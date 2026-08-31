@@ -5,10 +5,16 @@ export interface TokenTracker {
   output: number;
   cache: number;
   calls: number;
+  /** El input de la ÚLTIMA llamada: cuánto ocupa AHORA la ventana del modelo.
+   *
+   * Los acumulados dicen lo que la sesión HA costado; esto dice cuánto queda
+   * de margen antes de que el historial desborde el contexto — dos preguntas
+   * distintas y la segunda es la que la barra de estado necesita. */
+  contexto: number;
 }
 
 export function createTokenTracker(): TokenTracker {
-  return { input: 0, output: 0, cache: 0, calls: 0 };
+  return { input: 0, output: 0, cache: 0, calls: 0, contexto: 0 };
 }
 
 export function createTokenTrackingMiddleware(tracker: TokenTracker) {
@@ -47,6 +53,7 @@ export function createTokenTrackingMiddleware(tracker: TokenTracker) {
       tracker.output += outputTokens;
       tracker.cache += cacheRead;
       tracker.calls += 1;
+      tracker.contexto = inputTokens;
     },
   });
 }

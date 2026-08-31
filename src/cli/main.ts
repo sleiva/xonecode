@@ -12,7 +12,9 @@ import { cmdDescribe } from "./describe.js";
 import { cmdConfig } from "./config.js";
 import { cmdDoctor } from "./doctor.js";
 import { cmdVerify } from "./verify.js";
-import { type FuentesDeEleccion, ModeloMalEscrito, resolver } from "../core/modelos.js";
+import { type FuentesDeEleccion, ModeloMalEscrito, parsear, resolver } from "../core/modelos.js";
+import { topeDeContexto } from "../core/contextos.js";
+import { cargar } from "../agent/configEnDisco.js";
 import {
   COMANDOS,
   correrConsola,
@@ -27,6 +29,8 @@ import { inspeccionar } from "../agent/entorno.js";
 import { SkillsEnDisco } from "../agent/skills.js";
 import { Modelos } from "../agent/modelos.js";
 import { abrirSesionReal, type SesionReal } from "../agent/turnoReal.js";
+import { crearProyecto } from "../agent/crearProyecto.js";
+import { type DatosDelProyecto } from "../core/esqueleto.js";
 import { createTokenTracker, type TokenTracker } from "../vendor/tokenTracking.js";
 
 /**
@@ -150,6 +154,46 @@ function formatearTokens(total: number): string {
   return total < 1000 ? `${total} tokens` : `${(total / 1000).toFixed(1)}K tokens`;
 }
 
+/** El tope de contexto, compacto: `131K`, `200K`, `1M`. Sin decimales de cortesía. */
+function formatearTope(tope: number): string {
+  if (tope >= 1_000_000) return `${tope / 1_000_000}M`;
+  return `${Math.round(tope / 1000)}K`;
+}
+
+/** Las piezas de la barra de estado, ya resueltas: aquí solo queda darles formato. */
+export interface PiezasDeBarra {
+  proyecto: string;
+  colecciones: number;
+  /** El modelo de la sesión, «proveedor/modelo». */
+  modelo: string;
+  /** Tokens acumulados de la sesión (input + output). */
+  tokens: number;
+  /** Cuánto ocupa AHORA la ventana del modelo; 0 antes de la primera llamada. */
+  contexto: number;
+  /** El tope de la ventana, si se sabe (`core/contextos.ts` + config). */
+  tope?: number;
+}
+
+/**
+ * La barra de estado como función PURA: la compone quien tiene los valores y
+ * la pinta quien tiene el color. Así la barra se puede probar sin TTY — y es
+ * que solo se pinta con TTY, que es justo el caso que los tests no pueden ser.
+ *
+ * La sección `ctx` solo existe si hay algo que medir, y el porcentaje solo si
+ * hay tope: sin tope conocido, la cifra va pelada antes que calcular un
+ * porcentaje sobre un número inventado.
+ */
+export function formatearBarra(p: PiezasDeBarra): string {
+  const ctx =
+    p.contexto > 0
+      ? ` · ctx ${formatearTokens(p.contexto).replace(" tokens", "")}` +
+        (p.tope !== undefined
+          ? `/${formatearTope(p.tope)} (${Math.round((p.contexto / p.tope) * 100)}%)`
+          : "")
+      : "";
+  return `─ ${p.proyecto} (${p.colecciones} colls) · ${p.modelo} · ${formatearTokens(p.tokens)}${ctx} · /ayuda`;
+}
+
 /**
  * El ejecutor de turno REAL de la consola: cada línea de prosa corre sobre una `SesionReal`
  * que sobrevive entre turnos (mismo agente, mismo hilo).
@@ -234,11 +278,79 @@ function crearEjecutorReal(alAbrirSesion: (sesion: SesionReal) => void): Ejecuto
  * Devuelve el código de salida, que es el que devuelva `correrConsola` (0 tanto por
  * `/salir` como por EOF).
  */
+/** ¿La respuesta a una pregunta sí/no es SÍ? Enter a secas y cualquier otra cosa: NO. */
+function esSi(respuesta: string): boolean {
+  return ["s", "si", "y", "yes"].includes(respuesta.trim().toLowerCase());
+}
+
+/**
+ * El asistente de creación de proyecto: cuatro preguntas y el esqueleto en disco.
+ *
+ * La oferta inicial es sí/no con **omisión No**, como las aprobaciones: crear
+ * ficheros en la carpeta del usuario es opt-in, y quien no ha entendido la
+ * pregunta no ha pedido nada. Lo que se escribe es `core/esqueleto.ts` (el
+ * «Hola Mundo» de la documentación XOne, nada inventado), a través de
+ * `agent/crearProyecto.ts`, que no pisa lo que ya exista.
+ */
+async function ofrecerCrearProyecto(raiz: string, consola: Consola): Promise<boolean> {
+  const respuesta = await consola.preguntar("¿Creo un proyecto XOne aquí? (s/N) ");
+  if (!esSi(respuesta)) return false;
+
+  const datos = await preguntarDatos(consola);
+  const informe = crearProyecto(raiz, datos);
+
+  consola.escribir(
+    `✓ proyecto creado: ${informe.creados.length} ficheros` +
+      `${informe.saltados.length > 0 ? ` (${informe.saltados.length} existentes no tocados: ${informe.saltados.join(", ")})` : ""}\n`
+  );
+  // Las carpetas del runtime van VACÍAS a propósito, y eso hay que decirlo: quien
+  // no sepa que el .db lo genera el simulador pensará que falta algo.
+  consola.escribir(
+    "  (bd/, icons/ y files/ están vacías: la base de datos la genera el simulador y los iconos se añaden a mano)\n"
+  );
+  return true;
+}
+
+/** Las cuatro preguntas, cada una re-preguntada hasta que la respuesta sirva. */
+async function preguntarDatos(consola: Consola): Promise<DatosDelProyecto> {
+  // El nombre interno no admite espacios (es `Name=` del app.ini y el prefijo de
+  // las clases de pantallas): re-preguntar, no «arreglarlo» por debajo.
+  let nombre = "";
+  for (;;) {
+    nombre = (await consola.preguntar("Nombre interno de la app (sin espacios): ")).trim();
+    if (nombre.length > 0 && !/\s/.test(nombre)) break;
+    consola.escribir("  (sin espacios y no vacío)\n");
+  }
+
+  const titulo =
+    (await consola.preguntar(`Título visible [${nombre}]: `)).trim() || nombre;
+
+  let orientacion: "portrait" | "landscape" = "portrait";
+  for (;;) {
+    const respuesta = (
+      await consola.preguntar("Orientación (portrait/landscape) [portrait]: ")
+    )
+      .trim()
+      .toLowerCase();
+    if (respuesta === "") break;
+    if (respuesta === "portrait" || respuesta === "landscape") {
+      orientacion = respuesta;
+      break;
+    }
+    consola.escribir("  (portrait o landscape)\n");
+  }
+
+  const login = esSi(await consola.preguntar("¿La app lleva login? (s/N) "));
+
+  return { nombre, titulo, orientacion, login };
+}
+
 export async function entrarEnConsola(
   fuentes: FuentesDeEleccion,
   raiz: string = process.cwd(),
   escribir: Escribir = escribirEnStdout,
-  inspeccionarProyecto: (raiz: string) => Promise<{ colecciones: number }> = inspeccionar,
+  inspeccionarProyecto: (raiz: string) => Promise<{ colecciones: number; esProyectoXone: boolean }> =
+    inspeccionar,
   crearRl: () => readline.Interface = () =>
     readline.createInterface({
       input: process.stdin,
@@ -250,9 +362,14 @@ export async function entrarEnConsola(
       // no se le da uno Y se llama a `rl.prompt()` — las dos cosas hacen falta.
       prompt: PROMPT,
     }),
-  guion = false
+  guion = false,
+  /** Costura de test del «¿hay alguien al otro lado?»: sin TTY no se pregunta nada. */
+  interactivo: boolean = process.stdin.isTTY === true
 ): Promise<number> {
-  const entorno = await inspeccionarProyecto(raiz);
+  // `let` porque el asistente de creación puede cambiarlo TODO: si el usuario acepta,
+  // la carpeta pasa de «0 colls, sin app.xml» a proyecto de verdad, y la cabecera se
+  // re-inspecciona para no mentir en la primera línea que se ve.
+  let entorno = await inspeccionarProyecto(raiz);
 
   // El papel `trabajo` es el que representa a la sesión. Sin el sufijo `(origen)` que
   // añade `Modelos.descripcion()`: la cabecera es breve y la procedencia se puede ver
@@ -278,18 +395,45 @@ export async function entrarEnConsola(
   // al arrancar y tras cada /nuevo o /modelo. La lista de comandos se GENERA recorriendo
   // el registro — una lista escrita a mano se queda vieja en cuanto alguien añade uno.
   /**
+   * El tope de la ventana del modelo ACTUAL: tabla de `core/contextos.ts` + lo que el
+   * usuario haya fijado en `config.json` (lo de proyecto gana a lo global, como los
+   * modelos). Se lee en cada barra y no en el arranque porque `modeloTrabajo` cambia
+   * en caliente con /modelo, y un tope del modelo equivocado es un porcentaje que miente.
+   * Si el id no parsea —no debería, viene de `resolver`—, no hay tope y no pasa nada.
+   */
+  const topeDelModelo = (id: string): number | undefined => {
+    try {
+      const { proveedor, modelo } = parsear(id);
+      const { config } = cargar(raiz);
+      return topeDeContexto(proveedor, modelo, {
+        ...config.global?.contextos,
+        ...config.proyecto?.contextos,
+      });
+    } catch {
+      return undefined;
+    }
+  };
+
+  /**
    * La barra de estado, al estilo de la de opencode: lo que uno necesita tener delante sin
    * pedirlo. En stdio no se puede clavar al fondo de la pantalla —eso pide control de
    * cursor, y es lo que trae la TUI de Ink— así que se emite ANTES de cada prompt, que es
    * el sitio donde de verdad se mira.
    *
    * Lleva el modelo porque es lo que uno olvida haber cambiado, el proyecto porque la
-   * consola se lanza desde donde toque y equivocarse de carpeta es fácil, y los tokens
-   * porque es el coste acumulándose.
+   * consola se lanza desde donde toque y equivocarse de carpeta es fácil, los tokens
+   * porque es el coste acumulándose, y el contexto porque es el margen que va
+   * consumiéndose — la cifra que dice si toca resumir el hilo.
    */
   const barraDeEstado = (): string =>
-    `${DIM}─ ${basename(raiz)} (${entorno.colecciones} colls) · ${modeloTrabajo} · ` +
-    `${formatearTokens(tracker.input + tracker.output)} · /ayuda${RESET}\n`;
+    `${DIM}${formatearBarra({
+      proyecto: basename(raiz),
+      colecciones: entorno.colecciones,
+      modelo: modeloTrabajo,
+      tokens: tracker.input + tracker.output,
+      contexto: tracker.contexto,
+      tope: topeDelModelo(modeloTrabajo),
+    })}${RESET}\n`;
 
   /** La cabecera larga: solo al arrancar y tras /nuevo o /modelo, nunca por turno. */
   const cabecera = (): string => {
@@ -304,8 +448,9 @@ export async function entrarEnConsola(
   };
   const lineaDeEstado = cabecera; // el nombre que ya usan los tests
 
-  escribir(cabecera());
-
+  // El rl y la consola se crean ANTES de la cabecera: si la carpeta no es un proyecto
+  // XOne, la oferta de crearlo se pregunta aquí mismo, y para preguntar hace falta
+  // el `preguntar` de la consola (que comparte este rl con el lazo de líneas).
   const rl = crearRl();
 
   const consola: Consola = {
@@ -329,9 +474,23 @@ export async function entrarEnConsola(
       }
     },
     preguntar: crearPreguntar(rl),
-    interactivo: process.stdin.isTTY === true,
+    interactivo,
     leerSecreto: crearLeerSecreto(rl),
   };
+
+  // El asistente de creación: la única escritura fuera de un turno del agente, y
+  // por eso la única que pregunta ANTES de escribir. Si se crea, la carpeta ya ES
+  // un proyecto XOne y `entorno` se re-inspecciona; si no, la consola sigue viva
+  // para /config, /doctor o lo que haga falta (el control del primer turno de
+  // prosa sigue ahí como red de seguridad).
+  if (!entorno.esProyectoXone) {
+    consola.escribir(`✗ ${basename(raiz)} no es un proyecto XOne (falta app.xml)\n`);
+    if (interactivo && (await ofrecerCrearProyecto(raiz, consola))) {
+      entorno = await inspeccionarProyecto(raiz);
+    }
+  }
+
+  escribir(cabecera());
 
   // Mismo patrón de prefijo que run.ts y el manejador /nuevo de consola.ts.
   const estado: EstadoDeSesion = { hilo: `xonecode-${randomUUID()}`, raiz, fuentes };

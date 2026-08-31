@@ -26,6 +26,8 @@ export interface ConfigDeFichero {
   modelo?: string;
   modelos?: Partial<Record<Papel, string>>;
   ollama?: { baseUrl?: string };
+  /** Topes de ventana de contexto fijados a mano, por id «proveedor/modelo». */
+  contextos?: Record<string, number>;
 }
 
 /** Las credenciales, que viven en OTRO fichero y solo global. */
@@ -140,6 +142,33 @@ export function validar(
         }
       }
       config.modelos = modelos;
+      continue;
+    }
+
+    // El tope de la ventana de contexto que la tabla de `core/contextos.ts` no
+    // sabe: cada entrada es «proveedor/modelo» → tope en tokens. Se fija a mano
+    // porque el usuario sabe más de SU modelo (sobre todo del local) que la tabla.
+    if (clave === "contextos") {
+      if (!esObjeto(valor)) {
+        avisos.push({
+          texto: `«${ruta}»: «contextos» debe ser un objeto «proveedor/modelo» → tope en tokens; se descarta.`,
+          severidad: "aviso",
+        });
+        continue;
+      }
+      const contextos: Record<string, number> = {};
+      for (const id of Object.keys(valor)) {
+        const tope = valor[id];
+        if (typeof tope === "number" && Number.isInteger(tope) && tope > 0) {
+          contextos[id] = tope;
+        } else {
+          avisos.push({
+            texto: `«${ruta}»: «contextos.${id}» debe ser un número entero de tokens positivo; se descarta.`,
+            severidad: "aviso",
+          });
+        }
+      }
+      config.contextos = contextos;
       continue;
     }
 

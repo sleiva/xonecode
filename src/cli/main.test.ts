@@ -1,10 +1,10 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, rmSync, existsSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, basename } from "node:path";
 import { PassThrough } from "node:stream";
 import * as readline from "node:readline";
-import { entrarEnConsola, main } from "./main.js";
+import { entrarEnConsola, main, formatearBarra } from "./main.js";
 import { COMANDOS } from "./consola.js";
 import type { Escribir } from "./stdio.js";
 import { POR_OMISION, type FuentesDeEleccion } from "../core/modelos.js";
@@ -36,7 +36,32 @@ function crearRlDe(...lineas: string[]): () => readline.Interface {
   };
 }
 
-const inspeccionarFalso = async (_raiz: string): Promise<{ colecciones: number }> => ({ colecciones: 3 });
+/**
+ * Readline para los tests del ASISTENTE: aquí el input no puede estar cerrado de
+ * antemano, porque `rl.question` no contesta sobre un rl cerrado. Cada respuesta
+ * se escribe cuando su pregunta aparece en el output del rl (el prompt de
+ * `rl.question` es la señal de que hay alguien esperando), y el input se cierra
+ * tras la última — EOF que termina el lazo de la consola.
+ */
+function crearRlPreguntable(...respuestas: string[]): () => readline.Interface {
+  return () => {
+    const input = new PassThrough();
+    const output = new PassThrough();
+    let siguiente = 0;
+    output.on("data", () => {
+      if (siguiente < respuestas.length) {
+        input.write(respuestas[siguiente++] + "\n");
+        if (siguiente === respuestas.length) input.end();
+      }
+    });
+    return readline.createInterface({ input, output, terminal: false });
+  };
+}
+
+const inspeccionarFalso = async (_raiz: string): Promise<{ colecciones: number; esProyectoXone: boolean }> => ({
+  colecciones: 3,
+  esProyectoXone: true,
+});
 
 let temporales: string[] = [];
 function raizTemporal(): string {
@@ -137,5 +162,132 @@ describe("entrarEnConsola", () => {
     // también lo contiene, así que comprobamos que llega tras el primer arranque).
     const trasArranque = texto.slice(texto.indexOf("\n") + 1);
     expect(trasArranque).toContain("ollama/llama3");
+  });
+});
+
+describe("formatearBarra", () => {
+  it("lleva el contexto con tope y porcentaje cuando todo se sabe", () => {
+    expect(
+      formatearBarra({ proyecto: "miapp", colecciones: 3, modelo: "ollama/x", tokens: 12_800, contexto: 12_400, tope: 200_000 })
+    ).toBe("─ miapp (3 colls) · ollama/x · 12.8K tokens · ctx 12.4K/200K (6%) · /ayuda");
+  });
+
+  it("sin tope conocido, el contexto va SIN porcentaje (no se inventa la cifra)", () => {
+    expect(
+      formatearBarra({ proyecto: "miapp", colecciones: 0, modelo: "ollama/glm-5.3-flash:cloud", tokens: 500, contexto: 512 })
+    ).toBe("─ miapp (0 colls) · ollama/glm-5.3-flash:cloud · 500 tokens · ctx 512 · /ayuda");
+  });
+
+  it("antes del primer turno no hay sección de contexto: no hay nada que medir", () => {
+    expect(
+      formatearBarra({ proyecto: "miapp", colecciones: 3, modelo: "ollama/x", tokens: 0, contexto: 0, tope: 200_000 })
+    ).toBe("─ miapp (3 colls) · ollama/x · 0 tokens · /ayuda");
+  });
+
+  it("el tope se redondea a K (y a M a partir del millón)", () => {
+    const barra = formatearBarra({ proyecto: "a", colecciones: 1, modelo: "m", tokens: 10, contexto: 10, tope: 131_072 });
+    expect(barra).toContain("ctx 10/131K");
+    expect(formatearBarra({ proyecto: "a", colecciones: 1, modelo: "m", tokens: 10, contexto: 10, tope: 1_000_000 })).toContain(
+      "ctx 10/1M"
+    );
+  });
+});
+
+describe("entrarEnConsola — proyecto XOne ausente", () => {
+  /** Doble con estado: la primera llamada ve una carpeta sin app.xml y la re-inspección ya lo ve. */
+  function inspeccionarSinProyecto() {
+    let llamadas = 0;
+    return async (_raiz: string): Promise<{ colecciones: number; esProyectoXone: boolean }> => {
+      llamadas++;
+      return llamadas === 1
+        ? { colecciones: 0, esProyectoXone: false }
+        : { colecciones: 2, esProyectoXone: true };
+    };
+  }
+
+  it("avisa al arrancar y ofrece crearlo; Enter a secas (No) no escribe NADA", async () => {
+    const raiz = raizTemporal();
+    const { escribir, salida } = acumulador();
+
+    const codigo = await entrarEnConsola(
+      {},
+      raiz,
+      escribir,
+      inspeccionarSinProyecto(),
+      crearRlPreguntable(""),
+      false,
+      true
+    );
+
+    expect(codigo).toBe(0);
+    const texto = salida();
+    expect(texto).toContain("no es un proyecto XOne");
+    // La consola sigue viva: cabecera normal, no el fallo del primer turno de prosa.
+    expect(texto).toContain("xonecode · ");
+    expect(existsSync(join(raiz, "app.xml"))).toBe(false);
+  });
+
+  it("sí: pregunta los cuatro datos, escribe el esqueleto y re-inspecciona la cabecera", async () => {
+    const raiz = raizTemporal();
+    const { escribir, salida } = acumulador();
+
+    const codigo = await entrarEnConsola(
+      {},
+      raiz,
+      escribir,
+      inspeccionarSinProyecto(),
+      // s → crear; nombre; título; orientación; sin login.
+      crearRlPreguntable("s", "GestionClientes", "Gestión de Clientes", "portrait", "n"),
+      false,
+      true
+    );
+
+    expect(codigo).toBe(0);
+    expect(existsSync(join(raiz, "app.xml"))).toBe(true);
+    expect(existsSync(join(raiz, "mappings.xne"))).toBe(true);
+    expect(readFileSync(join(raiz, "app.ini"), "utf8")).toContain("Name=GestionClientes");
+    // La cabecera ya no dice «0 colls»: se re-inspecciona tras crear.
+    expect(salida()).toContain("2 colls");
+  });
+
+  it("un nombre con espacios se re-pregunta hasta que sea válido", async () => {
+    const raiz = raizTemporal();
+    const { escribir } = acumulador();
+
+    await entrarEnConsola(
+      {},
+      raiz,
+      escribir,
+      inspeccionarSinProyecto(),
+      crearRlPreguntable("s", "Gestion Clientes", "GestionClientes", "", "portrait", "n"),
+      false,
+      true
+    );
+
+    // El título vacío cae en el nombre; el fichero se crea con el nombre VÁLIDO.
+    const ini = readFileSync(join(raiz, "app.ini"), "utf8");
+    expect(ini).toContain("Name=GestionClientes");
+    expect(ini).toContain("Title=GestionClientes");
+  });
+
+  it("sin TTY no pregunta: solo el aviso, y la consola sigue para los comandos", async () => {
+    const raiz = raizTemporal();
+    const { escribir, salida } = acumulador();
+
+    const codigo = await entrarEnConsola(
+      {},
+      raiz,
+      escribir,
+      inspeccionarSinProyecto(),
+      crearRlDe(),
+      false,
+      false
+    );
+
+    expect(codigo).toBe(0);
+    const texto = salida();
+    expect(texto).toContain("no es un proyecto XOne");
+    expect(texto).toContain("xonecode · ");
+    expect(existsSync(join(raiz, "app.xml"))).toBe(false);
   });
 });

@@ -61,6 +61,36 @@ describe("validar", () => {
     expect(avisos[0]!.texto).toContain("modelo");
   });
 
+  it("acepta contextos: topes de ventana fijados a mano, por id de modelo", () => {
+    const { config, avisos } = validar(
+      { contextos: { "ollama/glm-5.3-flash:cloud": 131072 } },
+      RUTA,
+      "proyecto"
+    );
+    expect(config.contextos).toEqual({ "ollama/glm-5.3-flash:cloud": 131072 });
+    expect(avisos).toHaveLength(0);
+  });
+
+  it("descarta contextos que no es objeto", () => {
+    const { config, avisos } = validar({ contextos: 131072 }, RUTA, "proyecto");
+    expect(config.contextos).toBeUndefined();
+    expect(avisos).toHaveLength(1);
+    expect(avisos[0]!.texto).toContain("contextos");
+  });
+
+  it("descarta una entrada de contextos que no es un número positivo, conservando las buenas", () => {
+    const { config, avisos } = validar(
+      { contextos: { "ollama/bueno": 131072, "ollama/malo": "grande", "ollama/negativo": -1 } },
+      RUTA,
+      "proyecto"
+    );
+    expect(config.contextos).toEqual({ "ollama/bueno": 131072 });
+    expect(avisos).toHaveLength(2);
+    expect(avisos.some((a) => a.texto.includes("malo"))).toBe(true);
+    expect(avisos.some((a) => a.texto.includes("negativo"))).toBe(true);
+    expect(avisos.every((a) => a.severidad === "aviso")).toBe(true);
+  });
+
   it("descarta el fichero entero si el JSON raíz no es objeto", () => {
     for (const bruto of [[1, 2], "texto", 42, null]) {
       const { config, avisos } = validar(bruto, RUTA, "global");
