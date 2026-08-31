@@ -1,0 +1,27 @@
+{
+  "success": false,
+  "path": "/ruta/al/proyecto",
+  "summary": { "total": 3, "errors": 2, "warnings": 1 },
+  "issues": [
+    {
+      "severity": "error",
+      "code": "XML_PARSE",
+      "message": "XML mal formado: app.xml no contiene nodo <app>: /ruta/al/proyecto/app.xml",
+      "file": "/ruta/al/proyecto/app.xml"
+    },
+    {
+      "severity": "error",
+      "code": "COLL_MISSING_PROGID",
+      "message": "La coleccion \"ListaClientes\" tiene objname pero falta progid",
+      "file": "/ruta/al/proyecto/ListaClientes.xne",
+      "location": { "file": "/ruta/al/proyecto/ListaClientes.xne" }
+    },
+    {
+      "severity": "warning",
+      "code": "INVALID_PROP_TYPE",
+      "message": "Tipo de propiedad invalido \"C\" en \"AppCompleta.MAP_TIPO\"",
+      "file": "/ruta/al/proyecto/AppCompleta.xne",
+      "location": { "file": "/ruta/al/proyecto/AppCompleta.xne", "line": 42, "column": 7 }
+    }
+  ]
+}

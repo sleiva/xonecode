@@ -1,0 +1,210 @@
+/**
+ * Los puertos: todo lo caro entra por aquí, con su doble determinista al lado.
+ *
+ * La regla dura: los puertos se PASAN al construir, nunca se importan dentro de quien
+ * los usa. Es lo que hace que el lazo completo se recorra sin API, sin red y sin
+ * CloudStudio — la propiedad que sostiene los tests offline del laboratorio.
+ *
+ * Este fichero es TypeScript puro: no importa langchain, langgraph, deepagents, MCP,
+ * Ink ni React. La frontera está probada en `core/imports.test.ts`.
+ */
+
+/**
+ * La marca de «esto es un doble», y por qué es un Symbol y no un booleano.
+ *
+ * En el harness Python equivalente el flag `verifier_is_stub` no es un campo que alguien
+ * rellene: es una propiedad derivada de la CLASE del objeto. La diferencia importa —
+ * un booleano se puede olvidar, o poner a false sobre un doble, y entonces los tres
+ * avisos de honestidad callan justo cuando más falta hacen.
+ *
+ * Aquí la traducción fiel es una marca que solo los dobles llevan: un puerto real no
+ * puede fingir que no lo es porque no la tiene, y un doble no puede quitársela sin
+ * editar su propia definición.
+ */
+export const ES_DOBLE: unique symbol = Symbol.for("xonecode.es-doble");
+
+export function esDoble(puerto: unknown): boolean {
+  return typeof puerto === "object" && puerto !== null && ES_DOBLE in puerto;
+}
+
+/** Una tool publicada por un servidor MCP, reducida a lo que xonecode necesita. */
+export interface ToolInfo {
+  nombre: string;
+  descripcion: string;
+  /** Coste aproximado en tokens de prompt. Se mide, no se estima. */
+  tokens: number;
+}
+
+export interface CatalogoMcp {
+  cloudstudio: ToolInfo[];
+  ide: ToolInfo[];
+}
+
+/** El acceso al proyecto del cliente, que vive en CloudStudio y se habla por MCP. */
+export interface McpPort {
+  catalogo(): Promise<CatalogoMcp>;
+  invocar(tool: string, args: Record<string, unknown>): Promise<unknown>;
+  cerrar(): Promise<void>;
+}
+
+export interface SkillInfo {
+  nombre: string;
+  descripcion: string;
+  tokens: number;
+}
+
+/** Las skills de XOne: el catálogo y el contenido. */
+export interface SkillsPort {
+  catalogo(): SkillInfo[];
+  cargar(nombre: string): string;
+}
+
+export type Papel = "rapido" | "trabajo" | "afilado";
+
+/**
+ * La fábrica de modelos, por PAPEL y no por nombre.
+ *
+ * Se reparte por papel porque es la palanca de coste: una sola pregunta de solo lectura
+ * midió 213.895 tokens de entrada y 11 llamadas al modelo. El papel que corre en TODOS
+ * los turnos arranca en `rapido`, y se sube solo con una medición delante.
+ */
+export interface ModelosPort {
+  paraPapel(papel: Papel): unknown;
+  /** Qué modelo concreto resuelve cada papel, para que `describe` lo pueda enseñar. */
+  descripcion(): Record<Papel, string>;
+}
+
+/**
+ * Un hallazgo del verificador. La forma NO es de diseño: es la que emite
+ * `xone-simulator validate --json` (xone-linter 1.4.0), medida contra un proyecto real.
+ *
+ * Tres cosas que la medición corrigió respecto al primer borrador, y las tres importan:
+ *
+ * 1. **`linea` es OPCIONAL.** `SourceLocation` la declara `line?: number`
+ *    (`xone-linter/src/model/XoneModel.ts:3`) y en la corrida medida NINGÚN hallazgo la
+ *    traía. Con un `linea: number` obligatorio, el adaptador tendría que inventarse un 0
+ *    — y un número inventado en un informe de hechos es exactamente la mentira que este
+ *    diseño existe para no contar.
+ * 2. **Las severidades son TRES**, no dos: `error | warning | info`
+ *    (`xone-linter/src/validator/ValidationResult.ts:3`). Colapsar `info` en `warning`
+ *    es una decisión de producto que nadie ha tomado.
+ * 3. **Se llama `code`, no `regla`**, y se conserva su nombre. El vocabulario del
+ *    verificador es el que viaja al ejecutor como brief de reparación y al juez como
+ *    hecho; traducirlo aquí obliga a destraducirlo en los dos sitios.
+ */
+export interface Hallazgo {
+  code: string;
+  severidad: "error" | "warning" | "info";
+  mensaje: string;
+  /** Ruta ABSOLUTA tal como la da el simulador. Opcional: no todo hallazgo tiene fichero. */
+  fichero?: string;
+  linea?: number;
+  columna?: number;
+}
+
+export interface InformeVerificacion {
+  verde: boolean;
+  hallazgos: Hallazgo[];
+  /**
+   * La copia que se midió era de edad desconocida: se INTENTÓ traerla de CloudStudio y no
+   * se pudo. Viaja DENTRO del informe y no en una bitácora aparte porque el informe es lo
+   * que se mueve —al ejecutor como brief, al juez como hecho, al `--json` de quien lo
+   * consuma— y ninguno de los tres lee la bitácora.
+   *
+   * Es un TERCER estado, no una variante de «no hay copia»: «nadie la ha traído» es
+   * honesto, «se creía que sí y no» produce hallazgos con código, fichero y línea de otra
+   * versión del proyecto.
+   */
+  copiaVieja?: boolean;
+}
+
+/**
+ * La huella de un hallazgo, para detectar NO-PROGRESO: la misma huella dos veces seguidas
+ * significa que reparar no está avanzando, y se bloquea ANTES de agotar el presupuesto.
+ *
+ * Ignora el mensaje a propósito: lleva nombres interpolados que varían sin que el problema
+ * cambie. Y tolera la ausencia de línea, que es el caso normal según la medición.
+ */
+export function huella(h: Hallazgo): string {
+  return [h.code, h.fichero ?? "", h.linea ?? ""].join("|");
+}
+
+/** El verificador determinista. Establece HECHOS: no opina y no auto-corrige. */
+export interface VerifierPort {
+  verificar(rutaProyecto: string): Promise<InformeVerificacion>;
+}
+
+// ─────────────────────────── LOS DOBLES ───────────────────────────
+// Viven aquí, junto a los puertos, y NO en una carpeta de tests. El motivo: el modo
+// offline es un modo de USO de primera clase (`xonecode describe` lo enseña al usuario),
+// no un detalle de la suite. Un doble escondido en fixtures no lo puede reportar.
+
+export class McpVacio implements McpPort {
+  readonly [ES_DOBLE] = true;
+  async catalogo(): Promise<CatalogoMcp> {
+    return { cloudstudio: [], ide: [] };
+  }
+  async invocar(tool: string): Promise<unknown> {
+    throw new Error(
+      `[DOBLE] No hay MCP: la tool «${tool}» no se ha ejecutado y el proyecto NO se ha tocado.`
+    );
+  }
+  async cerrar(): Promise<void> {}
+}
+
+export class SkillsEnMemoria implements SkillsPort {
+  readonly [ES_DOBLE] = true;
+  constructor(private readonly contenido: Record<string, string> = {}) {}
+  catalogo(): SkillInfo[] {
+    return Object.keys(this.contenido).map((nombre) => ({
+      nombre,
+      descripcion: `[DOBLE] skill en memoria`,
+      tokens: Math.ceil(this.contenido[nombre]!.length / 4),
+    }));
+  }
+  cargar(nombre: string): string {
+    const c = this.contenido[nombre];
+    if (c === undefined) throw new Error(`[DOBLE] no hay skill «${nombre}» en memoria`);
+    return c;
+  }
+}
+
+export class ModeloGuionizado implements ModelosPort {
+  readonly [ES_DOBLE] = true;
+  constructor(private readonly respuestas: string[] = ["(respuesta guionizada)"]) {}
+  paraPapel(): unknown {
+    return { guion: this.respuestas };
+  }
+  descripcion(): Record<Papel, string> {
+    return {
+      rapido: "[DOBLE] guionizado",
+      trabajo: "[DOBLE] guionizado",
+      afilado: "[DOBLE] guionizado",
+    };
+  }
+}
+
+/**
+ * Verificador que siempre dice verde.
+ *
+ * Peligroso a propósito: es el doble que más miente si nadie lo declara, porque un verde
+ * falso deja pasar código roto. Por eso lleva la marca y por eso `describe` lo canta.
+ */
+export class StubVerifier implements VerifierPort {
+  readonly [ES_DOBLE] = true;
+  async verificar(): Promise<InformeVerificacion> {
+    return { verde: true, hallazgos: [] };
+  }
+}
+
+/** Verificador con guion, para recorrer el lazo de reparación sin LLM: [rojo, rojo, verde]. */
+export class VerifierGuionizado implements VerifierPort {
+  readonly [ES_DOBLE] = true;
+  private i = 0;
+  constructor(private readonly guion: InformeVerificacion[]) {}
+  async verificar(): Promise<InformeVerificacion> {
+    const r = this.guion[Math.min(this.i, this.guion.length - 1)]!;
+    this.i++;
+    return r;
+  }
+}

@@ -1,0 +1,41 @@
+{
+  "name": "xonecode",
+  "version": "0.1.0",
+  "description": "Consola CLI y harness de agente para desarrollar aplicaciones XOne",
+  "type": "module",
+  "license": "MIT",
+  "bin": {
+    "xonecode": "./dist/bin.js"
+  },
+  "files": [
+    "dist",
+    "skills",
+    "README.md"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "build": "rm -rf dist && tsc -p tsconfig.build.json && chmod +x dist/bin.js",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc --noEmit",
+    "xonecode": "tsx src/bin.ts"
+  },
+  "dependencies": {
+    "@langchain/anthropic": "1.5.2",
+    "@langchain/core": "1.2.3",
+    "@langchain/google-genai": "2.2.0",
+    "@langchain/langgraph": "1.4.8",
+    "@langchain/ollama": "1.3.0",
+    "@langchain/openai": "1.5.5",
+    "deepagents": "1.12.0",
+    "langchain": "1.5.4"
+  },
+  "devDependencies": {
+    "@types/node": "^20.19.43",
+    "tsx": "^4.23.1",
+    "typescript": "^5.9.3",
+    "vitest": "^4.1.10"
+  }
+}

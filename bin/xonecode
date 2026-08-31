@@ -1,0 +1,5 @@
+#!/bin/sh
+# Lanzador de DESARROLLO: corre el TypeScript con tsx, así que siempre ejecuta el código
+# actual. Para uso normal, `npm run build` y el binario de `dist/`.
+RAIZ="$(cd "$(dirname "$0")/.." && pwd)"
+exec "$RAIZ/node_modules/.bin/tsx" "$RAIZ/src/bin.ts" "$@"

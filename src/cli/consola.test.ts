@@ -1,0 +1,413 @@
+import { describe, it, expect, vi } from "vitest";
+import { mkdtempSync, mkdirSync, writeFileSync, chmodSync, readFileSync, rmSync, statSync, existsSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join, dirname } from "node:path";
+import {
+  COMANDOS,
+  correrConsola,
+  crearCompleter,
+  type Consola,
+  type EstadoDeSesion,
+  type EjecutorDeTurno,
+} from "./consola.js";
+import type { Escribir } from "./stdio.js";
+import type { Preguntar } from "./aprobar.js";
+import { rutaAuth, NOMBRE_CARPETA } from "../agent/configEnDisco.js";
+
+/**
+ * La costura del diseño: la consola de prueba lee de un generador con las líneas del test
+ * y escribe en un acumulador, así que el lazo entero se recorre sin stdin ni stdout.
+ *
+ * El turno NUNCA se cuenta parseando la salida: se inyecta un `EjecutorDeTurno` falso que
+ * apunta peticiones y estados, y la salida solo se mira para lo que la consola escribe.
+ */
+
+async function* lineasDe(...lineas: string[]): AsyncIterable<string> {
+  for (const linea of lineas) yield linea;
+}
+
+const preguntarFalso: Preguntar = async () => "s";
+
+function consolaDe(...lineas: string[]): { consola: Consola; salida: () => string } {
+  return consolaDeConSecreto({ lineas });
+}
+
+function consolaDeConSecreto(opciones: {
+  lineas: string[];
+  interactivo?: boolean;
+  leerSecreto?: (p: string) => Promise<string>;
+}): { consola: Consola; salida: () => string } {
+  const { lineas, interactivo = false, leerSecreto } = opciones;
+  let salida = "";
+  const escribir: Escribir = (t) => {
+    salida += t;
+  };
+  return {
+    consola: {
+      lineas: lineasDe(...lineas),
+      escribir,
+      preguntar: preguntarFalso,
+      interactivo,
+      leerSecreto:
+        leerSecreto ??
+        (async () => {
+          throw new Error("leerSecreto no esperado en este test");
+        }),
+    },
+    salida: () => salida,
+  };
+}
+
+function estadoDe(): EstadoDeSesion {
+  return { hilo: "xonecode-test", raiz: process.cwd(), fuentes: {} };
+}
+
+function ejecutorFalsoDe(turnos: Array<{ peticion: string; estado: EstadoDeSesion }>): EjecutorDeTurno {
+  return async (peticion, estado) => {
+    turnos.push({ peticion, estado });
+  };
+}
+
+/** Crea `~/.xonecode/auth.json` dentro del HOME temporal, con 0700 en la carpeta y 0600. */
+function plantarAuth(h: string, contenido: string): void {
+  mkdirSync(join(h, NOMBRE_CARPETA), { recursive: true });
+  chmodSync(join(h, NOMBRE_CARPETA), 0o700);
+  const ruta = join(h, NOMBRE_CARPETA, "auth.json");
+  writeFileSync(ruta, contenido);
+  chmodSync(ruta, 0o600);
+}
+
+/**
+ * Ninguna ventana de longitud 5 del secreto puede aparecer en la salida: es la versión
+ * severa de «no contiene la clave completa» — caza también truncados y fragmentos.
+ */
+function sinFuga(texto: string, secreto: string): void {
+  for (let i = 0; i <= secreto.length - 5; i++) {
+    expect(texto).not.toContain(secreto.slice(i, i + 5));
+  }
+}
+
+describe("correrConsola — turnos de prosa", () => {
+  it("una línea normal produce un turno y una vacía no produce nada", async () => {
+    const { consola, salida } = consolaDe("", "   ", "\t", "hola que tal");
+    let turnos: Array<{ peticion: string; estado: EstadoDeSesion }> = [];
+    const codigo = await correrConsola(consola, estadoDe(), ejecutorFalsoDe(turnos));
+
+    expect(codigo).toBe(0);
+    expect(turnos).toHaveLength(1);
+    expect(turnos[0]!.peticion).toBe("hola que tal");
+    // Un Enter de más no saca ni un error: no hay nada que hacer.
+    expect(salida()).not.toContain("Error");
+    expect(salida()).not.toContain("comando desconocido");
+  });
+});
+
+describe("correrConsola — /ayuda", () => {
+  it("lista nombre y descripción de CADA entrada del registro COMANDOS", async () => {
+    const { consola, salida } = consolaDe("/ayuda");
+    await correrConsola(consola, estadoDe());
+
+    const texto = salida();
+    for (const [nombre, comando] of Object.entries(COMANDOS)) {
+      expect(texto, `/ayuda no lista /${nombre}`).toContain(`/${nombre}`);
+      expect(texto, `/ayuda no lista la descripción de /${nombre}`).toContain(comando.descripcion);
+    }
+  });
+});
+
+describe("correrConsola — fin de sesión", () => {
+  it("/salir termina con 0 y NO procesa las líneas que quedaban", async () => {
+    const { consola, salida } = consolaDe("/salir", "esto no es un turno");
+    let turnos: Array<{ peticion: string; estado: EstadoDeSesion }> = [];
+    const codigo = await correrConsola(consola, estadoDe(), ejecutorFalsoDe(turnos));
+
+    expect(codigo).toBe(0);
+    expect(turnos).toHaveLength(0);
+    expect(salida()).toContain("hasta luego");
+  });
+
+  it("agotar las líneas (EOF) termina con el MISMO código que /salir", async () => {
+    const { consola } = consolaDe("primera", "segunda");
+    let turnos: Array<{ peticion: string; estado: EstadoDeSesion }> = [];
+    const codigo = await correrConsola(consola, estadoDe(), ejecutorFalsoDe(turnos));
+
+    expect(codigo).toBe(0);
+    expect(turnos.map((t) => t.peticion)).toEqual(["primera", "segunda"]);
+  });
+});
+
+describe("correrConsola — los fallos no tumban la sesión", () => {
+  it("un comando de barra que lanza sigue la sesión y el error sale con su tipo", async () => {
+    // COMANDOS es un Record exportado sin congelar: la entrada de prueba se añade y se
+    // quita en `finally`, para no ensuciar a los demás tests aunque el expect falle.
+    // La clave va en minúsculas porque el lazo compara el comando con `toLowerCase()`.
+    COMANDOS["rompetest"] = {
+      descripcion: "solo para el test",
+      manejador: async () => {
+        throw new Error("boom de prueba");
+      },
+    };
+    try {
+      const { consola, salida } = consolaDe("/rompetest", "/hilo");
+      const codigo = await correrConsola(consola, estadoDe());
+
+      expect(codigo).toBe(0);
+      expect(salida()).toContain("Error: boom de prueba");
+      // La sesión sigue viva: /hilo se procesó después del comando roto.
+      expect(salida()).toContain("xonecode-test");
+    } finally {
+      delete COMANDOS["rompetest"];
+    }
+  });
+
+  it("un turno que lanza tampoco la termina: el error sale con su tipo y /hilo sigue", async () => {
+    const { consola, salida } = consolaDe("petición que revienta", "/hilo");
+    const ejecutorQueLanza: EjecutorDeTurno = async () => {
+      throw new Error("boom de turno");
+    };
+    const codigo = await correrConsola(consola, estadoDe(), ejecutorQueLanza);
+
+    expect(codigo).toBe(0);
+    expect(salida()).toContain("Error: boom de turno");
+    // La sesión sobrevivió al turno roto: el comando posterior se procesó.
+    expect(salida()).toContain("xonecode-test");
+  });
+});
+
+describe("correrConsola — /modelo en caliente", () => {
+  it("/modelo <p>/<m> cambia el estado y el turno siguiente lo recibe", async () => {
+    const { consola, salida } = consolaDe("/modelo gemini/gemini-3.6-flash", "siguiente turno");
+    let turnos: Array<{ peticion: string; estado: EstadoDeSesion }> = [];
+    await correrConsola(consola, estadoDe(), ejecutorFalsoDe(turnos));
+
+    expect(turnos[0]!.estado.fuentes.bandera).toBe("gemini/gemini-3.6-flash");
+    expect(salida()).toContain("gemini/gemini-3.6-flash");
+  });
+
+  it("/modelo con el proveedor mal escrito NO cambia el estado y lista los válidos", async () => {
+    const { consola, salida } = consolaDe("/modelo olama/x", "siguiente turno");
+    let turnos: Array<{ peticion: string; estado: EstadoDeSesion }> = [];
+    await correrConsola(consola, estadoDe(), ejecutorFalsoDe(turnos));
+
+    // Un fallo de tecleo no deja la sesión apuntando a un modelo que revienta al construir.
+    expect(turnos.length).toBe(1);
+    expect(turnos[0]!.estado.fuentes.bandera).toBeUndefined();
+    const texto = salida();
+    expect(texto).toContain("olama");
+    expect(texto).toContain("gemini");
+    expect(texto).toContain("openai");
+    expect(texto).toContain("anthropic");
+    expect(texto).toContain("ollama");
+  });
+
+  it("/modelo-rapido y /modelo-trabajo encadenados dejan los DOS papeles puestos y los demás intactos", async () => {
+    const { consola } = consolaDe(
+      "/modelo-rapido gemini/gemini-2.5-flash",
+      "/modelo-trabajo openai/gpt-4o-mini",
+      "siguiente turno"
+    );
+    let turnos: Array<{ peticion: string; estado: EstadoDeSesion }> = [];
+    await correrConsola(consola, estadoDe(), ejecutorFalsoDe(turnos));
+
+    const porPapel = turnos[0]!.estado.fuentes.porPapel;
+    expect(porPapel?.rapido).toBe("gemini/gemini-2.5-flash");
+    expect(porPapel?.trabajo).toBe("openai/gpt-4o-mini");
+    // Cada comando fija solo SU papel: ni la bandera ni los otros papeles se tocan.
+    expect(porPapel?.afilado).toBeUndefined();
+    expect(turnos[0]!.estado.fuentes.bandera).toBeUndefined();
+  });
+});
+
+describe("correrConsola — comando desconocido", () => {
+  it("no se manda al modelo: cero turnos y remite a /ayuda", async () => {
+    const { consola, salida } = consolaDe("/verifyy");
+    let turnos: Array<{ peticion: string; estado: EstadoDeSesion }> = [];
+    await correrConsola(consola, estadoDe(), ejecutorFalsoDe(turnos));
+
+    // Un `verifyy` mal escrito no puede costar un turno de LLM.
+    expect(turnos).toHaveLength(0);
+    expect(salida()).toContain("/verifyy");
+    expect(salida()).toContain("/ayuda");
+  });
+});
+
+describe("correrConsola — el hilo", () => {
+  it("/hilo escribe el hilo actual; /nuevo lo cambia y un /hilo posterior lo ve nuevo", async () => {
+    const { consola, salida } = consolaDe("/hilo", "/nuevo", "/hilo");
+    const codigo = await correrConsola(consola, estadoDe());
+
+    expect(codigo).toBe(0);
+    const texto = salida();
+    expect(texto).toContain("xonecode-test\n");
+
+    const nuevo = /hilo nuevo: (\S+)/.exec(texto)?.[1];
+    expect(nuevo).toBeDefined();
+    expect(nuevo).not.toBe("xonecode-test");
+    // El segundo /hilo, en la MISMA sesión, ya escribe el hilo nuevo.
+    expect(texto.split(nuevo!).length - 1).toBeGreaterThanOrEqual(2);
+  });
+});
+
+describe("correrConsola — comandos de diagnóstico", () => {
+  it("/config /describe /doctor /verify corren sobre el repo real y la sesión sigue viva", async () => {
+    const { consola, salida } = consolaDe("/config", "/describe", "/doctor", "/verify", "/hilo");
+    let turnos: Array<{ peticion: string; estado: EstadoDeSesion }> = [];
+    const codigo = await correrConsola(consola, estadoDe(), ejecutorFalsoDe(turnos));
+
+    // Ni revienta ni consume un turno: son los mismos cmd* de la shell.
+    expect(codigo).toBe(0);
+    expect(turnos).toHaveLength(0);
+    expect(salida()).toContain("xonecode-test");
+  });
+});
+
+/** HOME temporal para los tests de /provider: nada toca el ~/.xonecode real. */
+function homeTemporal(): string {
+  const h = mkdtempSync(join(tmpdir(), "xc-home-"));
+  vi.stubEnv("HOME", h);
+  return h;
+}
+
+describe("correrConsola — /provider", () => {
+  it("listado sin argumento marca lo plantado y NO filtra la clave ni fragmentos", async () => {
+    const h = homeTemporal();
+    try {
+      plantarAuth(h, '{"anthropic":{"key":"sk-secreta-12345"}}');
+      const { consola, salida } = consolaDe("/provider");
+      await correrConsola(consola, estadoDe());
+
+      const texto = salida();
+      expect(texto).toContain("anthropic");
+      expect(texto).toContain("✓ puesta");
+      expect(texto).toContain("ollama");
+      expect(texto).not.toMatch(/ollama\s+· sin credencial/);
+      // Afirmaciones SOLO sobre lo plantado: el entorno puede llevar credenciales reales
+      // de otros proveedores y eso no fallo de este test.
+      sinFuga(texto, "sk-secreta-12345");
+    } finally {
+      rmSync(h, { recursive: true, force: true });
+      vi.unstubAllEnvs();
+    }
+  });
+
+  it("con argumento e interactivo guarda la clave con modo 0600/0700 y sin eco en la salida", async () => {
+    const h = homeTemporal();
+    try {
+      const secreto = "sk-una-clave-de-test";
+      const { consola, salida } = consolaDeConSecreto({
+        lineas: ["/provider anthropic"],
+        interactivo: true,
+        leerSecreto: async () => secreto,
+      });
+      await correrConsola(consola, estadoDe());
+
+      expect(statSync(rutaAuth()).mode & 0o777).toBe(0o600);
+      expect(statSync(dirname(rutaAuth())).mode & 0o777).toBe(0o700);
+      const grabado = JSON.parse(readFileSync(rutaAuth(), "utf8"));
+      expect(grabado.anthropic.key).toBe(secreto);
+      sinFuga(salida(), secreto);
+    } finally {
+      rmSync(h, { recursive: true, force: true });
+      vi.unstubAllEnvs();
+    }
+  });
+
+  it("guardar una credencial preserva las de los demás proveedores del auth.json previo", async () => {
+    const h = homeTemporal();
+    try {
+      plantarAuth(h, '{"anthropic":{"key":"sk-existente"}}');
+      const { consola } = consolaDeConSecreto({
+        lineas: ["/provider gemini"],
+        interactivo: true,
+        leerSecreto: async () => "sk-de-gemini",
+      });
+      await correrConsola(consola, estadoDe());
+
+      const grabado = JSON.parse(readFileSync(rutaAuth(), "utf8"));
+      expect(grabado.anthropic.key).toBe("sk-existente");
+      expect(grabado.gemini.key).toBe("sk-de-gemini");
+    } finally {
+      rmSync(h, { recursive: true, force: true });
+      vi.unstubAllEnvs();
+    }
+  });
+
+  it("auth.json roto: el error sale con su tipo, no se sobrescribe y la sesión sigue", async () => {
+    const h = homeTemporal();
+    try {
+      const roto = "no es json{{";
+      plantarAuth(h, roto);
+      const { consola, salida } = consolaDeConSecreto({
+        lineas: ["/provider openai", "/hilo"],
+        interactivo: true,
+        leerSecreto: async () => "sk-nueva",
+      });
+      const codigo = await correrConsola(consola, estadoDe());
+
+      // El catch de correrConsola nunca se activó para AuthRotoEnDisco: salió por el
+      // propio manejador y la sesión siguió hasta procesar /hilo.
+      expect(codigo).toBe(0);
+      expect(readFileSync(rutaAuth(), "utf8")).toBe(roto);
+      const texto = salida();
+      expect(texto).toContain("no se sobrescribe");
+      expect(texto).toContain("Edita el fichero a mano");
+      expect(texto).not.toContain("Error: ");
+      expect(texto).toContain("xonecode-test");
+    } finally {
+      rmSync(h, { recursive: true, force: true });
+      vi.unstubAllEnvs();
+    }
+  });
+
+  it("sin TTY se rechaza, remite a editar auth.json a mano y leerSecreto NUNCA se llama", async () => {
+    const h = homeTemporal();
+    try {
+      const { consola, salida } = consolaDeConSecreto({
+        lineas: ["/provider anthropic"],
+        interactivo: false,
+        leerSecreto: async () => {
+          throw new Error("leerSecreto no debe llamarse sin TTY");
+        },
+      });
+      await correrConsola(consola, estadoDe());
+
+      const texto = salida();
+      expect(texto).toContain("sin TTY");
+      expect(texto).toContain(".xonecode/auth.json");
+      // Para ANTES de tocar disco: ni fichero ni carpeta creados.
+      expect(existsSync(rutaAuth())).toBe(false);
+    } finally {
+      vi.unstubAllEnvs();
+      rmSync(h, { recursive: true, force: true });
+    }
+  });
+});
+
+describe("crearCompleter", () => {
+  it("fuera de una línea de barra no completa nada", () => {
+    let salida = "";
+    const [candidatos, reemplazo] = crearCompleter((t) => {
+      salida += t;
+    })("hola que tal");
+    expect(candidatos).toEqual([]);
+    expect(reemplazo).toBe("hola que tal");
+    expect(salida).toBe("");
+  });
+
+  it("con '/prov' propone /provider", () => {
+    const [candidatos] = crearCompleter(() => {})("/prov");
+    expect(candidatos).toContain("/provider");
+  });
+
+  it("con varios candidatos lista NOMBRES y descripcion de COMANDOS", () => {
+    let salida = "";
+    const [candidatos] = crearCompleter((t) => {
+      salida += t;
+    })("/modelo");
+    expect(candidatos).toEqual(
+      expect.arrayContaining(["/modelo", "/modelo-rapido", "/modelo-trabajo", "/modelo-afilado"])
+    );
+    // readline por sí solo no pinta las descripciones: las escribe el completer.
+    expect(salida).toContain(COMANDOS["modelo-rapido"]!.descripcion);
+  });
+});

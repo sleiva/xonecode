@@ -1,0 +1,5 @@
+interface:
+  display_name: "XOne Plan Builder"
+  short_description: "Break a PLAN.md into tracer-bullet tasks"
+policy:
+  allow_implicit_invocation: false
