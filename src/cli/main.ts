@@ -24,6 +24,7 @@ import {
   type EstadoDeSesion,
 } from "./consola.js";
 import { crearLeerSecreto, crearPreguntar, crearPielStdio, escribirEnStdout, type Escribir } from "./stdio.js";
+import { crearTema } from "./tema.js";
 import { pedirDecisiones } from "./aprobar.js";
 import { inspeccionar } from "../agent/entorno.js";
 import { SkillsEnDisco } from "../agent/skills.js";
@@ -36,16 +37,19 @@ import { createTokenTracker, type TokenTracker } from "../vendor/tokenTracking.j
 /**
  * Estilo, y solo con TTY detrás.
  *
- * Sin la guarda, los códigos ANSI se cuelan en las tuberías y en los logs de CI como
- * basura (`\x1b[2m─ …`). Y esta consola se prueba con pipes, así que pasaría siempre.
+ * Los códigos viven en `cli/tema.ts` — el único fichero con ANSI de todo `src/`,
+ * vigilado por `cli/tema.test.ts` — y este fichero pide SIGNIFICADO (`tema.mudo`),
+ * nunca color. Sin TTY el tema apagado lo convierte todo en cadena vacía, así que
+ * las tuberías y los logs de CI quedan limpios sin ramificar por aquí.
  */
 const CON_COLOR = process.stdout.isTTY === true;
-const DIM = CON_COLOR ? "\x1b[2m" : "";
-const BOLD = CON_COLOR ? "\x1b[1m" : "";
-const RESET = CON_COLOR ? "\x1b[0m" : "";
+const tema = crearTema(CON_COLOR);
+const DIM = tema.mudo;
+const BOLD = tema.negrita;
+const RESET = tema.reset;
 
 /** El prompt. Se ve dónde acaba la respuesta y empieza lo que uno escribe. */
-const PROMPT = CON_COLOR ? "\x1b[36m❯\x1b[0m " : "> ";
+const PROMPT = CON_COLOR ? `${tema.prompt}❯${tema.reset} ` : "> ";
 
 /**
  * Envuelve las líneas de `readline` para pintar la barra y el prompt ANTES de cada una.

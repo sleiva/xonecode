@@ -67,17 +67,17 @@ describe("correrTurno", () => {
     ]);
   });
 
-  it("las tools se colapsan por racha y la cuenta sale al final", async () => {
+  it("las tools se colapsan por racha y la cuenta sale al final, con el detalle de la lista blanca", async () => {
     const { piel, actos } = pielDePrueba();
     await correrTurno(
       flujo(
-        { tipo: "tool", nombre: "grep" },
+        { tipo: "tool", nombre: "grep", detalle: "realizarLogin" },
         { tipo: "tool", nombre: "grep" },
         { tipo: "tool", nombre: "grep" }
       ),
       piel
     );
-    expect(actos).toEqual(["linea:🔧 grep", "linea:🔧 grep ×3", "fin"]);
+    expect(actos).toEqual(["linea:✱ busca realizarLogin", "linea:✱ busca ×3 — realizarLogin", "fin"]);
   });
 
   it("la bitácora recoge lo que ha corrido, y solo eso", async () => {
@@ -127,10 +127,10 @@ describe("correrTurno", () => {
     // DENTRO de la línea de token todavía abierta, que es exactamente el pegado
     // que este mecanismo existe para evitar: «a medio🔧 grep ×2».
     expect(actos).toEqual([
-      "linea:🔧 grep",
+      "linea:✱ busca",
       "token:a medio",
       "cerrar",           // la línea a medio escribir se cierra...
-      "linea:🔧 grep ×2", // ...y solo entonces sale la cuenta, en su propia línea
+      "linea:✱ busca ×2", // ...y solo entonces sale la cuenta, en su propia línea
       "fin",
     ]);
   });

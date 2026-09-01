@@ -43,9 +43,26 @@ describe("textoDe", () => {
 });
 
 describe("toolsDe", () => {
-  it("saca los nombres de las tool calls de un chunk de updates", () => {
-    const dato = { agent: { messages: [{ tool_calls: [{ name: "read_file" }, { name: "grep" }] }] } };
-    expect(toolsDe(dato)).toEqual(["read_file", "grep"]);
+  it("saca las tool calls de un chunk de updates: nombre y detalle de la lista blanca", () => {
+    const dato = {
+      agent: {
+        messages: [
+          {
+            tool_calls: [
+              { name: "read_file", args: { file_path: "app.xne" } },
+              { name: "grep", args: { pattern: "realizarLogin" } },
+              // Sin entrada en la lista blanca: nombre sí, detalle no.
+              { name: "studio_read", args: { file_path: "app.xne", auth: "Bearer x" } },
+            ],
+          },
+        ],
+      },
+    };
+    expect(toolsDe(dato)).toEqual([
+      { nombre: "read_file", detalle: "app.xne" },
+      { nombre: "grep", detalle: "realizarLogin" },
+      { nombre: "studio_read" },
+    ]);
   });
 
   it("un chunk sin tool calls no inventa ninguna", () => {

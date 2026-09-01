@@ -90,7 +90,7 @@ export async function correrTurno(
 
         case "tool":
           bitacora.anota("tool", ev.nombre);
-          for (const linea of colapsador.lineas({ nombre: ev.nombre, error: ev.error })) {
+          for (const linea of colapsador.lineas({ nombre: ev.nombre, detalle: ev.detalle, error: ev.error })) {
             escribirLinea(linea);
           }
           break;

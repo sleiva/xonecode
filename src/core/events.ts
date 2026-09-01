@@ -5,11 +5,17 @@
  * Ningún evento lleva argumentos de tool. Ni truncados: `studio_edit_file` lleva el
  * contenido del fichero y una tool MCP lleva el bearer. Enseñar el progreso no puede ser
  * la forma de filtrar un secreto, así que el TIPO no los puede llevar.
+ *
+ * La excepción aparente es `tool.detalle`, y no es una excepción: es lo ÚNICO que
+ * sale de los argumentos, un campo por tool elegido a mano en la lista blanca de
+ * `agent/resumenDeTool.ts` — `file_path`, `path` o `pattern`, nunca contenido. Una
+ * tool sin entrada en la lista no lleva `detalle`, exista lo que exista en sus
+ * argumentos.
  */
 export type DomainEvent =
   | { tipo: "token"; texto: string; msgId?: string }
   | { tipo: "fase"; fase: Fase; detalle?: string }
-  | { tipo: "tool"; nombre: string; error?: string }
+  | { tipo: "tool"; nombre: string; detalle?: string; error?: string }
   | { tipo: "plan"; tareas: TareaDelPlan[] }
   | { tipo: "tarea"; id: string; indice: number; total: number; estado: EstadoTarea }
   | { tipo: "verificacion"; verde: boolean; errores: number; avisos: number }

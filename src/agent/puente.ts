@@ -1,5 +1,6 @@
 import { normalizar } from "./normalizar.js";
 import { Mensajes } from "./mensajes.js";
+import { detalleDe } from "./resumenDeTool.js";
 import type { DomainEvent, PendienteDeAprobacion } from "../core/events.js";
 
 /** El texto de un mensaje, venga como venga. */
@@ -20,10 +21,10 @@ export function textoDe(msg: unknown): string {
   return "";
 }
 
-/** Los nombres de tool de un chunk de `updates`. */
-export function toolsDe(dato: unknown): string[] {
+/** Los nombres de tool de un chunk de `updates`, con su detalle de la lista blanca. */
+export function toolsDe(dato: unknown): Array<{ nombre: string; detalle?: string }> {
   if (!dato || typeof dato !== "object") return [];
-  const salida: string[] = [];
+  const salida: Array<{ nombre: string; detalle?: string }> = [];
   for (const nodo of Object.values(dato as Record<string, unknown>)) {
     const msgs = (nodo as Record<string, unknown> | null)?.messages;
     if (!Array.isArray(msgs)) continue;
@@ -32,7 +33,7 @@ export function toolsDe(dato: unknown): string[] {
       if (Array.isArray(llamadas)) {
         for (const l of llamadas) {
           const n = (l as Record<string, unknown>)?.name;
-          if (typeof n === "string") salida.push(n);
+          if (typeof n === "string") salida.push({ nombre: n, detalle: detalleDe(n, (l as Record<string, unknown>).args) });
         }
       }
     }
@@ -93,7 +94,9 @@ export async function* aEventos(
       if (!chunk) continue;
 
       if (chunk.modo === "updates") {
-        for (const nombre of toolsDe(chunk.dato)) yield { tipo: "tool", nombre };
+        for (const { nombre, detalle } of toolsDe(chunk.dato)) {
+          yield { tipo: "tool", nombre, ...(detalle !== undefined ? { detalle } : {}) };
+        }
         continue;
       }
 
