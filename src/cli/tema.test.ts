@@ -35,6 +35,10 @@ describe("crearTema", () => {
       quitado: "\x1b[31m",
       prompt: "\x1b[36m",
       reset: "\x1b[0m",
+      // Borrar del cursor al final de la línea (EL): lo usa el spinner para dejar
+      // limpia su línea antes de escribir la estática. Sin color es vacío porque el
+      // spinner ni llega a arrancar sin TTY.
+      borrar: "\x1b[K",
     });
   });
 

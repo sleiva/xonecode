@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import { PassThrough } from "node:stream";
 import * as readline from "node:readline";
 import { crearPielStdio, crearPreguntar, crearLeerSecreto } from "./stdio.js";
+import { crearTema } from "./tema.js";
 
 function acumulador() {
   const trozos: string[] = [];
@@ -9,14 +10,41 @@ function acumulador() {
 }
 
 describe("piel de stdio", () => {
-  it("cada token es UNA llamada a escribir, y sin salto", () => {
-    // Si `token` añadiera `\n`, la respuesta saldría partida en una línea por trozo.
-    // Y si acumulase para volcar al final, dejaría de ser streaming.
+  it("los trozos fluyen por LÍNEA CONFIRMADA: una escritura por línea, no una por trozo", () => {
+    // El anti-ainvoke de siempre: la línea confirmada se suelta en el acto, sin
+    // esperar al final del turno. Lo que ya NO se escribe es un trozo a medio marcar.
     const { trozos, escribir } = acumulador();
     const piel = crearPielStdio(escribir);
-    piel.token("Hola");
-    piel.token(" qué tal");
-    expect(trozos).toEqual(["Hola", " qué tal"]);
+    piel.token("Listo. He recorrido ");
+    expect(trozos).toEqual([]); // la línea aún no está confirmada: nada a medias
+    piel.token("el turno entero.\nHecho.");
+    expect(trozos.join("")).toBe("Listo. He recorrido el turno entero.\n");
+    piel.cerrarLinea();
+    expect(trozos.join("")).toBe("Listo. He recorrido el turno entero.\nHecho.\n");
+  });
+
+  it("un párrafo largo fluye por CORTES SEGUROS sin esperar al salto de línea", () => {
+    const { trozos, escribir } = acumulador();
+    const piel = crearPielStdio(escribir);
+    const texto = `la **colección Hola** con el campo \`Nombre\` y una explicación larga que se pasa ` +
+      `del mínimo de flujo para forzar un corte en un espacio seguro del párrafo en marcha`;
+    piel.token(texto);
+    // Fluyó ANTES de cerrar: un colchón que solo se suelta al final es un `ainvoke`
+    // disfrazado de streaming. (Un solo token produce un corte; lo que queda cae bajo
+    // el mínimo y espera al cierre.)
+    expect(trozos.length).toBe(1);
+    piel.cerrarLinea();
+    // Y el corte no rompió nada: ni un carácter perdido ni uno repetido.
+    expect(trozos.length).toBe(2);
+    expect(trozos.join("")).toBe(texto + "\n");
+  });
+
+  it("con TTY, la línea confirmada sale con el markdown pintado", () => {
+    const { trozos, escribir } = acumulador();
+    const CON = crearTema(true);
+    const piel = crearPielStdio(escribir, CON);
+    piel.token("la **Hola** está lista\n");
+    expect(trozos.join("")).toBe(`la ${CON.negrita}Hola${CON.reset} está lista\n`);
   });
 
   it("la respuesta se lee como UNA frase, no como una lista", () => {
@@ -25,6 +53,24 @@ describe("piel de stdio", () => {
     for (const t of ["Se ha", " creado", " la colección"]) piel.token(t);
     piel.cerrarLinea();
     expect(trozos.join("")).toBe("Se ha creado la colección\n");
+  });
+
+  it("la fase sin TTY es la línea estática de siempre, sin animación alguna", () => {
+    const { trozos, escribir } = acumulador();
+    const piel = crearPielStdio(escribir);
+    piel.fase!("planificando");
+    expect(trozos.join("")).toBe("  ·  planificando\n");
+  });
+
+  it("la cascada: cualquier escritura termina el spinner y deja la fase en el historial", () => {
+    const { trozos, escribir } = acumulador();
+    const CON = crearTema(true);
+    const piel = crearPielStdio(escribir, CON);
+    piel.fase!("planificando");
+    piel.linea("→ lee app.xne");
+    expect(trozos[0]).toBe(`\r  ${CON.mudo}⠋ planificando${CON.reset}`); // el fotograma
+    expect(trozos[1]).toBe(`\r${CON.borrar}  ·  planificando\n`); // la fase, ya estática
+    expect(trozos[2]).toBe("  → lee app.xne\n"); // y la escritura que desplazó al spinner
   });
 
   it("una línea suelta va sangrada y con su propio salto", () => {
@@ -151,6 +197,33 @@ describe("preguntar y leerSecreto sobre el rl compartido", () => {
     const promesa = leerSecreto("API key: ");
     // Sin escribir nada: rl.close() (o input.end()) dispara `close` y la promesa NO se
     // puede quedar colgada — eso colgaría el manejador de /provider para siempre.
+    rl.close();
+    const respuesta = await promesa;
+    expect(respuesta).toBe("");
+  });
+
+  it("crearPreguntar resuelve con cadena vacía si rl YA ESTÁ CERRADO (EOF de un pipe durante un turno)", async () => {
+    // Caso real, visto en e2e: con la entrada en pipe, el EOF llega mientras el turno
+    // corre; cuando la aprobación pregunta, el rl ya está cerrado y `rl.question` LANZA
+    // «readline was closed». El turno aborta con el interrupt colgado y las líneas en
+    // cola se leen después como PROSA. La cadena vacía es además lo SEGURO: sin un «s»
+    // explícito, `interpretAnswer` rechaza.
+    const { rl, input } = crearRlDePrueba();
+    rl.on("close", () => undefined); // asegura que el close se ha disparado antes de preguntar
+    input.end();
+    await new Promise((r) => rl.once("close", r));
+    // `closed` existe en runtime pero no en los tipos de esta versión — ver stdio.ts.
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    expect((rl as any).closed).toBe(true);
+
+    const respuesta = await crearPreguntar(rl)("¿Aprobar? [s/N] ");
+    expect(respuesta).toBe("");
+  });
+
+  it("crearPreguntar resuelve con cadena vacía si rl se cierra EN MEDIO de la pregunta", async () => {
+    const { rl } = crearRlDePrueba();
+    const promesa = crearPreguntar(rl)("¿Aprobar? [s/N] ");
+    // El usuario no contesta: llega el EOF (Ctrl-D, pipe que se cierra).
     rl.close();
     const respuesta = await promesa;
     expect(respuesta).toBe("");

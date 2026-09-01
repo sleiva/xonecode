@@ -49,6 +49,28 @@ describe("correrTurno", () => {
     ]);
   });
 
+  it("una piel que sabe de fases recibe la fase delegada, y también con la línea cerrada", async () => {
+    // La fase es lo único del turno que DURA: la piel de terminal la anima (spinner) y
+    // la de pega la registra. El motor solo dicta el TEXTO — la decoración es de la piel.
+    const { piel, actos } = pielDePrueba();
+    piel.fase = (t) => actos.push(`fase:${t}`);
+    await correrTurno(
+      flujo(
+        { tipo: "token", texto: "escribiendo", msgId: "r1" },
+        { tipo: "fase", fase: "verificando" },
+        { tipo: "fase", fase: "respondiendo", detalle: "resumen" }
+      ),
+      piel
+    );
+    expect(actos).toEqual([
+      "token:escribiendo",
+      "cerrar",
+      "fase:verificando con el simulador",
+      "fase:redactando la respuesta — resumen",
+      "fin",
+    ]);
+  });
+
   it("un mensaje con OTRO id cierra la línea del anterior", async () => {
     const { piel, actos } = pielDePrueba();
     await correrTurno(

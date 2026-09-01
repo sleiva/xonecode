@@ -2,29 +2,96 @@ import * as readline from "node:readline";
 import type { Piel } from "../core/turno.js";
 import type { PendienteDeAprobacion } from "../core/events.js";
 import type { Preguntar } from "./aprobar.js";
+import { crearTema, type Tema } from "./tema.js";
+import { RenderizadorDeMarkdown, puntoSeguro } from "./markdown.js";
+import { AnimadorDeFase } from "./spinner.js";
 
 /** Escribe SIN añadir salto de línea. La implementación real hace flush. */
 export type Escribir = (texto: string) => void;
 
 /**
+ * Por debajo de esto, un párrafo que aún no ha visto su `\n` puede esperar: fluye al
+ * confirmarse la línea. Por encima, se corta por un punto seguro (`puntoSeguro`) para
+ * que el streaming siga vivo en los párrafos largos.
+ */
+const MINIMO_DE_FLUJO = 80;
+
+/**
  * La piel de terminal.
  *
- * Dos cosas medidas, las dos con el mismo síntoma (el streaming no se ve) y causas
+ * El streaming del asistente se suelta por LÍNEA CONFIRMADA (y, en párrafos largos, por
+ * cortes que no rompen marcadores), y no por trozo: una consola que NO repinta solo
+ * puede escribir una línea cuando su texto es definitivo — un `**` partido entre dos
+ * escrituras queda literal para siempre. Sigue siendo streaming: la línea confirmada
+ * se pinta en el acto, y un colchón que solo se suelta al final sería un `ainvoke`
+ * disfrazado.
+ *
+ * Las otras dos cosas medidas, con el mismo síntoma (el streaming no se ve) y causas
  * distintas:
  *
- * 1. **Un `escribir` por trozo, sin salto.** Juntar los trozos en un buffer y volcarlos al
- *    final también evita que la frase salga partida en una línea por trozo, pero **deja de
- *    ser streaming**: convierte esto en un `ainvoke` disfrazado y el usuario no ve nada
- *    hasta que el turno acaba. El ritmo de aparición ES el punto.
- * 2. **`flush` explícito** (en `escribirEnStdout`). Sin él la salida se queda en el buffer
- *    y no aparece hasta que se vacía sola — un fallo que solo se manifiesta en procesos de
- *    larga duración, o sea justo en el caso de uso real.
+ * 1. **`flush` explícito** (en `escribirEnStdout`). Sin él la salida se queda en el
+ *    buffer y no aparece hasta que se vacía sola — un fallo que solo se manifiesta en
+ *    procesos de larga duración, o sea justo en el caso de uso real.
+ * 2. **Un solo `escribir` por línea confirmada**: juntar trozos en un buffer y volcar
+ *    al final también evita frases partidas, pero deja de ser streaming.
  */
-export function crearPielStdio(escribir: Escribir): Piel {
+export function crearPielStdio(
+  escribir: Escribir,
+  tema: Tema = crearTema(process.stdout.isTTY === true)
+): Piel {
+  const render = new RenderizadorDeMarkdown(tema);
+  let colchon = "";
+  let inicioDeLinea = true;
+
+  // El spinner de fase: anima la ÚLTIMA línea mientras una fase dura. La cascada es
+  // esta `firme`: CUALQUIER otra escritura termina el spinner primero — así solo hay
+  // una línea viva al fondo, y el historial queda con la fase como línea estática.
+  const animador = new AnimadorDeFase(escribir, tema);
+  const firme = (t: string): void => {
+    animador.termina();
+    escribir(t);
+  };
+
+  const volcar = (linea: string, inicio: boolean, conSalto: boolean): void => {
+    firme(render.linea(linea, inicio) + (conSalto ? "\n" : ""));
+  };
+
   return {
-    token: (texto) => escribir(texto),
-    cerrarLinea: () => escribir("\n"),
-    linea: (texto) => escribir(`  ${texto}\n`),
+    token: (texto) => {
+      colchon += texto;
+      // Las líneas confirmadas se sueltan enteras y en el acto.
+      while (true) {
+        const salto = colchon.indexOf("\n");
+        if (salto === -1) break;
+        volcar(colchon.slice(0, salto), inicioDeLinea, true);
+        colchon = colchon.slice(salto + 1);
+        inicioDeLinea = true;
+      }
+      // Párrafo largo sin `\n` a la vista: fluir por un corte que no rompa marcadores.
+      // **Sin salto final**: la continuación sigue en la MISMA línea de terminal — un
+      // salto aquí partiría el párrafo en líneas de la longitud del corte. Y
+      // `inicioDeLinea` baja a false para que la continuación no se mire como cabecera
+      // ni viñeta: ya no empieza línea.
+      const corte = puntoSeguro(colchon, MINIMO_DE_FLUJO);
+      if (corte !== undefined) {
+        volcar(colchon.slice(0, corte), inicioDeLinea, false);
+        colchon = colchon.slice(corte);
+        inicioDeLinea = false;
+      }
+    },
+    cerrarLinea: () => {
+      // Lo que quede en el colchón es el final de la última línea. Si el mensaje acabó
+      // justo en un salto, no hay nada que añadir: esa línea ya se escribió entera.
+      if (colchon !== "") volcar(colchon, inicioDeLinea, true);
+      colchon = "";
+      inicioDeLinea = true;
+    },
+    linea: (texto) => firme(`  ${texto}\n`),
+    /**
+     * La fase, animada: sin TTY el propio animador escribe la línea estática de
+     * siempre y no arranca nada.
+     */
+    fase: (texto) => animador.empieza(texto),
     pausa: (pendientes: PendienteDeAprobacion[]) => {
       // Quien pinta el detalle de cada pendiente (origen, descripción, fichero) es
       // `pedirDecisiones`, al preguntar una a una. Aquí sería redundante, y el viejo
@@ -33,9 +100,9 @@ export function crearPielStdio(escribir: Escribir): Piel {
       // En el modo de un disparo lo que sigue a la pausa NO es la respuesta del usuario:
       // es la aprobación, que conduce `pedirDecisiones`. Decir «lo siguiente que escribas
       // es la respuesta» sería mentira y despistaría justo en el paso delicado.
-      escribir(`\n(turno pausado: ${pendientes.length} aprobación(es) pendiente(s))\n`);
+      firme(`\n(turno pausado: ${pendientes.length} aprobación(es) pendiente(s))\n`);
     },
-    fin: (ms) => escribir(`\n(${(ms / 1000).toFixed(1)}s)\n`),
+    fin: (ms) => firme(`\n(${(ms / 1000).toFixed(1)}s)\n`),
   };
 }
 
@@ -53,9 +120,33 @@ export const escribirEnStdout: Escribir = (texto) => {
  * compartido con el lazo de líneas y con `leerSecreto`. Tres lectores de stdin no pueden
  * competir por sus eventos `data`; con un solo `rl`, `rl.question` se intercala sin
  * robarle líneas al `for await` del lazo (es readline quien arbitra internamente).
+ *
+ * **Si el rl ya está cerrado (o se cierra a media pregunta), resuelve con cadena vacía
+ * y no lanza.** Es el EOF de un pipe que se agota mientras el turno corre — medido en
+ * e2e: la aprobación pregunta 20 segundos después de que stdin hiciera EOF, y el
+ * `readline was closed` abortaba el turno con el interrupt colgado. Y la cadena vacía
+ * es lo correcto además de lo seguro: `interpretAnswer` sin un «s» explícito RECHAZA.
+ * Mismo pacto que `leerSecreto` con su `alCerrar`.
  */
 export function crearPreguntar(rl: readline.Interface): Preguntar {
-  return (pregunta: string) => new Promise<string>((resolver) => rl.question(pregunta, resolver));
+  // `rl.closed` existe en runtime pero no está en los tipos de esta versión de
+  // @types/node — mismo caso que `rl.history` abajo, y mismo cast justificado.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const cerrado = (): boolean => (rl as any).closed === true;
+  return (pregunta: string) =>
+    new Promise<string>((resolver) => {
+      const alCerrar = (): void => resolver("");
+      rl.once("close", alCerrar);
+      if (cerrado()) {
+        rl.off("close", alCerrar);
+        resolver("");
+        return;
+      }
+      rl.question(pregunta, (respuesta: string) => {
+        rl.off("close", alCerrar);
+        resolver(respuesta);
+      });
+    });
 }
 
 /**

@@ -16,6 +16,12 @@ export interface Piel {
   linea(texto: string): void;
   pausa(pendientes: PendienteDeAprobacion[]): void;
   fin(ms: number): void;
+  /**
+   * Si la piel sabe animar fases (el spinner del terminal), el motor le delega la fase
+   * y le dicta SOLO el texto — la decoración es cosa de la piel. Sin este método, la
+   * fase es una línea estática más.
+   */
+  fase?(texto: string): void;
 }
 
 /** Cómo se le cuenta cada fase al usuario. En un solo sitio, no repartido por el motor. */
@@ -83,10 +89,23 @@ export async function correrTurno(
           piel.token(ev.texto);
           break;
 
-        case "fase":
+        case "fase": {
           bitacora.anota(ev.fase, ev.detalle ?? "");
-          escribirLinea(`·  ${TEXTO_DE_FASE[ev.fase]}${ev.detalle ? ` — ${ev.detalle}` : ""}`);
+          const texto = `${TEXTO_DE_FASE[ev.fase]}${ev.detalle ? ` — ${ev.detalle}` : ""}`;
+          // La fase DURA: la piel que sabe animarla la recibe delegada (con la línea de
+          // tokens cerrada, como cualquier otra cosa que empieza su propia línea); la
+          // que no, la pinta como la línea estática de siempre.
+          if (piel.fase) {
+            if (abierta) {
+              piel.cerrarLinea();
+              abierta = false;
+            }
+            piel.fase(texto);
+          } else {
+            escribirLinea(`·  ${texto}`);
+          }
           break;
+        }
 
         case "tool":
           bitacora.anota("tool", ev.nombre);

@@ -28,6 +28,12 @@ export interface Tema {
   quitado: string;
   prompt: string;
   reset: string;
+  /**
+   * Borrar del cursor al final de la línea (EL). Lo usa el spinner para dejar limpia
+   * su línea antes de escribir la estática — el fotograma animado puede ser más largo
+   * que la línea que lo reemplaza. Sin color es vacío porque el spinner ni arranca.
+   */
+  borrar: string;
 }
 
 const CON_COLOR: Tema = {
@@ -43,6 +49,7 @@ const CON_COLOR: Tema = {
   quitado: "\x1b[31m",
   prompt: "\x1b[36m",
   reset: "\x1b[0m",
+  borrar: "\x1b[K",
 };
 
 /**
