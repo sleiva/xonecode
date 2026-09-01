@@ -21,7 +21,11 @@ import { crearTema } from "./tema.js";
 describe("crearTema", () => {
   it("con color, los tokens son códigos ANSI exactos — el sitio único donde viven", () => {
     const t = crearTema(true);
-    expect(t).toEqual({
+    // `arriba` es un token-función (CUU parametrizado): no cabe en un toEqual de
+    // códigos, lo verifica el test propio de abajo.
+    const { arriba, ...tokens } = t;
+    expect(typeof arriba).toBe("function");
+    expect(tokens).toEqual({
       texto: "",
       mudo: "\x1b[2m",
       negrita: "\x1b[1m",
@@ -39,14 +43,31 @@ describe("crearTema", () => {
       // limpia su línea antes de escribir la estática. Sin color es vacío porque el
       // spinner ni llega a arrancar sin TTY.
       borrar: "\x1b[K",
+      // Borrar la línea entera (EL con parámetro 2): lo usa el panel de avisos para
+      // repintar y colapsar. Sin color, vacío.
+      limpiarLinea: "\x1b[2K",
     });
   });
 
   it("sin color, TODO token es cadena vacía: mismo camino de código, cero basura en pipes", () => {
     const t = crearTema(false);
     for (const [nombre, valor] of Object.entries(t)) {
-      expect(valor, `token «${nombre}»`).toBe("");
+      // Los tokens-función (movimiento de cursor parametrizado) se comprueban
+      // llamándolos: el no-op debe devolver cadena vacía para cualquier argumento.
+      if (typeof valor === "function") {
+        expect(valor(2), `token «${nombre}»`).toBe("");
+        expect(valor(7), `token «${nombre}»`).toBe("");
+      } else {
+        expect(valor, `token «${nombre}»`).toBe("");
+      }
     }
+  });
+
+  it("con color, mover el cursor N líneas hacia arriba es CUU parametrizado", () => {
+    const t = crearTema(true);
+    expect(t.arriba(1)).toBe("\x1b[1A");
+    expect(t.arriba(5)).toBe("\x1b[5A");
+    expect(t.arriba(0)).toBe("");
   });
 });
 

@@ -99,6 +99,70 @@ describe("piel de stdio", () => {
     crearPielStdio(escribir).fin(2500);
     expect(trozos.join("")).toBe("\n(2.5s)\n");
   });
+
+  it("con TTY, los avisos van al panel reciclado y el contenido real los solidifica", () => {
+    const { trozos, escribir } = acumulador();
+    const CON = crearTema(true);
+    const piel = crearPielStdio(escribir, CON);
+    const aviso = "△ el verificador no ha corrido en este turno";
+    piel.notificacion!(aviso);
+    expect(trozos[0]).toBe(`${CON.limpiarLinea}${CON.mudo}${aviso}${CON.reset}\n`);
+    // La primera escritura de contenido colapsa el panel: queda el aviso, solo.
+    // (Con UNA línea de panel no hay nada más que borrar tras ella.)
+    piel.linea("→ lee app.xne");
+    expect(trozos[1]).toBe(
+      `${CON.arriba(1)}\r${CON.limpiarLinea}${CON.mudo}${aviso}${CON.reset}\n`
+    );
+    expect(trozos[2]).toBe("  → lee app.xne\n");
+    // Y el panel quedó vacío: el siguiente aviso arranca de cero, sin subir el cursor.
+    piel.notificacion!("otro aviso");
+    expect(trozos[3]).toBe(`${CON.limpiarLinea}${CON.mudo}otro aviso${CON.reset}\n`);
+  });
+
+  it("con TTY, la pausa entra al panel y se solidifica en el acto: el bloque de aprobación escribe después por su lado", () => {
+    const { trozos, escribir } = acumulador();
+    const CON = crearTema(true);
+    const piel = crearPielStdio(escribir, CON);
+    piel.pausa([
+      { id: "i1", origen: "dev", descripcion: "escribir Clientes.xne", decisionesPermitidas: ["approve", "reject"] },
+    ]);
+    const texto = "(turno pausado: 1 aprobación(es) pendiente(s))";
+    expect(trozos[0]).toBe(`${CON.limpiarLinea}${CON.mudo}${texto}${CON.reset}\n`);
+    expect(trozos[1]).toBe(
+      `${CON.arriba(1)}\r${CON.limpiarLinea}${CON.mudo}${texto}${CON.reset}\n`
+    );
+  });
+
+  it("con TTY, el fin fusiona los avisos pendientes y el tiempo en UNA sola línea", () => {
+    const { trozos, escribir } = acumulador();
+    const CON = crearTema(true);
+    const piel = crearPielStdio(escribir, CON);
+    piel.notificacion!("△ el verificador no ha corrido en este turno");
+    piel.fin(998200);
+    const fusion = "△ el verificador no ha corrido en este turno · (998.2s)";
+    // trozos[0]: el aviso pintado. trozos[1]: el repintado al entrar la fusión.
+    expect(trozos[1]).toBe(
+      `${CON.arriba(1)}\r${CON.limpiarLinea}${CON.mudo}△ el verificador no ha corrido en este turno${CON.reset}\n` +
+        `${CON.limpiarLinea}${CON.mudo}${fusion}${CON.reset}\n`
+    );
+    // trozos[2]: el colapso final, que deja SOLO la fusión en el historial (y limpia
+    // la línea del aviso que el repintado dejó debajo).
+    expect(trozos[2]).toBe(
+      `${CON.arriba(2)}\r${CON.limpiarLinea}${CON.mudo}${fusion}${CON.reset}\n${CON.limpiarLinea}\n`
+    );
+  });
+
+  it("con TTY, un fin sin avisos solidifica solo el tiempo", () => {
+    const { trozos, escribir } = acumulador();
+    const CON = crearTema(true);
+    const piel = crearPielStdio(escribir, CON);
+    piel.fin(2500);
+    // Pintar y solidificar son dos escrituras; con UNA línea no hay nada más que borrar.
+    expect(trozos.join("")).toBe(
+      `${CON.limpiarLinea}${CON.mudo}(2.5s)${CON.reset}\n` +
+        `${CON.arriba(1)}\r${CON.limpiarLinea}${CON.mudo}(2.5s)${CON.reset}\n`
+    );
+  });
 });
 
 function crearRlDePrueba() {

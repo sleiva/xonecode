@@ -22,6 +22,13 @@ export interface Piel {
    * fase es una línea estática más.
    */
   fase?(texto: string): void;
+  /**
+   * Si la piel sabe reciclar avisos de sistema (el panel de notificaciones del
+   * terminal), el motor le delega los `aviso` — con la línea de tokens cerrada, como
+   * cualquier otra cosa que empieza su propia línea. Sin este método, el aviso es una
+   * línea estática más.
+   */
+  notificacion?(texto: string): void;
 }
 
 /** Cómo se le cuenta cada fase al usuario. En un solo sitio, no repartido por el motor. */
@@ -155,7 +162,18 @@ export async function correrTurno(
 
         case "aviso":
           bitacora.anota("aviso", ev.texto);
-          escribirLinea(ev.texto);
+          // La piel que recicla avisos recibe el aviso delegado (la línea de tokens
+          // cerrada primero, para que el repintado del panel caiga en línea propia);
+          // la que no, lo pinta como la línea estática de siempre.
+          if (piel.notificacion) {
+            if (abierta) {
+              piel.cerrarLinea();
+              abierta = false;
+            }
+            piel.notificacion(ev.texto);
+          } else {
+            escribirLinea(ev.texto);
+          }
           break;
 
         case "fin":

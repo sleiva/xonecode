@@ -5,6 +5,7 @@ import type { Preguntar } from "./aprobar.js";
 import { crearTema, type Tema } from "./tema.js";
 import { RenderizadorDeMarkdown, puntoSeguro } from "./markdown.js";
 import { AnimadorDeFase } from "./spinner.js";
+import { PanelDeAvisos } from "./panel.js";
 
 /** Escribe SIN añadir salto de línea. La implementación real hace flush. */
 export type Escribir = (texto: string) => void;
@@ -43,11 +44,26 @@ export function crearPielStdio(
   let colchon = "";
   let inicioDeLinea = true;
 
+  // El panel de avisos: las notificaciones de sistema viven en un recinto de hasta 5
+  // líneas grises que se recicla en sitio, y solo la última queda en el historial. Sin
+  // color (pipe, CI) no se instala: el motor cae en las líneas estáticas de siempre y
+  // la salida es la de siempre. El disparador de su colapso es esta `firme` — la misma
+  // cascada del spinner, por la misma razón: solo una cosa viva al fondo.
+  const conPanel = tema.mudo !== "";
+  const panel = new PanelDeAvisos(escribir, tema);
+  const avisosDelCierre: string[] = [];
+
   // El spinner de fase: anima la ÚLTIMA línea mientras una fase dura. La cascada es
   // esta `firme`: CUALQUIER otra escritura termina el spinner primero — así solo hay
   // una línea viva al fondo, y el historial queda con la fase como línea estática.
   const animador = new AnimadorDeFase(escribir, tema);
   const firme = (t: string): void => {
+    if (conPanel) {
+      panel.solidifica();
+      // Lo que el panel ya solidificó con contenido real queda en el historial; no
+      // vuelve a salir en la fusión del fin.
+      avisosDelCierre.length = 0;
+    }
     animador.termina();
     escribir(t);
   };
@@ -92,6 +108,11 @@ export function crearPielStdio(
      * siempre y no arranca nada.
      */
     fase: (texto) => animador.empieza(texto),
+    /**
+     * Con panel, la pausa entra en él y se solidifica EN EL ACTO: lo que sigue no es
+     * salida de la piel, es el bloque de aprobación (`pedirDecisiones` escribe por su
+     * lado), y el panel no puede quedar colgando encima de una decisión.
+     */
     pausa: (pendientes: PendienteDeAprobacion[]) => {
       // Quien pinta el detalle de cada pendiente (origen, descripción, fichero) es
       // `pedirDecisiones`, al preguntar una a una. Aquí sería redundante, y el viejo
@@ -100,9 +121,36 @@ export function crearPielStdio(
       // En el modo de un disparo lo que sigue a la pausa NO es la respuesta del usuario:
       // es la aprobación, que conduce `pedirDecisiones`. Decir «lo siguiente que escribas
       // es la respuesta» sería mentira y despistaría justo en el paso delicado.
-      firme(`\n(turno pausado: ${pendientes.length} aprobación(es) pendiente(s))\n`);
+      const texto = `(turno pausado: ${pendientes.length} aprobación(es) pendiente(s))`;
+      if (conPanel) {
+        panel.avisa(texto);
+        panel.solidifica();
+      } else {
+        firme(`\n${texto}\n`);
+      }
     },
-    fin: (ms) => firme(`\n(${(ms / 1000).toFixed(1)}s)\n`),
+    /**
+     * Con panel, el fin FUSIONA los avisos pendientes y el tiempo en UNA línea: es la
+     * «última» que solidifica, y así el aviso de honestidad no se lo lleva por delante
+     * el tiempo final. Sin panel, la línea de siempre.
+     */
+    fin: (ms) => {
+      if (conPanel) {
+        panel.avisa([...avisosDelCierre, `(${(ms / 1000).toFixed(1)}s)`].join(" · "));
+        avisosDelCierre.length = 0;
+        panel.solidifica();
+      } else {
+        firme(`\n(${(ms / 1000).toFixed(1)}s)\n`);
+      }
+    },
+    ...(conPanel
+      ? {
+          notificacion: (texto: string): void => {
+            panel.avisa(texto);
+            avisosDelCierre.push(texto);
+          },
+        }
+      : {}),
   };
 }
 

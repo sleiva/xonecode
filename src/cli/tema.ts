@@ -34,6 +34,14 @@ export interface Tema {
    * que la línea que lo reemplaza. Sin color es vacío porque el spinner ni arranca.
    */
   borrar: string;
+  /** Borrar la línea entera, cursor incluido (EL con parámetro 2). Lo usa el panel de avisos para repintar. */
+  limpiarLinea: string;
+  /**
+   * Mover el cursor N líneas hacia arriba (CUU parametrizado): la única forma de
+   * repintar las líneas del panel de avisos, que viven POR ENCIMA del punto de
+   * escritura. `0` líneas no escribe nada.
+   */
+  arriba: (lineas: number) => string;
 }
 
 const CON_COLOR: Tema = {
@@ -50,15 +58,23 @@ const CON_COLOR: Tema = {
   prompt: "\x1b[36m",
   reset: "\x1b[0m",
   borrar: "\x1b[K",
+  limpiarLinea: "\x1b[2K",
+  arriba: (lineas: number): string => (lineas > 0 ? `\x1b[${lineas}A` : ""),
 };
+
+/** El no-op para los tokens-función del tema apagado: se llama, y no escribe nada. */
+const SIN_ACCION = (): string => "";
 
 /**
  * El tema apagado se DERIVA del encendido, no se escribe aparte: un token nuevo que
  * se olvide de apagarse falla en el test que recorre `Object.entries`, no en un pipe
- * de CI a las tantas.
+ * de CI a las tantas. Los tokens-función se derivan al no-op.
  */
 const SIN_COLOR: Tema = Object.fromEntries(
-  Object.keys(CON_COLOR).map((nombre) => [nombre, ""])
+  Object.keys(CON_COLOR).map((nombre) => [
+    nombre,
+    typeof CON_COLOR[nombre as keyof Tema] === "function" ? SIN_ACCION : "",
+  ])
 ) as unknown as Tema;
 
 export function crearTema(conColor: boolean): Tema {

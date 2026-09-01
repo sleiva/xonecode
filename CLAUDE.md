@@ -77,6 +77,15 @@ sitio donde el contenido se enseña entero: es el paso donde se DECIDE sobre él
 (`core/bitacora.ts`): a un modelo al que le pides «avisa de que el verificador es de pega» a
 veces no avisa, y un aviso que salta cuando no ha pasado nada enseña a ignorarlo.
 
+**El panel de avisos** (`cli/panel.ts`) es la ÚNICA excepción al append-only de la consola: las
+notificaciones de sistema (pausas, avisos deterministas, el tiempo final) viven en un recinto de
+hasta 5 líneas grises que se **repinta en sitio** por encima del punto de escritura, y al
+solidificarse deja en el historial solo la ÚLTIMA — el fin fusiona avisos pendientes y tiempo en
+esa línea, para que el aviso de honestidad no lo borre el tiempo final. Dos reglas duras: el
+borrado es EXACTO por número de líneas (nunca «hasta fin de pantalla», porque debajo puede vivir
+el spinner) y **sin TTY el panel no se instala** — el motor cae en `Piel.notificacion?` (mismo
+patrón que `fase?`) y las líneas estáticas de siempre, así que pipes y guion salen byte-idénticos.
+
 **El agente** (`agent/xoneAgent.ts`): un orquestador **sin ninguna tool** que delega en cuatro
 especialistas (`docs`, `planner`, `dev`, `mockup` — `agent/perfiles.ts`). Cuatro cosas no son
 negociables ahí:

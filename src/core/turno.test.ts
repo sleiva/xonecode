@@ -133,6 +133,29 @@ describe("correrTurno", () => {
     expect(actos).not.toContain("linea:⚠ VERIFICADOR DE PEGA");
   });
 
+  it("los avisos de sistema van delegados a la piel que sabe de notificaciones, con la línea cerrada", async () => {
+    // Mismo pacto que la fase: el motor dicta el TEXTO y no decide decoración. La piel
+    // de terminal manda el aviso al panel reciclado; la que no sabe, pinta la línea
+    // estática de siempre (los tests de arriba).
+    const { piel, actos } = pielDePrueba();
+    piel.notificacion = (t) => actos.push(`notificacion:${t}`);
+    await correrTurno(
+      flujo(
+        { tipo: "token", texto: "a medio", msgId: "r1" },
+        { tipo: "aviso", texto: "△ el verificador no ha corrido en este turno", severidad: "aviso" },
+        { tipo: "aviso", texto: "otro aviso", severidad: "info" }
+      ),
+      piel
+    );
+    expect(actos).toEqual([
+      "token:a medio",
+      "cerrar",
+      "notificacion:△ el verificador no ha corrido en este turno",
+      "notificacion:otro aviso",
+      "fin",
+    ]);
+  });
+
   it("si el flujo revienta, la línea se cierra y la cuenta de tools NO se pierde", async () => {
     const { piel, actos } = pielDePrueba();
     async function* explota(): AsyncIterable<DomainEvent> {
