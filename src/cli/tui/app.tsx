@@ -65,6 +65,25 @@ function PreguntaInk({
   );
 }
 
+/**
+ * Las filas que NO son transcript: las 2 de la Entrada (línea en edición + modelo; la
+ * barra izquierda no añade filas) y 1 del pie. Si la Entrada cambia de forma, este
+ * número cambia con ella. La pista de Tab añade una fila transitoria que se acepta:
+ * ese frame toca el borrado total de Ink (ver FILA_DE_RESERVA) y vuelve al soltar.
+ */
+const FILAS_FIJAS = 3;
+
+/**
+ * Una fila que la TUI NUNCA ocupa. Ink (`build/ink.js`, `outputHeight >= stdout.rows`)
+ * borra el terminal entero y repinta el frame completo cuando la salida llega a las
+ * filas de la pantalla; con la fila de columnas a `rows` y el transcript con
+ * `minHeight`, TODOS los frames caerían ahí — un borrado por token y por tecla. Con la
+ * reserva, el frame normal es `rows - 1` y el repintado es incremental. El modal de
+ * aprobación (montado debajo de la fila) sí supera `rows` mientras está abierto: es el
+ * comportamiento previo y está anotado en la spec como riesgo asumido.
+ */
+const FILA_DE_RESERVA = 1;
+
 export function App({
   store,
   vista: ranuraVista,
@@ -90,7 +109,8 @@ export function App({
   const vista = useSincronizado(ranuraVista.ver, ranuraVista.suscribir);
   const datos = datosSidebar();
   const { stdout } = useStdout();
-  const alturaTranscript = Math.max(5, (stdout.rows ?? 24) - 4);
+  const filas = (stdout.rows ?? 24) - FILA_DE_RESERVA;
+  const alturaTranscript = Math.max(5, filas - FILAS_FIJAS);
 
   // El transcript se repinta por su cuenta (Transcript está suscrito al store); la app
   // necesita re-render por los DATOS (sidebar, modelo), no por los actos. `suscribir`
@@ -114,7 +134,7 @@ export function App({
 
   return (
     <Box flexDirection="column" width="100%">
-      <Box flexDirection="row">
+      <Box flexDirection="row" height={filas}>
         <Box flexDirection="column" flexGrow={1} paddingRight={1}>
           <Transcript store={store} altura={alturaTranscript} />
           {vista.pregunta !== null ? (
@@ -130,7 +150,7 @@ export function App({
           )}
           <BarraDeEstado ruta={datos.ruta} contexto={datos.contexto} tope={datos.tope} />
         </Box>
-        <Box width={30} paddingLeft={1}>
+        <Box width={30} paddingLeft={1} flexDirection="column">
           <Sidebar {...datos} columnas={stdout.columns ?? 80} />
         </Box>
       </Box>

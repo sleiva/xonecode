@@ -106,7 +106,9 @@ aserción de «hex» se mantiene para los cuatro.
   4. `<Box flexGrow={1} />` que empuja el resto al fondo.
   5. Pie de sidebar: `<ruta>:<rama>` con `proyecto` en negrita y `:rama` en `mudo`
      (sin rama, solo el proyecto), y debajo `● xonecode <versión>` con el ● en `exito`.
-- `DatosDeSidebar` gana `columnas: number`. `proyecto` sigue siendo el basename.
+- `columnas` llega a `Sidebar` como prop APARTE de `DatosDeSidebar` (los datos los compone
+  `correrTui.ts`, que no mira stdout; la anchura la conoce `App`). `DatosDeSidebar` gana en
+  cambio `ruta` (la raíz completa) para el pie; `proyecto` sigue siendo el basename.
 - Para que `height="100%"` funcione, `App` da a la fila de columnas `height = rows - 1`
   (la fila del pie) y a la columna izquierda la altura del transcript + entrada.
 
