@@ -156,6 +156,21 @@ describe("correrTurno", () => {
     ]);
   });
 
+  it("los avisos DETERMINISTAS del final también van delegados — no solo los eventos aviso", async () => {
+    // El fallo medido en real: el △ del verificador sale del `finally` y no del flujo
+    // de eventos; si ese camino no enruta por `notificacion`, el panel nunca lo ve y el
+    // aviso vuelve a acumularse en el scrollback pegado a su propio tiempo final.
+    const { piel, actos } = pielDePrueba();
+    piel.notificacion = (t) => actos.push(`notificacion:${t}`);
+    await correrTurno(flujo(), piel, {
+      avisos: () => ["△ el verificador no ha corrido en este turno"],
+    });
+    expect(actos).toEqual([
+      "notificacion:△ el verificador no ha corrido en este turno",
+      "fin",
+    ]);
+  });
+
   it("si el flujo revienta, la línea se cierra y la cuenta de tools NO se pierde", async () => {
     const { piel, actos } = pielDePrueba();
     async function* explota(): AsyncIterable<DomainEvent> {

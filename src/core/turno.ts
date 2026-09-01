@@ -187,7 +187,19 @@ export async function correrTurno(
     if (cierre) escribirLinea(cierre);
 
     // Los avisos deterministas van DESPUÉS de todo, y también si hubo excepción.
-    for (const aviso of opciones.avisos?.(bitacora) ?? []) escribirLinea(aviso);
+    // Por el MISMO camino que los eventos `aviso`: la piel que recicla los recibe
+    // delegados, la que no los pinta como líneas estáticas.
+    for (const aviso of opciones.avisos?.(bitacora) ?? []) {
+      if (piel.notificacion) {
+        if (abierta) {
+          piel.cerrarLinea();
+          abierta = false;
+        }
+        piel.notificacion(aviso);
+      } else {
+        escribirLinea(aviso);
+      }
+    }
 
     if (abierta) piel.cerrarLinea();
     piel.fin(Date.now() - t0);
