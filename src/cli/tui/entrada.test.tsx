@@ -17,7 +17,9 @@ const esperar = (): Promise<void> => new Promise((r) => setTimeout(r, 10));
 describe("entrada", () => {
   it("escribe, envía con Enter y vacía el campo", async () => {
     const enviadas: string[] = [];
-    const instancia = render(<Entrada alEnviar={(l) => enviadas.push(l)} completa={() => [[], ""]} ocupado={false} historial={[]} />);
+    const instancia = render(
+      <Entrada alEnviar={(l) => enviadas.push(l)} completa={() => [[], ""]} ocupado={false} historial={[]} modelo="ollama/glm" />
+    );
     await teclear(instancia, "hola");
     instancia.stdin.write("\r");
     await esperar();
@@ -32,6 +34,7 @@ describe("entrada", () => {
         completa={(linea) => (linea === "/conf" ? [["/config"], linea] : [[], linea])}
         ocupado={false}
         historial={[]}
+        modelo="ollama/glm"
       />
     );
     await teclear(instancia, "/conf");
@@ -43,7 +46,13 @@ describe("entrada", () => {
   it("↑/↓ recorren el historial: lo más reciente primero, y ↓ devuelve a la línea vacía", async () => {
     // Contrato: el historial llega con la MÁS RECIENTE en el índice 0.
     const instancia = render(
-      <Entrada alEnviar={() => {}} completa={() => [[], ""]} ocupado={false} historial={["reciente", "antigua"]} />
+      <Entrada
+        alEnviar={() => {}}
+        completa={() => [[], ""]}
+        ocupado={false}
+        historial={["reciente", "antigua"]}
+        modelo="ollama/glm"
+      />
     );
     await esperar();
     instancia.stdin.write("\x1b[A"); // ↑ → la más reciente
@@ -66,7 +75,13 @@ describe("entrada", () => {
     // lanzaba un TypeError sin catch.
     const enviadas: string[] = [];
     const instancia = render(
-      <Entrada alEnviar={(l) => enviadas.push(l)} completa={() => [[], ""]} ocupado={false} historial={["reciente"]} />
+      <Entrada
+        alEnviar={(l) => enviadas.push(l)}
+        completa={() => [[], ""]}
+        ocupado={false}
+        historial={["reciente"]}
+        modelo="ollama/glm"
+      />
     );
     await esperar();
     instancia.stdin.write("\x1b[B"); // ↓ sin haber subido: ya estás en la línea en edición
@@ -87,6 +102,7 @@ describe("entrada", () => {
         completa={() => [["/config", "/conectar", "/conectar2"], "/con"]}
         ocupado={false}
         historial={[]}
+        modelo="ollama/glm"
       />
     );
     await teclear(instancia, "/con");
@@ -102,7 +118,13 @@ describe("entrada", () => {
   it("ocupado deshabilita la entrada y enseña el turno en marcha", async () => {
     const enviadas: string[] = [];
     const instancia = render(
-      <Entrada alEnviar={(l) => enviadas.push(l)} completa={() => [[], ""]} ocupado={true} historial={[]} />
+      <Entrada
+        alEnviar={(l) => enviadas.push(l)}
+        completa={() => [[], ""]}
+        ocupado={true}
+        historial={[]}
+        modelo="ollama/glm"
+      />
     );
     await teclear(instancia, "hola");
     instancia.stdin.write("\r");
@@ -110,5 +132,25 @@ describe("entrada", () => {
     expect(enviadas).toEqual([]);
     expect(instancia.lastFrame()).toContain("turno en curso");
     expect(instancia.lastFrame()).not.toContain("hola");
+  });
+
+  it("es un bloque con barra izquierda y una segunda fila con el modelo, también ocupada", async () => {
+    const libre = render(
+      <Entrada alEnviar={() => {}} completa={() => [[], ""]} ocupado={false} historial={[]} modelo="ollama/glm" />
+    );
+    await esperar();
+    const salidaLibre = libre.lastFrame() ?? "";
+    expect(salidaLibre.trimStart().startsWith("▌")).toBe(true);
+    expect(salidaLibre).not.toContain("╭");
+    expect(salidaLibre).not.toContain("╰");
+    expect(salidaLibre).toContain("▏");
+    expect(salidaLibre).toContain("ollama/glm");
+
+    const ocupada = render(
+      <Entrada alEnviar={() => {}} completa={() => [[], ""]} ocupado={true} historial={[]} modelo="ollama/glm" />
+    );
+    await esperar();
+    expect(ocupada.lastFrame()).toContain("turno en curso");
+    expect(ocupada.lastFrame()).toContain("ollama/glm");
   });
 });

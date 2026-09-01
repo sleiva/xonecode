@@ -11,6 +11,7 @@ import { Transcript } from "./transcript.js";
 import { Entrada } from "./entrada.js";
 import { BarraDeEstado, Sidebar, type DatosDeSidebar } from "./sidebar.js";
 import { ModalAprobacion } from "./aprobarTui.js";
+import { barra } from "./barra.js";
 import { temaInk } from "./temaInk.js";
 
 type Store = ReturnType<typeof crearStore>;
@@ -54,11 +55,11 @@ function PreguntaInk({
     if (entrada && !tecla.ctrl && !tecla.meta && !tecla.escape) setValor((v) => v + entrada);
   });
   return (
-    <Box borderStyle="round" borderColor={temaInk.aviso} paddingX={1}>
+    <Box {...barra(temaInk.aviso)}>
       <Text>
         {pregunta.texto}
         {pregunta.oculto ? "*".repeat(valor.length) : valor}
-        <Text color={temaInk.acento}>{"▏"}</Text>
+        <Text color={temaInk.prompt}>{"▏"}</Text>
       </Text>
     </Box>
   );
@@ -119,7 +120,13 @@ export function App({
           {vista.pregunta !== null ? (
             <PreguntaInk pregunta={vista.pregunta} alResponder={responder} />
           ) : (
-            <Entrada alEnviar={alEnviar} completa={completa} ocupado={vista.ocupado} historial={historial} />
+            <Entrada
+              alEnviar={alEnviar}
+              completa={completa}
+              ocupado={vista.ocupado}
+              historial={historial}
+              modelo={datos.modelo}
+            />
           )}
           <BarraDeEstado modelo={datos.modelo} ruta={datos.proyecto} />
         </Box>

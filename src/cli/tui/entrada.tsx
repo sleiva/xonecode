@@ -8,6 +8,7 @@
 import { Box, Text, useInput } from "ink";
 import { useState } from "react";
 import type { ReactNode } from "react";
+import { barra } from "./barra.js";
 import { temaInk } from "./temaInk.js";
 
 export function Entrada({
@@ -15,12 +16,15 @@ export function Entrada({
   completa,
   ocupado,
   historial,
+  modelo,
 }: {
   alEnviar: (linea: string) => void;
   /** El completer puro de `consola.ts`: `(linea) => [candidatos, linea]`. */
   completa: (linea: string) => [string[], string];
   ocupado: boolean;
   historial: readonly string[];
+  /** El modelo de trabajo vigente: la segunda fila del cuadro, en mudo (la maqueta). */
+  modelo: string;
 }): ReactNode {
   const [valor, setValor] = useState("");
   const [indiceHistorial, setIndice] = useState(-1); // -1 = la línea en edición
@@ -78,15 +82,19 @@ export function Entrada({
   );
 
   return (
-    <Box flexDirection="column" borderStyle="round" borderColor={temaInk.borde} paddingX={1}>
+    // La misma barra navy que el bloque de usuario: lo que escribes y lo que escribiste
+    // tienen la misma forma. Sin borde arriba/abajo: dos filas de contenido, y app.tsx
+    // cuenta con ellas en FILAS_FIJAS.
+    <Box flexDirection="column" {...barra(temaInk.marca)}>
       {ocupado ? (
         <Text color={temaInk.mudo}>turno en curso… (Ctrl-C para cancelar el turno)</Text>
       ) : (
         <Text color={temaInk.texto}>
           {valor}
-          <Text color={temaInk.acento}>{"▏"}</Text>
+          <Text color={temaInk.prompt}>{"▏"}</Text>
         </Text>
       )}
+      <Text color={temaInk.mudo}>{modelo}</Text>
       {pista.length > 0 ? <Text color={temaInk.mudo}>{`  ${pista.join("   ")}`}</Text> : null}
     </Box>
   );
