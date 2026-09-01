@@ -57,6 +57,24 @@ describe("la consola TUI", () => {
     expect(() => piel.token("otro turno")).not.toThrow();
   });
 
+  it("una Ctrl-C que aterriza tarde no mata el turno siguiente (cada piel nueva rearma)", () => {
+    const { consola, cancelar } = crearConsolaTui({ raiz: "/tmp/proyecto" });
+
+    // Turno 1: la Ctrl-C llega DESPUÉS del último acto — el turno termina sin consumir
+    // el flag, y la piel vieja no vuelve a usarse.
+    const pielUno = consola.piel!();
+    pielUno.token("hola");
+    cancelar();
+
+    // Turno 2: una piel nueva es un turno nuevo — arranca limpio, sin «turno cancelado».
+    const pielDos = consola.piel!();
+    expect(() => pielDos.token("primer acto del turno 2")).not.toThrow();
+
+    // Y la cancelación DURANTE el turno 2 sigue funcionando igual.
+    cancelar();
+    expect(() => pielDos.token("más")).toThrow(/cancelado/);
+  });
+
   it("el historial deja la más reciente en el índice 0 (contrato de Entrada)", () => {
     const { enviar, historial } = crearConsolaTui({ raiz: "/tmp/proyecto" });
     enviar("primera");

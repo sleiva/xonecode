@@ -211,6 +211,13 @@ describe("decidirTui", () => {
     conTty(true, true, () => expect(decidirTui([])).toBe(true));
     conTty(false, false, () => expect(decidirTui([])).toBe(false));
   });
+
+  it("sin banderas exige TTY en AMBOS lados: stdout TTY con stdin de tubería es stdio", () => {
+    // `echo /salir | xonecode` en un terminal real: la TUI se comería los bytes del
+    // pipe como teclas y el EOF del pipe no termina el lazo. Solo los dos lados TTY.
+    conTty(true, false, () => expect(decidirTui([])).toBe(false));
+    conTty(false, true, () => expect(decidirTui([])).toBe(false));
+  });
 });
 
 describe("main — la bandera --tui sin terminal es un error de uso, no un crash", () => {

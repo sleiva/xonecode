@@ -233,13 +233,16 @@ export function crearTopeDelModelo(raiz: string): (id: string) => number | undef
 /**
  * ¿TUI o stdio? `--no-tui` gana siempre (el usuario pidió explícitamente la consola
  * clásica); después `--tui` fuerza la TUI aunque no haya TTY (quien la pide, la tiene:
- * sin TTY el raw mode no funciona y el resultado es suyo); por omisión, TTY → TUI y
- * tubería/CI → stdio, que es lo que mantiene el e2e de pipe byte-idéntico.
+ * sin TTY el raw mode no funciona y el resultado es suyo); por omisión, AMBOS lados
+ * TTY → TUI (solo mirar stdout monta la TUI con stdin de tubería — «echo /salir |
+ * xonecode» en un terminal real — y los bytes del pipe se consumen como teclas mientras
+ * el EOF del pipe no termina el lazo) y cualquier tubería → stdio, que es lo que
+ * mantiene el e2e de pipe byte-idéntico.
  */
 export function decidirTui(argv: string[] = []): boolean {
   if (argv.includes("--no-tui")) return false;
   if (argv.includes("--tui")) return true;
-  return process.stdout.isTTY === true;
+  return process.stdout.isTTY === true && process.stdin.isTTY === true;
 }
 
 /**
@@ -606,9 +609,9 @@ export async function main(argv: string[]): Promise<number> {
     const pedirTui = argv.includes("--tui");
     const usarTui = decidirTui(argv);
     // `--tui` fuerza la TUI, pero no puede fabricar un terminal: sin stdin interactivo
-    // no hay teclado que leer y el raw mode revienta a mitad de pantalla. Error de USO
-    // (64), no un crash — la bandera fue imposible, no el entorno.
-    if (pedirTui && usarTui && process.stdin.isTTY !== true) {
+    // no hay teclado que leer, y sin stdout TTY ink pintaría códigos de escape en la
+    // tubería. Error de USO (64), no un crash — la bandera fue imposible, no el entorno.
+    if (pedirTui && usarTui && (process.stdin.isTTY !== true || process.stdout.isTTY !== true)) {
       process.stderr.write("la TUI necesita un terminal interactivo: usa --no-tui o corre sin tubería\n");
       return 64;
     }

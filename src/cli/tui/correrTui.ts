@@ -177,6 +177,12 @@ export function crearConsolaTui(opciones: OpcionesDeConsolaTui) {
       });
     },
     piel: (): Piel => {
+      // REARME por turno: ambos ejecutores (real y guionizado) llaman `piel()` UNA vez
+      // al empezar el turno y antes de ningún acto, así que este es el inicio exacto del
+      // turno nuevo. Una Ctrl-C que aterrizó tarde en el turno ANTERIOR (tras su último
+      // acto) muere aquí en vez de matar el primer acto del turno que no la pidió; y una
+      // Ctrl-C DURANTE el turno actual vuelve a poner el flag después de este rearme.
+      cancelarPendiente = false;
       const base = crearPielTui(store);
       return {
         token: (t) => {
