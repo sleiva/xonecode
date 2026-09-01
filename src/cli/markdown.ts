@@ -85,3 +85,33 @@ export class RenderizadorDeMarkdown {
     return renderizarInline(texto, this.tema);
   }
 }
+
+/** Un trozo de línea con su significado: la TUI lo pinta y la stdio lo colorea. */
+export type EstiloDeSegmento = "normal" | "negrita" | "mudo";
+export interface Segmento {
+  texto: string;
+  estilo: EstiloDeSegmento;
+}
+
+/**
+ * Parte una línea en segmentos `**negrita**` y `` `mudo` `` — la MISMA gramática que
+ * `renderizarInline`, pero en datos y no en ANSI: la TUI no puede usar códigos de
+ * escape dentro de un `<Text>` de Ink, así que pide significado y no color.
+ */
+export function segmentosDe(texto: string): Segmento[] {
+  const segmentos: Segmento[] = [];
+  const re = /\*\*([^*\n]+)\*\*|`([^`\n]+)`/g;
+  let ultimo = 0;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(texto)) !== null) {
+    if (m.index > ultimo) segmentos.push({ texto: texto.slice(ultimo, m.index), estilo: "normal" });
+    segmentos.push(
+      m[1] !== undefined
+        ? { texto: m[1]!, estilo: "negrita" }
+        : { texto: m[2]!, estilo: "mudo" }
+    );
+    ultimo = m.index + m[0].length;
+  }
+  if (ultimo < texto.length) segmentos.push({ texto: texto.slice(ultimo), estilo: "normal" });
+  return segmentos.length > 0 ? segmentos : [{ texto, estilo: "normal" }];
+}

@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { RenderizadorDeMarkdown, renderizarInline, puntoSeguro } from "./markdown.js";
+import { RenderizadorDeMarkdown, renderizarInline, puntoSeguro, segmentosDe } from "./markdown.js";
 import { crearTema } from "./tema.js";
 
 const CON = crearTema(true);
@@ -73,6 +73,25 @@ describe("RenderizadorDeMarkdown", () => {
     expect(rend.linea("<coll/>")).toBe("<coll/>");
     expect(rend.linea("```")).toBe("```");
     expect(rend.linea("**ya** fuera")).toBe("**ya** fuera");
+  });
+});
+
+describe("segmentosDe", () => {
+  it("parte una línea en segmentos normal, negrita y mudo", () => {
+    expect(segmentosDe("la **Hola** está `lista`")).toEqual([
+      { texto: "la ", estilo: "normal" },
+      { texto: "Hola", estilo: "negrita" },
+      { texto: " está ", estilo: "normal" },
+      { texto: "lista", estilo: "mudo" },
+    ]);
+  });
+
+  it("texto sin marcadores: un segmento normal", () => {
+    expect(segmentosDe("hola tal cual")).toEqual([{ texto: "hola tal cual", estilo: "normal" }]);
+  });
+
+  it("un marcador sin cerrar queda LITERAL, nunca partido", () => {
+    expect(segmentosDe("esto es **a medio")).toEqual([{ texto: "esto es **a medio", estilo: "normal" }]);
   });
 });
 
