@@ -46,6 +46,10 @@ export function Entrada({
       }
       if (tecla.downArrow) {
         const siguiente = indiceHistorial - 1;
+        // Ya estás en la línea en edición (-1): no hay nada más abajo. Sin este guard,
+        // siguiente === -2 y `historial[-2]` es undefined — y lo tecleado después se
+        // pegaría detrás («undefinedhola») hasta llegar al modelo por Enter.
+        if (siguiente < -1) return;
         setIndice(siguiente);
         setValor(siguiente === -1 ? "" : historial[siguiente]!);
         return;

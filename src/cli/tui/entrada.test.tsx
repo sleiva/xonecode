@@ -60,6 +60,26 @@ describe("entrada", () => {
     expect(instancia.lastFrame()).not.toContain("reciente");
   });
 
+  it("↓ desde la línea en edición no inventa nada: el campo queda vacío y Enter no envía", async () => {
+    // El bug que esto fija: ↓ con indiceHistorial === -1 calculaba -2 y pintaba
+    // `undefined`; lo escrito después se pegaba detrás («undefinedhola») y Enter
+    // lanzaba un TypeError sin catch.
+    const enviadas: string[] = [];
+    const instancia = render(
+      <Entrada alEnviar={(l) => enviadas.push(l)} completa={() => [[], ""]} ocupado={false} historial={["reciente"]} />
+    );
+    await esperar();
+    instancia.stdin.write("\x1b[B"); // ↓ sin haber subido: ya estás en la línea en edición
+    await esperar();
+    expect(instancia.lastFrame()).not.toContain("undefined");
+    // Lo que se escriba después es texto limpio, no una cola pegada a `undefined`.
+    await teclear(instancia, "hola");
+    expect(instancia.lastFrame()).toContain("hola");
+    instancia.stdin.write("\r");
+    await esperar();
+    expect(enviadas).toEqual(["hola"]);
+  });
+
   it("Tab con varios candidatos no completa: enseña hasta 8 pistas y deja el texto", async () => {
     const instancia = render(
       <Entrada
