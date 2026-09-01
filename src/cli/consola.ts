@@ -15,11 +15,14 @@ import { cmdDescribe } from "./describe.js";
 import { cmdDoctor } from "./doctor.js";
 import { cmdVerify } from "./verify.js";
 import { AgenteGuionizado } from "../agent/guionizado.js";
-import { correrTurno } from "../core/turno.js";
+import { correrTurno, type Piel } from "../core/turno.js";
 import { PAPELES, POR_OMISION, ModeloMalEscrito, parsear, PROVEEDORES, type FuentesDeEleccion, type Proveedor } from "../core/modelos.js";
 import type { Aviso } from "../core/config.js";
 import type { Papel } from "../core/ports.js";
 import { esDoble } from "../core/ports.js";
+import type { PendienteDeAprobacion } from "../core/events.js";
+import type { LineaDeDiff } from "../core/diff.js";
+import type { Decision } from "../vendor/hitl.js";
 import { crearPielStdio, type Escribir } from "./stdio.js";
 import type { Preguntar } from "./aprobar.js";
 import { guardarCredencial, AuthRotoEnDisco } from "../agent/authEnDisco.js";
@@ -38,6 +41,20 @@ export interface Consola {
    * stdin) vive fuera — este fichero solo la usa.
    */
   leerSecreto: (pregunta: string) => Promise<string>;
+  /**
+   * La piel que los turnos usan para pintarse. La consola stdio no la define (se usa
+   * `crearPielStdio`); la TUI la aporta — mismo contrato `Piel`, otro render.
+   */
+  piel?: () => Piel;
+  /**
+   * Las aprobaciones propias (modal TUI). Ausente = `pedirDecisiones` por readline.
+   * Mismo contrato que el puerto `pedirAprobacion` de `abrirSesionReal`.
+   */
+  aprobacionesTui?: (
+    pendientes: PendienteDeAprobacion[],
+    ficheros: Map<string, string>,
+    diffs: Map<string, LineaDeDiff[]>
+  ) => Promise<Map<string, Decision>>;
 }
 
 export interface EstadoDeSesion {
@@ -84,7 +101,9 @@ export async function ejecutarTurnoGuionizado(
   consola: Consola
 ): Promise<void> {
   const agente = new AgenteGuionizado();
-  const piel = crearPielStdio(consola.escribir);
+  // La costura: la piel de la consola si la aporta (la TUI), y el render stdio de siempre
+  // si no — el camino de hoy, byte-idéntico cuando el campo no está.
+  const piel = consola.piel?.() ?? crearPielStdio(consola.escribir);
 
   if (esDoble(agente)) {
     consola.escribir("⚠  AGENTE DE PEGA: esto es un guion, no ha corrido ningún modelo.\n\n");

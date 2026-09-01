@@ -237,12 +237,16 @@ function crearEjecutorReal(alAbrirSesion: (sesion: SesionReal) => void): Ejecuto
         entorno,
         // Las aprobaciones entran por el `preguntar` de la propia consola: el turno para
         // y pregunta DENTRO de la sesión, sin salir de ella ni montar otro lector de stdin.
-        pedirAprobacion: (lista, ficheros, diffs) =>
-          pedirDecisiones(lista, consolaReal.preguntar, consolaReal.escribir, {
-            interactive: consolaReal.interactivo,
-            fichero: (id) => ficheros.get(id),
-            diff: (id) => diffs.get(id),
-          }),
+        // Si la consola aporta su propio puerto (`aprobacionesTui`, el modal de la TUI),
+        // manda: mismo contrato que este `pedirDecisiones` por readline.
+        pedirAprobacion: async (lista, ficheros, diffs) =>
+          consolaReal.aprobacionesTui !== undefined
+            ? consolaReal.aprobacionesTui(lista, ficheros, diffs)
+            : pedirDecisiones(lista, consolaReal.preguntar, consolaReal.escribir, {
+                interactive: consolaReal.interactivo,
+                fichero: (id) => ficheros.get(id),
+                diff: (id) => diffs.get(id),
+              }),
       });
       alAbrirSesion(sesion);
       // Recién construida: no hay cambio que detectar en esta primera vuelta.
@@ -268,7 +272,9 @@ function crearEjecutorReal(alAbrirSesion: (sesion: SesionReal) => void): Ejecuto
       }
     }
 
-    await sesion.turno(peticion, crearPielStdio(consolaReal.escribir));
+    // La piel del turno: la de la consola si la aporta (la TUI), y el render stdio de
+    // siempre si no — mismo reparto que `ejecutarTurnoGuionizado`.
+    await sesion.turno(peticion, consolaReal.piel?.() ?? crearPielStdio(consolaReal.escribir));
   };
 }
 

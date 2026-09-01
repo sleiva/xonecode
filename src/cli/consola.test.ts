@@ -5,11 +5,13 @@ import { join, dirname } from "node:path";
 import {
   COMANDOS,
   correrConsola,
+  ejecutarTurnoGuionizado,
   crearCompleter,
   type Consola,
   type EstadoDeSesion,
   type EjecutorDeTurno,
 } from "./consola.js";
+import type { Piel } from "../core/turno.js";
 import type { Escribir } from "./stdio.js";
 import type { Preguntar } from "./aprobar.js";
 import { rutaAuth, NOMBRE_CARPETA } from "../agent/configEnDisco.js";
@@ -99,6 +101,43 @@ describe("correrConsola — turnos de prosa", () => {
     // Un Enter de más no saca ni un error: no hay nada que hacer.
     expect(salida()).not.toContain("Error");
     expect(salida()).not.toContain("comando desconocido");
+  });
+
+  it("la costura piel: los actos del turno caen en ESA piel y NO en consola.escribir", async () => {
+    // La piel de prueba apunta cada llamada: mismo contrato `Piel`, otro render (el de
+    // la TUI será otro igual). Sin la costura, el turno guionizado pinta siempre por
+    // `crearPielStdio(consola.escribir)` y este test no tiene dónde mirar.
+    const actos: Array<[string, string]> = [];
+    const pielDePrueba: Piel = {
+      token: (t) => actos.push(["token", t]),
+      cerrarLinea: () => actos.push(["cerrarLinea", ""]),
+      linea: (t) => actos.push(["linea", t]),
+      pausa: (p) => actos.push(["pausa", `${p.length}`]),
+      fin: (ms) => actos.push(["fin", `${ms}`]),
+      fase: (t) => actos.push(["fase", t]),
+    };
+    let salida = "";
+    const consola: Consola = {
+      ...consolaDe("dime un turno").consola,
+      escribir: (t) => {
+        salida += t;
+      },
+      piel: () => pielDePrueba,
+    };
+
+    await ejecutarTurnoGuionizado("dime un turno", estadoDe(), consola);
+
+    // La respuesta del guion llegó a la piel inyectada, no al `escribir` de la consola.
+    const tokens = actos.filter(([m]) => m === "token").map(([, t]) => t).join("");
+    expect(tokens).toContain("Listo.");
+    expect(actos[actos.length - 1]![0]).toBe("fin");
+    // El plan del guion también: son actos `linea` de la misma piel.
+    const lineas = actos.filter(([m]) => m === "linea").map(([, t]) => t).join("");
+    expect(lineas).toContain("[GUION]");
+    expect(salida).not.toContain("[GUION]");
+    expect(salida).not.toContain("Listo.");
+    // Y el aviso de agente de pega sí sale por la consola: no es un acto de piel.
+    expect(salida).toContain("AGENTE DE PEGA");
   });
 });
 
