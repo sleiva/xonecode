@@ -50,6 +50,18 @@ describe("el store de la TUI", () => {
     expect(s.estado().aprobacionPendiente).toBe(true);
     expect(avisos).toEqual([1]);
   });
+
+  it("rearmar baja la aprobación pendiente: quien cierra el modal sabe que ya no hay nada", () => {
+    // `pausa` solo sube a true; sin rearme la TUI quedaría «en pausa» tras la primera
+    // aprobación. El rearme lo hace el cierre del modal, no el store por su cuenta.
+    const s = crearStore();
+    const estados: boolean[] = [];
+    s.suscribir(() => estados.push(s.estado().aprobacionPendiente));
+    s.pausa();
+    s.rearmar();
+    expect(s.estado().aprobacionPendiente).toBe(false);
+    expect(estados).toEqual([true, false]);
+  });
 });
 
 describe("la piel TUI", () => {

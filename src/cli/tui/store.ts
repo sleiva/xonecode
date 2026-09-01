@@ -7,6 +7,8 @@
  * no stdout: en TUI el repintado es total y no hay append-only que respetar.
  */
 
+import type { PropsDelModal } from "./aprobarTui.js";
+
 /** Un acto del transcript: lo que ya no cambia y se pinta por su tipo. */
 export type Acto =
   | { tipo: "usuario"; texto: string }
@@ -107,8 +109,63 @@ export function crearStore(opciones: OpcionesDelStore = {}) {
       mutar({ aprobacionPendiente: true });
     },
 
+    /**
+     * El rearme: `pausa` solo sube a true, y el modal que la cerró es quien sabe que
+     * ya no hay nada pendiente — si no baja, la TUI se queda «en pausa» para siempre
+     * tras la primera aprobación.
+     */
+    rearmar(): void {
+      mutar({ aprobacionPendiente: false });
+    },
+
     fin(ms: number): void {
       aniadir([{ tipo: "fin", ms }]);
     },
   };
+}
+
+/**
+ * Lo que la TUI muestra además del transcript y que TAMBIÉN cambia mientras corre:
+ * si hay un turno en curso, una pregunta de consola viva (crear proyecto, la clave
+ * de /provider) o un modal de aprobación montado. Vive en su propia ranura y no en
+ * `EstadoDeTui` porque es estado de MONTAJE (quién tiene el teclado), no contenido
+ * del transcript.
+ */
+export type VistaDeTui = {
+  /** Hay un turno corriendo: la Entrada se desactiva y Ctrl-C cancela el turno. */
+  ocupado: boolean;
+  /**
+   * La pregunta de `consola.preguntar`/`leerSecreto` sin resolver. Mientras vive,
+   * la app la pinta EN LUGAR de la Entrada (un solo teclado a la vez). `oculto`
+   * pinta asteriscos: es la clave de `/provider`.
+   */
+  pregunta: { texto: string; oculto: boolean; responder: (respuesta: string) => void } | null;
+  /** El modal de aprobación montado, con las props que `pedirDecisionesTui` dejó. */
+  modal: PropsDelModal | null;
+};
+
+/** Un trocito observable de la vista: lo que `App` consume con `useSincronizado`. */
+export interface Ranura<T extends object> {
+  ver(): T;
+  mutar(cambio: Partial<T>): void;
+  suscribir(f: () => void): void;
+}
+
+export function crearRanura<T extends object>(inicial: T): Ranura<T> {
+  let valor = inicial;
+  const suscriptores: (() => void)[] = [];
+  return {
+    ver: () => valor,
+    mutar(cambio: Partial<T>): void {
+      valor = { ...valor, ...cambio };
+      for (const s of suscriptores) s();
+    },
+    suscribir(f: () => void): void {
+      suscriptores.push(f);
+    },
+  };
+}
+
+export function vistaInicial(): VistaDeTui {
+  return { ocupado: false, pregunta: null, modal: null };
 }

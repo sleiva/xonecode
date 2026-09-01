@@ -33,6 +33,7 @@ import { abrirSesionReal, ficherosDelProyecto, type SesionReal } from "../agent/
 import { crearProyecto } from "../agent/crearProyecto.js";
 import { type DatosDelProyecto } from "../core/esqueleto.js";
 import { createTokenTracker, type TokenTracker } from "../vendor/tokenTracking.js";
+import { correrConsolaTui } from "./tui/correrTui.js";
 
 /**
  * Estilo, y solo con TTY detrás.
@@ -92,6 +93,8 @@ const AYUDA = `xonecode — harness de XOne
   xonecode doctor                ¿hay un proyecto aquí? ¿responde el simulador?
   xonecode verify [ruta]         valida el proyecto con xone-simulator (por omisión, aquí)
   xonecode --guion               la consola con el agente de pega, sin gastar
+  xonecode --tui                 fuerza la interfaz de terminal (TUI)
+  xonecode --no-tui              fuerza la consola clásica (stdio), p. ej. con TTY
   xonecode --help                esto
 
 Modelo:
@@ -196,6 +199,47 @@ export function formatearBarra(p: PiezasDeBarra): string {
           : "")
       : "";
   return `─ ${p.proyecto} (${p.colecciones} colls) · ${p.modelo} · ${formatearTokens(p.tokens)}${ctx} · /ayuda`;
+}
+
+/**
+ * El tope de la ventana del modelo ACTUAL: tabla de `core/contextos.ts` + lo que el
+ * usuario haya fijado en `config.json` (lo de proyecto gana a lo global, como los
+ * modelos). Fábrica PORQUE la barra lo lee en cada llamada y no en el arranque:
+ * /modelo cambia el modelo en caliente, y un tope del modelo equivocado es un
+ * porcentaje que miente. Si el id no parsea —no debería, viene de `resolver`—, no hay
+ * tope y no pasa nada.
+ *
+ * Exportada para que la TUI calcule su `ctx` con LA MISMA función que usa la barra de
+ * stdio y la que /config declara: dos pieles no pueden divergir en el tope.
+ */
+export function crearTopeDelModelo(raiz: string): (id: string) => number | undefined {
+  return (id: string) => {
+    try {
+      const { proveedor, modelo } = parsear(id);
+      const { config } = cargar(raiz);
+      // Misma resolución que /config (`topeResuelto`): proyecto gana a global, y la
+      // tabla es el último recurso. El origen aquí no se mira, pero así no puede
+      // divergir entre lo que la barra calcula y lo que /config declara.
+      return topeResuelto(proveedor, modelo, {
+        proyecto: config.proyecto?.contextos,
+        global: config.global?.contextos,
+      })?.tope;
+    } catch {
+      return undefined;
+    }
+  };
+}
+
+/**
+ * ¿TUI o stdio? `--no-tui` gana siempre (el usuario pidió explícitamente la consola
+ * clásica); después `--tui` fuerza la TUI aunque no haya TTY (quien la pide, la tiene:
+ * sin TTY el raw mode no funciona y el resultado es suyo); por omisión, TTY → TUI y
+ * tubería/CI → stdio, que es lo que mantiene el e2e de pipe byte-idéntico.
+ */
+export function decidirTui(argv: string[] = []): boolean {
+  if (argv.includes("--no-tui")) return false;
+  if (argv.includes("--tui")) return true;
+  return process.stdout.isTTY === true;
 }
 
 /**
@@ -386,8 +430,29 @@ export async function entrarEnConsola(
     }),
   guion = false,
   /** Costura de test del «¿hay alguien al otro lado?»: sin TTY no se pregunta nada. */
-  interactivo: boolean = process.stdin.isTTY === true
+  interactivo: boolean = process.stdin.isTTY === true,
+  /**
+   * ¿Arranca la TUI? Costura de test: los tests corren sin TTY y pasan `false` (o no
+   * la pasan, y `decidirTui` sin banderas cae en el `isTTY` del proceso). En la rama
+   * TUI este parámetro de `interactivo` no se usa: la TUI es interactiva por diseño.
+   */
+  usarTui: boolean = decidirTui()
 ): Promise<number> {
+  if (usarTui) {
+    // La TUI es la MISMA consola: `entrarEnConsola` no la duplica, le entrega las
+    // piezas que son de esta capa (la inspección, el asistente de creación, el
+    // ejecutor real, el tope compartido) y el montaje vive en `tui/correrTui.ts`,
+    // que no puede importar de aquí porque sería un ciclo.
+    return correrConsolaTui({
+      fuentes,
+      raiz,
+      guion,
+      inspeccionarProyecto,
+      ofrecer: ofrecerCrearProyecto,
+      crearEjecutor: guion ? undefined : crearEjecutorReal,
+      topeDe: crearTopeDelModelo(raiz),
+    });
+  }
   // `let` porque el asistente de creación puede cambiarlo TODO: si el usuario acepta,
   // la carpeta pasa de «0 colls, sin app.xml» a proyecto de verdad, y la cabecera se
   // re-inspecciona para no mentir en la primera línea que se ve.
@@ -417,27 +482,11 @@ export async function entrarEnConsola(
   // al arrancar y tras cada /nuevo o /modelo. La lista de comandos se GENERA recorriendo
   // el registro — una lista escrita a mano se queda vieja en cuanto alguien añade uno.
   /**
-   * El tope de la ventana del modelo ACTUAL: tabla de `core/contextos.ts` + lo que el
-   * usuario haya fijado en `config.json` (lo de proyecto gana a lo global, como los
-   * modelos). Se lee en cada barra y no en el arranque porque `modeloTrabajo` cambia
-   * en caliente con /modelo, y un tope del modelo equivocado es un porcentaje que miente.
-   * Si el id no parsea —no debería, viene de `resolver`—, no hay tope y no pasa nada.
+   * El tope de la ventana del modelo ACTUAL. La lógica vive en `crearTopeDelModelo`
+   * (módulo, y compartida con la TUI): la barra la llama en cada emisión porque
+   * /modelo cambia el modelo en caliente.
    */
-  const topeDelModelo = (id: string): number | undefined => {
-    try {
-      const { proveedor, modelo } = parsear(id);
-      const { config } = cargar(raiz);
-      // Misma resolución que /config (`topeResuelto`): proyecto gana a global, y la
-      // tabla es el último recurso. El origen aquí no se mira, pero así no puede
-      // divergir entre lo que la barra calcula y lo que /config declara.
-      return topeResuelto(proveedor, modelo, {
-        proyecto: config.proyecto?.contextos,
-        global: config.global?.contextos,
-      })?.tope;
-    } catch {
-      return undefined;
-    }
-  };
+  const topeDelModelo = crearTopeDelModelo(raiz);
 
   /**
    * La barra de estado, al estilo de la de opencode: lo que uno necesita tener delante sin
@@ -546,13 +595,28 @@ export async function main(argv: string[]): Promise<number> {
   // cayendo en «no conozco el comando».
   // `--guion` se quita del argv ANTES de extraerBanderasDeModelo: no es una bandera de
   // modelo y no debe llegar como `resto` a ninguna parte.
-  if (!comando || comando === "--guion" || comando.startsWith("--modelo")) {
+  if (
+    !comando ||
+    comando === "--guion" ||
+    comando === "--tui" ||
+    comando === "--no-tui" ||
+    comando.startsWith("--modelo")
+  ) {
     const guion = argv.includes("--guion");
+    const pedirTui = argv.includes("--tui");
+    const usarTui = decidirTui(argv);
+    // `--tui` fuerza la TUI, pero no puede fabricar un terminal: sin stdin interactivo
+    // no hay teclado que leer y el raw mode revienta a mitad de pantalla. Error de USO
+    // (64), no un crash — la bandera fue imposible, no el entorno.
+    if (pedirTui && usarTui && process.stdin.isTTY !== true) {
+      process.stderr.write("la TUI necesita un terminal interactivo: usa --no-tui o corre sin tubería\n");
+      return 64;
+    }
     // extraerBanderasDeModelo también con argv vacío, para que fuentes.entorno
     // .XONECODE_MODELO se rellene igual que en todos los demás subcomandos: la consola
     // no puede ser la única vía que ignora esa variable.
     const { fuentes } = extraerBanderasDeModelo(argv.filter((a) => a !== "--guion"));
-    return entrarEnConsola(fuentes, undefined, undefined, undefined, undefined, guion);
+    return entrarEnConsola(fuentes, undefined, undefined, undefined, undefined, guion, undefined, usarTui);
   }
   if (comando === "--help" || comando === "-h") {
     process.stdout.write(AYUDA);

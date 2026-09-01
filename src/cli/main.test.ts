@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join, basename } from "node:path";
 import { PassThrough } from "node:stream";
 import * as readline from "node:readline";
-import { entrarEnConsola, main, formatearBarra, crearCompleterDelProyecto } from "./main.js";
+import { entrarEnConsola, main, formatearBarra, crearCompleterDelProyecto, decidirTui } from "./main.js";
 import { COMANDOS } from "./consola.js";
 import type { Escribir } from "./stdio.js";
 import { POR_OMISION, type FuentesDeEleccion } from "../core/modelos.js";
@@ -179,6 +179,52 @@ describe("entrarEnConsola", () => {
     // también lo contiene, así que comprobamos que llega tras el primer arranque).
     const trasArranque = texto.slice(texto.indexOf("\n") + 1);
     expect(trasArranque).toContain("ollama/llama3");
+  });
+});
+
+describe("decidirTui", () => {
+  /** El isTTY de stdout/stdin es de solo lectura para el test: se cambia y se restaura. */
+  function conTty(stdout: boolean, stdin: boolean, probar: () => void): void {
+    const antes = [Object.getOwnPropertyDescriptor(process.stdout, "isTTY"), Object.getOwnPropertyDescriptor(process.stdin, "isTTY")];
+    Object.defineProperty(process.stdout, "isTTY", { value: stdout, configurable: true });
+    Object.defineProperty(process.stdin, "isTTY", { value: stdin, configurable: true });
+    try {
+      probar();
+    } finally {
+      for (const [lado, descriptor] of [[process.stdout, antes[0]], [process.stdin, antes[1]]] as const) {
+        if (descriptor === undefined) delete (lado as { isTTY?: boolean }).isTTY;
+        else Object.defineProperty(lado, "isTTY", descriptor);
+      }
+    }
+  }
+
+  it("--no-tui gana sobre todo: fuerza stdio incluso con TTY", () => {
+    conTty(true, true, () => expect(decidirTui(["--no-tui"])).toBe(false));
+    conTty(true, true, () => expect(decidirTui(["--tui", "--no-tui"])).toBe(false));
+  });
+
+  it("--tui fuerza la TUI aunque no haya TTY (el guardián de stdin vive en main)", () => {
+    conTty(false, false, () => expect(decidirTui(["--tui"])).toBe(true));
+  });
+
+  it("sin banderas: TTY → TUI, tubería → stdio", () => {
+    conTty(true, true, () => expect(decidirTui([])).toBe(true));
+    conTty(false, false, () => expect(decidirTui([])).toBe(false));
+  });
+});
+
+describe("main — la bandera --tui sin terminal es un error de uso, no un crash", () => {
+  it("devuelve 64 con su mensaje en stderr, sin montar nada", async () => {
+    // Sin TTY (los tests): decidirTui deja pasar la --tui forzada, y el guardián de
+    // main la rechaza ANTES de montar ink.
+    const errorEspia = vi.spyOn(process.stderr, "write").mockImplementation(() => true);
+    try {
+      const codigo = await main(["--tui"]);
+      expect(codigo).toBe(64);
+      expect(errorEspia.mock.calls.map((c) => String(c[0])).join("")).toContain("terminal interactivo");
+    } finally {
+      errorEspia.mockRestore();
+    }
   });
 });
 
