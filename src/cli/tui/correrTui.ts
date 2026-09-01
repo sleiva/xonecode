@@ -24,6 +24,7 @@ import {
   type EjecutorDeTurno,
   type EstadoDeSesion,
 } from "../consola.js";
+import { modeloDeAcuse } from "../acuseDeModelo.js";
 import { crearStore, crearRanura, vistaInicial, type Acto, type VistaDeTui } from "./store.js";
 import { crearPielTui } from "./pielTui.js";
 import { pedirDecisionesTui } from "./aprobarTui.js";
@@ -127,20 +128,17 @@ export function crearConsolaTui(opciones: OpcionesDeConsolaTui) {
   };
 
   const detectarCambiosDeModelo = (texto: string): void => {
-    // Las MISMAS frases que el `escribir` de stdio mira para reimprimir su barra: aquí
-    // actualizan la sidebar. El acuse de /modelo es una sola llamada a `escribir`.
-    const losTres = /^modelo \(los tres papeles\): (.+)\n$/.exec(texto);
-    if (losTres) {
-      modeloTrabajo = losTres[1]!;
+    // El acuse de /modelo se escribe y se lee por el MISMO módulo que `consola.ts`
+    // (`acuseDeModelo.ts`): aquí solo se le aplica a la sidebar.
+    const acuse = modeloDeAcuse(texto);
+    if (acuse === undefined) return;
+    if (acuse.papel === undefined) {
+      modeloTrabajo = acuse.modelo;
       for (const p of PAPELES) papeles[p] = modeloTrabajo;
       return;
     }
-    const uno = /^modelo (rapido|trabajo|afilado): (.+)\n$/.exec(texto);
-    if (uno) {
-      const papel = uno[1] as Papel;
-      papeles[papel] = uno[2]!;
-      if (papel === "trabajo") modeloTrabajo = uno[2]!;
-    }
+    papeles[acuse.papel] = acuse.modelo;
+    if (acuse.papel === "trabajo") modeloTrabajo = acuse.modelo;
   };
 
   const consola: Consola = {

@@ -24,6 +24,7 @@ import type { PendienteDeAprobacion } from "../core/events.js";
 import type { LineaDeDiff } from "../core/diff.js";
 import type { Decision } from "../vendor/hitl.js";
 import { crearPielStdio, type Escribir } from "./stdio.js";
+import { acuseDeModelo } from "./acuseDeModelo.js";
 import type { Preguntar } from "./aprobar.js";
 import { guardarCredencial, AuthRotoEnDisco } from "../agent/authEnDisco.js";
 import { cargar, NOMBRE_CARPETA } from "../agent/configEnDisco.js";
@@ -219,9 +220,9 @@ function manejadorDeModelo(papel: Papel | undefined): ManejadorDeBarra {
       papel === undefined
         ? { ...estado.fuentes, bandera: valor }
         : { ...estado.fuentes, porPapel: { ...estado.fuentes.porPapel, [papel]: valor } };
-    consola.escribir(
-      papel === undefined ? `modelo (los tres papeles): ${valor}\n` : `modelo ${papel}: ${valor}\n`
-    );
+    // La frase vive en `acuseDeModelo.ts`: la TUI la re-parsea para su sidebar, así
+    // que escribir y leer comparten módulo — retocar la frase aquí no rompe a ciegas.
+    consola.escribir(acuseDeModelo(papel, valor));
     return { seguir: true, estado: { ...estado, fuentes } };
   };
 }

@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { crearConsolaTui } from "./correrTui.js";
+import { acuseDeModelo } from "../acuseDeModelo.js";
 
 describe("la consola TUI", () => {
   it("implementa Consola: lineas es la cola de lo enviado, escribir y piel comparten store", async () => {
@@ -79,6 +80,14 @@ describe("la consola TUI", () => {
     const { consola, actos } = crearConsolaTui({ raiz: "/tmp/proyecto" });
     consola.escribir("\n");
     expect(actos()).toEqual([]);
+  });
+
+  it("el acuse de /modelo (compartido con consola.ts) actualiza la sidebar en caliente", () => {
+    const { consola, datosSidebar } = crearConsolaTui({ raiz: "/tmp/proyecto" });
+    consola.escribir(acuseDeModelo(undefined, "ollama/nuevo"));
+    expect(datosSidebar().modelo).toBe("ollama/nuevo");
+    consola.escribir(acuseDeModelo("trabajo", "ollama/otro"));
+    expect(datosSidebar().modelo).toBe("ollama/otro");
   });
 
   it("el historial deja la más reciente en el índice 0 (contrato de Entrada)", () => {
