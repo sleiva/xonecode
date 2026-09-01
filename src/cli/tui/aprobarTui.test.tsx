@@ -1,6 +1,6 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import { render } from "ink-testing-library";
-import { reductorDeAprobacion, estadoInicial, ModalAprobacion } from "./aprobarTui.js";
+import { reductorDeAprobacion, estadoInicial, pedirDecisionesTui, ModalAprobacion } from "./aprobarTui.js";
 import type { PendienteDeAprobacion } from "../../core/events.js";
 import type { LineaDeDiff } from "../../core/diff.js";
 
@@ -108,5 +108,31 @@ describe("el modal de aprobación", () => {
     expect(decisiones).toHaveLength(1);
     expect(decisiones[0]!.get("i1")!.type).toBe("reject");
     instancia.unmount();
+  });
+});
+
+describe("pedirDecisionesTui — la costura fail-closed", () => {
+  it("rellena con RECHAZO todo pendiente sin decisión explícita y resuelve el Map completo", async () => {
+    // `montar` falso: el modal «se cierra» devolviendo solo lo respondido. Los que
+    // quedaron sin respuesta NO pueden quedar fuera del Map: aprobar ejecuta, así que
+    // el silencio es rechazo.
+    const promesa = pedirDecisionesTui([pendiente("i1"), pendiente("i2")], new Map(), new Map(), ({ alTerminar }) => {
+      const parciales = new Map();
+      parciales.set("i1", { type: "approve" });
+      alTerminar(parciales);
+    });
+    await expect(promesa).resolves.toEqual(
+      new Map([
+        ["i1", { type: "approve" }],
+        ["i2", { type: "reject" }],
+      ])
+    );
+  });
+
+  it("con la lista vacía resuelve un Map vacío SIN montar nada", async () => {
+    const montar = vi.fn();
+    const promesa = pedirDecisionesTui([], new Map(), new Map(), montar);
+    await expect(promesa).resolves.toEqual(new Map());
+    expect(montar).not.toHaveBeenCalled();
   });
 });
