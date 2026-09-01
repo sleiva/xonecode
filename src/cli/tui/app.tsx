@@ -131,7 +131,7 @@ export function App({
           <BarraDeEstado ruta={datos.ruta} contexto={datos.contexto} tope={datos.tope} />
         </Box>
         <Box width={30} paddingLeft={1}>
-          <Sidebar {...datos} />
+          <Sidebar {...datos} columnas={stdout.columns ?? 80} />
         </Box>
       </Box>
       {vista.modal !== null ? <ModalAprobacion {...vista.modal} /> : null}

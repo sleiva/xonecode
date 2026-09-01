@@ -9,6 +9,7 @@ import { temaInk } from "./temaInk.js";
 import type { Papel } from "../../core/ports.js";
 // El MISMO formato compacto que stdio (`cli/tokens.ts`): dos pieles, una cifra.
 import { compacto, formatearTope } from "../tokens.js";
+import { LOGO_XONE, cabeLogo } from "./logo.js";
 
 export interface DatosDeSidebar {
   contexto: number;
@@ -22,11 +23,23 @@ export interface DatosDeSidebar {
   version: string;
 }
 
-export function Sidebar(d: DatosDeSidebar): ReactNode {
+/**
+ * `columnas` es la anchura TOTAL del terminal, y llega aparte de los datos: los datos
+ * los compone `correrTui.ts` (que no mira stdout) y la anchura la conoce `App`.
+ */
+export function Sidebar({ columnas, ...d }: DatosDeSidebar & { columnas: number }): ReactNode {
   return (
-    <Box flexDirection="column" gap={1}>
+    // flexGrow para llenar la columna: el separador de abajo empuja el pie al fondo.
+    <Box flexDirection="column" flexGrow={1}>
+      {cabeLogo(columnas) ? (
+        <Box flexDirection="column" marginBottom={1}>
+          {LOGO_XONE.map((fila, i) => (
+            <Text key={i} color={temaInk.acento}>{fila}</Text>
+          ))}
+        </Box>
+      ) : null}
       {d.contexto > 0 ? (
-        <Box flexDirection="column">
+        <Box flexDirection="column" marginBottom={1}>
           <Text bold color={temaInk.acento}>Contexto</Text>
           <Text>
             {compacto(d.contexto)}
@@ -41,11 +54,17 @@ export function Sidebar(d: DatosDeSidebar): ReactNode {
           <Text key={papel} color={temaInk.mudo}>{`${papel}: ${m}`}</Text>
         ))}
       </Box>
+      {/* El separador elástico: lo estable vive al fondo, como en la maqueta. */}
+      <Box flexGrow={1} />
       <Box flexDirection="column">
-        <Text bold color={temaInk.acento}>Proyecto</Text>
-        <Text>{d.proyecto}</Text>
-        {d.rama !== undefined ? <Text color={temaInk.mudo}>{d.rama}</Text> : null}
-        <Text color={temaInk.mudo}>xonecode {d.version}</Text>
+        <Text>
+          <Text bold>{d.proyecto}</Text>
+          {d.rama !== undefined ? <Text color={temaInk.mudo}>{`:${d.rama}`}</Text> : null}
+        </Text>
+        <Text>
+          <Text color={temaInk.exito}>{"● "}</Text>
+          <Text color={temaInk.mudo}>{`xonecode ${d.version}`}</Text>
+        </Text>
       </Box>
     </Box>
   );
