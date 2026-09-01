@@ -67,7 +67,10 @@ justo cuando hace falta.
 `agent/puente.ts` traduce los chunks del stream de langgraph), `core/turno.ts` decide qué se
 cuenta, y las pieles (`cli/stdio.ts`, en su día una TUI) pintan. Ningún evento lleva argumentos
 de tool, ni truncados: `write_file` lleva el contenido del fichero y una tool MCP lleva el
-bearer.
+bearer. La excepción aparente es `tool.detalle`, y no es una excepción: una lista blanca por
+NOMBRE de tool (`agent/resumenDeTool.ts`) extrae un solo campo de ruta/patrón — nunca contenido.
+Y el bloque de diff de la aprobación (`cli/aprobar.ts`, líneas de `core/diff.ts`) es el único
+sitio donde el contenido se enseña entero: es el paso donde se DECIDE sobre él.
 
 **Los avisos de honestidad son código, no prompt**, y tienen alcance de **turno**
 (`core/bitacora.ts`): a un modelo al que le pides «avisa de que el verificador es de pega» a
@@ -87,7 +90,10 @@ negociables ahí:
 
 **La aprobación humana es fail-closed** (`cli/aprobar.ts`, `vendor/hitl.ts`). Aprobar ejecuta;
 rechazar no toca nada, así que lo que no se entiende es **rechazo**. El Enter a secas solo
-aprueba con un TTY de verdad detrás. Tope de `MAX_APPROVAL_ROUNDS = 5` rondas por turno.
+aprueba con un TTY de verdad detrás, y un rl ya cerrado (el EOF de un pipe que se agota durante
+un turno, medido en e2e) responde con cadena vacía — o sea, rechazo — en vez de lanzar
+`readline was closed` y dejar el interrupt colgado. Tope de `MAX_APPROVAL_ROUNDS = 5` rondas
+por turno.
 
 **La foto del ANTES** (`agent/instantanea.ts`) es un árbol de git en un `GIT_INDEX_FILE`
 privado: no necesita commits, no necesita que el proyecto sea la raíz del repo, y no toca el

@@ -237,10 +237,11 @@ function crearEjecutorReal(alAbrirSesion: (sesion: SesionReal) => void): Ejecuto
         entorno,
         // Las aprobaciones entran por el `preguntar` de la propia consola: el turno para
         // y pregunta DENTRO de la sesión, sin salir de ella ni montar otro lector de stdin.
-        pedirAprobacion: (lista, ficheros) =>
+        pedirAprobacion: (lista, ficheros, diffs) =>
           pedirDecisiones(lista, consolaReal.preguntar, consolaReal.escribir, {
             interactive: consolaReal.interactivo,
             fichero: (id) => ficheros.get(id),
+            diff: (id) => diffs.get(id),
           }),
       });
       alAbrirSesion(sesion);

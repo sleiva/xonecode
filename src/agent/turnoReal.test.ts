@@ -1,4 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
+import { mkdtempSync, writeFileSync, rmSync } from "node:fs";
+import { join } from "node:path";
+import { tmpdir } from "node:os";
 import { Command } from "@langchain/langgraph";
 
 // vi.mock se eleva al principio del módulo: las factorías no pueden tocar variables de
@@ -16,6 +19,7 @@ import { abrirSesionReal } from "./turnoReal.js";
 import { ModeloGuionizado, SkillsEnMemoria } from "../core/ports.js";
 import type { Piel } from "../core/turno.js";
 import type { PendienteDeAprobacion } from "../core/events.js";
+import type { LineaDeDiff } from "../core/diff.js";
 import type { Decision } from "../vendor/hitl.js";
 import type { Entorno } from "./entorno.js";
 import type { Cambio } from "./instantanea.js";
@@ -30,7 +34,7 @@ import type { Cambio } from "./instantanea.js";
  */
 type AgenteFalso = ReturnType<typeof agenteFalso>;
 
-function agenteFalso(opts: { escribe?: boolean } = {}) {
+function agenteFalso(opts: { escribe?: boolean; interruptArgs?: Record<string, unknown> } = {}) {
   let ejecuto = false;
   let interrumpido = false; // true tras la primera ronda si opts.escribe
   return {
@@ -63,7 +67,7 @@ function agenteFalso(opts: { escribe?: boolean } = {}) {
                   actionRequests: [
                     {
                       name: "write_file",
-                      args: { file_path: "/a.xne" },
+                      args: opts.interruptArgs ?? { file_path: "/a.xne" },
                       description: "[dev] quiere escribir un fichero",
                     },
                   ],
@@ -117,11 +121,22 @@ function rechazarTodo() {
 }
 
 async function abrir(
-  opts: { escribe?: boolean; pedir?: (pendientes: PendienteDeAprobacion[]) => Promise<Map<string, Decision>> } = {}
+  opts: {
+    escribe?: boolean;
+    interruptArgs?: Record<string, unknown>;
+    raiz?: string;
+    pedir?: (
+      pendientes: PendienteDeAprobacion[],
+      ficheros: Map<string, string>,
+      diffs: Map<string, LineaDeDiff[]>
+    ) => Promise<Map<string, Decision>>;
+  } = {}
 ) {
-  mocks.construirAgente.mockImplementation(() => agenteFalso({ escribe: opts.escribe }));
+  mocks.construirAgente.mockImplementation(() =>
+    agenteFalso({ escribe: opts.escribe, interruptArgs: opts.interruptArgs })
+  );
   return abrirSesionReal({
-    raiz: "/tmp/turno-real-test", // no existe: `ficherosDelProyecto` devuelve Set vacío
+    raiz: opts.raiz ?? "/tmp/turno-real-test", // no existe: `ficherosDelProyecto` devuelve Set vacío
     modelos: new ModeloGuionizado(),
     skills: new SkillsEnMemoria(),
     entorno: entornoFalso,
@@ -218,6 +233,48 @@ describe("abrirSesionReal", () => {
         "int-1": { decisions: [{ type: "reject" }] },
       });
       expect(ag.ejecuto()).toBe(false);
+    });
+
+    it("el que aprueba recibe las LÍNEAS DE DIFF de cada pendiente (disco contra contenido)", async () => {
+      // Un raíz REAL con un fichero en el disco: el ANTES del diff tiene que ser lo que
+      // hay en el disco, y eso no se puede doblar — el interrupt pausa ANTES de escribir.
+      const dir = mkdtempSync(join(tmpdir(), "turnoreal-"));
+      writeFileSync(join(dir, "app.xne"), "<coll>\nviejo\n</coll>\n");
+      const vistos: Array<Map<string, LineaDeDiff[]> | undefined> = [];
+
+      const sesion = await abrir({
+        escribe: true,
+        raiz: dir,
+        interruptArgs: { file_path: "app.xne", content: "<coll>\nnuevo\n</coll>\n" },
+        pedir: async (pendientes, _ficheros, diffs) => {
+          vistos.push(diffs);
+          return rechazarTodo()(pendientes);
+        },
+      });
+      await sesion.turno("escribe algo", pielFalsa());
+
+      expect(vistos[0]?.get("int-1")).toEqual([
+        { tipo: "igual", texto: "<coll>" },
+        { tipo: "quitado", texto: "viejo" },
+        { tipo: "anadido", texto: "nuevo" },
+        { tipo: "igual", texto: "</coll>" },
+      ]);
+      rmSync(dir, { recursive: true, force: true });
+    });
+
+    it("un pendiente sin vista (tool que no escribe) no aparece en el mapa de diffs", async () => {
+      const vistos: Array<Map<string, LineaDeDiff[]> | undefined> = [];
+      const sesion = await abrir({
+        escribe: true,
+        interruptArgs: { file_path: "/a.xne" }, // write_file sin content: sin vista
+        pedir: async (pendientes, _ficheros, diffs) => {
+          vistos.push(diffs);
+          return rechazarTodo()(pendientes);
+        },
+      });
+      await sesion.turno("escribe algo", pielFalsa());
+
+      expect(vistos[0]?.size).toBe(0);
     });
   });
 });

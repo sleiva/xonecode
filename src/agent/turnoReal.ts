@@ -1,11 +1,12 @@
-import { readdirSync, statSync, existsSync } from "node:fs";
-import { join, sep } from "node:path";
+import { readdirSync, statSync, existsSync, readFileSync } from "node:fs";
+import { join, sep, resolve } from "node:path";
 import { randomUUID } from "node:crypto";
 import { HumanMessage } from "@langchain/core/messages";
 import { Command, MemorySaver } from "@langchain/langgraph";
 import { collectPending, type Decision, MAX_APPROVAL_ROUNDS } from "../vendor/hitl.js";
-import { aPendiente, ficheroDe, buildResume } from "./interrupts.js";
+import { aPendiente, ficheroDe, cambioDe, buildResume } from "./interrupts.js";
 import type { PendienteDeAprobacion } from "../core/events.js";
+import type { LineaDeDiff } from "../core/diff.js";
 import type { Piel } from "../core/turno.js";
 import { Bitacora } from "../core/bitacora.js";
 import { correrTurno } from "../core/turno.js";
@@ -91,7 +92,8 @@ export async function abrirSesionReal(opciones: {
   /** Para las aprobaciones. Sin él, una escritura pendiente termina el turno diciéndolo. */
   pedirAprobacion?: (
     pendientes: PendienteDeAprobacion[],
-    ficheros: Map<string, string>
+    ficheros: Map<string, string>,
+    diffs: Map<string, LineaDeDiff[]>
   ) => Promise<Map<string, Decision>>;
 }): Promise<SesionReal> {
   const { raiz, entorno } = opciones;
@@ -124,17 +126,30 @@ export async function abrirSesionReal(opciones: {
   const leerPendientes = async (): Promise<{
     lista: PendienteDeAprobacion[];
     ficheros: Map<string, string>;
+    diffs: Map<string, LineaDeDiff[]>;
   }> => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const crudos = collectPending(await (agente as any).getState({
       configurable: { thread_id: hilo },
     }));
     const ficheros = new Map<string, string>();
+    const diffs = new Map<string, LineaDeDiff[]>();
     for (const c of crudos) {
       const f = ficheroDe(c);
       if (f) ficheros.set(c.id, f);
+      // El ANTES es el disco: el interrupt pausa ANTES de escribir. La ruta viene del
+      // backend, que es relativo a la raíz del proyecto — y si no está en el disco, el
+      // fichero es nuevo y su «antes» es la cadena vacía, no un error.
+      const vista = cambioDe(c, (ruta) => {
+        try {
+          return readFileSync(resolve(raiz, ruta), "utf8");
+        } catch {
+          return "";
+        }
+      });
+      if (vista) diffs.set(c.id, vista.lineas);
     }
-    return { lista: crudos.map(aPendiente), ficheros };
+    return { lista: crudos.map(aPendiente), ficheros, diffs };
   };
 
   /**
@@ -176,7 +191,7 @@ export async function abrirSesionReal(opciones: {
         }
       );
 
-      const { lista, ficheros } = await leerPendientes();
+      const { lista, ficheros, diffs } = await leerPendientes();
       if (lista.length === 0) break;
 
       // El tope existe porque un modelo que insiste tras cada rechazo convierte esto en un
@@ -195,7 +210,7 @@ export async function abrirSesionReal(opciones: {
         break;
       }
 
-      const decisiones = await opciones.pedirAprobacion(lista, ficheros);
+      const decisiones = await opciones.pedirAprobacion(lista, ficheros, diffs);
       payload = new Command({ resume: buildResume(decisiones) });
     }
 

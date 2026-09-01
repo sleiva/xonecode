@@ -135,7 +135,7 @@ async function correrReal(opciones: OpcionesRun, escribir: Escribir): Promise<nu
     modelos,
     skills,
     entorno,
-    pedirAprobacion: async (lista, ficheros) => {
+    pedirAprobacion: async (lista, ficheros, diffs) => {
       // **Se pregunta SIEMPRE, con TTY o sin él.** Cortar aquí sin preguntar dejaría
       // muerto el conjunto de respuestas sin-TTY de `interpretAnswer`, que existe
       // precisamente para que en un pipe o en CI se pueda aprobar con un `s` EXPLÍCITO.
@@ -149,6 +149,7 @@ async function correrReal(opciones: OpcionesRun, escribir: Escribir): Promise<nu
       const decisiones = await pedirDecisiones(lista, preguntar, escribir, {
         interactive: interactivo,
         fichero: (id) => ficheros.get(id),
+        diff: (id) => diffs.get(id),
       });
       if (!interactivo && [...decisiones.values()].every((d) => d.type === "reject")) {
         sinHumano = true;

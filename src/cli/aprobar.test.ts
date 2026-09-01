@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { pedirDecisiones, type Preguntar } from "./aprobar.js";
 import type { PendienteDeAprobacion } from "../core/events.js";
+import type { LineaDeDiff } from "../core/diff.js";
 
 /** Registra los textos que se le pasan a escribir, igual que en stdio.test.ts. */
 function acumulador() {
@@ -138,5 +139,72 @@ describe("pedirDecisiones", () => {
     const { escribir: e2 } = acumulador();
     await pedirDecisiones([pendiente("x")], sinTty.preguntar, e2);
     expect(sinTty.prompts[0]).toBe("¿Aprobar? [s/N] ");
+  });
+
+  describe("bloque de diff", () => {
+    const diff: LineaDeDiff[] = [
+      { tipo: "igual", texto: "<app>" },
+      { tipo: "quitado", texto: "viejo" },
+      { tipo: "anadido", texto: "nuevo" },
+      { tipo: "igual", texto: "</app>" },
+    ];
+
+    it("con diff, pinta los cambios con -/+ y su contexto, antes de decidir", async () => {
+      const { trozos, escribir } = acumulador();
+      const { preguntar } = preguntadorGuionizado(["s"]);
+
+      await pedirDecisiones([pendiente("x")], preguntar, escribir, {
+        fichero: () => "app.xml",
+        diff: () => diff,
+      });
+
+      const salida = trozos.join("");
+      // El diff va ANTES de la decisión: se aprueba mirándolo, no recordándolo.
+      expect(salida.indexOf("    <app>")).toBeLessThan(salida.indexOf("APROBADO"));
+      expect(salida).toContain("  - viejo");
+      expect(salida).toContain("  + nuevo");
+      expect(salida).toContain("    </app>");
+    });
+
+    it("las rachas de «igual» largas no se pintan enteras: contexto alrededor del cambio", async () => {
+      const largo: LineaDeDiff[] = [
+        ...Array.from({ length: 20 }, (_, i): LineaDeDiff => ({ tipo: "igual", texto: `línea ${i}` })),
+        { tipo: "anadido", texto: "NUEVA" },
+      ];
+      const { trozos, escribir } = acumulador();
+      const { preguntar } = preguntadorGuionizado(["s"]);
+
+      await pedirDecisiones([pendiente("x")], preguntar, escribir, { diff: () => largo });
+
+      const salida = trozos.join("");
+      expect(salida).toContain("  + NUEVA");
+      // Las primeras del fichero no aportan nada a la decisión: fuera del contexto.
+      expect(salida).not.toContain("línea 0");
+      expect(salida).toContain("línea 19");
+    });
+
+    it("más allá del techo de líneas, se declara cuántas faltan", async () => {
+      const enorme: LineaDeDiff[] = Array.from({ length: 40 }, (_, i): LineaDeDiff => ({
+        tipo: "anadido",
+        texto: `línea ${i}`,
+      }));
+      const { trozos, escribir } = acumulador();
+      const { preguntar } = preguntadorGuionizado(["s"]);
+
+      await pedirDecisiones([pendiente("x")], preguntar, escribir, { diff: () => enorme });
+
+      expect(trozos.join("")).toContain("… y 15 líneas más");
+    });
+
+    it("sin diff para ese id no hay bloque — la pregunta queda igual", async () => {
+      const { trozos, escribir } = acumulador();
+      const { prompts, preguntar } = preguntadorGuionizado(["s"]);
+
+      await pedirDecisiones([pendiente("x")], preguntar, escribir, { diff: () => undefined });
+
+      expect(trozos.join("")).not.toContain("+ ");
+      // La pregunta viaja por `preguntar`, no por `escribir`: el doble la registra.
+      expect(prompts[0]).toBe("¿Aprobar? [s/N] ");
+    });
   });
 });
