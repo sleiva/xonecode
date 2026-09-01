@@ -145,3 +145,10 @@ Todo con `ink-testing-library` o funciones puras; nada necesita TTY ni red.
 - **`height="100%"` en Ink depende de que el padre tenga altura fija.** Si el anclaje al
   fondo no cuadra en algún terminal, el fallback aceptable es un `marginTop` calculado; el
   plan lo comprueba con un frame de altura conocida.
+- **Una fila de reserva por el borrado total de Ink.** Ink repinta con `clearTerminal` el
+  frame entero cuando su altura alcanza `stdout.rows`. La fila de columnas mide `rows - 1`
+  para que el frame normal quede por debajo y el repintado sea incremental.
+- **El modal de aprobación supera `rows` mientras está abierto.** Se monta debajo de la
+  fila de columnas (diseño de la spec base), así que en ese estado Ink pinta por el camino
+  del borrado total. Ya pasaba cuando el transcript estaba lleno; con la fila anclada pasa
+  siempre que hay modal. Se asume; rehacer dónde se monta el modal es otro cambio.

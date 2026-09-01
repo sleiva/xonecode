@@ -1091,15 +1091,18 @@ git commit -m "TUI: sidebar con logotipo XONE arriba y proyecto:rama + versión 
 
 ### Task 8: Maqueta de `App`: filas fijas, alturas y verificación final
 
-**Goal:** `app.tsx` calcula el transcript con `FILAS_FIJAS = 3`, fija la altura de la fila de columnas para que el anclaje de la sidebar funcione en pantalla, y la suite completa más el typecheck quedan verdes.
+**Goal:** `app.tsx` calcula el transcript con `FILAS_FIJAS = 3`, fija la altura de la fila de columnas a `rows - 1` para que el anclaje de la sidebar funcione en pantalla SIN caer en el borrado total de Ink, y la suite completa más el typecheck quedan verdes.
+
+**Por qué `rows - 1` y no `rows`:** `node_modules/ink/build/ink.js` (línea ~121) hace `clearTerminal` + frame entero cuando `outputHeight >= stdout.rows`. Con la fila a `rows` y el transcript con `minHeight`, TODOS los frames caerían ahí: un borrado de pantalla por token y por tecla. La fila de reserva lo evita. **Conocido y fuera de alcance:** el modal de aprobación se monta DEBAJO de la fila de columnas, así que mientras está abierto el frame supera `rows` y se pinta por el camino del borrado total (ya pasaba antes cuando el transcript estaba lleno). No lo «arregles» aquí; está anotado en la spec.
 
 **Files:**
 - Modify: `src/cli/tui/app.tsx`
 - Modify: `docs/superpowers/specs/2026-09-01-tui-estilo-xone-design.md` (solo si el plan se desvió: anotar `columnas` como prop de `Sidebar` y `ruta` en `DatosDeSidebar`)
 
 **Acceptance Criteria:**
-- [ ] `app.tsx` tiene `const FILAS_FIJAS = 3` con el desglose comentado (2 de la Entrada + 1 del pie) y `alturaTranscript = Math.max(5, rows - FILAS_FIJAS)`.
-- [ ] La fila de columnas tiene `height={rows}` y la columna de la sidebar es `flexDirection="column"`, para que `flexGrow` de la Sidebar tenga altura que llenar.
+- [ ] `app.tsx` tiene `const FILAS_FIJAS = 3` (2 de la Entrada + 1 del pie) y `const FILA_DE_RESERVA = 1`, con el porqué comentado, y `alturaTranscript = Math.max(5, rows - FILA_DE_RESERVA - FILAS_FIJAS)`.
+- [ ] La fila de columnas tiene `height={rows - FILA_DE_RESERVA}` y la columna de la sidebar es `flexDirection="column"`, para que `flexGrow` de la Sidebar tenga altura que llenar.
+- [ ] Con `rows = 24`, la altura de la fila es 23 y la del transcript 20 (23 - 3).
 - [ ] `npm test` completo en verde y `npm run typecheck` limpio.
 - [ ] `frontera.test.ts` e `imports.test.ts` en verde (ningún import nuevo de ink/react fuera de `cli/tui/`).
 
@@ -1116,20 +1119,32 @@ En `src/cli/tui/app.tsx`:
 ```ts
 /**
  * Las filas que NO son transcript: las 2 de la Entrada (línea en edición + modelo; la
- * barra izquierda no añade filas) y 1 del pie. La pista de Tab añade una transitoria
- * que se acepta, como antes. Si la Entrada cambia de forma, este número cambia con ella.
+ * barra izquierda no añade filas) y 1 del pie. Si la Entrada cambia de forma, este
+ * número cambia con ella. La pista de Tab añade una fila transitoria que se acepta:
+ * ese frame toca el borrado total de Ink (ver FILA_DE_RESERVA) y vuelve al soltar.
  */
 const FILAS_FIJAS = 3;
+
+/**
+ * Una fila que la TUI NUNCA ocupa. Ink (`build/ink.js`, `outputHeight >= stdout.rows`)
+ * borra el terminal entero y repinta el frame completo cuando la salida llega a las
+ * filas de la pantalla; con la fila de columnas a `rows` y el transcript con
+ * `minHeight`, TODOS los frames caerían ahí — un borrado por token y por tecla. Con la
+ * reserva, el frame normal es `rows - 1` y el repintado es incremental. El modal de
+ * aprobación (montado debajo de la fila) sí supera `rows` mientras está abierto: es el
+ * comportamiento previo y está anotado en la spec como riesgo asumido.
+ */
+const FILA_DE_RESERVA = 1;
 ```
 
 (b) Sustituye `const alturaTranscript = Math.max(5, (stdout.rows ?? 24) - 4);` por:
 
 ```ts
-  const filas = stdout.rows ?? 24;
+  const filas = (stdout.rows ?? 24) - FILA_DE_RESERVA;
   const alturaTranscript = Math.max(5, filas - FILAS_FIJAS);
 ```
 
-(c) En el `return`, sustituye `<Box flexDirection="row">` por `<Box flexDirection="row" height={filas}>` y `<Box width={30} paddingLeft={1}>` por `<Box width={30} paddingLeft={1} flexDirection="column">`.
+(c) En el `return`, sustituye `<Box flexDirection="row">` por `<Box flexDirection="row" height={filas}>` (`filas` ya lleva la reserva descontada) y `<Box width={30} paddingLeft={1}>` por `<Box width={30} paddingLeft={1} flexDirection="column">`.
 
 - [ ] **Step 2: Suite completa y typecheck**
 
@@ -1154,7 +1169,7 @@ git commit -m "TUI: maqueta con FILAS_FIJAS y altura de fila para anclar la side
 ```
 
 ```json:metadata
-{"files": ["src/cli/tui/app.tsx", "docs/superpowers/specs/2026-09-01-tui-estilo-xone-design.md"], "verifyCommand": "npm test && npm run typecheck", "acceptanceCriteria": ["FILAS_FIJAS = 3 y altura rows - 3", "fila con height={rows} y columna sidebar en column", "npm test y typecheck verdes"], "modelTier": "standard"}
+{"files": ["src/cli/tui/app.tsx", "docs/superpowers/specs/2026-09-01-tui-estilo-xone-design.md"], "verifyCommand": "npm test && npm run typecheck", "acceptanceCriteria": ["FILAS_FIJAS = 3, FILA_DE_RESERVA = 1, altura rows - 1 - 3", "fila con height={rows - 1} y columna sidebar en column", "modal no se toca", "npm test y typecheck verdes"], "modelTier": "standard"}
 ```
 
 ---
