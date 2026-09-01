@@ -45,7 +45,8 @@ describe("el transcript pintado", () => {
     s.token("¡Hola! **listo**\n");
     const { lastFrame } = render(<Transcript store={s} altura={10} />);
     const salida = lastFrame() ?? "";
-    expect(salida).toContain("❯ hola");
+    expect(salida).toContain("▌ hola");
+    expect(salida).not.toContain("❯");
     expect(salida).toContain("¡Hola! listo");
     expect(salida).not.toContain("**");
   });
@@ -81,7 +82,7 @@ describe("el transcript pintado", () => {
     s.fin(2400);
     const { lastFrame } = render(<Transcript store={s} altura={10} />);
     const salida = lastFrame() ?? "";
-    expect(salida).toContain("❯ hazlo");
+    expect(salida).toContain("▌ hazlo");
     expect(salida).toContain("→ lee app.xne");
     expect(salida).toContain("aviso honesto");
     // El fin cierra la fase viva con su duración, y él mismo se pinta con la suya.
@@ -105,5 +106,26 @@ describe("el transcript pintado", () => {
     await esperar();
     expect(instancia.lastFrame()).toContain("línea 29");
     expect(instancia.lastFrame()).toContain("acto nuevo");
+  });
+
+  it("el bloque de usuario ocupa UNA fila: barra izquierda, sin borde arriba ni abajo", () => {
+    // `ventanaDe` cuenta un acto como una fila. Un Box con borde arriba/abajo o padding
+    // vertical serían tres, y la ventana se saldría de la pantalla.
+    const s = crearStore();
+    s.usuario("uno");
+    s.usuario("dos");
+    s.usuario("tres");
+    const { lastFrame } = render(<Transcript store={s} altura={10} />);
+    const lineas = (lastFrame() ?? "").split("\n").filter((l) => l.trim() !== "");
+    expect(lineas).toHaveLength(3);
+    for (const linea of lineas) expect(linea.trimStart().startsWith("▌")).toBe(true);
+  });
+
+  it("con pocos actos el transcript conserva su altura: la entrada queda anclada abajo", () => {
+    const s = crearStore();
+    s.usuario("hola");
+    s.linea("→ x");
+    const { lastFrame } = render(<Transcript store={s} altura={10} />);
+    expect((lastFrame() ?? "").split("\n")).toHaveLength(10);
   });
 });

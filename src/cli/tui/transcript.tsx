@@ -16,6 +16,7 @@ import type { ReactNode } from "react";
 import { crearStore, type Acto, type EstadoDeTui } from "./store.js";
 import { segmentosDe } from "../markdown.js";
 import { temaInk } from "./temaInk.js";
+import { barra } from "./barra.js";
 
 type Store = ReturnType<typeof crearStore>;
 
@@ -71,17 +72,17 @@ function LineaMarkdown({ texto }: { texto: string }): ReactNode {
 function ActoVista({ acto }: { acto: Acto }): ReactNode {
   switch (acto.tipo) {
     case "usuario":
+      // Un bloque con barra navy, UNA fila: la forma que comparte con la Entrada.
       return (
-        <Text>
-          <Text color={temaInk.acento}>{"❯ "}</Text>
-          {acto.texto}
-        </Text>
+        <Box {...barra(temaInk.marca)}>
+          <Text>{acto.texto}</Text>
+        </Box>
       );
     case "asistente":
       return <LineaMarkdown texto={acto.texto} />;
     case "fase":
       return (
-        <Text color={temaInk.mudo}>
+        <Text color={temaInk.fase}>
           {`+ ${acto.texto}: ${(acto.ms / 1000).toFixed(1)}s`}
         </Text>
       );
@@ -116,7 +117,10 @@ export function Transcript({ store, altura }: { store: Store; altura: number }):
 
   const visibles = ventanaDe(estado.actos, altura, desfase);
   return (
-    <Box flexDirection="column">
+    // `minHeight` y no `height`: con pocos actos la Entrada queda anclada abajo (la
+    // maqueta), y con una línea larga que envuelve el transcript CRECE en vez de
+    // recortar lo más nuevo — que es justo lo que hay que leer.
+    <Box flexDirection="column" minHeight={altura}>
       {visibles.map((acto, i) => (
         <ActoVista key={`${i}-${acto.tipo}`} acto={acto} />
       ))}
