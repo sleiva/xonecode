@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
-import { crearConsolaTui } from "./correrTui.js";
+import { crearConsolaTui, envolverConOcupacion } from "./correrTui.js";
 import { acuseDeModelo } from "../acuseDeModelo.js";
+import type { EjecutorDeTurno } from "../consola.js";
 
 describe("la consola TUI", () => {
   it("implementa Consola: lineas es la cola de lo enviado, escribir y piel comparten store", async () => {
@@ -88,6 +89,26 @@ describe("la consola TUI", () => {
     expect(datosSidebar().modelo).toBe("ollama/nuevo");
     consola.escribir(acuseDeModelo("trabajo", "ollama/otro"));
     expect(datosSidebar().modelo).toBe("ollama/otro");
+  });
+
+  it("el envoltorio de ocupación sube antes del turno y baja al final — también para el guionizado", async () => {
+    // El bug que fija esto: el envoltorio solo se aplicaba con `crearEjecutor`
+    // definido, y `--guion` lo fuerza a undefined — el camino del default
+    // (ejecutarTurnoGuionizado) corría SIN la envoltura y la Entrada nunca se
+    // desactivaba. Ahora las dos rutas pasan por aquí.
+    const marcas: string[] = [];
+    let soltar: () => void = () => {};
+    const base: EjecutorDeTurno = async () => {
+      marcas.push("turno-arranca");
+      await new Promise<void>((r) => (soltar = r));
+      marcas.push("turno-acaba");
+    };
+    const envuelto = envolverConOcupacion(base, (ocupado) => marcas.push(`ocupado=${ocupado}`));
+    const turno = envuelto("hola", { hilo: "t", raiz: "/tmp", fuentes: {} }, {} as Parameters<EjecutorDeTurno>[2]);
+    await new Promise((r) => setTimeout(r, 0));
+    soltar();
+    await turno;
+    expect(marcas).toEqual(["ocupado=true", "turno-arranca", "turno-acaba", "ocupado=false"]);
   });
 
   it("el historial deja la más reciente en el índice 0 (contrato de Entrada)", () => {

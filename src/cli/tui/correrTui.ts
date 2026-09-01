@@ -20,6 +20,7 @@ import { inspeccionar } from "../../agent/entorno.js";
 import {
   correrConsola,
   crearCompleter,
+  ejecutarTurnoGuionizado,
   type Consola,
   type EjecutorDeTurno,
   type EstadoDeSesion,
@@ -75,6 +76,23 @@ export interface OpcionesDeConsolaTui {
   rama?: string;
   /** El tope de contexto del modelo actual (proyecto > global), como lo declara /config. */
   topeDe?: (id: string) => number | undefined;
+}
+
+/**
+ * La envoltura de ocupación: un turno más, y la Entrada se desactiva y Ctrl-C pasa a
+ * cancelar. Exportada para probarla sin montar Ink — y aplicada a LOS DOS caminos de
+ * ejecutor (el real y el guionizado por omisión): `--guion` fuerza `crearEjecutor` a
+ * undefined, y un envoltorio solo para la rama real dejaba el turno guionizado sin
+ * ocupación nunca.
+ */
+export function envolverConOcupacion(
+  ejecutor: EjecutorDeTurno,
+  ocupar: (ocupado: boolean) => void
+): EjecutorDeTurno {
+  return (peticion, estadoTurno, consolaTurno) => {
+    ocupar(true);
+    return ejecutor(peticion, estadoTurno, consolaTurno).finally(() => ocupar(false));
+  };
 }
 
 /**
@@ -329,17 +347,13 @@ export async function correrConsolaTui(opciones: OpcionesDeMontaje): Promise<num
 
     const ejecutorBase =
       guion || crearEjecutor === undefined ? undefined : crearEjecutor(montaje.alAbrirSesion);
-    // La envoltura de ocupación: un turno más, y la Entrada se desactiva y Ctrl-C pasa
-    // a cancelar. La fábrica se creó UNA vez arriba; aquí solo se envuelve.
-    const ejecutar: EjecutorDeTurno | undefined =
-      ejecutorBase === undefined
-        ? undefined
-        : (peticion, estadoTurno, consolaTurno) => {
-            vista.mutar({ ocupado: true });
-            return ejecutorBase(peticion, estadoTurno, consolaTurno).finally(() => {
-              vista.mutar({ ocupado: false });
-            });
-          };
+    // La envoltura de ocupación cubre LOS DOS caminos: el ejecutor real si lo hay, y
+    // el guionizado por omisión si no — `--guion` fuerza `crearEjecutor` a undefined,
+    // y sin envolver el default la Entrada no se desactivaría nunca en ese modo.
+    const ejecutar = envolverConOcupacion(
+      ejecutorBase ?? ejecutarTurnoGuionizado,
+      (ocupado) => vista.mutar({ ocupado })
+    );
 
     return await correrConsola(consola, estado, ejecutar);
   } finally {
