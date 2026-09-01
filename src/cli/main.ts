@@ -34,7 +34,6 @@ import { crearProyecto } from "../agent/crearProyecto.js";
 import { type DatosDelProyecto } from "../core/esqueleto.js";
 import { createTokenTracker, type TokenTracker } from "../vendor/tokenTracking.js";
 import { compacto, formatearTokens, formatearTope } from "./tokens.js";
-import { correrConsolaTui } from "./tui/correrTui.js";
 
 /**
  * Estilo, y solo con TTY detrás.
@@ -437,6 +436,11 @@ export async function entrarEnConsola(
     // piezas que son de esta capa (la inspección, el asistente de creación, el
     // ejecutor real, el tope compartido) y el montaje vive en `tui/correrTui.ts`,
     // que no puede importar de aquí porque sería un ciclo.
+    //
+    // Import DINÁMICO: `correrTui.ts` arrastra ink y react, y un import estático los
+    // cargaría también en `run`, `describe`, `config` y en cada pipe — que no los
+    // necesitan ni los van a pintar. Solo la rama TUI paga el módulo.
+    const { correrConsolaTui } = await import("./tui/correrTui.js");
     return correrConsolaTui({
       fuentes,
       raiz,
