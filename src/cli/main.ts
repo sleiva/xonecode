@@ -29,7 +29,7 @@ import { pedirDecisiones } from "./aprobar.js";
 import { inspeccionar } from "../agent/entorno.js";
 import { SkillsEnDisco } from "../agent/skills.js";
 import { Modelos } from "../agent/modelos.js";
-import { abrirSesionReal, type SesionReal } from "../agent/turnoReal.js";
+import { abrirSesionReal, ficherosDelProyecto, type SesionReal } from "../agent/turnoReal.js";
 import { crearProyecto } from "../agent/crearProyecto.js";
 import { type DatosDelProyecto } from "../core/esqueleto.js";
 import { createTokenTracker, type TokenTracker } from "../vendor/tokenTracking.js";
@@ -350,6 +350,17 @@ async function preguntarDatos(consola: Consola): Promise<DatosDelProyecto> {
   return { nombre, titulo, orientacion, login };
 }
 
+/**
+ * El completer que monta la consola: comandos Y, tras una «@», ficheros del proyecto.
+ *
+ * Los ficheros se piden en el momento del Tab (`() => ficherosDelProyecto(raiz)`, no la
+ * lista ya hecha): el completer se construye una sola vez al arrancar el rl y la lista
+ * quedaría congelada en el primer instante de la sesión.
+ */
+export function crearCompleterDelProyecto(raiz: string, escribir: Escribir = escribirEnStdout) {
+  return crearCompleter(escribir, () => ficherosDelProyecto(raiz));
+}
+
 export async function entrarEnConsola(
   fuentes: FuentesDeEleccion,
   raiz: string = process.cwd(),
@@ -361,7 +372,7 @@ export async function entrarEnConsola(
       input: process.stdin,
       output: process.stdout,
       terminal: process.stdin.isTTY === true,
-      completer: crearCompleter(escribirEnStdout),
+      completer: crearCompleterDelProyecto(raiz),
       // **El prompt.** Sin él la consola es un cursor pelado: no se sabe que espera, ni
       // dónde acaba la respuesta y empieza lo que uno escribió. `readline` no lo pinta si
       // no se le da uno Y se llama a `rl.prompt()` — las dos cosas hacen falta.

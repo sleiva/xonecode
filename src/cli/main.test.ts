@@ -1,10 +1,10 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
-import { mkdtempSync, rmSync, existsSync, readFileSync } from "node:fs";
+import { mkdtempSync, rmSync, existsSync, readFileSync, mkdirSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, basename } from "node:path";
 import { PassThrough } from "node:stream";
 import * as readline from "node:readline";
-import { entrarEnConsola, main, formatearBarra } from "./main.js";
+import { entrarEnConsola, main, formatearBarra, crearCompleterDelProyecto } from "./main.js";
 import { COMANDOS } from "./consola.js";
 import type { Escribir } from "./stdio.js";
 import { POR_OMISION, type FuentesDeEleccion } from "../core/modelos.js";
@@ -108,6 +108,23 @@ describe("main — la consola no se come los subcomandos", () => {
 });
 
 describe("entrarEnConsola", () => {
+  it("el completer de la consola completa @ficheros del ÁRBOL REAL, sin node_modules", () => {
+    // El completer que monta la consola lee el árbol EN EL MOMENTO del Tab (función, no
+    // lista fija): lo que se aprueba o se crea durante la sesión también se completa.
+    const raiz = raizTemporal();
+    mkdirSync(join(raiz, "app"));
+    writeFileSync(join(raiz, "app", "Clientes.xne"), "<rep><coll …/></rep>");
+    writeFileSync(join(raiz, "app.xml"), "<app …/>");
+    mkdirSync(join(raiz, "node_modules"));
+    writeFileSync(join(raiz, "node_modules", "paquete.xne"), "…");
+    const completar = crearCompleterDelProyecto(raiz, () => {});
+
+    // La ruta del espacio virtual («/app/…») se ofrece relativa, como se teclea.
+    expect(completar("abre @app/Cli")[0]).toEqual(["abre @app/Clientes.xne"]);
+    // Y node_modules nunca se ofrece, aunque haya un fichero que case.
+    expect(completar("abre @node_modules/paquete")[0]).toEqual([]);
+  });
+
   it("arranca: cabecera con basename, colecciones y modelo por omisión, y devuelve por EOF", async () => {
     const raiz = raizTemporal();
     const { escribir, salida } = acumulador();

@@ -56,11 +56,11 @@ export interface SesionReal {
 /**
  * Recorre la raíz y devuelve las rutas en el ESPACIO VIRTUAL del backend.
  *
- * Duplicada a propósito desde `cli/run.ts` (misma letra): `agent/` no puede importar de
- * `cli/` —es la frontera que prueba `core/imports.test.ts`— y en esta tarea no se puede
- * tocar `cli/run.ts` para moverla. La tarea 36 la dedup.
+ * Exportada porque la consola la usa para el completado de «@ficheros» (cli puede
+ * importar de agent; al revés no). El recorrido se hace EN CADA llamada a propósito:
+ * la lista no se cachea porque los ficheros cambian durante la sesión.
  */
-function ficherosDelProyecto(raiz: string, prof = 0): ReadonlySet<string> {
+export function ficherosDelProyecto(raiz: string, prof = 0): ReadonlySet<string> {
   if (prof > 4 || !existsSync(raiz)) return new Set();
   const salida = new Set<string>();
   for (const entrada of readdirSync(raiz)) {
@@ -68,7 +68,11 @@ function ficherosDelProyecto(raiz: string, prof = 0): ReadonlySet<string> {
     const ruta = join(raiz, entrada);
     try {
       if (statSync(ruta).isDirectory()) {
-        for (const f of ficherosDelProyecto(ruta, prof + 1)) salida.add(f);
+        // La recursión devuelve rutas relativas al SUBDIRECTORIO: sin recoserle el
+        // nombre, «app/Clientes.xne» saldría como «/Clientes.xne» y el Set dejaría de
+        // responder por las vistas aplanadas ANIDADAS (este universo es el que consulta
+        // `esVistaAplanada`).
+        for (const f of ficherosDelProyecto(ruta, prof + 1)) salida.add(`/${entrada}${f}`);
       } else {
         salida.add("/" + ruta.slice(raiz.length + 1).split(sep).join("/"));
       }

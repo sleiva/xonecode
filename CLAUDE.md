@@ -54,7 +54,8 @@ Cuatro capas, y la frontera importa más que el contenido:
 `core/` y falla si aparece un import de langchain, `@langchain/*`, langgraph, deepagents, ink,
 react o `@modelcontextprotocol`. Al añadir algo a `core/`, esa es la regla dura. (La otra
 convención — `agent/` no importa de `cli/` — vive solo como comentario en `agent/turnoReal.ts`;
-nada la verifica, y por eso `ficherosDelProyecto` está duplicada a propósito entre los dos.)
+nada la verifica. En el otro sentido sí se puede: `cli/main.ts` importa
+`ficherosDelProyecto` de `agent/turnoReal.ts` para el completado de «@ficheros» del Tab.)
 
 **Los puertos y sus dobles** (`core/ports.ts`, `core/deps.ts`). Todo lo caro (modelos, skills,
 verificador, MCP) entra por un puerto que se **pasa al construir**, nunca se importa dentro de
@@ -129,7 +130,10 @@ puede calcular sobre un tope que `/config` no declare.
 
 **La consola y la shell no divergen** porque comparten función: `/config` llama a `cmdConfig`,
 no a una copia. `COMANDOS` en `cli/consola.ts` es el registro único — `/ayuda`, la cabecera y el
-autocompletado se generan recorriéndolo, así que añadir un comando ahí basta.
+autocompletado se generan recorriéndolo, así que añadir un comando ahí basta. El Tab completa
+comandos desde `COMANDOS` y, tras una «@», ficheros del proyecto (leídos del árbol en el momento
+del Tab, nunca de una lista congelada al arrancar). Las flechas y ctrl-p/ctrl-n del historial
+los trae readline; no hay código propio.
 
 ## Códigos de salida (contrato, CI los lee)
 

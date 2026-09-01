@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { mkdtempSync, writeFileSync, rmSync } from "node:fs";
+import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { Command } from "@langchain/langgraph";
@@ -15,7 +15,7 @@ vi.mock("./instantanea.js", async (importOriginal) => {
   return { ...orig, tomarInstantanea: mocksInstantanea.tomarInstantanea };
 });
 
-import { abrirSesionReal } from "./turnoReal.js";
+import { abrirSesionReal, ficherosDelProyecto } from "./turnoReal.js";
 import { ModeloGuionizado, SkillsEnMemoria } from "../core/ports.js";
 import type { Piel } from "../core/turno.js";
 import type { PendienteDeAprobacion } from "../core/events.js";
@@ -276,5 +276,28 @@ describe("abrirSesionReal", () => {
 
       expect(vistos[0]?.size).toBe(0);
     });
+  });
+});
+
+describe("ficherosDelProyecto", () => {
+  it("conserva el SUBDIRECTORIO en las rutas anidadas (espacio virtual del backend)", () => {
+    // Defecto medido al montar el completado de «@ficheros»: la recursión devolvía
+    // rutas relativas al SUBDIRECTORIO y la llamada de arriba las añadía tal cual,
+    // con lo que «app/Clientes.xne» salía como «/Clientes.xne». Eso no solo
+    // despistaba al completer: `sinVistasAplanadas` usa este Set como universo de
+    // ficheros, y sin el prefijo un «app/Clientes.xml» anidado NO era retirado del
+    // backend — justo el fichero que la regla de las vistas existe para proteger.
+    const raiz = mkdtempSync(join(tmpdir(), "xc-ficheros-"));
+    try {
+      writeFileSync(join(raiz, "app.xml"), "<app/>");
+      const dirApp = join(raiz, "app");
+      mkdirSync(dirApp);
+      writeFileSync(join(dirApp, "Clientes.xne"), "<rep/>");
+      writeFileSync(join(dirApp, "Clientes.xml"), "<vistas/>"); // la vista aplanada TAMBIÉN está en el árbol
+
+      expect([...ficherosDelProyecto(raiz)].sort()).toEqual(["/app.xml", "/app/Clientes.xml", "/app/Clientes.xne"]);
+    } finally {
+      rmSync(raiz, { recursive: true, force: true });
+    }
   });
 });

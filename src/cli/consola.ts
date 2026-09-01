@@ -112,15 +112,49 @@ function rutaAuthParaAviso(): string {
 
 /**
  * El `completer` de readline (ver docs de node:readline: firma síncrona
- * `(line: string) => [string[], string]`). Propone SIEMPRE desde `COMANDOS`,
- * nunca de una lista aparte. Con un único candidato, se completa. Con varios,
- * se listan con su descripción (readline por sí solo no la pinta) usando
- * `escribir`. Fuera de una línea que empiece por «/», no completa nada: en
- * medio de una petición en prosa sería un estorbo.
+ * `(line: string) => [string[], string]`). Dos mundos:
+ *
+ * - Una línea que empieza por «/» propone SIEMPRE desde `COMANDOS`, nunca de una lista
+ *   aparte. Con un único candidato, se completa. Con varios, se listan con su
+ *   descripción (readline por sí solo no la pinta) usando `escribir`.
+ * - Una línea en prosa no completa nada… salvo tras una «@»: entonces propone
+ *   FICHEROS del proyecto. Los ficheros entran por FUNCIÓN porque el completer se
+ *   construye una vez al arrancar y los ficheros cambian durante la sesión. Los
+ *   candidatos son líneas COMPLETAS (mismo pacto que con «/prov» → /provider): readline
+ *   sustituye la línea entera por el candidato y completa al prefijo común solo.
+ *
+ * Fuera de eso, no molesta: en medio de una petición en prosa, un completer que
+ * sugiriera siempre sería un estorbo.
  */
-export function crearCompleter(escribir: Escribir): (linea: string) => [string[], string] {
+const TOPE_DE_PILDORAS = 8;
+
+export function crearCompleter(
+  escribir: Escribir,
+  ficherosDelProyecto: () => ReadonlySet<string> = () => new Set()
+): (linea: string) => [string[], string] {
   return (linea: string) => {
-    if (!linea.startsWith("/")) return [[], linea];
+    if (!linea.startsWith("/")) {
+      const arroba = linea.lastIndexOf("@");
+      if (arroba === -1) return [[], linea];
+      const prefijo = linea.slice(arroba + 1);
+      const base = linea.slice(0, arroba + 1);
+      // La barra inicial es el convenio del espacio virtual del backend, no algo que el
+      // usuario deba teclear: se ofrece la ruta RELATIVA.
+      const ficheros = [...ficherosDelProyecto()]
+        .map((f) => (f.startsWith("/") ? f.slice(1) : f))
+        .filter((f) => f.startsWith(prefijo))
+        .sort()
+        .map((f) => base + f);
+      if (ficheros.length === 0) return [[], linea];
+      if (ficheros.length > 1) {
+        escribir("\n");
+        const visibles = ficheros.slice(0, TOPE_DE_PILDORAS);
+        escribir(`  ${visibles.map((f) => f.slice(base.length)).join("   ")}\n`);
+        const restantes = ficheros.length - visibles.length;
+        if (restantes > 0) escribir(`  … y ${restantes} más\n`);
+      }
+      return [ficheros, linea];
+    }
     const prefijo = linea.slice(1).toLowerCase();
     const candidatos = Object.keys(COMANDOS)
       .filter((n) => n.startsWith(prefijo))

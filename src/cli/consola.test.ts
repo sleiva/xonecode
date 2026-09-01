@@ -410,4 +410,88 @@ describe("crearCompleter", () => {
     // readline por sí solo no pinta las descripciones: las escribe el completer.
     expect(salida).toContain(COMANDOS["modelo-rapido"]!.descripcion);
   });
+
+  it("en prosa, tras una «@» completa FICHEROS del proyecto", () => {
+    // Los ficheros se piden por función (no por lista fija): el completer se construye
+    // UNA vez al arrancar y los ficheros del proyecto cambian durante la sesión.
+    const ficheros = () => new Set(["app/Clientes.xne", "app/Proveedores.xne", "app.xml"]);
+    let salida = "";
+    const [candidatos, reemplazo] = crearCompleter(
+      (t) => {
+        salida += t;
+      },
+      ficheros
+    )("abre @app/Cli");
+    // Candidato = línea COMPLETA: readline sustituye la línea por el candidato que case,
+    // no el trozo tras la @ (mismo pacto que con «/prov» → /provider).
+    expect(candidatos).toEqual(["abre @app/Clientes.xne"]);
+    expect(reemplazo).toBe("abre @app/Cli");
+    expect(salida).toBe(""); // un solo candidato: se completa sin listar
+  });
+
+  it("varios ficheros que casan: los lista en píldoras, en un orden estable", () => {
+    const ficheros = () => new Set(["app/Proveedores.xne", "app/Clientes.xne"]);
+    let salida = "";
+    const [candidatos] = crearCompleter(
+      (t) => {
+        salida += t;
+      },
+      ficheros
+    )("abre @app/");
+    expect(candidatos).toEqual(["abre @app/Clientes.xne", "abre @app/Proveedores.xne"]);
+    // La lista es compacta (píldoras, no la tabla de comandos): una ruta no necesita
+    // descripción al lado, y con proyectos de muchas colecciones la tabla no cabe.
+    expect(salida).toContain("app/Clientes.xne   app/Proveedores.xne");
+  });
+
+  it("muchos ficheros: la lista de píldoras lleva TOPE y cuenta de lo que falta", () => {
+    const ficheros = () =>
+      new Set(Array.from({ length: 12 }, (_, i) => `app/Fichero${i}.xne`));
+    let salida = "";
+    const [, reemplazo] = crearCompleter(
+      (t) => {
+        salida += t;
+      },
+      ficheros
+    )("abre @");
+    expect(salida).toContain("… y 4 más"); // 12 ficheros, 8 pintados
+    expect(reemplazo).toBe("abre @");
+  });
+
+  it("la @ solo completa ficheros; sin casar, no molesta", () => {
+    const ficheros = () => new Set(["app/Clientes.xne"]);
+    let salida = "";
+    const [candidatos, reemplazo] = crearCompleter(
+      (t) => {
+        salida += t;
+      },
+      ficheros
+    )("abre @zzz");
+    expect(candidatos).toEqual([]);
+    expect(reemplazo).toBe("abre @zzz");
+    expect(salida).toBe("");
+  });
+
+  it("una ruta del ESPACIO VIRTUAL (con barra inicial) se ofrece RELATIVA", () => {
+    // `ficherosDelProyecto` devuelve rutas como «/app/Clientes.xne» — es el espacio del
+    // backend. Pero lo que se teclea tras la «@» es una ruta de proyecto, sin barra:
+    // pedírsela al usuario sería un convenio interno de la tool escapándose al prompt.
+    const ficheros = () => new Set(["/app/Clientes.xne", "/app.xml"]);
+    const [candidatos] = crearCompleter(() => {}, ficheros)("abre @app/C");
+    expect(candidatos).toEqual(["abre @app/Clientes.xne"]);
+  });
+
+  it("una prosa sin arroba sigue sin completar nada, aunque haya ficheros", () => {
+    const ficheros = () => new Set(["app/Clientes.xne"]);
+    let salida = "";
+    const [candidatos, reemplazo] = crearCompleter(
+      (t) => {
+        salida += t;
+      },
+      ficheros
+    )("hola que tal");
+    expect(candidatos).toEqual([]);
+    expect(reemplazo).toBe("hola que tal");
+    expect(salida).toBe("");
+  });
 });
