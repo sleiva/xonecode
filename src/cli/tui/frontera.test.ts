@@ -38,10 +38,11 @@ function ficherosDeFuente(carpeta: string): string[] {
 
 // `from "ink"`, `from 'react/…'`, `from "ink-testing-library"`, con cualquier
 // profundidad de subruta — pero no un paquete que solo CONTENGA la palabra
-// (`preact` no es react). Y también la forma dinámica, `import("react")`.
+// (`preact` no es react). Y también la forma dinámica, `import("react")`, y la de
+// efectos laterales, `import "ink";` — que carga la librería igual sin cláusula from.
 function importacionesTui(fuente: string): string[] {
   const encontradas: string[] = [];
-  const linea = /(from\s*|import\s*\(\s*)(["'])([^"']*)\2/g;
+  const linea = /(from\s*|import\s*\(\s*|^\s*import\s*)(["'])([^"']*)\2/gm;
   for (const m of fuente.matchAll(linea)) {
     const modulo = m[3];
     if (/^(ink|react|ink-testing-library)(\/|$)/.test(modulo)) encontradas.push(modulo);
@@ -50,6 +51,17 @@ function importacionesTui(fuente: string): string[] {
 }
 
 describe("la frontera de cli/tui/", () => {
+  it("el detector ve también la forma de efectos laterales: import \"ink\";", () => {
+    // `import "ink";` sin cláusula `from` carga la librería igual — el guardián la
+    // tiene que ver, o un import así colaría ink fuera de cli/tui/ sin ser visto.
+    expect(importacionesTui(`import "ink";\nimport 'react/jsx-runtime.js';\n`)).toEqual([
+      "ink",
+      "react/jsx-runtime.js",
+    ]);
+    // Y no ve sombras: un comentario o un módulo que solo CONTIENE la palabra.
+    expect(importacionesTui(`// import "ink";\nconst x = "preact";\n`)).toEqual([]);
+  });
+
   const ficheros = ficherosDeFuente(join(RAIZ, "src"));
 
   it("hay ficheros que revisar (si no, este test no prueba nada)", () => {
