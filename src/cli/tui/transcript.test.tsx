@@ -1,0 +1,109 @@
+/**
+ * El viewport del transcript, probado por su frame (ink-testing-library) y por la
+ * lógica PURA de la ventana.
+ *
+ * El scroll de teclas se prueba de las dos maneras: los cálculos de ventana y de
+ * desfase viven en funciones puras exportadas (fiables, sin terminal detrás), y una
+ * única prueba escribe la secuencia PageUp en el stdin falso para probar el cable
+ * `useInput` → desfase. Si la emulación de teclado se demostrara frágil, las puras
+ * sostienen el comportamiento y la de teclas se retira sin perder cobertura.
+ */
+import { describe, it, expect } from "vitest";
+import { render } from "ink-testing-library";
+import { Transcript, ventanaDe, moverDesfase } from "./transcript.js";
+import { crearStore } from "./store.js";
+
+const esperar = (): Promise<void> => new Promise((r) => setTimeout(r, 10));
+
+/** Diez actos tool numerados, para hablar de la ventana por su contenido. */
+const diez = (): { tipo: "tool"; texto: string }[] =>
+  Array.from({ length: 10 }, (_, i) => ({ tipo: "tool", texto: `t${i}` }));
+
+describe("la ventana pura del transcript", () => {
+  it("sin desfase toma los ÚLTIMOS actos que caben", () => {
+    expect(ventanaDe(diez(), 3, 0).map((a) => a.texto)).toEqual(["t7", "t8", "t9"]);
+  });
+
+  it("con desfase sube la ventana, y no se sale por abajo ni por arriba", () => {
+    expect(ventanaDe(diez(), 3, 4).map((a) => a.texto)).toEqual(["t3", "t4", "t5"]);
+    // Desfase mayor que el contenido: la ventana queda vacía antes que inventar actos.
+    expect(ventanaDe(diez(), 3, 20)).toEqual([]);
+    expect(ventanaDe([], 3, 0)).toEqual([]);
+  });
+
+  it("moverDesfase acota entre 0 y el total", () => {
+    expect(moverDesfase(0, 30, 10)).toBe(10);
+    expect(moverDesfase(25, 30, 10)).toBe(30);
+    expect(moverDesfase(5, 30, -10)).toBe(0);
+  });
+});
+
+describe("el transcript pintado", () => {
+  it("pinta los últimos actos y el colchón como línea en curso", () => {
+    const s = crearStore();
+    s.usuario("hola");
+    s.token("¡Hola! **listo**\n");
+    const { lastFrame } = render(<Transcript store={s} altura={10} />);
+    const salida = lastFrame() ?? "";
+    expect(salida).toContain("❯ hola");
+    expect(salida).toContain("¡Hola! listo");
+    expect(salida).not.toContain("**");
+  });
+
+  it("con más actos que altura, la ventana vive al fondo", () => {
+    const s = crearStore();
+    for (let i = 0; i < 30; i++) s.linea(`línea ${i}`);
+    const { lastFrame } = render(<Transcript store={s} altura={5} />);
+    expect(lastFrame()).toContain("línea 29");
+    expect(lastFrame()).not.toContain("línea 0\n");
+  });
+
+  it("el markdown del asistente: cabecera, viñeta y código sin marcadores", () => {
+    const s = crearStore();
+    s.linea("## Resumen", "asistente");
+    s.linea("- punto uno", "asistente");
+    s.linea("usa `xne` ya", "asistente");
+    const { lastFrame } = render(<Transcript store={s} altura={10} />);
+    const salida = lastFrame() ?? "";
+    expect(salida).toContain("Resumen");
+    expect(salida).not.toContain("##");
+    expect(salida).toContain("• punto uno");
+    expect(salida).toContain("usa xne ya");
+    expect(salida).not.toContain("`");
+  });
+
+  it("cada acto se pinta por su tipo", () => {
+    const s = crearStore({ ahora: () => 1000 });
+    s.usuario("hazlo");
+    s.linea("→ lee app.xne", "tool");
+    s.linea("aviso honesto", "sistema");
+    s.fase("planificando");
+    s.fin(2400);
+    const { lastFrame } = render(<Transcript store={s} altura={10} />);
+    const salida = lastFrame() ?? "";
+    expect(salida).toContain("❯ hazlo");
+    expect(salida).toContain("→ lee app.xne");
+    expect(salida).toContain("aviso honesto");
+    // El fin cierra la fase viva con su duración, y él mismo se pinta con la suya.
+    expect(salida).toContain("+ planificando: 0.0s");
+    expect(salida).toContain("(2.4s)");
+  });
+
+  it("PageUp sube la ventana y un acto nuevo la reancla al fondo", async () => {
+    const s = crearStore();
+    for (let i = 0; i < 30; i++) s.linea(`línea ${i}`);
+    const instancia = render(<Transcript store={s} altura={5} />);
+    // Un tick antes de teclear: los efectos de Ink (el cable de useInput) se asientan
+    // después del primer frame, y una tecla anterior se perdería en el stdin falso.
+    await esperar();
+    instancia.stdin.write("\x1b[5~"); // PageUp
+    await esperar();
+    expect(instancia.lastFrame()).toContain("línea 19");
+    expect(instancia.lastFrame()).not.toContain("línea 29");
+    // Lo nuevo manda: la ventana vuelve al fondo sin que el usuario pida nada.
+    s.linea("acto nuevo");
+    await esperar();
+    expect(instancia.lastFrame()).toContain("línea 29");
+    expect(instancia.lastFrame()).toContain("acto nuevo");
+  });
+});
