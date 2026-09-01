@@ -32,8 +32,17 @@ describe("sidebar", () => {
       <Sidebar contexto={0} tope={200_000} modelo="ollama/glm" modelosPorPapel={{}} proyecto="MinitMT" version="0.3.0" />
     );
     const salida = lastFrame() ?? "";
-    expect(salida).not.toContain("Context");
+    expect(salida).not.toContain("Contexto");
     expect(salida).not.toContain("%");
+  });
+
+  it("la cifra compacta es LA MISMA que pinta stdio (200K, no 200.0K)", () => {
+    // El formato vive en `cli/tokens.ts`, compartido: si la sidebar vuelve a tener
+    // un `compacto` propio, esta cifra divergiría de la barra de stdio.
+    const { lastFrame } = render(
+      <Sidebar contexto={200_000} tope={200_000} modelo="m" modelosPorPapel={{}} proyecto="p" version="0" />
+    );
+    expect(lastFrame() ?? "").toContain("200K/200K");
   });
 
   it("sin rama git, el proyecto y la versión quedan solos", () => {

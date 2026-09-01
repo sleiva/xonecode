@@ -7,9 +7,8 @@ import { Box, Text } from "ink";
 import type { ReactNode } from "react";
 import { temaInk } from "./temaInk.js";
 import type { Papel } from "../../core/ports.js";
-
-const compacto = (n: number): string =>
-  n < 1000 ? `${n}` : n >= 1_000_000 ? `${(n / 1_000_000).toFixed(1)}M` : `${(n / 1000).toFixed(1)}K`;
+// El MISMO formato compacto que stdio (`cli/tokens.ts`): dos pieles, una cifra.
+import { compacto, formatearTope } from "../tokens.js";
 
 export interface DatosDeSidebar {
   contexto: number;
@@ -26,10 +25,10 @@ export function Sidebar(d: DatosDeSidebar): ReactNode {
     <Box flexDirection="column" gap={1}>
       {d.contexto > 0 ? (
         <Box flexDirection="column">
-          <Text bold color={temaInk.acento}>Context</Text>
+          <Text bold color={temaInk.acento}>Contexto</Text>
           <Text>
             {compacto(d.contexto)}
-            {d.tope !== undefined ? `/${compacto(d.tope)} (${Math.round((d.contexto / d.tope) * 100)}%)` : " tokens"}
+            {d.tope !== undefined ? `/${formatearTope(d.tope)} (${Math.round((d.contexto / d.tope) * 100)}%)` : " tokens"}
           </Text>
         </Box>
       ) : null}

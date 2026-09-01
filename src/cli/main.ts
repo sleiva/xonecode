@@ -33,6 +33,7 @@ import { abrirSesionReal, ficherosDelProyecto, type SesionReal } from "../agent/
 import { crearProyecto } from "../agent/crearProyecto.js";
 import { type DatosDelProyecto } from "../core/esqueleto.js";
 import { createTokenTracker, type TokenTracker } from "../vendor/tokenTracking.js";
+import { compacto, formatearTokens, formatearTope } from "./tokens.js";
 import { correrConsolaTui } from "./tui/correrTui.js";
 
 /**
@@ -153,19 +154,9 @@ export function extraerBanderasDeModelo(argv: string[]): { fuentes: FuentesDeEle
 }
 
 /**
- * Token compacto para la línea de estado: `0 tokens` hasta 999, `12.8K tokens` a partir
- * de 1000. Un decimal basta para un indicador de cabecera; la cifra exacta la da quien
- * la necesita (printTokenUsage al final de los experimentos).
+ * El formato compacto ya no vive aquí: `tokens.ts` lo comparte con la sidebar de la
+ * TUI, para que las dos pieles digan la misma cifra (ver el comentario de allí).
  */
-function formatearTokens(total: number): string {
-  return total < 1000 ? `${total} tokens` : `${(total / 1000).toFixed(1)}K tokens`;
-}
-
-/** El tope de contexto, compacto: `131K`, `200K`, `1M`. Sin decimales de cortesía. */
-function formatearTope(tope: number): string {
-  if (tope >= 1_000_000) return `${tope / 1_000_000}M`;
-  return `${Math.round(tope / 1000)}K`;
-}
 
 /** Las piezas de la barra de estado, ya resueltas: aquí solo queda darles formato. */
 export interface PiezasDeBarra {
@@ -193,7 +184,7 @@ export interface PiezasDeBarra {
 export function formatearBarra(p: PiezasDeBarra): string {
   const ctx =
     p.contexto > 0
-      ? ` · ctx ${formatearTokens(p.contexto).replace(" tokens", "")}` +
+      ? ` · ctx ${compacto(p.contexto)}` +
         (p.tope !== undefined
           ? `/${formatearTope(p.tope)} (${Math.round((p.contexto / p.tope) * 100)}%)`
           : "")
