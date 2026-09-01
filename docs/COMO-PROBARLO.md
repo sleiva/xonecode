@@ -11,7 +11,9 @@ Y ya se usa `xonecode` desde cualquier sitio.
 > **No uses `npm run xonecode` desde otro proyecto.** `npm run` cambia el directorio de
 > trabajo al del `package.json`, así que xonecode creería que el proyecto es este repo y
 > diría «no hay app.xml aquí» estés donde estés. Medido. Para desarrollar, `./bin/xonecode`
-> llama a tsx directamente y preserva el cwd.
+> llama a tsx directamente y preserva el cwd — y le ancla el `tsconfig.json` del repo con
+> `--tsconfig`: tsx lo busca desde el cwd, y desde otro proyecto perdería el `jsx: react-jsx`
+> y la TUI reventaría con «React is not defined» al montar. También medido.
 
 ---
 
@@ -79,6 +81,45 @@ printf '/ayuda\n/verify\n/config\n/salir\n' | xonecode
 Dos cosas cambian sin TTY, las dos a propósito: el Tab no sirve, y **`/provider <nombre>`
 se rechaza** — leer una clave de un pipe la deja en el historial de la shell o en el log de
 CI.
+
+### La TUI (Ink)
+
+Con un terminal de verdad, la consola monta una TUI de Ink: transcript, sidebar (modelo por
+papel, proyecto, rama, versión) y cuadro de entrada. **Es la MISMA consola** — los comandos, el
+hilo y el ejecutor son los de arriba; solo cambia la piel.
+
+| bandera | efecto |
+|---|---|
+| *(nada)* | TUI solo si stdin Y stdout son TTY; cualquier tubería cae al stdio de siempre |
+| `--no-tui` | consola clásica (stdio), pase lo que pase |
+| `--tui` | fuerza la TUI; sin TTY de verdad en ambos lados sale con **64** y lo dice |
+
+Probarla **sin gastar**:
+
+```sh
+./bin/xonecode --guion --tui     # en un terminal de verdad
+```
+
+El agente de pega recorre el turno entero (fases, plan, verificación de pega) sin llamar a
+ningún modelo, en la TUI montada de verdad. Y **contra Ollama de verdad**: `./bin/xonecode
+--tui` sobre una copia de tu app — una petición que escribe abre el MODAL de aprobación con el
+diff coloreado.
+
+Dentro de la TUI:
+
+- **El modal de aprobación es fail-closed por tecla**: solo `s`/`S` aprueba; `n`, Enter,
+  Escape, Ctrl-C — y desmontar sin responder — **rechazan**. Lo mismo que en stdio, con otro
+  teclado.
+- **Ctrl-C durante un turno cancela el turno** (el paso en marcha termina; nada suyo se
+  pierde a medias). No mata la app.
+- `/modelo <proveedor>/<modelo>` cambia el modelo en caliente y la sidebar lo enseña al
+  momento.
+- `/salir` desmonta limpio y devuelve la shell. (El Ctrl-D que sirve en stdio aquí no: en la
+  TUI es una tecla más y no está en el contrato de la Entrada.)
+
+Los ejemplos guionizados de arriba (pipes, CI) NO montan la TUI: es lo que mantiene su salida
+byte-idéntica. Y una nota de teclado: los paste de bloques Enter-incluido no se llevan bien
+con el modo raw de ink — escríbelo tú, tecla a tecla.
 
 ### Lo que en la consola es de VERDAD y lo que no
 
@@ -215,5 +256,6 @@ El 2 es deliberado: un turno que se quedó esperando un permiso que nadie dio **
   `/nuevo`.
 - **La consola habla con el agente real por omisión** (y `--guion` la vuelve de pega, sin
   gastar). Antes era al revés; si algún otro texto dice lo contrario, el código manda.
-- **No hay TUI** con paneles todavía; la consola es stdio.
+- **La TUI es la piel por omisión SOLO con TTY en ambos lados**; en pipes y CI manda el stdio
+  de siempre, y su salida sigue siendo byte-idéntica.
 - **No usa los MCP de Studio**: el proyecto tiene que estar en disco.

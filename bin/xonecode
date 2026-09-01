@@ -1,5 +1,9 @@
 #!/bin/sh
 # Lanzador de DESARROLLO: corre el TypeScript con tsx, así que siempre ejecuta el código
 # actual. Para uso normal, `npm run build` y el binario de `dist/`.
+#
+# El `--tsconfig` anclado a la RAIZ no es opcional: tsx busca el tsconfig.json desde el
+# cwd, así que lanzado desde otro proyecto (el caso de uso normal) perdería el
+# `jsx: react-jsx` y la TUI reventaría con «React is not defined».
 RAIZ="$(cd "$(dirname "$0")/.." && pwd)"
-exec "$RAIZ/node_modules/.bin/tsx" "$RAIZ/src/bin.ts" "$@"
+exec "$RAIZ/node_modules/.bin/tsx" --tsconfig "$RAIZ/tsconfig.json" "$RAIZ/src/bin.ts" "$@"

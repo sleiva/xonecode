@@ -93,13 +93,20 @@ Las decisiones que explican la forma del código. Ninguna es preferencia estéti
 salen de un fallo medido.
 
 **El motor de turno no sabe pintar.** `core/turno.ts` consume eventos de dominio y decide
-qué se cuenta; la consola de stdio y (en su día) la TUI son pieles. Así el turno se prueba
+qué se cuenta; la consola de stdio y la TUI son pieles. Así el turno se prueba
 entero sin montar un renderizador.
 
 **Frontera de imports, y está probada.** `core/` es TypeScript puro: no importa langchain,
 langgraph, deepagents, MCP, Ink ni React. Toda la suciedad del grafo vive en `agent/`. Hay
 un test que recorre los ficheros de `core/` y falla si aparece un import prohibido — una
 convención que nadie verifica dura dos semanas.
+
+**La TUI es una piel, y su frontera también está probada.** Ink y React viven SOLO en
+`src/cli/tui/`: otro test recorre `src/` y falla si un import de ink o react se cuela fuera
+— el mismo truco. Y el lazo de comandos es UNO: la TUI no lo duplica, se lo inyectan, así
+que `/config` llama a la misma función con stdio y con la TUI. La TUI monta por omisión solo
+con un terminal de verdad en ambos lados; cualquier tubería cae al stdio de siempre, y por
+eso los pipes y CI siguen viendo la salida byte-idéntica de siempre.
 
 **Todo lo caro entra por un puerto, con su doble al lado.** Consecuencia buscada: la suite
 entera corre **sin API, sin red y sin el simulador**.

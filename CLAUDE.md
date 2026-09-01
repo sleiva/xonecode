@@ -37,7 +37,10 @@ sostiene todo el diseño de puertos: si un cambio lo rompe, está mal el cambio,
 
 **No uses `npm run xonecode` desde otro proyecto**: `npm run` cambia el cwd al de este
 `package.json`, así que xonecode creería que el proyecto es este repo. Para probar sobre una app
-real, `./bin/xonecode` (o `npm run build && npm link`).
+real, `./bin/xonecode` (o `npm run build && npm link`). Ese lanzador le pasa a tsx `--tsconfig`
+anclado a la raíz del repo: tsx busca el tsconfig.json desde el cwd, así que lanzado desde otro
+proyecto perdería el `jsx: react-jsx` y la TUI reventaría con «React is not defined» al montar.
+Medido; hay un test (`src/cli/lanzador.test.ts`) que vigila el anclaje.
 
 ## Arquitectura
 
@@ -66,7 +69,7 @@ justo cuando hace falta.
 
 **Los eventos de dominio** (`core/events.ts`). `agent/` los emite (el puente
 `agent/puente.ts` traduce los chunks del stream de langgraph), `core/turno.ts` decide qué se
-cuenta, y las pieles (`cli/stdio.ts`, en su día una TUI) pintan. Ningún evento lleva argumentos
+cuenta, y las pieles (`cli/stdio.ts`, `cli/tui/`) pintan. Ningún evento lleva argumentos
 de tool, ni truncados: `write_file` lleva el contenido del fichero y una tool MCP lleva el
 bearer. La excepción aparente es `tool.detalle`, y no es una excepción: una lista blanca por
 NOMBRE de tool (`agent/resumenDeTool.ts`) extrae un solo campo de ruta/patrón — nunca contenido.
@@ -85,6 +88,19 @@ esa línea, para que el aviso de honestidad no lo borre el tiempo final. Dos reg
 borrado es EXACTO por número de líneas (nunca «hasta fin de pantalla», porque debajo puede vivir
 el spinner) y **sin TTY el panel no se instala** — el motor cae en `Piel.notificacion?` (mismo
 patrón que `fase?`) y las líneas estáticas de siempre, así que pipes y guion salen byte-idénticos.
+
+**La TUI** (`cli/tui/`) es una piel Ink de LA MISMA consola (`cli/consola.ts`): el lazo de
+comandos, el estado de sesión y el ejecutor entran INYECTADOS (`cli/tui/correrTui.ts`); la TUI
+solo aporta entrada, preguntas, piel y el modal de aprobación. La frontera está probada
+(`cli/tui/frontera.test.ts`): ink y react no se importan fuera de `cli/tui/` — igual que
+langchain no entra en `core/` —, y es lo que mantiene pipes y `npm test` funcionando sin TTY.
+El modo lo decide `decidirTui` (`cli/main.ts`): `--no-tui` gana siempre; `--tui` fuerza la TUI
+(y sin TTY de verdad en ambos lados es error de USO, 64); por omisión, TUI solo con stdin Y
+stdout TTY — cualquier tubería cae al stdio de siempre, que es lo que mantiene el e2e de pipe
+byte-idéntico. El modal de aprobación (`cli/tui/aprobarTui.tsx`) es fail-closed POR TECLA: solo
+`s`/`S` aprueba; `n`, Enter, Escape, Ctrl-C y desmontar sin responder son rechazo. Ink corre con
+`exitOnCtrlC: false` (`cli/tui/correrTui.ts`) porque Ctrl-C tiene significado aquí: cancelar el
+turno (un punto de cancelación en la piel, con rearme por turno) o rechazar en el modal.
 
 **El agente** (`agent/xoneAgent.ts`): un orquestador **sin ninguna tool** que delega en cuatro
 especialistas (`docs`, `planner`, `dev`, `mockup` — `agent/perfiles.ts`). Cuatro cosas no son
@@ -142,7 +158,8 @@ no a una copia. `COMANDOS` en `cli/consola.ts` es el registro único — `/ayuda
 autocompletado se generan recorriéndolo, así que añadir un comando ahí basta. El Tab completa
 comandos desde `COMANDOS` y, tras una «@», ficheros del proyecto (leídos del árbol en el momento
 del Tab, nunca de una lista congelada al arrancar). Las flechas y ctrl-p/ctrl-n del historial
-los trae readline; no hay código propio.
+los trae readline en stdio (la TUI los implementa en `cli/tui/entrada.tsx`, misma tecla, mismo
+completer); no hay código propio fuera de la piel.
 
 ## Códigos de salida (contrato, CI los lee)
 
