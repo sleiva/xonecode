@@ -128,7 +128,7 @@ export function App({
               modelo={datos.modelo}
             />
           )}
-          <BarraDeEstado modelo={datos.modelo} ruta={datos.proyecto} />
+          <BarraDeEstado ruta={datos.ruta} contexto={datos.contexto} tope={datos.tope} />
         </Box>
         <Box width={30} paddingLeft={1}>
           <Sidebar {...datos} />

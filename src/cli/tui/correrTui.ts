@@ -260,6 +260,7 @@ export function crearConsolaTui(opciones: OpcionesDeConsolaTui) {
       modelo: modeloTrabajo,
       modelosPorPapel: { ...papeles },
       proyecto: basename(raiz),
+      ruta: raiz,
       rama,
       version: VERSION,
     };

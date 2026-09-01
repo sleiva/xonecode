@@ -89,6 +89,8 @@ describe("la consola TUI", () => {
     expect(datosSidebar().modelo).toBe("ollama/nuevo");
     consola.escribir(acuseDeModelo("trabajo", "ollama/otro"));
     expect(datosSidebar().modelo).toBe("ollama/otro");
+    // El pie enseña la RUTA completa (la maqueta), no solo el basename.
+    expect(datosSidebar().ruta).toBe("/tmp/proyecto");
   });
 
   it("el fin del turno lleva el modelo de trabajo vigente, y un /modelo posterior no lo reetiqueta", () => {

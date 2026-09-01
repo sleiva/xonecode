@@ -7,12 +7,13 @@
  */
 import { describe, it, expect } from "vitest";
 import { render } from "ink-testing-library";
-import { Sidebar, BarraDeEstado, lineaDeEstado } from "./sidebar.js";
+import { Box } from "ink";
+import { Sidebar, BarraDeEstado, pie } from "./sidebar.js";
 
 describe("sidebar", () => {
   it("enseña contexto con porcentaje SOLO si hay tope", () => {
     const { lastFrame } = render(
-      <Sidebar contexto={25700} tope={200_000} modelo="ollama/glm" modelosPorPapel={{ rapido: "ollama/rapido" }} proyecto="MinitMT" rama="main" version="0.3.0" />
+      <Sidebar contexto={25700} tope={200_000} modelo="ollama/glm" modelosPorPapel={{ rapido: "ollama/rapido" }} proyecto="MinitMT" ruta="/dev/MinitMT" rama="main" version="0.3.0" />
     );
     const salida = lastFrame() ?? "";
     expect(salida).toContain("13%");
@@ -22,14 +23,14 @@ describe("sidebar", () => {
 
   it("sin tope no hay porcentaje — una cifra sobre un número inventado es una mentira", () => {
     const { lastFrame } = render(
-      <Sidebar contexto={25700} tope={undefined} modelo="ollama/glm" modelosPorPapel={{}} proyecto="MinitMT" rama="main" version="0.3.0" />
+      <Sidebar contexto={25700} tope={undefined} modelo="ollama/glm" modelosPorPapel={{}} proyecto="MinitMT" ruta="/dev/MinitMT" rama="main" version="0.3.0" />
     );
     expect(lastFrame() ?? "").not.toContain("%");
   });
 
   it("con contexto 0 la sección calla — no hay medición y pintar un cero sería inventarla", () => {
     const { lastFrame } = render(
-      <Sidebar contexto={0} tope={200_000} modelo="ollama/glm" modelosPorPapel={{}} proyecto="MinitMT" version="0.3.0" />
+      <Sidebar contexto={0} tope={200_000} modelo="ollama/glm" modelosPorPapel={{}} proyecto="MinitMT" ruta="/dev/MinitMT" version="0.3.0" />
     );
     const salida = lastFrame() ?? "";
     expect(salida).not.toContain("Contexto");
@@ -40,14 +41,14 @@ describe("sidebar", () => {
     // El formato vive en `cli/tokens.ts`, compartido: si la sidebar vuelve a tener
     // un `compacto` propio, esta cifra divergiría de la barra de stdio.
     const { lastFrame } = render(
-      <Sidebar contexto={200_000} tope={200_000} modelo="m" modelosPorPapel={{}} proyecto="p" version="0" />
+      <Sidebar contexto={200_000} tope={200_000} modelo="m" modelosPorPapel={{}} proyecto="p" ruta="/dev/MinitMT" version="0" />
     );
     expect(lastFrame() ?? "").toContain("200K/200K");
   });
 
   it("sin rama git, el proyecto y la versión quedan solos", () => {
     const { lastFrame } = render(
-      <Sidebar contexto={0} modelo="ollama/glm" modelosPorPapel={{ trabajo: "ollama/glm" }} proyecto="MinitMT" version="0.3.0" />
+      <Sidebar contexto={0} modelo="ollama/glm" modelosPorPapel={{ trabajo: "ollama/glm" }} proyecto="MinitMT" ruta="/dev/MinitMT" version="0.3.0" />
     );
     const salida = lastFrame() ?? "";
     expect(salida).toContain("MinitMT");
@@ -56,13 +57,35 @@ describe("sidebar", () => {
   });
 });
 
-describe("la barra inferior de estado", () => {
-  it("en mudo: modelo · ruta · /ayuda", () => {
-    const { lastFrame } = render(<BarraDeEstado modelo="ollama/glm" ruta="~/dev/MinitMT" />);
-    expect(lastFrame() ?? "").toContain("ollama/glm · ~/dev/MinitMT · /ayuda");
+describe("el pie a dos extremos", () => {
+  it("izquierda la ruta; derecha las cifras y /ayuda — porcentaje SOLO con tope", () => {
+    expect(pie({ ruta: "~/dev/MinitMT", contexto: 15_400, tope: 200_000 })).toEqual({
+      izquierda: "~/dev/MinitMT",
+      cifras: "15.4K (8%)",
+      derecha: "15.4K (8%)  /ayuda",
+    });
+    expect(pie({ ruta: "~/dev/MinitMT", contexto: 15_400 })).toEqual({
+      izquierda: "~/dev/MinitMT",
+      cifras: "15.4K tokens",
+      derecha: "15.4K tokens  /ayuda",
+    });
+    // Sin medición no hay cifra: pintar «0 tokens» sería inventar una lectura.
+    expect(pie({ ruta: "~/dev/MinitMT", contexto: 0, tope: 200_000 })).toEqual({
+      izquierda: "~/dev/MinitMT",
+      cifras: "",
+      derecha: "/ayuda",
+    });
   });
 
-  it("la línea pura coincide con lo pintado", () => {
-    expect(lineaDeEstado("ollama/glm", "~/dev/MinitMT")).toBe("ollama/glm · ~/dev/MinitMT · /ayuda");
+  it("pintado: la ruta a la izquierda y /ayuda al final de la misma línea", () => {
+    const { lastFrame } = render(
+      <Box width={60}>
+        <BarraDeEstado ruta="~/dev/MinitMT" contexto={15_400} tope={200_000} />
+      </Box>
+    );
+    const linea = (lastFrame() ?? "").split("\n")[0] ?? "";
+    expect(linea.trimStart().startsWith("~/dev/MinitMT")).toBe(true);
+    expect(linea.trimEnd().endsWith("/ayuda")).toBe(true);
+    expect(linea).toContain("15.4K (8%)");
   });
 });

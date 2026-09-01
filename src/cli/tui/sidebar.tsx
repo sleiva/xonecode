@@ -16,6 +16,8 @@ export interface DatosDeSidebar {
   modelo: string;
   modelosPorPapel: Partial<Record<Papel, string>>;
   proyecto: string;
+  /** La raíz completa del proyecto: el pie la enseña entera; `proyecto` es su basename. */
+  ruta: string;
   rama?: string;
   version: string;
 }
@@ -50,14 +52,37 @@ export function Sidebar(d: DatosDeSidebar): ReactNode {
 }
 
 /**
- * La línea inferior de estado, en mudo: lo que ya se sabe, recordado sin gritar.
- * El texto vive en una función PURA (`lineaDeEstado`) para probar la composición
- * sin montar Ink, mismo patrón que `ventanaDe` en transcript.tsx.
+ * El pie a dos extremos: la ruta a la izquierda; a la derecha las cifras de contexto y
+ * el recordatorio de `/ayuda`. Pura, para probar la composición sin montar Ink (mismo
+ * patrón que `ventanaDe` en transcript.tsx). `cifras` vive aparte de `derecha` porque
+ * se pinta en mudo y `/ayuda` en texto; `derecha` es la línea completa, para los tests.
+ * Porcentaje SOLO con tope, y sin medición (`contexto === 0`) ninguna cifra: las dos
+ * reglas de `core/contextos.ts` y de la sidebar.
  */
-export function lineaDeEstado(modelo: string, ruta: string): string {
-  return `${modelo} · ${ruta} · /ayuda`;
+export function pie(d: { ruta: string; contexto: number; tope?: number }): {
+  izquierda: string;
+  cifras: string;
+  derecha: string;
+} {
+  let cifras = "";
+  if (d.contexto > 0) {
+    cifras =
+      d.tope !== undefined && d.tope > 0
+        ? `${compacto(d.contexto)} (${Math.round((d.contexto / d.tope) * 100)}%)`
+        : `${compacto(d.contexto)} tokens`;
+  }
+  return { izquierda: d.ruta, cifras, derecha: cifras === "" ? "/ayuda" : `${cifras}  /ayuda` };
 }
 
-export function BarraDeEstado({ modelo, ruta }: { modelo: string; ruta: string }): ReactNode {
-  return <Text color={temaInk.mudo}>{lineaDeEstado(modelo, ruta)}</Text>;
+export function BarraDeEstado(d: { ruta: string; contexto: number; tope?: number }): ReactNode {
+  const p = pie(d);
+  return (
+    <Box justifyContent="space-between">
+      <Text color={temaInk.mudo}>{p.izquierda}</Text>
+      <Text>
+        {p.cifras !== "" ? <Text color={temaInk.mudo}>{`${p.cifras}  `}</Text> : null}
+        <Text color={temaInk.texto}>/ayuda</Text>
+      </Text>
+    </Box>
+  );
 }
