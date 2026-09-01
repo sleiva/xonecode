@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { topeDeContexto } from "./contextos.js";
+import { topeDeContexto, topeResuelto } from "./contextos.js";
 
 describe("topeDeContexto", () => {
   it("las familias conocidas tienen tope, emparejadas por prefijo", () => {
@@ -31,5 +31,28 @@ describe("topeDeContexto", () => {
     expect(topeDeContexto("ollama", "glm-5.3-flash:cloud", overrides)).toBe(131_072);
     // Y no se aplica a otros modelos del mismo proveedor.
     expect(topeDeContexto("ollama", "llama3", overrides)).toBeUndefined();
+  });
+});
+describe("topeResuelto", () => {
+  it("el override del proyecto gana al global, y dice de dónde salió", () => {
+    const r = topeResuelto("anthropic", "claude-3", {
+      proyecto: { "anthropic/claude-3": 100_000 },
+      global: { "anthropic/claude-3": 50_000 },
+    });
+    expect(r).toEqual({ tope: 100_000, origen: "proyecto" });
+  });
+
+  it("el override global vale cuando el proyecto no trae ese id", () => {
+    expect(
+      topeResuelto("ollama", "local", { proyecto: {}, global: { "ollama/local": 131_072 } })
+    ).toEqual({ tope: 131_072, origen: "global" });
+  });
+
+  it("sin overrides, la tabla — y el origen lo dice", () => {
+    expect(topeResuelto("gemini", "gemini-2.5", {})).toEqual({ tope: 1_000_000, origen: "tabla" });
+  });
+
+  it("nadie sabe: undefined, sin disfrazarlo de cero", () => {
+    expect(topeResuelto("ollama", "desconocido", {})).toBeUndefined();
   });
 });

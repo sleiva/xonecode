@@ -47,3 +47,20 @@ export function topeDeContexto(
 
   return TOPES[proveedor]?.find(([prefijo]) => modelo.startsWith(prefijo))?.[1];
 }
+
+/**
+ * El tope con su ORIGEN, para `/config`: lo que el usuario fijó a mano (proyecto gana
+ * a global, igual que con los modelos), la tabla como último recurso — o nada, que es
+ * una respuesta válida y se distingue del cero.
+ */
+export function topeResuelto(
+  proveedor: Proveedor,
+  modelo: string,
+  configs: { proyecto?: Record<string, number>; global?: Record<string, number> }
+): { tope: number; origen: "proyecto" | "global" | "tabla" } | undefined {
+  const id = `${proveedor}/${modelo}`;
+  if (configs.proyecto?.[id] !== undefined) return { tope: configs.proyecto[id]!, origen: "proyecto" };
+  if (configs.global?.[id] !== undefined) return { tope: configs.global[id]!, origen: "global" };
+  const deTabla = topeDeContexto(proveedor, modelo);
+  return deTabla !== undefined ? { tope: deTabla, origen: "tabla" } : undefined;
+}

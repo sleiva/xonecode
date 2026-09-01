@@ -22,6 +22,7 @@ import {
   type Proveedor,
 } from "../core/modelos.js";
 import type { Papel } from "../core/ports.js";
+import { topeResuelto } from "../core/contextos.js";
 import { escribirEnStdout, type Escribir } from "./stdio.js";
 
 /**
@@ -77,6 +78,19 @@ export function cmdConfig(
     origen: eleccion[papel].origen,
   }));
 
+  // El tope de la ventana de cada papel, con su ORIGEN: quien fija un tope a mano
+  // en config.json necesita ver que se ha cogido (y de qué fichero), porque un
+  // tope ignorado es un porcentaje que miente sin que se note. Sin tope conocido
+  // también es una respuesta, y se distingue de cualquier número.
+  const topes = PAPELES.map((papel) => {
+    const { proveedor, modelo } = eleccion[papel];
+    const resuelto = topeResuelto(proveedor, modelo, {
+      proyecto: cargado.config.proyecto?.contextos,
+      global: cargado.config.global?.contextos,
+    });
+    return { papel, modelo: `${proveedor}/${modelo}`, ...resuelto };
+  });
+
   // El entorno gana sobre auth.json (en runtime `aplicarAuth` no pisa una variable que
   // ya existe), así que el origen se decide mirando PRIMERO el entorno.
   const credenciales: CredencialVista[] = (
@@ -108,6 +122,7 @@ export function cmdConfig(
         procedencia: r.procedencia,
       })),
       modelos,
+      contextos: Object.fromEntries(topes.map(({ papel, ...t }) => [papel, t])),
       credenciales: credenciales.map((c) =>
         c.puesta ? c : { proveedor: c.proveedor, puesta: false }
       ),
@@ -127,6 +142,16 @@ export function cmdConfig(
   escribir("--- modelos por papel ---\n");
   for (const m of modelos) {
     escribir(`  ${m.papel}   ${m.proveedor}/${m.modelo}  (${m.origen})\n`);
+  }
+
+  escribir("--- topes de contexto ---\n");
+  for (const t of topes) {
+    const deDonde =
+      t.origen === "proyecto" ? "  (config del proyecto)"
+      : t.origen === "global" ? "  (config global)"
+      : t.origen === "tabla" ? "  (tabla)"
+      : "";
+    escribir(`  ${t.papel}   ${t.modelo}  ${t.tope ?? "sin tope conocido"}${deDonde}\n`);
   }
 
   escribir("--- credenciales ---\n");

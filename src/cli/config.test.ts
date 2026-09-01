@@ -428,3 +428,65 @@ describe("cmdDescribe", () => {
     }
   });
 });
+
+describe("cmdConfig — topes de contexto", () => {
+  it("enseña el tope de cada papel y de dónde sale: config del proyecto, global o tabla", () => {
+    const t = entornoTemporal();
+    try {
+      // rapido: tabla. trabajo: override del PROYECTO. afilado: override global.
+      t.escribirConfigProyecto(
+        '{"contextos":{"anthropic/claude-4":100000},"modelos":{"rapido":"anthropic/claude-3","trabajo":"anthropic/claude-4","afilado":"ollama/local"}}'
+      );
+      t.escribirConfigGlobal('{"contextos":{"ollama/local":131072}}');
+      const { trozos, escribir } = acumulador();
+
+      const codigo = cmdConfig(SIN_FUENTES, {}, escribir, t.raiz);
+
+      expect(codigo).toBe(0);
+      const salida = trozos.join("");
+      expect(salida).toContain("--- topes de contexto ---");
+      expect(salida).toContain("100000  (config del proyecto)");
+      expect(salida).toContain("131072  (config global)");
+      expect(salida).toContain("200000  (tabla)");
+    } finally {
+      t.borrar();
+    }
+  });
+
+  it("un modelo sin tope conocido se dice así: «sin tope conocido», sin disfraz", () => {
+    const t = entornoTemporal();
+    try {
+      t.escribirConfigProyecto('{"modelos":{"trabajo":"ollama/misterio"}}');
+      const { trozos, escribir } = acumulador();
+
+      cmdConfig(SIN_FUENTES, {}, escribir, t.raiz);
+
+      const salida = trozos.join("");
+      expect(salida).toContain("sin tope conocido");
+      expect(salida).not.toContain("(0)");
+    } finally {
+      t.borrar();
+    }
+  });
+
+  it("en JSON, los topes van con su origen por papel", () => {
+    const t = entornoTemporal();
+    try {
+      t.escribirConfigProyecto(
+        '{"contextos":{"anthropic/claude-4":100000},"modelos":{"rapido":"anthropic/claude-3","trabajo":"anthropic/claude-4"}}'
+      );
+      const { trozos, escribir } = acumulador();
+
+      cmdConfig(SIN_FUENTES, { json: true }, escribir, t.raiz);
+
+      const salida = JSON.parse(trozos.join(""));
+      expect(salida.contextos).toEqual({
+        rapido: { modelo: "anthropic/claude-3", tope: 200000, origen: "tabla" },
+        trabajo: { modelo: "anthropic/claude-4", tope: 100000, origen: "proyecto" },
+        afilado: { modelo: "ollama/kimi-k3:cloud" },
+      });
+    } finally {
+      t.borrar();
+    }
+  });
+});

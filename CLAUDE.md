@@ -117,7 +117,9 @@ suma acumulada) contra el tope de `core/contextos.ts`. La tabla es por familias 
 **ollama no tiene tope a propósito** (cada modelo local trae el suyo), y el porcentaje solo
 se calcula si hay tope — un porcentaje sobre un número inventado es una mentira con forma
 de cifra. El tope se re-resuelve en cada barra porque `/modelo` cambia el modelo en
-caliente.
+caliente, siempre por `topeResuelto` (`core/contextos.ts`) — la misma función que `/config`
+usa para enseñar los topes **y su origen** (proyecto > global > tabla), así que la barra no
+puede calcular sobre un tope que `/config` no declare.
 
 **La consola y la shell no divergen** porque comparten función: `/config` llama a `cmdConfig`,
 no a una copia. `COMANDOS` en `cli/consola.ts` es el registro único — `/ayuda`, la cabecera y el
@@ -136,12 +138,13 @@ autocompletado se generan recorriéndolo, así que añadir un comando ahí basta
 Un fallo del entorno no se reporta como un proyecto roto: `agent/verificador.ts` lanza
 `ErrorDelSimulador` en vez de devolver un informe en rojo.
 
-## Dos trampas verificadas
+## Una trampa verificada
 
-- **`docs/COMO-PROBARLO.md` está desactualizado en un punto**: dice que la consola no habla con
-  el agente real. Ya lo hace — `cli/main.ts` monta `crearEjecutorReal` por omisión, y `--guion`
-  es el modo con agente de pega. Ante una discrepancia, el código manda.
 - **`SkillsPort.cargar()` no tiene ningún llamador en la ruta del agente.** `promptDe` solo usa
   `catalogo()` para NOMBRAR las skills en el prompt del especialista («Cárgalas antes de
   responder») y avisar de las que falten; el contenido de `skills/*/SKILL.md` nunca se inyecta, y
   el backend está confinado a la raíz del proyecto, así que el modelo tampoco puede leerlo.
+
+(Antes había una segunda trampa: `docs/COMO-PROBARLO.md` decía que la consola no hablaba con el
+agente real. El doc ya está corregido — `cli/main.ts` monta `crearEjecutorReal` por omisión y
+`--guion` es el modo de pega. Ante una discrepancia entre doc y código, el código manda.)

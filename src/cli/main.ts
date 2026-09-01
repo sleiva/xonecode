@@ -13,7 +13,7 @@ import { cmdConfig } from "./config.js";
 import { cmdDoctor } from "./doctor.js";
 import { cmdVerify } from "./verify.js";
 import { type FuentesDeEleccion, ModeloMalEscrito, parsear, resolver } from "../core/modelos.js";
-import { topeDeContexto } from "../core/contextos.js";
+import { topeResuelto } from "../core/contextos.js";
 import { cargar } from "../agent/configEnDisco.js";
 import {
   COMANDOS,
@@ -405,10 +405,13 @@ export async function entrarEnConsola(
     try {
       const { proveedor, modelo } = parsear(id);
       const { config } = cargar(raiz);
-      return topeDeContexto(proveedor, modelo, {
-        ...config.global?.contextos,
-        ...config.proyecto?.contextos,
-      });
+      // Misma resolución que /config (`topeResuelto`): proyecto gana a global, y la
+      // tabla es el último recurso. El origen aquí no se mira, pero así no puede
+      // divergir entre lo que la barra calcula y lo que /config declara.
+      return topeResuelto(proveedor, modelo, {
+        proyecto: config.proyecto?.contextos,
+        global: config.global?.contextos,
+      })?.tope;
     } catch {
       return undefined;
     }

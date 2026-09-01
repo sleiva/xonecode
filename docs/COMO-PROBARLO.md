@@ -87,10 +87,11 @@ CI.
 | `/verify` | **real** — corre `xone-simulator` sobre el proyecto |
 | `/config`, `/describe`, `/doctor` | **reales** |
 | `/modelo`, `/provider`, `/hilo`, `/nuevo` | **reales** |
-| **una petición en prosa** | **GUION.** La consola todavía no está cableada al agente real |
+| **una petición en prosa** | **REAL** — va al agente de verdad (Ollama por omisión) |
 
-Ese último es el hueco: `xonecode run --real "…"` sí conversa con el agente de verdad, pero
-la **consola** usa el agente guionizado. Por eso los tokens de la cabecera se quedan en `0`.
+La excepción es `--guion`: esa bandera SIEMPRE monta el agente de pega, sin gastar, y con
+ella los tokens de la barra se quedan en `0` a propósito: el turno guionizado no corre
+ningún modelo.
 
 ---
 
@@ -212,7 +213,7 @@ El 2 es deliberado: un turno que se quedó esperando un permiso que nadie dio **
 - **No hay lazo**: ni planner, ni juez, ni reparación, ni presupuestos.
 - **Un disparo, no conversación**: cada `run` abre un hilo nuevo. No hay `/estado` ni
   `/nuevo`.
-- **La consola no habla con el agente real** todavía: una petición en prosa la
-  contesta un guion. Los comandos de barra sí son reales.
+- **La consola habla con el agente real por omisión** (y `--guion` la vuelve de pega, sin
+  gastar). Antes era al revés; si algún otro texto dice lo contrario, el código manda.
 - **No hay TUI** con paneles todavía; la consola es stdio.
 - **No usa los MCP de Studio**: el proyecto tiene que estar en disco.
