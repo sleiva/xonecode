@@ -20,7 +20,7 @@ y el backend (`agent/proyecto.ts`).
 
 ```sh
 npm run typecheck                      # tsc --noEmit
-npm test                               # vitest run — 37 ficheros, 355 tests, ~1s
+npm test                               # vitest run — todo el suite, sin red ni clave ni simulador
 npm run test:watch
 npx vitest run src/core/turno.test.ts  # un solo fichero
 npx vitest run -t "la frontera"        # por nombre de test
@@ -158,8 +158,9 @@ no a una copia. `COMANDOS` en `cli/consola.ts` es el registro único — `/ayuda
 autocompletado se generan recorriéndolo, así que añadir un comando ahí basta. El Tab completa
 comandos desde `COMANDOS` y, tras una «@», ficheros del proyecto (leídos del árbol en el momento
 del Tab, nunca de una lista congelada al arrancar). Las flechas y ctrl-p/ctrl-n del historial
-los trae readline en stdio (la TUI los implementa en `cli/tui/entrada.tsx`, misma tecla, mismo
-completer); no hay código propio fuera de la piel.
+los trae readline en stdio; la TUI solo implementa las flechas (`upArrow`/`downArrow` en
+`cli/tui/entrada.tsx`, con el mismo completer) y descarta ctrl-p/ctrl-n — no es la misma
+tecla en las dos pieles. No hay código propio de historial fuera de la piel.
 
 ## Códigos de salida (contrato, CI los lee)
 
