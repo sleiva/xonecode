@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { crearStore } from "./store.js";
+import { crearStore, crearRanura } from "./store.js";
 import { crearPielTui } from "./pielTui.js";
 
 describe("el store de la TUI", () => {
@@ -49,6 +49,31 @@ describe("el store de la TUI", () => {
     s.pausa();
     expect(s.estado().aprobacionPendiente).toBe(true);
     expect(avisos).toEqual([1]);
+  });
+
+  it("suscribir devuelve la baja: desuscribir a uno deja al otro (y solo al otro) recibiendo", () => {
+    const s = crearStore();
+    const a: number[] = [];
+    const b: number[] = [];
+    const bajaA = s.suscribir(() => a.push(1));
+    s.suscribir(() => b.push(1));
+    s.pausa();
+    bajaA();
+    s.rearmar();
+    expect(a).toEqual([1]); // quedó en el estado previo al rearme
+    expect(b).toEqual([1, 1]);
+    // Y una doble baja no revienta (React puede llamar el cleanup dos veces en StrictMode).
+    expect(() => bajaA()).not.toThrow();
+  });
+
+  it("la ranura también devuelve la baja", () => {
+    const ranura = crearRanura({ n: 0 });
+    const vistas: number[] = [];
+    const baja = ranura.suscribir(() => vistas.push(ranura.ver().n));
+    ranura.mutar({ n: 1 });
+    baja();
+    ranura.mutar({ n: 2 });
+    expect(vistas).toEqual([1]);
   });
 
   it("rearmar baja la aprobación pendiente: quien cierra el modal sabe que ya no hay nada", () => {

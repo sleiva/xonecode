@@ -100,11 +100,10 @@ export function Transcript({ store, altura }: { store: Store; altura: number }):
   const [desfase, setDesfase] = useState(0); // 0 = al fondo; N = N actos hacia arriba
 
   useEffect(() => {
-    const quitar = () => setEstado({ ...store.estado() });
-    store.suscribir(quitar);
-    return () => {
-      /* El store de la sesión vive tanto como la app; no hay nada que quitar. */
-    };
+    // `suscribir` devuelve la baja: el cleanup la usa — suscribir sin desuscribir
+    // era un suscriptor filtrado por cada montaje del componente.
+    const baja = store.suscribir(() => setEstado({ ...store.estado() }));
+    return baja;
   }, [store]);
 
   // Cualquier acto nuevo ancla la ventana al fondo, haya scroll o no.

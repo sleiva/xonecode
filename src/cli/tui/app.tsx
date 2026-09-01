@@ -92,7 +92,8 @@ export function App({
   const alturaTranscript = Math.max(5, (stdout.rows ?? 24) - 4);
 
   // El transcript se repinta por su cuenta (Transcript está suscrito al store); la app
-  // necesita re-render por los DATOS (sidebar, modelo), no por los actos.
+  // necesita re-render por los DATOS (sidebar, modelo), no por los actos. `suscribir`
+  // devuelve la baja: el cleanup del useEffect la usa al desmontar.
   const [, repintar] = useState(0);
   useEffect(() => store.suscribir(() => repintar((n) => n + 1)), [store]);
 

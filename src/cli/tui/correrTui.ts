@@ -156,7 +156,9 @@ export function crearConsolaTui(opciones: OpcionesDeConsolaTui) {
       },
     },
     escribir: (texto) => {
-      if (texto === "") return;
+      // El guard cubre whitespace, no solo la cadena vacía: un `escribir("\n")`
+      // (la forma de «línea sin contenido») partía en un acto sistema vacío.
+      if (texto.trim() === "") return;
       detectarCambiosDeModelo(texto);
       // El chunk de consola puede traer varias líneas (los comandos escriben bloques):
       // cada una es un acto, como lo sería en el scrollback de stdio.

@@ -58,11 +58,20 @@ export function crearStore(opciones: OpcionesDelStore = {}) {
     mutar({ actos: [...estado.actos, ...cerrarFase(), ...nuevos] });
   };
 
+  /** La baja de un suscriptor, tolerante a doble llamada (React puede repetir el cleanup). */
+  const baja = (suscriptor: () => void): (() => void) => {
+    const indice = suscriptores.lastIndexOf(suscriptor);
+    if (indice !== -1) suscriptores.splice(indice, 1);
+    return () => baja(suscriptor);
+  };
+
   return {
     estado: (): EstadoDeTui => estado,
 
-    suscribir(suscriptor: () => void): void {
+    /** Devuelve la función de desuscripción: el cleanup del useEffect es su llamador natural. */
+    suscribir(suscriptor: () => void): () => void {
       suscriptores.push(suscriptor);
+      return () => baja(suscriptor);
     },
 
     token(texto: string): void {
@@ -148,7 +157,7 @@ export type VistaDeTui = {
 export interface Ranura<T extends object> {
   ver(): T;
   mutar(cambio: Partial<T>): void;
-  suscribir(f: () => void): void;
+  suscribir(f: () => void): () => void;
 }
 
 export function crearRanura<T extends object>(inicial: T): Ranura<T> {
@@ -160,8 +169,13 @@ export function crearRanura<T extends object>(inicial: T): Ranura<T> {
       valor = { ...valor, ...cambio };
       for (const s of suscriptores) s();
     },
-    suscribir(f: () => void): void {
+    /** Devuelve la baja, igual que el store: el cleanup del useEffect es su llamador natural. */
+    suscribir(f: () => void): () => void {
       suscriptores.push(f);
+      return () => {
+        const indice = suscriptores.lastIndexOf(f);
+        if (indice !== -1) suscriptores.splice(indice, 1);
+      };
     },
   };
 }

@@ -75,6 +75,12 @@ describe("la consola TUI", () => {
     expect(() => pielDos.token("más")).toThrow(/cancelado/);
   });
 
+  it("escribir no crea actos vacíos: «\\n» solo no deja acto (el guard cubre whitespace, no solo \"\")", () => {
+    const { consola, actos } = crearConsolaTui({ raiz: "/tmp/proyecto" });
+    consola.escribir("\n");
+    expect(actos()).toEqual([]);
+  });
+
   it("el historial deja la más reciente en el índice 0 (contrato de Entrada)", () => {
     const { enviar, historial } = crearConsolaTui({ raiz: "/tmp/proyecto" });
     enviar("primera");
