@@ -87,7 +87,19 @@ function ActoVista({ acto }: { acto: Acto }): ReactNode {
         </Text>
       );
     case "fin":
-      return <Text color={temaInk.mudo}>{`(${(acto.ms / 1000).toFixed(1)}s)`}</Text>;
+      // «■ modelo · 1.8s»: el cuadrado en acento, el modelo en texto, la duración en mudo.
+      return (
+        <Text>
+          <Text color={temaInk.acento}>{"■ "}</Text>
+          {acto.modelo !== undefined ? (
+            <>
+              <Text>{acto.modelo}</Text>
+              <Text color={temaInk.mudo}>{" · "}</Text>
+            </>
+          ) : null}
+          <Text color={temaInk.mudo}>{`${(acto.ms / 1000).toFixed(1)}s`}</Text>
+        </Text>
+      );
     case "error":
       return <Text color={temaInk.grave}>{acto.texto}</Text>;
     default:

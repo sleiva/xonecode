@@ -87,7 +87,14 @@ describe("el transcript pintado", () => {
     expect(salida).toContain("aviso honesto");
     // El fin cierra la fase viva con su duración, y él mismo se pinta con la suya.
     expect(salida).toContain("+ planificando: 0.0s");
-    expect(salida).toContain("(2.4s)");
+    expect(salida).toContain("■ 2.4s");
+    expect(salida).not.toContain("(2.4s)");
+  });
+
+  it("el fin con modelo se pinta como «■ modelo · Ns»", () => {
+    const s = crearStore();
+    s.fin(1800, "ollama/glm");
+    expect(render(<Transcript store={s} altura={5} />).lastFrame()).toContain("■ ollama/glm · 1.8s");
   });
 
   it("PageUp sube la ventana y un acto nuevo la reancla al fondo", async () => {

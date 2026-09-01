@@ -42,6 +42,16 @@ describe("el store de la TUI", () => {
     ]);
   });
 
+  it("fin guarda el modelo del turno si se lo dan, y no inventa la clave si no", () => {
+    const s = crearStore();
+    s.fin(2400);
+    s.fin(1800, "ollama/glm");
+    expect(s.estado().actos).toEqual([
+      { tipo: "fin", ms: 2400 },
+      { tipo: "fin", ms: 1800, modelo: "ollama/glm" },
+    ]);
+  });
+
   it("pausa marca la aprobación pendiente y el suscriptor se entera de cada mutación", () => {
     const s = crearStore();
     const avisos: number[] = [];
@@ -116,5 +126,18 @@ describe("la piel TUI", () => {
     const piel = crearPielTui(s);
     piel.notificacion!("aviso de honestidad");
     expect(s.estado().actos).toEqual([{ tipo: "sistema", texto: "aviso de honestidad" }]);
+  });
+
+  it("con modeloActual, la piel etiqueta el fin con el modelo del MOMENTO del fin", () => {
+    let modelo = "ollama/a";
+    const s = crearStore();
+    const piel = crearPielTui(s, () => modelo);
+    piel.fin(100);
+    modelo = "ollama/b";
+    piel.fin(200);
+    expect(s.estado().actos).toEqual([
+      { tipo: "fin", ms: 100, modelo: "ollama/a" },
+      { tipo: "fin", ms: 200, modelo: "ollama/b" },
+    ]);
   });
 });

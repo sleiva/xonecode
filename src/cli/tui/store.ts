@@ -16,7 +16,8 @@ export type Acto =
   | { tipo: "tool"; texto: string }
   | { tipo: "sistema"; texto: string }
   | { tipo: "fase"; texto: string; ms: number }
-  | { tipo: "fin"; ms: number }
+  /** El cierre del turno: duración y, si la piel lo sabe, el modelo que lo corrió. */
+  | { tipo: "fin"; ms: number; modelo?: string }
   | { tipo: "error"; texto: string };
 
 export interface EstadoDeTui {
@@ -127,8 +128,14 @@ export function crearStore(opciones: OpcionesDelStore = {}) {
       mutar({ aprobacionPendiente: false });
     },
 
-    fin(ms: number): void {
-      aniadir([{ tipo: "fin", ms }]);
+    /**
+     * El cierre del turno. `modelo` es el que lo corrió, capturado por quien llama EN
+     * este momento (no en el render): un /modelo posterior no debe reetiquetar turnos
+     * ya cerrados. Sin modelo no se escribe la clave, para que los actos viejos y los
+     * tests que los comparan con `toEqual` no cambien.
+     */
+    fin(ms: number, modelo?: string): void {
+      aniadir([modelo === undefined ? { tipo: "fin", ms } : { tipo: "fin", ms, modelo }]);
     },
   };
 }

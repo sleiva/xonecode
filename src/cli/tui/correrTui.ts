@@ -201,7 +201,9 @@ export function crearConsolaTui(opciones: OpcionesDeConsolaTui) {
       // acto) muere aquí en vez de matar el primer acto del turno que no la pidió; y una
       // Ctrl-C DURANTE el turno actual vuelve a poner el flag después de este rearme.
       cancelarPendiente = false;
-      const base = crearPielTui(store);
+      // El modelo que etiqueta el «■ modelo · Ns» del fin: el de trabajo VIGENTE, leído
+      // cuando el fin ocurre (ver pielTui.ts).
+      const base = crearPielTui(store, () => modeloTrabajo);
       return {
         token: (t) => {
           puntoDeCancelacion();

@@ -91,6 +91,18 @@ describe("la consola TUI", () => {
     expect(datosSidebar().modelo).toBe("ollama/otro");
   });
 
+  it("el fin del turno lleva el modelo de trabajo vigente, y un /modelo posterior no lo reetiqueta", () => {
+    // Capturar al cerrar el turno, no al pintar: si el transcript leyera el modelo
+    // actual en el render, un /modelo cambiaría la etiqueta de turnos ya cerrados.
+    const { consola, actos, datosSidebar } = crearConsolaTui({ raiz: "/tmp/proyecto" });
+    const antes = datosSidebar().modelo;
+    consola.piel!().fin(1800);
+    consola.escribir(acuseDeModelo(undefined, "ollama/nuevo"));
+    const fin = actos().find((a) => a.tipo === "fin");
+    expect(fin).toEqual({ tipo: "fin", ms: 1800, modelo: antes });
+    expect(datosSidebar().modelo).toBe("ollama/nuevo");
+  });
+
   it("el envoltorio de ocupación sube antes del turno y baja al final — también para el guionizado", async () => {
     // El bug que fija esto: el envoltorio solo se aplicaba con `crearEjecutor`
     // definido, y `--guion` lo fuerza a undefined — el camino del default
