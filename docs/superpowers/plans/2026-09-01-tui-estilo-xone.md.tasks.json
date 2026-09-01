@@ -1,0 +1,75 @@
+{
+  "planPath": "docs/superpowers/plans/2026-09-01-tui-estilo-xone.md",
+  "tasks": [
+    {
+      "id": 0,
+      "subject": "Task 1: Paleta XOne en `temaInk.ts`",
+      "status": "pending",
+      "description": "**Goal:** Cambiar el acento al azul claro de xone.es, el prompt al cian, y añadir los tokens de layout `marca` y `fase`, declarados en el test espejo.\n\n**Files:**\n- Modify: `src/cli/tui/temaInk.ts`\n- Test: `src/cli/tui/temaInk.test.ts`\n\n**Acceptance Criteria:**\n- [ ] `temaInk.acento === \"#47abd6\"`, `temaInk.prompt === \"#2ac4ea\"`, `temaInk.marca === \"#00396f\"`, `temaInk.fase === \"#e0a458\"`.\n- [ ] El test de espejo inverso acepta `marca` y `fase` (lista `soloTui`) y sigue rechazando cualquier otra clave desconocida.\n- [ ] Todos los tokens de color son hex de 6 dígitos en minúsculas.\n\n**Verify:** `npx vitest run src/cli/tui/temaInk.test.ts` → 3 tests PASS.\n\n```json:metadata\n{\"files\": [\"src/cli/tui/temaInk.ts\", \"src/cli/tui/temaInk.test.ts\"], \"verifyCommand\": \"npx vitest run src/cli/tui/temaInk.test.ts\", \"acceptanceCriteria\": [\"acento #47abd6, prompt #2ac4ea, marca #00396f, fase #e0a458\", \"marca y fase declarados en soloTui\", \"hex minúsculas\"], \"modelTier\": \"mechanical\"}\n```"
+    },
+    {
+      "id": 1,
+      "subject": "Task 2: Logotipo XONE (`logo.ts`)",
+      "status": "pending",
+      "description": "**Goal:** Un módulo puro con el logotipo en letras de bloque y el umbral de anchura que decide si se pinta.\n\n**Files:**\n- Create: `src/cli/tui/logo.ts`\n- Test: `src/cli/tui/logo.test.ts`\n\n**Acceptance Criteria:**\n- [ ] `LOGO_XONE` tiene 5 filas, todas de la MISMA anchura, ninguna mayor de 28 columnas (la sidebar mide 30).\n- [ ] `cabeLogo(99) === false`, `cabeLogo(100) === true`.\n- [ ] `logo.ts` no importa ink ni react (lo vigila `frontera.test.ts` de rebote: no es fichero de piel).\n\n**Verify:** `npx vitest run src/cli/tui/logo.test.ts` → 2 PASS.\n\n```json:metadata\n{\"files\": [\"src/cli/tui/logo.ts\", \"src/cli/tui/logo.test.ts\"], \"verifyCommand\": \"npx vitest run src/cli/tui/logo.test.ts\", \"acceptanceCriteria\": [\"5 filas de igual anchura <= 28\", \"cabeLogo umbral 100\", \"sin imports de ink/react\"], \"modelTier\": \"mechanical\"}\n```",
+      "blockedBy": [
+        0
+      ]
+    },
+    {
+      "id": 2,
+      "subject": "Task 3: Barra de acento compartida y bloque de usuario en el transcript",
+      "status": "pending",
+      "description": "**Goal:** Un helper `barra(color)` con las props de Box para un bloque con SOLO barra izquierda, y el transcript pintando al usuario como bloque (una fila) y la fase en ámbar; el transcript ancla la entrada abajo con `minHeight`.\n\n**Files:**\n- Create: `src/cli/tui/barra.ts`\n- Modify: `src/cli/tui/transcript.tsx`\n- Test: `src/cli/tui/transcript.test.tsx`\n\n**Acceptance Criteria:**\n- [ ] Un store con 3 actos `usuario` pinta exactamente 3 líneas no vacías, cada una empezando por `▌`.\n- [ ] El acto de usuario ya no lleva `❯ `.\n- [ ] La fase se pinta con `temaInk.fase` (el texto «+ fase: Ns» no cambia).\n- [ ] El transcript tiene `minHeight={altura}`: con 2 actos y altura 10, el frame tiene 10 líneas.\n- [ ] `barra.ts` no importa ink ni react.\n\n**Verify:** `npx vitest run src/cli/tui/transcript.test.tsx` → PASS.\n\n```json:metadata\n{\"files\": [\"src/cli/tui/barra.ts\", \"src/cli/tui/transcript.tsx\", \"src/cli/tui/transcript.test.tsx\"], \"verifyCommand\": \"npx vitest run src/cli/tui/transcript.test.tsx\", \"acceptanceCriteria\": [\"3 usuarios = 3 líneas no vacías con ▌\", \"sin ❯\", \"fase en temaInk.fase\", \"minHeight altura\", \"barra.ts sin ink\"], \"modelTier\": \"standard\"}\n```",
+      "blockedBy": [
+        1
+      ]
+    },
+    {
+      "id": 3,
+      "subject": "Task 4: El acto `fin` lleva el modelo del turno («■ modelo · 1.8s»)",
+      "status": "pending",
+      "description": "**Goal:** `store.fin(ms, modelo?)`, `crearPielTui(store, modeloActual?)`, `correrTui.ts` pasa el modelo vigente, y el transcript pinta `■ ollama/glm · 1.8s`.\n\n**Files:**\n- Modify: `src/cli/tui/store.ts`\n- Modify: `src/cli/tui/pielTui.ts`\n- Modify: `src/cli/tui/correrTui.ts`\n- Modify: `src/cli/tui/transcript.tsx`\n- Test: `src/cli/tui/store.test.ts`, `src/cli/tui/correrTui.test.ts`, `src/cli/tui/transcript.test.tsx`\n\n**Acceptance Criteria:**\n- [ ] `s.fin(2400)` sigue dando `{ tipo: \"fin\", ms: 2400 }` (sin clave `modelo`); `s.fin(1800, \"ollama/glm\")` da `{ tipo: \"fin\", ms: 1800, modelo: \"ollama/glm\" }`.\n- [ ] La piel de `crearConsolaTui` pone en el `fin` el modelo de trabajo vigente, y un acuse de `/modelo` POSTERIOR no cambia el acto ya cerrado.\n- [ ] El transcript pinta `■ ollama/glm · 1.8s` con modelo y `■ 2.4s` sin él; ya no pinta `(2.4s)`.\n- [ ] `Piel.fin` del motor sigue siendo `(ms: number) => void`.\n\n**Verify:** `npx vitest run src/cli/tui/store.test.ts src/cli/tui/correrTui.test.ts src/cli/tui/transcript.test.tsx` → PASS.\n\n```json:metadata\n{\"files\": [\"src/cli/tui/store.ts\", \"src/cli/tui/pielTui.ts\", \"src/cli/tui/correrTui.ts\", \"src/cli/tui/transcript.tsx\", \"src/cli/tui/store.test.ts\", \"src/cli/tui/correrTui.test.ts\", \"src/cli/tui/transcript.test.tsx\"], \"verifyCommand\": \"npx vitest run src/cli/tui/store.test.ts src/cli/tui/correrTui.test.ts src/cli/tui/transcript.test.tsx\", \"acceptanceCriteria\": [\"fin sin modelo no lleva la clave\", \"fin con modelo la lleva\", \"piel de correrTui etiqueta con el modelo vigente y no reetiqueta\", \"transcript pinta ■ modelo · Ns y ■ Ns\"], \"modelTier\": \"standard\"}\n```",
+      "blockedBy": [
+        2
+      ]
+    },
+    {
+      "id": 4,
+      "subject": "Task 5: Entrada con barra izquierda y línea de modelo; Pregunta con barra",
+      "status": "pending",
+      "description": "**Goal:** La Entrada cambia el borde redondeado por la barra navy y gana una segunda fila muda con el modelo de trabajo; `PreguntaInk` (en `app.tsx`) usa la misma barra en `aviso`.\n\n**Files:**\n- Modify: `src/cli/tui/entrada.tsx`\n- Modify: `src/cli/tui/app.tsx` (prop `modelo` a `Entrada`, barra en `PreguntaInk`)\n- Test: `src/cli/tui/entrada.test.tsx`\n\n**Acceptance Criteria:**\n- [ ] `Entrada` exige la prop `modelo: string` y la pinta en una segunda fila (también con `ocupado`).\n- [ ] El frame de la Entrada empieza por `▌` y no contiene `╭` ni `╰` (el borde redondeado desaparece).\n- [ ] El cursor es `▏` en `temaInk.prompt`.\n- [ ] `PreguntaInk` usa `barra(temaInk.aviso)`.\n- [ ] Los tests existentes de Entrada siguen pasando con la prop nueva.\n\n**Verify:** `npx vitest run src/cli/tui/entrada.test.tsx` → PASS.\n\n```json:metadata\n{\"files\": [\"src/cli/tui/entrada.tsx\", \"src/cli/tui/entrada.test.tsx\", \"src/cli/tui/app.tsx\"], \"verifyCommand\": \"npx vitest run src/cli/tui/entrada.test.tsx\", \"acceptanceCriteria\": [\"prop modelo obligatoria y pintada, también ocupada\", \"frame empieza por ▌ sin ╭╰\", \"cursor ▏ en prompt\", \"PreguntaInk con barra aviso\"], \"modelTier\": \"standard\"}\n```",
+      "blockedBy": [
+        3
+      ]
+    },
+    {
+      "id": 5,
+      "subject": "Task 6: Pie a dos extremos (`pie()` y `BarraDeEstado`)",
+      "status": "pending",
+      "description": "**Goal:** Sustituir `lineaDeEstado(modelo, ruta)` por `pie()` pura con izquierda (ruta) y derecha (cifras + `/ayuda`), y `BarraDeEstado` con `justifyContent=\"space-between\"`; `datosSidebar` gana `ruta`.\n\n**Files:**\n- Modify: `src/cli/tui/sidebar.tsx`\n- Modify: `src/cli/tui/correrTui.ts` (`ruta: raiz` en `datosSidebar`)\n- Modify: `src/cli/tui/app.tsx` (props nuevas de `BarraDeEstado`)\n- Test: `src/cli/tui/sidebar.test.tsx`, `src/cli/tui/correrTui.test.ts`\n\n**Acceptance Criteria:**\n- [ ] `pie({ ruta, contexto: 15_400, tope: 200_000 })` → `{ izquierda: ruta, cifras: \"15.4K (8%)\", derecha: \"15.4K (8%)  /ayuda\" }`.\n- [ ] Sin tope: `cifras: \"15.4K tokens\"`, `derecha: \"15.4K tokens  /ayuda\"`. Con contexto 0: `cifras: \"\"`, `derecha: \"/ayuda\"`.\n- [ ] El frame de `BarraDeEstado` con `width={60}` contiene la ruta al principio y `/ayuda` al final de la MISMA línea.\n- [ ] `lineaDeEstado` deja de existir en `sidebar.tsx`.\n- [ ] `datosSidebar().ruta === raiz`.\n\n**Verify:** `npx vitest run src/cli/tui/sidebar.test.tsx src/cli/tui/correrTui.test.ts` → PASS.\n\n```json:metadata\n{\"files\": [\"src/cli/tui/sidebar.tsx\", \"src/cli/tui/sidebar.test.tsx\", \"src/cli/tui/correrTui.ts\", \"src/cli/tui/correrTui.test.ts\", \"src/cli/tui/app.tsx\"], \"verifyCommand\": \"npx vitest run src/cli/tui/sidebar.test.tsx src/cli/tui/correrTui.test.ts\", \"acceptanceCriteria\": [\"pie() en sus tres variantes\", \"BarraDeEstado space-between con /ayuda al final\", \"lineaDeEstado eliminada\", \"datosSidebar().ruta === raiz\"], \"modelTier\": \"standard\"}\n```",
+      "blockedBy": [
+        4
+      ]
+    },
+    {
+      "id": 6,
+      "subject": "Task 7: Sidebar con logotipo, secciones y pie anclado abajo",
+      "status": "pending",
+      "description": "**Goal:** La sidebar pinta el logotipo XONE arriba (si cabe), Contexto y Modelo, y ancla al fondo «proyecto:rama» y «● xonecode <versión>».\n\n**Files:**\n- Modify: `src/cli/tui/sidebar.tsx`\n- Modify: `src/cli/tui/app.tsx` (prop `columnas` y altura de la fila)\n- Test: `src/cli/tui/sidebar.test.tsx`\n\n**Acceptance Criteria:**\n- [ ] `Sidebar` recibe `columnas: number` aparte de los datos; con 120 el frame contiene `█`, con 80 no.\n- [ ] Renderizada dentro de `<Box height={20} flexDirection=\"column\">`, el frame tiene 20 líneas y la ÚLTIMA no vacía contiene `xonecode 0.3.0`; la anterior contiene `MinitMT:main`.\n- [ ] Sin rama, el pie enseña solo `MinitMT` (sin `:`).\n- [ ] Las aserciones existentes (`13%`, sin `%` sin tope, `Contexto` calla con 0, `200K/200K`, `trabajo: ollama/glm`) siguen verdes.\n\n**Verify:** `npx vitest run src/cli/tui/sidebar.test.tsx` → PASS.\n\n```json:metadata\n{\"files\": [\"src/cli/tui/sidebar.tsx\", \"src/cli/tui/sidebar.test.tsx\", \"src/cli/tui/app.tsx\"], \"verifyCommand\": \"npx vitest run src/cli/tui/sidebar.test.tsx\", \"acceptanceCriteria\": [\"logo con 120 columnas, no con 80\", \"en Box height 20: 20 líneas, última con xonecode 0.3.0, penúltima MinitMT:main\", \"sin rama solo proyecto\", \"aserciones previas verdes\"], \"modelTier\": \"standard\"}\n```",
+      "blockedBy": [
+        5
+      ]
+    },
+    {
+      "id": 7,
+      "subject": "Task 8: Maqueta de `App`: filas fijas, alturas y verificación final",
+      "status": "pending",
+      "description": "**Goal:** `app.tsx` calcula el transcript con `FILAS_FIJAS = 3`, fija la altura de la fila de columnas para que el anclaje de la sidebar funcione en pantalla, y la suite completa más el typecheck quedan verdes.\n\n**Files:**\n- Modify: `src/cli/tui/app.tsx`\n- Modify: `docs/superpowers/specs/2026-09-01-tui-estilo-xone-design.md` (solo si el plan se desvió: anotar `columnas` como prop de `Sidebar` y `ruta` en `DatosDeSidebar`)\n\n**Acceptance Criteria:**\n- [ ] `app.tsx` tiene `const FILAS_FIJAS = 3` con el desglose comentado (2 de la Entrada + 1 del pie) y `alturaTranscript = Math.max(5, rows - FILAS_FIJAS)`.\n- [ ] La fila de columnas tiene `height={rows}` y la columna de la sidebar es `flexDirection=\"column\"`, para que `flexGrow` de la Sidebar tenga altura que llenar.\n- [ ] `npm test` completo en verde y `npm run typecheck` limpio.\n- [ ] `frontera.test.ts` e `imports.test.ts` en verde (ningún import nuevo de ink/react fuera de `cli/tui/`).\n\n**Verify:** `npm test && npm run typecheck` → todo PASS, 0 errores.\n\n```json:metadata\n{\"files\": [\"src/cli/tui/app.tsx\", \"docs/superpowers/specs/2026-09-01-tui-estilo-xone-design.md\"], \"verifyCommand\": \"npm test && npm run typecheck\", \"acceptanceCriteria\": [\"FILAS_FIJAS = 3 y altura rows - 3\", \"fila con height={rows} y columna sidebar en column\", \"npm test y typecheck verdes\"], \"modelTier\": \"standard\"}\n```",
+      "blockedBy": [
+        6
+      ]
+    }
+  ],
+  "lastUpdated": "2026-09-01T20:53:24.181589+00:00"
+}
