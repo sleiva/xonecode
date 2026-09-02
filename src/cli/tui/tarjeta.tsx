@@ -18,15 +18,17 @@ export function Fila({
   ancho,
   visible,
   color,
+  fondo = temaInk.fondoInput,
   children,
 }: {
   ancho: number;
   visible: number;
   color?: string;
+  fondo?: string;
   children?: ReactNode;
 }): ReactNode {
   return (
-    <Text backgroundColor={temaInk.fondoInput} color={color}>
+    <Text backgroundColor={fondo} color={color}>
       {" "}
       {children}
       {" ".repeat(Math.max(0, ancho - 1 - visible))}

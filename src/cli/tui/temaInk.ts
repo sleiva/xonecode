@@ -37,6 +37,8 @@ export const temaInk = {
    * terminal `#0a0a0a`: un escalón visible, no un matiz.
    */
   fondoInput: "#1e1e1e",
+  /** Fondo casi negro para una petición pendiente: se aparta de la conversación activa. */
+  fondoCola: "#090909",
   /**
    * Superficie de la sidebar: un azul pizarra separado del transcript para que el
    * contexto se lea como panel, no como una continuación de la conversación.

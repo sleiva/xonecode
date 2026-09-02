@@ -17,7 +17,7 @@ describe("temaInk", () => {
     // `acento` y `borde` pintan cajas, `fondoInput` es el fondo del cuadro de entrada,
     // `marca` es la barra izquierda de los bloques, `fase` el color de «+ fase: Ns» y
     // `tenue` el gris de las herramientas, por debajo de `mudo`.
-    const soloTui = ["acento", "borde", "fondoInput", "marca", "fase", "tenue", "fondoSidebar"];
+    const soloTui = ["acento", "borde", "fondoInput", "fondoCola", "marca", "fase", "tenue", "fondoSidebar"];
     const conocidas = new Set(Object.keys(crearTema(true)));
     for (const clave of Object.keys(temaInk)) {
       expect(conocidas.has(clave) || soloTui.includes(clave), `token «${clave}» de temaInk`).toBe(true);
@@ -48,5 +48,10 @@ describe("temaInk", () => {
     // no un token semántico compartido con stdio.
     expect(temaInk.fondoSidebar).toMatch(/^#[0-9a-f]{6}$/);
     expect(temaInk.fondoSidebar).not.toBe(temaInk.fondoInput);
+  });
+
+  it("reserva negro para las peticiones en cola", () => {
+    expect(temaInk.fondoCola).toBe("#090909");
+    expect(temaInk.fondoCola).not.toBe(temaInk.fondoInput);
   });
 });

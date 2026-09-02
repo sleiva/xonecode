@@ -39,6 +39,20 @@ export const PASO_DE_RUEDA = 3;
 /** Cuántas líneas de un grupo de herramientas se enseñan: las últimas. Medido con el usuario: 4. */
 export const LINEAS_DE_HERRAMIENTAS = 4;
 
+/** Los cuatro fotogramas bastan para sugerir espera sin distraer del streaming. */
+const ESPERA_EN_COLA = ["◐", "◓", "◑", "◒"] as const;
+
+/** Una fila propia: negro, ámbar y animación local que desaparece cuando deja la cola. */
+function EsperaEnCola({ ancho }: { ancho: number }): ReactNode {
+  const [paso, setPaso] = useState(0);
+  useEffect(() => {
+    const reloj = setInterval(() => setPaso((actual) => (actual + 1) % ESPERA_EN_COLA.length), 360);
+    return () => clearInterval(reloj);
+  }, []);
+  const texto = `${ESPERA_EN_COLA[paso]}  EN COLA · esperando turno`;
+  return <Fila ancho={ancho} visible={Array.from(texto).length} color={temaInk.aviso} fondo={temaInk.fondoCola}>{texto}</Fila>;
+}
+
 /**
  * Los actos visibles: los ÚLTIMOS `altura`, subidos `desfase` hacia arriba.
  *
@@ -237,7 +251,7 @@ function ActoVista({
               {fila}
             </Fila>
           ))}
-          {acto.enCola ? <Text color={temaInk.fase}>{"  EN COLA"}</Text> : null}
+          {acto.enCola ? <EsperaEnCola ancho={ancho} /> : null}
           <Fila ancho={ancho} visible={0} />
         </Box>
       );
