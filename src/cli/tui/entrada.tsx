@@ -85,7 +85,10 @@ export function Entrada({
     // La misma barra navy que el bloque de usuario: lo que escribes y lo que escribiste
     // tienen la misma forma. Sin borde arriba/abajo: dos filas de contenido, y app.tsx
     // cuenta con ellas en FILAS_FIJAS.
-    <Box flexDirection="column" {...barra(temaInk.marca)}>
+    // `flexShrink={0}`: la fila de columnas tiene altura fija, y sin esto Ink encoge la
+    // Entrada antes que el transcript — la fila del modelo pisaba la línea en edición y
+    // el cursor `▏` desaparecía en cuanto había pista de Tab o el transcript se llenaba.
+    <Box flexDirection="column" flexShrink={0} {...barra(temaInk.marca)}>
       {ocupado ? (
         <Text color={temaInk.mudo}>turno en curso… (Ctrl-C para cancelar el turno)</Text>
       ) : (

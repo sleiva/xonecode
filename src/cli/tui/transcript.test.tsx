@@ -9,6 +9,7 @@
  * sostienen el comportamiento y la de teclas se retira sin perder cobertura.
  */
 import { describe, it, expect } from "vitest";
+import { Box } from "ink";
 import { render } from "ink-testing-library";
 import { Transcript, ventanaDe, moverDesfase } from "./transcript.js";
 import { crearStore } from "./store.js";
@@ -128,11 +129,21 @@ describe("el transcript pintado", () => {
     for (const linea of lineas) expect(linea.trimStart().startsWith("▌")).toBe(true);
   });
 
-  it("con pocos actos el transcript conserva su altura: la entrada queda anclada abajo", () => {
+  it("con pocos actos el transcript llena la altura del padre y ancla el contenido ABAJO", () => {
     const s = crearStore();
     s.usuario("hola");
     s.linea("→ x");
-    const { lastFrame } = render(<Transcript store={s} altura={10} />);
-    expect((lastFrame() ?? "").split("\n")).toHaveLength(10);
+    // La altura la pone el PADRE: el transcript es elástico (`flexGrow`), porque en la
+    // App es la única pieza que cede. Lo que se prueba aquí es lo que el test siempre
+    // quiso decir: ocupa las 10 filas y el contenido queda pegado al fondo.
+    const { lastFrame } = render(
+      <Box height={10} flexDirection="column">
+        <Transcript store={s} altura={10} />
+      </Box>
+    );
+    const lineas = (lastFrame() ?? "").split("\n");
+    expect(lineas).toHaveLength(10);
+    expect(lineas.at(-1)).toContain("→ x");
+    expect(lineas[0]!.trim()).toBe("");
   });
 });

@@ -55,7 +55,9 @@ function PreguntaInk({
     if (entrada && !tecla.ctrl && !tecla.meta && !tecla.escape) setValor((v) => v + entrada);
   });
   return (
-    <Box {...barra(temaInk.aviso)}>
+    // `flexShrink={0}`: mientras vive, la pregunta ES lo único contestable — la fila de
+    // columnas tiene altura fija y quien cede es el transcript, nunca ella.
+    <Box flexShrink={0} {...barra(temaInk.aviso)}>
       <Text>
         {pregunta.texto}
         {pregunta.oculto ? "*".repeat(valor.length) : valor}
@@ -68,17 +70,22 @@ function PreguntaInk({
 /**
  * Las filas que NO son transcript: las 2 de la Entrada (línea en edición + modelo; la
  * barra izquierda no añade filas) y 1 del pie. Si la Entrada cambia de forma, este
- * número cambia con ella. La pista de Tab añade una fila transitoria que se acepta:
- * ese frame toca el borrado total de Ink (ver FILA_DE_RESERVA) y vuelve al soltar.
+ * número cambia con ella. La pista de Tab añade una fila transitoria, y no pasa nada:
+ * la fila de columnas sigue midiendo lo mismo y la pista sale de una fila del
+ * transcript, que es la ÚNICA pieza elástica (Entrada, Pregunta y pie no encogen).
+ *
+ * Con eso, `alturaTranscript` ya NO es la altura de la caja del transcript —esa la pone
+ * el flex— sino el tamaño de la rebanada que `ventanaDe` corta del historial: cuántos
+ * actos se piden. Si sobran, el transcript los recorta por arriba.
  */
 const FILAS_FIJAS = 3;
 
 /**
  * Una fila que la TUI NUNCA ocupa. Ink (`build/ink.js`, `outputHeight >= stdout.rows`)
  * borra el terminal entero y repinta el frame completo cuando la salida llega a las
- * filas de la pantalla; con la fila de columnas a `rows` y el transcript con
- * `minHeight`, TODOS los frames caerían ahí — un borrado por token y por tecla. Con la
- * reserva, el frame normal es `rows - 1` y el repintado es incremental. El modal de
+ * filas de la pantalla; y la fila de columnas mide SIEMPRE lo que se le dice, así que
+ * con `height = rows` TODOS los frames caerían ahí — un borrado por token y por tecla.
+ * Con la reserva, el frame normal es `rows - 1` y el repintado es incremental. El modal de
  * aprobación (montado debajo de la fila) sí supera `rows` mientras está abierto: es el
  * comportamiento previo y está anotado en la spec como riesgo asumido.
  */
@@ -135,7 +142,10 @@ export function App({
   return (
     <Box flexDirection="column" width="100%">
       <Box flexDirection="row" height={filas}>
-        <Box flexDirection="column" flexGrow={1} paddingRight={1}>
+        {/* `flexBasis={0}`: la columna crece desde cero por flex, así que un prompt
+            largo no infla su base y no le roba anchura a la sidebar (el logotipo, de
+            anchura fija, se envolvería en garabatos). */}
+        <Box flexDirection="column" flexGrow={1} flexBasis={0} paddingRight={1}>
           <Transcript store={store} altura={alturaTranscript} />
           {vista.pregunta !== null ? (
             <PreguntaInk pregunta={vista.pregunta} alResponder={responder} />
@@ -150,7 +160,9 @@ export function App({
           )}
           <BarraDeEstado ruta={datos.ruta} contexto={datos.contexto} tope={datos.tope} />
         </Box>
-        <Box width={30} paddingLeft={1} flexDirection="column">
+        {/* `flexShrink={0}`: la sidebar mide 30 y no negocia — el logotipo y las cifras
+            están dibujados para esa anchura. */}
+        <Box width={30} flexShrink={0} paddingLeft={1} flexDirection="column">
           <Sidebar {...datos} columnas={stdout.columns ?? 80} />
         </Box>
       </Box>

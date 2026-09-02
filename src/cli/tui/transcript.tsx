@@ -129,15 +129,32 @@ export function Transcript({ store, altura }: { store: Store; altura: number }):
 
   const visibles = ventanaDe(estado.actos, altura, desfase);
   return (
-    // `minHeight` y no `height`: con pocos actos la Entrada queda anclada abajo (la
-    // maqueta), y con una línea larga que envuelve el transcript CRECE en vez de
-    // recortar lo más nuevo — que es justo lo que hay que leer.
-    <Box flexDirection="column" minHeight={altura}>
+    // La ÚNICA pieza elástica de la columna: la fila de columnas tiene altura fija
+    // (`rows - 1`, la reserva del borrado total de Ink) y Entrada, Pregunta y pie no
+    // encogen, así que lo que sobra —o lo que falta— lo pone y lo paga el transcript.
+    // `overflow="hidden"` + `justifyContent="flex-end"`: con pocos actos la Entrada
+    // queda anclada abajo (la maqueta) y, cuando el contenido no cabe (una línea que
+    // envuelve, el colchón vivo), se recorta por ARRIBA — lo más nuevo, que es lo que
+    // hay que leer, se queda. `altura` ya no es la altura de la caja (la pone el flex):
+    // es el tamaño de la rebanada que pide `ventanaDe`.
+    <Box flexDirection="column" flexGrow={1} flexBasis={0} overflow="hidden" justifyContent="flex-end">
+      {/* Cada fila en un Box que NO encoge. Sin esto, cuando el contenido no cabe Ink
+          reparte el recorte entre todos los hijos (que encogen por omisión) y los
+          redondea sobre las mismas filas: MEDIDO, un transcript de 10 actos en 5 filas
+          pintaba «c1 c3 c5 c7 c9» — se perdían actos del MEDIO, y con ellos el colchón
+          vivo del final. Con `flexShrink 0` el recorte es limpio y por arriba: se pierde
+          lo viejo, que es lo que se puede perder. */}
       {visibles.map((acto, i) => (
-        <ActoVista key={`${i}-${acto.tipo}`} acto={acto} />
+        <Box key={`${i}-${acto.tipo}`} flexShrink={0} flexDirection="column">
+          <ActoVista acto={acto} />
+        </Box>
       ))}
       {/* El colchón solo es «en curso» si se ve el fondo: subido a leer, no estorba. */}
-      {desfase === 0 && estado.colchon !== "" ? <LineaMarkdown texto={estado.colchon} /> : null}
+      {desfase === 0 && estado.colchon !== "" ? (
+        <Box flexShrink={0} flexDirection="column">
+          <LineaMarkdown texto={estado.colchon} />
+        </Box>
+      ) : null}
     </Box>
   );
 }

@@ -17,10 +17,23 @@ export interface DatosDeSidebar {
   modelo: string;
   modelosPorPapel: Partial<Record<Papel, string>>;
   proyecto: string;
-  /** La raíz completa del proyecto: el pie la enseña entera; `proyecto` es su basename. */
+  /** La raíz del proyecto (con el `$HOME` ya abreviado a `~`) para el pie; `proyecto` es su basename. */
   ruta: string;
   rama?: string;
   version: string;
+}
+
+/**
+ * El porcentaje de contexto, o `undefined` si no hay tope que dividir. La regla de
+ * `core/contextos.ts` («porcentaje SOLO con tope») en UNA función: la sidebar y el pie
+ * la enseñan en dos sitios, y dos copias de la misma cuenta se separan tarde o temprano.
+ * Un tope 0 es un tope que no se sabe: dividir daría `Infinity`, no un dato. Un
+ * porcentaje definido implica, pues, un tope definido: por eso los llamadores pueden
+ * afirmarlo al formatear el denominador.
+ */
+export function porcentaje(contexto: number, tope: number | undefined): number | undefined {
+  if (tope === undefined || tope <= 0) return undefined;
+  return Math.round((contexto / tope) * 100);
 }
 
 /**
@@ -28,6 +41,7 @@ export interface DatosDeSidebar {
  * los compone `correrTui.ts` (que no mira stdout) y la anchura la conoce `App`.
  */
 export function Sidebar({ columnas, ...d }: DatosDeSidebar & { columnas: number }): ReactNode {
+  const pct = porcentaje(d.contexto, d.tope);
   return (
     // flexGrow para llenar la columna: el separador de abajo empuja el pie al fondo.
     <Box flexDirection="column" flexGrow={1}>
@@ -43,7 +57,7 @@ export function Sidebar({ columnas, ...d }: DatosDeSidebar & { columnas: number 
           <Text bold color={temaInk.acento}>Contexto</Text>
           <Text>
             {compacto(d.contexto)}
-            {d.tope !== undefined ? `/${formatearTope(d.tope)} (${Math.round((d.contexto / d.tope) * 100)}%)` : " tokens"}
+            {pct !== undefined ? `/${formatearTope(d.tope!)} (${pct}%)` : " tokens"}
           </Text>
         </Box>
       ) : null}
@@ -85,10 +99,8 @@ export function pie(d: { ruta: string; contexto: number; tope?: number }): {
 } {
   let cifras = "";
   if (d.contexto > 0) {
-    cifras =
-      d.tope !== undefined && d.tope > 0
-        ? `${compacto(d.contexto)} (${Math.round((d.contexto / d.tope) * 100)}%)`
-        : `${compacto(d.contexto)} tokens`;
+    const pct = porcentaje(d.contexto, d.tope);
+    cifras = pct !== undefined ? `${compacto(d.contexto)} (${pct}%)` : `${compacto(d.contexto)} tokens`;
   }
   return { izquierda: d.ruta, cifras, derecha: cifras === "" ? "/ayuda" : `${cifras}  /ayuda` };
 }
@@ -96,12 +108,23 @@ export function pie(d: { ruta: string; contexto: number; tope?: number }): {
 export function BarraDeEstado(d: { ruta: string; contexto: number; tope?: number }): ReactNode {
   const p = pie(d);
   return (
-    <Box justifyContent="space-between">
-      <Text color={temaInk.mudo}>{p.izquierda}</Text>
-      <Text>
-        {p.cifras !== "" ? <Text color={temaInk.mudo}>{`${p.cifras}  `}</Text> : null}
-        <Text color={temaInk.texto}>/ayuda</Text>
-      </Text>
+    // `flexShrink={0}` en el pie: la fila de columnas tiene altura fija y el pie NO es
+    // lo que cede — cede el transcript. Dentro, al revés: la ruta encoge (y se trunca
+    // por DELANTE, que la cola es la que identifica el proyecto) y las cifras no, para
+    // que un pie estrecho no se coma «/ayuda». El `marginLeft` deja el hueco que evita
+    // que una ruta truncada quede pegada a las cifras.
+    <Box justifyContent="space-between" flexShrink={0}>
+      <Box flexShrink={1} minWidth={0}>
+        <Text color={temaInk.mudo} wrap="truncate-start">
+          {p.izquierda}
+        </Text>
+      </Box>
+      <Box flexShrink={0} marginLeft={1}>
+        <Text>
+          {p.cifras !== "" ? <Text color={temaInk.mudo}>{`${p.cifras}  `}</Text> : null}
+          <Text color={temaInk.texto}>/ayuda</Text>
+        </Text>
+      </Box>
     </Box>
   );
 }
