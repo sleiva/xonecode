@@ -1,4 +1,4 @@
-import { createDeepAgent } from "deepagents";
+import { createDeepAgent, createFilesystemMiddleware } from "deepagents";
 import { MemorySaver } from "@langchain/langgraph";
 import { backendConSkills, backendDelProyecto, exponerMemoriaDeProyecto, sinVistasAplanadas } from "./proyecto.js";
 import { PERFILES, permisosDe, hitlDe } from "./perfiles.js";
@@ -29,6 +29,29 @@ export const PROMPT_ORQUESTADOR = [
   "que corran a la vez.",
   "No afirmes que un cambio se ha aplicado si no te lo ha confirmado el especialista.",
 ].join(" ");
+
+/**
+ * Indicaciones que el modelo recibe junto a las tools reales de fichero.
+ *
+ * No crean herramientas ni rebajan permisos: hacen explícito el destino correcto
+ * para que una skill no confunda su propia carpeta de instrucciones con la salida.
+ */
+export const DESCRIPCIONES_FICHEROS = {
+  write_file: [
+    "Escribe un fichero del proyecto en una ruta absoluta.",
+    "Para diagramas, esquemas, arquitecturas y flujos: carga primero la skill `archify`;",
+    "no escribas nunca dentro de `/skills`. Si el usuario pide el resultado renderizado,",
+    "guárdalo como HTML autocontenido en `/artifacts/<nombre>.html`.",
+    "Para dashboards, informes o tablas HTML interactivas carga `artifacts-builder` y usa",
+    "también `/artifacts/<nombre>.html`. La ruta `/MEMORIA_PROYECTO.md` es exclusivamente",
+    "para hechos confirmados, decisiones y pendientes útiles; no guardes transcripciones ni secretos.",
+  ].join(" "),
+  edit_file: [
+    "Modifica un fichero existente del proyecto en una ruta absoluta.",
+    "No modifiques `/skills`: son instrucciones de solo lectura. Para actualizar la memoria",
+    "usa solo `/MEMORIA_PROYECTO.md` y conserva su contenido útil.",
+  ].join(" "),
+};
 
 /**
  * El agente real.
@@ -76,7 +99,16 @@ export async function construirAgente(opciones: OpcionesDelAgente): Promise<unkn
     // tools de fichero, así que es su siguiente llamada al modelo la que reventaba.
     // El nombre coincide con el middleware por defecto de DeepAgents y lo sustituye: así
     // aplica tanto al especialista como al orquestador.
-    middleware: [resumenDeContexto(backend), middlewareTextoDeTool(), ...middlewareTracker],
+    middleware: [
+      createFilesystemMiddleware({
+        backend,
+        permissions: permisosDe(perfil),
+        customToolDescriptions: DESCRIPCIONES_FICHEROS,
+      }),
+      resumenDeContexto(backend),
+      middlewareTextoDeTool(),
+      ...middlewareTracker,
+    ],
     model: opciones.modelos.paraPapel(perfil.soloLectura ? "rapido" : "trabajo"),
   }));
 
@@ -89,7 +121,12 @@ export async function construirAgente(opciones: OpcionesDelAgente): Promise<unkn
     // revienta tras 8-10 tools con «Non string tool message content is not supported» —
     // y no es de langchain ni de deepagents, sino de `@langchain/ollama` (ver
     // `textoDeTool.ts`). Medido con dos modelos, nube y local.
-    middleware: [resumenDeContexto(backend), middlewareTextoDeTool(), ...middlewareTracker],
+    middleware: [
+      createFilesystemMiddleware({ backend, customToolDescriptions: DESCRIPCIONES_FICHEROS }),
+      resumenDeContexto(backend),
+      middlewareTextoDeTool(),
+      ...middlewareTracker,
+    ],
     subagents: [
       ...subagentes,
       {
@@ -125,7 +162,11 @@ export function promptDe(nombre: string, skills: SkillsPort): string {
     "  en silencio, así que un invento no da error — da un bug mudo.",
     "",
     "SKILLS VISUALES:",
-    "- Si te piden un diagrama, esquema, arquitectura, flujo, secuencia, datos o estados, carga primero `archify`.",
+    "- REGLA DE PRIORIDAD: para un diagrama, esquema, arquitectura, flujo, secuencia, datos o estados,",
+    "  usa solamente `archify`. No cargues ni uses `artifacts-builder` como sustituto.",
+    "- Solo si, ADEMÁS del diagrama, el usuario pide un contenedor HTML interactivo, usa `artifacts-builder`",
+    "  después de decidir el diagrama con `archify`. Guárdalo en `/artifacts/<nombre>.html`; no escribas",
+    "  jamás dentro de `/skills` ni menciones una tool que no tienes.",
     "- Si te piden un dashboard, informe, tabla o artefacto HTML interactivo, carga primero `artifacts-builder`.",
     "- Apóyate en el código real antes de dibujar: no inventes nombres, componentes ni flujos.",
     "",

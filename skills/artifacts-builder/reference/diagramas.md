@@ -1,5 +1,26 @@
 # Diagramas de flujo
 
+## Antes de escribir HTML: `archify` decide el diagrama
+
+Si la petición es **solo** un diagrama, esquema, arquitectura, flujo, secuencia, data-flow o
+ciclo de estados, **no uses esta skill**: carga únicamente **`archify`**. Es quien decide el
+tipo de diagrama, qué evidencia del proyecto es relevante y cómo conservar nombres reales.
+
+`artifacts-builder` participa únicamente cuando el usuario pide además un contenedor HTML
+interactivo, dashboard, informe o tabla. En ese caso, espera a que `archify` haya decidido el
+diagrama, crea su SVG y **lo incrusta inline** en el único HTML de este artefacto.
+
+- La salida se guarda en `/artifacts/<nombre>.html`, nunca en `/skills` ni dentro de la carpeta
+  de esta skill: allí viven solo instrucciones y recursos del harness.
+- No inventes `renderizar_diagrama`, `publish_artifact` ni una ejecución de scripts si esas
+  herramientas no figuran en tu contexto. Con `write_file`, entrega el HTML autocontenido.
+- Usa Mermaid únicamente cuando el usuario lo pida expresamente o cuando un SVG manual no aporte
+  claridad. Para el resto, `archify` es la fuente de decisión visual y semántica.
+- Si el resultado combina análisis del proyecto y un diagrama, primero confirma los hechos con
+  el código; no dibujes componentes, rutas ni estados que no estén comprobados.
+
+## Mermaid, solo cuando procede
+
 Mermaid desde cdnjs. Sin red: el diagrama es texto dentro de la página. **Éste es el montaje
 canónico** — copia el bloque entero, no la mitad:
 

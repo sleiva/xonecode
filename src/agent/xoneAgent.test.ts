@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { promptDe, PROMPT_ORQUESTADOR, rutasDeSkills } from "./xoneAgent.js";
+import { DESCRIPCIONES_FICHEROS, promptDe, PROMPT_ORQUESTADOR, rutasDeSkills } from "./xoneAgent.js";
 import { SkillsEnMemoria } from "../core/ports.js";
 
 describe("PROMPT_ORQUESTADOR", () => {
@@ -53,6 +53,15 @@ describe("promptDe", () => {
     const p = promptDe("planner", conSkills);
     expect(p).toMatch(/diagrama, esquema, arquitectura, flujo, secuencia, datos o estados/i);
     expect(p).toContain("`archify`");
+    expect(p).toContain("usa solamente `archify`");
+    expect(p).toContain("No cargues ni uses `artifacts-builder` como sustituto");
+    expect(p).toContain("/artifacts/<nombre>.html");
+  });
+
+  it("describe en las tools de escritura el destino y la skill correctos", () => {
+    expect(DESCRIPCIONES_FICHEROS.write_file).toContain("`archify`");
+    expect(DESCRIPCIONES_FICHEROS.write_file).toContain("/artifacts/<nombre>.html");
+    expect(DESCRIPCIONES_FICHEROS.edit_file).toContain("/MEMORIA_PROYECTO.md");
   });
 
   it("nombra las skills que SÍ tiene", () => {

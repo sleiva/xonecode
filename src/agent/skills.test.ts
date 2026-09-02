@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
-import { existsSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
+import { join } from "node:path";
 import { SkillsEnDisco, RAIZ_SKILLS, tokensDe } from "./skills.js";
 import { esDoble } from "../core/ports.js";
 
@@ -31,6 +32,13 @@ describe("SkillsEnDisco", () => {
 
   it("cargar() devuelve el SKILL.md entero", () => {
     expect(new SkillsEnDisco().cargar("xone-development")).toContain("XOne");
+  });
+
+  it("la guía de diagramas de artifacts-builder remite a archify y no usa skills como salida", () => {
+    const guia = readFileSync(join(RAIZ_SKILLS, "artifacts-builder", "reference", "diagramas.md"), "utf8");
+    expect(guia).toContain("`archify`");
+    expect(guia).toContain("/artifacts/<nombre>.html");
+    expect(guia).toContain("nunca en `/skills`");
   });
 
   it("una skill que no existe falla diciendo cuáles hay", () => {
