@@ -9,7 +9,7 @@ import type { ReactNode } from "react";
 import { crearStore, type Ranura, type VistaDeTui } from "./store.js";
 import { Transcript } from "./transcript.js";
 import { Entrada } from "./entrada.js";
-import { BarraDeEstado, Sidebar, type DatosDeSidebar } from "./sidebar.js";
+import { ANCHO_DE_SIDEBAR, BarraDeEstado, Sidebar, cabeSidebar, type DatosDeSidebar } from "./sidebar.js";
 import { ModalAprobacion } from "./aprobarTui.js";
 import { barra } from "./barra.js";
 import { temaInk } from "./temaInk.js";
@@ -118,6 +118,21 @@ export function App({
   const { stdout } = useStdout();
   const filas = (stdout.rows ?? 24) - FILA_DE_RESERVA;
   const alturaTranscript = Math.max(5, filas - FILAS_FIJAS);
+  const columnas = stdout.columns ?? 80;
+  const conSidebar = cabeSidebar(columnas);
+
+  // Ink escucha el `resize` del terminal, pero su manejador (`ink.js`, `resized`) solo
+  // recalcula Yoga y repinta el árbol YA montado: no re-renderiza React. Sin esto,
+  // `stdout.columns` no se volvería a leer y la sidebar no aparecería ni se iría al
+  // cambiar la anchura hasta el siguiente acto del transcript. `app.test.tsx` lo prueba.
+  const [, alRedimensionar] = useState(0);
+  useEffect(() => {
+    const f = (): void => alRedimensionar((n) => n + 1);
+    stdout.on("resize", f);
+    return () => {
+      stdout.off("resize", f);
+    };
+  }, [stdout]);
 
   // El transcript se repinta por su cuenta (Transcript está suscrito al store); la app
   // necesita re-render por los DATOS (sidebar, modelo), no por los actos. `suscribir`
@@ -158,13 +173,30 @@ export function App({
               modelo={datos.modelo}
             />
           )}
-          <BarraDeEstado ruta={datos.ruta} contexto={datos.contexto} tope={datos.tope} />
+          {/* Sin sidebar, la rama no está en ninguna otra parte: va al pie. */}
+          <BarraDeEstado
+            ruta={datos.ruta}
+            rama={conSidebar ? undefined : datos.rama}
+            contexto={datos.contexto}
+            tope={datos.tope}
+          />
         </Box>
-        {/* `flexShrink={0}`: la sidebar mide 30 y no negocia — el logotipo y las cifras
-            están dibujados para esa anchura. */}
-        <Box width={30} flexShrink={0} paddingLeft={1} flexDirection="column">
-          <Sidebar {...datos} columnas={stdout.columns ?? 80} />
-        </Box>
+        {/* La regla de OpenCode: la sidebar mide 42 fijas (2 de padding por lado, como
+            allí) y solo se monta con MÁS de 120 columnas; por debajo, el transcript se
+            queda con todo el ancho. `flexShrink={0}`: no negocia — el logotipo y las
+            cifras están dibujados para esa anchura. */}
+        {conSidebar ? (
+          <Box
+            width={ANCHO_DE_SIDEBAR}
+            flexShrink={0}
+            paddingLeft={2}
+            paddingRight={2}
+            paddingTop={1}
+            flexDirection="column"
+          >
+            <Sidebar {...datos} />
+          </Box>
+        ) : null}
       </Box>
       {vista.modal !== null ? <ModalAprobacion {...vista.modal} /> : null}
     </Box>

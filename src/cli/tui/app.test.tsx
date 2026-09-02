@@ -68,6 +68,8 @@ class StdinFalso extends EventEmitter {
 const esperar = (ms = 40): Promise<void> => new Promise((r) => setTimeout(r, ms));
 
 const FILAS = 24;
+/** Anchura por omisión: con sidebar (la regla es «más de 120»). */
+const COLUMNAS = 140;
 
 function datosDe(ruta: string): DatosDeSidebar {
   return {
@@ -89,7 +91,7 @@ function montar(opciones: {
 }) {
   const store = crearStore();
   const vista = crearRanura(vistaInicial());
-  const stdout = new StdoutFalso(opciones.columnas ?? 100, FILAS);
+  const stdout = new StdoutFalso(opciones.columnas ?? COLUMNAS, FILAS);
   const stdin = new StdinFalso();
   const instancia = render(
     createElement(App, {
@@ -115,16 +117,21 @@ function montar(opciones: {
   return { store, vista, stdout, stdin, instancia };
 }
 
-/** Las aserciones que la maqueta debe cumplir SIEMPRE, sea cual sea el estado. */
-function laMaquetaCabe(frame: string): void {
+/**
+ * Las aserciones que la maqueta debe cumplir SIEMPRE, sea cual sea el estado. Con
+ * sidebar (más de 120 columnas), «● xonecode» cierra la última fila junto al pie; sin
+ * ella, la versión no está en pantalla y el pie es lo único que cierra.
+ */
+function laMaquetaCabe(frame: string, opciones: { sidebar?: boolean } = {}): void {
   const lineas = frame.split("\n");
   expect(lineas).toHaveLength(FILAS - 1); // la fila de reserva del borrado total de Ink
   expect(lineas.at(-1)).toContain("/ayuda");
-  expect(lineas.at(-1)).toContain("● xonecode");
+  if (opciones.sidebar ?? true) expect(lineas.at(-1)).toContain("● xonecode");
+  else expect(frame).not.toContain("● xonecode");
 }
 
 describe("la maqueta de la App", () => {
-  it("en reposo: 23 filas, pie abajo, cursor visible y logotipo con 100 columnas", async () => {
+  it("en reposo: 23 filas, pie abajo, cursor visible y logotipo con 140 columnas", async () => {
     const m = montar({});
     await esperar();
     const frame = m.stdout.ultimo();
@@ -145,11 +152,11 @@ describe("la maqueta de la App", () => {
     expect(frame).toContain("▏");
   });
 
-  it("con un prompt ENVUELTO (52 chars a 80 columnas) el cursor sigue en pantalla", async () => {
-    // A 80 columnas la Entrada tiene 47 columnas de contenido (80 − 30 de sidebar − 1 de
-    // paddingRight − 2 de la barra), así que 52 caracteres ocupan DOS filas y la Entrada
-    // pasa de 2 a 3. Es el primer disparador del fallo: el que no se ve con el prompt de
-    // 60 a 100 columnas, donde todavía cabe en una fila.
+  it("con un prompt ENVUELTO (105 chars a 80 columnas) el cursor sigue en pantalla", async () => {
+    // A 80 columnas no hay sidebar, y la Entrada tiene 77 columnas de contenido (80 − 1
+    // de paddingRight − 2 de la barra), así que 105 caracteres ocupan DOS filas y la
+    // Entrada pasa de 2 a 3. Es el primer disparador del fallo: el que no se ve con el
+    // prompt de 60 a 140 columnas, donde todavía cabe en una fila.
     //
     // La línea entra de GOLPE (un solo write) y sobre la línea VACÍA, que es como llega
     // de verdad al recuperar del historial con ↑ o al pegar — y es el caso en el que Ink
@@ -157,14 +164,14 @@ describe("la maqueta de la App", () => {
     // fallo no aparece.
     const m = montar({ columnas: 80 });
     await esperar();
-    m.stdin.write("haz que la colección de clientes ordene por apellido");
+    m.stdin.write("haz que la colección de clientes ordene por apellido y luego por nombre, y que el listado enseñe el total");
     await esperar();
     const frame = m.stdout.ultimo();
     m.instancia.unmount();
-    laMaquetaCabe(frame);
+    laMaquetaCabe(frame, { sidebar: false });
     // La segunda fila del prompt está entera y el cursor con ella: la fila del modelo no
     // la ha pisado.
-    expect(frame).toContain("apellido▏");
+    expect(frame).toContain("total▏");
     expect(frame).toContain("ollama/glm");
   });
 
@@ -234,16 +241,69 @@ describe("la maqueta de la App", () => {
     expect(frame).toContain("turno en curso");
   });
 
-  it("con 80 columnas la ruta larga se trunca por delante, sin logotipo y sin perder el pie", async () => {
-    const m = montar({ columnas: 80, ruta: "/Users/sergioleivaortega/dev/MinitMT" });
+  it("con 50 columnas la ruta larga se trunca por delante, sin sidebar y sin perder el pie", async () => {
+    // Sin sidebar el pie enseña `ruta:rama`, y a 50 columnas (49 de pie menos las cifras
+    // y /ayuda) no cabe entera: se trunca POR DELANTE — se pierde la cabeza, se conserva
+    // la cola, que es la que identifica el proyecto y la rama.
+    const m = montar({ columnas: 50, ruta: "/Users/sergioleivaortega/dev/MinitMT" });
+    await esperar();
+    const frame = m.stdout.ultimo();
+    m.instancia.unmount();
+    laMaquetaCabe(frame, { sidebar: false });
+    expect(frame).toContain("▏");
+    expect(frame).toContain("MinitMT:main");
+    expect(frame).not.toContain("/Users/sergioleivaortega");
+    expect(frame).not.toContain("█"); // sin sidebar, sin logotipo
+  });
+
+  it("con 140 columnas la sidebar mide 42: el logotipo empieza en la columna 100 (140 − 42 + 2 de padding)", async () => {
+    const m = montar({});
     await esperar();
     const frame = m.stdout.ultimo();
     m.instancia.unmount();
     laMaquetaCabe(frame);
-    expect(frame).toContain("▏");
-    // Truncada POR DELANTE: se pierde la cabeza, se conserva la cola (el proyecto).
-    expect(frame).toContain("dev/MinitMT");
-    expect(frame).not.toContain("/Users/sergioleivaortega");
-    expect(frame).not.toContain("█"); // por debajo del umbral, sin logotipo
+    const filaDeLogo = frame.split("\n").find((l) => l.includes("█"));
+    expect(filaDeLogo).toBeDefined();
+    expect(filaDeLogo!.indexOf("█")).toBe(140 - 42 + 2);
+  });
+
+  it("con 120 columnas exactas NO hay sidebar (la regla es estricta) y el pie lleva la rama", async () => {
+    const m = montar({ columnas: 120 });
+    await esperar();
+    const frame = m.stdout.ultimo();
+    m.instancia.unmount();
+    laMaquetaCabe(frame, { sidebar: false });
+    expect(frame).not.toContain("█");
+    expect(frame).toContain("/dev/MinitMT:main");
+  });
+
+  it("al ENSANCHAR el terminal aparece la sidebar: el resize re-renderiza App, no solo repinta", async () => {
+    // Ink escucha `resize`, pero su manejador solo recalcula Yoga y repinta el árbol ya
+    // montado (`ink.js`, `resized`): sin un re-render de React, `stdout.columns` no se
+    // vuelve a leer y la sidebar seguiría sin montarse hasta el siguiente acto.
+    const m = montar({ columnas: 100 });
+    await esperar();
+    expect(m.stdout.ultimo()).not.toContain("█");
+    m.stdout.columns = 140;
+    m.stdout.emit("resize");
+    await esperar();
+    const frame = m.stdout.ultimo();
+    m.instancia.unmount();
+    laMaquetaCabe(frame);
+    expect(frame).toContain("█");
+  });
+
+  it("al ESTRECHAR el terminal la sidebar se va y la rama pasa al pie", async () => {
+    const m = montar({ columnas: 140 });
+    await esperar();
+    expect(m.stdout.ultimo()).toContain("█");
+    m.stdout.columns = 100;
+    m.stdout.emit("resize");
+    await esperar();
+    const frame = m.stdout.ultimo();
+    m.instancia.unmount();
+    laMaquetaCabe(frame, { sidebar: false });
+    expect(frame).not.toContain("█");
+    expect(frame).toContain("/dev/MinitMT:main");
   });
 });

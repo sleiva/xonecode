@@ -199,6 +199,12 @@ Un fallo del entorno no se reporta como un proyecto roto: `agent/verificador.ts`
   de UNA fila y la fila del modelo pisa la segunda. El remedio es `key={valor}` en ese Text
   (`cli/tui/entrada.tsx`, con la medición en el comentario); `app.test.tsx` lo vigila.
 
+- **El `resize` de Ink no re-renderiza React.** `ink.js`, `resized`: recalcula Yoga y repinta
+  el árbol YA montado. Lo que dependa de `stdout.columns` leído en el render (la sidebar, que
+  solo se monta con más de 120 columnas) se queda como estaba hasta el siguiente acto. `App`
+  (`cli/tui/app.tsx`) se suscribe al `resize` y fuerza un re-render; `app.test.tsx` lo prueba
+  en los dos sentidos.
+
 (Antes había una segunda trampa: `docs/COMO-PROBARLO.md` decía que la consola no hablaba con el
 agente real. El doc ya está corregido — `cli/main.ts` monta `crearEjecutorReal` por omisión y
 `--guion` es el modo de pega. Ante una discrepancia entre doc y código, el código manda.)

@@ -9,7 +9,7 @@ import { temaInk } from "./temaInk.js";
 import type { Papel } from "../../core/ports.js";
 // El MISMO formato compacto que stdio (`cli/tokens.ts`): dos pieles, una cifra.
 import { compacto, formatearTope } from "../tokens.js";
-import { LOGO_XONE, cabeLogo } from "./logo.js";
+import { LOGO_XONE } from "./logo.js";
 
 export interface DatosDeSidebar {
   contexto: number;
@@ -37,21 +37,30 @@ export function porcentaje(contexto: number, tope: number | undefined): number |
 }
 
 /**
- * `columnas` es la anchura TOTAL del terminal, y llega aparte de los datos: los datos
- * los compone `correrTui.ts` (que no mira stdout) y la anchura la conoce `App`.
+ * La regla de anchura, copiada de OpenCode (`packages/tui/src/routes/session/index.tsx`):
+ * la sidebar NO se redimensiona — mide fijo y aparece solo con MÁS de 120 columnas de
+ * terminal (estricto, como allí). Por debajo, el transcript se queda con todo el ancho y
+ * el pie enseña `ruta:rama`. Quien decide es `App`, que es quien conoce `stdout.columns`;
+ * la sidebar, si está montada, es que cabe — y con ella el logotipo (26 columnas en 38
+ * de contenido), que por eso ya no tiene umbral propio.
  */
-export function Sidebar({ columnas, ...d }: DatosDeSidebar & { columnas: number }): ReactNode {
+export const ANCHO_DE_SIDEBAR = 42;
+export const ANCHO_MINIMO_PARA_SIDEBAR = 120;
+
+export function cabeSidebar(columnas: number): boolean {
+  return columnas > ANCHO_MINIMO_PARA_SIDEBAR;
+}
+
+export function Sidebar(d: DatosDeSidebar): ReactNode {
   const pct = porcentaje(d.contexto, d.tope);
   return (
     // flexGrow para llenar la columna: el separador de abajo empuja el pie al fondo.
     <Box flexDirection="column" flexGrow={1}>
-      {cabeLogo(columnas) ? (
-        <Box flexDirection="column" marginBottom={1}>
-          {LOGO_XONE.map((fila, i) => (
-            <Text key={i} color={temaInk.acento}>{fila}</Text>
-          ))}
-        </Box>
-      ) : null}
+      <Box flexDirection="column" marginBottom={1}>
+        {LOGO_XONE.map((fila, i) => (
+          <Text key={i} color={temaInk.acento}>{fila}</Text>
+        ))}
+      </Box>
       {d.contexto > 0 ? (
         <Box flexDirection="column" marginBottom={1}>
           <Text bold color={temaInk.acento}>Contexto</Text>
@@ -90,9 +99,10 @@ export function Sidebar({ columnas, ...d }: DatosDeSidebar & { columnas: number 
  * patrón que `ventanaDe` en transcript.tsx). `cifras` vive aparte de `derecha` porque
  * se pinta en mudo y `/ayuda` en texto; `derecha` es la línea completa, para los tests.
  * Porcentaje SOLO con tope, y sin medición (`contexto === 0`) ninguna cifra: las dos
- * reglas de `core/contextos.ts` y de la sidebar.
+ * reglas de `core/contextos.ts` y de la sidebar. `rama` llega solo cuando NO hay
+ * sidebar que la enseñe (terminal estrecho): entonces la izquierda es `ruta:rama`.
  */
-export function pie(d: { ruta: string; contexto: number; tope?: number }): {
+export function pie(d: { ruta: string; rama?: string; contexto: number; tope?: number }): {
   izquierda: string;
   cifras: string;
   derecha: string;
@@ -102,10 +112,11 @@ export function pie(d: { ruta: string; contexto: number; tope?: number }): {
     const pct = porcentaje(d.contexto, d.tope);
     cifras = pct !== undefined ? `${compacto(d.contexto)} (${pct}%)` : `${compacto(d.contexto)} tokens`;
   }
-  return { izquierda: d.ruta, cifras, derecha: cifras === "" ? "/ayuda" : `${cifras}  /ayuda` };
+  const izquierda = d.rama !== undefined ? `${d.ruta}:${d.rama}` : d.ruta;
+  return { izquierda, cifras, derecha: cifras === "" ? "/ayuda" : `${cifras}  /ayuda` };
 }
 
-export function BarraDeEstado(d: { ruta: string; contexto: number; tope?: number }): ReactNode {
+export function BarraDeEstado(d: { ruta: string; rama?: string; contexto: number; tope?: number }): ReactNode {
   const p = pie(d);
   return (
     // `flexShrink={0}` en el pie: la fila de columnas tiene altura fija y el pie NO es

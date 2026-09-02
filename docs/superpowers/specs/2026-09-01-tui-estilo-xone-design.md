@@ -108,21 +108,27 @@ aserción de «hex» se mantiene para los cuatro.
 
 ### 5. Sidebar (`sidebar.tsx`, `logo.ts`)
 
+- **Anchura (corregido el 2026-09-02, copiando la regla real de OpenCode en
+  `packages/tui/src/routes/session/index.tsx`):** la sidebar NO se redimensiona. Mide
+  `ANCHO_DE_SIDEBAR = 42` columnas fijas (2 de padding por lado, 38 de contenido) y `App`
+  solo la monta si `cabeSidebar(stdout.columns)`, es decir con MÁS de 120 columnas
+  (estricto, como allí). Por debajo, el transcript se queda con todo el ancho y el pie
+  enseña `ruta:rama` (la rama no está en ningún otro sitio). Antes medía 30 y estaba
+  siempre; el logo tenía un umbral propio de 100 columnas, que desaparece: si hay sidebar,
+  el logo cabe. Como Ink solo repinta en el `resize` (no re-renderiza React), `App` se
+  suscribe al `resize` de stdout y fuerza un re-render.
 - `logo.ts`: `export const LOGO_XONE: readonly string[]` (letras de bloque, 5 filas de
-  26 columnas) y `export function cabeLogo(columnas: number): boolean` → `columnas >= 100`.
-  El umbral es sobre la anchura TOTAL del terminal (stdout.columns), que `App` pasa a la
-  sidebar como prop `columnas`.
+  26 columnas). Sin umbral propio.
 - Estructura: `<Box flexDirection="column" flexGrow={1}>` (llena la columna, cuya altura fija pone `App`) con:
-  1. Logotipo (si `cabeLogo`) en `acento`, seguido de una fila vacía.
+  1. Logotipo en `acento`, seguido de una fila vacía.
   2. Sección **Contexto** (solo si `contexto > 0`): la cifra como hoy.
   3. Sección **Modelo**: trabajo en `texto`, resto de papeles en `mudo`.
   4. `<Box flexGrow={1} />` que empuja el resto al fondo.
   5. Pie de sidebar: `<ruta>:<rama>` con `proyecto` en negrita y `:rama` en `mudo`
      (sin rama, solo el proyecto), y debajo `● xonecode <versión>` con el ● en `exito`.
-- `columnas` llega a `Sidebar` como prop APARTE de `DatosDeSidebar` (los datos los compone
-  `correrTui.ts`, que no mira stdout; la anchura la conoce `App`). `DatosDeSidebar` gana en
-  cambio `ruta` para el pie (la raíz, con el `$HOME` abreviado a `~`); `proyecto` sigue
-  siendo el basename.
+- La anchura del terminal la conoce `App` y no viaja a `Sidebar` (los datos los compone
+  `correrTui.ts`, que no mira stdout). `DatosDeSidebar` gana `ruta` para el pie (la raíz,
+  con el `$HOME` abreviado a `~`); `proyecto` sigue siendo el basename.
 - Para que el anclaje al fondo funcione, `App` da a la fila de columnas `height = rows - 1`.
   El pie NO es esa fila —vive dentro de la columna izquierda—: el `- 1` es la fila de
   reserva del borrado total de Ink (ver Riesgos).
@@ -150,21 +156,25 @@ Todo con `ink-testing-library` o funciones puras; nada necesita TTY ni red.
   DESPUÉS del fin no cambia el acto ya cerrado.
 - `entrada.test.tsx`: la segunda fila enseña el modelo; ocupada también.
 - `sidebar.test.tsx`: `pie()` en sus tres variantes (con tope, sin tope, contexto 0);
-  el logotipo aparece con 120 columnas y no con 80; `proyecto:rama` y `xonecode 0.3.0`
-  siguen presentes; sin rama, solo el proyecto. Se actualizan las aserciones de cadena
+  el logotipo se pinta siempre; `cabeSidebar` es falso a 120 y cierto a 121;
+  `ANCHO_DE_SIDEBAR` es 42; `pie()` con rama da `ruta:rama`; `proyecto:rama` y
+  `xonecode 0.3.0` siguen presentes; sin rama, solo el proyecto. Se actualizan las aserciones de cadena
   exacta que cambian (`lineaDeEstado` desaparece).
 - `logo.test.ts`: todas las filas del logotipo tienen la misma anchura y ninguna supera
-  28 columnas (la sidebar mide 30).
+  28 columnas (la sidebar tiene 38 de contenido).
 - `app.test.tsx`: la maqueta ENTERA con una altura conocida (stdout falso de 24 filas, sin
   TTY; `ink-testing-library` no vale porque fija `columns` y no expone `rows`). En reposo,
   con prompt largo, con pista de Tab, con el transcript lleno y colchón vivo, ocupado y a
-  80 columnas: el frame mide 23 filas, el pie y `● xonecode` cierran la última y el cursor
-  `▏` (o «turno en curso») sigue en pantalla.
+  80 columnas: el frame mide 23 filas, el pie (y `● xonecode` si hay sidebar) cierra la
+  última y el cursor `▏` (o «turno en curso») sigue en pantalla. Además: a 140 columnas
+  la sidebar mide 42 (el logo empieza en la columna 100); a 120 exactas no hay sidebar y
+  el pie lleva la rama; y al ensanchar de 100 a 140 con un `resize` la sidebar aparece.
 - `frontera.test.ts` no cambia: `logo.ts` no importa ink.
 
 ## Riesgos asumidos
 
-- **El umbral de 100 columnas es un número a ojo.** Si molesta, se ajusta en un sitio.
+- **El umbral de 120 columnas y las 42 de anchura son los de OpenCode**, no una medida
+  propia. Viven en un solo sitio (`sidebar.tsx`) para poder ajustarlos.
 - **El ámbar de fase no es color XOne.** Es el único tono cálido de la paleta y existe
   para que la fase no se confunda con el texto mudo; queda declarado como token de TUI.
 - **El anclaje al fondo (`flexGrow` + separador elástico) depende de que la columna tenga
