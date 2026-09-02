@@ -27,7 +27,7 @@ export const PERFILES: Record<NombrePerfil, Perfil> = {
       "eventos, patrones). Puede leer el proyecto para no contradecir el código real. " +
       "No modifica nada.",
     soloLectura: true,
-    skills: ["xone-development"],
+    skills: ["xone-development", "archify", "artifacts-builder"],
   },
   planner: {
     nombre: "planner",
@@ -35,7 +35,7 @@ export const PERFILES: Record<NombrePerfil, Perfil> = {
       "Inspecciona el proyecto real para anclar planes y diagnósticos: estructura, " +
       "colecciones y búsqueda de código. No modifica nada.",
     soloLectura: true,
-    skills: ["xone-spec-builder", "xone-plan-builder"],
+    skills: ["xone-spec-builder", "xone-plan-builder", "archify", "artifacts-builder"],
   },
   dev: {
     nombre: "dev",
@@ -43,7 +43,7 @@ export const PERFILES: Record<NombrePerfil, Perfil> = {
       "Desarrolla: crea y modifica colecciones, escribe scripts y edita ficheros. " +
       "Las modificaciones requieren aprobación humana.",
     soloLectura: false,
-    skills: ["xone-development", "xone-debugging"],
+    skills: ["xone-development", "xone-debugging", "archify", "artifacts-builder"],
   },
   mockup: {
     nombre: "mockup",
@@ -51,7 +51,7 @@ export const PERFILES: Record<NombrePerfil, Perfil> = {
       "Trabajo visual: layouts, CSS y recursos. Las modificaciones requieren " +
       "aprobación humana.",
     soloLectura: false,
-    skills: ["xone-development"],
+    skills: ["xone-development", "archify", "artifacts-builder"],
   },
 };
 
@@ -62,6 +62,8 @@ export const DENEGADO_SIEMPRE = [
     paths: ["/.env", "/.env.*", "/.git", "/.git/**", "/.xonecode", "/.xonecode/**"],
     mode: "deny" as const,
   },
+  // Las skills son instrucciones del harness, nunca ficheros que el agente pueda alterar.
+  { operations: ["write"] as const, paths: ["/skills", "/skills/**"], mode: "deny" as const },
 ];
 
 /**

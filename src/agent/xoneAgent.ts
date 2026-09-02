@@ -1,6 +1,6 @@
 import { createDeepAgent } from "deepagents";
 import { MemorySaver } from "@langchain/langgraph";
-import { backendDelProyecto, exponerMemoriaDeProyecto, sinVistasAplanadas } from "./proyecto.js";
+import { backendConSkills, backendDelProyecto, exponerMemoriaDeProyecto, sinVistasAplanadas } from "./proyecto.js";
 import { PERFILES, permisosDe, hitlDe } from "./perfiles.js";
 import { middlewareTextoDeTool } from "./textoDeTool.js";
 import { resumenDeContexto } from "./resumenDeContexto.js";
@@ -23,6 +23,8 @@ export const PROMPT_ORQUESTADOR = [
   "NO tienes herramientas: tu único trabajo es entender la petición y delegar.",
   "Delega en `docs` las preguntas técnicas de la plataforma; en `planner` lo que",
   "exija inspeccionar el proyecto; en `dev` el desarrollo; en `mockup` lo visual.",
+  "Para diagramas o esquemas de la app, delega en `mockup`; si deben reflejar el",
+  "código real, encarga a `planner` el análisis y usa su resultado antes de dibujar.",
   "Cuando varias tareas sean independientes, delégalas EN EL MISMO mensaje para",
   "que corran a la vez.",
   "No afirmes que un cambio se ha aplicado si no te lo ha confirmado el especialista.",
@@ -44,9 +46,8 @@ export const PROMPT_ORQUESTADOR = [
  * 4. **El HITL va en las tools de fichero**, que en la v1 son las que escriben.
  */
 export async function construirAgente(opciones: OpcionesDelAgente): Promise<unknown> {
-  const backend = sinVistasAplanadas(
-    exponerMemoriaDeProyecto(backendDelProyecto(opciones.raiz)),
-    opciones.ficheros
+  const backend = backendConSkills(
+    sinVistasAplanadas(exponerMemoriaDeProyecto(backendDelProyecto(opciones.raiz)), opciones.ficheros)
   );
 
   // Si no hay tracker, no se añade el middleware: es opcional a propósito arriba.
@@ -56,6 +57,9 @@ export async function construirAgente(opciones: OpcionesDelAgente): Promise<unkn
     name: perfil.nombre,
     description: perfil.descripcion,
     systemPrompt: promptDe(perfil.nombre, opciones.skills),
+    // Los subagentes no heredan las skills del orquestador. Se entregan como fuentes
+    // directas para mantener cada perfil limitado a su catálogo declarado.
+    skills: rutasDeSkills(perfil.nombre, opciones.skills),
     // **NO se pasa `tools`.** Era un bug: `SubAgent.tools` es `StructuredTool[]` —objetos,
     // para tools PROPIAS— y pasarle los NOMBRES de las de fichero las sustituía por
     // cadenas, dejando al especialista sin ninguna capacidad real. Compilaba (por el
@@ -120,6 +124,11 @@ export function promptDe(nombre: string, skills: SkillsPort): string {
     "- No inventes atributos XML, funciones ni propiedades CSS: XOne ignora lo desconocido",
     "  en silencio, así que un invento no da error — da un bug mudo.",
     "",
+    "SKILLS VISUALES:",
+    "- Si te piden un diagrama, esquema, arquitectura, flujo, secuencia, datos o estados, carga primero `archify`.",
+    "- Si te piden un dashboard, informe, tabla o artefacto HTML interactivo, carga primero `artifacts-builder`.",
+    "- Apóyate en el código real antes de dibujar: no inventes nombres, componentes ni flujos.",
+    "",
     nombre === "docs"
       ? ""
       : "Para una tarea sobre este proyecto, lee una sola vez `/MEMORIA_PROYECTO.md` antes de inspeccionarlo. " +
@@ -136,4 +145,11 @@ export function promptDe(nombre: string, skills: SkillsPort): string {
   ]
     .filter(Boolean)
     .join("\n");
+}
+
+/** Rutas virtuales que SkillsMiddleware carga de forma progresiva para un perfil. */
+export function rutasDeSkills(nombre: string, skills: SkillsPort): string[] {
+  const perfil = PERFILES[nombre as keyof typeof PERFILES];
+  const disponibles = new Set(skills.catalogo().map((s) => s.nombre));
+  return perfil.skills.filter((skill) => disponibles.has(skill)).map((skill) => `/skills/${skill}/`);
 }

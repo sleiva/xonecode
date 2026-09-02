@@ -3,7 +3,7 @@ import { ChatAnthropic } from "@langchain/anthropic";
 import { ChatOllama } from "@langchain/ollama";
 import type { ModelosPort, Papel } from "../core/ports.js";
 import { resolver, type Eleccion, type FuentesDeEleccion } from "../core/modelos.js";
-import { baseUrlDeOllama } from "./catalogoModelos.js";
+import { baseUrlDeOllama, baseUrlDeOllamaCloud } from "./catalogoModelos.js";
 import { ChatGoogleGenerativeAICompatible } from "./gemini.js";
 
 /**
@@ -31,6 +31,12 @@ export class Modelos implements ModelosPort {
         return new ChatOllama({
           model: modelo,
           baseUrl: baseUrlDeOllama(),
+        });
+      case "ollama-cloud":
+        return new ChatOllama({
+          model: modelo,
+          baseUrl: baseUrlDeOllamaCloud(),
+          headers: { authorization: `Bearer ${process.env.OLLAMA_API_KEY ?? ""}` },
         });
       case "gemini":
         return new ChatGoogleGenerativeAICompatible({

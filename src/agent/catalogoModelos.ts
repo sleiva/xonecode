@@ -16,6 +16,11 @@ export function baseUrlDeOllama(): string {
   return process.env.OLLAMA_BASE_URL ?? "http://localhost:11434";
 }
 
+/** El host remoto oficial de Ollama Cloud no se mezcla con el servidor local. */
+export function baseUrlDeOllamaCloud(): string {
+  return "https://ollama.com";
+}
+
 type Registro = Record<string, unknown>;
 
 function esRegistro(valor: unknown): valor is Registro {
@@ -46,6 +51,10 @@ function urlConParametro(url: string, nombre: string, valor: string): string {
 
 function unirUrlOllama(ruta: string): string {
   return `${baseUrlDeOllama().replace(/\/+$/, "")}${ruta}`;
+}
+
+function unirUrl(baseUrl: string, ruta: string): string {
+  return `${baseUrl.replace(/\/+$/, "")}${ruta}`;
 }
 
 function esModeloOpenAiConversacional(id: string): boolean {
@@ -82,14 +91,16 @@ export class CatalogoModelos implements CatalogoModelosPort {
       case "anthropic": return this.listarAnthropic();
       case "gemini": return this.listarGemini();
       case "ollama": return this.listarOllama();
+      case "ollama-cloud": return this.listarOllamaCloud();
     }
   }
 
-  private clave(proveedor: "openai" | "anthropic" | "gemini"): string {
+  private clave(proveedor: "openai" | "anthropic" | "gemini" | "ollama-cloud"): string {
     const variable = {
       openai: "OPENAI_API_KEY",
       anthropic: "ANTHROPIC_API_KEY",
       gemini: "GOOGLE_API_KEY",
+      "ollama-cloud": "OLLAMA_API_KEY",
     }[proveedor];
     const clave = process.env[variable];
     if (!clave) {
@@ -201,25 +212,44 @@ export class CatalogoModelos implements CatalogoModelosPort {
   }
 
   private async listarOllama(): Promise<ModeloDisponible[]> {
-    const etiquetas = await this.pedir("ollama", unirUrlOllama("/api/tags"));
-    if (!esRegistro(etiquetas)) throw new ErrorCatalogoModelos("respuesta incompatible de ollama");
+    return this.listarOllamaDesde("ollama", baseUrlDeOllama());
+  }
+
+  private async listarOllamaCloud(): Promise<ModeloDisponible[]> {
+    const clave = this.clave("ollama-cloud");
+    return this.listarOllamaDesde("ollama-cloud", baseUrlDeOllamaCloud(), {
+      authorization: `Bearer ${clave}`,
+    });
+  }
+
+  private async listarOllamaDesde(
+    proveedor: "ollama" | "ollama-cloud",
+    baseUrl: string,
+    cabeceras?: Record<string, string>,
+  ): Promise<ModeloDisponible[]> {
+    const etiquetas = await this.pedir(
+      proveedor,
+      unirUrl(baseUrl, "/api/tags"),
+      cabeceras === undefined ? {} : { headers: cabeceras },
+    );
+    if (!esRegistro(etiquetas)) throw new ErrorCatalogoModelos(`respuesta incompatible de ${proveedor}`);
     const salida: ModeloDisponible[] = [];
-    for (const etiqueta of modelosDe(etiquetas, "models", "ollama")) {
+    for (const etiqueta of modelosDe(etiquetas, "models", proveedor)) {
       const id = texto(etiqueta.name);
       if (id === undefined) continue;
-      const detalle = await this.pedir("ollama", unirUrlOllama("/api/show"), {
+      const detalle = await this.pedir(proveedor, unirUrl(baseUrl, "/api/show"), {
         method: "POST",
-        headers: { "content-type": "application/json" },
+        headers: { ...cabeceras, "content-type": "application/json" },
         body: JSON.stringify({ model: id }),
       });
-      if (!esRegistro(detalle)) throw new ErrorCatalogoModelos("respuesta incompatible de ollama");
+      if (!esRegistro(detalle)) throw new ErrorCatalogoModelos(`respuesta incompatible de ${proveedor}`);
       const capacidades = detalle.capabilities;
       if (
         !Array.isArray(capacidades)
         || !capacidades.some((capacidad) => capacidad === "completion" || capacidad === "generate" || capacidad === "chat")
       ) continue;
       const contexto = contextoOllama(detalle.model_info);
-      salida.push({ proveedor: "ollama", id, ...(contexto === undefined ? {} : { contexto }) });
+      salida.push({ proveedor, id, ...(contexto === undefined ? {} : { contexto }) });
     }
     return salida;
   }

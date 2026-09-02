@@ -1,5 +1,6 @@
-import { FilesystemBackend } from "deepagents";
+import { CompositeBackend, FilesystemBackend } from "deepagents";
 import { RUTA_MEMORIA_INTERNA, RUTA_MEMORIA_VIRTUAL } from "./memoriaDeProyecto.js";
+import { RAIZ_SKILLS } from "./skills.js";
 
 /**
  * El backend del proyecto: confinado, y sin las vistas aplanadas.
@@ -13,6 +14,22 @@ import { RUTA_MEMORIA_INTERNA, RUTA_MEMORIA_VIRTUAL } from "./memoriaDeProyecto.
  */
 export function backendDelProyecto(raiz: string): FilesystemBackend {
   return new FilesystemBackend({ rootDir: raiz, virtualMode: true });
+}
+
+/**
+ * Añade las skills del harness como una ruta virtual de solo lectura del agente.
+ *
+ * El proyecto del usuario sigue siendo la raíz predeterminada. `/skills` apunta al
+ * catálogo que se distribuye con xonecode: así SkillsMiddleware puede descubrir y
+ * cargar bajo demanda cada `SKILL.md` sin conceder al modelo acceso al repositorio
+ * del harness ni sacarlo de la raíz del proyecto.
+ */
+export function backendConSkills<T extends object>(backend: T): T {
+  return new CompositeBackend(backend as never, {
+    // La barra final importa: CompositeBackend la retira antes de delegar. Sin ella
+    // reconstruye `//archify/...`, que FilesystemBackend interpreta fuera de su raíz.
+    "/skills/": new FilesystemBackend({ rootDir: RAIZ_SKILLS, virtualMode: true }),
+  }) as T;
 }
 
 /**

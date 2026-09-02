@@ -140,6 +140,52 @@ describe("CatalogoModelos", () => {
     ]);
   });
 
+  it("Ollama Cloud pide el catálogo y sus capacidades con bearer", async () => {
+    vi.stubEnv("OLLAMA_API_KEY", "clave-prueba-ollama");
+    const doble = responderJson(
+      { models: [{ name: "glm-4.6" }, { name: "embed:latest" }] },
+      { capabilities: ["chat"], model_info: { "glm.context_length": 131072 } },
+      { capabilities: ["embedding"], model_info: { "nomic.context_length": 8192 } },
+    );
+
+    await expect(new CatalogoModelos(doble.fetch).listar("ollama-cloud" as never)).resolves.toEqual([
+      { proveedor: "ollama-cloud", id: "glm-4.6", contexto: 131072 },
+    ]);
+    expect(doble.llamadas).toEqual([
+      {
+        url: "https://ollama.com/api/tags",
+        init: {
+          headers: { authorization: "Bearer clave-prueba-ollama" },
+          signal: expect.any(AbortSignal),
+        },
+      },
+      {
+        url: "https://ollama.com/api/show",
+        init: {
+          method: "POST",
+          headers: {
+            authorization: "Bearer clave-prueba-ollama",
+            "content-type": "application/json",
+          },
+          body: JSON.stringify({ model: "glm-4.6" }),
+          signal: expect.any(AbortSignal),
+        },
+      },
+      {
+        url: "https://ollama.com/api/show",
+        init: {
+          method: "POST",
+          headers: {
+            authorization: "Bearer clave-prueba-ollama",
+            "content-type": "application/json",
+          },
+          body: JSON.stringify({ model: "embed:latest" }),
+          signal: expect.any(AbortSignal),
+        },
+      },
+    ]);
+  });
+
   it("rechaza una credencial ausente sin intentar llamar al proveedor", async () => {
     vi.stubEnv("OPENAI_API_KEY", "");
     const fetchFalso = vi.fn() as unknown as typeof fetch;
@@ -222,4 +268,14 @@ it("Modelos y el catálogo comparten OLLAMA_BASE_URL", () => {
   expect(baseUrlDeOllama()).toBe("http://ollama.local");
   const cliente = new Modelos({ bandera: "ollama/prueba" }).paraPapel("rapido") as { baseUrl: string };
   expect(cliente.baseUrl).toBe(baseUrlDeOllama());
+});
+
+it("Modelos configura Ollama Cloud con su endpoint y bearer", () => {
+  vi.stubEnv("OLLAMA_API_KEY", "clave-prueba-ollama");
+  const cliente = new Modelos({ bandera: "ollama-cloud/glm-4.6" }).paraPapel("rapido") as {
+    baseUrl: string;
+    client: { config: { headers: Record<string, string> } };
+  };
+  expect(cliente.baseUrl).toBe("https://ollama.com");
+  expect(cliente.client.config.headers).toEqual({ authorization: "Bearer clave-prueba-ollama" });
 });

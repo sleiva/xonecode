@@ -6,6 +6,13 @@ describe("parsear", () => {
     expect(parsear("ollama/kimi-k3:cloud")).toEqual({ proveedor: "ollama", modelo: "kimi-k3:cloud" });
   });
 
+  it("reconoce Ollama Cloud como proveedor separado", () => {
+    expect(parsear("ollama-cloud/glm-4.6")).toEqual({
+      proveedor: "ollama-cloud",
+      modelo: "glm-4.6",
+    });
+  });
+
   it("parte por la PRIMERA barra: un id de modelo puede llevar barras", () => {
     expect(parsear("ollama/library/qwen3:8b")).toEqual({
       proveedor: "ollama",

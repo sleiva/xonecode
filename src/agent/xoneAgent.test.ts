@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { promptDe, PROMPT_ORQUESTADOR } from "./xoneAgent.js";
+import { promptDe, PROMPT_ORQUESTADOR, rutasDeSkills } from "./xoneAgent.js";
 import { SkillsEnMemoria } from "../core/ports.js";
 
 describe("PROMPT_ORQUESTADOR", () => {
@@ -11,6 +11,11 @@ describe("PROMPT_ORQUESTADOR", () => {
   it("pide paralelismo explícito para las tareas independientes", () => {
     expect(PROMPT_ORQUESTADOR).toMatch(/EN EL MISMO mensaje/);
   });
+
+  it("reserva los diagramas de la app para mockup y el análisis real para planner", () => {
+    expect(PROMPT_ORQUESTADOR).toMatch(/diagramas o esquemas.*`mockup`/s);
+    expect(PROMPT_ORQUESTADOR).toMatch(/`planner` el análisis/s);
+  });
 });
 
 describe("promptDe", () => {
@@ -19,6 +24,8 @@ describe("promptDe", () => {
     "xone-debugging": "…",
     "xone-spec-builder": "…",
     "xone-plan-builder": "…",
+    archify: "…",
+    "artifacts-builder": "…",
   });
 
   it("un especialista de solo lectura lo dice", () => {
@@ -42,6 +49,12 @@ describe("promptDe", () => {
     expect(p).toMatch(/bug mudo/);
   });
 
+  it("dirige explícitamente los diagramas y esquemas a archify", () => {
+    const p = promptDe("planner", conSkills);
+    expect(p).toMatch(/diagrama, esquema, arquitectura, flujo, secuencia, datos o estados/i);
+    expect(p).toContain("`archify`");
+  });
+
   it("nombra las skills que SÍ tiene", () => {
     expect(promptDe("dev", conSkills)).toContain("xone-development");
   });
@@ -57,5 +70,14 @@ describe("promptDe", () => {
 
   it("sin skills que falten no mete ningún aviso de relleno", () => {
     expect(promptDe("docs", conSkills)).not.toMatch(/AVISO/);
+  });
+
+  it("expone cada skill disponible como una ruta que carga Deep Agents", () => {
+    expect(rutasDeSkills("dev", conSkills)).toEqual([
+      "/skills/xone-development/",
+      "/skills/xone-debugging/",
+      "/skills/archify/",
+      "/skills/artifacts-builder/",
+    ]);
   });
 });

@@ -105,6 +105,7 @@ const VARIABLE_POR_PROVEEDOR: Partial<Record<Proveedor, string>> = {
   anthropic: "ANTHROPIC_API_KEY",
   openai: "OPENAI_API_KEY",
   gemini: "GOOGLE_API_KEY",
+  "ollama-cloud": "OLLAMA_API_KEY",
 };
 
 /**

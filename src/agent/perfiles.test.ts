@@ -4,6 +4,13 @@ import { PERFILES, permisosDe, toolsDe, hitlDe, TOOLS_ESCRITURA } from "./perfil
 const TODOS = Object.values(PERFILES);
 
 describe("permisosDe", () => {
+  it("todos los especialistas reciben las skills compartidas de arquitectura y artefactos", () => {
+    for (const perfil of TODOS) {
+      expect(perfil.skills, perfil.nombre).toContain("archify");
+      expect(perfil.skills, perfil.nombre).toContain("artifacts-builder");
+    }
+  });
+
   it("TODO perfil deniega .env y .git — incluido el que se añada mañana", () => {
     // El fallo que esto cierra: `SubAgent.permissions` REEMPLAZA las del padre. Un perfil
     // que declarase solo «no escribas» perdería la denegación de .env y podría leer las
@@ -14,6 +21,7 @@ describe("permisosDe", () => {
       expect(rutas, perfil.nombre).toContain("/.git/**");
       expect(rutas, perfil.nombre).toContain("/.xonecode");
       expect(rutas, perfil.nombre).toContain("/.xonecode/**");
+      expect(rutas, perfil.nombre).toContain("/skills/**");
     }
   });
 

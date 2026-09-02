@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { esVistaAplanada, porQueNo, sinVistasAplanadas, backendDelProyecto, exponerMemoriaDeProyecto } from "./proyecto.js";
+import { esVistaAplanada, porQueNo, sinVistasAplanadas, backendConSkills, backendDelProyecto, exponerMemoriaDeProyecto } from "./proyecto.js";
 import { RUTA_MEMORIA_VIRTUAL } from "./memoriaDeProyecto.js";
 
 const TODAS = new Set(["/p/Clientes.xne", "/p/Clientes.xml", "/p/app.xml", "/p/config.xml"]);
@@ -93,6 +93,18 @@ describe("backendDelProyecto", () => {
     const be = backendDelProyecto("/tmp") as unknown as { virtualMode: boolean };
     expect(be.virtualMode).toBe(true);
     expect(backendDelProyecto.length).toBe(1); // solo la raíz: no hay parámetro que lo apague
+  });
+});
+
+describe("backendConSkills", () => {
+  it("monta el catálogo del harness en /skills para carga progresiva", async () => {
+    const backend = backendConSkills(backendDelProyecto(process.cwd())) as unknown as {
+      routePrefixes: string[];
+      read(path: string): Promise<unknown>;
+    };
+    expect(backend.routePrefixes).toContain("/skills/");
+    const skill = await backend.read("/skills/archify/SKILL.md");
+    expect(JSON.stringify(skill)).toContain("Archify");
   });
 });
 

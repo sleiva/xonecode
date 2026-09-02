@@ -5,10 +5,10 @@ import type { ConfigDeFichero } from "./config.js";
 
 export const PAPELES: readonly Papel[] = ["rapido", "trabajo", "afilado"] as const;
 
-export type Proveedor = "gemini" | "openai" | "anthropic" | "ollama";
+export type Proveedor = "gemini" | "openai" | "anthropic" | "ollama" | "ollama-cloud";
 
 export const PROVEEDORES: readonly Proveedor[] = [
-  "gemini", "openai", "anthropic", "ollama",
+  "gemini", "openai", "anthropic", "ollama", "ollama-cloud",
 ] as const;
 
 export interface Eleccion {
