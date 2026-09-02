@@ -18,7 +18,7 @@ describe("entrada", () => {
   it("escribe, envía con Enter y vacía el campo", async () => {
     const enviadas: string[] = [];
     const instancia = render(
-      <Entrada alEnviar={(l) => enviadas.push(l)} completa={() => [[], ""]} ocupado={false} historial={[]} modelo="ollama/glm" />
+      <Entrada alEnviar={(l) => enviadas.push(l)} completa={() => [[], ""]} ocupado={false} historial={[]} modelo="ollama/glm" ancho={40} />
     );
     await teclear(instancia, "hola");
     instancia.stdin.write("\r");
@@ -35,6 +35,7 @@ describe("entrada", () => {
         ocupado={false}
         historial={[]}
         modelo="ollama/glm"
+        ancho={40}
       />
     );
     await teclear(instancia, "/conf");
@@ -52,6 +53,7 @@ describe("entrada", () => {
         ocupado={false}
         historial={["reciente", "antigua"]}
         modelo="ollama/glm"
+        ancho={40}
       />
     );
     await esperar();
@@ -81,6 +83,7 @@ describe("entrada", () => {
         ocupado={false}
         historial={["reciente"]}
         modelo="ollama/glm"
+        ancho={40}
       />
     );
     await esperar();
@@ -103,6 +106,7 @@ describe("entrada", () => {
         ocupado={false}
         historial={[]}
         modelo="ollama/glm"
+        ancho={40}
       />
     );
     await teclear(instancia, "/con");
@@ -124,6 +128,7 @@ describe("entrada", () => {
         ocupado={true}
         historial={[]}
         modelo="ollama/glm"
+        ancho={40}
       />
     );
     await teclear(instancia, "hola");
@@ -134,9 +139,43 @@ describe("entrada", () => {
     expect(instancia.lastFrame()).not.toContain("hola");
   });
 
+  it("es una tarjeta de CUATRO filas con barra: aire, texto con cursor, aire, modelo", async () => {
+    // La forma de OpenCode. El fondo (`fondoInput`) va fila a fila en cada Text, porque
+    // Ink 5.2.1 no da fondo a un Box; sin TTY los frames no llevan color, así que aquí
+    // se prueba la estructura y el color se ve en el terminal.
+    const instancia = render(
+      <Entrada alEnviar={() => {}} completa={() => [[], ""]} ocupado={false} historial={[]} modelo="ollama/glm" ancho={40} />
+    );
+    await teclear(instancia, "hola");
+    const lineas = (instancia.lastFrame() ?? "").split("\n");
+    expect(lineas).toHaveLength(4);
+    for (const l of lineas) expect(l.startsWith("▌")).toBe(true);
+    expect(lineas[0]!.slice(1).trim()).toBe("");
+    expect(lineas[1]).toContain("hola▏");
+    expect(lineas[2]!.slice(1).trim()).toBe("");
+    expect(lineas[3]).toContain("ollama/glm");
+  });
+
+  it("un texto más largo que la anchura se parte en filas y el cursor va en la última", async () => {
+    const instancia = render(
+      <Entrada alEnviar={() => {}} completa={() => [[], ""]} ocupado={false} historial={["abcdefghijklmnopqrstuvwxy"]} modelo="ollama/glm" ancho={12} />
+    );
+    await esperar();
+    instancia.stdin.write("\x1b[A"); // ↑: 25 letras de golpe sobre la línea vacía
+    await esperar();
+    const lineas = (instancia.lastFrame() ?? "").split("\n");
+    // ancho 12 menos una celda de aire por lado = 10 de texto: aire + 3 filas (10 + 10 + 5 y
+    // el cursor) + aire + modelo
+    expect(lineas).toHaveLength(6);
+    expect(lineas[1]).toContain("abcdefghij");
+    expect(lineas[2]).toContain("klmnopqrst");
+    expect(lineas[3]).toContain("uvwxy▏");
+    expect(lineas[5]).toContain("ollama/glm");
+  });
+
   it("es un bloque con barra izquierda y una segunda fila con el modelo, también ocupada", async () => {
     const libre = render(
-      <Entrada alEnviar={() => {}} completa={() => [[], ""]} ocupado={false} historial={[]} modelo="ollama/glm" />
+      <Entrada alEnviar={() => {}} completa={() => [[], ""]} ocupado={false} historial={[]} modelo="ollama/glm" ancho={40} />
     );
     await esperar();
     const salidaLibre = libre.lastFrame() ?? "";
@@ -147,7 +186,7 @@ describe("entrada", () => {
     expect(salidaLibre).toContain("ollama/glm");
 
     const ocupada = render(
-      <Entrada alEnviar={() => {}} completa={() => [[], ""]} ocupado={true} historial={[]} modelo="ollama/glm" />
+      <Entrada alEnviar={() => {}} completa={() => [[], ""]} ocupado={true} historial={[]} modelo="ollama/glm" ancho={40} />
     );
     await esperar();
     expect(ocupada.lastFrame()).toContain("turno en curso");

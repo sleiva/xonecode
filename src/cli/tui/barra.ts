@@ -3,7 +3,9 @@
  * de la Pregunta. Solo el lado izquierdo, con `▌`, y NUNCA borde arriba ni abajo: en el
  * transcript un acto es una fila (`ventanaDe` cuenta así), y una caja de tres filas por
  * mensaje se saldría de la pantalla. Vive aparte de los componentes para que las tres
- * cajas no puedan divergir en la forma.
+ * cajas no puedan divergir en la barra. La Entrada (entrada.tsx) extiende esta forma: pone
+ * `paddingLeft` a 0 y mete el aire dentro de cada fila, con fondo, porque es la tarjeta
+ * donde se escribe y tiene que verse; la barra sigue siendo esta.
  *
  * TypeScript puro: son props de Box, pero no importa ink — no hace falta.
  */

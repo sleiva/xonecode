@@ -31,8 +31,12 @@ export const temaInk = {
   acento: "#47abd6",
   /** Reservado: token de maqueta SIN consumidor hoy — el test de espejo lo lista. */
   borde: "#27272a",
-  /** Reservado: token de maqueta SIN consumidor hoy (Ink 5.2.1 no da fondo a `Box`). */
-  fondoInput: "#18181b",
+  /**
+   * El fondo de la tarjeta de la Entrada, pintado fila a fila en cada `Text` (Ink 5.2.1
+   * no da fondo a `Box`). El gris de OpenCode (`backgroundElement`, darkStep3) sobre su
+   * terminal `#0a0a0a`: un escalón visible, no un matiz.
+   */
+  fondoInput: "#1e1e1e",
   /**
    * El navy dominante de xone.es. SOLO para barras y bordes: como color de texto sobre
    * un terminal oscuro es casi invisible, y un color de marca que no se lee no es marca.

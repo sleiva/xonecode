@@ -293,6 +293,23 @@ describe("la maqueta de la App", () => {
     expect(frame).toContain("█");
   });
 
+  it("con pocos actos el transcript nace ARRIBA: el primer acto ocupa la primera fila", async () => {
+    // Como en OpenCode: la conversación empieza arriba y la Entrada se queda abajo, con el
+    // hueco en medio. El recorte cuando NO cabe sigue siendo por arriba (los tests de
+    // desborde lo vigilan): esto solo cambia dónde se apoya el contenido cuando sobra sitio.
+    const m = montar({});
+    await esperar();
+    m.store.usuario("hola");
+    m.store.linea("respuesta corta", "asistente");
+    await esperar();
+    const frame = m.stdout.ultimo();
+    m.instancia.unmount();
+    laMaquetaCabe(frame);
+    const lineas = frame.split("\n");
+    expect(lineas[0]).toContain("hola");
+    expect(lineas[1]).toContain("respuesta corta");
+  });
+
   it("al ESTRECHAR el terminal la sidebar se va y la rama pasa al pie", async () => {
     const m = montar({ columnas: 140 });
     await esperar();

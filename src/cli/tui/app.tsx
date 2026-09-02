@@ -68,9 +68,9 @@ function PreguntaInk({
 }
 
 /**
- * Las filas que NO son transcript: las 2 de la Entrada (línea en edición + modelo; la
- * barra izquierda no añade filas) y 1 del pie. Si la Entrada cambia de forma, este
- * número cambia con ella. La pista de Tab añade una fila transitoria, y no pasa nada:
+ * Las filas que NO son transcript: las 4 de la Entrada (aire, línea en edición, aire,
+ * modelo; la barra izquierda no añade filas) y 1 del pie. Si la Entrada cambia de forma,
+ * este número cambia con ella. La pista de Tab añade una fila transitoria, y no pasa nada:
  * la fila de columnas sigue midiendo lo mismo y la pista sale de una fila del
  * transcript, que es la ÚNICA pieza elástica (Entrada, Pregunta y pie no encogen).
  *
@@ -78,7 +78,7 @@ function PreguntaInk({
  * el flex— sino el tamaño de la rebanada que `ventanaDe` corta del historial: cuántos
  * actos se piden. Si sobran, el transcript los recorta por arriba.
  */
-const FILAS_FIJAS = 3;
+const FILAS_FIJAS = 5;
 
 /**
  * Una fila que la TUI NUNCA ocupa. Ink (`build/ink.js`, `outputHeight >= stdout.rows`)
@@ -120,6 +120,9 @@ export function App({
   const alturaTranscript = Math.max(5, filas - FILAS_FIJAS);
   const columnas = stdout.columns ?? 80;
   const conSidebar = cabeSidebar(columnas);
+  // Lo que la Entrada rellena de fondo: la columna izquierda (total menos sidebar y su
+  // paddingRight de 1) menos la barra `▌`.
+  const anchoEntrada = columnas - (conSidebar ? ANCHO_DE_SIDEBAR : 0) - 1 - 1;
 
   // Ink escucha el `resize` del terminal, pero su manejador (`ink.js`, `resized`) solo
   // recalcula Yoga y repinta el árbol YA montado: no re-renderiza React. Sin esto,
@@ -171,6 +174,7 @@ export function App({
               ocupado={vista.ocupado}
               historial={historial}
               modelo={datos.modelo}
+              ancho={anchoEntrada}
             />
           )}
           {/* Sin sidebar, la rama no está en ninguna otra parte: va al pie. */}

@@ -155,6 +155,11 @@ export function Transcript({ store, altura }: { store: Store; altura: number }):
           <LineaMarkdown texto={estado.colchon} />
         </Box>
       ) : null}
+      {/* El separador elástico: con pocos actos se estira y los empuja ARRIBA (la
+          conversación nace arriba, como en OpenCode, y la Entrada se queda abajo con el
+          hueco en medio); cuando el contenido no cabe mide cero y el `flex-end` de la caja
+          sigue recortando por arriba. Un solo Box, sin medir nada. */}
+      <Box flexGrow={1} />
     </Box>
   );
 }

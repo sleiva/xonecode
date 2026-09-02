@@ -65,7 +65,10 @@ aserción de «hex» se mantiene para los cuatro.
   justifyContent="flex-end">`. El transcript es la ÚNICA pieza elástica de la columna
   izquierda (Entrada, Pregunta y pie llevan `flexShrink 0`): con pocos actos se estira y
   deja la Entrada anclada abajo, y cuando el contenido no cabe se recorta por ARRIBA, que
-  lo más nuevo es lo que hay que leer. `altura` deja de ser la altura de la caja —la pone
+  lo más nuevo es lo que hay que leer. **Corregido el 2026-09-02:** detrás del último acto
+  (y del colchón) va un `<Box flexGrow={1} />`; con pocos actos se estira y empuja la
+  conversación ARRIBA (nace arriba, como en OpenCode, y el hueco queda entre ella y la
+  Entrada), y cuando no cabe mide cero y el `flex-end` sigue recortando por arriba. `altura` deja de ser la altura de la caja —la pone
   el flex— y pasa a ser el tamaño de la rebanada que `ventanaDe` corta del historial.
   Cada fila va en un Box con `flexShrink 0`: si las filas encogen, Ink reparte el recorte
   entre todas y las redondea sobre las mismas líneas, y se pierden actos del MEDIO en vez
@@ -85,11 +88,20 @@ aserción de «hex» se mantiene para los cuatro.
 
 ### 3. Entrada (`entrada.tsx`)
 
-- Borde: barra izquierda `marca` (mismo Box que el bloque de usuario), sin el redondeado.
-- Dentro, dos filas: la línea en edición con cursor `prompt`; debajo, en `mudo`, el
-  modelo de trabajo (`modelo: string`, prop nueva). Ocupada: «turno en curso… (Ctrl-C
-  para cancelar el turno)» sustituye a la primera fila; la segunda se mantiene.
-- La pista de Tab, cuando hay, es una tercera fila (como hoy).
+- **Corregido el 2026-09-02 (la tarjeta de OpenCode):** barra izquierda en `acento` (el
+  navy casi no se ve sobre fondo oscuro, y la Entrada es lo que hay que ver; los bloques de
+  usuario del transcript siguen en `marca`) y CUATRO filas: aire, la línea en edición con
+  cursor `prompt`, aire, y el modelo de trabajo en `mudo` (`modelo: string`). Cada fila es
+  un `Text` con `backgroundColor: fondoInput` (`#1e1e1e`, el `backgroundElement` de
+  OpenCode) rellenado de espacios hasta `ancho` (prop nueva: las columnas tras la barra, que
+  `App` calcula), porque Ink 5.2.1 no da fondo a un `Box`. Una celda de aire por lado.
+- El texto se parte en filas de `ancho - 2` con `filasDe` (`cli/tui/filas.ts`, pura, por
+  puntos de código) en vez de dejar que Ink envuelva: así cada fila lleva su fondo y sobra
+  el `key={valor}` de la trampa de ink 5.2.1. El cursor viaja dentro del texto al partir y
+  se pinta aparte en la última fila.
+- Ocupada: «turno en curso… (Ctrl-C para cancelar el turno)» sustituye a la línea en
+  edición; el resto de la tarjeta se mantiene.
+- La pista de Tab, cuando hay, son filas extra al final, con el mismo fondo.
 - `PreguntaInk` (app.tsx) adopta la misma barra izquierda pero en `aviso`, para que se
   distinga de la Entrada.
 
@@ -139,9 +151,10 @@ La fila de columnas mide `rows - 1` (fijo, por la fila de reserva del borrado to
 Ink) y Entrada, Pregunta y pie llevan `flexShrink 0`: el transcript es lo único que se
 estira y lo único que se recorta, por arriba. Lo que se calcula, entonces, no es una
 altura de caja sino cuántos actos pedir: `alturaTranscript = (rows - 1) - FILAS_FIJAS` es
-el tamaño de la rebanada que `ventanaDe` corta. `FILAS_FIJAS = 3` (2 filas de contenido de
-la Entrada + 1 del pie) queda como constante nombrada, con el desglose en comentario; la
-pista de Tab añade una fila transitoria que sale de una fila del transcript.
+el tamaño de la rebanada que `ventanaDe` corta. `FILAS_FIJAS = 5` (4 filas de contenido de
+la Entrada —aire, texto, aire, modelo— + 1 del pie; era 3 antes de la tarjeta del
+2026-09-02) queda como constante nombrada, con el desglose en comentario; la pista de Tab
+añade filas transitorias que salen del transcript.
 
 ## Testing
 
@@ -154,7 +167,10 @@ Todo con `ink-testing-library` o funciones puras; nada necesita TTY ni red.
 - `store.test.ts`: `fin(ms, modelo)` guarda el modelo en el acto.
 - `correrTui.test.ts`: la piel del turno pasa el modelo vigente al `fin`, y un `/modelo`
   DESPUÉS del fin no cambia el acto ya cerrado.
-- `entrada.test.tsx`: la segunda fila enseña el modelo; ocupada también.
+- `entrada.test.tsx`: la tarjeta tiene cuatro filas con barra (aire, texto con cursor,
+  aire, modelo); un texto más largo que `ancho - 2` se parte en filas y el cursor va en la
+  última; ocupada, el modelo sigue. Sin TTY los frames no llevan color: el fondo se ve en
+  el terminal, no en el test. `filas.test.ts` prueba `filasDe` como función.
 - `sidebar.test.tsx`: `pie()` en sus tres variantes (con tope, sin tope, contexto 0);
   el logotipo se pinta siempre; `cabeSidebar` es falso a 120 y cierto a 121;
   `ANCHO_DE_SIDEBAR` es 42; `pie()` con rama da `ruta:rama`; `proyecto:rama` y

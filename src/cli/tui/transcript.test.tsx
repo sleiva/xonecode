@@ -129,13 +129,14 @@ describe("el transcript pintado", () => {
     for (const linea of lineas) expect(linea.trimStart().startsWith("▌")).toBe(true);
   });
 
-  it("con pocos actos el transcript llena la altura del padre y ancla el contenido ABAJO", () => {
+  it("con pocos actos el transcript llena la altura del padre y el contenido nace ARRIBA", () => {
     const s = crearStore();
     s.usuario("hola");
     s.linea("→ x");
     // La altura la pone el PADRE: el transcript es elástico (`flexGrow`), porque en la
-    // App es la única pieza que cede. Lo que se prueba aquí es lo que el test siempre
-    // quiso decir: ocupa las 10 filas y el contenido queda pegado al fondo.
+    // App es la única pieza que cede. Ocupa las 10 filas y, como en OpenCode, el
+    // contenido se apoya arriba: el hueco queda entre la conversación y la Entrada. El
+    // recorte cuando NO cabe sigue siendo por arriba (el test siguiente).
     const { lastFrame } = render(
       <Box height={10} flexDirection="column">
         <Transcript store={s} altura={10} />
@@ -143,7 +144,22 @@ describe("el transcript pintado", () => {
     );
     const lineas = (lastFrame() ?? "").split("\n");
     expect(lineas).toHaveLength(10);
-    expect(lineas.at(-1)).toContain("→ x");
-    expect(lineas[0]!.trim()).toBe("");
+    expect(lineas[0]).toContain("hola");
+    expect(lineas[1]).toContain("→ x");
+    expect(lineas.at(-1)!.trim()).toBe("");
+  });
+
+  it("cuando NO cabe, el recorte sigue siendo por arriba: lo nuevo se ve, lo viejo se pierde", () => {
+    const s = crearStore();
+    for (let i = 0; i < 20; i++) s.linea(`línea ${i}`);
+    const { lastFrame } = render(
+      <Box height={5} flexDirection="column">
+        <Transcript store={s} altura={20} />
+      </Box>
+    );
+    const lineas = (lastFrame() ?? "").split("\n");
+    expect(lineas).toHaveLength(5);
+    expect(lineas.at(-1)).toContain("línea 19");
+    expect(lineas[0]).toContain("línea 15");
   });
 });

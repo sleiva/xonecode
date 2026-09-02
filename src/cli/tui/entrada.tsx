@@ -10,6 +10,26 @@ import { useState } from "react";
 import type { ReactNode } from "react";
 import { barra } from "./barra.js";
 import { temaInk } from "./temaInk.js";
+import { filasDe } from "./filas.js";
+
+/** El cursor: un carácter que viaja DENTRO del texto para que el partido en filas lo cuente. */
+const CURSOR = "▏";
+
+/**
+ * Una fila de la tarjeta, rellena de espacios hasta `ancho` para que el fondo sea un
+ * bloque sólido: Ink 5.2.1 solo da fondo a `Text`, y un Text pinta fondo solo bajo sus
+ * caracteres. Una celda de aire a la izquierda (y la que sobre a la derecha) hace de
+ * padding lateral. `visible` es lo que ocupa `children`, en puntos de código.
+ */
+function Fila({ ancho, visible, color, children }: { ancho: number; visible: number; color?: string; children?: ReactNode }): ReactNode {
+  return (
+    <Text backgroundColor={temaInk.fondoInput} color={color}>
+      {" "}
+      {children}
+      {" ".repeat(Math.max(0, ancho - 1 - visible))}
+    </Text>
+  );
+}
 
 export function Entrada({
   alEnviar,
@@ -17,14 +37,17 @@ export function Entrada({
   ocupado,
   historial,
   modelo,
+  ancho,
 }: {
   alEnviar: (linea: string) => void;
   /** El completer puro de `consola.ts`: `(linea) => [candidatos, linea]`. */
   completa: (linea: string) => [string[], string];
   ocupado: boolean;
   historial: readonly string[];
-  /** El modelo de trabajo vigente: la segunda fila del cuadro, en mudo (la maqueta). */
+  /** El modelo de trabajo vigente: la última fila de la tarjeta, en mudo (la maqueta). */
   modelo: string;
+  /** Columnas DESPUÉS de la barra: lo que cada fila rellena de fondo. La conoce `App`. */
+  ancho: number;
 }): ReactNode {
   const [valor, setValor] = useState("");
   const [indiceHistorial, setIndice] = useState(-1); // -1 = la línea en edición
@@ -81,32 +104,52 @@ export function Entrada({
     { isActive: !ocupado }
   );
 
+  // Una celda de aire por lado: el texto se parte a `ancho - 2`.
+  const interior = Math.max(1, ancho - 2);
+  const filasDeTexto = filasDe(valor + CURSOR, interior);
+  const largo = (t: string): number => Array.from(t).length;
+
   return (
-    // La misma barra navy que el bloque de usuario: lo que escribes y lo que escribiste
-    // tienen la misma forma. Sin borde arriba/abajo: dos filas de contenido, y app.tsx
-    // cuenta con ellas en FILAS_FIJAS.
+    // La tarjeta de OpenCode: barra izquierda en acento (el navy casi no se ve sobre fondo
+    // oscuro, y esto es lo que hay que ver: dónde escribes), una fila de aire, el texto,
+    // otra de aire y el modelo. Los bloques de usuario del transcript siguen en navy: lo
+    // que escribes se distingue de lo que escribiste. Sin borde arriba/abajo: cuatro
+    // filas de contenido, y app.tsx cuenta con ellas en FILAS_FIJAS.
+    // `paddingLeft={0}`: el aire lo pone cada Fila por dentro, para que lleve fondo.
     // `flexShrink={0}`: la fila de columnas tiene altura fija, y sin esto Ink encoge la
     // Entrada antes que el transcript — la fila del modelo pisaba la línea en edición y
-    // el cursor `▏` desaparecía en cuanto había pista de Tab o el transcript se llenaba.
-    <Box flexDirection="column" flexShrink={0} {...barra(temaInk.marca)}>
+    // el cursor desaparecía en cuanto había pista de Tab o el transcript se llenaba.
+    //
+    // El texto se parte AQUÍ (`filasDe`) y cada fila es su propio Text: no hay ningún
+    // Text que envuelva, y con eso sobra el `key={valor}` que remediaba la trampa de
+    // remedida de ink 5.2.1 (CLAUDE.md, «Trampas verificadas»); `app.test.tsx` la sigue
+    // vigilando con un prompt de dos filas.
+    <Box flexDirection="column" flexShrink={0} {...barra(temaInk.acento)} paddingLeft={0}>
+      <Fila ancho={ancho} visible={0} />
       {ocupado ? (
-        <Text color={temaInk.mudo}>turno en curso… (Ctrl-C para cancelar el turno)</Text>
+        filasDe("turno en curso… (Ctrl-C para cancelar el turno)", interior).map((fila, i) => (
+          <Fila key={i} ancho={ancho} visible={largo(fila)} color={temaInk.mudo}>{fila}</Fila>
+        ))
       ) : (
-        // `key={valor}` fuerza a React a remontar este Text en cada cambio, y con él el
-        // nodo de Yoga. MEDIDO: con un Text ANIDADO (el cursor va dentro, para llevar su
-        // color), Ink se queda con la altura de UNA fila cuando el valor pasa de VACÍO a
-        // uno que envuelve en un solo render, y entonces la fila del modelo pisa la
-        // segunda línea. Con la línea vacía el único hijo es el cursor, así que el texto
-        // no se actualiza: se INSERTA, y por ahí se cuela sin remedir. Desde un valor no
-        // vacío —o tecleando letra a letra— remide bien; el caso que falla es el de
-        // siempre: recuperar del historial con ↑, o pegar, sobre la línea vacía.
-        <Text key={valor} color={temaInk.texto}>
-          {valor}
-          <Text color={temaInk.prompt}>{"▏"}</Text>
-        </Text>
+        filasDeTexto.map((fila, i) => {
+          const conCursor = i === filasDeTexto.length - 1;
+          return (
+            <Fila key={i} ancho={ancho} visible={largo(fila)} color={temaInk.texto}>
+              {conCursor ? fila.slice(0, -CURSOR.length) : fila}
+              {conCursor ? <Text color={temaInk.prompt}>{CURSOR}</Text> : null}
+            </Fila>
+          );
+        })
       )}
-      <Text color={temaInk.mudo}>{modelo}</Text>
-      {pista.length > 0 ? <Text color={temaInk.mudo}>{`  ${pista.join("   ")}`}</Text> : null}
+      <Fila ancho={ancho} visible={0} />
+      {filasDe(modelo, interior).map((fila, i) => (
+        <Fila key={i} ancho={ancho} visible={largo(fila)} color={temaInk.mudo}>{fila}</Fila>
+      ))}
+      {pista.length > 0
+        ? filasDe(`  ${pista.join("   ")}`, interior).map((fila, i) => (
+            <Fila key={i} ancho={ancho} visible={largo(fila)} color={temaInk.mudo}>{fila}</Fila>
+          ))
+        : null}
     </Box>
   );
 }

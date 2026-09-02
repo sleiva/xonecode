@@ -196,8 +196,11 @@ Un fallo del entorno no se reporta como un proyecto roto: `agent/verificador.ts`
   `dom.js`: `insertBeforeNode` sale sin marcar sucio el `ink-text` padre (append y remove sí lo
   hacen). En la Entrada el cursor va anidado dentro del Text, así que al pasar la línea de vacía
   a un valor que envuelve en un solo render (↑ del historial, pegar) Ink se queda con la medida
-  de UNA fila y la fila del modelo pisa la segunda. El remedio es `key={valor}` en ese Text
-  (`cli/tui/entrada.tsx`, con la medición en el comentario); `app.test.tsx` lo vigila.
+  de UNA fila y la fila del modelo pisa la segunda. Hoy la Entrada la esquiva de raíz: parte
+  el texto en filas ella misma (`cli/tui/filas.ts`) y cada fila es su propio Text, así que
+  ningún Text envuelve (antes el remedio era `key={valor}` en el Text que envolvía).
+  `app.test.tsx` lo sigue vigilando con un prompt de dos filas. Si algún día vuelve a haber
+  un Text que envuelva con hijos anidados, la trampa vuelve.
 
 - **El `resize` de Ink no re-renderiza React.** `ink.js`, `resized`: recalcula Yoga y repinta
   el árbol YA montado. Lo que dependa de `stdout.columns` leído en el render (la sidebar, que
