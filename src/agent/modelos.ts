@@ -1,10 +1,10 @@
-import { ChatGoogleGenerativeAI } from "@langchain/google-genai";
 import { ChatOpenAI } from "@langchain/openai";
 import { ChatAnthropic } from "@langchain/anthropic";
 import { ChatOllama } from "@langchain/ollama";
 import type { ModelosPort, Papel } from "../core/ports.js";
 import { resolver, type Eleccion, type FuentesDeEleccion } from "../core/modelos.js";
 import { baseUrlDeOllama } from "./catalogoModelos.js";
+import { ChatGoogleGenerativeAICompatible } from "./gemini.js";
 
 /**
  * Construye el modelo de cada papel. NO lleva la marca de doble: es real.
@@ -33,7 +33,10 @@ export class Modelos implements ModelosPort {
           baseUrl: baseUrlDeOllama(),
         });
       case "gemini":
-        return new ChatGoogleGenerativeAI({ model: modelo, apiKey: process.env.GOOGLE_API_KEY });
+        return new ChatGoogleGenerativeAICompatible({
+          model: modelo,
+          apiKey: process.env.GOOGLE_API_KEY,
+        });
     }
   }
 
