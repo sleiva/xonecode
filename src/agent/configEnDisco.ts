@@ -4,9 +4,20 @@
  * `statSync`; lo que llega a `validar`/`validarAuth` es solo datos.
  */
 
-import { existsSync, readFileSync, statSync } from "node:fs";
+import {
+  closeSync,
+  existsSync,
+  mkdirSync,
+  openSync,
+  readFileSync,
+  renameSync,
+  statSync,
+  unlinkSync,
+  writeFileSync,
+} from "node:fs";
+import { randomUUID } from "node:crypto";
 import { homedir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import {
   Aviso,
   Auth,
@@ -15,9 +26,18 @@ import {
   validar,
   validarAuth,
 } from "../core/config.js";
-import { Proveedor, PROVEEDORES } from "../core/modelos.js";
+import { parsear, Proveedor, PROVEEDORES } from "../core/modelos.js";
+import type { Papel } from "../core/ports.js";
 
 export const NOMBRE_CARPETA = ".xonecode";
+
+export class ConfigRotaEnDisco extends Error {
+  constructor(ruta: string, causa?: unknown) {
+    super(`«${ruta}»: el config global está roto y no se puede actualizar.`);
+    this.name = "ConfigRotaEnDisco";
+    if (causa !== undefined) this.cause = causa;
+  }
+}
 
 export function rutaConfigGlobal(): string {
   // homedir() en el momento de la llamada: si se cacheara en una constante de módulo,
@@ -31,6 +51,55 @@ export function rutaConfigDeProyecto(raiz: string): string {
 
 export function rutaAuth(): string {
   return join(homedir(), NOMBRE_CARPETA, "auth.json");
+}
+
+function esObjeto(v: unknown): v is Record<string, unknown> {
+  return typeof v === "object" && v !== null && !Array.isArray(v);
+}
+
+function leerObjetoCrudoOAbortar(ruta: string): Record<string, unknown> {
+  if (!existsSync(ruta)) return {};
+  let bruto: unknown;
+  try {
+    bruto = JSON.parse(readFileSync(ruta, "utf8"));
+  } catch (error) {
+    throw new ConfigRotaEnDisco(ruta, error);
+  }
+  if (!esObjeto(bruto)) throw new ConfigRotaEnDisco(ruta);
+  return bruto;
+}
+
+function escribirAtomico(ruta: string, contenido: string): void {
+  const directorio = dirname(ruta);
+  mkdirSync(directorio, { recursive: true, mode: 0o700 });
+  const temporal = join(directorio, `.config.json.${randomUUID()}.tmp`);
+  let descriptor: number | undefined;
+  try {
+    descriptor = openSync(temporal, "wx", 0o600);
+    writeFileSync(descriptor, contenido, "utf8");
+    closeSync(descriptor);
+    descriptor = undefined;
+    renameSync(temporal, ruta);
+  } catch (error) {
+    if (descriptor !== undefined) closeSync(descriptor);
+    try {
+      unlinkSync(temporal);
+    } catch {
+      // Si no llegó a crearse, no hay nada que limpiar.
+    }
+    throw error;
+  }
+}
+
+/** Guarda una elección de papel sin perder el resto del config global. */
+export function guardarModeloGlobal(papel: Papel, id: string): { ruta: string; id: string } {
+  parsear(id);
+  const ruta = rutaConfigGlobal();
+  const base = leerObjetoCrudoOAbortar(ruta);
+  const modelos = esObjeto(base.modelos) ? { ...base.modelos } : {};
+  const fusionado = { ...base, modelos: { ...modelos, [papel]: id } };
+  escribirAtomico(ruta, JSON.stringify(fusionado, null, 2) + "\n");
+  return { ruta, id };
 }
 
 export function cargar(raiz: string): {

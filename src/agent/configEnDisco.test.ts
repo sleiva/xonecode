@@ -9,7 +9,7 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
-import { mkdtempSync, mkdirSync, writeFileSync, chmodSync, rmSync } from "node:fs";
+import { mkdtempSync, mkdirSync, writeFileSync, chmodSync, rmSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
@@ -19,6 +19,8 @@ import {
   rutaAuth,
   cargar,
   aplicarAuth,
+  guardarModeloGlobal,
+  ConfigRotaEnDisco,
 } from "./configEnDisco.js";
 
 // Valores originales de las dos variables que `aplicarAuth` puede escribir con
@@ -149,4 +151,79 @@ it("aplicarAuth ignora una entrada ollama", () => {
     aplicadas = aplicarAuth({ ollama: { key: "algo" } });
   }).not.toThrow();
   expect(aplicadas).toEqual([]);
+});
+
+it("fusiona solo modelos.trabajo y preserva campos crudos", () => {
+  const h = mkdtempSync(join(tmpdir(), "xc-home-"));
+  vi.stubEnv("HOME", h);
+  const ruta = rutaConfigGlobal();
+  mkdirSync(join(h, NOMBRE_CARPETA), { recursive: true });
+  writeFileSync(
+    ruta,
+    JSON.stringify({
+      desconocido: { conservar: true },
+      modelo: "ollama/general",
+      modelos: { rapido: "ollama/a" },
+      contextos: { "openai/gpt": 128000 },
+      ollama: { baseUrl: "http://localhost:11434" },
+    }),
+  );
+
+  const resultado = guardarModeloGlobal("trabajo", "openai/gpt-test");
+  expect(resultado).toEqual({ ruta, id: "openai/gpt-test" });
+  expect(JSON.parse(readFileSync(ruta, "utf8"))).toEqual({
+    desconocido: { conservar: true },
+    modelo: "ollama/general",
+    modelos: { rapido: "ollama/a", trabajo: "openai/gpt-test" },
+    contextos: { "openai/gpt": 128000 },
+    ollama: { baseUrl: "http://localhost:11434" },
+  });
+  rmSync(h, { recursive: true, force: true });
+});
+
+it("crea el config global si aún no existe", () => {
+  const h = mkdtempSync(join(tmpdir(), "xc-home-"));
+  vi.stubEnv("HOME", h);
+
+  const resultado = guardarModeloGlobal("rapido", "ollama/qwen3");
+  expect(resultado.ruta).toBe(rutaConfigGlobal());
+  expect(JSON.parse(readFileSync(resultado.ruta, "utf8"))).toEqual({
+    modelos: { rapido: "ollama/qwen3" },
+  });
+  rmSync(h, { recursive: true, force: true });
+});
+
+it("no pisa JSON global inválido", () => {
+  const h = mkdtempSync(join(tmpdir(), "xc-home-"));
+  vi.stubEnv("HOME", h);
+  const ruta = rutaConfigGlobal();
+  mkdirSync(join(h, NOMBRE_CARPETA), { recursive: true });
+  writeFileSync(ruta, "{ roto");
+  const antes = readFileSync(ruta, "utf8");
+
+  expect(() => guardarModeloGlobal("afilado", "anthropic/claude-test")).toThrow(ConfigRotaEnDisco);
+  expect(readFileSync(ruta, "utf8")).toBe(antes);
+  rmSync(h, { recursive: true, force: true });
+});
+
+it("no pisa un config global cuyo raíz no sea objeto", () => {
+  const h = mkdtempSync(join(tmpdir(), "xc-home-"));
+  vi.stubEnv("HOME", h);
+  const ruta = rutaConfigGlobal();
+  mkdirSync(join(h, NOMBRE_CARPETA), { recursive: true });
+  writeFileSync(ruta, "[1,2,3]");
+  const antes = readFileSync(ruta, "utf8");
+
+  expect(() => guardarModeloGlobal("afilado", "anthropic/claude-test")).toThrow(ConfigRotaEnDisco);
+  expect(readFileSync(ruta, "utf8")).toBe(antes);
+  rmSync(h, { recursive: true, force: true });
+});
+
+it("valida el id antes de crear o modificar el config", () => {
+  const h = mkdtempSync(join(tmpdir(), "xc-home-"));
+  vi.stubEnv("HOME", h);
+
+  expect(() => guardarModeloGlobal("trabajo", "no-es-un-id")).toThrow();
+  expect(() => readFileSync(rutaConfigGlobal(), "utf8")).toThrow();
+  rmSync(h, { recursive: true, force: true });
 });
