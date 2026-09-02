@@ -9,6 +9,8 @@
  * Ink ni React. La frontera está probada en `core/imports.test.ts`.
  */
 
+import type { Proveedor } from "./modelos.js";
+
 /**
  * La marca de «esto es un doble», y por qué es un Symbol y no un booleano.
  *
@@ -72,6 +74,19 @@ export interface ModelosPort {
   paraPapel(papel: Papel): unknown;
   /** Qué modelo concreto resuelve cada papel, para que `describe` lo pueda enseñar. */
   descripcion(): Record<Papel, string>;
+}
+
+/** Modelo normalizado publicado por un proveedor, sin detalles de su cliente. */
+export interface ModeloDisponible {
+  proveedor: Proveedor;
+  id: string;
+  nombre?: string;
+  contexto?: number;
+}
+
+/** Catálogo offline de modelos disponibles por proveedor. */
+export interface CatalogoModelosPort {
+  listar(proveedor: Proveedor): Promise<ModeloDisponible[]>;
 }
 
 /**
@@ -181,6 +196,18 @@ export class ModeloGuionizado implements ModelosPort {
       trabajo: "[DOBLE] guionizado",
       afilado: "[DOBLE] guionizado",
     };
+  }
+}
+
+/** Catálogo determinista para recorrer la CLI sin red ni credenciales. */
+export class CatalogoModelosEnMemoria implements CatalogoModelosPort {
+  readonly [ES_DOBLE] = true;
+  constructor(
+    private readonly porProveedor: Partial<Record<Proveedor, ModeloDisponible[]>> = {}
+  ) {}
+
+  async listar(proveedor: Proveedor): Promise<ModeloDisponible[]> {
+    return this.porProveedor[proveedor] ?? [];
   }
 }
 

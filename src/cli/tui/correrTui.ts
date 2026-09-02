@@ -14,7 +14,7 @@ import { render } from "ink";
 import { createElement } from "react";
 import { createTokenTracker, type TokenTracker } from "../../vendor/tokenTracking.js";
 import { PAPELES, parsear, resolver, type FuentesDeEleccion } from "../../core/modelos.js";
-import type { Papel } from "../../core/ports.js";
+import type { CatalogoModelosPort, Papel } from "../../core/ports.js";
 import type { Piel } from "../../core/turno.js";
 import { ficherosDelProyecto, type SesionReal } from "../../agent/turnoReal.js";
 import { inspeccionar } from "../../agent/entorno.js";
@@ -87,6 +87,10 @@ function ramaDeGit(raiz: string): string | undefined {
 
 export interface OpcionesDeConsolaTui {
   raiz: string;
+  /** El montaje de `main` comparte esta instancia con la consola stdio. */
+  catalogoModelos: CatalogoModelosPort;
+  /** Persistencia inyectada: la piel no conoce el adaptador de disco de `agent/`. */
+  guardarModeloGlobal: Consola["guardarModeloGlobal"];
   /** Fuentes del modelo de sesión: deciden el modelo que la sidebar enseña al arrancar. */
   fuentes?: FuentesDeEleccion;
   /** Costura de test: los tests no preguntan a git. */
@@ -120,7 +124,7 @@ export function envolverConOcupacion(
  * reparte a mano acabarían siendo dos mundos.
  */
 export function crearConsolaTui(opciones: OpcionesDeConsolaTui) {
-  const { raiz, fuentes = {}, rama, topeDe } = opciones;
+  const { raiz, fuentes = {}, rama, topeDe, catalogoModelos, guardarModeloGlobal } = opciones;
   const store = crearStore();
   const vista = crearRanura<VistaDeTui>(vistaInicial());
 
@@ -217,6 +221,8 @@ export function crearConsolaTui(opciones: OpcionesDeConsolaTui) {
         };
       },
     },
+    catalogoModelos,
+    guardarModeloGlobal,
     escribir: (texto) => {
       // El guard cubre whitespace, no solo la cadena vacía: un `escribir("\n")`
       // (la forma de «línea sin contenido») partía en un acto sistema vacío.
@@ -348,6 +354,8 @@ export interface OpcionesDeMontaje {
   fuentes: FuentesDeEleccion;
   raiz: string;
   guion: boolean;
+  catalogoModelos: CatalogoModelosPort;
+  guardarModeloGlobal: Consola["guardarModeloGlobal"];
   /** La inspección del prólogo; el real ejecuta el simulador y entra por omisión. */
   inspeccionarProyecto?: (raiz: string) => Promise<{ colecciones: number; esProyectoXone: boolean }>;
   /** El asistente de creación de proyecto; desde `main.ts`, para no duplicarlo. */
@@ -368,13 +376,22 @@ export async function correrConsolaTui(opciones: OpcionesDeMontaje): Promise<num
     fuentes,
     raiz,
     guion,
+    catalogoModelos,
+    guardarModeloGlobal,
     inspeccionarProyecto = inspeccionar,
     ofrecer,
     crearEjecutor,
     topeDe,
     raton = true,
   } = opciones;
-  const montaje = crearConsolaTui({ raiz, fuentes, rama: ramaDeGit(raiz), topeDe });
+  const montaje = crearConsolaTui({
+    raiz,
+    fuentes,
+    catalogoModelos,
+    guardarModeloGlobal,
+    rama: ramaDeGit(raiz),
+    topeDe,
+  });
   const { consola, store, vista, enviar, responder, cancelar, completa, historial, datosSidebar } = montaje;
 
   // Los modos de terminal (pantalla alternativa y ratón) ANTES de montar Ink, para que el

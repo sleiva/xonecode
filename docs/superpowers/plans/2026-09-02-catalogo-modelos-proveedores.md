@@ -412,6 +412,8 @@ it("montar la TUI no lista modelos hasta ejecutar /modelos", async () => {
 
 Añadir un test de arranque con `HOME` temporal que contiene `~/.xonecode/config.json` y afirmar que `resolver(fuentesHidratadas).trabajo` toma `global.modelos.trabajo`; añadir otro que deje `XONECODE_MODELO` definido y compruebe que sigue ganando. Añadir además la salida de `acuseDeModelo("trabajo", "openai/gpt-b")` a través de la consola TUI y afirmar que `datosSidebar().modelo` cambia.
 
+Añadir una prueba de integración positiva de credencial guardada: con `HOME` temporal y `auth.json` que contiene la clave de OpenAI, arrancar la consola con un `CatalogoModelos` construido con `fetch` falso y ejecutar `/modelos openai`; el `fetch` falso debe observar el encabezado `Authorization: Bearer <clave de fixture>`. La prueba demuestra que `aplicarAuth` ocurre antes de la consulta, sin enviar red real.
+
 - [ ] **Step 2: Ejecutar los tests y comprobar el fallo por la nueva opción ausente.**
 
 Run: `npx vitest run src/cli/tui/correrTui.test.ts src/cli/main.test.ts`

@@ -28,6 +28,7 @@ import { acuseDeModelo } from "./acuseDeModelo.js";
 import type { Preguntar } from "./aprobar.js";
 import { guardarCredencial, AuthRotoEnDisco } from "../agent/authEnDisco.js";
 import { cargar, NOMBRE_CARPETA } from "../agent/configEnDisco.js";
+import type { CatalogoModelosPort, ModeloDisponible } from "../core/ports.js";
 
 export interface Consola {
   /** De dónde vienen las líneas del usuario. Agotarlo termina la sesión: es EOF, no cuelgue. */
@@ -42,6 +43,10 @@ export interface Consola {
    * stdin) vive fuera — este fichero solo la usa.
    */
   leerSecreto: (pregunta: string) => Promise<string>;
+  /** El catálogo vivo entra por puerto; los tests le dan su doble determinista. */
+  catalogoModelos: CatalogoModelosPort;
+  /** Escritura global inyectada: la consola elige, pero no conoce el disco. */
+  guardarModeloGlobal: (papel: Papel, id: string) => { ruta: string; id: string };
   /**
    * La piel que los turnos usan para pintarse. La consola stdio no la define (se usa
    * `crearPielStdio`); la TUI la aporta — mismo contrato `Piel`, otro render.
@@ -62,6 +67,8 @@ export interface EstadoDeSesion {
   hilo: string;
   raiz: string;
   fuentes: FuentesDeEleccion;
+  /** Overrides vivos de `/modelos`, separados de las banderas con las que arrancó la CLI. */
+  seleccionesDeCatalogo?: Partial<Record<Papel, string>>;
 }
 
 /** Lo que hace un comando de barra: escribe y puede cambiar el estado de la sesión. */
@@ -128,6 +135,159 @@ function describirError(e: unknown): string {
  */
 function rutaAuthParaAviso(): string {
   return join(homedir(), NOMBRE_CARPETA, "auth.json");
+}
+
+/** Filtra por id o nombre sin alterar el orden publicado por el proveedor. */
+export function filtrarModelos(
+  modelos: readonly ModeloDisponible[],
+  filtro: string
+): ModeloDisponible[] {
+  const buscado = filtro.trim().toLowerCase();
+  if (buscado === "") return [...modelos];
+  return modelos.filter((modelo) =>
+    modelo.id.toLowerCase().includes(buscado) || modelo.nombre?.toLowerCase().includes(buscado)
+  );
+}
+
+export type EleccionNumerada =
+  | { tipo: "elegido"; modelo: ModeloDisponible }
+  | { tipo: "cancelado" }
+  | { tipo: "invalido" };
+
+/** Un número visible es uno basado en uno; Enter significa cancelar, no elegir el primero. */
+export function elegirPorNumero(
+  modelos: readonly ModeloDisponible[],
+  respuesta: string
+): EleccionNumerada {
+  const texto = respuesta.trim();
+  if (texto === "") return { tipo: "cancelado" };
+  if (!/^\d+$/.test(texto)) return { tipo: "invalido" };
+  const modelo = modelos[Number(texto) - 1];
+  return modelo === undefined ? { tipo: "invalido" } : { tipo: "elegido", modelo };
+}
+
+/** Un papel vacío permite salir del flujo, pero cualquier otro texto debe ser exacto. */
+export function elegirPapel(respuesta: string): Papel | undefined {
+  const texto = respuesta.trim().toLowerCase();
+  return (PAPELES as readonly string[]).includes(texto) ? (texto as Papel) : undefined;
+}
+
+/** La global solo tiene efecto inmediato si no hay una fuente de rango superior para ese papel. */
+export function fuenteQueEclipsaGlobal(
+  papel: Papel,
+  fuentes: FuentesDeEleccion,
+  seleccionesDeCatalogo: Partial<Record<Papel, string>> = {}
+): "bandera" | "entorno" | "proyecto" | undefined {
+  if (
+    (fuentes.porPapel?.[papel] !== undefined &&
+      fuentes.porPapel[papel] !== seleccionesDeCatalogo[papel]) ||
+    fuentes.bandera !== undefined
+  ) {
+    return "bandera";
+  }
+  if (fuentes.entorno?.XONECODE_MODELO !== undefined) return "entorno";
+  if (fuentes.proyecto?.modelos?.[papel] !== undefined || fuentes.proyecto?.modelo !== undefined) {
+    return "proyecto";
+  }
+  return undefined;
+}
+
+function validarProveedor(nombre: string | undefined): Proveedor | undefined {
+  if (nombre !== undefined && (PROVEEDORES as readonly string[]).includes(nombre)) {
+    return nombre as Proveedor;
+  }
+  return undefined;
+}
+
+function hayCredencial(proveedor: Proveedor, raiz: string): boolean {
+  const variable = VARIABLE_POR_PROVEEDOR[proveedor];
+  if (variable === undefined) return true;
+  const enEntorno = process.env[variable];
+  if (enEntorno !== undefined && enEntorno.trim() !== "") return true;
+  return cargar(raiz).auth[proveedor] !== undefined;
+}
+
+function describirModelo(modelo: ModeloDisponible): string {
+  const etiqueta = modelo.nombre ?? modelo.id;
+  const contexto = modelo.contexto === undefined ? "" : `, ctx ${modelo.contexto}`;
+  return `${etiqueta} (${modelo.proveedor}/${modelo.id}${contexto})`;
+}
+
+/** Flujo interactivo de catálogo; los fallos previstos nunca devuelven un estado nuevo. */
+async function elegirModelo(
+  args: string[],
+  estado: EstadoDeSesion,
+  consola: Consola
+): Promise<{ seguir: boolean; estado?: EstadoDeSesion }> {
+  const proveedor = validarProveedor(args[0]);
+  if (proveedor === undefined) {
+    const escrito = args[0];
+    consola.escribir(
+      escrito === undefined
+        ? `uso: /modelos <proveedor> — proveedores: ${PROVEEDORES.join(", ")}\n`
+        : `proveedor «${escrito}» desconocido. Los que hay: ${PROVEEDORES.join(", ")}\n`
+    );
+    return { seguir: true };
+  }
+  if (!hayCredencial(proveedor, estado.raiz)) {
+    consola.escribir(`falta la credencial para ${proveedor}; usa /provider ${proveedor}\n`);
+    return { seguir: true };
+  }
+
+  const modelos = await consola.catalogoModelos.listar(proveedor);
+  if (modelos.length === 0) {
+    consola.escribir(`no hay modelos disponibles para ${proveedor}\n`);
+    return { seguir: true };
+  }
+  const filtro = await consola.preguntar("filtro (Enter para todos): ");
+  const filtrados = filtrarModelos(modelos, filtro);
+  if (filtrados.length === 0) {
+    consola.escribir("no hay modelos que coincidan con el filtro\n");
+    return { seguir: true };
+  }
+  for (const [indice, modelo] of filtrados.entries()) {
+    consola.escribir(`${indice + 1}. ${describirModelo(modelo)}\n`);
+  }
+  const eleccion = elegirPorNumero(filtrados, await consola.preguntar("número (Enter cancela): "));
+  if (eleccion.tipo === "cancelado") {
+    consola.escribir("selección cancelada\n");
+    return { seguir: true };
+  }
+  if (eleccion.tipo === "invalido") {
+    consola.escribir("número inválido\n");
+    return { seguir: true };
+  }
+  const respuestaPapel = await consola.preguntar("papel (rapido/trabajo/afilado): ");
+  if (respuestaPapel.trim() === "") {
+    consola.escribir("selección cancelada\n");
+    return { seguir: true };
+  }
+  const papel = elegirPapel(respuestaPapel);
+  if (papel === undefined) {
+    consola.escribir(`papel inválido; elige: ${PAPELES.join(", ")}\n`);
+    return { seguir: true };
+  }
+
+  const id = `${proveedor}/${eleccion.modelo.id}`;
+  consola.guardarModeloGlobal(papel, id);
+  const eclipsa = fuenteQueEclipsaGlobal(papel, estado.fuentes, estado.seleccionesDeCatalogo);
+  if (eclipsa !== undefined) {
+    consola.escribir(`modelo ${papel} guardado en global; sigue activo el de ${eclipsa}\n`);
+    return { seguir: true };
+  }
+  const fuentes = {
+    ...estado.fuentes,
+    porPapel: { ...estado.fuentes.porPapel, [papel]: id },
+  };
+  consola.escribir(acuseDeModelo(papel, id));
+  return {
+    seguir: true,
+    estado: {
+      ...estado,
+      fuentes,
+      seleccionesDeCatalogo: { ...estado.seleccionesDeCatalogo, [papel]: id },
+    },
+  };
 }
 
 /**
@@ -223,7 +383,21 @@ function manejadorDeModelo(papel: Papel | undefined): ManejadorDeBarra {
     // La frase vive en `acuseDeModelo.ts`: la TUI la re-parsea para su sidebar, así
     // que escribir y leer comparten módulo — retocar la frase aquí no rompe a ciegas.
     consola.escribir(acuseDeModelo(papel, valor));
-    return { seguir: true, estado: { ...estado, fuentes } };
+    const seleccionesDeCatalogo = { ...estado.seleccionesDeCatalogo };
+    if (papel === undefined) {
+      for (const p of PAPELES) delete seleccionesDeCatalogo[p];
+    } else {
+      delete seleccionesDeCatalogo[papel];
+    }
+    return {
+      seguir: true,
+      estado: {
+        ...estado,
+        fuentes,
+        seleccionesDeCatalogo:
+          Object.keys(seleccionesDeCatalogo).length === 0 ? undefined : seleccionesDeCatalogo,
+      },
+    };
   };
 }
 
@@ -285,6 +459,10 @@ export const COMANDOS: Record<string, { descripcion: string; manejador: Manejado
   "modelo-afilado": {
     descripcion: "cambia el papel `afilado` en caliente: /modelo-afilado <proveedor>/<modelo>",
     manejador: manejadorDeModelo("afilado"),
+  },
+  modelos: {
+    descripcion: "elige un modelo del catálogo de un proveedor y lo guarda globalmente: /modelos <proveedor>",
+    manejador: elegirModelo,
   },
   hilo: {
     descripcion: "muestra el hilo (thread_id) de esta sesión",

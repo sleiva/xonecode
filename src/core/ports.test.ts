@@ -6,6 +6,7 @@ import {
   ModeloGuionizado,
   StubVerifier,
   VerifierGuionizado,
+  CatalogoModelosEnMemoria,
   type McpPort,
   type VerifierPort,
 } from "./ports.js";
@@ -52,6 +53,19 @@ describe("McpVacio", () => {
     const mcp: McpPort = new McpVacio();
     await expect(mcp.invocar("studio_edit_file", {})).rejects.toThrow(/NO se ha tocado/);
     await expect(mcp.invocar("studio_edit_file", {})).rejects.toThrow(/studio_edit_file/);
+  });
+});
+
+describe("CatalogoModelosEnMemoria", () => {
+  it("el catálogo en memoria conserva proveedor, id y contexto", async () => {
+    const catalogo = new CatalogoModelosEnMemoria({
+      openai: [{ proveedor: "openai", id: "gpt-test", nombre: "GPT Test", contexto: 128000 }],
+    });
+    expect(esDoble(catalogo)).toBe(true);
+    await expect(catalogo.listar("openai")).resolves.toEqual([
+      { proveedor: "openai", id: "gpt-test", nombre: "GPT Test", contexto: 128000 },
+    ]);
+    await expect(catalogo.listar("ollama")).resolves.toEqual([]);
   });
 });
 

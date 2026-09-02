@@ -15,6 +15,7 @@ import type { Piel } from "../core/turno.js";
 import type { Escribir } from "./stdio.js";
 import type { Preguntar } from "./aprobar.js";
 import { rutaAuth, NOMBRE_CARPETA } from "../agent/configEnDisco.js";
+import { CatalogoModelosEnMemoria, type CatalogoModelosPort } from "../core/ports.js";
 
 /**
  * La costura del diseño: la consola de prueba lee de un generador con las líneas del test
@@ -38,8 +39,19 @@ function consolaDeConSecreto(opciones: {
   lineas: string[];
   interactivo?: boolean;
   leerSecreto?: (p: string) => Promise<string>;
+  respuestas?: string[];
+  catalogoModelos?: CatalogoModelosPort;
+  guardarModeloGlobal?: (papel: "rapido" | "trabajo" | "afilado", id: string) => { ruta: string; id: string };
 }): { consola: Consola; salida: () => string } {
-  const { lineas, interactivo = false, leerSecreto } = opciones;
+  const {
+    lineas,
+    interactivo = false,
+    leerSecreto,
+    respuestas = [],
+    catalogoModelos = new CatalogoModelosEnMemoria(),
+    guardarModeloGlobal = (_papel, id) => ({ ruta: "/tmp/config.json", id }),
+  } = opciones;
+  let siguienteRespuesta = 0;
   let salida = "";
   const escribir: Escribir = (t) => {
     salida += t;
@@ -48,8 +60,10 @@ function consolaDeConSecreto(opciones: {
     consola: {
       lineas: lineasDe(...lineas),
       escribir,
-      preguntar: preguntarFalso,
+      preguntar: async () => respuestas[siguienteRespuesta++] ?? "",
       interactivo,
+      catalogoModelos,
+      guardarModeloGlobal,
       leerSecreto:
         leerSecreto ??
         (async () => {
@@ -58,6 +72,18 @@ function consolaDeConSecreto(opciones: {
     },
     salida: () => salida,
   };
+}
+
+function consolaDeConRespuestas(opciones: {
+  lineas: string[];
+  respuestas: string[];
+  catalogo: CatalogoModelosPort;
+  guardarModeloGlobal?: (papel: "rapido" | "trabajo" | "afilado", id: string) => { ruta: string; id: string };
+}): { consola: Consola; salida: () => string } {
+  return consolaDeConSecreto({
+    ...opciones,
+    catalogoModelos: opciones.catalogo,
+  });
 }
 
 function estadoDe(): EstadoDeSesion {
@@ -254,6 +280,202 @@ describe("correrConsola — /modelo en caliente", () => {
     // Cada comando fija solo SU papel: ni la bandera ni los otros papeles se tocan.
     expect(porPapel?.afilado).toBeUndefined();
     expect(turnos[0]!.estado.fuentes.bandera).toBeUndefined();
+  });
+});
+
+describe("correrConsola — /modelos", () => {
+  const catalogoOpenAi = () =>
+    new CatalogoModelosEnMemoria({
+      openai: [
+        { proveedor: "openai", id: "gpt-a", nombre: "GPT A" },
+        { proveedor: "openai", id: "gpt-b", nombre: "GPT B", contexto: 128000 },
+      ],
+    });
+
+  it("persiste el modelo filtrado para el papel elegido y lo activa en la sesión", async () => {
+    vi.stubEnv("OPENAI_API_KEY", "clave-de-test");
+    try {
+      const guardados: Array<{ papel: string; id: string }> = [];
+      const { consola, salida } = consolaDeConRespuestas({
+        lineas: ["/modelos openai", "siguiente turno"],
+        respuestas: ["b", "1", "trabajo"],
+        catalogo: catalogoOpenAi(),
+        guardarModeloGlobal: (papel, id) => {
+          guardados.push({ papel, id });
+          return { ruta: "/tmp/config.json", id };
+        },
+      });
+      const turnos: Array<{ peticion: string; estado: EstadoDeSesion }> = [];
+      await correrConsola(consola, estadoDe(), ejecutorFalsoDe(turnos));
+
+      expect(salida()).toContain("1. GPT B (openai/gpt-b, ctx 128000)");
+      expect(guardados).toEqual([{ papel: "trabajo", id: "openai/gpt-b" }]);
+      expect(salida()).toContain("modelo trabajo: openai/gpt-b");
+      expect(turnos[0]!.estado.fuentes.porPapel?.trabajo).toBe("openai/gpt-b");
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
+
+  it("una variable de entorno ausente y sin auth.json deja el estado intacto", async () => {
+    const h = homeTemporal();
+    vi.stubEnv("OPENAI_API_KEY", undefined);
+    try {
+      const { consola, salida } = consolaDeConRespuestas({
+        lineas: ["/modelos openai", "siguiente turno"],
+        respuestas: [],
+        catalogo: catalogoOpenAi(),
+      });
+      const turnos: Array<{ peticion: string; estado: EstadoDeSesion }> = [];
+      await correrConsola(consola, estadoDe(), ejecutorFalsoDe(turnos));
+
+      expect(salida()).toContain("falta la credencial para openai");
+      expect(turnos[0]!.estado.fuentes.porPapel).toBeUndefined();
+    } finally {
+      vi.unstubAllEnvs();
+      rmSync(h, { recursive: true, force: true });
+    }
+  });
+
+  it("un proveedor desconocido deja el estado intacto", async () => {
+    const { consola, salida } = consolaDeConRespuestas({
+      lineas: ["/modelos noexiste", "siguiente turno"],
+      respuestas: [],
+      catalogo: new CatalogoModelosEnMemoria(),
+    });
+    const turnos: Array<{ peticion: string; estado: EstadoDeSesion }> = [];
+    await correrConsola(consola, estadoDe(), ejecutorFalsoDe(turnos));
+
+    expect(salida()).toContain("proveedor «noexiste» desconocido");
+    expect(turnos[0]!.estado.fuentes.porPapel).toBeUndefined();
+  });
+
+  it("un catálogo vacío no cambia el estado", async () => {
+    const { consola, salida } = consolaDeConRespuestas({
+      lineas: ["/modelos ollama", "siguiente turno"],
+      respuestas: [],
+      catalogo: new CatalogoModelosEnMemoria(),
+    });
+    const turnos: Array<{ peticion: string; estado: EstadoDeSesion }> = [];
+    await correrConsola(consola, estadoDe(), ejecutorFalsoDe(turnos));
+
+    expect(salida()).toContain("no hay modelos disponibles para ollama");
+    expect(turnos[0]!.estado.fuentes.porPapel).toBeUndefined();
+  });
+
+  it("un número inválido cancela sin cambiar el estado", async () => {
+    vi.stubEnv("OPENAI_API_KEY", "clave-de-test");
+    try {
+      const { consola, salida } = consolaDeConRespuestas({
+        lineas: ["/modelos openai", "siguiente turno"],
+        respuestas: ["", "3"],
+        catalogo: catalogoOpenAi(),
+      });
+      const turnos: Array<{ peticion: string; estado: EstadoDeSesion }> = [];
+      await correrConsola(consola, estadoDe(), ejecutorFalsoDe(turnos));
+
+      expect(salida()).toContain("número inválido");
+      expect(turnos[0]!.estado.fuentes.porPapel).toBeUndefined();
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
+
+  it("Enter al elegir el número cancela sin cambiar el estado", async () => {
+    vi.stubEnv("OPENAI_API_KEY", "clave-de-test");
+    try {
+      const { consola, salida } = consolaDeConRespuestas({
+        lineas: ["/modelos openai", "siguiente turno"],
+        respuestas: ["", ""],
+        catalogo: catalogoOpenAi(),
+      });
+      const turnos: Array<{ peticion: string; estado: EstadoDeSesion }> = [];
+      await correrConsola(consola, estadoDe(), ejecutorFalsoDe(turnos));
+
+      expect(salida()).toContain("selección cancelada");
+      expect(turnos[0]!.estado.fuentes.porPapel).toBeUndefined();
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
+
+  it("un fallo al guardar deja el estado intacto", async () => {
+    vi.stubEnv("OPENAI_API_KEY", "clave-de-test");
+    try {
+      const { consola, salida } = consolaDeConRespuestas({
+        lineas: ["/modelos openai", "siguiente turno"],
+        respuestas: ["", "1", "afilado"],
+        catalogo: catalogoOpenAi(),
+        guardarModeloGlobal: () => {
+          throw new Error("disco lleno");
+        },
+      });
+      const turnos: Array<{ peticion: string; estado: EstadoDeSesion }> = [];
+      await correrConsola(consola, estadoDe(), ejecutorFalsoDe(turnos));
+
+      expect(salida()).toContain("Error: disco lleno");
+      expect(turnos[0]!.estado.fuentes.porPapel).toBeUndefined();
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
+
+  it("una bandera ganadora conserva el estado de sesión y explica que eclipsa lo guardado", async () => {
+    const { consola, salida } = consolaDeConRespuestas({
+      lineas: ["/modelos ollama", "siguiente turno"],
+      respuestas: ["", "1", "trabajo"],
+      catalogo: new CatalogoModelosEnMemoria({
+        ollama: [{ proveedor: "ollama", id: "qwen3" }],
+      }),
+    });
+    const turnos: Array<{ peticion: string; estado: EstadoDeSesion }> = [];
+    const estado = { ...estadoDe(), fuentes: { bandera: "gemini/gemini-2.5-flash" } };
+    await correrConsola(consola, estado, ejecutorFalsoDe(turnos));
+
+    expect(salida()).toContain("guardado en global");
+    expect(salida()).toContain("bandera");
+    expect(salida()).not.toContain("modelo trabajo: ollama/qwen3");
+    expect(turnos[0]!.estado.fuentes).toEqual(estado.fuentes);
+  });
+
+  it("dos selecciones consecutivas del mismo papel permanecen activas", async () => {
+    vi.stubEnv("OPENAI_API_KEY", "clave-de-test");
+    try {
+      const { consola, salida } = consolaDeConRespuestas({
+        lineas: ["/modelos openai", "/modelos openai", "siguiente turno"],
+        respuestas: ["", "1", "trabajo", "", "2", "trabajo"],
+        catalogo: catalogoOpenAi(),
+      });
+      const turnos: Array<{ peticion: string; estado: EstadoDeSesion }> = [];
+      await correrConsola(consola, estadoDe(), ejecutorFalsoDe(turnos));
+
+      expect(salida()).toContain("modelo trabajo: openai/gpt-a");
+      expect(salida()).toContain("modelo trabajo: openai/gpt-b");
+      expect(salida()).not.toContain("sigue activo el de bandera");
+      expect(turnos[0]!.estado.fuentes.porPapel?.trabajo).toBe("openai/gpt-b");
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
+
+  it("la configuración del proyecto también eclipsa la selección global sin mutar la sesión", async () => {
+    const { consola, salida } = consolaDeConRespuestas({
+      lineas: ["/modelos ollama", "siguiente turno"],
+      respuestas: ["", "1", "afilado"],
+      catalogo: new CatalogoModelosEnMemoria({
+        ollama: [{ proveedor: "ollama", id: "qwen3" }],
+      }),
+    });
+    const turnos: Array<{ peticion: string; estado: EstadoDeSesion }> = [];
+    const estado = {
+      ...estadoDe(),
+      fuentes: { proyecto: { modelos: { afilado: "anthropic/claude-test" } } },
+    };
+    await correrConsola(consola, estado, ejecutorFalsoDe(turnos));
+
+    expect(salida()).toContain("guardado en global");
+    expect(salida()).toContain("proyecto");
+    expect(turnos[0]!.estado.fuentes).toEqual(estado.fuentes);
   });
 });
 

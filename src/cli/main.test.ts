@@ -4,10 +4,19 @@ import { tmpdir } from "node:os";
 import { join, basename } from "node:path";
 import { PassThrough } from "node:stream";
 import * as readline from "node:readline";
-import { entrarEnConsola, main, formatearBarra, crearCompleterDelProyecto, decidirTui, quiereRaton } from "./main.js";
+import {
+  entrarEnConsola,
+  main,
+  formatearBarra,
+  crearCompleterDelProyecto,
+  decidirTui,
+  quiereRaton,
+  extraerBanderasDeModelo,
+} from "./main.js";
 import { COMANDOS } from "./consola.js";
 import type { Escribir } from "./stdio.js";
 import { POR_OMISION, type FuentesDeEleccion } from "../core/modelos.js";
+import { CatalogoModelos } from "../agent/catalogoModelos.js";
 
 /**
  * La consola real se prueba sin stdin/stdout al estilo del resto del paquete: un
@@ -58,12 +67,38 @@ function crearRlPreguntable(...respuestas: string[]): () => readline.Interface {
   };
 }
 
+/** Ejecuta primero un comando y alimenta después sus preguntas interactivas. */
+function crearRlConComando(comando: string, ...respuestas: string[]): () => readline.Interface {
+  return () => {
+    const input = new PassThrough();
+    const output = new PassThrough();
+    let siguiente = 0;
+    // Si el comando falla antes de preguntar (el estado rojo de la prueba de auth),
+    // el EOF de guarda evita que el test se quede esperando cinco segundos.
+    const eofDeGuarda = setTimeout(() => input.end(), 50);
+    output.on("data", () => {
+      if (siguiente < respuestas.length) {
+        input.write(respuestas[siguiente++] + "\n");
+        if (siguiente === respuestas.length) {
+          clearTimeout(eofDeGuarda);
+          input.end();
+        }
+      }
+    });
+    input.write(comando + "\n");
+    return readline.createInterface({ input, output, terminal: false });
+  };
+}
+
 const inspeccionarFalso = async (_raiz: string): Promise<{ colecciones: number; esProyectoXone: boolean }> => ({
   colecciones: 3,
   esProyectoXone: true,
 });
 
 let temporales: string[] = [];
+const homeOriginal = process.env.HOME;
+const openAiOriginal = process.env.OPENAI_API_KEY;
+const modeloEntornoOriginal = process.env.XONECODE_MODELO;
 function raizTemporal(): string {
   const r = mkdtempSync(join(tmpdir(), "xc-main-"));
   temporales.push(r);
@@ -72,6 +107,12 @@ function raizTemporal(): string {
 afterEach(() => {
   for (const r of temporales) rmSync(r, { recursive: true, force: true });
   temporales = [];
+  if (homeOriginal === undefined) delete process.env.HOME;
+  else process.env.HOME = homeOriginal;
+  if (openAiOriginal === undefined) delete process.env.OPENAI_API_KEY;
+  else process.env.OPENAI_API_KEY = openAiOriginal;
+  if (modeloEntornoOriginal === undefined) delete process.env.XONECODE_MODELO;
+  else process.env.XONECODE_MODELO = modeloEntornoOriginal;
 });
 
 describe("main — la consola no se come los subcomandos", () => {
@@ -180,6 +221,146 @@ describe("entrarEnConsola", () => {
     const trasArranque = texto.slice(texto.indexOf("\n") + 1);
     expect(trasArranque).toContain("ollama/llama3");
   });
+
+  it("tras un acuse individual de trabajo la línea de estado refleja ese modelo", async () => {
+    const raiz = raizTemporal();
+    const { escribir, salida } = acumulador();
+
+    await entrarEnConsola(
+      {},
+      raiz,
+      escribir,
+      inspeccionarFalso,
+      crearRlDe("/modelo-trabajo ollama/qwen3")
+    );
+
+    const texto = salida();
+    const trasArranque = texto.slice(texto.indexOf("\n") + 1);
+    expect(trasArranque).toContain("ollama/qwen3");
+    expect(texto.split("xonecode · ").length - 1).toBeGreaterThanOrEqual(2);
+  });
+
+  it("hidrata el modelo global antes de construir la cabecera", async () => {
+    const casa = raizTemporal();
+    const raiz = raizTemporal();
+    mkdirSync(join(casa, ".xonecode"));
+    writeFileSync(
+      join(casa, ".xonecode", "config.json"),
+      JSON.stringify({ modelos: { trabajo: "openai/gpt-global" } })
+    );
+    process.env.HOME = casa;
+    const { escribir, salida } = acumulador();
+
+    await entrarEnConsola({}, raiz, escribir, inspeccionarFalso, crearRlDe());
+
+    expect(salida()).toContain("openai/gpt-global");
+  });
+
+  it("hidrata el modelo de proyecto y conserva su precedencia sobre el global", async () => {
+    const casa = raizTemporal();
+    const raiz = raizTemporal();
+    mkdirSync(join(casa, ".xonecode"));
+    mkdirSync(join(raiz, ".xonecode"));
+    writeFileSync(
+      join(casa, ".xonecode", "config.json"),
+      JSON.stringify({ modelos: { trabajo: "openai/gpt-global" } })
+    );
+    writeFileSync(
+      join(raiz, ".xonecode", "config.json"),
+      JSON.stringify({ modelos: { trabajo: "anthropic/claude-proyecto" } })
+    );
+    process.env.HOME = casa;
+    const { escribir, salida } = acumulador();
+
+    await entrarEnConsola({}, raiz, escribir, inspeccionarFalso, crearRlDe());
+
+    expect(salida()).toContain("anthropic/claude-proyecto");
+    expect(salida()).not.toContain("openai/gpt-global");
+  });
+
+  it("la variable XONECODE_MODELO conserva precedencia sobre la configuración global", async () => {
+    const casa = raizTemporal();
+    const raiz = raizTemporal();
+    mkdirSync(join(casa, ".xonecode"));
+    writeFileSync(
+      join(casa, ".xonecode", "config.json"),
+      JSON.stringify({ modelos: { trabajo: "openai/gpt-global" } })
+    );
+    process.env.HOME = casa;
+    process.env.XONECODE_MODELO = "anthropic/claude-entorno";
+    const fuentes = extraerBanderasDeModelo([]).fuentes;
+    const { escribir, salida } = acumulador();
+
+    await entrarEnConsola(fuentes, raiz, escribir, inspeccionarFalso, crearRlDe());
+
+    expect(salida()).toContain("anthropic/claude-entorno");
+    expect(salida()).not.toContain("openai/gpt-global");
+  });
+
+  it("aplica auth.json antes de consultar el catálogo inyectado, sin red real", async () => {
+    const casa = raizTemporal();
+    const raiz = raizTemporal();
+    mkdirSync(join(casa, ".xonecode"));
+    writeFileSync(
+      join(casa, ".xonecode", "auth.json"),
+      JSON.stringify({ openai: { key: "sk-fixture-guardada" } }),
+      { mode: 0o600 }
+    );
+    process.env.HOME = casa;
+    delete process.env.OPENAI_API_KEY;
+    const autorizaciones: Array<string | null> = [];
+    const fetchFalso: typeof fetch = async (_entrada, init) => {
+      autorizaciones.push(new Headers(init?.headers).get("authorization"));
+      return new Response(JSON.stringify({ data: [{ id: "gpt-b" }] }), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      });
+    };
+    const catalogoModelos = new CatalogoModelos(fetchFalso);
+    const { escribir, salida } = acumulador();
+
+    await entrarEnConsola(
+      {},
+      raiz,
+      escribir,
+      inspeccionarFalso,
+      crearRlConComando("/modelos openai", "", "1", "trabajo"),
+      false,
+      true,
+      false,
+      true,
+      {
+        catalogoModelos,
+        guardarModeloGlobal: (_papel, id) => ({ ruta: join(casa, "config.json"), id }),
+      }
+    );
+
+    expect(autorizaciones, salida()).toEqual(["Bearer sk-fixture-guardada"]);
+  });
+
+  it("no consulta el catálogo inyectado durante el arranque", async () => {
+    const raiz = raizTemporal();
+    const listar = vi.fn(async () => []);
+    const { escribir } = acumulador();
+
+    await entrarEnConsola(
+      {},
+      raiz,
+      escribir,
+      inspeccionarFalso,
+      crearRlDe(),
+      false,
+      false,
+      false,
+      true,
+      {
+        catalogoModelos: { listar },
+        guardarModeloGlobal: (_papel, id) => ({ ruta: "/tmp/config.json", id }),
+      }
+    );
+
+    expect(listar).not.toHaveBeenCalled();
+  });
 });
 
 describe("quiereRaton", () => {
@@ -238,6 +419,28 @@ describe("main — la bandera --tui sin terminal es un error de uso, no un crash
       const codigo = await main(["--tui"]);
       expect(codigo).toBe(64);
       expect(errorEspia.mock.calls.map((c) => String(c[0])).join("")).toContain("terminal interactivo");
+    } finally {
+      errorEspia.mockRestore();
+    }
+  });
+});
+
+describe("main — modelos inválidos en la configuración de la consola", () => {
+  it("devuelve 64 y explica el formato sin propagar ModeloMalEscrito", async () => {
+    const casa = raizTemporal();
+    mkdirSync(join(casa, ".xonecode"));
+    writeFileSync(
+      join(casa, ".xonecode", "config.json"),
+      JSON.stringify({ modelo: "basura-sin-barra" })
+    );
+    process.env.HOME = casa;
+    delete process.env.XONECODE_MODELO;
+    const errorEspia = vi.spyOn(process.stderr, "write").mockImplementation(() => true);
+    try {
+      await expect(main(["--no-tui"])).resolves.toBe(64);
+      const error = errorEspia.mock.calls.map((c) => String(c[0])).join("");
+      expect(error).toContain("«basura-sin-barra» no tiene la forma proveedor/modelo");
+      expect(error).toContain("gemini, openai, anthropic, ollama");
     } finally {
       errorEspia.mockRestore();
     }

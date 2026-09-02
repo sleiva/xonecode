@@ -14,7 +14,7 @@ import { cmdDoctor } from "./doctor.js";
 import { cmdVerify } from "./verify.js";
 import { type FuentesDeEleccion, ModeloMalEscrito, parsear, resolver } from "../core/modelos.js";
 import { topeResuelto } from "../core/contextos.js";
-import { cargar } from "../agent/configEnDisco.js";
+import { aplicarAuth, cargar, guardarModeloGlobal } from "../agent/configEnDisco.js";
 import {
   COMANDOS,
   correrConsola,
@@ -26,9 +26,11 @@ import {
 import { crearLeerSecreto, crearPreguntar, crearPielStdio, escribirEnStdout, type Escribir } from "./stdio.js";
 import { crearTema } from "./tema.js";
 import { pedirDecisiones } from "./aprobar.js";
+import { modeloDeAcuse } from "./acuseDeModelo.js";
 import { inspeccionar } from "../agent/entorno.js";
 import { SkillsEnDisco } from "../agent/skills.js";
 import { Modelos } from "../agent/modelos.js";
+import { CatalogoModelos } from "../agent/catalogoModelos.js";
 import { abrirSesionReal, ficherosDelProyecto, type SesionReal } from "../agent/turnoReal.js";
 import { crearProyecto } from "../agent/crearProyecto.js";
 import { type DatosDelProyecto } from "../core/esqueleto.js";
@@ -441,8 +443,24 @@ export async function entrarEnConsola(
    */
   usarTui: boolean = decidirTui(),
   /** ¿Ratón en la TUI? Solo la rama TUI lo mira. */
-  raton: boolean = true
+  raton: boolean = true,
+  /** Adaptadores compartidos por stdio y TUI; `main` construye una sola instancia real. */
+  dependencias: Pick<Consola, "catalogoModelos" | "guardarModeloGlobal"> = {
+    catalogoModelos: new CatalogoModelos(),
+    guardarModeloGlobal,
+  }
 ): Promise<number> {
+  // La elección de modelo y las credenciales se hidratan ANTES de decidir la piel:
+  // stdio y TUI reciben exactamente las mismas fuentes y el catálogo leerá la clave
+  // ya aplicada solo cuando `/modelos` provoque su primera consulta.
+  const cargado = cargar(raiz);
+  aplicarAuth(cargado.auth);
+  const fuentesHidratadas: FuentesDeEleccion = {
+    ...fuentes,
+    proyecto: cargado.config.proyecto,
+    global: cargado.config.global,
+  };
+
   if (usarTui) {
     // La TUI es la MISMA consola: `entrarEnConsola` no la duplica, le entrega las
     // piezas que son de esta capa (la inspección, el asistente de creación, el
@@ -454,9 +472,10 @@ export async function entrarEnConsola(
     // necesitan ni los van a pintar. Solo la rama TUI paga el módulo.
     const { correrConsolaTui } = await import("./tui/correrTui.js");
     return correrConsolaTui({
-      fuentes,
+      fuentes: fuentesHidratadas,
       raiz,
       guion,
+      ...dependencias,
       inspeccionarProyecto,
       ofrecer: ofrecerCrearProyecto,
       crearEjecutor: guion ? undefined : crearEjecutorReal,
@@ -474,7 +493,7 @@ export async function entrarEnConsola(
   // con /describe. `let` porque /modelo <p>/<m> la cambia EN CALIENTE dentro de la sesión.
   let modeloTrabajo: string;
   {
-    const { proveedor, modelo } = resolver(fuentes).trabajo;
+    const { proveedor, modelo } = resolver(fuentesHidratadas).trabajo;
     modeloTrabajo = `${proveedor}/${modelo}`;
   }
 
@@ -544,15 +563,11 @@ export async function entrarEnConsola(
     lineas: conPrompt(rl, escribir, barraDeEstado),
     escribir: (t: string) => {
       escribir(t);
-      // La línea de estado se reimprime tras /nuevo y /modelo (los DOS, no
-      // /modelo-rapido/-trabajo/-afilado: así lo pide la tarea). Ambos manejadores
-      // escriben su resultado en UNA sola llamada a escribir, así que basta con anclar
-      // al principio de esa cadena exacta:
-      //   "modelo (los tres papeles): <p>/<m>\n"   → /modelo
-      //   "hilo nuevo: <id>\n"                     → /nuevo
-      const comoModelo = /^modelo \(los tres papeles\): (.+)\n$/.exec(t);
-      if (comoModelo) {
-        modeloTrabajo = comoModelo[1]!;
+      // La TUI usa el mismo parser: un acuse de los tres papeles, o el del papel
+      // `trabajo` individual de `/modelos`, actualiza la cabecera sin duplicar regex.
+      const acuse = modeloDeAcuse(t);
+      if (acuse !== undefined && (acuse.papel === undefined || acuse.papel === "trabajo")) {
+        modeloTrabajo = acuse.modelo;
         escribir(lineaDeEstado());
       } else if (/^hilo nuevo: /.test(t)) {
         escribir(lineaDeEstado());
@@ -561,6 +576,8 @@ export async function entrarEnConsola(
     preguntar: crearPreguntar(rl),
     interactivo,
     leerSecreto: crearLeerSecreto(rl),
+    catalogoModelos: dependencias.catalogoModelos,
+    guardarModeloGlobal: dependencias.guardarModeloGlobal,
   };
 
   // El asistente de creación: la única escritura fuera de un turno del agente, y
@@ -578,7 +595,11 @@ export async function entrarEnConsola(
   escribir(cabecera());
 
   // Mismo patrón de prefijo que run.ts y el manejador /nuevo de consola.ts.
-  const estado: EstadoDeSesion = { hilo: `xonecode-${randomUUID()}`, raiz, fuentes };
+  const estado: EstadoDeSesion = {
+    hilo: `xonecode-${randomUUID()}`,
+    raiz,
+    fuentes: fuentesHidratadas,
+  };
 
   // `--guion` conserva el agente de pega (el valor por omisión de `correrConsola`): es lo
   // que permite ver la consola correr sin gastar. Sin ella, el ejecutor real corre cada
@@ -599,53 +620,55 @@ export async function entrarEnConsola(
 export async function main(argv: string[]): Promise<number> {
   const [comando, ...resto] = argv;
 
-  // Las banderas de la consola (`--guion` y las de modelo) no son subcomandos:
-  // `xonecode --guion` entra en la consola igual que `xonecode` a secas, pero con el
-  // agente de pega. `--help`/`-h` NO entran aquí: son el subcomando de ayuda de abajo.
-  // El resto de banderas (`--real`, `--json`, …) pertenecen a otros subcomandos y siguen
-  // cayendo en «no conozco el comando».
-  // `--guion` se quita del argv ANTES de extraerBanderasDeModelo: no es una bandera de
-  // modelo y no debe llegar como `resto` a ninguna parte.
-  if (
-    !comando ||
-    comando === "--guion" ||
-    comando === "--tui" ||
-    comando === "--no-tui" ||
-    comando === "--sin-raton" ||
-    comando.startsWith("--modelo")
-  ) {
-    const guion = argv.includes("--guion");
-    const pedirTui = argv.includes("--tui");
-    const usarTui = decidirTui(argv);
-    // `--tui` fuerza la TUI, pero no puede fabricar un terminal: sin stdin interactivo
-    // no hay teclado que leer, y sin stdout TTY ink pintaría códigos de escape en la
-    // tubería. Error de USO (64), no un crash — la bandera fue imposible, no el entorno.
-    if (pedirTui && usarTui && (process.stdin.isTTY !== true || process.stdout.isTTY !== true)) {
-      process.stderr.write("la TUI necesita un terminal interactivo: usa --no-tui o corre sin tubería\n");
-      return 64;
-    }
-    // extraerBanderasDeModelo también con argv vacío, para que fuentes.entorno
-    // .XONECODE_MODELO se rellene igual que en todos los demás subcomandos: la consola
-    // no puede ser la única vía que ignora esa variable.
-    const { fuentes } = extraerBanderasDeModelo(argv.filter((a) => a !== "--guion" && a !== "--sin-raton"));
-    return entrarEnConsola(
-      fuentes,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      guion,
-      undefined,
-      usarTui,
-      quiereRaton(argv)
-    );
-  }
-  if (comando === "--help" || comando === "-h") {
-    process.stdout.write(AYUDA);
-    return 0;
-  }
-
   try {
+    // Las banderas de la consola (`--guion` y las de modelo) no son subcomandos:
+    // `xonecode --guion` entra en la consola igual que `xonecode` a secas, pero con el
+    // agente de pega. `--help`/`-h` NO entran aquí: son el subcomando de ayuda de abajo.
+    // El resto de banderas (`--real`, `--json`, …) pertenecen a otros subcomandos y siguen
+    // cayendo en «no conozco el comando».
+    // `--guion` se quita del argv ANTES de extraerBanderasDeModelo: no es una bandera de
+    // modelo y no debe llegar como `resto` a ninguna parte.
+    if (
+      !comando ||
+      comando === "--guion" ||
+      comando === "--tui" ||
+      comando === "--no-tui" ||
+      comando === "--sin-raton" ||
+      comando.startsWith("--modelo")
+    ) {
+      const guion = argv.includes("--guion");
+      const pedirTui = argv.includes("--tui");
+      const usarTui = decidirTui(argv);
+      // `--tui` fuerza la TUI, pero no puede fabricar un terminal: sin stdin interactivo
+      // no hay teclado que leer, y sin stdout TTY ink pintaría códigos de escape en la
+      // tubería. Error de USO (64), no un crash — la bandera fue imposible, no el entorno.
+      if (pedirTui && usarTui && (process.stdin.isTTY !== true || process.stdout.isTTY !== true)) {
+        process.stderr.write("la TUI necesita un terminal interactivo: usa --no-tui o corre sin tubería\n");
+        return 64;
+      }
+      // extraerBanderasDeModelo también con argv vacío, para que fuentes.entorno
+      // .XONECODE_MODELO se rellene igual que en todos los demás subcomandos: la consola
+      // no puede ser la única vía que ignora esa variable.
+      const { fuentes } = extraerBanderasDeModelo(argv.filter((a) => a !== "--guion" && a !== "--sin-raton"));
+      const catalogoModelos = new CatalogoModelos();
+      return await entrarEnConsola(
+        fuentes,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        guion,
+        undefined,
+        usarTui,
+        quiereRaton(argv),
+        { catalogoModelos, guardarModeloGlobal }
+      );
+    }
+    if (comando === "--help" || comando === "-h") {
+      process.stdout.write(AYUDA);
+      return 0;
+    }
+
     if (comando === "run") {
       const { fuentes, resto: sinModelo } = extraerBanderasDeModelo(resto);
       const peticion = sinModelo.filter((a) => !a.startsWith("--")).join(" ");
