@@ -145,6 +145,29 @@ describe("la maqueta de la App", () => {
     expect(frame).toContain("▏");
   });
 
+  it("con un prompt ENVUELTO (52 chars a 80 columnas) el cursor sigue en pantalla", async () => {
+    // A 80 columnas la Entrada tiene 47 columnas de contenido (80 − 30 de sidebar − 1 de
+    // paddingRight − 2 de la barra), así que 52 caracteres ocupan DOS filas y la Entrada
+    // pasa de 2 a 3. Es el primer disparador del fallo: el que no se ve con el prompt de
+    // 60 a 100 columnas, donde todavía cabe en una fila.
+    //
+    // La línea entra de GOLPE (un solo write) y sobre la línea VACÍA, que es como llega
+    // de verdad al recuperar del historial con ↑ o al pegar — y es el caso en el que Ink
+    // se quedaba con la altura de una fila. Letra a letra, o desde un valor no vacío, el
+    // fallo no aparece.
+    const m = montar({ columnas: 80 });
+    await esperar();
+    m.stdin.write("haz que la colección de clientes ordene por apellido");
+    await esperar();
+    const frame = m.stdout.ultimo();
+    m.instancia.unmount();
+    laMaquetaCabe(frame);
+    // La segunda fila del prompt está entera y el cursor con ella: la fila del modelo no
+    // la ha pisado.
+    expect(frame).toContain("apellido▏");
+    expect(frame).toContain("ollama/glm");
+  });
+
   it("con la pista de Tab (3 candidatos) el cursor sigue en pantalla", async () => {
     const m = montar({ completa: () => [["/config", "/conectar", "/conectar2"], "/con"] });
     await esperar();

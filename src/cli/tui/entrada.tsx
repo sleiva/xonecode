@@ -92,7 +92,15 @@ export function Entrada({
       {ocupado ? (
         <Text color={temaInk.mudo}>turno en curso… (Ctrl-C para cancelar el turno)</Text>
       ) : (
-        <Text color={temaInk.texto}>
+        // `key={valor}` fuerza a React a remontar este Text en cada cambio, y con él el
+        // nodo de Yoga. MEDIDO: con un Text ANIDADO (el cursor va dentro, para llevar su
+        // color), Ink se queda con la altura de UNA fila cuando el valor pasa de VACÍO a
+        // uno que envuelve en un solo render, y entonces la fila del modelo pisa la
+        // segunda línea. Con la línea vacía el único hijo es el cursor, así que el texto
+        // no se actualiza: se INSERTA, y por ahí se cuela sin remedir. Desde un valor no
+        // vacío —o tecleando letra a letra— remide bien; el caso que falla es el de
+        // siempre: recuperar del historial con ↑, o pegar, sobre la línea vacía.
+        <Text key={valor} color={temaInk.texto}>
           {valor}
           <Text color={temaInk.prompt}>{"▏"}</Text>
         </Text>
