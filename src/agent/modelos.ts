@@ -4,6 +4,7 @@ import { ChatAnthropic } from "@langchain/anthropic";
 import { ChatOllama } from "@langchain/ollama";
 import type { ModelosPort, Papel } from "../core/ports.js";
 import { resolver, type Eleccion, type FuentesDeEleccion } from "../core/modelos.js";
+import { baseUrlDeOllama } from "./catalogoModelos.js";
 
 /**
  * Construye el modelo de cada papel. NO lleva la marca de doble: es real.
@@ -29,7 +30,7 @@ export class Modelos implements ModelosPort {
       case "ollama":
         return new ChatOllama({
           model: modelo,
-          baseUrl: process.env.OLLAMA_BASE_URL ?? "http://localhost:11434",
+          baseUrl: baseUrlDeOllama(),
         });
       case "gemini":
         return new ChatGoogleGenerativeAI({ model: modelo, apiKey: process.env.GOOGLE_API_KEY });
