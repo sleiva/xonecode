@@ -52,8 +52,6 @@ export const temaInk = {
    * sin competir con el acento azul. No es color XOne; es un token de TUI declarado.
    */
   fase: "#e0a458",
-  /** Guía de los bloques de respuesta: visible, pero más tranquila que el cursor cian. */
-  respuesta: "#5baed6",
   /**
    * Un gris por debajo de `mudo`: las líneas de herramientas son paisaje y tienen que
    * leerse como tal, más apagadas que los avisos y que el detalle de una fase.

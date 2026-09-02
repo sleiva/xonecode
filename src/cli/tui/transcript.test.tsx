@@ -34,9 +34,9 @@ describe("la ventana pura del transcript", () => {
     expect(ventanaDe([], 3, 0)).toEqual([]);
   });
 
-  it("moverDesfase acota entre 0 y el total", () => {
+  it("moverDesfase acota entre 0 y el último acto: al subir no deja un panel vacío", () => {
     expect(moverDesfase(0, 30, 10)).toBe(10);
-    expect(moverDesfase(25, 30, 10)).toBe(30);
+    expect(moverDesfase(25, 30, 10)).toBe(29);
     expect(moverDesfase(5, 30, -10)).toBe(0);
   });
 });
@@ -66,7 +66,13 @@ describe("el transcript pintado", () => {
   it("con más actos que altura, la ventana vive al fondo", () => {
     const s = crearStore();
     for (let i = 0; i < 30; i++) s.linea(`línea ${i}`, "sistema");
-    const { lastFrame } = render(<Transcript store={s} altura={5} />);
+    // La ventana se mide en FILAS físicas: el contenido completo se deja a Ink y el
+    // contenedor de cinco filas recorta lo antiguo por arriba.
+    const { lastFrame } = render(
+      <Box height={5} flexDirection="column">
+        <Transcript store={s} altura={5} />
+      </Box>
+    );
     expect(lastFrame()).toContain("línea 29");
     expect(lastFrame()).not.toContain("línea 0\n");
   });
@@ -143,7 +149,7 @@ describe("el transcript pintado", () => {
     s.linea("> ojo al dato", "asistente");
     s.linea("---", "asistente");
     const lineas = (render(<Transcript store={s} altura={10} />).lastFrame() ?? "").split("\n");
-    expect(lineas[0]!.startsWith("┃")).toBe(true); // la barra de la cita
+    expect(lineas[0]!.trimStart().startsWith("┃")).toBe(true); // la barra de la cita
     expect(lineas[0]).toContain("ojo al dato");
     expect(lineas[1]).toContain("───");
     expect(lineas[1]).not.toContain("---");
@@ -184,6 +190,28 @@ describe("el transcript pintado", () => {
     expect(lineas[0]).toContain("texto antes");
     expect(lineas.some((l) => l.includes("texto después"))).toBe(true);
     expect(lineas.filter((l) => l.includes("| Colección |"))).toHaveLength(0);
+  });
+
+  it("calcula la tabla con el ancho ÚTIL de la respuesta sangrada", () => {
+    // La respuesta deja dos columnas a la izquierda, como OpenCode. Si el cálculo de
+    // la tabla usase el ancho exterior, su borde derecho se envolvería y las columnas
+    // quedarían partidas, justo el fallo que se ve en la terminal real.
+    const s = crearStore();
+    s.linea("| Propiedad | Tipo | Descripción |", "asistente");
+    s.linea("|---|---|---|", "asistente");
+    s.linea("| MAP_LOGIN_TITLE | T | Título de acceso |", "asistente");
+    const lineas = (
+      render(
+        <Box width={40}>
+          <Transcript store={s} altura={10} ancho={40} />
+        </Box>
+      ).lastFrame() ?? ""
+    ).split("\n");
+    for (const linea of lineas.filter((l) => l.includes("┌") || l.includes("┬") || l.includes("┤") || l.includes("┘"))) {
+      expect(linea.length).toBeLessThanOrEqual(40);
+    }
+    const fila = lineas.find((linea) => linea.includes("MAP_LOGIN"));
+    expect(fila?.lastIndexOf("│")).toBe(39);
   });
 
   it("el inline se parsea DENTRO de las celdas: ni ** ni comillas literales en la tabla", () => {
@@ -284,9 +312,10 @@ describe("el transcript pintado", () => {
     expect(lineas[1]!.trim()).toBe(""); // el aire que abre el grupo (ya estaba)
     expect(lineas[2]).toContain("→ lee /f0");
     expect(lineas[3]!.trim()).toBe(""); // NUEVO: el aire que cierra el grupo
-    expect(lineas[4]).toContain("más texto");
-    expect(lineas[5]!.trim()).toBe(""); // NUEVO: el aire antes del ■
-    expect(lineas[6]).toContain("■");
+    expect(lineas[4]!.trim()).toBe(""); // margen del siguiente bloque de respuesta
+    expect(lineas[5]).toContain("más texto");
+    expect(lineas[6]!.trim()).toBe(""); // aire antes del ■
+    expect(lineas[7]).toContain("■");
   });
 
   it("entre herramientas y el cierre no se dobla el aire: UNA fila en blanco", () => {

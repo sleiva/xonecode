@@ -1,4 +1,5 @@
 import { FilesystemBackend } from "deepagents";
+import { RUTA_MEMORIA_INTERNA, RUTA_MEMORIA_VIRTUAL } from "./memoriaDeProyecto.js";
 
 /**
  * El backend del proyecto: confinado, y sin las vistas aplanadas.
@@ -12,6 +13,32 @@ import { FilesystemBackend } from "deepagents";
  */
 export function backendDelProyecto(raiz: string): FilesystemBackend {
   return new FilesystemBackend({ rootDir: raiz, virtualMode: true });
+}
+
+/**
+ * Expone la memoria del proyecto sin abrir la carpeta interna `.xonecode`.
+ *
+ * Los permisos siguen denegando esa carpeta completa (puede contener configuración), pero
+ * esta única ruta virtual permite al agente conservar decisiones aprobadas entre sesiones.
+ */
+export function exponerMemoriaDeProyecto<T extends object>(backend: T): T {
+  const rutaReal = (ruta: unknown): unknown => ruta === RUTA_MEMORIA_VIRTUAL ? RUTA_MEMORIA_INTERNA : ruta;
+
+  return new Proxy(backend, {
+    get(destino, prop, receptor) {
+      const valor = Reflect.get(destino, prop, receptor);
+      if (typeof valor !== "function") return valor;
+
+      if (prop === "read" || prop === "readRaw" || prop === "write" || prop === "edit") {
+        return async (...args: unknown[]) => {
+          args[0] = rutaReal(args[0]);
+          return (valor as (...a: unknown[]) => unknown).apply(destino, args);
+        };
+      }
+
+      return (valor as (...a: unknown[]) => unknown).bind(destino);
+    },
+  }) as T;
 }
 
 /** ¿Es `ruta` una vista aplanada, teniendo a la vista el conjunto de ficheros del proyecto? */

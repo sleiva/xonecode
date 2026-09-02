@@ -124,9 +124,11 @@ export function App({
   const alturaTranscript = Math.max(5, filas - FILAS_FIJAS);
   const columnas = stdout.columns ?? 80;
   const conSidebar = cabeSidebar(columnas);
-  // Lo que la Entrada rellena de fondo: la columna izquierda (total menos sidebar y su
-  // paddingRight de 1) menos la barra `▌`.
-  const anchoEntrada = columnas - (conSidebar ? ANCHO_DE_SIDEBAR : 0) - 1 - 1;
+  // Lo que la Entrada rellena de fondo: la columna izquierda (total menos sidebar, su
+  // borde izquierdo y el paddingRight de 1) menos la barra `▌`. El borde cuenta como
+  // una columna real de Ink; si no se descuenta, las filas de fondo de la Entrada
+  // invaden una celda y sus bandas dejan de formar un rectángulo.
+  const anchoEntrada = columnas - (conSidebar ? ANCHO_DE_SIDEBAR + 1 : 0) - 1 - 1;
 
   // Ink escucha el `resize` del terminal, pero su manejador (`ink.js`, `resized`) solo
   // recalcula Yoga y repinta el árbol YA montado: no re-renderiza React. Sin esto,

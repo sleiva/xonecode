@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
-import { esVistaAplanada, porQueNo, sinVistasAplanadas, backendDelProyecto } from "./proyecto.js";
+import { esVistaAplanada, porQueNo, sinVistasAplanadas, backendDelProyecto, exponerMemoriaDeProyecto } from "./proyecto.js";
+import { RUTA_MEMORIA_VIRTUAL } from "./memoriaDeProyecto.js";
 
 const TODAS = new Set(["/p/Clientes.xne", "/p/Clientes.xml", "/p/app.xml", "/p/config.xml"]);
 
@@ -92,5 +93,25 @@ describe("backendDelProyecto", () => {
     const be = backendDelProyecto("/tmp") as unknown as { virtualMode: boolean };
     expect(be.virtualMode).toBe(true);
     expect(backendDelProyecto.length).toBe(1); // solo la raíz: no hay parámetro que lo apague
+  });
+});
+
+describe("exponerMemoriaDeProyecto", () => {
+  it("traduce solo la fachada de memoria a su ruta interna", async () => {
+    const visto: string[] = [];
+    const backend = {
+      async read(ruta: string) { visto.push(`read:${ruta}`); return { content: "memoria" }; },
+      async write(ruta: string) { visto.push(`write:${ruta}`); return { ok: true }; },
+      async edit(ruta: string) { visto.push(`edit:${ruta}`); return { ok: true }; },
+    };
+    const memoria = exponerMemoriaDeProyecto(backend);
+    await memoria.read(RUTA_MEMORIA_VIRTUAL);
+    await memoria.write(RUTA_MEMORIA_VIRTUAL);
+    await memoria.edit(RUTA_MEMORIA_VIRTUAL);
+    expect(visto).toEqual([
+      "read:/.xonecode/memoria.md",
+      "write:/.xonecode/memoria.md",
+      "edit:/.xonecode/memoria.md",
+    ]);
   });
 });

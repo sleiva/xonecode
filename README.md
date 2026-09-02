@@ -68,6 +68,8 @@ Dos ficheros con dos ciclos de vida distintos, y **las claves nunca van en el pr
 | Fichero | Qué lleva |
 |---|---|
 | `<proyecto>/.xonecode/config.json` | modelos y proveedores. **Rechaza claves de API.** |
+| `<proyecto>/.xonecode/memoria.md` | decisiones, convenciones y pendientes confirmados. El agente solo la ve como `/MEMORIA_PROYECTO.md`; escribirla pide aprobación. |
+| `<proyecto>/.xonecode/conversation_history/` | historial técnico descargado al resumir contexto. Es interno: no se expone al agente ni se mezcla con la app. |
 | `~/.xonecode/config.json` | lo mismo, para todos los proyectos |
 | `~/.xonecode/auth.json` | las credenciales, con modo **0600**. Se escribe con `/provider <nombre>` |
 

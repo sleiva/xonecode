@@ -13,6 +13,10 @@ import { LOGO_XONE } from "./logo.js";
 
 export interface DatosDeSidebar {
   contexto: number;
+  /** Tokens de entrada acumulados durante la sesión. */
+  tokenIn?: number;
+  /** Tokens de salida acumulados durante la sesión. */
+  tokenOut?: number;
   tope?: number;
   modelo: string;
   modelosPorPapel: Partial<Record<Papel, string>>;
@@ -40,9 +44,7 @@ export function porcentaje(contexto: number, tope: number | undefined): number |
  * La regla de anchura, copiada de OpenCode (`packages/tui/src/routes/session/index.tsx`):
  * la sidebar NO se redimensiona — mide fijo y aparece solo con MÁS de 120 columnas de
  * terminal (estricto, como allí). Por debajo, el transcript se queda con todo el ancho y
- * el pie enseña `ruta:rama`. Quien decide es `App`, que es quien conoce `stdout.columns`;
- * la sidebar, si está montada, es que cabe — y con ella el logotipo (26 columnas en 38
- * de contenido), que por eso ya no tiene umbral propio.
+ * el pie enseña `ruta:rama`. Quien decide es `App`, que es quien conoce `stdout.columns`.
  */
 export const ANCHO_DE_SIDEBAR = 42;
 export const ANCHO_MINIMO_PARA_SIDEBAR = 120;
@@ -53,27 +55,32 @@ export function cabeSidebar(columnas: number): boolean {
 
 export function Sidebar(d: DatosDeSidebar): ReactNode {
   const pct = porcentaje(d.contexto, d.tope);
+  const tokenIn = d.tokenIn ?? 0;
+  const tokenOut = d.tokenOut ?? 0;
   return (
     // flexGrow para llenar la columna: el separador de abajo empuja el pie al fondo.
     <Box flexDirection="column" flexGrow={1}>
-      {/* Ink solo pinta fondos en Text, no en Box. Esta franja llena el ancho útil de
-          la columna y, junto con el borde azul de App, deja la sidebar inequívocamente
-          separada del transcript sin introducir escapes ANSI. */}
-      <Text backgroundColor={temaInk.fondoSidebar} color={temaInk.acento} bold>
-        {"  SESIÓN XONE".padEnd(38, " ")}
-      </Text>
+      {/* La barra abre por el proyecto; debajo va el logotipo XOne completo. Los intentos
+          de comprimirlo alteraban sus letras con esta fuente de terminal, así que la
+          versión de cinco filas es la única marca legible y estable. */}
       <Box flexDirection="column" marginBottom={1}>
+        <Text backgroundColor={temaInk.fondoSidebar} bold>{` ${d.proyecto}`.padEnd(38, " ")}</Text>
+        <Text color={temaInk.mudo}>{d.rama !== undefined ? `${d.ruta}:${d.rama}` : d.ruta}</Text>
         {LOGO_XONE.map((fila, i) => (
           <Text key={i} color={temaInk.acento}>{fila}</Text>
         ))}
       </Box>
-      {d.contexto > 0 ? (
+      {tokenIn > 0 || tokenOut > 0 || d.contexto > 0 ? (
         <Box flexDirection="column" marginBottom={1}>
-          <Text bold color={temaInk.acento}>Contexto</Text>
-          <Text>
-            {compacto(d.contexto)}
-            {pct !== undefined ? `/${formatearTope(d.tope!)} (${pct}%)` : " tokens"}
-          </Text>
+          <Text bold color={temaInk.acento}>Tokens</Text>
+          {tokenIn > 0 ? <Text>{`Token In  ${compacto(tokenIn)}`}</Text> : null}
+          {tokenOut > 0 ? <Text>{`Token Out  ${compacto(tokenOut)}`}</Text> : null}
+          {d.contexto > 0 ? (
+            <Text color={temaInk.mudo}>
+              {`Contexto  ${compacto(d.contexto)}`}
+              {pct !== undefined ? `/${formatearTope(d.tope!)} (${pct}%)` : " tokens"}
+            </Text>
+          ) : null}
         </Box>
       ) : null}
       <Box flexDirection="column">
@@ -92,10 +99,6 @@ export function Sidebar(d: DatosDeSidebar): ReactNode {
       {/* El separador elástico: lo estable vive al fondo, como en la maqueta. */}
       <Box flexGrow={1} />
       <Box flexDirection="column">
-        <Text>
-          <Text bold>{d.proyecto}</Text>
-          {d.rama !== undefined ? <Text color={temaInk.mudo}>{`:${d.rama}`}</Text> : null}
-        </Text>
         <Text>
           <Text color={temaInk.exito}>{"● "}</Text>
           <Text color={temaInk.mudo}>{`xonecode ${d.version}`}</Text>

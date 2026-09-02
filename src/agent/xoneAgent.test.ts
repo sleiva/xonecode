@@ -29,6 +29,12 @@ describe("promptDe", () => {
     expect(promptDe("dev", conSkills)).toMatch(/aprobación humana/);
   });
 
+  it("usa la fachada de memoria para tareas de proyecto sin exponer .xonecode", () => {
+    const p = promptDe("dev", conSkills);
+    expect(p).toContain("/MEMORIA_PROYECTO.md");
+    expect(p).not.toContain("/.xonecode/memoria.md");
+  });
+
   it("lleva las reglas duras de XOne, no solo su papel", () => {
     const p = promptDe("dev", conSkills);
     expect(p).toMatch(/no existen DOM/);

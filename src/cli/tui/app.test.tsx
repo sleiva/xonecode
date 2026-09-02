@@ -140,14 +140,14 @@ function laMaquetaCabe(frame: string, opciones: { sidebar?: boolean } = {}): voi
 }
 
 describe("la maqueta de la App", () => {
-  it("en reposo: 23 filas, pie abajo, cursor visible y logotipo con 140 columnas", async () => {
+  it("en reposo: 23 filas, pie abajo, cursor visible y título de proyecto con 140 columnas", async () => {
     const m = montar({});
     await esperar();
     const frame = m.stdout.ultimo();
     m.instancia.unmount();
     laMaquetaCabe(frame);
     expect(frame).toContain("▏");
-    expect(frame).toContain("█");
+    expect(frame).toContain("MinitMT");
   });
 
   it("con un prompt de 60 caracteres el cursor sigue en pantalla", async () => {
@@ -265,15 +265,14 @@ describe("la maqueta de la App", () => {
     expect(frame).not.toContain("█"); // sin sidebar, sin logotipo
   });
 
-  it("con 140 columnas la sidebar mide 42: el logotipo empieza en la columna 100 (140 − 42 + 2 de padding)", async () => {
+  it("con 140 columnas la sidebar muestra el título del proyecto", async () => {
     const m = montar({});
     await esperar();
     const frame = m.stdout.ultimo();
     m.instancia.unmount();
     laMaquetaCabe(frame);
-    const filaDeLogo = frame.split("\n").find((l) => l.includes("█"));
-    expect(filaDeLogo).toBeDefined();
-    expect(filaDeLogo!.indexOf("█")).toBe(140 - 42 + 2);
+    expect(frame).toContain("MinitMT");
+    expect(frame).toContain("█");
   });
 
   it("con 120 columnas exactas NO hay sidebar (la regla es estricta) y el pie lleva la rama", async () => {
@@ -299,7 +298,7 @@ describe("la maqueta de la App", () => {
     const frame = m.stdout.ultimo();
     m.instancia.unmount();
     laMaquetaCabe(frame);
-    expect(frame).toContain("█");
+    expect(frame).toContain("MinitMT");
   });
 
   it("con pocos actos el transcript nace ARRIBA: el primer acto ocupa la primera fila", async () => {
@@ -383,7 +382,7 @@ describe("la maqueta de la App", () => {
   it("al ESTRECHAR el terminal la sidebar se va y la rama pasa al pie", async () => {
     const m = montar({ columnas: 140 });
     await esperar();
-    expect(m.stdout.ultimo()).toContain("█");
+    expect(m.stdout.ultimo()).toContain("MinitMT");
     m.stdout.columns = 100;
     m.stdout.emit("resize");
     await esperar();

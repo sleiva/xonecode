@@ -1,8 +1,9 @@
 import { createDeepAgent } from "deepagents";
 import { MemorySaver } from "@langchain/langgraph";
-import { backendDelProyecto, sinVistasAplanadas } from "./proyecto.js";
+import { backendDelProyecto, exponerMemoriaDeProyecto, sinVistasAplanadas } from "./proyecto.js";
 import { PERFILES, permisosDe, hitlDe } from "./perfiles.js";
 import { middlewareTextoDeTool } from "./textoDeTool.js";
+import { resumenDeContexto } from "./resumenDeContexto.js";
 import { createTokenTrackingMiddleware, type TokenTracker } from "../vendor/tokenTracking.js";
 import type { SkillsPort, ModelosPort } from "../core/ports.js";
 
@@ -43,7 +44,10 @@ export const PROMPT_ORQUESTADOR = [
  * 4. **El HITL va en las tools de fichero**, que en la v1 son las que escriben.
  */
 export async function construirAgente(opciones: OpcionesDelAgente): Promise<unknown> {
-  const backend = sinVistasAplanadas(backendDelProyecto(opciones.raiz), opciones.ficheros);
+  const backend = sinVistasAplanadas(
+    exponerMemoriaDeProyecto(backendDelProyecto(opciones.raiz)),
+    opciones.ficheros
+  );
 
   // Si no hay tracker, no se añade el middleware: es opcional a propósito arriba.
   const middlewareTracker = opciones.tracker ? [createTokenTrackingMiddleware(opciones.tracker)] : [];
@@ -66,7 +70,9 @@ export async function construirAgente(opciones: OpcionesDelAgente): Promise<unkn
     interruptOn: hitlDe(perfil),
     // En CADA especialista, no solo en el orquestador: son ellos los que llaman a las
     // tools de fichero, así que es su siguiente llamada al modelo la que reventaba.
-    middleware: [middlewareTextoDeTool(), ...middlewareTracker],
+    // El nombre coincide con el middleware por defecto de DeepAgents y lo sustituye: así
+    // aplica tanto al especialista como al orquestador.
+    middleware: [resumenDeContexto(backend), middlewareTextoDeTool(), ...middlewareTracker],
     model: opciones.modelos.paraPapel(perfil.soloLectura ? "rapido" : "trabajo"),
   }));
 
@@ -79,7 +85,7 @@ export async function construirAgente(opciones: OpcionesDelAgente): Promise<unkn
     // revienta tras 8-10 tools con «Non string tool message content is not supported» —
     // y no es de langchain ni de deepagents, sino de `@langchain/ollama` (ver
     // `textoDeTool.ts`). Medido con dos modelos, nube y local.
-    middleware: [middlewareTextoDeTool(), ...middlewareTracker],
+    middleware: [resumenDeContexto(backend), middlewareTextoDeTool(), ...middlewareTracker],
     subagents: [
       ...subagentes,
       {
@@ -113,6 +119,15 @@ export function promptDe(nombre: string, skills: SkillsPort): string {
     "- La fuente de una colección es su `.xne`. Los `.xml` los genera Studio y no se tocan.",
     "- No inventes atributos XML, funciones ni propiedades CSS: XOne ignora lo desconocido",
     "  en silencio, así que un invento no da error — da un bug mudo.",
+    "",
+    nombre === "docs"
+      ? ""
+      : "Para una tarea sobre este proyecto, lee una sola vez `/MEMORIA_PROYECTO.md` antes de inspeccionarlo. " +
+        "No la uses para preguntas generales de plataforma.",
+    perfil.soloLectura || nombre === "docs"
+      ? ""
+      : "Al terminar trabajo relevante, actualiza esa memoria solo con hechos comprobados, decisiones aprobadas " +
+        "o pendientes útiles. Nunca copies transcripciones, salidas de tools, secretos ni ficheros completos.",
     "",
     suyas.length ? `Tus skills: ${suyas.join(", ")}. Cárgalas antes de responder.` : "",
     // Patrón 4: un doble nunca se disfraza. Si falta una skill, se dice — no se calla.

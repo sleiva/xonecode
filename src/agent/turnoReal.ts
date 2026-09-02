@@ -14,6 +14,7 @@ import type { ModelosPort, SkillsPort } from "../core/ports.js";
 import type { Entorno } from "./entorno.js";
 import { tomarInstantanea, type Instantanea, type Cambio } from "./instantanea.js";
 import { construirAgente } from "./xoneAgent.js";
+import { asegurarMemoriaDeProyecto } from "./memoriaDeProyecto.js";
 import { aEventos } from "./puente.js";
 import { createTokenTracker, type TokenTracker } from "../vendor/tokenTracking.js";
 
@@ -101,6 +102,10 @@ export async function abrirSesionReal(opciones: {
   ) => Promise<Map<string, Decision>>;
 }): Promise<SesionReal> {
   const { raiz, entorno } = opciones;
+
+  // Persiste fuera del checkpointer (que es solo de la sesión), pero no sobrescribe nunca
+  // una memoria ya creada por el usuario o por otra sesión.
+  asegurarMemoriaDeProyecto(raiz);
 
   const checkpointer = new MemorySaver();
   const tracker = createTokenTracker();

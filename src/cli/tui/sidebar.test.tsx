@@ -11,6 +11,16 @@ import { Box } from "ink";
 import { Sidebar, BarraDeEstado, pie, cabeSidebar, ANCHO_DE_SIDEBAR } from "./sidebar.js";
 
 describe("sidebar", () => {
+  it("hace observable el coste acumulado como Token In y Token Out", () => {
+    const { lastFrame } = render(
+      <Sidebar contexto={25_700} tokenIn={41_200} tokenOut={3_600} tope={200_000} modelo="ollama/glm" modelosPorPapel={{}} proyecto="MinitMT" ruta="/dev/MinitMT" version="0.3.0" />
+    );
+    const salida = lastFrame() ?? "";
+    expect(salida).toContain("Token In  41.2K");
+    expect(salida).toContain("Token Out  3.6K");
+    expect(salida).toContain("Contexto  25.7K/200K (13%)");
+  });
+
   it("enseña contexto con porcentaje SOLO si hay tope", () => {
     const { lastFrame } = render(
       <Sidebar contexto={25700} tope={200_000} modelo="ollama/glm" modelosPorPapel={{ rapido: "ollama/rapido" }} proyecto="MinitMT" ruta="/dev/MinitMT" rama="main" version="0.3.0" />
@@ -68,14 +78,18 @@ describe("sidebar", () => {
     expect(salida.split("ollama/glm").length - 1).toBe(1);
   });
 
-  it("el logotipo XONE se pinta siempre: si hay sidebar, cabe (la regla de anchura es de App)", () => {
+  it("abre con el título de proyecto y el logotipo XOne completo, que es legible", () => {
     const { lastFrame } = render(
       <Sidebar contexto={0} modelo="m" modelosPorPapel={{}} proyecto="p" ruta="/p" version="0" />
     );
-    expect(lastFrame() ?? "").toContain("█");
+    const salida = lastFrame() ?? "";
+    expect(salida).toContain("p");
+    expect(salida.split("\n").filter((linea) => linea.includes("█"))).toHaveLength(5);
+    expect(salida).toContain("█   █  █████  █   █  █████");
+    expect(salida).toContain("  █    █   █  █ █ █  ████");
   });
 
-  it("lo estable (proyecto:rama, versión) queda anclado al fondo de la columna", () => {
+  it("la versión queda anclada al fondo de la columna", () => {
     const { lastFrame } = render(
       <Box height={20} flexDirection="column">
         <Sidebar contexto={0} modelo="ollama/glm" modelosPorPapel={{}} proyecto="MinitMT" ruta="/dev/MinitMT" rama="main" version="0.3.0" />
@@ -85,9 +99,9 @@ describe("sidebar", () => {
     expect(lineas).toHaveLength(20);
     const llenas = lineas.filter((l) => l.trim() !== "");
     expect(llenas.at(-1)).toContain("xonecode 0.3.0");
-    expect(llenas.at(-2)).toContain("MinitMT:main");
-    // Y hay hueco entre las secciones y el pie: el anclaje es real, no un margen fijo.
-    expect(lineas.at(-3)?.trim()).toBe("");
+    // El título vive arriba, como OpenCode; el hueco antes del pie demuestra que el
+    // anclaje es elástico, no un margen fijo.
+    expect(lineas.at(-2)?.trim()).toBe("");
   });
 
   it("sin rama, el pie enseña solo el proyecto", () => {

@@ -51,9 +51,9 @@ export function ventanaDe<T extends Acto>(actos: readonly T[], altura: number, d
   return actos.slice(inicio, fin);
 }
 
-/** El desfase tras moverse `delta` actos, acotado a [0, total]: no salirse del transcript. */
+/** El desfase tras moverse `delta` actos, acotado sin vaciar nunca el transcript. */
 export function moverDesfase(desfase: number, total: number, delta: number): number {
-  return Math.min(Math.max(0, desfase + delta), total);
+  return Math.min(Math.max(0, desfase + delta), Math.max(0, total - 1));
 }
 
 /** El color de un segmento inline. Pura: los tests no ven color, y esta decisión sí se prueba. */
@@ -116,32 +116,21 @@ function LineaMarkdown({
     // Hermanos Text dentro del Box del acto: contenido estático, sin inserciones
     // que desmidan (la trampa de ink 5.2.1).
     const cabecera = tabla.rol === "cabecera";
-    const celdas = tabla.celdas.flatMap((celda, j) => [
-      ...(j === 0
-        ? []
-        : [
-            <Text key={`a${j}`}>{" "}</Text>,
-            <Text key={`b${j}`} color={temaInk.tenue}>{"│"}</Text>,
-            <Text key={`c${j}`}>{" "}</Text>,
-          ]),
-      ...segmentosDe(celda).map((seg, k) => (
-        <Text
-          key={`${j}-${k}`}
-          bold={cabecera || seg.estilo === "negrita"}
-          color={cabecera ? temaInk.negrita : colorDeSegmento(seg.estilo)}
-        >
-          {seg.texto}
-        </Text>
-      )),
-    ]);
-    // La fila va en un Box `row` explícito: los Text hermanos sueltos caerían en la
-    // columna del acto (uno por línea) — así comparten fila y el grid no se parte.
+    // Una fila NO puede depender de los espacios al final de un Text: Ink los recorta
+    // al medir y el borde derecho acaba justo tras el contenido, distinto en cada fila.
+    // Cada celda es una caja de ancho fijo (texto + dos márgenes), como TextTable de
+    // OpenTUI; el separador queda por tanto en la misma columna siempre.
     const fila = (
-      <Box flexDirection="row">
+      <Box flexDirection="row" flexShrink={0}>
         <Text color={temaInk.tenue}>{"│"}</Text>
-        <Text>{" "}</Text>
-        {celdas}
-        <Text>{" "}</Text>
+        {tabla.celdas.flatMap((celda, j) => [
+          <Box key={`celda-${j}`} width={(tabla.anchos[j] ?? 0) + 2} paddingLeft={1} paddingRight={1} flexShrink={0}>
+            <Text bold={cabecera} color={cabecera ? temaInk.negrita : undefined} wrap="truncate-end">
+              <Segmentos texto={celda.trimEnd()} />
+            </Text>
+          </Box>,
+          ...(j === tabla.celdas.length - 1 ? [] : [<Text key={`borde-${j}`} color={temaInk.tenue}>{"│"}</Text>]),
+        ])}
         <Text color={temaInk.tenue}>{"│"}</Text>
       </Box>
     );
@@ -348,7 +337,12 @@ export function Transcript({
     if (tecla.pageDown) setDesfase((d) => moverDesfase(d, estado.actos.length, -PASO_DE_PAGINA));
   });
 
-  const visibles = ventanaDe(estado.actos, altura, desfase);
+  // `altura` es la altura física del panel, pero un acto no equivale a una fila: una
+  // tarjeta ocupa tres, una tabla varias y el markdown puede envolver. Recortar con
+  // `ventanaDe(..., altura)` mezclaba ambas unidades y daba saltos al hacer scroll.
+  // Dejamos que Ink recorte por altura REAL; al subir, solo quitamos del final los actos
+  // más nuevos para que el borde inferior de la ventana se desplace hacia el pasado.
+  const visibles = estado.actos.slice(0, Math.max(0, estado.actos.length - desfase));
 
   // El cerco es estado GLOBAL de la conversación: una ventana que empiece a mitad de un
   // cerco abierto tiene que saberlo. Un pase sobre TODOS los actos asistente (en orden,
@@ -359,7 +353,10 @@ export function Transcript({
     .filter((a): a is Extract<Acto, { tipo: "asistente" }> => a.tipo === "asistente")
     .map((a) => a.texto);
   const estados = estadosDeCerco(textosAsistente);
-  const tablas = contextoDeTabla(textosAsistente, ancho);
+  // Cada respuesta se pinta con dos columnas de sangría (igual que OpenCode). La
+  // tabla ha de repartir sus columnas con ESE ancho útil: calcularla con `ancho`
+  // exterior hacía que su borde derecho se envolviera dentro del bloque.
+  const tablas = contextoDeTabla(textosAsistente, Math.max(3, ancho - 2));
   const cercoDeActo = new Map<Acto, boolean>();
   const tablaDeActo = new Map<Acto, LineaDeTabla>();
   let i = 0;
@@ -390,16 +387,15 @@ export function Transcript({
           lo viejo, que es lo que se puede perder. */}
       {visibles.map((acto, i) => {
         const esRespuesta = acto.tipo === "asistente";
-        // La separación se reserva al salto desde la tarjeta del usuario: es donde
-        // empieza una respuesta nueva. Durante el streaming las líneas siguen juntas
-        // y el bloque no se infla al llegar cada token.
-        const empiezaRespuesta = esRespuesta && visibles[i - 1]?.tipo === "usuario";
+        // OpenCode separa cada parte de texto, no cada línea: el streaming sigue unido,
+        // pero al llegar desde una tarjeta, herramientas o sistema respira una fila.
+        const empiezaRespuesta = esRespuesta && i > 0 && visibles[i - 1]?.tipo !== "asistente";
         const contenido = (
           <ActoVista
             acto={acto}
             previo={i > 0 ? visibles[i - 1] : undefined}
-            // La guía y su sangría ocupan dos columnas. Las tablas y separadores se
-            // calculan con el ancho útil para que nunca empujen la columna derecha.
+            // La sangría ocupa dos columnas. Las tablas y separadores se calculan con
+            // el ancho útil para que nunca empujen la columna derecha.
             ancho={esRespuesta ? Math.max(3, ancho - 2) : ancho}
             enCerco={cercoDeActo.get(acto) ?? false}
             tabla={tablaDeActo.get(acto)}
@@ -408,12 +404,12 @@ export function Transcript({
         return (
           <Box key={`${i}-${acto.tipo}`} flexShrink={0} flexDirection="column">
             {esRespuesta ? (
-              // Una respuesta de streaming llega línea a línea. La barra común y el
-              // aire al salir de la tarjeta del usuario la convierten visualmente en
-              // una unidad legible, sin desperdiciar una fila entre cada línea.
+              // Como OpenCode, una respuesta es Markdown sangrado y con aire antes del
+              // bloque, no una sucesión de barras de color. Las líneas del streaming
+              // permanecen juntas y siguen leyéndose como una sola respuesta.
               <Box
                 flexDirection="column"
-                {...barra(temaInk.respuesta)}
+                paddingLeft={2}
                 marginTop={empiezaRespuesta ? 1 : 0}
               >
                 {contenido}

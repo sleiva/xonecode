@@ -271,6 +271,8 @@ export function crearConsolaTui(opciones: OpcionesDeConsolaTui) {
     const tope = topeDe?.(modeloTrabajo);
     return {
       contexto: tracker.contexto,
+      tokenIn: tracker.input,
+      tokenOut: tracker.output,
       // Un tope 0 es un tope que no se sabe: porcentaje sobre cero es NaN, así que no
       // hay tope — la regla «porcentaje SOLO con tope» de core/contextos.ts.
       tope: tope !== undefined && tope > 0 ? tope : undefined,
