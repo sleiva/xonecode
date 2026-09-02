@@ -16,9 +16,9 @@ import { crearStore } from "./store.js";
 
 const esperar = (): Promise<void> => new Promise((r) => setTimeout(r, 10));
 
-/** Diez actos tool numerados, para hablar de la ventana por su contenido. */
-const diez = (): { tipo: "tool"; texto: string }[] =>
-  Array.from({ length: 10 }, (_, i) => ({ tipo: "tool", texto: `t${i}` }));
+/** Diez actos de sistema numerados, para hablar de la ventana por su contenido. */
+const diez = (): { tipo: "sistema"; texto: string }[] =>
+  Array.from({ length: 10 }, (_, i) => ({ tipo: "sistema", texto: `t${i}` }));
 
 describe("la ventana pura del transcript", () => {
   it("sin desfase toma los ÚLTIMOS actos que caben", () => {
@@ -54,7 +54,7 @@ describe("el transcript pintado", () => {
 
   it("con más actos que altura, la ventana vive al fondo", () => {
     const s = crearStore();
-    for (let i = 0; i < 30; i++) s.linea(`línea ${i}`);
+    for (let i = 0; i < 30; i++) s.linea(`línea ${i}`, "sistema");
     const { lastFrame } = render(<Transcript store={s} altura={5} />);
     expect(lastFrame()).toContain("línea 29");
     expect(lastFrame()).not.toContain("línea 0\n");
@@ -100,7 +100,7 @@ describe("el transcript pintado", () => {
 
   it("PageUp sube la ventana y un acto nuevo la reancla al fondo", async () => {
     const s = crearStore();
-    for (let i = 0; i < 30; i++) s.linea(`línea ${i}`);
+    for (let i = 0; i < 30; i++) s.linea(`línea ${i}`, "sistema");
     const instancia = render(<Transcript store={s} altura={5} />);
     // Un tick antes de teclear: los efectos de Ink (el cable de useInput) se asientan
     // después del primer frame, y una tecla anterior se perdería en el stdin falso.
@@ -110,10 +110,35 @@ describe("el transcript pintado", () => {
     expect(instancia.lastFrame()).toContain("línea 19");
     expect(instancia.lastFrame()).not.toContain("línea 29");
     // Lo nuevo manda: la ventana vuelve al fondo sin que el usuario pida nada.
-    s.linea("acto nuevo");
+    s.linea("acto nuevo", "sistema");
     await esperar();
     expect(instancia.lastFrame()).toContain("línea 29");
     expect(instancia.lastFrame()).toContain("acto nuevo");
+  });
+
+  it("el grupo de herramientas: una fila de aire encima, las ÚLTIMAS 4 líneas y cuántas hay antes", () => {
+    const s = crearStore();
+    s.linea("Delego en el planner:", "asistente");
+    for (let i = 0; i < 7; i++) s.linea(`→ lee /f${i}`);
+    const { lastFrame } = render(<Transcript store={s} altura={20} />);
+    const lineas = (lastFrame() ?? "").split("\n");
+    expect(lineas[0]).toContain("Delego en el planner:");
+    expect(lineas[1]!.trim()).toBe(""); // el aire que separa el grupo del texto
+    expect(lineas[2]).toContain("… 3 pasos antes");
+    expect(lineas[3]).toContain("→ lee /f3");
+    expect(lineas[6]).toContain("→ lee /f6");
+    expect(lastFrame()).not.toContain("/f2");
+    // Sangría: el paisaje va metido, la conversación no.
+    expect(lineas[3]!.startsWith("  ")).toBe(true);
+  });
+
+  it("un grupo de 4 o menos no dice «pasos antes»", () => {
+    const s = crearStore();
+    for (let i = 0; i < 4; i++) s.linea(`→ lee /f${i}`);
+    const salida = render(<Transcript store={s} altura={20} />).lastFrame() ?? "";
+    expect(salida).not.toContain("pasos antes");
+    expect(salida).toContain("/f0");
+    expect(salida).toContain("/f3");
   });
 
   it("el bloque de usuario ocupa UNA fila: barra izquierda, sin borde arriba ni abajo", () => {
@@ -132,7 +157,7 @@ describe("el transcript pintado", () => {
   it("con pocos actos el transcript llena la altura del padre y el contenido nace ARRIBA", () => {
     const s = crearStore();
     s.usuario("hola");
-    s.linea("→ x");
+    s.linea("→ x", "sistema");
     // La altura la pone el PADRE: el transcript es elástico (`flexGrow`), porque en la
     // App es la única pieza que cede. Ocupa las 10 filas y, como en OpenCode, el
     // contenido se apoya arriba: el hueco queda entre la conversación y la Entrada. El
@@ -151,7 +176,7 @@ describe("el transcript pintado", () => {
 
   it("cuando NO cabe, el recorte sigue siendo por arriba: lo nuevo se ve, lo viejo se pierde", () => {
     const s = crearStore();
-    for (let i = 0; i < 20; i++) s.linea(`línea ${i}`);
+    for (let i = 0; i < 20; i++) s.linea(`línea ${i}`, "sistema");
     const { lastFrame } = render(
       <Box height={5} flexDirection="column">
         <Transcript store={s} altura={20} />

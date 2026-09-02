@@ -25,9 +25,9 @@ describe("la consola TUI", () => {
     piel.fase!("planificando");
     piel.linea("→ lee app.xne");
     const vistos = actos();
-    // `escribir` es sistema y `piel.linea` es tool — tipos distintos, el MISMO store.
+    // `escribir` es sistema y `piel.linea` es tool (grupo «herramientas») — tipos distintos, el MISMO store.
     expect(vistos.some((a) => a.tipo === "sistema" && a.texto.includes("hola"))).toBe(true);
-    expect(vistos.some((a) => a.tipo === "tool" && a.texto.includes("app.xne"))).toBe(true);
+    expect(vistos.some((a) => a.tipo === "herramientas" && a.lineas.some((l) => l.includes("app.xne")))).toBe(true);
     expect(vistos.some((a) => a.tipo === "fase")).toBe(true);
 
     // aprobar por defecto: fail-closed sin modal montado.

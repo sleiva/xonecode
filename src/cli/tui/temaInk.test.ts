@@ -15,8 +15,9 @@ describe("temaInk", () => {
     // no comparte — y un token nuevo de tema.ts podría quedarse sin espejo sin
     // que nadie lo vea. Las de TUI son de LAYOUT/pantalla, no de significado:
     // `acento` y `borde` pintan cajas, `fondoInput` es el fondo del cuadro de entrada,
-    // `marca` es la barra izquierda de los bloques y `fase` el color de «+ fase: Ns».
-    const soloTui = ["acento", "borde", "fondoInput", "marca", "fase"];
+    // `marca` es la barra izquierda de los bloques, `fase` el color de «+ fase: Ns» y
+    // `tenue` el gris de las herramientas, por debajo de `mudo`.
+    const soloTui = ["acento", "borde", "fondoInput", "marca", "fase", "tenue"];
     const conocidas = new Set(Object.keys(crearTema(true)));
     for (const clave of Object.keys(temaInk)) {
       expect(conocidas.has(clave) || soloTui.includes(clave), `token «${clave}» de temaInk`).toBe(true);
@@ -34,5 +35,11 @@ describe("temaInk", () => {
     expect(temaInk.prompt).toBe("#2ac4ea");
     expect(temaInk.marca).toBe("#00396f");
     expect(temaInk.fase).toBe("#e0a458");
+  });
+
+  it("tenue es un gris más apagado que mudo: las herramientas son paisaje, no conversación", () => {
+    expect(temaInk.tenue).toMatch(/^#[0-9a-f]{6}$/);
+    const luz = (hex: string): number => parseInt(hex.slice(1, 3), 16) + parseInt(hex.slice(3, 5), 16) + parseInt(hex.slice(5, 7), 16);
+    expect(luz(temaInk.tenue)).toBeLessThan(luz(temaInk.mudo));
   });
 });

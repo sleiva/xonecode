@@ -73,6 +73,15 @@ aserción de «hex» se mantiene para los cuatro.
   Cada fila va en un Box con `flexShrink 0`: si las filas encogen, Ink reparte el recorte
   entre todas y las redondea sobre las mismas líneas, y se pierden actos del MEDIO en vez
   de los de arriba (medido: 10 actos en 5 filas pintaban «c1 c3 c5 c7 c9»).
+- **Herramientas (añadido el 2026-09-02):** las líneas de tool consecutivas de un turno
+  forman UN acto `{ tipo: "herramientas"; lineas }` en el store (una línea del asistente o
+  de sistema cierra el grupo). El cierre de racha del colapsador del motor («→ lee ×3 — …»)
+  SUSTITUYE a la apertura de la misma racha (`conLineaDeTool`, pura): el colapsador escribe
+  las dos porque stdio solo añade, y en la TUI serían ruido duplicado. Se pinta con una fila
+  de aire encima, «… N pasos antes» si hay más de `LINEAS_DE_HERRAMIENTAS = 4`, y las
+  últimas 4 en `tenue` (`#52525b`, por debajo de `mudo`), con sangría y truncadas a la
+  anchura: una línea de tool es UNA fila, nunca envuelve. Como mucho 6 filas por grupo. El
+  acto `tool` de una línea desaparece; `linea(texto, "tool")` sigue siendo la API.
 - `usuario`: `<Box borderStyle="single" borderLeft borderTop={false} borderRight={false}
   borderBottom={false} borderLeftColor={temaInk.marca} paddingLeft={1}>` con el texto
   dentro. Una fila por acto. Se retira el `❯ ` de delante.

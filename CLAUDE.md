@@ -102,6 +102,12 @@ byte-idéntico. El modal de aprobación (`cli/tui/aprobarTui.tsx`) es fail-close
 `exitOnCtrlC: false` (`cli/tui/correrTui.ts`) porque Ctrl-C tiene significado aquí: cancelar el
 turno (un punto de cancelación en la piel, con rearme por turno) o rechazar en el modal.
 
+**Las líneas de tool en la TUI son un grupo, no actos** (`cli/tui/store.ts`): las consecutivas
+de un turno viven en un acto `herramientas` que el transcript pinta como sus últimas 4 líneas
+en gris tenue, truncadas a una fila, más «… N pasos antes». El colapsador del motor
+(`core/notify.ts`) escribe apertura Y cierre de cada racha porque stdio solo añade; el store
+de la TUI sustituye la apertura por el cierre. stdio no cambia: es la piel la que decide.
+
 **La maqueta de la TUI tiene una sola pieza elástica** (`cli/tui/app.tsx`). La fila de dos
 columnas mide `rows - 1` (`FILA_DE_RESERVA`), porque Ink borra el terminal entero y repinta el
 frame completo cuando la salida alcanza `stdout.rows` — con la fila a `rows` eso pasaría en cada

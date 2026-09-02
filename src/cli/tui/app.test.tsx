@@ -194,7 +194,7 @@ describe("la maqueta de la App", () => {
     await esperar();
     // El transcript se llena por el store y no por el teclado: son actos del agente, no
     // teclas — el camino real por el que se desborda.
-    for (let i = 0; i < 40; i++) m.store.linea(`línea ${i}`);
+    for (let i = 0; i < 40; i++) m.store.linea(`línea ${i}`, "sistema");
     m.store.token("streaming en curso sin salto de línea");
     await esperar();
     const frame = m.stdout.ultimo();
@@ -210,7 +210,7 @@ describe("la maqueta de la App", () => {
     // redondeaba sobre las mismas: se perdían actos del medio y el colchón del final.
     const m = montar({ completa: () => [["/config", "/conectar", "/conectar2"], "/con"] });
     await esperar();
-    for (let i = 0; i < 40; i++) m.store.linea(`línea ${i}`);
+    for (let i = 0; i < 40; i++) m.store.linea(`línea ${i}`, "sistema");
     m.store.token("streaming vivo");
     m.stdin.write("/con");
     await esperar();
@@ -233,7 +233,7 @@ describe("la maqueta de la App", () => {
     const m = montar({});
     await esperar();
     m.vista.mutar({ ocupado: true });
-    for (let i = 0; i < 40; i++) m.store.linea(`línea ${i}`);
+    for (let i = 0; i < 40; i++) m.store.linea(`línea ${i}`, "sistema");
     await esperar();
     const frame = m.stdout.ultimo();
     m.instancia.unmount();
@@ -308,6 +308,25 @@ describe("la maqueta de la App", () => {
     const lineas = frame.split("\n");
     expect(lineas[0]).toContain("hola");
     expect(lineas[1]).toContain("respuesta corta");
+  });
+
+  it("40 líneas de tool en un turno ocupan como mucho 5 filas y no esconden el texto del asistente", async () => {
+    // Lo que se veía en el terminal: el transcript inundado de «lee /x» hasta echar la
+    // tarjeta fuera. Las tools son paisaje: un grupo, las últimas 4 y la cuenta.
+    const m = montar({});
+    await esperar();
+    m.store.usuario("hazme un diagrama");
+    m.store.linea("Voy a inspeccionar el proyecto. Delego en el planner:", "asistente");
+    for (let i = 0; i < 40; i++) m.store.linea(`→ lee /fichero_${i}.xne`);
+    await esperar();
+    const frame = m.stdout.ultimo();
+    m.instancia.unmount();
+    laMaquetaCabe(frame);
+    expect(frame).toContain("hazme un diagrama");
+    expect(frame).toContain("Delego en el planner");
+    expect(frame).toContain("… 36 pasos antes");
+    expect(frame).toContain("/fichero_39.xne");
+    expect((frame.match(/→ lee/g) ?? []).length).toBe(4);
   });
 
   it("al ESTRECHAR el terminal la sidebar se va y la rama pasa al pie", async () => {

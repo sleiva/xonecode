@@ -23,6 +23,9 @@ type Store = ReturnType<typeof crearStore>;
 /** Cuántos actos salta una pulsación: una página de lectura, no un acto. */
 const PASO_DE_PAGINA = 10;
 
+/** Cuántas líneas de un grupo de herramientas se enseñan: las últimas. Medido con el usuario: 4. */
+export const LINEAS_DE_HERRAMIENTAS = 4;
+
 /**
  * Los actos visibles: los ÚLTIMOS `altura`, subidos `desfase` hacia arriba.
  *
@@ -102,8 +105,24 @@ function ActoVista({ acto }: { acto: Acto }): ReactNode {
       );
     case "error":
       return <Text color={temaInk.grave}>{acto.texto}</Text>;
+    case "herramientas": {
+      // Paisaje: una fila de aire que lo separe del texto, la cuenta de lo que no se ve y
+      // las ÚLTIMAS líneas, en tenue, con sangría y truncadas a la anchura — una línea
+      // de tool es UNA fila, nunca envuelve (un patrón de grep puede medir 200 columnas).
+      const sobran = acto.lineas.length - LINEAS_DE_HERRAMIENTAS;
+      const ultimas = acto.lineas.slice(-LINEAS_DE_HERRAMIENTAS);
+      return (
+        <>
+          <Text>{" "}</Text>
+          {sobran > 0 ? <Text color={temaInk.tenue}>{`  … ${sobran} pasos antes`}</Text> : null}
+          {ultimas.map((linea, i) => (
+            <Text key={i} color={temaInk.tenue} wrap="truncate-end">{`  ${linea}`}</Text>
+          ))}
+        </>
+      );
+    }
     default:
-      // tool y sistema: mudo e indentados — son el paisaje, no la conversación.
+      // sistema: mudo e indentado — un aviso, no la conversación.
       return <Text color={temaInk.mudo}>{`  ${acto.texto}`}</Text>;
   }
 }
