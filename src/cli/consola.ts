@@ -461,7 +461,7 @@ export const COMANDOS: Record<string, { descripcion: string; manejador: Manejado
     manejador: manejadorDeModelo("afilado"),
   },
   modelos: {
-    descripcion: "elige un modelo del catálogo de un proveedor: /modelos <proveedor>",
+    descripcion: "elige un modelo del catálogo de un proveedor y lo guarda globalmente: /modelos <proveedor>",
     manejador: elegirModelo,
   },
   hilo: {

@@ -17,3 +17,10 @@ Comando ejecutado correctamente: `npm test && npm run typecheck && npm run build
 - `npm run typecheck`: pasa.
 - `npm run build`: pasa.
 - `git diff --check`: pasa.
+
+## Ajuste posterior
+
+- La descripción de `COMANDOS.modelos` ahora indica explícitamente en `/ayuda` que la
+  selección se guarda globalmente, conservando la sintaxis `/modelos <proveedor>`.
+- El test existente de `/ayuda` ya verifica automáticamente la descripción de cada comando;
+  no fue necesario añadir otro test.
