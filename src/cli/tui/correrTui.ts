@@ -18,6 +18,8 @@ import type { Papel } from "../../core/ports.js";
 import type { Piel } from "../../core/turno.js";
 import { ficherosDelProyecto, type SesionReal } from "../../agent/turnoReal.js";
 import { inspeccionar } from "../../agent/entorno.js";
+import { CatalogoModelos } from "../../agent/catalogoModelos.js";
+import { guardarModeloGlobal } from "../../agent/configEnDisco.js";
 import {
   correrConsola,
   crearCompleter,
@@ -217,6 +219,8 @@ export function crearConsolaTui(opciones: OpcionesDeConsolaTui) {
         };
       },
     },
+    catalogoModelos: new CatalogoModelos(),
+    guardarModeloGlobal,
     escribir: (texto) => {
       // El guard cubre whitespace, no solo la cadena vacía: un `escribir("\n")`
       // (la forma de «línea sin contenido») partía en un acto sistema vacío.

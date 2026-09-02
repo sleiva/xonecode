@@ -14,7 +14,7 @@ import { cmdDoctor } from "./doctor.js";
 import { cmdVerify } from "./verify.js";
 import { type FuentesDeEleccion, ModeloMalEscrito, parsear, resolver } from "../core/modelos.js";
 import { topeResuelto } from "../core/contextos.js";
-import { cargar } from "../agent/configEnDisco.js";
+import { cargar, guardarModeloGlobal } from "../agent/configEnDisco.js";
 import {
   COMANDOS,
   correrConsola,
@@ -29,6 +29,7 @@ import { pedirDecisiones } from "./aprobar.js";
 import { inspeccionar } from "../agent/entorno.js";
 import { SkillsEnDisco } from "../agent/skills.js";
 import { Modelos } from "../agent/modelos.js";
+import { CatalogoModelos } from "../agent/catalogoModelos.js";
 import { abrirSesionReal, ficherosDelProyecto, type SesionReal } from "../agent/turnoReal.js";
 import { crearProyecto } from "../agent/crearProyecto.js";
 import { type DatosDelProyecto } from "../core/esqueleto.js";
@@ -561,6 +562,8 @@ export async function entrarEnConsola(
     preguntar: crearPreguntar(rl),
     interactivo,
     leerSecreto: crearLeerSecreto(rl),
+    catalogoModelos: new CatalogoModelos(),
+    guardarModeloGlobal,
   };
 
   // El asistente de creación: la única escritura fuera de un turno del agente, y
