@@ -1,5 +1,6 @@
 node_modules/
 dist/
+.worktrees/
 # Configuración y CREDENCIALES locales. `auth.json` va con modo 0600 en el HOME del
 # usuario, nunca en un proyecto — pero si alguien crea un `.xonecode/` aquí, no se sube.
 .xonecode/
