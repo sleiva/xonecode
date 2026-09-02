@@ -1,0 +1,47 @@
+{
+  "planPath": "docs/superpowers/plans/2026-09-02-catalogo-modelos-proveedores.md",
+  "tasks": [
+    {
+      "id": 1,
+      "subject": "Task 1: Contrato de catálogo offline",
+      "status": "pending",
+      "description": "**Goal:** Definir en core el catálogo normalizado y un doble determinista que permita a toda la CLI probarse sin red.\n\n**Files:**\n- Modify: src/core/ports.ts\n- Modify: src/core/ports.test.ts\n\n**Acceptance Criteria:**\n- ModeloDisponible contiene proveedor, id, nombre? y contexto? sin HTTP ni LangChain.\n- CatalogoModelosPort.listar(proveedor) devuelve Promise<ModeloDisponible[]>.\n- El doble lleva ES_DOBLE y devuelve la lista inyectada o [].\n- La frontera de core continúa pasando.\n\n**Verify:** npx vitest run src/core/ports.test.ts src/core/imports.test.ts → PASS sin red.\n\n```json:metadata\n{\"files\":[\"src/core/ports.ts\",\"src/core/ports.test.ts\"],\"verifyCommand\":\"npx vitest run src/core/ports.test.ts src/core/imports.test.ts\",\"acceptanceCriteria\":[\"Puerto puro y doble marcado\",\"Prueba de frontera core verde\"],\"modelTier\":\"mechanical\"}\n```"
+    },
+    {
+      "id": 2,
+      "subject": "Task 2: Adaptadores de catálogo vivo",
+      "status": "pending",
+      "blockedBy": [1],
+      "description": "**Goal:** Implementar en agent un adaptador HTTP inyectable que normalice los catálogos reales y excluya recursos no conversacionales.\n\n**Files:**\n- Create: src/agent/catalogoModelos.ts\n- Create: src/agent/catalogoModelos.test.ts\n- Modify: src/agent/modelos.ts\n\n**Acceptance Criteria:**\n- Consulta las cuatro APIs con sus cabeceras, paginación y capacidad correspondiente.\n- Excluye recursos no conversacionales y no filtra claves ni body remoto.\n- Comparte la URL de Ollama con Modelos.\n- Las pruebas usan fetch inyectado.\n\n**Verify:** npx vitest run src/agent/catalogoModelos.test.ts src/core/imports.test.ts → PASS sin conexiones.\n\n```json:metadata\n{\"files\":[\"src/agent/catalogoModelos.ts\",\"src/agent/catalogoModelos.test.ts\",\"src/agent/modelos.ts\"],\"verifyCommand\":\"npx vitest run src/agent/catalogoModelos.test.ts src/core/imports.test.ts\",\"acceptanceCriteria\":[\"Respuestas reales normalizadas mediante fixtures\",\"Sin fuga de claves ni red de test\"],\"modelTier\":\"standard\"}\n```"
+    },
+    {
+      "id": 3,
+      "subject": "Task 3: Persistencia global atómica",
+      "status": "pending",
+      "blockedBy": [1],
+      "description": "**Goal:** Guardar una elección de papel en ~/.xonecode/config.json sin perder configuración existente ni dejar un fichero parcialmente escrito.\n\n**Files:**\n- Modify: src/agent/configEnDisco.ts\n- Modify: src/agent/configEnDisco.test.ts\n\n**Acceptance Criteria:**\n- guardarModeloGlobal valida proveedor/modelo y modifica solo modelos.<papel>.\n- Conserva campos crudos y no pisa JSON inválido.\n- Usa sustitución atómica en el mismo directorio.\n\n**Verify:** npx vitest run src/agent/configEnDisco.test.ts src/core/config.test.ts → PASS.\n\n```json:metadata\n{\"files\":[\"src/agent/configEnDisco.ts\",\"src/agent/configEnDisco.test.ts\"],\"verifyCommand\":\"npx vitest run src/agent/configEnDisco.test.ts src/core/config.test.ts\",\"acceptanceCriteria\":[\"Fusión preserva contenido existente\",\"JSON inválido queda byte a byte intacto\"],\"modelTier\":\"mechanical\"}\n```"
+    },
+    {
+      "id": 4,
+      "subject": "Task 4: Flujo interactivo de /modelos",
+      "status": "pending",
+      "blockedBy": [2, 3],
+      "description": "**Goal:** Añadir al registro único el flujo de catálogo, filtro, selección, papel y actualización de sesión.\n\n**Files:**\n- Modify: src/cli/consola.ts\n- Modify: src/cli/consola.test.ts\n- Modify: src/cli/acuseDeModelo.ts solo si hace falta una variante individual\n\n**Acceptance Criteria:**\n- Ayuda, Tab y menú muestran /modelos desde COMANDOS.\n- Lista, filtra, cancela, selecciona número y papel.\n- Persiste globalmente y cambia la sesión solo sin fuente eclipsante.\n- Provider conserva su flujo secreto.\n\n**Verify:** npx vitest run src/cli/consola.test.ts src/cli/main.test.ts src/cli/tui/entrada.test.tsx → PASS.\n\n```json:metadata\n{\"files\":[\"src/cli/consola.ts\",\"src/cli/consola.test.ts\",\"src/cli/acuseDeModelo.ts\"],\"verifyCommand\":\"npx vitest run src/cli/consola.test.ts src/cli/main.test.ts src/cli/tui/entrada.test.tsx\",\"acceptanceCriteria\":[\"Selección completa por catálogo falso\",\"Cancelación y precedencia preservan estado\"],\"modelTier\":\"standard\"}\n```"
+    },
+    {
+      "id": 5,
+      "subject": "Task 5: Inyección y paridad TUI",
+      "status": "pending",
+      "blockedBy": [4],
+      "description": "**Goal:** Hidratar la configuración global al arrancar, inyectar el adaptador real en producción y comprobar el mismo flujo en stdio y TUI.\n\n**Files:**\n- Modify: src/cli/main.ts\n- Modify: src/cli/tui/correrTui.ts\n- Modify: src/cli/tui/correrTui.test.ts\n- Modify: src/cli/main.test.ts\n\n**Acceptance Criteria:**\n- Main mezcla config de proyecto/global y aplica auth sin pisar variables de entorno.\n- Main inyecta un catálogo real sin consultar red al arrancar.\n- La TUI solo reenvía el puerto y no importa el adaptador agent.\n- La sidebar reacciona a la selección activa de trabajo.\n\n**Verify:** npx vitest run src/cli/main.test.ts src/cli/tui/correrTui.test.ts src/cli/tui/frontera.test.ts && npm run typecheck → PASS.\n\n```json:metadata\n{\"files\":[\"src/cli/main.ts\",\"src/cli/main.test.ts\",\"src/cli/tui/correrTui.ts\",\"src/cli/tui/correrTui.test.ts\"],\"verifyCommand\":\"npx vitest run src/cli/main.test.ts src/cli/tui/correrTui.test.ts src/cli/tui/frontera.test.ts && npm run typecheck\",\"acceptanceCriteria\":[\"Configuración global funciona tras reiniciar\",\"Arranque perezoso sin red y frontera TUI verde\"],\"modelTier\":\"standard\"}\n```"
+    },
+    {
+      "id": 6,
+      "subject": "Task 6: Documentación y cierre",
+      "status": "pending",
+      "blockedBy": [5],
+      "description": "**Goal:** Confirmar el comportamiento integrado y documentar /modelos donde la documentación existente enumere comandos.\n\n**Files:**\n- Modify: README.md si enumera comandos interactivos\n- Modify: docs/COMO-PROBARLO.md si tiene recorrido de consola\n- Test: suites existentes de core, agent y cli\n\n**Acceptance Criteria:**\n- La ayuda y cualquier documentación aplicable describen /modelos y la persistencia global.\n- Ningún documento mueve claves a config.json ni atribuye listado a /provider.\n- Tests, typecheck, build y git diff --check terminan con código 0.\n\n**Verify:** npm test && npm run typecheck && npm run build && git diff --check → PASS.\n\n```json:metadata\n{\"files\":[\"README.md\",\"docs/COMO-PROBARLO.md\"],\"verifyCommand\":\"npm test && npm run typecheck && npm run build && git diff --check\",\"acceptanceCriteria\":[\"Documentación coherente con credenciales separadas\",\"Batería completa verde sin red\"],\"modelTier\":\"mechanical\"}\n```"
+    }
+  ],
+  "lastUpdated": "2026-09-02T00:00:00+02:00"
+}

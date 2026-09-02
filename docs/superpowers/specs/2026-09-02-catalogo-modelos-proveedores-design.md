@@ -59,6 +59,8 @@ Las APIs de OpenAI y Anthropic pueden listar recursos sin expresar toda su capac
 
 Al no existir una fuente de mayor prioridad (bandera, entorno o configuración de proyecto), la sesión se actualizará inmediatamente. Si existe una, se guardará el ajuste global pero se explicará que esa fuente lo está eclipsando; no se mentirá mostrando como activo un modelo que la precedencia no puede resolver.
 
+Al arrancar la consola interactiva, `main` cargará la configuración de proyecto y global y la incorporará a `FuentesDeEleccion` antes de resolver modelos, barra o sesión. También aplicará las credenciales globales al entorno solo si la variable no estaba ya definida. Por ello una elección guardada hoy se aplica al reiniciar, salvo una fuente de mayor prioridad que ya estaba definida.
+
 ## Persistencia y seguridad
 
 Se añadirá un escritor específico para la configuración global. Leerá el JSON crudo, verificará que su raíz sea un objeto, fusionará únicamente `modelos.<papel>` y conservará todos los demás campos, incluso los no reconocidos. Si el JSON existente no se puede fusionar, abortará y no lo sobrescribirá.
