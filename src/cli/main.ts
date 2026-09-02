@@ -620,55 +620,55 @@ export async function entrarEnConsola(
 export async function main(argv: string[]): Promise<number> {
   const [comando, ...resto] = argv;
 
-  // Las banderas de la consola (`--guion` y las de modelo) no son subcomandos:
-  // `xonecode --guion` entra en la consola igual que `xonecode` a secas, pero con el
-  // agente de pega. `--help`/`-h` NO entran aquí: son el subcomando de ayuda de abajo.
-  // El resto de banderas (`--real`, `--json`, …) pertenecen a otros subcomandos y siguen
-  // cayendo en «no conozco el comando».
-  // `--guion` se quita del argv ANTES de extraerBanderasDeModelo: no es una bandera de
-  // modelo y no debe llegar como `resto` a ninguna parte.
-  if (
-    !comando ||
-    comando === "--guion" ||
-    comando === "--tui" ||
-    comando === "--no-tui" ||
-    comando === "--sin-raton" ||
-    comando.startsWith("--modelo")
-  ) {
-    const guion = argv.includes("--guion");
-    const pedirTui = argv.includes("--tui");
-    const usarTui = decidirTui(argv);
-    // `--tui` fuerza la TUI, pero no puede fabricar un terminal: sin stdin interactivo
-    // no hay teclado que leer, y sin stdout TTY ink pintaría códigos de escape en la
-    // tubería. Error de USO (64), no un crash — la bandera fue imposible, no el entorno.
-    if (pedirTui && usarTui && (process.stdin.isTTY !== true || process.stdout.isTTY !== true)) {
-      process.stderr.write("la TUI necesita un terminal interactivo: usa --no-tui o corre sin tubería\n");
-      return 64;
-    }
-    // extraerBanderasDeModelo también con argv vacío, para que fuentes.entorno
-    // .XONECODE_MODELO se rellene igual que en todos los demás subcomandos: la consola
-    // no puede ser la única vía que ignora esa variable.
-    const { fuentes } = extraerBanderasDeModelo(argv.filter((a) => a !== "--guion" && a !== "--sin-raton"));
-    const catalogoModelos = new CatalogoModelos();
-    return entrarEnConsola(
-      fuentes,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      guion,
-      undefined,
-      usarTui,
-      quiereRaton(argv),
-      { catalogoModelos, guardarModeloGlobal }
-    );
-  }
-  if (comando === "--help" || comando === "-h") {
-    process.stdout.write(AYUDA);
-    return 0;
-  }
-
   try {
+    // Las banderas de la consola (`--guion` y las de modelo) no son subcomandos:
+    // `xonecode --guion` entra en la consola igual que `xonecode` a secas, pero con el
+    // agente de pega. `--help`/`-h` NO entran aquí: son el subcomando de ayuda de abajo.
+    // El resto de banderas (`--real`, `--json`, …) pertenecen a otros subcomandos y siguen
+    // cayendo en «no conozco el comando».
+    // `--guion` se quita del argv ANTES de extraerBanderasDeModelo: no es una bandera de
+    // modelo y no debe llegar como `resto` a ninguna parte.
+    if (
+      !comando ||
+      comando === "--guion" ||
+      comando === "--tui" ||
+      comando === "--no-tui" ||
+      comando === "--sin-raton" ||
+      comando.startsWith("--modelo")
+    ) {
+      const guion = argv.includes("--guion");
+      const pedirTui = argv.includes("--tui");
+      const usarTui = decidirTui(argv);
+      // `--tui` fuerza la TUI, pero no puede fabricar un terminal: sin stdin interactivo
+      // no hay teclado que leer, y sin stdout TTY ink pintaría códigos de escape en la
+      // tubería. Error de USO (64), no un crash — la bandera fue imposible, no el entorno.
+      if (pedirTui && usarTui && (process.stdin.isTTY !== true || process.stdout.isTTY !== true)) {
+        process.stderr.write("la TUI necesita un terminal interactivo: usa --no-tui o corre sin tubería\n");
+        return 64;
+      }
+      // extraerBanderasDeModelo también con argv vacío, para que fuentes.entorno
+      // .XONECODE_MODELO se rellene igual que en todos los demás subcomandos: la consola
+      // no puede ser la única vía que ignora esa variable.
+      const { fuentes } = extraerBanderasDeModelo(argv.filter((a) => a !== "--guion" && a !== "--sin-raton"));
+      const catalogoModelos = new CatalogoModelos();
+      return await entrarEnConsola(
+        fuentes,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        guion,
+        undefined,
+        usarTui,
+        quiereRaton(argv),
+        { catalogoModelos, guardarModeloGlobal }
+      );
+    }
+    if (comando === "--help" || comando === "-h") {
+      process.stdout.write(AYUDA);
+      return 0;
+    }
+
     if (comando === "run") {
       const { fuentes, resto: sinModelo } = extraerBanderasDeModelo(resto);
       const peticion = sinModelo.filter((a) => !a.startsWith("--")).join(" ");

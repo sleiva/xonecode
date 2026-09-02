@@ -425,6 +425,28 @@ describe("main — la bandera --tui sin terminal es un error de uso, no un crash
   });
 });
 
+describe("main — modelos inválidos en la configuración de la consola", () => {
+  it("devuelve 64 y explica el formato sin propagar ModeloMalEscrito", async () => {
+    const casa = raizTemporal();
+    mkdirSync(join(casa, ".xonecode"));
+    writeFileSync(
+      join(casa, ".xonecode", "config.json"),
+      JSON.stringify({ modelo: "basura-sin-barra" })
+    );
+    process.env.HOME = casa;
+    delete process.env.XONECODE_MODELO;
+    const errorEspia = vi.spyOn(process.stderr, "write").mockImplementation(() => true);
+    try {
+      await expect(main(["--no-tui"])).resolves.toBe(64);
+      const error = errorEspia.mock.calls.map((c) => String(c[0])).join("");
+      expect(error).toContain("«basura-sin-barra» no tiene la forma proveedor/modelo");
+      expect(error).toContain("gemini, openai, anthropic, ollama");
+    } finally {
+      errorEspia.mockRestore();
+    }
+  });
+});
+
 describe("formatearBarra", () => {
   it("lleva el contexto con tope y porcentaje cuando todo se sabe", () => {
     expect(
