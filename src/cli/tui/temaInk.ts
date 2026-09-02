@@ -29,7 +29,9 @@ export const temaInk = {
   arriba: (): string => "",
   /** El azul claro de xone.es: cabeceras de sidebar, viñetas, el ■ del fin, el logotipo. */
   acento: "#47abd6",
+  /** Reservado: token de maqueta SIN consumidor hoy — el test de espejo lo lista. */
   borde: "#27272a",
+  /** Reservado: token de maqueta SIN consumidor hoy (Ink 5.2.1 no da fondo a `Box`). */
   fondoInput: "#18181b",
   /**
    * El navy dominante de xone.es. SOLO para barras y bordes: como color de texto sobre

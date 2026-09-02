@@ -61,6 +61,15 @@ aserción de «hex» se mantiene para los cuatro.
 
 ### 2. Transcript (`transcript.tsx`, `store.ts`)
 
+- Caja: `<Box flexDirection="column" flexGrow={1} flexBasis={0} overflow="hidden"
+  justifyContent="flex-end">`. El transcript es la ÚNICA pieza elástica de la columna
+  izquierda (Entrada, Pregunta y pie llevan `flexShrink 0`): con pocos actos se estira y
+  deja la Entrada anclada abajo, y cuando el contenido no cabe se recorta por ARRIBA, que
+  lo más nuevo es lo que hay que leer. `altura` deja de ser la altura de la caja —la pone
+  el flex— y pasa a ser el tamaño de la rebanada que `ventanaDe` corta del historial.
+  Cada fila va en un Box con `flexShrink 0`: si las filas encogen, Ink reparte el recorte
+  entre todas y las redondea sobre las mismas líneas, y se pierden actos del MEDIO en vez
+  de los de arriba (medido: 10 actos en 5 filas pintaban «c1 c3 c5 c7 c9»).
 - `usuario`: `<Box borderStyle="single" borderLeft borderTop={false} borderRight={false}
   borderBottom={false} borderLeftColor={temaInk.marca} paddingLeft={1}>` con el texto
   dentro. Una fila por acto. Se retira el `❯ ` de delante.
@@ -92,6 +101,10 @@ aserción de «hex» se mantiene para los cuatro.
   de `compacto`/`formatearTope` de `cli/tokens.ts`, como hoy.
 - `BarraDeEstado` pinta `<Box justifyContent="space-between">`: la ruta y las cifras en
   `mudo`; solo la palabra `/ayuda` en `texto`, como el «ctrl+p» de la referencia.
+- La ruta abrevia el `$HOME` a `~` (`abreviarHome`, pura, en `correrTui.ts`) y, cuando el
+  pie es estrecho, se trunca por DELANTE (`wrap="truncate-start"`, dentro de un Box con
+  `flexShrink 1`): la cola —el proyecto— es la que identifica. Las cifras y `/ayuda` van
+  en un Box con `flexShrink 0`, para que un pie estrecho no se los coma.
 
 ### 5. Sidebar (`sidebar.tsx`, `logo.ts`)
 
@@ -108,16 +121,21 @@ aserción de «hex» se mantiene para los cuatro.
      (sin rama, solo el proyecto), y debajo `● xonecode <versión>` con el ● en `exito`.
 - `columnas` llega a `Sidebar` como prop APARTE de `DatosDeSidebar` (los datos los compone
   `correrTui.ts`, que no mira stdout; la anchura la conoce `App`). `DatosDeSidebar` gana en
-  cambio `ruta` (la raíz completa) para el pie; `proyecto` sigue siendo el basename.
-- Para que `height="100%"` funcione, `App` da a la fila de columnas `height = rows - 1`
-  (la fila del pie) y a la columna izquierda la altura del transcript + entrada.
+  cambio `ruta` para el pie (la raíz, con el `$HOME` abreviado a `~`); `proyecto` sigue
+  siendo el basename.
+- Para que el anclaje al fondo funcione, `App` da a la fila de columnas `height = rows - 1`.
+  El pie NO es esa fila —vive dentro de la columna izquierda—: el `- 1` es la fila de
+  reserva del borrado total de Ink (ver Riesgos).
 
 ### 6. Altura del transcript (`app.tsx`)
 
-Hoy: `rows - 4` (borde arriba y abajo de la Entrada, la línea de texto, el pie). Con la
-Entrada nueva: 2 filas de contenido + 1 del pie = `rows - 3`; con pista de Tab una más,
-que se acepta como hoy (la pista es transitoria). Se deja una constante nombrada
-`FILAS_FIJAS` con el desglose en comentario.
+La fila de columnas mide `rows - 1` (fijo, por la fila de reserva del borrado total de
+Ink) y Entrada, Pregunta y pie llevan `flexShrink 0`: el transcript es lo único que se
+estira y lo único que se recorta, por arriba. Lo que se calcula, entonces, no es una
+altura de caja sino cuántos actos pedir: `alturaTranscript = (rows - 1) - FILAS_FIJAS` es
+el tamaño de la rebanada que `ventanaDe` corta. `FILAS_FIJAS = 3` (2 filas de contenido de
+la Entrada + 1 del pie) queda como constante nombrada, con el desglose en comentario; la
+pista de Tab añade una fila transitoria que sale de una fila del transcript.
 
 ## Testing
 
@@ -137,6 +155,11 @@ Todo con `ink-testing-library` o funciones puras; nada necesita TTY ni red.
   exacta que cambian (`lineaDeEstado` desaparece).
 - `logo.test.ts`: todas las filas del logotipo tienen la misma anchura y ninguna supera
   28 columnas (la sidebar mide 30).
+- `app.test.tsx`: la maqueta ENTERA con una altura conocida (stdout falso de 24 filas, sin
+  TTY; `ink-testing-library` no vale porque fija `columns` y no expone `rows`). En reposo,
+  con prompt largo, con pista de Tab, con el transcript lleno y colchón vivo, ocupado y a
+  80 columnas: el frame mide 23 filas, el pie y `● xonecode` cierran la última y el cursor
+  `▏` (o «turno en curso») sigue en pantalla.
 - `frontera.test.ts` no cambia: `logo.ts` no importa ink.
 
 ## Riesgos asumidos
