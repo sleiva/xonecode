@@ -11,7 +11,7 @@ import type { PropsDelModal } from "./aprobarTui.js";
 
 /** Un acto del transcript: lo que ya no cambia y se pinta por su tipo. */
 export type Acto =
-  | { tipo: "usuario"; texto: string; enCola?: boolean }
+  | { tipo: "usuario"; texto: string }
   | { tipo: "asistente"; texto: string }
   /**
    * Las líneas de tool CONSECUTIVAS de un turno, en un solo acto: son paisaje, y el
@@ -146,18 +146,8 @@ export function crearStore(opciones: OpcionesDelStore = {}) {
     },
 
     /** Lo que el humano escribió: acto inmediato, llega entero de una vez. */
-    usuario(texto: string, enCola = false): void {
-      aniadir([enCola ? { tipo: "usuario", texto, enCola: true } : { tipo: "usuario", texto }]);
-    },
-
-    /** La siguiente petición ya salió de la cola y pasa a ser el turno activo. */
-    desencolarUsuario(): void {
-      const indice = estado.actos.findIndex((acto) => acto.tipo === "usuario" && acto.enCola === true);
-      if (indice === -1) return;
-      const actos = [...estado.actos];
-      const acto = actos[indice]! as Extract<Acto, { tipo: "usuario" }>;
-      actos[indice] = { tipo: "usuario", texto: acto.texto };
-      mutar({ actos });
+    usuario(texto: string): void {
+      aniadir([{ tipo: "usuario", texto }]);
     },
 
     /** Un fallo del motor: acto inmediato, con su propio tipo para que se pinte en rojo. */
@@ -205,7 +195,7 @@ export type VistaDeTui = {
   /** Hay un turno corriendo: Ctrl-C lo cancela, pero la Entrada sigue disponible para encolar. */
   ocupado: boolean;
   /** Peticiones confirmadas que esperan a que acabe el turno activo. */
-  enCola: number;
+  enCola: string[];
   /**
    * La pregunta de `consola.preguntar`/`leerSecreto` sin resolver. Mientras vive,
    * la app la pinta EN LUGAR de la Entrada (un solo teclado a la vez). `oculto`
@@ -244,5 +234,5 @@ export function crearRanura<T extends object>(inicial: T): Ranura<T> {
 }
 
 export function vistaInicial(): VistaDeTui {
-  return { ocupado: false, enCola: 0, pregunta: null, modal: null };
+  return { ocupado: false, enCola: [], pregunta: null, modal: null };
 }

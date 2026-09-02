@@ -148,12 +148,12 @@ describe("la consola TUI", () => {
     const { consola, enviar, vista, actos } = crearConsolaTui({ raiz: "/tmp/proyecto" });
     vista.mutar({ ocupado: true });
     enviar("segunda petición");
-    expect(vista.ver().enCola).toBe(1);
-    expect(actos()).toContainEqual({ tipo: "usuario", texto: "segunda petición", enCola: true });
+    expect(vista.ver().enCola).toEqual(["segunda petición"]);
+    expect(actos()).not.toContainEqual({ tipo: "usuario", texto: "segunda petición" });
 
     const lector = consola.lineas[Symbol.asyncIterator]();
     await expect(lector.next()).resolves.toEqual({ value: "segunda petición", done: false });
-    expect(vista.ver().enCola).toBe(0);
+    expect(vista.ver().enCola).toEqual([]);
     expect(actos()).toContainEqual({ tipo: "usuario", texto: "segunda petición" });
   });
 });

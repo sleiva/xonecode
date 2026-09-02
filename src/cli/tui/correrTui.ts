@@ -126,7 +126,7 @@ export function crearConsolaTui(opciones: OpcionesDeConsolaTui) {
 
   // La cola de `lineas`: lo que la Entrada envía y `correrConsola` consume. Si nadie
   // espera todavía, la línea espera en `cola`; si hay un `next` colgado, se despierta.
-  const cola: string[] = [];
+  const cola: Array<{ linea: string; diferida: boolean }> = [];
   const esperando: ((r: IteratorResult<string>) => void)[] = [];
 
   // Contrato de Entrada: historial[0] es la MÁS RECIENTE. Se guarda ya invertido y se
@@ -147,13 +147,17 @@ export function crearConsolaTui(opciones: OpcionesDeConsolaTui) {
     historial.unshift(linea);
     // El eco de lo escrito: el turno no repite la petición, y el transcript se lo debe
     // a quien la tecleó, no al motor.
-    store.usuario(linea, enCola);
+    // Una petición diferida NO entra aún en el transcript: el turno actual puede seguir
+    // escribiendo durante minutos y separaría su futura respuesta de la pregunta.
+    if (enCola) {
+      cola.push({ linea, diferida: true });
+      vista.mutar({ enCola: [...vista.ver().enCola, linea] });
+      return;
+    }
+    store.usuario(linea);
     const despertar = esperando.shift();
     if (despertar !== undefined) despertar({ value: linea, done: false });
-    else {
-      cola.push(linea);
-      if (enCola) vista.mutar({ enCola: vista.ver().enCola + 1 });
-    }
+    else cola.push({ linea, diferida: false });
   };
 
   // Ctrl-C durante un turno: no hay AbortController en el motor, así que la cancelación
@@ -188,11 +192,12 @@ export function crearConsolaTui(opciones: OpcionesDeConsolaTui) {
           next: () =>
             cola.length > 0
               ? Promise.resolve().then(() => {
-                  const linea = cola.shift()!;
-                  store.desencolarUsuario();
-                  const pendientes = vista.ver().enCola;
-                  if (pendientes > 0) vista.mutar({ enCola: pendientes - 1 });
-                  return { value: linea, done: false as const };
+                  const entrada = cola.shift()!;
+                  if (entrada.diferida) {
+                    store.usuario(entrada.linea);
+                    vista.mutar({ enCola: vista.ver().enCola.slice(1) });
+                  }
+                  return { value: entrada.linea, done: false as const };
                 })
               : new Promise<IteratorResult<string>>((resuelto) => esperando.push(resuelto)),
         };

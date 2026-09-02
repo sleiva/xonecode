@@ -139,6 +139,23 @@ describe("entrada", () => {
     expect(instancia.lastFrame()).not.toContain("hola▏");
   });
 
+  it("muestra la primera petición pendiente en un dock de cola separado del editor", async () => {
+    const instancia = render(
+      <Entrada
+        alEnviar={() => {}}
+        completa={() => [[], ""]}
+        ocupado={true}
+        pendientes={["y también revisa el menú"]}
+        historial={[]}
+        modelo="ollama/glm"
+        ancho={50}
+      />
+    );
+    await esperar();
+    expect(instancia.lastFrame()).toMatch(/[◐◓◑◒]  1 en cola · y también revisa el menú/);
+    instancia.unmount();
+  });
+
   it("es una tarjeta de CUATRO filas con barra: aire, texto con cursor, aire, modelo", async () => {
     // La forma de OpenCode. El fondo (`fondoInput`) va fila a fila en cada Text, porque
     // Ink 5.2.1 no da fondo a un Box; sin TTY los frames no llevan color, así que aquí

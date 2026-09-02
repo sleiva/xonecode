@@ -121,7 +121,7 @@ export function App({
   const datos = datosSidebar();
   const { stdout } = useStdout();
   const filas = (stdout.rows ?? 24) - FILA_DE_RESERVA;
-  const alturaTranscript = Math.max(5, filas - FILAS_FIJAS);
+  const alturaTranscript = Math.max(5, filas - FILAS_FIJAS - (vista.enCola.length > 0 ? 1 : 0));
   const columnas = stdout.columns ?? 80;
   const conSidebar = cabeSidebar(columnas);
   // Lo que la Entrada rellena de fondo: la columna izquierda (total menos sidebar, su

@@ -63,16 +63,6 @@ describe("el transcript pintado", () => {
     expect(salida).not.toContain("**");
   });
 
-  it("marca una petición que espera sin confundirla con el turno ya activo", () => {
-    const s = crearStore();
-    s.usuario("continúa con el mapa", true);
-    const vista = render(<Transcript store={s} altura={10} />);
-    expect(vista.lastFrame()).toMatch(/[◐◓◑◒]  EN COLA · esperando turno/);
-    s.desencolarUsuario();
-    expect(s.estado().actos).toContainEqual({ tipo: "usuario", texto: "continúa con el mapa" });
-    vista.unmount();
-  });
-
   it("con más actos que altura, la ventana vive al fondo", () => {
     const s = crearStore();
     for (let i = 0; i < 30; i++) s.linea(`línea ${i}`, "sistema");

@@ -6,7 +6,7 @@
  * dependencia más no lo acorta.
  */
 import { Box, Text, useInput } from "ink";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import type { ReactNode } from "react";
 import { barra } from "./barra.js";
 import { temaInk } from "./temaInk.js";
@@ -15,12 +15,25 @@ import { Fila } from "./tarjeta.js";
 
 /** El cursor: un carácter que viaja DENTRO del texto para que el partido en filas lo cuente. */
 const CURSOR = "▏";
+const ESPERA_EN_COLA = ["◐", "◓", "◑", "◒"] as const;
+
+/** La cola vive junto a la entrada, no en el pasado del transcript que aún está creciendo. */
+function DockDeCola({ pendientes, ancho }: { pendientes: readonly string[]; ancho: number }): ReactNode {
+  const [paso, setPaso] = useState(0);
+  useEffect(() => {
+    const reloj = setInterval(() => setPaso((actual) => (actual + 1) % ESPERA_EN_COLA.length), 360);
+    return () => clearInterval(reloj);
+  }, []);
+  const bruto = `${ESPERA_EN_COLA[paso]}  ${pendientes.length} en cola · ${pendientes[0] ?? ""}`;
+  const texto = Array.from(bruto).slice(0, Math.max(1, ancho - 2)).join("");
+  return <Fila ancho={ancho} visible={Array.from(texto).length} color={temaInk.aviso} fondo={temaInk.fondoCola}>{texto}</Fila>;
+}
 
 export function Entrada({
   alEnviar,
   completa,
   ocupado,
-  pendientes = 0,
+  pendientes = [],
   historial,
   modelo,
   ancho,
@@ -30,7 +43,7 @@ export function Entrada({
   completa: (linea: string) => [string[], string];
   ocupado: boolean;
   /** Solicitudes que esperan detrás del turno actual. */
-  pendientes?: number;
+  pendientes?: readonly string[];
   historial: readonly string[];
   /** El modelo de trabajo vigente: la última fila de la tarjeta, en mudo (la maqueta). */
   modelo: string;
@@ -117,10 +130,11 @@ export function Entrada({
     // vigilando con un prompt de dos filas.
     <Box flexDirection="column" flexShrink={0} {...barra(temaInk.acento)} paddingLeft={0}>
       {ocupado ? (
-        <Fila ancho={ancho} visible={largo(`turno en curso · Enter encola${pendientes > 0 ? ` · ${pendientes} pendiente${pendientes === 1 ? "" : "s"}` : ""}`)} color={temaInk.mudo}>
-          {`turno en curso · Enter encola${pendientes > 0 ? ` · ${pendientes} pendiente${pendientes === 1 ? "" : "s"}` : ""}`}
+        <Fila ancho={ancho} visible={largo(`turno en curso · Enter encola${pendientes.length > 0 ? ` · ${pendientes.length} pendiente${pendientes.length === 1 ? "" : "s"}` : ""}`)} color={temaInk.mudo}>
+          {`turno en curso · Enter encola${pendientes.length > 0 ? ` · ${pendientes.length} pendiente${pendientes.length === 1 ? "" : "s"}` : ""}`}
         </Fila>
       ) : <Fila ancho={ancho} visible={0} />}
+      {pendientes.length > 0 ? <DockDeCola pendientes={pendientes} ancho={ancho} /> : null}
       {filasDeTexto.map((fila, i) => {
         const conCursor = i === filasDeTexto.length - 1;
         return (
