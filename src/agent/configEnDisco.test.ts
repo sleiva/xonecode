@@ -9,7 +9,20 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
-import { mkdtempSync, mkdirSync, writeFileSync, chmodSync, rmSync, readFileSync } from "node:fs";
+import {
+  mkdtempSync,
+  mkdirSync,
+  writeFileSync,
+  chmodSync,
+  rmSync,
+  readFileSync,
+  readdirSync,
+  openSync as fsOpenSync,
+  writeFileSync as fsWriteFileSync,
+  closeSync as fsCloseSync,
+  renameSync as fsRenameSync,
+  unlinkSync as fsUnlinkSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
@@ -21,6 +34,7 @@ import {
   aplicarAuth,
   guardarModeloGlobal,
   ConfigRotaEnDisco,
+  OperacionesDeEscritura,
 } from "./configEnDisco.js";
 
 // Valores originales de las dos variables que `aplicarAuth` puede escribir con
@@ -224,6 +238,31 @@ it("valida el id antes de crear o modificar el config", () => {
   vi.stubEnv("HOME", h);
 
   expect(() => guardarModeloGlobal("trabajo", "no-es-un-id")).toThrow();
+  expect(() => readFileSync(rutaConfigGlobal(), "utf8")).toThrow();
+  rmSync(h, { recursive: true, force: true });
+});
+
+it("limpia el temporal aunque falle su primer cierre", () => {
+  const h = mkdtempSync(join(tmpdir(), "xc-home-"));
+  vi.stubEnv("HOME", h);
+  const directorio = join(h, NOMBRE_CARPETA);
+  let primerCierre = true;
+  const operaciones = {
+    openSync: fsOpenSync,
+    writeFileSync: fsWriteFileSync,
+    closeSync: ((fd: number) => {
+      if (primerCierre) {
+        primerCierre = false;
+        throw new Error("fallo de cierre");
+      }
+      fsCloseSync(fd);
+    }) as OperacionesDeEscritura["closeSync"],
+    renameSync: fsRenameSync,
+    unlinkSync: fsUnlinkSync,
+  } satisfies OperacionesDeEscritura;
+
+  expect(() => guardarModeloGlobal("trabajo", "openai/gpt-test", operaciones)).toThrow("fallo de cierre");
+  expect(readdirSync(directorio).filter((nombre) => nombre.endsWith(".tmp"))).toEqual([]);
   expect(() => readFileSync(rutaConfigGlobal(), "utf8")).toThrow();
   rmSync(h, { recursive: true, force: true });
 });

@@ -69,21 +69,47 @@ function leerObjetoCrudoOAbortar(ruta: string): Record<string, unknown> {
   return bruto;
 }
 
-function escribirAtomico(ruta: string, contenido: string): void {
+export interface OperacionesDeEscritura {
+  openSync: typeof openSync;
+  writeFileSync: typeof writeFileSync;
+  closeSync: typeof closeSync;
+  renameSync: typeof renameSync;
+  unlinkSync: typeof unlinkSync;
+}
+
+const OPERACIONES_DE_ESCRITURA: OperacionesDeEscritura = {
+  openSync,
+  writeFileSync,
+  closeSync,
+  renameSync,
+  unlinkSync,
+};
+
+function escribirAtomico(
+  ruta: string,
+  contenido: string,
+  operaciones: OperacionesDeEscritura = OPERACIONES_DE_ESCRITURA,
+): void {
   const directorio = dirname(ruta);
   mkdirSync(directorio, { recursive: true, mode: 0o700 });
   const temporal = join(directorio, `.config.json.${randomUUID()}.tmp`);
   let descriptor: number | undefined;
   try {
-    descriptor = openSync(temporal, "wx", 0o600);
-    writeFileSync(descriptor, contenido, "utf8");
-    closeSync(descriptor);
+    descriptor = operaciones.openSync(temporal, "wx", 0o600);
+    operaciones.writeFileSync(descriptor, contenido, "utf8");
+    operaciones.closeSync(descriptor);
     descriptor = undefined;
-    renameSync(temporal, ruta);
+    operaciones.renameSync(temporal, ruta);
   } catch (error) {
-    if (descriptor !== undefined) closeSync(descriptor);
+    if (descriptor !== undefined) {
+      try {
+        operaciones.closeSync(descriptor);
+      } catch {
+        // Un fallo al cerrar durante la recuperación no puede impedir borrar el temporal.
+      }
+    }
     try {
-      unlinkSync(temporal);
+      operaciones.unlinkSync(temporal);
     } catch {
       // Si no llegó a crearse, no hay nada que limpiar.
     }
@@ -92,13 +118,17 @@ function escribirAtomico(ruta: string, contenido: string): void {
 }
 
 /** Guarda una elección de papel sin perder el resto del config global. */
-export function guardarModeloGlobal(papel: Papel, id: string): { ruta: string; id: string } {
+export function guardarModeloGlobal(
+  papel: Papel,
+  id: string,
+  operaciones?: OperacionesDeEscritura,
+): { ruta: string; id: string } {
   parsear(id);
   const ruta = rutaConfigGlobal();
   const base = leerObjetoCrudoOAbortar(ruta);
   const modelos = esObjeto(base.modelos) ? { ...base.modelos } : {};
   const fusionado = { ...base, modelos: { ...modelos, [papel]: id } };
-  escribirAtomico(ruta, JSON.stringify(fusionado, null, 2) + "\n");
+  escribirAtomico(ruta, JSON.stringify(fusionado, null, 2) + "\n", operaciones);
   return { ruta, id };
 }
 
