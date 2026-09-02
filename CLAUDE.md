@@ -102,6 +102,16 @@ byte-idéntico. El modal de aprobación (`cli/tui/aprobarTui.tsx`) es fail-close
 `exitOnCtrlC: false` (`cli/tui/correrTui.ts`) porque Ctrl-C tiene significado aquí: cancelar el
 turno (un punto de cancelación en la piel, con rearme por turno) o rechazar en el modal.
 
+**La maqueta de la TUI tiene una sola pieza elástica** (`cli/tui/app.tsx`). La fila de dos
+columnas mide `rows - 1` (`FILA_DE_RESERVA`), porque Ink borra el terminal entero y repinta el
+frame completo cuando la salida alcanza `stdout.rows` — con la fila a `rows` eso pasaría en cada
+tecla. Dentro, el transcript es lo ÚNICO que cede (`flexGrow`, `overflow="hidden"`, recorta por
+ARRIBA, y cada acto va en un Box con `flexShrink={0}` porque si no Ink pierde actos del medio);
+la Entrada, la Pregunta, el pie y la sidebar llevan `flexShrink={0}`. Sin eso, medido, la fila
+del modelo de la Entrada pisaba la línea en edición y el cursor desaparecía en cuanto había
+pista de Tab o el transcript se llenaba. `cli/tui/app.test.tsx` monta `App` entera contra un
+stdout falso y vigila esos estados; los tests de componente no los ven.
+
 **El agente** (`agent/xoneAgent.ts`): un orquestador **sin ninguna tool** que delega en cuatro
 especialistas (`docs`, `planner`, `dev`, `mockup` — `agent/perfiles.ts`). Cuatro cosas no son
 negociables ahí:
@@ -175,12 +185,19 @@ tecla en las dos pieles. No hay código propio de historial fuera de la piel.
 Un fallo del entorno no se reporta como un proyecto roto: `agent/verificador.ts` lanza
 `ErrorDelSimulador` en vez de devolver un informe en rojo.
 
-## Una trampa verificada
+## Trampas verificadas
 
 - **`SkillsPort.cargar()` no tiene ningún llamador en la ruta del agente.** `promptDe` solo usa
   `catalogo()` para NOMBRAR las skills en el prompt del especialista («Cárgalas antes de
   responder») y avisar de las que falten; el contenido de `skills/*/SKILL.md` nunca se inyecta, y
   el backend está confinado a la raíz del proyecto, así que el modelo tampoco puede leerlo.
+
+- **ink@5.2.1 no remide un `<Text>` cuando se INSERTA texto delante de un hijo existente.**
+  `dom.js`: `insertBeforeNode` sale sin marcar sucio el `ink-text` padre (append y remove sí lo
+  hacen). En la Entrada el cursor va anidado dentro del Text, así que al pasar la línea de vacía
+  a un valor que envuelve en un solo render (↑ del historial, pegar) Ink se queda con la medida
+  de UNA fila y la fila del modelo pisa la segunda. El remedio es `key={valor}` en ese Text
+  (`cli/tui/entrada.tsx`, con la medición en el comentario); `app.test.tsx` lo vigila.
 
 (Antes había una segunda trampa: `docs/COMO-PROBARLO.md` decía que la consola no hablaba con el
 agente real. El doc ya está corregido — `cli/main.ts` monta `crearEjecutorReal` por omisión y

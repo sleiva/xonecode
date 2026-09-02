@@ -108,11 +108,11 @@ aserción de «hex» se mantiene para los cuatro.
 
 ### 5. Sidebar (`sidebar.tsx`, `logo.ts`)
 
-- `logo.ts`: `export const LOGO_XONE: readonly string[]` (letras de bloque, 6 filas,
-  ~28 columnas) y `export function cabeLogo(columnas: number): boolean` → `columnas >= 100`.
+- `logo.ts`: `export const LOGO_XONE: readonly string[]` (letras de bloque, 5 filas de
+  26 columnas) y `export function cabeLogo(columnas: number): boolean` → `columnas >= 100`.
   El umbral es sobre la anchura TOTAL del terminal (stdout.columns), que `App` pasa a la
   sidebar como prop `columnas`.
-- Estructura: `<Box flexDirection="column" height="100%">` con:
+- Estructura: `<Box flexDirection="column" flexGrow={1}>` (llena la columna, cuya altura fija pone `App`) con:
   1. Logotipo (si `cabeLogo`) en `acento`, seguido de una fila vacía.
   2. Sección **Contexto** (solo si `contexto > 0`): la cifra como hoy.
   3. Sección **Modelo**: trabajo en `texto`, resto de papeles en `mudo`.
@@ -167,9 +167,9 @@ Todo con `ink-testing-library` o funciones puras; nada necesita TTY ni red.
 - **El umbral de 100 columnas es un número a ojo.** Si molesta, se ajusta en un sitio.
 - **El ámbar de fase no es color XOne.** Es el único tono cálido de la paleta y existe
   para que la fase no se confunda con el texto mudo; queda declarado como token de TUI.
-- **`height="100%"` en Ink depende de que el padre tenga altura fija.** Si el anclaje al
-  fondo no cuadra en algún terminal, el fallback aceptable es un `marginTop` calculado; el
-  plan lo comprueba con un frame de altura conocida.
+- **El anclaje al fondo (`flexGrow` + separador elástico) depende de que la columna tenga
+  altura fija**, que `App` le da con `height={rows - 1}`. Probado con un frame de altura
+  conocida (`sidebar.test.tsx`) y montando `App` entera (`app.test.tsx`).
 - **Una fila de reserva por el borrado total de Ink.** Ink repinta con `clearTerminal` el
   frame entero cuando su altura alcanza `stdout.rows`. La fila de columnas mide `rows - 1`
   para que el frame normal quede por debajo y el repintado sea incremental.
