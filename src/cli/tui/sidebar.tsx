@@ -73,9 +73,15 @@ export function Sidebar(d: DatosDeSidebar): ReactNode {
       <Box flexDirection="column">
         <Text bold color={temaInk.acento}>Modelo</Text>
         <Text>{d.modelo}</Text>
-        {Object.entries(d.modelosPorPapel).map(([papel, m]) => (
-          <Text key={papel} color={temaInk.mudo}>{`${papel}: ${m}`}</Text>
-        ))}
+        {/* «trabajo» no se lista: la línea principal de arriba YA es ese (medido: salía
+            el mismo valor dos veces). `correrTui.ts` mantiene `papeles.trabajo` y
+            `modeloTrabajo` sincronizados en las dos ramas de /modelo, así que ocultarlo no
+            esconde ninguna discrepancia. Los demás papeles sí, en mudo. */}
+        {Object.entries(d.modelosPorPapel)
+          .filter(([papel]) => papel !== "trabajo")
+          .map(([papel, m]) => (
+            <Text key={papel} color={temaInk.mudo}>{`${papel}: ${m}`}</Text>
+          ))}
       </Box>
       {/* El separador elástico: lo estable vive al fondo, como en la maqueta. */}
       <Box flexGrow={1} />
@@ -130,11 +136,14 @@ export function BarraDeEstado(d: { ruta: string; rama?: string; contexto: number
           {p.izquierda}
         </Text>
       </Box>
+      {/* Dos Text HERMANOS en un Box, no anidados en un Text. MEDIDO en terminal real: al
+          arrancar no hay cifras y el Text medía las 6 columnas de «/ayuda»; cuando llegaban,
+          se insertaban DELANTE en el mismo Text y ink 5.2.1 no remide en ese caso (CLAUDE.md,
+          «Trampas verificadas»): envolvía y «tokens  /ayuda» caía a una fila recortada.
+          Insertar un hijo en un Box sí remide. `app.test.tsx` lo vigila. */}
       <Box flexShrink={0} marginLeft={1}>
-        <Text>
-          {p.cifras !== "" ? <Text color={temaInk.mudo}>{`${p.cifras}  `}</Text> : null}
-          <Text color={temaInk.texto}>/ayuda</Text>
-        </Text>
+        {p.cifras !== "" ? <Text color={temaInk.mudo}>{`${p.cifras}  `}</Text> : null}
+        <Text color={temaInk.texto}>/ayuda</Text>
       </Box>
     </Box>
   );

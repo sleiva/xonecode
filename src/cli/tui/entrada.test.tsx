@@ -149,7 +149,7 @@ describe("entrada", () => {
     await teclear(instancia, "hola");
     const lineas = (instancia.lastFrame() ?? "").split("\n");
     expect(lineas).toHaveLength(4);
-    for (const l of lineas) expect(l.startsWith("▌")).toBe(true);
+    for (const l of lineas) expect(l.startsWith("┃")).toBe(true);
     expect(lineas[0]!.slice(1).trim()).toBe("");
     expect(lineas[1]).toContain("hola▏");
     expect(lineas[2]!.slice(1).trim()).toBe("");
@@ -179,7 +179,7 @@ describe("entrada", () => {
     );
     await esperar();
     const salidaLibre = libre.lastFrame() ?? "";
-    expect(salidaLibre.trimStart().startsWith("▌")).toBe(true);
+    expect(salidaLibre.trimStart().startsWith("┃")).toBe(true);
     expect(salidaLibre).not.toContain("╭");
     expect(salidaLibre).not.toContain("╰");
     expect(salidaLibre).toContain("▏");

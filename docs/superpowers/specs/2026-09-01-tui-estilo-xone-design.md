@@ -116,6 +116,12 @@ aserción de «hex» se mantiene para los cuatro.
 
 ### 4. Pie (`sidebar.tsx`, `app.tsx`)
 
+- **Corregido el 2026-09-02, medido en terminal:** las cifras y `/ayuda` son dos `Text`
+  HERMANOS dentro de un `Box`, no anidados en un `Text`. Al arrancar no hay cifras y el Text
+  medía las 6 columnas de `/ayuda`; al llegar se insertaban delante y ink 5.2.1 no remide
+  ese caso: envolvía y el pie decía «2K» y nada más. `app.test.tsx` lo vigila.
+- **La barra de los bloques es `┃`** (barra.ts), no `▌`: medido, el medio bloque no llena la
+  celda en vertical con la fuente del usuario y salía a trozos; `┃` es el glifo de OpenCode.
 - `lineaDeEstado(modelo, ruta)` se sustituye por `pie(datos): { izquierda: string;
   derecha: string }`, pura: `izquierda = ruta`; `derecha = "<15,4K> (<8>%)  /ayuda"`, y
   sin tope `"<15,4K> tokens  /ayuda"`, y con contexto 0 solo `"/ayuda"`. Las cifras salen
@@ -143,7 +149,8 @@ aserción de «hex» se mantiene para los cuatro.
 - Estructura: `<Box flexDirection="column" flexGrow={1}>` (llena la columna, cuya altura fija pone `App`) con:
   1. Logotipo en `acento`, seguido de una fila vacía.
   2. Sección **Contexto** (solo si `contexto > 0`): la cifra como hoy.
-  3. Sección **Modelo**: trabajo en `texto`, resto de papeles en `mudo`.
+  3. Sección **Modelo**: trabajo en `texto`, resto de papeles en `mudo` (el papel `trabajo`
+     no se lista: la línea principal ya es ese; corregido el 2026-09-02, medido en terminal).
   4. `<Box flexGrow={1} />` que empuja el resto al fondo.
   5. Pie de sidebar: `<ruta>:<rama>` con `proyecto` en negrita y `:rama` en `mudo`
      (sin rama, solo el proyecto), y debajo `● xonecode <versión>` con el ● en `exito`.

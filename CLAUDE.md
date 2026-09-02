@@ -206,7 +206,10 @@ Un fallo del entorno no se reporta como un proyecto roto: `agent/verificador.ts`
   el texto en filas ella misma (`cli/tui/filas.ts`) y cada fila es su propio Text, así que
   ningún Text envuelve (antes el remedio era `key={valor}` en el Text que envolvía).
   `app.test.tsx` lo sigue vigilando con un prompt de dos filas. Si algún día vuelve a haber
-  un Text que envuelva con hijos anidados, la trampa vuelve.
+  un Text que envuelva con hijos anidados, la trampa vuelve. Volvió una vez, medida en terminal:
+  el pie insertaba las cifras de contexto delante de `/ayuda` en el mismo Text y se quedaba
+  con 6 columnas («2K» y nada más). Regla práctica: hijos que aparecen y desaparecen, como
+  `Text` HERMANOS dentro de un `Box` (insertar en un Box sí remide), nunca anidados en un Text.
 
 - **El `resize` de Ink no re-renderiza React.** `ink.js`, `resized`: recalcula Yoga y repinta
   el árbol YA montado. Lo que dependa de `stdout.columns` leído en el render (la sidebar, que

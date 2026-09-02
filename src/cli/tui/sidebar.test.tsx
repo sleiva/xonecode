@@ -48,12 +48,24 @@ describe("sidebar", () => {
 
   it("sin rama git, el proyecto y la versión quedan solos", () => {
     const { lastFrame } = render(
-      <Sidebar contexto={0} modelo="ollama/glm" modelosPorPapel={{ trabajo: "ollama/glm" }} proyecto="MinitMT" ruta="/dev/MinitMT" version="0.3.0" />
+      <Sidebar contexto={0} modelo="ollama/glm" modelosPorPapel={{ trabajo: "ollama/glm", rapido: "ollama/r" }} proyecto="MinitMT" ruta="/dev/MinitMT" version="0.3.0" />
     );
     const salida = lastFrame() ?? "";
     expect(salida).toContain("MinitMT");
     expect(salida).toContain("xonecode 0.3.0");
-    expect(salida).toContain("trabajo: ollama/glm");
+    expect(salida).toContain("rapido: ollama/r");
+  });
+
+  it("la lista de papeles omite «trabajo»: la línea principal de Modelo YA es ese", () => {
+    // MEDIDO en terminal real: «ollama/glm» y debajo «trabajo: ollama/glm», el mismo valor
+    // dos veces. Los demás papeles (rapido, afilado) sí se listan.
+    const { lastFrame } = render(
+      <Sidebar contexto={0} modelo="ollama/glm" modelosPorPapel={{ trabajo: "ollama/glm", rapido: "ollama/r" }} proyecto="p" ruta="/p" version="0" />
+    );
+    const salida = lastFrame() ?? "";
+    expect(salida).not.toContain("trabajo:");
+    expect(salida).toContain("rapido: ollama/r");
+    expect(salida.split("ollama/glm").length - 1).toBe(1);
   });
 
   it("el logotipo XONE se pinta siempre: si hay sidebar, cabe (la regla de anchura es de App)", () => {

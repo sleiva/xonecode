@@ -46,7 +46,7 @@ describe("el transcript pintado", () => {
     s.token("¡Hola! **listo**\n");
     const { lastFrame } = render(<Transcript store={s} altura={10} />);
     const salida = lastFrame() ?? "";
-    expect(salida).toContain("▌ hola");
+    expect(salida).toContain("┃ hola");
     expect(salida).not.toContain("❯");
     expect(salida).toContain("¡Hola! listo");
     expect(salida).not.toContain("**");
@@ -83,7 +83,7 @@ describe("el transcript pintado", () => {
     s.fin(2400);
     const { lastFrame } = render(<Transcript store={s} altura={10} />);
     const salida = lastFrame() ?? "";
-    expect(salida).toContain("▌ hazlo");
+    expect(salida).toContain("┃ hazlo");
     expect(salida).toContain("→ lee app.xne");
     expect(salida).toContain("aviso honesto");
     // El fin cierra la fase viva con su duración, y él mismo se pinta con la suya.
@@ -151,7 +151,7 @@ describe("el transcript pintado", () => {
     const { lastFrame } = render(<Transcript store={s} altura={10} />);
     const lineas = (lastFrame() ?? "").split("\n").filter((l) => l.trim() !== "");
     expect(lineas).toHaveLength(3);
-    for (const linea of lineas) expect(linea.trimStart().startsWith("▌")).toBe(true);
+    for (const linea of lineas) expect(linea.trimStart().startsWith("┃")).toBe(true);
   });
 
   it("con pocos actos el transcript llena la altura del padre y el contenido nace ARRIBA", () => {

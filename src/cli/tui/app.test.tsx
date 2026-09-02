@@ -88,6 +88,8 @@ function montar(opciones: {
   columnas?: number;
   ruta?: string;
   completa?: (linea: string) => [string[], string];
+  /** Datos de sidebar propios (se leen en cada render): para probar cambios en caliente. */
+  datos?: () => DatosDeSidebar;
 }) {
   const store = crearStore();
   const vista = crearRanura(vistaInicial());
@@ -101,7 +103,7 @@ function montar(opciones: {
       responder: () => {},
       completa: opciones.completa ?? ((): [string[], string] => [[], ""]),
       historial: [],
-      datosSidebar: () => datosDe(opciones.ruta ?? "/dev/MinitMT"),
+      datosSidebar: opciones.datos ?? (() => datosDe(opciones.ruta ?? "/dev/MinitMT")),
       alCancelarTurno: () => {},
     }),
     {
@@ -327,6 +329,25 @@ describe("la maqueta de la App", () => {
     expect(frame).toContain("… 36 pasos antes");
     expect(frame).toContain("/fichero_39.xne");
     expect((frame.match(/→ lee/g) ?? []).length).toBe(4);
+  });
+
+  it("el pie conserva «/ayuda» cuando llegan las primeras cifras de contexto", async () => {
+    // MEDIDO en terminal real: tras el primer turno el pie decía «2K» y nada más. Al
+    // arrancar no hay medición y el pie pinta solo «/ayuda» (6 columnas); cuando llegan las
+    // cifras se INSERTAN delante en el mismo Text, y ese es el caso en que ink 5.2.1 no
+    // remide (CLAUDE.md, «Trampas verificadas»): el Text se queda con 6 columnas, envuelve,
+    // y «tokens  /ayuda» cae a una fila que la altura fija recorta.
+    const datos = { ...datosDe("/dev/MinitMT"), contexto: 0, tope: undefined };
+    const m = montar({ datos: () => datos });
+    await esperar();
+    expect(m.stdout.ultimo().split("\n").at(-1)).toContain("/ayuda");
+    datos.contexto = 2000;
+    m.store.linea("aviso", "sistema"); // un acto: la App repinta y relee los datos
+    await esperar();
+    const frame = m.stdout.ultimo();
+    m.instancia.unmount();
+    laMaquetaCabe(frame);
+    expect(frame.split("\n").at(-1)).toContain("2K tokens  /ayuda");
   });
 
   it("al ESTRECHAR el terminal la sidebar se va y la rama pasa al pie", async () => {

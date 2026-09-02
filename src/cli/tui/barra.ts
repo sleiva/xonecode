@@ -1,6 +1,8 @@
 /**
  * El bloque con barra izquierda: la forma de los mensajes del usuario, de la Entrada y
- * de la Pregunta. Solo el lado izquierdo, con `▌`, y NUNCA borde arriba ni abajo: en el
+ * de la Pregunta. Solo el lado izquierdo, con `┃` (la vertical gruesa de cajas, la de
+ * OpenCode: MEDIDO, `▌` no llena la celda en vertical con la fuente del usuario y salía a
+ * trozos entre filas; los glifos de cajas están hechos para empalmar), y NUNCA borde arriba ni abajo: en el
  * transcript un acto es una fila (`ventanaDe` cuenta así), y una caja de tres filas por
  * mensaje se saldría de la pantalla. Vive aparte de los componentes para que las tres
  * cajas no puedan divergir en la barra. La Entrada (entrada.tsx) extiende esta forma: pone
@@ -19,7 +21,7 @@ export const BORDE_BARRA = {
   bottomRight: "",
   bottom: "",
   bottomLeft: "",
-  left: "▌",
+  left: "┃",
 } as const;
 
 /** Las props de un `<Box>` de Ink para un bloque con barra izquierda del color dado. */
