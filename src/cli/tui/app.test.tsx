@@ -318,7 +318,9 @@ describe("la maqueta de la App", () => {
     // La tarjeta de usuario lleva su aire DENTRO: el texto nace en la fila 1, no en la 0.
     expect(lineas[0]!.replace("┃", "").trim()).toBe("");
     expect(lineas[1]).toContain("hola");
-    expect(lineas[3]).toContain("respuesta corta");
+    // La respuesta respira una fila tras la tarjeta de usuario: es un bloque distinto,
+    // no texto apilado sobre el prompt.
+    expect(lineas[4]).toContain("respuesta corta");
   });
 
   it("40 líneas de tool en un turno ocupan como mucho 5 filas y no esconden el texto del asistente", async () => {

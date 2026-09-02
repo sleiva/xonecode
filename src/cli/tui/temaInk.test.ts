@@ -17,7 +17,7 @@ describe("temaInk", () => {
     // `acento` y `borde` pintan cajas, `fondoInput` es el fondo del cuadro de entrada,
     // `marca` es la barra izquierda de los bloques, `fase` el color de «+ fase: Ns» y
     // `tenue` el gris de las herramientas, por debajo de `mudo`.
-    const soloTui = ["acento", "borde", "fondoInput", "marca", "fase", "tenue"];
+    const soloTui = ["acento", "borde", "fondoInput", "marca", "fase", "tenue", "fondoSidebar", "respuesta"];
     const conocidas = new Set(Object.keys(crearTema(true)));
     for (const clave of Object.keys(temaInk)) {
       expect(conocidas.has(clave) || soloTui.includes(clave), `token «${clave}» de temaInk`).toBe(true);
@@ -41,5 +41,15 @@ describe("temaInk", () => {
     expect(temaInk.tenue).toMatch(/^#[0-9a-f]{6}$/);
     const luz = (hex: string): number => parseInt(hex.slice(1, 3), 16) + parseInt(hex.slice(3, 5), 16) + parseInt(hex.slice(5, 7), 16);
     expect(luz(temaInk.tenue)).toBeLessThan(luz(temaInk.mudo));
+  });
+
+  it("reserva superficies diferenciadas para la barra lateral y las respuestas", () => {
+    // La barra lateral debe leerse como una región propia y las respuestas necesitan una
+    // guía más clara que el texto corrido: los dos colores son decisiones de maqueta,
+    // no tokens semánticos compartidos con stdio.
+    expect(temaInk.fondoSidebar).toMatch(/^#[0-9a-f]{6}$/);
+    expect(temaInk.respuesta).toMatch(/^#[0-9a-f]{6}$/);
+    expect(temaInk.fondoSidebar).not.toBe(temaInk.fondoInput);
+    expect(temaInk.respuesta).not.toBe(temaInk.tenue);
   });
 });

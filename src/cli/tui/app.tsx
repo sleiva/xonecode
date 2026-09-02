@@ -201,6 +201,8 @@ export function App({
             paddingRight={2}
             paddingTop={1}
             flexDirection="column"
+            borderLeft
+            borderLeftColor={temaInk.acento}
           >
             <Sidebar {...datos} />
           </Box>

@@ -172,14 +172,97 @@ la Entrada —aire, texto, aire, modelo— + 1 del pie; era 3 antes de la tarjet
 2026-09-02) queda como constante nombrada, con el desglose en comentario; la pista de Tab
 añade filas transitorias que salen del transcript.
 
+### 7. Scroll con ratón y pantalla alternativa (añadido el 2026-09-02)
+
+Pedido tras verlo en terminal: «el panel central es el que debe scrollear y no todo». La
+rueda del ratón la recibe el terminal, no la aplicación, y mueve el scrollback entero. Lo que
+hace OpenCode, y lo que se hace aquí:
+
+- **Pantalla alternativa** (`\x1b[?1049h` al entrar, `\x1b[?1049l` al salir, como vim o
+  htop): mientras xonecode corre no hay scrollback que mover, y al salir el terminal recupera
+  lo que tenía. Hace imposible que «todo» se desplace.
+- **Seguimiento de ratón SGR** (`\x1b[?1000h\x1b[?1006h` / `\x1b[?1006l\x1b[?1000l`): el
+  terminal entrega los eventos de ratón como secuencias `\x1b[<b;x;yM`. Solo interesan las
+  muescas de rueda (botón 64 arriba, 65 abajo, con o sin modificadores); clics y arrastres se
+  descartan. Coste asumido: seleccionar texto pasa a ser Alt/Shift + arrastre. `--sin-raton`
+  lo apaga (queda la pantalla alternativa y PgUp/PgDn).
+- **El filtro va DELANTE de Ink** (`cli/tui/raton.ts`, TypeScript puro): `crearStdinSinRaton`
+  envuelve el stdin real con la superficie que Ink usa (`isTTY`, `setRawMode`, `read`,
+  `readable`, `ref/unref`, `setEncoding`, `resume/pause`), quita las secuencias de ratón con
+  `separarRaton` (pura; guarda un prefijo incompleto para el siguiente chunk) y emite las
+  muescas por `crearEmisorDeRueda`. Ink nunca ve una secuencia de ratón, así que no puede
+  colarla en la Entrada como texto.
+- **El Transcript se suscribe a la rueda**: `PASO_DE_RUEDA = 3` actos por muesca, con el
+  mismo `moverDesfase` que PgUp/PgDn; un acto nuevo sigue devolviendo la ventana al fondo.
+- **Los modos solo con stdout TTY** (`entrarEnModos`): sin TTY no se escribe ningún escape, que
+  es lo que mantiene los tests con stdout falso y `--guion` en pipe byte-idénticos. Orden de
+  salida en `correrConsolaTui`: desmontar Ink y DESPUÉS salir de los modos, en un `finally`.
+
+### 8. Aire, código en acento y markdown del panel central (añadido el 2026-09-02)
+
+Tercera ronda, decidida sobre la fuente de OpenCode
+(`packages/tui/src/routes/session/index.tsx`) y no sobre capturas:
+
+- **Tarjeta de usuario con fondo** (`transcript.tsx`): la forma del `UserMessage` suyo —
+  barra izquierda, y el aire DENTRO de la tarjeta (su `paddingTop/Bottom 1` con fondo): fila
+  de aire con fondo, texto partido con `filasDe`, fila de aire con fondo, todo pintado con
+  `Text backgroundColor` (Ink 5.2.1 no da fondo a `Box`). La barra sigue en navy (lo que
+  EScribiste se distingue de lo que escribes, que lleva acento). `Fila` vive en
+  `cli/tui/tarjeta.tsx`, compartida con la Entrada para que no puedan divergir; `App` pasa a
+  `Transcript` el mismo `ancho` que a la Entrada.
+- **Aire**: el grupo de herramientas deja fila también DETRÁS, y el cierre «■» lleva la suya
+  DELANTE (el `marginTop 1` del «▣ modo · modelo» de OpenCode). Entre herramientas y «■» no se
+  dobla: OpenCode deja UNA fila vacía (su aire de padding va dentro de la tarjeta con fondo).
+- **Código inline en acento**: nuevo estilo «codigo» en `segmentosDe` (`cli/markdown.ts`),
+  que la TUI pinta en `#47abd6`. La stdio ni se entera: su lado es ANSI y no cambia.
+- **Markdown del panel central**, en dos oleadas, con la regla del módulo intacta (lo que no
+  empareja queda literal). El parseo es PURO en
+  `cli/markdown.ts`: `estadosDeCerco` (estado de cerco por línea, un pase sobre los actos
+  asistente, que son líneas definitivas en orden; el colchón hereda el estado final por el
+  centinela de una última línea que no es cerco) y `clasificarLinea` (cabecera, viñeta y
+  numerada con nivel —2 espacios por nivel—, cita, hr, cerco, texto; solo ve líneas
+  definitivas: el colchón se pinta por su lado). Oleada 1: cercos en mudo con cabecera de
+  lenguaje (marcadores fuera del frame, como en stdio), listas anidadas con sangría,
+  cursiva en `italic`, hr en «─». Oleada 2: cita con barra tenue, enlaces con su texto en
+  acento y la URL visible en mudo entre paréntesis (en TUI no hay clic: despintar la URL
+  es quitarle información). Los colores inline viven en `colorDeSegmento`, pura y probada.
+- **Tablas en GRID**, copiado del `TextTable` de OpenTUI (`packages/core/src/renderables/`,
+  borderStyle «single»): `┌┬┐ / ├┼┤ / └┴┘`, bordes en tenue (su «conceal»), cabecera en
+  negrita, columnas al máximo común y recortadas con «…» al ancho disponible. Lo decide un
+  tercer helper puro, `contextoDeTabla(lineas, ancho)`: cabecera + separador + filas
+  consecutivas que empiezan por `|`; sin separador, barras literales. Una cita vacía («>»
+  suelto del modelo) no se pinta — era la barra huérfana de la captura. (El usuario preguntó
+  por una librería de markdown: OpenCode tampoco usa una — el `<markdown>` es suyo dentro de
+  `@opentui/core`, con tree-sitter solo para resaltado.)
+
+### 9. Tablas, segunda pasada (añadido el 2026-09-02, comparando capturas reales)
+
+Sexta ronda: el usuario puso lado a lado xonecode y OpenCode («falta claridad»). Tres
+bugs medidos sobre su captura:
+
+- **El inline se parsea DENTRO de las celdas.** «**NO SE USA**» y `` `NoReplica` `` salían
+  crudos en el grid: la piel imprimía las celdas pre-rellenas tal cual. Ahora cada celda
+  pasa por `segmentosDe` y se pinta por segmentos; el relleno de espacios sobrevive porque
+  viaja dentro del último segmento. Cabecera en la tinta de las cabeceras de texto
+  (`negrita`), filas con sus estilos inline (`colorDeSegmento`). Los bordes `│` de las
+  filas van tenue, como las líneas del grid.
+- **La fila es un Box `row` explícito.** Los Text hermanos sueltos caían en la columna del
+  acto (`flexDirection="column"`), UNO POR LÍNEA: el grid se partía en vertical. Antes no
+  se veía porque cada acto era un único Text.
+- **El reparto de anchos ya no es un tope plano** (`repartir` en `cli/markdown.ts`): la
+  tabla LLENA el panel, como el «full» del TextTable. Si cabe todo, el sobrante se reparte
+  entre columnas; si no, recorte por NIVELES DE AGUA — la columna corta se queda con lo
+  suyo y cede el resto a la larga (el tope plano trunca pronto y dejaba el panel vacío a
+  la derecha; medido). Mínimo 3 por celda, como antes.
+
 ## Testing
 
 Todo con `ink-testing-library` o funciones puras; nada necesita TTY ni red.
 
 - `temaInk.test.ts`: acento `#47abd6`; `marca` y `fase` declarados; los cuatro hex.
-- `transcript.test.tsx`: el bloque de usuario ocupa UNA fila (frame de un store con N
-  usuarios tiene N líneas de contenido); `fin` con modelo pinta `■ ollama/glm · 1.8s`;
-  `fin` sin modelo pinta `■ 1.8s`.
+- `transcript.test.tsx`: el bloque de usuario es una TARJETA de tres filas con barra
+  (aire, texto, aire — el aire dentro, como OpenCode); `fin` con modelo pinta
+  `■ ollama/glm · 1.8s`; `fin` sin modelo pinta `■ 1.8s`.
 - `store.test.ts`: `fin(ms, modelo)` guarda el modelo en el acto.
 - `correrTui.test.ts`: la piel del turno pasa el modelo vigente al `fin`, y un `/modelo`
   DESPUÉS del fin no cambia el acto ya cerrado.

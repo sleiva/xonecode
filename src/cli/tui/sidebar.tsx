@@ -56,6 +56,12 @@ export function Sidebar(d: DatosDeSidebar): ReactNode {
   return (
     // flexGrow para llenar la columna: el separador de abajo empuja el pie al fondo.
     <Box flexDirection="column" flexGrow={1}>
+      {/* Ink solo pinta fondos en Text, no en Box. Esta franja llena el ancho útil de
+          la columna y, junto con el borde azul de App, deja la sidebar inequívocamente
+          separada del transcript sin introducir escapes ANSI. */}
+      <Text backgroundColor={temaInk.fondoSidebar} color={temaInk.acento} bold>
+        {"  SESIÓN XONE".padEnd(38, " ")}
+      </Text>
       <Box flexDirection="column" marginBottom={1}>
         {LOGO_XONE.map((fila, i) => (
           <Text key={i} color={temaInk.acento}>{fila}</Text>
