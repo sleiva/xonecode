@@ -152,6 +152,43 @@ beforeEach(() => {
 });
 
 describe("abrirSesionReal", () => {
+  it("expone una cancelación de sesión para desatascar un stream sin eventos", async () => {
+    const sesion = await abrirSesionReal({
+      raiz: "/tmp/turno-real-test",
+      modelos: new ModeloGuionizado(),
+      skills: new SkillsEnMemoria(),
+      entorno: entornoFalso,
+    });
+    expect((sesion as unknown as { cancelar?: unknown }).cancelar).toEqual(expect.any(Function));
+  });
+
+  it("cancela el stream real aunque el modelo no emita otro evento", async () => {
+    let senal: AbortSignal | undefined;
+    mocks.construirAgente.mockImplementation(() => ({
+      stream: vi.fn(async (_payload: unknown, config: { signal?: AbortSignal }) => {
+        senal = config.signal;
+        async function* flujo() {
+          await new Promise<void>((_resolver, rechazar) => {
+            if (senal?.aborted) return rechazar(senal.reason);
+            senal?.addEventListener("abort", () => rechazar(senal?.reason), { once: true });
+          });
+        }
+        return flujo();
+      }),
+      getState: vi.fn(async () => ({ tasks: [] })),
+    }));
+    const sesion = await abrirSesionReal({
+      raiz: "/tmp/turno-real-test",
+      modelos: new ModeloGuionizado(),
+      skills: new SkillsEnMemoria(),
+      entorno: entornoFalso,
+    });
+    const enCurso = sesion.turno("analiza", pielFalsa());
+    await vi.waitFor(() => expect(senal).toBeDefined());
+    sesion.cancelar();
+    await expect(enCurso).rejects.toThrow(/turno cancelado por el usuario/);
+  });
+
   it("dos turnos seguidos reusan el mismo agente", async () => {
     const sesion = await abrir();
     await sesion.turno("primera", pielFalsa());

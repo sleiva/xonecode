@@ -1,7 +1,8 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import { abreviarHome, crearConsolaTui, envolverConOcupacion } from "./correrTui.js";
 import { acuseDeModelo } from "../acuseDeModelo.js";
 import type { EjecutorDeTurno } from "../consola.js";
+import type { SesionReal } from "../../agent/turnoReal.js";
 
 describe("la consola TUI", () => {
   it("implementa Consola: lineas es la cola de lo enviado, escribir y piel comparten store", async () => {
@@ -155,5 +156,18 @@ describe("la consola TUI", () => {
     await expect(lector.next()).resolves.toEqual({ value: "segunda petición", done: false });
     expect(vista.ver().enCola).toEqual([]);
     expect(actos()).toContainEqual({ tipo: "usuario", texto: "segunda petición" });
+  });
+
+  it("/salir durante un turno aborta de inmediato y adelanta la salida a la cola", async () => {
+    const cancelar = vi.fn();
+    const { consola, enviar, vista, alAbrirSesion } = crearConsolaTui({ raiz: "/tmp/proyecto" });
+    alAbrirSesion({ cancelar } as unknown as SesionReal);
+    vista.mutar({ ocupado: true, enCola: ["petición que ya esperaba"] });
+
+    enviar("/salir");
+
+    expect(cancelar).toHaveBeenCalledOnce();
+    expect(vista.ver().enCola).toEqual([]);
+    await expect(consola.lineas[Symbol.asyncIterator]().next()).resolves.toEqual({ value: "/salir", done: false });
   });
 });

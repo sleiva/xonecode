@@ -49,6 +49,8 @@ export interface SesionReal {
    * que usaba el grafo. Un identificador que no identifica es peor que no darlo.
    */
   nuevoHilo(id?: string): void;
+  /** Aborta de inmediato la llamada al modelo que está en curso, si la hay. */
+  cancelar(): void;
   readonly tracker: TokenTracker;
   /** El `thread_id` ACTUAL: tras `nuevoHilo()` cambia, y hay que leerlo, no cachearlo. */
   readonly hilo: string;
@@ -111,6 +113,7 @@ export async function abrirSesionReal(opciones: {
   const tracker = createTokenTracker();
   let modelos = opciones.modelos;
   let hilo = `xonecode-${randomUUID()}`;
+  let cancelarEnCurso: (() => void) | undefined;
 
   const construir = async (): Promise<unknown> =>
     construirAgente({
@@ -185,20 +188,27 @@ export async function abrirSesionReal(opciones: {
 
     while (true) {
       ronda += 1;
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const stream = await (agente as any).stream(payload, {
-        configurable: { thread_id: hilo },
-        streamMode: ["updates", "messages"],
-        subgraphs: true,
-      });
+      const aborto = new AbortController();
+      cancelarEnCurso = () => aborto.abort(new Error("turno cancelado por el usuario"));
+      try {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const stream = await (agente as any).stream(payload, {
+          configurable: { thread_id: hilo },
+          signal: aborto.signal,
+          streamMode: ["updates", "messages"],
+          subgraphs: true,
+        });
 
-      bitacora = await correrTurno(
-        aEventos(stream, async () => (await leerPendientes()).lista),
-        piel,
-        {
-          avisos: (b) => (b.corrio("verify") ? [] : ["⚠ el verificador no ha corrido en este turno"]),
-        }
-      );
+        bitacora = await correrTurno(
+          aEventos(stream, async () => (await leerPendientes()).lista),
+          piel,
+          {
+            avisos: (b) => (b.corrio("verify") ? [] : ["⚠ el verificador no ha corrido en este turno"]),
+          }
+        );
+      } finally {
+        cancelarEnCurso = undefined;
+      }
 
       const { lista, ficheros, diffs } = await leerPendientes();
       if (lista.length === 0) break;
@@ -233,6 +243,7 @@ export async function abrirSesionReal(opciones: {
 
   return {
     turno,
+    cancelar: () => cancelarEnCurso?.(),
     /** Para `/modelo`: agente nuevo con los mismos hilo, checkpointer y tracker. */
     async cambiarModelos(nuevos: ModelosPort): Promise<void> {
       modelos = nuevos;

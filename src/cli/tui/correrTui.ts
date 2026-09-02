@@ -141,10 +141,26 @@ export function crearConsolaTui(opciones: OpcionesDeConsolaTui) {
   let modeloTrabajo = `${elegido.proveedor}/${elegido.modelo}`;
   const papeles: Partial<Record<Papel, string>> = { trabajo: modeloTrabajo };
   let tracker: TokenTracker = createTokenTracker();
+  let cancelarReal: (() => void) | undefined;
+  let cancelarPendiente = false;
+  const cancelarTurno = (): void => {
+    cancelarPendiente = true;
+    cancelarReal?.();
+  };
 
   const enviar = (linea: string): void => {
     const enCola = vista.ver().ocupado;
     historial.unshift(linea);
+    // Salir no puede quedarse detrás de una llamada al modelo que ya no progresa. Se
+    // descartan los seguimientos y se deja este comando el primero que verá el lazo tras
+    // abortar el stream activo.
+    if (enCola && linea.trim() === "/salir") {
+      cola.length = 0;
+      cola.push({ linea, diferida: false });
+      vista.mutar({ enCola: [] });
+      cancelarTurno();
+      return;
+    }
     // El eco de lo escrito: el turno no repite la petición, y el transcript se lo debe
     // a quien la tecleó, no al motor.
     // Una petición diferida NO entra aún en el transcript: el turno actual puede seguir
@@ -160,10 +176,8 @@ export function crearConsolaTui(opciones: OpcionesDeConsolaTui) {
     else cola.push({ linea, diferida: false });
   };
 
-  // Ctrl-C durante un turno: no hay AbortController en el motor, así que la cancelación
-  // es un PUNTO DE CANCELACIÓN en la piel — el siguiente acto del turno lanza y el
-  // motor aborta el consumo (el paso en marcha termina; nada suyo se pierde a medias).
-  let cancelarPendiente = false;
+  // La piel conserva este punto cooperativo para el guionizado; la sesión real además
+  // recibe un AbortSignal, que corta incluso si el modelo no produce más eventos.
   const puntoDeCancelacion = (): void => {
     if (!cancelarPendiente) return;
     cancelarPendiente = false;
@@ -314,11 +328,12 @@ export function crearConsolaTui(opciones: OpcionesDeConsolaTui) {
     },
     /** Ctrl-C durante un turno: la piel del turno en curso lanza en su próximo acto. */
     cancelar: (): void => {
-      cancelarPendiente = true;
+      cancelarTurno();
     },
     /** La costura por la que el ejecutor real apunta la sidebar a su tracker. */
     alAbrirSesion: (sesion: SesionReal): void => {
       tracker = sesion.tracker;
+      cancelarReal = () => sesion.cancelar();
     },
     actos: (): Acto[] => store.estado().actos,
     historial,
