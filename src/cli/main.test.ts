@@ -180,6 +180,24 @@ describe("entrarEnConsola", () => {
     const trasArranque = texto.slice(texto.indexOf("\n") + 1);
     expect(trasArranque).toContain("ollama/llama3");
   });
+
+  it("tras un acuse individual de trabajo la línea de estado refleja ese modelo", async () => {
+    const raiz = raizTemporal();
+    const { escribir, salida } = acumulador();
+
+    await entrarEnConsola(
+      {},
+      raiz,
+      escribir,
+      inspeccionarFalso,
+      crearRlDe("/modelo-trabajo ollama/qwen3")
+    );
+
+    const texto = salida();
+    const trasArranque = texto.slice(texto.indexOf("\n") + 1);
+    expect(trasArranque).toContain("ollama/qwen3");
+    expect(texto.split("xonecode · ").length - 1).toBeGreaterThanOrEqual(2);
+  });
 });
 
 describe("quiereRaton", () => {

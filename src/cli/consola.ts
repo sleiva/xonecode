@@ -67,6 +67,8 @@ export interface EstadoDeSesion {
   hilo: string;
   raiz: string;
   fuentes: FuentesDeEleccion;
+  /** Overrides vivos de `/modelos`, separados de las banderas con las que arrancó la CLI. */
+  seleccionesDeCatalogo?: Partial<Record<Papel, string>>;
 }
 
 /** Lo que hace un comando de barra: escribe y puede cambiar el estado de la sesión. */
@@ -173,9 +175,16 @@ export function elegirPapel(respuesta: string): Papel | undefined {
 /** La global solo tiene efecto inmediato si no hay una fuente de rango superior para ese papel. */
 export function fuenteQueEclipsaGlobal(
   papel: Papel,
-  fuentes: FuentesDeEleccion
+  fuentes: FuentesDeEleccion,
+  seleccionesDeCatalogo: Partial<Record<Papel, string>> = {}
 ): "bandera" | "entorno" | "proyecto" | undefined {
-  if (fuentes.porPapel?.[papel] !== undefined || fuentes.bandera !== undefined) return "bandera";
+  if (
+    (fuentes.porPapel?.[papel] !== undefined &&
+      fuentes.porPapel[papel] !== seleccionesDeCatalogo[papel]) ||
+    fuentes.bandera !== undefined
+  ) {
+    return "bandera";
+  }
   if (fuentes.entorno?.XONECODE_MODELO !== undefined) return "entorno";
   if (fuentes.proyecto?.modelos?.[papel] !== undefined || fuentes.proyecto?.modelo !== undefined) {
     return "proyecto";
@@ -193,7 +202,8 @@ function validarProveedor(nombre: string | undefined): Proveedor | undefined {
 function hayCredencial(proveedor: Proveedor, raiz: string): boolean {
   const variable = VARIABLE_POR_PROVEEDOR[proveedor];
   if (variable === undefined) return true;
-  if (process.env[variable]?.trim() !== "") return true;
+  const enEntorno = process.env[variable];
+  if (enEntorno !== undefined && enEntorno.trim() !== "") return true;
   return cargar(raiz).auth[proveedor] !== undefined;
 }
 
@@ -260,7 +270,7 @@ async function elegirModelo(
 
   const id = `${proveedor}/${eleccion.modelo.id}`;
   consola.guardarModeloGlobal(papel, id);
-  const eclipsa = fuenteQueEclipsaGlobal(papel, estado.fuentes);
+  const eclipsa = fuenteQueEclipsaGlobal(papel, estado.fuentes, estado.seleccionesDeCatalogo);
   if (eclipsa !== undefined) {
     consola.escribir(`modelo ${papel} guardado en global; sigue activo el de ${eclipsa}\n`);
     return { seguir: true };
@@ -270,7 +280,14 @@ async function elegirModelo(
     porPapel: { ...estado.fuentes.porPapel, [papel]: id },
   };
   consola.escribir(acuseDeModelo(papel, id));
-  return { seguir: true, estado: { ...estado, fuentes } };
+  return {
+    seguir: true,
+    estado: {
+      ...estado,
+      fuentes,
+      seleccionesDeCatalogo: { ...estado.seleccionesDeCatalogo, [papel]: id },
+    },
+  };
 }
 
 /**
@@ -366,7 +383,21 @@ function manejadorDeModelo(papel: Papel | undefined): ManejadorDeBarra {
     // La frase vive en `acuseDeModelo.ts`: la TUI la re-parsea para su sidebar, así
     // que escribir y leer comparten módulo — retocar la frase aquí no rompe a ciegas.
     consola.escribir(acuseDeModelo(papel, valor));
-    return { seguir: true, estado: { ...estado, fuentes } };
+    const seleccionesDeCatalogo = { ...estado.seleccionesDeCatalogo };
+    if (papel === undefined) {
+      for (const p of PAPELES) delete seleccionesDeCatalogo[p];
+    } else {
+      delete seleccionesDeCatalogo[papel];
+    }
+    return {
+      seguir: true,
+      estado: {
+        ...estado,
+        fuentes,
+        seleccionesDeCatalogo:
+          Object.keys(seleccionesDeCatalogo).length === 0 ? undefined : seleccionesDeCatalogo,
+      },
+    };
   };
 }
 

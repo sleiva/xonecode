@@ -26,6 +26,7 @@ import {
 import { crearLeerSecreto, crearPreguntar, crearPielStdio, escribirEnStdout, type Escribir } from "./stdio.js";
 import { crearTema } from "./tema.js";
 import { pedirDecisiones } from "./aprobar.js";
+import { modeloDeAcuse } from "./acuseDeModelo.js";
 import { inspeccionar } from "../agent/entorno.js";
 import { SkillsEnDisco } from "../agent/skills.js";
 import { Modelos } from "../agent/modelos.js";
@@ -545,15 +546,11 @@ export async function entrarEnConsola(
     lineas: conPrompt(rl, escribir, barraDeEstado),
     escribir: (t: string) => {
       escribir(t);
-      // La línea de estado se reimprime tras /nuevo y /modelo (los DOS, no
-      // /modelo-rapido/-trabajo/-afilado: así lo pide la tarea). Ambos manejadores
-      // escriben su resultado en UNA sola llamada a escribir, así que basta con anclar
-      // al principio de esa cadena exacta:
-      //   "modelo (los tres papeles): <p>/<m>\n"   → /modelo
-      //   "hilo nuevo: <id>\n"                     → /nuevo
-      const comoModelo = /^modelo \(los tres papeles\): (.+)\n$/.exec(t);
-      if (comoModelo) {
-        modeloTrabajo = comoModelo[1]!;
+      // La TUI usa el mismo parser: un acuse de los tres papeles, o el del papel
+      // `trabajo` individual de `/modelos`, actualiza la cabecera sin duplicar regex.
+      const acuse = modeloDeAcuse(t);
+      if (acuse !== undefined && (acuse.papel === undefined || acuse.papel === "trabajo")) {
+        modeloTrabajo = acuse.modelo;
         escribir(lineaDeEstado());
       } else if (/^hilo nuevo: /.test(t)) {
         escribir(lineaDeEstado());

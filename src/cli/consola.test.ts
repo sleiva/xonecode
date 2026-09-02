@@ -317,8 +317,9 @@ describe("correrConsola — /modelos", () => {
     }
   });
 
-  it("sin credencial deja el estado intacto", async () => {
-    vi.stubEnv("OPENAI_API_KEY", "");
+  it("una variable de entorno ausente y sin auth.json deja el estado intacto", async () => {
+    const h = homeTemporal();
+    vi.stubEnv("OPENAI_API_KEY", undefined);
     try {
       const { consola, salida } = consolaDeConRespuestas({
         lineas: ["/modelos openai", "siguiente turno"],
@@ -332,6 +333,7 @@ describe("correrConsola — /modelos", () => {
       expect(turnos[0]!.estado.fuentes.porPapel).toBeUndefined();
     } finally {
       vi.unstubAllEnvs();
+      rmSync(h, { recursive: true, force: true });
     }
   });
 
@@ -434,6 +436,26 @@ describe("correrConsola — /modelos", () => {
     expect(salida()).toContain("bandera");
     expect(salida()).not.toContain("modelo trabajo: ollama/qwen3");
     expect(turnos[0]!.estado.fuentes).toEqual(estado.fuentes);
+  });
+
+  it("dos selecciones consecutivas del mismo papel permanecen activas", async () => {
+    vi.stubEnv("OPENAI_API_KEY", "clave-de-test");
+    try {
+      const { consola, salida } = consolaDeConRespuestas({
+        lineas: ["/modelos openai", "/modelos openai", "siguiente turno"],
+        respuestas: ["", "1", "trabajo", "", "2", "trabajo"],
+        catalogo: catalogoOpenAi(),
+      });
+      const turnos: Array<{ peticion: string; estado: EstadoDeSesion }> = [];
+      await correrConsola(consola, estadoDe(), ejecutorFalsoDe(turnos));
+
+      expect(salida()).toContain("modelo trabajo: openai/gpt-a");
+      expect(salida()).toContain("modelo trabajo: openai/gpt-b");
+      expect(salida()).not.toContain("sigue activo el de bandera");
+      expect(turnos[0]!.estado.fuentes.porPapel?.trabajo).toBe("openai/gpt-b");
+    } finally {
+      vi.unstubAllEnvs();
+    }
   });
 
   it("la configuración del proyecto también eclipsa la selección global sin mutar la sesión", async () => {
