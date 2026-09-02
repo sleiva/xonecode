@@ -14,7 +14,7 @@ import { cmdDoctor } from "./doctor.js";
 import { cmdVerify } from "./verify.js";
 import { type FuentesDeEleccion, ModeloMalEscrito, parsear, resolver } from "../core/modelos.js";
 import { topeResuelto } from "../core/contextos.js";
-import { cargar, guardarModeloGlobal } from "../agent/configEnDisco.js";
+import { aplicarAuth, cargar, guardarModeloGlobal } from "../agent/configEnDisco.js";
 import {
   COMANDOS,
   correrConsola,
@@ -443,8 +443,24 @@ export async function entrarEnConsola(
    */
   usarTui: boolean = decidirTui(),
   /** ¿Ratón en la TUI? Solo la rama TUI lo mira. */
-  raton: boolean = true
+  raton: boolean = true,
+  /** Adaptadores compartidos por stdio y TUI; `main` construye una sola instancia real. */
+  dependencias: Pick<Consola, "catalogoModelos" | "guardarModeloGlobal"> = {
+    catalogoModelos: new CatalogoModelos(),
+    guardarModeloGlobal,
+  }
 ): Promise<number> {
+  // La elección de modelo y las credenciales se hidratan ANTES de decidir la piel:
+  // stdio y TUI reciben exactamente las mismas fuentes y el catálogo leerá la clave
+  // ya aplicada solo cuando `/modelos` provoque su primera consulta.
+  const cargado = cargar(raiz);
+  aplicarAuth(cargado.auth);
+  const fuentesHidratadas: FuentesDeEleccion = {
+    ...fuentes,
+    proyecto: cargado.config.proyecto,
+    global: cargado.config.global,
+  };
+
   if (usarTui) {
     // La TUI es la MISMA consola: `entrarEnConsola` no la duplica, le entrega las
     // piezas que son de esta capa (la inspección, el asistente de creación, el
@@ -456,9 +472,10 @@ export async function entrarEnConsola(
     // necesitan ni los van a pintar. Solo la rama TUI paga el módulo.
     const { correrConsolaTui } = await import("./tui/correrTui.js");
     return correrConsolaTui({
-      fuentes,
+      fuentes: fuentesHidratadas,
       raiz,
       guion,
+      ...dependencias,
       inspeccionarProyecto,
       ofrecer: ofrecerCrearProyecto,
       crearEjecutor: guion ? undefined : crearEjecutorReal,
@@ -476,7 +493,7 @@ export async function entrarEnConsola(
   // con /describe. `let` porque /modelo <p>/<m> la cambia EN CALIENTE dentro de la sesión.
   let modeloTrabajo: string;
   {
-    const { proveedor, modelo } = resolver(fuentes).trabajo;
+    const { proveedor, modelo } = resolver(fuentesHidratadas).trabajo;
     modeloTrabajo = `${proveedor}/${modelo}`;
   }
 
@@ -559,8 +576,8 @@ export async function entrarEnConsola(
     preguntar: crearPreguntar(rl),
     interactivo,
     leerSecreto: crearLeerSecreto(rl),
-    catalogoModelos: new CatalogoModelos(),
-    guardarModeloGlobal,
+    catalogoModelos: dependencias.catalogoModelos,
+    guardarModeloGlobal: dependencias.guardarModeloGlobal,
   };
 
   // El asistente de creación: la única escritura fuera de un turno del agente, y
@@ -578,7 +595,11 @@ export async function entrarEnConsola(
   escribir(cabecera());
 
   // Mismo patrón de prefijo que run.ts y el manejador /nuevo de consola.ts.
-  const estado: EstadoDeSesion = { hilo: `xonecode-${randomUUID()}`, raiz, fuentes };
+  const estado: EstadoDeSesion = {
+    hilo: `xonecode-${randomUUID()}`,
+    raiz,
+    fuentes: fuentesHidratadas,
+  };
 
   // `--guion` conserva el agente de pega (el valor por omisión de `correrConsola`): es lo
   // que permite ver la consola correr sin gastar. Sin ella, el ejecutor real corre cada
@@ -628,6 +649,7 @@ export async function main(argv: string[]): Promise<number> {
     // .XONECODE_MODELO se rellene igual que en todos los demás subcomandos: la consola
     // no puede ser la única vía que ignora esa variable.
     const { fuentes } = extraerBanderasDeModelo(argv.filter((a) => a !== "--guion" && a !== "--sin-raton"));
+    const catalogoModelos = new CatalogoModelos();
     return entrarEnConsola(
       fuentes,
       undefined,
@@ -637,7 +659,8 @@ export async function main(argv: string[]): Promise<number> {
       guion,
       undefined,
       usarTui,
-      quiereRaton(argv)
+      quiereRaton(argv),
+      { catalogoModelos, guardarModeloGlobal }
     );
   }
   if (comando === "--help" || comando === "-h") {

@@ -1,12 +1,34 @@
 import { describe, it, expect, vi } from "vitest";
 import { abreviarHome, crearConsolaTui, envolverConOcupacion } from "./correrTui.js";
 import { acuseDeModelo } from "../acuseDeModelo.js";
-import type { EjecutorDeTurno } from "../consola.js";
+import { correrConsola, type EjecutorDeTurno } from "../consola.js";
 import type { SesionReal } from "../../agent/turnoReal.js";
+import { CatalogoModelosEnMemoria, type CatalogoModelosPort } from "../../core/ports.js";
+
+function crearMontajeTui(
+  opciones: Omit<Parameters<typeof crearConsolaTui>[0], "catalogoModelos" | "guardarModeloGlobal">
+) {
+  return crearConsolaTui({
+    ...opciones,
+    catalogoModelos: new CatalogoModelosEnMemoria(),
+    guardarModeloGlobal: (_papel, id) => ({ ruta: "/tmp/config.json", id }),
+  });
+}
+
+async function esperarPregunta(
+  montaje: ReturnType<typeof crearConsolaTui>,
+  texto: string
+): Promise<void> {
+  for (let intento = 0; intento < 20; intento++) {
+    if (montaje.vista.ver().pregunta?.texto === texto) return;
+    await new Promise((resolver) => setTimeout(resolver, 0));
+  }
+  throw new Error(`la TUI no mostró la pregunta «${texto}»`);
+}
 
 describe("la consola TUI", () => {
   it("implementa Consola: lineas es la cola de lo enviado, escribir y piel comparten store", async () => {
-    const { consola, enviar, actos } = crearConsolaTui({ raiz: "/tmp/proyecto" });
+    const { consola, enviar, actos } = crearMontajeTui({ raiz: "/tmp/proyecto" });
     const leidas: string[] = [];
     const lector = (async () => {
       for await (const linea of consola.lineas) {
@@ -36,7 +58,7 @@ describe("la consola TUI", () => {
   });
 
   it("preguntar y leerSecreto se responden por la misma ranura y devuelven la respuesta", async () => {
-    const { consola, responder } = crearConsolaTui({ raiz: "/tmp/proyecto" });
+    const { consola, responder } = crearMontajeTui({ raiz: "/tmp/proyecto" });
 
     // preguntar deja la pregunta viva en la vista: la app la pinta en cuanto ocurre.
     const respuesta = consola.preguntar("¿nombre? ");
@@ -50,7 +72,7 @@ describe("la consola TUI", () => {
   });
 
   it("Ctrl-C en un turno: la piel siguiente lanza (el motor aborta) y el turno nuevo no hereda", () => {
-    const { consola, cancelar } = crearConsolaTui({ raiz: "/tmp/proyecto" });
+    const { consola, cancelar } = crearMontajeTui({ raiz: "/tmp/proyecto" });
     const piel = consola.piel!();
 
     piel.token("hola"); // sin cancelación: fluye
@@ -61,7 +83,7 @@ describe("la consola TUI", () => {
   });
 
   it("una Ctrl-C que aterriza tarde no mata el turno siguiente (cada piel nueva rearma)", () => {
-    const { consola, cancelar } = crearConsolaTui({ raiz: "/tmp/proyecto" });
+    const { consola, cancelar } = crearMontajeTui({ raiz: "/tmp/proyecto" });
 
     // Turno 1: la Ctrl-C llega DESPUÉS del último acto — el turno termina sin consumir
     // el flag, y la piel vieja no vuelve a usarse.
@@ -79,13 +101,13 @@ describe("la consola TUI", () => {
   });
 
   it("escribir no crea actos vacíos: «\\n» solo no deja acto (el guard cubre whitespace, no solo \"\")", () => {
-    const { consola, actos } = crearConsolaTui({ raiz: "/tmp/proyecto" });
+    const { consola, actos } = crearMontajeTui({ raiz: "/tmp/proyecto" });
     consola.escribir("\n");
     expect(actos()).toEqual([]);
   });
 
   it("el acuse de /modelo (compartido con consola.ts) actualiza la sidebar en caliente", () => {
-    const { consola, datosSidebar } = crearConsolaTui({ raiz: "/tmp/proyecto" });
+    const { consola, datosSidebar } = crearMontajeTui({ raiz: "/tmp/proyecto" });
     consola.escribir(acuseDeModelo(undefined, "ollama/nuevo"));
     expect(datosSidebar().modelo).toBe("ollama/nuevo");
     consola.escribir(acuseDeModelo("trabajo", "ollama/otro"));
@@ -97,7 +119,7 @@ describe("la consola TUI", () => {
   it("el fin del turno lleva el modelo de trabajo vigente, y un /modelo posterior no lo reetiqueta", () => {
     // Capturar al cerrar el turno, no al pintar: si el transcript leyera el modelo
     // actual en el render, un /modelo cambiaría la etiqueta de turnos ya cerrados.
-    const { consola, actos, datosSidebar } = crearConsolaTui({ raiz: "/tmp/proyecto" });
+    const { consola, actos, datosSidebar } = crearMontajeTui({ raiz: "/tmp/proyecto" });
     const antes = datosSidebar().modelo;
     consola.piel!().fin(1800);
     consola.escribir(acuseDeModelo(undefined, "ollama/nuevo"));
@@ -138,7 +160,7 @@ describe("la consola TUI", () => {
   });
 
   it("el historial deja la más reciente en el índice 0 (contrato de Entrada)", () => {
-    const { enviar, historial } = crearConsolaTui({ raiz: "/tmp/proyecto" });
+    const { enviar, historial } = crearMontajeTui({ raiz: "/tmp/proyecto" });
     enviar("primera");
     enviar("segunda");
     expect(historial[0]).toBe("segunda");
@@ -146,7 +168,7 @@ describe("la consola TUI", () => {
   });
 
   it("una petición enviada mientras está ocupado queda marcada y sale en orden al terminar", async () => {
-    const { consola, enviar, vista, actos } = crearConsolaTui({ raiz: "/tmp/proyecto" });
+    const { consola, enviar, vista, actos } = crearMontajeTui({ raiz: "/tmp/proyecto" });
     vista.mutar({ ocupado: true });
     enviar("segunda petición");
     expect(vista.ver().enCola).toEqual(["segunda petición"]);
@@ -160,7 +182,7 @@ describe("la consola TUI", () => {
 
   it("/salir durante un turno aborta de inmediato y adelanta la salida a la cola", async () => {
     const cancelar = vi.fn();
-    const { consola, enviar, vista, alAbrirSesion } = crearConsolaTui({ raiz: "/tmp/proyecto" });
+    const { consola, enviar, vista, alAbrirSesion } = crearMontajeTui({ raiz: "/tmp/proyecto" });
     alAbrirSesion({ cancelar } as unknown as SesionReal);
     vista.mutar({ ocupado: true, enCola: ["petición que ya esperaba"] });
 
@@ -169,5 +191,55 @@ describe("la consola TUI", () => {
     expect(cancelar).toHaveBeenCalledOnce();
     expect(vista.ver().enCola).toEqual([]);
     await expect(consola.lineas[Symbol.asyncIterator]().next()).resolves.toEqual({ value: "/salir", done: false });
+  });
+
+  it("inyecta el catálogo sin consultarlo al montar y solo lista al ejecutar /modelos", async () => {
+    const listar = vi.fn<CatalogoModelosPort["listar"]>(async () => []);
+    const catalogoModelos: CatalogoModelosPort = { listar };
+    const montaje = crearConsolaTui({
+      raiz: "/tmp/proyecto",
+      catalogoModelos,
+      guardarModeloGlobal: (_papel, id) => ({ ruta: "/tmp/config.json", id }),
+    });
+
+    expect(montaje.consola.catalogoModelos).toBe(catalogoModelos);
+    expect(listar).not.toHaveBeenCalled();
+    await montaje.consola.catalogoModelos.listar("ollama");
+    expect(listar).toHaveBeenCalledWith("ollama");
+  });
+
+  it("/modelos usa la ranura de pregunta y actualiza la sidebar al elegir trabajo", async () => {
+    const catalogoModelos = new CatalogoModelosEnMemoria({
+      ollama: [{ proveedor: "ollama", id: "qwen3", nombre: "Qwen 3" }],
+    });
+    const guardarModeloGlobal = vi.fn((_papel, id: string) => ({
+      ruta: "/tmp/config.json",
+      id,
+    }));
+    const montaje = crearConsolaTui({
+      raiz: "/tmp/proyecto",
+      catalogoModelos,
+      guardarModeloGlobal,
+    });
+    expect(montaje.consola.catalogoModelos).toBe(catalogoModelos);
+
+    const ejecucion = correrConsola(montaje.consola, {
+      hilo: "tui-modelos",
+      raiz: "/tmp/proyecto",
+      fuentes: {},
+    });
+    montaje.enviar("/modelos ollama");
+    await esperarPregunta(montaje, "filtro (Enter para todos): ");
+    montaje.responder("qwen");
+    await esperarPregunta(montaje, "número (Enter cancela): ");
+    montaje.responder("1");
+    await esperarPregunta(montaje, "papel (rapido/trabajo/afilado): ");
+    montaje.responder("trabajo");
+    await new Promise((resolver) => setTimeout(resolver, 0));
+
+    expect(guardarModeloGlobal).toHaveBeenCalledWith("trabajo", "ollama/qwen3");
+    expect(montaje.datosSidebar().modelo).toBe("ollama/qwen3");
+    montaje.enviar("/salir");
+    await ejecucion;
   });
 });
