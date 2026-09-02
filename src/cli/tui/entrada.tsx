@@ -20,6 +20,7 @@ export function Entrada({
   alEnviar,
   completa,
   ocupado,
+  pendientes = 0,
   historial,
   modelo,
   ancho,
@@ -28,6 +29,8 @@ export function Entrada({
   /** El completer puro de `consola.ts`: `(linea) => [candidatos, linea]`. */
   completa: (linea: string) => [string[], string];
   ocupado: boolean;
+  /** Solicitudes que esperan detrás del turno actual. */
+  pendientes?: number;
   historial: readonly string[];
   /** El modelo de trabajo vigente: la última fila de la tarjeta, en mudo (la maqueta). */
   modelo: string;
@@ -86,7 +89,10 @@ export function Entrada({
         setPista([]);
       }
     },
-    { isActive: !ocupado }
+    // El turno activo no bloquea la escritura: Enter manda la línea a la cola de la
+    // consola. Preguntas y modales desmontan esta Entrada, así que sigue habiendo un
+    // único dueño del teclado para las decisiones sensibles.
+    { isActive: true }
   );
 
   // Una celda de aire por lado: el texto se parte a `ancho - 2`.
@@ -110,22 +116,20 @@ export function Entrada({
     // remedida de ink 5.2.1 (CLAUDE.md, «Trampas verificadas»); `app.test.tsx` la sigue
     // vigilando con un prompt de dos filas.
     <Box flexDirection="column" flexShrink={0} {...barra(temaInk.acento)} paddingLeft={0}>
-      <Fila ancho={ancho} visible={0} />
       {ocupado ? (
-        filasDe("turno en curso… (Ctrl-C para cancelar el turno)", interior).map((fila, i) => (
-          <Fila key={i} ancho={ancho} visible={largo(fila)} color={temaInk.mudo}>{fila}</Fila>
-        ))
-      ) : (
-        filasDeTexto.map((fila, i) => {
-          const conCursor = i === filasDeTexto.length - 1;
-          return (
-            <Fila key={i} ancho={ancho} visible={largo(fila)} color={temaInk.texto}>
-              {conCursor ? fila.slice(0, -CURSOR.length) : fila}
-              {conCursor ? <Text color={temaInk.prompt}>{CURSOR}</Text> : null}
-            </Fila>
-          );
-        })
-      )}
+        <Fila ancho={ancho} visible={largo(`turno en curso · Enter encola${pendientes > 0 ? ` · ${pendientes} pendiente${pendientes === 1 ? "" : "s"}` : ""}`)} color={temaInk.mudo}>
+          {`turno en curso · Enter encola${pendientes > 0 ? ` · ${pendientes} pendiente${pendientes === 1 ? "" : "s"}` : ""}`}
+        </Fila>
+      ) : <Fila ancho={ancho} visible={0} />}
+      {filasDeTexto.map((fila, i) => {
+        const conCursor = i === filasDeTexto.length - 1;
+        return (
+          <Fila key={i} ancho={ancho} visible={largo(fila)} color={temaInk.texto}>
+            {conCursor ? fila.slice(0, -CURSOR.length) : fila}
+            {conCursor ? <Text color={temaInk.prompt}>{CURSOR}</Text> : null}
+          </Fila>
+        );
+      })}
       <Fila ancho={ancho} visible={0} />
       {filasDe(modelo, interior).map((fila, i) => (
         <Fila key={i} ancho={ancho} visible={largo(fila)} color={temaInk.mudo}>{fila}</Fila>

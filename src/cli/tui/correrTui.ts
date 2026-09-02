@@ -96,8 +96,8 @@ export interface OpcionesDeConsolaTui {
 }
 
 /**
- * La envoltura de ocupación: un turno más, y la Entrada se desactiva y Ctrl-C pasa a
- * cancelar. Exportada para probarla sin montar Ink — y aplicada a LOS DOS caminos de
+ * La envoltura de ocupación: un turno más, Ctrl-C pasa a cancelarlo y la Entrada puede
+ * encolar seguimiento. Exportada para probarla sin montar Ink — y aplicada a LOS DOS caminos de
  * ejecutor (el real y el guionizado por omisión): `--guion` fuerza `crearEjecutor` a
  * undefined, y un envoltorio solo para la rama real dejaba el turno guionizado sin
  * ocupación nunca.
@@ -143,13 +143,17 @@ export function crearConsolaTui(opciones: OpcionesDeConsolaTui) {
   let tracker: TokenTracker = createTokenTracker();
 
   const enviar = (linea: string): void => {
+    const enCola = vista.ver().ocupado;
     historial.unshift(linea);
     // El eco de lo escrito: el turno no repite la petición, y el transcript se lo debe
     // a quien la tecleó, no al motor.
-    store.usuario(linea);
+    store.usuario(linea, enCola);
     const despertar = esperando.shift();
     if (despertar !== undefined) despertar({ value: linea, done: false });
-    else cola.push(linea);
+    else {
+      cola.push(linea);
+      if (enCola) vista.mutar({ enCola: vista.ver().enCola + 1 });
+    }
   };
 
   // Ctrl-C durante un turno: no hay AbortController en el motor, así que la cancelación
@@ -183,7 +187,13 @@ export function crearConsolaTui(opciones: OpcionesDeConsolaTui) {
         return {
           next: () =>
             cola.length > 0
-              ? Promise.resolve({ value: cola.shift()!, done: false as const })
+              ? Promise.resolve().then(() => {
+                  const linea = cola.shift()!;
+                  store.desencolarUsuario();
+                  const pendientes = vista.ver().enCola;
+                  if (pendientes > 0) vista.mutar({ enCola: pendientes - 1 });
+                  return { value: linea, done: false as const };
+                })
               : new Promise<IteratorResult<string>>((resuelto) => esperando.push(resuelto)),
         };
       },
@@ -399,7 +409,7 @@ export async function correrConsolaTui(opciones: OpcionesDeMontaje): Promise<num
       guion || crearEjecutor === undefined ? undefined : crearEjecutor(montaje.alAbrirSesion);
     // La envoltura de ocupación cubre LOS DOS caminos: el ejecutor real si lo hay, y
     // el guionizado por omisión si no — `--guion` fuerza `crearEjecutor` a undefined,
-    // y sin envolver el default la Entrada no se desactivaría nunca en ese modo.
+    // y sin envolver el default no habría turno marcado como activo ni cola durante ese modo.
     const ejecutar = envolverConOcupacion(
       ejecutorBase ?? ejecutarTurnoGuionizado,
       (ocupado) => vista.mutar({ ocupado })

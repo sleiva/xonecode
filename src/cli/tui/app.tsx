@@ -178,6 +178,7 @@ export function App({
               alEnviar={alEnviar}
               completa={completa}
               ocupado={vista.ocupado}
+              pendientes={vista.enCola}
               historial={historial}
               modelo={datos.modelo}
               ancho={anchoEntrada}

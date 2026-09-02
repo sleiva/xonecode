@@ -119,7 +119,7 @@ describe("entrada", () => {
     expect(salida).toContain("/con▏"); // el texto sigue igual: completar era ambiguo
   });
 
-  it("ocupado deshabilita la entrada y enseña el turno en marcha", async () => {
+  it("ocupado deja escribir y Enter encola, sin cancelar el turno en marcha", async () => {
     const enviadas: string[] = [];
     const instancia = render(
       <Entrada
@@ -134,9 +134,9 @@ describe("entrada", () => {
     await teclear(instancia, "hola");
     instancia.stdin.write("\r");
     await esperar();
-    expect(enviadas).toEqual([]);
+    expect(enviadas).toEqual(["hola"]);
     expect(instancia.lastFrame()).toContain("turno en curso");
-    expect(instancia.lastFrame()).not.toContain("hola");
+    expect(instancia.lastFrame()).not.toContain("hola▏");
   });
 
   it("es una tarjeta de CUATRO filas con barra: aire, texto con cursor, aire, modelo", async () => {
@@ -190,6 +190,7 @@ describe("entrada", () => {
     );
     await esperar();
     expect(ocupada.lastFrame()).toContain("turno en curso");
+    expect(ocupada.lastFrame()).toContain("Enter encola");
     expect(ocupada.lastFrame()).toContain("ollama/glm");
   });
 });

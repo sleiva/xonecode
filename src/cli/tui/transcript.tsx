@@ -237,6 +237,7 @@ function ActoVista({
               {fila}
             </Fila>
           ))}
+          {acto.enCola ? <Text color={temaInk.fase}>{"  EN COLA"}</Text> : null}
           <Fila ancho={ancho} visible={0} />
         </Box>
       );

@@ -109,7 +109,7 @@ describe("la consola TUI", () => {
     // El bug que fija esto: el envoltorio solo se aplicaba con `crearEjecutor`
     // definido, y `--guion` lo fuerza a undefined — el camino del default
     // (ejecutarTurnoGuionizado) corría SIN la envoltura y la Entrada nunca se
-    // desactivaba. Ahora las dos rutas pasan por aquí.
+    // no marcaba el turno activo. Ahora las dos rutas pasan por aquí.
     const marcas: string[] = [];
     let soltar: () => void = () => {};
     const base: EjecutorDeTurno = async () => {
@@ -142,5 +142,18 @@ describe("la consola TUI", () => {
     enviar("segunda");
     expect(historial[0]).toBe("segunda");
     expect(historial[1]).toBe("primera");
+  });
+
+  it("una petición enviada mientras está ocupado queda marcada y sale en orden al terminar", async () => {
+    const { consola, enviar, vista, actos } = crearConsolaTui({ raiz: "/tmp/proyecto" });
+    vista.mutar({ ocupado: true });
+    enviar("segunda petición");
+    expect(vista.ver().enCola).toBe(1);
+    expect(actos()).toContainEqual({ tipo: "usuario", texto: "segunda petición", enCola: true });
+
+    const lector = consola.lineas[Symbol.asyncIterator]();
+    await expect(lector.next()).resolves.toEqual({ value: "segunda petición", done: false });
+    expect(vista.ver().enCola).toBe(0);
+    expect(actos()).toContainEqual({ tipo: "usuario", texto: "segunda petición" });
   });
 });
