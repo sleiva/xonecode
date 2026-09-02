@@ -11,7 +11,7 @@ XOne es una plataforma propietaria de apps móviles nativas: se programa con XML
 $ cd MiApp && xonecode
 
 xonecode · MiApp (7 colls) · ollama/glm-5.3-flash:cloud · 0 tokens
-13 comandos: /ayuda /config /describe /doctor /verify /modelo … /salir
+14 comandos: /ayuda /config /describe /doctor /verify /modelo /modelos … /salir
 
 ─ MiApp (7 colls) · ollama/glm-5.3-flash:cloud · 0 tokens · /ayuda
 ❯ ¿qué colecciones tiene este proyecto?
@@ -27,7 +27,7 @@ El proyecto tiene 9 colecciones repartidas en 7 ficheros .xne: …
 
 | | |
 |---|---|
-| Consola interactiva | prompt, barra de estado, 13 comandos de barra, autocompletado con Tab |
+| Consola interactiva | prompt, barra de estado, 14 comandos de barra, autocompletado con Tab |
 | Un disparo | `xonecode run "…"` — pipeable, para tuberías y CI |
 | Aprobación humana | el agente **para y pregunta** antes de escribir; sin un sí explícito, rechaza |
 | Verificador real | `xone-simulator` sobre el proyecto, con `/verify` y `xonecode verify` |
@@ -85,6 +85,10 @@ Precedencia, y cada valor recuerda de dónde vino (`xonecode config` lo dice):
 ```
 --modelo-<papel>  >  --modelo  >  XONECODE_MODELO  >  proyecto  >  global  >  omisión
 ```
+
+`/modelos <proveedor>` consulta el catálogo vivo del proveedor, filtra modelos de
+conversación y permite guardar una selección global para `rapido`, `trabajo` o `afilado`.
+Las claves siguen exclusivamente en `~/.xonecode/auth.json`; `/provider` solo las configura.
 
 Hay **tres papeles** porque el reparto es la palanca de coste: `rapido` corre en todos los
 turnos, `trabajo` desarrolla y `afilado` está reservado al juez. Por omisión, Ollama local.

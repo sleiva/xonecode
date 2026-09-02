@@ -46,7 +46,7 @@ Arranca así:
 
 ```
 xonecode · TuApp (7 colls) · ollama/glm-5.3-flash:cloud · 0 tokens
-13 comandos: /ayuda /config /describe /doctor /verify /modelo /modelo-rapido
+14 comandos: /ayuda /config /describe /doctor /verify /modelo /modelos /modelo-rapido
              /modelo-trabajo /modelo-afilado /hilo /nuevo /provider /salir
 ```
 
@@ -63,9 +63,10 @@ mismos que desde la shell, y **es literalmente la misma función** detrás — `
 | `/verify` | `xonecode verify` — **el más útil**: se corre tras un turno que escribió |
 | `/modelo ollama/qwen3.8:27b-mlx` | cambia los tres papeles **en caliente**, sin perder el hilo |
 | `/modelo-afilado anthropic/…` | cambia solo un papel |
+| `/modelos <proveedor>` | consulta el catálogo vivo, filtra modelos de conversación y guarda una selección global para un papel |
 | `/hilo` · `/nuevo` | ver el hilo · abrir otro sin salir |
 | `/provider` | los proveedores y **si** tienen credencial (nunca la clave) |
-| `/provider anthropic` | pide la clave **sin eco** y la guarda en `~/.xonecode/auth.json` (0600) |
+| `/provider anthropic` | configura la clave **sin eco** y la guarda en `~/.xonecode/auth.json` (0600); no lista modelos |
 | `/salir` | salir (Ctrl-D también) |
 
 Tab completa los comandos: `/mod` + Tab. Con varios candidatos los lista con su descripción.
