@@ -32,6 +32,7 @@ import { crearPielTui } from "./pielTui.js";
 import { pedirDecisionesTui } from "./aprobarTui.js";
 import type { DatosDeSidebar } from "./sidebar.js";
 import { App } from "./app.js";
+import { crearEmisorDeRueda, crearStdinSinRaton, entrarEnModos, type StdinParaInk } from "./raton.js";
 
 /**
  * La raíz con el HOME abreviado a `~`, para el pie: `/Users/x/dev/MinitMT` sale como
@@ -326,12 +327,39 @@ export interface OpcionesDeMontaje {
    */
   crearEjecutor?: (alAbrirSesion: (sesion: SesionReal) => void) => EjecutorDeTurno;
   topeDe?: (id: string) => number | undefined;
+  /** ¿Se captura el ratón para que la rueda mueva el transcript? `--sin-raton` lo apaga. Por omisión, sí. */
+  raton?: boolean;
 }
 
 export async function correrConsolaTui(opciones: OpcionesDeMontaje): Promise<number> {
-  const { fuentes, raiz, guion, inspeccionarProyecto = inspeccionar, ofrecer, crearEjecutor, topeDe } = opciones;
+  const {
+    fuentes,
+    raiz,
+    guion,
+    inspeccionarProyecto = inspeccionar,
+    ofrecer,
+    crearEjecutor,
+    topeDe,
+    raton = true,
+  } = opciones;
   const montaje = crearConsolaTui({ raiz, fuentes, rama: ramaDeGit(raiz), topeDe });
   const { consola, store, vista, enviar, responder, cancelar, completa, historial, datosSidebar } = montaje;
+
+  // Los modos de terminal (pantalla alternativa y ratón) ANTES de montar Ink, para que el
+  // primer frame ya caiga en la pantalla alternativa. Sin stdout TTY no escribe nada.
+  const conRaton = raton && process.stdin.isTTY === true;
+  const salirDeModos = entrarEnModos(process.stdout, { raton: conRaton });
+  // «Nunca un terminal roto» también si el proceso muere por una excepción que no pasa
+  // por aquí o por un `process.exit()` ajeno: sin esto el usuario se queda en la pantalla
+  // alternativa, sin scrollback y con cada clic escupiendo secuencias. `exit` cubre eso
+  // (los writes a un TTY son síncronos y llegan antes de morir); no cubre SIGTERM, y
+  // Ctrl-C en modo crudo no es SIGINT sino una tecla. `salirDeModos` es idempotente.
+  process.once("exit", salirDeModos);
+  // El stdin que Ink lee lleva el ratón ya quitado: una secuencia de rueda que llegara a
+  // `useInput` acabaría como texto en la Entrada. Sin ratón, el stdin real tal cual.
+  const rueda = conRaton ? crearEmisorDeRueda() : undefined;
+  const stdin =
+    rueda === undefined ? undefined : crearStdinSinRaton(process.stdin as unknown as StdinParaInk, rueda.emitir);
 
   // exitOnCtrlC: false OBLIGATORIO — Ctrl-C es un gesto con significado aquí (cancelar
   // el turno, rechazar en el modal), no «mata la app y deja la promesa del modal colgada».
@@ -345,8 +373,9 @@ export async function correrConsolaTui(opciones: OpcionesDeMontaje): Promise<num
       historial,
       datosSidebar,
       alCancelarTurno: cancelar,
+      rueda,
     }),
-    { exitOnCtrlC: false }
+    { exitOnCtrlC: false, ...(stdin === undefined ? {} : { stdin: stdin as unknown as NodeJS.ReadStream }) }
   );
 
   try {
@@ -376,7 +405,14 @@ export async function correrConsolaTui(opciones: OpcionesDeMontaje): Promise<num
 
     return await correrConsola(consola, estado, ejecutar);
   } finally {
-    // Nunca un terminal roto: se desmonta también si revienta el prólogo o un turno.
-    instancia.unmount();
+    // Nunca un terminal roto: se desmonta también si revienta el prólogo o un turno, y
+    // DESPUÉS se sale de los modos — el último frame de Ink debe caer aún en la pantalla
+    // alternativa, y el terminal recuperar lo que tenía con el ratón ya suelto.
+    try {
+      instancia.unmount();
+    } finally {
+      salirDeModos();
+      process.off("exit", salirDeModos);
+    }
   }
 }

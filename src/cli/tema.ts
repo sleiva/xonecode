@@ -80,3 +80,17 @@ const SIN_COLOR: Tema = Object.fromEntries(
 export function crearTema(conColor: boolean): Tema {
   return conColor ? CON_COLOR : SIN_COLOR;
 }
+
+/**
+ * Los modos de terminal de la TUI (`cli/tui/raton.ts`), aquí porque este es el único
+ * fichero de producción con escapes ANSI (tema.test.ts lo vigila): son control de
+ * terminal, como `arriba` o `limpiarLinea`, no color. Solo se escriben con stdout TTY.
+ */
+export const MODOS_DE_TERMINAL = {
+  /** `?1049h` entra en la pantalla alternativa (la de vim); `H` lleva el cursor arriba a la izquierda. */
+  entrarPantallaAlternativa: "\x1b[?1049h\x1b[H",
+  salirPantallaAlternativa: "\x1b[?1049l",
+  /** `?1000h` pide botones (la rueda son los botones 64/65); `?1006h` los codifica en SGR, legibles. */
+  activarRaton: "\x1b[?1000h\x1b[?1006h",
+  desactivarRaton: "\x1b[?1006l\x1b[?1000l",
+} as const;

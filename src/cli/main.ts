@@ -95,6 +95,7 @@ const AYUDA = `xonecode — harness de XOne
   xonecode --guion               la consola con el agente de pega, sin gastar
   xonecode --tui                 fuerza la interfaz de terminal (TUI)
   xonecode --no-tui              fuerza la consola clásica (stdio), p. ej. con TTY
+  xonecode --sin-raton           TUI sin capturar el ratón (la rueda vuelve al terminal)
   xonecode --help                esto
 
 Modelo:
@@ -229,6 +230,15 @@ export function crearTopeDelModelo(raiz: string): (id: string) => number | undef
  * el EOF del pipe no termina el lazo) y cualquier tubería → stdio, que es lo que
  * mantiene el e2e de pipe byte-idéntico.
  */
+/**
+ * ¿Captura la TUI el ratón? Con él, la rueda mueve el transcript y no el scrollback del
+ * terminal, a cambio de que seleccionar texto sea Alt/Shift + arrastre. `--sin-raton` lo
+ * apaga. Pura, para probarla.
+ */
+export function quiereRaton(argv: string[] = []): boolean {
+  return !argv.includes("--sin-raton");
+}
+
 export function decidirTui(argv: string[] = []): boolean {
   if (argv.includes("--no-tui")) return false;
   if (argv.includes("--tui")) return true;
@@ -429,7 +439,9 @@ export async function entrarEnConsola(
    * la pasan, y `decidirTui` sin banderas cae en el `isTTY` del proceso). En la rama
    * TUI este parámetro de `interactivo` no se usa: la TUI es interactiva por diseño.
    */
-  usarTui: boolean = decidirTui()
+  usarTui: boolean = decidirTui(),
+  /** ¿Ratón en la TUI? Solo la rama TUI lo mira. */
+  raton: boolean = true
 ): Promise<number> {
   if (usarTui) {
     // La TUI es la MISMA consola: `entrarEnConsola` no la duplica, le entrega las
@@ -449,6 +461,7 @@ export async function entrarEnConsola(
       ofrecer: ofrecerCrearProyecto,
       crearEjecutor: guion ? undefined : crearEjecutorReal,
       topeDe: crearTopeDelModelo(raiz),
+      raton,
     });
   }
   // `let` porque el asistente de creación puede cambiarlo TODO: si el usuario acepta,
@@ -598,6 +611,7 @@ export async function main(argv: string[]): Promise<number> {
     comando === "--guion" ||
     comando === "--tui" ||
     comando === "--no-tui" ||
+    comando === "--sin-raton" ||
     comando.startsWith("--modelo")
   ) {
     const guion = argv.includes("--guion");
@@ -613,8 +627,18 @@ export async function main(argv: string[]): Promise<number> {
     // extraerBanderasDeModelo también con argv vacío, para que fuentes.entorno
     // .XONECODE_MODELO se rellene igual que en todos los demás subcomandos: la consola
     // no puede ser la única vía que ignora esa variable.
-    const { fuentes } = extraerBanderasDeModelo(argv.filter((a) => a !== "--guion"));
-    return entrarEnConsola(fuentes, undefined, undefined, undefined, undefined, guion, undefined, usarTui);
+    const { fuentes } = extraerBanderasDeModelo(argv.filter((a) => a !== "--guion" && a !== "--sin-raton"));
+    return entrarEnConsola(
+      fuentes,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      guion,
+      undefined,
+      usarTui,
+      quiereRaton(argv)
+    );
   }
   if (comando === "--help" || comando === "-h") {
     process.stdout.write(AYUDA);

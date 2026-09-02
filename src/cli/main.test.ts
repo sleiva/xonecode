@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join, basename } from "node:path";
 import { PassThrough } from "node:stream";
 import * as readline from "node:readline";
-import { entrarEnConsola, main, formatearBarra, crearCompleterDelProyecto, decidirTui } from "./main.js";
+import { entrarEnConsola, main, formatearBarra, crearCompleterDelProyecto, decidirTui, quiereRaton } from "./main.js";
 import { COMANDOS } from "./consola.js";
 import type { Escribir } from "./stdio.js";
 import { POR_OMISION, type FuentesDeEleccion } from "../core/modelos.js";
@@ -179,6 +179,15 @@ describe("entrarEnConsola", () => {
     // también lo contiene, así que comprobamos que llega tras el primer arranque).
     const trasArranque = texto.slice(texto.indexOf("\n") + 1);
     expect(trasArranque).toContain("ollama/llama3");
+  });
+});
+
+describe("quiereRaton", () => {
+  it("por omisión la TUI captura el ratón; --sin-raton lo apaga", () => {
+    expect(quiereRaton([])).toBe(true);
+    expect(quiereRaton(["--tui"])).toBe(true);
+    expect(quiereRaton(["--sin-raton"])).toBe(false);
+    expect(quiereRaton(["--tui", "--sin-raton", "--guion"])).toBe(false);
   });
 });
 

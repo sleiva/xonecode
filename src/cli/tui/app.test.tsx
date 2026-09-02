@@ -24,6 +24,7 @@ import { createElement } from "react";
 import { App } from "./app.js";
 import { crearStore, crearRanura, vistaInicial } from "./store.js";
 import type { DatosDeSidebar } from "./sidebar.js";
+import { crearEmisorDeRueda, crearStdinSinRaton, type StdinParaInk } from "./raton.js";
 
 /** El terminal falso: solo mide y recoge. Nada de `isTTY`. */
 class StdoutFalso extends EventEmitter {
@@ -90,11 +91,16 @@ function montar(opciones: {
   completa?: (linea: string) => [string[], string];
   /** Datos de sidebar propios (se leen en cada render): para probar cambios en caliente. */
   datos?: () => DatosDeSidebar;
+  /** Con ratón: Ink lee un stdin FILTRADO (`raton.ts`) y el transcript recibe la rueda. */
+  raton?: boolean;
 }) {
   const store = crearStore();
   const vista = crearRanura(vistaInicial());
   const stdout = new StdoutFalso(opciones.columnas ?? COLUMNAS, FILAS);
   const stdin = new StdinFalso();
+  const rueda = opciones.raton ? crearEmisorDeRueda() : undefined;
+  const stdinParaInk =
+    rueda === undefined ? stdin : crearStdinSinRaton(stdin as unknown as StdinParaInk, rueda.emitir);
   const instancia = render(
     createElement(App, {
       store,
@@ -105,10 +111,11 @@ function montar(opciones: {
       historial: [],
       datosSidebar: opciones.datos ?? (() => datosDe(opciones.ruta ?? "/dev/MinitMT")),
       alCancelarTurno: () => {},
+      rueda,
     }),
     {
       stdout: stdout as never,
-      stdin: stdin as never,
+      stdin: stdinParaInk as never,
       stderr: new StdoutFalso(80, FILAS) as never,
       debug: true,
       exitOnCtrlC: false,
@@ -308,8 +315,10 @@ describe("la maqueta de la App", () => {
     m.instancia.unmount();
     laMaquetaCabe(frame);
     const lineas = frame.split("\n");
-    expect(lineas[0]).toContain("hola");
-    expect(lineas[1]).toContain("respuesta corta");
+    // La tarjeta de usuario lleva su aire DENTRO: el texto nace en la fila 1, no en la 0.
+    expect(lineas[0]!.replace("┃", "").trim()).toBe("");
+    expect(lineas[1]).toContain("hola");
+    expect(lineas[3]).toContain("respuesta corta");
   });
 
   it("40 líneas de tool en un turno ocupan como mucho 5 filas y no esconden el texto del asistente", async () => {
@@ -348,6 +357,25 @@ describe("la maqueta de la App", () => {
     m.instancia.unmount();
     laMaquetaCabe(frame);
     expect(frame.split("\n").at(-1)).toContain("2K tokens  /ayuda");
+  });
+
+  it("con ratón: Ink lee el stdin filtrado — la rueda mueve el transcript y NO se cuela como texto", async () => {
+    // El montaje real de correrTui.ts, con el stdin falso detrás del filtro: prueba que la
+    // superficie que `crearStdinSinRaton` ofrece es la que Ink 5 usa de verdad.
+    const m = montar({ raton: true });
+    await esperar();
+    for (let i = 0; i < 40; i++) m.store.linea(`línea ${i}`, "sistema");
+    await esperar();
+    m.stdin.write("ho\x1b[<64;10;5Mla"); // «hola» con una muesca de rueda hacia arriba en medio
+    await esperar();
+    const frame = m.stdout.ultimo();
+    m.instancia.unmount();
+    laMaquetaCabe(frame);
+    expect(frame).toContain("hola▏");
+    expect(frame).not.toContain("64;10");
+    // La ventana subió 3 actos: lo último ya no se ve.
+    expect(frame).not.toContain("línea 39");
+    expect(frame).toContain("línea 36");
   });
 
   it("al ESTRECHAR el terminal la sidebar se va y la rama pasa al pie", async () => {

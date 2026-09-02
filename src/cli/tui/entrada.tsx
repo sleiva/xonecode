@@ -11,25 +11,10 @@ import type { ReactNode } from "react";
 import { barra } from "./barra.js";
 import { temaInk } from "./temaInk.js";
 import { filasDe } from "./filas.js";
+import { Fila } from "./tarjeta.js";
 
 /** El cursor: un carácter que viaja DENTRO del texto para que el partido en filas lo cuente. */
 const CURSOR = "▏";
-
-/**
- * Una fila de la tarjeta, rellena de espacios hasta `ancho` para que el fondo sea un
- * bloque sólido: Ink 5.2.1 solo da fondo a `Text`, y un Text pinta fondo solo bajo sus
- * caracteres. Una celda de aire a la izquierda (y la que sobre a la derecha) hace de
- * padding lateral. `visible` es lo que ocupa `children`, en puntos de código.
- */
-function Fila({ ancho, visible, color, children }: { ancho: number; visible: number; color?: string; children?: ReactNode }): ReactNode {
-  return (
-    <Text backgroundColor={temaInk.fondoInput} color={color}>
-      {" "}
-      {children}
-      {" ".repeat(Math.max(0, ancho - 1 - visible))}
-    </Text>
-  );
-}
 
 export function Entrada({
   alEnviar,

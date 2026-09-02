@@ -13,6 +13,7 @@ import { ANCHO_DE_SIDEBAR, BarraDeEstado, Sidebar, cabeSidebar, type DatosDeSide
 import { ModalAprobacion } from "./aprobarTui.js";
 import { barra } from "./barra.js";
 import { temaInk } from "./temaInk.js";
+import type { EmisorDeRueda } from "./raton.js";
 
 type Store = ReturnType<typeof crearStore>;
 
@@ -100,6 +101,7 @@ export function App({
   historial,
   datosSidebar,
   alCancelarTurno,
+  rueda,
 }: {
   store: Store;
   vista: Ranura<VistaDeTui>;
@@ -112,6 +114,8 @@ export function App({
   /** Se lee en CADA render: los tokens y el modelo cambian mientras corre el turno. */
   datosSidebar: () => DatosDeSidebar;
   alCancelarTurno: () => void;
+  /** Las muescas de la rueda del ratón para el transcript; sin ratón, no hay emisor. */
+  rueda?: EmisorDeRueda;
 }): ReactNode {
   const vista = useSincronizado(ranuraVista.ver, ranuraVista.suscribir);
   const datos = datosSidebar();
@@ -164,7 +168,7 @@ export function App({
             largo no infla su base y no le roba anchura a la sidebar (el logotipo, de
             anchura fija, se envolvería en garabatos). */}
         <Box flexDirection="column" flexGrow={1} flexBasis={0} paddingRight={1}>
-          <Transcript store={store} altura={alturaTranscript} />
+          <Transcript store={store} altura={alturaTranscript} rueda={rueda} ancho={anchoEntrada} />
           {vista.pregunta !== null ? (
             <PreguntaInk pregunta={vista.pregunta} alResponder={responder} />
           ) : (
