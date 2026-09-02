@@ -12,6 +12,7 @@ import { barra } from "./barra.js";
 import { temaInk } from "./temaInk.js";
 import { filasDe } from "./filas.js";
 import { Fila } from "./tarjeta.js";
+import { COMANDOS } from "../consola.js";
 
 /** El cursor: un carácter que viaja DENTRO del texto para que el partido en filas lo cuente. */
 const CURSOR = "▏";
@@ -27,6 +28,33 @@ function DockDeCola({ pendientes, ancho }: { pendientes: readonly string[]; anch
   const bruto = `${ESPERA_EN_COLA[paso]}  ${pendientes.length} en cola · ${pendientes[0] ?? ""}`;
   const texto = Array.from(bruto).slice(0, Math.max(1, ancho - 2)).join("");
   return <Fila ancho={ancho} visible={Array.from(texto).length} color={temaInk.aviso} fondo={temaInk.fondoCola}>{texto}</Fila>;
+}
+
+type OpcionDeComando = { nombre: string; descripcion: string };
+const MAX_COMANDOS_VISIBLES = 8;
+
+function MenuDeComandos({ opciones, seleccion, ancho }: { opciones: readonly OpcionDeComando[]; seleccion: number; ancho: number }): ReactNode {
+  const limite = Math.max(1, ancho - 2);
+  return (
+    <Box flexDirection="column" flexShrink={0}>
+      {opciones.map((opcion, indice) => {
+        const activo = indice === seleccion;
+        const bruto = `${activo ? "›" : " "} /${opcion.nombre.padEnd(16)} ${opcion.descripcion}`;
+        const texto = Array.from(bruto).slice(0, limite).join("");
+        return (
+          <Fila
+            key={opcion.nombre}
+            ancho={ancho}
+            visible={Array.from(texto).length}
+            color={activo ? temaInk.fondoCola : temaInk.mudo}
+            fondo={activo ? temaInk.fase : temaInk.fondoCola}
+          >
+            {texto}
+          </Fila>
+        );
+      })}
+    </Box>
+  );
 }
 
 export function Entrada({
@@ -53,10 +81,28 @@ export function Entrada({
   const [valor, setValor] = useState("");
   const [indiceHistorial, setIndice] = useState(-1); // -1 = la línea en edición
   const [pista, setPista] = useState<string[]>([]);
+  const [menuAbierto, setMenuAbierto] = useState(false);
+  const [seleccion, setSeleccion] = useState(0);
+  const opcionesDeMenu: OpcionDeComando[] =
+    menuAbierto && valor.startsWith("/")
+      ? Object.entries(COMANDOS)
+          .filter(([nombre]) => nombre.startsWith(valor.slice(1).toLowerCase()))
+          .slice(0, MAX_COMANDOS_VISIBLES)
+          .map(([nombre, comando]) => ({ nombre, descripcion: comando.descripcion }))
+      : [];
+
+  useEffect(() => setSeleccion(0), [valor]);
 
   useInput(
     (entrada, tecla) => {
       if (tecla.return) {
+        const opcion = opcionesDeMenu[seleccion];
+        if (opcion !== undefined) {
+          setValor(`/${opcion.nombre}`);
+          setMenuAbierto(false);
+          setPista([]);
+          return;
+        }
         if (valor.trim() === "") return;
         alEnviar(valor);
         setValor("");
@@ -65,6 +111,10 @@ export function Entrada({
         return;
       }
       if (tecla.upArrow) {
+        if (opcionesDeMenu.length > 0) {
+          setSeleccion((actual) => (actual - 1 + opcionesDeMenu.length) % opcionesDeMenu.length);
+          return;
+        }
         const siguiente = Math.min(historial.length - 1, indiceHistorial + 1);
         if (historial[siguiente] !== undefined) {
           setIndice(siguiente);
@@ -73,6 +123,10 @@ export function Entrada({
         return;
       }
       if (tecla.downArrow) {
+        if (opcionesDeMenu.length > 0) {
+          setSeleccion((actual) => (actual + 1) % opcionesDeMenu.length);
+          return;
+        }
         const siguiente = indiceHistorial - 1;
         // Ya estás en la línea en edición (-1): no hay nada más abajo. Sin este guard,
         // siguiente === -2 y `historial[-2]` es undefined — y lo tecleado después se
@@ -83,6 +137,13 @@ export function Entrada({
         return;
       }
       if (tecla.tab) {
+        const opcion = opcionesDeMenu[seleccion];
+        if (opcion !== undefined) {
+          setValor(`/${opcion.nombre}`);
+          setMenuAbierto(false);
+          setPista([]);
+          return;
+        }
         const [candidatos, base] = completa(valor);
         if (candidatos.length === 1) {
           setValor(candidatos[0]!);
@@ -92,13 +153,22 @@ export function Entrada({
         }
         return;
       }
+      if (tecla.escape) {
+        setMenuAbierto(false);
+        setPista([]);
+        return;
+      }
       if (tecla.backspace || tecla.delete) {
-        setValor((v) => v.slice(0, -1));
+        const siguiente = valor.slice(0, -1);
+        setValor(siguiente);
+        setMenuAbierto(siguiente.startsWith("/"));
         setPista([]);
         return;
       }
       if (entrada && !tecla.ctrl && !tecla.meta && !tecla.escape) {
-        setValor((v) => v + entrada);
+        const siguiente = valor + entrada;
+        setValor(siguiente);
+        setMenuAbierto(siguiente.startsWith("/"));
         setPista([]);
       }
     },
@@ -129,6 +199,7 @@ export function Entrada({
     // remedida de ink 5.2.1 (CLAUDE.md, «Trampas verificadas»); `app.test.tsx` la sigue
     // vigilando con un prompt de dos filas.
     <Box flexDirection="column" flexShrink={0} {...barra(temaInk.acento)} paddingLeft={0}>
+      {opcionesDeMenu.length > 0 ? <MenuDeComandos opciones={opcionesDeMenu} seleccion={seleccion} ancho={ancho} /> : null}
       {ocupado ? (
         <Fila ancho={ancho} visible={largo(`turno en curso · Enter encola${pendientes.length > 0 ? ` · ${pendientes.length} pendiente${pendientes.length === 1 ? "" : "s"}` : ""}`)} color={temaInk.mudo}>
           {`turno en curso · Enter encola${pendientes.length > 0 ? ` · ${pendientes.length} pendiente${pendientes.length === 1 ? "" : "s"}` : ""}`}

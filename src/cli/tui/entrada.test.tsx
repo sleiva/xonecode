@@ -44,6 +44,22 @@ describe("entrada", () => {
     expect(instancia.lastFrame()).toContain("/config");
   });
 
+  it("/ abre un menú de comandos con descripción, navegable con flechas", async () => {
+    const instancia = render(
+      <Entrada alEnviar={() => {}} completa={() => [[], ""]} ocupado={false} historial={[]} modelo="ollama/glm" ancho={60} />
+    );
+    await teclear(instancia, "/");
+    expect(instancia.lastFrame()).toContain("/ayuda");
+    expect(instancia.lastFrame()).toContain("lista los comandos de barra");
+    instancia.stdin.write("\x1b[B");
+    await esperar();
+    instancia.stdin.write("\r");
+    await esperar();
+    expect(instancia.lastFrame()).toMatch(/\/\w+▏/);
+    expect(instancia.lastFrame()).not.toContain("lista los comandos de barra");
+    instancia.unmount();
+  });
+
   it("↑/↓ recorren el historial: lo más reciente primero, y ↓ devuelve a la línea vacía", async () => {
     // Contrato: el historial llega con la MÁS RECIENTE en el índice 0.
     const instancia = render(
@@ -98,25 +114,25 @@ describe("entrada", () => {
     expect(enviadas).toEqual(["hola"]);
   });
 
-  it("Tab con varios candidatos no completa: enseña hasta 8 pistas y deja el texto", async () => {
+  it("Tab con varios candidatos de fichero no completa: enseña hasta 8 pistas y deja el texto", async () => {
     const instancia = render(
       <Entrada
         alEnviar={() => {}}
-        completa={() => [["/config", "/conectar", "/conectar2"], "/con"]}
+        completa={() => [["@config", "@conectar", "@conectar2"], "@con"]}
         ocupado={false}
         historial={[]}
         modelo="ollama/glm"
         ancho={40}
       />
     );
-    await teclear(instancia, "/con");
+    await teclear(instancia, "@con");
     instancia.stdin.write("\t");
     await esperar();
     const salida = instancia.lastFrame() ?? "";
     expect(salida).toContain("fig"); // la pista es el candidato sin su base
     expect(salida).toContain("ectar");
     expect(salida).toContain("ectar2");
-    expect(salida).toContain("/con▏"); // el texto sigue igual: completar era ambiguo
+    expect(salida).toContain("@con▏"); // el texto sigue igual: completar era ambiguo
   });
 
   it("ocupado deja escribir y Enter encola, sin cancelar el turno en marcha", async () => {
