@@ -111,12 +111,11 @@ describe("CatalogoModelos", () => {
     const doble = responderJson(
       { models: [{ name: "chat:latest" }, { name: "embed:latest" }] },
       { capabilities: ["completion", "vision"], model_info: { "llama.context_length": 32768 } },
-      { capabilities: ["completion"], model_info: { "llama.context_length": 32768 } },
       { capabilities: ["embedding"], model_info: { "nomic.context_length": 8192 } },
     );
 
     await expect(new CatalogoModelos(doble.fetch).listar("ollama")).resolves.toEqual([
-      { proveedor: "ollama", id: "embed:latest", contexto: 32768 },
+      { proveedor: "ollama", id: "chat:latest", contexto: 32768 },
     ]);
     expect(doble.llamadas).toEqual([
       { url: "http://ollama.local/api/tags", init: { signal: expect.any(AbortSignal) } },
@@ -183,6 +182,30 @@ describe("CatalogoModelos", () => {
 
     await expect(new CatalogoModelos(doble.fetch).listar("gemini"))
       .rejects.toThrow("respuesta incompatible de gemini");
+  });
+
+  it("rechaza metadatos de paginación Anthropic malformados", async () => {
+    vi.stubEnv("ANTHROPIC_API_KEY", "sk-prueba-anthropic");
+    const doble = responderJson({ data: [], has_more: "false" });
+
+    await expect(new CatalogoModelos(doble.fetch).listar("anthropic"))
+      .rejects.toThrow("respuesta incompatible de anthropic");
+  });
+
+  it("rechaza un nextPageToken de Gemini que no es texto", async () => {
+    vi.stubEnv("GOOGLE_API_KEY", "clave-prueba-gemini");
+    const doble = responderJson({ models: [], nextPageToken: 42 });
+
+    await expect(new CatalogoModelos(doble.fetch).listar("gemini"))
+      .rejects.toThrow("respuesta incompatible de gemini");
+  });
+
+  it("etiqueta con el proveedor los errores de normalización", async () => {
+    vi.stubEnv("OPENAI_API_KEY", "sk-prueba-openai");
+    const doble = responderJson({ data: "forma inesperada" });
+
+    await expect(new CatalogoModelos(doble.fetch).listar("openai"))
+      .rejects.toThrow("respuesta incompatible de openai");
   });
 });
 

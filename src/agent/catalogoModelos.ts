@@ -30,10 +30,10 @@ function numero(valor: unknown): number | undefined {
   return typeof valor === "number" && Number.isFinite(valor) && valor > 0 ? valor : undefined;
 }
 
-function modelosDe(registro: Registro, campo: string): Registro[] {
+function modelosDe(registro: Registro, campo: string, proveedor: Proveedor): Registro[] {
   const valor = registro[campo];
   if (!Array.isArray(valor) || !valor.every(esRegistro)) {
-    throw new ErrorCatalogoModelos("respuesta incompatible");
+    throw new ErrorCatalogoModelos(`respuesta incompatible de ${proveedor}`);
   }
   return valor;
 }
@@ -120,9 +120,6 @@ export class CatalogoModelos implements CatalogoModelosPort {
       }
     } catch (error) {
       if (error instanceof ErrorCatalogoModelos) {
-        if (error.message === "respuesta incompatible") {
-          throw new ErrorCatalogoModelos(`respuesta incompatible de ${proveedor}`);
-        }
         throw error;
       }
       if (agotoElTiempo || controlador.signal.aborted) {
@@ -140,7 +137,7 @@ export class CatalogoModelos implements CatalogoModelosPort {
       headers: { authorization: `Bearer ${clave}` },
     });
     if (!esRegistro(respuesta)) throw new ErrorCatalogoModelos("respuesta incompatible de openai");
-    return modelosDe(respuesta, "data").flatMap((modelo) => {
+    return modelosDe(respuesta, "data", "openai").flatMap((modelo) => {
       const id = texto(modelo.id);
       return id !== undefined && esModeloOpenAiConversacional(id) ? [{ proveedor: "openai", id }] : [];
     });
@@ -155,14 +152,17 @@ export class CatalogoModelos implements CatalogoModelosPort {
     for (let pagina = 0; pagina < MAX_PAGINAS; pagina++) {
       const respuesta = await this.pedir("anthropic", url, { headers: cabeceras });
       if (!esRegistro(respuesta)) throw new ErrorCatalogoModelos("respuesta incompatible de anthropic");
-      for (const modelo of modelosDe(respuesta, "data")) {
+      for (const modelo of modelosDe(respuesta, "data", "anthropic")) {
         const id = texto(modelo.id);
         if (id === undefined || !esIdConversacional(id)) continue;
         const nombre = texto(modelo.display_name);
         const contexto = numero(modelo.max_input_tokens);
         salida.push({ proveedor: "anthropic", id, ...(nombre === undefined ? {} : { nombre }), ...(contexto === undefined ? {} : { contexto }) });
       }
-      if (respuesta.has_more !== true) return salida;
+      if (typeof respuesta.has_more !== "boolean") {
+        throw new ErrorCatalogoModelos("respuesta incompatible de anthropic");
+      }
+      if (!respuesta.has_more) return salida;
       const cursor = texto(respuesta.last_id);
       if (cursor === undefined || vistos.has(cursor)) break;
       vistos.add(cursor);
@@ -180,7 +180,7 @@ export class CatalogoModelos implements CatalogoModelosPort {
     for (let pagina = 0; pagina < MAX_PAGINAS; pagina++) {
       const respuesta = await this.pedir("gemini", url, { headers: cabeceras });
       if (!esRegistro(respuesta)) throw new ErrorCatalogoModelos("respuesta incompatible de gemini");
-      for (const modelo of modelosDe(respuesta, "models")) {
+      for (const modelo of modelosDe(respuesta, "models", "gemini")) {
         const nombreRemoto = texto(modelo.name);
         const metodos = modelo.supportedGenerationMethods;
         if (nombreRemoto === undefined || !Array.isArray(metodos) || !metodos.includes("generateContent")) continue;
@@ -190,8 +190,9 @@ export class CatalogoModelos implements CatalogoModelosPort {
         const contexto = numero(modelo.inputTokenLimit);
         salida.push({ proveedor: "gemini", id, ...(nombre === undefined ? {} : { nombre }), ...(contexto === undefined ? {} : { contexto }) });
       }
+      if (respuesta.nextPageToken === undefined) return salida;
       const siguiente = texto(respuesta.nextPageToken);
-      if (siguiente === undefined) return salida;
+      if (siguiente === undefined) throw new ErrorCatalogoModelos("respuesta incompatible de gemini");
       if (vistos.has(siguiente)) break;
       vistos.add(siguiente);
       url = urlConParametro("https://generativelanguage.googleapis.com/v1beta/models", "pageToken", siguiente);
@@ -203,7 +204,7 @@ export class CatalogoModelos implements CatalogoModelosPort {
     const etiquetas = await this.pedir("ollama", unirUrlOllama("/api/tags"));
     if (!esRegistro(etiquetas)) throw new ErrorCatalogoModelos("respuesta incompatible de ollama");
     const salida: ModeloDisponible[] = [];
-    for (const etiqueta of modelosDe(etiquetas, "models")) {
+    for (const etiqueta of modelosDe(etiquetas, "models", "ollama")) {
       const id = texto(etiqueta.name);
       if (id === undefined) continue;
       const detalle = await this.pedir("ollama", unirUrlOllama("/api/show"), {
@@ -216,7 +217,6 @@ export class CatalogoModelos implements CatalogoModelosPort {
       if (
         !Array.isArray(capacidades)
         || !capacidades.some((capacidad) => capacidad === "completion" || capacidad === "generate" || capacidad === "chat")
-        || capacidades.some((capacidad) => typeof capacidad === "string" && ["vision", "image", "audio", "video", "embedding"].includes(capacidad))
       ) continue;
       const contexto = contextoOllama(detalle.model_info);
       salida.push({ proveedor: "ollama", id, ...(contexto === undefined ? {} : { contexto }) });
