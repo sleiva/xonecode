@@ -68,6 +68,67 @@ function PreguntaInk({
   );
 }
 
+const FILAS_SELECTOR = 6;
+
+/** Selector pequeño y filtrable: no vuelca el catálogo completo al transcript. */
+function SelectorInk({
+  selector,
+  alResponder,
+  ancho,
+}: {
+  selector: NonNullable<VistaDeTui["selector"]>;
+  alResponder: (id: string | undefined) => void;
+  ancho: number;
+}): ReactNode {
+  const [filtro, setFiltro] = useState("");
+  const [seleccion, setSeleccion] = useState(0);
+  const opciones = selector.opciones.filter((opcion) => {
+    const texto = `${opcion.etiqueta} ${opcion.id} ${opcion.detalle ?? ""}`.toLowerCase();
+    return texto.includes(filtro.toLowerCase());
+  });
+  const inicio = Math.max(0, Math.min(seleccion - Math.floor(FILAS_SELECTOR / 2), opciones.length - FILAS_SELECTOR));
+  const visibles = opciones.slice(inicio, inicio + FILAS_SELECTOR);
+
+  useEffect(() => setSeleccion(0), [filtro]);
+  useInput((entrada, tecla) => {
+    if (tecla.escape) return alResponder(undefined);
+    if (tecla.return) return alResponder(opciones[seleccion]?.id);
+    if (tecla.upArrow && opciones.length > 0) {
+      setSeleccion((actual) => (actual - 1 + opciones.length) % opciones.length);
+      return;
+    }
+    if (tecla.downArrow && opciones.length > 0) {
+      setSeleccion((actual) => (actual + 1) % opciones.length);
+      return;
+    }
+    if (tecla.backspace || tecla.delete) {
+      setFiltro((actual) => actual.slice(0, -1));
+      return;
+    }
+    if (entrada && !tecla.ctrl && !tecla.meta) setFiltro((actual) => actual + entrada);
+  });
+
+  const recortar = (texto: string): string => Array.from(texto).slice(0, Math.max(1, ancho - 2)).join("");
+  return (
+    <Box flexDirection="column" flexShrink={0} {...barra(temaInk.acento)}>
+      <Text color={temaInk.negrita}>{recortar(selector.titulo)}</Text>
+      <Text color={temaInk.mudo}>{recortar(`filtra · ↑↓ elige · Enter confirma · Esc cancela  ${filtro}▏`)}</Text>
+      {Array.from({ length: FILAS_SELECTOR }, (_, indice) => {
+        const opcion = visibles[indice];
+        if (opcion === undefined) return <Text key={indice}> </Text>;
+        const posicion = inicio + indice;
+        const activa = posicion === seleccion;
+        const detalle = opcion.detalle === undefined ? "" : ` — ${opcion.detalle}`;
+        return (
+          <Text key={opcion.id} color={activa ? temaInk.fondoCola : temaInk.texto} backgroundColor={activa ? temaInk.fase : undefined}>
+            {recortar(`${activa ? "›" : " "} ${opcion.etiqueta}${detalle}`)}
+          </Text>
+        );
+      })}
+    </Box>
+  );
+}
+
 /**
  * Las filas que NO son transcript: las 4 de la Entrada (aire, línea en edición, aire,
  * modelo; la barra izquierda no añade filas) y 1 del pie. Si la Entrada cambia de forma,
@@ -97,6 +158,7 @@ export function App({
   vista: ranuraVista,
   alEnviar,
   responder,
+  responderSelector,
   completa,
   historial,
   datosSidebar,
@@ -108,6 +170,8 @@ export function App({
   alEnviar: (linea: string) => void;
   /** La respuesta a la pregunta viva (la ranura la enruta a quien preguntó). */
   responder: (linea: string) => void;
+  /** La respuesta del selector vivo (Enter entrega id; Escape cancela). */
+  responderSelector: (id: string | undefined) => void;
   completa: (linea: string) => [string[], string];
   /** Contrato de Entrada: la MÁS RECIENTE en el índice 0. */
   historial: readonly string[];
@@ -121,7 +185,10 @@ export function App({
   const datos = datosSidebar();
   const { stdout } = useStdout();
   const filas = (stdout.rows ?? 24) - FILA_DE_RESERVA;
-  const alturaTranscript = Math.max(5, filas - FILAS_FIJAS - (vista.enCola.length > 0 ? 1 : 0));
+  const alturaTranscript = Math.max(
+    5,
+    filas - FILAS_FIJAS - (vista.enCola.length > 0 ? 1 : 0) - (vista.selector === null ? 0 : FILAS_SELECTOR + 2 - 4)
+  );
   const columnas = stdout.columns ?? 80;
   const conSidebar = cabeSidebar(columnas);
   // Lo que la Entrada rellena de fondo: la columna izquierda (total menos sidebar, su
@@ -171,7 +238,9 @@ export function App({
             anchura fija, se envolvería en garabatos). */}
         <Box flexDirection="column" flexGrow={1} flexBasis={0} paddingRight={1}>
           <Transcript store={store} altura={alturaTranscript} rueda={rueda} ancho={anchoEntrada} />
-          {vista.pregunta !== null ? (
+          {vista.selector !== null ? (
+            <SelectorInk selector={vista.selector} alResponder={responderSelector} ancho={anchoEntrada} />
+          ) : vista.pregunta !== null ? (
             <PreguntaInk pregunta={vista.pregunta} alResponder={responder} />
           ) : (
             <Entrada

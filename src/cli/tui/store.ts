@@ -8,6 +8,7 @@
  */
 
 import type { PropsDelModal } from "./aprobarTui.js";
+import type { SelectorDeConsola } from "../consola.js";
 
 /** Un acto del transcript: lo que ya no cambia y se pinta por su tipo. */
 export type Acto =
@@ -202,6 +203,8 @@ export type VistaDeTui = {
    * pinta asteriscos: es la clave de `/provider`.
    */
   pregunta: { texto: string; oculto: boolean; responder: (respuesta: string) => void } | null;
+  /** Selector navegable de una piel rica; sustituye temporalmente a la Entrada. */
+  selector: (SelectorDeConsola & { responder: (id: string | undefined) => void }) | null;
   /** El modal de aprobación montado, con las props que `pedirDecisionesTui` dejó. */
   modal: PropsDelModal | null;
 };
@@ -234,5 +237,5 @@ export function crearRanura<T extends object>(inicial: T): Ranura<T> {
 }
 
 export function vistaInicial(): VistaDeTui {
-  return { ocupado: false, enCola: [], pregunta: null, modal: null };
+  return { ocupado: false, enCola: [], pregunta: null, selector: null, modal: null };
 }

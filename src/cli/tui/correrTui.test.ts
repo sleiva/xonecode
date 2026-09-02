@@ -26,6 +26,17 @@ async function esperarPregunta(
   throw new Error(`la TUI no mostró la pregunta «${texto}»`);
 }
 
+async function esperarSelector(
+  montaje: ReturnType<typeof crearConsolaTui>,
+  titulo: string
+): Promise<void> {
+  for (let intento = 0; intento < 20; intento++) {
+    if (montaje.vista.ver().selector?.titulo === titulo) return;
+    await new Promise((resolver) => setTimeout(resolver, 0));
+  }
+  throw new Error(`la TUI no mostró el selector «${titulo}»`);
+}
+
 describe("la consola TUI", () => {
   it("implementa Consola: lineas es la cola de lo enviado, escribir y piel comparten store", async () => {
     const { consola, enviar, actos } = crearMontajeTui({ raiz: "/tmp/proyecto" });
@@ -208,7 +219,7 @@ describe("la consola TUI", () => {
     expect(listar).toHaveBeenCalledWith("ollama");
   });
 
-  it("/modelos usa la ranura de pregunta y actualiza la sidebar al elegir trabajo", async () => {
+  it("/modelos usa selectores TUI y actualiza la sidebar al elegir trabajo", async () => {
     const catalogoModelos = new CatalogoModelosEnMemoria({
       ollama: [{ proveedor: "ollama", id: "qwen3", nombre: "Qwen 3" }],
     });
@@ -229,12 +240,13 @@ describe("la consola TUI", () => {
       fuentes: {},
     });
     montaje.enviar("/modelos ollama");
-    await esperarPregunta(montaje, "filtro (Enter para todos): ");
-    montaje.responder("qwen");
-    await esperarPregunta(montaje, "número (Enter cancela): ");
-    montaje.responder("1");
-    await esperarPregunta(montaje, "papel (rapido/trabajo/afilado): ");
-    montaje.responder("trabajo");
+    await esperarSelector(montaje, "Modelos de ollama");
+    expect(montaje.vista.ver().selector?.opciones).toEqual([
+      expect.objectContaining({ id: "qwen3", etiqueta: "Qwen 3" }),
+    ]);
+    montaje.seleccionar("qwen3");
+    await esperarSelector(montaje, "Asignar modelo a");
+    montaje.seleccionar("trabajo");
     await new Promise((resolver) => setTimeout(resolver, 0));
 
     expect(guardarModeloGlobal).toHaveBeenCalledWith("trabajo", "ollama/qwen3");

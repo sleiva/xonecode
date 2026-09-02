@@ -48,6 +48,11 @@ export interface Consola {
   /** Escritura global inyectada: la consola elige, pero no conoce el disco. */
   guardarModeloGlobal: (papel: Papel, id: string) => { ruta: string; id: string };
   /**
+   * Selector opcional de una piel rica. La consola conserva su flujo de preguntas y
+   * número cuando no existe (stdio y tests que no montan la TUI).
+   */
+  seleccionar?: (selector: SelectorDeConsola) => Promise<string | undefined>;
+  /**
    * La piel que los turnos usan para pintarse. La consola stdio no la define (se usa
    * `crearPielStdio`); la TUI la aporta — mismo contrato `Piel`, otro render.
    */
@@ -61,6 +66,12 @@ export interface Consola {
     ficheros: Map<string, string>,
     diffs: Map<string, LineaDeDiff[]>
   ) => Promise<Map<string, Decision>>;
+}
+
+/** Datos de un selector: UI-neutral, para que `consola.ts` no conozca Ink. */
+export interface SelectorDeConsola {
+  titulo: string;
+  opciones: readonly { id: string; etiqueta: string; detalle?: string }[];
 }
 
 export interface EstadoDeSesion {
@@ -239,6 +250,29 @@ async function elegirModelo(
     consola.escribir(`no hay modelos disponibles para ${proveedor}\n`);
     return { seguir: true };
   }
+  if (consola.seleccionar !== undefined) {
+    const opciones = modelos.map((modelo) => ({
+      id: modelo.id,
+      etiqueta: modelo.nombre ?? modelo.id,
+      detalle: describirModelo(modelo),
+    }));
+    const elegido = await consola.seleccionar({ titulo: `Modelos de ${proveedor}`, opciones });
+    const modelo = modelos.find((candidato) => candidato.id === elegido);
+    if (modelo === undefined) {
+      consola.escribir("selección cancelada\n");
+      return { seguir: true };
+    }
+    const papelElegido = await consola.seleccionar({
+      titulo: "Asignar modelo a",
+      opciones: PAPELES.map((papel) => ({ id: papel, etiqueta: papel })),
+    });
+    const papel = elegirPapel(papelElegido ?? "");
+    if (papel === undefined) {
+      consola.escribir("selección cancelada\n");
+      return { seguir: true };
+    }
+    return guardarEleccionDeModelo(proveedor, modelo, papel, estado, consola);
+  }
   const filtro = await consola.preguntar("filtro (Enter para todos): ");
   const filtrados = filtrarModelos(modelos, filtro);
   if (filtrados.length === 0) {
@@ -268,7 +302,17 @@ async function elegirModelo(
     return { seguir: true };
   }
 
-  const id = `${proveedor}/${eleccion.modelo.id}`;
+  return guardarEleccionDeModelo(proveedor, eleccion.modelo, papel, estado, consola);
+}
+
+function guardarEleccionDeModelo(
+  proveedor: Proveedor,
+  modelo: ModeloDisponible,
+  papel: Papel,
+  estado: EstadoDeSesion,
+  consola: Consola
+): { seguir: boolean; estado?: EstadoDeSesion } {
+  const id = `${proveedor}/${modelo.id}`;
   consola.guardarModeloGlobal(papel, id);
   const eclipsa = fuenteQueEclipsaGlobal(papel, estado.fuentes, estado.seleccionesDeCatalogo);
   if (eclipsa !== undefined) {

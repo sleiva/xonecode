@@ -223,6 +223,15 @@ export function crearConsolaTui(opciones: OpcionesDeConsolaTui) {
     },
     catalogoModelos,
     guardarModeloGlobal,
+    seleccionar: async (selector) =>
+      new Promise<string | undefined>((resuelto) => {
+        vista.mutar({
+          selector: {
+            ...selector,
+            responder: resuelto,
+          },
+        });
+      }),
     escribir: (texto) => {
       // El guard cubre whitespace, no solo la cadena vacía: un `escribir("\n")`
       // (la forma de «línea sin contenido») partía en un acto sistema vacío.
@@ -332,6 +341,13 @@ export function crearConsolaTui(opciones: OpcionesDeConsolaTui) {
       vista.mutar({ pregunta: null });
       pregunta.responder(linea);
     },
+    /** Resuelve el selector visible; Enter entrega un id y Escape `undefined`. */
+    seleccionar: (id: string | undefined): void => {
+      const selector = vista.ver().selector;
+      if (selector === null) return;
+      vista.mutar({ selector: null });
+      selector.responder(id);
+    },
     /** Ctrl-C durante un turno: la piel del turno en curso lanza en su próximo acto. */
     cancelar: (): void => {
       cancelarTurno();
@@ -392,7 +408,7 @@ export async function correrConsolaTui(opciones: OpcionesDeMontaje): Promise<num
     rama: ramaDeGit(raiz),
     topeDe,
   });
-  const { consola, store, vista, enviar, responder, cancelar, completa, historial, datosSidebar } = montaje;
+  const { consola, store, vista, enviar, responder, seleccionar, cancelar, completa, historial, datosSidebar } = montaje;
 
   // Los modos de terminal (pantalla alternativa y ratón) ANTES de montar Ink, para que el
   // primer frame ya caiga en la pantalla alternativa. Sin stdout TTY no escribe nada.
@@ -418,6 +434,7 @@ export async function correrConsolaTui(opciones: OpcionesDeMontaje): Promise<num
       vista,
       alEnviar: enviar,
       responder,
+      responderSelector: seleccionar,
       completa,
       historial,
       datosSidebar,

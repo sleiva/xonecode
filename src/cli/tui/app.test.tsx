@@ -17,7 +17,7 @@
  * lo declara, porque `useInput` llama a `setRawMode` y sin `isTTY` Ink lanza — es un
  * doble de teclado en memoria, no un terminal.
  */
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import { EventEmitter } from "node:events";
 import { render } from "ink";
 import { createElement } from "react";
@@ -91,6 +91,7 @@ function montar(opciones: {
   completa?: (linea: string) => [string[], string];
   /** Datos de sidebar propios (se leen en cada render): para probar cambios en caliente. */
   datos?: () => DatosDeSidebar;
+  responderSelector?: (id: string | undefined) => void;
   /** Con ratón: Ink lee un stdin FILTRADO (`raton.ts`) y el transcript recibe la rueda. */
   raton?: boolean;
 }) {
@@ -107,6 +108,7 @@ function montar(opciones: {
       vista,
       alEnviar: () => {},
       responder: () => {},
+      responderSelector: opciones.responderSelector ?? (() => {}),
       completa: opciones.completa ?? ((): [string[], string] => [[], ""]),
       historial: [],
       datosSidebar: opciones.datos ?? (() => datosDe(opciones.ruta ?? "/dev/MinitMT")),
@@ -196,6 +198,31 @@ describe("la maqueta de la App", () => {
     expect(frame).toContain("fig"); // la pista está pintada (/con|fig, |ectar, …)
     laMaquetaCabe(frame);
     expect(frame).toContain("▏");
+  });
+
+  it("el selector filtra, se navega con flechas y Enter entrega el modelo activo", async () => {
+    const responderSelector = vi.fn();
+    const m = montar({ responderSelector });
+    await esperar();
+    m.vista.mutar({
+      selector: {
+        titulo: "Modelos de gemini",
+        opciones: [
+          { id: "flash", etiqueta: "Gemini Flash", detalle: "rápido" },
+          { id: "pro", etiqueta: "Gemini Pro", detalle: "razonamiento" },
+        ],
+        responder: () => {},
+      },
+    });
+    await esperar();
+    m.stdin.write("pro");
+    await esperar();
+    expect(m.stdout.ultimo()).toContain("Gemini Pro");
+    expect(m.stdout.ultimo()).not.toContain("Gemini Flash");
+    m.stdin.write("\r");
+    await esperar();
+    m.instancia.unmount();
+    expect(responderSelector).toHaveBeenCalledWith("pro");
   });
 
   it("con el transcript lleno y colchón vivo el cursor sigue en pantalla", async () => {
