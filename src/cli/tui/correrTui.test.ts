@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { crearConsolaTui, envolverConOcupacion } from "./correrTui.js";
+import { abreviarHome, crearConsolaTui, envolverConOcupacion } from "./correrTui.js";
 import { acuseDeModelo } from "../acuseDeModelo.js";
 import type { EjecutorDeTurno } from "../consola.js";
 
@@ -123,6 +123,17 @@ describe("la consola TUI", () => {
     soltar();
     await turno;
     expect(marcas).toEqual(["ocupado=true", "turno-arranca", "turno-acaba", "ocupado=false"]);
+  });
+
+  // El `home` va explícito: el HOME de quien corre los tests no puede decidir el
+  // resultado. (Por eso la aserción de `/tmp/proyecto` de más arriba sigue valiendo:
+  // nadie tiene `/tmp` por home.)
+  it("el pie abrevia el HOME a «~», y solo cuando es el prefijo de verdad", () => {
+    expect(abreviarHome("/Users/x/dev/MinitMT", "/Users/x")).toBe("~/dev/MinitMT");
+    expect(abreviarHome("/Users/x", "/Users/x")).toBe("~");
+    // Prefijo de TEXTO pero no de carpeta: `/Users/xy` no vive dentro de `/Users/x`.
+    expect(abreviarHome("/Users/xy/z", "/Users/x")).toBe("/Users/xy/z");
+    expect(abreviarHome("/tmp/proyecto", "/Users/x")).toBe("/tmp/proyecto");
   });
 
   it("el historial deja la más reciente en el índice 0 (contrato de Entrada)", () => {

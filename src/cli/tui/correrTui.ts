@@ -7,7 +7,8 @@
  */
 import { readFileSync } from "node:fs";
 import { randomUUID } from "node:crypto";
-import { basename } from "node:path";
+import { basename, sep } from "node:path";
+import { homedir } from "node:os";
 import { execFileSync } from "node:child_process";
 import { render } from "ink";
 import { createElement } from "react";
@@ -31,6 +32,21 @@ import { crearPielTui } from "./pielTui.js";
 import { pedirDecisionesTui } from "./aprobarTui.js";
 import type { DatosDeSidebar } from "./sidebar.js";
 import { App } from "./app.js";
+
+/**
+ * La raíz con el HOME abreviado a `~`, para el pie: `/Users/x/dev/MinitMT` sale como
+ * `~/dev/MinitMT`. La ruta absoluta entera es ruido —y en una captura de pantalla, el
+ * nombre de usuario— y el pie tiene sitio contado. Pura, con `home` inyectable: así se
+ * prueba sin depender del HOME de quien corre los tests.
+ *
+ * Solo el PREFIJO, y solo si es el home entero o el home seguido de separador:
+ * `/Users/xy` no empieza por `/Users/x` como carpeta, aunque sí como texto.
+ */
+export function abreviarHome(ruta: string, home: string = homedir()): string {
+  if (ruta === home) return "~";
+  if (home !== "" && ruta.startsWith(home + sep)) return `~${ruta.slice(home.length)}`;
+  return ruta;
+}
 
 /**
  * La versión, para la sidebar. Tres niveles arriba tanto desde `src/cli/tui/` (tsx en
@@ -260,7 +276,7 @@ export function crearConsolaTui(opciones: OpcionesDeConsolaTui) {
       modelo: modeloTrabajo,
       modelosPorPapel: { ...papeles },
       proyecto: basename(raiz),
-      ruta: raiz,
+      ruta: abreviarHome(raiz),
       rama,
       version: VERSION,
     };
