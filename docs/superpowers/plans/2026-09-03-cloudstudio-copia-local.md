@@ -1107,6 +1107,8 @@ git commit -m "feat: enumera el remoto sorteando el truncado de la estructura"
 
 **Acceptance Criteria:**
 - [ ] Vía ZIP: extrae en la raíz y marca `via: "zip"`, con `descargados` = las rutas del ZIP
+- [ ] **Las vistas aplanadas se BORRAN del disco tras extraer**: un `X.xml` con `X.xne` al lado desaparece de la copia local; `app.xml` se conserva siempre
+- [ ] Las vistas aplanadas borradas **no aparecen en `descargados`** (segundo cierre del candado), pero sí siguen en el `manifiesto` (existen en el remoto)
 - [ ] Si el ZIP falla, cae a la vía degradada **sin volver a intentarlo** y guarda el motivo
 - [ ] La vía degradada solo pide lo que la whitelist de texto permite, y marca `via: "parcial"`
 - [ ] La concurrencia nunca supera el tope: se comprueba con un contador de llamadas simultáneas
@@ -1217,6 +1219,35 @@ describe("descargarProyecto", () => {
     expect(estado.descargados).toEqual(["app.xml"]);
   });
 
+  it("borra las vistas aplanadas de la copia local y las deja fuera de descargados", async () => {
+    const raiz = raizNueva();
+    const puerto = new CloudStudioEnMemoria({
+      zipBase64: zip({
+        "app.xml": "<app/>",
+        "BuscarFarmacias.xne": "<coll/>",
+        "BuscarFarmacias.xml": "<generado/>",
+        "AlquilerCoches.XNE": "<coll/>",
+        "AlquilerCoches.XML": "<generado/>",
+      }),
+      textos: { "app.xml": "<app/>" },
+    });
+    const estado = await descargarProyecto({ puerto, raiz, proyecto });
+
+    // La fuente y app.xml se quedan; lo que Studio regenera, no.
+    expect(existsSync(join(raiz, "BuscarFarmacias.xne"))).toBe(true);
+    expect(existsSync(join(raiz, "app.xml"))).toBe(true);
+    expect(existsSync(join(raiz, "BuscarFarmacias.xml"))).toBe(false);
+    // Sin importar cómo estén escritas las extensiones: el proyecto puede venir de Windows.
+    expect(existsSync(join(raiz, "AlquilerCoches.XML"))).toBe(false);
+
+    // Segundo cierre del candado: si no están en `descargados`, no pueden borrarse en Studio
+    // aunque alguien reordene las guardas de planDeSubida algún día.
+    expect(estado.descargados).not.toContain("BuscarFarmacias.xml");
+    expect(estado.descargados).toContain("BuscarFarmacias.xne");
+    // Pero en el remoto SÍ existen, así que el manifiesto las conserva.
+    expect(estado.manifiesto.map((e) => e.ruta)).toContain("app.xml");
+  });
+
   it("deja sync.json legible bajo .xonecode/cloudstudio", async () => {
     const raiz = raizNueva();
     const puerto = new CloudStudioEnMemoria({ zipBase64: zip({ "app.xml": "<app/>" }), textos: { "app.xml": "<app/>" } });
@@ -1246,7 +1277,7 @@ Expected: FAIL — no existe el módulo
  * Por eso se escribe siempre qué se pudo traer: es lo que después impide borrar en Studio
  * lo que aquí no llegó.
  */
-import { mkdirSync, writeFileSync } from "node:fs";
+import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import type { CloudStudioPort } from "../core/ports.js";
 import type { EstadoDeSync } from "../core/cloudstudio.js";
@@ -1294,6 +1325,39 @@ export function rutaSyncJson(raiz: string): string {
   return join(raiz, NOMBRE_CARPETA, "cloudstudio", "sync.json");
 }
 
+/**
+ * Borra del disco las vistas aplanadas y las quita de la lista de descargados.
+ *
+ * De colecciones solo se trabaja con el `.xne` y con `app.xml`: el `X.xml` lo REGENERA
+ * Studio. Hasta ahora solo se le ocultaba al agente con un Proxy; borrarlo de verdad hace
+ * que la regla valga también para el usuario, su editor y su `grep`.
+ *
+ * **El momento es lo que importa**: esto corre tras extraer y ANTES del commit de baseline
+ * (`prepararRepo`). Al revés, git vería esos `.xml` como borrados y —al haberse descargado,
+ * el candado no los frenaría— la primera subida los borraría EN STUDIO.
+ *
+ * Que no entren en `descargados` es el segundo cierre: aunque algún día alguien reordene
+ * las guardas de `planDeSubida`, el candado sigue impidiendo su borrado remoto.
+ */
+export function retirarVistasAplanadas(raiz: string, rutas: string[]): string[] {
+  // Las extensiones se comparan en minúsculas: un proyecto que viene de Windows puede
+  // traer `Foo.XML` junto a `Foo.xne`, y es la misma vista aplanada.
+  const fuentes = new Set(
+    rutas.filter((r) => r.toLowerCase().endsWith(".xne")).map((r) => r.slice(0, -4).toLowerCase())
+  );
+  const quedan: string[] = [];
+  for (const ruta of rutas) {
+    const esVista = ruta.toLowerCase().endsWith(".xml") && fuentes.has(ruta.slice(0, -4).toLowerCase());
+    if (!esVista) {
+      quedan.push(ruta);
+      continue;
+    }
+    // `app.xml` no tiene hermano `.xne`, así que el propio predicado lo conserva: es fuente.
+    rmSync(join(raiz, ruta), { force: true });
+  }
+  return quedan;
+}
+
 export async function descargarProyecto(opciones: OpcionesDeDescarga): Promise<EstadoDeSync> {
   const { puerto, raiz, proyecto, informar = () => {} } = opciones;
 
@@ -1309,7 +1373,7 @@ export async function descargarProyecto(opciones: OpcionesDeDescarga): Promise<E
   let descargados: string[] = [];
 
   try {
-    descargados = extraerZipBase64(await puerto.descargarZip(), raiz);
+    descargados = retirarVistasAplanadas(raiz, extraerZipBase64(await puerto.descargarZip(), raiz));
   } catch (error) {
     // Un solo intento: si el ZIP falla por un fichero roto en Studio, volverá a fallar.
     via = "parcial";
@@ -1327,7 +1391,8 @@ export async function descargarProyecto(opciones: OpcionesDeDescarga): Promise<E
         // estar en `descargados` queda protegido contra el borrado.
       }
     }), CONCURRENCIA);
-    descargados = traidos;
+    // Misma regla en la vía degradada: si bajó un `.xml` con su `.xne` al lado, fuera.
+    descargados = retirarVistasAplanadas(raiz, traidos);
   }
 
   const estado: EstadoDeSync = {

@@ -153,6 +153,33 @@ La concurrencia es un **pool de promesas acotado** (4–8 en vuelo) sobre la mis
 MCP, con reintento y backoff por fichero. No hay `worker_threads`: esto es E/S, no CPU, y
 un hilo no acelera una espera de red. Un fichero que falla no aborta la descarga: se anota.
 
+### Las vistas aplanadas se borran de la copia local
+
+De colecciones, en local solo se trabaja con los `.xne` y con `app.xml`. Los `X.xml` que
+Studio genera junto a un `X.xne` **se borran del disco** justo después de extraer, antes de
+nada más. Hasta ahora solo se le ocultaban al agente con un Proxy
+(`sinVistasAplanadas`); borrarlos de verdad hace que la regla también valga para el
+usuario, para `grep`, para su editor y para su git.
+
+**El orden es la parte que importa, y al revés hace justo lo contrario:**
+
+1. extraer el ZIP → 2. **borrar las vistas aplanadas** → 3. commit de baseline (`prepararRepo`).
+
+Si el baseline se tomara antes del borrado, git vería esos `.xml` como borrados, y como sí
+se descargaron, el candado no los frenaría: la primera subida los borraría **en Studio**.
+Tomándolo después, para git nunca existieron y no hay nada que subir.
+
+Dos cierres más, porque una sola barrera no basta para algo que borra en casa del cliente:
+
+- `esVistaAplanada` se comprueba **antes** que la rama de borrado en `planDeSubida`, así que
+  un `X.xml` borrado en local no puede emitir un borrado remoto mientras exista su `X.xne`.
+- Las vistas aplanadas **no entran en `descargados`**, así que el candado las protege
+  también por esa vía, aunque alguien reordene las guardas algún día.
+
+`sinVistasAplanadas` se queda donde está pese a todo: los proyectos offline y los que ya
+tuvieran `.xml` en disco siguen necesitándolo, y una regla que protege dos veces no sobra
+cuando el fallo es mudo.
+
 ### El manifiesto y el candado de borrado
 
 `get_project_structure` es el inventario del remoto. Se guarda, junto con el conjunto de

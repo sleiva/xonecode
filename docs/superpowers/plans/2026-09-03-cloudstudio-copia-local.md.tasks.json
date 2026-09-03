@@ -4,21 +4,21 @@
     {
       "id": 1,
       "subject": "Task 1: Extracción de ZIP con guarda de zip slip",
-      "status": "pending",
+      "status": "completed",
       "description": "**Goal:** convertir el base64Zip de CloudStudio en ficheros en disco, sin que una entrada maliciosa escriba fuera de la raíz.\n\n**Files:**\n- Create: `src/agent/zip.ts`\n- Create: `src/agent/zip.test.ts`\n- Modify: `package.json` (dependencia `fflate`)\n\n**Acceptance Criteria:**\n- [ ] Un ZIP con carpetas anidadas se extrae conservando la estructura\n- [ ] Una entrada con `../` o con ruta absoluta se rechaza y no escribe nada fuera de la raíz\n- [ ] Devuelve la lista de rutas escritas, relativas y en POSIX\n- [ ] Los directorios intermedios se crean solos\n\n**Verify:** `npx vitest run --exclude '**/.worktrees/**' src/agent/zip.test.ts`\n\n```json:metadata\n{\"files\": [\"src/agent/zip.ts\", \"src/agent/zip.test.ts\", \"package.json\"], \"verifyCommand\": \"npx vitest run --exclude '**/.worktrees/**' src/agent/zip.test.ts\", \"acceptanceCriteria\": [\"Un ZIP con carpetas anidadas se extrae conservando la estructura\", \"Una entrada con `../` o con ruta absoluta se rechaza y no escribe nada fuera de la raíz\", \"Devuelve la lista de rutas escritas, relativas y en POSIX\", \"Los directorios intermedios se crean solos\"], \"modelTier\": \"mechanical\"}\n```",
       "activeForm": "Extrayendo el ZIP de CloudStudio"
     },
     {
       "id": 2,
       "subject": "Task 2: Puerto CloudStudio y su doble",
-      "status": "pending",
+      "status": "completed",
       "description": "**Goal:** dar a todo lo que viene después una única superficie contra la que programar y testear sin red.\n\n**Files:**\n- Create: `src/core/cloudstudio.ts`\n- Modify: `src/core/ports.ts`\n- Create: `src/core/cloudstudioPuerto.test.ts`\n\n**Acceptance Criteria:**\n- [ ] `CloudStudioPort` cubre abrir, contexto, descargarZip, estructura, leerTexto, escribirTexto, borrarTexto, subirBinario, ramas, crearRama y cambiarRama\n- [ ] El doble `CloudStudioEnMemoria` lleva `ES_DOBLE` y `esDoble()` lo reconoce\n- [ ] El doble simula el fallo del ZIP y el truncado de la estructura\n- [ ] `core/imports.test.ts` sigue en verde: nada de MCP en core/\n\n**Verify:** `npx vitest run --exclude '**/.worktrees/**' src/core/`\n\n```json:metadata\n{\"files\": [\"src/core/cloudstudio.ts\", \"src/core/ports.ts\", \"src/core/cloudstudioPuerto.test.ts\"], \"verifyCommand\": \"npx vitest run --exclude '**/.worktrees/**' src/core/\", \"acceptanceCriteria\": [\"`CloudStudioPort` cubre abrir, contexto, descargarZip, estructura, leerTexto, escribirTexto, borrarTexto, subirBinario, ramas, crearRama y cambiarRama\", \"El doble `CloudStudioEnMemoria` lleva `ES_DOBLE` y `esDoble()` lo reconoce\", \"El doble simula el fallo del ZIP y el truncado de la estructura\", \"`core/imports.test.ts` sigue en verde: nada de MCP en core/\"], \"modelTier\": \"mechanical\"}\n```",
       "activeForm": "Definiendo el puerto CloudStudio"
     },
     {
       "id": 3,
       "subject": "Task 3: Plan de subida con el candado de borrado",
-      "status": "pending",
+      "status": "completed",
       "description": "**Goal:** convertir un diff de git y el estado de la descarga en operaciones, sin poder emitir jamás el borrado de algo que no llegamos a bajar.\n\n**Files:**\n- Create: `src/core/planDeSubida.ts`\n- Create: `src/core/planDeSubida.test.ts`\n\n**Acceptance Criteria:**\n- [ ] Con una descarga parcial, ninguna ruta ausente de `descargados` produce un borrado\n- [ ] `.xonecode/` y todo lo que cuelga se excluye siempre\n- [ ] `X.xml` se excluye cuando existe `X.xne`; `app.xml` se conserva\n- [ ] El tipo se decide por la whitelist de texto medida, y el binario elige base64 o chunked según el tope de 5 MB\n- [ ] Es una función pura: sin disco, sin red, sin reloj\n\n**Verify:** `npx vitest run --exclude '**/.worktrees/**' src/core/planDeSubida.test.ts`\n\n```json:metadata\n{\"files\": [\"src/core/planDeSubida.ts\", \"src/core/planDeSubida.test.ts\"], \"verifyCommand\": \"npx vitest run --exclude '**/.worktrees/**' src/core/planDeSubida.test.ts\", \"acceptanceCriteria\": [\"Con una descarga parcial, ninguna ruta ausente de `descargados` produce un borrado\", \"`.xonecode/` y todo lo que cuelga se excluye siempre\", \"`X.xml` se excluye cuando existe `X.xne`; `app.xml` se conserva\", \"El tipo se decide por la whitelist de texto medida, y el binario elige base64 o chunked según el tope de 5 MB\", \"Es una función pura: sin disco, sin red, sin reloj\"], \"modelTier\": \"mechanical\"}\n```",
       "activeForm": "Escribiendo el plan de subida"
     },
@@ -106,5 +106,5 @@
       ]
     }
   ],
-  "lastUpdated": "2026-09-03T20:58:41.614636"
+  "lastUpdated": "2026-09-03T21:23:47.582735"
 }
