@@ -520,10 +520,10 @@ describe("correrConsola — /themes", () => {
 describe("correrConsola — /connect-studio", () => {
   it("conecta, lista un resumen seguro de tools y persiste solo la URL", async () => {
     const { consola, salida } = consolaDeConSecreto({ lineas: ["/connect-studio https://mcp.example/mcp"] });
-    const guardar = vi.fn((url: string) => ({ ruta: "/proyecto/.xonecode/config.json", url }));
+    const guardar = vi.fn((url: string, scopes: readonly string[]) => ({ ruta: "/proyecto/.xonecode/config.json", url, scopes: [...scopes] }));
     const conectar = vi.fn(async (url: string, informar: (texto: string) => void) => {
       informar("abriendo IDS…\n");
-      return { url, herramientas: [{ nombre: "project_list", descripcion: "lista proyectos" }] };
+      return { url, scopes: ["openid", "mcp.read"], herramientas: [{ nombre: "project_list", descripcion: "lista proyectos" }] };
     });
     consola.conectarCloudStudio = conectar;
     consola.guardarCloudStudioDeProyecto = guardar;
@@ -531,7 +531,7 @@ describe("correrConsola — /connect-studio", () => {
     await correrConsola(consola, estadoDe());
 
     expect(conectar).toHaveBeenCalledWith("https://mcp.example/mcp", expect.any(Function));
-    expect(guardar).toHaveBeenCalledWith("https://mcp.example/mcp");
+    expect(guardar).toHaveBeenCalledWith("https://mcp.example/mcp", ["openid", "mcp.read"]);
     expect(salida()).toContain("CloudStudio conectado · 1 herramientas");
     expect(salida()).toContain("project_list — lista proyectos");
   });

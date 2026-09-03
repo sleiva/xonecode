@@ -28,7 +28,7 @@ export interface ConfigDeFichero {
   /** Tema visual de la consola, persistido solo cuando pertenece al proyecto. */
   tema?: string;
   /** Endpoint MCP de CloudStudio. Las credenciales OAuth viven solo en el almacén global. */
-  cloudstudio?: { url: string };
+  cloudstudio?: { url: string; scopes?: string[] };
   ollama?: { baseUrl?: string };
   /** Topes de ventana de contexto fijados a mano, por id «proveedor/modelo». */
   contextos?: Record<string, number>;
@@ -172,7 +172,16 @@ export function validar(
       try {
         const url = new URL(valor.url);
         if (url.protocol !== "https:" || url.username !== "" || url.password !== "") throw new Error();
-        config.cloudstudio = { url: url.toString() };
+        const scopes = valor.scopes;
+        if (scopes !== undefined && (!Array.isArray(scopes) || !scopes.every((scope) => typeof scope === "string" && scope.trim() !== ""))) {
+          avisos.push({
+            texto: `«${ruta}»: «cloudstudio.scopes» debe ser una lista de permisos no vacíos; se descarta.`,
+            severidad: "aviso",
+          });
+          config.cloudstudio = { url: url.toString() };
+        } else {
+          config.cloudstudio = { url: url.toString(), ...(scopes === undefined ? {} : { scopes: [...scopes] }) };
+        }
       } catch {
         avisos.push({
           texto: `«${ruta}»: «cloudstudio.url» debe ser una URL HTTPS sin credenciales; se descarta.`,

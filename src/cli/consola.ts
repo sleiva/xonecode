@@ -76,10 +76,11 @@ export interface Consola {
   /** Conexión OAuth + MCP, inyectada desde agent para que esta capa siga sin SDK MCP. */
   conectarCloudStudio?: (url: string, informar: (texto: string) => void) => Promise<{
     url: string;
+    scopes: readonly string[];
     herramientas: Array<{ nombre: string; descripcion: string }>;
   }>;
   /** El endpoint es configuración de proyecto; los tokens OAuth no. */
-  guardarCloudStudioDeProyecto?: (url: string) => { ruta: string; url: string };
+  guardarCloudStudioDeProyecto?: (url: string, scopes: readonly string[]) => { ruta: string; url: string; scopes: string[] };
 }
 
 /**
@@ -603,8 +604,8 @@ export const COMANDOS: Record<string, { descripcion: string; manejador: Manejado
       const escrita = args[0] ?? await consola.preguntar(`URL MCP de CloudStudio [${URL_CLOUDSTUDIO_POR_OMISION}]: `);
       const url = escrita.trim() || URL_CLOUDSTUDIO_POR_OMISION;
       const resultado = await consola.conectarCloudStudio(url, consola.escribir);
-      const guardado = consola.guardarCloudStudioDeProyecto(resultado.url);
-      consola.escribir(`CloudStudio conectado · ${resultado.herramientas.length} herramientas · URL guardada en ${guardado.ruta}\n`);
+      const guardado = consola.guardarCloudStudioDeProyecto(resultado.url, resultado.scopes);
+      consola.escribir(`CloudStudio conectado · ${resultado.herramientas.length} herramientas · permisos: ${guardado.scopes.join(", ")} · URL guardada en ${guardado.ruta}\n`);
       for (const tool of resultado.herramientas.slice(0, 12)) {
         consola.escribir(`  ${tool.nombre}${tool.descripcion ? ` — ${tool.descripcion}` : ""}\n`);
       }

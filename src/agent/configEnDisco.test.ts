@@ -230,13 +230,14 @@ it("guarda únicamente el endpoint MCP de CloudStudio dentro del proyecto", () =
   mkdirSync(join(p, NOMBRE_CARPETA), { recursive: true });
   writeFileSync(ruta, JSON.stringify({ tema: "xone" }));
 
-  expect(guardarCloudStudioDeProyecto(p, "https://mcp.xonewebstudio.com/mcp")).toEqual({
+  expect(guardarCloudStudioDeProyecto(p, "https://mcp.xonewebstudio.com/mcp", ["openid", "mcp.read"])).toEqual({
     ruta,
     url: "https://mcp.xonewebstudio.com/mcp",
+    scopes: ["openid", "mcp.read"],
   });
   expect(JSON.parse(readFileSync(ruta, "utf8"))).toEqual({
     tema: "xone",
-    cloudstudio: { url: "https://mcp.xonewebstudio.com/mcp" },
+    cloudstudio: { url: "https://mcp.xonewebstudio.com/mcp", scopes: ["openid", "mcp.read"] },
   });
   rmSync(p, { recursive: true, force: true });
 });

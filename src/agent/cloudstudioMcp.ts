@@ -14,7 +14,7 @@ import { closeSync, existsSync, mkdirSync, openSync, readFileSync, renameSync, u
 import { join, dirname } from "node:path";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
-import { UnauthorizedError, type OAuthClientProvider } from "@modelcontextprotocol/sdk/client/auth.js";
+import { auth, type OAuthClientProvider } from "@modelcontextprotocol/sdk/client/auth.js";
 import type { OAuthClientInformationMixed, OAuthClientMetadata, OAuthTokens } from "@modelcontextprotocol/sdk/shared/auth.js";
 
 const NOMBRE_CARPETA = ".xonecode";
@@ -22,6 +22,8 @@ const NOMBRE_AUTH = "cloudstudio-oauth.json";
 const VERSION = "0.5.0";
 /** Debe ser estable: el IDS registra el redirect_uri del cliente OAuth. */
 const PUERTO_CALLBACK = 7634;
+/** Permisos mínimos para descubrir el catálogo MCP; no otorgan escritura ni ejecución. */
+export const SCOPES_CLOUDSTUDIO = ["openid", "profile", "email", "offline_access", "mcp.read"] as const;
 
 type EstadoOAuth = {
   clientInformation?: OAuthClientInformationMixed;
@@ -32,6 +34,7 @@ type EstadoOAuth = {
 /** Resultado reducido: los esquemas completos de tools no deben entrar en el transcript. */
 export interface ConexionCloudStudio {
   url: string;
+  scopes: readonly string[];
   herramientas: Array<{ nombre: string; descripcion: string }>;
 }
 
@@ -159,7 +162,7 @@ class ProviderCloudStudio implements OAuthClientProvider {
       grant_types: ["authorization_code", "refresh_token"],
       response_types: ["code"],
       // Mínimo privilegio: conectar y descubrir tools no necesita escribir ni ejecutar.
-      scope: "openid profile email offline_access mcp.read",
+      scope: SCOPES_CLOUDSTUDIO.join(" "),
     };
   }
   get redirectUrl(): string { return this.metadata.redirect_uris![0]!; }
@@ -189,24 +192,33 @@ export async function conectarCloudStudio(urlTexto: string, opciones: OpcionesCl
     opciones.informar?.(`Abriendo IDS de CloudStudio…\n${autorizacion.toString()}\n`);
     (opciones.abrirNavegador ?? abrirEnSistema)(autorizacion);
   });
-  const cliente = new Client({ name: "xonecode", version: VERSION });
-  const transporte = new StreamableHTTPClientTransport(url, { authProvider: provider });
+  let transporte: StreamableHTTPClientTransport | undefined;
   try {
-    try {
-      await cliente.connect(transporte);
-    } catch (error) {
-      if (!(error instanceof UnauthorizedError)) throw error;
+    // No se usa `client.connect()` para iniciar OAuth: ese transporte queda marcado como
+    // iniciado incluso cuando redirige y no admite un segundo connect. `auth()` realiza
+    // primero el descubrimiento/PKCE y solo se crea el transporte DESPUÉS del callback.
+    const opcionesAuth = {
+      serverUrl: url,
+      resourceMetadataUrl: new URL("/.well-known/oauth-protected-resource", url.origin),
+      scope: SCOPES_CLOUDSTUDIO.join(" "),
+    };
+    const inicial = await auth(provider, opcionesAuth);
+    if (inicial === "REDIRECT") {
       const codigo = await callback.codigo;
-      await transporte.finishAuth(codigo);
-      await cliente.connect(transporte);
+      const final = await auth(provider, { ...opcionesAuth, authorizationCode: codigo });
+      if (final !== "AUTHORIZED") throw new Error("el IDS no completó la autorización de CloudStudio");
     }
+    const cliente = new Client({ name: "xonecode", version: VERSION });
+    transporte = new StreamableHTTPClientTransport(url, { authProvider: provider });
+    await cliente.connect(transporte);
     const listado = await cliente.listTools();
     return {
       url: url.toString(),
+      scopes: SCOPES_CLOUDSTUDIO,
       herramientas: listado.tools.map((tool) => ({ nombre: tool.name, descripcion: tool.description ?? "" })),
     };
   } finally {
     callback.cerrar();
-    await transporte.close();
+    await transporte?.close();
   }
 }

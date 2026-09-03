@@ -75,6 +75,18 @@ describe("validar", () => {
     expect(avisos).toEqual([]);
   });
 
+  it("conserva los permisos MCP del entorno sin aceptar una lista malformada", () => {
+    const bueno = validar(
+      { cloudstudio: { url: "https://mcp.xonewebstudio.com/mcp", scopes: ["openid", "mcp.read"] } }, RUTA, "proyecto"
+    );
+    expect(bueno.config.cloudstudio?.scopes).toEqual(["openid", "mcp.read"]);
+    const malo = validar(
+      { cloudstudio: { url: "https://mcp.xonewebstudio.com/mcp", scopes: ["mcp.read", 2] } }, RUTA, "proyecto"
+    );
+    expect(malo.config.cloudstudio).toEqual({ url: "https://mcp.xonewebstudio.com/mcp" });
+    expect(malo.avisos[0]?.texto).toContain("cloudstudio.scopes");
+  });
+
   it("rechaza una URL CloudStudio insegura o que lleve credenciales", () => {
     const { config, avisos } = validar(
       { cloudstudio: { url: "https://token@example.test/mcp" } }, RUTA, "proyecto"

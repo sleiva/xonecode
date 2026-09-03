@@ -142,12 +142,16 @@ export function guardarTemaDeProyecto(raiz: string, tema: string): { ruta: strin
 }
 
 /** Guarda solo el endpoint MCP: OAuth nunca vive dentro del proyecto. */
-export function guardarCloudStudioDeProyecto(raiz: string, url: string): { ruta: string; url: string } {
+export function guardarCloudStudioDeProyecto(
+  raiz: string,
+  url: string,
+  scopes: readonly string[] = []
+): { ruta: string; url: string; scopes: string[] } {
   const ruta = rutaConfigDeProyecto(raiz);
   const base = leerObjetoCrudoOAbortar(ruta);
-  const fusionado = { ...base, cloudstudio: { url } };
+  const fusionado = { ...base, cloudstudio: { url, scopes: [...scopes] } };
   escribirAtomico(ruta, JSON.stringify(fusionado, null, 2) + "\n");
-  return { ruta, url };
+  return { ruta, url, scopes: [...scopes] };
 }
 
 export function cargar(raiz: string): {
