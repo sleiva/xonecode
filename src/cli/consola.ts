@@ -85,6 +85,23 @@ export interface Consola {
   /** El modo es configuración local del proyecto, inyectada desde el adaptador de disco. */
   guardarModoDeProyecto?: (modo: "offline" | "cloud") => { ruta: string; modo: "offline" | "cloud" };
   guardarProyectoCloudStudioDeProyecto?: (proyecto: { id: string; nombre: string }) => { ruta: string; proyecto: { id: string; nombre: string } };
+  /**
+   * Las ramas del proyecto remoto YA elegido, hermana de `conectarCloudStudio`: esta capa
+   * tampoco conoce MCP para esto. Con una sola rama disponible el alta no pregunta.
+   */
+  ramasDeCloudStudio?: (proyecto: string) => Promise<string[]>;
+  /** La rama ORIGEN es identidad del remoto, no una preferencia: va dentro de `cloudstudio`. */
+  guardarRamaDeProyecto?: (rama: string) => { ruta: string; rama: string };
+  /** El modelo propio del proyecto, por papel. Nunca lleva claves. */
+  guardarModelosDeProyecto?: (papel: Papel, id: string) => { ruta: string; id: string };
+  /**
+   * Sincronización con CloudStudio, inyectada desde `agent/`: esta capa no conoce MCP ni
+   * git. Su ausencia (modo guion, tests) es la que hace que `/sync` lo diga sin reventar.
+   */
+  sincronizar?: (
+    accion: "estado" | "bajar" | "subir",
+    raiz: string
+  ) => Promise<{ tipo: "texto"; texto: string } | { tipo: "arbol-sucio"; pendientes: string[] }>;
 }
 
 /**
@@ -204,7 +221,103 @@ export async function configurarModoInicial(raiz: string, consola: Consola): Pro
   }
   consola.guardarCloudStudioDeProyecto(resultado.url, resultado.scopes);
   consola.guardarProyectoCloudStudioDeProyecto(proyecto);
+  // El modo se guarda YA: `sincronizar` (más abajo) relee la config del disco, y un
+  // fallo en la descarga no puede dejar «cloudstudio» apuntado sin ningún «modo».
   consola.guardarModoDeProyecto("cloud");
+
+  // Paso 3: rama ORIGEN (de la que se baja y contra la que se compara) y descarga de la
+  // copia local. Las ramas entran inyectadas, hermanas de `conectarCloudStudio`: esta capa
+  // tampoco conoce MCP para esto. Hoy los proyectos suelen tener solo `master`, y con una
+  // sola opción no se pregunta: preguntar lo que no tiene alternativa es ruido.
+  let ramas: string[] = [];
+  try {
+    ramas = (await consola.ramasDeCloudStudio?.(proyecto.nombre)) ?? [];
+  } catch (error) {
+    // Igual que el fallo de `conectarCloudStudio`: no puede tirar abajo un alta que ya
+    // guardó proyecto y modo. La rama cae al valor por defecto y se avisa.
+    const detalle = error instanceof Error ? error.message : String(error);
+    consola.escribir(`no se pudieron listar las ramas de CloudStudio: ${detalle}\n`);
+  }
+  let rama = ramas[0] ?? "master";
+  if (ramas.length > 1) {
+    let elegida: string | undefined;
+    if (consola.seleccionar !== undefined) {
+      elegida = await consola.seleccionar({
+        titulo: "Rama origen",
+        opciones: ramas.map((r) => ({ id: r, etiqueta: r })),
+      });
+    } else {
+      consola.escribir("rama origen:\n");
+      for (const [indice, r] of ramas.entries()) consola.escribir(`  ${indice + 1}. ${r}\n`);
+      const indice = Number((await consola.preguntar("número (Enter cancela): ")).trim()) - 1;
+      elegida = Number.isInteger(indice) ? ramas[indice] : undefined;
+    }
+    if (elegida === undefined) {
+      // A diferencia de la cancelación del modo o del proyecto, aquí YA se guardó
+      // `cloudstudio` y `modo: "cloud"`: decir «no se ha creado .xonecode» sería mentir.
+      // Se cae a la primera rama en vez de dejar el proyecto sin rama origen.
+      consola.escribir(`selección cancelada; se usa «${rama}» como rama origen\n`);
+    } else {
+      rama = elegida;
+    }
+  }
+  consola.guardarRamaDeProyecto?.(rama);
+
+  if (consola.sincronizar !== undefined) {
+    consola.escribir("Descargando el proyecto…\n");
+    try {
+      const bajada = await consola.sincronizar("bajar", raiz);
+      if (bajada.tipo === "texto") consola.escribir(bajada.texto);
+    } catch (error) {
+      // Un fallo de red o de servidor durante la descarga no puede tirar abajo el alta:
+      // .xonecode ya quedó escrito y el usuario puede reintentar con /sync bajar.
+      const detalle = error instanceof Error ? error.message : String(error);
+      consola.escribir(`no se pudo descargar el proyecto: ${detalle}; prueba /sync bajar\n`);
+    }
+  }
+
+  // Paso 4: modelo propio del proyecto, opcional. Por omisión NO: hereda el global, que
+  // es lo que el usuario acaba de elegir en el asistente de cuenta.
+  if (consola.guardarModelosDeProyecto !== undefined) {
+    let quierePropio = false;
+    if (consola.seleccionar !== undefined) {
+      const elegido = await consola.seleccionar({
+        titulo: "Modelo de este proyecto",
+        opciones: [
+          { id: "global", etiqueta: "Usar el modelo global", detalle: "lo normal" },
+          { id: "propio", etiqueta: "Elegir uno solo para este proyecto" },
+        ],
+      });
+      quierePropio = elegido === "propio";
+    } else {
+      consola.escribir("modelo de este proyecto:\n  1. Usar el modelo global\n  2. Elegir uno para este proyecto\n");
+      quierePropio = (await consola.preguntar("número (Enter = usar el global): ")).trim() === "2";
+    }
+    if (quierePropio) {
+      let proveedor: Proveedor | undefined;
+      if (consola.seleccionar !== undefined) {
+        const elegido = await consola.seleccionar({
+          titulo: "Proveedor del modelo de este proyecto",
+          opciones: PROVEEDORES.map((p) => ({ id: p, etiqueta: p })),
+        });
+        proveedor = validarProveedor(elegido);
+      } else {
+        consola.escribir(`proveedores: ${PROVEEDORES.join(", ")}\n`);
+        proveedor = validarProveedor((await consola.preguntar("proveedor: ")).trim());
+      }
+      if (proveedor === undefined) {
+        consola.escribir("proveedor inválido; se mantiene el modelo global\n");
+      } else {
+        const modeloId = await seleccionarModelo(proveedor, consola);
+        if (modeloId !== undefined) {
+          const id = `${proveedor}/${modeloId}`;
+          for (const papel of PAPELES) consola.guardarModelosDeProyecto(papel, id);
+          consola.escribir(`→ ${id} guardado para este proyecto\n`);
+        }
+      }
+    }
+  }
+
   // No se vuelca el catálogo: es configuración de transporte, no parte de la conversación.
   consola.escribir("→ Entorno cloud listo\n");
 }
@@ -352,7 +465,8 @@ function validarProveedor(nombre: string | undefined): Proveedor | undefined {
   return undefined;
 }
 
-function hayCredencial(proveedor: Proveedor, raiz: string): boolean {
+/** Exportada: `main.ts` la usa para el contexto de `asistenteDeModelo` (stdio y TUI). */
+export function hayCredencial(proveedor: Proveedor, raiz: string): boolean {
   const variable = VARIABLE_POR_PROVEEDOR[proveedor];
   if (variable === undefined) return true;
   const enEntorno = process.env[variable];
@@ -364,6 +478,55 @@ function describirModelo(modelo: ModeloDisponible): string {
   const etiqueta = modelo.nombre ?? modelo.id;
   const contexto = modelo.contexto === undefined ? "" : `, ctx ${modelo.contexto}`;
   return `${etiqueta} (${modelo.proveedor}/${modelo.id}${contexto})`;
+}
+
+/**
+ * El selector de modelo de un catálogo ya elegido: la parte que `/modelos` y el alta de
+ * proyecto (`configurarModoInicial`) COMPARTEN, para que no haya dos copias del mismo
+ * flujo (rico con `seleccionar`, o numerado por `preguntar` cuando esa costura no existe).
+ * Devuelve el id crudo del catálogo (sin el prefijo `<proveedor>/`) o `undefined` si se
+ * canceló o no había nada entre lo que elegir — los mensajes de cada caso ya se escriben
+ * aquí, así que quien llama no repite el aviso.
+ */
+export async function seleccionarModelo(proveedor: Proveedor, consola: Consola): Promise<string | undefined> {
+  const modelos = await consola.catalogoModelos.listar(proveedor);
+  if (modelos.length === 0) {
+    consola.escribir(`no hay modelos disponibles para ${proveedor}\n`);
+    return undefined;
+  }
+  if (consola.seleccionar !== undefined) {
+    const opciones = modelos.map((modelo) => ({
+      id: modelo.id,
+      etiqueta: modelo.nombre ?? modelo.id,
+      detalle: describirModelo(modelo),
+    }));
+    const elegido = await consola.seleccionar({ titulo: `Modelos de ${proveedor}`, opciones });
+    const modelo = modelos.find((candidato) => candidato.id === elegido);
+    if (modelo === undefined) {
+      consola.escribir("selección cancelada\n");
+      return undefined;
+    }
+    return modelo.id;
+  }
+  const filtro = await consola.preguntar("filtro (Enter para todos): ");
+  const filtrados = filtrarModelos(modelos, filtro);
+  if (filtrados.length === 0) {
+    consola.escribir("no hay modelos que coincidan con el filtro\n");
+    return undefined;
+  }
+  for (const [indice, modelo] of filtrados.entries()) {
+    consola.escribir(`${indice + 1}. ${describirModelo(modelo)}\n`);
+  }
+  const eleccion = elegirPorNumero(filtrados, await consola.preguntar("número (Enter cancela): "));
+  if (eleccion.tipo === "cancelado") {
+    consola.escribir("selección cancelada\n");
+    return undefined;
+  }
+  if (eleccion.tipo === "invalido") {
+    consola.escribir("número inválido\n");
+    return undefined;
+  }
+  return eleccion.modelo.id;
 }
 
 /** Flujo interactivo de catálogo; los fallos previstos nunca devuelven un estado nuevo. */
@@ -387,64 +550,34 @@ async function elegirModelo(
     return { seguir: true };
   }
 
-  const modelos = await consola.catalogoModelos.listar(proveedor);
-  if (modelos.length === 0) {
-    consola.escribir(`no hay modelos disponibles para ${proveedor}\n`);
-    return { seguir: true };
-  }
+  const modeloId = await seleccionarModelo(proveedor, consola);
+  if (modeloId === undefined) return { seguir: true };
+
+  let papel: Papel | undefined;
   if (consola.seleccionar !== undefined) {
-    const opciones = modelos.map((modelo) => ({
-      id: modelo.id,
-      etiqueta: modelo.nombre ?? modelo.id,
-      detalle: describirModelo(modelo),
-    }));
-    const elegido = await consola.seleccionar({ titulo: `Modelos de ${proveedor}`, opciones });
-    const modelo = modelos.find((candidato) => candidato.id === elegido);
-    if (modelo === undefined) {
-      consola.escribir("selección cancelada\n");
-      return { seguir: true };
-    }
     const papelElegido = await consola.seleccionar({
       titulo: "Asignar modelo a",
-      opciones: PAPELES.map((papel) => ({ id: papel, etiqueta: papel })),
+      opciones: PAPELES.map((p) => ({ id: p, etiqueta: p })),
     });
-    const papel = elegirPapel(papelElegido ?? "");
-    if (papel === undefined) {
+    papel = elegirPapel(papelElegido ?? "");
+  } else {
+    const respuestaPapel = await consola.preguntar("papel (rapido/trabajo/afilado): ");
+    if (respuestaPapel.trim() === "") {
       consola.escribir("selección cancelada\n");
       return { seguir: true };
     }
-    return guardarEleccionDeModelo(proveedor, modelo, papel, estado, consola);
+    papel = elegirPapel(respuestaPapel);
+    if (papel === undefined) {
+      consola.escribir(`papel inválido; elige: ${PAPELES.join(", ")}\n`);
+      return { seguir: true };
+    }
   }
-  const filtro = await consola.preguntar("filtro (Enter para todos): ");
-  const filtrados = filtrarModelos(modelos, filtro);
-  if (filtrados.length === 0) {
-    consola.escribir("no hay modelos que coincidan con el filtro\n");
-    return { seguir: true };
-  }
-  for (const [indice, modelo] of filtrados.entries()) {
-    consola.escribir(`${indice + 1}. ${describirModelo(modelo)}\n`);
-  }
-  const eleccion = elegirPorNumero(filtrados, await consola.preguntar("número (Enter cancela): "));
-  if (eleccion.tipo === "cancelado") {
-    consola.escribir("selección cancelada\n");
-    return { seguir: true };
-  }
-  if (eleccion.tipo === "invalido") {
-    consola.escribir("número inválido\n");
-    return { seguir: true };
-  }
-  const respuestaPapel = await consola.preguntar("papel (rapido/trabajo/afilado): ");
-  if (respuestaPapel.trim() === "") {
-    consola.escribir("selección cancelada\n");
-    return { seguir: true };
-  }
-  const papel = elegirPapel(respuestaPapel);
   if (papel === undefined) {
-    consola.escribir(`papel inválido; elige: ${PAPELES.join(", ")}\n`);
+    consola.escribir("selección cancelada\n");
     return { seguir: true };
   }
 
-  return guardarEleccionDeModelo(proveedor, eleccion.modelo, papel, estado, consola);
+  return guardarEleccionDeModelo(proveedor, modeloId, papel, estado, consola);
 }
 
 /** Selector de tema: misma costura rica que /modelos, con pregunta numerada en stdio. */
@@ -486,12 +619,12 @@ async function elegirTema(_args: string[], _estado: EstadoDeSesion, consola: Con
 
 function guardarEleccionDeModelo(
   proveedor: Proveedor,
-  modelo: ModeloDisponible,
+  modeloId: string,
   papel: Papel,
   estado: EstadoDeSesion,
   consola: Consola
 ): { seguir: boolean; estado?: EstadoDeSesion } {
-  const id = `${proveedor}/${modelo.id}`;
+  const id = `${proveedor}/${modeloId}`;
   consola.guardarModeloGlobal(papel, id);
   const eclipsa = fuenteQueEclipsaGlobal(papel, estado.fuentes, estado.seleccionesDeCatalogo);
   if (eclipsa !== undefined) {
@@ -714,6 +847,31 @@ export const COMANDOS: Record<string, { descripcion: string; manejador: Manejado
       // La URL y los scopes siguen guardados en `.xonecode/config.json` para diagnóstico.
       void guardado;
       consola.escribir("→ Entorno listo\n");
+      return { seguir: true };
+    },
+  },
+  sync: {
+    descripcion: "sincroniza con CloudStudio: /sync [estado|bajar|subir]",
+    manejador: async (args, estado, consola) => {
+      if (consola.sincronizar === undefined) {
+        consola.escribir("la sincronización no está disponible en esta ejecución\n");
+        return { seguir: true };
+      }
+      const accion = args[0] ?? "estado";
+      if (accion !== "estado" && accion !== "bajar" && accion !== "subir") {
+        consola.escribir("uso: /sync [estado|bajar|subir]\n");
+        return { seguir: true };
+      }
+      const resultado = await consola.sincronizar(accion, estado.raiz);
+      if (resultado.tipo === "arbol-sucio") {
+        // Se sube el estado de un COMMIT, no un borrador: así «lo que está arriba» es
+        // siempre un commit concreto y mover la ref significa algo.
+        consola.escribir(
+          `hay cambios sin commitear (${resultado.pendientes.join(", ")}); commitea antes de subir\n`
+        );
+        return { seguir: true };
+      }
+      consola.escribir(resultado.texto);
       return { seguir: true };
     },
   },

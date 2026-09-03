@@ -23,6 +23,7 @@ import {
   configurarModoInicial,
   crearCompleter,
   ejecutarTurnoGuionizado,
+  hayCredencial,
   hayEstadoDeProyecto,
   MENSAJE_BIENVENIDA,
   MENSAJE_REANUDANDO,
@@ -31,6 +32,9 @@ import {
   type EjecutorDeTurno,
   type EstadoDeSesion,
 } from "../consola.js";
+import { asistenteDeModelo } from "../wizardInicial.js";
+import { guardarCredencial } from "../../agent/authEnDisco.js";
+import { cargar } from "../../agent/configEnDisco.js";
 import { modeloDeAcuse } from "../acuseDeModelo.js";
 import { crearStore, crearRanura, vistaInicial, type Acto, type VistaDeTui } from "./store.js";
 import { crearPielTui } from "./pielTui.js";
@@ -103,6 +107,11 @@ export interface OpcionesDeConsolaTui {
   guardarCloudStudioDeProyecto?: Consola["guardarCloudStudioDeProyecto"];
   guardarModoDeProyecto?: Consola["guardarModoDeProyecto"];
   guardarProyectoCloudStudioDeProyecto?: Consola["guardarProyectoCloudStudioDeProyecto"];
+  ramasDeCloudStudio?: Consola["ramasDeCloudStudio"];
+  guardarRamaDeProyecto?: Consola["guardarRamaDeProyecto"];
+  guardarModelosDeProyecto?: Consola["guardarModelosDeProyecto"];
+  /** Sincronización con CloudStudio inyectada desde `main.ts`: la TUI no conoce MCP ni git. */
+  sincronizar?: Consola["sincronizar"];
   /** Fuentes del modelo de sesión: deciden el modelo que la sidebar enseña al arrancar. */
   fuentes?: FuentesDeEleccion;
   /** Costura de test: los tests no preguntan a git. */
@@ -136,7 +145,23 @@ export function envolverConOcupacion(
  * reparte a mano acabarían siendo dos mundos.
  */
 export function crearConsolaTui(opciones: OpcionesDeConsolaTui) {
-  const { raiz, fuentes = {}, rama, topeDe, catalogoModelos, guardarModeloGlobal, guardarTemaDeProyecto, conectarCloudStudio, guardarCloudStudioDeProyecto, guardarModoDeProyecto, guardarProyectoCloudStudioDeProyecto } = opciones;
+  const {
+    raiz,
+    fuentes = {},
+    rama,
+    topeDe,
+    catalogoModelos,
+    guardarModeloGlobal,
+    guardarTemaDeProyecto,
+    conectarCloudStudio,
+    guardarCloudStudioDeProyecto,
+    guardarModoDeProyecto,
+    guardarProyectoCloudStudioDeProyecto,
+    ramasDeCloudStudio,
+    guardarRamaDeProyecto,
+    guardarModelosDeProyecto,
+    sincronizar,
+  } = opciones;
   const store = crearStore();
   const vista = crearRanura<VistaDeTui>(vistaInicial());
   // main ya resolvió el tema del config de proyecto antes de cargar Ink.
@@ -242,6 +267,10 @@ export function crearConsolaTui(opciones: OpcionesDeConsolaTui) {
     guardarCloudStudioDeProyecto,
     guardarModoDeProyecto,
     guardarProyectoCloudStudioDeProyecto,
+    ramasDeCloudStudio,
+    guardarRamaDeProyecto,
+    guardarModelosDeProyecto,
+    sincronizar,
     aplicarTema: (tema) => {
       seleccionarTema(tema);
       aplicarTemaInk(tema);
@@ -403,6 +432,10 @@ export interface OpcionesDeMontaje {
   guardarCloudStudioDeProyecto?: Consola["guardarCloudStudioDeProyecto"];
   guardarModoDeProyecto?: Consola["guardarModoDeProyecto"];
   guardarProyectoCloudStudioDeProyecto?: Consola["guardarProyectoCloudStudioDeProyecto"];
+  ramasDeCloudStudio?: Consola["ramasDeCloudStudio"];
+  guardarRamaDeProyecto?: Consola["guardarRamaDeProyecto"];
+  guardarModelosDeProyecto?: Consola["guardarModelosDeProyecto"];
+  sincronizar?: Consola["sincronizar"];
   /** La inspección del prólogo; el real ejecuta el simulador y entra por omisión. */
   inspeccionarProyecto?: (raiz: string) => Promise<{ colecciones: number; esProyectoXone: boolean }>;
   /** El asistente de creación de proyecto; desde `main.ts`, para no duplicarlo. */
@@ -432,6 +465,10 @@ export async function correrConsolaTui(opciones: OpcionesDeMontaje): Promise<num
     guardarCloudStudioDeProyecto,
     guardarModoDeProyecto,
     guardarProyectoCloudStudioDeProyecto,
+    ramasDeCloudStudio,
+    guardarRamaDeProyecto,
+    guardarModelosDeProyecto,
+    sincronizar,
     inspeccionarProyecto = inspeccionar,
     ofrecer,
     crearEjecutor,
@@ -449,6 +486,10 @@ export async function correrConsolaTui(opciones: OpcionesDeMontaje): Promise<num
     guardarCloudStudioDeProyecto,
     guardarModoDeProyecto,
     guardarProyectoCloudStudioDeProyecto,
+    ramasDeCloudStudio,
+    guardarRamaDeProyecto,
+    guardarModelosDeProyecto,
+    sincronizar,
     rama: ramaDeGit(raiz),
     topeDe,
   });
@@ -492,7 +533,24 @@ export async function correrConsolaTui(opciones: OpcionesDeMontaje): Promise<num
     // El prólogo que `entrarEnConsola` hace en stdio, pero contra la TUI YA montada:
     // los avisos y las preguntas del asistente de creación salen por el store y la
     // ranura de pregunta, no por stdout (que ensuciaría la pantalla de ink).
-    if (asistenteInicial) await configurarModoInicial(raiz, consola);
+    //
+    // El asistente de cuenta va ANTES del alta de proyecto: es configuración de la
+    // persona, no de la carpeta. Aquí (a diferencia de stdio) `consola.seleccionar` SÍ
+    // existe, así que es la única piel donde este paso llega a preguntar algo hoy.
+    // `let`: si el asistente o el alta escriben modelo (global o de proyecto), la sesión
+    // tiene que arrancar sobre las fuentes YA recargadas, no las de antes de esa escritura
+    // — es la misma regla que sigue `entrarEnConsola` en stdio.
+    let fuentesDeSesion = fuentes;
+    if (asistenteInicial) {
+      await asistenteDeModelo(consola, {
+        origenDeTrabajo: resolver(fuentes).trabajo.origen,
+        hayCredencial: (proveedor) => hayCredencial(proveedor, raiz),
+        guardarCredencial: (proveedor, clave) => guardarCredencial(proveedor, clave),
+      });
+      await configurarModoInicial(raiz, consola);
+      const recargado = cargar(raiz);
+      fuentesDeSesion = { ...fuentes, proyecto: recargado.config.proyecto, global: recargado.config.global };
+    }
     let entorno = await inspeccionarProyecto(raiz);
     if (!entorno.esProyectoXone) {
       consola.escribir(`✗ ${basename(raiz)} no es un proyecto XOne (falta app.xml)\n`);
@@ -502,7 +560,7 @@ export async function correrConsolaTui(opciones: OpcionesDeMontaje): Promise<num
     }
 
     // Mismo patrón de prefijo que run.ts y el manejador /nuevo de consola.ts.
-    const estado: EstadoDeSesion = { hilo: `xonecode-${randomUUID()}`, raiz, fuentes };
+    const estado: EstadoDeSesion = { hilo: `xonecode-${randomUUID()}`, raiz, fuentes: fuentesDeSesion };
 
     const ejecutorBase =
       guion || crearEjecutor === undefined ? undefined : crearEjecutor(montaje.alAbrirSesion);

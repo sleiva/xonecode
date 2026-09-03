@@ -152,6 +152,188 @@ describe("configurarModoInicial", () => {
     expect(salida()).toContain("No se pudo conectar a CloudStudio: no publicó project_list");
     rmSync(raiz, { recursive: true, force: true });
   });
+
+  /**
+   * Monta una consola en pleno alta cloud, ya con el proyecto elegido: el punto donde
+   * empiezan los pasos 3 (rama + descarga) y 4 (modelo propio) del spec. `respuestasExtra`
+   * cubre lo que SIGA usando `preguntar` tras elegir proyecto (la URL ya se consume sola).
+   */
+  function consolaEnAltaCloud(opciones: {
+    respuestas?: string[];
+    seleccionar?: Consola["seleccionar"];
+    catalogoModelos?: CatalogoModelosPort;
+  } = {}): { raiz: string; consola: Consola; salida: () => string } {
+    const raiz = mkdtempSync(join(tmpdir(), "xc-modo-"));
+    const { consola, salida } = consolaDeConSecreto({
+      lineas: [],
+      interactivo: true,
+      respuestas: ["1", "", "1", ...(opciones.respuestas ?? [])],
+      catalogoModelos: opciones.catalogoModelos,
+    });
+    consola.conectarCloudStudio = async () => ({
+      url: "https://mcp.xonewebstudio.com/mcp",
+      scopes: ["openid", "mcp.read"],
+      herramientas: [],
+      proyectos: [{ id: "p-1", nombre: "Proyecto" }],
+    });
+    consola.guardarCloudStudioDeProyecto = () => ({
+      ruta: join(raiz, ".xonecode", "config.json"),
+      url: "https://mcp.xonewebstudio.com/mcp",
+      scopes: ["openid", "mcp.read"],
+    });
+    consola.guardarModoDeProyecto = () => ({ ruta: join(raiz, ".xonecode", "config.json"), modo: "cloud" as const });
+    consola.guardarProyectoCloudStudioDeProyecto = () => ({
+      ruta: join(raiz, ".xonecode", "config.json"),
+      proyecto: { id: "p-1", nombre: "Proyecto" },
+    });
+    // El «seleccionar» base resuelve modo y proyecto (ya cubiertos por los tests de
+    // arriba); el de cada test SOLO añade lo propio del paso que prueba.
+    const base = async (selector: { titulo: string }): Promise<string | undefined> => {
+      if (selector.titulo === "Modo de proyecto") return "cloud";
+      if (selector.titulo === "Proyecto de CloudStudio") return "p-1";
+      return undefined;
+    };
+    const extra = opciones.seleccionar;
+    consola.seleccionar = async (selector) => {
+      const desdeBase = await base(selector);
+      if (desdeBase !== undefined) return desdeBase;
+      return extra?.(selector);
+    };
+    return { raiz, consola, salida };
+  }
+
+  describe("paso 3: rama origen y descarga", () => {
+    it("con una sola rama disponible, NO pregunta y guarda esa", async () => {
+      const seleccionar = vi.fn(async (_selector: { titulo: string }) => undefined);
+      const { raiz, consola } = consolaEnAltaCloud({ seleccionar });
+      consola.ramasDeCloudStudio = async () => ["master"];
+      const guardarRama = vi.fn(() => ({ ruta: "x", rama: "master" }));
+      consola.guardarRamaDeProyecto = guardarRama;
+      try {
+        await configurarModoInicial(raiz, consola);
+      } finally {
+        rmSync(raiz, { recursive: true, force: true });
+      }
+      // La prueba dura: con una sola rama, «Rama origen» ni se pregunta.
+      expect(seleccionar).not.toHaveBeenCalledWith(expect.objectContaining({ titulo: "Rama origen" }));
+      expect(guardarRama).toHaveBeenCalledWith("master");
+    });
+
+    it("con varias ramas, pregunta y guarda la elegida", async () => {
+      const seleccionar = vi.fn(async (selector: { titulo: string }) => {
+        if (selector.titulo === "Rama origen") return "dev";
+        return undefined;
+      });
+      const { raiz, consola } = consolaEnAltaCloud({ seleccionar });
+      consola.ramasDeCloudStudio = async () => ["master", "dev"];
+      const guardarRama = vi.fn(() => ({ ruta: "x", rama: "dev" }));
+      consola.guardarRamaDeProyecto = guardarRama;
+      try {
+        await configurarModoInicial(raiz, consola);
+      } finally {
+        rmSync(raiz, { recursive: true, force: true });
+      }
+      expect(seleccionar).toHaveBeenCalledWith(
+        expect.objectContaining({ titulo: "Rama origen", opciones: expect.arrayContaining([expect.objectContaining({ id: "master" }), expect.objectContaining({ id: "dev" })]) })
+      );
+      expect(guardarRama).toHaveBeenCalledWith("dev");
+    });
+
+    it("tras elegir proyecto, descarga (\"bajar\") y prepara el repo antes del primer turno", async () => {
+      const { raiz, consola, salida } = consolaEnAltaCloud();
+      consola.ramasDeCloudStudio = async () => ["master"];
+      consola.guardarRamaDeProyecto = vi.fn(() => ({ ruta: "x", rama: "master" }));
+      const sincronizar = vi.fn(async (accion: "estado" | "bajar" | "subir", raizRecibida: string) => {
+        expect(accion).toBe("bajar");
+        expect(raizRecibida).toBe(raiz);
+        return { tipo: "texto" as const, texto: "bajados 3 ficheros (zip)\n" };
+      });
+      consola.sincronizar = sincronizar;
+      try {
+        await configurarModoInicial(raiz, consola);
+      } finally {
+        rmSync(raiz, { recursive: true, force: true });
+      }
+      expect(sincronizar).toHaveBeenCalledOnce();
+      expect(salida()).toContain("bajados 3 ficheros");
+    });
+  });
+
+  describe("paso 4: modelo propio del proyecto", () => {
+    it("«usar el modelo global» (la omisión) no toca la configuración del proyecto", async () => {
+      const seleccionar = vi.fn(async (selector: { titulo: string }) => {
+        if (selector.titulo === "Modelo de este proyecto") return "global";
+        return undefined;
+      });
+      const { raiz, consola } = consolaEnAltaCloud({ seleccionar });
+      consola.ramasDeCloudStudio = async () => ["master"];
+      consola.guardarRamaDeProyecto = vi.fn(() => ({ ruta: "x", rama: "master" }));
+      const guardarModelos = vi.fn();
+      consola.guardarModelosDeProyecto = guardarModelos;
+      try {
+        await configurarModoInicial(raiz, consola);
+      } finally {
+        rmSync(raiz, { recursive: true, force: true });
+      }
+      expect(guardarModelos).not.toHaveBeenCalled();
+    });
+
+    it("«elegir uno propio» guarda el mismo modelo para los TRES papeles del proyecto", async () => {
+      const seleccionar = vi.fn(async (selector: { titulo: string }) => {
+        if (selector.titulo === "Modelo de este proyecto") return "propio";
+        if (selector.titulo === "Proveedor del modelo de este proyecto") return "ollama";
+        if (selector.titulo === "Modelos de ollama") return "qwen3";
+        return undefined;
+      });
+      const { raiz, consola } = consolaEnAltaCloud({
+        seleccionar,
+        catalogoModelos: new CatalogoModelosEnMemoria({ ollama: [{ proveedor: "ollama", id: "qwen3" }] }),
+      });
+      consola.ramasDeCloudStudio = async () => ["master"];
+      consola.guardarRamaDeProyecto = vi.fn(() => ({ ruta: "x", rama: "master" }));
+      const guardarModelos = vi.fn(() => ({ ruta: "x", id: "ollama/qwen3" }));
+      consola.guardarModelosDeProyecto = guardarModelos;
+      try {
+        await configurarModoInicial(raiz, consola);
+      } finally {
+        rmSync(raiz, { recursive: true, force: true });
+      }
+      expect(guardarModelos).toHaveBeenCalledWith("rapido", "ollama/qwen3");
+      expect(guardarModelos).toHaveBeenCalledWith("trabajo", "ollama/qwen3");
+      expect(guardarModelos).toHaveBeenCalledWith("afilado", "ollama/qwen3");
+    });
+  });
+});
+
+describe("/sync", () => {
+  it("sin dependencias inyectadas lo dice y no revienta", async () => {
+    const { consola, salida } = consolaDe("/sync", "/salir");
+    await correrConsola(consola, estadoDe());
+    expect(salida()).toMatch(/sincronización no está disponible/i);
+  });
+
+  it("se niega a subir con el árbol sucio", async () => {
+    const { consola, salida } = consolaDe("/sync subir", "/salir");
+    const conSync: Consola = {
+      ...consola,
+      sincronizar: async (accion) => {
+        expect(accion).toBe("subir");
+        return { tipo: "arbol-sucio", pendientes: ["app.xml"] };
+      },
+    };
+    await correrConsola(conSync, estadoDe());
+    expect(salida()).toMatch(/commitea/i);
+  });
+
+  it("«/sync estado» enseña lo que falta por subir", async () => {
+    const { consola, salida } = consolaDe("/sync", "/salir");
+    const conSync: Consola = {
+      ...consola,
+      sincronizar: async () => ({ tipo: "texto", texto: "rama master: 2 ficheros por subir\n" }),
+    };
+    await correrConsola(conSync, estadoDe());
+    expect(salida()).toContain("2 ficheros por subir");
+  });
 });
 
 function ejecutorFalsoDe(turnos: Array<{ peticion: string; estado: EstadoDeSesion }>): EjecutorDeTurno {

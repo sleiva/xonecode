@@ -14,13 +14,30 @@ import { cmdDoctor } from "./doctor.js";
 import { cmdVerify } from "./verify.js";
 import { type FuentesDeEleccion, ModeloMalEscrito, parsear, resolver } from "../core/modelos.js";
 import { topeResuelto } from "../core/contextos.js";
-import { aplicarAuth, cargar, guardarCloudStudioDeProyecto, guardarModeloGlobal, guardarModoDeProyecto, guardarProyectoCloudStudioDeProyecto, guardarTemaDeProyecto } from "../agent/configEnDisco.js";
-import { conectarCloudStudio } from "../agent/cloudstudioMcp.js";
+import {
+  aplicarAuth,
+  cargar,
+  guardarCloudStudioDeProyecto,
+  guardarModeloGlobal,
+  guardarModelosDeProyecto,
+  guardarModoDeProyecto,
+  guardarProyectoCloudStudioDeProyecto,
+  guardarRamaDeProyecto,
+  guardarTemaDeProyecto,
+} from "../agent/configEnDisco.js";
+import { conectarCloudStudio, sesionCloudStudio } from "../agent/cloudstudioMcp.js";
+import { clienteCloudStudio } from "../agent/cloudstudioClient.js";
+import { descargarProyecto } from "../agent/descarga.js";
+import { arbolLimpio, cambiosPendientes, prepararRepo } from "../agent/gitSync.js";
+import { subir } from "../agent/subida.js";
+import { guardarCredencial } from "../agent/authEnDisco.js";
+import { asistenteDeModelo } from "./wizardInicial.js";
 import {
   COMANDOS,
   configurarModoInicial,
   correrConsola,
   crearCompleter,
+  hayCredencial,
   hayEstadoDeProyecto,
   MENSAJE_BIENVENIDA,
   MENSAJE_REANUDANDO,
@@ -428,6 +445,135 @@ export function crearCompleterDelProyecto(raiz: string, escribir: Escribir = esc
   return crearCompleter(escribir, () => ficherosDelProyecto(raiz));
 }
 
+/**
+ * Las piezas de la sincronización, para poder probar `crearSincronizador` y
+ * `crearListaDeRamas` sin red ni MCP: los tests inyectan dobles y el valor por omisión es
+ * el adaptador real de `agent/`. `leerConfig` es literalmente `cargar` de
+ * `agent/configEnDisco.ts` — no existe (ni hace falta) un `leerCloudStudioDeProyecto`.
+ */
+export interface PiezasDeSincronizacion {
+  leerConfig: typeof cargar;
+  sesion: typeof sesionCloudStudio;
+  cliente: typeof clienteCloudStudio;
+  descargar: typeof descargarProyecto;
+  preparar: typeof prepararRepo;
+  pendientes: typeof cambiosPendientes;
+  limpio: typeof arbolLimpio;
+  subirProyecto: typeof subir;
+}
+
+const PIEZAS_DE_SINCRONIZACION_REALES: PiezasDeSincronizacion = {
+  leerConfig: cargar,
+  sesion: sesionCloudStudio,
+  cliente: clienteCloudStudio,
+  descargar: descargarProyecto,
+  preparar: prepararRepo,
+  pendientes: cambiosPendientes,
+  limpio: arbolLimpio,
+  subirProyecto: subir,
+};
+
+/**
+ * El endpoint de CloudStudio del proyecto YA guardado, o `undefined` si `/sync` no puede
+ * seguir: ni «no hay `cloudstudio`» ni «falta el proyecto o la rama» (un `/connect-studio`
+ * sin completar el alta) se distinguen hoy — las dos caen en el mismo texto genérico de
+ * `crearSincronizador`. Si algún día hace falta un mensaje más fino, es aquí donde separar
+ * los dos casos, sin tocar a quien llama.
+ */
+function cloudStudioDeProyecto(
+  leerConfig: typeof cargar,
+  raiz: string
+): { url: string; scopes?: string[]; proyecto: { id: string; nombre: string }; rama: string } | undefined {
+  const cloudstudio = leerConfig(raiz).config.proyecto?.cloudstudio;
+  if (cloudstudio === undefined) return undefined;
+  if (cloudstudio.proyecto === undefined || cloudstudio.rama === undefined) return undefined;
+  return { url: cloudstudio.url, scopes: cloudstudio.scopes, proyecto: cloudstudio.proyecto, rama: cloudstudio.rama };
+}
+
+/**
+ * El adaptador real de `consola.sincronizar`: abre una sesión MCP VIVA con
+ * `sesionCloudStudio` —`conectarCloudStudio` cierra su transporte al terminar y sirve
+ * para el alta, pero no para operar— y la cierra siempre en un `finally`, tanto si la
+ * operación termina bien como si revienta.
+ *
+ * El orden dentro de «bajar» es crítico: `descargarProyecto` (que ya retira las vistas
+ * aplanadas) y DESPUÉS `prepararRepo`. Al revés, git vería esos `.xml` como borrados y la
+ * primera subida los borraría en Studio.
+ *
+ * «subir» se niega con el árbol sucio ANTES de abrir sesión ni tocar CloudStudio: se sube
+ * el estado de un commit, no un borrador, para que mover la ref signifique algo.
+ */
+export function crearSincronizador(
+  piezas: PiezasDeSincronizacion = PIEZAS_DE_SINCRONIZACION_REALES
+): NonNullable<Consola["sincronizar"]> {
+  return async (accion, raiz) => {
+    const config = cloudStudioDeProyecto(piezas.leerConfig, raiz);
+    if (config === undefined) {
+      return { tipo: "texto", texto: "este proyecto no es cloud (o le falta el proyecto/rama del alta)\n" };
+    }
+
+    if (accion === "subir" && !(await piezas.limpio(raiz))) {
+      const pendientes = await piezas.pendientes(raiz, config.rama);
+      return { tipo: "arbol-sucio", pendientes: pendientes.map((c) => c.ruta) };
+    }
+
+    const sesion = await piezas.sesion(config.url, { scopes: config.scopes });
+    try {
+      const puerto = piezas.cliente(sesion.invocar, config.proyecto.nombre);
+
+      if (accion === "bajar") {
+        const bajada = await piezas.descargar({ puerto, raiz, proyecto: config.proyecto });
+        await piezas.preparar(raiz, bajada.rama);
+        // Hoy los proyectos suelen tener una sola rama, así que esto no debería disparar
+        // casi nunca; si dispara, `/sync estado`/`subir` compararían contra una ref que no
+        // existe (siguen la rama GUARDADA, no la que de verdad se bajó).
+        const aviso =
+          bajada.rama !== config.rama
+            ? ` (aviso: CloudStudio devolvió la rama «${bajada.rama}», pero la guardada es «${config.rama}»)`
+            : "";
+        return { tipo: "texto", texto: `bajados ${bajada.descargados.length} ficheros (${bajada.via})${aviso}\n` };
+      }
+      if (accion === "subir") {
+        const informe = await piezas.subirProyecto({
+          puerto,
+          raiz,
+          ramaOrigen: config.rama,
+          ramaTrabajo: `xonecode/${config.rama}`,
+          proyecto: config.proyecto,
+        });
+        return { tipo: "texto", texto: `subidos ${informe.ok.length}, fallaron ${informe.fallos.length}\n` };
+      }
+      const pendientes = await piezas.pendientes(raiz, config.rama);
+      return { tipo: "texto", texto: `rama ${config.rama}: ${pendientes.length} ficheros por subir\n` };
+    } finally {
+      await sesion.cerrar();
+    }
+  };
+}
+
+/**
+ * El adaptador real de `consola.ramasDeCloudStudio`: mismo patrón de sesión VIVA +
+ * `finally`. Se usa durante el alta, con `proyecto` y `url` ya guardados pero la rama
+ * todavía sin elegir — por eso lee el config en cada llamada en vez de recibirlo cerrado.
+ */
+export function crearListaDeRamas(
+  raiz: string,
+  piezas: Pick<PiezasDeSincronizacion, "leerConfig" | "sesion" | "cliente"> = PIEZAS_DE_SINCRONIZACION_REALES
+): (proyecto: string) => Promise<string[]> {
+  return async (proyectoNombre) => {
+    const cloudstudio = piezas.leerConfig(raiz).config.proyecto?.cloudstudio;
+    if (cloudstudio?.url === undefined) return [];
+    const sesion = await piezas.sesion(cloudstudio.url, { scopes: cloudstudio.scopes });
+    try {
+      const puerto = piezas.cliente(sesion.invocar, proyectoNombre);
+      await puerto.abrir(proyectoNombre);
+      return await puerto.ramas();
+    } finally {
+      await sesion.cerrar();
+    }
+  };
+}
+
 export async function entrarEnConsola(
   fuentes: FuentesDeEleccion,
   raiz: string = process.cwd(),
@@ -473,7 +619,10 @@ export async function entrarEnConsola(
   seleccionarTema("xone");
   const temaDeProyecto = cargado.config.proyecto?.tema;
   if (temaDeProyecto !== undefined && esTema(temaDeProyecto)) seleccionarTema(temaDeProyecto);
-  const fuentesHidratadas: FuentesDeEleccion = {
+  // `let`: el asistente de cuenta y el alta de proyecto (más abajo, ambos solo con TTY)
+  // pueden escribir modelo global o de proyecto, y la cabecera no puede quedarse leyendo
+  // las fuentes de ANTES de esa escritura.
+  let fuentesHidratadas: FuentesDeEleccion = {
     ...fuentes,
     proyecto: cargado.config.proyecto,
     global: cargado.config.global,
@@ -498,6 +647,10 @@ export async function entrarEnConsola(
       guardarCloudStudioDeProyecto: (url, scopes) => guardarCloudStudioDeProyecto(raiz, url, scopes),
       guardarModoDeProyecto: (modo) => guardarModoDeProyecto(raiz, modo),
       guardarProyectoCloudStudioDeProyecto: (proyecto) => guardarProyectoCloudStudioDeProyecto(raiz, proyecto),
+      ramasDeCloudStudio: crearListaDeRamas(raiz),
+      guardarRamaDeProyecto: (rama) => guardarRamaDeProyecto(raiz, rama),
+      guardarModelosDeProyecto: (papel, id) => guardarModelosDeProyecto(raiz, papel, id),
+      sincronizar: crearSincronizador(),
       inspeccionarProyecto,
       ofrecer: ofrecerCrearProyecto,
       crearEjecutor: guion ? undefined : crearEjecutorReal,
@@ -608,12 +761,35 @@ export async function entrarEnConsola(
     guardarCloudStudioDeProyecto: (url, scopes) => guardarCloudStudioDeProyecto(raiz, url, scopes),
     guardarModoDeProyecto: (modo) => guardarModoDeProyecto(raiz, modo),
     guardarProyectoCloudStudioDeProyecto: (proyecto) => guardarProyectoCloudStudioDeProyecto(raiz, proyecto),
+    ramasDeCloudStudio: crearListaDeRamas(raiz),
+    guardarRamaDeProyecto: (rama) => guardarRamaDeProyecto(raiz, rama),
+    guardarModelosDeProyecto: (papel, id) => guardarModelosDeProyecto(raiz, papel, id),
+    sincronizar: crearSincronizador(),
   };
 
   // Los dobles de readline de tests (y una tubería) pueden declararse interactivos para
   // probar otro diálogo, pero no son un terminal en el que abrir OAuth. El asistente de
   // arranque es exclusivamente de una sesión TTY real.
-  if (process.stdin.isTTY === true) await configurarModoInicial(raiz, consola);
+  if (process.stdin.isTTY === true) {
+    // 1. Cuenta: proveedor y modelo, SOLO si nadie eligió nunca (mira `origen`, no un
+    // flag de «primer arranque» aparte). Antes que el proyecto: es configuración de la
+    // persona, no de la carpeta.
+    await asistenteDeModelo(consola, {
+      origenDeTrabajo: resolver(fuentesHidratadas).trabajo.origen,
+      hayCredencial: (proveedor) => hayCredencial(proveedor, raiz),
+      guardarCredencial: (proveedor, clave) => guardarCredencial(proveedor, clave),
+    });
+    // 2-3-4. Modo, proyecto de CloudStudio + rama + descarga, y modelo propio opcional.
+    await configurarModoInicial(raiz, consola);
+    // El asistente y el alta pueden haber escrito modelo global o de proyecto (y, con
+    // cloud, ficheros nuevos): se relee TODO antes de fijar la cabecera, o mentiría sobre
+    // lo que se acaba de elegir.
+    const recargado = cargar(raiz);
+    fuentesHidratadas = { ...fuentesHidratadas, proyecto: recargado.config.proyecto, global: recargado.config.global };
+    entorno = await inspeccionarProyecto(raiz);
+    const elegidoTrasAlta = resolver(fuentesHidratadas).trabajo;
+    modeloTrabajo = `${elegidoTrasAlta.proveedor}/${elegidoTrasAlta.modelo}`;
+  }
 
   // El asistente de creación: la única escritura fuera de un turno del agente, y
   // por eso la única que pregunta ANTES de escribir. Si se crea, la carpeta ya ES
