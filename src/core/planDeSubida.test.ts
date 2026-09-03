@@ -75,4 +75,14 @@ describe("planDeSubida", () => {
     });
     expect(plan).toEqual([]);
   });
+
+  it("reconoce la vista aplanada sin importar la mayúscula de la extensión", () => {
+    // Bug mudo si esto falla: un `Foo.XML` viejo se subiría junto al `.xne` nuevo y
+    // dejaría el proyecto del cliente incoherente sin ningún aviso de XOne.
+    expect(planDeSubida({
+      ...base,
+      cambios: [{ clase: "modificado", ruta: "Foo.XML" }],
+      fuentesXne: new Set(["Foo.xne"]),
+    })).toEqual([]);
+  });
 });

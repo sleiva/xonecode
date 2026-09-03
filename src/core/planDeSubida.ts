@@ -38,9 +38,16 @@ const extensionDe = (ruta: string): string => {
   return punto === -1 ? "" : ruta.slice(punto).toLowerCase();
 };
 
-/** `X.xml` es vista aplanada si existe `X.xne`. `app.xml` no tiene hermano: es fuente. */
+/**
+ * `X.xml` es vista aplanada si existe `X.xne`. `app.xml` no tiene hermano: es fuente.
+ *
+ * La extensión se mira con `extensionDe` (normalizada a minúsculas) para que haya UNA sola
+ * forma de decidir "es un .xml" en todo el fichero — si no, un `Foo.XML` se colaba como texto
+ * en vez de excluirse, y XOne no avisa: sube un XML viejo junto al `.xne` nuevo, en silencio.
+ * El hermano se compone sobre la RUTA ORIGINAL (no la minusculizada): el nombre en disco importa.
+ */
 const esVistaAplanada = (ruta: string, fuentes: ReadonlySet<string>): boolean =>
-  ruta.endsWith(".xml") && fuentes.has(`${ruta.slice(0, -4)}.xne`);
+  extensionDe(ruta) === ".xml" && fuentes.has(`${ruta.slice(0, -4)}.xne`);
 
 export function planDeSubida(entrada: EntradaDelPlan): OperacionDeSubida[] {
   const fuentes = entrada.fuentesXne ?? new Set<string>();
