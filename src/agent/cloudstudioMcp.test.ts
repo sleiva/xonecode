@@ -64,6 +64,49 @@ describe("invocarSobre", () => {
     await invocar("studio_open_project", { project: "AppForTest" });
     expect(peticiones).toEqual([{ name: "studio_open_project", arguments: { project: "AppForTest" } }]);
   });
+
+  // Medido contra el servidor real: `studio_open_project` con un id devolvió
+  // «Failed to open project: Project '96fe…' not found for user 'sleiva@xone.es'», y un
+  // `studio_edit_file` en modo `patch` puede rechazar devolviendo el propio bloque que
+  // se intentó escribir. El mensaje de la excepción es justo el canal que atraviesa
+  // `conSesion`, logs, capturas y `sync.log` — el invariante del repo lo protege.
+  it("una tool de ESCRITURA no reenvía el cuerpo del error: puede ser nuestro fichero rebotando", async () => {
+    const contenidoReconocible = "function actualizarStock() { /* lógica real del cliente */ }";
+    const invocar = invocarSobre(async () => ({
+      isError: true,
+      content: [{ type: "text", text: `Patch rejected, offending block was:\n${contenidoReconocible}\nEOF` }],
+    }));
+    const error = await invocar("studio_edit_file", { filePath: "stock.js", content: "x", editMode: "replace" })
+      .catch((e: unknown) => e as Error);
+    expect(error).toBeInstanceOf(Error);
+    expect((error as Error).message).not.toContain(contenidoReconocible);
+    // Sigue sirviendo para diagnosticar: nombra la tool y la ruta.
+    expect((error as Error).message).toContain("studio_edit_file");
+    expect((error as Error).message).toContain("stock.js");
+  });
+
+  it("una tool de LECTURA solo reenvía la primera línea, acotada", async () => {
+    const primeraLinea = "File extension '.jpg' is not allowed or missing";
+    const resto = "x".repeat(500);
+    const invocar = invocarSobre(async () => ({
+      isError: true,
+      content: [{ type: "text", text: `${primeraLinea}\n${resto}` }],
+    }));
+    const error = await invocar("studio_get_file", { filePath: "logo.jpg" }).catch((e: unknown) => e as Error);
+    expect((error as Error).message).toContain(primeraLinea);
+    expect((error as Error).message).not.toContain(resto);
+    expect((error as Error).message.length).toBeLessThan(primeraLinea.length + 50);
+    expect((error as Error).message).toContain("studio_get_file");
+  });
+
+  it("la caducidad de sesión se conserva incluso en una tool de escritura: si no, no hay reapertura posible", async () => {
+    const invocar = invocarSobre(async () => ({
+      isError: true,
+      content: [{ type: "text", text: "No project is open. Use the studio_open_project tool" }],
+    }));
+    await expect(invocar("studio_edit_file", { filePath: "a.js", content: "x", editMode: "replace" }))
+      .rejects.toThrow(/No project is open/);
+  });
 });
 
 describe("herramientaDeProyectos", () => {

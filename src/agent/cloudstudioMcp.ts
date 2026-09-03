@@ -301,9 +301,26 @@ export interface SesionCloudStudio {
   cerrar: () => Promise<void>;
 }
 
-/** El texto de un error de TOOL (`isError`), nunca del transporte. Puede incluir rutas
- *  del servidor («No project is open»), nunca contenido de fichero ni el token: eso no
- *  viaja en el mensaje de error de una tool, solo en su resultado de éxito. */
+/**
+ * El servidor pierde el proyecto abierto al caducar la sesión; lo dice con este texto
+ * (medido). Duplicado a propósito del mismo patrón en `agent/cloudstudioClient.ts`: es
+ * la señal, no un detalle de transporte, y ninguno de los dos módulos importa del otro.
+ */
+const SESION_PERDIDA = /no project is open/i;
+
+/** Tools cuyo `isError` puede traer de vuelta nuestro propio contenido: un rechazo de
+ *  `studio_edit_file` en modo `patch`, o de `studio_upload_file`, puede incluir el
+ *  fragmento o fichero que se intentó mandar. Nunca se reenvía ese cuerpo. */
+const TOOLS_DE_ESCRITURA = new Set(["studio_edit_file", "studio_upload_file"]);
+
+/** Cuánto de la primera línea de un error se conserva. Basta para «File extension
+ *  '.jpg' is not allowed…»; no basta para un volcado de fichero entero. */
+const TOPE_MENSAJE_ERROR = 200;
+
+/** El texto de un error de TOOL (`isError`), tal cual lo manda el servidor. Puede
+ *  incluir identidad («…not found for user 'sleiva@xone.es'») o, en una tool de
+ *  escritura, el propio contenido rechazado: por eso `mensajeDeErrorDeTool` decide
+ *  cuánto de esto sale de aquí, nunca esta función. */
 function textoDeErrorDeTool(resultado: unknown): string {
   const contenido = typeof resultado === "object" && resultado !== null
     ? (resultado as Record<string, unknown>).content
@@ -318,6 +335,42 @@ function textoDeErrorDeTool(resultado: unknown): string {
     if (texto !== "") return texto;
   }
   return "CloudStudio devolvió un error sin detalle";
+}
+
+/** La ruta del fichero de la llamada, cuando la tool la lleva en `filePath`. Solo para
+ *  nombrar el error; nunca su contenido. */
+function rutaDe(argumentos: Record<string, unknown>): string | undefined {
+  return typeof argumentos.filePath === "string" ? argumentos.filePath : undefined;
+}
+
+/** La primera línea, acotada. Un texto de una sola línea corta pasa intacto. */
+function primeraLineaAcotada(texto: string): string {
+  const primeraLinea = texto.split(/\r?\n/, 1)[0] ?? "";
+  return primeraLinea.length > TOPE_MENSAJE_ERROR
+    ? `${primeraLinea.slice(0, TOPE_MENSAJE_ERROR)}…`
+    : primeraLinea;
+}
+
+/**
+ * El mensaje final de la excepción: nombra siempre la tool, para que el error siga
+ * sirviendo para diagnosticar, pero decide cuánto del cuerpo del servidor deja pasar.
+ *
+ * La caducidad de sesión es la excepción a la excepción: es un texto fijo y corto —
+ * nunca contenido de fichero—, y es la señal de la que depende toda la reapertura en
+ * `clienteCloudStudio`, incluida la de las tools de escritura. Redactar el cuerpo ahí
+ * dejaría un `escribirTexto`/`subirBinario` con la sesión caducada sin forma de
+ * reabrir y reintentar.
+ */
+function mensajeDeErrorDeTool(nombre: string, argumentos: Record<string, unknown>, resultado: unknown): string {
+  const detalle = textoDeErrorDeTool(resultado);
+  if (SESION_PERDIDA.test(detalle)) return `${nombre}: ${primeraLineaAcotada(detalle)}`;
+  if (TOOLS_DE_ESCRITURA.has(nombre)) {
+    const ruta = rutaDe(argumentos);
+    // Sin el cuerpo: en una tool de escritura ese cuerpo puede ser nuestro propio
+    // fichero (o el fragmento de un patch) rebotando.
+    return `CloudStudio rechazó ${nombre}${ruta !== undefined ? ` (${ruta})` : ""}`;
+  }
+  return `${nombre}: ${primeraLineaAcotada(detalle)}`;
 }
 
 /**
@@ -338,7 +391,7 @@ export function invocarSobre(
     // project is open» nunca llegaría a un catch y `clienteCloudStudio` no podría
     // reabrir la sesión.
     if (typeof resultado === "object" && resultado !== null && (resultado as { isError?: boolean }).isError) {
-      throw new Error(textoDeErrorDeTool(resultado));
+      throw new Error(mensajeDeErrorDeTool(nombre, argumentos, resultado));
     }
     return resultado;
   };
