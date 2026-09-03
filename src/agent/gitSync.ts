@@ -141,6 +141,15 @@ export async function prepararRepo(
   // cuentas de xonecode y nadie más lo usa.
   await git(raiz, ["config", `remote.${REMOTO}.url`, `cloudstudio://${ramaOrigen}`]);
   await git(raiz, ["config", `remote.${REMOTO}.fetch`, `+refs/heads/*:refs/remotes/${REMOTO}/*`]);
+  // DETRÁS DE ESTE REMOTO NO HAY UN SERVIDOR GIT. La url `cloudstudio://…` existe para que
+  // la pareja `branch.<rama>.remote` + la ref le den a `git status` el «ahead/behind»
+  // —que es el corazón del diseño: el libro de cuentas es git y no un fichero nuestro—,
+  // pero nadie puede hablar ese protocolo. Sin esto, medido, el `git fetch --all` o el
+  // `git remote update` del usuario mueren con «remote helper 'cloudstudio' aborted
+  // session» (código 128) por culpa de un remoto que le pusimos nosotros. `skipFetchAll`
+  // hace que los recorridos de TODOS los remotos se salten este, y deja intacto todo lo
+  // demás. Nuestro «fetch» de verdad es `/sync bajar`, no un transporte de git.
+  await git(raiz, ["config", `remote.${REMOTO}.skipFetchAll`, "true"]);
 
   // Estas tres son del USUARIO: `core.autocrlf` gobierna todo su repo y
   // `branch.<rama>.remote`/`.merge` son a dónde empuja su `git push`. En un repo

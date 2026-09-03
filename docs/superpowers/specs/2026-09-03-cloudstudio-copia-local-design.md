@@ -208,9 +208,21 @@ detrás:
 ```sh
 git config remote.cloudstudio.url   "cloudstudio://<proyecto>"
 git config remote.cloudstudio.fetch "+refs/heads/*:refs/remotes/cloudstudio/*"
+git config remote.cloudstudio.skipFetchAll true
 git config branch.main.remote  cloudstudio
 git config branch.main.merge   refs/heads/main
 ```
+
+`skipFetchAll` no es un adorno: detrás de `cloudstudio://` no hay ningún servidor git, así
+que sin ella el `git fetch --all` (o el `git remote update`) del usuario muere con «remote
+helper 'cloudstudio' aborted session», código 128, por culpa de un remoto que le pusimos
+nosotros. Con ella, los recorridos de todos los remotos se saltan éste y el resto queda
+igual — incluido el «ahead/behind» de `git status`, que es lo único para lo que declaramos
+el remoto. Nuestro «fetch» de verdad es `/sync bajar`.
+
+Las tres claves de `remote.cloudstudio.*` se escriben SIEMPRE (son nuestro espacio de
+nombres); `core.autocrlf` y `branch.<rama>.remote`/`.merge` son del usuario y en un repo
+preexistente solo se escriben si no valen ya nada.
 
 Si la carpeta no es un repo, `git init` (es el git local que el usuario quiere, normal y
 usable). Si ya lo es, no se inicia nada: solo se crea la ref. El commit de baseline se

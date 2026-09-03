@@ -111,10 +111,17 @@ export function clienteCloudStudio(invocar: Invocar, proyecto: string): CloudStu
       await conSesion("studio_edit_file", { filePath: ruta, content: contenido, editMode: "replace" });
     },
     async borrarTexto(ruta) {
+      // `studio_edit_file` es una tool de TEXTO: no hay borrado de binarios por MCP. Ese
+      // caso tampoco llega hasta aquí — `planDeSubida` lo declara imposible y lo saca del
+      // plan, con un motivo que le dice al usuario que lo borre en Studio a mano.
       await conSesion("studio_edit_file", { filePath: ruta, editMode: "delete" });
     },
     async subirBinario(ruta, datos) {
-      // El modo lo decide `planDeSubida`; aquí solo se ejecuta el envío directo.
+      // `base64` es el ÚNICO modo que xonecode implementa, y el puerto ni siquiera lleva
+      // el campo: el `chunked` del servidor no está enchufado. Por eso `planDeSubida`
+      // declara IMPOSIBLE —y saca del plan— cualquier binario por encima de
+      // `TOPE_BASE64`, en vez de mandarlo aquí a fallar. Si algún día se implementa el
+      // troceado, este es el sitio, y `OperacionDeSubida` vuelve a tener dos modos.
       await conSesion("studio_upload_file", {
         filePath: ruta,
         source: "base64",

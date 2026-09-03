@@ -221,6 +221,14 @@ antes del borrado, git vería esos `.xml` como borrados y, al haberse descargado
 candado no los frenaría; la primera subida los borraría **en Studio**. Tomándolo después,
 para git nunca existieron.
 
+El remoto `cloudstudio` se declara con `skipFetchAll`: detrás de `cloudstudio://` no hay
+servidor git, y sin esa clave el `git fetch --all` del usuario muere con «remote helper
+'cloudstudio' aborted session». La url y la ref existen solo para que `git status` calcule
+el ahead/behind — el libro de cuentas es git, no un fichero nuestro—, así que quitar el
+remoto no era una opción. Las tres claves de `remote.cloudstudio.*` se escriben siempre;
+`core.autocrlf` y `branch.<rama>.remote`/`.merge` son del USUARIO y en un repo preexistente
+solo se escriben si no valen ya nada (y se dice cuáles se omiten).
+
 Studio tiene rama origen (de la que se baja, `cloudstudio.rama`) y rama de trabajo (a la
 que se sube, `ramaDeTrabajo(origen)` = `xonecode/<origen>`, creada perezosamente en la
 primera subida para no ensuciar Studio a quien no sube nada). **La ref que se mueve al

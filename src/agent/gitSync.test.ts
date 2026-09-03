@@ -43,6 +43,30 @@ describe("prepararRepo", () => {
     expect(git(raiz, "rev-parse", `refs/remotes/${REMOTO}/master`)).toMatch(/^[0-9a-f]{40}$/);
   });
 
+  it("el remoto declarado no rompe el `git fetch --all` del usuario", async () => {
+    // Detrás de `cloudstudio://…` no hay ningún servidor git: la url existe solo para que
+    // `git status` calcule el ahead/behind. Medido antes del arreglo: `git fetch --all`
+    // moría con «remote helper 'cloudstudio' aborted session» y código 128 — un remoto
+    // que le pusimos nosotros rompiéndole un comando suyo de todos los días.
+    const raiz = proyecto();
+    execFileSync("git", ["init", "-q", "-b", "master"], { cwd: raiz });
+    git(raiz, "config", "user.email", "t@t");
+    git(raiz, "config", "user.name", "t");
+    git(raiz, "add", "app.xml");
+    git(raiz, "commit", "-qm", "inicial");
+
+    await prepararRepo(raiz, "master");
+
+    // No se afirma sobre la clave sino sobre el COMPORTAMIENTO: es lo que se midió, y un
+    // test de la clave pasaría igual si git dejara de respetarla.
+    expect(() => execFileSync("git", ["fetch", "--all"], { cwd: raiz, stdio: "ignore" })).not.toThrow();
+    expect(() => execFileSync("git", ["remote", "update"], { cwd: raiz, stdio: "ignore" })).not.toThrow();
+    // Y la pareja que sostiene el «ahead/behind» sigue en pie: el arreglo no puede ser
+    // «quitar el remoto», porque el libro de cuentas es git y no un fichero nuestro.
+    expect(git(raiz, "config", `branch.master.remote`)).toBe(REMOTO);
+    expect(git(raiz, "rev-parse", `refs/remotes/${REMOTO}/master`)).toMatch(/^[0-9a-f]{40}$/);
+  });
+
   it("no pisa la configuración de un repo preexistente, y lo dice", async () => {
     // Reproducido: un repo con `origin` en GitHub acababa con `master` apuntando a un
     // remoto `cloudstudio://`, que no es ningún servidor git — y el `git push` del
