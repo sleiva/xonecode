@@ -74,7 +74,7 @@ export interface Consola {
   /** Persistencia inyectada: el tema es del proyecto, no de la cuenta. */
   guardarTemaDeProyecto?: (tema: IdTema) => { ruta: string; tema: string };
   /** Conexión OAuth + MCP, inyectada desde agent para que esta capa siga sin SDK MCP. */
-  conectarCloudStudio?: (url: string, informar: (texto: string) => void) => Promise<{
+  conectarCloudStudio?: (url: string, scopes: readonly string[], informar: (texto: string) => void) => Promise<{
     url: string;
     scopes: readonly string[];
     herramientas: Array<{ nombre: string; descripcion: string }>;
@@ -111,6 +111,14 @@ export const PETICION_REANUDAR_PROYECTO =
 
 export const MENSAJE_REANUDANDO = "Analizando el estado guardado del repositorio…\n";
 export const URL_CLOUDSTUDIO_POR_OMISION = "https://mcp.xonewebstudio.com/mcp";
+const SCOPES_STUDIO_LECTURA = ["openid", "profile", "email", "offline_access", "mcp.read"] as const;
+const SCOPES_STUDIO_ESCRITURA = [...SCOPES_STUDIO_LECTURA, "mcp.write"] as const;
+
+function modoStudio(valor: string | undefined): { nombre: "lectura" | "escritura"; scopes: readonly string[] } | undefined {
+  if (valor === undefined || valor === "lectura") return { nombre: "lectura", scopes: SCOPES_STUDIO_LECTURA };
+  if (valor === "escritura") return { nombre: "escritura", scopes: SCOPES_STUDIO_ESCRITURA };
+  return undefined;
+}
 
 /** Datos de un selector: UI-neutral, para que `consola.ts` no conozca Ink. */
 export interface SelectorDeConsola {
@@ -595,17 +603,23 @@ export const COMANDOS: Record<string, { descripcion: string; manejador: Manejado
     manejador: elegirTema,
   },
   "connect-studio": {
-    descripcion: "conecta CloudStudio por MCP y abre el login IDS: /connect-studio [url]",
+    descripcion: "conecta CloudStudio: /connect-studio [url] [lectura|escritura]",
     manejador: async (args, _estado, consola) => {
       if (consola.conectarCloudStudio === undefined || consola.guardarCloudStudioDeProyecto === undefined) {
         consola.escribir("la conexión CloudStudio no está disponible en esta ejecución\n");
         return { seguir: true };
       }
-      const escrita = args[0] ?? await consola.preguntar(`URL MCP de CloudStudio [${URL_CLOUDSTUDIO_POR_OMISION}]: `);
+      const primerArgEsModo = args[0] === "lectura" || args[0] === "escritura";
+      const escrita = primerArgEsModo ? "" : args[0] ?? await consola.preguntar(`URL MCP de CloudStudio [${URL_CLOUDSTUDIO_POR_OMISION}]: `);
       const url = escrita.trim() || URL_CLOUDSTUDIO_POR_OMISION;
-      const resultado = await consola.conectarCloudStudio(url, consola.escribir);
+      const modo = modoStudio(primerArgEsModo ? args[0] : args[1]);
+      if (modo === undefined) {
+        consola.escribir("modo inválido; elige lectura o escritura\n");
+        return { seguir: true };
+      }
+      const resultado = await consola.conectarCloudStudio(url, modo.scopes, consola.escribir);
       const guardado = consola.guardarCloudStudioDeProyecto(resultado.url, resultado.scopes);
-      consola.escribir(`CloudStudio conectado · ${resultado.herramientas.length} herramientas · permisos: ${guardado.scopes.join(", ")} · URL guardada en ${guardado.ruta}\n`);
+      consola.escribir(`CloudStudio conectado (${modo.nombre}) · ${resultado.herramientas.length} herramientas · permisos: ${guardado.scopes.join(", ")} · URL guardada en ${guardado.ruta}\n`);
       for (const tool of resultado.herramientas.slice(0, 12)) {
         consola.escribir(`  ${tool.nombre}${tool.descripcion ? ` — ${tool.descripcion}` : ""}\n`);
       }

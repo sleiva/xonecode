@@ -521,19 +521,32 @@ describe("correrConsola — /connect-studio", () => {
   it("conecta, lista un resumen seguro de tools y persiste solo la URL", async () => {
     const { consola, salida } = consolaDeConSecreto({ lineas: ["/connect-studio https://mcp.example/mcp"] });
     const guardar = vi.fn((url: string, scopes: readonly string[]) => ({ ruta: "/proyecto/.xonecode/config.json", url, scopes: [...scopes] }));
-    const conectar = vi.fn(async (url: string, informar: (texto: string) => void) => {
+    const conectar = vi.fn(async (url: string, scopes: readonly string[], informar: (texto: string) => void) => {
       informar("abriendo IDS…\n");
-      return { url, scopes: ["openid", "mcp.read"], herramientas: [{ nombre: "project_list", descripcion: "lista proyectos" }] };
+      return { url, scopes, herramientas: [{ nombre: "project_list", descripcion: "lista proyectos" }] };
     });
     consola.conectarCloudStudio = conectar;
     consola.guardarCloudStudioDeProyecto = guardar;
 
     await correrConsola(consola, estadoDe());
 
-    expect(conectar).toHaveBeenCalledWith("https://mcp.example/mcp", expect.any(Function));
-    expect(guardar).toHaveBeenCalledWith("https://mcp.example/mcp", ["openid", "mcp.read"]);
-    expect(salida()).toContain("CloudStudio conectado · 1 herramientas");
+    expect(conectar).toHaveBeenCalledWith("https://mcp.example/mcp", expect.arrayContaining(["mcp.read"]), expect.any(Function));
+    expect(guardar).toHaveBeenCalledWith("https://mcp.example/mcp", expect.arrayContaining(["openid", "mcp.read"]));
+    expect(salida()).toContain("CloudStudio conectado (lectura) · 1 herramientas");
     expect(salida()).toContain("project_list — lista proyectos");
+  });
+
+  it("eleva a mcp.write solo cuando se pide el modo escritura", async () => {
+    const { consola } = consolaDeConSecreto({ lineas: ["/connect-studio escritura"] });
+    const conectar = vi.fn(async (url: string, scopes: readonly string[]) => ({ url, scopes, herramientas: [] }));
+    consola.conectarCloudStudio = conectar;
+    consola.guardarCloudStudioDeProyecto = (url, scopes) => ({ ruta: "/tmp/config.json", url, scopes: [...scopes] });
+    await correrConsola(consola, estadoDe());
+    expect(conectar).toHaveBeenCalledWith(
+      "https://mcp.xonewebstudio.com/mcp",
+      expect.arrayContaining(["mcp.read", "mcp.write"]),
+      expect.any(Function)
+    );
   });
 });
 

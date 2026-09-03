@@ -24,6 +24,7 @@ const VERSION = "0.5.0";
 const PUERTO_CALLBACK = 7634;
 /** Permisos mínimos para descubrir el catálogo MCP; no otorgan escritura ni ejecución. */
 export const SCOPES_CLOUDSTUDIO = ["openid", "profile", "email", "offline_access", "mcp.read"] as const;
+export const SCOPES_CLOUDSTUDIO_ESCRITURA = [...SCOPES_CLOUDSTUDIO, "mcp.write"] as const;
 
 type EstadoOAuth = {
   clientInformation?: OAuthClientInformationMixed;
@@ -46,6 +47,8 @@ export interface OpcionesCloudStudio {
   /** Tope de espera de la vuelta del usuario desde el IDS. */
   timeoutMs?: number;
   rutaAuth?: string;
+  /** Scope elegido conscientemente por el comando o por una futura tool permitida. */
+  scopes?: readonly string[];
 }
 
 function rutaAuthPorDefecto(): string {
@@ -153,8 +156,16 @@ class ProviderCloudStudio implements OAuthClientProvider {
     private readonly ruta: string,
     redirectUrl: string,
     private readonly alRedirigir: (url: URL) => void,
+    private readonly scopes: readonly string[],
   ) {
     this.estado = leerEstado(ruta);
+    // Un refresh token de solo lectura no sirve para elevar privilegios. Borrarlo aquí
+    // fuerza Authorization Code + consentimiento nuevo en lugar de fingir una elevación.
+    const concedidos = new Set((this.estado.tokens?.scope ?? "").split(/\s+/));
+    if (this.estado.tokens !== undefined && !this.scopes.every((scope) => concedidos.has(scope))) {
+      delete this.estado.tokens;
+      guardarEstado(this.ruta, this.estado);
+    }
     this.metadata = {
       client_name: "xonecode",
       client_uri: "https://github.com/xonecode/xonecode",
@@ -162,7 +173,7 @@ class ProviderCloudStudio implements OAuthClientProvider {
       grant_types: ["authorization_code", "refresh_token"],
       response_types: ["code"],
       // Mínimo privilegio: conectar y descubrir tools no necesita escribir ni ejecutar.
-      scope: SCOPES_CLOUDSTUDIO.join(" "),
+      scope: scopes.join(" "),
     };
   }
   get redirectUrl(): string { return this.metadata.redirect_uris![0]!; }
@@ -186,12 +197,13 @@ class ProviderCloudStudio implements OAuthClientProvider {
  */
 export async function conectarCloudStudio(urlTexto: string, opciones: OpcionesCloudStudio = {}): Promise<ConexionCloudStudio> {
   const url = urlSegura(urlTexto);
+  const scopes = opciones.scopes ?? SCOPES_CLOUDSTUDIO;
   const callback = await esperarCallback(opciones.timeoutMs ?? 5 * 60_000);
   const ruta = opciones.rutaAuth ?? rutaAuthPorDefecto();
   const provider = new ProviderCloudStudio(ruta, callback.url, (autorizacion) => {
     opciones.informar?.(`Abriendo IDS de CloudStudio…\n${autorizacion.toString()}\n`);
     (opciones.abrirNavegador ?? abrirEnSistema)(autorizacion);
-  });
+  }, scopes);
   let transporte: StreamableHTTPClientTransport | undefined;
   try {
     // No se usa `client.connect()` para iniciar OAuth: ese transporte queda marcado como
@@ -200,7 +212,7 @@ export async function conectarCloudStudio(urlTexto: string, opciones: OpcionesCl
     const opcionesAuth = {
       serverUrl: url,
       resourceMetadataUrl: new URL("/.well-known/oauth-protected-resource", url.origin),
-      scope: SCOPES_CLOUDSTUDIO.join(" "),
+      scope: scopes.join(" "),
     };
     const inicial = await auth(provider, opcionesAuth);
     if (inicial === "REDIRECT") {
@@ -214,7 +226,7 @@ export async function conectarCloudStudio(urlTexto: string, opciones: OpcionesCl
     const listado = await cliente.listTools();
     return {
       url: url.toString(),
-      scopes: SCOPES_CLOUDSTUDIO,
+      scopes,
       herramientas: listado.tools.map((tool) => ({ nombre: tool.name, descripcion: tool.description ?? "" })),
     };
   } finally {

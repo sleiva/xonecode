@@ -459,7 +459,7 @@ export async function entrarEnConsola(
   dependencias: Pick<Consola, "catalogoModelos" | "guardarModeloGlobal" | "conectarCloudStudio"> = {
     catalogoModelos: new CatalogoModelos(),
     guardarModeloGlobal,
-    conectarCloudStudio: (url, informar) => conectarCloudStudio(url, { informar }),
+    conectarCloudStudio: (url, scopes, informar) => conectarCloudStudio(url, { informar, scopes }),
   }
 ): Promise<number> {
   // La elección de modelo y las credenciales se hidratan ANTES de decidir la piel:
@@ -702,7 +702,7 @@ export async function main(argv: string[]): Promise<number> {
         {
           catalogoModelos,
           guardarModeloGlobal,
-          conectarCloudStudio: (url, informar) => conectarCloudStudio(url, { informar }),
+          conectarCloudStudio: (url, scopes, informar) => conectarCloudStudio(url, { informar, scopes }),
         }
       );
     }
