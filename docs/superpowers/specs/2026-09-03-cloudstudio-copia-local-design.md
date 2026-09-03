@@ -30,6 +30,10 @@ supuesto. Son las restricciones que dan forma al diseño.
 | `studio_get_project_structure(mode:"filesystem")` da rutas y tamaños, y **se trunca** (tope 2000) | Sirve de manifiesto del remoto, pero hay que recorrer por `directoryPath` |
 | El listado de proyectos ya trae `rights: {remove, download, edit}` | Se puede elegir estrategia **antes** de fallar |
 | No hay checksums remotos por fichero | Bajar siempre trae el proyecto entero; subir sí es incremental |
+| El proyecto abierto es **estado de sesión del servidor**: no hay id que pasar (ninguna tool acepta uno) y **caduca** — medido: aguantó varias llamadas seguidas y se perdió minutos después | Reabrir al empezar cada conexión, y reintentar una vez ante «No project is open» |
+| `studio_get_context` devuelve `{project, branch}` | Se puede comprobar el estado **sin provocar un error**, y saber en qué rama está el proyecto |
+| `manage_branches("list")` devuelve solo nombres (`[{Key:"master",Value:"master"}]`) | El listado no dice la rama activa; quien la dice es `get_context` |
+| `manage_branches("merge")` está documentado como «get merge file **list**» | El servidor no fusiona. La fusión la hace git en local, que sí tiene el ancestro común |
 
 ## Arquitectura
 
@@ -95,6 +99,40 @@ el objeto crudo y escritura atómica, con el mismo rechazo de claves.
 qué modelo va a usarse y de dónde sale. Es la misma regla que la creación de proyecto:
 escribir configuración es opt-in, y un asistente cancelado no puede dejar la cuenta a
 medio configurar.
+
+## Ramas: origen y trabajo
+
+El proyecto de Studio tiene ramas propias (hoy, en `AppForTest`, solo `master`). Se usan
+dos, y se corresponden 1:1 con lo que git ya sabe hacer:
+
+| | En Studio | En git |
+|---|---|---|
+| **Rama origen** — de donde se baja | se elige al dar de alta el proyecto; se guarda en `cloudstudio.rama` | `refs/remotes/cloudstudio/<origen>` |
+| **Rama de trabajo** — a donde se sube | se crea en la **primera subida**, no en el alta | `refs/remotes/cloudstudio/<trabajo>`, upstream de la rama local |
+
+Es la relación de siempre entre `origin/main` y una rama de feature: bajar de la rama
+origen es un fetch + merge, `git status` sigue diciendo si vas por delante, y **quien
+integra en la rama origen es el usuario, en Studio**. La rama de trabajo se crea
+perezosamente porque crear una rama vacía en el alta le ensucia el Studio a quien luego no
+sube nada. El nombre de la rama local se hace coincidir con la rama origen (`git init -b
+<origen>`) para que no haya dos vocabularios.
+
+**El servidor no fusiona.** `manage_branches("merge")` devuelve una LISTA de ficheros a
+fusionar, no un resultado fusionado. Y no lo necesitamos: git tiene el ancestro común real
+—el commit de la descarga— y el MCP no puede tenerlo, porque no sabe de dónde partiste. La
+rama remota es un contenedor; el motor de fusión es git.
+
+**Cambiar de rama tiene efecto fuera.** `switch` cambia la rama activa del proyecto en el
+servidor: si el usuario tiene Studio abierto en el navegador, se le mueve el suelo. La
+secuencia obligatoria de toda operación con ramas es entonces:
+
+```
+get_context()  →  guarda la rama activa real
+switch(rama que toque)  →  operar  →  switch(la rama que estaba)
+```
+
+y queda anotado en el registro. Sin `get_context` esto no se podría hacer bien: se
+restauraría «a la que creíamos», que no es lo mismo.
 
 ## Bajada, en dos vías
 
@@ -259,9 +297,6 @@ ruta virtual concreta**, como `/MEMORIA_PROYECTO.md`, nunca la carpeta.
 
 ## Abierto, a decidir antes del plan
 
-- **Rama remota**: existe `studio_manage_branches` (list/create/switch/merge). La subida
-  podría aterrizar en una rama de CloudStudio en vez de sobre la que el usuario tenga
-  abierta, dejándole el merge en Studio. Más seguro, un paso más.
 - **Borrado de binarios**: `studio_edit_file` documenta `delete` para ficheros de texto.
   Falta confirmar si acepta rutas binarias; si no, un borrado de icono no se puede
   propagar y hay que decirlo en vez de fingir que subió.
