@@ -25,11 +25,18 @@ const PUERTO_CALLBACK = 7634;
 /** Permisos mínimos para descubrir el catálogo MCP; no otorgan escritura ni ejecución. */
 export const SCOPES_CLOUDSTUDIO = ["openid", "profile", "email", "offline_access", "mcp.read"] as const;
 export const SCOPES_CLOUDSTUDIO_ESCRITURA = [...SCOPES_CLOUDSTUDIO, "mcp.write"] as const;
+/** Un único consentimiento para el trabajo normal del agente; jamás incluye mcp.admin. */
+export const SCOPES_CLOUDSTUDIO_AGENTE = [
+  "openid", "profile", "email", "offline_access", "xonewebstudioapi",
+  "mcp.read", "mcp.write", "mcp.execute", "mcp.branch",
+] as const;
 
 type EstadoOAuth = {
   clientInformation?: OAuthClientInformationMixed;
   tokens?: OAuthTokens;
   codeVerifier?: string;
+  /** Permisos concedidos junto al token; evita reautorizar si el servidor omite `scope`. */
+  scopes?: string[];
 };
 
 /** Resultado reducido: los esquemas completos de tools no deben entrar en el transcript. */
@@ -161,7 +168,7 @@ class ProviderCloudStudio implements OAuthClientProvider {
     this.estado = leerEstado(ruta);
     // Un refresh token de solo lectura no sirve para elevar privilegios. Borrarlo aquí
     // fuerza Authorization Code + consentimiento nuevo en lugar de fingir una elevación.
-    const concedidos = new Set((this.estado.tokens?.scope ?? "").split(/\s+/));
+    const concedidos = new Set(this.estado.scopes ?? (this.estado.tokens?.scope ?? "").split(/\s+/));
     if (this.estado.tokens !== undefined && !this.scopes.every((scope) => concedidos.has(scope))) {
       delete this.estado.tokens;
       guardarEstado(this.ruta, this.estado);
@@ -181,7 +188,11 @@ class ProviderCloudStudio implements OAuthClientProvider {
   clientInformation(): OAuthClientInformationMixed | undefined { return this.estado.clientInformation; }
   saveClientInformation(info: OAuthClientInformationMixed): void { this.estado.clientInformation = info; guardarEstado(this.ruta, this.estado); }
   tokens(): OAuthTokens | undefined { return this.estado.tokens; }
-  saveTokens(tokens: OAuthTokens): void { this.estado.tokens = tokens; guardarEstado(this.ruta, this.estado); }
+  saveTokens(tokens: OAuthTokens): void {
+    this.estado.tokens = tokens;
+    this.estado.scopes = [...this.scopes];
+    guardarEstado(this.ruta, this.estado);
+  }
   redirectToAuthorization(url: URL): void { this.alRedirigir(url); }
   saveCodeVerifier(verifier: string): void { this.estado.codeVerifier = verifier; guardarEstado(this.ruta, this.estado); }
   codeVerifier(): string {
@@ -197,7 +208,7 @@ class ProviderCloudStudio implements OAuthClientProvider {
  */
 export async function conectarCloudStudio(urlTexto: string, opciones: OpcionesCloudStudio = {}): Promise<ConexionCloudStudio> {
   const url = urlSegura(urlTexto);
-  const scopes = opciones.scopes ?? SCOPES_CLOUDSTUDIO;
+  const scopes = opciones.scopes ?? SCOPES_CLOUDSTUDIO_AGENTE;
   const callback = await esperarCallback(opciones.timeoutMs ?? 5 * 60_000);
   const ruta = opciones.rutaAuth ?? rutaAuthPorDefecto();
   const provider = new ProviderCloudStudio(ruta, callback.url, (autorizacion) => {

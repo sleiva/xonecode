@@ -532,21 +532,22 @@ describe("correrConsola — /connect-studio", () => {
 
     expect(conectar).toHaveBeenCalledWith("https://mcp.example/mcp", expect.arrayContaining(["mcp.read"]), expect.any(Function));
     expect(guardar).toHaveBeenCalledWith("https://mcp.example/mcp", expect.arrayContaining(["openid", "mcp.read"]));
-    expect(salida()).toContain("CloudStudio conectado (lectura) · 1 herramientas");
+    expect(salida()).toContain("CloudStudio conectado (agente) · 1 herramientas");
     expect(salida()).toContain("project_list — lista proyectos");
   });
 
-  it("eleva a mcp.write solo cuando se pide el modo escritura", async () => {
-    const { consola } = consolaDeConSecreto({ lineas: ["/connect-studio escritura"] });
+  it("el modo agente pide una vez los permisos de trabajo, sin mcp.admin", async () => {
+    const { consola } = consolaDeConSecreto({ lineas: ["/connect-studio"] });
     const conectar = vi.fn(async (url: string, scopes: readonly string[]) => ({ url, scopes, herramientas: [] }));
     consola.conectarCloudStudio = conectar;
     consola.guardarCloudStudioDeProyecto = (url, scopes) => ({ ruta: "/tmp/config.json", url, scopes: [...scopes] });
     await correrConsola(consola, estadoDe());
     expect(conectar).toHaveBeenCalledWith(
       "https://mcp.xonewebstudio.com/mcp",
-      expect.arrayContaining(["mcp.read", "mcp.write"]),
+      expect.arrayContaining(["mcp.read", "mcp.write", "mcp.execute", "mcp.branch"]),
       expect.any(Function)
     );
+    expect(conectar.mock.calls[0]?.[1]).not.toContain("mcp.admin");
   });
 });
 

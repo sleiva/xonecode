@@ -112,11 +112,14 @@ export const PETICION_REANUDAR_PROYECTO =
 export const MENSAJE_REANUDANDO = "Analizando el estado guardado del repositorio…\n";
 export const URL_CLOUDSTUDIO_POR_OMISION = "https://mcp.xonewebstudio.com/mcp";
 const SCOPES_STUDIO_LECTURA = ["openid", "profile", "email", "offline_access", "mcp.read"] as const;
-const SCOPES_STUDIO_ESCRITURA = [...SCOPES_STUDIO_LECTURA, "mcp.write"] as const;
+const SCOPES_STUDIO_AGENTE = [
+  "openid", "profile", "email", "offline_access", "xonewebstudioapi",
+  "mcp.read", "mcp.write", "mcp.execute", "mcp.branch",
+] as const;
 
-function modoStudio(valor: string | undefined): { nombre: "lectura" | "escritura"; scopes: readonly string[] } | undefined {
-  if (valor === undefined || valor === "lectura") return { nombre: "lectura", scopes: SCOPES_STUDIO_LECTURA };
-  if (valor === "escritura") return { nombre: "escritura", scopes: SCOPES_STUDIO_ESCRITURA };
+function modoStudio(valor: string | undefined): { nombre: "lectura" | "agente"; scopes: readonly string[] } | undefined {
+  if (valor === "lectura") return { nombre: "lectura", scopes: SCOPES_STUDIO_LECTURA };
+  if (valor === undefined || valor === "agente") return { nombre: "agente", scopes: SCOPES_STUDIO_AGENTE };
   return undefined;
 }
 
@@ -603,18 +606,18 @@ export const COMANDOS: Record<string, { descripcion: string; manejador: Manejado
     manejador: elegirTema,
   },
   "connect-studio": {
-    descripcion: "conecta CloudStudio: /connect-studio [url] [lectura|escritura]",
+    descripcion: "conecta CloudStudio una vez: /connect-studio [url] [agente|lectura]",
     manejador: async (args, _estado, consola) => {
       if (consola.conectarCloudStudio === undefined || consola.guardarCloudStudioDeProyecto === undefined) {
         consola.escribir("la conexión CloudStudio no está disponible en esta ejecución\n");
         return { seguir: true };
       }
-      const primerArgEsModo = args[0] === "lectura" || args[0] === "escritura";
+      const primerArgEsModo = args[0] === "lectura" || args[0] === "agente";
       const escrita = primerArgEsModo ? "" : args[0] ?? await consola.preguntar(`URL MCP de CloudStudio [${URL_CLOUDSTUDIO_POR_OMISION}]: `);
       const url = escrita.trim() || URL_CLOUDSTUDIO_POR_OMISION;
       const modo = modoStudio(primerArgEsModo ? args[0] : args[1]);
       if (modo === undefined) {
-        consola.escribir("modo inválido; elige lectura o escritura\n");
+        consola.escribir("modo inválido; elige agente o lectura\n");
         return { seguir: true };
       }
       const resultado = await consola.conectarCloudStudio(url, modo.scopes, consola.escribir);
