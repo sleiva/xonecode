@@ -70,13 +70,44 @@ const recortar = (prefijo: string, ruta: string): string =>
   prefijo !== "" && ruta.startsWith(prefijo) ? ruta.slice(prefijo.length) : ruta;
 
 /**
+ * El valor EFECTIVO de una clave de configuración, o `undefined` si no la tiene nadie.
+ *
+ * `git config --get` sale con código 1 cuando la clave no existe, y `execFile` convierte
+ * eso en una excepción: sin este envoltorio, «no está puesta» sería un error.
+ *
+ * Se mira el valor efectivo (repo + global + sistema), no solo el `--local`: al usuario
+ * le importa lo que git hace de verdad en esa carpeta, no en qué fichero está escrito.
+ */
+async function valorDeConfig(raiz: string, clave: string): Promise<string | undefined> {
+  try {
+    const { stdout } = await git(raiz, ["config", "--get", clave]);
+    const valor = stdout.trim();
+    return valor === "" ? undefined : valor;
+  } catch {
+    return undefined;
+  }
+}
+
+/**
  * Deja el repo listo tras una descarga: repo, exclusiones, remoto y baseline.
  *
  * El commit de baseline se construye con índice privado para no tocar el staging del
  * usuario, que puede tener trabajo a medias cuando hace un `/sync`.
+ *
+ * **En un repo PREEXISTENTE la configuración es suya, no nuestra.** Se cuida su índice
+ * con esmero (`indicePrivado`, la guarda antes del `reset --mixed`) y pisarle la config
+ * sin la misma guarda sería incoherente: un repo con `origin` en GitHub acababa con su
+ * rama apuntando a un remoto `cloudstudio://` que no es ningún servidor git, y su
+ * `git push` dejaba de funcionar. Las claves que ya tienen valor se respetan y se DICE
+ * cuáles se omitieron: un aviso que no se da es un cambio invisible en el repo de otro.
  */
-export async function prepararRepo(raiz: string, ramaOrigen: string): Promise<string> {
-  if (!(await esRepo(raiz))) {
+export async function prepararRepo(
+  raiz: string,
+  ramaOrigen: string,
+  informar: (texto: string) => void = () => {}
+): Promise<string> {
+  const yaEraRepo = await esRepo(raiz);
+  if (!yaEraRepo) {
     // La rama local se llama como la remota: dos vocabularios para lo mismo confunden.
     await git(raiz, ["init", "-q", "-b", ramaOrigen]);
   }
@@ -95,13 +126,39 @@ export async function prepararRepo(raiz: string, ramaOrigen: string): Promise<st
     appendFileSync(exclude, `${actual.endsWith("\n") || actual === "" ? "" : "\n"}${patron}\n`);
   }
 
-  // Sin esto, el texto que vuelve del servidor se normaliza al escribirlo y cada `/sync`
-  // produce diffs fantasma.
-  await git(raiz, ["config", "core.autocrlf", "false"]);
+  // `remote.cloudstudio.*` es nuestro propio espacio de nombres: ahí sí se escribe
+  // siempre, porque la ref de seguimiento (`refs/remotes/cloudstudio/…`) es el libro de
+  // cuentas de xonecode y nadie más lo usa.
   await git(raiz, ["config", `remote.${REMOTO}.url`, `cloudstudio://${ramaOrigen}`]);
   await git(raiz, ["config", `remote.${REMOTO}.fetch`, `+refs/heads/*:refs/remotes/${REMOTO}/*`]);
-  await git(raiz, ["config", `branch.${ramaOrigen}.remote`, REMOTO]);
-  await git(raiz, ["config", `branch.${ramaOrigen}.merge`, `refs/heads/${ramaOrigen}`]);
+
+  // Estas tres son del USUARIO: `core.autocrlf` gobierna todo su repo y
+  // `branch.<rama>.remote`/`.merge` son a dónde empuja su `git push`. En un repo
+  // preexistente solo se escriben si no valen ya nada.
+  const omitidas: string[] = [];
+  const fijarSinPisar = async (clave: string, valor: string): Promise<void> => {
+    if (yaEraRepo) {
+      const actual = await valorDeConfig(raiz, clave);
+      if (actual !== undefined) {
+        omitidas.push(`${clave}=${actual}`);
+        return;
+      }
+    }
+    await git(raiz, ["config", clave, valor]);
+  };
+
+  // Sin `core.autocrlf=false`, el texto que vuelve del servidor se normaliza al
+  // escribirlo y cada `/sync` produce diffs fantasma — pero si el usuario ya eligió otra
+  // cosa, mandan él y su aviso, no nuestra comodidad.
+  await fijarSinPisar("core.autocrlf", "false");
+  await fijarSinPisar(`branch.${ramaOrigen}.remote`, REMOTO);
+  await fijarSinPisar(`branch.${ramaOrigen}.merge`, `refs/heads/${ramaOrigen}`);
+  if (omitidas.length > 0) {
+    informar(
+      `se conserva tu configuración de git y no se toca: ${omitidas.join(", ")}. ` +
+        `El seguimiento de CloudStudio vive igualmente en refs/remotes/${REMOTO}/${ramaOrigen}\n`
+    );
+  }
 
   const idx = indicePrivado("sync");
   try {

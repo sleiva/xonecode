@@ -31,11 +31,40 @@ describe("prepararRepo", () => {
     expect(existsSync(join(raiz, ".gitignore"))).toBe(false);
   });
 
-  it("deja autocrlf desactivado y el remoto configurado", async () => {
+  it("deja autocrlf desactivado y el remoto configurado (repo virgen)", async () => {
+    // El único caso en que escribir esas claves es inofensivo: el repo lo acabamos de
+    // crear nosotros. En uno preexistente son del usuario — ver el test de más abajo.
     const raiz = proyecto();
     await prepararRepo(raiz, "master");
     expect(git(raiz, "config", "core.autocrlf")).toBe("false");
     expect(git(raiz, "config", `branch.master.remote`)).toBe(REMOTO);
+    expect(git(raiz, "config", `branch.master.merge`)).toBe("refs/heads/master");
+    expect(git(raiz, "config", `remote.${REMOTO}.url`)).toBe("cloudstudio://master");
+    expect(git(raiz, "rev-parse", `refs/remotes/${REMOTO}/master`)).toMatch(/^[0-9a-f]{40}$/);
+  });
+
+  it("no pisa la configuración de un repo preexistente, y lo dice", async () => {
+    // Reproducido: un repo con `origin` en GitHub acababa con `master` apuntando a un
+    // remoto `cloudstudio://`, que no es ningún servidor git — y el `git push` del
+    // usuario dejaba de funcionar. Se le cuida el índice con esmero; la config también.
+    const raiz = proyecto();
+    execFileSync("git", ["init", "-q", "-b", "master"], { cwd: raiz });
+    git(raiz, "remote", "add", "origin", "https://github.com/usuario/suyo.git");
+    git(raiz, "config", "branch.master.remote", "origin");
+    git(raiz, "config", "branch.master.merge", "refs/heads/master");
+    git(raiz, "config", "core.autocrlf", "input");
+
+    const avisos: string[] = [];
+    await prepararRepo(raiz, "master", (t) => avisos.push(t));
+
+    expect(git(raiz, "config", "branch.master.remote")).toBe("origin");
+    expect(git(raiz, "config", "branch.master.merge")).toBe("refs/heads/master");
+    expect(git(raiz, "config", "core.autocrlf")).toBe("input");
+    // Un cambio que no se hace y no se dice es indistinguible de uno que sí se hizo.
+    const texto = avisos.join("");
+    expect(texto).toContain("branch.master.remote=origin");
+    expect(texto).toContain("core.autocrlf=input");
+    // Y el libro de cuentas sigue existiendo: la ref no depende de esas claves.
     expect(git(raiz, "rev-parse", `refs/remotes/${REMOTO}/master`)).toMatch(/^[0-9a-f]{40}$/);
   });
 
