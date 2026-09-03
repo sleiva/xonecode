@@ -16,6 +16,7 @@
 import { appendFileSync, mkdirSync, readFileSync, statSync, existsSync, readdirSync } from "node:fs";
 import { dirname, join } from "node:path";
 import type { CloudStudioPort } from "../core/ports.js";
+import type { PoliticaDeAprobacion } from "../core/cloudstudio.js";
 import { planDeSubida } from "../core/planDeSubida.js";
 import { NOMBRE_CARPETA } from "./configEnDisco.js";
 import { cambiosPendientes, marcarSubido } from "./gitSync.js";
@@ -27,6 +28,15 @@ export interface OpcionesDeSubida {
   ramaOrigen: string;
   ramaTrabajo: string;
   proyecto: { id: string; nombre: string };
+  /**
+   * El hueco de política (`core/cloudstudio.ts#PoliticaDeAprobacion`), OBLIGATORIO —
+   * fail-closed por TIPO, no por convención: no hay forma de llamar a `subir()` sin decir
+   * quién autoriza, en vez de confiar en que cada llamador se acuerde. Se invoca con el
+   * plan YA CONSTRUIDO (`planDeSubida`), ANTES de tocar el puerto: quien autorice ve
+   * exactamente lo que se va a escribir, ni más ni menos. Cualquier resultado que no sea
+   * autorización deja todo como estaba: nada se escribe, la ref no se mueve.
+   */
+  politicaDeAprobacion: PoliticaDeAprobacion;
   informar?: (texto: string) => void;
 }
 
@@ -68,7 +78,7 @@ function descargadosDe(raiz: string): Set<string> {
 }
 
 export async function subir(opciones: OpcionesDeSubida): Promise<InformeDeSubida> {
-  const { puerto, raiz, ramaOrigen, ramaTrabajo, proyecto, informar = () => {} } = opciones;
+  const { puerto, raiz, ramaOrigen, ramaTrabajo, proyecto, politicaDeAprobacion, informar = () => {} } = opciones;
 
   const cambios = await cambiosPendientes(raiz, ramaOrigen);
   const tamanos = new Map<string, number>();
@@ -109,6 +119,15 @@ export async function subir(opciones: OpcionesDeSubida): Promise<InformeDeSubida
 
   if (plan.length === 0) {
     informar("no hay nada que subir\n");
+    registrar();
+    return informe;
+  }
+
+  // La política decide ANTES de tocar el puerto: ni `abrir` ni `contexto` ni una sola
+  // escritura corren sin su autorización. Que no autorice deja el disco, el puerto y la
+  // ref exactamente como estaban — sea cual sea la política que haya detrás.
+  if (!(await politicaDeAprobacion(plan))) {
+    informar("subida cancelada: no se ha aplicado nada\n");
     registrar();
     return informe;
   }

@@ -44,6 +44,27 @@ function conLeerTextoEnvuelto(
   return puerto;
 }
 
+/**
+ * Envuelve `descargarZip` para capturar en qué rama estaba el puerto EN EL MOMENTO de
+ * bajar — mismo patrón que `conRamaInstrumentada` en `subida.test.ts`. Sin esto, un test
+ * que solo mirara `estado.rama` al final no distinguiría «se posicionó de verdad antes
+ * de bajar» de «se limitó a declarar la rama pedida sin haber cambiado nada».
+ */
+function conRamaDuranteLaDescarga(base: CloudStudioEnMemoria): {
+  puerto: CloudStudioEnMemoria;
+  ramaAlDescargar: () => string | undefined;
+} {
+  const prototipo = Object.getPrototypeOf(base) as CloudStudioEnMemoria;
+  const puerto: CloudStudioEnMemoria = Object.assign(Object.create(prototipo), base);
+  let ramaAlDescargar: string | undefined;
+  const original = prototipo.descargarZip.bind(puerto);
+  puerto.descargarZip = async () => {
+    ramaAlDescargar = (await puerto.contexto()).rama;
+    return original();
+  };
+  return { puerto, ramaAlDescargar: () => ramaAlDescargar };
+}
+
 describe("descargarProyecto", () => {
   it("vía ZIP: extrae y declara la copia completa", async () => {
     const raiz = raizNueva();
@@ -51,7 +72,7 @@ describe("descargarProyecto", () => {
       zipBase64: zip({ "app.xml": "<app/>", "icons/a.svg": "<svg/>" }),
       textos: { "app.xml": "<app/>", "icons/a.svg": "<svg/>" },
     });
-    const estado = await descargarProyecto({ puerto, raiz, proyecto });
+    const estado = await descargarProyecto({ puerto, raiz, proyecto, ramaOrigen: "master" });
 
     expect(estado.via).toBe("zip");
     expect(readFileSync(join(raiz, "app.xml"), "utf8")).toBe("<app/>");
@@ -64,7 +85,7 @@ describe("descargarProyecto", () => {
       zipFalla: "colección AlquilerCoches con error de sintaxis",
       textos: { "app.xml": "<app/>", "BuscarFarmacias.js": "function f(){}" },
     });
-    const estado = await descargarProyecto({ puerto, raiz, proyecto });
+    const estado = await descargarProyecto({ puerto, raiz, proyecto, ramaOrigen: "master" });
 
     expect(estado.via).toBe("parcial");
     expect(estado.motivo).toMatch(/error de sintaxis/);
@@ -88,7 +109,7 @@ describe("descargarProyecto", () => {
       pedidas.push(ruta);
       return original(ruta);
     });
-    const estado = await descargarProyecto({ puerto, raiz, proyecto });
+    const estado = await descargarProyecto({ puerto, raiz, proyecto, ramaOrigen: "master" });
 
     expect(estado.descargados).toEqual(["app.xml"]);
     expect(estado.manifiesto.map((e) => e.ruta)).toContain("fonts/A.ttf");
@@ -113,7 +134,7 @@ describe("descargarProyecto", () => {
       return original(ruta);
     });
 
-    await descargarProyecto({ puerto, raiz, proyecto });
+    await descargarProyecto({ puerto, raiz, proyecto, ramaOrigen: "master" });
     expect(maximo).toBeLessThanOrEqual(CONCURRENCIA);
     expect(maximo).toBeGreaterThan(1);
   });
@@ -128,7 +149,7 @@ describe("descargarProyecto", () => {
       ruta === "roto.js" ? Promise.reject(new Error("500")) : original(ruta)
     );
 
-    const estado = await descargarProyecto({ puerto, raiz, proyecto });
+    const estado = await descargarProyecto({ puerto, raiz, proyecto, ramaOrigen: "master" });
     expect(estado.descargados).toEqual(["app.xml"]);
   });
 
@@ -143,7 +164,7 @@ describe("descargarProyecto", () => {
     );
 
     const avisos: string[] = [];
-    const estado = await descargarProyecto({ puerto, raiz, proyecto, informar: (t) => avisos.push(t) });
+    const estado = await descargarProyecto({ puerto, raiz, proyecto, ramaOrigen: "master", informar: (t) => avisos.push(t) });
 
     // El aviso nombra el fichero caído Y el motivo; y la descarga sigue sin abortar
     // (el resto llega igual): lo uno no debe romper lo otro.
@@ -164,7 +185,7 @@ describe("descargarProyecto", () => {
       }),
       textos: { "app.xml": "<app/>" },
     });
-    const estado = await descargarProyecto({ puerto, raiz, proyecto });
+    const estado = await descargarProyecto({ puerto, raiz, proyecto, ramaOrigen: "master" });
 
     // La fuente y app.xml se quedan; lo que Studio regenera, no.
     expect(existsSync(join(raiz, "BuscarFarmacias.xne"))).toBe(true);
@@ -184,7 +205,7 @@ describe("descargarProyecto", () => {
   it("deja sync.json legible bajo .xonecode/cloudstudio", async () => {
     const raiz = raizNueva();
     const puerto = new CloudStudioEnMemoria({ zipBase64: zip({ "app.xml": "<app/>" }), textos: { "app.xml": "<app/>" } });
-    await descargarProyecto({ puerto, raiz, proyecto });
+    await descargarProyecto({ puerto, raiz, proyecto, ramaOrigen: "master" });
 
     const guardado = JSON.parse(readFileSync(join(raiz, ".xonecode", "cloudstudio", "sync.json"), "utf8"));
     expect(guardado.proyecto).toEqual(proyecto);
@@ -206,11 +227,35 @@ describe("descargarProyecto", () => {
       topeEstructura: 2,
     });
     const avisos: string[] = [];
-    const estado = await descargarProyecto({ puerto, raiz, proyecto, informar: (t) => avisos.push(t) });
+    const estado = await descargarProyecto({ puerto, raiz, proyecto, ramaOrigen: "master", informar: (t) => avisos.push(t) });
 
     expect(estado.raizTruncada).toBe(true);
     expect(avisos.join("")).toMatch(/truncó/);
     const guardado = JSON.parse(readFileSync(join(raiz, ".xonecode", "cloudstudio", "sync.json"), "utf8"));
     expect(guardado.raizTruncada).toBe(true);
+  });
+
+  /**
+   * `puerto.contexto()` (lo que Studio tiene ABIERTO ahora mismo) puede no ser la rama
+   * ORIGEN guardada — por ejemplo, alguien navegando el proyecto en el propio Studio.
+   * Bajar sin fijar la rama traería lo que estuviera activo, y una subida posterior
+   * atribuiría ese contenido a la rama guardada sin comprobarlo (rama B firmada como A).
+   */
+  it("se posiciona en la rama ORIGEN antes de bajar y restaura la que estaba activa", async () => {
+    const raiz = raizNueva();
+    const base = new CloudStudioEnMemoria({
+      rama: "feature-abierta-en-el-navegador",
+      zipBase64: zip({ "app.xml": "<app/>" }),
+      textos: { "app.xml": "<app/>" },
+    });
+    const { puerto, ramaAlDescargar } = conRamaDuranteLaDescarga(base);
+
+    const estado = await descargarProyecto({ puerto, raiz, proyecto, ramaOrigen: "master" });
+
+    // Se posicionó DE VERDAD en la rama pedida antes de bajar — no se limitó a declararla.
+    expect(ramaAlDescargar()).toBe("master");
+    expect(estado.rama).toBe("master");
+    // Y no le movió el suelo a quien tenga Studio abierto en el navegador.
+    expect((await puerto.contexto()).rama).toBe("feature-abierta-en-el-navegador");
   });
 });

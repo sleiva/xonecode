@@ -334,6 +334,66 @@ describe("/sync", () => {
     await correrConsola(conSync, estadoDe());
     expect(salida()).toContain("2 ficheros por subir");
   });
+
+  describe("subir: rellena el hueco de política con un humano", () => {
+    /** `sincronizar` FALSO que se comporta como haría `agent/subida.ts#subir`: invoca la
+     * política recibida con un plan de muestra y responde según lo que decida. */
+    function sincronizarQueMiraLaPolitica(): Consola["sincronizar"] {
+      return async (accion, _raiz, politica) => {
+        expect(accion).toBe("subir");
+        expect(politica).toBeDefined();
+        const autorizado = await politica!([{ tipo: "texto", ruta: "app.xml" }]);
+        return {
+          tipo: "texto",
+          texto: autorizado ? "subidos 1, fallaron 0\n" : "no se ha aplicado nada\n",
+        };
+      };
+    }
+
+    it("enseña el plan, pregunta, y si se aprueba deja que sincronizar suba", async () => {
+      const { consola, salida } = consolaDeConSecreto({
+        lineas: ["/sync subir", "/salir"],
+        respuestas: ["s"],
+      });
+      const conSync: Consola = { ...consola, sincronizar: sincronizarQueMiraLaPolitica() };
+
+      await correrConsola(conSync, estadoDe());
+
+      const texto = salida();
+      expect(texto).toContain("SUBIDA A CLOUDSTUDIO");
+      expect(texto).toContain("app.xml");
+      expect(texto).toContain("APROBADO");
+      expect(texto).toContain("subidos 1, fallaron 0");
+    });
+
+    it("si se rechaza, sincronizar no llega a decir que subió nada", async () => {
+      const { consola, salida } = consolaDeConSecreto({
+        lineas: ["/sync subir", "/salir"],
+        respuestas: ["n"],
+      });
+      const conSync: Consola = { ...consola, sincronizar: sincronizarQueMiraLaPolitica() };
+
+      await correrConsola(conSync, estadoDe());
+
+      const texto = salida();
+      expect(texto).toContain("rechazado, no se ha aplicado nada");
+      expect(texto).toContain("no se ha aplicado nada");
+      expect(texto).not.toContain("subidos 1");
+    });
+
+    it("sin TTY, Enter a secas NO aprueba: hace falta un sí explícito", async () => {
+      const { consola, salida } = consolaDeConSecreto({
+        lineas: ["/sync subir", "/salir"],
+        respuestas: [""],
+        interactivo: false,
+      });
+      const conSync: Consola = { ...consola, sincronizar: sincronizarQueMiraLaPolitica() };
+
+      await correrConsola(conSync, estadoDe());
+
+      expect(salida()).toContain("no se ha aplicado nada");
+    });
+  });
 });
 
 function ejecutorFalsoDe(turnos: Array<{ peticion: string; estado: EstadoDeSesion }>): EjecutorDeTurno {

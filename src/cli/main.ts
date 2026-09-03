@@ -506,7 +506,7 @@ function cloudStudioDeProyecto(
 export function crearSincronizador(
   piezas: PiezasDeSincronizacion = PIEZAS_DE_SINCRONIZACION_REALES
 ): NonNullable<Consola["sincronizar"]> {
-  return async (accion, raiz) => {
+  return async (accion, raiz, politicaDeAprobacion) => {
     const config = cloudStudioDeProyecto(piezas.leerConfig, raiz);
     if (config === undefined) {
       return { tipo: "texto", texto: "este proyecto no es cloud (o le falta el proyecto/rama del alta)\n" };
@@ -522,16 +522,13 @@ export function crearSincronizador(
       const puerto = piezas.cliente(sesion.invocar, config.proyecto.nombre);
 
       if (accion === "bajar") {
-        const bajada = await piezas.descargar({ puerto, raiz, proyecto: config.proyecto });
+        // `ramaOrigen` fija explícitamente de qué rama se baja (`descargarProyecto` la
+        // deja posicionada y la restaura al terminar): sin esto se traería lo que
+        // estuviera ACTIVO en la sesión de Studio, y una subida posterior firmaría ese
+        // contenido como si fuera de `config.rama`, en silencio.
+        const bajada = await piezas.descargar({ puerto, raiz, proyecto: config.proyecto, ramaOrigen: config.rama });
         await piezas.preparar(raiz, bajada.rama);
-        // Hoy los proyectos suelen tener una sola rama, así que esto no debería disparar
-        // casi nunca; si dispara, `/sync estado`/`subir` compararían contra una ref que no
-        // existe (siguen la rama GUARDADA, no la que de verdad se bajó).
-        const aviso =
-          bajada.rama !== config.rama
-            ? ` (aviso: CloudStudio devolvió la rama «${bajada.rama}», pero la guardada es «${config.rama}»)`
-            : "";
-        return { tipo: "texto", texto: `bajados ${bajada.descargados.length} ficheros (${bajada.via})${aviso}\n` };
+        return { tipo: "texto", texto: `bajados ${bajada.descargados.length} ficheros (${bajada.via})\n` };
       }
       if (accion === "subir") {
         const informe = await piezas.subirProyecto({
@@ -540,6 +537,10 @@ export function crearSincronizador(
           ramaOrigen: config.rama,
           ramaTrabajo: `xonecode/${config.rama}`,
           proyecto: config.proyecto,
+          // Fail-closed si alguien llamara a `sincronizar("subir", ...)` sin política (el
+          // comando `/sync` siempre construye una): sin ella, no autoriza NADA en vez de
+          // asumir que sí. El hueco lo documenta `core/cloudstudio.ts#PoliticaDeAprobacion`.
+          politicaDeAprobacion: politicaDeAprobacion ?? (async () => false),
         });
         return { tipo: "texto", texto: `subidos ${informe.ok.length}, fallaron ${informe.fallos.length}\n` };
       }

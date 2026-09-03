@@ -23,7 +23,8 @@ import type { Papel } from "../core/ports.js";
 import { esDoble } from "../core/ports.js";
 import type { PendienteDeAprobacion } from "../core/events.js";
 import type { LineaDeDiff } from "../core/diff.js";
-import type { Decision } from "../vendor/hitl.js";
+import { interpretAnswer, type Decision } from "../vendor/hitl.js";
+import type { PoliticaDeAprobacion } from "../core/cloudstudio.js";
 import { crearPielStdio, type Escribir } from "./stdio.js";
 import { esTema, seleccionarTema, TEMAS, type IdTema } from "./tema.js";
 import { acuseDeModelo } from "./acuseDeModelo.js";
@@ -97,10 +98,16 @@ export interface Consola {
   /**
    * Sincronización con CloudStudio, inyectada desde `agent/`: esta capa no conoce MCP ni
    * git. Su ausencia (modo guion, tests) es la que hace que `/sync` lo diga sin reventar.
+   *
+   * `politicaDeAprobacion` solo importa para «subir» (`core/cloudstudio.ts` documenta el
+   * hueco): quien construye el adaptador real la reenvía a `agent/subida.ts#subir`, que
+   * la exige. Esta capa no rellena el hueco por su cuenta — eso es cosa del comando
+   * `/sync` (ver `politicaInteractiva` más abajo), que sí tiene `preguntar`/`escribir`.
    */
   sincronizar?: (
     accion: "estado" | "bajar" | "subir",
-    raiz: string
+    raiz: string,
+    politicaDeAprobacion?: PoliticaDeAprobacion
   ) => Promise<{ tipo: "texto"; texto: string } | { tipo: "arbol-sucio"; pendientes: string[] }>;
 }
 
@@ -757,6 +764,35 @@ function manejadorDeModelo(papel: Papel | undefined): ManejadorDeBarra {
   };
 }
 
+/**
+ * La ÚNICA política de aprobación que existe hoy: rellena el hueco de
+ * `core/cloudstudio.ts#PoliticaDeAprobacion` con un humano que ve el plan y responde.
+ * Vive aquí, en `cli/`, y no en `agent/subida.ts`: la política es de la piel, el hueco es
+ * del motor. Mismo fail-closed que `cli/aprobar.ts` (`interpretAnswer`): sin TTY, sin un
+ * sí explícito, no se sube.
+ *
+ * La política AUTÓNOMA (el papel `afilado` decidiendo sin que nadie mire) todavía no
+ * existe — hace falta, además del veredicto del juez, que el código compruebe
+ * condiciones deterministas (verificador en verde, árbol limpio, plan sin pendientes):
+ * ver el comentario de `PoliticaDeAprobacion`.
+ */
+function politicaInteractiva(consola: Consola): PoliticaDeAprobacion {
+  return async (plan) => {
+    consola.escribir(`\n${"─".repeat(60)}\n`);
+    consola.escribir(`SUBIDA A CLOUDSTUDIO — ${plan.length} operación${plan.length === 1 ? "" : "es"}\n`);
+    for (const operacion of plan) {
+      const signo = operacion.tipo === "borrado" ? "-" : operacion.tipo === "binario" ? "~" : "+";
+      consola.escribir(`  ${signo} ${operacion.ruta}\n`);
+    }
+    const respuesta = await consola.preguntar(
+      consola.interactivo ? "¿Subir a CloudStudio? [S/n] " : "¿Subir a CloudStudio? [s/N] "
+    );
+    const decision = interpretAnswer(respuesta, { interactive: consola.interactivo });
+    consola.escribir(decision.type === "approve" ? "  → APROBADO\n" : "  → rechazado, no se ha aplicado nada\n");
+    return decision.type === "approve";
+  };
+}
+
 export const COMANDOS: Record<string, { descripcion: string; manejador: ManejadorDeBarra }> = {
   ayuda: {
     descripcion: "lista los comandos de barra",
@@ -862,7 +898,12 @@ export const COMANDOS: Record<string, { descripcion: string; manejador: Manejado
         consola.escribir("uso: /sync [estado|bajar|subir]\n");
         return { seguir: true };
       }
-      const resultado = await consola.sincronizar(accion, estado.raiz);
+      // El hueco de política solo se rellena para «subir»: es la única acción que
+      // escribe. `agent/subida.ts#subir` la invoca con el plan YA CONSTRUIDO, así que
+      // esto puede pasarse siempre — si el árbol está sucio o no hay nada que subir, ni
+      // siquiera llega a invocarse.
+      const politicaDeAprobacion = accion === "subir" ? politicaInteractiva(consola) : undefined;
+      const resultado = await consola.sincronizar(accion, estado.raiz, politicaDeAprobacion);
       if (resultado.tipo === "arbol-sucio") {
         // Se sube el estado de un COMMIT, no un borrador: así «lo que está arriba» es
         // siempre un commit concreto y mover la ref significa algo.

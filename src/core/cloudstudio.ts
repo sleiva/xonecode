@@ -61,3 +61,23 @@ export type OperacionDeSubida =
   | { tipo: "texto"; ruta: string }
   | { tipo: "binario"; ruta: string; bytes: number; modo: "base64" | "chunked" }
   | { tipo: "borrado"; ruta: string };
+
+/**
+ * El hueco de política que autoriza una subida — NO «preguntar al humano»: quién lo
+ * rellena es una decisión de la piel, no del motor. `agent/subida.ts` solo exige que
+ * ALGUIEN lo rellene (fail-closed por TIPO: no hay forma de llamar a `subir()` sin decir
+ * cómo se autoriza) y no presupone que detrás haya una persona.
+ *
+ * Dos políticas previstas:
+ * - **Interactiva** (la única implementada hoy, en `cli/`): un humano ve el plan y
+ *   responde sí/no. Sin TTY, sin un sí explícito, no se sube.
+ * - **Autónoma** (futura, NO implementada): la rellenará el papel `afilado` — el juez —
+ *   cuando el usuario trabaje sin mirar. Pero un veredicto de juez a secas no basta: hace
+ *   falta ADEMÁS que el código compruebe condiciones deterministas antes de invocarlo
+ *   siquiera —verificador en verde, árbol limpio, plan sin pendientes—, porque a un
+ *   modelo se le puede pedir que avise de algo y no avisar; en este repo los avisos son
+ *   código, no prompt. Hoy no existe el lazo plan→ejecuta→verifica→juzga que la
+ *   sustentaría, así que esta política no se implementa todavía: el hueco queda limpio
+ *   para enchufarla el día que exista.
+ */
+export type PoliticaDeAprobacion = (plan: readonly OperacionDeSubida[]) => Promise<boolean>;

@@ -7,6 +7,12 @@ import { CloudStudioEnMemoria, type CloudStudioPort } from "../core/ports.js";
 import { prepararRepo, cambiosPendientes, REMOTO } from "./gitSync.js";
 import { rutaSyncJson } from "./descarga.js";
 import { subir, rutaSyncLog } from "./subida.js";
+import type { OperacionDeSubida } from "../core/cloudstudio.js";
+
+/** `politicaDeAprobacion` es obligatoria (fail-closed por tipo): estos tests no la
+ * prueban, así que autorizan siempre y dejan el resto del comportamiento tal cual
+ * estaba. Los tests de la política de verdad viven más abajo, en su propio describe. */
+const autorizaSiempre = async () => true;
 
 async function proyectoConCambios() {
   const raiz = mkdtempSync(join(tmpdir(), "xc-sub-"));
@@ -96,7 +102,7 @@ describe("subir", () => {
 
     const informe = await subir({
       puerto, raiz, ramaOrigen: "master", ramaTrabajo: "xonecode/sergio",
-      proyecto: { id: "96fe", nombre: "AppForTest" },
+      proyecto: { id: "96fe", nombre: "AppForTest" }, politicaDeAprobacion: autorizaSiempre
     });
 
     expect(informe.ok).toEqual(["app.xml"]);
@@ -118,7 +124,7 @@ describe("subir", () => {
     // creada" y la creación perezosa quedaría sin cubrir.
     puerto.ramas = async () => ["master", "t"];
 
-    await subir({ puerto, raiz, ramaOrigen: "master", ramaTrabajo: "t", proyecto: { id: "1", nombre: "AppForTest" } });
+    await subir({ puerto, raiz, ramaOrigen: "master", ramaTrabajo: "t", proyecto: { id: "1", nombre: "AppForTest" }, politicaDeAprobacion: autorizaSiempre});
 
     expect(llamadasCrearRama).toEqual([]);
   });
@@ -127,7 +133,7 @@ describe("subir", () => {
     const raiz = await proyectoConCambios();
     const puerto = new CloudStudioEnMemoria({ rama: "master", textos: { "app.xml": "<app/>" } });
     await puerto.abrir("AppForTest");
-    await subir({ puerto, raiz, ramaOrigen: "master", ramaTrabajo: "t", proyecto: { id: "1", nombre: "AppForTest" } });
+    await subir({ puerto, raiz, ramaOrigen: "master", ramaTrabajo: "t", proyecto: { id: "1", nombre: "AppForTest" }, politicaDeAprobacion: autorizaSiempre});
 
     expect(await cambiosPendientes(raiz, "master")).toEqual([]);
     expect(git(raiz, "reflog", "show", `${REMOTO}/master`)).toContain("sync:");
@@ -141,7 +147,7 @@ describe("subir", () => {
 
     const informe = await subir({
       puerto, raiz, ramaOrigen: "master", ramaTrabajo: "t",
-      proyecto: { id: "1", nombre: "AppForTest" },
+      proyecto: { id: "1", nombre: "AppForTest" }, politicaDeAprobacion: autorizaSiempre
     });
 
     expect(informe.fallos).toHaveLength(1);
@@ -164,7 +170,7 @@ describe("subir", () => {
 
     await expect(subir({
       puerto, raiz, ramaOrigen: "master", ramaTrabajo: "t",
-      proyecto: { id: "1", nombre: "AppForTest" },
+      proyecto: { id: "1", nombre: "AppForTest" }, politicaDeAprobacion: autorizaSiempre
     })).rejects.toThrow("no se pudo posicionar la rama de trabajo");
 
     // (a) subir() rechaza — comprobado arriba.
@@ -182,8 +188,8 @@ describe("subir", () => {
     const raiz = await proyectoConCambios();
     const puerto = new CloudStudioEnMemoria({ rama: "master", textos: { "app.xml": "<app/>" } });
     await puerto.abrir("AppForTest");
-    await subir({ puerto, raiz, ramaOrigen: "master", ramaTrabajo: "t", proyecto: { id: "1", nombre: "AppForTest" } });
-    await subir({ puerto, raiz, ramaOrigen: "master", ramaTrabajo: "t", proyecto: { id: "1", nombre: "AppForTest" } });
+    await subir({ puerto, raiz, ramaOrigen: "master", ramaTrabajo: "t", proyecto: { id: "1", nombre: "AppForTest" }, politicaDeAprobacion: autorizaSiempre});
+    await subir({ puerto, raiz, ramaOrigen: "master", ramaTrabajo: "t", proyecto: { id: "1", nombre: "AppForTest" }, politicaDeAprobacion: autorizaSiempre});
 
     const lineas = readFileSync(rutaSyncLog(raiz), "utf8").trim().split("\n");
     expect(lineas).toHaveLength(2);
@@ -200,7 +206,7 @@ describe("subir", () => {
 
     const puerto = new CloudStudioEnMemoria({ rama: "master", textos: { "app.xml": "<app/>" } });
     await puerto.abrir("AppForTest");
-    await subir({ puerto, raiz, ramaOrigen: "master", ramaTrabajo: "t", proyecto: { id: "1", nombre: "AppForTest" } });
+    await subir({ puerto, raiz, ramaOrigen: "master", ramaTrabajo: "t", proyecto: { id: "1", nombre: "AppForTest" }, politicaDeAprobacion: autorizaSiempre});
 
     expect(puerto.escrituras.some((e) => e.ruta.startsWith(".xonecode"))).toBe(false);
     expect(existsSync(rutaSyncLog(raiz))).toBe(true);
@@ -236,7 +242,7 @@ describe("subir", () => {
     const puerto = new CloudStudioEnMemoria({ rama: "master", textos: { "app.xml": "<app/>" } });
     await puerto.abrir("AppForTest");
 
-    const informe = await subir({ puerto, raiz, ramaOrigen: "master", ramaTrabajo: "t", proyecto: { id: "1", nombre: "AppForTest" } });
+    const informe = await subir({ puerto, raiz, ramaOrigen: "master", ramaTrabajo: "t", proyecto: { id: "1", nombre: "AppForTest" }, politicaDeAprobacion: autorizaSiempre});
 
     expect(informe.ok.slice().sort()).toEqual(["app.xml", "viejo.js"]);
     expect(puerto.escrituras).toContainEqual({ tipo: "borrado", ruta: "viejo.js" });
@@ -247,12 +253,60 @@ describe("subir", () => {
     const puerto = new CloudStudioEnMemoria({ rama: "master", textos: { "app.xml": "<app/>" } });
     await puerto.abrir("AppForTest");
 
-    const informe = await subir({ puerto, raiz, ramaOrigen: "master", ramaTrabajo: "t", proyecto: { id: "1", nombre: "AppForTest" } });
+    const informe = await subir({ puerto, raiz, ramaOrigen: "master", ramaTrabajo: "t", proyecto: { id: "1", nombre: "AppForTest" }, politicaDeAprobacion: autorizaSiempre});
 
     // `app.xml` sí sube (no lo protege el candado); `viejo.js` no se toca en absoluto,
     // ni en el informe ni en el servidor: la copia era incompleta y no se puede afirmar
     // que "viejo.js" no siga existiendo en Studio.
     expect(informe.ok).toEqual(["app.xml"]);
     expect(puerto.escrituras.some((e) => e.ruta === "viejo.js")).toBe(false);
+  });
+
+  describe("politicaDeAprobacion", () => {
+    it("si autoriza, sube todo y la ref se mueve — invocada con el plan YA CONSTRUIDO", async () => {
+      const raiz = await proyectoConCambios();
+      const puerto = new CloudStudioEnMemoria({ rama: "master", textos: { "app.xml": "<app/>" } });
+      await puerto.abrir("AppForTest");
+      let planRecibido: readonly OperacionDeSubida[] | undefined;
+      const politica = async (plan: readonly OperacionDeSubida[]) => {
+        planRecibido = [...plan];
+        return true;
+      };
+
+      const informe = await subir({
+        puerto, raiz, ramaOrigen: "master", ramaTrabajo: "t",
+        proyecto: { id: "1", nombre: "AppForTest" }, politicaDeAprobacion: politica,
+      });
+
+      // Ve EXACTAMENTE lo que se va a escribir, ni más ni menos.
+      expect(planRecibido).toEqual([{ tipo: "texto", ruta: "app.xml" }]);
+      expect(informe.ok).toEqual(["app.xml"]);
+      expect(await cambiosPendientes(raiz, "master")).toEqual([]);
+      expect(git(raiz, "reflog", "show", `${REMOTO}/master`)).toContain("sync:");
+    });
+
+    it("si NO autoriza, no escribe nada en el puerto, la ref no se mueve, y lo dice", async () => {
+      const raiz = await proyectoConCambios();
+      // Sin `puerto.abrir()` de antemano, A PROPÓSITO: si `subir()` llegara a abrir el
+      // proyecto antes de mirar la política, `contexto()` no reventaría más abajo y este
+      // test no distinguiría «se miró la política y se abrió igual» de «no se llegó ni a
+      // abrir» — que es justo lo que hace falta demostrar.
+      const puerto = new CloudStudioEnMemoria({ rama: "master", textos: { "app.xml": "<app/>" } });
+      const avisos: string[] = [];
+
+      const informe = await subir({
+        puerto, raiz, ramaOrigen: "master", ramaTrabajo: "t",
+        proyecto: { id: "1", nombre: "AppForTest" },
+        politicaDeAprobacion: async () => false,
+        informar: (t) => avisos.push(t),
+      });
+
+      expect(informe).toEqual({ ok: [], fallos: [] });
+      expect(puerto.escrituras).toEqual([]);
+      // Ni siquiera se abrió el proyecto: la política decide ANTES de tocar el puerto.
+      await expect(puerto.contexto()).rejects.toThrow("No project is open");
+      expect(await cambiosPendientes(raiz, "master")).toHaveLength(1);
+      expect(avisos.join("")).toContain("no se ha aplicado nada");
+    });
   });
 });
