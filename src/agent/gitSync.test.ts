@@ -1,0 +1,83 @@
+import { describe, expect, it } from "vitest";
+import { execFileSync } from "node:child_process";
+import { mkdtempSync, writeFileSync, mkdirSync, readFileSync, existsSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { prepararRepo, cambiosPendientes, marcarSubido, REMOTO } from "./gitSync.js";
+
+const git = (raiz: string, ...args: string[]) =>
+  execFileSync("git", args, { cwd: raiz, encoding: "utf8" }).trim();
+
+function proyecto(): string {
+  const raiz = mkdtempSync(join(tmpdir(), "xc-git-"));
+  writeFileSync(join(raiz, "app.xml"), "<app/>");
+  mkdirSync(join(raiz, ".xonecode"), { recursive: true });
+  writeFileSync(join(raiz, ".xonecode", "memoria.md"), "# memoria");
+  return raiz;
+}
+
+describe("prepararRepo", () => {
+  it("inicia el repo con el nombre de la rama origen", async () => {
+    const raiz = proyecto();
+    await prepararRepo(raiz, "master");
+    expect(git(raiz, "rev-parse", "--abbrev-ref", "HEAD")).toBe("master");
+  });
+
+  it("excluye .xonecode en info/exclude, no en .gitignore", async () => {
+    const raiz = proyecto();
+    await prepararRepo(raiz, "master");
+    expect(readFileSync(join(raiz, ".git", "info", "exclude"), "utf8")).toContain(".xonecode/");
+    // .gitignore es un fichero del PROYECTO: acabaría subido a CloudStudio.
+    expect(existsSync(join(raiz, ".gitignore"))).toBe(false);
+  });
+
+  it("deja autocrlf desactivado y el remoto configurado", async () => {
+    const raiz = proyecto();
+    await prepararRepo(raiz, "master");
+    expect(git(raiz, "config", "core.autocrlf")).toBe("false");
+    expect(git(raiz, "config", `branch.master.remote`)).toBe(REMOTO);
+    expect(git(raiz, "rev-parse", `refs/remotes/${REMOTO}/master`)).toMatch(/^[0-9a-f]{40}$/);
+  });
+
+  it("no toca el índice del usuario", async () => {
+    const raiz = proyecto();
+    execFileSync("git", ["init", "-q", "-b", "master"], { cwd: raiz });
+    execFileSync("git", ["config", "user.email", "t@t"], { cwd: raiz });
+    execFileSync("git", ["config", "user.name", "t"], { cwd: raiz });
+    writeFileSync(join(raiz, "pendiente.js"), "x");
+    execFileSync("git", ["add", "pendiente.js"], { cwd: raiz });
+
+    await prepararRepo(raiz, "master");
+    // Lo que el usuario tenía en staging sigue ahí, y NADA MÁS: `toContain` no distinguía
+    // esto de una implementación ingenua que hiciera `add -A` sobre el índice real (ahí
+    // `pendiente.js` seguiría "conteniéndose" junto a `app.xml`, colado por el baseline).
+    expect(git(raiz, "diff", "--cached", "--name-only")).toBe("pendiente.js");
+  });
+});
+
+describe("cambiosPendientes y marcarSubido", () => {
+  it("ve lo que falta por subir, y deja de verlo al marcarlo", async () => {
+    const raiz = proyecto();
+    await prepararRepo(raiz, "master");
+    writeFileSync(join(raiz, "app.xml"), "<app cambiada/>");
+    writeFileSync(join(raiz, "nuevo.js"), "// nuevo");
+    git(raiz, "add", "-A");
+    git(raiz, "-c", "user.email=t@t", "-c", "user.name=t", "commit", "-qm", "trabajo");
+
+    expect(await cambiosPendientes(raiz, "master")).toEqual([
+      { clase: "modificado", ruta: "app.xml" },
+      { clase: "nuevo", ruta: "nuevo.js" },
+    ]);
+
+    await marcarSubido(raiz, "master", "sync: 2 ficheros");
+    expect(await cambiosPendientes(raiz, "master")).toEqual([]);
+    expect(git(raiz, "reflog", "show", `${REMOTO}/master`)).toContain("sync: 2 ficheros");
+  });
+
+  it("no lista nada de .xonecode aunque exista", async () => {
+    const raiz = proyecto();
+    await prepararRepo(raiz, "master");
+    writeFileSync(join(raiz, ".xonecode", "memoria.md"), "# cambiada");
+    expect(await cambiosPendientes(raiz, "master")).toEqual([]);
+  });
+});
