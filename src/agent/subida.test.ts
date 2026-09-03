@@ -262,6 +262,56 @@ describe("subir", () => {
     expect(puerto.escrituras.some((e) => e.ruta === "viejo.js")).toBe(false);
   });
 
+  it("una operación IMPOSIBLE no atasca la subida: sale del plan, se declara y la ref avanza", async () => {
+    // El caso que dejaba `/sync subir` inútil de forma PERMANENTE: el borrado de un
+    // binario se emitía como `borrarTexto`, el servidor lo rechazaba, `fallos` nunca
+    // quedaba vacío, la ref no se movía, y el siguiente `/sync` recalculaba el mismo
+    // plan y volvía a fallar. La primera imagen borrada bastaba.
+    const raiz = mkdtempSync(join(tmpdir(), "xc-sub-"));
+    writeFileSync(join(raiz, "app.xml"), "<app/>");
+    mkdirSync(join(raiz, "icons"), { recursive: true });
+    writeFileSync(join(raiz, "icons", "viejo.png"), "PNG");
+    await prepararRepo(raiz, "master");
+
+    // El binario SÍ se descargó: el candado no lo protege, así que sin la escapatoria
+    // este borrado se emitiría de verdad.
+    mkdirSync(dirname(rutaSyncJson(raiz)), { recursive: true });
+    writeFileSync(rutaSyncJson(raiz), JSON.stringify({ descargados: ["app.xml", "icons/viejo.png"] }));
+
+    writeFileSync(join(raiz, "app.xml"), "<app cambiada/>");
+    execFileSync("git", ["rm", "-q", "icons/viejo.png"], { cwd: raiz });
+    execFileSync("git", ["add", "-A"], { cwd: raiz });
+    execFileSync("git", ["-c", "user.email=t@t", "-c", "user.name=t", "commit", "-qm", "borro el icono"], { cwd: raiz });
+
+    const puerto = new CloudStudioEnMemoria({ rama: "master", textos: { "app.xml": "<app/>" } });
+    await puerto.abrir("AppForTest");
+    const avisos: string[] = [];
+    const informe = await subir({
+      puerto, raiz, ramaOrigen: "master", ramaTrabajo: "t",
+      proyecto: { id: "1", nombre: "AppForTest" }, politicaDeAprobacion: autorizaSiempre,
+      informar: (t) => avisos.push(t),
+    });
+
+    // 1. La operación imposible NO se intenta contra el servidor.
+    expect(puerto.escrituras.some((e) => e.ruta === "icons/viejo.png")).toBe(false);
+    // 2. El resto sí sube, y sin fallos.
+    expect(informe.ok).toEqual(["app.xml"]);
+    expect(informe.fallos).toEqual([]);
+    // 3. Se declara, en el informe y por consola, con un motivo accionable.
+    expect(informe.omitidas).toEqual([
+      { ruta: "icons/viejo.png", motivo: expect.stringMatching(/no borra binarios/) },
+    ]);
+    expect(avisos.join("")).toContain("icons/viejo.png");
+    // 4. Y queda en `sync.log`, que es lo único que sobrevive al turno.
+    const lineas = readFileSync(rutaSyncLog(raiz), "utf8").trim().split("\n");
+    expect(JSON.parse(lineas[lineas.length - 1]!).omitidas).toEqual([
+      { ruta: "icons/viejo.png", motivo: expect.stringMatching(/no borra binarios/) },
+    ]);
+    // 5. LA PRUEBA DURA: la ref avanzó, así que el siguiente `/sync` no reintenta lo
+    //    imposible. Antes se quedaba clavada y el atasco era permanente.
+    expect(await cambiosPendientes(raiz, "master")).toEqual([]);
+  });
+
   describe("politicaDeAprobacion", () => {
     it("si autoriza, sube todo y la ref se mueve — invocada con el plan YA CONSTRUIDO", async () => {
       const raiz = await proyectoConCambios();
@@ -301,7 +351,7 @@ describe("subir", () => {
         informar: (t) => avisos.push(t),
       });
 
-      expect(informe).toEqual({ ok: [], fallos: [] });
+      expect(informe).toEqual({ ok: [], fallos: [], omitidas: [] });
       expect(puerto.escrituras).toEqual([]);
       // Ni siquiera se abrió el proyecto: la política decide ANTES de tocar el puerto.
       await expect(puerto.contexto()).rejects.toThrow("No project is open");

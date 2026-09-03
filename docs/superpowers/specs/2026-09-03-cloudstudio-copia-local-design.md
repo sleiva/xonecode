@@ -259,7 +259,8 @@ verdad contra MCP. No hay que rehacer nada para llegar ahí.
    decir quién autoriza**: la política es un campo obligatorio, no una convención que cada
    llamador recuerde. Es fail-closed llevado al tipo.
 3. Se ejecuta: texto por `studio_edit_file` (`replace`, o `delete`), binarios por
-   `studio_upload_file` (`base64` hasta 5 MB, `chunked` por encima).
+   `studio_upload_file` (`base64` hasta 5 MB; `chunked` NO está implementado en xonecode:
+   por encima del tope la operación se declara imposible y sale del plan).
 4. **La ref se mueve solo si todo terminó.** Con fallos parciales se queda donde estaba, el
    registro dice qué faltó y el siguiente `/sync` reintenta exactamente eso. Idempotente
    por construcción.
@@ -317,7 +318,7 @@ Dos capas con oficios distintos, sin duplicar la verdad:
 {"fecha":"2026-09-03T20:15:48+02:00","dir":"bajada","proyecto":"AppForTest","modo":"zip","ficheros":247,"commit":"8fe1dfd"}
 {"fecha":"2026-09-03T20:41:02+02:00","dir":"subida","desde":"8fe1dfd","hasta":"6190983","aprobado":true,
  "ok":["BuscarFarmacias.xne","icons/icon_new.svg"],
- "fallos":[{"ruta":"bd/gestion.db","motivo":"5 MB excedidos en base64; reintentar en chunked"}]}
+ "fallos":[],"omitidas":[{"ruta":"bd/gestion.db","motivo":"pesa 6291456 bytes y la subida en base64 admite hasta 5242880; el modo troceado no está implementado: súbelo desde Studio"}]}
 ```
 
 `sync.json` deja de ser estado y queda como diagnóstico: manifiesto, rutas descargadas,

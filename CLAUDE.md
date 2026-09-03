@@ -268,12 +268,17 @@ se queda con el destino: `B` sube y `A` se queda huérfano en Studio para siempr
 ningún aviso; forzando borrado + alta por separado, el borrado de `A` sí pasa por el
 candado.
 
-Dos huecos abiertos, sin cerrar a propósito por ahora: `planDeSubida` calcula
-`modo: "chunked"` para un binario de más de 5 MB, pero `subirBinario` del puerto no recibe
-ese modo y siempre manda `base64` — un binario grande falla en el servidor, no se
-trocea. Y el borrado (`borrarTexto`, sobre `studio_edit_file` con `editMode: "delete"`) se
-invoca igual para texto y para binario: si el servidor rechaza rutas binarias en modo
-`delete`, un icono borrado en local no se propaga, y hoy nada lo detecta ni lo declara.
+**Lo IMPOSIBLE sale del plan y se declara** (`core/planDeSubida.ts`, que devuelve
+`{ operaciones, omitidas }`). El modo `chunked` NO está implementado —`subirBinario` del
+puerto ni recibe el modo y el adaptador manda siempre `base64`—, y el borrado
+(`borrarTexto`, sobre `studio_edit_file` con `editMode: "delete"`) es una tool de TEXTO,
+así que un binario borrado no se puede propagar. Las dos cosas eran operaciones que
+fallaban SIEMPRE, y como la ref solo avanza con `fallos` vacío, el siguiente `/sync`
+recalculaba el mismo plan: la primera imagen borrada o el primer `.db` de más de 5 MB
+dejaba `/sync subir` inútil de forma permanente. Ahora salen del plan como `omitidas`,
+con motivo accionable, y se dicen por consola Y en `sync.log` —que sobrevive al turno—
+mientras el resto sube y la ref avanza. Si no hay ningún «resto», la ref no se mueve: se
+vuelven a declarar en cada `/sync`, que es la verdad.
 
 **La aprobación humana es fail-closed** (`cli/aprobar.ts`, `vendor/hitl.ts`). Aprobar ejecuta;
 rechazar no toca nada, así que lo que no se entiende es **rechazo**. El Enter a secas solo

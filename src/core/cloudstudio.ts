@@ -56,11 +56,34 @@ export interface EstadoDeSync {
   raizTruncada?: boolean;
 }
 
-/** Una operación de subida ya decidida. La ejecuta `agent/subida.ts`. */
+/**
+ * Una operación de subida ya decidida. La ejecuta `agent/subida.ts`.
+ *
+ * El binario solo tiene modo `base64`. El modo `chunked` del servidor NO está
+ * implementado: `CloudStudioPort.subirBinario` ni siquiera lleva el modo, y el adaptador
+ * manda siempre base64. Mientras siga así, un binario que no cabe en base64 no es una
+ * operación pendiente sino una operación IMPOSIBLE (`OperacionOmitida`) — dejarla en el
+ * plan atascaba la subida entera para siempre, porque la ref solo avanza sin fallos.
+ */
 export type OperacionDeSubida =
   | { tipo: "texto"; ruta: string }
-  | { tipo: "binario"; ruta: string; bytes: number; modo: "base64" | "chunked" }
+  | { tipo: "binario"; ruta: string; bytes: number; modo: "base64" }
   | { tipo: "borrado"; ruta: string };
+
+/**
+ * Algo que había que sincronizar y NO se puede, con el porqué.
+ *
+ * Es el camino de escape: sale del plan, se declara (por consola y en `sync.log`) y deja
+ * que la ref avance con el resto. Sin él, una sola operación imposible —la primera imagen
+ * borrada, el primer `.db` de más de 5 MB— dejaba `/sync subir` inútil de forma
+ * PERMANENTE: fallaba, la ref no se movía, el siguiente `/sync` recalculaba el mismo plan
+ * y volvía a fallar, para siempre.
+ */
+export interface OperacionOmitida {
+  ruta: string;
+  /** En castellano y accionable: qué hacer con esto, no solo que no se hizo. */
+  motivo: string;
+}
 
 /**
  * El hueco de política que autoriza una subida — NO «preguntar al humano»: quién lo

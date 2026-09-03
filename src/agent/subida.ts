@@ -16,7 +16,7 @@
 import { appendFileSync, mkdirSync, readFileSync, statSync, existsSync, readdirSync } from "node:fs";
 import { dirname, join } from "node:path";
 import type { CloudStudioPort } from "../core/ports.js";
-import type { PoliticaDeAprobacion } from "../core/cloudstudio.js";
+import type { OperacionOmitida, PoliticaDeAprobacion } from "../core/cloudstudio.js";
 import { planDeSubida } from "../core/planDeSubida.js";
 import { NOMBRE_CARPETA } from "./configEnDisco.js";
 import { cambiosPendientes, marcarSubido } from "./gitSync.js";
@@ -43,6 +43,12 @@ export interface OpcionesDeSubida {
 export interface InformeDeSubida {
   ok: string[];
   fallos: Array<{ ruta: string; motivo: string }>;
+  /**
+   * Lo que NO se puede sincronizar, con el porqué (`core/planDeSubida.ts`). No son
+   * fallos: no bloquean la ref. Son el camino de escape para que una operación imposible
+   * —el borrado de un binario, un fichero de más de 5 MB— no atasque la subida entera.
+   */
+  omitidas: OperacionOmitida[];
 }
 
 export function rutaSyncLog(raiz: string): string {
@@ -87,14 +93,14 @@ export async function subir(opciones: OpcionesDeSubida): Promise<InformeDeSubida
     if (existsSync(ruta)) tamanos.set(cambio.ruta, statSync(ruta).size);
   }
 
-  const plan = planDeSubida({
+  const { operaciones: plan, omitidas } = planDeSubida({
     cambios,
     descargados: descargadosDe(raiz),
     tamanos,
     fuentesXne: fuentesXne(raiz),
   });
 
-  const informe: InformeDeSubida = { ok: [], fallos: [] };
+  const informe: InformeDeSubida = { ok: [], fallos: [], omitidas };
 
   // El log es «una línea por OPERACIÓN de sync» (criterio de aceptación), no una línea
   // por fichero movido: un `/sync` sin nada pendiente también es una operación y queda
@@ -110,6 +116,9 @@ export async function subir(opciones: OpcionesDeSubida): Promise<InformeDeSubida
       rama: ramaTrabajo,
       ok: informe.ok,
       fallos: informe.fallos,
+      // Lo IMPOSIBLE queda por escrito igual que lo fallido: el usuario tiene que poder
+      // volver mañana y saber qué se quedó sin subir y por qué, no solo verlo pasar.
+      omitidas: informe.omitidas,
       ...(error === undefined ? {} : { error }),
     });
     const log = rutaSyncLog(raiz);
@@ -117,8 +126,19 @@ export async function subir(opciones: OpcionesDeSubida): Promise<InformeDeSubida
     appendFileSync(log, `${linea}\n`);
   };
 
+  // Las omisiones se dicen SIEMPRE, y antes de pedir autorización: quien autoriza tiene
+  // que ver también lo que NO se va a hacer. Y se dicen aunque el plan quede vacío, que
+  // es justo el caso en que callarlas haría creer que no había nada pendiente.
+  for (const omitida of omitidas) informar(`no se sube «${omitida.ruta}»: ${omitida.motivo}\n`);
+
   if (plan.length === 0) {
-    informar("no hay nada que subir\n");
+    if (omitidas.length === 0) informar("no hay nada que subir\n");
+    // La ref NO se mueve aquí: no se ha escrito nada en CloudStudio, y una ref que dice
+    // «esto ya está arriba» sin haber subido nada es exactamente la clase de mentira que
+    // se corrige en otra parte de esta misma ola. Lo omitido se vuelve a declarar en cada
+    // `/sync` mientras siga en el diff, que es la verdad: sigue sin sincronizar. Cuando
+    // haya OTRAS operaciones, la ref avanzará con ellas y arrastrará también lo omitido
+    // —por eso queda además escrito en `sync.log`, que sí sobrevive al turno—.
     registrar();
     return informe;
   }

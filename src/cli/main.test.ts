@@ -652,7 +652,7 @@ function piezasFalsas(overrides: Partial<PiezasDeSincronizacion> = {}): PiezasDe
     pendientes: overrides.pendientes ?? (async () => []),
     limpio: overrides.limpio ?? (async () => true),
     sinCommitear: overrides.sinCommitear ?? (async () => []),
-    subirProyecto: overrides.subirProyecto ?? (async () => ({ ok: [], fallos: [] })),
+    subirProyecto: overrides.subirProyecto ?? (async () => ({ ok: [], fallos: [], omitidas: [] })),
   };
 }
 
@@ -746,7 +746,7 @@ describe("crearSincronizador", () => {
     const avisos: string[] = [];
     const subirProyecto = vi.fn(async ({ informar }: { informar?: (t: string) => void }) => {
       informar?.("2 ficheros no subieron; la ref no se mueve\n");
-      return { ok: [], fallos: [{ ruta: "a.xne", motivo: "x" }, { ruta: "b.xne", motivo: "y" }] };
+      return { ok: [], fallos: [{ ruta: "a.xne", motivo: "x" }, { ruta: "b.xne", motivo: "y" }], omitidas: [] };
     });
     const sincronizar = crearSincronizador(piezasFalsas({ subirProyecto }));
 
