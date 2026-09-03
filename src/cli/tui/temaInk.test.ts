@@ -48,6 +48,7 @@ describe("temaInk", () => {
     // no un token semántico compartido con stdio.
     expect(temaInk.fondoSidebar).toMatch(/^#[0-9a-f]{6}$/);
     expect(temaInk.fondoSidebar).not.toBe(temaInk.fondoInput);
+    expect(temaInk.fondoSidebar).toBe("#101820");
   });
 
   it("reserva negro para las peticiones en cola", () => {

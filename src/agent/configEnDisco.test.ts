@@ -34,6 +34,7 @@ import {
   aplicarAuth,
   guardarModeloGlobal,
   guardarTemaDeProyecto,
+  guardarCloudStudioDeProyecto,
   ConfigRotaEnDisco,
   OperacionesDeEscritura,
 } from "./configEnDisco.js";
@@ -219,6 +220,23 @@ it("guarda el tema en el config del proyecto y preserva su resto", () => {
     modelos: { trabajo: "ollama/a" },
     desconocido: true,
     tema: "midnight",
+  });
+  rmSync(p, { recursive: true, force: true });
+});
+
+it("guarda únicamente el endpoint MCP de CloudStudio dentro del proyecto", () => {
+  const p = mkdtempSync(join(tmpdir(), "xc-cfg-"));
+  const ruta = rutaConfigDeProyecto(p);
+  mkdirSync(join(p, NOMBRE_CARPETA), { recursive: true });
+  writeFileSync(ruta, JSON.stringify({ tema: "xone" }));
+
+  expect(guardarCloudStudioDeProyecto(p, "https://mcp.xonewebstudio.com/mcp")).toEqual({
+    ruta,
+    url: "https://mcp.xonewebstudio.com/mcp",
+  });
+  expect(JSON.parse(readFileSync(ruta, "utf8"))).toEqual({
+    tema: "xone",
+    cloudstudio: { url: "https://mcp.xonewebstudio.com/mcp" },
   });
   rmSync(p, { recursive: true, force: true });
 });

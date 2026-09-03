@@ -25,6 +25,8 @@ export interface DatosDeSidebar {
   ruta: string;
   rama?: string;
   version: string;
+  /** Alto disponible para extender el fondo diferenciado hasta el pie. */
+  altura?: number;
 }
 
 /**
@@ -57,6 +59,19 @@ export function Sidebar(d: DatosDeSidebar): ReactNode {
   const pct = porcentaje(d.contexto, d.tope);
   const tokenIn = d.tokenIn ?? 0;
   const tokenOut = d.tokenOut ?? 0;
+  const anchoInterior = ANCHO_DE_SIDEBAR - 4;
+  const fondo = temaInk.fondoSidebar;
+  const logos = LOGOS_XONE[temaInkActivo()];
+  const textoContexto =
+    `Contexto  ${compacto(d.contexto)}` +
+    (pct !== undefined ? `/${formatearTope(d.tope!)} (${pct}%)` : " tokens");
+  const lineasTokens = (tokenIn > 0 ? 1 : 0) + (tokenOut > 0 ? 1 : 0) + (d.contexto > 0 ? 1 : 0);
+  const lineasRoles = Object.keys(d.modelosPorPapel).filter((papel) => papel !== "trabajo").length;
+  // Dos líneas de cabecera, logo, aire tras logo, posible bloque de tokens, bloque de
+  // modelo y pie. El resto se pinta explícitamente con fondo: Ink solo permite fondos
+  // sobre Text, no sobre Box, y el hueco no puede volver a confundirse con transcript.
+  const lineasOcupadas = 2 + logos.length + 1 + (lineasTokens > 0 ? 1 + lineasTokens + 1 : 0) + 2 + lineasRoles + 1;
+  const huecos = d.altura === undefined ? 0 : Math.max(0, d.altura - lineasOcupadas);
   return (
     // flexGrow para llenar la columna: el separador de abajo empuja el pie al fondo.
     <Box flexDirection="column" flexGrow={1}>
@@ -64,28 +79,27 @@ export function Sidebar(d: DatosDeSidebar): ReactNode {
           de comprimirlo alteraban sus letras con esta fuente de terminal, así que la
           versión de cinco filas es la única marca legible y estable. */}
       <Box flexDirection="column" marginBottom={1}>
-        <Text backgroundColor={temaInk.fondoSidebar} bold>{` ${d.proyecto}`.padEnd(38, " ")}</Text>
-        <Text color={temaInk.mudo}>{d.rama !== undefined ? `${d.ruta}:${d.rama}` : d.ruta}</Text>
-        {LOGOS_XONE[temaInkActivo()].map((fila, i) => (
-          <Text key={i} color={temaInk.acento}>{fila}</Text>
+        <Text backgroundColor={temaInk.marca} bold>{` ${d.proyecto}`.padEnd(anchoInterior, " ")}</Text>
+        <Text backgroundColor={fondo} color={temaInk.mudo} wrap="truncate-end">{(d.rama !== undefined ? `${d.ruta}:${d.rama}` : d.ruta).padEnd(anchoInterior, " ")}</Text>
+        {logos.map((fila, i) => (
+          <Text key={i} backgroundColor={fondo} color={temaInk.acento}>{fila.padEnd(anchoInterior, " ")}</Text>
         ))}
       </Box>
       {tokenIn > 0 || tokenOut > 0 || d.contexto > 0 ? (
         <Box flexDirection="column" marginBottom={1}>
-          <Text bold color={temaInk.acento}>Tokens</Text>
-          {tokenIn > 0 ? <Text>{`Token In  ${compacto(tokenIn)}`}</Text> : null}
-          {tokenOut > 0 ? <Text>{`Token Out  ${compacto(tokenOut)}`}</Text> : null}
+          <Text backgroundColor={fondo} bold color={temaInk.acento}>{"Tokens".padEnd(anchoInterior, " ")}</Text>
+          {tokenIn > 0 ? <Text backgroundColor={fondo}>{`Token In  ${compacto(tokenIn)}`.padEnd(anchoInterior, " ")}</Text> : null}
+          {tokenOut > 0 ? <Text backgroundColor={fondo}>{`Token Out  ${compacto(tokenOut)}`.padEnd(anchoInterior, " ")}</Text> : null}
           {d.contexto > 0 ? (
-            <Text color={temaInk.mudo}>
-              {`Contexto  ${compacto(d.contexto)}`}
-              {pct !== undefined ? `/${formatearTope(d.tope!)} (${pct}%)` : " tokens"}
+            <Text backgroundColor={fondo} color={temaInk.mudo}>
+              {textoContexto.padEnd(anchoInterior, " ")}
             </Text>
           ) : null}
         </Box>
       ) : null}
       <Box flexDirection="column">
-        <Text bold color={temaInk.acento}>Modelo</Text>
-        <Text>{d.modelo}</Text>
+        <Text backgroundColor={fondo} bold color={temaInk.acento}>{"Modelo".padEnd(anchoInterior, " ")}</Text>
+        <Text backgroundColor={fondo} wrap="truncate-end">{d.modelo.padEnd(anchoInterior, " ")}</Text>
         {/* «trabajo» no se lista: la línea principal de arriba YA es ese (medido: salía
             el mismo valor dos veces). `correrTui.ts` mantiene `papeles.trabajo` y
             `modeloTrabajo` sincronizados en las dos ramas de /modelo, así que ocultarlo no
@@ -93,15 +107,20 @@ export function Sidebar(d: DatosDeSidebar): ReactNode {
         {Object.entries(d.modelosPorPapel)
           .filter(([papel]) => papel !== "trabajo")
           .map(([papel, m]) => (
-            <Text key={papel} color={temaInk.mudo}>{`${papel}: ${m}`}</Text>
+            <Text key={papel} backgroundColor={fondo} color={temaInk.mudo} wrap="truncate-end">{`${papel}: ${m}`.padEnd(anchoInterior, " ")}</Text>
           ))}
       </Box>
       {/* El separador elástico: lo estable vive al fondo, como en la maqueta. */}
-      <Box flexGrow={1} />
+      <Box flexGrow={1} flexDirection="column">
+        {Array.from({ length: huecos }, (_, i) => (
+          <Text key={i} backgroundColor={fondo}>{" ".repeat(anchoInterior)}</Text>
+        ))}
+      </Box>
       <Box flexDirection="column">
-        <Text>
+        <Text backgroundColor={fondo} wrap="truncate-end">
           <Text color={temaInk.exito}>{"● "}</Text>
           <Text color={temaInk.mudo}>{`xonecode ${d.version}`}</Text>
+          {" ".repeat(anchoInterior)}
         </Text>
       </Box>
     </Box>

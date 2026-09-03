@@ -27,6 +27,8 @@ export interface ConfigDeFichero {
   modelos?: Partial<Record<Papel, string>>;
   /** Tema visual de la consola, persistido solo cuando pertenece al proyecto. */
   tema?: string;
+  /** Endpoint MCP de CloudStudio. Las credenciales OAuth viven solo en el almacén global. */
+  cloudstudio?: { url: string };
   ollama?: { baseUrl?: string };
   /** Topes de ventana de contexto fijados a mano, por id «proveedor/modelo». */
   contextos?: Record<string, number>;
@@ -153,6 +155,27 @@ export function validar(
       } else {
         avisos.push({
           texto: `«${ruta}»: «tema» debe ser una cadena; se descarta.`,
+          severidad: "aviso",
+        });
+      }
+      continue;
+    }
+
+    if (clave === "cloudstudio") {
+      if (!esObjeto(valor) || typeof valor.url !== "string") {
+        avisos.push({
+          texto: `«${ruta}»: «cloudstudio» debe ser un objeto con la URL HTTPS «url»; se descarta.`,
+          severidad: "aviso",
+        });
+        continue;
+      }
+      try {
+        const url = new URL(valor.url);
+        if (url.protocol !== "https:" || url.username !== "" || url.password !== "") throw new Error();
+        config.cloudstudio = { url: url.toString() };
+      } catch {
+        avisos.push({
+          texto: `«${ruta}»: «cloudstudio.url» debe ser una URL HTTPS sin credenciales; se descarta.`,
           severidad: "aviso",
         });
       }

@@ -39,7 +39,10 @@ Lo que **todavía no hay**, y conviene saber antes de fiarse:
 - **Nadie verifica lo que el agente escribe.** El verificador existe y funciona, pero no
   corre dentro del turno: la consola te lo avisa en cada uno. Hay que lanzar `/verify`.
 - **No hay lazo** de plan → ejecuta → verifica → juzga → repara, con presupuestos.
-- **No usa los servidores MCP de XOne Studio**: el proyecto tiene que estar en disco.
+- **CloudStudio MCP está en fase de conexión**: `/connect-studio` inicia OAuth con el IDS,
+  comprueba el endpoint y guarda solo su URL por proyecto. Las tools remotas aún no se
+  inyectan en el agente: antes se aplicará una lista blanca por perfil para no cargar el
+  catálogo completo en cada prompt.
 - **No hay TUI con paneles**; la consola es stdio.
 
 ## Instalación

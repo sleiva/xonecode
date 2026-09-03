@@ -98,6 +98,8 @@ export interface OpcionesDeConsolaTui {
   /** Persistencia inyectada: la piel no conoce el adaptador de disco de `agent/`. */
   guardarModeloGlobal: Consola["guardarModeloGlobal"];
   guardarTemaDeProyecto?: NonNullable<Consola["guardarTemaDeProyecto"]>;
+  conectarCloudStudio?: Consola["conectarCloudStudio"];
+  guardarCloudStudioDeProyecto?: Consola["guardarCloudStudioDeProyecto"];
   /** Fuentes del modelo de sesión: deciden el modelo que la sidebar enseña al arrancar. */
   fuentes?: FuentesDeEleccion;
   /** Costura de test: los tests no preguntan a git. */
@@ -131,7 +133,7 @@ export function envolverConOcupacion(
  * reparte a mano acabarían siendo dos mundos.
  */
 export function crearConsolaTui(opciones: OpcionesDeConsolaTui) {
-  const { raiz, fuentes = {}, rama, topeDe, catalogoModelos, guardarModeloGlobal, guardarTemaDeProyecto } = opciones;
+  const { raiz, fuentes = {}, rama, topeDe, catalogoModelos, guardarModeloGlobal, guardarTemaDeProyecto, conectarCloudStudio, guardarCloudStudioDeProyecto } = opciones;
   const store = crearStore();
   const vista = crearRanura<VistaDeTui>(vistaInicial());
   // main ya resolvió el tema del config de proyecto antes de cargar Ink.
@@ -233,6 +235,8 @@ export function crearConsolaTui(opciones: OpcionesDeConsolaTui) {
     catalogoModelos,
     guardarModeloGlobal,
     guardarTemaDeProyecto,
+    conectarCloudStudio,
+    guardarCloudStudioDeProyecto,
     aplicarTema: (tema) => {
       seleccionarTema(tema);
       aplicarTemaInk(tema);
@@ -390,6 +394,8 @@ export interface OpcionesDeMontaje {
   catalogoModelos: CatalogoModelosPort;
   guardarModeloGlobal: Consola["guardarModeloGlobal"];
   guardarTemaDeProyecto?: NonNullable<Consola["guardarTemaDeProyecto"]>;
+  conectarCloudStudio?: Consola["conectarCloudStudio"];
+  guardarCloudStudioDeProyecto?: Consola["guardarCloudStudioDeProyecto"];
   /** La inspección del prólogo; el real ejecuta el simulador y entra por omisión. */
   inspeccionarProyecto?: (raiz: string) => Promise<{ colecciones: number; esProyectoXone: boolean }>;
   /** El asistente de creación de proyecto; desde `main.ts`, para no duplicarlo. */
@@ -413,6 +419,8 @@ export async function correrConsolaTui(opciones: OpcionesDeMontaje): Promise<num
     catalogoModelos,
     guardarModeloGlobal,
     guardarTemaDeProyecto,
+    conectarCloudStudio,
+    guardarCloudStudioDeProyecto,
     inspeccionarProyecto = inspeccionar,
     ofrecer,
     crearEjecutor,
@@ -425,6 +433,8 @@ export async function correrConsolaTui(opciones: OpcionesDeMontaje): Promise<num
     catalogoModelos,
     guardarModeloGlobal,
     guardarTemaDeProyecto,
+    conectarCloudStudio,
+    guardarCloudStudioDeProyecto,
     rama: ramaDeGit(raiz),
     topeDe,
   });

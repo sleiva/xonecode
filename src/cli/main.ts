@@ -14,7 +14,8 @@ import { cmdDoctor } from "./doctor.js";
 import { cmdVerify } from "./verify.js";
 import { type FuentesDeEleccion, ModeloMalEscrito, parsear, resolver } from "../core/modelos.js";
 import { topeResuelto } from "../core/contextos.js";
-import { aplicarAuth, cargar, guardarModeloGlobal, guardarTemaDeProyecto } from "../agent/configEnDisco.js";
+import { aplicarAuth, cargar, guardarCloudStudioDeProyecto, guardarModeloGlobal, guardarTemaDeProyecto } from "../agent/configEnDisco.js";
+import { conectarCloudStudio } from "../agent/cloudstudioMcp.js";
 import {
   COMANDOS,
   correrConsola,
@@ -455,9 +456,10 @@ export async function entrarEnConsola(
   /** ¿Ratón en la TUI? Solo la rama TUI lo mira. */
   raton: boolean = true,
   /** Adaptadores compartidos por stdio y TUI; `main` construye una sola instancia real. */
-  dependencias: Pick<Consola, "catalogoModelos" | "guardarModeloGlobal"> = {
+  dependencias: Pick<Consola, "catalogoModelos" | "guardarModeloGlobal" | "conectarCloudStudio"> = {
     catalogoModelos: new CatalogoModelos(),
     guardarModeloGlobal,
+    conectarCloudStudio: (url, informar) => conectarCloudStudio(url, { informar }),
   }
 ): Promise<number> {
   // La elección de modelo y las credenciales se hidratan ANTES de decidir la piel:
@@ -492,6 +494,7 @@ export async function entrarEnConsola(
       guion,
       ...dependencias,
       guardarTemaDeProyecto: (tema) => guardarTemaDeProyecto(raiz, tema),
+      guardarCloudStudioDeProyecto: (url) => guardarCloudStudioDeProyecto(raiz, url),
       inspeccionarProyecto,
       ofrecer: ofrecerCrearProyecto,
       crearEjecutor: guion ? undefined : crearEjecutorReal,
@@ -595,6 +598,8 @@ export async function entrarEnConsola(
     catalogoModelos: dependencias.catalogoModelos,
     guardarModeloGlobal: dependencias.guardarModeloGlobal,
     guardarTemaDeProyecto: (tema) => guardarTemaDeProyecto(raiz, tema),
+    conectarCloudStudio: dependencias.conectarCloudStudio,
+    guardarCloudStudioDeProyecto: (url) => guardarCloudStudioDeProyecto(raiz, url),
   };
 
   // El asistente de creación: la única escritura fuera de un turno del agente, y

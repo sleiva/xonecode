@@ -259,4 +259,6 @@ El 2 es deliberado: un turno que se quedó esperando un permiso que nadie dio **
   gastar). Antes era al revés; si algún otro texto dice lo contrario, el código manda.
 - **La TUI es la piel por omisión SOLO con TTY en ambos lados**; en pipes y CI manda el stdio
   de siempre, y su salida sigue siendo byte-idéntica.
-- **No usa los MCP de Studio**: el proyecto tiene que estar en disco.
+- **CloudStudio MCP puede autenticarse con `/connect-studio`**: abre el IDS, valida el
+  endpoint y guarda su URL en `.xonecode/config.json`. El agente sigue trabajando sobre
+  el proyecto local hasta que se incorpore la lista blanca de tools remotas por perfil.

@@ -73,6 +73,13 @@ export interface Consola {
   aplicarTema?: (tema: IdTema) => void;
   /** Persistencia inyectada: el tema es del proyecto, no de la cuenta. */
   guardarTemaDeProyecto?: (tema: IdTema) => { ruta: string; tema: string };
+  /** Conexión OAuth + MCP, inyectada desde agent para que esta capa siga sin SDK MCP. */
+  conectarCloudStudio?: (url: string, informar: (texto: string) => void) => Promise<{
+    url: string;
+    herramientas: Array<{ nombre: string; descripcion: string }>;
+  }>;
+  /** El endpoint es configuración de proyecto; los tokens OAuth no. */
+  guardarCloudStudioDeProyecto?: (url: string) => { ruta: string; url: string };
 }
 
 /**
@@ -102,6 +109,7 @@ export const PETICION_REANUDAR_PROYECTO =
   "en ese caso lee solo sus primeras 50 líneas. Termina preguntando si quieres continuar ese paso.";
 
 export const MENSAJE_REANUDANDO = "Analizando el estado guardado del repositorio…\n";
+export const URL_CLOUDSTUDIO_POR_OMISION = "https://mcp.xonewebstudio.com/mcp";
 
 /** Datos de un selector: UI-neutral, para que `consola.ts` no conozca Ink. */
 export interface SelectorDeConsola {
@@ -584,6 +592,25 @@ export const COMANDOS: Record<string, { descripcion: string; manejador: Manejado
   themes: {
     descripcion: "elige tema visual: XOne, Clear, Midnight, Graphite o Ember",
     manejador: elegirTema,
+  },
+  "connect-studio": {
+    descripcion: "conecta CloudStudio por MCP y abre el login IDS: /connect-studio [url]",
+    manejador: async (args, _estado, consola) => {
+      if (consola.conectarCloudStudio === undefined || consola.guardarCloudStudioDeProyecto === undefined) {
+        consola.escribir("la conexión CloudStudio no está disponible en esta ejecución\n");
+        return { seguir: true };
+      }
+      const escrita = args[0] ?? await consola.preguntar(`URL MCP de CloudStudio [${URL_CLOUDSTUDIO_POR_OMISION}]: `);
+      const url = escrita.trim() || URL_CLOUDSTUDIO_POR_OMISION;
+      const resultado = await consola.conectarCloudStudio(url, consola.escribir);
+      const guardado = consola.guardarCloudStudioDeProyecto(resultado.url);
+      consola.escribir(`CloudStudio conectado · ${resultado.herramientas.length} herramientas · URL guardada en ${guardado.ruta}\n`);
+      for (const tool of resultado.herramientas.slice(0, 12)) {
+        consola.escribir(`  ${tool.nombre}${tool.descripcion ? ` — ${tool.descripcion}` : ""}\n`);
+      }
+      if (resultado.herramientas.length > 12) consola.escribir(`  … y ${resultado.herramientas.length - 12} más\n`);
+      return { seguir: true };
+    },
   },
   hilo: {
     descripcion: "muestra el hilo (thread_id) de esta sesión",

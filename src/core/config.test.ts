@@ -67,6 +67,22 @@ describe("validar", () => {
     expect(avisos).toEqual([]);
   });
 
+  it("acepta el endpoint HTTPS de CloudStudio, sin credenciales", () => {
+    const { config, avisos } = validar(
+      { cloudstudio: { url: "https://mcp.xonewebstudio.com/mcp" } }, RUTA, "proyecto"
+    );
+    expect(config.cloudstudio).toEqual({ url: "https://mcp.xonewebstudio.com/mcp" });
+    expect(avisos).toEqual([]);
+  });
+
+  it("rechaza una URL CloudStudio insegura o que lleve credenciales", () => {
+    const { config, avisos } = validar(
+      { cloudstudio: { url: "https://token@example.test/mcp" } }, RUTA, "proyecto"
+    );
+    expect(config.cloudstudio).toBeUndefined();
+    expect(avisos[0]?.texto).toContain("cloudstudio.url");
+  });
+
   it("descarta un tema que no es cadena", () => {
     const { config, avisos } = validar({ tema: 42 }, RUTA, "proyecto");
     expect(config.tema).toBeUndefined();

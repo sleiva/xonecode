@@ -81,7 +81,7 @@ const XONE: TemaInk = {
   borde: "#27272a",
   fondoInput: "#1e1e1e",
   fondoCola: "#090909",
-  fondoSidebar: "#162331",
+  fondoSidebar: "#101820",
   marca: "#00396f",
   fase: "#e0a458",
   tenue: "#52525b",

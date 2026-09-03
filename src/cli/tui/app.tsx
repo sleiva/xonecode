@@ -276,7 +276,7 @@ export function App({
             borderLeft
             borderLeftColor={temaInk.acento}
           >
-            <Sidebar {...datos} />
+            <Sidebar {...datos} altura={Math.max(0, filas - 1)} />
           </Box>
         ) : null}
       </Box>
