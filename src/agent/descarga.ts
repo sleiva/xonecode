@@ -12,7 +12,7 @@ import type { CloudStudioPort } from "../core/ports.js";
 import type { EstadoDeSync } from "../core/cloudstudio.js";
 import { EXTENSIONES_DE_TEXTO } from "../core/planDeSubida.js";
 import { NOMBRE_CARPETA } from "./configEnDisco.js";
-import { extraerZipBase64 } from "./zip.js";
+import { destinoSeguro, extraerZipBase64 } from "./zip.js";
 import { enumerarRemoto } from "./manifiesto.js";
 
 /** Bastante para que la espera de red se solape; poco para no parecer un ataque. */
@@ -49,7 +49,10 @@ async function enParalelo<T>(tareas: Array<() => Promise<T>>, tope: number): Pro
 }
 
 function escribir(raiz: string, ruta: string, contenido: string): void {
-  const destino = join(raiz, ruta);
+  // La ruta viene del JSON del servidor tal cual. `join(raiz, ruta)` con un `../` escribe
+  // FUERA del proyecto: la misma guarda que el ZIP ya tenía (`zip.ts#destinoSeguro`), en
+  // el camino que no la tenía. Lanza, y el llamador lo cuenta como fichero no bajado.
+  const destino = destinoSeguro(raiz, ruta);
   mkdirSync(dirname(destino), { recursive: true });
   // Se escriben los bytes tal cual: normalizar finales de línea produce diffs fantasma
   // en cada sync y subidas que no cambian nada.
@@ -88,7 +91,9 @@ export function retirarVistasAplanadas(raiz: string, rutas: string[]): string[] 
       continue;
     }
     // `app.xml` no tiene hermano `.xne`, así que el propio predicado lo conserva: es fuente.
-    rmSync(join(raiz, ruta), { force: true });
+    // Y se BORRA por la ruta contenida, no por `join` a secas: aquí las rutas también
+    // vienen del servidor, y un `rmSync` fuera de la raíz es peor que una escritura.
+    rmSync(destinoSeguro(raiz, ruta), { force: true });
   }
   return quedan;
 }

@@ -9,16 +9,20 @@ import { dirname, join, resolve, sep } from "node:path";
 import { unzipSync } from "fflate";
 
 /**
- * La guarda de *zip slip*: una entrada con `../` o absoluta escribiría fuera de la raíz.
+ * La guarda de contención: una ruta con `../` o absoluta escribiría fuera de la raíz.
  * Se comprueba sobre la ruta YA resuelta, porque comparar cadenas antes de resolver deja
  * pasar `a/../../x`. Se aborta entero: un ZIP que intenta esto no es de fiar en ninguna
  * de sus entradas.
+ *
+ * Se exporta porque la vía degradada (`agent/descarga.ts`) escribe y BORRA con rutas que
+ * vienen del JSON del servidor exactamente igual de crudas: tener la guarda solo en el
+ * camino del ZIP era la asimetría, no una decisión.
  */
-function destinoSeguro(raiz: string, entrada: string): string {
+export function destinoSeguro(raiz: string, entrada: string): string {
   const base = resolve(raiz);
   const destino = resolve(base, entrada);
   if (destino !== base && !destino.startsWith(base + sep)) {
-    throw new Error(`«${entrada}» apunta fuera de la raíz del proyecto; no se extrae nada`);
+    throw new Error(`«${entrada}» apunta fuera de la raíz del proyecto`);
   }
   return destino;
 }

@@ -1,10 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { mkdtempSync, readFileSync, existsSync } from "node:fs";
+import { mkdtempSync, readFileSync, existsSync, writeFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { basename, join } from "node:path";
 import { zipSync, strToU8 } from "fflate";
 import { CloudStudioEnMemoria } from "../core/ports.js";
-import { descargarProyecto, CONCURRENCIA } from "./descarga.js";
+import { descargarProyecto, retirarVistasAplanadas, CONCURRENCIA } from "./descarga.js";
 
 const raizNueva = () => mkdtempSync(join(tmpdir(), "xc-desc-"));
 const zip = (f: Record<string, string>) => Buffer.from(zipSync(
@@ -171,6 +171,43 @@ describe("descargarProyecto", () => {
     expect(avisos.join("")).toMatch(/roto\.js/);
     expect(avisos.join("")).toMatch(/500/);
     expect(estado.descargados).toEqual(["app.xml"]);
+  });
+
+  it("la vía degradada NO escribe fuera de la raíz aunque el servidor lo pida", async () => {
+    // El ZIP ya tenía la guarda (`zip.ts#destinoSeguro`, con test de atomicidad) y la vía
+    // degradada hacía `join(raiz, ruta)` con la ruta del JSON del servidor tal cual: la
+    // asimetría ERA el defecto. `..` no es hipotético: el manifiesto viene del mismo
+    // sitio que el ZIP y no lo valida nadie más.
+    const raiz = raizNueva();
+    const escapada = `../fuga-${basename(raiz)}.xne`;
+    const puerto = new CloudStudioEnMemoria({
+      zipFalla: "roto",
+      textos: { "app.xml": "<app/>", [escapada]: "<coll/>" },
+    });
+
+    const avisos: string[] = [];
+    const estado = await descargarProyecto({ puerto, raiz, proyecto, ramaOrigen: "master", informar: (t) => avisos.push(t) });
+
+    expect(existsSync(join(raiz, "..", `fuga-${basename(raiz)}.xne`))).toBe(false);
+    // Y no cuenta como descargada: si contara, el candado autorizaría su borrado remoto.
+    expect(estado.descargados).toEqual(["app.xml"]);
+    expect(avisos.join("")).toMatch(/fuera de la raíz/);
+  });
+
+  it("retirarVistasAplanadas tampoco borra fuera de la raíz", async () => {
+    // El otro extremo: `rmSync` sobre las mismas rutas crudas. Un borrado fuera de la
+    // raíz es peor que una escritura, y aquí no había ninguna guarda.
+    const raiz = raizNueva();
+    const testigo = join(raiz, "..", `testigo-${basename(raiz)}.xml`);
+    writeFileSync(testigo, "no me borres");
+    try {
+      expect(() =>
+        retirarVistasAplanadas(raiz, [`../testigo-${basename(raiz)}.xml`, `../testigo-${basename(raiz)}.xne`])
+      ).toThrow(/fuera de la raíz/);
+      expect(existsSync(testigo)).toBe(true);
+    } finally {
+      rmSync(testigo, { force: true });
+    }
   });
 
   it("borra las vistas aplanadas de la copia local y las deja fuera de descargados", async () => {
