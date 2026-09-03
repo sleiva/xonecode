@@ -33,6 +33,7 @@ import {
   cargar,
   aplicarAuth,
   guardarModeloGlobal,
+  guardarTemaDeProyecto,
   ConfigRotaEnDisco,
   OperacionesDeEscritura,
 } from "./configEnDisco.js";
@@ -205,6 +206,21 @@ it("crea el config global si aún no existe", () => {
     modelos: { rapido: "ollama/qwen3" },
   });
   rmSync(h, { recursive: true, force: true });
+});
+
+it("guarda el tema en el config del proyecto y preserva su resto", () => {
+  const p = mkdtempSync(join(tmpdir(), "xc-cfg-"));
+  const ruta = rutaConfigDeProyecto(p);
+  mkdirSync(join(p, NOMBRE_CARPETA), { recursive: true });
+  writeFileSync(ruta, JSON.stringify({ modelos: { trabajo: "ollama/a" }, desconocido: true }));
+
+  expect(guardarTemaDeProyecto(p, "midnight")).toEqual({ ruta, tema: "midnight" });
+  expect(JSON.parse(readFileSync(ruta, "utf8"))).toEqual({
+    modelos: { trabajo: "ollama/a" },
+    desconocido: true,
+    tema: "midnight",
+  });
+  rmSync(p, { recursive: true, force: true });
 });
 
 it("no pisa JSON global inválido", () => {

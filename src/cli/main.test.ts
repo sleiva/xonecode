@@ -17,6 +17,7 @@ import { COMANDOS, MENSAJE_BIENVENIDA } from "./consola.js";
 import type { Escribir } from "./stdio.js";
 import { POR_OMISION, type FuentesDeEleccion } from "../core/modelos.js";
 import { CatalogoModelos } from "../agent/catalogoModelos.js";
+import { temaActivo } from "./tema.js";
 
 /**
  * La consola real se prueba sin stdin/stdout al estilo del resto del paquete: un
@@ -198,6 +199,17 @@ describe("entrarEnConsola", () => {
     for (const nombre of Object.keys(COMANDOS)) {
       expect(texto, `la cabecera no lista /${nombre}`).toContain(`/${nombre}`);
     }
+  });
+
+  it("carga el tema desde .xonecode/config.json del proyecto", async () => {
+    const raiz = raizTemporal();
+    mkdirSync(join(raiz, ".xonecode"));
+    writeFileSync(join(raiz, ".xonecode", "config.json"), JSON.stringify({ tema: "midnight" }));
+    const { escribir } = acumulador();
+
+    await entrarEnConsola({}, raiz, escribir, inspeccionarFalso, crearRlDe());
+
+    expect(temaActivo()).toBe("midnight");
   });
 
   it("tras /modelo la línea de estado se reimprime ya con el modelo nuevo", async () => {

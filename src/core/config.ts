@@ -25,6 +25,8 @@ import type { Papel } from "./ports.js";
 export interface ConfigDeFichero {
   modelo?: string;
   modelos?: Partial<Record<Papel, string>>;
+  /** Tema visual de la consola, persistido solo cuando pertenece al proyecto. */
+  tema?: string;
   ollama?: { baseUrl?: string };
   /** Topes de ventana de contexto fijados a mano, por id «proveedor/modelo». */
   contextos?: Record<string, number>;
@@ -142,6 +144,18 @@ export function validar(
         }
       }
       config.modelos = modelos;
+      continue;
+    }
+
+    if (clave === "tema") {
+      if (typeof valor === "string") {
+        config.tema = valor;
+      } else {
+        avisos.push({
+          texto: `«${ruta}»: «tema» debe ser una cadena; se descarta.`,
+          severidad: "aviso",
+        });
+      }
       continue;
     }
 

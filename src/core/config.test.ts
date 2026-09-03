@@ -61,6 +61,18 @@ describe("validar", () => {
     expect(avisos[0]!.texto).toContain("modelo");
   });
 
+  it("acepta el tema visual como preferencia no sensible", () => {
+    const { config, avisos } = validar({ tema: "midnight" }, RUTA, "proyecto");
+    expect(config.tema).toBe("midnight");
+    expect(avisos).toEqual([]);
+  });
+
+  it("descarta un tema que no es cadena", () => {
+    const { config, avisos } = validar({ tema: 42 }, RUTA, "proyecto");
+    expect(config.tema).toBeUndefined();
+    expect(avisos[0]?.texto).toContain("tema");
+  });
+
   it("acepta contextos: topes de ventana fijados a mano, por id de modelo", () => {
     const { config, avisos } = validar(
       { contextos: { "ollama/glm-5.3-flash:cloud": 131072 } },

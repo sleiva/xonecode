@@ -500,7 +500,9 @@ describe("correrConsola — /themes", () => {
   it("enumera los tres temas y aplica el elegido sin tocar el estado del agente", async () => {
     const { consola, salida } = consolaDeConSecreto({ lineas: ["/themes"], respuestas: ["2"] });
     const aplicarTema = vi.fn();
+    const guardarTema = vi.fn(() => ({ ruta: "/tmp/proyecto/.xonecode/config.json", tema: "clear" }));
     consola.aplicarTema = aplicarTema;
+    consola.guardarTemaDeProyecto = guardarTema;
 
     await correrConsola(consola, estadoDe(), ejecutorFalsoDe([]));
 
@@ -510,7 +512,8 @@ describe("correrConsola — /themes", () => {
     expect(salida()).toContain("4. Graphite");
     expect(salida()).toContain("5. Ember");
     expect(aplicarTema).toHaveBeenCalledWith("clear");
-    expect(salida()).toContain("tema activo: Clear");
+    expect(guardarTema).toHaveBeenCalledWith("clear");
+    expect(salida()).toContain("tema activo: Clear · guardado en /tmp/proyecto/.xonecode/config.json");
   });
 });
 

@@ -14,7 +14,7 @@ import { cmdDoctor } from "./doctor.js";
 import { cmdVerify } from "./verify.js";
 import { type FuentesDeEleccion, ModeloMalEscrito, parsear, resolver } from "../core/modelos.js";
 import { topeResuelto } from "../core/contextos.js";
-import { aplicarAuth, cargar, guardarModeloGlobal } from "../agent/configEnDisco.js";
+import { aplicarAuth, cargar, guardarModeloGlobal, guardarTemaDeProyecto } from "../agent/configEnDisco.js";
 import {
   COMANDOS,
   correrConsola,
@@ -28,7 +28,7 @@ import {
   type EstadoDeSesion,
 } from "./consola.js";
 import { crearLeerSecreto, crearPreguntar, crearPielStdio, escribirEnStdout, type Escribir } from "./stdio.js";
-import { crearTema } from "./tema.js";
+import { crearTema, esTema, seleccionarTema } from "./tema.js";
 import { pedirDecisiones } from "./aprobar.js";
 import { modeloDeAcuse } from "./acuseDeModelo.js";
 import { inspeccionar } from "../agent/entorno.js";
@@ -465,6 +465,11 @@ export async function entrarEnConsola(
   // ya aplicada solo cuando `/modelos` provoque su primera consulta.
   const cargado = cargar(raiz);
   aplicarAuth(cargado.auth);
+  // El tema es una preferencia del proyecto: un config global no puede cambiar cómo se
+  // presenta otro repositorio. Un valor manual desconocido conserva XOne por omisión.
+  seleccionarTema("xone");
+  const temaDeProyecto = cargado.config.proyecto?.tema;
+  if (temaDeProyecto !== undefined && esTema(temaDeProyecto)) seleccionarTema(temaDeProyecto);
   const fuentesHidratadas: FuentesDeEleccion = {
     ...fuentes,
     proyecto: cargado.config.proyecto,
@@ -486,6 +491,7 @@ export async function entrarEnConsola(
       raiz,
       guion,
       ...dependencias,
+      guardarTemaDeProyecto: (tema) => guardarTemaDeProyecto(raiz, tema),
       inspeccionarProyecto,
       ofrecer: ofrecerCrearProyecto,
       crearEjecutor: guion ? undefined : crearEjecutorReal,
@@ -588,6 +594,7 @@ export async function entrarEnConsola(
     leerSecreto: crearLeerSecreto(rl),
     catalogoModelos: dependencias.catalogoModelos,
     guardarModeloGlobal: dependencias.guardarModeloGlobal,
+    guardarTemaDeProyecto: (tema) => guardarTemaDeProyecto(raiz, tema),
   };
 
   // El asistente de creación: la única escritura fuera de un turno del agente, y

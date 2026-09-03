@@ -34,6 +34,7 @@ import { modeloDeAcuse } from "../acuseDeModelo.js";
 import { crearStore, crearRanura, vistaInicial, type Acto, type VistaDeTui } from "./store.js";
 import { crearPielTui } from "./pielTui.js";
 import { aplicarTemaInk } from "./temaInk.js";
+import { seleccionarTema, temaActivo } from "../tema.js";
 import { pedirDecisionesTui } from "./aprobarTui.js";
 import type { DatosDeSidebar } from "./sidebar.js";
 import { App } from "./app.js";
@@ -96,6 +97,7 @@ export interface OpcionesDeConsolaTui {
   catalogoModelos: CatalogoModelosPort;
   /** Persistencia inyectada: la piel no conoce el adaptador de disco de `agent/`. */
   guardarModeloGlobal: Consola["guardarModeloGlobal"];
+  guardarTemaDeProyecto?: NonNullable<Consola["guardarTemaDeProyecto"]>;
   /** Fuentes del modelo de sesión: deciden el modelo que la sidebar enseña al arrancar. */
   fuentes?: FuentesDeEleccion;
   /** Costura de test: los tests no preguntan a git. */
@@ -129,9 +131,11 @@ export function envolverConOcupacion(
  * reparte a mano acabarían siendo dos mundos.
  */
 export function crearConsolaTui(opciones: OpcionesDeConsolaTui) {
-  const { raiz, fuentes = {}, rama, topeDe, catalogoModelos, guardarModeloGlobal } = opciones;
+  const { raiz, fuentes = {}, rama, topeDe, catalogoModelos, guardarModeloGlobal, guardarTemaDeProyecto } = opciones;
   const store = crearStore();
   const vista = crearRanura<VistaDeTui>(vistaInicial());
+  // main ya resolvió el tema del config de proyecto antes de cargar Ink.
+  aplicarTemaInk(temaActivo());
 
   // La cola de `lineas`: lo que la Entrada envía y `correrConsola` consume. Si nadie
   // espera todavía, la línea espera en `cola`; si hay un `next` colgado, se despierta.
@@ -228,7 +232,9 @@ export function crearConsolaTui(opciones: OpcionesDeConsolaTui) {
     },
     catalogoModelos,
     guardarModeloGlobal,
+    guardarTemaDeProyecto,
     aplicarTema: (tema) => {
+      seleccionarTema(tema);
       aplicarTemaInk(tema);
       // La paleta Ink es un objeto estable; esta mutación observable obliga a React a
       // repintar todos los consumidores que lo importan.
@@ -383,6 +389,7 @@ export interface OpcionesDeMontaje {
   guion: boolean;
   catalogoModelos: CatalogoModelosPort;
   guardarModeloGlobal: Consola["guardarModeloGlobal"];
+  guardarTemaDeProyecto?: NonNullable<Consola["guardarTemaDeProyecto"]>;
   /** La inspección del prólogo; el real ejecuta el simulador y entra por omisión. */
   inspeccionarProyecto?: (raiz: string) => Promise<{ colecciones: number; esProyectoXone: boolean }>;
   /** El asistente de creación de proyecto; desde `main.ts`, para no duplicarlo. */
@@ -405,6 +412,7 @@ export async function correrConsolaTui(opciones: OpcionesDeMontaje): Promise<num
     guion,
     catalogoModelos,
     guardarModeloGlobal,
+    guardarTemaDeProyecto,
     inspeccionarProyecto = inspeccionar,
     ofrecer,
     crearEjecutor,
@@ -416,6 +424,7 @@ export async function correrConsolaTui(opciones: OpcionesDeMontaje): Promise<num
     fuentes,
     catalogoModelos,
     guardarModeloGlobal,
+    guardarTemaDeProyecto,
     rama: ramaDeGit(raiz),
     topeDe,
   });

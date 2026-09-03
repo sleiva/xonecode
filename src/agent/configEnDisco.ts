@@ -132,6 +132,15 @@ export function guardarModeloGlobal(
   return { ruta, id };
 }
 
+/** Guarda la preferencia estética junto al proyecto; nunca en el config global de la cuenta. */
+export function guardarTemaDeProyecto(raiz: string, tema: string): { ruta: string; tema: string } {
+  const ruta = rutaConfigDeProyecto(raiz);
+  const base = leerObjetoCrudoOAbortar(ruta);
+  const fusionado = { ...base, tema };
+  escribirAtomico(ruta, JSON.stringify(fusionado, null, 2) + "\n");
+  return { ruta, tema };
+}
+
 export function cargar(raiz: string): {
   config: { proyecto?: ConfigDeFichero; global?: ConfigDeFichero };
   auth: Auth;

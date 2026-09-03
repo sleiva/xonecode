@@ -71,6 +71,8 @@ export interface Consola {
   ) => Promise<Map<string, Decision>>;
   /** Cambia la paleta de la piel actual; la TUI además fuerza un repintado completo. */
   aplicarTema?: (tema: IdTema) => void;
+  /** Persistencia inyectada: el tema es del proyecto, no de la cuenta. */
+  guardarTemaDeProyecto?: (tema: IdTema) => { ruta: string; tema: string };
 }
 
 /**
@@ -367,7 +369,12 @@ async function elegirTema(_args: string[], _estado: EstadoDeSesion, consola: Con
   }
   (consola.aplicarTema ?? seleccionarTema)(id);
   const tema = TEMAS.find((candidato) => candidato.id === id)!;
-  consola.escribir(`tema activo: ${tema.etiqueta}\n`);
+  const guardado = consola.guardarTemaDeProyecto?.(id);
+  consola.escribir(
+    guardado === undefined
+      ? `tema activo: ${tema.etiqueta}\n`
+      : `tema activo: ${tema.etiqueta} · guardado en ${guardado.ruta}\n`
+  );
   return { seguir: true };
 }
 
