@@ -36,6 +36,7 @@ const ICONO: Record<string, string> = {
   edit_file: "←",
   glob: "✱",
   grep: "✱",
+  regex_search: "✱",
 };
 
 /** El verbo de cada tool conocida, en español. */
@@ -46,6 +47,7 @@ const VERBO: Record<string, string> = {
   edit_file: "edita",
   glob: "busca",
   grep: "busca",
+  regex_search: "regex",
 };
 
 /** `→ lee app.xne` para una conocida; `⚙ studio_edit_file` para el resto. */

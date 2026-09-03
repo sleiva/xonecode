@@ -18,6 +18,7 @@ describe("Colapsador", () => {
     expect(una("ls", "/")).toEqual(["→ lista /"]);
     expect(una("glob", "*.xne")).toEqual(["✱ busca *.xne"]);
     expect(una("grep", "realizarLogin")).toEqual(["✱ busca realizarLogin"]);
+    expect(una("regex_search", "function\\s+(MT\\w+)")).toEqual(["✱ regex function\\s+(MT\\w+)"]);
   });
 
   it("una tool desconocida no se disfraza: icono genérico y su nombre tal cual", () => {

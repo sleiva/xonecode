@@ -20,6 +20,7 @@ describe("detalleDe", () => {
     expect(detalleDe("ls", { path: "/" })).toBe("/");
     expect(detalleDe("glob", { pattern: "*.xne", path: "/" })).toBe("*.xne");
     expect(detalleDe("grep", { pattern: "realizarLogin", path: "/", glob: "*.js" })).toBe("realizarLogin");
+    expect(detalleDe("regex_search", { pattern: "function\\s+(MT\\w+)", path: "/", glob: "*.js" })).toBe("function\\s+(MT\\w+)");
   });
 
   it("el contenido y los strings de edición NUNCA salen, aunque estén en los argumentos", () => {

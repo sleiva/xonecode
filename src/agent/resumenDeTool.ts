@@ -19,6 +19,7 @@ const CAMPO_SEGURO: Record<string, string> = {
   ls: "path",
   glob: "pattern",
   grep: "pattern",
+  regex_search: "pattern",
 };
 
 /**
