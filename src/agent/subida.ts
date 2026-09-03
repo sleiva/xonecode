@@ -16,7 +16,7 @@
 import { appendFileSync, mkdirSync, readFileSync, statSync, existsSync, readdirSync } from "node:fs";
 import { dirname, join } from "node:path";
 import type { CloudStudioPort } from "../core/ports.js";
-import type { OperacionOmitida, PoliticaDeAprobacion } from "../core/cloudstudio.js";
+import type { EstadoDeSync, OperacionOmitida, PoliticaDeAprobacion } from "../core/cloudstudio.js";
 import { planDeSubida } from "../core/planDeSubida.js";
 import { NOMBRE_CARPETA } from "./configEnDisco.js";
 import { cambiosPendientes, marcarSubido } from "./gitSync.js";
@@ -70,11 +70,37 @@ function fuentesXne(raiz: string): Set<string> {
   return salida;
 }
 
-function descargadosDe(raiz: string): Set<string> {
+/**
+ * Lo que la descarga trajo DE VERDAD, según `sync.json` — **y solo si ese `sync.json` es
+ * de ESTE proyecto y de ESTA rama**.
+ *
+ * `descargados` es la única pata del candado de borrado que puede MENTIR: el manifiesto y
+ * el diff se calculan en el momento, pero esto es un fichero en disco que sobrevive a
+ * cambios de configuración. Un `/connect-studio` a otro proyecto, o un cambio de rama
+ * origen, deja el `sync.json` de la descarga ANTERIOR ahí quieto; sus rutas afirmarían
+ * «esto lo bajamos» sobre un proyecto en el que nunca entramos, y con eso el candado
+ * autorizaría borrados en el Studio del cliente equivocado.
+ *
+ * `EstadoDeSync` ya guarda proyecto y rama: se comparan, y si no casan se cae a conjunto
+ * vacío —que prohíbe TODO borrado— en vez de a uno inventado. Fail-closed, como el resto.
+ */
+function descargadosDe(
+  raiz: string,
+  proyecto: { id: string; nombre: string },
+  rama: string,
+  informar: (texto: string) => void
+): Set<string> {
   const ruta = rutaSyncJson(raiz);
   if (!existsSync(ruta)) return new Set();
   try {
-    const estado = JSON.parse(readFileSync(ruta, "utf8")) as { descargados?: string[] };
+    const estado = JSON.parse(readFileSync(ruta, "utf8")) as Partial<EstadoDeSync>;
+    if (estado.proyecto?.id !== proyecto.id || estado.rama !== rama) {
+      informar(
+        "el sync.json en disco no es de este proyecto/rama: no se borrará nada en Studio " +
+          "hasta que vuelvas a bajar con /sync bajar\n"
+      );
+      return new Set();
+    }
     return new Set(estado.descargados ?? []);
   } catch {
     // Sin manifiesto legible no se puede afirmar qué se bajó, y sin eso el candado no
@@ -95,7 +121,7 @@ export async function subir(opciones: OpcionesDeSubida): Promise<InformeDeSubida
 
   const { operaciones: plan, omitidas } = planDeSubida({
     cambios,
-    descargados: descargadosDe(raiz),
+    descargados: descargadosDe(raiz, proyecto, ramaOrigen, informar),
     tamanos,
     fuentesXne: fuentesXne(raiz),
   });

@@ -226,7 +226,11 @@ describe("subir", () => {
     await prepararRepo(raiz, "master");
 
     mkdirSync(dirname(rutaSyncJson(raiz)), { recursive: true });
+    // El `sync.json` lleva proyecto y rama porque el candado los COMPRUEBA: uno de otro
+    // proyecto no cuenta (ver el test de más abajo).
     writeFileSync(rutaSyncJson(raiz), JSON.stringify({
+      proyecto: { id: "1", nombre: "AppForTest" },
+      rama: "master",
       descargados: descargado ? ["viejo.js"] : [],
     }));
 
@@ -276,7 +280,11 @@ describe("subir", () => {
     // El binario SÍ se descargó: el candado no lo protege, así que sin la escapatoria
     // este borrado se emitiría de verdad.
     mkdirSync(dirname(rutaSyncJson(raiz)), { recursive: true });
-    writeFileSync(rutaSyncJson(raiz), JSON.stringify({ descargados: ["app.xml", "icons/viejo.png"] }));
+    writeFileSync(rutaSyncJson(raiz), JSON.stringify({
+      proyecto: { id: "1", nombre: "AppForTest" },
+      rama: "master",
+      descargados: ["app.xml", "icons/viejo.png"],
+    }));
 
     writeFileSync(join(raiz, "app.xml"), "<app cambiada/>");
     execFileSync("git", ["rm", "-q", "icons/viejo.png"], { cwd: raiz });
@@ -310,6 +318,51 @@ describe("subir", () => {
     // 5. LA PRUEBA DURA: la ref avanzó, así que el siguiente `/sync` no reintenta lo
     //    imposible. Antes se quedaba clavada y el atasco era permanente.
     expect(await cambiosPendientes(raiz, "master")).toEqual([]);
+  });
+
+  it("un sync.json de OTRO proyecto no vale como candado: no se borra nada", async () => {
+    // `descargados` es la única pata del candado que puede MENTIR: es un fichero en
+    // disco que sobrevive a un `/connect-studio` a otro proyecto o a un cambio de rama
+    // origen. Sus rutas afirmarían «esto lo bajamos» sobre un Studio en el que nunca
+    // entramos, y el candado autorizaría borrados en el proyecto del cliente equivocado.
+    const raiz = await proyectoConBorrado(true);
+    // Mismo contenido, otro proyecto: solo cambia la identidad, no lo que dice haber bajado.
+    writeFileSync(rutaSyncJson(raiz), JSON.stringify({
+      proyecto: { id: "OTRO", nombre: "OtraApp" },
+      rama: "master",
+      descargados: ["viejo.js"],
+    }));
+
+    const puerto = new CloudStudioEnMemoria({ rama: "master", textos: { "app.xml": "<app/>" } });
+    await puerto.abrir("AppForTest");
+    const avisos: string[] = [];
+    const informe = await subir({
+      puerto, raiz, ramaOrigen: "master", ramaTrabajo: "t",
+      proyecto: { id: "1", nombre: "AppForTest" }, politicaDeAprobacion: autorizaSiempre,
+      informar: (t) => avisos.push(t),
+    });
+
+    expect(puerto.escrituras.some((e) => e.ruta === "viejo.js")).toBe(false);
+    expect(informe.ok).toEqual(["app.xml"]);
+    expect(avisos.join("")).toMatch(/no es de este proyecto/);
+  });
+
+  it("un sync.json de otra RAMA tampoco vale", async () => {
+    const raiz = await proyectoConBorrado(true);
+    writeFileSync(rutaSyncJson(raiz), JSON.stringify({
+      proyecto: { id: "1", nombre: "AppForTest" },
+      rama: "dev",
+      descargados: ["viejo.js"],
+    }));
+
+    const puerto = new CloudStudioEnMemoria({ rama: "master", textos: { "app.xml": "<app/>" } });
+    await puerto.abrir("AppForTest");
+    await subir({
+      puerto, raiz, ramaOrigen: "master", ramaTrabajo: "t",
+      proyecto: { id: "1", nombre: "AppForTest" }, politicaDeAprobacion: autorizaSiempre,
+    });
+
+    expect(puerto.escrituras.some((e) => e.ruta === "viejo.js")).toBe(false);
   });
 
   describe("politicaDeAprobacion", () => {
