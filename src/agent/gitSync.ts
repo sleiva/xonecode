@@ -108,7 +108,13 @@ const CLASE: Record<string, CambioLocal["clase"]> = {
 
 /** Lo que hay en local y no está subido: el diff contra la ref de seguimiento. */
 export async function cambiosPendientes(raiz: string, rama: string): Promise<CambioLocal[]> {
+  // `core.quotePath` (por omisión `true`) escapa a octal cualquier byte >= 0x80: una
+  // ruta como «ñu.xne» saldría como `"\303\261u.xne"`. El candado de `planDeSubida`
+  // compara estas rutas, tal cual, contra las de `descargados` (que SÍ vienen en UTF-8
+  // sin comillas, de `extraerZipBase64`/el manifiesto) — con la ruta citada nunca
+  // coinciden, y un proyecto XOne en castellano tiene nombres así a diario.
   const { stdout } = await git(raiz, [
+    "-c", "core.quotePath=false",
     "diff", "--name-status", `refs/remotes/${REMOTO}/${rama}`, "--", ".",
   ]);
   return stdout

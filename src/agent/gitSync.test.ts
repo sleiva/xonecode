@@ -80,4 +80,18 @@ describe("cambiosPendientes y marcarSubido", () => {
     writeFileSync(join(raiz, ".xonecode", "memoria.md"), "# cambiada");
     expect(await cambiosPendientes(raiz, "master")).toEqual([]);
   });
+
+  it("devuelve las rutas no-ASCII sin citar (core.quotePath=false)", async () => {
+    // Medido: por omisión git cita a octal cualquier byte >= 0x80 («ñu.xne» sale como
+    // `"\303\261u.xne"`). `descargados` (de `extraerZipBase64`/el manifiesto) guarda la
+    // ruta en UTF-8 sin comillas: si esta función no desactiva el citado, el candado de
+    // `planDeSubida` nunca reconoce el fichero y el borrado queda bloqueado para siempre.
+    const raiz = proyecto();
+    await prepararRepo(raiz, "master");
+    writeFileSync(join(raiz, "ñu.xne"), "x");
+    git(raiz, "add", "-A");
+    git(raiz, "-c", "user.email=t@t", "-c", "user.name=t", "commit", "-qm", "ñu");
+
+    expect(await cambiosPendientes(raiz, "master")).toEqual([{ clase: "nuevo", ruta: "ñu.xne" }]);
+  });
 });
