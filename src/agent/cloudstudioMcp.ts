@@ -321,6 +321,30 @@ function textoDeErrorDeTool(resultado: unknown): string {
 }
 
 /**
+ * Envuelve un `callTool` crudo del SDK en la función `invocar` que espera
+ * `clienteCloudStudio`. Separada de `sesionCloudStudio` para poder probar la conversión
+ * `isError → excepción` con un `callTool` falso, sin tocar OAuth ni el transporte: es la
+ * pieza de la que depende toda la reapertura de sesión en `agent/cloudstudioClient.ts`,
+ * y una implementación que se limitara a `return callTool(...)` pasaría los tests de
+ * `clienteCloudStudio` igual de mal que los de aquí bien, si esto no se probara aparte.
+ */
+export function invocarSobre(
+  callTool: (peticion: { name: string; arguments: Record<string, unknown> }) => Promise<unknown>,
+): InvocarMcp {
+  return async (nombre, argumentos) => {
+    const resultado = await callTool({ name: nombre, arguments: argumentos });
+    // El SDK MCP no lanza cuando la TOOL falla (`isError: true` es una respuesta RPC
+    // válida, con el motivo dentro de `content`); sin convertirlo en excepción, «No
+    // project is open» nunca llegaría a un catch y `clienteCloudStudio` no podría
+    // reabrir la sesión.
+    if (typeof resultado === "object" && resultado !== null && (resultado as { isError?: boolean }).isError) {
+      throw new Error(textoDeErrorDeTool(resultado));
+    }
+    return resultado;
+  };
+}
+
+/**
  * Abre (o reutiliza) OAuth y conecta el transporte MCP. Es la base común de
  * `sesionCloudStudio` y `conectarCloudStudio`: la segunda necesita además
  * `listTools()`, que no es una tool invocable y por eso no cabe en `{ invocar, cerrar }`.
@@ -381,15 +405,7 @@ async function abrirCliente(
 export async function sesionCloudStudio(urlTexto: string, opciones: OpcionesCloudStudio = {}): Promise<SesionCloudStudio> {
   const { cliente, cerrar } = await abrirCliente(urlTexto, opciones);
   return {
-    invocar: async (nombre, argumentos) => {
-      const resultado = await cliente.callTool({ name: nombre, arguments: argumentos });
-      // El SDK MCP no lanza cuando la TOOL falla (`isError: true` es una respuesta RPC
-      // válida, con el motivo dentro de `content`); sin convertirlo en excepción, «No
-      // project is open» nunca llegaría a un catch y `clienteCloudStudio` no podría
-      // reabrir la sesión.
-      if ((resultado as { isError?: boolean }).isError) throw new Error(textoDeErrorDeTool(resultado));
-      return resultado;
-    },
+    invocar: invocarSobre((peticion) => cliente.callTool(peticion)),
     cerrar,
   };
 }

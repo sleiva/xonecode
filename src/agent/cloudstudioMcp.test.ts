@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { herramientaDeProyectos, proyectosDeResultado } from "./cloudstudioMcp.js";
+import { herramientaDeProyectos, invocarSobre, proyectosDeResultado } from "./cloudstudioMcp.js";
 
 describe("proyectosDeResultado", () => {
   it("extrae identidades de una respuesta estructurada sin conservar el resto", () => {
@@ -26,6 +26,43 @@ describe("proyectosDeResultado", () => {
     expect(proyectosDeResultado({
       content: [{ type: "text", text: '{"projects":[{"id":"a","name":"Ventas"}]}' }],
     })).toEqual([{ id: "a", nombre: "Ventas" }]);
+  });
+});
+
+describe("invocarSobre", () => {
+  // El SDK MCP no lanza cuando una tool falla: `isError: true` es una respuesta RPC
+  // válida, con el motivo dentro de `content`. Sin esta conversión, «No project is
+  // open» nunca llegaría a un catch y `clienteCloudStudio` no podría reabrir la
+  // sesión — un `invocarSobre` que se limitara a `return callTool(...)` pasaría los
+  // dos primeros tests igual, pero jamás rechazaría en el tercero.
+  it("convierte isError en una excepción con el texto del servidor", async () => {
+    const invocar = invocarSobre(async () => ({
+      isError: true,
+      content: [{ type: "text", text: "No project is open. Use the studio_open_project tool" }],
+    }));
+    await expect(invocar("studio_get_file", { filePath: "a.js" }))
+      .rejects.toThrow(/No project is open/);
+  });
+
+  it("un isError sin texto no deja el mensaje vacío", async () => {
+    const invocar = invocarSobre(async () => ({ isError: true, content: [] }));
+    await expect(invocar("studio_get_context", {})).rejects.toThrow(/./);
+  });
+
+  it("una respuesta sin isError se devuelve tal cual, sin tocarla", async () => {
+    const bruto = { content: [{ type: "text", text: "contenido" }] };
+    const invocar = invocarSobre(async () => bruto);
+    expect(await invocar("studio_get_file", { filePath: "a.js" })).toBe(bruto);
+  });
+
+  it("pasa nombre y argumentos al callTool subyacente sin transformarlos", async () => {
+    const peticiones: unknown[] = [];
+    const invocar = invocarSobre(async (peticion) => {
+      peticiones.push(peticion);
+      return { content: [] };
+    });
+    await invocar("studio_open_project", { project: "AppForTest" });
+    expect(peticiones).toEqual([{ name: "studio_open_project", arguments: { project: "AppForTest" } }]);
   });
 });
 
