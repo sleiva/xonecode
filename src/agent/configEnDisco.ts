@@ -188,7 +188,13 @@ export function guardarModoDeProyecto(
   return { ruta, modo };
 }
 
-/** Guarda solo el endpoint MCP: OAuth nunca vive dentro del proyecto. */
+/**
+ * Guarda solo el endpoint MCP: OAuth nunca vive dentro del proyecto.
+ *
+ * Fusiona sobre `cloudstudio`, no lo reemplaza entero: un `/connect-studio` posterior
+ * (nueva URL, o la misma) no puede borrar en silencio la `rama` o el `proyecto` que ya
+ * se habían fijado — la próxima sincronización compararía contra la rama equivocada.
+ */
 export function guardarCloudStudioDeProyecto(
   raiz: string,
   url: string,
@@ -196,7 +202,8 @@ export function guardarCloudStudioDeProyecto(
 ): { ruta: string; url: string; scopes: string[] } {
   const ruta = rutaConfigDeProyecto(raiz);
   const base = leerObjetoCrudoOAbortar(ruta);
-  const fusionado = { ...base, cloudstudio: { url, scopes: [...scopes] } };
+  const cloudstudio = esObjeto(base.cloudstudio) ? { ...base.cloudstudio } : {};
+  const fusionado = { ...base, cloudstudio: { ...cloudstudio, url, scopes: [...scopes] } };
   escribirAtomico(ruta, JSON.stringify(fusionado, null, 2) + "\n");
   return { ruta, url, scopes: [...scopes] };
 }

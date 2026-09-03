@@ -256,6 +256,28 @@ it("guarda únicamente el endpoint MCP de CloudStudio dentro del proyecto", () =
   rmSync(p, { recursive: true, force: true });
 });
 
+it("guardarCloudStudioDeProyecto no borra la rama al reconectar", () => {
+  const p = mkdtempSync(join(tmpdir(), "xc-cfg-"));
+  const ruta = rutaConfigDeProyecto(p);
+  mkdirSync(join(p, NOMBRE_CARPETA), { recursive: true });
+  writeFileSync(ruta, JSON.stringify({ tema: "xone" }));
+
+  guardarCloudStudioDeProyecto(p, "https://mcp.xonewebstudio.com/mcp", ["openid", "mcp.read"]);
+  guardarRamaDeProyecto(p, "develop");
+
+  // Reconectar (mismo endpoint, u otro) es lo que antes reemplazaba `cloudstudio`
+  // ENTERO y se llevaba la rama por delante en silencio.
+  guardarCloudStudioDeProyecto(p, "https://mcp.xonewebstudio.com/mcp", ["openid"]);
+
+  const guardado = JSON.parse(readFileSync(ruta, "utf8"));
+  expect(guardado.cloudstudio).toEqual({
+    url: "https://mcp.xonewebstudio.com/mcp",
+    scopes: ["openid"],
+    rama: "develop",
+  });
+  rmSync(p, { recursive: true, force: true });
+});
+
 it("guardarModelosDeProyecto fusiona sin perder lo que ya había", () => {
   const raiz = mkdtempSync(join(tmpdir(), "xc-cfg-"));
   mkdirSync(join(raiz, ".xonecode"), { recursive: true });

@@ -60,10 +60,10 @@ describe("asistenteDeModelo", () => {
     expect(escrito.join("")).toMatch(/cancelad/i);
   });
 
-  it("un proveedor sin credencial la pide y la guarda por guardarCredencial", async () => {
-    const { consola } = consolaFalsa([]);
+  it("un proveedor sin credencial la pide, la guarda por guardarCredencial y lo dice", async () => {
+    const { consola, escrito } = consolaFalsa([]);
     const leerSecreto = vi.fn(async () => "clave-de-openai");
-    const guardarCredencial = vi.fn();
+    const guardarCredencial = vi.fn(() => ({ ruta: "~/.xonecode/auth.json" }));
     const guardar = vi.fn((_papel: string, id: string) => ({ ruta: "~/.xonecode/config.json", id }));
     await asistenteDeModelo(
       {
@@ -81,8 +81,41 @@ describe("asistenteDeModelo", () => {
 
     expect(leerSecreto).toHaveBeenCalledWith("clave de openai: ");
     expect(guardarCredencial).toHaveBeenCalledWith("openai", "clave-de-openai");
+    // Confirma QUÉ se guardó y DÓNDE, igual que `/provider` — no en silencio.
+    expect(escrito.join("")).toMatch(/credencial de openai guardada en ~\/\.xonecode\/auth\.json/);
     expect(guardar.mock.calls.map((c) => c[0])).toEqual(["rapido", "trabajo", "afilado"]);
     expect(guardar.mock.calls[0]![1]).toBe("openai/gpt-5");
+  });
+
+  it("cancelar en el paso de MODELO tras guardar una credencial de pago: la credencial ya quedó, y se dice", async () => {
+    const { consola, escrito } = consolaFalsa([]);
+    const leerSecreto = vi.fn(async () => "clave-de-openai");
+    const guardarCredencial = vi.fn(() => ({ ruta: "~/.xonecode/auth.json" }));
+    const guardar = vi.fn();
+    await asistenteDeModelo(
+      {
+        ...consola,
+        leerSecreto,
+        guardarModeloGlobal: guardar,
+        catalogoModelos: new CatalogoModelosEnMemoria({
+          openai: [{ proveedor: "openai", id: "gpt-5", nombre: "GPT 5" }],
+        }),
+        // Elige "openai" en el paso de PROVEEDOR y cancela (undefined) en el de MODELO.
+        seleccionar: async ({ titulo }: { titulo: string }) =>
+          titulo === "Proveedor de modelos" ? "openai" : undefined,
+      } as never,
+      { origenDeTrabajo: "omision", hayCredencial: () => false, guardarCredencial }
+    );
+
+    // La credencial SÍ se guardó (hace falta para poder listar el catálogo de pago)...
+    expect(guardarCredencial).toHaveBeenCalledWith("openai", "clave-de-openai");
+    // ...pero ningún papel se reasignó de modelo: cancelar en MODELO no elige nada.
+    expect(guardar).not.toHaveBeenCalled();
+    const texto = escrito.join("");
+    // Y el aviso final de «cancelado» no es la única frase: antes se dijo la verdad
+    // sobre la credencial, así que «cancelado» no puede leerse como «no pasó nada».
+    expect(texto).toMatch(/credencial de openai guardada en ~\/\.xonecode\/auth\.json/);
+    expect(texto).toMatch(/cancelad/i);
   });
 
   it("ollama nunca pide credencial aunque hayCredencial diga que falta", async () => {
