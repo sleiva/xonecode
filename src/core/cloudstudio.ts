@@ -45,6 +45,15 @@ export interface EstadoDeSync {
   descargados: string[];
   /** Por qué falló el ZIP, cuando `via` es `parcial`. Es la pista para arreglarlo. */
   motivo?: string;
+  /**
+   * El listado de la raíz llegó truncado al enumerar el remoto (`enumerarRemoto`).
+   *
+   * El manifiesto es lo que sostiene el candado de borrado: si vino incompleto, puede
+   * faltarle una ruta que sí existe en Studio, y esa ausencia no se puede demostrar
+   * después. Se declara aquí, en el propio `sync.json`, en vez de vivir solo en un aviso
+   * de consola que nadie vuelve a leer una vez pasa el turno.
+   */
+  raizTruncada?: boolean;
 }
 
 /** Una operación de subida ya decidida. La ejecuta `agent/subida.ts`. */
