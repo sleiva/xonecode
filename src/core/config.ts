@@ -35,6 +35,8 @@ export interface ConfigDeFichero {
     scopes?: string[];
     /** Identidad no sensible del proyecto remoto elegido. */
     proyecto?: { id: string; nombre: string };
+    /** La rama ORIGEN: de la que se baja y contra la que se compara. */
+    rama?: string;
   };
   ollama?: { baseUrl?: string };
   /** Topes de ventana de contexto fijados a mano, por id «proveedor/modelo». */
@@ -205,14 +207,31 @@ export function validar(
             severidad: "aviso",
           });
         }
+        const ramaBruta = valor.rama;
+        const rama = typeof ramaBruta === "string" && ramaBruta.trim() !== "" ? ramaBruta : undefined;
+        if (ramaBruta !== undefined && rama === undefined) {
+          avisos.push({
+            texto: `«${ruta}»: «cloudstudio.rama» debe ser un nombre no vacío; se descarta.`,
+            severidad: "aviso",
+          });
+        }
         if (scopes !== undefined && (!Array.isArray(scopes) || !scopes.every((scope) => typeof scope === "string" && scope.trim() !== ""))) {
           avisos.push({
             texto: `«${ruta}»: «cloudstudio.scopes» debe ser una lista de permisos no vacíos; se descarta.`,
             severidad: "aviso",
           });
-          config.cloudstudio = { url: url.toString(), ...(proyecto === undefined ? {} : { proyecto }) };
+          config.cloudstudio = {
+            url: url.toString(),
+            ...(proyecto === undefined ? {} : { proyecto }),
+            ...(rama === undefined ? {} : { rama }),
+          };
         } else {
-          config.cloudstudio = { url: url.toString(), ...(scopes === undefined ? {} : { scopes: [...scopes] }), ...(proyecto === undefined ? {} : { proyecto }) };
+          config.cloudstudio = {
+            url: url.toString(),
+            ...(scopes === undefined ? {} : { scopes: [...scopes] }),
+            ...(proyecto === undefined ? {} : { proyecto }),
+            ...(rama === undefined ? {} : { rama }),
+          };
         }
       } catch {
         avisos.push({

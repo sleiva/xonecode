@@ -141,6 +141,38 @@ export function guardarTemaDeProyecto(raiz: string, tema: string): { ruta: strin
   return { ruta, tema };
 }
 
+/** El modelo que este proyecto usa, sea cual sea el global. Nunca lleva claves. */
+export function guardarModelosDeProyecto(
+  raiz: string,
+  papel: Papel,
+  id: string,
+): { ruta: string; id: string } {
+  parsear(id);
+  const ruta = rutaConfigDeProyecto(raiz);
+  const base = leerObjetoCrudoOAbortar(ruta);
+  const modelos = esObjeto(base.modelos) ? { ...base.modelos } : {};
+  const fusionado = { ...base, modelos: { ...modelos, [papel]: id } };
+  escribirAtomico(ruta, JSON.stringify(fusionado, null, 2) + "\n");
+  return { ruta, id };
+}
+
+/**
+ * La rama ORIGEN del proyecto: de la que se baja y contra la que se compara.
+ * Va dentro de `cloudstudio`, junto a la URL y al proyecto, porque es identidad del
+ * remoto y no una preferencia del usuario.
+ */
+export function guardarRamaDeProyecto(
+  raiz: string,
+  rama: string,
+): { ruta: string; rama: string } {
+  const ruta = rutaConfigDeProyecto(raiz);
+  const base = leerObjetoCrudoOAbortar(ruta);
+  const cloudstudio = esObjeto(base.cloudstudio) ? { ...base.cloudstudio } : {};
+  const fusionado = { ...base, cloudstudio: { ...cloudstudio, rama } };
+  escribirAtomico(ruta, JSON.stringify(fusionado, null, 2) + "\n");
+  return { ruta, rama };
+}
+
 /**
  * El modo pertenece al proyecto, no a la cuenta: una carpeta puede trabajarse sin red
  * aunque la anterior se abriera desde CloudStudio. OAuth queda siempre fuera de aquí.
