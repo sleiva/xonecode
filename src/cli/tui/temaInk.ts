@@ -81,8 +81,9 @@ const XONE: TemaInk = {
   borde: "#27272a",
   fondoInput: "#1e1e1e",
   fondoCola: "#090909",
-  fondoSidebar: "#101820",
-  marca: "#00396f",
+  fondoSidebar: "#111315",
+  // La cabecera conserva identidad XOne, pero no tiñe el panel entero de azul.
+  marca: "#00414a",
   fase: "#e0a458",
   tenue: "#52525b",
 };

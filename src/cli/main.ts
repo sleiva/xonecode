@@ -699,7 +699,11 @@ export async function main(argv: string[]): Promise<number> {
         undefined,
         !argv.includes("--no-tui"),
         quiereRaton(argv),
-        { catalogoModelos, guardarModeloGlobal }
+        {
+          catalogoModelos,
+          guardarModeloGlobal,
+          conectarCloudStudio: (url, informar) => conectarCloudStudio(url, { informar }),
+        }
       );
     }
     if (comando === "--help" || comando === "-h") {

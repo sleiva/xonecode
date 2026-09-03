@@ -33,7 +33,7 @@ describe("temaInk", () => {
     }
     expect(temaInk.acento).toBe("#47abd6");
     expect(temaInk.prompt).toBe("#2ac4ea");
-    expect(temaInk.marca).toBe("#00396f");
+    expect(temaInk.marca).toBe("#00414a");
     expect(temaInk.fase).toBe("#e0a458");
   });
 
@@ -48,7 +48,7 @@ describe("temaInk", () => {
     // no un token semántico compartido con stdio.
     expect(temaInk.fondoSidebar).toMatch(/^#[0-9a-f]{6}$/);
     expect(temaInk.fondoSidebar).not.toBe(temaInk.fondoInput);
-    expect(temaInk.fondoSidebar).toBe("#101820");
+    expect(temaInk.fondoSidebar).toBe("#111315");
   });
 
   it("reserva negro para las peticiones en cola", () => {
