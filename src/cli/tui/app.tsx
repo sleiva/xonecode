@@ -22,10 +22,19 @@ type Store = ReturnType<typeof crearStore>;
  * Igual que `Transcript` hace con su propio `useState`, pero reutilizable para la
  * ranura de la vista (ocupado/pregunta/modal).
  */
-function useSincronizado<T extends object>(obtener: () => T, suscribir: (f: () => void) => void): T {
+function useSincronizado<T extends object>(
+  obtener: () => T,
+  suscribir: (f: () => void) => () => void
+): T {
   const [valor, setValor] = useState<T>(obtener);
   useEffect(() => {
-    suscribir(() => setValor({ ...obtener() }));
+    const sincronizar = (): void => setValor({ ...obtener() });
+    const baja = suscribir(sincronizar);
+    // `render()` devuelve antes de que React instale este efecto. El asistente de
+    // arranque puede abrir un selector exactamente en ese intervalo; sin esta lectura
+    // posterior, la ranura ya contiene el selector pero nadie vuelve a pintar la App.
+    sincronizar();
+    return baja;
   }, [obtener, suscribir]);
   return valor;
 }

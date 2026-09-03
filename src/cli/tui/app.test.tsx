@@ -225,6 +225,24 @@ describe("la maqueta de la App", () => {
     expect(responderSelector).toHaveBeenCalledWith("pro");
   });
 
+  it("pinta un selector abierto justo al montar, antes de que React instale sus efectos", async () => {
+    const m = montar({});
+    // Es la misma carrera que el asistente inicial: `render()` ya devolvió, pero su
+    // useEffect aún no ha suscrito la App a la ranura.
+    m.vista.mutar({
+      selector: {
+        titulo: "Elige el modo de trabajo",
+        opciones: [{ id: "offline", etiqueta: "Offline", detalle: "Trabajar localmente" }],
+        responder: () => {},
+      },
+    });
+    await esperar();
+    const frame = m.stdout.ultimo();
+    m.instancia.unmount();
+    expect(frame).toContain("Elige el modo de trabajo");
+    expect(frame).toContain("Offline");
+  });
+
   it("con el transcript lleno y colchón vivo el cursor sigue en pantalla", async () => {
     const m = montar({});
     await esperar();
