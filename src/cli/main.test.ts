@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, afterEach } from "vitest";
+import { describe, it, expect, vi, afterEach, beforeEach } from "vitest";
 import { mkdtempSync, rmSync, existsSync, readFileSync, mkdirSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, basename } from "node:path";
@@ -110,6 +110,25 @@ function raizTemporal(): string {
   temporales.push(r);
   return r;
 }
+/**
+ * AISLAMIENTO DEL ENTORNO. `main()` y `entrarEnConsola()` resuelven los modelos por
+ * `cargar()`, que lee `~/.xonecode/config.json` con `homedir()` — o sea, `$HOME`. Sin
+ * esta guarda, la suite lee la configuración REAL de quien la corre y los tests que
+ * afirman sobre el modelo por omisión salen en rojo en cualquier máquina con un
+ * `/modelo` global puesto (medido: con `gemini/…` en el global, 2 tests fallaban).
+ * «`npm test` no puede necesitar una clave, una conexión ni el simulador» es el
+ * invariante que sostiene el diseño de puertos: un test que depende del disco del
+ * usuario lo rompe igual que uno que depende de la red.
+ *
+ * Se apunta HOME a un temporal VACÍO (no a uno con config): así el caso por omisión es
+ * el que se prueba, y los tests que necesitan un global se fabrican el suyo encima.
+ */
+beforeEach(() => {
+  process.env.HOME = raizTemporal();
+  delete process.env.XONECODE_MODELO;
+  delete process.env.OPENAI_API_KEY;
+});
+
 afterEach(() => {
   for (const r of temporales) rmSync(r, { recursive: true, force: true });
   temporales = [];
