@@ -934,7 +934,7 @@ export const COMANDOS: Record<string, { descripcion: string; manejador: Manejado
         const porque =
           resultado.accion === "subir"
             ? "commitea antes de subir"
-            : "la descarga sobrescribe el disco; commitea antes de bajar";
+            : "la descarga sobrescribe el disco; commitea antes de bajar (o guarda una copia, si no llevas git)";
         consola.escribir(`hay cambios sin commitear (${resultado.pendientes.join(", ")}); ${porque}\n`);
         return { seguir: true };
       }

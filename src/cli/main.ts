@@ -502,8 +502,10 @@ function cloudStudioDeProyecto(
  * aplanadas) y DESPUÉS `prepararRepo`. Al revés, git vería esos `.xml` como borrados y la
  * primera subida los borraría en Studio.
  *
- * «subir» se niega con el árbol sucio ANTES de abrir sesión ni tocar CloudStudio: se sube
- * el estado de un commit, no un borrador, para que mover la ref signifique algo.
+ * Las dos direcciones se niegan con el árbol sucio ANTES de abrir sesión ni tocar
+ * CloudStudio: «subir» porque se sube el estado de un commit y no un borrador (para que
+ * mover la ref signifique algo), y «bajar» porque la descarga SOBRESCRIBE el disco y el
+ * baseline se construye después — sin un commit debajo, el trabajo local no se recupera.
  */
 export function crearSincronizador(
   piezas: PiezasDeSincronizacion = PIEZAS_DE_SINCRONIZACION_REALES
