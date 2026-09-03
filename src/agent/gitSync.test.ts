@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { execFileSync } from "node:child_process";
-import { mkdtempSync, writeFileSync, mkdirSync, readFileSync, existsSync } from "node:fs";
+import { mkdtempSync, writeFileSync, mkdirSync, readFileSync, existsSync, unlinkSync, symlinkSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { prepararRepo, cambiosPendientes, marcarSubido, REMOTO } from "./gitSync.js";
@@ -111,5 +111,16 @@ describe("cambiosPendientes y marcarSubido", () => {
       { clase: "borrado", ruta: "A.xne" },
       { clase: "nuevo", ruta: "B.xne" },
     ]);
+  });
+
+  it("un cambio de TIPO (fichero -> symlink) cuenta como modificado, no se pierde", async () => {
+    // Sale como `T` en `--name-status` (comprobado a mano): no es alta ni baja, así que
+    // se sube como si fuera contenido cambiado — ver la regla en `agent/git.ts`.
+    const raiz = proyecto();
+    await prepararRepo(raiz, "master");
+    unlinkSync(join(raiz, "app.xml"));
+    symlinkSync("otro-sitio", join(raiz, "app.xml"));
+
+    expect(await cambiosPendientes(raiz, "master")).toEqual([{ clase: "modificado", ruta: "app.xml" }]);
   });
 });

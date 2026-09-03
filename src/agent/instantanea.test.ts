@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { mkdtempSync, writeFileSync, rmSync, mkdirSync } from "node:fs";
+import { mkdtempSync, writeFileSync, rmSync, mkdirSync, unlinkSync, symlinkSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { execFile } from "node:child_process";
@@ -80,6 +80,19 @@ describe("instantánea por árbol de git", () => {
     const dif = await i.diff();
     expect(dif).toContain("app.xml");
     expect(dif).toContain("+<app cambiado/>");
+    rmSync(d, { recursive: true, force: true });
+  });
+
+  it("un cambio de TIPO (fichero -> symlink) cuenta como modificado, igual que en gitSync", async () => {
+    // `diff-tree` lo marca como `T`: no es alta ni baja, así que entra por la misma regla
+    // que `gitSync.ts` (`agent/git.ts`, `claseDeCambio`) — antes esto ya salía "modificado"
+    // por la omisión `?? "modificado"`, y ahora sigue igual porque el módulo compartido usa
+    // la misma regla, no una nueva.
+    const d = await repo(false);
+    const i = await tomarInstantanea(d, GIT);
+    unlinkSync(join(d, "app.xml"));
+    symlinkSync("otro-sitio", join(d, "app.xml"));
+    expect(await i.cambios()).toContainEqual({ ruta: "app.xml", clase: "modificado" });
     rmSync(d, { recursive: true, force: true });
   });
 

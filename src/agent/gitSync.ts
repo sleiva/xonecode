@@ -8,21 +8,15 @@
  */
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
-import { appendFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { appendFileSync, existsSync, mkdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import type { CambioLocal } from "../core/planDeSubida.js";
+import { indicePrivado, claseDeCambio } from "./git.js";
 
 const ejecutar = promisify(execFile);
 
 export const REMOTO = "cloudstudio";
 const EXCLUSION = ".xonecode/";
-
-/** Índice temporal propio: mismo patrón que `agent/instantanea.ts`, y por lo mismo. */
-function indicePrivado(): { ruta: string; limpiar: () => void } {
-  const dir = mkdtempSync(join(tmpdir(), "xonecode-sync-"));
-  return { ruta: join(dir, "git.index"), limpiar: () => rmSync(dir, { recursive: true, force: true }) };
-}
 
 const git = (raiz: string, args: string[], env?: NodeJS.ProcessEnv) =>
   ejecutar("git", args, { cwd: raiz, env: env ?? process.env, maxBuffer: 32 * 1024 * 1024 });
@@ -65,7 +59,7 @@ export async function prepararRepo(raiz: string, ramaOrigen: string): Promise<st
   await git(raiz, ["config", `branch.${ramaOrigen}.remote`, REMOTO]);
   await git(raiz, ["config", `branch.${ramaOrigen}.merge`, `refs/heads/${ramaOrigen}`]);
 
-  const idx = indicePrivado();
+  const idx = indicePrivado("sync");
   try {
     const env = { ...process.env, GIT_INDEX_FILE: idx.ruta };
     await git(raiz, ["add", "-A", "--", "."], env);
@@ -102,10 +96,6 @@ export async function prepararRepo(raiz: string, ramaOrigen: string): Promise<st
   }
 }
 
-const CLASE: Record<string, CambioLocal["clase"]> = {
-  A: "nuevo", D: "borrado", M: "modificado", R: "modificado", C: "modificado", T: "modificado",
-};
-
 /** Lo que hay en local y no está subido: el diff contra la ref de seguimiento. */
 export async function cambiosPendientes(raiz: string, rama: string): Promise<CambioLocal[]> {
   // `core.quotePath` (por omisión `true`) escapa a octal cualquier byte >= 0x80: una
@@ -127,9 +117,10 @@ export async function cambiosPendientes(raiz: string, rama: string): Promise<Cam
     .filter((linea) => linea.trim() !== "")
     .flatMap((linea) => {
       const [marca, ...resto] = linea.split("\t");
-      const clase = CLASE[marca!.charAt(0)];
       const ruta = resto[resto.length - 1];
-      return clase === undefined || ruta === undefined ? [] : [{ clase, ruta }];
+      // `claseDeCambio` nunca devuelve `undefined` (ver `agent/git.ts`): una marca que no
+      // reconocemos también se cuenta, nunca se pierde en silencio del plan de subida.
+      return ruta === undefined ? [] : [{ clase: claseDeCambio(marca!), ruta }];
     })
     .sort((a, b) => a.ruta.localeCompare(b.ruta));
 }
