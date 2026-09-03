@@ -9,7 +9,7 @@
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { appendFileSync, existsSync, mkdirSync, readFileSync } from "node:fs";
-import { join } from "node:path";
+import { dirname, resolve } from "node:path";
 import type { CambioLocal } from "../core/planDeSubida.js";
 import { indicePrivado, claseDeCambio } from "./git.js";
 
@@ -31,6 +31,45 @@ async function esRepo(raiz: string): Promise<boolean> {
 }
 
 /**
+ * Dónde vive de VERDAD el `info/exclude` de este repo.
+ *
+ * `join(raiz, ".git", "info", "exclude")` da por hecho dos cosas falsas: que el proyecto
+ * es la raíz del repo (con `outer/` repo y `outer/app/` proyecto, crea un `.git` fantasma
+ * en `outer/app/` y la exclusión se escribe donde git no la lee jamás) y que `.git` es un
+ * directorio (en un worktree de git es un FICHERO, y el `mkdirSync` revienta con ENOTDIR
+ * DESPUÉS de que el ZIP ya escribió el disco). `--git-path` resuelve las dos: en un
+ * worktree apunta al `info/` del directorio común, que es donde git lo lee.
+ *
+ * La salida puede venir relativa al cwd (que es `raiz`) o absoluta; `resolve` cubre ambas.
+ */
+async function rutaDeExclusion(raiz: string): Promise<string> {
+  const { stdout } = await git(raiz, ["rev-parse", "--git-path", "info/exclude"]);
+  return resolve(raiz, stdout.trim());
+}
+
+/**
+ * El prefijo del proyecto dentro del repo (`app/`), o `""` si el proyecto ES la raíz.
+ *
+ * Mismo patrón que `agent/instantanea.ts#porArbol`, que ya resolvía exactamente esto: git
+ * habla en rutas relativas a la raíz del REPO y el resto de xonecode (el manifiesto, los
+ * `descargados` del ZIP, el `join(raiz, ruta)` de la subida) habla en rutas relativas al
+ * PROYECTO. Sin recortar, `subida.ts` compone `outer/app/app/app.xml` y falla en cada
+ * fichero, y el candado de borrado no reconoce ni una ruta.
+ *
+ * No se detecta el caso comparando `--show-toplevel` con `raiz`: en macOS un temporal es
+ * `/var/folders/…` y git devuelve el realpath `/private/var/…`, así que la comparación de
+ * cadenas mentiría. El prefijo vacío ES la respuesta a «¿soy la raíz?».
+ */
+async function prefijoDelProyecto(raiz: string): Promise<string> {
+  const { stdout } = await git(raiz, ["rev-parse", "--show-prefix"]);
+  return stdout.trim();
+}
+
+/** Quita el prefijo del repo: las rutas se leen desde el proyecto, como en todo lo demás. */
+const recortar = (prefijo: string, ruta: string): string =>
+  prefijo !== "" && ruta.startsWith(prefijo) ? ruta.slice(prefijo.length) : ruta;
+
+/**
  * Deja el repo listo tras una descarga: repo, exclusiones, remoto y baseline.
  *
  * El commit de baseline se construye con índice privado para no tocar el staging del
@@ -44,11 +83,16 @@ export async function prepararRepo(raiz: string, ramaOrigen: string): Promise<st
 
   // `.gitignore` es un fichero del PROYECTO y acabaría subido a CloudStudio; `info/exclude`
   // es local del repo y no viaja a ninguna parte.
-  const exclude = join(raiz, ".git", "info", "exclude");
-  mkdirSync(join(raiz, ".git", "info"), { recursive: true });
+  const exclude = await rutaDeExclusion(raiz);
+  const prefijo = await prefijoDelProyecto(raiz);
+  mkdirSync(dirname(exclude), { recursive: true });
   const actual = existsSync(exclude) ? readFileSync(exclude, "utf8") : "";
-  if (!actual.includes(EXCLUSION)) {
-    appendFileSync(exclude, `${actual.endsWith("\n") || actual === "" ? "" : "\n"}${EXCLUSION}\n`);
+  // La exclusión se ancla al PROYECTO: en un repo mayor, `.xonecode/` a secas excluiría
+  // también un `.xonecode/` de cualquier otro subdirectorio del usuario. `/` inicial =
+  // relativo a la raíz del repo, que es donde git lee este fichero.
+  const patron = `/${prefijo}${EXCLUSION}`;
+  if (!actual.includes(patron)) {
+    appendFileSync(exclude, `${actual.endsWith("\n") || actual === "" ? "" : "\n"}${patron}\n`);
   }
 
   // Sin esto, el texto que vuelve del servidor se normaliza al escribirlo y cada `/sync`
@@ -98,6 +142,10 @@ export async function prepararRepo(raiz: string, ramaOrigen: string): Promise<st
 
 /** Lo que hay en local y no está subido: el diff contra la ref de seguimiento. */
 export async function cambiosPendientes(raiz: string, rama: string): Promise<CambioLocal[]> {
+  // Las rutas del diff vienen relativas a la RAÍZ DEL REPO. Si el proyecto es un
+  // subdirectorio, hay que recortar el prefijo o `subida.ts` compone `raiz/app/app.xml`
+  // (ENOENT) y ninguna ruta casa con `descargados`, que son relativas al proyecto.
+  const prefijo = await prefijoDelProyecto(raiz);
   // `core.quotePath` (por omisión `true`) escapa a octal cualquier byte >= 0x80: una
   // ruta como «ñu.xne» saldría como `"\303\261u.xne"`. El candado de `planDeSubida`
   // compara estas rutas, tal cual, contra las de `descargados` (que SÍ vienen en UTF-8
@@ -120,7 +168,7 @@ export async function cambiosPendientes(raiz: string, rama: string): Promise<Cam
       const ruta = resto[resto.length - 1];
       // `claseDeCambio` nunca devuelve `undefined` (ver `agent/git.ts`): una marca que no
       // reconocemos también se cuenta, nunca se pierde en silencio del plan de subida.
-      return ruta === undefined ? [] : [{ clase: claseDeCambio(marca!), ruta }];
+      return ruta === undefined ? [] : [{ clase: claseDeCambio(marca!), ruta: recortar(prefijo, ruta) }];
     })
     .sort((a, b) => a.ruta.localeCompare(b.ruta));
 }
