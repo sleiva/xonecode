@@ -20,7 +20,9 @@ describe("PROMPT_ORQUESTADOR", () => {
 
   it("reserva los diagramas de la app para mockup y el análisis real para planner", () => {
     expect(PROMPT_ORQUESTADOR).toMatch(/diagramas o esquemas.*`mockup`/s);
-    expect(PROMPT_ORQUESTADOR).toMatch(/`planner` el análisis/s);
+    expect(PROMPT_ORQUESTADOR).toMatch(/PRIMERO el análisis a `planner`/s);
+    expect(PROMPT_ORQUESTADOR).toContain("HANDOFF DE PLANNER");
+    expect(PROMPT_ORQUESTADOR).toMatch(/no comparten el transcript/i);
   });
 });
 
@@ -78,6 +80,15 @@ describe("promptDe", () => {
     expect(p).toContain("offset=0` y `limit=50");
     expect(p).toContain("deja de llamar tools y responde");
     expect(p).toContain("No repitas una lectura de la misma ruta y rango");
+    expect(p).toContain("HANDOFF DE PLANNER");
+    expect(p).toContain("aristas `origen → destino`");
+  });
+
+  it("hace que mockup reutilice el handoff del planner sin reinspeccionar el proyecto", () => {
+    const p = promptDe("mockup", conSkills);
+    expect(p).toContain("HANDOFF PARA DIAGRAMAS");
+    expect(p).toContain("NO vuelvas a leer, buscar ni reconstruir");
+    expect(p).toContain("solo si la tarea NO incluye un `HANDOFF DE PLANNER`");
   });
 
   it("hace que grep localice antes de leer y conserva su presupuesto", () => {

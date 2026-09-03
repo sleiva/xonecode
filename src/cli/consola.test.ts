@@ -7,6 +7,7 @@ import {
   correrConsola,
   ejecutarTurnoGuionizado,
   crearCompleter,
+  hayEstadoDeProyecto,
   type Consola,
   type EstadoDeSesion,
   type EjecutorDeTurno,
@@ -114,6 +115,22 @@ function sinFuga(texto: string, secreto: string): void {
     expect(texto).not.toContain(secreto.slice(i, i + 5));
   }
 }
+
+describe("hayEstadoDeProyecto", () => {
+  it("solo detecta una memoria .xonecode del proyecto indicado", () => {
+    const raiz = mkdtempSync(join(tmpdir(), "xc-estado-"));
+    try {
+      expect(hayEstadoDeProyecto(raiz)).toBe(false);
+      mkdirSync(join(raiz, NOMBRE_CARPETA));
+      // Configurar un modelo no basta: no hay trabajo de agente que reanudar.
+      expect(hayEstadoDeProyecto(raiz)).toBe(false);
+      writeFileSync(join(raiz, NOMBRE_CARPETA, "memoria.md"), "# Memoria\n");
+      expect(hayEstadoDeProyecto(raiz)).toBe(true);
+    } finally {
+      rmSync(raiz, { recursive: true, force: true });
+    }
+  });
+});
 
 describe("correrConsola — turnos de prosa", () => {
   it("una línea normal produce un turno y una vacía no produce nada", async () => {

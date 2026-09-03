@@ -19,6 +19,10 @@ import {
   COMANDOS,
   correrConsola,
   crearCompleter,
+  hayEstadoDeProyecto,
+  MENSAJE_BIENVENIDA,
+  MENSAJE_REANUDANDO,
+  PETICION_REANUDAR_PROYECTO,
   type Consola,
   type EjecutorDeTurno,
   type EstadoDeSesion,
@@ -53,6 +57,11 @@ const RESET = tema.reset;
 
 /** El prompt. Se ve dónde acaba la respuesta y empieza lo que uno escribe. */
 const PROMPT = CON_COLOR ? `${tema.prompt}❯${tema.reset} ` : "> ";
+
+/** El arranque automático falla como un turno normal: informa y deja la consola viva. */
+function describirError(e: unknown): string {
+  return e instanceof Error ? `${e.constructor.name}: ${e.message}` : String(e);
+}
 
 /**
  * Envuelve las líneas de `readline` para pintar la barra y el prompt ANTES de cada una.
@@ -609,6 +618,20 @@ export async function entrarEnConsola(
     : crearEjecutorReal((sesion) => {
         tracker = sesion.tracker;
       });
+
+  // Una memoria .xonecode pertenece al PROYECTO y significa que hay trabajo que
+  // retomar. El saludo de primera visita no debe ocultar ese contexto. `--guion` no
+  // simula esta lectura: no hay modelo real que pueda analizarlo.
+  if (hayEstadoDeProyecto(raiz) && !guion) {
+    consola.escribir(MENSAJE_REANUDANDO);
+    try {
+      await ejecutar!(PETICION_REANUDAR_PROYECTO, estado, consola);
+    } catch (e) {
+      consola.escribir(`${describirError(e)}\n`);
+    }
+  } else {
+    consola.escribir(MENSAJE_BIENVENIDA);
+  }
 
   const codigo = await correrConsola(consola, estado, ejecutar);
   // Siempre, tanto si se sale por /salir como por EOF: sin rl.close() el proceso queda

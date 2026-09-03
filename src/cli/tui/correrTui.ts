@@ -22,6 +22,10 @@ import {
   correrConsola,
   crearCompleter,
   ejecutarTurnoGuionizado,
+  hayEstadoDeProyecto,
+  MENSAJE_BIENVENIDA,
+  MENSAJE_REANUDANDO,
+  PETICION_REANUDAR_PROYECTO,
   type Consola,
   type EjecutorDeTurno,
   type EstadoDeSesion,
@@ -468,6 +472,20 @@ export async function correrConsolaTui(opciones: OpcionesDeMontaje): Promise<num
       ejecutorBase ?? ejecutarTurnoGuionizado,
       (ocupado) => vista.mutar({ ocupado })
     );
+
+    // El estado de proyecto decide el prólogo. La petición de reanudación es de lectura
+    // acotada y se pinta como un turno normal; nunca entra como mensaje del usuario.
+    if (hayEstadoDeProyecto(raiz) && !guion && ejecutorBase !== undefined) {
+      consola.escribir(MENSAJE_REANUDANDO);
+      try {
+        await ejecutar(PETICION_REANUDAR_PROYECTO, estado, consola);
+      } catch (e) {
+        consola.escribir(`${e instanceof Error ? `${e.constructor.name}: ${e.message}` : String(e)}\n`);
+      }
+    } else {
+      // Saludo estático, común a stdio y TUI. No llega al LLM ni consume tokens.
+      consola.escribir(MENSAJE_BIENVENIDA);
+    }
 
     return await correrConsola(consola, estado, ejecutar);
   } finally {

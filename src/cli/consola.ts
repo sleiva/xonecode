@@ -8,6 +8,7 @@
  */
 
 import { randomUUID } from "node:crypto";
+import { existsSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { cmdConfig } from "./config.js";
@@ -28,6 +29,7 @@ import { acuseDeModelo } from "./acuseDeModelo.js";
 import type { Preguntar } from "./aprobar.js";
 import { guardarCredencial, AuthRotoEnDisco } from "../agent/authEnDisco.js";
 import { cargar, NOMBRE_CARPETA } from "../agent/configEnDisco.js";
+import { rutaMemoriaDeProyecto } from "../agent/memoriaDeProyecto.js";
 import type { CatalogoModelosPort, ModeloDisponible } from "../core/ports.js";
 
 export interface Consola {
@@ -67,6 +69,34 @@ export interface Consola {
     diffs: Map<string, LineaDeDiff[]>
   ) => Promise<Map<string, Decision>>;
 }
+
+/**
+ * Saludo local de la consola. No procede del modelo ni se incorpora al hilo: debe hacer
+ * visible que xonecode está listo sin gastar tokens ni sesgar la primera petición.
+ */
+export const MENSAJE_BIENVENIDA =
+  "¡Bienvenido a xonecode! Puedo analizar, explicar y modificar tu proyecto XOne. Escribe `/` para ver los comandos o cuéntame qué necesitas.\n";
+
+/**
+ * Hay estado que retomar solo cuando existe la memoria del PROYECTO. Una carpeta
+ * `.xonecode` con `config.json` aislado no representa trabajo anterior y debe conservar
+ * el saludo de primera visita.
+ */
+export function hayEstadoDeProyecto(raiz: string): boolean {
+  return existsSync(rutaMemoriaDeProyecto(raiz));
+}
+
+/**
+ * Petición interna de reanudación. Es deliberadamente de solo lectura y estrecha para
+ * que abrir una sesión existente no se convierta en otra exploración exhaustiva.
+ */
+export const PETICION_REANUDAR_PROYECTO =
+  "Reanuda el proyecto. Lee solo /MEMORIA_PROYECTO.md y resume brevemente el contexto, " +
+  "los pendientes confirmados y el siguiente paso recomendado. No modifiques nada, no cargues skills " +
+  "ni explores el código salvo que la memoria cite una ruta imprescindible para aclarar un pendiente; " +
+  "en ese caso lee solo sus primeras 50 líneas. Termina preguntando si quieres continuar ese paso.";
+
+export const MENSAJE_REANUDANDO = "Analizando el estado guardado del repositorio…\n";
 
 /** Datos de un selector: UI-neutral, para que `consola.ts` no conozca Ink. */
 export interface SelectorDeConsola {

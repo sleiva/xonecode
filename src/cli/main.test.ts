@@ -13,7 +13,7 @@ import {
   quiereRaton,
   extraerBanderasDeModelo,
 } from "./main.js";
-import { COMANDOS } from "./consola.js";
+import { COMANDOS, MENSAJE_BIENVENIDA } from "./consola.js";
 import type { Escribir } from "./stdio.js";
 import { POR_OMISION, type FuentesDeEleccion } from "../core/modelos.js";
 import { CatalogoModelos } from "../agent/catalogoModelos.js";
@@ -184,6 +184,7 @@ describe("entrarEnConsola", () => {
     expect(texto).not.toContain(`${porOmision} (`);
     // Tracker en cero, formateado pequeño.
     expect(texto).toContain("0 tokens");
+    expect(texto).toContain(MENSAJE_BIENVENIDA.trim());
   });
 
   it("la lista de comandos se GENERA del registro: contiene TODOS los de COMANDOS", async () => {

@@ -28,7 +28,10 @@ export const PROMPT_ORQUESTADOR = [
   "Delega en `docs` las preguntas técnicas de la plataforma; en `planner` lo que",
   "exija inspeccionar el proyecto; en `dev` el desarrollo; en `mockup` lo visual.",
   "Para diagramas o esquemas de la app, delega en `mockup`; si deben reflejar el",
-  "código real, encarga a `planner` el análisis y usa su resultado antes de dibujar.",
+  "código real, encarga PRIMERO el análisis a `planner` y usa su resultado antes de dibujar.",
+  "Los especialistas no comparten el transcript: al encadenarlos, incluye en la descripción",
+  "de la siguiente `task` un bloque `HANDOFF DE PLANNER` compacto con los hechos verificados,",
+  "rutas/evidencias y lagunas. No pidas al siguiente especialista redescubrir esos hechos.",
   "Cuando varias tareas sean independientes, delégalas EN EL MISMO mensaje para",
   "que corran a la vez.",
   "No afirmes que un cambio se ha aplicado si no te lo ha confirmado el especialista.",
@@ -222,11 +225,24 @@ export function promptDe(nombre: string, skills: SkillsPort): string {
           "- No repitas una lectura de la misma ruta y rango, ni hagas búsquedas genéricas como `function ` sin una hipótesis.",
           "- Cuando puedas identificar el propósito y los módulos principales con evidencia, deja de llamar tools y responde.",
           "- Solo amplía la exploración si el usuario pide detalle exhaustivo o si las evidencias son insuficientes o contradictorias; explica brevemente qué faltaba.",
+          "- Si el resultado alimenta un diagrama o artefacto, termina con un `HANDOFF DE PLANNER` compacto:",
+          "  propósito; nodos; aristas `origen → destino`; evidencia `ruta:líneas`; y lagunas. No incluyas transcript ni lecturas crudas.",
+          "",
+        ].join("\n")
+      : "",
+    nombre === "mockup"
+      ? [
+          "HANDOFF PARA DIAGRAMAS:",
+          "- Si la descripción de tu tarea incluye `HANDOFF DE PLANNER`, ese bloque es tu evidencia de código real.",
+          "- Úsalo como fuente para el diagrama y NO vuelvas a leer, buscar ni reconstruir las rutas ya documentadas.",
+          "- Solo inspecciona un fichero si el handoff marca una laguna o dos evidencias se contradicen; explica cuál es la laguna.",
           "",
         ].join("\n")
       : "",
     nombre === "docs"
       ? ""
+      : nombre === "mockup"
+        ? "Lee `/MEMORIA_PROYECTO.md` solo si la tarea NO incluye un `HANDOFF DE PLANNER`. Con handoff, no la leas: sus hechos pertinentes ya vienen resumidos."
       : "Para una tarea sobre este proyecto, lee una sola vez `/MEMORIA_PROYECTO.md` antes de inspeccionarlo. " +
         "No la uses para preguntas generales de plataforma.",
     perfil.soloLectura || nombre === "docs"
