@@ -122,9 +122,12 @@ export async function descargarProyecto(opciones: OpcionesDeDescarga): Promise<E
       try {
         escribir(raiz, entrada.ruta, await puerto.leerTexto(entrada.ruta));
         traidos.push(entrada.ruta);
-      } catch {
+      } catch (error) {
         // Un fichero que falla no tumba la descarga: simplemente no estará, y por no
-        // estar en `descargados` queda protegido contra el borrado.
+        // estar en `descargados` queda protegido contra el borrado. Pero mudo no: los
+        // avisos son código, no prompt, y un usuario al que le fallan varios ficheros
+        // tiene que saber CUÁLES para poder hacer algo con eso.
+        informar(`no se pudo bajar «${entrada.ruta}»: ${(error as Error).message}\n`);
       }
     }), CONCURRENCIA);
     // Misma regla en la vía degradada: si bajó un `.xml` con su `.xne` al lado, fuera.

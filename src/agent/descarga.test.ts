@@ -73,16 +73,28 @@ describe("descargarProyecto", () => {
 
   it("la vía degradada NO pide binarios: el servidor no los sirve por fichero", async () => {
     const raiz = raizNueva();
-    const puerto = new CloudStudioEnMemoria({
+    const base = new CloudStudioEnMemoria({
       zipFalla: "roto",
       textos: { "app.xml": "<app/>" },
       binarios: { "fonts/A.ttf": 126228, "icons/bg.png": 354523 },
+    });
+    // Asertar solo sobre `descargados` no basta: `CloudStudioEnMemoria.leerTexto` YA
+    // rechaza los binarios por extensión (medido: replica el "File extension not
+    // allowed" del servidor real), así que el mismo resultado sale con o sin el filtro
+    // de `EXTENSIONES_DE_TEXTO` en `descarga.ts`. Se registran las rutas PEDIDAS para
+    // comprobar que el filtro actúa ANTES de llamar, no que el doble encubra su ausencia.
+    const pedidas: string[] = [];
+    const puerto = conLeerTextoEnvuelto(base, (original, ruta) => {
+      pedidas.push(ruta);
+      return original(ruta);
     });
     const estado = await descargarProyecto({ puerto, raiz, proyecto });
 
     expect(estado.descargados).toEqual(["app.xml"]);
     expect(estado.manifiesto.map((e) => e.ruta)).toContain("fonts/A.ttf");
     expect(existsSync(join(raiz, "fonts", "A.ttf"))).toBe(false);
+    expect(pedidas).not.toContain("fonts/A.ttf");
+    expect(pedidas).not.toContain("icons/bg.png");
   });
 
   it("no supera la concurrencia acordada", async () => {
@@ -117,6 +129,26 @@ describe("descargarProyecto", () => {
     );
 
     const estado = await descargarProyecto({ puerto, raiz, proyecto });
+    expect(estado.descargados).toEqual(["app.xml"]);
+  });
+
+  it("un fichero que falla se avisa, con su ruta: mudo es peor que ruidoso", async () => {
+    const raiz = raizNueva();
+    const base = new CloudStudioEnMemoria({
+      zipFalla: "roto",
+      textos: { "app.xml": "<app/>", "roto.js": "x" },
+    });
+    const puerto = conLeerTextoEnvuelto(base, (original, ruta) =>
+      ruta === "roto.js" ? Promise.reject(new Error("500")) : original(ruta)
+    );
+
+    const avisos: string[] = [];
+    const estado = await descargarProyecto({ puerto, raiz, proyecto, informar: (t) => avisos.push(t) });
+
+    // El aviso nombra el fichero caído Y el motivo; y la descarga sigue sin abortar
+    // (el resto llega igual): lo uno no debe romper lo otro.
+    expect(avisos.join("")).toMatch(/roto\.js/);
+    expect(avisos.join("")).toMatch(/500/);
     expect(estado.descargados).toEqual(["app.xml"]);
   });
 
