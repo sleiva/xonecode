@@ -87,6 +87,8 @@ async function* conPrompt(
 
 const AYUDA = `xonecode — harness de XOne
 
+  xonecode                       lanza la consola TUI (por defecto)
+  xonecode --no-tui              consola clásica (stdio)
   xonecode run "<peticion>"      un turno, de un disparo (pipeable)
   xonecode run --real "<peticion>"   el agente real sobre el proyecto del cwd
   xonecode describe              qué hay montado y qué es de pega (sin red)
@@ -96,7 +98,6 @@ const AYUDA = `xonecode — harness de XOne
   xonecode verify [ruta]         valida el proyecto con xone-simulator (por omisión, aquí)
   xonecode --guion               la consola con el agente de pega, sin gastar
   xonecode --tui                 fuerza la interfaz de terminal (TUI)
-  xonecode --no-tui              fuerza la consola clásica (stdio), p. ej. con TTY
   xonecode --sin-raton           TUI sin capturar el ratón (la rueda vuelve al terminal)
   xonecode --help                esto
 
@@ -638,7 +639,8 @@ export async function main(argv: string[]): Promise<number> {
     ) {
       const guion = argv.includes("--guion");
       const pedirTui = argv.includes("--tui");
-      const usarTui = decidirTui(argv);
+      // Por defecto, TUI siempre. `--no-tui` fuerza stdio; sin banderas, TUI.
+      const usarTui = !argv.includes("--no-tui");
       // `--tui` fuerza la TUI, pero no puede fabricar un terminal: sin stdin interactivo
       // no hay teclado que leer, y sin stdout TTY ink pintaría códigos de escape en la
       // tubería. Error de USO (64), no un crash — la bandera fue imposible, no el entorno.
@@ -651,6 +653,7 @@ export async function main(argv: string[]): Promise<number> {
       // no puede ser la única vía que ignora esa variable.
       const { fuentes } = extraerBanderasDeModelo(argv.filter((a) => a !== "--guion" && a !== "--sin-raton"));
       const catalogoModelos = new CatalogoModelos();
+      // Por defecto, TUI siempre. `--no-tui` fuerza stdio.
       return await entrarEnConsola(
         fuentes,
         undefined,
@@ -659,7 +662,7 @@ export async function main(argv: string[]): Promise<number> {
         undefined,
         guion,
         undefined,
-        usarTui,
+        !argv.includes("--no-tui"),
         quiereRaton(argv),
         { catalogoModelos, guardarModeloGlobal }
       );
