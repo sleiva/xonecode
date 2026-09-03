@@ -11,7 +11,7 @@ XOne es una plataforma propietaria de apps móviles nativas: se programa con XML
 $ cd MiApp && xonecode
 
 xonecode · MiApp (7 colls) · ollama/glm-5.3-flash:cloud · 0 tokens
-14 comandos: /ayuda /config /describe /doctor /verify /modelo /modelos … /salir
+17 comandos: /ayuda /config /describe /doctor /verify /modelo /modelos /sync … /salir
 
 ─ MiApp (7 colls) · ollama/glm-5.3-flash:cloud · 0 tokens · /ayuda
 ❯ ¿qué colecciones tiene este proyecto?
@@ -27,23 +27,22 @@ El proyecto tiene 9 colecciones repartidas en 7 ficheros .xne: …
 
 | | |
 |---|---|
-| Consola interactiva | prompt, barra de estado, 14 comandos de barra, autocompletado con Tab |
+| Consola interactiva | stdio o TUI (Ink) con paneles, barra de estado, 17 comandos de barra, autocompletado con Tab |
 | Un disparo | `xonecode run "…"` — pipeable, para tuberías y CI |
 | Aprobación humana | el agente **para y pregunta** antes de escribir; sin un sí explícito, rechaza |
 | Verificador real | `xone-simulator` sobre el proyecto, con `/verify` y `xonecode verify` |
 | Multi-proveedor | Gemini, OpenAI, Anthropic y **Ollama local**, con modelo por papel |
 | Diagnóstico sin coste | `describe`, `doctor` y `config` no gastan una llamada al modelo |
+| CloudStudio | copia local del proyecto, registrada en git (`refs/remotes/cloudstudio/<rama>`); `/sync` baja y sube |
 
 Lo que **todavía no hay**, y conviene saber antes de fiarse:
 
 - **Nadie verifica lo que el agente escribe.** El verificador existe y funciona, pero no
   corre dentro del turno: la consola te lo avisa en cada uno. Hay que lanzar `/verify`.
 - **No hay lazo** de plan → ejecuta → verifica → juzga → repara, con presupuestos.
-- **CloudStudio MCP está en fase de conexión**: `/connect-studio` inicia OAuth con el IDS,
-  comprueba el endpoint y guarda solo su URL por proyecto. Las tools remotas aún no se
-  inyectan en el agente: antes se aplicará una lista blanca por perfil para no cargar el
-  catálogo completo en cada prompt.
-- **No hay TUI con paneles**; la consola es stdio.
+- **La subida a CloudStudio es siempre interactiva.** El hueco de política para que el
+  juez la autorice solo cuando el trabajo está terminado (verificador en verde, árbol
+  limpio, nada pendiente de aprobar) está declarado, pero el juez todavía no existe.
 
 ## Instalación
 

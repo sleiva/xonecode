@@ -167,10 +167,12 @@ con Ollama eso comprime demasiado tarde. Los historiales ya resumidos se escribe
 **CloudStudio (MCP con OAuth)** (`agent/cloudstudioMcp.ts`). Al abrir un proyecto sin
 `.xonecode/`, `configurarModoInicial` (`cli/consola.ts`) pregunta el modo: `offline` o `cloud`;
 `cloud` hace OAuth Authorization Code + PKCE contra el IDS, lista los proyectos y guarda en el
-`config.json` del proyecto `modo` y `cloudstudio` (`url`, `scopes`, `proyecto`). Invariantes:
+`config.json` del proyecto `modo` y `cloudstudio` (`url`, `scopes`, `proyecto`, `rama`). Invariantes:
 - **Las tools remotas NO se inyectan en el agente.** `turnoReal.ts` y `xoneAgent.ts` no conocen
-  CloudStudio; solo `cli/` llama a `conectarCloudStudio`. Falta la lista blanca por perfil, y sin
-  ella el catálogo entero acabaría en cada prompt.
+  CloudStudio; solo `cli/` llama a `conectarCloudStudio` — y, ahora que hay descarga y subida,
+  también a `agent/descarga.ts` y `agent/subida.ts`. Las ejecuta el CLI, nunca una tool que el
+  agente pueda invocar. Falta la lista blanca por perfil, y sin ella el catálogo entero
+  acabaría en cada prompt.
 - El puerto de callback (**7634**) es fijo porque el IDS registra el `redirect_uri`; el estado
   OAuth va a `~/.xonecode/cloudstudio-oauth.json`, **nunca al repo**.
 - Tres escalones de scopes (`SCOPES_CLOUDSTUDIO`, `…_ESCRITURA`, `…_AGENTE`) y ninguno incluye
@@ -190,6 +192,82 @@ con Ollama eso comprime demasiado tarde. Los historiales ya resumidos se escribe
   nada de eso puede acabar en `config.json` ni en el transcript.
 - Un fallo aquí no puede tumbar el arranque: el asistente informa y **no crea `.xonecode`** a
   medias.
+
+**La copia local y la sincronización** (`agent/descarga.ts`, `agent/gitSync.ts`,
+`agent/subida.ts`, `core/planDeSubida.ts`). El proyecto se descarga a la carpeta que el
+usuario abrió, con la misma estructura del servidor, y el agente trabaja sobre ella sin
+enterarse de que CloudStudio existe. El estado de «qué hay arriba» NO es un fichero
+nuestro: es la ref `refs/remotes/cloudstudio/<rama>`, así que `git status` responde solo y
+`git diff cloudstudio/<rama>..HEAD` ES el plan de subida. Cuatro reglas duras:
+- **Lo que no se pudo bajar, no se puede borrar** (`core/planDeSubida.ts`). El plan B baja
+  fichero a fichero y el servidor no sirve binarios así, de modo que git ve las imágenes y
+  las fuentes tipográficas como borradas. Emitir esos borrados vaciaría el proyecto en
+  Studio; el manifiesto de `sync.json` es lo que lo impide.
+- **La ref se mueve solo si la subida terminó entera**, así que un fallo parcial se
+  reintenta solo en el siguiente `/sync`. El reintento reenvía el plan ENTERO contra la
+  misma ref sin mover, ficheros ya subidos incluidos: eso solo es seguro si escribir o
+  borrar dos veces la misma ruta en CloudStudio no tiene efecto observable la segunda
+  vez, algo que `agent/subida.ts` asume del servidor sin comprobarlo.
+- **`.xonecode` no sube nunca**, con filtro propio además del exclude de git — y `.gitignore`
+  no se toca, porque es un fichero del proyecto y acabaría en CloudStudio.
+- **La rama activa del servidor se restaura** tras cada operación (`get_context` antes de
+  `switch`): un switch le mueve el suelo a quien tenga Studio abierto.
+
+De colecciones, en local solo se conservan los `.xne` y `app.xml`: los `X.xml` que Studio
+genera junto a un `X.xne` se **borran del disco** justo tras extraer, no solo se le ocultan
+al agente. El orden es la parte que importa —extraer → borrar vistas aplanadas → commit de
+baseline (`prepararRepo`)— y al revés hace justo lo contrario: si el baseline se tomara
+antes del borrado, git vería esos `.xml` como borrados y, al haberse descargado, el
+candado no los frenaría; la primera subida los borraría **en Studio**. Tomándolo después,
+para git nunca existieron.
+
+Studio tiene rama origen (de la que se baja, `cloudstudio.rama`) y rama de trabajo (a la
+que se sube, creada perezosamente en la primera subida para no ensuciar Studio a quien no
+sube nada). **El servidor no fusiona** —`manage_branches("merge")` da una LISTA de
+ficheros a fusionar, no un resultado— así que quien integra en la rama origen es el
+usuario, en Studio, y quien fusiona en local es git, que sí tiene el ancestro común (el
+commit de la descarga).
+
+El alta completa son cuatro pasos (`cli/main.ts`), y cada uno solo aparece si falta lo que
+decide: 1) cuenta —proveedor y modelo, solo si nadie eligió nunca, deducido del `origen`
+con que resuelve el papel `trabajo` (`wizardInicial.ts#asistenteDeModelo`), nunca de una
+marca de «primer arranque»—; 2) modo del proyecto (`offline`/`cloud`); 3) proyecto de
+CloudStudio, su rama origen y la descarga; 4) modelo propio del proyecto, opcional, hereda
+el global por omisión. **Sin TTY real** (`process.stdin.isTTY`) los cuatro se saltan
+enteros en `main.ts` antes de intentar nada; `asistenteDeModelo` y `configurarModoInicial`
+repiten además su propia guarda de `consola.interactivo`. Cancelar antes de elegir
+proveedor, modo o proyecto no escribe nada; cancelar DESPUÉS de elegir proyecto dejó ya
+`cloudstudio` y `modo: "cloud"` en disco a propósito —negarlo sería mentir—, así que
+cancelar la rama cae a la primera disponible en vez de fingir que no pasó nada, y un fallo
+de descarga deja dicho que reintentar con `/sync bajar`. Una credencial tecleada en el paso
+de cuenta también queda escrita aunque el usuario cancele el paso de modelo que viene
+después: el asistente lo dice en el momento, porque callarlo daría a entender que no se
+tocó nada.
+
+**La autorización de la subida es un hueco de política, no un prompt**
+(`core/cloudstudio.ts#PoliticaDeAprobacion`): `subir()` no se puede invocar sin decir quién
+autoriza, fail-closed por TIPO. Hoy solo está montada la interactiva, con el plan delante.
+La autónoma —el juez decide que el trabajo está terminado y sube solo— está declarada pero
+no implementada, y **el veredicto del juez no bastará solo**: exigirá además condiciones
+que comprueba el código (verificador en verde, árbol limpio, nada pendiente de aprobar),
+porque en este repo los avisos son código y no prompt precisamente porque a un modelo se le
+puede pedir que avise y no avisa.
+
+Dos trampas medidas: `core.quotePath` (por omisión `true`) cita en octal cualquier ruta con
+bytes ≥ 0x80, así que un `ñu.xne` salía como `"\303\261u.xne"` y no coincidía nunca con las
+rutas —en UTF-8 sin comillas— de `descargados`, rompiendo el candado en silencio para
+cualquier proyecto XOne en castellano; `cambiosPendientes` fuerza `core.quotePath=false`.
+Y sin `--no-renames`, un `A.xne` → `B.xne` sale como una sola línea de renombrado que solo
+se queda con el destino: `B` sube y `A` se queda huérfano en Studio para siempre, sin
+ningún aviso; forzando borrado + alta por separado, el borrado de `A` sí pasa por el
+candado.
+
+Dos huecos abiertos, sin cerrar a propósito por ahora: `planDeSubida` calcula
+`modo: "chunked"` para un binario de más de 5 MB, pero `subirBinario` del puerto no recibe
+ese modo y siempre manda `base64` — un binario grande falla en el servidor, no se
+trocea. Y el borrado (`borrarTexto`, sobre `studio_edit_file` con `editMode: "delete"`) se
+invoca igual para texto y para binario: si el servidor rechaza rutas binarias en modo
+`delete`, un icono borrado en local no se propaga, y hoy nada lo detecta ni lo declara.
 
 **La aprobación humana es fail-closed** (`cli/aprobar.ts`, `vendor/hitl.ts`). Aprobar ejecuta;
 rechazar no toca nada, así que lo que no se entiende es **rechazo**. El Enter a secas solo
