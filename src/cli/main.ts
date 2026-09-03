@@ -14,10 +14,11 @@ import { cmdDoctor } from "./doctor.js";
 import { cmdVerify } from "./verify.js";
 import { type FuentesDeEleccion, ModeloMalEscrito, parsear, resolver } from "../core/modelos.js";
 import { topeResuelto } from "../core/contextos.js";
-import { aplicarAuth, cargar, guardarCloudStudioDeProyecto, guardarModeloGlobal, guardarTemaDeProyecto } from "../agent/configEnDisco.js";
+import { aplicarAuth, cargar, guardarCloudStudioDeProyecto, guardarModeloGlobal, guardarModoDeProyecto, guardarProyectoCloudStudioDeProyecto, guardarTemaDeProyecto } from "../agent/configEnDisco.js";
 import { conectarCloudStudio } from "../agent/cloudstudioMcp.js";
 import {
   COMANDOS,
+  configurarModoInicial,
   correrConsola,
   crearCompleter,
   hayEstadoDeProyecto,
@@ -494,7 +495,9 @@ export async function entrarEnConsola(
       guion,
       ...dependencias,
       guardarTemaDeProyecto: (tema) => guardarTemaDeProyecto(raiz, tema),
-      guardarCloudStudioDeProyecto: (url) => guardarCloudStudioDeProyecto(raiz, url),
+      guardarCloudStudioDeProyecto: (url, scopes) => guardarCloudStudioDeProyecto(raiz, url, scopes),
+      guardarModoDeProyecto: (modo) => guardarModoDeProyecto(raiz, modo),
+      guardarProyectoCloudStudioDeProyecto: (proyecto) => guardarProyectoCloudStudioDeProyecto(raiz, proyecto),
       inspeccionarProyecto,
       ofrecer: ofrecerCrearProyecto,
       crearEjecutor: guion ? undefined : crearEjecutorReal,
@@ -599,8 +602,15 @@ export async function entrarEnConsola(
     guardarModeloGlobal: dependencias.guardarModeloGlobal,
     guardarTemaDeProyecto: (tema) => guardarTemaDeProyecto(raiz, tema),
     conectarCloudStudio: dependencias.conectarCloudStudio,
-    guardarCloudStudioDeProyecto: (url) => guardarCloudStudioDeProyecto(raiz, url),
+    guardarCloudStudioDeProyecto: (url, scopes) => guardarCloudStudioDeProyecto(raiz, url, scopes),
+    guardarModoDeProyecto: (modo) => guardarModoDeProyecto(raiz, modo),
+    guardarProyectoCloudStudioDeProyecto: (proyecto) => guardarProyectoCloudStudioDeProyecto(raiz, proyecto),
   };
+
+  // Los dobles de readline de tests (y una tubería) pueden declararse interactivos para
+  // probar otro diálogo, pero no son un terminal en el que abrir OAuth. El asistente de
+  // arranque es exclusivamente de una sesión TTY real.
+  if (process.stdin.isTTY === true) await configurarModoInicial(raiz, consola);
 
   // El asistente de creación: la única escritura fuera de un turno del agente, y
   // por eso la única que pregunta ANTES de escribir. Si se crea, la carpeta ya ES

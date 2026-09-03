@@ -67,6 +67,18 @@ describe("validar", () => {
     expect(avisos).toEqual([]);
   });
 
+  it("acepta el modo de trabajo de un proyecto", () => {
+    const { config, avisos } = validar({ modo: "cloud" }, RUTA, "proyecto");
+    expect(config.modo).toBe("cloud");
+    expect(avisos).toEqual([]);
+  });
+
+  it("descarta un modo de trabajo desconocido", () => {
+    const { config, avisos } = validar({ modo: "remoto" }, RUTA, "proyecto");
+    expect(config.modo).toBeUndefined();
+    expect(avisos[0]?.texto).toContain("modo");
+  });
+
   it("acepta el endpoint HTTPS de CloudStudio, sin credenciales", () => {
     const { config, avisos } = validar(
       { cloudstudio: { url: "https://mcp.xonewebstudio.com/mcp" } }, RUTA, "proyecto"

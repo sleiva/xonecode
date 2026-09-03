@@ -20,6 +20,7 @@ import { ficherosDelProyecto, type SesionReal } from "../../agent/turnoReal.js";
 import { inspeccionar } from "../../agent/entorno.js";
 import {
   correrConsola,
+  configurarModoInicial,
   crearCompleter,
   ejecutarTurnoGuionizado,
   hayEstadoDeProyecto,
@@ -100,6 +101,8 @@ export interface OpcionesDeConsolaTui {
   guardarTemaDeProyecto?: NonNullable<Consola["guardarTemaDeProyecto"]>;
   conectarCloudStudio?: Consola["conectarCloudStudio"];
   guardarCloudStudioDeProyecto?: Consola["guardarCloudStudioDeProyecto"];
+  guardarModoDeProyecto?: Consola["guardarModoDeProyecto"];
+  guardarProyectoCloudStudioDeProyecto?: Consola["guardarProyectoCloudStudioDeProyecto"];
   /** Fuentes del modelo de sesión: deciden el modelo que la sidebar enseña al arrancar. */
   fuentes?: FuentesDeEleccion;
   /** Costura de test: los tests no preguntan a git. */
@@ -133,7 +136,7 @@ export function envolverConOcupacion(
  * reparte a mano acabarían siendo dos mundos.
  */
 export function crearConsolaTui(opciones: OpcionesDeConsolaTui) {
-  const { raiz, fuentes = {}, rama, topeDe, catalogoModelos, guardarModeloGlobal, guardarTemaDeProyecto, conectarCloudStudio, guardarCloudStudioDeProyecto } = opciones;
+  const { raiz, fuentes = {}, rama, topeDe, catalogoModelos, guardarModeloGlobal, guardarTemaDeProyecto, conectarCloudStudio, guardarCloudStudioDeProyecto, guardarModoDeProyecto, guardarProyectoCloudStudioDeProyecto } = opciones;
   const store = crearStore();
   const vista = crearRanura<VistaDeTui>(vistaInicial());
   // main ya resolvió el tema del config de proyecto antes de cargar Ink.
@@ -237,6 +240,8 @@ export function crearConsolaTui(opciones: OpcionesDeConsolaTui) {
     guardarTemaDeProyecto,
     conectarCloudStudio,
     guardarCloudStudioDeProyecto,
+    guardarModoDeProyecto,
+    guardarProyectoCloudStudioDeProyecto,
     aplicarTema: (tema) => {
       seleccionarTema(tema);
       aplicarTemaInk(tema);
@@ -396,6 +401,8 @@ export interface OpcionesDeMontaje {
   guardarTemaDeProyecto?: NonNullable<Consola["guardarTemaDeProyecto"]>;
   conectarCloudStudio?: Consola["conectarCloudStudio"];
   guardarCloudStudioDeProyecto?: Consola["guardarCloudStudioDeProyecto"];
+  guardarModoDeProyecto?: Consola["guardarModoDeProyecto"];
+  guardarProyectoCloudStudioDeProyecto?: Consola["guardarProyectoCloudStudioDeProyecto"];
   /** La inspección del prólogo; el real ejecuta el simulador y entra por omisión. */
   inspeccionarProyecto?: (raiz: string) => Promise<{ colecciones: number; esProyectoXone: boolean }>;
   /** El asistente de creación de proyecto; desde `main.ts`, para no duplicarlo. */
@@ -421,6 +428,8 @@ export async function correrConsolaTui(opciones: OpcionesDeMontaje): Promise<num
     guardarTemaDeProyecto,
     conectarCloudStudio,
     guardarCloudStudioDeProyecto,
+    guardarModoDeProyecto,
+    guardarProyectoCloudStudioDeProyecto,
     inspeccionarProyecto = inspeccionar,
     ofrecer,
     crearEjecutor,
@@ -435,6 +444,8 @@ export async function correrConsolaTui(opciones: OpcionesDeMontaje): Promise<num
     guardarTemaDeProyecto,
     conectarCloudStudio,
     guardarCloudStudioDeProyecto,
+    guardarModoDeProyecto,
+    guardarProyectoCloudStudioDeProyecto,
     rama: ramaDeGit(raiz),
     topeDe,
   });
@@ -478,6 +489,7 @@ export async function correrConsolaTui(opciones: OpcionesDeMontaje): Promise<num
     // El prólogo que `entrarEnConsola` hace en stdio, pero contra la TUI YA montada:
     // los avisos y las preguntas del asistente de creación salen por el store y la
     // ranura de pregunta, no por stdout (que ensuciaría la pantalla de ink).
+    if (process.stdin.isTTY === true) await configurarModoInicial(raiz, consola);
     let entorno = await inspeccionarProyecto(raiz);
     if (!entorno.esProyectoXone) {
       consola.escribir(`✗ ${basename(raiz)} no es un proyecto XOne (falta app.xml)\n`);

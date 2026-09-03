@@ -141,6 +141,21 @@ export function guardarTemaDeProyecto(raiz: string, tema: string): { ruta: strin
   return { ruta, tema };
 }
 
+/**
+ * El modo pertenece al proyecto, no a la cuenta: una carpeta puede trabajarse sin red
+ * aunque la anterior se abriera desde CloudStudio. OAuth queda siempre fuera de aquí.
+ */
+export function guardarModoDeProyecto(
+  raiz: string,
+  modo: "offline" | "cloud",
+): { ruta: string; modo: "offline" | "cloud" } {
+  const ruta = rutaConfigDeProyecto(raiz);
+  const base = leerObjetoCrudoOAbortar(ruta);
+  const fusionado = { ...base, modo };
+  escribirAtomico(ruta, JSON.stringify(fusionado, null, 2) + "\n");
+  return { ruta, modo };
+}
+
 /** Guarda solo el endpoint MCP: OAuth nunca vive dentro del proyecto. */
 export function guardarCloudStudioDeProyecto(
   raiz: string,
@@ -152,6 +167,20 @@ export function guardarCloudStudioDeProyecto(
   const fusionado = { ...base, cloudstudio: { url, scopes: [...scopes] } };
   escribirAtomico(ruta, JSON.stringify(fusionado, null, 2) + "\n");
   return { ruta, url, scopes: [...scopes] };
+}
+
+/** Guarda la identidad del proyecto remoto, sin mezclarla con el token OAuth. */
+export function guardarProyectoCloudStudioDeProyecto(
+  raiz: string,
+  proyecto: { id: string; nombre: string },
+): { ruta: string; proyecto: { id: string; nombre: string } } {
+  const ruta = rutaConfigDeProyecto(raiz);
+  const base = leerObjetoCrudoOAbortar(ruta);
+  const cloudstudio = esObjeto(base.cloudstudio) ? { ...base.cloudstudio } : {};
+  const seleccionado = { id: proyecto.id, nombre: proyecto.nombre };
+  const fusionado = { ...base, cloudstudio: { ...cloudstudio, proyecto: seleccionado } };
+  escribirAtomico(ruta, JSON.stringify(fusionado, null, 2) + "\n");
+  return { ruta, proyecto: seleccionado };
 }
 
 export function cargar(raiz: string): {

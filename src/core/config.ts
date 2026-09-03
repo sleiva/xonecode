@@ -23,12 +23,19 @@ import type { Papel } from "./ports.js";
 
 /** La configuración: modelos y proveedores. Nunca claves. */
 export interface ConfigDeFichero {
+  /** Cómo se abrió este proyecto. Las credenciales nunca se guardan aquí. */
+  modo?: "offline" | "cloud";
   modelo?: string;
   modelos?: Partial<Record<Papel, string>>;
   /** Tema visual de la consola, persistido solo cuando pertenece al proyecto. */
   tema?: string;
   /** Endpoint MCP de CloudStudio. Las credenciales OAuth viven solo en el almacén global. */
-  cloudstudio?: { url: string; scopes?: string[] };
+  cloudstudio?: {
+    url: string;
+    scopes?: string[];
+    /** Identidad no sensible del proyecto remoto elegido. */
+    proyecto?: { id: string; nombre: string };
+  };
   ollama?: { baseUrl?: string };
   /** Topes de ventana de contexto fijados a mano, por id «proveedor/modelo». */
   contextos?: Record<string, number>;
@@ -120,6 +127,18 @@ export function validar(
       continue;
     }
 
+    if (clave === "modo") {
+      if (valor === "offline" || valor === "cloud") {
+        config.modo = valor;
+      } else {
+        avisos.push({
+          texto: `«${ruta}»: «modo» debe ser «offline» o «cloud»; se descarta.`,
+          severidad: "aviso",
+        });
+      }
+      continue;
+    }
+
     if (clave === "modelos") {
       if (!esObjeto(valor)) {
         avisos.push({
@@ -173,14 +192,27 @@ export function validar(
         const url = new URL(valor.url);
         if (url.protocol !== "https:" || url.username !== "" || url.password !== "") throw new Error();
         const scopes = valor.scopes;
+        const proyectoBruto = valor.proyecto;
+        const proyecto = proyectoBruto === undefined
+          ? undefined
+          : esObjeto(proyectoBruto) && typeof proyectoBruto.id === "string" && proyectoBruto.id.trim() !== "" &&
+              typeof proyectoBruto.nombre === "string" && proyectoBruto.nombre.trim() !== ""
+            ? { id: proyectoBruto.id, nombre: proyectoBruto.nombre }
+            : undefined;
+        if (proyectoBruto !== undefined && proyecto === undefined) {
+          avisos.push({
+            texto: `«${ruta}»: «cloudstudio.proyecto» debe tener «id» y «nombre» no vacíos; se descarta.`,
+            severidad: "aviso",
+          });
+        }
         if (scopes !== undefined && (!Array.isArray(scopes) || !scopes.every((scope) => typeof scope === "string" && scope.trim() !== ""))) {
           avisos.push({
             texto: `«${ruta}»: «cloudstudio.scopes» debe ser una lista de permisos no vacíos; se descarta.`,
             severidad: "aviso",
           });
-          config.cloudstudio = { url: url.toString() };
+          config.cloudstudio = { url: url.toString(), ...(proyecto === undefined ? {} : { proyecto }) };
         } else {
-          config.cloudstudio = { url: url.toString(), ...(scopes === undefined ? {} : { scopes: [...scopes] }) };
+          config.cloudstudio = { url: url.toString(), ...(scopes === undefined ? {} : { scopes: [...scopes] }), ...(proyecto === undefined ? {} : { proyecto }) };
         }
       } catch {
         avisos.push({

@@ -34,6 +34,7 @@ import {
   aplicarAuth,
   guardarModeloGlobal,
   guardarTemaDeProyecto,
+  guardarModoDeProyecto,
   guardarCloudStudioDeProyecto,
   ConfigRotaEnDisco,
   OperacionesDeEscritura,
@@ -221,6 +222,17 @@ it("guarda el tema en el config del proyecto y preserva su resto", () => {
     desconocido: true,
     tema: "midnight",
   });
+  rmSync(p, { recursive: true, force: true });
+});
+
+it("guarda el modo de proyecto sin perder sus otras preferencias", () => {
+  const p = mkdtempSync(join(tmpdir(), "xc-cfg-"));
+  const ruta = rutaConfigDeProyecto(p);
+  mkdirSync(join(p, NOMBRE_CARPETA), { recursive: true });
+  writeFileSync(ruta, JSON.stringify({ tema: "xone" }));
+
+  expect(guardarModoDeProyecto(p, "cloud")).toEqual({ ruta, modo: "cloud" });
+  expect(JSON.parse(readFileSync(ruta, "utf8"))).toEqual({ tema: "xone", modo: "cloud" });
   rmSync(p, { recursive: true, force: true });
 });
 

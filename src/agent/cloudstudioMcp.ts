@@ -16,6 +16,7 @@ import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import { auth, type OAuthClientProvider } from "@modelcontextprotocol/sdk/client/auth.js";
 import type { OAuthClientInformationMixed, OAuthClientMetadata, OAuthTokens } from "@modelcontextprotocol/sdk/shared/auth.js";
+import { MultiServerMCPClient } from "@langchain/mcp-adapters";
 
 const NOMBRE_CARPETA = ".xonecode";
 const NOMBRE_AUTH = "cloudstudio-oauth.json";
@@ -44,6 +45,7 @@ export interface ConexionCloudStudio {
   url: string;
   scopes: readonly string[];
   herramientas: Array<{ nombre: string; descripcion: string }>;
+  proyectos: Array<{ id: string; nombre: string }>;
 }
 
 export interface OpcionesCloudStudio {
@@ -56,6 +58,31 @@ export interface OpcionesCloudStudio {
   rutaAuth?: string;
   /** Scope elegido conscientemente por el comando o por una futura tool permitida. */
   scopes?: readonly string[];
+}
+
+/** Extrae solo una identidad visible; el resultado íntegro nunca va al transcript. */
+export function proyectosDeResultado(valor: unknown): Array<{ id: string; nombre: string }> {
+  if (typeof valor === "string") {
+    try { return proyectosDeResultado(JSON.parse(valor)); } catch { return []; }
+  }
+  const lista = Array.isArray(valor)
+    ? valor
+    : typeof valor === "object" && valor !== null
+      ? ["projects", "proyectos", "items", "data"].flatMap((clave) => {
+          const candidato = (valor as Record<string, unknown>)[clave];
+          return Array.isArray(candidato) ? candidato : [];
+        })
+      : [];
+  const vistos = new Set<string>();
+  return lista.flatMap((candidato) => {
+    if (typeof candidato !== "object" || candidato === null || Array.isArray(candidato)) return [];
+    const dato = candidato as Record<string, unknown>;
+    const id = [dato.id, dato.projectId, dato.project_id].find((v): v is string => typeof v === "string" && v.trim() !== "");
+    const nombre = [dato.name, dato.nombre, dato.title].find((v): v is string => typeof v === "string" && v.trim() !== "");
+    if (id === undefined || nombre === undefined || vistos.has(id)) return [];
+    vistos.add(id);
+    return [{ id, nombre }];
+  });
 }
 
 function rutaAuthPorDefecto(): string {
@@ -212,10 +239,13 @@ export async function conectarCloudStudio(urlTexto: string, opciones: OpcionesCl
   const callback = await esperarCallback(opciones.timeoutMs ?? 5 * 60_000);
   const ruta = opciones.rutaAuth ?? rutaAuthPorDefecto();
   const provider = new ProviderCloudStudio(ruta, callback.url, (autorizacion) => {
-    opciones.informar?.(`Abriendo IDS de CloudStudio…\n${autorizacion.toString()}\n`);
+    // La URL de autorización no aporta nada al transcript normal y puede tener parámetros
+    // sensibles de OAuth. El navegador se abre sin volcarla; quien use SSH puede inyectar
+    // `abrirNavegador` y decidir cómo presentarla.
     (opciones.abrirNavegador ?? abrirEnSistema)(autorizacion);
   }, scopes);
   let transporte: StreamableHTTPClientTransport | undefined;
+  let adaptador: MultiServerMCPClient | undefined;
   try {
     // No se usa `client.connect()` para iniciar OAuth: ese transporte queda marcado como
     // iniciado incluso cuando redirige y no admite un segundo connect. `auth()` realiza
@@ -235,13 +265,24 @@ export async function conectarCloudStudio(urlTexto: string, opciones: OpcionesCl
     transporte = new StreamableHTTPClientTransport(url, { authProvider: provider });
     await cliente.connect(transporte);
     const listado = await cliente.listTools();
+    // Solo esta tool se carga e invoca antes del agente: escoger proyecto no es una
+    // decisión del modelo. El adaptador la entrega como herramienta LangChain.
+    adaptador = new MultiServerMCPClient({
+      mcpServers: { cloudstudio: { url: url.toString(), authProvider: provider } },
+    });
+    const herramientasLangChain = await adaptador.getTools("cloudstudio");
+    const listarProyectos = herramientasLangChain.find((tool) => tool.name === "project_list");
+    if (listarProyectos === undefined) throw new Error("CloudStudio no publicó la herramienta «project_list»");
+    const proyectos = proyectosDeResultado(await listarProyectos.invoke({}));
     return {
       url: url.toString(),
       scopes,
       herramientas: listado.tools.map((tool) => ({ nombre: tool.name, descripcion: tool.description ?? "" })),
+      proyectos,
     };
   } finally {
     callback.cerrar();
+    await adaptador?.close();
     await transporte?.close();
   }
 }

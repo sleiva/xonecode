@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join, dirname } from "node:path";
 import {
   COMANDOS,
+  configurarModoInicial,
   correrConsola,
   ejecutarTurnoGuionizado,
   crearCompleter,
@@ -90,6 +91,46 @@ function consolaDeConRespuestas(opciones: {
 function estadoDe(): EstadoDeSesion {
   return { hilo: "xonecode-test", raiz: process.cwd(), fuentes: {} };
 }
+
+describe("configurarModoInicial", () => {
+  it("persiste offline al elegirlo en una carpeta sin estado", async () => {
+    const raiz = mkdtempSync(join(tmpdir(), "xc-modo-"));
+    const { consola, salida } = consolaDeConSecreto({ lineas: [], interactivo: true, respuestas: ["2"] });
+    const guardar = vi.fn(() => ({ ruta: join(raiz, ".xonecode", "config.json"), modo: "offline" as const }));
+    consola.guardarModoDeProyecto = guardar;
+
+    await configurarModoInicial(raiz, consola);
+
+    expect(guardar).toHaveBeenCalledWith("offline");
+    expect(salida()).toContain("Modo offline listo");
+    rmSync(raiz, { recursive: true, force: true });
+  });
+
+  it("solo persiste cloud tras conectar el MCP", async () => {
+    const raiz = mkdtempSync(join(tmpdir(), "xc-modo-"));
+    const { consola, salida } = consolaDeConSecreto({ lineas: [], interactivo: true, respuestas: ["1", "1"] });
+    const conectar = vi.fn(async () => ({
+      url: "https://mcp.xonewebstudio.com/mcp",
+      scopes: ["openid", "mcp.read"],
+      herramientas: [],
+      proyectos: [{ id: "p-1", nombre: "Proyecto" }],
+    }));
+    const guardarCloud = vi.fn(() => ({ ruta: join(raiz, ".xonecode", "config.json"), url: "https://mcp.xonewebstudio.com/mcp", scopes: ["openid", "mcp.read"] }));
+    const guardarModo = vi.fn(() => ({ ruta: join(raiz, ".xonecode", "config.json"), modo: "cloud" as const }));
+    consola.conectarCloudStudio = conectar;
+    consola.guardarCloudStudioDeProyecto = guardarCloud;
+    consola.guardarModoDeProyecto = guardarModo;
+    consola.guardarProyectoCloudStudioDeProyecto = vi.fn(() => ({ ruta: join(raiz, ".xonecode", "config.json"), proyecto: { id: "p-1", nombre: "Proyecto" } }));
+
+    await configurarModoInicial(raiz, consola);
+
+    expect(conectar).toHaveBeenCalledOnce();
+    expect(guardarCloud).toHaveBeenCalledWith("https://mcp.xonewebstudio.com/mcp", ["openid", "mcp.read"]);
+    expect(guardarModo).toHaveBeenCalledWith("cloud");
+    expect(salida()).toContain("Entorno cloud listo");
+    rmSync(raiz, { recursive: true, force: true });
+  });
+});
 
 function ejecutorFalsoDe(turnos: Array<{ peticion: string; estado: EstadoDeSesion }>): EjecutorDeTurno {
   return async (peticion, estado) => {
@@ -523,7 +564,7 @@ describe("correrConsola — /connect-studio", () => {
     const guardar = vi.fn((url: string, scopes: readonly string[]) => ({ ruta: "/proyecto/.xonecode/config.json", url, scopes: [...scopes] }));
     const conectar = vi.fn(async (url: string, scopes: readonly string[], informar: (texto: string) => void) => {
       informar("abriendo IDS…\n");
-      return { url, scopes, herramientas: [{ nombre: "project_list", descripcion: "lista proyectos" }] };
+      return { url, scopes, herramientas: [{ nombre: "project_list", descripcion: "lista proyectos" }], proyectos: [] };
     });
     consola.conectarCloudStudio = conectar;
     consola.guardarCloudStudioDeProyecto = guardar;
@@ -532,13 +573,14 @@ describe("correrConsola — /connect-studio", () => {
 
     expect(conectar).toHaveBeenCalledWith("https://mcp.example/mcp", expect.arrayContaining(["mcp.read"]), expect.any(Function));
     expect(guardar).toHaveBeenCalledWith("https://mcp.example/mcp", expect.arrayContaining(["openid", "mcp.read"]));
-    expect(salida()).toContain("CloudStudio conectado (agente) · 1 herramientas");
-    expect(salida()).toContain("project_list — lista proyectos");
+    expect(salida()).toContain("Configurando CloudStudio…");
+    expect(salida()).toContain("→ Entorno listo");
+    expect(salida()).not.toContain("project_list — lista proyectos");
   });
 
   it("el modo agente pide una vez los permisos de trabajo, sin mcp.admin", async () => {
     const { consola } = consolaDeConSecreto({ lineas: ["/connect-studio"] });
-    const conectar = vi.fn(async (url: string, scopes: readonly string[]) => ({ url, scopes, herramientas: [] }));
+    const conectar = vi.fn(async (url: string, scopes: readonly string[]) => ({ url, scopes, herramientas: [], proyectos: [] }));
     consola.conectarCloudStudio = conectar;
     consola.guardarCloudStudioDeProyecto = (url, scopes) => ({ ruta: "/tmp/config.json", url, scopes: [...scopes] });
     await correrConsola(consola, estadoDe());

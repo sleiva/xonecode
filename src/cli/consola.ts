@@ -78,9 +78,13 @@ export interface Consola {
     url: string;
     scopes: readonly string[];
     herramientas: Array<{ nombre: string; descripcion: string }>;
+    proyectos: Array<{ id: string; nombre: string }>;
   }>;
   /** El endpoint es configuración de proyecto; los tokens OAuth no. */
   guardarCloudStudioDeProyecto?: (url: string, scopes: readonly string[]) => { ruta: string; url: string; scopes: string[] };
+  /** El modo es configuración local del proyecto, inyectada desde el adaptador de disco. */
+  guardarModoDeProyecto?: (modo: "offline" | "cloud") => { ruta: string; modo: "offline" | "cloud" };
+  guardarProyectoCloudStudioDeProyecto?: (proyecto: { id: string; nombre: string }) => { ruta: string; proyecto: { id: string; nombre: string } };
 }
 
 /**
@@ -121,6 +125,73 @@ function modoStudio(valor: string | undefined): { nombre: "lectura" | "agente"; 
   if (valor === "lectura") return { nombre: "lectura", scopes: SCOPES_STUDIO_LECTURA };
   if (valor === undefined || valor === "agente") return { nombre: "agente", scopes: SCOPES_STUDIO_AGENTE };
   return undefined;
+}
+
+/**
+ * Primer contacto con una carpeta. En pipes no se crea estado ni se pregunta: el modo
+ * offline histórico permanece exactamente igual. Cloud se persiste SOLO después de
+ * autenticar y descubrir el MCP, de modo que un login cancelado deja la carpeta virgen.
+ */
+export async function configurarModoInicial(raiz: string, consola: Consola): Promise<void> {
+  if (existsSync(join(raiz, NOMBRE_CARPETA)) || !consola.interactivo || consola.guardarModoDeProyecto === undefined) return;
+
+  let modo: "offline" | "cloud" | undefined;
+  if (consola.seleccionar !== undefined) {
+    const elegido = await consola.seleccionar({
+      titulo: "Modo de proyecto",
+      opciones: [
+        { id: "cloud", etiqueta: "Cloud connected", detalle: "Conecta CloudStudio y trabaja sobre una copia sincronizada." },
+        { id: "offline", etiqueta: "Offline", detalle: "Trabaja solo con los ficheros presentes en esta carpeta." },
+      ],
+    });
+    modo = elegido === "cloud" || elegido === "offline" ? elegido : undefined;
+  } else {
+    consola.escribir("modo de proyecto:\n  1. Cloud connected\n  2. Offline\n");
+    const elegido = (await consola.preguntar("número (Enter cancela): ")).trim();
+    modo = elegido === "1" ? "cloud" : elegido === "2" ? "offline" : undefined;
+  }
+
+  if (modo === undefined) {
+    consola.escribir("inicio cancelado: elige un modo para crear .xonecode\n");
+    return;
+  }
+  if (modo === "offline") {
+    consola.guardarModoDeProyecto("offline");
+    consola.escribir("→ Modo offline listo\n");
+    return;
+  }
+  if (consola.conectarCloudStudio === undefined || consola.guardarCloudStudioDeProyecto === undefined || consola.guardarProyectoCloudStudioDeProyecto === undefined) {
+    consola.escribir("CloudStudio no está disponible en esta ejecución; no se ha creado .xonecode\n");
+    return;
+  }
+
+  consola.escribir("Configurando CloudStudio…\n");
+  const resultado = await consola.conectarCloudStudio(URL_CLOUDSTUDIO_POR_OMISION, SCOPES_STUDIO_AGENTE, consola.escribir);
+  if (resultado.proyectos.length === 0) {
+    consola.escribir("CloudStudio no devolvió proyectos seleccionables; no se ha creado .xonecode\n");
+    return;
+  }
+  let id: string | undefined;
+  if (consola.seleccionar !== undefined) {
+    id = await consola.seleccionar({
+      titulo: "Proyecto de CloudStudio",
+      opciones: resultado.proyectos.map((proyecto) => ({ id: proyecto.id, etiqueta: proyecto.nombre, detalle: proyecto.id })),
+    });
+  } else {
+    for (const [indice, proyecto] of resultado.proyectos.entries()) consola.escribir(`  ${indice + 1}. ${proyecto.nombre}\n`);
+    const indice = Number((await consola.preguntar("número (Enter cancela): ")).trim()) - 1;
+    id = Number.isInteger(indice) ? resultado.proyectos[indice]?.id : undefined;
+  }
+  const proyecto = resultado.proyectos.find((candidato) => candidato.id === id);
+  if (proyecto === undefined) {
+    consola.escribir("selección cancelada; no se ha creado .xonecode\n");
+    return;
+  }
+  consola.guardarCloudStudioDeProyecto(resultado.url, resultado.scopes);
+  consola.guardarProyectoCloudStudioDeProyecto(proyecto);
+  consola.guardarModoDeProyecto("cloud");
+  // No se vuelca el catálogo: es configuración de transporte, no parte de la conversación.
+  consola.escribir("→ Entorno cloud listo\n");
 }
 
 /** Datos de un selector: UI-neutral, para que `consola.ts` no conozca Ink. */
@@ -620,13 +691,14 @@ export const COMANDOS: Record<string, { descripcion: string; manejador: Manejado
         consola.escribir("modo inválido; elige agente o lectura\n");
         return { seguir: true };
       }
+      consola.escribir("Configurando CloudStudio…\n");
       const resultado = await consola.conectarCloudStudio(url, modo.scopes, consola.escribir);
       const guardado = consola.guardarCloudStudioDeProyecto(resultado.url, resultado.scopes);
-      consola.escribir(`CloudStudio conectado (${modo.nombre}) · ${resultado.herramientas.length} herramientas · permisos: ${guardado.scopes.join(", ")} · URL guardada en ${guardado.ruta}\n`);
-      for (const tool of resultado.herramientas.slice(0, 12)) {
-        consola.escribir(`  ${tool.nombre}${tool.descripcion ? ` — ${tool.descripcion}` : ""}\n`);
-      }
-      if (resultado.herramientas.length > 12) consola.escribir(`  … y ${resultado.herramientas.length - 12} más\n`);
+      // El catálogo completo es material de configuración, no una respuesta de consola:
+      // varias descripciones ocupan cientos de líneas y apartan al usuario de su tarea.
+      // La URL y los scopes siguen guardados en `.xonecode/config.json` para diagnóstico.
+      void guardado;
+      consola.escribir("→ Entorno listo\n");
       return { seguir: true };
     },
   },
