@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
-import { writeFileSync, readdirSync } from "node:fs";
+import { writeFileSync, existsSync } from "node:fs";
+import { dirname } from "node:path";
 import { claseDeCambio, indicePrivado } from "./git.js";
 
 describe("claseDeCambio", () => {
@@ -33,8 +34,10 @@ describe("indicePrivado", () => {
     const idx = indicePrivado("prueba");
     expect(idx.ruta).toContain("xonecode-prueba-");
     writeFileSync(idx.ruta, ""); // el índice no existe hasta que algo lo crea
+    const dir = dirname(idx.ruta);
+    expect(existsSync(dir)).toBe(true);
     idx.limpiar();
-    expect(() => readdirSync(idx.ruta)).toThrow();
+    expect(existsSync(dir)).toBe(false);
   });
 
   it("dos llamadas dan directorios distintos: dos sesiones no se pisan", () => {
