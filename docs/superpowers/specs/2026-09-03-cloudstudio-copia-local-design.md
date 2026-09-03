@@ -224,13 +224,23 @@ recién bajado          ## main...cloudstudio/main
 tras trabajar          ## main...cloudstudio/main [ahead 2]
    a subir:            M  app.xml
                        A  icon.svg
-tras subir             ## main...cloudstudio/main
+tras subir             ## main...cloudstudio/main [ahead 2]
 ```
+
+Ese último renglón es lo que hay que leer bien: la ref que se mueve al subir es la de la
+rama de TRABAJO (`cloudstudio/xonecode/main`), porque es la rama a la que se escribió de
+verdad. `branch.main.merge` sigue apuntando a la rama ORIGEN, así que `git status` sigue
+diciendo «ahead» — y **eso es cierto**: en Studio, `main` no tiene ese trabajo hasta que
+el usuario lo integre allí. Mover la ref de `main` era lo cómodo y lo falso: decía «al
+día» sobre una rama que no había recibido nada, y un `bajar` posterior reintroducía todo
+el trabajo como si se hubiera revertido. Quien responde «¿está subido?» sin ambigüedad es
+`/sync estado`, que compara contra la ref de trabajo.
 
 De ahí sale todo lo demás sin inventar nada:
 
-- **`git status` responde «¿está subido?»** sin comandos de xonecode ni fichero de estado.
-- **`git diff --name-status cloudstudio/main..HEAD` ES el plan de subida.**
+- **`git diff --name-status cloudstudio/xonecode/main..HEAD` ES el plan de subida** (antes
+  de la primera subida esa ref no existe todavía y se compara contra `cloudstudio/main`,
+  que es de donde parte la rama de trabajo).
 - **Bajar podría ser un merge de verdad** —el nuevo download se commitea con el sync
   anterior como padre y `git merge cloudstudio/main` daría fusión a tres bandas con
   ancestro real—, pero **no está implementado**: no hay ningún `git merge` en el código.

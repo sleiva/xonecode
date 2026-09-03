@@ -222,8 +222,13 @@ candado no los frenaría; la primera subida los borraría **en Studio**. Tománd
 para git nunca existieron.
 
 Studio tiene rama origen (de la que se baja, `cloudstudio.rama`) y rama de trabajo (a la
-que se sube, creada perezosamente en la primera subida para no ensuciar Studio a quien no
-sube nada). **El servidor no fusiona** —`manage_branches("merge")` da una LISTA de
+que se sube, `ramaDeTrabajo(origen)` = `xonecode/<origen>`, creada perezosamente en la
+primera subida para no ensuciar Studio a quien no sube nada). **La ref que se mueve al
+subir es la de la rama de TRABAJO**, que es a la que se escribió: con la de la origen,
+`git status` decía «al día con master» mientras en Studio `master` no tenía nada de eso, y
+un `bajar` posterior reintroducía todo como si el trabajo se hubiera revertido. Por eso
+`cambiosPendientes` compara contra la ref de trabajo en cuanto existe, y contra la de la
+origen antes de la primera subida — de ahí parte la de trabajo. **El servidor no fusiona** —`manage_branches("merge")` da una LISTA de
 ficheros a fusionar, no un resultado— así que quien integra en la rama origen es el
 usuario, en Studio. En local fusionaría git, que sí tiene el ancestro común (el commit de
 la descarga), pero **eso todavía no está implementado**: `bajar` SOBRESCRIBE el disco y no

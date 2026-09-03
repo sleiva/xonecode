@@ -112,7 +112,7 @@ function descargadosDe(
 export async function subir(opciones: OpcionesDeSubida): Promise<InformeDeSubida> {
   const { puerto, raiz, ramaOrigen, ramaTrabajo, proyecto, politicaDeAprobacion, informar = () => {} } = opciones;
 
-  const cambios = await cambiosPendientes(raiz, ramaOrigen);
+  const cambios = await cambiosPendientes(raiz, ramaOrigen, ramaTrabajo);
   const tamanos = new Map<string, number>();
   for (const cambio of cambios) {
     const ruta = join(raiz, cambio.ruta);
@@ -219,7 +219,9 @@ export async function subir(opciones: OpcionesDeSubida): Promise<InformeDeSubida
   }
 
   if (informe.fallos.length === 0) {
-    await marcarSubido(raiz, ramaOrigen, `sync: ${informe.ok.length} ficheros a ${ramaTrabajo}`);
+    // La ref se llama como la rama a la que se ESCRIBIÓ, no como la origen (ver
+    // `gitSync.ts#marcarSubido`): en Studio la origen no tiene nada de esto.
+    await marcarSubido(raiz, ramaTrabajo, `sync: ${informe.ok.length} ficheros a ${ramaTrabajo}`);
   } else {
     // La ref no se mueve: el siguiente `/sync` recalcula el plan entero desde ahí y lo
     // reenvía completo, incluido lo que sí subió esta vez (ver la nota de cabecera).

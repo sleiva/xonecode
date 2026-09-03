@@ -28,7 +28,7 @@ import {
 import { conectarCloudStudio, sesionCloudStudio } from "../agent/cloudstudioMcp.js";
 import { clienteCloudStudio } from "../agent/cloudstudioClient.js";
 import { descargarProyecto } from "../agent/descarga.js";
-import { arbolLimpio, cambiosPendientes, prepararRepo, sinCommitear } from "../agent/gitSync.js";
+import { arbolLimpio, cambiosPendientes, prepararRepo, ramaDeTrabajo, sinCommitear } from "../agent/gitSync.js";
 import { subir } from "../agent/subida.js";
 import { guardarCredencial } from "../agent/authEnDisco.js";
 import { asistenteDeModelo } from "./wizardInicial.js";
@@ -545,7 +545,7 @@ export function crearSincronizador(
           puerto,
           raiz,
           ramaOrigen: config.rama,
-          ramaTrabajo: `xonecode/${config.rama}`,
+          ramaTrabajo: ramaDeTrabajo(config.rama),
           proyecto: config.proyecto,
           // Fail-closed si alguien llamara a `sincronizar("subir", ...)` sin política (el
           // comando `/sync` siempre construye una): sin ella, no autoriza NADA en vez de

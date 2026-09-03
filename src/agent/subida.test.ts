@@ -135,8 +135,43 @@ describe("subir", () => {
     await puerto.abrir("AppForTest");
     await subir({ puerto, raiz, ramaOrigen: "master", ramaTrabajo: "t", proyecto: { id: "1", nombre: "AppForTest" }, politicaDeAprobacion: autorizaSiempre});
 
+    // La ref lleva el nombre de la rama a la que se ESCRIBIÓ («t»), no el de la origen:
+    // en Studio `master` no tiene nada de esto. Y el diff pendiente se calcula contra esa
+    // misma ref, así que después de subir no queda nada.
+    expect(await cambiosPendientes(raiz, "master", "t")).toEqual([]);
+    expect(git(raiz, "reflog", "show", `${REMOTO}/t`)).toContain("sync:");
+  });
+
+  it("la ref se llama como la rama a la que se ESCRIBIÓ, no como la origen", async () => {
+    // El libro de cuentas mentía: se escribía en `xonecode/master` y se movía la ref de
+    // `master`. Después de subir, `git status` decía que ibas al día con `master`, pero
+    // en Studio `master` no tenía nada de eso; y un `/sync bajar` posterior reintroducía
+    // todo como si el trabajo se hubiera revertido.
+    const raiz = await proyectoConCambios();
+    const puerto = new CloudStudioEnMemoria({ rama: "master", textos: { "app.xml": "<app/>" } });
+    await puerto.abrir("AppForTest");
+
+    const baseAntes = git(raiz, "rev-parse", `refs/remotes/${REMOTO}/master`);
+    await subir({
+      puerto, raiz, ramaOrigen: "master", ramaTrabajo: "xonecode/master",
+      proyecto: { id: "1", nombre: "AppForTest" }, politicaDeAprobacion: autorizaSiempre,
+    });
+
+    // La ref de la rama ORIGEN sigue exactamente donde estaba: en Studio `master` no ha
+    // cambiado, y afirmar lo contrario es lo que hacía irrecuperable el siguiente bajar.
+    expect(git(raiz, "rev-parse", `refs/remotes/${REMOTO}/master`)).toBe(baseAntes);
+    // Y la de la rama de trabajo, que es donde se escribió, apunta a HEAD.
+    expect(git(raiz, "rev-parse", `refs/remotes/${REMOTO}/xonecode/master`)).toBe(git(raiz, "rev-parse", "HEAD"));
+    // Con esa ref ya existiendo, «lo que falta por subir» se mide contra ELLA: nada.
     expect(await cambiosPendientes(raiz, "master")).toEqual([]);
-    expect(git(raiz, "reflog", "show", `${REMOTO}/master`)).toContain("sync:");
+  });
+
+  it("antes de la primera subida, lo pendiente se mide contra la rama ORIGEN", async () => {
+    // La otra mitad: sin ref de trabajo todavía, la referencia buena es la origen —de la
+    // que parte la rama de trabajo—. Si `cambiosPendientes` solo mirara la de trabajo, la
+    // primera subida no encontraría nada que subir.
+    const raiz = await proyectoConCambios();
+    expect(await cambiosPendientes(raiz, "master")).toEqual([{ clase: "modificado", ruta: "app.xml" }]);
   });
 
   it("con un fallo a mitad, la ref NO se mueve", async () => {
@@ -317,7 +352,7 @@ describe("subir", () => {
     ]);
     // 5. LA PRUEBA DURA: la ref avanzó, así que el siguiente `/sync` no reintenta lo
     //    imposible. Antes se quedaba clavada y el atasco era permanente.
-    expect(await cambiosPendientes(raiz, "master")).toEqual([]);
+    expect(await cambiosPendientes(raiz, "master", "t")).toEqual([]);
   });
 
   it("un sync.json de OTRO proyecto no vale como candado: no se borra nada", async () => {
@@ -384,8 +419,8 @@ describe("subir", () => {
       // Ve EXACTAMENTE lo que se va a escribir, ni más ni menos.
       expect(planRecibido).toEqual([{ tipo: "texto", ruta: "app.xml" }]);
       expect(informe.ok).toEqual(["app.xml"]);
-      expect(await cambiosPendientes(raiz, "master")).toEqual([]);
-      expect(git(raiz, "reflog", "show", `${REMOTO}/master`)).toContain("sync:");
+      expect(await cambiosPendientes(raiz, "master", "t")).toEqual([]);
+      expect(git(raiz, "reflog", "show", `${REMOTO}/t`)).toContain("sync:");
     });
 
     it("si NO autoriza, no escribe nada en el puerto, la ref no se mueve, y lo dice", async () => {
