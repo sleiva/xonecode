@@ -250,13 +250,39 @@ verdad contra MCP. No hay que rehacer nada para llegar ahí.
 
 1. Se calcula el plan con `git diff --name-status cloudstudio/main..HEAD`, filtrado por el
    candado de borrado y por las dos exclusiones de abajo.
-2. Se pide **aprobación explícita** con el diff delante (`cli/aprobar.ts`, `core/diff.ts`).
-   Es una acción hacia fuera: fail-closed, lo que no se entiende no se sube.
+2. Se pide autorización explícita con el plan delante. La subida **no se puede invocar sin
+   decir quién autoriza**: la política es un campo obligatorio, no una convención que cada
+   llamador recuerde. Es fail-closed llevado al tipo.
 3. Se ejecuta: texto por `studio_edit_file` (`replace`, o `delete`), binarios por
    `studio_upload_file` (`base64` hasta 5 MB, `chunked` por encima).
 4. **La ref se mueve solo si todo terminó.** Con fallos parciales se queda donde estaba, el
    registro dice qué faltó y el siguiente `/sync` reintenta exactamente eso. Idempotente
    por construcción.
+
+### Quién autoriza: una política, no un prompt
+
+El campo obligatorio de autorización es un **hueco de política**, y hay dos previstas:
+
+| | Quién rellena el hueco | Estado |
+|---|---|---|
+| **Interactivo** | la persona, con el plan delante | lo que se implementa ahora |
+| **Autónomo** | el juez: «plan terminado, nada pendiente» → sube | declarado, sin implementar |
+
+El modo autónomo existe porque preguntar en cada subida hace inviable dejar al agente
+trabajando solo. Pero **el veredicto del juez no puede ser la única condición**: en este
+repo los avisos son código y no prompt precisamente porque a un modelo se le puede pedir
+que avise y no avisa. La política autónoma exigirá, ADEMÁS del veredicto, condiciones que
+comprueba el código: verificador en verde, árbol limpio, plan sin tareas pendientes y
+ninguna escritura esperando aprobación en el turno. El juez decide si el trabajo está
+hecho; el código decide si es seguro subirlo.
+
+Lo que hace esto asumible es la **rama de trabajo**: una subida automática nunca toca la
+rama origen. Si el juez se equivoca, lo que queda es una rama de más en Studio que el
+usuario revisa y descarta — recuperable. Subir solo a la rama origen no lo sería.
+
+El juez **todavía no existe**: el papel `afilado` está reservado para él y no hay lazo de
+plan → ejecuta → verifica → juzga → repara. Por eso ahora se monta el hueco y la política
+interactiva; la autónoma se enchufa cuando el juez llegue, sin tocar el motor.
 
 Exclusiones, ambas incondicionales:
 
