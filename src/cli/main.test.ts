@@ -707,6 +707,54 @@ describe("crearSincronizador", () => {
     expect(sesion).not.toHaveBeenCalled();
   });
 
+  it("cablea `informar`: los avisos deterministas de bajar llegan a quien llama", async () => {
+    // Estaban todos escritos y no llegaban a ninguna parte: `informar` no se pasaba y su
+    // valor por omisión es `() => {}`. Se tiraban «no se pudo listar», «el servidor
+    // truncó el listado», «el ZIP falló; bajando fichero a fichero», la lista de qué
+    // ficheros no se pudieron bajar y la config de git que se conservó. En este repo los
+    // avisos son código y no prompt: un cable cortado los anula igual que borrarlos.
+    const raiz = raizConProyectoCloud();
+    const avisos: string[] = [];
+    const descargar = vi.fn(async ({ proyecto, informar }: { proyecto: { id: string; nombre: string }; informar?: (t: string) => void }) => {
+      informar?.("el ZIP falló (roto); bajando fichero a fichero\n");
+      informar?.("no se pudo bajar «icons/logo.png»: File extension not allowed\n");
+      return {
+        proyecto,
+        rama: "master",
+        fecha: "2026-01-01T00:00:00.000Z",
+        via: "parcial" as const,
+        manifiesto: [],
+        descargados: ["app.xml"],
+      };
+    });
+    const preparar = vi.fn(async (_raiz: string, _rama: string, informar?: (t: string) => void) => {
+      informar?.("se conserva tu configuración de git y no se toca: core.autocrlf=input\n");
+      return "sha-falso";
+    });
+    const sincronizar = crearSincronizador(piezasFalsas({ descargar, preparar }));
+
+    await sincronizar("bajar", raiz, undefined, (t) => avisos.push(t));
+
+    const texto = avisos.join("");
+    expect(texto).toContain("icons/logo.png");
+    expect(texto).toContain("bajando fichero a fichero");
+    expect(texto).toContain("core.autocrlf=input");
+  });
+
+  it("cablea `informar` también en subir", async () => {
+    const raiz = raizConProyectoCloud();
+    const avisos: string[] = [];
+    const subirProyecto = vi.fn(async ({ informar }: { informar?: (t: string) => void }) => {
+      informar?.("2 ficheros no subieron; la ref no se mueve\n");
+      return { ok: [], fallos: [{ ruta: "a.xne", motivo: "x" }, { ruta: "b.xne", motivo: "y" }] };
+    });
+    const sincronizar = crearSincronizador(piezasFalsas({ subirProyecto }));
+
+    await sincronizar("subir", raiz, async () => true, (t) => avisos.push(t));
+
+    expect(avisos.join("")).toContain("2 ficheros no subieron");
+  });
+
   it("«bajar» descarga y DESPUÉS prepara el repo — nunca al revés", async () => {
     const raiz = raizConProyectoCloud();
     const orden: string[] = [];

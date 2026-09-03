@@ -107,7 +107,15 @@ export interface Consola {
   sincronizar?: (
     accion: "estado" | "bajar" | "subir",
     raiz: string,
-    politicaDeAprobacion?: PoliticaDeAprobacion
+    politicaDeAprobacion?: PoliticaDeAprobacion,
+    /**
+     * Los avisos DETERMINISTAS de la sincronización, tal cual los emite `agent/`: «el
+     * servidor truncó el listado», «el ZIP falló; bajando fichero a fichero», qué
+     * ficheros no se pudieron bajar, cuántos no subieron, qué configuración de git se
+     * conservó. En este repo los avisos son código y no prompt; sin este cable estaban
+     * escritos y no llegaban a ninguna parte (el `informar` por omisión es `() => {}`).
+     */
+    informar?: (texto: string) => void
   ) => Promise<
     | { tipo: "texto"; texto: string }
     // `accion` viaja con el rechazo porque el porqué NO es el mismo en las dos
@@ -279,7 +287,7 @@ export async function configurarModoInicial(raiz: string, consola: Consola): Pro
   if (consola.sincronizar !== undefined) {
     consola.escribir("Descargando el proyecto…\n");
     try {
-      const bajada = await consola.sincronizar("bajar", raiz);
+      const bajada = await consola.sincronizar("bajar", raiz, undefined, consola.escribir);
       if (bajada.tipo === "texto") consola.escribir(bajada.texto);
       else {
         // El alta es el camino por el que se pierde trabajo sin haber escrito `/sync`:
@@ -918,7 +926,7 @@ export const COMANDOS: Record<string, { descripcion: string; manejador: Manejado
       // esto puede pasarse siempre — si el árbol está sucio o no hay nada que subir, ni
       // siquiera llega a invocarse.
       const politicaDeAprobacion = accion === "subir" ? politicaInteractiva(consola) : undefined;
-      const resultado = await consola.sincronizar(accion, estado.raiz, politicaDeAprobacion);
+      const resultado = await consola.sincronizar(accion, estado.raiz, politicaDeAprobacion, consola.escribir);
       if (resultado.tipo === "arbol-sucio") {
         // Al subir se sube el estado de un COMMIT, no un borrador: así «lo que está
         // arriba» es siempre un commit concreto y mover la ref significa algo. Al bajar

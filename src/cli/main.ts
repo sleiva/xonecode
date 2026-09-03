@@ -508,7 +508,7 @@ function cloudStudioDeProyecto(
 export function crearSincronizador(
   piezas: PiezasDeSincronizacion = PIEZAS_DE_SINCRONIZACION_REALES
 ): NonNullable<Consola["sincronizar"]> {
-  return async (accion, raiz, politicaDeAprobacion) => {
+  return async (accion, raiz, politicaDeAprobacion, informar = () => {}) => {
     const config = cloudStudioDeProyecto(piezas.leerConfig, raiz);
     if (config === undefined) {
       return { tipo: "texto", texto: "este proyecto no es cloud (o le falta el proyecto/rama del alta)\n" };
@@ -536,8 +536,8 @@ export function crearSincronizador(
         // deja posicionada y la restaura al terminar): sin esto se traería lo que
         // estuviera ACTIVO en la sesión de Studio, y una subida posterior firmaría ese
         // contenido como si fuera de `config.rama`, en silencio.
-        const bajada = await piezas.descargar({ puerto, raiz, proyecto: config.proyecto, ramaOrigen: config.rama });
-        await piezas.preparar(raiz, bajada.rama);
+        const bajada = await piezas.descargar({ puerto, raiz, proyecto: config.proyecto, ramaOrigen: config.rama, informar });
+        await piezas.preparar(raiz, bajada.rama, informar);
         return { tipo: "texto", texto: `bajados ${bajada.descargados.length} ficheros (${bajada.via})\n` };
       }
       if (accion === "subir") {
@@ -551,6 +551,7 @@ export function crearSincronizador(
           // comando `/sync` siempre construye una): sin ella, no autoriza NADA en vez de
           // asumir que sí. El hueco lo documenta `core/cloudstudio.ts#PoliticaDeAprobacion`.
           politicaDeAprobacion: politicaDeAprobacion ?? (async () => false),
+          informar,
         });
         return { tipo: "texto", texto: `subidos ${informe.ok.length}, fallaron ${informe.fallos.length}\n` };
       }

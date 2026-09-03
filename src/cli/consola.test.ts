@@ -350,6 +350,21 @@ describe("/sync", () => {
     expect(salida()).toMatch(/commitea/i);
   });
 
+  it("«/sync bajar» pinta los avisos deterministas de la descarga parcial", async () => {
+    // El extremo del cable de I2: el aviso lo emite `agent/`, y si `/sync` no le pasa un
+    // `informar` que escriba en la consola, muere en el `() => {}` por omisión.
+    const { consola, salida } = consolaDe("/sync bajar", "/salir");
+    const conSync: Consola = {
+      ...consola,
+      sincronizar: async (_accion, _raiz, _politica, informar) => {
+        informar?.("no se pudo bajar «icons/logo.png»: File extension not allowed\n");
+        return { tipo: "texto", texto: "bajados 1 ficheros (parcial)\n" };
+      },
+    };
+    await correrConsola(conSync, estadoDe());
+    expect(salida()).toContain("icons/logo.png");
+  });
+
   it("«/sync estado» enseña lo que falta por subir", async () => {
     const { consola, salida } = consolaDe("/sync", "/salir");
     const conSync: Consola = {
