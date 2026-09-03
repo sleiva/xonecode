@@ -503,6 +503,9 @@ export async function entrarEnConsola(
       crearEjecutor: guion ? undefined : crearEjecutorReal,
       topeDe: crearTopeDelModelo(raiz),
       raton,
+      // Una TUI ya implica interacción real. No se vuelve a consultar isTTY dentro de
+      // Ink: algunos emuladores integrados lo exponen falso tras capturar stdin.
+      asistenteInicial: true,
     });
   }
   // `let` porque el asistente de creación puede cambiarlo TODO: si el usuario acepta,

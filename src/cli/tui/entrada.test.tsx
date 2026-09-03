@@ -60,6 +60,18 @@ describe("entrada", () => {
     instancia.unmount();
   });
 
+  it("envía un comando completo con un único Enter, sin volver a autocompletarlo", async () => {
+    const enviadas: string[] = [];
+    const instancia = render(
+      <Entrada alEnviar={(linea) => enviadas.push(linea)} completa={() => [[], ""]} ocupado={false} historial={[]} modelo="ollama/glm" ancho={60} />
+    );
+    await teclear(instancia, "/salir");
+    instancia.stdin.write("\r");
+    await esperar();
+    expect(enviadas).toEqual(["/salir"]);
+    instancia.unmount();
+  });
+
   it("↑/↓ recorren el historial: lo más reciente primero, y ↓ devuelve a la línea vacía", async () => {
     // Contrato: el historial llega con la MÁS RECIENTE en el índice 0.
     const instancia = render(

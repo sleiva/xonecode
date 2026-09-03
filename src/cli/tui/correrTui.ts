@@ -416,6 +416,8 @@ export interface OpcionesDeMontaje {
   topeDe?: (id: string) => number | undefined;
   /** ¿Se captura el ratón para que la rueda mueva el transcript? `--sin-raton` lo apaga. Por omisión, sí. */
   raton?: boolean;
+  /** `main` lo activa solo al entrar realmente por la TUI; los montajes de test no preguntan. */
+  asistenteInicial?: boolean;
 }
 
 export async function correrConsolaTui(opciones: OpcionesDeMontaje): Promise<number> {
@@ -435,6 +437,7 @@ export async function correrConsolaTui(opciones: OpcionesDeMontaje): Promise<num
     crearEjecutor,
     topeDe,
     raton = true,
+    asistenteInicial = false,
   } = opciones;
   const montaje = crearConsolaTui({
     raiz,
@@ -489,7 +492,7 @@ export async function correrConsolaTui(opciones: OpcionesDeMontaje): Promise<num
     // El prólogo que `entrarEnConsola` hace en stdio, pero contra la TUI YA montada:
     // los avisos y las preguntas del asistente de creación salen por el store y la
     // ranura de pregunta, no por stdout (que ensuciaría la pantalla de ink).
-    if (process.stdin.isTTY === true) await configurarModoInicial(raiz, consola);
+    if (asistenteInicial) await configurarModoInicial(raiz, consola);
     let entorno = await inspeccionarProyecto(raiz);
     if (!entorno.esProyectoXone) {
       consola.escribir(`✗ ${basename(raiz)} no es un proyecto XOne (falta app.xml)\n`);

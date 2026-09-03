@@ -97,7 +97,9 @@ export function Entrada({
     (entrada, tecla) => {
       if (tecla.return) {
         const opcion = opcionesDeMenu[seleccion];
-        if (opcion !== undefined) {
+        // Un comando ya completo es una orden, no una sugerencia. Antes `/salir` con
+        // Enter se volvía a autocompletar (y, con renders lentos, parecía bloquearse).
+        if (opcion !== undefined && valor.trim() !== `/${opcion.nombre}`) {
           setValor(`/${opcion.nombre}`);
           setMenuAbierto(false);
           setPista([]);
