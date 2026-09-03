@@ -165,8 +165,23 @@ export async function configurarModoInicial(raiz: string, consola: Consola): Pro
     return;
   }
 
+  // El endpoint es parte de la identidad del entorno: incluso teniendo uno oficial
+  // por omisión, el primer arranque debe permitir elegir el CloudStudio concreto.
+  // Enter conserva la URL pública sin obligar a teclearla.
+  const escrita = await consola.preguntar(`URL MCP de CloudStudio [${URL_CLOUDSTUDIO_POR_OMISION}]: `);
+  const url = escrita.trim() || URL_CLOUDSTUDIO_POR_OMISION;
   consola.escribir("Configurando CloudStudio…\n");
-  const resultado = await consola.conectarCloudStudio(URL_CLOUDSTUDIO_POR_OMISION, SCOPES_STUDIO_AGENTE, consola.escribir);
+  let resultado: Awaited<ReturnType<NonNullable<Consola["conectarCloudStudio"]>>>;
+  try {
+    resultado = await consola.conectarCloudStudio(url, SCOPES_STUDIO_AGENTE, consola.escribir);
+  } catch (error) {
+    // El asistente inicial nunca puede tirar abajo la consola: ni un OAuth cancelado
+    // ni un MCP con un catálogo distinto deben dejar la carpeta a medio configurar.
+    const detalle = error instanceof Error ? error.message : String(error);
+    consola.escribir(`No se pudo conectar a CloudStudio: ${detalle}\n`);
+    consola.escribir("No se ha creado .xonecode. Reinicia xonecode para elegir Offline o probar otra URL.\n");
+    return;
+  }
   if (resultado.proyectos.length === 0) {
     consola.escribir("CloudStudio no devolvió proyectos seleccionables; no se ha creado .xonecode\n");
     return;

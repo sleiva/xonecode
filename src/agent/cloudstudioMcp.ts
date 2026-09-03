@@ -16,7 +16,8 @@ import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import { auth, type OAuthClientProvider } from "@modelcontextprotocol/sdk/client/auth.js";
 import type { OAuthClientInformationMixed, OAuthClientMetadata, OAuthTokens } from "@modelcontextprotocol/sdk/shared/auth.js";
-import { MultiServerMCPClient } from "@langchain/mcp-adapters";
+import { tool } from "@langchain/core/tools";
+import { z } from "zod";
 
 const NOMBRE_CARPETA = ".xonecode";
 const NOMBRE_AUTH = "cloudstudio-oauth.json";
@@ -60,24 +61,87 @@ export interface OpcionesCloudStudio {
   scopes?: readonly string[];
 }
 
+/**
+ * El listado de proyectos por orden de preferencia.
+ *
+ * El servidor real de XOne CloudStudio la publica como `studio_list_projects`; los dos
+ * alias siguientes son endpoints anteriores. NO se codifica un solo nombre: cuando el
+ * servidor renombra su catálogo, el arranque entero se queda sin proyectos, y el usuario
+ * ve «no publicó la herramienta» en vez de su lista.
+ */
+const NOMBRES_LISTAR_PROYECTOS = ["studio_list_projects", "project_list", "list_projects", "projects_list"] as const;
+
+type DefinicionDeTool = { name: string; description?: string; inputSchema?: unknown };
+
+/** Una tool que exige argumentos no se puede invocar con `{}` en el arranque. */
+function pideArgumentos(definicion: DefinicionDeTool): boolean {
+  const esquema = definicion.inputSchema;
+  if (typeof esquema !== "object" || esquema === null) return false;
+  const obligatorios = (esquema as Record<string, unknown>).required;
+  return Array.isArray(obligatorios) && obligatorios.length > 0;
+}
+
+/**
+ * Qué tool lista los proyectos. Primero los nombres conocidos, en orden; si ninguno está,
+ * una heurística conservadora: tiene que hablar de listar Y de proyectos, y no pedir
+ * argumentos. `studio_open_project` o `studio_download_project` no la superan a propósito
+ * — abrir el proyecto equivocado en el arranque es peor que no encontrar la tool.
+ */
+export function herramientaDeProyectos(tools: readonly DefinicionDeTool[]): DefinicionDeTool | undefined {
+  for (const nombre of NOMBRES_LISTAR_PROYECTOS) {
+    const exacta = tools.find((t) => t.name === nombre);
+    if (exacta !== undefined) return exacta;
+  }
+  return tools.find((t) => {
+    const nombre = t.name.toLowerCase();
+    return /list/.test(nombre) && /project|proyecto/.test(nombre) && !pideArgumentos(t);
+  });
+}
+
 /** Extrae solo una identidad visible; el resultado íntegro nunca va al transcript. */
 export function proyectosDeResultado(valor: unknown): Array<{ id: string; nombre: string }> {
   if (typeof valor === "string") {
     try { return proyectosDeResultado(JSON.parse(valor)); } catch { return []; }
   }
+  // Medido contra el servidor real: `studio_list_projects` NO devuelve una lista, sino un
+  // MAPA indexado por id bajo «recents». Por eso cada clave admite las dos formas y la
+  // clave del mapa se conserva: es el id cuando la entrada no lo repite en «pid».
+  const entradas = (candidato: unknown): unknown[] =>
+    Array.isArray(candidato)
+      ? candidato
+      : typeof candidato === "object" && candidato !== null
+        ? Object.entries(candidato).map(([clave, entrada]) =>
+            typeof entrada === "object" && entrada !== null && !Array.isArray(entrada)
+              ? { ...entrada, __clave: clave }
+              : entrada
+          )
+        : [];
+
   const lista = Array.isArray(valor)
     ? valor
     : typeof valor === "object" && valor !== null
-      ? ["projects", "proyectos", "items", "data"].flatMap((clave) => {
-          const candidato = (valor as Record<string, unknown>)[clave];
-          return Array.isArray(candidato) ? candidato : [];
-        })
+      ? ["projects", "proyectos", "items", "data", "recents"].flatMap((clave) =>
+          entradas((valor as Record<string, unknown>)[clave])
+        )
       : [];
+  // Los SDK MCP devuelven el resultado textual dentro de `content`; no se conserva
+  // nada salvo los pares id/nombre. El wrapper LangChain de abajo serializa ese
+  // resultado para poder usar `.invoke({})` sin traducir los esquemas ajenos.
+  if (lista.length === 0 && typeof valor === "object" && valor !== null) {
+    const contenido = (valor as Record<string, unknown>).content;
+    if (Array.isArray(contenido)) {
+      return contenido.flatMap((bloque) =>
+        typeof bloque === "object" && bloque !== null && (bloque as Record<string, unknown>).type === "text"
+          ? proyectosDeResultado((bloque as Record<string, unknown>).text)
+          : []
+      );
+    }
+  }
   const vistos = new Set<string>();
   return lista.flatMap((candidato) => {
     if (typeof candidato !== "object" || candidato === null || Array.isArray(candidato)) return [];
     const dato = candidato as Record<string, unknown>;
-    const id = [dato.id, dato.projectId, dato.project_id].find((v): v is string => typeof v === "string" && v.trim() !== "");
+    const id = [dato.id, dato.pid, dato.projectId, dato.project_id, dato.__clave].find((v): v is string => typeof v === "string" && v.trim() !== "");
     const nombre = [dato.name, dato.nombre, dato.title].find((v): v is string => typeof v === "string" && v.trim() !== "");
     if (id === undefined || nombre === undefined || vistos.has(id)) return [];
     vistos.add(id);
@@ -245,7 +309,6 @@ export async function conectarCloudStudio(urlTexto: string, opciones: OpcionesCl
     (opciones.abrirNavegador ?? abrirEnSistema)(autorizacion);
   }, scopes);
   let transporte: StreamableHTTPClientTransport | undefined;
-  let adaptador: MultiServerMCPClient | undefined;
   try {
     // No se usa `client.connect()` para iniciar OAuth: ese transporte queda marcado como
     // iniciado incluso cuando redirige y no admite un segundo connect. `auth()` realiza
@@ -265,14 +328,19 @@ export async function conectarCloudStudio(urlTexto: string, opciones: OpcionesCl
     transporte = new StreamableHTTPClientTransport(url, { authProvider: provider });
     await cliente.connect(transporte);
     const listado = await cliente.listTools();
-    // Solo esta tool se carga e invoca antes del agente: escoger proyecto no es una
-    // decisión del modelo. El adaptador la entrega como herramienta LangChain.
-    adaptador = new MultiServerMCPClient({
-      mcpServers: { cloudstudio: { url: url.toString(), authProvider: provider } },
-    });
-    const herramientasLangChain = await adaptador.getTools("cloudstudio");
-    const listarProyectos = herramientasLangChain.find((tool) => tool.name === "project_list");
-    if (listarProyectos === undefined) throw new Error("CloudStudio no publicó la herramienta «project_list»");
+    const definicion = herramientaDeProyectos(listado.tools);
+    if (definicion === undefined) {
+      const disponibles = listado.tools.map((tool) => tool.name).filter(Boolean).join(", ");
+      throw new Error(`CloudStudio no publicó ninguna herramienta de listado de proyectos${disponibles ? ` (disponibles: ${disponibles})` : ""}`);
+    }
+    // En el arranque solo se necesita el listado, sin argumentos. Construir ESTA
+    // tool con esquema vacío y llamarla con `.invoke({})` evita que el adaptador
+    // intente normalizar el JSON Schema de las demás herramientas MCP (varias usan
+    // variantes no compatibles con Zod) y mantiene el bootstrap fuera del agente.
+    const listarProyectos = tool(
+      async () => JSON.stringify(await cliente.callTool({ name: definicion.name, arguments: {} })),
+      { name: definicion.name, description: definicion.description ?? "Lista los proyectos disponibles en CloudStudio.", schema: z.object({}) }
+    );
     const proyectos = proyectosDeResultado(await listarProyectos.invoke({}));
     return {
       url: url.toString(),
@@ -282,7 +350,6 @@ export async function conectarCloudStudio(urlTexto: string, opciones: OpcionesCl
     };
   } finally {
     callback.cerrar();
-    await adaptador?.close();
     await transporte?.close();
   }
 }

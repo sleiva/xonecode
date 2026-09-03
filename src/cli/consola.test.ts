@@ -108,7 +108,7 @@ describe("configurarModoInicial", () => {
 
   it("solo persiste cloud tras conectar el MCP", async () => {
     const raiz = mkdtempSync(join(tmpdir(), "xc-modo-"));
-    const { consola, salida } = consolaDeConSecreto({ lineas: [], interactivo: true, respuestas: ["1", "1"] });
+    const { consola, salida } = consolaDeConSecreto({ lineas: [], interactivo: true, respuestas: ["1", "", "1"] });
     const conectar = vi.fn(async () => ({
       url: "https://mcp.xonewebstudio.com/mcp",
       scopes: ["openid", "mcp.read"],
@@ -128,6 +128,28 @@ describe("configurarModoInicial", () => {
     expect(guardarCloud).toHaveBeenCalledWith("https://mcp.xonewebstudio.com/mcp", ["openid", "mcp.read"]);
     expect(guardarModo).toHaveBeenCalledWith("cloud");
     expect(salida()).toContain("Entorno cloud listo");
+    rmSync(raiz, { recursive: true, force: true });
+  });
+
+  it("pide la URL MCP y no abandona la consola si CloudStudio falla", async () => {
+    const raiz = mkdtempSync(join(tmpdir(), "xc-modo-"));
+    const { consola, salida } = consolaDeConSecreto({
+      lineas: [],
+      interactivo: true,
+      respuestas: ["1", "https://mcp.ejemplo.test/mcp"],
+    });
+    const guardarModo = vi.fn(() => ({ ruta: join(raiz, ".xonecode", "config.json"), modo: "cloud" as const }));
+    const conectar = vi.fn(async () => { throw new Error("no publicó project_list"); });
+    consola.guardarModoDeProyecto = guardarModo;
+    consola.conectarCloudStudio = conectar;
+    consola.guardarCloudStudioDeProyecto = vi.fn();
+    consola.guardarProyectoCloudStudioDeProyecto = vi.fn();
+
+    await configurarModoInicial(raiz, consola);
+
+    expect(conectar).toHaveBeenCalledWith("https://mcp.ejemplo.test/mcp", expect.any(Array), expect.any(Function));
+    expect(guardarModo).not.toHaveBeenCalled();
+    expect(salida()).toContain("No se pudo conectar a CloudStudio: no publicó project_list");
     rmSync(raiz, { recursive: true, force: true });
   });
 });
