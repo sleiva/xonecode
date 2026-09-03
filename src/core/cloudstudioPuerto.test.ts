@@ -18,6 +18,19 @@ describe("CloudStudioEnMemoria", () => {
     expect((await puerto.estructura()).map((e) => e.ruta).sort()).toEqual(["app.ini", "app.xml"]);
   });
 
+  it("sin proyecto abierto falla con el texto del servidor real, que otra tarea reconoce", async () => {
+    await expect(new CloudStudioEnMemoria().contexto()).rejects.toThrow("No project is open");
+  });
+
+  it("trunca la estructura al tope dado, que es el otro caso que obliga a la vía degradada", async () => {
+    const puerto = new CloudStudioEnMemoria({
+      textos: { "a.js": "1", "b.js": "2", "c.js": "3" },
+      topeEstructura: 2,
+    });
+    await puerto.abrir("Demo");
+    expect(await puerto.estructura()).toHaveLength(2);
+  });
+
   it("puede fingir que el ZIP falla, que es el caso que obliga a la vía degradada", async () => {
     const puerto = new CloudStudioEnMemoria({ zipFalla: "colección con error de sintaxis" });
     await puerto.abrir("Demo");
