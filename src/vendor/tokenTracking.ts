@@ -13,11 +13,19 @@ export interface TokenTracker {
   contexto: number;
 }
 
+export type AlContarTokens = (uso: {
+  input: number;
+  output: number;
+  cache: number;
+  llamadas: number;
+  contexto: number;
+}) => void;
+
 export function createTokenTracker(): TokenTracker {
   return { input: 0, output: 0, cache: 0, calls: 0, contexto: 0 };
 }
 
-export function createTokenTrackingMiddleware(tracker: TokenTracker) {
+export function createTokenTrackingMiddleware(tracker: TokenTracker, alContar?: AlContarTokens) {
   return createMiddleware({
     name: "TokenTrackingMiddleware",
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -54,6 +62,19 @@ export function createTokenTrackingMiddleware(tracker: TokenTracker) {
       tracker.cache += cacheRead;
       tracker.calls += 1;
       tracker.contexto = inputTokens;
+      // Un observador es diagnóstico: nunca se deja que un problema de log rompa
+      // una llamada real ni cambie el conteo que acabamos de obtener del proveedor.
+      try {
+        alContar?.({
+          input: inputTokens,
+          output: outputTokens,
+          cache: cacheRead,
+          llamadas: tracker.calls,
+          contexto: tracker.contexto,
+        });
+      } catch {
+        // Sin acción a propósito; el tracker sigue siendo la fuente de verdad.
+      }
     },
   });
 }

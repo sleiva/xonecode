@@ -43,3 +43,13 @@ npm run build
 ```
 
 Las pruebas deben mantenerse sin red, credenciales ni simulador. Si se cambia un límite, añadir una prueba que compruebe tanto el resultado visible como la ruta de truncado.
+
+## Traza de diagnóstico
+
+Para analizar una sesión real sin guardar el contenido de ficheros, se puede activar una traza local:
+
+```sh
+XONECODE_TRACE_TOOLS=1 /Users/projects/xonecode/bin/xonecode
+```
+
+Se crea o amplía `.xonecode/traza-tools.jsonl` dentro del proyecto abierto. Cada línea registra una llamada al modelo (`input`, `output`, caché, especialista y acumulados) o una tool (nombre y el único detalle seguro que ya mostraría la consola: ruta o patrón). Nunca guarda argumentos completos, respuestas de tools, contenido de ficheros ni credenciales.

@@ -89,4 +89,14 @@ describe("createTokenTrackingMiddleware", () => {
     expect(tracker.cache).toBe(600);
     expect(tracker.contexto).toBe(700);
   });
+
+  it("notifica el uso de la llamada sin alterar los acumulados", () => {
+    const tracker = createTokenTracker();
+    const vistos: unknown[] = [];
+    const mw = createTokenTrackingMiddleware(tracker, (uso) => vistos.push(uso));
+    despuesDelModelo(mw)(estadoConUsage(100, 20, 60));
+
+    expect(vistos).toEqual([{ input: 100, output: 20, cache: 60, llamadas: 1, contexto: 100 }]);
+    expect(tracker).toEqual({ input: 100, output: 20, cache: 60, calls: 1, contexto: 100 });
+  });
 });

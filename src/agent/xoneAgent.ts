@@ -3,6 +3,7 @@ import { MemorySaver } from "@langchain/langgraph";
 import { backendConSkills, backendDelProyecto, exponerMemoriaDeProyecto, sinVistasAplanadas } from "./proyecto.js";
 import { PERFILES, permisosDe, hitlDe } from "./perfiles.js";
 import { crearBusquedaRegex } from "./busquedaRegex.js";
+import type { DiagnosticoDeTools } from "./diagnosticoDeTools.js";
 import { middlewareTextoDeTool } from "./textoDeTool.js";
 import { resumenDeContexto } from "./resumenDeContexto.js";
 import { createTokenTrackingMiddleware, type TokenTracker } from "../vendor/tokenTracking.js";
@@ -17,6 +18,8 @@ export interface OpcionesDelAgente {
   checkpointer?: MemorySaver;
   /** Opcional porque no siempre se viene a contar gasto; sin él la barra de estado enseña 0. */
   tracker?: TokenTracker;
+  /** Registro local opt-in de llamadas y uso; nunca llega al modelo. */
+  diagnostico?: DiagnosticoDeTools;
 }
 
 export const PROMPT_ORQUESTADOR = [
@@ -100,7 +103,10 @@ export async function construirAgente(opciones: OpcionesDelAgente): Promise<unkn
   );
 
   // Si no hay tracker, no se añade el middleware: es opcional a propósito arriba.
-  const middlewareTracker = opciones.tracker ? [createTokenTrackingMiddleware(opciones.tracker)] : [];
+  const middlewareTracker = (origen: string) =>
+    opciones.tracker
+      ? [createTokenTrackingMiddleware(opciones.tracker, (uso) => opciones.diagnostico?.modelo(origen, uso))]
+      : [];
 
   const subagentes = Object.values(PERFILES).map((perfil) => ({
     name: perfil.nombre,
@@ -134,7 +140,7 @@ export async function construirAgente(opciones: OpcionesDelAgente): Promise<unkn
       }),
       resumenDeContexto(backend),
       middlewareTextoDeTool(),
-      ...middlewareTracker,
+      ...middlewareTracker(perfil.nombre),
     ],
     model: opciones.modelos.paraPapel(perfil.soloLectura ? "rapido" : "trabajo"),
   }));
@@ -156,7 +162,7 @@ export async function construirAgente(opciones: OpcionesDelAgente): Promise<unkn
       }),
       resumenDeContexto(backend),
       middlewareTextoDeTool(),
-      ...middlewareTracker,
+      ...middlewareTracker("orquestador"),
     ],
     subagents: [
       ...subagentes,

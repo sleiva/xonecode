@@ -111,6 +111,18 @@ describe("aEventos", () => {
     expect(await recoger([[["dev:abc"], "updates", dato]])).toEqual([{ tipo: "tool", nombre: "read_file" }]);
   });
 
+  it("puede observar una tool sin alterar el evento que pinta la consola", async () => {
+    const vistas: unknown[] = [];
+    const dato = { agent: { messages: [{ tool_calls: [{ name: "grep", args: { pattern: "MTLogin" } }] }] } };
+    async function* flujo(): AsyncIterable<unknown> {
+      yield [["tools:abc"], "updates", dato];
+    }
+    const e: DomainEvent[] = [];
+    for await (const evento of aEventos(flujo(), undefined, (tool) => vistas.push(tool))) e.push(evento);
+    expect(vistas).toEqual([{ nombre: "grep", detalle: "MTLogin" }]);
+    expect(e).toEqual([{ tipo: "tool", nombre: "grep", detalle: "MTLogin" }]);
+  });
+
   it("acepta las dos formas de chunk, con y sin namespace", async () => {
     const e = await recoger([["messages", [{ text: "a", id: "r1" }, {}]]]);
     expect(e).toEqual([{ tipo: "token", texto: "a", msgId: "r1" }]);

@@ -17,6 +17,7 @@ import { construirAgente } from "./xoneAgent.js";
 import { asegurarMemoriaDeProyecto } from "./memoriaDeProyecto.js";
 import { aEventos } from "./puente.js";
 import { createTokenTracker, type TokenTracker } from "../vendor/tokenTracking.js";
+import { crearDiagnosticoDeTools } from "./diagnosticoDeTools.js";
 
 /**
  * Una sesión de turno real: varios turnos sobre el MISMO agente y el MISMO hilo.
@@ -111,6 +112,7 @@ export async function abrirSesionReal(opciones: {
 
   const checkpointer = new MemorySaver();
   const tracker = createTokenTracker();
+  const diagnostico = crearDiagnosticoDeTools(raiz);
   let modelos = opciones.modelos;
   let hilo = `xonecode-${randomUUID()}`;
   let cancelarEnCurso: (() => void) | undefined;
@@ -123,6 +125,7 @@ export async function abrirSesionReal(opciones: {
       skills: opciones.skills,
       checkpointer: checkpointer,
       tracker,
+      diagnostico,
     });
 
   let agente = await construir();
@@ -200,7 +203,11 @@ export async function abrirSesionReal(opciones: {
         });
 
         bitacora = await correrTurno(
-          aEventos(stream, async () => (await leerPendientes()).lista),
+          aEventos(
+            stream,
+            async () => (await leerPendientes()).lista,
+            ({ nombre, detalle }) => diagnostico?.herramienta(nombre, detalle, tracker)
+          ),
           piel,
           {
             avisos: (b) => (b.corrio("verify") ? [] : ["⚠ el verificador no ha corrido en este turno"]),

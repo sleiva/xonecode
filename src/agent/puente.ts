@@ -70,6 +70,8 @@ export function esDelPadre(ns: readonly string[]): boolean {
   return ns.length <= 1;
 }
 
+export type AlLlamarTool = (tool: { nombre: string; detalle?: string }) => void;
+
 /**
  * Convierte el stream del grafo en `DomainEvent`.
  *
@@ -85,7 +87,8 @@ export function esDelPadre(ns: readonly string[]): boolean {
  */
 export async function* aEventos(
   stream: AsyncIterable<unknown>,
-  pendientes?: () => Promise<PendienteDeAprobacion[]>
+  pendientes?: () => Promise<PendienteDeAprobacion[]>,
+  alLlamarTool?: AlLlamarTool
 ): AsyncIterable<DomainEvent> {
   const mensajes = new Mensajes();
   try {
@@ -95,6 +98,11 @@ export async function* aEventos(
 
       if (chunk.modo === "updates") {
         for (const { nombre, detalle } of toolsDe(chunk.dato)) {
+          try {
+            alLlamarTool?.({ nombre, ...(detalle === undefined ? {} : { detalle }) });
+          } catch {
+            // La observabilidad no puede tumbar ni silenciar el stream.
+          }
           yield { tipo: "tool", nombre, ...(detalle !== undefined ? { detalle } : {}) };
         }
         continue;
