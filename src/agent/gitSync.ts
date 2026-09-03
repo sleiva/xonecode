@@ -115,7 +115,12 @@ export async function cambiosPendientes(raiz: string, rama: string): Promise<Cam
   // coinciden, y un proyecto XOne en castellano tiene nombres así a diario.
   const { stdout } = await git(raiz, [
     "-c", "core.quotePath=false",
-    "diff", "--name-status", `refs/remotes/${REMOTO}/${rama}`, "--", ".",
+    // Sin `--no-renames`, un `A.xne` → `B.xne` sale como una sola línea `R100 A.xne
+    // B.xne` y este parser solo se queda con el destino (`resto[resto.length - 1]`):
+    // `B` sube y `A` se queda vivo en Studio para siempre, como colección huérfana, sin
+    // ningún aviso. Forzando borrado + alta por separado, el borrado de `A` SÍ pasa por
+    // el candado (estaba en `descargados`, así que se emite) y `B` sube como alta.
+    "diff", "--no-renames", "--name-status", `refs/remotes/${REMOTO}/${rama}`, "--", ".",
   ]);
   return stdout
     .split("\n")

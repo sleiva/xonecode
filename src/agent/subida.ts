@@ -2,9 +2,15 @@
  * La subida: del plan a las llamadas MCP, y de ahí a la ref y al registro.
  *
  * Dos propiedades que no son negociables:
- * - La ref se mueve SOLO si todo terminó. Con fallos parciales se queda donde estaba, y
- *   el siguiente `/sync` reintenta exactamente lo que faltó. Idempotente por construcción.
- * - La rama activa del servidor se restaura al terminar: `switch` le mueve el suelo a
+ * - La ref se mueve SOLO si todo terminó. Con fallos parciales se queda donde estaba, así
+ *   que el siguiente `/sync` vuelve a calcular el plan ENTERO contra esa misma ref sin
+ *   mover —no solo lo que falló— y lo reenvía completo, incluidas las operaciones que la
+ *   vez anterior SÍ funcionaron. Eso NO es «idempotente por construcción»: es seguro
+ *   únicamente si escribir/borrar dos veces la misma ruta en CloudStudio no tiene efecto
+ *   observable la segunda vez. Esta función no lo garantiza ni lo comprueba, solo lo
+ *   asume del servidor.
+ * - La rama activa del servidor se restaura al terminar (incluso si falló al posicionar
+ *   la rama de trabajo, antes de tocar un solo fichero): `switch` le mueve el suelo a
  *   quien tenga Studio abierto en el navegador.
  */
 import { appendFileSync, mkdirSync, readFileSync, statSync, existsSync, readdirSync } from "node:fs";
@@ -83,7 +89,10 @@ export async function subir(opciones: OpcionesDeSubida): Promise<InformeDeSubida
   // El log es «una línea por OPERACIÓN de sync» (criterio de aceptación), no una línea
   // por fichero movido: un `/sync` sin nada pendiente también es una operación y queda
   // registrado, o el JSONL mentiría por omisión sobre cuántas veces se sincronizó.
-  const registrar = (): void => {
+  // `error` es el fallo ESTRUCTURAL (posicionar la rama, abrir el proyecto) que impide
+  // intentar el plan siquiera — el otro camino, un fichero suelto que falla, ya vive en
+  // `fallos` y no necesita este campo.
+  const registrar = (error?: string): void => {
     const linea = JSON.stringify({
       fecha: new Date().toISOString(),
       dir: "subida",
@@ -91,6 +100,7 @@ export async function subir(opciones: OpcionesDeSubida): Promise<InformeDeSubida
       rama: ramaTrabajo,
       ok: informe.ok,
       fallos: informe.fallos,
+      ...(error === undefined ? {} : { error }),
     });
     const log = rutaSyncLog(raiz);
     mkdirSync(dirname(log), { recursive: true });
@@ -106,34 +116,49 @@ export async function subir(opciones: OpcionesDeSubida): Promise<InformeDeSubida
   await puerto.abrir(proyecto.nombre);
   const antes = await puerto.contexto();
   try {
-    if (!(await puerto.ramas()).includes(ramaTrabajo)) {
-      // Perezosa: crear la rama en el alta le ensucia el Studio a quien no sube nada.
-      await puerto.crearRama(ramaTrabajo, ramaOrigen);
-    }
-    await puerto.cambiarRama(ramaTrabajo);
-
-    for (const operacion of plan) {
-      try {
-        if (operacion.tipo === "borrado") await puerto.borrarTexto(operacion.ruta);
-        else if (operacion.tipo === "texto") {
-          await puerto.escribirTexto(operacion.ruta, readFileSync(join(raiz, operacion.ruta), "utf8"));
-        } else {
-          await puerto.subirBinario(operacion.ruta, readFileSync(join(raiz, operacion.ruta)));
-        }
-        informe.ok.push(operacion.ruta);
-      } catch (error) {
-        informe.fallos.push({ ruta: operacion.ruta, motivo: (error as Error).message });
+    try {
+      if (!(await puerto.ramas()).includes(ramaTrabajo)) {
+        // Perezosa: crear la rama en el alta le ensucia el Studio a quien no sube nada.
+        await puerto.crearRama(ramaTrabajo, ramaOrigen);
       }
+      await puerto.cambiarRama(ramaTrabajo);
+
+      for (const operacion of plan) {
+        try {
+          if (operacion.tipo === "borrado") await puerto.borrarTexto(operacion.ruta);
+          else if (operacion.tipo === "texto") {
+            await puerto.escribirTexto(operacion.ruta, readFileSync(join(raiz, operacion.ruta), "utf8"));
+          } else {
+            await puerto.subirBinario(operacion.ruta, readFileSync(join(raiz, operacion.ruta)));
+          }
+          informe.ok.push(operacion.ruta);
+        } catch (error) {
+          informe.fallos.push({ ruta: operacion.ruta, motivo: (error as Error).message });
+        }
+      }
+    } finally {
+      // La rama que estaba de VERDAD, no la que suponíamos: por eso se lee `contexto`
+      // antes. Este `finally` corre TAMBIÉN si `crearRama`/`cambiarRama` revientan antes
+      // de llegar al plan — es precisamente el camino para el que existe: un fallo
+      // posicionando la rama no puede dejar el suelo movido bajo quien tenga Studio
+      // abierto en el navegador.
+      await puerto.cambiarRama(antes.rama);
     }
-  } finally {
-    // La rama que estaba de VERDAD, no la que suponíamos: por eso se lee `contexto` antes.
-    await puerto.cambiarRama(antes.rama);
+  } catch (error) {
+    // No se pudo ni intentar el plan (crear/cambiar de rama falló): se registra el
+    // intento —es la clase de fallo, de red o servidor, para la que existe el log— y
+    // se relanza, porque a diferencia de un fichero suelto que falla, aquí no hay
+    // informe de fallos por ruta que devolver: la sesión de subida ni llegó a empezar.
+    registrar((error as Error).message);
+    throw error;
   }
 
   if (informe.fallos.length === 0) {
     await marcarSubido(raiz, ramaOrigen, `sync: ${informe.ok.length} ficheros a ${ramaTrabajo}`);
   } else {
-    informar(`${informe.fallos.length} ficheros no subieron; la ref no se mueve y el próximo /sync los reintenta\n`);
+    // La ref no se mueve: el siguiente `/sync` recalcula el plan entero desde ahí y lo
+    // reenvía completo, incluido lo que sí subió esta vez (ver la nota de cabecera).
+    informar(`${informe.fallos.length} ficheros no subieron; la ref no se mueve y el próximo /sync reintenta\n`);
   }
 
   registrar();

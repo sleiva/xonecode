@@ -94,4 +94,22 @@ describe("cambiosPendientes y marcarSubido", () => {
 
     expect(await cambiosPendientes(raiz, "master")).toEqual([{ clase: "nuevo", ruta: "ñu.xne" }]);
   });
+
+  it("un renombrado sale como borrado + alta, no como un solo `modificado`", async () => {
+    // Medido: por omisión git DETECTA el rename y lo colapsa en una línea `R100 A B`
+    // (`resto[resto.length - 1]` solo se queda con el destino). Si esta función no
+    // pasara `--no-renames`, subir «A.xne» → «B.xne» dejaría a «A» vivo en Studio para
+    // siempre —una colección huérfana, duplicada, sin ningún aviso—, porque nunca se
+    // emitiría su borrado.
+    const raiz = proyecto();
+    writeFileSync(join(raiz, "A.xne"), "contenido bastante largo para que git detecte el rename por similitud");
+    await prepararRepo(raiz, "master");
+    git(raiz, "mv", "A.xne", "B.xne");
+    git(raiz, "-c", "user.email=t@t", "-c", "user.name=t", "commit", "-qm", "renombro");
+
+    expect(await cambiosPendientes(raiz, "master")).toEqual([
+      { clase: "borrado", ruta: "A.xne" },
+      { clase: "nuevo", ruta: "B.xne" },
+    ]);
+  });
 });
