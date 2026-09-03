@@ -1,7 +1,8 @@
 # Arranque, copia local de CloudStudio y sincronización
 
-Diseño de la descarga del proyecto de CloudStudio a una copia local, del registro de
-cambios sobre ella y de la subida incremental. Sustituye el «flujo objetivo» de
+Diseño del alta completa: asistente de proveedor y modelo, descarga del proyecto de
+CloudStudio a una copia local, registro de los cambios sobre ella y subida incremental.
+Sustituye el «flujo objetivo» de
 `docs/CLOUDSTUDIO-SINCRONIZACION.md`, que se escribió antes de conocer el catálogo MCP real.
 
 Fecha: 2026-09-03. Estado: diseño aprobado pendiente de plan de implementación.
