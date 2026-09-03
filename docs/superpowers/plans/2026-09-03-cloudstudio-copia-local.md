@@ -698,6 +698,9 @@ git commit -m "feat: plan de subida puro, con el candado de borrado parcial"
 
 **Acceptance Criteria:**
 - [ ] Cada método llama a la tool medida con sus argumentos reales (`studio_open_project`, `studio_get_context`, `studio_download_project`, `studio_get_project_structure`, `studio_get_file`, `studio_edit_file`, `studio_upload_file`, `studio_manage_branches`)
+- [ ] **`estructura()` informa del truncado**: devuelve `{ entradas, truncado }`, propagando el `truncated` que el servidor ya envía. Se actualizan el tipo del puerto (`core/ports.ts`), el doble (`truncado: true` cuando recorta por `topeEstructura`) y el llamador `enumerarRemoto` con sus tests
+- [ ] Cuando el listado de la RAÍZ viene truncado y quedan directorios inalcanzables, `enumerarRemoto` lo declara — no puede quedarse callado: el manifiesto es lo que sostiene el candado de borrado
+- [ ] **Existe `sesionCloudStudio(url, scopes) → { invocar, cerrar }`** en `agent/cloudstudioMcp.ts`, con el transporte VIVO y reutilizando el `ProviderCloudStudio` actual; `conectarCloudStudio` pasa a construirse encima de ella sin cambiar su contrato público
 - [ ] Ante «No project is open», reabre el proyecto y **reintenta una vez**; si vuelve a fallar, propaga
 - [ ] El resultado textual del SDK (`content[].text`) se desenvuelve
 - [ ] Los errores nunca incluyen el contenido del fichero ni el token
@@ -1113,6 +1116,7 @@ git commit -m "feat: enumera el remoto sorteando el truncado de la estructura"
 - [ ] La vía degradada solo pide lo que la whitelist de texto permite, y marca `via: "parcial"`
 - [ ] La concurrencia nunca supera el tope: se comprueba con un contador de llamadas simultáneas
 - [ ] Un fichero que falla no aborta la descarga; queda fuera de `descargados`
+- [ ] Si `enumerarRemoto` devuelve `raizTruncada`, se avisa y el estado lo refleja: un inventario incompleto no puede quedarse callado
 - [ ] `sync.json` se escribe en `.xonecode/cloudstudio/` y es JSON legible
 
 **Verify:** `npx vitest run --exclude '**/.worktrees/**' src/agent/descarga.test.ts` → 6 tests en verde
@@ -1363,9 +1367,15 @@ export async function descargarProyecto(opciones: OpcionesDeDescarga): Promise<E
 
   await puerto.abrir(proyecto.nombre);
   const { rama } = await puerto.contexto();
-  const { manifiesto, noEnumerados } = await enumerarRemoto(puerto);
+  const { manifiesto, noEnumerados, raizTruncada } = await enumerarRemoto(puerto);
   if (noEnumerados.length > 0) {
     informar(`no se pudo listar: ${noEnumerados.join(", ")}\n`);
+  }
+  // El inventario es lo que impide borrar en Studio lo que no se pudo bajar. Si viene
+  // incompleto, la copia se marca parcial aunque el ZIP funcione: callarlo dejaría al
+  // usuario con un proyecto a medias y sin saberlo.
+  if (raizTruncada) {
+    informar("el servidor truncó el listado del proyecto: el inventario puede estar incompleto\n");
   }
 
   let via: EstadoDeSync["via"] = "zip";
@@ -2240,6 +2250,7 @@ git commit -m "feat: asistente inicial de proveedor y modelo, y modelo por proye
 - [ ] El alta ofrece un modelo propio del proyecto, con «usar el global» por omisión
 - [ ] El selector de modelo se extrae a `seleccionarModelo` y lo comparten `/modelos` y el alta: nada de dos copias
 - [ ] Sin las dependencias inyectadas (modo guion, tests), `/sync` lo dice y no revienta
+- [ ] La sesión MCP se abre con `sesionCloudStudio` y se **cierra** en un `finally`: `conectarCloudStudio` cierra su transporte y no sirve para operar
 
 **Verify:** `npx vitest run --exclude '**/.worktrees/**' src/cli/` → toda la carpeta en verde
 
@@ -2342,8 +2353,10 @@ En la construcción de las dependencias de la consola (junto a `conectarCloudStu
       const config = leerCloudStudioDeProyecto(raiz); // {url, scopes, proyecto, rama}
       if (config === undefined) return { tipo: "texto", texto: "este proyecto no es cloud\n" };
 
-      const conexion = await conectarCloudStudio(config.url, config.scopes, () => {});
-      const puerto = clienteCloudStudio(conexion.invocar, config.proyecto.nombre);
+      // `conectarCloudStudio` cierra su transporte al terminar: sirve para el alta, no para
+      // operar. La sesión VIVA la da `sesionCloudStudio` (Task 4), y hay que cerrarla.
+      const sesion = await sesionCloudStudio(config.url, { scopes: config.scopes });
+      const puerto = clienteCloudStudio(sesion.invocar, config.proyecto.nombre);
 
       if (accion === "bajar") {
         const estado = await descargarProyecto({ puerto, raiz, proyecto: config.proyecto });
