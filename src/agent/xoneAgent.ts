@@ -2,6 +2,7 @@ import { createDeepAgent, createFilesystemMiddleware } from "deepagents";
 import { MemorySaver } from "@langchain/langgraph";
 import { backendConSkills, backendDelProyecto, exponerMemoriaDeProyecto, sinVistasAplanadas } from "./proyecto.js";
 import { PERFILES, permisosDe, hitlDe } from "./perfiles.js";
+import { crearBusquedaRegex } from "./busquedaRegex.js";
 import { middlewareTextoDeTool } from "./textoDeTool.js";
 import { resumenDeContexto } from "./resumenDeContexto.js";
 import { createTokenTrackingMiddleware, type TokenTracker } from "../vendor/tokenTracking.js";
@@ -108,10 +109,10 @@ export async function construirAgente(opciones: OpcionesDelAgente): Promise<unkn
     // Los subagentes no heredan las skills del orquestador. Se entregan como fuentes
     // directas para mantener cada perfil limitado a su catálogo declarado.
     skills: rutasDeSkills(perfil.nombre, opciones.skills),
-    // **NO se pasa `tools`.** Era un bug: `SubAgent.tools` es `StructuredTool[]` —objetos,
-    // para tools PROPIAS— y pasarle los NOMBRES de las de fichero las sustituía por
-    // cadenas, dejando al especialista sin ninguna capacidad real. Compilaba (por el
-    // `as any` de `createDeepAgent`) y reventaba al ejecutar.
+    // `tools` solo lleva tools PROPIAS. Pasarle los NOMBRES de las de fichero las sustituía
+    // por cadenas, dejando al especialista sin ninguna capacidad real. Las de fichero las
+    // monta el middleware; regex_search es una tool real y confinada al mismo backend.
+    tools: [crearBusquedaRegex(backend)],
     //
     // Las tools de fichero las monta el `FilesystemMiddleware` a partir del backend, y
     // quien las acota por NOMBRE es su propia opción `tools` (con la restricción de que

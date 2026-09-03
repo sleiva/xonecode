@@ -81,6 +81,25 @@ export function permisosDe(perfil: Perfil) {
 }
 
 /**
+ * Barrera de lectura para tools propias.
+ *
+ * `FilesystemMiddleware` aplica `permisosDe()` a sus seis herramientas, pero
+ * una tool de LangChain añadida por xonecode no pasa por ese middleware. Las
+ * rutas protegidas se concentran aquí para que esas tools no abran por accidente
+ * `.env`, `.git` ni la carpeta interna del proyecto.
+ */
+export function puedeLeerRuta(ruta: string): boolean {
+  return !(
+    ruta === "/.env" ||
+    ruta.startsWith("/.env.") ||
+    ruta === "/.git" ||
+    ruta.startsWith("/.git/") ||
+    ruta === "/.xonecode" ||
+    ruta.startsWith("/.xonecode/")
+  );
+}
+
+/**
  * Las tools de fichero que le corresponden a un perfil.
  *
  * **No se le pasa a `SubAgent.tools`**: ese campo es `StructuredTool[]` —objetos, para
