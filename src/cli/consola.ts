@@ -25,6 +25,7 @@ import type { PendienteDeAprobacion } from "../core/events.js";
 import type { LineaDeDiff } from "../core/diff.js";
 import type { Decision } from "../vendor/hitl.js";
 import { crearPielStdio, type Escribir } from "./stdio.js";
+import { esTema, seleccionarTema, TEMAS, type IdTema } from "./tema.js";
 import { acuseDeModelo } from "./acuseDeModelo.js";
 import type { Preguntar } from "./aprobar.js";
 import { guardarCredencial, AuthRotoEnDisco } from "../agent/authEnDisco.js";
@@ -68,6 +69,8 @@ export interface Consola {
     ficheros: Map<string, string>,
     diffs: Map<string, LineaDeDiff[]>
   ) => Promise<Map<string, Decision>>;
+  /** Cambia la paleta de la piel actual; la TUI además fuerza un repintado completo. */
+  aplicarTema?: (tema: IdTema) => void;
 }
 
 /**
@@ -336,6 +339,38 @@ async function elegirModelo(
   return guardarEleccionDeModelo(proveedor, eleccion.modelo, papel, estado, consola);
 }
 
+/** Selector de tema: misma costura rica que /modelos, con pregunta numerada en stdio. */
+async function elegirTema(_args: string[], _estado: EstadoDeSesion, consola: Consola): Promise<{ seguir: boolean }> {
+  let id: string | undefined;
+  if (consola.seleccionar !== undefined) {
+    id = await consola.seleccionar({
+      titulo: "Tema de xonecode",
+      opciones: TEMAS.map((tema) => ({ id: tema.id, etiqueta: tema.etiqueta, detalle: tema.detalle })),
+    });
+  } else {
+    consola.escribir("temas:\n");
+    for (const [indice, tema] of TEMAS.entries()) {
+      consola.escribir(`  ${indice + 1}. ${tema.etiqueta} — ${tema.detalle}\n`);
+    }
+    const respuesta = (await consola.preguntar("número (Enter cancela): ")).trim();
+    if (respuesta === "") return { seguir: true };
+    const indice = Number(respuesta) - 1;
+    id = Number.isInteger(indice) ? TEMAS[indice]?.id : undefined;
+  }
+  if (id === undefined) {
+    consola.escribir("selección cancelada\n");
+    return { seguir: true };
+  }
+  if (!esTema(id)) {
+    consola.escribir("tema inválido\n");
+    return { seguir: true };
+  }
+  (consola.aplicarTema ?? seleccionarTema)(id);
+  const tema = TEMAS.find((candidato) => candidato.id === id)!;
+  consola.escribir(`tema activo: ${tema.etiqueta}\n`);
+  return { seguir: true };
+}
+
 function guardarEleccionDeModelo(
   proveedor: Proveedor,
   modelo: ModeloDisponible,
@@ -538,6 +573,10 @@ export const COMANDOS: Record<string, { descripcion: string; manejador: Manejado
   modelos: {
     descripcion: "elige un modelo del catálogo de un proveedor y lo guarda globalmente: /modelos <proveedor>",
     manejador: elegirModelo,
+  },
+  themes: {
+    descripcion: "elige tema visual: XOne, Clear, Midnight, Graphite o Ember",
+    manejador: elegirTema,
   },
   hilo: {
     descripcion: "muestra el hilo (thread_id) de esta sesión",

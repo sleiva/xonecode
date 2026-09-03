@@ -4,6 +4,7 @@ import { acuseDeModelo } from "../acuseDeModelo.js";
 import { correrConsola, type EjecutorDeTurno } from "../consola.js";
 import type { SesionReal } from "../../agent/turnoReal.js";
 import { CatalogoModelosEnMemoria, type CatalogoModelosPort } from "../../core/ports.js";
+import { aplicarTemaInk, temaInk } from "./temaInk.js";
 
 function crearMontajeTui(
   opciones: Omit<Parameters<typeof crearConsolaTui>[0], "catalogoModelos" | "guardarModeloGlobal">
@@ -253,5 +254,28 @@ describe("la consola TUI", () => {
     expect(montaje.datosSidebar().modelo).toBe("ollama/qwen3");
     montaje.enviar("/salir");
     await ejecucion;
+  });
+
+  it("/themes abre el selector y repinta la paleta activa", async () => {
+    const montaje = crearMontajeTui({ raiz: "/tmp/proyecto" });
+    const ejecucion = correrConsola(montaje.consola, {
+      hilo: "tui-themes",
+      raiz: "/tmp/proyecto",
+      fuentes: {},
+    });
+    try {
+      montaje.enviar("/themes");
+      await esperarSelector(montaje, "Tema de xonecode");
+      expect(montaje.vista.ver().selector?.opciones.map((opcion) => opcion.id)).toEqual([
+        "xone", "clear", "midnight", "graphite", "ember",
+      ]);
+      montaje.seleccionar("clear");
+      await new Promise((resolver) => setTimeout(resolver, 0));
+      expect(temaInk.acento).toBe("#7dd3fc");
+      montaje.enviar("/salir");
+      await ejecucion;
+    } finally {
+      aplicarTemaInk("xone");
+    }
   });
 });

@@ -33,6 +33,7 @@ import {
 import { modeloDeAcuse } from "../acuseDeModelo.js";
 import { crearStore, crearRanura, vistaInicial, type Acto, type VistaDeTui } from "./store.js";
 import { crearPielTui } from "./pielTui.js";
+import { aplicarTemaInk } from "./temaInk.js";
 import { pedirDecisionesTui } from "./aprobarTui.js";
 import type { DatosDeSidebar } from "./sidebar.js";
 import { App } from "./app.js";
@@ -227,6 +228,12 @@ export function crearConsolaTui(opciones: OpcionesDeConsolaTui) {
     },
     catalogoModelos,
     guardarModeloGlobal,
+    aplicarTema: (tema) => {
+      aplicarTemaInk(tema);
+      // La paleta Ink es un objeto estable; esta mutación observable obliga a React a
+      // repintar todos los consumidores que lo importan.
+      vista.mutar({ ocupado: vista.ver().ocupado });
+    },
     seleccionar: async (selector) =>
       new Promise<string | undefined>((resuelto) => {
         vista.mutar({

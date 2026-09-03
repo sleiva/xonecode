@@ -16,3 +16,34 @@ export const LOGO_XONE: readonly string[] = [
   " █ █   █   █  █  ██  █    ",
   "█   █  █████  █   █  █████",
 ];
+
+/** Trazos alternativos para la marca; la fuente real la elige el terminal del usuario. */
+export const LOGOS_XONE = {
+  xone: LOGO_XONE,
+  clear: [
+    "X   X   OOO   N   N  EEEEE",
+    " X X   O   O  NN  N  E    ",
+    "  X    O   O  N N N  EEEE ",
+    " X X   O   O  N  NN  E    ",
+    "X   X   OOO   N   N  EEEEE",
+  ],
+  midnight: [
+    "█   █  █████  █   █  █████",
+    " █ █   █   █  ██  █  █    ",
+    "  █    █   █  █ █ █  ████ ",
+    " █ █   █   █  █  ██  █    ",
+    "█   █  █████  █   █  █████",
+  ],
+  graphite: [
+    "X   X  OOOOO  N   N  EEEEE",
+    " X X   O   O  NN  N  E    ",
+    "  X    O   O  N N N  EEEE ",
+    " X X   O   O  N  NN  E    ",
+    "X   X  OOOOO  N   N  EEEEE",
+  ],
+  ember: [
+    "╲ ╱   ╭─╮  ╱╲╱╲  ════",
+    " ╳   │ │  │╲  │  ══  ",
+    "╱ ╲   ╰─╯  │ ╲ │  ════",
+  ],
+} as const;

@@ -44,7 +44,24 @@ export interface Tema {
   arriba: (lineas: number) => string;
 }
 
-const CON_COLOR: Tema = {
+/** Identificadores estables: los comandos y la TUI nunca dependen de un color concreto. */
+export type IdTema = "xone" | "clear" | "midnight" | "graphite" | "ember";
+
+export const TEMAS: readonly { id: IdTema; etiqueta: string; detalle: string }[] = [
+  { id: "xone", etiqueta: "XOne", detalle: "cian corporativo · logo de bloque" },
+  { id: "clear", etiqueta: "Clear", detalle: "alto contraste frío · trazo ligero" },
+  { id: "midnight", etiqueta: "Midnight", detalle: "dark azul profundo · bajo brillo" },
+  { id: "graphite", etiqueta: "Graphite", detalle: "dark neutro · contraste sobrio" },
+  { id: "ember", etiqueta: "Ember", detalle: "ámbar cálido · trazo técnico" },
+];
+
+const CONTROL: Pick<Tema, "borrar" | "limpiarLinea" | "arriba"> = {
+  borrar: "\x1b[K",
+  limpiarLinea: "\x1b[2K",
+  arriba: (lineas: number): string => (lineas > 0 ? `\x1b[${lineas}A` : ""),
+};
+
+const CON_COLOR_XONE: Tema = {
   texto: "",
   mudo: "\x1b[2m",
   negrita: "\x1b[1m",
@@ -57,9 +74,63 @@ const CON_COLOR: Tema = {
   quitado: "\x1b[31m",
   prompt: "\x1b[36m",
   reset: "\x1b[0m",
-  borrar: "\x1b[K",
-  limpiarLinea: "\x1b[2K",
-  arriba: (lineas: number): string => (lineas > 0 ? `\x1b[${lineas}A` : ""),
+  ...CONTROL,
+};
+
+const CON_COLOR: Record<IdTema, Tema> = {
+  xone: CON_COLOR_XONE,
+  clear: {
+    texto: "",
+    mudo: "\x1b[38;5;250m",
+    negrita: "\x1b[1;97m",
+    exito: "\x1b[38;5;120m",
+    aviso: "\x1b[38;5;222m",
+    grave: "\x1b[38;5;210m",
+    anadido: "\x1b[38;5;120m",
+    quitado: "\x1b[38;5;210m",
+    prompt: "\x1b[38;5;159m",
+    reset: "\x1b[0m",
+    ...CONTROL,
+  },
+  midnight: {
+    texto: "",
+    mudo: "\x1b[38;5;110m",
+    negrita: "\x1b[1;97m",
+    exito: "\x1b[38;5;80m",
+    aviso: "\x1b[38;5;221m",
+    grave: "\x1b[38;5;210m",
+    anadido: "\x1b[38;5;80m",
+    quitado: "\x1b[38;5;210m",
+    prompt: "\x1b[38;5;81m",
+    reset: "\x1b[0m",
+    ...CONTROL,
+  },
+  graphite: {
+    texto: "",
+    mudo: "\x1b[38;5;249m",
+    negrita: "\x1b[1;97m",
+    exito: "\x1b[38;5;114m",
+    aviso: "\x1b[38;5;223m",
+    grave: "\x1b[38;5;217m",
+    anadido: "\x1b[38;5;114m",
+    quitado: "\x1b[38;5;217m",
+    prompt: "\x1b[38;5;255m",
+    reset: "\x1b[0m",
+    ...CONTROL,
+  },
+  ember: {
+    texto: "",
+    mudo: "\x1b[38;5;245m",
+    negrita: "\x1b[1;97m",
+    exito: "\x1b[38;5;150m",
+    aviso: "\x1b[38;5;214m",
+    grave: "\x1b[38;5;203m",
+    anadido: "\x1b[38;5;150m",
+    quitado: "\x1b[38;5;203m",
+    prompt: "\x1b[38;5;215m",
+    reset: "\x1b[0m",
+    ...CONTROL,
+  },
 };
 
 /** El no-op para los tokens-función del tema apagado: se llama, y no escribe nada. */
@@ -71,14 +142,28 @@ const SIN_ACCION = (): string => "";
  * de CI a las tantas. Los tokens-función se derivan al no-op.
  */
 const SIN_COLOR: Tema = Object.fromEntries(
-  Object.keys(CON_COLOR).map((nombre) => [
+  Object.keys(CON_COLOR_XONE).map((nombre) => [
     nombre,
-    typeof CON_COLOR[nombre as keyof Tema] === "function" ? SIN_ACCION : "",
+    typeof CON_COLOR_XONE[nombre as keyof Tema] === "function" ? SIN_ACCION : "",
   ])
 ) as unknown as Tema;
 
-export function crearTema(conColor: boolean): Tema {
-  return conColor ? CON_COLOR : SIN_COLOR;
+let temaSeleccionado: IdTema = "xone";
+
+export function temaActivo(): IdTema {
+  return temaSeleccionado;
+}
+
+export function seleccionarTema(id: IdTema): void {
+  temaSeleccionado = id;
+}
+
+export function esTema(valor: string): valor is IdTema {
+  return TEMAS.some((tema) => tema.id === valor);
+}
+
+export function crearTema(conColor: boolean, id: IdTema = temaSeleccionado): Tema {
+  return conColor ? CON_COLOR[id] : SIN_COLOR;
 }
 
 /**

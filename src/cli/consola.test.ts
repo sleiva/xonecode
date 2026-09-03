@@ -496,6 +496,24 @@ describe("correrConsola — /modelos", () => {
   });
 });
 
+describe("correrConsola — /themes", () => {
+  it("enumera los tres temas y aplica el elegido sin tocar el estado del agente", async () => {
+    const { consola, salida } = consolaDeConSecreto({ lineas: ["/themes"], respuestas: ["2"] });
+    const aplicarTema = vi.fn();
+    consola.aplicarTema = aplicarTema;
+
+    await correrConsola(consola, estadoDe(), ejecutorFalsoDe([]));
+
+    expect(salida()).toContain("1. XOne");
+    expect(salida()).toContain("2. Clear");
+    expect(salida()).toContain("3. Midnight");
+    expect(salida()).toContain("4. Graphite");
+    expect(salida()).toContain("5. Ember");
+    expect(aplicarTema).toHaveBeenCalledWith("clear");
+    expect(salida()).toContain("tema activo: Clear");
+  });
+});
+
 describe("correrConsola — comando desconocido", () => {
   it("no se manda al modelo: cero turnos y remite a /ayuda", async () => {
     const { consola, salida } = consolaDe("/verifyy");

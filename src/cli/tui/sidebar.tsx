@@ -5,11 +5,11 @@
  */
 import { Box, Text } from "ink";
 import type { ReactNode } from "react";
-import { temaInk } from "./temaInk.js";
+import { temaInk, temaInkActivo } from "./temaInk.js";
 import type { Papel } from "../../core/ports.js";
 // El MISMO formato compacto que stdio (`cli/tokens.ts`): dos pieles, una cifra.
 import { compacto, formatearTope } from "../tokens.js";
-import { LOGO_XONE } from "./logo.js";
+import { LOGOS_XONE } from "./logo.js";
 
 export interface DatosDeSidebar {
   contexto: number;
@@ -66,7 +66,7 @@ export function Sidebar(d: DatosDeSidebar): ReactNode {
       <Box flexDirection="column" marginBottom={1}>
         <Text backgroundColor={temaInk.fondoSidebar} bold>{` ${d.proyecto}`.padEnd(38, " ")}</Text>
         <Text color={temaInk.mudo}>{d.rama !== undefined ? `${d.ruta}:${d.rama}` : d.ruta}</Text>
-        {LOGO_XONE.map((fila, i) => (
+        {LOGOS_XONE[temaInkActivo()].map((fila, i) => (
           <Text key={i} color={temaInk.acento}>{fila}</Text>
         ))}
       </Box>
