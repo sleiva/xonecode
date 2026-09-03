@@ -28,7 +28,7 @@ import {
 import { conectarCloudStudio, sesionCloudStudio } from "../agent/cloudstudioMcp.js";
 import { clienteCloudStudio } from "../agent/cloudstudioClient.js";
 import { descargarProyecto } from "../agent/descarga.js";
-import { arbolLimpio, cambiosPendientes, prepararRepo } from "../agent/gitSync.js";
+import { arbolLimpio, cambiosPendientes, prepararRepo, sinCommitear } from "../agent/gitSync.js";
 import { subir } from "../agent/subida.js";
 import { guardarCredencial } from "../agent/authEnDisco.js";
 import { asistenteDeModelo } from "./wizardInicial.js";
@@ -459,6 +459,7 @@ export interface PiezasDeSincronizacion {
   preparar: typeof prepararRepo;
   pendientes: typeof cambiosPendientes;
   limpio: typeof arbolLimpio;
+  sinCommitear: typeof sinCommitear;
   subirProyecto: typeof subir;
 }
 
@@ -470,6 +471,7 @@ const PIEZAS_DE_SINCRONIZACION_REALES: PiezasDeSincronizacion = {
   preparar: prepararRepo,
   pendientes: cambiosPendientes,
   limpio: arbolLimpio,
+  sinCommitear,
   subirProyecto: subir,
 };
 
@@ -512,9 +514,17 @@ export function crearSincronizador(
       return { tipo: "texto", texto: "este proyecto no es cloud (o le falta el proyecto/rama del alta)\n" };
     }
 
-    if (accion === "subir" && !(await piezas.limpio(raiz))) {
-      const pendientes = await piezas.pendientes(raiz, config.rama);
-      return { tipo: "arbol-sucio", pendientes: pendientes.map((c) => c.ruta) };
+    // Las DOS direcciones exigen árbol limpio, y «bajar» no menos que «subir»: la
+    // descarga SOBRESCRIBE el disco (`extraerZipBase64` escribe encima, no fusiona) y el
+    // baseline se construye DESPUÉS, así que sin un commit debajo el trabajo local no se
+    // recupera de ninguna forma. Es alcanzable sin escribir `/sync`: el alta llama a
+    // `sincronizar("bajar", …)`, así que quien arranca xonecode en una carpeta con
+    // trabajo y elige modo cloud lo perdería. La guarda va ANTES de abrir sesión MCP.
+    if (accion !== "estado" && !(await piezas.limpio(raiz))) {
+      // `sinCommitear` y no `pendientes`: la pregunta aquí es «qué falta por COMMITEAR»,
+      // y además `pendientes` compara contra la ref de seguimiento, que en el alta de una
+      // carpeta que todavía no es repo no existe siquiera.
+      return { tipo: "arbol-sucio", accion, pendientes: await piezas.sinCommitear(raiz) };
     }
 
     const sesion = await piezas.sesion(config.url, { scopes: config.scopes });

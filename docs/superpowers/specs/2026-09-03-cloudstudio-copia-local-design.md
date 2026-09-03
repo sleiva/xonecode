@@ -110,9 +110,11 @@ dos, y se corresponden 1:1 con lo que git ya sabe hacer:
 | **Rama origen** — de donde se baja | se elige al dar de alta el proyecto; se guarda en `cloudstudio.rama` | `refs/remotes/cloudstudio/<origen>` |
 | **Rama de trabajo** — a donde se sube | se crea en la **primera subida**, no en el alta | `refs/remotes/cloudstudio/<trabajo>`, upstream de la rama local |
 
-Es la relación de siempre entre `origin/main` y una rama de feature: bajar de la rama
-origen es un fetch + merge, `git status` sigue diciendo si vas por delante, y **quien
-integra en la rama origen es el usuario, en Studio**. La rama de trabajo se crea
+Es la relación de siempre entre `origin/main` y una rama de feature: `git status` sigue
+diciendo si vas por delante, y **quien integra en la rama origen es el usuario, en
+Studio**. Bajar, HOY, no es un fetch + merge: **sobrescribe** el disco con lo que venga
+del servidor, y por eso exige árbol limpio (ver más abajo). La fusión a tres bandas está
+pendiente de implementar. La rama de trabajo se crea
 perezosamente porque crear una rama vacía en el alta le ensucia el Studio a quien luego no
 sube nada. El nombre de la rama local se hace coincidir con la rama origen (`git init -b
 <origen>`) para que no haya dos vocabularios.
@@ -229,9 +231,12 @@ De ahí sale todo lo demás sin inventar nada:
 
 - **`git status` responde «¿está subido?»** sin comandos de xonecode ni fichero de estado.
 - **`git diff --name-status cloudstudio/main..HEAD` ES el plan de subida.**
-- **Bajar es un merge de verdad**: el nuevo download se commitea con el sync anterior como
-  padre y `git merge cloudstudio/main` da fusión a tres bandas con ancestro real. Si
-  alguien tocó la app en Studio mientras tanto, sale un conflicto, no un machaque.
+- **Bajar podría ser un merge de verdad** —el nuevo download se commitea con el sync
+  anterior como padre y `git merge cloudstudio/main` daría fusión a tres bandas con
+  ancestro real—, pero **no está implementado**: no hay ningún `git merge` en el código.
+  Hoy la descarga SOBRESCRIBE y la única red de seguridad es la guarda de árbol limpio,
+  que se exige en las dos direcciones. Con el árbol limpio, un machaque se deshace con
+  `git checkout .`; sin ella no se deshace de ninguna forma.
 - **«Simular el push» es un comando**: `git update-ref -m "sync: N ficheros"
   refs/remotes/cloudstudio/main HEAD`, y solo si la subida terminó entera.
 
@@ -342,9 +347,14 @@ ruta virtual concreta**, como `/MEMORIA_PROYECTO.md`, nunca la carpeta.
 - **Descompresor**: `fflate` (JS puro, ~30 KB, sin binarios nativos). `unzip` del sistema
   se descarta: no existe en Windows y metería un `spawn` donde no hace falta.
 - **Cuándo se baja**: en el alta del proyecto, y luego solo con `/sync` explícito. Bajar
-  sin pedirlo, con un merge de por medio, asusta y con razón.
-- **Árbol sucio al subir**: se sube el estado de un commit (HEAD) y se rechaza subir con
-  cambios sin commitear, diciendo qué falta. Así «lo que está arriba» es siempre un commit
+  sin pedirlo asusta y con razón — y más aún mientras la descarga sobrescriba en vez de
+  fusionar.
+- **Árbol sucio: se rechaza en las DOS direcciones**, por motivos distintos. Al subir, se
+  sube el estado de un commit (HEAD) y se rechaza con cambios sin commitear, diciendo qué
+  falta. Al bajar, porque la descarga sobrescribe el disco y el baseline se construye
+  DESPUÉS: sin commit debajo, el trabajo local no se recupera. `.xonecode/` nunca cuenta
+  (en el alta se escribe antes de que exista la exclusión de `info/exclude`), y una
+  carpeta que aún no es repo se considera limpia solo si está vacía. Así «lo que está arriba» es siempre un commit
   concreto y mover la ref significa algo. xonecode no commitea por el usuario: el git es
   suyo y la autoría también.
 

@@ -108,7 +108,13 @@ export interface Consola {
     accion: "estado" | "bajar" | "subir",
     raiz: string,
     politicaDeAprobacion?: PoliticaDeAprobacion
-  ) => Promise<{ tipo: "texto"; texto: string } | { tipo: "arbol-sucio"; pendientes: string[] }>;
+  ) => Promise<
+    | { tipo: "texto"; texto: string }
+    // `accion` viaja con el rechazo porque el porqué NO es el mismo en las dos
+    // direcciones: subir exige un commit para que mover la ref signifique algo; bajar lo
+    // exige porque SOBRESCRIBE el disco y sin commit no hay nada que recuperar.
+    | { tipo: "arbol-sucio"; accion: "bajar" | "subir"; pendientes: string[] }
+  >;
 }
 
 /**
@@ -275,6 +281,15 @@ export async function configurarModoInicial(raiz: string, consola: Consola): Pro
     try {
       const bajada = await consola.sincronizar("bajar", raiz);
       if (bajada.tipo === "texto") consola.escribir(bajada.texto);
+      else {
+        // El alta es el camino por el que se pierde trabajo sin haber escrito `/sync`:
+        // quien arranca xonecode en una carpeta con trabajo y elige modo cloud. Bajar
+        // sobrescribe el disco, así que aquí se dice qué hay y NO se baja nada.
+        consola.escribir(
+          `no se ha descargado nada: hay trabajo local sin commitear (${bajada.pendientes.join(", ")}). ` +
+            "La descarga sobrescribe el disco; commitea (o guarda) y usa /sync bajar\n"
+        );
+      }
     } catch (error) {
       // Un fallo de red o de servidor durante la descarga no puede tirar abajo el alta:
       // .xonecode ya quedó escrito y el usuario puede reintentar con /sync bajar.
@@ -905,11 +920,14 @@ export const COMANDOS: Record<string, { descripcion: string; manejador: Manejado
       const politicaDeAprobacion = accion === "subir" ? politicaInteractiva(consola) : undefined;
       const resultado = await consola.sincronizar(accion, estado.raiz, politicaDeAprobacion);
       if (resultado.tipo === "arbol-sucio") {
-        // Se sube el estado de un COMMIT, no un borrador: así «lo que está arriba» es
-        // siempre un commit concreto y mover la ref significa algo.
-        consola.escribir(
-          `hay cambios sin commitear (${resultado.pendientes.join(", ")}); commitea antes de subir\n`
-        );
+        // Al subir se sube el estado de un COMMIT, no un borrador: así «lo que está
+        // arriba» es siempre un commit concreto y mover la ref significa algo. Al bajar
+        // el motivo es otro y hay que decirlo: la descarga SOBRESCRIBE el disco.
+        const porque =
+          resultado.accion === "subir"
+            ? "commitea antes de subir"
+            : "la descarga sobrescribe el disco; commitea antes de bajar";
+        consola.escribir(`hay cambios sin commitear (${resultado.pendientes.join(", ")}); ${porque}\n`);
         return { seguir: true };
       }
       consola.escribir(resultado.texto);

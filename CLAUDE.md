@@ -225,8 +225,14 @@ Studio tiene rama origen (de la que se baja, `cloudstudio.rama`) y rama de traba
 que se sube, creada perezosamente en la primera subida para no ensuciar Studio a quien no
 sube nada). **El servidor no fusiona** —`manage_branches("merge")` da una LISTA de
 ficheros a fusionar, no un resultado— así que quien integra en la rama origen es el
-usuario, en Studio, y quien fusiona en local es git, que sí tiene el ancestro común (el
-commit de la descarga).
+usuario, en Studio. En local fusionaría git, que sí tiene el ancestro común (el commit de
+la descarga), pero **eso todavía no está implementado**: `bajar` SOBRESCRIBE el disco y no
+hay ningún `git merge` en el código. Lo único que protege el trabajo local es la guarda de
+**árbol limpio, exigida en las dos direcciones** (`arbolLimpio`, en `crearSincronizador`,
+antes de abrir sesión MCP): al subir porque se sube un commit y no un borrador, al bajar
+porque el baseline se construye DESPUÉS de sobrescribir y sin commit no hay nada que
+recuperar. `.xonecode/` no cuenta nunca —en el alta se escribe antes de que exista la
+exclusión—, y una carpeta que aún no es repo solo está limpia si está vacía.
 
 El alta completa son cuatro pasos (`cli/main.ts`), y cada uno solo aparece si falta lo que
 decide: 1) cuenta —proveedor y modelo, solo si nadie eligió nunca, deducido del `origen`

@@ -8,15 +8,16 @@
  */
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
-import { appendFileSync, existsSync, mkdirSync, readFileSync } from "node:fs";
+import { appendFileSync, existsSync, mkdirSync, readFileSync, readdirSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import type { CambioLocal } from "../core/planDeSubida.js";
 import { indicePrivado, claseDeCambio } from "./git.js";
+import { NOMBRE_CARPETA } from "./configEnDisco.js";
 
 const ejecutar = promisify(execFile);
 
 export const REMOTO = "cloudstudio";
-const EXCLUSION = ".xonecode/";
+const EXCLUSION = `${NOMBRE_CARPETA}/`;
 
 const git = (raiz: string, args: string[], env?: NodeJS.ProcessEnv) =>
   ejecutar("git", args, { cwd: raiz, env: env ?? process.env, maxBuffer: 32 * 1024 * 1024 });
@@ -236,8 +237,50 @@ export async function marcarSubido(raiz: string, rama: string, mensaje: string):
   await git(raiz, ["update-ref", "-m", mensaje, `refs/remotes/${REMOTO}/${rama}`, stdout.trim()]);
 }
 
-/** ¿Hay cambios sin commitear? La subida exige árbol limpio: se sube un commit, no un borrador. */
+/**
+ * ¿Hay cambios sin commitear?
+ *
+ * Lo exigen las DOS direcciones, por motivos distintos: subir sube el estado de un commit
+ * (no un borrador), y bajar SOBRESCRIBE el disco con lo que venga del servidor — sin
+ * commit debajo, el trabajo local no se recupera de ninguna forma.
+ *
+ * `.xonecode/` no cuenta nunca. En el alta, la config del proyecto se escribe ANTES de la
+ * primera descarga y `prepararRepo` (que es quien pone la exclusión en `info/exclude`)
+ * corre DESPUÉS: sin este `:(exclude)`, la propia alta se bloquearía a sí misma en
+ * cualquier repo preexistente. Y la carpeta del harness no sube ni baja jamás.
+ *
+ * **Sin repo** no hay `git status` que valer: se responde por el contenido. Una carpeta
+ * vacía (salvo `.xonecode/`) es el alta normal y se deja pasar; una con ficheros dentro y
+ * sin git es justo el caso sin red de seguridad —nada que recuperar tras sobrescribir—,
+ * así que se declara sucia.
+ */
 export async function arbolLimpio(raiz: string): Promise<boolean> {
-  const { stdout } = await git(raiz, ["status", "--porcelain", "--", "."]);
-  return stdout.trim() === "";
+  return (await sinCommitear(raiz)).length === 0;
+}
+
+/**
+ * QUÉ está sin commitear, para poder decirlo. Es la misma pregunta que `arbolLimpio`
+ * —de hecho aquélla se responde con ésta, para que no haya dos criterios de «limpio»—,
+ * y no la misma que `cambiosPendientes`: aquélla es «qué falta por SUBIR» (diff contra la
+ * ref de seguimiento) y ésta es «qué falta por COMMITEAR».
+ */
+export async function sinCommitear(raiz: string): Promise<string[]> {
+  if (!(await esRepo(raiz))) {
+    return readdirSync(raiz)
+      .filter((entrada) => entrada !== NOMBRE_CARPETA && entrada !== ".git")
+      .sort();
+  }
+  const prefijo = await prefijoDelProyecto(raiz);
+  const { stdout } = await git(raiz, [
+    // Mismo motivo que en `cambiosPendientes`: un nombre en castellano saldría citado en
+    // octal y el mensaje al usuario sería ilegible.
+    "-c", "core.quotePath=false",
+    "status", "--porcelain", "--", ".", `:(exclude)${NOMBRE_CARPETA}`,
+  ]);
+  return stdout
+    .split("\n")
+    .filter((linea) => linea.trim() !== "")
+    // `XY ruta`: dos caracteres de estado y un espacio.
+    .map((linea) => recortar(prefijo, linea.slice(3).trim()))
+    .sort();
 }

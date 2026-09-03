@@ -257,6 +257,31 @@ describe("configurarModoInicial", () => {
       expect(sincronizar).toHaveBeenCalledOnce();
       expect(salida()).toContain("bajados 3 ficheros");
     });
+
+    it("si el árbol está sucio, el alta DICE que no ha bajado nada y por qué", async () => {
+      // Este es el camino por el que se pierde trabajo sin haber escrito `/sync`: quien
+      // arranca xonecode en una carpeta con trabajo y elige modo cloud. La descarga
+      // sobrescribe el disco y el baseline se construye después, así que no se recupera.
+      // El alta se tragaba el rechazo en silencio (solo pintaba el caso `texto`).
+      const { raiz, consola, salida } = consolaEnAltaCloud();
+      consola.ramasDeCloudStudio = async () => ["master"];
+      consola.guardarRamaDeProyecto = vi.fn(() => ({ ruta: "x", rama: "master" }));
+      consola.sincronizar = async () => ({
+        tipo: "arbol-sucio" as const,
+        accion: "bajar" as const,
+        pendientes: ["app.xml", "Farmacias.xne"],
+      });
+      try {
+        await configurarModoInicial(raiz, consola);
+      } finally {
+        rmSync(raiz, { recursive: true, force: true });
+      }
+      const texto = salida();
+      expect(texto).toContain("app.xml");
+      expect(texto).toContain("Farmacias.xne");
+      expect(texto).toMatch(/sobrescribe/i);
+      expect(texto).toMatch(/no se ha descargado nada/i);
+    });
   });
 
   describe("paso 4: modelo propio del proyecto", () => {
@@ -318,7 +343,7 @@ describe("/sync", () => {
       ...consola,
       sincronizar: async (accion) => {
         expect(accion).toBe("subir");
-        return { tipo: "arbol-sucio", pendientes: ["app.xml"] };
+        return { tipo: "arbol-sucio", accion: "subir", pendientes: ["app.xml"] };
       },
     };
     await correrConsola(conSync, estadoDe());

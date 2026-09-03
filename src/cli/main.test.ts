@@ -651,6 +651,7 @@ function piezasFalsas(overrides: Partial<PiezasDeSincronizacion> = {}): PiezasDe
     preparar: overrides.preparar ?? (async () => "sha-falso"),
     pendientes: overrides.pendientes ?? (async () => []),
     limpio: overrides.limpio ?? (async () => true),
+    sinCommitear: overrides.sinCommitear ?? (async () => []),
     subirProyecto: overrides.subirProyecto ?? (async () => ({ ok: [], fallos: [] })),
   };
 }
@@ -671,17 +672,38 @@ describe("crearSincronizador", () => {
     const raiz = raizConProyectoCloud();
     const sesion = vi.fn(piezasFalsas().sesion);
     const subirProyecto = vi.fn(piezasFalsas().subirProyecto);
-    const pendientes = vi.fn(async () => [{ clase: "modificado" as const, ruta: "app.xml" }]);
+    const sinCommitear = vi.fn(async () => ["app.xml"]);
     const sincronizar = crearSincronizador(
-      piezasFalsas({ limpio: async () => false, pendientes, subirProyecto, sesion })
+      piezasFalsas({ limpio: async () => false, sinCommitear, subirProyecto, sesion })
     );
 
     const resultado = await sincronizar("subir", raiz);
 
     // Esta es la guarda que una implementación ingenua se saltaría: sin ella, `subir`
     // llegaría a llamarse igual con el árbol sucio.
-    expect(resultado).toEqual({ tipo: "arbol-sucio", pendientes: ["app.xml"] });
+    expect(resultado).toEqual({ tipo: "arbol-sucio", accion: "subir", pendientes: ["app.xml"] });
     expect(subirProyecto).not.toHaveBeenCalled();
+    expect(sesion).not.toHaveBeenCalled();
+  });
+
+  it("«bajar» con el árbol sucio se niega SIN descargar ni abrir sesión", async () => {
+    // La descarga SOBRESCRIBE el disco (`extraerZipBase64` escribe encima; no hay ningún
+    // `git merge` en la rama) y el baseline se construye DESPUÉS, así que sin commit
+    // debajo el trabajo local no se recupera. Y se llega aquí sin escribir `/sync`: el
+    // alta llama a `sincronizar("bajar", …)` al elegir modo cloud.
+    const raiz = raizConProyectoCloud();
+    const sesion = vi.fn(piezasFalsas().sesion);
+    const descargar = vi.fn(piezasFalsas().descargar);
+    const preparar = vi.fn(piezasFalsas().preparar);
+    const sincronizar = crearSincronizador(
+      piezasFalsas({ limpio: async () => false, sinCommitear: async () => ["app.xml"], descargar, preparar, sesion })
+    );
+
+    const resultado = await sincronizar("bajar", raiz);
+
+    expect(resultado).toEqual({ tipo: "arbol-sucio", accion: "bajar", pendientes: ["app.xml"] });
+    expect(descargar).not.toHaveBeenCalled();
+    expect(preparar).not.toHaveBeenCalled();
     expect(sesion).not.toHaveBeenCalled();
   });
 

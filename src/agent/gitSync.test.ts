@@ -3,7 +3,7 @@ import { execFileSync } from "node:child_process";
 import { mkdtempSync, writeFileSync, mkdirSync, readFileSync, existsSync, unlinkSync, symlinkSync, statSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
-import { prepararRepo, cambiosPendientes, marcarSubido, arbolLimpio, REMOTO } from "./gitSync.js";
+import { prepararRepo, cambiosPendientes, marcarSubido, arbolLimpio, sinCommitear, REMOTO } from "./gitSync.js";
 
 const git = (raiz: string, ...args: string[]) =>
   execFileSync("git", args, { cwd: raiz, encoding: "utf8" }).trim();
@@ -159,6 +159,48 @@ describe("prepararRepo — el proyecto no es la raíz del repo", () => {
     } finally {
       rmSync(wt, { recursive: true, force: true });
     }
+  });
+});
+
+describe("arbolLimpio y sinCommitear", () => {
+  it("`.xonecode/` sin rastrear NO ensucia el árbol, aunque aún no haya exclusión", async () => {
+    // En el alta, la config del proyecto se escribe ANTES de la primera descarga y
+    // `prepararRepo` (que pone la exclusión) corre DESPUÉS. Sin este `:(exclude)`, la
+    // guarda de árbol limpio de `bajar` bloquearía la propia alta en cualquier repo
+    // preexistente, para siempre y sin nada que el usuario pudiera hacer.
+    const raiz = proyecto();
+    execFileSync("git", ["init", "-q", "-b", "master"], { cwd: raiz });
+    git(raiz, "config", "user.email", "t@t");
+    git(raiz, "config", "user.name", "t");
+    git(raiz, "add", "app.xml");
+    git(raiz, "commit", "-qm", "inicial");
+
+    expect(await sinCommitear(raiz)).toEqual([]);
+    expect(await arbolLimpio(raiz)).toBe(true);
+  });
+
+  it("dice QUÉ está sin commitear, y eso ensucia el árbol", async () => {
+    const raiz = proyecto();
+    await prepararRepo(raiz, "master");
+    writeFileSync(join(raiz, "app.xml"), "<app cambiada/>");
+    writeFileSync(join(raiz, "ñu.xne"), "x");
+
+    expect(await sinCommitear(raiz)).toEqual(["app.xml", "ñu.xne"]);
+    expect(await arbolLimpio(raiz)).toBe(false);
+  });
+
+  it("sin repo: una carpeta con trabajo está SUCIA (no hay nada que recuperar)", async () => {
+    // `git status` no existe aquí, y sobrescribir con la descarga sería irreversible.
+    const raiz = proyecto();
+    expect(await sinCommitear(raiz)).toEqual(["app.xml"]);
+    expect(await arbolLimpio(raiz)).toBe(false);
+  });
+
+  it("sin repo: una carpeta vacía salvo `.xonecode/` está limpia (es el alta normal)", async () => {
+    const raiz = mkdtempSync(join(tmpdir(), "xc-alta-"));
+    mkdirSync(join(raiz, ".xonecode"), { recursive: true });
+    writeFileSync(join(raiz, ".xonecode", "config.json"), "{}");
+    expect(await arbolLimpio(raiz)).toBe(true);
   });
 });
 
