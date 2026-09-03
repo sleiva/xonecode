@@ -1,5 +1,11 @@
 import { describe, it, expect } from "vitest";
-import { DESCRIPCIONES_FICHEROS, promptDe, PROMPT_ORQUESTADOR, rutasDeSkills } from "./xoneAgent.js";
+import {
+  DESCRIPCIONES_FICHEROS,
+  OPCIONES_BUSQUEDA_FICHEROS,
+  promptDe,
+  PROMPT_ORQUESTADOR,
+  rutasDeSkills,
+} from "./xoneAgent.js";
 import { SkillsEnMemoria } from "../core/ports.js";
 
 describe("PROMPT_ORQUESTADOR", () => {
@@ -62,6 +68,16 @@ describe("promptDe", () => {
     expect(DESCRIPCIONES_FICHEROS.write_file).toContain("`archify`");
     expect(DESCRIPCIONES_FICHEROS.write_file).toContain("/artifacts/<nombre>.html");
     expect(DESCRIPCIONES_FICHEROS.edit_file).toContain("/MEMORIA_PROYECTO.md");
+  });
+
+  it("hace que grep localice antes de leer y conserva su presupuesto", () => {
+    expect(DESCRIPCIONES_FICHEROS.grep).toContain("LITERAL");
+    expect(DESCRIPCIONES_FICHEROS.grep).toContain("files_with_matches");
+    expect(DESCRIPCIONES_FICHEROS.grep).toContain("max_count");
+    expect(OPCIONES_BUSQUEDA_FICHEROS).toEqual({
+      grepMaxCount: 100,
+      toolTokenLimitBeforeEvict: 6_000,
+    });
   });
 
   it("nombra las skills que SÍ tiene", () => {

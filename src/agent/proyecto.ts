@@ -5,7 +5,7 @@ import { RAIZ_SKILLS } from "./skills.js";
 /**
  * El backend del proyecto: confinado, y sin las vistas aplanadas.
  *
- * **`virtualMode: true` no es configurable.** Medido contra deepagents 1.12.0: con el
+ * **`virtualMode: true` no es configurable.** Medido contra deepagents 1.13.2: con el
  * default (`false`) el backend LEYÓ una ruta absoluta de fuera de la raíz. La propia
  * librería lo dice de su default — «absolute paths and `..` can bypass rootDir».
  *

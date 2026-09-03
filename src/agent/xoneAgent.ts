@@ -51,7 +51,32 @@ export const DESCRIPCIONES_FICHEROS = {
     "No modifiques `/skills`: son instrucciones de solo lectura. Para actualizar la memoria",
     "usa solo `/MEMORIA_PROYECTO.md` y conserva su contenido útil.",
   ].join(" "),
+  grep: [
+    "Busca texto LITERAL (no regex) de forma progresiva para ahorrar contexto.",
+    "Primero acota con `path` y `glob`; para localizar candidatos usa",
+    "`output_mode=\"files_with_matches\"` o `output_mode=\"count\"`.",
+    "Usa `output_mode=\"content\"` solo con un patrón específico y lee después",
+    "el fragmento necesario con `read_file` (offset y limit). La búsqueda devuelve",
+    "como máximo 100 coincidencias salvo que justifiques subir `max_count`.",
+  ].join(" "),
 };
+
+/**
+ * Presupuesto de las herramientas de ficheros.
+ *
+ * DeepAgents 1.13 incorpora `max_count` y `output_mode` en `grep`. El valor por
+ * defecto de la librería (1.000) sigue siendo demasiado generoso para un agente
+ * que explora proyectos XOne: 100 resultados bastan para localizar candidatos y
+ * el modelo puede subirlo explícitamente en una búsqueda excepcional.
+ *
+ * A partir de 6k tokens la salida se conserva bajo `/large_tool_results/` y se
+ * sustituye por una referencia paginable. Así una lectura o búsqueda accidental
+ * no consume toda la ventana antes de que actúe el resumen de conversación.
+ */
+export const OPCIONES_BUSQUEDA_FICHEROS = {
+  grepMaxCount: 100,
+  toolTokenLimitBeforeEvict: 6_000,
+} as const;
 
 /**
  * El agente real.
@@ -104,6 +129,7 @@ export async function construirAgente(opciones: OpcionesDelAgente): Promise<unkn
         backend,
         permissions: permisosDe(perfil),
         customToolDescriptions: DESCRIPCIONES_FICHEROS,
+        ...OPCIONES_BUSQUEDA_FICHEROS,
       }),
       resumenDeContexto(backend),
       middlewareTextoDeTool(),
@@ -122,7 +148,11 @@ export async function construirAgente(opciones: OpcionesDelAgente): Promise<unkn
     // y no es de langchain ni de deepagents, sino de `@langchain/ollama` (ver
     // `textoDeTool.ts`). Medido con dos modelos, nube y local.
     middleware: [
-      createFilesystemMiddleware({ backend, customToolDescriptions: DESCRIPCIONES_FICHEROS }),
+      createFilesystemMiddleware({
+        backend,
+        customToolDescriptions: DESCRIPCIONES_FICHEROS,
+        ...OPCIONES_BUSQUEDA_FICHEROS,
+      }),
       resumenDeContexto(backend),
       middlewareTextoDeTool(),
       ...middlewareTracker,
