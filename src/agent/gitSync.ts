@@ -158,7 +158,12 @@ export async function prepararRepo(
   const fijarSinPisar = async (clave: string, valor: string): Promise<void> => {
     if (yaEraRepo) {
       const actual = await valorDeConfig(raiz, clave);
-      if (actual !== undefined) {
+      // Se compara el VALOR, no solo la presencia. Con `actual !== undefined` bastaba con
+      // que la clave existiera: a partir del SEGUNDO `/sync bajar` sobre el repo que
+      // xonecode acaba de crear, `yaEraRepo` ya es cierto y nuestras propias claves con
+      // nuestros propios valores se declaraban «conservadas» — un aviso que salta cuando
+      // no ha pasado nada, que es justo lo que enseña a ignorar los avisos.
+      if (actual !== undefined && actual !== valor) {
         omitidas.push(`${clave}=${actual}`);
         return;
       }
@@ -300,13 +305,30 @@ export async function marcarSubido(raiz: string, rama: string, mensaje: string):
  * cualquier repo preexistente. Y la carpeta del harness no sube ni baja jamás.
  *
  * **Sin repo** no hay `git status` que valer: se responde por el contenido. Una carpeta
- * vacía (salvo `.xonecode/`) es el alta normal y se deja pasar; una con ficheros dentro y
- * sin git es justo el caso sin red de seguridad —nada que recuperar tras sobrescribir—,
- * así que se declara sucia.
+ * vacía (salvo `.xonecode/` y la basura del sistema operativo) es el alta normal y se deja
+ * pasar; una con ficheros dentro y sin git es justo el caso sin red de seguridad —nada que
+ * recuperar tras sobrescribir—, así que se declara sucia.
  */
 export async function arbolLimpio(raiz: string): Promise<boolean> {
   return (await sinCommitear(raiz)).length === 0;
 }
+
+/**
+ * Ficheros que pone el SISTEMA OPERATIVO, no el usuario.
+ *
+ * Sin repo, `sinCommitear` responde por el contenido de la carpeta, y en macOS —la
+ * plataforma de este repo— una carpeta vacía que se ha abierto una vez en el Finder tiene
+ * un `.DS_Store` dentro. Contarlo bloqueaba el alta entera («hay trabajo local sin
+ * commitear (.DS_Store)») sin salida posible desde xonecode, porque `/sync bajar` lleva la
+ * misma guarda: se arreglaba un riesgo real y se rompía el camino feliz.
+ *
+ * Es una LISTA CERRADA y no «ignora los ocultos» a propósito: un `.env` o un `.gitignore`
+ * son trabajo del usuario, y sobrescribirlos sin red de seguridad es exactamente lo que la
+ * guarda existe para impedir. Estos tres no son contenido de ningún proyecto y aparecen
+ * solo por abrir la carpeta.
+ */
+const esBasuraDelSO = (entrada: string): boolean =>
+  entrada === ".DS_Store" || entrada === "Thumbs.db" || entrada === "desktop.ini";
 
 /**
  * QUÉ está sin commitear, para poder decirlo. Es la misma pregunta que `arbolLimpio`
@@ -317,7 +339,7 @@ export async function arbolLimpio(raiz: string): Promise<boolean> {
 export async function sinCommitear(raiz: string): Promise<string[]> {
   if (!(await esRepo(raiz))) {
     return readdirSync(raiz)
-      .filter((entrada) => entrada !== NOMBRE_CARPETA && entrada !== ".git")
+      .filter((entrada) => entrada !== NOMBRE_CARPETA && entrada !== ".git" && !esBasuraDelSO(entrada))
       .sort();
   }
   const prefijo = await prefijoDelProyecto(raiz);

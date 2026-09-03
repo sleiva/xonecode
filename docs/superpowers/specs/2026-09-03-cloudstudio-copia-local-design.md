@@ -377,7 +377,9 @@ ruta virtual concreta**, como `/MEMORIA_PROYECTO.md`, nunca la carpeta.
   falta. Al bajar, porque la descarga sobrescribe el disco y el baseline se construye
   DESPUÉS: sin commit debajo, el trabajo local no se recupera. `.xonecode/` nunca cuenta
   (en el alta se escribe antes de que exista la exclusión de `info/exclude`), y una
-  carpeta que aún no es repo se considera limpia solo si está vacía. Así «lo que está arriba» es siempre un commit
+  carpeta que aún no es repo se considera limpia solo si está vacía — salvo por
+  `.DS_Store`, `Thumbs.db` y `desktop.ini`, que los pone el sistema operativo y no el
+  usuario. Es una lista cerrada y no «ignora los ocultos»: un `.env` sí bloquea. Así «lo que está arriba» es siempre un commit
   concreto y mover la ref significa algo. xonecode no commitea por el usuario: el git es
   suyo y la autoría también.
 

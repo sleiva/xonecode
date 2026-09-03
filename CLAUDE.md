@@ -245,7 +245,11 @@ hay ningún `git merge` en el código. Lo único que protege el trabajo local es
 antes de abrir sesión MCP): al subir porque se sube un commit y no un borrador, al bajar
 porque el baseline se construye DESPUÉS de sobrescribir y sin commit no hay nada que
 recuperar. `.xonecode/` no cuenta nunca —en el alta se escribe antes de que exista la
-exclusión—, y una carpeta que aún no es repo solo está limpia si está vacía.
+exclusión—, y una carpeta que aún no es repo solo está limpia si está vacía salvo por la
+basura del sistema operativo (`.DS_Store`, `Thumbs.db`, `desktop.ini`: lista CERRADA, no
+«los ocultos» — un `.env` o un `.gitignore` sí son trabajo del usuario y deben bloquear).
+En macOS, una carpeta vacía abierta una vez en el Finder ya trae `.DS_Store`, y contarlo
+bloqueaba el alta entera sin salida posible.
 
 El alta completa son cuatro pasos (`cli/main.ts`), y cada uno solo aparece si falta lo que
 decide: 1) cuenta —proveedor y modelo, solo si nadie eligió nunca, deducido del `origen`

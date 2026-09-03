@@ -67,6 +67,25 @@ describe("prepararRepo", () => {
     expect(git(raiz, "rev-parse", `refs/remotes/${REMOTO}/master`)).toMatch(/^[0-9a-f]{40}$/);
   });
 
+  it("un segundo prepararRepo sobre NUESTRO repo no avisa de nada", async () => {
+    // Medido: a partir del segundo `/sync bajar`, `yaEraRepo` ya es cierto —el repo lo
+    // creamos nosotros la vez anterior— y, comparando solo la PRESENCIA de la clave,
+    // nuestras propias claves con nuestros propios valores se declaraban «conservadas».
+    // Con `informar` ya cableado (I2), ese aviso falso llegaba a la consola en cada
+    // descarga: «un aviso que salta cuando no ha pasado nada enseña a ignorarlo».
+    const raiz = proyecto();
+    await prepararRepo(raiz, "master");
+
+    const avisos: string[] = [];
+    await prepararRepo(raiz, "master", (t) => avisos.push(t));
+
+    expect(avisos).toEqual([]);
+    // Y las claves siguen valiendo lo que tienen que valer: no se ha «conservado» nada
+    // porque no había nada del usuario que conservar.
+    expect(git(raiz, "config", "core.autocrlf")).toBe("false");
+    expect(git(raiz, "config", "branch.master.remote")).toBe(REMOTO);
+  });
+
   it("no pisa la configuración de un repo preexistente, y lo dice", async () => {
     // Reproducido: un repo con `origin` en GitHub acababa con `master` apuntando a un
     // remoto `cloudstudio://`, que no es ningún servidor git — y el `git push` del
@@ -225,6 +244,38 @@ describe("arbolLimpio y sinCommitear", () => {
     mkdirSync(join(raiz, ".xonecode"), { recursive: true });
     writeFileSync(join(raiz, ".xonecode", "config.json"), "{}");
     expect(await arbolLimpio(raiz)).toBe(true);
+  });
+
+  it("sin repo: un `.DS_Store` no bloquea el alta", async () => {
+    // En macOS —la plataforma de este repo— una carpeta vacía que se ha abierto UNA VEZ
+    // en el Finder tiene un `.DS_Store` dentro. Contándolo, el alta respondía «hay trabajo
+    // local sin commitear (.DS_Store)» y no había salida desde xonecode, porque
+    // `/sync bajar` lleva la misma guarda: la guarda arreglaba un riesgo real y rompía el
+    // camino feliz.
+    const raiz = mkdtempSync(join(tmpdir(), "xc-alta-"));
+    mkdirSync(join(raiz, ".xonecode"), { recursive: true });
+    writeFileSync(join(raiz, ".xonecode", "config.json"), "{}");
+    writeFileSync(join(raiz, ".DS_Store"), "basura del Finder");
+    writeFileSync(join(raiz, "Thumbs.db"), "basura de Windows");
+    writeFileSync(join(raiz, "desktop.ini"), "[.ShellClassInfo]");
+
+    expect(await sinCommitear(raiz)).toEqual([]);
+    expect(await arbolLimpio(raiz)).toBe(true);
+  });
+
+  it("sin repo: la basura del SO no tapa un fichero REAL, y el aviso nombra el real", async () => {
+    // La otra mitad: la excepción es una lista cerrada de metadatos del sistema, no un
+    // «ignora los ocultos». Un `.env` o un `.gitignore` SON trabajo del usuario y tienen
+    // que seguir bloqueando, porque sobrescribirlos sin git no se deshace.
+    const raiz = mkdtempSync(join(tmpdir(), "xc-alta-"));
+    mkdirSync(join(raiz, ".xonecode"), { recursive: true });
+    writeFileSync(join(raiz, ".DS_Store"), "basura del Finder");
+    writeFileSync(join(raiz, "app.xml"), "<app/>");
+    writeFileSync(join(raiz, ".env"), "CLAVE=1");
+
+    // Solo lo real, y por su nombre: el mensaje al usuario tiene que decirle qué se juega.
+    expect(await sinCommitear(raiz)).toEqual([".env", "app.xml"]);
+    expect(await arbolLimpio(raiz)).toBe(false);
   });
 });
 
