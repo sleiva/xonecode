@@ -1,4 +1,4 @@
-# CloudStudio: copia local, git como libro de cuentas y sincronización
+# Arranque, copia local de CloudStudio y sincronización
 
 Diseño de la descarga del proyecto de CloudStudio a una copia local, del registro de
 cambios sobre ella y de la subida incremental. Sustituye el «flujo objetivo» de
@@ -48,6 +48,52 @@ En **la carpeta que el usuario abrió**, con la misma estructura que el servidor
 `worktree/` bajo `.xonecode`: todo lo que ya funciona sobre `raiz` —detección de `app.xml`,
 verificador, foto de git por turno, ocultar vistas aplanadas, completado de `@ficheros`—
 sigue funcionando sin tocarlo, y `.xonecode` puede seguir denegada entera al agente.
+
+## El arranque completo, en orden
+
+El alta es una secuencia, y cada paso solo aparece si falta lo que decide. Nada se
+pregunta dos veces, y **sin TTY no se pregunta nada**: igual que `configurarModoInicial`
+hoy, el asistente entero se salta con `!consola.interactivo`, o las tuberías y `xonecode
+run` dejarían de dar la salida byte-idéntica que CI espera.
+
+1. **Cuenta: proveedor y modelo** — solo si no hay ninguno configurado. Se guarda global.
+2. **Proyecto: modo** `offline` / `cloud` — solo si no hay `.xonecode/`.
+3. **Proyecto: cuál** de CloudStudio, y **descarga** de la copia local (secciones de abajo).
+4. **Proyecto: modelo propio** — opcional, por omisión hereda el global.
+
+## Wizard de proveedor y modelo
+
+**Cuándo salta.** No hace falta una marca de «primer arranque»: la resolución de modelos ya
+guarda el `origen` de cada valor (`--modelo-<papel>` > `--modelo` > `XONECODE_MODELO` >
+proyecto > global > omisión). Si el papel `trabajo` resuelve con `origen === "omisión"`,
+nadie ha elegido nunca nada, y ahí es donde se ofrece el asistente. Un flag aparte sería
+una segunda fuente de verdad sobre algo que el sistema ya sabe.
+
+**Qué pregunta**, reutilizando lo que ya existe (`PROVEEDORES`, `hayCredencial`,
+`catalogoModelos.listar`, `describirModelo`):
+
+1. Proveedor. Ollama local se ofrece sin pedir credencial —es la omisión— y se comprueba
+   que responde en `OLLAMA_BASE_URL` antes de darlo por bueno; el resto pide la clave si
+   falta, con el mismo `guardarCredencial` de `/provider`.
+2. Modelo, del **catálogo vivo** del proveedor.
+3. Ese modelo se asigna a **los tres papeles**, como hace `/modelo`. Afinar por papel es
+   una decisión posterior y opt-in, con `/modelos <proveedor>`: preguntar tres veces en el
+   primer arranque, antes de que nadie sepa qué es «afilado», es peaje sin contrapartida.
+
+**Dónde se guarda.** La elección va al `config.json` **global** (`guardarModeloGlobal`, que
+ya existe). La clave va solo a `~/.xonecode/auth.json` con modo 0600, por `authEnDisco.ts`
+— nunca al proyecto: `core/config.ts` rechaza claves de API ahí, y esa regla no se toca.
+
+**El modelo del proyecto** es el paso 4 del arranque y es opcional: por omisión el proyecto
+hereda el global, y solo si el usuario dice que sí se abre el mismo selector y se escribe
+en `<proyecto>/.xonecode/config.json`. Eso necesita una función nueva —hoy solo hay
+guardado global— hermana de `guardarTemaDeProyecto` y `guardarModoDeProyecto`: fusión sobre
+el objeto crudo y escritura atómica, con el mismo rechazo de claves.
+
+**Cancelar no escribe nada.** Se sigue con la omisión (Ollama local) y se dice en voz alta
+qué modelo va a usarse y de dónde sale. Es la misma regla que la creación de proyecto:
+escribir configuración es opt-in, y un asistente cancelado no puede dejar la cuenta a
+medio configurar.
 
 ## Bajada, en dos vías
 
