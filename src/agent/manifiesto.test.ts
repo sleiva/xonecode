@@ -20,8 +20,9 @@ describe("enumerarRemoto", () => {
   it("devuelve todo cuando no hay truncado", async () => {
     const puerto = new CloudStudioEnMemoria({ textos });
     await puerto.abrir("Demo");
-    const { manifiesto } = await enumerarRemoto(puerto);
+    const { manifiesto, raizTruncada } = await enumerarRemoto(puerto);
     expect(manifiesto.map((e) => e.ruta)).toEqual(["app.xml", "doc/guia.md", "icons/a.svg", "icons/b.svg"]);
+    expect(raizTruncada).toBe(false);
   });
 
   it("recorre subdirectorios cuando el servidor trunca", async () => {
@@ -29,9 +30,13 @@ describe("enumerarRemoto", () => {
     await puerto.abrir("Demo");
     // Comprueba la premisa: la llamada única YA viene incompleta. Si esto no fuera cierto
     // el test pasaría igual con una implementación que ni recorriera subdirectorios.
-    expect((await puerto.estructura()).length).toBeLessThan(4);
-    const { manifiesto } = await enumerarRemoto(puerto);
+    expect((await puerto.estructura()).entradas.length).toBeLessThan(4);
+    const { manifiesto, raizTruncada } = await enumerarRemoto(puerto);
     expect(manifiesto.map((e) => e.ruta).sort()).toEqual(["app.xml", "doc/guia.md", "icons/a.svg", "icons/b.svg"]);
+    // La raíz vino truncada aunque el recorrido por ancestros haya recuperado TODO en
+    // este fixture concreto: no hay forma de saberlo desde el cliente, así que se
+    // declara siempre — la certeza de "sí lo cubrí todo" no la puede dar este código.
+    expect(raizTruncada).toBe(true);
   });
 
   it("recorre directorios anidados aunque el truncado esconda un directorio hermano", async () => {
@@ -45,9 +50,21 @@ describe("enumerarRemoto", () => {
     };
     const puerto = new CloudStudioEnMemoria({ textos: anidados, topeEstructura: 2 });
     await puerto.abrir("Demo");
-    expect((await puerto.estructura()).length).toBeLessThan(3);
+    expect((await puerto.estructura()).entradas.length).toBeLessThan(3);
     const { manifiesto } = await enumerarRemoto(puerto);
     expect(manifiesto.map((e) => e.ruta).sort()).toEqual(["a/b/c.txt", "a/d/e.txt", "root.txt"]);
+  });
+
+  it("declara la raíz truncada cuando esconde un directorio que ningún otro fichero menciona", async () => {
+    // "secreto/x.txt" no comparte prefijo con NADA más: si el corte de la raíz lo deja
+    // fuera, ningún ancestro visto lo vuelve a pedir jamás, y se pierde en silencio. Una
+    // implementación que solo mirara si el manifiesto "parece completo" no lo notaría.
+    const conOculto = { "app.xml": "1", "icons/a.svg": "2", "secreto/x.txt": "3" };
+    const puerto = new CloudStudioEnMemoria({ textos: conOculto, topeEstructura: 2 });
+    await puerto.abrir("Demo");
+    const { manifiesto, raizTruncada } = await enumerarRemoto(puerto);
+    expect(manifiesto.some((e) => e.ruta === "secreto/x.txt")).toBe(false);
+    expect(raizTruncada).toBe(true);
   });
 
   it("no duplica una entrada vista dos veces", async () => {

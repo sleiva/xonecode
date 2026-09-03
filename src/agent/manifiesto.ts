@@ -13,6 +13,15 @@ export interface ResultadoDeEnumeracion {
   manifiesto: ManifiestoRemoto;
   /** Directorios que no se pudieron listar. Salen en el informe: callarlos es peor. */
   noEnumerados: string[];
+  /**
+   * El listado de la RAÍZ llegó truncado. A diferencia de un directorio truncado
+   * cualquiera (que este recorrido sortea pidiendo sus ancestros), un directorio de
+   * primer nivel que el corte deja fuera de la respuesta de la raíz Y que ningún otro
+   * fichero visto menciona como ancestro es INVISIBLE: no hay ninguna llamada que lo
+   * pida. No se puede demostrar que no existan; por eso se declara siempre que la raíz
+   * viene truncada, en vez de fingir que el recorrido por ancestros lo cubre todo.
+   */
+  raizTruncada: boolean;
 }
 
 /**
@@ -37,15 +46,16 @@ export async function enumerarRemoto(puerto: CloudStudioPort): Promise<Resultado
   const noEnumerados: string[] = [];
   const pendientes: string[] = [""];
   const visitados = new Set<string>();
+  let raizTruncada = false;
 
   while (pendientes.length > 0) {
     const directorio = pendientes.shift()!;
     if (visitados.has(directorio)) continue;
     visitados.add(directorio);
 
-    let entradas;
+    let respuesta;
     try {
-      entradas = await puerto.estructura(directorio === "" ? undefined : directorio);
+      respuesta = await puerto.estructura(directorio === "" ? undefined : directorio);
     } catch {
       // El motivo no se propaga al mensaje: puede traer rutas del servidor. Basta con
       // saber QUÉ no se enumeró, que es lo que condiciona el candado.
@@ -53,7 +63,12 @@ export async function enumerarRemoto(puerto: CloudStudioPort): Promise<Resultado
       continue;
     }
 
-    for (const entrada of entradas) {
+    // Solo la raíz importa aquí: un directorio truncado cualquiera lo sortea el propio
+    // recorrido pidiendo sus ancestros, pero un hermano de primer nivel que la raíz deja
+    // fuera y que ningún fichero visto menciona nunca llega a pedirse.
+    if (directorio === "" && respuesta.truncado) raizTruncada = true;
+
+    for (const entrada of respuesta.entradas) {
       vistas.set(entrada.ruta, entrada.bytes);
       // Cada directorio antepasado se vuelve a pedir por su cuenta: si esta respuesta
       // venía truncada, el recorrido por subdirectorios recupera lo que faltó — incluidos
@@ -67,5 +82,5 @@ export async function enumerarRemoto(puerto: CloudStudioPort): Promise<Resultado
   const manifiesto = [...vistas.entries()]
     .map(([ruta, bytes]) => ({ ruta, bytes }))
     .sort((a, b) => a.ruta.localeCompare(b.ruta));
-  return { manifiesto, noEnumerados };
+  return { manifiesto, noEnumerados, raizTruncada };
 }

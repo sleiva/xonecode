@@ -11,7 +11,7 @@
 
 import type { Proveedor } from "./modelos.js";
 import type {
-  ContextoRemoto, EntradaRemota, ManifiestoRemoto,
+  ContextoRemoto, EntradaRemota, EstructuraRemota, ManifiestoRemoto,
 } from "./cloudstudio.js";
 
 /**
@@ -251,7 +251,7 @@ export interface CloudStudioPort {
   contexto(): Promise<ContextoRemoto>;
   /** Devuelve el ZIP en base64. Puede fallar por un fichero roto en Studio. */
   descargarZip(): Promise<string>;
-  estructura(directorio?: string): Promise<ManifiestoRemoto>;
+  estructura(directorio?: string): Promise<EstructuraRemota>;
   leerTexto(ruta: string): Promise<string>;
   escribirTexto(ruta: string, contenido: string): Promise<void>;
   borrarTexto(ruta: string): Promise<void>;
@@ -311,15 +311,15 @@ export class CloudStudioEnMemoria implements CloudStudioPort {
     return this.opciones.zipBase64;
   }
 
-  async estructura(directorio = ""): Promise<ManifiestoRemoto> {
+  async estructura(directorio = ""): Promise<EstructuraRemota> {
     this.exigirAbierto();
     const todas: EntradaRemota[] = [
       ...Object.entries(this.opciones.textos ?? {}).map(([ruta, texto]) => ({ ruta, bytes: texto.length })),
       ...Object.entries(this.opciones.binarios ?? {}).map(([ruta, bytes]) => ({ ruta, bytes })),
     ].filter((e) => directorio === "" || e.ruta.startsWith(`${directorio}/`));
-    return this.opciones.topeEstructura === undefined
-      ? todas
-      : todas.slice(0, this.opciones.topeEstructura);
+    const tope = this.opciones.topeEstructura;
+    const truncado = tope !== undefined && todas.length > tope;
+    return { entradas: truncado ? todas.slice(0, tope) : todas, truncado };
   }
 
   async leerTexto(ruta: string): Promise<string> {

@@ -15,7 +15,9 @@ describe("CloudStudioEnMemoria", () => {
     await puerto.abrir("Demo");
     expect((await puerto.contexto()).rama).toBe("master");
     expect(await puerto.leerTexto("app.xml")).toBe("<app/>");
-    expect((await puerto.estructura()).map((e) => e.ruta).sort()).toEqual(["app.ini", "app.xml"]);
+    const estructura = await puerto.estructura();
+    expect(estructura.entradas.map((e) => e.ruta).sort()).toEqual(["app.ini", "app.xml"]);
+    expect(estructura.truncado).toBe(false);
   });
 
   it("sin proyecto abierto falla con el texto del servidor real, que otra tarea reconoce", async () => {
@@ -28,7 +30,9 @@ describe("CloudStudioEnMemoria", () => {
       topeEstructura: 2,
     });
     await puerto.abrir("Demo");
-    expect(await puerto.estructura()).toHaveLength(2);
+    const estructura = await puerto.estructura();
+    expect(estructura.entradas).toHaveLength(2);
+    expect(estructura.truncado).toBe(true);
   });
 
   it("puede fingir que el ZIP falla, que es el caso que obliga a la vía degradada", async () => {

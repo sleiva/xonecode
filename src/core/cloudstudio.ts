@@ -13,6 +13,19 @@ export interface EntradaRemota {
 
 export type ManifiestoRemoto = EntradaRemota[];
 
+/**
+ * Lo que devuelve `estructura()`: las entradas vistas Y si el servidor las recortó.
+ *
+ * `studio_get_project_structure` trunca (medido: con `maxFiles:60` ya venía
+ * `truncated:true`; el tope duro es 2000). Tirar ese dato y devolver solo el array deja
+ * al llamador sin forma de saber que quedó algo fuera — y el manifiesto es lo que
+ * sostiene el candado de borrado en CloudStudio.
+ */
+export interface EstructuraRemota {
+  entradas: ManifiestoRemoto;
+  truncado: boolean;
+}
+
 /** Qué proyecto y qué rama tiene abiertos el servidor AHORA. */
 export interface ContextoRemoto {
   proyecto: string;
