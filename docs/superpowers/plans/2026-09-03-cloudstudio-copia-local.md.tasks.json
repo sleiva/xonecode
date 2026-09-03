@@ -1,0 +1,110 @@
+{
+  "planPath": "docs/superpowers/plans/2026-09-03-cloudstudio-copia-local.md",
+  "tasks": [
+    {
+      "id": 1,
+      "subject": "Task 1: Extracción de ZIP con guarda de zip slip",
+      "status": "pending",
+      "description": "**Goal:** convertir el base64Zip de CloudStudio en ficheros en disco, sin que una entrada maliciosa escriba fuera de la raíz.\n\n**Files:**\n- Create: `src/agent/zip.ts`\n- Create: `src/agent/zip.test.ts`\n- Modify: `package.json` (dependencia `fflate`)\n\n**Acceptance Criteria:**\n- [ ] Un ZIP con carpetas anidadas se extrae conservando la estructura\n- [ ] Una entrada con `../` o con ruta absoluta se rechaza y no escribe nada fuera de la raíz\n- [ ] Devuelve la lista de rutas escritas, relativas y en POSIX\n- [ ] Los directorios intermedios se crean solos\n\n**Verify:** `npx vitest run --exclude '**/.worktrees/**' src/agent/zip.test.ts`\n\n```json:metadata\n{\"files\": [\"src/agent/zip.ts\", \"src/agent/zip.test.ts\", \"package.json\"], \"verifyCommand\": \"npx vitest run --exclude '**/.worktrees/**' src/agent/zip.test.ts\", \"acceptanceCriteria\": [\"Un ZIP con carpetas anidadas se extrae conservando la estructura\", \"Una entrada con `../` o con ruta absoluta se rechaza y no escribe nada fuera de la raíz\", \"Devuelve la lista de rutas escritas, relativas y en POSIX\", \"Los directorios intermedios se crean solos\"], \"modelTier\": \"mechanical\"}\n```",
+      "activeForm": "Extrayendo el ZIP de CloudStudio"
+    },
+    {
+      "id": 2,
+      "subject": "Task 2: Puerto CloudStudio y su doble",
+      "status": "pending",
+      "description": "**Goal:** dar a todo lo que viene después una única superficie contra la que programar y testear sin red.\n\n**Files:**\n- Create: `src/core/cloudstudio.ts`\n- Modify: `src/core/ports.ts`\n- Create: `src/core/cloudstudioPuerto.test.ts`\n\n**Acceptance Criteria:**\n- [ ] `CloudStudioPort` cubre abrir, contexto, descargarZip, estructura, leerTexto, escribirTexto, borrarTexto, subirBinario, ramas, crearRama y cambiarRama\n- [ ] El doble `CloudStudioEnMemoria` lleva `ES_DOBLE` y `esDoble()` lo reconoce\n- [ ] El doble simula el fallo del ZIP y el truncado de la estructura\n- [ ] `core/imports.test.ts` sigue en verde: nada de MCP en core/\n\n**Verify:** `npx vitest run --exclude '**/.worktrees/**' src/core/`\n\n```json:metadata\n{\"files\": [\"src/core/cloudstudio.ts\", \"src/core/ports.ts\", \"src/core/cloudstudioPuerto.test.ts\"], \"verifyCommand\": \"npx vitest run --exclude '**/.worktrees/**' src/core/\", \"acceptanceCriteria\": [\"`CloudStudioPort` cubre abrir, contexto, descargarZip, estructura, leerTexto, escribirTexto, borrarTexto, subirBinario, ramas, crearRama y cambiarRama\", \"El doble `CloudStudioEnMemoria` lleva `ES_DOBLE` y `esDoble()` lo reconoce\", \"El doble simula el fallo del ZIP y el truncado de la estructura\", \"`core/imports.test.ts` sigue en verde: nada de MCP en core/\"], \"modelTier\": \"mechanical\"}\n```",
+      "activeForm": "Definiendo el puerto CloudStudio"
+    },
+    {
+      "id": 3,
+      "subject": "Task 3: Plan de subida con el candado de borrado",
+      "status": "pending",
+      "description": "**Goal:** convertir un diff de git y el estado de la descarga en operaciones, sin poder emitir jamás el borrado de algo que no llegamos a bajar.\n\n**Files:**\n- Create: `src/core/planDeSubida.ts`\n- Create: `src/core/planDeSubida.test.ts`\n\n**Acceptance Criteria:**\n- [ ] Con una descarga parcial, ninguna ruta ausente de `descargados` produce un borrado\n- [ ] `.xonecode/` y todo lo que cuelga se excluye siempre\n- [ ] `X.xml` se excluye cuando existe `X.xne`; `app.xml` se conserva\n- [ ] El tipo se decide por la whitelist de texto medida, y el binario elige base64 o chunked según el tope de 5 MB\n- [ ] Es una función pura: sin disco, sin red, sin reloj\n\n**Verify:** `npx vitest run --exclude '**/.worktrees/**' src/core/planDeSubida.test.ts`\n\n```json:metadata\n{\"files\": [\"src/core/planDeSubida.ts\", \"src/core/planDeSubida.test.ts\"], \"verifyCommand\": \"npx vitest run --exclude '**/.worktrees/**' src/core/planDeSubida.test.ts\", \"acceptanceCriteria\": [\"Con una descarga parcial, ninguna ruta ausente de `descargados` produce un borrado\", \"`.xonecode/` y todo lo que cuelga se excluye siempre\", \"`X.xml` se excluye cuando existe `X.xne`; `app.xml` se conserva\", \"El tipo se decide por la whitelist de texto medida, y el binario elige base64 o chunked según el tope de 5 MB\", \"Es una función pura: sin disco, sin red, sin reloj\"], \"modelTier\": \"mechanical\"}\n```",
+      "activeForm": "Escribiendo el plan de subida"
+    },
+    {
+      "id": 4,
+      "subject": "Task 4: Adaptador CloudStudio sobre MCP",
+      "status": "pending",
+      "description": "**Goal:** implementar CloudStudioPort contra el cliente MCP ya conectado, sobreviviendo a la caducidad de la sesión.\n\n**Files:**\n- Create: `src/agent/cloudstudioClient.ts`\n- Create: `src/agent/cloudstudioClient.test.ts`\n\n**Acceptance Criteria:**\n- [ ] Cada método llama a la tool medida con sus argumentos reales\n- [ ] Ante «No project is open» reabre y reintenta UNA vez; si vuelve a fallar, propaga\n- [ ] El resultado textual del SDK (`content[].text`) se desenvuelve\n- [ ] Los errores nunca incluyen contenido de fichero ni token\n- [ ] Se prueba con un cliente MCP falso: ni red ni SDK real\n\n**Verify:** `npx vitest run --exclude '**/.worktrees/**' src/agent/cloudstudioClient.test.ts`\n\n```json:metadata\n{\"files\": [\"src/agent/cloudstudioClient.ts\", \"src/agent/cloudstudioClient.test.ts\"], \"verifyCommand\": \"npx vitest run --exclude '**/.worktrees/**' src/agent/cloudstudioClient.test.ts\", \"acceptanceCriteria\": [\"Cada método llama a la tool medida con sus argumentos reales\", \"Ante «No project is open» reabre y reintenta UNA vez; si vuelve a fallar, propaga\", \"El resultado textual del SDK (`content[].text`) se desenvuelve\", \"Los errores nunca incluyen contenido de fichero ni token\", \"Se prueba con un cliente MCP falso: ni red ni SDK real\"], \"modelTier\": \"standard\"}\n```",
+      "activeForm": "Implementando el adaptador MCP",
+      "blockedBy": [
+        2
+      ]
+    },
+    {
+      "id": 5,
+      "subject": "Task 5: Enumeración del remoto con truncado",
+      "status": "pending",
+      "description": "**Goal:** obtener el manifiesto completo aunque get_project_structure corte, porque el manifiesto es lo que protege el borrado.\n\n**Files:**\n- Create: `src/agent/manifiesto.ts`\n- Create: `src/agent/manifiesto.test.ts`\n\n**Acceptance Criteria:**\n- [ ] Con un tope artificial, la enumeración recorre subdirectorios y devuelve todas las rutas\n- [ ] No repite entradas cuando un directorio aparece en dos recorridos\n- [ ] Un directorio que falla no aborta el resto: se anota como no enumerado\n- [ ] Devuelve rutas POSIX ordenadas\n\n**Verify:** `npx vitest run --exclude '**/.worktrees/**' src/agent/manifiesto.test.ts`\n\n```json:metadata\n{\"files\": [\"src/agent/manifiesto.ts\", \"src/agent/manifiesto.test.ts\"], \"verifyCommand\": \"npx vitest run --exclude '**/.worktrees/**' src/agent/manifiesto.test.ts\", \"acceptanceCriteria\": [\"Con un tope artificial, la enumeración recorre subdirectorios y devuelve todas las rutas\", \"No repite entradas cuando un directorio aparece en dos recorridos\", \"Un directorio que falla no aborta el resto: se anota como no enumerado\", \"Devuelve rutas POSIX ordenadas\"], \"modelTier\": \"standard\"}\n```",
+      "activeForm": "Enumerando el proyecto remoto",
+      "blockedBy": [
+        2
+      ]
+    },
+    {
+      "id": 6,
+      "subject": "Task 6: Descarga en dos vías con pool acotado",
+      "status": "pending",
+      "description": "**Goal:** traerse el proyecto por ZIP y, si falla, fichero a fichero en paralelo, dejando sync.json con el manifiesto y lo realmente descargado.\n\n**Files:**\n- Create: `src/agent/descarga.ts`\n- Create: `src/agent/descarga.test.ts`\n\n**Acceptance Criteria:**\n- [ ] Vía ZIP: extrae en la raíz y marca via zip, con descargados = las rutas del ZIP\n- [ ] Si el ZIP falla, cae a la vía degradada sin reintentarlo y guarda el motivo\n- [ ] La vía degradada solo pide lo que la whitelist de texto permite, y marca via parcial\n- [ ] La concurrencia nunca supera el tope, comprobado con un contador de llamadas simultáneas\n- [ ] Un fichero que falla no aborta la descarga y queda fuera de descargados\n- [ ] sync.json se escribe en .xonecode/cloudstudio/ y es JSON legible\n\n**Verify:** `npx vitest run --exclude '**/.worktrees/**' src/agent/descarga.test.ts`\n\n```json:metadata\n{\"files\": [\"src/agent/descarga.ts\", \"src/agent/descarga.test.ts\"], \"verifyCommand\": \"npx vitest run --exclude '**/.worktrees/**' src/agent/descarga.test.ts\", \"acceptanceCriteria\": [\"Vía ZIP: extrae en la raíz y marca via zip, con descargados = las rutas del ZIP\", \"Si el ZIP falla, cae a la vía degradada sin reintentarlo y guarda el motivo\", \"La vía degradada solo pide lo que la whitelist de texto permite, y marca via parcial\", \"La concurrencia nunca supera el tope, comprobado con un contador de llamadas simultáneas\", \"Un fichero que falla no aborta la descarga y queda fuera de descargados\", \"sync.json se escribe en .xonecode/cloudstudio/ y es JSON legible\"], \"modelTier\": \"standard\"}\n```",
+      "activeForm": "Descargando el proyecto",
+      "blockedBy": [
+        1,
+        2,
+        3,
+        5
+      ]
+    },
+    {
+      "id": 7,
+      "subject": "Task 7: Git local como libro de cuentas",
+      "status": "pending",
+      "description": "**Goal:** dejar el repo local listo tras la descarga y saber, con git y sin estado propio, qué falta por subir.\n\n**Files:**\n- Create: `src/agent/gitSync.ts`\n- Create: `src/agent/gitSync.test.ts`\n\n**Acceptance Criteria:**\n- [ ] En carpeta sin repo, git init -b <rama origen>; en una que ya lo es, no se inicia nada\n- [ ] .xonecode/ acaba en .git/info/exclude, nunca en .gitignore\n- [ ] core.autocrlf queda en false\n- [ ] El commit de baseline usa GIT_INDEX_FILE privado y no toca el índice del usuario\n- [ ] Queda configurado el remoto cloudstudio con su ref y el upstream de la rama\n- [ ] cambiosPendientes devuelve el diff contra la ref con clases nuevo/modificado/borrado\n- [ ] marcarSubido mueve la ref con mensaje de reflog\n\n**Verify:** `npx vitest run --exclude '**/.worktrees/**' src/agent/gitSync.test.ts`\n\n```json:metadata\n{\"files\": [\"src/agent/gitSync.ts\", \"src/agent/gitSync.test.ts\"], \"verifyCommand\": \"npx vitest run --exclude '**/.worktrees/**' src/agent/gitSync.test.ts\", \"acceptanceCriteria\": [\"En carpeta sin repo, git init -b <rama origen>; en una que ya lo es, no se inicia nada\", \".xonecode/ acaba en .git/info/exclude, nunca en .gitignore\", \"core.autocrlf queda en false\", \"El commit de baseline usa GIT_INDEX_FILE privado y no toca el índice del usuario\", \"Queda configurado el remoto cloudstudio con su ref y el upstream de la rama\", \"cambiosPendientes devuelve el diff contra la ref con clases nuevo/modificado/borrado\", \"marcarSubido mueve la ref con mensaje de reflog\"], \"modelTier\": \"standard\"}\n```",
+      "activeForm": "Preparando el git local"
+    },
+    {
+      "id": 8,
+      "subject": "Task 8: Ejecutar la subida y dejar registro",
+      "status": "pending",
+      "description": "**Goal:** subir el plan aprobado, mover la ref solo si terminó entero y escribir el sync.log.\n\n**Files:**\n- Create: `src/agent/subida.ts`\n- Create: `src/agent/subida.test.ts`\n\n**Acceptance Criteria:**\n- [ ] Antes de nada: get_context, cambiarRama(trabajo), operar, cambiarRama(la que estaba)\n- [ ] La rama de trabajo se crea la primera vez, con crearRama(nombre, ramaOrigen)\n- [ ] Con un fallo a mitad, la ref NO se mueve y el log recoge los fallos con su motivo\n- [ ] Con todo correcto, la ref se mueve y el log registra ok\n- [ ] El sync.log es JSONL y se añade, nunca se reescribe\n\n**Verify:** `npx vitest run --exclude '**/.worktrees/**' src/agent/subida.test.ts`\n\n```json:metadata\n{\"files\": [\"src/agent/subida.ts\", \"src/agent/subida.test.ts\"], \"verifyCommand\": \"npx vitest run --exclude '**/.worktrees/**' src/agent/subida.test.ts\", \"acceptanceCriteria\": [\"Antes de nada: get_context, cambiarRama(trabajo), operar, cambiarRama(la que estaba)\", \"La rama de trabajo se crea la primera vez, con crearRama(nombre, ramaOrigen)\", \"Con un fallo a mitad, la ref NO se mueve y el log recoge los fallos con su motivo\", \"Con todo correcto, la ref se mueve y el log registra ok\", \"El sync.log es JSONL y se añade, nunca se reescribe\"], \"modelTier\": \"standard\"}\n```",
+      "activeForm": "Subiendo los cambios",
+      "blockedBy": [
+        3,
+        6,
+        7
+      ]
+    },
+    {
+      "id": 9,
+      "subject": "Task 9: Asistente de proveedor y modelo",
+      "status": "pending",
+      "description": "**Goal:** que un usuario sin configuración elija proveedor y modelo al arrancar, se guarde global, y pueda fijar uno distinto por proyecto.\n\n**Files:**\n- Create: `src/cli/wizardInicial.ts`\n- Create: `src/cli/wizardInicial.test.ts`\n- Modify: `src/agent/configEnDisco.ts` (guardarModelosDeProyecto y guardarRamaDeProyecto)\n- Modify: `src/agent/configEnDisco.test.ts`\n- Modify: `src/core/config.ts` y `src/core/config.test.ts` (validar cloudstudio.rama)\n\n**Acceptance Criteria:**\n- [ ] Solo se ofrece si el papel trabajo resuelve con origen «omisión»\n- [ ] Sin TTY no pregunta nada y no escribe nada\n- [ ] Ollama local no pide credencial; el resto sí, y la clave va por guardarCredencial\n- [ ] El modelo elegido se asigna a los tres papeles, en el config global\n- [ ] Cancelar en cualquier punto no escribe nada y lo dice\n- [ ] guardarModelosDeProyecto y guardarRamaDeProyecto fusionan sobre el objeto crudo y escriben atómicamente\n- [ ] core/config.ts valida cloudstudio.rama y descarta con aviso lo que no sea cadena no vacía\n\n**Verify:** `npx vitest run --exclude '**/.worktrees/**' src/cli/wizardInicial.test.ts src/agent/configEnDisco.test.ts src/core/config.test.ts`\n\n```json:metadata\n{\"files\": [\"src/cli/wizardInicial.ts\", \"src/agent/configEnDisco.ts\", \"src/core/config.ts\"], \"verifyCommand\": \"npx vitest run --exclude '**/.worktrees/**' src/cli/wizardInicial.test.ts src/agent/configEnDisco.test.ts src/core/config.test.ts\", \"acceptanceCriteria\": [\"Solo se ofrece si el papel trabajo resuelve con origen «omisión»\", \"Sin TTY no pregunta nada y no escribe nada\", \"Ollama local no pide credencial; el resto sí, y la clave va por guardarCredencial\", \"El modelo elegido se asigna a los tres papeles, en el config global\", \"Cancelar en cualquier punto no escribe nada y lo dice\", \"guardarModelosDeProyecto y guardarRamaDeProyecto fusionan sobre el objeto crudo y escriben atómicamente\", \"core/config.ts valida cloudstudio.rama y descarta con aviso lo que no sea cadena no vacía\"], \"modelTier\": \"standard\"}\n```",
+      "activeForm": "Escribiendo el asistente inicial"
+    },
+    {
+      "id": 10,
+      "subject": "Task 10: Cablear el alta y el comando /sync",
+      "status": "pending",
+      "description": "**Goal:** que todo lo anterior se vea desde la consola: alta en cuatro pasos y /sync para bajar y subir.\n\n**Files:**\n- Modify: `src/cli/consola.ts`\n- Modify: `src/cli/consola.test.ts`\n- Modify: `src/cli/main.ts`\n- Modify: `src/cli/main.test.ts`\n\n**Acceptance Criteria:**\n- [ ] /sync sin argumentos informa del estado: rama, pendientes y fecha del último sync\n- [ ] /sync bajar descarga y prepara el repo; /sync subir pide aprobación y sube\n- [ ] /sync subir con árbol sucio se niega y dice qué commitear\n- [ ] Tras elegir proyecto en el alta, se descarga y se prepara el repo antes del primer turno\n- [ ] El asistente de modelo corre ANTES del alta de proyecto\n- [ ] La rama origen se guarda en cloudstudio.rama; con una sola rama disponible no se pregunta\n- [ ] El alta ofrece un modelo propio del proyecto, con «usar el global» por omisión\n- [ ] El selector de modelo se extrae a seleccionarModelo y lo comparten /modelos y el alta\n- [ ] Sin las dependencias inyectadas, /sync lo dice y no revienta\n\n**Verify:** `npx vitest run --exclude '**/.worktrees/**' src/cli/`\n\n```json:metadata\n{\"files\": [\"src/cli/consola.ts\", \"src/cli/main.ts\"], \"verifyCommand\": \"npx vitest run --exclude '**/.worktrees/**' src/cli/\", \"acceptanceCriteria\": [\"/sync sin argumentos informa del estado: rama, pendientes y fecha del último sync\", \"/sync bajar descarga y prepara el repo; /sync subir pide aprobación y sube\", \"/sync subir con árbol sucio se niega y dice qué commitear\", \"Tras elegir proyecto en el alta, se descarga y se prepara el repo antes del primer turno\", \"El asistente de modelo corre ANTES del alta de proyecto\", \"La rama origen se guarda en cloudstudio.rama; con una sola rama disponible no se pregunta\", \"El alta ofrece un modelo propio del proyecto, con «usar el global» por omisión\", \"El selector de modelo se extrae a seleccionarModelo y lo comparten /modelos y el alta\", \"Sin las dependencias inyectadas, /sync lo dice y no revienta\"], \"modelTier\": \"standard\"}\n```",
+      "activeForm": "Cableando el alta y /sync",
+      "blockedBy": [
+        4,
+        6,
+        7,
+        8,
+        9
+      ]
+    },
+    {
+      "id": 11,
+      "subject": "Task 11: Documentación y cierre",
+      "status": "pending",
+      "description": "**Goal:** que el mapa del repo cuente lo que ahora hace el código, y que la doc vieja no contradiga a la nueva.\n\n**Files:**\n- Modify: `CLAUDE.md`\n- Modify: `AGENTS.md`\n- Modify: `docs/CLOUDSTUDIO-SINCRONIZACION.md`\n- Modify: `README.md`\n\n**Acceptance Criteria:**\n- [ ] CLAUDE.md describe la copia local, la ref de seguimiento, el candado de borrado y el alta en cuatro pasos\n- [ ] docs/CLOUDSTUDIO-SINCRONIZACION.md deja de decir que no se debe adivinar la API de descarga\n- [ ] El README corrige «No hay TUI con paneles» y el número de comandos\n- [ ] AGENTS.md es byte-idéntico a CLAUDE.md salvo las tres primeras líneas\n- [ ] Suite entera y typecheck en verde\n\n**Verify:** `npm run typecheck && npx vitest run --exclude '**/.worktrees/**'`\n\n```json:metadata\n{\"files\": [\"CLAUDE.md\", \"AGENTS.md\", \"README.md\", \"docs/CLOUDSTUDIO-SINCRONIZACION.md\"], \"verifyCommand\": \"npm run typecheck && npx vitest run --exclude '**/.worktrees/**'\", \"acceptanceCriteria\": [\"CLAUDE.md describe la copia local, la ref de seguimiento, el candado de borrado y el alta en cuatro pasos\", \"docs/CLOUDSTUDIO-SINCRONIZACION.md deja de decir que no se debe adivinar la API de descarga\", \"El README corrige «No hay TUI con paneles» y el número de comandos\", \"AGENTS.md es byte-idéntico a CLAUDE.md salvo las tres primeras líneas\", \"Suite entera y typecheck en verde\"], \"modelTier\": \"mechanical\"}\n```",
+      "activeForm": "Actualizando la documentación",
+      "blockedBy": [
+        10
+      ]
+    }
+  ],
+  "lastUpdated": "2026-09-03T20:58:41.614636"
+}
