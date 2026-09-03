@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { planDeSubida, TOPE_BASE64 } from "./planDeSubida.js";
+import { extensionDe, planDeSubida, TOPE_BASE64 } from "./planDeSubida.js";
 
 const base = {
   descargados: new Set(["app.xml", "BuscarFarmacias.xne", "icons/icon_check.svg", "AlquilerCoches.js"]),
@@ -130,6 +130,35 @@ describe("planDeSubida", () => {
     ]);
   });
 
+  it("`.env` no sube NUNCA, ni como binario ni como nada", () => {
+    // `extensionDe(".env")` devolvía `".env"` porque `lastIndexOf(".")` es 0: no está en
+    // la lista de texto, así que caía en la rama BINARIA y se subía al proyecto del
+    // cliente entero. El agente tiene `/.env` y `/.git` denegados por `permisosDe`
+    // —invariante explícito de CLAUDE.md— y la ruta de subida no replicaba la denegación.
+    const plan = planDeSubida({
+      ...base,
+      cambios: [
+        { clase: "nuevo", ruta: ".env" },
+        { clase: "modificado", ruta: ".env.local" },
+        { clase: "nuevo", ruta: "config/.env" },
+        { clase: "modificado", ruta: ".git/config" },
+        { clase: "modificado", ruta: "app.xml" },
+      ],
+      tamanos: new Map([[".env", 120], [".env.local", 80], ["config/.env", 90], [".git/config", 200]]),
+    });
+    expect(plan.operaciones).toEqual([{ tipo: "texto", ruta: "app.xml" }]);
+    // Y se declaran: son ficheros del usuario que él podría esperar ver subir.
+    expect(plan.omitidas.map((o) => o.ruta).sort()).toEqual([".env", ".env.local", ".git/config", "config/.env"]);
+  });
+
+  it("un fichero sin extensión sube como binario, no como texto", () => {
+    expect(planDeSubida({
+      ...base,
+      cambios: [{ clase: "nuevo", ruta: "LICENSE" }],
+      tamanos: new Map([["LICENSE", 1000]]),
+    }).operaciones).toEqual([{ tipo: "binario", ruta: "LICENSE", bytes: 1000, modo: "base64" }]);
+  });
+
   it("reconoce la vista aplanada sin importar la mayúscula de la extensión", () => {
     // Bug mudo si esto falla: un `Foo.XML` viejo se subiría junto al `.xne` nuevo y
     // dejaría el proyecto del cliente incoherente sin ningún aviso de XOne.
@@ -138,5 +167,24 @@ describe("planDeSubida", () => {
       cambios: [{ clase: "modificado", ruta: "Foo.XML" }],
       fuentesXne: new Set(["Foo.xne"]),
     })).toEqual({ operaciones: [], omitidas: [] });
+  });
+});
+
+describe("extensionDe", () => {
+  it("un punto inicial no es una extensión, y el de un directorio tampoco", () => {
+    // La versión ingenua (`lastIndexOf(".")` sobre la ruta ENTERA) devolvía `".env"` para
+    // `.env` —como si `.env` fuera un tipo de fichero— y `".v2/logo"` para
+    // `iconos.v2/logo`. HOY las dos cosas acaban clasificadas igual (nada de eso está en
+    // la lista de texto, así que caen en binario de todas formas), y por eso este test es
+    // del HELPER y no del plan: no se puede fingir que discrimina a través de
+    // `planDeSubida`. Vale por lo que evita mañana — quien lea `extensionDe(".env") ===
+    // ".env"` y construya encima está construyendo sobre algo falso, y la denegación de
+    // `.env` de la regla 1 es justo lo que hace falta cuando eso pasa.
+    expect(extensionDe(".env")).toBe("");
+    expect(extensionDe(".gitignore")).toBe("");
+    expect(extensionDe("LICENSE")).toBe("");
+    expect(extensionDe("iconos.v2/logo")).toBe("");
+    expect(extensionDe("libs.v2/util.js")).toBe(".js");
+    expect(extensionDe("Foo.XML")).toBe(".xml");
   });
 });

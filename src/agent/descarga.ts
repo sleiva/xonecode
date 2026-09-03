@@ -10,7 +10,7 @@ import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import type { CloudStudioPort } from "../core/ports.js";
 import type { EstadoDeSync } from "../core/cloudstudio.js";
-import { EXTENSIONES_DE_TEXTO } from "../core/planDeSubida.js";
+import { EXTENSIONES_DE_TEXTO, extensionDe } from "../core/planDeSubida.js";
 import { NOMBRE_CARPETA } from "./configEnDisco.js";
 import { destinoSeguro, extraerZipBase64 } from "./zip.js";
 import { enumerarRemoto } from "./manifiesto.js";
@@ -30,11 +30,6 @@ export interface OpcionesDeDescarga {
   ramaOrigen: string;
   informar?: (texto: string) => void;
 }
-
-const extensionDe = (ruta: string): string => {
-  const punto = ruta.lastIndexOf(".");
-  return punto === -1 ? "" : ruta.slice(punto).toLowerCase();
-};
 
 /** Pool acotado. No hay `worker_threads`: esto es espera de red, no CPU. */
 async function enParalelo<T>(tareas: Array<() => Promise<T>>, tope: number): Promise<void> {

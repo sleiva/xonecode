@@ -33,10 +33,45 @@ export interface EntradaDelPlan {
   fuentesXne?: ReadonlySet<string>;
 }
 
-const extensionDe = (ruta: string): string => {
-  const punto = ruta.lastIndexOf(".");
-  return punto === -1 ? "" : ruta.slice(punto).toLowerCase();
+/**
+ * La extensión de una ruta POSIX, en minúsculas, o `""` si no tiene.
+ *
+ * Dos trampas que la versión ingenua (`ruta.lastIndexOf(".")` sobre la ruta entera) no
+ * veía, y que se exporta para que no vuelva a haber dos copias divergentes de esta regla:
+ *
+ * - **Un punto en la posición 0 no es una extensión**: es un fichero OCULTO sin ella.
+ *   `".env".lastIndexOf(".")` es 0, así que devolvía `".env"` como si `.env` fuera un tipo
+ *   de fichero. No está en la lista de texto, con lo cual `.env` se clasificaba como
+ *   BINARIO y podía subirse al proyecto del cliente entero.
+ * - **El punto puede estar en un DIRECTORIO**: en `iconos.v2/logo` el último punto está en
+ *   el directorio, y devolvía `".v2/logo"`. Se mira solo el último segmento.
+ */
+export const extensionDe = (ruta: string): string => {
+  const nombre = ruta.slice(ruta.lastIndexOf("/") + 1);
+  const punto = nombre.lastIndexOf(".");
+  return punto <= 0 ? "" : nombre.slice(punto).toLowerCase();
 };
+
+/**
+ * Lo que no sale de esta máquina NUNCA, mire quien lo mire.
+ *
+ * Es la misma denegación que `agent/perfiles.ts` le impone al AGENTE
+ * (`permisosDe`/`puedeLeerRuta` deniegan `/.env` y `/.git`, invariante explícito de
+ * `CLAUDE.md`), replicada en la ruta de SUBIDA, que no pasa por aquellos permisos y por
+ * tanto no la heredaba. Que el agente no pueda leer `.env` no sirve de nada si el `/sync`
+ * lo empuja a CloudStudio por su cuenta.
+ *
+ * Se comprueba por SEGMENTO, no solo en la raíz: un `.env` dentro de un subdirectorio
+ * guarda exactamente los mismos secretos que uno arriba.
+ */
+const esRutaProhibida = (ruta: string): boolean =>
+  ruta.split("/").some(
+    (segmento) =>
+      segmento === ".xonecode" ||
+      segmento === ".git" ||
+      segmento === ".env" ||
+      segmento.startsWith(".env.")
+  );
 
 /**
  * `X.xml` es vista aplanada si existe `X.xne`. `app.xml` no tiene hermano: es fuente.
@@ -70,9 +105,20 @@ export function planDeSubida(entrada: EntradaDelPlan): Plan {
   const omitidas: OperacionOmitida[] = [];
 
   for (const cambio of entrada.cambios) {
-    // 1. La carpeta del harness no sube NUNCA. Va primero porque ninguna otra regla
-    //    debe poder colarla: ahí viven memoria, sesiones y planes.
-    if (cambio.ruta === ".xonecode" || cambio.ruta.startsWith(".xonecode/")) continue;
+    // 1. Lo prohibido no sube NUNCA. Va primero porque ninguna otra regla debe poder
+    //    colarlo: en `.xonecode/` viven memoria, sesiones y planes, y en `.env` las
+    //    credenciales del usuario. `.xonecode/` se calla (es nuestro y no sincroniza
+    //    jamás: declararlo sería ruido en cada `/sync`); `.env` y `.git` se DECLARAN,
+    //    porque son ficheros del usuario que él sí podría esperar ver subir.
+    if (esRutaProhibida(cambio.ruta)) {
+      if (!cambio.ruta.split("/").includes(".xonecode")) {
+        omitidas.push({
+          ruta: cambio.ruta,
+          motivo: "no se sincroniza nunca: credenciales o metadatos locales (misma denegación que tiene el agente)",
+        });
+      }
+      continue;
+    }
 
     // 2. La fuente es el `.xne`; el `.xml` lo regenera Studio.
     if (esVistaAplanada(cambio.ruta, fuentes)) continue;
