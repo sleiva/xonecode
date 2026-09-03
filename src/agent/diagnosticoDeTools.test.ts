@@ -20,12 +20,17 @@ describe("diagnóstico de tools", () => {
     tracker.output = 8;
     tracker.calls = 2;
     log!.modelo("planner", { input: 80, output: 6, cache: 40, llamadas: 2, contexto: 80 });
-    log!.herramienta("grep", "function MTLogin", tracker);
+    log!.herramienta("grep", "function MTLogin", { pattern: "function MTLogin", path: "/", max_count: 10 }, tracker);
 
     const lineas = readFileSync(rutaTrazaDeTools(raiz), "utf8").trim().split("\n").map((linea) => JSON.parse(linea)) as Array<Record<string, unknown>>;
     expect(lineas.map((l) => l.tipo)).toEqual(["sesion", "modelo", "tool"]);
     expect(lineas[1]).toMatchObject({ origen: "planner", input: 80, cache: 40 });
-    expect(lineas[2]).toMatchObject({ nombre: "grep", detalle: "function MTLogin", inputAcumulado: 120 });
+    expect(lineas[2]).toMatchObject({
+      nombre: "grep",
+      detalle: "function MTLogin",
+      parametros: { pattern: "function MTLogin", path: "/", max_count: 10 },
+      inputAcumulado: 120,
+    });
     expect(JSON.stringify(lineas)).not.toContain("contenido");
   });
 });

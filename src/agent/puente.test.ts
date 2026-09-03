@@ -49,8 +49,8 @@ describe("toolsDe", () => {
         messages: [
           {
             tool_calls: [
-              { name: "read_file", args: { file_path: "app.xne" } },
-              { name: "grep", args: { pattern: "realizarLogin" } },
+      { name: "read_file", args: { file_path: "app.xne", offset: 20, limit: 80 } },
+      { name: "grep", args: { pattern: "realizarLogin", path: "/src", max_count: 10 } },
               // Sin entrada en la lista blanca: nombre sí, detalle no.
               { name: "studio_read", args: { file_path: "app.xne", auth: "Bearer x" } },
             ],
@@ -59,8 +59,8 @@ describe("toolsDe", () => {
       },
     };
     expect(toolsDe(dato)).toEqual([
-      { nombre: "read_file", detalle: "app.xne" },
-      { nombre: "grep", detalle: "realizarLogin" },
+      { nombre: "read_file", detalle: "app.xne", parametros: { file_path: "app.xne", offset: 20, limit: 80 } },
+      { nombre: "grep", detalle: "realizarLogin", parametros: { pattern: "realizarLogin", path: "/src", max_count: 10 } },
       { nombre: "studio_read" },
     ]);
   });
@@ -68,6 +68,16 @@ describe("toolsDe", () => {
   it("un chunk sin tool calls no inventa ninguna", () => {
     expect(toolsDe({ agent: { messages: [{ content: "hola" }] } })).toEqual([]);
     expect(toolsDe(null)).toEqual([]);
+  });
+
+  it("para una escritura conserva la ruta pero nunca el contenido", () => {
+    const dato = {
+      agent: {
+        messages: [{ tool_calls: [{ name: "write_file", args: { file_path: "/MEMORIA.md", content: "token-secreto" } }] }],
+      },
+    };
+    expect(toolsDe(dato)).toEqual([{ nombre: "write_file", detalle: "/MEMORIA.md", parametros: { file_path: "/MEMORIA.md" } }]);
+    expect(JSON.stringify(toolsDe(dato))).not.toContain("token-secreto");
   });
 });
 
@@ -119,7 +129,7 @@ describe("aEventos", () => {
     }
     const e: DomainEvent[] = [];
     for await (const evento of aEventos(flujo(), undefined, (tool) => vistas.push(tool))) e.push(evento);
-    expect(vistas).toEqual([{ nombre: "grep", detalle: "MTLogin" }]);
+    expect(vistas).toEqual([{ nombre: "grep", detalle: "MTLogin", parametros: { pattern: "MTLogin" } }]);
     expect(e).toEqual([{ tipo: "tool", nombre: "grep", detalle: "MTLogin" }]);
   });
 

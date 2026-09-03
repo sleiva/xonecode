@@ -41,6 +41,12 @@ export const PROMPT_ORQUESTADOR = [
  * para que una skill no confunda su propia carpeta de instrucciones con la salida.
  */
 export const DESCRIPCIONES_FICHEROS = {
+  read_file: [
+    "Lee únicamente el fragmento de un fichero necesario para responder.",
+    "Indica siempre `offset` y `limit`; para el reconocimiento inicial usa",
+    "`offset=0, limit=50`. No releas la misma ruta y el mismo rango: usa la",
+    "evidencia ya obtenida o una página distinta solo si hace falta.",
+  ].join(" "),
   write_file: [
     "Escribe un fichero del proyecto en una ruta absoluta.",
     "Para diagramas, esquemas, arquitecturas y flujos: carga primero la skill `archify`;",
@@ -207,6 +213,18 @@ export function promptDe(nombre: string, skills: SkillsPort): string {
     "- Si te piden un dashboard, informe, tabla o artefacto HTML interactivo, carga primero `artifacts-builder`.",
     "- Apóyate en el código real antes de dibujar: no inventes nombres, componentes ni flujos.",
     "",
+    nombre === "planner"
+      ? [
+          "RECONOCIMIENTO RÁPIDO DEL PROYECTO:",
+          "- Para preguntas generales como «qué hace esta app», busca evidencia suficiente, no un inventario completo.",
+          "- Lee `/app.xml` y, como máximo, tres ficheros representativos que ese contexto señale.",
+          "- En cada primera lectura usa exactamente `offset=0` y `limit=50`; usa otra página solo si una evidencia concreta lo exige.",
+          "- No repitas una lectura de la misma ruta y rango, ni hagas búsquedas genéricas como `function ` sin una hipótesis.",
+          "- Cuando puedas identificar el propósito y los módulos principales con evidencia, deja de llamar tools y responde.",
+          "- Solo amplía la exploración si el usuario pide detalle exhaustivo o si las evidencias son insuficientes o contradictorias; explica brevemente qué faltaba.",
+          "",
+        ].join("\n")
+      : "",
     nombre === "docs"
       ? ""
       : "Para una tarea sobre este proyecto, lee una sola vez `/MEMORIA_PROYECTO.md` antes de inspeccionarlo. " +

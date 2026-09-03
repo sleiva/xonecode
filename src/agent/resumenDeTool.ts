@@ -11,27 +11,27 @@
  * contra su dist (`file_path` con `path` normalizado, `pattern` en glob/grep).
  */
 
-/** El único campo permitido de cada tool. Sin entrada: nada sale. */
-const CAMPO_SEGURO: Record<string, string> = {
-  read_file: "file_path",
-  write_file: "file_path",
-  edit_file: "file_path",
-  ls: "path",
-  glob: "pattern",
-  grep: "pattern",
-  regex_search: "pattern",
-};
+/** Valores escalares que una traza local puede conservar sin volcar contenido. */
+export type ParametrosSeguros = Record<string, string | number | boolean>;
 
 /**
- * El `detalle` de una llamada, o `undefined` si no hay nada permitido que contar.
+ * Campos permitidos por tool. Es una lista blanca deliberada: ni `content`,
+ * ni `old_string`/`new_string`, ni la descripción de `task` llegan a disco.
  *
- * Los argumentos llegan como objeto o como cadena JSON (así viajan en las
- * `tool_calls`); un JSON roto es una tool rota, no una excepción que tumbe el turno.
+ * Los parámetros de paginación y acotación son justo los que necesitamos para
+ * detectar una lectura masiva o una búsqueda mal afinada.
  */
-export function detalleDe(nombre: string, args: unknown): string | undefined {
-  const campo = CAMPO_SEGURO[nombre];
-  if (campo === undefined) return undefined;
+const CAMPOS_SEGUROS: Record<string, readonly string[]> = {
+  read_file: ["file_path", "offset", "limit"],
+  write_file: ["file_path"],
+  edit_file: ["file_path"],
+  ls: ["path"],
+  glob: ["pattern", "path"],
+  grep: ["pattern", "path", "glob", "max_count", "output_mode"],
+  regex_search: ["pattern", "path", "glob", "flags", "max_count"],
+};
 
+function objetoDeArgs(args: unknown): Record<string, unknown> | undefined {
   let objeto: unknown = args;
   if (typeof args === "string") {
     try {
@@ -40,9 +40,44 @@ export function detalleDe(nombre: string, args: unknown): string | undefined {
       return undefined;
     }
   }
-  if (!objeto || typeof objeto !== "object") return undefined;
+  return objeto && typeof objeto === "object" && !Array.isArray(objeto)
+    ? objeto as Record<string, unknown>
+    : undefined;
+}
 
-  const valor = (objeto as Record<string, unknown>)[campo];
+/** Argumentos acotados y seguros para la traza opt-in de diagnóstico. */
+export function parametrosDe(nombre: string, args: unknown): ParametrosSeguros | undefined {
+  const campos = CAMPOS_SEGUROS[nombre];
+  const objeto = objetoDeArgs(args);
+  if (campos === undefined || objeto === undefined) return undefined;
+
+  const salida: ParametrosSeguros = {};
+  for (const campo of campos) {
+    const valor = objeto[campo];
+    if (typeof valor === "string" || typeof valor === "number" || typeof valor === "boolean") {
+      salida[campo] = valor;
+    }
+  }
+  return Object.keys(salida).length > 0 ? salida : undefined;
+}
+
+/**
+ * El `detalle` de una llamada, o `undefined` si no hay nada permitido que contar.
+ *
+ * Los argumentos llegan como objeto o como cadena JSON (así viajan en las
+ * `tool_calls`); un JSON roto es una tool rota, no una excepción que tumbe el turno.
+ */
+export function detalleDe(nombre: string, args: unknown): string | undefined {
+  const parametros = parametrosDe(nombre, args);
+  const campo = nombre === "read_file" || nombre === "write_file" || nombre === "edit_file"
+    ? "file_path"
+    : nombre === "ls"
+      ? "path"
+      : nombre === "glob" || nombre === "grep" || nombre === "regex_search"
+        ? "pattern"
+        : undefined;
+  if (campo === undefined || parametros === undefined) return undefined;
+  const valor = parametros[campo];
   // Una cadena vacía no describe nada, y un tipo raro (`file_path: 42`) tampoco:
   // sin detalle es una respuesta válida.
   return typeof valor === "string" && valor !== "" ? valor : undefined;

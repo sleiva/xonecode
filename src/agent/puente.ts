@@ -1,6 +1,6 @@
 import { normalizar } from "./normalizar.js";
 import { Mensajes } from "./mensajes.js";
-import { detalleDe } from "./resumenDeTool.js";
+import { detalleDe, parametrosDe, type ParametrosSeguros } from "./resumenDeTool.js";
 import type { DomainEvent, PendienteDeAprobacion } from "../core/events.js";
 
 /** El texto de un mensaje, venga como venga. */
@@ -22,7 +22,7 @@ export function textoDe(msg: unknown): string {
 }
 
 /** Los nombres de tool de un chunk de `updates`, con su detalle de la lista blanca. */
-export function toolsDe(dato: unknown): Array<{ nombre: string; detalle?: string }> {
+export function toolsDe(dato: unknown): Array<{ nombre: string; detalle?: string; parametros?: ParametrosSeguros }> {
   if (!dato || typeof dato !== "object") return [];
   const salida: Array<{ nombre: string; detalle?: string }> = [];
   for (const nodo of Object.values(dato as Record<string, unknown>)) {
@@ -33,7 +33,12 @@ export function toolsDe(dato: unknown): Array<{ nombre: string; detalle?: string
       if (Array.isArray(llamadas)) {
         for (const l of llamadas) {
           const n = (l as Record<string, unknown>)?.name;
-          if (typeof n === "string") salida.push({ nombre: n, detalle: detalleDe(n, (l as Record<string, unknown>).args) });
+          if (typeof n === "string") {
+            const args = (l as Record<string, unknown>).args;
+            const detalle = detalleDe(n, args);
+            const parametros = parametrosDe(n, args);
+            salida.push({ nombre: n, ...(detalle === undefined ? {} : { detalle }), ...(parametros === undefined ? {} : { parametros }) });
+          }
         }
       }
     }
@@ -70,7 +75,7 @@ export function esDelPadre(ns: readonly string[]): boolean {
   return ns.length <= 1;
 }
 
-export type AlLlamarTool = (tool: { nombre: string; detalle?: string }) => void;
+export type AlLlamarTool = (tool: { nombre: string; detalle?: string; parametros?: ParametrosSeguros }) => void;
 
 /**
  * Convierte el stream del grafo en `DomainEvent`.
@@ -97,9 +102,9 @@ export async function* aEventos(
       if (!chunk) continue;
 
       if (chunk.modo === "updates") {
-        for (const { nombre, detalle } of toolsDe(chunk.dato)) {
+        for (const { nombre, detalle, parametros } of toolsDe(chunk.dato)) {
           try {
-            alLlamarTool?.({ nombre, ...(detalle === undefined ? {} : { detalle }) });
+            alLlamarTool?.({ nombre, ...(detalle === undefined ? {} : { detalle }), ...(parametros === undefined ? {} : { parametros }) });
           } catch {
             // La observabilidad no puede tumbar ni silenciar el stream.
           }

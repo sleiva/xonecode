@@ -52,4 +52,4 @@ Para analizar una sesión real sin guardar el contenido de ficheros, se puede ac
 XONECODE_TRACE_TOOLS=1 /Users/projects/xonecode/bin/xonecode
 ```
 
-Se crea o amplía `.xonecode/traza-tools.jsonl` dentro del proyecto abierto. Cada línea registra una llamada al modelo (`input`, `output`, caché, especialista y acumulados) o una tool (nombre y el único detalle seguro que ya mostraría la consola: ruta o patrón). Nunca guarda argumentos completos, respuestas de tools, contenido de ficheros ni credenciales.
+Se crea o amplía `.xonecode/traza-tools.jsonl` dentro del proyecto abierto. Cada línea registra una llamada al modelo (`input`, `output`, caché, especialista y acumulados) o una tool. Para poder detectar lecturas y búsquedas ineficientes, la tool conserva únicamente parámetros de una lista blanca: ruta, `offset`/`limit`, patrón, `glob`, `path`, `flags`, `max_count` y modo de salida. Nunca guarda argumentos completos, respuestas de tools, contenido de ficheros ni credenciales; una escritura conserva exclusivamente su ruta.

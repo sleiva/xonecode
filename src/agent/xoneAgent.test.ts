@@ -65,9 +65,19 @@ describe("promptDe", () => {
   });
 
   it("describe en las tools de escritura el destino y la skill correctos", () => {
+    expect(DESCRIPCIONES_FICHEROS.read_file).toContain("offset=0, limit=50");
     expect(DESCRIPCIONES_FICHEROS.write_file).toContain("`archify`");
     expect(DESCRIPCIONES_FICHEROS.write_file).toContain("/artifacts/<nombre>.html");
     expect(DESCRIPCIONES_FICHEROS.edit_file).toContain("/MEMORIA_PROYECTO.md");
+  });
+
+  it("da al planner un criterio explícito para cerrar un reconocimiento rápido", () => {
+    const p = promptDe("planner", conSkills);
+    expect(p).toContain("RECONOCIMIENTO RÁPIDO DEL PROYECTO");
+    expect(p).toContain("como máximo, tres ficheros representativos");
+    expect(p).toContain("offset=0` y `limit=50");
+    expect(p).toContain("deja de llamar tools y responde");
+    expect(p).toContain("No repitas una lectura de la misma ruta y rango");
   });
 
   it("hace que grep localice antes de leer y conserva su presupuesto", () => {

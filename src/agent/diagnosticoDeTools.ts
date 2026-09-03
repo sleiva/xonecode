@@ -1,6 +1,7 @@
 import { appendFileSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
 import type { TokenTracker } from "../vendor/tokenTracking.js";
+import type { ParametrosSeguros } from "./resumenDeTool.js";
 
 /** Activa una traza local y opt-in; nunca se habilita para una sesión normal. */
 export const VARIABLE_TRAZA_TOOLS = "XONECODE_TRACE_TOOLS";
@@ -16,7 +17,7 @@ export interface UsoDeModelo {
 
 export interface DiagnosticoDeTools {
   modelo(origen: string, uso: UsoDeModelo): void;
-  herramienta(nombre: string, detalle: string | undefined, tracker: TokenTracker): void;
+  herramienta(nombre: string, detalle: string | undefined, parametros: ParametrosSeguros | undefined, tracker: TokenTracker): void;
 }
 
 /** Ruta pública solo para comunicar al usuario dónde quedó su diagnóstico. */
@@ -25,7 +26,8 @@ export function rutaTrazaDeTools(raiz: string): string {
 }
 
 /**
- * Crea un registro append-only de costes y calls, sin contenido de tools.
+ * Crea un registro append-only de costes y calls, con solo argumentos de una
+ * lista blanca; nunca incluye contenido de tools.
  *
  * JSONL permite analizar una sesión grande sin tener que cargarla entera. Es
  * deliberadamente síncrono: son registros minúsculos de un modo de diagnóstico
@@ -54,11 +56,12 @@ export function crearDiagnosticoDeTools(
     modelo(origen, uso) {
       escribir({ tipo: "modelo", origen, ...uso });
     },
-    herramienta(nombre, detalle, tracker) {
+    herramienta(nombre, detalle, parametros, tracker) {
       escribir({
         tipo: "tool",
         nombre,
         ...(detalle === undefined ? {} : { detalle }),
+        ...(parametros === undefined ? {} : { parametros }),
         inputAcumulado: tracker.input,
         outputAcumulado: tracker.output,
         llamadasModelo: tracker.calls,
