@@ -30,6 +30,17 @@ describe("extraerZipBase64", () => {
     expect(existsSync(join(raiz, "..", "fuera.txt"))).toBe(false);
   });
 
+  it("no deja nada a medias: una entrada buena antes de la maliciosa tampoco se escribe", () => {
+    // El orden importa: "bueno.txt" va ANTES que la entrada maliciosa para que este test
+    // solo pase si TODAS las rutas se resuelven antes de escribir ninguna. Una implementación
+    // ingenua que escribiera mientras itera dejaría "bueno.txt" en disco.
+    const raiz = mkdtempSync(join(tmpdir(), "xc-zip-"));
+    expect(() => extraerZipBase64(enBase64({ "bueno.txt": "si", "../fuera.txt": "no" }), raiz))
+      .toThrow(/fuera de la raíz/);
+    expect(existsSync(join(raiz, "bueno.txt"))).toBe(false);
+    expect(existsSync(join(raiz, "..", "fuera.txt"))).toBe(false);
+  });
+
   it("rechaza una ruta absoluta", () => {
     const raiz = mkdtempSync(join(tmpdir(), "xc-zip-"));
     expect(() => extraerZipBase64(enBase64({ "/etc/passwd": "no" }), raiz))
