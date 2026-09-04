@@ -73,7 +73,7 @@ Vinculantes para TODAS las tareas. Un cambio que las rompa está mal el cambio, 
 - [ ] Los tests bajo `apps/web/**` corren con `environment: "jsdom"`
 - [ ] `npx vitest run` sin la bandera `--exclude` ya no barre `.worktrees/`
 
-**Verify:** `npx vitest run --reporter=basic 2>&1 | tail -5` → el recuento de ficheros no incluye `.worktrees/`
+**Verify:** `npx vitest run 2>&1 | tail -5` → el recuento de ficheros no incluye `.worktrees/`
 
 **Steps:**
 
@@ -82,7 +82,7 @@ Vinculantes para TODAS las tareas. Un cambio que las rompa está mal el cambio, 
 ```bash
 # CLAUDE.md documenta que sin config el include por omisión barre .worktrees/.
 ls .worktrees/ 2>/dev/null && echo "hay worktrees en disco: el problema es reproducible"
-npx vitest run --reporter=basic 2>&1 | tail -3
+npx vitest run 2>&1 | tail -3
 ```
 
 - [ ] **Step 2: Escribir la config**
@@ -102,14 +102,33 @@ import { defineConfig } from "vitest/config";
  */
 export default defineConfig({
   test: {
-    exclude: ["**/node_modules/**", "**/dist/**", "**/.worktrees/**"],
-    environmentMatchGlobs: [
-      ["apps/web/**", "jsdom"],
-      ["src/**", "node"],
+    projects: [
+      {
+        test: {
+          name: "host",
+          include: ["src/**/*.test.ts", "src/**/*.test.tsx"],
+          exclude: ["**/node_modules/**", "**/dist/**", "**/.worktrees/**"],
+          environment: "node",
+        },
+      },
+      {
+        test: {
+          name: "cliente",
+          include: ["apps/web/**/*.test.ts", "apps/web/**/*.test.tsx"],
+          exclude: ["**/node_modules/**", "**/dist/**"],
+          environment: "jsdom",
+        },
+      },
     ],
   },
 });
 ```
+
+**`environmentMatchGlobs` NO existe en vitest 4** (comprobado contra `vitest@4.1.11`: cero
+apariciones en sus `.d.ts`). El sustituto son los **proyectos**, y de paso resuelven solo el
+problema de `.worktrees/`: con `include: ["src/**/*.test.ts"]`, un worktree bajo
+`.worktrees/<x>/src/` ya no casa. El `exclude` se conserva igualmente, por si alguien
+ensancha el `include` algún día.
 
 - [ ] **Step 3: Instalar jsdom como dependencia de desarrollo**
 
@@ -119,7 +138,7 @@ npm install --save-dev jsdom@^25
 
 - [ ] **Step 4: Verificar que la suite sigue verde y no barre worktrees**
 
-Run: `npx vitest run --reporter=basic 2>&1 | tail -5`
+Run: `npx vitest run 2>&1 | tail -5`
 Expected: todos los tests en verde; el recuento coincide con `npx vitest run --exclude '**/.worktrees/**'` de antes.
 
 - [ ] **Step 5: Corregir CLAUDE.md**
@@ -134,7 +153,7 @@ git commit -m "chore: vitest.config.ts — excluye .worktrees/ y elige environme
 ```
 
 ```json:metadata
-{"files": ["vitest.config.ts", "CLAUDE.md"], "verifyCommand": "npx vitest run --reporter=basic", "acceptanceCriteria": ["la suite sigue verde", ".worktrees/ excluido sin bandera", "environment jsdom para apps/web y node para src"], "modelTier": "mechanical"}
+{"files": ["vitest.config.ts", "CLAUDE.md"], "verifyCommand": "npx vitest run", "acceptanceCriteria": ["la suite sigue verde", ".worktrees/ excluido sin bandera", "environment jsdom para apps/web y node para src"], "modelTier": "mechanical"}
 ```
 
 ---
@@ -2060,6 +2079,15 @@ export function Barra({ entornos, entornoActivo, proyectos, sesionActiva, alEleg
 }
 ```
 
+- [ ] **Step 4b: Instalar la librería de test de componentes**
+
+```bash
+npm install --save-dev --workspace apps/web @testing-library/react@^16 @testing-library/dom@^10
+```
+
+Hace falta **aquí** y no más tarde: el test de sugerencias del compositor (Step 5) monta un
+componente de verdad. La Task 14 la da por instalada.
+
 - [ ] **Step 5: El compositor**
 
 `textarea` con Enter que envía y Shift+Enter que hace salto; `disabled` cuando `conectado === false`, con un texto que dice por qué («sin conexión con xonecode») en vez de quedarse mudo.
@@ -2343,10 +2371,13 @@ describe("Wizard", () => {
 });
 ```
 
-- [ ] **Step 2: Instalar la librería de test de componentes**
+- [ ] **Step 2: Comprobar que la librería de test de componentes ya está**
+
+Se instaló en la Task 12, que ya monta un componente. Si falta, es que la Task 12 quedó
+incompleta:
 
 ```bash
-npm install --save-dev --workspace apps/web @testing-library/react@^16 @testing-library/dom@^10
+npm ls --workspace apps/web @testing-library/react
 ```
 
 - [ ] **Step 3: Ver fallar**
@@ -2402,6 +2433,8 @@ git commit -m "feat(web): el modal de aprobación fail-closed y el wizard de tre
 **Goal:** Que `xonecode` abra la web, que `--cli` siga dando la consola entera, que un proyecto offline lo diga en vez de callar, y que CLAUDE.md y el README cuenten la verdad.
 
 **Files:**
+- Create: `src/web/servidor/arranque.ts` (`arrancarConsolaWeb`: comprobaciones, servidor, vestíbulo, navegador)
+- Create: `src/web/servidor/arranque.test.ts`
 - Modify: `src/cli/main.ts` (`decidirPiel`, y la rama que arranca la web)
 - Modify: `src/cli/main.test.ts`
 - Modify: `CLAUDE.md`
@@ -2480,7 +2513,8 @@ if (decidirPiel(argv) === "web") {
 }
 ```
 
-`arrancarConsolaWeb` comprueba, en este orden:
+`arrancarConsolaWeb` vive en `src/web/servidor/arranque.ts` —no en `main.ts`, que ya tiene
+960 líneas— y comprueba, en este orden:
 1. Que `apps/web/dist/index.html` existe. Si no: `falta el build del cliente: ejecuta «npm run build:web»` y salida 70 (fallo del **entorno**, no del proyecto).
 2. Si el cwd tiene `.xonecode/config.json` con `modo: "offline"`, lo dice: `este directorio es un proyecto offline: ábrelo con «xonecode --cli»`. Informa y **sigue** al vestíbulo — no es un error, es un aviso: el usuario puede querer la web para otro proyecto.
 3. Levanta el servidor, imprime la URL con el token y abre el navegador salvo `--no-abrir`.
