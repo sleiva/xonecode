@@ -1,17 +1,15 @@
-/* Alias comprobados contra `apps/web/estilos/design-platform.css`: bg-layer-1/2,
+/* Alias comprobados contra `apps/web/estilos/design-platform.css`: bg-layer-2,
    border-l2, label-primary/secondary/tertiary, state-error-primary,
-   state-success-primary, button-primary-fill/hover y label-primary-inverted. */
+   state-success-primary, button-primary-fill/hover y label-primary-inverted.
 
+   YA NO es tarjeta propia — vivía sola, con su propio borde y fondo, como paso
+   suelto debajo de `Bienvenida`. Ahora `Wizard` es el paso ACTUAL dentro de
+   `TarjetaDeAlta` (que aporta el único borde/fondo exterior de la pantalla), así que
+   aquí solo queda el espaciado de sus campos, ninguna caja alrededor. */
 .wizard {
   display: flex;
   flex-direction: column;
   gap: 6px;
-  width: min(480px, 100%);
-  margin: 0 auto;
-  padding: 24px;
-  border: 0.5px solid var(--dsw-alias-border-l2);
-  border-radius: 12px;
-  background: var(--dsw-alias-bg-layer-1);
 }
 
 .titulo {

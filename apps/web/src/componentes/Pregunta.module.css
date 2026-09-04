@@ -1,10 +1,12 @@
 /* Alias comprobados contra `apps/web/estilos/design-platform.css`: bg-layer-2, border-l2,
    label-primary, button-primary-fill/hover y label-primary-inverted. */
 
-/* Misma tarjeta que `Selector.module.css` y por el mismo motivo: el paso de cuenta del
-   alta contesta la clave de API con ESTE componente (`oculta`), y ahora el alta se enseña
-   sola y centrada (`App.tsx`) — una franja con `border-top` suelta en mitad del negro no
-   se sostiene como tarjeta. */
+/* Misma tarjeta que `Selector.module.css`, y su cabecera explica por qué ya no es UN
+   motivo sino dos: mitad de conversación (el `[s/N]` de una subida, `/connect-studio`
+   sin URL) flota sola sobre el transcript y necesita el borde entero; el paso de cuenta
+   del alta contesta la clave de API con ESTE componente (`oculta`) y hoy vive DENTRO de
+   `TarjetaDeAlta.module.css` (`.tarjeta`, `bg-layer-1`), así que aquí el `bg-layer-2` es
+   el panel anidado de esa pareja de alias, no una tarjeta repetida sin motivo. */
 .pregunta {
   display: flex;
   flex-direction: column;

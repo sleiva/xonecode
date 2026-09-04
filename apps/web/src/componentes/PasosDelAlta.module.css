@@ -1,0 +1,90 @@
+/* Alias comprobados contra `apps/web/estilos/design-platform.css`: border-l2,
+   label-primary/secondary/tertiary, label-primary-inverted, state-success-primary y
+   button-primary-fill. */
+
+.pasos {
+  display: flex;
+  align-items: center;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.paso {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* El conector entre dos marcadores: una línea de 24px, gris mientras el paso anterior no
+   esté `hecho` y del mismo verde que el marcador «hecho» en cuanto lo está — es lo que
+   convierte una fila de puntos sueltos en una progresión que se lee de izquierda a
+   derecha. */
+.paso[data-conector] {
+  padding-left: 6px;
+}
+
+.paso[data-conector]::before {
+  content: "";
+  display: block;
+  width: 24px;
+  height: 1px;
+  margin-right: 6px;
+  background: var(--dsw-alias-border-l2);
+}
+
+.paso[data-conector="hecho"]::before {
+  background: var(--dsw-alias-state-success-primary);
+}
+
+/* El marcador: hueco y con solo el borde mientras el paso ni ha empezado, relleno del
+   color de acción (el mismo que los botones primarios) mientras es el actual, y relleno
+   de éxito con su marca de verificación en cuanto queda hecho — un paso satisfecho se
+   PINTA hecho, no desaparece de la lista. */
+.marcador {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  border: 1px solid var(--dsw-alias-border-l2);
+  font-size: 11px;
+  line-height: 1;
+}
+
+/* «pendiente» no tiene regla propia: el `.marcador` base ya es un círculo hueco con solo
+   su borde, sin relleno ni texto. Un `background: transparent` aquí sería un
+   color-keyword literal — el test de disciplina de estilos lo caza igual que uno de
+   verdad (`Barra.test.tsx`, «el detector de color-keyword SÍ dispara… `background:
+   transparent`»). */
+
+.marcador[data-estado="actual"] {
+  border-color: var(--dsw-alias-button-primary-fill);
+  background: var(--dsw-alias-button-primary-fill);
+}
+
+.marcador[data-estado="hecho"] {
+  border-color: var(--dsw-alias-state-success-primary);
+  background: var(--dsw-alias-state-success-primary);
+  color: var(--dsw-alias-label-primary-inverted);
+}
+
+.etiqueta {
+  font-size: 13px;
+  white-space: nowrap;
+}
+
+.etiqueta[data-estado="pendiente"] {
+  color: var(--dsw-alias-label-tertiary);
+}
+
+.etiqueta[data-estado="actual"] {
+  color: var(--dsw-alias-label-primary);
+  font-weight: 600;
+}
+
+.etiqueta[data-estado="hecho"] {
+  color: var(--dsw-alias-label-secondary);
+}

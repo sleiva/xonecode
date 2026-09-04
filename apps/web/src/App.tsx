@@ -13,7 +13,8 @@ import { Aprobacion } from "./componentes/Aprobacion.js";
 import { Selector } from "./componentes/Selector.js";
 import { Wizard } from "./componentes/Wizard.js";
 import { PantallaDeArranque } from "./componentes/PantallaDeArranque.js";
-import { Bienvenida } from "./componentes/Bienvenida.js";
+import { TarjetaDeAlta } from "./componentes/TarjetaDeAlta.js";
+import type { PasoDeAlta } from "./componentes/PasosDelAlta.js";
 import { SinProyectoAbierto } from "./componentes/SinProyectoAbierto.js";
 
 type Store = ReturnType<typeof crearStoreDelCliente>;
@@ -82,58 +83,76 @@ export function App({ store, enviar }: { store: Store; enviar: Conexion["enviar"
   // «todavía no hay nada que enseñar salvo el alta».
   const enAlta = estado.alta === undefined || estado.alta.pasos.length > 0;
 
+  /**
+   * La progresión de los dos pasos, para `PasosDelAlta`. Se deriva de UNA sola señal —si
+   * `estado.alta` ya llegó— y no de mirar `selector`/`secreto` a mano: `arranque.ts`
+   * garantiza que el mensaje `alta` solo se manda DESPUÉS de que `conducirCuenta()`
+   * resuelve (`anunciarAlta` va en el `.finally()` que sigue a `conducirCuenta()`), así
+   * que `alta` sin llegar significa cuenta en curso, y `alta` ya llegado significa cuenta
+   * hecha. Dentro de esta rama (`enAlta`), si `alta` llegó, `pasos` tiene forzosamente
+   * «entorno» — es el único valor que le queda por dar `pasosPendientes()` (`vestibulo.ts`)
+   * y es lo que hace que este cálculo no necesite mirar `estado.alta.pasos` en absoluto.
+   */
+  const pasosDeAlta: PasoDeAlta[] = [
+    { id: "modelo", etiqueta: "Modelo", estado: estado.alta === undefined ? "actual" : "hecho" },
+    { id: "entorno", etiqueta: "Entorno de CloudStudio", estado: estado.alta === undefined ? "pendiente" : "actual" },
+  ];
+
   if (enAlta) {
     return (
       <PantallaDeArranque>
-        <Bienvenida nombre={estado.alta?.nombre} />
         {/*
           Antes de que llegue el primer `selector`/`secreto`/`alta` (la conexión SSE
           todavía no ha resuelto nada, o se cayó a mitad del alta) esto era la única
           señal — sin ella, un token inválido o el servidor caído pintaban el splash y
           la bienvenida y NADA más: un fallo mudo, justo lo que este repo persigue en
           todas partes. `AvisoDeConexion` ya devuelve `null` en conectado, así que en el
-          camino feliz esto sigue sin enseñar nada de más.
+          camino feliz esto sigue sin enseñar nada de más. Va FUERA de `TarjetaDeAlta`
+          —es un aviso de sistema, a lo ancho, no un paso del alta— y por eso conserva su
+          propio aspecto de franja en vez de encogerse a los 480px de la tarjeta.
         */}
         <AvisoDeConexion conectado={estado.conectado} />
-        {estado.pregunta !== undefined ? (
-          <Pregunta
-            texto={estado.pregunta.texto}
-            alResponder={async (respuesta) => {
-              await enviar({ clase: "respuesta", texto: respuesta });
-              store.contestarPregunta();
-            }}
-          />
-        ) : null}
-        {estado.secreto !== undefined ? (
-          <Pregunta
-            texto={estado.secreto.pregunta}
-            oculta
-            alResponder={async (valor) => {
-              await enviar({ clase: "secreto", valor });
-              store.contestarSecreto();
-            }}
-          />
-        ) : null}
-        {estado.selector !== undefined ? (
-          <Selector
-            titulo={estado.selector.titulo}
-            opciones={estado.selector.opciones}
-            alElegir={async (id) => {
-              await enviar({ clase: "eleccion", id });
-              store.contestarSelector();
-            }}
-          />
-        ) : null}
-        {estado.alta !== undefined && estado.alta.pasos.length > 0 ? (
-          <Wizard
-            pasos={estado.alta.pasos}
-            proveedores={estado.alta.proveedores}
-            entornos={estado.alta.entornos}
-            {...(estado.alta.aviso === undefined ? {} : { aviso: estado.alta.aviso })}
-            alGuardarCredencial={(_proveedor, clave) => void enviar({ clase: "secreto", valor: clave })}
-            alRegistrarEntorno={(entorno) => void enviar({ clase: "alta", paso: "entorno", entorno })}
-          />
-        ) : null}
+        <TarjetaDeAlta nombre={estado.alta?.nombre} pasos={pasosDeAlta}>
+          {estado.pregunta !== undefined ? (
+            <Pregunta
+              texto={estado.pregunta.texto}
+              alResponder={async (respuesta) => {
+                await enviar({ clase: "respuesta", texto: respuesta });
+                store.contestarPregunta();
+              }}
+            />
+          ) : null}
+          {estado.secreto !== undefined ? (
+            <Pregunta
+              texto={estado.secreto.pregunta}
+              oculta
+              alResponder={async (valor) => {
+                await enviar({ clase: "secreto", valor });
+                store.contestarSecreto();
+              }}
+            />
+          ) : null}
+          {estado.selector !== undefined ? (
+            <Selector
+              titulo={estado.selector.titulo}
+              opciones={estado.selector.opciones}
+              alElegir={async (id) => {
+                await enviar({ clase: "eleccion", id });
+                store.contestarSelector();
+              }}
+            />
+          ) : null}
+          {estado.alta !== undefined && estado.alta.pasos.length > 0 ? (
+            <Wizard
+              pasos={estado.alta.pasos}
+              proveedores={estado.alta.proveedores}
+              entornos={estado.alta.entornos}
+              {...(estado.alta.aviso === undefined ? {} : { aviso: estado.alta.aviso })}
+              alGuardarCredencial={(_proveedor, clave) => void enviar({ clase: "secreto", valor: clave })}
+              alRegistrarEntorno={(entorno) => void enviar({ clase: "alta", paso: "entorno", entorno })}
+            />
+          ) : null}
+        </TarjetaDeAlta>
       </PantallaDeArranque>
     );
   }

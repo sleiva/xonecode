@@ -1,20 +1,17 @@
-/* Alias comprobados contra design-platform.css: bg-layer-1, border-l2,
-   label-primary/secondary existen. Misma tarjeta que `Wizard.module.css` — el texto vive
-   SOBRE el fondo del splash (`--xonecode-splash-bg`, provisional y fuera de la escala de
-   alias), así que no puede fiarse a un color fijo: una tarjeta con su propio fondo claro
-   es lo que mantiene el contraste sea cual sea el color que el splash tenga el día que
-   alguien lo rediseñe. */
+/* Alias comprobados contra design-platform.css: label-primary/secondary existen.
+   YA NO es tarjeta propia: vivía sola, flotando sobre el splash con su propio borde y
+   fondo, encima de la tarjeta del paso — dos cajas que un usuario ve como dos cosas
+   sueltas, no una pantalla. Ahora es la CABECERA de `TarjetaDeAlta.module.css`
+   (`.tarjeta`, que aporta el único borde y fondo de la pantalla), así que este fichero
+   solo tipografía: sin margen propio, sin ancho acotado, sin caja. */
 .bienvenida {
-  width: min(480px, 100%);
-  margin: 0 auto;
-  padding: 20px 24px;
-  border: 0.5px solid var(--dsw-alias-border-l2);
-  border-radius: 12px;
-  background: var(--dsw-alias-bg-layer-1);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
 }
 
 .saludo {
-  margin: 0 0 8px;
+  margin: 0;
   font-size: 18px;
   color: var(--dsw-alias-label-primary);
 }

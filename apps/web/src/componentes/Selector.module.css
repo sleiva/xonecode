@@ -2,11 +2,15 @@
    label-primary/tertiary, interactive-bg-hover y state-error-primary. */
 
 /* Antes era una franja a lo ancho con un solo `border-top`, pensada para vivir pegada
-   debajo del transcript. El paso de cuenta del alta usa este MISMO componente («Proveedor
-   de modelos») y ahora se enseña solo, centrado sobre el negro (`App.tsx`): una franja sin
-   bordes ni esquinas flotando en mitad de la pantalla no lee como nada. Borde entero,
-   esquinas redondeadas y ancho acotado — la misma tarjeta que `Wizard.module.css` —, así
-   que el mismo componente sirve a los dos sitios sin dos aspectos distintos. */
+   debajo del transcript: una franja sin bordes ni esquinas flotando en mitad de la
+   pantalla no lee como nada. Borde entero, esquinas redondeadas y ancho acotado — y esa
+   sigue siendo la forma correcta en los DOS sitios donde vive este componente, aunque ya
+   no por el mismo motivo en cada uno. Mitad de conversación (`/modelos`, `/provider`,
+   `[s/N]`): flota solo sobre el transcript, y sigue haciendo falta una tarjeta entera.
+   Paso de cuenta del alta («Proveedor de modelos»): ya NO flota solo — vive DENTRO de
+   `TarjetaDeAlta.module.css` (`.tarjeta`, `bg-layer-1`) —, y este `bg-layer-2` es
+   justo el panel anidado que esa pareja de alias está pensada para dar, no una tarjeta
+   repetida por descuido. */
 .selector {
   display: flex;
   flex-direction: column;

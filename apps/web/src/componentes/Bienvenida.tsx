@@ -1,7 +1,8 @@
 import estilos from "./Bienvenida.module.css";
 
 /**
- * El saludo de arriba del todo, antes de cualquier paso del alta. `nombre` viaja YA
+ * El saludo, cabecera de `TarjetaDeAlta` (que es quien pone el borde y el fondo — este
+ * componente ya no lleva caja propia, ver `Bienvenida.module.css`). `nombre` viaja YA
  * resuelto en el mensaje del alta (`web/servidor/vestibulo.ts#nombreDePersona` — git
  * config, o el usuario del sistema, o nada): este componente no adivina ni inventa un
  * nombre genérico si no lo hay ("Hola, usuario" sería peor que ningún nombre, porque
