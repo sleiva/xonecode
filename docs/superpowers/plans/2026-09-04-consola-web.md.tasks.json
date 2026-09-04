@@ -55,8 +55,8 @@
     {
       "id": 6,
       "subject": "Task 6: `pielWeb` — la Piel que produce actos",
-      "status": "pending",
-      "description": "**Goal:** Una implementación de `Piel` que traduce los eventos del turno a la lista de actos, con la misma semántica que la TUI (tokens a colchón, cascada de fases, agrupación de tools) y **sin argumentos de tool**.\n\n**Files:**\n- Create: `src/web/servidor/pielWeb.ts`\n- Create: `src/web/servidor/pielWeb.test.ts`\n\n**Acceptance Criteria:**\n- [ ] Implementa `Piel` entera, `fase?` y `notificacion?` incluidos (la web sí sabe animar fases y reciclar avisos)\n- [ ] Los tokens se acumulan en un colchón y `cerrarLinea` los solidifica en un acto `asistente`\n- [ ] Las líneas de tool consecutivas se agrupan en un solo acto `herramientas`\n- [ ] Una línea de asistente o de sistema cierra el grupo de herramientas\n- [ ] `fin` produce un acto `fin` con los ms\n- [ ] `pausa` produce un acto `sistema` con la **descripción** del pendiente, y **nunca** el diff\n- [ ] Ningún acto producido contiene una llave `{` que venga de argumentos de tool\n\n**Verify:** `npx vitest run src/web/servidor/pielWeb.test.ts` → PASS\n\n```json:metadata\n{\"files\": [\"src/web/servidor/pielWeb.ts\", \"src/web/servidor/pielWeb.test.ts\"], \"verifyCommand\": \"npx vitest run src/web/servidor/pielWeb.test.ts && npm run typecheck\", \"acceptanceCriteria\": [\"Piel completa con fase y notificacion\", \"colchón de tokens\", \"agrupación de herramientas\", \"pausa sin diff\", \"ningún argumento de tool\"], \"modelTier\": \"standard\"}\n```",
+      "status": "completed",
+      "description": "**Goal:** Una implementación de `Piel` que traduce los eventos del turno a la lista de actos, con la misma semántica que la TUI (tokens a colchón, cascada de fases, agrupación de tools) y **sin argumentos de tool**.\n\nComplete — see ledger.",
       "blockedBy": [
         2
       ]
@@ -148,5 +148,5 @@
       ]
     }
   ],
-  "lastUpdated": "2026-09-04T09:22:12.308914+00:00"
+  "lastUpdated": "2026-09-04T09:33:02.076483+00:00"
 }

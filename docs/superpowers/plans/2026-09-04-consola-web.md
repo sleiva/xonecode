@@ -1164,7 +1164,7 @@ git commit -m "feat(web): pielWeb — la Piel de siempre, con el transcript como
 - [ ] Una reconexión del SSE **reemite todos los actos** desde el principio, sin duplicarlos en el servidor
 - [ ] La aprobación con el cliente desconectado devuelve **rechazo** para todos los pendientes
 - [ ] La aprobación que expira (timeout) devuelve **rechazo**
-- [ ] Solo una decisión explícita `"si"` aprueba; cualquier otra cosa, y la ausencia, es rechazo
+- [ ] Solo una decisión explícita de aprobación aprueba; cualquier otra cosa, y la ausencia, es rechazo. **`Decision` es `{ type: "approve" | "reject"; message?: string }`** (`vendor/hitl.ts:26`), no una cadena: un test que compare contra `"si"` pasaría sin probar nada
 - [ ] El **diff viaja solo** en el mensaje de aprobación y no aparece en ningún acto ni en el SSE de eventos
 - [ ] `leerSecreto` no deja el secreto en ningún acto, ningún log ni ningún evento
 
@@ -1179,7 +1179,17 @@ git commit -m "feat(web): pielWeb — la Piel de siempre, con el transcript como
 import { describe, it, expect } from "vitest";
 import { crearConsolaWeb } from "./consolaWeb.js";
 
-const PENDIENTE = { id: "1", origen: "dev", descripcion: "escribir src/app.xne", decisionesPermitidas: ["si", "no"] };
+import { REJECT_MESSAGE, type Decision } from "../../vendor/hitl.js";
+
+const PENDIENTE = { id: "1", origen: "dev", descripcion: "escribir src/app.xne", decisionesPermitidas: ["approve", "reject"] };
+
+/**
+ * `Decision` NO es una cadena: es `{ type: "approve" | "reject"; message?: string }`
+ * (`vendor/hitl.ts:26`). Los ayudantes evitan que un test compare contra una forma
+ * inventada y pase por accidente.
+ */
+const aprobado = (d: Decision | undefined) => d?.type === "approve";
+const rechazado = (d: Decision | undefined) => d?.type === "reject";
 
 describe("consolaWeb: la entrada", () => {
   it("la prosa que llega por accion sale por el iterador de líneas", async () => {
@@ -1202,22 +1212,23 @@ describe("consolaWeb: la aprobación es fail-closed POR TRANSPORTE", () => {
     const c = crearConsolaWeb();
     c.desconectar();
     const d = await c.consola.aprobacionesTui!([PENDIENTE], new Map(), new Map());
-    expect(d.get("1")).toBe("no");
+    expect(rechazado(d.get("1"))).toBe(true);
+    expect(d.get("1")?.message).toBe(REJECT_MESSAGE);
   });
 
   it("si expira el plazo, se RECHAZA: el silencio no aprueba", async () => {
     const c = crearConsolaWeb({ msDeEspera: 10 });
     c.conectar();
     const d = await c.consola.aprobacionesTui!([PENDIENTE], new Map(), new Map());
-    expect(d.get("1")).toBe("no");
+    expect(rechazado(d.get("1"))).toBe(true);
   });
 
   it("solo un «si» explícito aprueba", async () => {
     const c = crearConsolaWeb();
     c.conectar();
     const promesa = c.consola.aprobacionesTui!([PENDIENTE], new Map(), new Map());
-    c.recibir({ clase: "decision", decisiones: { "1": "si" } });
-    expect((await promesa).get("1")).toBe("si");
+    c.recibir({ clase: "decision", decisiones: { "1": "approve" } });
+    expect(aprobado((await promesa).get("1"))).toBe(true);
   });
 
   it("una decisión que no entendemos es RECHAZO, no un pase", async () => {
@@ -1225,7 +1236,7 @@ describe("consolaWeb: la aprobación es fail-closed POR TRANSPORTE", () => {
     c.conectar();
     const promesa = c.consola.aprobacionesTui!([PENDIENTE], new Map(), new Map());
     c.recibir({ clase: "decision", decisiones: { "1": "quizá" } });
-    expect((await promesa).get("1")).toBe("no");
+    expect(rechazado((await promesa).get("1"))).toBe(true);
   });
 
   it("desconectarse MIENTRAS se decide es rechazo", async () => {
@@ -1233,7 +1244,7 @@ describe("consolaWeb: la aprobación es fail-closed POR TRANSPORTE", () => {
     c.conectar();
     const promesa = c.consola.aprobacionesTui!([PENDIENTE], new Map(), new Map());
     c.desconectar();
-    expect((await promesa).get("1")).toBe("no");
+    expect(rechazado((await promesa).get("1"))).toBe(true);
   });
 });
 
@@ -1241,12 +1252,13 @@ describe("consolaWeb: qué NO viaja", () => {
   it("el diff va en el mensaje de aprobación y en ningún acto ni evento", async () => {
     const c = crearConsolaWeb();
     c.conectar();
-    const diffs = new Map([["src/app.xne", [{ signo: "+", texto: "<coleccion/>" }]]]);
-    const promesa = c.consola.aprobacionesTui!([PENDIENTE], new Map(), diffs as never);
+    // `LineaDeDiff` es `{ tipo: "igual"|"anadido"|"quitado"; texto }` (`core/diff.ts:12`).
+    const diffs = new Map([["src/app.xne", [{ tipo: "anadido" as const, texto: "<coleccion/>" }]]]);
+    const promesa = c.consola.aprobacionesTui!([PENDIENTE], new Map(), diffs);
     expect(JSON.stringify(c.mensajesDeAprobacion())).toContain("<coleccion/>");
     expect(JSON.stringify(c.actos())).not.toContain("<coleccion/>");
     expect(JSON.stringify(c.eventosEmitidos())).not.toContain("<coleccion/>");
-    c.recibir({ clase: "decision", decisiones: { "1": "no" } });
+    c.recibir({ clase: "decision", decisiones: { "1": "reject" } });
     await promesa;
   });
 
@@ -1313,7 +1325,7 @@ export type MensajeDelCliente =
 
 - `lineas` es un `AsyncIterable<string>` sobre una cola con promesas pendientes; `cerrar()` la agota (EOF, no cuelgue) — el mismo pacto que readline al acabarse un pipe.
 - `preguntar`, `leerSecreto` y `seleccionar` son la misma mecánica: emiten su mensaje, esperan la respuesta correspondiente, y **si el cliente se desconecta responden lo mismo que responde un `rl` cerrado**: cadena vacía. En `aprobar.ts` eso ya significa rechazo.
-- `aprobacionesTui`: construye el `Map` con **`"no"` para todos los pendientes de entrada**, y solo lo cambia a `"si"` cuando llega una decisión que es exactamente `"si"` para ese id. Así el fallo de cualquier camino —desconexión, timeout, decisión ilegible, respuesta parcial— cae en rechazo sin ninguna rama extra. `msDeEspera` es inyectable para poder probar el timeout sin esperar de verdad.
+- `aprobacionesTui`: construye el `Map` con **`{ type: "reject", message: REJECT_MESSAGE }` para todos los pendientes de entrada**, y solo lo cambia a `{ type: "approve" }` cuando llega una decisión de aprobación explícita para ese id. Reutiliza `interpretAnswer` de `vendor/hitl.ts` para decidir qué cuenta como aprobación, en vez de comparar cadenas a mano: es la misma función que ya usa `cli/aprobar.ts`, y dos criterios de «esto aprueba» acabarían divergiendo. Así el fallo de cualquier camino —desconexión, timeout, decisión ilegible, respuesta parcial— cae en rechazo sin ninguna rama extra. `msDeEspera` es inyectable para poder probar el timeout sin esperar de verdad.
 - El colchón de reemisión guarda **actos**, no mensajes: los de pregunta y aprobación son de un momento y no se reemiten (un cliente que reconecta recibe el estado, y el turno vuelve a pedir lo que necesite).
 
 - [ ] **Step 5: Ver pasar**
