@@ -321,7 +321,12 @@ export function crearConsolaWeb(opciones: OpcionesDeConsolaWeb = {}): ConsolaWeb
       return;
     }
     if (mensaje.clase === "eleccion") {
-      esperandoSeleccion.shift()?.(mensaje.id);
+      // La traducción de CANCELAR, y vive solo aquí: sin `id` —o con `null`— el humano se
+      // echó atrás, y eso es `undefined`, lo mismo que responden el plazo y la desconexión.
+      // Un id vacío o desconocido NO pasa por aquí: es una cadena, se entrega tal cual, y
+      // quien llamó descubrirá que no casa con ninguna opción. Confundir las dos cosas
+      // convertiría el bug de un cliente en un usuario que dijo «déjalo».
+      esperandoSeleccion.shift()?.(typeof mensaje.id === "string" ? mensaje.id : undefined);
       return;
     }
     // Decisión de aprobación.

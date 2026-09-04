@@ -330,6 +330,44 @@ describe("consolaWeb: nada que espere a un humano cuelga ni se queda sin respues
     expect(JSON.stringify(c.eventosEmitidos())).not.toContain("sk-");
   });
 
+  /**
+   * Cancelar es una salida de primera clase, no un olvido: los selectores del terminal
+   * preguntan «número (Enter cancela)». Sin ella, quien abriera `/modelos` en la web solo
+   * podría elegir algo o esperar al plazo — y elegir un modelo por no poder salirse es peor
+   * que no haber preguntado. Va por la clase `eleccion` que ya existe, sin `id`.
+   */
+  it("una `eleccion` SIN id es cancelar, igual que el plazo y la desconexión", async () => {
+    const c = crearConsolaWeb({ msDeEspera: 60_000 });
+    c.conectar();
+    const promesa = c.consola.seleccionar!({ titulo: "modelo", opciones: [{ id: "a", etiqueta: "A" }] });
+    c.recibir({ clase: "eleccion" });
+    expect(await promesa).toBe(undefined);
+  });
+
+  it("`id: null` dice lo mismo: es lo que escribe un cliente que lo serialice explícito", async () => {
+    const c = crearConsolaWeb({ msDeEspera: 60_000 });
+    c.conectar();
+    const promesa = c.consola.seleccionar!({ titulo: "modelo", opciones: [{ id: "a", etiqueta: "A" }] });
+    c.recibir({ clase: "eleccion", id: null });
+    expect(await promesa).toBe(undefined);
+  });
+
+  it("un id VACÍO no es cancelar: es un id que no existe, y se entrega tal cual", async () => {
+    const c = crearConsolaWeb({ msDeEspera: 60_000 });
+    c.conectar();
+    const promesa = c.consola.seleccionar!({ titulo: "modelo", opciones: [{ id: "a", etiqueta: "A" }] });
+    c.recibir({ clase: "eleccion", id: "" });
+    expect(await promesa).toBe("");
+  });
+
+  it("un id DESCONOCIDO tampoco es cancelar: quien llamó descubrirá que no casa", async () => {
+    const c = crearConsolaWeb({ msDeEspera: 60_000 });
+    c.conectar();
+    const promesa = c.consola.seleccionar!({ titulo: "modelo", opciones: [{ id: "a", etiqueta: "A" }] });
+    c.recibir({ clase: "eleccion", id: "no-existe" });
+    expect(await promesa).toBe("no-existe");
+  });
+
   it("contestar a tiempo desarma el plazo: la respuesta gana, no la cadena vacía", async () => {
     const c = crearConsolaWeb({ msDeEspera: 30 });
     c.conectar();

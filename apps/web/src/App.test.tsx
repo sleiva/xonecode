@@ -122,6 +122,22 @@ describe("App: el secreto y el selector, que también colgaban", () => {
     await waitFor(() => expect(screen.queryByRole("group", { name: /elige modelo/i })).toBeNull());
   });
 
+  it("cancelar el selector viaja SIN `id`: el servidor lo traduce a `undefined`", async () => {
+    const { store, enviar } = montar();
+    act(() =>
+      store.aplicar({
+        clase: "selector",
+        selector: { titulo: "Elige modelo", opciones: [{ id: "claude-x", etiqueta: "Claude X" }] },
+      })
+    );
+    fireEvent.click(screen.getByRole("button", { name: /cancelar/i }));
+    // `JSON.stringify` descarta las claves `undefined`, así que por el cable sale
+    // `{"clase":"eleccion"}` — y eso, y no una cadena vacía, es lo que significa cancelar.
+    const enviado = enviar.mock.calls.at(-1)![0];
+    expect(JSON.parse(JSON.stringify(enviado))).toEqual({ clase: "eleccion" });
+    await waitFor(() => expect(screen.queryByRole("group", { name: /elige modelo/i })).toBeNull());
+  });
+
   it("un `secreto` del cable se pinta oculto, viaja como `secreto` y NO entra en el store", async () => {
     const { store, enviar } = montar();
     act(() => store.aplicar({ clase: "secreto", pregunta: "clave de anthropic: " }));

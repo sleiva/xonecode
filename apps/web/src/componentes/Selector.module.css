@@ -57,6 +57,27 @@
   color: var(--dsw-alias-label-tertiary);
 }
 
+/* Cancelar va abajo y en su propia fila: es una salida, no una opción más del catálogo —
+   mezclarla con las opciones invitaría a pulsarla creyendo que se elige algo. */
+.acciones {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.cancelar {
+  padding: 6px 14px;
+  border: 0.5px solid var(--dsw-alias-border-l2);
+  border-radius: 8px;
+  background: var(--dsw-alias-bg-layer-1);
+  color: var(--dsw-alias-label-secondary);
+  font: inherit;
+  cursor: pointer;
+}
+
+.cancelar:hover {
+  background: var(--dsw-alias-interactive-bg-hover);
+}
+
 .fallo {
   margin: 0;
   color: var(--dsw-alias-state-error-primary);

@@ -13,7 +13,9 @@ describe("Selector", () => {
   it("pinta el título y una opción por cada una: es lo que manda `seleccionar`", () => {
     render(<Selector titulo="Elige modelo" opciones={OPCIONES} alElegir={() => {}} />);
     expect(screen.getByRole("group", { name: /elige modelo/i })).toBeTruthy();
-    expect(screen.getAllByRole("button")).toHaveLength(2);
+    // Dos opciones y el botón de cancelar, que no es una opción del catálogo.
+    expect(screen.getAllByRole("listitem")).toHaveLength(2);
+    expect(screen.getByRole("button", { name: /cancelar/i })).toBeTruthy();
     expect(screen.getByText("anthropic")).toBeTruthy();
   });
 
@@ -41,6 +43,32 @@ describe("Selector", () => {
     fireEvent.click(screen.getByRole("button", { name: /llama/i }));
     expect(alElegir).toHaveBeenCalledTimes(1);
     resolver();
+  });
+
+  /**
+   * Cancelar existe porque en el terminal existe: los selectores preguntan «número (Enter
+   * cancela)». Sin ella, `/modelos` solo se podría cerrar eligiendo algo o esperando al
+   * plazo. `undefined` es la cancelación, y el cable la lleva como la AUSENCIA del `id`.
+   */
+  it("«Cancelar» manda `undefined`, que es lo que el servidor traduce a cancelar", () => {
+    const alElegir = vi.fn();
+    render(<Selector titulo="Elige modelo" opciones={OPCIONES} alElegir={alElegir} />);
+    fireEvent.click(screen.getByRole("button", { name: /cancelar/i }));
+    expect(alElegir).toHaveBeenCalledWith(undefined);
+  });
+
+  it("Escape cancela igual que el botón: una salida que pide ratón no es una salida", () => {
+    const alElegir = vi.fn();
+    render(<Selector titulo="Elige modelo" opciones={OPCIONES} alElegir={alElegir} />);
+    fireEvent.keyDown(document, { key: "Escape" });
+    expect(alElegir).toHaveBeenCalledWith(undefined);
+  });
+
+  it("cancelar NO manda una cadena vacía: eso sería un id que no existe, no echarse atrás", () => {
+    const alElegir = vi.fn();
+    render(<Selector titulo="Elige modelo" opciones={OPCIONES} alElegir={alElegir} />);
+    fireEvent.click(screen.getByRole("button", { name: /cancelar/i }));
+    expect(alElegir).not.toHaveBeenCalledWith("");
   });
 
   it("una opción sin detalle no inventa uno", () => {

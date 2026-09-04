@@ -62,7 +62,15 @@ export type MensajeAlCliente =
 export type MensajeDelCliente =
   | { clase: "prosa"; texto: string }
   | { clase: "respuesta"; texto: string }
-  | { clase: "eleccion"; id: string }
+  /**
+   * La respuesta a `seleccionar`. **Sin `id` (o con `id: null`) es CANCELAR** — la misma
+   * salida que en el terminal («número, Enter cancela»). El servidor lo traduce a
+   * `undefined`; un id vacío o desconocido NO es cancelar, es un id que no existe. Ver
+   * `web/servidor/transporte.ts` para el razonamiento entero: este fichero es su copia
+   * declarada, y `tipos.test.ts` solo compara los literales `clase:`, no los CAMPOS de
+   * dentro de una variante — o sea que esta pareja hay que cuidarla a mano.
+   */
+  | { clase: "eleccion"; id?: string | null }
   /** La respuesta a la pregunta secreta de `MensajeAlCliente` — otro mensaje, otra forma: aquel lleva `pregunta`, este `valor`. */
   | { clase: "secreto"; valor: string }
   | { clase: "decision"; decisiones: Record<string, string> };

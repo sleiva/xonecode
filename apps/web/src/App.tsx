@@ -91,6 +91,10 @@ export function App({ store, enviar }: { store: Store; enviar: Conexion["enviar"
               titulo={estado.selector.titulo}
               opciones={estado.selector.opciones}
               alElegir={async (id) => {
+                // `id: undefined` es cancelar, y viaja como la AUSENCIA del campo:
+                // `JSON.stringify` descarta las claves con ese valor, así que por el cable
+                // sale `{"clase":"eleccion"}` — que es lo que `consolaWeb` traduce a
+                // `undefined`. No hay clase nueva para cancelar.
                 await enviar({ clase: "eleccion", id });
                 store.contestarSelector();
               }}

@@ -52,7 +52,21 @@ export type MensajeAlCliente =
 export type MensajeDelCliente =
   | { clase: "prosa"; texto: string }
   | { clase: "respuesta"; texto: string }
-  | { clase: "eleccion"; id: string }
+  /**
+   * La respuesta a `seleccionar`. **Sin `id` (o con `id: null`) es CANCELAR**, que es
+   * exactamente lo que `seleccionar` ya devuelve al desconectarse y al vencer su plazo — en
+   * el terminal cancelar es una salida de primera clase («número, Enter cancela»), así que
+   * la web no puede tener menos. Se aprovecha esta clase en vez de añadir otra: el contrato
+   * del cable no crece y la traducción a `undefined` vive en un solo sitio
+   * (`consolaWeb.ts#recibir`). `undefined` viaja como la AUSENCIA del campo, porque
+   * `JSON.stringify` descarta las claves con ese valor; `null` se admite porque es lo que
+   * escribiría un cliente que lo serialice explícitamente, y dice lo mismo.
+   *
+   * Un `id` vacío o desconocido NO es cancelar: es un id que no existe, y así se lo pasa a
+   * quien llamó. Traducirlo aquí a cancelación convertiría el bug de un cliente en un
+   * usuario que se echó atrás.
+   */
+  | { clase: "eleccion"; id?: string | null }
   | { clase: "secreto"; valor: string }
   /**
    * El valor es el `Decision["type"]` que el pendiente declara en `decisionesPermitidas`,
