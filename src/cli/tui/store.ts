@@ -9,22 +9,8 @@
 
 import type { PropsDelModal } from "./aprobarTui.js";
 import type { SelectorDeConsola } from "../consola.js";
-
-/** Un acto del transcript: lo que ya no cambia y se pinta por su tipo. */
-export type Acto =
-  | { tipo: "usuario"; texto: string }
-  | { tipo: "asistente"; texto: string }
-  /**
-   * Las líneas de tool CONSECUTIVAS de un turno, en un solo acto: son paisaje, y el
-   * transcript enseña solo las últimas. Una línea del asistente (o de sistema) cierra el
-   * grupo; la siguiente tool abre otro.
-   */
-  | { tipo: "herramientas"; lineas: string[] }
-  | { tipo: "sistema"; texto: string }
-  | { tipo: "fase"; texto: string; ms: number }
-  /** El cierre del turno: duración y, si la piel lo sabe, el modelo que lo corrió. */
-  | { tipo: "fin"; ms: number; modelo?: string }
-  | { tipo: "error"; texto: string };
+import type { Acto } from "../../core/actos.js";
+export type { Acto };
 
 export interface EstadoDeTui {
   actos: Acto[];
