@@ -4,8 +4,8 @@
     {
       "id": 0,
       "subject": "Task 0: `vitest.config.ts`",
-      "status": "pending",
-      "description": "**Goal:** Que el repo tenga una config de vitest que elija `environment` por glob y excluya `.worktrees/`, para que el cliente web pueda tener tests de DOM sin contaminar la suite del host.\n\n**Files:**\n- Create: `vitest.config.ts`\n- Modify: `CLAUDE.md` (la sección que documenta la ausencia de config como coste medido)\n\n**Acceptance Criteria:**\n- [ ] `npm test` corre los mismos ficheros que hoy más ninguno de `.worktrees/`\n- [ ] Los tests bajo `src/**` corren con `environment: \"node\"`\n- [ ] Los tests bajo `apps/web/**` corren con `environment: \"jsdom\"`\n- [ ] `npx vitest run` sin la bandera `--exclude` ya no barre `.worktrees/`\n\n**Verify:** `npx vitest run 2>&1 | tail -5` → el recuento de ficheros no incluye `.worktrees/`\n\n```json:metadata\n{\"files\": [\"vitest.config.ts\", \"CLAUDE.md\"], \"verifyCommand\": \"npx vitest run\", \"acceptanceCriteria\": [\"la suite sigue verde\", \".worktrees/ excluido sin bandera\", \"environment jsdom para apps/web y node para src\"], \"modelTier\": \"mechanical\"}\n```"
+      "status": "completed",
+      "description": "**Goal:** Que el repo tenga una config de vitest que elija `environment` por glob y excluya `.worktrees/`, para que el cliente web pueda tener tests de DOM sin contaminar la suite del host.\n\nComplete — see ledger."
     },
     {
       "id": 1,
@@ -148,5 +148,5 @@
       ]
     }
   ],
-  "lastUpdated": "2026-09-04T08:14:33.019898+00:00"
+  "lastUpdated": "2026-09-04T08:22:09.709395+00:00"
 }
