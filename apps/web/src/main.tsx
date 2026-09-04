@@ -4,6 +4,11 @@ import "../estilos/base.css";
 import "../estilos/design-platform.css";
 import "../estilos/corner-shape.css";
 import "../estilos/scrollbar.css";
+// Los `--shiki-*` que las vallas de código resaltadas usan (`CodeBlock`, vía
+// `MarkdownText` en `Chat.tsx`): sin este fichero el tema de shiki no tiene de dónde
+// leer color y el texto resaltado sale con lo que el navegador herede, no con la
+// paleta que `shiki.css` ya trae copiada para esto (Task 13b).
+import "../estilos/shiki.css";
 import { crearStoreDelCliente } from "./store.js";
 import { crearConexion } from "./conexion.js";
 import { App } from "./App.js";

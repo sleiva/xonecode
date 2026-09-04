@@ -26,6 +26,17 @@ export default defineConfig({
           include: ["apps/web/**/*.test.ts", "apps/web/**/*.test.tsx"],
           exclude: ["**/node_modules/**", "**/dist/**"],
           environment: "jsdom",
+          // `MarkdownText` (`@deepseek-ai/dsh-client-ui-primitives`) importa
+          // `katex/dist/katex.min.css` como efecto de carga. Externalizado (el trato por
+          // omisión para node_modules), Node intenta resolverlo con su loader nativo y
+          // revienta con «Unknown file extension ".css"» — no es un fallo del paquete,
+          // es que sin esto Vitest nunca le pasa ese import por Vite, que sí sabe mockear
+          // CSS en modo test. Basta con inlinear ESTE paquete (no `katex` en sí, probado
+          // por separado: sin su entrada aquí la suite sigue en verde) — el import de la
+          // hoja de estilos vive DENTRO de `dsh-client-ui-primitives`, así que forzar SU
+          // transformación por Vite ya le pasa ese `.css` por el pipeline que sabe
+          // mockearlo, sin tener que inlinear también a quien lo publica.
+          server: { deps: { inline: [/@deepseek-ai\/dsh-client-ui-primitives/] } },
         },
       },
     ],

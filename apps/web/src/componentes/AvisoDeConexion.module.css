@@ -1,0 +1,16 @@
+/* Alias comprobados contra design-platform.css (mismo par que usa el globo de error de
+   Chat.module.css): state-error-primary/secondary existen. */
+
+/* `ConnectionBanner` (`@deepseek-ai/dsh-client-ui-primitives`) no acepta `className`: su
+   `<div>` propio, en esta rc, sale SIN clase alguna —su CSS Module está vacío, el mismo
+   hecho medido que documenta `Chat.module.css` para el resto del paquete—. Envolverlo es
+   la única forma de darle aspecto de banner en vez de una fila de texto suelta; cuando
+   `reconnecting` es falso devuelve `null` y este envoltorio se queda vacío, sin caja
+   visible, así que no hace falta ocultarlo aparte. */
+.avisoDeConexion :global(div) {
+  padding: 8px 16px;
+  text-align: center;
+  font-size: 13px;
+  background: var(--dsw-alias-state-error-secondary);
+  color: var(--dsw-alias-state-error-primary);
+}

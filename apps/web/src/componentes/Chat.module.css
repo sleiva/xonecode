@@ -18,9 +18,10 @@
   line-height: 1.5;
 }
 
-/* `pre-wrap` solo en los globos de TEXTO plano (usuario, error): el del asistente lleva
-   el HTML de `aHtml`, que trae un `\n` entre cada bloque —`</h1>\n<ul>\n<li>…`— y
-   `pre-wrap` ahí pintaría filas en blanco visibles y convertiría un salto de línea
+/* `pre-wrap` solo en los globos de TEXTO plano (usuario, error): el del asistente lo
+   pinta `MarkdownText`, que interpone un nodo de texto `"\n"` entre cada bloque
+   (`render.js#wrapBlockChildren`, la misma separación que traía el HTML de `marked`) —
+   y `pre-wrap` ahí pintaría filas en blanco visibles y convertiría un salto de línea
    suave dentro de un párrafo en un corte duro, justo lo contrario de lo que dice el
    markdown. */
 .usuario,
@@ -47,27 +48,37 @@
   color: var(--dsw-alias-state-error-primary);
 }
 
-/* Lo que sigue estiliza el HTML que produce `aHtml` (marked + DOMPurify) dentro de
-   `.asistente`: no lleva sus propias clases de módulo — es HTML insertado con
-   `dangerouslySetInnerHTML`, así que el único gancho posible es `:global()` sobre la
-   etiqueta que marked ya elige. */
+/* Lo que sigue estiliza los elementos que `MarkdownText` monta dentro de `.asistente`
+   (Task 13b): son React de verdad, no HTML insertado, pero sus PROPIAS clases de módulo
+   están vacías en esta versión exacta —medido en `lib/index.js` del paquete instalado:
+   cada `X.module.css` publicado se reduce a `var X_module_css_default = {}`, así que
+   `clsx(stub.block, "md-code-block", className)` en `CodeBlock` deja solo `md-code-block`
+   como clase real y todo lo demás (`table`, `img`, el `div` que envuelve la tabla) sale
+   SIN clase alguna—. El único gancho de sobra es la etiqueta, igual que antes con el HTML
+   de `marked`, más el ÚNICO literal que el paquete sí conserva: `md-code-block`. */
 
-.asistente :global(pre) {
+.asistente :global(.md-code-block) {
   background: var(--dsw-alias-markdown-code-block);
   padding: 10px;
   border-radius: 6px;
   overflow-x: auto;
+  margin: 4px 0;
+}
+
+/* El `pre`/`code` de dentro de la valla —resaltado por shiki o el `<pre>` llano de
+   respaldo cuando no hay gramática registrada— no lleva su propio fondo: ya lo pone
+   `.md-code-block`, y duplicarlo aquí encima del de shiki (que trae el suyo vía
+   `--shiki-background`, `estilos/shiki.css`) se vería como una caja dentro de otra caja. */
+.asistente :global(.md-code-block) :global(pre),
+.asistente :global(.md-code-block) :global(code) {
+  background: none;
+  padding: 0;
 }
 
 .asistente :global(code) {
   background: var(--dsw-alias-markdown-inline-code);
   border-radius: 3px;
   padding: 0 4px;
-}
-
-.asistente :global(pre) :global(code) {
-  background: none;
-  padding: 0;
 }
 
 .asistente :global(table) {
@@ -78,4 +89,14 @@
 .asistente :global(td) {
   border: 0.5px solid var(--dsw-alias-border-l2);
   padding: 4px 8px;
+}
+
+/* Sin esto una imagen del asistente se sale del globo (`max-width: 70ch` es para
+   texto, no para el ancho nativo de la imagen) — `MarkdownText` ya exige http(s)
+   absoluto y `referrerPolicy="no-referrer"` antes de montar el `<img>` (`render.js`,
+   `remoteImageUrl`), así que esto es solo maquetación, no una segunda comprobación de
+   seguridad. */
+.asistente :global(img) {
+  max-width: 100%;
+  border-radius: 4px;
 }

@@ -7,6 +7,7 @@ import { Cabecera } from "./componentes/Cabecera.js";
 import { Compositor } from "./componentes/Compositor.js";
 import { Transcript } from "./componentes/Transcript.js";
 import { BarraDeEstado } from "./componentes/BarraDeEstado.js";
+import { AvisoDeConexion } from "./componentes/AvisoDeConexion.js";
 
 type Store = ReturnType<typeof crearStoreDelCliente>;
 
@@ -51,6 +52,7 @@ export function App({ store, enviar }: { store: Store; enviar: Conexion["enviar"
             titulo={primerActoDeUsuario?.texto ?? "xonecode"}
             conectado={estado.conectado}
           />
+          <AvisoDeConexion conectado={estado.conectado} />
           <Transcript actos={estado.actos} />
           <Compositor
             comandos={estado.comandos}
