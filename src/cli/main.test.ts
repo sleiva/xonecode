@@ -1,7 +1,8 @@
 import { describe, it, expect, vi, afterEach, beforeEach } from "vitest";
 import { mkdtempSync, rmSync, existsSync, readFileSync, mkdirSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join, basename } from "node:path";
+import { join, basename, dirname } from "node:path";
+import { fileURLToPath } from "node:url";
 import { PassThrough } from "node:stream";
 import * as readline from "node:readline";
 import {
@@ -17,6 +18,7 @@ import {
   extraerBanderasDeModelo,
   crearSincronizador,
   crearListaDeRamas,
+  adaptadoresDeProyecto,
   entornoDeUrl,
   guardarEndpointYEntorno,
   type PiezasDeSincronizacion,
@@ -762,7 +764,7 @@ describe("crearSincronizador", () => {
     );
   });
 
-  it("una barra final de más no es otro servidor", async () => {
+  it("una barra final NO casa, y eso es benigno: falla a «legado», no cruza a otro entorno", async () => {
     const raiz = raizConProyectoCloud();
     const sesion = vi.fn(piezasFalsas().sesion);
     await crearSincronizador(
@@ -1000,6 +1002,47 @@ describe("entornoDeUrl", () => {
 
   it("sin entornos registrados, nada que casar", () => {
     expect(entornoDeUrl("https://mcp.xonewebstudio.com/mcp", [])).toBeUndefined();
+  });
+});
+
+describe("los adaptadores de proyecto son los MISMOS en las dos pieles", () => {
+  /**
+   * La rama stdio tenía su propia copia de estos siete adaptadores y el arreglo del
+   * `entorno` caducado entró solo en la de la TUI: por la consola de terminal seguía
+   * guardándose una `url` nueva encima de un `entorno` que nombraba OTRO servidor
+   * (reproducido con un HOME falso). Ahora hay una sola definición, y esto lo fija.
+   */
+  const fuenteDeMain = (): string =>
+    readFileSync(join(dirname(fileURLToPath(import.meta.url)), "main.ts"), "utf8");
+
+  it("el montaje no escribe el endpoint sin resolver el entorno, por ninguna de las dos ramas", () => {
+    const crudas = fuenteDeMain()
+      .split("\n")
+      .filter((l) => /guardarCloudStudioDeProyecto:\s*\(url, scopes\)/.test(l))
+      .filter((l) => !l.includes("guardarEndpointYEntorno"));
+    expect(crudas).toEqual([]);
+  });
+
+  it("las dos ramas montan la MISMA fábrica: sin dos copias no hay dos comportamientos", () => {
+    // Una por rama (TUI y stdio); si alguien vuelve a escribir los adaptadores a mano,
+    // este recuento deja de cuadrar.
+    expect(fuenteDeMain().match(/\.\.\.adaptadoresDeProyecto\(raiz\)/g)).toHaveLength(2);
+  });
+
+  it("el adaptador que monta stdio (y la TUI) BORRA el entorno caducado al cambiar de servidor", () => {
+    const raiz = raizTemporal();
+    const registrado = settingsFalsos({ id: "webstudio", nombre: "XOne", url: "https://mcp.ejemplo.test/mcp" });
+    // Se ejercita el adaptador tal cual lo recibe la `Consola`, que es lo que
+    // `/connect-studio` llama: probar solo `guardarEndpointYEntorno` dejaba fuera
+    // precisamente el cableado que estaba mal.
+    const adaptadores = adaptadoresDeProyecto(raiz, registrado);
+    adaptadores.guardarCloudStudioDeProyecto!("https://mcp.ejemplo.test/mcp", ["mcp.read"]);
+    expect(JSON.parse(readFileSync(join(raiz, ".xonecode", "config.json"), "utf8")).entorno).toBe("webstudio");
+
+    adaptadores.guardarCloudStudioDeProyecto!("https://cloudstudio.cliente.example/mcp", ["mcp.read"]);
+    const config = JSON.parse(readFileSync(join(raiz, ".xonecode", "config.json"), "utf8"));
+    expect(config.cloudstudio.url).toBe("https://cloudstudio.cliente.example/mcp");
+    expect(config.entorno).toBeUndefined();
   });
 });
 

@@ -411,6 +411,47 @@ function crearEjecutorReal(alAbrirSesion: (sesion: SesionReal) => void): Ejecuto
 }
 
 /**
+ * Los adaptadores de disco y de red que dependen SOLO de la raíz del proyecto.
+ *
+ * Existe porque estaban escritos dos veces —una en la rama TUI y otra en la stdio— y eso
+ * ya divergió, medido: el arreglo del `entorno` caducado de `/connect-studio` entró en la
+ * rama TUI y no en la de stdio, así que por la consola de terminal seguía guardándose una
+ * `url` nueva encima de un `entorno` que nombraba el juego de credenciales de OTRO
+ * servidor. Es el mismo principio que ya rige aquí para los comandos («la consola y la
+ * shell no divergen porque comparten función»), aplicado a los adaptadores: con una sola
+ * definición, «las dos ramas hacen lo mismo» deja de ser algo que haya que recordar.
+ */
+export function adaptadoresDeProyecto(
+  raiz: string,
+  /** Misma costura que `guardarEndpointYEntorno`: los tests no pueden leer el
+   *  `~/.xonecode/settings.json` de quien corre la suite. */
+  leerSettings: typeof cargarSettings = cargarSettings,
+): Pick<
+  Consola,
+  | "guardarTemaDeProyecto"
+  | "guardarCloudStudioDeProyecto"
+  | "guardarModoDeProyecto"
+  | "guardarProyectoCloudStudioDeProyecto"
+  | "ramasDeCloudStudio"
+  | "guardarRamaDeProyecto"
+  | "guardarModelosDeProyecto"
+  | "sincronizar"
+> {
+  return {
+    guardarTemaDeProyecto: (tema) => guardarTemaDeProyecto(raiz, tema),
+    // `guardarEndpointYEntorno` y NUNCA `guardarCloudStudioDeProyecto` a pelo: el endpoint
+    // y el entorno tienen que escribirse juntos o la referencia se queda caducada.
+    guardarCloudStudioDeProyecto: (url, scopes) => guardarEndpointYEntorno(raiz, url, scopes, leerSettings),
+    guardarModoDeProyecto: (modo) => guardarModoDeProyecto(raiz, modo),
+    guardarProyectoCloudStudioDeProyecto: (proyecto) => guardarProyectoCloudStudioDeProyecto(raiz, proyecto),
+    ramasDeCloudStudio: crearListaDeRamas(raiz),
+    guardarRamaDeProyecto: (rama) => guardarRamaDeProyecto(raiz, rama),
+    guardarModelosDeProyecto: (papel, id) => guardarModelosDeProyecto(raiz, papel, id),
+    sincronizar: crearSincronizador(),
+  };
+}
+
+/**
  * La sesión interactiva: `xonecode` a secas.
  *
  * Mismo patrón de inyección que `cmdDescribe(fuentes, escribir, raiz)`: todo lo que toca
@@ -545,8 +586,13 @@ const PIEZAS_DE_SINCRONIZACION_REALES: PiezasDeSincronizacion = {
  *  - Se queda viejo cuando `/connect-studio` reescribe la `url` del proyecto: sin volver a
  *    resolver, el `entorno` anterior seguiría nombrando el juego de OTRO servidor.
  *
- * La comparación normaliza con `URL` (una barra final de más no es otro servidor) y cae a
- * la comparación literal si alguna cadena no es una URL parseable.
+ * La comparación normaliza con `URL` y cae a la comparación literal si alguna cadena no
+ * parsea. Qué absorbe esa normalización, MEDIDO y no supuesto: el case del host y el puerto
+ * por omisión explícito (`:443`) sí casan; una barra final de más, un `?` vacío, otro puerto,
+ * `http` frente a `https` y otro case en la RUTA no casan. Que no casen es benigno y no
+ * accidental: el fallo devuelve `undefined` —y cae en `legado`, donde ese proyecto ya
+ * estaba— en vez de resolver al id de otro entorno. Ninguna variante cruza a un id ajeno, y
+ * ESA es la propiedad de la que depende no mandarle a un servidor el token de otro.
  */
 export function entornoDeUrl(url: string, entornos: readonly Entorno[]): string | undefined {
   const canonica = (valor: string): string => {
@@ -785,14 +831,7 @@ export async function entrarEnConsola(
       raiz,
       guion,
       ...dependencias,
-      guardarTemaDeProyecto: (tema) => guardarTemaDeProyecto(raiz, tema),
-      guardarCloudStudioDeProyecto: (url, scopes) => guardarEndpointYEntorno(raiz, url, scopes),
-      guardarModoDeProyecto: (modo) => guardarModoDeProyecto(raiz, modo),
-      guardarProyectoCloudStudioDeProyecto: (proyecto) => guardarProyectoCloudStudioDeProyecto(raiz, proyecto),
-      ramasDeCloudStudio: crearListaDeRamas(raiz),
-      guardarRamaDeProyecto: (rama) => guardarRamaDeProyecto(raiz, rama),
-      guardarModelosDeProyecto: (papel, id) => guardarModelosDeProyecto(raiz, papel, id),
-      sincronizar: crearSincronizador(),
+      ...adaptadoresDeProyecto(raiz),
       inspeccionarProyecto,
       ofrecer: ofrecerCrearProyecto,
       crearEjecutor: guion ? undefined : crearEjecutorReal,
@@ -899,15 +938,8 @@ export async function entrarEnConsola(
     leerSecreto: crearLeerSecreto(rl),
     catalogoModelos: dependencias.catalogoModelos,
     guardarModeloGlobal: dependencias.guardarModeloGlobal,
-    guardarTemaDeProyecto: (tema) => guardarTemaDeProyecto(raiz, tema),
     conectarCloudStudio: dependencias.conectarCloudStudio,
-    guardarCloudStudioDeProyecto: (url, scopes) => guardarCloudStudioDeProyecto(raiz, url, scopes),
-    guardarModoDeProyecto: (modo) => guardarModoDeProyecto(raiz, modo),
-    guardarProyectoCloudStudioDeProyecto: (proyecto) => guardarProyectoCloudStudioDeProyecto(raiz, proyecto),
-    ramasDeCloudStudio: crearListaDeRamas(raiz),
-    guardarRamaDeProyecto: (rama) => guardarRamaDeProyecto(raiz, rama),
-    guardarModelosDeProyecto: (papel, id) => guardarModelosDeProyecto(raiz, papel, id),
-    sincronizar: crearSincronizador(),
+    ...adaptadoresDeProyecto(raiz),
   };
 
   // Los dobles de readline de tests (y una tubería) pueden declararse interactivos para
