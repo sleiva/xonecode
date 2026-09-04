@@ -1,5 +1,18 @@
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, statSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { herramientaDeProyectos, invocarSobre, proyectosDeResultado } from "./cloudstudioMcp.js";
+import {
+  adoptarLegadoSiProcede,
+  EstadoOAuthVersionIncompatible,
+  guardarEstadoDeEntorno,
+  herramientaDeProyectos,
+  invocarSobre,
+  leerEstado,
+  olvidarEntorno,
+  proyectosDeResultado,
+  URL_CLOUDSTUDIO_POR_OMISION,
+} from "./cloudstudioMcp.js";
 
 describe("proyectosDeResultado", () => {
   it("extrae identidades de una respuesta estructurada sin conservar el resto", () => {
@@ -190,5 +203,139 @@ describe("proyectosDeResultado · forma real de studio_list_projects", () => {
     expect(proyectosDeResultado({
       content: [{ type: "text", text: JSON.stringify(respuestaReal) }],
     })).toHaveLength(2);
+  });
+});
+
+/**
+ * `~/.xonecode/cloudstudio-oauth.json` pasa de un único juego plano de tokens a un
+ * fichero indexado por entorno: los dos oficiales, más el on-premise de un cliente. Cada
+ * test recibe su propia «casa» temporal (nunca `~/.xonecode` real, como ya hace
+ * `settingsEnDisco.test.ts`) y una ruta DENTRO de una carpeta que todavía no existe, para
+ * que `guardarEstado` tenga que crear el árbol — como en el primer login de una casa
+ * nueva.
+ */
+describe("estado OAuth por entorno", () => {
+  function rutaNueva(): string {
+    const casa = mkdtempSync(join(tmpdir(), "xonecode-cloudstudio-oauth-"));
+    return join(casa, ".xonecode", "cloudstudio-oauth.json");
+  }
+
+  function ficheroTemporalCon(plano: unknown): string {
+    const ruta = rutaNueva();
+    mkdirSync(join(ruta, ".."), { recursive: true, mode: 0o700 });
+    writeFileSync(ruta, JSON.stringify(plano));
+    return ruta;
+  }
+
+  function ficheroTemporalVacio(): string {
+    return rutaNueva(); // no existe todavía: leerEstado debe devolver el estado vacío
+  }
+
+  function ficheroTemporalCrudo(texto: string): string {
+    const ruta = rutaNueva();
+    mkdirSync(join(ruta, ".."), { recursive: true, mode: 0o700 });
+    writeFileSync(ruta, texto);
+    return ruta;
+  }
+
+  /** `token_type` no importa a ningún test de este bloque: solo hace falta para que el
+   *  literal case en el tipo `OAuthTokens` del SDK MCP. */
+  function tokenDePrueba(access_token: string): { access_token: string; token_type: string } {
+    return { access_token, token_type: "bearer" };
+  }
+
+  it("un fichero plano (el de hoy) no se pierde: pasa a la clave legado", () => {
+    const ruta = ficheroTemporalCon({ tokens: { access_token: "viejo" }, scopes: ["a"] });
+    const estado = leerEstado(ruta);
+    expect(estado.version).toBe(2);
+    expect(estado.porEntorno.legado?.tokens?.access_token).toBe("viejo");
+  });
+
+  it("leer un fichero plano NO lo reescribe: un arranque de solo lectura no toca el disco del usuario", () => {
+    const bruto = JSON.stringify({ tokens: { access_token: "viejo" }, scopes: ["a"] });
+    const ruta = ficheroTemporalCon(JSON.parse(bruto));
+    leerEstado(ruta);
+    leerEstado(ruta);
+    // Byte a byte: la migración se materializa en la primera ESCRITURA, no aquí.
+    expect(readFileSync(ruta, "utf8")).toBe(bruto);
+  });
+
+  it("legado se adopta al registrar el entorno de la URL por omisión, y NO antes", () => {
+    const ruta = ficheroTemporalCon({ tokens: { access_token: "viejo" } });
+    // Un entorno cualquiera no se lo lleva.
+    adoptarLegadoSiProcede(ruta, { id: "otro", url: "https://on-prem/mcp" });
+    expect(leerEstado(ruta).porEntorno.legado).toBeDefined();
+    expect(leerEstado(ruta).porEntorno.otro).toBeUndefined();
+    // El de la URL por omisión sí.
+    adoptarLegadoSiProcede(ruta, { id: "webstudio", url: URL_CLOUDSTUDIO_POR_OMISION });
+    expect(leerEstado(ruta).porEntorno.webstudio?.tokens?.access_token).toBe("viejo");
+    expect(leerEstado(ruta).porEntorno.legado).toBeUndefined();
+  });
+
+  it("adoptar legado conserva intactos los tokens de un entorno que ya existía", () => {
+    // Un fichero plano de antes, más un entorno "otro" que ya inició sesión aparte: la
+    // primera escritura de guardarEstadoDeEntorno es la que materializa la migración de
+    // formato, y es justo ahí donde un bug podría machacar "otro" con el porEntorno entero.
+    const ruta = ficheroTemporalCon({ tokens: { access_token: "viejo" } });
+    guardarEstadoDeEntorno(ruta, "otro", { tokens: tokenDePrueba("del-otro-entorno") });
+    adoptarLegadoSiProcede(ruta, { id: "webstudio", url: URL_CLOUDSTUDIO_POR_OMISION });
+    const { porEntorno } = leerEstado(ruta);
+    expect(porEntorno.webstudio?.tokens?.access_token).toBe("viejo");
+    expect(porEntorno.otro?.tokens?.access_token).toBe("del-otro-entorno");
+    expect(porEntorno.legado).toBeUndefined();
+  });
+
+  it("nunca se registró el entorno por omisión: legado queda intacto para siempre", () => {
+    const ruta = ficheroTemporalCon({ tokens: { access_token: "viejo" } });
+    adoptarLegadoSiProcede(ruta, { id: "on-prem-cliente", url: "https://cloudstudio.cliente.example/mcp" });
+    expect(leerEstado(ruta).porEntorno.legado?.tokens?.access_token).toBe("viejo");
+  });
+
+  it("cerrar sesión en un entorno deja intactos los demás", () => {
+    const ruta = ficheroTemporalVacio();
+    guardarEstadoDeEntorno(ruta, "a", { tokens: tokenDePrueba("ta") });
+    guardarEstadoDeEntorno(ruta, "b", { tokens: tokenDePrueba("tb") });
+    olvidarEntorno(ruta, "a");
+    expect(leerEstado(ruta).porEntorno.a).toBeUndefined();
+    expect(leerEstado(ruta).porEntorno.b?.tokens?.access_token).toBe("tb");
+  });
+
+  it("olvidar un entorno sin nada guardado no crea el fichero", () => {
+    const ruta = ficheroTemporalVacio();
+    olvidarEntorno(ruta, "nunca-existió");
+    expect(existsSync(ruta)).toBe(false);
+    expect(leerEstado(ruta).porEntorno).toEqual({});
+  });
+
+  it("un fichero corrupto sigue dando estado vacío y no imprime nada", () => {
+    const ruta = ficheroTemporalCrudo("{{{");
+    expect(leerEstado(ruta).porEntorno).toEqual({});
+  });
+
+  it("una versión futura y desconocida no se sobrescribe: leerEstado la trata como vacía, pero escribir encima destruiría lo que no sabe interpretar", () => {
+    const bruto = JSON.stringify({ version: 3, porEntorno: { futuro: { tokens: tokenDePrueba("del-futuro") } } });
+    const ruta = ficheroTemporalCon(JSON.parse(bruto));
+    expect(() => guardarEstadoDeEntorno(ruta, "a", { tokens: tokenDePrueba("ta") }))
+      .toThrow(EstadoOAuthVersionIncompatible);
+    expect(() => olvidarEntorno(ruta, "a")).toThrow(EstadoOAuthVersionIncompatible);
+    expect(() => adoptarLegadoSiProcede(ruta, { id: "webstudio", url: URL_CLOUDSTUDIO_POR_OMISION }))
+      .toThrow(EstadoOAuthVersionIncompatible);
+    // Ninguno de los tres intentos tocó el disco.
+    expect(readFileSync(ruta, "utf8")).toBe(bruto);
+  });
+
+  it("un fichero nuevo se escribe en disco como { version: 2, porEntorno: {…} }", () => {
+    const ruta = ficheroTemporalVacio();
+    guardarEstadoDeEntorno(ruta, "webstudio", { tokens: tokenDePrueba("t") });
+    const enDisco = JSON.parse(readFileSync(ruta, "utf8"));
+    expect(enDisco.version).toBe(2);
+    expect(enDisco.porEntorno.webstudio.tokens.access_token).toBe("t");
+  });
+
+  it("el fichero queda 0600 dentro de una carpeta 0700, igual que antes de los entornos", () => {
+    const ruta = ficheroTemporalVacio();
+    guardarEstadoDeEntorno(ruta, "webstudio", { tokens: tokenDePrueba("t") });
+    expect(statSync(ruta).mode & 0o777).toBe(0o600);
+    expect(statSync(join(ruta, "..")).mode & 0o777).toBe(0o700);
   });
 });

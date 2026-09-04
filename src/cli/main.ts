@@ -25,7 +25,7 @@ import {
   guardarRamaDeProyecto,
   guardarTemaDeProyecto,
 } from "../agent/configEnDisco.js";
-import { conectarCloudStudio, sesionCloudStudio } from "../agent/cloudstudioMcp.js";
+import { conectarCloudStudio, sesionCloudStudio, PUERTO_CALLBACK } from "../agent/cloudstudioMcp.js";
 import { clienteCloudStudio } from "../agent/cloudstudioClient.js";
 import { descargarProyecto } from "../agent/descarga.js";
 import { arbolLimpio, cambiosPendientes, prepararRepo, ramaDeTrabajo, sinCommitear } from "../agent/gitSync.js";
@@ -284,8 +284,6 @@ export function decidirTui(argv: string[] = []): boolean {
  */
 export class ErrorDeUso extends Error {}
 
-/** El puerto del callback OAuth: el IDS lo registra como redirect_uri y no se toca. */
-const PUERTO_OAUTH = 7634;
 const PUERTO_WEB_POR_OMISION = 4173;
 
 export type PielElegida = "web" | "consola";
@@ -317,9 +315,9 @@ export function parsearOpcionesWeb(argv: string[]): OpcionesWeb {
   if (!Number.isInteger(puerto) || puerto < 1 || puerto > 65535) {
     throw new ErrorDeUso(`--puerto espera un número entre 1 y 65535, y recibió «${bruto ?? ""}»`);
   }
-  if (puerto === PUERTO_OAUTH) {
+  if (puerto === PUERTO_CALLBACK) {
     throw new ErrorDeUso(
-      `el puerto ${PUERTO_OAUTH} está reservado al callback de OAuth de CloudStudio: elige otro`
+      `el puerto ${PUERTO_CALLBACK} está reservado al callback de OAuth de CloudStudio: elige otro`
     );
   }
   return { puerto, abrir };

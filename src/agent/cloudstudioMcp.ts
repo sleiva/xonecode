@@ -16,12 +16,29 @@ import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import { auth, type OAuthClientProvider } from "@modelcontextprotocol/sdk/client/auth.js";
 import type { OAuthClientInformationMixed, OAuthClientMetadata, OAuthTokens } from "@modelcontextprotocol/sdk/shared/auth.js";
+import type { Entorno } from "../core/settings.js";
 
 const NOMBRE_CARPETA = ".xonecode";
 const NOMBRE_AUTH = "cloudstudio-oauth.json";
 const VERSION = "0.5.0";
-/** Debe ser estable: el IDS registra el redirect_uri del cliente OAuth. */
-const PUERTO_CALLBACK = 7634;
+/**
+ * Debe ser estable: el IDS registra el redirect_uri del cliente OAuth.
+ *
+ * Se exporta porque `cli/main.ts` necesita el mismo número para rechazar `--puerto 7634`
+ * en el servidor web (el callback de OAuth y la web no pueden compartir puerto). Antes
+ * había una copia literal en `main.ts` porque este valor era privado; una sola fuente
+ * evita que las dos constantes diverjan si el puerto cambia algún día.
+ */
+export const PUERTO_CALLBACK = 7634;
+/**
+ * El CloudStudio oficial. Vive aquí y no en `cli/consola.ts` (de donde se movió) porque
+ * es la dirección de un SERVIDOR, no un detalle de la piel de consola, y
+ * `adoptarLegadoSiProcede` —de este mismo fichero— la necesita para decidir si el fichero
+ * plano de antes de los entornos pertenece al oficial: `agent/` no puede importar de
+ * `cli/` (convención documentada en `agent/turnoReal.ts`), así que si esto se hubiera
+ * quedado en `consola.ts` la migración habría tenido que duplicar el literal.
+ */
+export const URL_CLOUDSTUDIO_POR_OMISION = "https://mcp.xonewebstudio.com/mcp";
 /** Permisos mínimos para descubrir el catálogo MCP; no otorgan escritura ni ejecución. */
 export const SCOPES_CLOUDSTUDIO = ["openid", "profile", "email", "offline_access", "mcp.read"] as const;
 export const SCOPES_CLOUDSTUDIO_ESCRITURA = [...SCOPES_CLOUDSTUDIO, "mcp.write"] as const;
@@ -31,13 +48,40 @@ export const SCOPES_CLOUDSTUDIO_AGENTE = [
   "mcp.read", "mcp.write", "mcp.execute", "mcp.branch",
 ] as const;
 
-type EstadoOAuth = {
+/** El juego de credenciales de UN entorno. Es el `EstadoOAuth` plano de antes de que
+ *  hubiera más de un CloudStudio. */
+export type EstadoDeEntorno = {
   clientInformation?: OAuthClientInformationMixed;
   tokens?: OAuthTokens;
   codeVerifier?: string;
   /** Permisos concedidos junto al token; evita reautorizar si el servidor omite `scope`. */
   scopes?: string[];
 };
+
+/** El id reservado para el fichero plano de antes de los entornos: ver `leerEstado`. */
+const CLAVE_LEGADO = "legado";
+
+/**
+ * El fichero entero: un juego POR ENTORNO.
+ *
+ * Antes era un solo juego plano en la raíz del fichero, porque solo existía un
+ * CloudStudio. Con entornos registrables —los dos oficiales y el on-premise de un
+ * cliente— hace falta indexar: cerrar sesión en uno no puede tocar los tokens de los
+ * demás, así que cada entorno vive en su propia clave y una escritura solo toca la suya.
+ *
+ * La clave `legado` es el fichero plano de antes, ya envuelto. No se puede adivinar a
+ * qué entorno pertenecía —el formato viejo no guardaba la URL—, así que se conserva
+ * intacto hasta que `adoptarLegadoSiProcede` lo adopta al registrar el entorno de
+ * `URL_CLOUDSTUDIO_POR_OMISION`, la única URL que ese fichero pudo haber usado por
+ * omisión (si el usuario tecleó otra URL en el paso de alta, la migración automática no
+ * la alcanza y el fichero se queda en `legado` para siempre: no hay forma de saberlo).
+ */
+export type EstadoOAuth = {
+  version: 2;
+  porEntorno: Record<string, EstadoDeEntorno>;
+};
+
+const ESTADO_VACIO: EstadoOAuth = { version: 2, porEntorno: {} };
 
 /** Resultado reducido: los esquemas completos de tools no deben entrar en el transcript. */
 export interface ConexionCloudStudio {
@@ -57,6 +101,14 @@ export interface OpcionesCloudStudio {
   rutaAuth?: string;
   /** Scope elegido conscientemente por el comando o por una futura tool permitida. */
   scopes?: readonly string[];
+  /**
+   * Qué entorno guarda/lee sus credenciales, dentro del fichero único indexado por
+   * entorno. Se cae a `legado` cuando no se indica: es el mismo juego que usaba el
+   * fichero plano de antes de que existieran entornos registrables, así que un
+   * llamador que todavía no conoce su id de entorno (el flujo de terminal de hoy;
+   * `cli/main.ts` no lo pasa) sigue leyendo y escribiendo exactamente donde lo hacía.
+   */
+  entornoId?: string;
 }
 
 /**
@@ -151,14 +203,69 @@ function rutaAuthPorDefecto(): string {
   return join(homedir(), NOMBRE_CARPETA, NOMBRE_AUTH);
 }
 
-function leerEstado(ruta: string): EstadoOAuth {
-  if (!existsSync(ruta)) return {};
+/** Un candidato de `porEntorno` que no es objeto (fichero tocado a mano) no puede colar
+ *  un valor no indexable: `leerEstado` filtra antes de devolverlo, no cada llamador. */
+function porEntornoValido(bruto: unknown): Record<string, EstadoDeEntorno> {
+  if (typeof bruto !== "object" || bruto === null || Array.isArray(bruto)) return {};
+  const salida: Record<string, EstadoDeEntorno> = {};
+  for (const [id, valor] of Object.entries(bruto as Record<string, unknown>)) {
+    if (typeof valor === "object" && valor !== null && !Array.isArray(valor)) {
+      salida[id] = valor as EstadoDeEntorno;
+    }
+  }
+  return salida;
+}
+
+/**
+ * Lee el fichero entero. Un formato SIN `version` es el plano de antes de los entornos:
+ * se envuelve como `{ version: 2, porEntorno: { legado: <plano> } }` **solo en memoria**
+ * — un arranque de solo lectura (`xonecode config`, `describe`) no puede reescribir el
+ * disco del usuario, así que la migración se materializa recién en la primera escritura
+ * (`guardarEstadoDeEntorno`, `adoptarLegadoSiProcede`), nunca aquí.
+ */
+export function leerEstado(ruta: string): EstadoOAuth {
+  if (!existsSync(ruta)) return ESTADO_VACIO;
   try {
     const bruto: unknown = JSON.parse(readFileSync(ruta, "utf8"));
-    return typeof bruto === "object" && bruto !== null && !Array.isArray(bruto) ? bruto as EstadoOAuth : {};
+    if (typeof bruto !== "object" || bruto === null || Array.isArray(bruto)) return ESTADO_VACIO;
+    const objeto = bruto as Record<string, unknown>;
+    if (objeto.version === undefined) {
+      // El formato plano no tenía `version`; el objeto entero ES el juego de un entorno.
+      return { version: 2, porEntorno: { [CLAVE_LEGADO]: objeto as EstadoDeEntorno } };
+    }
+    if (objeto.version !== 2) return ESTADO_VACIO; // formato futuro/desconocido: fail-closed, no se inventa
+    return { version: 2, porEntorno: porEntornoValido(objeto.porEntorno) };
   } catch {
-    // Un token corrupto no impide volver a autenticar; nunca se imprime el contenido.
-    return {};
+    // Un fichero corrupto no impide volver a autenticar; nunca se imprime su contenido.
+    return ESTADO_VACIO;
+  }
+}
+
+/**
+ * Un fichero de una versión futura y desconocida no se puede sobrescribir a ciegas: este
+ * código no sabe qué juegos de credenciales lleva dentro, y `leerEstado` lo trata como
+ * vacío para no tumbar un arranque de solo lectura. Escribir SOBRE ese vacío destruiría
+ * lo que hubiera. Un JSON corrupto (parse roto) es harina de otro costal —ya se
+ * sobrescribía así antes de que existieran los entornos, es el comportamiento actual que
+ * el enunciado pide no tocar— así que solo se bloquea la versión reconocible pero
+ * distinta de 2, nunca el texto irrecuperable.
+ */
+export class EstadoOAuthVersionIncompatible extends Error {}
+
+function comprobarVersionEscribible(ruta: string): void {
+  if (!existsSync(ruta)) return;
+  let bruto: unknown;
+  try {
+    bruto = JSON.parse(readFileSync(ruta, "utf8"));
+  } catch {
+    return; // corrupto: se sobrescribe, como ya hacía antes de los entornos.
+  }
+  if (typeof bruto !== "object" || bruto === null || Array.isArray(bruto)) return;
+  const version = (bruto as Record<string, unknown>).version;
+  if (version !== undefined && version !== 2) {
+    throw new EstadoOAuthVersionIncompatible(
+      `${ruta}: versión de estado OAuth desconocida (${JSON.stringify(version)}); no se sobrescribe`
+    );
   }
 }
 
@@ -177,6 +284,49 @@ function guardarEstado(ruta: string, estado: EstadoOAuth): void {
     try { unlinkSync(temporal); } catch { /* no llegó a crearse */ }
     throw error;
   }
+}
+
+/**
+ * Sustituye el juego de credenciales de UN entorno y deja los demás tal cual estaban:
+ * lee el fichero entero, reemplaza solo `porEntorno[id]` y reescribe con la misma
+ * mecánica de temporal + `rename` de `guardarEstado` — es la que asegura 0600/0700 y que
+ * un fallo a mitad de escritura no deja el fichero truncado.
+ */
+export function guardarEstadoDeEntorno(ruta: string, id: string, datos: EstadoDeEntorno): void {
+  comprobarVersionEscribible(ruta);
+  const estado = leerEstado(ruta);
+  guardarEstado(ruta, { version: 2, porEntorno: { ...estado.porEntorno, [id]: datos } });
+}
+
+/**
+ * Cierra sesión en UN entorno. Si no tenía nada guardado no hay nada que tocar: escribir
+ * de todos modos reescribiría el fichero entero (y su mtime) sin que haya cambiado nada
+ * observable.
+ */
+export function olvidarEntorno(ruta: string, id: string): void {
+  comprobarVersionEscribible(ruta);
+  const estado = leerEstado(ruta);
+  if (!(id in estado.porEntorno)) return;
+  const { [id]: _omitido, ...resto } = estado.porEntorno;
+  guardarEstado(ruta, { version: 2, porEntorno: resto });
+}
+
+/**
+ * Adopta `legado` como el juego del entorno recién registrado, y SOLO si su URL es la
+ * oficial por omisión — es la única URL que el fichero plano pudo haber usado sin que el
+ * usuario tecleara una distinta a mano (ver el comentario de `EstadoOAuth`). Si `legado`
+ * no existe, o ya hay algo guardado bajo `entorno.id`, no hace nada: no hay nada que
+ * migrar en el primer caso, y pisar un juego ya autenticado sería peor que dejar el
+ * plano huérfano en el segundo.
+ */
+export function adoptarLegadoSiProcede(ruta: string, entorno: Pick<Entorno, "id" | "url">): void {
+  if (entorno.url !== URL_CLOUDSTUDIO_POR_OMISION) return;
+  comprobarVersionEscribible(ruta);
+  const estado = leerEstado(ruta);
+  const legado = estado.porEntorno[CLAVE_LEGADO];
+  if (legado === undefined || entorno.id in estado.porEntorno) return;
+  const { [CLAVE_LEGADO]: _omitido, ...resto } = estado.porEntorno;
+  guardarEstado(ruta, { version: 2, porEntorno: { ...resto, [entorno.id]: legado } });
 }
 
 function abrirEnSistema(url: URL): void {
@@ -245,22 +395,26 @@ function esperarCallback(timeoutMs: number): Promise<{ url: string; codigo: Prom
 
 /** Provider OAuth persistente, deliberadamente pequeño y compatible con el SDK MCP. */
 class ProviderCloudStudio implements OAuthClientProvider {
-  private estado: EstadoOAuth;
+  private estado: EstadoDeEntorno;
   private readonly metadata: OAuthClientMetadata;
 
   constructor(
     private readonly ruta: string,
+    /** El entorno cuyo juego de credenciales lee y escribe este provider: opera SOLO
+     *  sobre `porEntorno[entornoId]`, nunca sobre el fichero entero, para que abrir
+     *  sesión en un entorno no pueda pisar el juego de otro. */
+    private readonly entornoId: string,
     redirectUrl: string,
     private readonly alRedirigir: (url: URL) => void,
     private readonly scopes: readonly string[],
   ) {
-    this.estado = leerEstado(ruta);
+    this.estado = leerEstado(ruta).porEntorno[entornoId] ?? {};
     // Un refresh token de solo lectura no sirve para elevar privilegios. Borrarlo aquí
     // fuerza Authorization Code + consentimiento nuevo en lugar de fingir una elevación.
     const concedidos = new Set(this.estado.scopes ?? (this.estado.tokens?.scope ?? "").split(/\s+/));
     if (this.estado.tokens !== undefined && !this.scopes.every((scope) => concedidos.has(scope))) {
       delete this.estado.tokens;
-      guardarEstado(this.ruta, this.estado);
+      this.guardar();
     }
     this.metadata = {
       client_name: "xonecode",
@@ -272,18 +426,21 @@ class ProviderCloudStudio implements OAuthClientProvider {
       scope: scopes.join(" "),
     };
   }
+  /** Solo esta clave se toca en el fichero, nunca `porEntorno` entero: es lo que hace
+   *  que abrir sesión en un entorno deje intactos los tokens de los demás. */
+  private guardar(): void { guardarEstadoDeEntorno(this.ruta, this.entornoId, this.estado); }
   get redirectUrl(): string { return this.metadata.redirect_uris![0]!; }
   get clientMetadata(): OAuthClientMetadata { return this.metadata; }
   clientInformation(): OAuthClientInformationMixed | undefined { return this.estado.clientInformation; }
-  saveClientInformation(info: OAuthClientInformationMixed): void { this.estado.clientInformation = info; guardarEstado(this.ruta, this.estado); }
+  saveClientInformation(info: OAuthClientInformationMixed): void { this.estado.clientInformation = info; this.guardar(); }
   tokens(): OAuthTokens | undefined { return this.estado.tokens; }
   saveTokens(tokens: OAuthTokens): void {
     this.estado.tokens = tokens;
     this.estado.scopes = [...this.scopes];
-    guardarEstado(this.ruta, this.estado);
+    this.guardar();
   }
   redirectToAuthorization(url: URL): void { this.alRedirigir(url); }
-  saveCodeVerifier(verifier: string): void { this.estado.codeVerifier = verifier; guardarEstado(this.ruta, this.estado); }
+  saveCodeVerifier(verifier: string): void { this.estado.codeVerifier = verifier; this.guardar(); }
   codeVerifier(): string {
     if (!this.estado.codeVerifier) throw new Error("no hay verificador PKCE para el login de CloudStudio");
     return this.estado.codeVerifier;
@@ -414,7 +571,7 @@ async function abrirCliente(
   const scopes = opciones.scopes ?? SCOPES_CLOUDSTUDIO_AGENTE;
   const callback = await esperarCallback(opciones.timeoutMs ?? 5 * 60_000);
   const ruta = opciones.rutaAuth ?? rutaAuthPorDefecto();
-  const provider = new ProviderCloudStudio(ruta, callback.url, (autorizacion) => {
+  const provider = new ProviderCloudStudio(ruta, opciones.entornoId ?? CLAVE_LEGADO, callback.url, (autorizacion) => {
     // La URL de autorización no aporta nada al transcript normal y puede tener parámetros
     // sensibles de OAuth. El navegador se abre sin volcarla; quien use SSH puede inyectar
     // `abrirNavegador` y decidir cómo presentarla.

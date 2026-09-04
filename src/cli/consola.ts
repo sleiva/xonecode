@@ -30,6 +30,7 @@ import { esTema, seleccionarTema, TEMAS, type IdTema } from "./tema.js";
 import { acuseDeModelo } from "./acuseDeModelo.js";
 import type { Preguntar } from "./aprobar.js";
 import { guardarCredencial, AuthRotoEnDisco } from "../agent/authEnDisco.js";
+import { URL_CLOUDSTUDIO_POR_OMISION } from "../agent/cloudstudioMcp.js";
 import { cargar, NOMBRE_CARPETA } from "../agent/configEnDisco.js";
 import { rutaMemoriaDeProyecto } from "../agent/memoriaDeProyecto.js";
 import type { CatalogoModelosPort, ModeloDisponible } from "../core/ports.js";
@@ -152,7 +153,11 @@ export const PETICION_REANUDAR_PROYECTO =
   "en ese caso lee solo sus primeras 50 líneas. Termina preguntando si quieres continuar ese paso.";
 
 export const MENSAJE_REANUDANDO = "Analizando el estado guardado del repositorio…\n";
-export const URL_CLOUDSTUDIO_POR_OMISION = "https://mcp.xonewebstudio.com/mcp";
+// Movida a `agent/cloudstudioMcp.ts`: es la dirección de un servidor, no un detalle de
+// esta piel, y `adoptarLegadoSiProcede` (Task 4 del plan de la consola web) la necesita
+// desde `agent/`, que no puede importar de `cli/`. Se reexporta para no romper a quien
+// la importaba de aquí.
+export { URL_CLOUDSTUDIO_POR_OMISION };
 const SCOPES_STUDIO_LECTURA = ["openid", "profile", "email", "offline_access", "mcp.read"] as const;
 const SCOPES_STUDIO_AGENTE = [
   "openid", "profile", "email", "offline_access", "xonewebstudioapi",
