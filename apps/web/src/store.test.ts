@@ -76,6 +76,16 @@ describe("store del cliente", () => {
     expect(estado.aprobacion).toBeUndefined();
   });
 
+  it("el registro de comandos llega entero y sobrevive a la desconexión: es un catálogo, no una espera", () => {
+    const s = crearStoreDelCliente();
+    s.aplicar({ clase: "comandos", comandos: [{ nombre: "/sync", descripcion: "sincroniza" }] });
+    expect(s.leer().comandos).toEqual([{ nombre: "/sync", descripcion: "sincroniza" }]);
+    s.marcarDesconectado();
+    expect(s.leer().comandos).toEqual([{ nombre: "/sync", descripcion: "sincroniza" }]);
+    expect(() => s.aplicar({ clase: "comandos", comandos: [{ nombre: "/sync" }] })).not.toThrow();
+    expect(s.leer().comandos).toEqual([{ nombre: "/sync", descripcion: "sincroniza" }]);
+  });
+
   it("suscribir avisa de cada mutación y la baja para de avisar, tolerante a doble baja", () => {
     const s = crearStoreDelCliente();
     let avisos = 0;

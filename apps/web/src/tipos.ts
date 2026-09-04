@@ -46,6 +46,12 @@ export type MensajeAlCliente =
   | { clase: "pregunta"; texto: string }
   | { clase: "selector"; selector: SelectorDeConsola }
   | { clase: "secreto"; pregunta: string }
+  /**
+   * El registro de comandos de barra (`COMANDOS` en `cli/consola.ts`), para que el
+   * compositor sugiera sin llevar una copia — `nombre` con la «/» delante, tal cual se
+   * teclea.
+   */
+  | { clase: "comandos"; comandos: { nombre: string; descripcion: string }[] }
   | {
       clase: "aprobacion";
       pendientes: unknown[];

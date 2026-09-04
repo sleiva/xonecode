@@ -1,0 +1,50 @@
+/* Alias comprobados: bg-layer-1, border-l2, label-primary, state-success-primary y
+   state-error-primary existen en design-platform.css (ver el grep del brief). */
+
+.cabecera {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 16px;
+  border-bottom: 0.5px solid var(--dsw-alias-border-l2);
+  background: var(--dsw-alias-bg-layer-1);
+}
+
+.titulo {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--dsw-alias-label-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.estado {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  flex-shrink: 0;
+}
+
+.punto {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+}
+
+.conectado {
+  color: var(--dsw-alias-state-success-primary);
+}
+.conectado .punto {
+  background: var(--dsw-alias-state-success-primary);
+}
+
+.desconectado {
+  color: var(--dsw-alias-state-error-primary);
+}
+.desconectado .punto {
+  background: var(--dsw-alias-state-error-primary);
+}

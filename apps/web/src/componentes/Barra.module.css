@@ -1,0 +1,87 @@
+/* Los alias de este fichero están comprobados contra design-platform.css, no inventados
+   (ver el grep del brief): bg-layer-1, border-l2, label-primary/secondary/tertiary/
+   dimmed e interactive-bg-hover/active existen; bg-primary, text-primary y
+   border-primary — la primera tentativa — no. */
+
+.barra {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  padding: 12px;
+  gap: 16px;
+}
+
+.entorno {
+  width: 100%;
+  padding: 6px 8px;
+  background: var(--dsw-alias-bg-layer-1);
+  color: var(--dsw-alias-label-primary);
+  border: 0.5px solid var(--dsw-alias-border-l2);
+  border-radius: 6px;
+}
+
+.proyectos {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  overflow-y: auto;
+}
+
+.proyecto {
+  display: block;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: var(--dsw-alias-label-tertiary);
+  padding: 4px 6px;
+}
+
+.sesiones {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Una fila por sesión: botón de ancho completo, no un enlace — no hay navegación de
+   verdad, solo el cambio de qué transcript se pinta en el centro. */
+.sesion {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 6px 8px;
+  border: none;
+  border-radius: 6px;
+  /* `none` y no `transparent`: es un color-keyword como cualquier otro nombrado, y la
+     regla es «ningún color literal» — el reset de fondo no necesita nombrar ninguno. */
+  background: none;
+  color: var(--dsw-alias-label-secondary);
+  cursor: pointer;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.sesion:hover {
+  background: var(--dsw-alias-interactive-bg-hover);
+}
+
+/* La sesión VIVA (por omisión) se pinta con el color de texto fuerte; `historica` la
+ * atenúa por debajo — es la distinción visual que pide el criterio de aceptación, sin
+ * inventar un tercer color: dimmed ya existe en el alfabeto de alias.
+ */
+.historica {
+  color: var(--dsw-alias-label-dimmed);
+  font-style: italic;
+}
+
+.activa {
+  background: var(--dsw-alias-interactive-bg-active);
+  color: var(--dsw-alias-label-primary);
+  font-weight: 600;
+}

@@ -24,9 +24,15 @@ export interface EstadoDelCliente {
   selector?: { titulo: string; opciones: { id: string; etiqueta: string; detalle?: string }[] };
   secreto?: { pregunta: string };
   aprobacion?: { pendientes: unknown[]; ficheros: Record<string, string>; diffs: Record<string, unknown[]> };
+  /**
+   * El registro de comandos de barra que manda el servidor al conectar (`COMANDOS` de
+   * `cli/consola.ts`, recorrido — nunca una copia escrita a mano). Vacío hasta que llega
+   * el mensaje: el compositor no tiene nada que sugerir antes de conectar, ni lo finge.
+   */
+  comandos: { nombre: string; descripcion: string }[];
 }
 
-const ESTADO_INICIAL: EstadoDelCliente = { actos: [], conectado: false };
+const ESTADO_INICIAL: EstadoDelCliente = { actos: [], conectado: false, comandos: [] };
 
 // `satisfies Record<Acto["tipo"], true>` es lo que hace que añadir un tipo a `Acto` en
 // `tipos.ts` sin añadirlo aquí falle en `tsc`, no en tiempo de ejecución con un mensaje
@@ -74,6 +80,19 @@ function esSelector(valor: unknown): valor is SelectorDeConsola {
 
 function esRegistro(valor: unknown): valor is Record<string, unknown> {
   return typeof valor === "object" && valor !== null && !Array.isArray(valor);
+}
+
+function esComandos(valor: unknown): valor is { nombre: string; descripcion: string }[] {
+  return (
+    Array.isArray(valor) &&
+    valor.every(
+      (c) =>
+        typeof c === "object" &&
+        c !== null &&
+        typeof (c as { nombre?: unknown }).nombre === "string" &&
+        typeof (c as { descripcion?: unknown }).descripcion === "string"
+    )
+  );
 }
 
 export function crearStoreDelCliente(): {
@@ -143,6 +162,12 @@ export function crearStoreDelCliente(): {
           const pregunta = (mensaje as { pregunta?: unknown }).pregunta;
           if (typeof pregunta !== "string") return;
           mutar({ secreto: { pregunta } });
+          return;
+        }
+        case "comandos": {
+          const comandos = (mensaje as { comandos?: unknown }).comandos;
+          if (!esComandos(comandos)) return;
+          mutar({ comandos });
           return;
         }
         case "aprobacion": {

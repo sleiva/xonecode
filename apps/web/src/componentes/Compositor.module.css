@@ -1,0 +1,71 @@
+/* Alias comprobados: bg-layer-1/2, border-l2, label-primary/tertiary/dimmed e
+   interactive-bg-hover existen en design-platform.css (ver el grep del brief). */
+
+.compositor {
+  position: relative;
+  padding: 12px;
+  border-top: 0.5px solid var(--dsw-alias-border-l2);
+  background: var(--dsw-alias-bg-layer-1);
+}
+
+.entrada {
+  width: 100%;
+  min-height: 44px;
+  max-height: 220px;
+  resize: vertical;
+  padding: 10px 12px;
+  background: var(--dsw-alias-bg-layer-2);
+  color: var(--dsw-alias-label-primary);
+  border: 0.5px solid var(--dsw-alias-border-l2);
+  border-radius: 8px;
+  font: inherit;
+}
+
+/* Sin conexión el campo se ve tan apagado como su propio texto: mismo alias en fondo y
+ * placeholder, para que «deshabilitado» se lea de un vistazo y no solo por el cursor. */
+.entrada:disabled {
+  color: var(--dsw-alias-label-dimmed);
+  background: var(--dsw-alias-bg-layer-1);
+}
+
+.entrada::placeholder {
+  color: var(--dsw-alias-label-tertiary);
+}
+
+.sugerencias {
+  position: absolute;
+  left: 12px;
+  right: 12px;
+  bottom: 100%;
+  margin: 0 0 4px;
+  padding: 4px;
+  list-style: none;
+  background: var(--dsw-alias-bg-layer-2);
+  border: 0.5px solid var(--dsw-alias-border-l2);
+  border-radius: 8px;
+  max-height: 200px;
+  overflow-y: auto;
+}
+
+.sugerencia {
+  display: flex;
+  gap: 8px;
+  padding: 6px 8px;
+  border-radius: 6px;
+}
+
+.sugerencia:hover {
+  background: var(--dsw-alias-interactive-bg-hover);
+}
+
+.nombreComando {
+  color: var(--dsw-alias-label-primary);
+  font-family: monospace;
+}
+
+.descripcionComando {
+  color: var(--dsw-alias-label-tertiary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

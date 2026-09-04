@@ -33,6 +33,14 @@ export type MensajeAlCliente =
   | { clase: "pregunta"; texto: string }
   | { clase: "selector"; selector: SelectorDeConsola }
   | { clase: "secreto"; pregunta: string }
+  /**
+   * El registro de comandos de barra, para que el compositor sugiera sin llevar una
+   * copia: `nombre` va con la «/» delante (lo que el usuario teclea), `descripcion` es
+   * la misma que `COMANDOS[nombre].descripcion` en `cli/consola.ts`. Quien registre la
+   * ruta de conexión lo arma recorriendo ese registro — no hay lista escrita a mano en
+   * ningún punto de este cable.
+   */
+  | { clase: "comandos"; comandos: { nombre: string; descripcion: string }[] }
   /** El ÚNICO mensaje que lleva contenido de fichero: es el paso donde se DECIDE sobre él. */
   | {
       clase: "aprobacion";

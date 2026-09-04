@@ -1,0 +1,6 @@
+/* Los nombres de alias de este fichero están MEDIDOS contra design-platform.css (ver
+   Barra.module.css para el porqué), no inventados: bg-base, label-primary y border-l1
+   existen; bg-primary/text-primary/border-primary del primer borrador no. */
+.maqueta { display: flex; height: 100dvh; background: var(--dsw-alias-bg-base); color: var(--dsw-alias-label-primary); }
+.centro  { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; }
+.barra   { flex: 0 0 280px; border-left: 0.5px solid var(--dsw-alias-border-l1); overflow-y: auto; }
