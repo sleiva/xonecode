@@ -57,13 +57,15 @@ Medido; hay un test (`src/cli/lanzador.test.ts`) que vigila el anclaje.
 
 ## Arquitectura
 
-Cuatro capas, y la frontera importa más que el contenido:
+Seis capas, y la frontera importa más que el contenido:
 
 | capa | qué es |
 |---|---|
 | `src/core/` | TypeScript **puro**: eventos de dominio, motor de turno, puertos + dobles, resolución de modelos, config |
 | `src/agent/` | toda la suciedad del grafo: deepagents, langgraph, backend de ficheros, perfiles, verificador, git |
 | `src/cli/` | despachador (`main.ts`), consola interactiva (`consola.ts`), un disparo (`run.ts`), comandos de diagnóstico |
+| `src/web/` | el SERVIDOR de la consola web: http en loopback, SSE, vestíbulo, sesiones, piel web |
+| `apps/web/` | el CLIENTE: React + Vite, un `package.json` propio (workspace) que se compila a `apps/web/dist` |
 | `src/vendor/` | módulos propios traídos de un laboratorio anterior (HITL, conteo de tokens), con sus tests |
 
 **La frontera de `core/` está PROBADA.** `src/core/imports.test.ts` recorre los ficheros de
@@ -82,7 +84,7 @@ justo cuando hace falta.
 
 **Los eventos de dominio** (`core/events.ts`). `agent/` los emite (el puente
 `agent/puente.ts` traduce los chunks del stream de langgraph), `core/turno.ts` decide qué se
-cuenta, y las pieles (`cli/stdio.ts`, `cli/tui/`) pintan. Ningún evento lleva argumentos
+cuenta, y las pieles (`cli/stdio.ts`, `cli/tui/`, `web/servidor/pielWeb.ts`) pintan. Ningún evento lleva argumentos
 de tool, ni truncados: `write_file` lleva el contenido del fichero y una tool MCP lleva el
 bearer. La excepción aparente es `tool.detalle`, y no es una excepción: una lista blanca por
 NOMBRE de tool (`agent/resumenDeTool.ts`) extrae un solo campo de ruta/patrón — nunca contenido.
@@ -138,6 +140,72 @@ la Entrada, la Pregunta, el pie y la sidebar llevan `flexShrink={0}`. Sin eso, m
 del modelo de la Entrada pisaba la línea en edición y el cursor desaparecía en cuanto había
 pista de Tab o el transcript se llenaba. `cli/tui/app.test.tsx` monta `App` entera contra un
 stdout falso y vigila esos estados; los tests de componente no los ven.
+
+**La consola web** (`src/web/`, `apps/web/`) es la TERCERA piel de LA MISMA consola, y desde
+esta versión la de omisión. `decidirPiel` (`cli/main.ts`) la elige: `--cli` gana siempre y da
+la consola de terminal entera (con `--tui`/`--no-tui` dentro de esa rama), `--web` la fuerza
+incluso sin terminal, y **sin stdin TTY la omisión NO es la web** — `echo "…" | xonecode`
+intentaría abrir un navegador y se llevaría por delante el e2e de tubería byte-idéntica, que
+es lo que sostiene que `npm test` no necesite terminal. El TTY entra por parámetro para poder
+probar los dos lados sin terminal, igual que `decidirTui` se prueba sin TTY.
+
+`arrancarConsolaWeb` (`web/servidor/arranque.ts`, no en `main.ts`, que ya pasa de mil líneas)
+comprueba en este orden: que existe `apps/web/dist/index.html` —si no, «falta el build del
+cliente» y salida **70**, fallo del ENTORNO y no del proyecto—; si el cwd tiene un
+`.xonecode/config.json` con `modo: "offline"`, lo dice y **sigue**, porque es un aviso y no un
+error; y después levanta el servidor, imprime la URL con el token y abre el navegador salvo
+`--no-abrir`. Abrir el navegador es lo accesorio: `abrirEnSistema` (`agent/cloudstudioMcp.ts`,
+compartida con el callback de OAuth) escucha el `error` del `spawn`, porque un `xdg-open` que
+no existe emite ese evento y sin escucha se lleva el proceso por delante — la URL ya está
+impresa y el servidor tiene que seguir en pie.
+
+El servidor (`web/servidor/servidor.ts`) es `node:http` en **loopback y nada más** —no hay
+bandera para `0.0.0.0`—, con token en la query que se convierte en cookie `HttpOnly`,
+comprobación de `Host` y `Origin` en TODA petición (el ataque real a un servidor local es el
+DNS rebinding, no el escaneo de puertos) y `.xonecode` denegado por el TEXTO de la ruta antes
+de tocar disco. `arranque.ts` es quien monta las dos rutas del cable: `GET /eventos` (SSE) y
+`POST /accion`. Un cuerpo ilegible responde 400 **sin devolver nada de lo recibido**: por ahí
+pasa la clave de API.
+
+**El vestíbulo** (`web/servidor/vestibulo.ts`) es lo que hay ANTES de que exista ninguna raíz:
+`correrConsola` es un lazo sobre UNA raíz, y la jerarquía entorno → proyecto → sesión necesita
+un sitio donde vivir mientras no hay proyecto abierto. De ahí dos consolas, la del vestíbulo y
+la del proyecto. **El cable se muda de una a otra al abrir proyecto**, y no es cosmético:
+`consolaWeb.eof()` es `!transporte.conectado()`, así que una consola de proyecto sin cliente
+enganchado rechaza TODA aprobación y contesta cadena vacía a todo `preguntar`, sin decir por
+qué. Al cerrarse el SSE se desconecta la consola que se ADJUNTÓ, no la que sea la actual: entre
+medias puede haberse abierto un proyecto.
+
+El alta del navegador son los mismos pasos del alta de terminal y con la misma regla —cada uno
+solo aparece si falta lo que decide, calculado preguntándole al sistema y nunca a una marca de
+«primer arranque»—, con dos precisiones: el paso de ENTORNO se pide siempre que quede el de
+proyecto (abrir un proyecto exige saber de qué entorno sale, y eso `pasosPendientes` no lo
+cubre), y el paso de CUENTA no lo pinta el wizard: lo conduce `vestibulo.pasoDeCuenta()`, o sea
+`cli/wizardInicial.ts#asistenteDeModelo` sin tocar, sobre `seleccionar` y `leerSecreto`. Así la
+clave de API sigue viajando por el ÚNICO mensaje del cable que la lleva y, de propina, el
+asistente elige también el modelo: un paso de cuenta que solo guardara la credencial dejaría
+`trabajo` en la omisión (Ollama local) con una clave de Anthropic recién escrita al lado.
+
+El registro de comandos que el compositor sugiere se **genera recorriendo `COMANDOS`**
+(`comandosDelRegistro`, `web/servidor/arranque.ts`), igual que `/ayuda`, la cabecera de stdio y
+el completador de Tab: una lista escrita a mano se queda vieja en cuanto alguien añade un
+comando. Por eso una línea que empieza por «/» no tiene camino propio en la web — viaja como
+prosa y la despacha `correrConsola` del lado servidor.
+
+**La regla de qué URL de MCP vale es UNA** (`agent/cloudstudioMcp.ts#urlDeMcpAceptable`): HTTPS
+sin credenciales, más `http://` en una lista CERRADA de hosts loopback, que existe solo para un
+CloudStudio on-premise levantado en desarrollo. Hubo tres puertas con dos criterios —el wizard
+del navegador aceptaba loopback, el registro del entorno y el conector lo rechazaban—, o sea
+dos mensajes claros que se contradecían. Se resolvió por el lado PERMISIVO porque el caso
+existe y porque en loopback el texto plano no cruza ninguna red (es el mismo trato que ya recibe
+el `redirect_uri` del callback, `http://127.0.0.1:7634`, y la propia consola web). El cliente
+lleva su copia declarada porque `src/web/frontera.test.ts` prohíbe compartir módulo con `src/`.
+
+**La frontera del cliente está PROBADA** (`src/web/frontera.test.ts`): react-dom, vite y
+`apps/web/` no se importan desde `src/` —salvo react en `cli/tui/`, que ya vive ahí por Ink—, y
+los tipos del cable se **redeclaran** en `apps/web/src/tipos.ts` en vez de importarse.
+`tipos.test.ts` compara los literales `tipo:` de los actos y los literales `clase:` de las dos
+uniones de mensaje contra los del host: divergir da un test en rojo y no un bug mudo.
 
 **El agente** (`agent/xoneAgent.ts`): un orquestador **sin ninguna tool** que delega en cuatro
 especialistas (`docs`, `planner`, `dev`, `mockup` — `agent/perfiles.ts`). Cuatro cosas no son

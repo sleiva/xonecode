@@ -15,6 +15,11 @@ import type { Acto } from "../../core/actos.js";
 import type { PendienteDeAprobacion } from "../../core/events.js";
 import type { LineaDeDiff } from "../../core/diff.js";
 import type { SelectorDeConsola } from "../../cli/consola.js";
+// Solo TIPO, y por eso no es un ciclo: `vestibulo.ts` importa este módulo para ejecutar,
+// y esta importación se borra al compilar. Se traen de allí en vez de redeclararlos aquí
+// porque son los MISMOS pasos y los MISMOS entornos que el vestíbulo calcula; una segunda
+// declaración en este fichero sería el tipo de copia que diverge sin que nada chiste.
+import type { OpcionDeEntorno, PasoDelVestibulo } from "./vestibulo.js";
 
 export type MensajeAlCliente =
   | { clase: "acto"; acto: Acto }
@@ -41,6 +46,29 @@ export type MensajeAlCliente =
    * ningún punto de este cable.
    */
   | { clase: "comandos"; comandos: { nombre: string; descripcion: string }[] }
+  /**
+   * El alta que FALTA, para el wizard del navegador. `pasos` sale de
+   * `vestibulo.ts#pasosPendientes`, que los calcula preguntándole al sistema y nunca a una
+   * marca de «primer arranque»; vacío significa que no hay alta que hacer y el cliente no
+   * pinta nada.
+   *
+   * `proyectos` y `ramas` llegan vacíos hasta que hay entorno (y proyecto) elegidos: son
+   * dos consultas a CloudStudio y no se pueden inventar. Lista vacía es «todavía no lo
+   * sé», que es la verdad, y no un dato de relleno.
+   *
+   * **La clave de API NO viaja aquí.** El paso de cuenta lo conduce
+   * `vestibulo.pasoDeCuenta()` sobre `seleccionar` y `leerSecreto`, así que la clave sigue
+   * entrando por el mensaje de clase «secreto» y por ninguno más — el mismo trato que
+   * documentan `consolaWeb.ts#leerSecreto` y la cabecera de `Wizard.tsx`.
+   */
+  | {
+      clase: "alta";
+      pasos: PasoDelVestibulo[];
+      proveedores: { id: string; nombre: string }[];
+      entornos: OpcionDeEntorno[];
+      proyectos: { id: string; nombre: string }[];
+      ramas: string[];
+    }
   /** El ÚNICO mensaje que lleva contenido de fichero: es el paso donde se DECIDE sobre él. */
   | {
       clase: "aprobacion";
@@ -68,6 +96,26 @@ export type MensajeDelCliente =
    */
   | { clase: "eleccion"; id?: string | null }
   | { clase: "secreto"; valor: string }
+  /**
+   * Un paso del alta, resuelto por el wizard. Es UNA clase y no tres porque los tres son
+   * el mismo trámite —el alta— y quien la atiende es un solo sitio (`web/servidor/arranque.ts`);
+   * tres clases obligarían a mantener tres ramas del cable de acuerdo entre sí sin ganar
+   * nada.
+   *
+   * Con `paso` «proyecto» y SIN `rama` no se abre nada: significa «he elegido proyecto,
+   * dime sus ramas», y el servidor contesta con otro mensaje de alta con `ramas` llenas.
+   * Es lo que evita inventarse las ramas del primer proyecto de la lista antes de que
+   * nadie haya elegido — el mismo «lista vacía, no dato inventado» del otro extremo.
+   *
+   * Aquí NO hay campo para la clave de API: el paso de cuenta va por «secreto».
+   */
+  | {
+      clase: "alta";
+      paso: PasoDelVestibulo;
+      entorno?: { id: string; nombre: string; url: string };
+      proyecto?: string;
+      rama?: string;
+    }
   /**
    * El valor es el `Decision["type"]` que el pendiente declara en `decisionesPermitidas`,
    * no una respuesta tecleada: el cliente son botones. `consolaWeb` lo traduce a la

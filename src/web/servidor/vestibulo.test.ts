@@ -147,7 +147,22 @@ describe("vestíbulo", () => {
     const d = dobles();
     const v = crearVestibulo({ ...d, entornos: [], origenDeTrabajo: "global" });
     await expect(v.registrarEntorno({ id: "malo", nombre: "Malo", url: "http://interno/mcp" })).rejects.toThrow(/HTTPS/);
+    // `mcp.localhost.ejemplo.com` es la máquina de OTRO, no un loopback: la lista de hosts
+    // exentos es cerrada justo para que «lo que parezca local» no cuele.
+    await expect(
+      v.registrarEntorno({ id: "casi", nombre: "Casi", url: "http://mcp.localhost.ejemplo.com/mcp" })
+    ).rejects.toThrow(/HTTPS/);
     expect(d.escrituras).toEqual([]);
+  });
+
+  it("un on-premise en loopback SÍ se registra: es la misma regla que aplica quien conecta", async () => {
+    // Antes había dos criterios: el wizard del navegador aceptaba este loopback y este
+    // fichero lo rechazaba, con dos mensajes claros que se contradecían. Ahora los tres
+    // gates tiran de `cloudstudioMcp.ts#urlDeMcpAceptable`.
+    const d = dobles();
+    const v = crearVestibulo({ ...d, entornos: [], origenDeTrabajo: "global" });
+    await v.registrarEntorno({ id: "local", nombre: "On-premise", url: "http://127.0.0.1:8080/mcp" });
+    expect(d.escrituras).toContain("entorno:local");
   });
 
   it("abrir un proyecto con otro abierto cierra el primero", async () => {

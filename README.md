@@ -7,8 +7,12 @@ XOne es una plataforma propietaria de apps móviles nativas: se programa con XML
 `.xne`), JavaScript ES5 y un CSS propio. **No es desarrollo web** — no existe el DOM, ni
 `async/await` en el runtime, ni ningún framework tipo React.
 
+`xonecode` a secas abre la **consola web** en el navegador: se eligen entorno y proyecto, se
+baja la copia local y se trabaja desde ahí. `xonecode --cli` da la consola de terminal de
+siempre, que es la que se ve aquí abajo.
+
 ```
-$ cd MiApp && xonecode
+$ cd MiApp && xonecode --cli
 
 xonecode · MiApp (7 colls) · ollama/glm-5.3-flash:cloud · 0 tokens
 17 comandos: /ayuda /config /describe /doctor /verify /modelo /modelos /sync … /salir
@@ -27,7 +31,8 @@ El proyecto tiene 9 colecciones repartidas en 7 ficheros .xne: …
 
 | | |
 |---|---|
-| Consola interactiva | stdio o TUI (Ink) con paneles, barra de estado, 17 comandos de barra, autocompletado con Tab |
+| Consola web | la de omisión: servidor http en loopback con token, transcript por SSE, aprobación con diff, alta de entorno y proyecto |
+| Consola interactiva | con `--cli`: stdio o TUI (Ink) con paneles, barra de estado, 17 comandos de barra, autocompletado con Tab |
 | Un disparo | `xonecode run "…"` — pipeable, para tuberías y CI |
 | Aprobación humana | el agente **para y pregunta** antes de escribir; sin un sí explícito, rechaza |
 | Verificador real | `xone-simulator` sobre el proyecto, con `/verify` y `xonecode verify` |
@@ -165,8 +170,12 @@ El 2 es deliberado: un turno que se quedó esperando un permiso que nadie dio **
 ```sh
 npm run typecheck     # tsc --noEmit
 npm test              # la suite entera, sin red ni claves
+npm run build:web     # solo el cliente web (vite) — `npm run build` ya lo incluye
 ./bin/xonecode …      # corre el TypeScript con tsx: siempre el código actual
 ```
+
+La consola web necesita el build del cliente en `apps/web/dist`. Sin él, `xonecode` dice
+«falta el build del cliente» y sale con **70** (fallo del entorno, no del proyecto).
 
 `npm test` no puede necesitar una clave ni una conexión. Si un cambio lo rompe, está mal el
 cambio, no el test.

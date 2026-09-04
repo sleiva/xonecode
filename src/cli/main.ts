@@ -118,8 +118,11 @@ async function* conPrompt(
 
 const AYUDA = `xonecode — harness de XOne
 
-  xonecode                       lanza la consola TUI (por defecto)
-  xonecode --no-tui              consola clásica (stdio)
+  xonecode                       abre la consola WEB en el navegador (por defecto)
+  xonecode --no-abrir            la web, pero sin abrir el navegador (imprime la URL)
+  xonecode --puerto <n>          la web en otro puerto (por omisión 4173)
+  xonecode --cli                 la consola de terminal (TUI)
+  xonecode --cli --no-tui        consola clásica (stdio)
   xonecode run "<peticion>"      un turno, de un disparo (pipeable)
   xonecode run --real "<peticion>"   el agente real sobre el proyecto del cwd
   xonecode describe              qué hay montado y qué es de pega (sin red)
@@ -128,8 +131,9 @@ const AYUDA = `xonecode — harness de XOne
   xonecode doctor                ¿hay un proyecto aquí? ¿responde el simulador?
   xonecode verify [ruta]         valida el proyecto con xone-simulator (por omisión, aquí)
   xonecode --guion               la consola con el agente de pega, sin gastar
-  xonecode --tui                 fuerza la interfaz de terminal (TUI)
-  xonecode --sin-raton           TUI sin capturar el ratón (la rueda vuelve al terminal)
+  xonecode --web                 fuerza la web aunque no haya terminal interactivo
+  xonecode --cli --tui           fuerza la interfaz de terminal (TUI)
+  xonecode --cli --sin-raton     TUI sin capturar el ratón (la rueda vuelve al terminal)
   xonecode --help                esto
 
 Modelo:
@@ -295,13 +299,24 @@ export type PielElegida = "web" | "consola";
  * Qué piel arranca. Hermana pura de `decidirTui`, y por la misma razón: la decisión se
  * prueba sin TTY, y la rama que la usa solo la obedece.
  *
- * Hoy la omisión es `"consola"`. El cambio a `"web"` con TTY es la ÚLTIMA tarea del plan,
- * a propósito: así `xonecode` nunca queda roto a mitad de la implementación.
+ * La omisión ya es la web. `--cli` gana siempre —es la puerta a la consola de terminal
+ * entera, TUI incluida— y `--web` fuerza la web incluso sin terminal, que es lo que hace
+ * falta en una máquina remota sin TTY.
+ *
+ * El TTY entra por parámetro y no se lee aquí dentro para poder probar los dos lados sin
+ * terminal; la omisión sigue siendo el `process.stdin.isTTY` de verdad.
  */
-export function decidirPiel(argv: string[] = []): PielElegida {
+export function decidirPiel(
+  argv: string[] = [],
+  entorno: { stdinTTY?: boolean } = {}
+): PielElegida {
   if (argv.includes("--cli")) return "consola";
   if (argv.includes("--web")) return "web";
-  return "consola";
+  // Sin stdin TTY la omisión NO es la web: `echo "…" | xonecode` intentaría abrir un
+  // navegador y se llevaría por delante el e2e de tubería byte-idéntica, que es lo que
+  // sostiene que `npm test` no necesite terminal.
+  const tty = entorno.stdinTTY ?? process.stdin.isTTY === true;
+  return tty ? "web" : "consola";
 }
 
 export interface OpcionesWeb {
@@ -342,8 +357,13 @@ export function parsearOpcionesWeb(argv: string[]): OpcionesWeb {
  * `alAbrirSesion` se llama UNA vez, justo tras `abrirSesionReal`, y es la costura por la
  * que `entrarEnConsola` apunta la barra de estado al tracker de la sesión (que alimenta
  * el agente; el de `createTokenTracker()` de cabecera se descarta al reasignarse).
+ *
+ * Exportada porque la consola web la monta tal cual: es exactamente lo que espera la
+ * opción `crearEjecutor` del vestíbulo (`web/servidor/vestibulo.ts`), que usa esa misma
+ * costura para poder CERRAR la sesión al cambiar de proyecto. Una segunda fábrica para la
+ * web habría sido un segundo sitio donde arreglar cada bug del ejecutor real.
  */
-function crearEjecutorReal(alAbrirSesion: (sesion: SesionReal) => void): EjecutorDeTurno {
+export function crearEjecutorReal(alAbrirSesion: (sesion: SesionReal) => void): EjecutorDeTurno {
   let sesion: SesionReal | undefined;
   let fuentesVistas: FuentesDeEleccion | undefined;
   let hiloVisto: string | undefined;
@@ -1034,8 +1054,48 @@ export async function main(argv: string[]): Promise<number> {
       comando === "--tui" ||
       comando === "--no-tui" ||
       comando === "--sin-raton" ||
+      // Las cuatro de la consola web. Sin ellas, `xonecode --web` cae en «no conozco el
+      // comando» y sale 64 antes de que `decidirPiel` llegue a decidir nada — medido.
+      comando === "--web" ||
+      comando === "--cli" ||
+      comando === "--no-abrir" ||
+      comando === "--puerto" ||
       comando.startsWith("--modelo")
     ) {
+      // La bifurcación va ANTES del alta de cuatro pasos de `entrarEnConsola`: si no,
+      // `xonecode` con TTY preguntaría el proveedor en el terminal y DESPUÉS abriría un
+      // navegador para volver a preguntarlo.
+      if (decidirPiel(argv) === "web") {
+        const { puerto, abrir } = parsearOpcionesWeb(argv);
+        // Import DINÁMICO, por el mismo motivo que el de la TUI: esta rama arrastra el
+        // vestíbulo entero (grafo del agente, MCP, sesiones) y `run`, `describe` y
+        // cualquier tubería no lo necesitan ni lo van a levantar.
+        const { arrancarConsolaWeb } = await import("../web/servidor/arranque.js");
+        return await arrancarConsolaWeb({
+          puerto,
+          abrir,
+          cwd: process.cwd(),
+          guion: argv.includes("--guion"),
+          // Las dos piezas de ESTA capa que el vestíbulo necesita, pasadas y no importadas
+          // desde allí: `arranque.ts` importando `main.ts` sería un ciclo entre el
+          // despachador y la piel que monta. Y no son opcionales de verdad — sin
+          // `crearEjecutor` el vestíbulo cae en el turno GUIONIZADO, y sin
+          // `dependenciasDeProyecto` no hay `/sync`, o sea que la descarga del alta no
+          // bajaría nada. Las dos cosas serían mudas.
+          crearEjecutor: crearEjecutorReal,
+          dependenciasDeProyecto: (raiz) => ({
+            ...adaptadoresDeProyecto(raiz),
+            catalogoModelos: new CatalogoModelos(),
+            guardarModeloGlobal,
+            conectarCloudStudio: (url, scopes, informar) =>
+              conectarCloudStudio(url, {
+                informar,
+                scopes,
+                entornoId: entornoDeUrl(url, cargarSettings().settings.entornos),
+              }),
+          }),
+        });
+      }
       const guion = argv.includes("--guion");
       const pedirTui = argv.includes("--tui");
       // Por defecto, TUI siempre. `--no-tui` fuerza stdio; sin banderas, TUI.
@@ -1050,7 +1110,13 @@ export async function main(argv: string[]): Promise<number> {
       // extraerBanderasDeModelo también con argv vacío, para que fuentes.entorno
       // .XONECODE_MODELO se rellene igual que en todos los demás subcomandos: la consola
       // no puede ser la única vía que ignora esa variable.
-      const { fuentes } = extraerBanderasDeModelo(argv.filter((a) => a !== "--guion" && a !== "--sin-raton"));
+      // `--puerto` se quita CON su valor: un `4300` suelto no es una bandera de modelo,
+      // pero tampoco tiene por qué llegar a `resto` como si fuera un argumento del usuario.
+      const sinBanderasDeConsola = argv.filter((a, i) => {
+        if (["--guion", "--sin-raton", "--web", "--cli", "--no-abrir", "--puerto"].includes(a)) return false;
+        return argv[i - 1] !== "--puerto";
+      });
+      const { fuentes } = extraerBanderasDeModelo(sinBanderasDeConsola);
       const catalogoModelos = new CatalogoModelos();
       // Por defecto, TUI siempre. `--no-tui` fuerza stdio.
       return await entrarEnConsola(

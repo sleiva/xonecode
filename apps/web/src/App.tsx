@@ -11,6 +11,7 @@ import { AvisoDeConexion } from "./componentes/AvisoDeConexion.js";
 import { Pregunta } from "./componentes/Pregunta.js";
 import { Aprobacion } from "./componentes/Aprobacion.js";
 import { Selector } from "./componentes/Selector.js";
+import { Wizard } from "./componentes/Wizard.js";
 
 type Store = ReturnType<typeof crearStoreDelCliente>;
 
@@ -98,6 +99,30 @@ export function App({ store, enviar }: { store: Store; enviar: Conexion["enviar"
                 await enviar({ clase: "eleccion", id });
                 store.contestarSelector();
               }}
+            />
+          ) : null}
+          {/*
+            El alta, cuando falta algo. Va DELANTE del compositor y detrás de las esperas de
+            humano por la misma razón que ellas: es lo que hay que resolver antes de poder
+            hablar con el agente. El paso de cuenta no llega por aquí —lo conduce el servidor
+            sobre el selector y el secreto (`web/servidor/arranque.ts`)—, así que en la
+            práctica solo se pintan entorno y proyecto; `alGuardarCredencial` está cableado
+            igualmente al mensaje de clase «secreto», que es el único que lleva una clave.
+          */}
+          {estado.alta !== undefined && estado.alta.pasos.length > 0 ? (
+            <Wizard
+              pasos={estado.alta.pasos}
+              proveedores={estado.alta.proveedores}
+              entornos={estado.alta.entornos}
+              proyectos={estado.alta.proyectos}
+              ramas={estado.alta.ramas}
+              alGuardarCredencial={(_proveedor, clave) => void enviar({ clase: "secreto", valor: clave })}
+              alRegistrarEntorno={(entorno) => void enviar({ clase: "alta", paso: "entorno", entorno })}
+              // Sin rama: pide las del proyecto elegido, no abre nada.
+              alCambiarProyecto={(proyecto) => void enviar({ clase: "alta", paso: "proyecto", proyecto })}
+              alElegirProyecto={({ proyecto, rama }) =>
+                void enviar({ clase: "alta", paso: "proyecto", proyecto, rama })
+              }
             />
           ) : null}
           <Compositor

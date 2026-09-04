@@ -15,7 +15,7 @@
  * líneas —«→ lee src/app.xne» y luego «→ lee ×3 — …»— para una sola racha, que es
  * exactamente lo que la TUI ya evita en `cli/tui/store.ts` con la misma sustitución.
  */
-import type { Acto, MensajeAlCliente, SelectorDeConsola } from "./tipos.js";
+import type { Acto, MensajeAlCliente, PasoDelWizard, SelectorDeConsola } from "./tipos.js";
 
 export interface EstadoDelCliente {
   actos: Acto[];
@@ -30,9 +30,23 @@ export interface EstadoDelCliente {
    * el mensaje: el compositor no tiene nada que sugerir antes de conectar, ni lo finge.
    */
   comandos: { nombre: string; descripcion: string }[];
+  /**
+   * El alta que falta, tal cual la manda el servidor al conectar y tras cada paso. Ausente
+   * hasta que llega el mensaje: mientras no se sabe qué falta, el wizard no se pinta —
+   * enseñar un formulario vacío «por si acaso» sería inventarse el estado del alta.
+   */
+  alta?: {
+    pasos: PasoDelWizard[];
+    proveedores: { id: string; nombre: string }[];
+    entornos: { id: string; nombre: string; url: string }[];
+    proyectos: { id: string; nombre: string }[];
+    ramas: string[];
+  };
 }
 
 const ESTADO_INICIAL: EstadoDelCliente = { actos: [], conectado: false, comandos: [] };
+
+const PASOS: ReadonlySet<string> = new Set<PasoDelWizard>(["cuenta", "entorno", "proyecto"]);
 
 // `satisfies Record<Acto["tipo"], true>` es lo que hace que añadir un tipo a `Acto` en
 // `tipos.ts` sin añadirlo aquí falle en `tsc`, no en tiempo de ejecución con un mensaje
@@ -74,6 +88,20 @@ function esSelector(valor: unknown): valor is SelectorDeConsola {
     s.opciones.every(
       (o) => typeof o === "object" && o !== null && typeof (o as { id?: unknown }).id === "string" &&
         typeof (o as { etiqueta?: unknown }).etiqueta === "string"
+    )
+  );
+}
+
+/** `{id, nombre}` y nada más: lo que el mensaje promete. Lo demás se descarta entero. */
+function sonIdentidades(valor: unknown): valor is { id: string; nombre: string }[] {
+  return (
+    Array.isArray(valor) &&
+    valor.every(
+      (o) =>
+        typeof o === "object" &&
+        o !== null &&
+        typeof (o as { id?: unknown }).id === "string" &&
+        typeof (o as { nombre?: unknown }).nombre === "string"
     )
   );
 }
@@ -172,6 +200,35 @@ export function crearStoreDelCliente(): {
           const comandos = (mensaje as { comandos?: unknown }).comandos;
           if (!esComandos(comandos)) return;
           mutar({ comandos });
+          return;
+        }
+        case "alta": {
+          const m = mensaje as {
+            pasos?: unknown;
+            proveedores?: unknown;
+            entornos?: unknown;
+            proyectos?: unknown;
+            ramas?: unknown;
+          };
+          if (!Array.isArray(m.pasos) || !m.pasos.every((p) => typeof p === "string" && PASOS.has(p))) return;
+          if (!sonIdentidades(m.proveedores) || !sonIdentidades(m.proyectos)) return;
+          if (
+            !Array.isArray(m.entornos) ||
+            !m.entornos.every((e) => typeof (e as { url?: unknown })?.url === "string") ||
+            !sonIdentidades(m.entornos)
+          ) {
+            return;
+          }
+          if (!Array.isArray(m.ramas) || !m.ramas.every((r) => typeof r === "string")) return;
+          mutar({
+            alta: {
+              pasos: m.pasos as PasoDelWizard[],
+              proveedores: m.proveedores,
+              entornos: m.entornos as { id: string; nombre: string; url: string }[],
+              proyectos: m.proyectos,
+              ramas: m.ramas as string[],
+            },
+          });
           return;
         }
         case "aprobacion": {

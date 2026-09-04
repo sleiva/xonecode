@@ -1,0 +1,474 @@
+/**
+ * El arranque de la consola web: las comprobaciones, el servidor, las RUTAS y el navegador.
+ *
+ * Vive aquí y no en `cli/main.ts` —que ya pasa de mil líneas— por lo mismo que
+ * `cli/tui/correrTui.ts`: el despachador decide QUÉ piel arranca, y la piel se monta en su
+ * propia casa. `main.ts` lo carga con un import dinámico, así que `run`, `describe` y
+ * cualquier tubería no pagan el vestíbulo entero.
+ *
+ * **Aquí es donde `registrarRuta` deja de ser código muerto.** `web/servidor/servidor.ts`
+ * la exportaba desde la Task 5 y hasta ahora no la llamaba nadie fuera de sus tests: los
+ * dos extremos del cable estaban escritos y sin conectar, de modo que la consola web no se
+ * podía abrir aunque `decidirPiel` devolviera «web». Las dos rutas son las que el cliente
+ * ya pedía (`apps/web/src/conexion.ts`): el SSE de `/eventos` y el `POST /accion`.
+ *
+ * **A qué consola habla el cable, y por qué se re-adjunta.** El vestíbulo tiene DOS
+ * consolas: la suya (sin raíz, la del alta) y la del proyecto abierto. `consolaWeb.eof()`
+ * es `!transporte.conectado()`, y sin cliente conectado toda aprobación sale rechazada y
+ * todo `preguntar` responde cadena vacía. Si el SSE se quedara enganchado a la consola del
+ * vestíbulo después de abrir un proyecto, el usuario vería su transcript y NADA de lo que
+ * decidiera llegaría: fail-closed mudo. Por eso al abrir proyecto se desconecta la anterior
+ * y se conecta la nueva, con reemisión entera del transcript.
+ *
+ * **La clave de API no pasa por el mensaje de alta.** El paso de cuenta lo conduce
+ * `vestibulo.pasoDeCuenta()` —o sea `cli/wizardInicial.ts#asistenteDeModelo` sin tocar—
+ * sobre `seleccionar` y `leerSecreto`, que el cliente ya pinta. Así la clave sigue viajando
+ * por el único mensaje del cable que la lleva y, de propina, el asistente elige TAMBIÉN el
+ * modelo y lo guarda: un paso de cuenta que solo guardara la credencial dejaría `trabajo`
+ * en la omisión (Ollama local) con una clave de Anthropic recién escrita al lado.
+ */
+
+import { existsSync, readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
+import type { IncomingMessage, ServerResponse } from "node:http";
+import type { Acto } from "../../core/actos.js";
+import { PROVEEDORES, resolver, type FuentesDeEleccion } from "../../core/modelos.js";
+import { COMANDOS, hayCredencial, type Consola, type EjecutorDeTurno } from "../../cli/consola.js";
+import { aplicarAuth, cargar, guardarModeloGlobal } from "../../agent/configEnDisco.js";
+import { guardarCredencial } from "../../agent/authEnDisco.js";
+import { cargarSettings, guardarEntorno as guardarEntornoEnDisco } from "../../agent/settingsEnDisco.js";
+import { abrirEnSistema } from "../../agent/cloudstudioMcp.js";
+import { CatalogoModelos } from "../../agent/catalogoModelos.js";
+import type { Entorno } from "../../core/settings.js";
+import { arrancarServidor, type ServidorWeb } from "./servidor.js";
+import {
+  conexionDeVestibulo,
+  crearVestibulo,
+  escribirProyectoEnDisco,
+  type OpcionDeEntorno,
+  type PasoDelVestibulo,
+  type SesionCerrable,
+  type Vestibulo,
+} from "./vestibulo.js";
+import type { MensajeAlCliente, MensajeDelCliente, Sumidero } from "./transporte.js";
+
+/** Las dos rutas del cable. El cliente las tiene escritas en `apps/web/src/conexion.ts`. */
+export const RUTA_EVENTOS = "/eventos";
+export const RUTA_ACCION = "/accion";
+
+/** Lo que se sirve: el build del cliente. Tres niveles arriba tanto desde `src/web/servidor/`
+ *  como desde `dist/web/servidor/`, que es la disposición que se publica en npm. */
+export function raizDelClientePorOmision(): string {
+  return join(dirname(fileURLToPath(import.meta.url)), "..", "..", "..", "apps", "web", "dist");
+}
+
+export const FALTA_EL_BUILD = "falta el build del cliente: ejecuta «npm run build:web»";
+
+/** Tope del cuerpo de `POST /accion`. Generoso para una prosa larga, finito porque el
+ *  cuerpo se acumula en memoria y un cliente roto no puede llenarla. */
+const TOPE_DE_CUERPO = 1_000_000;
+
+/**
+ * El registro de comandos de barra, para el compositor del navegador.
+ *
+ * Se GENERA recorriendo `COMANDOS` (`cli/consola.ts`), igual que `/ayuda`, la cabecera de
+ * stdio y el completador de Tab: una lista escrita a mano se queda vieja en cuanto alguien
+ * añade un comando, y el compositor lo sugeriría todo menos el nuevo.
+ */
+export function comandosDelRegistro(): { nombre: string; descripcion: string }[] {
+  return Object.entries(COMANDOS).map(([nombre, c]) => ({ nombre: `/${nombre}`, descripcion: c.descripcion }));
+}
+
+/** Lo mínimo que el cable necesita de una consola, la del vestíbulo o la del proyecto. */
+interface DestinoDelCable {
+  recibir(mensaje: MensajeDelCliente): void;
+  conectar(enviar?: Sumidero): readonly Acto[];
+  desconectar(): void;
+}
+
+export interface OpcionesDeMontaje {
+  /** A dónde van los avisos que no caben en el transcript. Por omisión, a ningún sitio. */
+  informar?: (texto: string) => void;
+}
+
+/**
+ * Monta `/eventos` y `/accion` sobre un servidor ya levantado.
+ *
+ * Separada de `arrancarConsolaWeb` para poder probar el cable entero —conexión, registro
+ * de comandos, alta, cambio de proyecto— sin puerto, sin disco y sin navegador: los
+ * manejadores se invocan con dobles de petición y respuesta.
+ */
+export function montarRutas(
+  servidor: Pick<ServidorWeb, "registrarRuta">,
+  vestibulo: Vestibulo,
+  opciones: OpcionesDeMontaje = {}
+): void {
+  const informar = opciones.informar ?? (() => {});
+
+  /** El sumidero del cliente vivo. `undefined` = no hay nadie al otro lado. */
+  let enviar: Sumidero | undefined;
+  /**
+   * La consola a la que está ENGANCHADO el cable ahora mismo. No se recalcula al cerrar:
+   * hay que desconectar la que se conectó, no la que sea la actual en ese momento — entre
+   * medias puede haberse abierto un proyecto.
+   */
+  let adjunto: DestinoDelCable | undefined;
+
+  /** Lo elegido en el wizard hasta ahora. Ninguno se inventa: sin elección, no hay lista. */
+  let entornoElegido: string | undefined;
+  let proyectoElegido: string | undefined;
+  let proyectos: { id: string; nombre: string }[] = [];
+  let ramas: string[] = [];
+  /**
+   * El paso de cuenta ya conducido en ESTE proceso. Hace falta porque `origenDeTrabajo` se
+   * congela al construir el vestíbulo: `pasosPendientes()` seguiría diciendo «cuenta»
+   * después de haberla dado, y el wizard volvería a pedirla en cada reconexión.
+   */
+  let cuentaHecha = false;
+
+  const destinoActual = (): DestinoDelCable => vestibulo.proyectoAbierto() ?? vestibulo.consola;
+
+  const emitir = (mensaje: MensajeAlCliente): void => enviar?.(mensaje);
+
+  /**
+   * El mensaje de alta: qué falta, y con qué elegirlo.
+   *
+   * Con proyecto abierto no falta nada y se dice con `pasos` vacío, que es lo que retira el
+   * wizard del cliente. Sin él, la lista sale de `pasosPendientes()` menos la cuenta ya
+   * conducida, y con el paso de entorno DELANTE siempre que quede el de proyecto: abrir un
+   * proyecto exige saber de qué entorno viene, y eso no lo cubre `pasosPendientes()`, que
+   * responde a «qué falta por configurar» y no a «qué necesita esta apertura».
+   */
+  const anunciarAlta = async (): Promise<void> => {
+    if (vestibulo.proyectoAbierto() !== undefined) {
+      emitir({ clase: "alta", pasos: [], proveedores: [], entornos: [], proyectos: [], ramas: [] });
+      return;
+    }
+    const pendientes = await vestibulo.pasosPendientes();
+    const pasos: PasoDelVestibulo[] = [];
+    // «cuenta» NO se anuncia nunca al wizard: ese paso lo conduce `conducirCuenta` sobre
+    // el selector y el secreto, que es lo que mantiene la clave en su único mensaje y lo
+    // que hace que se elija TAMBIÉN el modelo. El wizard sigue sabiendo pintarlo por si
+    // otra piel se lo manda; esta no.
+    if (pendientes.includes("proyecto") || pendientes.includes("entorno")) pasos.push("entorno");
+    if (pendientes.includes("proyecto")) pasos.push("proyecto");
+    emitir({
+      clase: "alta",
+      pasos,
+      proveedores: PROVEEDORES.map((p) => ({ id: p, nombre: p })),
+      entornos: [...vestibulo.opcionesDeEntorno()],
+      proyectos,
+      ramas,
+    });
+  };
+
+  /** Engancha el cable a la consola que toque, con el transcript entero por delante. */
+  const adjuntar = (): void => {
+    const destino = destinoActual();
+    if (adjunto !== undefined && adjunto !== destino) adjunto.desconectar();
+    adjunto = destino;
+    const actos = destino.conectar(enviar);
+    // El orden importa: primero el transcript, luego lo que el compositor necesita para
+    // sugerir, y al final lo que el wizard tiene que pedir.
+    emitir({ clase: "reemision", actos: [...actos] });
+    emitir({ clase: "comandos", comandos: comandosDelRegistro() });
+  };
+
+  /**
+   * El paso de cuenta, conducido por el asistente de siempre sobre esta consola. Se lanza
+   * suelto (no se espera) porque el manejador del SSE tiene que devolver para que el
+   * navegador reciba las preguntas que este asistente va a emitir.
+   */
+  const conducirCuenta = async (): Promise<void> => {
+    const pendientes = await vestibulo.pasosPendientes();
+    if (!pendientes.includes("cuenta") || cuentaHecha || vestibulo.proyectoAbierto() !== undefined) return;
+    cuentaHecha = true;
+    await vestibulo.pasoDeCuenta();
+  };
+
+  const contar = (error: unknown): void => {
+    informar(error instanceof Error ? error.message : String(error));
+  };
+
+  /** Un paso del alta resuelto en el navegador. Cada rama termina volviendo a anunciar. */
+  const atenderAlta = async (mensaje: Extract<MensajeDelCliente, { clase: "alta" }>): Promise<void> => {
+    try {
+      if (mensaje.paso === "entorno") {
+        const elegido = mensaje.entorno;
+        if (elegido === undefined || elegido.url.trim() === "") {
+          informar("el entorno necesita una URL");
+          return;
+        }
+        // Registrar es idempotente en disco (`settingsEnDisco.guardarEntorno` sustituye por
+        // id), pero volver a registrar el mismo entorno duplicaría la lista en memoria del
+        // vestíbulo. Elegir uno ya registrado no es dar de alta nada.
+        if (!vestibulo.opcionesDeEntorno().some((o) => o.id === elegido.id && o.url === elegido.url && o.url !== "")) {
+          await vestibulo.registrarEntorno({ id: elegido.id, nombre: elegido.nombre, url: elegido.url });
+        }
+        entornoElegido = elegido.id;
+        proyectoElegido = undefined;
+        ramas = [];
+        proyectos = await vestibulo.proyectosDe(elegido.id);
+        return;
+      }
+
+      if (entornoElegido === undefined) {
+        informar("elige antes el entorno del que sale el proyecto");
+        return;
+      }
+      const proyecto = mensaje.proyecto;
+      if (proyecto === undefined || proyecto === "") {
+        informar("el paso de proyecto necesita un proyecto");
+        return;
+      }
+      if (mensaje.rama === undefined || mensaje.rama === "") {
+        // Sin rama todavía no se abre nada: se contestan las ramas de ese proyecto. Es la
+        // alternativa a inventarse las del primero de la lista antes de que nadie elija.
+        proyectoElegido = proyecto;
+        ramas = await vestibulo.ramasDe(entornoElegido, proyecto);
+        return;
+      }
+      const identidad = proyectos.find((p) => p.id === (proyectoElegido ?? proyecto)) ?? proyecto;
+      const { raiz } = await vestibulo.completarProyecto({
+        entorno: entornoElegido,
+        proyecto: identidad,
+        rama: mensaje.rama,
+      });
+      await vestibulo.abrirProyecto({ raiz });
+      // El cable se muda a la consola del proyecto. Sin esto el usuario mira un transcript
+      // vivo cuyas aprobaciones se rechazan solas al otro lado.
+      adjuntar();
+    } catch (error) {
+      contar(error);
+    } finally {
+      await anunciarAlta().catch(contar);
+    }
+  };
+
+  servidor.registrarRuta("GET", RUTA_EVENTOS, (peticion, respuesta) => {
+    respuesta.writeHead(200, {
+      "Content-Type": "text/event-stream; charset=utf-8",
+      "Cache-Control": "no-cache",
+      Connection: "keep-alive",
+      // Sin esto un proxy intermedio bufferiza el stream y el transcript llega a tirones.
+      "X-Accel-Buffering": "no",
+    });
+    const sumidero: Sumidero = (mensaje) => {
+      // El socket se puede haber ido entre el último acto y este: escribir en él lanza, y
+      // ese lanzamiento subiría por el emisor del acto hasta el motor de turno.
+      try {
+        respuesta.write(`data: ${JSON.stringify(mensaje)}\n\n`);
+      } catch {
+        /* el cliente se fue; el `close` de abajo ya desconecta */
+      }
+    };
+    enviar = sumidero;
+    // Un comentario SSE abre el stream de verdad: sin nada escrito, algunos navegadores no
+    // disparan `onopen` hasta el primer dato.
+    respuesta.write(": xonecode\n\n");
+    adjuntar();
+    void conducirCuenta()
+      .catch(contar)
+      .finally(() => void anunciarAlta().catch(contar));
+
+    peticion.on("close", () => {
+      // Se desconecta el destino que se ADJUNTÓ, no el actual: entre la conexión y el
+      // cierre puede haberse abierto un proyecto, y desconectar a otro dejaría la consola
+      // viva creyendo que sigue habiendo alguien mirando.
+      if (enviar === sumidero) enviar = undefined;
+      adjunto?.desconectar();
+      adjunto = undefined;
+    });
+  });
+
+  servidor.registrarRuta("POST", RUTA_ACCION, async (peticion, respuesta) => {
+    let mensaje: MensajeDelCliente;
+    try {
+      mensaje = JSON.parse(await leerCuerpo(peticion)) as MensajeDelCliente;
+    } catch {
+      // Cuerpo ilegible o demasiado grande. NO se devuelve nada de lo recibido: por aquí
+      // pasa la clave de API del paso de cuenta, y un eco la dejaría en el log del cliente.
+      respuesta.writeHead(400);
+      respuesta.end();
+      return;
+    }
+    if (typeof mensaje === "object" && mensaje !== null && mensaje.clase === "alta") {
+      // Suelto y sin esperar: el alta hace dos viajes a CloudStudio y una descarga entera,
+      // y el `POST` no puede quedarse abierto minutos. Lo que pase se cuenta por el cable.
+      void atenderAlta(mensaje);
+    } else {
+      destinoActual().recibir(mensaje);
+    }
+    respuesta.writeHead(204);
+    respuesta.end();
+  });
+}
+
+async function leerCuerpo(peticion: IncomingMessage): Promise<string> {
+  const trozos: Buffer[] = [];
+  let total = 0;
+  for await (const trozo of peticion) {
+    const buffer = Buffer.from(trozo as Buffer);
+    total += buffer.length;
+    if (total > TOPE_DE_CUERPO) throw new Error("cuerpo demasiado grande");
+    trozos.push(buffer);
+  }
+  return Buffer.concat(trozos).toString("utf8");
+}
+
+export interface OpcionesDeArranque {
+  puerto: number;
+  abrir: boolean;
+  cwd: string;
+  /** `--guion`: el agente de pega también en la web, para verla correr sin gastar. */
+  guion?: boolean;
+  /**
+   * La fábrica del ejecutor real (`cli/main.ts#crearEjecutorReal`). Entra por parámetro y
+   * no se importa: `cli/main.ts` ya carga este módulo, e importarlo de vuelta sería un
+   * ciclo entre el despachador y la piel que monta.
+   */
+  crearEjecutor?: (alAbrirSesion: (sesion: SesionCerrable) => void) => EjecutorDeTurno;
+  /** Lo que la consola de proyecto necesita y depende de la raíz (`/sync`, los escritores). */
+  dependenciasDeProyecto?: (raiz: string) => Partial<Consola>;
+  /** Costuras de test: nada de esto toca disco, red ni navegador cuando se inyecta. */
+  raizDelCliente?: string;
+  escribir?: (texto: string) => void;
+  abrirNavegador?: (url: URL) => void;
+  crearServidor?: typeof arrancarServidor;
+  vestibulo?: Vestibulo;
+  /** Cuándo termina. Por omisión, con la primera señal de interrupción. */
+  esperarCierre?: () => Promise<void>;
+}
+
+/**
+ * Levanta la consola web y se queda. Devuelve el código de salida del proceso.
+ *
+ * El orden de las comprobaciones no es casual: primero lo que hace IMPOSIBLE arrancar
+ * (falta el build del cliente → 70, fallo del entorno y no del proyecto), y después lo que
+ * solo hay que DECIR (un proyecto offline en el cwd). Lo segundo informa y sigue, porque no
+ * es un error: quien abrió aquí un proyecto offline puede querer la web para otro.
+ */
+export async function arrancarConsolaWeb(opciones: OpcionesDeArranque): Promise<number> {
+  const escribir = opciones.escribir ?? ((texto: string) => void process.stdout.write(texto));
+  const raizDelCliente = opciones.raizDelCliente ?? raizDelClientePorOmision();
+
+  if (!existsSync(join(raizDelCliente, "index.html"))) {
+    process.stderr.write(`${FALTA_EL_BUILD}\n`);
+    return 70; // EX_SOFTWARE: falta una pieza del entorno, el proyecto no tiene la culpa
+  }
+
+  if (esProyectoOffline(opciones.cwd)) {
+    escribir("este directorio es un proyecto offline: ábrelo con «xonecode --cli»\n");
+  }
+
+  const arrancar = opciones.crearServidor ?? arrancarServidor;
+  const servidor = await arrancar({ puerto: opciones.puerto, raizEstaticos: raizDelCliente });
+
+  const vestibulo = opciones.vestibulo ?? vestibuloReal(opciones, servidor, escribir);
+  montarRutas(servidor, vestibulo, {
+    // Los avisos van al terminal ADEMÁS de a la consola del vestíbulo: en cuanto hay
+    // proyecto abierto, esa consola ya no es la que nadie mira.
+    informar: (texto) => escribir(`${texto}\n`),
+  });
+
+  escribir(`consola web en ${servidor.url}\n`);
+  if (opciones.abrir) {
+    // Lo accesorio: la URL ya está impresa, así que un fallo aquí no puede tumbar nada.
+    // `abrirEnSistema` escucha el `error` del spawn justo por esto.
+    try {
+      (opciones.abrirNavegador ?? abrirEnSistema)(new URL(servidor.url));
+    } catch (error) {
+      escribir(`no se pudo abrir el navegador (${error instanceof Error ? error.message : String(error)}); abre la URL a mano\n`);
+    }
+  }
+
+  await (opciones.esperarCierre ?? esperarInterrupcion)();
+  await vestibulo.cerrar();
+  await servidor.cerrar();
+  return 0;
+}
+
+/** Un `.xonecode/config.json` con `modo: "offline"` en el cwd. Lo que no se pueda leer no
+ *  es un proyecto offline: no se afirma sobre lo que no se sabe. */
+function esProyectoOffline(cwd: string): boolean {
+  try {
+    const crudo: unknown = JSON.parse(readFileSync(join(cwd, ".xonecode", "config.json"), "utf8"));
+    return typeof crudo === "object" && crudo !== null && (crudo as { modo?: unknown }).modo === "offline";
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * La espera por omisión: hasta que alguien interrumpa. Sin ella `arrancarConsolaWeb`
+ * devolvería en cuanto el servidor está en pie, y `bin.ts` hace `process.exit(codigo)` —
+ * o sea que el servidor recién levantado moriría antes de servir una sola petición.
+ */
+function esperarInterrupcion(): Promise<void> {
+  return new Promise<void>((resolver) => {
+    process.once("SIGINT", () => resolver());
+    process.once("SIGTERM", () => resolver());
+  });
+}
+
+/** El vestíbulo con todas sus piezas reales. Se construye DESPUÉS del servidor porque el
+ *  callback de OAuth necesita saber a qué URL devolver al navegador. */
+function vestibuloReal(
+  opciones: OpcionesDeArranque,
+  servidor: ServidorWeb,
+  escribir: (texto: string) => void
+): Vestibulo {
+  const cargado = cargar(opciones.cwd);
+  aplicarAuth(cargado.auth);
+  const fuentes: FuentesDeEleccion = {
+    global: cargado.config.global,
+    entorno: { XONECODE_MODELO: process.env.XONECODE_MODELO },
+  };
+  const settings = cargarSettings().settings;
+  const dependenciasDeProyecto = opciones.dependenciasDeProyecto;
+
+  return crearVestibulo({
+    origenDeTrabajo: resolver(fuentes).trabajo.origen,
+    fuentes,
+    catalogoModelos: new CatalogoModelos(),
+    guardarCredencial,
+    // Los proveedores que YA tienen clave no se vuelven a pedir. Sin esto la omisión del
+    // vestíbulo es `false` para todos —la dirección segura, pero molesta— y el asistente
+    // pediría de nuevo una credencial que está escrita.
+    hayCredencial: (proveedor) => hayCredencial(proveedor, opciones.cwd),
+    guardarEntorno: (entorno: Entorno) => guardarEntornoEnDisco(undefined, entorno),
+    guardarModeloGlobal,
+    guardarConfigDeProyecto: escribirProyectoEnDisco,
+    entornos: settings.entornos,
+    ...(settings.workspace === undefined ? {} : { baseDeWorkspace: settings.workspace }),
+    // La URL de la web para que la página del callback devuelva AQUÍ y no diga «vuelve a
+    // la terminal», que en un navegador es falso.
+    ...conexionDeVestibulo(servidor.url),
+    // La descarga es la de siempre, la del `/sync bajar` del proyecto ya dado de alta:
+    // `completarProyecto` escribe el `config.json` ENTERO antes de llamar aquí, así que el
+    // sincronizador lee del disco exactamente lo que leería después. Nada de la
+    // sincronización se toca ni se duplica.
+    descargar: async ({ raiz }) => {
+      const sincronizar = dependenciasDeProyecto?.(raiz).sincronizar;
+      if (sincronizar === undefined) return;
+      const bajada = await sincronizar("bajar", raiz, undefined, escribir);
+      if (bajada.tipo === "texto") {
+        escribir(bajada.texto);
+        return;
+      }
+      // El árbol sucio para la copia local. Bajar SOBRESCRIBE el disco, así que se dice
+      // qué hay y no se baja nada — igual que en el alta de terminal.
+      throw new Error(
+        `hay trabajo local sin commitear (${bajada.pendientes.join(", ")}); la descarga sobrescribe el disco`
+      );
+    },
+    ...(opciones.guion === true || opciones.crearEjecutor === undefined
+      ? {}
+      : { crearEjecutor: opciones.crearEjecutor }),
+    ...(dependenciasDeProyecto === undefined ? {} : { dependenciasDeProyecto }),
+  });
+}
+
+/** Los pasos, reexportados para quien monte otra piel sobre el mismo vestíbulo. */
+export type { OpcionDeEntorno, PasoDelVestibulo };

@@ -132,3 +132,38 @@ describe("store del cliente", () => {
     expect(avisos).toBe(1);
   });
 });
+
+describe("el alta del wizard", () => {
+  it("guarda pasos, entornos y listas tal cual llegan", () => {
+    const store = crearStoreDelCliente();
+    store.aplicar({
+      clase: "alta",
+      pasos: ["entorno", "proyecto"],
+      proveedores: [{ id: "ollama", nombre: "ollama" }],
+      entornos: [{ id: "webstudio", nombre: "XOne WebStudio", url: "https://mcp.xonewebstudio.com/mcp" }],
+      proyectos: [{ id: "p1", nombre: "Tienda" }],
+      ramas: ["master"],
+    });
+    expect(store.leer().alta?.pasos).toEqual(["entorno", "proyecto"]);
+    expect(store.leer().alta?.ramas).toEqual(["master"]);
+  });
+
+  it("un paso que no existe descarta el mensaje entero en vez de pintar un formulario inventado", () => {
+    const store = crearStoreDelCliente();
+    store.aplicar({
+      clase: "alta",
+      pasos: ["fantasma"],
+      proveedores: [],
+      entornos: [],
+      proyectos: [],
+      ramas: [],
+    });
+    expect(store.leer().alta).toBeUndefined();
+  });
+
+  it("con pasos vacíos hay alta pero sin nada que pedir: es lo que retira el wizard", () => {
+    const store = crearStoreDelCliente();
+    store.aplicar({ clase: "alta", pasos: [], proveedores: [], entornos: [], proyectos: [], ramas: [] });
+    expect(store.leer().alta?.pasos).toEqual([]);
+  });
+});

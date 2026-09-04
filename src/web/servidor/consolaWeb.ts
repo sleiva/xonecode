@@ -329,6 +329,11 @@ export function crearConsolaWeb(opciones: OpcionesDeConsolaWeb = {}): ConsolaWeb
       esperandoSeleccion.shift()?.(typeof mensaje.id === "string" ? mensaje.id : undefined);
       return;
     }
+    // Los pasos del alta no son de esta consola: los atiende el vestíbulo desde
+    // `web/servidor/arranque.ts`, que los aparta antes de llegar aquí. La guarda existe
+    // igual porque este `recibir` es público y lo que no se entiende no puede caer en la
+    // rama de aprobación — sería una decisión inventada sobre escrituras reales.
+    if (mensaje.clase !== "decision") return;
     // Decisión de aprobación.
     const enVuelo = aprobacionEnVuelo;
     if (enVuelo === undefined) return;

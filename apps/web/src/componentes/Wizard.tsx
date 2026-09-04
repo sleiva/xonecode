@@ -30,8 +30,13 @@ import estilos from "./Wizard.module.css";
  * marca de DeepSeek y este producto es XOne.
  */
 
-/** Los mismos tres de `vestibulo.ts#PasoDelVestibulo`, redeclarados (la frontera del cliente). */
-export type PasoDelWizard = "cuenta" | "entorno" | "proyecto";
+/**
+ * Los mismos tres de `vestibulo.ts#PasoDelVestibulo`. Se importan de `tipos.ts` —donde el
+ * mensaje del cable los necesita— y se reexportan para no romper a quien ya los pedía
+ * aquí: una segunda declaración en este fichero sería la copia que diverge.
+ */
+import type { PasoDelWizard } from "../tipos.js";
+export type { PasoDelWizard };
 
 export interface OpcionDeProveedor {
   id: string;
@@ -51,10 +56,14 @@ export interface OpcionDeEntorno {
  * deja pasar `mcp.localhost.ejemplo.com`, que es una máquina de otro. La excepción existe
  * solo para un CloudStudio on-premise levantado en desarrollo.
  *
- * Ojo a la divergencia, deliberada y declarada: `vestibulo.ts#urlDeEntornoValida` exige
- * HTTPS SIEMPRE, así que un loopback que aquí pasa lo rechazará el servidor al registrarlo.
+ * Ya NO hay divergencia con el servidor: `agent/cloudstudioMcp.ts#urlDeMcpAceptable` aplica
+ * esta misma regla, y de ella tiran el registro del entorno (`vestibulo.ts`) y quien conecta
+ * de verdad. Antes eran dos criterios y dos mensajes que se contradecían — el loopback que
+ * este formulario aceptaba lo rechazaba el servidor al registrarlo. La copia sigue aquí y no
+ * importada porque `src/web/frontera.test.ts` prohíbe compartir módulo con `src/`; las dos
+ * están probadas por separado.
  */
-const LOOPBACK = new Set(["127.0.0.1", "localhost", "::1"]);
+const LOOPBACK = new Set(["127.0.0.1", "localhost", "::1", "[::1]"]);
 
 const AVISO_DE_URL =
   "La URL del MCP debe ser https:// — solo se admite http:// en 127.0.0.1 o localhost, para un on-premise en desarrollo.";
@@ -83,6 +92,7 @@ export function Wizard({
   alGuardarCredencial,
   alRegistrarEntorno,
   alElegirProyecto,
+  alCambiarProyecto,
 }: {
   /** Los pasos que FALTAN, en orden. Vacío = no hay alta que hacer y no se pinta nada. */
   pasos: readonly PasoDelWizard[];
@@ -95,6 +105,13 @@ export function Wizard({
   alGuardarCredencial: (proveedor: string, clave: string) => void;
   alRegistrarEntorno: (entorno: OpcionDeEntorno) => void;
   alElegirProyecto: (eleccion: { proyecto: string; rama: string }) => void;
+  /**
+   * El proyecto elegido cambió, y todavía no se abre nada: sus ramas hay que pedirlas al
+   * servidor, que es quien habla con CloudStudio. Sin este aviso las dos listas del paso
+   * tendrían que llegar juntas, y las ramas del primer proyecto de la lista serían un dato
+   * inventado antes de que nadie hubiera elegido.
+   */
+  alCambiarProyecto?: (proyecto: string) => void;
 }) {
   const [indice, setIndice] = useState(0);
 
@@ -276,7 +293,10 @@ export function Wizard({
         id="wizard-proyecto"
         className={estilos.campo}
         value={proyecto}
-        onChange={(e) => setProyecto(e.target.value)}
+        onChange={(e) => {
+          setProyecto(e.target.value);
+          alCambiarProyecto?.(e.target.value);
+        }}
       >
         {proyectos.map((p) => (
           <option key={p.id} value={p.id}>

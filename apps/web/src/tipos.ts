@@ -32,6 +32,14 @@ export type Acto =
   | { tipo: "fin"; ms: number; modelo?: string }
   | { tipo: "error"; texto: string };
 
+/**
+ * Los tres pasos del alta, redeclarados igual que todo lo demás de este fichero: son los
+ * de `web/servidor/vestibulo.ts#PasoDelVestibulo`. Vive AQUÍ y no en `Wizard.tsx` porque
+ * el mensaje del cable lo necesita, y un tipo del cable que colgara de un componente
+ * ataría `tipos.ts` a un `.tsx` con React dentro.
+ */
+export type PasoDelWizard = "cuenta" | "entorno" | "proyecto";
+
 export interface SelectorDeConsola {
   titulo: string;
   opciones: readonly { id: string; etiqueta: string; detalle?: string }[];
@@ -52,6 +60,23 @@ export type MensajeAlCliente =
    * teclea.
    */
   | { clase: "comandos"; comandos: { nombre: string; descripcion: string }[] }
+  /**
+   * El alta que falta, para el wizard (`vestibulo.ts#pasosPendientes` del lado servidor).
+   * `pasos` vacío = no hay alta que hacer. `proyectos` y `ramas` vienen vacíos mientras no
+   * haya entorno (y proyecto) elegidos: son dos consultas a CloudStudio y una lista de
+   * relleno sería un dato inventado.
+   *
+   * La clave de API NO llega por aquí: el paso de cuenta lo conduce el servidor sobre los
+   * mensajes de clase «selector» y «secreto».
+   */
+  | {
+      clase: "alta";
+      pasos: PasoDelWizard[];
+      proveedores: { id: string; nombre: string }[];
+      entornos: { id: string; nombre: string; url: string }[];
+      proyectos: { id: string; nombre: string }[];
+      ramas: string[];
+    }
   | {
       clase: "aprobacion";
       pendientes: unknown[];
@@ -73,4 +98,16 @@ export type MensajeDelCliente =
   | { clase: "eleccion"; id?: string | null }
   /** La respuesta a la pregunta secreta de `MensajeAlCliente` — otro mensaje, otra forma: aquel lleva `pregunta`, este `valor`. */
   | { clase: "secreto"; valor: string }
+  /**
+   * Un paso del alta, resuelto por el wizard. Con `paso` «proyecto» y sin `rama` no se
+   * abre nada: pide las ramas del proyecto elegido, y el servidor contesta con otro
+   * mensaje de alta. Sin campo para la clave de API, que va por «secreto».
+   */
+  | {
+      clase: "alta";
+      paso: PasoDelWizard;
+      entorno?: { id: string; nombre: string; url: string };
+      proyecto?: string;
+      rama?: string;
+    }
   | { clase: "decision"; decisiones: Record<string, string> };

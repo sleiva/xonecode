@@ -349,22 +349,70 @@ export function adoptarLegadoSiProcede(ruta: string, entorno: Pick<Entorno, "id"
   guardarEstado(ruta, { version: 2, porEntorno: { ...resto, [entorno.id]: legado } });
 }
 
-function abrirEnSistema(url: URL): void {
+/**
+ * Abre una URL en el navegador del sistema. Exportada porque la consola web hace lo mismo
+ * al arrancar (`web/servidor/arranque.ts`) y tres `spawn` con la misma tabla de comandos
+ * en dos ficheros es cómo divergen.
+ *
+ * El `on("error")` no es decorativo: `spawn` de un comando que no existe —un contenedor
+ * sin `xdg-open`, un SSH sin escritorio— no lanza, EMITE `error`, y sin escucha eso es una
+ * excepción no capturada que se lleva el proceso por delante. Aquí abrir el navegador es
+ * siempre lo ACCESORIO: la URL ya está impresa, y el servidor tiene que seguir en pie.
+ */
+export function abrirEnSistema(url: URL): void {
   const [comando, args] = process.platform === "darwin"
     ? ["open", [url.toString()]]
     : process.platform === "win32"
       ? ["cmd", ["/c", "start", "", url.toString()]]
       : ["xdg-open", [url.toString()]];
   const proceso = spawn(comando, args, { detached: true, stdio: "ignore" });
+  proceso.on("error", () => {});
   proceso.unref();
 }
 
-function urlSegura(valor: string): URL {
-  const url = new URL(valor);
-  if (url.protocol !== "https:" || url.username !== "" || url.password !== "") {
-    throw new Error("la URL de CloudStudio debe ser HTTPS y no puede incluir credenciales");
+/**
+ * Los hosts que hacen de `http://` algo aceptable. Lista CERRADA, por el mismo motivo que
+ * la de basura del sistema operativo en `arbolLimpio`: «lo que parezca local» deja pasar
+ * `mcp.localhost.ejemplo.com`, que es una máquina de otro.
+ */
+const LOOPBACK: ReadonlySet<string> = new Set(["127.0.0.1", "localhost", "::1", "[::1]"]);
+
+export const AVISO_DE_URL_DE_MCP =
+  "la URL del MCP debe ser HTTPS —solo se admite http:// en 127.0.0.1 o localhost, para un on-premise en desarrollo— y no puede incluir credenciales";
+
+/**
+ * La ÚNICA regla de qué URL de MCP vale, y por eso vive aquí y no en cada gate.
+ *
+ * Había tres puertas con dos criterios: el wizard del navegador aceptaba loopback,
+ * `vestibulo.ts#urlDeEntornoValida` exigía HTTPS y lo rechazaba, y esta función —la última,
+ * la que de verdad conecta— también. Registrar un entorno on-premise de desarrollo era
+ * imposible por la segunda, y aflojar solo la segunda habría dejado registrar uno que
+ * después fallaba al primer `conectarCloudStudio`: un alta que se puede escribir y no se
+ * puede usar es peor que el rechazo claro de hoy.
+ *
+ * Se resuelve por el lado PERMISIVO porque el caso existe —un CloudStudio on-premise
+ * levantado en local durante el desarrollo— y porque en loopback el texto plano no cruza
+ * ninguna red: es el mismo trato que ya se da al `redirect_uri` del callback de OAuth
+ * (`http://127.0.0.1:7634`) y a la propia consola web. Fuera de loopback, HTTPS y nada más.
+ * La copia del cliente (`apps/web/src/componentes/Wizard.tsx#urlDeEntornoAceptable`) dice
+ * lo mismo y no puede importar esta: lo prohíbe `src/web/frontera.test.ts`.
+ */
+export function urlDeMcpAceptable(valor: string): boolean {
+  let url: URL;
+  try {
+    url = new URL(valor);
+  } catch {
+    return false;
   }
-  return url;
+  // Una URL con credenciales dentro acaba en `settings.json` y en cada traza que la enseñe.
+  if (url.username !== "" || url.password !== "") return false;
+  if (url.protocol === "https:") return true;
+  return url.protocol === "http:" && LOOPBACK.has(url.hostname);
+}
+
+function urlSegura(valor: string): URL {
+  if (!urlDeMcpAceptable(valor)) throw new Error(AVISO_DE_URL_DE_MCP);
+  return new URL(valor);
 }
 
 /**

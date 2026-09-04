@@ -455,18 +455,24 @@ describe("decidirTui", () => {
   });
 });
 
-describe("decidirPiel", () => {
-  it("por omisión es la consola de siempre: el cambio de omisión es una tarea posterior", () => {
-    expect(decidirPiel([])).toBe("consola");
+describe("decidirPiel: la omisión ya es la web", () => {
+  it("con stdin TTY, xonecode a secas abre la web", () => {
+    expect(decidirPiel([], { stdinTTY: true })).toBe("web");
+  });
+
+  it("SIN stdin TTY la omisión NO es la web: una tubería seguiría dando salida byte-idéntica", () => {
+    // El TTY entra por parámetro justo para poder afirmar ESTO: bajo vitest stdin nunca
+    // es un terminal, así que sin la inyección el test pasaría por el motivo equivocado.
+    expect(decidirPiel([], { stdinTTY: false })).toBe("consola");
   });
 
   it("--web fuerza la web aunque no haya TTY (servidores headless)", () => {
-    expect(decidirPiel(["--web"])).toBe("web");
+    expect(decidirPiel(["--web"], { stdinTTY: false })).toBe("web");
   });
 
-  it("--cli gana siempre, incluso frente a --web", () => {
-    expect(decidirPiel(["--cli"])).toBe("consola");
-    expect(decidirPiel(["--web", "--cli"])).toBe("consola");
+  it("--cli gana siempre, incluso con TTY y frente a --web", () => {
+    expect(decidirPiel(["--cli"], { stdinTTY: true })).toBe("consola");
+    expect(decidirPiel(["--web", "--cli"], { stdinTTY: true })).toBe("consola");
   });
 });
 
@@ -1023,10 +1029,12 @@ describe("los adaptadores de proyecto son los MISMOS en las dos pieles", () => {
     expect(crudas).toEqual([]);
   });
 
-  it("las dos ramas montan la MISMA fábrica: sin dos copias no hay dos comportamientos", () => {
-    // Una por rama (TUI y stdio); si alguien vuelve a escribir los adaptadores a mano,
-    // este recuento deja de cuadrar.
-    expect(fuenteDeMain().match(/\.\.\.adaptadoresDeProyecto\(raiz\)/g)).toHaveLength(2);
+  it("las TRES ramas montan la MISMA fábrica: sin tres copias no hay tres comportamientos", () => {
+    // Una por rama (TUI, stdio y la web, que se la pasa al vestíbulo como
+    // `dependenciasDeProyecto`); si alguien vuelve a escribir los adaptadores a mano, este
+    // recuento deja de cuadrar. La web fue la tercera: sin ella el vestíbulo se quedaba sin
+    // `/sync`, y la descarga del alta no bajaba nada sin decirlo.
+    expect(fuenteDeMain().match(/\.\.\.adaptadoresDeProyecto\(raiz\)/g)).toHaveLength(3);
   });
 
   it("el adaptador que monta stdio (y la TUI) BORRA el entorno caducado al cambiar de servidor", () => {

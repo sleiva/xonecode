@@ -35,11 +35,39 @@ xonecode describe --modelo anthropic/claude-sonnet-4-5-20250929 \
 xonecode describe --modelo olama/x     # sale con 64 y dice los proveedores válidos
 ```
 
-## 2. La consola interactiva
+## 2. La consola web (la de omisión)
+
+```sh
+npm run build:web      # el cliente vive en apps/web/dist; sin él, xonecode sale con 70
+./bin/xonecode         # abre el navegador
+./bin/xonecode --no-abrir --puerto 4399   # solo imprime la URL, útil para curl
+```
+
+Imprime una línea y se queda:
+
+```
+consola web en http://127.0.0.1:4399/?t=<token>
+```
+
+Qué comprobar sin navegador:
+
+```sh
+curl -s -o /dev/null -w "%{http_code}\n" "http://127.0.0.1:4399/eventos"          # 401: sin token, nada
+curl -s -N --max-time 2 "http://127.0.0.1:4399/eventos?t=<token>"                  # el SSE: reemision, comandos y alta
+curl -s -o /dev/null -w "%{http_code}\n" "http://127.0.0.1:4399/.xonecode/config.json?t=<token>"  # 403 siempre
+```
+
+El token va en la URL y se convierte en una cookie `HttpOnly` en la primera visita. El
+servidor escucha **solo en loopback** y no hay bandera para abrirlo a la red.
+
+En una carpeta que ya es un proyecto **offline**, la web lo dice al arrancar y **sigue**
+—es un aviso, no un error—: `este directorio es un proyecto offline: ábrelo con «xonecode --cli»`.
+
+## 2b. La consola de terminal (`--cli`)
 
 ```sh
 cd /ruta/a/TuApp      # o a una copia
-xonecode              # sin argumentos: entra en la consola
+xonecode --cli        # la consola de siempre: TUI si hay terminal, stdio si no
 ```
 
 Arranca así:
@@ -79,6 +107,10 @@ Tab completa los comandos: `/mod` + Tab. Con varios candidatos los lista con su 
 printf '/ayuda\n/verify\n/config\n/salir\n' | xonecode
 ```
 
+Una tubería NO abre la web aunque no lleve `--cli`: sin stdin TTY la omisión sigue siendo la
+consola de siempre (`decidirPiel`, `cli/main.ts`), que es lo que mantiene esta salida
+byte-idéntica.
+
 Dos cosas cambian sin TTY, las dos a propósito: el Tab no sirve, y **`/provider <nombre>`
 se rechaza** — leer una clave de un pipe la deja en el historial de la shell o en el log de
 CI.
@@ -89,21 +121,25 @@ Con un terminal de verdad, la consola monta una TUI de Ink: transcript, sidebar 
 papel, proyecto, rama, versión) y cuadro de entrada. **Es la MISMA consola** — los comandos, el
 hilo y el ejecutor son los de arriba; solo cambia la piel.
 
+Las banderas de TUI viven DENTRO de la rama `--cli`:
+
 | bandera | efecto |
 |---|---|
-| *(nada)* | TUI solo si stdin Y stdout son TTY; cualquier tubería cae al stdio de siempre |
-| `--no-tui` | consola clásica (stdio), pase lo que pase |
-| `--tui` | fuerza la TUI; sin TTY de verdad en ambos lados sale con **64** y lo dice |
+| *(nada)* | con stdin TTY, la **web**; con una tubería, el stdio de siempre |
+| `--cli` | la consola de terminal: TUI solo si stdin Y stdout son TTY |
+| `--cli --no-tui` | consola clásica (stdio), pase lo que pase |
+| `--cli --tui` | fuerza la TUI; sin TTY de verdad en ambos lados sale con **64** y lo dice |
+| `--web` | fuerza la web aunque no haya terminal |
 
 Probarla **sin gastar**:
 
 ```sh
-./bin/xonecode --guion --tui     # en un terminal de verdad
+./bin/xonecode --cli --guion --tui     # en un terminal de verdad
 ```
 
 El agente de pega recorre el turno entero (fases, plan, verificación de pega) sin llamar a
 ningún modelo, en la TUI montada de verdad. Y **contra Ollama de verdad**: `./bin/xonecode
---tui` sobre una copia de tu app — una petición que escribe abre el MODAL de aprobación con el
+--cli --tui` sobre una copia de tu app — una petición que escribe abre el MODAL de aprobación con el
 diff coloreado.
 
 Dentro de la TUI:

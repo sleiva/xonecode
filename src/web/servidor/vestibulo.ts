@@ -29,10 +29,12 @@ import { rutaDeWorkspace } from "../../core/settings.js";
 import {
   URL_CLOUDSTUDIO_POR_OMISION,
   SCOPES_CLOUDSTUDIO_AGENTE,
+  AVISO_DE_URL_DE_MCP,
   adoptarLegadoSiProcede,
   conectarCloudStudio,
   rutaAuthPorDefecto,
   sesionCloudStudio,
+  urlDeMcpAceptable,
 } from "../../agent/cloudstudioMcp.js";
 import { clienteCloudStudio } from "../../agent/cloudstudioClient.js";
 import {
@@ -279,15 +281,13 @@ export function conexionDeVestibulo(urlDeLaWeb?: string): Pick<
   };
 }
 
-/** Una URL de entorno tiene que ser HTTPS y sin credenciales, como la de `cloudstudioMcp`. */
-function urlDeEntornoValida(valor: string): boolean {
-  try {
-    const url = new URL(valor);
-    return url.protocol === "https:" && url.username === "" && url.password === "";
-  } catch {
-    return false;
-  }
-}
+/**
+ * La regla de URL de entorno es la MISMA que la de quien conecta de verdad
+ * (`agent/cloudstudioMcp.ts#urlDeMcpAceptable`), importada y no copiada: cuando eran dos
+ * criterios, el wizard aceptaba un loopback que este fichero rechazaba, con dos mensajes
+ * claros que se contradecían. Ver allí por qué se resolvió por el lado permisivo.
+ */
+const urlDeEntornoValida = urlDeMcpAceptable;
 
 export function crearVestibulo(opciones: OpcionesDelVestibulo): Vestibulo {
   const sesiones = opciones.sesiones ?? SESIONES_EN_DISCO;
@@ -513,7 +513,7 @@ export function crearVestibulo(opciones: OpcionesDelVestibulo): Vestibulo {
 
     async registrarEntorno(entorno) {
       if (!urlDeEntornoValida(entorno.url)) {
-        throw new Error("la URL de un entorno debe ser HTTPS y no puede incluir credenciales");
+        throw new Error(AVISO_DE_URL_DE_MCP);
       }
       const guardado = opciones.guardarEntorno(entorno);
       // Justo después de registrar, y no antes: `adoptarLegadoSiProcede` solo actúa si la
