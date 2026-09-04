@@ -43,6 +43,8 @@ export type ManejadorRuta = (
 
 export interface ServidorWeb {
   readonly puerto: number;
+  /** La dirección de bind REAL (`servidorHttp.address().address`), no una construida. */
+  readonly direccion: string;
   readonly token: string;
   readonly url: string;
   /** Registra un manejador propio para `MÉTODO ruta` — usado por tareas futuras (SSE, acciones). */
@@ -71,6 +73,7 @@ export async function arrancarServidor(opciones: OpcionesServidor): Promise<Serv
   const rutas = new Map<string, ManejadorRuta>();
 
   let puertoReal = opciones.puerto;
+  let direccionReal = "127.0.0.1";
   const contexto = (): ContextoPeticion => ({ raizReal, token, rutas, puerto: puertoReal });
 
   const servidorHttp: Server = createServer((peticion, respuesta) => {
@@ -95,8 +98,13 @@ export async function arrancarServidor(opciones: OpcionesServidor): Promise<Serv
       rechazar(error);
     });
     servidorHttp.once("listening", () => {
+      // `address()` es la única fuente de verdad del bind real; un test que compare
+      // contra una cadena que él mismo construye pasaría igual con `listen(..., "0.0.0.0")`.
       const direccion = servidorHttp.address();
-      if (typeof direccion === "object" && direccion !== null) puertoReal = direccion.port;
+      if (typeof direccion === "object" && direccion !== null) {
+        puertoReal = direccion.port;
+        direccionReal = direccion.address;
+      }
       resolver();
     });
     servidorHttp.listen(opciones.puerto, "127.0.0.1");
@@ -105,6 +113,9 @@ export async function arrancarServidor(opciones: OpcionesServidor): Promise<Serv
   return {
     get puerto() {
       return puertoReal;
+    },
+    get direccion() {
+      return direccionReal;
     },
     token,
     get url() {

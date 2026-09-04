@@ -1,5 +1,5 @@
 import { describe, it, expect, afterEach } from "vitest";
-import { mkdtempSync, writeFileSync, mkdirSync } from "node:fs";
+import { mkdtempSync, writeFileSync, mkdirSync, symlinkSync } from "node:fs";
 import { request } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -50,8 +50,11 @@ async function levantar(): Promise<{ base: string; token: string; raizEstaticos:
 
 describe("servidor web", () => {
   it("escucha en loopback", async () => {
-    const { base } = await levantar();
-    expect(base).toContain("127.0.0.1");
+    // Comparar contra `base` (una cadena que el propio test construye) pasaría igual si
+    // el servidor escuchara en `0.0.0.0`: no probaría nada. `direccion` es la dirección
+    // de bind REAL que devuelve `servidorHttp.address()`.
+    await levantar();
+    expect(servidor!.direccion).toBe("127.0.0.1");
   });
 
   it("una ruta de API sin token es 401", async () => {
@@ -104,6 +107,19 @@ describe("servidor web", () => {
     const r = await fetch(`${base}/.xonecode/secreto.json?t=${token}`);
     expect(r.status).toBe(403);
     expect(await r.text()).not.toContain("token");
+  });
+
+  it("un symlink dentro de la raíz que apunta fuera es 403: la contención es sobre la ruta RESUELTA", async () => {
+    const { token, raizEstaticos } = await levantar();
+    try {
+      symlinkSync("/etc/hosts", join(raizEstaticos, "fuera.html"));
+    } catch {
+      // Sin privilegios de symlink (Windows sin modo desarrollador, por ejemplo): no hay
+      // nada que crear, así que no hay nada que probar aquí — el test se salta solo.
+      return;
+    }
+    const r = await fetch(`http://127.0.0.1:${servidor!.puerto}/fuera.html?t=${token}`);
+    expect(r.status).toBe(403);
   });
 
   it("NUNCA se sirve .xonecode ni con otro CASO en la ruta", async () => {
