@@ -1,0 +1,152 @@
+{
+  "planPath": "docs/superpowers/plans/2026-09-04-consola-web.md",
+  "tasks": [
+    {
+      "id": 0,
+      "subject": "Task 0: `vitest.config.ts`",
+      "status": "pending",
+      "description": "**Goal:** Que el repo tenga una config de vitest que elija `environment` por glob y excluya `.worktrees/`, para que el cliente web pueda tener tests de DOM sin contaminar la suite del host.\n\n**Files:**\n- Create: `vitest.config.ts`\n- Modify: `CLAUDE.md` (la sección que documenta la ausencia de config como coste medido)\n\n**Acceptance Criteria:**\n- [ ] `npm test` corre los mismos ficheros que hoy más ninguno de `.worktrees/`\n- [ ] Los tests bajo `src/**` corren con `environment: \"node\"`\n- [ ] Los tests bajo `apps/web/**` corren con `environment: \"jsdom\"`\n- [ ] `npx vitest run` sin la bandera `--exclude` ya no barre `.worktrees/`\n\n**Verify:** `npx vitest run --reporter=basic 2>&1 | tail -5` → el recuento de ficheros no incluye `.worktrees/`\n\n```json:metadata\n{\"files\": [\"vitest.config.ts\", \"CLAUDE.md\"], \"verifyCommand\": \"npx vitest run --reporter=basic\", \"acceptanceCriteria\": [\"la suite sigue verde\", \".worktrees/ excluido sin bandera\", \"environment jsdom para apps/web y node para src\"], \"modelTier\": \"mechanical\"}\n```"
+    },
+    {
+      "id": 1,
+      "subject": "Task 1: `decidirPiel` y las banderas nuevas",
+      "status": "pending",
+      "description": "**Goal:** Que exista la decisión de piel (web / consola) como función pura probada, con `--web`, `--cli`, `--no-abrir` y `--puerto`, **sin cambiar todavía la omisión**: la web es opt-in hasta la última tarea.\n\n**Files:**\n- Modify: `src/cli/main.ts` (junto a `decidirTui`, línea 273)\n- Modify: `src/cli/main.test.ts`\n\n**Acceptance Criteria:**\n- [ ] `decidirPiel([])` devuelve `\"consola\"` (la omisión NO cambia en esta tarea)\n- [ ] `decidirPiel([\"--web\"])` devuelve `\"web\"` aunque no haya TTY\n- [ ] `decidirPiel([\"--cli\"])` devuelve `\"consola\"` incluso junto a `--web`\n- [ ] `parsearOpcionesWeb` lee `--puerto 4300` y `--no-abrir`\n- [ ] `--puerto` con un valor no numérico o fuera de 1..65535 es error de USO (código 64)\n- [ ] `decidirTui` no cambia de comportamiento\n\n**Verify:** `npx vitest run src/cli/main.test.ts -t \"decidirPiel\"` → PASS\n\n```json:metadata\n{\"files\": [\"src/cli/main.ts\", \"src/cli/main.test.ts\"], \"verifyCommand\": \"npx vitest run src/cli/main.test.ts\", \"acceptanceCriteria\": [\"decidirPiel([]) === consola\", \"--cli gana a --web\", \"--puerto no numérico o 7634 es error de uso 64\", \"decidirTui sin cambios\"], \"modelTier\": \"mechanical\"}\n```",
+      "blockedBy": [
+        0
+      ]
+    },
+    {
+      "id": 2,
+      "subject": "Task 2: `core/actos.ts` — el acto deja de ser de la TUI",
+      "status": "pending",
+      "description": "**Goal:** Extraer el tipo `Acto` de `cli/tui/store.ts` a `core/actos.ts`, porque ahora lo comparten dos pieles y el servidor web no puede importar de `cli/tui/`.\n\n**Files:**\n- Create: `src/core/actos.ts`\n- Modify: `src/cli/tui/store.ts` (importa el tipo en vez de declararlo)\n- Create: `src/core/actos.test.ts`\n\n**Acceptance Criteria:**\n- [ ] `Acto` vive en `core/actos.ts` y `cli/tui/store.ts` lo importa\n- [ ] `core/imports.test.ts` sigue en verde (el fichero nuevo no importa nada prohibido)\n- [ ] Toda la suite de la TUI sigue verde sin cambios de comportamiento\n- [ ] `core/actos.ts` no importa nada de `cli/`\n\n**Verify:** `npx vitest run src/core src/cli/tui` → PASS\n\n```json:metadata\n{\"files\": [\"src/core/actos.ts\", \"src/core/actos.test.ts\", \"src/cli/tui/store.ts\"], \"verifyCommand\": \"npx vitest run src/core src/cli && npm run typecheck\", \"acceptanceCriteria\": [\"Acto vive en core/actos.ts\", \"store.ts lo importa y re-exporta\", \"imports.test.ts sigue verde\", \"typecheck limpio\"], \"modelTier\": \"mechanical\"}\n```",
+      "blockedBy": [
+        0
+      ]
+    },
+    {
+      "id": 3,
+      "subject": "Task 3: Los settings globales y los entornos",
+      "status": "pending",
+      "description": "**Goal:** Que exista `~/.xonecode/settings.json` con la lista de entornos de CloudStudio y la base del workspace, con tipos puros en `core/` y un escritor en `agent/` que nunca destruye lo que había.\n\n**Files:**\n- Create: `src/core/settings.ts`\n- Create: `src/core/settings.test.ts`\n- Create: `src/agent/settingsEnDisco.ts`\n- Create: `src/agent/settingsEnDisco.test.ts`\n\n**Acceptance Criteria:**\n- [ ] `validarSettings` acepta entornos bien formados y descarta los rotos sin lanzar\n- [ ] `validarSettings` **rechaza claves de API**: un settings con `apiKey`/`api_key`/`clave` lanza, igual que hace `config.json`\n- [ ] `rutaDeWorkspace(base, entorno, proyecto)` da `<base>/<entorno>/workspace/<proyecto>` y es pura\n- [ ] `rutaDeWorkspace` rechaza un id de entorno o un nombre de proyecto con `/`, `\\` o `..`\n- [ ] `guardarEntorno` sobre un fichero con dos entornos deja los dos y añade el tercero\n- [ ] `guardarEntorno` sobre un JSON roto **lanza sin escribir** y el fichero queda intacto\n- [ ] El fichero se escribe con modo 0600 dentro de un directorio 0700\n\n**Verify:** `npx vitest run src/core/settings.test.ts src/agent/settingsEnDisco.test.ts` → PASS\n\n```json:metadata\n{\"files\": [\"src/core/settings.ts\", \"src/core/settings.test.ts\", \"src/agent/settingsEnDisco.ts\", \"src/agent/settingsEnDisco.test.ts\"], \"verifyCommand\": \"npx vitest run src/core/settings.test.ts src/agent/settingsEnDisco.test.ts\", \"acceptanceCriteria\": [\"validarSettings rechaza claves de API\", \"rutaDeWorkspace es pura y rechaza .. y separadores\", \"guardarEntorno no destruye lo que había\", \"JSON roto para sin escribir\", \"0600/0700\"], \"modelTier\": \"standard\"}\n```",
+      "blockedBy": [
+        0
+      ]
+    },
+    {
+      "id": 4,
+      "subject": "Task 4: Los tokens de OAuth, por entorno",
+      "status": "pending",
+      "description": "**Goal:** Que `~/.xonecode/cloudstudio-oauth.json` deje de ser un único juego de tokens y pase a estar indexado por entorno, con una migración que no pierde el que ya existe.\n\n**Files:**\n- Modify: `src/agent/cloudstudioMcp.ts` (`EstadoOAuth`, `leerEstado`, `guardarEstado`, líneas 34-40 y 154-180)\n- Modify: `src/agent/cloudstudioMcp.test.ts`\n\n**Acceptance Criteria:**\n- [ ] Un fichero nuevo se escribe como `{ version: 2, porEntorno: { … } }`\n- [ ] Un fichero SIN `version` (el plano de hoy) se lee como el juego de la clave `legado` y **no se pierde**\n- [ ] `legado` se adopta como el juego del primer entorno registrado cuya `url` sea `https://mcp.xonewebstudio.com/mcp`, y solo entonces\n- [ ] Si nunca se registra ese entorno, `legado` queda intacto para siempre\n- [ ] Cerrar sesión en un entorno no toca los tokens de los demás\n- [ ] Un fichero corrupto sigue devolviendo `{}` sin imprimir su contenido (comportamiento actual, no se toca)\n\n**Verify:** `npx vitest run src/agent/cloudstudioMcp.test.ts` → PASS\n\n```json:metadata\n{\"files\": [\"src/agent/cloudstudioMcp.ts\", \"src/agent/cloudstudioMcp.test.ts\"], \"verifyCommand\": \"npx vitest run src/agent/cloudstudioMcp.test.ts && npm run typecheck\", \"acceptanceCriteria\": [\"formato v2 indexado por entorno\", \"el plano de hoy va a legado y no se pierde\", \"legado se adopta solo con la URL por omisión\", \"cerrar sesión en uno no toca los demás\", \"corrupto sigue dando vacío sin imprimir\"], \"modelTier\": \"standard\"}\n```",
+      "blockedBy": [
+        0
+      ]
+    },
+    {
+      "id": 5,
+      "subject": "Task 5: El servidor HTTP",
+      "status": "pending",
+      "description": "**Goal:** Un `node:http` en loopback que sirve `apps/web/dist`, autentica por token, comprueba `Origin`/`Host` en toda petición y **no sirve jamás** nada de `.xonecode`.\n\n**Files:**\n- Create: `src/web/servidor/servidor.ts`\n- Create: `src/web/servidor/servidor.test.ts`\n\n**Acceptance Criteria:**\n- [ ] Escucha solo en `127.0.0.1`; no hay forma de pedir `0.0.0.0`\n- [ ] Una petición sin token y sin cookie a una ruta de API es **401**\n- [ ] El token de la URL se canjea por cookie `HttpOnly`, `SameSite=Strict`\n- [ ] Una petición con `Host` que no sea `127.0.0.1:<puerto>` o `localhost:<puerto>` es **403** (DNS rebinding)\n- [ ] Una petición con `Origin` de otro sitio es **403**\n- [ ] `GET /../../etc/passwd` y cualquier recorrido fuera de `dist` es **403**\n- [ ] `POST` a un estático es **405**; un fichero que no existe es **404** vacío\n- [ ] Una ruta que resuelva dentro de `.xonecode` (del proyecto o del home) es **403**, aunque exista\n- [ ] `EADDRINUSE` produce un mensaje que dice el puerto y `--puerto`, no una traza\n- [ ] Los tests corren **sin navegador**: peticiones con `fetch` contra el servidor levantado en un puerto efímero\n\n**Verify:** `npx vitest run src/web/servidor/servidor.test.ts` → PASS\n\n```json:metadata\n{\"files\": [\"src/web/servidor/servidor.ts\", \"src/web/servidor/servidor.test.ts\"], \"verifyCommand\": \"npx vitest run src/web/servidor/servidor.test.ts\", \"acceptanceCriteria\": [\"loopback y sin opción de 0.0.0.0\", \"401 sin token\", \"cookie HttpOnly SameSite=Strict\", \"403 por Host o Origin ajenos\", \"403 en recorrido y en .xonecode\", \"405/404\", \"EADDRINUSE legible\"], \"modelTier\": \"standard\"}\n```",
+      "blockedBy": [
+        0
+      ]
+    },
+    {
+      "id": 6,
+      "subject": "Task 6: `pielWeb` — la Piel que produce actos",
+      "status": "pending",
+      "description": "**Goal:** Una implementación de `Piel` que traduce los eventos del turno a la lista de actos, con la misma semántica que la TUI (tokens a colchón, cascada de fases, agrupación de tools) y **sin argumentos de tool**.\n\n**Files:**\n- Create: `src/web/servidor/pielWeb.ts`\n- Create: `src/web/servidor/pielWeb.test.ts`\n\n**Acceptance Criteria:**\n- [ ] Implementa `Piel` entera, `fase?` y `notificacion?` incluidos (la web sí sabe animar fases y reciclar avisos)\n- [ ] Los tokens se acumulan en un colchón y `cerrarLinea` los solidifica en un acto `asistente`\n- [ ] Las líneas de tool consecutivas se agrupan en un solo acto `herramientas`\n- [ ] Una línea de asistente o de sistema cierra el grupo de herramientas\n- [ ] `fin` produce un acto `fin` con los ms\n- [ ] `pausa` produce un acto `sistema` con la **descripción** del pendiente, y **nunca** el diff\n- [ ] Ningún acto producido contiene una llave `{` que venga de argumentos de tool\n\n**Verify:** `npx vitest run src/web/servidor/pielWeb.test.ts` → PASS\n\n```json:metadata\n{\"files\": [\"src/web/servidor/pielWeb.ts\", \"src/web/servidor/pielWeb.test.ts\"], \"verifyCommand\": \"npx vitest run src/web/servidor/pielWeb.test.ts && npm run typecheck\", \"acceptanceCriteria\": [\"Piel completa con fase y notificacion\", \"colchón de tokens\", \"agrupación de herramientas\", \"pausa sin diff\", \"ningún argumento de tool\"], \"modelTier\": \"standard\"}\n```",
+      "blockedBy": [
+        2
+      ]
+    },
+    {
+      "id": 7,
+      "subject": "Task 7: `consolaWeb` y el transporte (SSE + POST), con la aprobación fail-closed",
+      "status": "pending",
+      "description": "**Goal:** Una implementación de `Consola` alimentada por el navegador, con SSE para servidor→cliente y `POST /accion` para cliente→servidor, y una aprobación que **rechaza por transporte**.\n\n**Files:**\n- Create: `src/web/servidor/transporte.ts`\n- Create: `src/web/servidor/consolaWeb.ts`\n- Create: `src/web/servidor/consolaWeb.test.ts`\n\n**Acceptance Criteria:**\n- [ ] `consolaWeb` implementa `Consola`: `lineas`, `escribir`, `preguntar`, `leerSecreto`, `interactivo: true`, `seleccionar`, `piel`, `aprobacionesTui`, `catalogoModelos`, `guardarModeloGlobal`\n- [ ] `lineas` es una cola asíncrona: cada prosa que llega por `POST /accion` sale por el iterador\n- [ ] Cerrar la sesión agota `lineas` (EOF), y el lazo de `correrConsola` **retorna**; no cuelga\n- [ ] Una reconexión del SSE **reemite todos los actos** desde el principio, sin duplicarlos en el servidor\n- [ ] La aprobación con el cliente desconectado devuelve **rechazo** para todos los pendientes\n- [ ] La aprobación que expira (timeout) devuelve **rechazo**\n- [ ] Solo una decisión explícita `\"si\"` aprueba; cualquier otra cosa, y la ausencia, es rechazo\n- [ ] El **diff viaja solo** en el mensaje de aprobación y no aparece en ningún acto ni en el SSE de eventos\n- [ ] `leerSecreto` no deja el secreto en ningún acto, ningún log ni ningún evento\n\n**Verify:** `npx vitest run src/web/servidor/consolaWeb.test.ts` → PASS\n\n```json:metadata\n{\"files\": [\"src/web/servidor/transporte.ts\", \"src/web/servidor/consolaWeb.ts\", \"src/web/servidor/consolaWeb.test.ts\"], \"verifyCommand\": \"npx vitest run src/web/servidor/consolaWeb.test.ts && npm run typecheck\", \"acceptanceCriteria\": [\"Consola completa\", \"lineas como cola con EOF\", \"reconexión reemite sin duplicar\", \"desconexión/timeout/decisión ilegible = rechazo\", \"solo «si» aprueba\", \"el diff solo en el mensaje de aprobación\", \"el secreto no queda en actos ni eventos\"], \"modelTier\": \"frontier\"}\n```",
+      "blockedBy": [
+        6
+      ]
+    },
+    {
+      "id": 8,
+      "subject": "Task 8: Las sesiones se guardan y se reabren",
+      "status": "pending",
+      "description": "**Goal:** Que cada proyecto guarde sus sesiones en `.xonecode/sesiones/` como actos, y que reabrir una reemita lo que pasó dejando claro que es **histórica** hasta el primer turno nuevo.\n\n**Files:**\n- Create: `src/web/servidor/sesiones.ts`\n- Create: `src/web/servidor/sesiones.test.ts`\n\n**Acceptance Criteria:**\n- [ ] `.xonecode/sesiones/indice.json` lista `{id, titulo, creada, ultimoTurno}` por sesión\n- [ ] `.xonecode/sesiones/<id>.jsonl` guarda **un acto por línea**\n- [ ] El título de una sesión sale de la primera prosa del usuario, recortada\n- [ ] Reabrir devuelve los actos en orden y marca la sesión como histórica\n- [ ] El primer turno nuevo sobre una sesión reabierta quita la marca\n- [ ] Un `.jsonl` con una línea corrupta **salta esa línea** y devuelve las demás; no tumba la reapertura\n- [ ] Nada de lo guardado contiene diffs ni contenido de fichero\n- [ ] La escritura es por anexado (`appendFile`), no reescribiendo el fichero entero\n\n**Verify:** `npx vitest run src/web/servidor/sesiones.test.ts` → PASS\n\n```json:metadata\n{\"files\": [\"src/web/servidor/sesiones.ts\", \"src/web/servidor/sesiones.test.ts\"], \"verifyCommand\": \"npx vitest run src/web/servidor/sesiones.test.ts && npm run typecheck\", \"acceptanceCriteria\": [\"indice.json y jsonl por sesión\", \"un acto por línea, anexado\", \"título de la primera prosa\", \"reabrir marca histórica\", \"línea corrupta se salta\", \"sin diffs ni contenido\"], \"modelTier\": \"standard\"}\n```",
+      "blockedBy": [
+        7
+      ]
+    },
+    {
+      "id": 9,
+      "subject": "Task 9: El vestíbulo — el wizard de tres pasos y la apertura de un proyecto",
+      "status": "pending",
+      "description": "**Goal:** El estado que existe **antes** de que haya ninguna raíz: cuenta, entorno, proyecto y descarga; y la apertura de una consola de proyecto, **una a la vez**.\n\n**Files:**\n- Create: `src/web/servidor/vestibulo.ts`\n- Create: `src/web/servidor/vestibulo.test.ts`\n\n**Acceptance Criteria:**\n- [ ] El paso de **cuenta** solo aparece si el papel `trabajo` resuelve por `omision`, y es `asistenteDeModelo` **sin modificar**\n- [ ] El paso de **entorno** ofrece los dos oficiales pre-rellenados y un «otro» con URL libre, y registra en `settings.json`\n- [ ] El paso de **proyecto** lista con `herramientaDeProyectos`, elige rama y descarga al workspace\n- [ ] Cancelar antes de elegir no escribe nada\n- [ ] Cancelar **después** de elegir proyecto deja `config.json` escrito y **lo dice**\n- [ ] Una credencial tecleada en el paso 1 queda escrita aunque se cancele el paso 2, y se dice en el momento\n- [ ] Abrir un proyecto con otro ya abierto **cierra el primero** (agota sus `lineas`) antes de abrir el segundo\n- [ ] Un fallo de descarga no crea `.xonecode` a medias y dice que se reintente con `/sync bajar`\n- [ ] El `config.json` del proyecto gana `entorno: \"<id>\"` y **conserva** `cloudstudio.url`\n- [ ] En modo web, el callback de OAuth redirige a la URL de la web en vez de decir «vuelve a la terminal»\n- [ ] Todos los tests corren **offline**, con dobles del catálogo y de la conexión CloudStudio\n\n**Verify:** `npx vitest run src/web/servidor/vestibulo.test.ts` → PASS\n\n```json:metadata\n{\"files\": [\"src/web/servidor/vestibulo.ts\", \"src/web/servidor/vestibulo.test.ts\"], \"verifyCommand\": \"npx vitest run src/web/servidor/vestibulo.test.ts && npm run typecheck\", \"acceptanceCriteria\": [\"asistenteDeModelo sin modificar\", \"entornos oficiales + otro\", \"cancelar antes no escribe\", \"credencial escrita se dice\", \"una consola de proyecto a la vez\", \"fallo de descarga sin .xonecode a medias\"], \"modelTier\": \"frontier\"}\n```",
+      "blockedBy": [
+        3,
+        4,
+        7,
+        8
+      ]
+    },
+    {
+      "id": 10,
+      "subject": "Task 10: El paquete `apps/web` y los estilos de deepseek",
+      "status": "pending",
+      "description": "**Goal:** El paquete nuevo del cliente: workspaces de npm, Vite, tsconfig propio con `lib: dom`, el tema de deepseek copiado con su aviso MIT, y la frontera probada.\n\n**Files:**\n- Modify: `package.json` (raíz: `workspaces`, `build:web`)\n- Create: `apps/web/package.json`, `apps/web/tsconfig.json`, `apps/web/vite.config.ts`, `apps/web/index.html`\n- Create: `apps/web/src/main.tsx`, `apps/web/src/App.tsx`\n- Create: `apps/web/estilos/` (los CSS de deepseek)\n- Create: `THIRD_PARTY_NOTICES.md`\n- Create: `src/web/frontera.test.ts`\n\n**Acceptance Criteria:**\n- [ ] `npm run build:web` produce `apps/web/dist/index.html` y sus assets\n- [ ] `apps/web/estilos/` contiene los seis CSS de `ui-theme` con el aviso MIT en cabecera\n- [ ] `THIRD_PARTY_NOTICES.md` acredita a deepseek-harness (MIT) por los estilos\n- [ ] **No se copia ningún logo ni marca denominativa** de DeepSeek\n- [ ] `src/web/frontera.test.ts` falla si `react`, `react-dom`, `vite` o una API de DOM aparecen bajo `src/`\n- [ ] `src/web/frontera.test.ts` falla si algún fichero de `src/` importa de `apps/web/`\n- [ ] `npm test` sigue verde y sin navegador\n\n**Verify:** `npm run build:web && npx vitest run src/web/frontera.test.ts` → PASS\n\n```json:metadata\n{\"files\": [\"package.json\", \"apps/web/package.json\", \"apps/web/vite.config.ts\", \"apps/web/tsconfig.json\", \"apps/web/index.html\", \"apps/web/src/main.tsx\", \"apps/web/src/App.tsx\", \"apps/web/estilos/\", \"THIRD_PARTY_NOTICES.md\", \"src/web/frontera.test.ts\"], \"verifyCommand\": \"npm run build:web && npx vitest run src/web/frontera.test.ts\", \"acceptanceCriteria\": [\"build:web produce dist\", \"seis CSS con aviso MIT\", \"THIRD_PARTY_NOTICES acredita deepseek\", \"sin logos ni marca\", \"frontera prohíbe react-dom/vite en src/\", \"npm test verde sin navegador\"], \"modelTier\": \"standard\"}\n```",
+      "blockedBy": [
+        0
+      ]
+    },
+    {
+      "id": 11,
+      "subject": "Task 11: El cliente se conecta",
+      "status": "pending",
+      "description": "**Goal:** Que el navegador abra el SSE, mantenga el transcript y reconecte solo, con un store sin React probado aparte.\n\n**Files:**\n- Create: `apps/web/src/conexion.ts`\n- Create: `apps/web/src/store.ts`\n- Create: `apps/web/src/tipos.ts`\n- Create: `apps/web/src/store.test.ts`\n- Create: `apps/web/src/conexion.test.ts`\n- Create: `apps/web/src/tipos.test.ts`\n\n**Acceptance Criteria:**\n- [ ] `crearStoreDelCliente()` aplica un `acto` anexándolo y una `reemision` **sustituyendo** el transcript entero\n- [ ] Sustituir y no fusionar es lo que hace idempotente la reconexión: dos reemisiones seguidas dejan el mismo estado\n- [ ] La conexión reintenta con espera creciente (1 s, 2 s, 4 s, tope 30 s) y lo dice en el estado\n- [ ] Mientras está desconectada, el store lo refleja (`conectado: false`) para que la UI pueda deshabilitar el compositor\n- [ ] `enviar()` hace `POST /accion` con `credentials: \"same-origin\"` y `content-type: application/json`\n- [ ] El store no importa React: se prueba sin montar nada\n\n**Verify:** `npx vitest run apps/web/src/store.test.ts apps/web/src/conexion.test.ts` → PASS\n\n```json:metadata\n{\"files\": [\"apps/web/src/conexion.ts\", \"apps/web/src/store.ts\", \"apps/web/src/tipos.ts\", \"apps/web/src/store.test.ts\", \"apps/web/src/conexion.test.ts\", \"apps/web/src/tipos.test.ts\"], \"verifyCommand\": \"npx vitest run apps/web/src/\", \"acceptanceCriteria\": [\"acto anexa, reemisión sustituye\", \"dos reemisiones dejan el mismo estado\", \"reintento creciente con tope 30s\", \"conectado en el estado\", \"store sin React\", \"los tipos de acto no divergen del host\"], \"modelTier\": \"standard\"}\n```",
+      "blockedBy": [
+        10
+      ]
+    },
+    {
+      "id": 12,
+      "subject": "Task 12: La maqueta — barra derecha, cabecera y compositor",
+      "status": "pending",
+      "description": "**Goal:** La pantalla: barra lateral **a la derecha** con entorno → proyectos → sesiones, cabecera de sesión, y el compositor, con los estilos de deepseek.\n\n**Files:**\n- Create: `apps/web/src/componentes/Maqueta.tsx` + `Maqueta.module.css`\n- Create: `apps/web/src/componentes/Barra.tsx` + `Barra.module.css`\n- Create: `apps/web/src/componentes/Compositor.tsx` + `Compositor.module.css`\n- Create: `apps/web/src/componentes/Cabecera.tsx` + `Cabecera.module.css`\n- Create: `apps/web/src/componentes/Barra.test.tsx`\n- Modify: `apps/web/src/App.tsx`\n\n**Acceptance Criteria:**\n- [ ] La barra está **a la derecha** y muestra tres niveles: entorno (selector), proyectos, sesiones anidadas\n- [ ] Una sesión histórica se distingue visualmente de una viva\n- [ ] El compositor se deshabilita cuando `conectado === false`\n- [ ] Enter envía; Shift+Enter hace salto de línea\n- [ ] Una línea que empieza por `/` viaja **por el mismo camino que la prosa**: la despacha\n      `correrConsola` contra el registro `COMANDOS` (`cli/consola.ts:819`), así que `/ayuda`,\n      `/modelo`, `/config`, `/sync` y `/hilo` funcionan en la web **sin código nuevo**\n- [ ] El compositor ofrece las sugerencias de comando leyendo el mismo registro, no una copia\n- [ ] Los componentes usan **solo alias semánticos** `--dsw-alias-*`; ningún color literal\n- [ ] Ningún selector de tema (`prefers-color-scheme`, `[data-theme]`) en un CSS de componente\n- [ ] Un test comprueba las dos reglas anteriores leyendo los `.module.css`\n\n**Verify:** `npx vitest run apps/web/src/componentes/` → PASS\n\n```json:metadata\n{\"files\": [\"apps/web/src/componentes/Maqueta.tsx\", \"apps/web/src/componentes/Barra.tsx\", \"apps/web/src/componentes/Compositor.tsx\", \"apps/web/src/componentes/Cabecera.tsx\", \"apps/web/src/componentes/Barra.test.tsx\", \"apps/web/src/App.tsx\"], \"verifyCommand\": \"npx vitest run apps/web/src/componentes/ && npm run build:web\", \"acceptanceCriteria\": [\"barra a la derecha con tres niveles\", \"sesión histórica distinguible\", \"compositor deshabilitado sin conexión\", \"Enter envía y Shift+Enter salta\", \"sin colores literales\", \"sin selectores de tema en componentes\"], \"modelTier\": \"standard\"}\n```",
+      "blockedBy": [
+        11
+      ]
+    },
+    {
+      "id": 13,
+      "subject": "Task 13: Chat, Trayectoria y la barra de estado",
+      "status": "pending",
+      "description": "**Goal:** Las dos vistas del transcript —Chat con markdown y Trayectoria técnica— y la barra de estado inferior, con la Trayectoria **sin argumentos de tool**.\n\n**Files:**\n- Create: `apps/web/src/componentes/Chat.tsx` + `Chat.module.css`\n- Create: `apps/web/src/componentes/Trayectoria.tsx` + `Trayectoria.module.css`\n- Create: `apps/web/src/componentes/BarraDeEstado.tsx` + `BarraDeEstado.module.css`\n- Create: `apps/web/src/markdown.ts`\n- Create: `apps/web/src/markdown.test.ts`\n- Create: `apps/web/src/componentes/Trayectoria.test.tsx`\n\n**Acceptance Criteria:**\n- [ ] El Chat renderiza markdown: encabezados, listas, `código`, bloques de código y tablas\n- [ ] El markdown se **sanea** antes de insertarse: `<script>`, `onerror=` y `javascript:` no sobreviven\n- [ ] La Trayectoria pinta una fila por acto, monoespaciada y truncada a una línea\n- [ ] Un test comprueba que **ninguna fila** de Trayectoria contiene un JSON de argumentos\n- [ ] La barra de estado lleva turnos, pasos, tiempo y contexto, y **omite el porcentaje si no hay tope** (ollama no tiene tope a propósito)\n- [ ] Las dos vistas se alternan con pestañas y la elegida se recuerda mientras dure la página\n\n**Verify:** `npx vitest run apps/web/src/markdown.test.ts apps/web/src/componentes/Trayectoria.test.tsx` → PASS\n\n```json:metadata\n{\"files\": [\"apps/web/src/componentes/Chat.tsx\", \"apps/web/src/componentes/Trayectoria.tsx\", \"apps/web/src/componentes/BarraDeEstado.tsx\", \"apps/web/src/markdown.ts\", \"apps/web/src/markdown.test.ts\", \"apps/web/src/componentes/Trayectoria.test.tsx\"], \"verifyCommand\": \"npx vitest run apps/web/ && npm run build:web\", \"acceptanceCriteria\": [\"markdown básico renderizado\", \"script/onerror/javascript: saneados\", \"una fila por acto truncada\", \"ninguna fila con argumentos de tool\", \"sin porcentaje si no hay tope\", \"pestañas Chat/Trayectoria\"], \"modelTier\": \"standard\"}\n```",
+      "blockedBy": [
+        12
+      ]
+    },
+    {
+      "id": 14,
+      "subject": "Task 14: El modal de aprobación y el wizard en la interfaz",
+      "status": "pending",
+      "description": "**Goal:** Las dos interacciones que faltan: aprobar cambios con el diff delante (fail-closed) y el alta de tres pasos en el navegador.\n\n**Files:**\n- Create: `apps/web/src/componentes/Aprobacion.tsx` + `Aprobacion.module.css`\n- Create: `apps/web/src/componentes/Aprobacion.test.tsx`\n- Create: `apps/web/src/componentes/Wizard.tsx` + `Wizard.module.css`\n- Create: `apps/web/src/componentes/Wizard.test.tsx`\n\n**Acceptance Criteria:**\n- [ ] El modal enseña el diff **entero** por fichero: es el único sitio donde el contenido se ve completo, porque es el paso donde se decide\n- [ ] Solo el botón «Aprobar» aprueba; «Rechazar», Escape y cerrar la pestaña rechazan\n- [ ] Cerrar el modal sin decidir envía **rechazo explícito**, no silencio\n- [ ] El wizard tiene tres pasos y solo enseña los que faltan\n- [ ] El campo de la clave de API es `type=\"password\"`, tiene `autocomplete=\"off\"` y **no se guarda en el store**\n- [ ] Registrar un entorno «otro» pide nombre y URL, y valida que la URL sea `https://` (o `http://` solo en loopback, para el on-premise en desarrollo)\n- [ ] Al guardar una credencial, la interfaz dice **dónde** quedó, antes de seguir\n\n**Verify:** `npx vitest run apps/web/src/componentes/Aprobacion.test.tsx apps/web/src/componentes/Wizard.test.tsx` → PASS\n\n```json:metadata\n{\"files\": [\"apps/web/src/componentes/Aprobacion.tsx\", \"apps/web/src/componentes/Aprobacion.test.tsx\", \"apps/web/src/componentes/Wizard.tsx\", \"apps/web/src/componentes/Wizard.test.tsx\"], \"verifyCommand\": \"npx vitest run apps/web/ && npm run build:web\", \"acceptanceCriteria\": [\"el diff entero visible en el modal\", \"solo Aprobar aprueba\", \"Escape y desmontar rechazan explícitamente\", \"solo los pasos que faltan\", \"clave en campo password fuera del store\", \"URL validada https o loopback\", \"se dice dónde quedó la credencial\"], \"modelTier\": \"frontier\"}\n```",
+      "blockedBy": [
+        13
+      ]
+    },
+    {
+      "id": 15,
+      "subject": "Task 15: El cambio de omisión y la documentación",
+      "status": "pending",
+      "description": "**Goal:** Que `xonecode` abra la web, que `--cli` siga dando la consola entera, que un proyecto offline lo diga en vez de callar, y que CLAUDE.md y el README cuenten la verdad.\n\n**Files:**\n- Modify: `src/cli/main.ts` (`decidirPiel`, y la rama que arranca la web)\n- Modify: `src/cli/main.test.ts`\n- Modify: `CLAUDE.md`\n- Modify: `README.md`\n- Modify: `docs/COMO-PROBARLO.md`\n\n**Acceptance Criteria:**\n- [ ] `decidirPiel([])` con stdin TTY devuelve `\"web\"`\n- [ ] `decidirPiel([])` **sin** stdin TTY devuelve `\"consola\"` (el e2e de tubería no se mueve)\n- [ ] `--cli` sigue ganando siempre\n- [ ] `xonecode` imprime la URL con el token y abre el navegador salvo con `--no-abrir`\n- [ ] Si falta `apps/web/dist`, el comando dice «falta el build del cliente: `npm run build:web`» y sale, sin traza\n- [ ] Si el cwd tiene `.xonecode` con `modo: \"offline\"`, la web lo dice al arrancar y sugiere `xonecode --cli`\n- [ ] Los subcomandos y sus códigos de salida (0/1/2/64/70) no cambian\n- [ ] `npm test` entero en verde y `npm run typecheck` limpio\n\n**Verify:** `npm test && npm run typecheck` → PASS\n\n```json:metadata\n{\"files\": [\"src/cli/main.ts\", \"src/cli/main.test.ts\", \"CLAUDE.md\", \"README.md\", \"docs/COMO-PROBARLO.md\"], \"verifyCommand\": \"npm test && npm run typecheck && npm run build\", \"acceptanceCriteria\": [\"con TTY la omisión es web\", \"sin TTY la omisión es consola\", \"--cli gana siempre\", \"falta el build del cliente sale 70 con mensaje\", \"proyecto offline avisado\", \"subcomandos y códigos intactos\", \"suite verde y typecheck limpio\"], \"modelTier\": \"standard\"}\n```",
+      "blockedBy": [
+        9,
+        14,
+        1
+      ]
+    }
+  ],
+  "lastUpdated": "2026-09-04T08:09:58.647014+00:00"
+}
