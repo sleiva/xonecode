@@ -1,8 +1,10 @@
 {
+  "// lib": "Sin esto TS añade DOM al lib por omisión de ES2022: un document.getElementById en src/ compilaría limpio pese a que el DOM vive solo en apps/web/ (frontera vigilada por src/web/frontera.test.ts). Medido al fijar lib a solo ES2022: npm run typecheck sigue en 0 errores sobre el árbol actual, y un document.* metido a mano en src/agent/xoneAgent.ts para probarlo falla con TS2584 — antes compilaba limpio. No lo quites para 'simplificar': es la comprobación que cierra el hueco.",
   "compilerOptions": {
     "target": "ES2022",
     "module": "NodeNext",
     "moduleResolution": "NodeNext",
+    "lib": ["ES2022"],
     "strict": true,
     "esModuleInterop": true,
     "skipLibCheck": true,
