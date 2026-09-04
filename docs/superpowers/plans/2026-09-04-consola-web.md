@@ -2224,7 +2224,7 @@ git commit -m "feat(web): la maqueta — barra derecha de entorno/proyecto/sesi�
 
 **Acceptance Criteria:**
 - [ ] El Chat renderiza markdown: encabezados, listas, `código`, bloques de código y tablas
-- [ ] El markdown se **sanea** antes de insertarse: `<script>`, `onerror=` y `javascript:` no sobreviven
+- [ ] El markdown se renderiza con `MarkdownText` de `@deepseek-ai/dsh-client-ui-primitives`, y se comprueba **contra el componente real** que `<script>`, `<img onerror=…>` y un enlace `javascript:` no producen HTML activo: tienen que salir como texto literal
 - [ ] La Trayectoria pinta una fila por acto, monoespaciada y truncada a una línea
 - [ ] Un test comprueba que **ninguna fila** de Trayectoria contiene un JSON de argumentos
 - [ ] La barra de estado lleva turnos, pasos, tiempo y contexto, y **omite el porcentaje si no hay tope** (ollama no tiene tope a propósito)
@@ -2238,10 +2238,12 @@ git commit -m "feat(web): la maqueta — barra derecha de entorno/proyecto/sesi�
 - [ ] **Step 1: Añadir las dos dependencias del renderizado y decir por qué**
 
 ```bash
-npm install --workspace apps/web marked@^15 dompurify@^3
+npm install --workspace apps/web @deepseek-ai/dsh-client-ui-primitives@0.0.1-rc.1
 ```
 
-`marked` convierte markdown a HTML; `dompurify` lo sanea antes de insertarlo. Son dos y no una a propósito: el texto que se pinta viene de un modelo, y un modelo puede emitir `<img onerror=…>` sin ninguna mala intención. Insertar HTML de un modelo sin sanear es la vía corta a ejecutar código en la página que tiene la cookie de sesión del servidor local.
+Versión exacta porque hoy es un release candidate. Es el paquete de primitivos de deepseek-harness, y sus propios tipos lo declaran **`Cordis-free React primitives styled only through --dsw-* tokens`**: funciona sin su arquitectura de plugins y con los tokens que ya copiamos.
+
+Se usa en vez de `marked` + un saneador, y la razón es de fondo. El texto lo escribe un MODELO, que puede emitir `<img onerror=…>` sin ninguna mala intención, y la página tiene la cookie de sesión de un servidor local que escribe ficheros. Parsear a HTML y luego sanear depende de que al saneador no se le escape nada. `MarkdownText` se declara renderizador de Markdown **no confiable** y su política es más fuerte: **el HTML crudo se renderiza como texto literal, ninguno entra en el DOM** —no hay nada que sanear porque nunca se construye HTML—, con lista blanca de protocolos en enlaces e imágenes, imágenes solo por HTTP(S) absoluto y KaTeX sin comandos de confianza. Y parsea incrementalmente para streaming, congelando los bloques cerrados, que es exactamente nuestro caso.
 
 - [ ] **Step 2: Escribir los tests**
 
@@ -2306,23 +2308,14 @@ Expected: FAIL.
 
 ```ts
 /**
- * Markdown a HTML, saneado.
+ * El Chat pinta con `MarkdownText`, de los primitivos de deepseek-harness.
  *
- * El texto lo escribe un MODELO. `marked` no sanea —lo dice su propia documentación— y un
- * modelo puede emitir `<img onerror=…>` sin ninguna mala intención. La página tiene la
- * cookie de sesión del servidor local, así que insertar HTML sin sanear sería regalar la
- * consola entera. Los dos pasos son obligatorios y en este orden.
+ * No hay módulo propio de markdown ni saneador: `MarkdownText` renderiza el HTML crudo como
+ * TEXTO LITERAL —ninguno entra en el DOM—, así que no hay un paso de saneo al que se le
+ * pueda escapar algo. Es la misma propiedad que buscábamos, obtenida por construcción en vez
+ * de por filtrado.
  */
-import { marked } from "marked";
-import DOMPurify from "dompurify";
-
-export function aHtml(markdown: string): string {
-  return DOMPurify.sanitize(marked.parse(markdown, { async: false }) as string);
-}
-```
-
-- [ ] **Step 5: Implementar la Trayectoria**
-
+import { MarkdownText } from "@deepseek-ai/dsh-client-ui-primitives";
 ```ts
 /**
  * La vista técnica, con la pinta de la de deepseek —filas monoespaciadas de una línea,
@@ -2352,7 +2345,7 @@ Expected: PASS.
 
 ```bash
 git add apps/web/
-git commit -m "feat(web): Chat con markdown saneado, Trayectoria sin argumentos y barra de estado"
+git commit -m "feat(web): Chat con los primitivos de deepseek, Trayectoria sin argumentos y barra de estado"
 ```
 
 ```json:metadata
@@ -2372,7 +2365,7 @@ git commit -m "feat(web): Chat con markdown saneado, Trayectoria sin argumentos 
 - Create: `apps/web/src/componentes/Wizard.test.tsx`
 
 **Acceptance Criteria:**
-- [ ] El modal enseña el diff **entero** por fichero: es el único sitio donde el contenido se ve completo, porque es el paso donde se decide
+- [ ] El modal usa `Modal` y `DiffBlock` de `@deepseek-ai/dsh-client-ui-primitives` (ya instalado en la Task 13), y enseña el diff **entero** por fichero: es el único sitio donde el contenido se ve completo, porque es el paso donde se decide
 - [ ] Solo el botón «Aprobar» aprueba; «Rechazar», Escape y cerrar la pestaña rechazan
 - [ ] Cerrar el modal sin decidir envía **rechazo explícito**, no silencio
 - [ ] El wizard tiene tres pasos y solo enseña los que faltan
