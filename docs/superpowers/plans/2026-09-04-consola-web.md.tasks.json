@@ -94,8 +94,8 @@
     {
       "id": 10,
       "subject": "Task 10: El paquete `apps/web` y los estilos de deepseek",
-      "status": "pending",
-      "description": "**Goal:** El paquete nuevo del cliente: workspaces de npm, Vite, tsconfig propio con `lib: dom`, el tema de deepseek copiado con su aviso MIT, y la frontera probada.\n\n**Files:**\n- Modify: `package.json` (raíz: `workspaces`, `build:web`)\n- Create: `apps/web/package.json`, `apps/web/tsconfig.json`, `apps/web/vite.config.ts`, `apps/web/index.html`\n- Create: `apps/web/src/main.tsx`, `apps/web/src/App.tsx`\n- Create: `apps/web/estilos/` (los CSS de deepseek)\n- Create: `THIRD_PARTY_NOTICES.md`\n- Create: `src/web/frontera.test.ts`\n\n**Acceptance Criteria:**\n- [ ] `npm run build:web` produce `apps/web/dist/index.html` y sus assets\n- [ ] `apps/web/estilos/` contiene los seis CSS de `ui-theme` con el aviso MIT en cabecera\n- [ ] `THIRD_PARTY_NOTICES.md` acredita a deepseek-harness (MIT) por los estilos\n- [ ] **No se copia ningún logo ni marca denominativa** de DeepSeek\n- [ ] `src/web/frontera.test.ts` falla si `react`, `react-dom`, `vite` o una API de DOM aparecen bajo `src/`\n- [ ] `src/web/frontera.test.ts` falla si algún fichero de `src/` importa de `apps/web/`\n- [ ] `npm test` sigue verde y sin navegador\n\n**Verify:** `npm run build:web && npx vitest run src/web/frontera.test.ts` → PASS\n\n```json:metadata\n{\"files\": [\"package.json\", \"apps/web/package.json\", \"apps/web/vite.config.ts\", \"apps/web/tsconfig.json\", \"apps/web/index.html\", \"apps/web/src/main.tsx\", \"apps/web/src/App.tsx\", \"apps/web/estilos/\", \"THIRD_PARTY_NOTICES.md\", \"src/web/frontera.test.ts\"], \"verifyCommand\": \"npm run build:web && npx vitest run src/web/frontera.test.ts\", \"acceptanceCriteria\": [\"build:web produce dist\", \"seis CSS con aviso MIT\", \"THIRD_PARTY_NOTICES acredita deepseek\", \"sin logos ni marca\", \"frontera prohíbe react-dom/vite en src/\", \"npm test verde sin navegador\"], \"modelTier\": \"standard\"}\n```",
+      "status": "completed",
+      "description": "**Goal:** El paquete nuevo del cliente: workspaces de npm, Vite, tsconfig propio con `lib: dom`, el tema de deepseek copiado con su aviso MIT, y la frontera probada.\n\nComplete — see ledger.",
       "blockedBy": [
         0
       ]
@@ -148,5 +148,5 @@
       ]
     }
   ],
-  "lastUpdated": "2026-09-04T12:00:15.955768+00:00"
+  "lastUpdated": "2026-09-04T12:20:39.152386+00:00"
 }
