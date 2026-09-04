@@ -130,8 +130,8 @@
     {
       "id": 14,
       "subject": "Task 14: El modal de aprobación y el wizard en la interfaz",
-      "status": "pending",
-      "description": "**Goal:** Las dos interacciones que faltan: aprobar cambios con el diff delante (fail-closed) y el alta de tres pasos en el navegador.\n\n**Files:**\n- Create: `apps/web/src/componentes/Aprobacion.tsx` + `Aprobacion.module.css`\n- Create: `apps/web/src/componentes/Aprobacion.test.tsx`\n- Create: `apps/web/src/componentes/Wizard.tsx` + `Wizard.module.css`\n- Create: `apps/web/src/componentes/Wizard.test.tsx`\n\n**Acceptance Criteria:**\n- [ ] El modal enseña el diff **entero** por fichero: es el único sitio donde el contenido se ve completo, porque es el paso donde se decide\n- [ ] Solo el botón «Aprobar» aprueba; «Rechazar», Escape y cerrar la pestaña rechazan\n- [ ] Cerrar el modal sin decidir envía **rechazo explícito**, no silencio\n- [ ] El wizard tiene tres pasos y solo enseña los que faltan\n- [ ] El campo de la clave de API es `type=\"password\"`, tiene `autocomplete=\"off\"` y **no se guarda en el store**\n- [ ] Registrar un entorno «otro» pide nombre y URL, y valida que la URL sea `https://` (o `http://` solo en loopback, para el on-premise en desarrollo)\n- [ ] Al guardar una credencial, la interfaz dice **dónde** quedó, antes de seguir\n\n**Verify:** `npx vitest run apps/web/src/componentes/Aprobacion.test.tsx apps/web/src/componentes/Wizard.test.tsx` → PASS\n\n```json:metadata\n{\"files\": [\"apps/web/src/componentes/Aprobacion.tsx\", \"apps/web/src/componentes/Aprobacion.test.tsx\", \"apps/web/src/componentes/Wizard.tsx\", \"apps/web/src/componentes/Wizard.test.tsx\"], \"verifyCommand\": \"npx vitest run apps/web/ && npm run build:web\", \"acceptanceCriteria\": [\"el diff entero visible en el modal\", \"solo Aprobar aprueba\", \"Escape y desmontar rechazan explícitamente\", \"solo los pasos que faltan\", \"clave en campo password fuera del store\", \"URL validada https o loopback\", \"se dice dónde quedó la credencial\"], \"modelTier\": \"frontier\"}\n```",
+      "status": "completed",
+      "description": "**Goal:** Las dos interacciones que faltan: aprobar cambios con el diff delante (fail-closed) y el alta de tres pasos en el navegador.\n\nComplete — see ledger.",
       "blockedBy": [
         13
       ]
@@ -148,5 +148,5 @@
       ]
     }
   ],
-  "lastUpdated": "2026-09-04T13:54:01.730741+00:00"
+  "lastUpdated": "2026-09-04T15:59:49.357733+00:00"
 }
