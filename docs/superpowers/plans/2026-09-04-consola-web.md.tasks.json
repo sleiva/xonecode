@@ -73,8 +73,8 @@
     {
       "id": 8,
       "subject": "Task 8: Las sesiones se guardan y se reabren",
-      "status": "pending",
-      "description": "**Goal:** Que cada proyecto guarde sus sesiones en `.xonecode/sesiones/` como actos, y que reabrir una reemita lo que pasó dejando claro que es **histórica** hasta el primer turno nuevo.\n\n**Files:**\n- Create: `src/web/servidor/sesiones.ts`\n- Create: `src/web/servidor/sesiones.test.ts`\n\n**Acceptance Criteria:**\n- [ ] `.xonecode/sesiones/indice.json` lista `{id, titulo, creada, ultimoTurno}` por sesión\n- [ ] `.xonecode/sesiones/<id>.jsonl` guarda **un acto por línea**\n- [ ] El título de una sesión sale de la primera prosa del usuario, recortada\n- [ ] Reabrir devuelve los actos en orden y marca la sesión como histórica\n- [ ] El primer turno nuevo sobre una sesión reabierta quita la marca\n- [ ] Un `.jsonl` con una línea corrupta **salta esa línea** y devuelve las demás; no tumba la reapertura\n- [ ] Nada de lo guardado contiene diffs ni contenido de fichero\n- [ ] La escritura es por anexado (`appendFile`), no reescribiendo el fichero entero\n\n**Verify:** `npx vitest run src/web/servidor/sesiones.test.ts` → PASS\n\n```json:metadata\n{\"files\": [\"src/web/servidor/sesiones.ts\", \"src/web/servidor/sesiones.test.ts\"], \"verifyCommand\": \"npx vitest run src/web/servidor/sesiones.test.ts && npm run typecheck\", \"acceptanceCriteria\": [\"indice.json y jsonl por sesión\", \"un acto por línea, anexado\", \"título de la primera prosa\", \"reabrir marca histórica\", \"línea corrupta se salta\", \"sin diffs ni contenido\"], \"modelTier\": \"standard\"}\n```",
+      "status": "completed",
+      "description": "**Goal:** Que cada proyecto guarde sus sesiones en `.xonecode/sesiones/` como actos, y que reabrir una reemita lo que pasó dejando claro que es **histórica** hasta el primer turno nuevo.\n\nComplete — see ledger.",
       "blockedBy": [
         7
       ]
@@ -82,8 +82,8 @@
     {
       "id": 9,
       "subject": "Task 9: El vestíbulo — el wizard de tres pasos y la apertura de un proyecto",
-      "status": "pending",
-      "description": "**Goal:** El estado que existe **antes** de que haya ninguna raíz: cuenta, entorno, proyecto y descarga; y la apertura de una consola de proyecto, **una a la vez**.\n\n**Files:**\n- Create: `src/web/servidor/vestibulo.ts`\n- Create: `src/web/servidor/vestibulo.test.ts`\n\n**Acceptance Criteria:**\n- [ ] El paso de **cuenta** solo aparece si el papel `trabajo` resuelve por `omision`, y es `asistenteDeModelo` **sin modificar**\n- [ ] El paso de **entorno** ofrece los dos oficiales pre-rellenados y un «otro» con URL libre, y registra en `settings.json`\n- [ ] El paso de **proyecto** lista con `herramientaDeProyectos`, elige rama y descarga al workspace\n- [ ] Cancelar antes de elegir no escribe nada\n- [ ] Cancelar **después** de elegir proyecto deja `config.json` escrito y **lo dice**\n- [ ] Una credencial tecleada en el paso 1 queda escrita aunque se cancele el paso 2, y se dice en el momento\n- [ ] Abrir un proyecto con otro ya abierto **cierra el primero** (agota sus `lineas`) antes de abrir el segundo\n- [ ] Un fallo de descarga no crea `.xonecode` a medias y dice que se reintente con `/sync bajar`\n- [ ] El `config.json` del proyecto gana `entorno: \"<id>\"` y **conserva** `cloudstudio.url`\n- [ ] En modo web, el callback de OAuth redirige a la URL de la web en vez de decir «vuelve a la terminal»\n- [ ] Todos los tests corren **offline**, con dobles del catálogo y de la conexión CloudStudio\n\n**Verify:** `npx vitest run src/web/servidor/vestibulo.test.ts` → PASS\n\n```json:metadata\n{\"files\": [\"src/web/servidor/vestibulo.ts\", \"src/web/servidor/vestibulo.test.ts\"], \"verifyCommand\": \"npx vitest run src/web/servidor/vestibulo.test.ts && npm run typecheck\", \"acceptanceCriteria\": [\"asistenteDeModelo sin modificar\", \"entornos oficiales + otro\", \"cancelar antes no escribe\", \"credencial escrita se dice\", \"una consola de proyecto a la vez\", \"fallo de descarga sin .xonecode a medias\"], \"modelTier\": \"frontier\"}\n```",
+      "status": "completed",
+      "description": "**Goal:** El estado que existe **antes** de que haya ninguna raíz: cuenta, entorno, proyecto y descarga; y la apertura de una consola de proyecto, **una a la vez**.\n\nComplete — see ledger.",
       "blockedBy": [
         3,
         4,
@@ -148,5 +148,5 @@
       ]
     }
   ],
-  "lastUpdated": "2026-09-04T10:50:20.125583+00:00"
+  "lastUpdated": "2026-09-04T12:00:15.955768+00:00"
 }
