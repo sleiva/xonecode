@@ -59,8 +59,8 @@ export type Sumidero = (mensaje: MensajeAlCliente) => void;
 export interface Transporte {
   /**
    * El cliente abre el SSE. Devuelve los actos que hay que reemitirle: quien registra la
-   * ruta los manda como `{ clase: "reemision" }` con su propia escritura, así que esto NO
-   * los emite — hacerlo duplicaría la reemisión en el sumidero que se acaba de instalar.
+   * ruta los manda como una `reemision` con su propia escritura, así que esto NO los
+   * emite — hacerlo duplicaría la reemisión en el sumidero que se acaba de instalar.
    */
   conectar(enviar?: Sumidero): readonly Acto[];
   /** El SSE se cae, o la pestaña se cierra. Fail-closed: quien esperaba deja de esperar. */

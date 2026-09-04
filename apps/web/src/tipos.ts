@@ -5,8 +5,16 @@
  * tipos con `import type` desaparece en tiempo de ejecución pero igual ata el build del
  * cliente a la resolución de módulos de `src/` (su `tsconfig`, sus paths) — exactamente lo
  * que la frontera evita. Los dos ficheros pueden divergir en silencio; `tipos.test.ts`
- * compara los literales de `tipo:` de este fichero con los de `core/actos.ts` para que
- * divergir dé un test en rojo y no un bug mudo en producción.
+ * compara los literales de `tipo:` de este fichero con los de `core/actos.ts`, Y los
+ * literales de `clase:` de las dos uniones de mensaje con los de
+ * `web/servidor/transporte.ts`, para que divergir dé un test en rojo y no un bug mudo en
+ * producción. La comparación de `clase:` es la que faltó en la primera versión de este
+ * fichero: a `MensajeDelCliente` le faltaba el miembro de clase «secreto» —la respuesta a
+ * `leerSecreto`, con un campo `valor`— que `transporte.ts:46` sí declara, y nada lo delató
+ * hasta que se amplió el test. (Este párrafo describe ese miembro EN PROSA a propósito: la
+ * forma `{ clase: "…" }` en un comentario de este fichero contaría como un literal más
+ * para el propio detector de divergencia que unas líneas más abajo se prueba contra
+ * `[a-z0-9_-]+` — medido, dio un falso positivo hasta que se reescribió así.)
  *
  * Los campos de `aprobacion` van como `unknown[]`/`Record<string, unknown[]>` en vez de
  * traer aquí `PendienteDeAprobacion` y `LineaDeDiff`: esos dos tipos no llevan `tipo:` como
@@ -49,4 +57,6 @@ export type MensajeDelCliente =
   | { clase: "prosa"; texto: string }
   | { clase: "respuesta"; texto: string }
   | { clase: "eleccion"; id: string }
+  /** La respuesta a la pregunta secreta de `MensajeAlCliente` — otro mensaje, otra forma: aquel lleva `pregunta`, este `valor`. */
+  | { clase: "secreto"; valor: string }
   | { clase: "decision"; decisiones: Record<string, string> };

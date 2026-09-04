@@ -45,6 +45,14 @@ describe("store del cliente", () => {
     expect(s.leer().actos[0]).toEqual({ tipo: "herramientas", lineas: ["→ lee ×3 — a, b, c"] });
   });
 
+  it("una sustitución sobre un transcript vacío cae a anexar, no lanza: F2 de la revisión — antes solo lo razonaba un comentario", () => {
+    const s = crearStoreDelCliente();
+    // El servidor nunca manda `sustitucion` sin un último acto que sustituir
+    // (`transporte.ts`): esto es solo la red bajo un mensaje del que ya no se fía nada.
+    s.aplicar({ clase: "sustitucion", acto: { tipo: "asistente", texto: "huérfano" } });
+    expect(s.leer().actos).toEqual([{ tipo: "asistente", texto: "huérfano" }]);
+  });
+
   it("un mensaje malformado no lanza y no muta el estado", () => {
     const s = crearStoreDelCliente();
     expect(() => s.aplicar(null)).not.toThrow();
