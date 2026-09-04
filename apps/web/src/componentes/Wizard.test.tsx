@@ -23,11 +23,8 @@ const manejadores = {
     { id: "manager", nombre: "XOne Manager", url: "https://mcp.xonemanager.com/mcp" },
     { id: "otro", nombre: "Otro (on-premise)", url: "" },
   ],
-  proyectos: [{ id: "p1", nombre: "MinitMT" }],
-  ramas: ["master"],
   alGuardarCredencial: () => {},
   alRegistrarEntorno: () => {},
-  alElegirProyecto: () => {},
 };
 
 describe("Wizard", () => {
@@ -147,81 +144,16 @@ describe("Wizard", () => {
     expect(container.textContent).toBe("");
   });
 
-  it("el paso de proyecto elige proyecto y rama", () => {
-    const alElegirProyecto = vi.fn();
-    render(<Wizard pasos={["proyecto"]} {...manejadores} alElegirProyecto={alElegirProyecto} />);
-    fireEvent.click(screen.getByRole("button", { name: /abrir/i }));
-    expect(alElegirProyecto).toHaveBeenCalledWith({ proyecto: "p1", rama: "master" });
-  });
-
   /**
-   * Las dos listas del paso de proyecto llegan DESPUÉS de montar: el wizard aparece en el
-   * paso de entorno, cuando el servidor todavía no sabe ni el entorno. Un `useState` con el
-   * primero de la lista se queda congelado en la cadena vacía, y como `onChange` solo salta
-   * cuando el usuario CAMBIA de opción, con un solo proyecto el `<select>` enseñaba uno y el
-   * estado tenía otro. Los dos tests de aquí abajo son ese flujo, no el del montaje directo.
+   * «proyecto» salió del alta (cambio de rumbo del usuario: se elige en la barra
+   * lateral, no aquí) y `pasosPendientes()` ya nunca lo devuelve, así que este
+   * componente no debería verlo jamás en `pasos` — pero el tipo `PasoDelWizard`
+   * conserva el valor (lo reusa `MensajeDelCliente` para la ACCIÓN de abrir un
+   * proyecto), y este componente ya no tiene `proyectos`/`ramas` que pintar. Si algo
+   * lo mandara igual, no pinta nada en vez de fingir un paso que no sabe construir.
    */
-  it("el paso de entorno NO avanza al enviar: avanza cuando llegan los proyectos", () => {
-    // Medido en el navegador: avanzando al enviar, un registro que falla dejaba al usuario
-    // en un paso de proyecto vacío, con el error del paso ANTERIOR debajo y sin volver.
-    const vista = render(
-      <Wizard pasos={["entorno", "proyecto"]} {...manejadores} proyectos={[]} ramas={[]} />
-    );
-    fireEvent.click(screen.getByRole("button", { name: /registrar/i }));
-    expect(screen.getByRole("heading").textContent).toBe("Entorno");
-    // Con el fallo contado, se sigue en el paso que lo produjo.
-    vista.rerender(
-      <Wizard pasos={["entorno", "proyecto"]} {...manejadores} proyectos={[]} ramas={[]} aviso="fetch failed" />
-    );
-    expect(screen.getByRole("heading").textContent).toBe("Entorno");
-    expect(screen.getByRole("alert").textContent).toBe("fetch failed");
-    // Y cuando los proyectos llegan —la prueba de que salió bien—, avanza solo.
-    vista.rerender(
-      <Wizard
-        pasos={["entorno", "proyecto"]}
-        {...manejadores}
-        proyectos={[{ id: "p1", nombre: "MinitMT" }]}
-        ramas={[]}
-      />
-    );
-    expect(screen.getByRole("heading").textContent).toBe("Proyecto");
-  });
-
-  it("cuando los proyectos llegan después de montar, se pide la rama del primero sin tocar nada", () => {
-    const alCambiarProyecto = vi.fn();
-    const vista = render(
-      <Wizard pasos={["proyecto"]} {...manejadores} proyectos={[]} ramas={[]} alCambiarProyecto={alCambiarProyecto} />
-    );
-    expect(alCambiarProyecto).not.toHaveBeenCalled();
-    vista.rerender(
-      <Wizard
-        pasos={["proyecto"]}
-        {...manejadores}
-        proyectos={[{ id: "p1", nombre: "MinitMT" }]}
-        ramas={[]}
-        alCambiarProyecto={alCambiarProyecto}
-      />
-    );
-    expect(alCambiarProyecto).toHaveBeenCalledWith("p1");
-  });
-
-  it("cuando las ramas llegan después, el envío lleva una rama de verdad y no cadena vacía", () => {
-    // Mandar `rama: ""` es lo que el servidor lee como «pídeme las ramas»: sin esto, un
-    // proyecto con una sola rama dejaba el alta dando vueltas para siempre.
-    const alElegirProyecto = vi.fn();
-    const vista = render(
-      <Wizard pasos={["proyecto"]} {...manejadores} proyectos={[]} ramas={[]} alElegirProyecto={alElegirProyecto} />
-    );
-    vista.rerender(
-      <Wizard
-        pasos={["proyecto"]}
-        {...manejadores}
-        proyectos={[{ id: "p1", nombre: "MinitMT" }]}
-        ramas={["master"]}
-        alElegirProyecto={alElegirProyecto}
-      />
-    );
-    fireEvent.click(screen.getByRole("button", { name: /abrir/i }));
-    expect(alElegirProyecto).toHaveBeenCalledWith({ proyecto: "p1", rama: "master" });
+  it("un `paso` de «proyecto» no pinta nada: ya no es un paso que este componente sepa construir", () => {
+    const { container } = render(<Wizard pasos={["proyecto"]} {...manejadores} />);
+    expect(container.textContent).toBe("");
   });
 });

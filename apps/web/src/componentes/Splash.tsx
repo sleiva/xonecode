@@ -1,16 +1,16 @@
-import type { ReactNode } from "react";
 import estilos from "./Splash.module.css";
 
 /**
- * El lienzo del primer arranque, separado a propósito del contenido que se pinta encima
- * (`Wizard.tsx`, `Selector.tsx`, `Pregunta.tsx`, montados por `App.tsx`).
+ * SOLO el fondo del primer arranque — ni centra, ni envuelve nada. Antes este mismo
+ * componente hacía las dos cosas (pintaba Y centraba lo que se le pasara como
+ * `children`), pero eso mezclaba dos trabajos distintos: el usuario pidió separar el
+ * LIENZO (esto) de la INTERFAZ que va encima (`PantallaDeArranque.tsx`, que apila los
+ * dos). Quien rediseñe el splash de verdad para xonecode toca solo este fichero (o
+ * `estilos/splash.css`) y nunca `PantallaDeArranque`, `Bienvenida` ni `Wizard`.
  *
- * Hoy es un color sólido y PROVISIONAL: el usuario diseñará el splash de verdad para
- * xonecode más adelante, y que sea un componente aparte es lo que hace que ese rediseño
- * sea cambiar `Splash.module.css` (o esta función entera) y nada de lo que ya sabe
- * pintarse encima. Nada de degradados ni composición mientras tanto — color y punto, tal
- * cual se pidió.
+ * Sigue siendo un color sólido y PROVISIONAL — `estilos/splash.css` explica el porqué de
+ * la variable propia—, y sigue sin logos, degradados ni composición.
  */
-export function Splash({ children }: { children: ReactNode }) {
-  return <div className={estilos.splash}>{children}</div>;
+export function Splash() {
+  return <div className={estilos.splash} />;
 }

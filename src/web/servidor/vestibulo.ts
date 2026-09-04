@@ -52,7 +52,15 @@ import { crearConsolaWeb, type ConsolaWeb, type OpcionesDeConsolaWeb } from "./c
 import { anotarActo, crearSesion, reabrirSesion } from "./sesiones.js";
 import type { MensajeDelCliente, Sumidero } from "./transporte.js";
 
-/** El paso que todavía falta. El orden de la lista ES el orden en que se presentan. */
+/**
+ * Un paso del alta — o, para «proyecto», una ACCIÓN que ya no es un paso del alta:
+ * `pasosPendientes()` nunca la devuelve (cambio de rumbo del usuario: el proyecto se
+ * elige en la barra lateral, no bloquea la entrada al dashboard), pero el mensaje
+ * `{clase:"alta", paso:"proyecto", …}` del cable (`transporte.ts`) sigue existiendo —es
+ * lo que `completarProyecto`/`abrirProyecto` siguen consumiendo—, así que el valor sigue
+ * siendo válido aquí para no partir ese tipo en dos. El orden de la lista de PENDIENTES
+ * («cuenta», «entorno») ES el orden en que se presentan.
+ */
 export type PasoDelVestibulo = "cuenta" | "entorno" | "proyecto";
 
 /** Un entorno ofrecido en el paso 2. `url` vacía = el usuario la teclea («otro»). */
@@ -178,6 +186,13 @@ export interface OpcionesDelVestibulo {
   dependenciasDeProyecto?: (raiz: string) => Partial<Consola>;
   /** Plazo de aprobación de las consolas de proyecto; se pasa tal cual a `consolaWeb`. */
   msDeEspera?: number;
+  /**
+   * El nombre para el saludo de la bienvenida (`agent/persona.ts#nombreDePersona`, o
+   * `undefined` en los tests que no lo necesitan). Un dato ya resuelto y no una función:
+   * se calcula UNA vez, al arrancar, y no depende de nada que el vestíbulo sepa hacer
+   * (no es un puerto caro que haga falta invocar por turno).
+   */
+  nombre?: string;
 }
 
 /** Una consola de proyecto viva. Solo hay una a la vez. */
@@ -208,6 +223,8 @@ export interface ConsolaDeProyecto {
 export interface Vestibulo {
   /** La consola SIN raíz. Es la que pinta el asistente de cuenta y las preguntas del alta. */
   readonly consola: ConsolaWeb;
+  /** El saludo de la bienvenida. Ver `OpcionesDelVestibulo.nombre`. */
+  readonly nombre: string | undefined;
   pasosPendientes(): Promise<PasoDelVestibulo[]>;
   opcionesDeEntorno(): readonly OpcionDeEntorno[];
   /** El paso 1, que es `asistenteDeModelo` SIN TOCAR con la consola web detrás. */
@@ -494,15 +511,19 @@ export function crearVestibulo(opciones: OpcionesDelVestibulo): Vestibulo {
 
   return {
     consola: consolaDelVestibulo,
+    nombre: opciones.nombre,
 
     async pasosPendientes(): Promise<PasoDelVestibulo[]> {
       const pasos: PasoDelVestibulo[] = [];
       // La MISMA condición que usa `asistenteDeModelo`: si `trabajo` no resolvió por
-      // `omision`, alguien eligió (proyecto, global, bandera o entorno) y no se pregunta.
+      // `omision`, alguien eligió (proveedor, modelo, clave si el proveedor la pide,
+      // global o bandera) y no se pregunta.
       if (opciones.origenDeTrabajo === "omision") pasos.push("cuenta");
       if (registrados.length === 0) pasos.push("entorno");
-      // El proyecto no tiene condición: mientras no haya uno abierto, falta.
-      if (abierto === undefined) pasos.push("proyecto");
+      // El proyecto YA NO es un paso del alta — cambio de rumbo del usuario: con cuenta
+      // y entorno resueltos se entra directo al dashboard, y el proyecto se elige en la
+      // barra lateral (entorno → proyectos → sesiones), no aquí. `abierto` sigue
+      // existiendo como estado (`proyectoAbierto()`, más abajo) pero no bloquea nada.
       return pasos;
     },
 

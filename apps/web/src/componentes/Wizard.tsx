@@ -1,15 +1,20 @@
-import { useEffect, useState, type FormEvent } from "react";
+import { useState, type FormEvent } from "react";
 import { Input, Button } from "@deepseek-ai/dsh-client-ui-primitives";
 import estilos from "./Wizard.module.css";
 
 /**
- * El alta de tres pasos en el navegador: cuenta, entorno y proyecto.
+ * El alta, ahora de DOS pasos: cuenta y entorno. El de proyecto salió — cambio de rumbo
+ * del usuario: con cuenta y entorno resueltos se entra directo al dashboard, y el
+ * proyecto se elige en la barra lateral (`Barra.tsx`, entorno → proyectos → sesiones),
+ * no aquí. `PasoDelWizard` (`tipos.ts`) conserva «proyecto» como valor porque el mismo
+ * tipo sirve también para la ACCIÓN de abrir uno desde la barra (`MensajeDelCliente`),
+ * pero `pasos` —lo PENDIENTE— nunca lo trae ya: este componente no vuelve a pintarlo.
  *
- * Los mismos pasos del alta de terminal y con la misma regla: **cada uno solo aparece si
- * falta lo que decide** (`vestibulo.ts#pasosPendientes`, que los calcula preguntándole al
- * sistema —el papel `trabajo` resolviendo por `omision`, la lista de entornos vacía— y
- * nunca a una marca de «primer arranque»). Aquí llegan ya calculados, en `pasos`, y se
- * enseñan de uno en uno.
+ * Los pasos que quedan siguen la misma regla del alta de terminal: **cada uno solo
+ * aparece si falta lo que decide** (`vestibulo.ts#pasosPendientes`, que lo calcula
+ * preguntándole al sistema —el papel `trabajo` resolviendo por `omision`, la lista de
+ * entornos vacía— y nunca a una marca de «primer arranque»). Aquí llegan ya calculados,
+ * en `pasos`, y se enseñan de uno en uno.
  *
  * **La clave de API no entra en el estado del cliente.** Vive en el `useState` de este
  * paso y sale por `alGuardarCredencial`, que quien monte el wizard traduce a
@@ -86,21 +91,15 @@ export function Wizard({
   pasos,
   proveedores,
   entornos,
-  proyectos = [],
-  ramas = [],
   rutaDeCredencial,
   aviso,
   alGuardarCredencial,
   alRegistrarEntorno,
-  alElegirProyecto,
-  alCambiarProyecto,
 }: {
   /** Los pasos que FALTAN, en orden. Vacío = no hay alta que hacer y no se pinta nada. */
   pasos: readonly PasoDelWizard[];
   proveedores: readonly OpcionDeProveedor[];
   entornos: readonly OpcionDeEntorno[];
-  proyectos?: readonly { id: string; nombre: string }[];
-  ramas?: readonly string[];
   /** Dónde queda escrita la credencial. Ausente = no se sabe, y entonces no se afirma. */
   rutaDeCredencial?: string;
   /**
@@ -112,14 +111,6 @@ export function Wizard({
   aviso?: string;
   alGuardarCredencial: (proveedor: string, clave: string) => void;
   alRegistrarEntorno: (entorno: OpcionDeEntorno) => void;
-  alElegirProyecto: (eleccion: { proyecto: string; rama: string }) => void;
-  /**
-   * El proyecto elegido cambió, y todavía no se abre nada: sus ramas hay que pedirlas al
-   * servidor, que es quien habla con CloudStudio. Sin este aviso las dos listas del paso
-   * tendrían que llegar juntas, y las ramas del primer proyecto de la lista serían un dato
-   * inventado antes de que nadie hubiera elegido.
-   */
-  alCambiarProyecto?: (proyecto: string) => void;
 }) {
   const [indice, setIndice] = useState(0);
 
@@ -133,48 +124,6 @@ export function Wizard({
   const [nombreDelEntorno, setNombreDelEntorno] = useState("");
   const [url, setUrl] = useState(entornos[0]?.url ?? "");
   const [avisoDeUrl, setAvisoDeUrl] = useState<string | undefined>(undefined);
-
-  const [proyecto, setProyecto] = useState(proyectos[0]?.id ?? "");
-  const [rama, setRama] = useState(ramas[0] ?? "");
-
-  /**
-   * Las dos listas llegan DESPUÉS de montar —el wizard aparece en el paso de entorno, con
-   * proyectos y ramas todavía vacíos— y un `useState(lista[0])` se queda congelado en su
-   * valor inicial, que es la cadena vacía. Medido en el flujo entero: el `<select>` pintaba
-   * el primer proyecto pero el estado seguía vacío, y como `onChange` solo dispara cuando el
-   * usuario CAMBIA de opción, con un solo proyecto no se pedían sus ramas nunca; con una
-   * sola rama, el envío mandaba `rama: ""` y el servidor lo lee como «pídeme las ramas» —
-   * un bucle del que no se sale.
-   *
-   * Se sincroniza solo cuando el estado está vacío: una elección del usuario no la pisa una
-   * lista que vuelva a llegar.
-   */
-  useEffect(() => {
-    const primero = proyectos[0]?.id;
-    if (proyecto === "" && primero !== undefined) {
-      setProyecto(primero);
-      // Y se piden sus ramas, que es lo que haría el `onChange` que aquí no ocurre.
-      alCambiarProyecto?.(primero);
-    }
-    // `alCambiarProyecto` no entra en las dependencias a propósito: quien monta el wizard le
-    // pasa una lambda nueva en cada render, y con ella dentro esto se dispararía en bucle.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [proyectos, proyecto]);
-
-  useEffect(() => {
-    const primera = ramas[0];
-    if (rama === "" && primera !== undefined) setRama(primera);
-  }, [ramas, rama]);
-
-  /**
-   * Que lleguen proyectos ES la confirmación de que el paso de entorno salió bien: el
-   * servidor los pide justo después de registrarlo. Avanzar con eso y no con el envío es lo
-   * que evita quedarse en un paso de proyecto vacío cuando el registro falla.
-   */
-  useEffect(() => {
-    if (proyectos.length === 0) return;
-    setIndice((i) => (pasos[i] === "entorno" && i + 1 < pasos.length ? i + 1 : i));
-  }, [proyectos, pasos]);
 
   const paso = pasos[indice];
   if (paso === undefined) return null;
@@ -279,11 +228,14 @@ export function Wizard({
         nombre: esOtro ? nombreDelEntorno : (opcion?.nombre ?? entornoElegido),
         url,
       });
-      // NO se avanza aquí. Registrar un entorno es un viaje al servidor que puede fallar
-      // —una URL que no resuelve, un «fetch failed»— y avanzar al enviar dejaba al usuario
-      // en un paso de proyecto vacío, con el error de OTRO paso debajo y sin forma de
-      // volver. Medido en el navegador. Quien avanza es la llegada de los proyectos, que es
-      // la prueba de que el paso salió bien: ver el efecto de más arriba.
+      // NO se avanza aquí, y ya no hace falta un efecto que lo haga por su cuenta: el
+      // proyecto salió del alta, así que «entorno» es hoy el ÚLTIMO paso que este
+      // componente puede pintar. Si el registro sale bien, es el SERVIDOR quien lo dice
+      // —recalcula `pasosPendientes()` y manda un `alta` nuevo con `pasos: []`—, y ese
+      // mensaje es lo que hace que `App.tsx` deje de montar este wizard entero. Si falla
+      // (una URL que no resuelve, un «fetch failed»), `aviso` llega por el mismo mensaje
+      // y este paso se repinta con el error debajo, sin haber avanzado a ningún sitio del
+      // que volver.
     };
     return (
       <form className={estilos.wizard} onSubmit={registrar}>
@@ -340,53 +292,11 @@ export function Wizard({
     );
   }
 
-  const abrir = (evento: FormEvent): void => {
-    evento.preventDefault();
-    alElegirProyecto({ proyecto, rama });
-    if (hayMasPasos) avanzar();
-  };
-  return (
-    <form className={estilos.wizard} onSubmit={abrir}>
-      <h2 className={estilos.titulo}>Proyecto</h2>
-      <label className={estilos.etiqueta} htmlFor="wizard-proyecto">
-        Proyecto
-      </label>
-      <select
-        id="wizard-proyecto"
-        className={estilos.campo}
-        value={proyecto}
-        onChange={(e) => {
-          setProyecto(e.target.value);
-          alCambiarProyecto?.(e.target.value);
-        }}
-      >
-        {proyectos.map((p) => (
-          <option key={p.id} value={p.id}>
-            {p.nombre}
-          </option>
-        ))}
-      </select>
-      <label className={estilos.etiqueta} htmlFor="wizard-rama">
-        Rama
-      </label>
-      <select
-        id="wizard-rama"
-        className={estilos.campo}
-        value={rama}
-        onChange={(e) => setRama(e.target.value)}
-      >
-        {ramas.map((r) => (
-          <option key={r} value={r}>
-            {r}
-          </option>
-        ))}
-      </select>
-      {avisoDelServidor}
-      <div className={estilos.acciones}>
-        <Button type="submit" variant="primary" className={estilos.accion}>
-          Abrir
-        </Button>
-      </div>
-    </form>
-  );
+  // `paso === "proyecto"` no debería llegar nunca aquí (`pasosPendientes()` no lo
+  // devuelve desde que el proyecto salió del alta — ver la cabecera del fichero), pero
+  // `PasoDelWizard` conserva el valor porque el mismo tipo nombra la ACCIÓN de abrir un
+  // proyecto desde la barra. Si algún día otra piel lo anunciara como pendiente de
+  // verdad, mejor no pintar nada que fingir un paso que este componente ya no sabe
+  // construir (no tiene `proyectos`/`ramas` que pintar: esos dos ya no son prop suya).
+  return null;
 }

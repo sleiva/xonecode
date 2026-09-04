@@ -216,6 +216,18 @@ que este repo evita.
 
 ## El wizard inicial
 
+> **Nota posterior**: el usuario redefinió el arranque de la consola web. El wizard pasó
+> de TRES pasos a DOS —**cuenta** y **entorno**—; el paso de **proyecto** salió del alta
+> por completo. Con cuenta y entorno resueltos se entra DIRECTO al dashboard (sin ver
+> ningún wizard), y el proyecto se elige en la barra lateral (entorno → proyectos →
+> sesiones), no aquí. Delante del wizard va además una **bienvenida** (`Bienvenida.tsx`),
+> que saluda por el nombre local de quien programa (`agent/persona.ts`: `git config
+> user.name`, si no el usuario del sistema, si no sin nombre) — nunca un dato de
+> CloudStudio. Y el splash dejó de ser un TEMA oscuro global: es un FONDO a toda pantalla
+> (`Splash.tsx`, capa de abajo) con la bienvenida y el wizard encima (`PantallaDeArranque.
+> tsx`); la consola, una vez dentro, va siempre clara. Se deja el texto de abajo SIN
+> reescribir —es el registro de lo que se diseñó en su momento—, con este aviso delante.
+
 Corre en el vestíbulo, en el navegador, y son **tres pasos**; cada uno solo aparece si falta
 lo que decide, que es la regla que ya sigue el alta de terminal.
 

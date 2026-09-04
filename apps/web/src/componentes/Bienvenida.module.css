@@ -1,0 +1,25 @@
+/* Alias comprobados contra design-platform.css: bg-layer-1, border-l2,
+   label-primary/secondary existen. Misma tarjeta que `Wizard.module.css` — el texto vive
+   SOBRE el fondo del splash (`--xonecode-splash-bg`, provisional y fuera de la escala de
+   alias), así que no puede fiarse a un color fijo: una tarjeta con su propio fondo claro
+   es lo que mantiene el contraste sea cual sea el color que el splash tenga el día que
+   alguien lo rediseñe. */
+.bienvenida {
+  width: min(480px, 100%);
+  margin: 0 auto;
+  padding: 20px 24px;
+  border: 0.5px solid var(--dsw-alias-border-l2);
+  border-radius: 12px;
+  background: var(--dsw-alias-bg-layer-1);
+}
+
+.saludo {
+  margin: 0 0 8px;
+  font-size: 18px;
+  color: var(--dsw-alias-label-primary);
+}
+
+.texto {
+  margin: 0;
+  color: var(--dsw-alias-label-secondary);
+}

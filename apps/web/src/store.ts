@@ -43,6 +43,11 @@ export interface EstadoDelCliente {
     ramas: string[];
     /** Lo que falló en el paso anterior, para que lo diga el paso y no solo la Trayectoria. */
     aviso?: string;
+    /** El saludo de la bienvenida. Ausente = sin nombre que saludar (`Bienvenida.tsx`). */
+    nombre?: string;
+    /** Si hay un proyecto abierto en esta conexión — `App.tsx` lo usa para decidir entre
+     *  la maqueta completa y `SinProyectoAbierto`. */
+    proyectoAbierto: boolean;
   };
 }
 
@@ -212,6 +217,8 @@ export function crearStoreDelCliente(): {
             proyectos?: unknown;
             ramas?: unknown;
             aviso?: unknown;
+            nombre?: unknown;
+            proyectoAbierto?: unknown;
           };
           if (!Array.isArray(m.pasos) || !m.pasos.every((p) => typeof p === "string" && PASOS.has(p))) return;
           if (!sonIdentidades(m.proveedores) || !sonIdentidades(m.proyectos)) return;
@@ -223,6 +230,10 @@ export function crearStoreDelCliente(): {
             return;
           }
           if (!Array.isArray(m.ramas) || !m.ramas.every((r) => typeof r === "string")) return;
+          // Un `proyectoAbierto` que no sea booleano no cuenta como el mensaje válido: es
+          // el campo que distingue la maqueta completa del hueco de «elige un proyecto»
+          // (`App.tsx`), y un valor inventado ahí mentiría sobre cuál de las dos toca.
+          if (typeof m.proyectoAbierto !== "boolean") return;
           mutar({
             alta: {
               pasos: m.pasos as PasoDelWizard[],
@@ -230,8 +241,10 @@ export function crearStoreDelCliente(): {
               entornos: m.entornos as { id: string; nombre: string; url: string }[],
               proyectos: m.proyectos,
               ramas: m.ramas as string[],
-              // Ausente o de otro tipo = no hay aviso, nunca un aviso inventado.
+              proyectoAbierto: m.proyectoAbierto,
+              // Ausente o de otro tipo = no hay aviso/nombre, nunca uno inventado.
               ...(typeof m.aviso === "string" ? { aviso: m.aviso } : {}),
+              ...(typeof m.nombre === "string" ? { nombre: m.nombre } : {}),
             },
           });
           return;

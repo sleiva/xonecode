@@ -15,19 +15,29 @@ afterEach(cleanup);
  * —jsdom no lo implementa— ni ningún `fetch`.
  */
 /**
- * Con el proyecto ya abierto: `enAlta` (`App.tsx`) solo deja de tapar la maqueta entera
- * cuando llega un `alta` con `pasos: []` —lo que manda `anunciarAlta` en cuanto
- * `vestibulo.proyectoAbierto()` es cierto—, y todo lo que este fichero prueba pasa
- * DESPUÉS de esa apertura: la pregunta, la aprobación, el secreto y el selector de mitad
- * de conversación, no los del alta. Sin este mensaje `App` se quedaría enseñando la
- * pantalla centrada de la pantalla de arranque y ninguno de esos componentes montaría.
+ * Con el proyecto ya abierto: `enAlta` (`App.tsx`) solo deja de tapar la pantalla de
+ * arranque cuando llega un `alta` con `pasos: []`, y la maqueta completa solo pinta la
+ * sesión de verdad (en vez de `SinProyectoAbierto`) con `proyectoAbierto: true` — lo que
+ * manda `anunciarAlta` en cuanto `vestibulo.proyectoAbierto()` es cierto. Todo lo que
+ * este fichero prueba pasa DESPUÉS de esa apertura: la pregunta, la aprobación, el
+ * secreto y el selector de mitad de conversación, no los del alta. Sin estos dos campos
+ * `App` se quedaría enseñando la pantalla de arranque o el hueco de «elige un proyecto»,
+ * y ninguno de esos componentes montaría.
  */
 function montar(enviar = vi.fn(() => Promise.resolve(undefined as unknown))) {
   const store = crearStoreDelCliente();
   const vista = render(<App store={store} enviar={enviar} />);
   act(() => store.marcarConectado());
   act(() =>
-    store.aplicar({ clase: "alta", pasos: [], proveedores: [], entornos: [], proyectos: [], ramas: [] })
+    store.aplicar({
+      clase: "alta",
+      pasos: [],
+      proveedores: [],
+      entornos: [],
+      proyectos: [],
+      ramas: [],
+      proyectoAbierto: true,
+    })
   );
   return { store, enviar, vista };
 }
@@ -219,9 +229,10 @@ describe("App: la pantalla de arranque no enseña nada más", () => {
     // («Ajustes») en cambio se enseña SIEMPRE que `Barra` monta — es la prueba de que no
     // ha montado, no de una lista vacía.
     expect(screen.queryByText("Ajustes")).toBeNull();
-    // El oscuro es del splash, y `enAlta` sigue cierto aquí (no ha llegado `pasos: []`):
-    // `App` tiene que haber puesto el atributo que engancha `design-platform.css`.
-    expect(document.body.hasAttribute("data-ds-dark-theme")).toBe(true);
+    // El oscuro se quitó del todo (precisión del usuario: recolorear TODA la app por un
+    // atributo no era lo pedido; el splash es un FONDO, no un tema) — `App` no debe
+    // ponerlo nunca, ni siquiera durante el alta.
+    expect(document.body.hasAttribute("data-ds-dark-theme")).toBe(false);
   });
 
   /**
@@ -249,6 +260,7 @@ describe("App: la pantalla de arranque no enseña nada más", () => {
         entornos: [{ id: "webstudio", nombre: "XOne WebStudio", url: "https://mcp.example/mcp" }],
         proyectos: [],
         ramas: [],
+        proyectoAbierto: false,
       })
     );
     expect(screen.getByRole("heading", { name: /entorno/i })).toBeTruthy();
@@ -256,22 +268,79 @@ describe("App: la pantalla de arranque no enseña nada más", () => {
     expect(screen.queryByRole("tablist")).toBeNull();
   });
 
-  it("en cuanto `alta` llega con `pasos: []` aparece la maqueta completa, con compositor y barra", () => {
+  it("cuenta y entorno resueltos pero SIN proyecto abierto: la barra ya tiene datos, el centro espera", () => {
     const { store } = montarSinAbrir();
     act(() =>
-      store.aplicar({ clase: "alta", pasos: [], proveedores: [], entornos: [], proyectos: [], ramas: [] })
+      store.aplicar({
+        clase: "alta",
+        pasos: [],
+        proveedores: [],
+        entornos: [{ id: "webstudio", nombre: "XOne WebStudio", url: "https://mcp.example/mcp" }],
+        proyectos: [{ id: "p1", nombre: "Tienda" }],
+        ramas: [],
+        proyectoAbierto: false,
+      })
+    );
+    // Ni transcript, ni compositor, ni pestañas: el proyecto salió del alta pero
+    // TODAVÍA no se ha elegido ninguno, así que el centro no tiene sesión que enseñar.
+    expect(screen.queryByPlaceholderText(/escribe una petición/i)).toBeNull();
+    expect(screen.queryByRole("tablist")).toBeNull();
+    expect(screen.getByText(/elige un proyecto en la barra/i)).toBeTruthy();
+    // La barra SÍ está montada y con datos reales — ya no listas vacías a fuego:
+    // `App.tsx` deja de mandar `entornos={[]}` en cuanto `estado.alta` los trae.
+    expect(screen.getByText("XOne WebStudio")).toBeTruthy();
+    expect(screen.getByText("Tienda")).toBeTruthy();
+  });
+
+  it("en cuanto `alta` llega con `pasos: []` y `proyectoAbierto: true` aparece la maqueta completa, con compositor y barra", () => {
+    const { store } = montarSinAbrir();
+    act(() =>
+      store.aplicar({
+        clase: "alta",
+        pasos: [],
+        proveedores: [],
+        entornos: [],
+        proyectos: [],
+        ramas: [],
+        proyectoAbierto: true,
+      })
     );
     expect(screen.getByPlaceholderText(/escribe una petición/i)).toBeTruthy();
     expect(screen.getByRole("tablist")).toBeTruthy();
-    // La barra lateral, con su pie: `entornos`/`proyectos` llegan vacíos SIEMPRE hoy
-    // (`Barra.tsx` documenta por qué — el cable no manda esa jerarquía todavía), así que
-    // lo que confirma que la barra está montada es su nivel vacío, no un `<select>` que
+    // La barra lateral, con su pie: sin entorno/proyecto en ESTE mensaje, sus niveles
+    // siguen vacíos — es la prueba de que la barra está montada, no de un `<select>` que
     // con esas props no existe.
     expect(screen.getByText(/sin entorno que enseñar/i)).toBeTruthy();
     expect(screen.getByText("Ajustes")).toBeTruthy();
-    // La maqueta ya abierta va CLARA: el oscuro es solo del splash, y `enAlta` acaba de
-    // hacerse falso con este mismo `pasos: []` — el atributo tiene que haberse quitado,
-    // no quedarse puesto por descuido en un `document.body` que sobrevive al componente.
+    // El oscuro se quitó del todo: la maqueta ya abierta va clara, como el resto de la
+    // app — nunca se pone el atributo, ni aquí ni en el alta.
     expect(document.body.hasAttribute("data-ds-dark-theme")).toBe(false);
+  });
+
+  it("la bienvenida saluda por el nombre que manda el servidor, y sin él saluda igual sin inventarlo", () => {
+    const { store } = montarSinAbrir();
+    act(() =>
+      store.aplicar({
+        clase: "selector",
+        selector: { titulo: "Proveedor de modelos", opciones: [{ id: "ollama", etiqueta: "ollama" }] },
+      })
+    );
+    // Sin `nombre` en ningún mensaje todavía: saluda sin nombre, no con un placeholder.
+    expect(screen.getByText("Hola")).toBeTruthy();
+    expect(screen.queryByText(/hola,/i)).toBeNull();
+
+    act(() =>
+      store.aplicar({
+        clase: "alta",
+        pasos: ["entorno"],
+        proveedores: [],
+        entornos: [],
+        proyectos: [],
+        ramas: [],
+        proyectoAbierto: false,
+        nombre: "Ana",
+      })
+    );
+    expect(screen.getByText("Hola, Ana")).toBeTruthy();
   });
 });

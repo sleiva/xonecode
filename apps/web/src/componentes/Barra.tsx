@@ -10,22 +10,20 @@ export interface Proyecto { id: string; nombre: string; sesiones: { id: string; 
  * interfaz — un enlace a un panel que no existe sería el mismo dato inventado que un
  * alias de color que no existe.
  *
- * Solo se monta con el proyecto ya abierto (`App.tsx#enAlta`): mientras no lo hay, el
- * primer arranque no enseña ni esta barra ni nada de alrededor, así que las listas
- * vacías de aquí abajo son el caso «entorno registrado, aún sin proyectos» o «proyecto
- * abierto, aún sin sesiones» — no la pantalla de bienvenida. Cada nivel dice por qué
- * está vacío y no una lista que simplemente no pinta nada, porque eso es indistinguible
- * de que la barra se haya roto.
+ * Se monta con `enAlta` en falso (`App.tsx`): cuenta y entorno resueltos, CON o SIN
+ * proyecto abierto —el paso de proyecto salió del alta y se elige aquí—, así que las
+ * listas vacías de aquí abajo son de verdad «entorno registrado, aún sin proyectos» o
+ * «proyecto abierto, aún sin sesiones», y ya no el único caso que se veía. Cada nivel
+ * dice por qué está vacío y no una lista que simplemente no pinta nada, porque eso es
+ * indistinguible de que la barra se haya roto.
  *
- * `entornos`/`proyectos` llegan vacíos SIEMPRE hoy: `vestibulo.ts` (servidor) construye
- * esa jerarquía para el alta, pero ningún mensaje del cable la manda de vuelta una vez
- * hay proyecto abierto —esta tarea no tocó el servidor para añadir uno—, así que el
- * estado vacío de «Proyectos» es en la práctica el único que se ve hoy, INCLUSO con un
- * entorno ya registrado y un proyecto ya abierto en el propio turno que se está mirando.
- * Por eso el texto de cada nivel vacío dice que esta BARRA no tiene qué enseñar, y no que
- * no exista ningún entorno o proyecto: lo segundo sería una afirmación falsa sobre el
- * mundo (el entorno SÍ está registrado; esta barra es la que no lo sabe todavía), y ese
- * es justo el matiz que este repo no deja pasar en un aviso de honestidad.
+ * `entornos`/`proyectos` YA llegan poblados (`App.tsx` los lee de `estado.alta`, que el
+ * servidor manda siempre, tenga o no proyecto abierto). Lo que sigue siendo un hueco:
+ * `sesiones` de cada proyecto llega vacía siempre —no hay mensaje del cable que las
+ * traiga— y no hay manejador para «elige este proyecto y ábrelo» (el nombre del proyecto
+ * es hoy texto plano, sin `onClick`): abrir uno pide una rama al servidor
+ * (`vestibulo.ts#completarProyecto`) y un selector de ramas en la barra es trabajo
+ * aparte, declarado y no hecho todavía (`App.tsx#SinProyectoAbierto` lo explica).
  */
 export function Barra({ entornos, entornoActivo, proyectos, sesionActiva, alElegirEntorno, alAbrirSesion, alNuevaSesion }: {
   entornos: { id: string; nombre: string }[];

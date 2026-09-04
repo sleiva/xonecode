@@ -138,11 +138,16 @@ describe("el alta del wizard", () => {
     const store = crearStoreDelCliente();
     store.aplicar({
       clase: "alta",
+      // «proyecto» ya no es un paso PENDIENTE de verdad (salió del alta — cambio de
+      // rumbo del usuario), pero sigue siendo un valor válido del tipo (reusado para la
+      // acción de abrir uno desde la barra): el store no distingue de dónde viene el
+      // mensaje, así que esto sigue probando que guarda la lista tal cual llega.
       pasos: ["entorno", "proyecto"],
       proveedores: [{ id: "ollama", nombre: "ollama" }],
       entornos: [{ id: "webstudio", nombre: "XOne WebStudio", url: "https://mcp.xonewebstudio.com/mcp" }],
       proyectos: [{ id: "p1", nombre: "Tienda" }],
       ramas: ["master"],
+      proyectoAbierto: false,
     });
     expect(store.leer().alta?.pasos).toEqual(["entorno", "proyecto"]);
     expect(store.leer().alta?.ramas).toEqual(["master"]);
@@ -157,13 +162,66 @@ describe("el alta del wizard", () => {
       entornos: [],
       proyectos: [],
       ramas: [],
+      proyectoAbierto: false,
+    });
+    expect(store.leer().alta).toBeUndefined();
+  });
+
+  it("`proyectoAbierto` que no es booleano descarta el mensaje entero", () => {
+    const store = crearStoreDelCliente();
+    store.aplicar({
+      clase: "alta",
+      pasos: [],
+      proveedores: [],
+      entornos: [],
+      proyectos: [],
+      ramas: [],
+      proyectoAbierto: "sí" as unknown as boolean,
     });
     expect(store.leer().alta).toBeUndefined();
   });
 
   it("con pasos vacíos hay alta pero sin nada que pedir: es lo que retira el wizard", () => {
     const store = crearStoreDelCliente();
-    store.aplicar({ clase: "alta", pasos: [], proveedores: [], entornos: [], proyectos: [], ramas: [] });
+    store.aplicar({
+      clase: "alta",
+      pasos: [],
+      proveedores: [],
+      entornos: [],
+      proyectos: [],
+      ramas: [],
+      proyectoAbierto: true,
+    });
     expect(store.leer().alta?.pasos).toEqual([]);
+    expect(store.leer().alta?.proyectoAbierto).toBe(true);
+  });
+
+  it("sin nombre no hay nombre — nunca uno inventado", () => {
+    const store = crearStoreDelCliente();
+    store.aplicar({
+      clase: "alta",
+      pasos: [],
+      proveedores: [],
+      entornos: [],
+      proyectos: [],
+      ramas: [],
+      proyectoAbierto: false,
+    });
+    expect(store.leer().alta?.nombre).toBeUndefined();
+  });
+
+  it("con nombre, se guarda tal cual", () => {
+    const store = crearStoreDelCliente();
+    store.aplicar({
+      clase: "alta",
+      pasos: [],
+      proveedores: [],
+      entornos: [],
+      proyectos: [],
+      ramas: [],
+      proyectoAbierto: false,
+      nombre: "Ana",
+    });
+    expect(store.leer().alta?.nombre).toBe("Ana");
   });
 });

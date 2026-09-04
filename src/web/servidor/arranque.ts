@@ -39,6 +39,7 @@ import { aplicarAuth, cargar, guardarModeloGlobal } from "../../agent/configEnDi
 import { guardarCredencial } from "../../agent/authEnDisco.js";
 import { cargarSettings, guardarEntorno as guardarEntornoEnDisco } from "../../agent/settingsEnDisco.js";
 import { abrirEnSistema } from "../../agent/cloudstudioMcp.js";
+import { nombreDePersona } from "../../agent/persona.js";
 import { CatalogoModelos } from "../../agent/catalogoModelos.js";
 import type { Entorno } from "../../core/settings.js";
 import { arrancarServidor, type ServidorWeb } from "./servidor.js";
@@ -156,25 +157,29 @@ export function montarRutas(
   /**
    * El mensaje de alta: qué falta, y con qué elegirlo.
    *
-   * Con proyecto abierto no falta nada y se dice con `pasos` vacío, que es lo que retira el
-   * wizard del cliente. Sin él, la lista sale de `pasosPendientes()` menos la cuenta ya
-   * conducida, y con el paso de entorno DELANTE siempre que quede el de proyecto: abrir un
-   * proyecto exige saber de qué entorno viene, y eso no lo cubre `pasosPendientes()`, que
-   * responde a «qué falta por configurar» y no a «qué necesita esta apertura».
+   * Con proyecto YA abierto no falta nada, y se dice con `pasos` vacío SIN mirar
+   * `pasosPendientes()` — es el comportamiento de siempre (el atajo de `--guion` sobre un
+   * proyecto offline, por ejemplo, abre directo y nunca debería enseñar el alta, tenga o
+   * no cuenta/entorno resueltos) y no algo que este cambio deba tocar.
+   *
+   * Cambio de rumbo del usuario, para cuando NO hay proyecto abierto: el paso de proyecto
+   * salió del alta, así que `pasos` sale DIRECTO de `pasosPendientes()` —que ya nunca
+   * incluye «proyecto»— en vez de esperar a que se abra uno. Antes de este cambio
+   * `pasos: []` solo pasaba con un proyecto abierto, y el cliente usaba esa implicación
+   * para pintar la maqueta completa; ahora también pasa sin proyecto (con cuenta y
+   * entorno resueltos), así que la implicación ya no basta y `proyectoAbierto` viaja
+   * aparte (`transporte.ts` lo documenta) para que el cliente sepa si esperar una
+   * elección en la barra o pintar la sesión de verdad.
+   *
+   * «cuenta» NO se anuncia nunca al wizard: ese paso lo conduce `conducirCuenta` sobre el
+   * selector y el secreto, que es lo que mantiene la clave en su único mensaje y lo que
+   * hace que se elija TAMBIÉN el modelo. El wizard sigue sabiendo pintarlo por si otra
+   * piel se lo manda; esta no.
    */
   const anunciarAlta = async (): Promise<void> => {
-    if (vestibulo.proyectoAbierto() !== undefined) {
-      emitir({ clase: "alta", pasos: [], proveedores: [], entornos: [], proyectos: [], ramas: [] });
-      return;
-    }
-    const pendientes = await vestibulo.pasosPendientes();
-    const pasos: PasoDelVestibulo[] = [];
-    // «cuenta» NO se anuncia nunca al wizard: ese paso lo conduce `conducirCuenta` sobre
-    // el selector y el secreto, que es lo que mantiene la clave en su único mensaje y lo
-    // que hace que se elija TAMBIÉN el modelo. El wizard sigue sabiendo pintarlo por si
-    // otra piel se lo manda; esta no.
-    if (pendientes.includes("proyecto") || pendientes.includes("entorno")) pasos.push("entorno");
-    if (pendientes.includes("proyecto")) pasos.push("proyecto");
+    const proyectoAbierto = vestibulo.proyectoAbierto() !== undefined;
+    const pendientes = proyectoAbierto ? [] : await vestibulo.pasosPendientes();
+    const pasos: PasoDelVestibulo[] = pendientes.includes("entorno") ? ["entorno"] : [];
     emitir({
       clase: "alta",
       pasos,
@@ -182,6 +187,8 @@ export function montarRutas(
       entornos: [...vestibulo.opcionesDeEntorno()],
       proyectos,
       ramas,
+      proyectoAbierto,
+      ...(vestibulo.nombre === undefined ? {} : { nombre: vestibulo.nombre }),
       ...(aviso === undefined ? {} : { aviso }),
     });
   };
@@ -527,6 +534,11 @@ function vestibuloReal(
     informar,
     origenDeTrabajo: resolver(fuentes).trabajo.origen,
     fuentes,
+    // Se resuelve UNA vez, aquí, y no en cada `anunciarAlta`: `git config`/`os.userInfo`
+    // no cambian a media conexión, y repetir el subproceso en cada anuncio del alta sería
+    // gastar sin motivo. Nunca viaja hacia CloudStudio ni hacia ningún acto —
+    // `agent/persona.ts` lo documenta—.
+    nombre: nombreDePersona(opciones.cwd),
     catalogoModelos: new CatalogoModelos(),
     guardarCredencial,
     // Los proveedores que YA tienen clave no se vuelven a pedir. Sin esto la omisión del

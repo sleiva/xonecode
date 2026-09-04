@@ -1,19 +1,23 @@
-/* Alias comprobados contra design-platform.css: state-error-secondary y
-   label-primary-foreground existen.
+/* Alias comprobados contra design-platform.css: state-error-secondary y label-primary
+   existen.
 
    NO es `state-error-primary` sobre `state-error-secondary` —el par «de libro» que sigue
-   usando `Chat.module.css` y que `Aprobacion.module.css` usa en `.quitado`—: MEDIDO con
-   el tema oscuro puesto (`index.html`), `design-platform.css` mapea los dos al MISMO
-   `--dsw-static-red-400` dentro de `body[data-ds-dark-theme]` (línea 319-320 del
-   fichero), así que ese par es texto invisible sobre su propio fondo — no un tono
-   parecido, el mismo. No se toca ese fichero (es la escala copiada); se cambia qué alias
-   hace de texto AQUÍ, con uno que sí tiene contraste contra un fondo de acento en los
-   dos temas: `label-primary-foreground` es casi negro en oscuro y blanco en claro,
-   y las dos leen sobre un rojo. */
+   usando `Chat.module.css` y que `Aprobacion.module.css` usa en `.quitado`—: MEDIDO,
+   `design-platform.css` mapea los dos al MISMO `--dsw-static-red-400` en el ÚNICO tema
+   que queda (línea 228 del fichero), así que ese par es texto invisible sobre su propio
+   fondo — no un tono parecido, el mismo.
+
+   Tampoco es `label-primary-foreground`: ese alias existía para leer bien en DOS
+   contextos con polaridad opuesta (casi negro en el oscuro que este proyecto ya no
+   tiene, blanco en el claro que queda), y en el claro que queda es blanco —contraste
+   ~3.3:1 contra el rojo de fondo, por debajo del 4.5:1 de WCAG AA para texto normal—.
+   `label-primary` es el texto normal del tema, casi negro en claro, y contra el mismo
+   rojo da ~5.7:1: el mismo cambio ya hecho en `Chat.module.css#.error` y en
+   `Aprobacion.module.css` por la misma razón, ahora que solo hay un tema que servir. */
 .avisoDeConexion :global(div) {
   padding: 8px 16px;
   text-align: center;
   font-size: 13px;
   background: var(--dsw-alias-state-error-secondary);
-  color: var(--dsw-alias-label-primary-foreground);
+  color: var(--dsw-alias-label-primary);
 }

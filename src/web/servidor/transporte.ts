@@ -50,7 +50,10 @@ export type MensajeAlCliente =
    * El alta que FALTA, para el wizard del navegador. `pasos` sale de
    * `vestibulo.ts#pasosPendientes`, que los calcula preguntándole al sistema y nunca a una
    * marca de «primer arranque»; vacío significa que no hay alta que hacer y el cliente no
-   * pinta nada.
+   * pinta el wizard — pero puede seguir sin haber proyecto abierto, ver `proyectoAbierto`
+   * más abajo. Cambio de rumbo del usuario: «proyecto» ya NO puede aparecer en `pasos`
+   * (sigue siendo un `paso` válido del lado del `MensajeDelCliente`, para abrir uno desde
+   * la barra lateral, pero no bloquea la entrada al dashboard).
    *
    * `proyectos` y `ramas` llegan vacíos hasta que hay entorno (y proyecto) elegidos: son
    * dos consultas a CloudStudio y no se pueden inventar. Lista vacía es «todavía no lo
@@ -77,6 +80,22 @@ export type MensajeAlCliente =
        * sin una palabra, que es exactamente el fallo mudo que se quería quitar.
        */
       aviso?: string;
+      /**
+       * El saludo (`agent/persona.ts#nombreDePersona`). Viaja SUELTO en este mensaje, no
+       * dentro de ningún acto: `Bienvenida.tsx` lo pinta y nada más, así que no entra en
+       * el `.jsonl` de una sesión ni en el transcript. Ausente = sin nombre que saludar.
+       */
+      nombre?: string;
+      /**
+       * Si hay un proyecto abierto AHORA MISMO en esta conexión. Hace falta desde que el
+       * paso de proyecto salió del alta: antes, `pasos: []` solo pasaba con un proyecto
+       * ya abierto, y esa implicación bastaba para que el cliente supiera si pintar la
+       * maqueta completa o el alta. Ahora `pasos: []` pasa en cuanto cuenta y entorno
+       * están resueltos, CON o SIN proyecto abierto —el proyecto se elige en la barra—,
+       * así que hace falta decirlo aparte para que el centro sepa si esperar una elección
+       * o pintar la sesión de verdad.
+       */
+      proyectoAbierto: boolean;
     }
   /** El ÚNICO mensaje que lleva contenido de fichero: es el paso donde se DECIDE sobre él. */
   | {

@@ -140,7 +140,12 @@ describe("montarRutas — el cable, por fin conectado", () => {
     expect(comandos.comandos).toEqual(comandosDelRegistro());
   });
 
-  it("el alta pide entorno antes que proyecto aunque el entorno ya esté registrado", async () => {
+  it("con cuenta y entorno resueltos, `pasos` sale vacío y sin proyecto abierto lo dice aparte", async () => {
+    // Cambio de rumbo del usuario: el proyecto salió del alta. Con el entorno YA
+    // registrado (`vestibuloDePrueba` lo trae de fábrica) y la cuenta resuelta
+    // (`origenDeTrabajo: "global"`), ya no falta nada que el wizard tenga que pintar —
+    // antes esto habría dicho `["entorno", "proyecto"]` porque abrir un proyecto exigía
+    // saber de qué entorno viene; ahora abrir un proyecto no es parte del alta.
     const servidor = servidorDeMentira();
     montarRutas(servidor, vestibuloDePrueba());
     const cliente = clienteDeMentira();
@@ -148,12 +153,63 @@ describe("montarRutas — el cable, por fin conectado", () => {
     await eventos!(cliente.peticion, cliente.respuesta);
     await asentar();
     const alta = cliente.recibidos.at(-1) as Extract<MensajeAlCliente, { clase: "alta" }>;
-    // `pasosPendientes` diría solo «proyecto» (hay entornos registrados), pero abrir un
-    // proyecto exige saber DE QUÉ entorno sale.
-    expect(alta.pasos).toEqual(["entorno", "proyecto"]);
-    // Nada inventado mientras no se elige: ni proyectos ni ramas.
+    expect(alta.pasos).toEqual([]);
+    // Sin proyecto abierto: nadie ha elegido ninguno todavía en ESTA conexión, aunque el
+    // entorno ya estuviera registrado de antes.
+    expect(alta.proyectoAbierto).toBe(false);
+    // Nada inventado mientras no se elige proyecto: ni proyectos ni ramas.
     expect(alta.proyectos).toEqual([]);
     expect(alta.ramas).toEqual([]);
+  });
+
+  it("con un proyecto abierto por fuera del alta (el atajo de `--guion`), `pasos` sale vacío AUNQUE falte el entorno", async () => {
+    // La regresión que se vio en vivo y no en el suite: `anunciarAlta` se reescribió para
+    // sacar `pasos` directo de `pasosPendientes()` ahora que «proyecto» ya no cuenta como
+    // paso pendiente, y eso rompió el atajo de `--guion --web` — un proyecto offline se
+    // abre con `vestibulo.abrirProyecto()` DIRECTAMENTE, sin pasar por el paso «entorno»
+    // del alta, así que en una máquina sin ningún entorno registrado `pasosPendientes()`
+    // sigue diciendo «entorno» pendiente de verdad. Sin el corto-circuito de
+    // `proyectoAbierto`, la primera conexión veía el wizard de entorno por encima de la
+    // maqueta ya abierta. `entornos: []` es lo que fuerza que «entorno» sea de verdad
+    // pendiente aquí; sin él este test no distinguiría el corto-circuito de la vía normal.
+    const servidor = servidorDeMentira();
+    const vestibulo = vestibuloDePrueba({ entornos: [] });
+    await vestibulo.abrirProyecto({ raiz: "/w/a" });
+    montarRutas(servidor, vestibulo);
+    const cliente = clienteDeMentira();
+    const eventos = servidor.rutas.get(`GET ${RUTA_EVENTOS}`);
+    await eventos!(cliente.peticion, cliente.respuesta);
+    await asentar();
+
+    const alta = cliente.recibidos.at(-1) as Extract<MensajeAlCliente, { clase: "alta" }>;
+    expect(alta.pasos).toEqual([]);
+    expect(alta.proyectoAbierto).toBe(true);
+  });
+
+  it("el saludo de la bienvenida viaja en el alta cuando el vestíbulo trae uno, y no viaja si no", async () => {
+    // El wire entero de `agent/persona.ts#nombreDePersona`: `arranque.ts` lo resuelve UNA
+    // vez y lo pasa como `OpcionesDelVestibulo.nombre`; este test cubre que ese dato SIGUE
+    // vivo hasta el mensaje `alta` del cable — lo que `App.test.tsx`/`store.test.ts` prueban
+    // por separado es el render y el parseo, no que el vestíbulo lo entregue.
+    const servidorConNombre = servidorDeMentira();
+    montarRutas(servidorConNombre, vestibuloDePrueba({ nombre: "Ana" }));
+    const clienteConNombre = clienteDeMentira();
+    await servidorConNombre.rutas.get(`GET ${RUTA_EVENTOS}`)!(clienteConNombre.peticion, clienteConNombre.respuesta);
+    await asentar();
+    const altaConNombre = clienteConNombre.recibidos.at(-1) as Extract<MensajeAlCliente, { clase: "alta" }>;
+    expect(altaConNombre.nombre).toBe("Ana");
+
+    // Sin nombre: ausente del todo, no un `undefined` que un `JSON.stringify` real
+    // convertiría en «la clave desaparece» de todos modos — se comprueba aquí para que la
+    // omisión sea explícita y no un efecto colateral de cómo se serializa.
+    const servidorSinNombre = servidorDeMentira();
+    montarRutas(servidorSinNombre, vestibuloDePrueba());
+    const clienteSinNombre = clienteDeMentira();
+    await servidorSinNombre.rutas.get(`GET ${RUTA_EVENTOS}`)!(clienteSinNombre.peticion, clienteSinNombre.respuesta);
+    await asentar();
+    const altaSinNombre = clienteSinNombre.recibidos.at(-1) as Extract<MensajeAlCliente, { clase: "alta" }>;
+    expect(altaSinNombre.nombre).toBeUndefined();
+    expect("nombre" in altaSinNombre).toBe(false);
   });
 
   it("elegir entorno trae sus proyectos; elegir proyecto SIN rama trae sus ramas y no abre nada", async () => {

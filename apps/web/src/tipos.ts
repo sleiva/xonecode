@@ -33,10 +33,15 @@ export type Acto =
   | { tipo: "error"; texto: string };
 
 /**
- * Los tres pasos del alta, redeclarados igual que todo lo demás de este fichero: son los
- * de `web/servidor/vestibulo.ts#PasoDelVestibulo`. Vive AQUÍ y no en `Wizard.tsx` porque
- * el mensaje del cable lo necesita, y un tipo del cable que colgara de un componente
- * ataría `tipos.ts` a un `.tsx` con React dentro.
+ * Los tres valores, redeclarados igual que todo lo demás de este fichero: son los de
+ * `web/servidor/vestibulo.ts#PasoDelVestibulo`. Vive AQUÍ y no en `Wizard.tsx` porque el
+ * mensaje del cable lo necesita, y un tipo del cable que colgara de un componente ataría
+ * `tipos.ts` a un `.tsx` con React dentro.
+ *
+ * Solo DOS son pasos PENDIENTES de verdad hoy: «proyecto» salió del alta (cambio de
+ * rumbo del usuario — se elige en la barra lateral) y `pasosPendientes()` nunca lo
+ * devuelve, pero el valor sigue siendo válido porque el mismo tipo nombra también la
+ * ACCIÓN de `MensajeDelCliente` para abrir un proyecto desde la barra.
  */
 export type PasoDelWizard = "cuenta" | "entorno" | "proyecto";
 
@@ -62,9 +67,11 @@ export type MensajeAlCliente =
   | { clase: "comandos"; comandos: { nombre: string; descripcion: string }[] }
   /**
    * El alta que falta, para el wizard (`vestibulo.ts#pasosPendientes` del lado servidor).
-   * `pasos` vacío = no hay alta que hacer. `proyectos` y `ramas` vienen vacíos mientras no
-   * haya entorno (y proyecto) elegidos: son dos consultas a CloudStudio y una lista de
-   * relleno sería un dato inventado.
+   * `pasos` vacío = no hay wizard que pintar — pero puede seguir sin haber proyecto
+   * abierto (`proyectoAbierto`, más abajo): el paso de proyecto salió del alta, y con él
+   * la implicación de que `pasos: []` significaba «hay proyecto abierto». `proyectos` y
+   * `ramas` vienen vacíos mientras no haya entorno (y proyecto) elegidos: son dos
+   * consultas a CloudStudio y una lista de relleno sería un dato inventado.
    *
    * La clave de API NO llega por aquí: el paso de cuenta lo conduce el servidor sobre los
    * mensajes de clase «selector» y «secreto».
@@ -79,6 +86,12 @@ export type MensajeAlCliente =
       /** Qué falló en el paso anterior; ausente si no falló nada. Lo pinta el propio paso:
        *  un acto de sistema se va a la Trayectoria, que no es la pestaña que se está viendo. */
       aviso?: string;
+      /** El saludo (`agent/persona.ts#nombreDePersona`, servidor). Nunca en un acto ni en
+       *  una sesión guardada: solo lo pinta `Bienvenida.tsx`. Ausente = sin nombre. */
+      nombre?: string;
+      /** Si hay un proyecto abierto en ESTA conexión — hace falta desde que `pasos: []`
+       *  dejó de implicarlo (ver arriba). */
+      proyectoAbierto: boolean;
     }
   | {
       clase: "aprobacion";
