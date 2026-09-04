@@ -37,10 +37,15 @@ import { CatalogoModelosEnMemoria, type CatalogoModelosPort, type Papel } from "
 import { REJECT_MESSAGE, type Decision } from "../../vendor/hitl.js";
 
 /**
- * Plazo de una aprobación. Generoso porque al otro lado hay una persona leyendo un diff,
- * y corto comparado con «para siempre»: un turno que se queda esperando a una pestaña que
- * ya nadie mira bloquea la sesión entera. Vencer es RECHAZAR, y un rechazo se puede
- * volver a pedir; una aprobación por cansancio, no.
+ * Plazo de lo que espera a un humano: la aprobación y la pregunta de texto libre.
+ * Generoso porque al otro lado hay una persona leyendo un diff, y corto comparado con
+ * «para siempre»: un turno que se queda esperando a una pestaña que ya nadie mira bloquea
+ * la sesión entera. Vencer es RECHAZAR (o contestar cadena vacía, que aguas abajo es lo
+ * mismo), y un rechazo se puede volver a pedir; una aprobación por cansancio, no.
+ *
+ * Es UN plazo y no dos porque las dos esperas son la misma espera —una persona que decide—
+ * y dos números distintos serían dos cosas que mantener de acuerdo sin ninguna razón que
+ * las separe.
  */
 const MS_DE_ESPERA_POR_OMISION = 10 * 60_000;
 
@@ -187,7 +192,25 @@ export function crearConsolaWeb(opciones: OpcionesDeConsolaWeb = {}): ConsolaWeb
       anotar({ tipo: "sistema", texto: pregunta });
       if (!transporte.conectado()) return "";
       return new Promise<string>((resuelto) => {
-        esperandoTexto.push(resuelto);
+        // El MISMO plazo que `aprobacionesTui`, que era el único que lo tenía. Medido: con
+        // la pestaña abierta y nadie contestando, esta promesa no vencía nunca y el lazo de
+        // `correrConsola` se quedaba `await`-ado aquí dentro para siempre — la sesión web
+        // entera colgada por una pregunta de texto libre (`politicaInteractiva` antes de
+        // subir, `/connect-studio` sin URL). Vencer responde cadena vacía: lo mismo que
+        // responde al desconectarse, y lo que `interpretAnswer` trata como rechazo.
+        const responder = (texto: string): void => {
+          clearTimeout(temporizador);
+          resuelto(texto);
+        };
+        const temporizador = setTimeout(() => {
+          // Sacarlo de la COLA, no solo resolverlo: `esperandoTexto` es FIFO, y un
+          // resolutor muerto en cabeza se comería la respuesta de la pregunta SIGUIENTE
+          // —que sí está viva— dejándola colgada hasta su propio plazo.
+          const indice = esperandoTexto.indexOf(responder);
+          if (indice >= 0) esperandoTexto.splice(indice, 1);
+          resuelto("");
+        }, msDeEspera);
+        esperandoTexto.push(responder);
         transporte.emitir({ clase: "pregunta", texto: pregunta });
       });
     },

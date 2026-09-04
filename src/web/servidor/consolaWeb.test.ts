@@ -245,6 +245,56 @@ describe("consolaWeb: sin cliente, las preguntas contestan lo que un rl cerrado"
   });
 });
 
+/**
+ * El hueco que esta tarea cierra. `aprobacionesTui` tenía `msDeEspera` desde el primer día
+ * y `preguntar` no tenía ninguno: con la pestaña ABIERTA —o sea, sin que `alDesconectar`
+ * despertara a nadie— la promesa no vencía nunca y `correrConsola` se quedaba dentro del
+ * `await` para siempre. Y hasta ahora tampoco había forma de contestarla desde el
+ * navegador: el compositor manda todo como `{clase:"prosa"}`, que entra por la cola de
+ * líneas y no resuelve una pregunta ni acertando el texto.
+ */
+describe("consolaWeb: la pregunta de texto libre ni cuelga ni se queda sin respuesta", () => {
+  it("una `respuesta` del navegador la resuelve: la prosa NO, porque va a la cola de líneas", async () => {
+    const c = crearConsolaWeb({ msDeEspera: 60_000 });
+    c.conectar();
+    const promesa = c.consola.preguntar("¿Subir los cambios? [s/N] ");
+    // La prosa no contesta: se queda en la cola de líneas, que es de donde bebe el lazo.
+    c.recibir({ clase: "prosa", texto: "s" });
+    c.recibir({ clase: "respuesta", texto: "s" });
+    expect(await promesa).toBe("s");
+    // Y la prosa sigue siendo una línea del lazo, no una respuesta consumida.
+    const linea = await c.consola.lineas[Symbol.asyncIterator]().next();
+    expect(linea.value).toBe("s");
+  });
+
+  it("si expira el plazo responde cadena vacía: el turno vuelve al usuario en vez de colgarse", async () => {
+    const c = crearConsolaWeb({ msDeEspera: 10 });
+    c.conectar();
+    expect(await c.consola.preguntar("¿Subir los cambios? [s/N] ")).toBe("");
+  });
+
+  it("la pregunta vencida sale de la COLA: si no, se comería la respuesta de la siguiente", async () => {
+    const c = crearConsolaWeb({ msDeEspera: 20 });
+    c.conectar();
+    // La primera vence sola; la segunda se pide DESPUÉS y sí tiene quien la conteste.
+    expect(await c.consola.preguntar("primera ")).toBe("");
+    const segunda = c.consola.preguntar("segunda ");
+    c.recibir({ clase: "respuesta", texto: "la buena" });
+    expect(await segunda).toBe("la buena");
+  });
+
+  it("contestar a tiempo desarma el plazo: la respuesta gana, no la cadena vacía", async () => {
+    const c = crearConsolaWeb({ msDeEspera: 30 });
+    c.conectar();
+    const promesa = c.consola.preguntar("¿Subir los cambios? [s/N] ");
+    c.recibir({ clase: "respuesta", texto: "n" });
+    expect(await promesa).toBe("n");
+    // Pasado el plazo, nada vuelve a resolver ni revienta: el temporizador ya está limpio.
+    await new Promise((r) => setTimeout(r, 50));
+    expect(await promesa).toBe("n");
+  });
+});
+
 describe("consolaWeb: reconexión", () => {
   it("reconectar reemite todos los actos y no los duplica en el servidor", () => {
     const c = crearConsolaWeb();
