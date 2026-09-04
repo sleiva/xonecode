@@ -5,6 +5,8 @@ import { Maqueta } from "./componentes/Maqueta.js";
 import { Barra } from "./componentes/Barra.js";
 import { Cabecera } from "./componentes/Cabecera.js";
 import { Compositor } from "./componentes/Compositor.js";
+import { Transcript } from "./componentes/Transcript.js";
+import { BarraDeEstado } from "./componentes/BarraDeEstado.js";
 
 type Store = ReturnType<typeof crearStoreDelCliente>;
 
@@ -24,6 +26,23 @@ export function App({ store, enviar }: { store: Store; enviar: Conexion["enviar"
   // Dos reglas para el mismo título es cómo divergen — esta lo mira, no inventa una propia.
   const primerActoDeUsuario = estado.actos.find((a) => a.tipo === "usuario");
 
+  // Las piezas de `BarraDeEstado`, derivadas del transcript a falta de un mensaje propio
+  // del cable: ni `sistema` ni `EstadoDelCliente` llevan hoy `contexto`/`tope`
+  // (`tipos.ts`, `store.ts`), así que esos dos quedan `undefined` — la misma postura de
+  // «lista vacía, no dato inventado» que ya usa la `<Barra>` de abajo con `proyectos={[]}`.
+  // «Turnos» cuenta actos `usuario`; «pasos» suma las líneas de los actos `herramientas`
+  // —una racha COLAPSADA cuenta como una línea (`core/notify.ts`), así que esto cuenta
+  // rachas visibles, no llamadas reales a tool—; el tiempo es el del ÚLTIMO turno
+  // cerrado, no un acumulado de sesión.
+  const turnos = estado.actos.filter((a) => a.tipo === "usuario").length;
+  const pasos = estado.actos
+    .filter((a) => a.tipo === "herramientas")
+    .reduce((n, a) => n + a.lineas.length, 0);
+  const ultimoFin = estado.actos
+    .slice()
+    .reverse()
+    .find((a) => a.tipo === "fin");
+
   return (
     <Maqueta
       centro={
@@ -32,6 +51,7 @@ export function App({ store, enviar }: { store: Store; enviar: Conexion["enviar"
             titulo={primerActoDeUsuario?.texto ?? "xonecode"}
             conectado={estado.conectado}
           />
+          <Transcript actos={estado.actos} />
           <Compositor
             comandos={estado.comandos}
             conectado={estado.conectado}
@@ -41,6 +61,7 @@ export function App({ store, enviar }: { store: Store; enviar: Conexion["enviar"
             // `/modelo`, `/config` y `/sync` funcionan aquí sin ningún código nuevo.
             alEnviar={(texto) => void enviar({ clase: "prosa", texto })}
           />
+          <BarraDeEstado turnos={turnos} pasos={pasos} ms={ultimoFin?.ms} />
         </>
       }
       barra={

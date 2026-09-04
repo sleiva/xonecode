@@ -1,0 +1,50 @@
+/* Alias comprobados contra design-platform.css (grep del brief): border-l2,
+   label-primary/secondary/tertiary e interactive-bg-hover existen. */
+
+.transcript {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  flex: 1;
+}
+
+.pestanas {
+  display: flex;
+  gap: 4px;
+  padding: 8px 12px 0;
+  border-bottom: 0.5px solid var(--dsw-alias-border-l2);
+}
+
+.pestana,
+.activa {
+  border: none;
+  background: none;
+  cursor: pointer;
+  font-size: 13px;
+  padding: 6px 12px;
+}
+
+/* Sin `border-bottom: … transparent` (es un color-keyword como cualquier otro, y la
+   regla es «ningún color literal»): la pestaña inactiva reserva el mismo hueco con
+   2px extra de padding en vez de un borde invisible. */
+.pestana {
+  color: var(--dsw-alias-label-tertiary);
+  padding-bottom: 8px;
+}
+
+.pestana:hover {
+  color: var(--dsw-alias-label-secondary);
+  background: var(--dsw-alias-interactive-bg-hover);
+}
+
+.activa {
+  color: var(--dsw-alias-label-primary);
+  border-bottom: 2px solid var(--dsw-alias-label-primary);
+  font-weight: 600;
+}
+
+.vista {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}

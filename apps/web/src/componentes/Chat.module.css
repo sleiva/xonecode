@@ -1,0 +1,81 @@
+/* Alias comprobados contra design-platform.css (grep del brief): bg-layer-1/2,
+   border-l2, label-primary, state-error-primary/secondary, markdown-code-block y
+   markdown-inline-code existen. */
+
+.chat {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  height: 100%;
+  overflow-y: auto;
+  padding: 16px;
+}
+
+.globo {
+  max-width: 70ch;
+  padding: 10px 14px;
+  border-radius: 10px;
+  line-height: 1.5;
+}
+
+/* `pre-wrap` solo en los globos de TEXTO plano (usuario, error): el del asistente lleva
+   el HTML de `aHtml`, que trae un `\n` entre cada bloque —`</h1>\n<ul>\n<li>…`— y
+   `pre-wrap` ahí pintaría filas en blanco visibles y convertiría un salto de línea
+   suave dentro de un párrafo en un corte duro, justo lo contrario de lo que dice el
+   markdown. */
+.usuario,
+.error {
+  white-space: pre-wrap;
+}
+
+.usuario {
+  align-self: flex-end;
+  background: var(--dsw-alias-bg-layer-2);
+  color: var(--dsw-alias-label-primary);
+}
+
+.asistente {
+  align-self: flex-start;
+  background: var(--dsw-alias-bg-layer-1);
+  color: var(--dsw-alias-label-primary);
+  border: 0.5px solid var(--dsw-alias-border-l2);
+}
+
+.error {
+  align-self: flex-start;
+  background: var(--dsw-alias-state-error-secondary);
+  color: var(--dsw-alias-state-error-primary);
+}
+
+/* Lo que sigue estiliza el HTML que produce `aHtml` (marked + DOMPurify) dentro de
+   `.asistente`: no lleva sus propias clases de módulo — es HTML insertado con
+   `dangerouslySetInnerHTML`, así que el único gancho posible es `:global()` sobre la
+   etiqueta que marked ya elige. */
+
+.asistente :global(pre) {
+  background: var(--dsw-alias-markdown-code-block);
+  padding: 10px;
+  border-radius: 6px;
+  overflow-x: auto;
+}
+
+.asistente :global(code) {
+  background: var(--dsw-alias-markdown-inline-code);
+  border-radius: 3px;
+  padding: 0 4px;
+}
+
+.asistente :global(pre) :global(code) {
+  background: none;
+  padding: 0;
+}
+
+.asistente :global(table) {
+  border-collapse: collapse;
+}
+
+.asistente :global(th),
+.asistente :global(td) {
+  border: 0.5px solid var(--dsw-alias-border-l2);
+  padding: 4px 8px;
+}

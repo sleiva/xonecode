@@ -1,0 +1,42 @@
+/* Alias comprobados contra design-platform.css (grep del brief): bg-layer-1/2, border-l2,
+   label-primary/secondary/tertiary y markdown-inline-code existen. */
+
+.trayectoria {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  height: 100%;
+  overflow-y: auto;
+  /* Monoespaciada por contrato del componente (el brief lo pide) — no hay alias de
+     tipografía en design-platform.css, así que la pila va literal: no es un color. */
+  font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+  font-size: 12px;
+}
+
+.fila {
+  display: flex;
+  gap: 12px;
+  padding: 2px 12px;
+  /* Una fila por acto, truncada: la trayectoria es paisaje, no lectura. */
+  white-space: nowrap;
+  overflow: hidden;
+}
+
+.fila:nth-child(odd) {
+  background: var(--dsw-alias-bg-layer-1);
+}
+
+.etiqueta {
+  flex-shrink: 0;
+  width: 9ch;
+  color: var(--dsw-alias-label-tertiary);
+}
+
+.texto {
+  color: var(--dsw-alias-label-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  background: var(--dsw-alias-markdown-inline-code);
+  border-radius: 3px;
+  padding: 0 4px;
+}
