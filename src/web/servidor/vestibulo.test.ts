@@ -192,6 +192,47 @@ describe("vestíbulo", () => {
     expect(proyecto.cerrada).toBe(true);
   });
 
+  it("cerrar DURANTE la construcción de la sesión real también aborta: el aviso llega tarde", async () => {
+    const s = sesionesEnMemoria();
+    let cerrada = false;
+    // `crearEjecutorReal` avisa de la sesión DESPUÉS de `inspeccionar` y `abrirSesionReal`.
+    // Este ejecutor reproduce esa ventana: el `cerrar()` del vestíbulo llega antes de que
+    // `sesionReal` exista, así que solo la bandera de «cerrando» puede salvarlo.
+    const v = crearVestibulo({
+      ...dobles(),
+      origenDeTrabajo: "global",
+      sesiones: s.puerto,
+      crearEjecutor: (alAbrirSesion) => async () => {
+        await new Promise<void>((r) => setTimeout(r, 5));
+        await new Promise<void>((resuelto) => {
+          alAbrirSesion({
+            cerrar: () => {
+              cerrada = true;
+              resuelto();
+            },
+          });
+        });
+      },
+    });
+    const proyecto = await v.abrirProyecto({ raiz: "/w/a" });
+    proyecto.recibir({ clase: "prosa", texto: "haz algo largo" });
+    await new Promise((r) => setTimeout(r, 0));
+    await proyecto.cerrar();
+    expect(cerrada).toBe(true);
+  });
+
+  it("dos aperturas A LA VEZ siguen dejando una sola consola viva", async () => {
+    const s = sesionesEnMemoria();
+    const v = crearVestibulo({ ...dobles(), origenDeTrabajo: "global", sesiones: s.puerto });
+    // Sin serializar, las dos ven `abierto === undefined` en el `await` de cierre y las dos
+    // arrancan su `correrConsola`: la primera se queda viva y sin nadie que la cierre.
+    const [a, b] = await Promise.all([v.abrirProyecto({ raiz: "/w/a" }), v.abrirProyecto({ raiz: "/w/b" })]);
+    expect(a.cerrada).toBe(true);
+    expect(b.cerrada).toBe(false);
+    expect(v.proyectoAbierto()).toBe(b);
+    await v.cerrar();
+  });
+
   it("una sesión reabierta es histórica hasta el PRIMER turno nuevo", async () => {
     const s = sesionesEnMemoria();
     s.jsonl.set("/w/a|vieja", [{ tipo: "usuario", texto: "lo de ayer" }]);

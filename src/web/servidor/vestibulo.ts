@@ -18,6 +18,7 @@
  * evita en todas partes.
  */
 
+import { randomUUID } from "node:crypto";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import type { Acto } from "../../core/actos.js";
@@ -30,6 +31,7 @@ import {
   SCOPES_CLOUDSTUDIO_AGENTE,
   adoptarLegadoSiProcede,
   conectarCloudStudio,
+  rutaAuthPorDefecto,
   sesionCloudStudio,
 } from "../../agent/cloudstudioMcp.js";
 import { clienteCloudStudio } from "../../agent/cloudstudioClient.js";
@@ -188,8 +190,9 @@ export interface ConsolaDeProyecto {
   readonly historica: boolean;
   readonly cerrada: boolean;
   readonly consola: ConsolaWeb;
-  /** Un mensaje del navegador. Pasa por aquí y no por `consola.recibir` directamente
-   *  porque el vestíbulo es el dueño del ciclo de vida de la sesión. */
+  /** Un mensaje del navegador. Está aquí para que la ruta HTTP tenga UN solo objeto con
+   *  el que hablar; quien decide el fin de la marca histórica es el envoltorio del
+   *  ejecutor, no esto — una prosa que llega a mitad de turno solo entra en la cola. */
   recibir(mensaje: MensajeDelCliente): void;
   conectar(enviar?: Sumidero): readonly Acto[];
   desconectar(): void;
@@ -293,7 +296,9 @@ export function crearVestibulo(opciones: OpcionesDelVestibulo): Vestibulo {
   const base = opciones.baseDeWorkspace ?? baseDeWorkspacePorOmision();
   const adoptarLegado =
     opciones.adoptarLegado ??
-    ((entorno: Entorno) => adoptarLegadoSiProcede(join(homedir(), ".xonecode", "cloudstudio-oauth.json"), entorno));
+    // `rutaAuthPorDefecto` y no un `join` propio: el mismo literal en dos ficheros es lo
+    // que esta cabecera condena, y `cloudstudioMcp.ts` la exporta justo para esto.
+    ((entorno: Entorno) => adoptarLegadoSiProcede(rutaAuthPorDefecto(), entorno));
   const guardarModeloGlobal = opciones.guardarModeloGlobal ?? guardarModeloGlobalEnDisco;
 
   const consolaDelVestibulo = crearConsola({
@@ -338,7 +343,24 @@ export function crearVestibulo(opciones: OpcionesDelVestibulo): Vestibulo {
     abierto = undefined;
   };
 
-  const abrirProyecto = async ({ raiz, sesion }: { raiz: string; sesion?: string }): Promise<ConsolaDeProyecto> => {
+  /**
+   * La cola de las operaciones que tocan `abierto`.
+   *
+   * «Una consola de proyecto a la vez» no se sostiene sin serializar: dos `POST` que
+   * lleguen a la vez se entrelazan en el `await` de `cerrarProyectoAbierto`, los dos ven
+   * `abierto === undefined`, los dos arrancan un `correrConsola` y el primero se queda vivo
+   * y sin nadie que lo pueda cerrar nunca. La cola se traga los rechazos —si no, un fallo
+   * dejaría la cadena rota para todo lo que venga detrás— y el rechazo de verdad se
+   * devuelve sin tragar a quien llamó.
+   */
+  let cola: Promise<unknown> = Promise.resolve();
+  const enCola = <T>(operacion: () => Promise<T>): Promise<T> => {
+    const resultado = cola.then(operacion);
+    cola = resultado.catch(() => undefined);
+    return resultado;
+  };
+
+  const abrirDeVerdad = async ({ raiz, sesion }: { raiz: string; sesion?: string }): Promise<ConsolaDeProyecto> => {
     await cerrarProyectoAbierto();
 
     const reabierta = sesion === undefined ? undefined : sesiones.reabrir(raiz, sesion);
@@ -356,6 +378,14 @@ export function crearVestibulo(opciones: OpcionesDelVestibulo): Vestibulo {
     let cerrada = false;
     let volcados = 0;
     let sesionReal: SesionCerrable | undefined;
+    /**
+     * Marcado desde que empieza el cierre. Hace falta porque `crearEjecutorReal` avisa de
+     * la sesión DESPUÉS de `inspeccionar` y `abrirSesionReal` —segundos en el primer
+     * turno—, así que un cierre en esa ventana encontraba `sesionReal` sin definir, no
+     * abortaba nada, y el turno seguía corriendo entero sobre un proyecto que el usuario
+     * ya había dejado. La sesión que llega tarde se cierra en cuanto se anuncia.
+     */
+    let cerrando = false;
 
     /**
      * Vuelca al `.jsonl` los actos nuevos.
@@ -379,6 +409,7 @@ export function crearVestibulo(opciones: OpcionesDelVestibulo): Vestibulo {
 
     const base = opciones.crearEjecutor?.((s) => {
       sesionReal = s;
+      if (cerrando) s.cerrar();
     });
 
     const ejecutarTurno: EjecutorDeTurno = async (peticion, estado, consola) => {
@@ -396,7 +427,7 @@ export function crearVestibulo(opciones: OpcionesDelVestibulo): Vestibulo {
     const terminada = correr(
       consolaWeb.consola,
       {
-        hilo: `xonecode-${Math.random().toString(36).slice(2)}`,
+        hilo: `xonecode-${randomUUID()}`,
         raiz,
         fuentes: opciones.fuentes ?? {},
       },
@@ -433,6 +464,7 @@ export function crearVestibulo(opciones: OpcionesDelVestibulo): Vestibulo {
         // pero `correrConsola` no lo mira hasta que el turno en vuelo devuelve, y un turno
         // en vuelo puede tardar minutos. Abortar la sesión real primero es lo que lo
         // desbloquea — y es para lo que existe `SesionReal.cerrar()`.
+        cerrando = true;
         sesionReal?.cerrar();
         consolaWeb.cerrar();
         await terminada.catch(() => 0);
@@ -543,10 +575,10 @@ export function crearVestibulo(opciones: OpcionesDelVestibulo): Vestibulo {
       return { raiz, ruta };
     },
 
-    abrirProyecto,
+    abrirProyecto: (apertura) => enCola(() => abrirDeVerdad(apertura)),
     proyectoAbierto: () => abierto,
 
-    async cancelar() {
+    cancelar: () => enCola(async () => {
       await cerrarProyectoAbierto();
       informar("alta cancelada");
       // Negar lo que ya está en disco sería mentir. Cancelar no BORRA nada: dice qué quedó.
@@ -556,11 +588,11 @@ export function crearVestibulo(opciones: OpcionesDelVestibulo): Vestibulo {
       if (proyectoEscrito !== undefined) {
         informar(`el alta del proyecto sigue escrita en ${proyectoEscrito.ruta}`);
       }
-    },
+    }),
 
-    async cerrar() {
+    cerrar: () => enCola(async () => {
       await cerrarProyectoAbierto();
       consolaDelVestibulo.cerrar();
-    },
+    }),
   };
 }

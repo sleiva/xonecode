@@ -216,7 +216,10 @@ export function proyectosDeResultado(valor: unknown): Array<{ id: string; nombre
   });
 }
 
-function rutaAuthPorDefecto(): string {
+/** Dónde vive el estado OAuth cuando nadie inyecta otra ruta. Exportada porque
+ *  `web/servidor/vestibulo.ts` la necesita para `adoptarLegadoSiProcede`: una segunda copia
+ *  del literal es cómo divergen las rutas el día que una se corrige y la otra no. */
+export function rutaAuthPorDefecto(): string {
   return join(homedir(), NOMBRE_CARPETA, NOMBRE_AUTH);
 }
 
