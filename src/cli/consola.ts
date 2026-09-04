@@ -43,6 +43,14 @@ export interface Consola {
   preguntar: Preguntar;
   interactivo: boolean;
   /**
+   * ¿Se acabó la entrada? Acompaña a `preguntar`, y existe porque su cadena vacía
+   * significa DOS cosas —el usuario pulsó Enter, o el readline se cerró— y con
+   * `interactivo: true` la primera APRUEBA: sin distinguirlas, un Ctrl-D aprobaba una
+   * escritura de fichero (`cli/aprobar.ts` lo cuenta entero). Ausente = no se sabe; la
+   * TUI y la web no lo necesitan porque sus aprobaciones van por `aprobacionesTui`.
+   */
+  eof?: () => boolean;
+  /**
    * Lee una clave SIN eco (para `provider`). El eco-off no se puede probar desde
    * aquí: es la costura de test, y la implementación de producción (raw-mode de
    * stdin) vive fuera — este fichero solo la usa.

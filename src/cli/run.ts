@@ -1,5 +1,5 @@
 import { correrTurno } from "../core/turno.js";
-import { pedirDecisiones, preguntarPorStdin } from "./aprobar.js";
+import { eofDeStdin, pedirDecisiones, preguntarPorStdin } from "./aprobar.js";
 import { crearPielStdio, escribirEnStdout, type Escribir } from "./stdio.js";
 import { AgenteGuionizado } from "../agent/guionizado.js";
 import { esDoble } from "../core/ports.js";
@@ -141,13 +141,18 @@ async function correrReal(opciones: OpcionesRun, escribir: Escribir): Promise<nu
       // precisamente para que en un pipe o en CI se pueda aprobar con un `s` EXPLÍCITO.
       // La garantía no la da negarse a preguntar, la da la asimetría: sin un sí
       // explícito, es rechazo. Y si stdin está cerrado, `preguntarPorStdin` resuelve con
-      // cadena vacía — o sea, rechazo.
+      // cadena vacía, que aquí YA rechaza — pero solo porque el `eof` de abajo degrada la
+      // pregunta a no-interactiva: con TTY y sin él, esa misma cadena vacía aprobaría.
       if (!interactivo) {
         escribir(`\n⏸  ${lista.length} escritura(s) piden aprobación, y no hay terminal.\n`);
         escribir("   Sin un «s» explícito se rechazan (una línea en blanco NO aprueba).\n");
       }
       const decisiones = await pedirDecisiones(lista, preguntar, escribir, {
         interactive: interactivo,
+        // El `interactivo` de arriba solo dice que HAY un terminal, no que siga habiendo
+        // alguien: un Ctrl-D deja stdin agotado y `preguntarPorStdin` responde cadena
+        // vacía, que con TTY aprueba. `eofDeStdin` es lo que separa las dos cosas.
+        eof: eofDeStdin,
         fichero: (id) => ficheros.get(id),
         diff: (id) => diffs.get(id),
       });

@@ -113,6 +113,49 @@ describe("consolaWeb: la aprobación es fail-closed POR TRANSPORTE", () => {
     expect(rechazado((await promesa).get("1"))).toBe(true);
   });
 
+  /**
+   * El plazo se pone en un MINUTO a propósito: si la promesa dependiera de él, estos dos
+   * tests agotarían el suyo (5 s) en vez de pasar. Es la diferencia entre rechazar por
+   * decisión y rechazar por agotamiento, que desde fuera se parecen demasiado.
+   */
+  it("`decisiones: null` termina enseguida en rechazo, y no revienta el POST", async () => {
+    const c = crearConsolaWeb({ msDeEspera: 60_000 });
+    c.conectar();
+    const promesa = c.consola.aprobacionesTui!([PENDIENTE], new Map(), new Map());
+    c.recibir({ clase: "decision", decisiones: null as unknown as Record<string, string> });
+    expect(rechazado((await promesa).get("1"))).toBe(true);
+  });
+
+  it("sin la clave `decisiones` tampoco se espera al plazo", async () => {
+    const c = crearConsolaWeb({ msDeEspera: 60_000 });
+    c.conectar();
+    const promesa = c.consola.aprobacionesTui!([PENDIENTE], new Map(), new Map());
+    c.recibir({ clase: "decision" } as unknown as { clase: "decision"; decisiones: Record<string, string> });
+    expect(rechazado((await promesa).get("1"))).toBe(true);
+  });
+
+  /**
+   * El vocabulario del cable es EXACTAMENTE `Decision["type"]`, no el de una respuesta
+   * tecleada. Un `"s"` es lo que aprueba en `interpretAnswer`, y aquí no aprueba nada:
+   * son dos alfabetos distintos y este test es lo que impide confundirlos.
+   */
+  it("un «s» por el cable NO aprueba: aquí no se teclea, se pulsa un botón", async () => {
+    const c = crearConsolaWeb();
+    c.conectar();
+    const promesa = c.consola.aprobacionesTui!([PENDIENTE], new Map(), new Map());
+    c.recibir({ clase: "decision", decisiones: { "1": "s" } });
+    expect(rechazado((await promesa).get("1"))).toBe(true);
+  });
+
+  it("aprobar algo que el pendiente no permite aprobar es rechazo", async () => {
+    const c = crearConsolaWeb();
+    c.conectar();
+    const soloRechazable = { ...PENDIENTE, decisionesPermitidas: ["reject"] };
+    const promesa = c.consola.aprobacionesTui!([soloRechazable], new Map(), new Map());
+    c.recibir({ clase: "decision", decisiones: { "1": "approve" } });
+    expect(rechazado((await promesa).get("1"))).toBe(true);
+  });
+
   it("una decisión TARDÍA no asciende nada: cuando llega ya no hay aprobación viva", async () => {
     const c = crearConsolaWeb({ msDeEspera: 5 });
     c.conectar();

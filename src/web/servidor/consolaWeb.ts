@@ -14,15 +14,17 @@
  * id. Así no existe camino que deje un pendiente sin rechazar — no hay que acordarse de
  * cubrirlos, porque el valor por omisión ya los cubre.
  *
- * Qué cuenta como aprobación lo decide `interpretAnswer` (`vendor/hitl.ts`), la misma
- * función que usa `cli/aprobar.ts`: dos criterios de «esto aprueba» divergen, y este es el
- * único sitio del producto donde divergir significa escribir ficheros que nadie autorizó.
- * El cliente habla en el alfabeto de `Decision["type"]` (lo que el pendiente declara en
- * `decisionesPermitidas`), no en el de una respuesta tecleada, así que el valor del cable
- * se TRADUCE a una respuesta antes de preguntarle: `"approve"` → `"s"`, y cualquier otra
- * cosa → cadena vacía, que es exactamente lo que devuelve un readline cerrado y lo que
- * `aprobar.ts` ya trata como rechazo. `interactive` no se pasa NUNCA: significa «hay un
- * TTY de verdad detrás», y aquí no lo hay jamás — con él, el Enter a secas aprobaría.
+ * **Aquí NO se llama a `interpretAnswer`**, y no es un descuido. Esa función interpreta
+ * TEXTO QUE TECLEA UN HUMANO: todo lo que la hace sutil —el conjunto `{s, si, sí, y, yes}`,
+ * el corte entre TTY y no-TTY, el Enter a secas valiendo por un sí— va de teclear. Por este
+ * socket no llega texto tecleado: llega el enum `Decision["type"]` que el propio pendiente
+ * declara en `decisionesPermitidas`, porque el cliente son botones. Un enum no tiene nada
+ * que interpretar. Traducirlo a `"s"` para hacerle pasar por `interpretAnswer` no aportaba
+ * ni un bit de decisión —el predicado de aquí abajo ya la había tomado— y engañaba a quien
+ * auditara: leería `interpretAnswer` y creería que el vocabulario aceptado es `{s, si, sí,
+ * y, yes}`, cuando es exactamente `"approve"`. Y ataba este fichero a que `"s"` siguiera
+ * dentro de `APPROVALS_NO_TTY`. El fail-closed no se mueve un milímetro por esto: vive en
+ * el prellenado del mapa, no en quién compara la cadena.
  */
 import { crearPielWeb } from "./pielWeb.js";
 import { crearTransporte, type MensajeAlCliente, type MensajeDelCliente, type Sumidero } from "./transporte.js";
@@ -32,14 +34,7 @@ import type { LineaDeDiff } from "../../core/diff.js";
 import type { Piel } from "../../core/turno.js";
 import type { Consola, SelectorDeConsola } from "../../cli/consola.js";
 import { CatalogoModelosEnMemoria, type CatalogoModelosPort, type Papel } from "../../core/ports.js";
-import { interpretAnswer, REJECT_MESSAGE, type Decision } from "../../vendor/hitl.js";
-
-/**
- * La respuesta afirmativa canónica que `interpretAnswer` acepta sin TTY
- * (`APPROVALS_NO_TTY`). Si alguien la sacara de ese conjunto, esto empezaría a rechazar
- * todo — que es la dirección segura de romperse.
- */
-const RESPUESTA_AFIRMATIVA = "s";
+import { REJECT_MESSAGE, type Decision } from "../../vendor/hitl.js";
 
 /**
  * Plazo de una aprobación. Generoso porque al otro lado hay una persona leyendo un diff,
@@ -282,19 +277,34 @@ export function crearConsolaWeb(opciones: OpcionesDeConsolaWeb = {}): ConsolaWeb
     // Decisión de aprobación.
     const enVuelo = aprobacionEnVuelo;
     if (enVuelo === undefined) return;
-    for (const [id, valor] of Object.entries(mensaje.decisiones)) {
-      const pendiente = enVuelo.pendientes.get(id);
-      // Un id que no pedimos no puede aprobar nada, y tampoco entra en el mapa: el
-      // resume de langgraph se construye con estas claves.
-      if (pendiente === undefined) continue;
-      const respuesta =
-        valor === "approve" && pendiente.decisionesPermitidas.includes("approve") ? RESPUESTA_AFIRMATIVA : "";
-      const decision = interpretAnswer(respuesta);
-      if (decision.type === "approve") enVuelo.decisiones.set(id, decision);
+    // El `try/finally` es el fail-closed llevado hasta el final: pase lo que pase ahí
+    // dentro, la aprobación TERMINA con lo que tenga —y lo que tiene es el prellenado de
+    // rechazos—. Sin él, un lanzamiento dejaba la aprobación sin resolver hasta que
+    // venciera el plazo (diez minutos en producción) y sin forma de reintentar, porque la
+    // aprobación no se reemite al reconectar: acababa en rechazo por AGOTAMIENTO en vez de
+    // por decisión, que es la misma respuesta contada como si nadie hubiera fallado.
+    try {
+      // `decisiones` viene de un `JSON.parse` de la red: el tipo es una promesa que el
+      // cable no está obligado a cumplir. Medido: `Object.entries(null)` lanza
+      // «Cannot convert undefined or null to object» y `{clase:"decision"}` a secas
+      // tampoco trae la clave.
+      for (const [id, valor] of Object.entries(mensaje.decisiones ?? {})) {
+        const pendiente = enVuelo.pendientes.get(id);
+        // Un id que no pedimos no puede aprobar nada, y tampoco entra en el mapa: el
+        // resume de langgraph se construye con estas claves.
+        if (pendiente === undefined) continue;
+        // La comparación es EXACTA y contra lo que el propio pendiente declara permitido:
+        // el cliente son botones, no hay erratas que perdonar, y todo lo demás es rechazo
+        // porque el mapa ya nació rechazado.
+        if (valor === "approve" && pendiente.decisionesPermitidas.includes("approve")) {
+          enVuelo.decisiones.set(id, { type: "approve" });
+        }
+      }
+    } finally {
+      // Se termina AUNQUE la respuesta sea parcial o basura: los pendientes que no venían
+      // siguen rechazados, que es la respuesta correcta a «no me contestaste sobre esto».
+      enVuelo.terminar();
     }
-    // Se termina AUNQUE la respuesta sea parcial: los pendientes que no venían siguen
-    // rechazados, que es la respuesta correcta a «no me contestaste sobre esto».
-    enVuelo.terminar();
   };
 
   return {

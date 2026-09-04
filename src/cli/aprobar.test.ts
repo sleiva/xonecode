@@ -141,6 +141,78 @@ describe("pedirDecisiones", () => {
     expect(sinTty.prompts[0]).toBe("¿Aprobar? [s/N] ");
   });
 
+  describe("el EOF no se hace pasar por un Enter", () => {
+    /**
+     * El Enter a secas SÍ aprueba con el diff delante y un TTY detrás: es un rasgo
+     * deliberado del repo, y quien lo pulsa está mirando el cambio. Pero `crearPreguntar`
+     * (`cli/stdio.ts`) resuelve **cadena vacía** también cuando el readline ya está
+     * cerrado —un Ctrl-D, un stdin agotado a mitad de turno—, y `""` está dentro de
+     * `APPROVALS_TTY`. Sin el detector, ese EOF entraba por la puerta del Enter y APROBABA
+     * una escritura de fichero que nadie llegó a ver.
+     */
+    it("con TTY, una respuesta vacía y el rl CERRADO rechaza", async () => {
+      const { trozos, escribir } = acumulador();
+      const { preguntar } = preguntadorGuionizado([""]);
+
+      const d = await pedirDecisiones([pendiente("x")], preguntar, escribir, {
+        interactive: true,
+        eof: () => true,
+      });
+
+      expect(d.get("x")?.type).toBe("reject");
+      expect(trozos.join("")).toContain("no se ha aplicado nada");
+    });
+
+    it("con TTY y el rl VIVO, la misma respuesta vacía aprueba: el Enter sigue valiendo", async () => {
+      const { escribir } = acumulador();
+      const { preguntar } = preguntadorGuionizado([""]);
+
+      const d = await pedirDecisiones([pendiente("x")], preguntar, escribir, {
+        interactive: true,
+        eof: () => false,
+      });
+
+      expect(d.get("x")?.type).toBe("approve");
+    });
+
+    it("el prompt también deja de mentir: con EOF enseña [s/N], no [S/n]", async () => {
+      const { escribir } = acumulador();
+      const { prompts, preguntar } = preguntadorGuionizado([""]);
+
+      await pedirDecisiones([pendiente("x")], preguntar, escribir, { interactive: true, eof: () => true });
+
+      expect(prompts[0]).toBe("¿Aprobar? [s/N] ");
+    });
+
+    it("un rl que se cierra A MEDIA pregunta también rechaza", async () => {
+      // El caso que `crearPreguntar` documenta aparte del ya-cerrado: se preguntó con el
+      // rl vivo y el EOF llegó mientras el usuario no contestaba. Si `eof` solo se mirara
+      // ANTES de preguntar, esta respuesta vacía volvería a aprobar.
+      const { escribir } = acumulador();
+      let cerrado = false;
+      const preguntar: Preguntar = async () => {
+        cerrado = true;
+        return "";
+      };
+
+      const d = await pedirDecisiones([pendiente("x")], preguntar, escribir, {
+        interactive: true,
+        eof: () => cerrado,
+      });
+
+      expect(d.get("x")?.type).toBe("reject");
+    });
+
+    it("sin `eof`, nada cambia: los 21 llamadores que no lo pasan siguen igual", async () => {
+      const { escribir } = acumulador();
+      const { preguntar } = preguntadorGuionizado([""]);
+
+      const d = await pedirDecisiones([pendiente("x")], preguntar, escribir, { interactive: true });
+
+      expect(d.get("x")?.type).toBe("approve");
+    });
+  });
+
   describe("bloque de diff", () => {
     const diff: LineaDeDiff[] = [
       { tipo: "igual", texto: "<app>" },

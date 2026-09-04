@@ -307,9 +307,15 @@ vuelven a declarar en cada `/sync`, que es la verdad.
 **La aprobación humana es fail-closed** (`cli/aprobar.ts`, `vendor/hitl.ts`). Aprobar ejecuta;
 rechazar no toca nada, así que lo que no se entiende es **rechazo**. El Enter a secas solo
 aprueba con un TTY de verdad detrás, y un rl ya cerrado (el EOF de un pipe que se agota durante
-un turno, medido en e2e) responde con cadena vacía — o sea, rechazo — en vez de lanzar
-`readline was closed` y dejar el interrupt colgado. Tope de `MAX_APPROVAL_ROUNDS = 5` rondas
-por turno.
+un turno, medido en e2e) responde con cadena vacía en vez de lanzar `readline was closed` y
+dejar el interrupt colgado. **Esa cadena vacía sola NO rechaza**: aquí decía que sí y era
+falso. Solo rechaza SIN TTY; con TTY es exactamente lo mismo que un Enter, y el Enter aprueba
+— o sea que un Ctrl-D aprobaba una escritura. Por eso `pedirDecisiones` recibe además un
+`eof` (`crearDetectorDeEof` en `cli/stdio.ts`, `eofDeStdin` para el stdin crudo del disparo
+único) y una entrada agotada degrada la pregunta a no-interactiva, donde la cadena vacía ya
+rechaza y el prompt enseña `[s/N]` en vez de mentir con `[S/n]`. El Enter sigue aprobando
+mientras haya alguien: es deliberado, y quien lo pulsa tiene el diff delante. Tope de
+`MAX_APPROVAL_ROUNDS = 5` rondas por turno.
 
 **La foto del ANTES** (`agent/instantanea.ts`) es un árbol de git en un `GIT_INDEX_FILE`
 privado: no necesita commits, no necesita que el proyecto sea la raíz del repo, y no toca el

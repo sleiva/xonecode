@@ -46,7 +46,7 @@ import {
   type EjecutorDeTurno,
   type EstadoDeSesion,
 } from "./consola.js";
-import { crearLeerSecreto, crearPreguntar, crearPielStdio, escribirEnStdout, type Escribir } from "./stdio.js";
+import { crearDetectorDeEof, crearLeerSecreto, crearPreguntar, crearPielStdio, escribirEnStdout, type Escribir } from "./stdio.js";
 import { crearTema, esTema, seleccionarTema } from "./tema.js";
 import { pedirDecisiones } from "./aprobar.js";
 import { modeloDeAcuse } from "./acuseDeModelo.js";
@@ -369,6 +369,10 @@ function crearEjecutorReal(alAbrirSesion: (sesion: SesionReal) => void): Ejecuto
             ? consolaReal.aprobacionesTui(lista, ficheros, diffs)
             : pedirDecisiones(lista, consolaReal.preguntar, consolaReal.escribir, {
                 interactive: consolaReal.interactivo,
+                // Sin esto, el Ctrl-D de un TTY llega como cadena vacía y `interactive:
+                // true` la aprueba: un EOF haciéndose pasar por el Enter que aprueba
+                // escrituras. `eof` lo distingue (`cli/aprobar.ts` lo explica entero).
+                eof: consolaReal.eof,
                 fichero: (id) => ficheros.get(id),
                 diff: (id) => diffs.get(id),
               }),
@@ -814,6 +818,7 @@ export async function entrarEnConsola(
     },
     preguntar: crearPreguntar(rl),
     interactivo,
+    eof: crearDetectorDeEof(rl),
     leerSecreto: crearLeerSecreto(rl),
     catalogoModelos: dependencias.catalogoModelos,
     guardarModeloGlobal: dependencias.guardarModeloGlobal,

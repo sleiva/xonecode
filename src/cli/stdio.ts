@@ -164,6 +164,20 @@ export const escribirEnStdout: Escribir = (texto) => {
 };
 
 /**
+ * ¿Se acabó la entrada? Es la ÚNICA definición de «este readline ya está cerrado», y la
+ * comparten `crearPreguntar` (para no lanzar) y `pedirDecisiones` (para no confundir un
+ * EOF con un Enter). Dos definiciones de esto acabarían divergiendo, y divergir aquí es
+ * aprobar una escritura que nadie autorizó.
+ *
+ * `rl.closed` existe en runtime pero no está en los tipos de esta versión de @types/node
+ * — mismo caso que `rl.history` más abajo, y mismo cast justificado.
+ */
+export function crearDetectorDeEof(rl: readline.Interface): () => boolean {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  return () => (rl as any).closed === true;
+}
+
+/**
  * El `preguntar` de producción para la consola: usa el ÚNICO `readline.Interface`
  * compartido con el lazo de líneas y con `leerSecreto`. Tres lectores de stdin no pueden
  * competir por sus eventos `data`; con un solo `rl`, `rl.question` se intercala sin
@@ -172,15 +186,19 @@ export const escribirEnStdout: Escribir = (texto) => {
  * **Si el rl ya está cerrado (o se cierra a media pregunta), resuelve con cadena vacía
  * y no lanza.** Es el EOF de un pipe que se agota mientras el turno corre — medido en
  * e2e: la aprobación pregunta 20 segundos después de que stdin hiciera EOF, y el
- * `readline was closed` abortaba el turno con el interrupt colgado. Y la cadena vacía
- * es lo correcto además de lo seguro: `interpretAnswer` sin un «s» explícito RECHAZA.
- * Mismo pacto que `leerSecreto` con su `alCerrar`.
+ * `readline was closed` abortaba el turno con el interrupt colgado. Mismo pacto que
+ * `leerSecreto` con su `alCerrar`.
+ *
+ * **Y esa cadena vacía NO es segura por sí sola** —el comentario que estuvo aquí decía lo
+ * contrario y era falso—: `interpretAnswer` la RECHAZA sin TTY, pero CON TTY la aprueba,
+ * porque el Enter a secas vale por un sí (`APPROVALS_TTY`, `vendor/hitl.ts`). Con un
+ * terminal de verdad delante, un Ctrl-D aprobaba una escritura de fichero. Por eso quien
+ * decide sobre una aprobación necesita además `crearDetectorDeEof`: sirve para distinguir
+ * las dos cosas que aquí llegan idénticas —un humano que pulsa Enter y un stdin que se
+ * acabó—, que es justo lo que la cadena vacía sola no puede contar.
  */
 export function crearPreguntar(rl: readline.Interface): Preguntar {
-  // `rl.closed` existe en runtime pero no está en los tipos de esta versión de
-  // @types/node — mismo caso que `rl.history` abajo, y mismo cast justificado.
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const cerrado = (): boolean => (rl as any).closed === true;
+  const cerrado = crearDetectorDeEof(rl);
   return (pregunta: string) =>
     new Promise<string>((resolver) => {
       const alCerrar = (): void => resolver("");
