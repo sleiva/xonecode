@@ -127,7 +127,7 @@ describe("montarRutas — el cable, por fin conectado", () => {
     expect([...servidor.rutas.keys()].sort()).toEqual([`GET ${RUTA_EVENTOS}`, `POST ${RUTA_ACCION}`]);
   });
 
-  it("al conectar manda el transcript, el registro de comandos y el alta pendiente", async () => {
+  it("al conectar manda el transcript, el registro de comandos, el saludo y el alta pendiente", async () => {
     const servidor = servidorDeMentira();
     montarRutas(servidor, vestibuloDePrueba());
     const cliente = clienteDeMentira();
@@ -135,9 +135,36 @@ describe("montarRutas — el cable, por fin conectado", () => {
     await eventos!(cliente.peticion, cliente.respuesta);
     await asentar();
 
-    expect(cliente.recibidos.map((m) => m.clase)).toEqual(["reemision", "comandos", "alta"]);
+    expect(cliente.recibidos.map((m) => m.clase)).toEqual(["reemision", "comandos", "bienvenida", "alta"]);
     const comandos = cliente.recibidos[1] as Extract<MensajeAlCliente, { clase: "comandos" }>;
     expect(comandos.comandos).toEqual(comandosDelRegistro());
+  });
+
+  /**
+   * La medida que motivó la clase «bienvenida»: con la cuenta de verdad pendiente
+   * (`origenDeTrabajo: "omision"`), `alta` no se manda hasta que `conducirCuenta()`
+   * termina —y eso espera a que un humano conteste el selector—, así que sin este
+   * mensaje el nombre no tenía por dónde llegar mientras tanto. Se manda ANTES del
+   * selector, no después: el nombre ya está resuelto al conectar, no depende de que
+   * nadie elija nada.
+   */
+  it("el saludo llega ANTES de que la cuenta resuelva, no solo dentro del `alta` final", async () => {
+    const servidor = servidorDeMentira();
+    montarRutas(servidor, vestibuloDePrueba({ origenDeTrabajo: "omision", nombre: "Ana" }));
+    const cliente = clienteDeMentira();
+    const eventos = servidor.rutas.get(`GET ${RUTA_EVENTOS}`);
+    await eventos!(cliente.peticion, cliente.respuesta);
+    await asentar();
+
+    const clases = cliente.recibidos.map((m) => m.clase);
+    expect(clases.indexOf("bienvenida")).toBeGreaterThanOrEqual(0);
+    expect(clases.indexOf("bienvenida")).toBeLessThan(clases.indexOf("selector"));
+    expect(clases).not.toContain("alta");
+    const bienvenida = cliente.recibidos.find((m) => m.clase === "bienvenida") as Extract<
+      MensajeAlCliente,
+      { clase: "bienvenida" }
+    >;
+    expect(bienvenida.nombre).toBe("Ana");
   });
 
   it("con cuenta y entorno resueltos, `pasos` sale vacío, sin proyecto abierto lo dice aparte, y la barra llega con SUS proyectos", async () => {

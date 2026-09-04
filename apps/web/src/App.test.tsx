@@ -263,7 +263,11 @@ describe("App: la pantalla de arranque no enseña nada más", () => {
         proyectoAbierto: false,
       })
     );
-    expect(screen.getByRole("heading", { name: /entorno/i })).toBeTruthy();
+    // El propio `<h2>Entorno</h2>` del wizard se quitó (F4 de la revisión): repetía el
+    // rótulo «Entorno de CloudStudio» que ya pone `PasosDelAlta` justo encima, un paso
+    // más arriba en el mismo `TarjetaDeAlta`. El campo del formulario es la prueba de
+    // que el wizard sigue ahí.
+    expect(screen.getByLabelText(/url del mcp/i)).toBeTruthy();
     expect(screen.queryByPlaceholderText(/escribe una petición/i)).toBeNull();
     expect(screen.queryByRole("tablist")).toBeNull();
   });
@@ -341,6 +345,31 @@ describe("App: la pantalla de arranque no enseña nada más", () => {
         nombre: "Ana",
       })
     );
+    expect(screen.getByText("Hola, Ana")).toBeTruthy();
+  });
+
+  /**
+   * F1 de la revisión: el bug medido no era que `persona.ts` no cayera al usuario del
+   * sistema —`persona.test.ts` ya prueba esa rama y pasaba—, era que el nombre no tenía
+   * por dónde llegar al CLIENTE mientras el paso de cuenta seguía en curso: `alta` (el
+   * único mensaje que hasta entonces llevaba `nombre`) no se manda hasta que
+   * `conducirCuenta()` termina (`arranque.ts#anunciarAlta`), y eso puede tardar lo que
+   * tarde un humano en elegir modelo. Este test es el que se rompía sin `estado.nombre`:
+   * uno que solo mirase `alta?.nombre` (como antes) seguiría en verde aunque la
+   * preferencia de `App.tsx` se revirtiera por descuido, porque nunca aplica un
+   * `alta` con nombre.
+   */
+  it("el nombre llega ANTES de que la cuenta resuelva, por la clase «bienvenida» — no solo dentro del `alta` final", () => {
+    const { store } = montarSinAbrir();
+    act(() => store.aplicar({ clase: "bienvenida", nombre: "Ana" }));
+    act(() =>
+      store.aplicar({
+        clase: "selector",
+        selector: { titulo: "Proveedor de modelos", opciones: [{ id: "ollama", etiqueta: "ollama" }] },
+      })
+    );
+    // Todavía sin `alta`: si el saludo dependiera de `alta?.nombre`, esto sería «Hola» a
+    // secas — que es exactamente el bug medido.
     expect(screen.getByText("Hola, Ana")).toBeTruthy();
   });
 });

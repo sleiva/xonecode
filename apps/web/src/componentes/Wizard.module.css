@@ -12,12 +12,6 @@
   gap: 6px;
 }
 
-.titulo {
-  margin: 0 0 8px;
-  font-size: 16px;
-  color: var(--dsw-alias-label-primary);
-}
-
 .etiqueta {
   margin-top: 8px;
   color: var(--dsw-alias-label-secondary);

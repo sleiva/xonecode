@@ -56,6 +56,16 @@ export type MensajeAlCliente =
   | { clase: "sustitucion"; acto: Acto }
   /** El transcript completo: lo que trae (re)conectar, y el arreglo de cualquier desajuste. */
   | { clase: "reemision"; actos: Acto[] }
+  /**
+   * El saludo, SUELTO del `alta` — llega al conectar, ANTES de que el paso de cuenta
+   * resuelva (`web/servidor/arranque.ts` lo manda antes de `conducirCuenta()`), porque el
+   * nombre no depende de ninguna cuenta: es local (`agent/persona.ts#nombreDePersona`).
+   * `alta.nombre` sigue existiendo con el MISMO dato — no porque una conexión pueda ver
+   * `alta` sin haber visto este mensaje antes (no puede: el SSE arranca de cero cada vez
+   * y siempre manda éste primero), sino porque tocar ese campo cambiaría el contrato de
+   * `alta` y su test, que no es parte de este arreglo.
+   */
+  | { clase: "bienvenida"; nombre?: string }
   | { clase: "pregunta"; texto: string }
   | { clase: "selector"; selector: SelectorDeConsola }
   | { clase: "secreto"; pregunta: string }

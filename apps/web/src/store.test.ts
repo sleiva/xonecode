@@ -225,3 +225,32 @@ describe("el alta del wizard", () => {
     expect(store.leer().alta?.nombre).toBe("Ana");
   });
 });
+
+describe("aplicar: bienvenida", () => {
+  /**
+   * El motivo de que este mensaje exista: llega ANTES que `alta` (`arranque.ts` lo manda
+   * antes de `conducirCuenta()`), así que el nombre tiene que quedar en un campo propio
+   * del estado y no esperar a que `alta` aparezca — `App.tsx` lee `estado.nombre` con
+   * `estado.alta?.nombre` de red, nunca al revés.
+   */
+  it("guarda el nombre SIN que haya llegado ningún `alta` todavía", () => {
+    const store = crearStoreDelCliente();
+    store.aplicar({ clase: "bienvenida", nombre: "Ana" });
+    expect(store.leer().nombre).toBe("Ana");
+    expect(store.leer().alta).toBeUndefined();
+  });
+
+  it("sin nombre no hay nombre — nunca uno inventado", () => {
+    const store = crearStoreDelCliente();
+    store.aplicar({ clase: "bienvenida" });
+    expect(store.leer().nombre).toBeUndefined();
+  });
+
+  it("una reconexión sin nombre BORRA el de la conexión anterior, no lo deja colgado", () => {
+    const store = crearStoreDelCliente();
+    store.aplicar({ clase: "bienvenida", nombre: "Ana" });
+    expect(store.leer().nombre).toBe("Ana");
+    store.aplicar({ clase: "bienvenida" });
+    expect(store.leer().nombre).toBeUndefined();
+  });
+});

@@ -357,6 +357,12 @@ export function montarRutas(
     // disparan `onopen` hasta el primer dato.
     respuesta.write(": xonecode\n\n");
     adjuntar();
+    // ANTES de `conducirCuenta()`, no después: el nombre ya está resuelto (es local, no
+    // depende de ninguna cuenta) y el paso de cuenta puede tardar lo que tarde un humano
+    // en elegir modelo y teclear una clave. Mandarlo solo dentro de `alta` —al final de
+    // TODO esto— dejaba el saludo en «Hola» a secas mientras tanto (`transporte.ts`
+    // documenta la medida).
+    emitir({ clase: "bienvenida", ...(vestibulo.nombre === undefined ? {} : { nombre: vestibulo.nombre }) });
     void conducirCuenta()
       .catch(contar)
       .then(() => poblarProyectosSiProcede())

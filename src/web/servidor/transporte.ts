@@ -35,6 +35,21 @@ export type MensajeAlCliente =
   | { clase: "sustitucion"; acto: Acto }
   /** El transcript completo: lo que recibe quien (re)conecta, y el arreglo de cualquier desajuste. */
   | { clase: "reemision"; actos: Acto[] }
+  /**
+   * El saludo, SUELTO del `alta`. `agent/persona.ts#nombreDePersona` no depende de
+   * ninguna cuenta ni de ningún login —es `git config`/`os.userInfo()`, local y ya
+   * resuelto al construir el vestíbulo—, pero el `alta` solo se manda DESPUÉS de que
+   * `conducirCuenta()` termina (`arranque.ts#anunciarAlta`), que puede tardar lo que
+   * tarde un humano en elegir modelo y teclear una clave. Sin este mensaje, medido: la
+   * pantalla decía «Hola» a secas durante TODO el paso de cuenta, con el nombre ya
+   * resuelto y sin ningún sitio por el que viajar hasta que la cuenta se resolviera —
+   * un saludo que se sabe y no se dice. Se manda una vez, al conectar, antes de
+   * `conducirCuenta()`. `alta.nombre` (más abajo) sigue llevando el MISMO dato — no
+   * porque quede alguna conexión sin ver este mensaje (el SSE arranca de cero en cada
+   * conexión y siempre lo manda primero), sino porque quitarlo de `alta` cambiaría ese
+   * contrato y su test, y eso no es parte de este arreglo.
+   */
+  | { clase: "bienvenida"; nombre?: string }
   | { clase: "pregunta"; texto: string }
   | { clase: "selector"; selector: SelectorDeConsola }
   | { clase: "secreto"; pregunta: string }

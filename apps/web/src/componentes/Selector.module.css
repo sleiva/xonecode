@@ -1,5 +1,5 @@
 /* Alias comprobados contra `apps/web/estilos/design-platform.css`: bg-layer-2/1, border-l2,
-   label-primary/tertiary, interactive-bg-hover y state-error-primary. */
+   label-primary/secondary/tertiary, interactive-bg-hover y state-error-primary. */
 
 /* Antes era una franja a lo ancho con un solo `border-top`, pensada para vivir pegada
    debajo del transcript: una franja sin bordes ni esquinas flotando en mitad de la
@@ -23,6 +23,33 @@
   background: var(--dsw-alias-bg-layer-2);
 }
 
+/* `anidado` (`Selector.tsx`): dentro de `TarjetaDeAlta` el borde y el fondo de arriba
+   quedan DOBLADOS con los de la tarjeta —dos marcos concéntricos, con la costura entre
+   componentes bien visible—, medido en la primera versión de la pantalla unificada.
+   Sin caja propia aquí, el panel se funde en el fondo de la tarjeta; `.opcion` pasa de
+   `bg-layer-1` a `bg-layer-2` para seguir teniendo contraste contra ese fondo (antes
+   contrastaba contra ESTE `bg-layer-2`, ahora contra el `bg-layer-1` de
+   `TarjetaDeAlta.module.css`) — la misma pareja de alias, invertida. `.cancelar` no
+   necesita su propia regla anidada: ya no tiene fondo en NINGÚN sitio (ver más abajo). */
+.selector[data-anidado] {
+  padding: 0;
+  border: none;
+  border-radius: 0;
+  background: none;
+}
+
+.selector[data-anidado] .opcion {
+  background: var(--dsw-alias-bg-layer-2);
+}
+
+/* Sin esto el `:hover` de abajo no gana: `.selector[data-anidado] .opcion` tiene más
+   especificidad (0,3,0) que `.opcion:hover` (0,2,0) sola, y el fondo quieto ganaba sobre
+   el de hover — medido, los cinco proveedores dejaban de resaltar al pasar el ratón por
+   encima SOLO dentro del alta, porque mitad de conversación nunca pasa por esta regla. */
+.selector[data-anidado] .opcion:hover {
+  background: var(--dsw-alias-interactive-bg-hover);
+}
+
 .titulo {
   margin: 0;
   color: var(--dsw-alias-label-primary);
@@ -35,7 +62,14 @@
   margin: 0;
   padding: 0;
   list-style: none;
-  max-height: 260px;
+  /* 320px y no los 260px de antes: medido contra los CINCO proveedores reales
+     (`core/modelos.ts#PROVEEDORES` — ollama, gemini, openai, anthropic, ollama-cloud),
+     que a 260px dejaban el quinto partido por la mitad con un scroll que no se
+     anunciaba — un elemento cortado a medias lee como un fallo de pintado, no como una
+     lista larga. A 320px caben los cinco enteros; un catálogo más largo (`/modelos`
+     con decenas de modelos) sigue haciendo scroll, y ahí SÍ hace falta: acotar el alto
+     es lo que evita que ese catálogo empuje el resto de la pantalla. */
+  max-height: 320px;
   overflow-y: auto;
 }
 
@@ -77,11 +111,17 @@
   justify-content: flex-end;
 }
 
+/* Sin borde ni fondo propio A PROPÓSITO, en los DOS sitios donde vive este componente:
+   el paso se resuelve ELIGIENDO de la lista, no pulsando un botón — no hay ninguna
+   acción primaria de verdad aquí. Antes «Cancelar» era el único elemento con aspecto de
+   botón (borde, relleno) y la lista de opciones no lo tenía, así que la salida que NO
+   se quiere que nadie pulse por descuido era justo la que más peso visual tenía. Ahora
+   es texto con solo `label-secondary`, más apagado que `.etiqueta` de las opciones. */
 .cancelar {
-  padding: 6px 14px;
-  border: 0.5px solid var(--dsw-alias-border-l2);
+  padding: 6px 8px;
+  border: none;
   border-radius: 8px;
-  background: var(--dsw-alias-bg-layer-1);
+  background: none;
   color: var(--dsw-alias-label-secondary);
   font: inherit;
   cursor: pointer;

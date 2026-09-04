@@ -23,6 +23,7 @@ export function Selector({
   titulo,
   opciones,
   alElegir,
+  anidado = false,
 }: {
   titulo: string;
   opciones: readonly { id: string; etiqueta: string; detalle?: string }[];
@@ -35,6 +36,14 @@ export function Selector({
    * con el envío fallido dejaría al usuario creyendo que eligió.
    */
   alElegir: (id: string | undefined) => void | Promise<unknown>;
+  /**
+   * `true` cuando este selector vive DENTRO de `TarjetaDeAlta` (el paso de cuenta del
+   * alta): quita el borde y el fondo propios —los pone la tarjeta— para que se lea como
+   * el mismo marco y no como dos cajas concéntricas con una costura entre medias.
+   * `false` (omisión) es mitad de conversación (`/modelos`, `/provider`, aprobaciones),
+   * donde SÍ hace falta la tarjeta entera: flota solo sobre el transcript.
+   */
+  anidado?: boolean;
 }) {
   const [enviando, setEnviando] = useState(false);
   const [falloDeEnvio, setFalloDeEnvio] = useState(false);
@@ -78,7 +87,7 @@ export function Selector({
   cancelar.current = () => elegir(undefined);
 
   return (
-    <div className={estilos.selector} role="group" aria-label={titulo}>
+    <div className={estilos.selector} data-anidado={anidado ? "" : undefined} role="group" aria-label={titulo}>
       <p className={estilos.titulo}>{titulo}</p>
       <ul className={estilos.opciones}>
         {opciones.map((o) => (

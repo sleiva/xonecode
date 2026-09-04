@@ -150,8 +150,10 @@ export function Wizard({
       setCredencialGuardada(true);
     };
     return (
+      // Sin `<h2>Cuenta</h2>`: `PasosDelAlta` ya pone el rótulo del paso justo encima,
+      // dentro del mismo `TarjetaDeAlta` — un encabezado aquí lo repetiría (F4 de la
+      // revisión, la misma razón por la que el paso «entorno» de abajo perdió el suyo).
       <form className={estilos.wizard} onSubmit={guardar}>
-        <h2 className={estilos.titulo}>Cuenta</h2>
         <label className={estilos.etiqueta} htmlFor="wizard-proveedor">
           Proveedor
         </label>
@@ -238,8 +240,10 @@ export function Wizard({
       // que volver.
     };
     return (
+      // Sin `<h2>Entorno</h2>`: medido en la pantalla unificada, quedaba pegado justo
+      // debajo de «Entorno de CloudStudio» —el rótulo que ya pone `PasosDelAlta` para
+      // ESTE mismo paso—, repitiendo lo que el rótulo de progresión ya sitúa.
       <form className={estilos.wizard} onSubmit={registrar}>
-        <h2 className={estilos.titulo}>Entorno</h2>
         <label className={estilos.etiqueta} htmlFor="wizard-entorno">
           Entorno
         </label>

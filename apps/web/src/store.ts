@@ -31,6 +31,13 @@ export interface EstadoDelCliente {
    */
   comandos: { nombre: string; descripcion: string }[];
   /**
+   * El saludo, de la clase «bienvenida» — llega ANTES que `alta`, porque el nombre no
+   * depende de ninguna cuenta (ver `tipos.ts`). `Bienvenida.tsx` prefiere este campo y
+   * cae a `alta?.nombre` si por lo que sea no ha llegado (`App.tsx`): los dos mensajes
+   * llevan el mismo dato, y esto es solo el que llega primero.
+   */
+  nombre?: string;
+  /**
    * El alta que falta, tal cual la manda el servidor al conectar y tras cada paso. Ausente
    * hasta que llega el mensaje: mientras no se sabe qué falta, el wizard no se pinta —
    * enseñar un formulario vacío «por si acaso» sería inventarse el estado del alta.
@@ -182,6 +189,15 @@ export function crearStoreDelCliente(): {
           const actos = (mensaje as Partial<Extract<MensajeAlCliente, { clase: "reemision" }>>).actos;
           if (!Array.isArray(actos) || !actos.every(esActo)) return;
           mutar({ actos: [...actos] });
+          return;
+        }
+        case "bienvenida": {
+          const nombre = (mensaje as { nombre?: unknown }).nombre;
+          // Ausente o de otro tipo = sin nombre, nunca uno inventado — el mismo trato
+          // que ya usa la clase «alta» para este mismo dato. Se fija a `undefined` y no
+          // se ignora: una reconexión sin nombre tiene que PODER borrar el de la
+          // conexión anterior, no dejarlo colgado.
+          mutar({ nombre: typeof nombre === "string" ? nombre : undefined });
           return;
         }
         case "pregunta": {

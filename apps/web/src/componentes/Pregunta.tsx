@@ -33,6 +33,7 @@ export function Pregunta({
   texto,
   oculta = false,
   alResponder,
+  anidado = false,
 }: {
   texto: string;
   /** La forma `leerSecreto`: campo de contraseña y sin autocompletado del navegador. */
@@ -43,6 +44,13 @@ export function Pregunta({
    * usuario creyendo que contestó, mientras el servidor sigue esperando hasta su plazo.
    */
   alResponder: (respuesta: string) => void | Promise<unknown>;
+  /**
+   * `true` dentro de `TarjetaDeAlta` (la clave de API del paso de cuenta): sin borde ni
+   * fondo propio, para no anidar dos cajas iguales — ver `Selector.tsx`, mismo motivo y
+   * mismo nombre de prop. `false` (omisión) es mitad de conversación, donde sí hace
+   * falta la tarjeta entera.
+   */
+  anidado?: boolean;
 }) {
   const [valor, setValor] = useState("");
   const [enviando, setEnviando] = useState(false);
@@ -76,7 +84,7 @@ export function Pregunta({
   const id = oculta ? "pregunta-secreto" : "pregunta-respuesta";
 
   return (
-    <form className={estilos.pregunta} onSubmit={responder}>
+    <form className={estilos.pregunta} data-anidado={anidado ? "" : undefined} onSubmit={responder}>
       <label className={estilos.enunciado} htmlFor={id}>
         {texto}
       </label>

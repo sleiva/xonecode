@@ -1,12 +1,13 @@
 /* Alias comprobados contra `apps/web/estilos/design-platform.css`: bg-layer-2, border-l2,
    label-primary, button-primary-fill/hover y label-primary-inverted. */
 
-/* Misma tarjeta que `Selector.module.css`, y su cabecera explica por qué ya no es UN
-   motivo sino dos: mitad de conversación (el `[s/N]` de una subida, `/connect-studio`
-   sin URL) flota sola sobre el transcript y necesita el borde entero; el paso de cuenta
-   del alta contesta la clave de API con ESTE componente (`oculta`) y hoy vive DENTRO de
-   `TarjetaDeAlta.module.css` (`.tarjeta`, `bg-layer-1`), así que aquí el `bg-layer-2` es
-   el panel anidado de esa pareja de alias, no una tarjeta repetida sin motivo. */
+/* Misma tarjeta que `Selector.module.css`, y por el mismo motivo doble: mitad de
+   conversación (el `[s/N]` de una subida, `/connect-studio` sin URL) flota sola sobre
+   el transcript y necesita el borde entero; el paso de cuenta del alta contesta la
+   clave de API con ESTE componente (`oculta`), y ahí `anidado` (`Pregunta.tsx`) quita
+   ese borde/fondo propio para no anidarlo dentro del de `TarjetaDeAlta` — dos marcos
+   concéntricos con la costura entre componentes visible, medido en la pantalla
+   unificada. */
 .pregunta {
   display: flex;
   flex-direction: column;
@@ -16,6 +17,21 @@
   padding: 12px;
   border: 0.5px solid var(--dsw-alias-border-l2);
   border-radius: 12px;
+  background: var(--dsw-alias-bg-layer-2);
+}
+
+.pregunta[data-anidado] {
+  padding: 0;
+  border: none;
+  border-radius: 0;
+  background: none;
+}
+
+/* El campo pasa de `bg-layer-1` a `bg-layer-2` cuando está anidado: antes contrastaba
+   contra ESTE `bg-layer-2` (el panel suelto), ahora contra el `bg-layer-1` de
+   `TarjetaDeAlta` — la misma pareja de alias, invertida, igual que `.opcion` en
+   `Selector.module.css`. */
+.pregunta[data-anidado] .envoltorio input {
   background: var(--dsw-alias-bg-layer-2);
 }
 

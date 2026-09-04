@@ -112,10 +112,20 @@ export function App({ store, enviar }: { store: Store; enviar: Conexion["enviar"
           propio aspecto de franja en vez de encogerse a los 480px de la tarjeta.
         */}
         <AvisoDeConexion conectado={estado.conectado} />
-        <TarjetaDeAlta nombre={estado.alta?.nombre} pasos={pasosDeAlta}>
+        {/*
+          `estado.nombre` (clase «bienvenida») llega ANTES que `estado.alta`, porque el
+          nombre no depende de ninguna cuenta — sin esta preferencia el saludo se quedaba
+          en «Hola» a secas durante TODO el paso de cuenta con el nombre ya resuelto y sin
+          sitio por el que viajar. `alta?.nombre` de red no cubre ninguna conexión real
+          —el SSE siempre manda «bienvenida» antes que `alta`—, pero se deja como
+          preferencia y no se retira: quitar ese campo de `alta` es tocar un contrato que
+          no es parte de este arreglo.
+        */}
+        <TarjetaDeAlta nombre={estado.nombre ?? estado.alta?.nombre} pasos={pasosDeAlta}>
           {estado.pregunta !== undefined ? (
             <Pregunta
               texto={estado.pregunta.texto}
+              anidado
               alResponder={async (respuesta) => {
                 await enviar({ clase: "respuesta", texto: respuesta });
                 store.contestarPregunta();
@@ -126,6 +136,7 @@ export function App({ store, enviar }: { store: Store; enviar: Conexion["enviar"
             <Pregunta
               texto={estado.secreto.pregunta}
               oculta
+              anidado
               alResponder={async (valor) => {
                 await enviar({ clase: "secreto", valor });
                 store.contestarSecreto();
@@ -136,6 +147,7 @@ export function App({ store, enviar }: { store: Store; enviar: Conexion["enviar"
             <Selector
               titulo={estado.selector.titulo}
               opciones={estado.selector.opciones}
+              anidado
               alElegir={async (id) => {
                 await enviar({ clase: "eleccion", id });
                 store.contestarSelector();
