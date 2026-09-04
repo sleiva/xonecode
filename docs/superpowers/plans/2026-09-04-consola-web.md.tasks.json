@@ -46,8 +46,8 @@
     {
       "id": 5,
       "subject": "Task 5: El servidor HTTP",
-      "status": "pending",
-      "description": "**Goal:** Un `node:http` en loopback que sirve `apps/web/dist`, autentica por token, comprueba `Origin`/`Host` en toda petición y **no sirve jamás** nada de `.xonecode`.\n\n**Files:**\n- Create: `src/web/servidor/servidor.ts`\n- Create: `src/web/servidor/servidor.test.ts`\n\n**Acceptance Criteria:**\n- [ ] Escucha solo en `127.0.0.1`; no hay forma de pedir `0.0.0.0`\n- [ ] Una petición sin token y sin cookie a una ruta de API es **401**\n- [ ] El token de la URL se canjea por cookie `HttpOnly`, `SameSite=Strict`\n- [ ] Una petición con `Host` que no sea `127.0.0.1:<puerto>` o `localhost:<puerto>` es **403** (DNS rebinding)\n- [ ] Una petición con `Origin` de otro sitio es **403**\n- [ ] `GET /../../etc/passwd` y cualquier recorrido fuera de `dist` es **403**\n- [ ] `POST` a un estático es **405**; un fichero que no existe es **404** vacío\n- [ ] Una ruta que resuelva dentro de `.xonecode` (del proyecto o del home) es **403**, aunque exista\n- [ ] `EADDRINUSE` produce un mensaje que dice el puerto y `--puerto`, no una traza\n- [ ] Los tests corren **sin navegador**: peticiones con `fetch` contra el servidor levantado en un puerto efímero\n\n**Verify:** `npx vitest run src/web/servidor/servidor.test.ts` → PASS\n\n```json:metadata\n{\"files\": [\"src/web/servidor/servidor.ts\", \"src/web/servidor/servidor.test.ts\"], \"verifyCommand\": \"npx vitest run src/web/servidor/servidor.test.ts\", \"acceptanceCriteria\": [\"loopback y sin opción de 0.0.0.0\", \"401 sin token\", \"cookie HttpOnly SameSite=Strict\", \"403 por Host o Origin ajenos\", \"403 en recorrido y en .xonecode\", \"405/404\", \"EADDRINUSE legible\"], \"modelTier\": \"standard\"}\n```",
+      "status": "completed",
+      "description": "**Goal:** Un `node:http` en loopback que sirve `apps/web/dist`, autentica por token, comprueba `Origin`/`Host` en toda petición y **no sirve jamás** nada de `.xonecode`.\n\nComplete — see ledger.",
       "blockedBy": [
         0
       ]
@@ -148,5 +148,5 @@
       ]
     }
   ],
-  "lastUpdated": "2026-09-04T09:03:27.897458+00:00"
+  "lastUpdated": "2026-09-04T09:22:12.308914+00:00"
 }

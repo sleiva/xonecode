@@ -1009,11 +1009,16 @@ git commit -m "feat(web): el servidor HTTP — loopback, token, Origin/Host y .x
 **Files:**
 - Create: `src/web/servidor/pielWeb.ts`
 - Create: `src/web/servidor/pielWeb.test.ts`
+- Modify: `src/core/actos.ts` (recibe `conLineaDeTool` y `prefijoDeCierre`)
+- Modify: `src/core/actos.test.ts`
+- Modify: `src/cli/tui/store.ts` (las importa y re-exporta, como ya hace con `Acto`)
 
 **Acceptance Criteria:**
 - [ ] Implementa `Piel` entera, `fase?` y `notificacion?` incluidos (la web sí sabe animar fases y reciclar avisos)
 - [ ] Los tokens se acumulan en un colchón y `cerrarLinea` los solidifica en un acto `asistente`
 - [ ] Las líneas de tool consecutivas se agrupan en un solo acto `herramientas`
+- [ ] La línea de **cierre** de una racha (`→ lee ×3 — a, b, c`) **sustituye** a su apertura (`→ lee a`) en vez de añadirse: el colapsador de `core/notify.ts` escribe las dos porque stdio solo añade, pero una piel que repinta enseñaría dos líneas para la misma racha
+- [ ] `conLineaDeTool` y `prefijoDeCierre` se mueven de `cli/tui/store.ts` a `core/actos.ts` y las usan las DOS pieles: duplicar esa lógica sutil es cómo divergen
 - [ ] Una línea de asistente o de sistema cierra el grupo de herramientas
 - [ ] `fin` produce un acto `fin` con los ms
 - [ ] `pausa` produce un acto `sistema` con la **descripción** del pendiente, y **nunca** el diff
@@ -1045,6 +1050,17 @@ describe("pielWeb", () => {
     piel.linea("read_file  src/app.xne");
     piel.linea("grep  colecciones");
     expect(actos()).toEqual([{ tipo: "herramientas", lineas: ["read_file  src/app.xne", "grep  colecciones"] }]);
+  });
+
+  it("el cierre de una racha SUSTITUYE su apertura, no se añade detrás", () => {
+    const { piel, actos } = crearPielWeb();
+    // Lo que el colapsador del motor emite de verdad para tres lecturas seguidas:
+    // la apertura al abrir la racha, y el cierre con el ×N al terminarla.
+    piel.linea("→ lee src/app.xne");
+    piel.linea("→ lee ×3 — src/app.xne, src/b.xne, src/c.xne");
+    expect(actos()).toEqual([
+      { tipo: "herramientas", lineas: ["→ lee ×3 — src/app.xne, src/b.xne, src/c.xne"] },
+    ]);
   });
 
   it("una notificación cierra el grupo de herramientas", () => {
@@ -1105,7 +1121,11 @@ export function crearPielWeb(): PielWeb { /* … */ }
 
 Reglas de la implementación:
 - `token` acumula en un colchón; `cerrarLinea` lo vuelca como `{tipo:"asistente"}` **solo si no está vacío**.
-- `linea` se anexa al último acto si es `herramientas`; si no, abre uno nuevo.
+- `linea` se anexa al último acto si es `herramientas` **pasando por `conLineaDeTool`**; si no,
+  abre uno nuevo. Esa función y su ayudante `prefijoDeCierre` viven hoy en
+  `cli/tui/store.ts` (líneas 28-49) y **se mueven a `core/actos.ts`** en esta tarea, por la
+  misma razón por la que el `Acto` bajó ahí en la Task 2: ahora las usan dos pieles, son
+  puras, y una copia divergiría. `store.ts` pasa a importarla y re-exportarla.
 - `notificacion` y `pausa` producen `{tipo:"sistema"}` y **cierran** el grupo de herramientas.
 - `fase(texto)` produce `{tipo:"fase", texto, ms}` sustituyendo la fase anterior si aún está activa —igual que la cascada del store—.
 - `pausa` mapea `pendientes` a una línea por pendiente con `origen` y `descripcion` y **nada más**. El diff no está aquí; viaja en el mensaje de aprobación (Task 7).
