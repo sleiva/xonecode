@@ -57,8 +57,12 @@ export interface Aviso {
  * Formas plausibles de colar una clave dentro de un `config.json`. El intento se rechaza
  * sea cual sea el valor: lo que delata es el NOMBRE del campo, porque una clave con otro
  * nombre ya no es reconocible — y estas seis cubren lo que la gente escribe a mano.
+ *
+ * Exportada porque `core/settings.ts` la reutiliza tal cual: dos listas de nombres de
+ * credencial que empiezan iguales y divergen con el tiempo es justo el bug que se midió
+ * («key» —el campo que usa `auth.json`— faltaba en la copia que tenía `settings.ts`).
  */
-const CLAVES_DENEGADAS: readonly string[] = [
+export const CLAVES_DENEGADAS: readonly string[] = [
   "claves",
   "apiKey",
   "api_key",

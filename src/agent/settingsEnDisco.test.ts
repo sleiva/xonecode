@@ -3,7 +3,6 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, it, expect } from "vitest";
 import { cargarSettings, guardarEntorno, guardarWorkspace, rutaSettings, SettingsRotosEnDisco } from "./settingsEnDisco.js";
-import { SettingsConCredencial } from "../core/settings.js";
 
 /** Cada test recibe su propia «casa» temporal: nunca toca el ~/.xonecode real. */
 function casa(): string {
@@ -13,7 +12,7 @@ function casa(): string {
 describe("settingsEnDisco", () => {
   it("sin fichero, devuelve settings vacíos y no crea nada", () => {
     const c = casa();
-    expect(cargarSettings(c).entornos).toEqual([]);
+    expect(cargarSettings(c).settings.entornos).toEqual([]);
   });
 
   it("guardar un entorno NO destruye los que había", () => {
@@ -21,14 +20,14 @@ describe("settingsEnDisco", () => {
     guardarEntorno(c, { id: "a", nombre: "A", url: "https://a/mcp" });
     guardarEntorno(c, { id: "b", nombre: "B", url: "https://b/mcp" });
     guardarEntorno(c, { id: "c", nombre: "C", url: "https://c/mcp" });
-    expect(cargarSettings(c).entornos.map((e) => e.id)).toEqual(["a", "b", "c"]);
+    expect(cargarSettings(c).settings.entornos.map((e) => e.id)).toEqual(["a", "b", "c"]);
   });
 
   it("re-registrar el mismo id lo SUSTITUYE, no lo duplica", () => {
     const c = casa();
     guardarEntorno(c, { id: "a", nombre: "A", url: "https://a/mcp" });
     guardarEntorno(c, { id: "a", nombre: "A renombrado", url: "https://a2/mcp" });
-    const { entornos } = cargarSettings(c);
+    const { entornos } = cargarSettings(c).settings;
     expect(entornos).toHaveLength(1);
     expect(entornos[0].url).toBe("https://a2/mcp");
   });
@@ -68,7 +67,7 @@ describe("settingsEnDisco", () => {
     const c = casa();
     guardarEntorno(c, { id: "a", nombre: "A", url: "https://a/mcp" });
     guardarWorkspace(c, "/home/u/xone-projects");
-    const settings = cargarSettings(c);
+    const { settings } = cargarSettings(c);
     expect(settings.workspace).toBe("/home/u/xone-projects");
     expect(settings.entornos.map((e) => e.id)).toEqual(["a"]);
   });
@@ -78,14 +77,29 @@ describe("settingsEnDisco", () => {
     expect(rutaSettings(c)).toBe(join(c, ".xonecode", "settings.json"));
   });
 
-  it("una credencial colada a mano en el fichero SÍ hace lanzar a cargarSettings: solo el JSON roto es tolerado", () => {
+  it("una credencial colada a mano en el fichero deja un AVISO grave al leer, no un lanzamiento", () => {
     const c = casa();
     mkdirSync(join(c, ".xonecode"), { recursive: true, mode: 0o700 });
     const ruta = join(c, ".xonecode", "settings.json");
     writeFileSync(ruta, JSON.stringify({ entornos: [], apiKey: "sk-colada" }), { flag: "w" });
-    // «El lector puede ser tolerante» es sobre JSON mal formado, no sobre credenciales: una
-    // credencial en el fichero es el fallo de seguridad que este diseño exige que se VEA,
-    // así que cargarSettings deja pasar el lanzamiento de validarSettings sin atraparlo.
-    expect(() => cargarSettings(c)).toThrow(SettingsConCredencial);
+    // El escritor no vigila credenciales (fusiona sobre el crudo, deuda compartida con
+    // configEnDisco.ts); es la LECTURA la que la detecta — y ahora como aviso, no como
+    // excepción: un fallo del área de CloudStudio no puede tumbar el arranque.
+    const { settings, avisos } = cargarSettings(c);
+    expect(settings.entornos).toEqual([]);
+    expect(avisos).toHaveLength(1);
+    expect(avisos[0].severidad).toBe("grave");
+    expect(avisos[0].texto).toContain("apiKey");
+    expect(avisos[0].texto).not.toContain("sk-colada");
+  });
+
+  it("un JSON roto en disco también sale como aviso al leer, nunca como excepción", () => {
+    const c = casa();
+    mkdirSync(join(c, ".xonecode"), { recursive: true, mode: 0o700 });
+    writeFileSync(join(c, ".xonecode", "settings.json"), "{ esto no es json", { flag: "w" });
+    const { settings, avisos } = cargarSettings(c);
+    expect(settings.entornos).toEqual([]);
+    expect(avisos).toHaveLength(1);
+    expect(avisos[0].severidad).toBe("aviso");
   });
 });

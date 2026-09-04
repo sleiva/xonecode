@@ -10,6 +10,7 @@
  * que `core/config.ts` deja el I/O a `agent/configEnDisco.ts` y `agent/authEnDisco.ts`.
  */
 import { posix } from "node:path";
+import { type Aviso, CLAVES_DENEGADAS } from "./config.js";
 
 export interface Entorno {
   id: string;
@@ -26,60 +27,91 @@ export interface Settings {
 }
 
 /**
- * Publicable: no lleva nunca el valor sospechoso, solo el nombre del campo. Un error que
- * cite la credencial la filtraría al sitio donde menos se espera — un mensaje de consola.
- * Misma disciplina que `config.ts`: una clave de API no se avisa, se RECHAZA — un aviso
- * dejaría el fichero funcionando con la clave dentro.
+ * Misma disciplina que `config.json` (`CLAVES_DENEGADAS`, reexportada de `config.ts` como
+ * fuente ÚNICA — dos listas de nombres de credencial ya divergieron una vez, medido: «key»,
+ * el campo exacto de `auth.json`, faltaba aquí), más las formas en castellano que solo
+ * hacían falta en este fichero. Comparación en minúsculas: quien escribe «apiKey» a mano
+ * también escribe «apikey».
  */
-export class SettingsConCredencial extends Error {
-  constructor(campo: string) {
-    super(
-      `settings.json no puede llevar credenciales (campo «${campo}»): van en ~/.xonecode/auth.json, modo 0600`
-    );
-  }
-}
+const CAMPOS_DE_CREDENCIAL: readonly string[] = [
+  ...CLAVES_DENEGADAS,
+  "clave",
+  "password",
+  "contrasena",
+].map((c) => c.toLowerCase());
 
-const CAMPOS_DE_CREDENCIAL = ["apikey", "api_key", "clave", "token", "secret", "password", "contrasena"];
-
-function comprobarSinCredenciales(objeto: Record<string, unknown>): void {
-  for (const campo of Object.keys(objeto)) {
-    if (CAMPOS_DE_CREDENCIAL.includes(campo.toLowerCase())) throw new SettingsConCredencial(campo);
-  }
-}
-
-function esEntorno(valor: unknown): valor is Entorno {
-  if (typeof valor !== "object" || valor === null) return false;
-  const e = valor as Record<string, unknown>;
-  comprobarSinCredenciales(e);
-  return typeof e.id === "string" && e.id !== ""
-    && typeof e.nombre === "string" && e.nombre !== ""
-    && typeof e.url === "string" && e.url !== "";
+function esCampoDeCredencial(campo: string): boolean {
+  return CAMPOS_DE_CREDENCIAL.includes(campo.toLowerCase());
 }
 
 /**
- * Un entorno mal formado se DESCARTA en silencio; una credencial LANZA. La asimetría es
- * deliberada: un entorno roto es un dato de menos y el arranque puede seguir, pero una
- * credencial en el fichero equivocado es un fallo de seguridad que hay que ver.
+ * Un aviso «grave» que nombra el CAMPO y nunca el valor: el mensaje acaba en logs y
+ * capturas, y ahí es donde menos se quiere ver una clave.
  */
-export function validarSettings(bruto: unknown): Settings {
-  if (typeof bruto !== "object" || bruto === null || Array.isArray(bruto)) return { entornos: [] };
+function avisoCredencial(campo: string, donde: string): Aviso {
+  return {
+    texto: `settings.json: el campo «${campo}»${donde} parece una clave de API y no se acepta; las claves van en ~/.xonecode/auth.json. Se descarta.`,
+    severidad: "grave",
+  };
+}
+
+/**
+ * Un entorno con campos de credencial se sigue cargando si el resto es válido — el campo
+ * sospechoso simplemente no se copia, como cualquier campo desconocido —, pero SIEMPRE
+ * deja un aviso: la asimetría con «entorno mal formado, se descarta en silencio» es
+ * deliberada, porque una credencial es el fallo que hay que ver y un `url` vacío no.
+ */
+function validarEntorno(candidato: unknown, avisos: Aviso[]): Entorno | undefined {
+  if (typeof candidato !== "object" || candidato === null) return undefined;
+  const e = candidato as Record<string, unknown>;
+  const idParaElAviso = typeof e.id === "string" && e.id !== "" ? ` (entorno «${e.id}»)` : "";
+  for (const campo of Object.keys(e)) {
+    if (esCampoDeCredencial(campo)) avisos.push(avisoCredencial(campo, idParaElAviso));
+  }
+  if (typeof e.id !== "string" || e.id === "") return undefined;
+  if (typeof e.nombre !== "string" || e.nombre === "") return undefined;
+  if (typeof e.url !== "string" || e.url === "") return undefined;
+  return {
+    id: e.id,
+    nombre: e.nombre,
+    url: e.url,
+    ...(Array.isArray(e.scopes) ? { scopes: e.scopes.filter((s) => typeof s === "string") } : {}),
+  };
+}
+
+/**
+ * Un entorno mal formado se DESCARTA en silencio; una credencial deja un AVISO grave y
+ * sigue. La asimetría es deliberada: un entorno roto es un dato de menos y el arranque
+ * puede seguir sin decir nada, pero una credencial en el fichero equivocado es un fallo de
+ * seguridad que tiene que verse — igual que hace `config.json` (`config.ts`, línea 112):
+ * un aviso «grave» que descarta el campo, no una excepción que tumbe el arranque. Este
+ * fichero antes lanzaba (`SettingsConCredencial`); se cambió a aviso porque `CLAUDE.md`
+ * exige que un fallo de CloudStudio no pueda tumbar el arranque de la consola.
+ */
+export function validarSettings(bruto: unknown): { settings: Settings; avisos: Aviso[] } {
+  const avisos: Aviso[] = [];
+
+  if (typeof bruto !== "object" || bruto === null || Array.isArray(bruto)) {
+    return { settings: { entornos: [] }, avisos };
+  }
   const objeto = bruto as Record<string, unknown>;
-  comprobarSinCredenciales(objeto);
+
+  for (const campo of Object.keys(objeto)) {
+    if (esCampoDeCredencial(campo)) avisos.push(avisoCredencial(campo, ""));
+  }
+
   const lista = Array.isArray(objeto.entornos) ? objeto.entornos : [];
   const entornos: Entorno[] = [];
   for (const candidato of lista) {
-    if (esEntorno(candidato)) {
-      const e = candidato as Entorno;
-      entornos.push({
-        id: e.id,
-        nombre: e.nombre,
-        url: e.url,
-        ...(Array.isArray(e.scopes) ? { scopes: e.scopes.filter((s) => typeof s === "string") } : {}),
-      });
-    }
+    const entorno = validarEntorno(candidato, avisos);
+    if (entorno !== undefined) entornos.push(entorno);
   }
+
   const workspace = typeof objeto.workspace === "string" ? objeto.workspace : undefined;
-  return workspace === undefined ? { entornos } : { entornos, workspace };
+  return {
+    settings: workspace === undefined ? { entornos } : { entornos, workspace },
+    avisos,
+  };
 }
 
 /** Un segmento que no puede salirse de su carpeta ni inventar niveles. */

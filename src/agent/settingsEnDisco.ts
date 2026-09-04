@@ -23,6 +23,7 @@ import {
 import { randomUUID } from "node:crypto";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
+import type { Aviso } from "../core/config.js";
 import { Entorno, Settings, validarSettings } from "../core/settings.js";
 
 const NOMBRE_CARPETA = ".xonecode";
@@ -45,17 +46,26 @@ export function rutaSettings(casa: string = homedir()): string {
   return join(casa, NOMBRE_CARPETA, "settings.json");
 }
 
-/** Sin fichero, settings vacíos: no hay nada que crear solo por leer. */
-export function cargarSettings(casa: string = homedir()): Settings {
+/**
+ * Sin fichero, settings vacíos y sin avisos: no hay nada que crear solo por leer.
+ *
+ * Igual que `cargar()` en `configEnDisco.ts`, devuelve `{ settings, avisos }` — el JSON
+ * roto y la credencial colada NO lanzan, se cuentan como aviso: un fallo del área de
+ * CloudStudio no puede tumbar el arranque de la consola (invariante de `CLAUDE.md`), y
+ * `validarSettings` ya no lanza para una credencial, solo para JSON-que-no-parsea, que
+ * aquí se atrapa igual que en `configEnDisco.ts`.
+ */
+export function cargarSettings(casa: string = homedir()): { settings: Settings; avisos: Aviso[] } {
   const ruta = rutaSettings(casa);
-  if (!existsSync(ruta)) return { entornos: [] };
+  if (!existsSync(ruta)) return { settings: { entornos: [] }, avisos: [] };
   let bruto: unknown;
   try {
     bruto = JSON.parse(readFileSync(ruta, "utf8"));
   } catch {
-    // El lector SÍ puede ser tolerante (a diferencia del escritor): un settings.json roto
-    // no puede tumbar el arranque de la consola por un dato que ni siquiera hace falta.
-    return { entornos: [] };
+    return {
+      settings: { entornos: [] },
+      avisos: [{ texto: `«${ruta}»: el JSON es inválido; se ignora el fichero.`, severidad: "aviso" }],
+    };
   }
   return validarSettings(bruto);
 }
