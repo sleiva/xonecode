@@ -32,6 +32,12 @@ No hay `vitest.config`: se usan los valores por omisión y los tests son **coloc
 (`src/**/*.test.ts`, junto al módulo que prueban). `tsconfig.build.json` los excluye, igual
 que `src/core/__oro__/` (ficheros de oro: salida real de `xone-simulator --json`).
 
+**Consecuencia medida de no tener `vitest.config`**: el `include` por omisión barre TODO el
+repo, y `.worktrees/` (ignorado por git desde `ddf2948`, pero presente en disco) no está en el
+`exclude` por omisión. Con un worktree viejo ahí, `npm test` corrió 128 ficheros en vez de 66 y
+dio 2 fallos que no son de este código. Mientras no haya config:
+`npx vitest run --exclude '**/.worktrees/**'`.
+
 **`npm test` no puede necesitar una clave, una conexión ni el simulador.** Es el invariante que
 sostiene todo el diseño de puertos: si un cambio lo rompe, está mal el cambio, no el test.
 
@@ -135,8 +141,133 @@ negociables ahí:
   (`agent/proyecto.ts`): así la regla es propiedad del proyecto y no de un prompt.
 - Los permisos se construyen con `permisosDe(perfil)`, **nunca a mano**: `SubAgent.permissions`
   reemplaza los del padre en vez de fusionarlos, así que un perfil que los escriba a mano pierde
-  la denegación de `/.env` y `/.git`.
+  la denegación de `/.env`, `/.git` y `/.xonecode`.
 - El HITL va en las tools de fichero (`write_file`, `edit_file`), que son las que escriben.
+
+`SubAgent.tools` lleva SOLO tools propias, nunca los nombres de las de fichero: pasarle nombres
+las sustituía por cadenas y dejaba al especialista sin ninguna capacidad real. Las de fichero
+las monta `createFilesystemMiddleware` desde el backend, y quien las acota es `permissions`.
+La única tool propia hoy es la **búsqueda regex** (`agent/busquedaRegex.ts`): cubre patrones
+estructurales de XOne/ES5 que el `grep` literal de deepagents no expresa, sin conceder
+`execute` ni una shell. Va acotada a propósito
+(`LIMITES_REGEX`: 50 ficheros, 256 KB por fichero, 100 coincidencias) y filtra rutas con
+`puedeLeerRuta` — una tool de LangChain añadida por xonecode **no pasa por el middleware de
+permisos**, así que la denegación de `/.xonecode` hay que re-aplicarla ahí a mano.
+
+**La memoria del proyecto y el resumen de contexto** (`agent/memoriaDeProyecto.ts`,
+`agent/resumenDeContexto.ts`). `.xonecode/memoria.md` viaja con el proyecto, pero el agente la
+ve por UNA ruta virtual, `/MEMORIA_PROYECTO.md`: `exponerMemoriaDeProyecto` es un Proxy que
+traduce esa ruta en `read`/`readRaw`/`write`/`edit` y nada más, así que la carpeta `.xonecode`
+sigue denegada entera y escribir la memoria pasa por la misma aprobación que cualquier fichero.
+El resumen usa `createSummarizationMiddleware` con umbrales **fijados a mano** (32k para
+disparar, 8k de reciente): deepagents asume 170k cuando el proveedor no publica su ventana, y
+con Ollama eso comprime demasiado tarde. Los historiales ya resumidos se escriben en
+`.xonecode/conversation_history/` — internos, ni en el árbol del agente ni en la app XOne.
+
+**CloudStudio (MCP con OAuth)** (`agent/cloudstudioMcp.ts`). Al abrir un proyecto sin
+`.xonecode/`, `configurarModoInicial` (`cli/consola.ts`) pregunta el modo: `offline` o `cloud`;
+`cloud` hace OAuth Authorization Code + PKCE contra el IDS, lista los proyectos y guarda en el
+`config.json` del proyecto `modo` y `cloudstudio` (`url`, `scopes`, `proyecto`, `rama`). Invariantes:
+- **Las tools remotas NO se inyectan en el agente.** `turnoReal.ts` y `xoneAgent.ts` no conocen
+  CloudStudio; solo `cli/` llama a `conectarCloudStudio` — y, ahora que hay descarga y subida,
+  también a `agent/descarga.ts` y `agent/subida.ts`. Las ejecuta el CLI, nunca una tool que el
+  agente pueda invocar. Falta la lista blanca por perfil, y sin ella el catálogo entero
+  acabaría en cada prompt.
+- El puerto de callback (**7634**) es fijo porque el IDS registra el `redirect_uri`; el estado
+  OAuth va a `~/.xonecode/cloudstudio-oauth.json`, **nunca al repo**.
+- Tres escalones de scopes (`SCOPES_CLOUDSTUDIO`, `…_ESCRITURA`, `…_AGENTE`) y ninguno incluye
+  `mcp.admin`.
+- En el arranque solo se invoca el listado de proyectos, construido a mano con `z.object({})`
+  sobre `cliente.callTool`: pasar por `MultiServerMCPClient` obligaba a normalizar el JSON
+  Schema de TODAS las tools del servidor, y varias usan variantes que Zod no acepta.
+- **El nombre de esa tool no se codifica a pelo.** El servidor real la publica como
+  `studio_list_projects`; `project_list` y `list_projects` son endpoints anteriores.
+  `herramientaDeProyectos` prueba los nombres conocidos en orden y, si ninguno está, cae en una
+  heurística que exige «list» + «project» y CERO argumentos obligatorios: abrir el proyecto
+  equivocado en el arranque es peor que no encontrar la tool.
+- **La respuesta no es una lista.** Medido: `studio_list_projects` devuelve un MAPA indexado
+  por id bajo «recents», con el identificador en `pid`. `proyectosDeResultado` acepta lista y
+  mapa en cada clave conocida, usa la clave del mapa como id de reserva, y sigue quedándose
+  SOLO con `{id, nombre}`: la respuesta trae permisos, fechas y el correo del propietario, y
+  nada de eso puede acabar en `config.json` ni en el transcript.
+- Un fallo aquí no puede tumbar el arranque: el asistente informa y **no crea `.xonecode`** a
+  medias.
+
+**La copia local y la sincronización** (`agent/descarga.ts`, `agent/gitSync.ts`,
+`agent/subida.ts`, `core/planDeSubida.ts`). El proyecto se descarga a la carpeta que el
+usuario abrió, con la misma estructura del servidor, y el agente trabaja sobre ella sin
+enterarse de que CloudStudio existe. El estado de «qué hay arriba» NO es un fichero
+nuestro: es la ref `refs/remotes/cloudstudio/<rama>`, así que `git status` responde solo y
+`git diff cloudstudio/<rama>..HEAD` ES el plan de subida. Cuatro reglas duras:
+- **Lo que no se pudo bajar, no se puede borrar** (`core/planDeSubida.ts`). El plan B baja
+  fichero a fichero y el servidor no sirve binarios así, de modo que git ve las imágenes y
+  las fuentes tipográficas como borradas. Emitir esos borrados vaciaría el proyecto en
+  Studio; el manifiesto de `sync.json` es lo que lo impide.
+- **La ref se mueve solo si la subida terminó entera**, así que un fallo parcial se
+  reintenta solo en el siguiente `/sync`. El reintento reenvía el plan ENTERO contra la
+  misma ref sin mover, ficheros ya subidos incluidos: eso solo es seguro si escribir o
+  borrar dos veces la misma ruta en CloudStudio no tiene efecto observable la segunda
+  vez, algo que `agent/subida.ts` asume del servidor sin comprobarlo.
+- **`.xonecode` no sube nunca**, con filtro propio además del exclude de git — y `.gitignore`
+  no se toca, porque es un fichero del proyecto y acabaría en CloudStudio.
+- **La rama activa del servidor se restaura** tras cada operación (`get_context` antes de
+  `switch`): un switch le mueve el suelo a quien tenga Studio abierto.
+
+De colecciones, en local solo se conservan los `.xne` y `app.xml`: los `X.xml` que Studio
+genera junto a un `X.xne` se **borran del disco** justo tras extraer, no solo se le ocultan
+al agente. El orden es la parte que importa —extraer → borrar vistas aplanadas → commit de
+baseline (`prepararRepo`)— y al revés hace justo lo contrario: si el baseline se tomara
+antes del borrado, git vería esos `.xml` como borrados y, al haberse descargado, el
+candado no los frenaría; la primera subida los borraría **en Studio**. Tomándolo después,
+para git nunca existieron.
+
+Studio tiene rama origen (de la que se baja, `cloudstudio.rama`) y rama de trabajo (a la
+que se sube, creada perezosamente en la primera subida para no ensuciar Studio a quien no
+sube nada). **El servidor no fusiona** —`manage_branches("merge")` da una LISTA de
+ficheros a fusionar, no un resultado— así que quien integra en la rama origen es el
+usuario, en Studio, y quien fusiona en local es git, que sí tiene el ancestro común (el
+commit de la descarga).
+
+El alta completa son cuatro pasos (`cli/main.ts`), y cada uno solo aparece si falta lo que
+decide: 1) cuenta —proveedor y modelo, solo si nadie eligió nunca, deducido del `origen`
+con que resuelve el papel `trabajo` (`wizardInicial.ts#asistenteDeModelo`), nunca de una
+marca de «primer arranque»—; 2) modo del proyecto (`offline`/`cloud`); 3) proyecto de
+CloudStudio, su rama origen y la descarga; 4) modelo propio del proyecto, opcional, hereda
+el global por omisión. **Sin TTY real** (`process.stdin.isTTY`) los cuatro se saltan
+enteros en `main.ts` antes de intentar nada; `asistenteDeModelo` y `configurarModoInicial`
+repiten además su propia guarda de `consola.interactivo`. Cancelar antes de elegir
+proveedor, modo o proyecto no escribe nada; cancelar DESPUÉS de elegir proyecto dejó ya
+`cloudstudio` y `modo: "cloud"` en disco a propósito —negarlo sería mentir—, así que
+cancelar la rama cae a la primera disponible en vez de fingir que no pasó nada, y un fallo
+de descarga deja dicho que reintentar con `/sync bajar`. Una credencial tecleada en el paso
+de cuenta también queda escrita aunque el usuario cancele el paso de modelo que viene
+después: el asistente lo dice en el momento, porque callarlo daría a entender que no se
+tocó nada.
+
+**La autorización de la subida es un hueco de política, no un prompt**
+(`core/cloudstudio.ts#PoliticaDeAprobacion`): `subir()` no se puede invocar sin decir quién
+autoriza, fail-closed por TIPO. Hoy solo está montada la interactiva, con el plan delante.
+La autónoma —el juez decide que el trabajo está terminado y sube solo— está declarada pero
+no implementada, y **el veredicto del juez no bastará solo**: exigirá además condiciones
+que comprueba el código (verificador en verde, árbol limpio, nada pendiente de aprobar),
+porque en este repo los avisos son código y no prompt precisamente porque a un modelo se le
+puede pedir que avise y no avisa.
+
+Dos trampas medidas: `core.quotePath` (por omisión `true`) cita en octal cualquier ruta con
+bytes ≥ 0x80, así que un `ñu.xne` salía como `"\303\261u.xne"` y no coincidía nunca con las
+rutas —en UTF-8 sin comillas— de `descargados`, rompiendo el candado en silencio para
+cualquier proyecto XOne en castellano; `cambiosPendientes` fuerza `core.quotePath=false`.
+Y sin `--no-renames`, un `A.xne` → `B.xne` sale como una sola línea de renombrado que solo
+se queda con el destino: `B` sube y `A` se queda huérfano en Studio para siempre, sin
+ningún aviso; forzando borrado + alta por separado, el borrado de `A` sí pasa por el
+candado.
+
+Dos huecos abiertos, sin cerrar a propósito por ahora: `planDeSubida` calcula
+`modo: "chunked"` para un binario de más de 5 MB, pero `subirBinario` del puerto no recibe
+ese modo y siempre manda `base64` — un binario grande falla en el servidor, no se
+trocea. Y el borrado (`borrarTexto`, sobre `studio_edit_file` con `editMode: "delete"`) se
+invoca igual para texto y para binario: si el servidor rechaza rutas binarias en modo
+`delete`, un icono borrado en local no se propaga, y hoy nada lo detecta ni lo declara.
 
 **La aprobación humana es fail-closed** (`cli/aprobar.ts`, `vendor/hitl.ts`). Aprobar ejecuta;
 rechazar no toca nada, así que lo que no se entiende es **rechazo**. El Enter a secas solo
@@ -154,10 +285,20 @@ privado: no necesita commits, no necesita que el proyecto sea la raíz del repo,
 `--modelo-<papel>` > `--modelo` > `XONECODE_MODELO` > proyecto > global > omisión, y cada valor
 recuerda su `origen` para que `config`/`describe` lo digan.
 
+**El catálogo de modelos** (`agent/catalogoModelos.ts`, puerto `CatalogoModelosPort`):
+`/modelos <proveedor>` consulta el catálogo VIVO del proveedor, filtra los de conversación y
+guarda la elección en la config global. `ErrorCatalogoModelos` es un error publicable: nunca
+lleva la clave ni el cuerpo remoto. Ollama local (`OLLAMA_BASE_URL`) y Ollama Cloud
+(`https://ollama.com`) son dos hosts distintos y no se mezclan.
+
 **Configuración y credenciales** (`core/config.ts`, `agent/configEnDisco.ts`): `config.json`
-lleva modelos, `contextos` (topes de ventana fijados a mano, «proveedor/modelo» → tokens) y
-**rechaza claves de API**; las credenciales van solo en `~/.xonecode/auth.json`, modo 0600,
-y se escriben con `/provider <nombre>`.
+lleva modelos, `modo`, `cloudstudio`, `contextos` (topes de ventana fijados a mano,
+«proveedor/modelo» → tokens) y **rechaza claves de API**; las credenciales van solo en
+`~/.xonecode/auth.json`, modo 0600, y se escriben con `/provider <nombre>`. El ESCRITOR de
+`auth.json` es `agent/authEnDisco.ts` (el lector, `configEnDisco.ts`), y su contrato es que una
+escritura nunca destruye lo que había: la base de la fusión es el objeto CRUDO —no el resultado
+de `validarAuth`, que descarta entradas raras en silencio— y ante un JSON roto **para sin
+escribir** en vez de recuperar el fichero por su cuenta.
 
 **La creación de proyecto al arrancar** (`core/esqueleto.ts`, `agent/crearProyecto.ts`,
 `cli/main.ts`). Si al abrir la consola falta `app.xml`, se ofrece crearlo (omisión **No**:
@@ -201,10 +342,15 @@ Un fallo del entorno no se reporta como un proyecto roto: `agent/verificador.ts`
 
 ## Trampas verificadas
 
-- **`SkillsPort.cargar()` no tiene ningún llamador en la ruta del agente.** `promptDe` solo usa
-  `catalogo()` para NOMBRAR las skills en el prompt del especialista («Cárgalas antes de
-  responder») y avisar de las que falten; el contenido de `skills/*/SKILL.md` nunca se inyecta, y
-  el backend está confinado a la raíz del proyecto, así que el modelo tampoco puede leerlo.
+- **`SkillsPort.cargar()` sigue sin tener un solo llamador — pero las skills SÍ llegan al
+  modelo.** Quien las carga es `SkillsMiddleware` de deepagents, no el puerto: `xoneAgent.ts`
+  monta `/skills/` en el backend (`backendConSkills`, un `CompositeBackend` sobre un
+  `FilesystemBackend` propio con raíz `RAIZ_SKILLS`) y le pasa a cada subagente
+  `skills: rutasDeSkills(perfil.nombre, skills)`, que son rutas virtuales, no contenido. El puerto solo
+  aporta `catalogo()`: nombrar las suyas en el prompt y AVISAR de las que falten. Dos detalles
+  medidos: la barra final de `"/skills/"` es obligatoria (`CompositeBackend` la retira antes de
+  delegar; sin ella reconstruye `//archify/...`, fuera de la raíz) y `permisosDe` deniega
+  `write` sobre `/skills/**` — son instrucciones, no ficheros editables.
 
 - **ink@5.2.1 no remide un `<Text>` cuando se INSERTA texto delante de un hijo existente.**
   `dom.js`: `insertBeforeNode` sale sin marcar sucio el `ink-text` padre (append y remove sí lo

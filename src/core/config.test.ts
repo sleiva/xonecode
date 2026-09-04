@@ -99,6 +99,36 @@ describe("validar", () => {
     expect(malo.avisos[0]?.texto).toContain("cloudstudio.scopes");
   });
 
+  it("acepta la rama origen de CloudStudio y descarta la que no sea un nombre no vacío", () => {
+    const bueno = validar(
+      { cloudstudio: { url: "https://mcp.xonewebstudio.com/mcp", rama: "develop" } }, RUTA, "proyecto"
+    );
+    expect(bueno.config.cloudstudio?.rama).toBe("develop");
+    expect(bueno.avisos).toEqual([]);
+
+    const malo = validar(
+      { cloudstudio: { url: "https://mcp.xonewebstudio.com/mcp", rama: "  " } }, RUTA, "proyecto"
+    );
+    expect(malo.config.cloudstudio).toEqual({ url: "https://mcp.xonewebstudio.com/mcp" });
+    expect(malo.avisos[0]?.texto).toContain("cloudstudio.rama");
+
+    const tipoInvalido = validar(
+      { cloudstudio: { url: "https://mcp.xonewebstudio.com/mcp", rama: 7 } }, RUTA, "proyecto"
+    );
+    expect(tipoInvalido.config.cloudstudio).toEqual({ url: "https://mcp.xonewebstudio.com/mcp" });
+    expect(tipoInvalido.avisos[0]?.texto).toContain("cloudstudio.rama");
+  });
+
+  it("conserva la rama junto con scopes malformados: no se pisan entre sí", () => {
+    const { config, avisos } = validar(
+      { cloudstudio: { url: "https://mcp.xonewebstudio.com/mcp", rama: "develop", scopes: ["ok", 2] } },
+      RUTA,
+      "proyecto"
+    );
+    expect(config.cloudstudio).toEqual({ url: "https://mcp.xonewebstudio.com/mcp", rama: "develop" });
+    expect(avisos[0]?.texto).toContain("cloudstudio.scopes");
+  });
+
   it("rechaza una URL CloudStudio insegura o que lleve credenciales", () => {
     const { config, avisos } = validar(
       { cloudstudio: { url: "https://token@example.test/mcp" } }, RUTA, "proyecto"

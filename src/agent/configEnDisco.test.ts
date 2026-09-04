@@ -36,6 +36,8 @@ import {
   guardarTemaDeProyecto,
   guardarModoDeProyecto,
   guardarCloudStudioDeProyecto,
+  guardarModelosDeProyecto,
+  guardarRamaDeProyecto,
   ConfigRotaEnDisco,
   OperacionesDeEscritura,
 } from "./configEnDisco.js";
@@ -250,6 +252,72 @@ it("guarda únicamente el endpoint MCP de CloudStudio dentro del proyecto", () =
   expect(JSON.parse(readFileSync(ruta, "utf8"))).toEqual({
     tema: "xone",
     cloudstudio: { url: "https://mcp.xonewebstudio.com/mcp", scopes: ["openid", "mcp.read"] },
+  });
+  rmSync(p, { recursive: true, force: true });
+});
+
+it("guardarCloudStudioDeProyecto no borra la rama al reconectar", () => {
+  const p = mkdtempSync(join(tmpdir(), "xc-cfg-"));
+  const ruta = rutaConfigDeProyecto(p);
+  mkdirSync(join(p, NOMBRE_CARPETA), { recursive: true });
+  writeFileSync(ruta, JSON.stringify({ tema: "xone" }));
+
+  guardarCloudStudioDeProyecto(p, "https://mcp.xonewebstudio.com/mcp", ["openid", "mcp.read"]);
+  guardarRamaDeProyecto(p, "develop");
+
+  // Reconectar (mismo endpoint, u otro) es lo que antes reemplazaba `cloudstudio`
+  // ENTERO y se llevaba la rama por delante en silencio.
+  guardarCloudStudioDeProyecto(p, "https://mcp.xonewebstudio.com/mcp", ["openid"]);
+
+  const guardado = JSON.parse(readFileSync(ruta, "utf8"));
+  expect(guardado.cloudstudio).toEqual({
+    url: "https://mcp.xonewebstudio.com/mcp",
+    scopes: ["openid"],
+    rama: "develop",
+  });
+  rmSync(p, { recursive: true, force: true });
+});
+
+it("guardarModelosDeProyecto fusiona sin perder lo que ya había", () => {
+  const raiz = mkdtempSync(join(tmpdir(), "xc-cfg-"));
+  mkdirSync(join(raiz, ".xonecode"), { recursive: true });
+  writeFileSync(
+    join(raiz, ".xonecode", "config.json"),
+    JSON.stringify({ modo: "cloud", modelos: { rapido: "ollama/a" } })
+  );
+
+  guardarModelosDeProyecto(raiz, "trabajo", "anthropic/claude-sonnet-4-5-20250929");
+
+  const guardado = JSON.parse(readFileSync(join(raiz, ".xonecode", "config.json"), "utf8"));
+  expect(guardado.modo).toBe("cloud");
+  expect(guardado.modelos).toEqual({
+    rapido: "ollama/a",
+    trabajo: "anthropic/claude-sonnet-4-5-20250929",
+  });
+  rmSync(raiz, { recursive: true, force: true });
+});
+
+it("guardarRamaDeProyecto fusiona dentro de cloudstudio sin perder url ni proyecto", () => {
+  const p = mkdtempSync(join(tmpdir(), "xc-cfg-"));
+  const ruta = rutaConfigDeProyecto(p);
+  mkdirSync(join(p, NOMBRE_CARPETA), { recursive: true });
+  writeFileSync(
+    ruta,
+    JSON.stringify({
+      cloudstudio: {
+        url: "https://mcp.xonewebstudio.com/mcp",
+        proyecto: { id: "p1", nombre: "Mi App" },
+      },
+    })
+  );
+
+  expect(guardarRamaDeProyecto(p, "develop")).toEqual({ ruta, rama: "develop" });
+
+  const guardado = JSON.parse(readFileSync(ruta, "utf8"));
+  expect(guardado.cloudstudio).toEqual({
+    url: "https://mcp.xonewebstudio.com/mcp",
+    proyecto: { id: "p1", nombre: "Mi App" },
+    rama: "develop",
   });
   rmSync(p, { recursive: true, force: true });
 });

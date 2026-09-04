@@ -16,7 +16,6 @@ import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import { auth, type OAuthClientProvider } from "@modelcontextprotocol/sdk/client/auth.js";
 import type { OAuthClientInformationMixed, OAuthClientMetadata, OAuthTokens } from "@modelcontextprotocol/sdk/shared/auth.js";
-import { MultiServerMCPClient } from "@langchain/mcp-adapters";
 
 const NOMBRE_CARPETA = ".xonecode";
 const NOMBRE_AUTH = "cloudstudio-oauth.json";
@@ -60,24 +59,87 @@ export interface OpcionesCloudStudio {
   scopes?: readonly string[];
 }
 
+/**
+ * El listado de proyectos por orden de preferencia.
+ *
+ * El servidor real de XOne CloudStudio la publica como `studio_list_projects`; los dos
+ * alias siguientes son endpoints anteriores. NO se codifica un solo nombre: cuando el
+ * servidor renombra su catálogo, el arranque entero se queda sin proyectos, y el usuario
+ * ve «no publicó la herramienta» en vez de su lista.
+ */
+const NOMBRES_LISTAR_PROYECTOS = ["studio_list_projects", "project_list", "list_projects", "projects_list"] as const;
+
+type DefinicionDeTool = { name: string; description?: string; inputSchema?: unknown };
+
+/** Una tool que exige argumentos no se puede invocar con `{}` en el arranque. */
+function pideArgumentos(definicion: DefinicionDeTool): boolean {
+  const esquema = definicion.inputSchema;
+  if (typeof esquema !== "object" || esquema === null) return false;
+  const obligatorios = (esquema as Record<string, unknown>).required;
+  return Array.isArray(obligatorios) && obligatorios.length > 0;
+}
+
+/**
+ * Qué tool lista los proyectos. Primero los nombres conocidos, en orden; si ninguno está,
+ * una heurística conservadora: tiene que hablar de listar Y de proyectos, y no pedir
+ * argumentos. `studio_open_project` o `studio_download_project` no la superan a propósito
+ * — abrir el proyecto equivocado en el arranque es peor que no encontrar la tool.
+ */
+export function herramientaDeProyectos(tools: readonly DefinicionDeTool[]): DefinicionDeTool | undefined {
+  for (const nombre of NOMBRES_LISTAR_PROYECTOS) {
+    const exacta = tools.find((t) => t.name === nombre);
+    if (exacta !== undefined) return exacta;
+  }
+  return tools.find((t) => {
+    const nombre = t.name.toLowerCase();
+    return /list/.test(nombre) && /project|proyecto/.test(nombre) && !pideArgumentos(t);
+  });
+}
+
 /** Extrae solo una identidad visible; el resultado íntegro nunca va al transcript. */
 export function proyectosDeResultado(valor: unknown): Array<{ id: string; nombre: string }> {
   if (typeof valor === "string") {
     try { return proyectosDeResultado(JSON.parse(valor)); } catch { return []; }
   }
+  // Medido contra el servidor real: `studio_list_projects` NO devuelve una lista, sino un
+  // MAPA indexado por id bajo «recents». Por eso cada clave admite las dos formas y la
+  // clave del mapa se conserva: es el id cuando la entrada no lo repite en «pid».
+  const entradas = (candidato: unknown): unknown[] =>
+    Array.isArray(candidato)
+      ? candidato
+      : typeof candidato === "object" && candidato !== null
+        ? Object.entries(candidato).map(([clave, entrada]) =>
+            typeof entrada === "object" && entrada !== null && !Array.isArray(entrada)
+              ? { ...entrada, __clave: clave }
+              : entrada
+          )
+        : [];
+
   const lista = Array.isArray(valor)
     ? valor
     : typeof valor === "object" && valor !== null
-      ? ["projects", "proyectos", "items", "data"].flatMap((clave) => {
-          const candidato = (valor as Record<string, unknown>)[clave];
-          return Array.isArray(candidato) ? candidato : [];
-        })
+      ? ["projects", "proyectos", "items", "data", "recents"].flatMap((clave) =>
+          entradas((valor as Record<string, unknown>)[clave])
+        )
       : [];
+  // Los SDK MCP devuelven el resultado textual dentro de `content`; no se conserva
+  // nada salvo los pares id/nombre. El wrapper LangChain de abajo serializa ese
+  // resultado para poder usar `.invoke({})` sin traducir los esquemas ajenos.
+  if (lista.length === 0 && typeof valor === "object" && valor !== null) {
+    const contenido = (valor as Record<string, unknown>).content;
+    if (Array.isArray(contenido)) {
+      return contenido.flatMap((bloque) =>
+        typeof bloque === "object" && bloque !== null && (bloque as Record<string, unknown>).type === "text"
+          ? proyectosDeResultado((bloque as Record<string, unknown>).text)
+          : []
+      );
+    }
+  }
   const vistos = new Set<string>();
   return lista.flatMap((candidato) => {
     if (typeof candidato !== "object" || candidato === null || Array.isArray(candidato)) return [];
     const dato = candidato as Record<string, unknown>;
-    const id = [dato.id, dato.projectId, dato.project_id].find((v): v is string => typeof v === "string" && v.trim() !== "");
+    const id = [dato.id, dato.pid, dato.projectId, dato.project_id, dato.__clave].find((v): v is string => typeof v === "string" && v.trim() !== "");
     const nombre = [dato.name, dato.nombre, dato.title].find((v): v is string => typeof v === "string" && v.trim() !== "");
     if (id === undefined || nombre === undefined || vistos.has(id)) return [];
     vistos.add(id);
@@ -228,12 +290,126 @@ class ProviderCloudStudio implements OAuthClientProvider {
   }
 }
 
+/** El `invocar` que consume `clienteCloudStudio` (`agent/cloudstudioClient.ts`).
+ *  Se define aquí por estructura, no por import, para no crear un ciclo entre los dos
+ *  módulos: ambos son adaptadores del mismo servidor pero no dependen entre sí. */
+export type InvocarMcp = (nombre: string, argumentos: Record<string, unknown>) => Promise<unknown>;
+
+/** Sesión MCP viva: `invocar` llama tools, `cerrar` libera el transporte. */
+export interface SesionCloudStudio {
+  invocar: InvocarMcp;
+  cerrar: () => Promise<void>;
+}
+
 /**
- * Inicia (o reutiliza) OAuth, completa initialize y lista las tools disponibles.
- * La conexión de tools al grafo vendrá después: esta función prueba la conexión sin
- * incorporar los esquemas de todas las tools al prompt del agente.
+ * El servidor pierde el proyecto abierto al caducar la sesión; lo dice con este texto
+ * (medido). Duplicado a propósito del mismo patrón en `agent/cloudstudioClient.ts`: es
+ * la señal, no un detalle de transporte, y ninguno de los dos módulos importa del otro.
  */
-export async function conectarCloudStudio(urlTexto: string, opciones: OpcionesCloudStudio = {}): Promise<ConexionCloudStudio> {
+const SESION_PERDIDA = /no project is open/i;
+
+/** Tools cuyo `isError` puede traer de vuelta nuestro propio contenido: un rechazo de
+ *  `studio_edit_file` en modo `patch`, o de `studio_upload_file`, puede incluir el
+ *  fragmento o fichero que se intentó mandar. Nunca se reenvía ese cuerpo. */
+const TOOLS_DE_ESCRITURA = new Set(["studio_edit_file", "studio_upload_file"]);
+
+/** Cuánto de la primera línea de un error se conserva. Basta para «File extension
+ *  '.jpg' is not allowed…»; no basta para un volcado de fichero entero. */
+const TOPE_MENSAJE_ERROR = 200;
+
+/** El texto de un error de TOOL (`isError`), tal cual lo manda el servidor. Puede
+ *  incluir identidad («…not found for user 'sleiva@xone.es'») o, en una tool de
+ *  escritura, el propio contenido rechazado: por eso `mensajeDeErrorDeTool` decide
+ *  cuánto de esto sale de aquí, nunca esta función. */
+function textoDeErrorDeTool(resultado: unknown): string {
+  const contenido = typeof resultado === "object" && resultado !== null
+    ? (resultado as Record<string, unknown>).content
+    : undefined;
+  if (Array.isArray(contenido)) {
+    const texto = contenido
+      .filter((b): b is { type: string; text: string } =>
+        typeof b === "object" && b !== null && (b as { type?: string }).type === "text")
+      .map((b) => b.text)
+      .join(" ")
+      .trim();
+    if (texto !== "") return texto;
+  }
+  return "CloudStudio devolvió un error sin detalle";
+}
+
+/** La ruta del fichero de la llamada, cuando la tool la lleva en `filePath`. Solo para
+ *  nombrar el error; nunca su contenido. */
+function rutaDe(argumentos: Record<string, unknown>): string | undefined {
+  return typeof argumentos.filePath === "string" ? argumentos.filePath : undefined;
+}
+
+/** La primera línea, acotada. Un texto de una sola línea corta pasa intacto. */
+function primeraLineaAcotada(texto: string): string {
+  const primeraLinea = texto.split(/\r?\n/, 1)[0] ?? "";
+  return primeraLinea.length > TOPE_MENSAJE_ERROR
+    ? `${primeraLinea.slice(0, TOPE_MENSAJE_ERROR)}…`
+    : primeraLinea;
+}
+
+/**
+ * El mensaje final de la excepción: nombra siempre la tool, para que el error siga
+ * sirviendo para diagnosticar, pero decide cuánto del cuerpo del servidor deja pasar.
+ *
+ * La caducidad de sesión es la excepción a la excepción: es un texto fijo y corto —
+ * nunca contenido de fichero—, y es la señal de la que depende toda la reapertura en
+ * `clienteCloudStudio`, incluida la de las tools de escritura. Redactar el cuerpo ahí
+ * dejaría un `escribirTexto`/`subirBinario` con la sesión caducada sin forma de
+ * reabrir y reintentar.
+ */
+function mensajeDeErrorDeTool(nombre: string, argumentos: Record<string, unknown>, resultado: unknown): string {
+  const detalle = textoDeErrorDeTool(resultado);
+  if (SESION_PERDIDA.test(detalle)) return `${nombre}: ${primeraLineaAcotada(detalle)}`;
+  if (TOOLS_DE_ESCRITURA.has(nombre)) {
+    const ruta = rutaDe(argumentos);
+    // Sin el cuerpo: en una tool de escritura ese cuerpo puede ser nuestro propio
+    // fichero (o el fragmento de un patch) rebotando.
+    return `CloudStudio rechazó ${nombre}${ruta !== undefined ? ` (${ruta})` : ""}`;
+  }
+  return `${nombre}: ${primeraLineaAcotada(detalle)}`;
+}
+
+/**
+ * Envuelve un `callTool` crudo del SDK en la función `invocar` que espera
+ * `clienteCloudStudio`. Separada de `sesionCloudStudio` para poder probar la conversión
+ * `isError → excepción` con un `callTool` falso, sin tocar OAuth ni el transporte: es la
+ * pieza de la que depende toda la reapertura de sesión en `agent/cloudstudioClient.ts`,
+ * y una implementación que se limitara a `return callTool(...)` pasaría los tests de
+ * `clienteCloudStudio` igual de mal que los de aquí bien, si esto no se probara aparte.
+ */
+export function invocarSobre(
+  callTool: (peticion: { name: string; arguments: Record<string, unknown> }) => Promise<unknown>,
+): InvocarMcp {
+  return async (nombre, argumentos) => {
+    const resultado = await callTool({ name: nombre, arguments: argumentos });
+    // El SDK MCP no lanza cuando la TOOL falla (`isError: true` es una respuesta RPC
+    // válida, con el motivo dentro de `content`); sin convertirlo en excepción, «No
+    // project is open» nunca llegaría a un catch y `clienteCloudStudio` no podría
+    // reabrir la sesión.
+    if (typeof resultado === "object" && resultado !== null && (resultado as { isError?: boolean }).isError) {
+      throw new Error(mensajeDeErrorDeTool(nombre, argumentos, resultado));
+    }
+    return resultado;
+  };
+}
+
+/**
+ * Abre (o reutiliza) OAuth y conecta el transporte MCP. Es la base común de
+ * `sesionCloudStudio` y `conectarCloudStudio`: la segunda necesita además
+ * `listTools()`, que no es una tool invocable y por eso no cabe en `{ invocar, cerrar }`.
+ *
+ * En error se cierra el transporte aquí mismo, porque nadie más llega a recibir el
+ * `cerrar()` que lo liberaría; en éxito la sesión queda VIVA a propósito, y es quien
+ * llama quien decide cuándo cerrarla.
+ */
+async function abrirCliente(
+  urlTexto: string,
+  opciones: OpcionesCloudStudio,
+): Promise<{ cliente: Client; url: URL; cerrar: () => Promise<void> }> {
   const url = urlSegura(urlTexto);
   const scopes = opciones.scopes ?? SCOPES_CLOUDSTUDIO_AGENTE;
   const callback = await esperarCallback(opciones.timeoutMs ?? 5 * 60_000);
@@ -245,7 +421,6 @@ export async function conectarCloudStudio(urlTexto: string, opciones: OpcionesCl
     (opciones.abrirNavegador ?? abrirEnSistema)(autorizacion);
   }, scopes);
   let transporte: StreamableHTTPClientTransport | undefined;
-  let adaptador: MultiServerMCPClient | undefined;
   try {
     // No se usa `client.connect()` para iniciar OAuth: ese transporte queda marcado como
     // iniciado incluso cuando redirige y no admite un segundo connect. `auth()` realiza
@@ -264,16 +439,46 @@ export async function conectarCloudStudio(urlTexto: string, opciones: OpcionesCl
     const cliente = new Client({ name: "xonecode", version: VERSION });
     transporte = new StreamableHTTPClientTransport(url, { authProvider: provider });
     await cliente.connect(transporte);
+    const transporteVivo = transporte;
+    return { cliente, url, cerrar: () => transporteVivo.close() };
+  } catch (error) {
+    await transporte?.close();
+    throw error;
+  } finally {
+    callback.cerrar();
+  }
+}
+
+/**
+ * Sesión MCP viva contra CloudStudio, para `clienteCloudStudio`
+ * (`agent/cloudstudioClient.ts`): descarga, escribe y cambia de rama necesitan una
+ * conexión que sobreviva a más de una llamada, cosa que `conectarCloudStudio` no ofrece
+ * porque cierra el transporte en cuanto termina de mirar el catálogo.
+ */
+export async function sesionCloudStudio(urlTexto: string, opciones: OpcionesCloudStudio = {}): Promise<SesionCloudStudio> {
+  const { cliente, cerrar } = await abrirCliente(urlTexto, opciones);
+  return {
+    invocar: invocarSobre((peticion) => cliente.callTool(peticion)),
+    cerrar,
+  };
+}
+
+/**
+ * Inicia (o reutiliza) OAuth, completa initialize y lista las tools disponibles.
+ * La conexión de tools al grafo vendrá después: esta función prueba la conexión sin
+ * incorporar los esquemas de todas las tools al prompt del agente.
+ */
+export async function conectarCloudStudio(urlTexto: string, opciones: OpcionesCloudStudio = {}): Promise<ConexionCloudStudio> {
+  const scopes = opciones.scopes ?? SCOPES_CLOUDSTUDIO_AGENTE;
+  const { cliente, url, cerrar } = await abrirCliente(urlTexto, opciones);
+  try {
     const listado = await cliente.listTools();
-    // Solo esta tool se carga e invoca antes del agente: escoger proyecto no es una
-    // decisión del modelo. El adaptador la entrega como herramienta LangChain.
-    adaptador = new MultiServerMCPClient({
-      mcpServers: { cloudstudio: { url: url.toString(), authProvider: provider } },
-    });
-    const herramientasLangChain = await adaptador.getTools("cloudstudio");
-    const listarProyectos = herramientasLangChain.find((tool) => tool.name === "project_list");
-    if (listarProyectos === undefined) throw new Error("CloudStudio no publicó la herramienta «project_list»");
-    const proyectos = proyectosDeResultado(await listarProyectos.invoke({}));
+    const definicion = herramientaDeProyectos(listado.tools);
+    if (definicion === undefined) {
+      const disponibles = listado.tools.map((tool) => tool.name).filter(Boolean).join(", ");
+      throw new Error(`CloudStudio no publicó ninguna herramienta de listado de proyectos${disponibles ? ` (disponibles: ${disponibles})` : ""}`);
+    }
+    const proyectos = proyectosDeResultado(await cliente.callTool({ name: definicion.name, arguments: {} }));
     return {
       url: url.toString(),
       scopes,
@@ -281,8 +486,6 @@ export async function conectarCloudStudio(urlTexto: string, opciones: OpcionesCl
       proyectos,
     };
   } finally {
-    callback.cerrar();
-    await adaptador?.close();
-    await transporte?.close();
+    await cerrar();
   }
 }

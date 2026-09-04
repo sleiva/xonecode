@@ -108,7 +108,7 @@ describe("configurarModoInicial", () => {
 
   it("solo persiste cloud tras conectar el MCP", async () => {
     const raiz = mkdtempSync(join(tmpdir(), "xc-modo-"));
-    const { consola, salida } = consolaDeConSecreto({ lineas: [], interactivo: true, respuestas: ["1", "1"] });
+    const { consola, salida } = consolaDeConSecreto({ lineas: [], interactivo: true, respuestas: ["1", "", "1"] });
     const conectar = vi.fn(async () => ({
       url: "https://mcp.xonewebstudio.com/mcp",
       scopes: ["openid", "mcp.read"],
@@ -129,6 +129,310 @@ describe("configurarModoInicial", () => {
     expect(guardarModo).toHaveBeenCalledWith("cloud");
     expect(salida()).toContain("Entorno cloud listo");
     rmSync(raiz, { recursive: true, force: true });
+  });
+
+  it("pide la URL MCP y no abandona la consola si CloudStudio falla", async () => {
+    const raiz = mkdtempSync(join(tmpdir(), "xc-modo-"));
+    const { consola, salida } = consolaDeConSecreto({
+      lineas: [],
+      interactivo: true,
+      respuestas: ["1", "https://mcp.ejemplo.test/mcp"],
+    });
+    const guardarModo = vi.fn(() => ({ ruta: join(raiz, ".xonecode", "config.json"), modo: "cloud" as const }));
+    const conectar = vi.fn(async () => { throw new Error("no publicó project_list"); });
+    consola.guardarModoDeProyecto = guardarModo;
+    consola.conectarCloudStudio = conectar;
+    consola.guardarCloudStudioDeProyecto = vi.fn();
+    consola.guardarProyectoCloudStudioDeProyecto = vi.fn();
+
+    await configurarModoInicial(raiz, consola);
+
+    expect(conectar).toHaveBeenCalledWith("https://mcp.ejemplo.test/mcp", expect.any(Array), expect.any(Function));
+    expect(guardarModo).not.toHaveBeenCalled();
+    expect(salida()).toContain("No se pudo conectar a CloudStudio: no publicó project_list");
+    rmSync(raiz, { recursive: true, force: true });
+  });
+
+  /**
+   * Monta una consola en pleno alta cloud, ya con el proyecto elegido: el punto donde
+   * empiezan los pasos 3 (rama + descarga) y 4 (modelo propio) del spec. `respuestasExtra`
+   * cubre lo que SIGA usando `preguntar` tras elegir proyecto (la URL ya se consume sola).
+   */
+  function consolaEnAltaCloud(opciones: {
+    respuestas?: string[];
+    seleccionar?: Consola["seleccionar"];
+    catalogoModelos?: CatalogoModelosPort;
+  } = {}): { raiz: string; consola: Consola; salida: () => string } {
+    const raiz = mkdtempSync(join(tmpdir(), "xc-modo-"));
+    const { consola, salida } = consolaDeConSecreto({
+      lineas: [],
+      interactivo: true,
+      respuestas: ["1", "", "1", ...(opciones.respuestas ?? [])],
+      catalogoModelos: opciones.catalogoModelos,
+    });
+    consola.conectarCloudStudio = async () => ({
+      url: "https://mcp.xonewebstudio.com/mcp",
+      scopes: ["openid", "mcp.read"],
+      herramientas: [],
+      proyectos: [{ id: "p-1", nombre: "Proyecto" }],
+    });
+    consola.guardarCloudStudioDeProyecto = () => ({
+      ruta: join(raiz, ".xonecode", "config.json"),
+      url: "https://mcp.xonewebstudio.com/mcp",
+      scopes: ["openid", "mcp.read"],
+    });
+    consola.guardarModoDeProyecto = () => ({ ruta: join(raiz, ".xonecode", "config.json"), modo: "cloud" as const });
+    consola.guardarProyectoCloudStudioDeProyecto = () => ({
+      ruta: join(raiz, ".xonecode", "config.json"),
+      proyecto: { id: "p-1", nombre: "Proyecto" },
+    });
+    // El «seleccionar» base resuelve modo y proyecto (ya cubiertos por los tests de
+    // arriba); el de cada test SOLO añade lo propio del paso que prueba.
+    const base = async (selector: { titulo: string }): Promise<string | undefined> => {
+      if (selector.titulo === "Modo de proyecto") return "cloud";
+      if (selector.titulo === "Proyecto de CloudStudio") return "p-1";
+      return undefined;
+    };
+    const extra = opciones.seleccionar;
+    consola.seleccionar = async (selector) => {
+      const desdeBase = await base(selector);
+      if (desdeBase !== undefined) return desdeBase;
+      return extra?.(selector);
+    };
+    return { raiz, consola, salida };
+  }
+
+  describe("paso 3: rama origen y descarga", () => {
+    it("con una sola rama disponible, NO pregunta y guarda esa", async () => {
+      const seleccionar = vi.fn(async (_selector: { titulo: string }) => undefined);
+      const { raiz, consola } = consolaEnAltaCloud({ seleccionar });
+      consola.ramasDeCloudStudio = async () => ["master"];
+      const guardarRama = vi.fn(() => ({ ruta: "x", rama: "master" }));
+      consola.guardarRamaDeProyecto = guardarRama;
+      try {
+        await configurarModoInicial(raiz, consola);
+      } finally {
+        rmSync(raiz, { recursive: true, force: true });
+      }
+      // La prueba dura: con una sola rama, «Rama origen» ni se pregunta.
+      expect(seleccionar).not.toHaveBeenCalledWith(expect.objectContaining({ titulo: "Rama origen" }));
+      expect(guardarRama).toHaveBeenCalledWith("master");
+    });
+
+    it("con varias ramas, pregunta y guarda la elegida", async () => {
+      const seleccionar = vi.fn(async (selector: { titulo: string }) => {
+        if (selector.titulo === "Rama origen") return "dev";
+        return undefined;
+      });
+      const { raiz, consola } = consolaEnAltaCloud({ seleccionar });
+      consola.ramasDeCloudStudio = async () => ["master", "dev"];
+      const guardarRama = vi.fn(() => ({ ruta: "x", rama: "dev" }));
+      consola.guardarRamaDeProyecto = guardarRama;
+      try {
+        await configurarModoInicial(raiz, consola);
+      } finally {
+        rmSync(raiz, { recursive: true, force: true });
+      }
+      expect(seleccionar).toHaveBeenCalledWith(
+        expect.objectContaining({ titulo: "Rama origen", opciones: expect.arrayContaining([expect.objectContaining({ id: "master" }), expect.objectContaining({ id: "dev" })]) })
+      );
+      expect(guardarRama).toHaveBeenCalledWith("dev");
+    });
+
+    it("tras elegir proyecto, descarga (\"bajar\") y prepara el repo antes del primer turno", async () => {
+      const { raiz, consola, salida } = consolaEnAltaCloud();
+      consola.ramasDeCloudStudio = async () => ["master"];
+      consola.guardarRamaDeProyecto = vi.fn(() => ({ ruta: "x", rama: "master" }));
+      const sincronizar = vi.fn(async (accion: "estado" | "bajar" | "subir", raizRecibida: string) => {
+        expect(accion).toBe("bajar");
+        expect(raizRecibida).toBe(raiz);
+        return { tipo: "texto" as const, texto: "bajados 3 ficheros (zip)\n" };
+      });
+      consola.sincronizar = sincronizar;
+      try {
+        await configurarModoInicial(raiz, consola);
+      } finally {
+        rmSync(raiz, { recursive: true, force: true });
+      }
+      expect(sincronizar).toHaveBeenCalledOnce();
+      expect(salida()).toContain("bajados 3 ficheros");
+    });
+
+    it("si el árbol está sucio, el alta DICE que no ha bajado nada y por qué", async () => {
+      // Este es el camino por el que se pierde trabajo sin haber escrito `/sync`: quien
+      // arranca xonecode en una carpeta con trabajo y elige modo cloud. La descarga
+      // sobrescribe el disco y el baseline se construye después, así que no se recupera.
+      // El alta se tragaba el rechazo en silencio (solo pintaba el caso `texto`).
+      const { raiz, consola, salida } = consolaEnAltaCloud();
+      consola.ramasDeCloudStudio = async () => ["master"];
+      consola.guardarRamaDeProyecto = vi.fn(() => ({ ruta: "x", rama: "master" }));
+      consola.sincronizar = async () => ({
+        tipo: "arbol-sucio" as const,
+        accion: "bajar" as const,
+        pendientes: ["app.xml", "Farmacias.xne"],
+      });
+      try {
+        await configurarModoInicial(raiz, consola);
+      } finally {
+        rmSync(raiz, { recursive: true, force: true });
+      }
+      const texto = salida();
+      expect(texto).toContain("app.xml");
+      expect(texto).toContain("Farmacias.xne");
+      expect(texto).toMatch(/sobrescribe/i);
+      expect(texto).toMatch(/no se ha descargado nada/i);
+    });
+  });
+
+  describe("paso 4: modelo propio del proyecto", () => {
+    it("«usar el modelo global» (la omisión) no toca la configuración del proyecto", async () => {
+      const seleccionar = vi.fn(async (selector: { titulo: string }) => {
+        if (selector.titulo === "Modelo de este proyecto") return "global";
+        return undefined;
+      });
+      const { raiz, consola } = consolaEnAltaCloud({ seleccionar });
+      consola.ramasDeCloudStudio = async () => ["master"];
+      consola.guardarRamaDeProyecto = vi.fn(() => ({ ruta: "x", rama: "master" }));
+      const guardarModelos = vi.fn();
+      consola.guardarModelosDeProyecto = guardarModelos;
+      try {
+        await configurarModoInicial(raiz, consola);
+      } finally {
+        rmSync(raiz, { recursive: true, force: true });
+      }
+      expect(guardarModelos).not.toHaveBeenCalled();
+    });
+
+    it("«elegir uno propio» guarda el mismo modelo para los TRES papeles del proyecto", async () => {
+      const seleccionar = vi.fn(async (selector: { titulo: string }) => {
+        if (selector.titulo === "Modelo de este proyecto") return "propio";
+        if (selector.titulo === "Proveedor del modelo de este proyecto") return "ollama";
+        if (selector.titulo === "Modelos de ollama") return "qwen3";
+        return undefined;
+      });
+      const { raiz, consola } = consolaEnAltaCloud({
+        seleccionar,
+        catalogoModelos: new CatalogoModelosEnMemoria({ ollama: [{ proveedor: "ollama", id: "qwen3" }] }),
+      });
+      consola.ramasDeCloudStudio = async () => ["master"];
+      consola.guardarRamaDeProyecto = vi.fn(() => ({ ruta: "x", rama: "master" }));
+      const guardarModelos = vi.fn(() => ({ ruta: "x", id: "ollama/qwen3" }));
+      consola.guardarModelosDeProyecto = guardarModelos;
+      try {
+        await configurarModoInicial(raiz, consola);
+      } finally {
+        rmSync(raiz, { recursive: true, force: true });
+      }
+      expect(guardarModelos).toHaveBeenCalledWith("rapido", "ollama/qwen3");
+      expect(guardarModelos).toHaveBeenCalledWith("trabajo", "ollama/qwen3");
+      expect(guardarModelos).toHaveBeenCalledWith("afilado", "ollama/qwen3");
+    });
+  });
+});
+
+describe("/sync", () => {
+  it("sin dependencias inyectadas lo dice y no revienta", async () => {
+    const { consola, salida } = consolaDe("/sync", "/salir");
+    await correrConsola(consola, estadoDe());
+    expect(salida()).toMatch(/sincronización no está disponible/i);
+  });
+
+  it("se niega a subir con el árbol sucio", async () => {
+    const { consola, salida } = consolaDe("/sync subir", "/salir");
+    const conSync: Consola = {
+      ...consola,
+      sincronizar: async (accion) => {
+        expect(accion).toBe("subir");
+        return { tipo: "arbol-sucio", accion: "subir", pendientes: ["app.xml"] };
+      },
+    };
+    await correrConsola(conSync, estadoDe());
+    expect(salida()).toMatch(/commitea/i);
+  });
+
+  it("«/sync bajar» pinta los avisos deterministas de la descarga parcial", async () => {
+    // El extremo del cable de I2: el aviso lo emite `agent/`, y si `/sync` no le pasa un
+    // `informar` que escriba en la consola, muere en el `() => {}` por omisión.
+    const { consola, salida } = consolaDe("/sync bajar", "/salir");
+    const conSync: Consola = {
+      ...consola,
+      sincronizar: async (_accion, _raiz, _politica, informar) => {
+        informar?.("no se pudo bajar «icons/logo.png»: File extension not allowed\n");
+        return { tipo: "texto", texto: "bajados 1 ficheros (parcial)\n" };
+      },
+    };
+    await correrConsola(conSync, estadoDe());
+    expect(salida()).toContain("icons/logo.png");
+  });
+
+  it("«/sync estado» enseña lo que falta por subir", async () => {
+    const { consola, salida } = consolaDe("/sync", "/salir");
+    const conSync: Consola = {
+      ...consola,
+      sincronizar: async () => ({ tipo: "texto", texto: "rama master: 2 ficheros por subir\n" }),
+    };
+    await correrConsola(conSync, estadoDe());
+    expect(salida()).toContain("2 ficheros por subir");
+  });
+
+  describe("subir: rellena el hueco de política con un humano", () => {
+    /** `sincronizar` FALSO que se comporta como haría `agent/subida.ts#subir`: invoca la
+     * política recibida con un plan de muestra y responde según lo que decida. */
+    function sincronizarQueMiraLaPolitica(): Consola["sincronizar"] {
+      return async (accion, _raiz, politica) => {
+        expect(accion).toBe("subir");
+        expect(politica).toBeDefined();
+        const autorizado = await politica!([{ tipo: "texto", ruta: "app.xml" }]);
+        return {
+          tipo: "texto",
+          texto: autorizado ? "subidos 1, fallaron 0\n" : "no se ha aplicado nada\n",
+        };
+      };
+    }
+
+    it("enseña el plan, pregunta, y si se aprueba deja que sincronizar suba", async () => {
+      const { consola, salida } = consolaDeConSecreto({
+        lineas: ["/sync subir", "/salir"],
+        respuestas: ["s"],
+      });
+      const conSync: Consola = { ...consola, sincronizar: sincronizarQueMiraLaPolitica() };
+
+      await correrConsola(conSync, estadoDe());
+
+      const texto = salida();
+      expect(texto).toContain("SUBIDA A CLOUDSTUDIO");
+      expect(texto).toContain("app.xml");
+      expect(texto).toContain("APROBADO");
+      expect(texto).toContain("subidos 1, fallaron 0");
+    });
+
+    it("si se rechaza, sincronizar no llega a decir que subió nada", async () => {
+      const { consola, salida } = consolaDeConSecreto({
+        lineas: ["/sync subir", "/salir"],
+        respuestas: ["n"],
+      });
+      const conSync: Consola = { ...consola, sincronizar: sincronizarQueMiraLaPolitica() };
+
+      await correrConsola(conSync, estadoDe());
+
+      const texto = salida();
+      expect(texto).toContain("rechazado, no se ha aplicado nada");
+      expect(texto).toContain("no se ha aplicado nada");
+      expect(texto).not.toContain("subidos 1");
+    });
+
+    it("sin TTY, Enter a secas NO aprueba: hace falta un sí explícito", async () => {
+      const { consola, salida } = consolaDeConSecreto({
+        lineas: ["/sync subir", "/salir"],
+        respuestas: [""],
+        interactivo: false,
+      });
+      const conSync: Consola = { ...consola, sincronizar: sincronizarQueMiraLaPolitica() };
+
+      await correrConsola(conSync, estadoDe());
+
+      expect(salida()).toContain("no se ha aplicado nada");
+    });
   });
 });
 

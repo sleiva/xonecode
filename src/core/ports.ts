@@ -10,6 +10,9 @@
  */
 
 import type { Proveedor } from "./modelos.js";
+import type {
+  ContextoRemoto, EntradaRemota, EstructuraRemota, ManifiestoRemoto,
+} from "./cloudstudio.js";
 
 /**
  * La marca de «esto es un doble», y por qué es un Symbol y no un booleano.
@@ -233,5 +236,128 @@ export class VerifierGuionizado implements VerifierPort {
     const r = this.guion[Math.min(this.i, this.guion.length - 1)]!;
     this.i++;
     return r;
+  }
+}
+
+/**
+ * El proyecto del cliente en CloudStudio.
+ *
+ * Modela lo MEDIDO contra el servidor, no lo que sería cómodo: el proyecto abierto es
+ * estado de sesión que caduca (`abrir` se repite), la rama activa solo se sabe por
+ * `contexto`, y la descarga completa es un ZIP entero que jamás pasa por el transcript.
+ */
+export interface CloudStudioPort {
+  abrir(nombre: string): Promise<void>;
+  contexto(): Promise<ContextoRemoto>;
+  /** Devuelve el ZIP en base64. Puede fallar por un fichero roto en Studio. */
+  descargarZip(): Promise<string>;
+  estructura(directorio?: string): Promise<EstructuraRemota>;
+  leerTexto(ruta: string): Promise<string>;
+  escribirTexto(ruta: string, contenido: string): Promise<void>;
+  borrarTexto(ruta: string): Promise<void>;
+  subirBinario(ruta: string, datos: Uint8Array): Promise<void>;
+  ramas(): Promise<string[]>;
+  crearRama(nombre: string, desde: string): Promise<void>;
+  cambiarRama(nombre: string): Promise<void>;
+}
+
+export interface OpcionesCloudStudioEnMemoria {
+  rama?: string;
+  textos?: Record<string, string>;
+  binarios?: Record<string, number>;
+  /** Motivo con el que `descargarZip` rechaza; ausente = el ZIP funciona. */
+  zipFalla?: string;
+  /** Tope de entradas por llamada, para reproducir el truncado del servidor real. */
+  topeEstructura?: number;
+  /** ZIP ya fabricado (por el test, fuera de la frontera) para que `descargarZip` lo devuelva. */
+  zipBase64?: string;
+}
+
+/** El proyecto remoto en memoria: recorre el flujo entero sin red ni credenciales. */
+export class CloudStudioEnMemoria implements CloudStudioPort {
+  readonly [ES_DOBLE] = true;
+  /** Lo escrito, para poder afirmar sobre ello en los tests. */
+  readonly escrituras: Array<
+    | { tipo: "texto"; ruta: string; bytes: number }
+    | { tipo: "binario"; ruta: string; bytes: number }
+    | { tipo: "borrado"; ruta: string }
+  > = [];
+  private abierto: string | undefined;
+  private ramaActual: string;
+
+  constructor(private readonly opciones: OpcionesCloudStudioEnMemoria = {}) {
+    this.ramaActual = opciones.rama ?? "master";
+  }
+
+  async abrir(nombre: string): Promise<void> {
+    this.abierto = nombre;
+  }
+
+  private exigirAbierto(): void {
+    // El servidor real responde «No project is open»; el doble no puede ser más blando,
+    // o el adaptador nunca ejercitaría su reapertura.
+    if (this.abierto === undefined) throw new Error("No project is open");
+  }
+
+  async contexto(): Promise<ContextoRemoto> {
+    this.exigirAbierto();
+    return { proyecto: this.abierto!, rama: this.ramaActual };
+  }
+
+  async descargarZip(): Promise<string> {
+    this.exigirAbierto();
+    if (this.opciones.zipFalla !== undefined) throw new Error(this.opciones.zipFalla);
+    if (this.opciones.zipBase64 === undefined) throw new Error("[DOBLE] falta `zipBase64`");
+    return this.opciones.zipBase64;
+  }
+
+  async estructura(directorio = ""): Promise<EstructuraRemota> {
+    this.exigirAbierto();
+    const todas: EntradaRemota[] = [
+      ...Object.entries(this.opciones.textos ?? {}).map(([ruta, texto]) => ({ ruta, bytes: texto.length })),
+      ...Object.entries(this.opciones.binarios ?? {}).map(([ruta, bytes]) => ({ ruta, bytes })),
+    ].filter((e) => directorio === "" || e.ruta.startsWith(`${directorio}/`));
+    const tope = this.opciones.topeEstructura;
+    const truncado = tope !== undefined && todas.length > tope;
+    return { entradas: truncado ? todas.slice(0, tope) : todas, truncado };
+  }
+
+  async leerTexto(ruta: string): Promise<string> {
+    this.exigirAbierto();
+    const texto = this.opciones.textos?.[ruta];
+    // El servidor rechaza por EXTENSIÓN, no por ausencia: el mensaje se replica para que
+    // la vía degradada aprenda a distinguir «no existe» de «no se puede bajar así».
+    if (texto === undefined) throw new Error(`File extension not allowed or missing: ${ruta}`);
+    return texto;
+  }
+
+  async escribirTexto(ruta: string, contenido: string): Promise<void> {
+    this.exigirAbierto();
+    this.escrituras.push({ tipo: "texto", ruta, bytes: contenido.length });
+  }
+
+  async borrarTexto(ruta: string): Promise<void> {
+    this.exigirAbierto();
+    this.escrituras.push({ tipo: "borrado", ruta });
+  }
+
+  async subirBinario(ruta: string, datos: Uint8Array): Promise<void> {
+    this.exigirAbierto();
+    this.escrituras.push({ tipo: "binario", ruta, bytes: datos.byteLength });
+  }
+
+  async ramas(): Promise<string[]> {
+    this.exigirAbierto();
+    return [this.ramaActual];
+  }
+
+  async crearRama(nombre: string): Promise<void> {
+    this.exigirAbierto();
+    this.ramaActual = nombre;
+  }
+
+  async cambiarRama(nombre: string): Promise<void> {
+    this.exigirAbierto();
+    this.ramaActual = nombre;
   }
 }

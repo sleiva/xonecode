@@ -1,9 +1,9 @@
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { createHash } from "node:crypto";
-import { mkdtempSync, rmSync, readFileSync, readdirSync, statSync, existsSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { readFileSync, readdirSync, statSync, existsSync } from "node:fs";
 import { join } from "node:path";
+import { indicePrivado, claseDeCambio } from "./git.js";
 
 const ejecutar = promisify(execFile);
 
@@ -21,14 +21,6 @@ export interface Instantanea {
   diff(): Promise<string>;
 }
 
-/** Índice de git propio y temporal: ni toca el del usuario ni lo comparten dos sesiones. */
-function indicePrivado(): { ruta: string; limpiar: () => void } {
-  const dir = mkdtempSync(join(tmpdir(), "xonecode-idx-"));
-  return { ruta: join(dir, "git.index"), limpiar: () => rmSync(dir, { recursive: true, force: true }) };
-}
-
-const CLASE: Record<string, Cambio["clase"]> = { A: "nuevo", D: "borrado", M: "modificado", R: "modificado", C: "modificado" };
-
 /**
  * La foto por árbol de git.
  *
@@ -42,7 +34,7 @@ const CLASE: Record<string, Cambio["clase"]> = { A: "nuevo", D: "borrado", M: "m
  */
 async function porArbol(raiz: string, prefijo: string): Promise<Instantanea> {
   const escribirArbol = async (): Promise<string> => {
-    const idx = indicePrivado();
+    const idx = indicePrivado("idx");
     try {
       await ejecutar("git", ["add", "-A", "--", "."], {
         cwd: raiz,
@@ -73,7 +65,7 @@ async function porArbol(raiz: string, prefijo: string): Promise<Instantanea> {
         .filter((l) => l.trim())
         .map((l) => {
           const [estado, ...resto] = l.split("\t");
-          return { ruta: recortar(resto[resto.length - 1]!.trim()), clase: CLASE[estado![0]!] ?? "modificado" };
+          return { ruta: recortar(resto[resto.length - 1]!.trim()), clase: claseDeCambio(estado!) };
         });
     },
     async diff(): Promise<string> {
