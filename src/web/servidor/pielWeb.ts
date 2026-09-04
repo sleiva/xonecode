@@ -15,7 +15,7 @@
  * resumidas por `agent/resumenDeTool.ts` (lista blanca de ruta/patrón por nombre de tool,
  * nunca contenido), y `pausa` solo copia `origen` y `descripcion` del pendiente — el
  * `PendienteDeAprobacion` no trae más, y el diff en sí viaja únicamente en el mensaje de
- * aprobación (una tarea posterior), nunca por este canal de actos.
+ * aprobación (`transporte.ts`, clase `aprobacion`), nunca por este canal de actos.
  */
 import type { Piel } from "../../core/turno.js";
 import type { Acto } from "../../core/actos.js";
@@ -67,6 +67,11 @@ export function crearPielWeb(): PielWeb {
 
   const piel: Piel = {
     token(texto) {
+      // A DIFERENCIA del store de la TUI (`cli/tui/store.ts:74-87`), aquí NO se parte por
+      // `\n`: la TUI pinta líneas en un terminal y necesita una por fila, pero la web
+      // renderiza markdown, donde un párrafo entero —con sus saltos internos, sus listas
+      // y sus bloques de código— tiene que llegar de una pieza para que se pueda parsear.
+      // Partirlo daría un acto por línea y el markdown se rompería en trozos sueltos.
       colchon += texto;
     },
 
@@ -96,7 +101,7 @@ export function crearPielWeb(): PielWeb {
     pausa(pendientes: PendienteDeAprobacion[]) {
       cerrarFase();
       // Una línea por pendiente, origen y descripción y NADA más: ni el fichero, ni el
-      // diff — eso viaja solo en el mensaje de aprobación (tarea posterior).
+      // diff — eso viaja solo en el mensaje de aprobación (`transporte.ts`).
       const texto = pendientes.map((p) => `${p.origen}: ${p.descripcion}`).join("\n");
       empujar({ tipo: "sistema", texto });
     },

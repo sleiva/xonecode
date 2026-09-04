@@ -72,4 +72,28 @@ describe("pielWeb", () => {
       { tipo: "fin", ms: 10 },
     ]);
   });
+  /**
+   * El contrato de `alActo` que el transporte necesita y que hasta ahora solo estaba
+   * escrito en prosa: dispara también cuando el último acto se ACTUALIZA. Un consumidor
+   * que anexara a ciegas dejaría en pantalla la apertura de la racha Y su cierre.
+   */
+  it("alActo avisa también de la ACTUALIZACIÓN del último acto, no solo de las altas", () => {
+    const { piel, actos, alActo } = crearPielWeb();
+    const avisos: unknown[] = [];
+    alActo((a) => avisos.push(a));
+    piel.linea("→ lee /a");
+    piel.linea("→ lee ×3 — /a");
+    // Un solo acto en la lista, pero DOS avisos: el segundo es la sustitución.
+    expect(actos()).toEqual([{ tipo: "herramientas", lineas: ["→ lee ×3 — /a"] }]);
+    expect(avisos).toHaveLength(2);
+    expect(avisos[1]).toEqual({ tipo: "herramientas", lineas: ["→ lee ×3 — /a"] });
+  });
+
+  it("el token NO se parte por saltos: la web renderiza markdown y el párrafo va entero", () => {
+    const { piel, actos } = crearPielWeb();
+    piel.token("- uno\n- dos\n");
+    piel.cerrarLinea();
+    // El store de la TUI daría tres actos aquí (uno por línea); la web da uno.
+    expect(actos()).toEqual([{ tipo: "asistente", texto: "- uno\n- dos\n" }]);
+  });
 });
