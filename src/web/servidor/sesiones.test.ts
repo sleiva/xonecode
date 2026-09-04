@@ -2,7 +2,7 @@ import { mkdtempSync, writeFileSync, mkdirSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, it, expect } from "vitest";
-import { crearSesion, anotarActo, listarSesiones, reabrirSesion } from "./sesiones.js";
+import { crearSesion, anotarActo, listarSesiones, reabrirSesion, IndiceDeSesionesRoto } from "./sesiones.js";
 
 const proyecto = () => mkdtempSync(join(tmpdir(), "xonecode-proyecto-"));
 
@@ -47,5 +47,19 @@ describe("sesiones por proyecto", () => {
     const raiz = proyecto();
     const id = crearSesion(raiz);
     expect(reabrirSesion(raiz, id).id).toBe(id);
+  });
+
+  it("un indice.json roto para la escritura sin sobrescribirlo: no borra sesiones que nombraba", () => {
+    const raiz = proyecto();
+    const id = crearSesion(raiz);
+    const rutaIndice = join(raiz, ".xonecode", "sesiones", "indice.json");
+    const indiceRoto = "{esto no es json";
+    writeFileSync(rutaIndice, indiceRoto);
+    expect(() => anotarActo(raiz, id, { tipo: "usuario", texto: "uno" })).toThrow(IndiceDeSesionesRoto);
+    // El acto se escribió en el .jsonl aunque el índice esté roto: lo prescindible (el
+    // índice, reconstruible barriendo los .jsonl) no puede tumbar lo irrecuperable (el acto).
+    expect(reabrirSesion(raiz, id).actos).toEqual([{ tipo: "usuario", texto: "uno" }]);
+    // Y el indice.json roto se queda EXACTAMENTE como estaba: nadie lo sobrescribió con [].
+    expect(readFileSync(rutaIndice, "utf8")).toBe(indiceRoto);
   });
 });

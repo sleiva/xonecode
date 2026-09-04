@@ -117,8 +117,8 @@ export function validarSettings(bruto: unknown): { settings: Settings; avisos: A
 /**
  * Un segmento que no puede salirse de su carpeta ni inventar niveles.
  *
- * Exportada porque Task 8 (`web/servidor/sesiones.ts`) necesita la misma guarda para el id
- * de sesión, que llega del cliente y no puede componer una ruta: una segunda copia habría
+ * Exportada porque `web/servidor/sesiones.ts` necesita la misma guarda para el id de
+ * sesión, que llega del cliente y no puede componer una ruta: una segunda copia habría
  * divergido de esta la primera vez que una se corrigiera y la otra no.
  */
 export function segmentoSeguro(valor: string, que: string): string {

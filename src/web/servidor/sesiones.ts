@@ -77,29 +77,63 @@ function rutaIndice(raiz: string): string {
   return join(carpetaSesiones(raiz), "indice.json");
 }
 
-/** El id llega de fuera (Task 3 lo advierte de `crearSesion`, pero `anotarActo` y
- * `reabrirSesion` lo reciben también desde el cliente vía HTTP): sin esta guarda un id como
- * `"../../.env"` compondría una ruta fuera de `sesiones/`. Misma función que
- * `rutaDeWorkspace` en `core/settings.ts`, no una copia — dos copias es cómo diverge la
- * guarda el día que una se corrija y la otra no.
+/** `crearSesion` genera el id con `randomUUID()`, pero `anotarActo` y `reabrirSesion` lo
+ * reciben tal cual llega del cliente por HTTP: sin esta guarda un id como `"../../.env"`
+ * compondría una ruta fuera de `sesiones/`. Misma función que usa `rutaDeWorkspace` en
+ * `core/settings.ts`, no una copia — dos copias es cómo diverge la guarda el día que una
+ * se corrija y la otra no.
  */
 function rutaJsonl(raiz: string, id: string): string {
   return join(carpetaSesiones(raiz), `${segmentoSeguro(id, "id de sesión")}.jsonl`);
 }
 
-/** Lee el índice; sin fichero o con JSON roto, una lista vacía — un índice no se puede
- * reconstruir solo leyéndolo, así que fallar aquí no puede tumbar la reapertura de ninguna
- * sesión (mismo principio que la línea corrupta del `.jsonl`, aplicado al índice).
+/** Una entrada que no es un objeto reconocible no cuenta: sin este filtro, un índice con
+ * basura colada (`[null]`, `[42]`) hace que `entradas.find` reviente en cuanto alguien lea
+ * `.id` de un elemento que no lo tiene.
+ */
+function esEntrada(v: unknown): v is EntradaIndice {
+  return typeof v === "object" && v !== null && typeof (v as { id?: unknown }).id === "string";
+}
+
+/** Lee el índice para MOSTRARLO (`listarSesiones`); sin fichero o con JSON roto, una lista
+ * vacía — un índice no se puede reconstruir solo leyéndolo, así que fallar aquí no puede
+ * tumbar la reapertura de ninguna sesión (mismo principio que la línea corrupta del
+ * `.jsonl`, aplicado al índice). Nunca la uses como base de una ESCRITURA: ver
+ * `leerIndiceOAbortar`.
  */
 function leerIndice(raiz: string): EntradaIndice[] {
   const ruta = rutaIndice(raiz);
   if (!existsSync(ruta)) return [];
   try {
     const bruto: unknown = JSON.parse(readFileSync(ruta, "utf8"));
-    return Array.isArray(bruto) ? (bruto as EntradaIndice[]) : [];
+    return Array.isArray(bruto) ? bruto.filter(esEntrada) : [];
   } catch {
     return [];
   }
+}
+
+/** Un índice roto (JSON que no parsea, o que no es una lista) no se puede persistir como
+ * base: usar aquí la lista vacía que devuelve `leerIndice` para un JSON roto BORRARÍA del
+ * disco todas las sesiones que el índice roto todavía nombraba — el `.jsonl` de cada
+ * sesión sigue intacto, pero sin su entrada es irrecuperable. Misma disciplina que
+ * `settingsEnDisco.ts#leerCrudoOAbortar`: la lectura que alimenta una escritura PARA sin
+ * escribir ante JSON roto, en vez de recuperar el fichero por su cuenta.
+ */
+export class IndiceDeSesionesRoto extends Error {}
+
+function leerIndiceOAbortar(raiz: string): EntradaIndice[] {
+  const ruta = rutaIndice(raiz);
+  if (!existsSync(ruta)) return [];
+  let bruto: unknown;
+  try {
+    bruto = JSON.parse(readFileSync(ruta, "utf8"));
+  } catch {
+    throw new IndiceDeSesionesRoto(`«${ruta}»: el JSON es inválido; no se sobrescribe. Edita el fichero a mano.`);
+  }
+  if (!Array.isArray(bruto)) {
+    throw new IndiceDeSesionesRoto(`«${ruta}»: el JSON raíz debe ser una lista; no se sobrescribe.`);
+  }
+  return bruto.filter(esEntrada);
 }
 
 /** Temporal + `renameSync`, igual que `settingsEnDisco.ts#escribirAtomico`: un rename es
@@ -142,7 +176,7 @@ function escribirIndice(raiz: string, entradas: EntradaIndice[]): void {
 export function crearSesion(raiz: string): string {
   const id = randomUUID();
   const ahora = new Date().toISOString();
-  const entradas = leerIndice(raiz);
+  const entradas = leerIndiceOAbortar(raiz);
   entradas.push({ id, titulo: "", creada: ahora, ultimoTurno: ahora });
   escribirIndice(raiz, entradas);
   return id;
@@ -151,6 +185,11 @@ export function crearSesion(raiz: string): string {
 /** Anexa un acto al `.jsonl` de la sesión y refresca su entrada en el índice: fija el
  * título en el PRIMER acto `usuario` (y no se vuelve a tocar) y actualiza `ultimoTurno`
  * en cada llamada, sea cual sea el tipo de acto.
+ *
+ * El anexado va ANTES de tocar el índice a propósito: si el índice está roto y
+ * `leerIndiceOAbortar` lanza, el acto ya quedó escrito. Un turno completo no se pierde
+ * solo porque el índice —que es prescindible, se puede reconstruir barriendo los
+ * `.jsonl`— esté corrompido.
  */
 export function anotarActo(raiz: string, id: string, acto: Acto): void {
   const ruta = rutaJsonl(raiz, id);
@@ -158,7 +197,7 @@ export function anotarActo(raiz: string, id: string, acto: Acto): void {
   appendFileSync(ruta, JSON.stringify(acto) + "\n", "utf8");
 
   const ahora = new Date().toISOString();
-  const entradas = leerIndice(raiz);
+  const entradas = leerIndiceOAbortar(raiz);
   const entrada = entradas.find((e) => e.id === id);
   if (entrada === undefined) {
     // Anotar sin haber pasado por `crearSesion` (no debería pasar por el flujo normal,
