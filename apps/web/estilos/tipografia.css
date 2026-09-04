@@ -1,0 +1,43 @@
+/* NUESTRO, no copiado de deepseek-harness — a diferencia de los otros cinco ficheros de
+   esta carpeta, que son copias literales y no se tocan.
+
+   Existe porque las hojas copiadas solo DECLARAN tokens: `base.css` define
+   `--dsw-font-family` y `--ds-font-family-code`, y ni ella ni `design-platform.css` ni
+   `gradient-shadow-text.css` los aplican a ningún elemento. En deepseek eso lo hace su
+   paquete `ui-layout`, que no nos trajimos. Resultado, MEDIDO abriendo la consola: la
+   interfaz entera se pintaba con la tipografía por omisión del navegador —serif— y media
+   razón de haber copiado el tema se perdía por un `font-family` que no estaba en ningún
+   sitio.
+
+   Se aplica en `html` y no en `body` para que herede también lo que se monte fuera de
+   `#root` (un portal, un diálogo nativo). */
+
+html {
+  font-family: var(--dsw-font-family);
+  /* El tamaño y el interlineado de contenido que los tokens de markdown dan por sabidos
+     (`--dsh-content-font-size`, `gradient-shadow-text.css`): sin ellos cada componente
+     acababa fijando el suyo. */
+  font-size: 14px;
+  line-height: 1.5;
+  /* Sin esto, en macOS el texto claro sobre fondo oscuro sale engordado. */
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Los formularios NO heredan la tipografía del documento por omisión: es de las pocas
+   herencias que el navegador corta, y sin esta línea el compositor, los `select` del
+   wizard y los botones salían en la fuente del sistema mientras el resto ya estaba bien. */
+button,
+input,
+select,
+textarea {
+  font: inherit;
+}
+
+/* Lo que es código va con la pila de código, y por el token: es lo que hace que cambiarla
+   en un sitio la cambie en todos. */
+code,
+kbd,
+pre,
+samp {
+  font-family: var(--ds-font-family-code);
+}

@@ -89,6 +89,7 @@ export function Wizard({
   proyectos = [],
   ramas = [],
   rutaDeCredencial,
+  aviso,
   alGuardarCredencial,
   alRegistrarEntorno,
   alElegirProyecto,
@@ -102,6 +103,13 @@ export function Wizard({
   ramas?: readonly string[];
   /** Dónde queda escrita la credencial. Ausente = no se sabe, y entonces no se afirma. */
   rutaDeCredencial?: string;
+  /**
+   * Lo que falló en el paso anterior, dicho por el servidor. Se pinta EN el paso porque ahí
+   * es donde el usuario está mirando: el mismo texto llega también como acto, pero ese acaba
+   * en la Trayectoria —la otra pestaña—, y un paso que se repinta igual sin decir nada es un
+   * fallo mudo.
+   */
+  aviso?: string;
   alGuardarCredencial: (proveedor: string, clave: string) => void;
   alRegistrarEntorno: (entorno: OpcionDeEntorno) => void;
   alElegirProyecto: (eleccion: { proyecto: string; rama: string }) => void;
@@ -158,8 +166,27 @@ export function Wizard({
     if (rama === "" && primera !== undefined) setRama(primera);
   }, [ramas, rama]);
 
+  /**
+   * Que lleguen proyectos ES la confirmación de que el paso de entorno salió bien: el
+   * servidor los pide justo después de registrarlo. Avanzar con eso y no con el envío es lo
+   * que evita quedarse en un paso de proyecto vacío cuando el registro falla.
+   */
+  useEffect(() => {
+    if (proyectos.length === 0) return;
+    setIndice((i) => (pasos[i] === "entorno" && i + 1 < pasos.length ? i + 1 : i));
+  }, [proyectos, pasos]);
+
   const paso = pasos[indice];
   if (paso === undefined) return null;
+
+  /** El aviso del servidor, si lo hay. `role="alert"` para que un lector de pantalla lo lea
+   *  sin tener que ir a buscarlo. */
+  const avisoDelServidor =
+    aviso === undefined ? null : (
+      <p className={estilos.aviso} role="alert">
+        {aviso}
+      </p>
+    );
 
   const avanzar = (): void => setIndice((i) => i + 1);
   const hayMasPasos = indice + 1 < pasos.length;
@@ -206,6 +233,7 @@ export function Wizard({
           La clave no se guarda en el navegador: viaja a xonecode y se escribe en el fichero de
           credenciales, con permisos 0600.
         </p>
+        {avisoDelServidor}
         {credencialGuardada ? (
           <p className={estilos.estado} role="status">
             {rutaDeCredencial !== undefined
@@ -251,7 +279,11 @@ export function Wizard({
         nombre: esOtro ? nombreDelEntorno : (opcion?.nombre ?? entornoElegido),
         url,
       });
-      if (hayMasPasos) avanzar();
+      // NO se avanza aquí. Registrar un entorno es un viaje al servidor que puede fallar
+      // —una URL que no resuelve, un «fetch failed»— y avanzar al enviar dejaba al usuario
+      // en un paso de proyecto vacío, con el error de OTRO paso debajo y sin forma de
+      // volver. Medido en el navegador. Quien avanza es la llegada de los proyectos, que es
+      // la prueba de que el paso salió bien: ver el efecto de más arriba.
     };
     return (
       <form className={estilos.wizard} onSubmit={registrar}>
@@ -298,6 +330,7 @@ export function Wizard({
             {avisoDeUrl}
           </p>
         ) : null}
+        {avisoDelServidor}
         <div className={estilos.acciones}>
           <Button type="submit" variant="primary" className={estilos.accion}>
             Registrar
@@ -348,6 +381,7 @@ export function Wizard({
           </option>
         ))}
       </select>
+      {avisoDelServidor}
       <div className={estilos.acciones}>
         <Button type="submit" variant="primary" className={estilos.accion}>
           Abrir

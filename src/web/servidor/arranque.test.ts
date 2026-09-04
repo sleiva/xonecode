@@ -286,6 +286,80 @@ describe("montarRutas — el cable, por fin conectado", () => {
     expect(vestibulo.consola.actos()).not.toContainEqual({ tipo: "usuario", texto: "haz un listado" });
   });
 
+  it("un error del alta llega al NAVEGADOR como acto, no solo al terminal", async () => {
+    // Medido antes de este arreglo: `montarRutas` recibía un `informar` que solo escribía
+    // en el terminal, así que una URL rechazada o un `fetch failed` durante la descarga
+    // salían por la consola del proceso y no llegaban por el SSE. El `finally` re-anunciaba
+    // el alta, el wizard repintaba el mismo paso, y el usuario no leía ni una palabra —
+    // en una piel que vive en un navegador donde el terminal puede ni verse.
+    const servidor = servidorDeMentira();
+    const vestibulo = vestibuloDePrueba({
+      proyectosDeEntorno: async () => {
+        throw new Error("fetch failed");
+      },
+    });
+    const alTerminal: string[] = [];
+    montarRutas(servidor, vestibulo, {
+      informar: (texto) => {
+        alTerminal.push(texto);
+        vestibulo.consola.consola.escribir(`${texto}\n`);
+      },
+    });
+    const cliente = clienteDeMentira();
+    const eventos = servidor.rutas.get(`GET ${RUTA_EVENTOS}`);
+    await eventos!(cliente.peticion, cliente.respuesta);
+    const accion = servidor.rutas.get(`POST ${RUTA_ACCION}`)!;
+    await asentar();
+
+    await enviarMensaje(accion, {
+      clase: "alta",
+      paso: "entorno",
+      entorno: { id: "webstudio", nombre: "XOne WebStudio", url: "https://mcp.xonewebstudio.com/mcp" },
+    });
+    await asentar();
+
+    expect(alTerminal).toContain("fetch failed");
+    // Y en el propio paso del alta, que es donde el usuario está mirando: el acto de
+    // sistema se ve en la Trayectoria, la OTRA pestaña.
+    const alta = cliente.recibidos.at(-1) as Extract<MensajeAlCliente, { clase: "alta" }>;
+    expect(alta.aviso).toBe("fetch failed");
+    const actos = cliente.recibidos
+      .filter((m): m is Extract<MensajeAlCliente, { clase: "acto" }> => m.clase === "acto")
+      .map((m) => (m.acto.tipo === "sistema" ? m.acto.texto : ""));
+    expect(actos).toContain("fetch failed");
+  });
+
+  it("el aviso de un paso fallido no se queda pegado al siguiente que sale bien", async () => {
+    let falla = true;
+    const servidor = servidorDeMentira();
+    const vestibulo = vestibuloDePrueba({
+      proyectosDeEntorno: async () => {
+        if (falla) throw new Error("fetch failed");
+        return [{ id: "p1", nombre: "Tienda" }];
+      },
+    });
+    montarRutas(servidor, vestibulo);
+    const cliente = clienteDeMentira();
+    const eventos = servidor.rutas.get(`GET ${RUTA_EVENTOS}`);
+    await eventos!(cliente.peticion, cliente.respuesta);
+    const accion = servidor.rutas.get(`POST ${RUTA_ACCION}`)!;
+    await asentar();
+    const entorno = {
+      clase: "alta" as const,
+      paso: "entorno" as const,
+      entorno: { id: "webstudio", nombre: "XOne WebStudio", url: "https://mcp.xonewebstudio.com/mcp" },
+    };
+    await enviarMensaje(accion, entorno);
+    await asentar();
+    expect((cliente.recibidos.at(-1) as Extract<MensajeAlCliente, { clase: "alta" }>).aviso).toBe("fetch failed");
+
+    falla = false;
+    await enviarMensaje(accion, entorno);
+    await asentar();
+    // Un aviso viejo pegado a un paso que ya salió bien sería una mentira con forma de error.
+    expect((cliente.recibidos.at(-1) as Extract<MensajeAlCliente, { clase: "alta" }>).aviso).toBeUndefined();
+  });
+
   it("un cuerpo ilegible es 400 y no devuelve NADA de lo recibido: por ahí pasa la clave", async () => {
     const servidor = servidorDeMentira();
     montarRutas(servidor, vestibuloDePrueba());
@@ -377,6 +451,23 @@ describe("arrancarConsolaWeb — las comprobaciones, en orden", () => {
     });
     // La URL ya está impresa: abrir el navegador es lo accesorio y no puede tumbar el servidor.
     expect(codigo).toBe(0);
+  });
+
+  it("sin `crearEjecutor` y sin --guion NO arranca: correr el agente de pega sin decirlo es peor", async () => {
+    // El fallo que esto vigila es mudo por naturaleza: los turnos correrían, las fases se
+    // pintarían, y nada de lo que dijera el asistente vendría de un modelo. Misma postura
+    // que `descargar` sin sincronizador.
+    await expect(
+      arrancarConsolaWeb({
+        puerto: 0,
+        abrir: false,
+        cwd: mkdtempSync(join(tmpdir(), "xonecode-cwd-")),
+        raizDelCliente: conBuild(),
+        crearServidor: async () => servidorLevantado(),
+        escribir: () => {},
+        esperarCierre: async () => {},
+      })
+    ).rejects.toThrow(/agente de pega/);
   });
 
   it("la frase del build que falta es accionable y nombra el comando", () => {

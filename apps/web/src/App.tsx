@@ -116,6 +116,10 @@ export function App({ store, enviar }: { store: Store; enviar: Conexion["enviar"
               entornos={estado.alta.entornos}
               proyectos={estado.alta.proyectos}
               ramas={estado.alta.ramas}
+              // Lo que falló en el paso anterior, dicho DONDE pasó. El mismo texto llega
+              // además como acto, pero ese se ve en la Trayectoria y no en la pestaña que
+              // se está mirando.
+              {...(estado.alta.aviso === undefined ? {} : { aviso: estado.alta.aviso })}
               alGuardarCredencial={(_proveedor, clave) => void enviar({ clase: "secreto", valor: clave })}
               alRegistrarEntorno={(entorno) => void enviar({ clase: "alta", paso: "entorno", entorno })}
               // Sin rama: pide las del proyecto elegido, no abre nada.

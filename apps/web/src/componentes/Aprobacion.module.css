@@ -61,7 +61,7 @@
 
 .ruta {
   margin: 2px 0 0;
-  font-family: monospace;
+  font-family: var(--ds-font-family-code);
   color: var(--dsw-alias-label-secondary);
 }
 
@@ -74,7 +74,7 @@
   padding: 8px 0;
   border-radius: 8px;
   background: var(--dsw-alias-bg-layer-2);
-  font-family: monospace;
+  font-family: var(--ds-font-family-code);
   /* Sin `pre` envolvente: cada línea es su propio nodo y el desbordamiento horizontal se
      queda DENTRO del diff, para que la tarjeta no crezca a lo ancho por una línea larga. */
   overflow-x: auto;

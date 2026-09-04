@@ -9,6 +9,9 @@ import "../estilos/scrollbar.css";
 // leer color y el texto resaltado sale con lo que el navegador herede, no con la
 // paleta que `shiki.css` ya trae copiada para esto (Task 13b).
 import "../estilos/shiki.css";
+// NUESTRA, y la ÚLTIMA a propósito: aplica al documento los tokens de tipografía que las
+// hojas copiadas solo declaran. Sin ella la interfaz entera sale en serif — medido.
+import "../estilos/tipografia.css";
 import { crearStoreDelCliente } from "./store.js";
 import { crearConexion } from "./conexion.js";
 import { App } from "./App.js";

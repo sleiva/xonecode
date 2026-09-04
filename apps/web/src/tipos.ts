@@ -76,6 +76,9 @@ export type MensajeAlCliente =
       entornos: { id: string; nombre: string; url: string }[];
       proyectos: { id: string; nombre: string }[];
       ramas: string[];
+      /** Qué falló en el paso anterior; ausente si no falló nada. Lo pinta el propio paso:
+       *  un acto de sistema se va a la Trayectoria, que no es la pestaña que se está viendo. */
+      aviso?: string;
     }
   | {
       clase: "aprobacion";

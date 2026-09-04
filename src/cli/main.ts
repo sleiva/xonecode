@@ -306,12 +306,37 @@ export type PielElegida = "web" | "consola";
  * El TTY entra por parámetro y no se lee aquí dentro para poder probar los dos lados sin
  * terminal; la omisión sigue siendo el `process.stdin.isTTY` de verdad.
  */
+/**
+ * Las banderas que solo tienen sentido en la consola de TERMINAL. Pedir cualquiera de ellas
+ * es pedir la terminal, así que implican `--cli`.
+ *
+ * Medido con un pty: sin esto, `xonecode --tui` imprimía «consola web en …» y abría el
+ * navegador — o sea, la bandera documentada como «fuerza la interfaz de terminal» hacía
+ * exactamente lo contrario y sin decir nada; `--no-tui`, que ERA la vía a la stdio, se
+ * ignoraba igual. Una bandera que se obedece al revés en silencio es el bug mudo que este
+ * repo persigue en todas partes.
+ */
+const BANDERAS_DE_TERMINAL = ["--tui", "--no-tui", "--sin-raton"] as const;
+
 export function decidirPiel(
   argv: string[] = [],
   entorno: { stdinTTY?: boolean } = {}
 ): PielElegida {
+  // `--cli` gana SIEMPRE, también frente a la combinación imposible de abajo: es la orden
+  // más explícita que hay y no puede quedar en un error.
   if (argv.includes("--cli")) return "consola";
-  if (argv.includes("--web")) return "web";
+  const deTerminal = BANDERAS_DE_TERMINAL.filter((b) => argv.includes(b));
+  if (argv.includes("--web")) {
+    // Obedecer una y callar la otra es lo que no se puede hacer: la bandera perdedora se
+    // habría ignorado en silencio. Error de USO (64), como `--tui` sin terminal.
+    if (deTerminal.length > 0) {
+      throw new ErrorDeUso(
+        `«${deTerminal.join("», «")}» son de la consola de terminal y --web pide la web: elige una`
+      );
+    }
+    return "web";
+  }
+  if (deTerminal.length > 0) return "consola";
   // Sin stdin TTY la omisión NO es la web: `echo "…" | xonecode` intentaría abrir un
   // navegador y se llevaría por delante el e2e de tubería byte-idéntica, que es lo que
   // sostiene que `npm test` no necesite terminal.

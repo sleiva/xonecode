@@ -48,6 +48,7 @@ import {
   escribirProyectoEnDisco,
   type OpcionDeEntorno,
   type PasoDelVestibulo,
+  type OpcionesDelVestibulo,
   type SesionCerrable,
   type Vestibulo,
 } from "./vestibulo.js";
@@ -126,6 +127,12 @@ export function montarRutas(
    * después de haberla dado, y el wizard volvería a pedirla en cada reconexión.
    */
   let cuentaHecha = false;
+  /**
+   * Lo que falló en el último paso del alta. Viaja en el propio mensaje del alta porque el
+   * fallo pertenece al paso que lo produjo: el acto de sistema que `informar` deja aterriza
+   * en la Trayectoria —la otra pestaña—, y el wizard repintaba el mismo paso sin decir nada.
+   */
+  let aviso: string | undefined;
 
   const destinoActual = (): DestinoDelCable => vestibulo.proyectoAbierto() ?? vestibulo.consola;
 
@@ -160,6 +167,7 @@ export function montarRutas(
       entornos: [...vestibulo.opcionesDeEntorno()],
       proyectos,
       ramas,
+      ...(aviso === undefined ? {} : { aviso }),
     });
   };
 
@@ -193,11 +201,14 @@ export function montarRutas(
 
   /** Un paso del alta resuelto en el navegador. Cada rama termina volviendo a anunciar. */
   const atenderAlta = async (mensaje: Extract<MensajeDelCliente, { clase: "alta" }>): Promise<void> => {
+    // Se limpia al empezar: un aviso viejo pegado a un paso que ya salió bien mentiría.
+    aviso = undefined;
     try {
       if (mensaje.paso === "entorno") {
         const elegido = mensaje.entorno;
         if (elegido === undefined || elegido.url.trim() === "") {
-          informar("el entorno necesita una URL");
+          aviso = "el entorno necesita una URL";
+          informar(aviso);
           return;
         }
         // SIEMPRE se registra, aunque el entorno ya esté en la lista. La versión anterior
@@ -216,12 +227,14 @@ export function montarRutas(
       }
 
       if (entornoElegido === undefined) {
-        informar("elige antes el entorno del que sale el proyecto");
+        aviso = "elige antes el entorno del que sale el proyecto";
+        informar(aviso);
         return;
       }
       const proyecto = mensaje.proyecto;
       if (proyecto === undefined || proyecto === "") {
-        informar("el paso de proyecto necesita un proyecto");
+        aviso = "el paso de proyecto necesita un proyecto";
+        informar(aviso);
         return;
       }
       if (mensaje.rama === undefined || mensaje.rama === "") {
@@ -244,6 +257,8 @@ export function montarRutas(
       // vivo cuyas aprobaciones se rechazan solas al otro lado.
       adjuntar();
     } catch (error) {
+      // El aviso se fija ANTES de anunciar: el `finally` de abajo es quien lo lleva al paso.
+      aviso = error instanceof Error ? error.message : String(error);
       contar(error);
     } finally {
       await anunciarAlta().catch(contar);
@@ -374,12 +389,27 @@ export async function arrancarConsolaWeb(opciones: OpcionesDeArranque): Promise<
   const arrancar = opciones.crearServidor ?? arrancarServidor;
   const servidor = await arrancar({ puerto: opciones.puerto, raizEstaticos: raizDelCliente });
 
-  const vestibulo = opciones.vestibulo ?? vestibuloReal(opciones, servidor, escribir);
-  montarRutas(servidor, vestibulo, {
-    // Los avisos van al terminal ADEMÁS de a la consola del vestíbulo: en cuanto hay
-    // proyecto abierto, esa consola ya no es la que nadie mira.
-    informar: (texto) => escribir(`${texto}\n`),
-  });
+  /**
+   * El aviso que se ve por los DOS sitios, y es el mismo para el vestíbulo y para las rutas.
+   *
+   * El vestíbulo se captura perezosamente porque esta función se construye antes que él.
+   * Medido antes de este arreglo: `montarRutas` recibía un `informar` que solo escribía en
+   * el terminal, así que una URL rechazada o un `fetch failed` durante el alta salían por la
+   * consola del proceso y NO llegaban al navegador — el `finally` re-anunciaba el alta, el
+   * wizard repintaba el mismo paso, y el usuario no leía ni una palabra. En la piel que
+   * ahora es la de omisión, y que vive en un navegador donde el terminal puede ni verse, eso
+   * es un fallo mudo. Al revés también hace falta: en cuanto hay proyecto abierto, la consola
+   * del vestíbulo ya no la mira nadie, y ahí caería «la consola del proyecto terminó con un
+   * error».
+   */
+  let vestibulo: Vestibulo | undefined;
+  const informar = (texto: string): void => {
+    escribir(`${texto}\n`);
+    vestibulo?.consola.consola.escribir(`${texto}\n`);
+  };
+
+  vestibulo = opciones.vestibulo ?? vestibuloReal(opciones, servidor, escribir, informar);
+  montarRutas(servidor, vestibulo, { informar });
 
   escribir(`consola web en ${servidor.url}\n`);
   if (opciones.abrir) {
@@ -426,8 +456,12 @@ function esperarInterrupcion(): Promise<void> {
 function vestibuloReal(
   opciones: OpcionesDeArranque,
   servidor: ServidorWeb,
-  escribir: (texto: string) => void
+  escribir: (texto: string) => void,
+  informar: (texto: string) => void
 ): Vestibulo {
+  // Lo PRIMERO, antes de leer nada de disco: si esto va a fallar, que falle sin haber
+  // aplicado credenciales al proceso ni construido medio vestíbulo.
+  const ejecutor = banderaDeEjecutor(opciones);
   const cargado = cargar(opciones.cwd);
   aplicarAuth(cargado.auth);
   const fuentes: FuentesDeEleccion = {
@@ -436,17 +470,7 @@ function vestibuloReal(
   };
   const settings = cargarSettings().settings;
   const dependenciasDeProyecto = opciones.dependenciasDeProyecto;
-  // Capturado perezosamente porque el `informar` se construye ANTES que el vestíbulo al que
-  // escribe. La omisión del vestíbulo es solo su propia consola, y en cuanto hay proyecto
-  // abierto esa consola no la mira nadie: ahí caía «la consola del proyecto terminó con un
-  // error», el aviso que más falta hace ver.
-  let vestibulo: Vestibulo | undefined;
-  const informar = (texto: string): void => {
-    escribir(`${texto}\n`);
-    vestibulo?.consola.consola.escribir(`${texto}\n`);
-  };
-
-  vestibulo = crearVestibulo({
+  return crearVestibulo({
     informar,
     origenDeTrabajo: resolver(fuentes).trabajo.origen,
     fuentes,
@@ -486,12 +510,28 @@ function vestibuloReal(
         `hay trabajo local sin commitear (${bajada.pendientes.join(", ")}); la descarga sobrescribe el disco`
       );
     },
-    ...(opciones.guion === true || opciones.crearEjecutor === undefined
-      ? {}
-      : { crearEjecutor: opciones.crearEjecutor }),
+    // Sin `crearEjecutor` el vestíbulo cae en `ejecutarTurnoGuionizado` — el agente de
+    // PEGA— y no habría forma de notarlo desde el navegador: los turnos correrían, las
+    // fases se pintarían y nada de lo que dijera sería de un modelo. Se exige, igual que
+    // `descargar` exige su sincronizador. `--guion` es la única forma de pedir el de pega,
+    // y ahí se pide a propósito.
+    ...ejecutor,
     ...(dependenciasDeProyecto === undefined ? {} : { dependenciasDeProyecto }),
   });
-  return vestibulo;
+}
+
+/**
+ * O el ejecutor real, o el de pega PEDIDO con `--guion`, o un error. Lo que no hay es una
+ * tercera opción muda.
+ */
+function banderaDeEjecutor(opciones: OpcionesDeArranque): Pick<OpcionesDelVestibulo, "crearEjecutor"> {
+  if (opciones.guion === true) return {};
+  if (opciones.crearEjecutor === undefined) {
+    throw new Error(
+      "esta consola web se montó sin `crearEjecutor`: correría el agente de pega sin decirlo (usa --guion si es lo que quieres)"
+    );
+  }
+  return { crearEjecutor: opciones.crearEjecutor };
 }
 
 /** Los pasos, reexportados para quien monte otra piel sobre el mismo vestíbulo. */

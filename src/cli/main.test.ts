@@ -474,6 +474,25 @@ describe("decidirPiel: la omisión ya es la web", () => {
     expect(decidirPiel(["--cli"], { stdinTTY: true })).toBe("consola");
     expect(decidirPiel(["--web", "--cli"], { stdinTTY: true })).toBe("consola");
   });
+
+  it("--tui, --no-tui y --sin-raton implican la consola: son banderas de TERMINAL", () => {
+    // Medido con un pty antes de este arreglo: las tres imprimían «consola web en …» y
+    // abrían el navegador. `--tui` está documentada como «fuerza la interfaz de terminal»
+    // y hacía lo contrario, en silencio; `--no-tui`, que era LA vía a la stdio, se ignoraba.
+    for (const bandera of ["--tui", "--no-tui", "--sin-raton"]) {
+      expect(decidirPiel([bandera], { stdinTTY: true })).toBe("consola");
+    }
+  });
+
+  it("una bandera de terminal junto a --web es error de USO, no una de las dos ignorada", () => {
+    // Obedecer una y callar la otra dejaría la perdedora ignorada en silencio, que es
+    // justo lo que se está arreglando. 64, como `--tui` sin terminal.
+    expect(() => decidirPiel(["--web", "--tui"], { stdinTTY: true })).toThrow(ErrorDeUso);
+    expect(() => decidirPiel(["--web", "--no-tui"], { stdinTTY: false })).toThrow(ErrorDeUso);
+    // Salvo que se diga `--cli`, que es la orden más explícita de todas y no puede acabar
+    // en un error.
+    expect(decidirPiel(["--web", "--tui", "--cli"], { stdinTTY: true })).toBe("consola");
+  });
 });
 
 describe("parsearOpcionesWeb", () => {
@@ -1027,6 +1046,20 @@ describe("los adaptadores de proyecto son los MISMOS en las dos pieles", () => {
       .filter((l) => /guardarCloudStudioDeProyecto:\s*\(url, scopes\)/.test(l))
       .filter((l) => !l.includes("guardarEndpointYEntorno"));
     expect(crudas).toEqual([]);
+  });
+
+  it("la rama web le pasa al vestíbulo el ejecutor REAL, no el de pega", () => {
+    // El recuento de `adaptadoresDeProyecto` de aquí abajo NO cubre esto: son dos piezas
+    // distintas y la que faltaba era esta. Sin ella el vestíbulo cae en
+    // `ejecutarTurnoGuionizado` y la web corre el agente de pega — hoy `arranque.ts` lanza
+    // en vez de callarse, pero el cable de `main.ts` tiene que seguir estando.
+    expect(fuenteDeMain()).toMatch(/crearEjecutor:\s*crearEjecutorReal/);
+  });
+
+  it("y le pasa también las dependencias de proyecto: sin ellas el alta no bajaría nada", () => {
+    // `descargar` (en `web/servidor/arranque.ts`) sale por `dependenciasDeProyecto(raiz)
+    // .sincronizar`. Sin esa prop, el alta quedaría escrita y el proyecto sin bajar.
+    expect(fuenteDeMain()).toMatch(/dependenciasDeProyecto:\s*\(raiz\)\s*=>/);
   });
 
   it("las TRES ramas montan la MISMA fábrica: sin tres copias no hay tres comportamientos", () => {

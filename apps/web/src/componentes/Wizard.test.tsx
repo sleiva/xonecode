@@ -161,6 +161,32 @@ describe("Wizard", () => {
    * cuando el usuario CAMBIA de opción, con un solo proyecto el `<select>` enseñaba uno y el
    * estado tenía otro. Los dos tests de aquí abajo son ese flujo, no el del montaje directo.
    */
+  it("el paso de entorno NO avanza al enviar: avanza cuando llegan los proyectos", () => {
+    // Medido en el navegador: avanzando al enviar, un registro que falla dejaba al usuario
+    // en un paso de proyecto vacío, con el error del paso ANTERIOR debajo y sin volver.
+    const vista = render(
+      <Wizard pasos={["entorno", "proyecto"]} {...manejadores} proyectos={[]} ramas={[]} />
+    );
+    fireEvent.click(screen.getByRole("button", { name: /registrar/i }));
+    expect(screen.getByRole("heading").textContent).toBe("Entorno");
+    // Con el fallo contado, se sigue en el paso que lo produjo.
+    vista.rerender(
+      <Wizard pasos={["entorno", "proyecto"]} {...manejadores} proyectos={[]} ramas={[]} aviso="fetch failed" />
+    );
+    expect(screen.getByRole("heading").textContent).toBe("Entorno");
+    expect(screen.getByRole("alert").textContent).toBe("fetch failed");
+    // Y cuando los proyectos llegan —la prueba de que salió bien—, avanza solo.
+    vista.rerender(
+      <Wizard
+        pasos={["entorno", "proyecto"]}
+        {...manejadores}
+        proyectos={[{ id: "p1", nombre: "MinitMT" }]}
+        ramas={[]}
+      />
+    );
+    expect(screen.getByRole("heading").textContent).toBe("Proyecto");
+  });
+
   it("cuando los proyectos llegan después de montar, se pide la rama del primero sin tocar nada", () => {
     const alCambiarProyecto = vi.fn();
     const vista = render(

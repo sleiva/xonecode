@@ -68,6 +68,15 @@ export type MensajeAlCliente =
       entornos: OpcionDeEntorno[];
       proyectos: { id: string; nombre: string }[];
       ramas: string[];
+      /**
+       * Qué falló en el paso anterior. Ausente = no falló nada.
+       *
+       * Viaja EN el alta y no solo como acto porque el fallo pertenece al paso que lo
+       * produjo. Medido en el navegador: el acto de sistema aterriza en la Trayectoria —la
+       * pestaña que el usuario no está mirando— mientras el wizard repinta el mismo paso
+       * sin una palabra, que es exactamente el fallo mudo que se quería quitar.
+       */
+      aviso?: string;
     }
   /** El ÚNICO mensaje que lleva contenido de fichero: es el paso donde se DECIDE sobre él. */
   | {

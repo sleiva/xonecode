@@ -9,3 +9,6 @@ dist/
 .DS_Store
 *.log
 .idea/
+
+# Capturas y volcados del navegador de pruebas (playwright-mcp): no son del proyecto.
+.playwright-mcp/

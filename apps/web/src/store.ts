@@ -41,6 +41,8 @@ export interface EstadoDelCliente {
     entornos: { id: string; nombre: string; url: string }[];
     proyectos: { id: string; nombre: string }[];
     ramas: string[];
+    /** Lo que falló en el paso anterior, para que lo diga el paso y no solo la Trayectoria. */
+    aviso?: string;
   };
 }
 
@@ -209,6 +211,7 @@ export function crearStoreDelCliente(): {
             entornos?: unknown;
             proyectos?: unknown;
             ramas?: unknown;
+            aviso?: unknown;
           };
           if (!Array.isArray(m.pasos) || !m.pasos.every((p) => typeof p === "string" && PASOS.has(p))) return;
           if (!sonIdentidades(m.proveedores) || !sonIdentidades(m.proyectos)) return;
@@ -227,6 +230,8 @@ export function crearStoreDelCliente(): {
               entornos: m.entornos as { id: string; nombre: string; url: string }[],
               proyectos: m.proyectos,
               ramas: m.ramas as string[],
+              // Ausente o de otro tipo = no hay aviso, nunca un aviso inventado.
+              ...(typeof m.aviso === "string" ? { aviso: m.aviso } : {}),
             },
           });
           return;

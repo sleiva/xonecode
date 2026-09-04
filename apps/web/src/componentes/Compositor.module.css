@@ -60,7 +60,7 @@
 
 .nombreComando {
   color: var(--dsw-alias-label-primary);
-  font-family: monospace;
+  font-family: var(--ds-font-family-code);
 }
 
 .descripcionComando {
