@@ -277,6 +277,55 @@ export function decidirTui(argv: string[] = []): boolean {
 }
 
 /**
+ * Error de USO: una bandera imposible de obedecer, nunca un fallo del harness. Mismo
+ * tratamiento que `ModeloMalEscrito` en el `catch` de `main` — mensaje a stderr, sin
+ * traza, código 64 — pero con su propia clase: reusar `ModeloMalEscrito` aquí mentiría
+ * sobre la causa, y el contrato de códigos de salida lo lee CI.
+ */
+export class ErrorDeUso extends Error {}
+
+/** El puerto del callback OAuth: el IDS lo registra como redirect_uri y no se toca. */
+const PUERTO_OAUTH = 7634;
+const PUERTO_WEB_POR_OMISION = 4173;
+
+export type PielElegida = "web" | "consola";
+
+/**
+ * Qué piel arranca. Hermana pura de `decidirTui`, y por la misma razón: la decisión se
+ * prueba sin TTY, y la rama que la usa solo la obedece.
+ *
+ * Hoy la omisión es `"consola"`. El cambio a `"web"` con TTY es la ÚLTIMA tarea del plan,
+ * a propósito: así `xonecode` nunca queda roto a mitad de la implementación.
+ */
+export function decidirPiel(argv: string[] = []): PielElegida {
+  if (argv.includes("--cli")) return "consola";
+  if (argv.includes("--web")) return "web";
+  return "consola";
+}
+
+export interface OpcionesWeb {
+  puerto: number;
+  abrir: boolean;
+}
+
+export function parsearOpcionesWeb(argv: string[]): OpcionesWeb {
+  const abrir = !argv.includes("--no-abrir");
+  const i = argv.indexOf("--puerto");
+  if (i === -1) return { puerto: PUERTO_WEB_POR_OMISION, abrir };
+  const bruto = argv[i + 1];
+  const puerto = Number(bruto);
+  if (!Number.isInteger(puerto) || puerto < 1 || puerto > 65535) {
+    throw new ErrorDeUso(`--puerto espera un número entre 1 y 65535, y recibió «${bruto ?? ""}»`);
+  }
+  if (puerto === PUERTO_OAUTH) {
+    throw new ErrorDeUso(
+      `el puerto ${PUERTO_OAUTH} está reservado al callback de OAuth de CloudStudio: elige otro`
+    );
+  }
+  return { puerto, abrir };
+}
+
+/**
  * El ejecutor de turno REAL de la consola: cada línea de prosa corre sobre una `SesionReal`
  * que sobrevive entre turnos (mismo agente, mismo hilo).
  *
@@ -948,7 +997,7 @@ export async function main(argv: string[]): Promise<number> {
   } catch (e) {
     // Un modelo mal escrito es un error del USUARIO, no del harness: su mensaje, sin
     // traza, y código de uso (64). No se propaga como un fallo de software.
-    if (e instanceof ModeloMalEscrito) {
+    if (e instanceof ModeloMalEscrito || e instanceof ErrorDeUso) {
       process.stderr.write(`${e.message}\n`);
       return 64; // EX_USAGE
     }

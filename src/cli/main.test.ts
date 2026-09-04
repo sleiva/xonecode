@@ -10,6 +10,9 @@ import {
   formatearBarra,
   crearCompleterDelProyecto,
   decidirTui,
+  decidirPiel,
+  parsearOpcionesWeb,
+  ErrorDeUso,
   quiereRaton,
   extraerBanderasDeModelo,
   crearSincronizador,
@@ -444,6 +447,40 @@ describe("decidirTui", () => {
     // pipe como teclas y el EOF del pipe no termina el lazo. Solo los dos lados TTY.
     conTty(true, false, () => expect(decidirTui([])).toBe(false));
     conTty(false, true, () => expect(decidirTui([])).toBe(false));
+  });
+});
+
+describe("decidirPiel", () => {
+  it("por omisión es la consola de siempre: el cambio de omisión es una tarea posterior", () => {
+    expect(decidirPiel([])).toBe("consola");
+  });
+
+  it("--web fuerza la web aunque no haya TTY (servidores headless)", () => {
+    expect(decidirPiel(["--web"])).toBe("web");
+  });
+
+  it("--cli gana siempre, incluso frente a --web", () => {
+    expect(decidirPiel(["--cli"])).toBe("consola");
+    expect(decidirPiel(["--web", "--cli"])).toBe("consola");
+  });
+});
+
+describe("parsearOpcionesWeb", () => {
+  it("lee el puerto y la orden de no abrir el navegador", () => {
+    expect(parsearOpcionesWeb(["--puerto", "4300", "--no-abrir"]))
+      .toEqual({ puerto: 4300, abrir: false });
+  });
+
+  it("sin banderas, puerto por omisión y abre el navegador", () => {
+    expect(parsearOpcionesWeb([])).toEqual({ puerto: 4173, abrir: true });
+  });
+
+  it("un puerto que no es un número es error de USO, no un puerto raro", () => {
+    expect(() => parsearOpcionesWeb(["--puerto", "ocho"])).toThrow(ErrorDeUso);
+  });
+
+  it("el 7634 está reservado al callback OAuth y se rechaza", () => {
+    expect(() => parsearOpcionesWeb(["--puerto", "7634"])).toThrow(ErrorDeUso);
   });
 });
 
