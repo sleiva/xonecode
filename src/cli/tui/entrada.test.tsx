@@ -2,14 +2,58 @@ import { describe, it, expect } from "vitest";
 import { render } from "ink-testing-library";
 import { Entrada } from "./entrada.js";
 
-/** Escribe una secuencia de teclas en el stdin falso de ink-testing-library. */
-async function teclear(instancia: { stdin: { write: (d: string) => void } }, texto: string): Promise<void> {
-  // Un tick antes de la primera tecla: el cable de useInput se asienta tras el
-  // primer frame de Ink, y una tecla anterior se perdería en el stdin falso.
-  await esperar();
+/**
+ * Reintenta `condicion` hasta que sea cierta, en vez de asumir un tiempo fijo: medido, un
+ * `setTimeout` fijo (antes 10ms) no basta cuando la CPU está ocupada por OTRO proceso —
+ * tres suites de vitest a la vez reprodujeron una tecla perdida («ola» en vez de «hola»)
+ * porque `useInput` tardó más de 10ms en asentarse. Un techo de 1s convierte un fallo
+ * silencioso (tecla perdida) en uno con nombre, en vez de solo subir el número.
+ */
+async function esperarHasta(condicion: () => boolean, quePasa: string, frame: () => string | undefined): Promise<void> {
+  const inicio = Date.now();
+  while (!condicion()) {
+    // El frame en el mensaje es lo que distingue un diagnóstico de una conjetura: entre
+    // «nunca llegó» y «llegó cambiado» solo se sabe mirándolo en el momento del fallo.
+    if (Date.now() - inicio > 5000) throw new Error(`entrada.test.tsx: tiempo agotado esperando ${quePasa} — frame: ${JSON.stringify(frame())}`);
+    await new Promise((r) => setTimeout(r, 5));
+  }
+}
+
+/**
+ * Un giro completo del bucle de eventos, no una apuesta de reloj: `setTimeout(N)` es
+ * «no antes de N ms, quizá mucho después si la CPU está ocupada»; `setImmediate` es «tras
+ * la próxima vuelta», y eso vale igual con la CPU libre que compartida con otro proceso.
+ */
+const giro = (): Promise<void> => new Promise((r) => setImmediate(r));
+
+/**
+ * Escribe una secuencia de teclas en el stdin falso de ink-testing-library.
+ *
+ * Dos carreras distintas, medidas por separado con este mismo `Entrada`:
+ * 1. `useInput` engancha su listener en un `useEffect` PASIVO (tras el commit), no en el
+ *    render: escribir antes de ese giro emite en un `EventEmitter` sin nadie enganchado
+ *    todavía y la tecla se pierde ENTERA — no llega tarde, no llega (medido: sin ningún
+ *    giro de por medio se pierde siempre; con uno, llega siempre). Por eso el giro previo
+ *    a la primera tecla.
+ * 2. Ese mismo enganche se REPITE en cada render, porque `inputHandler` es una función
+ *    nueva cada vez y su `useEffect` la vuelve a suscribir con el `valor` fresco. El
+ *    frame ya puede enseñar «h» sin que ese re-enganche haya corrido todavía: escribir
+ *    «o» en ese hueco lo procesa el manejador VIEJO, que cierra sobre el `valor` de
+ *    ANTES de «h» — y `setValor(valor + entrada)` calcula "" + "o" = "o", no "ho". No es
+ *    un carácter tarde, es un carácter que borra al anterior (medido: sin un giro extra
+ *    después de que el frame se asiente, pasa siempre; con uno, nunca). Por eso el giro
+ *    extra tras cada tecla, además de esperar el frame.
+ */
+async function teclear(instancia: { stdin: { write: (d: string) => void }; lastFrame: () => string | undefined }, texto: string): Promise<void> {
+  await giro();
+  await giro();
+  let acumulado = "";
   for (const letra of texto) {
     instancia.stdin.write(letra);
-    await esperar();
+    acumulado += letra;
+    const esperado = acumulado;
+    await esperarHasta(() => instancia.lastFrame()?.includes(esperado) ?? false, `que el frame incluya "${esperado}"`, () => instancia.lastFrame());
+    await giro();
   }
 }
 const esperar = (): Promise<void> => new Promise((r) => setTimeout(r, 10));
@@ -22,7 +66,7 @@ describe("entrada", () => {
     );
     await teclear(instancia, "hola");
     instancia.stdin.write("\r");
-    await esperar();
+    await esperarHasta(() => enviadas.length > 0, "que Enter llegue a enviar", () => instancia.lastFrame());
     expect(enviadas).toEqual(["hola"]);
     expect(instancia.lastFrame()).not.toContain("hola\rhola");
   });
