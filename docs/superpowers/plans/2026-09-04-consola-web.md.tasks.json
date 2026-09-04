@@ -121,8 +121,8 @@
     {
       "id": 13,
       "subject": "Task 13: Chat, Trayectoria y la barra de estado",
-      "status": "pending",
-      "description": "**Goal:** Las dos vistas del transcript —Chat con markdown y Trayectoria técnica— y la barra de estado inferior, con la Trayectoria **sin argumentos de tool**.\n\n**Files:**\n- Create: `apps/web/src/componentes/Chat.tsx` + `Chat.module.css`\n- Create: `apps/web/src/componentes/Trayectoria.tsx` + `Trayectoria.module.css`\n- Create: `apps/web/src/componentes/BarraDeEstado.tsx` + `BarraDeEstado.module.css`\n- Create: `apps/web/src/markdown.ts`\n- Create: `apps/web/src/markdown.test.ts`\n- Create: `apps/web/src/componentes/Trayectoria.test.tsx`\n\n**Acceptance Criteria:**\n- [ ] El Chat renderiza markdown: encabezados, listas, `código`, bloques de código y tablas\n- [ ] El markdown se **sanea** antes de insertarse: `<script>`, `onerror=` y `javascript:` no sobreviven\n- [ ] La Trayectoria pinta una fila por acto, monoespaciada y truncada a una línea\n- [ ] Un test comprueba que **ninguna fila** de Trayectoria contiene un JSON de argumentos\n- [ ] La barra de estado lleva turnos, pasos, tiempo y contexto, y **omite el porcentaje si no hay tope** (ollama no tiene tope a propósito)\n- [ ] Las dos vistas se alternan con pestañas y la elegida se recuerda mientras dure la página\n\n**Verify:** `npx vitest run apps/web/src/markdown.test.ts apps/web/src/componentes/Trayectoria.test.tsx` → PASS\n\n```json:metadata\n{\"files\": [\"apps/web/src/componentes/Chat.tsx\", \"apps/web/src/componentes/Trayectoria.tsx\", \"apps/web/src/componentes/BarraDeEstado.tsx\", \"apps/web/src/markdown.ts\", \"apps/web/src/markdown.test.ts\", \"apps/web/src/componentes/Trayectoria.test.tsx\"], \"verifyCommand\": \"npx vitest run apps/web/ && npm run build:web\", \"acceptanceCriteria\": [\"markdown básico renderizado\", \"script/onerror/javascript: saneados\", \"una fila por acto truncada\", \"ninguna fila con argumentos de tool\", \"sin porcentaje si no hay tope\", \"pestañas Chat/Trayectoria\"], \"modelTier\": \"standard\"}\n```",
+      "status": "completed",
+      "description": "**Goal:** Las dos vistas del transcript —Chat con markdown y Trayectoria técnica— y la barra de estado inferior, con la Trayectoria **sin argumentos de tool**.\n\nComplete — see ledger.",
       "blockedBy": [
         12
       ]
@@ -148,5 +148,5 @@
       ]
     }
   ],
-  "lastUpdated": "2026-09-04T13:11:40.685924+00:00"
+  "lastUpdated": "2026-09-04T13:54:01.730741+00:00"
 }
