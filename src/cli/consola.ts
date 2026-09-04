@@ -20,7 +20,7 @@ import { correrTurno, type Piel } from "../core/turno.js";
 import { PAPELES, POR_OMISION, ModeloMalEscrito, parsear, PROVEEDORES, type FuentesDeEleccion, type Proveedor } from "../core/modelos.js";
 import type { Aviso } from "../core/config.js";
 import type { Papel } from "../core/ports.js";
-import { esDoble } from "../core/ports.js";
+import { ES_DOBLE, esDoble } from "../core/ports.js";
 import type { PendienteDeAprobacion } from "../core/events.js";
 import type { LineaDeDiff } from "../core/diff.js";
 import { interpretAnswer, type Decision } from "../vendor/hitl.js";
@@ -430,6 +430,14 @@ export async function ejecutarTurnoGuionizado(
     avisos: (b) => (b.corrio("verify") && esDoble(agente) ? ["⚠  El veredicto es de pega."] : []),
   });
 }
+
+// La función entera es de pega, no un turno suyo en concreto: TODO turno que pase por aquí
+// usa `new AgenteGuionizado()`, así que la marca no depende de qué pasó en esta llamada.
+// `web/servidor/vestibulo.ts#volcar` la mira para decidir si un turno se escribe a
+// `.xonecode/sesiones/` — un transcript de pega indistinguible de uno real ensuciaría el
+// historial del proyecto, y la decisión tiene que tomarla esta marca y no un booleano ni
+// una bandera leída del argv, por la misma razón de siempre: se puede olvidar.
+(ejecutarTurnoGuionizado as unknown as Record<typeof ES_DOBLE, true>)[ES_DOBLE] = true;
 
 /** El nombre del tipo de error y su mensaje: «ModeloMalEscrito: ...» no cuenta lo mismo que «Error: ...». */
 function describirError(e: unknown): string {

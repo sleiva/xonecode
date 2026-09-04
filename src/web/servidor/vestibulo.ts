@@ -24,6 +24,7 @@ import { join } from "node:path";
 import type { Acto } from "../../core/actos.js";
 import type { Eleccion, FuentesDeEleccion, Proveedor } from "../../core/modelos.js";
 import type { CatalogoModelosPort } from "../../core/ports.js";
+import { esDoble } from "../../core/ports.js";
 import type { Entorno } from "../../core/settings.js";
 import { rutaDeWorkspace } from "../../core/settings.js";
 import {
@@ -387,6 +388,14 @@ export function crearVestibulo(opciones: OpcionesDelVestibulo): Vestibulo {
      */
     let cerrando = false;
 
+    const base = opciones.crearEjecutor?.((s) => {
+      sesionReal = s;
+      if (cerrando) s.cerrar();
+    });
+    // El ejecutor que de verdad va a correr los turnos de ESTA consola de proyecto — se
+    // fija UNA vez, aquí, para que `volcar` y `ejecutarTurno` miren siempre el mismo valor.
+    const ejecutorEfectivo = base ?? ejecutarTurnoGuionizado;
+
     /**
      * Vuelca al `.jsonl` los actos nuevos.
      *
@@ -398,8 +407,20 @@ export function crearVestibulo(opciones: OpcionesDelVestibulo): Vestibulo {
      *
      * La sesión se crea PEREZOSAMENTE, en el primer volcado: un proyecto que se abre y se
      * cierra sin decir nada no deja una sesión vacía en el índice.
+     *
+     * Un ejecutor de PEGA (`--guion`, sin `crearEjecutor`) no vuelca NADA: el `.jsonl` de
+     * una sesión es historia del proyecto, y un transcript de pega indistinguible de uno
+     * real la ensuciaría — mañana alguien la reabre, lee la respuesta guionizada y no
+     * puede saber si fue el agente de pega o un fallo del de verdad. La decisión la toma
+     * la marca `ES_DOBLE` sobre `ejecutarTurnoGuionizado` (`cli/consola.ts`), nunca un
+     * booleano de este cierre ni la bandera `--guion` del argv: la misma razón por la que
+     * el resto del repo marca los dobles con un Symbol y no con un campo que alguien puede
+     * olvidar o poner mal. La guarda vive AQUÍ, en el único sitio que escribe a disco, y no
+     * repartida en cada llamador — `ejecutarTurno` de abajo y el `cerrar()` de más abajo
+     * comparten la misma `volcar`, así que ninguno de los dos puede colarse sin ella.
      */
     const volcar = (): void => {
+      if (esDoble(ejecutorEfectivo)) return;
       const todos = consolaWeb.actos();
       if (todos.length <= volcados) return;
       if (idSesion === undefined) idSesion = sesiones.crear(raiz);
@@ -407,18 +428,13 @@ export function crearVestibulo(opciones: OpcionesDelVestibulo): Vestibulo {
       volcados = todos.length;
     };
 
-    const base = opciones.crearEjecutor?.((s) => {
-      sesionReal = s;
-      if (cerrando) s.cerrar();
-    });
-
     const ejecutarTurno: EjecutorDeTurno = async (peticion, estado, consola) => {
       // El primer turno NUEVO es lo que deja de ser histórica una sesión reabierta.
       // `sesiones.ts` no puede hacerlo —`reabrirSesion` es una lectura pura sin estado
       // entre llamadas—, así que lo hace quien es dueño de la sesión viva, que es esto.
       historica = false;
       try {
-        await (base ?? ejecutarTurnoGuionizado)(peticion, estado, consola);
+        await ejecutorEfectivo(peticion, estado, consola);
       } finally {
         volcar();
       }

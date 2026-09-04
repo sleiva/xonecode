@@ -314,6 +314,22 @@ describe("vestíbulo", () => {
     expect(proyecto.sesion).toBeUndefined();
   });
 
+  it("un turno con el ejecutor de PEGA no deja sesión: un transcript de pega no es historia del proyecto", async () => {
+    // Sin `crearEjecutor` (como sin `--guion` NO se puede, `arranque.ts#banderaDeEjecutor`
+    // lo exige) el vestíbulo cae en `ejecutarTurnoGuionizado`, que es SIEMPRE de pega — la
+    // marca vive en la función (`cli/consola.ts`), no aquí. Sin la guarda de
+    // `vestibulo.ts#ejecutarTurno`, este turno habría escrito su respuesta guionizada al
+    // `.jsonl` del proyecto, indistinguible mañana de una respuesta real.
+    const s = sesionesEnMemoria();
+    const v = crearVestibulo({ ...dobles(), origenDeTrabajo: "global", sesiones: s.puerto });
+    const proyecto = await v.abrirProyecto({ raiz: "/w/a" });
+    proyecto.recibir({ clase: "prosa", texto: "hola" });
+    await new Promise((r) => setTimeout(r, 0));
+    await proyecto.cerrar();
+    expect(s.jsonl.size).toBe(0);
+    expect(proyecto.sesion).toBeUndefined();
+  });
+
   it("las dos consolas reciben el guardarModeloGlobal REAL: sin inyectarlo, consolaWeb lanza", async () => {
     const d = dobles();
     const s = sesionesEnMemoria();

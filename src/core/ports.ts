@@ -28,8 +28,20 @@ import type {
  */
 export const ES_DOBLE: unique symbol = Symbol.for("xonecode.es-doble");
 
+/**
+ * Acepta objeto O función: en JS una función también es un objeto en tiempo de ejecución
+ * y puede llevar una propiedad-symbol igual que cualquier otro. Hace falta para
+ * `cli/consola.ts#ejecutarTurnoGuionizado` — un `EjecutorDeTurno` es un tipo función, no
+ * una clase con instancia, y es SIEMPRE de pega (todo turno que pasa por ahí usa
+ * `new AgenteGuionizado()`), así que la marca vive en la función exportada y no en un
+ * booleano en quien la invoca (`web/servidor/vestibulo.ts#volcar`).
+ */
 export function esDoble(puerto: unknown): boolean {
-  return typeof puerto === "object" && puerto !== null && ES_DOBLE in puerto;
+  return (
+    (typeof puerto === "object" || typeof puerto === "function") &&
+    puerto !== null &&
+    ES_DOBLE in puerto
+  );
 }
 
 /** Una tool publicada por un servidor MCP, reducida a lo que xonecode necesita. */
