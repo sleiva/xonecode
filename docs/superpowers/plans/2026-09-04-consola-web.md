@@ -811,7 +811,8 @@ git commit -m "feat(web): los tokens de OAuth, indexados por entorno (con migrac
 - [ ] El token de la URL se canjea por cookie `HttpOnly`, `SameSite=Strict`
 - [ ] Una petición con `Host` que no sea `127.0.0.1:<puerto>` o `localhost:<puerto>` es **403** (DNS rebinding)
 - [ ] Una petición con `Origin` de otro sitio es **403**
-- [ ] `GET /../../etc/passwd` y cualquier recorrido fuera de `dist` es **403**
+- [ ] `GET /../../etc/passwd` y cualquier recorrido fuera de `dist` es **403**, tanto crudo como percent-encoded (`%2e%2e%2f`)
+- [ ] Los tests de `Host` y de recorrido usan `node:http.request`, **no `fetch`**: medido en node 22.22.3, `fetch` ignora un `Host` falseado y normaliza el `..` antes de enviar, así que con `fetch` esos dos tests no probarían nada
 - [ ] `POST` a un estático es **405**; un fichero que no existe es **404** vacío
 - [ ] Una ruta que resuelva dentro de `.xonecode` (del proyecto o del home) es **403**, aunque exista
 - [ ] `EADDRINUSE` produce un mensaje que dice el puerto y `--puerto`, no una traza
@@ -827,12 +828,44 @@ git commit -m "feat(web): los tokens de OAuth, indexados por entorno (con migrac
 // src/web/servidor/servidor.test.ts
 import { describe, it, expect, afterEach } from "vitest";
 import { mkdtempSync, writeFileSync, mkdirSync } from "node:fs";
+import { request } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { arrancarServidor, type ServidorWeb } from "./servidor.js";
 
 let servidor: ServidorWeb | undefined;
 afterEach(async () => { await servidor?.cerrar(); servidor = undefined; });
+
+/**
+ * Una petición con la ruta y el `Host` TAL CUAL, sin que nadie los normalice.
+ *
+ * Medido en node 22.22.3: `fetch` ignora un `Host` falseado (manda el real) y normaliza
+ * el `..` de la ruta antes de enviarla. Las dos cosas convertirían los tests de DNS
+ * rebinding y de recorrido en teatro: pasarían sin ejercitar la defensa. `http.request`
+ * manda ambos crudos, que es lo que haría un atacante.
+ */
+function peticionCruda(
+  opciones: { ruta: string; host?: string; metodo?: string }
+): Promise<{ estado: number; cuerpo: string }> {
+  return new Promise((resolver, rechazar) => {
+    const peticion = request(
+      {
+        host: "127.0.0.1",
+        port: servidor!.puerto,
+        path: opciones.ruta,
+        method: opciones.metodo ?? "GET",
+        ...(opciones.host === undefined ? {} : { headers: { Host: opciones.host } }),
+      },
+      (respuesta) => {
+        let cuerpo = "";
+        respuesta.on("data", (trozo) => { cuerpo += trozo; });
+        respuesta.on("end", () => resolver({ estado: respuesta.statusCode ?? 0, cuerpo }));
+      }
+    );
+    peticion.on("error", rechazar);
+    peticion.end();
+  });
+}
 
 async function levantar(): Promise<{ base: string; token: string; raizEstaticos: string }> {
   const raizEstaticos = mkdtempSync(join(tmpdir(), "xonecode-dist-"));
@@ -864,9 +897,12 @@ describe("servidor web", () => {
   });
 
   it("un Host que no es loopback es 403: es la defensa contra DNS rebinding", async () => {
-    const { base, token } = await levantar();
-    const r = await fetch(`${base}/eventos?t=${token}`, { headers: { Host: "malo.example.com" } });
-    expect(r.status).toBe(403);
+    const { token } = await levantar();
+    // `fetch` NO sirve aquí: MEDIDO en node 22.22.3, ignora en silencio un `Host`
+    // falseado y manda el real, así que el test pasaría sin probar nada. `http.request`
+    // sí lo manda tal cual.
+    const { estado } = await peticionCruda({ ruta: `/eventos?t=${token}`, host: "malo.example.com" });
+    expect(estado).toBe(403);
   });
 
   it("un Origin ajeno es 403", async () => {
@@ -880,9 +916,15 @@ describe("servidor web", () => {
   });
 
   it("un recorrido fuera de la raíz de estáticos es 403", async () => {
-    const { base, token } = await levantar();
-    const r = await fetch(`${base}/../../../../etc/passwd?t=${token}`);
-    expect(r.status).toBe(403);
+    const { token } = await levantar();
+    // Tampoco vale `fetch`: MEDIDO, normaliza el `..` ANTES de enviar y el servidor
+    // recibe `/etc/passwd`, o sea que nunca vería el recorrido. Con `http.request` la
+    // ruta viaja cruda, que es lo que haría un atacante.
+    const crudo = await peticionCruda({ ruta: `/../../../../etc/passwd?t=${token}` });
+    expect(crudo.estado).toBe(403);
+    // Y la forma que sí sobrevive a `fetch`: el recorrido percent-encoded.
+    const codificado = await peticionCruda({ ruta: `/%2e%2e%2f%2e%2e%2fetc/passwd?t=${token}` });
+    expect(codificado.estado).toBe(403);
   });
 
   it("NUNCA se sirve nada de .xonecode, aunque el fichero exista y esté dentro de la raíz", async () => {

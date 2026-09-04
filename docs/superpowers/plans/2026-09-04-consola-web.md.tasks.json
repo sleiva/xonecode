@@ -10,8 +10,8 @@
     {
       "id": 1,
       "subject": "Task 1: `decidirPiel` y las banderas nuevas",
-      "status": "pending",
-      "description": "**Goal:** Que exista la decisión de piel (web / consola) como función pura probada, con `--web`, `--cli`, `--no-abrir` y `--puerto`, **sin cambiar todavía la omisión**: la web es opt-in hasta la última tarea.\n\n**Files:**\n- Modify: `src/cli/main.ts` (junto a `decidirTui`, línea 273)\n- Modify: `src/cli/main.test.ts`\n\n**Acceptance Criteria:**\n- [ ] `decidirPiel([])` devuelve `\"consola\"` (la omisión NO cambia en esta tarea)\n- [ ] `decidirPiel([\"--web\"])` devuelve `\"web\"` aunque no haya TTY\n- [ ] `decidirPiel([\"--cli\"])` devuelve `\"consola\"` incluso junto a `--web`\n- [ ] `parsearOpcionesWeb` lee `--puerto 4300` y `--no-abrir`\n- [ ] `--puerto` con un valor no numérico o fuera de 1..65535 es error de USO (código 64)\n- [ ] `decidirTui` no cambia de comportamiento\n\n**Verify:** `npx vitest run src/cli/main.test.ts -t \"decidirPiel\"` → PASS\n\n```json:metadata\n{\"files\": [\"src/cli/main.ts\", \"src/cli/main.test.ts\"], \"verifyCommand\": \"npx vitest run src/cli/main.test.ts\", \"acceptanceCriteria\": [\"decidirPiel([]) === consola\", \"--cli gana a --web\", \"--puerto no numérico o 7634 es error de uso 64\", \"decidirTui sin cambios\"], \"modelTier\": \"mechanical\"}\n```",
+      "status": "completed",
+      "description": "**Goal:** Que exista la decisión de piel (web / consola) como función pura probada, con `--web`, `--cli`, `--no-abrir` y `--puerto`, **sin cambiar todavía la omisión**: la web es opt-in hasta la última tarea.\n\nComplete — see ledger.",
       "blockedBy": [
         0
       ]
@@ -19,8 +19,8 @@
     {
       "id": 2,
       "subject": "Task 2: `core/actos.ts` — el acto deja de ser de la TUI",
-      "status": "pending",
-      "description": "**Goal:** Extraer el tipo `Acto` de `cli/tui/store.ts` a `core/actos.ts`, porque ahora lo comparten dos pieles y el servidor web no puede importar de `cli/tui/`.\n\n**Files:**\n- Create: `src/core/actos.ts`\n- Modify: `src/cli/tui/store.ts` (importa el tipo en vez de declararlo)\n- Create: `src/core/actos.test.ts`\n\n**Acceptance Criteria:**\n- [ ] `Acto` vive en `core/actos.ts` y `cli/tui/store.ts` lo importa\n- [ ] `core/imports.test.ts` sigue en verde (el fichero nuevo no importa nada prohibido)\n- [ ] Toda la suite de la TUI sigue verde sin cambios de comportamiento\n- [ ] `core/actos.ts` no importa nada de `cli/`\n\n**Verify:** `npx vitest run src/core src/cli/tui` → PASS\n\n```json:metadata\n{\"files\": [\"src/core/actos.ts\", \"src/core/actos.test.ts\", \"src/cli/tui/store.ts\"], \"verifyCommand\": \"npx vitest run src/core src/cli && npm run typecheck\", \"acceptanceCriteria\": [\"Acto vive en core/actos.ts\", \"store.ts lo importa y re-exporta\", \"imports.test.ts sigue verde\", \"typecheck limpio\"], \"modelTier\": \"mechanical\"}\n```",
+      "status": "completed",
+      "description": "**Goal:** Extraer el tipo `Acto` de `cli/tui/store.ts` a `core/actos.ts`, porque ahora lo comparten dos pieles y el servidor web no puede importar de `cli/tui/`.\n\nComplete — see ledger.",
       "blockedBy": [
         0
       ]
@@ -28,8 +28,8 @@
     {
       "id": 3,
       "subject": "Task 3: Los settings globales y los entornos",
-      "status": "pending",
-      "description": "**Goal:** Que exista `~/.xonecode/settings.json` con la lista de entornos de CloudStudio y la base del workspace, con tipos puros en `core/` y un escritor en `agent/` que nunca destruye lo que había.\n\n**Files:**\n- Create: `src/core/settings.ts`\n- Create: `src/core/settings.test.ts`\n- Create: `src/agent/settingsEnDisco.ts`\n- Create: `src/agent/settingsEnDisco.test.ts`\n\n**Acceptance Criteria:**\n- [ ] `validarSettings` acepta entornos bien formados y descarta los rotos sin lanzar\n- [ ] `validarSettings` **rechaza claves de API**: un settings con `apiKey`/`api_key`/`clave` lanza, igual que hace `config.json`\n- [ ] `rutaDeWorkspace(base, entorno, proyecto)` da `<base>/<entorno>/workspace/<proyecto>` y es pura\n- [ ] `rutaDeWorkspace` rechaza un id de entorno o un nombre de proyecto con `/`, `\\` o `..`\n- [ ] `guardarEntorno` sobre un fichero con dos entornos deja los dos y añade el tercero\n- [ ] `guardarEntorno` sobre un JSON roto **lanza sin escribir** y el fichero queda intacto\n- [ ] El fichero se escribe con modo 0600 dentro de un directorio 0700\n\n**Verify:** `npx vitest run src/core/settings.test.ts src/agent/settingsEnDisco.test.ts` → PASS\n\n```json:metadata\n{\"files\": [\"src/core/settings.ts\", \"src/core/settings.test.ts\", \"src/agent/settingsEnDisco.ts\", \"src/agent/settingsEnDisco.test.ts\"], \"verifyCommand\": \"npx vitest run src/core/settings.test.ts src/agent/settingsEnDisco.test.ts\", \"acceptanceCriteria\": [\"validarSettings rechaza claves de API\", \"rutaDeWorkspace es pura y rechaza .. y separadores\", \"guardarEntorno no destruye lo que había\", \"JSON roto para sin escribir\", \"0600/0700\"], \"modelTier\": \"standard\"}\n```",
+      "status": "completed",
+      "description": "**Goal:** Que exista `~/.xonecode/settings.json` con la lista de entornos de CloudStudio y la base del workspace, con tipos puros en `core/` y un escritor en `agent/` que nunca destruye lo que había.\n\nComplete — see ledger.",
       "blockedBy": [
         0
       ]
@@ -37,8 +37,8 @@
     {
       "id": 4,
       "subject": "Task 4: Los tokens de OAuth, por entorno",
-      "status": "pending",
-      "description": "**Goal:** Que `~/.xonecode/cloudstudio-oauth.json` deje de ser un único juego de tokens y pase a estar indexado por entorno, con una migración que no pierde el que ya existe.\n\n**Files:**\n- Modify: `src/agent/cloudstudioMcp.ts` (`EstadoOAuth`, `leerEstado`, `guardarEstado`, líneas 34-40 y 154-180)\n- Modify: `src/agent/cloudstudioMcp.test.ts`\n\n**Acceptance Criteria:**\n- [ ] Un fichero nuevo se escribe como `{ version: 2, porEntorno: { … } }`\n- [ ] Un fichero SIN `version` (el plano de hoy) se lee como el juego de la clave `legado` y **no se pierde**\n- [ ] `legado` se adopta como el juego del primer entorno registrado cuya `url` sea `https://mcp.xonewebstudio.com/mcp`, y solo entonces\n- [ ] Si nunca se registra ese entorno, `legado` queda intacto para siempre\n- [ ] Cerrar sesión en un entorno no toca los tokens de los demás\n- [ ] Un fichero corrupto sigue devolviendo `{}` sin imprimir su contenido (comportamiento actual, no se toca)\n\n**Verify:** `npx vitest run src/agent/cloudstudioMcp.test.ts` → PASS\n\n```json:metadata\n{\"files\": [\"src/agent/cloudstudioMcp.ts\", \"src/agent/cloudstudioMcp.test.ts\"], \"verifyCommand\": \"npx vitest run src/agent/cloudstudioMcp.test.ts && npm run typecheck\", \"acceptanceCriteria\": [\"formato v2 indexado por entorno\", \"el plano de hoy va a legado y no se pierde\", \"legado se adopta solo con la URL por omisión\", \"cerrar sesión en uno no toca los demás\", \"corrupto sigue dando vacío sin imprimir\"], \"modelTier\": \"standard\"}\n```",
+      "status": "completed",
+      "description": "**Goal:** Que `~/.xonecode/cloudstudio-oauth.json` deje de ser un único juego de tokens y pase a estar indexado por entorno, con una migración que no pierde el que ya existe.\n\nComplete — see ledger.",
       "blockedBy": [
         0
       ]
@@ -148,5 +148,5 @@
       ]
     }
   ],
-  "lastUpdated": "2026-09-04T08:22:09.709395+00:00"
+  "lastUpdated": "2026-09-04T09:03:27.897458+00:00"
 }
