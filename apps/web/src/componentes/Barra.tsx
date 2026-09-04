@@ -4,7 +4,8 @@ import estilos from "./Barra.module.css";
 export interface Proyecto { id: string; nombre: string; sesiones: { id: string; titulo: string; historica: boolean }[] }
 
 /**
- * Los tres niveles a la derecha: entorno → proyectos → sesiones, y un pie con lo que hoy
+ * Los tres niveles, ahora a la IZQUIERDA (`Maqueta.tsx`, como deepseek — cambio de rumbo
+ * del usuario): entorno → proyectos → sesiones, y un pie con lo que hoy
  * son comandos de barra (`/config`, `/modelo`) y no un ajuste con sitio propio en la
  * interfaz — un enlace a un panel que no existe sería el mismo dato inventado que un
  * alias de color que no existe.

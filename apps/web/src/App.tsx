@@ -1,4 +1,4 @@
-import { useSyncExternalStore } from "react";
+import { useEffect, useSyncExternalStore } from "react";
 import type { crearStoreDelCliente } from "./store.js";
 import type { Conexion } from "./conexion.js";
 import { Maqueta } from "./componentes/Maqueta.js";
@@ -41,6 +41,18 @@ export function App({ store, enviar }: { store: Store; enviar: Conexion["enviar"
   // pasos pendientes de entorno/proyecto. Las dos cuentan como «todavía no hay nada que
   // enseñar».
   const enAlta = estado.alta === undefined || estado.alta.pasos.length > 0;
+
+  // El oscuro es SOLO del splash: `design-platform.css` engancha su variante oscura a
+  // `body[data-ds-dark-theme]` (index.html ya no lo pone a fuego), y `App` es el único
+  // sitio que sabe si `enAlta` es cierto — por la misma regla que ya lo hace el único
+  // lector del store. Se quita en la limpieza y no solo al pasar a `false`: un remonte
+  // de `App` a mitad de la vida de la página (los tests montan y desmontan) no debe
+  // dejar el atributo puesto en un `document.body` que sobrevive al componente.
+  useEffect(() => {
+    if (enAlta) document.body.setAttribute("data-ds-dark-theme", "");
+    else document.body.removeAttribute("data-ds-dark-theme");
+    return () => document.body.removeAttribute("data-ds-dark-theme");
+  }, [enAlta]);
 
   if (enAlta) {
     return (

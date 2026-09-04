@@ -2004,6 +2004,12 @@ git commit -m "feat(web): el cliente se conecta — SSE con reintento y store si
 
 ### Task 12: La maqueta — barra derecha, cabecera y compositor
 
+> **Nota posterior**: el usuario pidió más tarde mover la barra a la **izquierda** —como en
+> deepseek—, revirtiendo el «a la derecha» de este task (visto en `Maqueta.tsx` /
+> `Maqueta.module.css`: el `aside` va primero en el DOM y `border-right` reemplaza a
+> `border-left`). Se deja el texto original sin reescribir: es el registro de lo que se pidió
+> EN ESTE MOMENTO, no una ficción de que siempre fue a la izquierda.
+
 **Goal:** La pantalla: barra lateral **a la derecha** con entorno → proyectos → sesiones, cabecera de sesión, y el compositor, con los estilos de deepseek.
 
 **Files:**

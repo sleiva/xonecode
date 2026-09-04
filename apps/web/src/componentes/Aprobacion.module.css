@@ -1,7 +1,7 @@
 /* Alias comprobados contra `apps/web/estilos/design-platform.css`: bg-overlay,
    bg-layer-1/2/3, border-l2/l3, label-primary/secondary/tertiary,
    state-success-secondary, state-error-primary/secondary, button-primary-fill/hover,
-   label-primary-inverted, label-primary-foreground e interactive-bg-hover. */
+   label-primary-inverted e interactive-bg-hover. */
 
 /* La capa es el `dialog` de `Modal`, no su `mask`: los 22 CSS Modules del paquete son
    stubs vacíos en este release candidate y el `mask` no lleva clase ni prop con la que
@@ -94,23 +94,27 @@
   user-select: none;
 }
 
-/* `label-primary-foreground` en las dos, no el «primary» de su propio par —
-   `state-success-primary`/`state-error-primary» sobre su «secondary» a juego—: el caso
-   error está MEDIDO (`AvisoDeConexion.module.css`: `design-platform.css` mapea las dos
-   mitades del par al MISMO `--dsw-static-red-400` en `body[data-ds-dark-theme]`, texto
-   invisible sobre su propio fondo). El de éxito no colisiona en el mismo grado —verde
-   500 sobre verde 400 son dos tonos distintos— pero están tan próximos en luminosidad
-   que el texto tampoco se lee con comodidad, así que se corrige con el mismo alias por
-   coherencia: una línea «añadida» y una «quitada» del diff deben leerse igual de bien.
-   `.fallo`, más abajo, no lo necesita: ahí `state-error-primary` es texto SOLO sobre el
-   fondo normal de la tarjeta, no sobre `state-error-secondary`. */
+/* `label-primary` en las dos, no el «primary» de su propio par
+   (`state-success-primary`/`state-error-primary` sobre su «secondary» a juego) ni
+   `label-primary-foreground`. La aprobación solo vive en la consola, que ahora es
+   SIEMPRE clara —el oscuro se retiró a la pantalla de arranque (`App.tsx`)—, así que no
+   hace falta un alias que cambie de polaridad por tema: basta el texto normal de la
+   página, y MEDIDO da mejor contraste que las otras dos opciones contra estos fondos
+   (rojo/verde medios en los dos temas): el «primary» de origen colisiona o casi
+   —`AvisoDeConexion.module.css` documenta el caso error, mapeado al MISMO
+   `--dsw-static-red-400` en oscuro, y el de éxito, aun sin colisionar, tiene verde 500
+   sobre verde 400 con luminosidad demasiado próxima—, y `label-primary-foreground`
+   (blanco en claro) queda más flojo que el negro casi puro de `label-primary`. Una línea
+   «añadida» y una «quitada» del diff deben leerse igual de bien, de ahí el mismo alias en
+   las dos. `.fallo`, más abajo, no lo necesita: ahí `state-error-primary` es texto SOLO
+   sobre el fondo normal de la tarjeta, no sobre `state-error-secondary`. */
 .anadido {
-  color: var(--dsw-alias-label-primary-foreground);
+  color: var(--dsw-alias-label-primary);
   background: var(--dsw-alias-state-success-secondary);
 }
 
 .quitado {
-  color: var(--dsw-alias-label-primary-foreground);
+  color: var(--dsw-alias-label-primary);
   background: var(--dsw-alias-state-error-secondary);
 }
 

@@ -49,27 +49,48 @@ export function Compositor({
   };
 
   return (
-    <div className={estilos.compositor}>
-      {sugerencias.length > 0 && (
-        <ul className={estilos.sugerencias} role="listbox">
-          {sugerencias.map((c) => (
-            <li key={c.nombre} role="option" className={estilos.sugerencia}>
-              <span className={estilos.nombreComando}>{c.nombre}</span>
-              <span className={estilos.descripcionComando}>{c.descripcion}</span>
-            </li>
-          ))}
-        </ul>
-      )}
-      <textarea
-        className={estilos.entrada}
-        value={valor}
-        disabled={!conectado}
-        // Deshabilitado no puede quedarse mudo: dice POR QUÉ, en vez de dejar al usuario
-        // adivinando si el campo está roto o si nadie escucha al otro lado.
-        placeholder={conectado ? "Escribe una petición, o /comando…" : "sin conexión con xonecode"}
-        onChange={(evento) => setValor(evento.target.value)}
-        onKeyDown={alPulsarTecla}
-      />
+    <div className={estilos.envoltura}>
+      <div className={estilos.compositor}>
+        {sugerencias.length > 0 && (
+          <ul className={estilos.sugerencias} role="listbox">
+            {sugerencias.map((c) => (
+              <li key={c.nombre} role="option" className={estilos.sugerencia}>
+                <span className={estilos.nombreComando}>{c.nombre}</span>
+                <span className={estilos.descripcionComando}>{c.descripcion}</span>
+              </li>
+            ))}
+          </ul>
+        )}
+        <textarea
+          className={estilos.entrada}
+          value={valor}
+          disabled={!conectado}
+          // Deshabilitado no puede quedarse mudo: dice POR QUÉ, en vez de dejar al usuario
+          // adivinando si el campo está roto o si nadie escucha al otro lado.
+          placeholder={conectado ? "Escribe una petición, o /comando…" : "sin conexión con xonecode"}
+          onChange={(evento) => setValor(evento.target.value)}
+          onKeyDown={alPulsarTecla}
+        />
+        {/*
+          Fila de controles DENTRO de la tarjeta, como en la referencia — pero SOLO el
+          botón de enviar: es el único control de la fila que tiene detrás un dato o una
+          acción real. El «+» y la pastilla de modelo/permisos de deepseek no se copian
+          porque no hay nada que abran aquí (el cable no manda modelo ni permisos por
+          sesión, `BarraDeEstado.tsx` ya lo documenta) — un botón sin función detrás es
+          el mismo «dato inventado» que una lista vacía rellenada con un placeholder.
+        */}
+        <div className={estilos.controles}>
+          <button
+            type="button"
+            className={estilos.enviar}
+            disabled={!conectado}
+            aria-label="Enviar"
+            onClick={enviar}
+          >
+            ↑
+          </button>
+        </div>
+      </div>
     </div>
   );
 }

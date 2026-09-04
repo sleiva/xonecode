@@ -219,6 +219,9 @@ describe("App: la pantalla de arranque no enseña nada más", () => {
     // («Ajustes») en cambio se enseña SIEMPRE que `Barra` monta — es la prueba de que no
     // ha montado, no de una lista vacía.
     expect(screen.queryByText("Ajustes")).toBeNull();
+    // El oscuro es del splash, y `enAlta` sigue cierto aquí (no ha llegado `pasos: []`):
+    // `App` tiene que haber puesto el atributo que engancha `design-platform.css`.
+    expect(document.body.hasAttribute("data-ds-dark-theme")).toBe(true);
   });
 
   /**
@@ -266,5 +269,9 @@ describe("App: la pantalla de arranque no enseña nada más", () => {
     // con esas props no existe.
     expect(screen.getByText(/sin entorno que enseñar/i)).toBeTruthy();
     expect(screen.getByText("Ajustes")).toBeTruthy();
+    // La maqueta ya abierta va CLARA: el oscuro es solo del splash, y `enAlta` acaba de
+    // hacerse falso con este mismo `pasos: []` — el atributo tiene que haberse quitado,
+    // no quedarse puesto por descuido en un `document.body` que sobrevive al componente.
+    expect(document.body.hasAttribute("data-ds-dark-theme")).toBe(false);
   });
 });

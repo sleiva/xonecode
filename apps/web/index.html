@@ -5,9 +5,11 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>xonecode</title>
   </head>
-  <!-- El atributo, no una clase: `design-platform.css` engancha su variante oscura a
-       `body[data-ds-dark-theme]` (línea 251), y la consola web solo tiene un tema. -->
-  <body data-ds-dark-theme="">
+  <!-- Sin el atributo aquí: el oscuro es SOLO del splash (el registro de entorno y
+       modelo), no de la consola entera — `App.tsx` lo pone y lo quita él mismo, en el
+       único componente que sabe si `enAlta` es cierto. Ponerlo aquí a fuego lo dejaba
+       encendido también dentro de la maqueta ya abierta, que va clara como deepseek. -->
+  <body>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>

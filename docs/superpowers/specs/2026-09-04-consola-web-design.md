@@ -284,10 +284,14 @@ regla que heredamos.
 `THIRD_PARTY_NOTICES.md`. **No se copia ningún logo ni marca denominativa** — las guías de
 marca de DeepSeek lo piden explícitamente, y el nombre del producto aquí es XOne.
 
-**Maqueta**, calcada de lo que se vio funcionando, con la barra **a la derecha** como pidió
-el usuario y un nivel más de jerarquía:
+**Maqueta**, calcada de lo que se vio funcionando, con la barra **a la izquierda** —como en
+deepseek— y un nivel más de jerarquía. Cambio de rumbo del propio usuario: al principio pidió
+la barra a la derecha explícitamente para no calcar la colocación de deepseek, solo su oficio;
+más tarde pidió lo contrario, así que ahora se toma también la colocación. El borde que separa
+la barra del centro se movió con ella (`border-right` en `Maqueta.module.css`, no
+`border-left`).
 
-- Barra lateral derecha: **entorno** (selector arriba) → **proyectos** → **sesiones**
+- Barra lateral izquierda: **entorno** (selector arriba) → **proyectos** → **sesiones**
   anidadas con su antigüedad. Botón de sesión nueva. Ajustes abajo.
 - Centro sin sesión: héroe con el compositor —pastillas de proyecto, modo, modelo, y el
   botón de enviar—.

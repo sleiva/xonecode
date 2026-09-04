@@ -1,35 +1,82 @@
-/* Alias comprobados: bg-layer-1/2, border-l2, label-primary/tertiary/dimmed e
-   interactive-bg-hover existen en design-platform.css (ver el grep del brief). */
+/* Alias comprobados: bg-layer-1/2, border-l2, label-primary/tertiary/dimmed,
+   interactive-bg-hover y button-primary-fill existen en design-platform.css (ver el
+   grep del brief). */
+
+/* MEDIDO contra la referencia: el compositor ya no es un campo a sangre con un borde
+   arriba — es una tarjeta REDONDEADA y SEPARADA del borde inferior, del mismo ancho de
+   columna que `Chat.module.css` (775px, centrada) para que quede alineada bajo la
+   conversación. `.envoltura` es quien centra y separa; `.compositor` es la tarjeta. */
+.envoltura {
+  max-width: 775px;
+  margin: 0 auto;
+  padding: 0 16px 16px;
+  width: 100%;
+  box-sizing: border-box;
+}
 
 .compositor {
   position: relative;
-  padding: 12px;
-  border-top: 0.5px solid var(--dsw-alias-border-l2);
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+  padding: 10px 10px 10px 16px;
+  border: 0.5px solid var(--dsw-alias-border-l2);
+  border-radius: 20px;
   background: var(--dsw-alias-bg-layer-1);
 }
 
 .entrada {
-  width: 100%;
-  min-height: 44px;
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 24px;
   max-height: 220px;
-  resize: vertical;
-  padding: 10px 12px;
-  background: var(--dsw-alias-bg-layer-2);
+  resize: none;
+  padding: 8px 0;
+  background: none;
   color: var(--dsw-alias-label-primary);
-  border: 0.5px solid var(--dsw-alias-border-l2);
-  border-radius: 8px;
+  border: none;
   font: inherit;
 }
 
-/* Sin conexión el campo se ve tan apagado como su propio texto: mismo alias en fondo y
- * placeholder, para que «deshabilitado» se lea de un vistazo y no solo por el cursor. */
+.entrada:focus {
+  outline: none;
+}
+
+/* Sin conexión el campo se ve tan apagado como su propio texto — antes esto ponía
+ * también un fondo distinto, pero `.entrada` ya no tiene fondo propio (es transparente
+ * sobre la tarjeta): con la tarjeta entera apagándose no hace falta un segundo aviso. */
 .entrada:disabled {
   color: var(--dsw-alias-label-dimmed);
-  background: var(--dsw-alias-bg-layer-1);
 }
 
 .entrada::placeholder {
   color: var(--dsw-alias-label-tertiary);
+}
+
+.controles {
+  display: flex;
+  align-items: center;
+  padding-bottom: 2px;
+}
+
+/* Redondo, como en la referencia — `button-primary-fill` es el único azul de acento que
+ * ya usábamos en otro sitio (`Wizard`), así que no es un color nuevo por esto. */
+.enviar {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  border: none;
+  background: var(--dsw-alias-button-primary-fill);
+  color: var(--dsw-alias-label-primary-inverted);
+  font-size: 16px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.enviar:disabled {
+  background: var(--dsw-alias-bg-layer-2);
+  color: var(--dsw-alias-label-dimmed);
+  cursor: default;
 }
 
 .sugerencias {

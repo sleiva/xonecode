@@ -1,20 +1,26 @@
 /* Alias comprobados contra design-platform.css (grep del brief): bg-layer-1/2,
-   border-l2, label-primary, label-primary-foreground, state-error-secondary,
+   border-l2, label-primary, state-error-secondary, state-business-tertiary,
    markdown-code-block y markdown-inline-code existen. */
 
+/* MEDIDO contra la referencia (`dsh web`, 1700px): el texto no ocupa el centro entero —
+   vive en una columna de ~775px, centrada. A ese ancho se lee mal corrido de borde a
+   borde; `Compositor.module.css` usa el MISMO número para que el compositor quede
+   alineado bajo la conversación, no más ancho ni más estrecho. */
 .chat {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 20px;
   height: 100%;
   overflow-y: auto;
   padding: 16px;
+  max-width: 775px;
+  margin: 0 auto;
+  width: 100%;
+  box-sizing: border-box;
 }
 
 .globo {
-  max-width: 70ch;
   padding: 10px 14px;
-  border-radius: 10px;
   line-height: 1.5;
 }
 
@@ -29,28 +35,53 @@
   white-space: pre-wrap;
 }
 
+/* Pastilla redondeada, SOLO para el usuario — MEDIDO contra la referencia: el mensaje
+   del usuario es la única burbuja de verdad, con un fondo de acento azul clarísimo.
+   `bg-layer-2` (blanco sobre blanco en claro) no se veía como burbuja; se probó también
+   `interactive-bg-hover-accent`, pero en pantalla salía gris, no azul (es un gris-azulado
+   translúcido pensado para un HOVER, no para un fondo permanente). `state-business-
+   tertiary` es el alias que de verdad resuelve a un azul pastel en claro
+   (`--dsw-static-deepseek-100`, la escala de marca que ya usan `button-info-*`) — el
+   nombre es de negocio, no de chat, pero es lo que hay: no hay un alias «bubble» en el
+   tema copiado, y esto es el que da el color correcto sin inventar uno. `max-width`
+   propio (no 70ch, que era el de las dos): una pastilla de una frase corta no necesita
+   ancho de párrafo. */
 .usuario {
   align-self: flex-end;
-  background: var(--dsw-alias-bg-layer-2);
+  max-width: 70ch;
+  border-radius: 18px;
+  background: var(--dsw-alias-state-business-tertiary);
   color: var(--dsw-alias-label-primary);
 }
 
+/* SIN burbuja, a propósito — MEDIDO contra la referencia: el mensaje del usuario es la
+   ÚNICA burbuja; la respuesta del asistente es prosa corrida sobre el fondo de la
+   página, ancha y sin fondo ni borde propios. Antes de este cambio los dos llevaban
+   globo y la pantalla entera parecía una app de mensajería en vez de una consola de
+   lectura. `max-width` a 100%: la que manda ahora es la columna entera (`.chat`), no
+   70ch por mensaje. */
 .asistente {
-  align-self: flex-start;
-  background: var(--dsw-alias-bg-layer-1);
+  align-self: stretch;
+  max-width: 100%;
   color: var(--dsw-alias-label-primary);
-  border: 0.5px solid var(--dsw-alias-border-l2);
 }
 
-/* `label-primary-foreground`, no `state-error-primary`: MEDIDO con el tema oscuro puesto,
-   `design-platform.css` mapea `state-error-primary` y `state-error-secondary` al MISMO
-   `--dsw-static-red-400` dentro de `body[data-ds-dark-theme]` — texto invisible sobre su
-   propio fondo. `AvisoDeConexion.module.css` documenta el porqué del recambio; no se
-   toca el fichero del tema, que es la escala copiada. */
+/* `label-primary`, no `label-primary-foreground` ni `state-error-primary`. Esta burbuja
+   solo vive en la consola, que ahora es SIEMPRE clara —el oscuro se retiró a la pantalla
+   de arranque (`App.tsx`)—, así que ya no hace falta un alias que cambie de polaridad
+   por tema: basta el texto normal de la página. MEDIDO contra `state-error-secondary`
+   (`--dsw-static-red-400` en los dos temas, un rojo medio): `label-primary` da negro casi
+   puro sobre ese rojo (~6.4:1), mejor que el blanco de `label-primary-foreground`
+   (~3.3:1, el que sí hacía falta cuando esto podía verse en oscuro) y mucho mejor que
+   `state-error-primary` de origen (rojo oscuro sobre rojo medio, ~1.4:1 — apenas se leía
+   ni en claro). `AvisoDeConexion.module.css` sigue con `label-primary-foreground` porque
+   ese sí aparece en los dos temas (splash oscuro y consola clara). */
 .error {
   align-self: flex-start;
+  max-width: 70ch;
+  border-radius: 10px;
   background: var(--dsw-alias-state-error-secondary);
-  color: var(--dsw-alias-label-primary-foreground);
+  color: var(--dsw-alias-label-primary);
 }
 
 /* Lo que sigue estiliza los elementos que `MarkdownText` monta dentro de `.asistente`
