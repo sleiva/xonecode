@@ -21,7 +21,8 @@ que el spec no tenga huecos. Cada una es reversible antes del plan.
 | D4 | **El workspace por omisión queda como lo dictaste**: `~/.xonecode/<entorno>/workspace/<proyecto>`. | Dejo constancia de mi reserva y no insisto: el trabajo del usuario cuelga de una carpeta que en el resto del código significa «interno, no se toca», y algún día alguien escribirá una comprobación por prefijo que lo rompa. Es configurable, así que el riesgo es de convención, no de corrección. |
 | D5 | **El `config.json` del proyecto sigue escribiendo `cloudstudio.url`**, y además gana `entorno: <id>`. | Es lo que hace literalmente cierto que «la sincronización no se toca»: `crearSincronizador` y compañía leen la URL igual que hoy. El `entorno` es la referencia nueva; la URL es la copia operativa. |
 | D6 | **La web es solo modo `cloud`** en esta fase. Un proyecto offline se abre con `--cli`. | La web se organiza entorno → proyecto → sesión; un proyecto offline no tiene entorno. `configurarModoInicial` no corre en la ruta web. |
-| D7 | **Transporte: SSE (servidor→cliente) + POST (cliente→servidor)**, no WebSocket. | Cero dependencias, y la reconexión es trivial porque el servidor guarda la lista de actos y la reemite. El mux de WebSocket de deepseek existe para 40 paquetes con streams lógicos; aquí hay un stream. |
+| D7 | **Transporte: SSE (servidor→cliente) + POST (cliente→servidor)**, no WebSocket. | Cero dependencias, y la reconexión es trivial porque el servidor guarda la lista de **actos** —la misma unidad de transcript que ya usa la TUI (`cli/tui/store.ts`: usuario / asistente / herramientas / sistema)— y la reemite. El mux de WebSocket de deepseek existe para 40 paquetes con streams lógicos; aquí hay un stream. |
+| D9 | Leí **«nuevo de paquete» como «un paquete nuevo»** → workspaces de npm con `apps/web`. | En castellano peninsular «nuevo de paquete» también significa «recién estrenado, de fábrica», o sea «hazlo desde cero como dsh». Las dos lecturas acaban en el mismo `apps/web`, así que no bloquea — pero si querías decir lo segundo, dímelo y quito la conversión a workspaces. |
 | D8 | **Una consola de proyecto activa a la vez.** Cambiar de proyecto termina la actual y abre otra. | `correrConsola` es un lazo sobre UNA `raiz`. N raíces concurrentes en un proceso es un rediseño del motor, no una piel. |
 
 ---
@@ -183,8 +184,12 @@ Pasa de plano a **indexado por entorno**:
 { "version": 2, "porEntorno": { "webstudio": { "tokens": …, "scopes": […] } } }
 ```
 
-Migración: un fichero sin `version` es el juego único de hoy y se conserva tal cual bajo el
-entorno que corresponda a la URL que tuviera el proyecto. Cerrar sesión en un entorno no
+Migración: el `EstadoOAuth` plano de hoy **no tiene campo de URL**, así que no se puede
+adivinar a qué entorno pertenece. La regla es explícita: un fichero sin `version` se mueve
+tal cual bajo la clave `legado` y ahí se queda intacto; pasa a ser el juego del primer
+entorno que se registre cuya `url` sea `URL_CLOUDSTUDIO_POR_OMISION`
+(`https://mcp.xonewebstudio.com/mcp`), que es la única URL que ese fichero pudo haber
+usado. Si nunca se registra ese entorno, `legado` no se toca nunca. Cerrar sesión en un entorno no
 puede tocar los demás.
 
 ### `<proyecto>/.xonecode/config.json` (gana una clave)
@@ -193,8 +198,12 @@ Gana `entorno: "<id>"` y **conserva `cloudstudio.url`** (D5).
 
 ### Sesiones: `<proyecto>/.xonecode/sesiones/`
 
-`indice.json` con `{id, titulo, creada, ultimoTurno}` por sesión, y un `<id>.jsonl` con los
-`DomainEvent` del turno, uno por línea. Va en el `.xonecode` del proyecto, que ya tiene
+`indice.json` con `{id, titulo, creada, ultimoTurno}` por sesión, y un `<id>.jsonl` con un
+**acto por línea**, no un evento suelto. La distinción importa: ningún `DomainEvent` lleva el
+texto que escribió el usuario ni el comando que tecleó, así que un `.jsonl` de eventos daría
+una sesión reabierta con respuestas y sin preguntas. La unidad es la que ya usa la TUI
+(`cli/tui/store.ts`): usuario / asistente / herramientas / sistema. Un acto `pausa` conserva
+la `descripcion` del pendiente —que es lo que la TUI ya enseña—, pero **el diff no**. Va en el `.xonecode` del proyecto, que ya tiene
 precedente (`conversation_history/`), está denegado entero al agente y **no sube nunca** a
 CloudStudio.
 
@@ -326,7 +335,13 @@ Sesiones concurrentes. Sesiones que continúan la conversación (checkpointer pe
 La franja temporal del Trajectory. Los iconos de feedback (👍/👎/reintentar). La descarga
 del «session log». Una pantalla de ajustes más allá de entornos, workspace y modelo.
 `0.0.0.0`. Que el cwd preseleccione proyecto. El renombrado de tokens a `--xone-*`.
-Proyectos offline en la web (van por `--cli`).
+Proyectos offline en la web (van por `--cli`) — pero **no en silencio**: si el cwd tiene un
+`.xonecode` con `modo: offline`, la web lo dice al arrancar («este directorio es un proyecto
+offline: `xonecode --cli`») en vez de enseñar un vestíbulo cloud sin explicación.
+
+El **cuarto paso del alta de hoy** —modelo propio del proyecto, opcional, que hereda el
+global— no está en el wizard de tres pasos: se hace desde los ajustes del proyecto una vez
+abierto, que es donde ya vive `/modelo`.
 
 ## Asunciones a confirmar
 
