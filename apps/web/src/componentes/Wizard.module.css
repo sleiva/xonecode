@@ -1,0 +1,85 @@
+/* Alias comprobados contra `apps/web/estilos/design-platform.css`: bg-layer-1/2,
+   border-l2, label-primary/secondary/tertiary, state-error-primary,
+   state-success-primary, button-primary-fill/hover y label-primary-inverted. */
+
+.wizard {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: min(480px, 100%);
+  margin: 0 auto;
+  padding: 24px;
+  border: 0.5px solid var(--dsw-alias-border-l2);
+  border-radius: 12px;
+  background: var(--dsw-alias-bg-layer-1);
+}
+
+.titulo {
+  margin: 0 0 8px;
+  font-size: 16px;
+  color: var(--dsw-alias-label-primary);
+}
+
+.etiqueta {
+  margin-top: 8px;
+  color: var(--dsw-alias-label-secondary);
+}
+
+/* `Input` pone la clase que se le pasa en el SPAN que envuelve, no en el `<input>` (su
+   propia clase interna viene de un CSS Module que es un stub vacío en este release
+   candidate), así que el campo de dentro se estiliza por descendencia. */
+.envoltorio {
+  display: block;
+}
+
+.campo,
+.envoltorio input {
+  width: 100%;
+  padding: 8px 10px;
+  border: 0.5px solid var(--dsw-alias-border-l2);
+  border-radius: 8px;
+  background: var(--dsw-alias-bg-layer-2);
+  color: var(--dsw-alias-label-primary);
+  font: inherit;
+}
+
+.nota {
+  margin: 6px 0 0;
+  color: var(--dsw-alias-label-tertiary);
+}
+
+/* El aviso de URL y el «dónde quedó la credencial» se distinguen por color porque uno
+   frena y el otro deja seguir; el papel lo dice el `role`, no el estilo. */
+.aviso {
+  margin: 6px 0 0;
+  color: var(--dsw-alias-state-error-primary);
+}
+
+.estado {
+  margin: 6px 0 0;
+  color: var(--dsw-alias-state-success-primary);
+}
+
+.acciones {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 16px;
+}
+
+/* `Button` también llega sin estilo propio: lo que aporta es el elemento y el paso de los
+   atributos nativos (`type="submit"` incluido, que es lo que envía el formulario). */
+.accion {
+  padding: 8px 16px;
+  border: 0.5px solid var(--dsw-alias-button-primary-fill);
+  border-radius: 8px;
+  background: var(--dsw-alias-button-primary-fill);
+  color: var(--dsw-alias-label-primary-inverted);
+  font: inherit;
+  cursor: pointer;
+}
+
+.accion:hover {
+  background: var(--dsw-alias-button-primary-hover);
+  border-color: var(--dsw-alias-button-primary-hover);
+}

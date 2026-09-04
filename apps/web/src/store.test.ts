@@ -76,6 +76,27 @@ describe("store del cliente", () => {
     expect(estado.aprobacion).toBeUndefined();
   });
 
+  it("contestarPregunta y cerrarAprobacion retiran solo lo suyo: el servidor no manda ningún «ya está»", () => {
+    const s = crearStoreDelCliente();
+    s.aplicar({ clase: "pregunta", texto: "¿nombre?" });
+    s.aplicar({ clase: "aprobacion", pendientes: [], ficheros: {}, diffs: {} });
+    s.contestarPregunta();
+    expect(s.leer().pregunta).toBeUndefined();
+    // La aprobación sigue: contestar una pregunta no zanja lo otro que estuviera esperando.
+    expect(s.leer().aprobacion).toBeDefined();
+    s.cerrarAprobacion();
+    expect(s.leer().aprobacion).toBeUndefined();
+  });
+
+  it("las dos avisan a los suscriptores: si no, la pregunta contestada se quedaría pintada", () => {
+    const s = crearStoreDelCliente();
+    let avisos = 0;
+    s.suscribir(() => { avisos += 1; });
+    s.contestarPregunta();
+    s.cerrarAprobacion();
+    expect(avisos).toBe(2);
+  });
+
   it("el registro de comandos llega entero y sobrevive a la desconexión: es un catálogo, no una espera", () => {
     const s = crearStoreDelCliente();
     s.aplicar({ clase: "comandos", comandos: [{ nombre: "/sync", descripcion: "sincroniza" }] });

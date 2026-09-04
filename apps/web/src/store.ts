@@ -100,6 +100,8 @@ export function crearStoreDelCliente(): {
   aplicar: (mensaje: unknown) => void;
   marcarConectado: () => void;
   marcarDesconectado: () => void;
+  contestarPregunta: () => void;
+  cerrarAprobacion: () => void;
   suscribir: (escucha: () => void) => () => void;
 } {
   let estado: EstadoDelCliente = ESTADO_INICIAL;
@@ -200,6 +202,25 @@ export function crearStoreDelCliente(): {
       // lado —como rechazo, en el caso de la aprobación—. Dejarla pintada tras reconectar
       // mentiría sobre qué sigue esperando respuesta.
       mutar({ conectado: false, pregunta: undefined, selector: undefined, secreto: undefined, aprobacion: undefined });
+    },
+
+    /**
+     * Lo que el CLIENTE ya ha contestado. No son mensajes del cable: son la otra mitad de
+     * `marcarDesconectado`, que retira lo que el servidor ya dio por zanjado. Aquí el
+     * zanjado lo produce el usuario, y sin esto la pregunta y el modal se quedarían
+     * pintados para siempre después de responder — el servidor no manda ningún «ya está»
+     * (`consolaWeb.ts` resuelve la promesa y no emite nada), así que nadie los retiraría.
+     *
+     * Que el modal se DESMONTE al cerrarlo es además lo que hace de su rechazo-al-desmontar
+     * una red y no una segunda decisión: cuando llega aquí, el componente ya ha marcado que
+     * decidió.
+     */
+    contestarPregunta(): void {
+      mutar({ pregunta: undefined });
+    },
+
+    cerrarAprobacion(): void {
+      mutar({ aprobacion: undefined });
     },
 
     suscribir(escucha: () => void): () => void {

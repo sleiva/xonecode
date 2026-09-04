@@ -8,6 +8,8 @@ import { Compositor } from "./componentes/Compositor.js";
 import { Transcript } from "./componentes/Transcript.js";
 import { BarraDeEstado } from "./componentes/BarraDeEstado.js";
 import { AvisoDeConexion } from "./componentes/AvisoDeConexion.js";
+import { Pregunta } from "./componentes/Pregunta.js";
+import { Aprobacion } from "./componentes/Aprobacion.js";
 
 type Store = ReturnType<typeof crearStoreDelCliente>;
 
@@ -54,6 +56,19 @@ export function App({ store, enviar }: { store: Store; enviar: Conexion["enviar"
           />
           <AvisoDeConexion conectado={estado.conectado} />
           <Transcript actos={estado.actos} />
+          {estado.pregunta !== undefined ? (
+            // La pregunta va DELANTE del compositor y con su propio cauce: el compositor
+            // manda `prosa`, que entra por la cola de líneas y no resuelve nada.
+            <Pregunta
+              texto={estado.pregunta.texto}
+              alResponder={(respuesta) => {
+                void enviar({ clase: "respuesta", texto: respuesta });
+                // Retirarla es cosa del cliente: el servidor resuelve su promesa y no
+                // emite ningún «ya está», así que nadie más la quitaría de la pantalla.
+                store.contestarPregunta();
+              }}
+            />
+          ) : null}
           <Compositor
             comandos={estado.comandos}
             conectado={estado.conectado}
@@ -64,6 +79,20 @@ export function App({ store, enviar }: { store: Store; enviar: Conexion["enviar"
             alEnviar={(texto) => void enviar({ clase: "prosa", texto })}
           />
           <BarraDeEstado turnos={turnos} pasos={pasos} ms={ultimoFin?.ms} />
+          {estado.aprobacion !== undefined ? (
+            <Aprobacion
+              pendientes={estado.aprobacion.pendientes}
+              ficheros={estado.aprobacion.ficheros}
+              diffs={estado.aprobacion.diffs}
+              alDecidir={(decisiones) => {
+                // Mandar ANTES de cerrar: cerrar desmonta el modal, y su rechazo al
+                // desmontar es la red de debajo — si el envío reventara, lo que queda en
+                // pantalla es el modal sin decidir, no una decisión perdida.
+                void enviar({ clase: "decision", decisiones });
+                store.cerrarAprobacion();
+              }}
+            />
+          ) : null}
         </>
       }
       barra={

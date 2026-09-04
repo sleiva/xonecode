@@ -1,0 +1,53 @@
+/* Alias comprobados contra `apps/web/estilos/design-platform.css`: bg-layer-2, border-l2,
+   label-primary, button-primary-fill/hover y label-primary-inverted. */
+
+.pregunta {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px;
+  border-top: 0.5px solid var(--dsw-alias-border-l2);
+  background: var(--dsw-alias-bg-layer-2);
+}
+
+/* El enunciado va en el `<label>` y no en un párrafo aparte: es lo que ata la pregunta al
+   campo donde se contesta, y lo que hace que la lea un lector de pantalla al enfocarlo. */
+.enunciado {
+  color: var(--dsw-alias-label-primary);
+  white-space: pre-wrap;
+}
+
+.fila {
+  display: flex;
+  gap: 8px;
+}
+
+.envoltorio {
+  flex: 1 1 auto;
+}
+
+.envoltorio input {
+  width: 100%;
+  padding: 8px 10px;
+  border: 0.5px solid var(--dsw-alias-border-l2);
+  border-radius: 8px;
+  background: var(--dsw-alias-bg-layer-1);
+  color: var(--dsw-alias-label-primary);
+  font: inherit;
+}
+
+.accion {
+  flex: none;
+  padding: 8px 16px;
+  border: 0.5px solid var(--dsw-alias-button-primary-fill);
+  border-radius: 8px;
+  background: var(--dsw-alias-button-primary-fill);
+  color: var(--dsw-alias-label-primary-inverted);
+  font: inherit;
+  cursor: pointer;
+}
+
+.accion:hover {
+  background: var(--dsw-alias-button-primary-hover);
+  border-color: var(--dsw-alias-button-primary-hover);
+}
