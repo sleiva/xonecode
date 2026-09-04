@@ -447,10 +447,28 @@ export function respuestaDeCallback(
   };
 }
 
-function esperarCallback(
-  timeoutMs: number,
-  redirigirA?: string
-): Promise<{ url: string; codigo: Promise<string>; cerrar: () => void }> {
+/**
+ * La URL de callback es determinista —`PUERTO_CALLBACK` es fijo, porque el IDS registra
+ * ese `redirect_uri`— así que conocerla no exige que el servidor esté escuchando. El
+ * `provider` la necesita SIEMPRE, la escuche `auth()` o no: la lleva en su
+ * `clientMetadata` para el registro/descubrimiento aunque el token guardado sea válido y
+ * `auth()` nunca llegue a redirigir. Separada de `escucharCallback` (abajo) justo por
+ * eso: construir la URL no es un efecto colateral, EMPEZAR A ESCUCHAR sí lo es.
+ */
+function urlDeCallback(): string {
+  return `http://127.0.0.1:${PUERTO_CALLBACK}/oauth/callback`;
+}
+
+/**
+ * Arranca el servidor HTTP local que recibe el `code` de la redirección, con su
+ * temporizador de espera. Se llama solo cuando `auth()` YA dijo `REDIRECT` —antes se
+ * llamaba SIEMPRE, incluso con un token guardado y válido que no iba a redirigir nunca—:
+ * MEDIDO, eso ocupaba el puerto 7634 fijo y armaba un temporizador de cinco minutos en
+ * cada llamada a `abrirCliente`, y dos llamadas seguidas o solapadas (dos conexiones del
+ * vestíbulo listando proyectos del mismo entorno, por ejemplo) chocaban por el mismo
+ * puerto sin que hiciera falta ningún login de verdad.
+ */
+function escucharCallback(timeoutMs: number, redirigirA?: string): Promise<{ codigo: Promise<string>; cerrar: () => void }> {
   return new Promise((resolver, rechazar) => {
     let resolverCodigo!: (codigo: string) => void;
     let rechazarCodigo!: (error: Error) => void;
@@ -460,14 +478,14 @@ function esperarCallback(
     });
     const servidor = createServer((peticion, respuesta) => {
       const recibida = new URL(peticion.url ?? "/", "http://127.0.0.1");
-      const codigo = recibida.searchParams.get("code");
+      const codigoRecibido = recibida.searchParams.get("code");
       const error = recibida.searchParams.get("error");
-      const contestacion = respuestaDeCallback(codigo, error, redirigirA);
+      const contestacion = respuestaDeCallback(codigoRecibido, error, redirigirA);
       respuesta.writeHead(contestacion.estado, contestacion.cabeceras);
       respuesta.end(contestacion.cuerpo);
       limpiar();
-      if (error || !codigo) rechazarCodigo(new Error(`el IDS rechazó el acceso${error ? `: ${error}` : ""}`));
-      else resolverCodigo(codigo);
+      if (error || !codigoRecibido) rechazarCodigo(new Error(`el IDS rechazó el acceso${error ? `: ${error}` : ""}`));
+      else resolverCodigo(codigoRecibido);
     });
     const temporizador = setTimeout(() => {
       limpiar();
@@ -482,16 +500,8 @@ function esperarCallback(
       rechazar(new Error(`no se pudo abrir el callback local de OAuth: ${error.message}`));
     });
     servidor.listen(PUERTO_CALLBACK, "127.0.0.1", () => {
-      const direccion = servidor.address();
-      if (direccion === null || typeof direccion === "string") {
-        limpiar();
-        rechazar(new Error("no se pudo abrir el callback local de OAuth"));
-        return;
-      }
-      callback = `http://127.0.0.1:${direccion.port}/oauth/callback`;
-      resolver({ url: callback, codigo, cerrar: limpiar });
+      resolver({ codigo, cerrar: limpiar });
     });
-    let callback = "";
   });
 }
 
@@ -671,15 +681,16 @@ async function abrirCliente(
 ): Promise<{ cliente: Client; url: URL; cerrar: () => Promise<void> }> {
   const url = urlSegura(urlTexto);
   const scopes = opciones.scopes ?? SCOPES_CLOUDSTUDIO_AGENTE;
-  const callback = await esperarCallback(opciones.timeoutMs ?? 5 * 60_000, opciones.redirigirA);
   const ruta = opciones.rutaAuth ?? rutaAuthPorDefecto();
-  const provider = new ProviderCloudStudio(ruta, opciones.entornoId ?? CLAVE_LEGADO, callback.url, (autorizacion) => {
+  const provider = new ProviderCloudStudio(ruta, opciones.entornoId ?? CLAVE_LEGADO, urlDeCallback(), (autorizacion) => {
     // La URL de autorización no aporta nada al transcript normal y puede tener parámetros
     // sensibles de OAuth. El navegador se abre sin volcarla; quien use SSH puede inyectar
     // `abrirNavegador` y decidir cómo presentarla.
     (opciones.abrirNavegador ?? abrirEnSistema)(autorizacion);
   }, scopes);
   let transporte: StreamableHTTPClientTransport | undefined;
+  // Solo se rellena si `auth()` de verdad redirige — ver `escucharCallback` arriba.
+  let callback: { codigo: Promise<string>; cerrar: () => void } | undefined;
   try {
     // No se usa `client.connect()` para iniciar OAuth: ese transporte queda marcado como
     // iniciado incluso cuando redirige y no admite un segundo connect. `auth()` realiza
@@ -691,6 +702,7 @@ async function abrirCliente(
     };
     const inicial = await auth(provider, opcionesAuth);
     if (inicial === "REDIRECT") {
+      callback = await escucharCallback(opciones.timeoutMs ?? 5 * 60_000, opciones.redirigirA);
       const codigo = await callback.codigo;
       const final = await auth(provider, { ...opcionesAuth, authorizationCode: codigo });
       if (final !== "AUTHORIZED") throw new Error("el IDS no completó la autorización de CloudStudio");
@@ -704,7 +716,7 @@ async function abrirCliente(
     await transporte?.close();
     throw error;
   } finally {
-    callback.cerrar();
+    callback?.cerrar();
   }
 }
 

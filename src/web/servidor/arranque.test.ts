@@ -140,12 +140,18 @@ describe("montarRutas — el cable, por fin conectado", () => {
     expect(comandos.comandos).toEqual(comandosDelRegistro());
   });
 
-  it("con cuenta y entorno resueltos, `pasos` sale vacío y sin proyecto abierto lo dice aparte", async () => {
+  it("con cuenta y entorno resueltos, `pasos` sale vacío, sin proyecto abierto lo dice aparte, y la barra llega con SUS proyectos", async () => {
     // Cambio de rumbo del usuario: el proyecto salió del alta. Con el entorno YA
     // registrado (`vestibuloDePrueba` lo trae de fábrica) y la cuenta resuelta
     // (`origenDeTrabajo: "global"`), ya no falta nada que el wizard tenga que pintar —
     // antes esto habría dicho `["entorno", "proyecto"]` porque abrir un proyecto exigía
     // saber de qué entorno viene; ahora abrir un proyecto no es parte del alta.
+    //
+    // `proyectos` SÍ llega poblado, sin que nadie elija entorno en esta conexión: es la
+    // regresión encontrada al revisar en vivo (`poblarProyectosSiProcede`) — quien entra
+    // directo con las tres condiciones cumplidas se salta el paso "entorno" del wizard, y
+    // con él la única línea que antes rellenaba `proyectos`. Sin el arreglo, esto habría
+    // dicho `[]` con un entorno registrado de sobra: la barra poblada de mentira.
     const servidor = servidorDeMentira();
     montarRutas(servidor, vestibuloDePrueba());
     const cliente = clienteDeMentira();
@@ -157,9 +163,44 @@ describe("montarRutas — el cable, por fin conectado", () => {
     // Sin proyecto abierto: nadie ha elegido ninguno todavía en ESTA conexión, aunque el
     // entorno ya estuviera registrado de antes.
     expect(alta.proyectoAbierto).toBe(false);
-    // Nada inventado mientras no se elige proyecto: ni proyectos ni ramas.
-    expect(alta.proyectos).toEqual([]);
+    expect(alta.proyectos).toEqual([{ id: "p1", nombre: "Tienda" }]);
+    // Las ramas sí siguen vacías: pedirlas exige saber de qué PROYECTO, y eso solo lo
+    // dice quien elige uno en la barra (`paso: "proyecto"`), no la población automática.
     expect(alta.ramas).toEqual([]);
+  });
+
+  it("sin ningún entorno registrado, la población automática no tiene de dónde sacar proyectos: `proyectos` se queda vacío sin lanzar", async () => {
+    const servidor = servidorDeMentira();
+    montarRutas(servidor, vestibuloDePrueba({ entornos: [] }));
+    const cliente = clienteDeMentira();
+    const eventos = servidor.rutas.get(`GET ${RUTA_EVENTOS}`);
+    await eventos!(cliente.peticion, cliente.respuesta);
+    await asentar();
+    const alta = cliente.recibidos.at(-1) as Extract<MensajeAlCliente, { clase: "alta" }>;
+    expect(alta.pasos).toEqual(["entorno"]);
+    expect(alta.proyectos).toEqual([]);
+  });
+
+  it("un proyecto abierto por fuera del alta no dispara la población automática: no hay barra que rellenar", async () => {
+    // Si `poblarProyectosSiProcede` no mirara `proyectoAbierto()` primero, un proyecto
+    // OFFLINE (`--guion --web`) sin ningún entorno CloudStudio de por medio intentaría
+    // igual listar proyectos del primer entorno registrado — trabajo de sobra para una
+    // barra que ya no se va a enseñar (el centro pinta la sesión, no el Dashboard).
+    const servidor = servidorDeMentira();
+    let llamadas = 0;
+    const vestibulo = vestibuloDePrueba({
+      proyectosDeEntorno: async () => {
+        llamadas++;
+        return [{ id: "p1", nombre: "Tienda" }];
+      },
+    });
+    await vestibulo.abrirProyecto({ raiz: "/w/a" });
+    montarRutas(servidor, vestibulo);
+    const cliente = clienteDeMentira();
+    const eventos = servidor.rutas.get(`GET ${RUTA_EVENTOS}`);
+    await eventos!(cliente.peticion, cliente.respuesta);
+    await asentar();
+    expect(llamadas).toBe(0);
   });
 
   it("con un proyecto abierto por fuera del alta (el atajo de `--guion`), `pasos` sale vacío AUNQUE falte el entorno", async () => {

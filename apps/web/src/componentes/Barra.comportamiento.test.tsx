@@ -8,10 +8,10 @@ afterEach(cleanup);
  * El comportamiento de `Barra` en sí —`Barra.test.tsx` es la disciplina de estilos
  * compartida por TODOS los `.module.css` del directorio, no un test de este componente—.
  *
- * Los tres niveles siempre pueden llegar vacíos (hoy, SIEMPRE llegan vacíos: `App.tsx`
- * no tiene de dónde sacar `entornos`/`proyectos` una vez hay proyecto abierto, ver el
- * comentario de cabecera de `Barra.tsx`), y cada nivel tiene que decir por qué en vez de
- * no pintar nada — que es indistinguible de una barra rota.
+ * Los tres niveles pueden llegar vacíos (`entornos`/`proyectos` SÍ llegan poblados desde
+ * `App.tsx` cuando hay algo que contar — `sesiones` de cada proyecto sigue vacía siempre,
+ * ver el comentario de cabecera de `Barra.tsx`), y cada nivel tiene que decir por qué en
+ * vez de no pintar nada — que es indistinguible de una barra rota.
  */
 describe("Barra: los tres niveles vacíos se explican solos", () => {
   function montar(proyectos: Parameters<typeof Barra>[0]["proyectos"] = []) {
@@ -22,6 +22,7 @@ describe("Barra: los tres niveles vacíos se explican solos", () => {
         proyectos={proyectos}
         alElegirEntorno={() => {}}
         alAbrirSesion={() => {}}
+        alAbrirProyecto={() => {}}
         alNuevaSesion={() => {}}
       />
     );
@@ -53,11 +54,33 @@ describe("Barra: los tres niveles vacíos se explican solos", () => {
         proyectos={[{ id: "p1", nombre: "harnees", sesiones: [] }]}
         alElegirEntorno={() => {}}
         alAbrirSesion={() => {}}
+        alAbrirProyecto={() => {}}
         alNuevaSesion={alNuevaSesion}
       />
     );
     fireEvent.click(screen.getByRole("button", { name: /nueva sesión en harnees/i }));
     expect(alNuevaSesion).toHaveBeenCalledWith("p1");
+  });
+
+  it("el nombre del proyecto ES el botón que lo abre: viaja con SU id, no el del primero de la lista", () => {
+    const alAbrirProyecto = vi.fn();
+    render(
+      <Barra
+        entornos={[]}
+        entornoActivo=""
+        proyectos={[
+          { id: "p1", nombre: "harnees", sesiones: [] },
+          { id: "p2", nombre: "tienda", sesiones: [] },
+        ]}
+        alElegirEntorno={() => {}}
+        alAbrirSesion={() => {}}
+        alAbrirProyecto={alAbrirProyecto}
+        alNuevaSesion={() => {}}
+      />
+    );
+    fireEvent.click(screen.getByRole("button", { name: "tienda" }));
+    expect(alAbrirProyecto).toHaveBeenCalledWith("p2");
+    expect(alAbrirProyecto).not.toHaveBeenCalledWith("p1");
   });
 
   it("el pie de la barra no termina en la última sesión: «Ajustes» siempre se enseña", () => {
@@ -76,6 +99,7 @@ describe("Barra: los tres niveles vacíos se explican solos", () => {
         sesionActiva="s1"
         alElegirEntorno={() => {}}
         alAbrirSesion={() => {}}
+        alAbrirProyecto={() => {}}
         alNuevaSesion={() => {}}
       />
     );

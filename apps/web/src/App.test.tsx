@@ -344,3 +344,102 @@ describe("App: la pantalla de arranque no enseña nada más", () => {
     expect(screen.getByText("Hola, Ana")).toBeTruthy();
   });
 });
+
+describe("App: abrir un proyecto desde la barra (Layer C)", () => {
+  function montarConProyectos(proyectos: { id: string; nombre: string }[]) {
+    const store = crearStoreDelCliente();
+    const enviar = vi.fn(() => Promise.resolve(undefined as unknown));
+    const vista = render(<App store={store} enviar={enviar} />);
+    act(() => store.marcarConectado());
+    act(() =>
+      store.aplicar({
+        clase: "alta",
+        pasos: [],
+        proveedores: [],
+        entornos: [{ id: "webstudio", nombre: "XOne WebStudio", url: "https://mcp.example/mcp" }],
+        proyectos,
+        ramas: [],
+        proyectoAbierto: false,
+      })
+    );
+    return { store, enviar, vista };
+  }
+
+  it("pulsar un proyecto pide sus ramas SIN abrir nada todavía", () => {
+    const { enviar } = montarConProyectos([{ id: "p1", nombre: "Tienda" }]);
+    fireEvent.click(screen.getByRole("button", { name: "Tienda" }));
+    expect(enviar).toHaveBeenCalledWith({ clase: "alta", paso: "proyecto", proyecto: "p1" });
+    // Nada de Selector todavía: `estado.alta.ramas` sigue vacía hasta que el servidor
+    // conteste — no se inventa un catálogo mientras se espera.
+    expect(screen.queryByRole("group")).toBeNull();
+  });
+
+  it("con UNA sola rama no se pregunta: se manda sola en cuanto el servidor la dice", () => {
+    const { store, enviar } = montarConProyectos([{ id: "p1", nombre: "Tienda" }]);
+    fireEvent.click(screen.getByRole("button", { name: "Tienda" }));
+    enviar.mockClear();
+
+    act(() =>
+      store.aplicar({
+        clase: "alta",
+        pasos: [],
+        proveedores: [],
+        entornos: [{ id: "webstudio", nombre: "XOne WebStudio", url: "https://mcp.example/mcp" }],
+        proyectos: [{ id: "p1", nombre: "Tienda" }],
+        ramas: ["master"],
+        proyectoAbierto: false,
+      })
+    );
+
+    expect(enviar).toHaveBeenCalledWith({ clase: "alta", paso: "proyecto", proyecto: "p1", rama: "master" });
+    expect(screen.queryByRole("group")).toBeNull();
+  });
+
+  it("con VARIAS ramas se pinta un selector con el nombre del proyecto en el título, y elegir manda esa rama", () => {
+    const { store, enviar } = montarConProyectos([{ id: "p1", nombre: "Tienda" }]);
+    fireEvent.click(screen.getByRole("button", { name: "Tienda" }));
+    enviar.mockClear();
+
+    act(() =>
+      store.aplicar({
+        clase: "alta",
+        pasos: [],
+        proveedores: [],
+        entornos: [{ id: "webstudio", nombre: "XOne WebStudio", url: "https://mcp.example/mcp" }],
+        proyectos: [{ id: "p1", nombre: "Tienda" }],
+        ramas: ["master", "pruebas"],
+        proyectoAbierto: false,
+      })
+    );
+
+    const selector = screen.getByRole("group", { name: /elige la rama de tienda/i });
+    expect(selector).toBeTruthy();
+    // No se manda nada solo con LLEGAR las ramas: con más de una, la elección es humana.
+    expect(enviar).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole("button", { name: "pruebas" }));
+    expect(enviar).toHaveBeenCalledWith({ clase: "alta", paso: "proyecto", proyecto: "p1", rama: "pruebas" });
+  });
+
+  it("cancelar el selector de rama no manda nada: el proyecto se queda sin abrir", () => {
+    const { store, enviar } = montarConProyectos([{ id: "p1", nombre: "Tienda" }]);
+    fireEvent.click(screen.getByRole("button", { name: "Tienda" }));
+    act(() =>
+      store.aplicar({
+        clase: "alta",
+        pasos: [],
+        proveedores: [],
+        entornos: [{ id: "webstudio", nombre: "XOne WebStudio", url: "https://mcp.example/mcp" }],
+        proyectos: [{ id: "p1", nombre: "Tienda" }],
+        ramas: ["master", "pruebas"],
+        proyectoAbierto: false,
+      })
+    );
+    enviar.mockClear();
+
+    fireEvent.click(screen.getByRole("button", { name: /cancelar/i }));
+    expect(enviar).not.toHaveBeenCalled();
+    // Y la barra vuelve: el selector se retira, «elige un proyecto en la barra» reaparece.
+    expect(screen.getByText(/elige un proyecto en la barra/i)).toBeTruthy();
+  });
+});

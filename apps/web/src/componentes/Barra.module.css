@@ -73,14 +73,29 @@
   gap: 6px;
 }
 
+/* Botón, no `<span>`: es lo que abre el proyecto (`App.tsx#alAbrirProyecto`). El reset de
+   fondo/borde es el mismo que ya usa `.sesion` más abajo — un botón de ancho completo, no
+   un enlace, porque no hay navegación de verdad. */
 .proyecto {
   display: block;
+  width: 100%;
+  text-align: left;
   font-size: 12px;
   font-weight: 600;
   letter-spacing: 0.02em;
   text-transform: uppercase;
   color: var(--dsw-alias-label-tertiary);
   padding: 4px 6px;
+  border: none;
+  border-radius: 6px;
+  background: none;
+  font-family: inherit;
+  cursor: pointer;
+}
+
+.proyecto:hover {
+  background: var(--dsw-alias-interactive-bg-hover);
+  color: var(--dsw-alias-label-secondary);
 }
 
 /* Un botón de barra de herramientas, no uno primario: es una acción secundaria dentro de

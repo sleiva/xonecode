@@ -1,4 +1,4 @@
-import { useSyncExternalStore } from "react";
+import { useEffect, useState, useSyncExternalStore } from "react";
 import type { crearStoreDelCliente } from "./store.js";
 import type { Conexion } from "./conexion.js";
 import { Maqueta } from "./componentes/Maqueta.js";
@@ -28,6 +28,32 @@ type Store = ReturnType<typeof crearStoreDelCliente>;
  */
 export function App({ store, enviar }: { store: Store; enviar: Conexion["enviar"] }) {
   const estado = useSyncExternalStore(store.suscribir, store.leer);
+
+  /**
+   * Layer C: abrir un proyecto desde la barra. El servidor reutiliza EL MISMO mensaje que
+   * usaba el paso de proyecto del wizard (`{clase:"alta", paso:"proyecto", proyecto,
+   * rama}`, `vestibulo.ts#completarProyecto`): sin `rama` no abre nada y contesta con las
+   * ramas de ESE proyecto (`estado.alta.ramas`), así que hace falta guardar EN EL
+   * CLIENTE de cuál de los dos clics se trata —el cable no lo dice, solo manda la lista—.
+   * Con una sola rama no se pregunta (mismo criterio que ya usa `cli/consola.ts` cuando
+   * cancelar la elección de rama cae a la primera disponible): se manda sola, sin
+   * `Selector` de por medio. Con más de una, sí.
+   */
+  const [proyectoEligiendoRama, setProyectoEligiendoRama] = useState<string | undefined>(undefined);
+  const ramasPendientes = estado.alta?.ramas ?? [];
+
+  useEffect(() => {
+    if (proyectoEligiendoRama === undefined || ramasPendientes.length !== 1) return;
+    const proyecto = proyectoEligiendoRama;
+    const rama = ramasPendientes[0]!;
+    setProyectoEligiendoRama(undefined);
+    void enviar({ clase: "alta", paso: "proyecto", proyecto, rama });
+    // `ramasPendientes` no es una dependencia estable (`App.tsx` la recalcula en cada
+    // render desde `estado.alta?.ramas ?? []`, un array NUEVO cada vez): comparar por
+    // longitud e indexar [0] es correcto, pero listar el array entero como dependencia
+    // dispararía este efecto en cada render aunque el CONTENIDO no cambiara. Se lista su
+    // longitud y su único valor posible, que sí son estables entre renders sin cambios.
+  }, [proyectoEligiendoRama, ramasPendientes.length, ramasPendientes[0]]);
 
   // El alta es lo ÚNICO que se enseña mientras falte cuenta o entorno — nada de armazón
   // vacío alrededor esperando datos que todavía no llegan (la barra sin entornos, las
@@ -131,10 +157,36 @@ export function App({ store, enviar }: { store: Store; enviar: Conexion["enviar"
     .reverse()
     .find((a) => a.tipo === "fin");
 
+  // El nombre para el título del selector de rama; `undefined` si el proyecto ya no está
+  // en la lista (improbable, pero `Selector` no necesita un título vacío para funcionar).
+  const nombreDelProyectoEligiendoRama = estado.alta?.proyectos.find(
+    (p) => p.id === proyectoEligiendoRama
+  )?.nombre;
+
   return (
     <Maqueta
       centro={
-        proyectoAbierto ? (
+        proyectoEligiendoRama !== undefined && ramasPendientes.length > 1 ? (
+          // Más de una rama: aquí SÍ hace falta preguntar (con una sola, el `useEffect`
+          // de arriba ya la mandó sola y este caso ni se alcanza). Toma el centro
+          // ENTERO, tenga o no proyecto abierto — abrir uno nuevo mientras otro está
+          // abierto es un cambio legítimo (el servidor ya lo soporta, `vestibulo.ts`
+          // cierra el que estuviera abierto antes de abrir el elegido).
+          <Selector
+            titulo={`Elige la rama de ${nombreDelProyectoEligiendoRama ?? "el proyecto"}`}
+            opciones={ramasPendientes.map((r) => ({ id: r, etiqueta: r }))}
+            alElegir={async (rama) => {
+              const proyecto = proyectoEligiendoRama;
+              setProyectoEligiendoRama(undefined);
+              // `rama: undefined` es cancelar (mismo contrato que cualquier otro
+              // `Selector`): no se manda nada, y el proyecto se queda sin abrir hasta
+              // que se vuelva a pulsar en la barra.
+              if (rama !== undefined && proyecto !== undefined) {
+                await enviar({ clase: "alta", paso: "proyecto", proyecto, rama });
+              }
+            }}
+          />
+        ) : proyectoAbierto ? (
           <>
             <Cabecera
               titulo={primerActoDeUsuario?.texto ?? "xonecode"}
@@ -238,6 +290,16 @@ export function App({ store, enviar }: { store: Store; enviar: Conexion["enviar"
           proyectos={(estado.alta?.proyectos ?? []).map((p) => ({ ...p, sesiones: [] }))}
           alElegirEntorno={() => {}}
           alAbrirSesion={() => {}}
+          // Pide la rama del proyecto elegido (`vestibulo.ts#completarProyecto` la
+          // necesita) sin abrir nada todavía: el `useEffect` de arriba decide, en cuanto
+          // `estado.alta.ramas` responda, si la manda sola (una) o pinta el `Selector`
+          // de más arriba (varias). Un segundo clic mientras se espera la respuesta
+          // simplemente reemplaza cuál proyecto se está preguntando — no hay candado
+          // porque no hay nada que envíe dos veces la MISMA cosa.
+          alAbrirProyecto={(proyecto) => {
+            setProyectoEligiendoRama(proyecto);
+            void enviar({ clase: "alta", paso: "proyecto", proyecto });
+          }}
           // Mismo motivo: no hay clase del cable para «abre otra sesión de este
           // proyecto» (`Barra.tsx` documenta por qué el botón se enseña de todos modos).
           alNuevaSesion={() => {}}

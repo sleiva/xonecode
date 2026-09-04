@@ -227,6 +227,15 @@ export interface Vestibulo {
   readonly nombre: string | undefined;
   pasosPendientes(): Promise<PasoDelVestibulo[]>;
   opcionesDeEntorno(): readonly OpcionDeEntorno[];
+  /**
+   * Los entornos YA REGISTRADOS (`settings.json` más lo que este vestíbulo acaba de dar
+   * de alta), no los OFRECIDOS de `opcionesDeEntorno()` — esa es la lista fija de
+   * (WebStudio, Manager, Otro) para el paso de registro del wizard, y no sirve para saber
+   * de qué entorno listar proyectos cuando quien entra ya tiene uno registrado de antes.
+   * `arranque.ts` la usa para poblar la barra al conectar sin que nadie haya elegido
+   * entorno EN esta conexión.
+   */
+  entornosRegistrados(): readonly Entorno[];
   /** El paso 1, que es `asistenteDeModelo` SIN TOCAR con la consola web detrás. */
   pasoDeCuenta(): Promise<void>;
   guardarCredencialDe(proveedor: Proveedor, clave: string): Promise<{ ruta: string }>;
@@ -528,6 +537,7 @@ export function crearVestibulo(opciones: OpcionesDelVestibulo): Vestibulo {
     },
 
     opcionesDeEntorno: () => [...ENTORNOS_OFICIALES, ENTORNO_OTRO],
+    entornosRegistrados: () => [...registrados],
 
     async pasoDeCuenta(): Promise<void> {
       // `cli/wizardInicial.ts` NO se toca: se le pasa la consola web y ya está. Si esto

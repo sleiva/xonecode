@@ -231,6 +231,38 @@ export function montarRutas(
     informar(error instanceof Error ? error.message : String(error));
   };
 
+  /**
+   * Quien entra DIRECTO al Dashboard (las tres condiciones ya cumplidas) se salta el paso
+   * "entorno" del wizard entero, y con él la única línea que hasta ahora rellenaba
+   * `proyectos` (`atenderAlta`, más abajo). Sin esto la barra se quedaba con "Sin
+   * proyectos que enseñar aquí todavía" aunque el entorno estuviera registrado de sobra —
+   * la puerta que se acaba de abrir dejaba al usuario dentro y sin nada que hacer, peor
+   * que el wizard que se quitó. Se resuelve el PRIMERO de `entornosRegistrados()`: la
+   * misma asunción que ya hace `App.tsx` del lado cliente para `entornoActivo`, con el
+   * mismo motivo — no hay señal de «cuál es el activo» cuando hay más de uno registrado.
+   *
+   * `entornoElegido` SOLO se fija si `proyectosDe` sale bien: con un token muerto sin
+   * refresco o la red caída, la siguiente reconexión tiene que poder reintentarlo, no
+   * heredar un «ya se intentó» que se quedó en `proyectos: []` para siempre. Esto puede
+   * abrir el navegador de verdad si el token necesita reautenticar —`conectarCloudStudio`
+   * ya lo hace así—, y es lo correcto: un token vivo no toca el puerto de callback en
+   * absoluto (arreglado en `agent/cloudstudioMcp.ts#abrirCliente`), así que dos conexiones
+   * seguidas no chocan por intentarlo cada una.
+   */
+  const poblarProyectosSiProcede = async (): Promise<void> => {
+    if (vestibulo.proyectoAbierto() !== undefined) return;
+    if (entornoElegido !== undefined) return;
+    const [primero] = vestibulo.entornosRegistrados();
+    if (primero === undefined) return;
+    try {
+      proyectos = await vestibulo.proyectosDe(primero.id);
+      entornoElegido = primero.id;
+    } catch (error) {
+      aviso = error instanceof Error ? error.message : String(error);
+      contar(error);
+    }
+  };
+
   /** Un paso del alta resuelto en el navegador. Cada rama termina volviendo a anunciar. */
   const atenderAlta = async (mensaje: Extract<MensajeDelCliente, { clase: "alta" }>): Promise<void> => {
     // Se limpia al empezar: un aviso viejo pegado a un paso que ya salió bien mentiría.
@@ -321,6 +353,7 @@ export function montarRutas(
     adjuntar();
     void conducirCuenta()
       .catch(contar)
+      .then(() => poblarProyectosSiProcede())
       .finally(() => void anunciarAlta().catch(contar));
 
     peticion.on("close", () => {

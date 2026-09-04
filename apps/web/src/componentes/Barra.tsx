@@ -20,18 +20,21 @@ export interface Proyecto { id: string; nombre: string; sesiones: { id: string; 
  * `entornos`/`proyectos` YA llegan poblados (`App.tsx` los lee de `estado.alta`, que el
  * servidor manda siempre, tenga o no proyecto abierto). Lo que sigue siendo un hueco:
  * `sesiones` de cada proyecto llega vacía siempre —no hay mensaje del cable que las
- * traiga— y no hay manejador para «elige este proyecto y ábrelo» (el nombre del proyecto
- * es hoy texto plano, sin `onClick`): abrir uno pide una rama al servidor
- * (`vestibulo.ts#completarProyecto`) y un selector de ramas en la barra es trabajo
- * aparte, declarado y no hecho todavía (`App.tsx#SinProyectoAbierto` lo explica).
+ * traiga—. Abrir un proyecto (`alAbrirProyecto`) SÍ está cableado: pide la rama al
+ * servidor y, si tiene más de una, `App.tsx` enseña un selector — ver el comentario de
+ * `alAbrirProyecto` ahí para el porqué de la elección con una sola rama.
  */
-export function Barra({ entornos, entornoActivo, proyectos, sesionActiva, alElegirEntorno, alAbrirSesion, alNuevaSesion }: {
+export function Barra({ entornos, entornoActivo, proyectos, sesionActiva, alElegirEntorno, alAbrirSesion, alAbrirProyecto, alNuevaSesion }: {
   entornos: { id: string; nombre: string }[];
   entornoActivo: string;
   proyectos: Proyecto[];
   sesionActiva?: string;
   alElegirEntorno: (id: string) => void;
   alAbrirSesion: (proyecto: string, sesion: string) => void;
+  /** El nombre del proyecto es ahora un botón: pide su rama y lo abre (o lo enseña, si ya
+   *  estaba abierto — el servidor no distingue, `completarProyecto`/`abrirProyecto` corren
+   *  igual). */
+  alAbrirProyecto: (proyecto: string) => void;
   /**
    * Una sesión es reabrible por diseño (`web/servidor/sesiones.ts`), pero crear una
    * NUEVA desde aquí necesitaría una clase del cable que hoy no existe —abrir un
@@ -74,7 +77,13 @@ export function Barra({ entornos, entornoActivo, proyectos, sesionActiva, alEleg
               {proyectos.map((p) => (
                 <li key={p.id}>
                   <div className={estilos.filaProyecto}>
-                    <span className={estilos.proyecto}>{p.nombre}</span>
+                    <button
+                      type="button"
+                      className={estilos.proyecto}
+                      onClick={() => alAbrirProyecto(p.id)}
+                    >
+                      {p.nombre}
+                    </button>
                     <button
                       type="button"
                       className={estilos.nuevaSesion}
