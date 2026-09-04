@@ -1,17 +1,74 @@
 /* NUESTRO, no copiado de deepseek-harness — como `tipografia.css` de esta misma carpeta.
  *
- * El fondo de la pantalla de arranque (`componentes/Splash.tsx`): un color sólido y
- * PROVISIONAL a propósito. El usuario diseñará el splash de verdad para xonecode más
- * adelante, y hasta entonces esto es un placeholder de una sola pieza — por eso vive en
- * SU PROPIA variable, con su propio nombre, y no en la escala `--dsw-alias-*`
- * (`design-platform.css`): esa es la paleta copiada de deepseek-harness, y un splash que
- * se va a rediseñar no tiene por qué heredar de una paleta ajena ni arrastrarla el día
- * que cambie.
+ * El lienzo de la pantalla de arranque (`componentes/Splash.tsx`) y la marca que va
+ * encima de él (`componentes/Marca.tsx`): el diseño de verdad que el usuario hizo para
+ * xonecode, no ya el color sólido provisional que hubo antes de este fichero. Los
+ * valores están MEDIDOS del fichero que entregó (gradiente radial, líneas de la
+ * cuadrícula, los tres colores de marca del símbolo) — no inventados, no aproximados a
+ * un tono de Tailwind parecido.
  *
- * Quien lo rediseñe empieza y termina AQUÍ: cambiar este valor (o el mecanismo entero,
- * si deja de ser un color sólido) no toca `Splash.module.css` ni nada de lo que se pinta
- * encima (`Wizard.tsx`, `Selector.tsx`, `Pregunta.tsx`).
+ * Sigue viviendo en SU PROPIA variable, con su propio nombre, y no en la escala
+ * `--dsw-alias-*` (`design-platform.css`): esa es la paleta copiada de deepseek-harness,
+ * y un lienzo que es una pieza de marca propia no tiene por qué heredar de una paleta
+ * ajena ni arrastrarla el día que cambie. Por el mismo motivo este fichero NO es un
+ * `.module.css`: la disciplina de «solo alias, ningún color literal» de
+ * `componentes/Barra.test.tsx` es sobre lo que se pinta ENCIMA del lienzo, no sobre el
+ * lienzo — que es, él mismo, la excepción declarada.
+ *
+ * Quien retoque el diseño empieza y termina AQUÍ: cambiar un valor de aquí no toca
+ * `Splash.module.css`, `Marca.module.css` ni nada de lo que se pinta encima (`Wizard.tsx`,
+ * `Selector.tsx`, `Pregunta.tsx`, `TarjetaDeAlta.tsx`).
  */
 :root {
-  --xonecode-splash-bg: #151517;
+  /* Gradiente radial del fondo, centro ligeramente por encima de la mitad (50% 45%) —
+     los cuatro colores y paradas son los del fichero del usuario, sin redondear. */
+  --xonecode-splash-lienzo: radial-gradient(
+    circle at 50% 45%,
+    #0a496b 0%,
+    #083b56 35%,
+    #05263a 70%,
+    #031622 100%
+  );
+
+  /* La cuadrícula: dos líneas de 1px blancas al 4% de opacidad, no una capa aparte con
+     `opacity: 0.04` sobre todo el div (así lo hacía el fichero de origen) — aquí la
+     opacidad va DENTRO del color de cada línea, para que la variable sea un
+     `background-image` completo y listo para usar y `Splash.module.css` no tenga que
+     declarar una opacidad de más. Reservada para su propia capa (`.splash::before`,
+     `Splash.module.css`) y no mezclada en el mismo `background` que el lienzo: un único
+     `background-image` con lienzo + cuadrícula desalinea el recuento de capas de
+     `background-size` (medido) — la cuadrícula necesita `48px 48px` y el lienzo ninguno. */
+  --xonecode-splash-cuadricula: linear-gradient(to right, rgba(255, 255, 255, 0.04) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(255, 255, 255, 0.04) 1px, transparent 1px);
+  --xonecode-splash-cuadricula-tamano: 48px 48px;
+
+  /* Los tres colores del símbolo (`Marca.tsx`): el cian y el cielo de los dos trazos del
+     lazo, el naranja del punto central. El diseño del usuario trae un cuarto color de
+     marca (esmeralda, `#10b981`) para el punto «BRIDGE ACTIVE» y una de las pastillas de
+     entorno — ninguno de los dos entra en este producto (ver `Marca.tsx` y el informe de
+     la tarea), así que esmeralda no se declara aquí: una variable sin un solo sitio que
+     la consuma es la mentira contraria, la de un color que promete un uso que no existe. */
+  --xonecode-splash-cian: #00a3e0;
+  --xonecode-splash-cielo: #38bdf8;
+  --xonecode-splash-naranja: #f58220;
+
+  /* El fondo de la placa del símbolo: reutiliza dos paradas YA medidas del propio
+     `--xonecode-splash-lienzo` de arriba (0a496b, 05263a) en vez de los `#0a4d70`/`#062c41`
+     del fichero de origen — son un tono más de azul casi idéntico que solo serviría para
+     una placa, y esta pieza ya tiene bastantes variables de marca sin sumar dos más que
+     nadie vuelve a usar. El borde y el resplandor si son del propio cian de marca, a la
+     opacidad que trae el fichero de origen (`border-cyan-400/40`, `shadow […] rgba(0,
+     163, 224, 0.35)` leído literal de su sombra). */
+  --xonecode-splash-placa-fondo: linear-gradient(to bottom, #0a496b, #05263a);
+  --xonecode-splash-placa-borde: rgba(0, 163, 224, 0.4);
+  --xonecode-splash-placa-resplandor: rgba(0, 163, 224, 0.35);
+
+  /* Texto sobre el lienzo (`Marca.tsx`): no puede fiarse a `--dsw-alias-label-*` —esos
+     alias resuelven a un gris casi negro pensado para el fondo CLARO de la tarjeta, texto
+     invisible sobre un lienzo azul oscuro— y `white`/`transparent` son palabras clave que
+     `Barra.test.tsx` prohíbe en cualquier `.module.css` de `componentes/`. «xone» es
+     blanco sólido; el lema (si lo lleva) usa el mismo `text-cyan-100/75` del fichero de
+     origen — blanco con un ligero tinte cian, al 75% de opacidad, leído tal cual. */
+  --xonecode-splash-texto: #ffffff;
+  --xonecode-splash-texto-suave: rgba(224, 242, 254, 0.75);
 }

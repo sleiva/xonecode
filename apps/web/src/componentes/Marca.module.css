@@ -1,0 +1,82 @@
+/* Colores propios de marca, NUNCA de `--dsw-alias-*`: viven en `apps/web/estilos/splash.css`
+   (`--xonecode-splash-cian`, `-cielo`, `-naranja`, `-texto`, `-texto-suave`, `-placa-*`) y
+   ese fichero explica de dónde salen. Esta hoja solo los consume, como cualquier alias —
+   la única diferencia es la variable de origen, por el mismo motivo que ya documenta
+   `Splash.module.css`: son la excepción de marca declarada, no un color inventado.
+
+   Cabecera del lienzo, no centro de pantalla: `PantallaDeArranque.module.css` la apila
+   ANTES de `.contenido` (que es donde vive la tarjeta), con `flex-shrink: 0` para que un
+   wizard largo empuje solo a `.contenido` y nunca recorte esto. */
+.marca {
+  position: relative;
+  z-index: 1;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 32px 24px 0;
+  box-sizing: border-box;
+}
+
+.fila {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+/* La placa del símbolo: MEDIDA del fichero de origen (fondo, borde y resplandor), sin el
+   anillo exterior rotado ni el halo con `blur` que lo rodeaban ahí — ver el porqué en
+   `Marca.tsx`. Tamaño reducido a propósito: en el diseño de origen esto ocupaba el centro
+   de una pantalla vacía; aquí es una cabecera compacta, del tamaño de un logotipo de
+   navegación, no de una splash a pantalla completa. */
+.placa {
+  width: 40px;
+  height: 40px;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--xonecode-splash-placa-fondo);
+  border: 1px solid var(--xonecode-splash-placa-borde);
+  box-shadow: 0 0 24px var(--xonecode-splash-placa-resplandor);
+}
+
+.simbolo {
+  width: 24px;
+  height: 24px;
+}
+
+.trazoCian {
+  stroke: var(--xonecode-splash-cian);
+}
+
+.trazoCielo {
+  stroke: var(--xonecode-splash-cielo);
+}
+
+.puntoNaranja {
+  fill: var(--xonecode-splash-naranja);
+}
+
+.textoDeMarca {
+  font-size: 20px;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+}
+
+.xone {
+  color: var(--xonecode-splash-texto);
+}
+
+.code {
+  color: var(--xonecode-splash-cian);
+}
+
+.eslogan {
+  margin: 0;
+  font-size: 13px;
+  text-align: center;
+  max-width: 360px;
+  color: var(--xonecode-splash-texto-suave);
+}

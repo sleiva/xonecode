@@ -1,16 +1,34 @@
-/* El fondo de esta pantalla NO es un alias de `design-platform.css`: es
-   `--xonecode-splash-bg`, definida en `apps/web/estilos/splash.css` y no aquí — un color
-   sólido y PROVISIONAL a propósito de un splash que el usuario rediseñará más adelante.
-   Ese fichero explica el porqué; este solo la consume, igual que cualquier alias.
+/* El fondo de esta pantalla NO es un alias de `design-platform.css`: son
+   `--xonecode-splash-lienzo` y `--xonecode-splash-cuadricula`, definidas en
+   `apps/web/estilos/splash.css` y no aquí — el diseño de verdad que el usuario hizo para
+   xonecode. Ese fichero explica el porqué y de dónde salen los valores; este solo las
+   consume, igual que cualquier alias.
 
    Absoluto, `inset: 0`, dentro de un padre relativo (`PantallaDeArranque.module.css`):
    ESTO es lo que hace que sea SOLO fondo — se estira al tamaño del padre, que crece con
    el contenido (min-height, no height, en el padre), así que un wizard largo no deja
-   franja sin pintar por debajo. `z-index: 0` porque `.contenido` (encima) necesita un
-   `z-index` mayor para quedar POR DELANTE, no porque esto necesite apilarse sobre nada. */
+   franja sin pintar por debajo. `z-index: 0` porque `.contenido` de `PantallaDeArranque`
+   (encima) necesita un `z-index` mayor para quedar POR DELANTE, no porque esto necesite
+   apilarse sobre nada. */
 .splash {
   position: absolute;
   inset: 0;
   z-index: 0;
-  background: var(--xonecode-splash-bg);
+  background: var(--xonecode-splash-lienzo);
+}
+
+/* La cuadrícula en su PROPIA capa (`::before`, no el mismo `background` que el lienzo de
+   arriba): MEDIDO, un solo `background-image` con las dos líneas de la cuadrícula MÁS el
+   gradiente del lienzo desalinea `background-size` — la cuadrícula son 2 imágenes que
+   necesitan `48px 48px` y el lienzo es una 3ª que necesita cubrir toda la caja (`auto`),
+   y con solo 2 valores de tamaño para 3 imágenes el navegador los recicla en orden: la
+   cuadrícula vertical se queda sin repetir (una sola raya arriba) y el lienzo sale
+   troceado en mosaicos de 48px. Una capa aparte, del tamaño del padre, no tiene ese
+   problema porque en ella solo viven las 2 imágenes de la cuadrícula. */
+.splash::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background-image: var(--xonecode-splash-cuadricula);
+  background-size: var(--xonecode-splash-cuadricula-tamano);
 }

@@ -1,16 +1,22 @@
-/* Las tres capas del primer arranque: este fichero apila; `Splash.module.css` pinta;
-   el contenido de dentro (`Bienvenida`, `Wizard`, `Selector`, `Pregunta`) es interfaz. */
+/* Las tres capas del primer arranque: este fichero apila; `Splash.module.css` pinta el
+   lienzo; `Marca.module.css` pinta el logotipo, fijo arriba; el contenido de dentro de
+   `.contenido` (`Bienvenida`, `Wizard`, `Selector`, `Pregunta`, dentro de `TarjetaDeAlta`)
+   es interfaz variable, y es lo ÚNICO que crece. */
 
 /* `position: relative` es lo que convierte a `.splash` (absoluto, dentro) en el marco de
    referencia para su `inset: 0` — sin esto se estiraría al primer ancestro posicionado
    de verdad, que podría ser la ventana entera y no esta pantalla. `min-height: 100dvh`,
    no `height`: un wizard largo tiene que poder CRECER el envoltorio (y con él el fondo
-   absoluto, que se estira al tamaño real del padre) en vez de recortarse — la misma
-   razón por la que el `Splash` de antes de dividirse en dos usaba `min-height`. */
+   absoluto, que se estira al tamaño real del padre) en vez de recortarse. `display: flex`
+   con `flex-direction: column` es lo que apila `Marca` (fija, arriba) y `.contenido`
+   (crece, debajo) como dos filas en vez de superponerlas — antes de que existiera
+   `Marca` esto no hacía falta, porque `.contenido` era la única fila. */
 .envoltura {
   position: relative;
   min-height: 100dvh;
   width: 100%;
+  display: flex;
+  flex-direction: column;
 }
 
 /* `box-sizing: border-box`: sin él, `width: 100%` más este `padding` en el `content-box`
@@ -18,12 +24,17 @@
    documento sale más ancho que la ventana — MEDIDO la primera vez que este `padding`
    vivía en `Splash.module.css`. `z-index: 1` es lo único que hace falta para quedar
    DELANTE del fondo absoluto (`.splash`, z-index 0) — no compite por posición, solo por
-   apilamiento, así que `position: relative` basta (no hace falta `absolute` aquí). */
+   apilamiento, así que `position: relative` basta (no hace falta `absolute` aquí).
+   `flex: 1 1 auto` es lo que reparte el alto disponible: con `Marca` como fila fija
+   (`flex-shrink: 0`, `Marca.module.css`) delante, esta es la única fila que crece, así
+   que el centrado (`justify-content: center`) queda en el espacio que la marca deja
+   libre y no en el viewport entero — ya no hace falta `min-height: 100dvh` aquí, la
+   pone `.envoltura`. */
 .contenido {
   position: relative;
   z-index: 1;
   box-sizing: border-box;
-  min-height: 100dvh;
+  flex: 1 1 auto;
   width: 100%;
   display: flex;
   flex-direction: column;

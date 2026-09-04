@@ -1,8 +1,9 @@
 /* Alias comprobados contra `apps/web/estilos/design-platform.css`: border-l2 y
-   bg-layer-1 existen. El texto vive SOBRE el fondo del splash (`--xonecode-splash-bg`,
-   provisional y fuera de la escala de alias — `splash.css` explica el porqué), así que
-   no puede fiarse a ese color: esta tarjeta trae su propio fondo claro, el mismo motivo
-   por el que `Bienvenida` y `Wizard` ya lo hacían antes de fundirse en esta única caja. */
+   bg-layer-1 existen. El texto vive SOBRE el lienzo del splash (`--xonecode-splash-lienzo`,
+   diseño de marca y fuera de la escala de alias — `splash.css` explica el porqué), así
+   que no puede fiarse a ese color: esta tarjeta trae su propio fondo claro, el mismo
+   motivo por el que `Bienvenida` y `Wizard` ya lo hacían antes de fundirse en esta única
+   caja. */
 .tarjeta {
   display: flex;
   flex-direction: column;
