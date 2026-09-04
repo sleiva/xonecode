@@ -161,6 +161,38 @@ describe("vestíbulo", () => {
     await v.cerrar();
   });
 
+  it("el lazo anterior TERMINA antes de que arranque el siguiente, no solo se le pide que acabe", async () => {
+    const s = sesionesEnMemoria();
+    // La costura `correr` registra el orden de inicio y fin de cada lazo. Es lo único que
+    // distingue «se esperó al retorno» de «se pidió el cierre y se siguió»: sin el `await`,
+    // los dos `correrConsola` conviven un rato y comparten el ejecutor real, que es
+    // exactamente lo que «una consola de proyecto a la vez» prohíbe.
+    const traza: string[] = [];
+    const v = crearVestibulo({
+      ...dobles(),
+      origenDeTrabajo: "global",
+      sesiones: s.puerto,
+      correr: async (consola, estado) => {
+        traza.push(`inicio ${estado.raiz}`);
+        for await (const _linea of consola.lineas) {
+          // El lazo real consume líneas hasta el EOF; aquí basta con llegar a él.
+        }
+        // El EOF no devuelve al instante: `correrConsola` puede estar DENTRO de un turno
+        // cuando llega, y no lo mira hasta que ese turno acaba. Sin esta espera el test no
+        // distingue nada — el cierre resuelve la cola en el mismo microtask y el orden sale
+        // bien incluso sin esperar al retorno (medido).
+        await new Promise((r) => setTimeout(r, 5));
+        traza.push(`fin ${estado.raiz}`);
+        return 0;
+      },
+    });
+    await v.abrirProyecto({ raiz: "/w/a" });
+    await v.abrirProyecto({ raiz: "/w/b" });
+    expect(traza).toEqual(["inicio /w/a", "fin /w/a", "inicio /w/b"]);
+    await v.cerrar();
+    expect(traza).toEqual(["inicio /w/a", "fin /w/a", "inicio /w/b", "fin /w/b"]);
+  });
+
   it("cerrar la consola de proyecto ABORTA la sesión real: si no, un turno en vuelo la colgaría", async () => {
     const s = sesionesEnMemoria();
     let cerrada = false;

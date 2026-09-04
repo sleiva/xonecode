@@ -17,6 +17,8 @@ import {
   extraerBanderasDeModelo,
   crearSincronizador,
   crearListaDeRamas,
+  entornoDeUrl,
+  guardarEndpointYEntorno,
   type PiezasDeSincronizacion,
 } from "./main.js";
 import { COMANDOS, MENSAJE_BIENVENIDA } from "./consola.js";
@@ -26,6 +28,7 @@ import { CatalogoModelos } from "../agent/catalogoModelos.js";
 import { temaActivo } from "./tema.js";
 import type { CloudStudioPort } from "../core/ports.js";
 import { cargar } from "../agent/configEnDisco.js";
+import type { Entorno } from "../core/settings.js";
 
 /**
  * La consola real se prueba sin stdin/stdout al estilo del resto del paquete: un
@@ -689,9 +692,16 @@ function raizConProyectoCloudYEntorno(entorno = "webstudio"): string {
  * (`descargar`/`subirProyecto`/`pendientes`), así que nunca llaman a sus métodos de verdad. */
 const PUERTO_OPACO = {} as CloudStudioPort;
 
+/** Los entornos registrados, en memoria: los tests NO leen el `~/.xonecode` de verdad, que
+ *  además haría depender el resultado de lo que tenga registrado quien corre la suite. */
+function settingsFalsos(...entornos: Entorno[]): PiezasDeSincronizacion["leerSettings"] {
+  return () => ({ settings: { entornos }, avisos: [] });
+}
+
 function piezasFalsas(overrides: Partial<PiezasDeSincronizacion> = {}): PiezasDeSincronizacion {
   return {
     leerConfig: overrides.leerConfig ?? cargar,
+    leerSettings: overrides.leerSettings ?? settingsFalsos(),
     sesion: overrides.sesion ?? (async () => ({ invocar: async () => undefined, cerrar: async () => {} })),
     cliente: overrides.cliente ?? (() => PUERTO_OPACO),
     descargar:
@@ -723,13 +733,62 @@ describe("crearSincronizador", () => {
     );
   });
 
-  it("un proyecto de antes de los entornos no inventa uno: cae en «legado», donde ya tenía sus tokens", async () => {
+  it("sin entorno registrado que case la URL, cae en «legado»: es donde ese proyecto tiene sus tokens", async () => {
     const raiz = raizConProyectoCloud();
     const sesion = vi.fn(piezasFalsas().sesion);
     await crearSincronizador(piezasFalsas({ sesion }))("bajar", raiz);
     expect(sesion).toHaveBeenCalledWith(
       "https://mcp.ejemplo.test/mcp",
       expect.objectContaining({ entornoId: undefined })
+    );
+  });
+
+  it("un proyecto SIN «entorno» resuelve el suyo casando la URL: si no, el legado adoptado le queda huérfano", async () => {
+    // El caso real: proyecto dado de alta desde la terminal (no escribe «entorno», así que
+    // sus tokens viven en `legado`) y alguien registra después el oficial en el vestíbulo.
+    // `adoptarLegadoSiProcede` MUEVE ese juego a «webstudio»; sin casar la URL, este
+    // proyecto pediría `legado` —ya vacío— y reautenticaría en silencio.
+    const raiz = raizConProyectoCloud();
+    const sesion = vi.fn(piezasFalsas().sesion);
+    await crearSincronizador(
+      piezasFalsas({
+        sesion,
+        leerSettings: settingsFalsos({ id: "webstudio", nombre: "XOne", url: "https://mcp.ejemplo.test/mcp" }),
+      })
+    )("bajar", raiz);
+    expect(sesion).toHaveBeenCalledWith(
+      "https://mcp.ejemplo.test/mcp",
+      expect.objectContaining({ entornoId: "webstudio" })
+    );
+  });
+
+  it("una barra final de más no es otro servidor", async () => {
+    const raiz = raizConProyectoCloud();
+    const sesion = vi.fn(piezasFalsas().sesion);
+    await crearSincronizador(
+      piezasFalsas({
+        sesion,
+        leerSettings: settingsFalsos({ id: "webstudio", nombre: "XOne", url: "https://mcp.ejemplo.test/mcp/" }),
+      })
+    )("bajar", raiz);
+    expect(sesion).toHaveBeenCalledWith(
+      "https://mcp.ejemplo.test/mcp",
+      expect.objectContaining({ entornoId: undefined })
+    );
+  });
+
+  it("el «entorno» escrito GANA sobre la URL: es lo que el alta eligió a mano", async () => {
+    const raiz = raizConProyectoCloudYEntorno("manager");
+    const sesion = vi.fn(piezasFalsas().sesion);
+    await crearSincronizador(
+      piezasFalsas({
+        sesion,
+        leerSettings: settingsFalsos({ id: "webstudio", nombre: "XOne", url: "https://mcp.ejemplo.test/mcp" }),
+      })
+    )("bajar", raiz);
+    expect(sesion).toHaveBeenCalledWith(
+      "https://mcp.ejemplo.test/mcp",
+      expect.objectContaining({ entornoId: "manager" })
     );
   });
 
@@ -889,7 +948,7 @@ describe("crearListaDeRamas", () => {
   it("sin url guardada (proyecto aún no elegido), no abre sesión y devuelve vacío", async () => {
     const raiz = raizTemporal();
     const sesion = vi.fn(async () => ({ invocar: async () => undefined, cerrar: async () => {} }));
-    const ramas = crearListaDeRamas(raiz, { leerConfig: cargar, sesion, cliente: () => PUERTO_OPACO });
+    const ramas = crearListaDeRamas(raiz, { leerConfig: cargar, leerSettings: settingsFalsos(), sesion, cliente: () => PUERTO_OPACO });
 
     expect(await ramas("Proyecto")).toEqual([]);
     expect(sesion).not.toHaveBeenCalled();
@@ -903,6 +962,7 @@ describe("crearListaDeRamas", () => {
     const puertoFalso = { abrir, ramas: listar } as unknown as CloudStudioPort;
     const ramas = crearListaDeRamas(raiz, {
       leerConfig: cargar,
+      leerSettings: settingsFalsos(),
       sesion: async () => ({ invocar: async () => undefined, cerrar }),
       cliente: () => puertoFalso,
     });
@@ -916,10 +976,55 @@ describe("crearListaDeRamas", () => {
     const raiz = raizConProyectoCloudYEntorno("manager");
     const sesion = vi.fn(async () => ({ invocar: async () => undefined, cerrar: async () => {} }));
     const puertoFalso = { abrir: async () => {}, ramas: async () => ["master"] } as unknown as CloudStudioPort;
-    await crearListaDeRamas(raiz, { leerConfig: cargar, sesion, cliente: () => puertoFalso })("Proyecto");
+    await crearListaDeRamas(raiz, { leerConfig: cargar, leerSettings: settingsFalsos(), sesion, cliente: () => puertoFalso })("Proyecto");
     expect(sesion).toHaveBeenCalledWith(
       "https://mcp.ejemplo.test/mcp",
       expect.objectContaining({ entornoId: "manager" })
     );
+  });
+});
+
+describe("entornoDeUrl", () => {
+  const entornos: Entorno[] = [
+    { id: "webstudio", nombre: "XOne WebStudio", url: "https://mcp.xonewebstudio.com/mcp" },
+    { id: "manager", nombre: "XOne Manager", url: "https://mcp.xonemanager.com/mcp" },
+  ];
+
+  it("casa la URL con el entorno que la sirve", () => {
+    expect(entornoDeUrl("https://mcp.xonemanager.com/mcp", entornos)).toBe("manager");
+  });
+
+  it("una URL que no sirve ningún entorno no inventa uno", () => {
+    expect(entornoDeUrl("https://cloudstudio.cliente.example/mcp", entornos)).toBeUndefined();
+  });
+
+  it("sin entornos registrados, nada que casar", () => {
+    expect(entornoDeUrl("https://mcp.xonewebstudio.com/mcp", [])).toBeUndefined();
+  });
+});
+
+describe("/connect-studio: el endpoint y el entorno se escriben JUNTOS", () => {
+  const entornos: Entorno[] = [
+    { id: "webstudio", nombre: "XOne WebStudio", url: "https://mcp.xonewebstudio.com/mcp" },
+  ];
+  const settings = () => ({ settings: { entornos }, avisos: [] });
+  const leerEntorno = (raiz: string): unknown =>
+    JSON.parse(readFileSync(join(raiz, ".xonecode", "config.json"), "utf8")).entorno;
+
+  it("una URL registrada deja el proyecto apuntando a SU entorno", () => {
+    const raiz = raizTemporal();
+    guardarEndpointYEntorno(raiz, "https://mcp.xonewebstudio.com/mcp", ["mcp.read"], settings);
+    expect(leerEntorno(raiz)).toBe("webstudio");
+  });
+
+  it("cambiar a una URL NO registrada BORRA el entorno viejo: si no, el token iría a otro servidor", () => {
+    const raiz = raizTemporal();
+    guardarEndpointYEntorno(raiz, "https://mcp.xonewebstudio.com/mcp", ["mcp.read"], settings);
+    expect(leerEntorno(raiz)).toBe("webstudio");
+    guardarEndpointYEntorno(raiz, "https://cloudstudio.cliente.example/mcp", ["mcp.read"], settings);
+    expect(leerEntorno(raiz)).toBeUndefined();
+    // Y la URL nueva sí quedó: lo que se borra es la referencia caducada, no el endpoint.
+    const cloudstudio = JSON.parse(readFileSync(join(raiz, ".xonecode", "config.json"), "utf8")).cloudstudio;
+    expect(cloudstudio.url).toBe("https://cloudstudio.cliente.example/mcp");
   });
 });

@@ -222,11 +222,16 @@ export function guardarCloudStudioDeProyecto(
  */
 export function guardarEntornoDeProyecto(
   raiz: string,
-  entorno: string,
-): { ruta: string; entorno: string } {
+  entorno: string | undefined,
+): { ruta: string; entorno: string | undefined } {
   const ruta = rutaConfigDeProyecto(raiz);
   const base = leerObjetoCrudoOAbortar(ruta);
-  const fusionado = { ...base, entorno };
+  // `undefined` BORRA la clave, y esa es la mitad importante: `/connect-studio` puede
+  // reescribir la `url` con la de un servidor que no está registrado en `settings.json`, y
+  // un `entorno` que sobreviviera a ese cambio apuntaría al hueco de credenciales de OTRO
+  // servidor. Mandar el token de un CloudStudio a otro es peor que reautenticar.
+  const { entorno: _viejo, ...sinEntorno } = base;
+  const fusionado = entorno === undefined ? sinEntorno : { ...base, entorno };
   escribirAtomico(ruta, JSON.stringify(fusionado, null, 2) + "\n");
   return { ruta, entorno };
 }

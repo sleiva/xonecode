@@ -18,6 +18,7 @@ import {
   aplicarAuth,
   cargar,
   guardarCloudStudioDeProyecto,
+  guardarEntornoDeProyecto,
   guardarModeloGlobal,
   guardarModelosDeProyecto,
   guardarModoDeProyecto,
@@ -27,6 +28,8 @@ import {
 } from "../agent/configEnDisco.js";
 import { conectarCloudStudio, sesionCloudStudio, PUERTO_CALLBACK } from "../agent/cloudstudioMcp.js";
 import { clienteCloudStudio } from "../agent/cloudstudioClient.js";
+import { cargarSettings } from "../agent/settingsEnDisco.js";
+import type { Entorno } from "../core/settings.js";
 import { descargarProyecto } from "../agent/descarga.js";
 import { arbolLimpio, cambiosPendientes, prepararRepo, ramaDeTrabajo, sinCommitear } from "../agent/gitSync.js";
 import { subir } from "../agent/subida.js";
@@ -504,6 +507,8 @@ export function crearCompleterDelProyecto(raiz: string, escribir: Escribir = esc
  */
 export interface PiezasDeSincronizacion {
   leerConfig: typeof cargar;
+  /** Los entornos registrados, para resolver el `entorno` que al `config.json` le falte. */
+  leerSettings: typeof cargarSettings;
   sesion: typeof sesionCloudStudio;
   cliente: typeof clienteCloudStudio;
   descargar: typeof descargarProyecto;
@@ -516,6 +521,7 @@ export interface PiezasDeSincronizacion {
 
 const PIEZAS_DE_SINCRONIZACION_REALES: PiezasDeSincronizacion = {
   leerConfig: cargar,
+  leerSettings: cargarSettings,
   sesion: sesionCloudStudio,
   cliente: clienteCloudStudio,
   descargar: descargarProyecto,
@@ -527,6 +533,54 @@ const PIEZAS_DE_SINCRONIZACION_REALES: PiezasDeSincronizacion = {
 };
 
 /**
+ * Qué entorno de `settings.json` sirve esta URL.
+ *
+ * Existe porque el `entorno` del `config.json` puede FALTAR o quedarse viejo, y las dos
+ * cosas mandaban el token al hueco equivocado:
+ *
+ *  - Falta en todo proyecto dado de alta desde la terminal, que no elige entorno. Esos
+ *    proyectos viven en `legado` hasta que alguien registra el oficial en el vestíbulo, y
+ *    entonces `adoptarLegadoSiProcede` MUEVE ese juego a `webstudio` y los deja sin tokens:
+ *    reautenticaban en silencio. Casando la URL leen el hueco adoptado y no se enteran.
+ *  - Se queda viejo cuando `/connect-studio` reescribe la `url` del proyecto: sin volver a
+ *    resolver, el `entorno` anterior seguiría nombrando el juego de OTRO servidor.
+ *
+ * La comparación normaliza con `URL` (una barra final de más no es otro servidor) y cae a
+ * la comparación literal si alguna cadena no es una URL parseable.
+ */
+export function entornoDeUrl(url: string, entornos: readonly Entorno[]): string | undefined {
+  const canonica = (valor: string): string => {
+    try {
+      return new URL(valor).toString();
+    } catch {
+      return valor;
+    }
+  };
+  const buscada = canonica(url);
+  return entornos.find((entorno) => canonica(entorno.url) === buscada)?.id;
+}
+
+/**
+ * El adaptador de `/connect-studio`: guarda el endpoint Y vuelve a resolver el `entorno`.
+ *
+ * Las dos escrituras van juntas a propósito. Separarlas es lo que dejaba el `entorno`
+ * caducado apuntando al juego de credenciales de otro servidor — el fallo peor de todo
+ * este arreglo, porque manda un token válido a un endpoint que no lo emitió.
+ */
+export function guardarEndpointYEntorno(
+  raiz: string,
+  url: string,
+  scopes: readonly string[],
+  leerSettings: typeof cargarSettings = cargarSettings,
+): { ruta: string; url: string; scopes: string[] } {
+  const guardado = guardarCloudStudioDeProyecto(raiz, url, scopes);
+  // Sin entorno registrado para esa URL se BORRA la clave: el OAuth de esa URL cae en
+  // `legado`, y decir «webstudio» sería nombrar un juego que no es el suyo.
+  guardarEntornoDeProyecto(raiz, entornoDeUrl(guardado.url, leerSettings().settings.entornos));
+  return guardado;
+}
+
+/**
  * El endpoint de CloudStudio del proyecto YA guardado, o `undefined` si `/sync` no puede
  * seguir: ni «no hay `cloudstudio`» ni «falta el proyecto o la rama» (un `/connect-studio`
  * sin completar el alta) se distinguen hoy — las dos caen en el mismo texto genérico de
@@ -535,6 +589,7 @@ const PIEZAS_DE_SINCRONIZACION_REALES: PiezasDeSincronizacion = {
  */
 function cloudStudioDeProyecto(
   leerConfig: typeof cargar,
+  leerSettings: typeof cargarSettings,
   raiz: string
 ): { url: string; scopes?: string[]; proyecto: { id: string; nombre: string }; rama: string; entorno?: string } | undefined {
   const proyectoConfig = leerConfig(raiz).config.proyecto;
@@ -542,16 +597,16 @@ function cloudStudioDeProyecto(
   if (cloudstudio === undefined) return undefined;
   if (cloudstudio.proyecto === undefined || cloudstudio.rama === undefined) return undefined;
   // `entorno` viaja junto a la URL porque decide de QUÉ juego de credenciales se lee
-  // (`porEntorno[id]`, `agent/cloudstudioMcp.ts`). Ausente —un proyecto de antes de que
-  // hubiera entornos— cae en `legado`, que es exactamente donde ese proyecto ya tenía sus
-  // tokens: no pasarlo era reautenticar en un hueco `legado` nuevo cada vez que la
-  // migración a `webstudio` ya se hubiera hecho.
+  // (`porEntorno[id]`, `agent/cloudstudioMcp.ts`). Si al `config.json` le falta —todo
+  // proyecto dado de alta desde la terminal— se resuelve casando la URL contra los
+  // entornos registrados: ver `entornoDeUrl`. Si tampoco así aparece, `undefined` cae en
+  // `legado`, que es donde ese proyecto tiene sus tokens.
   return {
     url: cloudstudio.url,
     scopes: cloudstudio.scopes,
     proyecto: cloudstudio.proyecto,
     rama: cloudstudio.rama,
-    entorno: proyectoConfig?.entorno,
+    entorno: proyectoConfig?.entorno ?? entornoDeUrl(cloudstudio.url, leerSettings().settings.entornos),
   };
 }
 
@@ -574,7 +629,7 @@ export function crearSincronizador(
   piezas: PiezasDeSincronizacion = PIEZAS_DE_SINCRONIZACION_REALES
 ): NonNullable<Consola["sincronizar"]> {
   return async (accion, raiz, politicaDeAprobacion, informar = () => {}) => {
-    const config = cloudStudioDeProyecto(piezas.leerConfig, raiz);
+    const config = cloudStudioDeProyecto(piezas.leerConfig, piezas.leerSettings, raiz);
     if (config === undefined) {
       return { tipo: "texto", texto: "este proyecto no es cloud (o le falta el proyecto/rama del alta)\n" };
     }
@@ -635,15 +690,18 @@ export function crearSincronizador(
  */
 export function crearListaDeRamas(
   raiz: string,
-  piezas: Pick<PiezasDeSincronizacion, "leerConfig" | "sesion" | "cliente"> = PIEZAS_DE_SINCRONIZACION_REALES
+  piezas: Pick<PiezasDeSincronizacion, "leerConfig" | "leerSettings" | "sesion" | "cliente"> = PIEZAS_DE_SINCRONIZACION_REALES
 ): (proyecto: string) => Promise<string[]> {
   return async (proyectoNombre) => {
     const proyectoConfig = piezas.leerConfig(raiz).config.proyecto;
     const cloudstudio = proyectoConfig?.cloudstudio;
     if (cloudstudio?.url === undefined) return [];
-    // Mismo motivo que en `cloudStudioDeProyecto`: sin el id del entorno, un proyecto ya
-    // migrado a `webstudio` volvería a autenticar bajo `legado`.
-    const sesion = await piezas.sesion(cloudstudio.url, { scopes: cloudstudio.scopes, entornoId: proyectoConfig?.entorno });
+    // Mismo motivo, y misma resolución por URL, que en `cloudStudioDeProyecto`: sin el id
+    // del entorno un proyecto ya migrado a `webstudio` volvería a autenticar bajo `legado`.
+    const sesion = await piezas.sesion(cloudstudio.url, {
+      scopes: cloudstudio.scopes,
+      entornoId: proyectoConfig?.entorno ?? entornoDeUrl(cloudstudio.url, piezas.leerSettings().settings.entornos),
+    });
     try {
       const puerto = piezas.cliente(sesion.invocar, proyectoNombre);
       await puerto.abrir(proyectoNombre);
@@ -686,7 +744,11 @@ export async function entrarEnConsola(
   dependencias: Pick<Consola, "catalogoModelos" | "guardarModeloGlobal" | "conectarCloudStudio"> = {
     catalogoModelos: new CatalogoModelos(),
     guardarModeloGlobal,
-    conectarCloudStudio: (url, scopes, informar) => conectarCloudStudio(url, { informar, scopes }),
+    conectarCloudStudio: (url, scopes, informar) =>
+      // El entorno se resuelve por URL, no se omite: sin esto, un `/connect-studio` sobre
+      // un proyecto del vestíbulo abría OAuth en `legado` —un hueco que `/sync` no lee— y
+      // dejaba al proyecto reautenticando en cada sincronización.
+      conectarCloudStudio(url, { informar, scopes, entornoId: entornoDeUrl(url, cargarSettings().settings.entornos) }),
   }
 ): Promise<number> {
   // La elección de modelo y las credenciales se hidratan ANTES de decidir la piel:
@@ -724,7 +786,7 @@ export async function entrarEnConsola(
       guion,
       ...dependencias,
       guardarTemaDeProyecto: (tema) => guardarTemaDeProyecto(raiz, tema),
-      guardarCloudStudioDeProyecto: (url, scopes) => guardarCloudStudioDeProyecto(raiz, url, scopes),
+      guardarCloudStudioDeProyecto: (url, scopes) => guardarEndpointYEntorno(raiz, url, scopes),
       guardarModoDeProyecto: (modo) => guardarModoDeProyecto(raiz, modo),
       guardarProyectoCloudStudioDeProyecto: (proyecto) => guardarProyectoCloudStudioDeProyecto(raiz, proyecto),
       ramasDeCloudStudio: crearListaDeRamas(raiz),
@@ -972,7 +1034,11 @@ export async function main(argv: string[]): Promise<number> {
         {
           catalogoModelos,
           guardarModeloGlobal,
-          conectarCloudStudio: (url, scopes, informar) => conectarCloudStudio(url, { informar, scopes }),
+          conectarCloudStudio: (url, scopes, informar) =>
+      // El entorno se resuelve por URL, no se omite: sin esto, un `/connect-studio` sobre
+      // un proyecto del vestíbulo abría OAuth en `legado` —un hueco que `/sync` no lee— y
+      // dejaba al proyecto reautenticando en cada sincronización.
+      conectarCloudStudio(url, { informar, scopes, entornoId: entornoDeUrl(url, cargarSettings().settings.entornos) }),
         }
       );
     }
