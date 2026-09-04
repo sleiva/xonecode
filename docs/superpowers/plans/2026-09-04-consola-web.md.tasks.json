@@ -103,8 +103,8 @@
     {
       "id": 11,
       "subject": "Task 11: El cliente se conecta",
-      "status": "pending",
-      "description": "**Goal:** Que el navegador abra el SSE, mantenga el transcript y reconecte solo, con un store sin React probado aparte.\n\n**Files:**\n- Create: `apps/web/src/conexion.ts`\n- Create: `apps/web/src/store.ts`\n- Create: `apps/web/src/tipos.ts`\n- Create: `apps/web/src/store.test.ts`\n- Create: `apps/web/src/conexion.test.ts`\n- Create: `apps/web/src/tipos.test.ts`\n\n**Acceptance Criteria:**\n- [ ] `crearStoreDelCliente()` aplica un `acto` anexándolo y una `reemision` **sustituyendo** el transcript entero\n- [ ] Sustituir y no fusionar es lo que hace idempotente la reconexión: dos reemisiones seguidas dejan el mismo estado\n- [ ] La conexión reintenta con espera creciente (1 s, 2 s, 4 s, tope 30 s) y lo dice en el estado\n- [ ] Mientras está desconectada, el store lo refleja (`conectado: false`) para que la UI pueda deshabilitar el compositor\n- [ ] `enviar()` hace `POST /accion` con `credentials: \"same-origin\"` y `content-type: application/json`\n- [ ] El store no importa React: se prueba sin montar nada\n\n**Verify:** `npx vitest run apps/web/src/store.test.ts apps/web/src/conexion.test.ts` → PASS\n\n```json:metadata\n{\"files\": [\"apps/web/src/conexion.ts\", \"apps/web/src/store.ts\", \"apps/web/src/tipos.ts\", \"apps/web/src/store.test.ts\", \"apps/web/src/conexion.test.ts\", \"apps/web/src/tipos.test.ts\"], \"verifyCommand\": \"npx vitest run apps/web/src/\", \"acceptanceCriteria\": [\"acto anexa, reemisión sustituye\", \"dos reemisiones dejan el mismo estado\", \"reintento creciente con tope 30s\", \"conectado en el estado\", \"store sin React\", \"los tipos de acto no divergen del host\"], \"modelTier\": \"standard\"}\n```",
+      "status": "completed",
+      "description": "**Goal:** Que el navegador abra el SSE, mantenga el transcript y reconecte solo, con un store sin React probado aparte.\n\nComplete — see ledger.",
       "blockedBy": [
         10
       ]
@@ -148,5 +148,5 @@
       ]
     }
   ],
-  "lastUpdated": "2026-09-04T12:20:39.152386+00:00"
+  "lastUpdated": "2026-09-04T12:47:19.504870+00:00"
 }
