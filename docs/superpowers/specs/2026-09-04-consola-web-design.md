@@ -295,8 +295,26 @@ el usuario y un nivel más de jerarquía:
   markdown renderizado, compositor abajo, y la **barra de estado inferior** con lo que ya
   calcula `formatearBarra` más lo que el tracker sabe.
 
-**Un renderizador de markdown es una dependencia nueva del cliente.** Se nombra en el plan
-y se elige ahí; no se inventa uno.
+**El cliente REUTILIZA los primitivos de deepseek-harness** (`@deepseek-ai/dsh-client-ui-primitives`,
+MIT, publicado en npm). Sus propios tipos se declaran **`Cordis-free React primitives styled
+only through --dsw-* tokens`**: funcionan sin su arquitectura de plugins y con los mismos
+tokens que ya copiamos. De ahí salen el markdown (`MarkdownText`), el código (`CodeBlock`),
+el diff de la aprobación (`DiffBlock`), y `Modal`, `RiskConfirmation`, `ConnectionBanner`,
+`Button`, `Pill`, `Input`, `Menu`, `Tooltip`, `StateDot` y `DisclosureRow` donde encajen.
+
+`MarkdownText` es mejor que un `marked` + saneador, y la razón es de fondo: se declara
+renderizador de Markdown **no confiable** y **el HTML crudo se renderiza como texto literal,
+ninguno entra en el DOM** — no hay un paso de saneo al que se le pueda escapar algo, porque
+nunca se construye HTML. Lista blanca de protocolos, imágenes solo por HTTP(S) absoluto,
+KaTeX sin comandos de confianza, y parseo incremental para streaming, que es como llegan
+nuestros tokens.
+
+**`FishLogo` y `BrandWordmark` NO se usan**: son marca de DeepSeek y este producto es XOne.
+
+Lo que **no** se reutiliza: `dsh-client-web` arrastra `client-modules`, `ui-slots` y
+`schema-form`, o sea el andamio Cordis entero; y `dsh-host-webserver` no hace falta porque
+nuestro servidor ya está escrito, revisado y atacado. **Coste medido** de lo que sí: 107
+paquetes, 37 MB, casi todo shiki y katex.
 
 ---
 

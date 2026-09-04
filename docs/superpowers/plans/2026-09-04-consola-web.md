@@ -2214,6 +2214,13 @@ git commit -m "feat(web): la maqueta — barra derecha de entorno/proyecto/sesi�
 
 **Goal:** Las dos vistas del transcript —Chat con markdown y Trayectoria técnica— y la barra de estado inferior, con la Trayectoria **sin argumentos de tool**.
 
+> **Nota de ejecución.** Esta tarea se despachó con `marked` + `dompurify`, y a mitad el
+> usuario pidió reutilizar el harness de deepseek, que es open source. El cuerpo de abajo
+> queda como quedó; **la conversión a `MarkdownText` de
+> `@deepseek-ai/dsh-client-ui-primitives` es la Task 13b**, inmediatamente posterior. El
+> motivo está en el spec: el HTML crudo sale como texto literal y ninguno entra en el DOM,
+> así que la propiedad de seguridad se obtiene por construcción y no por filtrado.
+
 **Files:**
 - Create: `apps/web/src/componentes/Chat.tsx` + `Chat.module.css`
 - Create: `apps/web/src/componentes/Trayectoria.tsx` + `Trayectoria.module.css`
