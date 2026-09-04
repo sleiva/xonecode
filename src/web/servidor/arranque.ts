@@ -125,8 +125,23 @@ export function montarRutas(
    * El paso de cuenta ya conducido en ESTE proceso. Hace falta porque `origenDeTrabajo` se
    * congela al construir el vestíbulo: `pasosPendientes()` seguiría diciendo «cuenta»
    * después de haberla dado, y el wizard volvería a pedirla en cada reconexión.
+   *
+   * Se marca cuando `pasoDeCuenta()` TERMINA, no cuando se lanza — medido: marcarlo antes
+   * de esperar significaba que recargar a mitad del selector (o de teclear la clave) daba
+   * por «hecho» un paso que en realidad ni se había contestado ni se iba a volver a
+   * ofrecer, y el usuario se quedaba con el modelo por omisión sin que nada se lo dijera.
    */
   let cuentaHecha = false;
+  /**
+   * El propio `pasoDeCuenta()` en vuelo, compartido entre conexiones. Sin esto, dos
+   * conexiones solapadas (dos pestañas, o la reconexión que llega antes de que la vieja
+   * se haya desenganchado del todo) verían las dos `cuentaHecha` en `false` y llamarían
+   * a `pasoDeCuenta()` cada una la suya — dos `asistenteDeModelo` a la vez apilando DOS
+   * resolutores en la MISMA cola FIFO de `consolaWeb.ts#seleccionar`, de forma que la
+   * respuesta de una pestaña resolvería la pregunta de la OTRA. Una sola llamada real,
+   * y la segunda conexión se limita a esperar la que ya está en marcha.
+   */
+  let cuentaEnCurso: Promise<void> | undefined;
   /**
    * Lo que falló en el último paso del alta. Viaja en el propio mensaje del alta porque el
    * fallo pertenece al paso que lo produjo: el acto de sistema que `informar` deja aterriza
@@ -191,8 +206,18 @@ export function montarRutas(
   const conducirCuenta = async (): Promise<void> => {
     const pendientes = await vestibulo.pasosPendientes();
     if (!pendientes.includes("cuenta") || cuentaHecha || vestibulo.proyectoAbierto() !== undefined) return;
-    cuentaHecha = true;
-    await vestibulo.pasoDeCuenta();
+    if (cuentaEnCurso === undefined) {
+      cuentaEnCurso = vestibulo.pasoDeCuenta().finally(() => {
+        cuentaEnCurso = undefined;
+        // «Hecho» solo si al terminar seguía habiendo alguien conectado. Si terminó
+        // porque `desconectar()` canceló la elección en curso (`consolaWeb.ts:178`,
+        // sin cliente todo lo pendiente responde como un readline cerrado), no lo
+        // decidió ningún humano — fue el silencio — y la SIGUIENTE conexión tiene que
+        // poder intentarlo de verdad, no heredar un «ya se preguntó» que nadie contestó.
+        if (!(vestibulo.consola.consola.eof?.() ?? false)) cuentaHecha = true;
+      });
+    }
+    await cuentaEnCurso;
   };
 
   const contar = (error: unknown): void => {
@@ -372,6 +397,16 @@ export interface OpcionesDeArranque {
  * (falta el build del cliente → 70, fallo del entorno y no del proyecto), y después lo que
  * solo hay que DECIR (un proyecto offline en el cwd). Lo segundo informa y sigue, porque no
  * es un error: quien abrió aquí un proyecto offline puede querer la web para otro.
+ *
+ * **`--guion` sobre un proyecto offline lo abre solo, sin pasar por el alta.** Es la única
+ * vía para ver la maqueta completa —barra con datos, transcript, compositor— sin
+ * credenciales de CloudStudio: el alta de la web solo sabe de entornos y proyectos
+ * REMOTOS (`vestibulo.ts`), así que un proyecto offline nunca llega a `proyectoAbierto()`
+ * por ese camino, con o sin `--guion`. `vestibulo.abrirProyecto` (`vestibulo.ts#abrirDeVerdad`)
+ * no toca red —es local, el mismo turno que corre `--cli`—, así que abrirlo aquí no es un
+ * doble de nada: es la operación real, disparada por una bandera que ya existe y ya
+ * significa «sin gastar ni conectar». Sin `--guion` esto NO se abre solo —sería magia, no
+ * un modo declarado—, y el aviso de abajo sigue mandando a `--cli`.
  */
 export async function arrancarConsolaWeb(opciones: OpcionesDeArranque): Promise<number> {
   const escribir = opciones.escribir ?? ((texto: string) => void process.stdout.write(texto));
@@ -382,7 +417,8 @@ export async function arrancarConsolaWeb(opciones: OpcionesDeArranque): Promise<
     return 70; // EX_SOFTWARE: falta una pieza del entorno, el proyecto no tiene la culpa
   }
 
-  if (esProyectoOffline(opciones.cwd)) {
+  const offline = esProyectoOffline(opciones.cwd);
+  if (offline && opciones.guion !== true) {
     escribir("este directorio es un proyecto offline: ábrelo con «xonecode --cli»\n");
   }
 
@@ -409,6 +445,23 @@ export async function arrancarConsolaWeb(opciones: OpcionesDeArranque): Promise<
   };
 
   vestibulo = opciones.vestibulo ?? vestibuloReal(opciones, servidor, escribir, informar);
+
+  if (offline && opciones.guion === true) {
+    const abierto = await vestibulo.abrirProyecto({ raiz: opciones.cwd });
+    // Por los DOS sitios, como el resto de `informar` un poco más abajo: el terminal
+    // (quien lanzó el proceso) Y el transcript del proyecto (la Trayectoria, que es
+    // donde aterriza un acto de sistema — `anunciarAlta` más arriba documenta el mismo
+    // reparto). Es la evidencia de que esto es de pega, por el mismo motivo por el que
+    // la marca de doble (`core/ports.ts#ES_DOBLE`) es un símbolo que no se puede omitir
+    // por descuido: un aviso que solo viviera en un sitio que nadie mira no avisa nada.
+    const aviso =
+      "proyecto offline abierto solo, por --guion: el agente que responde es de pega " +
+      "(`ejecutarTurnoGuionizado`) y no hubo CloudStudio de por medio — nadie eligió " +
+      "este proyecto en un alta.";
+    escribir(`${aviso}\n`);
+    abierto.consola.consola.escribir(`${aviso}\n`);
+  }
+
   montarRutas(servidor, vestibulo, { informar });
 
   escribir(`consola web en ${servidor.url}\n`);

@@ -131,6 +131,8 @@ const AYUDA = `xonecode — harness de XOne
   xonecode doctor                ¿hay un proyecto aquí? ¿responde el simulador?
   xonecode verify [ruta]         valida el proyecto con xone-simulator (por omisión, aquí)
   xonecode --guion               la consola con el agente de pega, sin gastar
+  xonecode --guion --web         lo mismo, y si el cwd es un proyecto offline lo abre
+                                  solo: la maqueta completa sin alta ni CloudStudio
   xonecode --web                 fuerza la web aunque no haya terminal interactivo
   xonecode --cli --tui           fuerza la interfaz de terminal (TUI)
   xonecode --cli --sin-raton     TUI sin capturar el ratón (la rueda vuelve al terminal)

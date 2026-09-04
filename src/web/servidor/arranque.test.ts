@@ -379,6 +379,63 @@ describe("montarRutas — el cable, por fin conectado", () => {
     cliente.cerrar();
     expect(vestibulo.consola.consola.eof!()).toBe(true);
   });
+
+  /**
+   * `cuentaHecha` (`arranque.ts`) se marcaba ANTES de esperar `pasoDeCuenta()`: recargar a
+   * mitad del selector de proveedor —nadie contesta, el SSE se cae— dejaba el paso «hecho»
+   * para el resto del proceso sin que ningún humano hubiera elegido nada, y la siguiente
+   * conexión saltaba derecho al alta de entorno. `origenDeTrabajo: "omision"` es lo que
+   * hace que `pasosPendientes()` incluya «cuenta» de verdad (`vestibuloDePrueba` usa
+   * `"global"` en el resto de tests para no conducirla).
+   */
+  describe("conducirCuenta — lo que nadie contestó no cuenta como hecho", () => {
+    it("una conexión que se cae a mitad del selector no le cuesta el paso a la siguiente", async () => {
+      const servidor = servidorDeMentira();
+      montarRutas(servidor, vestibuloDePrueba({ origenDeTrabajo: "omision" }));
+      const eventos = servidor.rutas.get(`GET ${RUTA_EVENTOS}`)!;
+
+      const primera = clienteDeMentira();
+      await eventos(primera.peticion, primera.respuesta);
+      await asentar();
+      // El selector de «Proveedor de modelos» llegó y se quedó sin contestar.
+      expect(primera.recibidos.map((m) => m.clase)).toContain("selector");
+
+      primera.cerrar();
+      await asentar();
+
+      const segunda = clienteDeMentira();
+      await eventos(segunda.peticion, segunda.respuesta);
+      await asentar();
+
+      // Sin el arreglo, `cuentaHecha` ya llevaba en `true` desde que arrancó la primera
+      // conexión, y esto habría sido un `alta` con «entorno» de primeras y NINGÚN
+      // selector — el paso de cuenta, saltado en silencio.
+      expect(segunda.recibidos.map((m) => m.clase)).toContain("selector");
+      expect(segunda.recibidos.some((m) => m.clase === "alta")).toBe(false);
+    });
+
+    it("dos conexiones solapadas comparten el MISMO paso en curso: no hay dos selectores en vuelo", async () => {
+      // Dos pestañas, o una reconexión que adelanta al cierre de la vieja: las dos
+      // llegan con `cuentaHecha` todavía en `false`. Sin compartir la llamada, cada una
+      // lanzaría su propio `asistenteDeModelo`, y las dos apilarían un resolutor en la
+      // MISMA cola FIFO de `consolaWeb.ts#seleccionar` — la respuesta de una pestaña
+      // resolviendo la pregunta de la otra.
+      const servidor = servidorDeMentira();
+      montarRutas(servidor, vestibuloDePrueba({ origenDeTrabajo: "omision" }));
+      const eventos = servidor.rutas.get(`GET ${RUTA_EVENTOS}`)!;
+
+      const uno = clienteDeMentira();
+      await eventos(uno.peticion, uno.respuesta);
+      await asentar(); // el selector de `uno` ya salió y sigue sin contestar
+
+      const dos = clienteDeMentira();
+      await eventos(dos.peticion, dos.respuesta);
+      await asentar();
+
+      expect(uno.recibidos.filter((m) => m.clase === "selector")).toHaveLength(1);
+      expect(dos.recibidos.filter((m) => m.clase === "selector")).toHaveLength(0);
+    });
+  });
 });
 
 describe("arrancarConsolaWeb — las comprobaciones, en orden", () => {
@@ -425,6 +482,55 @@ describe("arrancarConsolaWeb — las comprobaciones, en orden", () => {
     expect(salida.join("")).toContain("xonecode --cli");
     // Y sigue: la URL se imprime igual.
     expect(salida.join("")).toContain("consola web en http://127.0.0.1:4173/?t=");
+  });
+
+  /**
+   * La vía legítima para ver la maqueta completa sin CloudStudio: el alta de la web solo
+   * sabe de entornos y proyectos remotos (`vestibulo.ts`), así que un proyecto offline
+   * nunca llega a `proyectoAbierto()` por ESE camino — con o sin `--guion`. Lo que
+   * `--guion` añade aquí es abrirlo DIRECTAMENTE (`vestibulo.abrirProyecto`, que no toca
+   * red: es local, el mismo turno que corre `--cli`), saltándose el alta entera.
+   */
+  it("con --guion, un proyecto offline en el cwd se abre solo: la maqueta completa, sin alta", async () => {
+    const cwd = mkdtempSync(join(tmpdir(), "xonecode-cwd-"));
+    mkdirSync(join(cwd, ".xonecode"));
+    writeFileSync(join(cwd, ".xonecode", "config.json"), JSON.stringify({ modo: "offline" }));
+    const vestibulo = vestibuloDePrueba();
+    const salida: string[] = [];
+    // Lo que hay que mirar vive ENTRE que el proyecto se abre y `vestibulo.cerrar()` lo
+    // vuelve a cerrar al final de `arrancarConsolaWeb` — y eso pasa justo cuando
+    // `esperarCierre` resuelve. Un `esperarCierre` que solo esperase (como en el test de
+    // arriba) miraría el vestíbulo YA cerrado.
+    let abiertoDurante: ReturnType<typeof vestibulo.proyectoAbierto>;
+    const codigo = await arrancarConsolaWeb({
+      puerto: 0,
+      abrir: false,
+      guion: true,
+      cwd,
+      raizDelCliente: conBuild(),
+      crearServidor: async () => servidorLevantado(),
+      vestibulo,
+      escribir: (t) => salida.push(t),
+      esperarCierre: async () => {
+        abiertoDurante = vestibulo.proyectoAbierto();
+      },
+    });
+    expect(codigo).toBe(0);
+    // Con --guion no hace falta el aviso de siempre: no hay que abrirlo con `--cli`
+    // porque ya se abrió aquí.
+    expect(salida.join("")).not.toContain("xonecode --cli");
+    expect(abiertoDurante).toBeDefined();
+    expect(abiertoDurante!.raiz).toBe(cwd);
+    // La evidencia de que es de pega, por los DOS sitios: el terminal (quien lanzó el
+    // proceso) y el transcript del proyecto (la Trayectoria, que es adonde aterriza un
+    // acto de sistema) — es lo primero que vería quien entrara por el navegador sin
+    // haber leído nunca la consola del proceso.
+    expect(salida.join("")).toContain("de pega");
+    expect(
+      abiertoDurante!.consola
+        .actos()
+        .some((a) => a.tipo === "sistema" && a.texto.includes("de pega"))
+    ).toBe(true);
   });
 
   it("con --no-abrir no se toca el navegador; con abrir, un fallo al abrirlo no tumba nada", async () => {
