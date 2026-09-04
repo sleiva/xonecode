@@ -160,6 +160,18 @@ export function crearConsolaWeb(opciones: OpcionesDeConsolaWeb = {}): ConsolaWeb
       },
     },
 
+    /**
+     * Sin cliente no hay humano, y decirlo aquí NO es redundante con `aprobacionesTui`.
+     * `pedirDecisiones` calcula lo interactivo como `interactive && !eof()`, o sea que
+     * «ausente» significa «hay alguien» — la dirección insegura. Y esta piel es la única
+     * que cumple las DOS precondiciones de la fuga que arregló `crearDetectorDeEof`:
+     * `interactivo: true` y un `preguntar` que devuelve cadena vacía al desconectarse, que
+     * con TTY aprueba. Hoy no llega ahí porque `main.ts` prefiere `aprobacionesTui` cuando
+     * existe; eso es dónde cae un `if`, no un diseño, y otra tarea puede moverlo sin
+     * enterarse. Esto es la red debajo.
+     */
+    eof: () => !transporte.conectado(),
+
     escribir: (texto) => {
       // El guard cubre whitespace, no solo la cadena vacía: un `escribir("\n")` (la forma
       // de «línea sin contenido») partía en un acto sistema vacío — medido en la TUI.

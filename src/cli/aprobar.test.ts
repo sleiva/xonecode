@@ -203,7 +203,7 @@ describe("pedirDecisiones", () => {
       expect(d.get("x")?.type).toBe("reject");
     });
 
-    it("sin `eof`, nada cambia: los 21 llamadores que no lo pasan siguen igual", async () => {
+    it("sin `eof`, el comportamiento de siempre no cambia", async () => {
       const { escribir } = acumulador();
       const { preguntar } = preguntadorGuionizado([""]);
 

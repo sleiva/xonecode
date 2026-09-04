@@ -221,6 +221,21 @@ describe("consolaWeb: sin cliente, las preguntas contestan lo que un rl cerrado"
     expect(await c.consola.seleccionar!({ titulo: "modo", opciones: [{ id: "cloud", etiqueta: "Cloud" }] })).toBe(undefined);
   });
 
+  /**
+   * `pedirDecisiones` hace `interactive && !eof()`: sin `eof` definido, «no se sabe» vale
+   * por «hay humano», que es la dirección insegura. Y esta piel cumple las dos
+   * precondiciones de la fuga —`interactivo: true` y `preguntar` devolviendo `""` al
+   * desconectarse—, así que declararlo es lo que la deja fail-closed por diseño y no por
+   * el sitio donde caiga el `if` de `main.ts`.
+   */
+  it("con el cliente caído, `eof()` dice que sí: la red de seguridad debajo de aprobacionesTui", () => {
+    const c = crearConsolaWeb();
+    c.conectar();
+    expect(c.consola.eof!()).toBe(false);
+    c.desconectar();
+    expect(c.consola.eof!()).toBe(true);
+  });
+
   it("desconectarse MIENTRAS se pregunta contesta cadena vacía en vez de colgarse", async () => {
     const c = crearConsolaWeb();
     c.conectar();
