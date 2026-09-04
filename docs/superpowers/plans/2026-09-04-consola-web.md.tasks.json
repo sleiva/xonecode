@@ -64,8 +64,8 @@
     {
       "id": 7,
       "subject": "Task 7: `consolaWeb` y el transporte (SSE + POST), con la aprobación fail-closed",
-      "status": "pending",
-      "description": "**Goal:** Una implementación de `Consola` alimentada por el navegador, con SSE para servidor→cliente y `POST /accion` para cliente→servidor, y una aprobación que **rechaza por transporte**.\n\n**Files:**\n- Create: `src/web/servidor/transporte.ts`\n- Create: `src/web/servidor/consolaWeb.ts`\n- Create: `src/web/servidor/consolaWeb.test.ts`\n\n**Acceptance Criteria:**\n- [ ] `consolaWeb` implementa `Consola`: `lineas`, `escribir`, `preguntar`, `leerSecreto`, `interactivo: true`, `seleccionar`, `piel`, `aprobacionesTui`, `catalogoModelos`, `guardarModeloGlobal`\n- [ ] `lineas` es una cola asíncrona: cada prosa que llega por `POST /accion` sale por el iterador\n- [ ] Cerrar la sesión agota `lineas` (EOF), y el lazo de `correrConsola` **retorna**; no cuelga\n- [ ] Una reconexión del SSE **reemite todos los actos** desde el principio, sin duplicarlos en el servidor\n- [ ] La aprobación con el cliente desconectado devuelve **rechazo** para todos los pendientes\n- [ ] La aprobación que expira (timeout) devuelve **rechazo**\n- [ ] Solo una decisión explícita `\"si\"` aprueba; cualquier otra cosa, y la ausencia, es rechazo\n- [ ] El **diff viaja solo** en el mensaje de aprobación y no aparece en ningún acto ni en el SSE de eventos\n- [ ] `leerSecreto` no deja el secreto en ningún acto, ningún log ni ningún evento\n\n**Verify:** `npx vitest run src/web/servidor/consolaWeb.test.ts` → PASS\n\n```json:metadata\n{\"files\": [\"src/web/servidor/transporte.ts\", \"src/web/servidor/consolaWeb.ts\", \"src/web/servidor/consolaWeb.test.ts\"], \"verifyCommand\": \"npx vitest run src/web/servidor/consolaWeb.test.ts && npm run typecheck\", \"acceptanceCriteria\": [\"Consola completa\", \"lineas como cola con EOF\", \"reconexión reemite sin duplicar\", \"desconexión/timeout/decisión ilegible = rechazo\", \"solo «si» aprueba\", \"el diff solo en el mensaje de aprobación\", \"el secreto no queda en actos ni eventos\"], \"modelTier\": \"frontier\"}\n```",
+      "status": "completed",
+      "description": "**Goal:** Una implementación de `Consola` alimentada por el navegador, con SSE para servidor→cliente y `POST /accion` para cliente→servidor, y una aprobación que **rechaza por transporte**.\n\nComplete — see ledger.",
       "blockedBy": [
         6
       ]
@@ -148,5 +148,5 @@
       ]
     }
   ],
-  "lastUpdated": "2026-09-04T09:33:02.076483+00:00"
+  "lastUpdated": "2026-09-04T10:50:20.125583+00:00"
 }
