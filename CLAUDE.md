@@ -28,15 +28,22 @@ npm run build                          # rm -rf dist && tsc -p tsconfig.build.js
 ./bin/xonecode …                       # lanzador de DESARROLLO: tsx sobre src/, preserva el cwd
 ```
 
-No hay `vitest.config`: se usan los valores por omisión y los tests son **colocados**
-(`src/**/*.test.ts`, junto al módulo que prueban). `tsconfig.build.json` los excluye, igual
-que `src/core/__oro__/` (ficheros de oro: salida real de `xone-simulator --json`).
+Los tests son **colocados** (`src/**/*.test.ts`, junto al módulo que prueban).
+`tsconfig.build.json` los excluye, igual que `src/core/__oro__/` (ficheros de oro: salida real
+de `xone-simulator --json`).
 
-**Consecuencia medida de no tener `vitest.config`**: el `include` por omisión barre TODO el
-repo, y `.worktrees/` (ignorado por git desde `ddf2948`, pero presente en disco) no está en el
-`exclude` por omisión. Con un worktree viejo ahí, `npm test` corrió 128 ficheros en vez de 66 y
-dio 2 fallos que no son de este código. Mientras no haya config:
-`npx vitest run --exclude '**/.worktrees/**'`.
+**`vitest.config.ts` existe por dos razones, no una.** Hasta que el cliente web lo exigió, los
+valores por omisión bastaban — pero tenían un coste medido: el `include` por omisión barre TODO
+el repo, y `.worktrees/` (ignorado por git desde `ddf2948`, pero presente en disco) no está en
+el `exclude` por omisión. Con un worktree viejo ahí, `npm test` corrió 128 ficheros en vez de 66
+y dio 2 fallos que no son de este código. La config resuelve las dos cosas con `test.projects`:
+el proyecto `host` acota `include` a `src/**` (un worktree bajo `.worktrees/<x>/src/` ya no
+casa, y además está en su `exclude`) y corre en `environment: "node"`; el proyecto `cliente`
+acota a `apps/web/**` y corre en `jsdom`, porque ahí sí hay DOM que probar.
+`environmentMatchGlobs` no existe en vitest 4 (comprobado contra `vitest@4.1.11`: cero
+apariciones en sus `.d.ts`) — `test.projects` es el único mecanismo real para elegir
+`environment` por ruta. El remedio manual, `npx vitest run --exclude '**/.worktrees/**'`, ya no
+hace falta: `npm test` sin banderas excluye `.worktrees/` solo.
 
 **`npm test` no puede necesitar una clave, una conexión ni el simulador.** Es el invariante que
 sostiene todo el diseño de puertos: si un cambio lo rompe, está mal el cambio, no el test.
