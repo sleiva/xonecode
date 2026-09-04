@@ -253,7 +253,7 @@ describe("consolaWeb: sin cliente, las preguntas contestan lo que un rl cerrado"
  * navegador: el compositor manda todo como `{clase:"prosa"}`, que entra por la cola de
  * líneas y no resuelve una pregunta ni acertando el texto.
  */
-describe("consolaWeb: la pregunta de texto libre ni cuelga ni se queda sin respuesta", () => {
+describe("consolaWeb: nada que espere a un humano cuelga ni se queda sin respuesta", () => {
   it("una `respuesta` del navegador la resuelve: la prosa NO, porque va a la cola de líneas", async () => {
     const c = crearConsolaWeb({ msDeEspera: 60_000 });
     c.conectar();
@@ -281,6 +281,53 @@ describe("consolaWeb: la pregunta de texto libre ni cuelga ni se queda sin respu
     const segunda = c.consola.preguntar("segunda ");
     c.recibir({ clase: "respuesta", texto: "la buena" });
     expect(await segunda).toBe("la buena");
+  });
+
+  /**
+   * `leerSecreto` y `seleccionar` eran el mismo hueco, y NO son hipotéticos: `/modelos`
+   * (`cli/consola.ts:546`), `/themes` (`:630`) y `/provider <x>` (`:1025`) llegan a los dos
+   * desde el compositor, y los tres están en el registro `COMANDOS` que este mismo servidor
+   * manda por el cable para que el compositor los sugiera. `interactivo: true` significa
+   * además que ninguna guarda de TTY los frena. Medido antes del arreglo: con cliente
+   * conectado seguían colgados pasados los 300 ms.
+   */
+  it("leerSecreto también vence, y responde lo mismo que al desconectarse", async () => {
+    const c = crearConsolaWeb({ msDeEspera: 10 });
+    c.conectar();
+    expect(await c.consola.leerSecreto("clave de anthropic: ")).toBe("");
+  });
+
+  it("seleccionar también vence, y vencer es CANCELAR", async () => {
+    const c = crearConsolaWeb({ msDeEspera: 10 });
+    c.conectar();
+    const elegido = await c.consola.seleccionar!({
+      titulo: "modelo",
+      opciones: [{ id: "claude-x", etiqueta: "Claude X" }],
+    });
+    expect(elegido).toBe(undefined);
+  });
+
+  it("el secreto y la selección vencidos salen de SU cola, sin comerse la respuesta siguiente", async () => {
+    const c = crearConsolaWeb({ msDeEspera: 20 });
+    c.conectar();
+    expect(await c.consola.leerSecreto("primera clave: ")).toBe("");
+    const segundaClave = c.consola.leerSecreto("segunda clave: ");
+    c.recibir({ clase: "secreto", valor: "la buena" });
+    expect(await segundaClave).toBe("la buena");
+
+    const selector = { titulo: "modelo", opciones: [{ id: "a", etiqueta: "A" }] };
+    expect(await c.consola.seleccionar!(selector)).toBe(undefined);
+    const segundaEleccion = c.consola.seleccionar!(selector);
+    c.recibir({ clase: "eleccion", id: "a" });
+    expect(await segundaEleccion).toBe("a");
+  });
+
+  it("un secreto vencido no deja rastro: ni en actos ni en la traza de emisión", async () => {
+    const c = crearConsolaWeb({ msDeEspera: 10 });
+    c.conectar();
+    await c.consola.leerSecreto("clave: ");
+    expect(JSON.stringify(c.actos())).toContain("clave: ");
+    expect(JSON.stringify(c.eventosEmitidos())).not.toContain("sk-");
   });
 
   it("contestar a tiempo desarma el plazo: la respuesta gana, no la cadena vacía", async () => {

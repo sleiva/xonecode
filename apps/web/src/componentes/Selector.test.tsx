@@ -1,0 +1,50 @@
+import { render, screen, fireEvent, cleanup, waitFor } from "@testing-library/react";
+import { describe, it, expect, vi, afterEach } from "vitest";
+import { Selector } from "./Selector.js";
+
+afterEach(cleanup);
+
+const OPCIONES = [
+  { id: "claude-x", etiqueta: "Claude X", detalle: "anthropic" },
+  { id: "llama", etiqueta: "Llama 3" },
+];
+
+describe("Selector", () => {
+  it("pinta el título y una opción por cada una: es lo que manda `seleccionar`", () => {
+    render(<Selector titulo="Elige modelo" opciones={OPCIONES} alElegir={() => {}} />);
+    expect(screen.getByRole("group", { name: /elige modelo/i })).toBeTruthy();
+    expect(screen.getAllByRole("button")).toHaveLength(2);
+    expect(screen.getByText("anthropic")).toBeTruthy();
+  });
+
+  it("elegir manda el ID, no la etiqueta: es lo que el servidor sabe casar", () => {
+    const alElegir = vi.fn();
+    render(<Selector titulo="Elige modelo" opciones={OPCIONES} alElegir={alElegir} />);
+    fireEvent.click(screen.getByRole("button", { name: /claude x/i }));
+    expect(alElegir).toHaveBeenCalledWith("claude-x");
+  });
+
+  it("si el envío falla lo DICE y se puede reintentar", async () => {
+    const alElegir = vi.fn(() => Promise.reject(new Error("sin red")));
+    render(<Selector titulo="Elige modelo" opciones={OPCIONES} alElegir={alElegir} />);
+    fireEvent.click(screen.getByRole("button", { name: /claude x/i }));
+    await waitFor(() => expect(screen.getByRole("alert").textContent).toMatch(/no llegó/i));
+    fireEvent.click(screen.getByRole("button", { name: /llama/i }));
+    expect(alElegir).toHaveBeenCalledTimes(2);
+  });
+
+  it("dos elecciones en vuelo no: sacarían DOS resolutores de la cola FIFO del servidor", () => {
+    let resolver: () => void = () => {};
+    const alElegir = vi.fn(() => new Promise<void>((r) => { resolver = r; }));
+    render(<Selector titulo="Elige modelo" opciones={OPCIONES} alElegir={alElegir} />);
+    fireEvent.click(screen.getByRole("button", { name: /claude x/i }));
+    fireEvent.click(screen.getByRole("button", { name: /llama/i }));
+    expect(alElegir).toHaveBeenCalledTimes(1);
+    resolver();
+  });
+
+  it("una opción sin detalle no inventa uno", () => {
+    render(<Selector titulo="Elige modelo" opciones={OPCIONES} alElegir={() => {}} />);
+    expect(screen.getByRole("button", { name: "Llama 3" })).toBeTruthy();
+  });
+});

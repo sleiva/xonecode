@@ -88,13 +88,26 @@ describe("store del cliente", () => {
     expect(s.leer().aprobacion).toBeUndefined();
   });
 
-  it("las dos avisan a los suscriptores: si no, la pregunta contestada se quedaría pintada", () => {
+  it("el secreto y el selector también se retiran uno a uno", () => {
+    const s = crearStoreDelCliente();
+    s.aplicar({ clase: "secreto", pregunta: "clave" });
+    s.aplicar({ clase: "selector", selector: { titulo: "elige", opciones: [{ id: "a", etiqueta: "A" }] } });
+    s.contestarSecreto();
+    expect(s.leer().secreto).toBeUndefined();
+    expect(s.leer().selector).toBeDefined();
+    s.contestarSelector();
+    expect(s.leer().selector).toBeUndefined();
+  });
+
+  it("las cuatro avisan a los suscriptores: si no, lo contestado se quedaría pintado", () => {
     const s = crearStoreDelCliente();
     let avisos = 0;
     s.suscribir(() => { avisos += 1; });
     s.contestarPregunta();
+    s.contestarSecreto();
+    s.contestarSelector();
     s.cerrarAprobacion();
-    expect(avisos).toBe(2);
+    expect(avisos).toBe(4);
   });
 
   it("el registro de comandos llega entero y sobrevive a la desconexión: es un catálogo, no una espera", () => {

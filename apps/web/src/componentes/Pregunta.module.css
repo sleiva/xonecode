@@ -36,6 +36,13 @@
   font: inherit;
 }
 
+/* Alias `state-error-primary`, comprobado. El fallo se pinta debajo, no en lugar del
+   campo: lo tecleado sigue ahí para reintentarlo tal cual. */
+.fallo {
+  margin: 0;
+  color: var(--dsw-alias-state-error-primary);
+}
+
 .accion {
   flex: none;
   padding: 8px 16px;

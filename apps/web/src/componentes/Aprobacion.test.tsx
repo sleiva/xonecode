@@ -1,5 +1,5 @@
 import { StrictMode } from "react";
-import { render, screen, fireEvent, cleanup } from "@testing-library/react";
+import { render, screen, fireEvent, cleanup, waitFor } from "@testing-library/react";
 import { describe, it, expect, vi, afterEach } from "vitest";
 import { Aprobacion } from "./Aprobacion.js";
 
@@ -60,6 +60,41 @@ describe("Aprobacion", () => {
     expect(alDecidir).toHaveBeenCalledWith({ "1": "reject" });
   });
 
+  /**
+   * El `mask` de `Modal` sí llama a `onClose`, pero es un `<div aria-hidden="true">` sin
+   * clase y, como las primitivas no traen CSS, no se pinta: nadie puede pulsarlo. El velo
+   * que el usuario ve es el nuestro, dentro del `dialog`, y hasta este arreglo pinchar ahí
+   * no rechazaba nada — la dirección era segura, pero el comentario prometía una cobertura
+   * que no existía.
+   */
+  it("pinchar en el velo VISIBLE rechaza; pinchar dentro de la tarjeta no", () => {
+    const alDecidir = vi.fn();
+    render(<Aprobacion pendientes={PENDIENTES} ficheros={{}} diffs={DIFFS} alDecidir={alDecidir} />);
+    // El velo es el único hijo del `dialog`; la tarjeta cuelga de él.
+    const velo = screen.getByRole("dialog").firstElementChild as HTMLElement;
+    fireEvent.click(velo.firstElementChild as HTMLElement);
+    expect(alDecidir).not.toHaveBeenCalled();
+    fireEvent.click(velo);
+    expect(alDecidir).toHaveBeenCalledWith({ "1": "reject" });
+  });
+
+  /**
+   * Medido antes del arreglo: `void enviar(...)` no esperaba nada y la interfaz se retiraba
+   * síncrona, así que un `POST` fallido dejaba al usuario convencido de haber aprobado algo
+   * que no llegó al servidor — y que diez minutos después vencía como rechazo sin que nadie
+   * lo dijera.
+   */
+  it("si el envío falla, el modal lo DICE y se puede reintentar: el candado se suelta", async () => {
+    const alDecidir = vi.fn(() => Promise.reject(new Error("sin red")));
+    render(<Aprobacion pendientes={PENDIENTES} ficheros={{}} diffs={DIFFS} alDecidir={alDecidir} />);
+    fireEvent.click(screen.getByRole("button", { name: /aprobar/i }));
+    await waitFor(() => expect(screen.getByRole("alert").textContent).toMatch(/no llegó/i));
+    // Y el modal sigue en pie: quien lo retira es quien lo montó, y solo si el envío llegó.
+    expect(screen.getByRole("button", { name: /aprobar/i })).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: /aprobar/i }));
+    expect(alDecidir).toHaveBeenCalledTimes(2);
+  });
+
   it("«Rechazar» rechaza, y es la única otra salida con botón", () => {
     const alDecidir = vi.fn();
     render(<Aprobacion pendientes={PENDIENTES} ficheros={{}} diffs={DIFFS} alDecidir={alDecidir} />);
@@ -98,9 +133,12 @@ describe("Aprobacion", () => {
    * `main.tsx` envuelve la app en `<StrictMode>`, que en desarrollo monta, DESMONTA y
    * vuelve a montar cada componente nuevo. Medido en este repo: el `return` de un
    * `useEffect` se ejecuta una vez en ese falso desmontaje. Sin distinguirlo, el modal se
-   * rechazaría solo en el instante de aparecer, cada vez, en todo el desarrollo.
+   * rechazaría solo en el instante de aparecer, cada vez, en todo el desarrollo — y peor:
+   * `useRef` SOBREVIVE al remontaje falso, así que `decidido.current` ya valdría `true`
+   * cuando aparece el modal de verdad y el clic en «Aprobar» sería un no-op mudo. Lo único
+   * que saldría de la pantalla es el rechazo. Por eso el test mira las dos cosas.
    */
-  it("el doble montaje de StrictMode NO cuenta como cerrar sin decidir", () => {
+  it("el doble montaje de StrictMode NO cuenta como cerrar sin decidir, y deja el modal utilizable", () => {
     const alDecidir = vi.fn();
     render(
       <StrictMode>
@@ -108,6 +146,8 @@ describe("Aprobacion", () => {
       </StrictMode>
     );
     expect(alDecidir).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: /aprobar/i }));
+    expect(alDecidir).toHaveBeenCalledWith({ "1": "approve" });
   });
 
   it("varios pendientes se deciden a la vez: una decisión parcial dejaría al resto rechazado por el servidor", () => {

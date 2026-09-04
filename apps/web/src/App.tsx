@@ -10,6 +10,7 @@ import { BarraDeEstado } from "./componentes/BarraDeEstado.js";
 import { AvisoDeConexion } from "./componentes/AvisoDeConexion.js";
 import { Pregunta } from "./componentes/Pregunta.js";
 import { Aprobacion } from "./componentes/Aprobacion.js";
+import { Selector } from "./componentes/Selector.js";
 
 type Store = ReturnType<typeof crearStoreDelCliente>;
 
@@ -56,16 +57,42 @@ export function App({ store, enviar }: { store: Store; enviar: Conexion["enviar"
           />
           <AvisoDeConexion conectado={estado.conectado} />
           <Transcript actos={estado.actos} />
+          {/*
+            Las tres esperas de humano van DELANTE del compositor y cada una con su propio
+            cauce: el compositor manda `prosa`, que entra por la cola de líneas del lazo y no
+            resuelve ninguna. Retirarlas es cosa del cliente —el servidor resuelve su promesa
+            y no emite ningún «ya está»—, y siempre DESPUÉS de que el envío haya llegado: con
+            el `POST` fallido, lo que se queda en pantalla es la pregunta sin contestar, que
+            es la verdad.
+          */}
           {estado.pregunta !== undefined ? (
-            // La pregunta va DELANTE del compositor y con su propio cauce: el compositor
-            // manda `prosa`, que entra por la cola de líneas y no resuelve nada.
             <Pregunta
               texto={estado.pregunta.texto}
-              alResponder={(respuesta) => {
-                void enviar({ clase: "respuesta", texto: respuesta });
-                // Retirarla es cosa del cliente: el servidor resuelve su promesa y no
-                // emite ningún «ya está», así que nadie más la quitaría de la pantalla.
+              alResponder={async (respuesta) => {
+                await enviar({ clase: "respuesta", texto: respuesta });
                 store.contestarPregunta();
+              }}
+            />
+          ) : null}
+          {estado.secreto !== undefined ? (
+            // La MISMA pregunta, oculta: el valor no entra en el store ni en un acto, y
+            // viaja por el único mensaje del cable que lo lleva.
+            <Pregunta
+              texto={estado.secreto.pregunta}
+              oculta
+              alResponder={async (valor) => {
+                await enviar({ clase: "secreto", valor });
+                store.contestarSecreto();
+              }}
+            />
+          ) : null}
+          {estado.selector !== undefined ? (
+            <Selector
+              titulo={estado.selector.titulo}
+              opciones={estado.selector.opciones}
+              alElegir={async (id) => {
+                await enviar({ clase: "eleccion", id });
+                store.contestarSelector();
               }}
             />
           ) : null}
@@ -84,11 +111,14 @@ export function App({ store, enviar }: { store: Store; enviar: Conexion["enviar"
               pendientes={estado.aprobacion.pendientes}
               ficheros={estado.aprobacion.ficheros}
               diffs={estado.aprobacion.diffs}
-              alDecidir={(decisiones) => {
-                // Mandar ANTES de cerrar: cerrar desmonta el modal, y su rechazo al
-                // desmontar es la red de debajo — si el envío reventara, lo que queda en
-                // pantalla es el modal sin decidir, no una decisión perdida.
-                void enviar({ clase: "decision", decisiones });
+              alDecidir={async (decisiones) => {
+                // Se ESPERA al envío antes de retirar el modal. Medido antes de este
+                // arreglo: `void enviar(...)` no esperaba nada y `cerrarAprobacion` corría
+                // síncrono, así que un `POST` fallido cerraba el modal igual, la aprobación
+                // no llegaba al servidor y diez minutos después vencía como rechazo sin que
+                // nadie lo dijera — el usuario convencido de haber autorizado algo que no se
+                // autorizó. Si esto lanza, el modal se queda, suelta su candado y lo dice.
+                await enviar({ clase: "decision", decisiones });
                 store.cerrarAprobacion();
               }}
             />

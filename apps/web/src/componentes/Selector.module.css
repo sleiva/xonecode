@@ -1,0 +1,63 @@
+/* Alias comprobados contra `apps/web/estilos/design-platform.css`: bg-layer-2/1, border-l2,
+   label-primary/tertiary, interactive-bg-hover y state-error-primary. */
+
+.selector {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px;
+  border-top: 0.5px solid var(--dsw-alias-border-l2);
+  background: var(--dsw-alias-bg-layer-2);
+}
+
+.titulo {
+  margin: 0;
+  color: var(--dsw-alias-label-primary);
+}
+
+.opciones {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  max-height: 260px;
+  overflow-y: auto;
+}
+
+/* `Button` llega sin estilo propio (su CSS Module es un stub vacío), así que la opción
+   entera la pinta esta clase. Es un botón a lo ancho porque la etiqueta y el detalle van en
+   dos líneas: un catálogo de modelos no cabe en una fila. */
+.opcion {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  width: 100%;
+  padding: 8px 10px;
+  border: 0.5px solid var(--dsw-alias-border-l2);
+  border-radius: 8px;
+  background: var(--dsw-alias-bg-layer-1);
+  color: var(--dsw-alias-label-primary);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.opcion:hover {
+  background: var(--dsw-alias-interactive-bg-hover);
+}
+
+.etiqueta {
+  color: var(--dsw-alias-label-primary);
+}
+
+.detalle {
+  color: var(--dsw-alias-label-tertiary);
+}
+
+.fallo {
+  margin: 0;
+  color: var(--dsw-alias-state-error-primary);
+}

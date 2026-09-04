@@ -37,15 +37,16 @@ import { CatalogoModelosEnMemoria, type CatalogoModelosPort, type Papel } from "
 import { REJECT_MESSAGE, type Decision } from "../../vendor/hitl.js";
 
 /**
- * Plazo de lo que espera a un humano: la aprobación y la pregunta de texto libre.
- * Generoso porque al otro lado hay una persona leyendo un diff, y corto comparado con
- * «para siempre»: un turno que se queda esperando a una pestaña que ya nadie mira bloquea
- * la sesión entera. Vencer es RECHAZAR (o contestar cadena vacía, que aguas abajo es lo
- * mismo), y un rechazo se puede volver a pedir; una aprobación por cansancio, no.
+ * Plazo de TODO lo que espera a un humano: la aprobación, la pregunta de texto libre, el
+ * secreto y la selección. Generoso porque al otro lado hay una persona leyendo un diff, y
+ * corto comparado con «para siempre»: un turno que se queda esperando a una pestaña que ya
+ * nadie mira bloquea la sesión entera. Vencer es RECHAZAR (o contestar cadena vacía, o
+ * cancelar, que aguas abajo es lo mismo), y un rechazo se puede volver a pedir; una
+ * aprobación por cansancio, no.
  *
- * Es UN plazo y no dos porque las dos esperas son la misma espera —una persona que decide—
- * y dos números distintos serían dos cosas que mantener de acuerdo sin ninguna razón que
- * las separe.
+ * Es UN plazo y no cuatro porque las cuatro esperas son la misma espera —una persona que
+ * decide— y cuatro números distintos serían cuatro cosas que mantener de acuerdo sin ninguna
+ * razón que las separe.
  */
 const MS_DE_ESPERA_POR_OMISION = 10 * 60_000;
 
@@ -84,6 +85,37 @@ interface AprobacionEnVuelo {
 
 function comoRegistro<V>(mapa: Map<string, V>): Record<string, V> {
   return Object.fromEntries(mapa);
+}
+
+/**
+ * Una espera de humano, con plazo. Las tres —la pregunta de texto libre, el secreto y la
+ * selección— son la MISMA espera, y por eso comparten función en vez de tres copias: con la
+ * pestaña abierta ninguna vencía, y el lazo de `correrConsola` se quedaba `await`-ado ahí
+ * dentro para siempre. Y no son hipotéticas: `/modelos`, `/themes` y `/provider` llegan a
+ * `seleccionar` y a `leerSecreto` desde el compositor, con el registro de comandos que este
+ * mismo servidor manda por el cable.
+ *
+ * `alVencer` es lo que cada una responde ya al desconectarse (cadena vacía, o `undefined`
+ * para cancelar el selector): vencer y quedarse sin cliente son la misma respuesta, porque
+ * en los dos casos no hay nadie contestando.
+ *
+ * La trampa que obliga a sacar el resolutor de la cola: `cola` es FIFO, así que uno muerto
+ * en cabeza se comería la respuesta de la espera SIGUIENTE —que sí está viva— y la dejaría
+ * colgada hasta su propio plazo.
+ */
+function esperarAUnHumano<T>(cola: ((valor: T) => void)[], alVencer: T, ms: number): Promise<T> {
+  return new Promise<T>((resuelto) => {
+    const responder = (valor: T): void => {
+      clearTimeout(temporizador);
+      resuelto(valor);
+    };
+    const temporizador = setTimeout(() => {
+      const indice = cola.indexOf(responder);
+      if (indice >= 0) cola.splice(indice, 1);
+      resuelto(alVencer);
+    }, ms);
+    cola.push(responder);
+  });
 }
 
 export function crearConsolaWeb(opciones: OpcionesDeConsolaWeb = {}): ConsolaWeb {
@@ -191,28 +223,13 @@ export function crearConsolaWeb(opciones: OpcionesDeConsolaWeb = {}): ConsolaWeb
       // pasa por aquí.
       anotar({ tipo: "sistema", texto: pregunta });
       if (!transporte.conectado()) return "";
-      return new Promise<string>((resuelto) => {
-        // El MISMO plazo que `aprobacionesTui`, que era el único que lo tenía. Medido: con
-        // la pestaña abierta y nadie contestando, esta promesa no vencía nunca y el lazo de
-        // `correrConsola` se quedaba `await`-ado aquí dentro para siempre — la sesión web
-        // entera colgada por una pregunta de texto libre (`politicaInteractiva` antes de
-        // subir, `/connect-studio` sin URL). Vencer responde cadena vacía: lo mismo que
-        // responde al desconectarse, y lo que `interpretAnswer` trata como rechazo.
-        const responder = (texto: string): void => {
-          clearTimeout(temporizador);
-          resuelto(texto);
-        };
-        const temporizador = setTimeout(() => {
-          // Sacarlo de la COLA, no solo resolverlo: `esperandoTexto` es FIFO, y un
-          // resolutor muerto en cabeza se comería la respuesta de la pregunta SIGUIENTE
-          // —que sí está viva— dejándola colgada hasta su propio plazo.
-          const indice = esperandoTexto.indexOf(responder);
-          if (indice >= 0) esperandoTexto.splice(indice, 1);
-          resuelto("");
-        }, msDeEspera);
-        esperandoTexto.push(responder);
-        transporte.emitir({ clase: "pregunta", texto: pregunta });
-      });
+      // El MISMO plazo que `aprobacionesTui`, que era el único que lo tenía: la pregunta de
+      // texto libre la ponen `politicaInteractiva` antes de subir y `/connect-studio` sin
+      // URL, y sin plazo colgaban la sesión web entera. Cadena vacía al vencer, que es lo
+      // que `interpretAnswer` trata como rechazo.
+      const espera = esperarAUnHumano(esperandoTexto, "", msDeEspera);
+      transporte.emitir({ clase: "pregunta", texto: pregunta });
+      return espera;
     },
 
     leerSecreto: async (pregunta) => {
@@ -220,18 +237,16 @@ export function crearConsolaWeb(opciones: OpcionesDeConsolaWeb = {}): ConsolaWeb
       // llamó y a ningún sitio más: ni acto, ni traza de emisión, ni sesión en disco.
       anotar({ tipo: "sistema", texto: pregunta });
       if (!transporte.conectado()) return "";
-      return new Promise<string>((resuelto) => {
-        esperandoSecreto.push(resuelto);
-        transporte.emitir({ clase: "secreto", pregunta });
-      });
+      const espera = esperarAUnHumano(esperandoSecreto, "", msDeEspera);
+      transporte.emitir({ clase: "secreto", pregunta });
+      return espera;
     },
 
     seleccionar: async (selector: SelectorDeConsola) => {
       if (!transporte.conectado()) return undefined;
-      return new Promise<string | undefined>((resuelto) => {
-        esperandoSeleccion.push(resuelto);
-        transporte.emitir({ clase: "selector", selector });
-      });
+      const espera = esperarAUnHumano<string | undefined>(esperandoSeleccion, undefined, msDeEspera);
+      transporte.emitir({ clase: "selector", selector });
+      return espera;
     },
 
     piel: (): Piel => pielWeb.piel,

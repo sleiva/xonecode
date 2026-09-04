@@ -101,6 +101,8 @@ export function crearStoreDelCliente(): {
   marcarConectado: () => void;
   marcarDesconectado: () => void;
   contestarPregunta: () => void;
+  contestarSecreto: () => void;
+  contestarSelector: () => void;
   cerrarAprobacion: () => void;
   suscribir: (escucha: () => void) => () => void;
 } {
@@ -214,9 +216,21 @@ export function crearStoreDelCliente(): {
      * Que el modal se DESMONTE al cerrarlo es además lo que hace de su rechazo-al-desmontar
      * una red y no una segunda decisión: cuando llega aquí, el componente ya ha marcado que
      * decidió.
+     *
+     * Las cuatro se llaman DESPUÉS de que el envío haya llegado, nunca antes: retirar la
+     * interfaz con el `POST` fallido deja al usuario creyendo que contestó mientras el
+     * servidor sigue esperando hasta su plazo.
      */
     contestarPregunta(): void {
       mutar({ pregunta: undefined });
+    },
+
+    contestarSecreto(): void {
+      mutar({ secreto: undefined });
+    },
+
+    contestarSelector(): void {
+      mutar({ selector: undefined });
     },
 
     cerrarAprobacion(): void {

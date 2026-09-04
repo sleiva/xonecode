@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent } from "react";
 import { Modal, Button } from "@deepseek-ai/dsh-client-ui-primitives";
 import clsx from "clsx";
 import estilos from "./Aprobacion.module.css";
@@ -19,10 +19,13 @@ import estilos from "./Aprobacion.module.css";
  *
  * **Qué se adoptó de `@deepseek-ai/dsh-client-ui-primitives` y qué no.** `Modal` sí: pone
  * el portal sobre `document.body`, el `role="dialog"`/`aria-modal` y el manejador de
- * Escape —que aquí ES el rechazo—, y su `className` cae en la tarjeta, que es lo único que
- * hay que colocar. Sus 22 CSS Modules son stubs vacíos en este release candidate, así que
- * el `mask` no tiene ni clase ni prop con la que llegar a él: el velo se pinta desde la
- * capa que sí acepta clase. `DiffBlock` NO: colapsa el medio a 16 filas por omisión
+ * Escape —que aquí ES el rechazo—, y su `className` cae en el `dialog`, que es lo único que
+ * hay que colocar. Sus 22 CSS Modules son stubs vacíos en este release candidate, y de ahí
+ * sale una trampa MEDIDA: su `mask` es un `<div aria-hidden="true">` sin clase, así que **no
+ * se pinta**, y su `onClick` (que sí llama a `onClose`) cuelga de un nodo que el usuario no
+ * puede ver ni pulsar. El velo que se ve de verdad es el `.velo` de aquí, dentro del
+ * `dialog`, y por eso lleva su PROPIO manejador de rechazo: sin él, pinchar fuera de la
+ * tarjeta no hacía nada y este fichero afirmaba una cobertura que no existía. `DiffBlock` NO: colapsa el medio a 16 filas por omisión
  * (justo lo contrario del invariante de este modal), agrupa el lado quitado y el añadido
  * en dos bloques en vez de intercalarlos como el LCS de `core/diff.ts` ya los da, pide
  * `{oldText, newText}` en vez de líneas, y trae los rótulos «复制» y «展开其余 N 行差异»
@@ -92,24 +95,40 @@ export function Aprobacion({
   ficheros: Record<string, string>;
   /** Id del pendiente → sus líneas de diff. */
   diffs: Record<string, readonly unknown[]>;
-  alDecidir: (decisiones: Record<string, string>) => void;
+  /**
+   * Devuelve una promesa si el envío es asíncrono —lo es: es un `POST`—. El modal la
+   * ESPERA: retirar la interfaz antes de que la decisión haya llegado convierte un fallo de
+   * red en un «aprobado» que nadie recibió.
+   */
+  alDecidir: (decisiones: Record<string, string>) => void | Promise<unknown>;
 }) {
   const lista = useMemo(() => pendientes.filter(esPendiente), [pendientes]);
 
   // `decidido` es lo que hace que haya UNA sola decisión por aprobación: aprobar y que
   // después el desmontaje mandara un rechazo sería peor que no tener rechazo al desmontar.
   const decidido = useRef(false);
+  const montado = useRef(true);
   const tarjeta = useRef<HTMLDivElement>(null);
+  const [falloDeEnvio, setFalloDeEnvio] = useState(false);
 
   const decidir = useCallback(
     (valor: string): void => {
       if (decidido.current) return;
       decidido.current = true;
+      setFalloDeEnvio(false);
       // Todos los pendientes a la vez, y no uno por tarjeta: el servidor TERMINA la
       // aprobación con el primer mensaje `decision` que le llega y deja rechazado lo que
       // no venía (`consolaWeb.ts`, el `finally`). Un botón por pendiente daría a entender
       // que se puede contestar en dos veces, y la segunda no llegaría a tiempo.
-      alDecidir(Object.fromEntries(lista.map((p) => [p.id, valor])));
+      const enviada = alDecidir(Object.fromEntries(lista.map((p) => [p.id, valor])));
+      // Quien monta el modal lo retira DESPUÉS de que el envío haya llegado, así que un
+      // envío que falla deja el modal en pantalla. Lo que falta entonces es soltar el
+      // candado: si no, la aprobación se quedaría de ladrillo —ningún botón haría ya nada—
+      // y el usuario se iría convencido de haber autorizado algo que no salió de aquí.
+      void Promise.resolve(enviada).catch(() => {
+        decidido.current = false;
+        if (montado.current) setFalloDeEnvio(true);
+      });
     },
     [alDecidir, lista]
   );
@@ -124,6 +143,7 @@ export function Aprobacion({
     // El nodo se captura al MONTAR, no en la limpieza: al desmontar de verdad, React ya ha
     // puesto la ref a null.
     const nodo = tarjeta.current;
+    montado.current = true;
     return () => {
       // `main.tsx` envuelve la app en `<StrictMode>`, que en desarrollo monta, desmonta y
       // vuelve a montar cada componente nuevo — y esta limpieza se ejecuta en ese falso
@@ -132,6 +152,7 @@ export function Aprobacion({
       // discriminador es síncrono y también está medido: en el desmontaje simulado el nodo
       // SIGUE conectado al documento (portal incluido), y en uno de verdad no.
       if (nodo?.isConnected === true) return;
+      montado.current = false;
       ultimoDecidir.current(RECHAZAR);
     };
   }, []);
@@ -146,6 +167,17 @@ export function Aprobacion({
       headless
       className={estilos.capa}
     >
+      {/*
+        Pinchar FUERA de la tarjeta rechaza, y la comprobación de `target` es lo que
+        distingue «fuera» de «dentro»: un clic en un botón de la tarjeta burbujea hasta
+        aquí, y sin ella cualquier pulsación acabaría rechazando.
+      */}
+      <div
+        className={estilos.velo}
+        onClick={(evento: MouseEvent<HTMLDivElement>) => {
+          if (evento.target === evento.currentTarget) decidir(RECHAZAR);
+        }}
+      >
       <div className={estilos.tarjeta} ref={tarjeta}>
         <h2 className={estilos.titulo}>
           {lista.length === 1 ? "1 escritura pide aprobación" : `${lista.length} escrituras piden aprobación`}
@@ -173,6 +205,12 @@ export function Aprobacion({
             );
           })}
         </div>
+        {falloDeEnvio ? (
+          <p className={estilos.fallo} role="alert">
+            La decisión no llegó a xonecode: el envío falló. Nada se ha aplicado; vuelve a
+            pulsar cuando la conexión se recupere.
+          </p>
+        ) : null}
         <div className={estilos.acciones}>
           <Button variant="outline" className={estilos.accion} onClick={() => decidir(RECHAZAR)}>
             Rechazar
@@ -181,6 +219,7 @@ export function Aprobacion({
             Aprobar
           </Button>
         </div>
+      </div>
       </div>
     </Modal>
   );

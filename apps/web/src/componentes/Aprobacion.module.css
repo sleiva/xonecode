@@ -5,13 +5,19 @@
 
 /* La capa es el `dialog` de `Modal`, no su `mask`: los 22 CSS Modules del paquete son
    stubs vacíos en este release candidate y el `mask` no lleva clase ni prop con la que
-   alcanzarlo, así que el velo se pinta aquí — sobre el único nodo que sí acepta clase. */
+   alcanzarlo, así que ni se pinta ni se puede pulsar. El velo de verdad es `.velo`, que
+   además es quien lleva el manejador de rechazo. */
 .capa {
   position: fixed;
   inset: 0;
   z-index: 100;
+}
+
+.velo {
   display: grid;
   place-items: center;
+  width: 100%;
+  height: 100%;
   padding: 24px;
   background: var(--dsw-alias-bg-overlay);
 }
@@ -100,6 +106,14 @@
 
 .igual {
   color: var(--dsw-alias-label-tertiary);
+}
+
+/* El fallo de envío vive DENTRO de la tarjeta y por encima de los botones: es lo que
+   explica por qué el modal sigue ahí después de haber pulsado. */
+.fallo {
+  margin: 0;
+  padding: 8px 20px;
+  color: var(--dsw-alias-state-error-primary);
 }
 
 .acciones {
