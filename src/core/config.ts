@@ -29,6 +29,17 @@ export interface ConfigDeFichero {
   modelos?: Partial<Record<Papel, string>>;
   /** Tema visual de la consola, persistido solo cuando pertenece al proyecto. */
   tema?: string;
+  /**
+   * A qué entorno de `~/.xonecode/settings.json` pertenece este proyecto.
+   *
+   * Convive con `cloudstudio.url` y no la sustituye: el `entorno` es la referencia (la que
+   * dice de qué juego de credenciales OAuth se lee, `porEntorno[id]` en
+   * `agent/cloudstudioMcp.ts`) y la URL es la copia operativa que la sincronización lee
+   * exactamente igual que antes de que los entornos existieran. Quitar la URL habría
+   * obligado a tocar `crearSincronizador` y todo lo que cuelga de él, que es justo lo que
+   * el diseño de la consola web se comprometió a no tocar.
+   */
+  entorno?: string;
   /** Endpoint MCP de CloudStudio. Las credenciales OAuth viven solo en el almacén global. */
   cloudstudio?: {
     url: string;
@@ -180,6 +191,21 @@ export function validar(
       } else {
         avisos.push({
           texto: `«${ruta}»: «tema» debe ser una cadena; se descarta.`,
+          severidad: "aviso",
+        });
+      }
+      continue;
+    }
+
+    if (clave === "entorno") {
+      // Un id vacío no es «sin entorno»: es un id que no se puede buscar en
+      // `settings.json`, y dejarlo pasar haría que el juego de credenciales se leyera bajo
+      // la clave "" en vez de caer en `legado` como cae un proyecto de antes de los entornos.
+      if (typeof valor === "string" && valor.trim() !== "") {
+        config.entorno = valor;
+      } else {
+        avisos.push({
+          texto: `«${ruta}»: «entorno» debe ser el id no vacío de un entorno de settings.json; se descarta.`,
           severidad: "aviso",
         });
       }

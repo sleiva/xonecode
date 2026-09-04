@@ -189,6 +189,41 @@ describe("abrirSesionReal", () => {
     await expect(enCurso).rejects.toThrow(/turno cancelado por el usuario/);
   });
 
+  it("cerrar aborta el turno en vuelo: es lo que desatasca un cambio de proyecto", async () => {
+    let senal: AbortSignal | undefined;
+    mocks.construirAgente.mockImplementation(() => ({
+      stream: vi.fn(async (_payload: unknown, config: { signal?: AbortSignal }) => {
+        senal = config.signal;
+        async function* flujo() {
+          await new Promise<void>((_resolver, rechazar) => {
+            if (senal?.aborted) return rechazar(senal.reason);
+            senal?.addEventListener("abort", () => rechazar(senal?.reason), { once: true });
+          });
+        }
+        return flujo();
+      }),
+      getState: vi.fn(async () => ({ tasks: [] })),
+    }));
+    // `abrirSesionReal` directo y no el ayudante `abrir()`: ese reinstala su propio
+    // agente falso y se llevaría por delante el stream que aquí hay que dejar colgado.
+    const sesion = await abrirSesionReal({
+      raiz: "/tmp/turno-real-test",
+      modelos: new ModeloGuionizado(),
+      skills: new SkillsEnMemoria(),
+      entorno: entornoFalso,
+    });
+    const enCurso = sesion.turno("analiza", pielFalsa());
+    await vi.waitFor(() => expect(senal).toBeDefined());
+    sesion.cerrar();
+    await expect(enCurso).rejects.toThrow(/turno cancelado por el usuario/);
+  });
+
+  it("un turno sobre una sesión ya cerrada FALLA en vez de revivir el hilo", async () => {
+    const sesion = await abrir();
+    sesion.cerrar();
+    await expect(sesion.turno("otra cosa", pielFalsa())).rejects.toThrow(/ya está cerrada/);
+  });
+
   it("dos turnos seguidos reusan el mismo agente", async () => {
     const sesion = await abrir();
     await sesion.turno("primera", pielFalsa());

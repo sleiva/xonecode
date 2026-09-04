@@ -536,11 +536,23 @@ const PIEZAS_DE_SINCRONIZACION_REALES: PiezasDeSincronizacion = {
 function cloudStudioDeProyecto(
   leerConfig: typeof cargar,
   raiz: string
-): { url: string; scopes?: string[]; proyecto: { id: string; nombre: string }; rama: string } | undefined {
-  const cloudstudio = leerConfig(raiz).config.proyecto?.cloudstudio;
+): { url: string; scopes?: string[]; proyecto: { id: string; nombre: string }; rama: string; entorno?: string } | undefined {
+  const proyectoConfig = leerConfig(raiz).config.proyecto;
+  const cloudstudio = proyectoConfig?.cloudstudio;
   if (cloudstudio === undefined) return undefined;
   if (cloudstudio.proyecto === undefined || cloudstudio.rama === undefined) return undefined;
-  return { url: cloudstudio.url, scopes: cloudstudio.scopes, proyecto: cloudstudio.proyecto, rama: cloudstudio.rama };
+  // `entorno` viaja junto a la URL porque decide de QUÉ juego de credenciales se lee
+  // (`porEntorno[id]`, `agent/cloudstudioMcp.ts`). Ausente —un proyecto de antes de que
+  // hubiera entornos— cae en `legado`, que es exactamente donde ese proyecto ya tenía sus
+  // tokens: no pasarlo era reautenticar en un hueco `legado` nuevo cada vez que la
+  // migración a `webstudio` ya se hubiera hecho.
+  return {
+    url: cloudstudio.url,
+    scopes: cloudstudio.scopes,
+    proyecto: cloudstudio.proyecto,
+    rama: cloudstudio.rama,
+    entorno: proyectoConfig?.entorno,
+  };
 }
 
 /**
@@ -580,7 +592,7 @@ export function crearSincronizador(
       return { tipo: "arbol-sucio", accion, pendientes: await piezas.sinCommitear(raiz) };
     }
 
-    const sesion = await piezas.sesion(config.url, { scopes: config.scopes });
+    const sesion = await piezas.sesion(config.url, { scopes: config.scopes, entornoId: config.entorno });
     try {
       const puerto = piezas.cliente(sesion.invocar, config.proyecto.nombre);
 
@@ -626,9 +638,12 @@ export function crearListaDeRamas(
   piezas: Pick<PiezasDeSincronizacion, "leerConfig" | "sesion" | "cliente"> = PIEZAS_DE_SINCRONIZACION_REALES
 ): (proyecto: string) => Promise<string[]> {
   return async (proyectoNombre) => {
-    const cloudstudio = piezas.leerConfig(raiz).config.proyecto?.cloudstudio;
+    const proyectoConfig = piezas.leerConfig(raiz).config.proyecto;
+    const cloudstudio = proyectoConfig?.cloudstudio;
     if (cloudstudio?.url === undefined) return [];
-    const sesion = await piezas.sesion(cloudstudio.url, { scopes: cloudstudio.scopes });
+    // Mismo motivo que en `cloudStudioDeProyecto`: sin el id del entorno, un proyecto ya
+    // migrado a `webstudio` volvería a autenticar bajo `legado`.
+    const sesion = await piezas.sesion(cloudstudio.url, { scopes: cloudstudio.scopes, entornoId: proyectoConfig?.entorno });
     try {
       const puerto = piezas.cliente(sesion.invocar, proyectoNombre);
       await puerto.abrir(proyectoNombre);

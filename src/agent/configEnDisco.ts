@@ -208,6 +208,29 @@ export function guardarCloudStudioDeProyecto(
   return { ruta, url, scopes: [...scopes] };
 }
 
+/**
+ * A qué entorno de `~/.xonecode/settings.json` pertenece este proyecto.
+ *
+ * Se guarda ADEMÁS de `cloudstudio.url`, nunca en su lugar: la URL es lo que leen
+ * `crearSincronizador` (`cli/main.ts`) y todo lo que cuelga de él, y conservarla es lo que
+ * hace literalmente cierto que la sincronización no se toca. El `entorno` añade la
+ * referencia que hacía falta para leer el juego de credenciales correcto
+ * (`porEntorno[id]`, `agent/cloudstudioMcp.ts`) en vez de reautenticar bajo `legado`.
+ *
+ * Misma mecánica que `guardarCloudStudioDeProyecto`: fusión sobre el objeto CRUDO y
+ * escritura atómica, para no borrar lo que ya hubiera en el fichero.
+ */
+export function guardarEntornoDeProyecto(
+  raiz: string,
+  entorno: string,
+): { ruta: string; entorno: string } {
+  const ruta = rutaConfigDeProyecto(raiz);
+  const base = leerObjetoCrudoOAbortar(ruta);
+  const fusionado = { ...base, entorno };
+  escribirAtomico(ruta, JSON.stringify(fusionado, null, 2) + "\n");
+  return { ruta, entorno };
+}
+
 /** Guarda la identidad del proyecto remoto, sin mezclarla con el token OAuth. */
 export function guardarProyectoCloudStudioDeProyecto(
   raiz: string,

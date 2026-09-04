@@ -666,6 +666,25 @@ function raizConProyectoCloud(rama = "master"): string {
   return raiz;
 }
 
+/** Igual, pero además con el `entorno` que escribe el alta de la consola web. */
+function raizConProyectoCloudYEntorno(entorno = "webstudio"): string {
+  const raiz = raizTemporal();
+  mkdirSync(join(raiz, ".xonecode"), { recursive: true });
+  writeFileSync(
+    join(raiz, ".xonecode", "config.json"),
+    JSON.stringify({
+      entorno,
+      cloudstudio: {
+        url: "https://mcp.ejemplo.test/mcp",
+        scopes: ["openid", "mcp.read"],
+        proyecto: { id: "p-1", nombre: "Proyecto" },
+        rama: "master",
+      },
+    })
+  );
+  return raiz;
+}
+
 /** Un `CloudStudioPort` opaco: las piezas que lo consumen en estos tests están FALSEADAS
  * (`descargar`/`subirProyecto`/`pendientes`), así que nunca llaman a sus métodos de verdad. */
 const PUERTO_OPACO = {} as CloudStudioPort;
@@ -694,6 +713,26 @@ function piezasFalsas(overrides: Partial<PiezasDeSincronizacion> = {}): PiezasDe
 }
 
 describe("crearSincronizador", () => {
+  it("le pasa a la sesión el ENTORNO del proyecto: si no, un proyecto ya migrado reautentica en «legado»", async () => {
+    const raiz = raizConProyectoCloudYEntorno();
+    const sesion = vi.fn(piezasFalsas().sesion);
+    await crearSincronizador(piezasFalsas({ sesion }))("bajar", raiz);
+    expect(sesion).toHaveBeenCalledWith(
+      "https://mcp.ejemplo.test/mcp",
+      expect.objectContaining({ entornoId: "webstudio" })
+    );
+  });
+
+  it("un proyecto de antes de los entornos no inventa uno: cae en «legado», donde ya tenía sus tokens", async () => {
+    const raiz = raizConProyectoCloud();
+    const sesion = vi.fn(piezasFalsas().sesion);
+    await crearSincronizador(piezasFalsas({ sesion }))("bajar", raiz);
+    expect(sesion).toHaveBeenCalledWith(
+      "https://mcp.ejemplo.test/mcp",
+      expect.objectContaining({ entornoId: undefined })
+    );
+  });
+
   it("sin cloudstudio en el config, lo dice y no abre sesión", async () => {
     const raiz = raizTemporal();
     const sesion = vi.fn(piezasFalsas().sesion);
@@ -871,5 +910,16 @@ describe("crearListaDeRamas", () => {
     expect(await ramas("Proyecto")).toEqual(["master", "dev"]);
     expect(abrir).toHaveBeenCalledWith("Proyecto");
     expect(cerrar).toHaveBeenCalledOnce();
+  });
+
+  it("también enhebra el entorno del proyecto en la sesión", async () => {
+    const raiz = raizConProyectoCloudYEntorno("manager");
+    const sesion = vi.fn(async () => ({ invocar: async () => undefined, cerrar: async () => {} }));
+    const puertoFalso = { abrir: async () => {}, ramas: async () => ["master"] } as unknown as CloudStudioPort;
+    await crearListaDeRamas(raiz, { leerConfig: cargar, sesion, cliente: () => puertoFalso })("Proyecto");
+    expect(sesion).toHaveBeenCalledWith(
+      "https://mcp.ejemplo.test/mcp",
+      expect.objectContaining({ entornoId: "manager" })
+    );
   });
 });

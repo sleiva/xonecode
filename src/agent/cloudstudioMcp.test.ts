@@ -11,6 +11,7 @@ import {
   leerEstado,
   olvidarEntorno,
   proyectosDeResultado,
+  respuestaDeCallback,
   URL_CLOUDSTUDIO_POR_OMISION,
 } from "./cloudstudioMcp.js";
 
@@ -337,5 +338,32 @@ describe("estado OAuth por entorno", () => {
     guardarEstadoDeEntorno(ruta, "webstudio", { tokens: tokenDePrueba("t") });
     expect(statSync(ruta).mode & 0o777).toBe(0o600);
     expect(statSync(join(ruta, "..")).mode & 0o777).toBe(0o700);
+  });
+});
+
+describe("la página del callback de OAuth", () => {
+  it("sin URL de web, la de siempre: 200 y «ya puedes volver a xonecode»", () => {
+    const r = respuestaDeCallback("abc", null);
+    expect(r.estado).toBe(200);
+    expect(r.cuerpo).toMatch(/volver a xonecode/);
+  });
+
+  it("con URL de web, 302 a la web: en un navegador «vuelve a la terminal» es falso", () => {
+    const r = respuestaDeCallback("abc", null, "http://127.0.0.1:7788/?t=xyz");
+    expect(r.estado).toBe(302);
+    expect(r.cabeceras.location).toBe("http://127.0.0.1:7788/?t=xyz");
+    expect(r.cuerpo).toBe("");
+  });
+
+  it("el FALLO no redirige ni con web: la web todavía no sabe el motivo y lo taparía", () => {
+    const r = respuestaDeCallback(null, "access_denied", "http://127.0.0.1:7788/");
+    expect(r.estado).toBe(400);
+    expect(r.cabeceras.location).toBeUndefined();
+    // Y el texto no manda a «la consola», que en el navegador no es donde está el usuario.
+    expect(r.cuerpo).not.toMatch(/la consola/);
+  });
+
+  it("un callback sin código es un fallo aunque el IDS no diga por qué", () => {
+    expect(respuestaDeCallback(null, null, "http://127.0.0.1:7788/").estado).toBe(400);
   });
 });

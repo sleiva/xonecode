@@ -137,6 +137,24 @@ describe("validar", () => {
     expect(avisos[0]?.texto).toContain("cloudstudio.url");
   });
 
+  it("acepta «entorno» junto a cloudstudio.url: la referencia nueva NO sustituye a la URL", () => {
+    const r = validar(
+      { entorno: "webstudio", cloudstudio: { url: "https://mcp.ejemplo.test/mcp" } },
+      "/x",
+      "proyecto"
+    );
+    expect(r.config.entorno).toBe("webstudio");
+    // Conservar la URL es lo que hace cierto que la sincronización no se toca.
+    expect(r.config.cloudstudio?.url).toBe("https://mcp.ejemplo.test/mcp");
+    expect(r.avisos).toEqual([]);
+  });
+
+  it("descarta un «entorno» vacío: un id que no se puede buscar en settings.json no es «sin entorno»", () => {
+    const r = validar({ entorno: "  " }, "/x", "proyecto");
+    expect(r.config.entorno).toBeUndefined();
+    expect(r.avisos).toHaveLength(1);
+  });
+
   it("descarta un tema que no es cadena", () => {
     const { config, avisos } = validar({ tema: 42 }, RUTA, "proyecto");
     expect(config.tema).toBeUndefined();

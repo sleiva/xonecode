@@ -52,6 +52,23 @@ export interface SesionReal {
   nuevoHilo(id?: string): void;
   /** Aborta de inmediato la llamada al modelo que está en curso, si la hay. */
   cancelar(): void;
+  /**
+   * Termina la sesión: aborta lo que esté en curso y la deja inservible.
+   *
+   * Hace falta para CAMBIAR de proyecto (`web/servidor/vestibulo.ts`): la consola web abre
+   * una consola de proyecto a la vez, y cerrar la anterior es agotar sus `lineas` para que
+   * `correrConsola` retorne. Sin esto, un turno en vuelo mantendría el lazo dentro del
+   * `await` durante minutos y la apertura del proyecto siguiente se quedaría esperando.
+   *
+   * Qué libera y qué no, dicho entero porque una fuga callada es peor que una declarada:
+   * el `MemorySaver`, el agente construido y el tracker viven en el CIERRE de
+   * `abrirSesionReal` y no exponen ningún `close()` —no hay sockets ni descriptores, el
+   * cliente del modelo es por llamada—, así que se recogen con la referencia a la sesión
+   * en cuanto quien la abrió la suelta. Lo único que hay que soltar activamente es la
+   * llamada en curso, y eso es exactamente `cancelar()`. La bandera de cerrada existe para
+   * que un `turno()` tardío falle en vez de revivir un hilo que ya nadie mira.
+   */
+  cerrar(): void;
   readonly tracker: TokenTracker;
   /** El `thread_id` ACTUAL: tras `nuevoHilo()` cambia, y hay que leerlo, no cachearlo. */
   readonly hilo: string;
@@ -116,6 +133,7 @@ export async function abrirSesionReal(opciones: {
   let modelos = opciones.modelos;
   let hilo = `xonecode-${randomUUID()}`;
   let cancelarEnCurso: (() => void) | undefined;
+  let cerrada = false;
 
   const construir = async (): Promise<unknown> =>
     construirAgente({
@@ -177,6 +195,9 @@ export async function abrirSesionReal(opciones: {
     peticion: string,
     piel: Piel
   ): Promise<{ bitacora: Bitacora; cambios: Cambio[]; cortadoPorTope: boolean }> => {
+    // Un turno sobre una sesión ya cerrada reviviría un hilo que su dueño soltó al cambiar
+    // de proyecto. Falla en vez de trabajar en silencio sobre la raíz equivocada.
+    if (cerrada) throw new Error("la sesión ya está cerrada");
     const instantanea: Instantanea = await tomarInstantanea(raiz, entorno.git);
 
     let payload: unknown = { messages: [new HumanMessage(peticion)] };
@@ -251,6 +272,10 @@ export async function abrirSesionReal(opciones: {
   return {
     turno,
     cancelar: () => cancelarEnCurso?.(),
+    cerrar: () => {
+      cerrada = true;
+      cancelarEnCurso?.();
+    },
     /** Para `/modelo`: agente nuevo con los mismos hilo, checkpointer y tracker. */
     async cambiarModelos(nuevos: ModelosPort): Promise<void> {
       modelos = nuevos;

@@ -109,6 +109,23 @@ export interface OpcionesCloudStudio {
    * `cli/main.ts` no lo pasa) sigue leyendo y escribiendo exactamente donde lo hacía.
    */
   entornoId?: string;
+  /**
+   * A dónde mandar el navegador cuando la autorización SALE BIEN.
+   *
+   * La página del callback termina diciendo «Ya puedes volver a xonecode», que en la
+   * consola de terminal es cierto y en la web es una instrucción falsa: quien autorizó
+   * desde el navegador ya está donde tiene que estar, y lo que le hace falta es volver a
+   * SU pestaña. Con esta opción el callback responde un 302 a la URL de la web.
+   *
+   * El puerto del callback (7634) no se mueve: el IDS registra ese `redirect_uri`. Lo que
+   * cambia es lo que se contesta DESPUÉS de recibir el código, que el IDS no mira.
+   *
+   * El fallo NO redirige, a propósito: la web todavía no sabe nada del error —se entera
+   * por la promesa rechazada, y lo cuenta por su propio canal— así que mandarla allí
+   * enseñaría un vestíbulo en blanco en lugar del motivo. La página de error se queda, con
+   * un texto que no presupone terminal.
+   */
+  redirigirA?: string;
 }
 
 /**
@@ -347,7 +364,42 @@ function urlSegura(valor: string): URL {
   return url;
 }
 
-function esperarCallback(timeoutMs: number): Promise<{ url: string; codigo: Promise<string>; cerrar: () => void }> {
+/**
+ * Qué se le contesta al navegador que vuelve del IDS.
+ *
+ * Sale del servidor y se prueba aparte porque montarlo exige el puerto 7634 —fijo, porque
+ * el IDS registra ese `redirect_uri`— y ahí no se puede escoger uno efímero: un test que
+ * atara el puerto real fallaría en cuanto alguien tuviera una autorización en curso.
+ */
+export function respuestaDeCallback(
+  codigo: string | null,
+  error: string | null,
+  redirigirA?: string
+): { estado: number; cabeceras: Record<string, string>; cuerpo: string } {
+  if (error || !codigo) {
+    // Sin redirección tampoco en modo web: la web aún no sabe del fallo (se entera por la
+    // promesa rechazada) y mandarla allí escondería el motivo. El texto no nombra «la
+    // consola» porque quien llega aquí puede estar usando el navegador.
+    return {
+      estado: 400,
+      cabeceras: { "content-type": "text/html; charset=utf-8" },
+      cuerpo: "<h1>No se pudo completar el acceso a CloudStudio</h1><p>Vuelve a xonecode para ver el detalle.</p>",
+    };
+  }
+  if (redirigirA !== undefined) {
+    return { estado: 302, cabeceras: { location: redirigirA }, cuerpo: "" };
+  }
+  return {
+    estado: 200,
+    cabeceras: { "content-type": "text/html; charset=utf-8" },
+    cuerpo: "<h1>CloudStudio conectado</h1><p>Ya puedes volver a xonecode.</p>",
+  };
+}
+
+function esperarCallback(
+  timeoutMs: number,
+  redirigirA?: string
+): Promise<{ url: string; codigo: Promise<string>; cerrar: () => void }> {
   return new Promise((resolver, rechazar) => {
     let resolverCodigo!: (codigo: string) => void;
     let rechazarCodigo!: (error: Error) => void;
@@ -359,10 +411,9 @@ function esperarCallback(timeoutMs: number): Promise<{ url: string; codigo: Prom
       const recibida = new URL(peticion.url ?? "/", "http://127.0.0.1");
       const codigo = recibida.searchParams.get("code");
       const error = recibida.searchParams.get("error");
-      respuesta.writeHead(error || !codigo ? 400 : 200, { "content-type": "text/html; charset=utf-8" });
-      respuesta.end(error || !codigo
-        ? "<h1>No se pudo completar el acceso a CloudStudio</h1><p>Vuelve a la consola para ver el detalle.</p>"
-        : "<h1>CloudStudio conectado</h1><p>Ya puedes volver a xonecode.</p>");
+      const contestacion = respuestaDeCallback(codigo, error, redirigirA);
+      respuesta.writeHead(contestacion.estado, contestacion.cabeceras);
+      respuesta.end(contestacion.cuerpo);
       limpiar();
       if (error || !codigo) rechazarCodigo(new Error(`el IDS rechazó el acceso${error ? `: ${error}` : ""}`));
       else resolverCodigo(codigo);
@@ -569,7 +620,7 @@ async function abrirCliente(
 ): Promise<{ cliente: Client; url: URL; cerrar: () => Promise<void> }> {
   const url = urlSegura(urlTexto);
   const scopes = opciones.scopes ?? SCOPES_CLOUDSTUDIO_AGENTE;
-  const callback = await esperarCallback(opciones.timeoutMs ?? 5 * 60_000);
+  const callback = await esperarCallback(opciones.timeoutMs ?? 5 * 60_000, opciones.redirigirA);
   const ruta = opciones.rutaAuth ?? rutaAuthPorDefecto();
   const provider = new ProviderCloudStudio(ruta, opciones.entornoId ?? CLAVE_LEGADO, callback.url, (autorizacion) => {
     // La URL de autorización no aporta nada al transcript normal y puede tener parámetros
