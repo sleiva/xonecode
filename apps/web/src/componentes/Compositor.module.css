@@ -2,14 +2,18 @@
    interactive-bg-hover y button-primary-fill existen en design-platform.css (ver el
    grep del brief). */
 
-/* MEDIDO contra la referencia: el compositor ya no es un campo a sangre con un borde
-   arriba — es una tarjeta REDONDEADA y SEPARADA del borde inferior, del mismo ancho de
-   columna que `Chat.module.css` (775px, centrada) para que quede alineada bajo la
-   conversación. `.envoltura` es quien centra y separa; `.compositor` es la tarjeta. */
+/* El compositor es una tarjeta redondeada, separada del borde de abajo, y CENTRADA en el
+   mismo eje que la conversación. El número ya no se repite a mano: las dos variables las
+   declara `.root` de `estilos/ConversationRoot.module.css` (copiado de deepseek), que
+   `Maqueta.tsx` monta sobre la columna central — `--dsh-composer-card-max-width` es
+   exactamente `--dsh-chat-content-width + 32px`, que es la relación que allí mantiene la
+   tarjeta 32px más ancha que el texto a cualquier tamaño de ventana. Antes eran dos
+   `775px` escritos en dos ficheros, y dos números para la misma cosa es cómo uno de los
+   dos se queda mintiendo. */
 .envoltura {
-  max-width: 775px;
+  max-width: var(--dsh-composer-card-max-width);
   margin: 0 auto;
-  padding: 0 16px 16px;
+  padding: 0 var(--dsh-composer-side-clearance) 16px;
   width: 100%;
   box-sizing: border-box;
 }

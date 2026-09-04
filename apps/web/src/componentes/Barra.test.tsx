@@ -7,6 +7,17 @@ const AQUI = dirname(fileURLToPath(import.meta.url));
 const modulos = readdirSync(AQUI).filter((f) => f.endsWith(".module.css"));
 
 /**
+ * Los `.module.css` COPIADOS de deepseek viven aparte, en `apps/web/estilos/`, y no en
+ * este directorio. La frontera importa: la disciplina de más abajo («ningún color
+ * literal») es sobre lo que escribimos NOSOTROS, y las hojas de ellos usan
+ * `transparent` a manos llenas — meterlas aquí las haría fallar y la salida no diría por
+ * qué. `estilos/` es además donde ya viven las hojas de tokens copiadas desde el
+ * principio, así que la procedencia se sigue con un `ls`.
+ */
+const ESTILOS = join(AQUI, "..", "..", "estilos");
+const COPIADOS = readdirSync(ESTILOS).filter((f) => f.endsWith(".module.css"));
+
+/**
  * Palabras clave de color de CSS Color Module Level 4 (los 147 nombres extendidos, más
  * `transparent` y `currentcolor`) — una lista CERRADA, no «lo que se me ocurra»: es la
  * única barrera que hace cumplir «ningún color literal», y una lista abierta es una
@@ -77,6 +88,27 @@ function tieneColorLiteral(css: string): boolean {
 describe("disciplina de estilos (heredada de deepseek)", () => {
   it("hay módulos que revisar", () => {
     expect(modulos.length).toBeGreaterThan(0);
+  });
+
+  it("cada hoja copiada de deepseek dice de dónde viene y bajo qué licencia", () => {
+    // No es burocracia: `THIRD_PARTY_NOTICES.md` se puede quedar viejo sin que nada
+    // chille, pero un fichero sin cabecera es un fichero que dentro de seis meses nadie
+    // sabe si es nuestro o de ellos — y esa duda es la que hace que alguien lo edite «un
+    // poco» y pierda la equivalencia con el original, que es justo lo que el usuario
+    // quiere conservar para poder recolorear cambiando tokens.
+    expect(COPIADOS.length).toBeGreaterThan(0);
+    for (const m of COPIADOS) {
+      const css = readFileSync(join(ESTILOS, m), "utf8");
+      expect(css.slice(0, 400), m).toMatch(/deepseek-harness/);
+      expect(css.slice(0, 400), m).toMatch(/MIT/);
+    }
+  });
+
+  it("ninguna hoja copiada se cuela en `componentes/`: la disciplina de abajo es sobre lo NUESTRO", () => {
+    for (const m of modulos) {
+      const css = readFileSync(join(AQUI, m), "utf8");
+      expect(css.slice(0, 200), m).not.toMatch(/^\s*\/\* (RECORTE|Tomado) de deepseek-harness/);
+    }
   });
 
   it("ningún componente escribe un color literal: solo alias semánticos", () => {

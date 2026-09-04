@@ -1,45 +1,23 @@
-import { useState } from "react";
 import type { Acto } from "../tipos.js";
+import type { Pestana } from "./Cabecera.js";
 import { Chat } from "./Chat.js";
 import { Trayectoria } from "./Trayectoria.js";
-import estilos from "./Transcript.module.css";
-
-type Pestana = "chat" | "trayectoria";
+import conversacion from "../../estilos/ConversationRoot.module.css";
 
 /**
- * Las dos vistas del transcript, alternadas por pestaña. El `useState` es TODO el
- * mecanismo de «se recuerda mientras dure la página»: no hay nada que persistir a
- * `localStorage` ni al store —recargar la pestaña del navegador es una sesión nueva
- * como lo es reconectar el SSE (`store.ts#marcarDesconectado` ya borra lo pendiente
- * en ese momento)—, así que un estado de componente que muere con el montaje es
- * exactamente la vida útil que pide el criterio de aceptación, ni más ni menos.
+ * La vista elegida, dentro de las cajas que la hoja copiada da a la banda de debajo de
+ * la cabecera (`estilos/ConversationRoot.module.css`): `.body` es la banda y `.viewArea`
+ * la vista.
+ *
+ * Ya no lleva las pestañas ni el `useState` que decidía cuál. Se fueron a `Cabecera.tsx`
+ * —que es donde viven en el original, dentro del mismo `<header>` que pinta la línea de
+ * separación— y el estado subió a `App.tsx`, con la misma vida útil de antes: muere con
+ * la página, no se persiste en ningún sitio.
  */
-export function Transcript({ actos }: { actos: readonly Acto[] }) {
-  const [pestana, setPestana] = useState<Pestana>("chat");
-
+export function Transcript({ actos, pestana }: { actos: readonly Acto[]; pestana: Pestana }) {
   return (
-    <div className={estilos.transcript}>
-      <div className={estilos.pestanas} role="tablist">
-        <button
-          type="button"
-          role="tab"
-          aria-selected={pestana === "chat"}
-          className={pestana === "chat" ? estilos.activa : estilos.pestana}
-          onClick={() => setPestana("chat")}
-        >
-          Chat
-        </button>
-        <button
-          type="button"
-          role="tab"
-          aria-selected={pestana === "trayectoria"}
-          className={pestana === "trayectoria" ? estilos.activa : estilos.pestana}
-          onClick={() => setPestana("trayectoria")}
-        >
-          Trayectoria
-        </button>
-      </div>
-      <div className={estilos.vista}>
+    <div className={conversacion.body}>
+      <div className={conversacion.viewArea}>
         {pestana === "chat" ? <Chat actos={actos} /> : <Trayectoria actos={actos} />}
       </div>
     </div>

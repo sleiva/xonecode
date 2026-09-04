@@ -48,6 +48,9 @@ export interface EstadoDelCliente {
     /** Si hay un proyecto abierto en esta conexión — `App.tsx` lo usa para decidir entre
      *  la maqueta completa y `SinProyectoAbierto`. */
     proyectoAbierto: boolean;
+    /** El modo del proyecto abierto, para la pastilla de la cabecera. Ausente = el
+     *  servidor no lo sabe, y entonces no se pinta pastilla (`Cabecera.tsx`). */
+    modo?: "offline" | "cloud";
   };
 }
 
@@ -219,6 +222,7 @@ export function crearStoreDelCliente(): {
             aviso?: unknown;
             nombre?: unknown;
             proyectoAbierto?: unknown;
+            modo?: unknown;
           };
           if (!Array.isArray(m.pasos) || !m.pasos.every((p) => typeof p === "string" && PASOS.has(p))) return;
           if (!sonIdentidades(m.proveedores) || !sonIdentidades(m.proyectos)) return;
@@ -245,6 +249,11 @@ export function crearStoreDelCliente(): {
               // Ausente o de otro tipo = no hay aviso/nombre, nunca uno inventado.
               ...(typeof m.aviso === "string" ? { aviso: m.aviso } : {}),
               ...(typeof m.nombre === "string" ? { nombre: m.nombre } : {}),
+              // Solo los dos valores que el tipo admite: cualquier otra cosa (un modo
+              // nuevo del servidor, o basura) se descarta y la cabecera no pinta
+              // pastilla, que es lo mismo que hace cuando el campo no viene. Aceptar la
+              // cadena a ciegas dejaría un modo desconocido escrito en pantalla.
+              ...(m.modo === "offline" || m.modo === "cloud" ? { modo: m.modo } : {}),
             },
           });
           return;

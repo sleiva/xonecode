@@ -2,22 +2,16 @@
    border-l2, label-primary, state-error-secondary, state-business-tertiary,
    markdown-code-block y markdown-inline-code existen. */
 
-/* MEDIDO contra la referencia (`dsh web`, 1700px): el texto no ocupa el centro entero —
-   vive en una columna de ~775px, centrada. A ese ancho se lee mal corrido de borde a
-   borde; `Compositor.module.css` usa el MISMO número para que el compositor quede
-   alineado bajo la conversación, no más ancho ni más estrecho. */
-.chat {
-  display: flex;
-  flex-direction: column;
-  gap: 20px;
-  height: 100%;
-  overflow-y: auto;
-  padding: 16px;
-  max-width: 775px;
-  margin: 0 auto;
-  width: 100%;
-  box-sizing: border-box;
-}
+/* La caja del scroller y la COLUMNA centrada ya no se escriben aquí: son
+   `estilos/ChatView.module.css`, copiado de deepseek (ver su cabecera de atribución), y
+   `Chat.tsx` las monta. Con ellas se fue el `max-width: 775px` medido a ojo contra la
+   referencia: el ancho lo decide ahora `--dsh-chat-content-width` con la MISMA fórmula
+   que ellos (un `clamp` sobre el ancho vivo de la columna), así que compositor y
+   conversación comparten eje sin que nadie repita un número.
+
+   Lo que queda aquí es lo que la referencia no nos da: cómo se ve cada acto NUESTRO.
+
+*/
 
 .globo {
   padding: 10px 14px;

@@ -1,0 +1,197 @@
+/* RECORTE de deepseek-harness (packages/client/ui-workspace/src/client/rows/Rows.module.css),
+   MIT. Copiado sin cambios en lo que se copia, con sus comentarios originales en inglés
+   (ver `AppFrame.module.css` para el porqué).
+
+   Se copian las filas de la barra: `.projectRow`/`.sessionRow` (geometría, hover y fila
+   seleccionada), la ranura del icono de cabeza (`.slot`, `.folderActive`, `.chevron`, el
+   intercambio carpeta↔flecha al pasar por encima), `.projectText`/`.title`/`.meta`/
+   `.time`, las acciones que solo salen en hover (`.rowActions`, `.iconButton`) y la
+   guarda de `prefers-reduced-motion`.
+
+   Lo que NO se copia: `.searchResult*` (la barra de deepseek busca sesiones; la nuestra
+   todavía no), `.renameInput`/`.dropBefore`/`.dropAfter`/`.menuOpen`-de-menú (renombrar,
+   arrastrar y el menú contextual de una fila), `.scheduleIndicator` y `.hover*` (la
+   tarjeta flotante al posar el ratón). Y hay un motivo DURO para dejar `.hoverStatus`
+   fuera además de que no la usemos: el original escribe ahí un color literal
+   (`#ADB2B8`), y la disciplina de esta consola es que ningún estilo lleve un color que no
+   sea un alias semántico — traerlo rompería justo lo que el usuario quiere conservar,
+   que es poder recolorear cambiando tokens en UN sitio. */
+.projectRow,
+.sessionRow {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  border-radius: 8px;
+  padding: 0 8px;
+  cursor: pointer;
+  user-select: none;
+  color: var(--dsw-alias-label-primary);
+}
+
+.projectRow:hover,
+.sessionRow:hover {
+  background: var(--dsw-alias-interactive-bg-hover);
+}
+
+.sessionRow.selected {
+  background: var(--dsw-alias-interactive-bg-hover);
+}
+/* Compact one-line Workspace row after removing the session-count subtitle. */
+.projectRow {
+  height: 34px;
+  align-items: center;
+  box-sizing: border-box;
+}
+
+.projectRow .rowActions {
+  height: 20px;
+}
+
+/* Session cell (figma): pad 8, a 16px status slot, then a 4px title gap. */
+.sessionRow {
+  height: 32px;
+  gap: 0;
+  /* Mount fade: session rows appear by unfolding a group (or the tree
+     mounting). Stable row keys keep already-visible rows from replaying it. */
+  animation: row-in 150ms var(--ds-ease-in-out);
+}
+
+.sessionRow .title {
+  margin: 0 6px 0 4px;
+}
+
+.flatSessionRowWithoutStatus .title {
+  margin-left: 0;
+}
+
+@keyframes row-in {
+  from { opacity: 0; }
+}
+
+.slot {
+  flex: none;
+  width: 16px;
+  height: 20px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--dsw-alias-label-tertiary);
+}
+
+.folderActive {
+  color: var(--dsw-alias-state-business-primary);
+}
+
+
+/* Project leading slot: folder by default, expand arrow on row hover. */
+.projectRow .chevron { display: none; }
+.projectRow:hover .chevron { display: inline-flex; }
+.projectRow:hover .folder { display: none; }
+
+/* Expand arrow (filled triangle): points right closed, rotates to point down open. */
+.arrow {
+  transition: transform 150ms var(--ds-ease-in-out);
+}
+
+.arrowOpen {
+  transform: rotate(90deg);
+}
+
+.projectText {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.title {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 14px;
+  line-height: 20px;
+}
+.sessionRow .title {
+  flex: 1;
+}
+
+.meta {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+  line-height: 20px;
+  color: var(--dsw-alias-label-tertiary);
+}
+
+.time {
+  flex: none;
+  font-size: 12px;
+  line-height: 20px;
+  color: var(--dsw-alias-label-tertiary);
+}
+.dot {
+  flex: none;
+}
+
+/* Trailing action buttons surface on hover only (figma 27:4668 / 27:4656):
+   bare 16px glyphs, gap 12, tertiary grey. */
+.rowActions {
+  flex: none;
+  display: none;
+  align-items: center;
+  gap: 12px;
+}
+
+.projectRow:hover .rowActions,
+.sessionRow:hover .rowActions,
+.projectRow.menuOpen .rowActions,
+.sessionRow.menuOpen .rowActions {
+  display: inline-flex;
+}
+
+.sessionRow:hover .time,
+.sessionRow.menuOpen .time {
+  display: none;
+}
+
+/* An open row menu pins the hover affordances (figma: the row keeps its
+   hover fill while its dropdown is up). */
+.projectRow.menuOpen,
+.sessionRow.menuOpen {
+  background: var(--dsw-alias-interactive-bg-hover);
+}
+.iconButton {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  border: none;
+  border-radius: 4px;
+  padding: 0;
+  background: transparent;
+  cursor: pointer;
+  color: var(--dsw-alias-label-tertiary);
+}
+
+.iconButton:hover {
+  color: var(--dsw-alias-label-primary);
+}
+
+/* Chevrons ride the caption grey (#ADB2B8); the folder glyph stays one step
+   darker (tertiary, #81858C) per the cell spec. */
+.chevron {
+  color: var(--dsw-alias-label-caption);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sessionRow,
+  .arrow {
+    animation: none;
+    transition: none;
+  }
+}

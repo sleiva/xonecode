@@ -1,5 +1,6 @@
 import type { Acto } from "../tipos.js";
 import { MarkdownText, type MarkdownCodeLabels } from "@deepseek-ai/dsh-client-ui-primitives";
+import vista from "../../estilos/ChatView.module.css";
 import estilos from "./Chat.module.css";
 
 /**
@@ -39,31 +40,40 @@ const ETIQUETAS_DE_CODIGO: MarkdownCodeLabels = { copyLabel: "Copiar", copiedLab
 
 export function Chat({ actos }: { actos: readonly Acto[] }) {
   return (
-    <div className={estilos.chat}>
-      {actos.map((acto, indice) => {
-        if (acto.tipo === "usuario") {
-          return (
-            <p key={indice} className={`${estilos.globo} ${estilos.usuario}`}>
-              {acto.texto}
-            </p>
-          );
-        }
-        if (acto.tipo === "asistente") {
-          return (
-            <div key={indice} className={`${estilos.globo} ${estilos.asistente}`}>
-              <MarkdownText text={acto.texto} streaming={false} codeLabels={ETIQUETAS_DE_CODIGO} />
-            </div>
-          );
-        }
-        if (acto.tipo === "error") {
-          return (
-            <p key={indice} className={`${estilos.globo} ${estilos.error}`}>
-              {acto.texto}
-            </p>
-          );
-        }
-        return null;
-      })}
+    <div className={vista.root}>
+      <div className={vista.scroll}>
+        {/* La columna centrada: `max-width: var(--dsh-chat-content-width); margin: 0 auto`
+            en la hoja copiada, con la variable declarada por `.root` de
+            `estilos/ConversationRoot.module.css` (que `Maqueta.tsx` monta sobre la
+            columna central). Es lo que pone la conversación en el CENTRO y no pegada a la
+            barra, y lo que la alinea con el compositor, que lee la MISMA variable. */}
+        <div className={vista.column}>
+          {actos.map((acto, indice) => {
+            if (acto.tipo === "usuario") {
+              return (
+                <p key={indice} className={`${vista.flowItem} ${estilos.globo} ${estilos.usuario}`}>
+                  {acto.texto}
+                </p>
+              );
+            }
+            if (acto.tipo === "asistente") {
+              return (
+                <div key={indice} className={`${vista.flowItem} ${estilos.globo} ${estilos.asistente}`}>
+                  <MarkdownText text={acto.texto} streaming={false} codeLabels={ETIQUETAS_DE_CODIGO} />
+                </div>
+              );
+            }
+            if (acto.tipo === "error") {
+              return (
+                <p key={indice} className={`${vista.flowItem} ${estilos.globo} ${estilos.error}`}>
+                  {acto.texto}
+                </p>
+              );
+            }
+            return null;
+          })}
+        </div>
+      </div>
     </div>
   );
 }

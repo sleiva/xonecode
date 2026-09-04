@@ -1,0 +1,159 @@
+/* RECORTE de deepseek-harness
+   (packages/client/ui-workspace/src/client/rows/WorkspaceBrowser.module.css), MIT.
+   Copiado sin cambios en lo que se copia, con sus comentarios originales en inglés (ver
+   `AppFrame.module.css` para el porqué).
+
+   Es el ocupante de `.regionArea` de `SidebarRoot.module.css`: la zona de la barra entre
+   el botón de sesión nueva y el pie. Se copia el armazón —`.root` con sus tres variables
+   de sangrado, la cabecera de sección (`.sectionHeader`, `.sectionLabel`, `.iconButton`),
+   `.listArea`/`.treeBody`/`.list` (la ÚNICA región que scrollea), el degradado de abajo
+   (`.fade`), la separación entre secciones (`.groupSection`) y el texto de lista vacía
+   (`.empty`)—.
+
+   Lo que NO se copia: todo lo de la búsqueda inline (`.search*`, ~180 líneas: el campo
+   que se expande comiéndose el grupo de acciones), el arrastrar-y-soltar de sesiones
+   (`.workspaceDropBefore/After`, `.listTopDropIndicator`), el botón de desbordamiento de
+   sesiones, y el diálogo de renombrar/borrar. Ninguna de esas existe aquí.
+
+   Dos cosas que esta hoja hereda de fuera y hay que respetar al montarla:
+   `--dsh-sidebar-inline-padding` lo declara `.root` de `SidebarRoot.module.css` (sin ese
+   ancestro, el sangrado derecho queda a cero), y `.list` cuenta con que el pulgar del
+   scroll mida 8px, que es lo que fija `estilos/scrollbar.css`. */
+.root {
+  --dsh-session-list-edge-inset: var(--dsh-sidebar-inline-padding);
+  --dsh-session-list-scrollbar-width: 8px;
+  --dsh-session-list-scrollbar-offset: 2px;
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  box-sizing: border-box;
+  padding-right: var(--dsh-session-list-edge-inset);
+}
+
+.root.rail {
+  padding-right: 0;
+}
+.iconButton {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border: none;
+  border-radius: 50%;
+  corner-shape: round;
+  padding: 0;
+  background: transparent;
+  cursor: pointer;
+  color: var(--dsw-alias-label-secondary);
+}
+
+.iconButton:hover {
+  background: var(--dsw-alias-interactive-bg-hover);
+}
+/* Section header: title, an inline search control, and the two trailing
+   actions. Expanding search collapses the action cluster and takes its room. */
+.sectionHeader {
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 4px;
+  height: 36px;
+  padding-left: 4px;
+  margin-bottom: 4px;
+  box-sizing: border-box;
+  border-radius: 12px;
+  overflow: hidden;
+  color: var(--dsw-alias-label-tertiary);
+}
+
+.root:not(.rail) .sectionHeader {
+  margin-top: 2px;
+  margin-right: -4px;
+}
+.listArea {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  margin-left: -4px;
+  margin-right: calc(-1 * var(--dsh-session-list-edge-inset));
+  padding-left: 4px;
+  /* The list remains the scroll clip. This seat stays visible so the
+     absolutely positioned first-boundary marker can occupy the header gap. */
+  overflow: visible;
+}
+
+.rail .listArea {
+  margin-left: 0;
+  margin-right: 0;
+  padding-left: 0;
+}
+
+/* Relative for the bottom fade overlay. */
+.treeBody {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  position: relative;
+}
+
+/* Bottom fade: compact overlay pinned to the visible bottom,
+   transparent -> sidebar fill so it tracks the theme. */
+.fade {
+  position: absolute;
+  left: 0;
+  right: var(--dsh-session-list-edge-inset);
+  bottom: 0;
+  height: 24px;
+  background: linear-gradient(to bottom, transparent, var(--dsw-specific-sidebar-fill));
+  pointer-events: none;
+}
+
+/* Wide-only content fades back in on expand remount (mirrors the shell). */
+.wide {
+  animation: wide-in 200ms var(--ds-ease-in-out);
+}
+
+@keyframes wide-in {
+  from { opacity: 0; }
+}
+
+/* List: the only scrolling region. Block children keep their design heights
+   under content overflow. The 2px edge offset, stable 8px themed scrollbar,
+   and remaining padding equal the shell's right inset, with or without
+   overflow, so moving the bar does not move the rows. */
+.list {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  margin-left: -4px;
+  margin-right: var(--dsh-session-list-scrollbar-offset);
+  padding-left: 4px;
+  padding-right: calc(
+    var(--dsh-session-list-edge-inset)
+    - var(--dsh-session-list-scrollbar-width)
+    - var(--dsh-session-list-scrollbar-offset)
+  );
+  /* Clears the compact bottom fade overlay: at scroll end the last row sits
+     above the gradient instead of under it. */
+  padding-bottom: 16px;
+  scrollbar-gutter: stable;
+}
+/* One workspace section: header row + a compact expanded session run. */
+.groupSection {
+  position: relative;
+}
+
+.groupSection + .groupSection {
+  margin-top: 4px;
+}
+.empty {
+  padding: 16px 12px;
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 13px;
+}

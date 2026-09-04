@@ -177,7 +177,12 @@ export function montarRutas(
    * piel se lo manda; esta no.
    */
   const anunciarAlta = async (): Promise<void> => {
-    const proyectoAbierto = vestibulo.proyectoAbierto() !== undefined;
+    const abierto = vestibulo.proyectoAbierto();
+    const proyectoAbierto = abierto !== undefined;
+    // Se lee del disco EN CADA anuncio y no se cachea al abrir: `configurarModoInicial`
+    // puede escribirlo después de abrir (el alta de un proyecto cloud), y una copia
+    // tomada antes se quedaría diciendo lo de antes.
+    const modo = abierto === undefined ? undefined : modoDeProyecto(abierto.raiz);
     const pendientes = proyectoAbierto ? [] : await vestibulo.pasosPendientes();
     const pasos: PasoDelVestibulo[] = pendientes.includes("entorno") ? ["entorno"] : [];
     emitir({
@@ -188,6 +193,7 @@ export function montarRutas(
       proyectos,
       ramas,
       proyectoAbierto,
+      ...(modo === undefined ? {} : { modo }),
       ...(vestibulo.nombre === undefined ? {} : { nombre: vestibulo.nombre }),
       ...(aviso === undefined ? {} : { aviso }),
     });
@@ -521,15 +527,33 @@ export async function arrancarConsolaWeb(opciones: OpcionesDeArranque): Promise<
   return 0;
 }
 
+/**
+ * El `modo` que declara el `.xonecode/config.json` de una raíz, o `undefined`.
+ *
+ * `undefined` es «no se sabe», no «offline»: cubre el fichero que no está, el JSON roto y
+ * el valor que no es ninguno de los dos. Quien pregunta decide qué hacer con no saber —
+ * `esProyectoOffline` lo trata como «no es offline» y la cabecera de la consola web no
+ * pinta pastilla—, y ninguno de los dos afirma sobre lo que no ha leído.
+ *
+ * Del config no sale nada más: ni la URL del entorno, ni el proyecto, ni la rama. Es lo
+ * mismo que ya hace `proyectosDeResultado` con la respuesta de CloudStudio (CLAUDE.md),
+ * quedarse SOLO con lo que hace falta enseñar.
+ */
+export function modoDeProyecto(raiz: string): "offline" | "cloud" | undefined {
+  try {
+    const crudo: unknown = JSON.parse(readFileSync(join(raiz, ".xonecode", "config.json"), "utf8"));
+    if (typeof crudo !== "object" || crudo === null) return undefined;
+    const modo = (crudo as { modo?: unknown }).modo;
+    return modo === "offline" || modo === "cloud" ? modo : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 /** Un `.xonecode/config.json` con `modo: "offline"` en el cwd. Lo que no se pueda leer no
  *  es un proyecto offline: no se afirma sobre lo que no se sabe. */
 function esProyectoOffline(cwd: string): boolean {
-  try {
-    const crudo: unknown = JSON.parse(readFileSync(join(cwd, ".xonecode", "config.json"), "utf8"));
-    return typeof crudo === "object" && crudo !== null && (crudo as { modo?: unknown }).modo === "offline";
-  } catch {
-    return false;
-  }
+  return modoDeProyecto(cwd) === "offline";
 }
 
 /**

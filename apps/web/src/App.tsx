@@ -3,7 +3,7 @@ import type { crearStoreDelCliente } from "./store.js";
 import type { Conexion } from "./conexion.js";
 import { Maqueta } from "./componentes/Maqueta.js";
 import { Barra } from "./componentes/Barra.js";
-import { Cabecera } from "./componentes/Cabecera.js";
+import { Cabecera, type Pestana } from "./componentes/Cabecera.js";
 import { Compositor } from "./componentes/Compositor.js";
 import { Transcript } from "./componentes/Transcript.js";
 import { BarraDeEstado } from "./componentes/BarraDeEstado.js";
@@ -39,6 +39,15 @@ export function App({ store, enviar }: { store: Store; enviar: Conexion["enviar"
    * cancelar la elección de rama cae a la primera disponible): se manda sola, sin
    * `Selector` de por medio. Con más de una, sí.
    */
+  /**
+   * Qué pestaña se está viendo. Vivía dentro de `Transcript`; subió aquí cuando la tira
+   * de pestañas se fue a `Cabecera` —que es donde vive en el CSS de deepseek, dentro del
+   * mismo `<header>` que pinta la línea de separación—. La vida útil no cambia: muere con
+   * la página, como antes, porque recargar el navegador ya es una sesión nueva
+   * (`store.ts#marcarDesconectado` borra lo pendiente en ese momento).
+   */
+  const [pestana, setPestana] = useState<Pestana>("chat");
+
   const [proyectoEligiendoRama, setProyectoEligiendoRama] = useState<string | undefined>(undefined);
   const ramasPendientes = estado.alta?.ramas ?? [];
 
@@ -190,10 +199,15 @@ export function App({ store, enviar }: { store: Store; enviar: Conexion["enviar"
           <>
             <Cabecera
               titulo={primerActoDeUsuario?.texto ?? "xonecode"}
+              // Ausente mientras el servidor no lo sepa: `Cabecera` no pinta pastilla
+              // entonces, en vez de afirmar un modo que nadie ha leído.
+              {...(estado.alta?.modo === undefined ? {} : { modo: estado.alta.modo })}
               conectado={estado.conectado}
+              pestana={pestana}
+              alElegirPestana={setPestana}
             />
             <AvisoDeConexion conectado={estado.conectado} />
-            <Transcript actos={estado.actos} />
+            <Transcript actos={estado.actos} pestana={pestana} />
             {/*
               Las tres esperas de humano van DELANTE del compositor y cada una con su propio
               cauce: el compositor manda `prosa`, que entra por la cola de líneas del lazo y no
@@ -303,6 +317,11 @@ export function App({ store, enviar }: { store: Store; enviar: Conexion["enviar"
           // Mismo motivo: no hay clase del cable para «abre otra sesión de este
           // proyecto» (`Barra.tsx` documenta por qué el botón se enseña de todos modos).
           alNuevaSesion={() => {}}
+          // «Ajustes» es una entrada de verdad, no un rótulo: manda `/config`, que es el
+          // comando que ya existe (`COMANDOS` en `cli/consola.ts`) y cuya salida entra en
+          // el transcript como cualquier otra prosa — el mismo camino que documenta el
+          // `alEnviar` del compositor, sin una sola línea nueva de servidor.
+          alAbrirAjustes={() => void enviar({ clase: "prosa", texto: "/config" })}
         />
       }
     />

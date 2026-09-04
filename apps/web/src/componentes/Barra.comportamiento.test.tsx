@@ -24,6 +24,7 @@ describe("Barra: los tres niveles vacíos se explican solos", () => {
         alAbrirSesion={() => {}}
         alAbrirProyecto={() => {}}
         alNuevaSesion={() => {}}
+        alAbrirAjustes={() => {}}
       />
     );
   }
@@ -56,6 +57,7 @@ describe("Barra: los tres niveles vacíos se explican solos", () => {
         alAbrirSesion={() => {}}
         alAbrirProyecto={() => {}}
         alNuevaSesion={alNuevaSesion}
+        alAbrirAjustes={() => {}}
       />
     );
     fireEvent.click(screen.getByRole("button", { name: /nueva sesión en harnees/i }));
@@ -76,6 +78,7 @@ describe("Barra: los tres niveles vacíos se explican solos", () => {
         alAbrirSesion={() => {}}
         alAbrirProyecto={alAbrirProyecto}
         alNuevaSesion={() => {}}
+        alAbrirAjustes={() => {}}
       />
     );
     fireEvent.click(screen.getByRole("button", { name: "tienda" }));
@@ -83,11 +86,28 @@ describe("Barra: los tres niveles vacíos se explican solos", () => {
     expect(alAbrirProyecto).not.toHaveBeenCalledWith("p1");
   });
 
-  it("el pie de la barra no termina en la última sesión: «Ajustes» siempre se enseña", () => {
-    montar();
-    expect(screen.getByText("Ajustes")).toBeTruthy();
-    expect(screen.getByText("/config")).toBeTruthy();
-    expect(screen.getByText("/modelo")).toBeTruthy();
+  it("«Ajustes» es una ENTRADA de verdad, no un rótulo: se pulsa y avisa", () => {
+    // Cambio de rumbo del usuario: antes el pie eran dos líneas de texto suelto
+    // («/config y /modelo, desde el compositor»), que se leían como una nota al pie y no
+    // como algo que se pueda pulsar. Ahora ocupa el mismo asiento que el «Settings» de
+    // la referencia (`estilos/SettingsRoot.module.css`) y es un botón. Que un botón
+    // exista no basta: este test exige que LLAME a alguien — un botón que no hace nada
+    // es el fallo mudo que este repo persigue.
+    const alAbrirAjustes = vi.fn();
+    render(
+      <Barra
+        entornos={[]}
+        entornoActivo=""
+        proyectos={[]}
+        alElegirEntorno={() => {}}
+        alAbrirSesion={() => {}}
+        alAbrirProyecto={() => {}}
+        alNuevaSesion={() => {}}
+        alAbrirAjustes={alAbrirAjustes}
+      />
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Ajustes" }));
+    expect(alAbrirAjustes).toHaveBeenCalledTimes(1);
   });
 
   it("con entorno y proyecto reales, el select y la lista de sesiones siguen ahí", () => {
@@ -101,6 +121,7 @@ describe("Barra: los tres niveles vacíos se explican solos", () => {
         alAbrirSesion={() => {}}
         alAbrirProyecto={() => {}}
         alNuevaSesion={() => {}}
+        alAbrirAjustes={() => {}}
       />
     );
     expect(screen.getByRole("combobox")).toBeTruthy();

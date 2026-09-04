@@ -92,6 +92,17 @@ export type MensajeAlCliente =
       /** Si hay un proyecto abierto en ESTA conexión — hace falta desde que `pasos: []`
        *  dejó de implicarlo (ver arriba). */
       proyectoAbierto: boolean;
+      /**
+       * El `modo` del `.xonecode/config.json` del proyecto abierto, para la pastilla de
+       * la cabecera. **Ausente cuando no se sabe**, y eso incluye tres casos que no se
+       * distinguen desde aquí: no hay proyecto abierto, el fichero no se pudo leer, o
+       * lleva un valor que no es ninguno de los dos. Ausente NO significa «offline»:
+       * pintar «offline» sobre un fichero que no se pudo leer sería afirmar lo que no se
+       * sabe, que es la misma clase de mentira que un alias de color inventado. Es lo
+       * único que se le extrae al config: ni la URL del entorno, ni el proyecto, ni la
+       * rama, que son datos del despliegue y no tienen por qué acabar en el transcript.
+       */
+      modo?: "offline" | "cloud";
     }
   | {
       clase: "aprobacion";

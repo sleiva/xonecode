@@ -1,58 +1,94 @@
 import clsx from "clsx";
+import {
+  IconFolderClose16,
+  IconNewChatOutline16,
+  IconSettingsOutline16,
+} from "@deepseek-ai/dsh-client-ui-primitives";
+import barra from "../../estilos/SidebarRoot.module.css";
+import navegador from "../../estilos/WorkspaceBrowser.module.css";
+import filas from "../../estilos/Rows.module.css";
+import ajustes from "../../estilos/SettingsRoot.module.css";
 import estilos from "./Barra.module.css";
 
 export interface Proyecto { id: string; nombre: string; sesiones: { id: string; titulo: string; historica: boolean }[] }
 
 /**
- * Los tres niveles, ahora a la IZQUIERDA (`Maqueta.tsx`, como deepseek — cambio de rumbo
- * del usuario): entorno → proyectos → sesiones, y un pie con lo que hoy
- * son comandos de barra (`/config`, `/modelo`) y no un ajuste con sitio propio en la
- * interfaz — un enlace a un panel que no existe sería el mismo dato inventado que un
- * alias de color que no existe.
+ * La barra, ahora con el CSS de deepseek en vez de la aproximación a mano que había:
+ * el armazón de la columna es `estilos/SidebarRoot.module.css` (fila de marca arriba,
+ * `.regionArea` elástica en medio, `.footArea` clavado abajo), la zona de listas es
+ * `estilos/WorkspaceBrowser.module.css` y cada fila es `estilos/Rows.module.css`. El pie
+ * es el asiento de `estilos/SettingsRoot.module.css`. Recolorear todo esto vuelve a ser
+ * cambiar el VALOR de un token en un sitio, que es lo que pidió el usuario.
  *
- * Se monta con `enAlta` en falso (`App.tsx`): cuenta y entorno resueltos, CON o SIN
- * proyecto abierto —el paso de proyecto salió del alta y se elige aquí—, así que las
- * listas vacías de aquí abajo son de verdad «entorno registrado, aún sin proyectos» o
- * «proyecto abierto, aún sin sesiones», y ya no el único caso que se veía. Cada nivel
- * dice por qué está vacío y no una lista que simplemente no pinta nada, porque eso es
- * indistinguible de que la barra se haya roto.
+ * **Tres niveles, no dos.** Es lo que NO se copia de ellos: deepseek tiene workspace →
+ * sesión, y aquí hay entorno → proyectos → sesiones. Se toma su oficio y su CSS, no su
+ * modelo de información: el entorno se queda con su `<select>` (nuestro, en
+ * `Barra.module.css`) porque en su barra no hay nada equivalente que copiar.
  *
- * `entornos`/`proyectos` YA llegan poblados (`App.tsx` los lee de `estado.alta`, que el
- * servidor manda siempre, tenga o no proyecto abierto). Lo que sigue siendo un hueco:
- * `sesiones` de cada proyecto llega vacía siempre —no hay mensaje del cable que las
- * traiga—. Abrir un proyecto (`alAbrirProyecto`) SÍ está cableado: pide la rama al
- * servidor y, si tiene más de una, `App.tsx` enseña un selector — ver el comentario de
- * `alAbrirProyecto` ahí para el porqué de la elección con una sola rama.
+ * **Las filas son `<button>`, no los `<div role="treeitem">` del original.** Allí el
+ * árbol se recorre con el teclado y el rol lo justifica; aquí no hay navegación de árbol
+ * —una fila solo abre lo que nombra—, y un `<div>` con `onClick` sería una fila que el
+ * teclado no alcanza. La contrapartida es que su `.projectRow`/`.sessionRow` da por hecho
+ * un `<div>` y no resetea nada de botón, así que el reseteo lo pone `.reseteoDeBoton`
+ * (`Barra.module.css`) en la misma etiqueta — el mismo apaño que `Maqueta.tsx` usa para
+ * la altura del marco, y por el mismo motivo: no tocar la hoja copiada.
+ *
+ * **No hay botón global de «sesión nueva»**, que en su barra es el control más visible
+ * (`.newSession` de la hoja copiada, sin ocupante aquí). Crear una sesión desde cero
+ * necesitaría una clase del cable que hoy no existe —`vestibulo.ts` solo sabe ABRIR un
+ * proyecto—, y un botón que no hace nada es justo el fallo mudo que este repo persigue.
+ * La acción por proyecto sí se enseña (en `.rowActions`, que solo salen al posar el
+ * ratón) porque el criterio de aceptación la pide y el manejador puede llegar el día que
+ * el cable la lleve; hasta entonces `App.tsx` le pasa uno que no hace nada, igual que a
+ * `alElegirEntorno`.
+ *
+ * NADA de la marca de DeepSeek viaja aquí: la ranura `.brandName` la ocupa el nombre de
+ * xonecode, y `.brandMark` —donde el original monta su `FishLogo`— se queda vacía.
  */
-export function Barra({ entornos, entornoActivo, proyectos, sesionActiva, alElegirEntorno, alAbrirSesion, alAbrirProyecto, alNuevaSesion }: {
+export function Barra({ entornos, entornoActivo, proyectos, sesionActiva, alElegirEntorno, alAbrirSesion, alAbrirProyecto, alNuevaSesion, alAbrirAjustes }: {
   entornos: { id: string; nombre: string }[];
   entornoActivo: string;
   proyectos: Proyecto[];
   sesionActiva?: string;
   alElegirEntorno: (id: string) => void;
   alAbrirSesion: (proyecto: string, sesion: string) => void;
-  /** El nombre del proyecto es ahora un botón: pide su rama y lo abre (o lo enseña, si ya
+  /** El nombre del proyecto es un botón: pide su rama y lo abre (o lo enseña, si ya
    *  estaba abierto — el servidor no distingue, `completarProyecto`/`abrirProyecto` corren
    *  igual). */
   alAbrirProyecto: (proyecto: string) => void;
-  /**
-   * Una sesión es reabrible por diseño (`web/servidor/sesiones.ts`), pero crear una
-   * NUEVA desde aquí necesitaría una clase del cable que hoy no existe —abrir un
-   * proyecto solo pasa por el alta, una vez, y `vestibulo.ts` no tiene un «vuelve a
-   * abrir este mismo proyecto sin sesión»—. El botón se enseña igual, porque es la
-   * acción que pide el criterio de aceptación y `proyectos` puede llegar poblado el
-   * día que el cable la lleve; hasta entonces, quien monte `Barra` sin ese mensaje le
-   * pasa un manejador que no hace nada, igual que ya hace con `alElegirEntorno`.
-   */
+  /** Ver el comentario de cabecera: la acción existe, el mensaje del cable todavía no. */
   alNuevaSesion: (proyecto: string) => void;
+  /**
+   * «Ajustes», ahora una entrada de verdad y no una línea de texto suelta. Lo que hace
+   * lo decide `App.tsx`: no hay panel de ajustes que abrir, hay un comando de barra
+   * (`/config`), y quién sabe mandarlo por el cable es quien tiene el `enviar`.
+   */
+  alAbrirAjustes: () => void;
 }) {
   return (
-    <nav className={estilos.barra}>
-      <div className={estilos.contenido}>
-        <section className={estilos.seccion}>
-          <h2 className={estilos.tituloSeccion}>Entorno</h2>
+    <nav className={barra.root}>
+      {/* La fila de marca. Sin `.brandMark`: ahí es donde el original monta su logo, y
+          copiar el CSS no hace nuestro su dibujo. */}
+      <div className={barra.logoRow}>
+        <span className={clsx(barra.brand, estilos.marcaSinBoton)}>
+          <span className={barra.brandIdentity}>
+            <span className={barra.brandName}>
+              <span className={barra.fallbackBrandName}>xonecode</span>
+            </span>
+          </span>
+        </span>
+      </div>
+
+      <div className={barra.regionArea}>
+        <div className={navegador.root}>
+          {/* Nivel 1 — el entorno. El `<select>` es nuestro: en su barra no hay nada
+              equivalente de lo que copiar el estilo. */}
+          <div className={navegador.sectionHeader}>
+            <span className={navegador.sectionLabel}>Entorno</span>
+            <span className={estilos.rellenoDeSeccion} />
+          </div>
           {entornos.length === 0 ? (
-            <p className={estilos.vacio}>Sin entorno que enseñar aquí todavía.</p>
+            <p className={navegador.empty}>Sin entorno que enseñar aquí todavía.</p>
           ) : (
             <select
               className={estilos.entorno}
@@ -66,71 +102,96 @@ export function Barra({ entornos, entornoActivo, proyectos, sesionActiva, alEleg
               ))}
             </select>
           )}
-        </section>
 
-        <section className={clsx(estilos.seccion, estilos.seccionProyectos)}>
-          <h2 className={estilos.tituloSeccion}>Proyectos</h2>
-          {proyectos.length === 0 ? (
-            <p className={estilos.vacio}>Sin proyectos que enseñar aquí todavía.</p>
-          ) : (
-            <ul className={estilos.proyectos}>
-              {proyectos.map((p) => (
-                <li key={p.id}>
-                  <div className={estilos.filaProyecto}>
-                    <button
-                      type="button"
-                      className={estilos.proyecto}
-                      onClick={() => alAbrirProyecto(p.id)}
-                    >
-                      {p.nombre}
-                    </button>
-                    <button
-                      type="button"
-                      className={estilos.nuevaSesion}
-                      onClick={() => alNuevaSesion(p.id)}
-                      aria-label={`nueva sesión en ${p.nombre}`}
-                    >
-                      + sesión
-                    </button>
-                  </div>
-                  {p.sesiones.length === 0 ? (
-                    <p className={estilos.vacioSesiones}>Sin sesiones todavía.</p>
-                  ) : (
-                    <ul className={estilos.sesiones}>
-                      {p.sesiones.map((s) => (
-                        <li key={s.id}>
+          {/* Niveles 2 y 3 — proyectos, y dentro de cada uno sus sesiones. */}
+          <div className={navegador.sectionHeader}>
+            <span className={navegador.sectionLabel}>Proyectos</span>
+            <span className={estilos.rellenoDeSeccion} />
+          </div>
+          <div className={navegador.listArea}>
+            <div className={navegador.treeBody}>
+              <div className={navegador.list}>
+                {proyectos.length === 0 ? (
+                  <p className={navegador.empty}>Sin proyectos que enseñar aquí todavía.</p>
+                ) : (
+                  proyectos.map((p) => (
+                    <div key={p.id} className={navegador.groupSection}>
+                      <div className={clsx(filas.projectRow, estilos.filaConAccion)}>
+                        <button
+                          type="button"
+                          className={clsx(estilos.reseteoDeBoton, estilos.cuerpoDeFila)}
+                          onClick={() => alAbrirProyecto(p.id)}
+                        >
+                          {/*
+                            `.slot` sí, `.folder` NO. Esa clase solo existe en su hoja
+                            para que la carpeta DESAPAREZCA al posar el ratón
+                            (`.projectRow:hover .folder { display: none }`) y deje sitio a
+                            un chevron que despliega la fila. Aquí las sesiones se enseñan
+                            siempre —no hay nada que desplegar— y no hay chevron que
+                            ponga, así que con `.folder` la fila se quedaba con el hueco
+                            en blanco al pasar por encima: medido en pantalla.
+                          */}
+                          <span className={filas.slot} aria-hidden="true">
+                            <IconFolderClose16 size={16} />
+                          </span>
+                          <span className={filas.projectText}>
+                            <span className={filas.title}>{p.nombre}</span>
+                          </span>
+                        </button>
+                        <span className={filas.rowActions}>
                           <button
+                            type="button"
+                            className={filas.iconButton}
+                            onClick={() => alNuevaSesion(p.id)}
+                            aria-label={`nueva sesión en ${p.nombre}`}
+                          >
+                            <IconNewChatOutline16 size={16} />
+                          </button>
+                        </span>
+                      </div>
+                      {p.sesiones.length === 0 ? (
+                        <p className={clsx(navegador.empty, estilos.sinSesiones)}>Sin sesiones todavía.</p>
+                      ) : (
+                        p.sesiones.map((s) => (
+                          <button
+                            key={s.id}
+                            type="button"
                             className={clsx(
-                              estilos.sesion,
-                              s.historica && estilos.historica,
-                              s.id === sesionActiva && estilos.activa
+                              estilos.reseteoDeBoton,
+                              filas.sessionRow,
+                              s.id === sesionActiva && filas.selected,
+                              s.historica && estilos.historica
                             )}
                             onClick={() => alAbrirSesion(p.id, s.id)}
                           >
-                            {s.titulo}
+                            <span className={filas.slot} aria-hidden="true" />
+                            <span className={filas.title}>{s.titulo}</span>
                           </button>
-                        </li>
-                      ))}
-                    </ul>
-                  )}
-                </li>
-              ))}
-            </ul>
-          )}
-        </section>
+                        ))
+                      )}
+                    </div>
+                  ))
+                )}
+              </div>
+              <div className={navegador.fade} aria-hidden="true" />
+            </div>
+          </div>
+        </div>
       </div>
 
-      {/* El remate de abajo: en la referencia va «Settings», y aquí son `/config` y
-          `/modelo` —comandos de barra, no un panel propio— porque eso es lo que ya
-          existe (`COMANDOS` en `cli/consola.ts`) y no hay nada que inventarle una
-          pantalla. Sin esto la barra terminaba en la última sesión, como si el resto se
-          hubiera cortado. */}
-      <div className={estilos.pie}>
-        <p className={estilos.pieTitulo}>Ajustes</p>
-        <p className={estilos.pieNota}>
-          <code className={estilos.pieComando}>/config</code> y{" "}
-          <code className={estilos.pieComando}>/modelo</code>, desde el compositor.
-        </p>
+      {/* El pie. En la referencia es «Settings» y abre un panel; aquí es «Ajustes» y
+          manda `/config` — el comando que ya existe (`COMANDOS` en `cli/consola.ts`) y
+          cuya salida entra en el transcript como cualquier otra. Mismo asiento, misma
+          geometría, misma tecla de color; lo que cambia es a dónde lleva. */}
+      <div className={barra.footArea}>
+        <div className={barra.settingsArea}>
+          <div className={ajustes.triggerRow}>
+            <button type="button" className={ajustes.trigger} onClick={alAbrirAjustes}>
+              <IconSettingsOutline16 size={16} />
+              <span className={ajustes.triggerLabel}>Ajustes</span>
+            </button>
+          </div>
+        </div>
       </div>
     </nav>
   );

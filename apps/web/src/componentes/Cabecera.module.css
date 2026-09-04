@@ -1,31 +1,20 @@
-/* Alias comprobados: bg-layer-1, border-l2, label-primary, state-success-primary y
-   state-error-primary existen en design-platform.css (ver el grep del brief). */
+/* Lo único propio de la cabecera: la caja, las migas, la pastilla de modo y las pestañas
+   son CSS de deepseek copiado tal cual (`estilos/ConversationRoot.module.css`,
+   `estilos/AgentPresetLabel.module.css` — cada uno con su cabecera de atribución).
 
-.cabecera {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 10px 16px;
-  border-bottom: 0.5px solid var(--dsw-alias-border-l2);
-  background: var(--dsw-alias-bg-layer-1);
-}
+   Aquí solo queda el indicador de conexión, que ocupa el asiento de la derecha
+   (`.headerUtilities`) porque el «Session log» de la referencia no tiene equivalente
+   aquí — ver `Cabecera.tsx`.
 
-.titulo {
-  margin: 0;
-  font-size: 14px;
-  font-weight: 600;
-  color: var(--dsw-alias-label-primary);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
+   Alias comprobados contra design-platform.css: state-success-primary y
+   state-error-primary existen. */
 
 .estado {
   display: flex;
   align-items: center;
   gap: 6px;
   font-size: 12px;
+  line-height: 22px;
   flex-shrink: 0;
 }
 

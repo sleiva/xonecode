@@ -38,6 +38,46 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ```
 
+## deepseek-harness (CSS de componentes de `apps/web/estilos/`)
+
+Además de las hojas de tokens de la sección anterior, `apps/web/estilos/` lleva el CSS de
+COMPONENTES de deepseek, para que la consola web use el mismo CSS y recolorearla sea
+cambiar valores de token en un sitio en vez de editar componentes. Cada fichero lleva su
+propia cabecera de atribución, que dice si es copia entera o RECORTE y —cuando es
+recorte— qué se dejó fuera y por qué.
+
+| fichero en `apps/web/estilos/` | origen (`packages/client/…`) | paquete | licencia | líneas copiadas |
+|---|---|---|---|---|
+| `AppFrame.module.css` | `ui-layout/src/client/AppFrame.module.css` | `@deepseek-ai/dsh-client-ui-layout` | MIT | 119 (entero) |
+| `SidebarRoot.module.css` | `ui-sidebar/src/client/SidebarRoot.module.css` | `@deepseek-ai/dsh-client-ui-sidebar` | MIT | 359 (entero) |
+| `ConversationRoot.module.css` | `ui-conversation/src/client/skeleton/ConversationRoot.module.css` | `@deepseek-ai/dsh-client-ui-conversation` | MIT | 238 de 452 (recorte) |
+| `ChatView.module.css` | `ui-chat/src/client/chat/ChatView.module.css` | `@deepseek-ai/dsh-client-ui-chat` | MIT | 58 de 223 (recorte) |
+| `WorkspaceBrowser.module.css` | `ui-workspace/src/client/rows/WorkspaceBrowser.module.css` | `@deepseek-ai/dsh-client-ui-workspace` | MIT | 138 de 505 (recorte) |
+| `Rows.module.css` | `ui-workspace/src/client/rows/Rows.module.css` | `@deepseek-ai/dsh-client-ui-workspace` | MIT | 179 de 368 (recorte) |
+| `SettingsRoot.module.css` | `ui-settings-general/src/client/SettingsRoot.module.css` | `@deepseek-ai/dsh-client-ui-settings-general` | MIT | 57 de 236 (recorte) |
+| `AgentPresetLabel.module.css` | `ui-agent-preset/src/client/AgentPresetLabel.module.css` | `@deepseek-ai/dsh-client-ui-agent-preset` | MIT | 22 de 23 (recorte) |
+
+La licencia es MIT en los OCHO casos, declarada por el `package.json` de cada paquete en
+el árbol de fuentes (`"license": "MIT"`, versión `0.1.2-rc.1`). Es la misma MIT que ya
+está transcrita en la primera sección de este fichero; no se repite.
+
+**Ojo con la sección siguiente**: el paquete de npm `@deepseek-ai/dsh-client-ui-primitives`
+que este repo INSTALA declara BSD-3-Clause, no MIT. Los CSS de arriba vienen del árbol de
+FUENTES; el paquete instalado es otra cosa y va bajo otra licencia. Se dejan las dos
+constancias por separado a propósito, y no una que cubra las dos.
+
+**Nada de marca.** Ninguna de estas hojas trae un activo de marca: son reglas de
+geometría y color por token. `SidebarRoot.module.css` da la geometría de las ranuras
+`.brand`/`.brandName`, y quien las ocupa aquí es el nombre de xonecode; `.brandMark`
+—donde el original monta su `FishLogo`— se queda vacía.
+
+**Una línea que NO se copió, y es un hallazgo.** `AgentPresetLabel.module.css` declara
+`background: var(--dsw-alias-fill-tsp-secondary)`, y ese alias no está definido en NINGÚN
+CSS de deepseek-harness (comprobado con `grep -rn -- "--dsw-alias-fill-tsp-secondary:"
+--include='*.css'` sobre el árbol entero: cero resultados). Un alias que no existe
+resuelve a transparente sin dar error. Se copia la hoja sin esa declaración, en vez de
+inventarle un relleno que el original nunca pinta.
+
 ## deepseek-harness (paquete `@deepseek-ai/dsh-client-ui-primitives`)
 
 `apps/web` instala `@deepseek-ai/dsh-client-ui-primitives@0.0.1-rc.1` (npm) para

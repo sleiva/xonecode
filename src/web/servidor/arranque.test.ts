@@ -227,6 +227,43 @@ describe("montarRutas — el cable, por fin conectado", () => {
     expect(alta.proyectoAbierto).toBe(true);
   });
 
+  it("el `modo` del proyecto abierto viaja en el alta, leído de su `.xonecode/config.json`", async () => {
+    // Es lo que pinta la pastilla de la cabecera (`Cabecera.tsx`). Se lee del disco EN
+    // CADA anuncio, no al abrir: `configurarModoInicial` puede escribirlo después.
+    const raiz = mkdtempSync(join(tmpdir(), "xonecode-modo-"));
+    mkdirSync(join(raiz, ".xonecode"));
+    writeFileSync(join(raiz, ".xonecode", "config.json"), JSON.stringify({ modo: "cloud" }));
+
+    const servidor = servidorDeMentira();
+    const vestibulo = vestibuloDePrueba();
+    await vestibulo.abrirProyecto({ raiz });
+    montarRutas(servidor, vestibulo);
+    const cliente = clienteDeMentira();
+    await servidor.rutas.get(`GET ${RUTA_EVENTOS}`)!(cliente.peticion, cliente.respuesta);
+    await asentar();
+
+    const alta = cliente.recibidos.at(-1) as Extract<MensajeAlCliente, { clase: "alta" }>;
+    expect(alta.modo).toBe("cloud");
+  });
+
+  it("un proyecto cuyo config no se puede leer NO viaja como «offline»: el campo no va", async () => {
+    // «No se sabe» y «offline» no son lo mismo, y la diferencia es visible: con el campo
+    // ausente la cabecera no pinta pastilla; con «offline» afirmaría en pantalla algo que
+    // nadie ha leído. `/w/a` no existe, que es el caso más común de los tres que caen
+    // aquí (no hay fichero, JSON roto, valor desconocido).
+    const servidor = servidorDeMentira();
+    const vestibulo = vestibuloDePrueba();
+    await vestibulo.abrirProyecto({ raiz: "/w/a" });
+    montarRutas(servidor, vestibulo);
+    const cliente = clienteDeMentira();
+    await servidor.rutas.get(`GET ${RUTA_EVENTOS}`)!(cliente.peticion, cliente.respuesta);
+    await asentar();
+
+    const alta = cliente.recibidos.at(-1) as Extract<MensajeAlCliente, { clase: "alta" }>;
+    expect(alta.proyectoAbierto).toBe(true);
+    expect("modo" in alta).toBe(false);
+  });
+
   it("el saludo de la bienvenida viaja en el alta cuando el vestíbulo trae uno, y no viaja si no", async () => {
     // El wire entero de `agent/persona.ts#nombreDePersona`: `arranque.ts` lo resuelve UNA
     // vez y lo pasa como `OpcionesDelVestibulo.nombre`; este test cubre que ese dato SIGUE

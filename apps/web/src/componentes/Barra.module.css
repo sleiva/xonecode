@@ -1,200 +1,91 @@
-/* Los alias de este fichero están comprobados contra design-platform.css, no inventados
-   (ver el grep del brief): bg-layer-1, border-l2, label-primary/secondary/tertiary/
-   dimmed, interactive-bg-hover/active y button-tool-bar-fill/hover existen; bg-primary,
-   text-primary y border-primary — la primera tentativa — no. */
+/* Lo poco que le queda de propio a la barra. El armazón, las listas y las filas son CSS
+   de deepseek copiado tal cual (`estilos/SidebarRoot.module.css`,
+   `estilos/WorkspaceBrowser.module.css`, `estilos/Rows.module.css`,
+   `estilos/SettingsRoot.module.css` — cada uno con su cabecera de atribución); aquí solo
+   vive lo que su barra no tiene o lo que su CSS da por hecho de un `<div>` y nuestro
+   marcado resuelve con un `<button>`.
 
-.barra {
+   Alias comprobados contra design-platform.css (mismo grep de siempre): bg-layer-1,
+   border-l2, label-primary y label-dimmed existen. */
+
+/* Su `.projectRow`/`.sessionRow` da por hecho un `<div role="treeitem">` y no resetea
+   nada de botón; nosotros usamos `<button>` de verdad (`Barra.tsx` explica por qué) y el
+   reseteo va aquí, en la misma etiqueta, para no tocar la hoja copiada. `background:
+   none`, no `transparent`: la regla de esta consola es que ningún estilo NUESTRO nombre
+   un color, y el reseteo no necesita nombrar ninguno. */
+.reseteoDeBoton {
+  border: none;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+/* La fila de proyecto tiene DOS zonas pulsables (abrir el proyecto, y la acción de
+   hover): la de abrir ocupa todo lo que sobra, la acción se queda con su ancho. Su
+   `.projectRow` es una sola caja flex y esto solo reparte el hueco dentro. */
+.filaConAccion {
+  padding-right: 4px;
+}
+
+.cuerpoDeFila {
+  flex: 1;
+  min-width: 0;
   display: flex;
-  flex-direction: column;
-  height: 100%;
+  align-items: center;
+  gap: 6px;
+  padding: 0;
+  overflow: hidden;
 }
 
-/* Lo único que crece: con un entorno sin proyectos, o un proyecto con muchas sesiones,
-   es esta zona la que hace scroll — el pie de abajo no se mueve nunca, que es lo que
-   evita que «Ajustes» se pierda al final de una lista larga. */
-.contenido {
-  flex: 1 1 auto;
-  min-height: 0;
-  overflow-y: auto;
-  padding: 12px;
-  display: flex;
-  flex-direction: column;
-  gap: 20px;
-}
-
-.seccion {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.seccionProyectos {
-  flex: 1 1 auto;
-}
-
-.tituloSeccion {
-  margin: 0;
-  font-size: 12px;
-  font-weight: 600;
-  letter-spacing: 0.02em;
-  text-transform: uppercase;
-  color: var(--dsw-alias-label-tertiary);
-}
-
-/* El texto de un nivel sin nada dentro: cada uno dice qué falta y no solo calla, que es
-   la diferencia entre un estado vacío a propósito y una barra que parece rota. */
-.vacio {
-  margin: 0;
-  color: var(--dsw-alias-label-dimmed);
-}
-
+/* El `<select>` del entorno: el nivel que su barra no tiene (ella va de workspace a
+   sesión, sin un tercer nivel encima), así que no hay CSS suyo del que copiarlo. Se
+   queda con la caja elevada del tema, que es lo que usan sus propios campos. */
 .entorno {
-  width: 100%;
+  width: calc(100% - 4px);
+  margin: 0 2px 8px;
   padding: 6px 8px;
+  box-sizing: border-box;
   background: var(--dsw-alias-bg-layer-1);
   color: var(--dsw-alias-label-primary);
   border: 0.5px solid var(--dsw-alias-border-l2);
-  border-radius: 6px;
+  border-radius: 8px;
+  font: inherit;
 }
 
-.proyectos {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
+/* La marca no es un botón aquí: en su barra el nombre dobla como atajo de «sesión
+   nueva», y esa acción no existe en esta consola (`Barra.tsx` lo explica). Su `.brand`
+   trae `cursor: pointer` porque allí SÍ se pulsa; sin acción detrás, un cursor de mano
+   promete algo que no pasa. */
+.marcaSinBoton {
+  cursor: default;
 }
 
-.filaProyecto {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 6px;
-}
-
-/* Botón, no `<span>`: es lo que abre el proyecto (`App.tsx#alAbrirProyecto`). El reset de
-   fondo/borde es el mismo que ya usa `.sesion` más abajo — un botón de ancho completo, no
-   un enlace, porque no hay navegación de verdad. */
-.proyecto {
-  display: block;
-  width: 100%;
-  text-align: left;
-  font-size: 12px;
-  font-weight: 600;
-  letter-spacing: 0.02em;
-  text-transform: uppercase;
-  color: var(--dsw-alias-label-tertiary);
-  padding: 4px 6px;
-  border: none;
-  border-radius: 6px;
-  background: none;
-  font-family: inherit;
-  cursor: pointer;
-}
-
-.proyecto:hover {
-  background: var(--dsw-alias-interactive-bg-hover);
-  color: var(--dsw-alias-label-secondary);
-}
-
-/* Un botón de barra de herramientas, no uno primario: es una acción secundaria dentro de
-   cada fila de proyecto y no la acción principal de la pantalla. */
-.nuevaSesion {
-  flex-shrink: 0;
-  padding: 2px 8px;
-  border: none;
-  border-radius: 6px;
-  background: var(--dsw-alias-button-tool-bar-fill);
-  color: var(--dsw-alias-label-secondary);
-  font-size: 12px;
-  cursor: pointer;
-}
-
-.nuevaSesion:hover {
-  background: var(--dsw-alias-button-tool-bar-hover);
-}
-
-.vacioSesiones {
-  margin: 0;
-  padding: 2px 6px;
-  color: var(--dsw-alias-label-dimmed);
-  font-size: 12px;
+/* Un nivel vacío dice por qué lo está, y no se limita a no pintar nada — que es
+   indistinguible de una barra rota. `.empty` de la hoja copiada ya le da el color y el
+   tamaño; esto solo lo mete debajo de su fila de proyecto en vez de al margen de la
+   lista. */
+.sinSesiones {
+  padding: 4px 12px 8px 30px;
   font-style: italic;
 }
 
-.sesiones {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: flex;
-  flex-direction: column;
-}
-
-/* Una fila por sesión: botón de ancho completo, no un enlace — no hay navegación de
-   verdad, solo el cambio de qué transcript se pinta en el centro. */
-.sesion {
-  display: block;
-  width: 100%;
-  text-align: left;
-  padding: 6px 8px;
-  border: none;
-  border-radius: 6px;
-  /* `none` y no `transparent`: es un color-keyword como cualquier otro nombrado, y la
-     regla es «ningún color literal» — el reset de fondo no necesita nombrar ninguno. */
-  background: none;
-  color: var(--dsw-alias-label-secondary);
-  cursor: pointer;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.sesion:hover {
-  background: var(--dsw-alias-interactive-bg-hover);
-}
-
-/* La sesión VIVA (por omisión) se pinta con el color de texto fuerte; `historica` la
- * atenúa por debajo — es la distinción visual que pide el criterio de aceptación, sin
- * inventar un tercer color: dimmed ya existe en el alfabeto de alias.
- */
+/* Una sesión reabierta y sin turno nuevo se atenúa por debajo de la viva: es la
+   distinción que pide el criterio de aceptación, y `label-dimmed` ya existe en el
+   alfabeto de alias — no hace falta inventar un tercer color. */
 .historica {
   color: var(--dsw-alias-label-dimmed);
   font-style: italic;
 }
 
-.activa {
-  background: var(--dsw-alias-interactive-bg-active);
-  color: var(--dsw-alias-label-primary);
-  font-weight: 600;
-}
-
-/* El remate de abajo. `flex-shrink: 0` para que `.contenido` sea lo único que cede — el
-   mismo reparto que ya usa `app.tsx` (CLAUDE.md) entre transcript y entrada — y un borde
-   arriba para que se lea como una sección propia y no como el final accidental de la
-   lista de sesiones. */
-.pie {
-  flex-shrink: 0;
-  padding: 12px;
-  border-top: 0.5px solid var(--dsw-alias-border-l2);
-}
-
-.pieTitulo {
-  margin: 0 0 4px;
-  font-size: 12px;
-  font-weight: 600;
-  letter-spacing: 0.02em;
-  text-transform: uppercase;
-  color: var(--dsw-alias-label-tertiary);
-}
-
-.pieNota {
-  margin: 0;
-  color: var(--dsw-alias-label-dimmed);
-  font-size: 12px;
-}
-
-.pieComando {
-  font-family: var(--ds-font-family-code);
-  color: var(--dsw-alias-label-secondary);
+/* Su `.sectionHeader` lleva `justify-content: flex-end` porque en su barra el rótulo va
+   seguido de un campo de búsqueda con `margin-left: auto` que se come todo el hueco: el
+   rótulo acaba a la IZQUIERDA por empuje, no por alineación. Copiada tal cual y con el
+   rótulo solo, el rótulo se iba al borde derecho — medido en pantalla, y es exactamente
+   el fallo que el usuario mandó cazar comparando capturas. Aquí no hay búsqueda que
+   copiar (esa lista todavía no se busca), así que el hueco lo empuja esto. */
+.rellenoDeSeccion {
+  flex: 1;
+  min-width: 0;
 }

@@ -1,0 +1,275 @@
+/* RECORTE de deepseek-harness
+   (packages/client/ui-conversation/src/client/skeleton/ConversationRoot.module.css), MIT.
+   Copiado sin cambios en lo que se copia, con sus comentarios originales en inglés (ver
+   `AppFrame.module.css` para el porqué).
+
+   Qué se copia: la columna central entera de cabecera para arriba —`.root` con el eje de
+   ancho compartido (`--dsh-chat-content-width`, que es lo que CENTRA la conversación y el
+   compositor sobre el mismo eje), la cabecera de sesión (`.header`, `.titleRow`,
+   `.titleCluster`, `.crumbs`, `.crumb*`, `.headerActions`, `.headerUtilities`), la tira de
+   pestañas (`.tabs`, `.tab`, `.tabActive`) y las cajas de debajo (`.viewArea`, `.body`,
+   `.scrollBody`, y las reglas de `[data-phase='active']`).
+
+   Qué NO se copia, y por qué: los tiradores de ancho (`.widthHandle*`, ~65 líneas — se
+   arrastran con el ratón para reencuadrar la columna, y aquí no hay nada que guarde esa
+   preferencia), la pila del compositor y su asiento pegajoso (`.composerStack`,
+   `.composerSeat`, el degradado de máscara — nuestro compositor es un hermano en la
+   columna, no un asiento dentro del scroller), y la fase «hero» (`.composerHero`,
+   `.heroWorkspaceRow`, `[data-phase='hero'|'settling']`): esta consola no tiene pantalla
+   de bienvenida con el compositor centrado a media altura.
+
+   Consecuencia MEDIDA de copiar `.root` sin el componente: el término del medio del
+   `clamp` de `--dsh-chat-content-width` es `--dsh-conversation-column-width`, que allí
+   PUBLICA un `ResizeObserver` sobre la propia columna. Sin nadie que lo publique vale
+   `0px` y el ancho cae siempre al suelo de 680px. `Maqueta.tsx` monta ese observador
+   (con guarda: jsdom no implementa `ResizeObserver`, y sin ella cualquier test que monte
+   `Maqueta` reventaría).
+
+   Segunda consecuencia, esta MEDIDA en pantalla: las reglas de `[data-phase='active']`
+   vienen en el recorte pero NADIE pone ese atributo, y es a propósito.
+   `.root[data-phase='active'] .viewArea { flex: 1 0 auto; min-height: auto }` allí tiene
+   sentido porque su `.viewArea` cuelga de un `.scrollBody` que scrollea con el compositor
+   pegajoso dentro; aquí no hay `.scrollBody` (nuestro compositor es hermano de la
+   columna), así que con el atributo puesto `.viewArea` crecía hasta el alto del contenido
+   y `.centerCol` lo recortaba DEBAJO del compositor: ni el chat ni la trayectoria podían
+   scrollear. Se dejan copiadas para no partir el fichero por la mitad, y `Maqueta.tsx`
+   documenta por qué no las enciende. */
+.root {
+  position: relative; /* positioning context for slot-owned absolute chrome */
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-width: 0;
+  background: var(--dsw-alias-bg-base);
+
+  /* Shared width axis for the whole column: one content width W
+     (--dsh-chat-content-width) for the transcript, the dock cards
+     (todo/goal/queue: card minus four insets, 4 x 8 = 32), and business-owned
+     takeover cards; the input card alone is W + 32px.
+     The relation also holds when a narrow viewport shrinks everything: the
+     chat scroller and the takeover frames pad clearance + 16px per side while
+     the input card clears the bare clearance, so the input card stays exactly
+     content + 32px at every width. Declared on the root because the
+     transcript and the composer seat are sibling subtrees.
+
+     W adapts to the column, not the viewport (a collapsed sidebar widens the
+     column without resizing the window): the component publishes the column's
+     live width as --dsh-conversation-column-width (px, via ResizeObserver —
+     container-type would re-anchor the subtree's portal-free position:fixed
+     descendants) and the clamp keeps a 680px floor (a step under the figma
+     748px — the full-width reading felt wide on every screen), takes 64% of
+     wider columns, and caps at 920px for line-length
+     readability. A dragged user preference (--dsh-chat-user-width, published
+     by the width handles) replaces the adaptive term wholesale. */
+  --dsh-chat-content-width: var(
+    --dsh-chat-user-width,
+    clamp(680px, calc(var(--dsh-conversation-column-width, 0px) * 0.64), 920px)
+  );
+  --dsh-composer-card-max-width: calc(var(--dsh-chat-content-width) + 32px);
+  --dsh-composer-side-clearance: 16px;
+  --dsh-composer-dock-inset: 8px;
+}
+
+.header {
+  position: relative;
+  flex: none;
+  padding: 12px 28px 0 20px;
+  border-bottom: 1px solid transparent;
+}
+
+.header::after {
+  content: '';
+  position: absolute;
+  right: 0;
+  bottom: 1px;
+  left: 0;
+  z-index: 0;
+  height: 0.5px;
+  background: var(--dsw-alias-border-l3);
+  pointer-events: none;
+}
+
+/* Blank hero/settling: keep the strict Session header mounted without taking
+   column space; the root-owned scrollport and composer remain below it. */
+.headerHidden {
+  display: none;
+}
+
+.titleRow {
+  display: flex;
+  align-items: center;
+  gap: 0;
+  min-height: 32px;
+}
+
+.titleCluster {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.crumbs {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+.crumbSeg {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+}
+
+.crumbSep {
+  /* figma: "/" separators are 14px caption gray (75:7903), one tint lighter than crumb text. */
+  color: var(--dsw-alias-label-caption);
+  font-size: 14px;
+  line-height: 20px;
+}
+
+.crumb {
+  max-width: 220px;
+  overflow: hidden;
+  padding: 4px 8px;
+  border: none;
+  border-radius: 12px;
+  background: transparent;
+  font-size: 14px;
+  line-height: 20px;
+  color: var(--dsw-alias-label-tertiary);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.crumbSubagent {
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.crumb:hover:not(:disabled) {
+  background: var(--dsw-alias-interactive-bg-hover);
+}
+
+.crumbCurrent {
+  font-weight: 500;
+  color: var(--dsw-alias-label-primary);
+  cursor: default;
+}
+
+.headerActions {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 8px;
+}
+
+.headerUtilities {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 8px;
+  margin-left: 20px;
+}
+
+.headerUtilities:empty {
+  display: none;
+}
+
+/* figma Tab_Group 34:11441: 35px strip, gap 36, pad-left 8, tabs bottom-aligned. */
+.tabs {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  gap: 36px;
+  margin-top: 4px;
+  padding-left: 8px;
+}
+
+/* figma .Tab 34:11442: 13/16 text (figma wt510, rendered 500), gap 8 to the 2px bar. */
+.tab {
+  position: relative;
+  padding: 0 0 11px;
+  border: none;
+  background: transparent;
+  font-size: 13px;
+  line-height: 16px;
+  font-weight: 500;
+  color: var(--dsw-alias-label-tertiary);
+  cursor: pointer;
+}
+
+.tab::after {
+  content: '';
+  position: absolute;
+  right: 0;
+  bottom: 1px;
+  left: 0;
+  height: 2px;
+  border-radius: 2px;
+  background: transparent;
+}
+
+/* Selected tab is blue, not ink: brand-primary resolves to neutral black in
+   this token sheet, so the selected state rides the business blue — the
+   nearest semantic token that stays blue in both themes. */
+.tabActive {
+  color: var(--dsw-alias-state-business-primary);
+}
+
+.tabActive::after {
+  background: var(--dsw-alias-state-business-primary);
+}
+
+.viewArea {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+}
+
+/* Active phase: header is ordinary column chrome above the scrollport (not
+   sticky). The scroll body holds the transcript and the sticky composer seat
+   so wheel over the footer moves the flow. */
+.root[data-phase='active'] {
+  overflow: hidden;
+}
+
+.root[data-phase='active'] .header {
+  flex: none;
+}
+
+/* Band below the header: the scrollport plus the width handles. Anchoring the
+   handles here keeps their full-height strips and glow under the header's
+   bottom edge at every header height. */
+.body {
+  position: relative;
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.scrollBody {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+  overflow-y: auto;
+  /* Reserved unconditionally: the composer seat rides this box's content box in
+     Chat and its padding box under a view's composer overlay, so an `auto`
+     gutter moves the input card sideways by the bar's width whenever the two
+     differ ([decision](../../../../../../.agents/notes/implemented/bug-fix/2026-08-04-composer-tab-gutter-reservation.md)). */
+  scrollbar-gutter: stable;
+}
+
+.root[data-phase='active'] .viewArea {
+  flex: 1 0 auto;
+  min-height: auto;
+}

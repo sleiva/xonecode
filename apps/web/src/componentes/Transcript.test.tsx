@@ -1,39 +1,32 @@
-import { render, screen, fireEvent, cleanup } from "@testing-library/react";
+import { render, screen, cleanup } from "@testing-library/react";
 import { afterEach, describe, it, expect } from "vitest";
 import { Transcript } from "./Transcript.js";
 
-// `globals` no está activado (proyecto «cliente» de `vitest.config.ts`): sin `cleanup`
-// explícito el segundo `render()` de este fichero deja montado el primero y
-// `getByRole("tab", …)` revienta con «found multiple elements» — la misma trampa que ya
-// documenta `Compositor.test.tsx`.
+// `globals` no está activado: sin `cleanup` explícito el segundo `render()` de este
+// fichero deja montado el primero y las consultas revientan con «found multiple
+// elements» — la misma trampa que ya documenta `Compositor.test.tsx`.
 afterEach(cleanup);
 
+/**
+ * `Transcript` ya no lleva las pestañas: se fueron a `Cabecera`, que es donde viven en el
+ * CSS de deepseek (dentro del mismo `<header>` que pinta la línea de separación), y con
+ * ellas se fue el `useState`. Lo que queda que probar aquí es que la pestaña que le
+ * DICEN es la vista que pinta — el comportamiento de la tira está en `Cabecera.test.tsx`.
+ */
 describe("Transcript", () => {
-  it("empieza en Chat y cambia a Trayectoria al pulsar su pestaña", () => {
-    render(<Transcript actos={[{ tipo: "usuario", texto: "hola" }]} />);
-    expect(screen.getByRole("tab", { name: "Chat" }).getAttribute("aria-selected")).toBe("true");
+  const ACTOS = [
+    { tipo: "usuario", texto: "hola" },
+    { tipo: "herramientas", lineas: ["read_file docs/uno.xne"] },
+  ] as const;
 
-    fireEvent.click(screen.getByRole("tab", { name: "Trayectoria" }));
-    expect(screen.getByRole("tab", { name: "Trayectoria" }).getAttribute("aria-selected")).toBe("true");
-    expect(screen.getByRole("tab", { name: "Chat" }).getAttribute("aria-selected")).toBe("false");
+  it("con «chat» pinta la conversación, y NO el detalle técnico de la trayectoria", () => {
+    render(<Transcript actos={[...ACTOS]} pestana="chat" />);
+    expect(screen.getByText("hola")).toBeTruthy();
+    expect(screen.queryByText(/read_file/)).toBeNull();
   });
 
-  it("la pestaña elegida se recuerda mientras dure la página: sobrevive a que lleguen más actos", () => {
-    const { rerender } = render(<Transcript actos={[{ tipo: "usuario", texto: "hola" }]} />);
-    fireEvent.click(screen.getByRole("tab", { name: "Trayectoria" }));
-
-    // Un acto nuevo re-renderiza el árbol (lo mismo que hace `App` al recibir un mensaje
-    // por `suscribir`) sin desmontar `Transcript`: si la pestaña se «olvidara» aquí,
-    // volvería a Chat en cuanto entrara CUALQUIER acto — justo lo que el criterio
-    // de aceptación prohíbe.
-    rerender(
-      <Transcript
-        actos={[
-          { tipo: "usuario", texto: "hola" },
-          { tipo: "asistente", texto: "hecho" },
-        ]}
-      />
-    );
-    expect(screen.getByRole("tab", { name: "Trayectoria" }).getAttribute("aria-selected")).toBe("true");
+  it("con «trayectoria» pinta el detalle técnico", () => {
+    render(<Transcript actos={[...ACTOS]} pestana="trayectoria" />);
+    expect(screen.getByText(/read_file/)).toBeTruthy();
   });
 });
