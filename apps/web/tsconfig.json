@@ -9,5 +9,7 @@
     "noEmit": true,
     "types": ["vite/client"]
   },
-  "include": ["src", "estilos"]
+  "include": ["src", "estilos"],
+  "// exclude": "Los .test.ts usan node:fs/url/path para comparar tipos.ts con core/actos.ts (frontier de apps/web/), y 'types: [vite/client]' apaga la inclusión automática de @types/node — meterlo aquí traería globals de Node a TODO el bundle del cliente. vitest los transpila con esbuild y no pasa por este tsconfig, así que excluirlos de la comprobación de tipos de producción no deja nada sin probar; solo saca el ruido de TS2307 de una comprobación que ni vite build ni npm run typecheck (que solo cubre src/) ejecutan hoy.",
+  "exclude": ["src/**/*.test.ts", "src/**/*.test.tsx"]
 }

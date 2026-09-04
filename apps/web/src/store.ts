@@ -1,0 +1,190 @@
+/**
+ * El estado de presentación del cliente, SIN React — mismo pacto que `cli/tui/store.ts`:
+ * los componentes solo pintan y la semántica se prueba sin montar nada.
+ *
+ * Una `reemision` SUSTITUYE el transcript entero en vez de fusionarlo. Es lo que hace que
+ * reconectar sea idempotente: el servidor es la única fuente de verdad del transcript, y
+ * fusionar obligaría a deduplicar por identidad de acto —que no tenemos— y duplicaría
+ * líneas en cuanto una reconexión pillara al servidor a mitad de turno.
+ *
+ * Una `sustitucion` reemplaza el ÚLTIMO acto en vez de anexarlo. Existe porque `pielWeb`
+ * avisa también de ACTUALIZACIONES: el cierre de una racha de tools reemplaza a su
+ * apertura dentro del mismo acto `herramientas` (`core/actos.ts#conLineaDeTool`,
+ * `web/servidor/transporte.ts#MensajeAlCliente`). El colapsador del motor escribe apertura
+ * Y cierre porque stdio solo puede añadir; un store que anexara a ciegas pintaría las dos
+ * líneas —«→ lee src/app.xne» y luego «→ lee ×3 — …»— para una sola racha, que es
+ * exactamente lo que la TUI ya evita en `cli/tui/store.ts` con la misma sustitución.
+ */
+import type { Acto, MensajeAlCliente, SelectorDeConsola } from "./tipos.js";
+
+export interface EstadoDelCliente {
+  actos: Acto[];
+  conectado: boolean;
+  pregunta?: { texto: string };
+  selector?: { titulo: string; opciones: { id: string; etiqueta: string; detalle?: string }[] };
+  secreto?: { pregunta: string };
+  aprobacion?: { pendientes: unknown[]; ficheros: Record<string, string>; diffs: Record<string, unknown[]> };
+}
+
+const ESTADO_INICIAL: EstadoDelCliente = { actos: [], conectado: false };
+
+// `satisfies Record<Acto["tipo"], true>` es lo que hace que añadir un tipo a `Acto` en
+// `tipos.ts` sin añadirlo aquí falle en `tsc`, no en tiempo de ejecución con un mensaje
+// bien formado silenciosamente descartado.
+const TIPOS_DE_ACTO = {
+  usuario: true,
+  asistente: true,
+  herramientas: true,
+  sistema: true,
+  fase: true,
+  fin: true,
+  error: true,
+} satisfies Record<Acto["tipo"], true>;
+
+/**
+ * Nada de lo que llega por el cable puede darse por bien formado: un `JSON.parse` de un
+ * `EventSource` es responsabilidad de quien lo emite, y el emisor es OTRO proceso que
+ * puede tener un bug, una versión distinta, o un proxy de por medio corrompiendo el
+ * cuerpo. `aplicar` no puede lanzar nunca, así que cada rama valida su forma mínima antes
+ * de mutar y descarta en silencio lo que no encaja — sin eso, un mensaje malformado
+ * tumbaría el `onmessage` del `EventSource` y con él la conexión entera.
+ */
+function esActo(valor: unknown): valor is Acto {
+  return (
+    typeof valor === "object" &&
+    valor !== null &&
+    "tipo" in valor &&
+    typeof (valor as { tipo: unknown }).tipo === "string" &&
+    (valor as { tipo: string }).tipo in TIPOS_DE_ACTO
+  );
+}
+
+function esSelector(valor: unknown): valor is SelectorDeConsola {
+  if (typeof valor !== "object" || valor === null) return false;
+  const s = valor as { titulo?: unknown; opciones?: unknown };
+  return (
+    typeof s.titulo === "string" &&
+    Array.isArray(s.opciones) &&
+    s.opciones.every(
+      (o) => typeof o === "object" && o !== null && typeof (o as { id?: unknown }).id === "string" &&
+        typeof (o as { etiqueta?: unknown }).etiqueta === "string"
+    )
+  );
+}
+
+function esRegistro(valor: unknown): valor is Record<string, unknown> {
+  return typeof valor === "object" && valor !== null && !Array.isArray(valor);
+}
+
+export function crearStoreDelCliente(): {
+  leer: () => EstadoDelCliente;
+  aplicar: (mensaje: unknown) => void;
+  marcarConectado: () => void;
+  marcarDesconectado: () => void;
+  suscribir: (escucha: () => void) => () => void;
+} {
+  let estado: EstadoDelCliente = ESTADO_INICIAL;
+  const suscriptores: (() => void)[] = [];
+
+  // Objeto NUEVO en cada mutación (nunca `estado.x = y`): es lo que permite a
+  // `useSyncExternalStore` (futuro consumidor de `suscribir`) detectar el cambio por
+  // identidad de referencia sin que este fichero sepa que React existe.
+  const mutar = (cambio: Partial<EstadoDelCliente>): void => {
+    estado = { ...estado, ...cambio };
+    for (const escucha of suscriptores) escucha();
+  };
+
+  return {
+    leer: () => estado,
+
+    aplicar(mensaje: unknown): void {
+      if (typeof mensaje !== "object" || mensaje === null || !("clase" in mensaje)) return;
+      const clase = (mensaje as { clase: unknown }).clase;
+
+      switch (clase) {
+        case "acto": {
+          const acto = (mensaje as Partial<Extract<MensajeAlCliente, { clase: "acto" }>>).acto;
+          if (!esActo(acto)) return;
+          mutar({ actos: [...estado.actos, acto] });
+          return;
+        }
+        case "sustitucion": {
+          const acto = (mensaje as Partial<Extract<MensajeAlCliente, { clase: "sustitucion" }>>).acto;
+          if (!esActo(acto)) return;
+          // Transcript vacío: el servidor no manda `sustitucion` sin un último acto que
+          // sustituir (`transporte.ts`), así que esto es solo la red bajo un cable que ya
+          // no se fía de nada — cae a anexar en vez de perder el mensaje.
+          mutar({ actos: estado.actos.length === 0 ? [acto] : [...estado.actos.slice(0, -1), acto] });
+          return;
+        }
+        case "reemision": {
+          const actos = (mensaje as Partial<Extract<MensajeAlCliente, { clase: "reemision" }>>).actos;
+          if (!Array.isArray(actos) || !actos.every(esActo)) return;
+          mutar({ actos: [...actos] });
+          return;
+        }
+        case "pregunta": {
+          const texto = (mensaje as { texto?: unknown }).texto;
+          if (typeof texto !== "string") return;
+          mutar({ pregunta: { texto } });
+          return;
+        }
+        case "selector": {
+          const selector = (mensaje as { selector?: unknown }).selector;
+          if (!esSelector(selector)) return;
+          // Copia a un array MUTABLE: `SelectorDeConsola.opciones` es `readonly` (así
+          // llega del transporte, que no quiere que nadie lo reordene por su cuenta) y
+          // `EstadoDelCliente.selector.opciones` no lo es — la interfaz del store es la
+          // del brief tal cual, y asignar el `readonly` ahí no tipa.
+          mutar({ selector: { titulo: selector.titulo, opciones: [...selector.opciones] } });
+          return;
+        }
+        case "secreto": {
+          const pregunta = (mensaje as { pregunta?: unknown }).pregunta;
+          if (typeof pregunta !== "string") return;
+          mutar({ secreto: { pregunta } });
+          return;
+        }
+        case "aprobacion": {
+          const m = mensaje as { pendientes?: unknown; ficheros?: unknown; diffs?: unknown };
+          if (!Array.isArray(m.pendientes) || !esRegistro(m.ficheros) || !esRegistro(m.diffs)) return;
+          mutar({
+            aprobacion: {
+              pendientes: m.pendientes,
+              ficheros: m.ficheros as Record<string, string>,
+              diffs: m.diffs as Record<string, unknown[]>,
+            },
+          });
+          return;
+        }
+        default:
+          // Clase desconocida: un servidor más nuevo que este cliente, o ruido. Ignorar
+          // es la misma postura que el resto de esta función frente a lo malformado.
+          return;
+      }
+    },
+
+    marcarConectado(): void {
+      mutar({ conectado: true });
+    },
+
+    marcarDesconectado(): void {
+      // El servidor resuelve TODO lo pendiente con cadena vacía (o `undefined`) en cuanto
+      // se cae el SSE (`web/servidor/consolaWeb.ts#alDesconectar`): una pregunta, selector,
+      // secreto o aprobación que el cliente tuviera en pantalla ya está zanjada al otro
+      // lado —como rechazo, en el caso de la aprobación—. Dejarla pintada tras reconectar
+      // mentiría sobre qué sigue esperando respuesta.
+      mutar({ conectado: false, pregunta: undefined, selector: undefined, secreto: undefined, aprobacion: undefined });
+    },
+
+    suscribir(escucha: () => void): () => void {
+      suscriptores.push(escucha);
+      return () => {
+        const indice = suscriptores.indexOf(escucha);
+        // Tolerante a doble baja: el `useEffect` de React StrictMode monta y desmonta dos
+        // veces en desarrollo, y una segunda baja no debe reventar sobre un índice -1.
+        if (indice >= 0) suscriptores.splice(indice, 1);
+      };
+    },
+  };
+}
