@@ -2094,18 +2094,27 @@ export function Maqueta({ centro, barra }: { centro: ReactNode; barra: ReactNode
 
 ```css
 /* apps/web/src/componentes/Maqueta.module.css */
-.maqueta { display: flex; height: 100dvh; background: var(--dsw-alias-bg-primary); color: var(--dsw-alias-text-primary); }
+.maqueta { display: flex; height: 100dvh; background: var(--dsw-alias-bg-base); color: var(--dsw-alias-label-primary); }
 .centro  { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; }
-.barra   { flex: 0 0 280px; border-left: 0.5px solid var(--dsw-alias-border-primary); overflow-y: auto; }
+.barra   { flex: 0 0 280px; border-left: 0.5px solid var(--dsw-alias-border-l1); overflow-y: auto; }
 ```
 
-**Antes de escribir los `var(--dsw-alias-*)`**, listar los alias que existen de verdad:
+**Los nombres de arriba están MEDIDOS contra el CSS copiado**, no inventados. El primer
+borrador de este plan usaba `--dsw-alias-bg-primary`, `--dsw-alias-text-primary` y
+`--dsw-alias-border-primary`, y **ninguno de los tres existe**: un alias inventado no da
+error, da transparente, que es justo el bug mudo que este repo persigue en todas partes.
+
+Las familias reales, comprobadas: fondos `--dsw-alias-bg-*` (`bg-base`, `bg-layer-1`…),
+bordes `--dsw-alias-border-*` (`border-l1`…`border-l4`), texto `--dsw-alias-label-*`
+(`label-primary`, `label-secondary`, `label-tertiary`, `label-caption`, `label-dimmed`),
+botones `--dsw-alias-button-*`, estados `--dsw-alias-interactive-*`, marca
+`--dsw-alias-brand-*` y markdown `--dsw-alias-markdown-*`.
+
+**Antes de escribir cualquier otro alias**, comprobar que existe:
 
 ```bash
 grep -o '\--dsw-alias-[a-z0-9-]*' apps/web/estilos/design-platform.css | sort -u
 ```
-
-Usar solo nombres de esa lista. Un alias inventado no da error: da un color transparente, que es exactamente el bug mudo que este repo persigue.
 
 - [ ] **Step 4: La barra de tres niveles**
 
