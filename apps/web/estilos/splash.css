@@ -1,0 +1,17 @@
+/* NUESTRO, no copiado de deepseek-harness — como `tipografia.css` de esta misma carpeta.
+ *
+ * El fondo de la pantalla de arranque (`componentes/Splash.tsx`): un color sólido y
+ * PROVISIONAL a propósito. El usuario diseñará el splash de verdad para xonecode más
+ * adelante, y hasta entonces esto es un placeholder de una sola pieza — por eso vive en
+ * SU PROPIA variable, con su propio nombre, y no en la escala `--dsw-alias-*`
+ * (`design-platform.css`): esa es la paleta copiada de deepseek-harness, y un splash que
+ * se va a rediseñar no tiene por qué heredar de una paleta ajena ni arrastrarla el día
+ * que cambie.
+ *
+ * Quien lo rediseñe empieza y termina AQUÍ: cambiar este valor (o el mecanismo entero,
+ * si deja de ser un color sólido) no toca `Splash.module.css` ni nada de lo que se pinta
+ * encima (`Wizard.tsx`, `Selector.tsx`, `Pregunta.tsx`).
+ */
+:root {
+  --xonecode-splash-bg: #151517;
+}

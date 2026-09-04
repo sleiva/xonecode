@@ -1,6 +1,6 @@
 /* Alias comprobados contra design-platform.css (grep del brief): bg-layer-1/2,
-   border-l2, label-primary, state-error-primary/secondary, markdown-code-block y
-   markdown-inline-code existen. */
+   border-l2, label-primary, label-primary-foreground, state-error-secondary,
+   markdown-code-block y markdown-inline-code existen. */
 
 .chat {
   display: flex;
@@ -42,10 +42,15 @@
   border: 0.5px solid var(--dsw-alias-border-l2);
 }
 
+/* `label-primary-foreground`, no `state-error-primary`: MEDIDO con el tema oscuro puesto,
+   `design-platform.css` mapea `state-error-primary` y `state-error-secondary` al MISMO
+   `--dsw-static-red-400` dentro de `body[data-ds-dark-theme]` — texto invisible sobre su
+   propio fondo. `AvisoDeConexion.module.css` documenta el porqué del recambio; no se
+   toca el fichero del tema, que es la escala copiada. */
 .error {
   align-self: flex-start;
   background: var(--dsw-alias-state-error-secondary);
-  color: var(--dsw-alias-state-error-primary);
+  color: var(--dsw-alias-label-primary-foreground);
 }
 
 /* Lo que sigue estiliza los elementos que `MarkdownText` monta dentro de `.asistente`

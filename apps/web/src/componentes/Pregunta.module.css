@@ -1,12 +1,19 @@
 /* Alias comprobados contra `apps/web/estilos/design-platform.css`: bg-layer-2, border-l2,
    label-primary, button-primary-fill/hover y label-primary-inverted. */
 
+/* Misma tarjeta que `Selector.module.css` y por el mismo motivo: el paso de cuenta del
+   alta contesta la clave de API con ESTE componente (`oculta`), y ahora el alta se enseña
+   sola y centrada (`App.tsx`) — una franja con `border-top` suelta en mitad del negro no
+   se sostiene como tarjeta. */
 .pregunta {
   display: flex;
   flex-direction: column;
   gap: 8px;
+  width: min(480px, 100%);
+  margin: 0 auto;
   padding: 12px;
-  border-top: 0.5px solid var(--dsw-alias-border-l2);
+  border: 0.5px solid var(--dsw-alias-border-l2);
+  border-radius: 12px;
   background: var(--dsw-alias-bg-layer-2);
 }
 

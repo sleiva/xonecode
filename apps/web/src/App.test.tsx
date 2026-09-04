@@ -14,10 +14,21 @@ afterEach(cleanup);
  * `enviar` entra inyectado, como en `main.tsx`: aquí no se construye ningún `EventSource`
  * —jsdom no lo implementa— ni ningún `fetch`.
  */
+/**
+ * Con el proyecto ya abierto: `enAlta` (`App.tsx`) solo deja de tapar la maqueta entera
+ * cuando llega un `alta` con `pasos: []` —lo que manda `anunciarAlta` en cuanto
+ * `vestibulo.proyectoAbierto()` es cierto—, y todo lo que este fichero prueba pasa
+ * DESPUÉS de esa apertura: la pregunta, la aprobación, el secreto y el selector de mitad
+ * de conversación, no los del alta. Sin este mensaje `App` se quedaría enseñando la
+ * pantalla centrada de la pantalla de arranque y ninguno de esos componentes montaría.
+ */
 function montar(enviar = vi.fn(() => Promise.resolve(undefined as unknown))) {
   const store = crearStoreDelCliente();
   const vista = render(<App store={store} enviar={enviar} />);
   act(() => store.marcarConectado());
+  act(() =>
+    store.aplicar({ clase: "alta", pasos: [], proveedores: [], entornos: [], proyectos: [], ramas: [] })
+  );
   return { store, enviar, vista };
 }
 
@@ -173,5 +184,87 @@ describe("App: un envío que falla no puede parecer que salió bien", () => {
     await waitFor(() => expect(screen.getByRole("alert").textContent).toMatch(/no llegó/i));
     expect(screen.getByLabelText(/subir los cambios/i)).toBeTruthy();
     expect(store.leer().pregunta).toBeDefined();
+  });
+});
+
+/**
+ * El primer arranque: `enAlta` (`App.tsx`) tapa la maqueta entera —Cabecera, pestañas del
+ * transcript, compositor, barra de estado y barra lateral— mientras no hay proyecto
+ * abierto, y esa era justo la corrección que pidió el encargo: el problema no era que la
+ * barra vacía se viera fea, era que se viera. Aquí, y no en `montar()` (que ya simula el
+ * proyecto abierto), se prueba lo de ANTES de esa apertura.
+ */
+describe("App: la pantalla de arranque no enseña nada más", () => {
+  function montarSinAbrir() {
+    const store = crearStoreDelCliente();
+    const enviar = vi.fn(() => Promise.resolve(undefined as unknown));
+    const vista = render(<App store={store} enviar={enviar} />);
+    act(() => store.marcarConectado());
+    return { store, enviar, vista };
+  }
+
+  it("con el selector de cuenta (sin `alta` todavía) no hay compositor, ni pestañas, ni barra lateral", () => {
+    const { store } = montarSinAbrir();
+    act(() =>
+      store.aplicar({
+        clase: "selector",
+        selector: { titulo: "Proveedor de modelos", opciones: [{ id: "ollama", etiqueta: "ollama" }] },
+      })
+    );
+    expect(screen.getByRole("group", { name: /proveedor de modelos/i })).toBeTruthy();
+    expect(screen.queryByPlaceholderText(/escribe una petición/i)).toBeNull();
+    expect(screen.queryByRole("tablist")).toBeNull();
+    // Y no «sin `<select>`»: con `entornos=[]` `Barra` tampoco pinta uno aunque SÍ esté
+    // montada (`Barra.tsx`), así que esa comprobación no distinguiría nada. Su pie
+    // («Ajustes») en cambio se enseña SIEMPRE que `Barra` monta — es la prueba de que no
+    // ha montado, no de una lista vacía.
+    expect(screen.queryByText("Ajustes")).toBeNull();
+  });
+
+  /**
+   * Antes de este aviso, un token inválido o el servidor caído mientras `estado.alta`
+   * seguía `undefined` (nunca llegó ni un `selector`) pintaban el splash sólido y NADA
+   * más: un fallo mudo, justo lo que este repo persigue en todas partes (`AGENTS.md`,
+   * los avisos de honestidad). `AvisoDeConexion` ya devuelve `null` en conectado, así
+   * que el camino feliz —las otras pruebas de este describe, todas conectadas— no
+   * cambia por tenerlo montado.
+   */
+  it("desconectado y sin nada del alta todavía, lo dice — no un splash mudo", () => {
+    const store = crearStoreDelCliente();
+    render(<App store={store} enviar={vi.fn()} />);
+    // Sin `marcarConectado()`: `ESTADO_INICIAL` (`store.ts`) ya nace `conectado: false`.
+    expect(screen.getByText(/sin conexión con xonecode/i)).toBeTruthy();
+  });
+
+  it("con el wizard de entorno pendiente pasa lo mismo: solo el alta, nada de maqueta", () => {
+    const { store } = montarSinAbrir();
+    act(() =>
+      store.aplicar({
+        clase: "alta",
+        pasos: ["entorno"],
+        proveedores: [],
+        entornos: [{ id: "webstudio", nombre: "XOne WebStudio", url: "https://mcp.example/mcp" }],
+        proyectos: [],
+        ramas: [],
+      })
+    );
+    expect(screen.getByRole("heading", { name: /entorno/i })).toBeTruthy();
+    expect(screen.queryByPlaceholderText(/escribe una petición/i)).toBeNull();
+    expect(screen.queryByRole("tablist")).toBeNull();
+  });
+
+  it("en cuanto `alta` llega con `pasos: []` aparece la maqueta completa, con compositor y barra", () => {
+    const { store } = montarSinAbrir();
+    act(() =>
+      store.aplicar({ clase: "alta", pasos: [], proveedores: [], entornos: [], proyectos: [], ramas: [] })
+    );
+    expect(screen.getByPlaceholderText(/escribe una petición/i)).toBeTruthy();
+    expect(screen.getByRole("tablist")).toBeTruthy();
+    // La barra lateral, con su pie: `entornos`/`proyectos` llegan vacíos SIEMPRE hoy
+    // (`Barra.tsx` documenta por qué — el cable no manda esa jerarquía todavía), así que
+    // lo que confirma que la barra está montada es su nivel vacío, no un `<select>` que
+    // con esas props no existe.
+    expect(screen.getByText(/sin entorno que enseñar/i)).toBeTruthy();
+    expect(screen.getByText("Ajustes")).toBeTruthy();
   });
 });

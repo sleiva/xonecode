@@ -4,6 +4,10 @@ import "../estilos/base.css";
 import "../estilos/design-platform.css";
 import "../estilos/corner-shape.css";
 import "../estilos/scrollbar.css";
+// La variable del splash de arranque (`componentes/Splash.tsx`), aparte de
+// `design-platform.css` a propósito: no es un token de la paleta copiada, es nuestro y
+// provisional — ver `splash.css` para el porqué.
+import "../estilos/splash.css";
 // Los `--shiki-*` que las vallas de código resaltadas usan (`CodeBlock`, vía
 // `MarkdownText` en `Chat.tsx`): sin este fichero el tema de shiki no tiene de dónde
 // leer color y el texto resaltado sale con lo que el navegador herede, no con la

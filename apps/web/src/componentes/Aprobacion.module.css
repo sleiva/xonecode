@@ -1,7 +1,7 @@
 /* Alias comprobados contra `apps/web/estilos/design-platform.css`: bg-overlay,
    bg-layer-1/2/3, border-l2/l3, label-primary/secondary/tertiary,
-   state-success-primary/secondary, state-error-primary/secondary,
-   button-primary-fill/hover, label-primary-inverted e interactive-bg-hover. */
+   state-success-secondary, state-error-primary/secondary, button-primary-fill/hover,
+   label-primary-inverted, label-primary-foreground e interactive-bg-hover. */
 
 /* La capa es el `dialog` de `Modal`, no su `mask`: los 22 CSS Modules del paquete son
    stubs vacíos en este release candidate y el `mask` no lleva clase ni prop con la que
@@ -94,13 +94,23 @@
   user-select: none;
 }
 
+/* `label-primary-foreground` en las dos, no el «primary» de su propio par —
+   `state-success-primary`/`state-error-primary» sobre su «secondary» a juego—: el caso
+   error está MEDIDO (`AvisoDeConexion.module.css`: `design-platform.css` mapea las dos
+   mitades del par al MISMO `--dsw-static-red-400` en `body[data-ds-dark-theme]`, texto
+   invisible sobre su propio fondo). El de éxito no colisiona en el mismo grado —verde
+   500 sobre verde 400 son dos tonos distintos— pero están tan próximos en luminosidad
+   que el texto tampoco se lee con comodidad, así que se corrige con el mismo alias por
+   coherencia: una línea «añadida» y una «quitada» del diff deben leerse igual de bien.
+   `.fallo`, más abajo, no lo necesita: ahí `state-error-primary` es texto SOLO sobre el
+   fondo normal de la tarjeta, no sobre `state-error-secondary`. */
 .anadido {
-  color: var(--dsw-alias-state-success-primary);
+  color: var(--dsw-alias-label-primary-foreground);
   background: var(--dsw-alias-state-success-secondary);
 }
 
 .quitado {
-  color: var(--dsw-alias-state-error-primary);
+  color: var(--dsw-alias-label-primary-foreground);
   background: var(--dsw-alias-state-error-secondary);
 }
 

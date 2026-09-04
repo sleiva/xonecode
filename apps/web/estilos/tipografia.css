@@ -23,6 +23,16 @@ html {
   -webkit-font-smoothing: antialiased;
 }
 
+/* Mismo hueco que el `font-family` de arriba: las hojas copiadas declaran los tokens de
+   fondo pero ninguna quita el `margin: 8px` que el user-agent le pone a `body`, y con el
+   tema oscuro puesto (`index.html`) ese margen deja de ser invisible — MEDIDO en captura:
+   un marco blanco alrededor de un canvas que se quiere negro. El fondo va aquí también,
+   para que no haya ni un parpadeo blanco antes de que `Maqueta.module.css` pinte el suyo. */
+body {
+  margin: 0;
+  background: var(--dsw-alias-bg-base);
+}
+
 /* Los formularios NO heredan la tipografía del documento por omisión: es de las pocas
    herencias que el navegador corta, y sin esta línea el compositor, los `select` del
    wizard y los botones salían en la fuente del sistema mientras el resto ya estaba bien. */

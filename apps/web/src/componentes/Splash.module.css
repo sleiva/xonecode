@@ -1,0 +1,32 @@
+/* El fondo de esta pantalla NO es un alias de `design-platform.css`: es
+   `--xonecode-splash-bg`, definida en `apps/web/estilos/splash.css` y no aquí — un color
+   sólido y PROVISIONAL a propósito de un splash que el usuario rediseñará más adelante.
+   Ese fichero explica el porqué; este solo la consume, igual que cualquier alias.
+
+   `box-sizing: border-box` no es un gesto de estilo: sin él, `width: 100%` más
+   `padding: 24px` con el `content-box` por omisión del navegador (este proyecto no trae
+   ningún reset que lo cambie) SUMA el padding al 100%, y el documento entero salía 48px
+   más ancho que la ventana — MEDIDO con `scrollWidth` contra `clientWidth` en un
+   arranque limpio: una franja de scroll horizontal en el borde de una pantalla que se
+   quería sin nada más que la tarjeta centrada.
+
+   `min-height` y no `height`: un `height: 100dvh` recorta en vez de crecer cuando el
+   contenido (el catálogo de modelos largo, o el wizard de tres campos) no cabe en la
+   ventana — "que se autoresize" pidió lo contrario. Con `min-height` la pantalla sigue
+   centrando en el caso normal y el `overflow-y: auto` es la salida para cuando no cabe.
+
+   `flex-direction: column`, no fila: el aviso de conexión (cuando lo hay) va ENCIMA de
+   la tarjeta del alta, no al lado — una fila los pondría uno junto al otro. */
+.splash {
+  box-sizing: border-box;
+  min-height: 100dvh;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  overflow-y: auto;
+  padding: 24px;
+  background: var(--xonecode-splash-bg);
+}

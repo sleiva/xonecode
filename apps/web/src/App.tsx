@@ -12,6 +12,7 @@ import { Pregunta } from "./componentes/Pregunta.js";
 import { Aprobacion } from "./componentes/Aprobacion.js";
 import { Selector } from "./componentes/Selector.js";
 import { Wizard } from "./componentes/Wizard.js";
+import { Splash } from "./componentes/Splash.js";
 
 type Store = ReturnType<typeof crearStoreDelCliente>;
 
@@ -25,6 +26,82 @@ type Store = ReturnType<typeof crearStoreDelCliente>;
  */
 export function App({ store, enviar }: { store: Store; enviar: Conexion["enviar"] }) {
   const estado = useSyncExternalStore(store.suscribir, store.leer);
+
+  // El alta es lo ÚNICO que se enseña mientras no hay proyecto abierto — nada de
+  // armazón vacío alrededor esperando datos que todavía no llegan (la barra sin
+  // entornos, las pestañas sin transcript, el compositor deshabilitado): eso era el
+  // problema medido, y la corrección es no enseñarlo, no vestirlo.
+  //
+  // `anunciarAlta` (`web/servidor/vestibulo.ts`) solo manda `pasos: []` una vez que
+  // `proyectoAbierto()` es cierto, y no se vuelve a llamar durante una conversación
+  // normal — así que, pasado ese punto, `estado.alta` se queda en `pasos: []` para el
+  // resto de la conexión y `enAlta` no vuelve a hacerse `true` por su cuenta. Antes de
+  // ese punto pasa una de dos: el paso de cuenta todavía se está resolviendo (viaja por
+  // `selector`/`secreto`, no por `alta`, así que `alta` sigue `undefined`) o ya llegó con
+  // pasos pendientes de entorno/proyecto. Las dos cuentan como «todavía no hay nada que
+  // enseñar».
+  const enAlta = estado.alta === undefined || estado.alta.pasos.length > 0;
+
+  if (enAlta) {
+    return (
+      <Splash>
+        {/*
+          Antes de que llegue el primer `selector`/`secreto`/`alta` (la conexión SSE
+          todavía no ha resuelto nada, o se cayó a mitad del alta) esto era la única
+          señal — sin ella, un token inválido o el servidor caído pintaban un splash
+          sólido y NADA más: un fallo mudo, justo lo que este repo persigue en todas
+          partes. `AvisoDeConexion` ya devuelve `null` en conectado, así que en el
+          camino feliz esto sigue sin enseñar nada de más.
+        */}
+        <AvisoDeConexion conectado={estado.conectado} />
+        {estado.pregunta !== undefined ? (
+          <Pregunta
+            texto={estado.pregunta.texto}
+            alResponder={async (respuesta) => {
+              await enviar({ clase: "respuesta", texto: respuesta });
+              store.contestarPregunta();
+            }}
+          />
+        ) : null}
+        {estado.secreto !== undefined ? (
+          <Pregunta
+            texto={estado.secreto.pregunta}
+            oculta
+            alResponder={async (valor) => {
+              await enviar({ clase: "secreto", valor });
+              store.contestarSecreto();
+            }}
+          />
+        ) : null}
+        {estado.selector !== undefined ? (
+          <Selector
+            titulo={estado.selector.titulo}
+            opciones={estado.selector.opciones}
+            alElegir={async (id) => {
+              await enviar({ clase: "eleccion", id });
+              store.contestarSelector();
+            }}
+          />
+        ) : null}
+        {estado.alta !== undefined && estado.alta.pasos.length > 0 ? (
+          <Wizard
+            pasos={estado.alta.pasos}
+            proveedores={estado.alta.proveedores}
+            entornos={estado.alta.entornos}
+            proyectos={estado.alta.proyectos}
+            ramas={estado.alta.ramas}
+            {...(estado.alta.aviso === undefined ? {} : { aviso: estado.alta.aviso })}
+            alGuardarCredencial={(_proveedor, clave) => void enviar({ clase: "secreto", valor: clave })}
+            alRegistrarEntorno={(entorno) => void enviar({ clase: "alta", paso: "entorno", entorno })}
+            alCambiarProyecto={(proyecto) => void enviar({ clase: "alta", paso: "proyecto", proyecto })}
+            alElegirProyecto={({ proyecto, rama }) =>
+              void enviar({ clase: "alta", paso: "proyecto", proyecto, rama })
+            }
+          />
+        ) : null}
+      </Splash>
+    );
+  }
 
   // El PRIMER acto de usuario, no el último: es la misma regla que titula una sesión en
   // disco (`web/servidor/sesiones.ts` — «titulo» se fija una vez y no se vuelve a tocar).
@@ -102,33 +179,12 @@ export function App({ store, enviar }: { store: Store; enviar: Conexion["enviar"
             />
           ) : null}
           {/*
-            El alta, cuando falta algo. Va DELANTE del compositor y detrás de las esperas de
-            humano por la misma razón que ellas: es lo que hay que resolver antes de poder
-            hablar con el agente. El paso de cuenta no llega por aquí —lo conduce el servidor
-            sobre el selector y el secreto (`web/servidor/arranque.ts`)—, así que en la
-            práctica solo se pintan entorno y proyecto; `alGuardarCredencial` está cableado
-            igualmente al mensaje de clase «secreto», que es el único que lleva una clave.
+            Nada de alta aquí abajo: mientras `estado.alta.pasos` tiene algo pendiente,
+            `enAlta` ya ha hecho el `return` de la pantalla centrada de más arriba, así que
+            este punto del árbol solo se alcanza con el alta resuelta. Un `<Wizard>` aquí
+            no pintaría nunca — dos sitios para la misma condición es cómo uno de los dos
+            se queda mintiendo el día que el otro cambie.
           */}
-          {estado.alta !== undefined && estado.alta.pasos.length > 0 ? (
-            <Wizard
-              pasos={estado.alta.pasos}
-              proveedores={estado.alta.proveedores}
-              entornos={estado.alta.entornos}
-              proyectos={estado.alta.proyectos}
-              ramas={estado.alta.ramas}
-              // Lo que falló en el paso anterior, dicho DONDE pasó. El mismo texto llega
-              // además como acto, pero ese se ve en la Trayectoria y no en la pestaña que
-              // se está mirando.
-              {...(estado.alta.aviso === undefined ? {} : { aviso: estado.alta.aviso })}
-              alGuardarCredencial={(_proveedor, clave) => void enviar({ clase: "secreto", valor: clave })}
-              alRegistrarEntorno={(entorno) => void enviar({ clase: "alta", paso: "entorno", entorno })}
-              // Sin rama: pide las del proyecto elegido, no abre nada.
-              alCambiarProyecto={(proyecto) => void enviar({ clase: "alta", paso: "proyecto", proyecto })}
-              alElegirProyecto={({ proyecto, rama }) =>
-                void enviar({ clase: "alta", paso: "proyecto", proyecto, rama })
-              }
-            />
-          ) : null}
           <Compositor
             comandos={estado.comandos}
             conectado={estado.conectado}
@@ -160,16 +216,20 @@ export function App({ store, enviar }: { store: Store; enviar: Conexion["enviar"
       }
       barra={
         // Sin entornos/proyectos/sesiones que mostrar todavía: `vestibulo.ts` (servidor)
-        // ya sabe construir esa jerarquía, pero ningún mensaje del cable la trae aquí —
-        // esta tarea solo añadió `comandos`. Listas vacías en vez de datos inventados:
-        // rellenarlas con un placeholder sería el mismo bug mudo que un alias de color
-        // que no existe.
+        // ya sabe construir esa jerarquía, pero ningún mensaje del cable la trae aquí una
+        // vez hay proyecto abierto —esta tarea no añadió ese mensaje—. Listas vacías en
+        // vez de datos inventados: rellenarlas con un placeholder sería el mismo bug mudo
+        // que un alias de color que no existe. `Barra` ya sabe pintar ese vacío por
+        // niveles (`Barra.tsx`); lo que falta aquí es el cable, no el componente.
         <Barra
           entornos={[]}
           entornoActivo=""
           proyectos={[]}
           alElegirEntorno={() => {}}
           alAbrirSesion={() => {}}
+          // Mismo motivo: no hay clase del cable para «abre otra sesión de este
+          // proyecto» (`Barra.tsx` documenta por qué el botón se enseña de todos modos).
+          alNuevaSesion={() => {}}
         />
       }
     />

@@ -5,7 +5,9 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>xonecode</title>
   </head>
-  <body>
+  <!-- El atributo, no una clase: `design-platform.css` engancha su variante oscura a
+       `body[data-ds-dark-theme]` (línea 251), y la consola web solo tiene un tema. -->
+  <body data-ds-dark-theme="">
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>

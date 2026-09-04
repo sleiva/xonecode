@@ -1,12 +1,21 @@
 /* Alias comprobados contra `apps/web/estilos/design-platform.css`: bg-layer-2/1, border-l2,
    label-primary/tertiary, interactive-bg-hover y state-error-primary. */
 
+/* Antes era una franja a lo ancho con un solo `border-top`, pensada para vivir pegada
+   debajo del transcript. El paso de cuenta del alta usa este MISMO componente («Proveedor
+   de modelos») y ahora se enseña solo, centrado sobre el negro (`App.tsx`): una franja sin
+   bordes ni esquinas flotando en mitad de la pantalla no lee como nada. Borde entero,
+   esquinas redondeadas y ancho acotado — la misma tarjeta que `Wizard.module.css` —, así
+   que el mismo componente sirve a los dos sitios sin dos aspectos distintos. */
 .selector {
   display: flex;
   flex-direction: column;
   gap: 8px;
+  width: min(480px, 100%);
+  margin: 0 auto;
   padding: 12px;
-  border-top: 0.5px solid var(--dsw-alias-border-l2);
+  border: 0.5px solid var(--dsw-alias-border-l2);
+  border-radius: 12px;
   background: var(--dsw-alias-bg-layer-2);
 }
 
