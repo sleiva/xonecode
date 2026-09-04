@@ -200,12 +200,14 @@ export function montarRutas(
           informar("el entorno necesita una URL");
           return;
         }
-        // Registrar es idempotente en disco (`settingsEnDisco.guardarEntorno` sustituye por
-        // id), pero volver a registrar el mismo entorno duplicaría la lista en memoria del
-        // vestíbulo. Elegir uno ya registrado no es dar de alta nada.
-        if (!vestibulo.opcionesDeEntorno().some((o) => o.id === elegido.id && o.url === elegido.url && o.url !== "")) {
-          await vestibulo.registrarEntorno({ id: elegido.id, nombre: elegido.nombre, url: elegido.url });
-        }
+        // SIEMPRE se registra, aunque el entorno ya esté en la lista. La versión anterior
+        // se lo saltaba comparando contra `opcionesDeEntorno()`, que es la lista OFRECIDA
+        // (los dos oficiales más «otro») y no la registrada: con un `settings.json` recién
+        // nacido, elegir WebStudio casaba con el oficial, no se registraba nada, y el
+        // `proyectosDe` siguiente moría con «el entorno no está registrado». Registrar dos
+        // veces no cuesta nada: en disco `guardarEntorno` sustituye por id y en memoria el
+        // vestíbulo hace lo mismo.
+        await vestibulo.registrarEntorno({ id: elegido.id, nombre: elegido.nombre, url: elegido.url });
         entornoElegido = elegido.id;
         proyectoElegido = undefined;
         ramas = [];
@@ -229,7 +231,9 @@ export function montarRutas(
         ramas = await vestibulo.ramasDe(entornoElegido, proyecto);
         return;
       }
-      const identidad = proyectos.find((p) => p.id === (proyectoElegido ?? proyecto)) ?? proyecto;
+      // El proyecto que viene en ESTE mensaje, no el cacheado: lo enviado es la verdad y
+      // `proyectoElegido` puede haberse quedado atrás.
+      const identidad = proyectos.find((p) => p.id === proyecto) ?? proyecto;
       const { raiz } = await vestibulo.completarProyecto({
         entorno: entornoElegido,
         proyecto: identidad,
@@ -273,10 +277,15 @@ export function montarRutas(
       .finally(() => void anunciarAlta().catch(contar));
 
     peticion.on("close", () => {
+      // El `close` de una pestaña recargada puede llegar DESPUÉS de que el SSE nuevo se
+      // haya enganchado. Sin esta guarda desconectaría la consola del cliente que acaba de
+      // llegar, y a partir de ahí `eof()` diría que no hay nadie: toda aprobación
+      // rechazada en silencio.
+      if (enviar !== sumidero) return;
+      enviar = undefined;
       // Se desconecta el destino que se ADJUNTÓ, no el actual: entre la conexión y el
       // cierre puede haberse abierto un proyecto, y desconectar a otro dejaría la consola
       // viva creyendo que sigue habiendo alguien mirando.
-      if (enviar === sumidero) enviar = undefined;
       adjunto?.desconectar();
       adjunto = undefined;
     });
@@ -427,8 +436,18 @@ function vestibuloReal(
   };
   const settings = cargarSettings().settings;
   const dependenciasDeProyecto = opciones.dependenciasDeProyecto;
+  // Capturado perezosamente porque el `informar` se construye ANTES que el vestíbulo al que
+  // escribe. La omisión del vestíbulo es solo su propia consola, y en cuanto hay proyecto
+  // abierto esa consola no la mira nadie: ahí caía «la consola del proyecto terminó con un
+  // error», el aviso que más falta hace ver.
+  let vestibulo: Vestibulo | undefined;
+  const informar = (texto: string): void => {
+    escribir(`${texto}\n`);
+    vestibulo?.consola.consola.escribir(`${texto}\n`);
+  };
 
-  return crearVestibulo({
+  vestibulo = crearVestibulo({
+    informar,
     origenDeTrabajo: resolver(fuentes).trabajo.origen,
     fuentes,
     catalogoModelos: new CatalogoModelos(),
@@ -451,7 +470,11 @@ function vestibuloReal(
     // sincronización se toca ni se duplica.
     descargar: async ({ raiz }) => {
       const sincronizar = dependenciasDeProyecto?.(raiz).sincronizar;
-      if (sincronizar === undefined) return;
+      // Un `return` a secas aquí sería el no-op silencioso que este repo evita en todas
+      // partes: el alta quedaría escrita y el usuario creyendo que su proyecto está bajado.
+      if (sincronizar === undefined) {
+        throw new Error("esta consola web se montó sin `dependenciasDeProyecto`: no hay con qué descargar");
+      }
       const bajada = await sincronizar("bajar", raiz, undefined, escribir);
       if (bajada.tipo === "texto") {
         escribir(bajada.texto);
@@ -468,6 +491,7 @@ function vestibuloReal(
       : { crearEjecutor: opciones.crearEjecutor }),
     ...(dependenciasDeProyecto === undefined ? {} : { dependenciasDeProyecto }),
   });
+  return vestibulo;
 }
 
 /** Los pasos, reexportados para quien monte otra piel sobre el mismo vestíbulo. */

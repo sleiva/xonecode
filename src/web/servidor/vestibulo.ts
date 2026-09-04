@@ -519,7 +519,13 @@ export function crearVestibulo(opciones: OpcionesDelVestibulo): Vestibulo {
       // Justo después de registrar, y no antes: `adoptarLegadoSiProcede` solo actúa si la
       // URL es la oficial por omisión, que es la única que el fichero plano pudo usar.
       adoptarLegado(entorno);
-      registrados.push(entorno);
+      // SUSTITUYE por id, como hace `settingsEnDisco.guardarEntorno` en el fichero. Con un
+      // `push` a secas, registrar dos veces el mismo entorno —cosa que la web hace cada vez
+      // que alguien lo elige— dejaba dos entradas para un id, y `entornoPorId` resolvía a la
+      // primera: la vieja. Registrar es idempotente aquí igual que en disco.
+      const yaEstaba = registrados.findIndex((e) => e.id === entorno.id);
+      if (yaEstaba >= 0) registrados.splice(yaEstaba, 1, entorno);
+      else registrados.push(entorno);
       informar(`entorno «${entorno.id}» registrado en ${guardado.ruta}`);
       return guardado;
     },

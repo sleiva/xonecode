@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import { Input, Button } from "@deepseek-ai/dsh-client-ui-primitives";
 import estilos from "./Wizard.module.css";
 
@@ -128,6 +128,35 @@ export function Wizard({
 
   const [proyecto, setProyecto] = useState(proyectos[0]?.id ?? "");
   const [rama, setRama] = useState(ramas[0] ?? "");
+
+  /**
+   * Las dos listas llegan DESPUÉS de montar —el wizard aparece en el paso de entorno, con
+   * proyectos y ramas todavía vacíos— y un `useState(lista[0])` se queda congelado en su
+   * valor inicial, que es la cadena vacía. Medido en el flujo entero: el `<select>` pintaba
+   * el primer proyecto pero el estado seguía vacío, y como `onChange` solo dispara cuando el
+   * usuario CAMBIA de opción, con un solo proyecto no se pedían sus ramas nunca; con una
+   * sola rama, el envío mandaba `rama: ""` y el servidor lo lee como «pídeme las ramas» —
+   * un bucle del que no se sale.
+   *
+   * Se sincroniza solo cuando el estado está vacío: una elección del usuario no la pisa una
+   * lista que vuelva a llegar.
+   */
+  useEffect(() => {
+    const primero = proyectos[0]?.id;
+    if (proyecto === "" && primero !== undefined) {
+      setProyecto(primero);
+      // Y se piden sus ramas, que es lo que haría el `onChange` que aquí no ocurre.
+      alCambiarProyecto?.(primero);
+    }
+    // `alCambiarProyecto` no entra en las dependencias a propósito: quien monta el wizard le
+    // pasa una lambda nueva en cada render, y con ella dentro esto se dispararía en bucle.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [proyectos, proyecto]);
+
+  useEffect(() => {
+    const primera = ramas[0];
+    if (rama === "" && primera !== undefined) setRama(primera);
+  }, [ramas, rama]);
 
   const paso = pasos[indice];
   if (paso === undefined) return null;

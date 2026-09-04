@@ -153,4 +153,49 @@ describe("Wizard", () => {
     fireEvent.click(screen.getByRole("button", { name: /abrir/i }));
     expect(alElegirProyecto).toHaveBeenCalledWith({ proyecto: "p1", rama: "master" });
   });
+
+  /**
+   * Las dos listas del paso de proyecto llegan DESPUÉS de montar: el wizard aparece en el
+   * paso de entorno, cuando el servidor todavía no sabe ni el entorno. Un `useState` con el
+   * primero de la lista se queda congelado en la cadena vacía, y como `onChange` solo salta
+   * cuando el usuario CAMBIA de opción, con un solo proyecto el `<select>` enseñaba uno y el
+   * estado tenía otro. Los dos tests de aquí abajo son ese flujo, no el del montaje directo.
+   */
+  it("cuando los proyectos llegan después de montar, se pide la rama del primero sin tocar nada", () => {
+    const alCambiarProyecto = vi.fn();
+    const vista = render(
+      <Wizard pasos={["proyecto"]} {...manejadores} proyectos={[]} ramas={[]} alCambiarProyecto={alCambiarProyecto} />
+    );
+    expect(alCambiarProyecto).not.toHaveBeenCalled();
+    vista.rerender(
+      <Wizard
+        pasos={["proyecto"]}
+        {...manejadores}
+        proyectos={[{ id: "p1", nombre: "MinitMT" }]}
+        ramas={[]}
+        alCambiarProyecto={alCambiarProyecto}
+      />
+    );
+    expect(alCambiarProyecto).toHaveBeenCalledWith("p1");
+  });
+
+  it("cuando las ramas llegan después, el envío lleva una rama de verdad y no cadena vacía", () => {
+    // Mandar `rama: ""` es lo que el servidor lee como «pídeme las ramas»: sin esto, un
+    // proyecto con una sola rama dejaba el alta dando vueltas para siempre.
+    const alElegirProyecto = vi.fn();
+    const vista = render(
+      <Wizard pasos={["proyecto"]} {...manejadores} proyectos={[]} ramas={[]} alElegirProyecto={alElegirProyecto} />
+    );
+    vista.rerender(
+      <Wizard
+        pasos={["proyecto"]}
+        {...manejadores}
+        proyectos={[{ id: "p1", nombre: "MinitMT" }]}
+        ramas={["master"]}
+        alElegirProyecto={alElegirProyecto}
+      />
+    );
+    fireEvent.click(screen.getByRole("button", { name: /abrir/i }));
+    expect(alElegirProyecto).toHaveBeenCalledWith({ proyecto: "p1", rama: "master" });
+  });
 });

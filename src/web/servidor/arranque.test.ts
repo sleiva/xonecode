@@ -182,6 +182,56 @@ describe("montarRutas — el cable, por fin conectado", () => {
     expect(vestibulo.proyectoAbierto()).toBeUndefined();
   });
 
+  it("con settings.json recién nacido, elegir el entorno oficial lo REGISTRA y trae sus proyectos", async () => {
+    // El fallo que esto vigila: la versión anterior se saltaba el registro comparando
+    // contra `opcionesDeEntorno()` —la lista OFRECIDA, no la registrada—, así que en un
+    // arranque limpio elegir WebStudio no registraba nada y el `proyectosDe` de después
+    // moría con «el entorno no está registrado». El resto de tests no lo veían porque el
+    // vestíbulo de prueba trae webstudio ya registrado.
+    const registrados: string[] = [];
+    const servidor = servidorDeMentira();
+    const vestibulo = vestibuloDePrueba({
+      entornos: [],
+      guardarEntorno: (e) => {
+        registrados.push(e.id);
+        return { ruta: "/casa/.xonecode/settings.json" };
+      },
+    });
+    montarRutas(servidor, vestibulo);
+    const cliente = clienteDeMentira();
+    const eventos = servidor.rutas.get(`GET ${RUTA_EVENTOS}`);
+    await eventos!(cliente.peticion, cliente.respuesta);
+    const accion = servidor.rutas.get(`POST ${RUTA_ACCION}`)!;
+    await asentar();
+
+    await enviarMensaje(accion, {
+      clase: "alta",
+      paso: "entorno",
+      entorno: { id: "webstudio", nombre: "XOne WebStudio", url: "https://mcp.xonewebstudio.com/mcp" },
+    });
+    await asentar();
+    expect(registrados).toEqual(["webstudio"]);
+    const alta = cliente.recibidos.at(-1) as Extract<MensajeAlCliente, { clase: "alta" }>;
+    expect(alta.proyectos).toEqual([{ id: "p1", nombre: "Tienda" }]);
+  });
+
+  it("un `close` que llega tarde no desconecta al cliente que acaba de entrar", async () => {
+    // Una pestaña recargada: el `close` de la vieja puede llegar DESPUÉS del SSE nuevo.
+    // Sin la guarda, desconectaba la consola del cliente recién llegado y a partir de ahí
+    // toda aprobación se rechazaba sola.
+    const servidor = servidorDeMentira();
+    const vestibulo = vestibuloDePrueba();
+    montarRutas(servidor, vestibulo);
+    const eventos = servidor.rutas.get(`GET ${RUTA_EVENTOS}`)!;
+    const vieja = clienteDeMentira();
+    await eventos(vieja.peticion, vieja.respuesta);
+    const nueva = clienteDeMentira();
+    await eventos(nueva.peticion, nueva.respuesta);
+    await asentar();
+    vieja.cerrar();
+    expect(vestibulo.consola.consola.eof!()).toBe(false);
+  });
+
   it("con rama abre el proyecto Y el cable se muda a su consola: si no, cada aprobación se rechazaría sola", async () => {
     const servidor = servidorDeMentira();
     const vestibulo = vestibuloDePrueba();
