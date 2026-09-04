@@ -796,26 +796,35 @@ function manejadorDeModelo(papel: Papel | undefined): ManejadorDeBarra {
  * La ÚNICA política de aprobación que existe hoy: rellena el hueco de
  * `core/cloudstudio.ts#PoliticaDeAprobacion` con un humano que ve el plan y responde.
  * Vive aquí, en `cli/`, y no en `agent/subida.ts`: la política es de la piel, el hueco es
- * del motor. Mismo fail-closed que `cli/aprobar.ts` (`interpretAnswer`): sin TTY, sin un
- * sí explícito, no se sube.
+ * del motor.
+ *
+ * **Es MÁS estricta que `cli/aprobar.ts`, a propósito: aquí el Enter a secas no aprueba
+ * ni con TTY.** No es el mismo acto. En `aprobar.ts` se autoriza una escritura con su
+ * diff delante, línea a línea, y el Enter que aprueba lo pulsa alguien que está mirando
+ * el cambio; aquí se PUBLICA en un servidor remoto, lo que hay en pantalla es una lista
+ * de rutas —no el contenido— y es la operación menos reversible del producto. El detalle
+ * que lo hace peligroso no se ve: `APPROVALS_TTY` (`vendor/hitl.ts`) contiene la cadena
+ * VACÍA, así que pasarle `interactive` a `interpretAnswer` convertiría en «sube» toda
+ * respuesta vacía — y `consola.preguntar` devuelve "" también cuando el readline ya está
+ * cerrado (Ctrl-D, un stdin agotado a mitad de turno). Un EOF no puede publicar. Por eso
+ * se llama sin opciones, contra `APPROVALS_NO_TTY`, y el prompt enseña `[s/N]` siempre:
+ * un default visible que no fuera el real sería mentir en el paso que sube.
  *
  * La política AUTÓNOMA (el papel `afilado` decidiendo sin que nadie mire) todavía no
  * existe — hace falta, además del veredicto del juez, que el código compruebe
  * condiciones deterministas (verificador en verde, árbol limpio, plan sin pendientes):
  * ver el comentario de `PoliticaDeAprobacion`.
  */
-function politicaInteractiva(consola: Consola): PoliticaDeAprobacion {
+export function politicaInteractiva(consola: Consola): PoliticaDeAprobacion {
   return async (plan) => {
     consola.escribir(`\n${"─".repeat(60)}\n`);
-    consola.escribir(`SUBIDA A CLOUDSTUDIO — ${plan.length} operación${plan.length === 1 ? "" : "es"}\n`);
+    consola.escribir(`SUBIDA A CLOUDSTUDIO — ${plan.length} ${plan.length === 1 ? "operación" : "operaciones"}\n`);
     for (const operacion of plan) {
       const signo = operacion.tipo === "borrado" ? "-" : operacion.tipo === "binario" ? "~" : "+";
       consola.escribir(`  ${signo} ${operacion.ruta}\n`);
     }
-    const respuesta = await consola.preguntar(
-      consola.interactivo ? "¿Subir a CloudStudio? [S/n] " : "¿Subir a CloudStudio? [s/N] "
-    );
-    const decision = interpretAnswer(respuesta, { interactive: consola.interactivo });
+    const respuesta = await consola.preguntar("¿Subir a CloudStudio? [s/N] ");
+    const decision = interpretAnswer(respuesta);
     consola.escribir(decision.type === "approve" ? "  → APROBADO\n" : "  → rechazado, no se ha aplicado nada\n");
     return decision.type === "approve";
   };

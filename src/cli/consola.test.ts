@@ -9,6 +9,7 @@ import {
   ejecutarTurnoGuionizado,
   crearCompleter,
   hayEstadoDeProyecto,
+  politicaInteractiva,
   type Consola,
   type EstadoDeSesion,
   type EjecutorDeTurno,
@@ -18,6 +19,7 @@ import type { Escribir } from "./stdio.js";
 import type { Preguntar } from "./aprobar.js";
 import { rutaAuth, NOMBRE_CARPETA } from "../agent/configEnDisco.js";
 import { CatalogoModelosEnMemoria, type CatalogoModelosPort } from "../core/ports.js";
+import type { OperacionDeSubida, PoliticaDeAprobacion } from "../core/cloudstudio.js";
 
 /**
  * La costura del diseño: la consola de prueba lee de un generador con las líneas del test
@@ -432,6 +434,90 @@ describe("/sync", () => {
       await correrConsola(conSync, estadoDe());
 
       expect(salida()).toContain("no se ha aplicado nada");
+    });
+
+    /**
+     * Los de arriba llegan a la política por `/sync`, y ninguno mira la respuesta VACÍA
+     * con TTY — que es justo por donde se colaba. Estos la llaman directa: es la única
+     * forma de ver el prompt literal y de mirar la pantalla EN EL INSTANTE de preguntar.
+     */
+    const PLAN: readonly OperacionDeSubida[] = [
+      { tipo: "texto", ruta: "app/Clientes.xne" },
+      { tipo: "borrado", ruta: "app/Viejo.xne" },
+    ];
+
+    function politicaSobreDoble(opciones: { respuesta: string; interactivo: boolean }): {
+      politica: PoliticaDeAprobacion;
+      prompts: string[];
+      salida: () => string;
+      vistoAlPreguntar: () => string;
+    } {
+      const { consola, salida } = consolaDeConSecreto({ lineas: [], interactivo: opciones.interactivo });
+      const prompts: string[] = [];
+      let visto = "";
+      // Se sustituye el `preguntar` del doble en vez de añadir otro helper: es lo que ya
+      // hacen los tests de `configurarModoInicial` con `guardarModoDeProyecto`.
+      consola.preguntar = async (pregunta: string) => {
+        prompts.push(pregunta);
+        visto = salida();
+        return opciones.respuesta;
+      };
+      return { politica: politicaInteractiva(consola), prompts, salida, vistoAlPreguntar: () => visto };
+    }
+
+    it("una respuesta VACÍA rechaza AUNQUE haya TTY: un EOF no puede publicar", async () => {
+      // La regresión. `APPROVALS_TTY` (`vendor/hitl.ts`) contiene "", así que pasarle
+      // `interactive: true` a `interpretAnswer` convertía en aprobación toda respuesta
+      // vacía — y `consola.preguntar` devuelve "" también cuando el readline ya está
+      // cerrado: un Ctrl-D en el prompt, o un stdin que se agotó a mitad de turno.
+      const { politica, salida } = politicaSobreDoble({ respuesta: "", interactivo: true });
+
+      expect(await politica(PLAN)).toBe(false);
+      expect(salida()).toContain("rechazado, no se ha aplicado nada");
+      expect(salida()).not.toContain("APROBADO");
+    });
+
+    it("un «s» explícito autoriza", async () => {
+      const { politica, salida } = politicaSobreDoble({ respuesta: "s", interactivo: true });
+
+      expect(await politica(PLAN)).toBe(true);
+      expect(salida()).toContain("APROBADO");
+    });
+
+    it("un «n» rechaza, y ese `false` es lo ÚNICO que frena la subida", async () => {
+      // La política no sube: devuelve el permiso. Que sea `false` es la parada entera,
+      // porque `agent/subida.ts` no tiene otra puerta.
+      const { politica, salida } = politicaSobreDoble({ respuesta: "n", interactivo: true });
+
+      expect(await politica(PLAN)).toBe(false);
+      expect(salida()).toContain("rechazado, no se ha aplicado nada");
+      expect(salida()).not.toContain("APROBADO");
+    });
+
+    it("el prompt enseña [s/N] con TTY y sin él: la mayúscula visible es la de verdad", async () => {
+      // El mismo invariante que vigila `aprobar.test.ts`, con el default al revés: aquí
+      // el Enter NO aprueba, así que enseñar «[S/n]» sería mentir en el paso que publica.
+      const conTty = politicaSobreDoble({ respuesta: "n", interactivo: true });
+      await conTty.politica(PLAN);
+      expect(conTty.prompts[0]).toBe("¿Subir a CloudStudio? [s/N] ");
+
+      const sinTty = politicaSobreDoble({ respuesta: "n", interactivo: false });
+      await sinTty.politica(PLAN);
+      expect(sinTty.prompts[0]).toBe("¿Subir a CloudStudio? [s/N] ");
+    });
+
+    it("el plan entero ya está en pantalla cuando se pregunta", async () => {
+      // Se mira la salida EN EL MOMENTO de preguntar, no la final: sobre la final, un
+      // plan impreso DESPUÉS de la pregunta pasaría igual, y sería pedir que se autorice
+      // una lista que nadie llegó a ver.
+      const { politica, vistoAlPreguntar } = politicaSobreDoble({ respuesta: "n", interactivo: true });
+
+      await politica(PLAN);
+
+      const visto = vistoAlPreguntar();
+      expect(visto).toContain("SUBIDA A CLOUDSTUDIO — 2 operaciones");
+      expect(visto).toContain("+ app/Clientes.xne");
+      expect(visto).toContain("- app/Viejo.xne");
     });
   });
 });
