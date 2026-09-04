@@ -14,6 +14,7 @@
     "dist",
     "skills",
     "README.md",
+    "THIRD_PARTY_NOTICES.md",
     "apps/web/dist"
   ],
   "engines": {
