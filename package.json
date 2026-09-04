@@ -4,19 +4,24 @@
   "description": "Consola CLI y harness de agente para desarrollar aplicaciones XOne",
   "type": "module",
   "license": "MIT",
+  "workspaces": [
+    "apps/*"
+  ],
   "bin": {
     "xonecode": "./dist/bin.js"
   },
   "files": [
     "dist",
     "skills",
-    "README.md"
+    "README.md",
+    "apps/web/dist"
   ],
   "engines": {
     "node": ">=20"
   },
   "scripts": {
-    "build": "rm -rf dist && tsc -p tsconfig.build.json && chmod +x dist/bin.js",
+    "build": "rm -rf dist && tsc -p tsconfig.build.json && chmod +x dist/bin.js && npm run build:web",
+    "build:web": "npm run build --workspace apps/web",
     "test": "vitest run",
     "test:watch": "vitest",
     "typecheck": "tsc --noEmit",
