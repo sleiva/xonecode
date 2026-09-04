@@ -10,7 +10,9 @@
 import type { PropsDelModal } from "./aprobarTui.js";
 import type { SelectorDeConsola } from "../consola.js";
 import type { Acto } from "../../core/actos.js";
+import { conLineaDeTool } from "../../core/actos.js";
 export type { Acto };
+export { conLineaDeTool };
 
 export interface EstadoDeTui {
   actos: Acto[];
@@ -24,29 +26,6 @@ export interface EstadoDeTui {
 type ActoDeTexto = Extract<Acto, { texto: string }>;
 /** Lo que `linea` acepta: los de texto y «tool», que no es un acto sino una línea del grupo `herramientas`. */
 type TipoDeLinea = ActoDeTexto["tipo"] | "tool";
-
-/**
- * Una línea de cierre de racha del colapsador del motor (`core/notify.ts`): «→ lee ×3 — …».
- * Devuelve su prefijo icono+verbo («→ lee»), o undefined si no es un cierre.
- */
-function prefijoDeCierre(linea: string): string | undefined {
-  const m = /^(\S+ \S+) ×\d+/.exec(linea);
-  return m?.[1];
-}
-
-/**
- * Añadir una línea de tool al grupo: si es el cierre de la racha cuya apertura es la
- * última línea, la SUSTITUYE. El colapsador escribe apertura y cierre porque stdio solo
- * añade; aquí se repinta, y dos líneas para la misma racha son ruido. Pura.
- */
-export function conLineaDeTool(lineas: readonly string[], linea: string): string[] {
-  const prefijo = prefijoDeCierre(linea);
-  const ultima = lineas.at(-1);
-  if (prefijo !== undefined && ultima !== undefined && (ultima === prefijo || ultima.startsWith(`${prefijo} `))) {
-    return [...lineas.slice(0, -1), linea];
-  }
-  return [...lineas, linea];
-}
 
 export interface OpcionesDelStore {
   /** Costura de test del reloj: la duración de una fase no puede dormir el test. */

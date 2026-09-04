@@ -22,3 +22,28 @@ export type Acto =
   /** El cierre del turno: duración y, si la piel lo sabe, el modelo que lo corrió. */
   | { tipo: "fin"; ms: number; modelo?: string }
   | { tipo: "error"; texto: string };
+
+/**
+ * Una línea de cierre de racha del colapsador del motor (`core/notify.ts`): «→ lee ×3 — …».
+ * Devuelve su prefijo icono+verbo («→ lee»), o undefined si no es un cierre.
+ */
+function prefijoDeCierre(linea: string): string | undefined {
+  const m = /^(\S+ \S+) ×\d+/.exec(linea);
+  return m?.[1];
+}
+
+/**
+ * Añadir una línea de tool al grupo: si es el cierre de la racha cuya apertura es la
+ * última línea, la SUSTITUYE. El colapsador escribe apertura y cierre porque stdio solo
+ * añade; una piel que repinta (TUI, web) no puede permitirse dos líneas para la misma
+ * racha. Pura, y vivía en `cli/tui/store.ts` hasta que la web empezó a necesitarla
+ * también: dos copias de esta sutileza es cómo divergen.
+ */
+export function conLineaDeTool(lineas: readonly string[], linea: string): string[] {
+  const prefijo = prefijoDeCierre(linea);
+  const ultima = lineas.at(-1);
+  if (prefijo !== undefined && ultima !== undefined && (ultima === prefijo || ultima.startsWith(`${prefijo} `))) {
+    return [...lineas.slice(0, -1), linea];
+  }
+  return [...lineas, linea];
+}
