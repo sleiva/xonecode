@@ -112,8 +112,8 @@
     {
       "id": 12,
       "subject": "Task 12: La maqueta — barra derecha, cabecera y compositor",
-      "status": "pending",
-      "description": "**Goal:** La pantalla: barra lateral **a la derecha** con entorno → proyectos → sesiones, cabecera de sesión, y el compositor, con los estilos de deepseek.\n\n**Files:**\n- Create: `apps/web/src/componentes/Maqueta.tsx` + `Maqueta.module.css`\n- Create: `apps/web/src/componentes/Barra.tsx` + `Barra.module.css`\n- Create: `apps/web/src/componentes/Compositor.tsx` + `Compositor.module.css`\n- Create: `apps/web/src/componentes/Cabecera.tsx` + `Cabecera.module.css`\n- Create: `apps/web/src/componentes/Barra.test.tsx`\n- Modify: `apps/web/src/App.tsx`\n\n**Acceptance Criteria:**\n- [ ] La barra está **a la derecha** y muestra tres niveles: entorno (selector), proyectos, sesiones anidadas\n- [ ] Una sesión histórica se distingue visualmente de una viva\n- [ ] El compositor se deshabilita cuando `conectado === false`\n- [ ] Enter envía; Shift+Enter hace salto de línea\n- [ ] Una línea que empieza por `/` viaja **por el mismo camino que la prosa**: la despacha\n      `correrConsola` contra el registro `COMANDOS` (`cli/consola.ts:819`), así que `/ayuda`,\n      `/modelo`, `/config`, `/sync` y `/hilo` funcionan en la web **sin código nuevo**\n- [ ] El compositor ofrece las sugerencias de comando leyendo el mismo registro, no una copia\n- [ ] Los componentes usan **solo alias semánticos** `--dsw-alias-*`; ningún color literal\n- [ ] Ningún selector de tema (`prefers-color-scheme`, `[data-theme]`) en un CSS de componente\n- [ ] Un test comprueba las dos reglas anteriores leyendo los `.module.css`\n\n**Verify:** `npx vitest run apps/web/src/componentes/` → PASS\n\n```json:metadata\n{\"files\": [\"apps/web/src/componentes/Maqueta.tsx\", \"apps/web/src/componentes/Barra.tsx\", \"apps/web/src/componentes/Compositor.tsx\", \"apps/web/src/componentes/Cabecera.tsx\", \"apps/web/src/componentes/Barra.test.tsx\", \"apps/web/src/App.tsx\"], \"verifyCommand\": \"npx vitest run apps/web/src/componentes/ && npm run build:web\", \"acceptanceCriteria\": [\"barra a la derecha con tres niveles\", \"sesión histórica distinguible\", \"compositor deshabilitado sin conexión\", \"Enter envía y Shift+Enter salta\", \"sin colores literales\", \"sin selectores de tema en componentes\"], \"modelTier\": \"standard\"}\n```",
+      "status": "completed",
+      "description": "**Goal:** La pantalla: barra lateral **a la derecha** con entorno → proyectos → sesiones, cabecera de sesión, y el compositor, con los estilos de deepseek.\n\nComplete — see ledger.",
       "blockedBy": [
         11
       ]
@@ -148,5 +148,5 @@
       ]
     }
   ],
-  "lastUpdated": "2026-09-04T12:47:19.504870+00:00"
+  "lastUpdated": "2026-09-04T13:11:40.685924+00:00"
 }

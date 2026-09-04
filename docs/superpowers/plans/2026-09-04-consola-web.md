@@ -2229,6 +2229,7 @@ git commit -m "feat(web): la maqueta — barra derecha de entorno/proyecto/sesi�
 - [ ] Un test comprueba que **ninguna fila** de Trayectoria contiene un JSON de argumentos
 - [ ] La barra de estado lleva turnos, pasos, tiempo y contexto, y **omite el porcentaje si no hay tope** (ollama no tiene tope a propósito)
 - [ ] Las dos vistas se alternan con pestañas y la elegida se recuerda mientras dure la página
+- [ ] **El test de disciplina de estilos deja de ser ciego a las palabras clave de color.** Medido: hoy caza `#fff`, `rgb(...)` y `hsl(...)`, pero `red` o `transparent` pasan — y `transparent` ya se coló una vez de verdad. Añadir una lista cerrada de palabras clave conocidas; es la única barrera que hace cumplir «ningún color literal»
 
 **Verify:** `npx vitest run apps/web/src/markdown.test.ts apps/web/src/componentes/Trayectoria.test.tsx` → PASS
 
@@ -2378,6 +2379,8 @@ git commit -m "feat(web): Chat con markdown saneado, Trayectoria sin argumentos 
 - [ ] El campo de la clave de API es `type="password"`, tiene `autocomplete="off"` y **no se guarda en el store**
 - [ ] Registrar un entorno «otro» pide nombre y URL, y valida que la URL sea `https://` (o `http://` solo en loopback, para el on-premise en desarrollo)
 - [ ] Al guardar una credencial, la interfaz dice **dónde** quedó, antes de seguir
+- [ ] **La pregunta de texto libre tiene UI y tiene plazo.** `estado.pregunta` se pinta y su respuesta viaja como `{clase:"respuesta"}` — hoy el compositor manda todo como `prosa`, que entra por la cola de líneas y **no resuelve la pregunta ni acertando el texto**. Sin esto, cualquier comando que caiga a `consola.preguntar` sin alternativa de `seleccionar` (`/sync subir` por `politicaInteractiva`, `cli/consola.ts:834`; `/connect-studio` sin URL, `cli/consola.ts:916`) **bloquea la sesión web para siempre**
+- [ ] **`preguntar` gana un plazo, como ya tiene `aprobacionesTui`.** Medido: `aprobacionesTui` lleva `msDeEspera` y `preguntar` no lleva ninguno, así que con la pestaña abierta espera indefinidamente y el lazo de `correrConsola` queda `await`-ado ahí dentro. Al vencer, responde cadena vacía — que es lo que ya responde al desconectarse, y lo que `interpretAnswer` trata como rechazo
 
 **Verify:** `npx vitest run apps/web/src/componentes/Aprobacion.test.tsx apps/web/src/componentes/Wizard.test.tsx` → PASS
 
@@ -2531,6 +2534,8 @@ git commit -m "feat(web): el modal de aprobación fail-closed y el wizard de tre
 - [ ] `xonecode` imprime la URL con el token y abre el navegador salvo con `--no-abrir`
 - [ ] Si falta `apps/web/dist`, el comando dice «falta el build del cliente: `npm run build:web`» y sale, sin traza
 - [ ] Si el cwd tiene `.xonecode` con `modo: "offline"`, la web lo dice al arrancar y sugiere `xonecode --cli`
+- [ ] **Alguien emite `{clase:"comandos"}` al conectar.** El mensaje está declarado en los dos lados del cable desde la Task 12, pero **ningún fichero de producción lo arma**, así que hoy la lista de sugerencias del compositor está siempre vacía. Se construye recorriendo `COMANDOS` (`cli/consola.ts:819`), igual que `/ayuda` y el completador de Tab: una lista escrita a mano se queda vieja en cuanto alguien añade un comando
+- [ ] **Las rutas HTTP existen de verdad.** `registrarRuta` (`web/servidor/servidor.ts`) no se invoca hoy desde ningún sitio de producción: `/eventos` y `/accion` están implementados pero no montados. Sin esto la consola web no se puede abrir aunque `decidirPiel` devuelva `"web"`
 - [ ] Los subcomandos y sus códigos de salida (0/1/2/64/70) no cambian
 - [ ] `npm test` entero en verde y `npm run typecheck` limpio
 
