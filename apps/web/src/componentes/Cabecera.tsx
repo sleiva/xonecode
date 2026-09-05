@@ -4,8 +4,6 @@ import conversacion from "../../estilos/ConversationRoot.module.css";
 import pastilla from "../../estilos/AgentPresetLabel.module.css";
 import estilos from "./Cabecera.module.css";
 
-export type Pestana = "chat" | "trayectoria" | "ficheros";
-
 /**
  * La cabecera de la sesión, con el CSS de deepseek
  * (`estilos/ConversationRoot.module.css`): fila de título con las migas a la izquierda,
@@ -23,7 +21,7 @@ export type Pestana = "chat" | "trayectoria" | "ficheros";
  * `<button disabled>` que el original usa para la última: mismo elemento, mismo estado,
  * misma clase `.crumbCurrent`.
  */
-export function Cabecera({ titulo, modo, conectado, pestana, alElegirPestana, barraContraida, alAlternarBarra }: {
+export function Cabecera({ titulo, modo, conectado, barraContraida, alAlternarBarra }: {
   titulo: string;
   /**
    * El modo del proyecto abierto (`.xonecode/config.json`), tal cual lo manda el
@@ -40,8 +38,6 @@ export function Cabecera({ titulo, modo, conectado, pestana, alElegirPestana, ba
    * barra superior SÍ se queda: es la barra de herramientas de la aplicación, no de la
    * sesión.
    */
-  pestana?: Pestana;
-  alElegirPestana?: (pestana: Pestana) => void;
   /** Si la barra lateral está plegada, para que el botón diga qué va a hacer. */
   barraContraida?: boolean;
   /** Plegar y desplegar la barra lateral. Ausente = no se ofrece el botón. */
@@ -125,43 +121,6 @@ export function Cabecera({ titulo, modo, conectado, pestana, alElegirPestana, ba
         </div>
       </div>
 
-      {pestana === undefined || alElegirPestana === undefined ? null : (
-      <div className={conversacion.tabs} role="tablist">
-        <button
-          type="button"
-          role="tab"
-          aria-selected={pestana === "chat"}
-          className={clsx(conversacion.tab, pestana === "chat" && conversacion.tabActive)}
-          onClick={() => alElegirPestana("chat")}
-        >
-          Chat
-        </button>
-        <button
-          type="button"
-          role="tab"
-          aria-selected={pestana === "trayectoria"}
-          className={clsx(conversacion.tab, pestana === "trayectoria" && conversacion.tabActive)}
-          onClick={() => alElegirPestana("trayectoria")}
-        >
-          Trayectoria
-        </button>
-        {/*
-          La tercera pestaña: lo que ESTA sesión ha tocado en el disco. No está en el CSS
-          copiado —allí son dos— pero es la misma tira y el mismo botón; lo que la
-          justifica es que es la única vista que responde a «¿qué me ha cambiado el
-          agente?» sin salir a un terminal.
-        */}
-        <button
-          type="button"
-          role="tab"
-          aria-selected={pestana === "ficheros"}
-          className={clsx(conversacion.tab, pestana === "ficheros" && conversacion.tabActive)}
-          onClick={() => alElegirPestana("ficheros")}
-        >
-          Ficheros
-        </button>
-      </div>
-      )}
     </header>
   );
 }

@@ -80,14 +80,6 @@
   font: inherit;
 }
 
-/* La marca no es un botón aquí: en su barra el nombre dobla como atajo de «sesión
-   nueva», y esa acción no existe en esta consola (`Barra.tsx` lo explica). Su `.brand`
-   trae `cursor: pointer` porque allí SÍ se pulsa; sin acción detrás, un cursor de mano
-   promete algo que no pasa. */
-.marcaSinBoton {
-  cursor: default;
-}
-
 /* Un nivel vacío dice por qué lo está, y no se limita a no pintar nada — que es
    indistinguible de una barra rota. `.empty` de la hoja copiada ya le da el color y el
    tamaño; esto solo lo mete debajo de su fila de proyecto en vez de al margen de la

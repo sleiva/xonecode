@@ -1,40 +1,14 @@
 import { render, screen, fireEvent, cleanup } from "@testing-library/react";
-import { afterEach, describe, it, expect, vi } from "vitest";
+import { afterEach, describe, it, expect } from "vitest";
 import { Cabecera } from "./Cabecera.js";
 
 afterEach(cleanup);
 
 function montar(extra: Partial<Parameters<typeof Cabecera>[0]> = {}) {
-  const alElegirPestana = vi.fn();
-  render(
-    <Cabecera
-      titulo="Hola, ¿qué puedes hacer?"
-      conectado
-      pestana="chat"
-      alElegirPestana={alElegirPestana}
-      {...extra}
-    />
-  );
-  return { alElegirPestana };
+  render(<Cabecera titulo="Hola, ¿qué puedes hacer?" conectado {...extra} />);
 }
 
 describe("Cabecera", () => {
-  it("la tira de pestañas vive AQUÍ, y dice cuál está elegida", () => {
-    // Antes vivían en `Transcript`. Se mudaron con el CSS de deepseek: allí `.tabs` es
-    // hija de `.header`, y la línea de separación la pinta `.header::after` — repartidas
-    // entre dos cajas, esa línea caía entre el título y las pestañas en vez de debajo de
-    // ellas.
-    montar();
-    expect(screen.getByRole("tab", { name: "Chat" }).getAttribute("aria-selected")).toBe("true");
-    expect(screen.getByRole("tab", { name: "Trayectoria" }).getAttribute("aria-selected")).toBe("false");
-  });
-
-  it("pulsar una pestaña lo pide hacia arriba: quien recuerda la elección es `App`, no esto", () => {
-    const { alElegirPestana } = montar();
-    fireEvent.click(screen.getByRole("tab", { name: "Trayectoria" }));
-    expect(alElegirPestana).toHaveBeenCalledWith("trayectoria");
-  });
-
   it("sin `modo` NO hay pastilla: ausente es «no se sabe», no «offline»", () => {
     // El servidor deja el campo fuera cuando no hay proyecto abierto o su config no se
     // pudo leer (`arranque.ts#modoDeProyecto`). Pintar «offline» ahí sería afirmar lo

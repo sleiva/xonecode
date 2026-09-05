@@ -42,19 +42,10 @@
   -webkit-text-fill-color: var(--xonecode-sobre-azul);
 }
 
-/* Las pestañas: apagadas sobre el azul, y la elegida en cian con su subrayado. El `::after`
-   de `.tabActive` es la barra inferior que pinta la hoja copiada. */
-.barraSuperior.barraSuperior [role="tab"] {
-  color: var(--xonecode-sobre-azul-suave);
-}
-
-.barraSuperior.barraSuperior [role="tab"][aria-selected="true"] {
-  color: var(--xonecode-cian);
-}
-
-.barraSuperior.barraSuperior [role="tab"][aria-selected="true"]::after {
-  background: var(--xonecode-cian);
-}
+/* Aquí había tres reglas para pintar las pestañas sobre el azul. Se fueron con ellas al
+   panel central (`Pestanas.module.css`): allí caen sobre la superficie clara para la que la
+   hoja copiada las diseñó, y lo único que hace falta es el acento de la elegida.
+   `Pestanas.test.tsx` vigila que no vuelvan a colarse aquí. */
 
 /* La pastilla de modo, que sobre azul necesita su propio fondo: el suyo es de paleta clara. */
 .barraSuperior.barraSuperior [class*="label"] {

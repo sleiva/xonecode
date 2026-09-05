@@ -23,20 +23,25 @@ El encargo fue explícito: «el estilo sí, descartar cambios no».
 
 ## Lo primero: las paletas se contradicen entre ellas
 
-No es un detalle. Cada `code.html` trae su propio `tailwind.config`, y **no coinciden**:
+No es un detalle. Cada `code.html` trae su propio `tailwind.config` y **no coinciden**. Esto
+está leído de los ocho ficheros, no de las capturas:
 
-| pantalla | cabecera | «acento» | primario |
+| pantalla | fondo oscuro | «acento» declarado | primario |
 |---|---|---|---|
-| escritorio | `#0b2331` | `#00a4e4` — el cian de XOne | `#111827` |
-| ajustes-modelos | `#0b1320` | `#0ea5e9` — `sky-500` de Tailwind | `#0284c7` |
-| ficheros-diff | `#0B1D28` | `#06B6D4` + `#0EA5E9` — `cyan-500` y `sky-500` | `#0F172A` |
-| nueva-sesion | — | — | `#0284c7` |
+| escritorio | `#0b2331` | `#00a4e4` — **el cian de XOne** | `#111827` |
+| ficheros-diff | `#0B1D28` | `#06B6D4` + `#0EA5E9` — `cyan-500`, `sky-500` | `#0F172A` |
+| ajustes-modelos | `#0b1320` | `#0ea5e9` — `sky-500` | `#0284c7` |
+| ajustes-apariencia | `#0c131d` | `#0284c7` — `sky-600` | — |
+| ajustes-entornos | `#0d1117` | `#06b6d4` — `cyan-500` | — |
+| chat-oscuro | `#0f172a` | `#0284c7` + `#38bdf8` — `sky-600`, `sky-400` | — |
+| eliminar-sesion | `#0b1926` | *ninguno declarado* | — |
+| nueva-sesion | `#0f2430` | `#0284c7` — `sky-600` | `#0369a1` |
 
-Tres azules de cabecera distintos, y **solo el escritorio trae el cian de XOne**: las otras
-lo sustituyen por tonos de Tailwind. Es el mismo relleno que `DISENO-DASHBOARD.md` ya
-documenta haber descartado con la escala índigo (`#6366f1`) de la primera tanda. La regla se
-mantiene y se extiende: **de estos mockups se toma la tipografía y la forma; el color de
-marca sigue siendo el MEDIDO en `estilos/marca.css`.**
+**Ocho fondos oscuros distintos, y una sola pantalla declara el cian de XOne.** Seis usan un
+`sky`/`cyan` de Tailwind y la octava no declara acento ninguno. Es el mismo relleno que
+`DISENO-DASHBOARD.md` ya documenta haber descartado con la escala índigo (`#6366f1`) de la
+primera tanda. La regla se mantiene y se extiende: **de estos mockups se toma la tipografía y
+la forma; el color de marca sigue siendo el MEDIDO en `estilos/marca.css`.**
 
 Una coincidencia que resolvió sola la duda del «tercer azul»: su `accent: #0284c7` ya estaba
 en la paleta como `--xonecode-cian-oscuro`. No era un color nuevo.
@@ -89,7 +94,20 @@ en la paleta como `--xonecode-cian-oscuro`. No era un color nuevo.
    los rótulos de sección van en versalitas espaciadas — en `label-tertiary` y no en
    `label-dimmed`, que a 10px casi no se lee (medido).
 
-7. **La línea `@@` del diff, con tinte azul.** No es decoración: esa línea no es código ni
+7. **Las pestañas bajan al panel central** (`Pestanas.tsx`). Lo pidió el usuario y lo
+   sostiene la misma regla del punto 5: si la barra de arriba es de la aplicación, unas
+   pestañas que solo existen con sesión abierta y que solo cambian lo que se ve en el centro
+   no son suyas. Arriba quedaban además centradas sobre la barra lateral, señalando a una
+   columna que no cambian. Ojo a la contradicción de los mockups también aquí: `escritorio`
+   y `chat-oscuro` las ponen arriba, y `eliminar-sesion` también — el criterio lo puso el
+   usuario, no ellos.
+
+8. **El botón de eliminar, en rojo LLENO** (`AccionDeSesion.module.css`). Era rojo suave
+   —borde y tinte— para no parecerse al primario, que entonces llevaba el relleno de marca
+   en cian. Desde que el primario es el negro del tema, el rojo lleno ya no se confunde con
+   nada, y para una acción irreversible y sin papelera es el peso que le toca.
+
+9. **La línea `@@` del diff, con tinte azul.** No es decoración: esa línea no es código ni
    es un cambio, es el salto de un trozo al siguiente, y con el gris de superficie se leía
    como una fila de contenido más entre el verde y el rojo.
 

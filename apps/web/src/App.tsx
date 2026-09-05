@@ -3,7 +3,8 @@ import type { crearStoreDelCliente } from "./store.js";
 import type { Conexion } from "./conexion.js";
 import { Maqueta } from "./componentes/Maqueta.js";
 import { Barra } from "./componentes/Barra.js";
-import { Cabecera, type Pestana } from "./componentes/Cabecera.js";
+import { Cabecera } from "./componentes/Cabecera.js";
+import { Pestanas, type Pestana } from "./componentes/Pestanas.js";
 import { Compositor } from "./componentes/Compositor.js";
 import { Transcript } from "./componentes/Transcript.js";
 import { BarraDeEstado } from "./componentes/BarraDeEstado.js";
@@ -307,6 +308,20 @@ export function App({ store, enviar }: { store: Store; enviar: Conexion["enviar"
           .find((x) => x.id === estado.alta!.sesionActiva)?.titulo) ||
     primerActoDeUsuario?.texto;
 
+  /*
+   * El respaldo de la miga cuando la sesión todavía no tiene título — que es TODA sesión
+   * recién abierta: el título nace del primer acto de usuario. Antes ponía «xonecode», y
+   * desde que la marca se mudó a la barra superior eso dejaba la fila diciendo «xonecode /
+   * xonecode». El nombre del proyecto es lo que de verdad contesta «dónde estoy», y es el
+   * mismo par que enseñan los mockups («AppDemo / Prueba del menú»).
+   *
+   * Y si tampoco hay proyecto que nombrar, «Sesión nueva» y no la marca otra vez: la miga
+   * dice dónde estás dentro del producto, no cómo se llama el producto.
+   */
+  const nombreDelProyectoActivo = estado.alta?.proyectos?.find(
+    (p) => p.id === estado.alta?.proyectoActivo
+  )?.nombre;
+
   // Las piezas de `BarraDeEstado`, derivadas del transcript a falta de un mensaje propio
   // del cable: ni `sistema` ni `EstadoDelCliente` llevan hoy `contexto`/`tope`
   // (`tipos.ts`, `store.ts`), así que esos dos quedan `undefined` — la misma postura de
@@ -463,13 +478,11 @@ export function App({ store, enviar }: { store: Store; enviar: Conexion["enviar"
   */
   const cabecera = proyectoAbierto ? (
     <Cabecera
-      titulo={tituloDeLaSesion ?? "xonecode"}
+      titulo={tituloDeLaSesion ?? nombreDelProyectoActivo ?? "Sesión nueva"}
       // Ausente mientras el servidor no lo sepa: `Cabecera` no pinta pastilla entonces, en
       // vez de afirmar un modo que nadie ha leído.
       {...(estado.alta?.modo === undefined ? {} : { modo: estado.alta.modo })}
       conectado={estado.conectado}
-      pestana={pestana}
-      alElegirPestana={setPestana}
       barraContraida={barraContraida}
       alAlternarBarra={alternarBarra}
     />
@@ -493,6 +506,14 @@ export function App({ store, enviar }: { store: Store; enviar: Conexion["enviar"
         // suelto en mitad del centro no decía ni de qué proyecto era.
         proyectoAbierto ? (
           <>
+            {/*
+              La tira de pestañas, en el PANEL CENTRAL y no en la barra superior: desde que
+              esa cruza las dos columnas es la barra de la aplicación, y unas pestañas que
+              solo existen con sesión abierta y que solo cambian lo que se ve aquí debajo
+              son de aquí. Arriba quedaban además centradas sobre la barra lateral,
+              señalando a una columna que no cambian.
+            */}
+            <Pestanas pestana={pestana} alElegirPestana={setPestana} />
             <AvisoDeConexion conectado={estado.conectado} />
             <Transcript
               actos={estado.actos}

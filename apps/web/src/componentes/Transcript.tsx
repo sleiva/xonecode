@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 import type { Acto } from "../tipos.js";
-import type { Pestana } from "./Cabecera.js";
+import type { Pestana } from "./Pestanas.js";
 import { Chat } from "./Chat.js";
 import { Trayectoria } from "./Trayectoria.js";
 import conversacion from "../../estilos/ConversationRoot.module.css";

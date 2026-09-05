@@ -53,8 +53,11 @@ export interface Proyecto {
  * el cable la lleve; hasta entonces `App.tsx` le pasa uno que no hace nada, igual que a
  * `alElegirEntorno`.
  *
- * NADA de la marca de DeepSeek viaja aquí: la ranura `.brandName` la ocupa el nombre de
- * xonecode, y `.brandMark` —donde el original monta su `FishLogo`— se queda vacía.
+ * NADA de la marca de DeepSeek viaja aquí, y desde el rediseño tampoco la nuestra: la fila
+ * de marca (`.logoRow`, `.brandName`, y el `.brandMark` donde el original monta su
+ * `FishLogo`) se fue entera. El nombre del producto vive ahora en la barra superior
+ * (`Cabecera.tsx`), que cruza las dos columnas — tenerlo en los dos sitios era decirlo dos
+ * veces en la misma esquina.
  */
 /**
  * Cuántos proyectos se enseñan cuando nadie ha dicho cuáles.

@@ -27,7 +27,7 @@ que aporta el diseño no es la disposición sino tres cosas concretas:
 | Buscar / filtrar / nuevo entorno en la cabecera de «Workspaces» | falta el buscador; «nuevo entorno» está en Ajustes |
 | Pastilla de modelo en el compositor | **ya está** |
 | Pestañas Chat / Trajectory | **ya está** |
-| Cabecera azul (`#083b56`) con la marca y el modo | falta: hoy la cabecera es clara |
+| Cabecera azul (`#083b56`) con la marca y el modo | **ya está** — y desde el rediseño cruza las dos columnas, con la marca dentro (`docs/REDISENO-STITCH.md`) |
 
 ## Lo que el diseño enseña y xonecode NO sabe hacer todavía
 

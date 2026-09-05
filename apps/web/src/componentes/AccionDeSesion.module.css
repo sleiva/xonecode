@@ -1,11 +1,16 @@
 /* Alias comprobados contra `apps/web/estilos/design-platform.css`:
-   state-error-primary/secondary y label-primary. */
+   state-error-primary y label-primary-inverted. */
 
-/* El botón que borra no se pinta como el que guarda. En el resto de ventanas el primario
-   lleva el relleno de marca; aquí eso lo haría idéntico a «Guardar», y las dos ventanas se
-   abren desde el mismo menú y en el mismo sitio de la pantalla. */
+/* El botón que borra no se pinta como el que guarda. Las dos ventanas se abren desde el
+   mismo menú y en el mismo sitio de la pantalla, así que si además el botón fuera el mismo,
+   lo único que distinguiría «Guardar» de «Eliminar» sería leer la palabra.
+   RELLENO rojo y no el rojo suave de antes (borde y tinte): aquello era para no parecerse
+   al primario, que entonces llevaba el relleno de marca en cian. Desde el rediseño el
+   primario es el negro del tema (`estilos/marca.css`), así que el rojo lleno ya no se
+   confunde con nada — y para una acción irreversible y sin papelera, es el peso que le
+   corresponde. Es además el del mockup (`docs/diseno/eliminar-sesion-rediseno-stitch.png`). */
 .destructiva.destructiva {
   border-color: var(--dsw-alias-state-error-primary);
-  background: var(--dsw-alias-state-error-secondary);
-  color: var(--dsw-alias-state-error-primary);
+  background: var(--dsw-alias-state-error-primary);
+  color: var(--dsw-alias-label-primary-inverted);
 }

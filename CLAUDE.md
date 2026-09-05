@@ -492,10 +492,10 @@ del orden en que el empaquetador coloque las hojas.
 
 **El rediseño de estilo, y las dos restas que salieron de él** (`docs/REDISENO-STITCH.md`,
 ocho pantallas ancladas en `docs/diseno/*-rediseno-stitch.*`). Lo primero que hay que saber
-es que **las paletas de los ocho mockups se contradicen entre ellas** —tres azules de
-cabecera distintos, y seis de los ocho cambian el cian de XOne por un `sky`/`cyan` de
-Tailwind—, así que de ahí se toma la TIPOGRAFÍA y la forma, y el color sigue siendo el
-medido en `marca.css`. Es la misma regla con que la primera tanda descartó su índigo.
+es que **las paletas de los ocho mockups se contradicen entre ellas**: leídos sus ocho
+`tailwind.config`, salen OCHO fondos oscuros distintos y **una sola pantalla declara el cian
+de XOne** —seis usan un `sky`/`cyan` de Tailwind y la octava no declara acento—. Así que de
+ahí se toma la TIPOGRAFÍA y la forma, y el color sigue siendo el medido en `marca.css`. Es la misma regla con que la primera tanda descartó su índigo.
 - **Inter y JetBrains Mono van EMPAQUETADAS** (`@fontsource-variable/*` en `main.tsx`), no
   desde `fonts.googleapis.com`: esta consola escucha en loopback y tiene un modo `offline`
   de primera clase, y una hoja de CDN la dejaría sin su letra justo en el caso que el
@@ -520,10 +520,16 @@ medido en `marca.css`. Es la misma regla con que la primera tanda descartó su �
   es el orden del Tab.
 
 **La barra superior es de la APLICACIÓN, no de la sesión**, así que se pinta también en el
-escritorio — con la marca, el estado del cable y el botón de plegar— pero **sin pestañas**:
-sin sesión no hay transcript ni trayectoria a los que llevar, y unas pestañas que no llevan a
-ningún sitio son el mismo botón muerto que este repo no consiente. `Cabecera` las omite
-cuando no le pasan `pestana`/`alElegirPestana`.
+escritorio — con la marca, el estado del cable y el botón de plegar. Y por esa misma regla
+**las pestañas ya no están en ella** (`Pestanas.tsx`, tercera casa que tienen: estuvieron en
+`Transcript` y luego en `Cabecera`): Chat, Trayectoria y Ficheros solo existen con sesión
+abierta y solo cambian lo que se ve en el centro, así que son del CENTRO. Puestas arriba, y
+desde que la barra cruza las dos columnas, quedaban además centradas sobre la barra lateral
+— señalando a una columna que no cambian. La mudanza se llevó consigo tres reglas de
+`Cabecera.module.css` que las pintaban sobre el azul; abajo caen sobre la superficie clara
+para la que la hoja copiada las diseñó y solo hace falta el acento cian de la elegida.
+`Pestanas.test.tsx` vigila que esas reglas no vuelvan a colarse arriba, que es CSS muerto que
+nadie ve fallar.
 
 **La barra lateral se pliega**, y el botón vive en la barra superior y no dentro de ella
 —donde lo pone el mockup— por una razón práctica: plegada, la barra no está, así que su

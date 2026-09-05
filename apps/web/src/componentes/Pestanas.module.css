@@ -1,0 +1,27 @@
+/* Lo único nuestro de la tira: el resto es `.tabs`/`.tab`/`.tabActive` de
+   `estilos/ConversationRoot.module.css`, copiado de deepseek.
+
+   Alias comprobados contra `estilos/design-platform.css`: border-l2 y bg-layer-1.
+   `--xonecode-cian` es de `estilos/marca.css` (la paleta propia). */
+
+/* La tira se pega arriba del panel y lo separa de lo que scrollea debajo. El borde va aquí
+   y no en el contenedor de abajo porque la tira es lo que está SIEMPRE: el chat, la
+   trayectoria y los ficheros se turnan debajo de ella, y un borde por vista serían tres
+   sitios que mantener sincronizados. */
+.tira {
+  flex: none;
+  padding: 0 16px;
+  border-bottom: 0.5px solid var(--dsw-alias-border-l2);
+  background: var(--dsw-alias-bg-layer-1);
+}
+
+/* El acento de la elegida, en cian: el mismo papel que tiene en el filo de la fila activa
+   de la barra y en el de la tarjeta con copia local. La hoja copiada pinta el subrayado en
+   un `::after`, así que se le cambia el color ahí y no se redibuja nada. */
+.tira [role="tab"][aria-selected="true"] {
+  color: var(--xonecode-cian);
+}
+
+.tira [role="tab"][aria-selected="true"]::after {
+  background: var(--xonecode-cian);
+}

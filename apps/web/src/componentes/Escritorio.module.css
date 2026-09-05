@@ -1,6 +1,7 @@
 /* Alias comprobados contra `apps/web/estilos/design-platform.css`: bg-layer-1/2, border-l2,
-   label-primary/secondary/tertiary, interactive-bg-hover, state-success-primary y
-   button-primary-fill. Los `--xonecode-*` son de `estilos/marca.css` (la paleta propia). */
+   label-primary/secondary/tertiary, label-primary-inverted, interactive-bg-hover,
+   state-success-primary/tertiary, state-business-primary/tertiary y button-primary-fill/hover.
+   Los `--xonecode-*` son de `estilos/marca.css` (la paleta propia). */
 
 .escritorio {
   flex: 1 1 auto;
