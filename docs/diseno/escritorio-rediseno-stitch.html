@@ -1,0 +1,539 @@
+<!DOCTYPE html><html class="h-full bg-slate-50 antialiased" lang="es"><head>
+<meta charset="utf-8">
+<meta content="width=device-width, initial-scale=1.0" name="viewport">
+<title>xonecode — Escritorio de Proyectos</title>
+<!-- Tailwind CSS CDN with forms and container queries plugins -->
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<!-- Tailwind Configuration -->
+<script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            brand: {
+              header: '#0b2331',
+              headerBorder: '#163a50',
+              accent: '#0284c7',
+              accentHover: '#0369a1',
+              cyan: '#00a4e4',
+              teal: '#14b8a6',
+              dark: '#111827'
+            }
+          },
+          fontFamily: {
+            sans: ['Inter', 'system-ui', '-apple-system', 'Segoe UI', 'Roboto', 'sans-serif'],
+            mono: ['JetBrains Mono', 'Menlo', 'Monaco', 'Consolas', 'monospace']
+          }
+        }
+      }
+    }
+  </script>
+<!-- Custom Styles for Scrollbars and UI Tweaks -->
+<style data-purpose="custom-ui-tweaks">
+    /* Subtle custom scrollbar */
+    ::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+    ::-webkit-scrollbar-track {
+      background: transparent;
+    }
+    ::-webkit-scrollbar-thumb {
+      background: #cbd5e1;
+      border-radius: 9999px;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background: #94a3b8;
+    }
+  </style>
+</head>
+<body class="h-full flex flex-col font-sans text-slate-800 bg-slate-50 overflow-hidden">
+<!-- BEGIN: TopNavigationBar -->
+<header class="h-12 bg-[#0b2331] text-white border-b border-[#163a50] flex items-center justify-between px-4 z-20 flex-shrink-0 select-none">
+<!-- Left: Branding and Breadcrumbs -->
+<div class="flex items-center space-x-3">
+<div class="flex items-center space-x-2">
+<!-- Sidebar Toggle Icon -->
+<button aria-label="Toggle Sidebar" class="text-slate-400 hover:text-white p-1 rounded transition-colors" type="button">
+<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+<path d="M15 19l-7-7 7-7" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path>
+</svg>
+</button>
+<span class="font-bold text-base tracking-tight text-white flex items-center gap-1.5">
+          xonecode
+          <span class="text-[10px] uppercase font-semibold bg-cyan-500/20 text-cyan-400 border border-cyan-500/30 px-1.5 py-0.5 rounded tracking-wider">
+            Desktop
+          </span>
+</span>
+</div>
+<span class="text-slate-600 text-sm">/</span>
+<!-- Title / Section Breadcrumb -->
+<div class="flex items-center space-x-2">
+<span class="text-sm font-medium text-slate-200">Escritorio</span>
+</div>
+</div>
+<!-- Right: Status, Environment and Quick Actions -->
+<div class="flex items-center space-x-4 text-xs">
+<!-- Connection Indicator -->
+<div class="flex items-center space-x-1.5 bg-emerald-950/50 border border-emerald-500/30 px-2.5 py-1 rounded-full text-emerald-400 font-medium">
+<span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
+<span class="">Conectado a CloudStudio</span>
+</div>
+<!-- Quick Action: Build & Run shortcut -->
+<button class="hidden md:inline-flex items-center space-x-1.5 bg-[#00a4e4] hover:bg-[#0284c7] text-white font-medium px-3 py-1 rounded shadow-sm transition-all duration-150" type="button">
+<svg class="w-3.5 h-3.5 fill-current" viewBox="0 0 24 24">
+<polygon points="5 3 19 12 5 21 5 3"></polygon>
+</svg>
+<span class="">Build &amp; Run</span>
+</button>
+<!-- User Profile Badge -->
+<div class="flex items-center space-x-2 pl-2 border-l border-[#1a445d]">
+<div class="w-6 h-6 rounded-full bg-cyan-700/60 border border-cyan-400/40 flex items-center justify-center text-cyan-200 font-mono text-[11px] font-bold">
+          SL
+        </div>
+<span class="text-slate-300 font-medium hidden sm:inline">sergioleivaortega</span>
+</div>
+</div>
+</header>
+<!-- END: TopNavigationBar -->
+<!-- BEGIN: AppBodyWrapper -->
+<div class="flex-1 flex overflow-hidden">
+<!-- BEGIN: LeftSidebar -->
+<aside class="w-72 bg-white border-r border-slate-200 flex flex-col flex-shrink-0 select-none z-10">
+<!-- Workspace Selector -->
+<div class="p-3.5 border-b border-slate-100 bg-slate-50/50">
+<label class="block text-[11px] font-semibold text-slate-400 uppercase tracking-wider mb-1.5">Entorno Activo</label>
+<div class="relative">
+<button class="w-full flex items-center justify-between bg-white border border-slate-200 rounded-md px-3 py-2 text-left text-xs font-medium text-slate-800 shadow-sm hover:border-slate-300 focus:outline-none focus:ring-1 focus:ring-cyan-500" type="button">
+<span class="flex items-center space-x-2 truncate">
+<span class="w-2 h-2 rounded-full bg-emerald-500 flex-shrink-0"></span>
+<span class="truncate">XOne WebStudio</span>
+</span>
+<svg class="w-4 h-4 text-slate-400 ml-1 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+<path d="M19 9l-7 7-7-7" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path>
+</svg>
+</button>
+</div>
+</div>
+<!-- Action: New Session Button -->
+
+<!-- Search and Quick Filter in Sidebar -->
+<div class="px-3 pb-2">
+<div class="relative">
+<span class="absolute inset-y-0 left-0 pl-2.5 flex items-center pointer-events-none text-slate-400">
+<svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+<path d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path>
+</svg>
+</span>
+<input class="w-full pl-8 pr-3 py-1.5 bg-slate-50 border border-slate-200 rounded text-xs placeholder-slate-400 focus:bg-white focus:outline-none focus:border-cyan-500 transition" placeholder="Filtrar proyectos..." type="text">
+</div>
+</div>
+<!-- Workspaces & Projects Tree -->
+<div class="flex-1 overflow-y-auto px-2 py-2 space-y-4 text-xs">
+<div>
+<!-- Group Title -->
+<div class="flex items-center justify-between px-2 py-1 text-slate-500 hover:text-slate-700 cursor-pointer font-medium">
+<span class="flex items-center space-x-1.5 truncate">
+<svg class="w-3 h-3 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+<path d="M19 9l-7 7-7-7" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path>
+</svg>
+<span class="truncate font-mono text-[11px] text-slate-600">xonewebstudio.com</span>
+</span>
+<span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
+</div>
+<!-- Project Tree Nodes -->
+<div class="mt-1 space-y-0.5 pl-3">
+<!-- Project Node: AppDemo -->
+<div class="group rounded hover:bg-slate-100 transition-colors">
+<div class="flex items-center justify-between px-2 py-1.5 cursor-pointer">
+<div class="flex items-center space-x-2 truncate">
+<svg class="w-3.5 h-3.5 text-cyan-600 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+<path d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path>
+</svg>
+<span class="font-semibold text-slate-800 truncate">AppDemo</span>
+</div>
+<span class="text-[10px] bg-emerald-50 text-emerald-700 font-mono px-1.5 py-0.2 rounded border border-emerald-200">local</span>
+</div>
+<!-- Sessions under AppDemo -->
+<div class="pl-6 pr-2 pb-1.5 space-y-1">
+<div class="flex items-center justify-between text-[11px] text-slate-600 hover:text-cyan-700 cursor-pointer py-0.5">
+<span class="truncate italic">Hola</span>
+<span class="text-[10px] text-slate-400 font-mono">2h</span>
+</div>
+<div class="flex items-center justify-between text-[11px] text-slate-600 hover:text-cyan-700 cursor-pointer py-0.5">
+<span class="truncate italic">Prueba del menú</span>
+<span class="text-[10px] text-slate-400 font-mono">1d</span>
+</div>
+</div>
+</div>
+<!-- Project Node: AppDeve -->
+<div class="group rounded hover:bg-slate-100 transition-colors">
+<div class="flex items-center justify-between px-2 py-1.5 cursor-pointer">
+<div class="flex items-center space-x-2 truncate">
+<svg class="w-3.5 h-3.5 text-slate-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+<path d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path>
+</svg>
+<span class="font-medium text-slate-700 truncate">AppDeve</span>
+</div>
+<span class="text-[10px] bg-slate-100 text-slate-500 font-mono px-1 py-0.2 rounded">propio</span>
+</div>
+<div class="pl-6 pr-2 pb-1 text-[11px] text-slate-400 italic">
+                Sin sesiones todavía.
+              </div>
+</div>
+<!-- Project Node: AppForTest -->
+<div class="group rounded hover:bg-slate-100 transition-colors">
+<div class="flex items-center justify-between px-2 py-1.5 cursor-pointer">
+<div class="flex items-center space-x-2 truncate">
+<svg class="w-3.5 h-3.5 text-slate-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+<path d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path>
+</svg>
+<span class="font-medium text-slate-700 truncate">AppForTest</span>
+</div>
+<span class="text-[10px] bg-slate-100 text-slate-500 font-mono px-1 py-0.2 rounded">propio</span>
+</div>
+</div>
+<!-- Project Node: Bequikly -->
+<div class="group rounded hover:bg-slate-100 transition-colors">
+<div class="flex items-center justify-between px-2 py-1.5 cursor-pointer">
+<div class="flex items-center space-x-2 truncate">
+<svg class="w-3.5 h-3.5 text-indigo-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+<path d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path>
+</svg>
+<span class="font-medium text-slate-700 truncate">Bequikly</span>
+</div>
+<span class="text-[10px] bg-blue-50 text-blue-600 font-mono px-1.5 py-0.2 rounded border border-blue-100">compartido</span>
+</div>
+</div>
+<!-- More projects hint -->
+<div class="pt-3 px-2 text-[11px] text-slate-400">
+<span class="italic">16 proyectos más sin mostrar.</span>
+<a class="block text-cyan-600 hover:underline mt-0.5" href="#ajustes">Configurar en Ajustes</a>
+</div>
+</div>
+</div>
+</div>
+<!-- Bottom Workspace Footer -->
+<div class="p-3 border-t border-slate-200 bg-slate-50 flex items-center justify-between text-xs text-slate-500">
+<a class="flex items-center space-x-1.5 hover:text-slate-800 font-medium transition-colors" href="#settings">
+<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+<path d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path>
+<path d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path>
+</svg>
+<span class="">Ajustes</span>
+</a>
+<span class="text-[10px] font-mono text-slate-400">port:5037</span>
+</div>
+</aside>
+<!-- END: LeftSidebar -->
+<!-- BEGIN: MainContent -->
+<main class="flex-1 overflow-y-auto bg-slate-50 p-6 lg:p-8">
+<div class="max-w-7xl mx-auto space-y-6">
+<!-- BEGIN: WelcomeBanner -->
+<section class="space-y-3" data-purpose="welcome-header">
+<div>
+<h1 class="text-3xl font-bold tracking-tight text-slate-900">
+              Hola, <span class="text-[#0b2331]">sergioleivaortega</span>
+</h1>
+<p class="text-sm text-slate-500 mt-1">
+              Elige un proyecto para empezar a trabajar, o sigue una conversación de antes.
+            </p>
+</div>
+<!-- Connected Endpoint & Environment Bar -->
+<div class="flex flex-wrap items-center justify-between gap-3 bg-white p-3.5 rounded-lg border border-slate-200/80 shadow-[0_1px_3px_rgba(0,0,0,0.03)]">
+<div class="flex items-center space-x-3 text-xs">
+<div class="flex items-center space-x-2">
+<span class="relative flex h-2 w-2">
+<span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+<span class="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+</span>
+<span class="font-semibold text-slate-800">XOne WebStudio</span>
+</div>
+<span class="text-slate-300">|</span>
+<span class="font-mono text-slate-500 select-all">https://mcp.xonewebstudio.com/mcp</span>
+</div>
+<div class="flex items-center space-x-2 text-xs">
+<span class="text-slate-400 text-[11px]">Daemon v4.2.0-hotreload</span>
+<button class="text-cyan-700 hover:text-cyan-900 font-medium px-2 py-1 rounded hover:bg-slate-100 transition" type="button">
+                Cambiar entorno
+              </button>
+</div>
+</div>
+</section>
+<!-- END: WelcomeBanner -->
+<!-- BEGIN: ProjectsControlBar -->
+<section class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-2" data-purpose="project-filters">
+<!-- Category Tabs / Filter Pills -->
+<div class="flex items-center space-x-1.5 overflow-x-auto text-xs font-medium pb-1 sm:pb-0">
+<button class="px-3 py-1.5 rounded-md bg-slate-900 text-white shadow-sm">
+              Todos <span class="ml-1 opacity-70 font-mono text-[11px]">18</span>
+</button>
+<button class="px-3 py-1.5 rounded-md bg-white border border-slate-200 text-slate-600 hover:bg-slate-100 hover:text-slate-900 transition">
+              En tu equipo <span class="ml-1 text-emerald-600 font-mono text-[11px]">1</span>
+</button>
+<button class="px-3 py-1.5 rounded-md bg-white border border-slate-200 text-slate-600 hover:bg-slate-100 hover:text-slate-900 transition">
+              Compartidos <span class="ml-1 text-blue-600 font-mono text-[11px]">7</span>
+</button>
+<button class="px-3 py-1.5 rounded-md bg-white border border-slate-200 text-slate-600 hover:bg-slate-100 hover:text-slate-900 transition">
+              Sin descargar <span class="ml-1 text-slate-400 font-mono text-[11px]">10</span>
+</button>
+</div>
+<!-- Project Filter Search -->
+<div class="relative w-full sm:w-64">
+<span class="absolute inset-y-0 left-0 pl-2.5 flex items-center pointer-events-none text-slate-400">
+<svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+<path d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path>
+</svg>
+</span>
+<input class="w-full pl-8 pr-3 py-1.5 bg-white border border-slate-200 rounded-md text-xs placeholder-slate-400 focus:outline-none focus:ring-1 focus:ring-cyan-500 focus:border-cyan-500 transition" placeholder="Buscar proyecto..." type="text">
+</div>
+</section>
+<!-- END: ProjectsControlBar -->
+<!-- BEGIN: ProjectCardsGrid -->
+<section class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4" data-purpose="projects-grid">
+<!-- Card 1: AppDemo (Active / Local) -->
+<div class="group bg-white rounded-xl border border-slate-200 shadow-sm hover:shadow-md hover:border-cyan-500/50 transition duration-150 flex flex-col justify-between p-5 relative overflow-hidden">
+<div class="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-cyan-500 to-emerald-400"></div>
+<div>
+<!-- Top Row: Name and Badges -->
+<div class="flex items-start justify-between gap-2">
+<div class="flex items-center space-x-2">
+<h3 class="font-bold text-base text-slate-900 group-hover:text-cyan-600 transition-colors">
+                    AppDemo
+                  </h3>
+<span class="text-[10px] uppercase font-mono px-2 py-0.5 rounded bg-slate-100 text-slate-600 font-semibold">
+                    propio
+                  </span>
+</div>
+<span class="text-[11px] font-medium text-emerald-700 bg-emerald-50 border border-emerald-200/80 px-2 py-0.5 rounded-full flex items-center gap-1">
+<span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
+                  en tu equipo
+                </span>
+</div>
+<!-- Sessions List / Description -->
+<div class="mt-4 space-y-2">
+<div class="text-xs text-slate-700 font-medium">
+                  Prueba del menú
+                  <span class="text-[11px] text-slate-400 font-normal ml-1">· hace 2 horas</span>
+</div>
+<div class="text-xs text-slate-400 italic">
+                  Hola
+                </div>
+</div>
+</div>
+<!-- Action Button -->
+<div class="mt-6 pt-3 border-t border-slate-100 flex items-center space-x-2">
+<button class="flex-1 bg-[#111827] hover:bg-slate-800 active:bg-black text-white text-xs font-semibold py-2.5 px-4 rounded-lg shadow-sm transition text-center flex items-center justify-center space-x-2" type="button">
+<svg class="w-3.5 h-3.5 text-cyan-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+<path d="M12 4v16m8-8H4" stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5"></path>
+</svg>
+<span class="">Nueva sesión</span>
+</button>
+<button class="px-2.5 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-xs font-mono font-medium flex items-center transition" title="Branch selector" type="button">
+                main
+              </button>
+</div>
+</div>
+<!-- Card 2: AppDeve -->
+<div class="group bg-white rounded-xl border border-slate-200 shadow-sm hover:shadow-md hover:border-slate-300 transition duration-150 flex flex-col justify-between p-5">
+<div>
+<div class="flex items-start justify-between gap-2">
+<div class="flex items-center space-x-2">
+<h3 class="font-bold text-base text-slate-900 group-hover:text-slate-700 transition-colors">
+                    AppDeve
+                  </h3>
+<span class="text-[10px] uppercase font-mono px-2 py-0.5 rounded bg-slate-100 text-slate-600 font-semibold">
+                    propio
+                  </span>
+</div>
+<span class="text-[11px] text-slate-500 font-mono">sin descargar</span>
+</div>
+<div class="mt-4">
+<p class="text-xs text-slate-400 italic">Sin sesiones todavía.</p>
+</div>
+</div>
+<div class="mt-6 pt-3 border-t border-slate-100">
+<button class="w-full bg-[#111827] hover:bg-slate-800 text-white text-xs font-semibold py-2.5 px-4 rounded-lg shadow-sm transition text-center" type="button">
+                Nueva sesión
+              </button>
+</div>
+</div>
+<!-- Card 3: AppForTest -->
+<div class="group bg-white rounded-xl border border-slate-200 shadow-sm hover:shadow-md hover:border-slate-300 transition duration-150 flex flex-col justify-between p-5">
+<div>
+<div class="flex items-start justify-between gap-2">
+<div class="flex items-center space-x-2">
+<h3 class="font-bold text-base text-slate-900 group-hover:text-slate-700 transition-colors">
+                    AppForTest
+                  </h3>
+<span class="text-[10px] uppercase font-mono px-2 py-0.5 rounded bg-slate-100 text-slate-600 font-semibold">
+                    propio
+                  </span>
+</div>
+<span class="text-[11px] text-slate-500 font-mono">sin descargar</span>
+</div>
+<div class="mt-4">
+<p class="text-xs text-slate-400 italic">Sin sesiones todavía.</p>
+</div>
+</div>
+<div class="mt-6 pt-3 border-t border-slate-100">
+<button class="w-full bg-[#111827] hover:bg-slate-800 text-white text-xs font-semibold py-2.5 px-4 rounded-lg shadow-sm transition text-center" type="button">
+                Nueva sesión
+              </button>
+</div>
+</div>
+<!-- Card 4: Bequikly (Shared) -->
+<div class="group bg-white rounded-xl border border-slate-200 shadow-sm hover:shadow-md hover:border-blue-300 transition duration-150 flex flex-col justify-between p-5">
+<div>
+<div class="flex items-start justify-between gap-2">
+<div class="flex items-center space-x-2">
+<h3 class="font-bold text-base text-slate-900 group-hover:text-blue-600 transition-colors">
+                    Bequikly
+                  </h3>
+<span class="text-[10px] font-semibold px-2 py-0.5 rounded bg-blue-50 text-blue-700 border border-blue-100">
+                    compartido
+                  </span>
+</div>
+<span class="text-[11px] text-slate-500 font-mono">sin descargar</span>
+</div>
+<div class="mt-4">
+<p class="text-xs text-slate-400 italic">Sin sesiones todavía.</p>
+</div>
+</div>
+<div class="mt-6 pt-3 border-t border-slate-100">
+<button class="w-full bg-[#111827] hover:bg-slate-800 text-white text-xs font-semibold py-2.5 px-4 rounded-lg shadow-sm transition text-center" type="button">
+                Nueva sesión
+              </button>
+</div>
+</div>
+<!-- Card 5: Conecta2 (Shared) -->
+<div class="group bg-white rounded-xl border border-slate-200 shadow-sm hover:shadow-md hover:border-blue-300 transition duration-150 flex flex-col justify-between p-5">
+<div>
+<div class="flex items-start justify-between gap-2">
+<div class="flex items-center space-x-2">
+<h3 class="font-bold text-base text-slate-900 group-hover:text-blue-600 transition-colors">
+                    Conecta2
+                  </h3>
+<span class="text-[10px] font-semibold px-2 py-0.5 rounded bg-blue-50 text-blue-700 border border-blue-100">
+                    compartido
+                  </span>
+</div>
+<span class="text-[11px] text-slate-500 font-mono">sin descargar</span>
+</div>
+<div class="mt-4">
+<p class="text-xs text-slate-400 italic">Sin sesiones todavía.</p>
+</div>
+</div>
+<div class="mt-6 pt-3 border-t border-slate-100">
+<button class="w-full bg-[#111827] hover:bg-slate-800 text-white text-xs font-semibold py-2.5 px-4 rounded-lg shadow-sm transition text-center" type="button">
+                Nueva sesión
+              </button>
+</div>
+</div>
+<!-- Card 6: DevPushProject -->
+<div class="group bg-white rounded-xl border border-slate-200 shadow-sm hover:shadow-md hover:border-slate-300 transition duration-150 flex flex-col justify-between p-5">
+<div>
+<div class="flex items-start justify-between gap-2">
+<div class="flex items-center space-x-2">
+<h3 class="font-bold text-base text-slate-900 group-hover:text-slate-700 transition-colors">
+                    DevPushProject
+                  </h3>
+<span class="text-[10px] uppercase font-mono px-2 py-0.5 rounded bg-slate-100 text-slate-600 font-semibold">
+                    propio
+                  </span>
+</div>
+<span class="text-[11px] text-slate-500 font-mono">sin descargar</span>
+</div>
+<div class="mt-4">
+<p class="text-xs text-slate-400 italic">Sin sesiones todavía.</p>
+</div>
+</div>
+<div class="mt-6 pt-3 border-t border-slate-100">
+<button class="w-full bg-[#111827] hover:bg-slate-800 text-white text-xs font-semibold py-2.5 px-4 rounded-lg shadow-sm transition text-center" type="button">
+                Nueva sesión
+              </button>
+</div>
+</div>
+<!-- Card 7: SAT_DEMO (Shared) -->
+<div class="group bg-white rounded-xl border border-slate-200 shadow-sm hover:shadow-md hover:border-blue-300 transition duration-150 flex flex-col justify-between p-5">
+<div>
+<div class="flex items-start justify-between gap-2">
+<div class="flex items-center space-x-2">
+<h3 class="font-bold text-base text-slate-900 group-hover:text-blue-600 transition-colors">
+                    SAT_DEMO
+                  </h3>
+<span class="text-[10px] font-semibold px-2 py-0.5 rounded bg-blue-50 text-blue-700 border border-blue-100">
+                    compartido
+                  </span>
+</div>
+<span class="text-[11px] text-slate-500 font-mono">sin descargar</span>
+</div>
+<div class="mt-4">
+<p class="text-xs text-slate-400 italic">Sin sesiones todavía.</p>
+</div>
+</div>
+<div class="mt-6 pt-3 border-t border-slate-100">
+<button class="w-full bg-[#111827] hover:bg-slate-800 text-white text-xs font-semibold py-2.5 px-4 rounded-lg shadow-sm transition text-center" type="button">
+                Nueva sesión
+              </button>
+</div>
+</div>
+<!-- Card 8: XOneAI (Shared) -->
+<div class="group bg-white rounded-xl border border-slate-200 shadow-sm hover:shadow-md hover:border-purple-300 transition duration-150 flex flex-col justify-between p-5">
+<div>
+<div class="flex items-start justify-between gap-2">
+<div class="flex items-center space-x-2">
+<h3 class="font-bold text-base text-slate-900 group-hover:text-purple-600 transition-colors flex items-center gap-1.5">
+                    XOneAI
+                    <span class="w-2 h-2 rounded-full bg-cyan-400"></span>
+</h3>
+<span class="text-[10px] font-semibold px-2 py-0.5 rounded bg-blue-50 text-blue-700 border border-blue-100">
+                    compartido
+                  </span>
+</div>
+<span class="text-[11px] text-slate-500 font-mono">sin descargar</span>
+</div>
+<div class="mt-4">
+<p class="text-xs text-slate-400 italic">Sin sesiones todavía.</p>
+</div>
+</div>
+<div class="mt-6 pt-3 border-t border-slate-100">
+<button class="w-full bg-[#111827] hover:bg-slate-800 text-white text-xs font-semibold py-2.5 px-4 rounded-lg shadow-sm transition text-center" type="button">
+                Nueva sesión
+              </button>
+</div>
+</div>
+<!-- Card 9: NewsApp -->
+<div class="group bg-white rounded-xl border border-slate-200 shadow-sm hover:shadow-md hover:border-slate-300 transition duration-150 flex flex-col justify-between p-5">
+<div>
+<div class="flex items-start justify-between gap-2">
+<div class="flex items-center space-x-2">
+<h3 class="font-bold text-base text-slate-900 group-hover:text-slate-700 transition-colors">
+                    NewsApp
+                  </h3>
+<span class="text-[10px] uppercase font-mono px-2 py-0.5 rounded bg-slate-100 text-slate-600 font-semibold">
+                    propio
+                  </span>
+</div>
+<span class="text-[11px] text-slate-500 font-mono">sin descargar</span>
+</div>
+<div class="mt-4">
+<p class="text-xs text-slate-400 italic">Sin sesiones todavía.</p>
+</div>
+</div>
+<div class="mt-6 pt-3 border-t border-slate-100">
+<button class="w-full bg-[#111827] hover:bg-slate-800 text-white text-xs font-semibold py-2.5 px-4 rounded-lg shadow-sm transition text-center" type="button">
+                Nueva sesión
+              </button>
+</div>
+</div>
+</section>
+<!-- END: ProjectCardsGrid -->
+</div>
+</main>
+<!-- END: MainContent -->
+</div>
+<!-- END: AppBodyWrapper -->
+
+
+</body></html>

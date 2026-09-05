@@ -20,6 +20,36 @@ describe("Maqueta", () => {
     expect(raiz?.children[1]?.querySelector("[data-testid='centro']")).not.toBeNull();
   });
 
+  it("con cabecera, va la PRIMERA y cruza las dos columnas — y el grid pasa a dos filas", () => {
+    // La barra superior es de la APLICACIÓN, no del centro: cruza la lateral. Dos cosas que
+    // un test de DOM no vería solas y que nada más impide: que se cuele DETRÁS de la barra
+    // (el orden del DOM es el orden del Tab, y la marca y el plegado van antes que el árbol
+    // de proyectos), y que el grid se quede con la fila única de `.frame` — `100%`, una sola
+    // fila del alto entero—, con lo que la cabecera y las columnas se pisarían en la misma
+    // celda. `minmax(0, 1fr)` y no `1fr` en la de abajo: `1fr` tiene suelo `auto` y una
+    // conversación larga estiraba la fila por debajo de la pantalla en vez de scrollear.
+    const { container } = render(
+      <Maqueta
+        cabecera={<div data-testid="cabecera">cabecera</div>}
+        centro={<div data-testid="centro">centro</div>}
+        barra={<div data-testid="barra">barra</div>}
+      />
+    );
+    const raiz = container.firstElementChild as HTMLElement;
+    expect(raiz.children[0]?.querySelector("[data-testid='cabecera']")).not.toBeNull();
+    expect(raiz.children[1]?.querySelector("[data-testid='barra']")).not.toBeNull();
+    expect(raiz.children[2]?.querySelector("[data-testid='centro']")).not.toBeNull();
+    expect(raiz.style.gridTemplateRows).toBe("auto minmax(0, 1fr)");
+  });
+
+  it("sin cabecera el grid se queda con UNA fila: la de `.frame`, sin pista escrita", () => {
+    // Que el hueco sea opcional no es cosmético: escribir `grid-template-rows` cuando no hay
+    // cabecera dejaría una fila `auto` de cero de alto delante de las columnas, y con ella
+    // el `100%` de la hoja copiada dejaría de valer sin que nada avisara.
+    const { container } = render(<Maqueta centro={<div />} barra={<div />} />);
+    expect((container.firstElementChild as HTMLElement).style.gridTemplateRows).toBe("");
+  });
+
   it("escribe las pistas del grid: el `.frame` copiado no las trae, y sin ellas la barra se apila ENCIMA del centro", () => {
     // No es cosmética. `AppFrame.module.css` declara `display: grid` y NINGUNA columna
     // —en el original las escribe su componente en línea—, así que un grid sin pistas

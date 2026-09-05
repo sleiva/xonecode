@@ -134,7 +134,12 @@
   left: 0;
   width: 2px;
   border-radius: 2px;
-  background: var(--dsw-alias-button-primary-fill);
+  /* El ACENTO, y por su nombre. Antes decía `button-primary-fill` y salía cian de rebote,
+     porque `estilos/marca.css` tenía ese alias secuestrado. Desde el rediseño el relleno
+     primario es el negro del tema y el cian se quedó SOLO de acento, así que un filo que
+     siguiera leyendo el alias del botón se volvía negro — medido en pantalla: la fila
+     activa perdía la única señal de color que la distinguía del `:hover` de al lado. */
+  background: var(--xonecode-cian);
 }
 
 /* La letra de estado, como en `git status`: A, M, D. Cuadrada y monoespaciada para que las
@@ -239,9 +244,16 @@
   color: var(--dsw-alias-label-secondary);
 }
 
+/* La línea `@@` con tinte AZUL y no con el gris de superficie. Es la del rediseño, y no es
+   decoración: esa línea no es código ni es un cambio, es el salto de un trozo al siguiente
+   —«aquí me he saltado cuarenta líneas»—, y con el gris de `bg-layer-2` se leía como una
+   fila de contenido más entre el verde y el rojo. El azul la saca de la conversación de
+   colores del diff, donde verde y rojo ya significan algo. Mismo pastel que la burbuja de
+   usuario del chat, mezclado igual que las otras dos y contra el mismo fondo, para que la
+   cabecera pegajosa siga pasando por encima sin transparentarse. */
 .linea[data-tipo="trozo"] {
   color: var(--dsw-alias-label-tertiary);
-  background: var(--dsw-alias-bg-layer-2);
+  background: color-mix(in srgb, var(--dsw-alias-state-business-tertiary) 45%, var(--dsw-alias-bg-layer-1));
 }
 
 .linea[data-tipo="cabecera"] {

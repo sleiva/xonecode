@@ -47,10 +47,26 @@ const ANCHO_BARRA = 280;
 export function Maqueta({
   centro,
   barra,
+  cabecera,
   barraContraida = false,
 }: {
   centro: ReactNode;
   barra: ReactNode;
+  /**
+   * La barra superior, que cruza las DOS columnas.
+   *
+   * Va aquí y no dentro de `centro` —que es donde estaba— porque es la barra de la
+   * APLICACIÓN y no la del centro: la marca, el estado del cable y el botón de plegar la
+   * lateral valen igual con la barra desplegada que sin ella, y arrancándola en el borde de
+   * la columna central se leía como si fuera de la conversación. Es además lo que pide el
+   * rediseño, donde la tira azul va de lado a lado y la lateral empieza por debajo.
+   *
+   * Es un ítem más del grid, ocupando `1 / -1`, y no un envoltorio por fuera: el `.frame`
+   * copiado ya es el elemento que mide la pantalla entera y anima sus pistas, y meterlo
+   * dentro de otra caja habría duplicado esa medida en dos sitios que se pueden desincronizar.
+   * Opcional: sin ella el grid se queda como estaba, con una sola fila.
+   */
+  cabecera?: ReactNode;
   /**
    * La barra lateral, plegada. La columna se va a CERO y su contenido se desmonta — no se
    * esconde con `visibility`: una barra invisible sigue siendo tabulable, y se llega con el
@@ -77,8 +93,16 @@ export function Maqueta({
   return (
     <div
       className={clsx(marco.frame, estilos.alto)}
-      style={{ gridTemplateColumns: `${barraContraida ? 0 : ANCHO_BARRA}px minmax(0, 1fr)` }}
+      style={{
+        gridTemplateColumns: `${barraContraida ? 0 : ANCHO_BARRA}px minmax(0, 1fr)`,
+        // `.frame` trae `grid-template-rows: 100%`, una fila y del alto entero. Con
+        // cabecera hacen falta dos, y la de abajo con `minmax(0, 1fr)` y no `1fr`: `1fr`
+        // tiene suelo `auto`, así que una conversación larga estiraba la fila por debajo
+        // del alto de la pantalla en vez de dejar scrollear la columna.
+        ...(cabecera === undefined ? {} : { gridTemplateRows: "auto minmax(0, 1fr)" }),
+      }}
     >
+      {cabecera === undefined ? null : <div className={estilos.cabecera}>{cabecera}</div>}
       <div className={marco.sidebarCol}>{barraContraida ? null : barra}</div>
       <div
         ref={columna}

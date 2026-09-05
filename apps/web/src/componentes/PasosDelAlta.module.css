@@ -60,9 +60,12 @@
    verdad (`Barra.test.tsx`, «el detector de color-keyword SÍ dispara… `background:
    transparent`»). */
 
+/* El paso EN CURSO va con el acento, no con el relleno del botón primario: desde el
+   rediseño ese es el negro del tema, y el marcador del paso actual quedaba igual que el de
+   un paso «hecho» apagado en vez de señalar dónde estás. */
 .marcador[data-estado="actual"] {
-  border-color: var(--dsw-alias-button-primary-fill);
-  background: var(--dsw-alias-button-primary-fill);
+  border-color: var(--xonecode-cian);
+  background: var(--xonecode-cian);
 }
 
 .marcador[data-estado="hecho"] {

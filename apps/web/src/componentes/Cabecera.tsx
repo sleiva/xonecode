@@ -68,6 +68,20 @@ export function Cabecera({ titulo, modo, conectado, pestana, alElegirPestana, ba
               {barraContraida === true ? "»" : "«"}
             </button>
           )}
+          {/*
+            La marca, que hasta el rediseño vivía arriba de la barra lateral. Se mudó aquí
+            con la tira azul: esta es la ÚNICA superficie de marca de la aplicación
+            (`Cabecera.module.css`), y el nombre del producto sobre el azul profundo es lo
+            que empareja esta pantalla con el splash del arranque.
+
+            Sin la pastilla «DESKTOP» que el mockup pone al lado: no hay ningún modo de
+            escritorio del que hablar —la consola web es una sola cosa—, y una pastilla que
+            no distingue nada de nada es un rótulo decorativo.
+          */}
+          <span className={estilos.marca}>xonecode</span>
+          <span className={estilos.separador} aria-hidden="true">
+            /
+          </span>
           <nav className={conversacion.crumbs} aria-label="dónde estás">
             <span className={conversacion.crumbSeg}>
               <button

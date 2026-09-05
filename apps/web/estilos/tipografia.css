@@ -12,6 +12,27 @@
    Se aplica en `html` y no en `body` para que herede también lo que se monte fuera de
    `#root` (un portal, un diálogo nativo). */
 
+/* Las dos caras del rediseño (`docs/diseno/*-rediseno-stitch.html`), puestas EN los tokens
+   que las hojas copiadas declaran, no en cada selector. Es el mismo puente que `marca.css`
+   hace con el acento y por la misma razón: cambiándolas aquí cambia la aplicación entera,
+   y `code`/`pre` de ahí abajo siguen leyendo su token sin enterarse de nada.
+
+   Van con la pila del sistema DETRÁS y no solas. Las fuentes se empaquetan
+   (`@fontsource-variable/*` en `main.tsx`), así que llegan siempre — pero una fuente puede
+   fallar en carga, y un respaldo que no está deja el texto en la serif del navegador, que
+   es exactamente el fallo que este fichero existe para haber arreglado una vez.
+
+   Los tres mockups piden Inter y JetBrains Mono, y es lo ÚNICO en lo que los tres coinciden:
+   sus paletas se contradicen entre sí (tres azules de cabecera distintos, y dos de las tres
+   cambian el cian de XOne por un tono de Tailwind), así que de ahí se toma la tipografía y
+   el color se queda siendo el medido en `marca.css`. */
+:root {
+  --dsw-font-family: "Inter Variable", "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI",
+    "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+  --ds-font-family-code: "JetBrains Mono Variable", "JetBrains Mono", "SF Mono", "Fira Code",
+    Consolas, monospace;
+}
+
 html {
   font-family: var(--dsw-font-family);
   /* El tamaño y el interlineado de contenido que los tokens de markdown dan por sabidos

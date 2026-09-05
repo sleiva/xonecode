@@ -9,3 +9,11 @@
 .alto {
   height: 100dvh;
 }
+
+
+/* La barra superior cruza las dos columnas. `1 / -1` y no `1 / 3` para que siga valiendo el
+   día que el grid tenga una columna más (la de detalles del original, que aquí no está). */
+.cabecera {
+  grid-column: 1 / -1;
+  min-width: 0;
+}

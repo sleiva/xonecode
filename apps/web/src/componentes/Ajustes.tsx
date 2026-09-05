@@ -290,7 +290,7 @@ export function Ajustes({
                   {entornos.map((e) => (
                     <li key={e.id} className={estilos.fila}>
                       <span className={estilos.nombre}>{e.nombre}</span>
-                      <span className={estilos.detalle}>{e.url}</span>
+                      <span className={estilos.url}>{e.url}</span>
                     </li>
                   ))}
                 </ul>

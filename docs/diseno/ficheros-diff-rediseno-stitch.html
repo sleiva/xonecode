@@ -1,0 +1,559 @@
+<!DOCTYPE html>
+
+<html class="h-full" lang="es"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>xonecode - Visor de Ficheros y Diff</title>
+<!-- Tailwind CSS v3 with plugins -->
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<!-- Google Fonts: Inter & JetBrains Mono -->
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@400;500;600&amp;display=swap" rel="stylesheet"/>
+<script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['Inter', 'sans-serif'],
+            mono: ['JetBrains Mono', 'monospace'],
+          },
+          colors: {
+            xone: {
+              header: '#0B1D28',
+              accent: '#0284C7',
+              cyan: '#06B6D4',
+              teal: '#0EA5E9',
+              dark: '#0F172A',
+              subtle: '#64748B',
+              border: '#E2E8F0',
+              canvas: '#F8FAFC',
+              sidebar: '#FFFFFF',
+              diffAdd: '#ECFDF5',
+              diffAddBorder: '#A7F3D0',
+              diffAddText: '#065F46',
+              diffHeader: '#F1F5F9',
+              diffHunk: '#EFF6FF',
+            }
+          }
+        }
+      }
+    }
+  </script>
+<!-- BEGIN: CustomStyles -->
+<style data-purpose="scrollbar-styling">
+    /* Custom subtle scrollbars for code diff view */
+    ::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+    ::-webkit-scrollbar-track {
+      background: transparent;
+    }
+    ::-webkit-scrollbar-thumb {
+      background: #CBD5E1;
+      border-radius: 9999px;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background: #94A3B8;
+    }
+  </style>
+<style data-purpose="diff-syntax-tokens">
+    /* JavaScript & Diff Syntax Highlighting Token Styles */
+    .token-keyword { color: #8B5CF6; font-weight: 500; }
+    .token-var { color: #0284C7; }
+    .token-string { color: #0D9488; }
+    .token-comment { color: #64748B; font-style: italic; }
+    .token-func { color: #2563EB; font-weight: 500; }
+    .token-operator { color: #D97706; }
+    .token-punct { color: #475569; }
+    .token-number { color: #EA580C; }
+    .token-bool { color: #DC2626; font-weight: 500; }
+  </style>
+<!-- END: CustomStyles -->
+</head>
+<body class="h-full bg-slate-50 font-sans text-slate-800 antialiased flex flex-col overflow-hidden select-none">
+<!-- BEGIN: TopNavigationHeader -->
+<header class="h-14 bg-[#0B1D28] text-white flex items-center justify-between px-4 shrink-0 border-b border-slate-800 z-30 shadow-sm" data-purpose="app-topbar">
+<!-- Left Section: Logo, Workspace Badge, Breadcrumbs -->
+<div class="flex items-center space-x-4">
+<div class="flex items-center space-x-2">
+<a class="font-bold text-lg tracking-tight text-white flex items-center space-x-1.5 focus:outline-none hover:opacity-90 transition" href="#">
+<span class="text-cyan-400 font-extrabold text-xl">&lt;/&gt;</span>
+<span>xonecode</span>
+</a>
+<span class="text-[10px] font-semibold tracking-wider uppercase px-1.5 py-0.5 rounded bg-cyan-500/20 text-cyan-300 border border-cyan-500/30">
+          DESKTOP
+        </span>
+</div>
+<div class="h-4 w-px bg-slate-700"></div>
+<!-- Breadcrumbs navigation -->
+<nav aria-label="Breadcrumbs" class="flex items-center space-x-1.5 text-xs text-slate-300 font-medium">
+<button class="hover:text-white p-1 rounded hover:bg-slate-800/60 transition" title="Volver al escritorio">
+<svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewbox="0 0 24 24">
+<path d="M15 19l-7-7 7-7" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path>
+</svg>
+</button>
+<span class="hover:text-white cursor-pointer transition">AppDemo</span>
+<span class="text-slate-500">/</span>
+<span class="text-white font-semibold">Prueba del menú</span>
+<span class="inline-flex items-center ml-2 text-[11px] font-normal text-slate-400 bg-slate-800/80 px-2 py-0.5 rounded-full border border-slate-700/60">
+<svg class="w-3 h-3 text-sky-400 mr-1" fill="none" stroke="currentColor" viewbox="0 0 24 24">
+<path d="M3 15a4 4 0 004 4h9a5 5 0 10-.1-9.999 5.002 5.002 0 00-9.78 2.096A4.001 4.001 0 003 15z" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path>
+</svg>
+          modo cloud
+        </span>
+</nav>
+</div>
+<!-- Center Section: Active Tab Navigation switcher -->
+<nav class="flex items-center space-x-1 h-full pt-1" data-purpose="workflow-tabs">
+<button class="h-full px-4 text-xs font-medium text-slate-300 hover:text-white hover:border-b-2 hover:border-slate-500 flex items-center transition border-b-2 border-transparent">
+        Chat
+      </button>
+<button class="h-full px-4 text-xs font-medium text-slate-300 hover:text-white hover:border-b-2 hover:border-slate-500 flex items-center transition border-b-2 border-transparent">
+        Trayectoria
+      </button>
+<button class="h-full px-4 text-xs font-semibold text-cyan-400 border-b-2 border-cyan-400 flex items-center shadow-inner">
+        Ficheros
+        <span class="ml-1.5 px-1.5 py-0.2 bg-cyan-950 text-cyan-300 text-[10px] rounded-full border border-cyan-700 font-mono">2</span>
+</button>
+</nav>
+<!-- Right Section: Connection status, Build & Run, Session log -->
+<div class="flex items-center space-x-3">
+<!-- Status dot indicator -->
+<div class="flex items-center space-x-1.5 text-xs text-emerald-400 font-medium bg-emerald-950/40 border border-emerald-800/50 px-2.5 py-1 rounded-full">
+<span class="relative flex h-2 w-2">
+<span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+<span class="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+</span>
+<span class="text-[11px] text-emerald-300">conectado</span>
+</div>
+<!-- Action: Build & Run -->
+<button class="inline-flex items-center space-x-1.5 bg-sky-600 hover:bg-sky-500 text-white px-3 py-1.5 rounded-md text-xs font-medium shadow-sm transition active:scale-95">
+<svg class="w-3.5 h-3.5 fill-current" viewbox="0 0 24 24">
+<path d="M8 5v14l11-7z"></path>
+</svg>
+<span>Build &amp; Run</span>
+</button>
+<!-- Session Menu -->
+<button class="p-1.5 text-slate-400 hover:text-white rounded hover:bg-slate-800 transition text-xs font-medium flex items-center space-x-1">
+<svg class="w-4 h-4" fill="none" stroke="currentColor" viewbox="0 0 24 24">
+<path d="M4 6h16M4 12h16M4 18h16" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path>
+</svg>
+</button>
+</div>
+</header>
+<!-- END: TopNavigationHeader -->
+<!-- BEGIN: MainWorkspaceLayout -->
+<div class="flex-1 flex overflow-hidden">
+<!-- BEGIN: PrimarySidebar -->
+<aside class="w-64 bg-white border-r border-slate-200 flex flex-col justify-between shrink-0 shadow-sm" data-purpose="workspace-tree-sidebar">
+<!-- Upper Section: Environment Selector & Projects -->
+<div class="p-3 overflow-y-auto space-y-4">
+<!-- Environment selector dropdown -->
+<div>
+<label class="block text-[11px] font-medium uppercase tracking-wider text-slate-400 mb-1.5">Entorno</label>
+<div class="relative">
+<select class="w-full text-xs font-semibold text-slate-700 bg-slate-50 border border-slate-200 rounded-md py-1.5 pl-2.5 pr-8 focus:outline-none focus:ring-1 focus:ring-sky-500 focus:border-sky-500">
+<option>XOne WebStudio</option>
+<option>Local MCP Daemon</option>
+<option>Staging Environment</option>
+</select>
+</div>
+</div>
+<!-- Filter bar for sidebar -->
+<div class="relative">
+<svg class="w-3.5 h-3.5 absolute left-2.5 top-2.5 text-slate-400" fill="none" stroke="currentColor" viewbox="0 0 24 24">
+<path d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path>
+</svg>
+<input class="w-full text-xs bg-slate-50 border border-slate-200 rounded-md py-1.5 pl-8 pr-2 focus:outline-none focus:ring-1 focus:ring-sky-500 text-slate-700 placeholder-slate-400" placeholder="Filtrar proyectos..." type="text"/>
+</div>
+<!-- Project List Section -->
+<div>
+<div class="flex items-center justify-between mb-1 text-[11px] font-medium uppercase tracking-wider text-slate-400">
+<span>Proyectos</span>
+<span class="text-[10px] text-slate-400 font-mono">18</span>
+</div>
+<div class="space-y-1">
+<!-- AppDemo - Active Project -->
+<div class="rounded-lg bg-slate-50/80 border border-slate-200/80 overflow-hidden">
+<div class="flex items-center justify-between px-2.5 py-1.5 bg-slate-100/70 border-b border-slate-200/50">
+<div class="flex items-center space-x-1.5">
+<svg class="w-4 h-4 text-sky-600" fill="currentColor" viewbox="0 0 20 20">
+<path d="M2 6a2 2 0 012-2h5l2 2h5a2 2 0 012 2v6a2 2 0 01-2 2H4a2 2 0 01-2-2V6z"></path>
+</svg>
+<span class="text-xs font-semibold text-slate-800">AppDemo</span>
+</div>
+<span class="text-[10px] px-1.5 py-0.5 rounded bg-sky-100 text-sky-700 font-medium">propio</span>
+</div>
+<!-- Sessions tree inside AppDemo -->
+<div class="py-1 px-1.5 space-y-0.5">
+<a class="flex items-center px-2 py-1 text-xs text-slate-600 hover:bg-slate-200/50 rounded transition italic" href="#">
+<span>Hola</span>
+<span class="ml-auto text-[10px] text-slate-400 not-italic font-mono">2h</span>
+</a>
+<!-- Active session -->
+<a class="flex items-center px-2 py-1.5 text-xs text-sky-900 bg-sky-100/70 font-semibold rounded transition border-l-2 border-sky-600" href="#">
+<span class="italic">Prueba del menú</span>
+<span class="ml-auto text-[10px] text-sky-600 not-italic font-mono">1d</span>
+</a>
+</div>
+</div>
+<!-- AppDeve Project item -->
+<div class="rounded-md hover:bg-slate-50 transition border border-transparent p-2">
+<div class="flex items-center justify-between">
+<div class="flex items-center space-x-1.5">
+<svg class="w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewbox="0 0 24 24">
+<path d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path>
+</svg>
+<span class="text-xs font-medium text-slate-700">AppDeve</span>
+</div>
+<span class="text-[10px] px-1.5 py-0.5 rounded bg-slate-100 text-slate-600 font-normal">propio</span>
+</div>
+<p class="text-[11px] text-slate-400 italic mt-1 pl-5">Sin sesiones todavía.</p>
+</div>
+<!-- AppForTest Project item -->
+<div class="rounded-md hover:bg-slate-50 transition border border-transparent p-2">
+<div class="flex items-center justify-between">
+<div class="flex items-center space-x-1.5">
+<svg class="w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewbox="0 0 24 24">
+<path d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path>
+</svg>
+<span class="text-xs font-medium text-slate-700">Bequikly</span>
+</div>
+<span class="text-[10px] px-1.5 py-0.5 rounded bg-purple-100 text-purple-700 font-normal">compartido</span>
+</div>
+</div>
+</div>
+<!-- Bottom hint: 16 proyectos más -->
+<div class="mt-4 px-1">
+<p class="text-[11px] text-slate-400 leading-tight">
+              16 proyectos más sin enseñar · <a class="text-sky-600 hover:underline" href="#">elígelos en Ajustes</a>
+</p>
+</div>
+</div>
+</div>
+<!-- Bottom Settings and Daemon Status -->
+<div class="p-3 border-t border-slate-200 bg-slate-50 flex items-center justify-between text-xs text-slate-600">
+<button class="flex items-center space-x-1.5 text-slate-700 hover:text-slate-900 transition font-medium">
+<svg class="w-4 h-4 text-slate-500" fill="none" stroke="currentColor" viewbox="0 0 24 24">
+<path d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path>
+<path d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path>
+</svg>
+<span>Ajustes</span>
+</button>
+<span class="font-mono text-[10px] text-slate-400">port:5037</span>
+</div>
+</aside>
+<!-- END: PrimarySidebar -->
+<!-- BEGIN: ChangedFilesListSubpanel -->
+<aside class="w-72 bg-white border-r border-slate-200 flex flex-col shrink-0" data-purpose="modified-files-list">
+<!-- Sub-panel Header -->
+<div class="px-3.5 py-3 border-b border-slate-200 flex items-center justify-between bg-slate-50/50">
+<div class="flex items-center space-x-2">
+<span class="text-xs font-bold text-slate-700">2 ficheros</span>
+<span class="text-[11px] text-slate-500">modificados</span>
+</div>
+<button class="px-2.5 py-1 text-xs font-medium text-slate-600 bg-white border border-slate-200 hover:bg-slate-50 rounded shadow-2xs hover:border-slate-300 transition flex items-center space-x-1" title="Sincronizar cambios">
+<svg class="w-3 h-3 text-slate-500" fill="none" stroke="currentColor" viewbox="0 0 24 24">
+<path d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path>
+</svg>
+<span>Actualizar</span>
+</button>
+</div>
+<!-- File entries -->
+<div class="p-2 space-y-1 overflow-y-auto flex-1">
+<!-- Item 1: calculadora.js (Selected) -->
+<div class="group flex items-center justify-between px-2.5 py-2 rounded-lg bg-sky-50/90 border border-sky-200 text-slate-900 cursor-pointer shadow-xs" data-purpose="active-file-item">
+<div class="flex items-center space-x-2 min-w-0">
+<!-- Git 'M' indicator badge -->
+<span class="w-4 h-4 rounded text-[10px] font-mono font-bold bg-amber-100 text-amber-700 flex items-center justify-center shrink-0 border border-amber-300/60">
+              M
+            </span>
+<span class="font-mono text-xs font-semibold text-slate-900 truncate">
+              calculadora.js
+            </span>
+</div>
+<!-- Add / Remove stats -->
+<div class="flex items-center space-x-1 font-mono text-[11px] font-semibold shrink-0 ml-2">
+<span class="text-emerald-600">+5</span>
+<span class="text-slate-400">/</span>
+<span class="text-rose-500">-0</span>
+</div>
+</div>
+<!-- Item 2: doc/NOTA-DEMO.md (Unselected) -->
+<div class="group flex items-center justify-between px-2.5 py-2 rounded-lg hover:bg-slate-100/70 border border-transparent text-slate-700 cursor-pointer transition" data-purpose="inactive-file-item">
+<div class="flex items-center space-x-2 min-w-0">
+<!-- Git 'A' indicator badge -->
+<span class="w-4 h-4 rounded text-[10px] font-mono font-bold bg-emerald-100 text-emerald-700 flex items-center justify-center shrink-0 border border-emerald-300/60">
+              A
+            </span>
+<div class="truncate text-xs font-mono">
+<span class="text-slate-400">doc/</span><span class="text-slate-800 font-medium">NOTA-DEMO.md</span>
+</div>
+</div>
+<!-- Add / Remove stats -->
+<div class="flex items-center space-x-1 font-mono text-[11px] font-medium shrink-0 ml-2">
+<span class="text-emerald-600 font-semibold">+4</span>
+<span class="text-slate-300">/</span>
+<span class="text-slate-400">-0</span>
+</div>
+</div>
+</div>
+<!-- Git status summary bar -->
+<div class="p-2.5 bg-slate-50 border-t border-slate-200 text-[11px] text-slate-500 flex items-center justify-between">
+<span class="flex items-center space-x-1">
+<svg class="w-3.5 h-3.5 text-slate-400" fill="none" stroke="currentColor" viewbox="0 0 24 24">
+<path d="M13 10V3L4 14h7v7l9-11h-7z" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path>
+</svg>
+<span>2 archivos preparados</span>
+</span>
+<span class="font-mono text-emerald-600 font-semibold">+9 lin</span>
+</div>
+</aside>
+<!-- END: ChangedFilesListSubpanel -->
+<!-- BEGIN: CodeInspectionAndDiffMain -->
+<main class="flex-1 flex flex-col bg-white overflow-hidden relative" data-purpose="code-diff-viewer">
+<!-- Diff File Header Toolbar -->
+<div class="px-5 py-2.5 bg-white border-b border-slate-200 flex items-center justify-between shrink-0 shadow-2xs">
+<div class="flex items-center space-x-3">
+<div class="flex items-center space-x-2">
+<span class="p-1 rounded bg-amber-50 border border-amber-200 text-amber-700 font-mono text-xs font-bold px-1.5">M</span>
+<h1 class="text-sm font-bold font-mono text-slate-900 tracking-tight">calculadora.js</h1>
+</div>
+<div class="h-4 w-px bg-slate-200"></div>
+<!-- Branch tag & stats -->
+<div class="flex items-center space-x-2">
+<span class="inline-flex items-center text-xs font-medium px-2 py-0.5 rounded bg-slate-100 text-slate-600 border border-slate-200 font-mono">
+<svg class="w-3 h-3 mr-1 text-slate-500" fill="none" stroke="currentColor" viewbox="0 0 24 24">
+<path d="M7 20l4-16m2 16l4-16M6 9h14M4 15h14" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path>
+</svg>
+              master (HEAD)
+            </span>
+<span class="text-xs font-semibold font-mono text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">+5 líneas añadidas</span>
+</div>
+</div>
+<!-- File actions -->
+<div class="flex items-center space-x-2">
+<button class="px-2.5 py-1 text-xs font-medium text-slate-600 hover:text-slate-900 bg-white border border-slate-200 hover:bg-slate-50 rounded-md transition shadow-2xs" title="Copiar ruta">
+            Copiar ruta
+          </button>
+<button class="px-2.5 py-1 text-xs font-medium text-slate-600 hover:text-slate-900 bg-white border border-slate-200 hover:bg-slate-50 rounded-md transition shadow-2xs">
+            Ver completo
+          </button>
+<button class="px-2.5 py-1 text-xs font-medium text-rose-600 hover:text-rose-700 bg-rose-50/70 border border-rose-200 hover:bg-rose-100 rounded-md transition">
+            Descartar cambios
+          </button>
+</div>
+</div>
+<!-- Diff Content Table View -->
+<div class="flex-1 overflow-y-auto font-mono text-xs bg-white" data-purpose="unified-diff-table">
+<table class="w-full border-collapse">
+<thead>
+<tr class="sr-only">
+<th scope="col">Línea Antigua</th>
+<th scope="col">Línea Nueva</th>
+<th scope="col">Marcador</th>
+<th scope="col">Código</th>
+</tr>
+</thead>
+<tbody class="divide-y-0 text-slate-700 leading-6">
+<!-- HUNK HEADER 1 -->
+<tr class="bg-blue-50/70 border-y border-blue-100/80 text-sky-800 select-none">
+<td class="w-12 py-1 text-right pr-3 text-[10px] text-slate-400 select-none">...</td>
+<td class="w-12 py-1 text-right pr-3 text-[10px] text-slate-400 select-none">...</td>
+<td class="w-6 py-1 text-center font-bold text-sky-600 select-none">@</td>
+<td class="py-1 px-4 font-semibold text-sky-700 tracking-wide">
+                @@ -6,6 +6,8 @@
+              </td>
+</tr>
+<!-- Line 6 (Context) -->
+<tr class="hover:bg-slate-50 transition">
+<td class="w-12 text-right pr-3 text-[11px] text-slate-400 bg-slate-50/60 select-none border-r border-slate-200">6</td>
+<td class="w-12 text-right pr-3 text-[11px] text-slate-400 bg-slate-50/60 select-none border-r border-slate-200">6</td>
+<td class="w-6 text-center text-slate-400 select-none"></td>
+<td class="py-0.5 px-4 whitespace-pre"><span class="token-keyword">var</span> <span class="token-var">primerOperando</span> <span class="token-operator">=</span> <span class="token-bool">null</span><span class="token-punct">;</span></td>
+</tr>
+<!-- Line 7 (Context) -->
+<tr class="hover:bg-slate-50 transition">
+<td class="w-12 text-right pr-3 text-[11px] text-slate-400 bg-slate-50/60 select-none border-r border-slate-200">7</td>
+<td class="w-12 text-right pr-3 text-[11px] text-slate-400 bg-slate-50/60 select-none border-r border-slate-200">7</td>
+<td class="w-6 text-center text-slate-400 select-none"></td>
+<td class="py-0.5 px-4 whitespace-pre"><span class="token-keyword">var</span> <span class="token-var">operadorPendiente</span> <span class="token-operator">=</span> <span class="token-bool">null</span><span class="token-punct">;</span></td>
+</tr>
+<!-- Line 8 (Context) -->
+<tr class="hover:bg-slate-50 transition">
+<td class="w-12 text-right pr-3 text-[11px] text-slate-400 bg-slate-50/60 select-none border-r border-slate-200">8</td>
+<td class="w-12 text-right pr-3 text-[11px] text-slate-400 bg-slate-50/60 select-none border-r border-slate-200">8</td>
+<td class="w-6 text-center text-slate-400 select-none"></td>
+<td class="py-0.5 px-4 whitespace-pre"><span class="token-keyword">var</span> <span class="token-var">limpiarAlDigito</span> <span class="token-operator">=</span> <span class="token-bool">false</span><span class="token-punct">;</span></td>
+</tr>
+<!-- Line ADDED 9 -->
+<tr class="bg-emerald-100/70 border-y border-emerald-200/50">
+<td class="w-12 text-right pr-3 text-[11px] text-emerald-800/40 bg-emerald-200/40 select-none border-r border-emerald-300/40"></td>
+<td class="w-12 text-right pr-3 text-[11px] text-emerald-900 font-bold bg-emerald-200/50 select-none border-r border-emerald-300">8</td>
+<td class="w-6 text-center text-emerald-700 font-bold select-none">+</td>
+<td class="py-0.5 px-4 whitespace-pre font-medium text-emerald-950"><span class="token-comment">// Cuántas operaciones lleva la sesión: sirve para el aviso de «pulsa C para reiniciar».</span></td>
+</tr>
+<!-- Line ADDED 10 -->
+<tr class="bg-emerald-100/70 border-b border-emerald-200/50">
+<td class="w-12 text-right pr-3 text-[11px] text-emerald-800/40 bg-emerald-200/40 select-none border-r border-emerald-300/40"></td>
+<td class="w-12 text-right pr-3 text-[11px] text-emerald-900 font-bold bg-emerald-200/50 select-none border-r border-emerald-300">9</td>
+<td class="w-6 text-center text-emerald-700 font-bold select-none">+</td>
+<td class="py-0.5 px-4 whitespace-pre font-medium text-emerald-950"><span class="token-keyword">var</span> <span class="token-var">operacionesHechas</span> <span class="token-operator">=</span> <span class="token-number">0</span><span class="token-punct">;</span></td>
+</tr>
+<!-- Blank context row -->
+<tr class="hover:bg-slate-50 transition">
+<td class="w-12 text-right pr-3 text-[11px] text-slate-400 bg-slate-50/60 select-none border-r border-slate-200">9</td>
+<td class="w-12 text-right pr-3 text-[11px] text-slate-400 bg-slate-50/60 select-none border-r border-slate-200">10</td>
+<td class="w-6 text-center text-slate-400 select-none"></td>
+<td class="py-0.5 px-4 whitespace-pre"></td>
+</tr>
+<!-- Context Comment Docblock -->
+<tr class="hover:bg-slate-50 transition">
+<td class="w-12 text-right pr-3 text-[11px] text-slate-400 bg-slate-50/60 select-none border-r border-slate-200">10</td>
+<td class="w-12 text-right pr-3 text-[11px] text-slate-400 bg-slate-50/60 select-none border-r border-slate-200">11</td>
+<td class="w-6 text-center text-slate-400 select-none"></td>
+<td class="py-0.5 px-4 whitespace-pre text-slate-500 italic"><span class="token-comment">/**</span></td>
+</tr>
+<tr class="hover:bg-slate-50 transition">
+<td class="w-12 text-right pr-3 text-[11px] text-slate-400 bg-slate-50/60 select-none border-r border-slate-200">11</td>
+<td class="w-12 text-right pr-3 text-[11px] text-slate-400 bg-slate-50/60 select-none border-r border-slate-200">12</td>
+<td class="w-6 text-center text-slate-400 select-none"></td>
+<td class="py-0.5 px-4 whitespace-pre text-slate-500 italic"><span class="token-comment"> * Formatea un número eliminando artefactos de precisión de coma flotante.</span></td>
+</tr>
+<!-- HUNK HEADER 2 -->
+<tr class="bg-blue-50/70 border-y border-blue-100/80 text-sky-800 select-none">
+<td class="w-12 py-1 text-right pr-3 text-[10px] text-slate-400 select-none">...</td>
+<td class="w-12 py-1 text-right pr-3 text-[10px] text-slate-400 select-none">...</td>
+<td class="w-6 py-1 text-center font-bold text-sky-600 select-none">@</td>
+<td class="py-1 px-4 font-semibold text-sky-700 tracking-wide">
+                @@ -13,6 +15,9 @@ var limpiarAlDigito = false;
+              </td>
+</tr>
+<tr class="hover:bg-slate-50 transition">
+<td class="w-12 text-right pr-3 text-[11px] text-slate-400 bg-slate-50/60 select-none border-r border-slate-200">13</td>
+<td class="w-12 text-right pr-3 text-[11px] text-slate-400 bg-slate-50/60 select-none border-r border-slate-200">15</td>
+<td class="w-6 text-center text-slate-400 select-none"></td>
+<td class="py-0.5 px-4 whitespace-pre text-slate-500 italic"><span class="token-comment"> * @returns {string} Representación en texto del valor o "Error"</span></td>
+</tr>
+<tr class="hover:bg-slate-50 transition">
+<td class="w-12 text-right pr-3 text-[11px] text-slate-400 bg-slate-50/60 select-none border-r border-slate-200">14</td>
+<td class="w-12 text-right pr-3 text-[11px] text-slate-400 bg-slate-50/60 select-none border-r border-slate-200">16</td>
+<td class="w-6 text-center text-slate-400 select-none"></td>
+<td class="py-0.5 px-4 whitespace-pre text-slate-500 italic"><span class="token-comment"> */</span></td>
+</tr>
+<tr class="hover:bg-slate-50 transition">
+<td class="w-12 text-right pr-3 text-[11px] text-slate-400 bg-slate-50/60 select-none border-r border-slate-200">15</td>
+<td class="w-12 text-right pr-3 text-[11px] text-slate-400 bg-slate-50/60 select-none border-r border-slate-200">17</td>
+<td class="w-6 text-center text-slate-400 select-none"></td>
+<td class="py-0.5 px-4 whitespace-pre"><span class="token-keyword">function</span> <span class="token-func">formatearResultado</span><span class="token-punct">(</span><span class="token-var">valor</span><span class="token-punct">)</span> <span class="token-punct">{</span></td>
+</tr>
+<!-- ADDED Block: Guard clause -->
+<tr class="bg-emerald-100/70 border-t border-emerald-200/50">
+<td class="w-12 text-right pr-3 text-[11px] text-emerald-800/40 bg-emerald-200/40 select-none border-r border-emerald-300/40"></td>
+<td class="w-12 text-right pr-3 text-[11px] text-emerald-900 font-bold bg-emerald-200/50 select-none border-r border-emerald-300">18</td>
+<td class="w-6 text-center text-emerald-700 font-bold select-none">+</td>
+<td class="py-0.5 px-4 whitespace-pre font-medium text-emerald-950"> <span class="token-keyword">if</span> <span class="token-punct">(</span><span class="token-var">valor</span> <span class="token-operator">===</span> <span class="token-bool">null</span> <span class="token-operator">||</span> <span class="token-var">valor</span> <span class="token-operator">===</span> <span class="token-keyword">undefined</span><span class="token-punct">)</span> <span class="token-punct">{</span></td>
+</tr>
+<tr class="bg-emerald-100/70">
+<td class="w-12 text-right pr-3 text-[11px] text-emerald-800/40 bg-emerald-200/40 select-none border-r border-emerald-300/40"></td>
+<td class="w-12 text-right pr-3 text-[11px] text-emerald-900 font-bold bg-emerald-200/50 select-none border-r border-emerald-300">19</td>
+<td class="w-6 text-center text-emerald-700 font-bold select-none">+</td>
+<td class="py-0.5 px-4 whitespace-pre font-medium text-emerald-950"> <span class="token-keyword">return</span> <span class="token-string">"0"</span><span class="token-punct">;</span></td>
+</tr>
+<tr class="bg-emerald-100/70 border-b border-emerald-200/50">
+<td class="w-12 text-right pr-3 text-[11px] text-emerald-800/40 bg-emerald-200/40 select-none border-r border-emerald-300/40"></td>
+<td class="w-12 text-right pr-3 text-[11px] text-emerald-900 font-bold bg-emerald-200/50 select-none border-r border-emerald-300">20</td>
+<td class="w-6 text-center text-emerald-700 font-bold select-none">+</td>
+<td class="py-0.5 px-4 whitespace-pre font-medium text-emerald-950"> <span class="token-punct">}</span></td>
+</tr>
+<!-- Subsequent Context -->
+<tr class="hover:bg-slate-50 transition">
+<td class="w-12 text-right pr-3 text-[11px] text-slate-400 bg-slate-50/60 select-none border-r border-slate-200">16</td>
+<td class="w-12 text-right pr-3 text-[11px] text-slate-400 bg-slate-50/60 select-none border-r border-slate-200">21</td>
+<td class="w-6 text-center text-slate-400 select-none"></td>
+<td class="py-0.5 px-4 whitespace-pre"> <span class="token-keyword">if</span> <span class="token-punct">(</span><span class="token-func">isNaN</span><span class="token-punct">(</span><span class="token-var">valor</span><span class="token-punct">)</span> <span class="token-operator">||</span> <span class="token-operator">!</span><span class="token-func">isFinite</span><span class="token-punct">(</span><span class="token-var">valor</span><span class="token-punct">))</span> <span class="token-punct">{</span></td>
+</tr>
+<tr class="hover:bg-slate-50 transition">
+<td class="w-12 text-right pr-3 text-[11px] text-slate-400 bg-slate-50/60 select-none border-r border-slate-200">17</td>
+<td class="w-12 text-right pr-3 text-[11px] text-slate-400 bg-slate-50/60 select-none border-r border-slate-200">22</td>
+<td class="w-6 text-center text-slate-400 select-none"></td>
+<td class="py-0.5 px-4 whitespace-pre"> <span class="token-keyword">return</span> <span class="token-string">"Error"</span><span class="token-punct">;</span></td>
+</tr>
+<tr class="hover:bg-slate-50 transition">
+<td class="w-12 text-right pr-3 text-[11px] text-slate-400 bg-slate-50/60 select-none border-r border-slate-200">18</td>
+<td class="w-12 text-right pr-3 text-[11px] text-slate-400 bg-slate-50/60 select-none border-r border-slate-200">23</td>
+<td class="w-6 text-center text-slate-400 select-none"></td>
+<td class="py-0.5 px-4 whitespace-pre"> <span class="token-punct">}</span></td>
+</tr>
+</tbody>
+</table>
+</div>
+<!-- BEGIN: FloatingAIComposerPrompt -->
+<div class="p-4 bg-gradient-to-t from-white via-white to-transparent shrink-0" data-purpose="ai-prompt-composer-container">
+<div class="max-w-4xl mx-auto">
+<div class="relative bg-white border border-slate-300/90 rounded-2xl shadow-lg p-2 transition focus-within:border-sky-500 focus-within:ring-2 focus-within:ring-sky-100">
+<!-- Textarea / Input bar -->
+<input class="w-full text-sm text-slate-800 placeholder-slate-400 bg-transparent border-0 focus:ring-0 px-3 py-2 leading-relaxed" placeholder="Escribe una petición, o /comando..." type="text"/>
+<!-- Bottom Prompt Action Controls -->
+<div class="flex items-center justify-between pt-1.5 px-2 border-t border-slate-100 mt-1">
+<div class="flex items-center space-x-2">
+<!-- Model Picker Pill -->
+<button class="inline-flex items-center space-x-1.5 px-2.5 py-1 rounded-full text-xs font-mono font-medium bg-slate-100 text-slate-700 hover:bg-slate-200 border border-slate-200/80 transition" data-purpose="model-selector-button">
+<span class="w-1.5 h-1.5 rounded-full bg-cyan-500"></span>
+<span>gemini/gemini-flash-latest</span>
+<svg class="w-3 h-3 text-slate-500" fill="none" stroke="currentColor" viewbox="0 0 24 24">
+<path d="M19 9l-7 7-7-7" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path>
+</svg>
+</button>
+</div>
+<!-- Submit button: dark circle with white up arrow -->
+<div class="flex items-center space-x-2">
+<button class="w-8 h-8 rounded-full bg-slate-900 hover:bg-slate-800 text-white flex items-center justify-center transition shadow-md focus:outline-none focus:ring-2 focus:ring-slate-400 active:scale-95" title="Enviar petición">
+<svg class="w-4 h-4 transform rotate-0" fill="none" stroke="currentColor" viewbox="0 0 24 24">
+<path d="M5 10l7-7m0 0l7 7m-7-7v18" stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5"></path>
+</svg>
+</button>
+</div>
+</div>
+</div>
+<!-- Bottom execution meta info: turnos, pasos, tiempo transcurrido -->
+<div class="flex items-center justify-between mt-2 px-3 text-[11px] text-slate-400">
+<div class="flex items-center space-x-2">
+<span>1 turno</span>
+<span>·</span>
+<span>0 pasos</span>
+<span>·</span>
+<span class="font-mono">1.9 s</span>
+</div>
+<div class="flex items-center space-x-2 text-[10px]">
+<span>Presiona <kbd class="px-1 py-0.5 rounded bg-slate-100 border border-slate-200 text-slate-600 font-mono">Enter</kbd> para enviar</span>
+</div>
+</div>
+</div>
+</div>
+<!-- END: FloatingAIComposerPrompt -->
+</main>
+<!-- END: CodeInspectionAndDiffMain -->
+</div>
+<!-- END: MainWorkspaceLayout -->
+<!-- BEGIN: InteractiveHandlers -->
+<script data-purpose="tab-and-row-interaction">
+    document.addEventListener('DOMContentLoaded', () => {
+      // Small visual interactions for file list selecting
+      const fileItems = document.querySelectorAll('[data-purpose$="-file-item"]');
+      fileItems.forEach(item => {
+        item.addEventListener('click', () => {
+          fileItems.forEach(i => {
+            i.classList.remove('bg-sky-50/90', 'border-sky-200');
+            i.classList.add('border-transparent');
+          });
+          item.classList.add('bg-sky-50/90', 'border-sky-200');
+          item.classList.remove('border-transparent');
+        });
+      });
+    });
+  </script>
+<!-- END: InteractiveHandlers -->
+</body></html>

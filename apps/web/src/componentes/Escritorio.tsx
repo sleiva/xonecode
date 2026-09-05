@@ -80,7 +80,7 @@ export function Escritorio({
             {proyectos.map((p) => {
               const sesiones = p.sesiones ?? [];
               return (
-                <li key={p.id} className={estilos.tarjeta}>
+                <li key={p.id} className={estilos.tarjeta} data-local={p.local === true ? "" : undefined}>
                   <div className={estilos.cabeceraDeTarjeta}>
                     <h2 className={estilos.nombreDeProyecto}>{p.nombre}</h2>
                     {/*

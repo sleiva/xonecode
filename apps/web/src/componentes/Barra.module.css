@@ -47,7 +47,12 @@
   left: 0;
   width: 2px;
   border-radius: 2px;
-  background: var(--dsw-alias-button-primary-fill);
+  /* El ACENTO, y por su nombre. Antes decía `button-primary-fill` y salía cian de rebote,
+     porque `estilos/marca.css` tenía ese alias secuestrado. Desde el rediseño el relleno
+     primario es el negro del tema y el cian se quedó SOLO de acento, así que un filo que
+     siguiera leyendo el alias del botón se volvía negro — medido en pantalla: la fila
+     activa perdía la única señal de color que la distinguía del `:hover` de al lado. */
+  background: var(--xonecode-cian);
 }
 
 .cuerpoDeFila {
@@ -122,7 +127,12 @@
   left: 0;
   width: 2px;
   border-radius: 2px;
-  background: var(--dsw-alias-button-primary-fill);
+  /* El ACENTO, y por su nombre. Antes decía `button-primary-fill` y salía cian de rebote,
+     porque `estilos/marca.css` tenía ese alias secuestrado. Desde el rediseño el relleno
+     primario es el negro del tema y el cian se quedó SOLO de acento, así que un filo que
+     siguiera leyendo el alias del botón se volvía negro — medido en pantalla: la fila
+     activa perdía la única señal de color que la distinguía del `:hover` de al lado. */
+  background: var(--xonecode-cian);
 }
 
 /* Y la abierta no se atenúa aunque sea histórica: es justo la que estás mirando, así que
@@ -177,8 +187,14 @@
   border-radius: 999px;
   background: var(--dsw-alias-bg-layer-2);
   color: var(--dsw-alias-label-tertiary);
+  /* Mono y en versalitas, lo mismo que la del Escritorio: es la MISMA etiqueta en las dos
+     pantallas y tenía que leerse igual en las dos. La regla del rediseño es que la letra de
+     máquina marca lo que es dato —etiquetas de estado, rutas, URLs— frente a la prosa. */
+  font-family: var(--ds-font-family-code);
   font-size: 10px;
+  letter-spacing: 0.04em;
   line-height: 1.6;
+  text-transform: uppercase;
   white-space: nowrap;
 }
 
@@ -189,4 +205,23 @@
 .duenno[data-compartido] {
   background: var(--dsw-alias-state-business-tertiary);
   color: var(--dsw-alias-state-business-primary);
+}
+
+
+/* El rótulo de sección («Entorno», «Proyectos»), encima de la `.sectionLabel` copiada.
+   El selector se repite para ganar especificidad sin depender de en qué orden coloque el
+   empaquetador las dos hojas — el mismo apaño, y por el mismo motivo, que
+   `Cabecera.module.css` documenta en `.barraSuperior.barraSuperior`.
+
+   Versalitas espaciadas: en el rediseño estos rótulos no son títulos, son separadores que
+   se leen de reojo, y a 11px en minúscula competían con los nombres de proyecto de debajo. */
+.rotulo.rotulo {
+  /* `label-tertiary` y no `label-dimmed`: ese es `neutral-bluish-200` en claro, un gris tan
+     alto que a 10px en versalitas el rótulo casi no se veía — medido en pantalla. `dimmed`
+     está pensado para texto DESACTIVADO, no para uno que se lee de reojo pero se lee. */
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
 }

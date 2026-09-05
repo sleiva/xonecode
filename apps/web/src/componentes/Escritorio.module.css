@@ -22,9 +22,9 @@
 .saludo {
   margin: 0;
   color: var(--dsw-alias-label-primary);
-  font-size: 28px;
-  font-weight: 600;
-  letter-spacing: -0.01em;
+  font-size: 32px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
 }
 
 .subtitulo {
@@ -33,13 +33,30 @@
 }
 
 /* El entorno activo: el punto verde dice que hay uno resuelto, no que se haya hecho ping —
-   con la URL al lado, que es lo que de verdad lo identifica. */
+   con la URL al lado, que es lo que de verdad lo identifica.
+   El rediseño lo saca de ser una línea suelta y lo mete en una tira con borde, que es lo
+   que lo separa del saludo y lo empareja con las tarjetas de abajo. */
 .entorno {
   display: flex;
   align-items: center;
-  gap: 8px;
-  margin: 14px 0 0;
+  gap: 10px;
+  margin: 20px 0 0;
+  padding: 12px 14px;
+  border: 0.5px solid var(--dsw-alias-border-l2);
+  border-radius: 12px;
+  background: var(--dsw-alias-bg-layer-2);
   font-size: 12px;
+}
+
+/* La barrita entre el nombre y la URL, como en el mockup: son dos datos distintos y sin
+   nada en medio se leían como una sola frase. */
+.entornoNombre::after {
+  content: "";
+  display: inline-block;
+  width: 1px;
+  height: 12px;
+  margin: 0 0 -2px 10px;
+  background: var(--dsw-alias-border-l2);
 }
 
 .punto {
@@ -55,8 +72,13 @@
   font-weight: 600;
 }
 
+/* Mono, y por el token: una URL es dato de máquina, no prosa. Es la regla tipográfica que
+   el rediseño aplica en las tres pantallas —el mono marca lo que se copia y se teclea— y
+   la única en la que sus tres paletas, que no coinciden en nada más, están de acuerdo. */
 .entornoUrl {
   color: var(--dsw-alias-label-tertiary);
+  font-family: var(--ds-font-family-code);
+  font-size: 11px;
 }
 
 .vacio {
@@ -86,16 +108,36 @@
 }
 
 .tarjeta {
+  position: relative;
   display: flex;
   flex-direction: column;
   padding: 14px;
   border: 0.5px solid var(--dsw-alias-border-l2);
   border-radius: 12px;
   background: var(--dsw-alias-bg-layer-2);
+  overflow: hidden;
 }
 
 .tarjeta:hover {
   border-color: var(--xonecode-cian);
+}
+
+/* El filo de acento del rediseño, y SOLO en la que tiene copia local. Es la única tarjeta
+   sobre la que empezar no descarga nada, así que es la única que se distingue de lejos —
+   con el mismo cian que marca la fila activa de la barra, que es el papel que le queda al
+   acento desde que el primario es negro (`estilos/marca.css`).
+
+   Va en un `::before` y no en un `border-top`: un borde de 2px en una sola tarjeta le
+   cambia la altura interior respecto de las de al lado, y la rejilla dejaba de alinear las
+   cabeceras por una fila de dos píxeles. */
+.tarjeta[data-local]::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: var(--xonecode-cian);
 }
 
 .cabeceraDeTarjeta {
@@ -133,7 +175,12 @@
   border-radius: 999px;
   background: var(--dsw-alias-bg-layer-2);
   color: var(--dsw-alias-label-tertiary);
+  /* Mono y en versalitas, como en el rediseño: es una ETIQUETA de estado, no una palabra de
+     la frase, y la letra de máquina es lo que se lo dice al ojo antes de leerla. */
+  font-family: var(--ds-font-family-code);
   font-size: 10px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
   white-space: nowrap;
 }
 
@@ -148,13 +195,31 @@
 
 .marca {
   flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
   color: var(--dsw-alias-label-tertiary);
-  font-size: 11px;
+  font-family: var(--ds-font-family-code);
+  font-size: 10px;
   white-space: nowrap;
 }
 
+/* Lo bajado se enseña como pastilla con punto; lo que falta por bajar, en texto pelado.
+   Sigue valiendo lo de antes —«sin descargar» no es un problema y no se pinta en rojo—,
+   y ahora además la asimetría dice cuál de los dos es el estado que habilita algo. */
 .marca[data-local] {
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--dsw-alias-state-success-tertiary);
   color: var(--dsw-alias-state-success-primary);
+}
+
+.marca[data-local]::before {
+  content: "";
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--dsw-alias-state-success-primary);
 }
 
 .sesiones {

@@ -449,27 +449,50 @@ export function App({ store, enviar }: { store: Store; enviar: Conexion["enviar"
     />
   ) : null;
 
+  /*
+    La MISMA barra superior con sesión abierta y sin ella, y a propósito: es la barra de
+    herramientas de la APLICACIÓN, no de la sesión — ahí viven la marca, el estado del cable
+    y el botón de plegar la lateral. Por eso se monta una sola vez y se le pasa a `Maqueta`,
+    que la cruza de lado a lado por encima de las dos columnas: estaba dentro de `centro`, o
+    sea arrancando en el borde de la barra lateral, y ahí se leía como si fuera de la
+    conversación.
+
+    Lo único que cambia entre los dos casos son las PESTAÑAS: sin sesión no hay transcript ni
+    trayectoria a los que llevar, y unas pestañas que no llevan a ningún sitio son el mismo
+    botón muerto que este repo no consiente. `Cabecera` las omite cuando no se las pasan.
+  */
+  const cabecera = proyectoAbierto ? (
+    <Cabecera
+      titulo={tituloDeLaSesion ?? "xonecode"}
+      // Ausente mientras el servidor no lo sepa: `Cabecera` no pinta pastilla entonces, en
+      // vez de afirmar un modo que nadie ha leído.
+      {...(estado.alta?.modo === undefined ? {} : { modo: estado.alta.modo })}
+      conectado={estado.conectado}
+      pestana={pestana}
+      alElegirPestana={setPestana}
+      barraContraida={barraContraida}
+      alAlternarBarra={alternarBarra}
+    />
+  ) : (
+    <Cabecera
+      titulo="Escritorio"
+      conectado={estado.conectado}
+      barraContraida={barraContraida}
+      alAlternarBarra={alternarBarra}
+    />
+  );
+
   return (
     <>
     <Maqueta
       barraContraida={barraContraida}
+      cabecera={cabecera}
       centro={
         // La rama ya NO se elige aquí: la pregunta de «qué proyecto abro y desde qué rama»
         // vive entera en `NuevaSesion`, que además dice que va a descargar. Un selector
         // suelto en mitad del centro no decía ni de qué proyecto era.
         proyectoAbierto ? (
           <>
-            <Cabecera
-              titulo={tituloDeLaSesion ?? "xonecode"}
-              // Ausente mientras el servidor no lo sepa: `Cabecera` no pinta pastilla
-              // entonces, en vez de afirmar un modo que nadie ha leído.
-              {...(estado.alta?.modo === undefined ? {} : { modo: estado.alta.modo })}
-              conectado={estado.conectado}
-              pestana={pestana}
-              alElegirPestana={setPestana}
-              barraContraida={barraContraida}
-              alAlternarBarra={alternarBarra}
-            />
             <AvisoDeConexion conectado={estado.conectado} />
             <Transcript
               actos={estado.actos}
@@ -584,18 +607,6 @@ export function App({ store, enviar }: { store: Store; enviar: Conexion["enviar"
           // lo que se sabe de cada uno y un clic para empezar. Todo lo que pinta ya viajaba
           // por el cable; no hay tarjeta de relleno.
           <>
-            {/*
-              La MISMA barra superior que con sesión abierta, y a propósito: es la barra de
-              herramientas de la aplicación, no de la sesión — ahí viven la marca, el estado
-              del cable y el botón de plegar la lateral. Sin pestañas, eso sí: sin sesión no
-              hay transcript ni trayectoria a los que llevar.
-            */}
-            <Cabecera
-              titulo="Escritorio"
-              conectado={estado.conectado}
-              barraContraida={barraContraida}
-              alAlternarBarra={alternarBarra}
-            />
             <Escritorio
             {...(estado.nombre === undefined ? {} : { nombre: estado.nombre })}
             {...(entornoDelEscritorio === undefined ? {} : { entorno: entornoDelEscritorio })}

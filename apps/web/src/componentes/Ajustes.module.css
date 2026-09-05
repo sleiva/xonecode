@@ -133,6 +133,19 @@
 
 .nombre {
   color: var(--dsw-alias-label-primary);
+  font-weight: 600;
+}
+
+/* La URL del entorno, en mono. `.detalle` no vale para esto aunque sea el hueco de al lado:
+   ese mismo hueco lo ocupan la descripción de una opción de apariencia y el estado de una
+   credencial, que son PROSA. La regla tipográfica del rediseño separa dato de máquina de
+   frase, y meterlos todos en mono la volvería decorativa. Misma clase y mismo motivo que
+   `.entornoUrl` en `Escritorio.module.css` — que es, además, la misma URL. */
+.url {
+  margin-right: auto;
+  color: var(--dsw-alias-label-tertiary);
+  font-family: var(--ds-font-family-code);
+  font-size: 11px;
 }
 
 /* `margin-right: auto` empuja las acciones al borde derecho sin necesidad de un envoltorio

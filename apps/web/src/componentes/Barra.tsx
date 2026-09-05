@@ -120,24 +120,17 @@ export function Barra({ entornos, entornoActivo, proyectos, visibles, proyectoAc
 
   return (
     <nav className={barra.root}>
-      {/* La fila de marca. Sin `.brandMark`: ahí es donde el original monta su logo, y
-          copiar el CSS no hace nuestro su dibujo. */}
-      <div className={barra.logoRow}>
-        <span className={clsx(barra.brand, estilos.marcaSinBoton)}>
-          <span className={barra.brandIdentity}>
-            <span className={barra.brandName}>
-              <span className={barra.fallbackBrandName}>xonecode</span>
-            </span>
-          </span>
-        </span>
-      </div>
+      {/* La marca ya NO va aquí: vive en la barra superior (`Cabecera.tsx`) desde que esa
+          cruza las dos columnas. Tenerla en las dos era decir el nombre del producto dos
+          veces en la misma esquina, y con la tira azul de lado a lado la de la lateral
+          quedaba debajo, suelta y sin superficie de marca que la sostuviera. */}
 
       <div className={barra.regionArea}>
         <div className={navegador.root}>
           {/* Nivel 1 — el entorno. El `<select>` es nuestro: en su barra no hay nada
               equivalente de lo que copiar el estilo. */}
           <div className={navegador.sectionHeader}>
-            <span className={navegador.sectionLabel}>Entorno</span>
+            <span className={clsx(navegador.sectionLabel, estilos.rotulo)}>Entorno</span>
             <span className={estilos.rellenoDeSeccion} />
           </div>
           {entornos.length === 0 ? (
@@ -158,7 +151,7 @@ export function Barra({ entornos, entornoActivo, proyectos, visibles, proyectoAc
 
           {/* Niveles 2 y 3 — proyectos, y dentro de cada uno sus sesiones. */}
           <div className={navegador.sectionHeader}>
-            <span className={navegador.sectionLabel}>Proyectos</span>
+            <span className={clsx(navegador.sectionLabel, estilos.rotulo)}>Proyectos</span>
             <span className={estilos.rellenoDeSeccion} />
           </div>
           <div className={navegador.listArea}>

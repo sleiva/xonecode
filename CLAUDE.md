@@ -490,6 +490,35 @@ profundo, pestaña activa en cian—, y se pinta con una clase NUESTRA encima de
 el selector repetido (`.barraSuperior.barraSuperior`) para ganar especificidad sin depender
 del orden en que el empaquetador coloque las hojas.
 
+**El rediseño de estilo, y las dos restas que salieron de él** (`docs/REDISENO-STITCH.md`,
+ocho pantallas ancladas en `docs/diseno/*-rediseno-stitch.*`). Lo primero que hay que saber
+es que **las paletas de los ocho mockups se contradicen entre ellas** —tres azules de
+cabecera distintos, y seis de los ocho cambian el cian de XOne por un `sky`/`cyan` de
+Tailwind—, así que de ahí se toma la TIPOGRAFÍA y la forma, y el color sigue siendo el
+medido en `marca.css`. Es la misma regla con que la primera tanda descartó su índigo.
+- **Inter y JetBrains Mono van EMPAQUETADAS** (`@fontsource-variable/*` en `main.tsx`), no
+  desde `fonts.googleapis.com`: esta consola escucha en loopback y tiene un modo `offline`
+  de primera clase, y una hoja de CDN la dejaría sin su letra justo en el caso que el
+  producto declara soportar. Se aplican sobre los tokens en `estilos/tipografia.css`, no en
+  cada selector — y el mono marca **dato de máquina** (URLs, etiquetas de estado, rutas),
+  nunca prosa: por eso la URL de un entorno tiene clase propia en Ajustes en vez de heredar
+  el `.detalle` que comparte hueco con dos textos que sí son frases.
+- **El primario casi negro del diseño es el del PROPIO tema copiado**:
+  `--dsw-alias-brand-primary` es `rgb(15, 17, 21)` en claro y `rgb(249, 250, 251)` en oscuro.
+  Aplicarlo fue QUITAR el puente que `marca.css` tenía secuestrado en cian, no escribir un
+  literal, y con eso el modo oscuro se resuelve solo. El cian se queda de ACENTO, que es
+  donde no tiene que sostener ninguna letra. **La trampa**: cuatro sitios pintaban acento
+  leyendo `--dsw-alias-button-primary-fill` —cian de rebote, por el puente— y al quitarlo se
+  volvieron negros (el filo del proyecto y la sesión activos, el del fichero elegido y el
+  marcador del paso en curso). Los cuatro apuntan ahora a `--xonecode-cian` por su nombre.
+  Nada daba error: solo se veía.
+- **La barra superior cruza las dos columnas** y la marca vive dentro. Es un ítem del grid
+  con `grid-column: 1 / -1` y no un envoltorio por fuera —`.frame` ya es quien mide la
+  pantalla y anima sus pistas—, y la fila de abajo va con `minmax(0, 1fr)` y no `1fr`, que
+  tiene suelo `auto` y estiraba el grid por debajo de la pantalla en vez de dejar scrollear.
+  `Maqueta.test.tsx` vigila las dos filas y que la cabecera vaya la PRIMERA en el DOM, que
+  es el orden del Tab.
+
 **La barra superior es de la APLICACIÓN, no de la sesión**, así que se pinta también en el
 escritorio — con la marca, el estado del cable y el botón de plegar— pero **sin pestañas**:
 sin sesión no hay transcript ni trayectoria a los que llevar, y unas pestañas que no llevan a

@@ -1,0 +1,324 @@
+<!DOCTYPE html>
+
+<html class="h-full bg-slate-900 text-slate-200" lang="es"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>xonecode - Ajustes de Entornos CloudStudio</title>
+<!-- Tailwind CSS v3 with forms and container queries -->
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            brand: {
+              50: '#ecfeff',
+              100: '#cffafe',
+              500: '#06b6d4',
+              600: '#0891b2',
+              700: '#0e7490',
+            },
+            surface: {
+              base: '#0d1117',
+              sidebar: '#161b22',
+              panel: '#1f242c',
+              modal: '#ffffff',
+              modalDark: '#1e232d'
+            }
+          },
+          fontFamily: {
+            mono: ['JetBrains Mono', 'Menlo', 'Monaco', 'Courier New', 'monospace'],
+            sans: ['Inter', 'system-ui', '-apple-system', 'BlinkMacSystemFont', 'Segoe UI', 'Roboto', 'sans-serif']
+          }
+        }
+      }
+    }
+  </script>
+<!-- Phosphor Icons for sharp developer tooling aesthetic -->
+<script src="https://unpkg.com/@phosphor-icons/web"></script>
+<style data-purpose="custom-scrollbars">
+    /* Custom subtle scrollbars */
+    ::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+    ::-webkit-scrollbar-track {
+      background: transparent;
+    }
+    ::-webkit-scrollbar-thumb {
+      background: rgba(148, 163, 184, 0.25);
+      border-radius: 9999px;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background: rgba(148, 163, 184, 0.4);
+    }
+  </style>
+</head>
+<body class="h-full font-sans antialiased overflow-hidden select-none">
+<!-- BEGIN: ApplicationBackgroundLayout -->
+<!-- Contextual background representing the IDE with editor and diffs behind the modal -->
+<div class="fixed inset-0 grid grid-cols-[240px_1fr] bg-[#0b131e] text-slate-300 filter blur-[2px] opacity-75 pointer-events-none select-none">
+<!-- Left IDE Sidebar -->
+<aside class="border-r border-slate-800 bg-[#0e1724] p-4 flex flex-col justify-between">
+<div>
+<div class="flex items-center gap-2 mb-6">
+<span class="text-xl font-bold tracking-tight text-white flex items-center gap-1.5">
+<i class="ph-bold ph-terminal-window text-cyan-400"></i> xonecode
+          </span>
+</div>
+<div class="mb-5">
+<div class="text-[11px] font-semibold uppercase tracking-wider text-slate-500 mb-1.5">Entorno</div>
+<div class="bg-slate-800/80 border border-slate-700/70 rounded px-2.5 py-1.5 text-xs text-slate-300 flex items-center justify-between">
+<span>XOne WebStudio</span>
+<i class="ph ph-caret-down text-slate-500"></i>
+</div>
+</div>
+<div class="space-y-1">
+<div class="text-[11px] font-semibold uppercase tracking-wider text-slate-500 mb-1">Proyectos</div>
+<div class="bg-slate-800/50 rounded p-2 text-xs">
+<div class="flex items-center gap-2 font-medium text-slate-200">
+<i class="ph ph-folder-open text-cyan-400"></i> AppDemo
+              <span class="ml-auto text-[10px] bg-slate-700/60 px-1.5 py-0.5 rounded text-slate-400">propio</span>
+</div>
+<div class="text-[11px] text-cyan-300 pl-5 mt-1 font-mono">Prueba del menú</div>
+</div>
+<div class="p-2 text-xs flex items-center gap-2 text-slate-400">
+<i class="ph ph-folder text-slate-500"></i> AppDeve
+            <span class="ml-auto text-[10px] bg-slate-800/40 px-1.5 py-0.5 rounded text-slate-500">propio</span>
+</div>
+</div>
+</div>
+<div class="pt-4 border-t border-slate-800/70 text-xs text-slate-400 flex items-center gap-2">
+<i class="ph ph-gear text-slate-400"></i> Ajustes
+      </div>
+</aside>
+<!-- IDE Code Editor and Diff Workspace -->
+<main class="flex flex-col h-full bg-[#0b1322]">
+<!-- Header bar -->
+<header class="h-10 border-b border-slate-800 bg-[#0c1626] px-4 flex items-center justify-between text-xs">
+<div class="flex items-center gap-3">
+<span class="font-medium text-slate-200">Prueba del menú</span>
+<span class="inline-flex items-center gap-1 text-slate-400">
+<i class="ph ph-git-branch text-cyan-400"></i> modo cloud
+          </span>
+<span class="ml-4 text-cyan-400 border-b-2 border-cyan-400 py-2.5">Ficheros</span>
+</div>
+<div class="flex items-center gap-2 text-emerald-400 text-xs">
+<span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+          conectado
+        </div>
+</header>
+<!-- Simulated Diff Area -->
+<div class="flex-1 grid grid-cols-[260px_1fr] font-mono text-xs overflow-hidden">
+<div class="border-r border-slate-800 p-3 bg-[#0d1727]/50">
+<div class="text-[11px] text-slate-400 mb-2 font-sans">2 ficheros</div>
+<div class="bg-cyan-950/40 text-cyan-200 border border-cyan-800/40 rounded px-2 py-1.5 mb-1 flex justify-between">
+<span>calculadora.js</span>
+<span class="text-emerald-400">+5 -0</span>
+</div>
+<div class="text-slate-400 px-2 py-1.5 flex justify-between">
+<span>doc/NOTA-DEMO.md</span>
+<span class="text-emerald-400">+4 -0</span>
+</div>
+</div>
+<div class="p-4 bg-[#0a111c] text-slate-400 space-y-1">
+<div class="text-slate-500">@@ -6,6 +6,8 @@</div>
+<div>var primerOperando = null;</div>
+<div>var operadorPendiente = null;</div>
+<div>var limpiarAlDigito = false;</div>
+<div class="bg-emerald-950/40 text-emerald-300 px-1 border-l-2 border-emerald-500">+ var modoReinicio = 'C para reiniciar';</div>
+<div class="bg-emerald-950/40 text-emerald-300 px-1 border-l-2 border-emerald-500">+ console.log('Entorno MCP inicializado.');</div>
+<div>var valorCorriente;</div>
+</div>
+</div>
+</main>
+</div>
+<!-- END: ApplicationBackgroundLayout -->
+<!-- BEGIN: ModalOverlay -->
+<!-- Backdrop blur cover -->
+<div class="fixed inset-0 bg-slate-950/65 backdrop-blur-sm z-40 flex items-center justify-center p-4 sm:p-6" data-purpose="settings-modal-overlay">
+<!-- BEGIN: SettingsModalWindow -->
+<!-- Center white card based on requested layout -->
+<div class="w-full max-w-4xl bg-white text-slate-800 rounded-xl shadow-2xl border border-slate-200/80 overflow-hidden flex flex-col md:flex-row max-h-[85vh] animate-in fade-in zoom-in-95 duration-150" data-purpose="settings-dialog">
+<!-- BEGIN: SettingsSidebar -->
+<!-- Left sidebar navigation inside settings -->
+<nav aria-label="Navegación de Ajustes" class="w-full md:w-64 bg-slate-50/80 border-r border-slate-200 p-5 flex flex-col justify-between">
+<div class="space-y-6">
+<!-- Sidebar Header -->
+<div>
+<div class="flex items-center gap-2 text-slate-900 font-semibold text-lg tracking-tight">
+<i class="ph-bold ph-gear-six text-cyan-600 text-xl"></i>
+              Ajustes
+            </div>
+<p class="text-xs text-slate-500 mt-0.5 font-medium">Configuración global</p>
+</div>
+<!-- Nav Items -->
+<div class="space-y-1 text-sm font-medium">
+<a class="flex items-center gap-2.5 px-3 py-2 rounded-lg text-slate-600 hover:bg-slate-200/60 transition-colors" href="#">
+<i class="ph ph-cpu text-lg text-slate-400"></i>
+              Modelos
+            </a>
+<a class="flex items-center gap-2.5 px-3 py-2 rounded-lg text-slate-600 hover:bg-slate-200/60 transition-colors" href="#">
+<i class="ph ph-paint-brush text-lg text-slate-400"></i>
+              Apariencia
+            </a>
+<!-- Active item -->
+<a class="flex items-center gap-2.5 px-3 py-2 rounded-lg bg-cyan-50 text-cyan-700 font-semibold border border-cyan-200/70 shadow-xs" href="#">
+<i class="ph-fill ph-cloud text-lg text-cyan-600"></i>
+              Entornos
+            </a>
+<a class="flex items-center gap-2.5 px-3 py-2 rounded-lg text-slate-600 hover:bg-slate-200/60 transition-colors" href="#">
+<i class="ph ph-keyboard text-lg text-slate-400"></i>
+              Atajos de teclado
+            </a>
+</div>
+</div>
+<!-- Sidebar Footer Version Tag -->
+<div class="pt-4 border-t border-slate-200/80 text-[11px] text-slate-400 flex items-center justify-between">
+<span>Versión v4.2.0-cloud</span>
+<span class="inline-flex w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
+</div>
+</nav>
+<!-- END: SettingsSidebar -->
+<!-- BEGIN: SettingsMainContent -->
+<!-- Right panel: Environment settings and project picker -->
+<section class="flex-1 flex flex-col min-w-0 bg-white" data-purpose="settings-panel-content">
+<!-- Content Header -->
+<header class="p-6 pb-4 border-b border-slate-100 flex items-start justify-between">
+<div>
+<h2 class="text-xl font-bold text-slate-900 tracking-tight">Entornos de CloudStudio</h2>
+<p class="text-xs text-slate-500 mt-1 leading-relaxed max-w-xl">
+              Un entorno es un servidor CloudStudio. Lo único que se teclea es su URL: el nombre lo dice el propio servidor al conectarse.
+            </p>
+</div>
+<!-- Close Modal Icon Button -->
+<button aria-label="Cerrar ajustes" class="text-slate-400 hover:text-slate-700 rounded-lg p-1.5 hover:bg-slate-100 transition-colors" type="button">
+<i class="ph ph-x text-xl"></i>
+</button>
+</header>
+<!-- Scrollable Content Body -->
+<div class="p-6 overflow-y-auto space-y-6 flex-1">
+<!-- CloudStudio Server Connection Card -->
+<div data-purpose="server-connection-card">
+<label class="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-2">Servidor Conectado</label>
+<div class="border border-slate-200 rounded-xl p-3.5 bg-slate-50/50 hover:bg-slate-50 transition-colors flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-xs">
+<div class="flex items-center gap-3">
+<div class="w-9 h-9 rounded-lg bg-cyan-100 text-cyan-700 flex items-center justify-center font-bold text-sm">
+<i class="ph-bold ph-hard-drives text-lg"></i>
+</div>
+<div>
+<div class="flex items-center gap-2">
+<span class="font-bold text-slate-900 text-sm">XOne WebStudio</span>
+<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium bg-emerald-100 text-emerald-800">
+<span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span> Conectado
+                    </span>
+</div>
+<div class="text-xs font-mono text-slate-500 break-all select-text">
+                    https://mcp.xonewebstudio.com/mcp
+                  </div>
+</div>
+</div>
+<div class="flex items-center gap-2 self-end sm:self-auto">
+<button class="px-3 py-1.5 text-xs font-medium text-slate-700 bg-white border border-slate-300 rounded-lg hover:bg-slate-50 transition shadow-xs flex items-center gap-1.5" type="button">
+<i class="ph ph-arrows-clockwise text-slate-500"></i> Reconectar
+                </button>
+</div>
+</div>
+</div>
+<!-- Projects Visibility Selector -->
+<div class="space-y-3" data-purpose="project-visibility-section">
+<div>
+<h3 class="text-sm font-semibold text-slate-900">Proyectos en la barra</h3>
+<p class="text-xs text-slate-500 mt-0.5">
+                Sin elegir ninguno se enseñan los 4 primeros. Lo que marques aquí manda sobre ese tope.
+              </p>
+</div>
+<!-- Project List with Checkboxes -->
+<div class="space-y-2 max-h-60 overflow-y-auto pr-1">
+<!-- Checkbox Item 1 (Selected) -->
+<label class="flex items-center justify-between p-3 rounded-lg border border-cyan-200 bg-cyan-50/40 hover:bg-cyan-50/70 transition-colors cursor-pointer group">
+<div class="flex items-center gap-3">
+<input checked="" class="h-4 w-4 rounded border-slate-300 text-cyan-600 focus:ring-cyan-500 cursor-pointer" type="checkbox"/>
+<div class="flex items-center gap-2 font-medium text-sm text-slate-800 group-hover:text-cyan-950">
+<i class="ph-fill ph-folder text-cyan-600"></i>
+<span>AppDemo</span>
+</div>
+</div>
+<span class="text-[11px] font-medium text-slate-400 bg-white px-2 py-0.5 rounded border border-slate-200">fijado</span>
+</label>
+<!-- Checkbox Item 2 (Selected) -->
+<label class="flex items-center justify-between p-3 rounded-lg border border-cyan-200 bg-cyan-50/40 hover:bg-cyan-50/70 transition-colors cursor-pointer group">
+<div class="flex items-center gap-3">
+<input checked="" class="h-4 w-4 rounded border-slate-300 text-cyan-600 focus:ring-cyan-500 cursor-pointer" type="checkbox"/>
+<div class="flex items-center gap-2 font-medium text-sm text-slate-800 group-hover:text-cyan-950">
+<i class="ph-fill ph-folder text-cyan-600"></i>
+<span>AppDeve</span>
+</div>
+</div>
+<span class="text-[11px] font-medium text-slate-400 bg-white px-2 py-0.5 rounded border border-slate-200">fijado</span>
+</label>
+<!-- Checkbox Item 3 -->
+<label class="flex items-center justify-between p-3 rounded-lg border border-slate-200 hover:border-slate-300 hover:bg-slate-50 transition-colors cursor-pointer group">
+<div class="flex items-center gap-3">
+<input class="h-4 w-4 rounded border-slate-300 text-cyan-600 focus:ring-cyan-500 cursor-pointer" type="checkbox"/>
+<div class="flex items-center gap-2 font-medium text-sm text-slate-700 group-hover:text-slate-900">
+<i class="ph ph-folder text-slate-400"></i>
+<span>AppForTest</span>
+</div>
+</div>
+<span class="text-[11px] text-slate-400">automático</span>
+</label>
+<!-- Checkbox Item 4 -->
+<label class="flex items-center justify-between p-3 rounded-lg border border-slate-200 hover:border-slate-300 hover:bg-slate-50 transition-colors cursor-pointer group">
+<div class="flex items-center gap-3">
+<input class="h-4 w-4 rounded border-slate-300 text-cyan-600 focus:ring-cyan-500 cursor-pointer" type="checkbox"/>
+<div class="flex items-center gap-2 font-medium text-sm text-slate-700 group-hover:text-slate-900">
+<i class="ph ph-folder text-slate-400"></i>
+<span>AppSport</span>
+</div>
+</div>
+<span class="text-[11px] text-slate-400">automático</span>
+</label>
+<!-- Checkbox Item 5 -->
+<label class="flex items-center justify-between p-3 rounded-lg border border-slate-200 hover:border-slate-300 hover:bg-slate-50 transition-colors cursor-pointer group">
+<div class="flex items-center gap-3">
+<input class="h-4 w-4 rounded border-slate-300 text-cyan-600 focus:ring-cyan-500 cursor-pointer" type="checkbox"/>
+<div class="flex items-center gap-2 font-medium text-sm text-slate-700 group-hover:text-slate-900">
+<i class="ph ph-folder text-slate-400"></i>
+<span>Bequikly</span>
+</div>
+</div>
+<span class="text-[11px] text-slate-400">automático</span>
+</label>
+<!-- Checkbox Item 6 -->
+<label class="flex items-center justify-between p-3 rounded-lg border border-slate-200 hover:border-slate-300 hover:bg-slate-50 transition-colors cursor-pointer group">
+<div class="flex items-center gap-3">
+<input class="h-4 w-4 rounded border-slate-300 text-cyan-600 focus:ring-cyan-500 cursor-pointer" type="checkbox"/>
+<div class="flex items-center gap-2 font-medium text-sm text-slate-700 group-hover:text-slate-900">
+<i class="ph ph-folder text-slate-400"></i>
+<span>Conecta2</span>
+</div>
+</div>
+<span class="text-[11px] text-slate-400">automático</span>
+</label>
+</div>
+<p class="text-[11px] text-slate-400 italic text-right">Mostrando 6 de 18 proyectos disponibles</p>
+</div>
+</div>
+<!-- Content Action Footer -->
+<footer class="p-4 px-6 border-t border-slate-200 bg-slate-50 flex items-center justify-end gap-3">
+<button class="px-4 py-2 text-xs font-semibold text-slate-600 hover:text-slate-900 hover:bg-slate-200/50 rounded-lg transition-colors" type="button">
+            Cerrar
+          </button>
+<button class="px-4 py-2 text-xs font-semibold text-white bg-cyan-600 hover:bg-cyan-500 active:bg-cyan-700 rounded-lg shadow-sm shadow-cyan-500/20 transition-all flex items-center gap-1.5" type="button">
+<i class="ph-bold ph-check"></i>
+            Guardar cambios
+          </button>
+</footer>
+</section>
+<!-- END: SettingsMainContent -->
+</div>
+<!-- END: SettingsModalWindow -->
+</div>
+<!-- END: ModalOverlay -->
+</body></html>

@@ -1,0 +1,256 @@
+<!DOCTYPE html>
+
+<html class="h-full bg-slate-900 text-slate-800" lang="es"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>xonecode - Eliminar Sesión</title>
+<!-- Tailwind CSS v3 -->
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<!-- Tailwind Configuration -->
+<script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            brand: {
+              dark: '#0e1e2d',
+              header: '#0b1926',
+              sidebar: '#f1f5f9',
+              activeSession: '#cbd5e1',
+              diffGreen: '#86efac',
+              diffBg: '#dcfce7'
+            }
+          },
+          fontFamily: {
+            sans: ['Inter', 'system-ui', '-apple-system', 'BlinkMacSystemFont', 'Segoe UI', 'Roboto', 'sans-serif'],
+            mono: ['JetBrains Mono', 'Fira Code', 'Menlo', 'Monaco', 'Consolas', 'monospace']
+          }
+        }
+      }
+    }
+  </script>
+<!-- Custom Styles for Diff & Modal Elevation -->
+<style data-purpose="custom-elements">
+    .diff-line-added {
+      background-color: rgba(134, 239, 172, 0.45);
+    }
+    .custom-shadow-modal {
+      box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25), 0 0 0 1px rgba(0, 0, 0, 0.05);
+    }
+  </style>
+</head>
+<body class="h-full w-full overflow-hidden flex flex-col font-sans select-none antialiased">
+<!-- BEGIN: ApplicationLayout (Background Context) -->
+<div class="relative flex-1 flex flex-col h-full w-full bg-slate-100 overflow-hidden" data-purpose="app-shell">
+<!-- BEGIN: TopHeader -->
+<header class="h-12 bg-[#091824] text-slate-300 flex items-center justify-between px-4 z-10 select-none border-b border-slate-800" data-purpose="main-header">
+<div class="flex items-center space-x-4">
+<button class="text-slate-400 hover:text-white transition-colors" title="Volver">
+<svg class="w-4 h-4" fill="none" stroke="currentColor" viewbox="0 0 24 24">
+<path d="M15 19l-7-7 7-7" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path>
+</svg>
+</button>
+<span class="font-medium text-white text-sm">Prueba del menú</span>
+<div class="flex items-center space-x-1 text-xs text-sky-400 font-medium">
+<svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewbox="0 0 24 24">
+<path d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 100-6 3 3 0 000 6z" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path>
+</svg>
+<span>modo cloud</span>
+</div>
+</div>
+<!-- Navigation Tabs -->
+<nav class="flex items-center space-x-6 text-xs font-medium">
+<button class="text-slate-400 hover:text-slate-200 transition-colors pb-1">Chat</button>
+<button class="text-slate-400 hover:text-slate-200 transition-colors pb-1">Trayectoria</button>
+<button class="text-sky-400 border-b-2 border-sky-400 pb-1 font-semibold">Ficheros</button>
+</nav>
+<!-- Connection Status -->
+<div class="flex items-center space-x-2">
+<span class="w-2 h-2 rounded-full bg-emerald-500"></span>
+<span class="text-xs text-emerald-500 font-medium">conectado</span>
+</div>
+</header>
+<!-- END: TopHeader -->
+<!-- BEGIN: MainWorkspace -->
+<div class="flex-1 flex overflow-hidden">
+<!-- BEGIN: LeftSidebar -->
+<aside class="w-64 bg-[#e2e8f0] border-r border-slate-300 flex flex-col justify-between" data-purpose="left-sidebar">
+<div class="p-4 flex flex-col space-y-5">
+<!-- Logo -->
+<div class="font-black tracking-tight text-xl text-slate-800">
+            xonecode
+          </div>
+<!-- Environment Selector -->
+<div>
+<label class="text-xs font-semibold text-slate-500 block mb-1">Entorno</label>
+<div class="relative">
+<select class="w-full text-xs font-medium bg-white border border-slate-300 rounded px-2.5 py-1.5 text-slate-700 shadow-sm appearance-none pr-7">
+<option>XOne WebStudio</option>
+</select>
+<svg class="w-3.5 h-3.5 absolute right-2.5 top-2.5 text-slate-400 pointer-events-none" fill="none" stroke="currentColor" viewbox="0 0 24 24">
+<path d="M19 9l-7 7-7-7" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path>
+</svg>
+</div>
+</div>
+<!-- Projects List -->
+<div>
+<div class="text-xs font-semibold text-slate-500 mb-2">Proyectos</div>
+<div class="space-y-1">
+<!-- Project 1 -->
+<div>
+<div class="flex items-center justify-between text-xs px-2 py-1.5 rounded text-slate-700 font-medium hover:bg-slate-200 cursor-pointer">
+<div class="flex items-center space-x-2">
+<svg class="w-4 h-4 text-slate-500" fill="none" stroke="currentColor" viewbox="0 0 24 24">
+<path d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path>
+</svg>
+<span>AppDemo</span>
+</div>
+<span class="text-[10px] bg-slate-200 text-slate-600 px-1 rounded">propio</span>
+</div>
+<!-- Sessions under AppDemo -->
+<div class="ml-4 pl-2 border-l border-slate-300 space-y-0.5 mt-1">
+<div class="text-[11px] italic text-slate-500 px-2 py-1 rounded cursor-pointer hover:bg-slate-200">Hola</div>
+<div class="text-[11px] italic font-semibold text-slate-800 bg-[#cbd5e1] px-2 py-1 rounded border-l-2 border-slate-700 cursor-pointer">Prueba del menú</div>
+</div>
+</div>
+<!-- Project 2 -->
+<div class="pt-2">
+<div class="flex items-center justify-between text-xs px-2 py-1.5 rounded text-slate-700 font-medium hover:bg-slate-200 cursor-pointer">
+<div class="flex items-center space-x-2">
+<svg class="w-4 h-4 text-slate-500" fill="none" stroke="currentColor" viewbox="0 0 24 24">
+<path d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path>
+</svg>
+<span>AppDeve</span>
+</div>
+<span class="text-[10px] bg-slate-200 text-slate-600 px-1 rounded">propio</span>
+</div>
+<div class="ml-4 pl-2 border-l border-slate-300 mt-1">
+<div class="text-[11px] italic text-slate-400 px-2 py-1">Sin sesiones todavía.</div>
+</div>
+</div>
+</div>
+<!-- Other Projects Notice -->
+<p class="text-[11px] italic text-slate-500 mt-6 px-1">
+              16 proyectos más sin enseñar · elígelos en Ajustes
+            </p>
+</div>
+</div>
+<!-- Sidebar Footer -->
+<div class="p-4 border-t border-slate-300">
+<button class="flex items-center space-x-2 text-xs text-slate-600 hover:text-slate-900 font-medium">
+<svg class="w-4 h-4" fill="none" stroke="currentColor" viewbox="0 0 24 24">
+<path d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path>
+<path d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path>
+</svg>
+<span>Ajustes</span>
+</button>
+</div>
+</aside>
+<!-- END: LeftSidebar -->
+<!-- BEGIN: FilesColumn -->
+<section class="w-56 bg-slate-200/80 border-r border-slate-300 flex flex-col" data-purpose="files-pane">
+<div class="p-3 flex items-center justify-between border-b border-slate-300">
+<span class="text-xs text-slate-500 font-medium">2 ficheros</span>
+<button class="text-xs bg-slate-100 hover:bg-white text-slate-700 border border-slate-300 px-2 py-0.5 rounded shadow-sm">
+            Actualizar
+          </button>
+</div>
+<div class="flex-1 overflow-y-auto py-2">
+<!-- Active Modified File -->
+<div class="flex items-center justify-between px-3 py-1.5 bg-slate-300/80 border-l-2 border-slate-700 text-xs font-mono cursor-pointer">
+<div class="flex items-center space-x-1.5 truncate">
+<span class="text-[10px] font-bold text-slate-600">M</span>
+<span class="truncate font-sans font-medium text-slate-800">calculadora.js</span>
+</div>
+<span class="text-[10px] font-bold text-emerald-600 shrink-0">+5 <span class="text-rose-600">-0</span></span>
+</div>
+<!-- Added File -->
+<div class="flex items-center justify-between px-3 py-1.5 hover:bg-slate-300/40 text-xs font-mono cursor-pointer">
+<div class="flex items-center space-x-1.5 truncate">
+<span class="text-[10px] font-bold text-emerald-700 bg-emerald-200 px-1 rounded-sm">A</span>
+<span class="truncate font-sans text-slate-700">doc/<span class="font-bold">NOTA-DEMO.md</span></span>
+</div>
+<span class="text-[10px] font-bold text-emerald-600 shrink-0">+4 <span class="text-rose-600">-0</span></span>
+</div>
+</div>
+</section>
+<!-- END: FilesColumn -->
+<!-- BEGIN: CodeDiffViewer -->
+<section class="flex-1 flex flex-col bg-slate-100 overflow-hidden" data-purpose="diff-viewer">
+<div class="px-4 py-2 bg-slate-100 border-b border-slate-200 text-xs font-mono text-slate-700 font-semibold">
+          calculadora.js
+        </div>
+<div class="flex-1 font-mono text-xs overflow-y-auto text-slate-700 select-text leading-relaxed">
+<div class="px-4 py-1 text-slate-400">@@ -6,6 +6,8 @@</div>
+<div class="px-4">var primerOperando = null;</div>
+<div class="px-4">var operadorPendiente = null;</div>
+<div class="px-4">var limpiarAlDigito = false;</div>
+<div class="diff-line-added px-4 text-emerald-950 font-medium">+// Cuántas operaciones lleva la sesión: sirve para el aviso de «pulsa C para reiniciar».</div>
+<div class="diff-line-added px-4 text-emerald-950 font-medium">+var operacionesHechas = 0;</div>
+<div class="px-4 py-1"></div>
+<div class="px-4">/**</div>
+<div class="px-4">* Formatea un número eliminando artefactos de precisión de coma flotante.</div>
+<div class="px-4 py-1 text-slate-400">@@ -13,6 +15,9 @@ var limpiarAlDigito = false;</div>
+<div class="px-4">* @returns {string} Representación en texto del valor o "Error"</div>
+<div class="px-4">*/</div>
+<div class="px-4">function formatearResultado(valor) {</div>
+<div class="diff-line-added px-4 text-emerald-950 font-medium">+  if (valor === null || valor === undefined) {</div>
+<div class="diff-line-added px-4 text-emerald-950 font-medium">+    return "0";</div>
+<div class="diff-line-added px-4 text-emerald-950 font-medium">+  }</div>
+</div>
+<!-- Chat Prompt Box / Footer inside workspace -->
+<div class="p-4 bg-transparent">
+<div class="max-w-3xl mx-auto relative bg-white/70 backdrop-blur-sm border border-slate-300 rounded-xl px-4 py-3 shadow-sm flex items-center justify-between">
+<span class="text-sm text-slate-400">Escribe una petición, o /comando...</span>
+<div class="flex items-center space-x-2">
+<span class="text-[11px] bg-slate-200/80 text-slate-600 px-2 py-0.5 rounded font-mono">gemini/gemini-flash-latest</span>
+<button class="p-1.5 bg-slate-900 hover:bg-slate-800 text-white rounded-full">
+<svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewbox="0 0 24 24">
+<path d="M5 10l7-7m0 0l7 7m-7-7v18" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path>
+</svg>
+</button>
+</div>
+</div>
+<div class="text-center text-[10px] text-slate-400 mt-2">
+            1 turno · 0 pasos · 1.9 s
+          </div>
+</div>
+</section>
+<!-- END: CodeDiffViewer -->
+</div>
+<!-- END: MainWorkspace -->
+</div>
+<!-- END: ApplicationLayout -->
+<!-- BEGIN: ModalOverlay -->
+<div class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/35 backdrop-blur-[2px]" data-purpose="modal-backdrop">
+<!-- BEGIN: DeleteSessionConfirmationDialog -->
+<div aria-labelledby="modal-title" aria-modal="true" class="bg-white rounded-xl max-w-md w-full p-6 custom-shadow-modal border border-slate-100 flex flex-col space-y-4 animate-in fade-in zoom-in-95 duration-150" data-purpose="delete-confirmation-dialog" role="dialog">
+<!-- Modal Title -->
+<h2 class="text-lg font-bold text-slate-900 tracking-tight" id="modal-title">
+        Eliminar sesión
+      </h2>
+<!-- Informative Body Texts -->
+<div class="space-y-3 text-sm text-slate-600 leading-relaxed" data-purpose="modal-content">
+<p>
+          Se borra <span class="font-medium text-slate-800">«Prueba del menú»</span> entera: la conversación guardada y la lista de ficheros que tocó. No hay papelera.
+        </p>
+<p class="text-xs text-slate-500">
+          Es la que estás mirando ahora, así que la consola se cerrará y volverás al escritorio.
+        </p>
+</div>
+<!-- Action Buttons -->
+<div class="pt-3 flex items-center justify-end space-x-2.5" data-purpose="modal-actions">
+<!-- Cancel Action -->
+<button class="px-4 py-1.5 text-xs font-medium text-slate-700 hover:text-slate-900 bg-white hover:bg-slate-50 border border-slate-300 rounded-lg shadow-sm transition-all focus:outline-none focus:ring-2 focus:ring-slate-300 active:scale-95" data-purpose="cancel-button" type="button">
+          Cancelar
+        </button>
+<!-- Destructive Delete Action -->
+<button class="px-4 py-1.5 text-xs font-semibold text-white bg-rose-500 hover:bg-rose-600 active:bg-rose-700 rounded-lg shadow-sm transition-all focus:outline-none focus:ring-2 focus:ring-rose-500/50 active:scale-95" data-purpose="confirm-delete-button" type="button">
+          Eliminar
+        </button>
+</div>
+</div>
+<!-- END: DeleteSessionConfirmationDialog -->
+</div>
+<!-- END: ModalOverlay -->
+</body></html>

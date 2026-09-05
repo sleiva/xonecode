@@ -1,0 +1,337 @@
+<!DOCTYPE html>
+
+<html class="h-full bg-slate-900 text-slate-800 antialiased" lang="es"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1" name="viewport"/>
+<title>xonecode — Ajustes del Sistema</title>
+<!-- Tailwind CSS v3 with forms & container queries -->
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['Inter', 'ui-sans-serif', 'system-ui', '-apple-system', 'Segoe UI', 'Roboto', 'sans-serif'],
+            mono: ['JetBrains Mono', 'Fira Code', 'Menlo', 'Monaco', 'Courier New', 'monospace']
+          },
+          colors: {
+            brand: {
+              50: '#f0f9ff',
+              100: '#e0f2fe',
+              500: '#0ea5e9',
+              600: '#0284c7',
+              700: '#0369a1',
+              900: '#0c4a6e',
+              dark: '#0b1320'
+            },
+            status: {
+              success: '#10b981',
+              warning: '#f59e0b',
+              danger: '#ef4444'
+            }
+          }
+        }
+      }
+    };
+  </script>
+<style data-purpose="custom-scrollbars">
+    ::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+    ::-webkit-scrollbar-track {
+      background: rgba(241, 245, 249, 0.6);
+    }
+    ::-webkit-scrollbar-thumb {
+      background: #cbd5e1;
+      border-radius: 9999px;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background: #94a3b8;
+    }
+  </style>
+</head>
+<body class="h-full overflow-hidden font-sans relative select-none">
+<!-- BEGIN: BackgroundWorkspace -->
+<!-- Contextual background showing dimmed workspace & file diff preview -->
+<div class="absolute inset-0 z-0 flex flex-col pointer-events-none filter blur-[2px] brightness-75 transition-all" data-purpose="workspace-background">
+<!-- Top Bar -->
+<header class="h-12 bg-slate-900 border-b border-slate-800 text-slate-300 px-5 flex items-center justify-between">
+<div class="flex items-center space-x-6">
+<div class="flex items-center space-x-2 font-bold text-white tracking-wide">
+<svg class="w-5 h-5 text-sky-400" fill="none" stroke="currentColor" viewbox="0 0 24 24">
+<path d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path>
+</svg>
+<span class="text-base tracking-tight">xonecode</span>
+</div>
+<div class="flex items-center text-xs space-x-4 border-l border-slate-700 pl-5">
+<span class="text-slate-400">«</span>
+<span class="text-white font-medium">Prueba del menú</span>
+<span class="flex items-center text-sky-400 bg-sky-950/60 px-2 py-0.5 rounded text-[11px] font-mono">
+<svg class="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewbox="0 0 24 24">
+<path d="M13 10V3L4 14h7v7l9-11h-7z" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path>
+</svg>
+            modo cloud
+          </span>
+<span class="text-slate-400">Chat</span>
+<span class="text-slate-400">Trayectoria</span>
+<span class="text-sky-400 font-semibold border-b-2 border-sky-400 pb-0.5">Ficheros</span>
+</div>
+</div>
+<div class="flex items-center space-x-3 text-xs">
+<span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs bg-emerald-950/80 text-emerald-400 border border-emerald-700/50">
+<span class="w-1.5 h-1.5 mr-1.5 rounded-full bg-emerald-400"></span>
+          conectado
+        </span>
+</div>
+</header>
+<!-- Workspace Body Preview -->
+<div class="flex-1 flex overflow-hidden bg-slate-900/90 text-slate-300">
+<!-- Left Sidebar Mock -->
+<div class="w-64 border-r border-slate-800 p-4 space-y-4 font-mono text-xs">
+<div class="text-[11px] text-slate-500 uppercase tracking-wider font-semibold">Entorno</div>
+<div class="bg-slate-800/80 p-2 rounded border border-slate-700 text-slate-200">XOne WebStudio</div>
+<div class="text-[11px] text-slate-500 uppercase tracking-wider font-semibold pt-2">Proyectos</div>
+<div class="space-y-1">
+<div class="p-1.5 rounded bg-slate-800 text-white font-medium flex items-center justify-between">
+<span>📁 AppDemo</span>
+<span class="text-[10px] bg-slate-700 text-slate-300 px-1.5 rounded">propio</span>
+</div>
+<div class="p-1.5 text-slate-400 pl-4">Prueba del menú</div>
+<div class="p-1.5 rounded text-slate-400 flex items-center justify-between">
+<span>📁 AppDeve</span>
+<span class="text-[10px] bg-slate-800 text-slate-500 px-1.5 rounded">propio</span>
+</div>
+</div>
+</div>
+<!-- Center Diff Editor Mock -->
+<div class="flex-1 p-6 font-mono text-xs text-slate-400 bg-slate-950/40">
+<div class="text-slate-200 font-semibold mb-2">calculadora.js</div>
+<div class="text-sky-400 font-semibold mb-3">@@ -6,6 +6,8 @@</div>
+<div class="text-slate-400">  var primerOperando = null;</div>
+<div class="text-slate-400">  var operadorPendiente = null;</div>
+<div class="text-emerald-400 bg-emerald-950/30 p-1 rounded">+ var limpiarAlDigito = false;</div>
+<div class="text-emerald-400 bg-emerald-950/30 p-1 rounded">+ var mensajeEstado = "Pulse C para reiniciar";</div>
+<div class="text-slate-400">  return true;</div>
+</div>
+</div>
+</div>
+<!-- END: BackgroundWorkspace -->
+<!-- BEGIN: ModalOverlay -->
+<div class="fixed inset-0 z-40 bg-slate-950/60 backdrop-blur-md flex items-center justify-center p-4 md:p-8" data-purpose="modal-backdrop">
+<!-- BEGIN: SettingsDialog -->
+<div aria-labelledby="modal-title" aria-modal="true" class="bg-white dark:bg-slate-900 w-full max-w-4xl h-[640px] max-h-[92vh] rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-800 flex overflow-hidden animate-in fade-in zoom-in-95 duration-200" role="dialog">
+<!-- BEGIN: InternalSidebar -->
+<aside class="w-60 bg-slate-50 dark:bg-slate-900/60 border-r border-slate-200 dark:border-slate-800 flex flex-col justify-between p-5 select-none">
+<div>
+<!-- Title & Brand Badge -->
+<div class="flex items-center space-x-2 pb-6 border-b border-slate-200/80 dark:border-slate-800">
+<div class="w-8 h-8 rounded-lg bg-sky-500/10 text-sky-600 dark:text-sky-400 flex items-center justify-center font-bold">
+<svg class="w-5 h-5" fill="none" stroke="currentColor" viewbox="0 0 24 24">
+<path d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path>
+<path d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path>
+</svg>
+</div>
+<div>
+<h2 class="font-bold text-slate-900 dark:text-white text-base tracking-tight" id="modal-title">Ajustes</h2>
+<p class="text-[11px] text-slate-500 dark:text-slate-400">Configuración global</p>
+</div>
+</div>
+<!-- Nav Items -->
+<nav aria-label="Secciones de ajustes" class="mt-6 space-y-1.5">
+<!-- Models Tab (Active) -->
+<button class="w-full flex items-center justify-between px-3 py-2 rounded-xl text-sm font-semibold transition-all bg-sky-50 dark:bg-sky-500/10 text-sky-700 dark:text-sky-400 border border-sky-200/70 dark:border-sky-500/20" type="button">
+<span class="flex items-center space-x-2.5">
+<svg class="w-4 h-4 text-sky-600 dark:text-sky-400" fill="none" stroke="currentColor" viewbox="0 0 24 24">
+<path d="M13 10V3L4 14h7v7l9-11h-7z" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path>
+</svg>
+<span>Modelos</span>
+</span>
+<span class="w-2 h-2 rounded-full bg-emerald-500"></span>
+</button>
+<!-- Appearance Tab -->
+<button class="w-full flex items-center space-x-2.5 px-3 py-2 rounded-xl text-sm font-medium text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800/60 hover:text-slate-900 dark:hover:text-slate-200 transition-colors" type="button">
+<svg class="w-4 h-4 text-slate-400 dark:text-slate-500" fill="none" stroke="currentColor" viewbox="0 0 24 24">
+<path d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path>
+</svg>
+<span>Apariencia</span>
+</button>
+<!-- Environments Tab -->
+<button class="w-full flex items-center space-x-2.5 px-3 py-2 rounded-xl text-sm font-medium text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800/60 hover:text-slate-900 dark:hover:text-slate-200 transition-colors" type="button">
+<svg class="w-4 h-4 text-slate-400 dark:text-slate-500" fill="none" stroke="currentColor" viewbox="0 0 24 24">
+<path d="M5 12h14M5 12a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v4a2 2 0 01-2 2M5 12a2 2 0 00-2 2v4a2 2 0 002 2h14a2 2 0 002-2v-4a2 2 0 00-2-2m-2-4h.01M17 16h.01" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path>
+</svg>
+<span>Entornos MCP</span>
+</button>
+<!-- Shortcuts Tab -->
+<button class="w-full flex items-center space-x-2.5 px-3 py-2 rounded-xl text-sm font-medium text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800/60 hover:text-slate-900 dark:hover:text-slate-200 transition-colors" type="button">
+<svg class="w-4 h-4 text-slate-400 dark:text-slate-500" fill="none" stroke="currentColor" viewbox="0 0 24 24">
+<path d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path>
+</svg>
+<span>Atajos de teclado</span>
+</button>
+</nav>
+</div>
+<!-- Sidebar Footer Status -->
+<div class="text-[11px] text-slate-400 dark:text-slate-500 pt-4 border-t border-slate-200 dark:border-slate-800">
+<div class="flex items-center justify-between">
+<span>Versión</span>
+<span class="font-mono text-slate-600 dark:text-slate-400 font-semibold">v4.2.0-cloud</span>
+</div>
+</div>
+</aside>
+<!-- END: InternalSidebar -->
+<!-- BEGIN: ContentArea -->
+<main class="flex-1 flex flex-col min-w-0 bg-white dark:bg-slate-900">
+<!-- Header Section -->
+<div class="px-8 pt-7 pb-5 border-b border-slate-100 dark:border-slate-800/80 flex items-start justify-between">
+<div>
+<h1 class="text-xl font-bold text-slate-900 dark:text-white tracking-tight">Modelos de IA</h1>
+<p class="mt-1 text-xs text-slate-500 dark:text-slate-400 leading-relaxed max-w-xl">
+              La clave se guarda en el fichero de credenciales local de <span class="font-mono text-slate-700 dark:text-slate-300">xonecode</span> con permisos <span class="font-mono bg-slate-100 dark:bg-slate-800 px-1 py-0.5 rounded text-[11px] text-sky-700 dark:text-sky-300">0600</span> y nunca se expone en el navegador. El modelo por defecto se selecciona en la pastilla del compositor.
+            </p>
+</div>
+<!-- Close Modal Button -->
+<button aria-label="Cerrar modal" class="p-2 -mr-2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl transition-all" type="button">
+<svg class="w-5 h-5" fill="none" stroke="currentColor" viewbox="0 0 24 24">
+<path d="M6 18L18 6M6 6l12 12" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path>
+</svg>
+</button>
+</div>
+<!-- Models Provider List Container -->
+<div class="flex-1 overflow-y-auto px-8 py-5 space-y-3">
+<!-- Card 1: Gemini (Configured & Active) -->
+<article class="group flex items-center justify-between p-3.5 rounded-xl border border-slate-200 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-700 bg-white dark:bg-slate-800/40 hover:shadow-sm transition-all" data-purpose="provider-card">
+<div class="flex items-center space-x-3.5">
+<span class="w-2.5 h-2.5 rounded-full bg-emerald-500 ring-4 ring-emerald-50 dark:ring-emerald-950/40"></span>
+<div>
+<div class="flex items-center space-x-2">
+<span class="text-sm font-semibold text-slate-900 dark:text-white lowercase">gemini</span>
+<span class="inline-flex items-center text-[11px] font-medium text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/50 px-2 py-0.5 rounded-full">
+                    clave guardada
+                  </span>
+</div>
+<div class="text-xs text-slate-500 dark:text-slate-400 font-mono mt-0.5">gemini-1.5-flash-latest · gemini-1.5-pro</div>
+</div>
+</div>
+<div class="flex items-center space-x-2">
+<button class="px-3 py-1.5 text-xs font-medium text-slate-700 dark:text-slate-200 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-lg transition-colors border border-slate-200 dark:border-slate-700" type="button">
+                Cambiar clave
+              </button>
+<button class="px-3 py-1.5 text-xs font-medium text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/40 rounded-lg transition-colors border border-transparent hover:border-rose-200 dark:hover:border-rose-900/60" type="button">
+                Eliminar
+              </button>
+</div>
+</article>
+<!-- Card 2: OpenAI (Configured) -->
+<article class="group flex items-center justify-between p-3.5 rounded-xl border border-slate-200 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-700 bg-white dark:bg-slate-800/40 hover:shadow-sm transition-all" data-purpose="provider-card">
+<div class="flex items-center space-x-3.5">
+<span class="w-2.5 h-2.5 rounded-full bg-emerald-500 ring-4 ring-emerald-50 dark:ring-emerald-950/40"></span>
+<div>
+<div class="flex items-center space-x-2">
+<span class="text-sm font-semibold text-slate-900 dark:text-white lowercase">openai</span>
+<span class="inline-flex items-center text-[11px] font-medium text-slate-600 dark:text-slate-400 bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded-full">
+                    clave configurada
+                  </span>
+</div>
+<div class="text-xs text-slate-500 dark:text-slate-400 font-mono mt-0.5">gpt-4o · gpt-4o-mini</div>
+</div>
+</div>
+<div class="flex items-center space-x-2">
+<button class="px-3 py-1.5 text-xs font-medium text-slate-700 dark:text-slate-200 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-lg transition-colors border border-slate-200 dark:border-slate-700" type="button">
+                Configurar
+              </button>
+<button class="px-3 py-1.5 text-xs font-medium text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors" type="button">
+                Probar
+              </button>
+</div>
+</article>
+<!-- Card 3: Anthropic (No key) -->
+<article class="group flex items-center justify-between p-3.5 rounded-xl border border-slate-200 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-700 bg-white dark:bg-slate-800/40 hover:shadow-sm transition-all" data-purpose="provider-card">
+<div class="flex items-center space-x-3.5">
+<span class="w-2.5 h-2.5 rounded-full bg-rose-500 ring-4 ring-rose-50 dark:ring-rose-950/40"></span>
+<div>
+<div class="flex items-center space-x-2">
+<span class="text-sm font-semibold text-slate-900 dark:text-white lowercase">anthropic</span>
+<span class="inline-flex items-center text-[11px] text-slate-500 dark:text-slate-400">
+                    sin clave
+                  </span>
+</div>
+<div class="text-xs text-slate-400 dark:text-slate-500 font-mono mt-0.5">claude-3-5-sonnet</div>
+</div>
+</div>
+<button class="px-3.5 py-1.5 text-xs font-medium text-white bg-slate-900 hover:bg-slate-800 dark:bg-sky-600 dark:hover:bg-sky-500 rounded-lg shadow-sm transition-all" type="button">
+              Añadir clave
+            </button>
+</article>
+<!-- Card 4: Ollama Local (Active Service) -->
+<article class="group flex items-center justify-between p-3.5 rounded-xl border border-slate-200 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-700 bg-white dark:bg-slate-800/40 hover:shadow-sm transition-all" data-purpose="provider-card">
+<div class="flex items-center space-x-3.5">
+<span class="w-2.5 h-2.5 rounded-full bg-emerald-500 ring-4 ring-emerald-50 dark:ring-emerald-950/40"></span>
+<div>
+<div class="flex items-center space-x-2">
+<span class="text-sm font-semibold text-slate-900 dark:text-white lowercase">ollama</span>
+<span class="inline-flex items-center text-[11px] text-slate-500 dark:text-slate-400">
+                    local, no necesita clave
+                  </span>
+<span class="inline-flex items-center text-[10px] font-mono text-emerald-700 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-950/60 px-1.5 py-0.5 rounded border border-emerald-200/60 dark:border-emerald-800/50">
+                    localhost:11434
+                  </span>
+</div>
+<div class="text-xs text-slate-500 dark:text-slate-400 font-mono mt-0.5 flex items-center space-x-2">
+<span>Modelos detectados:</span>
+<span class="text-slate-700 dark:text-slate-300 font-medium">llama3.1, codellama, qwen2.5</span>
+</div>
+</div>
+</div>
+<div class="flex items-center space-x-2">
+<button class="px-3 py-1.5 text-xs font-medium text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors border border-slate-200 dark:border-slate-700" type="button">
+                Sincronizar
+              </button>
+</div>
+</article>
+<!-- Card 5: Ollama Cloud (No Key) -->
+<article class="group flex items-center justify-between p-3.5 rounded-xl border border-slate-200 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-700 bg-white dark:bg-slate-800/40 hover:shadow-sm transition-all" data-purpose="provider-card">
+<div class="flex items-center space-x-3.5">
+<span class="w-2.5 h-2.5 rounded-full bg-rose-500 ring-4 ring-rose-50 dark:ring-rose-950/40"></span>
+<div>
+<div class="flex items-center space-x-2">
+<span class="text-sm font-semibold text-slate-900 dark:text-white lowercase">ollama-cloud</span>
+<span class="inline-flex items-center text-[11px] text-slate-500 dark:text-slate-400">
+                    sin clave
+                  </span>
+</div>
+<div class="text-xs text-slate-400 dark:text-slate-500 font-mono mt-0.5">Endpoint remoto cifrado</div>
+</div>
+</div>
+<button class="px-3.5 py-1.5 text-xs font-medium text-slate-700 dark:text-slate-200 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-lg transition-colors border border-slate-200 dark:border-slate-700" type="button">
+              Añadir clave
+            </button>
+</article>
+</div>
+<!-- BEGIN: ModalFooter -->
+<footer class="px-8 py-4 border-t border-slate-100 dark:border-slate-800/80 bg-slate-50/60 dark:bg-slate-900/40 flex items-center justify-between">
+<div class="flex items-center space-x-2 text-xs text-slate-500 dark:text-slate-400">
+<svg class="w-4 h-4 text-emerald-500" fill="none" stroke="currentColor" viewbox="0 0 24 24">
+<path d="M5 13l4 4L19 7" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path>
+</svg>
+<span>Los cambios en credenciales se sincronizan automáticamente</span>
+</div>
+<div class="flex items-center space-x-3">
+<button class="px-4 py-2 text-xs font-medium text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white rounded-xl hover:bg-slate-200/60 dark:hover:bg-slate-800 transition-colors" type="button">
+              Cerrar
+            </button>
+<button class="px-5 py-2 text-xs font-semibold text-white bg-sky-600 hover:bg-sky-500 active:bg-sky-700 rounded-xl shadow-sm transition-colors" type="button">
+              Guardar y Salir
+            </button>
+</div>
+</footer>
+<!-- END: ModalFooter -->
+</main>
+<!-- END: ContentArea -->
+</div>
+<!-- END: SettingsDialog -->
+</div>
+<!-- END: ModalOverlay -->
+</body></html>

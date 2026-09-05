@@ -1,5 +1,13 @@
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
+// Las dos caras de la marca, EMPAQUETADAS y no traídas de un CDN. No es purismo: esta
+// consola escucha en loopback y tiene un modo `offline` de primera clase (`config.json`,
+// `modo: "offline"`), así que una hoja de fonts.googleapis.com la dejaría sin su propia
+// letra justo en el caso que el producto declara soportar — y de paso le contaría a Google
+// cada arranque de una herramienta local. Van las PRIMERAS porque solo declaran `@font-face`
+// y no pintan nada: quien las aplica es `tipografia.css`, la última de la lista.
+import "@fontsource-variable/inter";
+import "@fontsource-variable/jetbrains-mono";
 import "../estilos/base.css";
 import "../estilos/design-platform.css";
 import "../estilos/corner-shape.css";
