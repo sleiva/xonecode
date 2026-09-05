@@ -88,6 +88,15 @@ export type MensajeAlCliente =
   /** Hay un turno EN VUELO, o dejó de haberlo: apaga el compositor y saca el botón de
    *  parar. No se deduce de los actos — un turno que revienta no siempre deja `fin`. */
   | { clase: "turno"; activo: boolean }
+  /**
+   * Los ficheros que la sesión ha tocado, y el parche de uno. Los tres `via` son tres cosas
+   * distintas: «git» es «comparado»; «sin-empezar», que la sesión no ha volcado ningún acto
+   * todavía y por eso no ha tocado nada; «sin-marca», que NO se sabe —sin git, o sesión
+   * abierta antes de que esto existiera—. Ninguna de las dos últimas es una lista vacía a
+   * secas: «no has hecho nada» y «no se puede saber» no se pueden leer igual.
+   */
+  | { clase: "ficheros"; via: "git" | "sin-marca" | "sin-empezar"; ficheros: FicheroTocado[] }
+  | { clase: "parche"; ruta: string; texto: string; recortado: boolean }
   | { clase: "secreto"; pregunta: string }
   /**
    * El registro de comandos de barra (`COMANDOS` en `cli/consola.ts`), para que el
@@ -169,6 +178,14 @@ export type MensajeAlCliente =
  * (Ollama local) — a ese no se le pinta punto, ni verde ni rojo, porque no hay nada que
  * afirmar. `modelos` ausente = su catálogo aún no se ha pedido.
  */
+/** Un fichero de la sesión. `mas`/`menos` faltan en un binario: git no cuenta líneas ahí. */
+export interface FicheroTocado {
+  ruta: string;
+  clase: "nuevo" | "modificado" | "borrado";
+  mas?: number;
+  menos?: number;
+}
+
 export interface ProveedorDeModelos {
   id: string;
   credencial: "puesta" | "falta" | "nativa";
@@ -224,4 +241,6 @@ export type MensajeDelCliente =
   | { clase: "credencial"; accion: "pedir" | "borrar"; proveedor: string }
   /** Parar el turno en vuelo, dejando la sesión viva. */
   | { clase: "cancelar" }
+  /** Pide los ficheros de la sesión, o el parche de uno. */
+  | { clase: "ficheros"; ruta?: string }
   | { clase: "decision"; decisiones: Record<string, string> };

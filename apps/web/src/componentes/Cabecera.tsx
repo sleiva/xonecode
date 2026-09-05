@@ -4,7 +4,7 @@ import conversacion from "../../estilos/ConversationRoot.module.css";
 import pastilla from "../../estilos/AgentPresetLabel.module.css";
 import estilos from "./Cabecera.module.css";
 
-export type Pestana = "chat" | "trayectoria";
+export type Pestana = "chat" | "trayectoria" | "ficheros";
 
 /**
  * La cabecera de la sesión, con el CSS de deepseek
@@ -130,6 +130,21 @@ export function Cabecera({ titulo, modo, conectado, pestana, alElegirPestana, ba
           onClick={() => alElegirPestana("trayectoria")}
         >
           Trayectoria
+        </button>
+        {/*
+          La tercera pestaña: lo que ESTA sesión ha tocado en el disco. No está en el CSS
+          copiado —allí son dos— pero es la misma tira y el mismo botón; lo que la
+          justifica es que es la única vista que responde a «¿qué me ha cambiado el
+          agente?» sin salir a un terminal.
+        */}
+        <button
+          type="button"
+          role="tab"
+          aria-selected={pestana === "ficheros"}
+          className={clsx(conversacion.tab, pestana === "ficheros" && conversacion.tabActive)}
+          onClick={() => alElegirPestana("ficheros")}
+        >
+          Ficheros
         </button>
       </div>
       )}

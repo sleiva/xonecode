@@ -162,6 +162,13 @@ export interface OpcionesDelVestibulo {
   guardarConfigDeProyecto: (raiz: string, datos: DatosDeProyecto) => { ruta: string };
   /** A dónde van los avisos del vestíbulo. Por omisión, su propia consola. */
   informar?: (texto: string) => void;
+  /**
+   * Toma el «antes» de la sesión al ABRIR el proyecto y devuelve con qué nombrarlo cuando el
+   * id exista (`agent/sesionGit.ts#fotoDeApertura`). Entra por opción como todo lo que toca
+   * el sistema: sin ella no se marca nada y la vista de ficheros dirá que no lo sabe, que es
+   * mejor que una lista vacía.
+   */
+  marcarSesion?: (raiz: string) => Promise<(id: string) => Promise<boolean>>;
   /** Los entornos YA registrados, tal cual los lee `agent/settingsEnDisco.ts#cargarSettings`. */
   entornos?: readonly Entorno[];
   baseDeWorkspace?: string;
@@ -572,6 +579,12 @@ export function crearVestibulo(opciones: OpcionesDelVestibulo): Vestibulo {
     // los escritores del proyecto) no lo puede saber `consolaWeb`, que no conoce ninguna.
     Object.assign(consolaWeb.consola, opciones.dependenciasDeProyecto?.(raiz) ?? {});
 
+    // La foto del ANTES se toma AQUÍ, al abrir, no en el primer volcado: para entonces el
+    // agente ya habría escrito y el «antes» incluiría su trabajo. Se nombra más abajo,
+    // cuando el id existe. Se lanza sin esperar —abrir no puede quedarse esperando a git— y
+    // el rechazo se traga: sin marca, la vista lo dice.
+    const foto = opciones.marcarSesion?.(raiz).catch(() => undefined);
+
     let idSesion = sesion;
     let historica = reabierta?.historica ?? false;
     let cerrada = false;
@@ -621,7 +634,12 @@ export function crearVestibulo(opciones: OpcionesDelVestibulo): Vestibulo {
       if (esDoble(ejecutorEfectivo)) return;
       const todos = consolaWeb.actos();
       if (todos.length <= volcados) return;
-      if (idSesion === undefined) idSesion = sesiones.crear(raiz);
+      if (idSesion === undefined) {
+        idSesion = sesiones.crear(raiz);
+        const nombrar = idSesion;
+        // Ahora sí hay a qué nombre apuntar la foto de la apertura.
+        void foto?.then((apuntar) => apuntar?.(nombrar));
+      }
       for (const acto of todos.slice(volcados)) sesiones.anotar(raiz, idSesion, acto);
       volcados = todos.length;
     };

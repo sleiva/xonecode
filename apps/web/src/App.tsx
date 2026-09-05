@@ -1,4 +1,4 @@
-import { useEffect, useState, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import type { crearStoreDelCliente } from "./store.js";
 import type { Conexion } from "./conexion.js";
 import { Maqueta } from "./componentes/Maqueta.js";
@@ -18,6 +18,7 @@ import type { PasoDeAlta } from "./componentes/PasosDelAlta.js";
 import { Escritorio } from "./componentes/Escritorio.js";
 import { NuevaSesion } from "./componentes/NuevaSesion.js";
 import { Ajustes } from "./componentes/Ajustes.js";
+import { Ficheros } from "./componentes/Ficheros.js";
 import { aplicarApariencia, guardarApariencia, leerApariencia, type Apariencia } from "./apariencia.js";
 import { guardarBarraContraida, leerBarraContraida } from "./preferencias.js";
 
@@ -52,6 +53,13 @@ export function App({ store, enviar }: { store: Store; enviar: Conexion["enviar"
    * (`store.ts#marcarDesconectado` borra lo pendiente en ese momento).
    */
   const [pestana, setPestana] = useState<Pestana>("chat");
+  /**
+   * La ruta desplegada en la pestaña de ficheros. El parche se pide al desplegar y no al
+   * abrir la pestaña: un diff por fichero de un turno largo son megas y casi ninguno se
+   * mira. Vive aquí y no en el store por lo mismo que `pestana`: es de esta ventana, no del
+   * servidor.
+   */
+  const [ficheroAbierto, setFicheroAbierto] = useState<string | undefined>(undefined);
 
   /**
    * La ventana de ajustes y la apariencia del cliente. Las dos viven aquí y no en el store:
@@ -66,6 +74,49 @@ export function App({ store, enviar }: { store: Store; enviar: Conexion["enviar"
    * recarga. `leerBarraContraida` se llama una vez, al montar.
    */
   const [barraContraida, setBarraContraida] = useState(() => leerBarraContraida());
+
+  /**
+   * Pedir la lista de ficheros de la sesión. Va en `useCallback` porque `Ficheros` la
+   * llama desde un `useEffect` al montar: una función nueva en cada render volvería a
+   * disparar ese efecto en cada render y la pestaña pediría la lista en bucle.
+   */
+  const pedirFicheros = useCallback(() => {
+    void enviar({ clase: "ficheros" });
+  }, [enviar]);
+
+  /** Desplegar (o plegar) un fichero. Al desplegar se pide su parche; al plegar, nada. */
+  const abrirFichero = useCallback(
+    (ruta: string | undefined) => {
+      setFicheroAbierto(ruta);
+      if (ruta !== undefined) void enviar({ clase: "ficheros", ruta });
+    },
+    [enviar]
+  );
+
+  /**
+   * Al TERMINAR un turno, si la pestaña de ficheros está delante, se refresca sola.
+   *
+   * Es la pregunta que la vista contesta —«¿qué acaba de tocar el agente?»— y dejarla
+   * esperando a que alguien pulse «Actualizar» significa enseñar la foto de ANTES del turno
+   * justo en el momento en que deja de ser verdad. Se refresca al terminar y no durante:
+   * a mitad de turno el agente todavía está escribiendo, y una lista que parpadea con cada
+   * fichero no se puede leer. Y si había una fila desplegada, se vuelve a pedir su parche:
+   * si no, seguiría enseñando el diff viejo del fichero que el turno acaba de cambiar.
+   */
+  const turnoEnVuelo = estado.turnoEnVuelo === true;
+  const turnoAnterior = useRef(turnoEnVuelo);
+  useEffect(() => {
+    const acabaDeTerminar = turnoAnterior.current && !turnoEnVuelo;
+    turnoAnterior.current = turnoEnVuelo;
+    // Solo el FLANCO de fin. Sin esto, abrir la pestaña dispararía este efecto además del
+    // que `Ficheros` lleva dentro para pedir al montar, y saldrían dos peticiones iguales.
+    if (!acabaDeTerminar || pestana !== "ficheros") return;
+    pedirFicheros();
+    if (ficheroAbierto !== undefined) void enviar({ clase: "ficheros", ruta: ficheroAbierto });
+    // `ficheroAbierto` NO va en las dependencias a propósito: desplegar una fila ya pide su
+    // parche por su cuenta (`abrirFichero`), y tenerlo aquí lo pediría dos veces.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [turnoEnVuelo, pestana, pedirFicheros, enviar]);
   const [apariencia, setApariencia] = useState<Apariencia>(() => leerApariencia());
 
   useEffect(() => {
@@ -371,7 +422,21 @@ export function App({ store, enviar }: { store: Store; enviar: Conexion["enviar"
               alAlternarBarra={alternarBarra}
             />
             <AvisoDeConexion conectado={estado.conectado} />
-            <Transcript actos={estado.actos} pestana={pestana} turnoEnVuelo={estado.turnoEnVuelo === true} />
+            <Transcript
+              actos={estado.actos}
+              pestana={pestana}
+              turnoEnVuelo={estado.turnoEnVuelo === true}
+              ficheros={
+                <Ficheros
+                  {...(estado.ficheros === undefined ? {} : { via: estado.ficheros.via })}
+                  ficheros={estado.ficheros?.lista ?? []}
+                  parches={estado.parches ?? {}}
+                  {...(ficheroAbierto === undefined ? {} : { abierto: ficheroAbierto })}
+                  alAbrir={abrirFichero}
+                  alRecargar={pedirFicheros}
+                />
+              }
+            />
             {/*
               Las tres esperas de humano van DELANTE del compositor y cada una con su propio
               cauce: el compositor manda `prosa`, que entra por la cola de líneas del lazo y no

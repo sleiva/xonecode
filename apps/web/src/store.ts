@@ -19,6 +19,7 @@ import type {
   Acto,
   MensajeAlCliente,
   PasoDelWizard,
+  FicheroTocado,
   ProveedorDeModelos,
   SelectorDeConsola,
 } from "./tipos.js";
@@ -36,6 +37,13 @@ export interface EstadoDelCliente {
   modelos?: { actual?: string; proveedores: ProveedorDeModelos[] };
   /** Hay un turno corriendo AHORA. Lo dice el servidor; el cliente no lo deduce. */
   turnoEnVuelo?: boolean;
+  /**
+   * Los ficheros de la sesión. Ausente = todavía no se han pedido; con `via: "sin-marca"`,
+   * que no se pueden saber. Los parches se guardan por ruta según se piden: uno grande no
+   * se vuelve a traer por plegar y desplegar la fila.
+   */
+  ficheros?: { via: "git" | "sin-marca"; lista: FicheroTocado[] };
+  parches?: Record<string, { texto: string; recortado: boolean }>;
   selector?: {
     titulo: string;
     opciones: { id: string; etiqueta: string; detalle?: string }[];
@@ -156,6 +164,17 @@ function esProveedorDeModelos(valor: unknown): valor is ProveedorDeModelos {
       return false;
     }
   }
+  return true;
+}
+
+/** Un fichero tocado, comprobado campo a campo como todo lo que entra por el cable. */
+function esFicheroTocado(valor: unknown): valor is FicheroTocado {
+  if (typeof valor !== "object" || valor === null) return false;
+  const f = valor as { ruta?: unknown; clase?: unknown; mas?: unknown; menos?: unknown };
+  if (typeof f.ruta !== "string") return false;
+  if (f.clase !== "nuevo" && f.clase !== "modificado" && f.clase !== "borrado") return false;
+  if (f.mas !== undefined && typeof f.mas !== "number") return false;
+  if (f.menos !== undefined && typeof f.menos !== "number") return false;
   return true;
 }
 
@@ -311,6 +330,25 @@ export function crearStoreDelCliente(): {
           });
           return;
         }
+        case "ficheros": {
+          const m = mensaje as { via?: unknown; ficheros?: unknown };
+          if (m.via !== "git" && m.via !== "sin-marca") return;
+          if (!Array.isArray(m.ficheros)) return;
+          const lista = m.ficheros.filter(esFicheroTocado).map((f) => ({ ...f }));
+          mutar({ ficheros: { via: m.via, lista } });
+          return;
+        }
+        case "parche": {
+          const m = mensaje as { ruta?: unknown; texto?: unknown; recortado?: unknown };
+          if (typeof m.ruta !== "string" || typeof m.texto !== "string") return;
+          mutar({
+            parches: {
+              ...estado.parches,
+              [m.ruta]: { texto: m.texto, recortado: m.recortado === true },
+            },
+          });
+          return;
+        }
         case "turno": {
           const activo = (mensaje as { activo?: unknown }).activo;
           if (typeof activo !== "boolean") return;
@@ -390,7 +428,15 @@ export function crearStoreDelCliente(): {
           // el campo que distingue la maqueta completa del hueco de «elige un proyecto»
           // (`App.tsx`), y un valor inventado ahí mentiría sobre cuál de las dos toca.
           if (typeof m.proyectoAbierto !== "boolean") return;
+          // La foto de ficheros es de UNA sesión. Si la que manda el servidor ya no es la
+          // misma, se tira: enseñar la lista de la sesión anterior bajo el título de la
+          // nueva es peor que no enseñar nada, porque parecería que esta sesión escribió
+          // esos ficheros. Misma sesión = se conserva, para no perder los parches ya
+          // traídos en cada mensaje de estado (que llega con cada cambio de consola).
+          const sesionDeAhora = typeof m.sesionActiva === "string" ? m.sesionActiva : undefined;
+          const cambioDeSesion = sesionDeAhora !== estado.alta?.sesionActiva;
           mutar({
+            ...(cambioDeSesion ? { ficheros: undefined, parches: undefined } : {}),
             alta: {
               pasos: m.pasos as PasoDelWizard[],
               proveedores: m.proveedores,
@@ -458,6 +504,11 @@ export function crearStoreDelCliente(): {
         // Sin cable no se sabe si el turno sigue: dejarlo en `true` apagaría el compositor
         // para siempre en una pestaña que ya no recibe el «terminó».
         turnoEnVuelo: false,
+        // Los ficheros y sus parches son una FOTO: mientras no hay cable pueden haber
+        // cambiado, y enseñarlos como si siguieran siendo verdad es peor que pedirlos otra
+        // vez al volver.
+        ficheros: undefined,
+        parches: undefined,
       });
     },
 

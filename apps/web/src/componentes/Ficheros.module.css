@@ -1,0 +1,193 @@
+/* Alias comprobados contra `apps/web/estilos/design-platform.css`: bg-layer-1/2, border-l2,
+   label-primary/secondary/tertiary, interactive-bg-hover, state-success-primary/secondary y
+   state-error-primary/secondary. */
+
+/* `min-height: 0` no sobra: `.viewArea` (la hoja copiada) es una columna flex, y un hijo
+   flex tiene `min-height: auto` por omisión — o sea, el alto de su contenido. Sin esto la
+   lista crecería en vez de scrollear y se metería DEBAJO del compositor, que es la trampa
+   que `Maqueta.tsx` ya documenta para la fase «active». */
+.ficheros {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 16px 20px;
+}
+
+.aviso {
+  margin: 12px 20px;
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 12px;
+  line-height: 1.6;
+  max-width: 60ch;
+}
+
+.cabecera {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+  color: var(--dsw-alias-label-secondary);
+  font-size: 12px;
+}
+
+.recargar {
+  padding: 4px 10px;
+  border: 0.5px solid var(--dsw-alias-border-l2);
+  border-radius: 8px;
+  background: var(--dsw-alias-bg-layer-1);
+  color: var(--dsw-alias-label-secondary);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.recargar:hover {
+  background: var(--dsw-alias-interactive-bg-hover);
+  color: var(--dsw-alias-label-primary);
+}
+
+.lista {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.fila {
+  border: 0.5px solid var(--dsw-alias-border-l2);
+  border-radius: 10px;
+  overflow: hidden;
+  background: var(--dsw-alias-bg-layer-1);
+}
+
+.nombre {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 8px 10px;
+  border: none;
+  background: none;
+  color: var(--dsw-alias-label-primary);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.nombre:hover {
+  background: var(--dsw-alias-interactive-bg-hover);
+}
+
+/* La letra de estado, como en `git status`: A, M, D. Cuadrada y monoespaciada para que las
+   tres ocupen lo mismo y las rutas queden alineadas. */
+.clase {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 18px;
+  height: 18px;
+  border-radius: 5px;
+  font-family: var(--ds-font-family-code);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.clase[data-clase="nuevo"] {
+  background: var(--dsw-alias-state-success-secondary);
+  color: var(--dsw-alias-state-success-primary);
+}
+
+.clase[data-clase="borrado"] {
+  background: var(--dsw-alias-state-error-secondary);
+  color: var(--dsw-alias-state-error-primary);
+}
+
+.clase[data-clase="modificado"] {
+  background: var(--dsw-alias-bg-layer-2);
+  color: var(--dsw-alias-label-secondary);
+}
+
+/* La ruta se come el ancho sobrante y recorta por la IZQUIERDA en cuanto no cabe: el final
+   —el nombre del fichero— es lo que identifica, no el principio del árbol. */
+.ruta {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  font-family: var(--ds-font-family-code);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+/* La carpeta es la única que encoge (`min-width: 0` + `flex-shrink` implícito), y lo hace
+   con puntos suspensivos; el nombre lleva `flex: none` para que no ceda nunca. */
+.carpeta {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--dsw-alias-label-tertiary);
+}
+
+.hoja {
+  flex: none;
+}
+
+.cuenta,
+.binario {
+  flex-shrink: 0;
+  font-family: var(--ds-font-family-code);
+  font-size: 11px;
+}
+
+.binario {
+  color: var(--dsw-alias-label-tertiary);
+}
+
+.mas {
+  color: var(--dsw-alias-state-success-primary);
+}
+
+.menos {
+  color: var(--dsw-alias-state-error-primary);
+}
+
+/* El parche, con su propio scroll horizontal: una línea larga no puede ensanchar la fila ni
+   la pestaña entera. */
+.parche {
+  border-top: 0.5px solid var(--dsw-alias-border-l2);
+  background: var(--dsw-alias-bg-layer-2);
+  overflow-x: auto;
+  padding: 6px 0;
+}
+
+.linea {
+  padding: 0 10px;
+  font-family: var(--ds-font-family-code);
+  font-size: 12px;
+  line-height: 1.5;
+  white-space: pre;
+  color: var(--dsw-alias-label-secondary);
+}
+
+.linea[data-tipo="cabecera"] {
+  color: var(--dsw-alias-label-tertiary);
+}
+
+.linea[data-tipo="trozo"] {
+  color: var(--dsw-alias-label-tertiary);
+  background: var(--dsw-alias-bg-layer-1);
+}
+
+/* Texto en `label-primary` sobre el fondo de estado, no el color de estado sobre sí mismo:
+   es la misma decisión medida que documenta `Aprobacion.module.css` para su diff. */
+.linea[data-tipo="anadido"] {
+  color: var(--dsw-alias-label-primary);
+  background: var(--dsw-alias-state-success-secondary);
+}
+
+.linea[data-tipo="quitado"] {
+  color: var(--dsw-alias-label-primary);
+  background: var(--dsw-alias-state-error-secondary);
+}

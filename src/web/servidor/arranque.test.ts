@@ -646,6 +646,178 @@ describe("montarRutas — el cable, por fin conectado", () => {
    * guardada eran manejadores vacíos en `App.tsx` — el usuario pulsaba y no pasaba
    * literalmente nada.
    */
+  describe("los ficheros de la sesión", () => {
+    /**
+     * El fallo mudo que esto vigila: `sin-marca` y «no tocó nada» son la MISMA lista vacía
+     * en el cable si no se distinguen, y significan lo contrario. Sin proyecto abierto no
+     * hay sesión que comparar, y hay que decirlo con ese `via`.
+     */
+    it("sin proyecto abierto se contesta «sin-marca», no una lista vacía a secas", async () => {
+      const servidor = servidorDeMentira();
+      const vestibulo = vestibuloDePrueba({ baseDeWorkspace: mkdtempSync(join(tmpdir(), "xonecode-vacio-")) });
+      montarRutas(servidor, vestibulo, {
+        cambiosDeSesion: async () => ({ via: "git", ficheros: [{ ruta: "no.xne", clase: "nuevo" }] }),
+      });
+      const cliente = clienteDeMentira();
+      await servidor.rutas.get(`GET ${RUTA_EVENTOS}`)!(cliente.peticion, cliente.respuesta);
+      await asentar();
+
+      await enviarMensaje(servidor.rutas.get(`POST ${RUTA_ACCION}`)!, { clase: "ficheros" });
+      await asentar();
+
+      const m = cliente.recibidos.filter((x) => x.clase === "ficheros").at(-1) as Extract<
+        MensajeAlCliente,
+        { clase: "ficheros" }
+      >;
+      expect(m.via).toBe("sin-marca");
+      expect(m.ficheros).toEqual([]);
+      await vestibulo.cerrar();
+    });
+
+    it("sin puerto que sepa mirar el repo tampoco se afirma: «sin-marca» igual", async () => {
+      const servidor = servidorDeMentira();
+      const vestibulo = vestibuloDePrueba({ baseDeWorkspace: mkdtempSync(join(tmpdir(), "xonecode-vacio-")) });
+      // Sin `cambiosDeSesion`: es lo que pasa con un montaje que no trae ese puerto.
+      montarRutas(servidor, vestibulo);
+      const cliente = clienteDeMentira();
+      await servidor.rutas.get(`GET ${RUTA_EVENTOS}`)!(cliente.peticion, cliente.respuesta);
+      await asentar();
+
+      await enviarMensaje(servidor.rutas.get(`POST ${RUTA_ACCION}`)!, { clase: "ficheros" });
+      await asentar();
+
+      const m = cliente.recibidos.filter((x) => x.clase === "ficheros").at(-1) as Extract<
+        MensajeAlCliente,
+        { clase: "ficheros" }
+      >;
+      expect(m.via).toBe("sin-marca");
+      await vestibulo.cerrar();
+    });
+
+    /**
+     * Lo destapó el propio test: recién abierto un proyecto la sesión NO tiene id todavía
+     * —nace al volcar el primer acto—, y contestar «sin-marca» ahí diagnostica mal: la
+     * vista mandaría a comprobar si el proyecto es un repositorio de git cuando lo único
+     * que pasa es que la sesión acaba de empezar y no ha tocado nada.
+     */
+    it("recién abierto el proyecto, sin id de sesión todavía, se dice «sin-empezar» y no «sin-marca»", async () => {
+      const base = mkdtempSync(join(tmpdir(), "xonecode-proy-"));
+      const servidor = servidorDeMentira();
+      const vestibulo = vestibuloDePrueba({ baseDeWorkspace: base });
+      const raizDeVerdad = vestibulo.raizDeProyecto("webstudio", "Tienda");
+      mkdirSync(join(raizDeVerdad, ".xonecode"), { recursive: true });
+      writeFileSync(join(raizDeVerdad, ".xonecode", "config.json"), JSON.stringify({ modo: "offline" }));
+      montarRutas(servidor, vestibulo, {
+        cambiosDeSesion: async () => ({ via: "git", ficheros: [{ ruta: "no.xne", clase: "nuevo" }] }),
+      });
+      const cliente = clienteDeMentira();
+      await servidor.rutas.get(`GET ${RUTA_EVENTOS}`)!(cliente.peticion, cliente.respuesta);
+      const accion = servidor.rutas.get(`POST ${RUTA_ACCION}`)!;
+      await asentar();
+      await enviarMensaje(accion, { clase: "sesion", proyecto: "p1" });
+      await asentar();
+      expect(vestibulo.proyectoAbierto()?.sesion).toBeUndefined();
+
+      await enviarMensaje(accion, { clase: "ficheros" });
+      await asentar();
+
+      const m = cliente.recibidos.filter((x) => x.clase === "ficheros").at(-1) as Extract<
+        MensajeAlCliente,
+        { clase: "ficheros" }
+      >;
+      expect(m.via).toBe("sin-empezar");
+      expect(m.ficheros).toEqual([]);
+      await vestibulo.cerrar();
+      rmSync(base, { recursive: true, force: true });
+    });
+
+    it("con proyecto y sesión, la lista sale del puerto y el parche se pide POR RUTA", async () => {
+      const base = mkdtempSync(join(tmpdir(), "xonecode-proy-"));
+      const servidor = servidorDeMentira();
+      const vestibulo = vestibuloDePrueba({ baseDeWorkspace: base });
+      const raizDeVerdad = vestibulo.raizDeProyecto("webstudio", "Tienda");
+      mkdirSync(join(raizDeVerdad, ".xonecode"), { recursive: true });
+      writeFileSync(join(raizDeVerdad, ".xonecode", "config.json"), JSON.stringify({ modo: "offline" }));
+
+      const pedidos: string[] = [];
+      montarRutas(servidor, vestibulo, {
+        cambiosDeSesion: async () => ({
+          via: "git",
+          ficheros: [{ ruta: "src/app.xne", clase: "modificado", mas: 2, menos: 1 }],
+        }),
+        parcheDeSesion: async (_raiz, _sesion, ruta) => {
+          pedidos.push(ruta);
+          return { texto: "@@ -1 +1 @@", recortado: false };
+        },
+      });
+      const cliente = clienteDeMentira();
+      await servidor.rutas.get(`GET ${RUTA_EVENTOS}`)!(cliente.peticion, cliente.respuesta);
+      const accion = servidor.rutas.get(`POST ${RUTA_ACCION}`)!;
+      await asentar();
+
+      // Se REABRE una sesión, no se empieza una: el id nace al volcar el primer acto
+      // (`vestibulo.ts#volcar`), y sin id lo que se contesta es «sin-empezar» — que es el
+      // caso del test de más abajo, no éste.
+      await enviarMensaje(accion, { clase: "sesion", proyecto: "p1", sesion: "s1" });
+      await asentar();
+      expect(vestibulo.proyectoAbierto()?.sesion).toBe("s1");
+
+      await enviarMensaje(accion, { clase: "ficheros" });
+      await asentar();
+      const lista = cliente.recibidos.filter((x) => x.clase === "ficheros").at(-1) as Extract<
+        MensajeAlCliente,
+        { clase: "ficheros" }
+      >;
+      expect(lista.via).toBe("git");
+      expect(lista.ficheros).toEqual([{ ruta: "src/app.xne", clase: "modificado", mas: 2, menos: 1 }]);
+
+      await enviarMensaje(accion, { clase: "ficheros", ruta: "src/app.xne" });
+      await asentar();
+      expect(pedidos).toEqual(["src/app.xne"]);
+      const parche = cliente.recibidos.filter((x) => x.clase === "parche").at(-1) as Extract<
+        MensajeAlCliente,
+        { clase: "parche" }
+      >;
+      expect(parche).toMatchObject({ ruta: "src/app.xne", texto: "@@ -1 +1 @@", recortado: false });
+
+      await vestibulo.cerrar();
+      rmSync(base, { recursive: true, force: true });
+    });
+
+    /**
+     * Un parche que no se puede dar se contesta con el texto vacío, no callando: el cliente
+     * tiene la fila desplegada esperando, y el silencio la deja «trayendo el diff…» para
+     * siempre. Un cargando eterno es un fallo mudo con animación.
+     */
+    it("sin puerto de parche se contesta igual, con el texto vacío", async () => {
+      const base = mkdtempSync(join(tmpdir(), "xonecode-proy-"));
+      const servidor = servidorDeMentira();
+      const vestibulo = vestibuloDePrueba({ baseDeWorkspace: base });
+      const raizDeVerdad = vestibulo.raizDeProyecto("webstudio", "Tienda");
+      mkdirSync(join(raizDeVerdad, ".xonecode"), { recursive: true });
+      writeFileSync(join(raizDeVerdad, ".xonecode", "config.json"), JSON.stringify({ modo: "offline" }));
+      montarRutas(servidor, vestibulo, { cambiosDeSesion: async () => ({ via: "git", ficheros: [] }) });
+      const cliente = clienteDeMentira();
+      await servidor.rutas.get(`GET ${RUTA_EVENTOS}`)!(cliente.peticion, cliente.respuesta);
+      const accion = servidor.rutas.get(`POST ${RUTA_ACCION}`)!;
+      await asentar();
+      await enviarMensaje(accion, { clase: "sesion", proyecto: "p1", sesion: "s1" });
+      await asentar();
+
+      await enviarMensaje(accion, { clase: "ficheros", ruta: "src/app.xne" });
+      await asentar();
+
+      const parche = cliente.recibidos.filter((x) => x.clase === "parche").at(-1) as Extract<
+        MensajeAlCliente,
+        { clase: "parche" }
+      >;
+      expect(parche).toMatchObject({ ruta: "src/app.xne", texto: "", recortado: false });
+
+      await vestibulo.cerrar();
+      rmSync(base, { recursive: true, force: true });
+    });
+  });
+
   describe("abrir una sesión desde la barra", () => {
     it("con la copia local ya bajada se abre directamente: no hay rama que preguntar", async () => {
       const raiz = mkdtempSync(join(tmpdir(), "xonecode-proy-"));

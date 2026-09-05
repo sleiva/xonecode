@@ -53,6 +53,7 @@ import { borrarCredencial, guardarCredencial } from "../../agent/authEnDisco.js"
 import { cargarSettings, guardarEntorno as guardarEntornoEnDisco } from "../../agent/settingsEnDisco.js";
 import { abrirEnSistema } from "../../agent/cloudstudioMcp.js";
 import { nombreDePersona } from "../../agent/persona.js";
+import { cambiosDeSesion, fotoDeApertura, parcheDeSesion } from "../../agent/sesionGit.js";
 import { CatalogoModelos } from "../../agent/catalogoModelos.js";
 import type { Entorno } from "../../core/settings.js";
 import { arrancarServidor, type ServidorWeb } from "./servidor.js";
@@ -66,7 +67,7 @@ import {
   type SesionCerrable,
   type Vestibulo,
 } from "./vestibulo.js";
-import type { MensajeAlCliente, MensajeDelCliente, Sumidero } from "./transporte.js";
+import type { FicheroTocado, MensajeAlCliente, MensajeDelCliente, Sumidero } from "./transporte.js";
 
 /** Las dos rutas del cable. El cliente las tiene escritas en `apps/web/src/conexion.ts`. */
 export const RUTA_EVENTOS = "/eventos";
@@ -132,6 +133,10 @@ export interface OpcionesDeMontaje {
    * menú lo dice en vez de quedarse cargando para siempre.
    */
   catalogoDeModelos?: (proveedor: Proveedor) => Promise<{ id: string; nombre?: string }[]>;
+  /** Qué ha tocado la sesión, y el parche de un fichero (`agent/sesionGit.ts`). Ausentes =
+   *  esta ejecución no lo puede saber, y la pestaña lo dice. */
+  cambiosDeSesion?: (raiz: string, sesion: string) => Promise<{ via: "git" | "sin-marca"; ficheros: FicheroTocado[] }>;
+  parcheDeSesion?: (raiz: string, sesion: string, ruta: string) => Promise<{ texto: string; recortado: boolean } | undefined>;
 }
 
 /**
@@ -665,6 +670,47 @@ export function montarRutas(
     emitirModelos();
   };
 
+  /**
+   * Los ficheros de la sesión abierta, o el parche de uno.
+   *
+   * Tres respuestas y no dos, porque son tres situaciones distintas y una sola lista vacía
+   * las haría indistinguibles:
+   *
+   * - **`sin-empezar`**: hay proyecto abierto pero la sesión todavía no tiene id (el id
+   *   nace al volcar el primer acto, ver `vestibulo.ts`). No ha tocado nada, y eso SE SABE.
+   *   Decir «sin-marca» aquí diagnosticaría mal: la vista mandaría a comprobar si el
+   *   proyecto es un repo de git cuando lo único que pasa es que acabas de sentarte.
+   * - **`sin-marca`**: no hay con qué comparar —sin proyecto abierto, o sin el puerto que
+   *   sabe mirar el repo—. No se sabe.
+   * - **`git`**: comparado, y esto es lo que hay.
+   */
+  const atenderFicheros = async (ruta?: string): Promise<void> => {
+    const abierto = vestibulo.proyectoAbierto();
+    const sesion = abierto?.sesion;
+    if (abierto === undefined || opciones.cambiosDeSesion === undefined) {
+      emitir({ clase: "ficheros", via: "sin-marca", ficheros: [] });
+      return;
+    }
+    if (sesion === undefined) {
+      emitir({ clase: "ficheros", via: "sin-empezar", ficheros: [] });
+      return;
+    }
+    if (ruta !== undefined) {
+      const parche = await opciones.parcheDeSesion?.(abierto.raiz, sesion, ruta);
+      // Sin parche que dar se dice con el texto vacío y no callando: el cliente tiene una
+      // fila abierta esperando, y el silencio la deja cargando para siempre.
+      emitir({
+        clase: "parche",
+        ruta,
+        texto: parche?.texto ?? "",
+        recortado: parche?.recortado ?? false,
+      });
+      return;
+    }
+    const { via, ficheros } = await opciones.cambiosDeSesion(abierto.raiz, sesion);
+    emitir({ clase: "ficheros", via, ficheros });
+  };
+
   /** Un paso del alta resuelto en el navegador. Cada rama termina volviendo a anunciar. */
   const atenderAlta = async (mensaje: Extract<MensajeDelCliente, { clase: "alta" }>): Promise<void> => {
     // Se limpia al empezar: un aviso viejo pegado a un paso que ya salió bien mentiría.
@@ -845,6 +891,12 @@ export function montarRutas(
         .guardarProyectosVisibles(mensaje.entorno, mensaje.proyectos)
         .catch(contar)
         .finally(() => void anunciarAlta().catch(contar));
+      respuesta.writeHead(204);
+      respuesta.end();
+      return;
+    }
+    if (typeof mensaje === "object" && mensaje !== null && mensaje.clase === "ficheros") {
+      void atenderFicheros(mensaje.ruta).catch(contar);
       respuesta.writeHead(204);
       respuesta.end();
       return;
@@ -1032,6 +1084,8 @@ export async function arrancarConsolaWeb(opciones: OpcionesDeArranque): Promise<
     credencialEnFichero: (proveedor) => cargar(opciones.cwd).auth[proveedor] !== undefined,
     borrarCredencial,
     guardarCredencial,
+    cambiosDeSesion,
+    parcheDeSesion,
     catalogoDeModelos: async (proveedor) => {
       const modelos = await new CatalogoModelos().listar(proveedor);
       return modelos.map((m) => ({ id: m.id, ...(m.nombre === undefined ? {} : { nombre: m.nombre }) }));
@@ -1143,6 +1197,9 @@ function vestibuloReal(
     guardarEntorno: (entorno: Entorno) => guardarEntornoEnDisco(undefined, entorno),
     guardarModeloGlobal,
     guardarConfigDeProyecto: escribirProyectoEnDisco,
+    // El «antes» de cada sesión: se fotografía al abrir el proyecto y se nombra cuando la
+    // sesión tiene id. Ver `agent/sesionGit.ts` para por qué es una ref y no un tag.
+    marcarSesion: fotoDeApertura,
     entornos: settings.entornos,
     ...(settings.workspace === undefined ? {} : { baseDeWorkspace: settings.workspace }),
     // La URL de la web para que la página del callback devuelva AQUÍ y no diga «vuelve a

@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import type { Acto } from "../tipos.js";
 import type { Pestana } from "./Cabecera.js";
 import { Chat } from "./Chat.js";
@@ -18,9 +19,17 @@ export function Transcript({
   actos,
   pestana,
   turnoEnVuelo,
+  ficheros,
 }: {
   actos: readonly Acto[];
   pestana: Pestana;
+  /**
+   * La vista de ficheros, ya montada por `App`. Va como ranura y no como cinco props
+   * sueltas porque lo que aporta este componente es ELEGIR la vista, no conocer los datos
+   * de cada una; y como el elemento solo se monta cuando se pinta, la petición al servidor
+   * que lleva dentro no sale hasta que alguien abre la pestaña.
+   */
+  ficheros?: ReactNode;
   /** Hay turno corriendo. Solo lo usa el Chat, para saber si el último mensaje sigue
    *  llegando — y con él, si toca resaltar el código o esperar al cierre. */
   turnoEnVuelo?: boolean;
@@ -30,8 +39,10 @@ export function Transcript({
       <div className={conversacion.viewArea}>
         {pestana === "chat" ? (
           <Chat actos={actos} turnoEnVuelo={turnoEnVuelo === true} />
-        ) : (
+        ) : pestana === "trayectoria" ? (
           <Trayectoria actos={actos} />
+        ) : (
+          ficheros
         )}
       </div>
     </div>

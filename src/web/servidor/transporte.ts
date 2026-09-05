@@ -79,6 +79,18 @@ export type MensajeAlCliente =
    * un turno que revienta no siempre deja `fin`.
    */
   | { clase: "turno"; activo: boolean }
+  /**
+   * Los ficheros que ESTA sesión ha tocado, y el parche de uno.
+   *
+   * `via` no es decoración, y son TRES cosas distintas: «git» es «comparado, y esto es lo
+   * que hay»; «sin-empezar» es que la sesión todavía no ha volcado ningún acto, así que no
+   * ha tocado nada y se sabe; «sin-marca» es que NO se sabe —la sesión se abrió sin git
+   * usable, o antes de que esto existiera—. Fundir las tres en una lista vacía haría que
+   * «todavía no has hecho nada» y «no se puede saber» se leyeran igual, y la segunda haría
+   * creer que un turno no escribió cuando lo que pasa es que no hay con qué comparar.
+   */
+  | { clase: "ficheros"; via: "git" | "sin-marca" | "sin-empezar"; ficheros: FicheroTocado[] }
+  | { clase: "parche"; ruta: string; texto: string; recortado: boolean }
   | { clase: "secreto"; pregunta: string }
   /**
    * El registro de comandos de barra, para que el compositor sugiera sin llevar una
@@ -218,6 +230,15 @@ export interface EntornoRegistrado extends OpcionDeEntorno {
   proyectos?: string[];
 }
 
+/** Un fichero de la sesión. `mas`/`menos` faltan en un binario: git no cuenta líneas ahí, y
+ *  poner cero diría que no cambió nada. */
+export interface FicheroTocado {
+  ruta: string;
+  clase: "nuevo" | "modificado" | "borrado";
+  mas?: number;
+  menos?: number;
+}
+
 export interface ProveedorDeModelos {
   id: string;
   credencial: "puesta" | "falta" | "nativa";
@@ -325,6 +346,8 @@ export type MensajeDelCliente =
   /** Parar el turno en vuelo. Aborta el `stream` del grafo (`SesionReal.cancelar`) y deja
    *  la sesión viva: es parar ESTO, no cerrar la conversación. */
   | { clase: "cancelar" }
+  /** Pide los ficheros de la sesión abierta, o el parche de uno concreto. */
+  | { clase: "ficheros"; ruta?: string }
   | { clase: "decision"; decisiones: Record<string, string> };
 
 /** A dónde escribe el SSE. Ausente = no hay nadie al otro lado. */

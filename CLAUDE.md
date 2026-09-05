@@ -513,6 +513,37 @@ el completador de Tab: una lista escrita a mano se queda vieja en cuanto alguien
 comando. Por eso una línea que empieza por «/» no tiene camino propio en la web — viaja como
 prosa y la despacha `correrConsola` del lado servidor.
 
+**Los ficheros que ha tocado una sesión** (`agent/sesionGit.ts`, pestaña «Ficheros» en
+`apps/web/src/componentes/Ficheros.tsx`). La marca es una **ref propia**,
+`refs/xonecode/sesion/<id>`, y no un tag: un tag es público, se empuja y significa «versión»,
+y esto es un marcador privado de herramienta. Tampoco vale guardar el SHA del árbol en un
+JSON nuestro: un árbol que ninguna ref alcanza se lo lleva `git gc` y la vista se rompe en
+silencio semanas después. Al ABRIR el proyecto se fotografía el árbol (`fotoDeApertura`, el
+mismo `GIT_INDEX_FILE` privado de `agent/instantanea.ts`: sin commits y sin tocar el índice
+del usuario) y la ref se nombra cuando la sesión recibe su id. Lo que se lista es
+**árbol contra árbol** —un árbol nuevo escrito en un índice privado contra el de la foto—,
+nunca `git diff <arbol> -- .`: eso compara contra el índice REAL del usuario y da por
+borrados ficheros que están ahí. Va con `--no-renames` por lo mismo que `cambiosPendientes`,
+y un binario se queda sin cuenta de líneas en vez de con un cero inventado. El `via` del
+cable tiene **tres** valores y no dos, porque son tres situaciones y una lista vacía las
+haría indistinguibles: `git` (comparado), `sin-empezar` (hay proyecto abierto pero la sesión
+todavía no tiene id —nace al volcar el primer acto, `vestibulo.ts#volcar`—, así que no ha
+tocado nada y eso SE SABE) y `sin-marca` (no hay con qué comparar: sin git usable, o sesión
+abierta antes de que esto existiera). Los dos últimos se separaron porque contestar
+«sin-marca» recién abierto un proyecto mandaba a comprobar si el proyecto es un repo de git
+cuando lo único que pasaba es que acabas de sentarte. `.xonecode/` se excluye —ahí dentro
+`volcar()` escribe el `.jsonl` de la propia sesión al final de cada turno, y sin excluirlo la
+primera fila era el transcript de la sesión diciendo que la sesión lo modificó—, pero **en el
+DIFF y nunca en el `git add`**: medido contra un proyecto de verdad, `git add` con un
+pathspec `:(exclude).xonecode` en un repo donde `.xonecode` ya está ignorado da por nombrada
+una ruta ignorada y **sale con código 1**, así que el árbol no se escribía y la pestaña decía
+«sin-marca» para siempre. Y los diffs llevan `--relative` porque los árboles se escriben con
+rutas desde la raíz del REPO, que no tiene por qué ser el proyecto (`instantanea.ts` sostiene
+ese caso): sin él, un proyecto en una subcarpeta daba rutas con prefijo que no casaban con
+ninguna al pedir el parche. El parche se pide al DESPLEGAR una fila,
+no al abrir la pestaña, y se recorta a `TOPE_DE_PARCHE` diciéndolo. La foto es de UNA sesión:
+`store.ts` la tira en cuanto el `alta` trae otra `sesionActiva`.
+
 **La regla de qué URL de MCP vale es UNA** (`agent/cloudstudioMcp.ts#urlDeMcpAceptable`): HTTPS
 sin credenciales, más `http://` en una lista CERRADA de hosts loopback, que existe solo para un
 CloudStudio on-premise levantado en desarrollo. Hubo tres puertas con dos criterios —el wizard
