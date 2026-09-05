@@ -46,10 +46,16 @@ import {
   guardarProyectoCloudStudioDeProyecto,
   guardarRamaDeProyecto,
 } from "../../agent/configEnDisco.js";
-import { correrConsola, ejecutarTurnoGuionizado, type Consola, type EjecutorDeTurno } from "../../cli/consola.js";
-import { asistenteDeModelo } from "../../cli/wizardInicial.js";
+import {
+  correrConsola,
+  ejecutarTurnoGuionizado,
+  type Consola,
+  type EjecutorDeTurno,
+  type EstadoDeSesion,
+} from "../../cli/consola.js";
+import { asistenteDeModelo, type ResultadoDelAsistente } from "../../cli/wizardInicial.js";
 import { crearConsolaWeb, type ConsolaWeb, type OpcionesDeConsolaWeb } from "./consolaWeb.js";
-import { anotarActo, crearSesion, reabrirSesion } from "./sesiones.js";
+import { anotarActo, crearSesion, listarSesiones, reabrirSesion } from "./sesiones.js";
 import type { MensajeDelCliente, Sumidero } from "./transporte.js";
 
 /**
@@ -113,12 +119,16 @@ export interface DatosDeProyecto {
  */
 export interface PuertoDeSesiones {
   crear(raiz: string): string;
+  /** El índice de sesiones de un proyecto ya bajado. Una carpeta que no existe es una
+   *  lista vacía, no un error: el proyecto todavía no se ha abierto nunca. */
+  listar(raiz: string): { id: string; titulo: string }[];
   anotar(raiz: string, id: string, acto: Acto): void;
   reabrir(raiz: string, id: string): { id: string; actos: Acto[]; historica: boolean };
 }
 
 const SESIONES_EN_DISCO: PuertoDeSesiones = {
   crear: crearSesion,
+  listar: listarSesiones,
   anotar: anotarActo,
   reabrir: reabrirSesion,
 };
@@ -126,6 +136,9 @@ const SESIONES_EN_DISCO: PuertoDeSesiones = {
 /** Lo mínimo que el vestíbulo necesita de una `SesionReal` para cambiar de proyecto. */
 export interface SesionCerrable {
   cerrar(): void;
+  /** Aborta el `stream` del grafo y deja la sesión viva. Opcional: el ejecutor guionizado
+   *  no tiene nada que abortar. */
+  cancelar?(): void;
 }
 
 export interface OpcionesDelVestibulo {
@@ -137,6 +150,9 @@ export interface OpcionesDelVestibulo {
   catalogoModelos: CatalogoModelosPort;
   /** Escribe en `~/.xonecode/auth.json` y devuelve dónde quedó, como `agent/authEnDisco.ts`. */
   guardarCredencial: (proveedor: Proveedor, clave: string) => { ruta: string };
+  /** Pone la clave en el proceso SIN escribirla, para poder probarla antes de guardarla
+   *  (`agent/configEnDisco.ts#aplicarCredencialAlProceso`). Ausente = no se prueba antes. */
+  aplicarCredencial?: (proveedor: Proveedor, clave: string) => void;
   /** Registra el entorno en `~/.xonecode/settings.json`. */
   guardarEntorno: (entorno: Entorno) => { ruta: string };
   /** Baja la copia local. Recibe la raíz ya calculada: la sincronización no se toca, solo
@@ -162,8 +178,19 @@ export interface OpcionesDelVestibulo {
   guardarModeloGlobal?: Consola["guardarModeloGlobal"];
   /** Adopta el fichero OAuth plano de antes de los entornos. Por omisión, el real. */
   adoptarLegado?: (entorno: Entorno) => void;
-  /** El listado de proyectos de un entorno. Ausente = esta ejecución no habla con CloudStudio. */
-  proyectosDeEntorno?: (entorno: Entorno) => Promise<Array<{ id: string; nombre: string }>>;
+  /**
+   * El listado de proyectos de un entorno. Ausente = esta ejecución no habla con CloudStudio.
+   *
+   * Devuelve también cómo se llama el servidor (`serverInfo` del initialize) porque esta es
+   * la PRIMERA vez que se habla con él de verdad: el entorno se registró antes con lo único
+   * que se le pidió al usuario, la URL. Ver `proyectosDe` para qué se hace con eso.
+   */
+  proyectosDeEntorno?: (entorno: Entorno) => Promise<{
+    proyectos: Array<{ id: string; nombre: string }>;
+    servidor?: { nombre: string };
+  }>;
+  /** `proyecto` es el NOMBRE, no el id: el servidor abre por nombre y rechaza el
+   *  identificador. Ver `clienteCloudStudio`. */
   ramasDeProyecto?: (entorno: Entorno, proyecto: string) => Promise<string[]>;
   sesiones?: PuertoDeSesiones;
   /** Costura de test: por omisión, la consola web de verdad. */
@@ -198,6 +225,12 @@ export interface OpcionesDelVestibulo {
 /** Una consola de proyecto viva. Solo hay una a la vez. */
 export interface ConsolaDeProyecto {
   readonly raiz: string;
+  /**
+   * El estado de sesión de ESTA consola, ahora mismo. Es de dónde sale el modelo en vigor:
+   * `/modelo` lo cambia en caliente dentro del lazo y no toca disco, así que releer la
+   * configuración diría lo de antes.
+   */
+  readonly estadoDeSesion: EstadoDeSesion;
   /** El id de la sesión, o `undefined` mientras no se haya volcado ningún acto. */
   readonly sesion: string | undefined;
   /**
@@ -208,12 +241,20 @@ export interface ConsolaDeProyecto {
   readonly historica: boolean;
   readonly cerrada: boolean;
   readonly consola: ConsolaWeb;
+  /**
+   * Para el turno en vuelo sin cerrar la sesión (`SesionReal.cancelar`). Devuelve si había
+   * algo que parar: sin sesión real —el ejecutor guionizado, o un turno que ya terminó— no
+   * hay nada, y decirlo es mejor que fingir que se paró algo.
+   */
+  cancelarTurno(): boolean;
   /** Un mensaje del navegador. Está aquí para que la ruta HTTP tenga UN solo objeto con
    *  el que hablar; quien decide el fin de la marca histórica es el envoltorio del
    *  ejecutor, no esto — una prosa que llega a mitad de turno solo entra en la cola. */
   recibir(mensaje: MensajeDelCliente): void;
   conectar(enviar?: Sumidero): readonly Acto[];
-  desconectar(): void;
+  /** Se va UN cliente (el suyo) o todos. Ver `Transporte`: la consola solo da por perdido
+   *  al humano cuando se va el ÚLTIMO. */
+  desconectar(enviar?: Sumidero): void;
   actos(): readonly Acto[];
   cerrar(): Promise<void>;
   /** El retorno de `correrConsola`. Resuelve cuando el lazo termina (EOF o `/salir`). */
@@ -236,12 +277,39 @@ export interface Vestibulo {
    * entorno EN esta conexión.
    */
   entornosRegistrados(): readonly Entorno[];
-  /** El paso 1, que es `asistenteDeModelo` SIN TOCAR con la consola web detrás. */
-  pasoDeCuenta(): Promise<void>;
+  /**
+   * El paso 1: `asistenteDeModelo` con la consola web detrás, exigiendo elección. Devuelve
+   * lo que pasó porque quien lo conduce (`arranque.ts`) lo usa como puerta: dar por hecho
+   * un paso que nadie resolvió es exactamente lo que dejaba al usuario con el modelo de
+   * omisión sin enterarse.
+   */
+  pasoDeCuenta(): Promise<ResultadoDelAsistente>;
   guardarCredencialDe(proveedor: Proveedor, clave: string): Promise<{ ruta: string }>;
-  registrarEntorno(entorno: Entorno): Promise<{ ruta: string }>;
+  /** Devuelve el entorno tal y como quedó REGISTRADO: el id puede no ser el que llegó
+   *  (ver `identidadDeEntorno`), y quien registra necesita el bueno para seguir. */
+  registrarEntorno(entorno: Entorno): Promise<{ ruta: string; entorno: Entorno }>;
+  /**
+   * Qué proyectos de un entorno se enseñan en la barra. Se guarda CON el entorno
+   * (`settings.json`) porque es una preferencia sobre él, y una lista vacía es una
+   * elección —«ninguno»— y no un «no lo he dicho».
+   */
+  guardarProyectosVisibles(entorno: string, proyectos: readonly string[]): Promise<{ ruta: string }>;
   proyectosDe(entorno: string): Promise<Array<{ id: string; nombre: string }>>;
-  ramasDe(entorno: string, proyecto: string): Promise<string[]>;
+  /**
+   * Las ramas de un proyecto. Acepta la identidad ENTERA (`{id, nombre}`) además del nombre
+   * suelto, por lo mismo que `completarProyecto`: quien llama desde la web tiene el id —es
+   * lo que viaja por el cable— y el servidor abre por NOMBRE. Pasarle el id acababa en un
+   * «no hay proyecto abierto» que no nombraba al culpable, que era el argumento.
+   */
+  ramasDe(entorno: string, proyecto: string | { id: string; nombre: string }): Promise<string[]>;
+  /**
+   * Dónde vive (o viviría) la copia local de un proyecto de ese entorno. Se calcula, no se
+   * consulta: `rutaDeWorkspace` es la misma función que usa el alta, y por eso la respuesta
+   * vale igual para un proyecto ya bajado que para uno que no.
+   */
+  raizDeProyecto(entorno: string, proyecto: string): string;
+  /** Las sesiones guardadas de una copia local. Sin copia, lista vacía. */
+  sesionesDe(raiz: string): { id: string; titulo: string }[];
   /** El paso 3 completo: escribe el alta y baja la copia local. */
   completarProyecto(eleccion: {
     entorno: string;
@@ -252,6 +320,19 @@ export interface Vestibulo {
   proyectoAbierto(): ConsolaDeProyecto | undefined;
   /** El usuario se va sin terminar. No escribe nada; DICE lo que ya quedó escrito. */
   cancelar(): Promise<void>;
+  /**
+   * Se avisa cuando el estado de sesión de la consola abierta cambia — o sea, cuando
+   * cambia el modelo en vigor. UNA sola escucha, que es la del cable; se instala al montar
+   * las rutas y vale para todas las consolas de proyecto que se abran después.
+   */
+  alCambiarEstadoDeSesion(escucha: (estado: EstadoDeSesion) => void): void;
+  /**
+   * Se avisa cuando empieza y cuando acaba un turno. UNA sola escucha, como la de estado:
+   * quien monta las rutas la instala para RECORDARLO, y así puede decírselo también a quien
+   * conecte después — el mensaje del cable se emite una vez y una pestaña que llega a mitad
+   * de turno no lo vio.
+   */
+  alCambiarTurno(escucha: (activo: boolean) => void): void;
   /** Cierra el proyecto abierto y el propio vestíbulo. */
   cerrar(): Promise<void>;
 }
@@ -294,7 +375,13 @@ export function conexionDeVestibulo(urlDeLaWeb?: string): Pick<
     ...(urlDeLaWeb === undefined ? {} : { redirigirA: urlDeLaWeb }),
   });
   return {
-    proyectosDeEntorno: async (entorno) => (await conectarCloudStudio(entorno.url, comunes(entorno))).proyectos,
+    proyectosDeEntorno: async (entorno) => {
+      const conexion = await conectarCloudStudio(entorno.url, comunes(entorno));
+      return {
+        proyectos: conexion.proyectos,
+        ...(conexion.servidor === undefined ? {} : { servidor: { nombre: conexion.servidor.nombre } }),
+      };
+    },
     ramasDeProyecto: async (entorno, proyecto) => {
       const sesion = await sesionCloudStudio(entorno.url, comunes(entorno));
       try {
@@ -315,6 +402,60 @@ export function conexionDeVestibulo(urlDeLaWeb?: string): Pick<
  * claros que se contradecían. Ver allí por qué se resolvió por el lado permisivo.
  */
 const urlDeEntornoValida = urlDeMcpAceptable;
+
+/**
+ * El host de una URL, o la URL entera si no parsea. No debería hacer falta ese segundo caso
+ * —`urlDeEntornoValida` corre antes y ya rechaza lo que no parsea—, pero si algún día
+ * alguien invierte ese orden, mejor un id feo que una excepción.
+ */
+function hostDeUrl(url: string): string {
+  try {
+    return new URL(url).host;
+  } catch {
+    return url;
+  }
+}
+
+/** Misma URL, dicha de dos formas (`https://x/mcp` y `https://x/mcp/`), es el mismo sitio. */
+function mismaUrl(a: string, b: string): boolean {
+  const normal = (u: string): string => u.trim().replace(/\/+$/, "").toLowerCase();
+  return normal(a) === normal(b);
+}
+
+/**
+ * La identidad del entorno, DEDUCIDA de la URL cuando no la trae puesta.
+ *
+ * El formulario del navegador pide solo la URL: un nombre tecleado a mano es un dato que
+ * el usuario se inventa y que después hay que creerse en la barra lateral y en la ruta del
+ * workspace. Las dos reglas:
+ *
+ * - Si la URL es la de un entorno OFICIAL, se usa su identidad (aunque se haya escrito a
+ *   mano en el hueco de «otro»): dos entradas para el mismo servidor son dos carpetas de
+ *   workspace y dos huecos de OAuth para la misma cuenta.
+ * - Si no, el id y el nombre salen del HOST. El id pasa por `segmentoSeguro`
+ *   (`core/settings.ts`) porque acaba siendo una carpeta (`rutaDeWorkspace`), así que se
+ *   quita todo lo que no sea letra, cifra, punto o guion — los dos puntos del puerto
+ *   incluidos, que en Windows parten la ruta. El nombre conserva el host tal cual, que es
+ *   para leerlo.
+ *
+ * Lo que NO se deduce aquí es nada que venga del servidor: eso exige haber hecho OAuth, y
+ * el registro pasa antes. Un nombre inventado a partir de la URL es verdad comprobable;
+ * uno «bonito» sacado de la nada no lo sería.
+ */
+export function identidadDeEntorno(entorno: Entorno): Entorno {
+  const oficial = ENTORNOS_OFICIALES.find((o) => mismaUrl(o.url, entorno.url));
+  if (oficial !== undefined) return { ...entorno, id: oficial.id, nombre: oficial.nombre };
+  // Un id y un nombre puestos por quien llama se respetan: el paso de entorno del wizard
+  // manda «otro» (o vacío) justo para pedir esta deducción, pero otra piel puede traerlos.
+  if (entorno.id !== "" && entorno.id !== ENTORNO_OTRO.id && entorno.nombre !== "") return entorno;
+  const host = hostDeUrl(entorno.url);
+  const id = host.replace(/[^a-zA-Z0-9.-]+/g, "-").replace(/^-+|-+$/g, "");
+  return {
+    ...entorno,
+    id: id === "" ? "on-premise" : id,
+    nombre: entorno.nombre === "" ? host : entorno.nombre,
+  };
+}
 
 export function crearVestibulo(opciones: OpcionesDelVestibulo): Vestibulo {
   const sesiones = opciones.sesiones ?? SESIONES_EN_DISCO;
@@ -345,6 +486,10 @@ export function crearVestibulo(opciones: OpcionesDelVestibulo): Vestibulo {
   let proyectoEscrito: { raiz: string; ruta: string } | undefined;
 
   let abierto: ConsolaDeProyecto | undefined;
+  /** Quien quiera enterarse de que el modelo en vigor cambió. UNA sola: el cable es uno. */
+  let escuchaDeEstado: ((estado: EstadoDeSesion) => void) | undefined;
+  /** Y de que hay (o deja de haber) un turno corriendo. */
+  let escuchaDeTurno: ((activo: boolean) => void) | undefined;
 
   const entornoPorId = (id: string): Entorno => {
     const encontrado = registrados.find((e) => e.id === id);
@@ -360,6 +505,33 @@ export function crearVestibulo(opciones: OpcionesDelVestibulo): Vestibulo {
     const guardada = opciones.guardarCredencial(proveedor, clave);
     credencialEscrita = { proveedor, ruta: guardada.ruta };
     return guardada;
+  };
+
+  /**
+   * El nombre BUENO del entorno, el que dice el propio servidor, cuando por fin se ha
+   * hablado con él.
+   *
+   * Del alta solo sale la URL, así que hasta aquí el nombre era el host — verdad
+   * comprobable, pero fea («mcp.casa.local»). El `serverInfo` del initialize llega en la
+   * primera conexión de verdad, que es `proyectosDe`, y solo entonces se puede sustituir.
+   *
+   * Dos guardas, y las dos importan:
+   * - Solo se pisa un nombre DEDUCIDO (el que sigue siendo igual al host). Un nombre que
+   *   puso una persona —o el de un entorno oficial, «XOne WebStudio»— no lo cambia un
+   *   servidor remoto por su cuenta.
+   * - El id NO se toca nunca. Es un segmento de ruta (`rutaDeWorkspace`) y ya hay una copia
+   *   local colgando de él: cambiarlo aquí sería mudar la carpeta del proyecto de sitio
+   *   porque el servidor decidió llamarse de otra forma.
+   */
+  const renombrarConElServidor = (entorno: Entorno, nombreDelServidor: string | undefined): void => {
+    if (nombreDelServidor === undefined || nombreDelServidor === "") return;
+    if (entorno.nombre !== hostDeUrl(entorno.url)) return;
+    if (nombreDelServidor === entorno.nombre) return;
+    const renombrado: Entorno = { ...entorno, nombre: nombreDelServidor };
+    opciones.guardarEntorno(renombrado);
+    const donde = registrados.findIndex((e) => e.id === entorno.id);
+    if (donde >= 0) registrados.splice(donde, 1, renombrado);
+    informar(`entorno «${entorno.id}»: el servidor dice llamarse «${nombreDelServidor}»`);
   };
 
   const cerrarProyectoAbierto = async (): Promise<void> => {
@@ -459,20 +631,41 @@ export function crearVestibulo(opciones: OpcionesDelVestibulo): Vestibulo {
       // `sesiones.ts` no puede hacerlo —`reabrirSesion` es una lectura pura sin estado
       // entre llamadas—, así que lo hace quien es dueño de la sesión viva, que es esto.
       historica = false;
+      // Este envoltorio es el ÚNICO sitio que sabe cuándo empieza y cuándo acaba un turno:
+      // `correrConsola` solo lo espera y la piel solo ve eventos. De aquí sale lo que apaga
+      // el compositor, saca el botón de parar y enciende el borde vivo.
+      consolaWeb.turno(true);
+      escuchaDeTurno?.(true);
       try {
         await ejecutorEfectivo(peticion, estado, consola);
       } finally {
+        // En el `finally`: un turno que revienta o que se cancela también TERMINA, y dejar
+        // el compositor apagado para siempre sería peor que no haberlo apagado nunca.
+        consolaWeb.turno(false);
+        escuchaDeTurno?.(false);
         volcar();
       }
     };
 
+    // El estado con el que arranca el lazo, guardado ANTES de arrancarlo: es lo que
+    // `estadoDeSesion` devuelve mientras nadie haya cambiado nada, y sin él quien pinte el
+    // modelo en vigor no tendría qué enseñar hasta el primer `/modelo` — que es justo lo
+    // que se quiere evitar (enseñar «no se sabe» cuando sí se sabe).
+    let estadoDeSesion: EstadoDeSesion = {
+      hilo: `xonecode-${randomUUID()}`,
+      raiz,
+      fuentes: opciones.fuentes ?? {},
+    };
+    // `/modelo` y `/modelos` cambian el modelo EN CALIENTE y no tocan disco, así que esta
+    // es la única forma de enterarse. Ver `Consola.alEstado`.
+    consolaWeb.consola.alEstado = (nuevo) => {
+      estadoDeSesion = nuevo;
+      escuchaDeEstado?.(nuevo);
+    };
+
     const terminada = correr(
       consolaWeb.consola,
-      {
-        hilo: `xonecode-${randomUUID()}`,
-        raiz,
-        fuentes: opciones.fuentes ?? {},
-      },
+      estadoDeSesion,
       ejecutarTurno
     ).finally(() => {
       cerrada = true;
@@ -485,6 +678,9 @@ export function crearVestibulo(opciones: OpcionesDelVestibulo): Vestibulo {
 
     const consolaDeProyecto: ConsolaDeProyecto = {
       raiz,
+      get estadoDeSesion() {
+        return estadoDeSesion;
+      },
       get sesion() {
         return idSesion;
       },
@@ -495,11 +691,16 @@ export function crearVestibulo(opciones: OpcionesDelVestibulo): Vestibulo {
         return cerrada;
       },
       consola: consolaWeb,
+      cancelarTurno: () => {
+        if (sesionReal?.cancelar === undefined) return false;
+        sesionReal.cancelar();
+        return true;
+      },
       recibir: (mensaje) => consolaWeb.recibir(mensaje),
       // El transcript del cliente lleva PRIMERO lo releído y después lo de esta ejecución.
       // Lo releído no vuelve a pasar por `volcar`: ya está en el `.jsonl`.
       conectar: (enviar) => [...(reabierta?.actos ?? []), ...consolaWeb.conectar(enviar)],
-      desconectar: () => consolaWeb.desconectar(),
+      desconectar: (enviar) => consolaWeb.desconectar(enviar),
       actos: () => [...(reabierta?.actos ?? []), ...consolaWeb.actos()],
       cerrar: async () => {
         // El orden es el que evita que cerrar cuelgue: `consolaWeb.cerrar()` pone el EOF,
@@ -536,16 +737,33 @@ export function crearVestibulo(opciones: OpcionesDelVestibulo): Vestibulo {
       return pasos;
     },
 
+    alCambiarEstadoDeSesion(escucha) {
+      escuchaDeEstado = escucha;
+    },
+
+    alCambiarTurno(escucha) {
+      escuchaDeTurno = escucha;
+    },
+
     opcionesDeEntorno: () => [...ENTORNOS_OFICIALES, ENTORNO_OTRO],
     entornosRegistrados: () => [...registrados],
 
-    async pasoDeCuenta(): Promise<void> {
-      // `cli/wizardInicial.ts` NO se toca: se le pasa la consola web y ya está. Si esto
-      // necesitara tocarlo, el diseño se habría desviado.
-      await asistenteDeModelo(consolaDelVestibulo.consola, {
+    async pasoDeCuenta(): Promise<ResultadoDelAsistente> {
+      // Sigue siendo `asistenteDeModelo` con la consola web detrás y nada más. Lo único que
+      // esta piel añade es `exigirEleccion`: aquí el paso de cuenta es la PUERTA del
+      // dashboard, así que cancelar vuelve a preguntar en vez de dejar entrar con el modelo
+      // por omisión. El asistente decide cuándo parar mirando `eof()` — sin cliente, no hay
+      // a quién insistirle.
+      return asistenteDeModelo(consolaDelVestibulo.consola, {
         origenDeTrabajo: opciones.origenDeTrabajo,
         hayCredencial: opciones.hayCredencial ?? (() => false),
         guardarCredencial: registrarCredencial,
+        // La clave se prueba contra el catálogo ANTES de escribirse; esto es lo que la
+        // pone en el proceso mientras tanto. Entra por opción como todo lo que toca el
+        // sistema: un test no puede escribir en el `process.env` del que corre los tests
+        // sin decirlo.
+        ...(opciones.aplicarCredencial === undefined ? {} : { aplicarCredencial: opciones.aplicarCredencial }),
+        exigirEleccion: true,
       });
     },
 
@@ -562,18 +780,33 @@ export function crearVestibulo(opciones: OpcionesDelVestibulo): Vestibulo {
       if (!urlDeEntornoValida(entorno.url)) {
         throw new Error(AVISO_DE_URL_DE_MCP);
       }
-      const guardado = opciones.guardarEntorno(entorno);
+      // Lo ÚNICO que el formulario pide es la URL; la identidad se deduce de ella.
+      const identificado = identidadDeEntorno(entorno);
+      const guardado = opciones.guardarEntorno(identificado);
       // Justo después de registrar, y no antes: `adoptarLegadoSiProcede` solo actúa si la
       // URL es la oficial por omisión, que es la única que el fichero plano pudo usar.
-      adoptarLegado(entorno);
+      adoptarLegado(identificado);
       // SUSTITUYE por id, como hace `settingsEnDisco.guardarEntorno` en el fichero. Con un
       // `push` a secas, registrar dos veces el mismo entorno —cosa que la web hace cada vez
       // que alguien lo elige— dejaba dos entradas para un id, y `entornoPorId` resolvía a la
       // primera: la vieja. Registrar es idempotente aquí igual que en disco.
-      const yaEstaba = registrados.findIndex((e) => e.id === entorno.id);
-      if (yaEstaba >= 0) registrados.splice(yaEstaba, 1, entorno);
-      else registrados.push(entorno);
-      informar(`entorno «${entorno.id}» registrado en ${guardado.ruta}`);
+      const yaEstaba = registrados.findIndex((e) => e.id === identificado.id);
+      if (yaEstaba >= 0) registrados.splice(yaEstaba, 1, identificado);
+      else registrados.push(identificado);
+      informar(`entorno «${identificado.id}» registrado en ${guardado.ruta}`);
+      // El entorno YA identificado vuelve con la ruta: quien registró un «otro» no sabe con
+      // qué id quedó, y `arranque.ts` necesita ese id exacto para pedirle los proyectos —
+      // con el «otro» de la lista, `entornoPorId` no encontraría nada.
+      return { ...guardado, entorno: identificado };
+    },
+
+    async guardarProyectosVisibles(entorno, proyectos) {
+      const registrado = entornoPorId(entorno);
+      const conProyectos: Entorno = { ...registrado, proyectos: [...proyectos] };
+      const guardado = opciones.guardarEntorno(conProyectos);
+      const donde = registrados.findIndex((e) => e.id === registrado.id);
+      if (donde >= 0) registrados.splice(donde, 1, conProyectos);
+      informar(`proyectos visibles de «${registrado.id}»: ${proyectos.length === 0 ? "ninguno" : proyectos.join(", ")}`);
       return guardado;
     },
 
@@ -582,15 +815,33 @@ export function crearVestibulo(opciones: OpcionesDelVestibulo): Vestibulo {
       if (opciones.proyectosDeEntorno === undefined) {
         throw new Error("esta ejecución no tiene conexión con CloudStudio");
       }
-      return opciones.proyectosDeEntorno(registrado);
+      const { proyectos, servidor } = await opciones.proyectosDeEntorno(registrado);
+      renombrarConElServidor(registrado, servidor?.nombre);
+      return proyectos;
     },
 
     async ramasDe(entorno, proyecto) {
+      // El NOMBRE, siempre: es lo único que el servidor sabe abrir.
+      const nombre = typeof proyecto === "string" ? proyecto : proyecto.nombre;
       const registrado = entornoPorId(entorno);
       if (opciones.ramasDeProyecto === undefined) {
         throw new Error("esta ejecución no tiene conexión con CloudStudio");
       }
-      return opciones.ramasDeProyecto(registrado, proyecto);
+      return opciones.ramasDeProyecto(registrado, nombre);
+    },
+
+    raizDeProyecto(entorno, proyecto) {
+      return rutaDeWorkspace(base, entornoPorId(entorno).id, proyecto);
+    },
+
+    sesionesDe(raiz) {
+      // Una carpeta que no existe no es un fallo: es un proyecto que nunca se abrió. El
+      // puerto se lo traga y devuelve vacío, que es la verdad.
+      try {
+        return sesiones.listar(raiz).map((s) => ({ id: s.id, titulo: s.titulo }));
+      } catch {
+        return [];
+      }
     },
 
     async completarProyecto({ entorno, proyecto, rama }) {

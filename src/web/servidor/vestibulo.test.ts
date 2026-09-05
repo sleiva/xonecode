@@ -63,6 +63,10 @@ function sesionesEnMemoria() {
   return {
     jsonl,
     puerto: {
+      listar: (raiz: string) =>
+        [...jsonl.keys()]
+          .filter((clave) => clave.startsWith(`${raiz}|`))
+          .map((clave) => ({ id: clave.slice(raiz.length + 1), titulo: "sesión" })),
       crear: (raiz: string) => {
         const id = `s${jsonl.size + 1}`;
         jsonl.set(`${raiz}|${id}`, []);
@@ -155,6 +159,154 @@ describe("vestíbulo", () => {
     expect(d.escrituras).toEqual([]);
   });
 
+  /**
+   * El formulario del navegador pide SOLO la URL desde este cambio. Lo demás se deduce
+   * aquí: un nombre tecleado a mano es un dato inventado que después hay que creerse en la
+   * barra lateral, y un id «otro» sería la misma carpeta de workspace para todos los
+   * on-premise del mundo.
+   */
+  describe("identidad del entorno: lo único que se teclea es la URL", () => {
+    it("un «otro» saca id y nombre del host, y el id vale como segmento de ruta", async () => {
+      const d = dobles();
+      const v = crearVestibulo({ ...d, entornos: [], origenDeTrabajo: "global" });
+      const { entorno } = await v.registrarEntorno({ id: "otro", nombre: "", url: "https://mcp.casa.local:8443/mcp" });
+      // Los dos puntos del puerto no sobreviven: esto acaba siendo una carpeta, y en
+      // Windows un «:» parte la ruta.
+      expect(entorno.id).toBe("mcp.casa.local-8443");
+      expect(entorno.nombre).toBe("mcp.casa.local:8443");
+      expect(d.escrituras).toContain("entorno:mcp.casa.local-8443");
+      // Y queda registrado con ESE id: quien pida sus proyectos lo va a buscar por él.
+      expect(v.entornosRegistrados().map((e) => e.id)).toEqual(["mcp.casa.local-8443"]);
+    });
+
+    it("la URL de un oficial tecleada en el hueco de «otro» NO crea un entorno paralelo", async () => {
+      // Dos entradas para el mismo servidor son dos carpetas de workspace y dos huecos de
+      // OAuth para la misma cuenta.
+      const d = dobles();
+      const v = crearVestibulo({ ...d, entornos: [], origenDeTrabajo: "global" });
+      const { entorno } = await v.registrarEntorno({
+        id: "otro",
+        nombre: "",
+        url: "https://mcp.xonewebstudio.com/mcp/",
+      });
+      expect(entorno).toMatchObject({ id: "webstudio", nombre: "XOne WebStudio" });
+    });
+
+    /**
+     * El nombre del host es verdad comprobable pero fea («mcp.casa.local»). La primera vez
+     * que se habla de verdad con el servidor —`proyectosDe`, que hace OAuth e `initialize`—
+     * llega su `serverInfo`, y solo entonces se puede poner el nombre bueno.
+     */
+    it("al listar proyectos, el nombre deducido se sustituye por el que dice el servidor", async () => {
+      const d = dobles();
+      const dichos: string[] = [];
+      const v = crearVestibulo({
+        ...d,
+        entornos: [],
+        origenDeTrabajo: "global",
+        informar: (t) => dichos.push(t),
+        proyectosDeEntorno: async () => ({
+          proyectos: [{ id: "p1", nombre: "Tienda" }],
+          servidor: { nombre: "CloudStudio de Acme" },
+        }),
+      });
+      const { entorno } = await v.registrarEntorno({ id: "otro", nombre: "", url: "https://mcp.casa.local/mcp" });
+      expect(entorno.nombre).toBe("mcp.casa.local");
+
+      await v.proyectosDe(entorno.id);
+
+      const registrado = v.entornosRegistrados()[0]!;
+      expect(registrado.nombre).toBe("CloudStudio de Acme");
+      // El id NO se toca: es un segmento de ruta y ya cuelga de él la copia local.
+      expect(registrado.id).toBe("mcp.casa.local");
+      expect(d.escrituras.filter((e) => e.startsWith("entorno:"))).toEqual([
+        "entorno:mcp.casa.local",
+        "entorno:mcp.casa.local",
+      ]);
+      expect(dichos.join("\n")).toMatch(/dice llamarse «CloudStudio de Acme»/);
+    });
+
+    it("un nombre que NO se dedujo no lo cambia un servidor remoto por su cuenta", async () => {
+      const d = dobles();
+      const v = crearVestibulo({
+        ...d,
+        entornos: [],
+        origenDeTrabajo: "global",
+        proyectosDeEntorno: async () => ({
+          proyectos: [],
+          servidor: { nombre: "Lo Que El Servidor Diga" },
+        }),
+      });
+      // El oficial: su nombre lo pone xonecode, no el otro extremo del cable.
+      const { entorno } = await v.registrarEntorno({
+        id: "otro",
+        nombre: "",
+        url: "https://mcp.xonewebstudio.com/mcp",
+      });
+      await v.proyectosDe(entorno.id);
+      expect(v.entornosRegistrados()[0]!.nombre).toBe("XOne WebStudio");
+    });
+
+    it("un servidor que no publica nombre no borra el que había", async () => {
+      const d = dobles();
+      const v = crearVestibulo({
+        ...d,
+        entornos: [],
+        origenDeTrabajo: "global",
+        proyectosDeEntorno: async () => ({ proyectos: [] }),
+      });
+      const { entorno } = await v.registrarEntorno({ id: "otro", nombre: "", url: "https://mcp.casa.local/mcp" });
+      await v.proyectosDe(entorno.id);
+      expect(v.entornosRegistrados()[0]!.nombre).toBe("mcp.casa.local");
+    });
+
+    it("un id y un nombre puestos por quien llama se respetan: otra piel puede traerlos", async () => {
+      const d = dobles();
+      const v = crearVestibulo({ ...d, entornos: [], origenDeTrabajo: "global" });
+      const { entorno } = await v.registrarEntorno({ id: "casa", nombre: "La casa", url: "https://mcp.casa.local/mcp" });
+      expect(entorno).toMatchObject({ id: "casa", nombre: "La casa" });
+    });
+  });
+
+  /**
+   * Medido contra el servidor real: `studio_open_project` abre por NOMBRE y rechaza el
+   * identificador. Como el cable trae el id, la web pedía las ramas con
+   * «5cd2327f_53f3_40b9…» y el servidor contestaba «no project is open» a todo — un bucle
+   * sordo en el que el error hablaba de la tool y no del argumento equivocado.
+   */
+  it("las ramas se piden por NOMBRE aunque quien llama tenga el id", async () => {
+    const pedidos: string[] = [];
+    const v = crearVestibulo({
+      ...dobles(),
+      origenDeTrabajo: "global",
+      ramasDeProyecto: async (_entorno, proyecto) => {
+        pedidos.push(proyecto);
+        return ["master"];
+      },
+    });
+
+    await v.ramasDe("webstudio", { id: "5cd2327f_53f3_40b9", nombre: "AppForTest" });
+    // Y un nombre suelto sigue valiendo: es lo que pasa el alta de terminal.
+    await v.ramasDe("webstudio", "OtroProyecto");
+
+    expect(pedidos).toEqual(["AppForTest", "OtroProyecto"]);
+  });
+
+  it("los proyectos visibles se guardan CON el entorno, y ninguno es una elección", async () => {
+    const d = dobles();
+    const dichos: string[] = [];
+    const v = crearVestibulo({ ...d, origenDeTrabajo: "global", informar: (t) => dichos.push(t) });
+    await v.guardarProyectosVisibles("webstudio", ["p1", "p3"]);
+    expect(v.entornosRegistrados()[0]!.proyectos).toEqual(["p1", "p3"]);
+    expect(d.escrituras).toContain("entorno:webstudio");
+
+    // Lista vacía = «ninguno», y se guarda como tal: no es lo mismo que no haber elegido,
+    // que es lo que significa el campo AUSENTE.
+    await v.guardarProyectosVisibles("webstudio", []);
+    expect(v.entornosRegistrados()[0]!.proyectos).toEqual([]);
+    expect(dichos.join("\n")).toMatch(/ninguno/);
+  });
+
   it("un on-premise en loopback SÍ se registra: es la misma regla que aplica quien conecta", async () => {
     // Antes había dos criterios: el wizard del navegador aceptaba este loopback y este
     // fichero lo rechazaba, con dos mensajes claros que se contradecían. Ahora los tres
@@ -163,6 +315,32 @@ describe("vestíbulo", () => {
     const v = crearVestibulo({ ...d, entornos: [], origenDeTrabajo: "global" });
     await v.registrarEntorno({ id: "local", nombre: "On-premise", url: "http://127.0.0.1:8080/mcp" });
     expect(d.escrituras).toContain("entorno:local");
+  });
+
+  /**
+   * El aviso de turno es lo que apaga el compositor, saca el botón de parar y enciende el
+   * borde vivo. Va en un `finally` a propósito: un turno que revienta o que se cancela
+   * también TERMINA, y dejar el compositor apagado para siempre sería peor que no haberlo
+   * apagado nunca.
+   */
+  it("avisa de que el turno empieza y de que acaba, también si el turno revienta", async () => {
+    const avisos: boolean[] = [];
+    const v = crearVestibulo({
+      ...dobles(),
+      origenDeTrabajo: "global",
+      correr: async (consola, estado, ejecutar) => {
+        await ejecutar!("una petición", estado, consola).catch(() => undefined);
+        return 0;
+      },
+      crearEjecutor: () => async () => {
+        throw new Error("el turno revienta");
+      },
+    });
+    v.alCambiarTurno((activo) => avisos.push(activo));
+    const abierto = await v.abrirProyecto({ raiz: "/w/a" });
+    await abierto.terminada;
+    expect(avisos).toEqual([true, false]);
+    await v.cerrar();
   });
 
   it("abrir un proyecto con otro abierto cierra el primero", async () => {

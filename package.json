@@ -23,6 +23,7 @@
   "scripts": {
     "build": "rm -rf dist && tsc -p tsconfig.build.json && chmod +x dist/bin.js && npm run build:web",
     "build:web": "npm run build --workspace apps/web",
+    "web": "npm run build:web && tsx src/bin.ts --web",
     "test": "vitest run",
     "test:watch": "vitest",
     "typecheck": "tsc --noEmit",

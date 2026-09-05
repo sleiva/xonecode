@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { aEventos, textoDe, toolsDe, esDelPadre } from "./puente.js";
+import { aEventos, razonamientoDe, textoDe, toolsDe, esDelPadre } from "./puente.js";
 import type { DomainEvent, PendienteDeAprobacion } from "../core/events.js";
 
 async function recoger(chunks: unknown[]): Promise<DomainEvent[]> {
@@ -34,6 +34,30 @@ describe("textoDe", () => {
     // Un `String(content)` daría el repr de la lista, razonamiento incluido: el
     // usuario vería basura donde espera una frase.
     expect(textoDe({ content: [{ type: "thinking", thinking: "…" }, { type: "text", text: "hola" }] })).toBe("hola");
+  });
+
+  it("el pensamiento NO se cuela en el texto de la respuesta", () => {
+    // La forma real de Gemini (`@langchain/google-genai`): bloques `thinking` mezclados con
+    // los de texto dentro del mismo `content`.
+    const msg = {
+      content: [
+        { type: "thinking", thinking: "déjame ver el fichero" },
+        { type: "text", text: "Listo." },
+      ],
+    };
+    expect(textoDe(msg)).toBe("Listo.");
+    expect(razonamientoDe(msg)).toBe("déjame ver el fichero");
+  });
+
+  it("también entiende la forma `{ text, thought: true }` de otros adaptadores", () => {
+    const msg = { content: [{ text: "pensando", thought: true }, { type: "text", text: "dicho" }] };
+    expect(razonamientoDe(msg)).toBe("pensando");
+    expect(textoDe(msg)).toBe("dicho");
+  });
+
+  it("sin bloques de pensamiento, el razonamiento es cadena vacía y no `undefined`", () => {
+    expect(razonamientoDe({ content: "solo texto" })).toBe("");
+    expect(razonamientoDe(null)).toBe("");
   });
 
   it("lo que no sabe leer da cadena vacía, no `undefined` ni un repr", () => {

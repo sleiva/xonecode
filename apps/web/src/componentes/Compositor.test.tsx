@@ -60,4 +60,52 @@ describe("Compositor", () => {
     fireEvent.change(screen.getByRole("textbox"), { target: { value: "sync" } });
     expect(screen.queryByRole("listbox")).toBeNull();
   });
+
+  /**
+   * Con un turno en vuelo, mandar una segunda petición la deja en la cola del lazo sin
+   * decirlo: el usuario ve su texto desaparecer del campo y no pasar nada durante minutos.
+   */
+  it("con turno en vuelo la entrada se apaga y dice por qué", () => {
+    render(<Compositor conectado turnoEnVuelo alEnviar={() => {}} />);
+    const entrada = screen.getByPlaceholderText(/está trabajando/i) as HTMLTextAreaElement;
+    expect(entrada.disabled).toBe(true);
+  });
+
+  it("la flecha se convierte en parar, y parar avisa a quien sabe abortar", () => {
+    const alParar = vi.fn();
+    const alEnviar = vi.fn();
+    const { rerender } = render(<Compositor conectado alEnviar={alEnviar} />);
+    expect(screen.getByRole("button", { name: /enviar/i })).toBeTruthy();
+
+    rerender(<Compositor conectado turnoEnVuelo alParar={alParar} alEnviar={alEnviar} />);
+    // Una sola ranura: no hay dos botones, uno de ellos inerte.
+    expect(screen.queryByRole("button", { name: /enviar/i })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: /parar/i }));
+    expect(alParar).toHaveBeenCalled();
+  });
+
+  it("el Enter tampoco cuela con el turno en vuelo", () => {
+    const alEnviar = vi.fn();
+    const { rerender } = render(<Compositor conectado alEnviar={alEnviar} />);
+    const entrada = screen.getByRole("textbox");
+    fireEvent.change(entrada, { target: { value: "algo" } });
+    // El campo se apaga DESPUÉS de escribir, con el foco puesto: la tecla llega igual.
+    rerender(<Compositor conectado turnoEnVuelo alParar={() => {}} alEnviar={alEnviar} />);
+    fireEvent.keyDown(screen.getByRole("textbox"), { key: "Enter" });
+    expect(alEnviar).not.toHaveBeenCalled();
+  });
+
+  /**
+   * El borde vivo es la única señal de que pasa algo en los tramos en que el modelo no
+   * habla —piensa, llama tools, espera al verificador— y pueden ser minutos. La caja
+   * apagada y quieta se leía como «se ha colgado». El test mira el ESTADO, no la animación:
+   * jsdom no hace layout ni corre `@keyframes`, así que afirmar el movimiento aquí sería
+   * afirmar lo que este entorno no sabe.
+   */
+  it("la caja se marca como trabajando mientras hay turno, y se desmarca al acabar", () => {
+    const { container, rerender } = render(<Compositor conectado turnoEnVuelo alEnviar={() => {}} />);
+    expect(container.querySelector("[data-trabajando]")).toBeTruthy();
+    rerender(<Compositor conectado alEnviar={() => {}} />);
+    expect(container.querySelector("[data-trabajando]")).toBeNull();
+  });
 });

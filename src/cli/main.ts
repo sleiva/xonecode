@@ -17,6 +17,7 @@ import { topeResuelto } from "../core/contextos.js";
 import {
   aplicarAuth,
   cargar,
+  aplicarCredencialAlProceso,
   guardarCloudStudioDeProyecto,
   guardarEntornoDeProyecto,
   guardarModeloGlobal,
@@ -121,6 +122,7 @@ const AYUDA = `xonecode — harness de XOne
   xonecode                       abre la consola WEB en el navegador (por defecto)
   xonecode --no-abrir            la web, pero sin abrir el navegador (imprime la URL)
   xonecode --puerto <n>          la web en otro puerto (por omisión 4173)
+  xonecode --anfitrion <host>    acepta ese Host además del loopback, para un túnel
   xonecode --cli                 la consola de terminal (TUI)
   xonecode --cli --no-tui        consola clásica (stdio)
   xonecode run "<peticion>"      un turno, de un disparo (pipeable)
@@ -349,12 +351,34 @@ export function decidirPiel(
 export interface OpcionesWeb {
   puerto: number;
   abrir: boolean;
+  /** `--anfitrion <host>`: un nombre extra aceptado en la cabecera `Host`, para un túnel. */
+  anfitrion?: string;
+}
+
+/**
+ * El anfitrión de un túnel: un nombre de máquina, y nada más.
+ *
+ * Se valida aquí y no en el servidor porque es un error de USO (64) y no de ejecución. Sin
+ * comodines, sin esquema, sin ruta y sin puerto: lo que llega en la cabecera `Host` de un
+ * túnel HTTPS es el nombre pelado, y aceptar `https://x/` o `*.ngrok-free.app` sería aceptar
+ * algo que nunca va a casar —o, peor, casar de más—.
+ */
+function anfitrionDeTunel(bruto: string | undefined): string {
+  const valor = (bruto ?? "").trim();
+  if (!/^[a-zA-Z0-9.-]+$/.test(valor) || valor.includes("*")) {
+    throw new ErrorDeUso(
+      `--anfitrion espera un nombre de máquina (por ejemplo «algo.ngrok-free.app»), y recibió «${bruto ?? ""}»`
+    );
+  }
+  return valor;
 }
 
 export function parsearOpcionesWeb(argv: string[]): OpcionesWeb {
   const abrir = !argv.includes("--no-abrir");
+  const j = argv.indexOf("--anfitrion");
+  const anfitrion = j === -1 ? {} : { anfitrion: anfitrionDeTunel(argv[j + 1]) };
   const i = argv.indexOf("--puerto");
-  if (i === -1) return { puerto: PUERTO_WEB_POR_OMISION, abrir };
+  if (i === -1) return { puerto: PUERTO_WEB_POR_OMISION, abrir, ...anfitrion };
   const bruto = argv[i + 1];
   const puerto = Number(bruto);
   if (!Number.isInteger(puerto) || puerto < 1 || puerto > 65535) {
@@ -365,7 +389,7 @@ export function parsearOpcionesWeb(argv: string[]): OpcionesWeb {
       `el puerto ${PUERTO_CALLBACK} está reservado al callback de OAuth de CloudStudio: elige otro`
     );
   }
-  return { puerto, abrir };
+  return { puerto, abrir, ...anfitrion };
 }
 
 /**
@@ -1000,6 +1024,9 @@ export async function entrarEnConsola(
       origenDeTrabajo: resolver(fuentesHidratadas).trabajo.origen,
       hayCredencial: (proveedor) => hayCredencial(proveedor, raiz),
       guardarCredencial: (proveedor, clave) => guardarCredencial(proveedor, clave),
+      // La clave se PRUEBA antes de escribirse: esto la pone en el proceso (que es de
+      // donde la lee `CatalogoModelos`) sin tocar `auth.json`.
+      aplicarCredencial: aplicarCredencialAlProceso,
     });
     // 2-3-4. Modo, proyecto de CloudStudio + rama + descarga, y modelo propio opcional.
     await configurarModoInicial(raiz, consola);
@@ -1093,13 +1120,14 @@ export async function main(argv: string[]): Promise<number> {
       // `xonecode` con TTY preguntaría el proveedor en el terminal y DESPUÉS abriría un
       // navegador para volver a preguntarlo.
       if (decidirPiel(argv) === "web") {
-        const { puerto, abrir } = parsearOpcionesWeb(argv);
+        const { puerto, abrir, anfitrion } = parsearOpcionesWeb(argv);
         // Import DINÁMICO, por el mismo motivo que el de la TUI: esta rama arrastra el
         // vestíbulo entero (grafo del agente, MCP, sesiones) y `run`, `describe` y
         // cualquier tubería no lo necesitan ni lo van a levantar.
         const { arrancarConsolaWeb } = await import("../web/servidor/arranque.js");
         return await arrancarConsolaWeb({
           puerto,
+          ...(anfitrion === undefined ? {} : { anfitrion }),
           abrir,
           cwd: process.cwd(),
           guion: argv.includes("--guion"),

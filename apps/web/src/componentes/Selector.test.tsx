@@ -71,6 +71,26 @@ describe("Selector", () => {
     expect(alElegir).not.toHaveBeenCalledWith("");
   });
 
+  /**
+   * El motivo viaja en el propio selector porque hay una piel que no pinta el transcript
+   * mientras pregunta: durante el alta, la web enseña solo la tarjeta
+   * (`App.tsx`, rama `enAlta`). Un «no se pudo conectar con openai» dicho solo por
+   * `escribir` acabaría en un acto de sistema que nadie está mirando.
+   */
+  it("pinta el aviso del servidor como alerta, y sin aviso no pinta ninguna", () => {
+    const { rerender } = render(<Selector titulo="Proveedor" opciones={OPCIONES} alElegir={() => {}} />);
+    expect(screen.queryByRole("alert")).toBeNull();
+    rerender(
+      <Selector
+        titulo="Proveedor"
+        opciones={OPCIONES}
+        aviso="no se pudo conectar con openai: credencial no autorizada"
+        alElegir={() => {}}
+      />
+    );
+    expect(screen.getByRole("alert").textContent).toMatch(/no se pudo conectar con openai/);
+  });
+
   it("una opción sin detalle no inventa uno", () => {
     render(<Selector titulo="Elige modelo" opciones={OPCIONES} alElegir={() => {}} />);
     expect(screen.getByRole("button", { name: "Llama 3" })).toBeTruthy();

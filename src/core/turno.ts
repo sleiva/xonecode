@@ -13,6 +13,12 @@ import type { DomainEvent, Fase, PendienteDeAprobacion } from "./events.js";
 export interface Piel {
   token(texto: string): void;
   cerrarLinea(): void;
+  /**
+   * El razonamiento del modelo, en trozos, como `token`. OPCIONAL: la piel que no lo
+   * implemente no lo verá, y la salida de stdio sigue siendo la de siempre —byte-idéntica
+   * por una tubería, que es lo que sostiene el e2e—. Hoy solo la web lo pinta.
+   */
+  razonamiento?(texto: string): void;
   linea(texto: string): void;
   pausa(pendientes: PendienteDeAprobacion[]): void;
   fin(ms: number): void;
@@ -94,6 +100,20 @@ export async function correrTurno(
           ultimoId = ev.msgId;
           abierta = true;
           piel.token(ev.texto);
+          break;
+
+        case "razonamiento":
+          // La piel que no lo implementa no se entera de que existe: ni cierra la línea de
+          // tokens ni pinta nada, así que stdio y la TUI siguen dando lo mismo que antes.
+          if (piel.razonamiento !== undefined) {
+            // Cierra la línea de respuesta abierta, como cualquier otra cosa que empieza la
+            // suya: el razonamiento no es continuación de la frase que se estaba diciendo.
+            if (abierta) {
+              piel.cerrarLinea();
+              abierta = false;
+            }
+            piel.razonamiento(ev.texto);
+          }
           break;
 
         case "fase": {

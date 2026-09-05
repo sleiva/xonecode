@@ -89,6 +89,12 @@ export interface ConexionCloudStudio {
   scopes: readonly string[];
   herramientas: Array<{ nombre: string; descripcion: string }>;
   proyectos: Array<{ id: string; nombre: string }>;
+  /**
+   * Cómo se llama a sí mismo el servidor MCP (el `serverInfo` del `initialize`). Ausente
+   * cuando no publica ninguno legible: entonces no se afirma nada — quien registra el
+   * entorno se queda con el nombre que dedujo de la URL.
+   */
+  servidor?: { nombre: string; version?: string };
 }
 
 export interface OpcionesCloudStudio {
@@ -506,7 +512,13 @@ function escucharCallback(timeoutMs: number, redirigirA?: string): Promise<{ cod
 }
 
 /** Provider OAuth persistente, deliberadamente pequeño y compatible con el SDK MCP. */
-class ProviderCloudStudio implements OAuthClientProvider {
+/**
+ * Exportada SOLO para poder probar `invalidateCredentials` —el gancho del que depende que
+ * el SDK sepa recuperarse de un token muerto— sin red ni navegador. Nadie fuera de este
+ * módulo la construye para usarla: quien abre sesión llama a `sesionCloudStudio` o a
+ * `conectarCloudStudio`, que la montan por dentro.
+ */
+export class ProviderCloudStudio implements OAuthClientProvider {
   private estado: EstadoDeEntorno;
   private readonly metadata: OAuthClientMetadata;
 
@@ -552,6 +564,36 @@ class ProviderCloudStudio implements OAuthClientProvider {
     this.guardar();
   }
   redirectToAuthorization(url: URL): void { this.alRedirigir(url); }
+  /**
+   * El gancho de recuperación del SDK, y no un extra: `auth()` (`client/auth.js`) atrapa
+   * `InvalidGrantError` —el refresh token muerto— e `InvalidClientError`, llama a esto y
+   * REINTENTA el flujo entero. Sin implementarlo, esa llamada es un no-op: el SDK reintenta
+   * con las mismas credenciales podridas, vuelve a fallar y lanza. O sea que un token
+   * caducado sin refresco válido era un fallo duro —«hay que borrar el fichero a mano»—
+   * cuando el propio SDK sabía volver a autenticar solo.
+   *
+   * Cada alcance borra LO SUYO y nada más, y se escribe en el acto: lo que se está
+   * arreglando es justo un estado a medias, y dejarlo en memoria sin guardar significaría
+   * que el siguiente arranque lo vuelve a leer del fichero.
+   */
+  invalidateCredentials(alcance: "all" | "client" | "tokens" | "verifier" | "discovery"): void {
+    if (alcance === "all") {
+      // Todo menos el hueco: el entorno sigue existiendo, lo que se va son sus credenciales.
+      this.estado = {};
+    } else if (alcance === "tokens") {
+      delete this.estado.tokens;
+      // Los scopes concedidos van CON el token: conservarlos haría creer al constructor
+      // que ya hay permiso concedido para unos tokens que ya no existen.
+      delete this.estado.scopes;
+    } else if (alcance === "client") {
+      delete this.estado.clientInformation;
+    } else if (alcance === "verifier") {
+      delete this.estado.codeVerifier;
+    }
+    // `discovery` no tiene nada que borrar aquí: este provider no cachea el descubrimiento
+    // (no implementa `discoveryState`), así que el SDK lo rehace solo.
+    this.guardar();
+  }
   saveCodeVerifier(verifier: string): void { this.estado.codeVerifier = verifier; this.guardar(); }
   codeVerifier(): string {
     if (!this.estado.codeVerifier) throw new Error("no hay verificador PKCE para el login de CloudStudio");
@@ -734,6 +776,39 @@ export async function sesionCloudStudio(urlTexto: string, opciones: OpcionesClou
   };
 }
 
+/** Lo más largo que se acepta de un nombre que viene del OTRO lado. Cabe cualquier nombre
+ *  real de servidor y no cabe un párrafo. */
+const TOPE_NOMBRE_DE_SERVIDOR = 60;
+
+/**
+ * El nombre del servidor MCP, saneado, o `undefined` si no publica ninguno usable.
+ *
+ * Es texto que llega de fuera y acaba en `settings.json` y en la barra lateral, así que
+ * pasa por la misma disciplina que cualquier otro dato remoto de este fichero: se quita lo
+ * que no es imprimible (un `\n` o un `\r` en un nombre parte la línea de un log y disfraza
+ * lo que venga detrás), se colapsan los espacios y se acota. Lo que NUNCA sale de aquí es
+ * un identificador: el id del entorno se deduce del host y no de esto, porque el id es un
+ * segmento de ruta y el servidor no puede elegir carpetas en el disco de nadie.
+ *
+ * `title` antes que `name` porque es la convención de MCP: `title` es el nombre para leer y
+ * `name` el programático (`xone-cloudstudio`). Si no hay `title`, `name` es mejor que nada.
+ */
+export function servidorDeImplementacion(
+  info: { name?: unknown; title?: unknown; version?: unknown } | undefined
+): { nombre: string; version?: string } | undefined {
+  const crudo = [info?.title, info?.name].find((v) => typeof v === "string" && v.trim() !== "");
+  if (typeof crudo !== "string") return undefined;
+  const nombre = crudo
+    // eslint-disable-next-line no-control-regex
+    .replace(/[\u0000-\u001f\u007f]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, TOPE_NOMBRE_DE_SERVIDOR);
+  if (nombre === "") return undefined;
+  const version = typeof info?.version === "string" ? info.version.trim().slice(0, TOPE_NOMBRE_DE_SERVIDOR) : "";
+  return { nombre, ...(version === "" ? {} : { version }) };
+}
+
 /**
  * Inicia (o reutiliza) OAuth, completa initialize y lista las tools disponibles.
  * La conexión de tools al grafo vendrá después: esta función prueba la conexión sin
@@ -750,11 +825,15 @@ export async function conectarCloudStudio(urlTexto: string, opciones: OpcionesCl
       throw new Error(`CloudStudio no publicó ninguna herramienta de listado de proyectos${disponibles ? ` (disponibles: ${disponibles})` : ""}`);
     }
     const proyectos = proyectosDeResultado(await cliente.callTool({ name: definicion.name, arguments: {} }));
+    // El `serverInfo` del initialize, ya saneado. Se lee DESPUÉS de `connect`, que es
+    // cuando el SDK lo tiene; antes devuelve `undefined`.
+    const servidor = servidorDeImplementacion(cliente.getServerVersion());
     return {
       url: url.toString(),
       scopes,
       herramientas: listado.tools.map((tool) => ({ nombre: tool.name, descripcion: tool.description ?? "" })),
       proyectos,
+      ...(servidor === undefined ? {} : { servidor }),
     };
   } finally {
     await cerrar();

@@ -71,6 +71,34 @@ describe("servidor web", () => {
     expect(cookie).toMatch(/SameSite=Strict/i);
   });
 
+  /**
+   * `--anfitrion`: la puerta que se abre A MANO para servir por un túnel. Sigue siendo una
+   * lista de UNO y sin comodines — la comprobación de `Host` es lo único que para el DNS
+   * rebinding, y «lo que acabe en .ngrok-free.app» la dejaría abierta a cualquiera que se
+   * registre en ngrok.
+   */
+  it("con `anfitrion` se acepta ESE Host y ningún otro parecido", async () => {
+    const raizEstaticos = mkdtempSync(join(tmpdir(), "xonecode-dist-"));
+    writeFileSync(join(raizEstaticos, "index.html"), "<!doctype html><title>x</title>");
+    servidor = await arrancarServidor({ puerto: 0, raizEstaticos, anfitrion: "tunel.ngrok-free.app" });
+    const token = servidor.token;
+
+    const bueno = await peticionCruda({ ruta: `/?t=${token}`, host: "tunel.ngrok-free.app" });
+    expect(bueno.estado).toBe(200);
+    // Un subdominio del mismo servicio NO cuela: sería el túnel de otra persona.
+    const otro = await peticionCruda({ ruta: `/?t=${token}`, host: "otro.ngrok-free.app" });
+    expect(otro.estado).toBe(403);
+    // Y el loopback sigue valiendo: abrir el túnel no cierra la puerta de casa.
+    const casa = await peticionCruda({ ruta: `/?t=${token}`, host: `127.0.0.1:${servidor.puerto}` });
+    expect(casa.estado).toBe(200);
+  });
+
+  it("sin `anfitrion` no hay puerta que abrir: el mismo Host de túnel es 403", async () => {
+    const { token } = await levantar();
+    const { estado } = await peticionCruda({ ruta: `/?t=${token}`, host: "tunel.ngrok-free.app" });
+    expect(estado).toBe(403);
+  });
+
   it("un Host que no es loopback es 403: es la defensa contra DNS rebinding", async () => {
     const { token } = await levantar();
     // `fetch` NO sirve aquí: MEDIDO en node 22.22.3, ignora en silencio un `Host`

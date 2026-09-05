@@ -10,8 +10,10 @@ import {
   invocarSobre,
   leerEstado,
   olvidarEntorno,
+  ProviderCloudStudio,
   proyectosDeResultado,
   respuestaDeCallback,
+  servidorDeImplementacion,
   URL_CLOUDSTUDIO_POR_OMISION,
 } from "./cloudstudioMcp.js";
 
@@ -365,5 +367,120 @@ describe("la página del callback de OAuth", () => {
 
   it("un callback sin código es un fallo aunque el IDS no diga por qué", () => {
     expect(respuestaDeCallback(null, null, "http://127.0.0.1:7788/").estado).toBe(400);
+  });
+});
+
+/**
+ * El `serverInfo` del initialize: es texto que llega del OTRO lado y acaba en
+ * `settings.json` y en la barra lateral, así que pasa por la misma criba que cualquier
+ * otro dato remoto de este fichero.
+ */
+describe("servidorDeImplementacion · el nombre que el servidor MCP se da a sí mismo", () => {
+  it("prefiere `title` (el nombre para leer) sobre `name` (el programático)", () => {
+    expect(
+      servidorDeImplementacion({ name: "xone-cloudstudio", title: "XOne CloudStudio", version: "2.1.0" })
+    ).toEqual({ nombre: "XOne CloudStudio", version: "2.1.0" });
+  });
+
+  it("sin `title` vale `name`: es mejor que nada", () => {
+    expect(servidorDeImplementacion({ name: "xone-cloudstudio", version: "2.1.0" })).toEqual({
+      nombre: "xone-cloudstudio",
+      version: "2.1.0",
+    });
+  });
+
+  it("sin nada legible no se afirma nada", () => {
+    expect(servidorDeImplementacion(undefined)).toBeUndefined();
+    expect(servidorDeImplementacion({ name: "   ", version: "1" })).toBeUndefined();
+    expect(servidorDeImplementacion({ name: 7 as never, version: "1" })).toBeUndefined();
+  });
+
+  it("quita lo que no es imprimible y colapsa espacios: un salto de línea disfraza lo que venga detrás", () => {
+    const sucio = servidorDeImplementacion({ title: "XOne\n\rStudio\t  local", version: "1" });
+    expect(sucio?.nombre).toBe("XOne Studio local");
+  });
+
+  it("acota la longitud: cabe cualquier nombre real y no cabe un párrafo", () => {
+    const largo = servidorDeImplementacion({ title: "x".repeat(500), version: "y".repeat(500) });
+    expect(largo?.nombre).toHaveLength(60);
+    expect(largo?.version).toHaveLength(60);
+  });
+
+  it("una versión ausente o vacía no se inventa", () => {
+    expect(servidorDeImplementacion({ title: "XOne CloudStudio" })).toEqual({ nombre: "XOne CloudStudio" });
+  });
+});
+
+/**
+ * El gancho del que depende la recuperación automática del SDK. `auth()`
+ * (`@modelcontextprotocol/sdk/client/auth.js`) atrapa `InvalidGrantError` —el refresh token
+ * muerto—, llama a `invalidateCredentials('tokens')` y REINTENTA el flujo entero. Sin
+ * implementarlo esa llamada era un no-op: el SDK reintentaba con las mismas credenciales
+ * podridas y volvía a fallar, así que un token caducado sin refresco válido era un fallo
+ * duro que solo se arreglaba borrando el fichero a mano.
+ */
+describe("ProviderCloudStudio · invalidar credenciales", () => {
+  function provider(ruta: string) {
+    return new ProviderCloudStudio(ruta, "webstudio", "http://127.0.0.1:7634/callback", () => {}, [
+      "mcp.read",
+    ]);
+  }
+
+  it("«tokens» se lleva el token Y los scopes concedidos, y deja el cliente registrado", () => {
+    const casa = mkdtempSync(join(tmpdir(), "xc-oauth-"));
+    const ruta = join(casa, "cloudstudio-oauth.json");
+    guardarEstadoDeEntorno(ruta, "webstudio", {
+      clientInformation: { client_id: "abc" },
+      tokens: { access_token: "viejo", token_type: "Bearer", scope: "mcp.read" },
+      scopes: ["mcp.read"],
+      codeVerifier: "v",
+    });
+
+    provider(ruta).invalidateCredentials("tokens");
+
+    const despues = leerEstado(ruta).porEntorno.webstudio!;
+    expect(despues.tokens).toBeUndefined();
+    // Los scopes van CON el token: conservarlos haría creer que hay permiso concedido para
+    // unos tokens que ya no existen.
+    expect(despues.scopes).toBeUndefined();
+    // El registro del cliente y el verificador NO son el problema y se quedan: volver a
+    // registrarse en el IDS por un token caducado sería trabajo de más.
+    expect(despues.clientInformation).toEqual({ client_id: "abc" });
+    expect(despues.codeVerifier).toBe("v");
+  });
+
+  it("«all» deja el entorno sin credenciales, y no toca las de los demás", () => {
+    const casa = mkdtempSync(join(tmpdir(), "xc-oauth-"));
+    const ruta = join(casa, "cloudstudio-oauth.json");
+    guardarEstadoDeEntorno(ruta, "webstudio", { tokens: { access_token: "a", token_type: "Bearer" } });
+    guardarEstadoDeEntorno(ruta, "manager", { tokens: { access_token: "b", token_type: "Bearer" } });
+
+    provider(ruta).invalidateCredentials("all");
+
+    const despues = leerEstado(ruta).porEntorno;
+    expect(despues.webstudio).toEqual({});
+    expect(despues.manager?.tokens?.access_token).toBe("b");
+  });
+
+  it("«verifier» y «client» borran lo suyo y nada más", () => {
+    const casa = mkdtempSync(join(tmpdir(), "xc-oauth-"));
+    const ruta = join(casa, "cloudstudio-oauth.json");
+    // Con `scopes`: sin ellos, el CONSTRUCTOR borra el token por su cuenta —no puede
+    // afirmar que cubra los permisos pedidos—, y este test estaría midiendo aquello en vez
+    // de la invalidación.
+    guardarEstadoDeEntorno(ruta, "webstudio", {
+      clientInformation: { client_id: "abc" },
+      tokens: { access_token: "a", token_type: "Bearer" },
+      scopes: ["mcp.read"],
+      codeVerifier: "v",
+    });
+
+    provider(ruta).invalidateCredentials("verifier");
+    expect(leerEstado(ruta).porEntorno.webstudio?.codeVerifier).toBeUndefined();
+    expect(leerEstado(ruta).porEntorno.webstudio?.tokens?.access_token).toBe("a");
+
+    provider(ruta).invalidateCredentials("client");
+    expect(leerEstado(ruta).porEntorno.webstudio?.clientInformation).toBeUndefined();
+    expect(leerEstado(ruta).porEntorno.webstudio?.tokens?.access_token).toBe("a");
   });
 });

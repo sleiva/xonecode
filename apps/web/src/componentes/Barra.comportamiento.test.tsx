@@ -14,12 +14,16 @@ afterEach(cleanup);
  * vez de no pintar nada — que es indistinguible de una barra rota.
  */
 describe("Barra: los tres niveles vacíos se explican solos", () => {
-  function montar(proyectos: Parameters<typeof Barra>[0]["proyectos"] = []) {
+  function montar(
+    proyectos: Parameters<typeof Barra>[0]["proyectos"] = [],
+    visibles?: readonly string[]
+  ) {
     return render(
       <Barra
         entornos={[]}
         entornoActivo=""
         proyectos={proyectos}
+        {...(visibles === undefined ? {} : { visibles })}
         alElegirEntorno={() => {}}
         alAbrirSesion={() => {}}
         alAbrirProyecto={() => {}}
@@ -44,6 +48,81 @@ describe("Barra: los tres niveles vacíos se explican solos", () => {
     montar([{ id: "p1", nombre: "harnees", sesiones: [] }]);
     expect(screen.getByText("harnees")).toBeTruthy();
     expect(screen.getByText(/sin sesiones todavía/i)).toBeTruthy();
+  });
+
+  /**
+   * Un CloudStudio con doscientos proyectos no cabe en una barra lateral. Cuatro es la
+   * omisión —lo que se ve sin configurar nada—, y lo que no se ve se DICE: callarlo dejaría
+   * creer que el entorno solo tiene cuatro.
+   */
+  it("por omisión enseña cuatro y cuenta los que faltan, con dónde se arregla", () => {
+    const seis = Array.from({ length: 6 }, (_, i) => ({ id: `p${i}`, nombre: `Proyecto ${i}`, sesiones: [] }));
+    montar(seis);
+    expect(screen.getByText("Proyecto 0")).toBeTruthy();
+    expect(screen.getByText("Proyecto 3")).toBeTruthy();
+    expect(screen.queryByText("Proyecto 4")).toBeNull();
+    expect(screen.getByText(/2 proyectos más sin enseñar/i).textContent).toMatch(/ajustes/i);
+  });
+
+  it("una elección MANDA sobre el tope: quien pide seis, ve seis", () => {
+    const seis = Array.from({ length: 6 }, (_, i) => ({ id: `p${i}`, nombre: `Proyecto ${i}`, sesiones: [] }));
+    montar(seis, seis.map((p) => p.id));
+    expect(screen.getByText("Proyecto 5")).toBeTruthy();
+    expect(screen.queryByText(/más sin enseñar/i)).toBeNull();
+  });
+
+  it("elegir NINGUNO es una elección y se respeta, sin confundirla con no haber elegido", () => {
+    const dos = [
+      { id: "p0", nombre: "Uno", sesiones: [] },
+      { id: "p1", nombre: "Dos", sesiones: [] },
+    ];
+    montar(dos, []);
+    expect(screen.queryByText("Uno")).toBeNull();
+    // Y el texto NO es «sin proyectos que enseñar»: los hay, no se están enseñando.
+    expect(screen.getByText(/ninguno elegido para esta barra/i)).toBeTruthy();
+  });
+
+  it("el orden lo pone el listado del servidor, no el orden en que se marcaron", () => {
+    const tres = [
+      { id: "a", nombre: "Alfa", sesiones: [] },
+      { id: "b", nombre: "Beta", sesiones: [] },
+      { id: "c", nombre: "Gamma", sesiones: [] },
+    ];
+    const { container } = montar(tres, ["c", "a"]);
+    const nombres = [...container.querySelectorAll("button")]
+      .map((b) => b.textContent)
+      .filter((t) => t === "Alfa" || t === "Gamma");
+    expect(nombres).toEqual(["Alfa", "Gamma"]);
+  });
+
+  /**
+   * Una fila resaltada AFIRMA «aquí es donde estás». Sin el dato del servidor no se marca
+   * nada: marcar el primero por no tenerlo sería afirmarlo sin saberlo.
+   */
+  it("el proyecto abierto se distingue, y sin saber cuál es no se marca ninguno", () => {
+    const dos = [
+      { id: "p1", nombre: "Tienda", sesiones: [] },
+      { id: "p2", nombre: "Almacén", sesiones: [] },
+    ];
+    const { container, rerender } = montar(dos);
+    expect(container.querySelectorAll("[aria-current]")).toHaveLength(0);
+
+    rerender(
+      <Barra
+        entornos={[]}
+        entornoActivo=""
+        proyectos={dos}
+        proyectoActivo="p2"
+        alElegirEntorno={() => {}}
+        alAbrirSesion={() => {}}
+        alAbrirProyecto={() => {}}
+        alNuevaSesion={() => {}}
+        alAbrirAjustes={() => {}}
+      />
+    );
+    const marcadas = [...container.querySelectorAll("[aria-current]")];
+    expect(marcadas).toHaveLength(1);
+    expect(marcadas[0]!.textContent).toContain("Almacén");
   });
 
   it("«nueva sesión» viaja con el id del proyecto de su propia fila", () => {

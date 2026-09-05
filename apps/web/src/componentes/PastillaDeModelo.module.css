@@ -1,0 +1,125 @@
+/* Alias comprobados contra `apps/web/estilos/design-platform.css`: bg-layer-1/2, border-l2,
+   label-primary/secondary/tertiary, interactive-bg-hover, state-error-primary y
+   state-success-primary. */
+
+.envoltura {
+  position: relative;
+}
+
+/* La pastilla vive en la fila de controles del compositor, así que es pequeña y sin peso:
+   es un dato con el que se puede interactuar, no una acción primaria — el único botón
+   primario de esa fila sigue siendo enviar. */
+.pastilla {
+  padding: 4px 8px;
+  border: 0.5px solid var(--dsw-alias-border-l2);
+  border-radius: 8px;
+  background: var(--dsw-alias-bg-layer-2);
+  color: var(--dsw-alias-label-secondary);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.pastilla:hover {
+  background: var(--dsw-alias-interactive-bg-hover);
+}
+
+/* El menú sube DESDE la pastilla (`bottom: 100%`) y no baja: el compositor vive pegado al
+   borde inferior de la ventana, y un menú hacia abajo quedaría fuera de pantalla. */
+.menu {
+  position: absolute;
+  bottom: 100%;
+  left: 0;
+  z-index: 10;
+  min-width: 260px;
+  max-height: 320px;
+  margin-bottom: 6px;
+  padding: 6px;
+  border: 0.5px solid var(--dsw-alias-border-l2);
+  border-radius: 12px;
+  background: var(--dsw-alias-bg-layer-1);
+  overflow-y: auto;
+}
+
+.grupo {
+  display: flex;
+  flex-direction: column;
+}
+
+.proveedor {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  padding: 6px 8px;
+  border: none;
+  border-radius: 8px;
+  background: none;
+  color: var(--dsw-alias-label-primary);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.proveedor:hover {
+  background: var(--dsw-alias-interactive-bg-hover);
+}
+
+/* Verde: credencial CONFIRMADA. Rojo: se sabe que falta. Quien no necesita ninguna no
+   llega a pintar este elemento (`PastillaDeModelo.tsx`), que es la tercera respuesta. */
+.punto {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.punto[data-credencial="puesta"] {
+  background: var(--dsw-alias-state-success-primary);
+}
+
+.punto[data-credencial="falta"] {
+  background: var(--dsw-alias-state-error-primary);
+}
+
+.modelos {
+  display: flex;
+  flex-direction: column;
+  padding-left: 14px;
+}
+
+.modelo {
+  padding: 5px 8px;
+  border: none;
+  border-radius: 8px;
+  background: none;
+  color: var(--dsw-alias-label-secondary);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.modelo:hover {
+  background: var(--dsw-alias-interactive-bg-hover);
+}
+
+/* El que ya está puesto se marca, no se oculta: saber cuál es el actual dentro de la lista
+   es la mitad de para qué se abre el menú. */
+.modelo[data-actual] {
+  color: var(--dsw-alias-label-primary);
+  font-weight: 600;
+}
+
+.espera,
+.error {
+  margin: 4px 8px;
+  font-size: 12px;
+}
+
+.espera {
+  color: var(--dsw-alias-label-tertiary);
+}
+
+.error {
+  color: var(--dsw-alias-state-error-primary);
+}

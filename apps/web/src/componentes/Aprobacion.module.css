@@ -19,7 +19,10 @@
   width: 100%;
   height: 100%;
   padding: 24px;
-  background: var(--dsw-alias-bg-overlay);
+  /* NO `--dsw-alias-bg-overlay`: ese alias de la paleta copiada es un gris OPACO —medido,
+     un 233/236/242 sin canal alfa— y tapaba la pantalla entera, así que la ventana quedaba
+     flotando sobre un fondo liso, sin la aplicación detrás. Ver `estilos/marca.css`. */
+  background: var(--xonecode-velo);
 }
 
 .tarjeta {

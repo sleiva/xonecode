@@ -73,6 +73,44 @@ export interface Aviso {
  * credencial que empiezan iguales y divergen con el tiempo es justo el bug que se midió
  * («key» —el campo que usa `auth.json`— faltaba en la copia que tenía `settings.ts`).
  */
+/**
+ * ¿Vale eso como clave de API? Devuelve el MOTIVO del rechazo, o `undefined` si pasa.
+ *
+ * La regla no es nuestra: es la que aplica el harness de DeepSeek en su panel de modelos,
+ * y la razón es que una clave de API acaba siendo el valor de una cabecera HTTP — todo
+ * carácter ASCII imprimible (`\x21`–`\x7E`) cabe ahí y ninguno más. Un espacio, un
+ * tabulador, un salto de línea o una eñe no llegan al proveedor: fallan al construir la
+ * petición, o peor, viajan mutilados y el error que vuelve habla de autorización.
+ *
+ * Las otras dos son de pegado, no de formato, y las dos se han visto de verdad:
+ * - `ANTHROPIC_API_KEY=sk-…`, la línea entera del `.env` copiada de un tirón;
+ * - `"sk-…"`, con las comillas de la línea de la que salió.
+ *
+ * Ninguna de las dos se «arregla» por nuestra cuenta quitando lo que sobra: no se puede
+ * saber si el usuario quería eso, y una clave adivinada que resulta ser válida enseña a
+ * pegar mal. Se rechaza diciendo qué pasa, que es lo que se puede afirmar.
+ *
+ * Lo que NO comprueba es que la clave sirva — eso solo lo sabe el proveedor, y el sitio
+ * donde se pregunta es el catálogo (`cli/wizardInicial.ts`, que lista antes de escribir).
+ * Ésta es la criba de balde: la que evita gastar una llamada para que te digan lo que el
+ * propio campo ya decía.
+ */
+export function motivoDeClaveInaceptable(clave: string): string | undefined {
+  const limpia = clave.trim();
+  if (limpia === "") return "la clave está vacía";
+  if (/^[A-Za-z_][A-Za-z0-9_]*=/.test(limpia)) {
+    return "eso parece una línea de entorno («NOMBRE=valor»): pega solo el valor, sin el nombre ni el «=»";
+  }
+  if (/^"[^]*"$/.test(limpia) || /^'[^]*'$/.test(limpia)) {
+    return "la clave viene entre comillas: pega solo el valor, sin ellas";
+  }
+  // eslint-disable-next-line no-control-regex
+  if (!/^[\x21-\x7e]+$/.test(limpia)) {
+    return "la clave lleva espacios o caracteres que no pueden viajar en una cabecera HTTP";
+  }
+  return undefined;
+}
+
 export const CLAVES_DENEGADAS: readonly string[] = [
   "claves",
   "apiKey",

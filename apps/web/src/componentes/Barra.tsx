@@ -45,10 +45,32 @@ export interface Proyecto { id: string; nombre: string; sesiones: { id: string; 
  * NADA de la marca de DeepSeek viaja aquí: la ranura `.brandName` la ocupa el nombre de
  * xonecode, y `.brandMark` —donde el original monta su `FishLogo`— se queda vacía.
  */
-export function Barra({ entornos, entornoActivo, proyectos, sesionActiva, alElegirEntorno, alAbrirSesion, alAbrirProyecto, alNuevaSesion, alAbrirAjustes }: {
+/**
+ * Cuántos proyectos se enseñan cuando nadie ha dicho cuáles.
+ *
+ * Un CloudStudio con doscientos proyectos no cabe en una barra lateral, y el que importa
+ * hoy lo sabe la persona y no el servidor. Cuatro es la omisión —lo que se ve sin
+ * configurar nada—; en Ajustes se eligen los que sean, y esa elección MANDA sobre este
+ * tope: quien pide seis, ve seis.
+ */
+export const PROYECTOS_POR_OMISION = 4;
+
+export function Barra({ entornos, entornoActivo, proyectos, visibles, proyectoActivo, sesionActiva, alElegirEntorno, alAbrirSesion, alAbrirProyecto, alNuevaSesion, alAbrirAjustes }: {
   entornos: { id: string; nombre: string }[];
   entornoActivo: string;
   proyectos: Proyecto[];
+  /**
+   * Los ids elegidos para ESTE entorno. **Ausente no es «ninguno»**: es que nadie lo ha
+   * dicho, y entonces se enseñan los `PROYECTOS_POR_OMISION` primeros. Una lista vacía sí
+   * es una elección y se respeta — la barra se queda sin proyectos y lo dice.
+   */
+  visibles?: readonly string[];
+  /**
+   * El proyecto ABIERTO ahora mismo, y su sesión. Ausentes = no se sabe, y entonces no se
+   * marca nada: marcar «el primero» por no tener el dato es peor que no marcar, porque una
+   * fila resaltada afirma que ahí es donde estás.
+   */
+  proyectoActivo?: string;
   sesionActiva?: string;
   alElegirEntorno: (id: string) => void;
   alAbrirSesion: (proyecto: string, sesion: string) => void;
@@ -65,6 +87,14 @@ export function Barra({ entornos, entornoActivo, proyectos, sesionActiva, alEleg
    */
   alAbrirAjustes: () => void;
 }) {
+  // El orden de `visibles` NO manda: manda el del listado, que es el del servidor. Elegir
+  // qué se ve es una cosa; reordenar el listado remoto sería otra, y nadie la ha pedido.
+  const alaVista =
+    visibles === undefined
+      ? proyectos.slice(0, PROYECTOS_POR_OMISION)
+      : proyectos.filter((p) => visibles.includes(p.id));
+  const ocultos = proyectos.length - alaVista.length;
+
   return (
     <nav className={barra.root}>
       {/* La fila de marca. Sin `.brandMark`: ahí es donde el original monta su logo, y
@@ -111,12 +141,26 @@ export function Barra({ entornos, entornoActivo, proyectos, sesionActiva, alEleg
           <div className={navegador.listArea}>
             <div className={navegador.treeBody}>
               <div className={navegador.list}>
-                {proyectos.length === 0 ? (
-                  <p className={navegador.empty}>Sin proyectos que enseñar aquí todavía.</p>
+                {alaVista.length === 0 ? (
+                  <p className={navegador.empty}>
+                    {proyectos.length === 0
+                      ? "Sin proyectos que enseñar aquí todavía."
+                      : "Ninguno elegido para esta barra; elígelos en Ajustes."}
+                  </p>
                 ) : (
-                  proyectos.map((p) => (
+                  alaVista.map((p) => (
                     <div key={p.id} className={navegador.groupSection}>
-                      <div className={clsx(filas.projectRow, estilos.filaConAccion)}>
+                      <div
+                        className={clsx(
+                          filas.projectRow,
+                          estilos.filaConAccion,
+                          p.id === proyectoActivo && estilos.filaAbierta
+                        )}
+                        // Dos señales para lo mismo y no una: el color de fondo lo pierde
+                        // quien no distingue bien los tonos, y el `aria-current` es lo que
+                        // se lo dice a un lector de pantalla.
+                        {...(p.id === proyectoActivo ? { "aria-current": "true" as const } : {})}
+                      >
                         <button
                           type="button"
                           className={clsx(estilos.reseteoDeBoton, estilos.cuerpoDeFila)}
@@ -172,6 +216,18 @@ export function Barra({ entornos, entornoActivo, proyectos, sesionActiva, alEleg
                     </div>
                   ))
                 )}
+                {/*
+                  Lo que NO se está viendo se dice, y se dice dónde se arregla. Callarlo
+                  dejaría creer que el entorno solo tiene cuatro proyectos — el listado
+                  remoto trae los que trae, y esto es un tope de presentación, no la verdad
+                  sobre el servidor.
+                */}
+                {ocultos > 0 ? (
+                  <p className={clsx(navegador.empty, estilos.sinSesiones)}>
+                    {ocultos === 1 ? "1 proyecto más sin enseñar" : `${ocultos} proyectos más sin enseñar`} · elígelos en
+                    Ajustes
+                  </p>
+                ) : null}
               </div>
               <div className={navegador.fade} aria-hidden="true" />
             </div>

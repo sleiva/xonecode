@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { validar, validarAuth } from "./config.js";
+import { motivoDeClaveInaceptable, validar, validarAuth } from "./config.js";
 
 const RUTA = "/proyecto/.xonecode/config.json";
 const RUTA_AUTH = "~/.xonecode/auth.json";
@@ -306,5 +306,41 @@ describe("validarAuth", () => {
     expect(auth).toEqual({});
     expect(avisos.some((a) => a.texto.includes("openai"))).toBe(true);
     expect(avisos.some((a) => a.texto.includes("desconocido"))).toBe(true);
+  });
+});
+
+/**
+ * La criba de balde: lo que el propio campo delata no hace falta preguntárselo al
+ * proveedor. La regla es la del harness de DeepSeek y su razón es literal — una clave de
+ * API acaba siendo el valor de una cabecera HTTP.
+ */
+describe("motivoDeClaveInaceptable", () => {
+  it("una clave normal pasa, con recorte de espacios alrededor", () => {
+    expect(motivoDeClaveInaceptable("sk-ant-api03-AbC_123-xyz")).toBeUndefined();
+    expect(motivoDeClaveInaceptable("  sk-proj-1234  ")).toBeUndefined();
+  });
+
+  it("una línea de entorno pegada entera se rechaza NOMBRÁNDOLO, no se recorta por nuestra cuenta", () => {
+    // Adivinar el valor que hay detrás del «=» y guardarlo enseña a pegar mal, y además
+    // no se puede saber si era eso lo que el usuario quería.
+    expect(motivoDeClaveInaceptable("ANTHROPIC_API_KEY=sk-ant-123")).toMatch(/línea de entorno/);
+    expect(motivoDeClaveInaceptable("export OPENAI_API_KEY=sk-1")).toMatch(/cabecera HTTP/);
+  });
+
+  it("las comillas de la línea de la que salió también se rechazan", () => {
+    expect(motivoDeClaveInaceptable('"sk-ant-123"')).toMatch(/comillas/);
+    expect(motivoDeClaveInaceptable("'sk-ant-123'")).toMatch(/comillas/);
+  });
+
+  it("lo que no cabe en una cabecera HTTP no pasa: espacios, saltos de línea, tildes", () => {
+    expect(motivoDeClaveInaceptable("sk ant 123")).toMatch(/cabecera HTTP/);
+    expect(motivoDeClaveInaceptable("sk-ant-123\n")).toBeUndefined(); // el \n de fuera lo recorta el trim
+    expect(motivoDeClaveInaceptable("sk-ant\n123")).toMatch(/cabecera HTTP/);
+    expect(motivoDeClaveInaceptable("clave-señor")).toMatch(/cabecera HTTP/);
+  });
+
+  it("vacía o solo espacios lo dice, en vez de dejarse caer en silencio", () => {
+    expect(motivoDeClaveInaceptable("")).toMatch(/vacía/);
+    expect(motivoDeClaveInaceptable("   ")).toMatch(/vacía/);
   });
 });

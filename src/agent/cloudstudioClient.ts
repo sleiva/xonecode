@@ -16,7 +16,16 @@ export interface LlamadaMcp {
 
 export type Invocar = (nombre: string, argumentos: Record<string, unknown>) => Promise<unknown>;
 
-/** El servidor pierde el proyecto abierto al caducar la sesión; lo dice con este texto. */
+/**
+ * El servidor pierde el proyecto abierto al caducar la sesión, y lo dice de DOS formas.
+ *
+ * A veces como error de tool (`isError: true`), que `invocarSobre` convierte en excepción.
+ * Y a veces —medido contra el servidor real— como una respuesta CORRECTA cuyo contenido de
+ * texto es «Error: No project is open…». Esa segunda es la que se colaba: nadie miraba el
+ * resultado, así que la reapertura no se disparaba y el texto seguía camino hasta el
+ * `JSON.parse` de quien lo llamó, que reventaba con «Unexpected token 'E'». Un fallo de
+ * sesión disfrazado de fallo de formato.
+ */
 const SESION_PERDIDA = /no project is open/i;
 
 /** Los SDK MCP envuelven el resultado en `content[].text`. */
@@ -47,19 +56,67 @@ function registro(valor: unknown): Record<string, unknown> {
   return typeof valor === "object" && valor !== null ? valor as Record<string, unknown> : {};
 }
 
-export function clienteCloudStudio(invocar: Invocar, proyecto: string): CloudStudioPort {
+/** Cuánto del cuerpo remoto se deja ver en un error de formato: lo justo para reconocerlo. */
+const TOPE_DE_MUESTRA = 120;
+
+/**
+ * JSON, o un error que dice quién contestó y con qué.
+ *
+ * La alternativa —`JSON.parse` a secas— produce un `SyntaxError` que no nombra la tool ni
+ * el contexto: «Unexpected token 'E', "Error: No "... is not valid JSON» fue justo el
+ * mensaje que llegó a la interfaz cuando lo que pasaba era que la sesión estaba caída.
+ */
+function comoJson(bruto: string, tool: string): unknown {
+  try {
+    return JSON.parse(bruto) as unknown;
+  } catch {
+    const muestra = bruto.length > TOPE_DE_MUESTRA ? `${bruto.slice(0, TOPE_DE_MUESTRA)}…` : bruto;
+    throw new Error(`${tool} no devolvió JSON: «${muestra}»`);
+  }
+}
+
+/**
+ * @param nombreDeProyecto El NOMBRE del proyecto, nunca su id. El servidor abre por nombre y
+ * rechaza el identificador («not found for user», medido), y este valor es el que usa la
+ * reapertura automática de `conSesion`. Pasarle el id daba un bucle sordo: se reabría con
+ * algo que el servidor no encuentra, la tool volvía a decir «no project is open», y el
+ * error hablaba de la tool y no del argumento equivocado.
+ */
+export function clienteCloudStudio(invocar: Invocar, nombreDeProyecto: string): CloudStudioPort {
+  const proyecto = nombreDeProyecto;
   /**
    * Una llamada que sobrevive a la caducidad: reabre y reintenta UNA vez. Una segunda
    * vuelta convertiría un servidor caído en un bucle silencioso.
+   *
+   * Mira las DOS formas en que el servidor dice que perdió el proyecto (ver
+   * `SESION_PERDIDA`): la excepción y el texto de una respuesta por lo demás correcta. Y
+   * después de reabrir vuelve a mirar: si sigue diciendo lo mismo, se lanza con el nombre
+   * de la tool delante en vez de devolver ese texto a quien llamó — devolverlo es como
+   * acabó siendo un error de JSON en la interfaz.
    */
   const conSesion = async (nombre: string, argumentos: Record<string, unknown>): Promise<unknown> => {
+    let perdida = false;
     try {
-      return await invocar(nombre, argumentos);
+      const resultado = await invocar(nombre, argumentos);
+      if (!SESION_PERDIDA.test(texto(resultado))) return resultado;
+      perdida = true;
     } catch (error) {
       if (!SESION_PERDIDA.test((error as Error).message)) throw error;
-      await invocar("studio_open_project", { project: proyecto });
-      return invocar(nombre, argumentos);
+      perdida = true;
     }
+    if (!perdida) throw new Error(`${nombre}: no se pudo determinar el estado de la sesión`);
+
+    // Reabrir es transparente a propósito: quien llamó pidió `studio_get_file`, no
+    // gestionar una sesión. Lo único que no se puede hacer transparente es que falle otra
+    // vez, y eso se dice.
+    await invocar("studio_open_project", { project: proyecto });
+    const reintento = await invocar(nombre, argumentos);
+    if (SESION_PERDIDA.test(texto(reintento))) {
+      throw new Error(
+        `${nombre}: CloudStudio sigue diciendo que no hay proyecto abierto después de reabrir «${proyecto}»`
+      );
+    }
+    return reintento;
   };
 
   const entradasDeArbol = (arbol: Record<string, unknown>): ManifiestoRemoto => {
@@ -130,7 +187,11 @@ export function clienteCloudStudio(invocar: Invocar, proyecto: string): CloudStu
     },
     async ramas() {
       const bruto = await conSesion("studio_manage_branches", { operation: "list" });
-      const lista = JSON.parse(texto(bruto) || JSON.stringify(bruto)) as unknown;
+      // `JSON.parse` a pelo era lo que convertía cualquier respuesta inesperada en un
+      // «Unexpected token …» sin nombre de tool ni pista: el error que se veía en la
+      // interfaz hablaba de JSON cuando el problema era la sesión. Aquí se falla diciendo
+      // QUÉ tool contestó y CON QUÉ, acotado.
+      const lista = comoJson(texto(bruto) || JSON.stringify(bruto), "studio_manage_branches");
       return Array.isArray(lista)
         ? lista.flatMap((r) => typeof r === "object" && r !== null && typeof (r as { Key?: unknown }).Key === "string"
             ? [(r as { Key: string }).Key] : [])

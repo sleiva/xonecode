@@ -1,0 +1,244 @@
+/* Alias comprobados contra `apps/web/estilos/design-platform.css`: bg-layer-1/2, border-l2,
+   label-primary/secondary/tertiary, interactive-bg-hover, state-error-primary y
+   state-success-primary. */
+
+/* El `className` de `Modal` cae en su `dialog`, y ESE elemento no trae posición propia: los
+   CSS Modules del primitivo son stubs vacíos en este release candidate, así que sin esto la
+   ventana se pintaba al final del `body`, en el flujo normal, debajo de toda la aplicación —
+   montada y fuera de la vista, que se lee como «el botón no hace nada». Medido en pantalla.
+   `Aprobacion.module.css` ya resolvía lo mismo con su `.capa`, y esto es la misma solución
+   con el mismo motivo. El velo va aparte porque la máscara del primitivo tampoco tiene
+   tamaño. */
+.capa {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+}
+
+.velo {
+  display: grid;
+  place-items: center;
+  width: 100%;
+  height: 100%;
+  padding: 24px;
+  /* NO `--dsw-alias-bg-overlay`: ese alias de la paleta copiada es un gris OPACO —medido,
+     un 233/236/242 sin canal alfa— y tapaba la pantalla entera, así que la ventana quedaba
+     flotando sobre un fondo liso, sin la aplicación detrás. Ver `estilos/marca.css`. */
+  background: var(--xonecode-velo);
+}
+
+/* Dos columnas, como el panel de la referencia: navegación estrecha y fija a la izquierda,
+   una sola sección a la vista a la derecha. El alto está acotado y quien cede es el panel,
+   no la navegación — una lista de proveedores larga no puede empujar las secciones fuera. */
+.ventana {
+  position: relative;
+  display: flex;
+  width: min(820px, 92vw);
+  height: min(560px, 86vh);
+  max-height: 100%;
+  border: 0.5px solid var(--dsw-alias-border-l2);
+  border-radius: 16px;
+  background: var(--dsw-alias-bg-layer-1);
+  overflow: hidden;
+}
+
+.navegacion {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex-shrink: 0;
+  width: 200px;
+  padding: 16px 10px;
+  border-right: 0.5px solid var(--dsw-alias-border-l2);
+  background: var(--dsw-alias-bg-layer-2);
+}
+
+.titulo {
+  margin: 0 0 10px 8px;
+  color: var(--dsw-alias-label-primary);
+  font-weight: 600;
+}
+
+.seccion {
+  padding: 8px 10px;
+  border: none;
+  border-radius: 8px;
+  background: none;
+  color: var(--dsw-alias-label-secondary);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.seccion:hover {
+  background: var(--dsw-alias-interactive-bg-hover);
+}
+
+.seccion[data-actual] {
+  background: var(--dsw-alias-bg-layer-1);
+  color: var(--dsw-alias-label-primary);
+  font-weight: 600;
+}
+
+.panel {
+  flex: 1;
+  padding: 20px 24px;
+  overflow-y: auto;
+}
+
+.encabezado {
+  margin: 0 0 4px;
+  color: var(--dsw-alias-label-primary);
+  font-size: 16px;
+}
+
+.nota,
+.vacio {
+  margin: 0 0 14px;
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 12px;
+}
+
+.filas {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+/* La fila es una tarjeta: es lo que hace que el editor de una clave se lea DENTRO de su
+   proveedor y no como un formulario suelto al final de la lista. */
+.fila {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 14px;
+  border: 0.5px solid var(--dsw-alias-border-l2);
+  border-radius: 12px;
+  background: var(--dsw-alias-bg-layer-2);
+}
+
+.fila[data-columna] {
+  flex-direction: column;
+  align-items: stretch;
+}
+
+.cabeceraDeFila {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.nombre {
+  color: var(--dsw-alias-label-primary);
+}
+
+/* `margin-right: auto` empuja las acciones al borde derecho sin necesidad de un envoltorio
+   más: el detalle ocupa lo que sobra. */
+.detalle {
+  margin-right: auto;
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 12px;
+}
+
+/* Verde: credencial CONFIRMADA. Rojo: consta que falta. Quien no necesita ninguna no llega
+   a pintar este elemento — es la tercera respuesta, y es «no hay nada que decir». */
+.punto {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.punto[data-credencial="puesta"] {
+  background: var(--dsw-alias-state-success-primary);
+}
+
+.punto[data-credencial="falta"] {
+  background: var(--dsw-alias-state-error-primary);
+}
+
+.accion {
+  padding: 6px 10px;
+  border: 0.5px solid var(--dsw-alias-border-l2);
+  border-radius: 8px;
+  background: var(--dsw-alias-bg-layer-1);
+  color: var(--dsw-alias-label-primary);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.accion:hover {
+  background: var(--dsw-alias-interactive-bg-hover);
+}
+
+.confirmacion {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 10px 0 0;
+  color: var(--dsw-alias-state-error-primary);
+  font-size: 12px;
+}
+
+.formulario {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 16px;
+}
+
+.etiqueta {
+  color: var(--dsw-alias-label-secondary);
+  font-size: 12px;
+}
+
+.campo {
+  width: 100%;
+}
+
+.aviso {
+  margin: 0;
+  color: var(--dsw-alias-state-error-primary);
+  font-size: 12px;
+}
+
+.pie {
+  margin-top: 16px;
+}
+
+.cerrar {
+  position: absolute;
+  top: 12px;
+  right: 14px;
+  padding: 4px 8px;
+  border: none;
+  border-radius: 8px;
+  background: none;
+  color: var(--dsw-alias-label-secondary);
+  font: inherit;
+  cursor: pointer;
+}
+
+.cerrar:hover {
+  background: var(--dsw-alias-interactive-bg-hover);
+}
+
+.subencabezado {
+  margin: 18px 0 4px;
+  color: var(--dsw-alias-label-primary);
+  font-size: 13px;
+}
+
+/* La fila entera es la etiqueta: pulsar el nombre marca la casilla, que es lo que espera
+   cualquiera que haya usado una lista de casillas. */
+.casilla {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  cursor: pointer;
+}

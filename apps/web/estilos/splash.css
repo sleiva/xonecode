@@ -48,9 +48,13 @@
      entorno — ninguno de los dos entra en este producto (ver `Marca.tsx` y el informe de
      la tarea), así que esmeralda no se declara aquí: una variable sin un solo sitio que
      la consuma es la mentira contraria, la de un color que promete un uso que no existe. */
-  --xonecode-splash-cian: #00a3e0;
+  /* Los tres de marca salen de `marca.css`, que es donde viven ahora: dos ficheros con el
+     mismo cian escrito a mano es como se acaba con dos cianes distintos. Los nombres
+     `--xonecode-splash-*` se conservan porque son los que usan `Splash.module.css` y
+     `Marca.module.css`. */
+  --xonecode-splash-cian: var(--xonecode-cian);
   --xonecode-splash-cielo: #38bdf8;
-  --xonecode-splash-naranja: #f58220;
+  --xonecode-splash-naranja: var(--xonecode-naranja);
 
   /* El fondo de la placa del símbolo: reutiliza dos paradas YA medidas del propio
      `--xonecode-splash-lienzo` de arriba (0a496b, 05263a) en vez de los `#0a4d70`/`#062c41`

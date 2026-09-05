@@ -14,11 +14,25 @@ import conversacion from "../../estilos/ConversationRoot.module.css";
  * separación— y el estado subió a `App.tsx`, con la misma vida útil de antes: muere con
  * la página, no se persiste en ningún sitio.
  */
-export function Transcript({ actos, pestana }: { actos: readonly Acto[]; pestana: Pestana }) {
+export function Transcript({
+  actos,
+  pestana,
+  turnoEnVuelo,
+}: {
+  actos: readonly Acto[];
+  pestana: Pestana;
+  /** Hay turno corriendo. Solo lo usa el Chat, para saber si el último mensaje sigue
+   *  llegando — y con él, si toca resaltar el código o esperar al cierre. */
+  turnoEnVuelo?: boolean;
+}) {
   return (
     <div className={conversacion.body}>
       <div className={conversacion.viewArea}>
-        {pestana === "chat" ? <Chat actos={actos} /> : <Trayectoria actos={actos} />}
+        {pestana === "chat" ? (
+          <Chat actos={actos} turnoEnVuelo={turnoEnVuelo === true} />
+        ) : (
+          <Trayectoria actos={actos} />
+        )}
       </div>
     </div>
   );

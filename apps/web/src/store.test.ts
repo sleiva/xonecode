@@ -88,6 +88,73 @@ describe("store del cliente", () => {
     expect(s.leer().aprobacion).toBeUndefined();
   });
 
+  it("el estado de modelos llega entero, y al desconectar se TIRA en vez de quedarse viejo", () => {
+    const s = crearStoreDelCliente();
+    s.aplicar({
+      clase: "modelos",
+      actual: "ollama/qwen3",
+      proveedores: [
+        { id: "ollama", credencial: "nativa", modelos: [{ id: "qwen3", nombre: "Qwen 3" }] },
+        { id: "openai", credencial: "falta", error: "credencial no autorizada" },
+        // Basura: se descarta la FILA, no el mensaje entero.
+        { id: 7, credencial: "puesta" },
+        { id: "gemini", credencial: "inventada" },
+      ],
+    });
+    const modelos = s.leer().modelos!;
+    expect(modelos.actual).toBe("ollama/qwen3");
+    expect(modelos.proveedores.map((p) => p.id)).toEqual(["ollama", "openai"]);
+    expect(modelos.proveedores[1]!.error).toBe("credencial no autorizada");
+
+    // Sin cable no se puede AFIRMAR qué modelo está en vigor: pudo cambiarlo otra pestaña
+    // o pudo morir el proceso. La reconexión lo trae entero.
+    s.marcarDesconectado();
+    expect(s.leer().modelos).toBeUndefined();
+  });
+
+  it("un `actual` que no es texto no se pinta: mejor «Elige modelo» que una fila inventada", () => {
+    const s = crearStoreDelCliente();
+    s.aplicar({ clase: "modelos", actual: 7, proveedores: [] } as never);
+    expect(s.leer().modelos).toEqual({ proveedores: [] });
+  });
+
+  it("el aviso del selector llega hasta el estado; sin aviso, no se inventa ninguno", () => {
+    const s = crearStoreDelCliente();
+    s.aplicar({ clase: "selector", selector: { titulo: "elige", opciones: [{ id: "a", etiqueta: "A" }] } });
+    expect(s.leer().selector?.aviso).toBeUndefined();
+    s.aplicar({
+      clase: "selector",
+      selector: { titulo: "elige", opciones: [{ id: "a", etiqueta: "A" }], aviso: "no se pudo conectar" },
+    });
+    expect(s.leer().selector?.aviso).toBe("no se pudo conectar");
+    // Y un aviso que no es texto se descarta entero, como el resto del store.
+    s.aplicar({
+      clase: "selector",
+      selector: { titulo: "elige", opciones: [{ id: "a", etiqueta: "A" }], aviso: 7 },
+    } as never);
+    expect(s.leer().selector?.aviso).toBeUndefined();
+  });
+
+  /**
+   * La carrera que esto vigila: desde que el asistente de cuenta es un lazo, el servidor
+   * puede emitir el selector SIGUIENTE sin ningún viaje de red por medio (volver atrás,
+   * cancelar con la puerta puesta), así que el mensaje del SSE puede llegar ANTES de que
+   * resuelva el `POST` de la respuesta anterior. Retirando «lo que haya» se borraba el
+   * selector nuevo: tarjeta vacía y el servidor esperando hasta el plazo.
+   */
+  it("contestarSelector retira SOLO el que se contestó: el siguiente puede haber llegado ya", () => {
+    const s = crearStoreDelCliente();
+    s.aplicar({ clase: "selector", selector: { titulo: "Proveedor", opciones: [{ id: "a", etiqueta: "A" }] } });
+    const contestado = s.leer().selector;
+    // Llega el siguiente antes de que el POST del anterior resuelva.
+    s.aplicar({ clase: "selector", selector: { titulo: "Proveedor", opciones: [{ id: "b", etiqueta: "B" }] } });
+    s.contestarSelector(contestado);
+    expect(s.leer().selector?.opciones[0]?.id).toBe("b");
+    // Y el nuevo sí se retira cuando se contesta ÉL.
+    s.contestarSelector(s.leer().selector);
+    expect(s.leer().selector).toBeUndefined();
+  });
+
   it("el secreto y el selector también se retiran uno a uno", () => {
     const s = crearStoreDelCliente();
     s.aplicar({ clase: "secreto", pregunta: "clave" });

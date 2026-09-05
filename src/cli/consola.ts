@@ -18,7 +18,7 @@ import { cmdVerify } from "./verify.js";
 import { AgenteGuionizado } from "../agent/guionizado.js";
 import { correrTurno, type Piel } from "../core/turno.js";
 import { PAPELES, POR_OMISION, ModeloMalEscrito, parsear, PROVEEDORES, type FuentesDeEleccion, type Proveedor } from "../core/modelos.js";
-import type { Aviso } from "../core/config.js";
+import { motivoDeClaveInaceptable, type Aviso } from "../core/config.js";
 import type { Papel } from "../core/ports.js";
 import { ES_DOBLE, esDoble } from "../core/ports.js";
 import type { PendienteDeAprobacion } from "../core/events.js";
@@ -79,6 +79,16 @@ export interface Consola {
     ficheros: Map<string, string>,
     diffs: Map<string, LineaDeDiff[]>
   ) => Promise<Map<string, Decision>>;
+  /**
+   * El estado de sesión ACABA de cambiar (un comando devolvió uno nuevo).
+   *
+   * Existe porque el modelo en vigor vive dentro del lazo: `/modelo` y `/modelos` cambian
+   * `estado.fuentes` en caliente y no tocan disco, así que nadie fuera de `correrConsola`
+   * puede saber cuál está puesto — y una piel que lo enseñe tiene que enterarse cuando
+   * cambia, no derivarlo de una frase del transcript. stdio y la TUI no la implementan: la
+   * TUI ya re-parsea `acuseDeModelo` para su barra lateral, y stdio no pinta estado.
+   */
+  alEstado?: (estado: EstadoDeSesion) => void;
   /** Cambia la paleta de la piel actual; la TUI además fuerza un repintado completo. */
   aplicarTema?: (tema: IdTema) => void;
   /** Persistencia inyectada: el tema es del proyecto, no de la cuenta. */
@@ -369,6 +379,15 @@ export async function configurarModoInicial(raiz: string, consola: Consola): Pro
 export interface SelectorDeConsola {
   titulo: string;
   opciones: readonly { id: string; etiqueta: string; detalle?: string }[];
+  /**
+   * Por qué se está preguntando esto (o por qué se pregunta OTRA VEZ). Existe porque hay
+   * una piel que no pinta el transcript mientras pregunta: durante el alta, la consola web
+   * enseña solo la tarjeta con el selector (`apps/web/src/App.tsx`, rama `enAlta`), así que
+   * un motivo dicho con `escribir` acabaría en un acto de sistema que nadie está mirando —
+   * un fallo mudo justo en el paso que se repite. Las pieles de terminal lo pueden ignorar:
+   * ahí el `escribir` ya está a la vista, encima del selector.
+   */
+  aviso?: string;
 }
 
 export interface EstadoDeSesion {
@@ -394,8 +413,8 @@ export type EjecutorDeTurno = (
 ) => Promise<void>;
 
 /**
- * Duplicado a propósito de `cli/config.ts` (que a su vez lo duplica de
- * `agent/configEnDisco.ts`, no exportado y no tocable): misma regla y misma
+ * Duplicado a propósito de `cli/config.ts` (que a su vez lo duplica del original de
+ * `agent/configEnDisco.ts`, hoy exportado para `authEnDisco.ts`): misma regla y misma
  * omisión — `ollama` no lleva variable porque no necesita credencial.
  */
 const VARIABLE_POR_PROVEEDOR: Partial<Record<Proveedor, string>> = {
@@ -1035,6 +1054,14 @@ export const COMANDOS: Record<string, { descripcion: string; manejador: Manejado
         consola.escribir("clave vacía: no se guardó nada\n");
         return { seguir: true };
       }
+      // La MISMA criba que el asistente de cuenta (`core/config.ts`), no una copia: lo que
+      // el propio campo ya delata —una línea `NOMBRE=valor` pegada entera, comillas,
+      // espacios— no llega a `auth.json`, donde solo se ve al fallar una petición.
+      const motivo = motivoDeClaveInaceptable(clave);
+      if (motivo !== undefined) {
+        consola.escribir(`no se guardó nada: ${motivo}\n`);
+        return { seguir: true };
+      }
       try {
         const { ruta, avisos } = guardarCredencial(nombre as Proveedor, clave);
         consola.escribir(`credencial de ${nombre} guardada en ${ruta}\n`);
@@ -1092,7 +1119,12 @@ export async function correrConsola(
         if (!resultado.seguir) return 0;
         // El estado MÁS RECIENTE manda: el turno siguiente parte de lo que devolvió el
         // último manejador, no del estado de arranque.
-        if (resultado.estado !== undefined) estado = resultado.estado;
+        if (resultado.estado !== undefined) {
+          estado = resultado.estado;
+          // Solo cuando cambia de verdad: avisar en cada línea haría que una piel que
+          // reemite por esto mandara un mensaje por cada `/ayuda`.
+          consola.alEstado?.(estado);
+        }
       } catch (e) {
         consola.escribir(`${describirError(e)}\n`);
       }

@@ -26,6 +26,7 @@ npx vitest run src/core/turno.test.ts  # un solo fichero
 npx vitest run -t "la frontera"        # por nombre de test
 npm run build                          # rm -rf dist && tsc -p tsconfig.build.json
 ./bin/xonecode …                       # lanzador de DESARROLLO: tsx sobre src/, preserva el cwd
+npm run web -- --puerto 4200           # la consola WEB: construye el cliente y la levanta
 ```
 
 Los tests son **colocados** (`src/**/*.test.ts`, junto al módulo que prueban).
@@ -47,6 +48,16 @@ hace falta: `npm test` sin banderas excluye `.worktrees/` solo.
 
 **`npm test` no puede necesitar una clave, una conexión ni el simulador.** Es el invariante que
 sostiene todo el diseño de puertos: si un cambio lo rompe, está mal el cambio, no el test.
+
+**`npm run web` es la excepción a la regla de abajo**, y solo esa: construye el cliente
+(`arrancarConsolaWeb` sale **70** si falta `apps/web/dist/index.html`) y levanta la consola web
+con `--web`, que la fuerza aunque no haya TTY. Puede vivir con el cwd puesto en este repo porque
+**la web no abre el cwd**: arranca en el vestíbulo, sin ninguna raíz, y el proyecto se elige en
+la barra lateral (el único caso en que el cwd SÍ se abre es el atajo `offline` + `--guion`). Del
+cwd solo salen tres cosas menores: el `config.json` de proyecto si esa carpeta lo es —ojo, un
+`.xonecode/` en la raíz de este repo haría desaparecer el paso de cuenta del alta, porque
+`origenDeTrabajo` dejaría de ser `omision`—, el nombre del saludo (`git config user.name` visto
+desde ahí) y el aviso de proyecto offline.
 
 **No uses `npm run xonecode` desde otro proyecto**: `npm run` cambia el cwd al de este
 `package.json`, así que xonecode creería que el proyecto es este repo. Para probar sobre una app
@@ -167,6 +178,100 @@ de tocar disco. `arranque.ts` es quien monta las dos rutas del cable: `GET /even
 `POST /accion`. Un cuerpo ilegible responde 400 **sin devolver nada de lo recibido**: por ahí
 pasa la clave de API.
 
+**El pulso se pliega al terminar el turno.** Mientras el agente trabaja, el tramo de
+razonamiento/tools/fases se enseña ABIERTO —es lo único que hay que mirar—; en cuanto llega
+el `fin`, se dobla en una línea («Trabajo del agente · N pasos · Xs») y la conversación se lee
+sin el andamio. No se BORRA: sigue a un clic, y en la Trayectoria está entero. Lo que cierra
+un tramo es cualquier acto de conversación; lo que lo da por TERMINADO es solo el `fin`, y
+entonces termina todos los del turno — un tramo cerrado por la respuesta puede tener más
+tools detrás, y plegarlo antes de tiempo escondería trabajo en curso.
+
+**El resaltado de código lo hace shiki, y `streaming` lo APAGA.** `MarkdownText` pasa
+`lang: undefined` cuando está en ese modo (medido en su `renderCode`): correcto a medio
+llegar —una valla sin cerrar no se puede colorear— y desastroso después, porque el último
+mensaje se quedaba en gris para siempre. Por eso `streaming` solo va puesto mientras el
+servidor dice que hay turno en vuelo (`clase: "turno"`), y no «en el último acto de
+asistente» a secas. La paleta ya estaba: `estilos/shiki.css` trae los `--shiki-token-*` en
+claro y en oscuro.
+
+**Los botones de copiar usan el icono del harness** (`IconCopyOutline16` →
+`IconCheckOutline16`, `BotonDeCopiar.tsx`), la misma pareja que su `JsonTree` usa para esto.
+El de las vallas de código lo pinta `MarkdownText` con la PALABRA «Copiar» y sin icono —su
+`CodeBlock` mete la etiqueta como hijo del botón, y desde fuera no se puede sustituir un
+hijo—, así que se le añade el icono por CSS con el MISMO trazado, guardado como máscara en
+`marca.css` (copiado literal de su `lib/index.js`, no un dibujo parecido). La palabra se
+queda pequeña al lado porque es lo ÚNICO que distingue «Copiar» de «Copiado»: ese botón no
+expone su estado en ningún atributo. Y los dos llevan BORDE: el del paquete llega plano
+—su CSS Module es un stub vacío— y un control que no se ve como control no invita a pulsarlo.
+
+**La caja del compositor se anima mientras el agente trabaja** (borde vivo, `data-trabajando`
+en `Compositor.module.css`). Es la única señal en los tramos donde el modelo no habla —piensa,
+llama tools, espera al verificador— y pueden ser minutos: la caja apagada y quieta se lee como
+«se ha colgado». El giro necesita `@property` para poder interpolar el `<angle>` del
+`conic-gradient`; donde no exista, el marco se pinta igual pero quieto — sigue habiendo señal.
+Y con `prefers-reduced-motion` el giro se apaga a propósito y se deja el acento fijo: quien
+pidió que no hubiera movimiento no puede recibir un borde girando, pero tampoco quedarse sin
+saber que hay algo en marcha.
+
+**El turno en vuelo lo DICE el servidor** (`clase: "turno"`, emitido por el envoltorio del
+ejecutor en `vestibulo.ts`, que es el único sitio que sabe cuándo empieza y cuándo acaba).
+Con eso el compositor se apaga mientras el agente trabaja —mandar una segunda petición la
+dejaba en la cola del lazo sin decirlo, y el usuario veía su texto desaparecer del campo y no
+pasar nada durante minutos— y la flecha de enviar se convierte en un botón de PARAR, en la
+misma ranura. Deducirlo de los actos («¿llegó un `fin` después del último `usuario`?»)
+fallaría justo cuando importa: un turno que revienta no siempre deja `fin`, y el compositor
+se quedaría apagado para siempre. El aviso de fin va en un `finally` por lo mismo. Parar es
+`clase: "cancelar"` → `SesionReal.cancelar()`, que aborta el `stream` del grafo y **deja la
+sesión viva**: es parar esto, no cerrar la conversación.
+
+**El chat sigue lo que llega, salvo que hayas subido a leer**
+(`apps/web/src/pegadoAbajo.ts`). Las dos mitades importan: sin la primera el texto crecía
+fuera de la vista; con un «baja siempre» no se puede leer nada mientras el agente escribe,
+porque el siguiente parcial te devuelve al fondo. El umbral es de 48 px y no cero, porque el
+navegador redondea las alturas a subpíxeles y un scroller que ESTÁ abajo puede dar 0.5 y
+desengancharse solo.
+
+**El trabajo del agente se ve en el CHAT, no solo en la Trayectoria.** El chat pintaba
+únicamente los globos de usuario y asistente y todo lo demás vivía en la otra pestaña:
+medido en pantalla, se escribía una petición y no pasaba nada durante minutos con el agente
+trabajando a la vista de nadie. Ahora `razonamiento`, `herramientas` y `fase` van
+intercalados en la conversación, en gris y en una línea — paisaje, no conversación. `sistema`
+y `fin` siguen siendo solo de la Trayectoria: son avisos de la consola y el cierre del turno,
+no el pulso.
+
+**El razonamiento del modelo es su propio evento y su propio acto** (`razonamiento`), nunca
+parte de la respuesta. Gemini lo manda como bloques `{type:"thinking"}` dentro de `content`
+(`@langchain/google-genai`), y otros adaptadores como `{text, thought:true}`: las dos formas
+las extrae `puente.ts#razonamientoDe`, y **`textoDe` las excluye** — mirar solo
+`typeof text === "string"` metía el pensamiento dentro de la frase. `Piel.razonamiento` es
+OPCIONAL y solo la web la implementa, así que stdio y la TUI no cambian y la salida por una
+tubería sigue siendo byte-idéntica. En el chat va plegado en un `<details>` nativo: puede ser
+larguísimo, no es la respuesta, y plegarlo no cuesta ni una línea de JavaScript.
+
+**El texto del asistente se ENSEÑA mientras llega** (`pielWeb.ts#token`). Antes se
+acumulaba entero en el colchón y no salía hasta `cerrarLinea`: la respuesta aparecía de
+golpe tras segundos de pantalla quieta, con el modelo escribiendo y nadie viéndolo. Ahora el
+PRIMER token ya empuja un acto de asistente y los siguientes lo SUSTITUYEN —por el mismo
+camino que ya usaba el cierre de una racha de tools: si la lista no crece, el transporte
+manda `sustitucion`—. No se emite por token, porque cada emisión manda el acto entero y eso
+sería cuadrático en bytes; se emite como mucho cada `MS_ENTRE_PARCIALES` (80 ms, el orden de
+un cuadro largo: por debajo nadie lo distingue, por encima se ve a tirones), y `cerrarLinea`
+manda siempre el último trozo aunque no haya pasado el plazo — es el que completa la frase.
+El reloj entra por parámetro para que el ritmo no dependa de lo que tarde la máquina que
+corre los tests.
+
+**El cable habla con TODOS los clientes, no con el último.** Había UNA ranura de sumidero
+(`transporte.ts`), así que abrir una segunda pestaña dejaba muda a la primera sin decírselo:
+su SSE seguía abierto y su interfaz congelada en el último estado que le llegó. Medido con
+una pestaña local y otra por un túnel — el menú de modelos se quedaba en «consultando…» para
+siempre porque la respuesta se la llevaba la otra. Ahora es un `Set` y `emitir` escribe a
+todos. Tres consecuencias que hay que respetar: la ráfaga de bienvenida (reemisión,
+comandos, modelos, saludo) va SOLO al recién llegado —repetirle el transcript a quien ya lo
+tiene le duplicaría la conversación—, `desconectar(sumidero)` quita a ESE cliente y la
+consola solo se da por sola cuando se va el ÚLTIMO (cortar a la primera baja rechazaría la
+aprobación que otra pestaña tiene delante), y la carrera del `close` que llegaba tarde
+desaparece sola: quitar el suyo de un conjunto es exacto.
+
 **El vestíbulo** (`web/servidor/vestibulo.ts`) es lo que hay ANTES de que exista ninguna raíz:
 `correrConsola` es un lazo sobre UNA raíz, y la jerarquía entorno → proyecto → sesión necesita
 un sitio donde vivir mientras no hay proyecto abierto. De ahí dos consolas, la del vestíbulo y
@@ -181,10 +286,226 @@ solo aparece si falta lo que decide, calculado preguntándole al sistema y nunca
 «primer arranque»—, con dos precisiones: el paso de ENTORNO se pide siempre que quede el de
 proyecto (abrir un proyecto exige saber de qué entorno sale, y eso `pasosPendientes` no lo
 cubre), y el paso de CUENTA no lo pinta el wizard: lo conduce `vestibulo.pasoDeCuenta()`, o sea
-`cli/wizardInicial.ts#asistenteDeModelo` sin tocar, sobre `seleccionar` y `leerSecreto`. Así la
+`cli/wizardInicial.ts#asistenteDeModelo` sobre `seleccionar` y `leerSecreto`. Así la
 clave de API sigue viajando por el ÚNICO mensaje del cable que la lleva y, de propina, el
 asistente elige también el modelo: un paso de cuenta que solo guardara la credencial dejaría
 `trabajo` en la omisión (Ollama local) con una clave de Anthropic recién escrita al lado.
+
+**El asistente de cuenta es un LAZO, y en la web es una PUERTA.** Tres reglas, las tres en
+`cli/wizardInicial.ts` y compartidas por las tres pieles: elegir proveedor se puede deshacer
+(una opción «volver», `ID_VOLVER`, la ÚLTIMA de la lista de modelos); listar el catálogo ES la
+validación de la conexión, así que un catálogo que lanza o que sale vacío devuelve al paso de
+proveedor con el motivo en vez de dejar seguir con el modelo de omisión —y al proveedor que
+falló se le vuelve a pedir la clave, porque `hayCredencial` ya diría que la hay—; y el motivo
+viaja EN el selector (`SelectorDeConsola.aviso`) y no solo por `escribir`, porque durante el
+alta la web no pinta el transcript y un aviso que solo fuera un acto de sistema sería mudo.
+Lo que NO comparten es quién puede cancelar: `exigirEleccion` (solo la web) hace que cancelar
+vuelva a preguntar mientras `consola.eof?.()` diga que hay alguien; en el terminal cancelar
+sigue cancelando, y se sigue con Ollama local, que es una consola usable. `pasoDeCuenta()`
+devuelve QUÉ pasó y `arranque.ts` solo marca el paso como hecho si no fue «cancelado» —que con
+`exigirEleccion` solo ocurre cuando ya no queda nadie a quien preguntar—.
+
+Y una trampa que llevaba escondida desde siempre: `guardarCredencial` (`agent/authEnDisco.ts`)
+escribe TAMBIÉN en `process.env`, machacando lo que hubiera. `aplicarAuth` hace lo contrario en
+el arranque a propósito (la variable manda sobre el fichero), pero aquí el fichero acaba de
+cambiar por orden de un humano. Sin eso, `CatalogoModelos` —que lee la clave de `process.env`—
+fallaba con «falta la credencial para …» justo después de que el asistente la escribiera: la
+validación de la conexión no podía pasar con NINGÚN proveedor de pago en un arranque nuevo.
+
+**Del entorno se teclea SOLO la URL, en un campo libre.** Ni desplegable de entornos ni campo
+de nombre: un desplegable de «los dos oficiales y otro» obligaba a clasificar antes de escribir
+—el on-premise se registraba por un camino distinto del de WebStudio siendo la misma
+operación—, y por el cable viaja la URL con `id` y `nombre` VACÍOS. Los deduce
+`vestibulo.ts#identidadDeEntorno`: si la URL es la de un oficial, su identidad (dos entradas
+para el mismo servidor son dos carpetas de workspace y dos huecos de OAuth para la misma
+cuenta); si no, del host. Del id se quita todo lo que no sea letra, cifra, punto o guion porque
+acaba siendo una carpeta (`rutaDeWorkspace`, que lo pasa por `segmentoSeguro`) — los dos puntos
+del puerto incluidos, que en Windows parten la ruta. Por eso `registrarEntorno` devuelve el
+entorno REGISTRADO: quien manda la URL no sabe con qué id quedó, y `arranque.ts` necesita ese
+exacto para pedir los proyectos.
+
+El nombre bueno llega DESPUÉS, del propio servidor: `proyectosDe` es la primera conexión de
+verdad (OAuth + `initialize`), y de ahí sale el `serverInfo` —`title` antes que `name`, que es
+la convención de MCP—, saneado en `agent/cloudstudioMcp.ts#servidorDeImplementacion`: sin
+caracteres de control (un salto de línea en un nombre parte la línea de un log y disfraza lo que
+venga detrás) y acotado a 60. `renombrarConElServidor` solo pisa un nombre DEDUCIDO —el que
+sigue siendo igual al host—, nunca uno que puso una persona ni el de un oficial, y **el id no se
+toca jamás**: es un segmento de ruta con la copia local colgando, y cambiarlo sería mudar la
+carpeta del proyecto porque el servidor decidió llamarse de otra forma. Del `serverInfo` no sale
+ningún identificador, solo texto para leer.
+
+**El selector de modelos del compositor** (`apps/web/src/componentes/PastillaDeModelo.tsx`,
+mensaje `modelos` en `transporte.ts`). Las reglas no son nuestras: salen de leer
+`@deepseek-ai/dsh-client-ui-model-selection`, que es el mismo problema resuelto antes.
+- **El modelo en vigor lo dice el SERVIDOR** y el cliente lo pinta: ni lo deduce del último
+  turno ni lo re-parsea del transcript. Sale de `resolver(estadoDeSesion.fuentes).trabajo`
+  de la consola ABIERTA, porque `/modelo` y `/modelos` cambian el modelo en caliente y no
+  tocan disco — releer la configuración contaría lo de antes para siempre. Sin sesión
+  abierta el campo se va y el cliente pone «Elige modelo»: no se sintetiza una fila.
+- Enterarse del cambio exige una costura, `Consola.alEstado` (`cli/consola.ts`), que
+  `correrConsola` invoca cuando un comando devuelve estado nuevo; el vestíbulo la instala
+  en cada consola de proyecto y la reexpone con `alCambiarEstadoDeSesion`. stdio y la TUI
+  no la implementan (la TUI ya re-parsea `acuseDeModelo` para su barra).
+- **Elegir no tiene camino propio**: manda `/modelo <proveedor>/<id>` como prosa, el mismo
+  comando que se teclea. Dos entradas, un solo camino de envío.
+- **El catálogo se pide por proveedor y bajo demanda** (`clase: "catalogo"`), porque cada
+  uno es una llamada de red; se cachea en el proceso, y el que falla se lista con su error
+  mientras los demás siguen elegibles — un desvío, no un callejón.
+- **El punto de credencial tiene TRES estados** (`SIN_CREDENCIAL`, `core/modelos.ts`):
+  verde solo si está confirmada, rojo solo si consta que falta, y NADA para quien no
+  necesita ninguna. `hayCredencial` (`cli/consola.ts`) no sirve para esto: devuelve `true`
+  para un proveedor sin variable de entorno, que responde a otra pregunta.
+- Al caerse el SSE el cliente **tira** el estado de modelos (`marcarDesconectado`) y la
+  reconexión lo trae entero: mientras no hay cable, el modelo en vigor no se puede afirmar.
+
+**La clave de API se PRUEBA antes de escribirse** (`cli/wizardInicial.ts`). Dos cribas, y la
+primera es de balde: `motivoDeClaveInaceptable` (`core/config.ts`) rechaza lo que el propio
+campo ya delata —una línea `NOMBRE=valor` pegada entera, comillas, y cualquier carácter que
+no quepa en una cabecera HTTP (`\x21`–`\x7E`)— sin gastar una petición. La segunda es el
+catálogo: la clave se aplica al proceso con `aplicarCredencialAlProceso`
+(`agent/configEnDisco.ts`, sin tocar disco), se pregunta, y **solo si el proveedor contesta
+se escribe** en `auth.json`. Antes se escribía primero —hacía falta para poder listar— y
+cada intento fallido dejaba una clave basura en el fichero con el asistente confesando
+dónde. La clave a medias vive en una variable de la VUELTA del lazo y no del lazo: siendo
+del lazo, una vuelta que se iba por un `continue` se la dejaba puesta y la siguiente
+—otro proveedor— la escribía como suya (medido con `auth.json` roto: la clave de openai
+se intentaba guardar bajo ollama, que ni pide credencial).
+
+**La ventana de ajustes** (`apps/web/src/componentes/Ajustes.tsx`), con la disposición del
+panel del harness: navegación a la izquierda y UNA sección a la vista — apariencia, modelos
+y entornos. Tres ausencias deliberadas, todas por la misma regla («un control sin dato
+detrás es la misma mentira que una lista vacía rellenada»):
+- **Los `TEMAS` de `cli/tema.ts` no están**: son paletas ANSI de la consola de terminal y en
+  un navegador no pintan nada. Lo que sí es real es el claro/oscuro del cliente
+  (`apps/web/src/apariencia.ts`), que existe porque el CSS de deepseek trae
+  `body[data-ds-dark-theme]`; se recuerda en `localStorage` —es de ESTE navegador, no de la
+  cuenta— con todo acceso envuelto en `try`, porque en una ventana privada el propio
+  accesor lanza.
+- **No hay «proveedor personalizado»**: los proveedores son una lista CERRADA
+  (`core/modelos.ts#PROVEEDORES`) y declarar uno a mano no llevaría a ninguna parte. El
+  harness lo tiene porque su adaptador habla con cualquier endpoint compatible con OpenAI.
+- **Borrar una credencial solo se ofrece si está en `auth.json`** (`enFichero` en el cable,
+  y solo si además hay puerto para borrarla). Una que viene de una variable de entorno no
+  la podemos quitar; `borrarCredencial` (`agent/authEnDisco.ts`) limpia `process.env` SOLO
+  si la variable llevaba exactamente la clave borrada —el caso de `aplicarAuth`— y devuelve
+  `quedaEnEntorno` para poder decirlo: el punto se quedará verde y callarlo parecería un
+  fallo del botón.
+
+Poner y borrar la clave **no pasan por la prosa `/provider`** aunque sea el mismo diálogo:
+esa ruta necesita el lazo de `correrConsola`, que solo existe con un proyecto abierto, y
+esta ventana se abre antes. Tienen su propio mensaje (`clase: "credencial"`), y «pedir»
+hace que el servidor PREGUNTE por `leerSecreto` — la clave sigue viajando por el único
+mensaje del cable que la lleva, y la ventana solo decide DÓNDE se pinta esa pregunta
+(dentro de la fila que se edita, no detrás del modal). Registrar un entorno desde ahí
+reutiliza el mensaje del alta con `id` y `nombre` vacíos.
+
+Y una corrección de honestidad que vino con esto: el mensaje de alta lleva ahora
+`registrados` además de `entornos`. `entornos` es la lista OFRECIDA (los dos oficiales más
+«otro»), que sirve para prerrellenar la URL; la barra lateral la estaba enseñando como si
+fuera la de entornos dados de alta, así que un on-premise registrado se leía con el nombre
+de otro servidor.
+
+**La barra lateral, cableada** (`apps/web/src/componentes/Barra.tsx` + `arranque.ts`).
+Tres controles eran manejadores vacíos en `App.tsx` —se pulsaban y no pasaba nada— y las
+sesiones llegaban a fuego como `[]`:
+- Las **sesiones guardadas viajan con su proyecto** en el mensaje de alta, leídas de la
+  copia local (`sesiones.listar`, vacío si nunca se bajó). Reabrir una y «nueva sesión» son
+  el MISMO mensaje (`clase: "sesion"`, con o sin `sesion`): si la copia local existe se abre
+  y punto —no hay alta que hacer ni rama que preguntar—, y si no existe se cae al camino del
+  alta, que es el único que sabe bajarla.
+- **La barra enseña cuatro proyectos** (`PROYECTOS_POR_OMISION`) cuando nadie ha dicho
+  cuáles, y DICE cuántos quedan fuera y dónde se eligen — callarlo haría creer que el
+  entorno solo tiene cuatro. La elección se guarda con el entorno
+  (`Entorno.proyectos`, `settings.json`) y manda sobre el tope: quien pide seis, ve seis.
+  **Ausente y vacía no son lo mismo**: ausente es «no lo he dicho» y aplica la omisión,
+  `[]` es «ninguno» y se respeta. Esa distinción se conserva en las cuatro capas (disco,
+  cable, store y componente); colapsarla haría que elegir ninguno se leyera como no haber
+  elegido. El ORDEN lo pone el listado del servidor, no el orden en que se marcaron.
+
+**El entorno ACTIVO lo dice el servidor** (`alta.entornoActivo`), y el desplegable de la
+barra lo cambia de verdad (`clase: "entorno"`, `accion: "activo"`): traer los proyectos del
+otro entorno es una conexión con CloudStudio, así que la hace el servidor y contesta con la
+lista nueva. Si esa conexión falla, `entornoElegido` **no se toca** y se sigue enseñando lo
+del entorno anterior con el aviso puesto — dejar los proyectos del viejo bajo el nombre del
+nuevo sería la peor mentira posible en esa barra. Antes el cliente asumía «el primero
+registrado», que se rompía en cuanto había dos.
+
+**Empezar a trabajar en un proyecto pasa por una VENTANA** (`NuevaSesion.tsx`), y el «+» de
+la fila y el nombre del proyecto abren la misma: es la misma decisión, y tener dos caminos
+para ella es lo que hacía que uno de los dos no hiciera nada. La ventana distingue los dos
+estados por un dato del servidor (`proyectos[].local`, que es si existe su
+`.xonecode/config.json`) y no adivinando: con copia local, un botón y ya; sin ella, se pide
+la rama ORIGEN y **se dice que va a descargar el proyecto entero**. Con una sola rama se
+preselecciona pero se ENSEÑA — antes se mandaba sola desde un efecto, y elegir por el
+usuario y callarlo es cómo se acaba trabajando sobre la rama equivocada. Y no empieza sola:
+pulsar «+» por error costaba una descarga.
+
+**La paleta de xonecode vive en UN sitio** (`apps/web/estilos/marca.css`, nuestra, como
+`tipografia.css` y `splash.css`). El cliente se pinta con los alias `--dsw-alias-*` de la
+paleta COPIADA de deepseek, cuyos acentos son los suyos; `marca.css` redefine los tres que
+llevan el acento —el relleno del botón primario, su hover y el acento del elemento activo de
+la barra— y con eso la aplicación entera cambia de color sin tocar un solo `.module.css`.
+`--dsw-alias-brand-primary` NO se toca aunque el fill herede de él: de ahí cuelgan también
+textos sobre fondo claro, y el cian sobre blanco no tiene contraste para texto. Los valores
+son los MEDIDOS del diseño del usuario (`docs/DISENO-DASHBOARD.md`), y la escala `brand`
+índigo que Stitch mete por omisión se descarta entera: competía con el cian en la misma
+pantalla. `splash.css` consume esos tokens en vez de repetir el cian — dos ficheros con el
+mismo color escrito a mano es como se acaba con dos cianes distintos. Este fichero y
+`splash.css` son las únicas excepciones declaradas a «ningún color literal»
+(`Barra.test.tsx`): esa disciplina es sobre lo que se pinta CON la paleta, no sobre la
+paleta. **La barra superior** (`Cabecera.module.css`) es la única superficie de marca —azul
+profundo, pestaña activa en cian—, y se pinta con una clase NUESTRA encima de la copiada, con
+el selector repetido (`.barraSuperior.barraSuperior`) para ganar especificidad sin depender
+del orden en que el empaquetador coloque las hojas.
+
+**La barra superior es de la APLICACIÓN, no de la sesión**, así que se pinta también en el
+escritorio — con la marca, el estado del cable y el botón de plegar— pero **sin pestañas**:
+sin sesión no hay transcript ni trayectoria a los que llevar, y unas pestañas que no llevan a
+ningún sitio son el mismo botón muerto que este repo no consiente. `Cabecera` las omite
+cuando no le pasan `pestana`/`alElegirPestana`.
+
+**La barra lateral se pliega**, y el botón vive en la barra superior y no dentro de ella
+—donde lo pone el mockup— por una razón práctica: plegada, la barra no está, así que su
+propio botón se habría ido con ella. Al plegarse se DESMONTA (la columna del grid se va a
+cero); no se esconde con `visibility`, porque una barra invisible sigue siendo tabulable y se
+llega con el teclado a botones que no se ven. La preferencia se recuerda en `localStorage`
+(`apps/web/src/preferencias.ts`), no en el servidor: es de ESTE navegador, como la
+apariencia, y con el mismo `try` alrededor de cada acceso porque en una ventana privada el
+accesor lanza.
+
+**El centro sin sesión es el ESCRITORIO** (`Escritorio.tsx`), no un hueco con una frase
+(«elige un proyecto en la barra lateral», que es lo que había). Pinta los proyectos con lo
+que el servidor ya manda —si tienen copia local, sus últimas sesiones—, el entorno activo
+con su URL y el modelo en vigor, y empezar es un clic. Todo lo que enseña ya viajaba por el
+cable: no hay una sola tarjeta de relleno. Y **no pinta nada del mockup que no tenga dato
+detrás** —el panel de dispositivos conectados, «Build & Run», el estado del ADB—: eso es un
+puente con el móvil que este producto todavía no cablea (`docs/DISENO-DASHBOARD.md` lista
+pieza por pieza qué se sostiene y qué no). Los dos vacíos se distinguen, además: «no hay
+entorno registrado» manda a Ajustes; «el entorno no devolvió proyectos» no, porque ahí no
+hay nada que configurar.
+
+**La barra distingue dónde estás.** `proyectoAbierto` (booleano) decía SI había uno; la
+barra necesita CUÁL, y son dos preguntas distintas: el mensaje de alta lleva ahora
+`proyectoActivo` y `sesionActiva`. El id del proyecto se DEDUCE comparando la raíz de la
+consola abierta con la que le tocaría a cada proyecto (`raizDeProyecto`, la misma función
+que la creó) en vez de guardarse aparte al abrirlo — un id guardado se queda viejo el día
+que alguien abra por otro camino. `sesionActiva` puede faltar con proyecto abierto y no es
+un fallo: el id de sesión no existe hasta que se vuelca el primer acto, igual que tampoco
+aparece todavía en la lista de sesiones guardadas. Sin esos datos **no se marca nada**:
+marcar el primero por no tenerlos sería afirmar «aquí estás» sin saberlo. Y se marca con
+DOS señales —fondo más barra de acento, y `aria-current`—, porque el fondo solo no basta
+cuando la fila de al lado está en `:hover` con ese mismo alias.
+
+**El cliente no manda comandos.** La pastilla de modelo mandaba la prosa `/modelo <id>`, y
+eran dos mentiras pequeñas: el transcript se apuntaba un acto de USUARIO que nadie tecleó
+—y de ahí sale el título de la sesión— y la interfaz hablaba en la sintaxis del terminal.
+Por el cable viaja la intención (`clase: "modelo"`, `clase: "sesion"`, `clase: "credencial"`,
+`clase: "entorno"`) y CÓMO se aplica lo decide el servidor: para el modelo, encolando la
+línea en el lazo con `consolaWeb.encolar` —sin acto de usuario— porque el manejador de
+`/modelo` es donde vive la precedencia entre banderas, ficheros y elecciones en caliente, y
+una segunda implementación divergiría el primer día. **La función se comparte; la sintaxis
+no se exporta.** Lo que sigue existiendo es teclear `/loquesea` en el compositor: eso lo
+decide quien escribe, no un botón.
 
 El registro de comandos que el compositor sugiere se **genera recorriendo `COMANDOS`**
 (`comandosDelRegistro`, `web/servidor/arranque.ts`), igual que `/ayuda`, la cabecera de stdio y
@@ -267,6 +588,34 @@ con Ollama eso comprime demasiado tarde. Los historiales ya resumidos se escribe
   nada de eso puede acabar en `config.json` ni en el transcript.
 - Un fallo aquí no puede tumbar el arranque: el asistente informa y **no crea `.xonecode`** a
   medias.
+
+**CloudStudio abre por NOMBRE y rechaza el id**, y eso vale también para la reapertura
+automática: `clienteCloudStudio(invocar, nombreDeProyecto)` usa ese valor cada vez que
+reabre, así que pasarle el id daba un bucle sordo —se reabría con algo que el servidor no
+encuentra, la tool volvía a decir «no project is open», y el error hablaba de la tool y no
+del argumento equivocado—. El cable trae el ID (es lo que identifica al proyecto en la
+lista), así que **quien llama desde la web traduce**: `ramasDe` acepta la identidad entera
+`{id, nombre}` igual que `completarProyecto`, y usa el nombre.
+
+**La sesión MCP se recupera sola, y eso incluye el token.** Dos agujeros medidos contra el
+servidor real, los dos arreglados:
+- **La sesión caída llega de DOS formas** y solo se miraba una. A veces es un error de tool
+  (`isError`, que `invocarSobre` convierte en excepción) y a veces una respuesta CORRECTA
+  cuyo texto empieza por «Error: No project is open…». Esa segunda no disparaba la
+  reapertura, y el texto seguía camino hasta el `JSON.parse` de quien llamó: lo que llegaba
+  a la interfaz era «Unexpected token 'E'» — un fallo de sesión disfrazado de fallo de
+  formato. `conSesion` (`agent/cloudstudioClient.ts`) mira ahora el RESULTADO además de la
+  excepción, reabre con `studio_open_project` y reintenta una vez; si tras reabrir el texto
+  sigue diciendo lo mismo, lanza nombrando la tool y el proyecto en vez de devolver ese
+  texto. Y ningún `JSON.parse` a pelo: `comoJson` falla diciendo QUÉ tool contestó y con qué
+  muestra.
+- **`ProviderCloudStudio.invalidateCredentials`** no existía, y es el gancho del que depende
+  la recuperación del SDK: `auth()` atrapa `InvalidGrantError` —refresh token muerto— o
+  `InvalidClientError`, llama a ese método y REINTENTA el flujo entero. Sin implementarlo la
+  llamada era un no-op, el SDK reintentaba con las credenciales podridas y volvía a fallar:
+  un token caducado sin refresco válido era un fallo duro que solo se arreglaba borrando el
+  fichero a mano. Cada alcance borra lo suyo (`tokens` se lleva también los `scopes`
+  concedidos, que van CON el token) y se escribe en el acto.
 
 **La copia local y la sincronización** (`agent/descarga.ts`, `agent/gitSync.ts`,
 `agent/subida.ts`, `core/planDeSubida.ts`). El proyecto se descarga a la carpeta que el

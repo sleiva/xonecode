@@ -26,9 +26,10 @@ import { topeResuelto } from "../core/contextos.js";
 import { escribirEnStdout, type Escribir } from "./stdio.js";
 
 /**
- * Duplicado a propósito: `agent/configEnDisco.ts` tiene el mismo mapa como `const`
- * privada (no exportada) y ese fichero no se puede tocar. Si cambia allí, cambia aquí.
- * `ollama` no lleva variable: no necesita credencial y se omite de esta sección.
+ * Duplicado a propósito: el original vive en `agent/configEnDisco.ts` (hoy sí exportado,
+ * para `authEnDisco.ts`), y `cli/` no tira de `agent/` por un mapa de cuatro líneas. Si
+ * cambia allí, cambia aquí. `ollama` no lleva variable: no necesita credencial y se omite
+ * de esta sección.
  */
 const VARIABLE_POR_PROVEEDOR: Partial<Record<Proveedor, string>> = {
   anthropic: "ANTHROPIC_API_KEY",

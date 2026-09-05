@@ -15,13 +15,33 @@
  * líneas —«→ lee src/app.xne» y luego «→ lee ×3 — …»— para una sola racha, que es
  * exactamente lo que la TUI ya evita en `cli/tui/store.ts` con la misma sustitución.
  */
-import type { Acto, MensajeAlCliente, PasoDelWizard, SelectorDeConsola } from "./tipos.js";
+import type {
+  Acto,
+  MensajeAlCliente,
+  PasoDelWizard,
+  ProveedorDeModelos,
+  SelectorDeConsola,
+} from "./tipos.js";
 
 export interface EstadoDelCliente {
   actos: Acto[];
   conectado: boolean;
   pregunta?: { texto: string };
-  selector?: { titulo: string; opciones: { id: string; etiqueta: string; detalle?: string }[] };
+  /**
+   * Los modelos, tal y como los cuenta el servidor: cuál está en vigor y qué hay.
+   * Ausente = todavía no ha llegado el mensaje. NUNCA se deriva de un acto del transcript
+   * ni se recuerda entre conexiones: al caerse el SSE se tira (`marcarDesconectado`) y la
+   * reconexión lo vuelve a traer entero.
+   */
+  modelos?: { actual?: string; proveedores: ProveedorDeModelos[] };
+  /** Hay un turno corriendo AHORA. Lo dice el servidor; el cliente no lo deduce. */
+  turnoEnVuelo?: boolean;
+  selector?: {
+    titulo: string;
+    opciones: { id: string; etiqueta: string; detalle?: string }[];
+    /** El motivo que manda el servidor (`SelectorDeConsola.aviso`). Ausente = no hay. */
+    aviso?: string;
+  };
   secreto?: { pregunta: string };
   aprobacion?: { pendientes: unknown[]; ficheros: Record<string, string>; diffs: Record<string, unknown[]> };
   /**
@@ -46,10 +66,20 @@ export interface EstadoDelCliente {
     pasos: PasoDelWizard[];
     proveedores: { id: string; nombre: string }[];
     entornos: { id: string; nombre: string; url: string }[];
-    proyectos: { id: string; nombre: string }[];
+    /** Los REGISTRADOS (`settings.json`), no los ofrecidos: es lo que lista la ventana de
+     *  ajustes y lo que la barra debe enseñar. Vacío mientras no haya ninguno. */
+    registrados: { id: string; nombre: string; url: string; proyectos?: string[] }[];
+    proyectos: { id: string; nombre: string; sesiones?: { id: string; titulo: string }[]; local?: boolean }[];
     ramas: string[];
     /** Lo que falló en el paso anterior, para que lo diga el paso y no solo la Trayectoria. */
     aviso?: string;
+    /** De qué entorno son los `proyectos`. Ausente = de ninguno todavía; el cliente NO
+     *  supone «el primero», que es lo que hacía y se rompía con dos entornos. */
+    entornoActivo?: string;
+    /** Cuál está abierto y cuál es su sesión, para marcarlos en la barra. Ausentes = no se
+     *  sabe, y entonces no se marca nada en vez de marcar el primero. */
+    proyectoActivo?: string;
+    sesionActiva?: string;
     /** El saludo de la bienvenida. Ausente = sin nombre que saludar (`Bienvenida.tsx`). */
     nombre?: string;
     /** Si hay un proyecto abierto en esta conexión — `App.tsx` lo usa para decidir entre
@@ -71,6 +101,7 @@ const PASOS: ReadonlySet<string> = new Set<PasoDelWizard>(["cuenta", "entorno", 
 const TIPOS_DE_ACTO = {
   usuario: true,
   asistente: true,
+  razonamiento: true,
   herramientas: true,
   sistema: true,
   fase: true,
@@ -105,6 +136,40 @@ function esSelector(valor: unknown): valor is SelectorDeConsola {
     s.opciones.every(
       (o) => typeof o === "object" && o !== null && typeof (o as { id?: unknown }).id === "string" &&
         typeof (o as { etiqueta?: unknown }).etiqueta === "string"
+    )
+  );
+}
+
+/** Un proveedor del mensaje «modelos», comprobado campo a campo como todo lo que entra. */
+function esProveedorDeModelos(valor: unknown): valor is ProveedorDeModelos {
+  if (typeof valor !== "object" || valor === null) return false;
+  const p = valor as { id?: unknown; credencial?: unknown; modelos?: unknown; error?: unknown };
+  if (typeof p.id !== "string") return false;
+  if (p.credencial !== "puesta" && p.credencial !== "falta" && p.credencial !== "nativa") return false;
+  if (p.error !== undefined && typeof p.error !== "string") return false;
+  if ((p as { enFichero?: unknown }).enFichero !== undefined && typeof (p as { enFichero?: unknown }).enFichero !== "boolean") {
+    return false;
+  }
+  if (p.modelos !== undefined) {
+    if (!Array.isArray(p.modelos)) return false;
+    if (!p.modelos.every((m) => typeof m === "object" && m !== null && typeof (m as { id?: unknown }).id === "string")) {
+      return false;
+    }
+  }
+  return true;
+}
+
+/** `{id, titulo}`: una sesión guardada. NO vale `sonIdentidades` —una sesión no tiene
+ *  `nombre`, tiene título— y usarla dejaba la lista siempre vacía sin decir por qué. */
+function sonSesiones(valor: unknown): valor is { id: string; titulo: string }[] {
+  return (
+    Array.isArray(valor) &&
+    valor.every(
+      (s) =>
+        typeof s === "object" &&
+        s !== null &&
+        typeof (s as { id?: unknown }).id === "string" &&
+        typeof (s as { titulo?: unknown }).titulo === "string"
     )
   );
 }
@@ -147,7 +212,9 @@ export function crearStoreDelCliente(): {
   marcarDesconectado: () => void;
   contestarPregunta: () => void;
   contestarSecreto: () => void;
-  contestarSelector: () => void;
+  /** Con el selector que se contestó, retira SOLO ese (ver la implementación: el paso de
+   *  cuenta encadena selectores sin viaje de red entre ellos). Sin él, retira lo que haya. */
+  contestarSelector: (contestado?: EstadoDelCliente["selector"]) => void;
   cerrarAprobacion: () => void;
   suscribir: (escucha: () => void) => () => void;
 } {
@@ -213,7 +280,41 @@ export function crearStoreDelCliente(): {
           // llega del transporte, que no quiere que nadie lo reordene por su cuenta) y
           // `EstadoDelCliente.selector.opciones` no lo es — la interfaz del store es la
           // del brief tal cual, y asignar el `readonly` ahí no tipa.
-          mutar({ selector: { titulo: selector.titulo, opciones: [...selector.opciones] } });
+          mutar({
+            selector: {
+              titulo: selector.titulo,
+              opciones: [...selector.opciones],
+              // Solo si es texto: lo demás se descarta entero, como el resto del store.
+              ...(typeof selector.aviso === "string" ? { aviso: selector.aviso } : {}),
+            },
+          });
+          return;
+        }
+        case "modelos": {
+          const m = mensaje as { actual?: unknown; proveedores?: unknown };
+          if (!Array.isArray(m.proveedores)) return;
+          const proveedores = m.proveedores.filter(esProveedorDeModelos).map((p) => ({
+            id: p.id,
+            credencial: p.credencial,
+            ...(p.enFichero === undefined ? {} : { enFichero: p.enFichero }),
+            ...(p.modelos === undefined ? {} : { modelos: [...p.modelos] }),
+            ...(p.error === undefined ? {} : { error: p.error }),
+          }));
+          mutar({
+            modelos: {
+              // Un `actual` que no sea texto se DESCARTA en vez de pintarse: sin él, el
+              // disparador dice «Elige modelo», que es la verdad («no se sabe»), y no una
+              // fila inventada.
+              ...(typeof m.actual === "string" ? { actual: m.actual } : {}),
+              proveedores,
+            },
+          });
+          return;
+        }
+        case "turno": {
+          const activo = (mensaje as { activo?: unknown }).activo;
+          if (typeof activo !== "boolean") return;
+          mutar({ turnoEnVuelo: activo });
           return;
         }
         case "secreto": {
@@ -233,6 +334,10 @@ export function crearStoreDelCliente(): {
             pasos?: unknown;
             proveedores?: unknown;
             entornos?: unknown;
+            registrados?: unknown;
+            entornoActivo?: unknown;
+            proyectoActivo?: unknown;
+            sesionActiva?: unknown;
             proyectos?: unknown;
             ramas?: unknown;
             aviso?: unknown;
@@ -242,6 +347,18 @@ export function crearStoreDelCliente(): {
           };
           if (!Array.isArray(m.pasos) || !m.pasos.every((p) => typeof p === "string" && PASOS.has(p))) return;
           if (!sonIdentidades(m.proveedores) || !sonIdentidades(m.proyectos)) return;
+          // Las sesiones viajan DENTRO de cada proyecto; `sonIdentidades` solo mira `id` y
+          // `nombre`, así que aquí se recogen aparte y se descarta lo que no tenga forma —
+          // una sesión inventada sería una fila que al pulsarla no abre nada.
+          const proyectos = m.proyectos.map((p) => {
+            const sesiones = (p as { sesiones?: unknown }).sesiones;
+            return {
+              id: p.id,
+              nombre: p.nombre,
+              ...(sonSesiones(sesiones) ? { sesiones: sesiones.map((s) => ({ id: s.id, titulo: s.titulo })) } : {}),
+              ...((p as { local?: unknown }).local === true ? { local: true } : {}),
+            };
+          });
           if (
             !Array.isArray(m.entornos) ||
             !m.entornos.every((e) => typeof (e as { url?: unknown })?.url === "string") ||
@@ -249,6 +366,25 @@ export function crearStoreDelCliente(): {
           ) {
             return;
           }
+          // `registrados` sí puede faltar sin invalidar el mensaje: lo que no se entiende
+          // se descarta a lista vacía —«todavía no lo sé»— en vez de tirar el alta entera,
+          // que es lo que decide si se pinta el wizard o la maqueta.
+          const registrados =
+            Array.isArray(m.registrados) &&
+            m.registrados.every((e) => typeof (e as { url?: unknown })?.url === "string") &&
+            sonIdentidades(m.registrados)
+              ? (m.registrados as { id: string; nombre: string; url: string; proyectos?: unknown }[]).map((e) => ({
+                  id: e.id,
+                  nombre: e.nombre,
+                  url: e.url,
+                  // Se conserva la DIFERENCIA entre ausente y vacío: ausente es «no lo he
+                  // elegido» y manda la omisión; `[]` es «ninguno». Colapsarlas aquí haría
+                  // que elegir ninguno se leyera como no haber elegido.
+                  ...(Array.isArray(e.proyectos) && e.proyectos.every((p) => typeof p === "string")
+                    ? { proyectos: e.proyectos as string[] }
+                    : {}),
+                }))
+              : [];
           if (!Array.isArray(m.ramas) || !m.ramas.every((r) => typeof r === "string")) return;
           // Un `proyectoAbierto` que no sea booleano no cuenta como el mensaje válido: es
           // el campo que distingue la maqueta completa del hueco de «elige un proyecto»
@@ -259,12 +395,16 @@ export function crearStoreDelCliente(): {
               pasos: m.pasos as PasoDelWizard[],
               proveedores: m.proveedores,
               entornos: m.entornos as { id: string; nombre: string; url: string }[],
-              proyectos: m.proyectos,
+              registrados,
+              proyectos,
               ramas: m.ramas as string[],
               proyectoAbierto: m.proyectoAbierto,
               // Ausente o de otro tipo = no hay aviso/nombre, nunca uno inventado.
               ...(typeof m.aviso === "string" ? { aviso: m.aviso } : {}),
               ...(typeof m.nombre === "string" ? { nombre: m.nombre } : {}),
+              ...(typeof m.entornoActivo === "string" ? { entornoActivo: m.entornoActivo } : {}),
+              ...(typeof m.proyectoActivo === "string" ? { proyectoActivo: m.proyectoActivo } : {}),
+              ...(typeof m.sesionActiva === "string" ? { sesionActiva: m.sesionActiva } : {}),
               // Solo los dos valores que el tipo admite: cualquier otra cosa (un modo
               // nuevo del servidor, o basura) se descarta y la cabecera no pinta
               // pastilla, que es lo mismo que hace cuando el campo no viene. Aceptar la
@@ -303,7 +443,22 @@ export function crearStoreDelCliente(): {
       // secreto o aprobación que el cliente tuviera en pantalla ya está zanjada al otro
       // lado —como rechazo, en el caso de la aprobación—. Dejarla pintada tras reconectar
       // mentiría sobre qué sigue esperando respuesta.
-      mutar({ conectado: false, pregunta: undefined, selector: undefined, secreto: undefined, aprobacion: undefined });
+      // `modelos` también se tira: mientras no hay cable, el modelo en vigor no se puede
+      // AFIRMAR —pudo cambiarlo otra pestaña, o el proceso pudo morir—, y la reconexión lo
+      // vuelve a traer entero (`arranque.ts#adjuntar`). Es la misma regla del harness de
+      // DeepSeek: un `connection/reset` tira todas las proyecciones y repide la selección
+      // antes de pintarla.
+      mutar({
+        conectado: false,
+        pregunta: undefined,
+        selector: undefined,
+        secreto: undefined,
+        aprobacion: undefined,
+        modelos: undefined,
+        // Sin cable no se sabe si el turno sigue: dejarlo en `true` apagaría el compositor
+        // para siempre en una pestaña que ya no recibe el «terminó».
+        turnoEnVuelo: false,
+      });
     },
 
     /**
@@ -329,7 +484,25 @@ export function crearStoreDelCliente(): {
       mutar({ secreto: undefined });
     },
 
-    contestarSelector(): void {
+    /**
+     * Retira el selector CONTESTADO, no «el que haya».
+     *
+     * Sin el parámetro esto era una carrera de verdad desde que el asistente de cuenta es
+     * un lazo (`cli/wizardInicial.ts`): volver atrás o cancelar con la puerta puesta hace
+     * que el servidor emita el selector SIGUIENTE sin ningún viaje de red por medio —antes
+     * siempre había un `listar` o un OAuth entre dos selectores—, así que el mensaje del
+     * SSE y la resolución del `POST` compiten, en sockets distintos y sin orden
+     * garantizado. Si ganaba el SSE, este `contestarSelector()` borraba el selector NUEVO:
+     * tarjeta vacía en pantalla y el servidor esperando una respuesta que ya nadie podía
+     * dar, hasta que venciera el plazo.
+     *
+     * La comparación es por REFERENCIA y basta: `aplicar` construye un objeto nuevo por
+     * cada mensaje «selector», así que dos selectores distintos nunca comparten identidad.
+     * Sin argumento se conserva el comportamiento de siempre (borra lo que haya), que es lo
+     * que quiere quien no tiene a mano lo que contestó.
+     */
+    contestarSelector(contestado?: EstadoDelCliente["selector"]): void {
+      if (contestado !== undefined && estado.selector !== contestado) return;
       mutar({ selector: undefined });
     },
 

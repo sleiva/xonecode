@@ -130,3 +130,135 @@
   max-width: 100%;
   border-radius: 4px;
 }
+
+/* EL PULSO DEL TURNO: razonamiento, tools y fases intercalados en la conversación.
+
+   Todo en `label-tertiary` y sin globo: es paisaje, no conversación. Lo que se lee de un
+   vistazo tiene que seguir siendo lo que dijo el usuario y lo que contestó el agente; esto
+   está para que se vea que ALGO pasa mientras tanto, no para competir con ello. */
+.textoTenue {
+  margin: 0;
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.trabajo {
+  margin: 2px 0;
+  padding: 0 0 0 10px;
+  list-style: none;
+  border-left: 2px solid var(--dsw-alias-border-l2);
+  font-family: var(--ds-font-family-code);
+  overflow-x: auto;
+}
+
+.trabajo li {
+  white-space: pre;
+}
+
+.fase {
+  padding-left: 12px;
+}
+
+/* El razonamiento, plegado por omisión: puede ser larguísimo y no es la respuesta. Se abre
+   quien quiera verlo. `<details>` nativo — sin JavaScript ni estado que mantener. */
+.pensando {
+  margin: 2px 0;
+  padding-left: 12px;
+}
+
+.resumen {
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.pensando[open] .resumen {
+  margin-bottom: 4px;
+}
+
+.pensando .textoTenue {
+  white-space: pre-wrap;
+  border-left: 2px solid var(--dsw-alias-border-l2);
+  padding-left: 10px;
+}
+
+/* El cuerpo del tramo de pulso, cuando está abierto. */
+.detalleDePulso {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding-top: 4px;
+}
+
+/* El razonamiento conserva sus saltos de línea: es prosa del modelo, no una lista. */
+.pensado {
+  white-space: pre-wrap;
+  border-left: 2px solid var(--dsw-alias-border-l2);
+  padding-left: 10px;
+}
+
+/* La fila de acciones del mensaje. Aparece al posar el ratón: mientras se lee, el mensaje
+   se lee solo. `focus-within` además de `hover` para que se llegue con el teclado — un
+   control que solo existe con ratón no existe para quien tabula. */
+.acciones {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 4px;
+  opacity: 0;
+  transition: opacity 120ms ease;
+}
+
+.globo:hover .acciones,
+.acciones:focus-within {
+  opacity: 1;
+}
+
+/* EL BOTÓN DE LAS VALLAS DE CÓDIGO. Lo pinta `MarkdownText` (paquete de deepseek) con la
+   PALABRA «Copiar»/«Copiado» y sin icono — se ve en su `CodeBlock`: el hijo del botón es la
+   etiqueta, no un `<svg>`. No se puede sustituir el hijo desde fuera, así que se le pone el
+   icono delante con el MISMO trazado que su propio `IconCopyOutline16`, como máscara: el
+   dibujo es suyo, copiado de `lib/index.js`, no uno parecido hecho a mano.
+
+   La palabra se queda —pequeña— porque es lo ÚNICO que distingue «Copiar» de «Copiado»: ese
+   botón no expone estado en ningún atributo, así que sin el texto no habría forma de saber
+   si la copia salió. */
+/* Y con BORDE: el botón del paquete llega plano —sin caja, porque su CSS Module es un stub
+   vacío— y no se distingue de la etiqueta del lenguaje que tiene al lado. Un control que no
+   se ve como control no invita a pulsarlo. */
+.asistente :global(.md-code-block) button {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border: 0.5px solid var(--dsw-alias-border-l2);
+  border-radius: 6px;
+  background: var(--dsw-alias-bg-layer-1);
+  color: var(--dsw-alias-label-secondary);
+  font: inherit;
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.asistente :global(.md-code-block) button:hover {
+  background: var(--dsw-alias-interactive-bg-hover);
+  color: var(--dsw-alias-label-primary);
+}
+
+.asistente :global(.md-code-block) button::before {
+  content: "";
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  margin-right: 4px;
+  vertical-align: -2px;
+  /* El alias y no `currentColor`: la disciplina de estilos prohíbe las palabras clave de
+     color en nuestras hojas, `currentcolor` incluida (`Barra.test.tsx`), y el tono que
+     queremos es justo el del texto apagado de al lado. */
+  background: var(--dsw-alias-label-secondary);
+  mask-image: var(--xonecode-icono-copiar);
+  mask-size: contain;
+  mask-repeat: no-repeat;
+  -webkit-mask-image: var(--xonecode-icono-copiar);
+  -webkit-mask-size: contain;
+  -webkit-mask-repeat: no-repeat;
+}

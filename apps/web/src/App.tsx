@@ -15,7 +15,11 @@ import { Wizard } from "./componentes/Wizard.js";
 import { PantallaDeArranque } from "./componentes/PantallaDeArranque.js";
 import { TarjetaDeAlta } from "./componentes/TarjetaDeAlta.js";
 import type { PasoDeAlta } from "./componentes/PasosDelAlta.js";
-import { SinProyectoAbierto } from "./componentes/SinProyectoAbierto.js";
+import { Escritorio } from "./componentes/Escritorio.js";
+import { NuevaSesion } from "./componentes/NuevaSesion.js";
+import { Ajustes } from "./componentes/Ajustes.js";
+import { aplicarApariencia, guardarApariencia, leerApariencia, type Apariencia } from "./apariencia.js";
+import { guardarBarraContraida, leerBarraContraida } from "./preferencias.js";
 
 type Store = ReturnType<typeof crearStoreDelCliente>;
 
@@ -49,21 +53,43 @@ export function App({ store, enviar }: { store: Store; enviar: Conexion["enviar"
    */
   const [pestana, setPestana] = useState<Pestana>("chat");
 
-  const [proyectoEligiendoRama, setProyectoEligiendoRama] = useState<string | undefined>(undefined);
-  const ramasPendientes = estado.alta?.ramas ?? [];
+  /**
+   * La ventana de ajustes y la apariencia del cliente. Las dos viven aquí y no en el store:
+   * el store es lo que dice el SERVIDOR, y esto es de esta ventana — qué panel está abierto
+   * y de qué color se ve. `leerApariencia` se llama una vez, al montar (`useState`
+   * perezoso), no en cada render.
+   */
+  const [ajustesAbiertos, setAjustesAbiertos] = useState(false);
+  /**
+   * La barra lateral, plegada. Es de esta ventana —como la apariencia— y se recuerda en el
+   * navegador: quien la pliega para ganar sitio no quiere volver a plegarla en cada
+   * recarga. `leerBarraContraida` se llama una vez, al montar.
+   */
+  const [barraContraida, setBarraContraida] = useState(() => leerBarraContraida());
+  const [apariencia, setApariencia] = useState<Apariencia>(() => leerApariencia());
 
   useEffect(() => {
-    if (proyectoEligiendoRama === undefined || ramasPendientes.length !== 1) return;
-    const proyecto = proyectoEligiendoRama;
-    const rama = ramasPendientes[0]!;
-    setProyectoEligiendoRama(undefined);
-    void enviar({ clase: "alta", paso: "proyecto", proyecto, rama });
-    // `ramasPendientes` no es una dependencia estable (`App.tsx` la recalcula en cada
-    // render desde `estado.alta?.ramas ?? []`, un array NUEVO cada vez): comparar por
-    // longitud e indexar [0] es correcto, pero listar el array entero como dependencia
-    // dispararía este efecto en cada render aunque el CONTENIDO no cambiara. Se lista su
-    // longitud y su único valor posible, que sí son estables entre renders sin cambios.
-  }, [proyectoEligiendoRama, ramasPendientes.length, ramasPendientes[0]]);
+    aplicarApariencia(apariencia);
+    // Con «sistema» hay que seguir escuchando: el usuario puede cambiar el modo del sistema
+    // con la pestaña abierta, y quedarse en claro sobre un escritorio que se ha puesto
+    // oscuro es justo lo que «como el sistema» promete que no pasa.
+    if (apariencia !== "sistema" || typeof window.matchMedia !== "function") return;
+    const medio = window.matchMedia("(prefers-color-scheme: dark)");
+    const alCambiar = (): void => aplicarApariencia("sistema");
+    medio.addEventListener("change", alCambiar);
+    return () => medio.removeEventListener("change", alCambiar);
+  }, [apariencia]);
+
+  /**
+   * El proyecto para el que se está abriendo la ventana de sesión nueva.
+   *
+   * Sustituye al `proyectoEligiendoRama` de antes, que existía solo para saber a qué
+   * proyecto pertenecía el selector de rama que flotaba en el centro. Ahora la ventana lo
+   * dice, así que la rama se elige DENTRO de ella y no hace falta ningún efecto que mande
+   * la elección por su cuenta cuando solo hay una: eso era decidir por el usuario sin
+   * enseñárselo.
+   */
+  const [sesionNueva, setSesionNueva] = useState<string | undefined>(undefined);
 
   // El alta es lo ÚNICO que se enseña mientras falte cuenta o entorno — nada de armazón
   // vacío alrededor esperando datos que todavía no llegan (la barra sin entornos, las
@@ -84,18 +110,22 @@ export function App({ store, enviar }: { store: Store; enviar: Conexion["enviar"
   const enAlta = estado.alta === undefined || estado.alta.pasos.length > 0;
 
   /**
-   * La progresión de los dos pasos, para `PasosDelAlta`. Se deriva de UNA sola señal —si
-   * `estado.alta` ya llegó— y no de mirar `selector`/`secreto` a mano: `arranque.ts`
-   * garantiza que el mensaje `alta` solo se manda DESPUÉS de que `conducirCuenta()`
-   * resuelve (`anunciarAlta` va en el `.finally()` que sigue a `conducirCuenta()`), así
-   * que `alta` sin llegar significa cuenta en curso, y `alta` ya llegado significa cuenta
-   * hecha. Dentro de esta rama (`enAlta`), si `alta` llegó, `pasos` tiene forzosamente
-   * «entorno» — es el único valor que le queda por dar `pasosPendientes()` (`vestibulo.ts`)
-   * y es lo que hace que este cálculo no necesite mirar `estado.alta.pasos` en absoluto.
+   * ¿Está el paso de cuenta en marcha AHORA MISMO?
+   *
+   * Dos señales, y las dos hacen falta. La primera es que `estado.alta` todavía no haya
+   * llegado: `arranque.ts` solo manda ese mensaje DESPUÉS de que `conducirCuenta()`
+   * resuelve, así que antes de él la cuenta sigue en curso. La segunda es que haya un
+   * selector o un secreto esperando respuesta, y es la que hizo falta al poder VOLVER al
+   * paso de modelo: en esa vuelta `alta` ya llegó hace rato, y sin mirar la pregunta en
+   * vuelo la progresión seguiría diciendo «Modelo ✓ / Entorno actual» con el selector de
+   * proveedor en pantalla, y el formulario de entorno pintado debajo del selector.
    */
+  const enCuenta = estado.alta === undefined || estado.selector !== undefined || estado.secreto !== undefined;
+
+  /** La progresión de los dos pasos, para `PasosDelAlta`. */
   const pasosDeAlta: PasoDeAlta[] = [
-    { id: "modelo", etiqueta: "Modelo", estado: estado.alta === undefined ? "actual" : "hecho" },
-    { id: "entorno", etiqueta: "Entorno de CloudStudio", estado: estado.alta === undefined ? "pendiente" : "actual" },
+    { id: "modelo", etiqueta: "Modelo", estado: enCuenta ? "actual" : "hecho" },
+    { id: "entorno", etiqueta: "Entorno de CloudStudio", estado: enCuenta ? "pendiente" : "actual" },
   ];
 
   if (enAlta) {
@@ -121,7 +151,17 @@ export function App({ store, enviar }: { store: Store; enviar: Conexion["enviar"
           preferencia y no se retira: quitar ese campo de `alta` es tocar un contrato que
           no es parte de este arreglo.
         */}
-        <TarjetaDeAlta nombre={estado.nombre ?? estado.alta?.nombre} pasos={pasosDeAlta}>
+        <TarjetaDeAlta
+          nombre={estado.nombre ?? estado.alta?.nombre}
+          pasos={pasosDeAlta}
+          // Volver al paso de MODELO: el servidor reconduce el asistente de cuenta entero
+          // (`arranque.ts`, `paso: "cuenta"`), que es quien lo pinta —por `selector` y
+          // `secreto`, no por el wizard—. Solo hay a dónde volver desde el alta: fuera de
+          // ella el modelo se cambia con `/modelo` en el compositor, que aquí no existe.
+          alVolverAPaso={(id) => {
+            if (id === "modelo") void enviar({ clase: "alta", paso: "cuenta" });
+          }}
+        >
           {estado.pregunta !== undefined ? (
             <Pregunta
               texto={estado.pregunta.texto}
@@ -147,14 +187,27 @@ export function App({ store, enviar }: { store: Store; enviar: Conexion["enviar"
             <Selector
               titulo={estado.selector.titulo}
               opciones={estado.selector.opciones}
+              {...(estado.selector.aviso === undefined ? {} : { aviso: estado.selector.aviso })}
               anidado
               alElegir={async (id) => {
+                // Se captura ANTES del `await`: el paso de cuenta encadena selectores sin
+                // viaje de red entre ellos (volver atrás, cancelar con la puerta puesta), y
+                // el nuevo puede llegar por el SSE antes de que el `POST` resuelva. Sin
+                // decir CUÁL se contestó, esto borraría el selector siguiente.
+                const contestado = estado.selector;
                 await enviar({ clase: "eleccion", id });
-                store.contestarSelector();
+                store.contestarSelector(contestado);
               }}
             />
           ) : null}
-          {estado.alta !== undefined && estado.alta.pasos.length > 0 ? (
+          {/*
+            El wizard SOLO cuando no hay una pregunta de cuenta en vuelo. Al volver al paso
+            de modelo, `alta` ya está en el cliente con «entorno» pendiente, así que sin
+            este `!enCuenta` se pintarían las dos cosas a la vez: el selector de proveedor
+            arriba y el formulario del entorno debajo, dos pasos abiertos en una progresión
+            que dice que solo hay uno.
+          */}
+          {!enCuenta && estado.alta !== undefined && estado.alta.pasos.length > 0 ? (
             <Wizard
               pasos={estado.alta.pasos}
               proveedores={estado.alta.proveedores}
@@ -197,36 +250,114 @@ export function App({ store, enviar }: { store: Store; enviar: Conexion["enviar"
     .reverse()
     .find((a) => a.tipo === "fin");
 
-  // El nombre para el título del selector de rama; `undefined` si el proyecto ya no está
-  // en la lista (improbable, pero `Selector` no necesita un título vacío para funcionar).
-  const nombreDelProyectoEligiendoRama = estado.alta?.proyectos.find(
-    (p) => p.id === proyectoEligiendoRama
-  )?.nombre;
+  /**
+   * Cuál es el entorno activo lo DICE el servidor, y solo si no lo dice se cae al primero
+   * registrado — que es lo que se hacía siempre y era una suposición que se rompía en
+   * cuanto había dos. Se calcula una vez aquí para que la barra y la ventana de ajustes no
+   * puedan discrepar.
+   */
+  const entornoActivo = estado.alta?.entornoActivo ?? estado.alta?.registrados[0]?.id ?? "";
+
+  /**
+   * Abrir la ventana de sesión nueva. Si el proyecto no está bajado hacen falta sus ramas,
+   * y se piden AQUÍ: pedirlas al abrir la ventana es lo que hace que estén cuando el
+   * usuario llega al desplegable, y pedirlas siempre sería una conexión con CloudStudio por
+   * cada clic en un proyecto que ya está en el equipo.
+   */
+  const abrirVentanaDeSesion = (proyecto: string): void => {
+    setSesionNueva(proyecto);
+    const identidad = estado.alta?.proyectos.find((p) => p.id === proyecto);
+    if (identidad?.local !== true) void enviar({ clase: "alta", paso: "proyecto", proyecto });
+  };
+
+  /** Plegar y desplegar, recordándolo en este navegador. */
+  const alternarBarra = (): void => {
+    setBarraContraida((plegada) => {
+      guardarBarraContraida(!plegada);
+      return !plegada;
+    });
+  };
+
+  /** El entorno activo con su nombre y su URL, para la portada del escritorio. `undefined`
+   *  si no hay ninguno registrado — que es distinto de haberlo y no tener proyectos. */
+  const entornoDelEscritorio = estado.alta?.registrados.find((e) => e.id === entornoActivo);
+
+  /** El proyecto de la ventana de sesión nueva, con lo que el servidor sabe de él. */
+  const proyectoDeLaSesion = estado.alta?.proyectos.find((p) => p.id === sesionNueva);
+
+  /**
+   * Las dos ventanas van al lado de la maqueta y no dentro: son modales —`Modal` las saca
+   * por un portal sobre el `body`— y tienen que poder abrirse haya o no proyecto abierto,
+   * que son dos centros distintos.
+   */
+  const ventanaDeSesion =
+    sesionNueva !== undefined && proyectoDeLaSesion !== undefined ? (
+      <NuevaSesion
+        proyecto={{ id: proyectoDeLaSesion.id, nombre: proyectoDeLaSesion.nombre }}
+        local={proyectoDeLaSesion.local === true}
+        ramas={estado.alta?.ramas ?? []}
+        // El motivo del último paso fallido: si la consulta de ramas revienta, la ventana
+        // tiene que decirlo en vez de quedarse en «consultando» para siempre.
+        {...(estado.alta?.aviso === undefined ? {} : { aviso: estado.alta.aviso })}
+        alEmpezar={(rama) => {
+          const proyecto = sesionNueva;
+          setSesionNueva(undefined);
+          // Con copia local es una sesión nueva y ya; sin ella hay que darlo de alta y
+          // bajarlo, que es lo que sabe hacer el camino del alta con su rama.
+          void enviar(
+            rama === undefined
+              ? { clase: "sesion", proyecto }
+              : { clase: "alta", paso: "proyecto", proyecto, rama }
+          );
+        }}
+        alCerrar={() => setSesionNueva(undefined)}
+      />
+    ) : null;
+
+  const ventanaDeAjustes = ajustesAbiertos ? (
+    <Ajustes
+      {...(estado.modelos === undefined ? {} : { proveedores: estado.modelos.proveedores })}
+      entornos={estado.alta?.registrados ?? []}
+      // El listado del entorno ACTIVO, que es del único del que el cable trae proyectos.
+      proyectos={estado.alta?.proyectos ?? []}
+      {...(entornoActivo === "" ? {} : { entornoActivo })}
+      apariencia={apariencia}
+      // La pregunta oculta en vuelo se pinta DENTRO de la fila que se está editando; por
+      // eso el centro deja de pintarla mientras la ventana está abierta (más abajo).
+      {...(estado.secreto === undefined ? {} : { secreto: estado.secreto.pregunta })}
+      alCambiarApariencia={(nueva) => {
+        setApariencia(nueva);
+        guardarApariencia(nueva);
+      }}
+      // Ni «pedir» ni «borrar» pasan por el lazo de la consola: tienen su propio mensaje
+      // porque esta ventana se abre también sin proyecto abierto, y ahí no hay lazo.
+      alPedirClave={(proveedor) => void enviar({ clase: "credencial", accion: "pedir", proveedor })}
+      alBorrarClave={(proveedor) => void enviar({ clase: "credencial", accion: "borrar", proveedor })}
+      // Registrar un entorno es el MISMO mensaje del alta: id y nombre vacíos, que los
+      // deduce el servidor de la URL.
+      alRegistrarEntorno={(url) =>
+        void enviar({ clase: "alta", paso: "entorno", entorno: { id: "", nombre: "", url } })
+      }
+      alElegirProyectos={(entorno, proyectos) =>
+        void enviar({ clase: "entorno", accion: "visibles", entorno, proyectos })
+      }
+      alResponderSecreto={async (valor) => {
+        await enviar({ clase: "secreto", valor });
+        store.contestarSecreto();
+      }}
+      alCerrar={() => setAjustesAbiertos(false)}
+    />
+  ) : null;
 
   return (
+    <>
     <Maqueta
+      barraContraida={barraContraida}
       centro={
-        proyectoEligiendoRama !== undefined && ramasPendientes.length > 1 ? (
-          // Más de una rama: aquí SÍ hace falta preguntar (con una sola, el `useEffect`
-          // de arriba ya la mandó sola y este caso ni se alcanza). Toma el centro
-          // ENTERO, tenga o no proyecto abierto — abrir uno nuevo mientras otro está
-          // abierto es un cambio legítimo (el servidor ya lo soporta, `vestibulo.ts`
-          // cierra el que estuviera abierto antes de abrir el elegido).
-          <Selector
-            titulo={`Elige la rama de ${nombreDelProyectoEligiendoRama ?? "el proyecto"}`}
-            opciones={ramasPendientes.map((r) => ({ id: r, etiqueta: r }))}
-            alElegir={async (rama) => {
-              const proyecto = proyectoEligiendoRama;
-              setProyectoEligiendoRama(undefined);
-              // `rama: undefined` es cancelar (mismo contrato que cualquier otro
-              // `Selector`): no se manda nada, y el proyecto se queda sin abrir hasta
-              // que se vuelva a pulsar en la barra.
-              if (rama !== undefined && proyecto !== undefined) {
-                await enviar({ clase: "alta", paso: "proyecto", proyecto, rama });
-              }
-            }}
-          />
-        ) : proyectoAbierto ? (
+        // La rama ya NO se elige aquí: la pregunta de «qué proyecto abro y desde qué rama»
+        // vive entera en `NuevaSesion`, que además dice que va a descargar. Un selector
+        // suelto en mitad del centro no decía ni de qué proyecto era.
+        proyectoAbierto ? (
           <>
             <Cabecera
               titulo={primerActoDeUsuario?.texto ?? "xonecode"}
@@ -236,9 +367,11 @@ export function App({ store, enviar }: { store: Store; enviar: Conexion["enviar"
               conectado={estado.conectado}
               pestana={pestana}
               alElegirPestana={setPestana}
+              barraContraida={barraContraida}
+              alAlternarBarra={alternarBarra}
             />
             <AvisoDeConexion conectado={estado.conectado} />
-            <Transcript actos={estado.actos} pestana={pestana} />
+            <Transcript actos={estado.actos} pestana={pestana} turnoEnVuelo={estado.turnoEnVuelo === true} />
             {/*
               Las tres esperas de humano van DELANTE del compositor y cada una con su propio
               cauce: el compositor manda `prosa`, que entra por la cola de líneas del lazo y no
@@ -256,9 +389,12 @@ export function App({ store, enviar }: { store: Store; enviar: Conexion["enviar"
                 }}
               />
             ) : null}
-            {estado.secreto !== undefined ? (
+            {estado.secreto !== undefined && !ajustesAbiertos ? (
               // La MISMA pregunta, oculta: el valor no entra en el store ni en un acto, y
-              // viaja por el único mensaje del cable que lo lleva.
+              // viaja por el único mensaje del cable que lo lleva. Con la ventana de
+              // ajustes abierta la pinta ELLA, dentro de la fila del proveedor que se está
+              // editando: dos sitios a la vez serían dos campos para una sola respuesta,
+              // y el de detrás ni se vería.
               <Pregunta
                 texto={estado.secreto.pregunta}
                 oculta
@@ -272,6 +408,7 @@ export function App({ store, enviar }: { store: Store; enviar: Conexion["enviar"
               <Selector
                 titulo={estado.selector.titulo}
                 opciones={estado.selector.opciones}
+                {...(estado.selector.aviso === undefined ? {} : { aviso: estado.selector.aviso })}
                 alElegir={async (id) => {
                   // `id: undefined` es cancelar, y viaja como la AUSENCIA del campo:
                   // `JSON.stringify` descarta las claves con ese valor, así que por el cable
@@ -292,6 +429,17 @@ export function App({ store, enviar }: { store: Store; enviar: Conexion["enviar"
             <Compositor
               comandos={estado.comandos}
               conectado={estado.conectado}
+              // El estado de modelos, tal cual lo manda el servidor: la pastilla lo pinta
+              // y no lo deduce. Ausente mientras no ha llegado el mensaje.
+              {...(estado.modelos === undefined ? {} : { modelos: estado.modelos })}
+              // El catálogo es una llamada de red por proveedor: se pide al desplegarlo,
+              // no al conectar.
+              alPedirCatalogo={(proveedor) => void enviar({ clase: "catalogo", proveedor })}
+              alElegirModelo={(id) => void enviar({ clase: "modelo", id })}
+              // Lo dice el servidor, no se deduce de los actos: un turno que revienta no
+              // siempre deja `fin`, y el compositor se quedaría apagado para siempre.
+              turnoEnVuelo={estado.turnoEnVuelo === true}
+              alParar={() => void enviar({ clase: "cancelar" })}
               // Una línea que empieza por «/» no tiene camino propio: viaja como prosa
               // igual que cualquier otra, y es `correrConsola` quien la despacha contra
               // `COMANDOS` (`cli/consola.ts:819`) del lado del servidor — así `/ayuda`,
@@ -318,43 +466,91 @@ export function App({ store, enviar }: { store: Store; enviar: Conexion["enviar"
             ) : null}
           </>
         ) : (
-          // Cuenta y entorno resueltos, pero nadie ha elegido proyecto todavía: se elige
-          // en la barra, así que el centro no tiene ni cabecera de sesión, ni transcript,
-          // ni compositor que ofrecer.
-          <SinProyectoAbierto />
+          // Sin sesión abierta el centro es el ESCRITORIO, no un hueco: los proyectos con
+          // lo que se sabe de cada uno y un clic para empezar. Todo lo que pinta ya viajaba
+          // por el cable; no hay tarjeta de relleno.
+          <>
+            {/*
+              La MISMA barra superior que con sesión abierta, y a propósito: es la barra de
+              herramientas de la aplicación, no de la sesión — ahí viven la marca, el estado
+              del cable y el botón de plegar la lateral. Sin pestañas, eso sí: sin sesión no
+              hay transcript ni trayectoria a los que llevar.
+            */}
+            <Cabecera
+              titulo="Escritorio"
+              conectado={estado.conectado}
+              barraContraida={barraContraida}
+              alAlternarBarra={alternarBarra}
+            />
+            <Escritorio
+            {...(estado.nombre === undefined ? {} : { nombre: estado.nombre })}
+            {...(entornoDelEscritorio === undefined ? {} : { entorno: entornoDelEscritorio })}
+            proyectos={estado.alta?.proyectos ?? []}
+            {...(estado.modelos?.actual === undefined ? {} : { modelo: estado.modelos.actual })}
+            alNuevaSesion={(proyecto) => abrirVentanaDeSesion(proyecto)}
+            alAbrirSesion={(proyecto, sesion) => void enviar({ clase: "sesion", proyecto, sesion })}
+              alAbrirAjustes={() => setAjustesAbiertos(true)}
+            />
+          </>
         )
       }
       barra={
         <Barra
-          entornos={estado.alta?.entornos ?? []}
-          // No hay señal del cable para «cuál es el entorno ACTIVO» —solo se registra
-          // uno normalmente—, así que se asume el primero de la lista. Con más de un
-          // entorno registrado esto podría mentir; hoy `pasosPendientes()` no distingue
-          // entre tener uno o varios, así que no hay un «activo» que leer del servidor.
-          entornoActivo={estado.alta?.entornos[0]?.id ?? ""}
-          proyectos={(estado.alta?.proyectos ?? []).map((p) => ({ ...p, sesiones: [] }))}
-          alElegirEntorno={() => {}}
-          alAbrirSesion={() => {}}
+          // Los REGISTRADOS, no los ofrecidos. `entornos` es la lista fija de los dos
+          // oficiales más «otro», que sirve para prerrellenar la URL en el alta; enseñarla
+          // aquí hacía que un on-premise recién registrado se leyera como «XOne WebStudio»
+          // — el nombre de otro servidor.
+          entornos={estado.alta?.registrados ?? []}
+          // Sigue sin haber señal del cable para «cuál es el ACTIVO», así que se asume el
+          // primero. Con más de uno registrado esto podría mentir; hoy nada del servidor
+          // dice cuál está en uso.
+          entornoActivo={entornoActivo}
+          // Cuál está abierto lo dice el servidor; sin ese dato no se marca nada, en vez de
+          // resaltar el primero — una fila resaltada AFIRMA que ahí es donde estás.
+          {...(estado.alta?.proyectoActivo === undefined ? {} : { proyectoActivo: estado.alta.proyectoActivo })}
+          {...(estado.alta?.sesionActiva === undefined ? {} : { sesionActiva: estado.alta.sesionActiva })}
+          // Las sesiones vienen en el mismo mensaje, por proyecto: una lista vacía a fuego
+          // hacía que la barra dijera «Sin sesiones todavía» siempre, incluso con la copia
+          // local llena de conversaciones guardadas.
+          // Lo elegido para ESTE entorno; ausente = nadie lo ha dicho y manda la omisión de
+          // la barra (los primeros cuatro).
+          {...(estado.alta?.registrados.find((e) => e.id === entornoActivo)?.proyectos === undefined
+            ? {}
+            : { visibles: estado.alta.registrados.find((e) => e.id === entornoActivo)!.proyectos })}
+          proyectos={(estado.alta?.proyectos ?? []).map((p) => ({
+            ...p,
+            sesiones: (p.sesiones ?? []).map((s) => ({ ...s, historica: true })),
+          }))}
+          // Cambiar de entorno trae SUS proyectos: es una conexión con CloudStudio, así
+          // que la hace el servidor y contesta con la lista nueva.
+          alElegirEntorno={(entorno) => void enviar({ clase: "entorno", accion: "activo", entorno })}
+          // Reabrir una sesión guardada: el servidor abre esa copia local con ese hilo.
+          alAbrirSesion={(proyecto, sesion) => void enviar({ clase: "sesion", proyecto, sesion })}
           // Pide la rama del proyecto elegido (`vestibulo.ts#completarProyecto` la
           // necesita) sin abrir nada todavía: el `useEffect` de arriba decide, en cuanto
           // `estado.alta.ramas` responda, si la manda sola (una) o pinta el `Selector`
           // de más arriba (varias). Un segundo clic mientras se espera la respuesta
           // simplemente reemplaza cuál proyecto se está preguntando — no hay candado
           // porque no hay nada que envíe dos veces la MISMA cosa.
-          alAbrirProyecto={(proyecto) => {
-            setProyectoEligiendoRama(proyecto);
-            void enviar({ clase: "alta", paso: "proyecto", proyecto });
-          }}
-          // Mismo motivo: no hay clase del cable para «abre otra sesión de este
-          // proyecto» (`Barra.tsx` documenta por qué el botón se enseña de todos modos).
-          alNuevaSesion={() => {}}
-          // «Ajustes» es una entrada de verdad, no un rótulo: manda `/config`, que es el
-          // comando que ya existe (`COMANDOS` en `cli/consola.ts`) y cuya salida entra en
-          // el transcript como cualquier otra prosa — el mismo camino que documenta el
-          // `alEnviar` del compositor, sin una sola línea nueva de servidor.
-          alAbrirAjustes={() => void enviar({ clase: "prosa", texto: "/config" })}
+          // Pulsar el proyecto y pulsar «+» abren la MISMA ventana: es la misma decisión
+          // —empezar a trabajar en ese proyecto—, y tener dos caminos para ella era lo que
+          // hacía que uno de los dos (el «+») no hiciera nada.
+          alAbrirProyecto={(proyecto) => abrirVentanaDeSesion(proyecto)}
+          // Sesión NUEVA en ese proyecto: el mismo mensaje sin nombrar sesión. Si la copia
+          // local todavía no existe, el servidor contesta con las ramas y se cae al camino
+          // del alta, que es el que sabe bajarla — por eso hace falta recordar de qué
+          // proyecto se está hablando, igual que al pulsar la fila.
+          alNuevaSesion={(proyecto) => abrirVentanaDeSesion(proyecto)}
+          // «Ajustes» abre la ventana de ajustes. Antes mandaba `/config` y volcaba la
+          // configuración al transcript: era lo único que había, pero leer un volcado no es
+          // configurar. El volcado sigue estando, dentro de la ventana, para quien quiera
+          // verlo entero.
+          alAbrirAjustes={() => setAjustesAbiertos(true)}
         />
       }
     />
+    {ventanaDeAjustes}
+    {ventanaDeSesion}
+    </>
   );
 }

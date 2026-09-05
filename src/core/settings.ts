@@ -18,6 +18,17 @@ export interface Entorno {
   /** La URL del MCP. Es lo que define el entorno. */
   url: string;
   scopes?: readonly string[];
+  /**
+   * Qué proyectos de este entorno se ENSEÑAN en la barra, por id.
+   *
+   * Es una preferencia de presentación y por eso vive con el entorno y no con el proyecto:
+   * un CloudStudio con doscientos proyectos no cabe en una barra lateral, y cuáles importan
+   * lo sabe la persona, no el servidor. **Ausente no es «ninguno»: es «no lo he dicho»**, y
+   * entonces manda la omisión (los primeros que devuelva el listado). Distinguirlo de una
+   * lista VACÍA —«no quiero ver ninguno», que es una elección legítima— es justo por lo que
+   * el campo es opcional en vez de arrancar en `[]`.
+   */
+  proyectos?: readonly string[];
 }
 
 export interface Settings {
@@ -76,6 +87,10 @@ function validarEntorno(candidato: unknown, avisos: Aviso[]): Entorno | undefine
     nombre: e.nombre,
     url: e.url,
     ...(Array.isArray(e.scopes) ? { scopes: e.scopes.filter((s) => typeof s === "string") } : {}),
+    // Igual que `scopes`: si viene, se filtra a cadenas; si no, no se inventa una lista —
+    // y ahí la diferencia importa, porque `[]` significa «ninguno» y ausente «no lo he
+    // dicho».
+    ...(Array.isArray(e.proyectos) ? { proyectos: e.proyectos.filter((p) => typeof p === "string") } : {}),
   };
 }
 

@@ -6,9 +6,9 @@
  * sobre el CABLE (qué se emite, en qué orden, a qué consola) sin abrir un socket.
  */
 import { describe, it, expect } from "vitest";
-import { mkdtempSync, mkdirSync, writeFileSync } from "node:fs";
+import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { Readable } from "node:stream";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import {
@@ -94,9 +94,14 @@ function vestibuloDePrueba(extra: Partial<Parameters<typeof crearVestibulo>[0]> 
     adoptarLegado: () => {},
     entornos,
     baseDeWorkspace: "/w",
-    proyectosDeEntorno: async () => [{ id: "p1", nombre: "Tienda" }],
+    proyectosDeEntorno: async () => ({ proyectos: [{ id: "p1", nombre: "Tienda" }] }),
     ramasDeProyecto: async () => ["master", "pruebas"],
-    sesiones: { crear: () => "s1", anotar: () => {}, reabrir: (_r, id) => ({ id, actos: [], historica: true }) },
+    sesiones: {
+      crear: () => "s1",
+      listar: () => [],
+      anotar: () => {},
+      reabrir: (_r, id) => ({ id, actos: [], historica: true }),
+    },
     // El lazo de consola no se arranca de verdad: `correrConsola` sobre una consola web
     // se quedaría esperando líneas para siempre y el test no terminaría.
     correr: async () => 0,
@@ -127,7 +132,7 @@ describe("montarRutas — el cable, por fin conectado", () => {
     expect([...servidor.rutas.keys()].sort()).toEqual([`GET ${RUTA_EVENTOS}`, `POST ${RUTA_ACCION}`]);
   });
 
-  it("al conectar manda el transcript, el registro de comandos, el saludo y el alta pendiente", async () => {
+  it("al conectar manda el transcript, los comandos, el estado de modelos, el saludo y el alta", async () => {
     const servidor = servidorDeMentira();
     montarRutas(servidor, vestibuloDePrueba());
     const cliente = clienteDeMentira();
@@ -135,7 +140,19 @@ describe("montarRutas — el cable, por fin conectado", () => {
     await eventos!(cliente.peticion, cliente.respuesta);
     await asentar();
 
-    expect(cliente.recibidos.map((m) => m.clase)).toEqual(["reemision", "comandos", "bienvenida", "alta"]);
+    // «modelos» va con los comandos y por el mismo motivo: es lo que el compositor
+    // necesita para pintarse, y al reconectar hay que repoblarlo entero — el cliente tira
+    // sus proyecciones al caerse el SSE en vez de recordar un modelo que pudo cambiar.
+    expect(cliente.recibidos.map((m) => m.clase)).toEqual([
+      "reemision",
+      "comandos",
+      "modelos",
+      // Y si hay turno corriendo, se dice: quien conecta a mitad no vio el mensaje que lo
+      // anunció, y su compositor se quedaría encendido mientras lo que escriba se encola.
+      "turno",
+      "bienvenida",
+      "alta",
+    ]);
     const comandos = cliente.recibidos[1] as Extract<MensajeAlCliente, { clase: "comandos" }>;
     expect(comandos.comandos).toEqual(comandosDelRegistro());
   });
@@ -218,7 +235,7 @@ describe("montarRutas — el cable, por fin conectado", () => {
     const vestibulo = vestibuloDePrueba({
       proyectosDeEntorno: async () => {
         llamadas++;
-        return [{ id: "p1", nombre: "Tienda" }];
+        return { proyectos: [{ id: "p1", nombre: "Tienda" }] };
       },
     });
     await vestibulo.abrirProyecto({ raiz: "/w/a" });
@@ -376,6 +393,568 @@ describe("montarRutas — el cable, por fin conectado", () => {
     expect(alta.proyectos).toEqual([{ id: "p1", nombre: "Tienda" }]);
   });
 
+  it("un «otro» llega SIN nombre y con id «otro»: los proyectos se piden con el id ya deducido", async () => {
+    // El formulario del navegador solo pide la URL. Si `atenderAlta` se quedara con el id
+    // que llegó, el `proyectosDe` de la línea siguiente moriría con «el entorno «otro» no
+    // está registrado» — y el usuario vería un fallo por rellenar bien el único campo que
+    // hay.
+    const registrados: string[] = [];
+    const pedidos: string[] = [];
+    const servidor = servidorDeMentira();
+    const vestibulo = vestibuloDePrueba({
+      entornos: [],
+      guardarEntorno: (entorno) => {
+        registrados.push(entorno.id);
+        return { ruta: "/casa/.xonecode/settings.json" };
+      },
+      proyectosDeEntorno: async (entorno) => {
+        pedidos.push(entorno.id);
+        return { proyectos: [{ id: "p9", nombre: "On-premise" }] };
+      },
+    });
+    montarRutas(servidor, vestibulo);
+    const cliente = clienteDeMentira();
+    const eventos = servidor.rutas.get(`GET ${RUTA_EVENTOS}`);
+    await eventos!(cliente.peticion, cliente.respuesta);
+    const accion = servidor.rutas.get(`POST ${RUTA_ACCION}`)!;
+    await asentar();
+
+    await enviarMensaje(accion, {
+      clase: "alta",
+      paso: "entorno",
+      entorno: { id: "otro", nombre: "", url: "https://mcp.casa.local/mcp" },
+    });
+    await asentar();
+
+    expect(registrados).toEqual(["mcp.casa.local"]);
+    expect(pedidos).toEqual(["mcp.casa.local"]);
+    const alta = cliente.recibidos.at(-1) as Extract<MensajeAlCliente, { clase: "alta" }>;
+    expect(alta.aviso).toBeUndefined();
+    expect(alta.proyectos).toEqual([{ id: "p9", nombre: "On-premise" }]);
+  });
+
+  /**
+   * El selector de modelos del compositor. La regla que lo gobierna es la del harness de
+   * DeepSeek: el modelo en vigor lo DICE el servidor, y si no hay sesión abierta no se
+   * afirma ninguno — el cliente pone «Elige modelo» en vez de sintetizar una fila.
+   */
+  describe("el estado de modelos", () => {
+    it("sin proyecto abierto no hay `actual`: no se inventa un modelo en vigor", async () => {
+      const servidor = servidorDeMentira();
+      montarRutas(servidor, vestibuloDePrueba(), {
+        hayCredencial: (p) => p === "anthropic",
+      });
+      const cliente = clienteDeMentira();
+      await servidor.rutas.get(`GET ${RUTA_EVENTOS}`)!(cliente.peticion, cliente.respuesta);
+      await asentar();
+
+      const modelos = cliente.recibidos.find((m) => m.clase === "modelos") as Extract<
+        MensajeAlCliente,
+        { clase: "modelos" }
+      >;
+      expect(modelos.actual).toBeUndefined();
+      // Los tres estados de credencial, cada uno solo cuando se puede afirmar: ollama no
+      // lleva ninguna, anthropic la tiene confirmada, el resto se sabe que no.
+      const porId = new Map(modelos.proveedores.map((p) => [p.id, p.credencial]));
+      expect(porId.get("ollama")).toBe("nativa");
+      expect(porId.get("anthropic")).toBe("puesta");
+      expect(porId.get("openai")).toBe("falta");
+      // Y ningún catálogo: cada uno es una llamada de red y nadie lo ha pedido.
+      expect(modelos.proveedores.every((p) => p.modelos === undefined)).toBe(true);
+    });
+
+    it("con proyecto abierto, `actual` sale del estado de sesión, no de un fichero", async () => {
+      const servidor = servidorDeMentira();
+      const vestibulo = vestibuloDePrueba({
+        fuentes: { bandera: "anthropic/claude-x" },
+        correr: async () => 0,
+      });
+      montarRutas(servidor, vestibulo);
+      const cliente = clienteDeMentira();
+      await servidor.rutas.get(`GET ${RUTA_EVENTOS}`)!(cliente.peticion, cliente.respuesta);
+      await vestibulo.abrirProyecto({ raiz: "/w/a" });
+      await asentar();
+      const antes = cliente.recibidos.length;
+      // Reconectar reemite el estado entero: el cliente tira sus proyecciones al caerse.
+      await servidor.rutas.get(`GET ${RUTA_EVENTOS}`)!(cliente.peticion, cliente.respuesta);
+      await asentar();
+
+      const modelos = cliente.recibidos
+        .slice(antes)
+        .find((m) => m.clase === "modelos") as Extract<MensajeAlCliente, { clase: "modelos" }>;
+      expect(modelos.actual).toBe("anthropic/claude-x");
+    });
+
+    it("cambiar el modelo EN CALIENTE se reemite: `/modelo` no toca disco", async () => {
+      // El fallo que esto vigila: releer la configuración diría lo de antes para siempre,
+      // porque `/modelo` cambia `estado.fuentes` dentro del lazo y no escribe nada.
+      const servidor = servidorDeMentira();
+      const vestibulo = vestibuloDePrueba({
+        // El aviso llega DESPUÉS de un tic, como en la vida real: `correrConsola` no
+        // cambia de estado hasta que alguien manda una línea, y para entonces el
+        // proyecto lleva abierto un rato. Avisando síncronamente aquí se probaría un
+        // orden que no existe (el vestíbulo aún no ha registrado la consola como
+        // abierta, así que no habría `actual` que dar).
+        correr: async (consola, estado) => {
+          await new Promise((listo) => setTimeout(listo, 0));
+          consola.alEstado?.({ ...estado, fuentes: { bandera: "openai/gpt-5" } });
+          return 0;
+        },
+      });
+      montarRutas(servidor, vestibulo);
+      const cliente = clienteDeMentira();
+      await servidor.rutas.get(`GET ${RUTA_EVENTOS}`)!(cliente.peticion, cliente.respuesta);
+      await asentar();
+      await vestibulo.abrirProyecto({ raiz: "/w/a" });
+      await asentar();
+
+      const ultimo = cliente.recibidos.filter((m) => m.clase === "modelos").at(-1) as Extract<
+        MensajeAlCliente,
+        { clase: "modelos" }
+      >;
+      expect(ultimo.actual).toBe("openai/gpt-5");
+    });
+
+    it("el catálogo se pide por proveedor, y el que falla no tumba a los demás", async () => {
+      const servidor = servidorDeMentira();
+      montarRutas(servidor, vestibuloDePrueba(), {
+        catalogoDeModelos: async (proveedor) => {
+          if (proveedor === "openai") throw new Error("credencial no autorizada para openai");
+          return [{ id: "qwen3", nombre: "Qwen 3" }];
+        },
+      });
+      const cliente = clienteDeMentira();
+      await servidor.rutas.get(`GET ${RUTA_EVENTOS}`)!(cliente.peticion, cliente.respuesta);
+      const accion = servidor.rutas.get(`POST ${RUTA_ACCION}`)!;
+      await asentar();
+
+      await enviarMensaje(accion, { clase: "catalogo", proveedor: "ollama" });
+      await asentar();
+      await enviarMensaje(accion, { clase: "catalogo", proveedor: "openai" });
+      await asentar();
+
+      const ultimo = cliente.recibidos.filter((m) => m.clase === "modelos").at(-1) as Extract<
+        MensajeAlCliente,
+        { clase: "modelos" }
+      >;
+      const porId = new Map(ultimo.proveedores.map((p) => [p.id, p]));
+      expect(porId.get("ollama")!.modelos).toEqual([{ id: "qwen3", nombre: "Qwen 3" }]);
+      expect(porId.get("openai")!.error).toMatch(/no autorizada/);
+      // El que falló no arrastra a los demás, y el que nadie pidió sigue sin consultar.
+      expect(porId.get("openai")!.modelos).toBeUndefined();
+      expect(porId.get("anthropic")!.modelos).toBeUndefined();
+      expect(porId.get("anthropic")!.error).toBeUndefined();
+    });
+
+    it("«pedir» pregunta la clave y la guarda si pasa la criba; una mala no llega al disco", async () => {
+      // No pasa por la prosa `/provider`: ese camino necesita el lazo de `correrConsola`,
+      // que solo existe con un proyecto abierto, y la ventana de ajustes se abre antes.
+      const guardadas: string[] = [];
+      const servidor = servidorDeMentira();
+      const vestibulo = vestibuloDePrueba();
+      montarRutas(servidor, vestibulo, {
+        guardarCredencial: (proveedor, clave) => {
+          guardadas.push(`${proveedor}:${clave}`);
+          return { ruta: "/casa/.xonecode/auth.json" };
+        },
+      });
+      const cliente = clienteDeMentira();
+      await servidor.rutas.get(`GET ${RUTA_EVENTOS}`)!(cliente.peticion, cliente.respuesta);
+      const accion = servidor.rutas.get(`POST ${RUTA_ACCION}`)!;
+      await asentar();
+
+      await enviarMensaje(accion, { clase: "credencial", accion: "pedir", proveedor: "anthropic" });
+      await asentar();
+      // La pregunta sale por el cable como cualquier otro secreto.
+      expect(cliente.recibidos.some((m) => m.clase === "secreto")).toBe(true);
+
+      // Una línea de entorno pegada entera: ni se guarda.
+      await enviarMensaje(accion, { clase: "secreto", valor: "ANTHROPIC_API_KEY=sk-1" });
+      await asentar();
+      expect(guardadas).toEqual([]);
+
+      await enviarMensaje(accion, { clase: "credencial", accion: "pedir", proveedor: "anthropic" });
+      await asentar();
+      await enviarMensaje(accion, { clase: "secreto", valor: "sk-buena" });
+      await asentar();
+      expect(guardadas).toEqual(["anthropic:sk-buena"]);
+    });
+
+    it("«borrar» borra, lo dice, y reemite el estado de modelos", async () => {
+      const borrados: string[] = [];
+      const servidor = servidorDeMentira();
+      const dichos: string[] = [];
+      montarRutas(servidor, vestibuloDePrueba(), {
+        informar: (t) => dichos.push(t),
+        credencialEnFichero: () => true,
+        borrarCredencial: (proveedor) => {
+          borrados.push(proveedor);
+          return { ruta: "/casa/.xonecode/auth.json", borrada: true, quedaEnEntorno: true };
+        },
+      });
+      const cliente = clienteDeMentira();
+      await servidor.rutas.get(`GET ${RUTA_EVENTOS}`)!(cliente.peticion, cliente.respuesta);
+      const accion = servidor.rutas.get(`POST ${RUTA_ACCION}`)!;
+      await asentar();
+      const antes = cliente.recibidos.filter((m) => m.clase === "modelos").length;
+
+      await enviarMensaje(accion, { clase: "credencial", accion: "borrar", proveedor: "openai" });
+      await asentar();
+
+      expect(borrados).toEqual(["openai"]);
+      expect(dichos.join("\n")).toMatch(/borrada de/);
+      // Y se dice lo que el botón NO puede cumplir: la variable de entorno sigue puesta,
+      // así que el punto se quedará verde y callarlo parecería un fallo.
+      expect(dichos.join("\n")).toMatch(/variable de entorno/);
+      expect(cliente.recibidos.filter((m) => m.clase === "modelos").length).toBeGreaterThan(antes);
+    });
+
+    it("sin puerto para borrar, no se marca `enFichero`: no se ofrece un botón que no puede cumplir", async () => {
+      const servidor = servidorDeMentira();
+      montarRutas(servidor, vestibuloDePrueba(), { credencialEnFichero: () => true });
+      const cliente = clienteDeMentira();
+      await servidor.rutas.get(`GET ${RUTA_EVENTOS}`)!(cliente.peticion, cliente.respuesta);
+      await asentar();
+      const modelos = cliente.recibidos.find((m) => m.clase === "modelos") as Extract<
+        MensajeAlCliente,
+        { clase: "modelos" }
+      >;
+      expect(modelos.proveedores.every((p) => p.enFichero === undefined)).toBe(true);
+    });
+
+    it("un proveedor que no existe no dispara nada: el cable no se tumba por un id inventado", async () => {
+      const servidor = servidorDeMentira();
+      const consultados: string[] = [];
+      montarRutas(servidor, vestibuloDePrueba(), {
+        catalogoDeModelos: async (proveedor) => {
+          consultados.push(proveedor);
+          return [];
+        },
+      });
+      const cliente = clienteDeMentira();
+      await servidor.rutas.get(`GET ${RUTA_EVENTOS}`)!(cliente.peticion, cliente.respuesta);
+      const accion = servidor.rutas.get(`POST ${RUTA_ACCION}`)!;
+      await asentar();
+      expect(await enviarMensaje(accion, { clase: "catalogo", proveedor: "no-existe" })).toBe(204);
+      await asentar();
+      expect(consultados).toEqual([]);
+    });
+  });
+
+  /**
+   * Los botones de la barra lateral: hasta este cambio, «nueva sesión» y reabrir una
+   * guardada eran manejadores vacíos en `App.tsx` — el usuario pulsaba y no pasaba
+   * literalmente nada.
+   */
+  describe("abrir una sesión desde la barra", () => {
+    it("con la copia local ya bajada se abre directamente: no hay rama que preguntar", async () => {
+      const raiz = mkdtempSync(join(tmpdir(), "xonecode-proy-"));
+      mkdirSync(join(raiz, ".xonecode"));
+      writeFileSync(join(raiz, ".xonecode", "config.json"), JSON.stringify({ modo: "offline" }));
+      const servidor = servidorDeMentira();
+      const vestibulo = vestibuloDePrueba({ baseDeWorkspace: dirname(raiz) });
+      // `raizDeProyecto` compone `<base>/<entorno>/workspace/<nombre>`, así que el nombre
+      // del proyecto se elige para que caiga en la carpeta que acabamos de preparar.
+      const raizDeVerdad = vestibulo.raizDeProyecto("webstudio", "Tienda");
+      mkdirSync(join(raizDeVerdad, ".xonecode"), { recursive: true });
+      writeFileSync(join(raizDeVerdad, ".xonecode", "config.json"), JSON.stringify({ modo: "offline" }));
+
+      montarRutas(servidor, vestibulo);
+      const cliente = clienteDeMentira();
+      await servidor.rutas.get(`GET ${RUTA_EVENTOS}`)!(cliente.peticion, cliente.respuesta);
+      const accion = servidor.rutas.get(`POST ${RUTA_ACCION}`)!;
+      await asentar();
+
+      await enviarMensaje(accion, { clase: "sesion", proyecto: "p1" });
+      await asentar();
+
+      expect(vestibulo.proyectoAbierto()?.raiz).toBe(raizDeVerdad);
+      const alta = cliente.recibidos.filter((m) => m.clase === "alta").at(-1) as Extract<
+        MensajeAlCliente,
+        { clase: "alta" }
+      >;
+      expect(alta.proyectoAbierto).toBe(true);
+      // No se pidió ninguna rama: no hay nada que bajar.
+      expect(alta.ramas).toEqual([]);
+      await vestibulo.cerrar();
+      rmSync(raiz, { recursive: true, force: true });
+    });
+
+    it("las ramas se piden con el NOMBRE del proyecto, no con el id que trae el cable", async () => {
+      const pedidos: string[] = [];
+      const servidor = servidorDeMentira();
+      const vestibulo = vestibuloDePrueba({
+        baseDeWorkspace: mkdtempSync(join(tmpdir(), "xonecode-vacio-")),
+        ramasDeProyecto: async (_entorno, proyecto) => {
+          pedidos.push(proyecto);
+          return ["master"];
+        },
+      });
+      montarRutas(servidor, vestibulo);
+      const cliente = clienteDeMentira();
+      await servidor.rutas.get(`GET ${RUTA_EVENTOS}`)!(cliente.peticion, cliente.respuesta);
+      const accion = servidor.rutas.get(`POST ${RUTA_ACCION}`)!;
+      await asentar();
+
+      // El cliente manda el id, que es lo que tiene; el servidor traduce a nombre.
+      await enviarMensaje(accion, { clase: "sesion", proyecto: "p1" });
+      await asentar();
+      await enviarMensaje(accion, { clase: "alta", paso: "proyecto", proyecto: "p1" });
+      await asentar();
+
+      expect(pedidos).toEqual(["Tienda", "Tienda"]);
+    });
+
+    it("sin copia local se cae al camino del alta: contesta las ramas y no abre nada", async () => {
+      const servidor = servidorDeMentira();
+      const vestibulo = vestibuloDePrueba({ baseDeWorkspace: mkdtempSync(join(tmpdir(), "xonecode-vacio-")) });
+      montarRutas(servidor, vestibulo);
+      const cliente = clienteDeMentira();
+      await servidor.rutas.get(`GET ${RUTA_EVENTOS}`)!(cliente.peticion, cliente.respuesta);
+      const accion = servidor.rutas.get(`POST ${RUTA_ACCION}`)!;
+      await asentar();
+
+      await enviarMensaje(accion, { clase: "sesion", proyecto: "p1" });
+      await asentar();
+
+      const alta = cliente.recibidos.filter((m) => m.clase === "alta").at(-1) as Extract<
+        MensajeAlCliente,
+        { clase: "alta" }
+      >;
+      expect(alta.ramas).toEqual(["master", "pruebas"]);
+      expect(vestibulo.proyectoAbierto()).toBeUndefined();
+    });
+
+    it("cambiar de entorno trae SUS proyectos y lo dice: nada del anterior se queda debajo", async () => {
+      const servidor = servidorDeMentira();
+      const vestibulo = vestibuloDePrueba({
+        entornos: [
+          { id: "webstudio", nombre: "XOne WebStudio", url: "https://mcp.xonewebstudio.com/mcp" },
+          { id: "casa", nombre: "On-premise", url: "https://mcp.casa.local/mcp" },
+        ],
+        proyectosDeEntorno: async (entorno) => ({
+          proyectos:
+            entorno.id === "casa" ? [{ id: "c1", nombre: "De casa" }] : [{ id: "p1", nombre: "Tienda" }],
+        }),
+      });
+      montarRutas(servidor, vestibulo);
+      const cliente = clienteDeMentira();
+      await servidor.rutas.get(`GET ${RUTA_EVENTOS}`)!(cliente.peticion, cliente.respuesta);
+      const accion = servidor.rutas.get(`POST ${RUTA_ACCION}`)!;
+      await asentar();
+
+      await enviarMensaje(accion, { clase: "entorno", accion: "activo", entorno: "casa" });
+      await asentar();
+
+      const alta = cliente.recibidos.filter((m) => m.clase === "alta").at(-1) as Extract<
+        MensajeAlCliente,
+        { clase: "alta" }
+      >;
+      expect(alta.entornoActivo).toBe("casa");
+      expect(alta.proyectos.map((p) => p.id)).toEqual(["c1"]);
+    });
+
+    it("si el entorno nuevo no contesta, se sigue en el de antes y se dice", async () => {
+      // Cambiar de entorno es una conexión con CloudStudio: con el token muerto o la red
+      // caída, dejar los proyectos del anterior bajo el nombre del nuevo sería la peor
+      // mentira posible en esta barra.
+      const servidor = servidorDeMentira();
+      const vestibulo = vestibuloDePrueba({
+        entornos: [
+          { id: "webstudio", nombre: "XOne WebStudio", url: "https://mcp.xonewebstudio.com/mcp" },
+          { id: "casa", nombre: "On-premise", url: "https://mcp.casa.local/mcp" },
+        ],
+        proyectosDeEntorno: async (entorno) => {
+          if (entorno.id === "casa") throw new Error("fetch failed");
+          return { proyectos: [{ id: "p1", nombre: "Tienda" }] };
+        },
+      });
+      montarRutas(servidor, vestibulo);
+      const cliente = clienteDeMentira();
+      await servidor.rutas.get(`GET ${RUTA_EVENTOS}`)!(cliente.peticion, cliente.respuesta);
+      const accion = servidor.rutas.get(`POST ${RUTA_ACCION}`)!;
+      await asentar();
+
+      await enviarMensaje(accion, { clase: "entorno", accion: "activo", entorno: "casa" });
+      await asentar();
+
+      const alta = cliente.recibidos.filter((m) => m.clase === "alta").at(-1) as Extract<
+        MensajeAlCliente,
+        { clase: "alta" }
+      >;
+      expect(alta.entornoActivo).toBe("webstudio");
+      expect(alta.proyectos.map((p) => p.id)).toEqual(["p1"]);
+      expect(alta.aviso).toBe("fetch failed");
+    });
+
+    it("con proyecto abierto se dice CUÁL, deducido de su raíz y no de un id guardado aparte", async () => {
+      const base = mkdtempSync(join(tmpdir(), "xonecode-base-"));
+      const servidor = servidorDeMentira();
+      const vestibulo = vestibuloDePrueba({ baseDeWorkspace: base });
+      montarRutas(servidor, vestibulo);
+      const cliente = clienteDeMentira();
+      await servidor.rutas.get(`GET ${RUTA_EVENTOS}`)!(cliente.peticion, cliente.respuesta);
+      await asentar();
+
+      // `p1` se llama «Tienda», y su raíz es la que compone `raizDeProyecto`.
+      await vestibulo.abrirProyecto({ raiz: vestibulo.raizDeProyecto("webstudio", "Tienda") });
+      await servidor.rutas.get(`GET ${RUTA_EVENTOS}`)!(cliente.peticion, cliente.respuesta);
+      await asentar();
+
+      const alta = cliente.recibidos.filter((m) => m.clase === "alta").at(-1) as Extract<
+        MensajeAlCliente,
+        { clase: "alta" }
+      >;
+      expect(alta.proyectoAbierto).toBe(true);
+      expect(alta.proyectoActivo).toBe("p1");
+      await vestibulo.cerrar();
+      rmSync(base, { recursive: true, force: true });
+    });
+
+    it("sin proyecto abierto no se dice ninguno: la barra no marca nada", async () => {
+      const servidor = servidorDeMentira();
+      montarRutas(servidor, vestibuloDePrueba());
+      const cliente = clienteDeMentira();
+      await servidor.rutas.get(`GET ${RUTA_EVENTOS}`)!(cliente.peticion, cliente.respuesta);
+      await asentar();
+      const alta = cliente.recibidos.filter((m) => m.clase === "alta").at(-1) as Extract<
+        MensajeAlCliente,
+        { clase: "alta" }
+      >;
+      expect(alta.proyectoActivo).toBeUndefined();
+      expect(alta.sesionActiva).toBeUndefined();
+    });
+
+    it("las sesiones guardadas viajan con su proyecto: la barra no puede inventárselas", async () => {
+      const servidor = servidorDeMentira();
+      const vestibulo = vestibuloDePrueba({
+        sesiones: {
+          crear: () => "s1",
+          listar: () => [{ id: "s7", titulo: "arreglar el alta" }],
+          anotar: () => {},
+          reabrir: (_r, id) => ({ id, actos: [], historica: true }),
+        },
+      });
+      montarRutas(servidor, vestibulo);
+      const cliente = clienteDeMentira();
+      await servidor.rutas.get(`GET ${RUTA_EVENTOS}`)!(cliente.peticion, cliente.respuesta);
+      await asentar();
+
+      const alta = cliente.recibidos.filter((m) => m.clase === "alta").at(-1) as Extract<
+        MensajeAlCliente,
+        { clase: "alta" }
+      >;
+      expect(alta.proyectos[0]?.sesiones).toEqual([{ id: "s7", titulo: "arreglar el alta" }]);
+    });
+  });
+
+  /**
+   * Medido en pantalla con una pestaña local y otra por un túnel: el servidor guardaba UNA
+   * ranura de sumidero, así que el último en conectar dejaba muda a la anterior sin
+   * decírselo. La pestaña vieja se quedaba con el SSE abierto y la interfaz congelada en el
+   * último estado que le llegó — el menú de modelos, en «consultando…» para siempre, porque
+   * la respuesta se la llevaba la otra.
+   */
+  describe("varios clientes a la vez", () => {
+    it("lo que se emite llega a TODAS las pestañas, no solo a la última", async () => {
+      const servidor = servidorDeMentira();
+      const vestibulo = vestibuloDePrueba();
+      montarRutas(servidor, vestibulo, { catalogoDeModelos: async () => [{ id: "qwen3" }] });
+      const eventos = servidor.rutas.get(`GET ${RUTA_EVENTOS}`)!;
+      const accion = servidor.rutas.get(`POST ${RUTA_ACCION}`)!;
+
+      const una = clienteDeMentira();
+      await eventos(una.peticion, una.respuesta);
+      const otra = clienteDeMentira();
+      await eventos(otra.peticion, otra.respuesta);
+      await asentar();
+      const antes = una.recibidos.length;
+
+      await enviarMensaje(accion, { clase: "catalogo", proveedor: "ollama" });
+      await asentar();
+
+      // La PRIMERA también se entera, que es lo que no pasaba.
+      const suyo = una.recibidos.slice(antes).filter((m) => m.clase === "modelos");
+      expect(suyo.length).toBeGreaterThan(0);
+      expect(otra.recibidos.filter((m) => m.clase === "modelos").length).toBeGreaterThan(0);
+    });
+
+    it("la ráfaga de bienvenida es solo para el que llega: no se repite en las demás", async () => {
+      const servidor = servidorDeMentira();
+      montarRutas(servidor, vestibuloDePrueba());
+      const eventos = servidor.rutas.get(`GET ${RUTA_EVENTOS}`)!;
+
+      const una = clienteDeMentira();
+      await eventos(una.peticion, una.respuesta);
+      await asentar();
+
+      const otra = clienteDeMentira();
+      await eventos(otra.peticion, otra.respuesta);
+      await asentar();
+
+      // Repetirle el transcript entero a quien ya lo tiene, cada vez que alguien abre otra
+      // pestaña, sería duplicarle la conversación en pantalla. Lo COMPARTIDO —el estado del
+      // alta, que cambia para todos— sí le vuelve a llegar, y debe.
+      expect(una.recibidos.filter((m) => m.clase === "reemision")).toHaveLength(1);
+      expect(una.recibidos.filter((m) => m.clase === "bienvenida")).toHaveLength(1);
+      expect(otra.recibidos.map((m) => m.clase)).toContain("reemision");
+    });
+
+    /**
+     * El fallo MEDIDO que esto vigila: al abrir un proyecto, el cable se muda a su consola
+     * y esa consola se quedaba sin ningún sumidero registrado. El turno corría —el agente
+     * trabajaba de verdad— y no salía nada por pantalla: escribir y que no pasara nada.
+     */
+    it("al abrir proyecto, TODOS los clientes quedan enganchados a la consola nueva", async () => {
+      const servidor = servidorDeMentira();
+      const vestibulo = vestibuloDePrueba();
+      montarRutas(servidor, vestibulo);
+      const eventos = servidor.rutas.get(`GET ${RUTA_EVENTOS}`)!;
+      const accion = servidor.rutas.get(`POST ${RUTA_ACCION}`)!;
+
+      const una = clienteDeMentira();
+      await eventos(una.peticion, una.respuesta);
+      const otra = clienteDeMentira();
+      await eventos(otra.peticion, otra.respuesta);
+      await asentar();
+
+      await enviarMensaje(accion, { clase: "alta", paso: "proyecto", proyecto: "p1", rama: "master" });
+      await asentar();
+      const abierto = vestibulo.proyectoAbierto()!;
+      una.recibidos.length = 0;
+      otra.recibidos.length = 0;
+
+      // Lo que escriba la consola del PROYECTO tiene que llegar a las dos pestañas.
+      abierto.consola.consola.escribir("el agente dice algo\n");
+      await asentar();
+
+      expect(una.recibidos.some((m) => m.clase === "acto")).toBe(true);
+      expect(otra.recibidos.some((m) => m.clase === "acto")).toBe(true);
+      await vestibulo.cerrar();
+    });
+
+    it("cerrar UNA pestaña no deja sin humano a la consola: eso solo pasa con la última", async () => {
+      const servidor = servidorDeMentira();
+      const vestibulo = vestibuloDePrueba();
+      montarRutas(servidor, vestibulo);
+      const eventos = servidor.rutas.get(`GET ${RUTA_EVENTOS}`)!;
+
+      const una = clienteDeMentira();
+      await eventos(una.peticion, una.respuesta);
+      const otra = clienteDeMentira();
+      await eventos(otra.peticion, otra.respuesta);
+      await asentar();
+
+      una.cerrar();
+      // Con una pestaña abierta todavía, `eof()` no puede decir que no hay nadie: diría que
+      // sí a rechazar la aprobación que la otra tiene delante.
+      expect(vestibulo.consola.consola.eof!()).toBe(false);
+
+      otra.cerrar();
+      expect(vestibulo.consola.consola.eof!()).toBe(true);
+    });
+  });
+
   it("un `close` que llega tarde no desconecta al cliente que acaba de entrar", async () => {
     // Una pestaña recargada: el `close` de la vieja puede llegar DESPUÉS del SSE nuevo.
     // Sin la guarda, desconectaba la consola del cliente recién llegado y a partir de ahí
@@ -496,7 +1075,7 @@ describe("montarRutas — el cable, por fin conectado", () => {
     const vestibulo = vestibuloDePrueba({
       proyectosDeEntorno: async () => {
         if (falla) throw new Error("fetch failed");
-        return [{ id: "p1", nombre: "Tienda" }];
+        return { proyectos: [{ id: "p1", nombre: "Tienda" }] };
       },
     });
     montarRutas(servidor, vestibulo);
@@ -573,6 +1152,73 @@ describe("montarRutas — el cable, por fin conectado", () => {
       // selector — el paso de cuenta, saltado en silencio.
       expect(segunda.recibidos.map((m) => m.clase)).toContain("selector");
       expect(segunda.recibidos.some((m) => m.clase === "alta")).toBe(false);
+    });
+
+    it("«volver al modelo» reconduce el asistente: llega un selector nuevo", async () => {
+      // La progresión del alta ofrece volver al paso hecho (`PasosDelAlta`), y lo único que
+      // manda el cliente es este mensaje: el asistente lo pinta el servidor, por `selector`
+      // y `secreto`.
+      const servidor = servidorDeMentira();
+      montarRutas(
+        servidor,
+        vestibuloDePrueba({
+          origenDeTrabajo: "omision",
+          // Con el catálogo vacío el asistente no daría el paso por bueno (listar es la
+          // validación de la conexión): haría falta un modelo de verdad que elegir.
+          catalogoModelos: new CatalogoModelosEnMemoria({
+            ollama: [{ proveedor: "ollama", id: "qwen3", nombre: "Qwen 3" }],
+          }),
+        })
+      );
+      const eventos = servidor.rutas.get(`GET ${RUTA_EVENTOS}`)!;
+      const accion = servidor.rutas.get(`POST ${RUTA_ACCION}`)!;
+      const cliente = clienteDeMentira();
+      await eventos(cliente.peticion, cliente.respuesta);
+      await asentar();
+
+      // Se contesta el paso ENTERO —proveedor y modelo—, que es lo que lo da por hecho.
+      await enviarMensaje(accion, { clase: "eleccion", id: "ollama" });
+      await asentar();
+      await enviarMensaje(accion, { clase: "eleccion", id: "qwen3" });
+      await asentar();
+      const antes = cliente.recibidos.filter((m) => m.clase === "selector").length;
+      expect(antes).toBe(2);
+      // El alta ya se anunció: el paso está hecho y en pantalla tocaría el de entorno.
+      expect(cliente.recibidos.some((m) => m.clase === "alta")).toBe(true);
+
+      await enviarMensaje(accion, { clase: "alta", paso: "cuenta" });
+      await asentar();
+
+      expect(cliente.recibidos.filter((m) => m.clase === "selector").length).toBeGreaterThan(antes);
+      const alta = cliente.recibidos.filter((m) => m.clase === "alta").at(-1) as
+        | Extract<MensajeAlCliente, { clase: "alta" }>
+        | undefined;
+      // Y no se cuela un aviso: aquí SÍ había algo que volver a preguntar.
+      expect(alta?.aviso).toBeUndefined();
+    });
+
+    it("si el modelo no lo decide el alta, volver a él lo DICE en vez de no hacer nada", async () => {
+      // `origenDeTrabajo: "global"` = alguien ya lo eligió fuera (una bandera, la config).
+      // El asistente no pregunta nada en ese caso, así que un botón «Modelo ✓» que no
+      // hiciera nada al pulsarlo sería el fallo mudo de siempre.
+      const servidor = servidorDeMentira();
+      montarRutas(servidor, vestibuloDePrueba());
+      const eventos = servidor.rutas.get(`GET ${RUTA_EVENTOS}`)!;
+      const accion = servidor.rutas.get(`POST ${RUTA_ACCION}`)!;
+      const cliente = clienteDeMentira();
+      await eventos(cliente.peticion, cliente.respuesta);
+      await asentar();
+
+      await enviarMensaje(accion, { clase: "alta", paso: "cuenta" });
+      await asentar();
+
+      expect(cliente.recibidos.some((m) => m.clase === "selector")).toBe(false);
+      const alta = cliente.recibidos.filter((m) => m.clase === "alta").at(-1) as Extract<
+        MensajeAlCliente,
+        { clase: "alta" }
+      >;
+      expect(alta.aviso).toMatch(/no lo decide el alta/i);
+      expect(alta.aviso).toMatch(/\/modelo/);
     });
 
     it("dos conexiones solapadas comparten el MISMO paso en curso: no hay dos selectores en vuelo", async () => {

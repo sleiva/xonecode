@@ -29,6 +29,27 @@
   padding-right: 4px;
 }
 
+/* El proyecto ABIERTO. Mismo fondo que la sesión seleccionada (`Rows.module.css`), para
+   que «aquí estás» se lea igual en los dos niveles del árbol, más una barra de acento a la
+   izquierda: el fondo solo no basta cuando la fila de al lado está en `:hover`, que usa ese
+   mismo alias. El `aria-current` de la fila dice lo mismo sin depender del color. */
+.filaAbierta {
+  position: relative;
+  background: var(--dsw-alias-interactive-bg-hover);
+  border-radius: 8px;
+}
+
+.filaAbierta::before {
+  content: "";
+  position: absolute;
+  top: 6px;
+  bottom: 6px;
+  left: 0;
+  width: 2px;
+  border-radius: 2px;
+  background: var(--dsw-alias-button-primary-fill);
+}
+
 .cuerpoDeFila {
   flex: 1;
   min-width: 0;

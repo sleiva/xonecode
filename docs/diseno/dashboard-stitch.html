@@ -1,0 +1,491 @@
+<!DOCTYPE html><html class="h-full bg-slate-50 antialiased" lang="en" style=""><head>
+<meta charset="utf-8">
+<meta content="width=device-width, initial-scale=1.0" name="viewport">
+<title>xonecode - Mobile Development Workspace</title>
+<!-- Tailwind CSS v3 with Forms and Container Queries -->
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            brand: {
+              50: '#eef2ff',
+              100: '#e0e7ff',
+              200: '#c7d2fe',
+              300: '#a5b4fc',
+              400: '#818cf8',
+              500: '#6366f1',
+              600: '#4f46e5',
+              700: '#4338ca',
+              800: '#3730a3',
+              900: '#312e81',
+            }
+          },
+          fontFamily: {
+            sans: ['Inter', 'system-ui', '-apple-system', 'BlinkMacSystemFont', 'Segoe UI', 'Roboto', 'sans-serif'],
+            mono: ['JetBrains Mono', 'Fira Code', 'Menlo', 'Monaco', 'Courier New', 'monospace'],
+          }
+        }
+      }
+    }
+  </script>
+<style data-purpose="custom-scrollbars">
+    /* Custom sleek scrollbar styling */
+    ::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+    ::-webkit-scrollbar-track {
+      background: transparent;
+    }
+    ::-webkit-scrollbar-thumb {
+      background: #cbd5e1;
+      border-radius: 9999px;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background: #94a3b8;
+    }
+  </style>
+<style data-purpose="chat-code-formatting">
+    .code-pill {
+      font-family: 'JetBrains Mono', monospace;
+      background-color: #f1f5f9;
+      border: 1px solid #e2e8f0;
+      padding: 0.1rem 0.35rem;
+      border-radius: 0.375rem;
+      font-size: 0.8125rem;
+      color: #334155;
+    }
+  </style>
+</head>
+<body class="h-full text-slate-800 flex overflow-hidden font-sans">
+<!-- BEGIN: LeftSidebar -->
+<aside class="w-80 flex-shrink-0 bg-white border-r border-slate-200 flex flex-col justify-between select-none h-full z-20 shadow-sm" data-purpose="workspace-sidebar">
+<!-- Sidebar Header & Action -->
+<div class="p-4 pb-2">
+<div class="flex items-center justify-between mb-4"><div class="flex items-center gap-2.5">
+  <div class="w-8 h-8 rounded-lg bg-[#083b56] flex items-center justify-center text-[#00a3e0] font-bold shadow-sm">
+    <svg class="w-4 h-4 text-[#00a3e0]" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
+      <path d="m8.25 4.5 7.5 7.5-7.5 7.5" stroke-linecap="round" stroke-linejoin="round"></path>
+    </svg>
+  </div>
+  <div class="flex items-center gap-1.5">
+    <span class="font-bold text-lg tracking-tight text-[#083b56]">xonecode</span>
+    <span class="px-1.5 py-0.5 text-[10px] uppercase font-bold bg-[#00a3e0]/10 text-[#00a3e0] rounded border border-[#00a3e0]/30">Mobile</span>
+  </div>
+</div>
+<button class="p-1.5 rounded-md hover:bg-slate-100 text-slate-400 hover:text-slate-600 transition-colors" title="Collapse sidebar">
+  <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+    <path d="M15.75 19.5 8.25 12l7.5-7.5" stroke-linecap="round" stroke-linejoin="round"></path>
+  </svg>
+</button></div>
+<!-- New Session Button -->
+<button class="w-full flex items-center justify-center gap-2 py-2 px-3 rounded-lg bg-[#00a3e0] hover:bg-[#0284c7] text-white text-sm font-medium transition-all shadow-xs group">
+  <svg class="w-4 h-4 text-white group-hover:scale-110 transition-transform" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
+    <path d="M12 4.5v15m7.5-7.5h-15" stroke-linecap="round" stroke-linejoin="round"></path>
+  </svg>
+  <span class="">New Session</span>
+</button>
+</div>
+<!-- Hierarchy Tree (Environments > Projects > Sessions) -->
+<div class="flex-1 overflow-y-auto px-3 py-2 space-y-4">
+<!-- Section: Workspaces & Filter -->
+<div>
+<div class="flex items-center justify-between px-2 mb-2 text-xs font-semibold text-slate-400 uppercase tracking-wider">
+<span class="">Workspaces</span>
+<div class="flex items-center gap-1">
+<button class="hover:text-slate-600 p-0.5" title="Search"><svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="m21 21-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.607 10.607Z" stroke-linecap="round" stroke-linejoin="round"></path></svg></button>
+<button class="hover:text-slate-600 p-0.5" title="Filter"><svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M3 4.5h18m-15 7.5h12m-9 7.5h6" stroke-linecap="round" stroke-linejoin="round"></path></svg></button>
+<button class="hover:text-slate-600 p-0.5" title="New Environment"><svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M12 9v6m3-3H9m12 0a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" stroke-linecap="round" stroke-linejoin="round"></path></svg></button>
+</div>
+</div>
+<!-- Hierarchy Item 1: Active Environment -->
+<div class="space-y-1">
+<!-- Env 1 -->
+<div class="flex items-center justify-between px-2 py-1.5 rounded-md hover:bg-slate-100 cursor-pointer text-slate-700 font-medium text-xs">
+<div class="flex items-center gap-1.5 truncate">
+<svg class="w-3.5 h-3.5 text-brand-600 transition-transform" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+<path d="m19.5 8.25-7.5 7.5-7.5-7.5" stroke-linecap="round" stroke-linejoin="round"></path>
+</svg>
+<span class="truncate">xonewebstudio.com</span>
+</div>
+<span class="w-2 h-2 rounded-full bg-emerald-500 ring-2 ring-emerald-100"></span>
+</div>
+<!-- Projects Sub-list -->
+<div class="pl-4 space-y-1 border-l border-slate-100 ml-3">
+<!-- Project 1 (Active Mobile App) -->
+<div>
+<div class="flex items-center justify-between px-2 py-1.5 rounded-md bg-slate-100/70 text-brand-900 font-medium text-xs">
+<div class="flex items-center gap-1.5">
+<svg class="w-3.5 h-3.5 text-brand-600" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+<path d="M10.5 1.5H8.25A2.25 2.25 0 0 0 6 3.75v16.5a2.25 2.25 0 0 0 2.25 2.25h7.5A2.25 2.25 0 0 0 18 20.25V3.75a2.25 2.25 0 0 0-2.25-2.25H13.5m-3 0V3h3V1.5m-3 0h3m-3 18.75h3" stroke-linecap="round" stroke-linejoin="round"></path>
+</svg>
+<span class="truncate">AppDemo</span>
+</div>
+<span class="text-[10px] bg-brand-100 text-brand-700 font-medium px-1 rounded">Mobile</span>
+</div>
+<!-- Sessions under AppDemo -->
+<div class="pl-3 py-1 space-y-0.5 border-l border-brand-200 ml-2 mt-1">
+<!-- Active Session -->
+<a class="flex items-center justify-between px-2.5 py-1.5 rounded-md bg-sky-50/80 text-[#073852] font-semibold text-xs border-l-3 border-l-[#00a3e0] border border-sky-200/70 shadow-2xs" href="#">
+  <div class="flex items-center gap-2 truncate">
+    <span class="w-1.5 h-1.5 rounded-full bg-[#00a3e0] animate-pulse"></span>
+    <span class="truncate">Device Bridge &amp; Hot Reload</span>
+  </div>
+  <span class="w-2 h-2 rounded-full bg-emerald-500"></span>
+</a>
+<!-- Other Session -->
+<a class="flex items-center gap-2 px-2 py-1 rounded-md text-slate-500 hover:text-slate-800 hover:bg-slate-50 text-xs" href="#">
+<span class="w-1.5 h-1.5 rounded-full bg-slate-300"></span>
+<span class="truncate">Setup iOS Simulator</span>
+</a>
+</div>
+</div>
+<!-- Project 2 -->
+<div class="flex items-center px-2 py-1 text-slate-500 hover:text-slate-700 text-xs cursor-pointer">
+<span class="truncate">mredapp</span>
+</div>
+</div>
+<!-- Env 2 -->
+<div class="flex items-center justify-between px-2 py-1.5 rounded-md hover:bg-slate-100 cursor-pointer text-slate-600 text-xs">
+<div class="flex items-center gap-1.5 truncate">
+<svg class="w-3.5 h-3.5 text-slate-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+<path d="m8.25 4.5 7.5 7.5-7.5 7.5" stroke-linecap="round" stroke-linejoin="round"></path>
+</svg>
+<span class="truncate">xonemanager.com</span>
+</div>
+</div>
+<!-- Env 3 -->
+<div class="flex items-center justify-between px-2 py-1.5 rounded-md hover:bg-slate-100 cursor-pointer text-slate-600 text-xs">
+<div class="flex items-center gap-1.5 truncate">
+<svg class="w-3.5 h-3.5 text-slate-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+<path d="m8.25 4.5 7.5 7.5-7.5 7.5" stroke-linecap="round" stroke-linejoin="round"></path>
+</svg>
+<span class="truncate">xonecloud.io</span>
+</div>
+</div>
+</div>
+</div>
+</div>
+<!-- Sidebar Bottom: Connected Devices Panel & Settings -->
+<div class="p-3 border-t border-slate-200 bg-slate-50/70">
+<div class="bg-white rounded-lg border border-slate-200 p-2.5 shadow-2xs mb-2">
+<div class="flex items-center justify-between mb-1.5">
+<span class="text-[11px] font-semibold text-slate-600 flex items-center gap-1.5">
+<span class="w-2 h-2 rounded-full bg-emerald-500 animate-ping inline-block"></span>
+            Connected Devices
+          </span>
+<span class="text-[10px] font-bold text-brand-700 bg-brand-50 px-1.5 py-0.5 rounded">2 Active</span>
+</div>
+<div class="space-y-1.5 text-xs">
+<!-- Device 1 Item -->
+<div class="flex items-center justify-between text-slate-600">
+<div class="flex items-center gap-1.5">
+<svg class="w-3.5 h-3.5 text-slate-500" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+<path d="M10.5 1.5H8.25A2.25 2.25 0 0 0 6 3.75v16.5a2.25 2.25 0 0 0 2.25 2.25h7.5A2.25 2.25 0 0 0 18 20.25V3.75a2.25 2.25 0 0 0-2.25-2.25H13.5m-3 0V3h3V1.5m-3 0h3m-3 18.75h3" stroke-linecap="round" stroke-linejoin="round"></path>
+</svg>
+<span class="truncate text-[11px] font-medium">iPhone 15 Pro</span>
+</div>
+<span class="text-[10px] text-emerald-600 font-mono">USB · 98%</span>
+</div>
+<!-- Device 2 Item -->
+<div class="flex items-center justify-between text-slate-600">
+<div class="flex items-center gap-1.5">
+<svg class="w-3.5 h-3.5 text-slate-500" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+<path d="M10.5 1.5H8.25A2.25 2.25 0 0 0 6 3.75v16.5a2.25 2.25 0 0 0 2.25 2.25h7.5A2.25 2.25 0 0 0 18 20.25V3.75a2.25 2.25 0 0 0-2.25-2.25H13.5m-3 0V3h3V1.5m-3 0h3m-3 18.75h3" stroke-linecap="round" stroke-linejoin="round"></path>
+</svg>
+<span class="truncate text-[11px] font-medium">Google Pixel 8</span>
+</div>
+<span class="text-[10px] text-emerald-600 font-mono">Wi-Fi · 82%</span>
+</div>
+</div>
+</div>
+<!-- Settings link -->
+<a class="flex items-center gap-2 px-2 py-1.5 rounded-md hover:bg-slate-200/60 text-slate-600 hover:text-slate-900 text-xs font-medium transition-colors" href="#">
+<svg class="w-4 h-4 text-slate-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+<path d="M9.594 3.94c.09-.542.56-.94 1.11-.94h2.593c.55 0 1.02.398 1.11.94l.213 1.281c.063.374.313.686.645.87.074.04.147.083.22.127.325.196.72.257 1.075.124l1.217-.456a1.125 1.125 0 0 1 1.37.49l1.296 2.247a1.125 1.125 0 0 1-.26 1.431l-1.003.827c-.293.241-.438.613-.43.992a7.723 7.723 0 0 1 0 .255c-.008.378.137.75.43.991l1.004.827c.424.35.534.955.26 1.43l-1.298 2.247a1.125 1.125 0 0 1-1.369.491l-1.217-.456c-.355-.133-.75-.072-1.076.124a6.47 6.47 0 0 1-.22.128c-.331.183-.581.495-.644.869l-.213 1.281c-.09.543-.56.94-1.11.94h-2.594c-.55 0-1.019-.398-1.11-.94l-.213-1.281c-.062-.374-.312-.686-.644-.87a6.52 6.52 0 0 1-.22-.127c-.325-.196-.72-.257-1.076-.124l-1.217.456a1.125 1.125 0 0 1-1.369-.49l-1.297-2.247a1.125 1.125 0 0 1 .26-1.431l1.004-.827c.292-.24.437-.613.43-.991a6.932 6.932 0 0 1 0-.255c.007-.38-.138-.751-.43-.992l-1.004-.827a1.125 1.125 0 0 1-.26-1.43l1.297-2.247a1.125 1.125 0 0 1 1.37-.491l1.216.456c.356.133.751.072 1.076-.124.072-.044.146-.086.22-.128.332-.183.582-.495.644-.869l.214-1.28Z" stroke-linecap="round" stroke-linejoin="round"></path>
+<path d="M15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z" stroke-linecap="round" stroke-linejoin="round"></path>
+</svg>
+<span class="">Settings</span>
+</a>
+</div>
+</aside>
+<!-- END: LeftSidebar -->
+<!-- BEGIN: MainContentArea -->
+<main class="flex-1 flex flex-col h-full bg-white relative overflow-hidden" data-purpose="chat-and-execution-space">
+<!-- BEGIN: WorkspaceTopHeader -->
+<header class="h-14 border-b border-[#05293d] bg-[#083b56] px-6 flex items-center justify-between z-10 text-white shadow-sm">
+<!-- Left: Title, Mode & Tabs -->
+<div class="flex items-center gap-6"><div class="flex items-center gap-2 text-sm font-semibold text-white">
+  <span class="tracking-tight flex items-center gap-2"><span class="w-2.5 h-2.5 rounded-full bg-[#00a3e0]"></span>xonecode</span>
+  <span class="text-[#00a3e0]/50 font-normal">|</span>
+  <span class="text-xs font-medium text-slate-300 flex items-center gap-1.5">
+    <span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
+    Standard mobile mode
+  </span>
+</div>
+<nav class="flex items-center gap-1 ml-2">
+  <button class="px-3 py-1.5 text-xs font-semibold text-[#00a3e0] border-b-2 border-[#00a3e0] transition-colors">
+    Chat
+  </button>
+  <button class="px-3 py-1.5 text-xs font-medium text-slate-300 hover:text-white transition-colors">
+    Trajectory
+  </button>
+</nav></div>
+<!-- Right Toolbar: Devices Badge, Quick Actions -->
+<div class="flex items-center gap-2.5"><button class="flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-semibold text-white bg-[#00a3e0] hover:bg-[#0284c7] rounded-lg shadow-sm transition-colors">
+  <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
+    <path d="M5.25 5.653c0-.856.917-1.398 1.667-.986l11.54 6.347a1.125 1.125 0 0 1 0 1.972l-11.54 6.347a1.125 1.125 0 0 1-1.667-.986V5.653Z" stroke-linecap="round" stroke-linejoin="round"></path>
+  </svg>
+  <span class="">Build &amp; Run</span>
+</button>
+<button class="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-slate-200 hover:text-white border border-[#0d4b6c] bg-[#07334a]/80 hover:bg-[#07334a] rounded-lg transition-colors">
+  <span class="">Session log</span>
+  <svg class="w-3.5 h-3.5 text-slate-300" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+    <path d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25h16.5" stroke-linecap="round" stroke-linejoin="round"></path>
+  </svg>
+</button></div>
+</header>
+<!-- END: WorkspaceTopHeader -->
+<!-- BEGIN: ConversationStream -->
+<div class="flex-1 overflow-y-auto px-6 py-8" data-purpose="chat-message-stream">
+<div class="max-w-4xl mx-auto space-y-6">
+<!-- User Message -->
+<div class="flex justify-end" data-purpose="user-query">
+<div class="max-w-xl bg-brand-50 border border-brand-100 rounded-2xl rounded-tr-xs px-4 py-3 text-sm text-slate-800 shadow-2xs">
+<div class="font-medium">
+              xone: ¿Cómo podemos probar y compilar AppDemo directamente en el iPhone y Android conectados con hot reload?
+            </div>
+<div class="mt-1 flex items-center justify-end gap-2 text-[11px] text-brand-600 font-mono">
+<span class="">xonewebstudio.com/AppDemo</span>
+<span class="">•</span>
+<span class="">11:42 AM</span>
+</div>
+</div>
+</div>
+<!-- Agent Response Container -->
+<div class="flex gap-4 items-start" data-purpose="agent-response">
+<!-- Avatar -->
+<div class="w-8 h-8 rounded-lg bg-[#083b56] flex-shrink-0 flex items-center justify-center text-[#00a3e0] shadow-sm mt-0.5 border border-[#0d4b6c]">
+<svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
+<path d="m8.25 4.5 7.5 7.5-7.5 7.5" stroke-linecap="round" stroke-linejoin="round"></path>
+</svg>
+</div>
+<!-- Message Body -->
+<div class="flex-1 space-y-4 text-sm text-slate-700 leading-relaxed">
+<!-- Agent Header & Context Badges -->
+<div>
+<div class="flex items-center gap-2 mb-2">
+<span class="font-semibold text-slate-900">xonecode</span>
+<span class="text-xs bg-slate-100 text-slate-600 px-2 py-0.5 rounded-full font-mono">Xone Native Bridge v4.2</span>
+</div>
+<!-- Injected Context Tags -->
+<div class="flex flex-wrap gap-1.5 mb-3 text-xs"><span class="inline-flex items-center gap-1 bg-slate-100 px-2 py-0.5 rounded text-slate-600 border border-slate-200/80 font-mono text-[11px]">
+  📱 Bridge: <span class="text-[#083b56] font-semibold">ios:00008110 · adb:Pixel8</span>
+</span>
+<span class="inline-flex items-center gap-1 bg-slate-100 px-2 py-0.5 rounded text-slate-600 border border-slate-200/80 font-mono text-[11px]">
+  📦 Target: <span class="text-slate-800 font-medium">AppDemo (React Native + Xone SDK)</span>
+</span>
+<span class="inline-flex items-center gap-1 bg-sky-50 text-[#0284c7] px-2 py-0.5 rounded border border-sky-200 font-mono text-[11px]">
+  ⚡ Live Hot Reload: Enabled
+</span>
+<span class="inline-flex items-center gap-1 bg-emerald-50 text-emerald-700 px-2 py-0.5 rounded border border-emerald-200 font-mono text-[11px]">
+  ● Sync: Active
+</span></div>
+<p class="text-base font-medium text-slate-900">
+                ¡Hola! 🚀 Estoy listo para ayudarte con el desarrollo y despliegue móvil de <strong class="text-brand-600 font-semibold">AppDemo</strong>.
+              </p>
+<p class="mt-1 text-slate-600">
+                He detectado y validado ambos dispositivos en el bridge local. Ambos cuentan con el runtime de desarrollo preparado para sincronización de código en caliente:
+              </p>
+</div>
+<!-- Connected Devices Grid Cards -->
+<div class="grid grid-cols-1 md:grid-cols-2 gap-3 pt-1"><!-- Device Card: iPhone 15 Pro -->
+<div class="bg-white border border-slate-200 rounded-xl p-3.5 shadow-2xs hover:border-[#00a3e0] transition-colors relative overflow-hidden group">
+  <div class="absolute top-0 right-0 w-24 h-24 bg-sky-50 rounded-full blur-2xl -mr-10 -mt-10 pointer-events-none"></div>
+  <div class="flex items-start justify-between mb-2.5">
+    <div class="flex items-center gap-2">
+      <div class="w-7 h-7 rounded-lg bg-[#083b56]/10 flex items-center justify-center text-[#083b56]">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+          <path d="M10.5 1.5H8.25A2.25 2.25 0 0 0 6 3.75v16.5a2.25 2.25 0 0 0 2.25 2.25h7.5A2.25 2.25 0 0 0 18 20.25V3.75a2.25 2.25 0 0 0-2.25-2.25H13.5m-3 0V3h3V1.5m-3 0h3m-3 18.75h3" stroke-linecap="round" stroke-linejoin="round"></path>
+        </svg>
+      </div>
+      <div>
+        <h4 class="font-semibold text-slate-900 text-xs">iPhone 15 Pro</h4>
+        <p class="text-[11px] text-slate-500 font-mono">iOS 17.4 · USB Type-C</p>
+      </div>
+    </div>
+    <span class="inline-flex items-center gap-1 text-[11px] font-medium text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
+      <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+      Ready
+    </span>
+  </div>
+  <div class="text-[11px] text-slate-500 space-y-1 font-mono mb-3 bg-slate-50 p-2 rounded-md border border-slate-100">
+    <div class="">Bundle: <span class="text-slate-800 font-medium">com.xone.appdemo</span></div>
+    <div class="">Sync Mode: <span class="text-[#0284c7] font-semibold">Fast Refresh (Xone Native)</span></div>
+  </div>
+  <div class="flex items-center gap-1.5 pt-1">
+    <button class="flex-1 py-1.5 px-2 rounded-md bg-[#0284c7] hover:bg-[#0369a1] text-white font-medium text-xs text-center transition-colors shadow-2xs">
+      Launch on Device
+    </button>
+    <button class="py-1.5 px-2 rounded-md border border-slate-200 hover:bg-slate-50 text-slate-600 text-xs font-medium transition-colors">
+      Logs
+    </button>
+    <button class="py-1.5 px-2 rounded-md border border-slate-200 hover:bg-slate-50 text-slate-600 text-xs font-medium transition-colors" title="Inspect UI Tree">
+      Inspect
+    </button>
+  </div>
+</div>
+<!-- Device Card: Google Pixel 8 -->
+<div class="bg-white border border-slate-200 rounded-xl p-3.5 shadow-2xs hover:border-[#00a3e0] transition-colors relative overflow-hidden group">
+  <div class="absolute top-0 right-0 w-24 h-24 bg-sky-50 rounded-full blur-2xl -mr-10 -mt-10 pointer-events-none"></div>
+  <div class="flex items-start justify-between mb-2.5">
+    <div class="flex items-center gap-2">
+      <div class="w-7 h-7 rounded-lg bg-[#083b56]/10 flex items-center justify-center text-[#083b56]">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+          <path d="M10.5 1.5H8.25A2.25 2.25 0 0 0 6 3.75v16.5a2.25 2.25 0 0 0 2.25 2.25h7.5A2.25 2.25 0 0 0 18 20.25V3.75a2.25 2.25 0 0 0-2.25-2.25H13.5m-3 0V3h3V1.5m-3 0h3m-3 18.75h3" stroke-linecap="round" stroke-linejoin="round"></path>
+        </svg>
+      </div>
+      <div>
+        <h4 class="font-semibold text-slate-900 text-xs">Google Pixel 8</h4>
+        <p class="text-[11px] text-slate-500 font-mono">Android 14 (API 34) · ADB Wi-Fi</p>
+      </div>
+    </div>
+    <span class="inline-flex items-center gap-1 text-[11px] font-medium text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
+      <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+      Ready
+    </span>
+  </div>
+  <div class="text-[11px] text-slate-500 space-y-1 font-mono mb-3 bg-slate-50 p-2 rounded-md border border-slate-100">
+    <div class="">Package: <span class="text-slate-800 font-medium">com.xone.appdemo</span></div>
+    <div class="">Sync Mode: <span class="text-[#0284c7] font-semibold">Fast Refresh (Xone Native)</span></div>
+  </div>
+  <div class="flex items-center gap-1.5 pt-1">
+    <button class="flex-1 py-1.5 px-2 rounded-md bg-[#0284c7] hover:bg-[#0369a1] text-white font-medium text-xs text-center transition-colors shadow-2xs">
+      Launch on Device
+    </button>
+    <button class="py-1.5 px-2 rounded-md border border-slate-200 hover:bg-slate-50 text-slate-600 text-xs font-medium transition-colors">
+      Logcat
+    </button>
+    <button class="py-1.5 px-2 rounded-md border border-slate-200 hover:bg-slate-50 text-slate-600 text-xs font-medium transition-colors" title="Inspect Layout">
+      Inspect
+    </button>
+  </div>
+</div></div>
+<!-- Actionable Recommendations & Capabilities -->
+<div class="bg-slate-50 border border-slate-200/90 rounded-xl p-4 mt-3">
+<h5 class="text-xs font-bold text-slate-900 uppercase tracking-wider mb-2">Comandos y acciones recomendadas:</h5>
+<ul class="space-y-2 text-xs text-slate-700">
+<li class="flex items-start gap-2">
+<span class="text-brand-600 font-bold">•</span>
+<div class="">
+<strong>Compilación simultánea híbrida:</strong> ejecuta el gate unificado con 
+                    <span class="code-pill">xone run --target=all --reload</span> para disparar Hot Reload en ambos terminales a la vez.
+                  </div>
+</li>
+<li class="flex items-start gap-2">
+<span class="text-brand-600 font-bold">•</span>
+<div class="">
+<strong>Validación estricta de tipos:</strong> antes de desplegar en producción, ejecutaremos 
+                    <span class="code-pill">tsc --noEmit</span> y <span class="code-pill">npm test</span> desde <span class="code-pill">AppDemo/</span>.
+                  </div>
+</li>
+<li class="flex items-start gap-2">
+<span class="text-brand-600 font-bold">•</span>
+<div class="">
+<strong>Acceso a APIs nativas de Xone:</strong> el módulo de biometría y cámara está montado en <span class="code-pill">@xone/hardware</span>.
+                  </div>
+</li>
+</ul>
+</div>
+<!-- Agent Action Toolbar -->
+<div class="flex items-center justify-between pt-1 border-t border-slate-100">
+<div class="flex items-center gap-2">
+<button class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#f58220] hover:bg-[#ea580c] text-white font-semibold text-xs shadow-xs transition-colors">
+  <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+    <path d="m3.75 13.5 10.5-11.25L12 10.5h8.25L9.75 21.75 12 13.5H3.75Z" stroke-linecap="round" stroke-linejoin="round"></path>
+  </svg>
+  <span class="">Run on All Devices Now</span>
+</button>
+<button class="px-2.5 py-1.5 rounded-lg border border-slate-200 hover:bg-slate-50 text-slate-600 text-xs font-medium transition-colors">
+                  Check TypeScript Gate
+                </button>
+</div>
+<!-- Feedback / Copy Icons -->
+<div class="flex items-center gap-1 text-slate-400">
+<button class="p-1.5 rounded hover:bg-slate-100 hover:text-slate-600 transition-colors" title="Copy response">
+<svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M15.75 17.25v3.375c0 .621-.504 1.125-1.125 1.125h-9.75a1.125 1.125 0 0 1-1.125-1.125V7.875c0-.621.504-1.125 1.125-1.125H6.75a9.06 9.06 0 0 1 1.5.124m7.5 10.376h3.375c.621 0 1.125-.504 1.125-1.125V11.25c0-4.46-3.243-8.161-7.5-8.876a9.06 9.06 0 0 0-1.5-.124H9.375c-.621 0-1.125.504-1.125 1.125v3.5m7.5 10.375H9.375a1.125 1.125 0 0 1-1.125-1.125v-9.25m12 6.625v-1.875a3.375 3.375 0 0 0-3.375-3.375h-1.5a1.125 1.125 0 0 1-1.125-1.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H9.75" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+</button>
+<button class="p-1.5 rounded hover:bg-slate-100 hover:text-slate-600 transition-colors" title="Helpful">
+<svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M6.633 10.25c.806 0 1.533-.446 2.031-1.08a9.041 9.041 0 0 1 2.861-2.4c.723-.384 1.35-.956 1.653-1.715a4.498 4.498 0 0 0 .322-1.672V2.75a.75.75 0 0 1 .75-.75 2.25 2.25 0 0 1 2.25 2.25c0 1.152-.26 2.243-.723 3.218-.266.558.107 1.282.725 1.282m0 0h3.126c1.026 0 1.945.694 2.054 1.715.045.422.068.85.068 1.285a11.95 11.95 0 0 1-2.649 7.521c-.388.482-.987.729-1.605.729H13.48c-.483 0-.964-.078-1.423-.23l-3.114-1.04a4.501 4.501 0 0 0-1.423-.23H5.904m10.598-9.75H14.25M5.904 18.5c.083.205.173.405.27.602.434.887 1.41 1.398 2.404 1.398h4.902c.483 0 .964-.078 1.423-.23l3.114-1.04a4.5 4.5 0 0 0 1.423-.23h1.988c.994 0 1.97-.511 2.404-1.398.097-.197.187-.397.27-.602M5.904 18.5H3.75A2.25 2.25 0 0 1 1.5 16.25v-4.5A2.25 2.25 0 0 1 3.75 9.5h2.154" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+</button>
+<button class="p-1.5 rounded hover:bg-slate-100 hover:text-slate-600 transition-colors" title="Regenerate">
+<svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0 3.181 3.183a8.25 8.25 0 0 0 13.803-3.7M4.031 9.865a8.25 8.25 0 0 1 13.803-3.7l3.181 3.182m0-4.991v4.99" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+</button>
+</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+<!-- END: ConversationStream -->
+<!-- BEGIN: InputPromptArea -->
+<div class="border-t border-slate-200 bg-white p-4" data-purpose="bottom-interaction-tray">
+<div class="max-w-4xl mx-auto">
+<!-- Prompt Box Container -->
+<div class="bg-white border border-slate-300 rounded-xl shadow-sm focus-within:border-brand-500 focus-within:ring-2 focus-within:ring-brand-100 transition-all p-3">
+<!-- Text Area Input -->
+<textarea class="w-full text-sm text-slate-800 placeholder-slate-400 resize-none border-0 p-0 focus:ring-0 focus:outline-none" placeholder="Pregunta al agente de xone sobre desarrollo móvil, APIs nativas, o comandos para dispositivos..." rows="2"></textarea>
+<!-- Input Footer Actions & Controls -->
+<div class="flex items-center justify-between pt-2 border-t border-slate-100 mt-2"><div class="flex flex-wrap items-center gap-2">
+  <!-- Mode Selection Dropdown -->
+  <div class="relative">
+    <button class="flex items-center gap-1 px-2.5 py-1 rounded-md bg-slate-100 hover:bg-slate-200/80 text-slate-700 text-xs font-medium transition-colors">
+      <span class="">📱 Mobile Dev &amp; Live Reload</span>
+      <svg class="w-3 h-3 text-slate-500" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+        <path d="m19.5 8.25-7.5 7.5-7.5-7.5" stroke-linecap="round" stroke-linejoin="round"></path>
+      </svg>
+    </button>
+  </div>
+  <!-- Device Selection -->
+  <div class="relative">
+    <button class="flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-sky-50 hover:bg-sky-100 text-[#0284c7] text-xs font-medium border border-sky-200 transition-colors">
+      <span class="w-1.5 h-1.5 rounded-full bg-[#00a3e0]"></span>
+      <span class="">Target: All Devices (iPhone + Android)</span>
+      <svg class="w-3 h-3 text-[#00a3e0]" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+        <path d="m19.5 8.25-7.5 7.5-7.5-7.5" stroke-linecap="round" stroke-linejoin="round"></path>
+      </svg>
+    </button>
+  </div>
+  <!-- Model Badge -->
+  <span class="hidden sm:inline-block text-[11px] text-slate-400 font-mono">
+    Xone-V4-Mobile High
+  </span>
+</div>
+<!-- Send Action Button -->
+<button class="w-8 h-8 rounded-lg bg-[#00a3e0] hover:bg-[#0284c7] text-white flex items-center justify-center transition-colors shadow-xs" title="Send query">
+  <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
+    <path d="M4.5 10.5 12 3m0 0 7.5 7.5M12 3v18" stroke-linecap="round" stroke-linejoin="round"></path>
+  </svg>
+</button></div>
+</div>
+<!-- Footnote Status info -->
+<div class="flex items-center justify-between text-[11px] text-slate-400 mt-2 px-1">
+<div class="flex items-center gap-2">
+<span class="">ADB status: <strong class="text-slate-600 font-medium">daemon active (port 5037)</strong></span>
+<span class="">•</span>
+<span class="">iOS Tunnel: <strong class="text-slate-600 font-medium">usbmuxd synced</strong></span>
+</div>
+<div class="">Presiona <kbd class="px-1.5 py-0.5 rounded bg-slate-100 border border-slate-200 font-mono text-[10px] text-slate-600">Enter</kbd> para enviar</div>
+</div>
+</div>
+</div>
+<!-- END: InputPromptArea -->
+</main>
+<!-- END: MainContentArea -->
+
+
+
+
+</body></html>

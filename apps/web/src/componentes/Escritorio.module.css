@@ -1,0 +1,192 @@
+/* Alias comprobados contra `apps/web/estilos/design-platform.css`: bg-layer-1/2, border-l2,
+   label-primary/secondary/tertiary, interactive-bg-hover, state-success-primary y
+   button-primary-fill. Los `--xonecode-*` son de `estilos/marca.css` (la paleta propia). */
+
+.escritorio {
+  flex: 1 1 auto;
+  overflow-y: auto;
+  padding: 40px 24px;
+}
+
+/* La misma columna acotada y centrada que usa el transcript: la pantalla no cambia de eje
+   al abrir una sesión, solo de contenido. */
+.contenido {
+  width: min(880px, 100%);
+  margin: 0 auto;
+}
+
+.portada {
+  margin-bottom: 28px;
+}
+
+.saludo {
+  margin: 0;
+  color: var(--dsw-alias-label-primary);
+  font-size: 28px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+.subtitulo {
+  margin: 6px 0 0;
+  color: var(--dsw-alias-label-secondary);
+}
+
+/* El entorno activo: el punto verde dice que hay uno resuelto, no que se haya hecho ping —
+   con la URL al lado, que es lo que de verdad lo identifica. */
+.entorno {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 14px 0 0;
+  font-size: 12px;
+}
+
+.punto {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--dsw-alias-state-success-primary);
+  flex-shrink: 0;
+}
+
+.entornoNombre {
+  color: var(--dsw-alias-label-primary);
+  font-weight: 600;
+}
+
+.entornoUrl {
+  color: var(--dsw-alias-label-tertiary);
+}
+
+.vacio {
+  margin: 0;
+  color: var(--dsw-alias-label-secondary);
+}
+
+.enlace {
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--xonecode-cian);
+  font: inherit;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+/* Rejilla que se adapta sola: con una ventana estrecha cae a una columna sin media queries
+   que haya que mantener a mano. */
+.rejilla {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 12px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.tarjeta {
+  display: flex;
+  flex-direction: column;
+  padding: 14px;
+  border: 0.5px solid var(--dsw-alias-border-l2);
+  border-radius: 12px;
+  background: var(--dsw-alias-bg-layer-2);
+}
+
+.tarjeta:hover {
+  border-color: var(--xonecode-cian);
+}
+
+.cabeceraDeTarjeta {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.nombreDeProyecto {
+  margin: 0;
+  color: var(--dsw-alias-label-primary);
+  font-size: 14px;
+  font-weight: 600;
+}
+
+/* Sin color de estado para «sin descargar»: no es un problema, es un hecho — y pintarlo en
+   rojo diría que algo va mal. Solo el que YA está en el equipo se destaca. */
+.marca {
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.marca[data-local] {
+  color: var(--dsw-alias-state-success-primary);
+}
+
+.sesiones {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 10px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.sesion {
+  display: block;
+  width: 100%;
+  padding: 4px 6px;
+  border: none;
+  border-radius: 6px;
+  background: none;
+  color: var(--dsw-alias-label-secondary);
+  font: inherit;
+  font-size: 12px;
+  text-align: left;
+  cursor: pointer;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sesion:hover {
+  background: var(--dsw-alias-interactive-bg-hover);
+  color: var(--dsw-alias-label-primary);
+}
+
+.sinSesiones {
+  margin: 10px 0 0;
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 12px;
+}
+
+/* `margin-top: auto` pega la acción al fondo de la tarjeta: con sesiones o sin ellas, el
+   botón queda a la misma altura en toda la fila. */
+.empezar {
+  margin-top: auto;
+  padding: 7px 10px;
+  border: none;
+  border-radius: 8px;
+  background: var(--dsw-alias-button-primary-fill);
+  color: var(--dsw-alias-label-primary-inverted);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.empezar:hover {
+  background: var(--dsw-alias-button-primary-hover);
+}
+
+.pie {
+  margin: 24px 0 0;
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 12px;
+}
+
+.modelo {
+  color: var(--dsw-alias-label-secondary);
+  font-weight: 600;
+}

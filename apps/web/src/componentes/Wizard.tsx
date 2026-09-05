@@ -28,6 +28,13 @@ import estilos from "./Wizard.module.css";
  * tocó nada, y la clave ya está escrita en disco (`vestibulo.ts#guardarCredencialDe` dice
  * lo mismo por consola, en el mismo momento y por el mismo motivo).
  *
+ * **Del entorno se teclea SOLO la URL.** No hay campo de nombre, ni siquiera para el
+ * on-premise: el nombre y el id los deduce el servidor del host al registrar
+ * (`vestibulo.ts#identidadDeEntorno`). Un nombre escrito a mano es un dato inventado que
+ * después hay que creerse en la barra lateral y en la ruta de la copia local, y con el id
+ * «otro» todos los on-premise compartirían carpeta de workspace. El desplegable sigue
+ * estando para lo que servía: rellenar la URL de los dos oficiales sin teclearla.
+ *
  * De `@deepseek-ai/dsh-client-ui-primitives` se usan `Input` y `Button`: aportan el
  * elemento nativo con los atributos pasando tal cual —que es lo que hace que `type`,
  * `autoComplete` e `id` lleguen de verdad al `<input>`— y nada más, porque sus CSS Modules
@@ -70,7 +77,7 @@ export interface OpcionDeEntorno {
  */
 const LOOPBACK = new Set(["127.0.0.1", "localhost", "::1", "[::1]"]);
 
-const AVISO_DE_URL =
+export const AVISO_DE_URL =
   "La URL del MCP debe ser https:// — solo se admite http:// en 127.0.0.1 o localhost, para un on-premise en desarrollo.";
 
 export function urlDeEntornoAceptable(valor: string): boolean {
@@ -120,8 +127,9 @@ export function Wizard({
   const [clave, setClave] = useState("");
   const [credencialGuardada, setCredencialGuardada] = useState(false);
 
-  const [entornoElegido, setEntornoElegido] = useState(entornos[0]?.id ?? "");
-  const [nombreDelEntorno, setNombreDelEntorno] = useState("");
+  // La URL arranca en la del primer entorno OFRECIDO (el oficial de omisión) y no en un
+  // literal escrito aquí: la dirección vive en `agent/cloudstudioMcp.ts` y llega por el
+  // cable, así que el cliente no tiene una segunda copia que se quede vieja.
   const [url, setUrl] = useState(entornos[0]?.url ?? "");
   const [avisoDeUrl, setAvisoDeUrl] = useState<string | undefined>(undefined);
 
@@ -209,15 +217,6 @@ export function Wizard({
   }
 
   if (paso === "entorno") {
-    const opcion = entornos.find((e) => e.id === entornoElegido);
-    // El «otro» es el de URL vacía, tal y como lo declara `ENTORNO_OTRO`: es lo que evita
-    // un `id === "otro"` escrito a mano aquí, que sería una segunda definición del mismo.
-    const esOtro = opcion !== undefined && opcion.url === "";
-    const elegir = (id: string): void => {
-      setEntornoElegido(id);
-      setUrl(entornos.find((e) => e.id === id)?.url ?? "");
-      setAvisoDeUrl(undefined);
-    };
     const registrar = (evento: FormEvent): void => {
       evento.preventDefault();
       if (!urlDeEntornoAceptable(url)) {
@@ -225,11 +224,12 @@ export function Wizard({
         return;
       }
       setAvisoDeUrl(undefined);
-      alRegistrarEntorno({
-        id: entornoElegido,
-        nombre: esOtro ? nombreDelEntorno : (opcion?.nombre ?? entornoElegido),
-        url,
-      });
+      // Se manda la URL y NADA más: id y nombre van vacíos a propósito, porque los deduce
+      // el servidor al registrar (`vestibulo.ts#identidadDeEntorno` — el id, del host;
+      // el nombre, del host primero y del `serverInfo` del MCP en cuanto se conecta). Los
+      // dos campos siguen en el mensaje del cable porque otra piel puede traer una
+      // identidad ya hecha y entonces se respeta; esta no la tiene.
+      alRegistrarEntorno({ id: "", nombre: "", url });
       // NO se avanza aquí, y ya no hace falta un efecto que lo haga por su cuenta: el
       // proyecto salió del alta, así que «entorno» es hoy el ÚLTIMO paso que este
       // componente puede pintar. Si el registro sale bien, es el SERVIDOR quien lo dice
@@ -244,34 +244,14 @@ export function Wizard({
       // debajo de «Entorno de CloudStudio» —el rótulo que ya pone `PasosDelAlta` para
       // ESTE mismo paso—, repitiendo lo que el rótulo de progresión ya sitúa.
       <form className={estilos.wizard} onSubmit={registrar}>
-        <label className={estilos.etiqueta} htmlFor="wizard-entorno">
-          Entorno
-        </label>
-        <select
-          id="wizard-entorno"
-          className={estilos.campo}
-          value={entornoElegido}
-          onChange={(e) => elegir(e.target.value)}
-        >
-          {entornos.map((e) => (
-            <option key={e.id} value={e.id}>
-              {e.nombre}
-            </option>
-          ))}
-        </select>
-        {esOtro ? (
-          <>
-            <label className={estilos.etiqueta} htmlFor="wizard-nombre">
-              Nombre
-            </label>
-            <Input
-              id="wizard-nombre"
-              className={estilos.campo}
-              value={nombreDelEntorno}
-              onChange={(e) => setNombreDelEntorno(e.target.value)}
-            />
-          </>
-        ) : null}
+        {/*
+          UN campo, libre, y ya está: ni desplegable de entornos ni campo de nombre. Lo que
+          define a un entorno es su URL —el resto son datos que el sistema sabe deducir o
+          preguntarle al propio servidor—, y un desplegable con «los dos oficiales y otro»
+          obligaba a clasificar antes de escribir: el on-premise se registraba por un camino
+          distinto del de WebStudio siendo la misma operación. El valor de partida es el
+          oficial de omisión, que se sobrescribe tecleando encima.
+        */}
         <label className={estilos.etiqueta} htmlFor="wizard-url">
           URL del MCP
         </label>
@@ -279,6 +259,7 @@ export function Wizard({
           id="wizard-url"
           className={estilos.envoltorio}
           value={url}
+          placeholder="https://mcp.ejemplo.com/mcp"
           onChange={(e) => setUrl(e.target.value)}
         />
         {avisoDeUrl !== undefined ? (

@@ -55,6 +55,18 @@ export interface ServidorWeb {
 interface OpcionesServidor {
   puerto: number;
   raizEstaticos: string;
+  /**
+   * Un anfitrión EXTRA que se acepta además del loopback, para un túnel (ngrok, Tailscale)
+   * que apunte a este proceso. Es una lista de uno y sin comodines a propósito: el
+   * comprobante de `Host` es la única defensa contra el DNS rebinding, y «lo que acabe en
+   * .ngrok-free.app» la deja abierta a cualquiera que se registre en ngrok.
+   *
+   * El puerto NO se le añade: un túnel HTTPS llega con `Host: algo.ngrok-free.app`, sin
+   * puerto, mientras que el loopback llega con el suyo. Se compara tal cual.
+   *
+   * Ausente = solo loopback, que es como debe estar salvo que alguien lo pida a propósito.
+   */
+  anfitrion?: string;
 }
 
 interface ContextoPeticion {
@@ -62,6 +74,7 @@ interface ContextoPeticion {
   token: string;
   rutas: Map<string, ManejadorRuta>;
   puerto: number;
+  anfitrion?: string;
 }
 
 export async function arrancarServidor(opciones: OpcionesServidor): Promise<ServidorWeb> {
@@ -74,7 +87,13 @@ export async function arrancarServidor(opciones: OpcionesServidor): Promise<Serv
 
   let puertoReal = opciones.puerto;
   let direccionReal = "127.0.0.1";
-  const contexto = (): ContextoPeticion => ({ raizReal, token, rutas, puerto: puertoReal });
+  const contexto = (): ContextoPeticion => ({
+    raizReal,
+    token,
+    rutas,
+    puerto: puertoReal,
+    ...(opciones.anfitrion === undefined ? {} : { anfitrion: opciones.anfitrion }),
+  });
 
   const servidorHttp: Server = createServer((peticion, respuesta) => {
     manejarPeticion(peticion, respuesta, contexto()).catch(() => {
@@ -139,13 +158,18 @@ async function manejarPeticion(
   respuesta: ServerResponse,
   contexto: ContextoPeticion
 ): Promise<void> {
-  const { raizReal, token, rutas, puerto } = contexto;
+  const { raizReal, token, rutas, puerto, anfitrion: anfitrionExtra } = contexto;
 
   // DNS rebinding: una web ajena resuelve su dominio a 127.0.0.1 y le habla a este
   // proceso desde el navegador de la víctima, que sí tiene la cookie. El único `Host`
   // válido es el propio loopback con el puerto real de este arranque.
   const anfitrion = peticion.headers.host;
-  if (anfitrion !== `127.0.0.1:${puerto}` && anfitrion !== `localhost:${puerto}`) {
+  if (
+    anfitrion !== `127.0.0.1:${puerto}` &&
+    anfitrion !== `localhost:${puerto}` &&
+    // El del túnel, si se pidió uno: exacto y sin comodines (ver `OpcionesServidor`).
+    (anfitrionExtra === undefined || anfitrion !== anfitrionExtra)
+  ) {
     responderProhibido(respuesta);
     return;
   }
@@ -156,7 +180,11 @@ async function manejarPeticion(
   if (
     origen !== undefined &&
     origen !== `http://127.0.0.1:${puerto}` &&
-    origen !== `http://localhost:${puerto}`
+    origen !== `http://localhost:${puerto}` &&
+    // Un túnel sirve por HTTPS, así que su `Origin` es `https://<anfitrion>`. Se acepta
+    // SOLO ese, no cualquier esquema: `http://<anfitrion>` sería el mismo nombre servido
+    // en claro, que es otra cosa y no la que se pidió abrir.
+    (anfitrionExtra === undefined || origen !== `https://${anfitrionExtra}`)
   ) {
     responderProhibido(respuesta);
     return;

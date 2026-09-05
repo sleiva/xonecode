@@ -76,4 +76,21 @@ describe("Chat", () => {
       expect(container.textContent).toContain(codigo);
     });
   });
+
+  /**
+   * `MarkdownText` apaga el resaltado ENTERO en modo streaming (`lang: undefined` en su
+   * `renderCode`): tiene sentido a medio llegar —una valla sin cerrar no se puede
+   * colorear— y ninguno después. Dejarlo puesto en el último mensaje lo dejaba gris para
+   * siempre, que es lo que se vio en pantalla.
+   */
+  it("el código sale resaltado cuando el turno YA terminó", () => {
+    const actos = [{ tipo: "asistente", texto: "```js\nconst a = 1;\n```" }] as const;
+    const { container, rerender } = render(<Chat actos={[...actos]} turnoEnVuelo />);
+    // A medio llegar: sin lenguaje, así que sin tokens de shiki.
+    expect(container.querySelector("[class*='language-']")).toBeNull();
+
+    rerender(<Chat actos={[...actos]} turnoEnVuelo={false} />);
+    // Terminado: el bloque ya declara su lenguaje, que es lo que shiki necesita para pintar.
+    expect(container.innerHTML).toMatch(/language-js|shiki/);
+  });
 });

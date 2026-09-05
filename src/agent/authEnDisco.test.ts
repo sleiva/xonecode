@@ -20,7 +20,7 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
-import { guardarCredencial, AuthRotoEnDisco } from "./authEnDisco.js";
+import { borrarCredencial, guardarCredencial, AuthRotoEnDisco } from "./authEnDisco.js";
 import { rutaAuth } from "./configEnDisco.js";
 
 afterEach(() => {
@@ -104,6 +104,32 @@ describe("guardarCredencial", () => {
     rmSync(h, { recursive: true, force: true });
   });
 
+  /**
+   * El fichero es para la próxima ejecución; la variable es para ÉSTA. Sin esto, la clave
+   * que el asistente de cuenta acaba de pedir no existía para `CatalogoModelos` —que la
+   * lee de `process.env`—, así que validar la conexión fallaba con «falta la credencial
+   * para …» justo después de haberla escrito.
+   */
+  it("aplica la credencial al proceso vivo, machacando lo que hubiera en la variable", () => {
+    const h = mkdtempSync(join(tmpdir(), "xc-authw-"));
+    vi.stubEnv("HOME", h);
+    // Una clave vieja en el entorno: aquí SÍ se machaca, al revés que en `aplicarAuth`
+    // (arranque), porque esto es una orden explícita de un humano y es lo último dicho.
+    vi.stubEnv("ANTHROPIC_API_KEY", "sk-vieja");
+    guardarCredencial("anthropic", "sk-recien-tecleada");
+    expect(process.env.ANTHROPIC_API_KEY).toBe("sk-recien-tecleada");
+    rmSync(h, { recursive: true, force: true });
+  });
+
+  it("ollama no tiene variable que aplicar: no se inventa ninguna", () => {
+    const h = mkdtempSync(join(tmpdir(), "xc-authw-"));
+    vi.stubEnv("HOME", h);
+    const antes = { ...process.env };
+    guardarCredencial("ollama", "no-hace-falta");
+    expect(Object.keys(process.env).filter((k) => !(k in antes))).toEqual([]);
+    rmSync(h, { recursive: true, force: true });
+  });
+
   it("devuelve avisos que mencionan un proveedor desconocido ya presente", () => {
     const h = mkdtempSync(join(tmpdir(), "xc-authw-"));
     vi.stubEnv("HOME", h);
@@ -118,6 +144,83 @@ describe("guardarCredencial", () => {
     const { avisos } = guardarCredencial("anthropic", "sk-test");
     expect(avisos.length).toBeGreaterThan(0);
     expect(avisos.map((a) => a.texto).join("\n")).toContain("proveedor-que-no-existe");
+    rmSync(h, { recursive: true, force: true });
+  });
+});
+
+describe("borrarCredencial", () => {
+  it("quita SOLO la del proveedor pedido y conserva el resto del fichero", () => {
+    const h = mkdtempSync(join(tmpdir(), "xc-authw-"));
+    vi.stubEnv("HOME", h);
+    const ruta = rutaAuth();
+    mkdirSync(dirname(ruta), { recursive: true, mode: 0o700 });
+    writeFileSync(
+      ruta,
+      JSON.stringify({ anthropic: { key: "sk-a" }, openai: "sk-o", "algo-raro": 7 }),
+      { mode: 0o600 },
+    );
+    chmodSync(ruta, 0o600);
+
+    const { borrada } = borrarCredencial("anthropic");
+    expect(borrada).toBe(true);
+    const despues = JSON.parse(readFileSync(ruta, "utf8")) as Record<string, unknown>;
+    expect(despues.anthropic).toBeUndefined();
+    // Lo que este fichero no entiende se conserva igual que al escribir: la base de la
+    // fusión es el objeto CRUDO.
+    expect(despues.openai).toBe("sk-o");
+    expect(despues["algo-raro"]).toBe(7);
+    rmSync(h, { recursive: true, force: true });
+  });
+
+  it("borrar lo que no estaba no es un error: es el estado que se pedía", () => {
+    const h = mkdtempSync(join(tmpdir(), "xc-authw-"));
+    vi.stubEnv("HOME", h);
+    expect(borrarCredencial("gemini").borrada).toBe(false);
+    rmSync(h, { recursive: true, force: true });
+  });
+
+  /**
+   * De `process.env` se quita solo si la variable llevaba EXACTAMENTE la clave borrada —el
+   * caso de `aplicarAuth`, que copia `auth.json` al entorno en el arranque—. Una variable
+   * con otro valor es del usuario: no se toca, y se dice que la credencial sigue puesta,
+   * porque el punto verde se va a quedar verde y callarlo parecería un fallo del botón.
+   */
+  it("limpia la variable del proceso si llevaba esa misma clave", () => {
+    const h = mkdtempSync(join(tmpdir(), "xc-authw-"));
+    vi.stubEnv("HOME", h);
+    vi.stubEnv("ANTHROPIC_API_KEY", "sk-a");
+    guardarCredencial("anthropic", "sk-a");
+    const { quedaEnEntorno } = borrarCredencial("anthropic");
+    expect(process.env.ANTHROPIC_API_KEY).toBeUndefined();
+    expect(quedaEnEntorno).toBe(false);
+    rmSync(h, { recursive: true, force: true });
+  });
+
+  it("una variable del USUARIO con otro valor no se toca, y se avisa de que sigue puesta", () => {
+    const h = mkdtempSync(join(tmpdir(), "xc-authw-"));
+    vi.stubEnv("HOME", h);
+    const ruta = rutaAuth();
+    mkdirSync(dirname(ruta), { recursive: true, mode: 0o700 });
+    writeFileSync(ruta, JSON.stringify({ anthropic: { key: "sk-del-fichero" } }), { mode: 0o600 });
+    chmodSync(ruta, 0o600);
+    vi.stubEnv("ANTHROPIC_API_KEY", "sk-exportada-a-mano");
+
+    const { borrada, quedaEnEntorno } = borrarCredencial("anthropic");
+    expect(borrada).toBe(true);
+    expect(process.env.ANTHROPIC_API_KEY).toBe("sk-exportada-a-mano");
+    expect(quedaEnEntorno).toBe(true);
+    rmSync(h, { recursive: true, force: true });
+  });
+
+  it("un auth.json roto no se sobrescribe ni a medias", () => {
+    const h = mkdtempSync(join(tmpdir(), "xc-authw-"));
+    vi.stubEnv("HOME", h);
+    const ruta = rutaAuth();
+    mkdirSync(dirname(ruta), { recursive: true, mode: 0o700 });
+    writeFileSync(ruta, "{ roto", { mode: 0o600 });
+    chmodSync(ruta, 0o600);
+    expect(() => borrarCredencial("anthropic")).toThrow(AuthRotoEnDisco);
+    expect(readFileSync(ruta, "utf8")).toBe("{ roto");
     rmSync(h, { recursive: true, force: true });
   });
 });

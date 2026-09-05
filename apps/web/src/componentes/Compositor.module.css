@@ -57,9 +57,14 @@
   color: var(--dsw-alias-label-tertiary);
 }
 
+/* `justify-content: space-between` desde que la fila tiene DOS cosas: la pastilla del
+   modelo a la izquierda —es un dato, se lee— y el botón de enviar a la derecha, que es
+   donde la referencia lo pone y donde va el pulgar. */
 .controles {
   display: flex;
   align-items: center;
+  justify-content: space-between;
+  gap: 8px;
   padding-bottom: 2px;
 }
 
@@ -119,4 +124,112 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+/* Parar tiene el mismo asiento que enviar —es la misma ranura, otra acción— pero no el
+   mismo color: el azul de marca es «adelante», y esto no lo es. Rojo de estado, que es el
+   alias que ya significa «esto interrumpe algo». */
+.parar {
+  background: var(--dsw-alias-state-error-primary);
+}
+
+/* EL BORDE VIVO MIENTRAS EL AGENTE TRABAJA.
+
+   Es la única señal de que pasa algo en los tramos en que el modelo no habla —piensa,
+   llama tools, espera al verificador— y pueden ser minutos. Antes de esto, la caja
+   apagada y quieta se leía como «se ha colgado».
+
+   Cómo está hecho: un pseudo-elemento que cubre el borde con un gradiente cónico y se
+   recorta con una máscara en XOR, de modo que solo se ve el marco de 1px y no el relleno.
+   El ángulo se anima con `@property`, que es lo que permite interpolar un `<angle>` — sin
+   registrarlo, un `conic-gradient(from …)` no se puede animar y se queda quieto. Donde
+   `@property` no exista (navegadores viejos), el gradiente se pinta igual pero sin girar:
+   sigue habiendo señal, solo que estática. */
+@property --xonecode-angulo {
+  syntax: "<angle>";
+  inherits: false;
+  initial-value: 0deg;
+}
+
+.compositor {
+  position: relative;
+}
+
+/* El resplandor: el marco solo se ve de cerca, y esto es lo que hace que se note desde el
+   otro lado de la mesa. Va por DEBAJO (`::before`, sin `z-index` que mantener) y desenfocado,
+   así que no compite con el texto que se escribe encima. */
+.compositor[data-trabajando]::before {
+  content: "";
+  position: absolute;
+  inset: -3px;
+  border-radius: inherit;
+  background: var(--xonecode-cian);
+  opacity: 0.18;
+  filter: blur(10px);
+  animation: xonecode-latir 2.4s ease-in-out infinite;
+  pointer-events: none;
+}
+
+.compositor[data-trabajando]::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  /* 2px y no 1: a un píxel el destello se pierde en cuanto la pantalla escala. */
+  padding: 2px;
+  /* El arco es más ancho y llega hasta el blanco-cian del splash en la cresta: un destello
+     que solo sube al cian de marca se confunde con el borde de foco del propio campo. */
+  background: conic-gradient(
+    from var(--xonecode-angulo),
+    var(--dsw-alias-border-l2) 0deg,
+    var(--xonecode-cian) 45deg,
+    var(--xonecode-splash-cielo) 90deg,
+    var(--xonecode-cian) 135deg,
+    var(--dsw-alias-border-l2) 220deg,
+    var(--dsw-alias-border-l2) 360deg
+  );
+  /* La máscara deja ver SOLO el marco: pinta la caja entera y le resta el contenido. Los
+     dos gradientes son sólidos —da igual el color, lo que importa es la opacidad— y usan un
+     alias para no escribir un literal. */
+  mask:
+    linear-gradient(var(--dsw-alias-label-primary) 0 0) content-box,
+    linear-gradient(var(--dsw-alias-label-primary) 0 0);
+  mask-composite: exclude;
+  -webkit-mask:
+    linear-gradient(var(--dsw-alias-label-primary) 0 0) content-box,
+    linear-gradient(var(--dsw-alias-label-primary) 0 0);
+  -webkit-mask-composite: xor;
+  animation: xonecode-girar 1.6s linear infinite;
+  /* El marco no puede robar el clic al textarea que cubre. */
+  pointer-events: none;
+}
+
+@keyframes xonecode-girar {
+  to {
+    --xonecode-angulo: 360deg;
+  }
+}
+
+@keyframes xonecode-latir {
+  0%,
+  100% {
+    opacity: 0.12;
+  }
+  50% {
+    opacity: 0.3;
+  }
+}
+
+/* Quien le ha pedido a su sistema que no haya movimiento no puede recibir un borde girando.
+   La señal se queda, quieta: el acento en el marco sigue diciendo «está trabajando», que es
+   lo que hace falta — lo que sobra es el giro. */
+@media (prefers-reduced-motion: reduce) {
+  .compositor[data-trabajando]::after {
+    animation: none;
+    background: var(--xonecode-cian);
+  }
+  .compositor[data-trabajando]::before {
+    animation: none;
+    opacity: 0.18;
+  }
 }

@@ -8,6 +8,11 @@ import "../estilos/scrollbar.css";
 // aparte de `design-platform.css` a propósito: no son tokens de la paleta copiada, son
 // el diseño de marca propio de xonecode — ver `splash.css` para el porqué.
 import "../estilos/splash.css";
+// NUESTRA, y ANTES que nada que la use: la paleta de marca de xonecode y el puente que mete
+// su acento en los alias `--dsw-alias-*` que pinta todo lo demás. Va después de
+// `design-platform.css` a propósito — redefine tres de sus alias, y para eso tiene que
+// llegar la última de las dos.
+import "../estilos/marca.css";
 // Los `--shiki-*` que las vallas de código resaltadas usan (`CodeBlock`, vía
 // `MarkdownText` en `Chat.tsx`): sin este fichero el tema de shiki no tiene de dónde
 // leer color y el texto resaltado sale con lo que el navegador herede, no con la

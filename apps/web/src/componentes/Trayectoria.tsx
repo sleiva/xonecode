@@ -41,6 +41,10 @@ function filasDe(acto: Acto): FilaDeTrayectoria[] {
       return [fila("USUARIO", acto.texto)];
     case "asistente":
       return [fila("ASISTENTE", acto.texto)];
+    case "razonamiento":
+      // La trayectoria es el registro COMPLETO: lo que el modelo pensó también consta, con
+      // su propia etiqueta para no confundirlo con lo que dijo.
+      return [fila("PIENSA", acto.texto)];
     case "herramientas":
       return acto.lineas.map((linea) => fila("TOOL", linea));
     case "sistema":

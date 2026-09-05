@@ -88,3 +88,24 @@
 .etiqueta[data-estado="hecho"] {
   color: var(--dsw-alias-label-secondary);
 }
+
+/* Un paso hecho es un botón para volver a él. Sin fondo ni borde propios: por dentro lleva
+   el MISMO marcador y la misma etiqueta que un paso de solo lectura, así que la progresión
+   no cambia de aspecto por ser pulsable — lo único que la delata es el cursor y el
+   subrayado al pasar por encima. El `padding` a cero es lo que evita que el botón desplace
+   el conector medio píxel respecto a los `<span>` de los otros pasos. */
+.volver {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  border: none;
+  background: none;
+  font: inherit;
+  cursor: pointer;
+}
+
+.volver:hover .etiqueta {
+  text-decoration: underline;
+}

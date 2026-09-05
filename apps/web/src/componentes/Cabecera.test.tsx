@@ -58,4 +58,19 @@ describe("Cabecera", () => {
     montar({ conectado: false });
     expect(screen.getByText("sin conexión")).toBeTruthy();
   });
+
+  /**
+   * La barra superior es la única superficie de MARCA de la pantalla (azul profundo de
+   * XOne, acento cian), y es lo que la hace leerse como el mismo producto que el arranque.
+   * El test mira la clase y no el color: en jsdom los CSS Modules son solo nombres, así que
+   * afirmar el tono aquí sería afirmar lo que este entorno no sabe — quien vigila que no se
+   * cuele un color literal es `Barra.test.tsx`, sobre las hojas.
+   */
+  it("la cabecera lleva la clase de marca ADEMÁS de la copiada, sin sustituirla", () => {
+    montar();
+    const cabecera = document.querySelector("header")!;
+    expect(cabecera.className).toMatch(/barraSuperior/);
+    // Y sigue llevando la de deepseek: la geometría es suya, solo se le pone color encima.
+    expect(cabecera.className.split(/\s+/).length).toBeGreaterThan(1);
+  });
 });

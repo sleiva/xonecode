@@ -12,6 +12,12 @@ export type Acto =
   | { tipo: "usuario"; texto: string }
   | { tipo: "asistente"; texto: string }
   /**
+   * El razonamiento del modelo, si lo publica. Es un acto APARTE de `asistente` porque no
+   * es la respuesta: se pinta distinto (apagado, plegable) y quien lea el transcript tiene
+   * que poder distinguir lo que el modelo pensó de lo que dijo.
+   */
+  | { tipo: "razonamiento"; texto: string }
+  /**
    * Las líneas de tool CONSECUTIVAS de un turno, en un solo acto: son paisaje, y el
    * transcript enseña solo las últimas. Una línea del asistente (o de sistema) cierra el
    * grupo; la siguiente tool abre otro.

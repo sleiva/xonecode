@@ -44,7 +44,22 @@ import estilos from "./Maqueta.module.css";
  */
 const ANCHO_BARRA = 280;
 
-export function Maqueta({ centro, barra }: { centro: ReactNode; barra: ReactNode }) {
+export function Maqueta({
+  centro,
+  barra,
+  barraContraida = false,
+}: {
+  centro: ReactNode;
+  barra: ReactNode;
+  /**
+   * La barra lateral, plegada. La columna se va a CERO y su contenido se desmonta — no se
+   * esconde con `visibility`: una barra invisible sigue siendo tabulable, y se llega con el
+   * teclado a botones que no se ven. Volver a expandirla la vuelve a montar con lo que el
+   * servidor diga en ese momento, que es lo mismo que enseñaría si nunca se hubiera
+   * plegado.
+   */
+  barraContraida?: boolean;
+}) {
   const columna = useRef<HTMLDivElement>(null);
   const [anchoDeColumna, setAnchoDeColumna] = useState(0);
 
@@ -62,9 +77,9 @@ export function Maqueta({ centro, barra }: { centro: ReactNode; barra: ReactNode
   return (
     <div
       className={clsx(marco.frame, estilos.alto)}
-      style={{ gridTemplateColumns: `${ANCHO_BARRA}px minmax(0, 1fr)` }}
+      style={{ gridTemplateColumns: `${barraContraida ? 0 : ANCHO_BARRA}px minmax(0, 1fr)` }}
     >
-      <div className={marco.sidebarCol}>{barra}</div>
+      <div className={marco.sidebarCol}>{barraContraida ? null : barra}</div>
       <div
         ref={columna}
         className={clsx(marco.centerCol, conversacion.root)}

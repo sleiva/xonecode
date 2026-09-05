@@ -9,6 +9,58 @@
    Alias comprobados contra design-platform.css: state-success-primary y
    state-error-primary existen. */
 
+/* LA BARRA SUPERIOR, en los colores de marca (`estilos/marca.css`).
+ *
+ * El diseño la pinta en el azul profundo de XOne con el cian de acento, y es lo que hace
+ * que esta pantalla se lea como el mismo producto que el arranque: el splash ya vive en ese
+ * azul. Lo de debajo (transcript, compositor, barra lateral) sigue claro, como en el
+ * mockup — la barra es la única superficie de marca.
+ *
+ * Va como clase NUESTRA encima de `.header` (copiada de deepseek) en vez de tocar aquella
+ * hoja: las copiadas se conservan tal cual, con su cabecera de atribución, para poder
+ * seguirles la pista. La clase se repite en el selector (`.barraSuperior.barraSuperior`)
+ * para ganar en especificidad sin depender de en qué orden acabe cada hoja en el bundle —
+ * con una sola clase las dos empatan a 0,1,0 y quién gana lo decidiría el empaquetador.
+ */
+.barraSuperior.barraSuperior {
+  background: var(--xonecode-azul);
+  border-bottom: 1px solid var(--xonecode-borde-azul);
+}
+
+/* La hairline de `.header::after` es la separación de la hoja copiada; sobre el azul sobra
+   —ya la pinta el borde de arriba— y con su color claro se veía como una raya. */
+.barraSuperior.barraSuperior::after {
+  display: none;
+}
+
+/* El título y las migas, en blanco: los `label-*` de la paleta son tonos para fondo claro y
+   sobre el azul no se leen. `:disabled` porque la miga actual ES un botón deshabilitado
+   (así lo monta la hoja original) y el navegador le baja el color por su cuenta. */
+.barraSuperior.barraSuperior button:disabled,
+.barraSuperior.barraSuperior [class*="crumb"] {
+  color: var(--xonecode-sobre-azul);
+  -webkit-text-fill-color: var(--xonecode-sobre-azul);
+}
+
+/* Las pestañas: apagadas sobre el azul, y la elegida en cian con su subrayado. El `::after`
+   de `.tabActive` es la barra inferior que pinta la hoja copiada. */
+.barraSuperior.barraSuperior [role="tab"] {
+  color: var(--xonecode-sobre-azul-suave);
+}
+
+.barraSuperior.barraSuperior [role="tab"][aria-selected="true"] {
+  color: var(--xonecode-cian);
+}
+
+.barraSuperior.barraSuperior [role="tab"][aria-selected="true"]::after {
+  background: var(--xonecode-cian);
+}
+
+/* La pastilla de modo, que sobre azul necesita su propio fondo: el suyo es de paleta clara. */
+.barraSuperior.barraSuperior [class*="label"] {
+  color: var(--xonecode-sobre-azul-suave);
+}
+
 .estado {
   display: flex;
   align-items: center;
@@ -36,4 +88,22 @@
 }
 .desconectado .punto {
   background: var(--dsw-alias-state-error-primary);
+}
+
+/* El botón de plegar la barra lateral. Vive aquí y no en la barra —donde lo pone el
+   mockup— porque plegada la barra no está: su botón se iría con ella y no habría por
+   dónde volver. Sobre el azul, en el mismo tono apagado que las pestañas. */
+.plegar {
+  padding: 2px 8px;
+  margin-right: 4px;
+  border: none;
+  border-radius: 6px;
+  background: none;
+  color: var(--xonecode-sobre-azul-suave);
+  font: inherit;
+  cursor: pointer;
+}
+
+.plegar:hover {
+  color: var(--xonecode-sobre-azul);
 }

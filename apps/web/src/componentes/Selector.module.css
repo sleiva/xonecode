@@ -135,3 +135,13 @@
   margin: 0;
   color: var(--dsw-alias-state-error-primary);
 }
+
+/* El motivo por el que se pregunta (o por el que se vuelve a preguntar). Mismo alias que
+   el `.aviso` de `Wizard.module.css` y que el `.fallo` de aquí abajo: los tres son la
+   misma clase de mensaje —algo no salió— y dos colores para eso sería inventar una
+   distinción que no existe. Va pegado al título, encima de las opciones: es la razón de
+   que la lista siga en pantalla. */
+.aviso {
+  margin: 0;
+  color: var(--dsw-alias-state-error-primary);
+}

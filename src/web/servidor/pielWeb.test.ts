@@ -2,13 +2,94 @@ import { describe, it, expect } from "vitest";
 import { crearPielWeb } from "./pielWeb.js";
 
 describe("pielWeb", () => {
-  it("los tokens se solidifican en un acto de asistente al cerrar la línea", () => {
-    const { piel, actos } = crearPielWeb();
+  /**
+   * El texto del asistente se ENSEÑA mientras llega. Antes se guardaba entero en el colchón
+   * y no salía hasta `cerrarLinea`: la respuesta aparecía de golpe tras segundos de pantalla
+   * quieta, con el modelo escribiendo y nadie viéndolo.
+   */
+  it("los tokens se enseñan mientras llegan, sustituyendo el mismo acto", () => {
+    // El reloj entra por parámetro: el ritmo de los parciales no puede depender de lo que
+    // tarde la máquina que corre los tests.
+    let t = 0;
+    const { piel, actos } = crearPielWeb(() => t);
     piel.token("Hola");
+    // El PRIMER token ya sale: es lo que convierte «no pasa nada» en «está escribiendo».
+    expect(actos()).toEqual([{ tipo: "asistente", texto: "Hola" }]);
     piel.token(" mundo");
-    expect(actos()).toHaveLength(0); // aún es colchón
+    // Dentro de la ventana de 80 ms no se emite otra vez —cada emisión manda el acto
+    // entero—, así que el acto sigue siendo uno solo.
+    expect(actos()).toHaveLength(1);
+    t = 100;
+    piel.token(" y más");
+    expect(actos()).toEqual([{ tipo: "asistente", texto: "Hola mundo y más" }]);
+
     piel.cerrarLinea();
-    expect(actos()).toEqual([{ tipo: "asistente", texto: "Hola mundo" }]);
+    // Y el cierre siempre entra, haya pasado el plazo o no: es el trozo que completa la
+    // frase.
+    expect(actos()).toEqual([{ tipo: "asistente", texto: "Hola mundo y más" }]);
+    expect(actos()).toHaveLength(1);
+  });
+
+  it("dos mensajes seguidos son dos actos: el segundo no sustituye al primero", () => {
+    let t = 0;
+    const { piel, actos } = crearPielWeb(() => t);
+    piel.token("uno");
+    piel.cerrarLinea();
+    piel.token("dos");
+    piel.cerrarLinea();
+    expect(actos()).toEqual([
+      { tipo: "asistente", texto: "uno" },
+      { tipo: "asistente", texto: "dos" },
+    ]);
+  });
+
+  it("un `cerrarLinea` sin texto no deja el parcial abierto para el mensaje siguiente", () => {
+    let t = 0;
+    const { piel, actos } = crearPielWeb(() => t);
+    piel.token("uno");
+    piel.cerrarLinea();
+    piel.cerrarLinea(); // sin nada nuevo: no debe cambiar el estado
+    piel.token("dos");
+    piel.cerrarLinea();
+    expect(actos()).toHaveLength(2);
+  });
+
+  /**
+   * El razonamiento va en su PROPIO acto: no es la respuesta, y mezclarlo con ella es lo
+   * que hacía el `String(content)` que el puente dejó de usar.
+   */
+  it("el razonamiento es su propio acto, con el mismo goteo que la respuesta", () => {
+    let t = 0;
+    const { piel, actos } = crearPielWeb(() => t);
+    piel.razonamiento!("Primero ");
+    expect(actos()).toEqual([{ tipo: "razonamiento", texto: "Primero " }]);
+    piel.razonamiento!("miro el fichero");
+    // Dentro de la ventana no se reemite, pero el texto se acumula.
+    t = 100;
+    piel.razonamiento!(".");
+    expect(actos()).toEqual([{ tipo: "razonamiento", texto: "Primero miro el fichero." }]);
+
+    // Y la respuesta va detrás, en su acto, sin arrastrar lo pensado.
+    piel.token("Hecho");
+    piel.cerrarLinea();
+    expect(actos()).toEqual([
+      { tipo: "razonamiento", texto: "Primero miro el fichero." },
+      { tipo: "asistente", texto: "Hecho" },
+    ]);
+  });
+
+  it("un acto por medio corta el razonamiento: el bloque siguiente empieza de cero", () => {
+    let t = 0;
+    const { piel, actos } = crearPielWeb(() => t);
+    piel.razonamiento!("pienso una cosa");
+    piel.linea("read_file  src/app.xne");
+    piel.razonamiento!("y otra");
+    expect(actos()).toEqual([
+      { tipo: "razonamiento", texto: "pienso una cosa" },
+      { tipo: "herramientas", lineas: ["read_file  src/app.xne"] },
+      // «y otra», no «pienso una cosay otra»: entre medias pasó algo.
+      { tipo: "razonamiento", texto: "y otra" },
+    ]);
   });
 
   it("las líneas de tool consecutivas van en UN acto de herramientas", () => {

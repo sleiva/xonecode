@@ -11,7 +11,7 @@ afterEach(cleanup);
  * prop, como las sugerencias del `Compositor`. Los tres entornos son los que devuelve
  * `vestibulo.ts#opcionesDeEntorno`, y el de URL VACÍA es el «otro» —así lo declara
  * `ENTORNO_OTRO` («url vacía = el usuario la teclea»)—, que es lo que el wizard usa para
- * saber cuándo pedir nombre y URL en vez de darlos por sabidos.
+ * saber cuándo la URL se teclea en vez de darla por sabida.
  */
 const manejadores = {
   proveedores: [
@@ -102,7 +102,7 @@ describe("Wizard", () => {
       fireEvent.change(screen.getByLabelText(/url del mcp/i), { target: { value: url } });
       fireEvent.click(screen.getByRole("button", { name: /registrar/i }));
       expect(screen.queryByRole("alert"), url).toBeNull();
-      expect(alRegistrarEntorno).toHaveBeenCalledWith({ id: "webstudio", nombre: "XOne WebStudio", url });
+      expect(alRegistrarEntorno).toHaveBeenCalledWith({ id: "", nombre: "", url });
       cleanup();
     }
   });
@@ -119,24 +119,31 @@ describe("Wizard", () => {
     }
   });
 
-  it("registrar un entorno «otro» pide nombre y URL, y los dos oficiales no", () => {
+  /**
+   * El paso de entorno es UN campo libre: ni desplegable de entornos ni campo de nombre.
+   * Un desplegable con «los dos oficiales y otro» obligaba a clasificar antes de escribir
+   * —el on-premise se registraba por un camino distinto del de WebStudio siendo la misma
+   * operación—, y el nombre a mano era un dato inventado que después hay que creerse en la
+   * barra y en la ruta de la copia local. Id y nombre los deduce el servidor
+   * (`vestibulo.ts#identidadDeEntorno`), y el nombre lo mejora con el `serverInfo` del MCP
+   * en cuanto se conecta.
+   */
+  it("el paso de entorno es un editor libre: solo la URL, sin desplegable ni nombre", () => {
     const alRegistrarEntorno = vi.fn();
     render(<Wizard pasos={["entorno"]} {...manejadores} alRegistrarEntorno={alRegistrarEntorno} />);
     expect(screen.queryByLabelText(/nombre/i)).toBeNull();
-    fireEvent.change(screen.getByLabelText(/^entorno/i), { target: { value: "otro" } });
-    expect(screen.getByLabelText(/nombre/i)).toBeTruthy();
-    expect((screen.getByLabelText(/url del mcp/i) as HTMLInputElement).value).toBe("");
-    fireEvent.change(screen.getByLabelText(/nombre/i), { target: { value: "Casa" } });
+    expect(screen.queryByRole("combobox")).toBeNull();
     fireEvent.change(screen.getByLabelText(/url del mcp/i), { target: { value: "https://mcp.casa.local/mcp" } });
     fireEvent.click(screen.getByRole("button", { name: /registrar/i }));
-    expect(alRegistrarEntorno).toHaveBeenCalledWith({ id: "otro", nombre: "Casa", url: "https://mcp.casa.local/mcp" });
+    // Ni id ni nombre: por el cable viaja la URL y nada más.
+    expect(alRegistrarEntorno).toHaveBeenCalledWith({ id: "", nombre: "", url: "https://mcp.casa.local/mcp" });
   });
 
-  it("elegir el entorno oficial rellena su URL: no hay que teclear lo que ya se sabe", () => {
+  it("el campo arranca en la URL oficial, y no en un literal escrito en el cliente", () => {
+    // Viene de `entornos[0]`, o sea del cable: la dirección vive en
+    // `agent/cloudstudioMcp.ts` y aquí no hay una segunda copia que se quede vieja.
     render(<Wizard pasos={["entorno"]} {...manejadores} />);
     expect((screen.getByLabelText(/url del mcp/i) as HTMLInputElement).value).toBe("https://webstudio.xone.es/mcp");
-    fireEvent.change(screen.getByLabelText(/^entorno/i), { target: { value: "manager" } });
-    expect((screen.getByLabelText(/url del mcp/i) as HTMLInputElement).value).toBe("https://mcp.xonemanager.com/mcp");
   });
 
   it("sin pasos pendientes no pinta nada: el alta no es una pantalla que visitar por gusto", () => {

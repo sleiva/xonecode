@@ -55,6 +55,42 @@ describe("clienteCloudStudio", () => {
     expect(falso.llamadas).toHaveLength(3);
   });
 
+  /**
+   * La forma que se colaba, MEDIDA contra el servidor real: la sesión caída llega como una
+   * respuesta CORRECTA cuyo texto empieza por «Error: No project is open». Sin mirar el
+   * resultado, la reapertura no se disparaba y ese texto seguía camino hasta el `JSON.parse`
+   * de quien llamó — y lo que se veía en la interfaz era «Unexpected token 'E'»: un fallo de
+   * sesión disfrazado de fallo de formato.
+   */
+  it("reabre también cuando la sesión caída viene como TEXTO de una respuesta correcta", async () => {
+    const falso = clienteFalso([
+      { content: [{ type: "text", text: "Error: No project is open. Use studio_open_project first." }] },
+      { status: "project_open" },
+      { content: [{ type: "text", text: '[{"Key":"master"}]' }] },
+    ]);
+    expect(await clienteCloudStudio(falso.invocar, "AppForTest").ramas()).toEqual(["master"]);
+    expect(falso.llamadas.map((l) => l.nombre)).toEqual([
+      "studio_manage_branches", "studio_open_project", "studio_manage_branches",
+    ]);
+  });
+
+  it("si tras reabrir el TEXTO sigue diciendo lo mismo, se lanza nombrando la tool", async () => {
+    const perdida = { content: [{ type: "text", text: "Error: No project is open." }] };
+    const falso = clienteFalso([perdida, { status: "project_open" }, perdida]);
+    await expect(clienteCloudStudio(falso.invocar, "AppForTest").ramas())
+      .rejects.toThrow(/studio_manage_branches.*no hay proyecto abierto.*AppForTest/s);
+  });
+
+  /**
+   * Un `JSON.parse` a pelo producía un `SyntaxError` que no nombraba ni la tool ni el
+   * contexto. El error que llega al usuario tiene que decir quién contestó y con qué.
+   */
+  it("una respuesta que no es JSON falla nombrando la tool y enseñando una muestra", async () => {
+    const falso = clienteFalso([{ content: [{ type: "text", text: "<html>500</html>" }] }]);
+    await expect(clienteCloudStudio(falso.invocar, "AppForTest").ramas())
+      .rejects.toThrow(/studio_manage_branches no devolvió JSON: «<html>500<\/html>»/);
+  });
+
   it("desenvuelve el bloque de texto del SDK", async () => {
     const falso = clienteFalso([{ content: [{ type: "text", text: "hola" }] }]);
     expect(await clienteCloudStudio(falso.invocar, "AppForTest").leerTexto("a.js")).toBe("hola");

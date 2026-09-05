@@ -33,10 +33,23 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import type { Acto } from "../../core/actos.js";
-import { PROVEEDORES, resolver, type FuentesDeEleccion } from "../../core/modelos.js";
+import {
+  parsear,
+  PROVEEDORES,
+  resolver,
+  SIN_CREDENCIAL,
+  type FuentesDeEleccion,
+  type Proveedor,
+} from "../../core/modelos.js";
 import { COMANDOS, hayCredencial, type Consola, type EjecutorDeTurno } from "../../cli/consola.js";
-import { aplicarAuth, cargar, guardarModeloGlobal } from "../../agent/configEnDisco.js";
-import { guardarCredencial } from "../../agent/authEnDisco.js";
+import { motivoDeClaveInaceptable } from "../../core/config.js";
+import {
+  aplicarAuth,
+  aplicarCredencialAlProceso,
+  cargar,
+  guardarModeloGlobal,
+} from "../../agent/configEnDisco.js";
+import { borrarCredencial, guardarCredencial } from "../../agent/authEnDisco.js";
 import { cargarSettings, guardarEntorno as guardarEntornoEnDisco } from "../../agent/settingsEnDisco.js";
 import { abrirEnSistema } from "../../agent/cloudstudioMcp.js";
 import { nombreDePersona } from "../../agent/persona.js";
@@ -86,12 +99,39 @@ export function comandosDelRegistro(): { nombre: string; descripcion: string }[]
 interface DestinoDelCable {
   recibir(mensaje: MensajeDelCliente): void;
   conectar(enviar?: Sumidero): readonly Acto[];
-  desconectar(): void;
+  /** Con sumidero se va ESE cliente; sin él, todos (es lo que hace mudarse de consola). */
+  desconectar(enviar?: Sumidero): void;
 }
 
 export interface OpcionesDeMontaje {
   /** A dónde van los avisos que no caben en el transcript. Por omisión, a ningún sitio. */
   informar?: (texto: string) => void;
+  /**
+   * ¿Está confirmada la credencial de ese proveedor? Por omisión NADIE la tiene, que es la
+   * dirección honesta: decir «puesta» sin haberlo comprobado es pintar un punto verde que
+   * no significa nada. Los que no necesitan credencial (`SIN_CREDENCIAL`) no pasan por
+   * aquí.
+   */
+  hayCredencial?: (proveedor: Proveedor) => boolean;
+  /** ¿Está esa credencial en `auth.json`? Solo esas se pueden borrar desde la interfaz. */
+  credencialEnFichero?: (proveedor: Proveedor) => boolean;
+  /**
+   * Borra la credencial de `auth.json`. Ausente = esta ejecución no puede borrar, y la
+   * interfaz no ofrece el botón en vez de ofrecer uno que no hace nada.
+   */
+  borrarCredencial?: (proveedor: Proveedor) => { ruta: string; borrada: boolean; quedaEnEntorno: boolean };
+  /**
+   * Escribe la credencial en `auth.json`. Entra por opción y no se importa aquí por lo
+   * mismo que todo lo que toca el disco en este repo: un valor por omisión que escribiera
+   * de verdad convertiría cualquier test de este cable en una escritura en el
+   * `~/.xonecode` de quien los corre.
+   */
+  guardarCredencial?: (proveedor: Proveedor, clave: string) => { ruta: string };
+  /**
+   * El catálogo VIVO de un proveedor. Ausente = esta ejecución no puede consultarlo, y el
+   * menú lo dice en vez de quedarse cargando para siempre.
+   */
+  catalogoDeModelos?: (proveedor: Proveedor) => Promise<{ id: string; nombre?: string }[]>;
 }
 
 /**
@@ -107,9 +147,18 @@ export function montarRutas(
   opciones: OpcionesDeMontaje = {}
 ): void {
   const informar = opciones.informar ?? (() => {});
+  const hayCredencialDe = opciones.hayCredencial ?? (() => false);
 
-  /** El sumidero del cliente vivo. `undefined` = no hay nadie al otro lado. */
-  let enviar: Sumidero | undefined;
+  /** Los tres estados que se pueden AFIRMAR de una credencial. Ver `ProveedorDeModelos`. */
+  const credencialDe = (proveedor: Proveedor): "puesta" | "falta" | "nativa" =>
+    SIN_CREDENCIAL.has(proveedor) ? "nativa" : hayCredencialDe(proveedor) ? "puesta" : "falta";
+
+  /**
+   * Los clientes vivos. Fue una sola ranura y era un fallo: el último en conectar dejaba
+   * mudos a los anteriores sin decírselo —medido con una pestaña local y otra por un túnel—.
+   * Emitir es escribirle a todos; el transporte hace lo mismo por su lado.
+   */
+  const clientes = new Set<Sumidero>();
   /**
    * La consola a la que está ENGANCHADO el cable ahora mismo. No se recalcula al cerrar:
    * hay que desconectar la que se conectó, no la que sea la actual en ese momento — entre
@@ -132,6 +181,11 @@ export function montarRutas(
    * por «hecho» un paso que en realidad ni se había contestado ni se iba a volver a
    * ofrecer, y el usuario se quedaba con el modelo por omisión sin que nada se lo dijera.
    */
+  /**
+   * Si hay turno en vuelo AHORA. Se lleva aquí, además de emitirse, porque quien conecta a
+   * mitad de turno tiene que enterarse: el mensaje que lo anunció ya pasó.
+   */
+  let turnoEnVuelo = false;
   let cuentaHecha = false;
   /**
    * El propio `pasoDeCuenta()` en vuelo, compartido entre conexiones. Sin esto, dos
@@ -152,7 +206,9 @@ export function montarRutas(
 
   const destinoActual = (): DestinoDelCable => vestibulo.proyectoAbierto() ?? vestibulo.consola;
 
-  const emitir = (mensaje: MensajeAlCliente): void => enviar?.(mensaje);
+  const emitir = (mensaje: MensajeAlCliente): void => {
+    for (const cliente of clientes) cliente(mensaje);
+  };
 
   /**
    * El mensaje de alta: qué falta, y con qué elegirlo.
@@ -183,6 +239,24 @@ export function montarRutas(
     // puede escribirlo después de abrir (el alta de un proyecto cloud), y una copia
     // tomada antes se quedaría diciendo lo de antes.
     const modo = abierto === undefined ? undefined : modoDeProyecto(abierto.raiz);
+    // CUÁL es el abierto, deducido de su raíz: la que le tocaría a cada proyecto de la
+    // lista se calcula con la misma función que la creó. Guardar el id aparte al abrirlo
+    // sería una segunda fuente de verdad que se queda vieja el día que alguien abra por
+    // otro camino.
+    // El `entorno` se copia a una constante porque TypeScript no puede saber que
+    // `entornoElegido` —una variable del cierre, que otro mensaje puede cambiar— sigue
+    // definida dentro del callback.
+    const entorno = entornoElegido;
+    const activo =
+      abierto === undefined || entorno === undefined
+        ? undefined
+        : proyectos.find((p) => {
+            try {
+              return vestibulo.raizDeProyecto(entorno, p.nombre) === abierto.raiz;
+            } catch {
+              return false;
+            }
+          })?.id;
     const pendientes = proyectoAbierto ? [] : await vestibulo.pasosPendientes();
     const pasos: PasoDelVestibulo[] = pendientes.includes("entorno") ? ["entorno"] : [];
     emitir({
@@ -190,25 +264,120 @@ export function montarRutas(
       pasos,
       proveedores: PROVEEDORES.map((p) => ({ id: p, nombre: p })),
       entornos: [...vestibulo.opcionesDeEntorno()],
-      proyectos,
+      // Los registrados de verdad, además de los ofrecidos: la ventana de ajustes los
+      // lista, y la barra lateral llevaba enseñando la lista OFRECIDA como si fuera ésta.
+      registrados: vestibulo.entornosRegistrados().map((e) => ({
+        id: e.id,
+        nombre: e.nombre,
+        url: e.url,
+        // Solo si el entorno lo dice: ausente es «no lo he elegido», y el cliente aplica su
+        // omisión. Mandar `[]` en su lugar sería decir «ninguno», que es otra cosa.
+        ...(e.proyectos === undefined ? {} : { proyectos: [...e.proyectos] }),
+      })),
+      // Cada proyecto con las sesiones de su copia local. Se recalcula en cada anuncio: una
+      // sesión nueva aparece en cuanto se abre, sin que nadie recargue.
+      proyectos: proyectos.map((p) => {
+        const sesiones = entornoElegido === undefined ? [] : sesionesDelProyecto(p.nombre);
+        return {
+          ...p,
+          ...(sesiones.length === 0 ? {} : { sesiones }),
+          // Si ya está bajado, abrirlo no necesita ni rama ni descarga: es lo que decide
+          // qué enseña la ventana de sesión nueva, y decidirlo en el cliente exigiría
+          // que supiera dónde vive la copia local.
+          ...(hayCopiaLocal(p.nombre) ? { local: true } : {}),
+        };
+      }),
       ramas,
       proyectoAbierto,
       ...(modo === undefined ? {} : { modo }),
+      ...(entornoElegido === undefined ? {} : { entornoActivo: entornoElegido }),
+      ...(activo === undefined ? {} : { proyectoActivo: activo }),
+      ...(abierto?.sesion === undefined ? {} : { sesionActiva: abierto.sesion }),
       ...(vestibulo.nombre === undefined ? {} : { nombre: vestibulo.nombre }),
       ...(aviso === undefined ? {} : { aviso }),
     });
   };
 
-  /** Engancha el cable a la consola que toque, con el transcript entero por delante. */
-  const adjuntar = (): void => {
+  /**
+   * Los catálogos ya consultados en ESTE proceso, por proveedor. Se guardan porque cada
+   * uno es una llamada de red: abrir el menú dos veces no la repite. Un fallo también se
+   * recuerda —como fallo— hasta que alguien lo vuelva a pedir a propósito.
+   */
+  const catalogos = new Map<string, { modelos?: { id: string; nombre?: string }[]; error?: string }>();
+
+  /**
+   * El estado de modelos: qué está en vigor y qué se puede elegir.
+   *
+   * `actual` sale del estado de sesión de la consola ABIERTA y de ningún sitio más. Sin
+   * proyecto abierto no hay sesión y por tanto no hay modelo que afirmar: el campo se va
+   * y el cliente pinta «Elige modelo» en vez de una fila muerta.
+   */
+  const emitirModelos = (): void => emitir(mensajeDeModelos());
+
+  /** El mensaje de modelos, compuesto pero sin mandar: `adjuntar` se lo da SOLO al cliente
+   *  que acaba de llegar, y el resto de sitios lo emite a todos. */
+  const mensajeDeModelos = (): MensajeAlCliente => {
+    const abierto = vestibulo.proyectoAbierto();
+    const trabajo = abierto === undefined ? undefined : resolver(abierto.estadoDeSesion.fuentes).trabajo;
+    return {
+      clase: "modelos",
+      ...(trabajo === undefined ? {} : { actual: `${trabajo.proveedor}/${trabajo.modelo}` }),
+      proveedores: PROVEEDORES.map((p) => ({
+        id: p,
+        credencial: credencialDe(p),
+        // Solo se marca lo que se puede afirmar: sin puerto para mirarlo, no se dice que
+        // esté en el fichero (y la interfaz no ofrecerá borrarla).
+        ...(opciones.credencialEnFichero?.(p) === true && opciones.borrarCredencial !== undefined
+          ? { enFichero: true }
+          : {}),
+        ...(catalogos.get(p) ?? {}),
+      })),
+    };
+  };
+
+  /**
+   * Engancha el cable a la consola que toque, con el transcript entero por delante.
+   *
+   * **La invariante es que TODOS los clientes vivos están registrados en `adjunto`**, y por
+   * eso hay dos casos y no uno:
+   *
+   * - Llega un cliente nuevo (`recien`): se registra ÉL en la consola actual y la ráfaga
+   *   —transcript, comandos, modelos— es suya sola. Mandársela a todos repetiría el
+   *   transcript en las pestañas que ya lo tienen.
+   * - Cambia la consola (se abre un proyecto): se registran TODOS los clientes en la nueva
+   *   y la ráfaga va a todos, porque todos cambian de transcript.
+   *
+   * Registrar solo al recién llegado en el primer caso y a nadie en el segundo fue un fallo
+   * MEDIDO: al abrir un proyecto, la consola nueva se quedaba sin ningún sumidero, así que
+   * el turno corría —el agente trabajaba de verdad— y no salía nada por pantalla. Escribir
+   * y que no pasara nada.
+   */
+  const adjuntar = (recien?: Sumidero): void => {
     const destino = destinoActual();
-    if (adjunto !== undefined && adjunto !== destino) adjunto.desconectar();
+    const cambiaDeConsola = adjunto !== destino;
+    if (adjunto !== undefined && cambiaDeConsola) adjunto.desconectar();
     adjunto = destino;
-    const actos = destino.conectar(enviar);
-    // El orden importa: primero el transcript, luego lo que el compositor necesita para
-    // sugerir, y al final lo que el wizard tiene que pedir.
-    emitir({ clase: "reemision", actos: [...actos] });
-    emitir({ clase: "comandos", comandos: comandosDelRegistro() });
+
+    // A quién hay que registrar y a quién hay que darle la ráfaga: al recién llegado, o a
+    // todos si lo que cambió fue la consola.
+    const destinatarios = recien !== undefined ? [recien] : cambiaDeConsola ? [...clientes] : [];
+    let actos: readonly Acto[] = destino.conectar();
+    for (const cliente of destinatarios) actos = destino.conectar(cliente);
+
+    const modelos = mensajeDeModelos();
+    for (const cliente of destinatarios) {
+      // El orden importa: primero el transcript, luego lo que el compositor necesita para
+      // sugerir, y al final el estado de modelos que pinta su disparador. Al reconectar se
+      // manda entero: el cliente tira sus proyecciones al caerse el SSE
+      // (`store.ts#marcarDesconectado`), así que hay que repoblarlas.
+      cliente({ clase: "reemision", actos: [...actos] });
+      cliente({ clase: "comandos", comandos: comandosDelRegistro() });
+      cliente(modelos);
+      // Y si hay turno corriendo, se dice: quien conecta a mitad no vio el mensaje que lo
+      // anunció, y sin esto vería el compositor encendido y sin borde —«no pasa nada»—
+      // mientras lo que escribiera se quedaba en la cola.
+      cliente({ clase: "turno", activo: turnoEnVuelo });
+    }
   };
 
   /**
@@ -216,19 +385,37 @@ export function montarRutas(
    * suelto (no se espera) porque el manejador del SSE tiene que devolver para que el
    * navegador reciba las preguntas que este asistente va a emitir.
    */
-  const conducirCuenta = async (): Promise<void> => {
+  const conducirCuenta = async (porPeticion = false): Promise<void> => {
     const pendientes = await vestibulo.pasosPendientes();
-    if (!pendientes.includes("cuenta") || cuentaHecha || vestibulo.proyectoAbierto() !== undefined) return;
+    // Que este alta NO conduzca el modelo es distinto de que ya esté conducido: lo primero
+    // pasa cuando el modelo viene de fuera (una bandera, la config global) y entonces no
+    // hay nada que volver a preguntar. Callarlo dejaría un botón «Modelo ✓» que al pulsarlo
+    // no hace nada — el fallo mudo de siempre.
+    const noProcede = !pendientes.includes("cuenta") || vestibulo.proyectoAbierto() !== undefined;
+    if (noProcede && porPeticion) {
+      aviso =
+        "el modelo de esta sesión no lo decide el alta: viene de una bandera o de la configuración. Cámbialo con «/modelo» cuando entres.";
+      informar(aviso);
+    }
+    if (noProcede || cuentaHecha) return;
     if (cuentaEnCurso === undefined) {
-      cuentaEnCurso = vestibulo.pasoDeCuenta().finally(() => {
-        cuentaEnCurso = undefined;
-        // «Hecho» solo si al terminar seguía habiendo alguien conectado. Si terminó
-        // porque `desconectar()` canceló la elección en curso (`consolaWeb.ts:178`,
-        // sin cliente todo lo pendiente responde como un readline cerrado), no lo
-        // decidió ningún humano — fue el silencio — y la SIGUIENTE conexión tiene que
-        // poder intentarlo de verdad, no heredar un «ya se preguntó» que nadie contestó.
-        if (!(vestibulo.consola.consola.eof?.() ?? false)) cuentaHecha = true;
-      });
+      cuentaEnCurso = vestibulo
+        .pasoDeCuenta()
+        .then((resultado) => {
+          // «Hecho» solo si de verdad se resolvió. `cancelado` es lo que devuelve el
+          // asistente cuando ya no queda nadie a quien preguntar —con `exigirEleccion`
+          // no sale por cancelar, solo por `eof()`—, o sea el silencio de una pestaña
+          // que se fue a mitad del selector: la SIGUIENTE conexión tiene que poder
+          // intentarlo de verdad, no heredar un «ya se preguntó» que nadie contestó.
+          //
+          // `sin-preguntar` SÍ cuenta como hecho: significa que no había nada que
+          // preguntar (la piel no tiene selector, o ya había elección). Tratarlo como
+          // pendiente dejaría fuera para siempre a quien no puede contestar.
+          if (resultado !== "cancelado") cuentaHecha = true;
+        })
+        .finally(() => {
+          cuentaEnCurso = undefined;
+        });
     }
     await cuentaEnCurso;
   };
@@ -269,11 +456,232 @@ export function montarRutas(
     }
   };
 
+  /**
+   * «Dime qué sirve este proveedor.» Una llamada de red por proveedor, cacheada, y el
+   * fallo de uno se guarda como suyo: el menú lo lista inservible y los demás siguen
+   * elegibles. Nunca lanza — quien pide un catálogo no puede tumbar el cable.
+   */
+  const atenderCatalogo = async (proveedor: string): Promise<void> => {
+    if (!(PROVEEDORES as readonly string[]).includes(proveedor)) return;
+    const id = proveedor as Proveedor;
+    if (opciones.catalogoDeModelos === undefined) {
+      catalogos.set(id, { error: "esta ejecución no puede consultar catálogos de modelos" });
+      emitirModelos();
+      return;
+    }
+    try {
+      const modelos = await opciones.catalogoDeModelos(id);
+      catalogos.set(id, { modelos: modelos.map((m) => ({ id: m.id, ...(m.nombre === undefined ? {} : { nombre: m.nombre }) })) });
+    } catch (error) {
+      // `ErrorCatalogoModelos` es publicable por contrato: nunca lleva la clave ni el
+      // cuerpo remoto (`agent/catalogoModelos.ts`).
+      catalogos.set(id, { error: error instanceof Error ? error.message : String(error) });
+    }
+    emitirModelos();
+  };
+
+  /**
+   * Las sesiones guardadas de un proyecto de este entorno. Sin entorno elegido no hay raíz
+   * que calcular, y sin copia local la lista es vacía — que es la verdad, no un fallo.
+   */
+  const sesionesDelProyecto = (nombre: string): { id: string; titulo: string }[] => {
+    if (entornoElegido === undefined) return [];
+    try {
+      return vestibulo.sesionesDe(vestibulo.raizDeProyecto(entornoElegido, nombre));
+    } catch {
+      return [];
+    }
+  };
+
+  /** ¿Existe ya la copia local de ese proyecto? Es `.xonecode/config.json` en su raíz: lo
+   *  que `completarProyecto` escribe ENTERO antes de bajar nada. */
+  const hayCopiaLocal = (nombre: string): boolean => {
+    if (entornoElegido === undefined) return false;
+    try {
+      return existsSync(join(vestibulo.raizDeProyecto(entornoElegido, nombre), ".xonecode", "config.json"));
+    } catch {
+      return false;
+    }
+  };
+
+  /**
+   * Cambiar de entorno activo: el de cuyos proyectos se habla. Trae su listado consigo
+   * —eso es una conexión con CloudStudio— y limpia lo del anterior: dejar los proyectos del
+   * entorno viejo bajo el nombre del nuevo sería la peor mentira posible en esta barra.
+   */
+  const atenderEntornoActivo = async (entorno: string): Promise<void> => {
+    aviso = undefined;
+    try {
+      const nuevos = await vestibulo.proyectosDe(entorno);
+      entornoElegido = entorno;
+      proyectoElegido = undefined;
+      ramas = [];
+      proyectos = nuevos;
+    } catch (error) {
+      // `entornoElegido` NO se toca si falla: con un token muerto o la red caída, seguir
+      // enseñando lo del entorno anterior es la verdad, y el aviso dice qué pasó.
+      aviso = error instanceof Error ? error.message : String(error);
+      contar(error);
+    } finally {
+      await anunciarAlta().catch(contar);
+    }
+  };
+
+  /**
+   * Abrir una sesión: la nombrada, o una nueva.
+   *
+   * Con copia local ya bajada no hay nada que dar de alta —ni rama que preguntar—, así que
+   * se abre directamente y el cable se muda a su consola. Sin copia local se cae al camino
+   * del alta, que es el único que sabe bajarla: se contestan las ramas y el cliente elige.
+   */
+  const atenderSesion = async (peticion: Extract<MensajeDelCliente, { clase: "sesion" }>): Promise<void> => {
+    aviso = undefined;
+    try {
+      if (entornoElegido === undefined) {
+        aviso = "elige antes el entorno del que sale el proyecto";
+        informar(aviso);
+        return;
+      }
+      const identidad = proyectos.find((p) => p.id === peticion.proyecto);
+      const nombre = identidad?.nombre ?? peticion.proyecto;
+      const raiz = vestibulo.raizDeProyecto(entornoElegido, nombre);
+      if (!existsSync(join(raiz, ".xonecode", "config.json"))) {
+        // Todavía no está bajado: el alta es quien sabe hacerlo, y necesita la rama.
+        proyectoElegido = peticion.proyecto;
+        // La identidad ENTERA, no el id: el servidor abre por nombre. `identidad` ya está
+        // resuelta unas líneas más arriba contra el listado.
+        ramas = await vestibulo.ramasDe(entornoElegido, identidad ?? peticion.proyecto);
+        return;
+      }
+      await vestibulo.abrirProyecto({ raiz, ...(peticion.sesion === undefined ? {} : { sesion: peticion.sesion }) });
+      // El cable se muda a la consola del proyecto, como en el alta: sin esto el usuario
+      // mira un transcript vivo cuyas aprobaciones se rechazan solas al otro lado.
+      adjuntar();
+    } catch (error) {
+      aviso = error instanceof Error ? error.message : String(error);
+      contar(error);
+    } finally {
+      await anunciarAlta().catch(contar);
+    }
+  };
+
+  /**
+   * «Ponme este modelo.»
+   *
+   * Lo que llega del cliente es la intención —`proveedor/modelo`— y no un comando: la
+   * interfaz no habla en la sintaxis de otra piel ni se apunta actos de usuario que nadie
+   * tecleó. Aplicarlo SÍ reusa el manejador de `/modelo` (`COMANDOS`, `cli/consola.ts`),
+   * porque la precedencia entre banderas, ficheros y elecciones en caliente vive ahí y una
+   * segunda implementación divergiría el primer día. Se encola la línea en el lazo, que es
+   * el único que puede adoptar el estado nuevo, y el acuse que escribe el manejador es lo
+   * que el usuario ve.
+   *
+   * Sin proyecto abierto no hay lazo, y se dice: el disparador vive en el compositor, que
+   * solo existe con sesión, pero un mensaje que llegara igual no puede quedarse en una cola
+   * que nadie lee.
+   */
+  const atenderModelo = (id: string): void => {
+    try {
+      parsear(id);
+    } catch (error) {
+      informar(error instanceof Error ? error.message : String(error));
+      return;
+    }
+    const abierto = vestibulo.proyectoAbierto();
+    if (abierto === undefined) {
+      informar("no hay ninguna sesión abierta a la que cambiarle el modelo");
+      return;
+    }
+    abierto.consola.encolar(`/modelo ${id}`);
+  };
+
+  /**
+   * Pide la clave de un proveedor y la guarda, con la MISMA disciplina que el asistente de
+   * cuenta: la criba de balde primero (`motivoDeClaveInaceptable`), y nada se escribe si no
+   * pasa. La pregunta sale por la consola a la que está enganchado el cable —la del
+   * proyecto si hay uno, la del vestíbulo si no—, así que llega como `clase: "secreto"` y
+   * la clave vuelve por ese mismo mensaje y por ninguno más.
+   *
+   * Lo que NO se hace aquí es probarla contra el catálogo antes de escribir, como sí hace
+   * el alta: ahí la elección de modelo obliga a listar de todos modos, y aquí el usuario
+   * puede estar poniendo la clave de un proveedor que no va a usar todavía. El menú del
+   * compositor la probará cuando toque, y su error se enseña donde se elige.
+   */
+  const pedirCredencial = async (proveedor: Proveedor): Promise<void> => {
+    if (opciones.guardarCredencial === undefined) {
+      informar("esta ejecución no puede guardar credenciales");
+      return;
+    }
+    const consola = vestibulo.proyectoAbierto()?.consola.consola ?? vestibulo.consola.consola;
+    const clave = (await consola.leerSecreto(`clave de ${proveedor}: `)).trim();
+    // Cadena vacía es lo que responde una consola sin nadie al otro lado, y también el
+    // usuario que da a Enter sin escribir: en los dos casos no se guarda nada y no se dice
+    // nada más — quien canceló no necesita un sermón.
+    if (clave === "") return;
+    const motivo = motivoDeClaveInaceptable(clave);
+    if (motivo !== undefined) {
+      informar(`no se guardó nada: ${motivo}`);
+      return;
+    }
+    try {
+      const { ruta } = opciones.guardarCredencial(proveedor, clave);
+      informar(`credencial de ${proveedor} guardada en ${ruta}`);
+    } catch (error) {
+      informar(error instanceof Error ? error.message : String(error));
+    }
+    emitirModelos();
+  };
+
+  /**
+   * Borrar una credencial. Se DICE lo que pasó por el transcript —incluido el caso en que
+   * el fichero ya no la tenía— y se reemite el estado de modelos, que es lo que repinta el
+   * punto. Si la variable de entorno la sigue llevando, eso también se dice: el punto se
+   * quedará verde y callarlo parecería un fallo del botón.
+   */
+  const atenderCredencial = (mensaje: Extract<MensajeDelCliente, { clase: "credencial" }>): void => {
+    if (!(PROVEEDORES as readonly string[]).includes(mensaje.proveedor)) return;
+    const proveedor = mensaje.proveedor as Proveedor;
+    if (mensaje.accion === "pedir") {
+      void pedirCredencial(proveedor).catch(contar);
+      return;
+    }
+    if (opciones.borrarCredencial === undefined) {
+      informar("esta ejecución no puede borrar credenciales");
+      return;
+    }
+    try {
+      const { ruta, borrada, quedaEnEntorno } = opciones.borrarCredencial(proveedor);
+      informar(
+        borrada
+          ? `credencial de ${proveedor} borrada de ${ruta}`
+          : `${proveedor} no tenía credencial en ${ruta}`
+      );
+      if (quedaEnEntorno) {
+        informar(`ojo: ${proveedor} sigue con credencial puesta por una variable de entorno`);
+      }
+    } catch (error) {
+      informar(error instanceof Error ? error.message : String(error));
+    }
+    emitirModelos();
+  };
+
   /** Un paso del alta resuelto en el navegador. Cada rama termina volviendo a anunciar. */
   const atenderAlta = async (mensaje: Extract<MensajeDelCliente, { clase: "alta" }>): Promise<void> => {
     // Se limpia al empezar: un aviso viejo pegado a un paso que ya salió bien mentiría.
     aviso = undefined;
     try {
+      if (mensaje.paso === "cuenta") {
+        // Volver al paso de modelo desde la progresión del alta. Se re-arma `cuentaHecha`
+        // —lo que impide preguntar dos veces es justo esa marca— y se relanza el asistente
+        // SUELTO: pintarlo es cosa suya (`selector` y `secreto`), y el `POST` no puede
+        // quedarse abierto mientras un humano elige. Cuando termine, `anunciarAlta` cuenta
+        // cómo quedó todo.
+        cuentaHecha = false;
+        void conducirCuenta(true)
+          .catch(contar)
+          .finally(() => void anunciarAlta().catch(contar));
+        return;
+      }
       if (mensaje.paso === "entorno") {
         const elegido = mensaje.entorno;
         if (elegido === undefined || elegido.url.trim() === "") {
@@ -288,11 +696,19 @@ export function montarRutas(
         // `proyectosDe` siguiente moría con «el entorno no está registrado». Registrar dos
         // veces no cuesta nada: en disco `guardarEntorno` sustituye por id y en memoria el
         // vestíbulo hace lo mismo.
-        await vestibulo.registrarEntorno({ id: elegido.id, nombre: elegido.nombre, url: elegido.url });
-        entornoElegido = elegido.id;
+        // El id con el que quedó REGISTRADO, no el que llegó: el formulario solo pide la
+        // URL, y de un «otro» el vestíbulo deduce id y nombre del host
+        // (`identidadDeEntorno`). Con el id de la lista, el `proyectosDe` de la línea
+        // siguiente moriría con «el entorno «otro» no está registrado».
+        const { entorno: registrado } = await vestibulo.registrarEntorno({
+          id: elegido.id,
+          nombre: elegido.nombre,
+          url: elegido.url,
+        });
+        entornoElegido = registrado.id;
         proyectoElegido = undefined;
         ramas = [];
-        proyectos = await vestibulo.proyectosDe(elegido.id);
+        proyectos = await vestibulo.proyectosDe(registrado.id);
         return;
       }
 
@@ -311,7 +727,8 @@ export function montarRutas(
         // Sin rama todavía no se abre nada: se contestan las ramas de ese proyecto. Es la
         // alternativa a inventarse las del primero de la lista antes de que nadie elija.
         proyectoElegido = proyecto;
-        ramas = await vestibulo.ramasDe(entornoElegido, proyecto);
+        // Igual que arriba: el servidor abre por NOMBRE, y el cable trae el id.
+        ramas = await vestibulo.ramasDe(entornoElegido, proyectos.find((p) => p.id === proyecto) ?? proyecto);
         return;
       }
       // El proyecto que viene en ESTE mensaje, no el cacheado: lo enviado es la verdad y
@@ -324,7 +741,9 @@ export function montarRutas(
       });
       await vestibulo.abrirProyecto({ raiz });
       // El cable se muda a la consola del proyecto. Sin esto el usuario mira un transcript
-      // vivo cuyas aprobaciones se rechazan solas al otro lado.
+      // vivo cuyas aprobaciones se rechazan solas al otro lado. `adjuntar` reemite también
+      // el estado de modelos, que hasta ahora no tenía `actual` que dar: sin sesión abierta
+      // no hay modelo en vigor.
       adjuntar();
     } catch (error) {
       // El aviso se fija ANTES de anunciar: el `finally` de abajo es quien lo lleva al paso.
@@ -334,6 +753,17 @@ export function montarRutas(
       await anunciarAlta().catch(contar);
     }
   };
+
+  // El modelo en vigor cambia DENTRO del lazo de la consola (`/modelo` y `/modelos` no
+  // tocan disco), así que la única forma de enterarse es que el vestíbulo lo diga. Sin
+  // esto, el disparador del compositor seguiría enseñando el modelo con el que se abrió la
+  // sesión después de haberlo cambiado — una cifra con forma de verdad.
+  vestibulo.alCambiarEstadoDeSesion(() => emitirModelos());
+  // El turno se emite solo (`consolaWeb.turno`), pero además hay que RECORDARLO: una pestaña
+  // que conecta a mitad no vio ese mensaje, y necesita saberlo para apagar su compositor.
+  vestibulo.alCambiarTurno((activo) => {
+    turnoEnVuelo = activo;
+  });
 
   servidor.registrarRuta("GET", RUTA_EVENTOS, (peticion, respuesta) => {
     respuesta.writeHead(200, {
@@ -352,34 +782,34 @@ export function montarRutas(
         /* el cliente se fue; el `close` de abajo ya desconecta */
       }
     };
-    enviar = sumidero;
+    clientes.add(sumidero);
     // Un comentario SSE abre el stream de verdad: sin nada escrito, algunos navegadores no
     // disparan `onopen` hasta el primer dato.
     respuesta.write(": xonecode\n\n");
-    adjuntar();
+    adjuntar(sumidero);
     // ANTES de `conducirCuenta()`, no después: el nombre ya está resuelto (es local, no
     // depende de ninguna cuenta) y el paso de cuenta puede tardar lo que tarde un humano
     // en elegir modelo y teclear una clave. Mandarlo solo dentro de `alta` —al final de
     // TODO esto— dejaba el saludo en «Hola» a secas mientras tanto (`transporte.ts`
     // documenta la medida).
-    emitir({ clase: "bienvenida", ...(vestibulo.nombre === undefined ? {} : { nombre: vestibulo.nombre }) });
+    // Solo al recién llegado: los demás ya recibieron su saludo al conectar.
+    sumidero({ clase: "bienvenida", ...(vestibulo.nombre === undefined ? {} : { nombre: vestibulo.nombre }) });
     void conducirCuenta()
       .catch(contar)
       .then(() => poblarProyectosSiProcede())
       .finally(() => void anunciarAlta().catch(contar));
 
     peticion.on("close", () => {
-      // El `close` de una pestaña recargada puede llegar DESPUÉS de que el SSE nuevo se
-      // haya enganchado. Sin esta guarda desconectaría la consola del cliente que acaba de
-      // llegar, y a partir de ahí `eof()` diría que no hay nadie: toda aprobación
-      // rechazada en silencio.
-      if (enviar !== sumidero) return;
-      enviar = undefined;
-      // Se desconecta el destino que se ADJUNTÓ, no el actual: entre la conexión y el
-      // cierre puede haberse abierto un proyecto, y desconectar a otro dejaría la consola
-      // viva creyendo que sigue habiendo alguien mirando.
-      adjunto?.desconectar();
-      adjunto = undefined;
+      // Se va ESTE cliente, no «el cliente». La guarda de antes (`enviar !== sumidero`)
+      // existía porque el `close` de una pestaña recargada puede llegar DESPUÉS de que el
+      // SSE nuevo se enganche, y con una sola ranura eso desconectaba al recién llegado;
+      // con un conjunto, quitar el suyo es exacto y esa carrera desaparece.
+      clientes.delete(sumidero);
+      // Y la consola solo se da por sola cuando se va el ÚLTIMO: el transporte lo decide
+      // mirando sus sumideros. Cortar a la primera baja rechazaría la aprobación que otra
+      // pestaña todavía tiene delante.
+      adjunto?.desconectar(sumidero);
+      if (clientes.size === 0) adjunto = undefined;
     });
   });
 
@@ -391,6 +821,70 @@ export function montarRutas(
       // Cuerpo ilegible o demasiado grande. NO se devuelve nada de lo recibido: por aquí
       // pasa la clave de API del paso de cuenta, y un eco la dejaría en el log del cliente.
       respuesta.writeHead(400);
+      respuesta.end();
+      return;
+    }
+    if (
+      typeof mensaje === "object" &&
+      mensaje !== null &&
+      mensaje.clase === "entorno" &&
+      mensaje.accion === "activo"
+    ) {
+      void atenderEntornoActivo(mensaje.entorno);
+      respuesta.writeHead(204);
+      respuesta.end();
+      return;
+    }
+    if (
+      typeof mensaje === "object" &&
+      mensaje !== null &&
+      mensaje.clase === "entorno" &&
+      mensaje.accion === "visibles"
+    ) {
+      void vestibulo
+        .guardarProyectosVisibles(mensaje.entorno, mensaje.proyectos)
+        .catch(contar)
+        .finally(() => void anunciarAlta().catch(contar));
+      respuesta.writeHead(204);
+      respuesta.end();
+      return;
+    }
+    if (typeof mensaje === "object" && mensaje !== null && mensaje.clase === "cancelar") {
+      // Parar ESTE turno, no cerrar la conversación. Sin proyecto abierto no hay turno que
+      // parar y se dice: un botón que no puede cumplir no puede callar.
+      const abierto = vestibulo.proyectoAbierto();
+      if (abierto === undefined || !abierto.cancelarTurno()) {
+        informar("no hay ningún turno en vuelo que parar");
+      }
+      respuesta.writeHead(204);
+      respuesta.end();
+      return;
+    }
+    if (typeof mensaje === "object" && mensaje !== null && mensaje.clase === "sesion") {
+      // Suelto: abrir un proyecto arranca una consola entera y el `POST` no se queda
+      // esperando. Lo que pase se cuenta por el cable.
+      void atenderSesion(mensaje);
+      respuesta.writeHead(204);
+      respuesta.end();
+      return;
+    }
+    if (typeof mensaje === "object" && mensaje !== null && mensaje.clase === "modelo") {
+      atenderModelo(mensaje.id);
+      respuesta.writeHead(204);
+      respuesta.end();
+      return;
+    }
+    if (typeof mensaje === "object" && mensaje !== null && mensaje.clase === "credencial") {
+      atenderCredencial(mensaje);
+      respuesta.writeHead(204);
+      respuesta.end();
+      return;
+    }
+    if (typeof mensaje === "object" && mensaje !== null && mensaje.clase === "catalogo") {
+      // Suelto, como el alta: consultar un catálogo es una petición de red y el `POST` no
+      // se queda abierto esperándola. La respuesta viaja por el SSE.
+      void atenderCatalogo(mensaje.proveedor).catch(contar);
+      respuesta.writeHead(204);
       respuesta.end();
       return;
     }
@@ -424,6 +918,16 @@ export interface OpcionesDeArranque {
   cwd: string;
   /** `--guion`: el agente de pega también en la web, para verla correr sin gastar. */
   guion?: boolean;
+  /**
+   * `--anfitrion <host>`: un nombre EXTRA que el servidor acepta en la cabecera `Host`,
+   * para servir a través de un túnel (ngrok, Tailscale) que apunte a este proceso.
+   *
+   * Sin esto, un túnel recibe 403 en todas las peticiones y hace bien: la comprobación de
+   * `Host` es la única defensa contra el DNS rebinding. Abrirla es una decisión, se pide a
+   * mano, y se DICE al arrancar — detrás de esta puerta hay un agente que escribe ficheros
+   * en el disco del usuario.
+   */
+  anfitrion?: string;
   /**
    * La fábrica del ejecutor real (`cli/main.ts#crearEjecutorReal`). Entra por parámetro y
    * no se importa: `cli/main.ts` ya carga este módulo, e importarlo de vuelta sería un
@@ -475,7 +979,11 @@ export async function arrancarConsolaWeb(opciones: OpcionesDeArranque): Promise<
   }
 
   const arrancar = opciones.crearServidor ?? arrancarServidor;
-  const servidor = await arrancar({ puerto: opciones.puerto, raizEstaticos: raizDelCliente });
+  const servidor = await arrancar({
+    puerto: opciones.puerto,
+    raizEstaticos: raizDelCliente,
+    ...(opciones.anfitrion === undefined ? {} : { anfitrion: opciones.anfitrion }),
+  });
 
   /**
    * El aviso que se ve por los DOS sitios, y es el mismo para el vestíbulo y para las rutas.
@@ -514,9 +1022,32 @@ export async function arrancarConsolaWeb(opciones: OpcionesDeArranque): Promise<
     abierto.consola.consola.escribir(`${aviso}\n`);
   }
 
-  montarRutas(servidor, vestibulo, { informar });
+  montarRutas(servidor, vestibulo, {
+    informar,
+    // Los dos puertos del selector de modelos, con las piezas reales: quién tiene
+    // credencial (`auth.json` o el entorno, leído desde el cwd) y el catálogo VIVO.
+    hayCredencial: (proveedor) => hayCredencial(proveedor, opciones.cwd),
+    // «Está en auth.json» es una pregunta distinta de «¿puedo usarlo?»: se lee el fichero,
+    // sin mirar el entorno, porque es lo único que un botón de borrar puede cumplir.
+    credencialEnFichero: (proveedor) => cargar(opciones.cwd).auth[proveedor] !== undefined,
+    borrarCredencial,
+    guardarCredencial,
+    catalogoDeModelos: async (proveedor) => {
+      const modelos = await new CatalogoModelos().listar(proveedor);
+      return modelos.map((m) => ({ id: m.id, ...(m.nombre === undefined ? {} : { nombre: m.nombre }) }));
+    },
+  });
 
   escribir(`consola web en ${servidor.url}\n`);
+  if (opciones.anfitrion !== undefined) {
+    // Se dice SIEMPRE y con lo que hay detrás nombrado. Una puerta abierta que solo consta
+    // en la línea de comandos que alguien tecleó hace media hora no consta.
+    escribir(
+      `ATENCIÓN: también se acepta «${opciones.anfitrion}» como Host, así que esta consola es alcanzable por ese túnel.\n` +
+        `Detrás hay un agente que escribe ficheros en este equipo y las credenciales de ~/.xonecode. ` +
+        `Lo único que lo separa de quien tenga la URL es el token.\n`
+    );
+  }
   if (opciones.abrir) {
     // Lo accesorio: la URL ya está impresa, así que un fallo aquí no puede tumbar nada.
     // `abrirEnSistema` escucha el `error` del spawn justo por esto.
@@ -604,6 +1135,7 @@ function vestibuloReal(
     nombre: nombreDePersona(opciones.cwd),
     catalogoModelos: new CatalogoModelos(),
     guardarCredencial,
+    aplicarCredencial: aplicarCredencialAlProceso,
     // Los proveedores que YA tienen clave no se vuelven a pedir. Sin esto la omisión del
     // vestíbulo es `false` para todos —la dirección segura, pero molesta— y el asistente
     // pediría de nuevo una credencial que está escrita.

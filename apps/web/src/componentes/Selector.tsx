@@ -22,11 +22,20 @@ import estilos from "./Selector.module.css";
 export function Selector({
   titulo,
   opciones,
+  aviso,
   alElegir,
   anidado = false,
 }: {
   titulo: string;
   opciones: readonly { id: string; etiqueta: string; detalle?: string }[];
+  /**
+   * Por qué se pregunta, o por qué se vuelve a preguntar (`SelectorDeConsola.aviso`). Se
+   * pinta DENTRO del selector y con `role="alert"` por lo mismo que el `aviso` del
+   * `Wizard`: el texto llega también como acto de sistema, pero durante el alta el
+   * transcript no está en pantalla, y un paso que se repite sin decir por qué es un fallo
+   * mudo.
+   */
+  aviso?: string;
   /**
    * `undefined` es CANCELAR. Es un solo manejador y no dos porque las dos salidas comparten
    * todo lo que importa —el candado de envío en vuelo, la espera y el aviso de fallo—, y
@@ -89,6 +98,11 @@ export function Selector({
   return (
     <div className={estilos.selector} data-anidado={anidado ? "" : undefined} role="group" aria-label={titulo}>
       <p className={estilos.titulo}>{titulo}</p>
+      {aviso !== undefined && aviso !== "" ? (
+        <p className={estilos.aviso} role="alert">
+          {aviso}
+        </p>
+      ) : null}
       <ul className={estilos.opciones}>
         {opciones.map((o) => (
           <li key={o.id}>

@@ -319,13 +319,36 @@ export function cargar(raiz: string): {
   return { config, auth, rutas, avisos };
 }
 
-/** Las claves ya presentes en el entorno MANDAN: `auth.json` no las machaca. */
-const VARIABLES_POR_PROVEEDOR: Partial<Record<Proveedor, string>> = {
+/**
+ * Las claves ya presentes en el entorno MANDAN: `auth.json` no las machaca.
+ *
+ * Exportada para `agent/authEnDisco.ts`, que necesita la MISMA tabla para aplicar al
+ * proceso la credencial que acaba de escribir. (`cli/config.ts` y `cli/consola.ts` siguen
+ * llevando su propia copia, y sus comentarios explican por qué; esta exportación no las
+ * obliga a nada, solo evita una CUARTA.)
+ */
+export const VARIABLES_POR_PROVEEDOR: Partial<Record<Proveedor, string>> = {
   anthropic: "ANTHROPIC_API_KEY",
   openai: "OPENAI_API_KEY",
   gemini: "GOOGLE_API_KEY",
   "ollama-cloud": "OLLAMA_API_KEY",
 };
+
+/**
+ * Pone la credencial en el entorno del proceso, y NADA más: sin tocar disco.
+ *
+ * Existe para poder PROBAR una clave antes de escribirla —`CatalogoModelos` la lee de
+ * `process.env`, así que sin esto no hay forma de preguntarle al proveedor si sirve— y es
+ * la misma operación que `guardarCredencial` (`agent/authEnDisco.ts`) hace al final de su
+ * escritura. Devuelve `false` para un proveedor sin variable (Ollama local): ahí no hay
+ * nada que aplicar y decir que sí sería mentir.
+ */
+export function aplicarCredencialAlProceso(proveedor: Proveedor, clave: string): boolean {
+  const variable = VARIABLES_POR_PROVEEDOR[proveedor];
+  if (variable === undefined) return false;
+  process.env[variable] = clave;
+  return true;
+}
 
 /**
  * Vuelca las credenciales en `process.env` y devuelve los proveedores que SÍ se

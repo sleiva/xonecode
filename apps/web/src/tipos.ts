@@ -26,6 +26,9 @@
 export type Acto =
   | { tipo: "usuario"; texto: string }
   | { tipo: "asistente"; texto: string }
+  /** Lo que el modelo PENSÓ, cuando lo publica. Aparte de `asistente` porque no es la
+   *  respuesta: se pinta apagado y plegado. */
+  | { tipo: "razonamiento"; texto: string }
   | { tipo: "herramientas"; lineas: string[] }
   | { tipo: "sistema"; texto: string }
   | { tipo: "fase"; texto: string; ms: number }
@@ -48,6 +51,13 @@ export type PasoDelWizard = "cuenta" | "entorno" | "proyecto";
 export interface SelectorDeConsola {
   titulo: string;
   opciones: readonly { id: string; etiqueta: string; detalle?: string }[];
+  /**
+   * Por qué se pregunta esto, o por qué se vuelve a preguntar. Redeclarado igual que todo
+   * lo demás de este fichero (`cli/consola.ts#SelectorDeConsola` es el original). Existe
+   * por ESTA piel: durante el alta la web no pinta el transcript (`App.tsx`, rama
+   * `enAlta`), así que el motivo tiene que viajar dentro del propio selector o no se ve.
+   */
+  aviso?: string;
 }
 
 export type MensajeAlCliente =
@@ -68,6 +78,16 @@ export type MensajeAlCliente =
   | { clase: "bienvenida"; nombre?: string }
   | { clase: "pregunta"; texto: string }
   | { clase: "selector"; selector: SelectorDeConsola }
+  /**
+   * Los modelos: cuál está en vigor (`actual`, «proveedor/modelo») y qué se puede elegir.
+   * Redeclarado como todo lo demás de este fichero; el original es
+   * `web/servidor/transporte.ts`. `actual` ausente = no hay sesión abierta y por tanto no
+   * hay modelo que afirmar — se enseña «Elige modelo», nunca una fila inventada.
+   */
+  | { clase: "modelos"; actual?: string; proveedores: ProveedorDeModelos[] }
+  /** Hay un turno EN VUELO, o dejó de haberlo: apaga el compositor y saca el botón de
+   *  parar. No se deduce de los actos — un turno que revienta no siempre deja `fin`. */
+  | { clase: "turno"; activo: boolean }
   | { clase: "secreto"; pregunta: string }
   /**
    * El registro de comandos de barra (`COMANDOS` en `cli/consola.ts`), para que el
@@ -91,7 +111,29 @@ export type MensajeAlCliente =
       pasos: PasoDelWizard[];
       proveedores: { id: string; nombre: string }[];
       entornos: { id: string; nombre: string; url: string }[];
-      proyectos: { id: string; nombre: string }[];
+      /**
+       * Los REGISTRADOS de verdad (`settings.json`), que no son los ofrecidos de arriba.
+       * `proyectos` es la elección de qué proyectos suyos se enseñan; AUSENTE significa que
+       * nadie lo ha dicho —y manda la omisión de la barra—, mientras que una lista vacía es
+       * una elección: ninguno.
+       */
+      registrados: { id: string; nombre: string; url: string; proyectos?: string[] }[];
+      /** De qué entorno son los `proyectos` de este mensaje. Ausente = de ninguno todavía. */
+      entornoActivo?: string;
+      /**
+       * CUÁL está abierto, y cuál es su sesión. `proyectoAbierto` (booleano) dice SI hay
+       * uno; esto dice cuál, que es lo que la barra necesita para marcarlo. `sesionActiva`
+       * puede faltar con proyecto abierto: el id no existe hasta el primer acto volcado.
+       */
+      proyectoActivo?: string;
+      sesionActiva?: string;
+      proyectos: {
+        id: string;
+        nombre: string;
+        sesiones?: { id: string; titulo: string }[];
+        /** La copia local ya existe: abrirlo no baja nada ni pregunta rama. */
+        local?: boolean;
+      }[];
       ramas: string[];
       /** Qué falló en el paso anterior; ausente si no falló nada. Lo pinta el propio paso:
        *  un acto de sistema se va a la Trayectoria, que no es la pestaña que se está viendo. */
@@ -121,8 +163,36 @@ export type MensajeAlCliente =
       diffs: Record<string, unknown[]>;
     };
 
+/**
+ * Un proveedor visto por el selector de modelos. `credencial` tiene TRES valores porque hay
+ * tres cosas distintas que decir: confirmada, confirmada ausente, y «no necesita ninguna»
+ * (Ollama local) — a ese no se le pinta punto, ni verde ni rojo, porque no hay nada que
+ * afirmar. `modelos` ausente = su catálogo aún no se ha pedido.
+ */
+export interface ProveedorDeModelos {
+  id: string;
+  credencial: "puesta" | "falta" | "nativa";
+  /** La credencial está en `auth.json` y por tanto se puede borrar desde aquí. Una que solo
+   *  viene del entorno no lo lleva: desexportar la shell de nadie no está a nuestro alcance. */
+  enFichero?: boolean;
+  modelos?: { id: string; nombre?: string }[];
+  error?: string;
+}
+
 export type MensajeDelCliente =
   | { clase: "prosa"; texto: string }
+  /**
+   * «Ponme este modelo», dicho por un control: `proveedor/modelo` y nada más. El cliente no
+   * manda comandos — ni se apunta actos de usuario que nadie tecleó, ni habla en la
+   * sintaxis de otra piel. Cómo se aplica es cosa del servidor.
+   */
+  | { clase: "modelo"; id: string }
+  /** Abrir una sesión de un proyecto: la nombrada, o una NUEVA si no se nombra ninguna. */
+  | { clase: "sesion"; proyecto: string; sesion?: string }
+  /** Qué proyectos de un entorno se enseñan en la barra. Vacío = ninguno, que es elección. */
+  | { clase: "entorno"; accion: "visibles"; entorno: string; proyectos: string[] }
+  /** Cambiar de entorno activo: el de cuyos proyectos se habla. */
+  | { clase: "entorno"; accion: "activo"; entorno: string }
   | { clase: "respuesta"; texto: string }
   /**
    * La respuesta a `seleccionar`. **Sin `id` (o con `id: null`) es CANCELAR** — la misma
@@ -147,4 +217,11 @@ export type MensajeDelCliente =
       proyecto?: string;
       rama?: string;
     }
+  /** «Dime qué modelos sirve este proveedor»: una llamada de red, y por eso bajo demanda. */
+  | { clase: "catalogo"; proveedor: string }
+  /** Borrar la credencial de `auth.json`. Guardar no pasa por aquí: la clave viaja por
+   *  «secreto», contestando al `leerSecreto` que abre `/provider`. */
+  | { clase: "credencial"; accion: "pedir" | "borrar"; proveedor: string }
+  /** Parar el turno en vuelo, dejando la sesión viva. */
+  | { clase: "cancelar" }
   | { clase: "decision"; decisiones: Record<string, string> };

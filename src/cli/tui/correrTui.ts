@@ -34,7 +34,7 @@ import {
 } from "../consola.js";
 import { asistenteDeModelo } from "../wizardInicial.js";
 import { guardarCredencial } from "../../agent/authEnDisco.js";
-import { cargar } from "../../agent/configEnDisco.js";
+import { aplicarCredencialAlProceso, cargar } from "../../agent/configEnDisco.js";
 import { modeloDeAcuse } from "../acuseDeModelo.js";
 import { crearStore, crearRanura, vistaInicial, type Acto, type VistaDeTui } from "./store.js";
 import { crearPielTui } from "./pielTui.js";
@@ -546,6 +546,9 @@ export async function correrConsolaTui(opciones: OpcionesDeMontaje): Promise<num
         origenDeTrabajo: resolver(fuentes).trabajo.origen,
         hayCredencial: (proveedor) => hayCredencial(proveedor, raiz),
         guardarCredencial: (proveedor, clave) => guardarCredencial(proveedor, clave),
+        // Igual que en `main.ts`: probar la clave antes de escribirla exige poder ponerla
+        // en el proceso sin tocar `auth.json`.
+        aplicarCredencial: aplicarCredencialAlProceso,
       });
       await configurarModoInicial(raiz, consola);
       const recargado = cargar(raiz);

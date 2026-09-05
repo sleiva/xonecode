@@ -18,16 +18,19 @@ import estilos from "./TarjetaDeAlta.module.css";
 export function TarjetaDeAlta({
   nombre,
   pasos,
+  alVolverAPaso,
   children,
 }: {
   nombre?: string;
   pasos: readonly PasoDeAlta[];
+  /** Reabrir un paso ya hecho; se pasa tal cual a `PasosDelAlta`. Ausente = solo lectura. */
+  alVolverAPaso?: (id: string) => void;
   children?: ReactNode;
 }) {
   return (
     <div className={estilos.tarjeta}>
       <Bienvenida nombre={nombre} />
-      <PasosDelAlta pasos={pasos} />
+      <PasosDelAlta pasos={pasos} {...(alVolverAPaso === undefined ? {} : { alVolver: alVolverAPaso })} />
       {children}
     </div>
   );

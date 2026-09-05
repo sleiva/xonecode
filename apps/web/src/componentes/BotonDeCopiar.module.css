@@ -1,0 +1,35 @@
+/* Alias comprobados contra `apps/web/estilos/design-platform.css`: label-tertiary,
+   label-primary, interactive-bg-hover, state-success-primary y state-error-primary. */
+
+/* Un botón de icono, sin caja: vive bajo el mensaje y no debe competir con él. El color
+   solo sube al pasar por encima, que es cuando alguien lo está buscando. */
+/* CON borde y fondo, no plano: un icono suelto sobre el fondo del mensaje no se lee como un
+   botón —no se ve dónde empieza ni dónde acaba— y nadie lo pulsa. Es la misma caja que el
+   resto de acciones secundarias de la interfaz: borde de medio píxel, esquina de 6 y el
+   fondo de la capa 1. */
+.boton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 4px 6px;
+  border: 0.5px solid var(--dsw-alias-border-l2);
+  border-radius: 6px;
+  background: var(--dsw-alias-bg-layer-1);
+  color: var(--dsw-alias-label-secondary);
+  cursor: pointer;
+}
+
+.boton:hover {
+  background: var(--dsw-alias-interactive-bg-hover);
+  color: var(--dsw-alias-label-primary);
+}
+
+/* El acuse se ve en el color además de en el icono: el cambio de forma solo no se nota
+   cuando el icono mide catorce píxeles. */
+.boton[data-estado="copiado"] {
+  color: var(--dsw-alias-state-success-primary);
+}
+
+.boton[data-estado="fallo"] {
+  color: var(--dsw-alias-state-error-primary);
+}

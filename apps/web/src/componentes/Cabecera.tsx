@@ -23,7 +23,7 @@ export type Pestana = "chat" | "trayectoria";
  * `<button disabled>` que el original usa para la última: mismo elemento, mismo estado,
  * misma clase `.crumbCurrent`.
  */
-export function Cabecera({ titulo, modo, conectado, pestana, alElegirPestana }: {
+export function Cabecera({ titulo, modo, conectado, pestana, alElegirPestana, barraContraida, alAlternarBarra }: {
   titulo: string;
   /**
    * El modo del proyecto abierto (`.xonecode/config.json`), tal cual lo manda el
@@ -33,13 +33,41 @@ export function Cabecera({ titulo, modo, conectado, pestana, alElegirPestana }: 
    */
   modo?: "offline" | "cloud";
   conectado: boolean;
-  pestana: Pestana;
-  alElegirPestana: (pestana: Pestana) => void;
+  /**
+   * La pestaña elegida y su manejador. **Ausentes las dos = no se pinta la tira**, que es lo
+   * que toca en el escritorio: sin sesión no hay transcript ni trayectoria que enseñar, y
+   * unas pestañas que no llevan a ningún sitio son el mismo botón muerto de siempre. La
+   * barra superior SÍ se queda: es la barra de herramientas de la aplicación, no de la
+   * sesión.
+   */
+  pestana?: Pestana;
+  alElegirPestana?: (pestana: Pestana) => void;
+  /** Si la barra lateral está plegada, para que el botón diga qué va a hacer. */
+  barraContraida?: boolean;
+  /** Plegar y desplegar la barra lateral. Ausente = no se ofrece el botón. */
+  alAlternarBarra?: () => void;
 }) {
   return (
-    <header className={conversacion.header}>
+    <header className={clsx(conversacion.header, estilos.barraSuperior)}>
       <div className={conversacion.titleRow}>
         <div className={conversacion.titleCluster}>
+          {/*
+            El botón de plegar vive en la barra de herramientas y no dentro de la propia
+            barra lateral —donde lo pone el mockup— por una razón práctica: plegada, la
+            barra no está, así que su botón se iría con ella y no habría por dónde volver.
+          */}
+          {alAlternarBarra === undefined ? null : (
+            <button
+              type="button"
+              className={estilos.plegar}
+              onClick={alAlternarBarra}
+              aria-expanded={barraContraida !== true}
+              aria-label={barraContraida === true ? "Mostrar la barra lateral" : "Ocultar la barra lateral"}
+              title={barraContraida === true ? "Mostrar la barra lateral" : "Ocultar la barra lateral"}
+            >
+              {barraContraida === true ? "»" : "«"}
+            </button>
+          )}
           <nav className={conversacion.crumbs} aria-label="dónde estás">
             <span className={conversacion.crumbSeg}>
               <button
@@ -83,6 +111,7 @@ export function Cabecera({ titulo, modo, conectado, pestana, alElegirPestana }: 
         </div>
       </div>
 
+      {pestana === undefined || alElegirPestana === undefined ? null : (
       <div className={conversacion.tabs} role="tablist">
         <button
           type="button"
@@ -103,6 +132,7 @@ export function Cabecera({ titulo, modo, conectado, pestana, alElegirPestana }: 
           Trayectoria
         </button>
       </div>
+      )}
     </header>
   );
 }

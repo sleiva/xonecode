@@ -14,6 +14,17 @@
  */
 export type DomainEvent =
   | { tipo: "token"; texto: string; msgId?: string }
+  /**
+   * El razonamiento del modelo, cuando lo publica (los bloques `thinking` de Gemini, y el
+   * equivalente de los demás). Va SEPARADO de `token` a propósito: no es la respuesta, y
+   * mezclarlo con ella es lo que hacía `String(content)` —volcar el `repr` de la lista con
+   * el razonamiento dentro— y por lo que el puente empezó a filtrar por bloques.
+   *
+   * Que exista el evento no obliga a nadie a pintarlo: `Piel.razonamiento` es opcional, y
+   * las pieles de terminal no lo implementan — así la salida de una tubería sigue siendo
+   * byte-idéntica.
+   */
+  | { tipo: "razonamiento"; texto: string; msgId?: string }
   | { tipo: "fase"; fase: Fase; detalle?: string }
   | { tipo: "tool"; nombre: string; detalle?: string; error?: string }
   | { tipo: "plan"; tareas: TareaDelPlan[] }

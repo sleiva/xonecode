@@ -11,6 +11,20 @@ export const PROVEEDORES: readonly Proveedor[] = [
   "gemini", "openai", "anthropic", "ollama", "ollama-cloud",
 ] as const;
 
+/**
+ * Los que NO llevan clave. Hoy solo Ollama local, que es la omisión del repo.
+ *
+ * Vive aquí, en datos puros, porque lo consultan dos sitios que no se conocen: el asistente
+ * de cuenta (`cli/wizardInicial.ts`, para no pedir una clave que no hace falta) y el estado
+ * de modelos de la consola web (`web/servidor/arranque.ts`, que necesita distinguir «no
+ * necesita credencial» de «la tiene» — pintarle a Ollama un punto verde sería concederle un
+ * permiso que nadie le dio, y uno rojo, inventarle un problema). Dos listas de esto ya
+ * habrían divergido: `hayCredencial` (`cli/consola.ts`) devuelve `true` para un proveedor
+ * sin variable de entorno, que para su pregunta —«¿puedo usarlo?»— es correcto y para ésta
+ * —«¿tiene credencial?»— sería falso.
+ */
+export const SIN_CREDENCIAL: ReadonlySet<Proveedor> = new Set<Proveedor>(["ollama"]);
+
 export interface Eleccion {
   proveedor: Proveedor;
   modelo: string;

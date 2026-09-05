@@ -52,6 +52,33 @@ export type MensajeAlCliente =
   | { clase: "bienvenida"; nombre?: string }
   | { clase: "pregunta"; texto: string }
   | { clase: "selector"; selector: SelectorDeConsola }
+  /**
+   * Los modelos: cuál está en vigor y qué se puede elegir.
+   *
+   * `actual` es lo que resuelve el papel `trabajo` con las fuentes de la sesión ABIERTA, no
+   * lo que diga un fichero: `/modelo` cambia el modelo en caliente y no escribe nada, así
+   * que releer la configuración contaría lo de antes. Ausente = no hay sesión de proyecto
+   * y por tanto no hay modelo en vigor que afirmar — el cliente enseña «Elige modelo» en
+   * vez de inventarse una fila, que es la regla del harness de DeepSeek: «no stale row is
+   * synthesized».
+   *
+   * `modelos` de un proveedor viaja SOLO cuando alguien lo ha pedido (`clase: "catalogo"`):
+   * el catálogo es una llamada de red por proveedor y consultarlos todos al conectar sería
+   * gastar cinco peticiones para pintar un menú que quizá nadie abra. `error` es el fallo
+   * de ESE proveedor y no tumba a los demás — se lista inservible y el resto sigue
+   * elegible.
+   */
+  | { clase: "modelos"; actual?: string; proveedores: ProveedorDeModelos[] }
+  /**
+   * Hay un turno EN VUELO, o dejó de haberlo.
+   *
+   * El cliente lo necesita para dos cosas que no puede deducir sin mentir: apagar el
+   * compositor mientras el agente trabaja —mandar una segunda petición encima solo la
+   * encola sin decirlo— y convertir la flecha de enviar en un botón de parar. Deducirlo de
+   * los actos (¿llegó un `fin` después del último `usuario`?) fallaría justo cuando importa:
+   * un turno que revienta no siempre deja `fin`.
+   */
+  | { clase: "turno"; activo: boolean }
   | { clase: "secreto"; pregunta: string }
   /**
    * El registro de comandos de barra, para que el compositor sugiera sin llevar una
@@ -84,7 +111,49 @@ export type MensajeAlCliente =
       pasos: PasoDelVestibulo[];
       proveedores: { id: string; nombre: string }[];
       entornos: OpcionDeEntorno[];
-      proyectos: { id: string; nombre: string }[];
+      /**
+       * Los entornos REGISTRADOS de verdad (`settings.json`), que no son los OFRECIDOS de
+       * `entornos` —esa es la lista fija de los dos oficiales más «otro», y sirve para
+       * prerrellenar la URL del alta—. Hacía falta desde que el registro deduce la
+       * identidad del host: un on-premise registrado no aparece en la ofrecida por ningún
+       * lado, y la barra lateral llevaba enseñando la ofrecida como si fuera ésta.
+       */
+      registrados: EntornoRegistrado[];
+      /**
+       * El id del proyecto ABIERTO ahora mismo, y el de su sesión.
+       *
+       * `proyectoAbierto` (booleano, más abajo) dice SI hay uno; estos dicen CUÁL, que es
+       * otra pregunta y la que necesita la barra para marcar la fila. Se resuelven
+       * comparando la raíz de la consola abierta con la que le tocaría a cada proyecto
+       * (`raizDeProyecto`), no guardando un id aparte: dos fuentes para lo mismo divergen
+       * en cuanto una se olvide de actualizarse.
+       *
+       * `sesionActiva` puede faltar con un proyecto abierto, y no es un fallo: el id de
+       * sesión no existe hasta que se vuelca el primer acto (`ConsolaDeProyecto.sesion`),
+       * así que una sesión recién empezada todavía no tiene nada que marcar — igual que
+       * tampoco aparece en la lista de sesiones guardadas.
+       */
+      proyectoActivo?: string;
+      sesionActiva?: string;
+      /**
+       * De qué entorno son los `proyectos` de este mensaje. Ausente = todavía de ninguno
+       * (nadie ha elegido y no había ninguno registrado que poblar). El cliente lo NECESITA
+       * para no tener que asumir «el primero de la lista», que es lo que hacía y era una
+       * suposición que se rompía en cuanto había dos.
+       */
+      entornoActivo?: string;
+      /**
+       * Los proyectos del entorno, con las SESIONES que ya tiene su copia local (vacío si
+       * no se ha bajado nunca). Van en el mismo mensaje porque la barra los pinta juntos:
+       * un proyecto sin sus sesiones es una fila que no se puede abrir por donde se dejó.
+       */
+      proyectos: {
+        id: string;
+        nombre: string;
+        sesiones?: { id: string; titulo: string }[];
+        /** La copia local YA existe: se puede abrir sin bajar nada ni preguntar rama. */
+        local?: boolean;
+      }[];
       ramas: string[];
       /**
        * Qué falló en el paso anterior. Ausente = no falló nada.
@@ -131,8 +200,68 @@ export type MensajeAlCliente =
       diffs: Record<string, LineaDeDiff[]>;
     };
 
+/**
+ * Un proveedor, tal y como lo ve el selector de modelos.
+ *
+ * `credencial` es literal y tiene TRES valores porque hay tres cosas distintas que decir:
+ * «puesta» solo si la credencial está confirmada, «falta» solo si se sabe que no está, y
+ * «nativa» para quien no necesita ninguna (Ollama local). Pintarle un punto rojo a Ollama
+ * sería inventarse un problema, y uno verde, un permiso.
+ */
+/**
+ * Un entorno ya registrado, con la elección de qué proyectos suyos se enseñan.
+ *
+ * `proyectos` AUSENTE no es «ninguno»: es que nadie lo ha dicho, y entonces la barra aplica
+ * su omisión (los primeros `PROYECTOS_POR_OMISION`). Una lista vacía sí es una elección.
+ */
+export interface EntornoRegistrado extends OpcionDeEntorno {
+  proyectos?: string[];
+}
+
+export interface ProveedorDeModelos {
+  id: string;
+  credencial: "puesta" | "falta" | "nativa";
+  /**
+   * La credencial está en `auth.json` — o sea, es NUESTRA y se puede borrar desde la
+   * interfaz. Una que solo viene del entorno no lleva esta marca: desexportar la shell de
+   * nadie no está a nuestro alcance, y ofrecer un botón que no puede cumplir sería peor
+   * que no ofrecerlo. Misma disciplina que el harness de DeepSeek, que solo retira la
+   * credencial cuya referencia puede demostrar suya.
+   */
+  enFichero?: boolean;
+  /** Ausente = todavía no se ha consultado su catálogo. Vacío = lo dijo y no ofrece nada. */
+  modelos?: { id: string; nombre?: string }[];
+  /** El catálogo de ESTE proveedor falló. Nunca lleva la clave ni el cuerpo remoto. */
+  error?: string;
+}
+
 export type MensajeDelCliente =
   | { clase: "prosa"; texto: string }
+  /**
+   * «Ponme este modelo», dicho por un control de la interfaz: `proveedor/modelo` y nada
+   * más.
+   *
+   * El cliente NO manda comandos. Podría mandar la prosa `/modelo <id>` —es el mismo
+   * efecto— y estuvo escrito así un rato, pero eso son dos mentiras pequeñas: el transcript
+   * se apunta un acto de USUARIO que nadie tecleó (y de ahí sale el título de la sesión), y
+   * la interfaz queda hablando en la sintaxis de otra piel. Lo que viaja es la intención;
+   * CÓMO se aplica es cosa del servidor, y hoy es reusando el manejador de `COMANDOS` que
+   * ya comparten el terminal y la TUI — la función se comparte, la sintaxis no se exporta.
+   */
+  | { clase: "modelo"; id: string }
+  /**
+   * Abrir una sesión de un proyecto: la que se nombra, o una NUEVA si no se nombra ninguna.
+   *
+   * Es la acción de la barra lateral, y no pasa por el alta: si la copia local ya existe no
+   * hay nada que dar de alta ni rama que preguntar — se abre y ya. Si no existe, el
+   * servidor contesta con las ramas por el camino del alta, que es el que sabe bajarla.
+   */
+  | { clase: "sesion"; proyecto: string; sesion?: string }
+  /** Qué proyectos de un entorno se enseñan en la barra. Lista vacía = ninguno, que es una
+   *  elección; para volver a la omisión no hay mensaje, porque no hay «deshacer» que pedir. */
+  | { clase: "entorno"; accion: "visibles"; entorno: string; proyectos: string[] }
+  /** Cambiar de entorno ACTIVO: el de cuyos proyectos se habla. Trae su listado consigo. */
+  | { clase: "entorno"; accion: "activo"; entorno: string }
   | { clase: "respuesta"; texto: string }
   /**
    * La respuesta a `seleccionar`. **Sin `id` (o con `id: null`) es CANCELAR**, que es
@@ -175,6 +304,27 @@ export type MensajeDelCliente =
    * no una respuesta tecleada: el cliente son botones. `consolaWeb` lo traduce a la
    * respuesta que `interpretAnswer` entiende, en vez de comparar cadenas por su cuenta.
    */
+  /**
+   * «Dime qué modelos sirve este proveedor.» Se pide al abrir el menú de ese proveedor y no
+   * antes: cada uno es una llamada de red. La respuesta es otro mensaje `modelos` con ese
+   * proveedor ya relleno — o con su `error` puesto, que también es una respuesta.
+   */
+  | { clase: "catalogo"; proveedor: string }
+  /**
+   * La credencial de un proveedor, desde la ventana de ajustes.
+   *
+   * «pedir» hace que el servidor PREGUNTE por ella (`leerSecreto`), así que la clave sigue
+   * viajando por el ÚNICO mensaje del cable que la lleva («secreto») y este mensaje no la
+   * toca. «borrar» la quita de `auth.json`.
+   *
+   * Podría haber viajado como la prosa `/provider <id>`, que es el mismo diálogo, pero esa
+   * ruta necesita el lazo de `correrConsola` — y el lazo solo existe con un proyecto
+   * abierto. La ventana de ajustes se abre antes, así que tiene su propio mensaje.
+   */
+  | { clase: "credencial"; accion: "pedir" | "borrar"; proveedor: string }
+  /** Parar el turno en vuelo. Aborta el `stream` del grafo (`SesionReal.cancelar`) y deja
+   *  la sesión viva: es parar ESTO, no cerrar la conversación. */
+  | { clase: "cancelar" }
   | { clase: "decision"; decisiones: Record<string, string> };
 
 /** A dónde escribe el SSE. Ausente = no hay nadie al otro lado. */
@@ -182,13 +332,29 @@ export type Sumidero = (mensaje: MensajeAlCliente) => void;
 
 export interface Transporte {
   /**
-   * El cliente abre el SSE. Devuelve los actos que hay que reemitirle: quien registra la
-   * ruta los manda como una `reemision` con su propia escritura, así que esto NO los
-   * emite — hacerlo duplicaría la reemisión en el sumidero que se acaba de instalar.
+   * Un cliente abre el SSE. Devuelve los actos que hay que reemitirLE: quien registra la
+   * ruta los manda como una `reemision` con su propia escritura —solo a ese sumidero—, así
+   * que esto NO los emite; hacerlo se los mandaría también a los demás clientes, que ya
+   * tienen el transcript.
+   *
+   * **Se admite más de uno.** Antes había UNA ranura y el último en conectar desplazaba al
+   * anterior en silencio: la pestaña vieja se quedaba con el SSE abierto y sin recibir
+   * nada, así que su interfaz se congelaba en el último estado que le llegó —medido con
+   * una pestaña local y otra por un túnel: el menú de modelos se quedaba en «consultando…»
+   * para siempre porque la respuesta se la llevaba la otra—. Un servidor que acepta la
+   * conexión tiene que hablarle.
    */
   conectar(enviar?: Sumidero): readonly Acto[];
-  /** El SSE se cae, o la pestaña se cierra. Fail-closed: quien esperaba deja de esperar. */
-  desconectar(): void;
+  /**
+   * Un SSE se cae, o se cierra una pestaña. Con el sumidero se dice CUÁL se va; sin él se
+   * van todos (es lo que hace `cerrar`).
+   *
+   * Fail-closed sigue significando lo mismo, pero sobre el conjunto: quien espera respuesta
+   * deja de esperar cuando se va el ÚLTIMO cliente, no el primero. Cortar a la primera baja
+   * rechazaría la aprobación que otra pestaña abierta todavía tiene delante.
+   */
+  desconectar(enviar?: Sumidero): void;
+  /** ¿Queda alguien al otro lado? Es lo que `consolaWeb.eof()` usa para saber si hay humano. */
   conectado(): boolean;
   /**
    * Produce un mensaje: lo anota en la traza y, si hay cliente, lo escribe. Anota aunque
@@ -209,24 +375,40 @@ export interface Transporte {
 export function crearTransporte(actos: () => readonly Acto[]): Transporte {
   const traza: MensajeAlCliente[] = [];
   const escuchasDeCorte: (() => void)[] = [];
-  let sumidero: Sumidero | undefined;
+  /** Todos los clientes vivos. `Set` y no lista: conectar dos veces el MISMO sumidero
+   *  —una reconexión que se solapa con su propio cierre— no puede duplicar sus mensajes. */
+  const sumideros = new Set<Sumidero>();
+  /**
+   * Hubo cliente alguna vez y todavía no se ha ido el último. Se lleva aparte del `Set`
+   * porque `conectar()` sin sumidero (los tests que no miran lo emitido) también cuenta
+   * como cliente: `eof()` mira esto, y decir que no hay nadie rechazaría sus aprobaciones.
+   */
   let hayCliente = false;
 
   return {
     conectar(enviar) {
       hayCliente = true;
-      sumidero = enviar;
+      if (enviar !== undefined) sumideros.add(enviar);
       return [...actos()];
     },
-    desconectar() {
+    desconectar(enviar) {
+      if (enviar !== undefined) {
+        sumideros.delete(enviar);
+        // Queda alguien mirando: no se despierta a nadie ni se corta nada. Lo que se fue
+        // es una pestaña, no la conversación.
+        if (sumideros.size > 0) return;
+      } else {
+        sumideros.clear();
+      }
       hayCliente = false;
-      sumidero = undefined;
       for (const escucha of escuchasDeCorte) escucha();
     },
     conectado: () => hayCliente,
     emitir(mensaje) {
       if (mensaje.clase !== "aprobacion") traza.push(mensaje);
-      sumidero?.(mensaje);
+      // A TODOS los clientes vivos. Con una sola ranura, el último en conectar dejaba mudos
+      // a los anteriores sin decírselo.
+      for (const sumidero of sumideros) sumidero(mensaje);
     },
     emitidos: () => traza,
     alDesconectar(escucha) {

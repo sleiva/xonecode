@@ -37,10 +37,32 @@ export interface PielWeb {
   alActo: (escucha: (acto: Acto) => void) => void;
 }
 
-export function crearPielWeb(): PielWeb {
+/**
+ * Cada cuánto sale un parcial mientras el modelo escribe.
+ *
+ * No se emite por token porque cada emisión manda el acto ENTERO —así lo sustituye el
+ * cliente—, o sea que N tokens costarían N mensajes de tamaño creciente: cuadrático en
+ * bytes, y por un túnel eso se nota. No se emite tampoco solo al final, que es lo que hacía
+ * y es peor: la respuesta aparecía de golpe después de segundos de nada.
+ *
+ * 80 ms es el orden de un cuadro de pantalla largo: por debajo de eso nadie distingue el
+ * texto creciendo, y por encima se empieza a notar a tirones.
+ */
+const MS_ENTRE_PARCIALES = 80;
+
+export function crearPielWeb(ahora: () => number = Date.now): PielWeb {
   const lista: Acto[] = [];
   let colchon = "";
   let faseActiva: { texto: string; t0: number } | undefined;
+  /** Hay un acto de asistente A MEDIAS al final de la lista, que los tokens siguientes
+   *  sustituyen en vez de anexar. */
+  let parcial = false;
+  let ultimoParcial = 0;
+  /** Lo mismo para el razonamiento, que es otro acto y por tanto otro colchón: mezclarlos
+   *  pondría lo que el modelo piensa dentro de lo que dice. */
+  let pensamiento = "";
+  let parcialPensado = false;
+  let ultimoPensado = 0;
   const escuchas: ((acto: Acto) => void)[] = [];
 
   const notificar = (acto: Acto): void => {
@@ -48,7 +70,23 @@ export function crearPielWeb(): PielWeb {
   };
 
   const empujar = (acto: Acto): void => {
+    // Cualquier acto NUEVO cierra los parciales: lo que venga detrás ya no los sustituye.
+    parcial = false;
+    parcialPensado = false;
+    // Y el razonamiento se cierra con el acto que venga: el siguiente bloque de
+    // pensamiento, si lo hay, es otro y empieza el suyo.
+    pensamiento = "";
     lista.push(acto);
+    notificar(acto);
+  };
+
+  /**
+   * Sustituye el último acto en vez de anexar. El transporte lo distingue por la LONGITUD
+   * de la lista (`consolaWeb.ts`): si no creció, manda `sustitucion` y el cliente reemplaza
+   * el último — el mismo camino que ya usaba el cierre de una racha de tools.
+   */
+  const sustituir = (acto: Acto): void => {
+    lista[lista.length - 1] = acto;
     notificar(acto);
   };
 
@@ -73,13 +111,67 @@ export function crearPielWeb(): PielWeb {
       // y sus bloques de código— tiene que llegar de una pieza para que se pueda parsear.
       // Partirlo daría un acto por línea y el markdown se rompería en trozos sueltos.
       colchon += texto;
+
+      // Y se ENSEÑA mientras llega. Antes el colchón se guardaba entero y no salía hasta
+      // `cerrarLinea`, así que la respuesta aparecía de golpe tras segundos de pantalla
+      // quieta — el modelo estaba escribiendo y no se veía.
+      if (!parcial) {
+        cerrarFase();
+        empujar({ tipo: "asistente", texto: colchon });
+        parcial = true;
+        ultimoParcial = ahora();
+        return;
+      }
+      const t = ahora();
+      if (t - ultimoParcial < MS_ENTRE_PARCIALES) return;
+      ultimoParcial = t;
+      sustituir({ tipo: "asistente", texto: colchon });
+    },
+
+    razonamiento(texto) {
+      // Mismo trato que los tokens de la respuesta —parcial que se sustituye, con su
+      // ventana de 80 ms— pero en su propio acto: lo que el modelo PIENSA no es lo que
+      // dice, y el transcript tiene que poder distinguirlo.
+      if (!parcialPensado) {
+        cerrarFase();
+        // El orden importa: `empujar` limpia los colchones (cualquier acto nuevo cierra lo
+        // que hubiera a medias), así que el bloque nuevo se asigna DESPUÉS. Al revés se
+        // perdía el primer trozo y el pensamiento empezaba a contar desde el segundo.
+        empujar({ tipo: "razonamiento", texto });
+        pensamiento = texto;
+        parcialPensado = true;
+        ultimoPensado = ahora();
+        return;
+      }
+      pensamiento += texto;
+      const t = ahora();
+      if (t - ultimoPensado < MS_ENTRE_PARCIALES) return;
+      ultimoPensado = t;
+      sustituir({ tipo: "razonamiento", texto: pensamiento });
     },
 
     cerrarLinea() {
-      if (colchon === "") return;
-      cerrarFase();
-      empujar({ tipo: "asistente", texto: colchon });
+      if (colchon === "") {
+        // Sin texto no hay nada que cerrar, pero sí que olvidar: un parcial abierto que no
+        // se marcara cerrado haría que el siguiente mensaje del modelo SUSTITUYERA a éste
+        // en vez de ir detrás.
+        parcial = false;
+        return;
+      }
+      // El último trozo entra siempre, aunque no hayan pasado los 80 ms: es el que completa
+      // la frase, y perderlo por el reloj dejaría el mensaje cortado en pantalla hasta el
+      // siguiente turno.
+      if (parcial) sustituir({ tipo: "asistente", texto: colchon });
+      else {
+        cerrarFase();
+        empujar({ tipo: "asistente", texto: colchon });
+      }
+      parcial = false;
       colchon = "";
+      // El razonamiento que hubiera quedado a medias se da por cerrado aquí: la respuesta
+      // ya empezó, así que lo pensado antes no va a crecer más.
+      parcialPensado = false;
+      pensamiento = "";
     },
 
     linea(texto) {
@@ -89,9 +181,7 @@ export function crearPielWeb(): PielWeb {
       // el grupo de ANTES de la fase, borrando la frontera que el usuario vio pasar.
       const ultimo = lista.at(-1);
       if (ultimo?.tipo === "herramientas" && faseActiva === undefined) {
-        const grupo: Acto = { tipo: "herramientas", lineas: conLineaDeTool(ultimo.lineas, texto) };
-        lista[lista.length - 1] = grupo;
-        notificar(grupo);
+        sustituir({ tipo: "herramientas", lineas: conLineaDeTool(ultimo.lineas, texto) });
         return;
       }
       cerrarFase();

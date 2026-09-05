@@ -15,10 +15,44 @@ export function textoDe(msg: unknown): string {
   // vería basura donde esperaba una frase.
   if (Array.isArray(c)) {
     return c
-      .map((b) => (b && typeof b === "object" && typeof (b as Record<string, unknown>).text === "string" ? (b as Record<string, unknown>).text as string : ""))
+      .map((b) => {
+        if (!b || typeof b !== "object") return "";
+        const bloque = b as Record<string, unknown>;
+        // Un bloque de PENSAMIENTO también trae `text` en algunos adaptadores
+        // (`{ text, thought: true }`), así que mirar solo `typeof text === "string"` metía
+        // el razonamiento dentro de la respuesta. Sale por `razonamientoDe`, no por aquí.
+        if (bloque.thought === true || bloque.type === "thinking") return "";
+        return typeof bloque.text === "string" ? bloque.text : "";
+      })
       .join("");
   }
   return "";
+}
+
+/**
+ * El RAZONAMIENTO de un mensaje, cuando el proveedor lo publica en bloques.
+ *
+ * Gemini lo manda como `{ type: "thinking", thinking: "…" }` dentro de `content`
+ * (`@langchain/google-genai`, `common.js`), o sea que `textoDe` —que solo mira `b.text`— lo
+ * dejaba fuera. Estaba bien dejarlo fuera de la RESPUESTA; lo que faltaba era tener por
+ * dónde enseñarlo aparte.
+ *
+ * Se aceptan las dos formas que hay sueltas por el ecosistema: el bloque `thinking` con su
+ * campo homónimo y el `{ text, thought: true }` que usan otros adaptadores.
+ */
+export function razonamientoDe(msg: unknown): string {
+  if (!msg || typeof msg !== "object") return "";
+  const c = (msg as Record<string, unknown>).content;
+  if (!Array.isArray(c)) return "";
+  return c
+    .map((b) => {
+      if (!b || typeof b !== "object") return "";
+      const bloque = b as Record<string, unknown>;
+      if (bloque.type === "thinking" && typeof bloque.thinking === "string") return bloque.thinking;
+      if (bloque.thought === true && typeof bloque.text === "string") return bloque.text;
+      return "";
+    })
+    .join("");
 }
 
 /** Los nombres de tool de un chunk de `updates`, con su detalle de la lista blanca. */
@@ -120,6 +154,13 @@ export async function* aEventos(
         const texto = textoDe(msg);
         const id = (msg as Record<string, unknown> | null)?.id;
         const idTexto = typeof id === "string" ? id : undefined;
+        // El razonamiento sale por su propio evento y NO pasa por `Mensajes`: ese contador
+        // decide qué trozos de la RESPUESTA se pintan (dedupe de reintentos), y contar el
+        // pensamiento ahí desalinearía esa cuenta.
+        const pensado = razonamientoDe(msg);
+        if (pensado !== "") {
+          yield { tipo: "razonamiento", texto: pensado, ...(idTexto === undefined ? {} : { msgId: idTexto }) };
+        }
         if (mensajes.trozo(idTexto, texto).pintar) {
           yield { tipo: "token", texto, msgId: idTexto };
         }

@@ -58,12 +58,26 @@ export interface OpcionesDeConsolaWeb {
 }
 
 export interface ConsolaWeb {
+  /**
+   * Mete una línea en la cola del lazo SIN acto de usuario. Es para lo que dispara un
+   * control de la interfaz, no una persona: `recibir({clase:"prosa"})` anota un acto de
+   * usuario —y debe: el transcript se le debe a quien escribió la petición—, pero un botón
+   * no escribió nada.
+   *
+   * No es un mensaje del cable: el cliente manda la INTENCIÓN (`clase: "modelo"`) y es el
+   * servidor quien decide que aplicarla es reusar el manejador de `COMANDOS`.
+   */
+  /** Dice si hay turno en vuelo. Lo llama el envoltorio del ejecutor (`vestibulo.ts`), que
+   *  es el único que sabe cuándo empieza y cuándo acaba. */
+  turno(activo: boolean): void;
+  encolar(linea: string): void;
   consola: Consola;
   /** Un mensaje del navegador, tal cual llega por `POST /accion`. */
   recibir(mensaje: MensajeDelCliente): void;
   /** El cliente abre el SSE; devuelve los actos con los que hay que reemitirle el transcript. */
   conectar(enviar?: Sumidero): readonly Acto[];
-  desconectar(): void;
+  /** Se va UN cliente (el sumidero que se pasa) o todos (sin argumento). Ver `Transporte`. */
+  desconectar(enviar?: Sumidero): void;
   /** Agota `lineas` (EOF) para que el lazo de `correrConsola` RETORNE, y corta el cliente. */
   cerrar(): void;
   actos(): readonly Acto[];
@@ -370,8 +384,15 @@ export function crearConsolaWeb(opciones: OpcionesDeConsolaWeb = {}): ConsolaWeb
   return {
     consola,
     recibir,
+    turno: (activo) => transporte.emitir({ clase: "turno", activo }),
+    encolar: (linea) => {
+      if (cerrada) return;
+      const despertar = esperandoLinea.shift();
+      if (despertar !== undefined) despertar({ value: linea, done: false });
+      else cola.push(linea);
+    },
     conectar: (enviar) => transporte.conectar(enviar),
-    desconectar: () => transporte.desconectar(),
+    desconectar: (enviar) => transporte.desconectar(enviar),
     cerrar: () => {
       // Primero el corte —despierta a quien esperaba respuesta— y luego el EOF de la
       // cola, para que `correrConsola` retorne en vez de quedarse en el `next`.
