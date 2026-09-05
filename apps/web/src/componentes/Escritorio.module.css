@@ -105,8 +105,16 @@
   gap: 8px;
 }
 
+/* El nombre es el ÚNICO que cede a lo ancho. Sin esto, medido en pantalla, un nombre largo
+   («PlaemerWebTestAsync») empujaba a «sin descargar» fuera de la tarjeta y lo dejaba
+   cortado a media palabra: de las tres piezas de la fila, la que se puede acortar sin
+   perder sentido es la que el ojo ya reconoce por el principio. */
 .nombreDeProyecto {
   margin: 0;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   color: var(--dsw-alias-label-primary);
   font-size: 14px;
   font-weight: 600;
@@ -114,7 +122,32 @@
 
 /* Sin color de estado para «sin descargar»: no es un problema, es un hecho — y pintarlo en
    rojo diría que algo va mal. Solo el que YA está en el equipo se destaca. */
+/* De quién es el proyecto. Va pegada al nombre, no en la esquina: ahí vive «en tu equipo»,
+   que contesta otra pregunta (si está bajado AQUÍ, no de quién es allá arriba). El
+   `margin-right: auto` es lo que las separa — la cabecera es `space-between`, y con tres
+   hijos el del medio se quedaría flotando en mitad de la fila. */
+.duenno {
+  flex: none;
+  margin-right: auto;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: var(--dsw-alias-bg-layer-2);
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 10px;
+  white-space: nowrap;
+}
+
+/* Solo lo compartido se colorea: tener proyectos tuyos es lo normal, lo que cambia cómo
+   trabajas es que sea de otro. La palabra distingue los dos aunque el color no llegue.
+   `state-business-tertiary` es el azul pastel que `Chat.module.css` midió para su burbuja;
+   `…-secondary` de esa familia no existe en la paleta copiada. */
+.duenno[data-compartido] {
+  background: var(--dsw-alias-state-business-tertiary);
+  color: var(--dsw-alias-state-business-primary);
+}
+
 .marca {
+  flex: none;
   color: var(--dsw-alias-label-tertiary);
   font-size: 11px;
   white-space: nowrap;

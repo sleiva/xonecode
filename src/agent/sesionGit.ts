@@ -73,6 +73,18 @@ export function refDeSesion(id: string): string | undefined {
  */
 const FUERA = ":(exclude).xonecode";
 
+/**
+ * Las TRES clases que esta vista sabe contar: creado, modificado y borrado.
+ *
+ * No es decoración del listado, es una guarda: `claseDeCambio` (`agent/git.ts`) devuelve
+ * «modificado» para cualquier letra que no sea `A` ni `D`, así que un cambio de TIPO (`T`,
+ * un fichero que pasa a enlace simbólico) o una entrada sin fusionar (`U`) se colarían
+ * etiquetados como una modificación normal — una etiqueta falsa, no una lista incompleta.
+ * Pidiéndole a git solo `AMD`, lo que llega es exactamente lo que la vista sabe nombrar.
+ * Los renombrados ya no aparecen por `--no-renames`, que los parte en borrado + alta.
+ */
+const FILTRO = "--diff-filter=AMD";
+
 /** El árbol de AHORA, escrito sobre un índice privado. Incluye lo no seguido por git, que
  *  es justo lo que un fichero recién creado por el agente es. */
 async function arbolDeAhora(raiz: string): Promise<string> {
@@ -159,8 +171,8 @@ export async function cambiosDeSesion(raiz: string, id: string): Promise<Cambios
       // el proyecto no tiene por qué serlo (`instantanea.ts` sostiene ese caso a propósito).
       // Sin él, en un proyecto que cuelga de un repo mayor las rutas saldrían con el prefijo
       // de la subcarpeta y `parcheDeSesion` no casaría con ninguna.
-      ejecutar("git", ["diff", "--relative", "--name-status", "--no-renames", ref, ahora, "--", ".", FUERA], { cwd: raiz }),
-      ejecutar("git", ["diff", "--relative", "--numstat", "--no-renames", ref, ahora, "--", ".", FUERA], { cwd: raiz }),
+      ejecutar("git", ["diff", "--relative", "--name-status", "--no-renames", FILTRO, ref, ahora, "--", ".", FUERA], { cwd: raiz }),
+      ejecutar("git", ["diff", "--relative", "--numstat", "--no-renames", FILTRO, ref, ahora, "--", ".", FUERA], { cwd: raiz }),
     ]);
     // `--no-renames` por el mismo motivo que en el plan de subida: un renombrado sale como
     // UNA línea que solo nombra el destino, y aquí eso escondería que el original ya no

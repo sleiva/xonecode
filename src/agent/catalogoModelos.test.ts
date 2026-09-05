@@ -18,6 +18,19 @@ function responderJson(...cuerpos: unknown[]): { fetch: typeof fetch; llamadas: 
   return { fetch, llamadas };
 }
 
+/** Responde por TURNOS, con el estado de cada uno: para probar que un modelo roto entre
+ *  varios buenos no se lleva la lista por delante. */
+function responderPorTurnos(...turnos: { status: number; cuerpo: unknown }[]): typeof fetch {
+  let indice = 0;
+  return (async () => {
+    const turno = turnos[indice++] ?? { status: 500, cuerpo: {} };
+    return new Response(JSON.stringify(turno.cuerpo), {
+      status: turno.status,
+      headers: { "content-type": "application/json" },
+    });
+  }) as typeof globalThis.fetch;
+}
+
 function responderError(status: number, cuerpo: string): typeof fetch {
   return (async () => new Response(cuerpo, { status })) as typeof globalThis.fetch;
 }
@@ -278,4 +291,63 @@ it("Modelos configura Ollama Cloud con su endpoint y bearer", () => {
   };
   expect(cliente.baseUrl).toBe("https://ollama.com");
   expect(cliente.client.config.headers).toEqual({ authorization: "Bearer clave-prueba-ollama" });
+});
+
+describe("Ollama: un modelo roto no se lleva la lista por delante", () => {
+  const CHAT = { capabilities: ["completion"], model_info: { "x.context_length": 4096 } };
+
+  /**
+   * Medido contra el Ollama del usuario: `/api/tags` devolvía 26 modelos, y dos de ellos
+   * —modelos de Ollama Cloud retirados— contestaban al `/api/show` con **HTTP 410** y
+   * «was retired at …». Siguen en el manifiesto local, así que `tags` los nombra, pero ya
+   * no existen. El bucle no capturaba nada, así que el primer 410 lanzaba y el proveedor
+   * ENTERO se reportaba como no disponible: elegir «ollama» en el asistente no listaba nada
+   * y volvía al paso de proveedor, con veinte y pico modelos usables detrás.
+   */
+  it("un modelo RETIRADO (410) se salta; los demás siguen listándose", async () => {
+    vi.stubEnv("OLLAMA_BASE_URL", "http://ollama.local/");
+    const fetch = responderPorTurnos(
+      { status: 200, cuerpo: { models: [{ name: "bueno:latest" }, { name: "retirado:cloud" }, { name: "otro:latest" }] } },
+      { status: 200, cuerpo: CHAT },
+      { status: 410, cuerpo: { error: "retirado:cloud was retired at 2026-06-16" } },
+      { status: 200, cuerpo: CHAT },
+    );
+    await expect(new CatalogoModelos(fetch).listar("ollama")).resolves.toEqual([
+      { proveedor: "ollama", id: "bueno:latest", contexto: 4096 },
+      { proveedor: "ollama", id: "otro:latest", contexto: 4096 },
+    ]);
+  });
+
+  /**
+   * Lo que NO se puede tragar: que fallen todos. Eso no es «no tienes modelos», es que no
+   * se puede hablar con el servidor — y devolver `[]` se lo diría a alguien que tiene
+   * veinte, con el asistente tratándolo como un proveedor vacío en vez de como una avería.
+   */
+  it("si fallan TODOS, se lanza: un servidor roto no es un catálogo vacío", async () => {
+    vi.stubEnv("OLLAMA_BASE_URL", "http://ollama.local/");
+    const fetch = responderPorTurnos(
+      { status: 200, cuerpo: { models: [{ name: "uno:latest" }, { name: "dos:latest" }] } },
+      { status: 500, cuerpo: {} },
+      { status: 500, cuerpo: {} },
+    );
+    await expect(new CatalogoModelos(fetch).listar("ollama")).rejects.toThrow(/no disponible de ollama/);
+  });
+
+  /** Un servidor SIN modelos sigue siendo una lista vacía legítima, no un error. */
+  it("cero etiquetas es una lista vacía, no una avería", async () => {
+    vi.stubEnv("OLLAMA_BASE_URL", "http://ollama.local/");
+    const fetch = responderPorTurnos({ status: 200, cuerpo: { models: [] } });
+    await expect(new CatalogoModelos(fetch).listar("ollama")).resolves.toEqual([]);
+  });
+
+  /**
+   * El código HTTP va en el mensaje: sin él, un 410 («ese modelo ya no existe») y un 500
+   * («el servidor está roto») se leen igual y hay que salir a curl para distinguirlos.
+   */
+  it("el error nombra el código HTTP, para poder distinguir la avería", async () => {
+    vi.stubEnv("OLLAMA_BASE_URL", "http://ollama.local/");
+    await expect(
+      new CatalogoModelos(responderError(503, "nope")).listar("ollama")
+    ).rejects.toThrow(/HTTP 503/);
+  });
 });

@@ -1,16 +1,54 @@
 /* Alias comprobados contra `apps/web/estilos/design-platform.css`: bg-layer-1/2, border-l2,
-   label-primary/secondary/tertiary, interactive-bg-hover, state-success-primary/secondary y
-   state-error-primary/secondary. */
+   label-primary/secondary/tertiary, interactive-bg-hover, interactive-bg-selected,
+   state-success-primary/secondary y state-error-primary/secondary. */
 
-/* `min-height: 0` no sobra: `.viewArea` (la hoja copiada) es una columna flex, y un hijo
-   flex tiene `min-height: auto` por omisión — o sea, el alto de su contenido. Sin esto la
-   lista crecería en vez de scrollear y se metería DEBAJO del compositor, que es la trampa
-   que `Maqueta.tsx` ya documenta para la fase «active». */
+/* Dos paneles: el índice a la izquierda, el diff a la derecha.
+   `min-height: 0` no sobra: `.viewArea` (la hoja copiada) es una columna flex, y un hijo
+   flex tiene `min-height: auto` por omisión —o sea, el alto de su contenido—. Sin esto el
+   panel crecería en vez de scrollear y se metería DEBAJO del compositor, que es la trampa
+   que `Maqueta.tsx` ya documenta para la fase «active».
+   `container-type: inline-size` es para la regla de abajo: lo que decide si caben dos
+   columnas es el ancho de ESTA caja, no el de la ventana — con la barra lateral desplegada
+   sobran 280 px que la ventana sí cuenta. */
 .ficheros {
+  display: flex;
   flex: 1 1 auto;
   min-height: 0;
+  container-type: inline-size;
+}
+
+/* El índice. No cede a lo ancho —es lo que hace que siga siendo un índice— y tiene su
+   propio scroll: cien ficheros tocados no pueden empujar el diff fuera de la pantalla. */
+.panel {
+  display: flex;
+  flex-direction: column;
+  flex: 0 0 320px;
+  min-width: 0;
   overflow-y: auto;
-  padding: 16px 20px;
+  border-right: 0.5px solid var(--dsw-alias-border-l2);
+  padding: 12px;
+}
+
+.detalle {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: auto;
+}
+
+/* Estrecho —la ventana a media pantalla, o la barra lateral desplegada en un portátil— dos
+   columnas de 320 px y pico no caben: se apilan, con el índice acotado en alto para que el
+   diff siga estando a la vista sin scrollear. Sigue viéndose la lista, que es la regla. */
+@container (max-width: 720px) {
+  .ficheros {
+    flex-direction: column;
+  }
+
+  .panel {
+    flex: 0 0 auto;
+    max-height: 40%;
+    border-right: none;
+    border-bottom: 0.5px solid var(--dsw-alias-border-l2);
+  }
 }
 
 .aviso {
@@ -49,17 +87,10 @@
 .lista {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 2px;
   margin: 0;
   padding: 0;
   list-style: none;
-}
-
-.fila {
-  border: 0.5px solid var(--dsw-alias-border-l2);
-  border-radius: 10px;
-  overflow: hidden;
-  background: var(--dsw-alias-bg-layer-1);
 }
 
 .nombre {
@@ -67,8 +98,9 @@
   align-items: center;
   gap: 8px;
   width: 100%;
-  padding: 8px 10px;
+  padding: 6px 8px;
   border: none;
+  border-radius: 8px;
   background: none;
   color: var(--dsw-alias-label-primary);
   font: inherit;
@@ -78,6 +110,31 @@
 
 .nombre:hover {
   background: var(--dsw-alias-interactive-bg-hover);
+}
+
+/* El elegido va por atributo y no por `:focus`: el foco se pierde al pulsar en el diff, y
+   entonces la lista dejaría de decir cuál se está mirando.
+
+   DOS señales, como en la barra lateral (`Barra.module.css`, `.filaAbierta`) y por el mismo
+   motivo: `--dsw-alias-interactive-bg-selected` NO EXISTE en la paleta copiada —comprobado,
+   cero apariciones en `design-platform.css`—, así que el fondo se quedaba sin pintar y la
+   fila elegida no se distinguía en nada. El alias que su propia `.sessionRow.selected` usa
+   es el de hover, o sea el MISMO que la fila de al lado bajo el ratón; la barra de acento es
+   lo que lo desempata. */
+.nombre[data-elegido] {
+  position: relative;
+  background: var(--dsw-alias-interactive-bg-hover);
+}
+
+.nombre[data-elegido]::before {
+  content: "";
+  position: absolute;
+  top: 5px;
+  bottom: 5px;
+  left: 0;
+  width: 2px;
+  border-radius: 2px;
+  background: var(--dsw-alias-button-primary-fill);
 }
 
 /* La letra de estado, como en `git status`: A, M, D. Cuadrada y monoespaciada para que las
@@ -95,14 +152,18 @@
   font-weight: 600;
 }
 
+/* La letra en `label-primary` y no en el «primary» de su propio par: `state-success-primary`
+   es verde 500 sobre verde 400, luminosidades demasiado próximas —es la misma medición que
+   documenta `Aprobacion.module.css` para su diff—, y a 11px dentro de un cuadrado de 18 la
+   «A» directamente no se leía. Medido en pantalla. */
 .clase[data-clase="nuevo"] {
   background: var(--dsw-alias-state-success-secondary);
-  color: var(--dsw-alias-state-success-primary);
+  color: var(--dsw-alias-label-primary);
 }
 
 .clase[data-clase="borrado"] {
   background: var(--dsw-alias-state-error-secondary);
-  color: var(--dsw-alias-state-error-primary);
+  color: var(--dsw-alias-label-primary);
 }
 
 .clase[data-clase="modificado"] {
@@ -110,8 +171,6 @@
   color: var(--dsw-alias-label-secondary);
 }
 
-/* La ruta se come el ancho sobrante y recorta por la IZQUIERDA en cuanto no cabe: el final
-   —el nombre del fichero— es lo que identifica, no el principio del árbol. */
 .ruta {
   display: flex;
   flex: 1;
@@ -153,41 +212,56 @@
   color: var(--dsw-alias-state-error-primary);
 }
 
-/* El parche, con su propio scroll horizontal: una línea larga no puede ensanchar la fila ni
-   la pestaña entera. */
+/* La ruta, otra vez, encima del diff: el panel puede estar scrolleado lejos de la fila
+   elegida, y un diff sin nombre no se puede leer. Pegada arriba por lo mismo. */
+.cabeceraDeParche {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  padding: 10px 16px;
+  border-bottom: 0.5px solid var(--dsw-alias-border-l2);
+  background: var(--dsw-alias-bg-layer-1);
+  color: var(--dsw-alias-label-secondary);
+  font-family: var(--ds-font-family-code);
+  font-size: 12px;
+}
+
 .parche {
-  border-top: 0.5px solid var(--dsw-alias-border-l2);
-  background: var(--dsw-alias-bg-layer-2);
-  overflow-x: auto;
   padding: 6px 0;
 }
 
 .linea {
-  padding: 0 10px;
+  padding: 0 16px;
   font-family: var(--ds-font-family-code);
   font-size: 12px;
-  line-height: 1.5;
+  line-height: 1.6;
   white-space: pre;
   color: var(--dsw-alias-label-secondary);
+}
+
+.linea[data-tipo="trozo"] {
+  color: var(--dsw-alias-label-tertiary);
+  background: var(--dsw-alias-bg-layer-2);
 }
 
 .linea[data-tipo="cabecera"] {
   color: var(--dsw-alias-label-tertiary);
 }
 
-.linea[data-tipo="trozo"] {
-  color: var(--dsw-alias-label-tertiary);
-  background: var(--dsw-alias-bg-layer-1);
-}
-
 /* Texto en `label-primary` sobre el fondo de estado, no el color de estado sobre sí mismo:
-   es la misma decisión medida que documenta `Aprobacion.module.css` para su diff. */
+   es la misma decisión medida que documenta `Aprobacion.module.css` para su diff. El fondo
+   va al 45% porque aquí la línea ocupa el ancho entero del panel y no el de una tarjeta
+   estrecha: con el alias a pelo, medido en pantalla, el bloque verde se comía la vista y el
+   código de dentro costaba de leer. Se mezcla contra `bg-layer-1` y no contra `transparent`
+   —que es una palabra clave de color, y la disciplina de `Barra.test.tsx` no admite ninguna—
+   y además así el resultado es opaco: sobre el fondo del panel da lo mismo, pero al pasar
+   por debajo de la cabecera pegajosa no se transparenta. */
 .linea[data-tipo="anadido"] {
   color: var(--dsw-alias-label-primary);
-  background: var(--dsw-alias-state-success-secondary);
+  background: color-mix(in srgb, var(--dsw-alias-state-success-secondary) 45%, var(--dsw-alias-bg-layer-1));
 }
 
 .linea[data-tipo="quitado"] {
   color: var(--dsw-alias-label-primary);
-  background: var(--dsw-alias-state-error-secondary);
+  background: color-mix(in srgb, var(--dsw-alias-state-error-secondary) 45%, var(--dsw-alias-bg-layer-1));
 }

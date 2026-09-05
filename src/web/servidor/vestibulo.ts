@@ -37,6 +37,7 @@ import {
   sesionCloudStudio,
   urlDeMcpAceptable,
 } from "../../agent/cloudstudioMcp.js";
+import type { ProyectoRemoto } from "../../agent/cloudstudioMcp.js";
 import { clienteCloudStudio } from "../../agent/cloudstudioClient.js";
 import {
   guardarCloudStudioDeProyecto,
@@ -55,7 +56,14 @@ import {
 } from "../../cli/consola.js";
 import { asistenteDeModelo, type ResultadoDelAsistente } from "../../cli/wizardInicial.js";
 import { crearConsolaWeb, type ConsolaWeb, type OpcionesDeConsolaWeb } from "./consolaWeb.js";
-import { anotarActo, crearSesion, listarSesiones, reabrirSesion } from "./sesiones.js";
+import {
+  anotarActo,
+  borrarSesion,
+  crearSesion,
+  listarSesiones,
+  reabrirSesion,
+  renombrarSesion,
+} from "./sesiones.js";
 import type { MensajeDelCliente, Sumidero } from "./transporte.js";
 
 /**
@@ -124,6 +132,11 @@ export interface PuertoDeSesiones {
   listar(raiz: string): { id: string; titulo: string }[];
   anotar(raiz: string, id: string, acto: Acto): void;
   reabrir(raiz: string, id: string): { id: string; actos: Acto[]; historica: boolean };
+  /** Borra una sesión. Devuelve si había algo que borrar; un id desconocido no es un error
+   *  (dos pestañas, un doble clic). Opcional: un puerto de prueba puede no saber borrar. */
+  borrar?(raiz: string, id: string): boolean;
+  /** Le pone nombre. Devuelve si existía; un título vacío se rechaza. */
+  renombrar?(raiz: string, id: string, titulo: string): boolean;
 }
 
 const SESIONES_EN_DISCO: PuertoDeSesiones = {
@@ -131,6 +144,8 @@ const SESIONES_EN_DISCO: PuertoDeSesiones = {
   listar: listarSesiones,
   anotar: anotarActo,
   reabrir: reabrirSesion,
+  borrar: borrarSesion,
+  renombrar: renombrarSesion,
 };
 
 /** Lo mínimo que el vestíbulo necesita de una `SesionReal` para cambiar de proyecto. */
@@ -169,6 +184,13 @@ export interface OpcionesDelVestibulo {
    * mejor que una lista vacía.
    */
   marcarSesion?: (raiz: string) => Promise<(id: string) => Promise<boolean>>;
+  /**
+   * Quita la marca de una sesión que se borra (`agent/sesionGit.ts#olvidarSesion`). Va
+   * aparejada a `marcarSesion` y por la misma razón que ella entra por opción: este fichero
+   * no ejecuta git. Sin ella la ref se queda apuntando al árbol de una sesión que ya no
+   * existe, y ese árbol no se lo lleva nunca `git gc`.
+   */
+  olvidarMarcaDeSesion?: (raiz: string, id: string) => Promise<void>;
   /** Los entornos YA registrados, tal cual los lee `agent/settingsEnDisco.ts#cargarSettings`. */
   entornos?: readonly Entorno[];
   baseDeWorkspace?: string;
@@ -193,7 +215,7 @@ export interface OpcionesDelVestibulo {
    * que se le pidió al usuario, la URL. Ver `proyectosDe` para qué se hace con eso.
    */
   proyectosDeEntorno?: (entorno: Entorno) => Promise<{
-    proyectos: Array<{ id: string; nombre: string }>;
+    proyectos: readonly ProyectoRemoto[];
     servidor?: { nombre: string };
   }>;
   /** `proyecto` es el NOMBRE, no el id: el servidor abre por nombre y rechaza el
@@ -301,7 +323,7 @@ export interface Vestibulo {
    * elección —«ninguno»— y no un «no lo he dicho».
    */
   guardarProyectosVisibles(entorno: string, proyectos: readonly string[]): Promise<{ ruta: string }>;
-  proyectosDe(entorno: string): Promise<Array<{ id: string; nombre: string }>>;
+  proyectosDe(entorno: string): Promise<readonly ProyectoRemoto[]>;
   /**
    * Las ramas de un proyecto. Acepta la identidad ENTERA (`{id, nombre}`) además del nombre
    * suelto, por lo mismo que `completarProyecto`: quien llama desde la web tiene el id —es
@@ -317,6 +339,18 @@ export interface Vestibulo {
   raizDeProyecto(entorno: string, proyecto: string): string;
   /** Las sesiones guardadas de una copia local. Sin copia, lista vacía. */
   sesionesDe(raiz: string): { id: string; titulo: string }[];
+  /**
+   * Borra una sesión guardada, con su marca de git.
+   *
+   * Si la sesión es la ABIERTA, se cierra primero. El orden no es cosmético: `cerrar()`
+   * llama a `volcar()`, que anota los actos pendientes y con ello RESUCITA la entrada del
+   * índice que se acaba de borrar. Cerrando antes, lo que se borra ya no lo va a reescribir
+   * nadie — y el cliente se queda sin proyecto abierto, que es lo honesto: la conversación
+   * que estaba mirando ya no existe.
+   */
+  borrarSesion(raiz: string, id: string): Promise<{ borrada: boolean; cerroLaAbierta: boolean }>;
+  /** Le pone nombre a una sesión guardada. `false` si no existe o el título viene vacío. */
+  renombrarSesion(raiz: string, id: string, titulo: string): boolean;
   /** El paso 3 completo: escribe el alta y baja la copia local. */
   completarProyecto(eleccion: {
     entorno: string;
@@ -862,11 +896,40 @@ export function crearVestibulo(opciones: OpcionesDelVestibulo): Vestibulo {
       }
     },
 
+    async borrarSesion(raiz, id) {
+      // Cerrar ANTES de borrar: ver el comentario del contrato. Y solo si es ESA sesión —
+      // cerrar el proyecto entero porque se borró una conversación vieja de la lista sería
+      // llevarse por delante el trabajo en curso.
+      const cerroLaAbierta = abierto?.raiz === raiz && abierto.sesion === id;
+      if (cerroLaAbierta) await cerrarProyectoAbierto();
+      const borrada = sesiones.borrar?.(raiz, id) ?? false;
+      // La ref de git de la sesión se va con ella: apunta a un árbol que solo esa vista
+      // usaba, y dejarla mantendría ese árbol vivo para siempre (`agent/sesionGit.ts`).
+      // No es condicional al `borrada`: una entrada de índice ya perdida no es motivo para
+      // dejar la ref colgada.
+      await opciones.olvidarMarcaDeSesion?.(raiz, id);
+      return { borrada, cerroLaAbierta };
+    },
+
+    renombrarSesion(raiz, id, titulo) {
+      return sesiones.renombrar?.(raiz, id, titulo) ?? false;
+    },
+
     async completarProyecto({ entorno, proyecto, rama }) {
       const registrado = entornoPorId(entorno);
       // El listado remoto trae `{id, nombre}`; un nombre suelto vale porque en CloudStudio
       // el proyecto se abre POR NOMBRE (`studio_open_project`) y el id solo identifica.
-      const identidad = typeof proyecto === "string" ? { id: proyecto, nombre: proyecto } : proyecto;
+      //
+      // Se DESESTRUCTURA, y no es estilo: lo que entre aquí acaba en el `config.json` del
+      // proyecto (`guardarProyectoCloudStudioDeProyecto`, abajo), y quien llama le pasa una
+      // fila del listado remoto — que hoy trae además `compartido` y mañana podría traer
+      // otra cosa. TypeScript no avisa: la comprobación de propiedades de más solo salta
+      // con un literal, no con un objeto que llega por variable. Copiar los dos campos que
+      // SON la identidad es lo que impide que el disco se llene de datos del servidor.
+      const identidad =
+        typeof proyecto === "string"
+          ? { id: proyecto, nombre: proyecto }
+          : { id: proyecto.id, nombre: proyecto.nombre };
       const raiz = rutaDeWorkspace(base, registrado.id, identidad.nombre);
       const datos: DatosDeProyecto = {
         entorno: registrado.id,

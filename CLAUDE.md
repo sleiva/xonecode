@@ -422,6 +422,38 @@ sesiones llegaban a fuego como `[]`:
   cable, store y componente); colapsarla haría que elegir ninguno se leyera como no haber
   elegido. El ORDEN lo pone el listado del servidor, no el orden en que se marcaron.
 
+**Cada sesión de la barra tiene su «…»** (`apps/web/src/componentes/MenuDeSesion.tsx`,
+`AccionDeSesion.tsx`, `clase: "sesionAccion"`), con **dos** entradas y no las cuatro del
+harness de deepseek. Su `SessionNodeItem` ofrece renombrar, bifurcar y archivar; las otras
+dos no es que falten, es que aquí no significan nada: **bifurcar** no tiene qué bifurcar
+—el hilo del agente vive en un `MemorySaver` que muere con el proceso, así que reabrir es
+RELEER y no seguir hablando (es lo mismo que dice la marca `historica`)—, y **archivar** es
+un estado que habría que inventar entero —campo en el índice, filtro en la barra, sitio
+donde ver lo archivado— para que el botón significara algo; mientras no exista, «archivar»
+sería «desaparecer», o sea borrar sin decirlo. Cuatro cosas que no son negociables:
+- **La barra REPORTA la intención; no ejecuta.** Las dos escriben en el índice del proyecto
+  y una es irreversible, así que las confirma una ventana de `App.tsx` — no cabe en una
+  columna de 280 px, y eliminar al primer clic en una fila de 34 px es cómo se pierde la
+  conversación de una tarde.
+- **Al borrar la sesión ABIERTA se cierra ANTES de borrar** (`vestibulo.ts#borrarSesion`).
+  `cerrar()` llama a `volcar()`, que anota los actos pendientes y con ello RESUCITA la
+  entrada del índice recién borrada: al revés, la sesión reaparecía en la barra al siguiente
+  refresco como si el botón no hubiera hecho nada. Y se lleva su ref de git
+  (`olvidarSesion`, que hasta ahora no tenía ningún llamador): una ref viva mantiene su árbol
+  vivo para siempre.
+- **Un título vacío se rechaza** (`sesiones.ts#renombrarSesion`). No es validación de
+  formulario: `anotarActo` fija el título en el primer acto de usuario y solo mientras esté
+  vacío, así que dejarlo en blanco devolvería la sesión al régimen automático y el siguiente
+  turno la rebautizaría con la primera frase, borrando en silencio el nombre que puso una
+  persona. Por lo mismo, el título de la CABECERA sale del índice y solo cae al primer acto
+  de usuario como respaldo: si no, renombrar dejaba dos nombres para una sesión.
+- **El «…» se queda en la maqueta y lo que cambia es la opacidad** (`Barra.module.css`).
+  La hoja copiada lo esconde con `display: none` hasta `:hover`, y un elemento en
+  `display: none` no es enfocable: el Tab lo salta y el control no existe para el teclado.
+  Es el mismo cuidado que `Maqueta.tsx` documenta al plegar la barra, en el otro sentido.
+  El lazo de «pinchar fuera cierra» está en `apps/web/src/cerrarAlPulsarFuera.ts` desde que
+  hubo un segundo menú; copiarlo habría sido la tercera versión del mismo `mousedown`.
+
 **El entorno ACTIVO lo dice el servidor** (`alta.entornoActivo`), y el desplegable de la
 barra lo cambia de verdad (`clase: "entorno"`, `accion: "activo"`): traer los proyectos del
 otro entorno es una conexión con CloudStudio, así que la hace el servidor y contesta con la
@@ -540,8 +572,20 @@ una ruta ignorada y **sale con código 1**, así que el árbol no se escribía y
 «sin-marca» para siempre. Y los diffs llevan `--relative` porque los árboles se escriben con
 rutas desde la raíz del REPO, que no tiene por qué ser el proyecto (`instantanea.ts` sostiene
 ese caso): sin él, un proyecto en una subcarpeta daba rutas con prefijo que no casaban con
-ninguna al pedir el parche. El parche se pide al DESPLEGAR una fila,
-no al abrir la pestaña, y se recorta a `TOPE_DE_PARCHE` diciéndolo. La foto es de UNA sesión:
+ninguna al pedir el parche. La lista y el diff son **dos paneles**, no un
+acordeón: metiendo el diff dentro de la fila, un fichero de cien líneas se llevaba la lista
+fuera de la pantalla y te quedabas mirando un parche sin saber de qué fichero era ni cuántos
+más había. El índice se queda a la izquierda con su propio scroll, y la fila elegida se marca
+con fondo Y barra de acento — `--dsw-alias-interactive-bg-selected` NO EXISTE en la paleta
+copiada (cero apariciones, comprobado), y la `.sessionRow.selected` de ellos usa el alias de
+HOVER, o sea el mismo que la fila de al lado bajo el ratón. Del parche no se pinta la cabecera
+de git (`diff --git`, `index`, `---`, `+++`): son cuatro líneas al principio de CADA fichero
+que no dicen nada que el nombre de la fila no diga ya, y empujan el primer cambio de verdad
+fuera de la vista; se corta en el primer `@@`, salvo que no haya ninguno —un binario, un
+cambio de modo—, porque entonces eso ES todo lo que git tiene que decir. El diff se pide a
+git con `--diff-filter=AMD`: `claseDeCambio` devuelve «modificado» para cualquier letra que
+no sea `A` ni `D`, así que un cambio de TIPO se colaría con una etiqueta falsa. El parche se
+pide al ELEGIR una fila, no al abrir la pestaña, y se recorta a `TOPE_DE_PARCHE` diciéndolo. La foto es de UNA sesión:
 `store.ts` la tira en cuanto el `alta` trae otra `sesionActiva`.
 
 **La regla de qué URL de MCP vale es UNA** (`agent/cloudstudioMcp.ts#urlDeMcpAceptable`): HTTPS
@@ -614,9 +658,24 @@ con Ollama eso comprime demasiado tarde. Los historiales ya resumidos se escribe
   equivocado en el arranque es peor que no encontrar la tool.
 - **La respuesta no es una lista.** Medido: `studio_list_projects` devuelve un MAPA indexado
   por id bajo «recents», con el identificador en `pid`. `proyectosDeResultado` acepta lista y
-  mapa en cada clave conocida, usa la clave del mapa como id de reserva, y sigue quedándose
-  SOLO con `{id, nombre}`: la respuesta trae permisos, fechas y el correo del propietario, y
-  nada de eso puede acabar en `config.json` ni en el transcript.
+  mapa en cada clave conocida, usa la clave del mapa como id de reserva, y se queda con
+  `{id, nombre, compartido?}` y nada más: la respuesta trae también permisos (`rights`),
+  fechas (`last`), una tabla de `studiopermissions` y **el correo del propietario**
+  (`suser`), y nada de eso puede acabar en `config.json` ni en el transcript. Lo que sostiene
+  esa regla no es el comentario: es un test que compara las claves EXACTAS de lo que sale,
+  para que un «ya que estamos, llevemos también la fecha» no cuele el correo de camino.
+  `compartido` es el único campo que se añadió a los dos de siempre —lo pintan la barra y el
+  escritorio para distinguir lo propio de lo compartido— y es un BOOLEANO, no el correo: para
+  esa etiqueta basta, y quién lo compartió es un dato de una persona que esta consola no
+  necesita. Se toma **solo si vino como booleano de verdad**: este servidor es flojo con los
+  tipos (en la misma respuesta, `rights` es un objeto serializado como cadena), y `"false"`
+  es una cadena verdadera en JavaScript. Ausente se propaga como ausente hasta el componente,
+  y entonces no se pinta NINGUNA de las dos etiquetas — «el servidor no lo dijo» no es «es
+  tuyo», y afirmarlo etiquetaría como propios los proyectos de todo el mundo contra un
+  endpoint anterior. Por lo mismo, `completarProyecto` (`vestibulo.ts`) **desestructura**
+  `{id, nombre}` en vez de reenviar la fila entera: de ahí sale el `config.json` del
+  proyecto, y la comprobación de propiedades de más de TypeScript no salta con un objeto que
+  llega por variable.
 - Un fallo aquí no puede tumbar el arranque: el asistente informa y **no crea `.xonecode`** a
   medias.
 
@@ -830,6 +889,20 @@ Un fallo del entorno no se reporta como un proyecto roto: `agent/verificador.ts`
 `ErrorDelSimulador` en vez de devolver un informe en rojo.
 
 ## Trampas verificadas
+
+- **Un modelo de Ollama RETIRADO tumbaba el catálogo entero.** Medido contra el Ollama del
+  usuario: `/api/tags` devolvía 26 modelos y dos de ellos —modelos de Ollama Cloud dados de
+  baja— contestaban al `/api/show` con **HTTP 410** y «was retired at …». Siguen en el
+  manifiesto local, así que `tags` los nombra, pero ya no existen. El bucle de
+  `listarOllamaDesde` no capturaba nada, así que el primer 410 lanzaba y el proveedor ENTERO
+  se reportaba como no disponible: elegir «ollama» en el asistente no listaba NADA y volvía
+  al paso de proveedor —con 22 modelos usables detrás—, y el mensaje decía «respuesta no
+  disponible de ollama» sin nombrar ni el modelo ni el código. Ahora el `/api/show` de un
+  modelo se salta si falla (un modelo retirado no está DISPONIBLE, y esta lista es la de los
+  disponibles) y el código HTTP va EN el mensaje del error — sin él, un 410 y un 500 se leen
+  igual. Lo que NO se traga es que fallen todos: eso no es un catálogo vacío, es un servidor
+  roto, y se relanza. `ErrorCatalogoModelos` sigue sin llevar la clave ni el cuerpo remoto:
+  la regla es no filtrar secretos, no ser opaco.
 
 - **`SkillsPort.cargar()` sigue sin tener un solo llamador — pero las skills SÍ llegan al
   modelo.** Quien las carga es `SkillsMiddleware` de deepagents, no el puerto: `xoneAgent.ts`

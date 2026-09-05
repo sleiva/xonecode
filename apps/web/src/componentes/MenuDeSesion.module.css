@@ -1,0 +1,62 @@
+/* Alias comprobados contra `apps/web/estilos/design-platform.css`: bg-layer-1, border-l2,
+   label-primary/secondary, interactive-bg-hover, state-error-primary/secondary. */
+
+/* El asiento del «…»: ancla de posicionamiento para el menú, y la maqueta que antes ponía
+   `.rowActions` de la hoja copiada —de la que se dejó de tirar porque su `display: none`
+   deja el botón fuera del alcance del teclado; ver `Barra.module.css`. */
+.ancla {
+  position: relative;
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+}
+
+/* El menú cuelga de la fila y se sale de la barra por la derecha si hace falta: la barra
+   mide 280px y una fila de sesión ocupa casi todo. `z-index` por encima de las filas de
+   abajo, que si no lo tapan. */
+.menu {
+  position: absolute;
+  top: 100%;
+  right: 0;
+  z-index: 20;
+  display: flex;
+  flex-direction: column;
+  min-width: 160px;
+  padding: 4px;
+  border: 0.5px solid var(--dsw-alias-border-l2);
+  border-radius: 10px;
+  /* Sin sombra, como el menú de `PastillaDeModelo.module.css`: el borde y el fondo de capa
+     ya lo separan de lo de debajo, y una sombra pide un color literal que la disciplina de
+     estilos de este cliente no admite (no hay alias de sombra en la paleta copiada). */
+  background: var(--dsw-alias-bg-layer-1);
+}
+
+.opcion {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 10px;
+  border: none;
+  border-radius: 6px;
+  background: none;
+  color: var(--dsw-alias-label-primary);
+  font: inherit;
+  font-size: 13px;
+  text-align: left;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.opcion:hover {
+  background: var(--dsw-alias-interactive-bg-hover);
+}
+
+/* La que borra se lee distinta de la que no. No es decoración: es la única del menú que no
+   se puede deshacer. */
+.destructiva {
+  color: var(--dsw-alias-state-error-primary);
+}
+
+.destructiva:hover {
+  background: var(--dsw-alias-state-error-secondary);
+}

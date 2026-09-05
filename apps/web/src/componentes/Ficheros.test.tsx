@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
-import { Ficheros } from "./Ficheros.js";
+import { Ficheros, lineasDeParche } from "./Ficheros.js";
 
 const NADA = () => {};
 
@@ -90,10 +90,14 @@ describe("Ficheros", () => {
   });
 
   /**
-   * Las cabeceras del diff (`+++`/`---`) NO son líneas añadidas ni quitadas. Pintarlas
-   * como tales hace que cada fichero parezca empezar con un alta y una baja.
+   * La cabecera de git (`diff --git`, `index`, `---`, `+++`) no se pinta: son cuatro líneas
+   * de ruido al principio de CADA fichero que no dicen nada que no diga ya el nombre de la
+   * fila, y empujan el primer cambio de verdad fuera de la vista. Se corta en el primer
+   * `@@`. Y las que quedan se clasifican bien: `+++`/`---` NO son alta ni baja, y pintarlas
+   * de verde y rojo hacía que cada fichero pareciera empezar con una línea añadida y otra
+   * borrada.
    */
-  it("«+++» y «---» son cabecera, no línea añadida ni quitada", () => {
+  it("la cabecera de git no se pinta; el diff empieza en el primer «@@»", () => {
     const { container } = render(
       <Ficheros
         via="git"
@@ -107,7 +111,20 @@ describe("Ficheros", () => {
       />
     );
     const tipos = [...container.querySelectorAll("[data-tipo]")].map((n) => n.getAttribute("data-tipo"));
-    expect(tipos).toEqual(["cabecera", "cabecera", "trozo", "quitado", "anadido"]);
+    expect(tipos).toEqual(["trozo", "quitado", "anadido"]);
+    expect(container.textContent).not.toContain("+++");
+  });
+
+  /**
+   * Un parche SIN ningún `@@` —un binario, un cambio de modo— no se recorta: eso es todo lo
+   * que git tiene que decir del fichero, y esconderlo dejaría el panel vacío sin explicar
+   * por qué.
+   */
+  it("sin ningún «@@» no se corta nada: es todo lo que hay", () => {
+    expect(lineasDeParche("diff --git a/x b/x\nBinary files differ")).toEqual([
+      "diff --git a/x b/x",
+      "Binary files differ",
+    ]);
   });
 
   it("un parche recortado lo dice: un diff a medias sin avisar es un diff falso", () => {

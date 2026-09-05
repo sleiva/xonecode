@@ -104,3 +104,40 @@ describe("Escritorio", () => {
     expect(screen.queryByText(/dispositivos conectados/i)).toBeNull();
   });
 });
+
+describe("Escritorio: propios y compartidos", () => {
+  afterEach(cleanup);
+
+  it("la tarjeta dice de quién es, con una palabra", () => {
+    render(
+      <Escritorio
+        {...MANEJADORES}
+        proyectos={[
+          { id: "p1", nombre: "Mío", compartido: false },
+          { id: "p2", nombre: "De otro", compartido: true },
+        ]}
+      />
+    );
+    expect(screen.getByText("propio")).toBeTruthy();
+    expect(screen.getByText("compartido")).toBeTruthy();
+  });
+
+  /**
+   * «De quién es» y «si está bajado» son dos preguntas distintas y las dos tienen su sitio:
+   * fundirlas —o que una tapara a la otra— dejaría sin respuesta la que no se pintara.
+   */
+  it("no se come la marca de copia local: son dos datos distintos", () => {
+    render(
+      <Escritorio {...MANEJADORES} proyectos={[{ id: "p1", nombre: "De otro", compartido: true, local: true }]} />
+    );
+    expect(screen.getByText("compartido")).toBeTruthy();
+    expect(screen.getByText("en tu equipo")).toBeTruthy();
+  });
+
+  /** Ausente es «no lo sé»: ni «propio» ni «compartido». Ver `Barra.comportamiento.test.tsx`. */
+  it("sin el dato no se pinta ninguna de las dos", () => {
+    render(<Escritorio {...MANEJADORES} proyectos={[{ id: "p1", nombre: "Sin dato" }]} />);
+    expect(screen.queryByText("propio")).toBeNull();
+    expect(screen.queryByText("compartido")).toBeNull();
+  });
+});

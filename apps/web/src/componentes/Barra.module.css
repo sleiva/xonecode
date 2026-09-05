@@ -92,12 +92,43 @@
   font-style: italic;
 }
 
-/* Una sesión reabierta y sin turno nuevo se atenúa por debajo de la viva: es la
-   distinción que pide el criterio de aceptación, y `label-dimmed` ya existe en el
-   alfabeto de alias — no hace falta inventar un tercer color. */
+/* Una sesión reabierta y sin turno nuevo se distingue de la viva. Iba en `label-dimmed`, y
+   MEDIDO en pantalla no se podía leer: ese alias es el gris más flojo del alfabeto y las
+   filas caen sobre un fondo gris, así que el título quedaba casi invisible — y como TODA
+   sesión guardada nace histórica al reabrirse, la lista entera se leía fantasma. La
+   distinción la lleva ahora la cursiva, que ya estaba, más un gris que sí se lee. Atenuar
+   no puede significar esconder: son las conversaciones por las que se navega. */
 .historica {
-  color: var(--dsw-alias-label-dimmed);
+  color: var(--dsw-alias-label-secondary);
   font-style: italic;
+}
+
+/* La sesión ABIERTA, marcada como el proyecto abierto y por el mismo motivo: la
+   `.sessionRow.selected` de la hoja copiada pinta el MISMO fondo que `:hover`, o sea el
+   mismo que la fila de al lado cuando pasas el ratón por encima. El acento es lo que
+   desempata. El recuadro va más ajustado que el de `.filaAbierta` porque la fila de sesión
+   es más baja que la de proyecto. */
+.sesionAbierta {
+  position: relative;
+  background: var(--dsw-alias-interactive-bg-hover);
+  border-radius: 8px;
+}
+
+.sesionAbierta::before {
+  content: "";
+  position: absolute;
+  top: 4px;
+  bottom: 4px;
+  left: 0;
+  width: 2px;
+  border-radius: 2px;
+  background: var(--dsw-alias-button-primary-fill);
+}
+
+/* Y la abierta no se atenúa aunque sea histórica: es justo la que estás mirando, así que
+   no puede ser la más apagada de la lista. */
+.sesionAbierta.historica {
+  color: var(--dsw-alias-label-primary);
 }
 
 /* Su `.sectionHeader` lleva `justify-content: flex-end` porque en su barra el rótulo va
@@ -109,4 +140,53 @@
 .rellenoDeSeccion {
   flex: 1;
   min-width: 0;
+}
+
+/* Las acciones de una fila —el «+» del proyecto, el «…» de la sesión— salen al posar el
+   ratón. La hoja copiada lo hace con `display: none` hasta `:hover`, y eso tiene un coste
+   que ahí no se ve: un control que solo EXISTE bajo el ratón no lo alcanza nunca el
+   teclado, porque un elemento en `display: none` no es enfocable y el Tab lo salta. Es el
+   mismo cuidado que `Maqueta.tsx` documenta al plegar la barra, en el sentido contrario:
+   allí se desmonta para que no se pueda tabular a lo invisible, aquí se mantiene montado
+   para que SÍ se pueda tabular a lo que hay.
+
+   Así que se queda siempre en la maqueta y lo que cambia es la opacidad, con tres
+   disparadores: la fila bajo el ratón, el foco dentro (teclado) y el menú desplegado —si
+   se escondiera al salir el ratón, el menú se quedaría colgando de la nada—. La doble
+   clase es para ganarle en especificidad al `display: none` de la hoja copiada sin tocarla
+   ni recurrir a `!important`. */
+.accionesDeFila.accionesDeFila {
+  display: inline-flex;
+  opacity: 0;
+}
+
+.filaConAccion:hover .accionesDeFila.accionesDeFila,
+.accionesDeFila.accionesDeFila:focus-within,
+.accionesDeFila.accionesDeFila[data-abierto] {
+  opacity: 1;
+}
+
+/* De quién es el proyecto, al lado del nombre. Discreta a propósito: el nombre es lo que se
+   lee para elegir, y esto es la respuesta a una pregunta que solo se hace de vez en cuando.
+   Lo compartido se destaca sobre lo propio —tener cosas tuyas es lo normal, lo que cambia
+   cómo trabajas es que sea de otro— y por eso solo esa variante se colorea; la palabra
+   distingue las dos aunque el color no llegue. */
+.duenno {
+  flex: none;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: var(--dsw-alias-bg-layer-2);
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 10px;
+  line-height: 1.6;
+  white-space: nowrap;
+}
+
+/* `state-business-tertiary`, no `…-secondary`: ese alias NO EXISTE en la paleta copiada
+   (comprobado — de la familia «state» solo hay secondary para success, error y warn), y
+   usarlo dejaba la pastilla sin fondo. El tertiary es el azul pastel que `Chat.module.css`
+   ya documenta haber medido para su burbuja de usuario. */
+.duenno[data-compartido] {
+  background: var(--dsw-alias-state-business-tertiary);
+  color: var(--dsw-alias-state-business-primary);
 }

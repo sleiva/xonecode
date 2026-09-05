@@ -36,6 +36,9 @@ export function Escritorio({
     id: string;
     nombre: string;
     local?: boolean;
+    /** Compartido CONTIGO por otra persona. Ausente = el servidor no lo dijo, que no es lo
+     *  mismo que «es tuyo»: entonces no se pinta ninguna de las dos etiquetas. */
+    compartido?: boolean;
     sesiones?: readonly { id: string; titulo: string }[];
   }[];
   /** «proveedor/modelo» en vigor. Ausente = no hay sesión y por tanto no se afirma ninguno. */
@@ -80,6 +83,18 @@ export function Escritorio({
                 <li key={p.id} className={estilos.tarjeta}>
                   <div className={estilos.cabeceraDeTarjeta}>
                     <h2 className={estilos.nombreDeProyecto}>{p.nombre}</h2>
+                    {/*
+                      De quién es, pegado al NOMBRE — mientras que «en tu equipo» se queda
+                      en su esquina. Son dos preguntas distintas y no pueden compartir sitio:
+                      una es de quién es el proyecto allá arriba, la otra si está bajado
+                      aquí. Con una palabra y no solo con color, y solo cuando el servidor
+                      lo dijo: `undefined` no pinta ninguna de las dos.
+                    */}
+                    {p.compartido === undefined ? null : (
+                      <span className={estilos.duenno} data-compartido={p.compartido ? "" : undefined}>
+                        {p.compartido ? "compartido" : "propio"}
+                      </span>
+                    )}
                     {/* «En tu equipo» es un dato del servidor, no una promesa: es si existe
                         su copia local, que es lo que decide si empezar baja algo o no. */}
                     <span className={estilos.marca} data-local={p.local === true ? "" : undefined}>

@@ -77,7 +77,14 @@ export interface EstadoDelCliente {
     /** Los REGISTRADOS (`settings.json`), no los ofrecidos: es lo que lista la ventana de
      *  ajustes y lo que la barra debe enseñar. Vacío mientras no haya ninguno. */
     registrados: { id: string; nombre: string; url: string; proyectos?: string[] }[];
-    proyectos: { id: string; nombre: string; sesiones?: { id: string; titulo: string }[]; local?: boolean }[];
+    proyectos: {
+      id: string;
+      nombre: string;
+      sesiones?: { id: string; titulo: string }[];
+      local?: boolean;
+      /** Compartido CONTIGO. Ausente = el servidor no lo dijo, que no es «es tuyo». */
+      compartido?: boolean;
+    }[];
     ramas: string[];
     /** Lo que falló en el paso anterior, para que lo diga el paso y no solo la Trayectoria. */
     aviso?: string;
@@ -395,6 +402,13 @@ export function crearStoreDelCliente(): {
               nombre: p.nombre,
               ...(sonSesiones(sesiones) ? { sesiones: sesiones.map((s) => ({ id: s.id, titulo: s.titulo })) } : {}),
               ...((p as { local?: unknown }).local === true ? { local: true } : {}),
+              // La MISMA regla que el servidor: solo un booleano de verdad. Ausente se
+              // queda ausente, y la interfaz no pinta etiqueta — «no lo dijo» no es
+              // «es tuyo». Una cadena colada aquí («shared: "false"») marcaría el
+              // proyecto como compartido, porque una cadena no vacía es verdadera.
+              ...(typeof (p as { compartido?: unknown }).compartido === "boolean"
+                ? { compartido: (p as unknown as { compartido: boolean }).compartido }
+                : {}),
             };
           });
           if (

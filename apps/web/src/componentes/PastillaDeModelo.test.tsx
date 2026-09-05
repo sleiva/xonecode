@@ -137,3 +137,89 @@ describe("PastillaDeModelo", () => {
     expect(screen.getByRole("button", { name: /^ollama$/i }).querySelector("[data-credencial]")).toBeNull();
   });
 });
+
+describe("el punto de un proveedor SIN credencial habla de la conexión", () => {
+  afterEach(cleanup);
+
+  const ollama = (extra: Record<string, unknown>) => ({
+    id: "ollama",
+    credencial: "nativa" as const,
+    ...extra,
+  });
+
+  function montar(p: ReturnType<typeof ollama>) {
+    render(
+      <PastillaDeModelo
+        proveedores={[p]}
+        alPedirCatalogo={() => {}}
+        alElegirModelo={() => {}}
+      />
+    );
+    fireEvent.click(screen.getByRole("button", { name: /elige modelo|ollama/i }));
+  }
+
+  /**
+   * Antes no se pintaba NADA para Ollama local, porque no lleva credencial de la que
+   * hablar. Pero «¿puedo usarlo?» ahí no la contesta ninguna clave: la contesta si el
+   * demonio responde — y eso ya se sabe sin pedir nada nuevo, porque su catálogo ES la
+   * prueba de conexión.
+   */
+  it("verde cuando su catálogo contestó", () => {
+    montar(ollama({ modelos: [{ id: "qwen3:8b" }] }));
+    expect(screen.getByTitle("conectado")).toBeTruthy();
+  });
+
+  it("rojo cuando su catálogo falló", () => {
+    montar(ollama({ error: "no se puede contactar con ollama" }));
+    expect(screen.getByTitle("sin conexión")).toBeTruthy();
+  });
+
+  /**
+   * Y nada mientras no conste ninguna de las dos: un punto verde antes de haber hablado
+   * con el demonio afirmaría una conexión que nadie ha comprobado. Es la misma disciplina
+   * de los tres estados de credencial.
+   */
+  it("sin consultar todavía no se pinta punto: no se afirma una conexión sin comprobarla", () => {
+    montar(ollama({}));
+    expect(screen.queryByTitle("conectado")).toBeNull();
+    expect(screen.queryByTitle("sin conexión")).toBeNull();
+  });
+
+  /** Los que SÍ llevan credencial no cambian: su punto sigue hablando de la clave. */
+  it("un proveedor con clave sigue diciendo lo de siempre", () => {
+    render(
+      <PastillaDeModelo
+        proveedores={[{ id: "anthropic", credencial: "puesta", modelos: [{ id: "claude-x" }] }]}
+        alPedirCatalogo={() => {}}
+        alElegirModelo={() => {}}
+      />
+    );
+    fireEvent.click(screen.getByRole("button", { name: /elige modelo|anthropic/i }));
+    expect(screen.getByTitle("con credencial")).toBeTruthy();
+  });
+});
+
+/**
+ * El punto es una descripción de la fila, no su nombre. Un `aria-label` dentro del botón se
+ * sumaba al nombre accesible y el proveedor pasaba a llamarse «conectado ollama»: dejaba de
+ * poder encontrarse por su nombre, tanto en un test como diciéndolo por voz.
+ */
+describe("el punto no se cuela en el nombre del proveedor", () => {
+  afterEach(cleanup);
+
+  it("el botón del proveedor se sigue llamando por su nombre y nada más", () => {
+    render(
+      <PastillaDeModelo
+        proveedores={[
+          { id: "ollama", credencial: "nativa", modelos: [{ id: "qwen3" }] },
+          { id: "anthropic", credencial: "puesta", modelos: [{ id: "claude-x" }] },
+        ]}
+        alPedirCatalogo={() => {}}
+        alElegirModelo={() => {}}
+      />
+    );
+    fireEvent.click(screen.getByRole("button", { name: /elige modelo|ollama/i }));
+    expect(screen.getByRole("button", { name: /^ollama$/i })).toBeTruthy();
+    expect(screen.getByRole("button", { name: /^anthropic$/i })).toBeTruthy();
+  });
+});

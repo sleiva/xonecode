@@ -71,27 +71,39 @@ export function Ficheros({
     return <p className={estilos.aviso}>Esta sesión todavía no ha tocado ningún fichero.</p>;
   }
 
+  const elegido = ficheros.find((f) => f.ruta === abierto);
+  const parche = elegido === undefined ? undefined : parches[elegido.ruta];
+
   return (
+    /*
+      Dos paneles y no un acordeón. El acordeón metía el diff DENTRO de la fila, así que en
+      cuanto el fichero tenía cien líneas la lista se iba de la pantalla: te quedabas mirando
+      un diff sin saber de qué fichero era ni cuántos más había. La lista se queda siempre a
+      la izquierda —es el índice de lo que ha hecho la sesión— y el diff ocupa su propio
+      panel. Es la disposición de cualquier visor de diffs, y por este motivo exacto.
+    */
     <div className={estilos.ficheros}>
-      <div className={estilos.cabecera}>
-        <span>
-          {ficheros.length} {ficheros.length === 1 ? "fichero" : "ficheros"}
-        </span>
-        <button type="button" className={estilos.recargar} onClick={alRecargar}>
-          Actualizar
-        </button>
-      </div>
-      <ul className={estilos.lista}>
-        {ficheros.map((f) => {
-          const desplegado = abierto === f.ruta;
-          const parche = parches[f.ruta];
-          return (
-            <li key={f.ruta} className={estilos.fila}>
+      <div className={estilos.panel}>
+        <div className={estilos.cabecera}>
+          <span>
+            {ficheros.length} {ficheros.length === 1 ? "fichero" : "ficheros"}
+          </span>
+          <button type="button" className={estilos.recargar} onClick={alRecargar}>
+            Actualizar
+          </button>
+        </div>
+        <ul className={estilos.lista}>
+          {ficheros.map((f) => (
+            <li key={f.ruta}>
               <button
                 type="button"
                 className={estilos.nombre}
-                aria-expanded={desplegado}
-                onClick={() => alAbrir(desplegado ? undefined : f.ruta)}
+                // `aria-current` y no `aria-expanded`: ya no despliega nada, elige cuál se
+                // está mirando. Y va además del fondo, que solo no basta cuando la fila de
+                // al lado está en `:hover`.
+                {...(f.ruta === abierto ? { "aria-current": "true" as const } : {})}
+                data-elegido={f.ruta === abierto ? "" : undefined}
+                onClick={() => alAbrir(f.ruta === abierto ? undefined : f.ruta)}
               >
                 <span className={estilos.clase} data-clase={f.clase} aria-label={f.clase}>
                   {f.clase === "nuevo" ? "A" : f.clase === "borrado" ? "D" : "M"}
@@ -116,34 +128,56 @@ export function Ficheros({
                   </span>
                 )}
               </button>
-              {desplegado ? (
-                parche === undefined ? (
-                  <p className={estilos.aviso}>Trayendo el diff…</p>
-                ) : (
-                  <div className={estilos.parche}>
-                    {parche.texto === "" ? (
-                      <p className={estilos.aviso}>Sin diff que enseñar para este fichero.</p>
-                    ) : (
-                      parche.texto.split("\n").map((linea, i) => (
-                        <div key={i} className={estilos.linea} data-tipo={tipoDeLinea(linea)}>
-                          {linea === "" ? " " : linea}
-                        </div>
-                      ))
-                    )}
-                    {parche.recortado ? (
-                      <p className={estilos.aviso}>
-                        El diff es demasiado grande y se ha cortado: míralo en tu editor.
-                      </p>
-                    ) : null}
-                  </div>
-                )
-              ) : null}
             </li>
-          );
-        })}
-      </ul>
+          ))}
+        </ul>
+      </div>
+
+      <div className={estilos.detalle}>
+        {elegido === undefined ? (
+          <p className={estilos.aviso}>Elige un fichero de la lista para ver qué cambió.</p>
+        ) : parche === undefined ? (
+          <p className={estilos.aviso}>Trayendo el diff de {elegido.ruta}…</p>
+        ) : (
+          <>
+            <div className={estilos.cabeceraDeParche}>{elegido.ruta}</div>
+            <div className={estilos.parche}>
+              {parche.texto === "" ? (
+                <p className={estilos.aviso}>Sin diff que enseñar para este fichero.</p>
+              ) : (
+                lineasDeParche(parche.texto).map((linea, i) => (
+                  <div key={i} className={estilos.linea} data-tipo={tipoDeLinea(linea)}>
+                    {linea === "" ? " " : linea}
+                  </div>
+                ))
+              )}
+              {parche.recortado ? (
+                <p className={estilos.aviso}>
+                  El diff es demasiado grande y se ha cortado: míralo en tu editor.
+                </p>
+              ) : null}
+            </div>
+          </>
+        )}
+      </div>
     </div>
   );
+}
+
+/**
+ * Las líneas del parche que hay algo que enseñar, o sea sin la cabecera de git.
+ *
+ * `diff --git a/x b/x`, `index b6545b0..e8ba3a8`, `--- a/x` y `+++ b/x` son cuatro líneas de
+ * ruido al principio de CADA fichero: no dicen nada que no diga ya el nombre de la fila, y
+ * empujan el primer cambio de verdad fuera de la vista. Se corta en el primer `@@`, que es
+ * donde empieza el contenido. Si no hay ninguno —un fichero binario, un cambio de modo— no
+ * se corta nada: eso es todo lo que git tiene que decir de ese fichero, y esconderlo dejaría
+ * un panel vacío sin explicación.
+ */
+export function lineasDeParche(texto: string): string[] {
+  const lineas = texto.split("\n");
+  const primerTrozo = lineas.findIndex((l) => l.startsWith("@@"));
+  return primerTrozo === -1 ? lineas : lineas.slice(primerTrozo);
 }
 
 /** La parte de la ruta que se puede recortar: todo menos el nombre del fichero. */

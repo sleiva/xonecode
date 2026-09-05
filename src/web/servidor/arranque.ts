@@ -53,7 +53,8 @@ import { borrarCredencial, guardarCredencial } from "../../agent/authEnDisco.js"
 import { cargarSettings, guardarEntorno as guardarEntornoEnDisco } from "../../agent/settingsEnDisco.js";
 import { abrirEnSistema } from "../../agent/cloudstudioMcp.js";
 import { nombreDePersona } from "../../agent/persona.js";
-import { cambiosDeSesion, fotoDeApertura, parcheDeSesion } from "../../agent/sesionGit.js";
+import { cambiosDeSesion, fotoDeApertura, olvidarSesion, parcheDeSesion } from "../../agent/sesionGit.js";
+import type { ProyectoRemoto } from "../../agent/cloudstudioMcp.js";
 import { CatalogoModelos } from "../../agent/catalogoModelos.js";
 import type { Entorno } from "../../core/settings.js";
 import { arrancarServidor, type ServidorWeb } from "./servidor.js";
@@ -174,7 +175,7 @@ export function montarRutas(
   /** Lo elegido en el wizard hasta ahora. Ninguno se inventa: sin elección, no hay lista. */
   let entornoElegido: string | undefined;
   let proyectoElegido: string | undefined;
-  let proyectos: { id: string; nombre: string }[] = [];
+  let proyectos: readonly ProyectoRemoto[] = [];
   let ramas: string[] = [];
   /**
    * El paso de cuenta ya conducido en ESTE proceso. Hace falta porque `origenDeTrabajo` se
@@ -539,6 +540,54 @@ export function montarRutas(
    * se abre directamente y el cable se muda a su consola. Sin copia local se cae al camino
    * del alta, que es el único que sabe bajarla: se contestan las ramas y el cliente elige.
    */
+  /**
+   * Borrar una sesión guardada, o ponerle nombre.
+   *
+   * La raíz se CALCULA con `raizDeProyecto`, igual que al abrir, y no se toma del proyecto
+   * abierto: se puede borrar una sesión de un proyecto que no es el que se está mirando, y
+   * darlo por hecho borraría en el sitio equivocado. Sin entorno elegido no hay raíz que
+   * calcular y se dice, en vez de escribir a ciegas.
+   */
+  const atenderAccionDeSesion = async (
+    peticion: Extract<MensajeDelCliente, { clase: "sesionAccion" }>
+  ): Promise<void> => {
+    aviso = undefined;
+    try {
+      if (entornoElegido === undefined) {
+        aviso = "no sé de qué entorno es ese proyecto";
+        informar(aviso);
+        return;
+      }
+      const identidad = proyectos.find((p) => p.id === peticion.proyecto);
+      const raiz = vestibulo.raizDeProyecto(entornoElegido, identidad?.nombre ?? peticion.proyecto);
+      if (peticion.accion === "borrar") {
+        const { borrada, cerroLaAbierta } = await vestibulo.borrarSesion(raiz, peticion.sesion);
+        // Se dice lo que pasó, incluido el «no había nada»: un menú que borra y calla deja
+        // dudando de si la fila se fue porque se borró o porque falló el listado.
+        informar(
+          borrada
+            ? cerroLaAbierta
+              ? "sesión borrada; era la que estabas mirando, así que se ha cerrado"
+              : "sesión borrada"
+            : "esa sesión ya no estaba"
+        );
+        // Al cerrar la abierta, el cable se queda enganchado a una consola muerta: se muda
+        // de vuelta al vestíbulo, que es lo que el cliente va a pintar (el escritorio).
+        if (cerroLaAbierta) adjuntar();
+        return;
+      }
+      if (!vestibulo.renombrarSesion(raiz, peticion.sesion, peticion.titulo)) {
+        aviso = "no se pudo renombrar esa sesión";
+        informar(aviso);
+      }
+    } catch (error) {
+      aviso = error instanceof Error ? error.message : String(error);
+      contar(error);
+    } finally {
+      await anunciarAlta().catch(contar);
+    }
+  };
+
   const atenderSesion = async (peticion: Extract<MensajeDelCliente, { clase: "sesion" }>): Promise<void> => {
     aviso = undefined;
     try {
@@ -920,6 +969,12 @@ export function montarRutas(
       respuesta.end();
       return;
     }
+    if (typeof mensaje === "object" && mensaje !== null && mensaje.clase === "sesionAccion") {
+      void atenderAccionDeSesion(mensaje).catch(contar);
+      respuesta.writeHead(204);
+      respuesta.end();
+      return;
+    }
     if (typeof mensaje === "object" && mensaje !== null && mensaje.clase === "modelo") {
       atenderModelo(mensaje.id);
       respuesta.writeHead(204);
@@ -1200,6 +1255,7 @@ function vestibuloReal(
     // El «antes» de cada sesión: se fotografía al abrir el proyecto y se nombra cuando la
     // sesión tiene id. Ver `agent/sesionGit.ts` para por qué es una ref y no un tag.
     marcarSesion: fotoDeApertura,
+    olvidarMarcaDeSesion: olvidarSesion,
     entornos: settings.entornos,
     ...(settings.workspace === undefined ? {} : { baseDeWorkspace: settings.workspace }),
     // La URL de la web para que la página del callback devuelva AQUÍ y no diga «vuelve a

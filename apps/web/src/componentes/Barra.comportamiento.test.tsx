@@ -28,6 +28,7 @@ describe("Barra: los tres niveles vacíos se explican solos", () => {
         alAbrirSesion={() => {}}
         alAbrirProyecto={() => {}}
         alNuevaSesion={() => {}}
+        alAccionDeSesion={() => {}}
         alAbrirAjustes={() => {}}
       />
     );
@@ -117,6 +118,7 @@ describe("Barra: los tres niveles vacíos se explican solos", () => {
         alAbrirSesion={() => {}}
         alAbrirProyecto={() => {}}
         alNuevaSesion={() => {}}
+        alAccionDeSesion={() => {}}
         alAbrirAjustes={() => {}}
       />
     );
@@ -157,6 +159,7 @@ describe("Barra: los tres niveles vacíos se explican solos", () => {
         alAbrirSesion={() => {}}
         alAbrirProyecto={alAbrirProyecto}
         alNuevaSesion={() => {}}
+        alAccionDeSesion={() => {}}
         alAbrirAjustes={() => {}}
       />
     );
@@ -200,10 +203,187 @@ describe("Barra: los tres niveles vacíos se explican solos", () => {
         alAbrirSesion={() => {}}
         alAbrirProyecto={() => {}}
         alNuevaSesion={() => {}}
+        alAccionDeSesion={() => {}}
         alAbrirAjustes={() => {}}
       />
     );
     expect(screen.getByRole("combobox")).toBeTruthy();
     expect(screen.getByRole("button", { name: "Hola" })).toBeTruthy();
+  });
+});
+
+describe("el «…» de una sesión", () => {
+  const PROYECTO = [
+    { id: "p1", nombre: "AppDemo", sesiones: [{ id: "s1", titulo: "arregla el login", historica: true }] },
+  ];
+
+  function montarConSesion(alAccion = () => {}) {
+    return render(
+      <Barra
+        entornos={[]}
+        entornoActivo=""
+        proyectos={PROYECTO}
+        alElegirEntorno={() => {}}
+        alAbrirSesion={() => {}}
+        alAbrirProyecto={() => {}}
+        alNuevaSesion={() => {}}
+        alAccionDeSesion={alAccion}
+        alAbrirAjustes={() => {}}
+      />
+    );
+  }
+
+  /**
+   * Tres «…» idénticos en tres filas son indistinguibles para quien navega con lector de
+   * pantalla: cada uno tiene que decir de QUÉ sesión es.
+   */
+  it("el disparador se nombra por su sesión, no «…» a secas", () => {
+    montarConSesion();
+    expect(screen.getByRole("button", { name: /opciones de «arregla el login»/i })).toBeTruthy();
+  });
+
+  it("cerrado no hay menú; abierto salen las dos acciones", () => {
+    montarConSesion();
+    expect(screen.queryByRole("menu")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: /opciones de/i }));
+    expect(screen.getByRole("menuitem", { name: /renombrar/i })).toBeTruthy();
+    expect(screen.getByRole("menuitem", { name: /eliminar/i })).toBeTruthy();
+  });
+
+  /**
+   * Las que el harness de deepseek sí tiene y aquí no significan nada: bifurcar no tiene
+   * hilo que bifurcar (el `MemorySaver` muere con el proceso, reabrir es RELEER) y archivar
+   * es un estado que no existe — sería «desaparecer», o sea borrar sin decirlo.
+   */
+  it("no ofrece bifurcar ni archivar: no hay nada detrás de esas dos", () => {
+    montarConSesion();
+    fireEvent.click(screen.getByRole("button", { name: /opciones de/i }));
+    expect(screen.queryByRole("menuitem", { name: /bifurcar|fork/i })).toBeNull();
+    expect(screen.queryByRole("menuitem", { name: /archivar|archive/i })).toBeNull();
+  });
+
+  /**
+   * La barra REPORTA la intención, no ejecuta: las dos escriben en el índice del proyecto y
+   * una es irreversible, así que quien las confirma es la ventana de `App.tsx`. Si la barra
+   * mandara el mensaje, eliminar sería un clic sin vuelta atrás en una fila de 34 píxeles.
+   */
+  it("elegir «Eliminar» reporta la intención con su sesión, y cierra el menú", () => {
+    const elegido: unknown[] = [];
+    montarConSesion(((...args: unknown[]) => elegido.push(args)) as () => void);
+    fireEvent.click(screen.getByRole("button", { name: /opciones de/i }));
+    fireEvent.click(screen.getByRole("menuitem", { name: /eliminar/i }));
+    expect(elegido).toEqual([["p1", "s1", "arregla el login", "borrar"]]);
+    expect(screen.queryByRole("menu")).toBeNull();
+  });
+
+  it("Escape cierra el menú sin elegir nada", () => {
+    const elegido: unknown[] = [];
+    montarConSesion(((...args: unknown[]) => elegido.push(args)) as () => void);
+    fireEvent.click(screen.getByRole("button", { name: /opciones de/i }));
+    fireEvent.keyDown(document, { key: "Escape" });
+    expect(screen.queryByRole("menu")).toBeNull();
+    expect(elegido).toEqual([]);
+  });
+
+  /**
+   * Un `<button>` dentro de otro `<button>` es HTML inválido y el clic se reparte entre los
+   * dos: pulsar el «…» abriría además la sesión. La fila tiene que ser un contenedor con
+   * dos botones HERMANOS, como ya lo es la de proyecto.
+   */
+  it("el «…» no está anidado dentro del botón que abre la sesión", () => {
+    const { container } = montarConSesion();
+    expect(container.querySelector("button button")).toBeNull();
+  });
+});
+
+describe("propios y compartidos", () => {
+  function montar(proyectos: Parameters<typeof Barra>[0]["proyectos"]) {
+    return render(
+      <Barra
+        entornos={[]}
+        entornoActivo=""
+        proyectos={proyectos}
+        alElegirEntorno={() => {}}
+        alAbrirSesion={() => {}}
+        alAbrirProyecto={() => {}}
+        alNuevaSesion={() => {}}
+        alAccionDeSesion={() => {}}
+        alAbrirAjustes={() => {}}
+      />
+    );
+  }
+
+  it("lo compartido y lo propio se dicen con una PALABRA, no solo con un color", () => {
+    montar([
+      { id: "p1", nombre: "Mío", sesiones: [], compartido: false },
+      { id: "p2", nombre: "De otro", sesiones: [], compartido: true },
+    ]);
+    expect(screen.getByText("propio")).toBeTruthy();
+    expect(screen.getByText("compartido")).toBeTruthy();
+  });
+
+  /**
+   * EL caso que importa: un servidor que no manda `shared` (un CloudStudio anterior) no
+   * puede acabar con todos los proyectos etiquetados «propio». Ausente es «no lo sé», y lo
+   * único honesto es no pintar ninguna de las dos — la misma postura que el punto de
+   * credencial de `PastillaDeModelo` o el `via` de la pestaña de ficheros.
+   */
+  it("sin el dato no se pinta NINGUNA de las dos: «no lo dijo» no es «es tuyo»", () => {
+    montar([{ id: "p1", nombre: "Sin dato", sesiones: [] }]);
+    expect(screen.queryByText("propio")).toBeNull();
+    expect(screen.queryByText("compartido")).toBeNull();
+  });
+});
+
+describe("la sesión abierta se distingue de la que tienes bajo el ratón", () => {
+  const PROYECTOS = [
+    {
+      id: "p1",
+      nombre: "AppDemo",
+      sesiones: [
+        { id: "s1", titulo: "la abierta", historica: true },
+        { id: "s2", titulo: "otra", historica: true },
+      ],
+    },
+  ];
+
+  function montar(sesionActiva?: string) {
+    return render(
+      <Barra
+        entornos={[]}
+        entornoActivo=""
+        proyectos={PROYECTOS}
+        {...(sesionActiva === undefined ? {} : { sesionActiva })}
+        alElegirEntorno={() => {}}
+        alAbrirSesion={() => {}}
+        alAbrirProyecto={() => {}}
+        alNuevaSesion={() => {}}
+        alAccionDeSesion={() => {}}
+        alAbrirAjustes={() => {}}
+      />
+    );
+  }
+
+  /**
+   * `filas.selected` de la hoja copiada pinta el MISMO fondo que `:hover`, así que la sesión
+   * abierta y la fila que tienes debajo del ratón se veían idénticas. Se marca con dos
+   * señales, como el proyecto abierto: el fondo con su acento, y `aria-current` para quien
+   * no distingue el color o no lo ve.
+   */
+  it("la abierta lleva `aria-current`; las demás no", () => {
+    const { container } = montar("s1");
+    const marcadas = [...container.querySelectorAll("[aria-current]")];
+    const titulos = marcadas.map((n) => n.textContent);
+    expect(titulos.some((t) => t?.includes("la abierta"))).toBe(true);
+    expect(titulos.some((t) => t?.includes("otra"))).toBe(false);
+  });
+
+  /**
+   * Sin el dato del servidor no se marca NADA: marcar la primera por no tenerlo afirmaría
+   * «aquí estás» sin saberlo. Misma postura que con el proyecto activo.
+   */
+  it("sin `sesionActiva` no se marca ninguna", () => {
+    const { container } = montar();
+    expect(container.querySelector("[aria-current]")).toBeNull();
   });
 });

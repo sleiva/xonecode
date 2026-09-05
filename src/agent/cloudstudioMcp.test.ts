@@ -179,10 +179,10 @@ describe("proyectosDeResultado · forma real de studio_list_projects", () => {
     },
   };
 
-  it("extrae los proyectos de un mapa indexado por id", () => {
+  it("extrae los proyectos de un mapa indexado por id, con si están compartidos", () => {
     expect(proyectosDeResultado(respuestaReal)).toEqual([
-      { id: "5cd2327f_53f3_40b9_9bb4_e6973fd0a938", nombre: "AppDemo" },
-      { id: "e01d2abe_25e7_47a0_9654_7bee94878a35", nombre: "AppDeve" },
+      { id: "5cd2327f_53f3_40b9_9bb4_e6973fd0a938", nombre: "AppDemo", compartido: false },
+      { id: "e01d2abe_25e7_47a0_9654_7bee94878a35", nombre: "AppDeve", compartido: true },
     ]);
   });
 
@@ -194,6 +194,46 @@ describe("proyectosDeResultado · forma real de studio_list_projects", () => {
     for (const filtrado of ["suser", "ejemplo.es", "rights", "studiopermissions", "last"]) {
       expect(serializado).not.toContain(filtrado);
     }
+  });
+
+  /**
+   * Las claves EXACTAS, no `toMatchObject`. Esta función es el punto de estrangulamiento del
+   * listado remoto, y lo que la protege no es el comentario de arriba: es que un «ya que
+   * estamos, llevemos también la fecha» rompa un test. El correo del propietario viaja en la
+   * misma respuesta y no puede colarse de camino.
+   */
+  it("las claves que salen son EXACTAMENTE id, nombre y compartido", () => {
+    for (const proyecto of proyectosDeResultado(respuestaReal)) {
+      expect(Object.keys(proyecto).sort()).toEqual(["compartido", "id", "nombre"]);
+    }
+  });
+
+  /**
+   * Ausente no es «es tuyo». Un endpoint anterior que no diga nada deja el campo fuera, y la
+   * interfaz no pinta etiqueta — en vez de afirmar que todos son propios, que es lo que
+   * pasaría si esto devolviera `false` por omisión.
+   */
+  it("sin el campo, «compartido» NO viaja: no se afirma que sea propio", () => {
+    const [proyecto] = proyectosDeResultado({ recents: { abc: { name: "Antiguo" } } });
+    expect(proyecto).toEqual({ id: "abc", nombre: "Antiguo" });
+    expect("compartido" in proyecto!).toBe(false);
+  });
+
+  /**
+   * El servidor es flojo con los tipos —en la misma respuesta, `rights` es un objeto
+   * serializado como CADENA—, así que solo cuenta un booleano de verdad. Ni «"true"», ni
+   * deducirlo de que `suser` traiga un correo: una cadena no vacía es verdadera en
+   * JavaScript, y con eso «shared: "false"» habría marcado el proyecto como compartido.
+   */
+  it("solo un booleano de verdad cuenta: ni cadenas ni deducirlo del correo", () => {
+    const raro = proyectosDeResultado({
+      recents: {
+        a: { name: "Cadena", shared: "true" },
+        b: { name: "Cadena falsa", shared: "false" },
+        c: { name: "Por el correo", suser: "otro@ejemplo.es" },
+      },
+    });
+    for (const proyecto of raro) expect("compartido" in proyecto).toBe(false);
   });
 
   it("usa la clave del mapa como id cuando la entrada no repite «pid»", () => {

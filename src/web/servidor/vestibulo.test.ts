@@ -81,6 +81,8 @@ function sesionesEnMemoria() {
         actos: [...(jsonl.get(`${raiz}|${id}`) ?? [])],
         historica: true,
       }),
+      borrar: (raiz: string, id: string) => jsonl.delete(`${raiz}|${id}`),
+      renombrar: (raiz: string, id: string) => jsonl.has(`${raiz}|${id}`),
     },
   };
 }
@@ -340,6 +342,60 @@ describe("vestíbulo", () => {
     const abierto = await v.abrirProyecto({ raiz: "/w/a" });
     await abierto.terminada;
     expect(avisos).toEqual([true, false]);
+    await v.cerrar();
+  });
+
+  /**
+   * La trampa del ORDEN, y es la que hace falta un test: `cerrar()` llama a `volcar()`, que
+   * anota los actos pendientes — y anotar RESUCITA la entrada del índice recién borrada. Si
+   * se borrara antes de cerrar, la sesión reaparecería en la barra al siguiente refresco,
+   * como si el botón no hubiera hecho nada.
+   */
+  it("borrar la sesión ABIERTA la cierra primero, y no reaparece al volcar", async () => {
+    const s = sesionesEnMemoria();
+    const olvidadas: string[] = [];
+    const v = crearVestibulo({
+      ...dobles(),
+      origenDeTrabajo: "global",
+      sesiones: s.puerto,
+      olvidarMarcaDeSesion: async (_raiz, id) => {
+        olvidadas.push(id);
+      },
+    });
+    // La sesión nace al volcar el primer acto, así que se crea a mano y se REABRE: es el
+    // camino por el que una sesión guardada llega a estar abierta.
+    const id = s.puerto.crear("/w/a");
+    s.puerto.anotar("/w/a", id, { tipo: "usuario", texto: "hola" });
+    const abierta = await v.abrirProyecto({ raiz: "/w/a", sesion: id });
+    expect(abierta.sesion).toBe(id);
+
+    const resultado = await v.borrarSesion("/w/a", id);
+
+    expect(resultado).toEqual({ borrada: true, cerroLaAbierta: true });
+    expect(abierta.cerrada).toBe(true);
+    expect(v.proyectoAbierto()).toBeUndefined();
+    expect(v.sesionesDe("/w/a")).toEqual([]);
+    // La ref de git se va con la sesión: si no, mantiene vivo para siempre un árbol que ya
+    // no mira nadie (`agent/sesionGit.ts#olvidarSesion`).
+    expect(olvidadas).toEqual([id]);
+    await v.cerrar();
+  });
+
+  it("borrar OTRA sesión no cierra el proyecto que estás mirando", async () => {
+    const s = sesionesEnMemoria();
+    const v = crearVestibulo({ ...dobles(), origenDeTrabajo: "global", sesiones: s.puerto });
+    const vieja = s.puerto.crear("/w/a");
+    s.puerto.anotar("/w/a", vieja, { tipo: "usuario", texto: "de antes" });
+    const otra = s.puerto.crear("/w/a");
+    s.puerto.anotar("/w/a", otra, { tipo: "usuario", texto: "la abierta" });
+    const abierta = await v.abrirProyecto({ raiz: "/w/a", sesion: otra });
+
+    const resultado = await v.borrarSesion("/w/a", vieja);
+
+    expect(resultado).toEqual({ borrada: true, cerroLaAbierta: false });
+    expect(abierta.cerrada).toBe(false);
+    expect(v.proyectoAbierto()).toBe(abierta);
+    expect(v.sesionesDe("/w/a").map((x) => x.id)).toEqual([otra]);
     await v.cerrar();
   });
 

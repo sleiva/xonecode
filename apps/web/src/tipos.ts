@@ -139,6 +139,10 @@ export type MensajeAlCliente =
       proyectos: {
         id: string;
         nombre: string;
+        /** Compartido CONTIGO por otra persona. Ausente = el servidor no lo dijo, que NO es
+         *  lo mismo que «es tuyo»: entonces no se pinta etiqueta. Booleano y no el correo
+         *  del propietario, que el host descarta a propósito. */
+        compartido?: boolean;
         sesiones?: { id: string; titulo: string }[];
         /** La copia local ya existe: abrirlo no baja nada ni pregunta rama. */
         local?: boolean;
@@ -206,6 +210,10 @@ export type MensajeDelCliente =
   | { clase: "modelo"; id: string }
   /** Abrir una sesión de un proyecto: la nombrada, o una NUEVA si no se nombra ninguna. */
   | { clase: "sesion"; proyecto: string; sesion?: string }
+  /** Borrar una sesión guardada, o ponerle nombre, desde el menú de su fila en la barra.
+   *  Verbo aparte de abrir: estos dos ESCRIBEN, y borrar puede cerrar la consola abierta. */
+  | { clase: "sesionAccion"; accion: "borrar"; proyecto: string; sesion: string }
+  | { clase: "sesionAccion"; accion: "renombrar"; proyecto: string; sesion: string; titulo: string }
   /** Qué proyectos de un entorno se enseñan en la barra. Vacío = ninguno, que es elección. */
   | { clase: "entorno"; accion: "visibles"; entorno: string; proyectos: string[] }
   /** Cambiar de entorno activo: el de cuyos proyectos se habla. */

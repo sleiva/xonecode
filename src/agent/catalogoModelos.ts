@@ -122,7 +122,11 @@ export class CatalogoModelos implements CatalogoModelosPort {
         if (respuesta.status === 401 || respuesta.status === 403) {
           throw new ErrorCatalogoModelos(`credencial no autorizada para ${proveedor}`);
         }
-        throw new ErrorCatalogoModelos(`respuesta no disponible de ${proveedor}`);
+        // El código HTTP va EN el mensaje. Sin él, un 410 («el modelo fue retirado») y un
+        // 500 («el servidor está roto») se leen igual —«respuesta no disponible»— y hay que
+        // salir a curl para distinguirlos. El código no es contenido remoto ni credencial:
+        // la regla de este error es no llevar la clave ni el cuerpo, no ser opaco.
+        throw new ErrorCatalogoModelos(`respuesta no disponible de ${proveedor} (HTTP ${respuesta.status})`);
       }
       try {
         return await respuesta.json();
@@ -234,14 +238,38 @@ export class CatalogoModelos implements CatalogoModelosPort {
     );
     if (!esRegistro(etiquetas)) throw new ErrorCatalogoModelos(`respuesta incompatible de ${proveedor}`);
     const salida: ModeloDisponible[] = [];
+    let intentados = 0;
+    let ultimoFallo: unknown;
     for (const etiqueta of modelosDe(etiquetas, "models", proveedor)) {
       const id = texto(etiqueta.name);
       if (id === undefined) continue;
-      const detalle = await this.pedir(proveedor, unirUrl(baseUrl, "/api/show"), {
-        method: "POST",
-        headers: { ...cabeceras, "content-type": "application/json" },
-        body: JSON.stringify({ model: id }),
-      });
+      intentados += 1;
+      /**
+       * El `/api/show` de UN modelo no puede tumbar la lista de todos.
+       *
+       * Medido contra el Ollama del usuario: `/api/tags` devolvía 26 modelos y dos de ellos
+       * —`qwen3-vl:235b-cloud` y `deepseek-v3.1:671b-cloud`— contestaban **HTTP 410** con
+       * «was retired at …». Siguen en el manifiesto local, así que `tags` los sigue
+       * nombrando, pero ya no existen. Sin esta guarda el primer 410 lanzaba y el proveedor
+       * entero se reportaba como no disponible: elegir «ollama» en el asistente no listaba
+       * NADA y volvía al paso de proveedor, con 24 modelos perfectamente usables detrás.
+       *
+       * Saltárselo no es tragarse un fallo: un modelo que el servidor declara retirado no
+       * está DISPONIBLE, y esta lista es la de los disponibles. Lo que sí sería tragárselo
+       * es callar cuando fallan todos —eso no es «no hay modelos», es un servidor roto—, y
+       * por eso se cuenta y se relanza abajo.
+       */
+      let detalle: unknown;
+      try {
+        detalle = await this.pedir(proveedor, unirUrl(baseUrl, "/api/show"), {
+          method: "POST",
+          headers: { ...cabeceras, "content-type": "application/json" },
+          body: JSON.stringify({ model: id }),
+        });
+      } catch (error) {
+        ultimoFallo = error;
+        continue;
+      }
       if (!esRegistro(detalle)) throw new ErrorCatalogoModelos(`respuesta incompatible de ${proveedor}`);
       const capacidades = detalle.capabilities;
       if (
@@ -251,6 +279,10 @@ export class CatalogoModelos implements CatalogoModelosPort {
       const contexto = contextoOllama(detalle.model_info);
       salida.push({ proveedor, id, ...(contexto === undefined ? {} : { contexto }) });
     }
+    // Fallaron TODOS los que había: eso no es un catálogo vacío, es que no se puede hablar
+    // con el servidor. Devolver `[]` aquí diría «no tienes modelos» a quien tiene veinte, y
+    // el asistente lo trataría como un proveedor sin nada en vez de como una avería.
+    if (salida.length === 0 && intentados > 0 && ultimoFallo !== undefined) throw ultimoFallo;
     return salida;
   }
 }

@@ -8,9 +8,20 @@ import barra from "../../estilos/SidebarRoot.module.css";
 import navegador from "../../estilos/WorkspaceBrowser.module.css";
 import filas from "../../estilos/Rows.module.css";
 import ajustes from "../../estilos/SettingsRoot.module.css";
+import { MenuDeSesion } from "./MenuDeSesion.js";
 import estilos from "./Barra.module.css";
 
-export interface Proyecto { id: string; nombre: string; sesiones: { id: string; titulo: string; historica: boolean }[] }
+export interface Proyecto {
+  id: string;
+  nombre: string;
+  sesiones: { id: string; titulo: string; historica: boolean }[];
+  /**
+   * Compartido CONTIGO por otra persona (`shared` de CloudStudio). **Ausente no es «es
+   * tuyo»**: es que el servidor no lo dijo, y entonces no se pinta NADA — ni «propio» ni
+   * «compartido»—, que es lo único honesto cuando el dato no ha llegado.
+   */
+  compartido?: boolean;
+}
 
 /**
  * La barra, ahora con el CSS de deepseek en vez de la aproximación a mano que había:
@@ -55,7 +66,7 @@ export interface Proyecto { id: string; nombre: string; sesiones: { id: string; 
  */
 export const PROYECTOS_POR_OMISION = 4;
 
-export function Barra({ entornos, entornoActivo, proyectos, visibles, proyectoActivo, sesionActiva, alElegirEntorno, alAbrirSesion, alAbrirProyecto, alNuevaSesion, alAbrirAjustes }: {
+export function Barra({ entornos, entornoActivo, proyectos, visibles, proyectoActivo, sesionActiva, alElegirEntorno, alAbrirSesion, alAbrirProyecto, alNuevaSesion, alAccionDeSesion, alAbrirAjustes }: {
   entornos: { id: string; nombre: string }[];
   entornoActivo: string;
   proyectos: Proyecto[];
@@ -80,6 +91,18 @@ export function Barra({ entornos, entornoActivo, proyectos, visibles, proyectoAc
   alAbrirProyecto: (proyecto: string) => void;
   /** Ver el comentario de cabecera: la acción existe, el mensaje del cable todavía no. */
   alNuevaSesion: (proyecto: string) => void;
+  /**
+   * Lo que se ha elegido en el «…» de una sesión. La barra NO ejecuta ninguna de las dos:
+   * las dos escriben y una además es irreversible, así que van a un diálogo que las
+   * confirma, y ese diálogo es de la aplicación (`App.tsx`) y no de la barra — se pinta
+   * sobre la pantalla entera, no dentro de una columna de 280px.
+   */
+  alAccionDeSesion: (
+    proyecto: string,
+    sesion: string,
+    titulo: string,
+    accion: "renombrar" | "borrar"
+  ) => void;
   /**
    * «Ajustes», ahora una entrada de verdad y no una línea de texto suelta. Lo que hace
    * lo decide `App.tsx`: no hay panel de ajustes que abrir, hay un comando de barra
@@ -181,8 +204,27 @@ export function Barra({ entornos, entornoActivo, proyectos, visibles, proyectoAc
                           <span className={filas.projectText}>
                             <span className={filas.title}>{p.nombre}</span>
                           </span>
+                          {/*
+                            De quién es. Tres cosas de esta etiqueta:
+
+                            - Va con una PALABRA y no solo con un color, como el
+                              `aria-current` de la fila abierta o el «+n −n» de los
+                              ficheros: un punto de color no lo lee quien no distingue los
+                              tonos, ni un lector de pantalla.
+                            - Solo si el servidor lo dijo. `undefined` no pinta NADA, ni
+                              «propio» ni «compartido».
+                            - Al lado del nombre y no debajo: su `.projectText` es una
+                              columna y meterla dentro habría partido la fila en dos
+                              líneas, deshaciendo la decisión que su propia hoja documenta
+                              («Compact one-line Workspace row»).
+                          */}
+                          {p.compartido === undefined ? null : (
+                            <span className={estilos.duenno} data-compartido={p.compartido ? "" : undefined}>
+                              {p.compartido ? "compartido" : "propio"}
+                            </span>
+                          )}
                         </button>
-                        <span className={filas.rowActions}>
+                        <span className={clsx(filas.rowActions, estilos.accionesDeFila)}>
                           <button
                             type="button"
                             className={filas.iconButton}
@@ -197,20 +239,45 @@ export function Barra({ entornos, entornoActivo, proyectos, visibles, proyectoAc
                         <p className={clsx(navegador.empty, estilos.sinSesiones)}>Sin sesiones todavía.</p>
                       ) : (
                         p.sesiones.map((s) => (
-                          <button
+                          /*
+                            Un `<div>` con un botón dentro y el menú al lado, no un botón
+                            suelto: el «…» es interactivo y anidarlo dentro del botón de la
+                            fila es HTML inválido —un control dentro de otro—, con el clic
+                            repartido entre los dos. Es la misma forma que ya tiene la fila
+                            de proyecto aquí arriba, y la que la hoja copiada da por hecha
+                            (`.sessionRow:hover .rowActions`).
+                          */
+                          <div
                             key={s.id}
-                            type="button"
                             className={clsx(
-                              estilos.reseteoDeBoton,
                               filas.sessionRow,
-                              s.id === sesionActiva && filas.selected,
+                              estilos.filaConAccion,
+                              // NO `filas.selected`: esa clase de la hoja copiada pinta el
+                              // MISMO fondo que `:hover`, así que la sesión abierta y la
+                              // fila que tienes debajo del ratón se ven idénticas — medido
+                              // en pantalla. Se marca como el proyecto abierto: fondo MÁS
+                              // barra de acento, y `aria-current` para quien no distingue
+                              // el color.
+                              s.id === sesionActiva && estilos.sesionAbierta,
                               s.historica && estilos.historica
                             )}
-                            onClick={() => alAbrirSesion(p.id, s.id)}
+                            {...(s.id === sesionActiva ? { "aria-current": "true" as const } : {})}
                           >
-                            <span className={filas.slot} aria-hidden="true" />
-                            <span className={filas.title}>{s.titulo}</span>
-                          </button>
+                            <button
+                              type="button"
+                              className={clsx(estilos.reseteoDeBoton, estilos.cuerpoDeFila)}
+                              onClick={() => alAbrirSesion(p.id, s.id)}
+                            >
+                              <span className={filas.slot} aria-hidden="true" />
+                              <span className={filas.title}>{s.titulo}</span>
+                            </button>
+                            <MenuDeSesion
+                              titulo={s.titulo}
+                              className={estilos.accionesDeFila}
+                              alRenombrar={() => alAccionDeSesion(p.id, s.id, s.titulo, "renombrar")}
+                              alBorrar={() => alAccionDeSesion(p.id, s.id, s.titulo, "borrar")}
+                            />
+                          </div>
                         ))
                       )}
                     </div>

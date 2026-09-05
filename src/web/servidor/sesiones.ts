@@ -216,6 +216,49 @@ export function anotarActo(raiz: string, id: string, acto: Acto): void {
   escribirIndice(raiz, entradas);
 }
 
+/**
+ * Borra una sesión: su `.jsonl` y su entrada del índice. Devuelve si había algo que borrar.
+ *
+ * El fichero va PRIMERO y el índice después, al revés que en `anotarActo` y por el mismo
+ * razonamiento invertido: aquí lo que no se puede quedar a medias es una entrada de índice
+ * apuntando a un fichero que ya no está —la sesión saldría en la barra y reventaría al
+ * abrirla—. Al revés, un `.jsonl` huérfano no lo ve nadie: la barra se pinta con el índice.
+ *
+ * Un id desconocido devuelve `false` en vez de lanzar: borrar dos veces la misma sesión —dos
+ * pestañas abiertas, un doble clic— no es un error, y lo único que hay que saber es si
+ * quedaba algo.
+ */
+export function borrarSesion(raiz: string, id: string): boolean {
+  const ruta = rutaJsonl(raiz, id);
+  const habia = existsSync(ruta);
+  if (habia) unlinkSync(ruta);
+  const entradas = leerIndiceOAbortar(raiz);
+  const quedan = entradas.filter((e) => e.id !== id);
+  if (quedan.length === entradas.length) return habia;
+  escribirIndice(raiz, quedan);
+  return true;
+}
+
+/**
+ * Le pone nombre a una sesión. Devuelve si existía.
+ *
+ * Un título vacío se RECHAZA, y no es una validación de formulario: `anotarActo` fija el
+ * título en el primer acto de usuario y solo mientras esté vacío (`entrada.titulo === ""`).
+ * Dejarlo vacío devolvería la sesión al régimen automático, así que el siguiente turno la
+ * rebautizaría con la primera frase y el nombre que puso una persona desaparecería sin más.
+ * Se acota a `LARGO_TITULO` como los automáticos: la barra tiene el ancho que tiene.
+ */
+export function renombrarSesion(raiz: string, id: string, titulo: string): boolean {
+  const limpio = titulo.trim().slice(0, LARGO_TITULO);
+  if (limpio === "") return false;
+  const entradas = leerIndiceOAbortar(raiz);
+  const entrada = entradas.find((e) => e.id === id);
+  if (entrada === undefined) return false;
+  entrada.titulo = limpio;
+  escribirIndice(raiz, entradas);
+  return true;
+}
+
 /** El índice completo, tal cual lo enseña la lista de sesiones del proyecto. */
 export function listarSesiones(raiz: string): EntradaIndice[] {
   return leerIndice(raiz);

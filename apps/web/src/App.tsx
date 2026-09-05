@@ -17,6 +17,7 @@ import { TarjetaDeAlta } from "./componentes/TarjetaDeAlta.js";
 import type { PasoDeAlta } from "./componentes/PasosDelAlta.js";
 import { Escritorio } from "./componentes/Escritorio.js";
 import { NuevaSesion } from "./componentes/NuevaSesion.js";
+import { AccionDeSesion, type AccionPendiente } from "./componentes/AccionDeSesion.js";
 import { Ajustes } from "./componentes/Ajustes.js";
 import { Ficheros } from "./componentes/Ficheros.js";
 import { aplicarApariencia, guardarApariencia, leerApariencia, type Apariencia } from "./apariencia.js";
@@ -60,6 +61,12 @@ export function App({ store, enviar }: { store: Store; enviar: Conexion["enviar"
    * servidor.
    */
   const [ficheroAbierto, setFicheroAbierto] = useState<string | undefined>(undefined);
+  /**
+   * Lo elegido en el «…» de una sesión, esperando confirmación. Vive aquí y no en la barra
+   * porque la ventana se pinta sobre la pantalla entera, no dentro de una columna de 280px
+   * — y porque la barra no ejecuta acciones: reporta la intención.
+   */
+  const [accionDeSesion, setAccionDeSesion] = useState<AccionPendiente | undefined>(undefined);
 
   /**
    * La ventana de ajustes y la apariencia del cliente. Las dos viven aquí y no en el store:
@@ -283,6 +290,23 @@ export function App({ store, enviar }: { store: Store; enviar: Conexion["enviar"
   // Dos reglas para el mismo título es cómo divergen — esta lo mira, no inventa una propia.
   const primerActoDeUsuario = estado.actos.find((a) => a.tipo === "usuario");
 
+  /**
+   * Cómo se llama la sesión abierta.
+   *
+   * Manda el título del ÍNDICE, que es el que el «…» de la barra puede cambiar; el primer
+   * acto de usuario es el respaldo, para la sesión que todavía no tiene entrada (nace al
+   * volcar el primer acto) y para la que se abrió antes de que existiera el índice. Sin
+   * esto, renombrar dejaba dos nombres para una sola sesión: el nuevo en la barra y la
+   * primera frase de siempre aquí arriba.
+   */
+  const tituloDeLaSesion =
+    (estado.alta?.sesionActiva === undefined
+      ? undefined
+      : estado.alta.proyectos
+          ?.flatMap((p) => p.sesiones ?? [])
+          .find((x) => x.id === estado.alta!.sesionActiva)?.titulo) ||
+    primerActoDeUsuario?.texto;
+
   // Las piezas de `BarraDeEstado`, derivadas del transcript a falta de un mensaje propio
   // del cable: ni `sistema` ni `EstadoDelCliente` llevan hoy `contexto`/`tope`
   // (`tipos.ts`, `store.ts`), así que esos dos quedan `undefined` — la misma postura de
@@ -365,6 +389,31 @@ export function App({ store, enviar }: { store: Store; enviar: Conexion["enviar"
       />
     ) : null;
 
+  /**
+   * La ventana que confirma lo elegido en el «…» de una sesión.
+   *
+   * `esLaAbierta` sale de comparar con `sesionActiva`, que es lo que dice el SERVIDOR: solo
+   * cambia lo que se avisa —borrar la que estás mirando cierra la consola y te devuelve al
+   * escritorio—, nunca lo que se hace. Deducirlo del transcript diría lo de antes.
+   */
+  const ventanaDeAccionDeSesion =
+    accionDeSesion === undefined ? null : (
+      <AccionDeSesion
+        pendiente={accionDeSesion}
+        esLaAbierta={estado.alta?.sesionActiva === accionDeSesion.sesion}
+        alCerrar={() => setAccionDeSesion(undefined)}
+        alConfirmar={(titulo) => {
+          const { proyecto, sesion, accion } = accionDeSesion;
+          setAccionDeSesion(undefined);
+          void enviar(
+            accion === "borrar"
+              ? { clase: "sesionAccion", accion: "borrar", proyecto, sesion }
+              : { clase: "sesionAccion", accion: "renombrar", proyecto, sesion, titulo: titulo ?? "" }
+          );
+        }}
+      />
+    );
+
   const ventanaDeAjustes = ajustesAbiertos ? (
     <Ajustes
       {...(estado.modelos === undefined ? {} : { proveedores: estado.modelos.proveedores })}
@@ -411,7 +460,7 @@ export function App({ store, enviar }: { store: Store; enviar: Conexion["enviar"
         proyectoAbierto ? (
           <>
             <Cabecera
-              titulo={primerActoDeUsuario?.texto ?? "xonecode"}
+              titulo={tituloDeLaSesion ?? "xonecode"}
               // Ausente mientras el servidor no lo sepa: `Cabecera` no pinta pastilla
               // entonces, en vez de afirmar un modo que nadie ha leído.
               {...(estado.alta?.modo === undefined ? {} : { modo: estado.alta.modo })}
@@ -606,6 +655,11 @@ export function App({ store, enviar }: { store: Store; enviar: Conexion["enviar"
           // del alta, que es el que sabe bajarla — por eso hace falta recordar de qué
           // proyecto se está hablando, igual que al pulsar la fila.
           alNuevaSesion={(proyecto) => abrirVentanaDeSesion(proyecto)}
+          // Lo elegido en el «…» de una sesión NO se ejecuta aquí: se guarda y lo confirma
+          // una ventana. Las dos escriben en el índice del proyecto y una es irreversible.
+          alAccionDeSesion={(proyecto, sesion, titulo, accion) =>
+            setAccionDeSesion({ proyecto, sesion, titulo, accion })
+          }
           // «Ajustes» abre la ventana de ajustes. Antes mandaba `/config` y volcaba la
           // configuración al transcript: era lo único que había, pero leer un volcado no es
           // configurar. El volcado sigue estando, dentro de la ventana, para quien quiera
@@ -616,6 +670,7 @@ export function App({ store, enviar }: { store: Store; enviar: Conexion["enviar"
     />
     {ventanaDeAjustes}
     {ventanaDeSesion}
+    {ventanaDeAccionDeSesion}
     </>
   );
 }

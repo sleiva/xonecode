@@ -10,5 +10,8 @@ dist/
 *.log
 .idea/
 
-# Capturas y volcados del navegador de pruebas (playwright-mcp): no son del proyecto.
+# Capturas y volcados del navegador de pruebas: no son del proyecto. `.playwright-mcp/` lo
+# escribe la herramienta sola; `capturas/` es la pasada de comprobación visual que se hace a
+# mano antes de commitear — se mira una vez y se tira, y ningún doc la enlaza.
 .playwright-mcp/
+capturas/

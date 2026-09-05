@@ -172,7 +172,28 @@ export function herramientaDeProyectos(tools: readonly DefinicionDeTool[]): Defi
 }
 
 /** Extrae solo una identidad visible; el resultado íntegro nunca va al transcript. */
-export function proyectosDeResultado(valor: unknown): Array<{ id: string; nombre: string }> {
+/**
+ * Un proyecto del listado remoto, con lo ÚNICO que se conserva de él.
+ *
+ * La respuesta de `studio_list_projects` trae bastante más —permisos (`rights`), fechas
+ * (`last`), el correo del propietario (`suser`), una tabla de `studiopermissions`— y nada de
+ * eso sale de aquí: esta función es el punto de estrangulamiento, y hay un test que compara
+ * las claves EXACTAS de lo que devuelve para que un «ya que estamos, llevemos también la
+ * fecha» no cuele el correo de un compañero de camino.
+ *
+ * `compartido` es la excepción que se añadió a los dos de siempre, y es un booleano y no el
+ * correo: para distinguir lo propio de lo compartido basta con eso, y quién lo compartió es
+ * un dato personal que esta consola no necesita para pintar una etiqueta. **Es opcional a
+ * propósito**: ausente significa «el servidor no lo dijo», que no es lo mismo que «es tuyo».
+ */
+export interface ProyectoRemoto {
+  id: string;
+  nombre: string;
+  /** Compartido CONTIGO por otra persona. Ausente = el servidor no lo dijo. */
+  compartido?: boolean;
+}
+
+export function proyectosDeResultado(valor: unknown): ProyectoRemoto[] {
   if (typeof valor === "string") {
     try { return proyectosDeResultado(JSON.parse(valor)); } catch { return []; }
   }
@@ -197,9 +218,10 @@ export function proyectosDeResultado(valor: unknown): Array<{ id: string; nombre
           entradas((valor as Record<string, unknown>)[clave])
         )
       : [];
-  // Los SDK MCP devuelven el resultado textual dentro de `content`; no se conserva
-  // nada salvo los pares id/nombre. El wrapper LangChain de abajo serializa ese
-  // resultado para poder usar `.invoke({})` sin traducir los esquemas ajenos.
+  // Los SDK MCP devuelven el resultado textual dentro de `content`; de todo eso no se
+  // conserva más que el id, el nombre y si el proyecto está compartido contigo. El wrapper
+  // LangChain de abajo serializa ese resultado para poder usar `.invoke({})` sin traducir
+  // los esquemas ajenos.
   if (lista.length === 0 && typeof valor === "object" && valor !== null) {
     const contenido = (valor as Record<string, unknown>).content;
     if (Array.isArray(contenido)) {
@@ -218,7 +240,11 @@ export function proyectosDeResultado(valor: unknown): Array<{ id: string; nombre
     const nombre = [dato.name, dato.nombre, dato.title].find((v): v is string => typeof v === "string" && v.trim() !== "");
     if (id === undefined || nombre === undefined || vistos.has(id)) return [];
     vistos.add(id);
-    return [{ id, nombre }];
+    // SOLO si de verdad vino un booleano. Este servidor es flojo con los tipos —en la misma
+    // respuesta, `rights` es un objeto serializado como cadena—, así que ni «"true"» ni
+    // deducirlo de que `suser` no esté vacío: la ausencia se propaga como ausencia y la
+    // interfaz no pinta nada, que es la respuesta honesta para un endpoint que no lo dice.
+    return [{ id, nombre, ...(typeof dato.shared === "boolean" ? { compartido: dato.shared } : {}) }];
   });
 }
 

@@ -1,8 +1,16 @@
-import { mkdtempSync, writeFileSync, mkdirSync, readFileSync } from "node:fs";
+import { mkdtempSync, writeFileSync, mkdirSync, readFileSync, existsSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, it, expect } from "vitest";
-import { crearSesion, anotarActo, listarSesiones, reabrirSesion, IndiceDeSesionesRoto } from "./sesiones.js";
+import {
+  crearSesion,
+  anotarActo,
+  listarSesiones,
+  reabrirSesion,
+  borrarSesion,
+  renombrarSesion,
+  IndiceDeSesionesRoto,
+} from "./sesiones.js";
 
 const proyecto = () => mkdtempSync(join(tmpdir(), "xonecode-proyecto-"));
 
@@ -61,5 +69,81 @@ describe("sesiones por proyecto", () => {
     expect(reabrirSesion(raiz, id).actos).toEqual([{ tipo: "usuario", texto: "uno" }]);
     // Y el indice.json roto se queda EXACTAMENTE como estaba: nadie lo sobrescribió con [].
     expect(readFileSync(rutaIndice, "utf8")).toBe(indiceRoto);
+  });
+});
+
+describe("borrar y renombrar una sesión", () => {
+  it("borrar se lleva la entrada del índice Y el fichero", () => {
+    const raiz = proyecto();
+    const id = crearSesion(raiz);
+    anotarActo(raiz, id, { tipo: "usuario", texto: "haz algo" });
+    expect(existsSync(join(raiz, ".xonecode", "sesiones", `${id}.jsonl`))).toBe(true);
+
+    expect(borrarSesion(raiz, id)).toBe(true);
+    expect(listarSesiones(raiz).map((s) => s.id)).not.toContain(id);
+    expect(existsSync(join(raiz, ".xonecode", "sesiones", `${id}.jsonl`))).toBe(false);
+  });
+
+  /**
+   * Dos pestañas abiertas, o un doble clic en «Eliminar»: la segunda llamada no puede ser
+   * un error. Lo único que hay que saber es si quedaba algo.
+   */
+  it("borrar un id desconocido no lanza: devuelve que no había nada", () => {
+    const raiz = proyecto();
+    const id = crearSesion(raiz);
+    anotarActo(raiz, id, { tipo: "usuario", texto: "x" });
+    expect(borrarSesion(raiz, id)).toBe(true);
+    expect(borrarSesion(raiz, id)).toBe(false);
+    expect(borrarSesion(raiz, "nunca-existio")).toBe(false);
+  });
+
+  it("borrar una sesión no toca a las demás", () => {
+    const raiz = proyecto();
+    const a = crearSesion(raiz);
+    const b = crearSesion(raiz);
+    anotarActo(raiz, a, { tipo: "usuario", texto: "la de A" });
+    anotarActo(raiz, b, { tipo: "usuario", texto: "la de B" });
+    borrarSesion(raiz, a);
+    expect(listarSesiones(raiz).map((s) => s.titulo)).toEqual(["la de B"]);
+    expect(reabrirSesion(raiz, b).actos).toHaveLength(1);
+  });
+
+  /**
+   * LA regresión que importa: `anotarActo` fija el título en el primer acto de usuario y
+   * solo mientras esté vacío. Un renombrado que no sobreviva al siguiente turno es peor que
+   * no poder renombrar, porque el nombre se pierde sin decir nada.
+   */
+  it("el nombre puesto a mano SOBREVIVE a los turnos siguientes", () => {
+    const raiz = proyecto();
+    const id = crearSesion(raiz);
+    anotarActo(raiz, id, { tipo: "usuario", texto: "arregla el login" });
+    expect(listarSesiones(raiz)[0]!.titulo).toBe("arregla el login");
+
+    expect(renombrarSesion(raiz, id, "Login de la demo")).toBe(true);
+    anotarActo(raiz, id, { tipo: "usuario", texto: "y ahora el registro" });
+    anotarActo(raiz, id, { tipo: "asistente", texto: "hecho" });
+    expect(listarSesiones(raiz)[0]!.titulo).toBe("Login de la demo");
+  });
+
+  /**
+   * Un título vacío devolvería la sesión al régimen automático (`entrada.titulo === ""`), y
+   * el siguiente turno la rebautizaría con la primera frase: el nombre que puso una persona
+   * desaparecería sin que nadie lo dijera.
+   */
+  it("un título vacío o en blanco se rechaza, no se guarda", () => {
+    const raiz = proyecto();
+    const id = crearSesion(raiz);
+    anotarActo(raiz, id, { tipo: "usuario", texto: "algo" });
+    renombrarSesion(raiz, id, "Nombre bueno");
+    expect(renombrarSesion(raiz, id, "   ")).toBe(false);
+    expect(renombrarSesion(raiz, id, "")).toBe(false);
+    expect(listarSesiones(raiz)[0]!.titulo).toBe("Nombre bueno");
+  });
+
+  it("renombrar una sesión que no existe dice que no, en vez de crearla", () => {
+    const raiz = proyecto();
+    crearSesion(raiz);
+    expect(renombrarSesion(raiz, "nunca-existio", "Hola")).toBe(false);
+    expect(listarSesiones(raiz)).toHaveLength(1);
   });
 });

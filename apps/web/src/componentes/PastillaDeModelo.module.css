@@ -82,6 +82,17 @@
   background: var(--dsw-alias-state-error-primary);
 }
 
+/* Los dos del proveedor que no lleva credencial (Ollama local): ahí el punto habla de la
+   CONEXIÓN, no de una clave. Mismo color y mismo significado de lectura —verde se puede
+   usar, rojo no—, y el rótulo accesible es el que dice de cuál de las dos cosas habla. */
+.punto[data-credencial="conecta"] {
+  background: var(--dsw-alias-state-success-primary);
+}
+
+.punto[data-credencial="sin-conexion"] {
+  background: var(--dsw-alias-state-error-primary);
+}
+
 .modelos {
   display: flex;
   flex-direction: column;

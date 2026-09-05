@@ -162,6 +162,17 @@ export type MensajeAlCliente =
       proyectos: {
         id: string;
         nombre: string;
+        /**
+         * Compartido CONTIGO por otra persona (`shared` de `studio_list_projects`).
+         * **Ausente no es «es tuyo»**: es que el servidor no lo dijo, y entonces no se
+         * pinta etiqueta ninguna — afirmar que todos son propios porque un endpoint viejo
+         * calló sería la clase de dato inventado que esta consola no consiente.
+         *
+         * Es un booleano y NO el correo del propietario, que viaja en la misma respuesta
+         * (`suser`): para distinguir lo propio de lo compartido basta con esto, y quién lo
+         * compartió es un dato de una persona que esta pantalla no necesita.
+         */
+        compartido?: boolean;
         sesiones?: { id: string; titulo: string }[];
         /** La copia local YA existe: se puede abrir sin bajar nada ni preguntar rama. */
         local?: boolean;
@@ -278,6 +289,18 @@ export type MensajeDelCliente =
    * servidor contesta con las ramas por el camino del alta, que es el que sabe bajarla.
    */
   | { clase: "sesion"; proyecto: string; sesion?: string }
+  /**
+   * Lo que se hace con una sesión GUARDADA desde el menú de su fila: borrarla o ponerle
+   * nombre. Va aparte de abrir (arriba) y no como un campo opcional de aquel, porque son
+   * verbos distintos con consecuencias distintas: uno abre y los otros dos escriben en el
+   * índice del proyecto — y borrar, además, puede cerrar la consola si es la sesión abierta.
+   *
+   * `titulo` solo lo lleva «renombrar», y vacío se rechaza en el servidor: dejar el título en
+   * blanco devolvería la sesión al régimen automático y el siguiente turno la rebautizaría
+   * con la primera frase, borrando en silencio el nombre que puso una persona.
+   */
+  | { clase: "sesionAccion"; accion: "borrar"; proyecto: string; sesion: string }
+  | { clase: "sesionAccion"; accion: "renombrar"; proyecto: string; sesion: string; titulo: string }
   /** Qué proyectos de un entorno se enseñan en la barra. Lista vacía = ninguno, que es una
    *  elección; para volver a la omisión no hay mensaje, porque no hay «deshacer» que pedir. */
   | { clase: "entorno"; accion: "visibles"; entorno: string; proyectos: string[] }

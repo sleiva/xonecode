@@ -1,4 +1,5 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useRef, useState } from "react";
+import { useCerrarAlPulsarFuera } from "../cerrarAlPulsarFuera.js";
 import type { ProveedorDeModelos } from "../tipos.js";
 import estilos from "./PastillaDeModelo.module.css";
 
@@ -43,39 +44,14 @@ export function PastillaDeModelo({
 }) {
   const [abierta, setAbierta] = useState(false);
   const envoltura = useRef<HTMLDivElement>(null);
+  const cerrarMenu = useCallback(() => setAbierta(false), []);
   const [desplegado, setDesplegado] = useState<string | undefined>(undefined);
   /** Los que ya se han pedido en ESTA pastilla: para decir «consultando…» sin fingir. */
   const [pedidos, setPedidos] = useState<readonly string[]>([]);
 
-  /**
-   * Pinchar fuera cierra, y Escape también.
-   *
-   * Un menú que solo se cierra volviendo a pulsar su disparador tapa la interfaz de debajo
-   * —está en la fila del compositor, justo encima de lo que se escribe— y no es lo que
-   * hace ningún menú: se pulsa en otro sitio y se va. El listener va en `document` con
-   * `mousedown` y no `click`: con `click` se cierra DESPUÉS de que el navegador haya
-   * decidido dónde cayó la pulsación, y un clic sobre otro botón acababa haciendo las dos
-   * cosas. Solo se registra con el menú abierto: escuchar el documento entero mientras está
-   * cerrado es trabajo por nada en cada pulsación de la aplicación.
-   */
-  useEffect(() => {
-    if (!abierta) return;
-    const fuera = (evento: MouseEvent): void => {
-      const nodo = envoltura.current;
-      if (nodo !== null && evento.target instanceof Node && !nodo.contains(evento.target)) {
-        setAbierta(false);
-      }
-    };
-    const escape = (evento: KeyboardEvent): void => {
-      if (evento.key === "Escape") setAbierta(false);
-    };
-    document.addEventListener("mousedown", fuera);
-    document.addEventListener("keydown", escape);
-    return () => {
-      document.removeEventListener("mousedown", fuera);
-      document.removeEventListener("keydown", escape);
-    };
-  }, [abierta]);
+  // Pinchar fuera cierra, y Escape también. El lazo vive en `cerrarAlPulsarFuera.ts` desde
+  // que el «…» de la barra necesitó lo mismo; allí está el porqué de `mousedown`.
+  useCerrarAlPulsarFuera(abierta, envoltura, cerrarMenu);
 
   const abrirProveedor = (id: string): void => {
     if (desplegado === id) {
@@ -108,6 +84,29 @@ export function PastillaDeModelo({
         <div className={estilos.menu} role="menu">
           {proveedores.map((p) => {
             const esperando = p.modelos === undefined && p.error === undefined && pedidos.includes(p.id);
+            /**
+             * Qué dice el punto de ESTE proveedor.
+             *
+             * Para los que llevan clave, la credencial, como siempre. Para los que no la
+             * llevan —Ollama local— la pregunta «¿puedo usarlo?» no la contesta ninguna
+             * credencial: la contesta si el servidor responde. Y eso ya se sabe sin pedir
+             * nada nuevo, porque el catálogo de ese proveedor ES la prueba de conexión: si
+             * trajo modelos, contestó; si trajo error, no.
+             *
+             * `undefined` mientras no se le haya preguntado, y entonces no se pinta punto.
+             * Es la misma disciplina de los otros tres estados: verde solo si consta que
+             * conecta, rojo solo si consta que no, y nada mientras no conste ninguna de las
+             * dos. Un punto verde antes de haber hablado con el demonio sería afirmar una
+             * conexión que nadie ha comprobado.
+             */
+            const punto =
+              p.credencial !== "nativa"
+                ? p.credencial
+                : p.error !== undefined
+                  ? "sin-conexion"
+                  : p.modelos !== undefined
+                    ? "conecta"
+                    : undefined;
             return (
               <div key={p.id} className={estilos.grupo}>
                 <button
@@ -116,12 +115,30 @@ export function PastillaDeModelo({
                   aria-expanded={desplegado === p.id}
                   onClick={() => abrirProveedor(p.id)}
                 >
-                  {/* Sin punto para «nativa»: no hay credencial de la que hablar. */}
-                  {p.credencial === "nativa" ? null : (
+                  {punto === undefined ? null : (
+                    /*
+                      `title` y `aria-hidden`, NO `aria-label`. Un `aria-label` dentro del
+                      botón se suma al nombre accesible del botón, y este se llamaba
+                      «conectado ollama» o «con credencial anthropic» — medido: dos tests
+                      que buscaban el proveedor por su nombre dejaron de encontrarlo, y con
+                      ellos cualquiera que navegue por voz diciendo «pulsa ollama». El
+                      estado es una DESCRIPCIÓN de la fila, no su nombre. Con el `title` lo
+                      lee quien pasa el ratón y lo anuncian los lectores como descripción, y
+                      al desplegar la fila el estado se dice además con todas las letras (el
+                      error en un `role="alert"`, o la lista de modelos).
+                    */
                     <span
                       className={estilos.punto}
-                      data-credencial={p.credencial}
-                      aria-label={p.credencial === "puesta" ? "con credencial" : "sin credencial"}
+                      data-credencial={punto}
+                      aria-hidden="true"
+                      title={
+                        {
+                          puesta: "con credencial",
+                          falta: "sin credencial",
+                          conecta: "conectado",
+                          "sin-conexion": "sin conexión",
+                        }[punto]
+                      }
                     />
                   )}
                   <span>{p.id}</span>
