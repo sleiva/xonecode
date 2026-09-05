@@ -53,16 +53,58 @@
   background: var(--dsw-alias-bg-layer-2);
 }
 
+/* La cabecera de la navegación: placa, nombre y alcance, con un filete que la separa de las
+   secciones. El filete importa más de lo que parece — sin él «Ajustes» se leía como un
+   cuarto elemento de la lista, y por peso además como el elegido. */
+.marcaDeAjustes {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 4px 8px 12px;
+  padding-bottom: 14px;
+  border-bottom: 0.5px solid var(--dsw-alias-border-l2);
+}
+
+/* La placa del icono: mismo gesto en la cabecera y en las filas de apariencia. El fondo es
+   el azul pastel que ya usan la burbuja del chat y la etiqueta de «compartido» — un alias
+   que existe, no un tinte inventado para esto. */
+.placa {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: 30px;
+  height: 30px;
+  border-radius: 9px;
+  background: var(--dsw-alias-state-business-tertiary);
+  color: var(--dsw-alias-state-business-primary);
+}
+
 .titulo {
-  margin: 0 0 10px 8px;
+  display: block;
+  margin: 0;
   color: var(--dsw-alias-label-primary);
   font-weight: 600;
 }
 
+/* De qué ajustes son. Estos tres van a la configuración global y a `auth.json`, no al
+   `config.json` del proyecto, y esa es justo la duda que una ventana de ajustes provoca. */
+.alcance {
+  display: block;
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 11px;
+}
+
+/* Pastillas con icono, como en el rediseño. El icono no es decoración: la lista tiene tres
+   entradas y ninguna se parece a otra, así que a partir de la segunda visita se llega por
+   la forma antes que por la palabra. */
 .seccion {
+  display: flex;
+  align-items: center;
+  gap: 10px;
   padding: 8px 10px;
   border: none;
-  border-radius: 8px;
+  border-radius: 999px;
   background: none;
   color: var(--dsw-alias-label-secondary);
   font: inherit;
@@ -70,14 +112,25 @@
   cursor: pointer;
 }
 
+/* Sin `color`: el icono HEREDA el del botón, así que la sección elegida lo tiñe de cian
+   junto con la letra y no hay una segunda regla que mantener sincronizada. Escribirlo
+   —`color: currentColor`— era además una palabra clave de color, y el detector de
+   `Barra.test.tsx` la caza igual que un `#rrggbb`, con razón: la disciplina es que el color
+   se nombra por alias o no se nombra. */
+.iconoDeSeccion {
+  flex: none;
+}
+
 .seccion:hover {
   background: var(--dsw-alias-interactive-bg-hover);
 }
 
+/* La elegida, en cian: el mismo acento que la pestaña activa y el filo de la fila abierta
+   en la barra. Ya no lleva `font-weight: 600` — con el color y el fondo va sobrada, y el
+   cambio de grosor movía el texto medio píxel al elegirla. */
 .seccion[data-actual] {
-  background: var(--dsw-alias-bg-layer-1);
-  color: var(--dsw-alias-label-primary);
-  font-weight: 600;
+  background: var(--dsw-alias-state-business-tertiary);
+  color: var(--xonecode-cian);
 }
 
 .panel {

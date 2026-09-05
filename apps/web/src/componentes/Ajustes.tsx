@@ -1,5 +1,15 @@
 import { useState, type FormEvent } from "react";
-import { Modal, Button, Input } from "@deepseek-ai/dsh-client-ui-primitives";
+import {
+  Modal,
+  Button,
+  Input,
+  IconSettingsOutline16,
+  IconSparkle16,
+  IconDarkOutline16,
+  IconLightOutline16,
+  IconFollowsystemOutline16,
+  IconDataOutline16,
+} from "@deepseek-ai/dsh-client-ui-primitives";
 import type { ProveedorDeModelos } from "../tipos.js";
 import { Pregunta } from "./Pregunta.js";
 import { urlDeEntornoAceptable, AVISO_DE_URL } from "./Wizard.js";
@@ -35,18 +45,44 @@ import estilos from "./Ajustes.module.css";
  */
 export type SeccionDeAjustes = "apariencia" | "modelos" | "entornos";
 
-const SECCIONES: readonly { id: SeccionDeAjustes; etiqueta: string }[] = [
-  { id: "apariencia", etiqueta: "Apariencia" },
-  { id: "modelos", etiqueta: "Modelos" },
-  { id: "entornos", etiqueta: "Entornos" },
+/**
+ * Las tres secciones, en el orden del rediseño —Modelos primero, que además es la que se
+ * abre por omisión— y cada una con su icono.
+ *
+ * Los iconos son de la librería de primitivas y están comprobados uno a uno contra los
+ * exports de `lib/index.js`: `Cabecera.tsx` documenta el día que se montó uno que el
+ * paquete NO exporta y React reventó con «Element type is invalid». Y son los que
+ * SIGNIFICAN lo que hay detrás, no los que se parecen al dibujo del mockup: `IconSparkle16`
+ * para los modelos, la luna para el claro/oscuro, y el de datos para los servidores MCP.
+ */
+const SECCIONES: readonly {
+  id: SeccionDeAjustes;
+  etiqueta: string;
+  Icono: typeof IconSparkle16;
+}[] = [
+  { id: "modelos", etiqueta: "Modelos", Icono: IconSparkle16 },
+  { id: "apariencia", etiqueta: "Apariencia", Icono: IconDarkOutline16 },
+  { id: "entornos", etiqueta: "Entornos", Icono: IconDataOutline16 },
 ];
 
 export type Apariencia = "sistema" | "claro" | "oscuro";
 
-const APARIENCIAS: readonly { id: Apariencia; etiqueta: string; detalle: string }[] = [
-  { id: "sistema", etiqueta: "Como el sistema", detalle: "sigue la preferencia del navegador" },
-  { id: "claro", etiqueta: "Claro", detalle: "fondo claro, siempre" },
-  { id: "oscuro", etiqueta: "Oscuro", detalle: "fondo oscuro, siempre" },
+/* Los tres iconos existen en la librería y dicen exactamente esto —seguir al sistema, claro
+   y oscuro—, así que no hay que aproximar ninguno con un dibujo parecido. */
+const APARIENCIAS: readonly {
+  id: Apariencia;
+  etiqueta: string;
+  detalle: string;
+  Icono: typeof IconSparkle16;
+}[] = [
+  {
+    id: "sistema",
+    etiqueta: "Como el sistema",
+    detalle: "sigue la preferencia del navegador",
+    Icono: IconFollowsystemOutline16,
+  },
+  { id: "claro", etiqueta: "Claro", detalle: "fondo claro, siempre", Icono: IconLightOutline16 },
+  { id: "oscuro", etiqueta: "Oscuro", detalle: "fondo oscuro, siempre", Icono: IconDarkOutline16 },
 ];
 
 export function Ajustes({
@@ -142,7 +178,18 @@ export function Ajustes({
       >
       <div className={estilos.ventana}>
         <nav className={estilos.navegacion} aria-label="Secciones de ajustes">
-          <p className={estilos.titulo}>Ajustes</p>
+          {/* La cabecera del rediseño. El subtítulo no es adorno: dice el ALCANCE, que es la
+              pregunta que esta ventana provoca —¿esto es de este proyecto o de todo?—, y la
+              respuesta es que estos tres van a la configuración global y a `auth.json`. */}
+          <div className={estilos.marcaDeAjustes}>
+            <span className={estilos.placa} aria-hidden="true">
+              <IconSettingsOutline16 size={16} />
+            </span>
+            <span>
+              <span className={estilos.titulo}>Ajustes</span>
+              <span className={estilos.alcance}>Configuración global</span>
+            </span>
+          </div>
           {SECCIONES.map((s) => (
             <button
               key={s.id}
@@ -152,6 +199,7 @@ export function Ajustes({
               aria-current={s.id === seccion ? "page" : undefined}
               onClick={() => setSeccion(s.id)}
             >
+              <s.Icono size={16} className={estilos.iconoDeSeccion} />
               {s.etiqueta}
             </button>
           ))}
@@ -167,6 +215,9 @@ export function Ajustes({
               <ul className={estilos.filas}>
                 {APARIENCIAS.map((a) => (
                   <li key={a.id} className={estilos.fila}>
+                    <span className={estilos.placa} aria-hidden="true">
+                      <a.Icono size={16} />
+                    </span>
                     <span className={estilos.nombre}>{a.etiqueta}</span>
                     <span className={estilos.detalle}>{a.detalle}</span>
                     <Button
