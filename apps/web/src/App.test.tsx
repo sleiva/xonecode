@@ -57,7 +57,7 @@ describe("App: la pregunta de texto libre", () => {
     const { store, enviar } = montar();
     act(() => store.aplicar({ clase: "pregunta", texto: "¿Subir los cambios? [s/N] " }));
     fireEvent.change(screen.getByLabelText(/subir los cambios/i), { target: { value: "s" } });
-    fireEvent.click(screen.getByRole("button", { name: /responder/i }));
+    fireEvent.click(screen.getByRole("button", { name: /aceptar/i }));
     expect(enviar).toHaveBeenCalledWith({ clase: "respuesta", texto: "s" });
     // Y se retira DESPUÉS de que el envío haya llegado —de ahí el `waitFor`—: el servidor no
     // manda ningún «ya está», así que si no la quitara el cliente se quedaría pintada encima
@@ -165,12 +165,31 @@ describe("App: el secreto y el selector, que también colgaban", () => {
     const campo = screen.getByLabelText(/clave de anthropic/i) as HTMLInputElement;
     expect(campo.type).toBe("password");
     fireEvent.change(campo, { target: { value: "sk-ant-NO-DEBE-SALIR" } });
-    fireEvent.click(screen.getByRole("button", { name: /responder/i }));
+    fireEvent.click(screen.getByRole("button", { name: /aceptar/i }));
     expect(enviar).toHaveBeenCalledWith({ clase: "secreto", valor: "sk-ant-NO-DEBE-SALIR" });
     // La costura que importa: el estado del cliente no guarda la clave en ninguna parte,
     // ni siquiera en el apartado que la pidió.
     expect(JSON.stringify(store.leer())).not.toContain("sk-ant-NO-DEBE-SALIR");
     await waitFor(() => expect(screen.queryByLabelText(/clave de anthropic/i)).toBeNull());
+  });
+
+  it("cerrar Ajustes CANCELA la clave pendiente, en vez de mudarla al chat", async () => {
+    // Visto en pantalla. El servidor sigue esperando por `leerSecreto`, y el centro solo
+    // deja de pintar la pregunta MIENTRAS la ventana está abierta — así que al cerrarla
+    // reaparecía flotando sobre el compositor, pidiendo la clave de un proveedor fuera de
+    // todo contexto. Se cancela con una respuesta VACÍA, que es exactamente lo que el
+    // servidor recibe cuando se cae el SSE: un camino ya probado en vez de una clase de
+    // mensaje nueva para decir «me arrepentí».
+    const { store, enviar } = montar();
+    fireEvent.click(screen.getByRole("button", { name: "Ajustes" }));
+    act(() => store.aplicar({ clase: "secreto", pregunta: "clave de openai: " }));
+    // Con la ventana abierta no se pinta en el centro, y en la ventana solo aparece dentro
+    // de la fila que se esté editando —aquí ninguna—: eso ya funcionaba y no es lo que se
+    // prueba. Lo que se prueba es qué pasa al CERRAR.
+    fireEvent.click(screen.getByRole("button", { name: "Cerrar ajustes" }));
+    expect(enviar).toHaveBeenCalledWith({ clase: "secreto", valor: "" });
+    // Y no reaparece en el centro, que es el fallo que se está arreglando.
+    await waitFor(() => expect(screen.queryByLabelText(/clave de openai/i)).toBeNull());
   });
 });
 
@@ -190,7 +209,7 @@ describe("App: un envío que falla no puede parecer que salió bien", () => {
   it("la pregunta se queda en pantalla y lo dice, en vez de fingir que se contestó", async () => {
     const { store } = montar(enviarQueFalla());
     act(() => store.aplicar({ clase: "pregunta", texto: "¿Subir los cambios? [s/N] " }));
-    fireEvent.click(screen.getByRole("button", { name: /responder/i }));
+    fireEvent.click(screen.getByRole("button", { name: /aceptar/i }));
     await waitFor(() => expect(screen.getByRole("alert").textContent).toMatch(/no llegó/i));
     expect(screen.getByLabelText(/subir los cambios/i)).toBeTruthy();
     expect(store.leer().pregunta).toBeDefined();

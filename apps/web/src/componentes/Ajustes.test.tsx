@@ -100,7 +100,7 @@ describe("Ajustes", () => {
     const campo = screen.getByLabelText(/clave de anthropic/i) as HTMLInputElement;
     expect(campo.type).toBe("password");
     fireEvent.change(campo, { target: { value: "sk-ant-NO-DEBE-SALIR" } });
-    fireEvent.click(screen.getByRole("button", { name: /responder/i }));
+    fireEvent.click(screen.getByRole("button", { name: /aceptar/i }));
     expect(alResponderSecreto).toHaveBeenCalledWith("sk-ant-NO-DEBE-SALIR");
     // En cuanto el envío vuelve, la fila deja de editarse y el campo desaparece con su
     // valor dentro: la clave no se queda escrita en ningún nodo del documento.

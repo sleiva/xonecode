@@ -477,7 +477,27 @@ export function App({ store, enviar }: { store: Store; enviar: Conexion["enviar"
         await enviar({ clase: "secreto", valor });
         store.contestarSecreto();
       }}
-      alCerrar={() => setAjustesAbiertos(false)}
+      /*
+        Cerrar la ventana CANCELA la clave que estuviera pidiendo.
+        
+        Sin esto, la pregunta no desaparecía: se mudaba al centro. El servidor sigue
+        esperando por `leerSecreto`, y el centro solo deja de pintarla MIENTRAS la ventana
+        está abierta (`!ajustesAbiertos`, más abajo) — así que al cerrarla reaparecía
+        flotando sobre el compositor, pidiendo la clave de un proveedor fuera de todo
+        contexto. Visto en pantalla.
+
+        Se cancela con una respuesta VACÍA, que es exactamente lo que el servidor recibe
+        cuando se cae el SSE (`consolaWeb.ts#alDesconectar`): un camino ya existente y ya
+        probado, en vez de una clase de mensaje nueva para decir «me arrepentí». Y una clave
+        vacía no se escribe — `motivoDeClaveInaceptable` la rechaza antes de gastar nada.
+      */
+      alCerrar={() => {
+        if (estado.secreto !== undefined) {
+          void enviar({ clase: "secreto", valor: "" });
+          store.contestarSecreto();
+        }
+        setAjustesAbiertos(false);
+      }}
     />
   ) : null;
 

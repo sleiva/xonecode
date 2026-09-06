@@ -14,14 +14,14 @@ describe("Pregunta", () => {
     const alResponder = vi.fn();
     render(<Pregunta texto="¿Subir? [s/N] " alResponder={alResponder} />);
     fireEvent.change(screen.getByLabelText(/subir/i), { target: { value: "s" } });
-    fireEvent.click(screen.getByRole("button", { name: /responder/i }));
+    fireEvent.click(screen.getByRole("button", { name: /aceptar/i }));
     expect(alResponder).toHaveBeenCalledWith("s");
   });
 
   it("responder en blanco es una respuesta, no un fallo: es lo que contesta un readline cerrado", () => {
     const alResponder = vi.fn();
     render(<Pregunta texto="¿Subir? [s/N] " alResponder={alResponder} />);
-    fireEvent.click(screen.getByRole("button", { name: /responder/i }));
+    fireEvent.click(screen.getByRole("button", { name: /aceptar/i }));
     expect(alResponder).toHaveBeenCalledWith("");
   });
 
@@ -53,7 +53,7 @@ describe("Pregunta", () => {
     render(<Pregunta texto="clave: " oculta alResponder={alResponder} />);
     const campo = screen.getByLabelText(/clave/i) as HTMLInputElement;
     fireEvent.change(campo, { target: { value: "sk-ant-NO-DEBE-SALIR" } });
-    fireEvent.click(screen.getByRole("button", { name: /responder/i }));
+    fireEvent.click(screen.getByRole("button", { name: /aceptar/i }));
     expect(alResponder).toHaveBeenCalledWith("sk-ant-NO-DEBE-SALIR");
     expect(document.body.textContent).not.toContain("sk-ant-NO-DEBE-SALIR");
     expect(campo.type).toBe("password");
@@ -67,9 +67,9 @@ describe("Pregunta", () => {
   it("si el envío falla lo DICE y se puede reintentar", async () => {
     const alResponder = vi.fn(() => Promise.reject(new Error("sin red")));
     render(<Pregunta texto="¿Subir? [s/N] " alResponder={alResponder} />);
-    fireEvent.click(screen.getByRole("button", { name: /responder/i }));
+    fireEvent.click(screen.getByRole("button", { name: /aceptar/i }));
     await waitFor(() => expect(screen.getByRole("alert").textContent).toMatch(/no llegó/i));
-    fireEvent.click(screen.getByRole("button", { name: /responder/i }));
+    fireEvent.click(screen.getByRole("button", { name: /aceptar/i }));
     expect(alResponder).toHaveBeenCalledTimes(2);
   });
 
@@ -77,8 +77,8 @@ describe("Pregunta", () => {
     let resolver: () => void = () => {};
     const alResponder = vi.fn(() => new Promise<void>((r) => { resolver = r; }));
     render(<Pregunta texto="¿Subir? [s/N] " alResponder={alResponder} />);
-    fireEvent.click(screen.getByRole("button", { name: /responder/i }));
-    fireEvent.click(screen.getByRole("button", { name: /responder/i }));
+    fireEvent.click(screen.getByRole("button", { name: /aceptar/i }));
+    fireEvent.click(screen.getByRole("button", { name: /aceptar/i }));
     expect(alResponder).toHaveBeenCalledTimes(1);
     resolver();
   });

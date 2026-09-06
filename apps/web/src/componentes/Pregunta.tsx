@@ -111,7 +111,7 @@ export function Pregunta({
           className={estilos.accion}
           disabled={enviando}
         >
-          Responder
+          Aceptar
         </Button>
       </div>
       {falloDeEnvio ? (
