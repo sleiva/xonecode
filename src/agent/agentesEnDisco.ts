@@ -77,6 +77,13 @@ export function leerCarpetaDeAgentes(carpeta: string, origen: Agente["origen"]):
  * raíz se contestan los globales, que es la verdad, en vez de una lista vacía.
  */
 export function cargarAgentes(raizDelProyecto?: string): Lectura {
+  // La siembra se hace AQUÍ, y no en el arranque de cada piel. Medido: estaba en
+  // `main.ts#entrarEnConsola` y la rama web devuelve antes de llegar ahí, así que
+  // `npm run web` no sembraba nada — la consola arrancaba sin un solo subagente y el
+  // orquestador sin nadie a quien delegar, sin que nada diera error. Colgarlo del cargador
+  // lo hace imposible de olvidar: quien necesita agentes los pide por aquí, y por
+  // construcción hay algo que leer. Es idempotente y no hace nada si la carpeta existe.
+  sembrarAgentes();
   const global = leerCarpetaDeAgentes(rutaGlobalDeAgentes(), "global");
   const proyecto =
     raizDelProyecto === undefined

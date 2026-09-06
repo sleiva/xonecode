@@ -6,8 +6,10 @@ import {
   AGENTES_DE_SERIE,
   borrarAgente,
   guardarAgente,
+  cargarAgentes,
   leerCarpetaDeAgentes,
   rutaDeAgentes,
+  rutaGlobalDeAgentes,
   sembrarAgentes,
 } from "./agentesEnDisco.js";
 import { fusionarAgentes } from "../core/agentes.js";
@@ -73,6 +75,34 @@ describe("sembrarAgentes", () => {
     // ahora están en el cuerpo de su fichero, que es donde se pueden leer y ajustar.
     const planner = AGENTES_DE_SERIE.find((a) => a.nombre === "planner")!;
     expect(planner.instrucciones).toContain("HANDOFF DE PLANNER");
+  });
+});
+
+describe("cargarAgentes", () => {
+  it("SIEMBRA si no hay carpeta global: quien pide agentes tiene que encontrar alguno", () => {
+    // Medido, y por eso está aquí y no en el arranque: la llamada vivía en
+    // `main.ts#entrarEnConsola` y la rama web devuelve ANTES de llegar ahí, así que
+    // `npm run web` arrancaba sin un solo subagente y el orquestador sin nadie a quien
+    // delegar — sin que nada diera error. Colgarlo del cargador lo hace imposible de
+    // olvidar: por construcción, quien pide agentes encuentra algo.
+    const casa = base();
+    const previo = process.env["HOME"];
+    process.env["HOME"] = casa;
+    try {
+      // `homedir()` en macOS y Linux respeta `HOME`; si en esta plataforma no lo hiciera, el
+      // test no puede afirmar nada y se salta en vez de dar un verde falso.
+      if (rutaGlobalDeAgentes().startsWith(casa)) {
+        expect(cargarAgentes().agentes.map((a) => a.nombre).sort()).toEqual([
+          "dev",
+          "docs",
+          "mockup",
+          "planner",
+        ]);
+      }
+    } finally {
+      if (previo === undefined) delete process.env["HOME"];
+      else process.env["HOME"] = previo;
+    }
   });
 });
 
