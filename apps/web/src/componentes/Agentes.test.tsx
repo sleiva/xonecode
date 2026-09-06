@@ -58,12 +58,15 @@ describe("Agentes", () => {
     expect(screen.getByText(/solo puede LEER/)).not.toBeNull();
   });
 
-  it("codex se ofrece rotulado como lo que es: todavía no cableado", () => {
-    // Quitarlo escondería que existe; ofrecerlo callado sería un botón muerto. Decirlo es la
-    // tercera opción y la única honesta.
+  it("cada motor externo dice QUÉ hace falta para que funcione", () => {
+    // No es el mismo requisito y el fallo se parece: Claude Code va por su SDK y Codex por
+    // el binario que el usuario tenga instalado. Un especialista al que le falte lo suyo no
+    // se monta siquiera —el servidor comprueba `disponible()` antes—, así que esto es lo
+    // que explica por qué no aparece.
     render(<Agentes {...manejadores} agentes={[]} />);
     fireEvent.click(screen.getByRole("button", { name: "Nuevo subagente" }));
-    expect(screen.getByRole("option", { name: /Codex/ }).textContent).toMatch(/no cableado/);
+    expect(screen.getByRole("option", { name: /Codex/ }).textContent).toMatch(/tengas instalado/);
+    expect(screen.getByRole("option", { name: /Claude Code/ }).textContent).toMatch(/solo lectura/);
   });
 
   it("guardar exige nombre y descripción: el servidor los exige, y decir que no después es peor", () => {

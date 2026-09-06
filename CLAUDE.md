@@ -425,9 +425,21 @@ especialistas de siempre —`docs`, `planner`, `dev`, `mockup`— dejaron de est
     su papel, que es lo que no puede saber.
   - **Se comprueba `disponible()` antes de montarlo.** Un especialista que el orquestador
     puede elegir y que revienta al elegirlo es un botón muerto dentro del grafo — peor que uno
-    de interfaz, porque quien lo pulsa es el modelo y se cree el resultado. **Codex no está
-    cableado** (va por `@openai/codex` y un «app-server», que es otra integración): se ofrece
-    en la ventana rotulado como tal, ni escondido ni fingido.
+    de interfaz, porque quien lo pulsa es el modelo y se cree el resultado.
+  - **Codex va por otro camino** (`agent/subagenteCodex.ts`) y es el que tiene la denegación
+    más fuerte: se habla con `codex app-server --stdio` por JSON POR LÍNEA, y la escritura la
+    bloquea el SANDBOX del sistema operativo (`sandbox: "read-only"`), no un callback — o sea
+    que no depende de que el modelo colabore. **Todo el protocolo está medido contra el
+    binario real, no deducido**: los tres valores de sandbox los enumeró el propio servidor
+    al rechazar uno mal escrito, y la respuesta final es el `item/completed` cuyo item es un
+    `agentMessage` de fase `final_answer` — quedarse con el último item devolvería el
+    razonamiento o la lectura. Comprobado de punta a punta: lee la carpeta y contesta, y al
+    pedirle que escriba un fichero contesta que no pudo y el directorio queda intacto.
+    Se usa el `codex` del PATH (o `CODEX_BIN`) y no el paquete npm: son ~100 MB de binario
+    por plataforma para una capacidad opcional, y el usuario ya tiene el suyo autenticado.
+    Un `TOPE_MS` de 10 minutos evita que un hijo colgado cuelgue el turno para siempre. Y una
+    consecuencia que hay que saber: el hijo es el Codex DEL USUARIO, con sus MCP, sus plugins
+    y sus hooks — medido, arrancan al abrir el hilo. xonecode no los filtra.
 - Un `.md` roto NO tumba nada: se salta, y su motivo viaja por el cable hasta la ventana.
   Quien lo tiene que arreglar está mirando ahí, y un agente que no aparece sin explicación
   se lee como que la aplicación lo perdió.

@@ -28,20 +28,26 @@ import estilos from "./Agentes.module.css";
  */
 
 /**
- * Los motores, con lo que significan Y con lo que todavía no hacen.
+ * Los motores, con lo que significan y con lo que HACE FALTA para cada uno.
  *
- * `codex` sigue en la lista porque el formato del `.md` lo admite, pero se rotula como lo
- * que es: no cableado. Quitarlo escondería que existe; ofrecerlo callado sería un botón
- * muerto. Decirlo es la tercera opción y la única honesta.
+ * Los dos externos dicen su requisito porque no es el mismo y el fallo se parece: Claude
+ * Code va por su SDK (que viene con xonecode) y Codex por el binario que el usuario ya
+ * tenga instalado. Un especialista que no arranca porque falta uno de los dos no se monta
+ * siquiera —el servidor comprueba `disponible()` antes—, así que decirlo aquí es lo que
+ * explica por qué no aparece.
  */
 const MOTORES: readonly { id: string; etiqueta: string; detalle: string }[] = [
   { id: "modelo", etiqueta: "Un modelo", detalle: "corre dentro de xonecode, con las tools del proyecto" },
   {
     id: "claude-code",
     etiqueta: "Claude Code",
-    detalle: "lanza un Claude Code sobre la carpeta del proyecto — solo lectura",
+    detalle: "lanza un Claude Code sobre el proyecto — solo lectura",
   },
-  { id: "codex", etiqueta: "Codex", detalle: "todavía no cableado" },
+  {
+    id: "codex",
+    etiqueta: "Codex",
+    detalle: "lanza el `codex` que tengas instalado — solo lectura",
+  },
 ];
 
 /**
@@ -52,8 +58,10 @@ const MOTORES: readonly { id: string; etiqueta: string; detalle: string }[] = [
  * —y forzar la casilla— convierte un error en una explicación.
  */
 const AVISO_EXTERNO =
-  "Un agente externo solo puede LEER el proyecto: sus escrituras se le deniegan una a una, " +
-  "porque la aprobación humana de xonecode todavía no está conectada a ellos.";
+  "Un agente externo solo puede LEER el proyecto: la aprobación humana de xonecode todavía " +
+  "no está conectada a ellos, así que sus escrituras se deniegan — a Claude Code tool a " +
+  "tool, y a Codex con el sandbox de solo lectura del sistema. Usa su propia cuenta y su " +
+  "propia configuración, no las de xonecode.";
 
 /** Un agente vacío, para el formulario de alta. */
 function enBlanco(): AgenteDelCable {

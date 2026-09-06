@@ -1,13 +1,13 @@
 /**
  * El adaptador que lanza un agente de OTRO producto sobre la carpeta del proyecto.
  *
- * Hoy solo Claude Code, con su SDK oficial (`@anthropic-ai/claude-agent-sdk`): una tarea
- * autocontenida entra, la respuesta final sale, y el hijo es una sesión de Claude Code de
- * verdad — con su propia autenticación, sus propios ajustes y su propio modelo. Codex se
- * declara en el tipo porque el formato del `.md` lo admite, pero `disponible` contesta que
- * NO: su integración va por `@openai/codex` y un «app-server», que es otra cosa, y ofrecer
- * un especialista que va a fallar en cuanto el orquestador lo elija es un botón muerto
- * dentro del grafo.
+ * Dos motores, y cada uno por su camino porque no se parecen en nada. **Claude Code** va
+ * por su SDK oficial (`@anthropic-ai/claude-agent-sdk`) y se le deniegan las escrituras con
+ * `canUseTool`, un callback nuestro. **Codex** va por su `app-server --stdio`
+ * (`subagenteCodex.ts`), y ahí la denegación la hace el SANDBOX del sistema operativo
+ * (`sandbox: "read-only"`) — que es más fuerte, porque no depende de que el modelo colabore.
+ * En los dos casos entra una tarea autocontenida y sale la respuesta final, y el hijo es una
+ * sesión del producto de verdad: su autenticación, sus ajustes y su modelo.
  *
  * **La escritura está DENEGADA, y no por precaución vaga.** El SDK trae `canUseTool`, un
  * callback que recibe cada tool con su entrada entera y contesta permitir o denegar; es
@@ -28,6 +28,7 @@ import type {
   PeticionExterna,
   SubagenteExternoPort,
 } from "../core/ports.js";
+import { codexDisponible, correrCodex } from "./subagenteCodex.js";
 
 /**
  * Las tools del hijo que SÍ puede usar: leer y buscar, y nada más.
@@ -74,27 +75,37 @@ export function decisionDeTool(
   return { behavior: "deny", message: MOTIVO_DE_DENEGACION };
 }
 
+/** Si el motor se puede usar de verdad. Sin cachear: el que cachea es quien lo llama. */
+async function medirDisponible(motor: MotorExterno): Promise<boolean> {
+  if (motor === "codex") return codexDisponible();
+  try {
+    await import("@anthropic-ai/claude-agent-sdk");
+    return true;
+  } catch {
+    // Sin el paquete no hay motor. No se lanza: quien pregunta está decidiendo si monta el
+    // especialista, y una excepción ahí tumbaría la construcción del agente entera por una
+    // capacidad opcional.
+    return false;
+  }
+}
+
 export function crearSubagenteExterno(): SubagenteExternoPort {
+  const cache = new Map<MotorExterno, boolean>();
   return {
     async disponible(motor: MotorExterno): Promise<boolean> {
-      if (motor !== "claude-code") return false;
-      try {
-        await import("@anthropic-ai/claude-agent-sdk");
-        return true;
-      } catch {
-        // Sin el paquete no hay motor. No se lanza: quien pregunta está decidiendo si monta
-        // el especialista, y una excepción ahí tumbaría la construcción del agente entera
-        // por una capacidad opcional.
-        return false;
-      }
+      // Se cachea por proceso: `disponible` se pregunta una vez por agente y por
+      // construcción del grafo, y comprobar Codex cuesta un `spawn`. La respuesta no cambia
+      // a mitad de una sesión salvo que alguien instale el binario con la consola abierta,
+      // que es un caso que se arregla reiniciando.
+      const visto = cache.get(motor);
+      if (visto !== undefined) return visto;
+      const hay = await medirDisponible(motor);
+      cache.set(motor, hay);
+      return hay;
     },
 
     async correr(peticion: PeticionExterna): Promise<string> {
-      if (peticion.motor !== "claude-code") {
-        throw new Error(
-          `el motor «${peticion.motor}» todavía no está cableado en xonecode: usa «claude-code» o «modelo»`
-        );
-      }
+      if (peticion.motor === "codex") return correrCodex(peticion);
       const { query } = await import("@anthropic-ai/claude-agent-sdk");
 
       const respuesta = query({
@@ -135,5 +146,8 @@ export function crearSubagenteExterno(): SubagenteExternoPort {
   };
 }
 
-/** Los que están cableados de verdad, para que la interfaz no ofrezca lo que no hay. */
-export const MOTORES_CABLEADOS: ReadonlySet<MotorExterno> = new Set<MotorExterno>(["claude-code"]);
+/** Los que están cableados de verdad. Los dos, desde que Codex habla por su app-server. */
+export const MOTORES_CABLEADOS: ReadonlySet<MotorExterno> = new Set<MotorExterno>([
+  "claude-code",
+  "codex",
+]);
