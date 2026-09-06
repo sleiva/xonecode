@@ -33,6 +33,7 @@ describe("describir", () => {
       verifier: verificadorReal,
       modelos: {
         paraPapel: () => ({}),
+        paraModelo: () => ({}),
         descripcion: () => ({ rapido: "x", trabajo: "x", afilado: "x" }) as Record<Papel, string>,
       },
     };

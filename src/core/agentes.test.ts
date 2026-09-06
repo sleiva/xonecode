@@ -111,14 +111,34 @@ describe("promptDeAgente", () => {
     expect(prompt.indexOf(REGLAS_XONE)).toBe(0);
   });
 
-  it("las instrucciones del usuario van al FINAL, que es donde más pesan", () => {
-    const prompt = promptDeAgente(agente({ instrucciones: "MI REGLA" }));
-    expect(prompt.trimEnd().endsWith("MI REGLA")).toBe(true);
+  it("las instrucciones del usuario van DESPUÉS de la descripción, que es donde más pesan", () => {
+    const prompt = promptDeAgente(agente({ descripcion: "DESC", instrucciones: "MI REGLA" }));
+    expect(prompt.indexOf("MI REGLA")).toBeGreaterThan(prompt.indexOf("DESC"));
   });
 
-  it("sin instrucciones no deja un hueco: la descripción cierra el prompt", () => {
-    const prompt = promptDeAgente(agente({ descripcion: "Revisa cosas.", instrucciones: "   " }));
-    expect(prompt.trimEnd().endsWith("Revisa cosas.")).toBe(true);
+  it("sin instrucciones no deja un hueco de tres saltos", () => {
+    // Tres saltos seguidos no separan nada: solo gastan tokens y hacen que el prompt se lea
+    // como si faltara un trozo.
+    const prompt = promptDeAgente(agente({ instrucciones: "   " }));
+    expect(prompt).not.toMatch(/\n{3,}/);
+  });
+
+  it("la línea de escritura es ESTRUCTURAL: sale de `soloLectura`, no del fichero", () => {
+    // Un agente que escribe sin saber que sus escrituras se aprueban insiste al ver un
+    // rechazo. Y no puede depender de que el usuario se acuerde de escribirlo en su `.md`.
+    expect(promptDeAgente(agente({ soloLectura: true }))).toContain("No modificas nada.");
+    expect(promptDeAgente(agente({ soloLectura: false }))).toMatch(/aprobación humana/);
+  });
+
+  it("las skills que FALTAN se avisan: un doble nunca se disfraza", () => {
+    // Una skill declarada en el `.md` que no está en el catálogo haría que el modelo
+    // intentara cargarla y fallara sin saber por qué. Se dice, no se calla.
+    const prompt = promptDeAgente(agente({ skills: ["archify", "inventada"] }), {
+      suyas: ["archify"],
+      faltan: ["inventada"],
+    });
+    expect(prompt).toContain("Tus skills: archify");
+    expect(prompt).toMatch(/AVISO: te faltan.*inventada/);
   });
 });
 

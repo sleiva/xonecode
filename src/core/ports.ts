@@ -87,6 +87,14 @@ export type Papel = "rapido" | "trabajo" | "afilado";
  */
 export interface ModelosPort {
   paraPapel(papel: Papel): unknown;
+  /**
+   * Un modelo CONCRETO, «proveedor/modelo», para el subagente que fija el suyo
+   * (`core/agentes.ts`). Los papeles no sirven para esto: son tres funciones del turno
+   * —rápido, trabajo, afilado— y un agente que quiere correr con Claude no está pidiendo
+   * un papel, está pidiendo ese modelo. Lanza si el texto no es un `proveedor/modelo`
+   * válido, que es lo que hace que un error de escritura en un `.md` se vea.
+   */
+  paraModelo(id: string): unknown;
   /** Qué modelo concreto resuelve cada papel, para que `describe` lo pueda enseñar. */
   descripcion(): Record<Papel, string>;
 }
@@ -203,6 +211,11 @@ export class ModeloGuionizado implements ModelosPort {
   readonly [ES_DOBLE] = true;
   constructor(private readonly respuestas: string[] = ["(respuesta guionizada)"]) {}
   paraPapel(): unknown {
+    return { guion: this.respuestas };
+  }
+  /** El mismo guion venga por papel o por id: el modo offline no distingue modelos, y
+   *  fingir que sí obligaría a los tests a saber qué modelo pide cada agente. */
+  paraModelo(): unknown {
     return { guion: this.respuestas };
   }
   descripcion(): Record<Papel, string> {

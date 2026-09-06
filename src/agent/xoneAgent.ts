@@ -1,7 +1,8 @@
 import { createDeepAgent, createFilesystemMiddleware } from "deepagents";
+import { promptDeAgente, repartirSkills, type Agente } from "../core/agentes.js";
 import { MemorySaver } from "@langchain/langgraph";
 import { backendConSkills, backendDelProyecto, exponerMemoriaDeProyecto, sinVistasAplanadas } from "./proyecto.js";
-import { PERFILES, permisosDe, hitlDe } from "./perfiles.js";
+import { permisosDe, hitlDe } from "./perfiles.js";
 import { crearBusquedaRegex } from "./busquedaRegex.js";
 import type { DiagnosticoDeTools } from "./diagnosticoDeTools.js";
 import { middlewareTextoDeTool } from "./textoDeTool.js";
@@ -13,6 +14,16 @@ export interface OpcionesDelAgente {
   raiz: string;
   /** Todas las rutas del proyecto, para saber cuáles son vistas aplanadas. */
   ficheros: ReadonlySet<string>;
+  /**
+   * Los subagentes, ya leídos de disco (`agent/agentesEnDisco.ts`). Entran por parámetro y
+   * no se leen aquí por la misma razón que todo lo demás: quien construye el agente no
+   * toca el disco, y así un test puede montar los que quiera sin escribir ficheros.
+   *
+   * Puede venir VACÍO, y entonces el orquestador se queda sin nadie a quien delegar. No se
+   * rellena con los de serie a espaldas de nadie: si el usuario borró los cuatro, la
+   * consola tiene que decírselo, no fingir que siguen ahí.
+   */
+  agentes: readonly Agente[];
   modelos: ModelosPort;
   skills: SkillsPort;
   checkpointer?: MemorySaver;
@@ -22,20 +33,40 @@ export interface OpcionesDelAgente {
   diagnostico?: DiagnosticoDeTools;
 }
 
-export const PROMPT_ORQUESTADOR = [
-  "Eres el orquestador de un harness de desarrollo para la plataforma XOne.",
-  "NO tienes herramientas: tu único trabajo es entender la petición y delegar.",
-  "Delega en `docs` las preguntas técnicas de la plataforma; en `planner` lo que",
-  "exija inspeccionar el proyecto; en `dev` el desarrollo; en `mockup` lo visual.",
-  "Para diagramas o esquemas de la app, delega en `mockup`; si deben reflejar el",
-  "código real, encarga PRIMERO el análisis a `planner` y usa su resultado antes de dibujar.",
-  "Los especialistas no comparten el transcript: al encadenarlos, incluye en la descripción",
-  "de la siguiente `task` un bloque `HANDOFF DE PLANNER` compacto con los hechos verificados,",
-  "rutas/evidencias y lagunas. No pidas al siguiente especialista redescubrir esos hechos.",
-  "Cuando varias tareas sean independientes, delégalas EN EL MISMO mensaje para",
-  "que corran a la vez.",
-  "No afirmes que un cambio se ha aplicado si no te lo ha confirmado el especialista.",
-].join(" ");
+/**
+ * El prompt del orquestador, GENERADO a partir de los subagentes que hay.
+ *
+ * Era una constante que nombraba a `docs`, `planner`, `dev` y `mockup` a pelo. Desde que los
+ * subagentes son ficheros que el usuario escribe y borra, eso se queda mintiendo el primer
+ * día: mandarle delegar en `mockup` cuando `mockup` no existe es la misma clase de botón
+ * muerto que este repo lleva semanas quitando de la interfaz.
+ *
+ * Lo que se conserva es lo GENERAL —no tienes tools, delega, encadena con handoff, no
+ * afirmes lo que no te han confirmado—, y lo específico sale de la propia lista. La línea
+ * del encadenado para diagramas solo se escribe si existen los dos agentes de los que
+ * habla: una instrucción sobre un especialista que no está no la puede seguir nadie.
+ */
+export function promptOrquestador(agentes: readonly Agente[]): string {
+  const hay = (n: string): boolean => agentes.some((a) => a.nombre === n);
+  return [
+    "Eres el orquestador de un harness de desarrollo para la plataforma XOne.",
+    "NO tienes herramientas: tu único trabajo es entender la petición y delegar.",
+    agentes.length === 0
+      ? "AVISO: ahora mismo no hay ningún especialista dado de alta, así que no puedes delegar en nadie. Dilo en vez de intentar resolverlo tú."
+      : `Los especialistas disponibles son: ${agentes.map((a) => a.nombre).join(", ")}. Elige por su descripción.`,
+    hay("planner") && hay("mockup")
+      ? "Para diagramas o esquemas de la app, delega en `mockup`; si deben reflejar el código real, encarga PRIMERO el análisis a `planner` y usa su resultado antes de dibujar."
+      : "",
+    "Los especialistas no comparten el transcript: al encadenarlos, incluye en la descripción",
+    "de la siguiente `task` un bloque `HANDOFF DE PLANNER` compacto con los hechos verificados,",
+    "rutas/evidencias y lagunas. No pidas al siguiente especialista redescubrir esos hechos.",
+    "Cuando varias tareas sean independientes, delégalas EN EL MISMO mensaje para",
+    "que corran a la vez.",
+    "No afirmes que un cambio se ha aplicado si no te lo ha confirmado el especialista.",
+  ]
+    .filter((l) => l !== "")
+    .join(" ");
+}
 
 /**
  * Indicaciones que el modelo recibe junto a las tools reales de fichero.
@@ -117,13 +148,17 @@ export async function construirAgente(opciones: OpcionesDelAgente): Promise<unkn
       ? [createTokenTrackingMiddleware(opciones.tracker, (uso) => opciones.diagnostico?.modelo(origen, uso))]
       : [];
 
-  const subagentes = Object.values(PERFILES).map((perfil) => ({
+  // El catálogo, una vez por construcción y no una por agente: `catalogo()` es un puerto y
+  // llamarlo N veces para preguntarle lo mismo es trabajo por nada.
+  const catalogoDeSkills = new Set(opciones.skills.catalogo().map((s) => s.nombre));
+
+  const subagentes = opciones.agentes.map((perfil) => ({
     name: perfil.nombre,
     description: perfil.descripcion,
-    systemPrompt: promptDe(perfil.nombre, opciones.skills),
+    systemPrompt: promptDeAgente(perfil, repartirSkills(perfil, catalogoDeSkills)),
     // Los subagentes no heredan las skills del orquestador. Se entregan como fuentes
     // directas para mantener cada perfil limitado a su catálogo declarado.
-    skills: rutasDeSkills(perfil.nombre, opciones.skills),
+    skills: rutasDeSkills(perfil, catalogoDeSkills),
     // `tools` solo lleva tools PROPIAS. Pasarle los NOMBRES de las de fichero las sustituía
     // por cadenas, dejando al especialista sin ninguna capacidad real. Las de fichero las
     // monta el middleware; regex_search es una tool real y confinada al mismo backend.
@@ -151,12 +186,20 @@ export async function construirAgente(opciones: OpcionesDelAgente): Promise<unkn
       middlewareTextoDeTool(),
       ...middlewareTracker(perfil.nombre),
     ],
-    model: opciones.modelos.paraPapel(perfil.soloLectura ? "rapido" : "trabajo"),
+    // El modelo que fije el agente en su fichero, y si no lo fija, el del papel que le
+    // toca por lo que hace: `rapido` para el que solo lee, `trabajo` para el que escribe.
+    // Fijarlo es la excepción y no la norma — un agente con modelo escrito se queda ahí
+    // aunque el usuario cambie el suyo con `/modelo`, que es justo lo que quiere quien
+    // escribe «este revisor corre con Claude» y no lo que quiere nadie más.
+    model:
+      perfil.modelo === undefined
+        ? opciones.modelos.paraPapel(perfil.soloLectura ? "rapido" : "trabajo")
+        : opciones.modelos.paraModelo(perfil.modelo),
   }));
 
   return createDeepAgent({
     model: opciones.modelos.paraPapel("rapido"),
-    systemPrompt: PROMPT_ORQUESTADOR,
+    systemPrompt: promptOrquestador(opciones.agentes),
     backend,
     checkpointer: opciones.checkpointer ?? new MemorySaver(),
     // El contenido de los `ToolMessage` va como TEXTO al modelo. Sin esto, un turno real
@@ -187,81 +230,15 @@ export async function construirAgente(opciones: OpcionesDelAgente): Promise<unkn
 }
 
 /**
- * El prompt de un especialista, con sus skills dentro.
+ * Rutas virtuales que SkillsMiddleware carga de forma progresiva para un agente.
  *
- * Provisional a propósito: los prompts pasan a ficheros `.md` en la fase 9, y hasta
- * entonces vivir aquí es mejor que vivir repartidos.
+ * Recibe el AGENTE y no su nombre: antes buscaba el perfil en `PERFILES`, y con subagentes
+ * escritos por el usuario ese `Record` no tiene su entrada — `perfil.skills` habría
+ * reventado con «cannot read properties of undefined» en cuanto alguien creara el primero.
+ *
+ * Solo las que EXISTEN. Una ruta a una skill que no está haría que el middleware fallara al
+ * montarla; que falte se dice en el prompt (`promptDeAgente`), que es donde se puede leer.
  */
-export function promptDe(nombre: string, skills: SkillsPort): string {
-  const perfil = PERFILES[nombre as keyof typeof PERFILES];
-  const disponibles = new Set(skills.catalogo().map((s) => s.nombre));
-  const suyas = perfil.skills.filter((s) => disponibles.has(s));
-  const faltan = perfil.skills.filter((s) => !disponibles.has(s));
-
-  return [
-    perfil.descripcion,
-    "",
-    "REGLAS DE XONE, no negociables:",
-    "- No es desarrollo web: no existen DOM, React, Vue, ni `async/await` en el runtime.",
-    "- La fuente de una colección es su `.xne`. Los `.xml` los genera Studio y no se tocan.",
-    "- No inventes atributos XML, funciones ni propiedades CSS: XOne ignora lo desconocido",
-    "  en silencio, así que un invento no da error — da un bug mudo.",
-    "",
-    "SKILLS VISUALES:",
-    "- REGLA DE PRIORIDAD: para un diagrama, esquema, arquitectura, flujo, secuencia, datos o estados,",
-    "  usa solamente `archify`. No cargues ni uses `artifacts-builder` como sustituto.",
-    "- Solo si, ADEMÁS del diagrama, el usuario pide un contenedor HTML interactivo, usa `artifacts-builder`",
-    "  después de decidir el diagrama con `archify`. Guárdalo en `/artifacts/<nombre>.html`; no escribas",
-    "  jamás dentro de `/skills` ni menciones una tool que no tienes.",
-    "- Si te piden un dashboard, informe, tabla o artefacto HTML interactivo, carga primero `artifacts-builder`.",
-    "- Apóyate en el código real antes de dibujar: no inventes nombres, componentes ni flujos.",
-    "",
-    nombre === "planner"
-      ? [
-          "RECONOCIMIENTO RÁPIDO DEL PROYECTO:",
-          "- Para preguntas generales como «qué hace esta app», busca evidencia suficiente, no un inventario completo.",
-          "- Lee `/app.xml` y, como máximo, tres ficheros representativos que ese contexto señale.",
-          "- En cada primera lectura usa exactamente `offset=0` y `limit=50`; usa otra página solo si una evidencia concreta lo exige.",
-          "- No repitas una lectura de la misma ruta y rango, ni hagas búsquedas genéricas como `function ` sin una hipótesis.",
-          "- Cuando puedas identificar el propósito y los módulos principales con evidencia, deja de llamar tools y responde.",
-          "- Solo amplía la exploración si el usuario pide detalle exhaustivo o si las evidencias son insuficientes o contradictorias; explica brevemente qué faltaba.",
-          "- Si el resultado alimenta un diagrama o artefacto, termina con un `HANDOFF DE PLANNER` compacto:",
-          "  propósito; nodos; aristas `origen → destino`; evidencia `ruta:líneas`; y lagunas. No incluyas transcript ni lecturas crudas.",
-          "",
-        ].join("\n")
-      : "",
-    nombre === "mockup"
-      ? [
-          "HANDOFF PARA DIAGRAMAS:",
-          "- Si la descripción de tu tarea incluye `HANDOFF DE PLANNER`, ese bloque es tu evidencia de código real.",
-          "- Úsalo como fuente para el diagrama y NO vuelvas a leer, buscar ni reconstruir las rutas ya documentadas.",
-          "- Solo inspecciona un fichero si el handoff marca una laguna o dos evidencias se contradicen; explica cuál es la laguna.",
-          "",
-        ].join("\n")
-      : "",
-    nombre === "docs"
-      ? ""
-      : nombre === "mockup"
-        ? "Lee `/MEMORIA_PROYECTO.md` solo si la tarea NO incluye un `HANDOFF DE PLANNER`. Con handoff, no la leas: sus hechos pertinentes ya vienen resumidos."
-      : "Para una tarea sobre este proyecto, lee una sola vez `/MEMORIA_PROYECTO.md` antes de inspeccionarlo. " +
-        "No la uses para preguntas generales de plataforma.",
-    perfil.soloLectura || nombre === "docs"
-      ? ""
-      : "Al terminar trabajo relevante, actualiza esa memoria solo con hechos comprobados, decisiones aprobadas " +
-        "o pendientes útiles. Nunca copies transcripciones, salidas de tools, secretos ni ficheros completos.",
-    "",
-    suyas.length ? `Tus skills: ${suyas.join(", ")}. Cárgalas antes de responder.` : "",
-    // Patrón 4: un doble nunca se disfraza. Si falta una skill, se dice — no se calla.
-    faltan.length ? `AVISO: te faltan estas skills y no las tienes: ${faltan.join(", ")}.` : "",
-    perfil.soloLectura ? "No modificas nada." : "Tus escrituras requieren aprobación humana. Si te la rechazan, no insistas: explica qué pretendías y por qué.",
-  ]
-    .filter(Boolean)
-    .join("\n");
-}
-
-/** Rutas virtuales que SkillsMiddleware carga de forma progresiva para un perfil. */
-export function rutasDeSkills(nombre: string, skills: SkillsPort): string[] {
-  const perfil = PERFILES[nombre as keyof typeof PERFILES];
-  const disponibles = new Set(skills.catalogo().map((s) => s.nombre));
-  return perfil.skills.filter((skill) => disponibles.has(skill)).map((skill) => `/skills/${skill}/`);
+export function rutasDeSkills(agente: Agente, disponibles: ReadonlySet<string>): string[] {
+  return agente.skills.filter((skill) => disponibles.has(skill)).map((skill) => `/skills/${skill}/`);
 }

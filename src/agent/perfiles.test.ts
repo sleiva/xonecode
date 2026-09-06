@@ -1,7 +1,13 @@
 import { describe, it, expect } from "vitest";
-import { PERFILES, permisosDe, toolsDe, hitlDe, TOOLS_ESCRITURA } from "./perfiles.js";
+import { permisosDe, toolsDe, hitlDe, TOOLS_ESCRITURA } from "./perfiles.js";
+import { AGENTES_DE_SERIE } from "./agentesEnDisco.js";
 
-const TODOS = Object.values(PERFILES);
+/* Las fixtures son los subagentes SEMBRADOS y ya no un `Record` a fuego: desde que los
+   especialistas son ficheros (`core/agentes.ts`), ese `Record` no existe — y probar estas
+   funciones contra una copia suya habría dejado de probar lo que corre de verdad. */
+const PERFILES = Object.fromEntries(AGENTES_DE_SERIE.map((a) => [a.nombre, a]));
+
+const TODOS = [...AGENTES_DE_SERIE];
 
 describe("permisosDe", () => {
   it("todos los especialistas reciben las skills compartidas de arquitectura y artefactos", () => {
@@ -26,12 +32,12 @@ describe("permisosDe", () => {
   });
 
   it("un perfil de solo lectura deniega TODA escritura", () => {
-    const deniegos = permisosDe(PERFILES.docs).filter((p) => p.mode === "deny");
+    const deniegos = permisosDe(PERFILES["docs"]!).filter((p) => p.mode === "deny");
     expect(deniegos.some((p) => p.operations.includes("write") && p.paths.includes("/**"))).toBe(true);
   });
 
   it("un perfil que escribe NO deniega toda escritura, pero sigue sin tocar .env", () => {
-    const permisos = permisosDe(PERFILES.dev);
+    const permisos = permisosDe(PERFILES["dev"]!);
     expect(permisos.some((p) => p.paths.includes("/**"))).toBe(false);
     expect(permisos.flatMap((p) => p.paths)).toContain("/.env");
   });
@@ -45,8 +51,8 @@ describe("toolsDe", () => {
   });
 
   it("los que desarrollan sí, y además conservan las de lectura", () => {
-    expect(toolsDe(PERFILES.dev)).toContain("write_file");
-    expect(toolsDe(PERFILES.dev)).toContain("read_file");
+    expect(toolsDe(PERFILES["dev"]!)).toContain("write_file");
+    expect(toolsDe(PERFILES["dev"]!)).toContain("read_file");
   });
 });
 
@@ -62,17 +68,17 @@ describe("hitlDe", () => {
   });
 
   it("un perfil de solo lectura no tiene nada que aprobar", () => {
-    expect(hitlDe(PERFILES.docs)).toEqual({});
+    expect(hitlDe(PERFILES["docs"]!)).toEqual({});
   });
 
   it("la descripción dice QUIÉN pide: el interrupt no lo trae", () => {
     // `dev` y `mockup` comparten `write_file`, así que sin esto el usuario no sabría
     // cuál de los dos le está pidiendo permiso.
-    expect(hitlDe(PERFILES.dev).write_file!.description).toContain("[dev]");
-    expect(hitlDe(PERFILES.mockup).write_file!.description).toContain("[mockup]");
+    expect(hitlDe(PERFILES["dev"]!).write_file!.description).toContain("[dev]");
+    expect(hitlDe(PERFILES["mockup"]!).write_file!.description).toContain("[mockup]");
   });
 
   it("no se ofrece `edit`: no hay interfaz para editar los argumentos", () => {
-    expect(hitlDe(PERFILES.dev).write_file!.allowedDecisions).toEqual(["approve", "reject"]);
+    expect(hitlDe(PERFILES["dev"]!).write_file!.allowedDecisions).toEqual(["approve", "reject"]);
   });
 });

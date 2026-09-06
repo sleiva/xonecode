@@ -71,10 +71,48 @@ export const REGLAS_XONE = [
  * tarea. Las reglas no se pueden perder por ir arriba — son cinco líneas, no un preámbulo
  * largo del que el modelo se despiste.
  */
-export function promptDeAgente(agente: Agente): string {
-  return [REGLAS_XONE, "", agente.descripcion, ...(agente.instrucciones.trim() === "" ? [] : ["", agente.instrucciones.trim()])].join(
-    "\n"
-  );
+export function promptDeAgente(agente: Agente, skills?: EstadoDeSkills): string {
+  return [
+    REGLAS_XONE,
+    "",
+    agente.descripcion,
+    ...(agente.instrucciones.trim() === "" ? [] : ["", agente.instrucciones.trim()]),
+    "",
+    // Las skills que tiene, y las que NO. El aviso es la misma disciplina de siempre: un
+    // doble nunca se disfraza, y una skill declarada en el `.md` que no está en el catálogo
+    // haría que el modelo intentara cargarla y fallara sin saber por qué. Se dice.
+    ...(skills === undefined || skills.suyas.length === 0
+      ? []
+      : [`Tus skills: ${skills.suyas.join(", ")}. Cárgalas antes de responder.`]),
+    ...(skills === undefined || skills.faltan.length === 0
+      ? []
+      : [`AVISO: te faltan estas skills y no las tienes: ${skills.faltan.join(", ")}.`]),
+    // La línea de escritura es ESTRUCTURAL y va aquí, no en el cuerpo del fichero: no
+    // depende de lo que el usuario escriba, sino de `soloLectura`, y un agente que escribe
+    // sin saber que sus escrituras se aprueban insistiría al ver un rechazo.
+    agente.soloLectura
+      ? "No modificas nada."
+      : "Tus escrituras requieren aprobación humana. Si te la rechazan, no insistas: explica qué pretendías y por qué.",
+  ]
+    .join("\n")
+    // Los huecos que dejan las partes ausentes (sin instrucciones, sin skills) se colapsan
+    // a una línea en blanco: tres saltos seguidos en un prompt no separan nada, solo gastan
+    // tokens y hacen que el texto se lea como si faltara algo.
+    .replace(/\n{3,}/g, "\n\n");
+}
+
+/** Qué skills de las que el agente declara existen de verdad en el catálogo, y cuáles no. */
+export interface EstadoDeSkills {
+  suyas: string[];
+  faltan: string[];
+}
+
+/** Reparte las skills declaradas entre las que hay y las que no. Puro: el catálogo entra. */
+export function repartirSkills(agente: Agente, disponibles: ReadonlySet<string>): EstadoDeSkills {
+  return {
+    suyas: agente.skills.filter((s) => disponibles.has(s)),
+    faltan: agente.skills.filter((s) => !disponibles.has(s)),
+  };
 }
 
 /** Lo que se pudo leer, y lo que no con su motivo. Nunca se descarta nada en silencio. */

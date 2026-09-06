@@ -27,6 +27,7 @@ import {
   guardarRamaDeProyecto,
   guardarTemaDeProyecto,
 } from "../agent/configEnDisco.js";
+import { sembrarAgentes } from "../agent/agentesEnDisco.js";
 import { conectarCloudStudio, sesionCloudStudio, PUERTO_CALLBACK } from "../agent/cloudstudioMcp.js";
 import { clienteCloudStudio } from "../agent/cloudstudioClient.js";
 import { cargarSettings } from "../agent/settingsEnDisco.js";
@@ -873,6 +874,12 @@ export async function entrarEnConsola(
   // ya aplicada solo cuando `/modelos` provoque su primera consulta.
   const cargado = cargar(raiz);
   aplicarAuth(cargado.auth);
+  // Los cuatro especialistas se siembran aquí, en el arranque y una sola vez: desde que son
+  // ficheros (`agent/agentesEnDisco.ts`), si nadie los escribe NO HAY NINGUNO — y un
+  // orquestador sin nadie a quien delegar no es un modo degradado, es una consola rota.
+  // Va antes de decidir la piel para que las tres —stdio, TUI y web— arranquen con lo
+  // mismo. No pisa nada: si la carpeta existe, no toca un solo fichero.
+  sembrarAgentes();
   // El tema es una preferencia del proyecto: un config global no puede cambiar cómo se
   // presenta otro repositorio. Un valor manual desconocido conserva XOne por omisión.
   seleccionarTema("xone");

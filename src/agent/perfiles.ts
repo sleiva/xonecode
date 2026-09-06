@@ -1,59 +1,30 @@
 /**
- * Los cuatro especialistas, con tools de FICHERO (la v1 no usa MCP).
+ * Los PERMISOS de un especialista, con tools de FICHERO (la v1 no usa MCP).
  *
- * Se mantienen los nombres y los papeles de `deep-agent-xone` a propósito: son los que ya
- * están medidos y los que el orquestador sabe elegir.
+ * Este fichero ya no tiene la lista de especialistas: los cuatro que vivían aquí a fuego
+ * son ahora ficheros `.md` (`core/agentes.ts`, `agent/agentesEnDisco.ts`), sembrados la
+ * primera vez y editables por el usuario. Lo que se queda es lo que NO puede salir de un
+ * fichero: qué se le deniega a todo el mundo, qué tools le tocan a quien escribe y cómo se
+ * monta su aprobación humana. Un `.md` puede cambiar el prompt de un agente; no puede
+ * concederle leer `/.env`.
  */
-export type NombrePerfil = "docs" | "planner" | "dev" | "mockup";
-
 /** Las tools de fichero que monta deepagents sobre el backend. */
 export const TOOLS_LECTURA = ["ls", "read_file", "glob", "grep"] as const;
 export const TOOLS_ESCRITURA = ["write_file", "edit_file"] as const;
 
-export interface Perfil {
-  nombre: NombrePerfil;
-  /** Lo que lee el orquestador para elegir a quién delega. */
-  descripcion: string;
+/**
+ * Lo que estas tres funciones MIRAN de verdad, y nada más.
+ *
+ * Antes pedían un `Perfil` entero. Desde que los subagentes son ficheros
+ * (`core/agentes.ts`) quien llega aquí es un `Agente`, y las dos formas comparten
+ * exactamente estos dos campos: el nombre para poder decirlo en la petición de aprobación,
+ * y si escribe o no. Pedir el tipo grande obligaría a convertir un `Agente` en un `Perfil`
+ * —o sea a inventarle campos— solo para preguntarle si puede escribir.
+ */
+export interface QuienDecidePermisos {
+  nombre: string;
   soloLectura: boolean;
-  /** Qué skills de `lab/skills/` se le cargan. */
-  skills: string[];
 }
-
-export const PERFILES: Record<NombrePerfil, Perfil> = {
-  docs: {
-    nombre: "docs",
-    descripcion:
-      "Responde preguntas técnicas de la plataforma XOne (XML/.xne, JavaScript, CSS, " +
-      "eventos, patrones). Puede leer el proyecto para no contradecir el código real. " +
-      "No modifica nada.",
-    soloLectura: true,
-    skills: ["xone-development", "archify", "artifacts-builder"],
-  },
-  planner: {
-    nombre: "planner",
-    descripcion:
-      "Inspecciona el proyecto real para anclar planes y diagnósticos: estructura, " +
-      "colecciones y búsqueda de código. No modifica nada.",
-    soloLectura: true,
-    skills: ["xone-spec-builder", "xone-plan-builder", "archify", "artifacts-builder"],
-  },
-  dev: {
-    nombre: "dev",
-    descripcion:
-      "Desarrolla: crea y modifica colecciones, escribe scripts y edita ficheros. " +
-      "Las modificaciones requieren aprobación humana.",
-    soloLectura: false,
-    skills: ["xone-development", "xone-debugging", "archify", "artifacts-builder"],
-  },
-  mockup: {
-    nombre: "mockup",
-    descripcion:
-      "Trabajo visual: layouts, CSS y recursos. Las modificaciones requieren " +
-      "aprobación humana.",
-    soloLectura: false,
-    skills: ["xone-development", "archify", "artifacts-builder"],
-  },
-};
 
 /** Lo que estructuralmente da igual quién seas: nunca se lee ni se escribe. */
 export const DENEGADO_SIEMPRE = [
@@ -74,7 +45,7 @@ export const DENEGADO_SIEMPRE = [
  * y perder la de `.env` significa que un especialista «de solo lectura» puede leer las
  * claves del usuario. Esta función es lo único que evita ese olvido.
  */
-export function permisosDe(perfil: Perfil) {
+export function permisosDe(perfil: QuienDecidePermisos) {
   const base = [...DENEGADO_SIEMPRE];
   if (!perfil.soloLectura) return base;
   return [...base, { operations: ["write"] as const, paths: ["/**"], mode: "deny" as const }];
@@ -111,7 +82,7 @@ export function puedeLeerRuta(ruta: string): boolean {
  * que se quiera OCULTAR las de escritura (en vez de denegarlas), el sitio es la opción
  * `tools` del `FilesystemMiddleware` — y ahí `read_file` es obligatorio en la lista.
  */
-export function toolsDe(perfil: Perfil): string[] {
+export function toolsDe(perfil: QuienDecidePermisos): string[] {
   return perfil.soloLectura
     ? [...TOOLS_LECTURA]
     : [...TOOLS_LECTURA, ...TOOLS_ESCRITURA];
@@ -133,7 +104,7 @@ const TEXTO_HITL: Record<string, string> = {
  * `edit` no se ofrece como decisión: no hay interfaz para editar los argumentos antes de
  * aprobar, así que anunciarla sería mentirle al modelo.
  */
-export function hitlDe(perfil: Perfil): Record<string, { allowedDecisions: string[]; description: string }> {
+export function hitlDe(perfil: QuienDecidePermisos): Record<string, { allowedDecisions: string[]; description: string }> {
   if (perfil.soloLectura) return {};
   const salida: Record<string, { allowedDecisions: string[]; description: string }> = {};
   for (const tool of TOOLS_ESCRITURA) {

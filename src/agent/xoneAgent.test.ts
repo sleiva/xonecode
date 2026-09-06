@@ -2,13 +2,43 @@ import { describe, it, expect } from "vitest";
 import {
   DESCRIPCIONES_FICHEROS,
   OPCIONES_BUSQUEDA_FICHEROS,
-  promptDe,
-  PROMPT_ORQUESTADOR,
+  promptOrquestador,
   rutasDeSkills,
 } from "./xoneAgent.js";
-import { SkillsEnMemoria } from "../core/ports.js";
+import { SkillsEnMemoria, type SkillsPort } from "../core/ports.js";
+import { promptDeAgente, repartirSkills, type Agente } from "../core/agentes.js";
+import { AGENTES_DE_SERIE } from "./agentesEnDisco.js";
 
-describe("PROMPT_ORQUESTADOR", () => {
+/** Los nombres del catálogo de un puerto de skills. */
+const disponibles = (skills: SkillsPort): ReadonlySet<string> =>
+  new Set(skills.catalogo().map((s) => s.nombre));
+
+/** Uno de los cuatro sembrados, por nombre. */
+const deSerie = (nombre: string): Agente => AGENTES_DE_SERIE.find((a) => a.nombre === nombre)!;
+
+describe("promptOrquestador", () => {
+  const CUATRO = AGENTES_DE_SERIE;
+  const PROMPT_ORQUESTADOR = promptOrquestador(CUATRO);
+
+  it("nombra a los especialistas que HAY, no a una lista escrita a mano", () => {
+    // Era una constante que nombraba a los cuatro a pelo. Desde que son ficheros que el
+    // usuario escribe y borra, eso se queda mintiendo el primer día.
+    expect(promptOrquestador([deSerie("docs")])).toContain("docs");
+    expect(promptOrquestador([deSerie("docs")])).not.toContain("mockup");
+  });
+
+  it("sin ningún especialista lo DICE, en vez de mandar delegar en nadie", () => {
+    // Un orquestador sin tools al que se le pide delegar y no tiene en quién se pondría a
+    // inventar la respuesta él mismo, que es lo peor que puede pasar aquí.
+    expect(promptOrquestador([])).toMatch(/no hay ningún especialista/);
+  });
+
+  it("la regla del encadenado solo se escribe si existen los DOS de los que habla", () => {
+    // Una instrucción sobre un especialista que no está no la puede seguir nadie: es el
+    // mismo botón muerto que la interfaz lleva semanas quitando, pero en un prompt.
+    expect(promptOrquestador([deSerie("planner")])).not.toMatch(/delega en `mockup`/);
+  });
+
   it("dice que NO tiene herramientas y que solo delega", () => {
     expect(PROMPT_ORQUESTADOR).toMatch(/NO tienes herramientas/);
     expect(PROMPT_ORQUESTADOR).toMatch(/delegar/);
@@ -26,7 +56,7 @@ describe("PROMPT_ORQUESTADOR", () => {
   });
 });
 
-describe("promptDe", () => {
+describe("el prompt de un especialista sembrado", () => {
   const conSkills = new SkillsEnMemoria({
     "xone-development": "…",
     "xone-debugging": "…",
@@ -37,28 +67,28 @@ describe("promptDe", () => {
   });
 
   it("un especialista de solo lectura lo dice", () => {
-    expect(promptDe("docs", conSkills)).toContain("No modificas nada");
+    expect(promptDeAgente(deSerie("docs"), repartirSkills(deSerie("docs"), disponibles(conSkills)))).toContain("No modificas nada");
   });
 
   it("uno que escribe avisa de que sus cambios se aprueban", () => {
-    expect(promptDe("dev", conSkills)).toMatch(/aprobación humana/);
+    expect(promptDeAgente(deSerie("dev"), repartirSkills(deSerie("dev"), disponibles(conSkills)))).toMatch(/aprobación humana/);
   });
 
   it("usa la fachada de memoria para tareas de proyecto sin exponer .xonecode", () => {
-    const p = promptDe("dev", conSkills);
+    const p = promptDeAgente(deSerie("dev"), repartirSkills(deSerie("dev"), disponibles(conSkills)));
     expect(p).toContain("/MEMORIA_PROYECTO.md");
     expect(p).not.toContain("/.xonecode/memoria.md");
   });
 
   it("lleva las reglas duras de XOne, no solo su papel", () => {
-    const p = promptDe("dev", conSkills);
+    const p = promptDeAgente(deSerie("dev"), repartirSkills(deSerie("dev"), disponibles(conSkills)));
     expect(p).toMatch(/no existen DOM/);
     expect(p).toMatch(/\.xne/);
     expect(p).toMatch(/bug mudo/);
   });
 
   it("dirige explícitamente los diagramas y esquemas a archify", () => {
-    const p = promptDe("planner", conSkills);
+    const p = promptDeAgente(deSerie("planner"), repartirSkills(deSerie("planner"), disponibles(conSkills)));
     expect(p).toMatch(/diagrama, esquema, arquitectura, flujo, secuencia, datos o estados/i);
     expect(p).toContain("`archify`");
     expect(p).toContain("usa solamente `archify`");
@@ -74,7 +104,7 @@ describe("promptDe", () => {
   });
 
   it("da al planner un criterio explícito para cerrar un reconocimiento rápido", () => {
-    const p = promptDe("planner", conSkills);
+    const p = promptDeAgente(deSerie("planner"), repartirSkills(deSerie("planner"), disponibles(conSkills)));
     expect(p).toContain("RECONOCIMIENTO RÁPIDO DEL PROYECTO");
     expect(p).toContain("como máximo, tres ficheros representativos");
     expect(p).toContain("offset=0` y `limit=50");
@@ -85,7 +115,7 @@ describe("promptDe", () => {
   });
 
   it("hace que mockup reutilice el handoff del planner sin reinspeccionar el proyecto", () => {
-    const p = promptDe("mockup", conSkills);
+    const p = promptDeAgente(deSerie("mockup"), repartirSkills(deSerie("mockup"), disponibles(conSkills)));
     expect(p).toContain("HANDOFF PARA DIAGRAMAS");
     expect(p).toContain("NO vuelvas a leer, buscar ni reconstruir");
     expect(p).toContain("solo si la tarea NO incluye un `HANDOFF DE PLANNER`");
@@ -102,24 +132,24 @@ describe("promptDe", () => {
   });
 
   it("nombra las skills que SÍ tiene", () => {
-    expect(promptDe("dev", conSkills)).toContain("xone-development");
+    expect(promptDeAgente(deSerie("dev"), repartirSkills(deSerie("dev"), disponibles(conSkills)))).toContain("xone-development");
   });
 
   it("y AVISA de las que le faltan en vez de callarlo", () => {
     // Patrón 4: un doble nunca se disfraza. Un especialista sin su skill responde
     // de memoria, y sin este aviso nadie sabría por qué empeoró.
     const sin = new SkillsEnMemoria({});
-    const p = promptDe("dev", sin);
+    const p = promptDeAgente(deSerie("dev"), repartirSkills(deSerie("dev"), disponibles(sin)));
     expect(p).toMatch(/AVISO/);
     expect(p).toContain("xone-development");
   });
 
   it("sin skills que falten no mete ningún aviso de relleno", () => {
-    expect(promptDe("docs", conSkills)).not.toMatch(/AVISO/);
+    expect(promptDeAgente(deSerie("docs"), repartirSkills(deSerie("docs"), disponibles(conSkills)))).not.toMatch(/AVISO/);
   });
 
   it("expone cada skill disponible como una ruta que carga Deep Agents", () => {
-    expect(rutasDeSkills("dev", conSkills)).toEqual([
+    expect(rutasDeSkills(deSerie("dev"), disponibles(conSkills))).toEqual([
       "/skills/xone-development/",
       "/skills/xone-debugging/",
       "/skills/archify/",

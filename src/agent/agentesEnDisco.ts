@@ -169,6 +169,27 @@ const SKILLS_VISUALES = [
   "- Apóyate en el código real antes de dibujar: no inventes nombres, componentes ni flujos.",
 ].join("\n");
 
+/**
+ * La memoria del proyecto, y quién la lee y la escribe.
+ *
+ * También vivía en `promptDe`, repartida en dos ternarios sobre el nombre del perfil. Va al
+ * cuerpo del fichero y no a `REGLAS_XONE` porque es una POLÍTICA de estos cuatro, no una
+ * regla del dominio: un agente que el usuario escriba puede querer no leerla, y `docs`
+ * —que contesta de la plataforma y no del proyecto— tampoco la lee.
+ */
+const MEMORIA_LEER = [
+  "Para una tarea sobre este proyecto, lee una sola vez `/MEMORIA_PROYECTO.md` antes de inspeccionarlo.",
+  "No la uses para preguntas generales de plataforma.",
+].join(" ");
+
+const MEMORIA_LEER_CON_HANDOFF =
+  "Lee `/MEMORIA_PROYECTO.md` solo si la tarea NO incluye un `HANDOFF DE PLANNER`. Con handoff, no la leas: sus hechos pertinentes ya vienen resumidos.";
+
+const MEMORIA_ESCRIBIR = [
+  "Al terminar trabajo relevante, actualiza esa memoria solo con hechos comprobados, decisiones aprobadas",
+  "o pendientes útiles. Nunca copies transcripciones, salidas de tools, secretos ni ficheros completos.",
+].join(" ");
+
 const RECONOCIMIENTO_PLANNER = [
   "RECONOCIMIENTO RÁPIDO DEL PROYECTO:",
   "- Para preguntas generales como «qué hace esta app», busca evidencia suficiente, no un inventario completo.",
@@ -210,7 +231,7 @@ export const AGENTES_DE_SERIE: readonly Agente[] = [
     motor: "modelo",
     soloLectura: true,
     skills: ["xone-spec-builder", "xone-plan-builder", "archify", "artifacts-builder"],
-    instrucciones: `${SKILLS_VISUALES}\n\n${RECONOCIMIENTO_PLANNER}`,
+    instrucciones: `${SKILLS_VISUALES}\n\n${RECONOCIMIENTO_PLANNER}\n\n${MEMORIA_LEER}`,
     origen: "semilla",
   },
   {
@@ -221,7 +242,7 @@ export const AGENTES_DE_SERIE: readonly Agente[] = [
     motor: "modelo",
     soloLectura: false,
     skills: ["xone-development", "xone-debugging", "archify", "artifacts-builder"],
-    instrucciones: SKILLS_VISUALES,
+    instrucciones: `${SKILLS_VISUALES}\n\n${MEMORIA_LEER}\n\n${MEMORIA_ESCRIBIR}`,
     origen: "semilla",
   },
   {
@@ -232,7 +253,7 @@ export const AGENTES_DE_SERIE: readonly Agente[] = [
     motor: "modelo",
     soloLectura: false,
     skills: ["xone-development", "archify", "artifacts-builder"],
-    instrucciones: `${SKILLS_VISUALES}\n\n${HANDOFF_MOCKUP}`,
+    instrucciones: `${SKILLS_VISUALES}\n\n${HANDOFF_MOCKUP}\n\n${MEMORIA_LEER_CON_HANDOFF}\n\n${MEMORIA_ESCRIBIR}`,
     origen: "semilla",
   },
 ];

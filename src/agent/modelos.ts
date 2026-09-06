@@ -2,7 +2,7 @@ import { ChatOpenAI } from "@langchain/openai";
 import { ChatAnthropic } from "@langchain/anthropic";
 import { ChatOllama } from "@langchain/ollama";
 import type { ModelosPort, Papel } from "../core/ports.js";
-import { resolver, type Eleccion, type FuentesDeEleccion } from "../core/modelos.js";
+import { parsear, resolver, type Eleccion, type FuentesDeEleccion, type Proveedor } from "../core/modelos.js";
 import { baseUrlDeOllama, baseUrlDeOllamaCloud } from "./catalogoModelos.js";
 import { ChatGoogleGenerativeAICompatible } from "./gemini.js";
 
@@ -21,7 +21,29 @@ export class Modelos implements ModelosPort {
   }
 
   paraPapel(papel: Papel): unknown {
-    const { proveedor, modelo } = this.eleccion[papel];
+    return construirModelo(this.eleccion[papel]);
+  }
+
+  /**
+   * Un modelo concreto por su «proveedor/modelo». `parsear` es la MISMA función que valida
+   * `--modelo` y `/modelo`, no una copia: un id mal escrito en el `.md` de un agente tiene
+   * que fallar igual y con el mismo mensaje que uno mal escrito en la línea de comandos.
+   */
+  paraModelo(id: string): unknown {
+    return construirModelo(parsear(id));
+  }
+
+  descripcion(): Record<Papel, string> {
+    const salida = {} as Record<Papel, string>;
+    for (const [papel, e] of Object.entries(this.eleccion) as [Papel, Eleccion][]) {
+      salida[papel] = `${e.proveedor}/${e.modelo}  (${e.origen})`;
+    }
+    return salida;
+  }
+}
+
+/** El cliente de un `{proveedor, modelo}`, venga de un papel o de la elección de un agente. */
+function construirModelo({ proveedor, modelo }: { proveedor: Proveedor; modelo: string }): unknown {
     switch (proveedor) {
       case "openai":
         return new ChatOpenAI({ model: modelo, apiKey: process.env.OPENAI_API_KEY });
@@ -44,13 +66,4 @@ export class Modelos implements ModelosPort {
           apiKey: process.env.GOOGLE_API_KEY,
         });
     }
-  }
-
-  descripcion(): Record<Papel, string> {
-    const salida = {} as Record<Papel, string>;
-    for (const [papel, e] of Object.entries(this.eleccion) as [Papel, Eleccion][]) {
-      salida[papel] = `${e.proveedor}/${e.modelo}  (${e.origen})`;
-    }
-    return salida;
-  }
 }
