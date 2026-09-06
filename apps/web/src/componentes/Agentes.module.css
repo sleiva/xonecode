@@ -190,3 +190,17 @@
   justify-content: flex-end;
   gap: 8px;
 }
+
+
+/* El aviso de lo que un agente externo NO puede hacer. En el tono de un dato y no de un
+   error: no es que algo haya ido mal, es el alcance de la capacidad — pintarlo en rojo haría
+   creer que hay que arreglar algo. */
+.aviso {
+  margin: 0;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: var(--dsw-alias-state-warn-tertiary);
+  color: var(--dsw-alias-state-warn-label);
+  font-size: 12px;
+  line-height: 1.5;
+}

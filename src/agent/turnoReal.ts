@@ -6,6 +6,7 @@ import { Command, MemorySaver } from "@langchain/langgraph";
 import { collectPending, type Decision, MAX_APPROVAL_ROUNDS } from "../vendor/hitl.js";
 import { aPendiente, ficheroDe, cambioDe, buildResume } from "./interrupts.js";
 import { cargarAgentes } from "./agentesEnDisco.js";
+import { crearSubagenteExterno } from "./subagenteExterno.js";
 import type { PendienteDeAprobacion } from "../core/events.js";
 import type { LineaDeDiff } from "../core/diff.js";
 import type { Piel } from "../core/turno.js";
@@ -144,6 +145,9 @@ export async function abrirSesionReal(opciones: {
       // usuario puede tocar un `.md` —o guardarlo desde Ajustes— con la consola abierta, y
       // una lista congelada al arrancar le haría creer que su cambio no se aplicó.
       agentes: cargarAgentes(raiz).agentes,
+      // El adaptador real. Su import del SDK es dinámico, así que traerlo aquí no carga
+      // nada hasta que un agente externo esté dado de alta Y disponible.
+      subagenteExterno: crearSubagenteExterno(),
       modelos,
       skills: opciones.skills,
       checkpointer: checkpointer,

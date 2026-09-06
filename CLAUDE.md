@@ -402,6 +402,32 @@ especialistas de siempre —`docs`, `planner`, `dev`, `mockup`— dejaron de est
   el mismo fichero se edita a mano, así que la autoridad sobre si vale es el cargador y no
   el formulario — si no, un agente podría desaparecer al siguiente arranque sin que nadie
   hubiera hecho nada raro.
+- **Un agente EXTERNO (Claude Code) corre, pero solo LEE** (`core/ports.ts#SubagenteExternoPort`,
+  `agent/subagenteExterno.ts`). Entra como `CompiledSubAgent` de deepagents
+  —`{name, description, runnable}`, que acepta junto a los normales—, así que los tres
+  motores llegan al orquestador por el MISMO `task` y él no sabe de qué está hecho cada
+  especialista. Cuatro cosas que sostienen esto:
+  - **La escritura se deniega por LISTA BLANCA**, no por lista negra. El SDK trae
+    `canUseTool` —recibe la tool y su entrada entera, contesta permitir o denegar— y es
+    exactamente el contrato de nuestra aprobación; lo que no encaja todavía es el otro lado:
+    nuestro HITL son `interrupt()` de LangGraph, y reanudar uno reejecuta el nodo desde el
+    principio, o sea relanzaría el proceso hijo. Hasta que eso se resuelva se permiten las
+    tools de lectura conocidas y se deniega TODO lo demás, incluido lo que no se reconoce —
+    con una lista negra, la tool que Claude Code añada mañana entraría permitida, y `Bash`
+    sola basta para escribir el proyecto entero. `WebFetch`/`WebSearch` también se deniegan:
+    no escriben, pero sacan el proyecto fuera de la máquina. `decisionDeTool` es pura y
+    exportada para poder probarla sin lanzar un Claude Code en `npm test`.
+  - **Un `.md` externo con `soloLectura: false` se RECHAZA al cargar**, no se degrada. Dejarlo
+    pasar prometería una capacidad que no va a tener, y quien lo escribió lo descubriría
+    cuando el agente le contestara que no ha podido tocar nada.
+  - **Sus instrucciones se AÑADEN al preset de Claude Code**, no lo sustituyen: lo que sabe
+    hacer como producto es la razón de llamarlo. Lo que se le añade son las reglas de XOne y
+    su papel, que es lo que no puede saber.
+  - **Se comprueba `disponible()` antes de montarlo.** Un especialista que el orquestador
+    puede elegir y que revienta al elegirlo es un botón muerto dentro del grafo — peor que uno
+    de interfaz, porque quien lo pulsa es el modelo y se cree el resultado. **Codex no está
+    cableado** (va por `@openai/codex` y un «app-server», que es otra integración): se ofrece
+    en la ventana rotulado como tal, ni escondido ni fingido.
 - Un `.md` roto NO tumba nada: se salta, y su motivo viaja por el cable hasta la ventana.
   Quien lo tiene que arreglar está mirando ahí, y un agente que no aparece sin explicación
   se lee como que la aplicación lo perdió.

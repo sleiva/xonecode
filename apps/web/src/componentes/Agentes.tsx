@@ -27,12 +27,33 @@ import estilos from "./Agentes.module.css";
  *   servidor RECHAZA el fichero que lo lleve, en vez de ignorarlo en silencio.
  */
 
-/** Los motores, con lo que significan. Sin esto, `codex` y `modelo` se leen igual de opacos. */
+/**
+ * Los motores, con lo que significan Y con lo que todavía no hacen.
+ *
+ * `codex` sigue en la lista porque el formato del `.md` lo admite, pero se rotula como lo
+ * que es: no cableado. Quitarlo escondería que existe; ofrecerlo callado sería un botón
+ * muerto. Decirlo es la tercera opción y la única honesta.
+ */
 const MOTORES: readonly { id: string; etiqueta: string; detalle: string }[] = [
   { id: "modelo", etiqueta: "Un modelo", detalle: "corre dentro de xonecode, con las tools del proyecto" },
-  { id: "claude-code", etiqueta: "Claude Code", detalle: "lanza un Claude Code sobre la carpeta del proyecto" },
-  { id: "codex", etiqueta: "Codex", detalle: "lanza un Codex sobre la carpeta del proyecto" },
+  {
+    id: "claude-code",
+    etiqueta: "Claude Code",
+    detalle: "lanza un Claude Code sobre la carpeta del proyecto — solo lectura",
+  },
+  { id: "codex", etiqueta: "Codex", detalle: "todavía no cableado" },
 ];
+
+/**
+ * Lo que un agente externo puede hacer hoy, dicho donde se decide.
+ *
+ * No es una advertencia genérica: el servidor RECHAZA el fichero de un agente externo que
+ * pida escribir, así que quien marque la casilla y guarde recibiría un error. Decirlo aquí
+ * —y forzar la casilla— convierte un error en una explicación.
+ */
+const AVISO_EXTERNO =
+  "Un agente externo solo puede LEER el proyecto: sus escrituras se le deniegan una a una, " +
+  "porque la aprobación humana de xonecode todavía no está conectada a ellos.";
 
 /** Un agente vacío, para el formulario de alta. */
 function enBlanco(): AgenteDelCable {
@@ -207,6 +228,10 @@ export function Agentes({
                   // el servidor rechaza el fichero que lo lleve. Dejarlo puesto haría que
                   // guardar fallara con un error que el formulario podía haber evitado.
                   ...(e.target.value === "modelo" ? {} : { modelo: undefined }),
+                  // Un agente externo va a solo lectura y no se puede desmarcar: el
+                  // servidor rechaza el fichero que pida escribir, así que dejar la casilla
+                  // suelta solo serviría para que guardar fallara.
+                  ...(e.target.value === "modelo" ? {} : { soloLectura: true }),
                 })
               }
             >
@@ -239,12 +264,15 @@ export function Agentes({
             <input
               type="checkbox"
               checked={editando.soloLectura}
+              disabled={editando.motor !== "modelo"}
               onChange={(e) => setEditando({ ...editando, soloLectura: e.target.checked })}
             />
             <span>
               Solo lectura <span className={estilos.pista}>— si escribe, sus cambios pasan por tu aprobación</span>
             </span>
           </label>
+
+          {editando.motor === "modelo" ? null : <p className={estilos.aviso}>{AVISO_EXTERNO}</p>}
 
           <label className={estilos.campo}>
             <span className={estilos.rotulo}>

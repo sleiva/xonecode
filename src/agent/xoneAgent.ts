@@ -1,5 +1,8 @@
 import { createDeepAgent, createFilesystemMiddleware } from "deepagents";
 import { promptDeAgente, repartirSkills, type Agente } from "../core/agentes.js";
+import type { MotorExterno, SubagenteExternoPort } from "../core/ports.js";
+import { RunnableLambda } from "@langchain/core/runnables";
+import { AIMessage, type BaseMessage } from "@langchain/core/messages";
 import { MemorySaver } from "@langchain/langgraph";
 import { backendConSkills, backendDelProyecto, exponerMemoriaDeProyecto, sinVistasAplanadas } from "./proyecto.js";
 import { permisosDe, hitlDe } from "./perfiles.js";
@@ -24,6 +27,12 @@ export interface OpcionesDelAgente {
    * consola tiene que decírselo, no fingir que siguen ahí.
    */
   agentes: readonly Agente[];
+  /**
+   * Quien lanza los agentes de otro producto (Claude Code). Puerto por lo de siempre:
+   * `npm test` no puede necesitar un binario instalado, y ni este fichero ni `turnoReal`
+   * pueden saber que Claude Code existe — la misma regla que con las tools de CloudStudio.
+   */
+  subagenteExterno: SubagenteExternoPort;
   modelos: ModelosPort;
   skills: SkillsPort;
   checkpointer?: MemorySaver;
@@ -152,7 +161,49 @@ export async function construirAgente(opciones: OpcionesDelAgente): Promise<unkn
   // llamarlo N veces para preguntarle lo mismo es trabajo por nada.
   const catalogoDeSkills = new Set(opciones.skills.catalogo().map((s) => s.nombre));
 
-  const subagentes = opciones.agentes.map((perfil) => ({
+  /**
+   * Los que corren FUERA: Claude Code y compañía.
+   *
+   * Entran como `CompiledSubAgent` —`{name, description, runnable}`, que deepagents acepta
+   * junto a los normales— y no como `SubAgent`: eso último es modelo + prompt + tools, y
+   * aquí no hay modelo nuestro que poner. Con esto los tres motores llegan al orquestador
+   * por el MISMO `task`, y él no tiene que saber de qué está hecho cada especialista.
+   *
+   * Se pregunta si el motor está DISPONIBLE antes de montarlo. Un especialista que el
+   * orquestador puede elegir y que revienta en cuanto lo elige es un botón muerto dentro del
+   * grafo: peor que uno de interfaz, porque el que lo pulsa es el modelo y se lo cree.
+   */
+  const externos = [];
+  for (const agente of opciones.agentes.filter((a) => a.motor !== "modelo")) {
+    const motor = agente.motor as MotorExterno;
+    if (!(await opciones.subagenteExterno.disponible(motor))) continue;
+    externos.push({
+      name: agente.nombre,
+      description: agente.descripcion,
+      runnable: RunnableLambda.from(async (entrada: { messages?: BaseMessage[] }) => {
+        // La tarea es el último mensaje que le pasa el orquestador. El hijo no comparte
+        // transcript —es un proceso aparte, con su propia sesión—, así que lo que no venga
+        // en esa descripción no existe para él: es la misma regla del handoff que el prompt
+        // del orquestador ya impone entre especialistas.
+        const ultimo = entrada.messages?.at(-1);
+        const tarea = typeof ultimo?.content === "string" ? ultimo.content : String(ultimo?.content ?? "");
+        const texto = await opciones.subagenteExterno.correr({
+          motor,
+          cwd: opciones.raiz,
+          instrucciones: promptDeAgente(agente, repartirSkills(agente, catalogoDeSkills)),
+          tarea,
+          // Hoy siempre falso, y `core/ports.ts` explica por qué con detalle: el gancho del
+          // SDK es un callback y nuestra aprobación son interrupts de LangGraph.
+          permitirEscritura: false,
+        });
+        return { messages: [new AIMessage(texto)] };
+      }),
+    });
+  }
+
+  const subagentes = opciones.agentes
+    .filter((a) => a.motor === "modelo")
+    .map((perfil) => ({
     name: perfil.nombre,
     description: perfil.descripcion,
     systemPrompt: promptDeAgente(perfil, repartirSkills(perfil, catalogoDeSkills)),
@@ -218,6 +269,7 @@ export async function construirAgente(opciones: OpcionesDelAgente): Promise<unkn
     ],
     subagents: [
       ...subagentes,
+      ...externos,
       {
         name: "general-purpose",
         description: "NO USAR. No tiene ninguna capacidad de XOne, así que cualquier respuesta sobre el proyecto o la plataforma sería inventada.",

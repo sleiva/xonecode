@@ -76,6 +76,56 @@ export interface SkillsPort {
   cargar(nombre: string): string;
 }
 
+/**
+ * Un agente de otro producto —Claude Code, Codex— corriendo sobre la carpeta del proyecto.
+ *
+ * Es un PUERTO por la razón de siempre y una más. La de siempre: `npm test` no puede
+ * necesitar una clave, una conexión ni un binario instalado, así que lo que lanza un proceso
+ * hijo entra por aquí y en los tests entra el doble. La otra: ni `xoneAgent.ts` ni
+ * `turnoReal.ts` pueden saber que Claude Code existe, exactamente igual que no saben que
+ * existe CloudStudio — las tools remotas no se inyectan en el agente, las ejecuta quien
+ * está fuera.
+ *
+ * **Lo que este puerto NO hace, y es deliberado: escribir.** El hijo es un producto ajeno
+ * con su propia política de permisos (`permissionMode`), y ninguno de sus valores es la
+ * aprobación de xonecode — aquí nada se escribe sin que un humano vea el diff. El SDK sí
+ * ofrece el gancho para arreglarlo (`canUseTool`, que recibe la tool y su entrada entera y
+ * contesta permitir o denegar), pero conectarlo a nuestro HITL no es un callback: nuestra
+ * aprobación son `interrupt()` de LangGraph recogidos por `collectPending`, y reanudar uno
+ * reejecutaría el nodo desde el principio — o sea, relanzaría el proceso hijo. Mientras eso
+ * no esté resuelto, `permitirEscritura` es `false` siempre y las escrituras del hijo se
+ * DENIEGAN con un motivo que él lee. Un agente externo que pidiera escribir y se le
+ * concediera en silencio sería el agujero más grande que este repo puede tener.
+ */
+export interface SubagenteExternoPort {
+  /**
+   * Si el motor se puede usar de verdad: el paquete está instalado y su CLI existe.
+   * Se pregunta ANTES de montarlo para no ofrecerle al orquestador un especialista que va a
+   * fallar en cuanto lo elija — un botón muerto, pero en el grafo.
+   */
+  disponible(motor: MotorExterno): Promise<boolean>;
+  /** Una tarea autocontenida entra, la respuesta final sale. Sin sesión ni continuidad. */
+  correr(peticion: PeticionExterna): Promise<string>;
+}
+
+export type MotorExterno = "claude-code" | "codex";
+
+export interface PeticionExterna {
+  motor: MotorExterno;
+  /** La carpeta del proyecto: el hijo trabaja ahí y en ningún otro sitio. */
+  cwd: string;
+  /** El prompt del subagente (`core/agentes.ts#promptDeAgente`), con las reglas de XOne. */
+  instrucciones: string;
+  /** La tarea que le encarga el orquestador. */
+  tarea: string;
+  /**
+   * Hoy siempre `false`, y el campo existe para que el día que se conecte la aprobación no
+   * haya que cambiar la forma del puerto — y para que quien lea esto vea que la decisión
+   * está tomada a propósito y no olvidada.
+   */
+  permitirEscritura: boolean;
+}
+
 export type Papel = "rapido" | "trabajo" | "afilado";
 
 /**
@@ -224,6 +274,29 @@ export class ModeloGuionizado implements ModelosPort {
       trabajo: "[DOBLE] guionizado",
       afilado: "[DOBLE] guionizado",
     };
+  }
+}
+
+/**
+ * El doble: contesta sin lanzar ningún proceso.
+ *
+ * `disponible` devuelve `false` por omisión a propósito. Un doble que dijera que sí haría
+ * que los tests recorrieran la rama de «hay Claude Code» sin haberlo, que es justo la
+ * mentira que `ES_DOBLE` existe para impedir — y el modo offline enseñaría un especialista
+ * que no puede correr.
+ */
+export class SubagenteExternoGuionizado implements SubagenteExternoPort {
+  readonly [ES_DOBLE] = true;
+  constructor(
+    private readonly hay: boolean = false,
+    private readonly respuesta: string = "[DOBLE] respuesta guionizada del agente externo"
+  ) {}
+  async disponible(): Promise<boolean> {
+    return this.hay;
+  }
+  async correr(peticion: PeticionExterna): Promise<string> {
+    if (!this.hay) throw new Error(`[DOBLE] no hay ${peticion.motor} instalado`);
+    return this.respuesta;
   }
 }
 

@@ -198,6 +198,21 @@ export function leerAgente(
     return { error: `«modelo» solo vale con «motor: modelo»; con «${motorCrudo}» lo elige el propio agente` };
   }
 
+  // Cualquier cosa que no sea exactamente «true» es false — ver abajo.
+  const soloLectura = (campos["soloLectura"] ?? "").trim() === "true";
+  // Un agente EXTERNO que pida escribir se rechaza al cargar, y no se degrada a solo
+  // lectura por su cuenta. Hoy sus escrituras se deniegan siempre (`SubagenteExternoPort`
+  // explica por qué: nuestra aprobación son interrupts de LangGraph y el gancho del SDK es
+  // un callback), así que dejarlo pasar con `soloLectura: false` le prometería a quien lo
+  // escribió una capacidad que no va a tener — y lo descubriría cuando el agente le
+  // contestara que no ha podido tocar nada. Decirlo aquí es decirlo en el sitio donde se
+  // puede arreglar.
+  if (!soloLectura && motorCrudo !== "modelo") {
+    return {
+      error: `un agente con «motor: ${motorCrudo}» tiene que ir con «soloLectura: true»: sus escrituras todavía no pasan por la aprobación de xonecode, así que se le denegarían`,
+    };
+  }
+
   return {
     agente: {
       nombre,
@@ -207,7 +222,7 @@ export function leerAgente(
       // Cualquier cosa que no sea exactamente «true» es false: un `soloLectura: quizá` no
       // puede acabar concediendo escritura por ser una cadena verdadera en JavaScript —
       // es la misma trampa que `compartido` con el `"false"` de CloudStudio.
-      soloLectura: (campos["soloLectura"] ?? "").trim() === "true",
+      soloLectura,
       skills: leerLista(campos["skills"]),
       instrucciones,
       origen,

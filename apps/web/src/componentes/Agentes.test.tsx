@@ -46,6 +46,26 @@ describe("Agentes", () => {
     expect(screen.queryByText(/proveedor\/modelo/)).toBeNull();
   });
 
+  it("elegir un motor externo fuerza solo lectura y DICE por qué", () => {
+    // El servidor rechaza el fichero de un agente externo que pida escribir, así que dejar
+    // la casilla suelta solo serviría para que guardar fallara con un error que el
+    // formulario podía haber evitado. Forzarla sin explicar sería igual de malo.
+    render(<Agentes {...manejadores} agentes={[]} />);
+    fireEvent.click(screen.getByRole("button", { name: "Nuevo subagente" }));
+    fireEvent.change(screen.getByDisplayValue(/Un modelo/), { target: { value: "claude-code" } });
+    expect(screen.getByRole("checkbox")).toHaveProperty("disabled", true);
+    expect(screen.getByRole("checkbox")).toHaveProperty("checked", true);
+    expect(screen.getByText(/solo puede LEER/)).not.toBeNull();
+  });
+
+  it("codex se ofrece rotulado como lo que es: todavía no cableado", () => {
+    // Quitarlo escondería que existe; ofrecerlo callado sería un botón muerto. Decirlo es la
+    // tercera opción y la única honesta.
+    render(<Agentes {...manejadores} agentes={[]} />);
+    fireEvent.click(screen.getByRole("button", { name: "Nuevo subagente" }));
+    expect(screen.getByRole("option", { name: /Codex/ }).textContent).toMatch(/no cableado/);
+  });
+
   it("guardar exige nombre y descripción: el servidor los exige, y decir que no después es peor", () => {
     render(<Agentes {...manejadores} agentes={[]} />);
     fireEvent.click(screen.getByRole("button", { name: "Nuevo subagente" }));
