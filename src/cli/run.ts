@@ -8,6 +8,7 @@ import { tomarInstantanea, type Instantanea, type Cambio } from "../agent/instan
 import { SkillsEnDisco } from "../agent/skills.js";
 import { Modelos } from "../agent/modelos.js";
 import { abrirSesionReal } from "../agent/turnoReal.js";
+import { SimuladorVerifier } from "../agent/verificador.js";
 import type { FuentesDeEleccion } from "../core/modelos.js";
 import type { Papel } from "../core/ports.js";
 
@@ -135,6 +136,9 @@ async function correrReal(opciones: OpcionesRun, escribir: Escribir): Promise<nu
     modelos,
     skills,
     entorno,
+    // El simulador de verdad. Su ausencia en la máquina no se descubre aquí sino al
+    // verificar, y entonces se dice en el turno — sin tumbar nada.
+    verifier: new SimuladorVerifier(),
     pedirAprobacion: async (lista, ficheros, diffs) => {
       // **Se pregunta SIEMPRE, con TTY o sin él.** Cortar aquí sin preguntar dejaría
       // muerto el conjunto de respuestas sin-TTY de `interpretAnswer`, que existe

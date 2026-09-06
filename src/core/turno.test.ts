@@ -133,6 +133,33 @@ describe("correrTurno", () => {
     expect(actos).not.toContain("linea:⚠ VERIFICADOR DE PEGA");
   });
 
+  it("una verificación con hallazgos los pinta uno por línea, con dónde, y cuenta aparte los ajenos", async () => {
+    // El resumen solo dice cuántos, y cuántos no se arregla. El fichero y la línea son lo
+    // que el humano abre — y lo que el paso de reparación necesitará después.
+    const { piel, actos } = pielDePrueba();
+    await correrTurno(
+      flujo({
+        tipo: "verificacion",
+        verde: false,
+        errores: 1,
+        avisos: 1,
+        hallazgos: [
+          { code: "XONE001", severidad: "error", mensaje: "atributo desconocido", fichero: "Clientes.xne", linea: 12 },
+          { code: "XONE100", severidad: "warning", mensaje: "sin usar" },
+        ],
+        preexistentes: 2,
+      }),
+      piel
+    );
+    expect(actos).toEqual([
+      "linea:✗  verificación: 1 error(es), 1 aviso(s)",
+      "linea:   ✗ XONE001 Clientes.xne:12 — atributo desconocido",
+      "linea:   △ XONE100 — sin usar",
+      "linea:   (y 2 hallazgo(s) más en ficheros que este turno no tocó)",
+      "fin",
+    ]);
+  });
+
   it("los avisos de sistema van delegados a la piel que sabe de notificaciones, con la línea cerrada", async () => {
     // Mismo pacto que la fase: el motor dicta el TEXTO y no decide decoración. La piel
     // de terminal manda el aviso al panel reciclado; la que no sabe, pinta la línea

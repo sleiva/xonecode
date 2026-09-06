@@ -16,7 +16,7 @@ vi.mock("./instantanea.js", async (importOriginal) => {
 });
 
 import { abrirSesionReal, ficherosDelProyecto } from "./turnoReal.js";
-import { ModeloGuionizado, SkillsEnMemoria } from "../core/ports.js";
+import { ModeloGuionizado, SkillsEnMemoria, type VerifierPort } from "../core/ports.js";
 import type { Piel } from "../core/turno.js";
 import type { PendienteDeAprobacion } from "../core/events.js";
 import type { LineaDeDiff } from "../core/diff.js";
@@ -130,19 +130,35 @@ async function abrir(
       ficheros: Map<string, string>,
       diffs: Map<string, LineaDeDiff[]>
     ) => Promise<Map<string, Decision>>;
+    /** Lo que la instantánea dirá que cambió el turno. */
+    cambios?: Cambio[];
+    verifier?: VerifierPort;
   } = {}
 ) {
   mocks.construirAgente.mockImplementation(() =>
     agenteFalso({ escribe: opts.escribe, interruptArgs: opts.interruptArgs })
   );
+  if (opts.cambios !== undefined) {
+    const cambios = opts.cambios;
+    mocksInstantanea.tomarInstantanea.mockImplementation(async () => instantaneaFalsa(cambios));
+  }
   return abrirSesionReal({
     raiz: opts.raiz ?? "/tmp/turno-real-test", // no existe: `ficherosDelProyecto` devuelve Set vacío
     modelos: new ModeloGuionizado(),
     skills: new SkillsEnMemoria(),
     entorno: entornoFalso,
     pedirAprobacion: opts.pedir,
+    ...(opts.verifier === undefined ? {} : { verifier: opts.verifier }),
   });
 }
+
+/** Las líneas que la piel falsa recibió, en orden. */
+function lineasDe(piel: Piel): string[] {
+  return (piel.linea as ReturnType<typeof vi.fn>).mock.calls.map((c) => String(c[0]));
+}
+
+const RAIZ = "/tmp/turno-real-test";
+const XNE = { ruta: "Clientes.xne", clase: "modificado" as const };
 
 beforeEach(() => {
   mocks.construirAgente.mockReset();
@@ -371,5 +387,118 @@ describe("ficherosDelProyecto", () => {
     } finally {
       rmSync(raiz, { recursive: true, force: true });
     }
+  });
+});
+
+
+describe("el lazo de verificación", () => {
+  it("un turno que escribió ficheros del proyecto pasa por el verificador, y el aviso calla", async () => {
+    // Es el cable que faltaba: el simulador solo se llamaba desde `xonecode verify`, y el
+    // agente escribía sin que nadie mirara. Con el verificador presente y verde, el turno
+    // termina en verde y el aviso de honestidad no sale — porque ya no es verdad.
+    const sesion = await abrir({
+      cambios: [XNE],
+      verifier: { verificar: async () => ({ verde: true, hallazgos: [] }) },
+    });
+    const piel = pielFalsa();
+    const { bitacora } = await sesion.turno("añade un campo", piel);
+    expect(lineasDe(piel)).toContain("✓  verificación en verde");
+    expect(lineasDe(piel).some((l) => l.includes("no ha corrido"))).toBe(false);
+    expect(bitacora.corrio("verify")).toBe(true);
+  });
+
+  it("los hallazgos del turno se listan con fichero y línea, y los de otros ficheros se cuentan aparte", async () => {
+    // El simulador mira el proyecto entero —es su API—, así que hay que repartir: un error
+    // que ya estaba en un fichero que el agente no abrió no es del agente. Atribuírselo
+    // sería falso; callarlo, fingir un proyecto limpio. Se dice aparte y sin detalle.
+    const sesion = await abrir({
+      cambios: [XNE],
+      verifier: {
+        verificar: async () => ({
+          verde: false,
+          hallazgos: [
+            { code: "XONE001", severidad: "error", mensaje: "atributo desconocido", fichero: join(RAIZ, "Clientes.xne"), linea: 12 },
+            { code: "XONE009", severidad: "error", mensaje: "ya estaba", fichero: join(RAIZ, "Otro.xne"), linea: 3 },
+          ],
+        }),
+      },
+    });
+    const piel = pielFalsa();
+    await sesion.turno("añade un campo", piel);
+    const lineas = lineasDe(piel);
+    expect(lineas).toContain("✗  verificación: 1 error(es), 0 aviso(s)");
+    expect(lineas).toContain("   ✗ XONE001 Clientes.xne:12 — atributo desconocido");
+    expect(lineas.some((l) => l.includes("Otro.xne"))).toBe(false);
+    expect(lineas).toContain("   (y 1 hallazgo(s) más en ficheros que este turno no tocó)");
+  });
+
+  it("sin verificador, un turno que escribió lo AVISA — con el motivo", async () => {
+    const sesion = await abrir({ cambios: [XNE] });
+    const piel = pielFalsa();
+    await sesion.turno("añade un campo", piel);
+    expect(lineasDe(piel)).toContain(
+      "⚠ el verificador no ha corrido en este turno (esta ejecución no tiene verificador)"
+    );
+  });
+
+  it("un turno que NO escribió nada ni verifica ni avisa", async () => {
+    // Antes el aviso saltaba en TODOS los turnos, incluido «cuéntame un chiste». Un aviso
+    // que salta cuando no ha pasado nada enseña a ignorarlo, que es lo contrario de lo que
+    // se compra con él.
+    const verificar = vi.fn(async () => ({ verde: true, hallazgos: [] }));
+    const sesion = await abrir({ cambios: [], verifier: { verificar } });
+    const piel = pielFalsa();
+    await sesion.turno("cuéntame un chiste", piel);
+    expect(verificar).not.toHaveBeenCalled();
+    expect(lineasDe(piel).some((l) => l.includes("verific"))).toBe(false);
+  });
+
+  it("lo que escribe el propio harness en `.xonecode/` no cuenta como escritura del turno", async () => {
+    // Ahí van la memoria y los resúmenes de contexto. Contarlos haría que un turno de pura
+    // conversación pasara por el simulador, y que el aviso saltara por algo que el agente
+    // no hizo sobre la app.
+    const verificar = vi.fn(async () => ({ verde: true, hallazgos: [] }));
+    const sesion = await abrir({
+      cambios: [{ ruta: ".xonecode/conversation_history/1.md", clase: "nuevo" }],
+      verifier: { verificar },
+    });
+    const piel = pielFalsa();
+    await sesion.turno("hola", piel);
+    expect(verificar).not.toHaveBeenCalled();
+    expect(lineasDe(piel).some((l) => l.includes("no ha corrido"))).toBe(false);
+  });
+
+  it("si el simulador no está, se dice como fallo del ENTORNO y el aviso sigue siendo verdad", async () => {
+    // Que no esté el binario no es un fallo del proyecto: se avisa con el motivo y el turno
+    // termina. Y «no ha corrido» sale igualmente, porque no ha corrido.
+    const sesion = await abrir({
+      cambios: [XNE],
+      verifier: {
+        verificar: async () => {
+          throw new Error("spawn xone-simulator ENOENT");
+        },
+      },
+    });
+    const piel = pielFalsa();
+    await sesion.turno("añade un campo", piel);
+    const lineas = lineasDe(piel);
+    expect(lineas).toContain("⚠ no se pudo verificar: spawn xone-simulator ENOENT");
+    expect(lineas.some((l) => l.startsWith("⚠ el verificador no ha corrido"))).toBe(true);
+  });
+
+  it("con aprobaciones por medio, solo verifica la ronda FINAL — la que aplicó las escrituras", async () => {
+    // En la primera ronda las escrituras están pendientes y no aplicadas: no hay nada que
+    // medir. Verificar ahí daría un veredicto sobre un proyecto que aún no ha cambiado.
+    const verificar = vi.fn(async () => ({ verde: true, hallazgos: [] }));
+    const sesion = await abrir({
+      escribe: true,
+      pedir: aprobarTodo(),
+      cambios: [XNE],
+      verifier: { verificar },
+    });
+    const piel = pielFalsa();
+    await sesion.turno("añade un campo", piel);
+    expect(verificar).toHaveBeenCalledTimes(1);
+    expect(lineasDe(piel)).toContain("✓  verificación en verde");
   });
 });

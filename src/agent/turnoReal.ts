@@ -12,7 +12,9 @@ import type { LineaDeDiff } from "../core/diff.js";
 import type { Piel } from "../core/turno.js";
 import { Bitacora } from "../core/bitacora.js";
 import { correrTurno } from "../core/turno.js";
-import type { ModelosPort, SkillsPort } from "../core/ports.js";
+import type { ModelosPort, SkillsPort, VerifierPort } from "../core/ports.js";
+import type { DomainEvent } from "../core/events.js";
+import { relative, resolve as resolverRuta } from "node:path";
 import type { Entorno } from "./entorno.js";
 import { tomarInstantanea, type Instantanea, type Cambio } from "./instantanea.js";
 import { construirAgente } from "./xoneAgent.js";
@@ -122,6 +124,13 @@ export async function abrirSesionReal(opciones: {
     ficheros: Map<string, string>,
     diffs: Map<string, LineaDeDiff[]>
   ) => Promise<Map<string, Decision>>;
+  /**
+   * El simulador, para verificar lo que el turno escribió. OPCIONAL, y su ausencia no se
+   * disimula: sin él, un turno que escribió termina con el aviso de que no se verificó y el
+   * motivo. Es un puerto por lo de siempre —`npm test` no puede necesitar el binario— y
+   * porque quien construye el turno no tiene por qué saber cómo se verifica.
+   */
+  verifier?: VerifierPort;
 }): Promise<SesionReal> {
   const { raiz, entorno } = opciones;
 
@@ -219,8 +228,90 @@ export async function abrirSesionReal(opciones: {
     // colgado para siempre y el modelo nunca llega a saber que se rechazó.
     let cortadoPorTope = false;
 
+    /**
+     * Si ESTA ronda dejó ficheros del proyecto cambiados, y por qué no se verificaron si no
+     * se verificaron. Lo escribe `conVerificacion` mientras la ronda corre, y lo lee el
+     * aviso determinista del final de esa misma ronda — que es la única forma de que el
+     * aviso sepa algo que solo se conoce al terminar el flujo.
+     */
+    let rondaEscribio = false;
+    let motivoSinVerificar: string | undefined;
+
+    /**
+     * El lazo de verificación, cosido al FINAL del flujo de eventos y no después del turno.
+     *
+     * Tiene que ir dentro del flujo porque `correrTurno` cierra el turno en su `finally`
+     * —el aviso «no ha corrido», y `piel.fin()`— en cuanto el flujo se agota. Verificar
+     * después de eso pintaría el veredicto detrás del fin del turno, y en la web el
+     * compositor ya se habría encendido con el turno «terminado».
+     *
+     * Solo verifica la ronda FINAL: la que termina sin escrituras pendientes. En una ronda
+     * con aprobaciones por resolver las escrituras no se han aplicado todavía, así que no
+     * hay nada que medir — se medirá en la ronda que las aplique.
+     *
+     * Y solo si el turno tocó ficheros del PROYECTO. Los de `.xonecode/` no cuentan: ahí
+     * escribe el propio harness (la memoria, los resúmenes de contexto) y contarlos haría
+     * que un turno de pura conversación pasara por el simulador — y que el aviso de «no se
+     * verificó» saltara en un «cuéntame un chiste», que es exactamente lo que la bitácora
+     * de turno existe para evitar.
+     */
+    async function* conVerificacion(eventos: AsyncIterable<DomainEvent>): AsyncIterable<DomainEvent> {
+      yield* eventos;
+      if ((await leerPendientes()).lista.length > 0) return;
+
+      const cambios = (await instantanea.cambios()).filter(
+        (c) => c.clase !== "borrado" && !c.ruta.startsWith(".xonecode/") && c.ruta !== ".xonecode"
+      );
+      rondaEscribio = cambios.length > 0;
+      if (!rondaEscribio) return;
+
+      if (opciones.verifier === undefined) {
+        motivoSinVerificar = "esta ejecución no tiene verificador";
+        return;
+      }
+
+      let informe;
+      try {
+        informe = await opciones.verifier.verificar(raiz);
+      } catch (e) {
+        // Que no esté el binario NO es un fallo del proyecto, y se dice como tal. El aviso
+        // determinista del final saldrá igualmente: «no ha corrido» sigue siendo verdad.
+        motivoSinVerificar = e instanceof Error ? e.message : String(e);
+        yield { tipo: "aviso", texto: `⚠ no se pudo verificar: ${motivoSinVerificar}`, severidad: "aviso" };
+        return;
+      }
+
+      // Los hallazgos se reparten entre los ficheros que ESTE turno tocó y los demás. El
+      // simulador mira el proyecto entero —es su API—, y un error que ya estaba en un
+      // fichero que el agente no abrió no es del agente. Un hallazgo sin fichero no se
+      // puede atribuir: se enseña con los del turno, que es el lado conservador.
+      const tocados = new Set(cambios.map((c) => resolverRuta(raiz, c.ruta)));
+      const delTurno = informe.hallazgos.filter(
+        (h) => h.fichero === undefined || tocados.has(resolverRuta(h.fichero))
+      );
+      const preexistentes = informe.hallazgos.length - delTurno.length;
+      const errores = delTurno.filter((h) => h.severidad === "error").length;
+
+      yield {
+        tipo: "verificacion",
+        verde: errores === 0,
+        errores,
+        avisos: delTurno.length - errores,
+        hallazgos: delTurno.map((h) => ({
+          code: h.code,
+          severidad: h.severidad,
+          mensaje: h.mensaje,
+          ...(h.fichero === undefined ? {} : { fichero: relative(raiz, h.fichero) }),
+          ...(h.linea === undefined ? {} : { linea: h.linea }),
+        })),
+        ...(preexistentes > 0 ? { preexistentes } : {}),
+      };
+    }
+
     while (true) {
       ronda += 1;
+      rondaEscribio = false;
+      motivoSinVerificar = undefined;
       const aborto = new AbortController();
       cancelarEnCurso = () => aborto.abort(new Error("turno cancelado por el usuario"));
       try {
@@ -233,14 +324,25 @@ export async function abrirSesionReal(opciones: {
         });
 
         bitacora = await correrTurno(
-          aEventos(
-            stream,
-            async () => (await leerPendientes()).lista,
-            ({ nombre, detalle, parametros }) => diagnostico?.herramienta(nombre, detalle, parametros, tracker)
+          conVerificacion(
+            aEventos(
+              stream,
+              async () => (await leerPendientes()).lista,
+              ({ nombre, detalle, parametros }) => diagnostico?.herramienta(nombre, detalle, parametros, tracker)
+            )
           ),
           piel,
           {
-            avisos: (b) => (b.corrio("verify") ? [] : ["⚠ el verificador no ha corrido en este turno"]),
+            // El aviso solo si el turno ESCRIBIÓ y aun así no se verificó. Antes saltaba en
+            // todos los turnos, incluido «cuéntame un chiste» — y un aviso que salta cuando
+            // no ha pasado nada enseña a ignorarlo, que es lo contrario de lo que se compra
+            // con él. Con el motivo, porque «no ha corrido» sin más manda a adivinar.
+            avisos: (b) =>
+              b.corrio("verify") || !rondaEscribio
+                ? []
+                : [
+                    `⚠ el verificador no ha corrido en este turno${motivoSinVerificar === undefined ? "" : ` (${motivoSinVerificar})`}`,
+                  ],
           }
         );
       } finally {

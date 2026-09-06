@@ -106,6 +106,40 @@ sitio donde el contenido se enseña entero: es el paso donde se DECIDE sobre él
 (`core/bitacora.ts`): a un modelo al que le pides «avisa de que el verificador es de pega» a
 veces no avisa, y un aviso que salta cuando no ha pasado nada enseña a ignorarlo.
 
+**El verificador está EN el turno, no solo en `xonecode verify`** (`agent/turnoReal.ts#conVerificacion`).
+Hasta ahora el simulador solo se llamaba desde ese comando suelto, y el evento
+`verificacion` solo lo emitía el agente de pega: el agente real escribía y nadie miraba,
+con el aviso «no ha corrido» diciendo la verdad en todos los turnos. Ahora, al terminar un
+turno que escribió ficheros del proyecto, se corre `xone-simulator validate --json` y el
+veredicto entra en el mismo flujo de eventos. Cinco reglas, y el porqué de cada una:
+- **Cosido al FINAL del flujo, no después del turno.** `correrTurno` cierra el turno en su
+  `finally` —el aviso de honestidad y `piel.fin()`— en cuanto el flujo se agota; verificar
+  después pintaría el veredicto detrás del fin, y en la web el compositor ya se habría
+  encendido con el turno «terminado». Por eso es un generador que envuelve a `aEventos` y
+  añade sus eventos cuando el interior se acaba.
+- **Solo la ronda FINAL**: la que termina sin escrituras pendientes. Con aprobaciones por
+  resolver las escrituras no se han aplicado, así que medir ahí daría un veredicto sobre un
+  proyecto que aún no ha cambiado.
+- **Solo si el turno tocó ficheros del PROYECTO.** `.xonecode/` no cuenta —ahí escribe el
+  propio harness: memoria, resúmenes de contexto—, y sin esa exclusión un «cuéntame un chiste»
+  pasaría por el simulador. Y **el aviso «no ha corrido» solo sale si el turno escribió y aun
+  así no se verificó**, con el motivo: antes saltaba en todos los turnos, y un aviso que salta
+  cuando no ha pasado nada enseña a ignorarlo — justo lo que la bitácora de turno existe para
+  evitar.
+- **Los hallazgos se REPARTEN** entre los ficheros que el turno tocó y los demás. El
+  simulador mira el proyecto entero (es su API), y un error que ya estaba en un fichero que
+  el agente no abrió no es del agente: atribuírselo sería falso, callarlo sería fingir un
+  proyecto limpio. El evento lleva los del turno con fichero RELATIVO y línea —nunca
+  contenido— y `preexistentes` cuenta los otros. Un hallazgo sin fichero no se puede
+  atribuir y se enseña con los del turno, que es el lado conservador.
+- **Que no esté el binario es fallo del ENTORNO**, y se dice como tal en un `aviso` — sin
+  tumbar el turno, y con el aviso de honestidad saliendo igualmente, porque no ha corrido.
+  El verificador entra por parámetro (`verifier?: VerifierPort`), así que `npm test` sigue
+  sin necesitarlo: los tests del lazo usan dobles en línea y la instantánea falsa.
+Lo que TODAVÍA no hace, y es la siguiente pieza: devolverle los hallazgos al agente como un
+paso de reparación acotado (`reparacion`, «intento N de M», que ya existe como evento y que
+`guionizado.ts` recorre). Hoy el veredicto se enseña; no se corrige solo.
+
 **El panel de avisos** (`cli/panel.ts`) es la ÚNICA excepción al append-only de la consola: las
 notificaciones de sistema (pausas, avisos deterministas, el tiempo final) viven en un recinto de
 hasta 5 líneas grises que se **repinta en sitio** por encima del punto de escritura, y al

@@ -29,7 +29,24 @@ export type DomainEvent =
   | { tipo: "tool"; nombre: string; detalle?: string; error?: string }
   | { tipo: "plan"; tareas: TareaDelPlan[] }
   | { tipo: "tarea"; id: string; indice: number; total: number; estado: EstadoTarea }
-  | { tipo: "verificacion"; verde: boolean; errores: number; avisos: number }
+  /**
+   * El veredicto del simulador sobre lo que ESTE turno escribió.
+   *
+   * `verde`, `errores` y `avisos` son de los ficheros que el turno tocó. `hallazgos` los
+   * lista —código, fichero RELATIVO al proyecto, línea y mensaje; nunca contenido—, porque
+   * un «2 errores» sin decir dónde no lo puede arreglar nadie, ni el humano ni el paso de
+   * reparación que viene detrás. `preexistentes` cuenta los que el simulador vio en
+   * ficheros que el turno NO tocó: se dicen aparte porque atribuírselos al agente sería
+   * falso, y callarlos sería fingir que el proyecto está limpio.
+   */
+  | {
+      tipo: "verificacion";
+      verde: boolean;
+      errores: number;
+      avisos: number;
+      hallazgos?: HallazgoDelTurno[];
+      preexistentes?: number;
+    }
   | { tipo: "reparacion"; intento: number; tope: number }
   | { tipo: "bloqueado"; motivo: MotivoBloqueo; explicacion: string }
   | { tipo: "pausa"; pendientes: PendienteDeAprobacion[] }
@@ -37,6 +54,15 @@ export type DomainEvent =
   | { tipo: "fin"; ms: number };
 
 /** Las fases del lazo. Es lo que llena los 100-300 s en que el agente no habla. */
+/** Un hallazgo del simulador, ya relativo al proyecto. Sin contenido de ningún fichero. */
+export interface HallazgoDelTurno {
+  code: string;
+  severidad: "error" | "warning" | "info";
+  mensaje: string;
+  fichero?: string;
+  linea?: number;
+}
+
 export type Fase =
   | "entendiendo"
   | "planificando"

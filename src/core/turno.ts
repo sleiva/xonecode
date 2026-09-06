@@ -164,14 +164,27 @@ export async function correrTurno(
           escribirLinea(`▶  tarea ${ev.indice}/${ev.total}: ${ev.id} — ${ev.estado}`);
           break;
 
-        case "verificacion":
+        case "verificacion": {
           bitacora.anota("verify", ev.verde ? "verde" : `${ev.errores} errores`);
           escribirLinea(
             ev.verde
               ? "✓  verificación en verde"
               : `✗  verificación: ${ev.errores} error(es), ${ev.avisos} aviso(s)`
           );
+          // Uno por línea, con dónde: el resumen solo dice cuántos, y cuántos no se
+          // arregla. La marca va por severidad y no por color, que aquí no hay.
+          for (const h of ev.hallazgos ?? []) {
+            const marca = h.severidad === "error" ? "✗" : h.severidad === "warning" ? "△" : "·";
+            const donde = h.fichero === undefined ? "" : ` ${h.fichero}${h.linea === undefined ? "" : `:${h.linea}`}`;
+            escribirLinea(`   ${marca} ${h.code}${donde} — ${h.mensaje}`);
+          }
+          // Lo que ya estaba mal ANTES de este turno se dice aparte y sin detalle:
+          // atribuírselo al agente sería falso, callarlo sería fingir un proyecto limpio.
+          if (ev.preexistentes !== undefined && ev.preexistentes > 0) {
+            escribirLinea(`   (y ${ev.preexistentes} hallazgo(s) más en ficheros que este turno no tocó)`);
+          }
           break;
+        }
 
         case "reparacion":
           bitacora.anota("reparacion", `${ev.intento}/${ev.tope}`);

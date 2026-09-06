@@ -59,6 +59,7 @@ import { SkillsEnDisco } from "../agent/skills.js";
 import { Modelos } from "../agent/modelos.js";
 import { CatalogoModelos } from "../agent/catalogoModelos.js";
 import { abrirSesionReal, ficherosDelProyecto, type SesionReal } from "../agent/turnoReal.js";
+import { SimuladorVerifier } from "../agent/verificador.js";
 import { crearProyecto } from "../agent/crearProyecto.js";
 import { type DatosDelProyecto } from "../core/esqueleto.js";
 import { createTokenTracker, type TokenTracker } from "../vendor/tokenTracking.js";
@@ -434,6 +435,9 @@ export function crearEjecutorReal(alAbrirSesion: (sesion: SesionReal) => void): 
         modelos: new Modelos(estado.fuentes),
         skills: new SkillsEnDisco(),
         entorno,
+        // El simulador de verdad. Su ausencia en la máquina no se descubre aquí sino al
+        // verificar, y entonces se dice en el turno — sin tumbar nada.
+        verifier: new SimuladorVerifier(),
         // Las aprobaciones entran por el `preguntar` de la propia consola: el turno para
         // y pregunta DENTRO de la sesión, sin salir de ella ni montar otro lector de stdin.
         // Si la consola aporta su propio puerto (`aprobacionesTui`, el modal de la TUI),
