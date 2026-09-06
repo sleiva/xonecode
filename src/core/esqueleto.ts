@@ -87,6 +87,14 @@ HideSplash=false
   // Regla crítica de XOne: aquí SOLO Empresas y Usuarios. Las colecciones de
   // negocio van en `.xne` separados, y esa es justamente la primera conversación
   // que el agente puede tener con el usuario sobre su proyecto.
+  // `progid` en Empresas y Usuarios, y solo ahí. No viene del Hola Mundo de la documentación
+  // —de ahí el resto de este fichero— sino de la regla de las propias skills
+  // (`xone-project-generator/references/fases-4-5-estructura-y-configuracion.md`: «progid solo
+  // en Empresas y Usuarios; ASGestion.CASEmpresa / ASGestion.CASUser»). Sin él, el simulador
+  // rechaza el esqueleto con dos `COLL_MISSING_PROGID` («tiene objname pero falta progid»):
+  // medido al pasar por primera vez el proyecto recién creado por `xone-simulator validate`,
+  // que es algo que `esqueleto.test.ts` nunca había hecho — comprobaba que el texto coincidía
+  // con los docs, no que el proyecto fuera válido.
   const mappingsXne = `<?xml version="1.0" encoding="utf-8"?>
 <xml>
     <app prefix="gen" version="1.0.0" debug="true" default-language="javascript">
@@ -97,6 +105,7 @@ HideSplash=false
         <coll name="Empresas"
               sql="SELECT * FROM ##PREF##Empresas"
               objname="Empresas"
+              progid="ASGestion.CASEmpresa"
               updateobj="Empresas"
               loadall="true">
             <group name="General" id="1">
@@ -110,6 +119,7 @@ HideSplash=false
         <coll name="Usuarios"
               sql="SELECT * FROM ##PREF##Usuarios"
               objname="Usuarios"
+              progid="ASGestion.CASUser"
               updateobj="Usuarios"
               loadall="true">
             <group name="General" id="1">

@@ -84,3 +84,17 @@ describe("generarEsqueleto", () => {
     expect(carpetasDelEsqueleto()).toEqual(["bd", "icons", "files"]);
   });
 });
+
+describe("mappings.xne — lo único del esqueleto que no sale del Hola Mundo", () => {
+  it("Empresas y Usuarios llevan su progid, que es la regla de las skills y lo que exige el simulador", () => {
+    // Medido: sin esto, `xone-simulator validate` rechaza el proyecto recién creado con dos
+    // `COLL_MISSING_PROGID`. Este test no puede correr el simulador —`npm test` no lo
+    // necesita—, así que fija el CONTENIDO; el eval de línea base es el que lo pasa de
+    // verdad. La regla y los valores están en
+    // `skills/xone-project-generator/references/fases-4-5-estructura-y-configuracion.md`.
+    const mappings = generarEsqueleto({ nombre: "P", titulo: "P", orientacion: "portrait", login: false })
+      .find((f) => f.ruta === "mappings.xne")!.contenido;
+    expect(mappings).toMatch(/name="Empresas"[\s\S]*?progid="ASGestion\.CASEmpresa"/);
+    expect(mappings).toMatch(/name="Usuarios"[\s\S]*?progid="ASGestion\.CASUser"/);
+  });
+});
