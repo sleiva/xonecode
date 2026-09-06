@@ -2,7 +2,7 @@ import { mkdtempSync, writeFileSync, mkdirSync, readFileSync, existsSync } from 
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, it, expect } from "vitest";
-import {
+import { tituloDesde,
   crearSesion,
   anotarActo,
   listarSesiones,
@@ -145,5 +145,34 @@ describe("borrar y renombrar una sesión", () => {
     crearSesion(raiz);
     expect(renombrarSesion(raiz, "nunca-existio", "Hola")).toBe(false);
     expect(listarSesiones(raiz)).toHaveLength(1);
+  });
+});
+
+describe("tituloDesde: el título automático es la primera frase, entera", () => {
+  it("una petición corta se queda tal cual", () => {
+    expect(tituloDesde("añade una colección de clientes")).toBe("añade una colección de clientes");
+  });
+
+  it("se queda con la PRIMERA frase y suelta la puntuación final", () => {
+    expect(tituloDesde("Arregla el login. Después revisa el menú y dime qué ves.")).toBe("Arregla el login");
+    expect(tituloDesde("¿Cómo se hace una ventana en XOne? Explícalo con un ejemplo.")).toBe("Cómo se hace una ventana en XOne");
+  });
+
+  it("el caso medido: corta antes de los dos puntos y no deja una comilla a medias", () => {
+    expect(tituloDesde("Escribe literalmente esta frase, sin cambiar nada: «en XOne se usa $http para peticiones»")).toBe(
+      "Escribe literalmente esta frase, sin cambiar nada"
+    );
+  });
+
+  it("una frase larga se corta en una palabra entera, con puntos suspensivos", () => {
+    const t = tituloDesde("Necesito que revises todas las colecciones del proyecto buscando props sin el prefijo MAP_ que no estén en la tabla");
+    expect(t.endsWith("…")).toBe(true);
+    expect(t.length).toBeLessThanOrEqual(61);
+    expect(t).not.toMatch(/\s…$/);
+    expect(t).toBe("Necesito que revises todas las colecciones del proyecto…");
+  });
+
+  it("solo la primera línea, sin la comilla de apertura", () => {
+    expect(tituloDesde("«hola»\notra línea")).toBe("hola»");
   });
 });

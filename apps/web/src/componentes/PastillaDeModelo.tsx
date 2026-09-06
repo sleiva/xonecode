@@ -35,6 +35,9 @@ import estilos from "./PastillaDeModelo.module.css";
  * desplazamiento — medido: desplegar «gemini» empujaba a los demás proveedores fuera del
  * alto del menú y parecía que habían desaparecido sin camino de vuelta.
  */
+/** A partir de cuántos modelos se ofrece el filtro. */
+const MODELOS_SIN_FILTRO = 8;
+
 export function PastillaDeModelo({
   actual,
   proveedores,
@@ -55,12 +58,15 @@ export function PastillaDeModelo({
   const [desplegado, setDesplegado] = useState<string | undefined>(undefined);
   /** Los que ya se han pedido en ESTA pastilla: para decir «consultando…» sin fingir. */
   const [pedidos, setPedidos] = useState<readonly string[]>([]);
+  /** El filtro de la lista desplegada. Se vacía al cambiar de proveedor. */
+  const [filtro, setFiltro] = useState("");
 
   // Pinchar fuera cierra, y Escape también. El lazo vive en `cerrarAlPulsarFuera.ts` desde
   // que el «…» de la barra necesitó lo mismo; allí está el porqué de `mousedown`.
   useCerrarAlPulsarFuera(abierta, envoltura, cerrarMenu);
 
   const abrirProveedor = (id: string): void => {
+    setFiltro("");
     if (desplegado === id) {
       setDesplegado(undefined);
       return;
@@ -169,7 +175,25 @@ export function PastillaDeModelo({
                     ) : p.modelos.length === 0 ? (
                       <p className={estilos.espera}>no ofrece ningún modelo de conversación</p>
                     ) : (
-                      p.modelos.map((m) => {
+                      <>
+                      {/* Con más de ocho, un filtro: Ollama trae veintiséis y la lista en
+                          el orden crudo de la API era desplazarse a ciegas. */}
+                      {p.modelos.length > MODELOS_SIN_FILTRO ? (
+                        <input
+                          type="search"
+                          className={estilos.filtro}
+                          value={filtro}
+                          onChange={(e) => setFiltro(e.target.value)}
+                          placeholder="filtrar…"
+                          aria-label={`filtrar los modelos de ${p.id}`}
+                        />
+                      ) : null}
+                      {p.modelos
+                        .filter((m) => {
+                          const aguja = filtro.trim().toLowerCase();
+                          return aguja === "" || m.id.toLowerCase().includes(aguja) || (m.nombre ?? "").toLowerCase().includes(aguja);
+                        })
+                        .map((m) => {
                         const id = `${p.id}/${m.id}`;
                         return (
                           <button
@@ -187,7 +211,8 @@ export function PastillaDeModelo({
                             {m.nombre ?? m.id}
                           </button>
                         );
-                      })
+                      })}
+                      </>
                     )}
                   </div>
                 ) : null}

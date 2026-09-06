@@ -604,6 +604,10 @@ sería «desaparecer», o sea borrar sin decirlo. Cuatro cosas que no son negoci
   refresco como si el botón no hubiera hecho nada. Y se lleva su ref de git
   (`olvidarSesion`, que hasta ahora no tenía ningún llamador): una ref viva mantiene su árbol
   vivo para siempre.
+- **El título automático es la primera frase, entera** (`sesiones.ts#tituloDesde`): era
+  `slice(0, 80)` del primer mensaje y daba «Escribe literalmente esta frase, sin cambiar
+  nada: «en XOne se usa $http para pe». Sin llamar a ningún modelo: primera frase o línea,
+  sin la comilla de apertura, cortada en palabra entera a 60 con puntos suspensivos.
 - **Un título vacío se rechaza** (`sesiones.ts#renombrarSesion`). No es validación de
   formulario: `anotarActo` fija el título en el primer acto de usuario y solo mientras esté
   vacío, así que dejarlo en blanco devolvería la sesión al régimen automático y el siguiente

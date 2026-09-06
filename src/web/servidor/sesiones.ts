@@ -55,6 +55,33 @@ import { segmentoSeguro } from "../../core/settings.js";
 /** Cuántos caracteres de la primera prosa del usuario se guardan como título. */
 const LARGO_TITULO = 80;
 
+/** Hasta dónde llega un título AUTOMÁTICO antes de cortarse en una palabra entera. */
+const LARGO_TITULO_AUTOMATICO = 60;
+
+/**
+ * El título automático de una sesión, a partir de su primera petición.
+ *
+ * Era `texto.slice(0, 80)` a secas, y medido en pantalla daba «Escribe literalmente esta
+ * frase, sin cambiar nada: «en XOne se usa $http para pe» — media frase con una comilla sin
+ * cerrar. Sin llamar a ningún modelo (un título no vale una petición), lo que sí se puede
+ * hacer es quedarse con la PRIMERA frase o línea, quitar la comilla de apertura si la
+ * petición empieza citando, y cortar en una palabra entera con puntos suspensivos. Sigue
+ * siendo lo que el usuario escribió, no un resumen: renombrar sigue estando en el «…».
+ */
+export function tituloDesde(texto: string): string {
+  const primera = texto
+    .trim()
+    .split(/\r?\n/)[0]!
+    .split(/(?<=[.!?:;])\s/)[0]!
+    .replace(/[.!?:;]+$/u, "")
+    .replace(/^[«"“'‘¿¡\s]+/u, "")
+    .trim();
+  if (primera.length <= LARGO_TITULO_AUTOMATICO) return primera.slice(0, LARGO_TITULO);
+  const corte = primera.slice(0, LARGO_TITULO_AUTOMATICO);
+  const enPalabra = corte.lastIndexOf(" ");
+  return `${(enPalabra > 20 ? corte.slice(0, enPalabra) : corte).replace(/[\s,;:]+$/u, "")}…`;
+}
+
 export interface EntradaIndice {
   id: string;
   titulo: string;
@@ -205,12 +232,12 @@ export function anotarActo(raiz: string, id: string, acto: Acto): void {
     // ocurrió arriba): se da de alta la entrada con lo que se sabe en este momento.
     entradas.push({
       id,
-      titulo: acto.tipo === "usuario" ? acto.texto.slice(0, LARGO_TITULO) : "",
+      titulo: acto.tipo === "usuario" ? tituloDesde(acto.texto) : "",
       creada: ahora,
       ultimoTurno: ahora,
     });
   } else {
-    if (entrada.titulo === "" && acto.tipo === "usuario") entrada.titulo = acto.texto.slice(0, LARGO_TITULO);
+    if (entrada.titulo === "" && acto.tipo === "usuario") entrada.titulo = tituloDesde(acto.texto);
     entrada.ultimoTurno = ahora;
   }
   escribirIndice(raiz, entradas);

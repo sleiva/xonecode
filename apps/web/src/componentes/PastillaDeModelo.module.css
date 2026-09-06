@@ -156,3 +156,17 @@
 .error {
   color: var(--dsw-alias-state-error-primary);
 }
+
+/* El filtro de una lista larga, dentro de su proveedor. */
+.filtro {
+  box-sizing: border-box;
+  width: calc(100% - 8px);
+  margin: 2px 0 4px 4px;
+  padding: 4px 8px;
+  border: 0.5px solid var(--dsw-alias-border-l2);
+  border-radius: 6px;
+  background: var(--dsw-alias-bg-layer-1);
+  color: var(--dsw-alias-label-primary);
+  font: inherit;
+  font-size: 12px;
+}

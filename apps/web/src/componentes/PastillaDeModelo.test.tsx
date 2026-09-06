@@ -225,3 +225,38 @@ describe("el punto no se cuela en el nombre del proveedor", () => {
     expect(screen.getByRole("menuitem", { name: /^anthropic$/i })).toBeTruthy();
   });
 });
+
+describe("PastillaDeModelo: el filtro de una lista larga", () => {
+  afterEach(cleanup);
+
+  it("con más de ocho modelos hay filtro, y filtra por id y por nombre", () => {
+    const modelos = Array.from({ length: 10 }, (_, i) => ({ id: `m${i}`, nombre: i === 3 ? "Qwen grande" : `Modelo ${i}` }));
+    render(
+      <PastillaDeModelo
+        proveedores={[{ id: "ollama", credencial: "nativa", modelos }]}
+        alPedirCatalogo={() => {}}
+        alElegir={() => {}}
+      />
+    );
+    fireEvent.click(screen.getByRole("button", { name: /elige modelo/i }));
+    fireEvent.click(screen.getByRole("menuitem", { name: /^ollama$/i }));
+    expect(screen.getAllByRole("menuitemradio")).toHaveLength(10);
+    fireEvent.change(screen.getByRole("searchbox", { name: /filtrar los modelos de ollama/ }), { target: { value: "qwen" } });
+    expect(screen.getAllByRole("menuitemradio").map((b) => b.textContent)).toEqual(["Qwen grande"]);
+    fireEvent.change(screen.getByRole("searchbox"), { target: { value: "M7" } });
+    expect(screen.getAllByRole("menuitemradio").map((b) => b.textContent)).toEqual(["Modelo 7"]);
+  });
+
+  it("con pocos modelos no hay filtro: un campo para tres filas es ruido", () => {
+    render(
+      <PastillaDeModelo
+        proveedores={[{ id: "ollama", credencial: "nativa", modelos: [{ id: "a" }, { id: "b" }] }]}
+        alPedirCatalogo={() => {}}
+        alElegir={() => {}}
+      />
+    );
+    fireEvent.click(screen.getByRole("button", { name: /elige modelo/i }));
+    fireEvent.click(screen.getByRole("menuitem", { name: /^ollama$/i }));
+    expect(screen.queryByRole("searchbox")).toBeNull();
+  });
+});
