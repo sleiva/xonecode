@@ -209,6 +209,32 @@ const RECONOCIMIENTO_PLANNER = [
   "  propósito; nodos; aristas `origen → destino`; evidencia `ruta:líneas`; y lagunas. No incluyas transcript ni lecturas crudas.",
 ].join("\n");
 
+/**
+ * La consulta acotada de `docs`, medida antes de escribirla.
+ *
+ * Trazado (`docs/EVALS.md`, «El coste, medido»): para decir que un atributo NO existe,
+ * `docs` hizo 26 llamadas y 317k tokens de entrada — tres `ls` y tres `glob` para
+ * inventariar `/skills`, ocho `grep` con `max_count: 30` en modo contenido (uno solo metió
+ * 1,4k tokens), y seis referencias leídas por páginas. Y nunca abrió
+ * `references/indice-completo.md`, que es el índice de las 55 referencias y la primera
+ * fila de `SKILL.md`. La regla no le quita capacidad: le dice dónde está el índice y
+ * cuándo la respuesta ya es «no está documentado» — que en XOne significa «no existe, no
+ * lo uses», y seguir buscando sinónimos no lo hace existir.
+ */
+const CONSULTA_ACOTADA_DOCS = [
+  "CONSULTA ACOTADA DE LAS REFERENCIAS:",
+  "- `/skills/<skill>/SKILL.md` es la regla corta y `references/indice-completo.md` es el índice de TODAS las",
+  "  referencias: léelo antes de buscar. No hagas `ls` ni `glob` sobre `/skills`; el índice ya dice qué hay y dónde.",
+  "- Abre como máximo tres referencias por pregunta, las que el índice señale para el tema, con `offset=0` y",
+  "  `limit=100`; pide otra página solo si el índice o el propio fichero dicen que lo buscado sigue ahí.",
+  "- Un `grep` por hipótesis concreta (un atributo, una función, una clase), con `max_count=5` y sobre la carpeta",
+  "  de su familia. Nunca dos sinónimos seguidos de lo mismo, ni una búsqueda sin hipótesis, ni repetir una",
+  "  lectura de la misma ruta y rango.",
+  "- Si el índice y las referencias del tema no nombran lo que se pregunta, la respuesta es que NO está",
+  "  documentado y por tanto no existe para XOne: dilo, nombra las referencias que miraste, y para.",
+  "- En cuanto tengas la evidencia para contestar, deja de llamar tools y responde.",
+].join("\n");
+
 const HANDOFF_MOCKUP = [
   "HANDOFF PARA DIAGRAMAS:",
   "- Si la descripción de tu tarea incluye `HANDOFF DE PLANNER`, ese bloque es tu evidencia de código real.",
@@ -216,7 +242,11 @@ const HANDOFF_MOCKUP = [
   "- Solo inspecciona un fichero si el handoff marca una laguna o dos evidencias se contradicen; explica cuál es la laguna.",
 ].join("\n");
 
-/** Los cuatro, con los MISMOS textos que tenían en código: esto es una mudanza, no un rediseño. */
+/**
+ * Los cuatro. Nacieron como una mudanza de los textos que había en código; desde entonces
+ * `docs` lleva además la consulta acotada, y solo esa: cada regla que se añade aquí se mide
+ * antes con los evals, porque un prompt más largo es coste en TODAS las llamadas.
+ */
 export const AGENTES_DE_SERIE: readonly Agente[] = [
   {
     nombre: "docs",
@@ -227,7 +257,7 @@ export const AGENTES_DE_SERIE: readonly Agente[] = [
     motor: "modelo",
     soloLectura: true,
     skills: ["xone-development", "archify", "artifacts-builder"],
-    instrucciones: SKILLS_VISUALES,
+    instrucciones: `${SKILLS_VISUALES}\n\n${CONSULTA_ACOTADA_DOCS}`,
     origen: "semilla",
   },
   {

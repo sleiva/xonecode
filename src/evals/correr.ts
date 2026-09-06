@@ -1,6 +1,6 @@
 /**
  * El corredor de evals:
- * `npm run eval [-- --solo nombre] [--modelo proveedor/modelo] [--json ruta] [--conservar]`.
+ * `npm run eval [-- --solo nombre] [--modelo proveedor/modelo] [--json ruta] [--conservar] [--agentes serie|carpeta]`.
  *
  * `--conservar` deja en disco el proyecto de cada tarea que FALLA e imprime su ruta. Sin
  * él no se puede saber si un ✗ es del agente o del juez: la primera ejecución real tiró
@@ -28,7 +28,7 @@
  * `~/.xonecode/agentes/`. Se imprime cuáles, porque el resultado depende de ello.
  */
 
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { copyFileSync, mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { crearProyecto } from "../agent/crearProyecto.js";
@@ -38,7 +38,8 @@ import { Modelos } from "../agent/modelos.js";
 import { abrirSesionReal } from "../agent/turnoReal.js";
 import { SimuladorVerifier } from "../agent/verificador.js";
 import { cargar, aplicarAuth } from "../agent/configEnDisco.js";
-import { cargarAgentes } from "../agent/agentesEnDisco.js";
+import { AGENTES_DE_SERIE, cargarAgentes } from "../agent/agentesEnDisco.js";
+import { escribirAgente } from "../core/agentes.js";
 import type { Piel } from "../core/turno.js";
 import type { Decision } from "../vendor/hitl.js";
 import type { PendienteDeAprobacion } from "../core/events.js";
@@ -61,6 +62,27 @@ interface Resultado {
   reparaciones: number;
   bloqueado: boolean;
   error?: string;
+}
+
+/**
+ * Con qué subagentes corre la tarea.
+ *
+ * Por omisión, los del que ejecuta: su carpeta global, ya sembrada. Pero la siembra se hace
+ * UNA vez (la carpeta es la marca), así que un cambio en `AGENTES_DE_SERIE` no llega a esa
+ * carpeta y el eval seguiría midiendo el texto viejo. `--agentes serie` escribe los de serie
+ * como agentes de PROYECTO en el temporal —pisan a los globales por nombre, que es la regla
+ * de siempre— y mide lo que se ENVÍA; `--agentes <carpeta>` hace lo mismo con cualquier
+ * variante, para comparar dos prompts sin tocar los ficheros de nadie.
+ */
+function sembrarAgentesDelEval(raiz: string, agentes: string | undefined): void {
+  if (agentes === undefined) return;
+  const carpeta = join(raiz, ".xonecode", "agentes");
+  mkdirSync(carpeta, { recursive: true });
+  if (agentes === "serie") {
+    for (const a of AGENTES_DE_SERIE) writeFileSync(join(carpeta, `${a.nombre}.md`), escribirAgente(a), "utf8");
+    return;
+  }
+  for (const f of readdirSync(agentes)) if (f.endsWith(".md")) copyFileSync(join(agentes, f), join(carpeta, f));
 }
 
 function argumento(nombre: string): string | undefined {
@@ -97,7 +119,8 @@ async function correrTarea(
   tarea: Tarea,
   modelos: Modelos,
   skills: SkillsEnDisco,
-  conservar: boolean
+  conservar: boolean,
+  agentes: string | undefined
 ): Promise<Resultado & { proyecto?: string }> {
   const raiz = mkdtempSync(join(tmpdir(), `xonecode-eval-${tarea.nombre}-`));
   const base: Resultado = {
@@ -117,6 +140,7 @@ async function correrTarea(
   try {
     crearProyecto(raiz, { nombre: "Eval", titulo: "Eval", orientacion: "portrait", login: false });
     tarea.preparar?.(raiz);
+    sembrarAgentesDelEval(raiz, agentes);
 
     const entorno = await inspeccionar(raiz);
     const sesion = await abrirSesionReal({
@@ -171,6 +195,7 @@ async function main(): Promise<number> {
   const json = argumento("--json");
   const conservarTodo = process.argv.includes("--conservar-todo");
   const conservar = conservarTodo || process.argv.includes("--conservar");
+  const agentesDelEval = argumento("--agentes");
 
   // La config del que corre, igual que la consola: credenciales al entorno, modelo global.
   const cargado = cargar(process.cwd());
@@ -191,12 +216,16 @@ async function main(): Promise<number> {
   const agentes = cargarAgentes().agentes.map((a) => `${a.nombre}(${a.motor})`).join(", ");
   console.log(`modelo de trabajo: ${modelos.descripcion().trabajo}`);
   console.log(`subagentes: ${agentes}`);
+  if (agentesDelEval !== undefined) {
+    const pisan = agentesDelEval === "serie" ? AGENTES_DE_SERIE.map((a) => a.nombre) : readdirSync(agentesDelEval).filter((f) => f.endsWith(".md")).map((f) => f.slice(0, -3));
+    console.log(`  pisados por los de ${agentesDelEval === "serie" ? "SERIE" : agentesDelEval}: ${pisan.join(", ")}`);
+  }
   console.log(`tareas: ${tareas.length}\n`);
 
   const resultados: Resultado[] = [];
   for (const tarea of tareas) {
     process.stdout.write(`▶ ${tarea.nombre} — ${tarea.mide} … `);
-    const r = await correrTarea(tarea, modelos, skills, conservar);
+    const r = await correrTarea(tarea, modelos, skills, conservar, agentesDelEval);
     resultados.push(r);
     // Lo que aprobó no se conserva ni con `--conservar`: no hay nada que inspeccionar en un ✓.
     if (r.ok && r.proyecto !== undefined && !conservarTodo) rmSync(r.proyecto, { recursive: true, force: true });

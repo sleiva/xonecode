@@ -7,7 +7,16 @@ npm run eval -- --modelo anthropic/claude-sonnet-4-5 --json resultados.json
 npm run eval -- --conservar                 # deja en disco el proyecto de cada ✗, con su ruta
 npm run eval -- --conservar-todo            # también los ✓: para leer la traza de una tarea que salió bien
 XONECODE_TRACE_TOOLS=1 npm run eval -- --solo no-inventa --conservar-todo   # y con `.xonecode/traza-tools.jsonl`
+npm run eval -- --agentes serie             # con los subagentes DE SERIE, no los de tu carpeta global
+npm run eval -- --agentes ./variantes       # con los `.md` de una carpeta: para comparar dos prompts
 ```
+
+`--agentes` existe porque el eval corre, por omisión, con los subagentes del que lo ejecuta
+(`~/.xonecode/agentes/`), y esa carpeta se siembra UNA vez: un cambio en `AGENTES_DE_SERIE`
+no llega a ella y el eval seguiría midiendo el texto viejo. Con `serie` se escriben los de
+serie como agentes de PROYECTO en el temporal —pisan a los globales por nombre, la regla de
+siempre— y se mide lo que se envía; con una carpeta, cualquier variante, sin tocar los
+ficheros de nadie. La cabecera dice cuáles quedaron pisados.
 
 `--conservar` existe por una lección de la primera ejecución: dos tareas salieron ✗, el
 temporal ya estaba borrado, y no había forma de saber si el fallo era del agente o del juez.
@@ -119,6 +128,31 @@ en orden:
    trozos pero no `cache_read`, y la agregación lo suma dos veces: 32.696 «cacheados» sobre
    una entrada de 20.097 cuando el servidor decía 16.348. `vendor/tokenTracking.ts` acota la
    caché a la entrada; no la corrige del todo, pero impide reportar más caché que entrada.
+
+**La consulta acotada de `docs`, medida antes y después — y el resultado es que un prompt no
+acota.** La regla (`agentesEnDisco.ts#CONSULTA_ACOTADA_DOCS`) le dice a `docs` que el índice
+es `references/indice-completo.md` y no la carpeta, tres referencias por pregunta, un `grep`
+por hipótesis y cuándo la respuesta ya es «no está documentado». Dos pasadas por brazo de
+`no-inventa`, trazadas, con `--agentes serie` para el nuevo texto (la caché es la del
+tracker, acotada a la entrada, y hereda el sobreconteo de arriba):
+
+| pasada | `docs` | llamadas | entrada | caché | ctx máx | forma |
+|---|---|---|---|---|---|---|
+| base-1 | viejo | 26 | 317k | 15% | 20k | `ls`×4, `glob`×4, `grep`×8, sin abrir el índice |
+| base-2 | viejo | 13 | 317k | 76% | 37k | `grep`×4, lecturas largas |
+| serie-1 | nuevo | 14 | 227k | 54% | 23k | índice leído, sin `ls`, `grep`×6 |
+| serie-2 | nuevo | 22 | 355k | 46% | 23k | índice leído, sin `ls`, **`grep`×13** |
+
+Cambió la FORMA —las dos pasadas nuevas abren el índice y ninguna inventaría `/skills`— y no
+el coste: 255k y 384k tokens totales contra 326k y 363k, con la varianza entre dos pasadas
+del mismo brazo por encima de cualquier diferencia entre brazos. Y serie-2 hizo trece `grep`
+con una regla de «uno por hipótesis» delante. Es la tesis de este repo aplicada al coste:
+lo que tiene que cumplirse se hace en código, no se pide en un prompt. La palanca que queda
+es de código —un tope de llamadas a tools por delegación que al alcanzarse inyecte «contesta
+con lo que tienes», o topes impuestos a lo que devuelve cada tool (`max_count`, `limit`)—, y
+se medirá con estas mismas tareas. La regla se queda porque corrige algo real y barato (usa
+el índice que existe, deja de listar la carpeta) y las tres pasadas nuevas siguieron siendo
+✓; lo que NO se puede afirmar es que ahorre.
 
 Con otro proveedor la caché sí es determinista (Anthropic con `cache_control`, que deepagents
 monta solo para sus modelos; OpenAI automática desde 1.024 tokens), y la misma medida —el
