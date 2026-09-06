@@ -437,6 +437,23 @@ export function App({ store, enviar }: { store: Store; enviar: Conexion["enviar"
       proyectos={estado.alta?.proyectos ?? []}
       {...(entornoActivo === "" ? {} : { entornoActivo })}
       apariencia={apariencia}
+      {...(estado.agentes === undefined ? {} : { agentes: estado.agentes })}
+      // Si hay proyecto abierto: decide si la ventana puede ofrecer guardar el subagente
+      // «en este proyecto». Sin uno, ese ámbito no existe y no se pregunta.
+      hayProyecto={proyectoAbierto}
+      alGuardarAgente={(agente, ambito) =>
+        void enviar({ clase: "agente", accion: "guardar", ambito, agente })
+      }
+      alBorrarAgente={(nombre, ambito) =>
+        void enviar({
+          clase: "agente",
+          accion: "borrar",
+          ambito,
+          // Borrar solo necesita el nombre, pero el mensaje lleva un agente entero para no
+          // tener dos formas del mismo mensaje: los demás campos los ignora el servidor.
+          agente: { nombre, descripcion: "", motor: "modelo", soloLectura: true, skills: [], instrucciones: "" },
+        })
+      }
       // La pregunta oculta en vuelo se pinta DENTRO de la fila que se está editando; por
       // eso el centro deja de pintarla mientras la ventana está abierta (más abajo).
       {...(estado.secreto === undefined ? {} : { secreto: estado.secreto.pregunta })}

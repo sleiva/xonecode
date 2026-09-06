@@ -23,6 +23,26 @@
  * los necesitará con forma, no aquí.
  */
 
+/**
+ * Un subagente tal y como viaja. Redeclarado aquí como todo lo del cable: `tipos.test.ts`
+ * compara los literales contra los del host, así que divergir da un test en rojo y no un
+ * bug mudo.
+ *
+ * `origen` lo pone el SERVIDOR al leer y es de solo lectura: dice si el agente viene del
+ * global o del proyecto, que es lo que explica por qué editarlo aquí no afecta a los demás
+ * proyectos. Ausente en el que se está creando y todavía no se ha guardado.
+ */
+export interface AgenteDelCable {
+  nombre: string;
+  descripcion: string;
+  motor: string;
+  modelo?: string;
+  soloLectura: boolean;
+  skills: string[];
+  instrucciones: string;
+  origen?: string;
+}
+
 export type Acto =
   | { tipo: "usuario"; texto: string }
   | { tipo: "asistente"; texto: string }
@@ -105,6 +125,16 @@ export type MensajeAlCliente =
   /** Hay un turno EN VUELO, o dejó de haberlo: apaga el compositor y saca el botón de
    *  parar. No se deduce de los actos — un turno que revienta no siempre deja `fin`. */
   | { clase: "turno"; activo: boolean }
+  /**
+   * Los subagentes dados de alta, para la ventana de ajustes. La lista va ENTERA cada vez
+   * que cambia —son pocos y pequeños— en vez de mandar diferencias: un delta perdido
+   * dejaría la ventana enseñando un agente que ya no existe.
+   *
+   * `problemas` son los `.md` que no se pudieron leer, con su motivo. Viajan porque quien
+   * los tiene que arreglar está mirando esta ventana: un agente que no aparece y nadie dice
+   * por qué se lee como que la aplicación lo perdió.
+   */
+  | { clase: "agentes"; agentes: AgenteDelCable[]; problemas: string[] }
   /**
    * Los ficheros que la sesión ha tocado, y el parche de uno. Los tres `via` son tres cosas
    * distintas: «git» es «comparado»; «sin-empezar», que la sesión no ha volcado ningún acto
@@ -264,6 +294,19 @@ export type MensajeDelCliente =
   /** Borrar la credencial de `auth.json`. Guardar no pasa por aquí: la clave viaja por
    *  «secreto», contestando al `leerSecreto` que abre `/provider`. */
   | { clase: "credencial"; accion: "pedir" | "borrar"; proveedor: string }
+  /**
+   * Dar de alta, cambiar o borrar un subagente.
+   *
+   * `ambito` viaja explícito en vez de deducirse de si hay proyecto abierto: con uno
+   * abierto valen los dos, y adivinar cuál quiere el usuario es cómo un «revisor» pensado
+   * para todos los proyectos acaba escondido en uno.
+   */
+  | {
+      clase: "agente";
+      accion: "guardar" | "borrar";
+      ambito: "global" | "proyecto";
+      agente: AgenteDelCable;
+    }
   /** Parar el turno en vuelo, dejando la sesión viva. */
   | { clase: "cancelar" }
   /** Pide los ficheros de la sesión, o el parche de uno. */

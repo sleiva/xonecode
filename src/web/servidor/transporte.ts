@@ -80,6 +80,18 @@ export type MensajeAlCliente =
    */
   | { clase: "turno"; activo: boolean }
   /**
+   * Los subagentes dados de alta, para la ventana de ajustes.
+   *
+   * Se manda entero cada vez que cambia —son pocos y pequeños— en vez de mandar deltas:
+   * una lista de cinco elementos no justifica un protocolo de diferencias, y un delta
+   * perdido dejaría la ventana enseñando un agente que ya no existe.
+   *
+   * `problemas` son los `.md` que no se pudieron leer, con su motivo. Van por el cable y no
+   * solo al log del servidor porque quien los tiene que arreglar está mirando ESTA ventana:
+   * un agente que no aparece y nadie dice por qué se lee como que la aplicación lo perdió.
+   */
+  | { clase: "agentes"; agentes: AgenteDelCable[]; problemas: string[] }
+  /**
    * Los ficheros que ESTA sesión ha tocado, y el parche de uno.
    *
    * `via` no es decoración, y son TRES cosas distintas: «git» es «comparado, y esto es lo
@@ -366,12 +378,43 @@ export type MensajeDelCliente =
    * abierto. La ventana de ajustes se abre antes, así que tiene su propio mensaje.
    */
   | { clase: "credencial"; accion: "pedir" | "borrar"; proveedor: string }
+  /**
+   * Dar de alta, cambiar o borrar un subagente.
+   *
+   * `ambito` decide en qué carpeta se escribe, y viaja explícito en vez de deducirse de si
+   * hay proyecto abierto: con uno abierto valen las dos, y adivinar cuál quiere el usuario
+   * es cómo un «revisor» que quería para todos los proyectos acaba escondido en uno.
+   */
+  | {
+      clase: "agente";
+      accion: "guardar" | "borrar";
+      ambito: "global" | "proyecto";
+      agente: AgenteDelCable;
+    }
   /** Parar el turno en vuelo. Aborta el `stream` del grafo (`SesionReal.cancelar`) y deja
    *  la sesión viva: es parar ESTO, no cerrar la conversación. */
   | { clase: "cancelar" }
   /** Pide los ficheros de la sesión abierta, o el parche de uno concreto. */
   | { clase: "ficheros"; ruta?: string }
   | { clase: "decision"; decisiones: Record<string, string> };
+
+/**
+ * Un subagente tal y como viaja: los campos del `.md` y de dónde salió.
+ *
+ * `origen` es de solo lectura —lo pone el servidor al leer— y sirve para que la ventana
+ * pueda decir si un agente viene del global o del proyecto, que es lo que explica por qué
+ * editarlo aquí no afecta a los demás proyectos.
+ */
+export interface AgenteDelCable {
+  nombre: string;
+  descripcion: string;
+  motor: string;
+  modelo?: string;
+  soloLectura: boolean;
+  skills: string[];
+  instrucciones: string;
+  origen?: string;
+}
 
 /** A dónde escribe el SSE. Ausente = no hay nadie al otro lado. */
 export type Sumidero = (mensaje: MensajeAlCliente) => void;

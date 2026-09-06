@@ -1,0 +1,192 @@
+/* La sección de subagentes de la ventana de ajustes. Reusa la forma de las filas de
+   `Ajustes.module.css` (tarjeta con cabecera y acciones a la derecha) porque es la misma
+   clase de lista y tenía que leerse igual.
+
+   Alias comprobados contra `apps/web/estilos/design-platform.css`: bg-layer-1/2,
+   bg-module-platform, border-l2, label-primary/secondary/tertiary, interactive-bg-hover,
+   state-error-primary/secondary, state-success-primary/tertiary y
+   state-business-primary/tertiary. */
+
+.nota,
+.vacio,
+.pista {
+  margin: 0 0 14px;
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.pista {
+  margin: 0;
+  font-weight: 400;
+}
+
+/* Los `.md` que no se pudieron leer. En rojo y con `role="alert"` porque no es información
+   de fondo: es trabajo pendiente de quien está mirando esta ventana. */
+.problemas {
+  margin: 0 0 14px;
+  padding: 10px 12px 10px 28px;
+  border-radius: 10px;
+  background: var(--dsw-alias-state-error-secondary);
+  color: var(--dsw-alias-state-error-primary);
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.filas {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0 0 14px;
+  padding: 0;
+  list-style: none;
+}
+
+.fila {
+  padding: 10px 12px;
+  border: 0.5px solid var(--dsw-alias-border-l2);
+  border-radius: 10px;
+  background: var(--dsw-alias-bg-layer-2);
+}
+
+.cabeceraDeFila {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.nombre {
+  color: var(--dsw-alias-label-primary);
+  font-weight: 600;
+}
+
+.relleno {
+  flex: 1;
+}
+
+/* Las tres etiquetas van en mono y en versalitas, como las del escritorio y las de la
+   barra: son dato de máquina —de qué está hecho, de dónde sale, qué puede tocar— y no
+   prosa. */
+.motor,
+.origen,
+.lectura {
+  flex: none;
+  padding: 1px 6px;
+  border-radius: 999px;
+  font-family: var(--ds-font-family-code);
+  font-size: 10px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.motor {
+  background: var(--dsw-alias-state-business-tertiary);
+  color: var(--dsw-alias-state-business-primary);
+}
+
+.origen {
+  background: var(--dsw-alias-bg-module-platform);
+  color: var(--dsw-alias-label-tertiary);
+}
+
+/* Verde para el que no escribe: es el estado que NO exige vigilancia, y en una lista larga
+   lo que se busca de un vistazo es cuáles sí pueden tocar el proyecto. */
+.lectura {
+  background: var(--dsw-alias-state-success-tertiary);
+  color: var(--dsw-alias-state-success-primary);
+}
+
+.descripcion {
+  margin: 6px 0 0;
+  color: var(--dsw-alias-label-secondary);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+/* La confirmación de borrado vive en la propia fila: es donde está el ojo, y una ventana
+   encima para dos líneas sería más ceremonia que la decisión. */
+.confirmar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 10px 0 0;
+  padding-top: 10px;
+  border-top: 0.5px solid var(--dsw-alias-border-l2);
+  color: var(--dsw-alias-label-secondary);
+  font-size: 12px;
+}
+
+.accion {
+  flex: none;
+  font-size: 12px;
+}
+
+/* Rojo lleno, igual que el de eliminar una sesión y por lo mismo: borra un fichero y no hay
+   papelera, así que no puede pintarse como el botón de al lado. */
+.destructiva.destructiva {
+  margin-left: auto;
+  border-color: var(--dsw-alias-state-error-primary);
+  background: var(--dsw-alias-state-error-primary);
+  color: var(--dsw-alias-label-primary-inverted);
+}
+
+.formulario {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 14px;
+  border: 0.5px solid var(--dsw-alias-border-l2);
+  border-radius: 10px;
+  background: var(--dsw-alias-bg-layer-2);
+}
+
+.campo {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.rotulo {
+  color: var(--dsw-alias-label-secondary);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.casilla {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--dsw-alias-label-secondary);
+  font-size: 12px;
+}
+
+.selector {
+  padding: 6px 8px;
+  border: 0.5px solid var(--dsw-alias-border-l2);
+  border-radius: 8px;
+  background: var(--dsw-alias-bg-layer-1);
+  color: var(--dsw-alias-label-primary);
+  font: inherit;
+  font-size: 12px;
+}
+
+/* Mono: el cuerpo de un `.md` es un prompt que se escribe y se relee como texto plano, y la
+   proporcional disimula la sangría de las listas que llevan casi todos. */
+.instrucciones {
+  padding: 8px 10px;
+  border: 0.5px solid var(--dsw-alias-border-l2);
+  border-radius: 8px;
+  background: var(--dsw-alias-bg-layer-1);
+  color: var(--dsw-alias-label-primary);
+  font-family: var(--ds-font-family-code);
+  font-size: 12px;
+  line-height: 1.5;
+  resize: vertical;
+}
+
+.botones {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}

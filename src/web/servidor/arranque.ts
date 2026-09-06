@@ -32,7 +32,10 @@ import { existsSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { IncomingMessage, ServerResponse } from "node:http";
+import { homedir } from "node:os";
 import type { Acto } from "../../core/actos.js";
+import { escribirAgente, leerAgente, type Agente } from "../../core/agentes.js";
+import { borrarAgente, cargarAgentes, guardarAgente } from "../../agent/agentesEnDisco.js";
 import {
   parsear,
   PROVEEDORES,
@@ -320,6 +323,81 @@ export function montarRutas(
    */
   const emitirModelos = (): void => emitir(mensajeDeModelos());
 
+  /**
+   * Los subagentes en vigor, compuestos pero sin mandar.
+   *
+   * `cargarAgentes` cada vez y no una lista cacheada: los `.md` se pueden editar a mano con
+   * la consola abierta, y una lista congelada al arrancar haría que el usuario creyera que
+   * su cambio no se aplicó — que es exactamente lo que pasa con el agente, que también los
+   * relee en cada construcción.
+   */
+  const mensajeDeAgentes = (): MensajeAlCliente => {
+    const abierto = vestibulo.proyectoAbierto();
+    const { agentes, problemas } = cargarAgentes(abierto?.raiz);
+    return {
+      clase: "agentes",
+      agentes: agentes.map((a) => ({
+        nombre: a.nombre,
+        descripcion: a.descripcion,
+        motor: a.motor,
+        ...(a.modelo === undefined ? {} : { modelo: a.modelo }),
+        soloLectura: a.soloLectura,
+        skills: a.skills,
+        instrucciones: a.instrucciones,
+        origen: a.origen,
+      })),
+      problemas,
+    };
+  };
+
+  const emitirAgentes = (): void => emitir(mensajeDeAgentes());
+
+  /**
+   * Alta, cambio y borrado de un subagente.
+   *
+   * El ÁMBITO decide la carpeta, y viene del cliente en vez de deducirse: con un proyecto
+   * abierto valen las dos, y adivinar cuál quiere el usuario es cómo un «revisor» pensado
+   * para todos los proyectos acaba escondido en uno. Sin proyecto abierto solo cabe el
+   * global, y pedir el de proyecto se dice en vez de escribirlo en cualquier sitio.
+   */
+  const atenderAgente = (mensaje: Extract<MensajeDelCliente, { clase: "agente" }>): void => {
+    const abierto = vestibulo.proyectoAbierto();
+    if (mensaje.ambito === "proyecto" && abierto === undefined) {
+      informar("no hay ningún proyecto abierto: ese subagente solo se puede guardar como global");
+      return;
+    }
+    const base = mensaje.ambito === "proyecto" ? abierto!.raiz : homedir();
+    try {
+      if (mensaje.accion === "borrar") {
+        informar(
+          borrarAgente(base, mensaje.agente.nombre)
+            ? `subagente «${mensaje.agente.nombre}» borrado`
+            : `«${mensaje.agente.nombre}» no existía en ${mensaje.ambito}`
+        );
+      } else {
+        // Se valida escribiendo Y VOLVIENDO A LEER, no confiando en el formulario: es el
+        // mismo fichero que se puede editar a mano, así que el cargador es la única
+        // autoridad sobre si vale. Si no pasara, el agente desaparecería al siguiente
+        // arranque sin que nadie hubiera hecho nada raro.
+        const candidato = {
+          ...mensaje.agente,
+          motor: mensaje.agente.motor as Agente["motor"],
+          origen: mensaje.ambito,
+        } as Agente;
+        const comprobado = leerAgente(candidato.nombre, escribirAgente(candidato), mensaje.ambito);
+        if ("error" in comprobado) {
+          informar(`no se guarda «${candidato.nombre}»: ${comprobado.error}`);
+          return;
+        }
+        guardarAgente(base, candidato);
+        informar(`subagente «${candidato.nombre}» guardado en ${mensaje.ambito}`);
+      }
+    } catch (error) {
+      informar(error instanceof Error ? error.message : String(error));
+    }
+    emitirAgentes();
+  };
+
   /** El mensaje de modelos, compuesto pero sin mandar: `adjuntar` se lo da SOLO al cliente
    *  que acaba de llegar, y el resto de sitios lo emite a todos. */
   const mensajeDeModelos = (): MensajeAlCliente => {
@@ -371,6 +449,10 @@ export function montarRutas(
     for (const cliente of destinatarios) actos = destino.conectar(cliente);
 
     const modelos = mensajeDeModelos();
+    // Los subagentes van en la ráfaga por lo mismo que los modelos: la ventana de ajustes
+    // se puede abrir en cuanto conecta, y sin esto enseñaría una lista vacía hasta que algo
+    // los cambiara — que es indistinguible de «no tienes ninguno».
+    const agentes = mensajeDeAgentes();
     for (const cliente of destinatarios) {
       // El orden importa: primero el transcript, luego lo que el compositor necesita para
       // sugerir, y al final el estado de modelos que pinta su disparador. Al reconectar se
@@ -379,6 +461,7 @@ export function montarRutas(
       cliente({ clase: "reemision", actos: [...actos] });
       cliente({ clase: "comandos", comandos: comandosDelRegistro() });
       cliente(modelos);
+      cliente(agentes);
       // Y si hay turno corriendo, se dice: quien conecta a mitad no vio el mensaje que lo
       // anunció, y sin esto vería el compositor encendido y sin borde —«no pasa nada»—
       // mientras lo que escribiera se quedaba en la cola.
@@ -977,6 +1060,12 @@ export function montarRutas(
     }
     if (typeof mensaje === "object" && mensaje !== null && mensaje.clase === "modelo") {
       atenderModelo(mensaje.id);
+      respuesta.writeHead(204);
+      respuesta.end();
+      return;
+    }
+    if (typeof mensaje === "object" && mensaje !== null && mensaje.clase === "agente") {
+      atenderAgente(mensaje);
       respuesta.writeHead(204);
       respuesta.end();
       return;

@@ -9,8 +9,10 @@ import {
   IconLightOutline16,
   IconFollowsystemOutline16,
   IconDataOutline16,
+  IconUserOutline16,
 } from "@deepseek-ai/dsh-client-ui-primitives";
-import type { ProveedorDeModelos } from "../tipos.js";
+import type { AgenteDelCable, ProveedorDeModelos } from "../tipos.js";
+import { Agentes } from "./Agentes.js";
 import { Pregunta } from "./Pregunta.js";
 import { urlDeEntornoAceptable, AVISO_DE_URL } from "./Wizard.js";
 import { PROYECTOS_POR_OMISION } from "./Barra.js";
@@ -43,7 +45,7 @@ import estilos from "./Ajustes.module.css";
  * pregunta: dentro de la fila que se está editando, para que no aparezca detrás de la
  * ventana.
  */
-export type SeccionDeAjustes = "apariencia" | "modelos" | "entornos";
+export type SeccionDeAjustes = "apariencia" | "modelos" | "entornos" | "agentes";
 
 /**
  * Las tres secciones, en el orden del rediseño —Modelos primero, que además es la que se
@@ -63,6 +65,7 @@ const SECCIONES: readonly {
   { id: "modelos", etiqueta: "Modelos", Icono: IconSparkle16 },
   { id: "apariencia", etiqueta: "Apariencia", Icono: IconDarkOutline16 },
   { id: "entornos", etiqueta: "Entornos", Icono: IconDataOutline16 },
+  { id: "agentes", etiqueta: "Subagentes", Icono: IconUserOutline16 },
 ];
 
 export type Apariencia = "sistema" | "claro" | "oscuro";
@@ -93,6 +96,10 @@ export function Ajustes({
   apariencia,
   secreto,
   alCambiarApariencia,
+  agentes,
+  hayProyecto,
+  alGuardarAgente,
+  alBorrarAgente,
   alPedirClave,
   alBorrarClave,
   alRegistrarEntorno,
@@ -113,6 +120,13 @@ export function Ajustes({
   proyectos?: readonly { id: string; nombre: string }[];
   entornoActivo?: string;
   apariencia: Apariencia;
+  /** Los subagentes y los `.md` ilegibles. Ausente = todavía no llegó el mensaje, que NO es
+   *  lo mismo que «no hay ninguno»: la sección lo distingue y lo dice. */
+  agentes?: { lista: readonly AgenteDelCable[]; problemas: readonly string[] };
+  /** Si hay proyecto abierto, para poder ofrecer el ámbito «de este proyecto». */
+  hayProyecto: boolean;
+  alGuardarAgente: (agente: AgenteDelCable, ambito: "global" | "proyecto") => void;
+  alBorrarAgente: (nombre: string, ambito: "global" | "proyecto") => void;
   /** La pregunta oculta en vuelo, si la hay: se pinta DENTRO de la fila que se edita. */
   secreto?: string;
   alCambiarApariencia: (apariencia: Apariencia) => void;
@@ -407,6 +421,18 @@ export function Ajustes({
                   Registrar
                 </Button>
               </form>
+            </>
+          ) : null}
+
+          {seccion === "agentes" ? (
+            <>
+              <h2 className={estilos.encabezado}>Subagentes</h2>
+              <Agentes
+                {...(agentes === undefined ? {} : { agentes: agentes.lista, problemas: agentes.problemas })}
+                hayProyecto={hayProyecto}
+                alGuardar={alGuardarAgente}
+                alBorrar={alBorrarAgente}
+              />
             </>
           ) : null}
         </div>

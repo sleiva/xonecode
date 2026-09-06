@@ -20,6 +20,7 @@ import type {
   MensajeAlCliente,
   PasoDelWizard,
   FicheroTocado,
+  AgenteDelCable,
   ProveedorDeModelos,
   SelectorDeConsola,
 } from "./tipos.js";
@@ -35,6 +36,9 @@ export interface EstadoDelCliente {
    * reconexión lo vuelve a traer entero.
    */
   modelos?: { actual?: string; proveedores: ProveedorDeModelos[] };
+  /** Los subagentes y los `.md` que no se pudieron leer. Ausente = todavía no ha llegado el
+   *  mensaje, que NO es lo mismo que «no hay ninguno»: la ventana lo distingue. */
+  agentes?: { lista: AgenteDelCable[]; problemas: string[] };
   /** Hay un turno corriendo AHORA. Lo dice el servidor; el cliente no lo deduce. */
   turnoEnVuelo?: boolean;
   /**
@@ -156,6 +160,21 @@ function esSelector(valor: unknown): valor is SelectorDeConsola {
 }
 
 /** Un proveedor del mensaje «modelos», comprobado campo a campo como todo lo que entra. */
+/** Un agente del cable, comprobado campo a campo: lo que llega por HTTP no se cree. */
+function esAgenteDelCable(valor: unknown): valor is AgenteDelCable {
+  const a = valor as Partial<AgenteDelCable> | null;
+  return (
+    typeof a === "object" &&
+    a !== null &&
+    typeof a.nombre === "string" &&
+    typeof a.descripcion === "string" &&
+    typeof a.motor === "string" &&
+    typeof a.soloLectura === "boolean" &&
+    Array.isArray(a.skills) &&
+    typeof a.instrucciones === "string"
+  );
+}
+
 function esProveedorDeModelos(valor: unknown): valor is ProveedorDeModelos {
   if (typeof valor !== "object" || valor === null) return false;
   const p = valor as { id?: unknown; credencial?: unknown; modelos?: unknown; error?: unknown };
@@ -333,6 +352,31 @@ export function crearStoreDelCliente(): {
               // fila inventada.
               ...(typeof m.actual === "string" ? { actual: m.actual } : {}),
               proveedores,
+            },
+          });
+          return;
+        }
+        case "agentes": {
+          const m = mensaje as { agentes?: unknown; problemas?: unknown };
+          if (!Array.isArray(m.agentes)) return;
+          // Se copia campo a campo y no con un `spread` del mensaje: es lo que impide que
+          // un campo de más que alguien añada mañana al servidor entre en el estado del
+          // cliente sin que nadie lo haya decidido. Misma postura que `proveedores`.
+          mutar({
+            agentes: {
+              lista: m.agentes.filter(esAgenteDelCable).map((a) => ({
+                nombre: a.nombre,
+                descripcion: a.descripcion,
+                motor: a.motor,
+                ...(a.modelo === undefined ? {} : { modelo: a.modelo }),
+                soloLectura: a.soloLectura,
+                skills: [...a.skills],
+                instrucciones: a.instrucciones,
+                ...(a.origen === undefined ? {} : { origen: a.origen }),
+              })),
+              problemas: Array.isArray(m.problemas)
+                ? m.problemas.filter((x): x is string => typeof x === "string")
+                : [],
             },
           });
           return;
@@ -523,6 +567,10 @@ export function crearStoreDelCliente(): {
         // vez al volver.
         ficheros: undefined,
         parches: undefined,
+        // Los subagentes salen de ficheros en disco: mientras no hay cable pueden haberse
+        // editado a mano, y la ventana de ajustes enseñaría una lista que ya no es. La
+        // reconexión los trae enteros en la misma ráfaga que los modelos.
+        agentes: undefined,
       });
     },
 

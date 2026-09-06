@@ -371,6 +371,41 @@ del lazo, una vuelta que se iba por un `continue` se la dejaba puesta y la sigui
 —otro proveedor— la escribía como suya (medido con `auth.json` roto: la clave de openai
 se intentaba guardar bajo ollama, que ni pide credencial).
 
+**Los subagentes son FICHEROS, y se configuran desde Ajustes** (`core/agentes.ts`,
+`agent/agentesEnDisco.ts`, `componentes/Agentes.tsx`). Uno es un `.md` con frontmatter en
+`.xonecode/agentes/<nombre>.md`: `descripcion`, `motor` (`modelo` | `claude-code` | `codex`),
+`modelo`, `soloLectura`, `skills`, y el cuerpo con sus instrucciones. Los cuatro
+especialistas de siempre —`docs`, `planner`, `dev`, `mockup`— dejaron de estar a fuego en
+`perfiles.ts` y son ahora esos mismos ficheros, sembrados en el arranque. Reglas duras:
+- **Las de XOne no salen del fichero.** `REGLAS_XONE` se antepone SIEMPRE desde código a
+  todo subagente. Un agente que no sepa que XOne ignora en silencio lo desconocido escribe
+  un atributo inventado y no da error: da un bug mudo. Poder quitarlas editando un `.md`
+  convertiría el invariante en una preferencia. Igual de estructurales, y por lo mismo, el
+  aviso de las skills que faltan y la línea de que las escrituras se aprueban.
+- **El nombre sale del FICHERO**, no del frontmatter: la unicidad la garantiza el sistema de
+  ficheros, y renombrar el agente es renombrar el fichero — sin dos sitios que discrepen.
+  Por eso la ventana no deja cambiar el nombre al editar.
+- **Sin `descripcion` no se carga**: es lo que el orquestador lee para decidir cuándo
+  delegar, no un rótulo. Y **`soloLectura` solo es cierto con exactamente «true»** — la
+  trampa del `"false"` de CloudStudio, que aquí concedería ESCRITURA.
+- **Se siembra UNA VEZ y la marca es la carpeta.** «Escribe los que falten» resucitaría un
+  agente borrado en el siguiente arranque, o sea convertiría el botón de eliminar en uno que
+  no hace nada hasta que reinicias.
+- **El prompt del orquestador se GENERA** de la lista (`xoneAgent.ts#promptOrquestador`): la
+  constante que nombraba a los cuatro a pelo se queda mintiendo el día que alguien borre uno.
+  La regla del encadenado de diagramas solo se escribe si existen los dos agentes de los que
+  habla, y sin ningún especialista el prompt lo DICE.
+- **El ámbito se elige, no se adivina** (`global` o `proyecto`): con proyecto abierto valen
+  los dos, y decidir por el usuario es cómo un «revisor» pensado para todos acaba escondido
+  en uno. El de proyecto pisa al global del mismo nombre, igual que los modelos.
+- **Lo que se guarda desde la ventana vuelve a pasar por el CARGADOR** antes de escribirse:
+  el mismo fichero se edita a mano, así que la autoridad sobre si vale es el cargador y no
+  el formulario — si no, un agente podría desaparecer al siguiente arranque sin que nadie
+  hubiera hecho nada raro.
+- Un `.md` roto NO tumba nada: se salta, y su motivo viaja por el cable hasta la ventana.
+  Quien lo tiene que arreglar está mirando ahí, y un agente que no aparece sin explicación
+  se lee como que la aplicación lo perdió.
+
 **La ventana de ajustes** (`apps/web/src/componentes/Ajustes.tsx`), con la disposición del
 panel del harness: navegación a la izquierda y UNA sección a la vista — apariencia, modelos
 y entornos. Tres ausencias deliberadas, todas por la misma regla («un control sin dato

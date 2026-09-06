@@ -147,6 +147,10 @@ describe("montarRutas — el cable, por fin conectado", () => {
       "reemision",
       "comandos",
       "modelos",
+      // Los subagentes van aquí por lo mismo que los modelos: la ventana de ajustes se
+      // puede abrir en cuanto conecta, y sin esto enseñaría una lista vacía hasta que algo
+      // los cambiara — indistinguible de «no tienes ninguno».
+      "agentes",
       // Y si hay turno corriendo, se dice: quien conecta a mitad no vio el mensaje que lo
       // anunció, y su compositor se quedaría encendido mientras lo que escriba se encola.
       "turno",
