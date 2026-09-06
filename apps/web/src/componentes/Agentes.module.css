@@ -117,26 +117,52 @@
   font-size: 12px;
 }
 
+/*
+ * El botón de contorno, vestido aquí y no heredado del paquete.
+ *
+ * Su `variant="outline"` llega BLANCO en tema oscuro —medido: «Nuevo subagente» salía como
+ * una caja blanca sobre el panel—, así que la hoja copiada no cubre ese caso. Se le ponen
+ * los mismos alias que `Ajustes.module.css#accion`, que es el botón de al lado en la misma
+ * ventana: son el mismo control y tienen que ser el mismo botón, no dos que se parecen.
+ */
 .accion {
   flex: none;
+  padding: 6px 10px;
+  border: 0.5px solid var(--dsw-alias-border-l2);
+  border-radius: 8px;
+  background: var(--dsw-alias-bg-layer-1);
+  color: var(--dsw-alias-label-primary);
+  font: inherit;
   font-size: 12px;
+  cursor: pointer;
 }
 
-/* Los dos de la fila, en icono. Sin borde ni fondo hasta el `:hover`: son acciones de una
-   fila que se repite cinco veces, y con marco cada una la lista se convertía en una rejilla
-   de botones donde el nombre del subagente era lo que menos pesaba. */
+.accion:hover {
+  background: var(--dsw-alias-interactive-bg-hover);
+}
+
+/*
+ * Los dos de la fila, en icono. CON borde y superficie en reposo, no solo al `:hover`.
+ *
+ * La primera versión iba plana —sin marco, en `label-tertiary`— para no convertir la lista
+ * en una rejilla de botones. Medido en pantalla: se pasó de largo. Un control que no se ve
+ * como control no invita a pulsarlo, que es exactamente lo que `marca.css` documenta de los
+ * botones de copiar («llegan planos… y desde fuera no se ve que sean botones»). El icono es
+ * lo que quita el ruido de dos rótulos repetidos por fila; el marco es lo que hace que se
+ * sepa que se pueden pulsar. Son cosas distintas y se pueden tener las dos.
+ */
 .icono {
   display: inline-flex;
   align-items: center;
   justify-content: center;
   flex: none;
-  width: 28px;
-  height: 28px;
+  width: 32px;
+  height: 32px;
   padding: 0;
-  border: none;
+  border: 0.5px solid var(--dsw-alias-border-l2);
   border-radius: 8px;
-  background: none;
-  color: var(--dsw-alias-label-tertiary);
+  background: var(--dsw-alias-bg-layer-1);
+  color: var(--dsw-alias-label-secondary);
   cursor: pointer;
 }
 
@@ -148,6 +174,7 @@
 /* El de borrar se tiñe de rojo AL PASAR POR ENCIMA, no en reposo: en reposo sería una fila
    con una alarma permanente; al apuntarlo, es lo que avisa antes de pulsar. */
 .iconoDestructivo:hover {
+  border-color: var(--dsw-alias-state-error-primary);
   background: var(--dsw-alias-state-error-secondary);
   color: var(--dsw-alias-state-error-primary);
 }
@@ -177,6 +204,36 @@
   gap: 5px;
 }
 
+/*
+ * El `<input>` de dentro del `<Input>` del paquete, vestido a mano.
+ *
+ * Dos cosas, y las dos medidas en tema oscuro: llegaba BLANCO —su hoja no cubre ese tema, lo
+ * mismo que le pasa a la variante `outline` del botón— y se quedaba con su ancho por
+ * omisión en vez de ocupar la fila, así que la ventana era una columna de cajas estrechas.
+ * La clase va en el componente y no en el `input`, de ahí el descendiente.
+ *
+ * `box-sizing: border-box` no es opcional: en este cliente NO hay reset global de
+ * `box-sizing` —lo ponen una a una las hojas copiadas—, y sin él un `width: 100%` con
+ * padding se sale de su caja. Es la misma línea que arregló el solape del botón
+ * «Responder» en `Pregunta.module.css`.
+ */
+.campo input {
+  box-sizing: border-box;
+  width: 100%;
+  padding: 7px 10px;
+  border: 0.5px solid var(--dsw-alias-border-l2);
+  border-radius: 8px;
+  background: var(--dsw-alias-bg-layer-1);
+  color: var(--dsw-alias-label-primary);
+  font: inherit;
+  font-size: 12px;
+}
+
+.campo input:disabled {
+  color: var(--dsw-alias-label-tertiary);
+  cursor: not-allowed;
+}
+
 .rotulo {
   color: var(--dsw-alias-label-secondary);
   font-size: 12px;
@@ -192,6 +249,8 @@
 }
 
 .selector {
+  box-sizing: border-box;
+  width: 100%;
   padding: 6px 8px;
   border: 0.5px solid var(--dsw-alias-border-l2);
   border-radius: 8px;
@@ -204,6 +263,8 @@
 /* Mono: el cuerpo de un `.md` es un prompt que se escribe y se relee como texto plano, y la
    proporcional disimula la sangría de las listas que llevan casi todos. */
 .instrucciones {
+  box-sizing: border-box;
+  width: 100%;
   padding: 8px 10px;
   border: 0.5px solid var(--dsw-alias-border-l2);
   border-radius: 8px;
@@ -233,4 +294,34 @@
   color: var(--dsw-alias-state-warn-label);
   font-size: 12px;
   line-height: 1.5;
+}
+
+
+/* La acción que confirma: el primario del tema, que `estilos/marca.css` dejó de secuestrar
+   con el cian — negro en claro, casi blanco en oscuro, con su etiqueta invertida. Se
+   escribe aquí por lo mismo que `.accion`: la variante del paquete no cubre el tema oscuro
+   y hay que decirle los alias. */
+.principal {
+  flex: none;
+  padding: 6px 12px;
+  border: 0.5px solid var(--dsw-alias-button-primary-fill);
+  border-radius: 8px;
+  background: var(--dsw-alias-button-primary-fill);
+  color: var(--dsw-alias-label-primary-inverted);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.principal:hover {
+  background: var(--dsw-alias-button-primary-hover);
+  border-color: var(--dsw-alias-button-primary-hover);
+}
+
+/* Deshabilitado se ve deshabilitado: sin esto el botón sigue pareciendo pulsable y el
+   usuario cree que la ventana no responde, en vez de que le falta rellenar algo. */
+.principal:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
 }

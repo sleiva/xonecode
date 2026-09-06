@@ -70,7 +70,17 @@
   min-width: 0;
 }
 
+/*
+ * `box-sizing: border-box` es LA línea que arregla el solape, y hay que decir por qué: en
+ * este cliente NO hay un reset global de `box-sizing` —lo ponen una a una las hojas
+ * copiadas (`AppFrame`, `Rows`, `SidebarRoot`…), no un `*` de arriba—, así que un
+ * `width: 100%` con `padding: 8px 10px` y un borde daba 100% + 21 px: el campo se salía de
+ * su caja por la derecha y se metía DEBAJO del botón «Responder». Medido en la fila de un
+ * proveedor de Ajustes, dos veces — la primera lo achaqué al reparto flex de la fila, que
+ * también hacía falta pero no era esto.
+ */
 .envoltorio input {
+  box-sizing: border-box;
   width: 100%;
   padding: 8px 10px;
   border: 0.5px solid var(--dsw-alias-border-l2);

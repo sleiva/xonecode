@@ -181,7 +181,7 @@ export function Agentes({
                     setCreando(false);
                   }}
                 >
-                  <IconEditOutline16 size={16} />
+                  <IconEditOutline16 size={18} />
                 </button>
                 <button
                   type="button"
@@ -190,7 +190,7 @@ export function Agentes({
                   title="Eliminar"
                   onClick={() => setBorrando(borrando === a.nombre ? undefined : a.nombre)}
                 >
-                  <IconTrashOutline16 size={16} />
+                  <IconTrashOutline16 size={18} />
                 </button>
               </div>
               <p className={estilos.descripcion}>{a.descripcion}</p>
@@ -364,8 +364,16 @@ export function Agentes({
             <Button variant="outline" className={estilos.accion} onClick={cerrar}>
               Cancelar
             </Button>
+            {/*
+              El `variant` va EXPLÍCITO en los dos. Sin él, el `<Button>` del paquete cae en
+              su variante por omisión, que en tema oscuro llega blanca — «Guardar» y
+              «Cancelar» salían los dos como cajas blancas y no se distinguía cuál era cuál.
+              Guardar es la acción de la pantalla y lleva el primario (que desde el rediseño
+              es el negro del tema en claro y el casi blanco en oscuro); cancelar, contorno.
+            */}
             <Button
-              className={estilos.accion}
+              variant="primary"
+              className={estilos.principal}
               // Sin nombre ni descripción el servidor lo rechazaría: es más honesto no
               // dejar pulsar que aceptar y contestar que no.
               disabled={editando.nombre.trim() === "" || editando.descripcion.trim() === ""}
