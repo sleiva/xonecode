@@ -50,6 +50,26 @@ const VERBO: Record<string, string> = {
   regex_search: "regex",
 };
 
+/**
+ * Una línea del colapsador, con la tool de la que habla.
+ *
+ * El texto ya no viaja solo porque quien pinta necesita saber DE QUÉ es la línea sin
+ * re-parsear la prosa: «→ lee» no dice `read_file` en ninguna parte, y deducirlo del icono
+ * sería reconstruir a mano el mapa que está diez líneas más arriba — con la garantía de que
+ * las dos copias divergen el día que alguien añada un verbo. El nombre ya lo tenía el
+ * evento; lo que se arregla es que dejara de estar al llegar a la piel.
+ *
+ * `nombre` es el de la tool de la RACHA que la línea cuenta, que en un cierre es la
+ * ANTERIOR y no la que acaba de llegar — es justo el caso que un `piel.tool(evento)`
+ * ingenuo habría etiquetado mal.
+ */
+export interface LineaDeTool {
+  texto: string;
+  nombre: string;
+  /** Presente solo en la línea de un error, que nunca se colapsa. */
+  error?: string;
+}
+
 /** `→ lee app.xne` para una conocida; `⚙ studio_edit_file` para el resto. */
 function frase(nombre: string, detalle?: string): string {
   const icono = ICONO[nombre];
@@ -75,14 +95,18 @@ export class Colapsador {
   private detalles: string[] = [];
 
   /** Las líneas que toca escribir por este evento, EN ORDEN. 0, 1 o 2. */
-  lineas(evento: EventoTool): string[] {
-    const salida: string[] = [];
+  lineas(evento: EventoTool): LineaDeTool[] {
+    const salida: LineaDeTool[] = [];
 
     if (evento.error) {
       // Cierra la racha en curso y canta el error aparte, sin colapsar.
       const pendiente = this.cerrarRacha();
       if (pendiente) salida.push(pendiente);
-      salida.push(`✗ ${frase(evento.nombre, evento.detalle).slice(2)}: ${evento.error}`);
+      salida.push({
+        texto: `✗ ${frase(evento.nombre, evento.detalle).slice(2)}: ${evento.error}`,
+        nombre: evento.nombre,
+        error: evento.error,
+      });
       return salida;
     }
 
@@ -97,24 +121,27 @@ export class Colapsador {
     this.nombre = evento.nombre;
     this.cuenta = 1;
     this.detalles = evento.detalle === undefined ? [] : [evento.detalle];
-    salida.push(frase(evento.nombre, evento.detalle));
+    salida.push({ texto: frase(evento.nombre, evento.detalle), nombre: evento.nombre });
     return salida;
   }
 
   /** La cuenta de la última racha. Se llama al terminar el turno, incluso si reventó. */
-  cierre(): string | null {
+  cierre(): LineaDeTool | null {
     return this.cerrarRacha();
   }
 
-  private cerrarRacha(): string | null {
+  private cerrarRacha(): LineaDeTool | null {
     // Una racha de 1 ya se anunció al abrirla: repetirla como "×1" es ruido.
     if (this.cuenta <= 1) {
       this.reiniciar();
       return null;
     }
     const base = frase(this.nombre);
-    const cierre =
+    const texto =
       this.detalles.length > 0 ? `${base} ×${this.cuenta} — ${listaDe(this.detalles)}` : `${base} ×${this.cuenta}`;
+    // El nombre se lee ANTES de reiniciar: es el de la racha que se cierra, no el de la
+    // que viene.
+    const cierre: LineaDeTool = { texto, nombre: this.nombre };
     this.reiniciar();
     return cierre;
   }

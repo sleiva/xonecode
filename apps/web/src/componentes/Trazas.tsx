@@ -34,6 +34,12 @@ export type TipoDeFila =
   | "asistente"
   | "razonamiento"
   | "tool"
+  /** Una línea de tool que FALLÓ. Se separa de `tool` para que tenga su propio color: en un
+   *  turno de cuarenta líneas, la que reventó es la única que se viene a buscar. */
+  | "toolError"
+  /** Un paso del motor —plan, tarea, verificación— que viaja por el MISMO canal que las
+   *  tools pero no es una llamada a nada. Antes se etiquetaba «TOOL», que era falso. */
+  | "paso"
   | "sistema"
   | "fase"
   | "fin"
@@ -52,6 +58,13 @@ export interface FilaDeTrazas {
   turno: number;
   /** Solo donde el acto lo trae: `fase` y `fin`. Ausente NO es cero. */
   ms?: number;
+  /** La tool que produjo la línea, cuando se sabe. Ausente en todo lo que no es una tool
+   *  —y también en las sesiones guardadas ANTES de que el acto lo llevara. */
+  nombre?: string;
+  /** El motivo del fallo, si la llamada falló. */
+  error?: string;
+  /** La categoría de la fase (`core/events.ts#Fase`), aparte de su texto en español. */
+  fase?: string;
 }
 
 const LARGO_MAXIMO_DE_FILA = 200;
@@ -65,8 +78,13 @@ function aUnaLinea(texto: string): string {
 /** Lo que cada acto aporta ANTES de numerarlo y asignarle turno, que es cosa del recorrido. */
 type FilaCruda = Omit<FilaDeTrazas, "indice" | "turno">;
 
-function cruda(tipo: TipoDeFila, etiqueta: string, texto: string, ms?: number): FilaCruda {
-  return { tipo, etiqueta, texto: aUnaLinea(texto), completo: texto, ...(ms === undefined ? {} : { ms }) };
+function cruda(
+  tipo: TipoDeFila,
+  etiqueta: string,
+  texto: string,
+  extra: Partial<Pick<FilaDeTrazas, "ms" | "nombre" | "error" | "fase">> = {}
+): FilaCruda {
+  return { tipo, etiqueta, texto: aUnaLinea(texto), completo: texto, ...extra };
 }
 
 /**
@@ -86,18 +104,39 @@ function filasDe(acto: Acto): FilaCruda[] {
       // su propia etiqueta para no confundirlo con lo que dijo.
       return [cruda("razonamiento", "PIENSA", acto.texto)];
     case "herramientas":
-      return acto.lineas.map((linea) => cruda("tool", "TOOL", linea));
+      return acto.lineas.map((linea, i) => {
+        // `detalles` AUSENTE y `detalles[i]` VACÍO no son lo mismo, y la diferencia se
+        // pinta: ausente es una sesión guardada antes de que el acto llevara la estructura
+        // —no se sabe de qué es la línea, y se deja la etiqueta genérica de siempre—;
+        // vacío es «esta línea no vino de una tool», que sí se sabe y se dice («PASO»:
+        // por este canal pasan también el plan, las tareas y la verificación).
+        const d = acto.detalles?.[i];
+        if (d === undefined) return cruda("tool", "TOOL", linea);
+        if (d.nombre === undefined) return cruda("paso", "PASO", linea);
+        return cruda(d.error === undefined ? "tool" : "toolError", d.nombre, linea, {
+          nombre: d.nombre,
+          ...(d.error === undefined ? {} : { error: d.error }),
+        });
+      });
     case "sistema":
       return [cruda("sistema", "SISTEMA", acto.texto)];
     case "fase":
-      return [cruda("fase", "FASE", acto.texto, acto.ms)];
+      // La etiqueta lleva la CATEGORÍA cuando el acto la trae: «VERIFICANDO» dice más que
+      // «FASE», y no hay que re-parsear la prosa para saberlo. Sin ella —sesión anterior—
+      // se queda la genérica, que es lo honesto: no se sabe de qué fase es.
+      return [
+        cruda("fase", acto.fase === undefined ? "FASE" : acto.fase.toUpperCase(), acto.texto, {
+          ms: acto.ms,
+          ...(acto.fase === undefined ? {} : { fase: acto.fase }),
+        }),
+      ];
     case "fin":
       return [
         cruda(
           "fin",
           "FIN",
           acto.modelo !== undefined ? `${acto.modelo} · ${acto.ms} ms` : `${acto.ms} ms`,
-          acto.ms
+          { ms: acto.ms }
         ),
       ];
     case "error":
@@ -176,8 +215,13 @@ export function Trazas({ actos }: { actos: readonly Acto[] }) {
   const visibles = useMemo(() => {
     const aguja = normalizar(busqueda.trim());
     if (aguja === "") return filas;
-    return filas.filter(
-      (f) => normalizar(f.completo).includes(aguja) || normalizar(f.etiqueta).includes(aguja)
+    // Se busca también en el nombre de la tool y en el motivo del error: son lo que se
+    // teclea cuando se viene aquí («write_file», «ENOENT»), y el primero puede no estar en
+    // el texto de la línea —«→ lee app.xne» no dice `read_file` en ninguna parte.
+    return filas.filter((f) =>
+      [f.completo, f.etiqueta, f.nombre ?? "", f.error ?? ""].some((c) =>
+        normalizar(c).includes(aguja)
+      )
     );
   }, [filas, busqueda]);
 
@@ -318,9 +362,20 @@ export function Trazas({ actos }: { actos: readonly Acto[] }) {
               </button>
             </div>
             {pestanaDetalle === "resumen" ? (
+              detalle.error === undefined ? (
               // El texto ENTERO, que es lo que el panel aporta: la tabla recorta a 200 y el
               // chat corta las rachas de herramientas a cuatro líneas.
-              <pre className={estilos.completo}>{detalle.completo}</pre>
+                <pre className={estilos.completo}>{detalle.completo}</pre>
+              ) : (
+                <>
+                  {/* El fallo, aparte y con su color: en la línea va detrás de la ruta y
+                      con cuarenta líneas alrededor se pierde. */}
+                  <p className={estilos.fallo} role="alert">
+                    {detalle.nombre} falló: {detalle.error}
+                  </p>
+                  <pre className={estilos.completo}>{detalle.completo}</pre>
+                </>
+              )
             ) : (
               <div className={estilos.tiempos}>
                 {detalle.ms === undefined ? (

@@ -19,8 +19,9 @@
  */
 import type { Piel } from "../../core/turno.js";
 import type { Acto } from "../../core/actos.js";
-import { conLineaDeTool } from "../../core/actos.js";
-import type { PendienteDeAprobacion } from "../../core/events.js";
+import { conLlamadaDeTool } from "../../core/actos.js";
+import type { DetalleDeLinea } from "../../core/actos.js";
+import type { Fase, PendienteDeAprobacion } from "../../core/events.js";
 
 export interface PielWeb {
   piel: Piel;
@@ -53,7 +54,7 @@ const MS_ENTRE_PARCIALES = 80;
 export function crearPielWeb(ahora: () => number = Date.now): PielWeb {
   const lista: Acto[] = [];
   let colchon = "";
-  let faseActiva: { texto: string; t0: number } | undefined;
+  let faseActiva: { texto: string; t0: number; fase?: Fase } | undefined;
   /** Hay un acto de asistente A MEDIAS al final de la lista, que los tokens siguientes
    *  sustituyen en vez de anexar. */
   let parcial = false;
@@ -98,9 +99,18 @@ export function crearPielWeb(ahora: () => number = Date.now): PielWeb {
    */
   const cerrarFase = (): void => {
     if (faseActiva === undefined) return;
-    const { texto, t0 } = faseActiva;
+    const { texto, fase, t0 } = faseActiva;
     faseActiva = undefined;
-    empujar({ tipo: "fase", texto, ms: Math.max(0, Date.now() - t0) });
+    // `fase` es la CATEGORÍA (`core/events.ts#Fase`), aparte del texto en español. Va
+    // suelta y no deducida del texto porque el texto es prosa para leer —vive en
+    // `TEXTO_DE_FASE`, y reescribirlo es cosa de una tarde— y un filtro que dependiera de
+    // esa prosa se rompería sin que nada avisara.
+    empujar({
+      tipo: "fase",
+      texto,
+      ms: Math.max(0, Date.now() - t0),
+      ...(fase === undefined ? {} : { fase }),
+    });
   };
 
   const piel: Piel = {
@@ -174,18 +184,24 @@ export function crearPielWeb(ahora: () => number = Date.now): PielWeb {
       pensamiento = "";
     },
 
-    linea(texto) {
+    linea(texto, detalle: DetalleDeLinea = {}) {
       // La comprobación de fusión va ANTES de cerrar la fase, no después: con una fase
       // viva el grupo no se completa (el acto de fase se intercala primero), igual que
       // en el store — si no, una racha que arranca justo tras `fase()` se fusionaría con
       // el grupo de ANTES de la fase, borrando la frontera que el usuario vio pasar.
+      //
+      // `detalle` dice de qué tool es la línea, y VACÍO cuando no es de ninguna: por este
+      // mismo canal pasan el plan, las tareas y la verificación (`core/turno.ts` las
+      // escribe con el mismo `escribirLinea`). Se guarda igual, con el objeto vacío, para
+      // que la lista corra en paralelo a la de líneas sin huecos — un array con agujeros y
+      // otro sin ellos es cómo se desalinean.
       const ultimo = lista.at(-1);
       if (ultimo?.tipo === "herramientas" && faseActiva === undefined) {
-        sustituir({ tipo: "herramientas", lineas: conLineaDeTool(ultimo.lineas, texto) });
+        sustituir({ tipo: "herramientas", ...conLlamadaDeTool(ultimo, texto, detalle) });
         return;
       }
       cerrarFase();
-      empujar({ tipo: "herramientas", lineas: [texto] });
+      empujar({ tipo: "herramientas", lineas: [texto], detalles: [detalle] });
     },
 
     pausa(pendientes: PendienteDeAprobacion[]) {
@@ -201,11 +217,11 @@ export function crearPielWeb(ahora: () => number = Date.now): PielWeb {
       empujar({ tipo: "fin", ms });
     },
 
-    fase(texto) {
+    fase(texto, fase) {
       // Sustituye la activa sin emitir acto por ella: igual que el store, dos `fase()`
       // seguidas sin nada de por medio pierden la duración de la primera a propósito —
       // es una fase que no llegó a contar nada.
-      faseActiva = { texto, t0: Date.now() };
+      faseActiva = { texto, t0: Date.now(), ...(fase === undefined ? {} : { fase }) };
     },
 
     notificacion(texto) {

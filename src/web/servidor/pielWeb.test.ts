@@ -86,17 +86,38 @@ describe("pielWeb", () => {
     piel.razonamiento!("y otra");
     expect(actos()).toEqual([
       { tipo: "razonamiento", texto: "pienso una cosa" },
-      { tipo: "herramientas", lineas: ["read_file  src/app.xne"] },
+      { tipo: "herramientas", lineas: ["read_file  src/app.xne"], detalles: [{}] },
       // «y otra», no «pienso una cosay otra»: entre medias pasó algo.
       { tipo: "razonamiento", texto: "y otra" },
     ]);
+  });
+
+  it("cada línea guarda de QUÉ tool es, y las que no son de ninguna lo dicen callando", () => {
+    // El motor manda el detalle solo en las líneas de tool: por `linea` pasan también el
+    // plan, las tareas y la verificación. El objeto VACÍO no es un hueco — mantiene la
+    // lista alineada con la de líneas, que es lo que permite leer `detalles[i]` sin contar.
+    const { piel, actos } = crearPielWeb();
+    piel.linea("→ lee app.xne", { nombre: "read_file" });
+    piel.linea("✗ busca x: ENOENT", { nombre: "grep", error: "ENOENT" });
+    piel.linea("📋 plan de 2 tarea(s):");
+    const acto = actos()[0];
+    expect(acto).toMatchObject({
+      tipo: "herramientas",
+      detalles: [{ nombre: "read_file" }, { nombre: "grep", error: "ENOENT" }, {}],
+    });
   });
 
   it("las líneas de tool consecutivas van en UN acto de herramientas", () => {
     const { piel, actos } = crearPielWeb();
     piel.linea("read_file  src/app.xne");
     piel.linea("grep  colecciones");
-    expect(actos()).toEqual([{ tipo: "herramientas", lineas: ["read_file  src/app.xne", "grep  colecciones"] }]);
+    expect(actos()).toEqual([
+      {
+        tipo: "herramientas",
+        lineas: ["read_file  src/app.xne", "grep  colecciones"],
+        detalles: [{}, {}],
+      },
+    ]);
   });
 
   it("el cierre de una racha SUSTITUYE su apertura, no se añade detrás", () => {
@@ -106,7 +127,7 @@ describe("pielWeb", () => {
     piel.linea("→ lee src/app.xne");
     piel.linea("→ lee ×3 — src/app.xne, src/b.xne, src/c.xne");
     expect(actos()).toEqual([
-      { tipo: "herramientas", lineas: ["→ lee ×3 — src/app.xne, src/b.xne, src/c.xne"] },
+      { tipo: "herramientas", lineas: ["→ lee ×3 — src/app.xne, src/b.xne, src/c.xne"], detalles: [{}] },
     ]);
   });
 
@@ -165,9 +186,9 @@ describe("pielWeb", () => {
     piel.linea("→ lee /a");
     piel.linea("→ lee ×3 — /a");
     // Un solo acto en la lista, pero DOS avisos: el segundo es la sustitución.
-    expect(actos()).toEqual([{ tipo: "herramientas", lineas: ["→ lee ×3 — /a"] }]);
+    expect(actos()).toEqual([{ tipo: "herramientas", lineas: ["→ lee ×3 — /a"], detalles: [{}] }]);
     expect(avisos).toHaveLength(2);
-    expect(avisos[1]).toEqual({ tipo: "herramientas", lineas: ["→ lee ×3 — /a"] });
+    expect(avisos[1]).toEqual({ tipo: "herramientas", lineas: ["→ lee ×3 — /a"], detalles: [{}] });
   });
 
   it("el token NO se parte por saltos: la web renderiza markdown y el párrafo va entero", () => {

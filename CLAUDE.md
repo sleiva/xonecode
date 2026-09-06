@@ -577,14 +577,36 @@ regla. Cuatro decisiones más, todas por lo mismo:
   Por eso la fila guarda `texto` (recortado, para la tabla) y `completo` (para buscar y para
   el panel).
 
-Lo que quedaría para una fase siguiente, y **exige tocar el cable**: los actos aplanan hoy
-lo que los eventos ya distinguen — `tool` lleva `{nombre, detalle, error}` y llega como una
-línea de texto compuesta, y `Fase` es un enum cerrado de ocho valores que llega como prosa.
-Devolverles la estructura no expone ni un byte nuevo (`detalle` ya pasa por la lista blanca
-de `resumenDeTool.ts`) y daría el nombre de la tool en la etiqueta, marca en las que
-fallaron y filtro por fase. La trampa a respetar: las sesiones ya guardadas en `.jsonl`
-llevan la forma vieja, así que `reabrirSesion` tendría que tragar las dos o se rompen las
-Trazas de todo lo anterior.
+**Y los actos ya NO aplanan lo que los eventos distinguen.** El acto de `herramientas` lleva
+`detalles`, en paralelo a `lineas` (misma longitud, mismo orden), con el NOMBRE de la tool y
+su error; el de `fase` lleva la categoría del enum además de su texto. No expone ni un byte
+nuevo —`detalle` sigue sin viajar, y el nombre ya iba dentro de la propia línea—, y con eso
+la etiqueta dice `read_file` en vez de «TOOL», la llamada que falló va en rojo y la fase dice
+«VERIFICANDO». Cinco cosas que sostienen esto:
+- **El canal es `Piel.linea(texto, detalle?)`, con el segundo parámetro OPCIONAL**, y no un
+  método nuevo. Una piel que implemente `linea(texto)` lo ignora sin enterarse, así que
+  stdio y la TUI no cambian y la tubería sigue byte-idéntica — el mismo trato que `fase?` y
+  `razonamiento?`, pero sin partir el canal en dos.
+- **Las líneas del colapsador dejan de ser cadenas sueltas** (`core/notify.ts#LineaDeTool`):
+  cada una dice de qué tool habla. Hacía falta porque `→ lee` no contiene `read_file` en
+  ninguna parte, y deducirlo del icono sería reconstruir a mano el mapa de `ICONO`/`VERBO`
+  con la garantía de que las dos copias divergen. Y **el nombre de una línea de CIERRE es el
+  de la racha que se cierra, no el del evento que la provocó**: es justo el caso que un
+  `piel.tool(evento)` ingenuo habría etiquetado mal — el `glob` que cierra tres `read_file`
+  produce dos líneas y la primera es de las lecturas.
+- **`conLlamadaDeTool` fusiona las DOS listas a la vez** (`core/actos.ts`). Aplicar la regla
+  por separado es cómo se desincronizan: la sustitución del cierre de una racha quita un
+  elemento de una lista y no de la otra, y a partir de ahí cada línea lleva el detalle de su
+  vecina. Una sola función que devuelva las dos lo hace imposible por construcción.
+- **Un detalle VACÍO significa «esta línea no es de una tool»**, y se guarda igual en vez de
+  dejar un hueco. Por `linea` pasan también el plan, las tareas y la verificación
+  (`turno.ts` las escribe con el mismo `escribirLinea`), que se etiquetaban «TOOL» y no lo
+  eran: ahora se dicen «PASO». Un array con agujeros y otro sin ellos es cómo se desalinean.
+- **Ausente y vacío no son lo mismo, y es la trampa de este cambio.** Las sesiones guardadas
+  antes no traen `detalles` —`reabrirSesion` hace `JSON.parse` a pelo, así que llegan sin el
+  campo—, y ausente es «no se sabe», no «ninguna vino de una tool». Tratarlo como vacío
+  habría marcado como pasos del motor todas las herramientas de todo lo anterior; con el
+  campo ausente se conserva la etiqueta genérica de siempre. Hay test.
 
 **La barra lateral se pliega**, y el botón vive en la barra superior y no dentro de ella
 —donde lo pone el mockup— por una razón práctica: plegada, la barra no está, así que su

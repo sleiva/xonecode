@@ -85,6 +85,66 @@ describe("Trazas", () => {
     expect(screen.getByText(/no lleva tiempo/)).not.toBeNull();
   });
 
+  it("la etiqueta es el NOMBRE de la tool, y la que falló va aparte", () => {
+    // Antes todas las líneas ponían «TOOL» y no distinguían una lectura de una escritura.
+    // El nombre lo traía el evento desde siempre; lo que pasaba es que el acto lo tiraba al
+    // componer el texto de la línea, y «→ lee app.xne» no dice `read_file` en ninguna parte.
+    const filas = filasDeTrazas([
+      {
+        tipo: "herramientas",
+        lineas: ["→ lee app.xne", "✗ busca x: ENOENT", "📋 plan de 2 tarea(s):"],
+        detalles: [{ nombre: "read_file" }, { nombre: "grep", error: "ENOENT" }, {}],
+      },
+    ]);
+    expect(filas.map((f) => f.etiqueta)).toEqual(["read_file", "grep", "PASO"]);
+    expect(filas.map((f) => f.tipo)).toEqual(["tool", "toolError", "paso"]);
+    expect(filas[1].error).toBe("ENOENT");
+  });
+
+  it("una línea que NO es de una tool se dice «PASO», no «TOOL»", () => {
+    // Por el mismo canal que las tools viajan el plan, las tareas y la verificación
+    // (`core/turno.ts` las escribe con el mismo `escribirLinea`). Etiquetarlas como
+    // herramienta era afirmar que el agente llamó a algo que no llamó.
+    const filas = filasDeTrazas([
+      { tipo: "herramientas", lineas: ["▶  tarea 1/2"], detalles: [{}] },
+    ]);
+    expect(filas[0].etiqueta).toBe("PASO");
+    expect(filas[0].nombre).toBeUndefined();
+  });
+
+  it("una sesión GUARDADA antes de esto no miente: se queda con la etiqueta genérica", () => {
+    // La trampa de este cambio. Los `.jsonl` de las sesiones anteriores no traen `detalles`,
+    // y `reabrirSesion` los relee con un `JSON.parse` a pelo — así que llegan sin el campo.
+    // Ausente NO es «ninguna línea vino de una tool»: es «no se sabe». Tratarlo como vacío
+    // marcaría como pasos del motor todas las herramientas de todo lo anterior.
+    const filas = filasDeTrazas([{ tipo: "herramientas", lineas: ["→ lee app.xne"] }]);
+    expect(filas[0].etiqueta).toBe("TOOL");
+    expect(filas[0].tipo).toBe("tool");
+  });
+
+  it("la fase lleva su categoría, y sin ella se queda en la genérica", () => {
+    const con = filasDeTrazas([{ tipo: "fase", texto: "verificando el proyecto", ms: 10, fase: "verificando" }]);
+    expect(con[0].etiqueta).toBe("VERIFICANDO");
+    // Sin categoría —sesión anterior— no se deduce del texto: la prosa vive en
+    // `TEXTO_DE_FASE` y reescribirla rompería el filtro sin que nada avisara.
+    const sin = filasDeTrazas([{ tipo: "fase", texto: "verificando el proyecto", ms: 10 }]);
+    expect(sin[0].etiqueta).toBe("FASE");
+  });
+
+  it("se busca por el nombre de la tool aunque no salga en el texto de la línea", () => {
+    // «→ lee app.xne» no contiene `read_file`. Buscar solo en el texto haría que el nombre
+    // de la tool —que es justo lo que se teclea al venir aquí— no encontrara nada.
+    render(
+      <Trazas
+        actos={[
+          { tipo: "herramientas", lineas: ["→ lee app.xne"], detalles: [{ nombre: "read_file" }] },
+        ]}
+      />
+    );
+    fireEvent.change(screen.getByRole("searchbox"), { target: { value: "read_file" } });
+    expect(screen.queryByText(/Ninguna fila contiene/)).toBeNull();
+  });
+
   it("sin actos no pinta una tabla vacía: dice que no ha pasado nada", () => {
     render(<Trazas actos={[]} />);
     expect(screen.getByText(/no ha hecho nada/)).not.toBeNull();

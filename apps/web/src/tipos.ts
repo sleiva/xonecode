@@ -29,9 +29,26 @@ export type Acto =
   /** Lo que el modelo PENSÓ, cuando lo publica. Aparte de `asistente` porque no es la
    *  respuesta: se pinta apagado y plegado. */
   | { tipo: "razonamiento"; texto: string }
-  | { tipo: "herramientas"; lineas: string[] }
+  /**
+   * `detalles` corre EN PARALELO a `lineas`: misma longitud, mismo orden. Dice de qué tool
+   * es cada línea y si falló — el evento ya lo traía y el acto lo tiraba al componer el
+   * texto. No expone nada nuevo: la ruta sigue sin viajar aquí, y el nombre de la tool ya
+   * iba dentro de la propia línea.
+   *
+   * Es OPCIONAL, y su ausencia significa algo: las sesiones guardadas antes de que esto
+   * existiera no lo traen. Ausente es «esta sesión es anterior», que NO es «ninguna línea
+   * vino de una tool» — por eso no se rellena con vacíos al releer del disco, y quien pinte
+   * puede distinguir las dos cosas.
+   *
+   * Un elemento VACÍO sí quiere decir «esta línea no es de una tool»: por el mismo canal
+   * pasan las líneas de plan, de tarea y de verificación.
+   */
+  | { tipo: "herramientas"; lineas: string[]; detalles?: { nombre?: string; error?: string }[] }
   | { tipo: "sistema"; texto: string }
-  | { tipo: "fase"; texto: string; ms: number }
+  /** `fase` es la CATEGORÍA (el enum de `core/events.ts`), aparte de su texto en español:
+   *  filtrar por la prosa se rompería el día que alguien la reescriba. Opcional por lo
+   *  mismo que `detalles` — las sesiones viejas no lo traen. */
+  | { tipo: "fase"; texto: string; ms: number; fase?: string }
   | { tipo: "fin"; ms: number; modelo?: string }
   | { tipo: "error"; texto: string };
 

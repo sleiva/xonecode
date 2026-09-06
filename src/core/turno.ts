@@ -1,6 +1,7 @@
 import { Bitacora } from "./bitacora.js";
 import { Colapsador } from "./notify.js";
 import type { DomainEvent, Fase, PendienteDeAprobacion } from "./events.js";
+import type { DetalleDeLinea } from "./actos.js";
 
 /**
  * Lo que hace falta para pintar un turno. La implementan el renderizador de stdio y la TUI.
@@ -19,7 +20,17 @@ export interface Piel {
    * por una tubería, que es lo que sostiene el e2e—. Hoy solo la web lo pinta.
    */
   razonamiento?(texto: string): void;
-  linea(texto: string): void;
+  /**
+   * Cualquier cosa que no sea un token. El segundo parámetro es OPCIONAL y solo lo manda el
+   * motor cuando la línea viene de una tool: dice cuál y si falló. Una piel que implemente
+   * `linea(texto)` con un solo parámetro lo ignora sin enterarse —así stdio y la TUI no
+   * cambian y la salida por una tubería sigue siendo byte-idéntica—, y la que quiera
+   * distinguir una lectura de una escritura ya no tiene que re-parsear la prosa de la línea.
+   *
+   * Sin detalle la línea NO es de una tool: por aquí pasan también el plan, las tareas y la
+   * verificación. Marcarlas como herramienta sería etiquetar mal un paso del motor.
+   */
+  linea(texto: string, detalle?: DetalleDeLinea): void;
   pausa(pendientes: PendienteDeAprobacion[]): void;
   fin(ms: number): void;
   /**
@@ -27,7 +38,7 @@ export interface Piel {
    * y le dicta SOLO el texto — la decoración es cosa de la piel. Sin este método, la
    * fase es una línea estática más.
    */
-  fase?(texto: string): void;
+  fase?(texto: string, fase?: Fase): void;
   /**
    * Si la piel sabe reciclar avisos de sistema (el panel de notificaciones del
    * terminal), el motor le delega los `aviso` — con la línea de tokens cerrada, como
@@ -81,12 +92,13 @@ export async function correrTurno(
   let ultimoId: string | undefined;
 
   /** Cualquier cosa que no sea un token empieza su propia línea. */
-  const escribirLinea = (texto: string): void => {
+  const escribirLinea = (texto: string, detalle?: DetalleDeLinea): void => {
     if (abierta) {
       piel.cerrarLinea();
       abierta = false;
     }
-    piel.linea(texto);
+    if (detalle === undefined) piel.linea(texto);
+    else piel.linea(texto, detalle);
   };
 
   try {
@@ -127,7 +139,7 @@ export async function correrTurno(
               piel.cerrarLinea();
               abierta = false;
             }
-            piel.fase(texto);
+            piel.fase(texto, ev.fase);
           } else {
             escribirLinea(`·  ${texto}`);
           }
@@ -136,8 +148,8 @@ export async function correrTurno(
 
         case "tool":
           bitacora.anota("tool", ev.nombre);
-          for (const linea of colapsador.lineas({ nombre: ev.nombre, detalle: ev.detalle, error: ev.error })) {
-            escribirLinea(linea);
+          for (const l of colapsador.lineas({ nombre: ev.nombre, detalle: ev.detalle, error: ev.error })) {
+            escribirLinea(l.texto, { nombre: l.nombre, ...(l.error === undefined ? {} : { error: l.error }) });
           }
           break;
 
@@ -204,7 +216,7 @@ export async function correrTurno(
     // La cuenta de la última racha de tools, aunque el turno reviente: si se cayó a
     // mitad, el «×17» es justo el dato que explica dónde se quedó.
     const cierre = colapsador.cierre();
-    if (cierre) escribirLinea(cierre);
+    if (cierre) escribirLinea(cierre.texto, { nombre: cierre.nombre });
 
     // Los avisos deterministas van DESPUÉS de todo, y también si hubo excepción.
     // Por el MISMO camino que los eventos `aviso`: la piel que recicla los recibe

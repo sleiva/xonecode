@@ -163,9 +163,14 @@
   color: var(--dsw-alias-label-dimmed);
 }
 
+/* Ancho fijo para que la columna de texto arranque siempre en el mismo sitio: es lo que
+   permite recorrer treinta filas leyendo solo el margen izquierdo. 16ch da para
+   `regex_search`; lo que no quepa se recorta con puntos suspensivos en la propia pastilla
+   —un nombre de tool se reconoce por el principio. */
 .etiquetaHueco {
   flex: none;
-  width: 11ch;
+  width: 16ch;
+  min-width: 0;
 }
 
 /* La pastilla de tipo. El color es lo que hace que la columna se lea de un vistazo sin
@@ -173,6 +178,9 @@
 .etiqueta {
   display: inline-flex;
   align-items: center;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
   padding: 1px 6px;
   border-radius: 6px;
   background: var(--dsw-alias-bg-module-platform);
@@ -203,10 +211,34 @@
 }
 
 /* Ámbar para las tools, igual que en la suya: es la clase de fila más numerosa y la que se
-   viene a buscar aquí. */
+   viene a buscar aquí. Desde que el acto lleva el nombre de la tool, la pastilla dice
+   `read_file` en vez de un «TOOL» que no distinguía una lectura de una escritura. */
 .etiqueta[data-tipo="tool"] {
   background: var(--dsw-alias-state-warn-tertiary);
   color: var(--dsw-alias-state-warn-label);
+}
+
+/* La que FALLÓ, en rojo. En un turno de cuarenta líneas es la única que se viene a buscar,
+   y el «✗» del texto se pierde detrás de la ruta. */
+.etiqueta[data-tipo="toolError"] {
+  background: var(--dsw-alias-state-error-secondary);
+  color: var(--dsw-alias-state-error-primary);
+}
+
+/* Un paso del motor —plan, tarea, verificación—, que viaja por el mismo canal que las tools
+   y hasta ahora se etiquetaba «TOOL». No es una llamada a nada, así que va neutro: teñirlo
+   del ámbar de las herramientas era afirmar que el agente llamó a algo. */
+.etiqueta[data-tipo="paso"] {
+  background: var(--dsw-alias-bg-module-platform);
+  color: var(--dsw-alias-label-tertiary);
+}
+
+/* La fase lleva su categoría cuando el acto la trae, así que la pastilla dice
+   «VERIFICANDO» y no «FASE». En azul de negocio, como el asistente: las dos cuentan en qué
+   anda el motor, no lo que hizo. */
+.etiqueta[data-tipo="fase"] {
+  background: var(--dsw-alias-state-business-tertiary);
+  color: var(--dsw-alias-state-business-primary);
 }
 
 .etiqueta[data-tipo="error"] {
@@ -297,6 +329,15 @@
 .pestanaActiva {
   border-bottom-color: var(--xonecode-cian);
   color: var(--xonecode-cian);
+}
+
+/* El fallo, arriba del todo y con su color: en la línea va detrás de la ruta y con cuarenta
+   líneas alrededor no se ve. */
+.fallo {
+  flex: none;
+  margin: 0;
+  padding: 10px 12px 0;
+  color: var(--dsw-alias-state-error-primary);
 }
 
 /* Aquí SÍ se lee: el texto entero, con sus saltos, sin recortar. Es lo único que el panel
