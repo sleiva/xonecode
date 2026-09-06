@@ -1116,6 +1116,19 @@ los trae readline en stdio; la TUI solo implementa las flechas (`upArrow`/`downA
 `cli/tui/entrada.tsx`, con el mismo completer) y descarta ctrl-p/ctrl-n — no es la misma
 tecla en las dos pieles. No hay código propio de historial fuera de la piel.
 
+## Los evals (`npm run eval`, nunca en `npm test`)
+
+`src/evals/correr.ts` corre tareas XOne reales sobre el esqueleto «Hola Mundo» en un temporal,
+con el agente de verdad, el simulador de verdad y una aprobación que **aprueba todo** (por eso
+no acepta una raíz: solo sobre un proyecto que se tira). El veredicto del simulador se MIDE
+en el corredor, no se lee del turno — el juez no puede depender de que el lazo haya hecho su
+parte, que es lo que se evalúa. Los JUECES (`tareas.ts`) son código puro y SÍ tienen test en
+`npm test`: un juez que juzgue mal invalida el eval entero sin que nadie lo note. El corredor
+vive en `src/` para tipearse, `tsconfig.build.json` lo excluye, y su nombre no acaba en
+`.test.ts` — así `npm test` sigue sin red, sin clave y sin simulador. `docs/EVALS.md` tiene
+las tareas y cómo leer un resultado. La primera comprobación de la línea base destapó que el
+esqueleto no pasaba el simulador (`COLL_MISSING_PROGID`): la línea base se comprueba por eso.
+
 ## Códigos de salida (contrato, CI los lee)
 
 | | |

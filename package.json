@@ -27,6 +27,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "typecheck": "tsc --noEmit",
+    "eval": "tsx src/evals/correr.ts",
     "xonecode": "tsx src/bin.ts"
   },
   "dependencies": {
