@@ -13,7 +13,7 @@ import { Readable } from "node:stream";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import {
   arrancarConsolaWeb,
-  comandosDelRegistro,
+  comandosDelRegistro, descripcionParaLaWeb,
   montarRutas,
   FALTA_EL_BUILD,
   RUTA_ACCION,
@@ -113,10 +113,14 @@ describe("comandosDelRegistro", () => {
   it("sale de COMANDOS recorrido, no de una lista escrita a mano", () => {
     const comandos = comandosDelRegistro();
     expect(comandos.map((c) => c.nombre)).toEqual(Object.keys(COMANDOS).map((n) => `/${n}`));
-    // La descripción es la MISMA que enseña /ayuda: dos textos para el mismo comando es
-    // cómo divergen la consola y la web.
+    // La descripción SALE de la que enseña /ayuda —una sola fuente— pasada por
+    // `descripcionParaLaWeb`, que solo le quita el vocabulario de terminal («como
+    // `xonecode config`», las comillas de código). Dos textos escritos a mano para el mismo
+    // comando es cómo divergen; un texto derivado del otro no puede.
     for (const [nombre, entrada] of Object.entries(COMANDOS)) {
-      expect(comandos.find((c) => c.nombre === `/${nombre}`)?.descripcion).toBe(entrada.descripcion);
+      expect(comandos.find((c) => c.nombre === `/${nombre}`)?.descripcion).toBe(
+        descripcionParaLaWeb(entrada.descripcion)
+      );
     }
   });
 
@@ -1578,3 +1582,15 @@ function servidorLevantado() {
     cerrar: async () => {},
   };
 }
+
+describe("descripcionParaLaWeb", () => {
+  it("quita el «— como `xonecode …`» y las comillas de código: es vocabulario de terminal", () => {
+    expect(descripcionParaLaWeb("config y credenciales, sin claves — como `xonecode config`")).toBe(
+      "config y credenciales, sin claves"
+    );
+    expect(descripcionParaLaWeb("cambia los TRES papeles en caliente: /modelo <proveedor>/<modelo>")).toBe(
+      "cambia los TRES papeles en caliente: /modelo <proveedor>/<modelo>"
+    );
+    expect(descripcionParaLaWeb("lista los comandos de barra")).toBe("lista los comandos");
+  });
+});

@@ -62,7 +62,9 @@ const SECCIONES: readonly {
   etiqueta: string;
   Icono: typeof IconSparkle16;
 }[] = [
-  { id: "modelos", etiqueta: "Modelos", Icono: IconSparkle16 },
+  // «Proveedores» y no «Modelos»: la sección gestiona CREDENCIALES, y su propio texto lo
+  // confesaba («el modelo en uso se elige en la pastilla del compositor»).
+  { id: "modelos", etiqueta: "Proveedores", Icono: IconSparkle16 },
   { id: "apariencia", etiqueta: "Apariencia", Icono: IconDarkOutline16 },
   { id: "entornos", etiqueta: "Entornos", Icono: IconDataOutline16 },
   { id: "agentes", etiqueta: "Subagentes", Icono: IconUserOutline16 },
@@ -248,8 +250,7 @@ export function Ajustes({
             <>
               <h2 className={estilos.encabezado}>Apariencia</h2>
               <p className={estilos.nota}>
-                Solo afecta a esta ventana del navegador; se recuerda en este equipo. Los temas
-                de la consola de terminal son otra cosa y se cambian ahí con «/themes».
+                Solo afecta a esta ventana del navegador; se recuerda en este equipo.
               </p>
               <ul className={estilos.filas}>
                 {APARIENCIAS.map((a) => (
@@ -274,7 +275,7 @@ export function Ajustes({
 
           {seccion === "modelos" ? (
             <>
-              <h2 className={estilos.encabezado}>Modelos</h2>
+              <h2 className={estilos.encabezado}>Proveedores</h2>
               <p className={estilos.nota}>
                 La clave se guarda en el fichero de credenciales de xonecode, con permisos 0600,
                 y nunca en el navegador. El modelo en uso se elige en la pastilla del compositor.

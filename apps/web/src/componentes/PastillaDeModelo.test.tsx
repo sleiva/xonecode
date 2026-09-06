@@ -1,3 +1,5 @@
+// Desde la revisión de interfaz los proveedores son `menuitem` y los modelos
+// `menuitemradio`: las flechas del teclado no navegaban una lista de botones.
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { PastillaDeModelo } from "./PastillaDeModelo.js";
@@ -43,12 +45,12 @@ describe("PastillaDeModelo", () => {
     );
     fireEvent.click(screen.getByRole("button", { name: /elige modelo/i }));
     expect(alPedirCatalogo).not.toHaveBeenCalled();
-    fireEvent.click(screen.getByRole("button", { name: /anthropic/i }));
+    fireEvent.click(screen.getByRole("menuitem", { name: /anthropic/i }));
     expect(alPedirCatalogo).toHaveBeenCalledWith("anthropic");
     expect(screen.getByText(/consultando/i)).toBeTruthy();
     // Cerrar y volver a abrir no lo vuelve a pedir: el servidor ya lo tiene cacheado.
-    fireEvent.click(screen.getByRole("button", { name: /anthropic/i }));
-    fireEvent.click(screen.getByRole("button", { name: /anthropic/i }));
+    fireEvent.click(screen.getByRole("menuitem", { name: /anthropic/i }));
+    fireEvent.click(screen.getByRole("menuitem", { name: /anthropic/i }));
     expect(alPedirCatalogo).toHaveBeenCalledTimes(1);
   });
 
@@ -77,7 +79,7 @@ describe("PastillaDeModelo", () => {
       <PastillaDeModelo proveedores={PROVEEDORES} alPedirCatalogo={() => {}} alElegir={() => {}} />
     );
     fireEvent.click(screen.getByRole("button", { name: /elige modelo/i }));
-    const anthropic = screen.getByRole("button", { name: /anthropic/i });
+    const anthropic = screen.getByRole("menuitem", { name: /anthropic/i });
     fireEvent.mouseDown(anthropic);
     fireEvent.click(anthropic);
     expect(screen.getByRole("menu")).toBeTruthy();
@@ -96,8 +98,8 @@ describe("PastillaDeModelo", () => {
       />
     );
     fireEvent.click(screen.getByRole("button", { name: "ollama/qwen3" }));
-    fireEvent.click(screen.getByRole("button", { name: /^ollama$/i }));
-    fireEvent.click(screen.getByRole("button", { name: "GLM" }));
+    fireEvent.click(screen.getByRole("menuitem", { name: /^ollama$/i }));
+    fireEvent.click(screen.getByRole("menuitemradio", { name: "GLM" }));
     expect(alElegir).toHaveBeenCalledWith("ollama/glm");
   });
 
@@ -114,11 +116,11 @@ describe("PastillaDeModelo", () => {
       />
     );
     fireEvent.click(screen.getByRole("button", { name: /elige modelo/i }));
-    fireEvent.click(screen.getByRole("button", { name: /openai/i }));
+    fireEvent.click(screen.getByRole("menuitem", { name: /openai/i }));
     expect(screen.getByRole("alert").textContent).toMatch(/no autorizada/);
     // Y el otro sigue funcionando: un desvío, no un callejón.
-    fireEvent.click(screen.getByRole("button", { name: /^ollama$/i }));
-    fireEvent.click(screen.getByRole("button", { name: "qwen3" }));
+    fireEvent.click(screen.getByRole("menuitem", { name: /^ollama$/i }));
+    fireEvent.click(screen.getByRole("menuitemradio", { name: "qwen3" }));
     expect(alElegir).toHaveBeenCalledWith("ollama/qwen3");
   });
 
@@ -132,9 +134,9 @@ describe("PastillaDeModelo", () => {
       <PastillaDeModelo proveedores={PROVEEDORES} alPedirCatalogo={() => {}} alElegir={() => {}} />
     );
     fireEvent.click(screen.getByRole("button", { name: /elige modelo/i }));
-    expect(screen.getByRole("button", { name: /anthropic/i }).querySelector("[data-credencial='puesta']")).toBeTruthy();
-    expect(screen.getByRole("button", { name: /openai/i }).querySelector("[data-credencial='falta']")).toBeTruthy();
-    expect(screen.getByRole("button", { name: /^ollama$/i }).querySelector("[data-credencial]")).toBeNull();
+    expect(screen.getByRole("menuitem", { name: /anthropic/i }).querySelector("[data-credencial='puesta']")).toBeTruthy();
+    expect(screen.getByRole("menuitem", { name: /openai/i }).querySelector("[data-credencial='falta']")).toBeTruthy();
+    expect(screen.getByRole("menuitem", { name: /^ollama$/i }).querySelector("[data-credencial]")).toBeNull();
   });
 });
 
@@ -219,7 +221,7 @@ describe("el punto no se cuela en el nombre del proveedor", () => {
       />
     );
     fireEvent.click(screen.getByRole("button", { name: /elige modelo|ollama/i }));
-    expect(screen.getByRole("button", { name: /^ollama$/i })).toBeTruthy();
-    expect(screen.getByRole("button", { name: /^anthropic$/i })).toBeTruthy();
+    expect(screen.getByRole("menuitem", { name: /^ollama$/i })).toBeTruthy();
+    expect(screen.getByRole("menuitem", { name: /^anthropic$/i })).toBeTruthy();
   });
 });

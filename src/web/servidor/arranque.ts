@@ -97,7 +97,25 @@ const TOPE_DE_CUERPO = 1_000_000;
  * añade un comando, y el compositor lo sugeriría todo menos el nuevo.
  */
 export function comandosDelRegistro(): { nombre: string; descripcion: string }[] {
-  return Object.entries(COMANDOS).map(([nombre, c]) => ({ nombre: `/${nombre}`, descripcion: c.descripcion }));
+  return Object.entries(COMANDOS).map(([nombre, c]) => ({
+    nombre: `/${nombre}`,
+    descripcion: descripcionParaLaWeb(c.descripcion),
+  }));
+}
+
+/**
+ * La descripción de un comando, para el navegador.
+ *
+ * `COMANDOS` está escrito para la terminal: «config y credenciales, sin claves — como
+ * `xonecode config`» remite a la shell y lleva acentos graves que el compositor pinta tal
+ * cual. Medido en pantalla. Se quita el «— como `xonecode …`» y las comillas de código; el
+ * registro sigue siendo UNO (`cli/consola.ts`), esto es solo cómo se lee aquí.
+ */
+export function descripcionParaLaWeb(descripcion: string): string {
+  return descripcion
+    .replace(/\s+—\s+como `xonecode[^`]*`/u, "")
+    .replace(/`/g, "")
+    .replace(/comandos de barra/u, "comandos");
 }
 
 /** Lo mínimo que el cable necesita de una consola, la del vestíbulo o la del proyecto. */

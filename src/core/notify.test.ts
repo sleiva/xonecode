@@ -46,10 +46,12 @@ describe("Colapsador", () => {
     ]);
   });
 
-  it("más de tres ficheros: lista los tres primeros y «y N más»", () => {
+  it("más de tres ficheros: lista los tres primeros y «y N ficheros más»", () => {
     const c = new Colapsador();
     for (const f of ["a.xne", "b.xne", "c.xne", "d.xne", "e.xne"]) c.lineas(ok("read_file", f));
-    expect(c.cierre()?.texto).toBe("→ lee ×5 — a.xne, b.xne, c.xne y 2 más");
+    // «ficheros» y no «más» a secas: el ×N cuenta llamadas y esto cuenta ficheros distintos,
+    // y sin la palabra las dos cifras parecían una sola cuenta que no cuadra.
+    expect(c.cierre()?.texto).toBe("→ lee ×5 — a.xne, b.xne, c.xne y 2 ficheros más");
   });
 
   it("el mismo fichero leído tres veces se cuenta una: «×3», fichero solo una vez", () => {

@@ -102,7 +102,7 @@ export function AccionDeSesion({
             </Button>
             <Button
               variant="primary"
-              className={clsx(estilos.accion, borrando && propios.destructiva)}
+              className={clsx(estilos.accion, estilos.principal, borrando && propios.destructiva)}
               disabled={!puedeConfirmar}
               onClick={() => alConfirmar(borrando ? undefined : titulo)}
             >

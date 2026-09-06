@@ -79,14 +79,16 @@ function frase(nombre: string, detalle?: string): string {
 }
 
 /**
- * La lista de ficheros del cierre: los tres primeros y «y N más» — el número completo
- * ya lo dijo el `×N`, la lista es para reconocer, no para leerla entera. El mismo
- * fichero dos veces (relecturas) se cuenta una.
+ * La lista de ficheros del cierre: los tres primeros y «y N ficheros más». El `×N` cuenta
+ * LLAMADAS y la lista cuenta ficheros DISTINTOS (una relectura se cuenta una), así que las
+ * dos cifras no suman: medido en pantalla, «lee ×35 — a, b, c y 29 más» enumeraba 32 y se
+ * leía como una cuenta que no cuadra. Decir «ficheros» es lo que separa las dos cifras.
  */
 function listaDe(detalles: string[]): string {
   const unicos = [...new Set(detalles)];
   if (unicos.length <= 3) return unicos.join(", ");
-  return `${unicos.slice(0, 3).join(", ")} y ${unicos.length - 3} más`;
+  const resto = unicos.length - 3;
+  return `${unicos.slice(0, 3).join(", ")} y ${resto} ${resto === 1 ? "fichero" : "ficheros"} más`;
 }
 
 export class Colapsador {

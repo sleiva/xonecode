@@ -83,6 +83,30 @@
   background: var(--dsw-alias-interactive-bg-hover);
 }
 
+/*
+ * La acción que confirma («Empezar», «Guardar»). Medido: las dos ventanas pedían
+ * `variant="primary"` y el botón salía IDÉNTICO al «Cancelar», porque `.accion` —la misma
+ * clase para los dos— pisaba el relleno del primario con borde y fondo de capa. Mismos
+ * alias que `Agentes.module.css#principal`: es el mismo botón. La destructiva de eliminar
+ * (`AccionDeSesion.module.css`) sigue ganando por su selector doblado.
+ */
+.principal.principal {
+  border-color: var(--dsw-alias-button-primary-fill);
+  background: var(--dsw-alias-button-primary-fill);
+  color: var(--dsw-alias-label-primary-inverted);
+  font-weight: 600;
+}
+
+.principal.principal:hover {
+  border-color: var(--dsw-alias-button-primary-hover);
+  background: var(--dsw-alias-button-primary-hover);
+}
+
+.principal.principal:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
 /* El fallo de la consulta de ramas: ocupa el sitio del desplegable que no se puede pintar. */
 .fallo {
   margin: 0 0 8px;

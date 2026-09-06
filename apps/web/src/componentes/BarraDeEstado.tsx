@@ -1,3 +1,4 @@
+import { formatearMs } from "../tiempo.js";
 import estilos from "./BarraDeEstado.module.css";
 
 /**
@@ -32,10 +33,6 @@ export interface PiezasDeLaBarraDeEstado {
    * anterior, y no había forma de saber cuánto llevaba éste.
    */
   segundosEnVuelo?: number;
-}
-
-function formatearMs(ms: number): string {
-  return ms >= 1000 ? `${(ms / 1000).toFixed(1)} s` : `${ms} ms`;
 }
 
 /** El texto de `ctx`: cifra pelada sin tope, con `%` solo si hay tope. Cadena vacía sin contexto que medir. */

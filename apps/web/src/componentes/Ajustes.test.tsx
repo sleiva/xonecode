@@ -24,9 +24,9 @@ const PROVEEDORES = [
 describe("Ajustes", () => {
   afterEach(cleanup);
 
-  it("abre en Modelos y las tres secciones se pueden cambiar", () => {
+  it("abre en Proveedores y las secciones se pueden cambiar", () => {
     render(<Ajustes {...MANEJADORES} proveedores={PROVEEDORES} />);
-    expect(screen.getByRole("heading", { name: /modelos/i })).toBeTruthy();
+    expect(screen.getByRole("heading", { name: /proveedores/i })).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Apariencia" }));
     expect(screen.getByRole("heading", { name: /apariencia/i })).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Entornos" }));

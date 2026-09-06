@@ -441,7 +441,8 @@ mensaje `modelos` en `transporte.ts`). Las reglas no son nuestras: salen de leer
   uno es una llamada de red; se cachea en el proceso, y el que falla se lista con su error
   mientras los demás siguen elegibles — un desvío, no un callejón.
 - **El punto de credencial tiene TRES estados** (`SIN_CREDENCIAL`, `core/modelos.ts`):
-  verde solo si está confirmada, rojo solo si consta que falta, y NADA para quien no
+  verde solo si está confirmada, HUECO solo si consta que falta (era rojo, y tres puntos
+  rojos en la lista se leían como tres errores), y NADA para quien no
   necesita ninguna. `hayCredencial` (`cli/consola.ts`) no sirve para esto: devuelve `true`
   para un proveedor sin variable de entorno, que responde a otra pregunta.
 - Al caerse el SSE el cliente **tira** el estado de modelos (`marcarDesconectado`) y la

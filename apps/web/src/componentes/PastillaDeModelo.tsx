@@ -24,9 +24,16 @@ import estilos from "./PastillaDeModelo.module.css";
  * - **El proveedor que falla se lista inservible y los demás siguen elegibles.** Su error
  *   se enseña donde está mirando el usuario, no en otra pestaña.
  *
- * El punto de la credencial es literal: verde solo si está CONFIRMADA, rojo solo si se
- * sabe que falta, y nada para quien no necesita ninguna (Ollama local) — pintarle un punto
- * a ese sería concederle un permiso o inventarle un problema.
+ * El punto de la credencial es literal: verde solo si está CONFIRMADA, hueco solo si se
+ * sabe que falta (era rojo, y se leía como error), y nada para quien no necesita ninguna
+ * (Ollama local) — pintarle un punto a ese sería concederle un permiso o inventarle un
+ * problema.
+ *
+ * Desde la revisión de interfaz: el menú lleva título, sus entradas son `menuitem` (las
+ * flechas del teclado no navegaban una lista de `button` dentro de un `role="menu"`), el
+ * proveedor en vigor va marcado, y la lista de modelos tiene su propio alto con
+ * desplazamiento — medido: desplegar «gemini» empujaba a los demás proveedores fuera del
+ * alto del menú y parecía que habían desaparecido sin camino de vuelta.
  */
 export function PastillaDeModelo({
   actual,
@@ -81,8 +88,12 @@ export function PastillaDeModelo({
         {actual ?? "Elige modelo"}
       </button>
       {abierta ? (
-        <div className={estilos.menu} role="menu">
+        <div className={estilos.menu} role="menu" aria-label="modelo de trabajo">
+          <div className={estilos.titulo} role="presentation">
+            Modelo de trabajo
+          </div>
           {proveedores.map((p) => {
+            const enVigor = actual !== undefined && actual.startsWith(`${p.id}/`);
             const esperando = p.modelos === undefined && p.error === undefined && pedidos.includes(p.id);
             /**
              * Qué dice el punto de ESTE proveedor.
@@ -111,8 +122,11 @@ export function PastillaDeModelo({
               <div key={p.id} className={estilos.grupo}>
                 <button
                   type="button"
+                  role="menuitem"
                   className={estilos.proveedor}
                   aria-expanded={desplegado === p.id}
+                  data-actual={enVigor ? "" : undefined}
+                  {...(enVigor ? { "aria-current": "true" as const } : {})}
                   onClick={() => abrirProveedor(p.id)}
                 >
                   {punto === undefined ? null : (
@@ -161,6 +175,8 @@ export function PastillaDeModelo({
                           <button
                             key={m.id}
                             type="button"
+                            role="menuitemradio"
+                            aria-checked={id === actual}
                             className={estilos.modelo}
                             data-actual={id === actual ? "" : undefined}
                             onClick={() => {

@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import clsx from "clsx";
 import type { Acto } from "../tipos.js";
+import { formatearMs } from "../tiempo.js";
 import estilos from "./Trazas.module.css";
 
 /**
@@ -135,7 +136,9 @@ function filasDe(acto: Acto): FilaCruda[] {
         cruda(
           "fin",
           "FIN",
-          acto.modelo !== undefined ? `${acto.modelo} · ${acto.ms} ms` : `${acto.ms} ms`,
+          // Sin el tiempo en el texto: ya va en la columna de la derecha, y medido en
+          // pantalla salía dos veces por turno.
+          acto.modelo !== undefined ? `fin del turno · ${acto.modelo}` : "fin del turno",
           { ms: acto.ms }
         ),
       ];
@@ -287,7 +290,7 @@ export function Trazas({ actos }: { actos: readonly Acto[] }) {
                     <span>{g.turno === 0 ? "Antes del primer turno" : `Turno ${g.turno}`}</span>
                     <span className={estilos.cuentaDeGrupo}>
                       {g.filas.length} {g.filas.length === 1 ? "fila" : "filas"}
-                      {g.ms === undefined ? "" : ` · ${g.ms} ms`}
+                      {g.ms === undefined ? "" : ` · ${formatearMs(g.ms)}`}
                     </span>
                   </button>
                   {plegado
@@ -312,7 +315,7 @@ export function Trazas({ actos }: { actos: readonly Acto[] }) {
                           {/* El tiempo solo donde lo hay. Un «0 ms» en las filas que no lo
                               traen sería una cifra inventada, que es peor que un hueco. */}
                           <span className={estilos.tiempo}>
-                            {f.ms === undefined ? "" : `${f.ms} ms`}
+                            {f.ms === undefined ? "" : formatearMs(f.ms)}
                           </span>
                         </button>
                       ))}

@@ -110,7 +110,7 @@ export function NuevaSesion({
             </Button>
             <Button
               variant="primary"
-              className={estilos.accion}
+              className={`${estilos.accion} ${estilos.principal}`}
               // Sin rama que mandar no se puede empezar lo que hay que bajar: el botón
               // espera a que lleguen, en vez de mandar un `undefined` que el servidor
               // tendría que interpretar.
