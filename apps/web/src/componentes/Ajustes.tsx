@@ -142,6 +142,31 @@ export function Ajustes({
   const [seccion, setSeccion] = useState<SeccionDeAjustes>("modelos");
   /** Qué fila está pidiendo clave: es donde se pinta la pregunta del servidor. */
   const [editando, setEditando] = useState<string | undefined>(undefined);
+  /** Registrar un entorno es un MODO: mientras dura, la lista no está (ver más abajo). */
+  const [registrando, setRegistrando] = useState(false);
+
+  /**
+   * Trae a la vista lo que se acaba de abrir.
+   *
+   * Medido en pantalla: la ventana mide 560 px de alto y el panel scrollea, así que al
+   * pulsar «Añadir clave» en el último proveedor la pregunta aparecía POR DEBAJO del
+   * pliegue — el botón hacía algo y no se veía nada, que es indistinguible de que no
+   * hiciera nada. Va como `ref` de callback y no en un `useEffect` porque el nodo solo
+   * existe mientras se edita: el callback corre justo al montarlo, que es el momento exacto.
+   *
+   * `block: "nearest"` para no dar un salto cuando ya se estaba viendo; `smooth` porque un
+   * salto seco en una lista larga hace perder de vista dónde estabas.
+   *
+   * La guarda del `typeof` es obligatoria: **jsdom no implementa `scrollIntoView`**, así que
+   * sin ella cualquier test que abra una fila de proveedor revienta con «is not a function».
+   * Es la misma trampa —y la misma guarda— que `Maqueta.tsx` documenta con `ResizeObserver`,
+   * y lo que se pierde en un test es exactamente lo que un test sin layout no puede ver.
+   */
+  const traerALaVista = (nodo: HTMLElement | null): void => {
+    if (nodo !== null && typeof nodo.scrollIntoView === "function") {
+      nodo.scrollIntoView({ block: "nearest", behavior: "smooth" });
+    }
+  };
   /** Qué fila ha pedido confirmación de borrado. Nombrar al proveedor en la pregunta es
    *  lo que impide borrar el de al lado por un clic de más. */
   const [borrando, setBorrando] = useState<string | undefined>(undefined);
@@ -306,6 +331,7 @@ export function Ajustes({
                         ) : null}
                       </div>
                       {editando === p.id && secreto !== undefined ? (
+                        <div ref={traerALaVista}>
                         <Pregunta
                           texto={secreto}
                           oculta
@@ -315,6 +341,7 @@ export function Ajustes({
                             setEditando(undefined);
                           }}
                         />
+                        </div>
                       ) : null}
                       {borrando === p.id ? (
                         <p className={estilos.confirmacion} role="alert">
@@ -348,7 +375,7 @@ export function Ajustes({
                 Un entorno es un servidor CloudStudio. Lo único que se teclea es su URL: el nombre
                 lo dice el propio servidor al conectarse.
               </p>
-              {entornos.length === 0 ? (
+              {registrando ? null : entornos.length === 0 ? (
                 <p className={estilos.vacio}>No hay ninguno registrado todavía.</p>
               ) : (
                 <ul className={estilos.filas}>
@@ -401,7 +428,17 @@ export function Ajustes({
                 (`{clase:"alta", paso:"entorno"}`): id y nombre vacíos, que los deduce el
                 servidor. Un segundo camino para registrar lo mismo es cómo divergen.
               */}
-              <form className={estilos.formulario} onSubmit={registrar}>
+              {registrando ? null : (
+                <Button
+                  variant="outline"
+                  className={estilos.accion}
+                  onClick={() => setRegistrando(true)}
+                >
+                  Registrar un entorno
+                </Button>
+              )}
+              {!registrando ? null : (
+              <form className={estilos.formulario} ref={traerALaVista} onSubmit={registrar}>
                 <label className={estilos.etiqueta} htmlFor="ajustes-url">
                   URL del MCP
                 </label>
@@ -417,10 +454,23 @@ export function Ajustes({
                     {avisoDeUrl}
                   </p>
                 ) : null}
-                <Button type="submit" variant="primary" className={estilos.accion}>
-                  Registrar
-                </Button>
+                <div className={estilos.botones}>
+                  <Button
+                    variant="outline"
+                    className={estilos.accion}
+                    onClick={() => {
+                      setRegistrando(false);
+                      setUrl("");
+                    }}
+                  >
+                    Cancelar
+                  </Button>
+                  <Button type="submit" variant="primary" className={estilos.accion}>
+                    Registrar
+                  </Button>
+                </div>
               </form>
+              )}
             </>
           ) : null}
 

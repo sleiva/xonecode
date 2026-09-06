@@ -308,3 +308,12 @@
   width: 100%;
   cursor: pointer;
 }
+
+
+/* La fila de acciones de un formulario, a la derecha: cancelar y confirmar, en ese orden.
+   El que confirma va el último porque es donde el ojo termina de leer. */
+.botones {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}

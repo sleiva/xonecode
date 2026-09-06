@@ -98,7 +98,19 @@ export function Pregunta({
           value={valor}
           onChange={(evento) => setValor(evento.target.value)}
         />
-        <Button type="submit" variant="primary" className={estilos.accion} disabled={enviando}>
+        {/*
+          Relleno cuando la pregunta flota sola sobre el transcript —ahí es LA acción de la
+          pantalla— y de contorno cuando va anidada dentro de una fila de ajustes, donde
+          tiene al lado a «Cambiar clave» y «Eliminar»: un botón relleno entre dos de
+          contorno se lee como si fuera otra cosa, y desde el rediseño el relleno primario
+          es casi blanco en oscuro, que sobre la fila cantaba todavía más.
+        */}
+        <Button
+          type="submit"
+          variant={anidado ? "outline" : "primary"}
+          className={estilos.accion}
+          disabled={enviando}
+        >
           Responder
         </Button>
       </div>

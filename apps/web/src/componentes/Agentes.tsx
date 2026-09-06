@@ -1,5 +1,11 @@
 import { useState } from "react";
-import { Button, Input } from "@deepseek-ai/dsh-client-ui-primitives";
+import clsx from "clsx";
+import {
+  Button,
+  Input,
+  IconEditOutline16,
+  IconTrashOutline16,
+} from "@deepseek-ai/dsh-client-ui-primitives";
 import type { AgenteDelCable } from "../tipos.js";
 import estilos from "./Agentes.module.css";
 
@@ -112,6 +118,15 @@ export function Agentes({
 
   return (
     <>
+      {/*
+        Editar es un MODO, no un añadido al final de la lista. Con la lista puesta encima, el
+        formulario aparecía debajo del todo —fuera de la vista si había cinco subagentes— y
+        no quedaba claro cuál se estaba tocando: se veía la fila de «revisor» arriba y unos
+        campos sueltos abajo. Se sustituye una cosa por la otra, que es lo que hace evidente
+        dónde estás.
+      */}
+      {editando !== undefined ? null : (
+        <>
       <p className={estilos.nota}>
         Cada subagente es un fichero <code>.md</code> en <code>.xonecode/agentes/</code>. Los
         globales valen en todos los proyectos; los de un proyecto solo en ese, y pisan al
@@ -145,9 +160,20 @@ export function Agentes({
                 {a.origen === undefined ? null : <span className={estilos.origen}>{a.origen}</span>}
                 {a.soloLectura ? <span className={estilos.lectura}>solo lectura</span> : null}
                 <span className={estilos.relleno} />
-                <Button
-                  variant="outline"
-                  className={estilos.accion}
+                {/*
+                  Iconos y no dos botones de texto: con cinco subagentes eran diez rótulos
+                  repetidos que pesaban más que los nombres. El nombre accesible va en el
+                  `aria-label` y LLEVA EL DEL AGENTE — aquí sí, al revés que en el punto de
+                  la pastilla de modelo: allí el `aria-label` se sumaba al nombre del botón
+                  que lo contenía y lo estropeaba; estos botones no tienen texto, así que sin
+                  `aria-label` no tendrían nombre ninguno, y «Editar» repetido cinco veces no
+                  distingue cuál es cuál para quien navega por voz.
+                */}
+                <button
+                  type="button"
+                  className={estilos.icono}
+                  aria-label={`Editar ${a.nombre}`}
+                  title="Editar"
                   onClick={() => {
                     setBorrando(undefined);
                     setAmbito(a.origen === "proyecto" ? "proyecto" : "global");
@@ -155,15 +181,17 @@ export function Agentes({
                     setCreando(false);
                   }}
                 >
-                  Editar
-                </Button>
-                <Button
-                  variant="outline"
-                  className={estilos.accion}
+                  <IconEditOutline16 size={16} />
+                </button>
+                <button
+                  type="button"
+                  className={clsx(estilos.icono, estilos.iconoDestructivo)}
+                  aria-label={`Eliminar ${a.nombre}`}
+                  title="Eliminar"
                   onClick={() => setBorrando(borrando === a.nombre ? undefined : a.nombre)}
                 >
-                  Eliminar
-                </Button>
+                  <IconTrashOutline16 size={16} />
+                </button>
               </div>
               <p className={estilos.descripcion}>{a.descripcion}</p>
               {/* Eliminar se confirma en la propia fila y no al primer clic: borra un fichero
@@ -186,6 +214,9 @@ export function Agentes({
             </li>
           ))}
         </ul>
+      )}
+
+        </>
       )}
 
       {editando === undefined ? (

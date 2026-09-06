@@ -122,6 +122,12 @@ describe("Ajustes", () => {
     fireEvent.click(screen.getByRole("button", { name: "Entornos" }));
     expect(screen.getByText("CloudStudio de casa")).toBeTruthy();
     expect(screen.getByText("https://mcp.casa.local/mcp")).toBeTruthy();
+    // Registrar es un MODO y el formulario no está hasta que se pide: con la lista puesta
+    // encima, el campo salía debajo de todo —fuera de la vista con unos cuantos entornos y
+    // el selector de proyectos de por medio—, que es indistinguible de que no haya campo.
+    fireEvent.click(screen.getByRole("button", { name: "Registrar un entorno" }));
+    // Y mientras se registra, la lista NO está: es una cosa o la otra.
+    expect(screen.queryByText("CloudStudio de casa")).toBeNull();
     // No hay campo de nombre en ningún sitio: lo dice el propio servidor al conectarse.
     expect(screen.queryByLabelText(/nombre/i)).toBeNull();
     // La misma regla de URL que el alta, compartida y no copiada.

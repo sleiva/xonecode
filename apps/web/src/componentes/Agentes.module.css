@@ -122,6 +122,36 @@
   font-size: 12px;
 }
 
+/* Los dos de la fila, en icono. Sin borde ni fondo hasta el `:hover`: son acciones de una
+   fila que se repite cinco veces, y con marco cada una la lista se convertía en una rejilla
+   de botones donde el nombre del subagente era lo que menos pesaba. */
+.icono {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: none;
+  border-radius: 8px;
+  background: none;
+  color: var(--dsw-alias-label-tertiary);
+  cursor: pointer;
+}
+
+.icono:hover {
+  background: var(--dsw-alias-interactive-bg-hover);
+  color: var(--dsw-alias-label-primary);
+}
+
+/* El de borrar se tiñe de rojo AL PASAR POR ENCIMA, no en reposo: en reposo sería una fila
+   con una alarma permanente; al apuntarlo, es lo que avisa antes de pulsar. */
+.iconoDestructivo:hover {
+  background: var(--dsw-alias-state-error-secondary);
+  color: var(--dsw-alias-state-error-primary);
+}
+
 /* Rojo lleno, igual que el de eliminar una sesión y por lo mismo: borra un fichero y no hay
    papelera, así que no puede pintarse como el botón de al lado. */
 .destructiva.destructiva {

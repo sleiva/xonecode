@@ -95,12 +95,13 @@ describe("Agentes", () => {
   it("eliminar se confirma en la fila: borra un fichero y no hay papelera", () => {
     const alBorrar = vi.fn();
     render(<Agentes {...manejadores} alBorrar={alBorrar} agentes={[REVISOR]} />);
-    fireEvent.click(screen.getByRole("button", { name: "Eliminar" }));
+    // El de la fila lleva el NOMBRE del agente en su etiqueta: son botones de icono y sin
+    // ella no tendrían nombre ninguno, y «Eliminar» repetido no distingue cuál es cuál.
+    fireEvent.click(screen.getByRole("button", { name: "Eliminar revisor" }));
     expect(alBorrar).not.toHaveBeenCalled();
 
-    // El segundo «Eliminar» es el de la confirmación, que aparece dentro de la fila.
-    const botones = screen.getAllByRole("button", { name: "Eliminar" });
-    fireEvent.click(botones[botones.length - 1]!);
+    // El «Eliminar» a secas es el de la confirmación, que aparece dentro de la fila.
+    fireEvent.click(screen.getByRole("button", { name: "Eliminar" }));
     expect(alBorrar).toHaveBeenCalledWith("revisor", "global");
   });
 
@@ -108,7 +109,7 @@ describe("Agentes", () => {
     // Renombrarlo desde aquí crearía uno nuevo y dejaría el viejo puesto, que es la peor de
     // las dos cosas que el usuario podría querer.
     render(<Agentes {...manejadores} agentes={[REVISOR]} />);
-    fireEvent.click(screen.getByRole("button", { name: "Editar" }));
+    fireEvent.click(screen.getByRole("button", { name: "Editar revisor" }));
     expect(screen.getByDisplayValue("revisor")).toHaveProperty("disabled", true);
   });
 
@@ -120,7 +121,7 @@ describe("Agentes", () => {
     render(
       <Agentes {...manejadores} hayProyecto alGuardar={alGuardar} agentes={[{ ...REVISOR, origen: "proyecto" }]} />
     );
-    fireEvent.click(screen.getByRole("button", { name: "Editar" }));
+    fireEvent.click(screen.getByRole("button", { name: "Editar revisor" }));
     fireEvent.click(screen.getByRole("button", { name: "Guardar" }));
     expect(alGuardar).toHaveBeenCalledWith(expect.objectContaining({ nombre: "revisor" }), "proyecto");
   });

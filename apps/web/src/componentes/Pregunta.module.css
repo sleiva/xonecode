@@ -44,11 +44,30 @@
 
 .fila {
   display: flex;
+  align-items: center;
   gap: 8px;
+}
+
+/*
+ * El hueco del campo se le da al PRIMER HIJO de la fila, sea el que sea.
+ *
+ * `.envoltorio` va en el `<Input>` del paquete de primitivas, y ese componente no monta la
+ * clase en el elemento que acaba siendo el hijo flex — así que el `flex: 1 1 auto` no lo
+ * cogía nadie: el campo se quedaba con su ancho propio, se desbordaba de la fila y el botón
+ * acababa ENCIMA de él. Medido en pantalla, en la fila de un proveedor de Ajustes.
+ *
+ * `min-width: 0` es la otra mitad: sin él, el ancho mínimo de un `input` es su tamaño por
+ * omisión y el flex no puede encogerlo por debajo, que es cómo se desborda una fila que
+ * «tiene flex» y aun así se sale.
+ */
+.fila > *:first-child {
+  flex: 1 1 auto;
+  min-width: 0;
 }
 
 .envoltorio {
   flex: 1 1 auto;
+  min-width: 0;
 }
 
 .envoltorio input {
@@ -82,4 +101,20 @@
 .accion:hover {
   background: var(--dsw-alias-button-primary-hover);
   border-color: var(--dsw-alias-button-primary-hover);
+}
+
+/* Anidada, el botón se viste como sus vecinos de la fila («Cambiar clave», «Eliminar»):
+   contorno, no relleno. Los mismos alias que `Ajustes.module.css#accion`, para que sean el
+   mismo botón y no dos que se parecen. */
+.pregunta[data-anidado] .accion {
+  padding: 6px 12px;
+  border-color: var(--dsw-alias-border-l2);
+  background: var(--dsw-alias-bg-layer-1);
+  color: var(--dsw-alias-label-primary);
+  font-size: 12px;
+}
+
+.pregunta[data-anidado] .accion:hover {
+  border-color: var(--dsw-alias-border-l2);
+  background: var(--dsw-alias-interactive-bg-hover);
 }
