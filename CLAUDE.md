@@ -1144,6 +1144,17 @@ Un fallo del entorno no se reporta como un proyecto roto: `agent/verificador.ts`
 
 ## Trampas verificadas
 
+- **La caché implícita de Gemini no entra a los tamaños de contexto de estos agentes, y el
+  adaptador la sobrecuenta en streaming.** Medido con un gancho de hashes sobre el cuerpo de
+  cada petición (el prefijo que mandamos es byte-idéntico entre llamadas consecutivas: no es
+  cosa nuestra) y con prefijos frescos crecientes contra `gemini-3.8-flash`: a ~11k, 0
+  aciertos en 36 llamadas; a ~20k, ~81% desde la segunda; a ~40k, ~91%. `dev` trabaja en
+  3-11k y `docs` en 2-20k, así que la caché no es la palanca del coste — las llamadas y el
+  contexto sí lo son (`docs/EVALS.md`, «El coste, medido»). Y cuando el stream trae dos
+  trozos con `usageMetadata`, `@langchain/google-genai` 2.3.0 suma `cache_read` dos veces
+  (32.696 sobre una entrada de 20.097; el servidor decía 16.348): `vendor/tokenTracking.ts`
+  acota la caché a la entrada.
+
 - **Un modelo de Ollama RETIRADO tumbaba el catálogo entero.** Medido contra el Ollama del
   usuario: `/api/tags` devolvía 26 modelos y dos de ellos —modelos de Ollama Cloud dados de
   baja— contestaban al `/api/show` con **HTTP 410** y «was retired at …». Siguen en el

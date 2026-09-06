@@ -47,6 +47,16 @@ describe("createTokenTrackingMiddleware", () => {
     expect(tracker.calls).toBe(2);
   });
 
+  it("la caché se acota a la entrada: el adaptador de Gemini la suma dos veces en streaming", () => {
+    // Medido: con dos trozos de `usageMetadata` en el stream, `cache_read` llega doblado
+    // (32.696 sobre una entrada de 20.097; el servidor decía 16.348). Más caché que entrada
+    // es imposible, y reportarlo haría creer que la llamada salió casi gratis.
+    const tracker = createTokenTracker();
+    const mw = createTokenTrackingMiddleware(tracker);
+    despuesDelModelo(mw)(estadoConUsage(20097, 5, 32696));
+    expect(tracker.cache).toBe(20097);
+  });
+
   it("el contexto es el input de la ÚLTIMA llamada, no la suma", () => {
     const tracker = createTokenTracker();
     const mw = createTokenTrackingMiddleware(tracker);

@@ -57,6 +57,14 @@ export function createTokenTrackingMiddleware(tracker: TokenTracker, alContar?: 
         }
       }
 
+      // La caché no puede superar la entrada: es una PARTE de ella. Medido contra Gemini
+      // (`gemini-3.8-flash`, streaming): cuando el stream trae dos trozos con `usageMetadata`,
+      // `@langchain/google-genai` 2.3.0 diferencia `input`/`output` entre trozos pero NO
+      // `cache_read`, y el `concat` de los chunks lo suma dos veces — 32.696 «cacheados» de
+      // una entrada de 20.097 cuando el servidor decía 16.348. Acotarlo no lo arregla del
+      // todo (queda sobrecontado hasta el 100%), pero impide reportar más caché que entrada.
+      cacheRead = Math.min(cacheRead, inputTokens);
+
       tracker.input += inputTokens;
       tracker.output += outputTokens;
       tracker.cache += cacheRead;

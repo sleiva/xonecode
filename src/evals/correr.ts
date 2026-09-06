@@ -5,7 +5,10 @@
  * `--conservar` deja en disco el proyecto de cada tarea que FALLA e imprime su ruta. Sin
  * él no se puede saber si un ✗ es del agente o del juez: la primera ejecución real tiró
  * dos tareas buenas por dos jueces mal escritos, y no había fichero que mirar para saberlo.
- * Los que aprueban se borran igual — no hay nada que inspeccionar en un ✓.
+ * Los que aprueban se borran igual — no hay nada que inspeccionar en un ✓. Salvo con
+ * `--conservar-todo`, que existe para UNA cosa: un ✓ que costó de más. Con
+ * `XONECODE_TRACE_TOOLS=1` el proyecto conservado trae `.xonecode/traza-tools.jsonl`, el uso
+ * por origen y por tool, que es la única forma de saber a dónde se fueron los tokens.
  *
  * Por cada tarea: proyecto limpio (el esqueleto, en un temporal) → `preparar` si la tarea
  * parte de algo roto → sesión REAL con el agente de verdad, el simulador de verdad y una
@@ -52,6 +55,8 @@ interface Resultado {
   ms: number;
   llamadas: number;
   tokensEntrada: number;
+  /** De la entrada, cuántos vinieron de caché del proveedor: cuestan ~10 veces menos. */
+  tokensCache: number;
   tokensSalida: number;
   reparaciones: number;
   bloqueado: boolean;
@@ -103,6 +108,7 @@ async function correrTarea(
     ms: 0,
     llamadas: 0,
     tokensEntrada: 0,
+    tokensCache: 0,
     tokensSalida: 0,
     reparaciones: 0,
     bloqueado: false,
@@ -145,6 +151,7 @@ async function correrTarea(
       ms: Date.now() - t0,
       llamadas: sesion.tracker.calls,
       tokensEntrada: sesion.tracker.input,
+      tokensCache: sesion.tracker.cache,
       tokensSalida: sesion.tracker.output,
       reparaciones: bitacora.todo.filter((l) => l.startsWith("reparacion:")).length,
       bloqueado: bitacora.corrio("bloqueado"),
@@ -162,7 +169,8 @@ async function main(): Promise<number> {
   const solo = argumento("--solo");
   const bandera = argumento("--modelo");
   const json = argumento("--json");
-  const conservar = process.argv.includes("--conservar");
+  const conservarTodo = process.argv.includes("--conservar-todo");
+  const conservar = conservarTodo || process.argv.includes("--conservar");
 
   // La config del que corre, igual que la consola: credenciales al entorno, modelo global.
   const cargado = cargar(process.cwd());
@@ -191,12 +199,17 @@ async function main(): Promise<number> {
     const r = await correrTarea(tarea, modelos, skills, conservar);
     resultados.push(r);
     // Lo que aprobó no se conserva ni con `--conservar`: no hay nada que inspeccionar en un ✓.
-    if (r.ok && r.proyecto !== undefined) rmSync(r.proyecto, { recursive: true, force: true });
+    if (r.ok && r.proyecto !== undefined && !conservarTodo) rmSync(r.proyecto, { recursive: true, force: true });
     console.log(
+      // El `input` bruto engaña: lo cacheado cuesta mucho menos. Se dice cuánto hay de caché y
+      // un coste EFECTIVO (input − 0,9·cache + output): tokens equivalentes para comparar dos
+      // ejecuciones del mismo modelo, no una factura — asume la caché a un décimo (la cifra de
+      // Anthropic; OpenAI descuenta ~la mitad, Gemini no la publica) y la salida 1:1.
       `${r.ok ? "✓" : "✗"} ${(r.ms / 1000).toFixed(0)}s · ${r.llamadas} llamadas · ${r.tokensEntrada + r.tokensSalida} tokens` +
+        ` (caché ${r.tokensEntrada === 0 ? 0 : Math.round((100 * r.tokensCache) / r.tokensEntrada)}% · efectivo ≈${Math.round(r.tokensEntrada - 0.9 * r.tokensCache + r.tokensSalida)})` +
         `${r.reparaciones > 0 ? ` · ${r.reparaciones} reparación(es)` : ""}${r.bloqueado ? " · bloqueado" : ""}` +
         `\n   ${r.error === undefined ? r.motivo : `ERROR: ${r.error}`}` +
-        `${!r.ok && r.proyecto !== undefined ? `\n   proyecto conservado en ${r.proyecto}` : ""}`
+        `${(!r.ok || conservarTodo) && r.proyecto !== undefined ? `\n   proyecto conservado en ${r.proyecto}` : ""}`
     );
   }
 
