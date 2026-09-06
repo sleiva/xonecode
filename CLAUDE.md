@@ -553,6 +553,39 @@ trabajar en una app XOne. Quien escribe una colección mira el chat y los ficher
 viene aquí está depurando qué hizo el agente y en qué orden. Que el destinatario sea otro es
 también lo que le permite ser densa a propósito.
 
+**Y la vista es la de deepseek, MENOS lo que su cable lleva y el nuestro no.** La anatomía de
+fila es la suya (`packages/client/ui-trajectory/.../TrajectoryCell.module.css`, MIT):
+`#índice · [ETIQUETA de color] · texto · tiempo`, con turnos agrupados y plegables,
+buscador y panel de detalle. Lo que **no** se copia, y es justo lo que hace que la suya
+parezca más detallada, son tres de sus cinco pestañas de detalle: **Payload, Result y
+Schema** son los argumentos y la salida ENTEROS de cada tool. Aquí eso no puede pasar por
+TIPO —`write_file` lleva el fichero y una tool MCP lleva el bearer—, así que el panel tiene
+DOS pestañas y no cinco: no están sin hacer, es que no hay con qué llenarlas sin romper la
+regla. Cuatro decisiones más, todas por lo mismo:
+- **El turno empieza en el acto de USUARIO**, no en el `fin`: un turno que revienta no
+  siempre deja `fin` —el mismo motivo por el que el compositor no deduce de ahí si hay turno
+  en vuelo—, así que abrir por la petición es lo robusto. Lo que llega antes de la primera
+  cae en el turno 0, que se rotula «Antes del primer turno»: llamarlo «Turno 1» le
+  inventaría dueño.
+- **El total del turno es el `ms` del `fin`**, nunca la suma de las fases: no cubren el turno
+  entero, y sumarlas daría una cifra que no es ningún tiempo real. Sin `fin`, no se afirma.
+- **El tiempo por fila solo donde lo hay** (`fase` y `fin`). Un «0 ms» en las demás sería una
+  cifra inventada, y el panel prefiere decir por qué no la tiene.
+- **El buscador mira el texto COMPLETO y no el recortado.** La tabla corta a 200 caracteres;
+  filtrar por lo que se ve haría que una palabra más allá de ese corte no se encontrara
+  nunca — el buscador mentiría justo en las filas largas, que son las que se vienen a buscar.
+  Por eso la fila guarda `texto` (recortado, para la tabla) y `completo` (para buscar y para
+  el panel).
+
+Lo que quedaría para una fase siguiente, y **exige tocar el cable**: los actos aplanan hoy
+lo que los eventos ya distinguen — `tool` lleva `{nombre, detalle, error}` y llega como una
+línea de texto compuesta, y `Fase` es un enum cerrado de ocho valores que llega como prosa.
+Devolverles la estructura no expone ni un byte nuevo (`detalle` ya pasa por la lista blanca
+de `resumenDeTool.ts`) y daría el nombre de la tool en la etiqueta, marca en las que
+fallaron y filtro por fase. La trampa a respetar: las sesiones ya guardadas en `.jsonl`
+llevan la forma vieja, así que `reabrirSesion` tendría que tragar las dos o se rompen las
+Trazas de todo lo anterior.
+
 **La barra lateral se pliega**, y el botón vive en la barra superior y no dentro de ella
 —donde lo pone el mockup— por una razón práctica: plegada, la barra no está, así que su
 propio botón se habría ido con ella. Al plegarse se DESMONTA (la columna del grid se va a
