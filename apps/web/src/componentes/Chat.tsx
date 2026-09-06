@@ -1,5 +1,6 @@
 import type { Acto } from "../tipos.js";
 import { usarPegadoAbajo } from "../pegadoAbajo.js";
+import { protegerDolares } from "../protegerDolares.js";
 import { BotonDeCopiar } from "./BotonDeCopiar.js";
 import { MarkdownText, type MarkdownCodeLabels } from "@deepseek-ai/dsh-client-ui-primitives";
 import vista from "../../estilos/ChatView.module.css";
@@ -68,7 +69,23 @@ interface TramoDePulso {
   ms?: number;
 }
 
-export function Chat({ actos, turnoEnVuelo = false }: { actos: readonly Acto[]; turnoEnVuelo?: boolean }) {
+export function Chat({
+  actos,
+  turnoEnVuelo = false,
+  historica = false,
+  segundosEnVuelo,
+}: {
+  actos: readonly Acto[];
+  turnoEnVuelo?: boolean;
+  /**
+   * La sesión es una RELECTURA (`alta.historica`): se reabrió de otra sesión de xonecode y
+   * el agente no la recuerda. Se dice arriba del todo, con palabras. Sin esto la pantalla
+   * enseñaba la conversación y el compositor activo como si se pudiera seguir hablando.
+   */
+  historica?: boolean;
+  /** Cuántos segundos lleva el turno en vuelo (`useCronometro`). Ausente = no hay turno. */
+  segundosEnVuelo?: number;
+}) {
   // Cuál es el último acto de asistente: es el único que puede estar llegando todavía.
   const ultimoAsistente = actos.map((a) => a.tipo).lastIndexOf("asistente");
 
@@ -120,6 +137,14 @@ export function Chat({ actos, turnoEnVuelo = false }: { actos: readonly Acto[]; 
             columna central). Es lo que pone la conversación en el CENTRO y no pegada a la
             barra, y lo que la alinea con el compositor, que lee la MISMA variable. */}
         <div className={vista.column}>
+          {historica ? (
+            // `role="note"`: es información de contexto, no una alerta. Y va DENTRO de la
+            // columna, encabezando la conversación a la que se refiere.
+            <p role="note" className={`${vista.flowItem} ${estilos.relectura}`}>
+              Conversación reabierta: el agente no la recuerda. Lo que escribas empieza un hilo
+              nuevo sobre este proyecto, con esta conversación a la vista pero no en su memoria.
+            </p>
+          ) : null}
           {piezas.map((pieza) => {
             if (pieza.tipo === "pulso") {
               const { tramo: t } = pieza;
@@ -137,7 +162,9 @@ export function Chat({ actos, turnoEnVuelo = false }: { actos: readonly Acto[]; 
                       ? `Trabajo del agente · ${pasos} ${pasos === 1 ? "paso" : "pasos"}${
                           t.ms === undefined ? "" : ` · ${Math.round(t.ms / 100) / 10}s`
                         }`
-                      : "Trabajando…"}
+                      : segundosEnVuelo === undefined
+                        ? "Trabajando…"
+                        : `Trabajando… · ${segundosEnVuelo} s`}
                   </summary>
                   <div className={estilos.detalleDePulso}>
                     {t.actos.map((a, i) => {
@@ -184,7 +211,10 @@ export function Chat({ actos, turnoEnVuelo = false }: { actos: readonly Acto[]; 
               return (
                 <div key={indice} className={`${vista.flowItem} ${estilos.globo} ${estilos.asistente}`}>
                   <MarkdownText
-                    text={acto.texto}
+                    // Con los dólares escapados: el renderizador los lee como TeX y no
+                    // se puede apagar (`protegerDolares.ts`). El botón de copiar de abajo
+                    // se queda con el texto original.
+                    text={protegerDolares(acto.texto)}
                     // Solo mientras el turno CORRE. `MarkdownText` desactiva el resaltado
                     // en modo streaming (`lang: context.streaming ? undefined : lang`,
                     // medido en su `renderCode`), que es justo lo que quieres a medio

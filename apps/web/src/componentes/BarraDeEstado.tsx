@@ -26,6 +26,12 @@ export interface PiezasDeLaBarraDeEstado {
   contexto?: number;
   /** El tope de `topeResuelto`; ausente con ollama u otro modelo sin familia conocida. */
   tope?: number;
+  /**
+   * Cuántos segundos lleva el turno EN VUELO. Mientras esté puesto sustituye a `ms`: medido
+   * en pantalla, durante un turno de 116 segundos el pie decía «10,7 s», el tiempo del turno
+   * anterior, y no había forma de saber cuánto llevaba éste.
+   */
+  segundosEnVuelo?: number;
 }
 
 function formatearMs(ms: number): string {
@@ -40,19 +46,24 @@ function formatearContexto(contexto: number | undefined, tope: number | undefine
   return `ctx ${contexto}${sobreTope}${porcentaje}`;
 }
 
-export function BarraDeEstado({ turnos, pasos, ms, contexto, tope }: PiezasDeLaBarraDeEstado) {
+export function BarraDeEstado({ turnos, pasos, ms, contexto, tope, segundosEnVuelo }: PiezasDeLaBarraDeEstado) {
   const textoDeContexto = formatearContexto(contexto, tope);
   return (
     <footer className={estilos.barra}>
       <span className={estilos.pieza}>{turnos} turno{turnos === 1 ? "" : "s"}</span>
       <span className={estilos.separador} aria-hidden="true">·</span>
       <span className={estilos.pieza}>{pasos} paso{pasos === 1 ? "" : "s"}</span>
-      {ms !== undefined && (
+      {segundosEnVuelo !== undefined ? (
+        <>
+          <span className={estilos.separador} aria-hidden="true">·</span>
+          <span className={estilos.pieza}>trabajando · {segundosEnVuelo} s</span>
+        </>
+      ) : ms !== undefined ? (
         <>
           <span className={estilos.separador} aria-hidden="true">·</span>
           <span className={estilos.pieza}>{formatearMs(ms)}</span>
         </>
-      )}
+      ) : null}
       {textoDeContexto !== "" && (
         <>
           <span className={estilos.separador} aria-hidden="true">·</span>

@@ -141,3 +141,27 @@ describe("Escritorio: propios y compartidos", () => {
     expect(screen.queryByText("compartido")).toBeNull();
   });
 });
+
+describe("Escritorio: sin conexión", () => {
+  afterEach(cleanup);
+
+  it("apaga lo que manda algo al servidor: empezar y seguir una sesión", () => {
+    // Medido sin servidor: los 18 «Nueva sesión» seguían negros y pulsables.
+    render(
+      <Escritorio
+        {...MANEJADORES}
+        conectado={false}
+        entorno={{ nombre: "E", url: "https://e" }}
+        proyectos={[{ id: "p1", nombre: "Tienda", local: true, sesiones: [{ id: "s1", titulo: "Hola" }] }]}
+      />
+    );
+    expect(screen.getByRole("button", { name: /nueva sesión/i })).toHaveProperty("disabled", true);
+    expect(screen.getByRole("button", { name: "Hola" })).toHaveProperty("disabled", true);
+    expect(document.querySelector("[data-sin-conexion]")).not.toBeNull();
+  });
+
+  it("conectado, nada de eso está apagado", () => {
+    render(<Escritorio {...MANEJADORES} conectado proyectos={[{ id: "p1", nombre: "Tienda", local: true }]} />);
+    expect(screen.getByRole("button", { name: /nueva sesión/i })).toHaveProperty("disabled", false);
+  });
+});

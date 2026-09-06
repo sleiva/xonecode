@@ -99,6 +99,8 @@ export interface EstadoDelCliente {
      *  sabe, y entonces no se marca nada en vez de marcar el primero. */
     proyectoActivo?: string;
     sesionActiva?: string;
+    /** La sesión abierta es una relectura que el agente no recuerda. Ausente = no. */
+    historica?: boolean;
     /** El saludo de la bienvenida. Ausente = sin nombre que saludar (`Bienvenida.tsx`). */
     nombre?: string;
     /** Si hay un proyecto abierto en esta conexión — `App.tsx` lo usa para decidir entre
@@ -427,6 +429,7 @@ export function crearStoreDelCliente(): {
             entornoActivo?: unknown;
             proyectoActivo?: unknown;
             sesionActiva?: unknown;
+            historica?: unknown;
             proyectos?: unknown;
             ramas?: unknown;
             aviso?: unknown;
@@ -509,6 +512,9 @@ export function crearStoreDelCliente(): {
               ...(typeof m.entornoActivo === "string" ? { entornoActivo: m.entornoActivo } : {}),
               ...(typeof m.proyectoActivo === "string" ? { proyectoActivo: m.proyectoActivo } : {}),
               ...(typeof m.sesionActiva === "string" ? { sesionActiva: m.sesionActiva } : {}),
+              // Solo si es exactamente `true`: es una afirmación sobre lo que el agente NO
+              // recuerda, y cualquier otra cosa se lee como «no».
+              ...(m.historica === true ? { historica: true } : {}),
               // Solo los dos valores que el tipo admite: cualquier otra cosa (un modo
               // nuevo del servidor, o basura) se descarta y la cabecera no pinta
               // pastilla, que es lo mismo que hace cuando el campo no viene. Aceptar la

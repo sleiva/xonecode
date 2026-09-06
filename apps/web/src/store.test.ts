@@ -321,3 +321,32 @@ describe("aplicar: bienvenida", () => {
     expect(store.leer().nombre).toBeUndefined();
   });
 });
+
+describe("la relectura viaja en el alta", () => {
+  const base = {
+    clase: "alta" as const,
+    pasos: [] as const,
+    proveedores: [],
+    entornos: [],
+    registrados: [],
+    proyectos: [],
+    ramas: [],
+    proyectoAbierto: true,
+  };
+
+  it("`historica: true` se guarda: es lo que enseña el aviso del chat", () => {
+    const store = crearStoreDelCliente();
+    store.aplicar({ ...base, historica: true });
+    expect(store.leer().alta?.historica).toBe(true);
+  });
+
+  it("ausente, o cualquier cosa que no sea `true`, es «no»: no se afirma de una sesión viva", () => {
+    const store = crearStoreDelCliente();
+    store.aplicar({ ...base, historica: true });
+    // El siguiente alta (el primer turno nuevo) ya no la trae, y el estado la suelta.
+    store.aplicar({ ...base });
+    expect(store.leer().alta?.historica).toBeUndefined();
+    store.aplicar({ ...base, historica: "sí" } as never);
+    expect(store.leer().alta?.historica).toBeUndefined();
+  });
+});

@@ -242,6 +242,39 @@ un tramo es cualquier acto de conversación; lo que lo da por TERMINADO es solo 
 entonces termina todos los del turno — un tramo cerrado por la respuesta puede tener más
 tools detrás, y plegarlo antes de tiempo escondería trabajo en curso.
 
+**Los dólares del asistente se ESCAPAN antes de pintarlos** (`apps/web/src/protegerDolares.ts`).
+Medido en vivo: «en XOne se usa $http … y el objeto $ui no existe» salía como
+«*httpparapeticionesyelobjeto*ui» — el `MarkdownText` de deepseek monta
+`micromark-extension-math` con el dólar simple activado y no expone interruptor, y por sus
+propios tipos la gramática de streaming NO tiene matemáticas y la asentada sí: la frase se
+veía bien mientras llegaba y mutaba al terminar. En XOne `$http` es un objeto real y aquí
+nadie necesita LaTeX, así que se escapa TODO dólar fuera de código (`\$` es CommonMark y
+las dos gramáticas lo respetan); dentro de vallas y tramos de código no se toca, porque ahí
+ya era literal y la barra se vería. Solo para lo que se le da a `MarkdownText`: el botón
+de copiar y las Trazas llevan el texto original.
+
+**Una sesión reabierta lo DICE, y lo dice el servidor** (`alta.historica`). El cliente
+marcaba `historica: true` a TODAS las sesiones guardadas por su cuenta (cursiva en toda la
+barra, incluida la activa) y la sesión ABIERTA no llevaba la marca por el cable: el chat
+enseñaba una conversación y un compositor activo como si se pudiera seguir hablando, cuando
+el hilo del agente murió con aquel proceso. Ahora `ConsolaDeProyecto.historica` viaja en el
+alta solo cuando es cierto, el chat lo dice arriba con palabras, Ficheros da la causa que
+conoce en vez de dos posibles, y la cursiva se fue. **El alta se reanuncia en los DOS
+flancos del turno, y DIFERIDO** (`arranque.ts`, la escucha de `alCambiarTurno`): una sesión
+nueva no aparecía en la barra hasta recargar, porque su id nace en `volcar()` al final del
+turno y nadie volvía a anunciar; y `historica` deja de serlo al EMPEZAR el primer turno
+nuevo. Diferido a una microtarea porque `vestibulo.ts` llama a la escucha ANTES de
+`volcar()` en el mismo `finally` síncrono: anunciar en el acto leería la sesión sin id.
+
+**El turno en vuelo tiene cronómetro, y sin cable la interfaz se apaga.** El pie decía el
+tiempo del turno ANTERIOR mientras corría el actual (116 s con «10,7 s» delante), y sin
+servidor lo único que cambiaba era un «sin conexión» pequeño con los 18 «Nueva sesión»
+pulsables debajo. `useCronometro` (`apps/web/src/cronometro.ts`) cuenta desde el flanco de
+subida y lo pintan el pie y el «Trabajando…» del pulso; `conectado` llega a `Barra` y
+`Escritorio` y apaga lo que manda algo al servidor (Ajustes se queda: la apariencia es de
+este navegador), el punto del entorno deja de estar verde y el aviso de conexión se pinta
+también en el escritorio. La miga lleva además el proyecto delante de la sesión.
+
 **El resaltado de código lo hace shiki, y `streaming` lo APAGA.** `MarkdownText` pasa
 `lang: undefined` cuando está en ese modo (medido en su `renderCode`): correcto a medio
 llegar —una valla sin cerrar no se puede colorear— y desastroso después, porque el último

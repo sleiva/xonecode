@@ -68,6 +68,18 @@
   flex-shrink: 0;
 }
 
+/* Sin cable no se puede afirmar que el entorno esté vivo: el punto deja de estar verde. */
+.punto[data-sin-conexion] {
+  background: var(--dsw-alias-state-error-primary);
+}
+
+/* Apagados sin conexión: lo que manda algo al servidor no puede fingir que funciona. */
+.empezar:disabled,
+.sesion:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
 .entornoNombre {
   color: var(--dsw-alias-label-primary);
   font-weight: 600;

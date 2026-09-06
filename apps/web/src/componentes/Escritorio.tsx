@@ -27,6 +27,7 @@ export function Escritorio({
   alNuevaSesion,
   alAbrirSesion,
   alAbrirAjustes,
+  conectado,
 }: {
   /** El saludo (`agent/persona.ts`). Ausente = se saluda igual, sin inventarse un nombre. */
   nombre?: string;
@@ -46,7 +47,15 @@ export function Escritorio({
   alNuevaSesion: (proyecto: string) => void;
   alAbrirSesion: (proyecto: string, sesion: string) => void;
   alAbrirAjustes: () => void;
+  /**
+   * Si el cable está vivo. Medido sin servidor: lo único que cambiaba era un «sin conexión»
+   * pequeño en la esquina, y los 18 «Nueva sesión» seguían negros y pulsables — se pulsaba
+   * y no pasaba nada. Sin conexión, lo que manda algo al servidor se apaga, y el punto
+   * del entorno deja de estar verde: nada de esto se puede afirmar sin cable.
+   */
+  conectado?: boolean;
 }) {
+  const apagado = conectado === false;
   return (
     <div className={estilos.escritorio}>
       <div className={estilos.contenido}>
@@ -57,7 +66,7 @@ export function Escritorio({
           </p>
           {entorno === undefined ? null : (
             <p className={estilos.entorno}>
-              <span className={estilos.punto} aria-hidden="true" />
+              <span className={estilos.punto} data-sin-conexion={apagado ? "" : undefined} aria-hidden="true" />
               <span className={estilos.entornoNombre}>{entorno.nombre}</span>
               <span className={estilos.entornoUrl}>{entorno.url}</span>
             </p>
@@ -112,6 +121,7 @@ export function Escritorio({
                           <button
                             type="button"
                             className={estilos.sesion}
+                            disabled={apagado}
                             onClick={() => alAbrirSesion(p.id, s.id)}
                           >
                             {s.titulo}
@@ -123,6 +133,7 @@ export function Escritorio({
                   <button
                     type="button"
                     className={estilos.empezar}
+                    disabled={apagado}
                     onClick={() => alNuevaSesion(p.id)}
                   >
                     Nueva sesión

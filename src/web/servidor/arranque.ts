@@ -302,6 +302,7 @@ export function montarRutas(
       ...(entornoElegido === undefined ? {} : { entornoActivo: entornoElegido }),
       ...(activo === undefined ? {} : { proyectoActivo: activo }),
       ...(abierto?.sesion === undefined ? {} : { sesionActiva: abierto.sesion }),
+      ...(abierto?.historica === true ? { historica: true } : {}),
       ...(vestibulo.nombre === undefined ? {} : { nombre: vestibulo.nombre }),
       ...(aviso === undefined ? {} : { aviso }),
     });
@@ -941,6 +942,16 @@ export function montarRutas(
   // que conecta a mitad no vio ese mensaje, y necesita saberlo para apagar su compositor.
   vestibulo.alCambiarTurno((activo) => {
     turnoEnVuelo = activo;
+    // El alta se reanuncia en los DOS flancos, y DIFERIDO. Medido: una sesión nueva no
+    // aparecía en la barra hasta recargar la página, porque su id nace en `volcar()` —al
+    // final del turno— y nadie volvía a anunciar. Y `historica` deja de ser cierto al
+    // EMPEZAR el primer turno nuevo, que es el otro flanco. Diferido a una microtarea porque
+    // `vestibulo.ts` llama a esta escucha ANTES de `volcar()`, en el mismo `finally`
+    // síncrono: anunciar en el acto leería la sesión sin id todavía. Una microtarea corre
+    // cuando ese bloque ha terminado, o sea con el `.jsonl` ya escrito.
+    void Promise.resolve()
+      .then(() => anunciarAlta())
+      .catch(contar);
   });
 
   servidor.registrarRuta("GET", RUTA_EVENTOS, (peticion, respuesta) => {

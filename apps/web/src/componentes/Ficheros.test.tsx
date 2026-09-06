@@ -141,3 +141,11 @@ describe("Ficheros", () => {
     expect(screen.getByText(/se ha cortado/i)).toBeTruthy();
   });
 });
+
+describe("Ficheros: la sesión reabierta", () => {
+  it("con «sin-marca» y la sesión reabierta dice la causa que conoce, no dos posibles", () => {
+    render(<Ficheros via="sin-marca" historica ficheros={[]} parches={{}} alAbrir={NADA} alRecargar={NADA} />);
+    expect(screen.getByText(/se reabrió/i)).toBeTruthy();
+    expect(screen.queryByText(/repositorio de git/i)).toBeNull();
+  });
+});

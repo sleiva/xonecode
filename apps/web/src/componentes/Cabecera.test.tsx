@@ -48,3 +48,18 @@ describe("Cabecera", () => {
     expect(cabecera.className.split(/\s+/).length).toBeGreaterThan(1);
   });
 });
+
+describe("Cabecera: la miga dice dónde estás, con el proyecto delante", () => {
+  it("con proyecto y sesión son dos niveles: «AppDemo / Hola»", () => {
+    // Medido: decía «xonecode / Hola» y el proyecto no aparecía en ningún sitio.
+    render(<Cabecera titulo="Hola" proyecto="AppDemo" conectado />);
+    const miga = screen.getByRole("navigation", { name: /dónde estás/ });
+    expect(miga.textContent).toMatch(/AppDemo.*\/.*Hola/s);
+  });
+
+  it("si la sesión aún se llama como el proyecto, no se repite", () => {
+    render(<Cabecera titulo="AppDemo" proyecto="AppDemo" conectado />);
+    const miga = screen.getByRole("navigation", { name: /dónde estás/ });
+    expect(miga.textContent?.match(/AppDemo/g)).toHaveLength(1);
+  });
+});

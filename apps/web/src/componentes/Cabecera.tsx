@@ -21,8 +21,15 @@ import estilos from "./Cabecera.module.css";
  * `<button disabled>` que el original usa para la última: mismo elemento, mismo estado,
  * misma clase `.crumbCurrent`.
  */
-export function Cabecera({ titulo, modo, conectado, barraContraida, alAlternarBarra }: {
+export function Cabecera({ titulo, proyecto, modo, conectado, barraContraida, alAlternarBarra }: {
   titulo: string;
+  /**
+   * El proyecto al que pertenece `titulo`, cuando es una sesión. Medido: la miga decía
+   * «xonecode / Hola» y AppDemo no aparecía en ningún sitio de la cabecera. Con él, la
+   * miga son dos niveles («AppDemo / Hola»); si coincide con el título —una sesión sin
+   * nombre todavía se llama como su proyecto— no se repite.
+   */
+  proyecto?: string;
   /**
    * El modo del proyecto abierto (`.xonecode/config.json`), tal cual lo manda el
    * servidor. Ausente = el servidor no lo sabe (no hay proyecto abierto, o su config no
@@ -79,6 +86,18 @@ export function Cabecera({ titulo, modo, conectado, barraContraida, alAlternarBa
             /
           </span>
           <nav className={conversacion.crumbs} aria-label="dónde estás">
+            {proyecto === undefined || proyecto === titulo ? null : (
+              <>
+                <span className={conversacion.crumbSeg}>
+                  <button type="button" className={conversacion.crumb} disabled>
+                    {proyecto}
+                  </button>
+                </span>
+                <span className={estilos.separador} aria-hidden="true">
+                  /
+                </span>
+              </>
+            )}
             <span className={conversacion.crumbSeg}>
               <button
                 type="button"

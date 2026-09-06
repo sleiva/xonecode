@@ -9,6 +9,7 @@ import { Compositor } from "./componentes/Compositor.js";
 import { Transcript } from "./componentes/Transcript.js";
 import { BarraDeEstado } from "./componentes/BarraDeEstado.js";
 import { AvisoDeConexion } from "./componentes/AvisoDeConexion.js";
+import { useCronometro } from "./cronometro.js";
 import { Pregunta } from "./componentes/Pregunta.js";
 import { Aprobacion } from "./componentes/Aprobacion.js";
 import { Selector } from "./componentes/Selector.js";
@@ -112,6 +113,9 @@ export function App({ store, enviar }: { store: Store; enviar: Conexion["enviar"
    * si no, seguiría enseñando el diff viejo del fichero que el turno acaba de cambiar.
    */
   const turnoEnVuelo = estado.turnoEnVuelo === true;
+  // Desde cuándo: lo pintan el pie y el pulso mientras dura, en vez del tiempo del turno
+  // anterior, que es lo que se veía.
+  const segundosEnVuelo = useCronometro(turnoEnVuelo);
   const turnoAnterior = useRef(turnoEnVuelo);
   useEffect(() => {
     const acabaDeTerminar = turnoAnterior.current && !turnoEnVuelo;
@@ -516,6 +520,9 @@ export function App({ store, enviar }: { store: Store; enviar: Conexion["enviar"
   const cabecera = proyectoAbierto ? (
     <Cabecera
       titulo={tituloDeLaSesion ?? nombreDelProyectoActivo ?? "Sesión nueva"}
+      // El proyecto delante de la sesión: «AppDemo / Hola». `Cabecera` no lo repite si el
+      // título todavía ES el nombre del proyecto.
+      {...(nombreDelProyectoActivo === undefined ? {} : { proyecto: nombreDelProyectoActivo })}
       // Ausente mientras el servidor no lo sepa: `Cabecera` no pinta pastilla entonces, en
       // vez de afirmar un modo que nadie ha leído.
       {...(estado.alta?.modo === undefined ? {} : { modo: estado.alta.modo })}
@@ -556,8 +563,13 @@ export function App({ store, enviar }: { store: Store; enviar: Conexion["enviar"
               actos={estado.actos}
               pestana={pestana}
               turnoEnVuelo={estado.turnoEnVuelo === true}
+              // Lo dice el servidor (`alta.historica`): una sesión reabierta que el agente
+              // no recuerda. El chat lo enseña arriba y Ficheros cambia su explicación.
+              historica={estado.alta?.historica === true}
+              {...(segundosEnVuelo === undefined ? {} : { segundosEnVuelo })}
               ficheros={
                 <Ficheros
+                  historica={estado.alta?.historica === true}
                   {...(estado.ficheros === undefined ? {} : { via: estado.ficheros.via })}
                   ficheros={estado.ficheros?.lista ?? []}
                   parches={estado.parches ?? {}}
@@ -645,7 +657,12 @@ export function App({ store, enviar }: { store: Store; enviar: Conexion["enviar"
               // `/modelo`, `/config` y `/sync` funcionan aquí sin ningún código nuevo.
               alEnviar={(texto) => void enviar({ clase: "prosa", texto })}
             />
-            <BarraDeEstado turnos={turnos} pasos={pasos} ms={ultimoFin?.ms} />
+            <BarraDeEstado
+              turnos={turnos}
+              pasos={pasos}
+              ms={ultimoFin?.ms}
+              {...(segundosEnVuelo === undefined ? {} : { segundosEnVuelo })}
+            />
             {estado.aprobacion !== undefined ? (
               <Aprobacion
                 pendientes={estado.aprobacion.pendientes}
@@ -669,7 +686,10 @@ export function App({ store, enviar }: { store: Store; enviar: Conexion["enviar"
           // lo que se sabe de cada uno y un clic para empezar. Todo lo que pinta ya viajaba
           // por el cable; no hay tarjeta de relleno.
           <>
+            {/* También aquí: sin servidor, el escritorio se veía entero y vivo. */}
+            <AvisoDeConexion conectado={estado.conectado} />
             <Escritorio
+            conectado={estado.conectado}
             {...(estado.nombre === undefined ? {} : { nombre: estado.nombre })}
             {...(entornoDelEscritorio === undefined ? {} : { entorno: entornoDelEscritorio })}
             proyectos={estado.alta?.proyectos ?? []}
@@ -683,6 +703,7 @@ export function App({ store, enviar }: { store: Store; enviar: Conexion["enviar"
       }
       barra={
         <Barra
+          conectado={estado.conectado}
           // Los REGISTRADOS, no los ofrecidos. `entornos` es la lista fija de los dos
           // oficiales más «otro», que sirve para prerrellenar la URL en el alta; enseñarla
           // aquí hacía que un on-premise recién registrado se leyera como «XOne WebStudio»

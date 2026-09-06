@@ -97,7 +97,11 @@
    no puede significar esconder: son las conversaciones por las que se navega. */
 .historica {
   color: var(--dsw-alias-label-secondary);
-  font-style: italic;
+  /* Sin cursiva desde la revisión de interfaz: TODA sesión guardada es histórica al
+     reabrirse, así que la cursiva iba en todas las filas —incluida la activa— y en el
+     mismo estilo que «Sin sesiones todavía»: una conversación real se leía como un estado
+     vacío, y el menú «…» la heredaba. Lo que dice que es una relectura es ahora el aviso
+     del chat, que lo dice con palabras y solo de la sesión abierta. */
 }
 
 /* La sesión ABIERTA, marcada como el proyecto abierto y por el mismo motivo: la

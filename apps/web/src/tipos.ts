@@ -183,6 +183,8 @@ export type MensajeAlCliente =
        */
       proyectoActivo?: string;
       sesionActiva?: string;
+      /** La sesión abierta es una relectura y el agente no la recuerda. Ausente = no. */
+      historica?: boolean;
       proyectos: {
         id: string;
         nombre: string;

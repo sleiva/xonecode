@@ -160,6 +160,15 @@ export type MensajeAlCliente =
       proyectoActivo?: string;
       sesionActiva?: string;
       /**
+       * La sesión abierta es una RELECTURA: se reabrió de otra sesión de xonecode y el
+       * agente no la recuerda (`ConsolaDeProyecto.historica`: el hilo vive en un
+       * `MemorySaver` que murió con aquel proceso). Deja de serlo en el primer turno nuevo,
+       * y el alta se reanuncia en ese flanco. Solo viaja cuando es cierto: ausente es «no».
+       * Sin esto el cliente pintaba una conversación y un compositor activo como si se
+       * pudiera seguir hablando, que es lo que el propio `CLAUDE.md` dice que no pasa.
+       */
+      historica?: boolean;
+      /**
        * De qué entorno son los `proyectos` de este mensaje. Ausente = todavía de ninguno
        * (nadie ha elegido y no había ninguno registrado que poblar). El cliente lo NECESITA
        * para no tener que asumir «el primero de la lista», que es lo que hacía y era una

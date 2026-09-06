@@ -1,4 +1,4 @@
-import { render, cleanup } from "@testing-library/react";
+import { render, screen, cleanup } from "@testing-library/react";
 import { afterEach, describe, it, expect } from "vitest";
 import { Chat } from "./Chat.js";
 import type { Acto } from "../tipos.js";
@@ -92,5 +92,45 @@ describe("Chat", () => {
     rerender(<Chat actos={[...actos]} turnoEnVuelo={false} />);
     // Terminado: el bloque ya declara su lenguaje, que es lo que shiki necesita para pintar.
     expect(container.innerHTML).toMatch(/language-js|shiki/);
+  });
+});
+
+describe("Chat: lo que la revisión de interfaz vio en vivo", () => {
+  it("un dólar en la prosa se pinta como dólar, no como fórmula — asentado y en streaming", () => {
+    // Medido: «$http … $ui» salía como «*httpparapeticionesyelobjeto*ui». El renderizador
+    // lee el dólar simple como TeX y no se puede apagar; se escapa antes de dárselo.
+    const texto = "en XOne se usa $http para peticiones y el objeto $ui no existe";
+    for (const enVuelo of [false, true]) {
+      cleanup();
+      const { container } = render(<Chat actos={[asistente(texto)]} turnoEnVuelo={enVuelo} />);
+      expect(container.querySelector(".katex, math")).toBeNull();
+      expect(container.textContent).toContain("se usa $http para peticiones y el objeto $ui no existe");
+    }
+  });
+
+  it("dentro de una valla el dólar ya era literal y sigue sin barra delante", () => {
+    const { container } = render(<Chat actos={[asistente("```js\nvar r = $http.get(u);\n```")]} />);
+    expect(container.querySelector("pre")?.textContent).toContain("$http.get(u)");
+    expect(container.querySelector("pre")?.textContent).not.toContain("\\$");
+  });
+
+  it("una sesión reabierta lo DICE arriba: el agente no la recuerda", () => {
+    render(<Chat actos={[asistente("hola")]} historica />);
+    expect(screen.getByRole("note").textContent).toMatch(/reabierta/);
+    expect(screen.getByRole("note").textContent).toMatch(/no la recuerda/);
+  });
+
+  it("sin la marca no hay aviso: afirmarlo de una sesión viva sería mentir", () => {
+    render(<Chat actos={[asistente("hola")]} />);
+    expect(screen.queryByRole("note")).toBeNull();
+  });
+
+  it("mientras el turno corre, el pulso dice cuántos segundos lleva", () => {
+    const actos: Acto[] = [
+      { tipo: "usuario", texto: "haz algo" },
+      { tipo: "herramientas", lineas: ["→ lee /app.xml"] },
+    ];
+    render(<Chat actos={actos} turnoEnVuelo segundosEnVuelo={42} />);
+    expect(screen.getByText(/Trabajando… · 42 s/)).toBeTruthy();
   });
 });

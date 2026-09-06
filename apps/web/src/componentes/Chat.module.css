@@ -262,3 +262,16 @@
   -webkit-mask-size: contain;
   -webkit-mask-repeat: no-repeat;
 }
+
+/* El aviso de relectura, encabezando la conversación reabierta. En el tono de un dato y no
+   de un error: no ha fallado nada, es lo que esta sesión ES. Los mismos alias que usa el
+   aviso de alcance de un agente externo (`Agentes.module.css#aviso`). */
+.relectura {
+  margin: 12px 0 0;
+  padding: 8px 12px;
+  border-radius: 8px;
+  background: var(--dsw-alias-state-warn-tertiary);
+  color: var(--dsw-alias-state-warn-label);
+  font-size: 12px;
+  line-height: 1.5;
+}

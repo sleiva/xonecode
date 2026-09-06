@@ -387,3 +387,28 @@ describe("la sesión abierta se distingue de la que tienes bajo el ratón", () =
     expect(container.querySelector("[aria-current]")).toBeNull();
   });
 });
+
+describe("Barra: sin conexión", () => {
+  it("apaga el entorno, el proyecto, el «+» y la sesión, y quita el «…»; Ajustes se queda", () => {
+    render(
+      <Barra
+        conectado={false}
+        entornos={[{ id: "e1", nombre: "E", url: "https://e" }]}
+        entornoActivo="e1"
+        proyectos={[{ id: "p1", nombre: "Tienda", sesiones: [{ id: "s1", titulo: "Hola", historica: true }] }]}
+        alElegirEntorno={() => {}}
+        alAbrirSesion={() => {}}
+        alAbrirProyecto={() => {}}
+        alNuevaSesion={() => {}}
+        alAccionDeSesion={() => {}}
+        alAbrirAjustes={() => {}}
+      />
+    );
+    expect(screen.getByRole("combobox")).toHaveProperty("disabled", true);
+    expect(screen.getByRole("button", { name: /^Tienda/ })).toHaveProperty("disabled", true);
+    expect(screen.getByRole("button", { name: /nueva sesión en Tienda/ })).toHaveProperty("disabled", true);
+    expect(screen.getByRole("button", { name: "Hola" })).toHaveProperty("disabled", true);
+    expect(screen.queryByRole("button", { name: /opciones de/ })).toBeNull();
+    expect(screen.getByRole("button", { name: "Ajustes" })).toHaveProperty("disabled", false);
+  });
+});

@@ -32,3 +32,12 @@ describe("BarraDeEstado", () => {
     expect(screen.getByText("1.5 s")).toBeTruthy();
   });
 });
+
+describe("BarraDeEstado: el turno en vuelo", () => {
+  it("mientras corre, dice cuánto lleva y NO el tiempo del turno anterior", () => {
+    // Medido: durante 116 segundos el pie decía «10,7 s», el del turno de antes.
+    render(<BarraDeEstado turnos={2} pasos={5} ms={10700} segundosEnVuelo={37} />);
+    expect(screen.getByText(/trabajando · 37 s/)).toBeTruthy();
+    expect(screen.queryByText(/10\.7 s/)).toBeNull();
+  });
+});

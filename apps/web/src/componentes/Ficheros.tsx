@@ -30,9 +30,15 @@ export function Ficheros({
   abierto,
   alAbrir,
   alRecargar,
+  historica,
 }: {
   /** Ausente = todavía no ha llegado la respuesta; se dice, en vez de enseñar vacío. */
   via?: "git" | "sin-marca" | "sin-empezar";
+  /**
+   * La sesión es una relectura (`alta.historica`). Con «sin-marca» cambia lo que se dice:
+   * el texto general ofrecía dos causas posibles cuando aquí se sabe cuál es.
+   */
+  historica?: boolean;
   ficheros: readonly FicheroTocado[];
   /** Los parches ya traídos, por ruta. El que falta está pedido y en camino. */
   parches: Record<string, { texto: string; recortado: boolean }>;
@@ -55,6 +61,15 @@ export function Ficheros({
       <p className={estilos.aviso}>
         Esta sesión todavía no ha empezado: no ha tocado ningún fichero. En cuanto le mandes
         algo al agente, lo que escriba aparecerá aquí.
+      </p>
+    );
+  }
+  if (via === "sin-marca" && historica === true) {
+    return (
+      <p className={estilos.aviso}>
+        Esta conversación se reabrió y no tiene foto del proyecto de cuando empezó, así que no
+        hay con qué comparar lo que tocó entonces. No es que no hubiera cambios — es que no se
+        puede saber. Lo que el agente escriba a partir de ahora sí aparecerá aquí.
       </p>
     );
   }

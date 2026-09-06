@@ -69,7 +69,7 @@ export interface Proyecto {
  */
 export const PROYECTOS_POR_OMISION = 4;
 
-export function Barra({ entornos, entornoActivo, proyectos, visibles, proyectoActivo, sesionActiva, alElegirEntorno, alAbrirSesion, alAbrirProyecto, alNuevaSesion, alAccionDeSesion, alAbrirAjustes }: {
+export function Barra({ entornos, entornoActivo, proyectos, visibles, proyectoActivo, sesionActiva, alElegirEntorno, alAbrirSesion, alAbrirProyecto, alNuevaSesion, alAccionDeSesion, alAbrirAjustes, conectado }: {
   entornos: { id: string; nombre: string }[];
   entornoActivo: string;
   proyectos: Proyecto[];
@@ -112,7 +112,15 @@ export function Barra({ entornos, entornoActivo, proyectos, visibles, proyectoAc
    * (`/config`), y quién sabe mandarlo por el cable es quien tiene el `enviar`.
    */
   alAbrirAjustes: () => void;
+  /**
+   * Si el cable está vivo. Sin él, todo lo que manda algo al servidor se apaga: cambiar de
+   * entorno, abrir un proyecto o una sesión, el «+» y el «…». Medido sin servidor: la barra
+   * seguía entera y pulsable con un «sin conexión» pequeño arriba. «Ajustes» se queda: la
+   * apariencia es de este navegador y funciona sin cable.
+   */
+  conectado?: boolean;
 }) {
+  const apagado = conectado === false;
   // El orden de `visibles` NO manda: manda el del listado, que es el del servidor. Elegir
   // qué se ve es una cosa; reordenar el listado remoto sería otra, y nadie la ha pedido.
   const alaVista =
@@ -141,6 +149,7 @@ export function Barra({ entornos, entornoActivo, proyectos, visibles, proyectoAc
           ) : (
             <select
               className={estilos.entorno}
+              disabled={apagado}
               value={entornoActivo}
               onChange={(e) => alElegirEntorno(e.target.value)}
             >
@@ -183,6 +192,7 @@ export function Barra({ entornos, entornoActivo, proyectos, visibles, proyectoAc
                         <button
                           type="button"
                           className={clsx(estilos.reseteoDeBoton, estilos.cuerpoDeFila)}
+                          disabled={apagado}
                           onClick={() => alAbrirProyecto(p.id)}
                         >
                           {/*
@@ -224,6 +234,7 @@ export function Barra({ entornos, entornoActivo, proyectos, visibles, proyectoAc
                           <button
                             type="button"
                             className={filas.iconButton}
+                            disabled={apagado}
                             onClick={() => alNuevaSesion(p.id)}
                             aria-label={`nueva sesión en ${p.nombre}`}
                           >
@@ -262,17 +273,20 @@ export function Barra({ entornos, entornoActivo, proyectos, visibles, proyectoAc
                             <button
                               type="button"
                               className={clsx(estilos.reseteoDeBoton, estilos.cuerpoDeFila)}
+                              disabled={apagado}
                               onClick={() => alAbrirSesion(p.id, s.id)}
                             >
                               <span className={filas.slot} aria-hidden="true" />
                               <span className={filas.title}>{s.titulo}</span>
                             </button>
+                            {apagado ? null : (
                             <MenuDeSesion
                               titulo={s.titulo}
                               className={estilos.accionesDeFila}
                               alRenombrar={() => alAccionDeSesion(p.id, s.id, s.titulo, "renombrar")}
                               alBorrar={() => alAccionDeSesion(p.id, s.id, s.titulo, "borrar")}
                             />
+                            )}
                           </div>
                         ))
                       )}

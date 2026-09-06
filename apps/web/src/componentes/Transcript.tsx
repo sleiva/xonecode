@@ -19,10 +19,15 @@ export function Transcript({
   actos,
   pestana,
   turnoEnVuelo,
+  historica,
+  segundosEnVuelo,
   ficheros,
 }: {
   actos: readonly Acto[];
   pestana: Pestana;
+  /** Las dos van al Chat tal cual: la relectura y el cronómetro del turno en vuelo. */
+  historica?: boolean;
+  segundosEnVuelo?: number;
   /**
    * La vista de ficheros, ya montada por `App`. Va como ranura y no como cinco props
    * sueltas porque lo que aporta este componente es ELEGIR la vista, no conocer los datos
@@ -38,7 +43,12 @@ export function Transcript({
     <div className={conversacion.body}>
       <div className={conversacion.viewArea}>
         {pestana === "chat" ? (
-          <Chat actos={actos} turnoEnVuelo={turnoEnVuelo === true} />
+          <Chat
+            actos={actos}
+            turnoEnVuelo={turnoEnVuelo === true}
+            historica={historica === true}
+            {...(segundosEnVuelo === undefined ? {} : { segundosEnVuelo })}
+          />
         ) : pestana === "trazas" ? (
           <Trazas actos={actos} />
         ) : (
