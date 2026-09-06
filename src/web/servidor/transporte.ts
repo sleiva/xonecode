@@ -11,6 +11,7 @@
  * actos ni la traza de emisión los tocan, y por eso `emitir` no registra ese mensaje: lo
  * guarda quien lo tiene en vuelo, que lo suelta en cuanto hay decisión.
  */
+import type { Herramienta, InformeDeDispositivos } from "../../core/dispositivos.js";
 import type { Acto } from "../../core/actos.js";
 import type { PendienteDeAprobacion } from "../../core/events.js";
 import type { LineaDeDiff } from "../../core/diff.js";
@@ -20,6 +21,15 @@ import type { SelectorDeConsola } from "../../cli/consola.js";
 // porque son los MISMOS pasos y los MISMOS entornos que el vestíbulo calcula; una segunda
 // declaración en este fichero sería el tipo de copia que diverge sin que nada chiste.
 import type { OpcionDeEntorno, PasoDelVestibulo } from "./vestibulo.js";
+
+/**
+ * El informe de `core/dispositivos.ts` SIN la ruta de cada herramienta: es una ruta del
+ * home del usuario, el panel no la pinta, y este cable puede ir por un túnel
+ * (`--anfitrion`). Campo a campo, nada de más.
+ */
+export type InformeDeDispositivosDelCable = Omit<InformeDeDispositivos, "herramientas"> & {
+  herramientas: Omit<Herramienta, "ruta">[];
+};
 
 export type MensajeAlCliente =
   | { clase: "acto"; acto: Acto }
@@ -91,6 +101,18 @@ export type MensajeAlCliente =
    * un agente que no aparece y nadie dice por qué se lee como que la aplicación lo perdió.
    */
   | { clase: "agentes"; agentes: AgenteDelCable[]; problemas: string[] }
+  /**
+   * Qué hay en la MÁQUINA para probar la app: el sistema, las herramientas de Android e
+   * iOS (adb, emulator, xcrun/simctl, devicectl) con su estado, y a qué dispositivos y
+   * simuladores se llega (`core/dispositivos.ts`).
+   *
+   * Es una FOTO con su hora (`medido`), no un estado en vivo: se toma al conectar el primer
+   * cliente y cuando alguien pide actualizarla (el mensaje «dispositivos» del cliente). No se
+   * sondea en bucle porque `adb devices` arranca el demonio de adb y `xcrun` puede tardar
+   * segundos — un panel que se refresca solo cada pocos segundos lanzaría procesos en la
+   * máquina del usuario sin que nadie lo pidiera.
+   */
+  | { clase: "dispositivos"; informe: InformeDeDispositivosDelCable }
   /**
    * Los ficheros que ESTA sesión ha tocado, y el parche de uno.
    *
@@ -375,6 +397,11 @@ export type MensajeDelCliente =
    * proveedor ya relleno — o con su `error` puesto, que también es una respuesta.
    */
   | { clase: "catalogo"; proveedor: string }
+  /**
+   * Vuelve a mirar qué dispositivos y simuladores hay. La respuesta viaja por el SSE como
+   * `dispositivos`, a todos los clientes: la máquina es la misma para todos.
+   */
+  | { clase: "dispositivos" }
   /**
    * La credencial de un proveedor, desde la ventana de ajustes.
    *

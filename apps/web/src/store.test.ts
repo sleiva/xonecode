@@ -350,3 +350,32 @@ describe("la relectura viaja en el alta", () => {
     expect(store.leer().alta?.historica).toBeUndefined();
   });
 });
+
+describe("la foto de la máquina («dispositivos»)", () => {
+  const informe = {
+    sistema: "mac" as const,
+    herramientas: [{ nombre: "adb" as const, estado: "ok" as const }],
+    dispositivos: [{ id: "U", nombre: "iPhone 17 · iOS 26.0", plataforma: "ios" as const, clase: "simulador" as const, estado: "arrancado" as const }],
+    avds: ["Pixel_8"],
+    medido: "2026-09-06T10:00:00.000Z",
+  };
+
+  it("se guarda campo a campo, y un campo de más del servidor no entra", () => {
+    const s = crearStoreDelCliente();
+    s.aplicar({ clase: "dispositivos", informe: { ...informe, extra: 1 } as unknown as typeof informe });
+    expect(s.leer().dispositivos).toEqual(informe);
+  });
+
+  it("un informe malformado se descarta en vez de pintarse a medias", () => {
+    const s = crearStoreDelCliente();
+    s.aplicar({ clase: "dispositivos", informe: { sistema: "mac" } as unknown as typeof informe });
+    expect(s.leer().dispositivos).toBeUndefined();
+  });
+
+  it("NO se tira al caerse el cable: es una foto con hora de la máquina, no un estado del servidor", () => {
+    const s = crearStoreDelCliente();
+    s.aplicar({ clase: "dispositivos", informe });
+    s.marcarDesconectado();
+    expect(s.leer().dispositivos).toEqual(informe);
+  });
+});

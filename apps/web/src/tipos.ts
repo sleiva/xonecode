@@ -136,6 +136,12 @@ export type MensajeAlCliente =
    */
   | { clase: "agentes"; agentes: AgenteDelCable[]; problemas: string[] }
   /**
+   * Qué hay en la máquina para probar la app: sistema, herramientas de Android e iOS con su
+   * estado, y los dispositivos y simuladores a los que se llega. Es una foto con hora
+   * (`medido`), no un estado en vivo. Redeclarado de `core/dispositivos.ts`.
+   */
+  | { clase: "dispositivos"; informe: InformeDeDispositivos }
+  /**
    * Los ficheros que la sesión ha tocado, y el parche de uno. Los tres `via` son tres cosas
    * distintas: «git» es «comparado»; «sin-empezar», que la sesión no ha volcado ningún acto
    * todavía y por eso no ha tocado nada; «sin-marca», que NO se sabe —sin git, o sesión
@@ -293,6 +299,8 @@ export type MensajeDelCliente =
     }
   /** «Dime qué modelos sirve este proveedor»: una llamada de red, y por eso bajo demanda. */
   | { clase: "catalogo"; proveedor: string }
+  /** Vuelve a mirar qué dispositivos hay; la respuesta llega por el SSE como `dispositivos`. */
+  | { clase: "dispositivos" }
   /** Borrar la credencial de `auth.json`. Guardar no pasa por aquí: la clave viaja por
    *  «secreto», contestando al `leerSecreto` que abre `/provider`. */
   | { clase: "credencial"; accion: "pedir" | "borrar"; proveedor: string }
@@ -314,3 +322,30 @@ export type MensajeDelCliente =
   /** Pide los ficheros de la sesión, o el parche de uno. */
   | { clase: "ficheros"; ruta?: string }
   | { clase: "decision"; decisiones: Record<string, string> };
+
+/** Redeclarado de `core/dispositivos.ts` (ver la cabecera de este fichero). */
+export type SistemaOperativo = "mac" | "windows" | "linux" | "otro";
+
+export interface Herramienta {
+  nombre: "adb" | "emulator" | "xcrun" | "devicectl";
+  estado: "ok" | "no-encontrada" | "fallo" | "no-aplica";
+  /** Sin `ruta`: se queda en el host, es una ruta del home del usuario. */
+  detalle?: string;
+}
+
+export interface Dispositivo {
+  id: string;
+  nombre: string;
+  plataforma: "android" | "ios";
+  clase: "emulador" | "simulador" | "fisico";
+  estado: "conectado" | "arrancado" | "apagado" | "sin-autorizar" | "offline" | "no-disponible";
+  detalle?: string;
+}
+
+export interface InformeDeDispositivos {
+  sistema: SistemaOperativo;
+  herramientas: Herramienta[];
+  dispositivos: Dispositivo[];
+  avds: string[];
+  medido: string;
+}

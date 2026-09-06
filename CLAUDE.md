@@ -789,11 +789,47 @@ accesor lanza.
 que el servidor ya manda —si tienen copia local, sus últimas sesiones—, el entorno activo
 con su URL y el modelo en vigor, y empezar es un clic. Todo lo que enseña ya viajaba por el
 cable: no hay una sola tarjeta de relleno. Y **no pinta nada del mockup que no tenga dato
-detrás** —el panel de dispositivos conectados, «Build & Run», el estado del ADB—: eso es un
-puente con el móvil que este producto todavía no cablea (`docs/DISENO-DASHBOARD.md` lista
+detrás** —«Build & Run», el estado del ADB en vivo, los dispositivos del mockup—: eso es un
+puente con el móvil que este producto todavía no cablea, salvo la DETECCIÓN, que sí se mide
+(párrafo siguiente) (`docs/DISENO-DASHBOARD.md` lista
 pieza por pieza qué se sostiene y qué no). Los dos vacíos se distinguen, además: «no hay
 entorno registrado» manda a Ajustes; «el entorno no devolvió proyectos» no, porque ahí no
 hay nada que configurar.
+
+**Qué hay en la máquina para probar la app** (`core/dispositivos.ts`,
+`agent/dispositivosEnMaquina.ts`, panel «Tu equipo» en `Equipo.tsx`, mensaje
+`dispositivos` en las dos direcciones del cable). El sistema operativo, si hay adb y
+emulator (PATH, luego `ANDROID_HOME`/`ANDROID_SDK_ROOT`, luego la carpeta por omisión de
+cada sistema; en Windows con `.exe`), y en macOS los simuladores (`xcrun simctl list -j
+devices available`) y los iPhone/iPad conectados (`xcrun devicectl list devices
+--json-output <fichero>`: no imprime el JSON por stdout). Los parsers son puros y están
+probados contra la salida MEDIDA aquí (simctl con iOS 26, devicectl vacío) y la forma
+documentada (adb, devicectl con dispositivos: en esta máquina no hay ninguno); el corredor
+recibe plataforma, entorno, `existe` y `ejecutar` por parámetro, así que `npm test` no
+lanza ni un proceso. Reglas:
+- **`xcode-select -p` ANTES de cualquier `xcrun`.** Sin herramientas de desarrollo, `xcrun`
+  levanta el diálogo de «instalar las command line tools» encima de lo que haya;
+  `xcode-select -p` falla sin diálogo.
+- **Cuatro estados por herramienta, no un booleano**: ok, no encontrada, falló (con UNA
+  línea de motivo, nunca la salida entera) y **no aplica** — iOS fuera de macOS. Decir «sin
+  iOS» en un Linux afirmaría lo que la máquina no puede saber. La RUTA de la herramienta se
+  queda en el host (`sinRutas`, `arranque.ts`): es una ruta del home del usuario y el cable
+  puede ir por un túnel (`--anfitrion`); el panel no la pinta y no la necesita.
+- **Cada proceso lleva tope** (`TOPES_MS`; el de adb es mayor porque `adb devices` ARRANCA
+  el demonio en frío) y un cuelgue se dice como «no respondió», nunca se queda el panel en
+  «consultando…». Ese demonio se queda vivo —también tras la primera medida al conectar—,
+  y el panel lo dice.
+- **Es una FOTO con hora, no un estado en vivo, y no hay sondeo**: se mide al conectar el
+  primer cliente —UNA detección en vuelo compartida, dos pestañas no lanzan dos adb— y solo
+  se vuelve a medir cuando alguien pulsa «Volver a mirar». Refrescar solo cada pocos
+  segundos lanzaría procesos en el equipo del usuario sin que nadie lo pidiera. Va a TODOS
+  los clientes: la máquina es la misma para todos. Y el store NO la tira al caerse el
+  cable, al revés que `modelos`: no es un estado que el servidor pueda haber cambiado.
+- **Por nombre solo lo que está a mano o pide algo** (conectado, arrancado, sin autorizar,
+  offline); los apagados se CUENTAN. Esta máquina tiene 35 simuladores y ninguno arrancado:
+  35 filas iguales no dicen nada que «35 disponibles, ninguno arrancado» no diga.
+- Sin la opción `detectarDispositivos` en `montarRutas` no se manda nada: el escritorio se
+  queda en «consultando…» en vez de afirmar una máquina vacía.
 
 **La barra distingue dónde estás.** `proyectoAbierto` (booleano) decía SI había uno; la
 barra necesita CUÁL, y son dos preguntas distintas: el mensaje de alta lleva ahora

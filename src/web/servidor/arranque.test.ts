@@ -1594,3 +1594,110 @@ describe("descripcionParaLaWeb", () => {
     expect(descripcionParaLaWeb("lista los comandos de barra")).toBe("lista los comandos");
   });
 });
+
+describe("qué hay en la máquina: el mensaje «dispositivos»", () => {
+  const informe = {
+    sistema: "mac" as const,
+    herramientas: [{ nombre: "adb" as const, estado: "no-encontrada" as const }],
+    dispositivos: [],
+    avds: [],
+    medido: "2026-09-06T10:00:00.000Z",
+  };
+
+  it("al conectar se mide UNA vez y la foto llega por el SSE a quien conectó; la segunda pestaña la recibe en la ráfaga sin volver a medir", async () => {
+    let medidas = 0;
+    const servidor = servidorDeMentira();
+    montarRutas(servidor, vestibuloDePrueba(), {
+      detectarDispositivos: async () => {
+        medidas++;
+        return informe;
+      },
+    });
+    const eventos = servidor.rutas.get(`GET ${RUTA_EVENTOS}`)!;
+    const primera = clienteDeMentira();
+    await eventos(primera.peticion, primera.respuesta);
+    await asentar();
+    const foto = primera.recibidos.find((m) => m.clase === "dispositivos") as Extract<MensajeAlCliente, { clase: "dispositivos" }>;
+    expect(foto.informe).toEqual(informe);
+    expect(medidas).toBe(1);
+
+    const segunda = clienteDeMentira();
+    await eventos(segunda.peticion, segunda.respuesta);
+    await asentar();
+    // La ráfaga de bienvenida ya la lleva: no se lanza adb otra vez por abrir una pestaña.
+    expect(segunda.recibidos.filter((m) => m.clase === "dispositivos")).toHaveLength(1);
+    expect(medidas).toBe(1);
+  });
+
+  it("dos pestañas que conectan A LA VEZ comparten la detección en vuelo", async () => {
+    let medidas = 0;
+    let soltar: (() => void) | undefined;
+    const servidor = servidorDeMentira();
+    montarRutas(servidor, vestibuloDePrueba(), {
+      detectarDispositivos: () => {
+        medidas++;
+        return new Promise((r) => {
+          soltar = () => r(informe);
+        });
+      },
+    });
+    const eventos = servidor.rutas.get(`GET ${RUTA_EVENTOS}`)!;
+    const a = clienteDeMentira();
+    const b = clienteDeMentira();
+    await eventos(a.peticion, a.respuesta);
+    await eventos(b.peticion, b.respuesta);
+    await asentar();
+    expect(medidas).toBe(1);
+    soltar!();
+    await asentar();
+    // Y la foto va a TODOS: la máquina es la misma para las dos.
+    expect(a.recibidos.some((m) => m.clase === "dispositivos")).toBe(true);
+    expect(b.recibidos.some((m) => m.clase === "dispositivos")).toBe(true);
+  });
+
+  it("el cliente pide volver a mirar y se mide de nuevo; es la ÚNICA forma —no hay sondeo—", async () => {
+    let medidas = 0;
+    const servidor = servidorDeMentira();
+    montarRutas(servidor, vestibuloDePrueba(), {
+      detectarDispositivos: async () => {
+        medidas++;
+        return { ...informe, medido: `medida-${medidas}` };
+      },
+    });
+    const cliente = clienteDeMentira();
+    await servidor.rutas.get(`GET ${RUTA_EVENTOS}`)!(cliente.peticion, cliente.respuesta);
+    await asentar();
+    expect(await enviarMensaje(servidor.rutas.get(`POST ${RUTA_ACCION}`)!, { clase: "dispositivos" })).toBe(204);
+    await asentar();
+    const fotos = cliente.recibidos.filter((m) => m.clase === "dispositivos") as Extract<MensajeAlCliente, { clase: "dispositivos" }>[];
+    expect(fotos.map((f) => f.informe.medido)).toEqual(["medida-1", "medida-2"]);
+    expect(medidas).toBe(2);
+  });
+
+  it("la RUTA de cada herramienta no sale por el cable: es una ruta del home del usuario", async () => {
+    const servidor = servidorDeMentira();
+    montarRutas(servidor, vestibuloDePrueba(), {
+      detectarDispositivos: async () => ({
+        ...informe,
+        herramientas: [{ nombre: "adb", estado: "ok", ruta: "/Users/alguien/Library/Android/sdk/platform-tools/adb" }],
+      }),
+    });
+    const cliente = clienteDeMentira();
+    await servidor.rutas.get(`GET ${RUTA_EVENTOS}`)!(cliente.peticion, cliente.respuesta);
+    await asentar();
+    const foto = cliente.recibidos.find((m) => m.clase === "dispositivos") as Extract<MensajeAlCliente, { clase: "dispositivos" }>;
+    expect(foto.informe.herramientas).toEqual([{ nombre: "adb", estado: "ok" }]);
+    expect(JSON.stringify(foto)).not.toContain("/Users/alguien");
+  });
+
+  it("sin la opción no se manda ningún «dispositivos»: no se afirma una máquina vacía", async () => {
+    const servidor = servidorDeMentira();
+    montarRutas(servidor, vestibuloDePrueba());
+    const cliente = clienteDeMentira();
+    await servidor.rutas.get(`GET ${RUTA_EVENTOS}`)!(cliente.peticion, cliente.respuesta);
+    await asentar();
+    expect(cliente.recibidos.some((m) => m.clase === "dispositivos")).toBe(false);
+    // Y pedirlo tampoco revienta: 204 y silencio.
+    expect(await enviarMensaje(servidor.rutas.get(`POST ${RUTA_ACCION}`)!, { clase: "dispositivos" })).toBe(204);
+  });
+});

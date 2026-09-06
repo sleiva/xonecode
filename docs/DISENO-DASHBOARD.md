@@ -32,13 +32,19 @@ que aporta el diseño no es la disposición sino tres cosas concretas:
 ## Lo que el diseño enseña y xonecode NO sabe hacer todavía
 
 Más de la mitad del mockup es un **puente con dispositivos** que este producto no tiene
-cableado. Nada de esto puede pintarse sin mentir:
+cableado. De ese puente, lo ÚNICO que hoy se pinta es lo que se MIDE: el panel «Tu equipo»
+del escritorio (`Equipo.tsx`, servido por `agent/dispositivosEnMaquina.ts`) dice el sistema
+operativo, si hay adb/emulator y Xcode, y a qué simuladores y dispositivos se llega — una
+foto con hora, con botón para volver a mirar y sin sondeo, porque `adb devices` arranca el
+demonio de adb y `xcrun` tarda segundos. Lo demás sigue sin poder pintarse sin mentir:
 
-- **Panel «Connected Devices»** (iPhone 15 Pro · USB · 98%, Pixel 8 · Wi-Fi · 82%), las
-  tarjetas de dispositivo del transcript, «Launch on Device», «Logs»/«Logcat», «Inspect».
+- **Del panel «Connected Devices»**, todo lo que no sea detección: el porcentaje de batería,
+  las tarjetas de dispositivo del transcript, «Launch on Device», «Logs»/«Logcat», «Inspect».
 - **«Build & Run»** y «Run on All Devices Now».
 - **Hot reload / Fast Refresh**, «Sync: Active», el badge «Xone Native Bridge v4.2».
 - **Pie de estado**: «ADB status: daemon active (port 5037)», «iOS Tunnel: usbmuxd synced».
+  El estado de adb (encontrado, falló, no instalado) sí se dice, pero en el panel y como
+  resultado de una medida, no como un pie que finge estar en vivo.
 - **Selector de destino** en el compositor («Target: All Devices»).
 - **«Session log»** en la cabecera.
 

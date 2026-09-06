@@ -23,6 +23,9 @@ import type {
   AgenteDelCable,
   ProveedorDeModelos,
   SelectorDeConsola,
+  Dispositivo,
+  Herramienta,
+  InformeDeDispositivos,
 } from "./tipos.js";
 
 export interface EstadoDelCliente {
@@ -39,6 +42,13 @@ export interface EstadoDelCliente {
   /** Los subagentes y los `.md` que no se pudieron leer. Ausente = todavía no ha llegado el
    *  mensaje, que NO es lo mismo que «no hay ninguno»: la ventana lo distingue. */
   agentes?: { lista: AgenteDelCable[]; problemas: string[] };
+  /**
+   * Qué hay en la máquina para probar la app (`core/dispositivos.ts`), tal como lo midió el
+   * servidor. Ausente = todavía no llegó: el escritorio dice «consultando…». NO se tira al
+   * caerse el cable como `modelos`: es una foto con hora de la máquina, no un estado que el
+   * servidor pueda haber cambiado sin decirlo, y la reconexión la vuelve a mandar igual.
+   */
+  dispositivos?: InformeDeDispositivos;
   /** Hay un turno corriendo AHORA. Lo dice el servidor; el cliente no lo deduce. */
   turnoEnVuelo?: boolean;
   /**
@@ -354,6 +364,42 @@ export function crearStoreDelCliente(): {
               // fila inventada.
               ...(typeof m.actual === "string" ? { actual: m.actual } : {}),
               proveedores,
+            },
+          });
+          return;
+        }
+        case "dispositivos": {
+          const m = mensaje as { informe?: unknown };
+          const informe = m.informe as Partial<InformeDeDispositivos> | undefined;
+          if (informe === undefined || informe === null || typeof informe !== "object") return;
+          if (!Array.isArray(informe.herramientas) || !Array.isArray(informe.dispositivos) || !Array.isArray(informe.avds)) return;
+          if (typeof informe.sistema !== "string" || typeof informe.medido !== "string") return;
+          // Campo a campo, como `agentes`: nada que el servidor añada mañana entra sin decidirlo.
+          mutar({
+            dispositivos: {
+              sistema: informe.sistema,
+              medido: informe.medido,
+              avds: informe.avds.filter((x): x is string => typeof x === "string"),
+              herramientas: informe.herramientas
+                .filter((h): h is Herramienta => typeof h === "object" && h !== null && typeof h.nombre === "string" && typeof h.estado === "string")
+                .map((h) => ({
+                  nombre: h.nombre,
+                  estado: h.estado,
+                  ...(h.detalle === undefined ? {} : { detalle: h.detalle }),
+                })),
+              dispositivos: informe.dispositivos
+                .filter(
+                  (d): d is Dispositivo =>
+                    typeof d === "object" && d !== null && typeof d.id === "string" && typeof d.nombre === "string" && typeof d.estado === "string"
+                )
+                .map((d) => ({
+                  id: d.id,
+                  nombre: d.nombre,
+                  plataforma: d.plataforma,
+                  clase: d.clase,
+                  estado: d.estado,
+                  ...(d.detalle === undefined ? {} : { detalle: d.detalle }),
+                })),
             },
           });
           return;

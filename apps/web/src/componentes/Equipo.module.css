@@ -1,0 +1,148 @@
+/* Alias comprobados contra `apps/web/estilos/design-platform.css` (los mismos que
+   `Escritorio.module.css`): bg-layer-1/2, border-l2, label-primary/secondary/tertiary,
+   interactive-bg-hover, state-success-primary, state-error-primary, state-warn-primary.
+   `--xonecode-cian` es de `estilos/marca.css`. Ningún color literal. */
+
+/* La misma tira con borde que el entorno activo: es información de la máquina, al mismo
+   nivel que «qué entorno hay», y se lee con la misma forma. */
+.equipo {
+  margin: 24px 0 0;
+  padding: 14px;
+  border: 0.5px solid var(--dsw-alias-border-l2);
+  border-radius: 12px;
+  background: var(--dsw-alias-bg-layer-2);
+}
+
+.cabecera {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+}
+
+.titulo {
+  margin: 0;
+  color: var(--dsw-alias-label-primary);
+  font-size: 14px;
+  font-weight: 600;
+}
+
+/* El sistema en mono: es dato de máquina, no una palabra de la frase. */
+.sistema {
+  margin-right: auto;
+  color: var(--dsw-alias-label-tertiary);
+  font-family: var(--ds-font-family-code);
+  font-size: 11px;
+}
+
+.actualizar {
+  padding: 4px 10px;
+  border: 0.5px solid var(--dsw-alias-border-l2);
+  border-radius: 8px;
+  background: var(--dsw-alias-bg-layer-1);
+  color: var(--dsw-alias-label-primary);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.actualizar:hover {
+  background: var(--dsw-alias-interactive-bg-hover);
+}
+
+.actualizar:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+/* Android e iOS, lado a lado cuando caben y en columna cuando no: sin media queries. */
+.bloques {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 12px 24px;
+  margin-top: 12px;
+}
+
+.bloque {
+  min-width: 0;
+}
+
+.plataforma {
+  margin: 0 0 6px;
+  color: var(--dsw-alias-label-secondary);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.resumen,
+.cuenta,
+.nota {
+  margin: 4px 0 0;
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 12px;
+}
+
+.fallo {
+  margin: 4px 0 0;
+  color: var(--dsw-alias-state-error-primary);
+  font-size: 12px;
+}
+
+.filas {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.fila {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 8px;
+  padding: 4px 0;
+  font-size: 12px;
+}
+
+.punto {
+  align-self: center;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--dsw-alias-label-tertiary);
+  flex-shrink: 0;
+}
+
+/* Verde SOLO cuando se llega al dispositivo; lo que pide algo va en aviso, y lo demás gris.
+   El texto de al lado dice el estado con palabras: el color no es la única señal. */
+.fila[data-estado="conectado"] .punto,
+.fila[data-estado="arrancado"] .punto {
+  background: var(--dsw-alias-state-success-primary);
+}
+
+.fila[data-estado="sin-autorizar"] .punto,
+.fila[data-estado="offline"] .punto {
+  background: var(--dsw-alias-state-warn-primary);
+}
+
+.nombre {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--dsw-alias-label-primary);
+  font-weight: 500;
+}
+
+/* La etiqueta de clase y estado, en mono y pequeña, como las de las tarjetas. */
+.etiqueta {
+  color: var(--dsw-alias-label-tertiary);
+  font-family: var(--ds-font-family-code);
+  font-size: 10px;
+  white-space: nowrap;
+}
+
+.detalle {
+  flex-basis: 100%;
+  padding-left: 16px;
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 11px;
+}

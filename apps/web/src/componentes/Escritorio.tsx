@@ -1,5 +1,7 @@
 import { PROYECTOS_POR_OMISION } from "./Barra.js";
 import estilos from "./Escritorio.module.css";
+import { Equipo } from "./Equipo.js";
+import type { InformeDeDispositivos } from "../tipos.js";
 
 /**
  * El centro cuando no hay sesión abierta: el escritorio.
@@ -15,10 +17,10 @@ import estilos from "./Escritorio.module.css";
  * No hay ni una tarjeta de relleno: cuando falta algo se dice qué falta y dónde se arregla,
  * que es lo que esta pantalla hacía mal — no decía nada.
  *
- * Y no se pinta NADA del mockup que no tenga dato detrás (el panel de dispositivos
- * conectados, «Build & Run», el estado del ADB): eso es un puente con el móvil que este
- * producto todavía no cablea, y quince botones muertos es peor que una pantalla honesta.
- * Ver `docs/DISENO-DASHBOARD.md`.
+ * Y no se pinta NADA del mockup que no tenga dato detrás. El panel de dispositivos
+ * (`Equipo.tsx`) existe desde que el servidor MIDE la máquina (`core/dispositivos.ts`:
+ * sistema, adb/emulator, simuladores y dispositivos iOS); «Build & Run» y cualquier acción
+ * sobre el móvil siguen sin cablear y no se pintan. Ver `docs/DISENO-DASHBOARD.md`.
  */
 export function Escritorio({
   nombre,
@@ -30,6 +32,8 @@ export function Escritorio({
   alAbrirAjustes,
   conectado,
   visibles,
+  dispositivos,
+  alActualizarDispositivos,
 }: {
   /** El saludo (`agent/persona.ts`). Ausente = se saluda igual, sin inventarse un nombre. */
   nombre?: string;
@@ -63,6 +67,9 @@ export function Escritorio({
    * del entorno deja de estar verde: nada de esto se puede afirmar sin cable.
    */
   conectado?: boolean;
+  /** La foto de la máquina (`Equipo.tsx`). Ausente = aún no llegó. */
+  dispositivos?: InformeDeDispositivos;
+  alActualizarDispositivos?: () => void;
 }) {
   const apagado = conectado === false;
   const destacados =
@@ -172,6 +179,12 @@ export function Escritorio({
           )}
           </>
         )}
+
+        <Equipo
+          {...(dispositivos === undefined ? {} : { informe: dispositivos })}
+          conectado={!apagado}
+          {...(alActualizarDispositivos === undefined ? {} : { alActualizar: alActualizarDispositivos })}
+        />
 
         {/* El modelo, dicho una vez y donde se va a usar. Ausente = no hay sesión abierta y
             no se afirma ninguno, la misma regla que la pastilla del compositor. */}

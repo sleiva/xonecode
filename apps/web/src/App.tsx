@@ -715,6 +715,8 @@ export function App({ store, enviar }: { store: Store; enviar: Conexion["enviar"
             alNuevaSesion={(proyecto) => abrirVentanaDeSesion(proyecto)}
             alAbrirSesion={(proyecto, sesion) => void enviar({ clase: "sesion", proyecto, sesion })}
               alAbrirAjustes={() => setAjustesAbiertos(true)}
+              {...(estado.dispositivos === undefined ? {} : { dispositivos: estado.dispositivos })}
+              alActualizarDispositivos={() => void enviar({ clase: "dispositivos" })}
             />
           </>
         )

@@ -36,6 +36,8 @@ import { homedir } from "node:os";
 import type { Acto } from "../../core/actos.js";
 import { escribirAgente, leerAgente, type Agente } from "../../core/agentes.js";
 import { borrarAgente, cargarAgentes, guardarAgente } from "../../agent/agentesEnDisco.js";
+import { detectarDispositivos } from "../../agent/dispositivosEnMaquina.js";
+import type { InformeDeDispositivos } from "../../core/dispositivos.js";
 import {
   parsear,
   PROVEEDORES,
@@ -71,7 +73,7 @@ import {
   type SesionCerrable,
   type Vestibulo,
 } from "./vestibulo.js";
-import type { FicheroTocado, MensajeAlCliente, MensajeDelCliente, Sumidero } from "./transporte.js";
+import type { FicheroTocado, MensajeAlCliente, MensajeDelCliente, Sumidero, InformeDeDispositivosDelCable } from "./transporte.js";
 
 /** Las dos rutas del cable. El cliente las tiene escritas en `apps/web/src/conexion.ts`. */
 export const RUTA_EVENTOS = "/eventos";
@@ -159,6 +161,13 @@ export interface OpcionesDeMontaje {
    *  esta ejecución no lo puede saber, y la pestaña lo dice. */
   cambiosDeSesion?: (raiz: string, sesion: string) => Promise<{ via: "git" | "sin-marca"; ficheros: FicheroTocado[] }>;
   parcheDeSesion?: (raiz: string, sesion: string, ruta: string) => Promise<{ texto: string; recortado: boolean } | undefined>;
+  /**
+   * Qué hay en la máquina para probar la app (`agent/dispositivosEnMaquina.ts`). Ausente =
+   * esta ejecución no lo mira, y no se manda ningún `dispositivos`: el escritorio se queda
+   * en «consultando…» en vez de afirmar una máquina vacía. Entra por opción porque lanza
+   * procesos (adb, xcrun) y un test del cable no puede lanzarlos.
+   */
+  detectarDispositivos?: () => Promise<InformeDeDispositivos>;
 }
 
 /**
@@ -456,6 +465,7 @@ export function montarRutas(
    * y que no pasara nada.
    */
   const adjuntar = (recien?: Sumidero): void => {
+    if (recien !== undefined && informeDeDispositivos === undefined) void atenderDispositivos().catch(contar);
     const destino = destinoActual();
     const cambiaDeConsola = adjunto !== destino;
     if (adjunto !== undefined && cambiaDeConsola) adjunto.desconectar();
@@ -481,6 +491,9 @@ export function montarRutas(
       cliente({ clase: "comandos", comandos: comandosDelRegistro() });
       cliente(modelos);
       cliente(agentes);
+      // La foto de la máquina, si ya se tomó. Si no, se dispara abajo UNA vez y llega a
+      // todos por el SSE cuando termine: no se espera aquí, que son varios procesos.
+      if (informeDeDispositivos !== undefined) cliente({ clase: "dispositivos", informe: informeDeDispositivos });
       // Y si hay turno corriendo, se dice: quien conecta a mitad no vio el mensaje que lo
       // anunció, y sin esto vería el compositor encendido y sin borde —«no pasa nada»—
       // mientras lo que escribiera se quedaba en la cola.
@@ -569,6 +582,39 @@ export function montarRutas(
    * fallo de uno se guarda como suyo: el menú lo lista inservible y los demás siguen
    * elegibles. Nunca lanza — quien pide un catálogo no puede tumbar el cable.
    */
+  /**
+   * La foto de la máquina y UNA detección en vuelo como mucho. Dos pestañas que conectan a
+   * la vez no lanzan dos rondas de adb y xcrun: la segunda se engancha a la promesa de la
+   * primera. Y la respuesta va a TODOS —la máquina es la misma para todos—.
+   */
+  let informeDeDispositivos: InformeDeDispositivosDelCable | undefined;
+  /** La ruta de cada herramienta es una ruta del home del usuario: no sale por el cable. */
+  const sinRutas = (informe: InformeDeDispositivos): InformeDeDispositivosDelCable => ({
+    ...informe,
+    herramientas: informe.herramientas.map(({ ruta: _ruta, ...resto }) => resto),
+  });
+  let deteccionEnVuelo: Promise<void> | undefined;
+  const atenderDispositivos = (): Promise<void> => {
+    if (opciones.detectarDispositivos === undefined) return Promise.resolve();
+    if (deteccionEnVuelo !== undefined) return deteccionEnVuelo;
+    const detectar = opciones.detectarDispositivos;
+    deteccionEnVuelo = (async () => {
+      try {
+        informeDeDispositivos = sinRutas(await detectar());
+        emitir({ clase: "dispositivos", informe: informeDeDispositivos });
+      } catch (error) {
+        // El detector reparte los fallos por herramienta y no lanza por ninguno; que
+        // reviente entero es un bug suyo. Aquí solo se cuenta en el terminal: el escritorio
+        // se queda en «consultando…» (o el botón en «Mirando…»), que es la verdad —no llegó
+        // ninguna foto—, y no se emite una máquina vacía para disimularlo.
+        informar(`no se pudo mirar qué dispositivos hay: ${error instanceof Error ? error.message : String(error)}`);
+      } finally {
+        deteccionEnVuelo = undefined;
+      }
+    })();
+    return deteccionEnVuelo;
+  };
+
   const atenderCatalogo = async (proveedor: string): Promise<void> => {
     if (!(PROVEEDORES as readonly string[]).includes(proveedor)) return;
     const id = proveedor as Proveedor;
@@ -1105,6 +1151,15 @@ export function montarRutas(
       respuesta.end();
       return;
     }
+    if (typeof mensaje === "object" && mensaje !== null && mensaje.clase === "dispositivos") {
+      // Suelto, como el catálogo: lanza procesos que tardan segundos y la respuesta va por
+      // el SSE. Es la ÚNICA forma de volver a medir: no hay sondeo.
+      informeDeDispositivos = undefined;
+      void atenderDispositivos().catch(contar);
+      respuesta.writeHead(204);
+      respuesta.end();
+      return;
+    }
     if (typeof mensaje === "object" && mensaje !== null && mensaje.clase === "catalogo") {
       // Suelto, como el alta: consultar un catálogo es una petición de red y el `POST` no
       // se queda abierto esperándola. La respuesta viaja por el SSE.
@@ -1259,6 +1314,9 @@ export async function arrancarConsolaWeb(opciones: OpcionesDeArranque): Promise<
     guardarCredencial,
     cambiosDeSesion,
     parcheDeSesion,
+    // La máquina de verdad: adb/emulator del PATH o del SDK, xcrun solo en macOS y solo con
+    // herramientas de desarrollo. Cada proceso con su tope.
+    detectarDispositivos: () => detectarDispositivos(),
     catalogoDeModelos: async (proveedor) => {
       const modelos = await new CatalogoModelos().listar(proveedor);
       return modelos.map((m) => ({ id: m.id, ...(m.nombre === undefined ? {} : { nombre: m.nombre }) }));
