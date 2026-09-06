@@ -144,6 +144,20 @@ export function Agentes({
         </ul>
       ) : null}
 
+      {/* Crear va ENCIMA de la lista: debajo quedaba fuera de la vista al abrir la sección. */}
+      {editando === undefined ? (
+        <Button
+          variant="outline"
+          className={estilos.accion}
+          onClick={() => {
+            setEditando(enBlanco());
+            setCreando(true);
+            setAmbito(hayProyecto ? "proyecto" : "global");
+          }}
+        >
+          Nuevo subagente
+        </Button>
+      ) : null}
       {agentes.length === 0 ? (
         <p className={estilos.vacio}>
           No hay ningún subagente. Sin ninguno, el orquestador no tiene en quién delegar.
@@ -219,19 +233,7 @@ export function Agentes({
         </>
       )}
 
-      {editando === undefined ? (
-        <Button
-          variant="outline"
-          className={estilos.accion}
-          onClick={() => {
-            setEditando(enBlanco());
-            setCreando(true);
-            setAmbito(hayProyecto ? "proyecto" : "global");
-          }}
-        >
-          Nuevo subagente
-        </Button>
-      ) : (
+      {editando === undefined ? null : (
         <div className={estilos.formulario}>
           <label className={estilos.campo}>
             <span className={estilos.rotulo}>Nombre</span>

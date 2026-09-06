@@ -1,5 +1,5 @@
 import { render, screen, fireEvent, cleanup } from "@testing-library/react";
-import { afterEach, describe, it, expect } from "vitest";
+import { afterEach, describe, it, expect, vi } from "vitest";
 import { Cabecera } from "./Cabecera.js";
 
 afterEach(cleanup);
@@ -61,5 +61,17 @@ describe("Cabecera: la miga dice dónde estás, con el proyecto delante", () => 
     render(<Cabecera titulo="AppDemo" proyecto="AppDemo" conectado />);
     const miga = screen.getByRole("navigation", { name: /dónde estás/ });
     expect(miga.textContent?.match(/AppDemo/g)).toHaveLength(1);
+  });
+});
+
+describe("Cabecera: Ajustes es de la aplicación", () => {
+  it("con manejador hay un botón «Ajustes» en la barra superior, y sin él no se ofrece", () => {
+    const alAbrirAjustes = vi.fn();
+    render(<Cabecera titulo="Escritorio" conectado alAbrirAjustes={alAbrirAjustes} />);
+    fireEvent.click(screen.getByRole("button", { name: "Ajustes" }));
+    expect(alAbrirAjustes).toHaveBeenCalledTimes(1);
+    cleanup();
+    render(<Cabecera titulo="Escritorio" conectado />);
+    expect(screen.queryByRole("button", { name: "Ajustes" })).toBeNull();
   });
 });

@@ -359,9 +359,17 @@ export function App({ store, enviar }: { store: Store; enviar: Conexion["enviar"
    * cada clic en un proyecto que ya está en el equipo.
    */
   const abrirVentanaDeSesion = (proyecto: string): void => {
-    setSesionNueva(proyecto);
     const identidad = estado.alta?.proyectos.find((p) => p.id === proyecto);
-    if (identidad?.local !== true) void enviar({ clase: "alta", paso: "proyecto", proyecto });
+    // Con copia local NO hay ventana: se abre y ya. La ventana existía para no descargar
+    // un proyecto entero por un «+» pulsado sin querer; con la copia en el equipo no se
+    // descarga nada, y medido en pantalla la ventana decía literalmente «se abre y ya» y
+    // aun así pedía confirmar — un paso sin ninguna decisión dentro.
+    if (identidad?.local === true) {
+      void enviar({ clase: "sesion", proyecto });
+      return;
+    }
+    setSesionNueva(proyecto);
+    void enviar({ clase: "alta", paso: "proyecto", proyecto });
   };
 
   /** Plegar y desplegar, recordándolo en este navegador. */
@@ -529,6 +537,7 @@ export function App({ store, enviar }: { store: Store; enviar: Conexion["enviar"
       conectado={estado.conectado}
       barraContraida={barraContraida}
       alAlternarBarra={alternarBarra}
+      alAbrirAjustes={() => setAjustesAbiertos(true)}
     />
   ) : (
     <Cabecera
@@ -536,6 +545,7 @@ export function App({ store, enviar }: { store: Store; enviar: Conexion["enviar"
       conectado={estado.conectado}
       barraContraida={barraContraida}
       alAlternarBarra={alternarBarra}
+      alAbrirAjustes={() => setAjustesAbiertos(true)}
     />
   );
 
@@ -567,6 +577,10 @@ export function App({ store, enviar }: { store: Store; enviar: Conexion["enviar"
               // no recuerda. El chat lo enseña arriba y Ficheros cambia su explicación.
               historica={estado.alta?.historica === true}
               {...(segundosEnVuelo === undefined ? {} : { segundosEnVuelo })}
+              // Para el estado vacío de una sesión nueva: en qué proyecto estás y con qué
+              // modelo va a trabajar. Los dos ya estaban en el estado.
+              {...(nombreDelProyectoActivo === undefined ? {} : { proyecto: nombreDelProyectoActivo })}
+              {...(estado.modelos?.actual === undefined ? {} : { modelo: estado.modelos.actual })}
               ficheros={
                 <Ficheros
                   historica={estado.alta?.historica === true}
@@ -690,6 +704,10 @@ export function App({ store, enviar }: { store: Store; enviar: Conexion["enviar"
             <AvisoDeConexion conectado={estado.conectado} />
             <Escritorio
             conectado={estado.conectado}
+            // La misma elección que la barra: los destacados primero, el resto debajo.
+            {...(estado.alta?.registrados.find((e) => e.id === entornoActivo)?.proyectos === undefined
+              ? {}
+              : { visibles: estado.alta.registrados.find((e) => e.id === entornoActivo)!.proyectos })}
             {...(estado.nombre === undefined ? {} : { nombre: estado.nombre })}
             {...(entornoDelEscritorio === undefined ? {} : { entorno: entornoDelEscritorio })}
             proyectos={estado.alta?.proyectos ?? []}

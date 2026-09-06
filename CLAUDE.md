@@ -628,7 +628,7 @@ registrado», que se rompía en cuanto había dos.
 la fila y el nombre del proyecto abren la misma: es la misma decisión, y tener dos caminos
 para ella es lo que hacía que uno de los dos no hiciera nada. La ventana distingue los dos
 estados por un dato del servidor (`proyectos[].local`, que es si existe su
-`.xonecode/config.json`) y no adivinando: con copia local, un botón y ya; sin ella, se pide
+`.xonecode/config.json`) y no adivinando: con copia local NO hay ventana —se abre y ya, porque la ventana existe para no descargar por accidente y ahí no se descarga nada—; sin ella, se pide
 la rama ORIGEN y **se dice que va a descargar el proyecto entero**. Con una sola rama se
 preselecciona pero se ENSEÑA — antes se mandaba sola desde un efecto, y elegir por el
 usuario y callarlo es cómo se acaba trabajando sobre la rama equivocada. Y no empieza sola:

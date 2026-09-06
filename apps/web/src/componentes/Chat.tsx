@@ -74,6 +74,8 @@ export function Chat({
   turnoEnVuelo = false,
   historica = false,
   segundosEnVuelo,
+  proyecto,
+  modelo,
 }: {
   actos: readonly Acto[];
   turnoEnVuelo?: boolean;
@@ -85,6 +87,9 @@ export function Chat({
   historica?: boolean;
   /** Cuántos segundos lleva el turno en vuelo (`useCronometro`). Ausente = no hay turno. */
   segundosEnVuelo?: number;
+  /** Para el estado vacío: dónde estás y con qué modelo. Ausentes = no se afirman. */
+  proyecto?: string;
+  modelo?: string;
 }) {
   // Cuál es el último acto de asistente: es el único que puede estar llegando todavía.
   const ultimoAsistente = actos.map((a) => a.tipo).lastIndexOf("asistente");
@@ -137,6 +142,30 @@ export function Chat({
             columna central). Es lo que pone la conversación en el CENTRO y no pegada a la
             barra, y lo que la alinea con el compositor, que lee la MISMA variable. */}
         <div className={vista.column}>
+          {actos.length === 0 && !historica ? (
+            // Una sesión nueva era un vacío de setecientos píxeles: ni saludo, ni qué se
+            // puede pedir, ni en qué proyecto estás — y la barra no la enseña hasta el
+            // primer acto. Todo lo que se dice aquí ya viajaba por el cable.
+            <section className={`${vista.flowItem} ${estilos.bienvenida}`} aria-label="sesión nueva">
+              <h2 className={estilos.bienvenidaTitulo}>
+                {proyecto === undefined ? "Sesión nueva" : `Sesión nueva en ${proyecto}`}
+              </h2>
+              <p>
+                Pide algo en la caja de abajo: una pantalla nueva, un cambio en un <code>.xne</code>,
+                una duda de XOne. El agente lee el proyecto, propone los cambios y{" "}
+                <strong>te pide aprobación antes de escribir</strong> ningún fichero.
+              </p>
+              <p>
+                Escribe <code>/</code> para ver los comandos.
+                {modelo === undefined ? null : (
+                  <>
+                    {" "}
+                    Trabajará con <code>{modelo}</code>; se cambia en la pastilla de la caja.
+                  </>
+                )}
+              </p>
+            </section>
+          ) : null}
           {historica ? (
             // `role="note"`: es información de contexto, no una alerta. Y va DENTRO de la
             // columna, encabezando la conversación a la que se refiere.

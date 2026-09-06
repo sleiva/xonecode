@@ -126,3 +126,13 @@ describe("Agentes", () => {
     expect(alGuardar).toHaveBeenCalledWith(expect.objectContaining({ nombre: "revisor" }), "proyecto");
   });
 });
+
+describe("Agentes: crear está a la vista", () => {
+  it("«Nuevo subagente» va ENCIMA de la lista, no detrás de ella", () => {
+    render(<Agentes {...manejadores} agentes={[REVISOR]} />);
+    const boton = screen.getByRole("button", { name: "Nuevo subagente" });
+    const fila = screen.getByText("revisor");
+    // `compareDocumentPosition`: FOLLOWING = 4 significa que `fila` viene después de `boton`.
+    expect(boton.compareDocumentPosition(fila) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+});

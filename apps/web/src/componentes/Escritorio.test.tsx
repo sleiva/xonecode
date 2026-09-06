@@ -165,3 +165,28 @@ describe("Escritorio: sin conexión", () => {
     expect(screen.getByRole("button", { name: /nueva sesión/i })).toHaveProperty("disabled", false);
   });
 });
+
+describe("Escritorio: los de la barra primero, el resto debajo", () => {
+  afterEach(cleanup);
+
+  it("sin elección, destaca los mismos que la barra y agrupa el resto con su botón en segundo plano", () => {
+    const seis = Array.from({ length: 6 }, (_, i) => ({ id: `p${i}`, nombre: `Proyecto ${i}` }));
+    render(<Escritorio {...MANEJADORES} proyectos={seis} />);
+    const otros = screen.getByRole("region", { name: /otros proyectos/ });
+    expect(within(otros).getAllByRole("heading", { level: 2 }).map((h) => h.textContent)).toEqual([
+      expect.stringMatching(/Otros 2 proyectos/),
+      "Proyecto 4",
+      "Proyecto 5",
+    ]);
+    const destacados = screen.getByRole("region", { name: /proyectos en la barra/ });
+    expect(within(destacados).getAllByRole("button", { name: /nueva sesión/i })).toHaveLength(4);
+  });
+
+  it("una elección manda: lo elegido se destaca aunque no sea lo primero", () => {
+    const tres = [{ id: "a", nombre: "A" }, { id: "b", nombre: "B" }, { id: "c", nombre: "C" }];
+    render(<Escritorio {...MANEJADORES} proyectos={tres} visibles={["c"]} />);
+    const destacados = screen.getByRole("region", { name: /proyectos en la barra/ });
+    expect(within(destacados).getByRole("heading", { name: "C" })).toBeTruthy();
+    expect(within(destacados).queryByRole("heading", { name: "A" })).toBeNull();
+  });
+});

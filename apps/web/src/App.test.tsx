@@ -181,7 +181,9 @@ describe("App: el secreto y el selector, que también colgaban", () => {
     // servidor recibe cuando se cae el SSE: un camino ya probado en vez de una clase de
     // mensaje nueva para decir «me arrepentí».
     const { store, enviar } = montar();
-    fireEvent.click(screen.getByRole("button", { name: "Ajustes" }));
+    // Hay DOS accesos a Ajustes desde la revisión de interfaz (barra superior y lateral);
+    // cualquiera de los dos abre la misma ventana.
+    fireEvent.click(screen.getAllByRole("button", { name: "Ajustes" })[0]!);
     act(() => store.aplicar({ clase: "secreto", pregunta: "clave de openai: " }));
     // Con la ventana abierta no se pinta en el centro, y en la ventana solo aparece dentro
     // de la fila que se esté editando —aquí ninguna—: eso ya funcionaba y no es lo que se
@@ -550,12 +552,13 @@ describe("App: abrir un proyecto desde la barra (Layer C)", () => {
    * Con la copia local ya bajada no hay nada que preguntar ni que descargar: ni se piden
    * ramas —sería una conexión con CloudStudio por cada clic— ni se enseña el desplegable.
    */
-  it("un proyecto YA bajado no pide ramas: la ventana solo confirma", () => {
+  it("un proyecto YA bajado se abre y ya: sin ventana, sin rama", () => {
+    // La ventana existe para no descargar por un «+» pulsado sin querer; con la copia en
+    // el equipo no se descarga nada, y medido en pantalla la ventana decía «se abre y ya»
+    // y aun así pedía confirmar: un paso sin ninguna decisión dentro.
     const { enviar } = montarConProyectos([{ id: "p1", nombre: "Tienda", local: true }]);
     fireEvent.click(screen.getByRole("button", { name: "Tienda" }));
-    expect(enviar).not.toHaveBeenCalled();
-    expect(screen.queryByLabelText(/rama de origen/i)).toBeNull();
-    fireEvent.click(screen.getByRole("button", { name: /^empezar$/i }));
+    expect(screen.queryByRole("dialog")).toBeNull();
     expect(enviar).toHaveBeenCalledWith({ clase: "sesion", proyecto: "p1" });
   });
 
@@ -587,11 +590,12 @@ describe("App: abrir un proyecto desde la barra (Layer C)", () => {
   });
 
   it("el «+» de la fila abre la MISMA ventana que pulsar el proyecto", () => {
-    const { enviar } = montarConProyectos([{ id: "p1", nombre: "Tienda", local: true }]);
+    // Sin copia local: es el caso en que HAY ventana (la descarga se confirma). Con copia
+    // local ninguno de los dos caminos la abre.
+    const { enviar } = montarConProyectos([{ id: "p1", nombre: "Tienda" }]);
     fireEvent.click(screen.getByRole("button", { name: /nueva sesión en tienda/i }));
     expect(screen.getByText(/nueva sesión en tienda/i)).toBeTruthy();
-    fireEvent.click(screen.getByRole("button", { name: /^empezar$/i }));
-    expect(enviar).toHaveBeenCalledWith({ clase: "sesion", proyecto: "p1" });
+    expect(enviar).toHaveBeenCalledWith({ clase: "alta", paso: "proyecto", proyecto: "p1" });
   });
 
   it("elegir otro entorno lo dice por el cable: sus proyectos los trae el servidor", () => {

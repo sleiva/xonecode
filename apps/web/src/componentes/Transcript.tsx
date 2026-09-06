@@ -21,13 +21,18 @@ export function Transcript({
   turnoEnVuelo,
   historica,
   segundosEnVuelo,
+  proyecto,
+  modelo,
   ficheros,
 }: {
   actos: readonly Acto[];
   pestana: Pestana;
-  /** Las dos van al Chat tal cual: la relectura y el cronómetro del turno en vuelo. */
+  /** Van al Chat tal cual: la relectura, el cronómetro del turno en vuelo, y el proyecto y
+   *  el modelo para el estado vacío de una sesión nueva. */
   historica?: boolean;
   segundosEnVuelo?: number;
+  proyecto?: string;
+  modelo?: string;
   /**
    * La vista de ficheros, ya montada por `App`. Va como ranura y no como cinco props
    * sueltas porque lo que aporta este componente es ELEGIR la vista, no conocer los datos
@@ -48,6 +53,8 @@ export function Transcript({
             turnoEnVuelo={turnoEnVuelo === true}
             historica={historica === true}
             {...(segundosEnVuelo === undefined ? {} : { segundosEnVuelo })}
+            {...(proyecto === undefined ? {} : { proyecto })}
+            {...(modelo === undefined ? {} : { modelo })}
           />
         ) : pestana === "trazas" ? (
           <Trazas actos={actos} />

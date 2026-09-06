@@ -375,6 +375,23 @@ export function Ajustes({
                 Un entorno es un servidor CloudStudio. Lo único que se teclea es su URL: el nombre
                 lo dice el propio servidor al conectarse.
               </p>
+              {/*
+                Registrar reutiliza el MISMO camino que el paso de entorno del alta
+                (`{clase:"alta", paso:"entorno"}`): id y nombre vacíos, que los deduce el
+                servidor. Un segundo camino para registrar lo mismo es cómo divergen.
+
+                Y va ENCIMA de las listas, no debajo: medido en pantalla quedaba detrás de
+                dieciocho casillas de 54 px, fuera de la vista al abrir la sección.
+              */}
+              {registrando ? null : (
+                <Button
+                  variant="outline"
+                  className={estilos.accion}
+                  onClick={() => setRegistrando(true)}
+                >
+                  Registrar un entorno
+                </Button>
+              )}
               {registrando ? null : entornos.length === 0 ? (
                 <p className={estilos.vacio}>No hay ninguno registrado todavía.</p>
               ) : (
@@ -423,20 +440,6 @@ export function Ajustes({
                 </>
               ) : null}
 
-              {/*
-                Registrar reutiliza el MISMO camino que el paso de entorno del alta
-                (`{clase:"alta", paso:"entorno"}`): id y nombre vacíos, que los deduce el
-                servidor. Un segundo camino para registrar lo mismo es cómo divergen.
-              */}
-              {registrando ? null : (
-                <Button
-                  variant="outline"
-                  className={estilos.accion}
-                  onClick={() => setRegistrando(true)}
-                >
-                  Registrar un entorno
-                </Button>
-              )}
               {!registrando ? null : (
               <form className={estilos.formulario} ref={traerALaVista} onSubmit={registrar}>
                 <label className={estilos.etiqueta} htmlFor="ajustes-url">

@@ -1,3 +1,4 @@
+import { PROYECTOS_POR_OMISION } from "./Barra.js";
 import estilos from "./Escritorio.module.css";
 
 /**
@@ -28,6 +29,7 @@ export function Escritorio({
   alAbrirSesion,
   alAbrirAjustes,
   conectado,
+  visibles,
 }: {
   /** El saludo (`agent/persona.ts`). Ausente = se saluda igual, sin inventarse un nombre. */
   nombre?: string;
@@ -44,6 +46,13 @@ export function Escritorio({
   }[];
   /** «proveedor/modelo» en vigor. Ausente = no hay sesión y por tanto no se afirma ninguno. */
   modelo?: string;
+  /**
+   * Los proyectos elegidos para la barra (`Entorno.proyectos`). Ausente = nadie eligió y
+   * aplica la misma omisión que la barra. Medido: la barra enseñaba cuatro y decía «14 más»
+   * mientras el escritorio pintaba los dieciocho iguales, con dieciocho botones primarios.
+   * Ahora los destacados van primero y el resto debajo, con su botón en segundo plano.
+   */
+  visibles?: readonly string[];
   alNuevaSesion: (proyecto: string) => void;
   alAbrirSesion: (proyecto: string, sesion: string) => void;
   alAbrirAjustes: () => void;
@@ -56,6 +65,9 @@ export function Escritorio({
   conectado?: boolean;
 }) {
   const apagado = conectado === false;
+  const destacados =
+    visibles === undefined ? proyectos.slice(0, PROYECTOS_POR_OMISION) : proyectos.filter((p) => visibles.includes(p.id));
+  const otros = proyectos.filter((p) => !destacados.includes(p));
   return (
     <div className={estilos.escritorio}>
       <div className={estilos.contenido}>
@@ -85,8 +97,21 @@ export function Escritorio({
             </button>
           </p>
         ) : (
+          <>
+          {[
+            { clave: "destacados", lista: destacados, secundario: false },
+            { clave: "otros", lista: otros, secundario: true },
+          ].map(({ clave, lista, secundario }) =>
+            lista.length === 0 ? null : (
+          <section key={clave} aria-label={secundario ? "otros proyectos del entorno" : "proyectos en la barra"}>
+          {secundario && destacados.length > 0 ? (
+            <h2 className={estilos.subtituloDeGrupo}>
+              {lista.length === 1 ? "Otro proyecto del entorno" : `Otros ${lista.length} proyectos del entorno`} · se
+              eligen en Ajustes
+            </h2>
+          ) : null}
           <ul className={estilos.rejilla}>
-            {proyectos.map((p) => {
+            {lista.map((p) => {
               const sesiones = p.sesiones ?? [];
               return (
                 <li key={p.id} className={estilos.tarjeta} data-local={p.local === true ? "" : undefined}>
@@ -132,7 +157,7 @@ export function Escritorio({
                   )}
                   <button
                     type="button"
-                    className={estilos.empezar}
+                    className={secundario ? estilos.empezarSecundario : estilos.empezar}
                     disabled={apagado}
                     onClick={() => alNuevaSesion(p.id)}
                   >
@@ -142,6 +167,10 @@ export function Escritorio({
               );
             })}
           </ul>
+          </section>
+            )
+          )}
+          </>
         )}
 
         {/* El modelo, dicho una vez y donde se va a usar. Ausente = no hay sesión abierta y

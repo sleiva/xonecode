@@ -134,3 +134,21 @@ describe("Chat: lo que la revisión de interfaz vio en vivo", () => {
     expect(screen.getByText(/Trabajando… · 42 s/)).toBeTruthy();
   });
 });
+
+describe("Chat: la sesión nueva no es un vacío", () => {
+  it("sin actos dice dónde estás, qué pedir y con qué modelo", () => {
+    render(<Chat actos={[]} proyecto="AppDemo" modelo="gemini/gemini-flash-latest" />);
+    const bloque = screen.getByRole("region", { name: /sesión nueva/ });
+    expect(bloque.textContent).toMatch(/Sesión nueva en AppDemo/);
+    expect(bloque.textContent).toMatch(/aprobación antes de escribir/);
+    expect(bloque.textContent).toMatch(/gemini\/gemini-flash-latest/);
+  });
+
+  it("con el primer acto se va, y en una relectura no aparece", () => {
+    render(<Chat actos={[asistente("hola")]} proyecto="AppDemo" />);
+    expect(screen.queryByRole("region", { name: /sesión nueva/ })).toBeNull();
+    cleanup();
+    render(<Chat actos={[]} historica proyecto="AppDemo" />);
+    expect(screen.queryByRole("region", { name: /sesión nueva/ })).toBeNull();
+  });
+});

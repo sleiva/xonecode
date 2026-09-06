@@ -1,5 +1,5 @@
 import clsx from "clsx";
-import { IconBranchOutline16 } from "@deepseek-ai/dsh-client-ui-primitives";
+import { IconBranchOutline16, IconSettingsOutline16 } from "@deepseek-ai/dsh-client-ui-primitives";
 import conversacion from "../../estilos/ConversationRoot.module.css";
 import pastilla from "../../estilos/AgentPresetLabel.module.css";
 import estilos from "./Cabecera.module.css";
@@ -21,7 +21,7 @@ import estilos from "./Cabecera.module.css";
  * `<button disabled>` que el original usa para la última: mismo elemento, mismo estado,
  * misma clase `.crumbCurrent`.
  */
-export function Cabecera({ titulo, proyecto, modo, conectado, barraContraida, alAlternarBarra }: {
+export function Cabecera({ titulo, proyecto, modo, conectado, barraContraida, alAlternarBarra, alAbrirAjustes }: {
   titulo: string;
   /**
    * El proyecto al que pertenece `titulo`, cuando es una sesión. Medido: la miga decía
@@ -49,6 +49,11 @@ export function Cabecera({ titulo, proyecto, modo, conectado, barraContraida, al
   barraContraida?: boolean;
   /** Plegar y desplegar la barra lateral. Ausente = no se ofrece el botón. */
   alAlternarBarra?: () => void;
+  /**
+   * Abrir Ajustes desde la barra de la APLICACIÓN. Medido: el único acceso vivía en la
+   * barra lateral, así que plegada no había forma de llegar. Ausente = no se ofrece.
+   */
+  alAbrirAjustes?: () => void;
 }) {
   return (
     <header className={clsx(conversacion.header, estilos.barraSuperior)}>
@@ -133,6 +138,17 @@ export function Cabecera({ titulo, proyecto, modo, conectado, barraContraida, al
           botón de ellos para rellenar el hueco sería prometer una descarga que no pasa.
         */}
         <div className={conversacion.headerUtilities}>
+          {alAbrirAjustes === undefined ? null : (
+            <button
+              type="button"
+              className={estilos.ajustes}
+              onClick={alAbrirAjustes}
+              aria-label="Ajustes"
+              title="Ajustes"
+            >
+              <IconSettingsOutline16 size={16} />
+            </button>
+          )}
           <span className={clsx(estilos.estado, conectado ? estilos.conectado : estilos.desconectado)}>
             <span className={estilos.punto} aria-hidden="true" />
             {conectado ? "conectado" : "sin conexión"}

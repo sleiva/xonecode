@@ -275,3 +275,23 @@
   font-size: 12px;
   line-height: 1.5;
 }
+
+/* El estado vacío de una sesión nueva: qué es esto y qué se puede pedir. En el color
+   secundario y sin marco: es una indicación, no un mensaje de nadie. */
+.bienvenida {
+  margin: 24px 0 0;
+  color: var(--dsw-alias-label-secondary);
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.bienvenida p {
+  margin: 0 0 8px;
+}
+
+.bienvenidaTitulo {
+  margin: 0 0 10px;
+  color: var(--dsw-alias-label-primary);
+  font-size: 16px;
+  font-weight: 600;
+}

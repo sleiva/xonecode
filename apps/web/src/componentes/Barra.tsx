@@ -245,7 +245,9 @@ export function Barra({ entornos, entornoActivo, proyectos, visibles, proyectoAc
                       {p.sesiones.length === 0 ? (
                         <p className={clsx(navegador.empty, estilos.sinSesiones)}>Sin sesiones todavía.</p>
                       ) : (
-                        p.sesiones.map((s) => (
+                        // Las más recientes ARRIBA, como en el escritorio: el índice las
+                        // guarda en orden de creación, y las dos listas se contradecían.
+                        [...p.sesiones].reverse().map((s) => (
                           /*
                             Un `<div>` con un botón dentro y el menú al lado, no un botón
                             suelto: el «…» es interactivo y anidarlo dentro del botón de la

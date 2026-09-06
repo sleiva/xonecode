@@ -99,6 +99,23 @@
   color: var(--xonecode-sobre-azul);
 }
 
+/* Ajustes, con el mismo trazo que el botón de plegar: ambos son de la aplicación. */
+.ajustes {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px;
+  margin-right: 10px;
+  border: none;
+  border-radius: 6px;
+  background: none;
+  color: var(--xonecode-sobre-azul-suave);
+  cursor: pointer;
+}
+
+.ajustes:hover {
+  color: var(--xonecode-sobre-azul);
+}
+
 
 /* La marca, en la barra superior desde que cruza las dos columnas. En blanco de marca y no
    en un `label-*` de la paleta clara: esos tonos están pensados para fondo claro y sobre el

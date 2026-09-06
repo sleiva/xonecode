@@ -412,3 +412,26 @@ describe("Barra: sin conexión", () => {
     expect(screen.getByRole("button", { name: "Ajustes" })).toHaveProperty("disabled", false);
   });
 });
+
+describe("Barra: el orden de las sesiones", () => {
+  it("las más recientes arriba, el mismo orden que el escritorio", () => {
+    render(
+      <Barra
+        entornos={[]}
+        entornoActivo=""
+        proyectos={[{ id: "p1", nombre: "Tienda", sesiones: [
+          { id: "s1", titulo: "la primera", historica: true },
+          { id: "s2", titulo: "la última", historica: true },
+        ] }]}
+        alElegirEntorno={() => {}}
+        alAbrirSesion={() => {}}
+        alAbrirProyecto={() => {}}
+        alNuevaSesion={() => {}}
+        alAccionDeSesion={() => {}}
+        alAbrirAjustes={() => {}}
+      />
+    );
+    const botones = screen.getAllByRole("button").map((b) => b.textContent);
+    expect(botones.indexOf("la última")).toBeLessThan(botones.indexOf("la primera"));
+  });
+});
