@@ -21,7 +21,7 @@ describe("Transcript", () => {
 
   /**
    * El trabajo del agente se ve EN EL CHAT, no solo en la otra pestaña. Antes el chat
-   * pintaba únicamente los globos y todo lo demás vivía en la Trayectoria: se escribía una
+   * pintaba únicamente los globos y todo lo demás vivía en las Trazas: se escribía una
    * petición y no pasaba nada durante minutos, con el agente trabajando a la vista de nadie.
    */
   it("con «chat» pinta la conversación Y el pulso del turno: tools, fases y razonamiento", () => {
@@ -71,7 +71,7 @@ describe("Transcript", () => {
   });
 
   /**
-   * Lo que sigue siendo SOLO de la trayectoria: los avisos de la consola (`sistema`) y el
+   * Lo que sigue siendo SOLO de las trazas: los avisos de la consola (`sistema`) y el
    * cierre con la duración (`fin`). El chat es el pulso; la pestaña, el registro completo.
    */
   it("con «chat» NO se cuelan los avisos de sistema ni el cierre del turno", () => {
@@ -87,8 +87,8 @@ describe("Transcript", () => {
     expect(screen.queryByText(/credencial guardada/)).toBeNull();
   });
 
-  it("con «trayectoria» pinta el detalle técnico", () => {
-    render(<Transcript actos={[...ACTOS]} pestana="trayectoria" />);
+  it("con «trazas» pinta el detalle técnico", () => {
+    render(<Transcript actos={[...ACTOS]} pestana="trazas" />);
     expect(screen.getByText(/read_file/)).toBeTruthy();
   });
 });

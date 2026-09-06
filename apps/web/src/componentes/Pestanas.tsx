@@ -2,10 +2,10 @@ import clsx from "clsx";
 import conversacion from "../../estilos/ConversationRoot.module.css";
 import estilos from "./Pestanas.module.css";
 
-export type Pestana = "chat" | "trayectoria" | "ficheros";
+export type Pestana = "chat" | "trazas" | "ficheros";
 
 /**
- * La tira de pestañas: Chat, Trayectoria y Ficheros.
+ * La tira de pestañas: Chat, Trazas y Ficheros.
  *
  * Vive en el PANEL CENTRAL, no en la barra superior. Es la tercera casa que tiene —estuvo
  * en `Transcript`, luego en `Cabecera`— y esta vez la mudanza la decide una regla y no una
@@ -45,11 +45,11 @@ export function Pestanas({
       <button
         type="button"
         role="tab"
-        aria-selected={pestana === "trayectoria"}
-        className={clsx(conversacion.tab, pestana === "trayectoria" && conversacion.tabActive)}
-        onClick={() => alElegirPestana("trayectoria")}
+        aria-selected={pestana === "trazas"}
+        className={clsx(conversacion.tab, pestana === "trazas" && conversacion.tabActive)}
+        onClick={() => alElegirPestana("trazas")}
       >
-        Trayectoria
+        Trazas
       </button>
       {/*
         La tercera pestaña: lo que ESTA sesión ha tocado en el disco. No está en el CSS

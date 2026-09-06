@@ -14,6 +14,46 @@ afterEach(cleanup);
 const manejadores = { conectado: true, alEnviar: () => {} };
 
 describe("Compositor", () => {
+  it("`oculto` lo saca de la vista Y del orden del Tab, sin perder lo escrito", () => {
+    // Las dos mitades importan. Fuera de la vista, porque en Trazas y en Ficheros no hay a
+    // quién escribirle. Y sin perderlo, porque la alternativa —desmontarlo— tiraba el
+    // borrador a medio escribir en cuanto ibas a mirar un fichero y volvías.
+    //
+    // `hidden` y no `visibility`: lo que hace falta es que el campo salga del árbol de
+    // accesibilidad, o se llegaría a él tabulando sin verlo. Por eso el test lo busca por
+    // ROL —que es lo que ve un lector de pantalla— y no por el nodo.
+    const { rerender } = render(<Compositor {...manejadores} />);
+    fireEvent.change(screen.getByRole("textbox"), { target: { value: "a medio escribir" } });
+
+    rerender(<Compositor {...manejadores} oculto />);
+    expect(screen.queryByRole("textbox")).toBeNull();
+
+    rerender(<Compositor {...manejadores} />);
+    expect((screen.getByRole("textbox") as HTMLTextAreaElement).value).toBe("a medio escribir");
+  });
+
+  it("al terminar el turno, el foco vuelve a la caja", () => {
+    // No es comodidad: la caja se apaga (`disabled`) mientras el agente trabaja, y un
+    // elemento que se deshabilita pierde el foco — el navegador se lo devuelve al `<body>`.
+    // Quien mandaba una petición y esperaba se encontraba con que teclear no escribía en
+    // ningún sitio y había que ir a pinchar con el ratón.
+    const { rerender } = render(<Compositor {...manejadores} turnoEnVuelo />);
+    expect(document.activeElement).not.toBe(screen.getByRole("textbox"));
+
+    rerender(<Compositor {...manejadores} />);
+    expect(document.activeElement).toBe(screen.getByRole("textbox"));
+  });
+
+  it("pero NO se lo roba si la caja está oculta ni al montar", () => {
+    // Robar el foco mientras el usuario mira un diff en Ficheros es lo contrario de lo que
+    // se quiere: le movería el teclado a una caja que ni siquiera se ve. Y al montar tampoco
+    // —el flanco es de BAJADA de `turnoEnVuelo`, no «está apagado»—, porque si no cada
+    // repintado con la consola recién abierta se llevaría el foco de donde estuviera.
+    const { rerender } = render(<Compositor {...manejadores} turnoEnVuelo oculto />);
+    rerender(<Compositor {...manejadores} oculto />);
+    expect(document.activeElement).toBe(document.body);
+  });
+
   it("las sugerencias salen del registro que manda el servidor, no de una lista escrita a mano", () => {
     render(<Compositor comandos={[{ nombre: "/sync", descripcion: "sincroniza" }]} {...manejadores} />);
     fireEvent.change(screen.getByRole("textbox"), { target: { value: "/sy" } });

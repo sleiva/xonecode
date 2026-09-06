@@ -33,7 +33,7 @@ export function Cabecera({ titulo, modo, conectado, barraContraida, alAlternarBa
   conectado: boolean;
   /**
    * La pestaña elegida y su manejador. **Ausentes las dos = no se pinta la tira**, que es lo
-   * que toca en el escritorio: sin sesión no hay transcript ni trayectoria que enseñar, y
+   * que toca en el escritorio: sin sesión no hay transcript ni trazas que enseñar, y
    * unas pestañas que no llevan a ningún sitio son el mismo botón muerto de siempre. La
    * barra superior SÍ se queda: es la barra de herramientas de la aplicación, no de la
    * sesión.

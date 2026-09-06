@@ -1,7 +1,7 @@
 /* Alias comprobados contra design-platform.css (grep del brief): bg-layer-1/2, border-l2,
    label-primary/secondary/tertiary y markdown-inline-code existen. */
 
-.trayectoria {
+.trazas {
   list-style: none;
   margin: 0;
   padding: 0;
@@ -17,7 +17,7 @@
   display: flex;
   gap: 12px;
   padding: 2px 12px;
-  /* Una fila por acto, truncada: la trayectoria es paisaje, no lectura. */
+  /* Una fila por acto, truncada: las trazas es paisaje, no lectura. */
   white-space: nowrap;
   overflow: hidden;
 }

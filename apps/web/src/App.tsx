@@ -473,7 +473,7 @@ export function App({ store, enviar }: { store: Store; enviar: Conexion["enviar"
     conversación.
 
     Lo único que cambia entre los dos casos son las PESTAÑAS: sin sesión no hay transcript ni
-    trayectoria a los que llevar, y unas pestañas que no llevan a ningún sitio son el mismo
+    trazas a los que llevar, y unas pestañas que no llevan a ningún sitio son el mismo
     botón muerto que este repo no consiente. `Cabecera` las omite cuando no se las pasan.
   */
   const cabecera = proyectoAbierto ? (
@@ -597,6 +597,10 @@ export function App({ store, enviar }: { store: Store; enviar: Conexion["enviar"
               // Lo dice el servidor, no se deduce de los actos: un turno que revienta no
               // siempre deja `fin`, y el compositor se quedaría apagado para siempre.
               turnoEnVuelo={estado.turnoEnVuelo === true}
+              // Solo en el chat: en Trazas y en Ficheros no hay a quién escribirle. Se
+              // oculta y no se desmonta, para no perder el borrador al ir a mirar un
+              // fichero y volver.
+              oculto={pestana !== "chat"}
               alParar={() => void enviar({ clase: "cancelar" })}
               // Una línea que empieza por «/» no tiene camino propio: viaja como prosa
               // igual que cualquier otra, y es `correrConsola` quien la despacha contra

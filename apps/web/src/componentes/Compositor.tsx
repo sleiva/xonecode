@@ -1,4 +1,4 @@
-import { useState, type KeyboardEvent } from "react";
+import { useEffect, useRef, useState, type KeyboardEvent } from "react";
 import type { ProveedorDeModelos } from "../tipos.js";
 import { PastillaDeModelo } from "./PastillaDeModelo.js";
 import estilos from "./Compositor.module.css";
@@ -23,6 +23,7 @@ export function Compositor({
   comandos = [],
   conectado,
   turnoEnVuelo = false,
+  oculto = false,
   alParar,
   modelos,
   alPedirCatalogo,
@@ -40,6 +41,20 @@ export function Compositor({
    * ve su texto desaparecer del campo y no pasar nada durante minutos.
    */
   turnoEnVuelo?: boolean;
+  /**
+   * Fuera de la vista: se pone en las pestañas que no son el chat.
+   *
+   * En Trazas y en Ficheros no hay a quién escribirle —son un registro y un diff—, y una
+   * caja de escribir debajo de ellos invita a mandar algo que no va a llegar donde el
+   * usuario cree.
+   *
+   * Se OCULTA y no se desmonta, que es la diferencia que importa: desmontado se pierde el
+   * borrador a medio escribir en cuanto miras un fichero y vuelves. Y `hidden` —no
+   * `visibility`— porque lo que hace falta es que además salga del orden del Tab y del
+   * árbol de accesibilidad: un campo invisible al que se llega tabulando es peor que uno
+   * visible.
+   */
+  oculto?: boolean;
   /** Parar el turno en vuelo. Ausente = no se ofrece el botón. */
   alParar?: () => void;
   /** El estado de modelos del cable. Ausente = todavía no llegó: no se pinta pastilla, en
@@ -51,6 +66,27 @@ export function Compositor({
   alEnviar: (texto: string) => void;
 }) {
   const [valor, setValor] = useState("");
+  const campo = useRef<HTMLTextAreaElement>(null);
+
+  /**
+   * Al terminar el turno, el foco vuelve a la caja.
+   *
+   * No es una comodidad: la caja se APAGA mientras el agente trabaja (`disabled`, ver
+   * arriba), y un elemento que se deshabilita pierde el foco — el navegador se lo devuelve
+   * al `<body>`. Así que quien escribía una petición, la mandaba y esperaba, al terminar se
+   * encontraba con que teclear no escribía en ningún sitio y había que ir a pinchar la caja
+   * con el ratón. Lo que se arregla aquí es eso, no un adorno.
+   *
+   * Solo en el flanco de bajada de `turnoEnVuelo`, y solo si la caja está a la vista y
+   * habilitada: robar el foco al montar, o mientras el usuario mira un diff en Ficheros,
+   * sería lo contrario de lo que se quiere.
+   */
+  const veniaDeTurno = useRef(false);
+  useEffect(() => {
+    const acabaDeTerminar = veniaDeTurno.current && !turnoEnVuelo;
+    veniaDeTurno.current = turnoEnVuelo;
+    if (acabaDeTerminar && !oculto && conectado) campo.current?.focus();
+  }, [turnoEnVuelo, oculto, conectado]);
 
   const sugerencias =
     valor.startsWith("/") ? comandos.filter((c) => c.nombre.startsWith(valor)) : [];
@@ -75,7 +111,7 @@ export function Compositor({
   };
 
   return (
-    <div className={estilos.envoltura}>
+    <div className={estilos.envoltura} hidden={oculto}>
       {/*
         `data-trabajando` en la caja, no una clase más: es un ESTADO —lo dice el servidor y
         cambia solo— y el CSS lo lee como tal. De ahí cuelga el borde animado, que es la
@@ -93,6 +129,7 @@ export function Compositor({
           </ul>
         )}
         <textarea
+          ref={campo}
           className={estilos.entrada}
           value={valor}
           disabled={!conectado || turnoEnVuelo}

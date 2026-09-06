@@ -60,7 +60,7 @@ describe("Maqueta", () => {
     expect(raiz.style.gridTemplateColumns).toBe("280px minmax(0, 1fr)");
   });
 
-  it("NO pone `data-phase`: con él, ni el chat ni la trayectoria pueden scrollear", () => {
+  it("NO pone `data-phase`: con él, ni el chat ni las trazas pueden scrollear", () => {
     // Regresión medida en pantalla, no teórica: `data-phase="active"` enciende
     // `.root[data-phase='active'] .viewArea { flex: 1 0 auto; min-height: auto }`, que en
     // el original convive con un `.scrollBody` que aquí no existe. Sin ese envoltorio la

@@ -1,9 +1,9 @@
 import { describe, it, expect } from "vitest";
-import { filasDeTrayectoria } from "./Trayectoria.js";
+import { filasDeTrazas } from "./Trazas.js";
 
-describe("Trayectoria", () => {
+describe("Trazas", () => {
   it("una fila por acto, etiquetada por tipo", () => {
-    const filas = filasDeTrayectoria([
+    const filas = filasDeTrazas([
       { tipo: "usuario", texto: "haz algo" },
       { tipo: "herramientas", lineas: ["read_file  src/app.xne", "grep  coleccion"] },
       { tipo: "asistente", texto: "hecho" },
@@ -12,7 +12,7 @@ describe("Trayectoria", () => {
   });
 
   it("NINGUNA fila lleva argumentos de tool: deepseek los enseña, nosotros no podemos", () => {
-    const filas = filasDeTrayectoria([
+    const filas = filasDeTrazas([
       { tipo: "herramientas", lineas: ["write_file  src/app.xne", "grep  ^function"] },
     ]);
     for (const f of filas) {
@@ -21,8 +21,8 @@ describe("Trayectoria", () => {
     }
   });
 
-  it("cada fila se trunca a una línea: la trayectoria es paisaje, no lectura", () => {
-    const filas = filasDeTrayectoria([{ tipo: "asistente", texto: "a".repeat(500) }]);
+  it("cada fila se trunca a una línea: las trazas es paisaje, no lectura", () => {
+    const filas = filasDeTrazas([{ tipo: "asistente", texto: "a".repeat(500) }]);
     expect(filas[0].texto.length).toBeLessThanOrEqual(200);
   });
 });

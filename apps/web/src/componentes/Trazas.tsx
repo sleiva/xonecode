@@ -1,9 +1,16 @@
 import type { Acto } from "../tipos.js";
-import estilos from "./Trayectoria.module.css";
+import estilos from "./Trazas.module.css";
 
 /**
- * La vista técnica, con la pinta de la de deepseek —filas monoespaciadas de una línea,
- * etiquetadas por tipo— pero **sin lo que ellos ponen dentro**.
+ * Las TRAZAS del turno: la vista técnica, con la pinta de la de deepseek —filas
+ * monoespaciadas de una línea, etiquetadas por tipo— pero **sin lo que ellos ponen dentro**.
+ *
+ * Se llamaba «Trayectoria», y el nombre nuevo lo pidió el usuario con su encargo detrás:
+ * esta pestaña es para desarrollar el HARNESS, no para trabajar en una app XOne. Quien está
+ * escribiendo una colección mira el chat y los ficheros; quien viene aquí está depurando
+ * qué hizo el agente y en qué orden. «Trayectoria» sonaba a resumen para el usuario final;
+ * «Trazas» dice lo que es. Que el destinatario sea otro también explica por qué esta vista
+ * puede permitirse ser densa y fea a propósito.
  *
  * Deepseek enseña `bash {"command": "cd /Users/…"}`. Aquí eso no puede pasar por TIPO: el
  * acto de herramientas ya viene con líneas resumidas por `agent/resumenDeTool.ts`, una
@@ -12,7 +19,7 @@ import estilos from "./Trayectoria.module.css";
  * añade nada al texto de esas líneas: si algún día `resumenDeTool.ts` empezara a colar un
  * argumento, esta fila lo repetiría — la barrera vive allí, no aquí.
  */
-export interface FilaDeTrayectoria {
+export interface FilaDeTrazas {
   etiqueta: string;
   texto: string;
 }
@@ -25,7 +32,7 @@ function aUnaLinea(texto: string): string {
   return plana.length > LARGO_MAXIMO_DE_FILA ? plana.slice(0, LARGO_MAXIMO_DE_FILA) : plana;
 }
 
-function fila(etiqueta: string, texto: string): FilaDeTrayectoria {
+function fila(etiqueta: string, texto: string): FilaDeTrazas {
   return { etiqueta, texto: aUnaLinea(texto) };
 }
 
@@ -35,14 +42,14 @@ function fila(etiqueta: string, texto: string): FilaDeTrayectoria {
  * `Acto` sin tocar este `switch` falla en `tsc` por la rama `default` tipada `never`,
  * igual que `TIPOS_DE_ACTO` en `store.ts` falla al olvidar un caso.
  */
-function filasDe(acto: Acto): FilaDeTrayectoria[] {
+function filasDe(acto: Acto): FilaDeTrazas[] {
   switch (acto.tipo) {
     case "usuario":
       return [fila("USUARIO", acto.texto)];
     case "asistente":
       return [fila("ASISTENTE", acto.texto)];
     case "razonamiento":
-      // La trayectoria es el registro COMPLETO: lo que el modelo pensó también consta, con
+      // Las trazas son el registro COMPLETO: lo que el modelo pensó también consta, con
       // su propia etiqueta para no confundirlo con lo que dijo.
       return [fila("PIENSA", acto.texto)];
     case "herramientas":
@@ -62,14 +69,14 @@ function filasDe(acto: Acto): FilaDeTrayectoria[] {
   }
 }
 
-export function filasDeTrayectoria(actos: readonly Acto[]): FilaDeTrayectoria[] {
+export function filasDeTrazas(actos: readonly Acto[]): FilaDeTrazas[] {
   return actos.flatMap(filasDe);
 }
 
-export function Trayectoria({ actos }: { actos: readonly Acto[] }) {
-  const filas = filasDeTrayectoria(actos);
+export function Trazas({ actos }: { actos: readonly Acto[] }) {
+  const filas = filasDeTrazas(actos);
   return (
-    <ol className={estilos.trayectoria}>
+    <ol className={estilos.trazas}>
       {filas.map((f, indice) => (
         // El índice como parte de la key es correcto aquí: las filas no tienen identidad
         // propia (dos líneas de tool pueden ser el texto exacto, «grep coleccion» dos

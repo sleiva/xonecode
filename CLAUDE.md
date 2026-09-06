@@ -531,6 +531,28 @@ para la que la hoja copiada las diseñó y solo hace falta el acento cian de la 
 `Pestanas.test.tsx` vigila que esas reglas no vuelvan a colarse arriba, que es CSS muerto que
 nadie ve fallar.
 
+**El compositor solo está en el Chat, y recupera el foco al terminar el turno**
+(`Compositor.tsx`). Dos cosas distintas que llegaron juntas:
+- En **Trazas** y en **Ficheros** no hay a quién escribirle —son un registro y un diff—, así
+  que la caja se va. Se OCULTA y no se desmonta: desmontada se pierde el borrador a medio
+  escribir en cuanto miras un fichero y vuelves. Y con `hidden`, no con `visibility`, porque
+  hace falta que además salga del orden del Tab y del árbol de accesibilidad — un campo
+  invisible al que se llega tabulando es peor que uno visible. La regla `[hidden]` se escribe
+  igualmente en la hoja aunque el navegador ya la dé por omisión: esa omisión la pisa
+  cualquier `display` que se le ponga después a `.envoltura`, y el atributo se quedaría mudo.
+- **El foco vuelve solo.** La caja se APAGA mientras el agente trabaja, y un elemento que se
+  deshabilita pierde el foco: el navegador se lo devuelve al `<body>`. Así que quien mandaba
+  una petición y esperaba, al terminar se encontraba con que teclear no escribía en ningún
+  sitio. Se devuelve en el flanco de BAJADA de `turnoEnVuelo` y solo si la caja está a la
+  vista: robarlo al montar, o mientras se mira un diff, sería lo contrario de lo que se
+  quiere.
+
+**«Trayectoria» ahora es «Trazas»** (`Trazas.tsx`), y no es solo la etiqueta: el nombre lo
+pidió el usuario con su encargo detrás — esa pestaña es para desarrollar el HARNESS, no para
+trabajar en una app XOne. Quien escribe una colección mira el chat y los ficheros; quien
+viene aquí está depurando qué hizo el agente y en qué orden. Que el destinatario sea otro es
+también lo que le permite ser densa a propósito.
+
 **La barra lateral se pliega**, y el botón vive en la barra superior y no dentro de ella
 —donde lo pone el mockup— por una razón práctica: plegada, la barra no está, así que su
 propio botón se habría ido con ella. Al plegarse se DESMONTA (la columna del grid se va a

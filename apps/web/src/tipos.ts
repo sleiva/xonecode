@@ -149,7 +149,7 @@ export type MensajeAlCliente =
       }[];
       ramas: string[];
       /** Qué falló en el paso anterior; ausente si no falló nada. Lo pinta el propio paso:
-       *  un acto de sistema se va a la Trayectoria, que no es la pestaña que se está viendo. */
+       *  un acto de sistema se va a las Trazas, que no es la pestaña que se está viendo. */
       aviso?: string;
       /** El saludo (`agent/persona.ts#nombreDePersona`, servidor). Nunca en un acto ni en
        *  una sesión guardada: solo lo pinta `Bienvenida.tsx`. Ausente = sin nombre. */

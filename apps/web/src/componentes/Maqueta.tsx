@@ -29,7 +29,7 @@ import estilos from "./Maqueta.module.css";
  * compositor pegajoso dentro. Aquí no hay `.scrollBody` —nuestro compositor es un hermano
  * de la columna, no un asiento del scroller—, así que `.viewArea` crecía hasta el alto del
  * contenido, se desbordaba, y `.centerCol` (que recorta) lo escondía DEBAJO del
- * compositor: la conversación y la trayectoria dejaban de poder scrollear y las últimas
+ * compositor: la conversación y las trazas dejaban de poder scrollear y las últimas
  * líneas quedaban tapadas. Sin el atributo mandan las reglas base (`.viewArea { flex: 1;
  * min-height: 0 }`), que es lo que acota el scroll.
  *

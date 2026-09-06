@@ -86,7 +86,7 @@ export interface EstadoDelCliente {
       compartido?: boolean;
     }[];
     ramas: string[];
-    /** Lo que falló en el paso anterior, para que lo diga el paso y no solo la Trayectoria. */
+    /** Lo que falló en el paso anterior, para que lo diga el paso y no solo las Trazas. */
     aviso?: string;
     /** De qué entorno son los `proyectos`. Ausente = de ninguno todavía; el cliente NO
      *  supone «el primero», que es lo que hacía y se rompía con dos entornos. */

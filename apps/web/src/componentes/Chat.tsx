@@ -35,16 +35,16 @@ import estilos from "./Chat.module.css";
  * el pulso —razonamiento, tools y fases— se enseña abierto: es lo único que hay que mirar
  * mientras el agente trabaja. En cuanto el turno acaba se dobla en una línea («Trabajo del
  * agente · N pasos · Xs») y la conversación se lee sin el andamio. No se BORRA: lo que pasó,
- * pasó, y está a un clic — en la Trayectoria sigue entero y sin plegar.
+ * pasó, y está a un clic — en las Trazas sigue entero y sin plegar.
  *
- * **El trabajo del agente se ve AQUÍ, no solo en la Trayectoria.** Antes el Chat pintaba
+ * **El trabajo del agente se ve AQUÍ, no solo en las Trazas.** Antes el Chat pintaba
  * únicamente los globos de usuario y asistente, y todo lo demás —las tools que llama, las
  * fases, lo que piensa— vivía en la otra pestaña. El resultado, medido en pantalla: se
  * escribía una petición y no pasaba nada durante minutos, con el agente trabajando a la
  * vista de nadie. Ahora la actividad va intercalada en la conversación, en gris y en una
  * línea, como en el harness de DeepSeek: `razonamiento`, `herramientas` y `fase`.
  *
- * Lo que sigue siendo de la Trayectoria y no se duplica aquí: `sistema` (avisos de la
+ * Lo que sigue siendo de las Trazas y no se duplica aquí: `sistema` (avisos de la
  * consola, no del turno) y `fin` (el resumen con la duración). La pestaña sigue siendo el
  * registro completo; esto es el pulso.
  */

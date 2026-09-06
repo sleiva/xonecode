@@ -10,6 +10,14 @@
    tarjeta 32px más ancha que el texto a cualquier tamaño de ventana. Antes eran dos
    `775px` escritos en dos ficheros, y dos números para la misma cosa es cómo uno de los
    dos se queda mintiendo. */
+/* Oculto en las pestañas que no son el chat. La regla se escribe aunque el navegador ya dé
+   `display: none` a `[hidden]` por omisión: esa omisión la pisa cualquier `display` que se
+   le ponga después a `.envoltura`, y entonces el atributo se queda mudo — el campo seguiría
+   viéndose y nada daría error. */
+.envoltura[hidden] {
+  display: none;
+}
+
 .envoltura {
   max-width: var(--dsh-composer-card-max-width);
   margin: 0 auto;

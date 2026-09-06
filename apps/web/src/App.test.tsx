@@ -543,7 +543,7 @@ describe("App: abrir un proyecto desde la barra (Layer C)", () => {
   /**
    * La barra superior es la barra de herramientas de la APLICACIÓN, no de la sesión: sin
    * sesión abierta sigue ahí (con la marca, el estado del cable y el plegado), pero sin
-   * pestañas — sin transcript ni trayectoria, no llevarían a ningún sitio.
+   * pestañas — sin transcript ni trazas, no llevarían a ningún sitio.
    */
   it("el escritorio también lleva barra superior, y sin pestañas", () => {
     montarConProyectos([{ id: "p1", nombre: "Tienda" }]);

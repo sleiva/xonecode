@@ -13,15 +13,15 @@ describe("Pestanas", () => {
   it("dice cuál está elegida, y solo una", () => {
     render(<Pestanas pestana="chat" alElegirPestana={vi.fn()} />);
     expect(screen.getByRole("tab", { name: "Chat" }).getAttribute("aria-selected")).toBe("true");
-    expect(screen.getByRole("tab", { name: "Trayectoria" }).getAttribute("aria-selected")).toBe("false");
+    expect(screen.getByRole("tab", { name: "Trazas" }).getAttribute("aria-selected")).toBe("false");
     expect(screen.getByRole("tab", { name: "Ficheros" }).getAttribute("aria-selected")).toBe("false");
   });
 
   it("pulsar una lo pide hacia arriba: quien recuerda la elección es `App`, no esto", () => {
     const alElegirPestana = vi.fn();
     render(<Pestanas pestana="chat" alElegirPestana={alElegirPestana} />);
-    fireEvent.click(screen.getByRole("tab", { name: "Trayectoria" }));
-    expect(alElegirPestana).toHaveBeenCalledWith("trayectoria");
+    fireEvent.click(screen.getByRole("tab", { name: "Trazas" }));
+    expect(alElegirPestana).toHaveBeenCalledWith("trazas");
   });
 
   it("las tres son `role=\"tab\"` dentro de un `role=\"tablist\"`", () => {

@@ -5,8 +5,8 @@
    `--xonecode-cian` es de `estilos/marca.css` (la paleta propia). */
 
 /* La tira se pega arriba del panel y lo separa de lo que scrollea debajo. El borde va aquí
-   y no en el contenedor de abajo porque la tira es lo que está SIEMPRE: el chat, la
-   trayectoria y los ficheros se turnan debajo de ella, y un borde por vista serían tres
+   y no en el contenedor de abajo porque la tira es lo que está SIEMPRE: el chat, las
+   trazas y los ficheros se turnan debajo de ella, y un borde por vista serían tres
    sitios que mantener sincronizados. */
 .tira {
   flex: none;

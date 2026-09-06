@@ -112,7 +112,7 @@ export function Wizard({
   /**
    * Lo que falló en el paso anterior, dicho por el servidor. Se pinta EN el paso porque ahí
    * es donde el usuario está mirando: el mismo texto llega también como acto, pero ese acaba
-   * en la Trayectoria —la otra pestaña—, y un paso que se repinta igual sin decir nada es un
+   * en las Trazas —la otra pestaña—, y un paso que se repinta igual sin decir nada es un
    * fallo mudo.
    */
   aviso?: string;
