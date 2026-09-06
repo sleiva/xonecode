@@ -15,7 +15,7 @@ vi.mock("./instantanea.js", async (importOriginal) => {
   return { ...orig, tomarInstantanea: mocksInstantanea.tomarInstantanea };
 });
 
-import { abrirSesionReal, ficherosDelProyecto } from "./turnoReal.js";
+import { abrirSesionReal, ficherosDelProyecto, TOPE_REPARACIONES } from "./turnoReal.js";
 import { ModeloGuionizado, SkillsEnMemoria, type VerifierPort } from "../core/ports.js";
 import type { Piel } from "../core/turno.js";
 import type { PendienteDeAprobacion } from "../core/events.js";
@@ -500,5 +500,148 @@ describe("el lazo de verificación", () => {
     await sesion.turno("añade un campo", piel);
     expect(verificar).toHaveBeenCalledTimes(1);
     expect(lineasDe(piel)).toContain("✓  verificación en verde");
+  });
+});
+
+
+/** Un verificador que contesta, en orden, los informes que se le den; el último se repite. */
+function verificadorConGuion(informes: Array<{ verde: boolean; hallazgos: Parameters<VerifierPort["verificar"]>[0] extends never ? never : { code: string; severidad: "error" | "warning" | "info"; mensaje: string; fichero?: string; linea?: number }[] }>) {
+  let i = 0;
+  const verificar = vi.fn(async () => informes[Math.min(i++, informes.length - 1)]!);
+  return { verificar };
+}
+
+const ERROR_A = { code: "XONE001", severidad: "error" as const, mensaje: "atributo desconocido", fichero: join(RAIZ, "Clientes.xne"), linea: 12 };
+const ERROR_B = { code: "XONE002", severidad: "error" as const, mensaje: "función inexistente", fichero: join(RAIZ, "Clientes.xne"), linea: 40 };
+
+describe("el lazo de reparación", () => {
+  it("un veredicto rojo lanza un intento: se anuncia, se le devuelven los hallazgos, y se vuelve a verificar", async () => {
+    // La segunda mitad del lazo. Sin esto el veredicto se enseñaba y ahí se quedaba; ahora
+    // los hallazgos vuelven al agente como una petición en el MISMO hilo, y el simulador
+    // vuelve a mirar lo que corrigió.
+    const verificador = verificadorConGuion([{ verde: false, hallazgos: [ERROR_A] }, { verde: true, hallazgos: [] }]);
+    const sesion = await abrir({ cambios: [XNE], verifier: verificador });
+    const piel = pielFalsa();
+    await sesion.turno("añade un campo", piel);
+
+    const lineas = lineasDe(piel);
+    expect(lineas).toContain(`🔁 reparando (intento 1 de ${TOPE_REPARACIONES})`);
+    expect(lineas).toContain("✓  verificación en verde");
+    expect(verificador.verificar).toHaveBeenCalledTimes(2);
+
+    // La petición de reparación es un mensaje de usuario con el hallazgo dentro: código,
+    // fichero relativo y línea. Sin contenido de ningún fichero.
+    const agente = agenteDeLLamada(0);
+    expect(agente.stream).toHaveBeenCalledTimes(2);
+    const segundo = agente.stream.mock.calls[1]![0] as { messages: Array<{ content: string }> };
+    expect(segundo.messages[0]!.content).toContain("XONE001 en Clientes.xne:12");
+    expect(segundo.messages[0]!.content).toMatch(/No inventes atributos/);
+  });
+
+  it("el turno cierra UNA sola vez aunque tenga varias pasadas", async () => {
+    // Antes cada pasada por `correrTurno` cerraba: stdio imprimía el tiempo por ronda y el
+    // chat plegaba el tramo por ronda. Con reparaciones eso se multiplicaba.
+    const verificador = verificadorConGuion([{ verde: false, hallazgos: [ERROR_A] }, { verde: true, hallazgos: [] }]);
+    const sesion = await abrir({ cambios: [XNE], verifier: verificador });
+    const piel = pielFalsa();
+    await sesion.turno("añade un campo", piel);
+    expect(piel.fin).toHaveBeenCalledTimes(1);
+  });
+
+  it("y también con rondas de aprobación por medio: un turno, un fin", async () => {
+    const sesion = await abrir({ escribe: true, pedir: aprobarTodo(), cambios: [XNE] });
+    const piel = pielFalsa();
+    await sesion.turno("añade un campo", piel);
+    expect(agenteDeLLamada(0).stream).toHaveBeenCalledTimes(2);
+    expect(piel.fin).toHaveBeenCalledTimes(1);
+  });
+
+  it("si corregir no cambia nada, se BLOQUEA por no-progreso antes de gastar el tope", async () => {
+    // El mismo error en el mismo sitio dos veces seguidas es la señal de que el modelo
+    // repite el mismo cambio. Seguir sería gastar intentos —y aprobaciones humanas— en nada.
+    const verificador = verificadorConGuion([{ verde: false, hallazgos: [ERROR_A] }]);
+    const sesion = await abrir({ cambios: [XNE], verifier: verificador });
+    const piel = pielFalsa();
+    await sesion.turno("añade un campo", piel);
+    const lineas = lineasDe(piel);
+    expect(lineas.some((l) => l.startsWith("⛔ bloqueado (no-progreso)"))).toBe(true);
+    // Un intento, dos veredictos: el original y el que repitió la huella.
+    expect(verificador.verificar).toHaveBeenCalledTimes(2);
+    expect(piel.fin).toHaveBeenCalledTimes(1);
+  });
+
+  it("si cada intento cambia el error pero nunca queda verde, se para en el tope y se dice", async () => {
+    // Errores DISTINTOS cada vez es avance, así que no-progreso no salta; lo que corta es el
+    // tope. Y se dice con la cifra para que quien lo lea sepa que se dejó como está.
+    const verificador = verificadorConGuion([
+      { verde: false, hallazgos: [ERROR_A] },
+      { verde: false, hallazgos: [ERROR_B] },
+      { verde: false, hallazgos: [ERROR_A] },
+    ]);
+    const sesion = await abrir({ cambios: [XNE], verifier: verificador });
+    const piel = pielFalsa();
+    await sesion.turno("añade un campo", piel);
+    const lineas = lineasDe(piel);
+    expect(lineas.some((l) => l.startsWith("⛔ bloqueado (tope-reparaciones)"))).toBe(true);
+    expect(verificador.verificar).toHaveBeenCalledTimes(TOPE_REPARACIONES + 1);
+    expect(piel.fin).toHaveBeenCalledTimes(1);
+  });
+
+  it("un aviso que va y viene NO cuenta como progreso ni como estancamiento: la huella son los errores", async () => {
+    const aviso = { code: "XONE100", severidad: "warning" as const, mensaje: "sin usar", fichero: join(RAIZ, "Clientes.xne") };
+    const verificador = verificadorConGuion([
+      { verde: false, hallazgos: [ERROR_A, aviso] },
+      { verde: false, hallazgos: [ERROR_A] },
+    ]);
+    const sesion = await abrir({ cambios: [XNE], verifier: verificador });
+    const piel = pielFalsa();
+    await sesion.turno("añade un campo", piel);
+    expect(lineasDe(piel).some((l) => l.startsWith("⛔ bloqueado (no-progreso)"))).toBe(true);
+  });
+
+  it("verde a la primera: ni intento ni bloqueo", async () => {
+    const verificador = verificadorConGuion([{ verde: true, hallazgos: [] }]);
+    const sesion = await abrir({ cambios: [XNE], verifier: verificador });
+    const piel = pielFalsa();
+    await sesion.turno("añade un campo", piel);
+    expect(verificador.verificar).toHaveBeenCalledTimes(1);
+    expect(lineasDe(piel).some((l) => l.includes("reparando") || l.includes("bloqueado"))).toBe(false);
+  });
+});
+
+
+describe("el cierre del turno cuando la aprobación revienta", () => {
+  it("si `pedirAprobacion` lanza tras una ronda que no cerró, el turno cierra igual y el error se propaga", async () => {
+    // Es el «sin humano» de `run.ts`, que corta desde DENTRO de la aprobación. La ronda
+    // anterior predijo reanudación y no emitió `fin`; sin este cierre, ese turno se quedaba
+    // sin línea de tiempo en stdio y sin plegar en la web. Y sigue siendo un fallo: se
+    // propaga, no se traga.
+    class Corte extends Error {}
+    const sesion = await abrir({
+      escribe: true,
+      pedir: async () => {
+        throw new Corte("sin humano");
+      },
+    });
+    const piel = pielFalsa();
+    await expect(sesion.turno("añade un campo", piel)).rejects.toBeInstanceOf(Corte);
+    expect(piel.fin).toHaveBeenCalledTimes(1);
+  });
+
+  it("el tiempo del fin es el del turno entero, no el de la última pasada", async () => {
+    // Dos pasadas —ronda con aprobación y reanudación—: el `fin` único cuenta desde que
+    // empezó el turno. Se comprueba que no es menor que lo que duró la primera pasada, que
+    // aquí se alarga a propósito en la aprobación.
+    const sesion = await abrir({
+      escribe: true,
+      pedir: async (pendientes) => {
+        await new Promise((r) => setTimeout(r, 120));
+        return aprobarTodo()(pendientes);
+      },
+    });
+    const piel = pielFalsa();
+    await sesion.turno("añade un campo", piel);
+    const [ms] = (piel.fin as ReturnType<typeof vi.fn>).mock.calls[0] as [number];
+    expect(ms).toBeGreaterThanOrEqual(120);
   });
 });

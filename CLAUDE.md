@@ -136,9 +136,31 @@ veredicto entra en el mismo flujo de eventos. Cinco reglas, y el porqué de cada
   tumbar el turno, y con el aviso de honestidad saliendo igualmente, porque no ha corrido.
   El verificador entra por parámetro (`verifier?: VerifierPort`), así que `npm test` sigue
   sin necesitarlo: los tests del lazo usan dobles en línea y la instantánea falsa.
-Lo que TODAVÍA no hace, y es la siguiente pieza: devolverle los hallazgos al agente como un
-paso de reparación acotado (`reparacion`, «intento N de M», que ya existe como evento y que
-`guionizado.ts` recorre). Hoy el veredicto se enseña; no se corrige solo.
+**Y un veredicto rojo se REPARA** (`TOPE_REPARACIONES`, dos intentos): los hallazgos vuelven
+al agente como un mensaje de USUARIO en el mismo hilo —código, fichero relativo, línea y
+mensaje, y el recordatorio de que no se invente nada para que el error desaparezca—, se
+vuelve a verificar, y así hasta verde, hasta el tope, o hasta que corregir no cambie nada.
+Lo que sostiene el lazo:
+- **La huella son los ERRORES** (código|fichero|línea), no todos los hallazgos, y se compara
+  con la del veredicto anterior, no con «¿bajó el número?»: un aviso que va y viene no dice
+  nada de si el error se arregla, y dos errores distintos en vez de dos iguales también es
+  avance. Misma huella dos veces → `bloqueado (no-progreso)` antes de gastar el tope; tope
+  agotado con errores distintos → `bloqueado (tope-reparaciones)`, con la cifra.
+- **Un turno cierra UNA vez.** `correrTurno` corre una vez por pasada —ronda de aprobación o
+  intento de reparación— y antes cada pasada cerraba: stdio imprimía el tiempo por ronda y
+  el chat plegaba el tramo por ronda (medido). Ahora `OpcionesDelTurno.cerrar` lo decide el
+  generador al agotar el flujo, que es el único que sabe si detrás viene otra pasada; y
+  `desde` le pasa el `t0` del turno entero, porque el `fin` de la última pasada contaba solo
+  lo suyo — un turno de cuarenta segundos con aprobación por medio decía «5.0s». Las
+  condiciones con que el generador predice «habrá otra ronda» son las MISMAS del `break` del
+  bucle, y tienen que serlo: si divergen, un turno se queda sin `fin` o cierra dos veces.
+- **Si la aprobación revienta tras una pasada que no cerró** (el «sin humano» de `run.ts`
+  corta desde dentro), el turno cierra él antes de propagar: sin eso ese turno se quedaba sin
+  línea de tiempo y sin plegar. Los avisos no se pierden ahí: con escrituras pendientes no
+  aplica ninguno.
+- **`reparacion` se emite al EMPEZAR la pasada del intento**, no al final de la anterior: el
+  «🔁 reparando» abre el tramo de trabajo que viene, en vez de cerrar el que acaba. Es el
+  orden que `guionizado.ts` ya recorría.
 
 **El panel de avisos** (`cli/panel.ts`) es la ÚNICA excepción al append-only de la consola: las
 notificaciones de sistema (pausas, avisos deterministas, el tiempo final) viven en un recinto de

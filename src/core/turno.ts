@@ -70,6 +70,26 @@ export interface OpcionesDelTurno {
    * pides que avise, a veces no avisa — y es justo el aviso que no puede faltar.
    */
   avisos?: (bitacora: Bitacora) => string[];
+  /**
+   * Si ESTA pasada cierra el turno: los avisos deterministas y `piel.fin()`.
+   *
+   * Existe porque un turno puede tener varias pasadas por `correrTurno` —una por ronda de
+   * aprobación, una por intento de reparación— y solo la última es el final. Antes cada
+   * pasada cerraba: stdio imprimía el tiempo una vez por ronda y el chat de la web plegaba
+   * el tramo una vez por ronda, medido. Es una función y no un booleano porque quien lo
+   * sabe es el flujo de eventos, y solo lo sabe al AGOTARSE — antes de eso no hay forma de
+   * decir si detrás viene otra pasada. Por omisión cierra, que es lo seguro: una pasada que
+   * revienta cierra igual, para que el tiempo y el aviso no se pierdan.
+   */
+  cerrar?: () => boolean;
+  /**
+   * Desde cuándo cuenta el tiempo del `fin`. Por omisión, desde que empezó ESTA pasada — que
+   * es lo correcto cuando el turno es una sola. Con varias pasadas y una sola que cierra,
+   * sin esto el `fin` diría solo lo que tardó la última: un turno de cuarenta segundos de
+   * trabajo, una aprobación y cinco de reanudación saldría como «5.0s». Quien encadena
+   * pasadas pasa aquí el `t0` del turno entero.
+   */
+  desde?: number;
 }
 
 /**
@@ -231,6 +251,14 @@ export async function correrTurno(
     const cierre = colapsador.cierre();
     if (cierre) escribirLinea(cierre.texto, { nombre: cierre.nombre });
 
+    // Una pasada intermedia —hay otra ronda o un intento de reparación detrás— NO cierra:
+    // ni avisos ni `fin`. La línea abierta sí se cierra siempre, porque lo que venga
+    // detrás empieza la suya.
+    if (!(opciones.cerrar?.() ?? true)) {
+      if (abierta) piel.cerrarLinea();
+      return bitacora;
+    }
+
     // Los avisos deterministas van DESPUÉS de todo, y también si hubo excepción.
     // Por el MISMO camino que los eventos `aviso`: la piel que recicla los recibe
     // delegados, la que no los pinta como líneas estáticas.
@@ -247,7 +275,7 @@ export async function correrTurno(
     }
 
     if (abierta) piel.cerrarLinea();
-    piel.fin(Date.now() - t0);
+    piel.fin(Date.now() - (opciones.desde ?? t0));
   }
 
   return bitacora;

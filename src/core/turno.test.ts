@@ -133,6 +133,35 @@ describe("correrTurno", () => {
     expect(actos).not.toContain("linea:⚠ VERIFICADOR DE PEGA");
   });
 
+  it("una pasada que NO cierra (`cerrar: () => false`) ni avisa ni emite fin — pero cierra su línea", async () => {
+    // Un turno puede tener varias pasadas —rondas de aprobación, intentos de reparación— y
+    // solo la última es el final. Antes cada pasada cerraba: stdio imprimía el tiempo una
+    // vez por ronda y el chat plegaba el tramo una vez por ronda. La línea abierta sí se
+    // cierra siempre: lo que venga detrás empieza la suya.
+    const { piel, actos } = pielDePrueba();
+    await correrTurno(flujo({ tipo: "token", texto: "a medio", msgId: "r1" }), piel, {
+      avisos: () => ["⚠ NO DEBE SALIR"],
+      cerrar: () => false,
+    });
+    expect(actos).toEqual(["token:a medio", "cerrar"]);
+  });
+
+  it("el tiempo del fin cuenta desde `desde`, no desde que empezó la pasada", async () => {
+    // Con varias pasadas y una sola que cierra, el fin de la última tiene que decir lo que
+    // tardó el TURNO. Un `desde` de hace un segundo largo da un fin mayor que la pasada.
+    const tiempos: number[] = [];
+    const piel: Piel = {
+      token: () => {},
+      cerrarLinea: () => {},
+      linea: () => {},
+      pausa: () => {},
+      fin: (ms) => tiempos.push(ms),
+    };
+    await correrTurno(flujo(), piel, { desde: Date.now() - 1500 });
+    expect(tiempos).toHaveLength(1);
+    expect(tiempos[0]!).toBeGreaterThanOrEqual(1500);
+  });
+
   it("una verificación con hallazgos los pinta uno por línea, con dónde, y cuenta aparte los ajenos", async () => {
     // El resumen solo dice cuántos, y cuántos no se arregla. El fichero y la línea son lo
     // que el humano abre — y lo que el paso de reparación necesitará después.

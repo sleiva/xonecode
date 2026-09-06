@@ -4,6 +4,15 @@ import { randomUUID } from "node:crypto";
 import { HumanMessage } from "@langchain/core/messages";
 import { Command, MemorySaver } from "@langchain/langgraph";
 import { collectPending, type Decision, MAX_APPROVAL_ROUNDS } from "../vendor/hitl.js";
+
+/**
+ * Cuántas veces se le devuelven los hallazgos al agente para que los corrija. Dos: tres
+ * verificaciones en total. Un modelo que no arregla algo en dos intentos con el error
+ * delante no lo arregla al quinto, y cada intento son escrituras que pasan por aprobación
+ * humana — o sea, tiempo de una persona. La guarda de «no progresa» (misma huella dos
+ * veces) corta antes de llegar aquí cuando el modelo repite el mismo cambio.
+ */
+export const TOPE_REPARACIONES = 2;
 import { aPendiente, ficheroDe, cambioDe, buildResume } from "./interrupts.js";
 import { cargarAgentes } from "./agentesEnDisco.js";
 import { crearSubagenteExterno } from "./subagenteExterno.js";
@@ -13,7 +22,7 @@ import type { Piel } from "../core/turno.js";
 import { Bitacora } from "../core/bitacora.js";
 import { correrTurno } from "../core/turno.js";
 import type { ModelosPort, SkillsPort, VerifierPort } from "../core/ports.js";
-import type { DomainEvent } from "../core/events.js";
+import type { DomainEvent, HallazgoDelTurno } from "../core/events.js";
 import { relative, resolve as resolverRuta } from "node:path";
 import type { Entorno } from "./entorno.js";
 import { tomarInstantanea, type Instantanea, type Cambio } from "./instantanea.js";
@@ -216,6 +225,11 @@ export async function abrirSesionReal(opciones: {
     // Un turno sobre una sesión ya cerrada reviviría un hilo que su dueño soltó al cambiar
     // de proyecto. Falla en vez de trabajar en silencio sobre la raíz equivocada.
     if (cerrada) throw new Error("la sesión ya está cerrada");
+    // El reloj del turno ENTERO. Se le pasa a cada pasada de `correrTurno` como `desde`:
+    // solo la última cierra, y su `fin` tiene que contar desde aquí y no desde que empezó
+    // ella — si no, un turno largo con aprobación por medio diría solo lo que tardó la
+    // reanudación.
+    const t0 = Date.now();
     const instantanea: Instantanea = await tomarInstantanea(raiz, entorno.git);
 
     let payload: unknown = { messages: [new HumanMessage(peticion)] };
@@ -229,13 +243,25 @@ export async function abrirSesionReal(opciones: {
     let cortadoPorTope = false;
 
     /**
-     * Si ESTA ronda dejó ficheros del proyecto cambiados, y por qué no se verificaron si no
-     * se verificaron. Lo escribe `conVerificacion` mientras la ronda corre, y lo lee el
-     * aviso determinista del final de esa misma ronda — que es la única forma de que el
-     * aviso sepa algo que solo se conoce al terminar el flujo.
+     * El estado del lazo, compartido entre el generador y el bucle de rondas.
+     *
+     * Lo escribe `conVerificacion` mientras la pasada corre, y lo leen el aviso determinista
+     * y la decisión de cierre de ESA misma pasada, más el bucle de fuera para saber si hay
+     * que reparar. Es la única forma de que quien cierra el turno sepa algo que solo se
+     * conoce al agotarse el flujo: si detrás viene otra ronda, otro intento, o nada.
      */
     let rondaEscribio = false;
     let motivoSinVerificar: string | undefined;
+    /** Si esta pasada cierra el turno. `false` = detrás viene otra ronda o un intento. */
+    let cerrarRonda = true;
+    /** Si tras esta pasada hay que lanzar un intento de reparación. */
+    let reparar = false;
+    /** Intentos de reparación ya lanzados en este turno. */
+    let intento = 0;
+    /** Los hallazgos del último veredicto rojo, para redactar la petición de reparación. */
+    let ultimosHallazgos: HallazgoDelTurno[] = [];
+    /** La huella del veredicto anterior, para detectar que reparar no avanza. */
+    let huellaPrevia: string | undefined;
 
     /**
      * El lazo de verificación, cosido al FINAL del flujo de eventos y no después del turno.
@@ -256,8 +282,23 @@ export async function abrirSesionReal(opciones: {
      * de turno existe para evitar.
      */
     async function* conVerificacion(eventos: AsyncIterable<DomainEvent>): AsyncIterable<DomainEvent> {
+      // Un intento de reparación se anuncia al EMPEZAR su pasada, no al final de la anterior:
+      // así el «🔁 reparando» abre el tramo de trabajo que viene, en vez de cerrar el que
+      // acaba. Es el orden que `guionizado.ts` ya recorre.
+      if (intento > 0) yield { tipo: "reparacion", intento, tope: TOPE_REPARACIONES };
+      reparar = false;
+
       yield* eventos;
-      if ((await leerPendientes()).lista.length > 0) return;
+
+      if ((await leerPendientes()).lista.length > 0) {
+        // Quedan escrituras por aprobar. Si el bucle va a seguir —hay quien apruebe y no se
+        // ha agotado el tope de rondas— esta pasada NO es el final del turno y no cierra.
+        // Son las mismas dos condiciones del `break` del bucle, y tienen que serlo: si
+        // divergen, un turno se queda sin `fin` o cierra dos veces.
+        cerrarRonda = !(ronda < MAX_APPROVAL_ROUNDS && opciones.pedirAprobacion !== undefined);
+        return;
+      }
+      cerrarRonda = true;
 
       const cambios = (await instantanea.cambios()).filter(
         (c) => c.clase !== "borrado" && !c.ruta.startsWith(".xonecode/") && c.ruta !== ".xonecode"
@@ -270,6 +311,7 @@ export async function abrirSesionReal(opciones: {
         return;
       }
 
+      yield { tipo: "fase", fase: "verificando" };
       let informe;
       try {
         informe = await opciones.verifier.verificar(raiz);
@@ -292,26 +334,99 @@ export async function abrirSesionReal(opciones: {
       const preexistentes = informe.hallazgos.length - delTurno.length;
       const errores = delTurno.filter((h) => h.severidad === "error").length;
 
+      const hallazgos: HallazgoDelTurno[] = delTurno.map((h) => ({
+        code: h.code,
+        severidad: h.severidad,
+        mensaje: h.mensaje,
+        ...(h.fichero === undefined ? {} : { fichero: relative(raiz, h.fichero) }),
+        ...(h.linea === undefined ? {} : { linea: h.linea }),
+      }));
+
       yield {
         tipo: "verificacion",
         verde: errores === 0,
         errores,
         avisos: delTurno.length - errores,
-        hallazgos: delTurno.map((h) => ({
-          code: h.code,
-          severidad: h.severidad,
-          mensaje: h.mensaje,
-          ...(h.fichero === undefined ? {} : { fichero: relative(raiz, h.fichero) }),
-          ...(h.linea === undefined ? {} : { linea: h.linea }),
-        })),
+        hallazgos,
         ...(preexistentes > 0 ? { preexistentes } : {}),
       };
+      if (errores === 0) return;
+
+      // Rojo. Tres salidas, y solo una de ellas es «inténtalo otra vez».
+      //
+      // La huella son los ERRORES, no todos los hallazgos: un aviso que va y viene no dice
+      // nada de si el error se está arreglando. Y se compara con la del veredicto anterior
+      // y no con «¿bajó el número?»: dos errores distintos en vez de dos iguales también es
+      // avance, y un modelo que arregla uno y rompe otro no debe quedarse bloqueado como si
+      // no hubiera hecho nada.
+      const huella = hallazgos
+        .filter((h) => h.severidad === "error")
+        .map((h) => `${h.code}|${h.fichero ?? ""}|${h.linea ?? ""}`)
+        .sort()
+        .join("\n");
+
+      if (huella === huellaPrevia) {
+        // Corregir no cambió nada: el mismo error, en el mismo sitio. Seguir sería gastar
+        // el tope —y aprobaciones humanas— en repetir el mismo cambio.
+        yield {
+          tipo: "bloqueado",
+          motivo: "no-progreso",
+          explicacion: `el intento ${intento} dejó los mismos ${errores} error(es) en los mismos sitios`,
+        };
+        return;
+      }
+      if (intento >= TOPE_REPARACIONES) {
+        yield {
+          tipo: "bloqueado",
+          motivo: "tope-reparaciones",
+          explicacion: `tras ${intento} intento(s) siguen ${errores} error(es); se deja como está para que lo mires`,
+        };
+        return;
+      }
+
+      // Se intenta otra vez. Esta pasada NO cierra el turno: el `fin` y los avisos van al
+      // final del intento que viene, o del que corte.
+      huellaPrevia = huella;
+      ultimosHallazgos = hallazgos;
+      intento += 1;
+      reparar = true;
+      cerrarRonda = false;
     }
 
+    /**
+     * La petición de reparación: los hallazgos tal cual, sin más interpretación.
+     *
+     * Va como un mensaje de USUARIO en el mismo hilo, no como un prompt de sistema nuevo:
+     * es la única forma de que el especialista vea lo que acaba de escribir y el error
+     * juntos. Y no se le dice CÓMO arreglarlo —eso lo sabe él o no lo sabe—, se le recuerda
+     * lo único que importa aquí: que no se invente nada para que el error desaparezca, que
+     * es justo lo que XOne no le va a reprochar y el simulador sí.
+     */
+    const peticionDeReparacion = (): string =>
+      [
+        `El simulador de XOne ha revisado lo que acabas de escribir y ha encontrado ${ultimosHallazgos.filter((h) => h.severidad === "error").length} error(es):`,
+        ...ultimosHallazgos.map(
+          (h) =>
+            `- ${h.severidad === "error" ? "ERROR" : "aviso"} ${h.code}${h.fichero === undefined ? "" : ` en ${h.fichero}${h.linea === undefined ? "" : `:${h.linea}`}`}: ${h.mensaje}`
+        ),
+        "",
+        "Corrige los errores. No inventes atributos, funciones ni propiedades para que",
+        "desaparezcan: XOne ignora lo desconocido en silencio y el simulador lo detecta.",
+        "Si algún error no sabes cómo corregirlo, dilo en vez de intentar otra cosa.",
+      ].join("\n");
+
+    // Dos bucles anidados y a propósito: el de dentro son las RONDAS de aprobación de una
+    // petición (una pausa termina la ronda, se reanuda con las decisiones); el de fuera son
+    // los INTENTOS de reparación, cada uno una petición nueva en el mismo hilo. Quién
+    // decide si hay intento es el generador, que es quien ve el veredicto.
+    do {
+    if (intento > 0) payload = { messages: [new HumanMessage(peticionDeReparacion())] };
+    ronda = 0;
     while (true) {
       ronda += 1;
       rondaEscribio = false;
       motivoSinVerificar = undefined;
+      cerrarRonda = true;
       const aborto = new AbortController();
       cancelarEnCurso = () => aborto.abort(new Error("turno cancelado por el usuario"));
       try {
@@ -343,6 +458,10 @@ export async function abrirSesionReal(opciones: {
                 : [
                     `⚠ el verificador no ha corrido en este turno${motivoSinVerificar === undefined ? "" : ` (${motivoSinVerificar})`}`,
                   ],
+            // Solo la ÚLTIMA pasada cierra el turno. Lo decide el generador al agotar el
+            // flujo: si quedan rondas o viene un intento, no hay `fin` todavía.
+            cerrar: () => cerrarRonda,
+            desde: t0,
           }
         );
       } finally {
@@ -368,9 +487,21 @@ export async function abrirSesionReal(opciones: {
         break;
       }
 
-      const decisiones = await opciones.pedirAprobacion(lista, ficheros, diffs);
+      let decisiones: Map<string, Decision>;
+      try {
+        decisiones = await opciones.pedirAprobacion(lista, ficheros, diffs);
+      } catch (e) {
+        // La ronda que acaba de pasar no cerró el turno —predijo que habría reanudación— y
+        // la aprobación ha reventado en vez de contestar (el «sin humano» de `run.ts`, que
+        // corta desde dentro). Sin esto, ese turno se quedaba sin `fin`: sin línea de tiempo
+        // en stdio y sin plegar en la web. Los avisos no se pierden: con escrituras
+        // pendientes ninguno aplica. Se cierra y se propaga, que sigue siendo un fallo.
+        if (!cerrarRonda) piel.fin(Date.now() - t0);
+        throw e;
+      }
       payload = new Command({ resume: buildResume(decisiones) });
     }
+    } while (reparar);
 
     // El diff contra la foto de ESTE turno. Un turno que no tocó nada TIENE que verse igual.
     const cambios = await instantanea.cambios();
