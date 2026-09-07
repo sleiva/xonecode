@@ -22,6 +22,7 @@ import { NuevaSesion } from "./componentes/NuevaSesion.js";
 import { AccionDeSesion, type AccionPendiente } from "./componentes/AccionDeSesion.js";
 import { Ajustes } from "./componentes/Ajustes.js";
 import { DESPLEGADOS_AL_ABRIR, Revision } from "./componentes/Revision.js";
+import { Ficheros } from "./componentes/Ficheros.js";
 import { aplicarApariencia, guardarApariencia, leerApariencia, type Apariencia } from "./apariencia.js";
 import { guardarBarraContraida, leerBarraContraida } from "./preferencias.js";
 
@@ -63,6 +64,8 @@ export function App({ store, enviar }: { store: Store; enviar: Conexion["enviar"
    * mismo que `pestana`: es de esta ventana, no del servidor.
    */
   const [desplegados, setDesplegados] = useState<ReadonlySet<string> | undefined>(undefined);
+  /** El fichero abierto en la pestaña Ficheros. De esta ventana, como `pestana`. */
+  const [ficheroElegido, setFicheroElegido] = useState<string | undefined>(undefined);
   /**
    * Lo elegido en el «…» de una sesión, esperando confirmación. Vive aquí y no en la barra
    * porque la ventana se pinta sobre la pantalla entera, no dentro de una columna de 280px
@@ -116,6 +119,19 @@ export function App({ store, enviar }: { store: Store; enviar: Conexion["enviar"
     });
   }, []);
 
+  /** Pedir el árbol del proyecto (pestaña Ficheros). Mismo motivo que `pedirRevision`. */
+  const pedirArbol = useCallback(() => {
+    void enviar({ clase: "arbol" });
+  }, [enviar]);
+
+  const elegirFichero = useCallback(
+    (ruta: string | undefined) => {
+      setFicheroElegido(ruta);
+      if (ruta !== undefined) void enviar({ clase: "fichero", ruta });
+    },
+    [enviar]
+  );
+
   // El despliegue inicial: solo la PRIMERA vez que llega una lista CON ficheros de esta
   // sesión. Si el store la tira (otra sesión, cable caído), `revision` vuelve a
   // `undefined` y esto se reinicia con ella. Y una lista vacía no inicializa nada: una
@@ -153,15 +169,22 @@ export function App({ store, enviar }: { store: Store; enviar: Conexion["enviar"
     turnoAnterior.current = turnoEnVuelo;
     // Solo el FLANCO de fin. Sin esto, abrir la pestaña dispararía este efecto además del
     // que `Revision` lleva dentro para pedir al montar, y saldrían dos peticiones iguales.
-    if (!acabaDeTerminar || pestana !== "revision") return;
-    pedirRevision();
-    // Los desplegados se vuelven a pedir: si no, seguirían enseñando el diff viejo del
-    // fichero que el turno acaba de cambiar.
-    for (const ruta of desplegados ?? []) pedirParche(ruta);
-    // `desplegados` NO va en las dependencias a propósito: desplegar ya pide su parche por
-    // su cuenta, y tenerlo aquí lo pediría dos veces.
+    if (!acabaDeTerminar) return;
+    if (pestana === "revision") {
+      pedirRevision();
+      // Los desplegados se vuelven a pedir: si no, seguirían enseñando el diff viejo del
+      // fichero que el turno acaba de cambiar.
+      for (const ruta of desplegados ?? []) pedirParche(ruta);
+    }
+    if (pestana === "ficheros") {
+      // El agente puede haber creado o cambiado ficheros: el árbol y el abierto se releen.
+      pedirArbol();
+      if (ficheroElegido !== undefined) void enviar({ clase: "fichero", ruta: ficheroElegido });
+    }
+    // `desplegados` y `ficheroElegido` NO van en las dependencias a propósito: desplegar y
+    // elegir ya piden lo suyo por su cuenta, y tenerlos aquí lo pediría dos veces.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [turnoEnVuelo, pestana, pedirRevision, pedirParche]);
+  }, [turnoEnVuelo, pestana, pedirRevision, pedirParche, pedirArbol, enviar]);
   const [apariencia, setApariencia] = useState<Apariencia>(() => leerApariencia());
 
   useEffect(() => {
@@ -624,6 +647,15 @@ export function App({ store, enviar }: { store: Store; enviar: Conexion["enviar"
                   alDesplegar={desplegar}
                   alPlegar={plegar}
                   alRecargar={pedirRevision}
+                />
+              }
+              ficheros={
+                <Ficheros
+                  {...(estado.arbol === undefined ? {} : { arbol: estado.arbol })}
+                  contenidos={estado.contenidos ?? {}}
+                  {...(ficheroElegido === undefined ? {} : { elegido: ficheroElegido })}
+                  alElegir={elegirFichero}
+                  alRecargar={pedirArbol}
                 />
               }
             />
