@@ -28,6 +28,7 @@ import { Agentes } from "./Agentes.js";
 import { Pregunta } from "./Pregunta.js";
 import { urlDeEntornoAceptable, AVISO_DE_URL } from "./Wizard.js";
 import { PROYECTOS_POR_OMISION } from "./Barra.js";
+import { IconoDeEntorno } from "./IconoDeEntorno.js";
 import { IconoDeProveedor } from "./IconoDeProveedor.js";
 import estilos from "./Ajustes.module.css";
 
@@ -907,6 +908,10 @@ export function Ajustes({
                 <ul className={estilos.filas}>
                   {entornos.map((e) => (
                     <li key={e.id} className={estilos.fila}>
+                      {/* La marca del producto, cuando consta cuál es: el id del entorno lo
+                          decide `identidadDeEntorno` a partir de la URL. Un on-premise lleva
+                          la marca XOne sin glifo — es lo único que se sabe de él. */}
+                      <IconoDeEntorno entorno={e.id} size={22} className={estilos.logo} />
                       <span className={estilos.nombre}>{e.nombre}</span>
                       <span className={estilos.url}>{e.url}</span>
                     </li>

@@ -692,6 +692,34 @@ preselecciona pero se ENSEÑA — antes se mandaba sola desde un efecto, y elegi
 usuario y callarlo es cómo se acaba trabajando sobre la rama equivocada. Y no empieza sola:
 pulsar «+» por error costaba una descarga.
 
+**Los iconos: los de PROVEEDOR son copiados y monocromos; los de MARCA, los del usuario y
+a color** (`componentes/IconoDeProveedor.tsx`, `componentes/IconoDeEntorno.tsx`,
+`apps/web/public/iconos/xonecode.png`). Nada se trae de un CDN: esta consola escucha en
+loopback y declara un modo `offline` de primera clase, el mismo motivo por el que las
+tipografías van empaquetadas. Cuatro reglas:
+- **Un icono solo se pinta donde hay DATO detrás.** El logo del proveedor sale de su id; la
+  marca del entorno, de `Entorno.id` —que `identidadDeEntorno` deduce de la URL—, así que un
+  WebStudio se pinta como WebStudio y un on-premise lleva la marca XOne SIN glifo de
+  producto: es lo único que se puede afirmar de él. De los siete `.svg` del juego de marca
+  se usan tres; `XOne MDM`, `XOneNFC` y los demás son productos que esta consola no modela
+  en ninguna parte, y pintarlos sería decoración con forma de dato — la misma regla por la
+  que el escritorio no pinta el «Build & Run» del mockup.
+- **Los de proveedor van MONOCROMOS y heredando el color** (`fill="currentColor"`, variante
+  mono de `@lobehub/icons-static-svg@1.95.0`, MIT, trazados copiados y no una dependencia de
+  2,3 MB para nueve iconos): son ocho en una lista, y ahí el color de marca es ruido —
+  heredando, además, el claro/oscuro sale solo. Los de entorno van a COLOR: son pocos, y en
+  ellos el color ES la identidad.
+- **Las clases `.cls-N` de Illustrator se convirtieron en atributos `fill`.** Son globales, y
+  los tres ficheros usan los mismos nombres con colores distintos: inline en la misma página
+  se pisarían. Y se les quitó el `<rect>` blanco de fondo — una marca no trae su propio
+  cuadrado, y sobre el azul de la barra se vería.
+- **El símbolo de la barra superior va sobre una placa clara.** Medido: el icono lleva cian
+  y azul marino, y ese azul marino sobre la barra azul profunda desaparecía — la marca se
+  quedaba en un anillo partido, sin la mitad de su forma. La placa es el blanco sobre el que
+  está dibujado (`--xonecode-sobre-azul`), no un filtro que recolorea el arte. El fichero es
+  UNO y se sirve desde `public/`: el favicon de `index.html` y la marca apuntan a la misma
+  ruta, porque dos copias de un logo acaban siendo dos logos.
+
 **La paleta de xonecode vive en UN sitio** (`apps/web/estilos/marca.css`, nuestra, como
 `tipografia.css` y `splash.css`). El cliente se pinta con los alias `--dsw-alias-*` de la
 paleta COPIADA de deepseek, cuyos acentos son los suyos; `marca.css` redefine los tres que

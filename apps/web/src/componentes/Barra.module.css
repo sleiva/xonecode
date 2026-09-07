@@ -221,3 +221,18 @@
   letter-spacing: 0.08em;
   text-transform: uppercase;
 }
+
+/* La marca del entorno activo, al lado de su selector. El `<select>` no puede llevarla
+   dentro —un `<option>` no admite marcado—, así que va fuera y contesta de un vistazo la
+   pregunta de esa esquina: en qué servidor estás. Se encoge a cero antes que el nombre:
+   con la barra estrecha, lo que hay que poder leer es el nombre. */
+.filaDeEntorno {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.iconoDeEntorno {
+  flex-shrink: 0;
+}

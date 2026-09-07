@@ -9,6 +9,7 @@ import navegador from "../../estilos/WorkspaceBrowser.module.css";
 import filas from "../../estilos/Rows.module.css";
 import ajustes from "../../estilos/SettingsRoot.module.css";
 import { MenuDeSesion } from "./MenuDeSesion.js";
+import { IconoDeEntorno } from "./IconoDeEntorno.js";
 import estilos from "./Barra.module.css";
 
 export interface Proyecto {
@@ -147,6 +148,11 @@ export function Barra({ entornos, entornoActivo, proyectos, visibles, proyectoAc
           {entornos.length === 0 ? (
             <p className={navegador.empty}>Sin entorno que enseñar aquí todavía.</p>
           ) : (
+            <div className={estilos.filaDeEntorno}>
+            {/* El icono va FUERA del `<select>`: un `<option>` no admite marcado, así que
+                lo que se puede pintar es la marca del entorno ACTIVO — que además es la
+                pregunta que uno se hace mirando esa esquina («¿en qué servidor estoy?»). */}
+            <IconoDeEntorno entorno={entornoActivo} size={20} className={estilos.iconoDeEntorno} />
             <select
               className={estilos.entorno}
               disabled={apagado}
@@ -159,6 +165,7 @@ export function Barra({ entornos, entornoActivo, proyectos, visibles, proyectoAc
                 </option>
               ))}
             </select>
+            </div>
           )}
 
           {/* Niveles 2 y 3 — proyectos, y dentro de cada uno sus sesiones. */}
