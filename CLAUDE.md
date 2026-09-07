@@ -487,9 +487,25 @@ especialistas de siempre —`docs`, `planner`, `dev`, `mockup`— dejaron de est
 - **Sin `descripcion` no se carga**: es lo que el orquestador lee para decidir cuándo
   delegar, no un rótulo. Y **`soloLectura` solo es cierto con exactamente «true»** — la
   trampa del `"false"` de CloudStudio, que aquí concedería ESCRITURA.
-- **Se siembra UNA VEZ y la marca es la carpeta.** «Escribe los que falten» resucitaría un
-  agente borrado en el siguiente arranque, o sea convertiría el botón de eliminar en uno que
-  no hace nada hasta que reinicias.
+- **La marca de la siembra es un FICHERO, `.semilla.json`, con el hash de lo que escribimos
+  nosotros para cada agente.** Fue «la carpeta es la marca»: si `agentes/` existía, no se
+  escribía nada nunca más. Respetaba el prompt afinado por el usuario —que es lo que hay que
+  respetar— pero eligió un cuerno del dilema y el otro acabó mordiendo: **ningún agente
+  nuevo, y ninguna corrección a uno existente, alcanzaba a quien ya hubiera arrancado una
+  vez**. Medido: un `docs.md` llevaba semanas sin la consulta acotada, y `probador` no habría
+  llegado jamás. El hash distingue los cuatro casos que antes eran uno:
+  no está + no consta = agente NUEVO, se escribe; no está + consta = lo BORRÓ el usuario, no
+  se resucita; está y es el nuestro = nadie lo tocó, se actualiza; está y NO es el nuestro =
+  es suyo, se deja y se DICE (por `problemas`, el mismo canal que un `.md` roto, porque quien
+  lo tiene que arreglar está mirando esa ventana).
+- **Una carpeta sin marca se ADOPTA, no se siembra** — pero solo si tiene alguno de serie
+  dentro. Es la de quien viene de la regla vieja, y ahí no se puede saber qué borró a
+  propósito: dar por nuevo lo que falta le resucitaría un agente que eliminó. Se anota lo que
+  hay —como nuestro si coincide con la versión de hoy, como `ajeno` si no— y no se escribe
+  ningún `.md` esa vez; desde la siguiente todo lo de arriba funciona. Una carpeta VACÍA sin
+  marca es otra cosa y se siembra entera: no viene de ninguna siembra (la deja un
+  `guardarAgente` con nombre inválido), y adoptarla anotaría los cinco como entregados sin
+  escribir uno solo — ese usuario se quedaría sin ningún subagente para siempre.
 - **El prompt del orquestador se GENERA** de la lista (`xoneAgent.ts#promptOrquestador`): la
   constante que nombraba a los cuatro a pelo se queda mintiendo el día que alguien borre uno.
   La regla del encadenado de diagramas solo se escribe si existen los dos agentes de los que
