@@ -21,7 +21,7 @@ import estilos from "./Cabecera.module.css";
  * `<button disabled>` que el original usa para la última: mismo elemento, mismo estado,
  * misma clase `.crumbCurrent`.
  */
-export function Cabecera({ titulo, proyecto, modo, conectado, barraContraida, alAlternarBarra, alAbrirAjustes }: {
+export function Cabecera({ titulo, proyecto, modo, conectado, barraContraida, alAlternarBarra, alAbrirAjustes, alIrAlEscritorio }: {
   titulo: string;
   /**
    * El proyecto al que pertenece `titulo`, cuando es una sesión. Medido: la miga decía
@@ -54,6 +54,19 @@ export function Cabecera({ titulo, proyecto, modo, conectado, barraContraida, al
    * barra lateral, así que plegada no había forma de llegar. Ausente = no se ofrece.
    */
   alAbrirAjustes?: () => void;
+  /**
+   * Volver al ESCRITORIO, con la sesión abierta detrás. **Ausente = no se ofrece**, que es
+   * lo que toca cuando ya estás en él: la marca se queda como rótulo y no como un botón
+   * que no lleva a ninguna parte.
+   *
+   * Va en la MARCA porque la marca ya es la raíz de la miga que se lee al lado
+   * («xonecode / AppDemo / Hola»): pulsar el primer nivel de una miga es lo que hace
+   * cualquier interfaz con migas, y no hace falta cromo nuevo en una barra que ya tiene
+   * cuatro cosas. La alternativa —una entrada «Escritorio» arriba de la barra lateral—
+   * añadía un control y además desaparecía con la barra plegada, que es justo cuando más
+   * falta hace.
+   */
+  alIrAlEscritorio?: () => void;
 }) {
   return (
     <header className={clsx(conversacion.header, estilos.barraSuperior)}>
@@ -86,7 +99,18 @@ export function Cabecera({ titulo, proyecto, modo, conectado, barraContraida, al
             escritorio del que hablar —la consola web es una sola cosa—, y una pastilla que
             no distingue nada de nada es un rótulo decorativo.
           */}
-          <span className={estilos.marca}>xonecode</span>
+          {alIrAlEscritorio === undefined ? (
+            <span className={estilos.marca}>xonecode</span>
+          ) : (
+            <button
+              type="button"
+              className={clsx(estilos.marca, estilos.marcaEnlace)}
+              onClick={alIrAlEscritorio}
+              title="Volver al escritorio"
+            >
+              xonecode
+            </button>
+          )}
           <span className={estilos.separador} aria-hidden="true">
             /
           </span>

@@ -137,3 +137,30 @@
   color: var(--xonecode-sobre-azul-suave);
   font-size: 14px;
 }
+
+/* La marca cuando ADEMÁS es el enlace al escritorio: el mismo texto y el mismo peso —no se
+   convierte en otra cosa por ser pulsable—, con la caja del botón deshecha y la señal solo
+   al pasar por encima. Subrayarla siempre la convertiría en un enlace de prosa en medio de
+   una barra de herramientas; sin ninguna señal, nadie descubriría que se puede pulsar. El
+   `:focus-visible` es obligatorio aquí: es el único aviso que le queda a quien navega con
+   el teclado, y el `outline` por omisión del navegador no se ve sobre el azul profundo. */
+.marcaEnlace {
+  padding: 0;
+  border: none;
+  background: none;
+  font: inherit;
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  cursor: pointer;
+}
+
+.marcaEnlace:hover {
+  text-decoration: underline;
+}
+
+.marcaEnlace:focus-visible {
+  outline: 2px solid var(--xonecode-cian);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
