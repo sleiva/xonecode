@@ -192,6 +192,32 @@ export async function leerFicheroDeProyecto(raiz: string, ruta: string): Promise
   if (!puedeLeerRuta(`/${relReal}`)) return rechazo("esa ruta no se enseña");
   if (relReal.endsWith(".xml") && existsSync(`${real.slice(0, -4)}.xne`)) return rechazo(MOTIVO_APLANADA);
 
+  return leerContenidoDeFichero(real, ruta, mimeDeImagen(normal));
+}
+
+/**
+ * El CONTENIDO de un fichero cuyo camino REAL ya pasó su barrera: texto o imagen, con su
+ * tope, su codificación y las dos caras del SVG.
+ *
+ * Se extrajo de `leerFicheroDeProyecto` cuando los ARTEFACTOS de una sesión necesitaron lo
+ * mismo (`agent/artefactosEnDisco.ts`). Lo que NO se extrajo es la barrera: la de un
+ * fichero del proyecto y la de un artefacto son reglas distintas —una pregunta
+ * `puedeLeerRuta` y las vistas aplanadas, la otra que el nombre sea un segmento llano
+ * dentro de la carpeta de la sesión—, y fundirlas en un parámetro sería la clase de
+ * generalización que acaba dejando un agujero en el lado que no se estaba mirando.
+ *
+ * `real` es el camino ya resuelto con `realpath`; `ruta` es la que se enseña y viaja de
+ * vuelta, nunca la del disco. El `mime` lo decide quien llama porque cada lado lo saca de
+ * un nombre distinto, y de él dependen los dos caminos de aquí: la imagen que solo viaja
+ * entera y el SVG, que va con fuente y dibujo.
+ */
+export async function leerContenidoDeFichero(
+  real: string,
+  ruta: string,
+  mime: string | undefined
+): Promise<FicheroLeido> {
+  const rechazo = (error: string): FicheroLeido => ({ ruta, recortado: false, binario: false, bytes: 0, error });
+
   const info = await stat(real);
   if (!info.isFile()) return rechazo("no es un fichero");
   const bytes = info.size;
@@ -200,7 +226,6 @@ export async function leerFicheroDeProyecto(raiz: string, ruta: string): Promise
   // funciona: un PNG lleva ceros en su propia cabecera (la longitud del primer trozo va en
   // big-endian y empieza por `00 00`), así que todas caían por el camino del texto y salían
   // como «es un fichero binario, no se enseña su contenido» — teniendo el visor delante.
-  const mime = mimeDeImagen(normal);
   // El SVG NO se atiende aquí: es texto, y sigue por el camino de abajo para poder enseñar
   // también su fuente. Solo se le añade el dibujo al final, si no hubo que recortarlo.
   if (mime !== undefined && mime !== "image/svg+xml") {
