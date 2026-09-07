@@ -3,7 +3,13 @@ import { join } from "node:path";
 import { CompositeBackend, FilesystemBackend } from "deepagents";
 import { RUTA_MEMORIA_INTERNA, RUTA_MEMORIA_VIRTUAL } from "./memoriaDeProyecto.js";
 import { RAIZ_SKILLS } from "./skills.js";
-import { mimeDeArtefacto, nombreDeArtefacto, RUTA_ARTEFACTOS, type Artefacto } from "../core/artefactos.js";
+import {
+  artefactoFueraDeSitio,
+  mimeDeArtefacto,
+  nombreDeArtefacto,
+  RUTA_ARTEFACTOS,
+  type Artefacto,
+} from "../core/artefactos.js";
 
 /**
  * El backend del proyecto: confinado, y sin las vistas aplanadas.
@@ -94,6 +100,38 @@ export function backendConArtefactos<T extends object>(
 }
 
 /**
+ * El backend con el que el agente ve el proyecto, compuesto entero.
+ *
+ * Vivía dentro de `construirAgente`, y eso dejaba sin probar justo la parte que decide si
+ * las reglas están puestas: los tests de este fichero comprobaban cada envoltorio por
+ * separado y `construirAgente` se simula en todos los suyos, así que **el cableado no lo
+ * miraba nadie**. Una regla que existe y no está montada es peor que no tenerla, porque
+ * hay un test en verde diciendo que sí.
+ *
+ * El orden es lo que hay que leer aquí:
+ * 1. La raíz confinada (`virtualMode`), con la memoria del proyecto expuesta por su ruta
+ *    virtual.
+ * 2. Las dos reglas del PROYECTO: las vistas aplanadas no existen, y un artefacto no se
+ *    puede escribir dentro.
+ * 3. `/skills/` colgada, de solo lectura por `permisosDe`.
+ * 4. Y `/artefactos/` colgada por FUERA, que es lo que hace que escribir ahí no pase por la
+ *    guarda de (2) — son dos raíces distintas del mismo compuesto.
+ */
+export function backendDeAgente(opciones: {
+  raiz: string;
+  ficheros: ReadonlySet<string>;
+  artefactos?: { carpeta: string; alEscribir: (artefacto: Artefacto) => void };
+}): FilesystemBackend {
+  const delProyecto = sinArtefactosEnElProyecto(
+    sinVistasAplanadas(exponerMemoriaDeProyecto(backendDelProyecto(opciones.raiz)), opciones.ficheros)
+  );
+  const conSkills = backendConSkills(delProyecto);
+  return opciones.artefactos === undefined
+    ? conSkills
+    : backendConArtefactos(conSkills, opciones.artefactos.carpeta, opciones.artefactos.alEscribir);
+}
+
+/**
  * Expone la memoria del proyecto sin abrir la carpeta interna `.xonecode`.
  *
  * Los permisos siguen denegando esa carpeta completa (puede contener configuración), pero
@@ -119,6 +157,70 @@ export function exponerMemoriaDeProyecto<T extends object>(backend: T): T {
   }) as T;
 }
 
+/**
+ * El motivo con el que se rechaza escribir un artefacto en el proyecto.
+ *
+ * Mismo criterio que `porQueNo`: rechazar y EXPLICAR. Un error seco haría que el modelo
+ * probara otra ruta —o que diera el trabajo por hecho—; diciéndole la ruta buena, corrige a
+ * la primera. Y nombra las tres consecuencias porque son el porqué: sin ellas, «usa otra
+ * carpeta» se lee como una preferencia de estilo.
+ */
+export const porQueNoAhi = (ruta: string, destino: string): string =>
+  `«${ruta}» está en el PROYECTO, y un artefacto ahí acaba dentro de la app XOne del usuario: ` +
+  `pasa por aprobación humana, entra en git y sube a CloudStudio. ` +
+  `Los artefactos van en «${destino}», la carpeta de ESTA sesión: se escribe sin aprobación, ` +
+  `no entra en git y no sale de aquí. Escríbelo ahí.`;
+
+/**
+ * Envuelve el backend del proyecto para que un artefacto NO se pueda escribir dentro.
+ *
+ * **Por qué es código y no una frase más en el prompt.** La carpeta buena ya la nombran los
+ * cuatro sitios que el modelo puede leer, y aun así, medido el 2026-09-07 en dos
+ * delegaciones consecutivas del mismo proyecto: la primera escribió
+ * `/artifacts/login_flow.html` —la raíz— y la segunda `/artefactos/diagrama.html`. Con la
+ * instrucción puesta en los cuatro sitios, añadir un quinto no cambia nada; lo que cambia es
+ * que la regla deje de depender de que el modelo la recuerde. Es exactamente el argumento de
+ * `sinVistasAplanadas`, y también el de los avisos de honestidad: en este repo lo que tiene
+ * que cumplirse es código.
+ *
+ * Va sobre el backend del PROYECTO, por dentro del compuesto, así que una escritura en
+ * `/artefactos/` —que es otra raíz montada— no pasa por aquí y no se ve afectada.
+ *
+ * **Solo `write` y `edit`.** Leer un artefacto mal puesto de una sesión anterior tiene que
+ * seguir funcionando: si no, el agente no podría ni mirar lo que hay que mover. Y borrarlo
+ * tampoco se toca — quitar de la app del cliente un diagrama que no debería estar ahí es
+ * justo lo que se quiere poder hacer.
+ */
+export function sinArtefactosEnElProyecto<T extends object>(backend: T): T {
+  const motivo = (ruta: unknown): string | undefined => {
+    if (typeof ruta !== "string") return undefined;
+    const destino = artefactoFueraDeSitio(ruta);
+    return destino === undefined ? undefined : porQueNoAhi(ruta, destino);
+  };
+
+  return new Proxy(backend, {
+    get(destino, prop, receptor) {
+      const valor = Reflect.get(destino, prop, receptor);
+      if (typeof valor !== "function") return valor;
+      if (prop !== "write" && prop !== "edit") {
+        return (valor as (...a: unknown[]) => unknown).bind(destino);
+      }
+      return async (...args: unknown[]) => {
+        // **Se DEVUELVE `{error}`, no se lanza**, y esta es la diferencia entre corregir al
+        // modelo y tumbarle el turno. Leído en deepagents 1.13.2: los cuatro tools de
+        // fichero hacen `const result = await backend.write(...); if (result.error) return
+        // result.error`, así que un error DEVUELTO vuelve al modelo como resultado de la
+        // tool y puede reintentar. Un `throw` se sale de la tool y se lleva el turno por
+        // delante — medido en vivo el 2026-09-07: el mensaje salió impecable en el chat, el
+        // fichero no se escribió, y el agente no reintentó porque el turno ya había muerto.
+        const porQue = motivo(args[0]);
+        if (porQue !== undefined) return { error: porQue };
+        return (valor as (...a: unknown[]) => unknown).apply(destino, args);
+      };
+    },
+  }) as T;
+}
+
 /** ¿Es `ruta` una vista aplanada, teniendo a la vista el conjunto de ficheros del proyecto? */
 export function esVistaAplanada(ruta: string, todas: ReadonlySet<string>): boolean {
   return ruta.endsWith(".xml") && todas.has(`${ruta.slice(0, -4)}.xne`);
@@ -129,7 +231,8 @@ export function esVistaAplanada(ruta: string, todas: ReadonlySet<string>): boole
  *
  * **Rechazar y explicar, no fallar en seco.** Un «fichero no encontrado» hace que el modelo
  * pruebe otra ruta, o peor, que dé por hecho que el cambio no hacía falta. Diciéndole dónde
- * está la fuente, corrige a la primera.
+ * está la fuente puede corregir — pero solo si el mensaje LLEGA, y para eso hay que
+ * devolverlo como `{error}` y no lanzarlo (ver `sinVistasAplanadas`).
  */
 export const porQueNo = (ruta: string): string =>
   `«${ruta}» es una vista APLANADA que genera XOne Studio a partir de «${ruta.slice(0, -4)}.xne». ` +
@@ -151,9 +254,8 @@ export const porQueNo = (ruta: string): string =>
  * `app.xml` no tiene hermano `.xne`, así que el propio predicado lo conserva: es fuente.
  */
 export function sinVistasAplanadas<T extends object>(backend: T, todas: ReadonlySet<string>): T {
-  const guarda = (ruta: unknown): void => {
-    if (typeof ruta === "string" && esVistaAplanada(ruta, todas)) throw new Error(porQueNo(ruta));
-  };
+  const motivo = (ruta: unknown): string | undefined =>
+    typeof ruta === "string" && esVistaAplanada(ruta, todas) ? porQueNo(ruta) : undefined;
 
   return new Proxy(backend, {
     get(destino, prop, receptor) {
@@ -162,13 +264,16 @@ export function sinVistasAplanadas<T extends object>(backend: T, todas: Readonly
 
       // Las que reciben una ruta y la tocan: se rechazan con explicación.
       if (prop === "read" || prop === "readRaw" || prop === "write" || prop === "edit" || prop === "delete") {
-        // `async` a propósito, y no una función normal que lanza. Los métodos del backend
-        // real son asíncronos, así que un `throw` SÍNCRONO aquí cambia el contrato de la
-        // llamada: quien haga `backend.read(x).catch(...)` se comería la excepción antes
-        // de tener una promesa que rechazar. Con `async`, el rechazo llega por donde el
-        // llamador lo espera.
         return async (...args: unknown[]) => {
-          guarda(args[0]);
+          // **Devolver `{error}` y no lanzar.** Esto LANZABA, y el comentario de al lado
+          // prometía que así el modelo «corrige a la primera» — que era falso y no estaba
+          // medido. Leído en deepagents 1.13.2, los cuatro tools de fichero comprueban
+          // `result.error` y lo devuelven al modelo; una excepción, en cambio, se sale de la
+          // tool y se lleva el turno. Medido en vivo con la guarda hermana
+          // (`sinArtefactosEnElProyecto`): mensaje impecable en el chat, fichero no escrito,
+          // y ningún reintento porque el turno ya había muerto.
+          const porQue = motivo(args[0]);
+          if (porQue !== undefined) return { error: porQue };
           return (valor as (...a: unknown[]) => unknown).apply(destino, args);
         };
       }

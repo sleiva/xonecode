@@ -679,6 +679,50 @@ registro de `COMANDOS` funciona igual en el terminal y en la web. Y en un proyec
 conectado el comando lo RECHAZA en vez de guardarlo sin aplicarlo: un ajuste escrito que no
 hace nada es peor que no poder ponerlo, porque quien lo puso se cree protegido al revés.
 
+**Un artefacto NO se puede escribir dentro del proyecto, y eso es código**
+(`core/artefactos.ts#artefactoFueraDeSitio`, `agent/proyecto.ts#sinArtefactosEnElProyecto`).
+La carpeta buena la nombran los CUATRO sitios que el modelo puede leer —las instrucciones
+del `mockup`, la skill `artifacts-builder`, `archify` y la descripción de `write_file`— y aun
+así, medido en dos delegaciones CONSECUTIVAS del mismo proyecto con `gemini-flash`: la
+primera escribió `/artifacts/login_flow.html` —la raíz, con aprobación humana de por medio— y
+la segunda, un minuto después, `/artefactos/diagrama.html`. No falta ninguna instrucción: es
+deriva del modelo, y con la instrucción ya en cuatro sitios, añadir un quinto no cambia nada.
+Lo que cambia es que la regla deje de depender de que el modelo la recuerde — el mismo
+argumento de las vistas aplanadas y de los avisos de honestidad. Cinco reglas:
+- **Se mira el PRIMER segmento y nada más**, y eso acota el falso positivo a propósito: un
+  `/src/artifacts.js` o un `/scripts/artifacts/util.js` del proyecto pasan sin enterarse. Se
+  deniegan la carpeta de la raíz (`artifacts`, `artifact`, sin distinguir mayúsculas — la
+  lección de APFS) y el `/artifact.html` suelto que nombra el contrato de `publish_artifact`.
+  El precio, dicho: un proyecto que de verdad tuviera un `artifacts/` en su raíz no podría
+  escribir ahí con el agente. Se acepta, porque el otro lado del error es un diagrama subido
+  a la app del cliente sin que nadie se entere.
+- **Solo `write` y `edit`.** Leer un artefacto mal puesto de antes tiene que seguir
+  funcionando —si no, el agente no podría ni mirar lo que hay que mover—, y borrarlo es justo
+  lo que se quiere poder hacer.
+- **El rechazo se DEVUELVE como `{error}`, no se lanza, y ahí está toda la diferencia.**
+  Leído en deepagents 1.13.2: los cuatro tools de fichero hacen
+  `const result = await backend.write(…); if (result.error) return result.error`, así que un
+  error DEVUELTO vuelve al modelo como resultado de la tool y puede reintentar; una excepción
+  se sale de la tool y se lleva el turno por delante. Medido en vivo con la primera versión,
+  que lanzaba: el mensaje salió impecable en el chat, el fichero no se escribió, y el agente
+  NO reintentó porque el turno ya había muerto. **Y con eso cayó `sinVistasAplanadas`, que
+  lanzaba igual**: su comentario prometía que así el modelo «corrige a la primera», y era
+  falso y no estaba medido. Las dos guardas devuelven ahora `{error}`.
+- **La costura con la librería tiene test propio** (`proyecto.test.ts`): se monta
+  `createFilesystemMiddleware` de verdad y se comprueba que `write_file` devuelve el motivo
+  como CADENA y no lanza. Es un contrato de una dependencia, así que confiar en haber leído
+  su código no basta: el día que empiece a lanzar, estas dos reglas se convertirían en «el
+  turno revienta» sin que nada chistara.
+- **Y el CABLEADO se probó, que era el agujero de verdad**: la composición vivía dentro de
+  `construirAgente`, que todos sus tests simulan, así que una regla podía dejar de estar
+  montada con todo en verde. Ahora es `backendDeAgente` (`agent/proyecto.ts`), con test que
+  compone el backend real sobre un proyecto temporal y comprueba las cuatro capas: las
+  vistas aplanadas, la guarda de artefactos, `/skills/` colgada y `/artefactos/` escribible.
+Lo que NO arregla esto: el HITL pregunta ANTES: el interrupt salta al hacer la llamada y el
+backend escribe después, así que una escritura a `/artifacts/` todavía saca el modal de
+aprobación de un diff que no se va a aplicar. Sale en la dirección segura —se aprueba y no se
+escribe—, pero es un modal que solo puede acabar en un rechazo.
+
 **Los ARTEFACTOS del agente no son ficheros del proyecto** (`core/artefactos.ts`,
 `agent/proyecto.ts#backendConArtefactos`). Un diagrama de `archify`, un panel de
 `artifacts-builder`, la captura que el `probador` traerá el día que hable con el móvil: son
