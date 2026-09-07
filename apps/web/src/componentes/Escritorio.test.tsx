@@ -166,27 +166,42 @@ describe("Escritorio: sin conexión", () => {
   });
 });
 
-describe("Escritorio: los de la barra primero, el resto debajo", () => {
+describe("Escritorio: solo los proyectos elegidos, y el resto contado", () => {
   afterEach(cleanup);
 
-  it("sin elección, destaca los mismos que la barra y agrupa el resto con su botón en segundo plano", () => {
+  it("sin elección, los mismos que la barra: los demás NO se pintan, se cuentan", () => {
     const seis = Array.from({ length: 6 }, (_, i) => ({ id: `p${i}`, nombre: `Proyecto ${i}` }));
     render(<Escritorio {...MANEJADORES} proyectos={seis} />);
-    const otros = screen.getByRole("region", { name: /otros proyectos/ });
-    expect(within(otros).getAllByRole("heading", { level: 2 }).map((h) => h.textContent)).toEqual([
-      expect.stringMatching(/Otros 2 proyectos/),
-      "Proyecto 4",
-      "Proyecto 5",
-    ]);
-    const destacados = screen.getByRole("region", { name: /proyectos en la barra/ });
-    expect(within(destacados).getAllByRole("button", { name: /nueva sesión/i })).toHaveLength(4);
+    const elegidos = screen.getByRole("region", { name: /proyectos elegidos/ });
+    expect(within(elegidos).getAllByRole("button", { name: /nueva sesión/i })).toHaveLength(4);
+    // Los dos de más no tienen tarjeta: pintarlos deshacía la elección.
+    expect(screen.queryByRole("heading", { name: "Proyecto 5" })).toBeNull();
+    // Pero se dicen, con el camino para elegirlos: callarlos haría creer que no existen.
+    expect(screen.getByText(/Otros 2 proyectos del entorno/)).toBeTruthy();
+    expect(screen.getByRole("button", { name: /elígelos en ajustes/i })).toBeTruthy();
   });
 
-  it("una elección manda: lo elegido se destaca aunque no sea lo primero", () => {
+  it("una elección manda: se pinta lo elegido y nada más, aunque no sea lo primero", () => {
     const tres = [{ id: "a", nombre: "A" }, { id: "b", nombre: "B" }, { id: "c", nombre: "C" }];
     render(<Escritorio {...MANEJADORES} proyectos={tres} visibles={["c"]} />);
-    const destacados = screen.getByRole("region", { name: /proyectos en la barra/ });
-    expect(within(destacados).getByRole("heading", { name: "C" })).toBeTruthy();
-    expect(within(destacados).queryByRole("heading", { name: "A" })).toBeNull();
+    const elegidos = screen.getByRole("region", { name: /proyectos elegidos/ });
+    expect(within(elegidos).getByRole("heading", { name: "C" })).toBeTruthy();
+    expect(within(elegidos).queryByRole("heading", { name: "A" })).toBeNull();
+    expect(screen.getByText(/Otros 2 proyectos del entorno/)).toBeTruthy();
+  });
+
+  it("elegir NINGUNO se respeta: ni una tarjeta, y la cuenta lo dice", () => {
+    // `[]` es «ninguno» y no «no lo he dicho»: la distinción se conserva en las cuatro
+    // capas, y colapsarla aquí haría que elegir ninguno se leyera como no haber elegido.
+    const tres = [{ id: "a", nombre: "A" }, { id: "b", nombre: "B" }, { id: "c", nombre: "C" }];
+    render(<Escritorio {...MANEJADORES} proyectos={tres} visibles={[]} />);
+    expect(screen.queryByRole("button", { name: /nueva sesión/i })).toBeNull();
+    expect(screen.getByText(/Otros 3 proyectos del entorno/)).toBeTruthy();
+  });
+
+  it("con todo elegido no se cuenta nada: no hay resto del que hablar", () => {
+    const dos = [{ id: "a", nombre: "A" }, { id: "b", nombre: "B" }];
+    render(<Escritorio {...MANEJADORES} proyectos={dos} visibles={["a", "b"]} />);
+    expect(screen.queryByText(/del entorno/)).toBeNull();
   });
 });
