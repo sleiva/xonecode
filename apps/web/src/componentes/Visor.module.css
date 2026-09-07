@@ -1,5 +1,5 @@
-/* Alias comprobados contra `estilos/design-platform.css`: label-tertiary, bg-layer-1,
-   border-l2. Los `--shiki-*` vienen de `estilos/shiki.css`. */
+/* Alias comprobados contra `estilos/design-platform.css`, y solo el que esta hoja usa:
+   label-tertiary. Los `--shiki-*` vienen de `estilos/shiki.css`. */
 
 .visor {
   padding: 0 16px 16px;

@@ -875,7 +875,21 @@ tope de profundidad como parámetro) y filtra con las MISMAS reglas que ve el ag
 aplanados no salen ni se leen aunque alguien los teclee en el cable. El lector rechaza en
 orden ruta absoluta o con `..`, lo que la barrera niega, aplanadas, y cualquier `realpath` que
 salga de la raíz (el enlace simbólico que apunta fuera), y nunca devuelve la ruta real de la
-máquina. Binario es un NUL en los primeros 8 KB; lo que no es UTF-8 se lee como latin1 y se
+máquina. **Y la barrera se aplica DOS veces: sobre el texto que teclea el cliente —de balde,
+antes de tocar el disco— y otra vez sobre el camino REAL, el que devuelve `realpath`.** Con
+una sola no era verdad, y estaba medido: en un sistema de ficheros que no distingue mayúsculas
+—APFS, NTFS— `.ENV` no es `/.env` para `puedeLeerRuta` pero abre `.env`, y un enlace simbólico
+DENTRO de la raíz que apunte a un fichero o a una carpeta denegada (`enlace-env.txt` → `.env`,
+`carpeta-enlazada` → `.xonecode`) pasaba la comprobación de «sigue en el proyecto» porque su
+camino real sí lo está: lo que falla no es el sitio, es el destino. `realpath` canonicaliza las
+mayúsculas y sigue los enlaces, así que UNA recomprobación cierra los dos agujeros — y sigue
+siendo una recomprobación y no una prohibición de enlaces: un enlace a un fichero que sí se
+enseña se lee con normalidad. La misma recomprobación caza la vista aplanada detrás de un
+alias (`alias.xml` → `app/Clientes.xml`, que no tiene ningún `alias.xne` al lado). Y el árbol
+NO recorre una carpeta detrás de un enlace (`ficherosDelProyecto` usa `lstatSync`), que era el
+otro lado del mismo agujero: seguirlo listaba `.xonecode` bajo un alias y nombres de ficheros
+de fuera del proyecto. Esa función alimenta también el completado del Tab y el universo de
+`esVistaAplanada`, y no seguir enlaces a carpeta es correcto para los tres. Binario es un NUL en los primeros 8 KB; lo que no es UTF-8 se lee como latin1 y se
 dice; el contenido se recorta al mismo tope que el parche. El visor es el `CodeBlock` de
 deepseek —un solo resaltador, un solo tema— y los números de línea son un contador CSS sobre
 los `.line` de shiki (`Visor.module.css`): con una gramática perezosa el primer render sale
@@ -884,7 +898,7 @@ por subcadena de la ruta que abre lo que casa) y la maqueta de dos columnas con 
 CONTENEDOR a 720 px, no por ventana. El árbol y los contenidos se tiran con la sesión y sin
 cable, como los parches.
 
-La marca es una **ref propia**,
+En Revisión, la marca de lo que la sesión tocó es una **ref propia**,
 `refs/xonecode/sesion/<id>`, y no un tag: un tag es público, se empuja y significa «versión»,
 y esto es un marcador privado de herramienta. Tampoco vale guardar el SHA del árbol en un
 JSON nuestro: un árbol que ninguna ref alcanza se lo lleva `git gc` y la vista se rompe en
@@ -910,17 +924,23 @@ una ruta ignorada y **sale con código 1**, así que el árbol no se escribía y
 «sin-marca» para siempre. Y los diffs llevan `--relative` porque los árboles se escriben con
 rutas desde la raíz del REPO, que no tiene por qué ser el proyecto (`instantanea.ts` sostiene
 ese caso): sin él, un proyecto en una subcarpeta daba rutas con prefijo que no casaban con
-ninguna al pedir el parche. El índice se queda a la izquierda con su propio scroll, y la fila elegida se marca
-con fondo Y barra de acento — `--dsw-alias-interactive-bg-selected` NO EXISTE en la paleta
-copiada (cero apariciones, comprobado), y la `.sessionRow.selected` de ellos usa el alias de
-HOVER, o sea el mismo que la fila de al lado bajo el ratón. Del parche no se pinta la cabecera
+ninguna al pedir el parche. El índice es hoy el árbol de los ficheros cambiados, a la DERECHA de la pila y
+compartiendo componente con Ficheros (`Arbol.tsx`), con su propio scroll. La hoja elegida se
+marca con fondo Y barra de acento — `--dsw-alias-interactive-bg-selected` NO EXISTE en la
+paleta copiada (cero apariciones, comprobado) y la `.sessionRow.selected` de ellos usa el
+alias de HOVER, así que `Arbol.module.css` pinta el fondo con ese mismo hover y añade una
+barra `--xonecode-cian`: sin ella, la hoja elegida y la de al lado bajo el ratón se verían
+igual. Del parche no se pinta la cabecera
 de git (`diff --git`, `index`, `---`, `+++`): son cuatro líneas al principio de CADA fichero
 que no dicen nada que el nombre de la fila no diga ya, y empujan el primer cambio de verdad
 fuera de la vista; se corta en el primer `@@`, salvo que no haya ninguno —un binario, un
 cambio de modo—, porque entonces eso ES todo lo que git tiene que decir. El diff se pide a
 git con `--diff-filter=AMD`: `claseDeCambio` devuelve «modificado» para cualquier letra que
-no sea `A` ni `D`, así que un cambio de TIPO se colaría con una etiqueta falsa. El parche se
-pide al ELEGIR una fila, no al abrir la pestaña, y se recorta a `TOPE_DE_PARCHE` diciéndolo. La foto es de UNA sesión:
+no sea `A` ni `D`, así que un cambio de TIPO se colaría con una etiqueta falsa. Los `DESPLEGADOS_AL_ABRIR`
+(8) primeros parches se piden cuando la lista llega por primera vez con algo dentro (el efecto
+de `App.tsx`, que es quien recuerda lo desplegado), y el resto al pulsar su cabecera: la
+pestaña se abre enseñando diffs sin traerse los megas de un turno largo. Cada parche se
+recorta a `TOPE_DE_PARCHE` diciéndolo. La foto es de UNA sesión:
 `store.ts` la tira en cuanto el `alta` trae otra `sesionActiva`.
 
 **La regla de qué URL de MCP vale es UNA** (`agent/cloudstudioMcp.ts#urlDeMcpAceptable`): HTTPS

@@ -86,6 +86,14 @@ describe("Ficheros", () => {
     expect(alElegir).toHaveBeenCalledWith(undefined);
   });
 
+  it("con el árbol RECORTADO el elegido NO se cierra aunque no esté en la lista", () => {
+    // Un fichero real más allá del tope de entradas no sale en la lista, y cerrarlo por
+    // eso haría desaparecer lo que se estaba leyendo sin ningún motivo.
+    const alElegir = vi.fn();
+    render(<Ficheros arbol={{ ...ARBOL, recortado: true }} contenidos={{}} elegido="mas-alla.xne" alElegir={alElegir} alRecargar={NADA} />);
+    expect(alElegir).not.toHaveBeenCalled();
+  });
+
   it("en estrecho el árbol sube por encima del visor con order, sin reordenar el DOM", () => {
     // El DOM se queda con el visor primero (Tab en el layout ancho); en estrecho es
     // `order: -1` sobre `.arbol` quien lo pone visualmente arriba.

@@ -1,4 +1,4 @@
-import { readdirSync, statSync, existsSync, readFileSync } from "node:fs";
+import { readdirSync, lstatSync, statSync, existsSync, readFileSync } from "node:fs";
 import { join, sep, resolve } from "node:path";
 import { randomUUID } from "node:crypto";
 import { HumanMessage } from "@langchain/core/messages";
@@ -104,7 +104,22 @@ export function ficherosDelProyecto(raiz: string, prof = 0, tope = PROFUNDIDAD_D
     if (entrada === "node_modules" || entrada === ".git") continue;
     const ruta = join(raiz, entrada);
     try {
-      if (statSync(ruta).isDirectory()) {
+      // `lstatSync` y no `statSync`: una CARPETA detrás de un enlace simbólico no se
+      // recorre. Medido en la pestaña Ficheros de la consola web: «carpeta-enlazada» →
+      // «.xonecode» listaba la carpeta denegada bajo otro nombre, y «dir-fuera» →
+      // «/algo/de/fuera» listaba nombres de ficheros que no son del proyecto (un
+      // «dir-fuera/id_rsa»). Tampoco se lista el enlace en sí: la carpeta a la que apunta
+      // o ya está en el árbol por su nombre real, o está fuera del proyecto y no debe
+      // salir — y una hoja que al abrirse dice «no se enseña» es un botón muerto.
+      // Un enlace a FICHERO sí se queda como hoja: quién decide si se puede leer es la
+      // barrera del lector (`arbolDeProyecto.ts`), que recomprueba sobre el `realpath`.
+      // Esta función alimenta a TRES consumidores y el cambio es correcto para los tres:
+      // el completado de «@ficheros» del Tab (no completa a carpetas ajenas), el universo
+      // que consulta `esVistaAplanada` (una vista aplanada de fuera del proyecto no es
+      // asunto nuestro) y el árbol de la consola web.
+      const info = lstatSync(ruta);
+      if (info.isSymbolicLink() && statSync(ruta).isDirectory()) continue;
+      if (info.isDirectory()) {
         // La recursión devuelve rutas relativas al SUBDIRECTORIO: sin recoserle el
         // nombre, «app/Clientes.xne» saldría como «/Clientes.xne» y el Set dejaría de
         // responder por las vistas aplanadas ANIDADAS (este universo es el que consulta

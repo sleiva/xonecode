@@ -1,6 +1,6 @@
-/* Alias comprobados contra `apps/web/estilos/design-platform.css`: bg-layer-1/2, border-l2,
-   label-primary/secondary/tertiary, interactive-bg-hover, interactive-bg-selected,
-   state-success-primary/secondary y state-error-primary/secondary. */
+/* Alias comprobados contra `apps/web/estilos/design-platform.css`, y solo los que esta hoja
+   usa: bg-layer-1/2, border-l2, label-primary/secondary/tertiary, interactive-bg-hover,
+   state-success-primary/secondary, state-error-primary/secondary y state-business-tertiary. */
 
 .aviso {
   margin: 12px 20px;

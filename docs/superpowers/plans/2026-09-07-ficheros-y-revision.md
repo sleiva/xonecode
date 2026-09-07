@@ -19,6 +19,7 @@
 - **Constantes con nombre**: `DESPLEGADOS_AL_ABRIR = 8`, `TOPE_DE_FICHERO = 400_000`, `TOPE_DE_ENTRADAS = 5_000`, `PROFUNDIDAD_DEL_ARBOL = 32`, `VENTANA_DE_BINARIO = 8_192`.
 - **Punto de corte de la columna derecha**: `@container (max-width: 720px)` sobre el contenedor de la pestaña, NO `@media` sobre la ventana. Sustituye al «960 px de ventana» del spec (D5) porque `Ficheros.module.css` ya mide así —con la barra lateral desplegada la ventana cuenta 280 px que la pestaña no tiene— y la razón está documentada en esa hoja.
 - **El corte de la cabecera de git** (`diff --git`, `index`, `---`, `+++`) lo hace el CLIENTE en `numerarParche`, no `parcheDeSesion` (el spec lo atribuía al host; hoy lo hace `lineasDeParche` en el componente y ahí se queda).
+- **En estrecho, el árbol de Ficheros va ARRIBA del visor**: `order: -1` sobre `.arbol` con el 40 % de la altura, y el DOM se queda con el visor primero (el orden del Tab del layout ancho). Tercer desvío del spec, que pedía «el árbol ocupa el centro hasta elegir un fichero, con una flecha para volver»: eso es un segundo estado de navegación —y una flecha— para una pestaña cuyo contenido cabe en las dos mitades, y perder el árbol de vista al abrir un fichero es justo lo que se viene a hacer aquí (saltar de uno a otro).
 - **Estilo de comentarios del repo**: cada decisión no obvia lleva su porqué en un comentario, en castellano, como el resto del código.
 
 **User decisions (already made):**

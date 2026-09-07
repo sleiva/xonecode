@@ -18,7 +18,8 @@ import estilos from "./Ficheros.module.css";
  *
  * El árbol se pide al montar y `App` lo vuelve a pedir al terminar un turno: el agente
  * puede haber creado ficheros. Si el elegido ya no está en el árbol nuevo, se cierra: un
- * visor enseñando un fichero que ya no existe es una foto vieja sin decirlo.
+ * visor enseñando un fichero que ya no existe es una foto vieja sin decirlo — salvo que el
+ * árbol venga RECORTADO, porque entonces la ausencia no dice nada.
  */
 export function Ficheros({
   arbol,
@@ -38,8 +39,17 @@ export function Ficheros({
     alRecargar();
   }, [alRecargar]);
 
+  // Con el árbol RECORTADO no se cierra: la lista no es el proyecto entero, así que «no
+  // está en el árbol» no significa «ya no existe». Un fichero real más allá del tope se
+  // cerraría solo, y el usuario vería desaparecer lo que estaba leyendo sin motivo.
   useEffect(() => {
-    if (elegido !== undefined && arbol !== undefined && arbol.error === undefined && !arbol.rutas.includes(elegido)) {
+    if (
+      elegido !== undefined &&
+      arbol !== undefined &&
+      arbol.error === undefined &&
+      !arbol.recortado &&
+      !arbol.rutas.includes(elegido)
+    ) {
       alElegir(undefined);
     }
   }, [arbol, elegido, alElegir]);

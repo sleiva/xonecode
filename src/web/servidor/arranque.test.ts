@@ -887,6 +887,35 @@ describe("montarRutas — el cable, por fin conectado", () => {
       rmSync(base, { recursive: true, force: true });
     });
 
+    it("si el lector lanza tras el realpath, «fichero» contesta con error y no con silencio", async () => {
+      // El lector devuelve los rechazos como `error`, pero un EACCES al abrir el fichero
+      // sale como excepción: sin atraparla, el visor se queda en «Trayendo…» para siempre.
+      const { base, servidor, vestibulo } = await abrirProyecto();
+      montarRutas(servidor, vestibulo, {
+        leerFichero: async () => {
+          throw new Error("sin permiso");
+        },
+      });
+      const cliente = clienteDeMentira();
+      await servidor.rutas.get(`GET ${RUTA_EVENTOS}`)!(cliente.peticion, cliente.respuesta);
+      const accion = servidor.rutas.get(`POST ${RUTA_ACCION}`)!;
+      await asentar();
+      await enviarMensaje(accion, { clase: "sesion", proyecto: "p1" });
+      await asentar();
+      await enviarMensaje(accion, { clase: "fichero", ruta: "x.xne" });
+      await asentar();
+      expect(cliente.recibidos.filter((x) => x.clase === "fichero").at(-1)).toEqual({
+        clase: "fichero",
+        ruta: "x.xne",
+        recortado: false,
+        binario: false,
+        bytes: 0,
+        error: "sin permiso",
+      });
+      await vestibulo.cerrar();
+      rmSync(base, { recursive: true, force: true });
+    });
+
     it("sin puerto que liste, «arbol» lo dice con error; sin proyecto abierto, no contesta nada", async () => {
       const { base, servidor, vestibulo } = await abrirProyecto();
       montarRutas(servidor, vestibulo);
@@ -903,10 +932,17 @@ describe("montarRutas — el cable, por fin conectado", () => {
       await enviarMensaje(accion, { clase: "sesion", proyecto: "p1" });
       await asentar();
       await enviarMensaje(accion, { clase: "arbol" });
+      await enviarMensaje(accion, { clase: "fichero", ruta: "x.xne" });
       await asentar();
       const m = cliente.recibidos.filter((x) => x.clase === "arbol").at(-1) as Extract<MensajeAlCliente, { clase: "arbol" }>;
       expect(m.rutas).toEqual([]);
       expect(m.error).toBeTypeOf("string");
+      // Sin puerto que lea, «fichero» también lo DICE: el cliente tiene un visor abierto
+      // esperando ese contenido, y callar lo deja en «Trayendo…» para siempre.
+      const f = cliente.recibidos.filter((x) => x.clase === "fichero").at(-1) as Extract<MensajeAlCliente, { clase: "fichero" }>;
+      expect(f.ruta).toBe("x.xne");
+      expect(f.error).toBeTypeOf("string");
+      expect(f.texto).toBeUndefined();
       await vestibulo.cerrar();
       rmSync(base, { recursive: true, force: true });
     });

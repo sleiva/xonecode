@@ -942,7 +942,15 @@ export function montarRutas(
     }
   };
 
-  /** El contenido de una ruta del proyecto abierto. El lector decide si se puede enseñar. */
+  /**
+   * El contenido de una ruta del proyecto abierto. El lector decide si se puede enseñar.
+   *
+   * El `try` es por lo mismo que el del árbol: `leerFicheroDeProyecto` devuelve los rechazos
+   * como `error` en el resultado, pero después del `realpath` todavía puede LANZAR —un
+   * EACCES al hacer `stat` o al abrir—, y esa excepción llegaba al `contar` genérico sin
+   * contestar nada, dejando al cliente en «Trayendo…» para siempre. La respuesta lleva la
+   * `ruta` porque el cliente indexa los contenidos por ella: sin eso no sabría cuál falló.
+   */
   const atenderFichero = async (ruta: string): Promise<void> => {
     const abierto = vestibulo.proyectoAbierto();
     if (abierto === undefined) return;
@@ -950,7 +958,18 @@ export function montarRutas(
       emitir({ clase: "fichero", ruta, recortado: false, binario: false, bytes: 0, error: "esta ejecución no puede leer el proyecto" });
       return;
     }
-    emitir({ clase: "fichero", ...(await opciones.leerFichero(abierto.raiz, ruta)) });
+    try {
+      emitir({ clase: "fichero", ...(await opciones.leerFichero(abierto.raiz, ruta)) });
+    } catch (error) {
+      emitir({
+        clase: "fichero",
+        ruta,
+        recortado: false,
+        binario: false,
+        bytes: 0,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
   };
 
   /** Un paso del alta resuelto en el navegador. Cada rama termina volviendo a anunciar. */

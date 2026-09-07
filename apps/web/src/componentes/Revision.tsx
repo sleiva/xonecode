@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import type { FicheroTocado } from "../tipos.js";
 import { numerarParche } from "../numerarParche.js";
 import { arbolDeRutas } from "../arbolDeRutas.js";
@@ -187,22 +187,7 @@ export function Revision({
                 ) : parche.texto === "" ? (
                   <p className={estilos.aviso}>Sin diff que enseñar para este fichero.</p>
                 ) : (
-                  <div className={estilos.parche}>
-                    {numerarParche(parche.texto).map((linea, i) => (
-                      <div key={i} className={estilos.linea} data-tipo={linea.tipo}>
-                        <span className={estilos.numero} data-viejo="">
-                          {linea.viejo ?? ""}
-                        </span>
-                        <span className={estilos.numero} data-nuevo="">
-                          {linea.nuevo ?? ""}
-                        </span>
-                        <span className={estilos.texto}>{linea.texto === "" ? " " : linea.texto}</span>
-                      </div>
-                    ))}
-                    {parche.recortado ? (
-                      <p className={estilos.aviso}>El diff es demasiado grande y se ha cortado: míralo en tu editor.</p>
-                    ) : null}
-                  </div>
+                  <ParcheNumerado texto={parche.texto} recortado={parche.recortado} />
                 )
               ) : null}
             </section>
@@ -241,3 +226,34 @@ function hoja(ruta: string): string {
   const corte = ruta.lastIndexOf("/");
   return corte === -1 ? ruta : ruta.slice(corte + 1);
 }
+
+/**
+ * Un parche ya numerado. Es su propio componente por una razón de coste medible, no de
+ * orden: durante un turno el store se reemite cada 80 ms, así que `App` re-renderiza
+ * Revisión con esa frecuencia, y `numerarParche` —que recorre el diff entero— se volvía a
+ * ejecutar en CADA render por cada bloque desplegado (hasta ocho al abrir la pestaña).
+ * Con el `useMemo` sobre el texto, solo se recalcula cuando el parche cambia de verdad.
+ * El DOM que pinta es exactamente el de antes.
+ */
+function ParcheNumerado({ texto, recortado }: { texto: string; recortado: boolean }) {
+  const lineas = useMemo(() => numerarParche(texto), [texto]);
+  return (
+    <div className={estilos.parche}>
+      {lineas.map((linea, i) => (
+        <div key={i} className={estilos.linea} data-tipo={linea.tipo}>
+          <span className={estilos.numero} data-viejo="">
+            {linea.viejo ?? ""}
+          </span>
+          <span className={estilos.numero} data-nuevo="">
+            {linea.nuevo ?? ""}
+          </span>
+          <span className={estilos.texto}>{linea.texto === "" ? " " : linea.texto}</span>
+        </div>
+      ))}
+      {recortado ? (
+        <p className={estilos.aviso}>El diff es demasiado grande y se ha cortado: míralo en tu editor.</p>
+      ) : null}
+    </div>
+  );
+}
+

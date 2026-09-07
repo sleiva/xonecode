@@ -1,6 +1,6 @@
 import { existsSync } from "node:fs";
 import { open, realpath, stat } from "node:fs/promises";
-import { isAbsolute, resolve, sep } from "node:path";
+import { isAbsolute, relative, resolve, sep } from "node:path";
 import { ficherosDelProyecto } from "./turnoReal.js";
 import { puedeLeerRuta } from "./perfiles.js";
 import { esVistaAplanada } from "./proyecto.js";
@@ -23,6 +23,9 @@ export const TOPE_DE_ENTRADAS = 5_000;
 export const TOPE_DE_FICHERO = 400_000;
 /** Ventana en la que un NUL delata un binario. */
 export const VENTANA_DE_BINARIO = 8_192;
+
+/** El motivo con el que se rechaza una vista aplanada. Uno solo: se comprueba dos veces. */
+const MOTIVO_APLANADA = "es una vista aplanada que genera XOne Studio; la fuente es el .xne del mismo nombre";
 
 export interface ArbolDeProyecto {
   /** Relativas a la raíz, sin barra inicial, ordenadas: carpetas antes que ficheros. */
@@ -103,7 +106,7 @@ export async function leerFicheroDeProyecto(raiz: string, ruta: string): Promise
   // disco en O(1) en vez de recorrer el árbol entero por cada fichero que se abre.
   const normal = ruta.split(/[\\/]/).join("/");
   if (normal.endsWith(".xml") && existsSync(resolve(raiz, `${normal.slice(0, -4)}.xne`))) {
-    return rechazo("es una vista aplanada que genera XOne Studio; la fuente es el .xne del mismo nombre");
+    return rechazo(MOTIVO_APLANADA);
   }
 
   let real: string;
@@ -121,6 +124,25 @@ export async function leerFicheroDeProyecto(raiz: string, ruta: string): Promise
   // Un enlace simbólico dentro del proyecto que apunte fuera se queda aquí: la lección que
   // el repo ya pagó con `virtualMode: true` en el backend del agente.
   if (!real.startsWith(raizReal + sep)) return rechazo("está fuera del proyecto");
+
+  // **La barrera se aplica DOS veces, y una sola no basta.** La primera pasada es sobre el
+  // TEXTO que teclea el cliente (`motivoDeRutaInaceptable` y la criba de aplanadas de
+  // arriba): es de balde y evita tocar el disco. Esta segunda es sobre el camino que el
+  // disco ha resuelto DE VERDAD, y cierra tres agujeros medidos:
+  //  - En un sistema de ficheros que no distingue mayúsculas (APFS, NTFS) «.ENV» no es
+  //    «/.env» para `puedeLeerRuta`, pero abre `.env`. Lo mismo «.Xonecode/config.json».
+  //  - Un enlace simbólico DENTRO de la raíz que apunte a un fichero denegado
+  //    («enlace-env.txt» → «.env») o a una carpeta denegada («carpeta-enlazada» →
+  //    «.xonecode») pasa la comprobación de arriba, porque su camino real sí está dentro
+  //    del proyecto: lo que falla no es el sitio, es el destino.
+  //  - Un enlace a una vista aplanada («alias.xml» → «app/Clientes.xml») no tiene ningún
+  //    «alias.xne» al lado, así que la criba de balde no puede verlo.
+  // `realpath` canonicaliza las mayúsculas y sigue los enlaces, así que recomprobar sobre
+  // su resultado cierra los tres a la vez. Y sigue siendo una recomprobación y no una
+  // prohibición de enlaces: un enlace a un fichero que SÍ se enseña se lee con normalidad.
+  const relReal = relative(raizReal, real).split(sep).join("/");
+  if (!puedeLeerRuta(`/${relReal}`)) return rechazo("esa ruta no se enseña");
+  if (relReal.endsWith(".xml") && existsSync(`${real.slice(0, -4)}.xne`)) return rechazo(MOTIVO_APLANADA);
 
   const info = await stat(real);
   if (!info.isFile()) return rechazo("no es un fichero");

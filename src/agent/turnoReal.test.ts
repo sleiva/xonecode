@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from "node:fs";
+import { mkdtempSync, mkdirSync, symlinkSync, writeFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { Command } from "@langchain/langgraph";
@@ -399,6 +399,26 @@ describe("ficherosDelProyecto", () => {
       expect(ficherosDelProyecto(raiz, 0, 32).has("/a/b/c/d/e/f/x.xne")).toBe(true);
     } finally {
       rmSync(raiz, { recursive: true, force: true });
+    }
+  });
+
+  it("no recorre una CARPETA detrás de un enlace simbólico", () => {
+    // Medido en la pestaña Ficheros: con `statSync` el enlace se seguía y salían nombres
+    // de ficheros de fuera del proyecto («dir-fuera/id_rsa»), y `.xonecode` se colaba bajo
+    // un alias. Con `lstatSync` el enlace no se recorre ni se lista.
+    const raiz = mkdtempSync(join(tmpdir(), "turno-enlaces-"));
+    const fuera = mkdtempSync(join(tmpdir(), "turno-fuera-"));
+    try {
+      writeFileSync(join(raiz, "app.xml"), "<app/>");
+      writeFileSync(join(fuera, "id_rsa"), "-----BEGIN");
+      symlinkSync(fuera, join(raiz, "dir-fuera"), "dir");
+      const rutas = ficherosDelProyecto(raiz);
+      expect(rutas.has("/app.xml")).toBe(true);
+      expect(rutas.has("/dir-fuera/id_rsa")).toBe(false);
+      expect([...rutas].some((r) => r.startsWith("/dir-fuera"))).toBe(false);
+    } finally {
+      rmSync(raiz, { recursive: true, force: true });
+      rmSync(fuera, { recursive: true, force: true });
     }
   });
 });

@@ -1,4 +1,4 @@
-import { mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -13,6 +13,22 @@ import {
 
 let raiz: string;
 let fuera: string;
+
+/**
+ * ¿El sistema de ficheros distingue mayúsculas? Se mide una vez, escribiendo y preguntando
+ * por el mismo nombre en otra caja: en APFS y en NTFS no distingue —y ahí «.ENV» abre
+ * «.env»—, en un ext4 sí, y ahí ese caso no se puede montar. Se detecta en vez de suponer
+ * la máquina: el test de más abajo afirma un rechazo que en Linux no tiene nada que rechazar.
+ */
+const SIN_DISTINGUIR_MAYUSCULAS = (() => {
+  const d = mkdtempSync(join(tmpdir(), "xc-caso-"));
+  try {
+    writeFileSync(join(d, "x.txt"), "");
+    return existsSync(join(d, "X.TXT"));
+  } finally {
+    rmSync(d, { recursive: true, force: true });
+  }
+})();
 
 beforeEach(() => {
   raiz = mkdtempSync(join(tmpdir(), "xc-arbol-"));
@@ -33,6 +49,14 @@ beforeEach(() => {
   writeFileSync(join(raiz, "grande.js"), "x".repeat(TOPE_DE_FICHERO + 10));
   writeFileSync(join(fuera, "secreto.txt"), "no");
   symlinkSync(join(fuera, "secreto.txt"), join(raiz, "enlace.txt"));
+  // Los tres enlaces que burlaban la barrera: apuntan DENTRO de la raíz, así que la
+  // comprobación de «el camino real sigue en el proyecto» los deja pasar.
+  symlinkSync(join(raiz, ".env"), join(raiz, "enlace-env.txt"));
+  symlinkSync(join(raiz, ".xonecode"), join(raiz, "carpeta-enlazada"), "dir");
+  symlinkSync(join(raiz, "app", "Clientes.xml"), join(raiz, "alias.xml"));
+  mkdirSync(join(fuera, "claves"));
+  writeFileSync(join(fuera, "claves", "id_rsa"), "-----BEGIN");
+  symlinkSync(join(fuera, "claves"), join(raiz, "dir-fuera"), "dir");
 });
 
 afterEach(() => {
@@ -48,6 +72,15 @@ describe("arbolDeProyecto", () => {
     expect(rutas).toContain("app.xml");
     expect(rutas).not.toContain("app/Clientes.xml");
     expect(rutas.some((r) => r.startsWith(".env") || r.startsWith(".xonecode") || r.startsWith(".git") || r.startsWith("node_modules"))).toBe(false);
+  });
+
+  it("no lista lo que hay detrás de un enlace a carpeta: ni el alias de una denegada ni lo de fuera", () => {
+    // Un enlace a carpeta no se sigue (`turnoReal.ts` usa `lstatSync`), así que
+    // «carpeta-enlazada» no puede colar `.xonecode` bajo otro nombre ni «dir-fuera»
+    // traer nombres de ficheros que no son del proyecto.
+    const { rutas } = arbolDeProyecto(raiz);
+    expect(rutas).not.toContain("carpeta-enlazada/config.json");
+    expect(rutas.some((r) => r.startsWith("carpeta-enlazada/") || r.startsWith("dir-fuera"))).toBe(false);
   });
 
   it("ordena carpetas antes que ficheros en cada nivel, y alfabético sin mayúsculas", () => {
@@ -137,6 +170,36 @@ describe("leerFicheroDeProyecto", () => {
     writeFileSync(join(raiz, "vacio.txt"), "");
     const f = await leerFicheroDeProyecto(raiz, "vacio.txt");
     expect(f).toMatchObject({ texto: "", binario: false, recortado: false, bytes: 0, codificacion: "utf-8" });
+  });
+
+  it("un enlace DENTRO de la raíz que apunta a un fichero denegado se rechaza", async () => {
+    const f = await leerFicheroDeProyecto(raiz, "enlace-env.txt");
+    expect(f.error).toBeTypeOf("string");
+    expect(f.texto).toBeUndefined();
+    expect(f.error).not.toContain(raiz);
+  });
+
+  it("un enlace a carpeta denegada no abre lo que hay dentro", async () => {
+    const f = await leerFicheroDeProyecto(raiz, "carpeta-enlazada/config.json");
+    expect(f.error).toBeTypeOf("string");
+    expect(f.texto).toBeUndefined();
+  });
+
+  it("un enlace a una vista APLANADA se rechaza como aplanada, no se lee", async () => {
+    // La criba de balde no puede verlo: al lado de «alias.xml» no hay ningún
+    // «alias.xne». Quien lo caza es la recomprobación sobre el camino REAL.
+    const f = await leerFicheroDeProyecto(raiz, "alias.xml");
+    expect(f.error).toContain("aplanada");
+    expect(f.texto).toBeUndefined();
+  });
+
+  it("una variante de mayúsculas de una ruta denegada se rechaza", async () => {
+    if (!SIN_DISTINGUIR_MAYUSCULAS) return; // en un FS que distingue, «.ENV» no existe: nada que rechazar
+    for (const ruta of [".ENV", ".Xonecode/config.json", ".GIT/HEAD"]) {
+      const f = await leerFicheroDeProyecto(raiz, ruta);
+      expect(f.error, ruta).toBeTypeOf("string");
+      expect(f.texto, ruta).toBeUndefined();
+    }
   });
 
   it("un enlace simbólico DENTRO de la raíz se lee con normalidad", async () => {
