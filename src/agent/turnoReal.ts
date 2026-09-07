@@ -5,6 +5,7 @@ import { HumanMessage, ToolMessage, type AIMessage, type BaseMessage } from "@la
 import { Command, MemorySaver } from "@langchain/langgraph";
 import type { BaseCheckpointSaver } from "@langchain/langgraph-checkpoint";
 import { collectPending, type Decision, MAX_APPROVAL_ROUNDS } from "../vendor/hitl.js";
+import { esRutaDeArtefacto, type Artefacto } from "../core/artefactos.js";
 
 /**
  * Cuántas veces se le devuelven los hallazgos al agente para que los corrija. Dos: tres
@@ -247,6 +248,14 @@ export async function abrirSesionReal(opciones: {
    * nadie puede volver a abrir solo engorda un fichero.
    */
   checkpointer?: BaseCheckpointSaver;
+  /**
+   * La carpeta donde caen los artefactos de esta sesión — lo que el agente ve como
+   * `/artefactos/`. Entra por parámetro porque quien sabe si hay sesión con identidad es
+   * quien la abrió: en la web es `.xonecode/sesiones/<id>/artefactos`, y sin sesión (la
+   * consola de terminal) se cae a `.xonecode/artefactos` del proyecto, que existe igual y
+   * no ensucia el índice con carpetas de hilos que nadie puede reabrir.
+   */
+  artefactos?: string;
 }): Promise<SesionReal> {
   const { raiz, entorno } = opciones;
 
@@ -261,6 +270,14 @@ export async function abrirSesionReal(opciones: {
   let hilo = opciones.hilo ?? `xonecode-${randomUUID()}`;
   let cancelarEnCurso: (() => void) | undefined;
   let cerrada = false;
+
+  /**
+   * Los artefactos escritos en la pasada en curso. Los apunta el backend (es el único que
+   * sabe que la escritura ocurrió) y los VACÍA quien los anuncia, para que un artefacto se
+   * diga una vez y no en cada pasada de una reparación.
+   */
+  const artefactosDeLaPasada: Artefacto[] = [];
+  const carpetaDeArtefactos = opciones.artefactos ?? join(raiz, ".xonecode", "artefactos");
 
   const construir = async (): Promise<unknown> =>
     construirAgente({
@@ -278,6 +295,10 @@ export async function abrirSesionReal(opciones: {
       checkpointer: checkpointer,
       tracker,
       diagnostico,
+      artefactos: {
+        carpeta: carpetaDeArtefactos,
+        alEscribir: (a) => artefactosDeLaPasada.push(a),
+      },
     });
 
   let agente = await construir();
@@ -349,6 +370,8 @@ export async function abrirSesionReal(opciones: {
     // con las decisiones — también con rejects, que si no se resumen dejan el interrupt
     // colgado para siempre y el modelo nunca llega a saber que se rechazó.
     let cortadoPorTope = false;
+    /** Tandas seguidas de artefactos aprobados solos. Tope propio: ver dónde se usa. */
+    let tandasDeArtefactos = 0;
 
     /**
      * El estado del lazo, compartido entre el generador y el bucle de rondas.
@@ -397,6 +420,12 @@ export async function abrirSesionReal(opciones: {
       reparar = false;
 
       yield* eventos;
+
+      // Lo primero al agotarse la pasada: lo que el agente dejó escrito sin preguntar. Va
+      // ANTES de la decisión de cierre y antes del veredicto porque es trabajo TERMINADO de
+      // esta pasada — anunciarlo después del `fin` lo pintaría fuera del turno, que es el
+      // mismo motivo por el que el verificador está cosido aquí dentro.
+      for (const artefacto of artefactosDeLaPasada.splice(0)) yield { tipo: "artefacto", artefacto };
 
       if ((await leerPendientes()).lista.length > 0) {
         // Quedan escrituras por aprobar. Si el bucle va a seguir —hay quien apruebe y no se
@@ -579,25 +608,66 @@ export async function abrirSesionReal(opciones: {
       const { lista, ficheros, diffs } = await leerPendientes();
       if (lista.length === 0) break;
 
+      /**
+       * Los artefactos se aprueban SOLOS, y el resto sigue pidiendo permiso.
+       *
+       * La aprobación existe para proteger el proyecto del usuario, y un artefacto ya no lo
+       * toca: vive en la carpeta de la sesión, no entra en git y no sube a CloudStudio. Que
+       * dibujar un diagrama costara tres clics enseñaría a aprobar sin mirar, que es como se
+       * rompe la aprobación justo cuando importa. A cambio se ANUNCIA (evento `artefacto`):
+       * una escritura que nadie aprueba no puede ser además muda.
+       *
+       * `esRutaDeArtefacto` es una lista blanca de forma y no un `startsWith`, porque de
+       * ella depende que esto no sea un camino para escribir en el proyecto sin permiso.
+       */
+      const automaticas = new Map<string, Decision>();
+      const humanos: PendienteDeAprobacion[] = [];
+      for (const p of lista) {
+        if (esRutaDeArtefacto(ficheros.get(p.id))) automaticas.set(p.id, { type: "approve" } as Decision);
+        else humanos.push(p);
+      }
+      if (humanos.length === 0) {
+        // Ronda que no gastó a nadie: no cuenta para el tope de APROBACIÓN. Contarla haría
+        // que cinco diagramas cortaran el turno con `cortadoPorTope`, cuyo significado
+        // —«quedaron escrituras esperando aprobación»— sería falso. La predicción de cierre
+        // de la pasada usó el mismo `ronda`, y sigue siendo correcta: viene otra pasada.
+        //
+        // Pero tiene su PROPIO tope, y por el mismo motivo que el otro: cada pasada es una
+        // llamada al modelo, y un agente que escribe un artefacto por pasada sería un bucle
+        // que nadie corta —aquí no hay humano al que preguntar, que es justo lo que frena
+        // al otro—. Al agotarse se para y se dice, con `cortadoPorTope` puesto: quedaron
+        // escrituras sin aplicar, que es lo que ese código de salida significa.
+        tandasDeArtefactos += 1;
+        if (tandasDeArtefactos > MAX_APPROVAL_ROUNDS) {
+          piel.linea(`\n⚠ tope de ${MAX_APPROVAL_ROUNDS} tandas de artefactos agotado en este turno.`);
+          piel.linea(`  quedaban ${lista.length} sin escribir, y NO se han aplicado.`);
+          cortadoPorTope = true;
+          break;
+        }
+        ronda -= 1;
+        payload = new Command({ resume: buildResume(automaticas) });
+        continue;
+      }
+
       // El tope existe porque un modelo que insiste tras cada rechazo convierte esto en un
       // ciclo automático de ~200k tokens por ronda (medido en da04). Sin resumir: nada se
       // aplica, pero el interrupt queda en el estado.
       if (ronda >= MAX_APPROVAL_ROUNDS) {
         piel.linea(`\n⚠ tope de ${MAX_APPROVAL_ROUNDS} rondas de aprobación agotado.`);
-        piel.linea(`  quedaban ${lista.length} sin resolver, y NO se han aplicado.`);
+        piel.linea(`  quedaban ${humanos.length} sin resolver, y NO se han aplicado.`);
         cortadoPorTope = true;
         break;
       }
 
       if (!opciones.pedirAprobacion) {
-        piel.linea(`\n⏸  ${lista.length} escritura(s) piden aprobación, y no hay quién apruebe.`);
+        piel.linea(`\n⏸  ${humanos.length} escritura(s) piden aprobación, y no hay quién apruebe.`);
         piel.linea("   Nada se ha aprobado y nada se ha aplicado.");
         break;
       }
 
       let decisiones: Map<string, Decision>;
       try {
-        decisiones = await opciones.pedirAprobacion(lista, ficheros, diffs);
+        decisiones = await opciones.pedirAprobacion(humanos, ficheros, diffs);
       } catch (e) {
         // La ronda que acaba de pasar no cerró el turno —predijo que habría reanudación— y
         // la aprobación ha reventado en vez de contestar (el «sin humano» de `run.ts`, que
@@ -607,7 +677,10 @@ export async function abrirSesionReal(opciones: {
         if (!cerrarRonda) piel.fin(Date.now() - t0);
         throw e;
       }
-      payload = new Command({ resume: buildResume(decisiones) });
+      // Las dos mitades vuelven en UN solo resume: un interrupt que no se resume se queda
+      // colgado para siempre, así que los artefactos aprobados solos tienen que viajar con
+      // las decisiones humanas y no en una reanudación aparte.
+      payload = new Command({ resume: buildResume(new Map([...automaticas, ...decisiones])) });
     }
     } while (reparar);
 

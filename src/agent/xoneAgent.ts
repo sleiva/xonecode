@@ -5,7 +5,8 @@ import { RunnableLambda } from "@langchain/core/runnables";
 import { AIMessage, type BaseMessage } from "@langchain/core/messages";
 import { MemorySaver } from "@langchain/langgraph";
 import type { BaseCheckpointSaver } from "@langchain/langgraph-checkpoint";
-import { backendConSkills, backendDelProyecto, exponerMemoriaDeProyecto, sinVistasAplanadas } from "./proyecto.js";
+import { backendConArtefactos, backendConSkills, backendDelProyecto, exponerMemoriaDeProyecto, sinVistasAplanadas } from "./proyecto.js";
+import type { Artefacto } from "../core/artefactos.js";
 import { permisosDe, hitlDe } from "./perfiles.js";
 import { crearBusquedaRegex } from "./busquedaRegex.js";
 import type { DiagnosticoDeTools } from "./diagnosticoDeTools.js";
@@ -43,6 +44,13 @@ export interface OpcionesDelAgente {
   tracker?: TokenTracker;
   /** Registro local opt-in de llamadas y uso; nunca llega al modelo. */
   diagnostico?: DiagnosticoDeTools;
+  /**
+   * Dónde caen los artefactos de la sesión (`/artefactos/` para el agente). Es una carpeta
+   * de `.xonecode/`, o sea FUERA del proyecto: ver `core/artefactos.ts`. Ausente = no se
+   * monta la carpeta, y entonces un `write_file` a `/artefactos/…` es un fichero más del
+   * proyecto — que es lo que pasaba antes de que esto existiera.
+   */
+  artefactos?: { carpeta: string; alEscribir: (a: Artefacto) => void };
 }
 
 /**
@@ -150,9 +158,21 @@ export const OPCIONES_BUSQUEDA_FICHEROS = {
  * 4. **El HITL va en las tools de fichero**, que en la v1 son las que escriben.
  */
 export async function construirAgente(opciones: OpcionesDelAgente): Promise<unknown> {
-  const backend = backendConSkills(
-    sinVistasAplanadas(exponerMemoriaDeProyecto(backendDelProyecto(opciones.raiz)), opciones.ficheros)
+  const delProyecto = sinVistasAplanadas(
+    exponerMemoriaDeProyecto(backendDelProyecto(opciones.raiz)),
+    opciones.ficheros
   );
+  // El orden importa poco entre estos dos —son dos rutas distintas del mismo compuesto—,
+  // pero los artefactos van DESPUÉS para que el compuesto de skills quede por dentro: así
+  // `/skills/` sigue resolviéndose igual que siempre.
+  const backend =
+    opciones.artefactos === undefined
+      ? backendConSkills(delProyecto)
+      : backendConArtefactos(
+          backendConSkills(delProyecto),
+          opciones.artefactos.carpeta,
+          opciones.artefactos.alEscribir
+        );
 
   // Si no hay tracker, no se añade el middleware: es opcional a propósito arriba.
   const middlewareTracker = (origen: string) =>

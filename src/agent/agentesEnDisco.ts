@@ -322,8 +322,11 @@ const SKILLS_VISUALES = [
   "- REGLA DE PRIORIDAD: para un diagrama, esquema, arquitectura, flujo, secuencia, datos o estados,",
   "  usa solamente `archify`. No cargues ni uses `artifacts-builder` como sustituto.",
   "- Solo si, ADEMÁS del diagrama, el usuario pide un contenedor HTML interactivo, usa `artifacts-builder`",
-  "  después de decidir el diagrama con `archify`. Guárdalo en `/artifacts/<nombre>.html`; no escribas",
-  "  jamás dentro de `/skills` ni menciones una tool que no tienes.",
+  "  después de decidir el diagrama con `archify`. No menciones jamás una tool que no tienes.",
+  "- DÓNDE se guarda: `/artefactos/<nombre>.html`, y nunca en la raíz del proyecto ni dentro de",
+  "  `/skills`. `/artefactos/` es la carpeta de esta sesión: no es del proyecto, no pasa por",
+  "  aprobación, no entra en git y no sube a CloudStudio. Un diagrama escrito fuera de ella acaba",
+  "  dentro de la app XOne del usuario.",
   "- Si te piden un dashboard, informe, tabla o artefacto HTML interactivo, carga primero `artifacts-builder`.",
   "- Apóyate en el código real antes de dibujar: no inventes nombres, componentes ni flujos.",
 ].join("\n");

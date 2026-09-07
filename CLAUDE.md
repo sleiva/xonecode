@@ -638,6 +638,46 @@ sesiones llegaban a fuego como `[]`:
   cable, store y componente); colapsarla haría que elegir ninguno se leyera como no haber
   elegido. El ORDEN lo pone el listado del servidor, no el orden en que se marcaron.
 
+**Los ARTEFACTOS del agente no son ficheros del proyecto** (`core/artefactos.ts`,
+`agent/proyecto.ts#backendConArtefactos`). Un diagrama de `archify`, un panel de
+`artifacts-builder`, la captura que el `probador` traerá el día que hable con el móvil: son
+salidas de la conversación, no código de la app. **Hasta ahora acababan dentro de la app
+XOne**, y no por descuido: las dos skills visuales reparten su entrega entre
+`renderizar_diagrama` y `publish_artifact`, y en xonecode **no existe ninguna de las dos**
+(cero apariciones en `src/`), así que el `mockup` caía siempre en el camino de reserva, que
+dice «con `write_file`, entrega el HTML autocontenido» en `/artifacts/<nombre>.html` — o sea
+la raíz del proyecto, con aprobación humana, git y subida a CloudStudio detrás.
+- **Es otro MONTAJE, la misma pieza que `/skills/`**: una raíz más en el `CompositeBackend`,
+  `/artefactos/` → `.xonecode/sesiones/<id>/artefactos/`. Dos diferencias con las skills: se
+  puede ESCRIBIR (las skills son instrucciones, y `permisosDe` las deniega) y se APUNTA lo
+  escrito, porque el backend es el único que sabe que la escritura ocurrió y cuánto pesó.
+- **La carpeta NO se crea al montar.** Medido: `FilesystemBackend` no exige que su `rootDir`
+  exista y el `write` lo crea. Crearla dejaría un `artefactos/` vacío en cada sesión que no
+  dibuja nada, que son casi todas.
+- **Se escriben SIN aprobación, y por eso se ANUNCIAN.** La aprobación protege el proyecto y
+  esto ya no lo toca; pedir permiso para dibujar un diagrama enseña a aprobar sin mirar, que
+  es como se rompe la aprobación justo cuando importa. La contrapartida es el evento
+  `artefacto` (nombre, tamaño, ruta virtual, nunca el contenido): una escritura que nadie
+  aprueba no puede ser además muda.
+- **`esRutaDeArtefacto` es una lista BLANCA de forma, no un `startsWith`.** De ella depende
+  que esto no sea un camino para escribir en el proyecto sin permiso: cada segmento tiene que
+  ser texto llano, lo que deja fuera `..`, `.`, el hueco de un `//`, la barra invertida y un
+  `%2e%2e` sin decodificar. Lo que no case pasa por la aprobación de siempre. (Medido aparte:
+  un `write` de `/artefactos/../pwn.html` no llega al proyecto —el `virtualMode` de la raíz
+  montada lo sujeta— pero devuelve OK sin escribir nada; la barrera no depende de eso.)
+- **Una tanda de solo artefactos no gasta ronda de aprobación**, o cinco diagramas cortarían
+  el turno con `cortadoPorTope`, cuyo significado —«quedaron escrituras esperando
+  aprobación»— sería falso. Tiene su propio tope, y por el mismo motivo que el otro: cada
+  pasada es una llamada al modelo y aquí no hay humano que frene el bucle.
+- **Se borran con su sesión** (`borrarSesion`), igual que el hilo del checkpointer: si no,
+  borrar una conversación dejaría en disco los diagramas que se dibujaron en ella, invisibles
+  desde la interfaz.
+- Y **la carpeta no se ve todavía en la consola**: el artefacto se anuncia con su nombre y su
+  ruta, y se abre desde disco. Enseñarlo dentro exige decidir antes cómo se pinta un HTML que
+  escribió un modelo, porque la consola sirve en el mismo origen que tiene la cookie del
+  token — el contrato de `artifacts-builder` da por hecho un sandbox de servidor que aquí no
+  existe.
+
 **El hilo del agente SOBREVIVE al proceso** (`agent/checkpointer.ts`,
 `.xonecode/checkpoint.sqlite`). Era un `MemorySaver`, así que reabrir una conversación era
 releerla: el texto a la vista y el modelo sin recordar una palabra, con la marca `historica`

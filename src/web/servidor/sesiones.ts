@@ -49,12 +49,14 @@ import {
   openSync,
   readFileSync,
   renameSync,
+  rmSync,
   unlinkSync,
   writeFileSync,
 } from "node:fs";
 import { randomUUID } from "node:crypto";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import type { Acto } from "../../core/actos.js";
+import { carpetaDeArtefactosDeSesion } from "../../core/artefactos.js";
 import { segmentoSeguro } from "../../core/settings.js";
 
 /** Cuántos caracteres de la primera prosa del usuario se guardan como título. */
@@ -141,6 +143,7 @@ function rutaIndice(raiz: string): string {
 function rutaJsonl(raiz: string, id: string): string {
   return join(carpetaSesiones(raiz), `${segmentoSeguro(id, "id de sesión")}.jsonl`);
 }
+
 
 /** Una entrada que no es un objeto reconocible no cuenta: sin este filtro, un índice con
  * basura colada (`[null]`, `[42]`) hace que `entradas.find` reviente en cuanto alguien lea
@@ -294,6 +297,11 @@ export function borrarSesion(raiz: string, id: string): boolean {
   const ruta = rutaJsonl(raiz, id);
   const habia = existsSync(ruta);
   if (habia) unlinkSync(ruta);
+  // Y sus artefactos, que son de esta sesión y de nadie más. Sin esto, borrar una
+  // conversación dejaría en disco los diagramas que se dibujaron en ella, invisibles desde
+  // la interfaz — el mismo agujero que dejaba su hilo del checkpointer antes de
+  // `olvidarHilo`. `force` porque la carpeta solo existe si el agente escribió algo.
+  rmSync(dirname(carpetaDeArtefactosDeSesion(raiz, id)), { recursive: true, force: true });
   const entradas = leerIndiceOAbortar(raiz);
   const quedan = entradas.filter((e) => e.id !== id);
   if (quedan.length === entradas.length) return habia;

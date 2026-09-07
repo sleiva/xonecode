@@ -93,7 +93,10 @@ describe("el prompt de un especialista sembrado", () => {
     expect(p).toContain("`archify`");
     expect(p).toContain("usa solamente `archify`");
     expect(p).toContain("No cargues ni uses `artifacts-builder` como sustituto");
-    expect(p).toContain("/artifacts/<nombre>.html");
+    // La carpeta de la sesión, no la raíz del proyecto: un diagrama escrito ahí acabaría
+    // pasando por aprobación, entrando en git y subiendo a CloudStudio.
+    expect(p).toContain("/artefactos/<nombre>.html");
+    expect(p).not.toContain("/artifacts/");
   });
 
   it("describe en las tools de escritura el destino y la skill correctos", () => {

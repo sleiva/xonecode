@@ -211,6 +211,17 @@ export async function correrTurno(
           escribirLinea(`🔁 reparando (intento ${ev.intento} de ${ev.tope})`);
           break;
 
+        case "artefacto": {
+          // Se ANUNCIA porque no se aprueba. Un artefacto se escribe sin preguntar —no es
+          // del proyecto—, así que la línea es lo único que evita que sea una escritura
+          // muda. Lleva el tamaño porque un panel de 400 KB y un SVG de 2 KB no son la
+          // misma noticia, y la ruta virtual porque es con la que se pide después.
+          const { nombre, bytes, ruta } = ev.artefacto;
+          bitacora.anota("artefacto", nombre);
+          escribirLinea(`🖼  artefacto: ${nombre} (${Math.max(1, Math.round(bytes / 1024))} KB) · ${ruta}`);
+          break;
+        }
+
         case "bloqueado":
           bitacora.anota("bloqueado", ev.motivo);
           escribirLinea(`⛔ bloqueado (${ev.motivo}): ${ev.explicacion}`);

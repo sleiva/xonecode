@@ -34,11 +34,14 @@ describe("SkillsEnDisco", () => {
     expect(new SkillsEnDisco().cargar("xone-development")).toContain("XOne");
   });
 
-  it("la guía de diagramas de artifacts-builder remite a archify y no usa skills como salida", () => {
+  it("la guía de diagramas de artifacts-builder remite a archify y saca la salida del proyecto", () => {
     const guia = readFileSync(join(RAIZ_SKILLS, "artifacts-builder", "reference", "diagramas.md"), "utf8");
     expect(guia).toContain("`archify`");
-    expect(guia).toContain("/artifacts/<nombre>.html");
-    expect(guia).toContain("nunca en `/skills`");
+    // `/artefactos/` y no `/artifacts/`: la carpeta de la sesión, que no es del proyecto.
+    // Escrito en la raíz, un diagrama acaba en git y en CloudStudio — dentro de la app XOne.
+    expect(guia).toContain("/artefactos/<nombre>.html");
+    expect(guia).not.toContain("/artifacts/");
+    expect(guia).toContain("ni en `/skills`");
   });
 
   it("una skill que no existe falla diciendo cuáles hay", () => {

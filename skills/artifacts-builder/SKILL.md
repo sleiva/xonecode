@@ -16,10 +16,13 @@ skill is mounted — nothing here runs a script.
    Inter, indigo accent, four different corner radii and zero CSS variables. Five tokens
    (`--surface --surface-2 --ink --ink-muted --border --accent --radius`) and one row of the
    character table are the whole decision; the file is 86 lines and it is the short one.
-2. **Write** the HTML with `write_file`, e.g. `/artifact.html`. Keep it ONE file: with no
-   `execute` tool anywhere here, there is no bundler to run. Inline local assets (fonts,
-   images) as `data:` URIs directly in the file you write, instead of splitting it and
-   planning to combine the pieces later.
+2. **Write** the HTML with `write_file` **en `/artefactos/<nombre>.html`** — nunca en la raíz
+   del proyecto. Esa carpeta no es del proyecto: no pasa por la aprobación humana, no entra
+   en git y no sube a CloudStudio. Un HTML escrito fuera de ella acaba DENTRO de la app XOne
+   del usuario, que no es lo que nadie pidió. Keep it ONE file: with no `execute` tool
+   anywhere here, there is no bundler to run. Inline local assets (fonts, images) as `data:`
+   URIs directly in the file you write, instead of splitting it and planning to combine the
+   pieces later.
 3. **Entrega, según la tool que TENGAS:**
    - **Si tienes `publish_artifact`** (el panel): `publish_artifact(path="/artifact.html",
      title="…")`. Valida al publicar contra el contrato de abajo. Si lo rechaza, te dice
@@ -30,8 +33,13 @@ skill is mounted — nothing here runs a script.
      dataflow, lifecycle), no sigas este camino — usa la skill `archify` y llama a
      `renderizar_diagrama(tipo, spec_json, ruta)`, que valida y coloca el fichero por ti.
      Para cualquier OTRO artefacto (tabla, dashboard, gráfica que no es un diagrama de
-     archify), ya tienes `write_file`: escribe directamente en la ruta del proyecto — el
-     contrato de abajo NO aplica en este camino, es del sandbox del panel (ver su nota).
+     archify), ya tienes `write_file`: escríbelo en `/artefactos/` — el contrato de abajo NO
+     aplica en este camino, es del sandbox del panel (ver su nota).
+   - **Si no tienes NINGUNA de las dos** (xonecode): `write_file` en
+     `/artefactos/<nombre>.html` y ya está. No inventes ninguna de las dos tools, y no
+     anuncies capacidades del panel —sandbox, enlace compartible, actualización por
+     `artifact_id`— que en este camino no existen. La entrega ES la escritura: la consola
+     anuncia el artefacto sola.
    **Cuando la entrega confirme, HAS TERMINADO** — no reescribas el mismo artefacto otra vez.
 
 ## The contract — non-negotiable — solo si tienes `publish_artifact`

@@ -12,6 +12,9 @@
  * tool sin entrada en la lista no lleva `detalle`, exista lo que exista en sus
  * argumentos.
  */
+import type { Artefacto } from "./artefactos.js";
+export type { Artefacto };
+
 export type DomainEvent =
   | { tipo: "token"; texto: string; msgId?: string }
   /**
@@ -48,6 +51,16 @@ export type DomainEvent =
       preexistentes?: number;
     }
   | { tipo: "reparacion"; intento: number; tope: number }
+  /**
+   * El agente ha dejado un ARTEFACTO: un diagrama, un panel, una captura. No es un fichero
+   * del proyecto —vive en la carpeta de la sesión, ver `core/artefactos.ts`— y por eso se
+   * escribe SIN aprobación humana. Que se anuncie es la contrapartida: una escritura que
+   * nadie aprueba tiene que decirse, o es una escritura muda.
+   *
+   * Lleva la ruta VIRTUAL (`/artefactos/…`) y nunca la del disco ni el contenido: por aquí
+   * pasa lo que acaba en el transcript y en el cable.
+   */
+  | { tipo: "artefacto"; artefacto: Artefacto }
   | { tipo: "bloqueado"; motivo: MotivoBloqueo; explicacion: string }
   | { tipo: "pausa"; pendientes: PendienteDeAprobacion[] }
   | { tipo: "aviso"; texto: string; severidad: "info" | "aviso" | "grave" }

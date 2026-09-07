@@ -44,6 +44,9 @@ Elige tu camino por la tool que TENGAS — son dos mecanismos distintos, no dos 
   es vocabulario del MOTOR de archify: solo tiene sentido si vas a llamar a esa tool.
 - **Tienes `publish_artifact`** en vez de `renderizar_diagrama` (el panel): el motor de archify
   no es alcanzable desde aquí. Nada del Camino A aplica — salta directo al **Camino B**.
+- **No tienes ninguna de las dos** (xonecode): el motor tampoco es alcanzable, así que el
+  Camino A no aplica. Ve al **Camino B** y entrega con `write_file` en `/artefactos/`, tal
+  como dice ahí.
 
 ## Camino A — solo si tienes `renderizar_diagrama`
 
@@ -86,13 +89,21 @@ trabajo extra de autoría — no las repliques a mano, y no prometas ninguna de 
 el Camino B, donde no existen. Detalle en `references/viewer-runtime.md`, solo si el usuario
 pide explícitamente una de esas capacidades.
 
-## Camino B — solo si tienes `publish_artifact`
+## Camino B — sin `renderizar_diagrama`
 
 Construye el diagrama tú mismo, como SVG o mermaid inline dentro de tu propio HTML
 autocontenido — no hay JSON de Archify que escribir ni motor que lo consuma, así que no lleva
 theme switching, pan/zoom, búsqueda ni export automático salvo que tú los programes. Sigue la
-skill `artifacts-builder`, en concreto `reference/diagramas.md`, y publica con
-`publish_artifact(path=..., title=...)`. **Cuando `publish_artifact` confirme, HAS TERMINADO.**
+skill `artifacts-builder`, en concreto `reference/diagramas.md`. La entrega depende de la tool
+que tengas:
+
+- **Con `publish_artifact`**: `publish_artifact(path=..., title=...)`. **Cuando confirme, HAS
+  TERMINADO.**
+- **Sin ninguna de las dos** (xonecode): `write_file` en `/artefactos/<nombre>.html`. Esa
+  carpeta no es del proyecto —no pasa por aprobación, no entra en git y no sube a
+  CloudStudio—, así que **no escribas el diagrama en la raíz del proyecto**: allí acabaría
+  dentro de la app XOne del usuario. **Cuando la escritura vuelva, HAS TERMINADO**: la consola
+  anuncia el artefacto sola.
 
 `references/delivery-contract.md` y `references/brand-marks.md` no son parte de ninguno de los
 dos caminos — cada uno lleva su propio aviso de que nada en él se puede ejecutar.

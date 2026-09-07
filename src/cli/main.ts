@@ -30,6 +30,7 @@ import {
   guardarTemaDeProyecto,
 } from "../agent/configEnDisco.js";
 import { crearCheckpointerDeProyecto } from "../agent/checkpointer.js";
+import { carpetaDeArtefactosDeSesion } from "../core/artefactos.js";
 import { conectarCloudStudio, sesionCloudStudio, PUERTO_CALLBACK } from "../agent/cloudstudioMcp.js";
 import { clienteCloudStudio } from "../agent/cloudstudioClient.js";
 import { cargarSettings } from "../agent/settingsEnDisco.js";
@@ -428,6 +429,7 @@ export function parsearOpcionesWeb(argv: string[]): OpcionesWeb {
 export function crearEjecutorReal(
   alAbrirSesion: (sesion: SesionReal) => void,
   checkpointerDeProyecto?: (raiz: string) => BaseCheckpointSaver | undefined,
+  carpetaDeArtefactos?: (raiz: string, hilo: string) => string,
 ): EjecutorDeTurno {
   let sesion: SesionReal | undefined;
   let fuentesVistas: FuentesDeEleccion | undefined;
@@ -467,6 +469,13 @@ export function crearEjecutorReal(
         // porque abrir el fichero falló— y `abrirSesionReal` cae en el `MemorySaver` de
         // siempre: se pierde la memoria entre arranques, que es lo que ya pasaba.
         ...(persistente === undefined ? {} : { checkpointer: persistente }),
+        // Dónde caen los diagramas y demás salidas del agente. Con sesión (la web) van a la
+        // carpeta de ESA sesión; sin ella, `abrirSesionReal` cae a `.xonecode/artefactos`
+        // del proyecto — el hilo del terminal es un uuid nuevo por arranque, y una carpeta
+        // por hilo dejaría basura que nadie puede volver a abrir.
+        ...(carpetaDeArtefactos === undefined
+          ? {}
+          : { artefactos: carpetaDeArtefactos(estado.raiz, estado.hilo) }),
         // El simulador de verdad. Su ausencia en la máquina no se descubre aquí sino al
         // verificar, y entonces se dice en el turno — sin tumbar nada.
         verifier: new SimuladorVerifier(),
@@ -1176,7 +1185,8 @@ export async function main(argv: string[]): Promise<number> {
           // Con checkpointer PERSISTENTE, al revés que la consola de terminal: aquí cada
           // conversación tiene id en el índice, así que su hilo se puede reanudar — y esa
           // es la diferencia entre reabrir y releer.
-          crearEjecutor: (alAbrir) => crearEjecutorReal(alAbrir, crearCheckpointerDeProyecto),
+          crearEjecutor: (alAbrir) =>
+            crearEjecutorReal(alAbrir, crearCheckpointerDeProyecto, carpetaDeArtefactosDeSesion),
           dependenciasDeProyecto: (raiz) => ({
             ...adaptadoresDeProyecto(raiz),
             catalogoModelos: new CatalogoModelos(undefined, undefined, proveedoresPersonalizados),

@@ -34,7 +34,15 @@ import type { Cambio } from "./instantanea.js";
  */
 type AgenteFalso = ReturnType<typeof agenteFalso>;
 
-function agenteFalso(opts: { escribe?: boolean; interruptArgs?: Record<string, unknown> } = {}) {
+function agenteFalso(
+  opts: {
+    escribe?: boolean;
+    interruptArgs?: Record<string, unknown>;
+    /** Una SEGUNDA petición en la misma tanda: es lo que hace falta para probar que la
+     *  partición entre artefactos y ficheros del proyecto reparte bien. */
+    interruptArgs2?: Record<string, unknown>;
+  } = {}
+) {
   let ejecuto = false;
   let interrumpido = false; // true tras la primera ronda si opts.escribe
   return {
@@ -70,8 +78,22 @@ function agenteFalso(opts: { escribe?: boolean; interruptArgs?: Record<string, u
                       args: opts.interruptArgs ?? { file_path: "/a.xne" },
                       description: "[dev] quiere escribir un fichero",
                     },
+                    ...(opts.interruptArgs2 === undefined
+                      ? []
+                      : [
+                          {
+                            name: "write_file",
+                            args: opts.interruptArgs2,
+                            description: "[mockup] quiere escribir un fichero",
+                          },
+                        ]),
                   ],
-                  reviewConfigs: [{ allowedDecisions: ["approve", "reject"] }],
+                  reviewConfigs: [
+                    { allowedDecisions: ["approve", "reject"] },
+                    ...(opts.interruptArgs2 === undefined
+                      ? []
+                      : [{ allowedDecisions: ["approve", "reject"] }]),
+                  ],
                 },
               },
             ],
@@ -124,6 +146,7 @@ async function abrir(
   opts: {
     escribe?: boolean;
     interruptArgs?: Record<string, unknown>;
+    interruptArgs2?: Record<string, unknown>;
     raiz?: string;
     pedir?: (
       pendientes: PendienteDeAprobacion[],
@@ -136,7 +159,11 @@ async function abrir(
   } = {}
 ) {
   mocks.construirAgente.mockImplementation(() =>
-    agenteFalso({ escribe: opts.escribe, interruptArgs: opts.interruptArgs })
+    agenteFalso({
+      escribe: opts.escribe,
+      interruptArgs: opts.interruptArgs,
+      interruptArgs2: opts.interruptArgs2,
+    })
   );
   if (opts.cambios !== undefined) {
     const cambios = opts.cambios;
@@ -738,5 +765,58 @@ describe("las aprobaciones que se quedaron colgadas al morir el proceso", () => 
     // Arreglar el pasado no puede costar el presente.
     const roto = { getState: async () => { throw new Error("nope"); } };
     await expect(saldarAprobacionesHuerfanas(roto, "s1")).resolves.toBeUndefined();
+  });
+});
+
+describe("los artefactos no pasan por la aprobación", () => {
+  it("un artefacto se escribe SOLO, sin preguntarle a nadie", async () => {
+    // La aprobación protege el PROYECTO, y un artefacto ya no lo toca: vive en la carpeta
+    // de la sesión. Pedir permiso para dibujar un diagrama enseñaría a aprobar sin mirar.
+    const pedir = vi.fn(aprobarTodo());
+    const sesion = await abrir({
+      escribe: true,
+      interruptArgs: { file_path: "/artefactos/flujo.html" },
+      pedir,
+    });
+    const piel = pielFalsa();
+    await sesion.turno("dibuja el flujo", piel);
+
+    expect(pedir).not.toHaveBeenCalled();
+    expect(agenteDeLLamada(0).ejecuto()).toBe(true);
+  });
+
+  it("en una tanda MIXTA solo se pregunta por el fichero del proyecto", async () => {
+    // Es la mitad que importa de la partición: que el artefacto salga de la lista no puede
+    // llevarse por delante la aprobación del `.xne` que iba en la misma tanda.
+    const vistos: string[][] = [];
+    const sesion = await abrir({
+      escribe: true,
+      interruptArgs: { file_path: "/Clientes.xne" },
+      interruptArgs2: { file_path: "/artefactos/flujo.html" },
+      pedir: async (pendientes, ficheros) => {
+        vistos.push(pendientes.map((p) => ficheros.get(p.id) ?? "?"));
+        return new Map(pendientes.map((p) => [p.id, { type: "approve" } as Decision]));
+      },
+    });
+    await sesion.turno("crea la colección y dibújala", pielFalsa());
+
+    expect(vistos).toEqual([["/Clientes.xne"]]);
+  });
+
+  /**
+   * Una ruta con `..` NO es un artefacto por mucho que empiece por el prefijo: si lo fuera,
+   * escribir en el proyecto sin aprobación sería cuestión de escribir bien la ruta.
+   */
+  it("una ruta con `..` bajo el prefijo sigue pidiendo aprobación", async () => {
+    const pedir = vi.fn(rechazarTodo());
+    const sesion = await abrir({
+      escribe: true,
+      interruptArgs: { file_path: "/artefactos/../app.xml" },
+      pedir,
+    });
+    await sesion.turno("cuela una escritura", pielFalsa());
+
+    expect(pedir).toHaveBeenCalledTimes(1);
+    expect(agenteDeLLamada(0).ejecuto()).toBe(false);
   });
 });
