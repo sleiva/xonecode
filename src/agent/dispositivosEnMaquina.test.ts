@@ -1,6 +1,13 @@
 import { describe, it, expect } from "vitest";
 import { join } from "node:path";
-import { describirFallo, detectarDispositivos, TOPES_MS, type DependenciasDeDeteccion, type Ejecucion } from "./dispositivosEnMaquina.js";
+import {
+  describirFallo,
+  detectarDispositivos,
+  instalarHerramientaDeDispositivos,
+  TOPES_MS,
+  type DependenciasDeDeteccion,
+  type Ejecucion,
+} from "./dispositivosEnMaquina.js";
 
 /** Un ejecutor de pega: responde según el binario y apunta qué se le pidió. */
 function ejecutorDe(respuestas: Record<string, Ejecucion | Error>) {
@@ -39,6 +46,69 @@ describe("detectarDispositivos", () => {
     expect(informe.dispositivos).toEqual([]);
     // Ni un proceso lanzado: sin binario no hay a quién preguntar, y en Windows xcrun no se intenta.
     expect(llamadas).toEqual([]);
+  });
+
+  it("un destino apagado NO lanza su proceso, y su herramienta se declara «desactivada»", async () => {
+    // El sentido del ajuste es este: medir cuesta procesos en el equipo del usuario —adb
+    // arranca un demonio que se queda vivo, xcrun tarda segundos—, así que apagar tiene que
+    // dejar de lanzarlos de verdad y no solo esconder filas.
+    const { ejecutar, llamadas } = ejecutorDe({ adb: salida("List of devices attached\nABC device model:Pixel_8\n") });
+    const informe = await detectarDispositivos(
+      {
+        plataforma: "darwin",
+        entorno: { PATH: "/bin" },
+        home: "/Users/yo",
+        existe: (r) => r === "/bin/adb" || r === "/bin/emulator",
+        ejecutar,
+        ahora: () => new Date("2026-09-07T10:00:00Z"),
+      },
+      { androidEmulador: false, ios: false, iosSimulador: false }
+    );
+    expect(informe.herramientas.map((h) => [h.nombre, h.estado])).toEqual([
+      ["adb", "ok"],
+      ["emulator", "desactivada"],
+      ["xcrun", "desactivada"],
+      ["devicectl", "desactivada"],
+    ]);
+    // Solo adb: ni `emulator -list-avds`, ni siquiera `xcode-select -p`. Apagar los dos
+    // destinos de iOS ahorra TODOS sus procesos, no solo los dos `xcrun` del final.
+    expect(llamadas.map((l) => l.binario)).toEqual(["/bin/adb"]);
+    expect(informe.dispositivos.map((d) => d.nombre)).toEqual(["Pixel 8"]);
+    expect(informe.avds).toEqual([]);
+  });
+
+  it("con «Android físico» apagado y el emulador encendido, adb SÍ se llama y la lista se filtra", async () => {
+    // adb no distingue: trae los físicos y los emuladores en la misma lista, y un emulador
+    // arrancado no aparece en ningún otro sitio. Así que se llama igual y se filtra después.
+    const { ejecutar, llamadas } = ejecutorDe({
+      adb: salida("List of devices attached\nemulator-5554 device model:sdk_gphone64\nR58M12 device model:Galaxy_S21\n"),
+      emulator: salida("Pixel_8_API_34\n"),
+    });
+    const informe = await detectarDispositivos(
+      {
+        plataforma: "linux",
+        entorno: { PATH: "/bin" },
+        home: "/home/yo",
+        existe: (r) => r === "/bin/adb" || r === "/bin/emulator",
+        ejecutar,
+      },
+      { android: false }
+    );
+    expect(llamadas.map((l) => l.binario)).toEqual(["/bin/adb", "/bin/emulator"]);
+    expect(informe.dispositivos.map((d) => d.nombre)).toEqual(["sdk gphone64"]);
+    expect(informe.avds).toEqual(["Pixel_8_API_34"]);
+  });
+
+  it("sin ajustes se mira todo: ausente no es «no»", async () => {
+    const { ejecutar, llamadas } = ejecutorDe({ adb: salida("List of devices attached\n"), emulator: salida("") });
+    await detectarDispositivos({
+      plataforma: "linux",
+      entorno: { PATH: "/bin" },
+      home: "/home/yo",
+      existe: (r) => r === "/bin/adb" || r === "/bin/emulator",
+      ejecutar,
+    });
+    expect(llamadas.map((l) => l.binario)).toEqual(["/bin/adb", "/bin/emulator"]);
   });
 
   it("en Windows busca `adb.exe` en el PATH y luego en `%LOCALAPPDATA%\\Android\\Sdk`", async () => {
@@ -172,5 +242,82 @@ describe("describirFallo", () => {
   });
   it("ENOENT se dice como que el ejecutable no existe", () => {
     expect(describirFallo(Object.assign(new Error("spawn adb ENOENT"), { code: "ENOENT" }), 1000)).toBe("el ejecutable no existe");
+  });
+});
+
+describe("cómo se instala lo que falta", () => {
+  it("propone brew para adb cuando está, y NUNCA un comando con una ruta dentro", async () => {
+    // El comando se pinta en Ajustes y viaja por el cable, que puede ir por un túnel: una
+    // ruta del home del usuario ahí es la misma fuga que `sinRutas` evita con `ruta`.
+    const { ejecutar } = ejecutorDe({});
+    const informe = await detectarDispositivos({
+      plataforma: "darwin",
+      entorno: { PATH: "/opt/homebrew/bin" },
+      home: "/Users/yo",
+      existe: (r) => r === "/opt/homebrew/bin/brew",
+      ejecutar,
+    });
+    const adb = informe.herramientas.find((h) => h.nombre === "adb")!;
+    expect(adb.instalar).toEqual({ comando: "brew install --cask android-platform-tools", automatico: false });
+    for (const h of informe.herramientas) expect(h.instalar?.comando ?? "").not.toContain("/Users/yo");
+  });
+
+  it("sin sdkmanager ni brew no se inventa un instalador", async () => {
+    const { ejecutar } = ejecutorDe({});
+    const informe = await detectarDispositivos({
+      plataforma: "linux",
+      entorno: { PATH: "/bin" },
+      home: "/home/yo",
+      existe: () => false,
+      ejecutar,
+    });
+    expect(informe.herramientas.find((h) => h.nombre === "adb")!.instalar).toBeUndefined();
+    // Y en Linux tampoco se propone Xcode: no es que falte, es que no aplica.
+    expect(informe.herramientas.find((h) => h.nombre === "xcrun")!.instalar).toBeUndefined();
+  });
+
+  it("solo `xcode-select --install` es automático: lo demás se copia", async () => {
+    const { ejecutar } = ejecutorDe({ "xcode-select": salida("") });
+    const informe = await detectarDispositivos({
+      plataforma: "darwin",
+      entorno: { PATH: "/usr/bin" },
+      home: "/Users/yo",
+      existe: () => false,
+      ejecutar,
+    });
+    expect(informe.herramientas.find((h) => h.nombre === "xcrun")!.instalar).toEqual({
+      comando: "xcode-select --install",
+      automatico: true,
+    });
+  });
+});
+
+describe("instalarHerramientaDeDispositivos", () => {
+  it("lanza xcode-select --install en macOS, y nada en otro sistema", async () => {
+    const mac = ejecutorDe({ "xcode-select": salida("") });
+    await instalarHerramientaDeDispositivos("xcrun", { plataforma: "darwin", ejecutar: mac.ejecutar });
+    expect(mac.llamadas.map((l) => [l.binario, l.args])).toEqual([["xcode-select", ["--install"]]]);
+
+    const linux = ejecutorDe({});
+    await instalarHerramientaDeDispositivos("xcrun", { plataforma: "linux", ejecutar: linux.ejecutar });
+    expect(linux.llamadas).toEqual([]);
+  });
+
+  it("no hay instalador para adb: no se lanza nada", async () => {
+    const { ejecutar, llamadas } = ejecutorDe({});
+    await instalarHerramientaDeDispositivos("adb", { plataforma: "darwin", ejecutar });
+    expect(llamadas).toEqual([]);
+  });
+
+  it("un código de salida no nulo NO es un fallo: xcode-select sale con error si ya están puestas", async () => {
+    const fallo = Object.assign(new Error("already installed"), { code: 1 });
+    const { ejecutar } = ejecutorDe({ "xcode-select": fallo });
+    await expect(instalarHerramientaDeDispositivos("xcrun", { plataforma: "darwin", ejecutar })).resolves.toBeUndefined();
+  });
+
+  it("un cuelgue SÍ se propaga: eso no lo arregla medir después", async () => {
+    const colgado = Object.assign(new Error("timeout"), { killed: true });
+    const { ejecutar } = ejecutorDe({ "xcode-select": colgado });
+    await expect(instalarHerramientaDeDispositivos("xcrun", { plataforma: "darwin", ejecutar })).rejects.toThrow();
   });
 });

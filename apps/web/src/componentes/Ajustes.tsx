@@ -10,8 +10,20 @@ import {
   IconFollowsystemOutline16,
   IconDataOutline16,
   IconUserOutline16,
+  IconLinkOutline16,
 } from "@deepseek-ai/dsh-client-ui-primitives";
-import type { AgenteDelCable, ProveedorDeModelos } from "../tipos.js";
+import type {
+  AgenteDelCable,
+  AjustesDeDispositivos,
+  Dispositivo,
+  Herramienta,
+  InformeDeDispositivos,
+  NombreDeHerramienta,
+  PlataformaDeDispositivo,
+  ProveedorDeModelos,
+} from "../tipos.js";
+import { seMira } from "../tipos.js";
+import { ETIQUETA_DE_ESTADO, inventario } from "../inventarioDeDispositivos.js";
 import { Agentes } from "./Agentes.js";
 import { Pregunta } from "./Pregunta.js";
 import { urlDeEntornoAceptable, AVISO_DE_URL } from "./Wizard.js";
@@ -45,7 +57,7 @@ import estilos from "./Ajustes.module.css";
  * pregunta: dentro de la fila que se está editando, para que no aparezca detrás de la
  * ventana.
  */
-export type SeccionDeAjustes = "apariencia" | "modelos" | "entornos" | "agentes";
+export type SeccionDeAjustes = "apariencia" | "modelos" | "entornos" | "agentes" | "dispositivos";
 
 /**
  * Las tres secciones, en el orden del rediseño —Modelos primero, que además es la que se
@@ -68,7 +80,61 @@ const SECCIONES: readonly {
   { id: "apariencia", etiqueta: "Apariencia", Icono: IconDarkOutline16 },
   { id: "entornos", etiqueta: "Entornos", Icono: IconDataOutline16 },
   { id: "agentes", etiqueta: "Subagentes", Icono: IconUserOutline16 },
+  // `IconLinkOutline16` y no un icono de móvil: en el paquete instalado no hay ninguno
+  // —comprobado sobre sus exports, que es la lección de `IconAgentPresetOutline16`, el que
+  // no existía y hacía reventar a React—. Y el enlace dice lo que esta sección es: con qué
+  // se conecta esta consola para probar la app.
+  { id: "dispositivos", etiqueta: "Dispositivos", Icono: IconLinkOutline16 },
 ];
+
+/**
+ * Los cuatro destinos, con la herramienta que los descubre y qué se puede decir de cada
+ * uno. El texto de la herramienta no es decoración: es lo que explica por qué un destino
+ * encendido puede seguir sin enseñar nada («adb no está instalado»).
+ */
+const DESTINOS: readonly {
+  id: PlataformaDeDispositivo;
+  etiqueta: string;
+  detalle: string;
+  /** Las herramientas que hay que mirar para saber si este destino puede funcionar. */
+  herramientas: readonly Herramienta["nombre"][];
+  plataforma: Dispositivo["plataforma"];
+  clases: readonly Dispositivo["clase"][];
+}[] = [
+  { id: "android", etiqueta: "Android", detalle: "teléfonos y tablets por USB o por red, con adb", herramientas: ["adb"], plataforma: "android", clases: ["fisico"] },
+  { id: "androidEmulador", etiqueta: "Android Sim", detalle: "los AVD del emulador del SDK", herramientas: ["emulator", "adb"], plataforma: "android", clases: ["emulador"] },
+  { id: "ios", etiqueta: "iOS", detalle: "iPhone y iPad conectados, con devicectl (Xcode 15+)", herramientas: ["devicectl"], plataforma: "ios", clases: ["fisico"] },
+  { id: "iosSimulador", etiqueta: "iOS Sim", detalle: "los simuladores de Xcode, con simctl", herramientas: ["xcrun"], plataforma: "ios", clases: ["simulador"] },
+];
+
+/**
+ * Los REQUISITOS: las herramientas del equipo, que son otra cosa que los destinos. Un
+ * destino se elige; un requisito está o no está, y si no está se instala. Mezclarlos en una
+ * sola lista era lo que hacía que «Android Sim · emulator no está instalada» pareciera un
+ * ajuste que se puede cambiar con el interruptor de al lado.
+ */
+const REQUISITOS: readonly { nombre: Herramienta["nombre"]; etiqueta: string; para: string }[] = [
+  { nombre: "adb", etiqueta: "adb", para: "hablar con teléfonos, tablets y emuladores de Android" },
+  { nombre: "emulator", etiqueta: "emulator", para: "listar y arrancar los AVD del SDK de Android" },
+  { nombre: "xcrun", etiqueta: "Xcode command line tools", para: "los simuladores de iOS (simctl)" },
+  { nombre: "devicectl", etiqueta: "devicectl", para: "los iPhone y iPad conectados (Xcode 15+)" },
+];
+
+/** La hora de la foto. Si el ISO no parsea se enseña tal cual: inventar una hora es peor. */
+function horaDe(iso: string): string {
+  const fecha = new Date(iso);
+  if (Number.isNaN(fecha.getTime())) return iso;
+  return fecha.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+}
+
+/** Qué se dice de una herramienta en la fila de su destino. */
+const ETIQUETA_DE_HERRAMIENTA: Record<Herramienta["estado"], string> = {
+  ok: "disponible",
+  "no-encontrada": "no está instalada",
+  fallo: "falló",
+  "no-aplica": "no aplica en este sistema",
+  desactivada: "no se ha mirado",
+};
 
 export type Apariencia = "sistema" | "claro" | "oscuro";
 
@@ -98,6 +164,12 @@ export function Ajustes({
   apariencia,
   secreto,
   alCambiarApariencia,
+  dispositivos,
+  ajustesDeDispositivos,
+  alCambiarDispositivos,
+  alActualizarDispositivos,
+  alInstalarHerramienta,
+  conectado = true,
   agentes,
   hayProyecto,
   alGuardarAgente,
@@ -132,6 +204,31 @@ export function Ajustes({
   /** La pregunta oculta en vuelo, si la hay: se pinta DENTRO de la fila que se edita. */
   secreto?: string;
   alCambiarApariencia: (apariencia: Apariencia) => void;
+  /**
+   * La foto de la máquina, la misma que pinta el escritorio. Ausente = todavía no ha
+   * llegado, y se dice: una lista vacía afirmaría un equipo sin nada.
+   */
+  dispositivos?: InformeDeDispositivos;
+  /**
+   * Qué destinos se miran. Ausente = no ha llegado el mensaje; `{}` = nadie ha elegido y se
+   * miran todos.
+   */
+  ajustesDeDispositivos?: AjustesDeDispositivos;
+  /**
+   * Cambia los cuatro interruptores. Se manda el objeto ENTERO y no el que cambió: el
+   * servidor los guarda juntos, y así no hay dos ideas de cuál es el estado actual.
+   * Ausente = esta ejecución no puede cambiarlos y no se pintan interruptores.
+   */
+  alCambiarDispositivos?: (ajustes: AjustesDeDispositivos) => void;
+  /** Volver a medir. Ausente = no se ofrece. */
+  alActualizarDispositivos?: () => void;
+  /**
+   * Instalar una herramienta que falta. Viaja el NOMBRE, nunca el comando: qué se lanza lo
+   * decide el servidor. Ausente = no se ofrece el botón.
+   */
+  alInstalarHerramienta?: (herramienta: NombreDeHerramienta) => void;
+  /** Sin cable no se manda nada: lo que escribe en el servidor se apaga. */
+  conectado?: boolean;
   /** Abre la petición de clave de ese proveedor (`/provider <id>` del otro lado). */
   alPedirClave: (proveedor: string) => void;
   alBorrarClave: (proveedor: string) => void;
@@ -270,6 +367,184 @@ export function Ajustes({
                   </li>
                 ))}
               </ul>
+            </>
+          ) : null}
+
+          {seccion === "dispositivos" ? (
+            <>
+              <h2 className={estilos.encabezado}>Dispositivos</h2>
+              <p className={estilos.nota}>
+                Dónde se prueba la app. Se guarda con el equipo y no con el proyecto: el mismo Mac tiene los
+                mismos simuladores para todos.
+              </p>
+
+              {/*
+                DOS bloques y no una lista, porque son dos cosas distintas: un requisito está
+                o no está —y si no está, se instala—, y un destino se elige. Juntos, «Android
+                Sim · emulator no está instalada» se leía como un ajuste que el interruptor de
+                al lado podía arreglar.
+              */}
+              <h3 className={estilos.subencabezado}>Requisitos</h3>
+              {dispositivos === undefined ? (
+                <p className={estilos.vacio}>Todavía no ha llegado ninguna medida de este equipo.</p>
+              ) : (
+                <ul className={estilos.filas}>
+                  {REQUISITOS.map((r) => {
+                    const h = dispositivos.herramientas.find((x) => x.nombre === r.nombre);
+                    // Verde SOLO con «ok»: es lo único que significa disponible y
+                    // configurado. «Desactivada» no se pinta en verde ni en rojo —no se ha
+                    // mirado, y afirmar cualquiera de las dos sería inventarlo.
+                    const estado = h?.estado;
+                    return (
+                      <li key={r.nombre} className={estilos.fila}>
+                        <span
+                          className={estilos.punto}
+                          data-herramienta={estado ?? "sin-medir"}
+                          aria-label={estado === undefined ? "sin medir" : ETIQUETA_DE_HERRAMIENTA[estado]}
+                        />
+                        <span className={estilos.nombre}>{r.etiqueta}</span>
+                        <span className={estilos.detalle}>
+                          {estado === undefined ? r.para : `${ETIQUETA_DE_HERRAMIENTA[estado]} · ${r.para}`}
+                          {h?.detalle === undefined || estado === "ok" ? null : ` · ${h.detalle}`}
+                        </span>
+                        {/*
+                          Instalar solo se ofrece cuando FALTA y se sabe cómo. Y el comando se
+                          enseña siempre: quien pulsa un botón que instala software tiene
+                          derecho a saber qué se va a lanzar en su máquina.
+                        */}
+                        {h?.instalar === undefined ? null : h.instalar.automatico ? (
+                          <Button
+                            variant="outline"
+                            className={estilos.accion}
+                            disabled={!conectado || alInstalarHerramienta === undefined}
+                            title={h.instalar.comando}
+                            onClick={() => alInstalarHerramienta?.(r.nombre)}
+                          >
+                            Instalar
+                          </Button>
+                        ) : (
+                          <code className={estilos.comando} title="cópialo en un terminal">
+                            {h.instalar.comando}
+                          </code>
+                        )}
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
+
+              <h3 className={estilos.subencabezado}>Dispositivos</h3>
+              {/*
+                El INVENTARIO, no cuatro interruptores. El botón de antes decía «Se mira» al
+                lado de un punto verde y se leía como si concediera la capacidad: el verde ya
+                dice que se puede usar, así que el botón sobraba justo donde estaba. Lo que
+                una persona quiere ver aquí es qué teléfonos y qué simuladores hay — y luego,
+                cuál usa el agente, que es una elección de la SESIÓN y por eso todavía no
+                vive en esta ventana (dice «Configuración global» en la cabecera).
+              */}
+              {dispositivos === undefined ? (
+                <p className={estilos.vacio}>Todavía no ha llegado ninguna medida de este equipo.</p>
+              ) : (
+                (() => {
+                  const { fisicos, virtuales } = inventario(dispositivos);
+                  return (
+                    <>
+                      <h4 className={estilos.subsubencabezado}>Teléfonos y tablets</h4>
+                      {fisicos.length === 0 ? (
+                        <p className={estilos.vacio}>Ninguno conectado.</p>
+                      ) : (
+                        <ul className={estilos.filas}>
+                          {fisicos.map((d) => (
+                            <li key={d.id} className={estilos.fila}>
+                              <span
+                                className={estilos.punto}
+                                data-herramienta={d.estado === "conectado" ? "ok" : "otro"}
+                                aria-label={ETIQUETA_DE_ESTADO[d.estado]}
+                              />
+                              <span className={estilos.nombre}>{d.nombre}</span>
+                              <span className={estilos.detalle}>
+                                {d.plataforma === "ios" ? "iOS" : "Android"} · {ETIQUETA_DE_ESTADO[d.estado]}
+                                {d.detalle === undefined ? "" : ` · ${d.detalle}`}
+                              </span>
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+
+                      <h4 className={estilos.subsubencabezado}>Simuladores y emuladores</h4>
+                      {virtuales.length === 0 ? (
+                        <p className={estilos.vacio}>Ninguno disponible.</p>
+                      ) : (
+                        // Con scroll: esta máquina tiene 35 simuladores, y el panel «Tu
+                        // equipo» los CUENTA justamente por eso. Aquí sí se listan —es donde
+                        // se elegirá uno— pero acotados en alto, para que la sección de
+                        // requisitos de arriba no se vaya de la pantalla.
+                        <ul className={`${estilos.filas} ${estilos.listaLarga}`}>
+                          {virtuales.map((d) => (
+                            <li key={d.id} className={estilos.fila}>
+                              <span
+                                className={estilos.punto}
+                                data-herramienta={d.estado === "arrancado" ? "ok" : "otro"}
+                                aria-label={ETIQUETA_DE_ESTADO[d.estado]}
+                              />
+                              <span className={estilos.nombre}>{d.nombre}</span>
+                              <span className={estilos.detalle}>
+                                {d.plataforma === "ios" ? "iOS" : "Android"} · {ETIQUETA_DE_ESTADO[d.estado]}
+                              </span>
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+                    </>
+                  );
+                })()
+              )}
+
+              {/*
+                El filtro de MEDIDA, degradado a lo que es: cuatro casillas, no cuatro
+                botones al lado de un punto verde. Sigue existiendo porque apagar uno ahorra
+                procesos de verdad en este equipo —adb arranca un demonio que se queda vivo—,
+                pero ya no compite con el estado de nada.
+              */}
+              {alCambiarDispositivos === undefined ? null : (
+                <p className={estilos.nota}>
+                  Buscar en:{" "}
+                  {DESTINOS.map((d, i) => (
+                    <span key={d.id}>
+                      {i === 0 ? null : " · "}
+                      <label className={estilos.casillaEnLinea}>
+                        <input
+                          type="checkbox"
+                          checked={seMira(ajustesDeDispositivos, d.id)}
+                          disabled={!conectado}
+                          // Se manda el objeto ENTERO con el cambio dentro: el servidor los
+                          // guarda juntos, y mandar solo el que cambió obligaría a fusionar
+                          // al otro lado con dos ideas de cuál es el estado.
+                          onChange={() =>
+                            alCambiarDispositivos({ ...ajustesDeDispositivos, [d.id]: !seMira(ajustesDeDispositivos, d.id) })
+                          }
+                        />
+                        {d.etiqueta}
+                      </label>
+                    </span>
+                  ))}
+                </p>
+              )}
+              <p className={estilos.nota}>
+                {dispositivos === undefined
+                  ? "Todavía no ha llegado ninguna medida de este equipo."
+                  : `Medido a las ${horaDe(dispositivos.medido)}. Lo que no se busca no se mide: adb arranca un demonio que se queda vivo, y xcrun tarda segundos.`}{" "}
+                {alActualizarDispositivos === undefined ? null : (
+                  <button type="button" className={estilos.enlace} disabled={!conectado} onClick={alActualizarDispositivos}>
+                    Volver a mirar
+                  </button>
+                )}
+              </p>
+              <p className={estilos.nota}>
+                Por ahora xonecode solo los DESCUBRE. Elegir con cuál trabaja el agente es una decisión de la
+                sesión, no de esta ventana; conectar por red, arrancar un emulador o instalar la app tampoco
+                está cableado todavía.
+              </p>
             </>
           ) : null}
 

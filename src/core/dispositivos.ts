@@ -7,9 +7,12 @@
  * probar cada formato contra una salida real sin que `npm test` necesite ni adb ni Xcode.
  *
  * Tres estados por herramienta y no un booleano: «no encontrada», «falló» (con el motivo) y
- * «bien». Y un cuarto, «no aplica», para lo que no se puede detectar en este sistema —Xcode
- * en Windows— y que no es lo mismo que «no hay». El escritorio los pinta distintos: decir
- * «sin iOS» en un Linux sería afirmar algo que la máquina no puede saber.
+ * «bien». Un cuarto, «no aplica», para lo que no se puede detectar en este sistema —Xcode
+ * en Windows— y que no es lo mismo que «no hay»: el escritorio los pinta distintos, porque
+ * decir «sin iOS» en un Linux sería afirmar algo que la máquina no puede saber. Y un
+ * quinto, «desactivada», para el destino que la persona apagó en Ajustes
+ * (`core/settings.ts#AjustesDeDispositivos`) — ese no se consulta, y decir que su
+ * herramienta no está sería mentir sobre la máquina.
  */
 
 export type SistemaOperativo = "mac" | "windows" | "linux" | "otro";
@@ -18,9 +21,31 @@ export type NombreDeHerramienta = "adb" | "emulator" | "xcrun" | "devicectl";
 
 export interface Herramienta {
   nombre: NombreDeHerramienta;
-  estado: "ok" | "no-encontrada" | "fallo" | "no-aplica";
+  /**
+   * Cinco estados, y los cinco dicen algo distinto: «ok», «no-encontrada», «fallo» (con el
+   * motivo), «no-aplica» —lo que este sistema no puede saber, iOS en Windows— y
+   * **«desactivada»**, que es el destino que la persona ha apagado en Ajustes.
+   *
+   * «desactivada» no se pliega en «no-aplica» ni en «no-encontrada»: una dice que la
+   * máquina no puede, la otra que falta el binario, y esta que no se ha mirado a propósito
+   * — y es la única de las tres que se arregla con un clic.
+   */
+  estado: "ok" | "no-encontrada" | "fallo" | "no-aplica" | "desactivada";
   /** Dónde se encontró, cuando se encontró. */
   ruta?: string;
+  /**
+   * Cómo se instala, cuando falta y se sabe cómo. **El comando no puede llevar ninguna ruta
+   * de la máquina**: se pinta en la ventana y viaja por el cable, que puede ir por un túnel
+   * (`--anfitrion`) — es la misma regla por la que `ruta` se queda en el host (`sinRutas`).
+   * Por eso solo se propone lo que se resuelve por el PATH.
+   *
+   * `automatico` es si xonecode puede lanzarlo ÉL. Hoy solo `xcode-select --install`, que
+   * devuelve en el acto y abre el diálogo de Apple. Lo demás se ofrece para copiar y
+   * pegarlo en un terminal: `brew install --cask` puede tardar minutos y pedir la
+   * contraseña de administrador, y un proceso sin terminal detrás se quedaría esperando esa
+   * contraseña para siempre — un botón que se cuelga es peor que no tener botón.
+   */
+  instalar?: { comando: string; automatico: boolean };
   /** El motivo del fallo, o por qué no aplica. Nunca la salida cruda entera. */
   detalle?: string;
 }

@@ -2,7 +2,7 @@ import { mkdirSync, mkdtempSync, readFileSync, statSync, writeFileSync } from "n
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, it, expect } from "vitest";
-import { cargarSettings, guardarEntorno, guardarWorkspace, rutaSettings, SettingsRotosEnDisco } from "./settingsEnDisco.js";
+import { cargarSettings, guardarDispositivos, guardarEntorno, guardarWorkspace, rutaSettings, SettingsRotosEnDisco } from "./settingsEnDisco.js";
 
 /** Cada test recibe su propia «casa» temporal: nunca toca el ~/.xonecode real. */
 function casa(): string {
@@ -61,6 +61,35 @@ describe("settingsEnDisco", () => {
     const ruta = join(c, ".xonecode", "settings.json");
     expect(statSync(ruta).mode & 0o777).toBe(0o600);
     expect(statSync(join(c, ".xonecode")).mode & 0o777).toBe(0o700);
+  });
+
+  it("guardarDispositivos escribe los cuatro interruptores sin tocar los entornos", () => {
+    const c = casa();
+    guardarEntorno(c, { id: "a", nombre: "A", url: "https://a/mcp" });
+    guardarDispositivos(c, { android: true, ios: false });
+    const { settings } = cargarSettings(c);
+    expect(settings.dispositivos).toEqual({ android: true, ios: false });
+    expect(settings.entornos.map((e) => e.id)).toEqual(["a"]);
+  });
+
+  it("guardarDispositivos SUSTITUYE, no fusiona: lo que ya no viene deja de estar apagado", () => {
+    // Son cuatro interruptores que la ventana manda juntos. Fusionando, un `ios: false` de
+    // antes seguiría vivo después de encenderlo en la interfaz — apagado sin que nadie lo
+    // haya pedido y sin que se vea dónde.
+    const c = casa();
+    guardarDispositivos(c, { ios: false, iosSimulador: false });
+    guardarDispositivos(c, { ios: false });
+    expect(cargarSettings(c).settings.dispositivos).toEqual({ ios: false });
+  });
+
+  it("guardar TODO encendido borra la clave: ausente y «todos» significan lo mismo", () => {
+    const c = casa();
+    guardarEntorno(c, { id: "a", nombre: "A", url: "https://a/mcp" });
+    guardarDispositivos(c, { ios: false });
+    guardarDispositivos(c, {});
+    const crudo = JSON.parse(readFileSync(join(c, ".xonecode", "settings.json"), "utf8")) as Record<string, unknown>;
+    expect("dispositivos" in crudo).toBe(false);
+    expect(cargarSettings(c).settings.entornos.map((e) => e.id)).toEqual(["a"]);
   });
 
   it("guardarWorkspace fija la base sin tocar los entornos ya guardados", () => {

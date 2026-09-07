@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { validarSettings, rutaDeWorkspace } from "./settings.js";
+import { validarSettings, rutaDeWorkspace, seMira, PLATAFORMAS_DE_DISPOSITIVO } from "./settings.js";
 
 describe("validarSettings", () => {
   it("conserva los entornos bien formados, sin avisos", () => {
@@ -75,5 +75,27 @@ describe("rutaDeWorkspace", () => {
     expect(() => rutaDeWorkspace("/base", "webstudio", "../fuera")).toThrow();
     expect(() => rutaDeWorkspace("/base", "..", "p")).toThrow();
     expect(() => rutaDeWorkspace("/base", "webstudio", "a/b")).toThrow();
+  });
+});
+
+describe("los destinos de prueba en settings.json", () => {
+  it("solo booleanos, y «false» de CADENA no cuela por verdadero", () => {
+    const { settings } = validarSettings({
+      entornos: [],
+      dispositivos: { android: false, ios: true, iosSimulador: "false", androidEmulador: 1 },
+    });
+    // La cadena y el número se descartan como cualquier campo desconocido, y entonces manda
+    // la omisión: mirar. Tomar `"false"` por falso es la trampa que este repo ya pagó dos
+    // veces, y aquí apagaría un destino que nadie apagó.
+    expect(settings.dispositivos).toEqual({ android: false, ios: true });
+    expect(seMira(settings.dispositivos, "iosSimulador")).toBe(true);
+    expect(seMira(settings.dispositivos, "android")).toBe(false);
+  });
+
+  it("ausente y vacío son lo mismo aquí —mirar todo— y no se guarda un objeto vacío", () => {
+    expect(validarSettings({ entornos: [] }).settings.dispositivos).toBeUndefined();
+    expect(validarSettings({ entornos: [], dispositivos: {} }).settings.dispositivos).toBeUndefined();
+    expect(validarSettings({ entornos: [], dispositivos: "no" }).settings.dispositivos).toBeUndefined();
+    for (const p of PLATAFORMAS_DE_DISPOSITIVO) expect(seMira(undefined, p)).toBe(true);
   });
 });

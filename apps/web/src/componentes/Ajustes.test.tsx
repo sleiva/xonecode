@@ -203,3 +203,125 @@ describe("Ajustes", () => {
     expect(alCambiarApariencia).toHaveBeenCalledWith("claro");
   });
 });
+
+const INFORME = {
+  sistema: "mac" as const,
+  herramientas: [
+    { nombre: "adb" as const, estado: "ok" as const },
+    { nombre: "emulator" as const, estado: "no-encontrada" as const, detalle: "ni en el PATH" },
+    { nombre: "xcrun" as const, estado: "ok" as const },
+    { nombre: "devicectl" as const, estado: "desactivada" as const },
+  ],
+  dispositivos: [
+    { id: "R58", nombre: "Galaxy S21", plataforma: "android" as const, clase: "fisico" as const, estado: "conectado" as const },
+    { id: "S1", nombre: "iPhone 16", plataforma: "ios" as const, clase: "simulador" as const, estado: "arrancado" as const },
+  ],
+  avds: [],
+  medido: "2026-09-07T10:00:00.000Z",
+};
+
+describe("Ajustes: la sección de Dispositivos", () => {
+  afterEach(cleanup);
+
+  const abrir = (extra: Record<string, unknown> = {}) => {
+    render(<Ajustes {...MANEJADORES} dispositivos={INFORME} ajustesDeDispositivos={{}} alCambiarDispositivos={() => {}} {...extra} />);
+    fireEvent.click(screen.getByRole("button", { name: "Dispositivos" }));
+    return screen.getByRole("heading", { name: "Dispositivos", level: 2 }).parentElement!;
+  };
+
+  it("los REQUISITOS y el INVENTARIO son dos bloques, no una lista", () => {
+    const panel = abrir();
+    // Un requisito está o no está —y si no está, se instala—; un dispositivo es algo que
+    // hay. Mezclados, «emulator no está instalada» se leía como un ajuste que el botón de
+    // al lado podía arreglar.
+    expect(within(panel).getByRole("heading", { name: "Requisitos" })).toBeTruthy();
+    expect(within(panel).getByRole("heading", { name: "Dispositivos", level: 3 })).toBeTruthy();
+    for (const nombre of ["adb", "emulator", "Xcode command line tools", "devicectl"]) {
+      expect(within(panel).getByText(nombre)).toBeTruthy();
+    }
+  });
+
+  it("el inventario va en dos grupos: lo que se enchufa y lo que se arranca", () => {
+    const panel = abrir();
+    expect(within(panel).getByRole("heading", { name: "Teléfonos y tablets" })).toBeTruthy();
+    expect(within(panel).getByRole("heading", { name: "Simuladores y emuladores" })).toBeTruthy();
+    expect(within(panel).getByText("Galaxy S21")).toBeTruthy();
+    expect(within(panel).getByText("iPhone 16")).toBeTruthy();
+  });
+
+  it("un AVD definido y sin arrancar TAMBIÉN es un simulador disponible", () => {
+    // `emulator -list-avds` los da por nombre y no salen en `adb devices` hasta que
+    // arrancan: sin esto, «los simuladores disponibles» dejaba fuera los de Android.
+    const panel = abrir({ dispositivos: { ...INFORME, avds: ["Pixel_8_API_34"] } });
+    expect(within(panel).getByText("Pixel_8_API_34")).toBeTruthy();
+    expect(within(panel).getByText(/Android · apagado/)).toBeTruthy();
+  });
+
+  it("verde SOLO lo disponible: lo que falta va hueco, y sin medir no se afirma nada", () => {
+    const panel = abrir();
+    const estados = [...panel.querySelectorAll("[data-herramienta]")].map((p) => p.getAttribute("data-herramienta"));
+    // Requisitos: adb ok, emulator falta, xcrun ok, devicectl desactivada. Luego el
+    // inventario: el Galaxy conectado y el iPhone arrancado, los dos a mano.
+    expect(estados).toEqual(["ok", "no-encontrada", "ok", "desactivada", "ok", "ok"]);
+  });
+
+  it("una herramienta que falta ofrece cómo instalarla, y el comando se ENSEÑA", () => {
+    const alInstalarHerramienta = vi.fn();
+    const conFaltas = {
+      ...INFORME,
+      herramientas: [
+        { nombre: "adb" as const, estado: "no-encontrada" as const, instalar: { comando: "brew install --cask android-platform-tools", automatico: false } },
+        { nombre: "emulator" as const, estado: "no-encontrada" as const },
+        { nombre: "xcrun" as const, estado: "no-encontrada" as const, instalar: { comando: "xcode-select --install", automatico: true } },
+        { nombre: "devicectl" as const, estado: "no-encontrada" as const, instalar: { comando: "xcode-select --install", automatico: true } },
+      ],
+    };
+    abrir({ dispositivos: conFaltas, alInstalarHerramienta });
+    // El que xonecode puede lanzar él: botón. Viaja el NOMBRE, nunca el comando.
+    fireEvent.click(screen.getAllByRole("button", { name: "Instalar" })[0]!);
+    expect(alInstalarHerramienta).toHaveBeenCalledWith("xcrun");
+    // El que no: el comando a la vista para copiarlo, sin botón que se pueda colgar.
+    expect(screen.getByText("brew install --cask android-platform-tools")).toBeTruthy();
+    // Y emulator no propone nada: no se inventa un instalador que no se conoce.
+    expect(screen.getAllByRole("button", { name: "Instalar" })).toHaveLength(2);
+  });
+
+  it("el filtro de medida son CASILLAS, y marcar una manda el objeto entero", () => {
+    // Eran cuatro botones «Se mira» al lado de un punto verde, y se leían como si
+    // concedieran la capacidad: el verde ya dice que se puede usar.
+    const alCambiarDispositivos = vi.fn();
+    render(
+      <Ajustes {...MANEJADORES} dispositivos={INFORME} ajustesDeDispositivos={{ ios: false }} alCambiarDispositivos={alCambiarDispositivos} />
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Dispositivos" }));
+    const casillas = screen.getAllByRole("checkbox") as HTMLInputElement[];
+    expect(casillas).toHaveLength(4);
+    // Ausente = se busca; solo iOS está desmarcado.
+    expect(casillas.map((c) => c.checked)).toEqual([true, true, false, true]);
+    fireEvent.click(casillas[0]!);
+    expect(alCambiarDispositivos).toHaveBeenCalledWith({ ios: false, android: false });
+  });
+
+  it("sin foto no se afirma nada de la máquina", () => {
+    render(<Ajustes {...MANEJADORES} alCambiarDispositivos={() => {}} />);
+    fireEvent.click(screen.getByRole("button", { name: "Dispositivos" }));
+    expect(screen.getAllByText(/todavía no ha llegado ninguna medida/i)).toHaveLength(3);
+    expect(screen.queryByText("Galaxy S21")).toBeNull();
+  });
+
+  it("sin cable las casillas se apagan: lo que escribe en el servidor no se ofrece", () => {
+    render(
+      <Ajustes
+        {...MANEJADORES}
+        conectado={false}
+        dispositivos={INFORME}
+        ajustesDeDispositivos={{}}
+        alCambiarDispositivos={() => {}}
+        alActualizarDispositivos={() => {}}
+      />
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Dispositivos" }));
+    for (const c of screen.getAllByRole("checkbox")) expect(c).toHaveProperty("disabled", true);
+    expect(screen.getByRole("button", { name: /volver a mirar/i })).toHaveProperty("disabled", true);
+  });
+});
