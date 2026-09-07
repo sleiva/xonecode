@@ -2226,3 +2226,139 @@ describe("los artefactos de la sesión", () => {
     });
   });
 });
+
+/**
+ * Ejecutar un paso de la receta de instalación: uno a la vez, con su log y su cancelación.
+ *
+ * El ejecutor entra por opción, como el resto de lo que toca la máquina: aquí no se lanza
+ * ningún proceso. Lo que se afirma es el CABLE — qué se emite, en qué orden, y qué NO se
+ * lanza dos veces.
+ */
+describe("los pasos de una receta, ejecutados desde el cable", () => {
+  /** Un ejecutor de pega: guarda el `alSalirLinea` para poder hablar por él. */
+  function ejecutorDeReceta() {
+    const lanzados: { receta: string; paso: number }[] = [];
+    let decir: ((linea: string) => void) | undefined;
+    let acabar: ((r: { estado: string; motivo?: string; ms: number }) => void) | undefined;
+    let cancelado = false;
+    return {
+      lanzados,
+      hablar: (linea: string) => decir?.(linea),
+      acabar: (estado: string, motivo?: string) => acabar?.({ estado, ...(motivo === undefined ? {} : { motivo }), ms: 5 }),
+      get cancelado() {
+        return cancelado;
+      },
+      correr: (receta: string, paso: number, alSalirLinea: (linea: string) => void) => {
+        lanzados.push({ receta, paso });
+        decir = alSalirLinea;
+        return {
+          titulo: "Descargando el emulador",
+          cancelar: () => {
+            cancelado = true;
+          },
+          terminado: new Promise<{ estado: string; motivo?: string; ms: number }>((r) => {
+            acabar = r;
+          }),
+        };
+      },
+    };
+  }
+
+  const conectar = async (opciones: Parameters<typeof montarRutas>[2]) => {
+    const servidor = servidorDeMentira();
+    const vestibulo = vestibuloDePrueba();
+    montarRutas(servidor, vestibulo, opciones);
+    const cliente = clienteDeMentira();
+    await servidor.rutas.get(`GET ${RUTA_EVENTOS}`)!(cliente.peticion, cliente.respuesta);
+    await asentar();
+    return { cliente, accion: servidor.rutas.get(`POST ${RUTA_ACCION}`)!, vestibulo };
+  };
+  const progresos = (cliente: ReturnType<typeof clienteDeMentira>) =>
+    cliente.recibidos.filter((m) => m.clase === "instalacion") as Extract<MensajeAlCliente, { clase: "instalacion" }>[];
+
+  it("emite «corriendo» al lanzar, el log al hablar, y cómo acabó", async () => {
+    const e = ejecutorDeReceta();
+    let medidas = 0;
+    const { cliente, accion } = await conectar({
+      correrPasoDeReceta: e.correr,
+      detectarDispositivos: async () => {
+        medidas += 1;
+        return { sistema: "mac", herramientas: [], dispositivos: [], avds: [], recetas: [], medido: "2026-09-07T10:00:00.000Z" };
+      },
+    });
+
+    expect(await enviarMensaje(accion, { clase: "receta", id: "android-emulador", paso: 3, accion: "ejecutar" })).toBe(204);
+    await asentar();
+    expect(e.lanzados).toEqual([{ receta: "android-emulador", paso: 3 }]);
+    expect(progresos(cliente).at(-1)).toMatchObject({ estado: "corriendo", titulo: "Descargando el emulador", lineas: [] });
+
+    e.hablar("Downloading 58%");
+    e.acabar("ok");
+    await asentar();
+    const ultimo = progresos(cliente).at(-1)!;
+    expect(ultimo.estado).toBe("ok");
+    // El último progreso lleva el log aunque no haya pasado el plazo: es el que lo completa.
+    expect(ultimo.lineas).toContain("Downloading 58%");
+    // Y al terminar se vuelve a MEDIR: la foto es lo que dice si el paso quedó hecho, no lo
+    // que conteste el instalador. Una al conectar y otra tras el paso.
+    expect(medidas).toBe(2);
+  });
+
+  it("un segundo «ejecutar» mientras corre NO lanza otro proceso", async () => {
+    // Dos `sdkmanager` sobre el mismo SDK es una carrera con una instalación de por medio, y
+    // la máquina es UNA aunque haya dos pestañas. Se reenvía el estado, que es lo que la otra
+    // pestaña necesita para pintar el log que ya va por dentro.
+    const e = ejecutorDeReceta();
+    const { cliente, accion } = await conectar({ correrPasoDeReceta: e.correr });
+    await enviarMensaje(accion, { clase: "receta", id: "android-emulador", paso: 3, accion: "ejecutar" });
+    await asentar();
+    await enviarMensaje(accion, { clase: "receta", id: "android-emulador", paso: 4, accion: "ejecutar" });
+    await asentar();
+    expect(e.lanzados).toEqual([{ receta: "android-emulador", paso: 3 }]);
+    expect(progresos(cliente).at(-1)).toMatchObject({ paso: 3, estado: "corriendo" });
+  });
+
+  it("cancelar llega al trabajo, y su estado se cuenta", async () => {
+    const e = ejecutorDeReceta();
+    const { cliente, accion } = await conectar({ correrPasoDeReceta: e.correr });
+    await enviarMensaje(accion, { clase: "receta", id: "android-emulador", paso: 3, accion: "ejecutar" });
+    await asentar();
+    await enviarMensaje(accion, { clase: "receta", id: "android-emulador", paso: 3, accion: "cancelar" });
+    expect(e.cancelado).toBe(true);
+    e.acabar("cancelada");
+    await asentar();
+    expect(progresos(cliente).at(-1)).toMatchObject({ estado: "cancelada" });
+  });
+
+  it("cancelar sin nada corriendo no revienta", async () => {
+    const { accion } = await conectar({ correrPasoDeReceta: ejecutorDeReceta().correr });
+    expect(await enviarMensaje(accion, { clase: "receta", id: "android-emulador", paso: 3, accion: "cancelar" })).toBe(204);
+  });
+
+  it("sin ejecutor se DICE y no se emite ningún progreso: el paso se copia igual", async () => {
+    const dichos: string[] = [];
+    const { cliente, accion } = await conectar({ informar: (x) => dichos.push(x) });
+    await enviarMensaje(accion, { clase: "receta", id: "android-emulador", paso: 3, accion: "ejecutar" });
+    await asentar();
+    expect(progresos(cliente)).toEqual([]);
+    expect(dichos.join(" ")).toMatch(/no puede ejecutar/i);
+  });
+
+  it("un fallo llega con su motivo de UNA línea, y después se mide igual", async () => {
+    const e = ejecutorDeReceta();
+    let medidas = 0;
+    const { cliente, accion } = await conectar({
+      correrPasoDeReceta: e.correr,
+      detectarDispositivos: async () => {
+        medidas += 1;
+        return { sistema: "mac", herramientas: [], dispositivos: [], avds: [], recetas: [], medido: "2026-09-07T10:00:00.000Z" };
+      },
+    });
+    await enviarMensaje(accion, { clase: "receta", id: "android-emulador", paso: 3, accion: "ejecutar" });
+    await asentar();
+    e.acabar("fallo", "Warning: Failed to find package");
+    await asentar();
+    expect(progresos(cliente).at(-1)).toMatchObject({ estado: "fallo", motivo: "Warning: Failed to find package" });
+    expect(medidas).toBe(2);
+  });
+});

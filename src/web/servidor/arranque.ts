@@ -42,6 +42,7 @@ import type { InformeDeDispositivos } from "../../core/dispositivos.js";
 import { PLATAFORMAS_DE_DISPOSITIVO, type AjustesDeDispositivos } from "../../core/settings.js";
 import type { NombreDeHerramienta } from "../../core/dispositivos.js";
 import { instalarHerramientaDeDispositivos } from "../../agent/dispositivosEnMaquina.js";
+import { correrPasoDeReceta } from "../../agent/instalacionEnMaquina.js";
 import {
   parsear,
   compatibleConOpenAi,
@@ -122,6 +123,11 @@ export const RUTA_ACCION = "/accion";
  * el contrato de las skills que los escriben es «autocontenido».
  */
 export const RUTA_ARTEFACTO = "/artefacto";
+
+/** Cuántas líneas del log de una instalación viajan: la COLA, lo último. */
+export const LINEAS_DE_LOG = 12;
+/** Cada cuánto se emite el progreso. Ver `atenderReceta`: cada emisión manda la cola entera. */
+export const MS_ENTRE_PROGRESOS = 250;
 
 /** Lo que se sirve: el build del cliente. Tres niveles arriba tanto desde `src/web/servidor/`
  *  como desde `dist/web/servidor/`, que es la disposición que se publica en npm. */
@@ -259,6 +265,16 @@ export interface OpcionesDeMontaje {
    * máquina del usuario. Ausente = esta ejecución no instala nada.
    */
   instalarHerramienta?: (herramienta: NombreDeHerramienta) => Promise<void>;
+  /**
+   * Ejecuta un paso de una receta (`agent/instalacionEnMaquina.ts`), con su salida en vivo.
+   * Ausente = esta ejecución no lanza nada y el botón no se ofrece: el paso se copia, que es
+   * lo que la receta hace de todas formas.
+   */
+  correrPasoDeReceta?: (
+    receta: string,
+    paso: number,
+    alSalirLinea: (linea: string) => void
+  ) => { titulo: string; cancelar: () => void; terminado: Promise<{ estado: string; motivo?: string; ms: number }> };
 }
 
 /** El `Content-Type` con el que se sirve un artefacto inline: al texto se le pone el juego
@@ -1244,6 +1260,93 @@ export function montarRutas(
     }
   };
 
+  /**
+   * El paso de receta que se está ejecutando, si hay alguno.
+   *
+   * **Uno a la vez, y para toda la máquina.** Dos `sdkmanager` a la vez sobre el mismo SDK
+   * es una carrera con la instalación de por medio, y la máquina es UNA aunque haya dos
+   * pestañas — el mismo motivo por el que la detección comparte una sola medida en vuelo. Un
+   * segundo «ejecutar» mientras corre no lanza nada: se reenvía el estado, que es lo que la
+   * otra pestaña necesita para pintar el log que ya va por dentro.
+   */
+  let trabajo:
+    | { receta: string; paso: number; titulo: string; lineas: string[]; cancelar: () => void; t0: number }
+    | undefined;
+  /** Cuándo se emitió el último progreso: el log se emite a ritmo, no por línea. */
+  let ultimoProgreso = 0;
+
+  const emitirProgreso = (
+    estado: "corriendo" | "ok" | "fallo" | "cancelada" | "colgada",
+    motivo?: string
+  ): void => {
+    if (trabajo === undefined) return;
+    emitir({
+      clase: "instalacion",
+      receta: trabajo.receta,
+      paso: trabajo.paso,
+      titulo: trabajo.titulo,
+      estado,
+      // La COLA del log y no todo: `sdkmanager` son miles de líneas y el cable no es un sitio
+      // donde guardarlas. Lo que hace falta es saber que avanza y en qué va.
+      lineas: trabajo.lineas.slice(-LINEAS_DE_LOG),
+      ms: Date.now() - trabajo.t0,
+      ...(motivo === undefined ? {} : { motivo }),
+    });
+    ultimoProgreso = Date.now();
+  };
+
+  /**
+   * Lanza un paso, o cancela el que corre.
+   *
+   * Al terminar se vuelve a MEDIR, y es lo que decide si el paso queda hecho: lo que diga el
+   * instalador es lo que él cree, y la foto es lo que hay. Es la misma regla que ya sigue
+   * `instalar`.
+   */
+  const atenderReceta = (mensaje: Extract<MensajeDelCliente, { clase: "receta" }>): void => {
+    if (mensaje.accion === "cancelar") {
+      trabajo?.cancelar();
+      return;
+    }
+    if (trabajo !== undefined) {
+      // Ya hay uno: se reenvía su estado en vez de lanzar otro.
+      emitirProgreso("corriendo");
+      return;
+    }
+    const correr = opciones.correrPasoDeReceta;
+    if (correr === undefined) {
+      informar("esta ejecución no puede ejecutar pasos de instalación");
+      return;
+    }
+    const enMarcha = correr(mensaje.id, mensaje.paso, (linea) => {
+      if (trabajo === undefined) return;
+      trabajo.lineas.push(linea);
+      // A ritmo: cada emisión manda la cola entera, y por línea sería cuadrático en bytes
+      // con un `sdkmanager` que habla cada pocos milisegundos. Es la misma razón que
+      // `MS_ENTRE_PARCIALES` en la piel web.
+      if (Date.now() - ultimoProgreso >= MS_ENTRE_PROGRESOS) emitirProgreso("corriendo");
+    });
+    trabajo = {
+      receta: mensaje.id,
+      paso: mensaje.paso,
+      titulo: enMarcha.titulo,
+      lineas: [],
+      cancelar: enMarcha.cancelar,
+      t0: Date.now(),
+    };
+    emitirProgreso("corriendo");
+    void (async () => {
+      const resultado = await enMarcha.terminado;
+      // El último progreso SIEMPRE se emite, aunque no haya pasado el plazo: es el que
+      // completa el log y el que dice cómo acabó.
+      ultimoProgreso = 0;
+      emitirProgreso(resultado.estado as "ok" | "fallo" | "cancelada" | "colgada", resultado.motivo);
+      trabajo = undefined;
+      // Y la foto nueva es la que dice si el paso quedó hecho, no el código de salida.
+      informeDeDispositivos = undefined;
+      await atenderDispositivos().catch(contar);
+    })();
+  };
+
   /** Un paso del alta resuelto en el navegador. Cada rama termina volviendo a anunciar. */
   const atenderAlta = async (mensaje: Extract<MensajeDelCliente, { clase: "alta" }>): Promise<void> => {
     // Se limpia al empezar: un aviso viejo pegado a un paso que ya salió bien mentiría.
@@ -1558,6 +1661,19 @@ export function montarRutas(
       respuesta.end();
       return;
     }
+    if (
+      typeof mensaje === "object" &&
+      mensaje !== null &&
+      mensaje.clase === "receta" &&
+      typeof mensaje.id === "string" &&
+      typeof mensaje.paso === "number" &&
+      (mensaje.accion === "ejecutar" || mensaje.accion === "cancelar")
+    ) {
+      atenderReceta(mensaje);
+      respuesta.writeHead(204);
+      respuesta.end();
+      return;
+    }
     if (typeof mensaje === "object" && mensaje !== null && mensaje.clase === "cancelar") {
       // Parar ESTE turno, no cerrar la conversación. Sin proyecto abierto no hay turno que
       // parar y se dice: un botón que no puede cumplir no puede callar.
@@ -1840,6 +1956,7 @@ export async function arrancarConsolaWeb(opciones: OpcionesDeArranque): Promise<
     leerFichero: leerFicheroDeProyecto,
     leerArtefacto: leerArtefactoDeSesion,
     leerArtefactoCrudo,
+    correrPasoDeReceta: (receta, paso, alSalirLinea) => correrPasoDeReceta(receta, paso, { alSalirLinea }),
     // La máquina de verdad: adb/emulator del PATH o del SDK, xcrun solo en macOS y solo con
     // herramientas de desarrollo. Cada proceso con su tope.
     detectarDispositivos: () => detectarDispositivos({}, cargarSettings().settings.dispositivos ?? {}),

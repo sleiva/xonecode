@@ -92,6 +92,23 @@ export interface PasoDeReceta {
    * es exactamente cuando hay que decirle que falta.
    */
   hecho: boolean;
+  /**
+   * ¿Lo puede lanzar xonecode él, con log en vivo?
+   *
+   * Solo lo que no puede pedir ENTRADA: `sdkmanager` y `avdmanager` preguntan las licencias
+   * y el perfil de hardware, y las dos respuestas se alimentan de forma determinista. `brew`
+   * no está aquí porque puede pedir la contraseña de administrador, y un hijo sin terminal
+   * detrás se quedaría esperándola para siempre.
+   */
+  ejecutable: boolean;
+  /** Por qué no se puede lanzar TODAVÍA, cuando el motivo es otro paso. */
+  porQueNo?: string;
+  /**
+   * Lo que se acepta al pulsar, si al pulsar se acepta algo. Va aparte del `nota` porque
+   * aceptar una licencia en nombre de alguien no puede ser un efecto de rebote de un botón
+   * que dice «Ejecutar»: se enseña al lado, y pulsar ES la aceptación.
+   */
+  acepta?: string;
 }
 
 /** Cómo conseguir una capacidad que esta máquina no tiene. Hoy hay una. */
@@ -115,6 +132,8 @@ export interface EstadoDeAndroid {
   /** `ANDROID_HOME` puesta en el entorno del proceso, que es lo único que se puede saber
    *  de la shell del usuario: la que lanzó xonecode. */
   androidHome: boolean;
+  /** Un JDK con el que correr `sdkmanager`, que es un programa Java. */
+  jdk: boolean;
   avds: readonly string[];
 }
 
@@ -130,6 +149,11 @@ export interface EstadoDeAndroid {
 export function recetaDeEmuladorAndroid(plataforma: string, estado: EstadoDeAndroid): Receta | undefined {
   if (plataforma !== "darwin") return undefined;
 
+  // Lo que xonecode puede lanzar él necesita las herramientas del paso 1: el binario y el
+  // JDK con el que corre. Sin ellos el botón no se ofrece y se dice por qué — un botón que
+  // no puede cumplir es el botón muerto de siempre.
+  const puedeLanzar = estado.sdkmanager && estado.jdk;
+
   const pasos: PasoDeReceta[] = [
     {
       titulo: "Instalar las herramientas: el JDK y el SDK de línea de comandos",
@@ -140,6 +164,7 @@ export function recetaDeEmuladorAndroid(plataforma: string, estado: EstadoDeAndr
       nota: "Puede pedirte la contraseña de administrador, así que se pega en un terminal y no se lanza desde aquí.",
       // `sdkmanager` es lo que instala el cask: si está, el paso está hecho.
       hecho: estado.sdkmanager,
+      ejecutable: false,
     },
     {
       titulo: "Declarar las variables en tu shell",
@@ -153,20 +178,29 @@ export function recetaDeEmuladorAndroid(plataforma: string, estado: EstadoDeAndr
         "xonecode NO lo necesita —ya mira la carpeta de Homebrew para encontrar el SDK—: " +
         "esto es para que los comandos de abajo funcionen en tu terminal.",
       hecho: estado.androidHome,
+      // Escribir en la shell de alguien es lo único de esta receta que no sabríamos deshacer.
+      ejecutable: false,
     },
     {
       titulo: "Descargar el emulador y la imagen del sistema",
       comandos: [
         'sdkmanager --install "emulator" "platforms;android-35" "system-images;android-35;google_apis;arm64-v8a"',
       ],
-      nota: "Son 2-3 GB y te pedirá aceptar las licencias del SDK de Android: responde `y`.",
+      nota: "Son 2-3 GB. Puedes pegarlo en un terminal o dejar que lo haga xonecode.",
       hecho: estado.emulator,
+      // Se puede lanzar en cuanto están las herramientas del paso 1: no pide contraseña.
+      ejecutable: puedeLanzar,
+      ...(puedeLanzar ? {} : { porQueNo: "hace falta el paso 1" }),
+      acepta: "las licencias del SDK de Android de Google",
     },
     {
       titulo: "Crear el dispositivo virtual",
       comandos: ['avdmanager create avd -n pixel8 -k "system-images;android-35;google_apis;arm64-v8a" -d pixel_8'],
-      nota: "Si pregunta por un perfil de hardware personalizado, responde `no`.",
+      nota: "Si lo pegas en un terminal y pregunta por un perfil de hardware, responde `no`.",
       hecho: estado.avds.length > 0,
+      // Necesita la imagen del sistema, que la trae el paso 3.
+      ejecutable: puedeLanzar && estado.emulator,
+      ...(puedeLanzar && estado.emulator ? {} : { porQueNo: puedeLanzar ? "hazlo después del paso 3" : "hace falta el paso 1" }),
     },
   ];
 

@@ -533,7 +533,16 @@ describe("la foto de la máquina («dispositivos»)", () => {
             id: "android-emulador",
             titulo: "Instalar el emulador de Android",
             descripcion: "Cuatro pasos.",
-            pasos: [{ titulo: "Instalar", comandos: ["brew install x"], nota: "ojo", hecho: false }],
+            pasos: [
+            { titulo: "Instalar", comandos: ["brew install x"], nota: "ojo", hecho: false, ejecutable: false },
+            // El paso ejecutable, con lo que se acepta al pulsarlo: MEDIDO en el navegador,
+            // esta lista blanca se comió `ejecutable`, `porQueNo` y `acepta`, y el botón no
+            // apareció con todos los tests de componente en verde. Otra vez la misma trampa.
+            { titulo: "Descargar", comandos: ["sdkmanager --install x"], hecho: false, ejecutable: true, acepta: "las licencias" },
+            { titulo: "Crear", comandos: ["avdmanager create"], hecho: false, ejecutable: false, porQueNo: "hazlo después del paso 3" },
+            // Un `"false"` de CADENA no puede encender el botón: es verdadero en JavaScript.
+            { titulo: "Otro", comandos: ["x"], hecho: false, ejecutable: "false" },
+          ],
             completa: false,
             despues: "emulator -avd pixel8",
           },
@@ -543,7 +552,12 @@ describe("la foto de la máquina («dispositivos»)", () => {
     });
     const receta = s.leer().dispositivos?.recetas?.[0];
     expect(receta).toMatchObject({ id: "android-emulador", completa: false, despues: "emulator -avd pixel8" });
-    expect(receta?.pasos).toEqual([{ titulo: "Instalar", comandos: ["brew install x"], nota: "ojo", hecho: false }]);
+    expect(receta?.pasos).toEqual([
+      { titulo: "Instalar", comandos: ["brew install x"], nota: "ojo", hecho: false, ejecutable: false },
+      { titulo: "Descargar", comandos: ["sdkmanager --install x"], hecho: false, ejecutable: true, acepta: "las licencias" },
+      { titulo: "Crear", comandos: ["avdmanager create"], hecho: false, ejecutable: false, porQueNo: "hazlo después del paso 3" },
+      { titulo: "Otro", comandos: ["x"], hecho: false, ejecutable: false },
+    ]);
   });
 
   it("un informe SIN recetas no revienta: llega la lista vacía", () => {
@@ -590,5 +604,52 @@ describe("la foto de la máquina («dispositivos»)", () => {
       ajustes: { android: false, ios: true, iosSimulador: "false" } as unknown as { android: boolean },
     });
     expect(s.leer().ajustesDeDispositivos).toEqual({ android: false, ios: true });
+  });
+});
+
+describe("el paso de receta que se está ejecutando", () => {
+  const progreso = (extra: Record<string, unknown> = {}) => ({
+    clase: "instalacion" as const,
+    receta: "android-emulador",
+    paso: 3,
+    titulo: "Descargando el emulador",
+    estado: "corriendo" as const,
+    lineas: ["58%"],
+    ms: 1200,
+    ...extra,
+  });
+
+  it("se guarda tal cual lo dice el servidor", () => {
+    const s = crearStoreDelCliente();
+    s.aplicar(progreso());
+    expect(s.leer().instalacion).toEqual({
+      receta: "android-emulador",
+      paso: 3,
+      titulo: "Descargando el emulador",
+      estado: "corriendo",
+      lineas: ["58%"],
+      ms: 1200,
+    });
+  });
+
+  it("un estado que no conocemos descarta el mensaje: el botón no puede quedarse en un limbo", () => {
+    const s = crearStoreDelCliente();
+    s.aplicar(progreso({ estado: "regular" }));
+    expect(s.leer().instalacion).toBeUndefined();
+  });
+
+  it("NO se tira al caerse el cable: el proceso sigue en la máquina aunque se caiga el SSE", () => {
+    // Es la misma regla que la foto de la máquina: `sdkmanager` sigue descargando, y borrar
+    // el estado diría que no pasó nada.
+    const s = crearStoreDelCliente();
+    s.aplicar(progreso({ estado: "corriendo" }));
+    s.marcarDesconectado();
+    expect(s.leer().instalacion?.estado).toBe("corriendo");
+  });
+
+  it("el motivo llega cuando lo hay", () => {
+    const s = crearStoreDelCliente();
+    s.aplicar(progreso({ estado: "fallo", motivo: "Warning: Failed to find package" }));
+    expect(s.leer().instalacion).toMatchObject({ estado: "fallo", motivo: "Warning: Failed to find package" });
   });
 });

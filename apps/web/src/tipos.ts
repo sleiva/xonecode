@@ -166,6 +166,17 @@ export type MensajeAlCliente =
   /** El contenido de un ARTEFACTO de la sesión, con la misma forma que un fichero del
    *  proyecto: así los visores son los mismos. La `ruta` es la VIRTUAL, `/artefactos/<n>`. */
   | ({ clase: "artefacto" } & FicheroDelProyecto)
+  /** Cómo va el paso que se está ejecutando. `lineas` es la COLA del log, no todo. */
+  | {
+      clase: "instalacion";
+      receta: string;
+      paso: number;
+      titulo: string;
+      estado: "corriendo" | "ok" | "fallo" | "cancelada" | "colgada";
+      lineas: string[];
+      ms: number;
+      motivo?: string;
+    }
   | { clase: "secreto"; pregunta: string }
   /**
    * El registro de comandos de barra (`COMANDOS` en `cli/consola.ts`), para que el
@@ -397,6 +408,8 @@ export type MensajeDelCliente =
   /** El contenido de un artefacto de la sesión abierta, por su NOMBRE: la carpeta la compone
    *  el servidor con el id del hilo, y una ruta del cliente sería negociar la barrera. */
   | { clase: "artefacto"; nombre: string }
+  /** Ejecuta o cancela un paso de receta. Viajan el nombre y el número, nunca un comando. */
+  | { clase: "receta"; id: string; paso: number; accion: "ejecutar" | "cancelar" }
   | { clase: "decision"; decisiones: Record<string, string> };
 
 /**
@@ -454,6 +467,11 @@ export interface PasoDeReceta {
   nota?: string;
   /** Sale de la MEDIDA del servidor, no de recordar que se pulsó. */
   hecho: boolean;
+  /** ¿Lo puede lanzar xonecode él? Solo lo que no puede pedir entrada. */
+  ejecutable: boolean;
+  porQueNo?: string;
+  /** Lo que se acepta al pulsar. Aparte de `nota`: pulsar ES la aceptación. */
+  acepta?: string;
 }
 
 export interface Receta {
