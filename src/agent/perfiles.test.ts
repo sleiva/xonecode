@@ -1,5 +1,8 @@
 import { describe, it, expect } from "vitest";
-import { permisosDe, toolsDe, hitlDe, TOOLS_ESCRITURA } from "./perfiles.js";
+import { permisosDe, toolsDe, hitlDe, seDetieneEn, TOOLS_ESCRITURA } from "./perfiles.js";
+import { sinArtefactosEnElProyecto } from "./proyecto.js";
+import { AIMessage } from "@langchain/core/messages";
+import { humanInTheLoopMiddleware } from "langchain";
 import { AGENTES_DE_SERIE } from "./agentesEnDisco.js";
 
 /* Las fixtures son los subagentes SEMBRADOS y ya no un `Record` a fuego: desde que los
@@ -97,5 +100,123 @@ describe("hitlDe", () => {
 
   it("no se ofrece `edit`: no hay interfaz para editar los argumentos", () => {
     expect(hitlDe(PERFILES["dev"]!).write_file!.allowedDecisions).toEqual(["approve", "reject"]);
+  });
+});
+
+/**
+ * El modal que solo podía acabar en rechazo.
+ *
+ * Medido en el navegador: pedir un artefacto en `/artifacts/` sacaba la ventana de
+ * aprobación con el diff entero, y aprobarla no escribía nada —la guarda del backend lo
+ * rechaza después—. Un modal cuyo único final posible es un rechazo enseña a aprobar sin
+ * mirar, que es cómo se rompe la aprobación el día que importa.
+ */
+describe("seDetieneEn — a qué escrituras se para el turno a preguntar", () => {
+  const peticion = (file_path: unknown) => ({ toolCall: { args: { file_path } } });
+
+  it("no pregunta por lo que el backend va a rechazar", () => {
+    expect(seDetieneEn(peticion("/artifacts/x.html"))).toBe(false);
+    expect(seDetieneEn(peticion("/artifact/x.html"))).toBe(false);
+  });
+
+  it("sigue preguntando por CUALQUIER fichero del proyecto", () => {
+    expect(seDetieneEn(peticion("/app.xml"))).toBe(true);
+    expect(seDetieneEn(peticion("/src/Clientes.xne"))).toBe(true);
+    // Parecidos que NO son la carpeta inventada: se pregunta, como siempre.
+    expect(seDetieneEn(peticion("/src/artifacts.js"))).toBe(true);
+    expect(seDetieneEn(peticion("/artifactsviejos/x.html"))).toBe(true);
+  });
+
+  it("ante la duda PREGUNTA: sin ruta, o con una que no es cadena", () => {
+    expect(seDetieneEn(peticion(undefined))).toBe(true);
+    expect(seDetieneEn(peticion(42))).toBe(true);
+    expect(seDetieneEn({})).toBe(true);
+    expect(seDetieneEn(null)).toBe(true);
+  });
+
+  it("y va PUESTO en las dos tools de escritura de quien escribe", () => {
+    for (const tool of TOOLS_ESCRITURA) {
+      expect(typeof hitlDe(PERFILES["dev"]!)[tool]!.when).toBe("function");
+    }
+  });
+
+  /**
+   * **El único fallo abierto posible por aquí, atado.**
+   *
+   * Saltarse la pregunta para NO escribir es correcto; saltársela para escribir sería una
+   * escritura al proyecto que nadie aprobó. Las dos barreras usan la misma función sobre la
+   * misma cadena, así que no pueden discrepar — y esto lo comprueba en vez de confiarlo:
+   * para cada ruta, si no se pregunta, la guarda del backend TIENE que rechazarla.
+   */
+  it("no preguntar implica que el backend lo rechaza — nunca al revés", async () => {
+    const escrituras: string[] = [];
+    const guardado = sinArtefactosEnElProyecto({
+      async write(ruta: string) { escrituras.push(ruta); return { ok: true }; },
+    });
+    const rutas = [
+      "/artifacts/x.html", "/artifact/x.html", "/artifact.html", "/ARTIFACTS/x.html",
+      "/artifacts/sub/x.html", "/app.xml", "/src/artifacts.js", "/artifactsviejos/x.html",
+      "/artefactos/x.html", "/Clientes.xne",
+    ];
+    for (const ruta of rutas) {
+      const sePregunta = seDetieneEn(peticion(ruta));
+      const resultado = (await guardado.write(ruta)) as { error?: string };
+      if (!sePregunta) {
+        expect(resultado.error, `«${ruta}» no se pregunta y el backend NO la rechaza`).toBeDefined();
+      }
+    }
+    // Y de propina: lo que sí se escribió es exactamente lo que el backend dejó pasar.
+    expect(escrituras).toEqual([
+      "/app.xml", "/src/artifacts.js", "/artifactsviejos/x.html", "/artefactos/x.html", "/Clientes.xne",
+    ]);
+  });
+});
+
+/**
+ * La COSTURA con el middleware de HITL, que es lo único que prueba que el modal no sale.
+ *
+ * `seDetieneEn` se prueba arriba como función; esto prueba lo que de ella depende: que
+ * `humanInTheLoopMiddleware` respeta el predicado y no llega a llamar a `interrupt()`. Es un
+ * contrato de una dependencia —leído en `langchain/agents/middleware/hitl`, «a tool call is
+ * interrupted only when it has a resolved config and its optional `when` predicate doesn't
+ * opt it out»— y de él depende que la aprobación siga saliendo para TODO lo demás: el día que
+ * el `when` deje de mirarse, este test cae en el lado que hay que vigilar.
+ *
+ * Fuera de un grafo, `interrupt()` lanza «Called interrupt() outside the context of a graph»:
+ * esa excepción es justo la señal de que el modal habría salido.
+ */
+describe("la costura con el HITL: el modal sale para el proyecto y NO para /artifacts/", () => {
+  const middleware = humanInTheLoopMiddleware({
+    interruptOn: hitlDe({ nombre: "mockup", soloLectura: false }) as never,
+  }) as unknown as { afterModel: { hook: (estado: unknown, runtime: unknown) => Promise<unknown> } };
+
+  const conEscrituraDe = (file_path: string) => ({
+    messages: [
+      new AIMessage({
+        content: "",
+        tool_calls: [{ name: "write_file", args: { file_path, content: "x" }, id: "1" }],
+      }),
+    ],
+  });
+
+  /** ¿Llegó a pedir la aprobación? Fuera de un grafo, pedirla lanza. */
+  const pidioAprobacion = async (file_path: string): Promise<boolean> => {
+    try {
+      await middleware.afterModel.hook(conEscrituraDe(file_path), { context: {} });
+      return false;
+    } catch (error) {
+      expect(String((error as Error).message)).toContain("interrupt()");
+      return true;
+    }
+  };
+
+  it("un fichero del proyecto la pide, como siempre", async () => {
+    expect(await pidioAprobacion("/app.xml")).toBe(true);
+    expect(await pidioAprobacion("/src/Clientes.xne")).toBe(true);
+  });
+
+  it("una escritura a `/artifacts/` no la pide: ese modal solo podía acabar en rechazo", async () => {
+    expect(await pidioAprobacion("/artifacts/modal.html")).toBe(false);
+    expect(await pidioAprobacion("/artifact.html")).toBe(false);
   });
 });

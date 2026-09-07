@@ -8,6 +8,7 @@
  * monta su aprobación humana. Un `.md` puede cambiar el prompt de un agente; no puede
  * concederle leer `/.env`.
  */
+import { artefactoFueraDeSitio } from "../core/artefactos.js";
 /** Las tools de fichero que monta deepagents sobre el backend. */
 export const TOOLS_LECTURA = ["ls", "read_file", "glob", "grep"] as const;
 export const TOOLS_ESCRITURA = ["write_file", "edit_file"] as const;
@@ -110,16 +111,58 @@ const TEXTO_HITL: Record<string, string> = {
  * `edit` no se ofrece como decisión: no hay interfaz para editar los argumentos antes de
  * aprobar, así que anunciarla sería mentirle al modelo.
  */
-export function hitlDe(perfil: QuienDecidePermisos): Record<string, { allowedDecisions: string[]; description: string }> {
+export function hitlDe(perfil: QuienDecidePermisos): Record<string, ConfigDeInterrupt> {
   if (perfil.soloLectura) return {};
-  const salida: Record<string, { allowedDecisions: string[]; description: string }> = {};
+  const salida: Record<string, ConfigDeInterrupt> = {};
   for (const tool of TOOLS_ESCRITURA) {
     salida[tool] = {
       allowedDecisions: ["approve", "reject"],
       // El nombre del perfil va DENTRO de la descripción por necesidad: el interrupt que
       // llega al runner no dice de qué subagente viene, y `dev` y `mockup` comparten tools.
       description: `[${perfil.nombre}] quiere ${TEXTO_HITL[tool] ?? tool}`,
+      when: seDetieneEn,
     };
   }
   return salida;
+}
+
+/**
+ * ¿Se para el turno a preguntar por ESTA escritura?
+ *
+ * El predicado `when` de `InterruptOnConfig` (leído en `langchain/agents/middleware/hitl`:
+ * «Returns `true` to interrupt or `false` to auto-approve the tool call»), y aquí existe
+ * para una sola cosa: **una escritura que el backend va a rechazar de todas formas no puede
+ * sacar un modal de aprobación.** Pasaba, y medido: pedir un artefacto en `/artifacts/`
+ * enseñaba el diff entero con Aprobar y Rechazar, y aprobarlo no escribía nada —
+ * `sinArtefactosEnElProyecto` lo rechaza después—. Un modal cuyo único final posible es un
+ * rechazo enseña a aprobar sin mirar, que es exactamente cómo se rompe la aprobación el día
+ * que importa.
+ *
+ * **Esto NO relaja la aprobación, y esa es la parte delicada.** No se salta la pregunta para
+ * escribir: se salta para NO escribir. La condición es la MISMA función que usa la guarda del
+ * backend —`artefactoFueraDeSitio`, sobre la misma cadena—, así que las dos no pueden
+ * discrepar; si discreparan, una escritura al proyecto pasaría sin que nadie la aprobara, que
+ * es el único fallo abierto posible por aquí. `perfiles.test.ts` lo ata: para cada ruta,
+ * saltarse la pregunta implica que la guarda la rechaza.
+ *
+ * Lo que pasa después es lo que se busca: la tool corre, el backend devuelve su `{error}` con
+ * la ruta buena, y el modelo reintenta en `/artefactos/`.
+ */
+export function seDetieneEn(peticion: unknown): boolean {
+  const args = (peticion as { toolCall?: { args?: Record<string, unknown> } } | null)?.toolCall?.args;
+  const ruta = args?.["file_path"];
+  if (typeof ruta !== "string") return true;
+  // Ante la duda, se PREGUNTA: es la dirección conservadora de siempre.
+  return artefactoFueraDeSitio(ruta) === undefined;
+}
+
+/**
+ * La forma del `interruptOn` de una tool, declarada aquí porque deepagents la reenvía tal
+ * cual a `humanInTheLoopMiddleware` sin tipar el `when` en su propia interfaz.
+ */
+export interface ConfigDeInterrupt {
+  allowedDecisions: string[];
+  description: string;
+  /** Ver `seDetieneEn`. */
+  when: (peticion: unknown) => boolean;
 }
