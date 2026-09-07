@@ -2,6 +2,8 @@ import { describe, it, expect } from "vitest";
 import {
   parsear, resolver, ModeloMalEscrito, POR_OMISION,
   COMPATIBLES_OPENAI, compatibleConOpenAi, PROVEEDORES, SIN_CREDENCIAL, VARIABLES_POR_PROVEEDOR,
+  motivoDeEndpointInaceptable, motivoDeSlugInaceptable, nombreDeProveedor, slugDesdeNombre,
+  variableDeProveedor,
 } from "./modelos.js";
 
 describe("parsear", () => {
@@ -177,5 +179,65 @@ describe("la tabla de variables de entorno", () => {
       return variable === undefined ? [] : [variable];
     });
     expect(new Set(variables).size).toBe(variables.length);
+  });
+});
+
+describe("los proveedores personalizados", () => {
+  it("se parsean por su FORMA, sin ningún registro: `parsear` sigue siendo pura", () => {
+    expect(parsear("custom:mi-lm-studio/qwen3-coder")).toEqual({
+      proveedor: "custom:mi-lm-studio",
+      modelo: "qwen3-coder",
+    });
+    // Un slug con mayúsculas o con dos puntos NO es un personalizado válido, y entonces es
+    // un proveedor desconocido de toda la vida.
+    expect(() => parsear("custom:Mi-LM/qwen3")).toThrow(ModeloMalEscrito);
+    expect(() => parsear("custom:/qwen3")).toThrow(ModeloMalEscrito);
+  });
+
+  it("el identificador se DERIVA del nombre, sin acentos ni signos", () => {
+    expect(slugDesdeNombre("Mi LM Studio")).toBe("mi-lm-studio");
+    expect(slugDesdeNombre("  Ollama de Producción  ")).toBe("ollama-de-produccion");
+    expect(slugDesdeNombre("vLLM (interno)")).toBe("vllm-interno");
+    // De un nombre de solo signos no sale identificador, y no se inventa: cadena vacía, que
+    // `motivoDeSlugInaceptable` rechaza con su motivo.
+    expect(slugDesdeNombre("¿?¡!")).toBe("");
+    expect(motivoDeSlugInaceptable(slugDesdeNombre("¿?¡!"))).toBeDefined();
+    // Y el recorte no deja un guion colgando al final.
+    expect(slugDesdeNombre("a".repeat(30) + " servidor")).toBe("a".repeat(30));
+  });
+
+  it("la variable de entorno se deriva del slug, y no se guarda en ningún sitio", () => {
+    expect(variableDeProveedor("custom:mi-lm-studio")).toBe("XONECODE_CLAVE_MI_LM_STUDIO");
+    expect(variableDeProveedor("anthropic")).toBe("ANTHROPIC_API_KEY");
+    expect(variableDeProveedor("ollama")).toBeUndefined();
+  });
+
+  it("sin estar dado de alta no hay endpoint: se devuelve nada, no una URL fabricada", () => {
+    const declarados = [{ slug: "mi-lm-studio", nombre: "Mi LM Studio", baseUrl: "http://localhost:1234/v1" }];
+    expect(compatibleConOpenAi("custom:mi-lm-studio", declarados)).toEqual({
+      baseUrl: "http://localhost:1234/v1",
+      variable: "XONECODE_CLAVE_MI_LM_STUDIO",
+    });
+    expect(compatibleConOpenAi("custom:otro", declarados)).toBeUndefined();
+    expect(compatibleConOpenAi("custom:mi-lm-studio")).toBeUndefined();
+  });
+
+  it("el nombre sale del registro; sin registro se cae al slug y no se inventa uno", () => {
+    const declarados = [{ slug: "mi-lm-studio", nombre: "Mi LM Studio", baseUrl: "http://localhost:1234/v1" }];
+    expect(nombreDeProveedor("custom:mi-lm-studio", declarados)).toBe("Mi LM Studio");
+    expect(nombreDeProveedor("custom:mi-lm-studio")).toBe("mi-lm-studio");
+    expect(nombreDeProveedor("xai")).toBe("xAI");
+  });
+
+  it("la URL admite https en cualquier sitio y http SOLO en loopback, nunca con credenciales", () => {
+    // Loopback en claro es el caso PRINCIPAL: LM Studio, llama.cpp y vLLM escuchan ahí.
+    expect(motivoDeEndpointInaceptable("http://localhost:1234/v1")).toBeUndefined();
+    expect(motivoDeEndpointInaceptable("http://127.0.0.1:8000/v1")).toBeUndefined();
+    expect(motivoDeEndpointInaceptable("https://api.ejemplo.com/v1")).toBeUndefined();
+    expect(motivoDeEndpointInaceptable("http://ajeno.example.com/v1")).toBeDefined();
+    expect(motivoDeEndpointInaceptable("https://usuario:clave@api.ejemplo.com/v1")).toBeDefined();
+    expect(motivoDeEndpointInaceptable("no es una url")).toBeDefined();
+    // Y un host que solo PARECE local es de otra máquina.
+    expect(motivoDeEndpointInaceptable("http://localhost.ejemplo.com/v1")).toBeDefined();
   });
 });

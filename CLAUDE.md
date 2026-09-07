@@ -596,11 +596,10 @@ detrás es la misma mentira que una lista vacía rellenada»):
   `body[data-ds-dark-theme]`; se recuerda en `localStorage` —es de ESTE navegador, no de la
   cuenta— con todo acceso envuelto en `try`, porque en una ventana privada el propio
   accesor lanza.
-- **No hay «proveedor personalizado»**: los proveedores son una lista CERRADA
-  (`core/modelos.ts#PROVEEDORES`). La razón ya no es que nuestro adaptador no sepa hablar
-  con un endpoint compatible con OpenAI —desde `COMPATIBLES_OPENAI` sabe—: es que un
-  endpoint tecleado en esta ventana mandaría la clave del usuario a donde diga el campo.
-  Un proveedor nuevo es una fila de esa tabla, revisada en el repo.
+- **Sí hay «proveedor personalizado», y las dos listas conviven** (párrafo propio más
+  abajo). Los de SERIE siguen siendo una lista cerrada del repo
+  (`core/modelos.ts#PROVEEDORES`); lo que se puede declarar desde la ventana es un endpoint
+  compatible con OpenAI con su URL y su clave, que es otra cosa y se pinta en otro grupo.
 - **Borrar una credencial solo se ofrece si está en `auth.json`** (`enFichero` en el cable,
   y solo si además hay puerto para borrarla). Una que viene de una variable de entorno no
   la podemos quitar; `borrarCredencial` (`agent/authEnDisco.ts`) limpia `process.env` SOLO
@@ -692,6 +691,34 @@ la rama ORIGEN y **se dice que va a descargar el proyecto entero**. Con una sola
 preselecciona pero se ENSEÑA — antes se mandaba sola desde un efecto, y elegir por el
 usuario y callarlo es cómo se acaba trabajando sobre la rama equivocada. Y no empieza sola:
 pulsar «+» por error costaba una descarga.
+
+**Los iconos: los de PROVEEDOR son copiados y monocromos; los de MARCA, los del usuario y
+a color** (`componentes/IconoDeProveedor.tsx`, `componentes/IconoDeEntorno.tsx`,
+`apps/web/public/iconos/xonecode.png`). Nada se trae de un CDN: esta consola escucha en
+loopback y declara un modo `offline` de primera clase, el mismo motivo por el que las
+tipografías van empaquetadas. Cuatro reglas:
+- **Un icono solo se pinta donde hay DATO detrás.** El logo del proveedor sale de su id; la
+  marca del entorno, de `Entorno.id` —que `identidadDeEntorno` deduce de la URL—, así que un
+  WebStudio se pinta como WebStudio y un on-premise lleva la marca XOne SIN glifo de
+  producto: es lo único que se puede afirmar de él. De los siete `.svg` del juego de marca
+  se usan tres; `XOne MDM`, `XOneNFC` y los demás son productos que esta consola no modela
+  en ninguna parte, y pintarlos sería decoración con forma de dato — la misma regla por la
+  que el escritorio no pinta el «Build & Run» del mockup.
+- **Los de proveedor van MONOCROMOS y heredando el color** (`fill="currentColor"`, variante
+  mono de `@lobehub/icons-static-svg@1.95.0`, MIT, trazados copiados y no una dependencia de
+  2,3 MB para nueve iconos): son ocho en una lista, y ahí el color de marca es ruido —
+  heredando, además, el claro/oscuro sale solo. Los de entorno van a COLOR: son pocos, y en
+  ellos el color ES la identidad.
+- **Las clases `.cls-N` de Illustrator se convirtieron en atributos `fill`.** Son globales, y
+  los tres ficheros usan los mismos nombres con colores distintos: inline en la misma página
+  se pisarían. Y se les quitó el `<rect>` blanco de fondo — una marca no trae su propio
+  cuadrado, y sobre el azul de la barra se vería.
+- **El símbolo de la barra superior va sobre una placa clara.** Medido: el icono lleva cian
+  y azul marino, y ese azul marino sobre la barra azul profunda desaparecía — la marca se
+  quedaba en un anillo partido, sin la mitad de su forma. La placa es el blanco sobre el que
+  está dibujado (`--xonecode-sobre-azul`), no un filtro que recolorea el arte. El fichero es
+  UNO y se sirve desde `public/`: el favicon de `index.html` y la marca apuntan a la misma
+  ruta, porque dos copias de un logo acaban siendo dos logos.
 
 **La paleta de xonecode vive en UN sitio** (`apps/web/estilos/marca.css`, nuestra, como
 `tipografia.css` y `splash.css`). El cliente se pinta con los alias `--dsw-alias-*` de la
@@ -1156,7 +1183,9 @@ pestaña se abre enseñando diffs sin traerse los megas de un turno largo. Cada 
 recorta a `TOPE_DE_PARCHE` diciéndolo. La foto es de UNA sesión:
 `store.ts` la tira en cuanto el `alta` trae otra `sesionActiva`.
 
-**La regla de qué URL de MCP vale es UNA** (`agent/cloudstudioMcp.ts#urlDeMcpAceptable`): HTTPS
+**La regla de qué URL de MCP vale es UNA** (`agent/cloudstudioMcp.ts#urlDeMcpAceptable`, que
+desde los proveedores personalizados es la MISMA de `core/modelos.ts#motivoDeEndpointInaceptable`
+—`core/` es datos puros y de ahí pueden tirar los dos, en vez de dos copias que divergen—): HTTPS
 sin credenciales, más `http://` en una lista CERRADA de hosts loopback, que existe solo para un
 CloudStudio on-premise levantado en desarrollo. Hubo tres puertas con dos criterios —el wizard
 del navegador aceptaba loopback, el registro del entorno y el conector lo rechazaban—, o sea
@@ -1413,9 +1442,10 @@ lleva la clave ni el cuerpo remoto. Ollama local (`OLLAMA_BASE_URL`) y Ollama Cl
 `grok-*`— (`api.x.ai/v1`, `XAI_API_KEY`) publican la misma API que OpenAI, así que son tres
 filas de datos con URL base y variable, y quien las consume tiene UNA rama genérica: el
 cliente es `ChatOpenAI` con `configuration.baseURL`, y el catálogo un `GET /v1/models`. La
-lista de proveedores sigue CERRADA —el cuarto compatible será otra fila del repo, no un
-campo en Ajustes—, pero lo que la cierra ya es política y no incapacidad del adaptador, y
-el párrafo de las «tres ausencias» de la ventana de ajustes lo dice así. Cinco reglas:
+lista de proveedores DE SERIE sigue cerrada —el cuarto compatible es otra fila del repo—,
+y lo que la cierra es política y no incapacidad del adaptador. Un endpoint que no está en
+esa tabla se da de alta como proveedor PERSONALIZADO (párrafo siguiente), que es el mismo
+mecanismo con la fila puesta por el usuario en vez de por el repo. Cinco reglas:
 - **La clave se EXIGE al construir** (`agent/modelos.ts#construirCompatibleOpenAi`), al
   revés que el caso de `openai`, que la pasa tal cual. `ChatOpenAI` sin `apiKey` se la
   busca él en `OPENAI_API_KEY`: sin la guarda, un `NVIDIA_API_KEY` sin poner haría que la
@@ -1444,6 +1474,55 @@ el párrafo de las «tres ausencias» de la ventana de ajustes lo dice así. Cin
   mismo sitio; `configEnDisco.ts` la reexporta con su nombre de siempre. Un test recorre
   `PROVEEDORES` y exige que la tabla nombre exactamente a los que no están en
   `SIN_CREDENCIAL`, y que ninguna variable se repita.
+
+**Los proveedores PERSONALIZADOS son la misma tabla, con la fila puesta por el usuario**
+(`core/modelos.ts`, `agent/configEnDisco.ts#guardarProveedorPersonalizado`, Ajustes →
+Proveedores). Un endpoint compatible con OpenAI —LM Studio, `llama.cpp --server`, vLLM, un
+servidor de la empresa— se da de alta con NOMBRE y URL base, y a partir de ahí es un
+proveedor más: `custom:<slug>/<modelo>` se teclea igual, se elige igual en la pastilla y su
+catálogo sale del mismo `GET <baseUrl>/models`. Ocho reglas:
+- **El tipo es una PLANTILLA, no una entrada más de la lista.** `ProveedorPersonalizado` es
+  `` `custom:${string}` ``, y `parsear` lo acepta por su FORMA sin mirar ningún registro —
+  así sigue siendo una función pura y la usan igual el `.md` de un agente, `--modelo` y el
+  cable. Que el slug esté dado de alta se comprueba al construir el cliente y al pedir el
+  catálogo, con un mensaje que dice dónde darlo de alta. El `switch` de `construirModelo`
+  sigue siendo exhaustivo sobre los de serie: el personalizado se resuelve ANTES.
+- **Se guarda SOLO en el `config.json` global, y el del proyecto se rechaza con un aviso
+  GRAVE.** No es purismo de ámbito: la clave vive en `auth.json` bajo el identificador, así
+  que un proyecto que pudiera redefinir la `baseUrl` de un slug ya dado de alta mandaría esa
+  clave al host que él dijera. Un `config.json` de proyecto puede venir de fuera; el global
+  es del dueño de la máquina.
+- **El identificador se DERIVA del nombre** (`slugDesdeNombre`, en el servidor y solo ahí:
+  derivarlo también en el cliente sería una segunda copia de la regla). Un tercer campo en
+  el formulario solo se puede escribir mal.
+- **La variable de entorno también se deriva** (`XONECODE_CLAVE_<SLUG>`), no se guarda. Con
+  eso `aplicarAuth`, `guardarCredencial`, el constructor del cliente y el catálogo siguen
+  funcionando sin enterarse de que estos proveedores existen. `aplicarAuth` recorre ahora lo
+  que HAY en `auth.json` y no `PROVEEDORES`: si no, la clave de un personalizado no se
+  aplicaba y el catálogo decía que faltaba una credencial escrita ahí mismo.
+- **La URL pasa la MISMA regla que un MCP** (`motivoDeEndpointInaceptable`, ahora en `core/`
+  y de donde tira `cloudstudioMcp.ts`): https fuera de la máquina, `http://` solo en
+  loopback, nunca credenciales dentro. Loopback es el caso PRINCIPAL y no la excepción — LM
+  Studio escucha en `http://localhost:1234/v1`.
+- **Un slug que ya existe se RECHAZA, no se pisa.** Dos endpoints con el mismo identificador
+  compartirían entrada en `auth.json`: la clave del segundo viajaría al host del primero.
+  Para cambiar una URL hay que dar de baja y volver a dar de alta — no hay «editar» todavía,
+  y se dice.
+- **La baja se lleva la credencial**, y la confirmación lo dice. Una clave en `auth.json`
+  bajo un proveedor que ya no existe no se puede mandar a ninguna parte, pero sigue siendo
+  un secreto en disco que nadie volvería a ver para borrarlo.
+- **La clave NO viaja en el alta.** El formulario son dos campos, nombre y URL; la
+  credencial se pone después con el mismo `{clase:"credencial", accion:"pedir"}` de los de
+  serie, o sea por el ÚNICO mensaje del cable que lleva credenciales. Y el resultado del
+  alta vuelve en un mensaje propio (`{clase:"proveedor", hecho, motivo?}`) y no por
+  `informar`: la ventana de ajustes no pinta el transcript, así que un fallo contado como
+  acto de sistema sería mudo justo donde hay que leerlo — el mismo motivo por el que el
+  aviso del selector viaja EN el selector durante el alta. El formulario se cierra cuando el
+  servidor dice que se hizo, no al pulsar.
+Lo que hoy NO llega: el asistente de cuenta del terminal (`cli/wizardInicial.ts`) recorre
+`PROVEEDORES`, así que un personalizado no aparece en el alta — se elige con `/modelo
+custom:<slug>/<modelo>` o desde la pastilla. Y nada de esto se ha probado contra un servidor
+real: la primera llamada con una clave es lo que lo confirma.
 
 **Configuración y credenciales** (`core/config.ts`, `agent/configEnDisco.ts`): `config.json`
 lleva modelos, `modo`, `cloudstudio`, `contextos` (topes de ventana fijados a mano,

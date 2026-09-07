@@ -388,6 +388,46 @@ describe("Modelos: los compatibles se construyen con la URL base cambiada", () =
   });
 });
 
+describe("los personalizados se resuelven contra el registro, y en el MOMENTO", () => {
+  const REGISTRO = [{ slug: "mi-llm", nombre: "Mi LLM", baseUrl: "http://localhost:1234/v1" }];
+
+  it("el catálogo sale de su URL base, con la clave de su variable derivada", async () => {
+    vi.stubEnv("XONECODE_CLAVE_MI_LLM", "sk-propia");
+    const doble = responderJson({ data: [{ id: "qwen3-coder" }, { id: "nomic-embed-text" }] });
+    await expect(
+      new CatalogoModelos(doble.fetch, undefined, () => REGISTRO).listar("custom:mi-llm"),
+    ).resolves.toEqual([{ proveedor: "custom:mi-llm", id: "qwen3-coder" }]);
+    expect(doble.llamadas[0]!.url).toBe("http://localhost:1234/v1/models");
+  });
+
+  it("uno que no está dado de alta lo dice, y dice dónde darlo de alta", async () => {
+    vi.stubEnv("XONECODE_CLAVE_FANTASMA", "sk-x");
+    const doble = responderJson({ data: [] });
+    await expect(
+      new CatalogoModelos(doble.fetch, undefined, () => REGISTRO).listar("custom:fantasma"),
+    ).rejects.toThrow(/no está dado de alta/);
+    expect(doble.llamadas).toEqual([]);
+  });
+
+  /**
+   * El flujo que esto protege es el primero que hace cualquiera: dar de alta el proveedor,
+   * ponerle la clave, elegir su modelo y hablar. Con una lista capturada al construir, ese
+   * turno reventaba con «no está dado de alta» justo después de darlo de alta.
+   */
+  it("`Modelos` relee el registro en cada uso, no lo captura al construir", () => {
+    vi.stubEnv("XONECODE_CLAVE_TARDIO", "sk-tardia");
+    const registro: { slug: string; nombre: string; baseUrl: string }[] = [];
+    const modelos = new Modelos({}, () => registro);
+    expect(() => modelos.paraModelo("custom:tardio/qwen3")).toThrow(/no está dado de alta/);
+    registro.push({ slug: "tardio", nombre: "Tardío", baseUrl: "https://tardio.example.com/v1" });
+    const cliente = modelos.paraModelo("custom:tardio/qwen3") as {
+      clientConfig: { apiKey: string; baseURL: string };
+    };
+    expect(cliente.clientConfig.baseURL).toBe("https://tardio.example.com/v1");
+    expect(cliente.clientConfig.apiKey).toBe("sk-tardia");
+  });
+});
+
 describe("Ollama: un modelo roto no se lleva la lista por delante", () => {
   const CHAT = { capabilities: ["completion"], model_info: { "x.context_length": 4096 } };
 

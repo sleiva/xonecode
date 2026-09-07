@@ -26,7 +26,10 @@ import {
   validar,
   validarAuth,
 } from "../core/config.js";
-import { parsear, Proveedor, PROVEEDORES, VARIABLES_POR_PROVEEDOR } from "../core/modelos.js";
+import {
+  motivoDeEndpointInaceptable, motivoDeSlugInaceptable, parsear, Proveedor, PROVEEDORES,
+  variableDeProveedor, type ProveedorDeclarado,
+} from "../core/modelos.js";
 import type { Papel } from "../core/ports.js";
 
 export const NOMBRE_CARPETA = ".xonecode";
@@ -130,6 +133,98 @@ export function guardarModeloGlobal(
   const fusionado = { ...base, modelos: { ...modelos, [papel]: id } };
   escribirAtomico(ruta, JSON.stringify(fusionado, null, 2) + "\n", operaciones);
   return { ruta, id };
+}
+
+/**
+ * Los proveedores personalizados dados de alta, del config GLOBAL y de ningún otro.
+ *
+ * No recibe raíz a propósito: el registro no depende del proyecto, y darle una invitaría a
+ * pensar que el `config.json` del proyecto también cuenta — que es justo lo que
+ * `core/config.ts` rechaza, porque la clave se guarda por identificador y un proyecto que
+ * redefiniera la URL de un slug ya dado de alta la mandaría a otro host.
+ *
+ * Lee de disco en cada llamada, sin caché: la ventana de ajustes da de alta en caliente, y
+ * una lista capturada al arrancar se quedaría vieja hasta reiniciar. Un fichero ilegible
+ * devuelve la lista vacía; quien tiene que contar ESE problema es `cargar`, que ya lo hace
+ * con sus avisos y es quien se pinta.
+ */
+export function proveedoresPersonalizados(): readonly ProveedorDeclarado[] {
+  const ruta = rutaConfigGlobal();
+  if (!existsSync(ruta)) return [];
+  try {
+    const bruto: unknown = JSON.parse(readFileSync(ruta, "utf8"));
+    return validar(bruto, ruta, "global").config.proveedores ?? [];
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Da de alta —o vuelve a escribir— un proveedor personalizado en el config GLOBAL.
+ *
+ * Tres cosas, y las tres tienen su porqué:
+ * - **Global y solo global.** La razón está en `core/config.ts` («proveedores»): la clave
+ *   se guarda por identificador, así que un proyecto que pudiera redefinir la URL de un
+ *   slug ya dado de alta mandaría esa clave a otro host. Aquí ni se ofrece la opción.
+ * - **Vuelve a pasar por el VALIDADOR** antes de escribir. Este fichero se edita también a
+ *   mano, así que la autoridad sobre si un alta vale es el cargador y no el formulario que
+ *   la mandó — la misma regla que `guardarAgente` con los `.md` de los subagentes.
+ * - **No toca la clave.** El alta escribe nombre y URL; la credencial va por su camino de
+ *   siempre (`guardarCredencial`, `auth.json`, modo 0600), que es el único mensaje del
+ *   cable que la lleva.
+ */
+export function guardarProveedorPersonalizado(
+  declarado: ProveedorDeclarado,
+  operaciones?: OperacionesDeEscritura,
+): { ruta: string; declarado: ProveedorDeclarado } {
+  const malSlug = motivoDeSlugInaceptable(declarado.slug);
+  if (malSlug !== undefined) throw new Error(malSlug);
+  const malUrl = motivoDeEndpointInaceptable(declarado.baseUrl);
+  if (malUrl !== undefined) throw new Error(malUrl);
+  if (declarado.nombre.trim() === "") throw new Error("el proveedor necesita un nombre");
+
+  const ruta = rutaConfigGlobal();
+  const base = leerObjetoCrudoOAbortar(ruta);
+  const previos = Array.isArray(base.proveedores) ? base.proveedores : [];
+  const limpio: ProveedorDeclarado = {
+    slug: declarado.slug,
+    nombre: declarado.nombre.trim(),
+    baseUrl: declarado.baseUrl,
+  };
+  // Se SUSTITUYE el del mismo slug en su sitio en vez de añadirse al final: editar la URL
+  // de un proveedor no puede cambiarlo de posición en la lista que se está mirando.
+  const yaEstaba = previos.some((p) => esObjeto(p) && p.slug === limpio.slug);
+  const proveedores = yaEstaba
+    ? previos.map((p) => (esObjeto(p) && p.slug === limpio.slug ? limpio : p))
+    : [...previos, limpio];
+  escribirAtomico(ruta, JSON.stringify({ ...base, proveedores }, null, 2) + "\n", operaciones);
+  return { ruta, declarado: limpio };
+}
+
+/**
+ * Retira un proveedor personalizado del config global. NO se lleva su credencial: eso lo
+ * hace quien llama, con `borrarCredencial`, porque es el otro fichero y el otro permiso —
+ * y una clave huérfana en `auth.json` es una clave que ya no se puede mandar a ninguna
+ * parte, pero sigue siendo un secreto en disco.
+ */
+export function borrarProveedorPersonalizado(
+  slug: string,
+  operaciones?: OperacionesDeEscritura,
+): { ruta: string; borrado: boolean } {
+  const ruta = rutaConfigGlobal();
+  const base = leerObjetoCrudoOAbortar(ruta);
+  const previos = Array.isArray(base.proveedores) ? base.proveedores : [];
+  const proveedores = previos.filter((p) => !(esObjeto(p) && p.slug === slug));
+  if (proveedores.length === previos.length) return { ruta, borrado: false };
+  // Al quedarse vacía se BORRA la clave en vez de escribir `[]`. Aquí, al revés que en
+  // `Entorno.proyectos` o en los ajustes de dispositivos, ausente y vacío significan lo
+  // mismo —quien lee hace `?? []`—, así que dejar un `"proveedores": []` sería basura en el
+  // fichero del usuario diciendo lo mismo que no decir nada.
+  const fusionado = proveedores.length === 0
+    ? Object.fromEntries(Object.entries(base).filter(([clave]) => clave !== "proveedores"))
+    : { ...base, proveedores };
+  escribirAtomico(ruta, JSON.stringify(fusionado, null, 2) + "\n", operaciones);
+  return { ruta, borrado: true };
 }
 
 /** Guarda la preferencia estética junto al proyecto; nunca en el config global de la cuenta. */
@@ -339,7 +434,7 @@ export { VARIABLES_POR_PROVEEDOR } from "../core/modelos.js";
  * nada que aplicar y decir que sí sería mentir.
  */
 export function aplicarCredencialAlProceso(proveedor: Proveedor, clave: string): boolean {
-  const variable = VARIABLES_POR_PROVEEDOR[proveedor];
+  const variable = variableDeProveedor(proveedor);
   if (variable === undefined) return false;
   process.env[variable] = clave;
   return true;
@@ -352,8 +447,12 @@ export function aplicarCredencialAlProceso(proveedor: Proveedor, clave: string):
  */
 export function aplicarAuth(auth: Auth): string[] {
   const aplicadas: string[] = [];
-  for (const proveedor of PROVEEDORES) {
-    const variable = VARIABLES_POR_PROVEEDOR[proveedor];
+  // Se recorre lo que HAY en el fichero y no la lista de proveedores de serie: los
+  // personalizados no están en esa lista —los declara el usuario— y su clave se quedaba
+  // sin aplicar, o sea que el catálogo decía «falta la credencial» de una que estaba
+  // escrita ahí mismo.
+  for (const proveedor of Object.keys(auth) as Proveedor[]) {
+    const variable = variableDeProveedor(proveedor);
     const credencial = auth[proveedor];
     if (variable === undefined || credencial === undefined) continue;
     if (process.env[variable] !== undefined) continue;

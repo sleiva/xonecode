@@ -164,3 +164,19 @@
   outline-offset: 2px;
   border-radius: 4px;
 }
+
+/* El símbolo de la marca, sobre una placa CLARA y no suelto sobre el azul.
+   Medido en pantalla: el icono lleva dos tintas —el cian del anillo y el azul marino de la
+   flecha y del glifo—, y ese azul marino sobre la barra azul profunda desaparecía: la marca
+   se quedaba en un anillo cian partido, o sea sin la mitad de su forma. La placa es el
+   mismo blanco sobre el que está dibujado (`--xonecode-sobre-azul`, el token que ya define
+   qué se lee encima de esta barra), así que el arte se ve tal cual se diseñó en vez de
+   recolorearlo con un filtro. No se encoge: una marca a medias no es una marca. */
+.simbolo {
+  flex-shrink: 0;
+  margin-right: 8px;
+  padding: 2px;
+  border-radius: 6px;
+  background: var(--xonecode-sobre-azul);
+  vertical-align: middle;
+}

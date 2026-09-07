@@ -18,7 +18,7 @@ import { cmdVerify } from "./verify.js";
 import { AgenteGuionizado } from "../agent/guionizado.js";
 import { correrTurno, type Piel } from "../core/turno.js";
 import {
-  PAPELES, POR_OMISION, ModeloMalEscrito, parsear, PROVEEDORES, VARIABLES_POR_PROVEEDOR,
+  PAPELES, POR_OMISION, ModeloMalEscrito, parsear, PROVEEDORES, VARIABLES_POR_PROVEEDOR, esProveedorPersonalizado, variableDeProveedor,
   type FuentesDeEleccion, type Proveedor,
 } from "../core/modelos.js";
 import { motivoDeClaveInaceptable, type Aviso } from "../core/config.js";
@@ -520,16 +520,23 @@ export function fuenteQueEclipsaGlobal(
   return undefined;
 }
 
+/**
+ * El proveedor que se teclea en `/modelos` y en `/provider`.
+ *
+ * Acepta también un personalizado por su FORMA (`custom:<slug>`), igual que `parsear`: que
+ * ese slug esté dado de alta lo dirá el catálogo, con un mensaje que dice dónde darlo de
+ * alta. Rechazarlo aquí obligaría a este módulo a leer el `config.json` global solo para
+ * validar un nombre.
+ */
 function validarProveedor(nombre: string | undefined): Proveedor | undefined {
-  if (nombre !== undefined && (PROVEEDORES as readonly string[]).includes(nombre)) {
-    return nombre as Proveedor;
-  }
-  return undefined;
+  if (nombre === undefined) return undefined;
+  if ((PROVEEDORES as readonly string[]).includes(nombre)) return nombre as Proveedor;
+  return esProveedorPersonalizado(nombre) ? nombre : undefined;
 }
 
 /** Exportada: `main.ts` la usa para el contexto de `asistenteDeModelo` (stdio y TUI). */
 export function hayCredencial(proveedor: Proveedor, raiz: string): boolean {
-  const variable = VARIABLES_POR_PROVEEDOR[proveedor];
+  const variable = variableDeProveedor(proveedor);
   if (variable === undefined) return true;
   const enEntorno = process.env[variable];
   if (enEntorno !== undefined && enEntorno.trim() !== "") return true;
@@ -602,8 +609,8 @@ async function elegirModelo(
     const escrito = args[0];
     consola.escribir(
       escrito === undefined
-        ? `uso: /modelos <proveedor> — proveedores: ${PROVEEDORES.join(", ")}\n`
-        : `proveedor «${escrito}» desconocido. Los que hay: ${PROVEEDORES.join(", ")}\n`
+        ? `uso: /modelos <proveedor> — proveedores: ${PROVEEDORES.join(", ")} (o «custom:<id>»)\n`
+        : `proveedor «${escrito}» desconocido. Los que hay: ${PROVEEDORES.join(", ")} (o «custom:<id>», dado de alta en Ajustes)\n`
     );
     return { seguir: true };
   }

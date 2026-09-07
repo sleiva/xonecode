@@ -15,7 +15,8 @@ import { chmodSync, existsSync, mkdirSync, readFileSync, statSync, writeFileSync
 import { dirname } from "node:path";
 import { validarAuth, type Aviso } from "../core/config.js";
 import type { Proveedor } from "../core/modelos.js";
-import { aplicarCredencialAlProceso, rutaAuth, VARIABLES_POR_PROVEEDOR } from "./configEnDisco.js";
+import { aplicarCredencialAlProceso, rutaAuth } from "./configEnDisco.js";
+import { variableDeProveedor } from "../core/modelos.js";
 
 /** Un `auth.json` existente que no se puede fusionar: no se escribe nada encima. */
 export class AuthRotoEnDisco extends Error {}
@@ -109,7 +110,7 @@ export function borrarCredencial(proveedor: Proveedor, clave?: string): {
   quedaEnEntorno: boolean;
 } {
   const ruta = rutaAuth();
-  const variable = VARIABLES_POR_PROVEEDOR[proveedor];
+  const variable = variableDeProveedor(proveedor);
   if (!existsSync(ruta)) {
     return { ruta, borrada: false, quedaEnEntorno: variable !== undefined && process.env[variable] !== undefined };
   }

@@ -18,7 +18,11 @@
  * campo, no QUÉ contenía. Por eso estos mensajes no interpolan nunca el valor de entrada.
  */
 
-import { PROVEEDORES, PAPELES, type Proveedor } from "./modelos.js";
+import {
+  PROVEEDORES, PAPELES,
+  esProveedorPersonalizado, motivoDeEndpointInaceptable, motivoDeSlugInaceptable,
+  type Proveedor, type ProveedorDeclarado,
+} from "./modelos.js";
 import type { Papel } from "./ports.js";
 
 /** La configuración: modelos y proveedores. Nunca claves. */
@@ -50,6 +54,16 @@ export interface ConfigDeFichero {
     rama?: string;
   };
   ollama?: { baseUrl?: string };
+  /**
+   * Endpoints compatibles con OpenAI dados de alta por el usuario. **Solo en el
+   * `config.json` GLOBAL**: en el del proyecto se rechaza, y no es purismo de ámbito.
+   *
+   * La clave de un personalizado se guarda en `auth.json` bajo su slug, así que un
+   * proyecto que pudiera redefinir la `baseUrl` de un slug ya existente mandaría esa clave
+   * al host que él dijera, sin que nadie tocara nada. Un `config.json` de proyecto es un
+   * fichero que puede venir de fuera; el global es del dueño de la máquina.
+   */
+  proveedores?: ProveedorDeclarado[];
   /** Topes de ventana de contexto fijados a mano, por id «proveedor/modelo». */
   contextos?: Record<string, number>;
 }
@@ -160,8 +174,11 @@ export function validar(
 
     // El rechazo se comprueba PRIMERO, para que una clave denegada no salga también como
     // «campo desconocido»: el mismo campo con dos avisos es ruido en la dirección mala.
+    // También un personalizado: `{"custom:mi-llm": "sk-…"}` es exactamente el mismo intento
+    // de meter una credencial aquí, y el campo lo delata igual.
     const proveedorConCadena =
-      (PROVEEDORES as readonly string[]).includes(clave) && typeof valor === "string";
+      ((PROVEEDORES as readonly string[]).includes(clave) || esProveedorPersonalizado(clave))
+      && typeof valor === "string";
     if (CLAVES_DENEGADAS.includes(clave) || proveedorConCadena) {
       avisos.push({
         texto: `«${ruta}»: el campo «${clave}» parece una clave de API y NO se acepta en un config.json: las claves van en ~/.xonecode/auth.json.`,
@@ -179,6 +196,64 @@ export function validar(
           severidad: "aviso",
         });
       }
+      continue;
+    }
+
+    if (clave === "proveedores") {
+      // Solo global, y el aviso es GRAVE: quien escribió esto esperaba que funcionara, y
+      // callarlo dejaría un proveedor declarado que no existe en ninguna lista.
+      if (procedencia === "proyecto") {
+        avisos.push({
+          texto: `«${ruta}»: «proveedores» solo se admite en el config.json GLOBAL — la clave de un proveedor personalizado se guarda por su identificador, y un proyecto que redefiniera su URL la mandaría a otro sitio; se descarta.`,
+          severidad: "grave",
+        });
+        continue;
+      }
+      if (!Array.isArray(valor)) {
+        avisos.push({
+          texto: `«${ruta}»: «proveedores» debe ser una lista de {slug, nombre, baseUrl}; se descarta.`,
+          severidad: "aviso",
+        });
+        continue;
+      }
+      const declarados: ProveedorDeclarado[] = [];
+      for (const fila of valor) {
+        if (!esObjeto(fila)) {
+          avisos.push({ texto: `«${ruta}»: una entrada de «proveedores» no es un objeto; se descarta.`, severidad: "aviso" });
+          continue;
+        }
+        const slug = fila["slug"];
+        const nombre = fila["nombre"];
+        const baseUrl = fila["baseUrl"];
+        if (typeof slug !== "string" || typeof nombre !== "string" || typeof baseUrl !== "string") {
+          avisos.push({ texto: `«${ruta}»: una entrada de «proveedores» no trae «slug», «nombre» y «baseUrl» como texto; se descarta.`, severidad: "aviso" });
+          continue;
+        }
+        // Los mismos motivos que enseña la ventana, aplicados aquí también: este fichero
+        // se edita a mano, así que la autoridad sobre si vale es el cargador y no el
+        // formulario — la misma regla que los `.md` de los subagentes.
+        const malSlug = motivoDeSlugInaceptable(slug);
+        if (malSlug !== undefined) {
+          avisos.push({ texto: `«${ruta}»: el «slug» de un proveedor no vale (${malSlug}); se descarta la entrada.`, severidad: "aviso" });
+          continue;
+        }
+        const malUrl = motivoDeEndpointInaceptable(baseUrl);
+        if (malUrl !== undefined) {
+          // El motivo sí, la URL NO: el aviso acaba en logs y en capturas.
+          avisos.push({ texto: `«${ruta}»: la «baseUrl» del proveedor «${slug}» no vale (${malUrl}); se descarta la entrada.`, severidad: "aviso" });
+          continue;
+        }
+        if (nombre.trim() === "") {
+          avisos.push({ texto: `«${ruta}»: el proveedor «${slug}» no tiene nombre; se descarta la entrada.`, severidad: "aviso" });
+          continue;
+        }
+        if (declarados.some((d) => d.slug === slug)) {
+          avisos.push({ texto: `«${ruta}»: el proveedor «${slug}» está declarado dos veces; se queda el primero.`, severidad: "aviso" });
+          continue;
+        }
+        declarados.push({ slug, nombre, baseUrl });
+      }
+      config.proveedores = declarados;
       continue;
     }
 
@@ -417,9 +492,13 @@ export function validarAuth(
   for (const clave of Object.keys(bruto)) {
     const valor = bruto[clave];
 
-    if (!(PROVEEDORES as readonly string[]).includes(clave)) {
+    // Un personalizado se acepta por su FORMA, igual que en `parsear`: aquí no hay
+    // registro que consultar —`auth.json` no sabe de `config.json`— y descartar la clave
+    // de un proveedor dado de alta dejaría al catálogo diciendo que falta una credencial
+    // que está escrita en el fichero de al lado.
+    if (!(PROVEEDORES as readonly string[]).includes(clave) && !esProveedorPersonalizado(clave)) {
       avisos.push({
-        texto: `«${ruta}»: «${clave}» no es un proveedor conocido (los que hay: ${PROVEEDORES.join(", ")}); se descarta.`,
+        texto: `«${ruta}»: «${clave}» no es un proveedor conocido (los que hay: ${PROVEEDORES.join(", ")}, o «custom:<id>»); se descarta.`,
         severidad: "aviso",
       });
       continue;

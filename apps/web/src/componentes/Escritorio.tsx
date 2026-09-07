@@ -1,4 +1,5 @@
 import { PROYECTOS_POR_OMISION } from "./Barra.js";
+import { IconoDeEntorno } from "./IconoDeEntorno.js";
 import estilos from "./Escritorio.module.css";
 import { Equipo } from "./Equipo.js";
 import type { InformeDeDispositivos } from "../tipos.js";
@@ -46,7 +47,8 @@ export function Escritorio({
   /** El saludo (`agent/persona.ts`). Ausente = se saluda igual, sin inventarse un nombre. */
   nombre?: string;
   /** El entorno activo. Ausente = no hay ninguno registrado todavía. */
-  entorno?: { nombre: string; url: string };
+  /** El `id` además del nombre: es lo que decide su marca (`IconoDeEntorno`). */
+  entorno?: { id: string; nombre: string; url: string };
   proyectos: readonly {
     id: string;
     nombre: string;
@@ -93,6 +95,9 @@ export function Escritorio({
           </p>
           {entorno === undefined ? null : (
             <p className={estilos.entorno}>
+              {/* La marca del entorno, delante de su punto de conexión: la primera dice de
+                  QUÉ servidor se habla y el segundo si se le está hablando. */}
+              <IconoDeEntorno entorno={entorno.id} size={20} className={estilos.iconoDeEntorno} />
               <span className={estilos.punto} data-sin-conexion={apagado ? "" : undefined} aria-hidden="true" />
               <span className={estilos.entornoNombre}>{entorno.nombre}</span>
               <span className={estilos.entornoUrl}>{entorno.url}</span>

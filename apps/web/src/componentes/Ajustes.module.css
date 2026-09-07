@@ -29,12 +29,19 @@
 
 /* Dos columnas, como el panel de la referencia: navegación estrecha y fija a la izquierda,
    una sola sección a la vista a la derecha. El alto está acotado y quien cede es el panel,
-   no la navegación — una lista de proveedores larga no puede empujar las secciones fuera. */
+   no la navegación — una lista de proveedores larga no puede empujar las secciones fuera.
+
+   Fueron 560px, medidos cuando Proveedores tenía cinco filas de una línea. Hoy son ocho de
+   DOS líneas —nombre y id— más los personalizados, y a 560px se veían seis y media: la
+   mitad inferior de una tarjeta asomando por el corte se lee como un fallo de pintado, que
+   es justo lo que el alto del selector de `/modelos` ya evita por su cuenta. 720px es lo
+   que cabe entero en un portátil de 900px de alto contando el `86vh`, que sigue mandando en
+   una ventana más baja: el tope en `vh` es el que impide que la ventana se salga. */
 .ventana {
   position: relative;
   display: flex;
   width: min(820px, 92vw);
-  height: min(560px, 86vh);
+  height: min(720px, 86vh);
   max-height: 100%;
   border: 0.5px solid var(--dsw-alias-border-l2);
   border-radius: 16px;
@@ -189,6 +196,46 @@
   font-weight: 600;
 }
 
+/* El logo del proveedor (`IconoDeProveedor.tsx`), monocromo y heredando el color: se pinta
+   con el alias de la fila, así que funciona en claro y en oscuro sin una regla más. Va en
+   `label-secondary` y no en `label-primary` a propósito — es una ayuda para reconocer la
+   fila de un vistazo, no el dato de la fila, que es el nombre de al lado. */
+.logo {
+  flex-shrink: 0;
+  color: var(--dsw-alias-label-secondary);
+}
+
+/* Nombre arriba, id debajo. `min-width: 0` porque es el elemento elástico de la fila: sin
+   él, un id largo empujaría los botones fuera de la tarjeta en vez de recortarse. */
+.identidad {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+  margin-right: auto;
+}
+
+/* El id del proveedor, en MONO: es lo que se teclea en `/modelo <proveedor>/<modelo>`, o
+   sea dato de máquina — la misma regla tipográfica que manda en `.url`, y por la que el
+   estado de la credencial de al lado sigue en Inter: eso es una frase. */
+.idDeProveedor {
+  overflow: hidden;
+  color: var(--dsw-alias-label-tertiary);
+  font-family: var(--ds-font-family-code);
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* El punto y su frase van juntos y NO se encogen: son la respuesta a «¿puedo usar esto?»,
+   y partir la frase en dos líneas para dejar sitio a un botón la vuelve ilegible. */
+.estadoDeClave {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 6px;
+}
+
 /* La URL del entorno, en mono. `.detalle` no vale para esto aunque sea el hueco de al lado:
    ese mismo hueco lo ocupan la descripción de una opción de apariencia y el estado de una
    credencial, que son PROSA. La regla tipográfica del rediseño separa dato de máquina de
@@ -201,12 +248,23 @@
   font-size: 11px;
 }
 
-/* `margin-right: auto` empuja las acciones al borde derecho sin necesidad de un envoltorio
-   más: el detalle ocupa lo que sobra. */
+/* La frase que acompaña a una fila: el estado de una credencial, la descripción de una
+   opción de apariencia, lo que dice una herramienta. Prosa, y por eso en Inter y no en
+   mono (ver `.url` justo arriba).
+
+   El `margin-right: auto` es lo que empuja los botones al borde derecho en las filas de
+   herramientas y dispositivos, donde el detalle ES el elemento elástico. En la fila de un
+   proveedor no lo es —ahí vive dentro de `.estadoDeClave`, pegado a su punto, y empuja
+   `.identidad`—, así que ahí se le quita: con el margen puesto, el punto se quedaba en el
+   centro de la fila y su frase al borde derecho, como si no fueran la misma respuesta. */
 .detalle {
   margin-right: auto;
   color: var(--dsw-alias-label-tertiary);
   font-size: 12px;
+}
+
+.estadoDeClave .detalle {
+  margin-right: 0;
 }
 
 /* Verde: credencial CONFIRMADA. Rojo: consta que falta. Quien no necesita ninguna no llega
@@ -230,7 +288,13 @@
   box-shadow: inset 0 0 0 1.5px var(--dsw-alias-label-tertiary);
 }
 
+/* `nowrap` porque en la fila de un proveedor personalizado los botones se partían en dos
+   líneas —«Añadir / clave», «Dar de / baja»— para dejarle sitio a una URL larga. La
+   prioridad es la contraria: un control tiene el tamaño que tiene, y quien cede es la
+   identidad de al lado, que ya recorta con puntos suspensivos y lleva el texto entero en
+   su `title`. */
 .accion {
+  white-space: nowrap;
   padding: 6px 10px;
   border: 0.5px solid var(--dsw-alias-border-l2);
   border-radius: 8px;
@@ -266,7 +330,18 @@
   font-size: 12px;
 }
 
+/* `Input` del paquete envuelve el `<input>` en un `<span>`, así que este `width` solo
+   estiraba la envoltura: el campo de dentro se quedaba en su tamaño por omisión —167 px
+   medidos en el navegador contra 551 de hueco disponible—, y ahí no cabe ni una URL corta.
+   Se ve en el formulario de entorno desde que existe: «https://mcp.ejemplo.com/mcp»
+   entraba cortado. El hijo directo, no un descendiente cualquiera: dentro de un campo no
+   hay más inputs, pero la regla dice lo que quiere decir. */
 .campo {
+  display: block;
+  width: 100%;
+}
+
+.campo > input {
   width: 100%;
 }
 

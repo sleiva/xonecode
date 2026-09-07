@@ -1,6 +1,7 @@
 import { useCallback, useRef, useState } from "react";
 import { useCerrarAlPulsarFuera } from "../cerrarAlPulsarFuera.js";
 import type { ProveedorDeModelos } from "../tipos.js";
+import { IconoDeProveedor } from "./IconoDeProveedor.js";
 import estilos from "./PastillaDeModelo.module.css";
 
 /**
@@ -161,7 +162,11 @@ export function PastillaDeModelo({
                       }
                     />
                   )}
-                  <span>{p.id}</span>
+                  <IconoDeProveedor proveedor={p.id} size={16} className={estilos.logo} />
+                  {/* El NOMBRE, no el id: el id se teclea, el nombre se lee. Lo manda el
+                      servidor —capitalizarlo aquí daría «Xai» y «Ollama-cloud»— y es
+                      también el nombre accesible de esta entrada del menú. */}
+                  <span>{p.nombre}</span>
                 </button>
                 {desplegado === p.id ? (
                   <div className={estilos.modelos}>
@@ -185,7 +190,7 @@ export function PastillaDeModelo({
                           value={filtro}
                           onChange={(e) => setFiltro(e.target.value)}
                           placeholder="filtrar…"
-                          aria-label={`filtrar los modelos de ${p.id}`}
+                          aria-label={`filtrar los modelos de ${p.nombre}`}
                         />
                       ) : null}
                       {p.modelos

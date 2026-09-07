@@ -122,6 +122,12 @@ export type MensajeAlCliente =
    * hay modelo que afirmar — se enseña «Elige modelo», nunca una fila inventada.
    */
   | { clase: "modelos"; actual?: string; proveedores: ProveedorDeModelos[] }
+  /**
+   * Cómo fue el último alta o baja de proveedor personalizado. El motivo viaja EN un
+   * mensaje propio y no como acto de sistema: la ventana de ajustes no pinta el
+   * transcript, así que ahí un fallo contado por el transcript sería mudo.
+   */
+  | { clase: "proveedor"; hecho: boolean; motivo?: string }
   /** Hay un turno EN VUELO, o dejó de haberlo: apaga el compositor y saca el botón de
    *  parar. No se deduce de los actos — un turno que revienta no siempre deja `fin`. */
   | { clase: "turno"; activo: boolean }
@@ -271,6 +277,12 @@ export interface FicheroDelProyecto {
 
 export interface ProveedorDeModelos {
   id: string;
+  /** Cómo se escribe. Lo pone el servidor: capitalizar el id aquí daría «Xai». */
+  nombre: string;
+  /** Lo declaró el usuario (`custom:<slug>`), no viene de serie. */
+  personalizado?: boolean;
+  /** Su URL base, solo en los personalizados. */
+  baseUrl?: string;
   credencial: "puesta" | "falta" | "nativa";
   /** La credencial está en `auth.json` y por tanto se puede borrar desde aquí. Una que solo
    *  viene del entorno no lo lleva: desexportar la shell de nadie no está a nuestro alcance. */
@@ -333,6 +345,22 @@ export type MensajeDelCliente =
   /** Borrar la credencial de `auth.json`. Guardar no pasa por aquí: la clave viaja por
    *  «secreto», contestando al `leerSecreto` que abre `/provider`. */
   | { clase: "credencial"; accion: "pedir" | "borrar"; proveedor: string }
+  /**
+   * Dar de alta o retirar un proveedor de modelos PERSONALIZADO: un endpoint compatible
+   * con OpenAI que declara el usuario.
+   *
+   * La clave NO viaja aquí. El alta escribe nombre y URL en el `config.json` global, y la
+   * credencial se pone después con el mismo `{clase:"credencial", accion:"pedir"}` que los
+   * de serie — o sea, por el único mensaje del cable que la lleva. Que sean dos pasos y no
+   * un formulario de tres campos es deliberado: un tercer campo con la clave dentro sería
+   * un segundo camino para lo mismo, y el que menos garantías da.
+   *
+   * El identificador no se teclea: lo deriva el servidor del nombre
+   * (`core/modelos.ts#slugDesdeNombre`). La baja va por ese identificador, que es lo que
+   * la fila conoce.
+   */
+  | { clase: "proveedor"; accion: "alta"; nombre: string; baseUrl: string }
+  | { clase: "proveedor"; accion: "baja"; slug: string }
   /**
    * Dar de alta, cambiar o borrar un subagente.
    *

@@ -22,6 +22,7 @@ import {
   guardarEntornoDeProyecto,
   guardarModeloGlobal,
   guardarModelosDeProyecto,
+  proveedoresPersonalizados,
   guardarModoDeProyecto,
   guardarProyectoCloudStudioDeProyecto,
   guardarRamaDeProyecto,
@@ -432,7 +433,7 @@ export function crearEjecutorReal(alAbrirSesion: (sesion: SesionReal) => void): 
       }
       sesion = await abrirSesionReal({
         raiz: estado.raiz,
-        modelos: new Modelos(estado.fuentes),
+        modelos: new Modelos(estado.fuentes, proveedoresPersonalizados),
         skills: new SkillsEnDisco(),
         entorno,
         // El simulador de verdad. Su ausencia en la máquina no se descubre aquí sino al
@@ -463,7 +464,7 @@ export function crearEjecutorReal(alAbrirSesion: (sesion: SesionReal) => void): 
       // `/modelo` solo actualizó `estado.fuentes`; aquí es donde deja de ser un cambio
       // cosmético: el agente se reconstruye con el modelo nuevo y el hilo SE CONSERVA.
       if (JSON.stringify(estado.fuentes) !== JSON.stringify(fuentesVistas)) {
-        await sesion.cambiarModelos(new Modelos(estado.fuentes));
+        await sesion.cambiarModelos(new Modelos(estado.fuentes, proveedoresPersonalizados));
         consolaReal.escribir("  (agente reconstruido con el modelo nuevo — el hilo se conserva)\n");
         fuentesVistas = estado.fuentes;
       }
@@ -863,7 +864,7 @@ export async function entrarEnConsola(
   raton: boolean = true,
   /** Adaptadores compartidos por stdio y TUI; `main` construye una sola instancia real. */
   dependencias: Pick<Consola, "catalogoModelos" | "guardarModeloGlobal" | "conectarCloudStudio"> = {
-    catalogoModelos: new CatalogoModelos(),
+    catalogoModelos: new CatalogoModelos(undefined, undefined, proveedoresPersonalizados),
     guardarModeloGlobal,
     conectarCloudStudio: (url, scopes, informar) =>
       // El entorno se resuelve por URL, no se omite: sin esto, un `/connect-studio` sobre
@@ -1144,7 +1145,7 @@ export async function main(argv: string[]): Promise<number> {
           crearEjecutor: crearEjecutorReal,
           dependenciasDeProyecto: (raiz) => ({
             ...adaptadoresDeProyecto(raiz),
-            catalogoModelos: new CatalogoModelos(),
+            catalogoModelos: new CatalogoModelos(undefined, undefined, proveedoresPersonalizados),
             guardarModeloGlobal,
             conectarCloudStudio: (url, scopes, informar) =>
               conectarCloudStudio(url, {
@@ -1176,7 +1177,7 @@ export async function main(argv: string[]): Promise<number> {
         return argv[i - 1] !== "--puerto";
       });
       const { fuentes } = extraerBanderasDeModelo(sinBanderasDeConsola);
-      const catalogoModelos = new CatalogoModelos();
+      const catalogoModelos = new CatalogoModelos(undefined, undefined, proveedoresPersonalizados);
       // Por defecto, TUI siempre. `--no-tui` fuerza stdio.
       return await entrarEnConsola(
         fuentes,

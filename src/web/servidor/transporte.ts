@@ -81,6 +81,15 @@ export type MensajeAlCliente =
    */
   | { clase: "modelos"; actual?: string; proveedores: ProveedorDeModelos[] }
   /**
+   * Cómo fue el último alta o baja de proveedor personalizado.
+   *
+   * El motivo viaja EN un mensaje propio y no por `informar`, por lo mismo que el aviso
+   * del selector durante el alta: la ventana de ajustes no pinta el transcript, así que un
+   * fallo contado como acto de sistema sería mudo justo donde hay que leerlo. `hecho` es
+   * lo que deja al formulario cerrarse solo cuando la cosa salió bien.
+   */
+  | { clase: "proveedor"; hecho: boolean; motivo?: string }
+  /**
    * Hay un turno EN VUELO, o dejó de haberlo.
    *
    * El cliente lo necesita para dos cosas que no puede deducir sin mentir: apagar el
@@ -343,6 +352,11 @@ export interface FicheroDelProyecto {
 
 export interface ProveedorDeModelos {
   id: string;
+  /**
+   * Cómo se ESCRIBE, que no es el id. Lo pone el servidor (`core/modelos.ts#nombreDeProveedor`)
+   * y no el cliente: capitalizar un id en el navegador daría «Xai» y «Ollama-cloud».
+   */
+  nombre: string;
   credencial: "puesta" | "falta" | "nativa";
   /**
    * La credencial está en `auth.json` — o sea, es NUESTRA y se puede borrar desde la
@@ -352,6 +366,11 @@ export interface ProveedorDeModelos {
    * credencial cuya referencia puede demostrar suya.
    */
   enFichero?: boolean;
+  /** Lo declaró el usuario (`custom:<slug>`), no viene de serie. */
+  personalizado?: boolean;
+  /** Su URL base, SOLO en los personalizados: es lo que tecleó el usuario y lo que hay que
+   *  ver al lado de su clave para saber a dónde va. Los de serie la tienen en el repo. */
+  baseUrl?: string;
   /** Ausente = todavía no se ha consultado su catálogo. Vacío = lo dijo y no ofrece nada. */
   modelos?: { id: string; nombre?: string }[];
   /** El catálogo de ESTE proveedor falló. Nunca lleva la clave ni el cuerpo remoto. */
@@ -483,6 +502,22 @@ export type MensajeDelCliente =
    * abierto. La ventana de ajustes se abre antes, así que tiene su propio mensaje.
    */
   | { clase: "credencial"; accion: "pedir" | "borrar"; proveedor: string }
+  /**
+   * Dar de alta o retirar un proveedor de modelos PERSONALIZADO: un endpoint compatible
+   * con OpenAI que declara el usuario.
+   *
+   * La clave NO viaja aquí. El alta escribe nombre y URL en el `config.json` global, y la
+   * credencial se pone después con el mismo `{clase:"credencial", accion:"pedir"}` que los
+   * de serie — o sea, por el único mensaje del cable que la lleva. Que sean dos pasos y no
+   * un formulario de tres campos es deliberado: un tercer campo con la clave dentro sería
+   * un segundo camino para lo mismo, y el que menos garantías da.
+   *
+   * El identificador no se teclea: lo deriva el servidor del nombre
+   * (`core/modelos.ts#slugDesdeNombre`). La baja va por ese identificador, que es lo que
+   * la fila conoce.
+   */
+  | { clase: "proveedor"; accion: "alta"; nombre: string; baseUrl: string }
+  | { clase: "proveedor"; accion: "baja"; slug: string }
   /**
    * Dar de alta, cambiar o borrar un subagente.
    *

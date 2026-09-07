@@ -99,8 +99,20 @@ export function Cabecera({ titulo, proyecto, modo, conectado, barraContraida, al
             escritorio del que hablar —la consola web es una sola cosa—, y una pastilla que
             no distingue nada de nada es un rótulo decorativo.
           */}
+          {/*
+            El símbolo va DENTRO de la marca, no al lado: es la misma raíz de la miga, y
+            partirlo en dos elementos daría dos zonas pulsables para el mismo destino. Es
+            el icono oficial que entregó el usuario, servido desde `apps/web/public/` con
+            la MISMA ruta que el favicon de `index.html` — un solo fichero, porque dos
+            copias del logo acaban siendo dos logos. Local y no de un CDN: esta consola
+            escucha en loopback y declara un modo offline de primera clase. `alt=""` y no «xonecode»: la
+            palabra está ahí al lado en texto, y repetirla la haría anunciarse dos veces.
+          */}
           {alIrAlEscritorio === undefined ? (
-            <span className={estilos.marca}>xonecode</span>
+            <span className={estilos.marca}>
+              <img className={estilos.simbolo} src="/iconos/xonecode.png" alt="" width={22} height={22} />
+              xonecode
+            </span>
           ) : (
             <button
               type="button"
@@ -108,6 +120,7 @@ export function Cabecera({ titulo, proyecto, modo, conectado, barraContraida, al
               onClick={alIrAlEscritorio}
               title="Volver al escritorio"
             >
+              <img className={estilos.simbolo} src="/iconos/xonecode.png" alt="" width={22} height={22} />
               xonecode
             </button>
           )}

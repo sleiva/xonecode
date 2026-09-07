@@ -1,5 +1,6 @@
 import {
-  compatibleConOpenAi, VARIABLES_POR_PROVEEDOR, type Proveedor,
+  compatibleConOpenAi, esProveedorPersonalizado, variableDeProveedor,
+  type Proveedor, type ProveedorDeclarado,
 } from "../core/modelos.js";
 import type { CatalogoModelosPort, ModeloDisponible } from "../core/ports.js";
 
@@ -87,9 +88,16 @@ function contextoOllama(modelInfo: unknown): number | undefined {
 }
 
 export class CatalogoModelos implements CatalogoModelosPort {
+  /**
+   * Los personalizados entran por una FUNCIÓN y no por una lista: la ventana de Ajustes
+   * los da de alta en caliente, y una lista leída al construir el catálogo se quedaría
+   * vieja hasta reiniciar el proceso — el mismo motivo por el que el modelo en vigor se
+   * re-resuelve en cada barra en vez de guardarse.
+   */
   constructor(
     private readonly fetchFn: typeof fetch = globalThis.fetch,
     private readonly timeoutMs = 8_000,
+    private readonly personalizados: () => readonly ProveedorDeclarado[] = () => [],
   ) {}
 
   async listar(proveedor: Proveedor): Promise<ModeloDisponible[]> {
@@ -103,6 +111,13 @@ export class CatalogoModelos implements CatalogoModelosPort {
       case "groq":
       case "xai":
         return this.listarCompatible(proveedor);
+      default:
+        // Un personalizado va por el mismo camino: es un endpoint compatible con OpenAI y
+        // punto. El `never` de abajo es lo que mantiene el switch exhaustivo — añadir un
+        // proveedor de serie sin case da un error de compilación en vez de caer aquí y
+        // preguntarle a un registro donde no está.
+        if (esProveedorPersonalizado(proveedor)) return this.listarCompatible(proveedor);
+        return ((nunca: never) => { throw new ErrorCatalogoModelos(`proveedor desconocido: ${String(nunca)}`); })(proveedor);
     }
   }
 
@@ -113,7 +128,7 @@ export class CatalogoModelos implements CatalogoModelosPort {
    * llama a esto—, pero si llegara, decirlo es mejor que leer `process.env[undefined]`.
    */
   private clave(proveedor: Proveedor): string {
-    const variable = VARIABLES_POR_PROVEEDOR[proveedor];
+    const variable = variableDeProveedor(proveedor);
     const clave = variable === undefined ? undefined : process.env[variable];
     if (!clave) {
       throw new ErrorCatalogoModelos(`falta la credencial para ${proveedor}; usa /provider ${proveedor}`);
@@ -248,8 +263,15 @@ export class CatalogoModelos implements CatalogoModelosPort {
    *   bucle de cursores contra un campo que no existe sería código que nadie ejecuta.
    */
   private async listarCompatible(proveedor: Proveedor): Promise<ModeloDisponible[]> {
-    const fila = compatibleConOpenAi(proveedor);
-    if (fila === undefined) throw new ErrorCatalogoModelos(`${proveedor} no es compatible con OpenAI`);
+    const fila = compatibleConOpenAi(proveedor, this.personalizados());
+    if (fila === undefined) {
+      // Solo llegan aquí los personalizados: los tres de serie están en la tabla. Y esto
+      // es lo que pasa cuando el slug no está dado de alta — el mensaje dice dónde darlo
+      // de alta en vez de hablar de una URL que no existe.
+      throw new ErrorCatalogoModelos(
+        `el proveedor personalizado «${proveedor}» no está dado de alta; añádelo en Ajustes → Proveedores`,
+      );
+    }
     const clave = this.clave(proveedor);
     const respuesta = await this.pedir(proveedor, unirUrl(fila.baseUrl, "/models"), {
       headers: { authorization: `Bearer ${clave}` },

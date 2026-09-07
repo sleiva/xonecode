@@ -316,3 +316,9 @@
   color: var(--dsw-alias-label-secondary);
   font-weight: 600;
 }
+
+/* La marca del entorno en la línea de la portada. No se encoge: es lo primero que
+   identifica de qué servidor se habla, y un icono a medias no identifica nada. */
+.iconoDeEntorno {
+  flex-shrink: 0;
+}
