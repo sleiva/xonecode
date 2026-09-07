@@ -1,3 +1,6 @@
+import { readFileSync } from "node:fs";
+import { join, dirname } from "node:path";
+import { fileURLToPath } from "node:url";
 import { StrictMode } from "react";
 import { render, screen, fireEvent, cleanup, waitFor } from "@testing-library/react";
 import { describe, it, expect, vi, afterEach } from "vitest";
@@ -9,6 +12,8 @@ import { Aprobacion } from "./Aprobacion.js";
 // «found multiple elements». Además, `cleanup` desmonta: es lo que ejerce el rechazo al
 // desmontar en todos los tests, no solo en el que lo mide.
 afterEach(cleanup);
+
+const AQUI = dirname(fileURLToPath(import.meta.url));
 
 /**
  * Los fixtures del brief venían con TRES formas inventadas, y las tres se corrigen aquí
@@ -186,5 +191,43 @@ describe("Aprobacion", () => {
       />
     );
     expect(screen.getByText("src/app.xne")).toBeTruthy();
+  });
+});
+
+/**
+ * Estas cuatro declaraciones no se pueden probar montando el componente: jsdom no hace
+ * layout, así que un `getBoundingClientRect` devuelve ceros y un modal roto pasa en verde.
+ * Se vigila la HOJA, que es el mismo trato que `Pestanas.test.tsx` le da a las reglas que
+ * nadie ve fallar.
+ *
+ * Lo que se rompió, medido en el navegador con un diff de 60 campos: viewport de 953 px y
+ * tarjeta de 1602 px, con «Rechazar» y «Aprobar» en `top: 1574`. Un modal fail-closed cuyo
+ * botón de rechazo no se puede pulsar deja al usuario esperando el plazo de diez minutos
+ * del servidor sin ninguna explicación.
+ */
+describe("la tarjeta cabe en la pantalla, y el que cede es el diff", () => {
+  const hoja = readFileSync(join(AQUI, "Aprobacion.module.css"), "utf8");
+  const regla = (nombre: string): string =>
+    hoja.slice(hoja.indexOf(`.${nombre} {`)).slice(0, hoja.slice(hoja.indexOf(`.${nombre} {`)).indexOf("}"));
+
+  it("la fila del velo está DEFINIDA: sin eso el `max-height` de la tarjeta no resuelve", () => {
+    // Un porcentaje contra una pista de grid `auto` se trata como `none`. `max-height: 100%`
+    // llevaba puesto desde el principio y no hacía absolutamente nada.
+    expect(regla("velo")).toMatch(/grid-template-rows:\s*minmax\(0,\s*1fr\)/);
+    expect(regla("tarjeta")).toMatch(/max-height:\s*100%/);
+  });
+
+  it("el velo cuenta su padding DENTRO: en este cliente no hay reset de `box-sizing`", () => {
+    // `height: 100%` + `padding: 24px` en content-box daban 1001 px dentro de una capa
+    // de 953. Lo mismo que ya documentan `Agentes.module.css` y `Pregunta.module.css`.
+    expect(regla("velo")).toMatch(/box-sizing:\s*border-box/);
+  });
+
+  it("el cuerpo puede ENCOGER, que es lo que hace real su scroll", () => {
+    // Un item de flex no baja de la altura de su contenido (`min-height: auto`), así que el
+    // `overflow-y: auto` era decorativo: medido, `scrollHeight` y `clientHeight` valían los
+    // dos 1480 — no había nada que desplazar porque nadie lo había encogido.
+    expect(regla("cuerpo")).toMatch(/min-height:\s*0/);
+    expect(regla("cuerpo")).toMatch(/overflow-y:\s*auto/);
   });
 });

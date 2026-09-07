@@ -13,9 +13,24 @@
   z-index: 100;
 }
 
+/* Tres líneas de esta regla y una de `.cuerpo` son las que hacen que la tarjeta quepa. Sin
+   ellas, MEDIDO en el navegador con un diff de 60 campos: viewport de 953 px, tarjeta de
+   1602 px, y los botones «Rechazar»/«Aprobar» en `top: 1574` — 621 px por debajo del borde,
+   inalcanzables. Un modal fail-closed cuyo botón de rechazo no se puede pulsar deja al
+   usuario esperando el plazo de diez minutos del servidor sin saber por qué.
+
+   - `grid-template-rows: minmax(0, 1fr)`: la fila era `auto`, o sea INDEFINIDA, y un
+     `max-height: 100%` contra una pista indefinida se trata como `none`. Estaba puesto en
+     `.tarjeta` desde el principio y no hacía absolutamente nada. Con la fila definida, el
+     porcentaje resuelve contra el área de la rejilla y la tarjeta ya no puede pasar de ahí.
+   - `box-sizing: border-box`: en este cliente NO hay reset global —lo dicen ya
+     `Agentes.module.css` y `Pregunta.module.css`—, así que `height: 100%` más `padding: 24px`
+     daba 1001 px dentro de una capa de 953. */
 .velo {
   display: grid;
+  grid-template-rows: minmax(0, 1fr);
   place-items: center;
+  box-sizing: border-box;
   width: 100%;
   height: 100%;
   padding: 24px;
@@ -44,9 +59,14 @@
 }
 
 /* El diff se ve ENTERO: el que cede es el cuerpo, con su propio scroll. Recortar aquí
-   sería recortar justo lo que se está decidiendo. */
+   sería recortar justo lo que se está decidiendo.
+   `min-height: 0` es la otra mitad de la corrección de arriba: un item de flex no baja de
+   la altura de su contenido —`min-height: auto` es la omisión—, así que el `overflow-y:
+   auto` estaba puesto y era decorativo. Medido: `scrollHeight` y `clientHeight` valían
+   los dos 1480, o sea que no había nada que desplazar porque nadie lo había encogido. */
 .cuerpo {
   flex: 1 1 auto;
+  min-height: 0;
   overflow-y: auto;
   padding: 12px 20px;
 }
