@@ -40,16 +40,15 @@ import type { BaseCheckpointSaver } from "@langchain/langgraph-checkpoint";
  *
  * Y dos cosas MEDIDAS, no deducidas, que cambian lo que hay que hacer:
  *
- * - **Una aprobación que se quedó sin contestar se vuelve a PREGUNTAR, no revienta ni se
- *   aplica sola.** Era el miedo razonable de reanudar: el hilo queda parado en un
- *   `interrupt()` con tareas pendientes, y lo que llega tras reabrir es un mensaje humano
- *   normal y no un `Command`. Medido con un grafo mínimo sobre este mismo saver: el estado
- *   guardado trae `next: ["pregunta"]` y un `pendingWrites` con el `__interrupt__`, y el
- *   `invoke` con un mensaje normal NO lanza — añade el mensaje, reejecuta el nodo desde el
- *   principio y vuelve a interrumpir. O sea que la escritura que nadie aprobó no se aplicó
- *   (nunca llegó a aplicarse) y la pregunta reaparece. Es el lado correcto, y por eso aquí
- *   no hay ninguna guarda contra los hilos con tareas pendientes: añadirla sería convertir
- *   en histórica una sesión que sí puede continuar.
+ * - **Una aprobación que se quedó sin contestar rompía el primer mensaje tras reabrir**, y
+ *   la primera medida no lo vio porque usaba la forma de grafo equivocada. Con un grafo de
+ *   un nodo, donde `START` va al nodo interrumpido, llegar con un mensaje humano normal
+ *   reejecuta ese nodo y vuelve a preguntar: inofensivo. El grafo del agente no tiene esa
+ *   forma —`START` va al MODELO y el nodo parado es el de tools—, así que lo que le llegaba
+ *   al modelo era `human → ai(tool_calls) → human`, con un `AIMessage` de llamadas y ningún
+ *   `ToolMessage` detrás: Gemini y OpenAI rechazan exactamente eso. Lo arregla
+ *   `turnoReal.ts#saldarAprobacionesHuerfanas` al abrir, no una guarda aquí: marcar como
+ *   histórico un hilo con tareas pendientes sería negar una sesión que sí puede continuar.
  * - **Los acompañantes heredan el modo, y eso está comprobado.** SQLite escribe además
  *   `checkpoint.sqlite-wal` y `-shm`, que crea él y no nosotros: medido sobre un proyecto
  *   de verdad, los dos salen `-rw-------` como el fichero principal, porque los crea con

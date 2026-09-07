@@ -674,9 +674,21 @@ tras reiniciar el servidor, «¿cómo se llamaba la colección que te pedí crea
   fichero. Persistir es de quien tiene identidad que reanudar.
 Y dos cosas que hay que saber: **una aprobación que quedó sin contestar se vuelve a
 PREGUNTAR** —medido con un grafo mínimo sobre este mismo saver: el estado guardado trae
-`next` y un `pendingWrites` con el `__interrupt__`, y llegar con un mensaje humano normal no
-lanza ni aplica nada, reejecuta el nodo y vuelve a interrumpir—, y **esto CRECE**: una sesión
-de cuatro turnos deja 370 checkpoints y 30 MB, porque cada superpaso guarda el estado entero.
+`next` y un `pendingWrites` con el `__interrupt__`— **pero no sola**: la primera medida usó
+un grafo de un nodo, donde `START` va al nodo interrumpido, y ahí reejecutar y volver a
+preguntar es inofensivo. El grafo del agente no tiene esa forma: `START` va al MODELO y el
+nodo parado es el de tools, así que al modelo le llegaba `human → ai(tool_calls) → human` —un
+`AIMessage` con llamadas y ningún `ToolMessage` detrás, que Gemini y OpenAI rechazan con un
+400—. Por eso `abrirSesionReal` SALDA las llamadas colgadas al abrir
+(`saldarAprobacionesHuerfanas`): una respuesta sintética por cada una diciendo la verdad —no
+se aplicó, la sesión se cerró antes de que nadie decidiera, y el `interrupt` pausa ANTES de
+escribir, así que el disco no se tocó—. Con eso el historial es válido y además honesto.
+Segundo: **esto CRECE**: una sesión de cinco turnos deja 370 checkpoints y 30 MB, porque cada
+superpaso guarda el estado entero. Por lo mismo, `.xonecode` se saca del índice privado con
+el que `instantanea.ts` y `sesionGit.ts` fotografían el árbol (`sacarXonecodeDelIndice`): en
+un proyecto CLOUD ya estaba excluida, pero en uno OFFLINE nadie escribió ese `info/exclude` y
+cada foto habría metido esos 30 MB en `.git/objects`, vivos para siempre porque las refs
+`refs/xonecode/sesion/*` los alcanzan.
 No hay poda todavía. Consecuencia directa: **`/nuevo` en la web abre un hilo huérfano** —el de
 la sesión es su id, así que al reabrirla se vuelve al anterior— y el comando lo DICE en su
 salida; quien quiera empezar de cero y poder volver, abre una sesión nueva.

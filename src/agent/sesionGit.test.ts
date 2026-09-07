@@ -3,7 +3,7 @@ import { execFileSync } from "node:child_process";
 import { mkdtempSync, writeFileSync, rmSync, mkdirSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
-import { cambiosDeSesion, marcarSesion, olvidarSesion, parcheDeSesion, refDeSesion } from "./sesionGit.js";
+import { cambiosDeSesion, fotoDeApertura, marcarSesion, olvidarSesion, parcheDeSesion, refDeSesion } from "./sesionGit.js";
 
 /** Un repo de verdad: esto prueba git, no un doble de git. */
 function repo(): string {
@@ -176,5 +176,33 @@ describe("lo que NO es trabajo de la sesión", () => {
     } finally {
       rmSync(base, { recursive: true, force: true });
     }
+  });
+});
+
+describe("`.xonecode` y el árbol de la sesión", () => {
+  /**
+   * En un proyecto OFFLINE nadie escribió `info/exclude`, así que `.xonecode` no está
+   * ignorada. Ahí dentro vive ahora `checkpoint.sqlite`, que son decenas de megas que
+   * cambian en cada superpaso: si entrara en el árbol, cada foto dejaría esos blobs en
+   * `.git/objects` y la ref de la sesión los mantendría vivos para siempre.
+   */
+  it("no entra en el árbol aunque el repo no la ignore", async () => {
+    const raiz = repo();
+    writeFileSync(join(raiz, "app.xne"), "uno\n");
+    escribir(raiz, ".xonecode/checkpoint.sqlite", "bytes que no queremos en git\n");
+    execFileSync("git", ["add", "-A"], { cwd: raiz });
+    execFileSync("git", ["commit", "-qm", "base"], { cwd: raiz });
+    // Sin `info/exclude`: es el caso offline, y se comprueba en vez de suponerse.
+    expect(() => execFileSync("git", ["check-ignore", "-q", ".xonecode/checkpoint.sqlite"], { cwd: raiz })).toThrow();
+
+    const marcar = await fotoDeApertura(raiz);
+    expect(await marcar("s1")).toBe(true);
+
+    const arbol = execFileSync("git", ["ls-tree", "-r", "--name-only", "refs/xonecode/sesion/s1"], {
+      cwd: raiz,
+      encoding: "utf8",
+    });
+    expect(arbol).toContain("app.xne");
+    expect(arbol).not.toContain(".xonecode");
   });
 });

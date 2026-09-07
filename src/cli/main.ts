@@ -444,6 +444,16 @@ export function crearEjecutorReal(
         return;
       }
       const persistente = checkpointerDeProyecto?.(estado.raiz);
+      // Y si había fábrica pero no dio nada, el fichero no se pudo abrir: se DICE. Sin esto
+      // la sesión funcionaba igual y en silencio dejaba de recordar entre arranques, que es
+      // justo la clase de degradación muda que este repo evita. El motivo no viaja —puede
+      // llevar la ruta absoluta del home—, así que se dice QUÉ pasa, no dónde.
+      if (checkpointerDeProyecto !== undefined && persistente === undefined) {
+        consolaReal.escribir(
+          "aviso: no se pudo abrir la memoria del proyecto (.xonecode/checkpoint.sqlite); " +
+            "esta conversación no se recordará al reabrirla.\n"
+        );
+      }
       sesion = await abrirSesionReal({
         raiz: estado.raiz,
         modelos: new Modelos(estado.fuentes, proveedoresPersonalizados),

@@ -21,7 +21,7 @@
  */
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
-import { claseDeCambio, indicePrivado } from "./git.js";
+import { claseDeCambio, indicePrivado, sacarXonecodeDelIndice } from "./git.js";
 import type { Cambio } from "./instantanea.js";
 
 const ejecutar = promisify(execFile);
@@ -101,6 +101,10 @@ async function arbolDeAhora(raiz: string): Promise<string> {
       cwd: raiz,
       env: { ...process.env, GIT_INDEX_FILE: idx.ruta },
     });
+    // El pathspec no vale (ver arriba), pero `rm --cached --ignore-unmatch` sí: sin esto,
+    // en un proyecto offline el `checkpoint.sqlite` entra en el árbol y sus 30 MB se quedan
+    // en `.git/objects`, vivos para siempre porque `refs/xonecode/sesion/*` los alcanza.
+    await sacarXonecodeDelIndice(ejecutar, raiz, idx.ruta);
     const { stdout } = await ejecutar("git", ["write-tree"], {
       cwd: raiz,
       env: { ...process.env, GIT_INDEX_FILE: idx.ruta },

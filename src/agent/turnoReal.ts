@@ -1,7 +1,7 @@
 import { readdirSync, lstatSync, statSync, existsSync, readFileSync } from "node:fs";
 import { join, sep, resolve } from "node:path";
 import { randomUUID } from "node:crypto";
-import { HumanMessage } from "@langchain/core/messages";
+import { HumanMessage, ToolMessage, type AIMessage, type BaseMessage } from "@langchain/core/messages";
 import { Command, MemorySaver } from "@langchain/langgraph";
 import type { BaseCheckpointSaver } from "@langchain/langgraph-checkpoint";
 import { collectPending, type Decision, MAX_APPROVAL_ROUNDS } from "../vendor/hitl.js";
@@ -137,6 +137,78 @@ export function ficherosDelProyecto(raiz: string, prof = 0, tope = PROFUNDIDAD_D
 }
 
 /**
+ * El nodo de tools del grafo de `createAgent`, comprobado en el paquete instalado
+ * (`langchain/dist/agents/nodes/ToolNode.js`: `TOOLS_NODE_NAME = "tools"`). Hace falta para
+ * decirle a `updateState` de qué nodo viene lo que se añade; si el nombre cambiara, el
+ * remedio de abajo cae al `updateState` sin nodo, que es peor pero no rompe nada.
+ */
+const NODO_DE_TOOLS = "tools";
+
+/**
+ * Cierra las aprobaciones que se quedaron sin contestar cuando murió el proceso anterior.
+ *
+ * Solo existe desde que el hilo se guarda en disco (`agent/checkpointer.ts`), y arregla un
+ * fallo MEDIDO —y medido dos veces, porque la primera medida estaba mal—. La forma del
+ * grafo importa: un grafo de un solo nodo donde `START` va al nodo interrumpido reejecuta
+ * ese nodo con el mensaje nuevo y vuelve a preguntar, que es inofensivo. El grafo del
+ * agente NO tiene esa forma: `START` va al MODELO, y el nodo parado es el de tools. Así que
+ * al reabrir una sesión que se cerró con una aprobación delante, lo que le llega al modelo
+ * es `human → ai(tool_calls) → human`: un `AIMessage` con llamadas a tool y ningún
+ * `ToolMessage` detrás. Gemini y OpenAI rechazan exactamente eso, así que el primer mensaje
+ * tras reabrir se iba en un 400 — y nada lo explicaba.
+ *
+ * El remedio es una respuesta SINTÉTICA por cada llamada colgada, diciendo la verdad: no se
+ * aplicó, porque la sesión se cerró antes de que nadie decidiera. Con eso el historial es
+ * válido y además honesto — el modelo se entera de que aquella escritura no llegó a pasar,
+ * en vez de dar por hecho que sí. Y es cierto: el `interrupt` pausa ANTES de escribir, o
+ * sea que el disco no se tocó.
+ *
+ * Se hace al ABRIR y no al empezar el turno porque es un arreglo del pasado, no del turno:
+ * dentro de una sesión viva las aprobaciones se resuelven por su camino normal. Un fallo
+ * aquí no puede impedir abrir la sesión, así que se traga — lo que se pierde entonces es
+ * este arreglo, no la conversación.
+ *
+ * Se exporta para poder probarla sin montar un grafo de verdad, igual que `decisionDeTool`.
+ */
+export async function saldarAprobacionesHuerfanas(agente: unknown, hilo: string): Promise<void> {
+  const cfg = { configurable: { thread_id: hilo } };
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const grafo = agente as any;
+  try {
+    const estado = await grafo.getState(cfg);
+    const mensajes: BaseMessage[] = estado?.values?.messages ?? [];
+    if (mensajes.length === 0) return;
+    const contestadas = new Set(
+      mensajes.filter((m) => m.getType() === "tool").map((m) => (m as ToolMessage).tool_call_id)
+    );
+    const colgadas = mensajes
+      .filter((m) => m.getType() === "ai")
+      .flatMap((m) => (m as AIMessage).tool_calls ?? [])
+      .filter((c) => c.id !== undefined && !contestadas.has(c.id));
+    if (colgadas.length === 0) return;
+
+    const respuestas = colgadas.map(
+      (c) =>
+        new ToolMessage({
+          content:
+            "No se aplicó: la sesión se cerró antes de que nadie decidiera sobre esta escritura, " +
+            "así que el fichero no se tocó. Si sigue haciendo falta, vuelve a proponerlo.",
+          tool_call_id: c.id!,
+          name: c.name,
+          status: "error",
+        })
+    );
+    try {
+      await grafo.updateState(cfg, { messages: respuestas }, NODO_DE_TOOLS);
+    } catch {
+      await grafo.updateState(cfg, { messages: respuestas });
+    }
+  } catch {
+    // Abrir la sesión manda sobre arreglarla.
+  }
+}
+
+/**
  * Abre una sesión real: agente, checkpointer, hilo y tracker se construyen UNA vez aquí, y
  * viven en el cierre. Todo lo que sobreviva al primer turno tiene que salir de este cierre:
  * reconstruir el agente fuera (o un `MemorySaver` nuevo por llamada) tiraría la conversación.
@@ -209,6 +281,7 @@ export async function abrirSesionReal(opciones: {
     });
 
   let agente = await construir();
+  await saldarAprobacionesHuerfanas(agente, hilo);
 
   /**
    * Los pendientes de aprobación, del ESTADO y no del resultado del stream.

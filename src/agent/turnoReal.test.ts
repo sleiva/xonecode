@@ -15,7 +15,7 @@ vi.mock("./instantanea.js", async (importOriginal) => {
   return { ...orig, tomarInstantanea: mocksInstantanea.tomarInstantanea };
 });
 
-import { abrirSesionReal, ficherosDelProyecto, TOPE_REPARACIONES } from "./turnoReal.js";
+import { abrirSesionReal, ficherosDelProyecto, saldarAprobacionesHuerfanas, TOPE_REPARACIONES } from "./turnoReal.js";
 import { ModeloGuionizado, SkillsEnMemoria, type VerifierPort } from "../core/ports.js";
 import type { Piel } from "../core/turno.js";
 import type { PendienteDeAprobacion } from "../core/events.js";
@@ -676,5 +676,67 @@ describe("el cierre del turno cuando la aprobación revienta", () => {
     await sesion.turno("añade un campo", piel);
     const [ms] = (piel.fin as ReturnType<typeof vi.fn>).mock.calls[0] as [number];
     expect(ms).toBeGreaterThanOrEqual(120);
+  });
+});
+
+describe("las aprobaciones que se quedaron colgadas al morir el proceso", () => {
+  /** Un grafo de mentira con solo lo que esta función usa. */
+  function grafoCon(mensajes: unknown[]) {
+    const actualizaciones: { valores: unknown; nodo?: string }[] = [];
+    return {
+      actualizaciones,
+      getState: async () => ({ values: { messages: mensajes } }),
+      updateState: async (_cfg: unknown, valores: unknown, nodo?: string) => {
+        actualizaciones.push({ valores, nodo });
+      },
+    };
+  }
+  const ai = (llamadas: { id: string; name: string }[]) => ({
+    getType: () => "ai",
+    tool_calls: llamadas.map((l) => ({ ...l, args: {} })),
+  });
+  const tool = (id: string) => ({ getType: () => "tool", tool_call_id: id });
+
+  it("contesta las que nadie contestó, y dice que no se aplicó nada", async () => {
+    // Es el historial que deja cerrar el navegador con la aprobación delante:
+    // `human → ai(tool_calls)` y ningún ToolMessage. Medido: llegar al modelo con eso es un
+    // 400 en Gemini y en OpenAI, así que el primer mensaje tras reabrir se perdía.
+    const g = grafoCon([{ getType: () => "human" }, ai([{ id: "call_1", name: "write_file" }])]);
+    await saldarAprobacionesHuerfanas(g, "s1");
+
+    expect(g.actualizaciones).toHaveLength(1);
+    const { valores, nodo } = g.actualizaciones[0]!;
+    expect(nodo).toBe("tools");
+    const puestos = (valores as { messages: { tool_call_id: string; content: string }[] }).messages;
+    expect(puestos).toHaveLength(1);
+    expect(puestos[0]!.tool_call_id).toBe("call_1");
+    // La verdad, no una excusa: el interrupt pausa ANTES de escribir.
+    expect(puestos[0]!.content).toMatch(/no se aplicó/i);
+  });
+
+  it("no toca un hilo cuyas tools sí se contestaron, ni uno vacío", async () => {
+    const contestado = grafoCon([ai([{ id: "c1", name: "write_file" }]), tool("c1")]);
+    await saldarAprobacionesHuerfanas(contestado, "s1");
+    expect(contestado.actualizaciones).toHaveLength(0);
+
+    const vacio = grafoCon([]);
+    await saldarAprobacionesHuerfanas(vacio, "s1");
+    expect(vacio.actualizaciones).toHaveLength(0);
+  });
+
+  it("contesta SOLO las colgadas cuando en la misma tanda hubo varias", async () => {
+    const g = grafoCon([
+      ai([{ id: "c1", name: "write_file" }, { id: "c2", name: "edit_file" }]),
+      tool("c1"),
+    ]);
+    await saldarAprobacionesHuerfanas(g, "s1");
+    const puestos = (g.actualizaciones[0]!.valores as { messages: { tool_call_id: string }[] }).messages;
+    expect(puestos.map((m) => m.tool_call_id)).toEqual(["c2"]);
+  });
+
+  it("un fallo del grafo no impide abrir la sesión", async () => {
+    // Arreglar el pasado no puede costar el presente.
+    const roto = { getState: async () => { throw new Error("nope"); } };
+    await expect(saldarAprobacionesHuerfanas(roto, "s1")).resolves.toBeUndefined();
   });
 });
