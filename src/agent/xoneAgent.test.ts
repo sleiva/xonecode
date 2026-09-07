@@ -102,7 +102,10 @@ describe("el prompt de un especialista sembrado", () => {
   it("describe en las tools de escritura el destino y la skill correctos", () => {
     expect(DESCRIPCIONES_FICHEROS.read_file).toContain("offset=0, limit=50");
     expect(DESCRIPCIONES_FICHEROS.write_file).toContain("`archify`");
-    expect(DESCRIPCIONES_FICHEROS.write_file).toContain("/artifacts/<nombre>.html");
+    // La carpeta de la SESIÓN, no la del proyecto: esta descripción llega a todos los
+    // agentes y era el último sitio que seguía mandando el HTML a la raíz.
+    expect(DESCRIPCIONES_FICHEROS.write_file).toContain("/artefactos/<nombre>.html");
+    expect(DESCRIPCIONES_FICHEROS.write_file).not.toContain("/artifacts/");
     expect(DESCRIPCIONES_FICHEROS.edit_file).toContain("/MEMORIA_PROYECTO.md");
   });
 
