@@ -26,13 +26,16 @@
 }
 
 /* Estrecho: el árbol pasa arriba, acotado en alto, y el visor sigue debajo. Aquí no vale
-   esconderlo como en Revisión: sin árbol no hay forma de elegir un fichero. */
+   esconderlo como en Revisión: sin árbol no hay forma de elegir un fichero. El DOM se
+   queda con el visor primero (así el Tab entra por él en el layout ancho, que es donde
+   vive la mayoría del tiempo); es `order: -1` quien lo sube por encima sin tocar el DOM. */
 @container (max-width: 720px) {
   .ficheros {
     flex-direction: column;
   }
 
   .arbol {
+    order: -1;
     flex: 0 0 auto;
     max-height: 40%;
     border-left: none;

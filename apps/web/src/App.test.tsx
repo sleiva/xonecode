@@ -670,3 +670,32 @@ describe("App: Revisión despliega solos los primeros", () => {
     );
   });
 });
+
+describe("App: la pestaña Ficheros", () => {
+  const arboles = (enviar: ReturnType<typeof vi.fn>) => enviar.mock.calls.filter(([m]) => (m as { clase: string }).clase === "arbol");
+
+  it("pide el árbol al abrir la pestaña, y lo vuelve a pedir junto al fichero abierto al terminar un turno", () => {
+    const { store, enviar } = montar();
+    fireEvent.click(screen.getByRole("tab", { name: "Ficheros" }));
+    expect(arboles(enviar)).toHaveLength(1);
+
+    act(() => store.aplicar({ clase: "arbol", rutas: ["app.xml"], recortado: false }));
+    fireEvent.click(screen.getByRole("treeitem", { name: "app.xml" }));
+    expect(enviar).toHaveBeenCalledWith({ clase: "fichero", ruta: "app.xml" });
+
+    // Flanco de fin de turno con la pestaña delante: árbol y fichero abierto se releen.
+    act(() => store.aplicar({ clase: "turno", activo: true }));
+    act(() => store.aplicar({ clase: "turno", activo: false }));
+    expect(arboles(enviar)).toHaveLength(2);
+    expect(
+      enviar.mock.calls.filter(([m]) => (m as { clase: string; ruta?: string }).clase === "fichero" && (m as { ruta?: string }).ruta === "app.xml")
+    ).toHaveLength(2);
+  });
+
+  it("con otra pestaña delante, el fin de turno no pide el árbol", () => {
+    const { store, enviar } = montar();
+    act(() => store.aplicar({ clase: "turno", activo: true }));
+    act(() => store.aplicar({ clase: "turno", activo: false }));
+    expect(arboles(enviar)).toHaveLength(0);
+  });
+});

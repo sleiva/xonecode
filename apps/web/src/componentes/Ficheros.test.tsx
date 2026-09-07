@@ -1,3 +1,6 @@
+import { readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { Ficheros } from "./Ficheros.js";
@@ -5,6 +8,7 @@ import { Ficheros } from "./Ficheros.js";
 afterEach(cleanup);
 const NADA = () => {};
 const ARBOL = { rutas: ["app.xml", "src/Clientes.xne", "src/Pedidos.xne"], recortado: false };
+const AQUI = dirname(fileURLToPath(import.meta.url));
 
 describe("Ficheros", () => {
   it("pide el árbol al montar: entrar a mirar ES la petición", () => {
@@ -80,5 +84,12 @@ describe("Ficheros", () => {
     const alElegir = vi.fn();
     render(<Ficheros arbol={ARBOL} contenidos={{}} elegido="borrado.xne" alElegir={alElegir} alRecargar={NADA} />);
     expect(alElegir).toHaveBeenCalledWith(undefined);
+  });
+
+  it("en estrecho el árbol sube por encima del visor con order, sin reordenar el DOM", () => {
+    // El DOM se queda con el visor primero (Tab en el layout ancho); en estrecho es
+    // `order: -1` sobre `.arbol` quien lo pone visualmente arriba.
+    const hoja = readFileSync(join(AQUI, "Ficheros.module.css"), "utf8");
+    expect(hoja).toMatch(/@container[^{]*\{[\s\S]*?\.arbol\s*\{[^}]*order:\s*-1/);
   });
 });
