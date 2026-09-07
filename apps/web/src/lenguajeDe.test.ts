@@ -10,6 +10,9 @@ describe("lenguajeDe", () => {
     expect(lenguajeDe("a.ini")).toBe("ini");
     expect(lenguajeDe("a.json")).toBe("json");
     expect(lenguajeDe("README.md")).toBe("markdown");
+    // El HTML entró con los ARTEFACTOS: su fuente es lo que más se lee en esa pestaña, y
+    // sin esto salía plana y sin números de línea (medido en el navegador).
+    expect(lenguajeDe("/artefactos/diagrama.html")).toBe("html");
     expect(lenguajeDe("notas.txt")).toBeUndefined();
     expect(lenguajeDe("Makefile")).toBeUndefined();
     expect(lenguajeDe("x.bin")).toBeUndefined();

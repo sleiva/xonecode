@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import type { crearStoreDelCliente } from "./store.js";
 import type { Conexion } from "./conexion.js";
 import { Maqueta } from "./componentes/Maqueta.js";
@@ -23,6 +23,7 @@ import { AccionDeSesion, type AccionPendiente } from "./componentes/AccionDeSesi
 import { Ajustes } from "./componentes/Ajustes.js";
 import { DESPLEGADOS_AL_ABRIR, Revision } from "./componentes/Revision.js";
 import { Ficheros } from "./componentes/Ficheros.js";
+import { Artefactos, type ArtefactoEnLista } from "./componentes/Artefactos.js";
 import { aplicarApariencia, guardarApariencia, leerApariencia, type Apariencia } from "./apariencia.js";
 import { guardarBarraContraida, leerBarraContraida } from "./preferencias.js";
 
@@ -66,6 +67,8 @@ export function App({ store, enviar }: { store: Store; enviar: Conexion["enviar"
   const [desplegados, setDesplegados] = useState<ReadonlySet<string> | undefined>(undefined);
   /** El fichero abierto en la pestaña Ficheros. De esta ventana, como `pestana`. */
   const [ficheroElegido, setFicheroElegido] = useState<string | undefined>(undefined);
+  /** El artefacto abierto en su pestaña. De esta ventana, igual que el fichero. */
+  const [artefactoElegido, setArtefactoElegido] = useState<string | undefined>(undefined);
   /**
    * Lo elegido en el «…» de una sesión, esperando confirmación. Vive aquí y no en la barra
    * porque la ventana se pinta sobre la pantalla entera, no dentro de una columna de 280px
@@ -149,6 +152,62 @@ export function App({ store, enviar }: { store: Store; enviar: Conexion["enviar"
     },
     [enviar]
   );
+
+  /**
+   * Los ARTEFACTOS de la sesión, sacados de los actos.
+   *
+   * La lista no se le pide al servidor: los actos ya la traen —ruta, nombre, peso y mime— y
+   * sobreviven a reabrir la sesión, porque van en el `.jsonl` del transcript. Preguntarle al
+   * disco cuáles hay sería una segunda fuente para lo mismo, y podría contradecir a la
+   * conversación que se está leyendo justo al lado.
+   *
+   * Un artefacto reescrito en un turno posterior aparece DOS veces en los actos y aquí una:
+   * se indexa por ruta, y el repetido se mueve al final —`delete` antes del `set`— porque el
+   * orden es lo que decide cuál se abre solo, y el que se acaba de dibujar es el último.
+   */
+  const artefactos: ArtefactoEnLista[] = useMemo(() => {
+    const porRuta = new Map<string, ArtefactoEnLista>();
+    for (const acto of estado.actos) {
+      if (acto.tipo !== "artefacto") continue;
+      porRuta.delete(acto.ruta);
+      porRuta.set(acto.ruta, {
+        ruta: acto.ruta,
+        nombre: acto.nombre,
+        bytes: acto.bytes,
+        ...(acto.mime === undefined ? {} : { mime: acto.mime }),
+      });
+    }
+    return [...porRuta.values()];
+  }, [estado.actos]);
+
+  /**
+   * La pestaña de artefactos desaparece si la sesión nueva no tiene ninguno, así que la
+   * elección tiene que caerse con ella: si no, `Pestanas` la quitaba de la tira —y hace
+   * bien— pero `pestana` seguía valiendo «artefactos» y el centro enseñaba ese panel sin
+   * ninguna pestaña marcada. Se vuelve al Chat, que es donde estaría quien no ha elegido.
+   */
+  useEffect(() => {
+    if (artefactos.length === 0) setPestana((actual) => (actual === "artefactos" ? "chat" : actual));
+  }, [artefactos.length]);
+
+  const pedirArtefacto = useCallback(
+    (nombre: string) => {
+      void enviar({ clase: "artefacto", nombre });
+    },
+    [enviar]
+  );
+
+  /**
+   * Abrir un artefacto desde su tarjeta del chat: cambia de pestaña Y lo elige.
+   *
+   * Es el mismo gesto que pulsar su fila en la lista, así que va por una función: la tarjeta
+   * es lo primero que se ve cuando el agente acaba de dibujar, y sin esto había que buscar
+   * la pestaña y volver a elegirlo.
+   */
+  const abrirArtefacto = useCallback((ruta: string) => {
+    setArtefactoElegido(ruta);
+    setPestana("artefactos");
+  }, []);
 
   /** Pedir el árbol del proyecto (pestaña Ficheros). Mismo motivo que `pedirRevision`. */
   const pedirArbol = useCallback(() => {
@@ -678,7 +737,7 @@ export function App({ store, enviar }: { store: Store; enviar: Conexion["enviar"
               son de aquí. Arriba quedaban además centradas sobre la barra lateral,
               señalando a una columna que no cambian.
             */}
-            <Pestanas pestana={pestana} alElegirPestana={setPestana} />
+            <Pestanas pestana={pestana} alElegirPestana={setPestana} hayArtefactos={artefactos.length > 0} />
             <AvisoDeConexion conectado={estado.conectado} />
             <Transcript
               actos={estado.actos}
@@ -722,6 +781,18 @@ export function App({ store, enviar }: { store: Store; enviar: Conexion["enviar"
                   conectado={estado.conectado}
                 />
               }
+              artefactos={
+                <Artefactos
+                  lista={artefactos}
+                  contenidos={estado.artefactos ?? {}}
+                  {...(artefactoElegido === undefined ? {} : { elegido: artefactoElegido })}
+                  alElegir={setArtefactoElegido}
+                  alPedir={pedirArtefacto}
+                  conectado={estado.conectado}
+                />
+              }
+              // La tarjeta del chat abre el artefacto: cambia de pestaña y lo elige.
+              alAbrirArtefacto={abrirArtefacto}
             />
             {/*
               Las tres esperas de humano van DELANTE del compositor y cada una con su propio

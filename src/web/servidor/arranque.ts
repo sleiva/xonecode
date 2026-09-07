@@ -79,7 +79,13 @@ import { cloudstudioDelProyecto } from "../../agent/configEnDisco.js";
 import { abrirEnSistema } from "../../agent/cloudstudioMcp.js";
 import { nombreDePersona } from "../../agent/persona.js";
 import { cambiosDeSesion, fotoDeApertura, olvidarSesion, parcheDeSesion } from "../../agent/sesionGit.js";
+import { RUTA_ARTEFACTOS, esRutaDeArtefacto } from "../../core/artefactos.js";
 import { arbolDeProyecto, leerFicheroDeProyecto } from "../../agent/arbolDeProyecto.js";
+import {
+  leerArtefactoCrudo,
+  leerArtefactoDeSesion,
+  type LecturaCruda,
+} from "../../agent/artefactosEnDisco.js";
 import type { ProyectoRemoto } from "../../agent/cloudstudioMcp.js";
 import { CatalogoModelos } from "../../agent/catalogoModelos.js";
 import type { Entorno } from "../../core/settings.js";
@@ -106,6 +112,16 @@ import type {
 /** Las dos rutas del cable. El cliente las tiene escritas en `apps/web/src/conexion.ts`. */
 export const RUTA_EVENTOS = "/eventos";
 export const RUTA_ACCION = "/accion";
+/**
+ * El documento de un ARTEFACTO, para el iframe y para la descarga.
+ *
+ * Tiene que ser HTTP y no cable: un iframe pinta un DOCUMENTO, y por `/eventos` viajan
+ * mensajes. El nombre va en la query y no en la ruta porque `registrarRuta` casa por
+ * coincidencia EXACTA (`servidor.ts`), así que `/artefacto/<nombre>` no encontraría
+ * manejador. Consecuencia asumida: las URLs relativas de dentro del HTML no resuelven —
+ * el contrato de las skills que los escriben es «autocontenido».
+ */
+export const RUTA_ARTEFACTO = "/artefacto";
 
 /** Lo que se sirve: el build del cliente. Tres niveles arriba tanto desde `src/web/servidor/`
  *  como desde `dist/web/servidor/`, que es la disposición que se publica en npm. */
@@ -209,6 +225,17 @@ export interface OpcionesDeMontaje {
   arbolDelProyecto?: (raiz: string) => Promise<{ rutas: string[]; recortado: boolean }>;
   leerFichero?: (raiz: string, ruta: string) => Promise<FicheroDelProyecto>;
   /**
+   * Los dos lectores de ARTEFACTOS (`agent/artefactosEnDisco.ts`), y son dos porque son dos
+   * transportes con necesidades opuestas: el del cable devuelve la forma de un fichero
+   * —texto al tope, imagen en base64— y el crudo devuelve los bytes tal cual, que es lo que
+   * el iframe necesita (un HTML recortado no abre) y lo que se descarga.
+   *
+   * Ausentes = esta ejecución no los tiene, y se dice: un visor que se queda «trayendo…»
+   * para siempre es peor que uno que explica que aquí no se puede.
+   */
+  leerArtefacto?: (raiz: string, sesion: string, nombre: string) => Promise<FicheroDelProyecto>;
+  leerArtefactoCrudo?: (raiz: string, sesion: string, nombre: string) => Promise<LecturaCruda>;
+  /**
    * Qué hay en la máquina para probar la app (`agent/dispositivosEnMaquina.ts`). Ausente =
    * esta ejecución no lo mira, y no se manda ningún `dispositivos`: el escritorio se queda
    * en «consultando…» en vez de afirmar una máquina vacía. Entra por opción porque lanza
@@ -232,6 +259,15 @@ export interface OpcionesDeMontaje {
    * máquina del usuario. Ausente = esta ejecución no instala nada.
    */
   instalarHerramienta?: (herramienta: NombreDeHerramienta) => Promise<void>;
+}
+
+/** El `Content-Type` con el que se sirve un artefacto inline: al texto se le pone el juego
+ *  de caracteres, porque sin él el navegador lo adivina de los bytes y un HTML en UTF-8 sale
+ *  con la acentuación rota. A una imagen no se le pone: no lo lleva. */
+function tipoServido(mime: string): string {
+  return mime.startsWith("text/") || mime === "image/svg+xml" || mime === "application/json"
+    ? `${mime}; charset=utf-8`
+    : mime;
 }
 
 /**
@@ -1178,6 +1214,36 @@ export function montarRutas(
     }
   };
 
+  /**
+   * El contenido de un ARTEFACTO de la sesión abierta, por su nombre.
+   *
+   * El id que se usa es `idDeHilo` y no `sesion`, y la diferencia es la que hace que esto
+   * funcione: `sesion` espera a que haya entrada en el índice, o sea al final del turno,
+   * mientras que el acto que anuncia un artefacto se emite a MITAD de turno. Con el otro id
+   * el visor habría contestado «no existe» justo cuando se acaba de dibujar.
+   *
+   * El `try` es el de `atenderFichero`, palabra por palabra y por lo mismo: el lector
+   * devuelve sus rechazos como `error`, pero después del `realpath` todavía puede LANZAR un
+   * EACCES, y esa excepción dejaba al cliente esperando para siempre. Ni por el cable ni por
+   * `informar` viaja el mensaje de Node, que lleva la ruta absoluta.
+   */
+  const atenderArtefacto = async (nombre: string): Promise<void> => {
+    const abierto = vestibulo.proyectoAbierto();
+    if (abierto === undefined) return;
+    const ruta = `${RUTA_ARTEFACTOS}${nombre}`;
+    const fallo = (error: string) => emitir({ clase: "artefacto", ruta, recortado: false, binario: false, bytes: 0, error });
+    if (opciones.leerArtefacto === undefined) {
+      fallo("esta ejecución no puede leer los artefactos");
+      return;
+    }
+    try {
+      emitir({ clase: "artefacto", ...(await opciones.leerArtefacto(abierto.raiz, abierto.idDeHilo, nombre)) });
+    } catch (error) {
+      informar(`no se pudo leer el artefacto «${nombre}» (${codigoDe(error)})`);
+      fallo("no se pudo leer el artefacto");
+    }
+  };
+
   /** Un paso del alta resuelto en el navegador. Cada rama termina volviendo a anunciar. */
   const atenderAlta = async (mensaje: Extract<MensajeDelCliente, { clase: "alta" }>): Promise<void> => {
     // Se limpia al empezar: un aviso viejo pegado a un paso que ya salió bien mentiría.
@@ -1336,6 +1402,102 @@ export function montarRutas(
     });
   });
 
+  /**
+   * `GET /artefacto?n=<nombre>` — el documento que pinta el iframe, y la descarga.
+   *
+   * **Aquí vive la decisión de sandbox que tenía parada esta pantalla.** Lo que se sirve lo
+   * escribió un MODELO, y servirlo en el mismo origen que tiene la cookie del token sería
+   * darle a ese HTML la consola entera: un `fetch("/accion")` desde dentro podría abrir un
+   * proyecto, cambiar el modelo o pedir una clave. Se cierra con dos capas, y las dos hacen
+   * falta:
+   *  - El iframe va `sandbox="allow-scripts"` SIN `allow-same-origin` (`Artefactos.tsx`),
+   *    así que el documento tiene un origen OPACO: no ve la cookie, no ve el padre, y sus
+   *    peticiones salen con `Origin: null`, que la comprobación de `servidor.ts` ya contesta
+   *    con 403.
+   *  - Y la respuesta lleva `Content-Security-Policy: sandbox allow-scripts`, que cubre lo
+   *    que el atributo no puede: abrir esta URL en una pestaña del navegador es una
+   *    navegación de PRIMER nivel en el origen real, con la cookie puesta. La cabecera hace
+   *    que ahí también sea un origen opaco.
+   *
+   * Lo que NO se pone es una CSP de red. Estos artefactos cargan tipografías y Mermaid de un
+   * CDN (es lo que sus skills mandan), y con origen opaco no hay nada que exfiltrar: cerrar
+   * la red solo los dejaría sin estilo. La contrapartida se DICE en la pantalla: no se ven
+   * sin conexión.
+   *
+   * Y un mime que no conocemos no se sirve inline. Adivinarlo es cómo un `.txt` acaba
+   * ejecutándose como HTML; sin `nosniff` lo adivinaría el navegador.
+   */
+  servidor.registrarRuta("GET", RUTA_ARTEFACTO, async (peticion, respuesta) => {
+    const responder = (codigo: number, texto: string): void => {
+      respuesta.writeHead(codigo, { "Content-Type": "text/plain; charset=utf-8" });
+      respuesta.end(texto);
+    };
+
+    // El nombre sale de la QUERY. `searchParams` decodifica una vez, así que un `%2e%2e`
+    // llega ya como `..` y lo caza `esRutaDeArtefacto`; un `%252e%252e` llega con el `%`
+    // dentro, que tampoco es texto llano. La ruta no se parsea con `new URL` para nada más:
+    // aquí no hay ningún camino que normalizar.
+    const query = new URLSearchParams((peticion.url ?? "").split("?")[1] ?? "");
+    const nombre = query.get("n");
+    if (nombre === null || nombre === "") {
+      responder(400, "falta el artefacto");
+      return;
+    }
+    // La MISMA función que decide que escribir ahí no pide aprobación humana. Se comprueba
+    // también aquí, antes de llamar al lector —que tiene su propia barrera— porque una ruta
+    // que se apoya solo en la barrera de su lector se queda abierta el día que alguien
+    // cambie el lector.
+    if (!esRutaDeArtefacto(`${RUTA_ARTEFACTOS}${nombre}`)) {
+      responder(403, "ese nombre no es de un artefacto");
+      return;
+    }
+
+    const abierto = vestibulo.proyectoAbierto();
+    if (abierto === undefined || opciones.leerArtefactoCrudo === undefined) {
+      responder(404, "no hay artefacto");
+      return;
+    }
+
+    let leido: LecturaCruda;
+    try {
+      leido = await opciones.leerArtefactoCrudo(abierto.raiz, abierto.idDeHilo, nombre);
+    } catch (error) {
+      // El mensaje de Node lleva la ruta absoluta: al cliente solo le llega el código, y a
+      // `informar` tampoco más, que escribe en el transcript y por tanto viaja.
+      informar(`no se pudo servir el artefacto «${nombre}» (${codigoDe(error)})`);
+      responder(500, "no se pudo leer");
+      return;
+    }
+    if (!leido.ok) {
+      // Un código por motivo: con un 404 para todo no habría forma de distinguir «ese
+      // nombre no vale» de «ya no está» ni de «no cabe».
+      const codigos = { rechazado: 403, "no-existe": 404, "demasiado-grande": 413 } as const;
+      const textos = {
+        rechazado: "ese nombre no es de un artefacto",
+        "no-existe": "no hay artefacto",
+        "demasiado-grande": "el artefacto es demasiado grande",
+      } as const;
+      responder(codigos[leido.motivo], textos[leido.motivo]);
+      return;
+    }
+
+    const descargar = query.get("descargar") !== null;
+    // Sin mime conocido se descarga en vez de adivinar. El nombre ya pasó la barrera de
+    // segmento llano, así que entre comillas no puede romper la cabecera.
+    const inline = !descargar && leido.mime !== undefined;
+    respuesta.writeHead(200, {
+      "Content-Type": inline ? tipoServido(leido.mime!) : "application/octet-stream",
+      "Content-Length": leido.datos.length,
+      "Content-Security-Policy": "sandbox allow-scripts",
+      "X-Content-Type-Options": "nosniff",
+      // Un artefacto se sobrescribe con el mismo nombre en el turno siguiente, y una
+      // respuesta cacheada enseñaría el dibujo de antes sin decirlo.
+      "Cache-Control": "no-store",
+      ...(inline ? {} : { "Content-Disposition": `attachment; filename="${leido.nombre}"` }),
+    });
+    respuesta.end(leido.datos);
+  });
+
   servidor.registrarRuta("POST", RUTA_ACCION, async (peticion, respuesta) => {
     let mensaje: MensajeDelCliente;
     try {
@@ -1386,6 +1548,12 @@ export function montarRutas(
     }
     if (typeof mensaje === "object" && mensaje !== null && mensaje.clase === "fichero" && typeof mensaje.ruta === "string") {
       void atenderFichero(mensaje.ruta).catch(contar);
+      respuesta.writeHead(204);
+      respuesta.end();
+      return;
+    }
+    if (typeof mensaje === "object" && mensaje !== null && mensaje.clase === "artefacto" && typeof mensaje.nombre === "string") {
+      void atenderArtefacto(mensaje.nombre).catch(contar);
       respuesta.writeHead(204);
       respuesta.end();
       return;
@@ -1670,6 +1838,8 @@ export async function arrancarConsolaWeb(opciones: OpcionesDeArranque): Promise<
     // barrera de rutas (`agent/arbolDeProyecto.ts`).
     arbolDelProyecto: async (raiz) => arbolDeProyecto(raiz),
     leerFichero: leerFicheroDeProyecto,
+    leerArtefacto: leerArtefactoDeSesion,
+    leerArtefactoCrudo,
     // La máquina de verdad: adb/emulator del PATH o del SDK, xcrun solo en macOS y solo con
     // herramientas de desarrollo. Cada proceso con su tope.
     detectarDispositivos: () => detectarDispositivos({}, cargarSettings().settings.dispositivos ?? {}),

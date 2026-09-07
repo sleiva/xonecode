@@ -294,3 +294,21 @@
   line-height: 1.5;
   color: var(--dsw-alias-label-tertiary);
 }
+
+/* El nombre del artefacto cuando ADEMÁS abre: un botón que se lee como el rótulo que era
+   —mismo tamaño, mismo peso— y se subraya al pasar por encima, que es lo que dice que lleva
+   a algún sitio. Sin `background` ni borde: dentro de la tarjeta ya hay un recinto, y un
+   segundo marco alrededor del nombre lo convertiría en un formulario. */
+.artefactoAbrir {
+  border: none;
+  padding: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.artefactoAbrir:hover {
+  text-decoration: underline;
+}

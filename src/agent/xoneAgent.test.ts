@@ -97,6 +97,13 @@ describe("el prompt de un especialista sembrado", () => {
     // pasando por aprobación, entrando en git y subiendo a CloudStudio.
     expect(p).toContain("/artefactos/<nombre>.html");
     expect(p).not.toContain("/artifacts/");
+    // Y lo que NO funciona donde se ve. Va en el prompt y no en la skill porque el modelo no
+    // abre la skill: medido, lee `archify/SKILL.md` y `diagramas.md` y nada más. Sin esto, un
+    // artefacto con interruptor de tema lanza `SecurityError` dentro del iframe y se lleva el
+    // resto de su `<script>` — visto en vivo, con la página perfecta y el botón muerto.
+    expect(p).toContain("sin `allow-same-origin`");
+    expect(p).toContain("`localStorage`, `sessionStorage` e `indexedDB` LANZAN");
+    expect(p).toContain("`matchMedia`");
   });
 
   it("describe en las tools de escritura el destino y la skill correctos", () => {

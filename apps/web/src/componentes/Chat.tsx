@@ -78,6 +78,7 @@ export function Chat({
   proyecto,
   modelo,
   sesion,
+  alAbrirArtefacto,
 }: {
   actos: readonly Acto[];
   turnoEnVuelo?: boolean;
@@ -106,6 +107,14 @@ export function Chat({
    * una. La ruta REAL de la máquina no viaja nunca: el cable puede ir por un túnel.
    */
   sesion?: string;
+  /**
+   * Abrir un artefacto: su tarjeta lo ofrece pulsando el nombre.
+   *
+   * Opcional a propósito. Sin manejador el nombre se pinta como RÓTULO y no como botón: un
+   * botón que no lleva a ninguna parte es el botón muerto de siempre, y este componente se
+   * monta también en tests que no cablean la pestaña.
+   */
+  alAbrirArtefacto?: (ruta: string) => void;
 }) {
   // Cuál es el último acto de asistente: es el único que puede estar llegando todavía.
   const ultimoAsistente = actos.map((a) => a.tipo).lastIndexOf("asistente");
@@ -310,7 +319,21 @@ export function Chat({
                     <span aria-hidden className={estilos.artefactoIcono}>
                       🖼
                     </span>
-                    <span className={estilos.artefactoNombre}>{acto.nombre}</span>
+                    {/* El NOMBRE es el enlace: lleva a la pestaña Artefactos con este
+                        elegido. La tarjeta es lo primero que se ve cuando el agente acaba de
+                        dibujar, y sin esto había que ir a buscar la pestaña y elegirlo otra
+                        vez. Sin manejador se queda como rótulo. */}
+                    {alAbrirArtefacto === undefined ? (
+                      <span className={estilos.artefactoNombre}>{acto.nombre}</span>
+                    ) : (
+                      <button
+                        type="button"
+                        className={`${estilos.artefactoNombre} ${estilos.artefactoAbrir}`}
+                        onClick={() => alAbrirArtefacto(acto.ruta)}
+                      >
+                        {acto.nombre}
+                      </button>
+                    )}
                     <span className={estilos.artefactoPeso}>
                       {Math.max(1, Math.round(acto.bytes / 1024))} KB
                     </span>
@@ -319,7 +342,7 @@ export function Chat({
                   <p className={estilos.artefactoRuta}>{donde}</p>
                   <p className={estilos.artefactoNota}>
                     No es un fichero del proyecto: vive con esta sesión, no entra en git y no
-                    sube a CloudStudio. Todavía no se abre desde aquí.
+                    sube a CloudStudio.
                   </p>
                 </div>
               );

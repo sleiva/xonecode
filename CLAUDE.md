@@ -728,10 +728,107 @@ MEDIDO de punta a punta con el agente real: el `mockup` escribe en
   de la sesión que ya viaja en el alta, y la virtual a secas cuando ese id todavía no existe.
   La ruta de la MÁQUINA no viaja: el cable puede ir por un túnel. En Trazas tiene etiqueta
   propia (`ARTEFACTO`) y no «SISTEMA», porque quien viene ahí depura justo eso.
-- Y **todavía no se ABRE desde la consola**. No es una pantalla que falte: pintar un HTML que
-  escribió un modelo, en el mismo origen que tiene la cookie del token, es una decisión de
-  sandbox — el contrato de `artifacts-builder` da por hecho un servidor que lo impone y aquí
-  no existe. Mientras tanto la tarjeta da la ruta y el fichero se abre desde disco.
+- Y **ya se ABREN, en su propia pestaña** (`apps/web/src/componentes/Artefactos.tsx`, ruta
+  `GET /artefacto?n=<nombre>`, mensaje `artefacto` en las dos direcciones del cable). Lo que
+  faltaba no era la pantalla: era la decisión de sandbox, porque pintar un HTML que escribió
+  un modelo en el mismo origen que tiene la cookie del token es darle la consola entera —un
+  `fetch("/accion")` desde dentro abriría un proyecto o pediría una clave—. Se resuelve con
+  DOS capas, y las dos hacen falta:
+  - El iframe va `sandbox="allow-scripts"` **sin** `allow-same-origin`, así que el documento
+    tiene un origen OPACO. Medido en el navegador: `window.origin === "null"`,
+    `document.cookie` **lanza** `SecurityError`, y un `fetch("/accion")` desde dentro lo corta
+    el propio navegador («from origin 'null' has been blocked by CORS») antes de salir — y si
+    saliera, la comprobación de `Origin` de `servidor.ts` ya lo contesta con 403. Las dos
+    mitades del atributo importan: `allow-scripts` es lo que deja correr el Mermaid de un
+    diagrama, y `allow-same-origin` al lado anularía el sandbox entero.
+  - Y la respuesta lleva `Content-Security-Policy: sandbox allow-scripts`, que cubre lo que el
+    atributo NO puede: abrir esa URL en una pestaña del navegador es una navegación de primer
+    nivel en el origen real, con la cookie puesta. Las tres medidas de arriba se tomaron
+    justamente así, navegando a pelo a `/artefacto`. Más `nosniff` y `no-store`: un artefacto
+    se reescribe con el mismo nombre al turno siguiente, y una respuesta cacheada enseñaría el
+    dibujo de antes sin decirlo.
+  Ocho reglas más, todas por el mismo criterio de siempre:
+  - **La ruta tiene que ser HTTP y el nombre va en la QUERY.** Un iframe pinta un DOCUMENTO y
+    por el cable viajan mensajes; y `registrarRuta` casa por coincidencia EXACTA, así que
+    `/artefacto/<nombre>` no encontraría manejador. Consecuencia asumida: las URLs relativas
+    de dentro del HTML no resuelven — el contrato de esas skills es «autocontenido».
+  - **No hay CSP de red, a propósito.** Estos artefactos cargan tipografías y Mermaid de un
+    CDN porque es lo que sus skills mandan; con origen opaco no hay nada que exfiltrar, así
+    que cerrar la red solo los dejaría sin estilo. La contrapartida se DICE en la pantalla:
+    sin conexión no se ven enteros.
+  - **La sesión la resuelve el servidor, y con `idDeHilo` y no con `sesion`**
+    (`vestibulo.ts`). `sesion` espera a que haya entrada en el índice, o sea al FINAL del
+    turno, mientras que el acto que anuncia un artefacto se emite a mitad: con ese id el visor
+    habría contestado «no existe» justo cuando se acaba de dibujar. El cliente manda un
+    NOMBRE, nunca una ruta.
+  - **La barrera es `esRutaDeArtefacto`, la misma que decide que escribir ahí no pide
+    aprobación**, y se aplica DOS veces: sobre el texto de la query (de balde) y otra sobre el
+    `realpath`, que es lo que caza un enlace simbólico dentro de la carpeta apuntando fuera.
+    Medido contra el servidor vivo: `../../auth.json`, `%2e%2e/auth.json` y un nombre con
+    espacio dan 403; lo que no está, 404; sin `n`, 400.
+  - **Dos lectores y no uno** (`agent/artefactosEnDisco.ts`), porque son dos transportes con
+    necesidades opuestas: el del cable devuelve la forma de un fichero del proyecto —texto al
+    tope, imagen en base64— y el CRUDO devuelve los bytes tal cual, que es lo que el iframe
+    necesita (un HTML recortado no abre) y lo que se descarga. `TOPE_DE_ARTEFACTO` (20 MB) no
+    acota lo que el agente puede dibujar: evita leer 800 MB a memoria.
+  - **El contenido va por el CABLE con la MISMA forma que un fichero del proyecto**, así que
+    los visores son los de Ficheros y no una segunda familia para lo mismo: `Dibujo` (que se
+    extrajo a su módulo al tener dos consumidores), `MarkdownText` con `protegerDolares`, y el
+    `Visor` de shiki. `html` entró en `lenguajeDe` con esto — sin él la cara «Fuente» salía
+    plana y sin números de línea, medido.
+  - **La LISTA sale de los actos, no del disco.** Ya traen ruta, nombre, peso y mime, y
+    sobreviven a reabrir porque van en el `.jsonl`; preguntarle al disco sería una segunda
+    fuente que puede contradecir a la conversación que se lee al lado. Un artefacto reescrito
+    aparece una vez y se mueve al final, que es lo que decide cuál se abre solo.
+  - **La pestaña solo existe si hay alguno**, y el nombre de la tarjeta del chat es el enlace
+    que lleva a ella. Casi ninguna conversación dibuja nada: una pestaña «Artefactos» siempre
+    presente sería el control sin dato detrás que este proyecto no se permite en ningún otro
+    sitio. Con eso viene una consecuencia que hay que atar: al abrir una sesión sin artefactos
+    la pestaña se va de la tira, así que la ELECCIÓN se cae con ella y se vuelve al Chat — sin
+    eso el centro seguía enseñando ese panel sin ninguna pestaña marcada. Y un tipo que no
+    sabemos enseñar se DICE y se descarga, en vez de adivinarlo.
+
+**El estilo de un artefacto sale de `artifacts-builder/reference/estilo.md`, y NO de
+`theme-factory`** (la skill de Anthropic). Leídos sus diez temas, cada uno son cuatro
+hexadecimales, una pareja de fuentes y una frase — y las dos mitades se caen aquí: la
+tipografía dice `DejaVu Sans` en los DIEZ, que es la fuente por omisión de los
+renderizadores de pptx y pdf y **no está instalada en macOS** (comprobado), así que
+aplicarla cambiaría las webfonts reales que el `mockup` ya usa (`Archivo` + IBM Plex,
+medido en un artefacto de verdad) por un sans genérico; y del color vale la misma regla que
+descartó el índigo de Stitch — de un juego ajeno se toma la forma, y el color es el medido
+en `marca.css`. Su flujo tampoco cabe: «enseña el PDF, pregunta y espera confirmación», y
+un subagente no tiene con qué preguntar. Lo que sí se hizo, con lo medido al abrir la
+pestaña:
+- **`estilo.md` ya ERA el tema nuestro** —un bloque de tokens elegido por el usuario, tres
+  caracteres y tres reglas duras—, así que se le añadió una CUARTA fila, `xonecode`, con el
+  cian `#00a3e0` de `marca.css`, y con dueño: solo si el artefacto habla de la CONSOLA. Para
+  el mockup de una pantalla XOne, no — esa app tiene su propio CSS, y pintarla del color del
+  harness sería contar otra cosa. El cian sigue siendo ACENTO y no sostiene texto, igual que
+  en la consola. Y la Inter de la consola no está en el menú: la prohíbe ese mismo fichero, y
+  además sus fuentes empaquetadas **no se pueden cargar** desde un artefacto.
+- **Se corrigió la afirmación más cara del `SKILL.md`**, que decía que entregando con
+  `write_file` no había sandbox y «`localStorage` no lanza ahí». Con la pestaña abierta es
+  falso, y su modo de fallo es SILENCIOSO —página perfecta, diagrama sin dibujar—. Medido
+  dentro del iframe: `localStorage`, `sessionStorage` e `indexedDB` lanzan `SecurityError`
+  los tres; `cdnjs` y Google Fonts contestan 200; y al ORIGEN de la consola no se llega, así
+  que hornear los datos dentro sigue siendo obligatorio aunque aquí no lo imponga ningún
+  servidor. Hay test (`agent/skills.test.ts`), y no un comentario: ese fichero es donde el
+  modelo mira de verdad — las dos sesiones medidas leyeron `estilo.md` y `diagramas.md`, y
+  ninguna leyó el `SKILL.md`.
+- **Y esa corrección NO bastó, medido en vivo al probarlo con el agente real.** Con las dos
+  skills ya arregladas, un turno nuevo escribió un artefacto con un interruptor de tema:
+  `localStorage.getItem` en la última línea de su arranque, `SecurityError` dentro del iframe,
+  y con él se fueron el `setAttribute` del tema y el `updateThemeButton` de detrás — el
+  diagrama se ve (el HTML ya estaba pintado) y el botón está muerto. El motivo está en las
+  trazas: ese turno leyó `archify/SKILL.md` y `reference/diagramas.md`, y **ni el `SKILL.md`
+  ni `estilo.md`** — así que se saltó además la paleta entera. Por eso la regla subió a
+  `SKILLS_VISUALES` (`agent/agentesEnDisco.ts`), que va en el prompt de los cuatro
+  especialistas SIEMPRE y no depende de cargar nada: es la misma lección que la carpeta
+  `/artefactos/`, y llega a quien ya arrancó porque la siembra compara por hash
+  (`.semilla.json`). Queda una alternativa de más calado sin hacer, y es decisión de
+  producto: **servir los artefactos desde OTRO origen** —un puerto sin nada detrás— permitiría
+  darles `allow-same-origin` sin regalar nada, y la clase entera de fallo desaparecería. Toca
+  la regla de «loopback y nada más».
 
 **El hilo del agente SOBREVIVE al proceso** (`agent/checkpointer.ts`,
 `.xonecode/checkpoint.sqlite`). Era un `MemorySaver`, así que reabrir una conversación era

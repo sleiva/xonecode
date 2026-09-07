@@ -271,6 +271,20 @@ describe("store del cliente", () => {
     expect(s.leer().contenidos).toBeUndefined();
   });
 
+  it("«artefacto» se guarda por su ruta virtual, y se tira con la sesión y sin cable", () => {
+    const s = crearStoreDelCliente();
+    s.aplicar({ clase: "artefacto", ruta: "/artefactos/d.html", texto: "<p/>", recortado: false, binario: false, bytes: 4 });
+    expect(s.leer().artefactos?.["/artefactos/d.html"]).toMatchObject({ texto: "<p/>", bytes: 4 });
+    s.marcarDesconectado();
+    expect(s.leer().artefactos).toBeUndefined();
+  });
+
+  it("un artefacto de imagen conserva mime y base64: la misma lista blanca que ya mordió", () => {
+    const s = crearStoreDelCliente();
+    s.aplicar({ clase: "artefacto", ruta: "/artefactos/c.png", recortado: false, binario: true, bytes: 7, mime: "image/png", base64: "QUJD" });
+    expect(s.leer().artefactos?.["/artefactos/c.png"]).toMatchObject({ mime: "image/png", base64: "QUJD", binario: true });
+  });
+
   it("una imagen conserva su MIME y sus bytes: el fichero se copia campo a campo", () => {
     // La trampa de esta lista blanca: un campo que no se nombre aquí se cae en silencio.
     // Medido en el navegador —no en jsdom, donde el componente sí pintaba la imagen porque
@@ -349,11 +363,13 @@ describe("el alta del wizard", () => {
     alta("s1");
     s.aplicar({ clase: "arbol", rutas: ["app.xml"], recortado: false });
     s.aplicar({ clase: "fichero", ruta: "app.xml", texto: "<app/>", recortado: false, binario: false, bytes: 6 });
+    s.aplicar({ clase: "artefacto", ruta: "/artefactos/d.html", texto: "<p/>", recortado: false, binario: false, bytes: 4 });
     alta("s1");
     expect(s.leer().arbol).toBeDefined(); // misma sesión: se conserva
     alta("s2");
     expect(s.leer().arbol).toBeUndefined();
     expect(s.leer().contenidos).toBeUndefined();
+    expect(s.leer().artefactos).toBeUndefined();
   });
 
   it("un paso que no existe descarta el mensaje entero en vez de pintar un formulario inventado", () => {

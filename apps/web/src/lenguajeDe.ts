@@ -11,6 +11,10 @@ const LENGUAJES = new Map<string, string>([
   ["ini", "ini"],
   ["json", "json"],
   ["md", "markdown"],
+  // El HTML de un ARTEFACTO: es el tipo que más se abre en esa pestaña, y su cara
+  // «Fuente» salía plana y sin números por no estar aquí. Vale igual para un `.html` que
+  // aparezca en un proyecto.
+  ["html", "html"],
   // La FUENTE de un SVG, que la pestaña Ficheros deja ver con el interruptor Vista/Fuente:
   // es XML, igual que un `.xne`. El dibujo lo pinta un `<img>`, no esto.
   ["svg", "xml"],

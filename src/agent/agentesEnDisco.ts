@@ -317,6 +317,19 @@ export function sembrarAgentes(base: string = homedir()): Siembra {
  * `artifacts-builder` no tiene por qué leer instrucciones sobre tools que no tiene —
  * hablarle de una capacidad que no posee es la misma clase de mentira que un botón muerto.
  */
+/**
+ * Las dos skills visuales, dónde se GUARDA lo que dibujan y qué NO funciona donde se VE.
+ *
+ * La última regla —los almacenes del navegador— está aquí y no en la skill por una razón
+ * medida: `artifacts-builder/SKILL.md` la explica con detalle y **el modelo no lo abre**. En
+ * las tres delegaciones medidas leyó `archify/SKILL.md` y `reference/diagramas.md`, y ni una
+ * vez el `SKILL.md` ni `reference/estilo.md`. El resultado, en vivo el 2026-09-07: un
+ * artefacto recién escrito puso un interruptor de tema con `localStorage.getItem` en la
+ * última línea de su arranque, lanzó `SecurityError` dentro del iframe y se llevó consigo el
+ * `setAttribute` del tema — página perfecta y botón muerto. Es la misma lección que la
+ * carpeta `/artefactos/`: lo que tiene que cumplirse va donde el modelo mira SIEMPRE, no en
+ * una skill que hay que cargar.
+ */
 const SKILLS_VISUALES = [
   "SKILLS VISUALES:",
   "- REGLA DE PRIORIDAD: para un diagrama, esquema, arquitectura, flujo, secuencia, datos o estados,",
@@ -328,6 +341,10 @@ const SKILLS_VISUALES = [
   "  aprobación, no entra en git y no sube a CloudStudio. Un diagrama escrito fuera de ella acaba",
   "  dentro de la app XOne del usuario.",
   "- Si te piden un dashboard, informe, tabla o artefacto HTML interactivo, carga primero `artifacts-builder`.",
+  "- DÓNDE se VE, y qué NO funciona ahí: la consola lo pinta en un iframe sin `allow-same-origin`.",
+  "  `localStorage`, `sessionStorage` e `indexedDB` LANZAN, y se llevan el resto de tu `<script>`:",
+  "  nada de interruptor de tema ni de recordar nada — el tema se resuelve con `matchMedia`, y ya.",
+  "  Y no se llega al origen de la consola, así que hornea los datos dentro del HTML.",
   "- Apóyate en el código real antes de dibujar: no inventes nombres, componentes ni flujos.",
 ].join("\n");
 

@@ -1,5 +1,5 @@
-import { render, screen, cleanup } from "@testing-library/react";
-import { afterEach, describe, it, expect } from "vitest";
+import { render, screen, cleanup, fireEvent } from "@testing-library/react";
+import { afterEach, describe, it, expect, vi } from "vitest";
 import { Chat } from "./Chat.js";
 import type { Acto } from "../tipos.js";
 
@@ -180,6 +180,21 @@ describe("Chat: el artefacto", () => {
 
     render(<Chat actos={[artefacto]} />);
     expect(screen.getByText("/artefactos/flujo.html")).toBeTruthy();
+  });
+
+  it("el nombre ABRE el artefacto, y sin manejador se queda como rótulo", () => {
+    const abrir = vi.fn();
+    const { unmount } = render(<Chat actos={[artefacto]} alAbrirArtefacto={abrir} />);
+    fireEvent.click(screen.getByRole("button", { name: "flujo.html" }));
+    expect(abrir).toHaveBeenCalledWith("/artefactos/flujo.html");
+    // Y la frase que decía que no se podía abrir se fue con esto.
+    expect(screen.queryByText(/todavía no se abre/i)).toBeNull();
+    unmount();
+
+    // Un botón que no lleva a ninguna parte es el botón muerto de siempre.
+    render(<Chat actos={[artefacto]} />);
+    expect(screen.queryByRole("button", { name: "flujo.html" })).toBeNull();
+    expect(screen.getByText("flujo.html")).toBeTruthy();
   });
 
   it("no se pliega con el trabajo del agente: no es paisaje del pulso", () => {

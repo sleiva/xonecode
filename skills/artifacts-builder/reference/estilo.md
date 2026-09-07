@@ -57,8 +57,25 @@ Otros caracteres, si el contenido pide otra cosa. **Se toma la fila ENTERA:**
 | **documento** (el de arriba) | Archivo / IBM Plex Serif / IBM Plex Mono | `#0e6c88` petróleo | `6px` |
 | **instrumento** | IBM Plex Sans / IBM Plex Sans / IBM Plex Mono | `#0f766e` teal | `4px` |
 | **cuadro de mando** | Space Grotesk / Public Sans / IBM Plex Mono | `#1d4ed8` tinta | `10px` |
+| **xonecode** (solo si el artefacto habla de la CONSOLA) | IBM Plex Sans / IBM Plex Sans / IBM Plex Mono | `#00a3e0` cian de marca | `6px` |
 
 **Ninguna es Inter y ningún acento es índigo ni púrpura**, que es la otra mitad.
+
+La fila **xonecode** es la excepción con dueño, y tiene su regla: el cian `#00a3e0` es el color
+de marca MEDIDO (`apps/web/estilos/marca.css`, junto al azul `#083b56` de las superficies de
+marca), y se usa **solo cuando el artefacto es sobre xonecode o sobre el harness** — un diagrama
+de sus capas, un panel de su lazo de turno. Para el mockup de una pantalla XOne o para un
+informe del proyecto del cliente, NO: ahí el tema es el de por omisión, y la app tiene su propio
+CSS. Dos cosas que no son negociables en esa fila:
+
+- **El cian es ACENTO y jamás sostiene texto.** Es la misma regla que la consola aplica sobre sí
+  misma: el relleno del botón primario es casi negro y el cian se reserva para la pestaña
+  elegida, el filo de la tarjeta viva, el punto de estado y la fila seleccionada. Un titular
+  cian sobre blanco no tiene contraste y es exactamente el aspecto que esta fila intenta evitar.
+- **La tipografía de la consola —Inter— no está en el menú**, y por dos motivos a la vez: la
+  regla de arriba de este mismo fichero, y que sus fuentes empaquetadas **no se pueden cargar**
+  desde el artefacto (el iframe tiene origen opaco y no llega al origen de la consola; medido).
+  Se usa IBM Plex Sans, que es un instrumento y viene de Google Fonts como el resto.
 
 ## El ancho: la PÁGINA no lleva `max-width`
 
@@ -73,6 +90,12 @@ lados, con el diagrama encogido en medio. Medido sobre un panel real, 2026-09-01
   párrafos largos. Una tabla, un diagrama o una rejilla de tarjetas quieren todo el ancho.
 - **Y el SVG de un diagrama tiene que poder CRECER**: mermaid le pone un `max-width` propio que
   lo deja a su tamaño natural. Ver `reference/diagramas.md`.
+- **Y tiene que sobrevivir al panel ESTRECHO, que es el otro lado de lo mismo.** En la consola de
+  xonecode el artefacto se pinta en la columna central, con la barra lateral (280 px) y la lista
+  de artefactos (260 px) a los lados: en un portátil eso deja el iframe por debajo de 700 px. No
+  es motivo para estrechar la página —sigue sin `max-width`—, sino para que la rejilla ceda:
+  columnas que se apilan, tablas con su propio scroll horizontal, y ninguna medida fija en px
+  para el contenedor.
 
 ## Tres reglas duras
 
@@ -88,7 +111,10 @@ lados, con el diagrama encogido en medio. Medido sobre un panel real, 2026-09-01
 **Y no pongas un INTERRUPTOR de tema.** Los tres bloques de arriba ya cubren los tres estados,
 así que no hace falta — y recordar la elección pide `localStorage`, que **LANZA** en el sandbox
 del visor y se lleva el bloque `<script>` entero: la página se ve perfecta y el diagrama no
-llega a dibujarse. El validador rechaza el artifact si lo encuentra.
+llega a dibujarse. Con `publish_artifact` lo rechaza además el validador. En la consola de
+xonecode no hay validador que lo pare, así que el único que lo evita eres tú — y ahí está medido
+(2026-09-07) que **los tres** almacenes lanzan `SecurityError`: `localStorage`, `sessionStorage`
+e `indexedDB`. Ver `SKILL.md`, «El contrato del OTRO camino».
 
 ## Y lo de siempre
 

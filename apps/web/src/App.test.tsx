@@ -690,6 +690,48 @@ describe("App: Revisión despliega solos los primeros", () => {
   });
 });
 
+describe("App: la pestaña Artefactos", () => {
+  /** Un acto de artefacto tal como lo emite el servidor. */
+  const ARTEFACTO = {
+    tipo: "artefacto" as const,
+    ruta: "/artefactos/d.html",
+    nombre: "d.html",
+    bytes: 9000,
+    mime: "text/html",
+  };
+  const conArtefacto = () => {
+    const montado = montar();
+    act(() => montado.store.aplicar({ clase: "reemision", actos: [ARTEFACTO] }));
+    return montado;
+  };
+
+  it("la lista sale de los ACTOS, y con ella aparece la pestaña", () => {
+    const { store } = montar();
+    expect(screen.queryByRole("tab", { name: "Artefactos" })).toBeNull();
+    act(() => store.aplicar({ clase: "reemision", actos: [ARTEFACTO] }));
+    expect(screen.getByRole("tab", { name: "Artefactos" })).toBeTruthy();
+  });
+
+  it("el nombre de la tarjeta del chat abre la pestaña con ese artefacto elegido", () => {
+    conArtefacto();
+    fireEvent.click(screen.getByRole("button", { name: "d.html" }));
+    expect(screen.getByRole("tab", { name: "Artefactos" }).getAttribute("aria-selected")).toBe("true");
+    // Y lo que se pinta es su iframe, no el «elige uno de la lista».
+    expect(screen.getByTitle("d.html").tagName).toBe("IFRAME");
+  });
+
+  it("si la sesión nueva no tiene artefactos, se vuelve al Chat en vez de dejar una pestaña que ya no está", () => {
+    // Es el estado que se escapa: estando en Artefactos, abrir otra sesión quita la pestaña
+    // de la tira —y hace bien— pero la elección seguía puesta, así que el centro enseñaba el
+    // panel de artefactos sin ninguna pestaña marcada.
+    const { store } = conArtefacto();
+    fireEvent.click(screen.getByRole("tab", { name: "Artefactos" }));
+    act(() => store.aplicar({ clase: "reemision", actos: [] }));
+    expect(screen.queryByRole("tab", { name: "Artefactos" })).toBeNull();
+    expect(screen.getByRole("tab", { name: "Chat" }).getAttribute("aria-selected")).toBe("true");
+  });
+});
+
 describe("App: la pestaña Ficheros", () => {
   const arboles = (enviar: ReturnType<typeof vi.fn>) => enviar.mock.calls.filter(([m]) => (m as { clase: string }).clase === "arbol");
 

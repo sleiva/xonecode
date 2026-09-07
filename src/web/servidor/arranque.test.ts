@@ -17,6 +17,7 @@ import {
   montarRutas,
   FALTA_EL_BUILD,
   RUTA_ACCION,
+  RUTA_ARTEFACTO,
   RUTA_EVENTOS,
 } from "./arranque.js";
 import { crearVestibulo, type Vestibulo } from "./vestibulo.js";
@@ -133,7 +134,12 @@ describe("montarRutas — el cable, por fin conectado", () => {
   it("registra el SSE y la acción: hasta ahora `registrarRuta` no la llamaba nadie", () => {
     const servidor = servidorDeMentira();
     montarRutas(servidor, vestibuloDePrueba());
-    expect([...servidor.rutas.keys()].sort()).toEqual([`GET ${RUTA_EVENTOS}`, `POST ${RUTA_ACCION}`]);
+    expect([...servidor.rutas.keys()].sort()).toEqual([
+      // La tercera es el documento de un artefacto, que un iframe no puede pedir por el cable.
+      `GET ${RUTA_ARTEFACTO}`,
+      `GET ${RUTA_EVENTOS}`,
+      `POST ${RUTA_ACCION}`,
+    ]);
   });
 
   it("al conectar manda el transcript, los comandos, el estado de modelos, el saludo y el alta", async () => {
@@ -2010,5 +2016,213 @@ describe("qué hay en la máquina: el mensaje «dispositivos»", () => {
     expect(cliente.recibidos.some((m) => m.clase === "dispositivos")).toBe(false);
     // Y pedirlo tampoco revienta: 204 y silencio.
     expect(await enviarMensaje(servidor.rutas.get(`POST ${RUTA_ACCION}`)!, { clase: "dispositivos" })).toBe(204);
+  });
+});
+
+/**
+ * Los ARTEFACTOS de la sesión, por sus dos caminos: el cable (contenido para los visores)
+ * y la ruta HTTP (el documento que pinta el iframe, y la descarga).
+ *
+ * Aquí no hay disco: los dos lectores entran por opción, igual que `leerFichero`. Lo que se
+ * afirma es el CABLE y las CABECERAS, que es donde vive la decisión de seguridad.
+ */
+describe("los artefactos de la sesión", () => {
+  /** Un GET a una ruta registrada, con su query. Apunta estado, cabeceras y cuerpo. */
+  async function pedir(manejador: ManejadorRuta, url: string) {
+    const peticion = { method: "GET", url, headers: {} } as unknown as IncomingMessage;
+    let estado = 0;
+    const cabeceras: Record<string, string | number> = {};
+    let cuerpo: Buffer | string | undefined;
+    const respuesta = {
+      writeHead: (codigo: number, extra?: Record<string, string | number>) => {
+        estado = codigo;
+        Object.assign(cabeceras, extra ?? {});
+        return respuesta;
+      },
+      setHeader: (clave: string, valor: string | number) => {
+        cabeceras[clave] = valor;
+        return respuesta;
+      },
+      end: (trozo?: Buffer | string) => {
+        cuerpo = trozo;
+        return respuesta;
+      },
+    } as unknown as ServerResponse;
+    await manejador(peticion, respuesta);
+    return { estado, cabeceras, cuerpo };
+  }
+
+  const abrirProyecto = async (opciones: Parameters<typeof montarRutas>[2] = {}) => {
+    const base = mkdtempSync(join(tmpdir(), "xonecode-artefacto-"));
+    const servidor = servidorDeMentira();
+    const vestibulo = vestibuloDePrueba({ baseDeWorkspace: base });
+    const raizDeVerdad = vestibulo.raizDeProyecto("webstudio", "Tienda");
+    mkdirSync(join(raizDeVerdad, ".xonecode"), { recursive: true });
+    writeFileSync(join(raizDeVerdad, ".xonecode", "config.json"), JSON.stringify({ modo: "offline" }));
+    montarRutas(servidor, vestibulo, opciones);
+    const cliente = clienteDeMentira();
+    await servidor.rutas.get(`GET ${RUTA_EVENTOS}`)!(cliente.peticion, cliente.respuesta);
+    const accion = servidor.rutas.get(`POST ${RUTA_ACCION}`)!;
+    await asentar();
+    await enviarMensaje(accion, { clase: "sesion", proyecto: "p1" });
+    await asentar();
+    return {
+      base,
+      servidor,
+      vestibulo,
+      cliente,
+      accion,
+      artefacto: servidor.rutas.get(`GET ${RUTA_ARTEFACTO}`)!,
+      limpiar: async () => {
+        await vestibulo.cerrar();
+        rmSync(base, { recursive: true, force: true });
+      },
+    };
+  };
+
+  describe("por el cable, para los visores", () => {
+    it("se pide por NOMBRE y se contesta con la ruta virtual", async () => {
+      const pedidos: { raiz: string; sesion: string; nombre: string }[] = [];
+      const { accion, cliente, vestibulo, limpiar } = await abrirProyecto({
+        leerArtefacto: async (raiz, sesion, nombre) => {
+          pedidos.push({ raiz, sesion, nombre });
+          return { ruta: `/artefactos/${nombre}`, texto: "<p/>", recortado: false, binario: false, bytes: 4 };
+        },
+      });
+
+      expect(await enviarMensaje(accion, { clase: "artefacto", nombre: "d.html" })).toBe(204);
+      await asentar();
+
+      // El id que se usa es el del HILO, que existe desde que se abre la sesión: es el que
+      // montó la carpeta en disco. Con `sesion` —que espera al índice— este mensaje habría
+      // contestado «no existe» durante todo el primer turno.
+      expect(pedidos).toEqual([
+        { raiz: vestibulo.proyectoAbierto()!.raiz, sesion: vestibulo.proyectoAbierto()!.idDeHilo, nombre: "d.html" },
+      ]);
+      expect(cliente.recibidos.filter((x) => x.clase === "artefacto").at(-1)).toMatchObject({
+        clase: "artefacto",
+        ruta: "/artefactos/d.html",
+        texto: "<p/>",
+      });
+      await limpiar();
+    });
+
+    it("sin lector se contesta que esta ejecución no puede, no silencio", async () => {
+      const { accion, cliente, limpiar } = await abrirProyecto();
+      await enviarMensaje(accion, { clase: "artefacto", nombre: "d.html" });
+      await asentar();
+      expect(cliente.recibidos.filter((x) => x.clase === "artefacto").at(-1)).toMatchObject({
+        clase: "artefacto",
+        ruta: "/artefactos/d.html",
+        error: expect.stringContaining("no puede"),
+      });
+      await limpiar();
+    });
+
+    it("si el lector LANZA, ni el cable ni lo informado llevan la ruta de la máquina", async () => {
+      const dichos: string[] = [];
+      const { accion, cliente, limpiar } = await abrirProyecto({
+        informar: (t) => dichos.push(t),
+        leerArtefacto: async () => {
+          throw Object.assign(new Error("EACCES: permission denied, open '/Users/alguien/.xonecode/x'"), { code: "EACCES" });
+        },
+      });
+      await enviarMensaje(accion, { clase: "artefacto", nombre: "d.html" });
+      await asentar();
+      expect(cliente.recibidos.filter((x) => x.clase === "artefacto").at(-1)).toMatchObject({ error: expect.any(String) });
+      expect(JSON.stringify(cliente.recibidos)).not.toContain("/Users/alguien");
+      expect(dichos.join(" ")).not.toContain("/Users/alguien");
+      expect(dichos.join(" ")).toContain("EACCES");
+      await limpiar();
+    });
+  });
+
+  describe("por HTTP, el documento del iframe", () => {
+    const html = Buffer.from("<!doctype html><p>hola</p>");
+    const lectorDe = (datos: Buffer, mime?: string) => ({
+      leerArtefactoCrudo: async () => ({ ok: true as const, nombre: "d.html", datos, ...(mime === undefined ? {} : { mime }) }),
+    });
+
+    it("sirve los bytes con el sandbox puesto en la CABECERA, no solo en el atributo", async () => {
+      const { artefacto, limpiar } = await abrirProyecto(lectorDe(html, "text/html"));
+      const { estado, cabeceras, cuerpo } = await pedir(artefacto, "/artefacto?n=d.html");
+
+      expect(estado).toBe(200);
+      expect(cuerpo).toEqual(html);
+      expect(cabeceras["Content-Type"]).toBe("text/html; charset=utf-8");
+      // La cabecera cubre lo que el atributo del iframe no puede: abrir esta URL en una
+      // pestaña sería una navegación de primer nivel en el origen real, CON la cookie.
+      expect(cabeceras["Content-Security-Policy"]).toBe("sandbox allow-scripts");
+      expect(cabeceras["X-Content-Type-Options"]).toBe("nosniff");
+      expect(cabeceras["Cache-Control"]).toBe("no-store");
+      await limpiar();
+    });
+
+    it("con «descargar» va como adjunto y sin tipo adivinado", async () => {
+      const { artefacto, limpiar } = await abrirProyecto(lectorDe(html, "text/html"));
+      const { estado, cabeceras } = await pedir(artefacto, "/artefacto?n=d.html&descargar=1");
+      expect(estado).toBe(200);
+      expect(cabeceras["Content-Disposition"]).toBe('attachment; filename="d.html"');
+      expect(cabeceras["Content-Type"]).toBe("application/octet-stream");
+      await limpiar();
+    });
+
+    it("un mime que no conocemos NO se sirve inline: se descarga", async () => {
+      const { artefacto, limpiar } = await abrirProyecto({
+        leerArtefactoCrudo: async () => ({ ok: true as const, nombre: "cosa.xyz", datos: Buffer.from("x") }),
+      });
+      const { cabeceras } = await pedir(artefacto, "/artefacto?n=cosa.xyz");
+      expect(cabeceras["Content-Type"]).toBe("application/octet-stream");
+      expect(cabeceras["Content-Disposition"]).toBe('attachment; filename="cosa.xyz"');
+      await limpiar();
+    });
+
+    it("cada motivo tiene su código, y ninguno delata el disco", async () => {
+      for (const [motivo, codigo] of [
+        ["rechazado", 403],
+        ["no-existe", 404],
+        ["demasiado-grande", 413],
+      ] as const) {
+        const { artefacto, limpiar } = await abrirProyecto({
+          leerArtefactoCrudo: async () => ({ ok: false as const, motivo }),
+        });
+        const { estado, cuerpo } = await pedir(artefacto, "/artefacto?n=d.html");
+        expect(estado).toBe(codigo);
+        expect(String(cuerpo ?? "")).not.toContain("/");
+        await limpiar();
+      }
+    });
+
+    it("sin nombre, sin proyecto abierto o sin lector se rechaza en vez de servir nada", async () => {
+      const { artefacto, limpiar } = await abrirProyecto(lectorDe(html, "text/html"));
+      expect((await pedir(artefacto, "/artefacto")).estado).toBe(400);
+      await limpiar();
+
+      const sinLector = await abrirProyecto();
+      expect((await pedir(sinLector.artefacto, "/artefacto?n=d.html")).estado).toBe(404);
+      await sinLector.limpiar();
+
+      const servidor = servidorDeMentira();
+      montarRutas(servidor, vestibuloDePrueba(), lectorDe(html, "text/html"));
+      const sinProyecto = servidor.rutas.get(`GET ${RUTA_ARTEFACTO}`)!;
+      expect((await pedir(sinProyecto, "/artefacto?n=d.html")).estado).toBe(404);
+    });
+
+    it("un nombre con recorrido no llega ni al lector", async () => {
+      let llamado = false;
+      const { artefacto, limpiar } = await abrirProyecto({
+        leerArtefactoCrudo: async () => {
+          llamado = true;
+          return { ok: false as const, motivo: "rechazado" as const };
+        },
+      });
+      // El lector tiene su propia barrera y está probado aparte; esto afirma que la ruta no
+      // se apoya SOLO en ella: `%2e%2e` lo decodifica `searchParams` a `..`.
+      for (const n of ["../auth.json", "%2e%2e/auth.json", "un%20nombre.html"]) {
+        expect((await pedir(artefacto, `/artefacto?n=${n}`)).estado).toBe(403);
+      }
+      expect(llamado).toBe(false);
+      await limpiar();
+    });
   });
 });

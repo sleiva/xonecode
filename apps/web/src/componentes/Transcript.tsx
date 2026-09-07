@@ -27,6 +27,8 @@ export function Transcript({
   sesion,
   ficheros,
   revision,
+  artefactos,
+  alAbrirArtefacto,
 }: {
   actos: readonly Acto[];
   pestana: Pestana;
@@ -48,6 +50,12 @@ export function Transcript({
    */
   ficheros?: ReactNode;
   revision?: ReactNode;
+  /** Lo que el agente DIBUJÓ en esta sesión. Su pestaña solo existe si hay alguno, y de eso
+   *  se encarga `Pestanas`: aquí es una ranura más. */
+  artefactos?: ReactNode;
+  /** Abrir un artefacto desde su tarjeta del Chat. Lo resuelve `App`, que es quien recuerda
+   *  la pestaña y el elegido. */
+  alAbrirArtefacto?: (ruta: string) => void;
   /** Hay turno corriendo. Solo lo usa el Chat, para saber si el último mensaje sigue
    *  llegando — y con él, si toca resaltar el código o esperar al cierre. */
   turnoEnVuelo?: boolean;
@@ -65,11 +73,14 @@ export function Transcript({
             {...(proyecto === undefined ? {} : { proyecto })}
             {...(modelo === undefined ? {} : { modelo })}
             {...(sesion === undefined ? {} : { sesion })}
+            {...(alAbrirArtefacto === undefined ? {} : { alAbrirArtefacto })}
           />
         ) : pestana === "trazas" ? (
           <Trazas actos={actos} />
         ) : pestana === "revision" ? (
           revision
+        ) : pestana === "artefactos" ? (
+          artefactos
         ) : (
           ficheros
         )}

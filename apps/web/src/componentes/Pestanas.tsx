@@ -2,7 +2,7 @@ import clsx from "clsx";
 import conversacion from "../../estilos/ConversationRoot.module.css";
 import estilos from "./Pestanas.module.css";
 
-export type Pestana = "chat" | "ficheros" | "revision" | "trazas";
+export type Pestana = "chat" | "ficheros" | "revision" | "artefactos" | "trazas";
 
 /**
  * La tira de pestañas: Chat, Ficheros, Revisión y Trazas.
@@ -27,9 +27,18 @@ export type Pestana = "chat" | "ficheros" | "revision" | "trazas";
 export function Pestanas({
   pestana,
   alElegirPestana,
+  hayArtefactos,
 }: {
   pestana: Pestana;
   alElegirPestana: (pestana: Pestana) => void;
+  /**
+   * ¿Ha dejado esta sesión algún artefacto? Su pestaña solo existe entonces.
+   *
+   * No es cosmética: casi todas las conversaciones no dibujan nada, y una pestaña
+   * «Artefactos» siempre presente sería el control sin dato detrás que este proyecto no se
+   * permite en ninguna otra parte. Lo sabe `App` mirando los actos, que ya traen la lista.
+   */
+  hayArtefactos?: boolean;
 }) {
   const pestanas: { id: Pestana; etiqueta: string }[] = [
     { id: "chat", etiqueta: "Chat" },
@@ -38,6 +47,9 @@ export function Pestanas({
     // Lo que ESTA sesión ha tocado, con su diff: la única vista que responde a «¿qué me ha
     // cambiado el agente?» sin salir a un terminal.
     { id: "revision", etiqueta: "Revisión" },
+    // Lo que el agente DIBUJÓ, que no es del proyecto y por eso no está en las dos de
+    // arriba. Solo si hay alguno.
+    ...(hayArtefactos === true ? [{ id: "artefactos" as const, etiqueta: "Artefactos" }] : []),
     // Para depurar el HARNESS, no para trabajar en una app XOne: por eso va la última.
     { id: "trazas", etiqueta: "Trazas" },
   ];
