@@ -17,9 +17,15 @@ function idDeGrupo(ruta: string): string {
  * tocados). Lo que cambia entre las dos es qué hay en cada hoja —`insignia`— y qué pasa al
  * pulsarla; el plegado, el filtro y la marca de elegida son los mismos.
  *
- * - Las carpetas del PRIMER nivel nacen abiertas y las de dentro cerradas: abrirlo todo en
- *   un proyecto de cien ficheros es una lista; cerrarlo todo obliga a dos clics para ver
- *   cualquier cosa.
+ * - **Cuánto nace abierto lo decide quien lo monta** (`abiertas`), porque las dos pestañas
+ *   enseñan cosas distintas con el mismo componente. En Ficheros el árbol es el proyecto
+ *   ENTERO y nace todo plegado: con el primer nivel abierto, un proyecto de verdad se abre
+ *   como una lista de cien ficheros donde no se distingue la forma del proyecto, que es
+ *   justo para lo que sirve un árbol. En Revisión son solo los ficheros que la sesión tocó
+ *   —un puñado, y verlos es el objetivo de la pestaña—, así que ahí el primer nivel sigue
+ *   naciendo abierto: plegarlos costaría un clic por carpeta para llegar a lo único que
+ *   hay. La omisión es «primer-nivel» y no «ninguna» porque es la que no se puede
+ *   equivocar: si el árbol nace de más, se ve; si nace de menos, parece vacío.
  * - El filtro es por subcadena de la ruta COMPLETA y sin distinguir mayúsculas, y mientras
  *   hay filtro todas las carpetas con alguna hoja que casa se enseñan abiertas: filtrar es
  *   buscar, y una coincidencia dentro de una carpeta plegada no se ve.
@@ -32,6 +38,7 @@ export function Arbol({
   alElegir,
   filtro = "",
   insignia,
+  abiertas = "primer-nivel",
 }: {
   nodos: readonly NodoDelArbol[];
   elegida?: string;
@@ -39,10 +46,12 @@ export function Arbol({
   /** Ya en minúsculas o no: se normaliza aquí. Vacío = sin filtro. */
   filtro?: string;
   insignia?: (ruta: string) => ReactNode;
+  /** Qué nace abierto antes de que nadie pulse nada. Ver el porqué arriba. */
+  abiertas?: "primer-nivel" | "ninguna";
 }) {
-  // Las carpetas que el usuario ha CAMBIADO respecto a su estado inicial (abierta en el
-  // primer nivel, cerrada dentro). Guardar el cambio y no el estado es lo que hace que un
-  // árbol nuevo del servidor no cierre lo que estaba abierto.
+  // Las carpetas que el usuario ha CAMBIADO respecto a su estado inicial (el que decide
+  // `abiertas`). Guardar el cambio y no el estado es lo que hace que un árbol nuevo del
+  // servidor no cierre lo que estaba abierto.
   const [cambiadas, setCambiadas] = useState<ReadonlySet<string>>(new Set());
   const aguja = filtro.trim().toLowerCase();
   // Prefijo de instancia: dos árboles en la misma página (Ficheros y Revisión) no pueden
@@ -55,7 +64,7 @@ export function Arbol({
 
   const abierta = (nodo: NodoDelArbol, nivel: number): boolean => {
     if (aguja !== "") return true;
-    const porOmision = nivel === 0;
+    const porOmision = abiertas === "primer-nivel" && nivel === 0;
     return cambiadas.has(nodo.ruta) ? !porOmision : porOmision;
   };
 

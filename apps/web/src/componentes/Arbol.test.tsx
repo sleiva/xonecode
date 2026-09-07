@@ -8,12 +8,29 @@ afterEach(cleanup);
 const NODOS = arbolDeRutas(["app.xml", "src/Clientes.xne", "src/Pedidos.xne", "src/ui/base.css"]);
 
 describe("Arbol", () => {
-  it("las carpetas del primer nivel nacen abiertas; las de dentro, cerradas hasta pulsarlas", () => {
+  it("por omisión las carpetas del primer nivel nacen abiertas; las de dentro, cerradas hasta pulsarlas", () => {
     render(<Arbol nodos={NODOS} alElegir={vi.fn()} />);
     expect(screen.getByRole("treeitem", { name: "src" }).getAttribute("aria-expanded")).toBe("true");
     expect(screen.getByRole("treeitem", { name: "ui" }).getAttribute("aria-expanded")).toBe("false");
     expect(screen.queryByRole("treeitem", { name: "base.css" })).toBeNull();
     fireEvent.click(screen.getByRole("treeitem", { name: "ui" }));
+    expect(screen.getByRole("treeitem", { name: "base.css" })).toBeTruthy();
+  });
+
+  it("con abiertas=«ninguna» nace todo plegado, y pulsar una carpeta la abre", () => {
+    render(<Arbol nodos={NODOS} alElegir={vi.fn()} abiertas="ninguna" />);
+    expect(screen.getByRole("treeitem", { name: "src" }).getAttribute("aria-expanded")).toBe("false");
+    expect(screen.queryByRole("treeitem", { name: "Clientes.xne" })).toBeNull();
+    // La hoja de la raíz sí se ve: no cuelga de ninguna carpeta.
+    expect(screen.getByRole("treeitem", { name: "app.xml" })).toBeTruthy();
+    fireEvent.click(screen.getByRole("treeitem", { name: "src" }));
+    expect(screen.getByRole("treeitem", { name: "Clientes.xne" })).toBeTruthy();
+    // Y lo de dentro sigue plegado: abrir una carpeta abre esa, no su subárbol.
+    expect(screen.getByRole("treeitem", { name: "ui" }).getAttribute("aria-expanded")).toBe("false");
+  });
+
+  it("con abiertas=«ninguna» el filtro sigue abriendo lo que casa", () => {
+    render(<Arbol nodos={NODOS} alElegir={vi.fn()} abiertas="ninguna" filtro="base" />);
     expect(screen.getByRole("treeitem", { name: "base.css" })).toBeTruthy();
   });
 
