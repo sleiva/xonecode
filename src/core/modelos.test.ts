@@ -1,5 +1,8 @@
 import { describe, it, expect } from "vitest";
-import { parsear, resolver, ModeloMalEscrito, POR_OMISION } from "./modelos.js";
+import {
+  parsear, resolver, ModeloMalEscrito, POR_OMISION,
+  COMPATIBLES_OPENAI, compatibleConOpenAi, PROVEEDORES, SIN_CREDENCIAL, VARIABLES_POR_PROVEEDOR,
+} from "./modelos.js";
 
 describe("parsear", () => {
   it("separa proveedor y modelo", () => {
@@ -122,5 +125,57 @@ describe("resolver", () => {
   it("global.modelo (general) se usa cuando no hay nada más", () => {
     const r = resolver({ global: { modelo: "gemini/gemini-3.6-flash" } });
     expect(r.trabajo).toEqual({ proveedor: "gemini", modelo: "gemini-3.6-flash", origen: "global" });
+  });
+});
+
+describe("los proveedores compatibles con OpenAI", () => {
+  it("son proveedores de verdad: se parsean y llevan barras en el id del modelo", () => {
+    // NVIDIA nombra los suyos `publicador/modelo`, así que el corte por la PRIMERA barra
+    // (el mismo que sostiene `library/qwen3:8b` de Ollama) es lo que hace que esto valga.
+    expect(parsear("nvidia/meta/llama-3.3-70b-instruct")).toEqual({
+      proveedor: "nvidia",
+      modelo: "meta/llama-3.3-70b-instruct",
+    });
+    expect(parsear("groq/llama-3.3-70b-versatile").proveedor).toBe("groq");
+    expect(parsear("xai/grok-4").proveedor).toBe("xai");
+  });
+
+  it("cada uno tiene URL base y variable, y `compatibleConOpenAi` no reconoce a los demás", () => {
+    for (const [proveedor, fila] of Object.entries(COMPATIBLES_OPENAI)) {
+      expect(PROVEEDORES).toContain(proveedor);
+      expect(fila.baseUrl.startsWith("https://")).toBe(true);
+      expect(compatibleConOpenAi(proveedor as never)).toEqual(fila);
+    }
+    // `openai` encaja en la forma y NO está en la tabla a propósito: su listado filtra por
+    // las familias de ids de OpenAI, que en los otros tres no significan nada.
+    expect(compatibleConOpenAi("openai")).toBeUndefined();
+    expect(compatibleConOpenAi("ollama")).toBeUndefined();
+  });
+});
+
+describe("la tabla de variables de entorno", () => {
+  /**
+   * Esta es la que impide que vuelvan las cuatro copias. Ya habían divergido una vez: la de
+   * `cli/config.ts` no tenía `OLLAMA_API_KEY`, así que `/config` decía «sin credencial» de
+   * un proveedor que la tenía puesta.
+   */
+  it("nombra exactamente a los proveedores que necesitan credencial", () => {
+    const conVariable = PROVEEDORES.filter((p) => VARIABLES_POR_PROVEEDOR[p] !== undefined);
+    const necesitanClave = PROVEEDORES.filter((p) => !SIN_CREDENCIAL.has(p));
+    expect([...conVariable].sort()).toEqual([...necesitanClave].sort());
+  });
+
+  it("la variable de un compatible es la misma que declara su fila", () => {
+    for (const [proveedor, fila] of Object.entries(COMPATIBLES_OPENAI)) {
+      expect(VARIABLES_POR_PROVEEDOR[proveedor as never]).toBe(fila.variable);
+    }
+  });
+
+  it("ninguna variable se repite entre dos proveedores", () => {
+    const variables = PROVEEDORES.flatMap((p) => {
+      const variable = VARIABLES_POR_PROVEEDOR[p];
+      return variable === undefined ? [] : [variable];
+    });
+    expect(new Set(variables).size).toBe(variables.length);
   });
 });

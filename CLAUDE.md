@@ -597,8 +597,10 @@ detrás es la misma mentira que una lista vacía rellenada»):
   cuenta— con todo acceso envuelto en `try`, porque en una ventana privada el propio
   accesor lanza.
 - **No hay «proveedor personalizado»**: los proveedores son una lista CERRADA
-  (`core/modelos.ts#PROVEEDORES`) y declarar uno a mano no llevaría a ninguna parte. El
-  harness lo tiene porque su adaptador habla con cualquier endpoint compatible con OpenAI.
+  (`core/modelos.ts#PROVEEDORES`). La razón ya no es que nuestro adaptador no sepa hablar
+  con un endpoint compatible con OpenAI —desde `COMPATIBLES_OPENAI` sabe—: es que un
+  endpoint tecleado en esta ventana mandaría la clave del usuario a donde diga el campo.
+  Un proveedor nuevo es una fila de esa tabla, revisada en el repo.
 - **Borrar una credencial solo se ofrece si está en `auth.json`** (`enFichero` en el cable,
   y solo si además hay puerto para borrarla). Una que viene de una variable de entorno no
   la podemos quitar; `borrarCredencial` (`agent/authEnDisco.ts`) limpia `process.env` SOLO
@@ -1404,6 +1406,41 @@ recuerda su `origen` para que `config`/`describe` lo digan.
 guarda la elección en la config global. `ErrorCatalogoModelos` es un error publicable: nunca
 lleva la clave ni el cuerpo remoto. Ollama local (`OLLAMA_BASE_URL`) y Ollama Cloud
 (`https://ollama.com`) son dos hosts distintos y no se mezclan.
+
+**Los proveedores compatibles con OpenAI son una TABLA, no tres ramas más**
+(`core/modelos.ts#COMPATIBLES_OPENAI`). NVIDIA (`integrate.api.nvidia.com/v1`,
+`NVIDIA_API_KEY`), Groq (`api.groq.com/openai/v1`, `GROQ_API_KEY`) y xAI —los modelos
+`grok-*`— (`api.x.ai/v1`, `XAI_API_KEY`) publican la misma API que OpenAI, así que son tres
+filas de datos con URL base y variable, y quien las consume tiene UNA rama genérica: el
+cliente es `ChatOpenAI` con `configuration.baseURL`, y el catálogo un `GET /v1/models`. La
+lista de proveedores sigue CERRADA —el cuarto compatible será otra fila del repo, no un
+campo en Ajustes—, pero lo que la cierra ya es política y no incapacidad del adaptador, y
+el párrafo de las «tres ausencias» de la ventana de ajustes lo dice así. Cinco reglas:
+- **La clave se EXIGE al construir** (`agent/modelos.ts#construirCompatibleOpenAi`), al
+  revés que el caso de `openai`, que la pasa tal cual. `ChatOpenAI` sin `apiKey` se la
+  busca él en `OPENAI_API_KEY`: sin la guarda, un `NVIDIA_API_KEY` sin poner haría que la
+  clave de OpenAI del usuario viajara a `integrate.api.nvidia.com` con la primera
+  petición. Hay test.
+- **Los tres casos van enumerados en el `switch`**, no en un `default`: así el switch sigue
+  siendo exhaustivo y añadir un proveedor da un error de compilación en vez de construir un
+  cliente equivocado en silencio.
+- **El filtro del listado es el genérico** (`esIdConversacional`) y no el de OpenAI: aquí
+  los ids no siguen sus familias (`meta/llama-3.3-70b-instruct`, `grok-4`), así que exigir
+  un prefijo conocido dejaría la lista vacía. Se descarta solo lo que con certeza no es de
+  conversación, y por eso «embedding» pasó a «embed» y se añadió «rerank» — NVIDIA nombra
+  los suyos `nv-embedqa-e5-v5` y `nv-rerankqa-1b-v2`, que no contienen «embedding».
+- **El contexto solo si el servidor lo dice** (`context_window`, que manda Groq y los otros
+  dos no). `core/contextos.ts` no tiene tabla para estas familias y no se le inventa una:
+  sin tope no hay porcentaje, que es la respuesta honesta.
+- **Y la variable de entorno de cada proveedor vive en UN sitio**
+  (`core/modelos.ts#VARIABLES_POR_PROVEEDOR`). Había CUATRO copias —`configEnDisco.ts`,
+  `catalogoModelos.ts`, `cli/config.ts` y `cli/consola.ts`, duplicadas para que `cli/` no
+  tirase de `agent/` por un mapa de cuatro líneas— y ya habían divergido: la de
+  `cli/config.ts` no tenía `OLLAMA_API_KEY`, así que `/config` decía «sin credencial» de un
+  proveedor que la tenía puesta. En `core/`, que es datos puros, los dos lados tiran del
+  mismo sitio; `configEnDisco.ts` la reexporta con su nombre de siempre. Un test recorre
+  `PROVEEDORES` y exige que la tabla nombre exactamente a los que no están en
+  `SIN_CREDENCIAL`, y que ninguna variable se repita.
 
 **Configuración y credenciales** (`core/config.ts`, `agent/configEnDisco.ts`): `config.json`
 lleva modelos, `modo`, `cloudstudio`, `contextos` (topes de ventana fijados a mano,

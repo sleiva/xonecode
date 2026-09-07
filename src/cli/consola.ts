@@ -17,7 +17,10 @@ import { cmdDoctor } from "./doctor.js";
 import { cmdVerify } from "./verify.js";
 import { AgenteGuionizado } from "../agent/guionizado.js";
 import { correrTurno, type Piel } from "../core/turno.js";
-import { PAPELES, POR_OMISION, ModeloMalEscrito, parsear, PROVEEDORES, type FuentesDeEleccion, type Proveedor } from "../core/modelos.js";
+import {
+  PAPELES, POR_OMISION, ModeloMalEscrito, parsear, PROVEEDORES, VARIABLES_POR_PROVEEDOR,
+  type FuentesDeEleccion, type Proveedor,
+} from "../core/modelos.js";
 import { motivoDeClaveInaceptable, type Aviso } from "../core/config.js";
 import type { Papel } from "../core/ports.js";
 import { ES_DOBLE, esDoble } from "../core/ports.js";
@@ -412,17 +415,6 @@ export type EjecutorDeTurno = (
   consola: Consola
 ) => Promise<void>;
 
-/**
- * Duplicado a propósito de `cli/config.ts` (que a su vez lo duplica del original de
- * `agent/configEnDisco.ts`, hoy exportado para `authEnDisco.ts`): misma regla y misma
- * omisión — `ollama` no lleva variable porque no necesita credencial.
- */
-const VARIABLE_POR_PROVEEDOR: Partial<Record<Proveedor, string>> = {
-  anthropic: "ANTHROPIC_API_KEY",
-  openai: "OPENAI_API_KEY",
-  gemini: "GOOGLE_API_KEY",
-  "ollama-cloud": "OLLAMA_API_KEY",
-};
 
 /**
  * Un turno con `AgenteGuionizado`, igual que el `cmdRun` sin `--real`.
@@ -537,7 +529,7 @@ function validarProveedor(nombre: string | undefined): Proveedor | undefined {
 
 /** Exportada: `main.ts` la usa para el contexto de `asistenteDeModelo` (stdio y TUI). */
 export function hayCredencial(proveedor: Proveedor, raiz: string): boolean {
-  const variable = VARIABLE_POR_PROVEEDOR[proveedor];
+  const variable = VARIABLES_POR_PROVEEDOR[proveedor];
   if (variable === undefined) return true;
   const enEntorno = process.env[variable];
   if (enEntorno !== undefined && enEntorno.trim() !== "") return true;
@@ -1016,7 +1008,7 @@ export const COMANDOS: Record<string, { descripcion: string; manejador: Manejado
         // existía): mismo orden de mirón que cmdConfig — primero env, luego disco.
         const cargado = cargar(estado.raiz);
         for (const p of PROVEEDORES) {
-          const variable = VARIABLE_POR_PROVEEDOR[p];
+          const variable = VARIABLES_POR_PROVEEDOR[p];
           const enEntorno = variable !== undefined && process.env[variable] !== undefined;
           const enAuth = !enEntorno && cargado.auth[p] !== undefined;
           // ollama no se marca «sin credencial»: no la necesita, no le falta nada.

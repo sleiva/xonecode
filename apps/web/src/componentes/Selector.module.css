@@ -62,14 +62,16 @@
   margin: 0;
   padding: 0;
   list-style: none;
-  /* 320px y no los 260px de antes: medido contra los CINCO proveedores reales
-     (`core/modelos.ts#PROVEEDORES` — ollama, gemini, openai, anthropic, ollama-cloud),
-     que a 260px dejaban el quinto partido por la mitad con un scroll que no se
-     anunciaba — un elemento cortado a medias lee como un fallo de pintado, no como una
-     lista larga. A 320px caben los cinco enteros; un catálogo más largo (`/modelos`
-     con decenas de modelos) sigue haciendo scroll, y ahí SÍ hace falta: acotar el alto
-     es lo que evita que ese catálogo empuje el resto de la pantalla. */
-  max-height: 320px;
+  /* El alto se acota para que caiga entero el número de PROVEEDORES, no un número
+     redondo. Fueron 260px y dejaban el quinto partido por la mitad con un scroll que no
+     se anunciaba —un elemento cortado a medias lee como un fallo de pintado, no como una
+     lista larga—; se subió a 320px con los cinco de entonces, que es la medida de récord:
+     ~64px por fila (dos líneas, `padding: 8px` arriba y abajo, borde y el `gap: 4px`).
+     Hoy `core/modelos.ts#PROVEEDORES` son OCHO (se añadieron nvidia, groq y xai), así que
+     512px por la misma cuenta. Un catálogo más largo (`/modelos` con decenas de modelos)
+     sigue haciendo scroll, y ahí SÍ hace falta: acotar el alto es lo que evita que ese
+     catálogo empuje el resto de la pantalla. */
+  max-height: 512px;
   overflow-y: auto;
 }
 

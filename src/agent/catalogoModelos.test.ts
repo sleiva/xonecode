@@ -293,6 +293,101 @@ it("Modelos configura Ollama Cloud con su endpoint y bearer", () => {
   expect(cliente.client.config.headers).toEqual({ authorization: "Bearer clave-prueba-ollama" });
 });
 
+describe("los compatibles con OpenAI (NVIDIA, Groq, xAI)", () => {
+  it("NVIDIA se pide a su URL base con bearer, y los de recuperación no se ofrecen", async () => {
+    vi.stubEnv("NVIDIA_API_KEY", "nvapi-prueba");
+    const doble = responderJson({ data: [
+      { id: "meta/llama-3.3-70b-instruct" },
+      { id: "nvidia/nv-embedqa-e5-v5" },
+      { id: "nvidia/llama-3.2-nv-rerankqa-1b-v2" },
+    ] });
+
+    await expect(new CatalogoModelos(doble.fetch).listar("nvidia")).resolves.toEqual([
+      // El id lleva barra: `parsear` corta por la PRIMERA, así que «nvidia/meta/llama-…»
+      // vuelve entero al elegirlo.
+      { proveedor: "nvidia", id: "meta/llama-3.3-70b-instruct" },
+    ]);
+    expect(doble.llamadas).toEqual([{
+      url: "https://integrate.api.nvidia.com/v1/models",
+      init: { headers: { authorization: "Bearer nvapi-prueba" }, signal: expect.any(AbortSignal) },
+    }]);
+  });
+
+  it("Groq trae el contexto cuando el servidor lo dice, y no lo inventa cuando calla", async () => {
+    vi.stubEnv("GROQ_API_KEY", "gsk-prueba");
+    const doble = responderJson({ data: [
+      { id: "llama-3.3-70b-versatile", context_window: 131072 },
+      { id: "llama-3.1-8b-instant" },
+      { id: "whisper-large-v3" },
+      { id: "playai-tts" },
+    ] });
+
+    await expect(new CatalogoModelos(doble.fetch).listar("groq")).resolves.toEqual([
+      { proveedor: "groq", id: "llama-3.3-70b-versatile", contexto: 131072 },
+      { proveedor: "groq", id: "llama-3.1-8b-instant" },
+    ]);
+    expect(doble.llamadas[0]!.url).toBe("https://api.groq.com/openai/v1/models");
+  });
+
+  it("xAI ofrece los grok de texto y deja fuera los de imagen", async () => {
+    vi.stubEnv("XAI_API_KEY", "xai-prueba");
+    const doble = responderJson({ data: [{ id: "grok-4" }, { id: "grok-2-image-1212" }] });
+
+    await expect(new CatalogoModelos(doble.fetch).listar("xai")).resolves.toEqual([
+      { proveedor: "xai", id: "grok-4" },
+    ]);
+    expect(doble.llamadas[0]!.url).toBe("https://api.x.ai/v1/models");
+  });
+
+  it("sin su clave no se llama a nadie, y el mensaje nombra al proveedor", async () => {
+    vi.stubEnv("GROQ_API_KEY", "");
+    const doble = responderJson({ data: [] });
+    await expect(new CatalogoModelos(doble.fetch).listar("groq")).rejects.toThrow(
+      /falta la credencial para groq/,
+    );
+    expect(doble.llamadas).toEqual([]);
+  });
+});
+
+describe("Modelos: los compatibles se construyen con la URL base cambiada", () => {
+  it("NVIDIA usa el cliente de OpenAI apuntado a su endpoint, con SU clave", () => {
+    vi.stubEnv("NVIDIA_API_KEY", "nvapi-prueba");
+    const cliente = new Modelos({ bandera: "nvidia/meta/llama-3.3-70b-instruct" }).paraPapel("trabajo") as {
+      model: string;
+      clientConfig: { apiKey: string; baseURL: string };
+    };
+    expect(cliente.model).toBe("meta/llama-3.3-70b-instruct");
+    expect(cliente.clientConfig.apiKey).toBe("nvapi-prueba");
+    expect(cliente.clientConfig.baseURL).toBe("https://integrate.api.nvidia.com/v1");
+  });
+
+  it("Groq y xAI van cada uno a su host", () => {
+    vi.stubEnv("GROQ_API_KEY", "gsk-prueba");
+    vi.stubEnv("XAI_API_KEY", "xai-prueba");
+    const groq = new Modelos({ bandera: "groq/llama-3.1-8b-instant" }).paraPapel("rapido") as {
+      clientConfig: { baseURL: string };
+    };
+    const xai = new Modelos({ bandera: "xai/grok-4" }).paraPapel("rapido") as {
+      clientConfig: { baseURL: string };
+    };
+    expect(groq.clientConfig.baseURL).toBe("https://api.groq.com/openai/v1");
+    expect(xai.clientConfig.baseURL).toBe("https://api.x.ai/v1");
+  });
+
+  /**
+   * La razón de que la clave se exija en `construirCompatibleOpenAi` en vez de pasarla tal
+   * cual como hace el caso de `openai`: `ChatOpenAI` sin `apiKey` se la busca él en
+   * `OPENAI_API_KEY`, así que sin esta guarda la clave de OpenAI del usuario acabaría
+   * viajando a `integrate.api.nvidia.com` con la primera petición.
+   */
+  it("sin la clave del proveedor NO se cae en la de OpenAI: falla y lo dice", () => {
+    vi.stubEnv("NVIDIA_API_KEY", "");
+    vi.stubEnv("OPENAI_API_KEY", "sk-la-clave-de-openai");
+    expect(() => new Modelos({ bandera: "nvidia/meta/llama-3.3-70b-instruct" }).paraPapel("trabajo"))
+      .toThrow(/falta la credencial para nvidia \(NVIDIA_API_KEY\)/);
+  });
+});
+
 describe("Ollama: un modelo roto no se lleva la lista por delante", () => {
   const CHAT = { capabilities: ["completion"], model_info: { "x.context_length": 4096 } };
 

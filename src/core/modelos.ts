@@ -5,11 +5,75 @@ import type { ConfigDeFichero } from "./config.js";
 
 export const PAPELES: readonly Papel[] = ["rapido", "trabajo", "afilado"] as const;
 
-export type Proveedor = "gemini" | "openai" | "anthropic" | "ollama" | "ollama-cloud";
+export type Proveedor =
+  | "gemini" | "openai" | "anthropic" | "ollama" | "ollama-cloud"
+  | "nvidia" | "groq" | "xai";
 
 export const PROVEEDORES: readonly Proveedor[] = [
   "gemini", "openai", "anthropic", "ollama", "ollama-cloud",
+  "nvidia", "groq", "xai",
 ] as const;
+
+/**
+ * Los que se hablan con el cliente de OpenAI cambiándole la URL base.
+ *
+ * Los tres —NVIDIA (`build.nvidia.com`), Groq y xAI (los modelos `grok-*`)— publican una
+ * API compatible con OpenAI: mismo `/chat/completions` y mismo `GET /v1/models`. Así que
+ * no son tres ramas nuevas en `construirModelo` ni tres listados nuevos en el catálogo,
+ * son tres FILAS de esta tabla, y quien las consume tiene una sola rama genérica. La
+ * cuarta que se añada será otra fila.
+ *
+ * **`openai` NO está aquí a propósito**, aunque encaje en la forma: su listado filtra por
+ * las familias de ids de OpenAI (`gpt-`, `o3-`, `codex-`), que en estos tres no significan
+ * nada — meterlo en la rama genérica cambiaría lo que hoy ofrece.
+ *
+ * Y la lista de proveedores sigue siendo CERRADA (no hay «proveedor personalizado», ver
+ * `componentes/Ajustes.tsx`): lo que cambia con esto es que añadir uno compatible cuesta
+ * una fila de datos en vez de una rama por sitio, no que se pueda declarar desde fuera.
+ */
+export type ProveedorCompatibleOpenAi = "nvidia" | "groq" | "xai";
+
+export const COMPATIBLES_OPENAI: Record<
+  ProveedorCompatibleOpenAi,
+  { baseUrl: string; variable: string }
+> = {
+  nvidia: { baseUrl: "https://integrate.api.nvidia.com/v1", variable: "NVIDIA_API_KEY" },
+  groq: { baseUrl: "https://api.groq.com/openai/v1", variable: "GROQ_API_KEY" },
+  xai: { baseUrl: "https://api.x.ai/v1", variable: "XAI_API_KEY" },
+};
+
+/**
+ * La variable de entorno donde vive la clave de cada proveedor, y el ÚNICO sitio donde
+ * se escribe.
+ *
+ * Hubo cuatro copias de esta tabla —`agent/configEnDisco.ts`, `agent/catalogoModelos.ts`,
+ * `cli/config.ts` y `cli/consola.ts`—, duplicadas para que `cli/` no tirase de `agent/`
+ * por un mapa de cuatro líneas. Ya habían divergido: la de `cli/config.ts` no tenía
+ * `OLLAMA_API_KEY`, así que `/config` decía «sin credencial» de Ollama Cloud aunque
+ * estuviera puesta. Puesta en `core/` —que es datos puros y de donde SÍ pueden tirar los
+ * dos lados— el problema desaparece por construcción.
+ *
+ * `ollama` no está: es local y no necesita clave. Esa ausencia es la misma que declara
+ * `SIN_CREDENCIAL`, y hay un test que exige que las dos cuenten lo mismo.
+ */
+export const VARIABLES_POR_PROVEEDOR: Partial<Record<Proveedor, string>> = {
+  anthropic: "ANTHROPIC_API_KEY",
+  openai: "OPENAI_API_KEY",
+  gemini: "GOOGLE_API_KEY",
+  "ollama-cloud": "OLLAMA_API_KEY",
+  ...Object.fromEntries(
+    Object.entries(COMPATIBLES_OPENAI).map(([proveedor, { variable }]) => [proveedor, variable]),
+  ),
+};
+
+/** La fila de un proveedor compatible con OpenAI, o nada si no lo es. */
+export function compatibleConOpenAi(
+  proveedor: Proveedor,
+): { baseUrl: string; variable: string } | undefined {
+  return (COMPATIBLES_OPENAI as Partial<Record<Proveedor, { baseUrl: string; variable: string }>>)[
+    proveedor
+  ];
+}
 
 /**
  * Los que NO llevan clave. Hoy solo Ollama local, que es la omisión del repo.

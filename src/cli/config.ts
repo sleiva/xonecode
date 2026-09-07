@@ -17,6 +17,7 @@ import {
   ModeloMalEscrito,
   PAPELES,
   resolver,
+  VARIABLES_POR_PROVEEDOR,
   type Eleccion,
   type FuentesDeEleccion,
   type Proveedor,
@@ -24,18 +25,6 @@ import {
 import type { Papel } from "../core/ports.js";
 import { topeResuelto } from "../core/contextos.js";
 import { escribirEnStdout, type Escribir } from "./stdio.js";
-
-/**
- * Duplicado a propósito: el original vive en `agent/configEnDisco.ts` (hoy sí exportado,
- * para `authEnDisco.ts`), y `cli/` no tira de `agent/` por un mapa de cuatro líneas. Si
- * cambia allí, cambia aquí. `ollama` no lleva variable: no necesita credencial y se omite
- * de esta sección.
- */
-const VARIABLE_POR_PROVEEDOR: Partial<Record<Proveedor, string>> = {
-  anthropic: "ANTHROPIC_API_KEY",
-  openai: "OPENAI_API_KEY",
-  gemini: "GOOGLE_API_KEY",
-};
 
 interface CredencialVista {
   proveedor: Proveedor;
@@ -95,9 +84,9 @@ export function cmdConfig(
   // El entorno gana sobre auth.json (en runtime `aplicarAuth` no pisa una variable que
   // ya existe), así que el origen se decide mirando PRIMERO el entorno.
   const credenciales: CredencialVista[] = (
-    Object.keys(VARIABLE_POR_PROVEEDOR) as Proveedor[]
+    Object.keys(VARIABLES_POR_PROVEEDOR) as Proveedor[]
   ).map((proveedor) => {
-    const variable = VARIABLE_POR_PROVEEDOR[proveedor]!;
+    const variable = VARIABLES_POR_PROVEEDOR[proveedor]!;
     const enEntorno = process.env[variable] !== undefined;
     const enAuth = !enEntorno && cargado.auth[proveedor] !== undefined;
     return {

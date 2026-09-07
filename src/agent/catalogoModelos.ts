@@ -1,4 +1,6 @@
-import type { Proveedor } from "../core/modelos.js";
+import {
+  compatibleConOpenAi, VARIABLES_POR_PROVEEDOR, type Proveedor,
+} from "../core/modelos.js";
 import type { CatalogoModelosPort, ModeloDisponible } from "../core/ports.js";
 
 const MAX_PAGINAS = 20;
@@ -66,7 +68,12 @@ function esModeloOpenAiConversacional(id: string): boolean {
 /** Familias que un cliente de chat no debe ofrecer aunque una API las enumere. */
 function esIdConversacional(id: string): boolean {
   return ![
-    "embedding", "moderation", "transcri", "whisper", "tts", "audio", "voice",
+    // «embed» y no «embedding»: el catálogo de NVIDIA nombra los suyos `nv-embedqa-e5-v5`,
+    // que no contiene «embedding». Y «rerank» por lo mismo (`llama-3.2-nv-rerankqa-1b-v2`):
+    // los dos son modelos de recuperación, no de conversación, y la API los enumera al
+    // lado de los de chat.
+    "embed", "rerank",
+    "moderation", "transcri", "whisper", "tts", "audio", "voice",
     "dall-e", "dalle", "image", "imagen", "sora", "video", "realtime",
   ].some((familia) => id.toLowerCase().includes(familia));
 }
@@ -92,17 +99,22 @@ export class CatalogoModelos implements CatalogoModelosPort {
       case "gemini": return this.listarGemini();
       case "ollama": return this.listarOllama();
       case "ollama-cloud": return this.listarOllamaCloud();
+      case "nvidia":
+      case "groq":
+      case "xai":
+        return this.listarCompatible(proveedor);
     }
   }
 
-  private clave(proveedor: "openai" | "anthropic" | "gemini" | "ollama-cloud"): string {
-    const variable = {
-      openai: "OPENAI_API_KEY",
-      anthropic: "ANTHROPIC_API_KEY",
-      gemini: "GOOGLE_API_KEY",
-      "ollama-cloud": "OLLAMA_API_KEY",
-    }[proveedor];
-    const clave = process.env[variable];
+  /**
+   * La clave de un proveedor, de la ÚNICA tabla que las nombra (`core/modelos.ts`).
+   *
+   * Un proveedor sin variable no puede llegar aquí —`ollama` es local y su listado no
+   * llama a esto—, pero si llegara, decirlo es mejor que leer `process.env[undefined]`.
+   */
+  private clave(proveedor: Proveedor): string {
+    const variable = VARIABLES_POR_PROVEEDOR[proveedor];
+    const clave = variable === undefined ? undefined : process.env[variable];
     if (!clave) {
       throw new ErrorCatalogoModelos(`falta la credencial para ${proveedor}; usa /provider ${proveedor}`);
     }
@@ -213,6 +225,40 @@ export class CatalogoModelos implements CatalogoModelosPort {
       url = urlConParametro("https://generativelanguage.googleapis.com/v1beta/models", "pageToken", siguiente);
     }
     throw new ErrorCatalogoModelos("respuesta incompatible de gemini");
+  }
+
+  /**
+   * El `GET /v1/models` de un proveedor compatible con OpenAI (NVIDIA, Groq, xAI).
+   *
+   * Tres decisiones, y las tres son la misma: no afirmar lo que no se sabe.
+   *
+   * - **El filtro es el genérico** (`esIdConversacional`), no el de OpenAI: aquí los ids
+   *   no siguen sus familias (`meta/llama-3.3-70b-instruct`, `grok-4`,
+   *   `llama-3.1-8b-instant`), así que exigir un prefijo conocido dejaría la lista vacía.
+   *   Se descarta solo lo que con certeza no es de conversación —embeddings, rerankers,
+   *   voz, imagen— y lo demás se ofrece: preferimos una lista con algo de más a una que
+   *   esconde el modelo que el usuario venía a elegir.
+   * - **El contexto solo si el servidor lo dice.** Groq manda `context_window` en cada
+   *   fila; NVIDIA y xAI no mandan nada. Sin dato no hay campo, y por tanto la barra no
+   *   pinta porcentaje — que es lo correcto, no un hueco por rellenar
+   *   (`core/contextos.ts` no tiene tabla para estas familias, y no se le inventa una).
+   * - **Sin paginación.** Ninguno de los tres la declara en `/v1/models`; inventar un
+   *   bucle de cursores contra un campo que no existe sería código que nadie ejecuta.
+   */
+  private async listarCompatible(proveedor: Proveedor): Promise<ModeloDisponible[]> {
+    const fila = compatibleConOpenAi(proveedor);
+    if (fila === undefined) throw new ErrorCatalogoModelos(`${proveedor} no es compatible con OpenAI`);
+    const clave = this.clave(proveedor);
+    const respuesta = await this.pedir(proveedor, unirUrl(fila.baseUrl, "/models"), {
+      headers: { authorization: `Bearer ${clave}` },
+    });
+    if (!esRegistro(respuesta)) throw new ErrorCatalogoModelos(`respuesta incompatible de ${proveedor}`);
+    return modelosDe(respuesta, "data", proveedor).flatMap((modelo) => {
+      const id = texto(modelo.id);
+      if (id === undefined || !esIdConversacional(id)) return [];
+      const contexto = numero(modelo.context_window) ?? numero(modelo.context_length);
+      return [{ proveedor, id, ...(contexto === undefined ? {} : { contexto }) }];
+    });
   }
 
   private async listarOllama(): Promise<ModeloDisponible[]> {

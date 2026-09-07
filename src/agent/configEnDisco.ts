@@ -26,7 +26,7 @@ import {
   validar,
   validarAuth,
 } from "../core/config.js";
-import { parsear, Proveedor, PROVEEDORES } from "../core/modelos.js";
+import { parsear, Proveedor, PROVEEDORES, VARIABLES_POR_PROVEEDOR } from "../core/modelos.js";
 import type { Papel } from "../core/ports.js";
 
 export const NOMBRE_CARPETA = ".xonecode";
@@ -322,17 +322,12 @@ export function cargar(raiz: string): {
 /**
  * Las claves ya presentes en el entorno MANDAN: `auth.json` no las machaca.
  *
- * Exportada para `agent/authEnDisco.ts`, que necesita la MISMA tabla para aplicar al
- * proceso la credencial que acaba de escribir. (`cli/config.ts` y `cli/consola.ts` siguen
- * llevando su propia copia, y sus comentarios explican por qué; esta exportación no las
- * obliga a nada, solo evita una CUARTA.)
+ * La tabla vive en `core/modelos.ts` y aquí solo se reexporta, para no romper a quien la
+ * importa de este módulo (`agent/authEnDisco.ts`). Hubo cuatro copias —dos de ellas en
+ * `cli/`, para que `cli/` no tirase de `agent/` por un mapa de cuatro líneas— y habían
+ * divergido; en `core/`, que es datos puros, los dos lados pueden tirar del mismo sitio.
  */
-export const VARIABLES_POR_PROVEEDOR: Partial<Record<Proveedor, string>> = {
-  anthropic: "ANTHROPIC_API_KEY",
-  openai: "OPENAI_API_KEY",
-  gemini: "GOOGLE_API_KEY",
-  "ollama-cloud": "OLLAMA_API_KEY",
-};
+export { VARIABLES_POR_PROVEEDOR } from "../core/modelos.js";
 
 /**
  * Pone la credencial en el entorno del proceso, y NADA más: sin tocar disco.

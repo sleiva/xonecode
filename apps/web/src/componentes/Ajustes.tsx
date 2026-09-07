@@ -44,9 +44,12 @@ import estilos from "./Ajustes.module.css";
  *   consola de terminal; en un navegador no pintan nada. Lo que sí es real aquí es el
  *   claro/oscuro del propio cliente, que es lo que esta sección ofrece.
  * - **No hay «proveedor personalizado».** El harness lo tiene porque su adaptador `pi-ai`
- *   sabe hablar con cualquier endpoint compatible con OpenAI; aquí los proveedores son una
- *   lista CERRADA (`core/modelos.ts#PROVEEDORES`) y declarar uno a mano no llevaría a
- *   ninguna parte.
+ *   sabe hablar con cualquier endpoint compatible con OpenAI. Aquí eso ya no es la razón:
+ *   desde que NVIDIA, Groq y xAI entran por `COMPATIBLES_OPENAI` (`core/modelos.ts`), el
+ *   nuestro también sabe. La lista sigue siendo CERRADA por POLÍTICA y no por incapacidad:
+ *   un proveedor nuevo es una fila de esa tabla, con su URL base y su variable de entorno
+ *   revisadas en el repo — un endpoint tecleado en esta ventana mandaría la clave del
+ *   usuario a donde diga el campo, y eso no es una preferencia de la aplicación.
  * - **Borrar una credencial solo se ofrece si está en `auth.json`** (`enFichero`). Una que
  *   viene de una variable de entorno no la podemos quitar: desexportar la shell de nadie
  *   no está a nuestro alcance, y un botón que no puede cumplir es peor que ninguno.
