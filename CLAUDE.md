@@ -453,6 +453,28 @@ mensaje `modelos` en `transporte.ts`). Las reglas no son nuestras: salen de leer
 - **El catálogo se pide por proveedor y bajo demanda** (`clase: "catalogo"`), porque cada
   uno es una llamada de red; se cachea en el proceso, y el que falla se lista con su error
   mientras los demás siguen elegibles — un desvío, no un callejón.
+- **La lista es de lo COMPROBADO, no de todo lo que existe.** Un proveedor sin clave no se
+  puede usar, y ponerlo en el menú de elegir modelo es ofrecer algo que falla al pulsarlo.
+  «Comprobado» significa dos cosas distintas, y las dos son lo máximo que se puede afirmar
+  de cada uno: con clave, que la clave ESTÁ —que valga lo dirá el primer uso; comprobarlas
+  todas al arrancar serían varias llamadas de red por sesión, y la clave puesta ya es una
+  decisión del usuario—; y sin clave (Ollama, un personalizado local), que su catálogo
+  CONTESTÓ. Tres reglas más:
+  - **Los que no llevan clave se prueban al CONECTAR**, una vez por proceso, y solo ellos.
+    Es la excepción a «el catálogo se pide bajo demanda», y se gana sola: Ollama es
+    `localhost` y sin esa llamada el proveedor por OMISIÓN de esta consola no aparecería
+    nunca en su propia lista. A los de pago no se les pregunta al arrancar.
+  - **El que está EN VIGOR se enseña siempre**, comprobado o no: si el modelo de trabajo
+    viene de una variable de entorno que este proceso no reconoce como credencial,
+    esconderlo dejaría la pastilla enseñando arriba un proveedor que no está en su propia
+    lista. Es además el único sitio donde se puede ver ya el punto HUECO, y el único donde
+    se ve el rojo de «sin conexión» — que es justo cuando hay que decirlo: lo estás usando y
+    ha dejado de responder.
+  - **Los que quedan fuera se CUENTAN, con el camino para arreglarlo** («6 proveedores más
+    sin comprobar · configúralos en Ajustes»), que es el mismo patrón de la barra lateral
+    con los proyectos sin enseñar. Esconderlos y callarlo haría que Anthropic pareciera no
+    existir. Y **Ajustes → Proveedores los sigue enseñando todos**: es donde se configuran, y
+    filtrar ahí haría imposible poner la primera clave.
 - **El punto de credencial tiene TRES estados** (`SIN_CREDENCIAL`, `core/modelos.ts`):
   verde solo si está confirmada, HUECO solo si consta que falta (era rojo, y tres puntos
   rojos en la lista se leían como tres errores), y NADA para quien no

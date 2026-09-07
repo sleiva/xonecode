@@ -862,6 +862,8 @@ export function App({ store, enviar }: { store: Store; enviar: Conexion["enviar"
               // no al conectar.
               alPedirCatalogo={(proveedor) => void enviar({ clase: "catalogo", proveedor })}
               alElegirModelo={(id) => void enviar({ clase: "modelo", id })}
+              // Los proveedores que la pastilla no lista —sin comprobar— se configuran aquí.
+              alAbrirAjustes={() => setAjustesAbiertos(true)}
               // El dispositivo de la sesión: viaja el ID y el servidor resuelve la foto
               // contra su última medida — el navegador no es fuente sobre la máquina.
               {...(estado.alta?.dispositivoActivo === undefined ? {} : { dispositivo: estado.alta.dispositivoActivo })}

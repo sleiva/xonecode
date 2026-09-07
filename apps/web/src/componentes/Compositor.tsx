@@ -29,6 +29,7 @@ export function Compositor({
   modelos,
   alPedirCatalogo,
   alElegirModelo,
+  alAbrirAjustes,
   dispositivo,
   dispositivos,
   alElegirDispositivo,
@@ -67,6 +68,8 @@ export function Compositor({
   alPedirCatalogo?: (proveedor: string) => void;
   /** Elegir modelo: el id `proveedor/modelo`. Lo manda como acción, no como comando. */
   alElegirModelo?: (id: string) => void;
+  /** Abrir Ajustes, para los proveedores que la pastilla no lista por no estar comprobados. */
+  alAbrirAjustes?: () => void;
   /** El dispositivo de la sesión, tal como lo cuenta el servidor. Ausente = ninguno. */
   dispositivo?: DispositivoElegido;
   /** La última medida de la máquina, para la lista. Ausente = todavía no llegó. */
@@ -177,6 +180,9 @@ export function Compositor({
               // usuario que nadie tecleó —y de ahí sale el título de la sesión— y dejaba la
               // interfaz hablando en la sintaxis del terminal.
               alElegir={(id) => alElegirModelo?.(id)}
+              // La pastilla solo lista lo COMPROBADO; los demás se cuentan con el camino
+              // para configurarlos, que es esta ventana.
+              {...(alAbrirAjustes === undefined ? {} : { alAbrirAjustes })}
             />
           ) : null}
           {/*

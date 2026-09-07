@@ -731,15 +731,21 @@ describe("montarRutas — el cable, por fin conectado", () => {
         await enviarMensaje(accion, { clase: "catalogo", proveedor: "custom:mi-llm" });
         await asentar();
 
-        expect(pedidos).toEqual(["custom:mi-llm"]);
+        // `ollama` y el personalizado se prueban SOLOS al conectar —no llevan clave—, así
+        // que lo que este test afirma es que pedirlo a mano llega igual, no que sea el
+        // único pedido. Sin el `custom:…` en la lista, la puerta seguiría siendo un botón
+        // muerto para un proveedor recién dado de alta.
+        expect(pedidos).toContain("custom:mi-llm");
         const fila = ultimoModelos(cliente).proveedores.find((p) => p.id === "custom:mi-llm")!;
         expect(fila.modelos).toEqual([{ id: "qwen3-coder" }]);
 
         // Y uno que NO está dado de alta se ignora: no se le pide catálogo a un endpoint
-        // que no existe.
+        // que no existe. Lo que se cuenta es que no AÑADE ninguna consulta.
+        const antes = pedidos.length;
         await enviarMensaje(accion, { clase: "catalogo", proveedor: "custom:fantasma" });
         await asentar();
-        expect(pedidos).toEqual(["custom:mi-llm"]);
+        expect(pedidos).toHaveLength(antes);
+        expect(pedidos).not.toContain("custom:fantasma");
       });
 
       it("la baja se lleva también la credencial: una clave huérfana sigue siendo un secreto", async () => {
@@ -826,7 +832,9 @@ describe("montarRutas — el cable, por fin conectado", () => {
       await asentar();
       expect(await enviarMensaje(accion, { clase: "catalogo", proveedor: "no-existe" })).toBe(204);
       await asentar();
-      expect(consultados).toEqual([]);
+      // `ollama` se prueba solo al conectar; lo que este test afirma es que un id inventado
+      // no añade NINGUNA consulta.
+      expect(consultados).toEqual(["ollama"]);
     });
   });
 
@@ -2360,5 +2368,91 @@ describe("los pasos de una receta, ejecutados desde el cable", () => {
     await asentar();
     expect(progresos(cliente).at(-1)).toMatchObject({ estado: "fallo", motivo: "Warning: Failed to find package" });
     expect(medidas).toBe(2);
+  });
+});
+
+/**
+ * Los proveedores SIN credencial se prueban al conectar, y solo ellos.
+ *
+ * «¿Puedo usar Ollama?» no la contesta ninguna credencial —no lleva—: la contesta si el
+ * demonio responde, y eso solo se sabe pidiéndole el catálogo. Sin esta prueba, el proveedor
+ * por omisión de esta consola no aparecería nunca en su propia lista de comprobados.
+ *
+ * Y solo ellos: cada catálogo de un proveedor de pago es una llamada a Internet, y ahí la
+ * credencial ya responde la pregunta. La regla de «bajo demanda» se mantiene para esos.
+ */
+describe("la comprobación de los proveedores que no llevan clave", () => {
+  const catalogoQueApunta = () => {
+    const pedidos: string[] = [];
+    return {
+      pedidos,
+      catalogo: async (proveedor: string) => {
+        pedidos.push(proveedor);
+        if (proveedor === "ollama") return [{ id: "llama3" }];
+        throw new Error(`no debería preguntarse por ${proveedor}`);
+      },
+    };
+  };
+
+  it("al conectar se pide el catálogo de ollama, y de NINGÚN otro", async () => {
+    const c = catalogoQueApunta();
+    const servidor = servidorDeMentira();
+    montarRutas(servidor, vestibuloDePrueba(), {
+      catalogoDeModelos: c.catalogo as never,
+      // Con credencial en todos: aun así, a los de pago no se les pregunta.
+      hayCredencial: () => true,
+    });
+    const cliente = clienteDeMentira();
+    await servidor.rutas.get(`GET ${RUTA_EVENTOS}`)!(cliente.peticion, cliente.respuesta);
+    await asentar();
+    expect(c.pedidos).toEqual(["ollama"]);
+    // Y el resultado llega por el cable: es lo que deja decir que ollama está comprobado.
+    const modelos = cliente.recibidos.filter((m) => m.clase === "modelos").at(-1) as Extract<
+      MensajeAlCliente,
+      { clase: "modelos" }
+    >;
+    expect(modelos.proveedores.find((p) => p.id === "ollama")?.modelos).toEqual([{ id: "llama3" }]);
+  });
+
+  it("una segunda pestaña no vuelve a preguntar: la respuesta ya está", async () => {
+    // Es una llamada por proceso, no por cliente: la máquina es la misma para todos.
+    const c = catalogoQueApunta();
+    const servidor = servidorDeMentira();
+    montarRutas(servidor, vestibuloDePrueba(), { catalogoDeModelos: c.catalogo as never });
+    const primera = clienteDeMentira();
+    const segunda = clienteDeMentira();
+    await servidor.rutas.get(`GET ${RUTA_EVENTOS}`)!(primera.peticion, primera.respuesta);
+    await asentar();
+    await servidor.rutas.get(`GET ${RUTA_EVENTOS}`)!(segunda.peticion, segunda.respuesta);
+    await asentar();
+    expect(c.pedidos).toEqual(["ollama"]);
+  });
+
+  it("si ollama no contesta, se dice: el error viaja y el proveedor NO queda comprobado", async () => {
+    const servidor = servidorDeMentira();
+    montarRutas(servidor, vestibuloDePrueba(), {
+      catalogoDeModelos: async () => {
+        throw new Error("no se pudo conectar con ollama en http://127.0.0.1:11434");
+      },
+    });
+    const cliente = clienteDeMentira();
+    await servidor.rutas.get(`GET ${RUTA_EVENTOS}`)!(cliente.peticion, cliente.respuesta);
+    await asentar();
+    const modelos = cliente.recibidos.filter((m) => m.clase === "modelos").at(-1) as Extract<
+      MensajeAlCliente,
+      { clase: "modelos" }
+    >;
+    const ollama = modelos.proveedores.find((p) => p.id === "ollama")!;
+    expect(ollama.modelos).toBeUndefined();
+    expect(ollama.error).toContain("ollama");
+  });
+
+  it("sin puerto de catálogos no se prueba nada y el cable no se queda a medias", async () => {
+    const servidor = servidorDeMentira();
+    montarRutas(servidor, vestibuloDePrueba(), {});
+    const cliente = clienteDeMentira();
+    await servidor.rutas.get(`GET ${RUTA_EVENTOS}`)!(cliente.peticion, cliente.respuesta);
+    await asentar();
+    expect(cliente.recibidos.some((m) => m.clase === "modelos")).toBe(true);
   });
 });

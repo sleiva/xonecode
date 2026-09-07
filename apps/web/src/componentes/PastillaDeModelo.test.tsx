@@ -108,7 +108,10 @@ describe("PastillaDeModelo", () => {
     render(
       <PastillaDeModelo
         proveedores={[
-          { id: "openai", nombre: "OpenAI", credencial: "falta", error: "credencial no autorizada para openai" },
+          // Con la clave PUESTA: desde que la lista es de lo comprobado, un proveedor de
+          // pago solo aparece así — y este es su fallo real, la clave que el servidor
+          // rechaza al pedirle el catálogo.
+          { id: "openai", nombre: "OpenAI", credencial: "puesta", error: "credencial no autorizada para openai" },
           { id: "ollama", nombre: "Ollama", credencial: "nativa", modelos: [{ id: "qwen3" }] },
         ]}
         alPedirCatalogo={() => {}}
@@ -125,18 +128,23 @@ describe("PastillaDeModelo", () => {
   });
 
   /**
-   * El punto es literal: verde solo si la credencial está confirmada, rojo solo si se sabe
+   * El punto es literal: verde solo si la credencial está confirmada, hueco solo si se sabe
    * que falta, y NADA para quien no necesita ninguna. Pintarle un punto a Ollama sería
    * concederle un permiso o inventarle un problema.
+   *
+   * Desde que la lista es de lo COMPROBADO, el hueco solo se puede ver en un sitio: el
+   * proveedor que está EN VIGOR sin credencial que este proceso reconozca —una clave que
+   * viene por variable de entorno, por ejemplo—. Y ahí es donde más falta hace decirlo.
    */
   it("el punto de credencial solo aparece cuando hay algo que afirmar", () => {
     render(
-      <PastillaDeModelo proveedores={PROVEEDORES} alPedirCatalogo={() => {}} alElegir={() => {}} />
+      <PastillaDeModelo actual="openai/gpt-5" proveedores={PROVEEDORES} alPedirCatalogo={() => {}} alElegir={() => {}} />
     );
-    fireEvent.click(screen.getByRole("button", { name: /elige modelo/i }));
+    fireEvent.click(screen.getByRole("button", { name: /openai/i }));
     expect(screen.getByRole("menuitem", { name: /Anthropic/i }).querySelector("[data-credencial='puesta']")).toBeTruthy();
     expect(screen.getByRole("menuitem", { name: /OpenAI/i }).querySelector("[data-credencial='falta']")).toBeTruthy();
-    expect(screen.getByRole("menuitem", { name: /^ollama$/i }).querySelector("[data-credencial]")).toBeNull();
+    // Ollama entra por estar comprobado, y sin punto de credencial: no lleva ninguna.
+    expect(screen.queryByRole("menuitem", { name: /^ollama$/i })).toBeNull();
   });
 });
 
@@ -149,15 +157,21 @@ describe("el punto de un proveedor SIN credencial habla de la conexión", () => 
     ...extra,
   });
 
+  /**
+   * `actual` puesto a propósito: desde que la lista es solo de lo COMPROBADO, un proveedor
+   * que no contesta solo aparece si es el que está en uso — y ese es justo el caso que
+   * importa, porque es cuando hay que decir que ha dejado de responder.
+   */
   function montar(p: ReturnType<typeof ollama>) {
     render(
       <PastillaDeModelo
+        actual="ollama/qwen3:8b"
         proveedores={[p]}
         alPedirCatalogo={() => {}}
         alElegirModelo={() => {}}
       />
     );
-    fireEvent.click(screen.getByRole("button", { name: /elige modelo|ollama/i }));
+    fireEvent.click(screen.getByRole("button", { name: /ollama/i }));
   }
 
   /**
@@ -258,5 +272,94 @@ describe("PastillaDeModelo: el filtro de una lista larga", () => {
     fireEvent.click(screen.getByRole("button", { name: /elige modelo/i }));
     fireEvent.click(screen.getByRole("menuitem", { name: /^ollama$/i }));
     expect(screen.queryByRole("searchbox")).toBeNull();
+  });
+});
+
+/**
+ * La lista es de lo COMPROBADO, no de todo lo que existe.
+ *
+ * Un proveedor sin clave no se puede usar, y enseñarlo en el menú de elegir modelo es
+ * ofrecer algo que va a fallar al pulsarlo. Los que quedan fuera se CUENTAN con el camino
+ * para arreglarlo —el mismo patrón que la barra lateral con los proyectos sin enseñar—:
+ * esconderlos sin decir nada haría que Anthropic pareciera no existir.
+ */
+describe("solo se listan los proveedores comprobados", () => {
+  afterEach(cleanup);
+  const CON_TODO = [
+    { id: "ollama", nombre: "Ollama", credencial: "nativa" as const, modelos: [{ id: "llama3" }] },
+    { id: "anthropic", nombre: "Anthropic", credencial: "puesta" as const },
+    { id: "openai", nombre: "OpenAI", credencial: "falta" as const },
+    { id: "gemini", nombre: "Gemini", credencial: "falta" as const },
+    { id: "custom:lm", nombre: "LM Studio", credencial: "falta" as const, personalizado: true as const, error: "no responde" },
+  ];
+  const abrir = (proveedores: typeof CON_TODO, alAbrirAjustes?: () => void) => {
+    render(
+      <PastillaDeModelo
+        proveedores={proveedores}
+        alPedirCatalogo={() => {}}
+        alElegir={() => {}}
+        {...(alAbrirAjustes === undefined ? {} : { alAbrirAjustes })}
+      />
+    );
+    fireEvent.click(screen.getByRole("button", { name: /modelo/i }));
+  };
+
+  it("con clave puesta entra; sin clave, no", () => {
+    abrir(CON_TODO);
+    expect(screen.getByRole("menuitem", { name: /Anthropic/ })).toBeTruthy();
+    expect(screen.queryByRole("menuitem", { name: /OpenAI/ })).toBeNull();
+    expect(screen.queryByRole("menuitem", { name: /Gemini/ })).toBeNull();
+  });
+
+  it("ollama entra si CONTESTÓ, y no si no", () => {
+    // No lleva credencial: lo único que se puede afirmar de él es si el demonio responde.
+    abrir(CON_TODO);
+    expect(screen.getByRole("menuitem", { name: /Ollama/ })).toBeTruthy();
+    cleanup();
+    abrir([{ id: "ollama", nombre: "Ollama", credencial: "nativa" as const, error: "no se pudo conectar" }]);
+    expect(screen.queryByRole("menuitem", { name: /Ollama/ })).toBeNull();
+  });
+
+  it("uno personalizado que no responde tampoco entra, aunque no necesite clave", () => {
+    abrir(CON_TODO);
+    expect(screen.queryByRole("menuitem", { name: /LM Studio/ })).toBeNull();
+  });
+
+  it("los que quedan fuera se CUENTAN, con el camino para arreglarlo", () => {
+    const aAjustes = vi.fn();
+    abrir(CON_TODO, aAjustes);
+    // Tres fuera: OpenAI, Gemini y LM Studio.
+    const linea = screen.getByRole("button", { name: /3 proveedores/i });
+    fireEvent.click(linea);
+    expect(aAjustes).toHaveBeenCalled();
+  });
+
+  it("sin manejador de ajustes la línea se dice igual, pero no es un botón muerto", () => {
+    abrir(CON_TODO);
+    expect(screen.getByText(/3 proveedores/i)).toBeTruthy();
+    expect(screen.queryByRole("button", { name: /3 proveedores/i })).toBeNull();
+  });
+
+  it("sin NINGUNO comprobado no se enseña un menú vacío: se dice qué hacer", () => {
+    // Es el arranque de quien no ha configurado nada y no tiene Ollama levantado. Un menú
+    // en blanco se lee como que la consola está rota.
+    abrir([{ id: "openai", nombre: "OpenAI", credencial: "falta" as const }]);
+    expect(screen.getByText(/ninguno comprobado/i)).toBeTruthy();
+  });
+
+  it("el que está EN VIGOR se enseña aunque no esté comprobado", () => {
+    // Si el modelo de trabajo sale de una variable de entorno que este proceso no ve como
+    // credencial, esconderlo dejaría la pastilla enseñando arriba un proveedor que no está
+    // en su propia lista. Lo que está en uso, está.
+    render(
+      <PastillaDeModelo
+        actual="openai/gpt-5"
+        proveedores={CON_TODO}
+        alPedirCatalogo={() => {}}
+        alElegir={() => {}}
+      />
+    );
+    fireEvent.click(screen.getByRole("button", { name: /openai/i }));
+    expect(screen.getByRole("menuitem", { name: /OpenAI/ })).toBeTruthy();
   });
 });
