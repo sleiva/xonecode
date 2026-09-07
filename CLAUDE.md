@@ -860,8 +860,31 @@ el completador de Tab: una lista escrita a mano se queda vieja en cuanto alguien
 comando. Por eso una línea que empieza por «/» no tiene camino propio en la web — viaja como
 prosa y la despacha `correrConsola` del lado servidor.
 
-**Los ficheros que ha tocado una sesión** (`agent/sesionGit.ts`, pestaña «Ficheros» en
-`apps/web/src/componentes/Ficheros.tsx`). La marca es una **ref propia**,
+**Ficheros y Revisión, las dos pestañas del proyecto** (`docs/superpowers/specs/2026-09-07-ficheros-y-revision-design.md`).
+**Revisión** es lo que ha tocado una sesión (`agent/sesionGit.ts`, `componentes/Revision.tsx`,
+mensaje `revision` del cable — se llamaba `ficheros` hasta que hubo una pestaña con ese
+nombre): los ficheros APILADOS con cabecera pegajosa y su diff dentro, numerado con las dos
+columnas del formato unificado por `apps/web/src/numerarParche.ts` (pura; es también quien
+corta la cabecera de git), los `DESPLEGADOS_AL_ABRIR` primeros abiertos solos y el resto al
+pulsar, y a la derecha el árbol de cambiados. La cabecera dice «Sesión» porque la foto es de
+la sesión: es el hueco del selector de turno que no existe. **Ficheros** es el árbol del
+proyecto con un visor de SOLO lectura (`agent/arbolDeProyecto.ts`, mensajes `arbol` y
+`fichero`): lista con la misma función del completado del Tab (`ficherosDelProyecto`, con el
+tope de profundidad como parámetro) y filtra con las MISMAS reglas que ve el agente
+—`puedeLeerRuta` y `esVistaAplanada`—, así que `.xonecode`, `.env`, `.git` y los `.xml`
+aplanados no salen ni se leen aunque alguien los teclee en el cable. El lector rechaza en
+orden ruta absoluta o con `..`, lo que la barrera niega, aplanadas, y cualquier `realpath` que
+salga de la raíz (el enlace simbólico que apunta fuera), y nunca devuelve la ruta real de la
+máquina. Binario es un NUL en los primeros 8 KB; lo que no es UTF-8 se lee como latin1 y se
+dice; el contenido se recorta al mismo tope que el parche. El visor es el `CodeBlock` de
+deepseek —un solo resaltador, un solo tema— y los números de línea son un contador CSS sobre
+los `.line` de shiki (`Visor.module.css`): con una gramática perezosa el primer render sale
+plano y se repinta solo. Las dos pestañas comparten `Arbol.tsx` (primer nivel abierto, filtro
+por subcadena de la ruta que abre lo que casa) y la maqueta de dos columnas con el corte por
+CONTENEDOR a 720 px, no por ventana. El árbol y los contenidos se tiran con la sesión y sin
+cable, como los parches.
+
+La marca es una **ref propia**,
 `refs/xonecode/sesion/<id>`, y no un tag: un tag es público, se empuja y significa «versión»,
 y esto es un marcador privado de herramienta. Tampoco vale guardar el SHA del árbol en un
 JSON nuestro: un árbol que ninguna ref alcanza se lo lleva `git gc` y la vista se rompe en
@@ -887,10 +910,7 @@ una ruta ignorada y **sale con código 1**, así que el árbol no se escribía y
 «sin-marca» para siempre. Y los diffs llevan `--relative` porque los árboles se escriben con
 rutas desde la raíz del REPO, que no tiene por qué ser el proyecto (`instantanea.ts` sostiene
 ese caso): sin él, un proyecto en una subcarpeta daba rutas con prefijo que no casaban con
-ninguna al pedir el parche. La lista y el diff son **dos paneles**, no un
-acordeón: metiendo el diff dentro de la fila, un fichero de cien líneas se llevaba la lista
-fuera de la pantalla y te quedabas mirando un parche sin saber de qué fichero era ni cuántos
-más había. El índice se queda a la izquierda con su propio scroll, y la fila elegida se marca
+ninguna al pedir el parche. El índice se queda a la izquierda con su propio scroll, y la fila elegida se marca
 con fondo Y barra de acento — `--dsw-alias-interactive-bg-selected` NO EXISTE en la paleta
 copiada (cero apariciones, comprobado), y la `.sessionRow.selected` de ellos usa el alias de
 HOVER, o sea el mismo que la fila de al lado bajo el ratón. Del parche no se pinta la cabecera
