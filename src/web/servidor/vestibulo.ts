@@ -60,9 +60,11 @@ import {
   anotarActo,
   borrarSesion,
   crearSesion,
+  elegirDispositivo,
   listarSesiones,
   reabrirSesion,
   renombrarSesion,
+  type DispositivoElegido,
 } from "./sesiones.js";
 import type { MensajeDelCliente, Sumidero } from "./transporte.js";
 
@@ -131,12 +133,15 @@ export interface PuertoDeSesiones {
    *  lista vacía, no un error: el proyecto todavía no se ha abierto nunca. */
   listar(raiz: string): { id: string; titulo: string }[];
   anotar(raiz: string, id: string, acto: Acto): void;
-  reabrir(raiz: string, id: string): { id: string; actos: Acto[]; historica: boolean };
+  reabrir(raiz: string, id: string): { id: string; actos: Acto[]; historica: boolean; dispositivo?: DispositivoElegido };
   /** Borra una sesión. Devuelve si había algo que borrar; un id desconocido no es un error
    *  (dos pestañas, un doble clic). Opcional: un puerto de prueba puede no saber borrar. */
   borrar?(raiz: string, id: string): boolean;
   /** Le pone nombre. Devuelve si existía; un título vacío se rechaza. */
   renombrar?(raiz: string, id: string, titulo: string): boolean;
+  /** Fija el dispositivo preferido. Devuelve si había entrada que tocar: la de una sesión
+   *  cuyo id todavía no existe (nace al volcar) no está, y quien llama lo guarda en memoria. */
+  elegirDispositivo?(raiz: string, id: string, dispositivo: DispositivoElegido | undefined): boolean;
 }
 
 const SESIONES_EN_DISCO: PuertoDeSesiones = {
@@ -146,6 +151,7 @@ const SESIONES_EN_DISCO: PuertoDeSesiones = {
   reabrir: reabrirSesion,
   borrar: borrarSesion,
   renombrar: renombrarSesion,
+  elegirDispositivo,
 };
 
 /** Lo mínimo que el vestíbulo necesita de una `SesionReal` para cambiar de proyecto. */
@@ -268,6 +274,17 @@ export interface ConsolaDeProyecto {
    * recuerda (el hilo vive en un `MemorySaver` que muere con el proceso).
    */
   readonly historica: boolean;
+  /**
+   * Con qué dispositivo trabaja esta sesión. Ausente = ninguno elegido.
+   *
+   * Vive AQUÍ y no solo en el índice porque el id de la sesión no existe hasta que se vuelca
+   * el primer acto: elegir dispositivo en una sesión recién abierta no tiene entrada que
+   * escribir, así que se queda en memoria y se anota en cuanto `volcar()` la crea. Es la
+   * misma forma de `sesionActiva` y por el mismo motivo.
+   */
+  readonly dispositivo: DispositivoElegido | undefined;
+  /** Elige —o quita, con `undefined`— el dispositivo preferido de esta sesión. */
+  elegirDispositivo(dispositivo: DispositivoElegido | undefined): void;
   readonly cerrada: boolean;
   readonly consola: ConsolaWeb;
   /**
@@ -621,6 +638,7 @@ export function crearVestibulo(opciones: OpcionesDelVestibulo): Vestibulo {
 
     let idSesion = sesion;
     let historica = reabierta?.historica ?? false;
+    let dispositivo: DispositivoElegido | undefined = reabierta?.dispositivo;
     let cerrada = false;
     let volcados = 0;
     let sesionReal: SesionCerrable | undefined;
@@ -676,6 +694,10 @@ export function crearVestibulo(opciones: OpcionesDelVestibulo): Vestibulo {
       }
       for (const acto of todos.slice(volcados)) sesiones.anotar(raiz, idSesion, acto);
       volcados = todos.length;
+      // El dispositivo elegido ANTES de que la sesión tuviera id se anota ahora, que es la
+      // primera vez que hay una entrada en el índice a la que apuntarlo. Sin esto, elegir
+      // dispositivo y hablar después perdía la elección al reabrir.
+      if (dispositivo !== undefined) sesiones.elegirDispositivo?.(raiz, idSesion, dispositivo);
     };
 
     const ejecutarTurno: EjecutorDeTurno = async (peticion, estado, consola) => {
@@ -738,6 +760,16 @@ export function crearVestibulo(opciones: OpcionesDelVestibulo): Vestibulo {
       },
       get historica() {
         return historica;
+      },
+      get dispositivo() {
+        return dispositivo;
+      },
+      elegirDispositivo: (elegido) => {
+        dispositivo = elegido;
+        // Si la sesión todavía no tiene id, se queda en memoria: `volcar()` lo anotará en
+        // cuanto la cree. Escribir aquí una entrada nueva la enseñaría en la barra como una
+        // sesión vacía que nadie ha empezado.
+        if (idSesion !== undefined) sesiones.elegirDispositivo?.(raiz, idSesion, elegido);
       },
       get cerrada() {
         return cerrada;

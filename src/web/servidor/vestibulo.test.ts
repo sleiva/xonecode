@@ -17,6 +17,7 @@ import { join } from "node:path";
 import { crearVestibulo, ENTORNOS_OFICIALES, escribirProyectoEnDisco } from "./vestibulo.js";
 import { CatalogoModelosEnMemoria } from "../../core/ports.js";
 import type { Acto } from "../../core/actos.js";
+import type { DispositivoElegido } from "./sesiones.js";
 import type { Entorno } from "../../core/settings.js";
 import { validar } from "../../core/config.js";
 
@@ -60,8 +61,11 @@ function dobles() {
 /** Un puerto de sesiones en memoria: los tests no escriben en ningún `.xonecode`. */
 function sesionesEnMemoria() {
   const jsonl = new Map<string, Acto[]>();
+  /** El dispositivo preferido, por clave `raiz|id` — como lo guarda el índice de verdad. */
+  const dispositivos = new Map<string, DispositivoElegido | undefined>();
   return {
     jsonl,
+    dispositivos,
     puerto: {
       listar: (raiz: string) =>
         [...jsonl.keys()]
@@ -76,13 +80,23 @@ function sesionesEnMemoria() {
         const clave = `${raiz}|${id}`;
         jsonl.set(clave, [...(jsonl.get(clave) ?? []), acto]);
       },
-      reabrir: (raiz: string, id: string) => ({
-        id,
-        actos: [...(jsonl.get(`${raiz}|${id}`) ?? [])],
-        historica: true,
-      }),
+      reabrir: (raiz: string, id: string) => {
+        const dispositivo = dispositivos.get(`${raiz}|${id}`);
+        return {
+          id,
+          actos: [...(jsonl.get(`${raiz}|${id}`) ?? [])],
+          historica: true,
+          ...(dispositivo === undefined ? {} : { dispositivo }),
+        };
+      },
       borrar: (raiz: string, id: string) => jsonl.delete(`${raiz}|${id}`),
       renombrar: (raiz: string, id: string) => jsonl.has(`${raiz}|${id}`),
+      elegirDispositivo: (raiz: string, id: string, dispositivo: DispositivoElegido | undefined) => {
+        // Como el índice real: sin entrada no hay nada que anotar, y se dice con `false`.
+        if (!jsonl.has(`${raiz}|${id}`)) return false;
+        dispositivos.set(`${raiz}|${id}`, dispositivo);
+        return true;
+      },
     },
   };
 }
@@ -379,6 +393,82 @@ describe("vestíbulo", () => {
     // no mira nadie (`agent/sesionGit.ts#olvidarSesion`).
     expect(olvidadas).toEqual([id]);
     await v.cerrar();
+  });
+
+  describe("el dispositivo preferido de la sesión", () => {
+    const GALAXY = { id: "R58", nombre: "Galaxy S21", plataforma: "android" as const, clase: "fisico" as const };
+
+    it("una sesión REABIERTA vuelve con el suyo puesto", async () => {
+      const s = sesionesEnMemoria();
+      const v = crearVestibulo({ ...dobles(), origenDeTrabajo: "global", sesiones: s.puerto });
+      const id = s.puerto.crear("/w/a");
+      s.puerto.elegirDispositivo("/w/a", id, GALAXY);
+      const abierta = await v.abrirProyecto({ raiz: "/w/a", sesion: id });
+      expect(abierta.dispositivo).toEqual(GALAXY);
+      await v.cerrar();
+    });
+
+    it("elegirlo con la sesión ya creada lo escribe en el acto", async () => {
+      const s = sesionesEnMemoria();
+      const v = crearVestibulo({ ...dobles(), origenDeTrabajo: "global", sesiones: s.puerto });
+      const id = s.puerto.crear("/w/a");
+      const abierta = await v.abrirProyecto({ raiz: "/w/a", sesion: id });
+      abierta.elegirDispositivo(GALAXY);
+      expect(abierta.dispositivo).toEqual(GALAXY);
+      expect(s.dispositivos.get(`/w/a|${id}`)).toEqual(GALAXY);
+      await v.cerrar();
+    });
+
+    it("elegido ANTES de que la sesión tenga id, se anota en cuanto la hay", async () => {
+      // El id nace al volcar el primer acto. Sin esta espera en memoria, elegir dispositivo
+      // nada más abrir y hablar después perdía la elección al reabrir: no había entrada en
+      // el índice donde escribirla, y nadie volvía a intentarlo.
+      const s = sesionesEnMemoria();
+      // El turno avisa de que corrió: esperar a un `setTimeout(0)` es una carrera —bajo
+      // carga el EOF de `cerrar()` puede llegar antes de que el lazo saque la línea de la
+      // cola, y entonces no hay acto, ni sesión, ni nada que comprobar. Medido: falló una
+      // vez de cada varias.
+      let turnoCorrido: () => void;
+      const corrio = new Promise<void>((r) => {
+        turnoCorrido = r;
+      });
+      const v = crearVestibulo({
+        ...dobles(),
+        origenDeTrabajo: "global",
+        sesiones: s.puerto,
+        crearEjecutor: () => async (_peticion, _estado, consola) => {
+          consola.escribir("hecho");
+          turnoCorrido();
+        },
+      });
+      const abierta = await v.abrirProyecto({ raiz: "/w/a" });
+      expect(abierta.sesion).toBeUndefined();
+      abierta.elegirDispositivo(GALAXY);
+      // Todavía no hay dónde escribirlo, pero la consola ya lo sabe.
+      expect(abierta.dispositivo).toEqual(GALAXY);
+      expect([...s.dispositivos.values()]).toEqual([]);
+
+      abierta.recibir({ clase: "prosa", texto: "hola" });
+      await corrio;
+      await abierta.cerrar();
+
+      const id = abierta.sesion!;
+      expect(id).toBeDefined();
+      expect(s.dispositivos.get(`/w/a|${id}`)).toEqual(GALAXY);
+      await v.cerrar();
+    });
+
+    it("quitarlo lo quita también del índice", async () => {
+      const s = sesionesEnMemoria();
+      const v = crearVestibulo({ ...dobles(), origenDeTrabajo: "global", sesiones: s.puerto });
+      const id = s.puerto.crear("/w/a");
+      s.puerto.elegirDispositivo("/w/a", id, GALAXY);
+      const abierta = await v.abrirProyecto({ raiz: "/w/a", sesion: id });
+      abierta.elegirDispositivo(undefined);
+      expect(abierta.dispositivo).toBeUndefined();
+      expect(s.dispositivos.get(`/w/a|${id}`)).toBeUndefined();
+      await v.cerrar();
+    });
   });
 
   it("borrar OTRA sesión no cierra el proyecto que estás mirando", async () => {

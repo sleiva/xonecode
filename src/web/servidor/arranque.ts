@@ -37,7 +37,11 @@ import type { Acto } from "../../core/actos.js";
 import { escribirAgente, leerAgente, type Agente } from "../../core/agentes.js";
 import { borrarAgente, cargarAgentes, guardarAgente } from "../../agent/agentesEnDisco.js";
 import { detectarDispositivos } from "../../agent/dispositivosEnMaquina.js";
+
 import type { InformeDeDispositivos } from "../../core/dispositivos.js";
+import { PLATAFORMAS_DE_DISPOSITIVO, type AjustesDeDispositivos } from "../../core/settings.js";
+import type { NombreDeHerramienta } from "../../core/dispositivos.js";
+import { instalarHerramientaDeDispositivos } from "../../agent/dispositivosEnMaquina.js";
 import {
   parsear,
   PROVEEDORES,
@@ -55,7 +59,7 @@ import {
   guardarModeloGlobal,
 } from "../../agent/configEnDisco.js";
 import { borrarCredencial, guardarCredencial } from "../../agent/authEnDisco.js";
-import { cargarSettings, guardarEntorno as guardarEntornoEnDisco } from "../../agent/settingsEnDisco.js";
+import { cargarSettings, guardarDispositivos, guardarEntorno as guardarEntornoEnDisco } from "../../agent/settingsEnDisco.js";
 import { abrirEnSistema } from "../../agent/cloudstudioMcp.js";
 import { nombreDePersona } from "../../agent/persona.js";
 import { cambiosDeSesion, fotoDeApertura, olvidarSesion, parcheDeSesion } from "../../agent/sesionGit.js";
@@ -182,6 +186,23 @@ export interface OpcionesDeMontaje {
    * procesos (adb, xcrun) y un test del cable no puede lanzarlos.
    */
   detectarDispositivos?: () => Promise<InformeDeDispositivos>;
+  /**
+   * Qué destinos se miran, leídos de `settings.json` en el momento de emitir. Se lee y no
+   * se cachea porque el fichero es del usuario y puede cambiar por fuera. Ausente = esta
+   * ejecución no los conoce y viaja `{}`, que significa «se miran todos».
+   */
+  ajustesDeDispositivos?: () => AjustesDeDispositivos;
+  /**
+   * Guarda esos ajustes. Ausente = la ventana no puede cambiarlos y el cable lo dirá
+   * quedándose como estaba: mejor que un interruptor que se mueve y no persiste.
+   */
+  guardarAjustesDeDispositivos?: (ajustes: AjustesDeDispositivos) => void;
+  /**
+   * Instala una herramienta que falta. Recibe el NOMBRE, nunca un comando: qué se lanza lo
+   * decide el host, porque un comando que llegue por el cable es una shell abierta en la
+   * máquina del usuario. Ausente = esta ejecución no instala nada.
+   */
+  instalarHerramienta?: (herramienta: NombreDeHerramienta) => Promise<void>;
 }
 
 /**
@@ -343,6 +364,7 @@ export function montarRutas(
       ...(entornoElegido === undefined ? {} : { entornoActivo: entornoElegido }),
       ...(activo === undefined ? {} : { proyectoActivo: activo }),
       ...(abierto?.sesion === undefined ? {} : { sesionActiva: abierto.sesion }),
+      ...(abierto?.dispositivo === undefined ? {} : { dispositivoActivo: abierto.dispositivo }),
       ...(abierto?.historica === true ? { historica: true } : {}),
       ...(vestibulo.nombre === undefined ? {} : { nombre: vestibulo.nombre }),
       ...(aviso === undefined ? {} : { aviso }),
@@ -507,7 +529,9 @@ export function montarRutas(
       cliente(agentes);
       // La foto de la máquina, si ya se tomó. Si no, se dispara abajo UNA vez y llega a
       // todos por el SSE cuando termine: no se espera aquí, que son varios procesos.
-      if (informeDeDispositivos !== undefined) cliente({ clase: "dispositivos", informe: informeDeDispositivos });
+      if (informeDeDispositivos !== undefined) {
+        cliente({ clase: "dispositivos", informe: informeDeDispositivos, ajustes: ajustesDeDispositivos() });
+      }
       // Y si hay turno corriendo, se dice: quien conecta a mitad no vio el mensaje que lo
       // anunció, y sin esto vería el compositor encendido y sin borde —«no pasa nada»—
       // mientras lo que escribiera se quedaba en la cola.
@@ -607,6 +631,12 @@ export function montarRutas(
     ...informe,
     herramientas: informe.herramientas.map(({ ruta: _ruta, ...resto }) => resto),
   });
+  /** Los cuatro nombres conocidos y nada más: lo que llega por el cable no elige binario. */
+  const esNombreDeHerramienta = (v: string): v is NombreDeHerramienta =>
+    v === "adb" || v === "emulator" || v === "xcrun" || v === "devicectl";
+
+  /** Los ajustes de destino, o `{}` —que es «se miran todos»— si esta ejecución no los lee. */
+  const ajustesDeDispositivos = (): AjustesDeDispositivos => opciones.ajustesDeDispositivos?.() ?? {};
   let deteccionEnVuelo: Promise<void> | undefined;
   const atenderDispositivos = (): Promise<void> => {
     if (opciones.detectarDispositivos === undefined) return Promise.resolve();
@@ -615,7 +645,7 @@ export function montarRutas(
     deteccionEnVuelo = (async () => {
       try {
         informeDeDispositivos = sinRutas(await detectar());
-        emitir({ clase: "dispositivos", informe: informeDeDispositivos });
+        emitir({ clase: "dispositivos", informe: informeDeDispositivos, ajustes: ajustesDeDispositivos() });
       } catch (error) {
         // El detector reparte los fallos por herramienta y no lanza por ninguno; que
         // reviente entero es un bug suyo. Aquí solo se cuenta en el terminal: el escritorio
@@ -1244,9 +1274,73 @@ export function montarRutas(
       respuesta.end();
       return;
     }
+    if (typeof mensaje === "object" && mensaje !== null && mensaje.clase === "dispositivo") {
+      // **El cliente manda el ID y nada más.** El nombre, la plataforma y la clase salen de
+      // la última MEDIDA: son datos sobre la máquina, y el navegador no es fuente sobre la
+      // máquina — aceptar su versión dejaría entrar un «iPhone 16» que nadie ha visto. Un id
+      // que no esté en la medida se ignora en silencio: es una foto vieja del cliente
+      // (desenchufaron el teléfono entre medias), no un error que contar.
+      const abierta = vestibulo.proyectoAbierto();
+      const pedido = (mensaje as { id?: unknown }).id;
+      if (abierta !== undefined) {
+        if (pedido === undefined) abierta.elegirDispositivo(undefined);
+        else if (typeof pedido === "string") {
+          const d = informeDeDispositivos?.dispositivos.find((x) => x.id === pedido);
+          if (d !== undefined) {
+            abierta.elegirDispositivo({ id: d.id, nombre: d.nombre, plataforma: d.plataforma, clase: d.clase });
+          }
+        }
+        // Suelto: `anunciarAlta` consulta CloudStudio y el `POST` no puede quedarse
+        // esperando por eso. El alta nueva llega por el SSE, como siempre.
+        void anunciarAlta().catch(contar);
+      }
+      respuesta.writeHead(204);
+      respuesta.end();
+      return;
+    }
     if (typeof mensaje === "object" && mensaje !== null && mensaje.clase === "dispositivos") {
       // Suelto, como el catálogo: lanza procesos que tardan segundos y la respuesta va por
       // el SSE. Es la ÚNICA forma de volver a medir: no hay sondeo.
+      //
+      // Con `ajustes` se GUARDAN primero y después se mide, en ese orden y no al revés: el
+      // detector los lee de disco en cada medida, así que medir antes de guardar daría la
+      // foto de la configuración anterior justo cuando se acaba de cambiar. Un fallo al
+      // escribir NO impide medir —se cuenta y se sigue—, porque la foto sigue siendo
+      // verdad; lo que no se puede es callarlo.
+      const pedidos = (mensaje as { ajustes?: unknown }).ajustes;
+      if (typeof pedidos === "object" && pedidos !== null && opciones.guardarAjustesDeDispositivos !== undefined) {
+        const limpios: AjustesDeDispositivos = {};
+        for (const plataforma of PLATAFORMAS_DE_DISPOSITIVO) {
+          const valor = (pedidos as Record<string, unknown>)[plataforma];
+          if (typeof valor === "boolean") limpios[plataforma] = valor;
+        }
+        try {
+          opciones.guardarAjustesDeDispositivos(limpios);
+        } catch (error) {
+          informar(`no se pudieron guardar los destinos de prueba (${codigoDe(error)})`);
+        }
+      }
+      // Instalar va ANTES de medir y por el nombre, nunca por un comando del cliente. Se
+      // espera a que termine para que la foto de después cuente la verdad: medir mientras
+      // el instalador corre diría que la herramienta sigue sin estar.
+      const aInstalar = (mensaje as { instalar?: unknown }).instalar;
+      const instalador = opciones.instalarHerramienta;
+      if (typeof aInstalar === "string" && instalador !== undefined && esNombreDeHerramienta(aInstalar)) {
+        void (async () => {
+          try {
+            await instalador(aInstalar);
+          } catch (error) {
+            // Un instalador que falla no puede tumbar nada: se cuenta y se mide igual, que
+            // es lo que dirá si la herramienta apareció o no.
+            informar(`no se pudo instalar ${aInstalar} (${codigoDe(error)})`);
+          }
+          informeDeDispositivos = undefined;
+          await atenderDispositivos().catch(contar);
+        })();
+        respuesta.writeHead(204);
+        respuesta.end();
+        return;
+      }
       informeDeDispositivos = undefined;
       void atenderDispositivos().catch(contar);
       respuesta.writeHead(204);
@@ -1413,7 +1507,11 @@ export async function arrancarConsolaWeb(opciones: OpcionesDeArranque): Promise<
     leerFichero: leerFicheroDeProyecto,
     // La máquina de verdad: adb/emulator del PATH o del SDK, xcrun solo en macOS y solo con
     // herramientas de desarrollo. Cada proceso con su tope.
-    detectarDispositivos: () => detectarDispositivos(),
+    detectarDispositivos: () => detectarDispositivos({}, cargarSettings().settings.dispositivos ?? {}),
+    // Se lee de disco en cada consulta, no se cachea: `settings.json` es del usuario.
+    ajustesDeDispositivos: () => cargarSettings().settings.dispositivos ?? {},
+    guardarAjustesDeDispositivos: (ajustes) => void guardarDispositivos(undefined, ajustes),
+    instalarHerramienta: instalarHerramientaDeDispositivos,
     catalogoDeModelos: async (proveedor) => {
       const modelos = await new CatalogoModelos().listar(proveedor);
       return modelos.map((m) => ({ id: m.id, ...(m.nombre === undefined ? {} : { nombre: m.nombre }) }));

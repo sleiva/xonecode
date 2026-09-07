@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type KeyboardEvent } from "react";
-import type { ProveedorDeModelos } from "../tipos.js";
+import type { DispositivoElegido, InformeDeDispositivos, ProveedorDeModelos } from "../tipos.js";
 import { PastillaDeModelo } from "./PastillaDeModelo.js";
+import { PastillaDeDispositivo } from "./PastillaDeDispositivo.js";
 import estilos from "./Compositor.module.css";
 
 /** Un candidato de `/ayuda`: lo manda el servidor recorriendo `COMANDOS`, no una copia. */
@@ -28,6 +29,9 @@ export function Compositor({
   modelos,
   alPedirCatalogo,
   alElegirModelo,
+  dispositivo,
+  dispositivos,
+  alElegirDispositivo,
   alEnviar,
 }: {
   /** Ausente antes de que llegue el mensaje `comandos` del servidor: sin sugerencias, no un fallo. */
@@ -63,6 +67,12 @@ export function Compositor({
   alPedirCatalogo?: (proveedor: string) => void;
   /** Elegir modelo: el id `proveedor/modelo`. Lo manda como acción, no como comando. */
   alElegirModelo?: (id: string) => void;
+  /** El dispositivo de la sesión, tal como lo cuenta el servidor. Ausente = ninguno. */
+  dispositivo?: DispositivoElegido;
+  /** La última medida de la máquina, para la lista. Ausente = todavía no llegó. */
+  dispositivos?: InformeDeDispositivos;
+  /** Elegir dispositivo: el id, o `undefined` para quitarlo. Ausente = no se pinta pastilla. */
+  alElegirDispositivo?: (id: string | undefined) => void;
   alEnviar: (texto: string) => void;
 }) {
   const [valor, setValor] = useState("");
@@ -169,6 +179,20 @@ export function Compositor({
               alElegir={(id) => alElegirModelo?.(id)}
             />
           ) : null}
+          {/*
+            El dispositivo de la sesión, al lado del modelo: es el mismo tipo de dato —una
+            elección de la sesión que decide el servidor— y por eso comparte fila. Solo se
+            pinta si quien monta el compositor sabe elegir: sin manejador no hay pastilla,
+            que es la misma regla que la de modelos.
+          */}
+          {alElegirDispositivo === undefined ? null : (
+            <PastillaDeDispositivo
+              {...(dispositivo === undefined ? {} : { elegido: dispositivo })}
+              {...(dispositivos === undefined ? {} : { informe: dispositivos })}
+              conectado={conectado}
+              alElegir={alElegirDispositivo}
+            />
+          )}
           {/*
             La MISMA ranura, dos acciones: con turno en vuelo es parar, y si no, enviar.
             Dos botones a la vez —uno inerte al lado del otro— dejaría al usuario eligiendo

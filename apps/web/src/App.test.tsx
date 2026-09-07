@@ -568,6 +568,25 @@ describe("App: abrir un proyecto desde la barra (Layer C)", () => {
    * sesión abierta sigue ahí (con la marca, el estado del cable y el plegado), pero sin
    * pestañas — sin transcript ni trazas, no llevarían a ningún sitio.
    */
+  /**
+   * Con la sesión abierta no había NINGUNA forma de volver al escritorio —ni a los otros
+   * proyectos, ni a «Tu equipo», ni al entorno—, porque el escritorio se pintaba solo
+   * cuando no había proyecto abierto. Medido en pantalla.
+   */
+  it("la marca lleva al escritorio con la sesión abierta, y no cierra nada", () => {
+    const { enviar } = montar();
+    // Con sesión: hay pestañas y la marca es pulsable.
+    expect(screen.queryByRole("tablist")).not.toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "xonecode" }));
+    // Se ve el escritorio: su saludo, y las pestañas de la sesión se van con ella.
+    expect(screen.getByRole("heading", { level: 1 })).toBeTruthy();
+    expect(screen.queryByRole("tablist")).toBeNull();
+    // Y NO se ha soltado el proyecto: es estado de vista, no una orden al servidor.
+    expect(enviar).not.toHaveBeenCalled();
+    // Ya en el escritorio la marca deja de ser un botón: no lleva a ninguna parte.
+    expect(screen.queryByRole("button", { name: "xonecode" })).toBeNull();
+  });
+
   it("el escritorio también lleva barra superior, y sin pestañas", () => {
     montarConProyectos([{ id: "p1", nombre: "Tienda" }]);
     expect(screen.getByRole("button", { name: /ocultar la barra lateral/i })).toBeTruthy();
