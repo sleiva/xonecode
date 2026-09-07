@@ -646,7 +646,10 @@ XOne**, y no por descuido: las dos skills visuales reparten su entrega entre
 `renderizar_diagrama` y `publish_artifact`, y en xonecode **no existe ninguna de las dos**
 (cero apariciones en `src/`), así que el `mockup` caía siempre en el camino de reserva, que
 dice «con `write_file`, entrega el HTML autocontenido» en `/artifacts/<nombre>.html` — o sea
-la raíz del proyecto, con aprobación humana, git y subida a CloudStudio detrás.
+la raíz del proyecto, con aprobación humana, git y subida a CloudStudio detrás. Arreglado y
+MEDIDO de punta a punta con el agente real: el `mockup` escribe en
+`/artefactos/diagrama_login.html`, no salta ninguna aprobación, el fichero aparece en
+`.xonecode/sesiones/<id>/artefactos/` y en el proyecto no queda nada.
 - **Es otro MONTAJE, la misma pieza que `/skills/`**: una raíz más en el `CompositeBackend`,
   `/artefactos/` → `.xonecode/sesiones/<id>/artefactos/`. Dos diferencias con las skills: se
   puede ESCRIBIR (las skills son instrucciones, y `permisosDe` las deniega) y se APUNTA lo
@@ -672,6 +675,12 @@ la raíz del proyecto, con aprobación humana, git y subida a CloudStudio detrá
 - **Se borran con su sesión** (`borrarSesion`), igual que el hilo del checkpointer: si no,
   borrar una conversación dejaría en disco los diagramas que se dibujaron en ella, invisibles
   desde la interfaz.
+- **La descripción de la TOOL era el último sitio, y el que ganaba.** Medido: con las skills
+  y el prompt del `mockup` ya corregidos, el agente listó las dos carpetas —o sea que el
+  montaje estaba— y escribió igual en `/artifacts/`, porque `DESCRIPCIONES_FICHEROS.write_file`
+  seguía nombrando esa ruta. Una descripción de tool está más cerca del modelo que un prompt
+  de sistema o una skill que hay que cargar; corregir las dos de arriba y no esa no habría
+  cambiado nada.
 - **En el chat es una TARJETA, no una línea del pulso** (`Chat.tsx`, acto `artefacto`), y por
   eso no se pliega con el trabajo del agente: plegarla escondería lo único que se escribió sin
   aprobar. Dice nombre, peso y DÓNDE — la ruta desde la raíz del proyecto, compuesta con el id
