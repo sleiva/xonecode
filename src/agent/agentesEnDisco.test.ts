@@ -24,15 +24,15 @@ function ponerFichero(raiz: string, fichero: string, contenido: string): void {
 }
 
 describe("sembrarAgentes", () => {
-  it("escribe los cuatro de serie la primera vez, y se vuelven a leer enteros", () => {
-    // La ida y vuelta es lo que importa: si lo sembrado no pasara el cargador, los cuatro
+  it("escribe los de serie la primera vez, y se vuelven a leer enteros", () => {
+    // La ida y vuelta es lo que importa: si lo sembrado no pasara el cargador, los
     // especialistas desaparecerían al siguiente arranque y el orquestador se quedaría sin
     // nadie a quien delegar — sin que nada diera error.
     const raiz = base();
-    expect(sembrarAgentes(raiz).sort()).toEqual(["dev", "docs", "mockup", "planner"]);
+    expect(sembrarAgentes(raiz).sort()).toEqual(["dev", "docs", "mockup", "planner", "probador"]);
     const { agentes, problemas } = leerCarpetaDeAgentes(rutaDeAgentes(raiz), "global");
     expect(problemas).toEqual([]);
-    expect(agentes.map((a) => a.nombre).sort()).toEqual(["dev", "docs", "mockup", "planner"]);
+    expect(agentes.map((a) => a.nombre).sort()).toEqual(["dev", "docs", "mockup", "planner", "probador"]);
   });
 
   it("NO pisa uno que ya existe: el usuario ha podido afinar su prompt", () => {
@@ -48,7 +48,7 @@ describe("sembrarAgentes", () => {
 
   it("la carpeta es la marca: sembrar dos veces no escribe nada la segunda", () => {
     const raiz = base();
-    expect(sembrarAgentes(raiz)).toHaveLength(4);
+    expect(sembrarAgentes(raiz)).toHaveLength(5);
     expect(sembrarAgentes(raiz)).toEqual([]);
   });
 
@@ -97,6 +97,7 @@ describe("cargarAgentes", () => {
           "docs",
           "mockup",
           "planner",
+          "probador",
         ]);
       }
     } finally {
@@ -171,7 +172,7 @@ describe("guardarAgente", () => {
     expect(leerCarpetaDeAgentes(rutaDeAgentes(raiz), "proyecto").agentes).toEqual([]);
     // Y NO deja la carpeta creada: es la marca de «ya se sembró», así que un intento
     // fallido en el global habría impedido para siempre que se sembraran los cuatro.
-    expect(sembrarAgentes(raiz)).toHaveLength(4);
+    expect(sembrarAgentes(raiz)).toHaveLength(5);
   });
 
   it("borrar dice si existía: no se puede decir «borrado» de algo que no estaba", () => {

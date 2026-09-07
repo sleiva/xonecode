@@ -243,9 +243,42 @@ const HANDOFF_MOCKUP = [
 ].join("\n");
 
 /**
- * Los cuatro. Nacieron como una mudanza de los textos que había en código; desde entonces
- * `docs` lleva además la consulta acotada, y solo esa: cada regla que se añade aquí se mide
- * antes con los evals, porque un prompt más largo es coste en TODAS las llamadas.
+ * El probador de Android. Su conocimiento del protocolo NO va aquí: va en la skill
+ * `xone-android-hotswap`, que son 1.200 líneas de referencia y se cargan solo cuando hacen
+ * falta. Aquí queda lo que tiene que saber SIEMPRE, que es qué puede y qué no.
+ *
+ * **Y lo que hoy no puede es hablar con el dispositivo.** Este agente no tiene shell ni
+ * cliente del servidor hotswap: las tools que lo harían son el paso siguiente. Decirlo aquí
+ * —y decirlo en la `descripcion`, que es lo que el orquestador lee para delegar— es lo que
+ * evita el peor botón muerto de todos: uno dentro del grafo, que pulsa el modelo y del que
+ * se cree el resultado. Mientras tanto sirve para lo que sí puede: escribir el procedimiento
+ * exacto y leer lo que vuelva.
+ */
+const PROBADOR_ANDROID = [
+  "LO QUE PUEDES Y LO QUE NO, HOY:",
+  "- NO tienes conexión con el dispositivo: no puedes lanzar adb, ni abrir el WebSocket del",
+  "  servidor hotswap, ni subir un fichero, ni capturar una pantalla. No lo intentes ni digas",
+  "  que lo has hecho.",
+  "- Sí puedes leer el proyecto, y con eso escribir el PROCEDIMIENTO exacto: los comandos en",
+  "  orden, con el nombre real de cada colección y de cada control, y qué tiene que valer cada",
+  "  comprobación para dar la prueba por pasada.",
+  "- Y puedes LEER lo que te devuelvan: un volcado de `getAllElements`, un logcat, la salida de",
+  "  un `runSql`. Ahí sí diagnosticas.",
+  "",
+  "CÓMO ESCRIBES UNA PRUEBA:",
+  "- Un paso es una acción y su comprobación. Una acción sin comprobación no prueba nada.",
+  "- Por NOMBRE de control, nunca por coordenadas.",
+  "- Espera a un control (`waitForElement`), nunca a un número de segundos.",
+  "- Di qué evidencia esperas de cada comprobación (`getText` devuelve X, `isVisible` true) en",
+  "  vez de «comprobar que se ve bien».",
+  "- Si el proyecto no tiene el control que la prueba necesitaría, DILO: no inventes un nombre.",
+].join("\n");
+
+/**
+ * Los cinco. Nacieron como una mudanza de los textos que había en código; desde entonces
+ * `docs` lleva además la consulta acotada, y `probador` llegó con la documentación del
+ * protocolo hotswap. Cada regla que se añade aquí se mide antes con los evals, porque un
+ * prompt más largo es coste en TODAS las llamadas.
  */
 export const AGENTES_DE_SERIE: readonly Agente[] = [
   {
@@ -280,6 +313,19 @@ export const AGENTES_DE_SERIE: readonly Agente[] = [
     soloLectura: false,
     skills: ["xone-development", "xone-debugging", "archify", "artifacts-builder"],
     instrucciones: `${SKILLS_VISUALES}\n\n${MEMORIA_LEER}\n\n${MEMORIA_ESCRIBIR}`,
+    origen: "semilla",
+  },
+  {
+    nombre: "probador",
+    descripcion:
+      "Pruebas en un dispositivo ANDROID local, sobre la app XOneStudio del móvil o del " +
+      "emulador. Hoy NO se conecta al dispositivo: escribe el procedimiento de prueba con " +
+      "los comandos y las comprobaciones exactas, y diagnostica los volcados de controles, " +
+      "los logcat y las consultas que se le peguen. No modifica el proyecto.",
+    motor: "modelo",
+    soloLectura: true,
+    skills: ["xone-android-hotswap", "xone-debugging"],
+    instrucciones: PROBADOR_ANDROID,
     origen: "semilla",
   },
   {
