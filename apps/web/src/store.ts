@@ -20,6 +20,7 @@ import type {
   MensajeAlCliente,
   PasoDelWizard,
   FicheroTocado,
+  FicheroDelProyecto,
   AgenteDelCable,
   ProveedorDeModelos,
   SelectorDeConsola,
@@ -59,6 +60,12 @@ export interface EstadoDelCliente {
    */
   revision?: { via: "git" | "sin-marca" | "sin-empezar"; lista: FicheroTocado[] };
   parches?: Record<string, { texto: string; recortado: boolean }>;
+  /**
+   * El árbol del proyecto abierto y los contenidos ya traídos, por ruta (pestaña Ficheros).
+   * Son una FOTO del disco: se tiran con la sesión y sin cable, como los parches.
+   */
+  arbol?: { rutas: string[]; recortado: boolean; error?: string };
+  contenidos?: Record<string, FicheroDelProyecto>;
   selector?: {
     titulo: string;
     opciones: { id: string; etiqueta: string; detalle?: string }[];
@@ -449,6 +456,37 @@ export function crearStoreDelCliente(): {
           });
           return;
         }
+        case "arbol": {
+          const m = mensaje as { rutas?: unknown; recortado?: unknown; error?: unknown };
+          if (!Array.isArray(m.rutas) || !m.rutas.every((r) => typeof r === "string")) return;
+          mutar({
+            arbol: {
+              rutas: m.rutas as string[],
+              recortado: m.recortado === true,
+              ...(typeof m.error === "string" ? { error: m.error } : {}),
+            },
+          });
+          return;
+        }
+        case "fichero": {
+          const m = mensaje as Partial<FicheroDelProyecto>;
+          if (typeof m.ruta !== "string" || typeof m.bytes !== "number") return;
+          mutar({
+            contenidos: {
+              ...estado.contenidos,
+              [m.ruta]: {
+                ruta: m.ruta,
+                bytes: m.bytes,
+                recortado: m.recortado === true,
+                binario: m.binario === true,
+                ...(typeof m.texto === "string" ? { texto: m.texto } : {}),
+                ...(m.codificacion === "utf-8" || m.codificacion === "latin1" ? { codificacion: m.codificacion } : {}),
+                ...(typeof m.error === "string" ? { error: m.error } : {}),
+              },
+            },
+          });
+          return;
+        }
         case "turno": {
           const activo = (mensaje as { activo?: unknown }).activo;
           if (typeof activo !== "boolean") return;
@@ -544,7 +582,7 @@ export function crearStoreDelCliente(): {
           const sesionDeAhora = typeof m.sesionActiva === "string" ? m.sesionActiva : undefined;
           const cambioDeSesion = sesionDeAhora !== estado.alta?.sesionActiva;
           mutar({
-            ...(cambioDeSesion ? { revision: undefined, parches: undefined } : {}),
+            ...(cambioDeSesion ? { revision: undefined, parches: undefined, arbol: undefined, contenidos: undefined } : {}),
             alta: {
               pasos: m.pasos as PasoDelWizard[],
               proveedores: m.proveedores,
@@ -620,6 +658,8 @@ export function crearStoreDelCliente(): {
         // vez al volver.
         revision: undefined,
         parches: undefined,
+        arbol: undefined,
+        contenidos: undefined,
         // Los subagentes salen de ficheros en disco: mientras no hay cable pueden haberse
         // editado a mano, y la ventana de ajustes enseñaría una lista que ya no es. La
         // reconexión los trae enteros en la misma ráfaga que los modelos.

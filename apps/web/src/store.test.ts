@@ -211,6 +211,18 @@ describe("store del cliente", () => {
     s.aplicar({ clase: "revision", via: "git", ficheros: [{ ruta: "a.xne", clase: "nuevo", mas: 1, menos: 0 }] });
     expect(s.leer().revision).toEqual({ via: "git", lista: [{ ruta: "a.xne", clase: "nuevo", mas: 1, menos: 0 }] });
   });
+
+  it("«arbol» y «fichero» se guardan, y se tiran al cambiar de sesión y al caerse el cable", () => {
+    const s = crearStoreDelCliente();
+    s.aplicar({ clase: "arbol", rutas: ["app.xml", "src/a.xne"], recortado: false });
+    s.aplicar({ clase: "fichero", ruta: "src/a.xne", texto: "<a/>", recortado: false, binario: false, bytes: 4, codificacion: "utf-8" });
+    expect(s.leer().arbol).toEqual({ rutas: ["app.xml", "src/a.xne"], recortado: false });
+    expect(s.leer().contenidos?.["src/a.xne"]).toMatchObject({ texto: "<a/>", bytes: 4, codificacion: "utf-8" });
+
+    s.marcarDesconectado();
+    expect(s.leer().arbol).toBeUndefined();
+    expect(s.leer().contenidos).toBeUndefined();
+  });
 });
 
 describe("el alta del wizard", () => {
@@ -231,6 +243,29 @@ describe("el alta del wizard", () => {
     });
     expect(store.leer().alta?.pasos).toEqual(["entorno", "proyecto"]);
     expect(store.leer().alta?.ramas).toEqual(["master"]);
+  });
+
+  it("otra sesionActiva en el alta tira el árbol y los contenidos, igual que la revisión y los parches", () => {
+    const s = crearStoreDelCliente();
+    const alta = (sesionActiva: string) =>
+      s.aplicar({
+        clase: "alta",
+        pasos: [],
+        proveedores: [],
+        entornos: [],
+        proyectos: [],
+        ramas: [],
+        proyectoAbierto: true,
+        sesionActiva,
+      });
+    alta("s1");
+    s.aplicar({ clase: "arbol", rutas: ["app.xml"], recortado: false });
+    s.aplicar({ clase: "fichero", ruta: "app.xml", texto: "<app/>", recortado: false, binario: false, bytes: 6 });
+    alta("s1");
+    expect(s.leer().arbol).toBeDefined(); // misma sesión: se conserva
+    alta("s2");
+    expect(s.leer().arbol).toBeUndefined();
+    expect(s.leer().contenidos).toBeUndefined();
   });
 
   it("un paso que no existe descarta el mensaje entero en vez de pintar un formulario inventado", () => {

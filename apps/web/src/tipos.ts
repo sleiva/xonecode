@@ -150,6 +150,9 @@ export type MensajeAlCliente =
    */
   | { clase: "revision"; via: "git" | "sin-marca" | "sin-empezar"; ficheros: FicheroTocado[] }
   | { clase: "parche"; ruta: string; texto: string; recortado: boolean }
+  /** El árbol del proyecto abierto y el contenido de uno de sus ficheros (pestaña Ficheros). */
+  | { clase: "arbol"; rutas: string[]; recortado: boolean; error?: string }
+  | ({ clase: "fichero" } & FicheroDelProyecto)
   | { clase: "secreto"; pregunta: string }
   /**
    * El registro de comandos de barra (`COMANDOS` en `cli/consola.ts`), para que el
@@ -245,6 +248,17 @@ export interface FicheroTocado {
   menos?: number;
 }
 
+/** Un fichero del proyecto tal como viaja. Redeclarado de `web/servidor/transporte.ts`. */
+export interface FicheroDelProyecto {
+  ruta: string;
+  texto?: string;
+  recortado: boolean;
+  binario: boolean;
+  bytes: number;
+  codificacion?: "utf-8" | "latin1";
+  error?: string;
+}
+
 export interface ProveedorDeModelos {
   id: string;
   credencial: "puesta" | "falta" | "nativa";
@@ -321,6 +335,8 @@ export type MensajeDelCliente =
   | { clase: "cancelar" }
   /** Pide lo que la sesión abierta ha tocado, o el parche de un fichero concreto. */
   | { clase: "revision"; ruta?: string }
+  | { clase: "arbol" }
+  | { clase: "fichero"; ruta: string }
   | { clase: "decision"; decisiones: Record<string, string> };
 
 /** Redeclarado de `core/dispositivos.ts` (ver la cabecera de este fichero). */

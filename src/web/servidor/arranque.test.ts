@@ -826,6 +826,92 @@ describe("montarRutas — el cable, por fin conectado", () => {
     });
   });
 
+  describe("el árbol del proyecto y el contenido de un fichero", () => {
+    const abrirProyecto = async () => {
+      const base = mkdtempSync(join(tmpdir(), "xonecode-arbol-"));
+      const servidor = servidorDeMentira();
+      const vestibulo = vestibuloDePrueba({ baseDeWorkspace: base });
+      const raizDeVerdad = vestibulo.raizDeProyecto("webstudio", "Tienda");
+      mkdirSync(join(raizDeVerdad, ".xonecode"), { recursive: true });
+      writeFileSync(join(raizDeVerdad, ".xonecode", "config.json"), JSON.stringify({ modo: "offline" }));
+      return { base, servidor, vestibulo, raizDeVerdad };
+    };
+
+    it("con proyecto abierto, «arbol» contesta lo que dice el puerto y «fichero» pide POR RUTA", async () => {
+      const { base, servidor, vestibulo } = await abrirProyecto();
+      const pedidos: { raiz: string; ruta: string }[] = [];
+      montarRutas(servidor, vestibulo, {
+        arbolDelProyecto: async () => ({ rutas: ["app.xml", "src/a.xne"], recortado: false }),
+        leerFichero: async (raiz, ruta) => {
+          pedidos.push({ raiz, ruta });
+          return { ruta, texto: "<a/>", recortado: false, binario: false, bytes: 4, codificacion: "utf-8" };
+        },
+      });
+      const cliente = clienteDeMentira();
+      await servidor.rutas.get(`GET ${RUTA_EVENTOS}`)!(cliente.peticion, cliente.respuesta);
+      const accion = servidor.rutas.get(`POST ${RUTA_ACCION}`)!;
+      await asentar();
+      await enviarMensaje(accion, { clase: "sesion", proyecto: "p1" });
+      await asentar();
+
+      expect(await enviarMensaje(accion, { clase: "arbol" })).toBe(204);
+      await asentar();
+      expect(cliente.recibidos.filter((x) => x.clase === "arbol").at(-1)).toEqual({ clase: "arbol", rutas: ["app.xml", "src/a.xne"], recortado: false });
+
+      expect(await enviarMensaje(accion, { clase: "fichero", ruta: "src/a.xne" })).toBe(204);
+      await asentar();
+      expect(pedidos).toEqual([{ raiz: vestibulo.proyectoAbierto()!.raiz, ruta: "src/a.xne" }]);
+      expect(cliente.recibidos.filter((x) => x.clase === "fichero").at(-1)).toMatchObject({ clase: "fichero", ruta: "src/a.xne", texto: "<a/>", bytes: 4 });
+
+      await vestibulo.cerrar();
+      rmSync(base, { recursive: true, force: true });
+    });
+
+    it("si el puerto del árbol lanza, se contesta con error y lista vacía, no con silencio", async () => {
+      const { base, servidor, vestibulo } = await abrirProyecto();
+      montarRutas(servidor, vestibulo, {
+        arbolDelProyecto: async () => {
+          throw new Error("disco roto");
+        },
+      });
+      const cliente = clienteDeMentira();
+      await servidor.rutas.get(`GET ${RUTA_EVENTOS}`)!(cliente.peticion, cliente.respuesta);
+      const accion = servidor.rutas.get(`POST ${RUTA_ACCION}`)!;
+      await asentar();
+      await enviarMensaje(accion, { clase: "sesion", proyecto: "p1" });
+      await asentar();
+      await enviarMensaje(accion, { clase: "arbol" });
+      await asentar();
+      expect(cliente.recibidos.filter((x) => x.clase === "arbol").at(-1)).toEqual({ clase: "arbol", rutas: [], recortado: false, error: "disco roto" });
+      await vestibulo.cerrar();
+      rmSync(base, { recursive: true, force: true });
+    });
+
+    it("sin puerto que liste, «arbol» lo dice con error; sin proyecto abierto, no contesta nada", async () => {
+      const { base, servidor, vestibulo } = await abrirProyecto();
+      montarRutas(servidor, vestibulo);
+      const cliente = clienteDeMentira();
+      await servidor.rutas.get(`GET ${RUTA_EVENTOS}`)!(cliente.peticion, cliente.respuesta);
+      const accion = servidor.rutas.get(`POST ${RUTA_ACCION}`)!;
+      await asentar();
+
+      await enviarMensaje(accion, { clase: "arbol" });
+      await enviarMensaje(accion, { clase: "fichero", ruta: "x" });
+      await asentar();
+      expect(cliente.recibidos.some((x) => x.clase === "arbol" || x.clase === "fichero")).toBe(false);
+
+      await enviarMensaje(accion, { clase: "sesion", proyecto: "p1" });
+      await asentar();
+      await enviarMensaje(accion, { clase: "arbol" });
+      await asentar();
+      const m = cliente.recibidos.filter((x) => x.clase === "arbol").at(-1) as Extract<MensajeAlCliente, { clase: "arbol" }>;
+      expect(m.rutas).toEqual([]);
+      expect(m.error).toBeTypeOf("string");
+      await vestibulo.cerrar();
+      rmSync(base, { recursive: true, force: true });
+    });
+  });
+
   describe("abrir una sesión desde la barra", () => {
     it("con la copia local ya bajada se abre directamente: no hay rama que preguntar", async () => {
       const raiz = mkdtempSync(join(tmpdir(), "xonecode-proy-"));

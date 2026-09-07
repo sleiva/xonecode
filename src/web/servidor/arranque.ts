@@ -59,6 +59,7 @@ import { cargarSettings, guardarEntorno as guardarEntornoEnDisco } from "../../a
 import { abrirEnSistema } from "../../agent/cloudstudioMcp.js";
 import { nombreDePersona } from "../../agent/persona.js";
 import { cambiosDeSesion, fotoDeApertura, olvidarSesion, parcheDeSesion } from "../../agent/sesionGit.js";
+import { arbolDeProyecto, leerFicheroDeProyecto } from "../../agent/arbolDeProyecto.js";
 import type { ProyectoRemoto } from "../../agent/cloudstudioMcp.js";
 import { CatalogoModelos } from "../../agent/catalogoModelos.js";
 import type { Entorno } from "../../core/settings.js";
@@ -73,7 +74,14 @@ import {
   type SesionCerrable,
   type Vestibulo,
 } from "./vestibulo.js";
-import type { FicheroTocado, MensajeAlCliente, MensajeDelCliente, Sumidero, InformeDeDispositivosDelCable } from "./transporte.js";
+import type {
+  FicheroTocado,
+  FicheroDelProyecto,
+  MensajeAlCliente,
+  MensajeDelCliente,
+  Sumidero,
+  InformeDeDispositivosDelCable,
+} from "./transporte.js";
 
 /** Las dos rutas del cable. El cliente las tiene escritas en `apps/web/src/conexion.ts`. */
 export const RUTA_EVENTOS = "/eventos";
@@ -161,6 +169,12 @@ export interface OpcionesDeMontaje {
    *  esta ejecución no lo puede saber, y la pestaña lo dice. */
   cambiosDeSesion?: (raiz: string, sesion: string) => Promise<{ via: "git" | "sin-marca"; ficheros: FicheroTocado[] }>;
   parcheDeSesion?: (raiz: string, sesion: string, ruta: string) => Promise<{ texto: string; recortado: boolean } | undefined>;
+  /**
+   * El árbol del proyecto y el contenido de un fichero (`agent/arbolDeProyecto.ts`). Entran
+   * por opción porque tocan el disco del proyecto: un test del cable usa dobles.
+   */
+  arbolDelProyecto?: (raiz: string) => Promise<{ rutas: string[]; recortado: boolean }>;
+  leerFichero?: (raiz: string, ruta: string) => Promise<FicheroDelProyecto>;
   /**
    * Qué hay en la máquina para probar la app (`agent/dispositivosEnMaquina.ts`). Ausente =
    * esta ejecución no lo mira, y no se manda ningún `dispositivos`: el escritorio se queda
@@ -908,6 +922,37 @@ export function montarRutas(
     emitir({ clase: "revision", via, ficheros });
   };
 
+  /**
+   * El árbol del proyecto abierto. Sin proyecto no hay pestaña que lo pida, así que no se
+   * contesta nada; sin PUERTO sí se contesta, con error: un árbol que nunca llega deja al
+   * cliente en «consultando…» para siempre, y un cargando eterno es un fallo mudo.
+   */
+  const atenderArbol = async (): Promise<void> => {
+    const abierto = vestibulo.proyectoAbierto();
+    if (abierto === undefined) return;
+    if (opciones.arbolDelProyecto === undefined) {
+      emitir({ clase: "arbol", rutas: [], recortado: false, error: "esta ejecución no puede listar el proyecto" });
+      return;
+    }
+    try {
+      const { rutas, recortado } = await opciones.arbolDelProyecto(abierto.raiz);
+      emitir({ clase: "arbol", rutas, recortado });
+    } catch (error) {
+      emitir({ clase: "arbol", rutas: [], recortado: false, error: error instanceof Error ? error.message : String(error) });
+    }
+  };
+
+  /** El contenido de una ruta del proyecto abierto. El lector decide si se puede enseñar. */
+  const atenderFichero = async (ruta: string): Promise<void> => {
+    const abierto = vestibulo.proyectoAbierto();
+    if (abierto === undefined) return;
+    if (opciones.leerFichero === undefined) {
+      emitir({ clase: "fichero", ruta, recortado: false, binario: false, bytes: 0, error: "esta ejecución no puede leer el proyecto" });
+      return;
+    }
+    emitir({ clase: "fichero", ...(await opciones.leerFichero(abierto.raiz, ruta)) });
+  };
+
   /** Un paso del alta resuelto en el navegador. Cada rama termina volviendo a anunciar. */
   const atenderAlta = async (mensaje: Extract<MensajeDelCliente, { clase: "alta" }>): Promise<void> => {
     // Se limpia al empezar: un aviso viejo pegado a un paso que ya salió bien mentiría.
@@ -1104,6 +1149,18 @@ export function montarRutas(
     }
     if (typeof mensaje === "object" && mensaje !== null && mensaje.clase === "revision") {
       void atenderRevision(mensaje.ruta).catch(contar);
+      respuesta.writeHead(204);
+      respuesta.end();
+      return;
+    }
+    if (typeof mensaje === "object" && mensaje !== null && mensaje.clase === "arbol") {
+      void atenderArbol().catch(contar);
+      respuesta.writeHead(204);
+      respuesta.end();
+      return;
+    }
+    if (typeof mensaje === "object" && mensaje !== null && mensaje.clase === "fichero" && typeof mensaje.ruta === "string") {
+      void atenderFichero(mensaje.ruta).catch(contar);
       respuesta.writeHead(204);
       respuesta.end();
       return;
@@ -1314,6 +1371,10 @@ export async function arrancarConsolaWeb(opciones: OpcionesDeArranque): Promise<
     guardarCredencial,
     cambiosDeSesion,
     parcheDeSesion,
+    // El proyecto tal como lo ve el agente, para la pestaña Ficheros: mismo filtro, misma
+    // barrera de rutas (`agent/arbolDeProyecto.ts`).
+    arbolDelProyecto: async (raiz) => arbolDeProyecto(raiz),
+    leerFichero: leerFicheroDeProyecto,
     // La máquina de verdad: adb/emulator del PATH o del SDK, xcrun solo en macOS y solo con
     // herramientas de desarrollo. Cada proceso con su tope.
     detectarDispositivos: () => detectarDispositivos(),

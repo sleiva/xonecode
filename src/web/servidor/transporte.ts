@@ -125,6 +125,14 @@ export type MensajeAlCliente =
    */
   | { clase: "revision"; via: "git" | "sin-marca" | "sin-empezar"; ficheros: FicheroTocado[] }
   | { clase: "parche"; ruta: string; texto: string; recortado: boolean }
+  /**
+   * El árbol del proyecto abierto (pestaña Ficheros): rutas relativas, ordenadas y ya
+   * filtradas por la misma regla que ve el agente (`agent/arbolDeProyecto.ts`). `error`
+   * solo si no se pudo listar, y entonces `rutas` va vacía. Y el contenido de UN fichero,
+   * de solo lectura: sin `texto` si es binario o si la ruta se rechazó, con el motivo.
+   */
+  | { clase: "arbol"; rutas: string[]; recortado: boolean; error?: string }
+  | ({ clase: "fichero" } & FicheroDelProyecto)
   | { clase: "secreto"; pregunta: string }
   /**
    * El registro de comandos de barra, para que el compositor sugiera sin llevar una
@@ -293,6 +301,18 @@ export interface FicheroTocado {
   menos?: number;
 }
 
+/** Un fichero del proyecto tal como viaja. Redeclarado en `apps/web/src/tipos.ts`. */
+export interface FicheroDelProyecto {
+  /** La ruta tal como se pidió, nunca la resuelta en disco. */
+  ruta: string;
+  texto?: string;
+  recortado: boolean;
+  binario: boolean;
+  bytes: number;
+  codificacion?: "utf-8" | "latin1";
+  error?: string;
+}
+
 export interface ProveedorDeModelos {
   id: string;
   credencial: "puesta" | "falta" | "nativa";
@@ -432,6 +452,9 @@ export type MensajeDelCliente =
   | { clase: "cancelar" }
   /** Pide lo que la sesión abierta ha tocado, o el parche de un fichero concreto. */
   | { clase: "revision"; ruta?: string }
+  /** Pide el árbol del proyecto abierto, o el contenido de una ruta relativa a su raíz. */
+  | { clase: "arbol" }
+  | { clase: "fichero"; ruta: string }
   | { clase: "decision"; decisiones: Record<string, string> };
 
 /**
