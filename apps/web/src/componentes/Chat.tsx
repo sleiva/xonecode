@@ -73,6 +73,7 @@ export function Chat({
   actos,
   turnoEnVuelo = false,
   historica = false,
+  sinAprobacion = false,
   segundosEnVuelo,
   proyecto,
   modelo,
@@ -86,6 +87,13 @@ export function Chat({
    * enseñaba la conversación y el compositor activo como si se pudiera seguir hablando.
    */
   historica?: boolean;
+  /**
+   * Este proyecto aplica las escrituras SIN pedir aprobación (`alta.sinAprobacion`). Se
+   * dice arriba, con la conversación, y no solo en el aviso del turno: la decisión se tomó
+   * una vez —quizá hace meses, en `settings.json`— y quien se sienta hoy tiene que saberlo
+   * ANTES de pedir nada, no después con los ficheros ya cambiados.
+   */
+  sinAprobacion?: boolean;
   /** Cuántos segundos lleva el turno en vuelo (`useCronometro`). Ausente = no hay turno. */
   segundosEnVuelo?: number;
   /** Para el estado vacío: dónde estás y con qué modelo. Ausentes = no se afirman. */
@@ -173,6 +181,16 @@ export function Chat({
                 )}
               </p>
             </section>
+          ) : null}
+          {sinAprobacion ? (
+            // `role="note"` y no `alert`: es una condición permanente de este proyecto, no
+            // algo que acabe de pasar. Va arriba del todo, por delante incluso del aviso de
+            // relectura: cambia lo que va a ocurrir con lo próximo que escribas.
+            <p role="note" className={`${vista.flowItem} ${estilos.sinAprobacion}`}>
+              Este proyecto escribe <strong>sin pedirte aprobación</strong>: los cambios se
+              aplican solos y cada turno te dirá qué ficheros tocó. Escribe{" "}
+              <code>/aprobacion humana</code> para volver a decidir tú.
+            </p>
           ) : null}
           {historica ? (
             // `role="note"`: es información de contexto, no una alerta. Y va DENTRO de la

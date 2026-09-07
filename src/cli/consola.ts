@@ -33,8 +33,10 @@ import { esTema, seleccionarTema, TEMAS, type IdTema } from "./tema.js";
 import { acuseDeModelo } from "./acuseDeModelo.js";
 import type { Preguntar } from "./aprobar.js";
 import { guardarCredencial, AuthRotoEnDisco } from "../agent/authEnDisco.js";
+import { cargarSettings, guardarSinAprobacion } from "../agent/settingsEnDisco.js";
+import { seAplicaSinAprobacion } from "../core/settings.js";
 import { URL_CLOUDSTUDIO_POR_OMISION } from "../agent/cloudstudioMcp.js";
-import { cargar, NOMBRE_CARPETA } from "../agent/configEnDisco.js";
+import { cargar, cloudstudioDelProyecto, NOMBRE_CARPETA } from "../agent/configEnDisco.js";
 import { rutaMemoriaDeProyecto } from "../agent/memoriaDeProyecto.js";
 import type { CatalogoModelosPort, ModeloDisponible } from "../core/ports.js";
 
@@ -987,6 +989,69 @@ export const COMANDOS: Record<string, { descripcion: string; manejador: Manejado
         return { seguir: true };
       }
       consola.escribir(resultado.texto);
+      return { seguir: true };
+    },
+  },
+  aprobacion: {
+    descripcion: "quién aprueba las escrituras aquí: /aprobacion [humana|automatica]",
+    manejador: async (args, estado, consola) => {
+      const raiz = estado.raiz;
+      // Del DISCO y por la raíz: en la consola web `fuentes.proyecto` no se rellena, así
+      // que preguntárselo daría «offline» para cualquier proyecto, conectado o no.
+      const cloudstudio = cloudstudioDelProyecto(raiz);
+      const vigente = (): boolean =>
+        seAplicaSinAprobacion({
+          raiz,
+          sinAprobacion: cargarSettings().settings.sinAprobacion,
+          cloudstudio,
+          interactivo: consola.interactivo,
+        });
+
+      const que = args[0];
+      if (que === undefined) {
+        consola.escribir(
+          vigente()
+            ? "automatica: las escrituras de este proyecto se aplican SIN preguntar\n"
+            : "humana: cada escritura pide aprobación con su diff delante\n"
+        );
+        // Las tres condiciones se dicen cuando la respuesta es «humana», porque entonces la
+        // pregunta que sigue siempre es «¿y por qué?». Un «no» sin motivo manda a adivinar.
+        if (!vigente() && cargarSettings().settings.sinAprobacion?.[raiz] === true) {
+          consola.escribir(
+            cloudstudio !== undefined
+              ? "  (está puesta, pero no se aplica: este proyecto sube a CloudStudio)\n"
+              : "  (está puesta, pero no se aplica: no hay nadie delante que pueda decidir)\n"
+          );
+        }
+        return { seguir: true };
+      }
+
+      if (que !== "humana" && que !== "automatica") {
+        consola.escribir("uso: /aprobacion [humana|automatica]\n");
+        return { seguir: true };
+      }
+
+      // Se RECHAZA en vez de guardarse y no aplicarse: un ajuste escrito que no hace nada
+      // es peor que no poder ponerlo, porque quien lo puso se cree protegido al revés.
+      if (que === "automatica" && cloudstudio !== undefined) {
+        consola.escribir(
+          "no: este proyecto está conectado a CloudStudio, y lo que se escriba aquí sube al\n" +
+            "trabajo de otras personas. La aprobación no es una preferencia ahí.\n"
+        );
+        return { seguir: true };
+      }
+
+      const { ruta } = guardarSinAprobacion(undefined, raiz, que === "automatica");
+      if (que === "automatica") {
+        consola.escribir(
+          `hecho: las escrituras de ${raiz} se aplicarán SIN preguntar.\n` +
+            `  Cada turno que escriba lo dirá, con los nombres de los ficheros.\n` +
+            `  Se guarda en ${ruta} —en tu máquina, no en el proyecto— y renombrar la\n` +
+            "  carpeta lo pierde: entonces se vuelve a preguntar.\n"
+        );
+      } else {
+        consola.escribir(`hecho: cada escritura vuelve a pedir aprobación. Guardado en ${ruta}.\n`);
+      }
       return { seguir: true };
     },
   },

@@ -184,6 +184,22 @@
   line-height: 1.5;
 }
 
+/* «Este proyecto escribe sin pedirte aprobación». En ROJO y no en el ámbar de la
+   relectura, que es la única distinción de color que hace falta aquí: una conversación
+   reabierta es una limitación —el agente no recuerda— y esto es una capacidad concedida,
+   la única pantalla donde el usuario ha renunciado a ver el diff antes de que exista. Del
+   par `state-error-*`, como `.error`, y por el mismo motivo `label-primary` para el texto:
+   medido, da mejor contraste sobre ese rojo medio que el «primary» de su propio par. */
+.sinAprobacion {
+  margin: 12px 0 0;
+  padding: 8px 12px;
+  border-radius: 8px;
+  background: var(--dsw-alias-state-error-secondary);
+  color: var(--dsw-alias-label-primary);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
 /* El estado vacío de una sesión nueva: qué es esto y qué se puede pedir. En el color
    secundario y sin marco: es una indicación, no un mensaje de nadie. */
 .bienvenida {

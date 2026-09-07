@@ -687,6 +687,9 @@ export function App({ store, enviar }: { store: Store; enviar: Conexion["enviar"
               // Lo dice el servidor (`alta.historica`): una sesión reabierta que el agente
               // no recuerda. El chat lo enseña arriba y Revisión cambia su explicación.
               historica={estado.alta?.historica === true}
+              // Lo dice el servidor tras comprobar las tres condiciones
+              // (`core/settings.ts#seAplicaSinAprobacion`); el cliente no lo deduce.
+              sinAprobacion={estado.alta?.sinAprobacion === true}
               {...(segundosEnVuelo === undefined ? {} : { segundosEnVuelo })}
               // Para el estado vacío de una sesión nueva: en qué proyecto estás y con qué
               // modelo va a trabajar. Los dos ya estaban en el estado.

@@ -155,6 +155,36 @@ export function guardarDispositivos(casa: string | undefined, ajustes: AjustesDe
   return { ruta };
 }
 
+/**
+ * Pone o quita la marca de «sin aprobación» de UN proyecto, por su ruta absoluta.
+ *
+ * Se fusiona campo a campo, al revés que `guardarDispositivos`: ahí son cuatro
+ * interruptores que la ventana manda juntos, y aquí cada entrada es un proyecto distinto
+ * que se decidió en otro momento — escribir el objeto entero borraría la decisión de los
+ * demás. Quitar la marca BORRA la entrada en vez de dejar un `false`: `false` y «no está»
+ * significan lo mismo (pedir aprobación) y dos formas de decirlo es una de más.
+ */
+export function guardarSinAprobacion(
+  casa: string | undefined,
+  raiz: string,
+  sinAprobacion: boolean,
+): { ruta: string } {
+  const ruta = rutaSettings(casa ?? homedir());
+  const crudo = leerCrudoOAbortar(ruta);
+  const previo = typeof crudo.sinAprobacion === "object" && crudo.sinAprobacion !== null
+    ? (crudo.sinAprobacion as Record<string, unknown>)
+    : {};
+  const siguiente = sinAprobacion
+    ? { ...previo, [raiz]: true }
+    : Object.fromEntries(Object.entries(previo).filter(([k]) => k !== raiz));
+  const fusionado =
+    Object.keys(siguiente).length === 0
+      ? Object.fromEntries(Object.entries(crudo).filter(([k]) => k !== "sinAprobacion"))
+      : { ...crudo, sinAprobacion: siguiente };
+  escribirAtomico(ruta, JSON.stringify(fusionado, null, 2) + "\n");
+  return { ruta };
+}
+
 /** Guarda solo la base del workspace, sin tocar la lista de entornos. */
 export function guardarWorkspace(casa: string | undefined, base: string): { ruta: string } {
   const ruta = rutaSettings(casa ?? homedir());

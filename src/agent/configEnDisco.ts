@@ -345,6 +345,29 @@ export function guardarProyectoCloudStudioDeProyecto(
   return { ruta, proyecto: seleccionado };
 }
 
+/**
+ * El bloque `cloudstudio` del proyecto que hay AHORA en disco, leído por su raíz.
+ *
+ * Existe porque quien decide si las escrituras se auto-aprueban no puede mirar
+ * `FuentesDeEleccion.proyecto`: en la consola WEB ese campo no se rellena nunca —el
+ * vestíbulo sirve muchos proyectos y las fuentes se construyen una vez al arrancar
+ * (`web/servidor/arranque.ts`)—, así que la guarda de «esto sube a CloudStudio» habría
+ * dado `undefined` para todos los proyectos, incluidos los conectados. Un fallo abierto y
+ * mudo, que es el peor sitio donde tenerlo.
+ *
+ * Se relee en cada consulta a propósito: es un fichero que el propio alta escribe a mitad
+ * de sesión, y una copia en memoria diría «offline» de un proyecto que acaba de conectarse.
+ */
+export function cloudstudioDelProyecto(raiz: string): ConfigDeFichero["cloudstudio"] {
+  try {
+    return cargar(raiz).config.proyecto?.cloudstudio;
+  } catch {
+    // Sin poder leerlo no se puede afirmar que sea offline. Se devuelve algo definido para
+    // que la guarda cierre: fallar cerrado aquí es pedir aprobación de más, nunca de menos.
+    return { url: "" };
+  }
+}
+
 export function cargar(raiz: string): {
   config: { proyecto?: ConfigDeFichero; global?: ConfigDeFichero };
   auth: Auth;

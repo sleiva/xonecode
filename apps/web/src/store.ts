@@ -138,6 +138,8 @@ export interface EstadoDelCliente {
     dispositivoActivo?: DispositivoElegido;
     /** La sesión abierta es una relectura que el agente no recuerda. Ausente = no. */
     historica?: boolean;
+    /** Este proyecto aplica las escrituras sin pedir aprobación. Ausente = las pide. */
+    sinAprobacion?: boolean;
     /** El saludo de la bienvenida. Ausente = sin nombre que saludar (`Bienvenida.tsx`). */
     nombre?: string;
     /** Si hay un proyecto abierto en esta conexión — `App.tsx` lo usa para decidir entre
@@ -600,6 +602,7 @@ export function crearStoreDelCliente(): {
             sesionActiva?: unknown;
             dispositivoActivo?: unknown;
             historica?: unknown;
+            sinAprobacion?: unknown;
             proyectos?: unknown;
             ramas?: unknown;
             aviso?: unknown;
@@ -689,6 +692,11 @@ export function crearStoreDelCliente(): {
               // Solo si es exactamente `true`: es una afirmación sobre lo que el agente NO
               // recuerda, y cualquier otra cosa se lee como «no».
               ...(m.historica === true ? { historica: true } : {}),
+              // Y aquí el `=== true` no es rutina: es la diferencia entre avisar de que
+              // este proyecto escribe sin preguntar y callarlo. Cualquier otra cosa —una
+              // cadena «true» incluida— se lee como «sí pide aprobación», que es el lado
+              // en el que un fallo no cuesta nada.
+              ...(m.sinAprobacion === true ? { sinAprobacion: true } : {}),
               // Solo los dos valores que el tipo admite: cualquier otra cosa (un modo
               // nuevo del servidor, o basura) se descarta y la cabecera no pinta
               // pastilla, que es lo mismo que hace cuando el campo no viene. Aceptar la

@@ -63,12 +63,63 @@ export function seMira(ajustes: AjustesDeDispositivos | undefined, plataforma: P
   return ajustes?.[plataforma] !== false;
 }
 
+/**
+ * Proyectos en los que el usuario ha decidido que las escrituras NO le pidan permiso.
+ *
+ * **Vive aquí y no en el `config.json` del proyecto, y eso es la mitad de la decisión.**
+ * Este repo ya rechaza `proveedores` en el config de proyecto por un motivo que vale
+ * exactamente igual aquí: «un `config.json` de proyecto es un fichero que puede venir de
+ * fuera». Si la marca viajara con la carpeta, quien te pasa un zip decidiría si TÚ revisas
+ * lo que el agente escribe dentro — y ponerle `modo: "offline"` al lado no arregla nada,
+ * porque es el mismo fichero. En `settings.json` la decisión es del dueño de la máquina.
+ *
+ * La clave es la RUTA ABSOLUTA del proyecto. Es frágil a propósito: renombrar la carpeta
+ * pierde el ajuste y las escrituras vuelven a pedir permiso. Falla CERRADO, que es la única
+ * dirección en la que un ajuste así puede fallar.
+ *
+ * Solo `true` cuenta. Un `"true"` de cadena se descarta como cualquier otra cosa: es la
+ * trampa que este repo ya pagó con el `soloLectura` de un subagente y con el `compartido`
+ * de CloudStudio, y aquí concedería justo lo que hay que conceder a mano.
+ */
+export type AprobacionPorProyecto = Record<string, boolean>;
+
 export interface Settings {
   entornos: Entorno[];
   /** La BASE del workspace. La disposición de dentro la fija `rutaDeWorkspace`. */
   workspace?: string;
   /** Qué destinos se miran al medir la máquina. Ausente = todos. */
   dispositivos?: AjustesDeDispositivos;
+  /** En qué proyectos las escrituras se aplican sin preguntar. Ausente = en ninguno. */
+  sinAprobacion?: AprobacionPorProyecto;
+}
+
+/**
+ * ¿Se aplican las escrituras de este proyecto SIN pedir aprobación?
+ *
+ * Las tres condiciones son AND, y ninguna es redundante:
+ *
+ * - **Lo ha dicho el dueño de la máquina**, para esta ruta, en `settings.json`.
+ * - **El proyecto es OFFLINE de verdad**, y eso NO se le pregunta al `modo` del
+ *   `config.json`: se mira si hay un bloque `cloudstudio`. Un proyecto conectado escribe en
+ *   una copia que después sube a CloudStudio, o sea al trabajo de otras personas, y ahí la
+ *   aprobación no es una preferencia. Mirar el `modo` sería creerle a un campo que puede
+ *   venir en la misma carpeta que la marca.
+ * - **Hay alguien delante.** Auto-aprobar significa «el humano que está aquí ha decidido no
+ *   pulsar», no «no hace falta humano». Sin interactivo —`xonecode run` en CI, una tubería—
+ *   se sigue sin aplicar nada, que es lo que esos caminos hacen hoy: cambiar eso volcaría
+ *   el significado de un código de salida del contrato por un ajuste que nadie escribió
+ *   pensando en CI.
+ */
+export function seAplicaSinAprobacion(opciones: {
+  raiz: string;
+  sinAprobacion: AprobacionPorProyecto | undefined;
+  /** El bloque `cloudstudio` del `config.json` del proyecto, si lo hay. */
+  cloudstudio: unknown;
+  interactivo: boolean;
+}): boolean {
+  if (opciones.sinAprobacion?.[opciones.raiz] !== true) return false;
+  if (opciones.cloudstudio !== undefined) return false;
+  return opciones.interactivo;
 }
 
 /**
@@ -158,14 +209,34 @@ export function validarSettings(bruto: unknown): { settings: Settings; avisos: A
 
   const workspace = typeof objeto.workspace === "string" ? objeto.workspace : undefined;
   const dispositivos = validarDispositivos(objeto.dispositivos);
+  const sinAprobacion = validarSinAprobacion(objeto.sinAprobacion);
   return {
     settings: {
       entornos,
       ...(workspace === undefined ? {} : { workspace }),
       ...(dispositivos === undefined ? {} : { dispositivos }),
+      ...(sinAprobacion === undefined ? {} : { sinAprobacion }),
     },
     avisos,
   };
+}
+
+/**
+ * Solo rutas absolutas con valor booleano `true`, y nada más.
+ *
+ * Un `false` no se guarda: significa lo mismo que no estar —pedir aprobación— y dejarlo
+ * escrito solo daría dos formas de decir que no. Un `"true"` de CADENA se descarta, por lo
+ * de siempre. Y una clave que no sea una ruta absoluta tampoco entra: la comparación de
+ * `seAplicaSinAprobacion` es exacta contra la raíz, así que una relativa no casaría nunca y
+ * quedaría en el fichero pareciendo que hace algo.
+ */
+function validarSinAprobacion(candidato: unknown): AprobacionPorProyecto | undefined {
+  if (typeof candidato !== "object" || candidato === null || Array.isArray(candidato)) return undefined;
+  const salida: AprobacionPorProyecto = {};
+  for (const [ruta, valor] of Object.entries(candidato as Record<string, unknown>)) {
+    if (valor === true && (ruta.startsWith("/") || /^[A-Za-z]:[\\/]/.test(ruta))) salida[ruta] = true;
+  }
+  return Object.keys(salida).length === 0 ? undefined : salida;
 }
 
 /**

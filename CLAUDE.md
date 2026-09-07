@@ -638,6 +638,42 @@ sesiones llegaban a fuego como `[]`:
   cable, store y componente); colapsarla haría que elegir ninguno se leyera como no haber
   elegido. El ORDEN lo pone el listado del servidor, no el orden en que se marcaron.
 
+**Un proyecto puede escribir SIN aprobación, y es la única grieta del fail-closed**
+(`core/settings.ts#seAplicaSinAprobacion`, comando `/aprobacion`). El caso es real —en un
+proyecto offline que el agente crea no hay nadie más— pero la aprobación no está ahí por la
+propiedad del repo: está porque XOne ignora en silencio lo desconocido, así que un atributo
+inventado no da error sino un bug mudo, y el diff es el único momento en que alguien lo ve
+antes de que exista. Por eso se concede con seis condiciones y no con una:
+- **La marca vive en `settings.json`, NO en el `config.json` del proyecto.** Es el mismo
+  motivo por el que ahí se rechaza `proveedores`: «un `config.json` de proyecto es un fichero
+  que puede venir de fuera». Si viajara con la carpeta, quien te pasa un zip decidiría si TÚ
+  revisas lo que el agente escribe dentro — y ponerle `modo: "offline"` al lado no arregla
+  nada, porque es el mismo fichero. La clave es la ruta absoluta, y renombrar la carpeta
+  pierde el ajuste: falla CERRADO, que es la única dirección posible aquí.
+- **Offline se comprueba mirando el bloque `cloudstudio`, no el campo `modo`** — y **del
+  DISCO, por la raíz** (`configEnDisco.ts#cloudstudioDelProyecto`). Esto último no es
+  cosmético: en la consola web `FuentesDeEleccion.proyecto` **no se rellena nunca** (el
+  vestíbulo sirve muchos proyectos y las fuentes se construyen una vez al arrancar), así que
+  preguntárselo a las fuentes habría dado «offline» para todos, conectados incluidos. Un
+  fallo abierto y mudo. Y si el fichero no se puede leer se devuelve algo definido: pedir
+  aprobación de más, nunca de menos.
+- **Tiene que haber alguien delante.** Auto-aprobar es «el humano que está aquí ha decidido
+  no pulsar», no «no hace falta humano»: sin interactivo —`xonecode run` en CI, una tubería—
+  no se aplica nada, que es lo que esos caminos hacen hoy. Un ajuste que nadie escribió
+  pensando en CI no puede volcar el significado de un código de salida del contrato.
+- **Solo el booleano `true`**, en las tres capas. La trampa de siempre.
+- **Se pregunta en cada RONDA, no al abrir la sesión** (`sinAprobacion` es una función):
+  `/aprobacion` cambia el ajuste sin cerrar la sesión, y un booleano capturado al abrir
+  dejaría el cambio sin efecto la mitad de las veces en la dirección peligrosa.
+- **Se DICE dos veces, y las dos hacen falta.** Cada turno que aplicó algo saca un aviso de
+  honestidad con los NOMBRES de los ficheros —un contador a secas es el aviso que enseña a
+  ignorar los avisos—, y el alta lleva `sinAprobacion` para que el chat lo diga arriba antes
+  de que pidas nada: la decisión se tomó una vez y quizá hace meses.
+No hay interruptor en Ajustes todavía: se pone con `/aprobacion automatica`, que por el
+registro de `COMANDOS` funciona igual en el terminal y en la web. Y en un proyecto
+conectado el comando lo RECHAZA en vez de guardarlo sin aplicarlo: un ajuste escrito que no
+hace nada es peor que no poder ponerlo, porque quien lo puso se cree protegido al revés.
+
 **Los ARTEFACTOS del agente no son ficheros del proyecto** (`core/artefactos.ts`,
 `agent/proyecto.ts#backendConArtefactos`). Un diagrama de `archify`, un panel de
 `artifacts-builder`, la captura que el `probador` traerá el día que hable con el móvil: son

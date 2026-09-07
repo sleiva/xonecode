@@ -74,6 +74,8 @@ import {
   crearCheckpointerDeProyecto, hayCheckpoint, olvidarHilo,
 } from "../../agent/checkpointer.js";
 import { cargarSettings, guardarDispositivos, guardarEntorno as guardarEntornoEnDisco } from "../../agent/settingsEnDisco.js";
+import { seAplicaSinAprobacion } from "../../core/settings.js";
+import { cloudstudioDelProyecto } from "../../agent/configEnDisco.js";
 import { abrirEnSistema } from "../../agent/cloudstudioMcp.js";
 import { nombreDePersona } from "../../agent/persona.js";
 import { cambiosDeSesion, fotoDeApertura, olvidarSesion, parcheDeSesion } from "../../agent/sesionGit.js";
@@ -411,6 +413,24 @@ export function montarRutas(
       ...(abierto?.sesion === undefined ? {} : { sesionActiva: abierto.sesion }),
       ...(abierto?.dispositivo === undefined ? {} : { dispositivoActivo: abierto.dispositivo }),
       ...(abierto?.historica === true ? { historica: true } : {}),
+      // Este proyecto escribe sin preguntar. Viaja en el ALTA y no solo en el aviso del
+      // turno porque la decisión se tomó una vez, quizá hace meses, y quien se sienta hoy
+      // tiene que saberlo ANTES de pedir nada — no después, con los ficheros ya cambiados.
+      // Se calcula aquí y no se guarda: las tres condiciones incluyen si hay alguien
+      // delante, y eso cambia con la conexión.
+      ...(abierto !== undefined &&
+      seAplicaSinAprobacion({
+        raiz: abierto.estadoDeSesion.raiz,
+        sinAprobacion: cargarSettings().settings.sinAprobacion,
+        cloudstudio: cloudstudioDelProyecto(abierto.estadoDeSesion.raiz),
+        // `true` sin más, y hay que decir por qué no es una simplificación: el alta se
+        // EMITE, o sea que solo llega a un cliente conectado, y la consola web declara
+        // `interactivo: true` por la misma razón (`consolaWeb.ts`). Quien decide de verdad
+        // en cada ronda es el ejecutor, que vuelve a preguntar las tres condiciones.
+        interactivo: true,
+      })
+        ? { sinAprobacion: true }
+        : {}),
       ...(vestibulo.nombre === undefined ? {} : { nombre: vestibulo.nombre }),
       ...(aviso === undefined ? {} : { aviso }),
     });

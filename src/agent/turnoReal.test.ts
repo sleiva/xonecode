@@ -156,6 +156,7 @@ async function abrir(
     /** Lo que la instantánea dirá que cambió el turno. */
     cambios?: Cambio[];
     verifier?: VerifierPort;
+    sinAprobacion?: () => boolean;
   } = {}
 ) {
   mocks.construirAgente.mockImplementation(() =>
@@ -175,6 +176,7 @@ async function abrir(
     skills: new SkillsEnMemoria(),
     entorno: entornoFalso,
     pedirAprobacion: opts.pedir,
+    ...(opts.sinAprobacion === undefined ? {} : { sinAprobacion: opts.sinAprobacion }),
     ...(opts.verifier === undefined ? {} : { verifier: opts.verifier }),
   });
 }
@@ -818,5 +820,52 @@ describe("los artefactos no pasan por la aprobación", () => {
 
     expect(pedir).toHaveBeenCalledTimes(1);
     expect(agenteDeLLamada(0).ejecuto()).toBe(false);
+  });
+});
+
+describe("un proyecto en «sin aprobación»", () => {
+  it("aplica la escritura sin preguntar, y lo DICE con el nombre del fichero", async () => {
+    // La decisión se tomó una vez en `settings.json`, quizá hace meses. El turno que la
+    // ejerce es el único momento en que se puede recordar — y con los nombres, porque un
+    // contador a secas es el aviso que enseña a ignorar los avisos.
+    const pedir = vi.fn(aprobarTodo());
+    const sesion = await abrir({
+      escribe: true,
+      interruptArgs: { file_path: "/Clientes.xne" },
+      pedir,
+      sinAprobacion: () => true,
+    });
+    const piel = pielFalsa();
+    await sesion.turno("añade un campo", piel);
+
+    expect(pedir).not.toHaveBeenCalled();
+    expect(agenteDeLLamada(0).ejecuto()).toBe(true);
+    const aviso = lineasDe(piel).find((l) => l.includes("SIN aprobación"));
+    expect(aviso).toBeDefined();
+    expect(aviso).toContain("/Clientes.xne");
+    expect(aviso).toContain("/aprobacion humana");
+  });
+
+  it("sin la marca, la MISMA escritura sigue pidiendo permiso y no avisa de nada", async () => {
+    const pedir = vi.fn(aprobarTodo());
+    const sesion = await abrir({
+      escribe: true,
+      interruptArgs: { file_path: "/Clientes.xne" },
+      pedir,
+    });
+    const piel = pielFalsa();
+    await sesion.turno("añade un campo", piel);
+
+    expect(pedir).toHaveBeenCalledTimes(1);
+    expect(lineasDe(piel).some((l) => l.includes("SIN aprobación"))).toBe(false);
+  });
+
+  it("un turno que no escribió no saca el aviso", async () => {
+    // La regla de la bitácora: un aviso que salta cuando no ha pasado nada enseña a
+    // ignorarlo. Aquí no hay escritura ninguna, con la marca puesta o sin ella.
+    const sesion = await abrir({ sinAprobacion: () => true });
+    const piel = pielFalsa();
+    await sesion.turno("cuéntame un chiste", piel);
+    expect(lineasDe(piel).some((l) => l.includes("SIN aprobación"))).toBe(false);
   });
 });

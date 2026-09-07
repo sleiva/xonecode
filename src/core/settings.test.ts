@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { validarSettings, rutaDeWorkspace, seMira, PLATAFORMAS_DE_DISPOSITIVO } from "./settings.js";
+import { validarSettings, rutaDeWorkspace, seMira, seAplicaSinAprobacion, PLATAFORMAS_DE_DISPOSITIVO } from "./settings.js";
 
 describe("validarSettings", () => {
   it("conserva los entornos bien formados, sin avisos", () => {
@@ -97,5 +97,47 @@ describe("los destinos de prueba en settings.json", () => {
     expect(validarSettings({ entornos: [], dispositivos: {} }).settings.dispositivos).toBeUndefined();
     expect(validarSettings({ entornos: [], dispositivos: "no" }).settings.dispositivos).toBeUndefined();
     for (const p of PLATAFORMAS_DE_DISPOSITIVO) expect(seMira(undefined, p)).toBe(true);
+  });
+});
+
+describe("las escrituras sin aprobación", () => {
+  const RAIZ = "/proyectos/AppDemo";
+  const base = { raiz: RAIZ, sinAprobacion: { [RAIZ]: true }, cloudstudio: undefined, interactivo: true };
+
+  it("se aplican solo si lo dijo el dueño de la máquina PARA ESTA raíz", () => {
+    expect(seAplicaSinAprobacion(base)).toBe(true);
+    expect(seAplicaSinAprobacion({ ...base, sinAprobacion: undefined })).toBe(false);
+    expect(seAplicaSinAprobacion({ ...base, sinAprobacion: {} })).toBe(false);
+    // Otra carpeta no hereda la decisión, ni siquiera una que empiece igual.
+    expect(seAplicaSinAprobacion({ ...base, raiz: "/proyectos/AppDemo2" })).toBe(false);
+    expect(seAplicaSinAprobacion({ ...base, raiz: "/proyectos/AppDemo/sub" })).toBe(false);
+  });
+
+  it("NUNCA en un proyecto conectado a CloudStudio, diga lo que diga el `modo`", () => {
+    // Ahí lo que se escribe acaba subiendo al trabajo de otras personas. Y se mira el
+    // bloque `cloudstudio` y no el campo `modo` porque `modo` vive en el mismo fichero que
+    // podría venir en la carpeta.
+    expect(seAplicaSinAprobacion({ ...base, cloudstudio: { url: "https://x/mcp" } })).toBe(false);
+  });
+
+  it("NUNCA sin nadie delante: es «no pulso», no «no hace falta humano»", () => {
+    // `xonecode run` en CI y las tuberías siguen sin aplicar nada, que es lo que hacen hoy.
+    expect(seAplicaSinAprobacion({ ...base, interactivo: false })).toBe(false);
+  });
+
+  it("solo el booleano `true` concede; una cadena «true» no", () => {
+    // La trampa que este repo ya pagó dos veces. Se filtra al validar el fichero.
+    const { settings } = validarSettings({ entornos: [], sinAprobacion: { [RAIZ]: "true" } });
+    expect(settings.sinAprobacion).toBeUndefined();
+  });
+
+  it("un `false` no se guarda, y una clave que no es ruta absoluta tampoco", () => {
+    // `false` significa lo mismo que no estar; una ruta relativa no casaría nunca con la
+    // raíz y quedaría en el fichero pareciendo que hace algo.
+    const { settings } = validarSettings({
+      entornos: [],
+      sinAprobacion: { [RAIZ]: true, "/otro": false, "relativa/x": true },
+    });
+    expect(settings.sinAprobacion).toEqual({ [RAIZ]: true });
   });
 });

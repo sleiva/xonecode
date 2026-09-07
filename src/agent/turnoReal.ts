@@ -256,6 +256,18 @@ export async function abrirSesionReal(opciones: {
    * no ensucia el índice con carpetas de hilos que nadie puede reabrir.
    */
   artefactos?: string;
+  /**
+   * ¿Las escrituras de ESTE proyecto se aplican sin pedir aprobación?
+   *
+   * Es una FUNCIÓN y no un booleano porque se pregunta en cada ronda: el ajuste se cambia
+   * con `/aprobacion` sin cerrar la sesión, y un booleano capturado al abrir dejaría el
+   * cambio sin efecto hasta reabrir — justo en la dirección peligrosa la mitad de las veces.
+   *
+   * Quien decide es `core/settings.ts#seAplicaSinAprobacion`, y no este fichero: la regla
+   * tiene tres condiciones (lo dijo el dueño de la máquina para esta raíz, el proyecto no
+   * está conectado a CloudStudio, y hay alguien delante) y ninguna se puede comprobar aquí.
+   */
+  sinAprobacion?: () => boolean;
 }): Promise<SesionReal> {
   const { raiz, entorno } = opciones;
 
@@ -370,8 +382,13 @@ export async function abrirSesionReal(opciones: {
     // con las decisiones — también con rejects, que si no se resumen dejan el interrupt
     // colgado para siempre y el modelo nunca llega a saber que se rechazó.
     let cortadoPorTope = false;
-    /** Tandas seguidas de artefactos aprobados solos. Tope propio: ver dónde se usa. */
-    let tandasDeArtefactos = 0;
+    /** Tandas seguidas aprobadas SOLAS —artefactos, o todo si el proyecto está en
+     *  «sin aprobación»—. Tope propio: ver dónde se usa. */
+    let tandasAutomaticas = 0;
+    /** Los ficheros del PROYECTO que este turno aplicó sin preguntar. Solo se llena en un
+     *  proyecto con «sin aprobación»; los artefactos no cuentan aquí, porque un artefacto
+     *  no es del proyecto y su constancia es su propio acto. */
+    const aplicadasSinPreguntar: string[] = [];
 
     /**
      * El estado del lazo, compartido entre el generador y el bucle de rondas.
@@ -589,12 +606,23 @@ export async function abrirSesionReal(opciones: {
             // todos los turnos, incluido «cuéntame un chiste» — y un aviso que salta cuando
             // no ha pasado nada enseña a ignorarlo, que es lo contrario de lo que se compra
             // con él. Con el motivo, porque «no ha corrido» sin más manda a adivinar.
-            avisos: (b) =>
-              b.corrio("verify") || !rondaEscribio
+            avisos: (b) => [
+              ...(b.corrio("verify") || !rondaEscribio
                 ? []
                 : [
                     `⚠ el verificador no ha corrido en este turno${motivoSinVerificar === undefined ? "" : ` (${motivoSinVerificar})`}`,
-                  ],
+                  ]),
+              // Lo que se aplicó sin que nadie lo mirara, CON LOS NOMBRES. La decisión se
+              // tomó una vez, quizá hace meses, en `settings.json`; el turno que la ejerce
+              // es el único momento en que se puede recordar. Solo si hubo alguna: un aviso
+              // que salta cuando no ha pasado nada enseña a ignorarlo.
+              ...(aplicadasSinPreguntar.length === 0
+                ? []
+                : [
+                    `⚠ ${aplicadasSinPreguntar.length} escritura(s) aplicadas SIN aprobación: ${aplicadasSinPreguntar.join(", ")}` +
+                      " — este proyecto está en «sin aprobación» (/aprobacion humana lo deshace)",
+                  ]),
+            ],
             // Solo la ÚLTIMA pasada cierra el turno. Lo decide el generador al agotar el
             // flujo: si quedan rondas o viene un intento, no hay `fin` todavía.
             cerrar: () => cerrarRonda,
@@ -620,11 +648,22 @@ export async function abrirSesionReal(opciones: {
        * `esRutaDeArtefacto` es una lista blanca de forma y no un `startsWith`, porque de
        * ella depende que esto no sea un camino para escribir en el proyecto sin permiso.
        */
+      const todoAutomatico = opciones.sinAprobacion?.() === true;
       const automaticas = new Map<string, Decision>();
       const humanos: PendienteDeAprobacion[] = [];
       for (const p of lista) {
-        if (esRutaDeArtefacto(ficheros.get(p.id))) automaticas.set(p.id, { type: "approve" } as Decision);
-        else humanos.push(p);
+        const ruta = ficheros.get(p.id);
+        if (esRutaDeArtefacto(ruta)) {
+          automaticas.set(p.id, { type: "approve" } as Decision);
+        } else if (todoAutomatico) {
+          // El proyecto está en «sin aprobación». Se apunta la RUTA, que es lo que después
+          // dice el aviso de honestidad: un contador sin nombres es el aviso que enseña a
+          // ignorar los avisos, que es justo lo que la bitácora existe para evitar.
+          automaticas.set(p.id, { type: "approve" } as Decision);
+          aplicadasSinPreguntar.push(ruta ?? p.descripcion);
+        } else {
+          humanos.push(p);
+        }
       }
       if (humanos.length === 0) {
         // Ronda que no gastó a nadie: no cuenta para el tope de APROBACIÓN. Contarla haría
@@ -637,9 +676,13 @@ export async function abrirSesionReal(opciones: {
         // que nadie corta —aquí no hay humano al que preguntar, que es justo lo que frena
         // al otro—. Al agotarse se para y se dice, con `cortadoPorTope` puesto: quedaron
         // escrituras sin aplicar, que es lo que ese código de salida significa.
-        tandasDeArtefactos += 1;
-        if (tandasDeArtefactos > MAX_APPROVAL_ROUNDS) {
-          piel.linea(`\n⚠ tope de ${MAX_APPROVAL_ROUNDS} tandas de artefactos agotado en este turno.`);
+        tandasAutomaticas += 1;
+        if (tandasAutomaticas > MAX_APPROVAL_ROUNDS) {
+          // El texto dice de QUÉ tandas habla: con «sin aprobación» puesto, por aquí pasan
+          // también las escrituras del proyecto, y llamarlas «artefactos» sería mentir en
+          // el único mensaje que explica por qué el turno se cortó.
+          const que = todoAutomatico ? "escrituras sin aprobación" : "artefactos";
+          piel.linea(`\n⚠ tope de ${MAX_APPROVAL_ROUNDS} tandas de ${que} agotado en este turno.`);
           piel.linea(`  quedaban ${lista.length} sin escribir, y NO se han aplicado.`);
           cortadoPorTope = true;
           break;

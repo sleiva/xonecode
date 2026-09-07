@@ -18,6 +18,7 @@ import { topeResuelto } from "../core/contextos.js";
 import {
   aplicarAuth,
   cargar,
+  cloudstudioDelProyecto,
   aplicarCredencialAlProceso,
   guardarCloudStudioDeProyecto,
   guardarEntornoDeProyecto,
@@ -31,6 +32,7 @@ import {
 } from "../agent/configEnDisco.js";
 import { crearCheckpointerDeProyecto } from "../agent/checkpointer.js";
 import { carpetaDeArtefactosDeSesion } from "../core/artefactos.js";
+import { seAplicaSinAprobacion } from "../core/settings.js";
 import { conectarCloudStudio, sesionCloudStudio, PUERTO_CALLBACK } from "../agent/cloudstudioMcp.js";
 import { clienteCloudStudio } from "../agent/cloudstudioClient.js";
 import { cargarSettings } from "../agent/settingsEnDisco.js";
@@ -476,6 +478,20 @@ export function crearEjecutorReal(
         ...(carpetaDeArtefactos === undefined
           ? {}
           : { artefactos: carpetaDeArtefactos(estado.raiz, estado.hilo) }),
+        // Si las escrituras de ESTE proyecto se aplican sin preguntar. Se pregunta en cada
+        // ronda —de ahí la función— porque `/aprobacion` lo cambia sin cerrar la sesión, y
+        // porque `interactivo` es de la consola que esté delante. Los settings se releen
+        // cada vez por lo mismo: la alternativa es que el cambio no surta efecto hasta
+        // reabrir, y la mitad de las veces eso sería en la dirección peligrosa.
+        sinAprobacion: () =>
+          seAplicaSinAprobacion({
+            raiz: estado.raiz,
+            sinAprobacion: cargarSettings().settings.sinAprobacion,
+            // Del DISCO y por la raíz, no de `estado.fuentes.proyecto`: en la web ese
+            // campo no se rellena nunca, y la guarda habría dado «offline» para todos.
+            cloudstudio: cloudstudioDelProyecto(estado.raiz),
+            interactivo: consolaReal.interactivo,
+          }),
         // El simulador de verdad. Su ausencia en la máquina no se descubre aquí sino al
         // verificar, y entonces se dice en el turno — sin tumbar nada.
         verifier: new SimuladorVerifier(),

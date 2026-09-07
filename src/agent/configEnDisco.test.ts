@@ -31,6 +31,7 @@ import {
   rutaConfigDeProyecto,
   rutaAuth,
   cargar,
+  cloudstudioDelProyecto,
   aplicarAuth,
   guardarModeloGlobal,
   guardarTemaDeProyecto,
@@ -380,4 +381,29 @@ it("limpia el temporal aunque falle su primer cierre", () => {
   expect(readdirSync(directorio).filter((nombre) => nombre.endsWith(".tmp"))).toEqual([]);
   expect(() => readFileSync(rutaConfigGlobal(), "utf8")).toThrow();
   rmSync(h, { recursive: true, force: true });
+});
+
+describe("cloudstudioDelProyecto", () => {
+  /**
+   * La guarda de «esto sube a CloudStudio» depende de esta función, y su llamador en la
+   * web no puede usar `FuentesDeEleccion.proyecto` — ahí no se rellena nunca.
+   */
+  it("lee el bloque del disco por la raíz", () => {
+    const raiz = mkdtempSync(join(tmpdir(), "xc-cs-"));
+    mkdirSync(join(raiz, ".xonecode"), { recursive: true });
+    writeFileSync(
+      join(raiz, ".xonecode", "config.json"),
+      JSON.stringify({ modo: "cloud", cloudstudio: { url: "https://mcp.example/mcp" } })
+    );
+    expect(cloudstudioDelProyecto(raiz)?.url).toBe("https://mcp.example/mcp");
+    rmSync(raiz, { recursive: true, force: true });
+  });
+
+  it("un proyecto sin bloque devuelve `undefined`: eso es offline de verdad", () => {
+    const raiz = mkdtempSync(join(tmpdir(), "xc-cs-"));
+    mkdirSync(join(raiz, ".xonecode"), { recursive: true });
+    writeFileSync(join(raiz, ".xonecode", "config.json"), JSON.stringify({ modo: "offline" }));
+    expect(cloudstudioDelProyecto(raiz)).toBeUndefined();
+    rmSync(raiz, { recursive: true, force: true });
+  });
 });

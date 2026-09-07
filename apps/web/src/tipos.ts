@@ -207,6 +207,13 @@ export type MensajeAlCliente =
       dispositivoActivo?: DispositivoElegido;
       /** La sesión abierta es una relectura y el agente no la recuerda. Ausente = no. */
       historica?: boolean;
+      /**
+       * Las escrituras de este proyecto se aplican SIN pedir aprobación
+       * (`core/settings.ts#seAplicaSinAprobacion`). Ausente = se pide, que es lo normal.
+       * Viaja en el alta y no solo en el aviso del turno porque quien se sienta hoy tiene
+       * que saberlo ANTES de pedir nada, no después con los ficheros ya cambiados.
+       */
+      sinAprobacion?: boolean;
       proyectos: {
         id: string;
         nombre: string;

@@ -231,6 +231,13 @@ export type MensajeAlCliente =
        */
       historica?: boolean;
       /**
+       * Las escrituras de este proyecto se aplican SIN pedir aprobación
+       * (`core/settings.ts#seAplicaSinAprobacion`). Ausente = se pide, que es lo normal.
+       * Viaja en el alta y no solo en el aviso del turno porque quien se sienta hoy tiene
+       * que saberlo ANTES de pedir nada, no después con los ficheros ya cambiados.
+       */
+      sinAprobacion?: boolean;
+      /**
        * De qué entorno son los `proyectos` de este mensaje. Ausente = todavía de ninguno
        * (nadie ha elegido y no había ninguno registrado que poblar). El cliente lo NECESITA
        * para no tener que asumir «el primero de la lista», que es lo que hacía y era una

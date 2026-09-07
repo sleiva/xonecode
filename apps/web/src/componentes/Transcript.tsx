@@ -20,6 +20,7 @@ export function Transcript({
   pestana,
   turnoEnVuelo,
   historica,
+  sinAprobacion,
   segundosEnVuelo,
   proyecto,
   modelo,
@@ -32,6 +33,8 @@ export function Transcript({
   /** Van al Chat tal cual: la relectura, el cronómetro del turno en vuelo, y el proyecto y
    *  el modelo para el estado vacío de una sesión nueva. */
   historica?: boolean;
+  /** El proyecto escribe sin pedir aprobación. Va al Chat, que lo dice con palabras. */
+  sinAprobacion?: boolean;
   segundosEnVuelo?: number;
   proyecto?: string;
   modelo?: string;
@@ -57,6 +60,7 @@ export function Transcript({
             actos={actos}
             turnoEnVuelo={turnoEnVuelo === true}
             historica={historica === true}
+            sinAprobacion={sinAprobacion === true}
             {...(segundosEnVuelo === undefined ? {} : { segundosEnVuelo })}
             {...(proyecto === undefined ? {} : { proyecto })}
             {...(modelo === undefined ? {} : { modelo })}

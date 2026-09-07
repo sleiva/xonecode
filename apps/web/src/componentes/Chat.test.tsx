@@ -189,3 +189,18 @@ describe("Chat: el artefacto", () => {
     expect(screen.getByText("flujo.html")).toBeTruthy();
   });
 });
+
+describe("Chat: el proyecto que escribe sin preguntar", () => {
+  it("lo DICE arriba, y dice cómo deshacerlo", () => {
+    // La decisión se tomó una vez en `settings.json`, quizá hace meses. Quien se sienta hoy
+    // tiene que saberlo ANTES de pedir nada, no después con los ficheros ya cambiados.
+    render(<Chat actos={[]} sinAprobacion />);
+    expect(screen.getByText(/sin pedirte aprobación/i)).toBeTruthy();
+    expect(screen.getByText("/aprobacion humana")).toBeTruthy();
+  });
+
+  it("y no lo dice cuando no es cierto", () => {
+    render(<Chat actos={[]} />);
+    expect(screen.queryByText(/sin pedirte aprobación/i)).toBeNull();
+  });
+});
