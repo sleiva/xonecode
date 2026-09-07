@@ -23,6 +23,7 @@ export function Transcript({
   segundosEnVuelo,
   proyecto,
   modelo,
+  sesion,
   ficheros,
   revision,
 }: {
@@ -34,6 +35,8 @@ export function Transcript({
   segundosEnVuelo?: number;
   proyecto?: string;
   modelo?: string;
+  /** El id de la sesión abierta. Solo para componer la ruta de un artefacto en el Chat. */
+  sesion?: string;
   /**
    * Las vistas de Ficheros y de Revisión, ya montadas por `App`. Van como ranuras y no como
    * props sueltas porque lo que aporta este componente es ELEGIR la vista; y como el
@@ -57,6 +60,7 @@ export function Transcript({
             {...(segundosEnVuelo === undefined ? {} : { segundosEnVuelo })}
             {...(proyecto === undefined ? {} : { proyecto })}
             {...(modelo === undefined ? {} : { modelo })}
+            {...(sesion === undefined ? {} : { sesion })}
           />
         ) : pestana === "trazas" ? (
           <Trazas actos={actos} />

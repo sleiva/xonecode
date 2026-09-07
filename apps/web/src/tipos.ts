@@ -65,6 +65,10 @@ export type Acto =
    */
   | { tipo: "herramientas"; lineas: string[]; detalles?: { nombre?: string; error?: string }[] }
   | { tipo: "sistema"; texto: string }
+  /** Un artefacto que dejó el agente: diagrama, panel, captura. No es un fichero del
+   *  proyecto (vive en la carpeta de la sesión) y por eso se escribió SIN aprobación — que
+   *  se vea es la contrapartida. Metadatos y nunca el contenido. */
+  | { tipo: "artefacto"; ruta: string; nombre: string; bytes: number; mime?: string }
   /** `fase` es la CATEGORÍA (el enum de `core/events.ts`), aparte de su texto en español:
    *  filtrar por la prosa se rompería el día que alguien la reescriba. Opcional por lo
    *  mismo que `detalles` — las sesiones viejas no lo traen. */

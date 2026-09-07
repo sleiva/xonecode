@@ -692,6 +692,10 @@ export function App({ store, enviar }: { store: Store; enviar: Conexion["enviar"
               // modelo va a trabajar. Los dos ya estaban en el estado.
               {...(nombreDelProyectoActivo === undefined ? {} : { proyecto: nombreDelProyectoActivo })}
               {...(estado.modelos?.actual === undefined ? {} : { modelo: estado.modelos.actual })}
+              // Solo para decir DÓNDE está un artefacto, en ruta del proyecto. Puede faltar:
+              // el id de sesión no existe hasta que se vuelca el primer acto, y entonces la
+              // tarjeta enseña la ruta virtual en vez de componer una falsa.
+              {...(estado.alta?.sesionActiva === undefined ? {} : { sesion: estado.alta.sesionActiva })}
               revision={
                 <Revision
                   historica={estado.alta?.historica === true}

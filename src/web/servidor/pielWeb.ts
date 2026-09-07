@@ -204,6 +204,20 @@ export function crearPielWeb(ahora: () => number = Date.now): PielWeb {
       empujar({ tipo: "herramientas", lineas: [texto], detalles: [detalle] });
     },
 
+    artefacto(a) {
+      // Acto PROPIO y no una línea más del grupo de herramientas: es lo único del turno que
+      // se escribió sin pasar por la aprobación humana, y desde aquí se abre el fichero.
+      // Cierra la fase como cualquier otro acto de conversación.
+      cerrarFase();
+      empujar({
+        tipo: "artefacto",
+        ruta: a.ruta,
+        nombre: a.nombre,
+        bytes: a.bytes,
+        ...(a.mime === undefined ? {} : { mime: a.mime }),
+      });
+    },
+
     pausa(pendientes: PendienteDeAprobacion[]) {
       cerrarFase();
       // Una línea por pendiente, origen y descripción y NADA más: ni el fichero, ni el

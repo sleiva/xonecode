@@ -672,11 +672,16 @@ la raíz del proyecto, con aprobación humana, git y subida a CloudStudio detrá
 - **Se borran con su sesión** (`borrarSesion`), igual que el hilo del checkpointer: si no,
   borrar una conversación dejaría en disco los diagramas que se dibujaron en ella, invisibles
   desde la interfaz.
-- Y **la carpeta no se ve todavía en la consola**: el artefacto se anuncia con su nombre y su
-  ruta, y se abre desde disco. Enseñarlo dentro exige decidir antes cómo se pinta un HTML que
-  escribió un modelo, porque la consola sirve en el mismo origen que tiene la cookie del
-  token — el contrato de `artifacts-builder` da por hecho un sandbox de servidor que aquí no
-  existe.
+- **En el chat es una TARJETA, no una línea del pulso** (`Chat.tsx`, acto `artefacto`), y por
+  eso no se pliega con el trabajo del agente: plegarla escondería lo único que se escribió sin
+  aprobar. Dice nombre, peso y DÓNDE — la ruta desde la raíz del proyecto, compuesta con el id
+  de la sesión que ya viaja en el alta, y la virtual a secas cuando ese id todavía no existe.
+  La ruta de la MÁQUINA no viaja: el cable puede ir por un túnel. En Trazas tiene etiqueta
+  propia (`ARTEFACTO`) y no «SISTEMA», porque quien viene ahí depura justo eso.
+- Y **todavía no se ABRE desde la consola**. No es una pantalla que falte: pintar un HTML que
+  escribió un modelo, en el mismo origen que tiene la cookie del token, es una decisión de
+  sandbox — el contrato de `artifacts-builder` da por hecho un servidor que lo impone y aquí
+  no existe. Mientras tanto la tarjeta da la ruta y el fichero se abre desde disco.
 
 **El hilo del agente SOBREVIVE al proceso** (`agent/checkpointer.ts`,
 `.xonecode/checkpoint.sqlite`). Era un `MemorySaver`, así que reabrir una conversación era

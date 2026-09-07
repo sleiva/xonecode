@@ -203,3 +203,67 @@
   font-size: 16px;
   font-weight: 600;
 }
+
+/* EL ARTEFACTO: un diagrama o un panel que el agente dejó escrito.
+
+   No es un globo de conversación ni es paisaje del pulso: es una COSA que ahora existe, y
+   además la única del turno que se escribió sin pasar por la aprobación. Por eso tiene
+   marco propio y no se pliega con el trabajo del agente — plegarla la escondería, y lo que
+   no se aprueba tiene que verse. Se pinta con la superficie secundaria y el borde de la
+   paleta copiada; nada de color literal, como el resto de esta hoja. */
+.artefacto {
+  align-self: flex-start;
+  max-width: 70ch;
+  box-sizing: border-box;
+  width: 100%;
+  padding: 12px 14px;
+  border: 1px solid var(--dsw-alias-border-primary);
+  border-radius: 10px;
+  background: var(--dsw-alias-bg-secondary);
+}
+
+.artefactoFila {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.artefactoIcono {
+  font-size: 15px;
+  line-height: 1;
+}
+
+.artefactoNombre {
+  font-weight: 600;
+  color: var(--dsw-alias-label-primary);
+  /* El nombre lo eligió el modelo y puede ser largo: que ceda él antes que la fila. */
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* El peso y la ruta son DATO DE MÁQUINA, así que van en mono (`estilos/tipografia.css`):
+   la misma regla por la que la URL de un entorno tiene clase propia en Ajustes. */
+.artefactoPeso {
+  margin-left: auto;
+  flex: none;
+  font-family: var(--ds-font-family-code);
+  font-size: 12px;
+  color: var(--dsw-alias-label-tertiary);
+}
+
+.artefactoRuta {
+  margin: 6px 0 0;
+  font-family: var(--ds-font-family-code);
+  font-size: 12px;
+  color: var(--dsw-alias-label-secondary);
+  /* Una ruta larga se parte por donde sea antes que ensanchar la columna. */
+  overflow-wrap: anywhere;
+}
+
+.artefactoNota {
+  margin: 6px 0 0;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--dsw-alias-label-tertiary);
+}

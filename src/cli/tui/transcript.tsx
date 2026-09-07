@@ -288,6 +288,12 @@ function ActoVista({
         </>
       );
     }
+    case "artefacto":
+      // No llega aquí HOY —`Piel.artefacto` es opcional y solo la implementa la web, así que
+      // en el terminal el artefacto es la línea que `core/turno.ts` escribe siempre—, pero
+      // el acto existe en el tipo compartido y un `default` que diera por hecho `.texto`
+      // sería una excepción en pantalla el día que alguien lo implemente aquí.
+      return <Text color={temaInk.mudo}>{`  ${acto.nombre}`}</Text>;
     default:
       // sistema: mudo e indentado — un aviso, no la conversación.
       return <Text color={temaInk.mudo}>{`  ${acto.texto}`}</Text>;

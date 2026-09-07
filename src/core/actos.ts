@@ -54,6 +54,16 @@ export type Acto =
   | { tipo: "herramientas"; lineas: string[]; detalles?: DetalleDeLinea[] }
   | { tipo: "sistema"; texto: string }
   /**
+   * Un artefacto que el agente dejó escrito: un diagrama, un panel, una captura
+   * (`core/artefactos.ts`). Es un acto propio y no una línea de `herramientas` porque es lo
+   * único del turno que se escribió SIN pasar por la aprobación humana —no es del proyecto—
+   * y eso hay que poder decirlo, y porque desde él se abre el fichero.
+   *
+   * Lleva metadatos y NUNCA el contenido: por aquí pasa lo que se guarda en el `.jsonl` y
+   * viaja por el cable, y un panel de `artifacts-builder` son cientos de kilobytes.
+   */
+  | { tipo: "artefacto"; ruta: string; nombre: string; bytes: number; mime?: string }
+  /**
    * `fase` es el valor del enum (`core/events.ts#Fase`), que el acto tiraba al quedarse
    * solo con su texto en español. Opcional por lo mismo que `detalles`: las sesiones
    * viejas no lo traen. Sirve para filtrar y agrupar sin re-parsear la prosa, que es lo
