@@ -938,7 +938,10 @@ export function montarRutas(
       const { rutas, recortado } = await opciones.arbolDelProyecto(abierto.raiz);
       emitir({ clase: "arbol", rutas, recortado });
     } catch (error) {
-      emitir({ clase: "arbol", rutas: [], recortado: false, error: error instanceof Error ? error.message : String(error) });
+      // El mensaje de Node lleva la ruta absoluta del disco, y por el cable no viaja
+      // ninguna ruta de la máquina; la causa completa va al terminal.
+      informar(error instanceof Error ? error.message : String(error));
+      emitir({ clase: "arbol", rutas: [], recortado: false, error: "no se pudo listar el proyecto" });
     }
   };
 
@@ -961,13 +964,16 @@ export function montarRutas(
     try {
       emitir({ clase: "fichero", ...(await opciones.leerFichero(abierto.raiz, ruta)) });
     } catch (error) {
+      // El mensaje de Node lleva la ruta absoluta del disco, y por el cable no viaja
+      // ninguna ruta de la máquina; la causa completa va al terminal.
+      informar(error instanceof Error ? error.message : String(error));
       emitir({
         clase: "fichero",
         ruta,
         recortado: false,
         binario: false,
         bytes: 0,
-        error: error instanceof Error ? error.message : String(error),
+        error: "no se pudo leer el fichero",
       });
     }
   };

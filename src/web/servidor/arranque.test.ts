@@ -868,10 +868,10 @@ describe("montarRutas — el cable, por fin conectado", () => {
     });
 
     it("si el puerto del árbol lanza, se contesta con error y lista vacía, no con silencio", async () => {
-      const { base, servidor, vestibulo } = await abrirProyecto();
+      const { base, servidor, vestibulo, raizDeVerdad } = await abrirProyecto();
       montarRutas(servidor, vestibulo, {
         arbolDelProyecto: async () => {
-          throw new Error("disco roto");
+          throw new Error(`EACCES: permission denied, scandir '${raizDeVerdad}'`);
         },
       });
       const cliente = clienteDeMentira();
@@ -882,7 +882,9 @@ describe("montarRutas — el cable, por fin conectado", () => {
       await asentar();
       await enviarMensaje(accion, { clase: "arbol" });
       await asentar();
-      expect(cliente.recibidos.filter((x) => x.clase === "arbol").at(-1)).toEqual({ clase: "arbol", rutas: [], recortado: false, error: "disco roto" });
+      const m = cliente.recibidos.filter((x) => x.clase === "arbol").at(-1) as Extract<MensajeAlCliente, { clase: "arbol" }>;
+      expect(m).toEqual({ clase: "arbol", rutas: [], recortado: false, error: "no se pudo listar el proyecto" });
+      expect(JSON.stringify(m)).not.toContain(raizDeVerdad);
       await vestibulo.cerrar();
       rmSync(base, { recursive: true, force: true });
     });
@@ -890,10 +892,10 @@ describe("montarRutas — el cable, por fin conectado", () => {
     it("si el lector lanza tras el realpath, «fichero» contesta con error y no con silencio", async () => {
       // El lector devuelve los rechazos como `error`, pero un EACCES al abrir el fichero
       // sale como excepción: sin atraparla, el visor se queda en «Trayendo…» para siempre.
-      const { base, servidor, vestibulo } = await abrirProyecto();
+      const { base, servidor, vestibulo, raizDeVerdad } = await abrirProyecto();
       montarRutas(servidor, vestibulo, {
         leerFichero: async () => {
-          throw new Error("sin permiso");
+          throw new Error(`EACCES: permission denied, open '${raizDeVerdad}/x.xne'`);
         },
       });
       const cliente = clienteDeMentira();
@@ -904,14 +906,16 @@ describe("montarRutas — el cable, por fin conectado", () => {
       await asentar();
       await enviarMensaje(accion, { clase: "fichero", ruta: "x.xne" });
       await asentar();
-      expect(cliente.recibidos.filter((x) => x.clase === "fichero").at(-1)).toEqual({
+      const m = cliente.recibidos.filter((x) => x.clase === "fichero").at(-1) as Extract<MensajeAlCliente, { clase: "fichero" }>;
+      expect(m).toEqual({
         clase: "fichero",
         ruta: "x.xne",
         recortado: false,
         binario: false,
         bytes: 0,
-        error: "sin permiso",
+        error: "no se pudo leer el fichero",
       });
+      expect(JSON.stringify(m)).not.toContain(raizDeVerdad);
       await vestibulo.cerrar();
       rmSync(base, { recursive: true, force: true });
     });
