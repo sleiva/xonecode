@@ -718,10 +718,25 @@ argumento de las vistas aplanadas y de los avisos de honestidad. Cinco reglas:
   montada con todo en verde. Ahora es `backendDeAgente` (`agent/proyecto.ts`), con test que
   compone el backend real sobre un proyecto temporal y comprueba las cuatro capas: las
   vistas aplanadas, la guarda de artefactos, `/skills/` colgada y `/artefactos/` escribible.
-Lo que NO arregla esto: el HITL pregunta ANTES: el interrupt salta al hacer la llamada y el
-backend escribe después, así que una escritura a `/artifacts/` todavía saca el modal de
-aprobación de un diff que no se va a aplicar. Sale en la dirección segura —se aprueba y no se
-escribe—, pero es un modal que solo puede acabar en un rechazo.
+- **Y no sale el modal**, que era el otro lado: el HITL pregunta ANTES que el backend, así
+  que una escritura a `/artifacts/` sacaba la ventana de aprobación con el diff entero y
+  aprobarla no escribía nada. Un modal cuyo único final posible es un rechazo enseña a
+  aprobar sin mirar, que es cómo se rompe la aprobación el día que importa. Lo corta el
+  predicado `when` de `InterruptOnConfig` (`agent/perfiles.ts#seDetieneEn`), que es el
+  mecanismo de la propia librería: «returns `true` to interrupt or `false` to auto-approve».
+  Tres cosas que lo sostienen:
+  - **No relaja la aprobación: no se salta la pregunta para escribir, se salta para NO
+    escribir.** La condición es la MISMA función que la guarda del backend
+    (`artefactoFueraDeSitio`) sobre la misma cadena, así que no pueden discrepar — y si
+    discreparan, una escritura al proyecto pasaría sin que nadie la aprobara, que es el único
+    fallo abierto posible por aquí. `perfiles.test.ts` lo ata en vez de confiarlo: para cada
+    ruta, no preguntar IMPLICA que la guarda la rechaza.
+  - **Ante la duda se pregunta**: sin `file_path`, o con uno que no es cadena, se interrumpe.
+  - **Y la costura tiene test propio**, como la de los tools de fichero: se monta
+    `humanInTheLoopMiddleware` de verdad y se comprueba que con `/app.xml` llega a llamar a
+    `interrupt()` —fuera de un grafo eso lanza, y esa excepción ES la señal— y que con
+    `/artifacts/` no. El día que el `when` deje de mirarse, cae por el lado que hay que
+    vigilar.
 
 **Los ARTEFACTOS del agente no son ficheros del proyecto** (`core/artefactos.ts`,
 `agent/proyecto.ts#backendConArtefactos`). Un diagrama de `archify`, un panel de
