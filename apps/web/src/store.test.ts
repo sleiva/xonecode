@@ -198,6 +198,19 @@ describe("store del cliente", () => {
     s.aplicar({ clase: "acto", acto: { tipo: "usuario", texto: "de nuevo" } });
     expect(avisos).toBe(1);
   });
+
+  /**
+   * El servidor contesta «sin-empezar» a una sesión recién abierta (`arranque.ts`), y el
+   * store solo admitía «git» y «sin-marca»: el mensaje se tiraba y la pestaña se quedaba
+   * en «consultando…» para siempre. Aquí se guardan los tres.
+   */
+  it("«revision» guarda los tres via, «sin-empezar» incluido", () => {
+    const s = crearStoreDelCliente();
+    s.aplicar({ clase: "revision", via: "sin-empezar", ficheros: [] });
+    expect(s.leer().revision).toEqual({ via: "sin-empezar", lista: [] });
+    s.aplicar({ clase: "revision", via: "git", ficheros: [{ ruta: "a.xne", clase: "nuevo", mas: 1, menos: 0 }] });
+    expect(s.leer().revision).toEqual({ via: "git", lista: [{ ruta: "a.xne", clase: "nuevo", mas: 1, menos: 0 }] });
+  });
 });
 
 describe("el alta del wizard", () => {

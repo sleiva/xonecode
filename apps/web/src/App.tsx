@@ -89,15 +89,15 @@ export function App({ store, enviar }: { store: Store; enviar: Conexion["enviar"
    * llama desde un `useEffect` al montar: una función nueva en cada render volvería a
    * disparar ese efecto en cada render y la pestaña pediría la lista en bucle.
    */
-  const pedirFicheros = useCallback(() => {
-    void enviar({ clase: "ficheros" });
+  const pedirRevision = useCallback(() => {
+    void enviar({ clase: "revision" });
   }, [enviar]);
 
   /** Desplegar (o plegar) un fichero. Al desplegar se pide su parche; al plegar, nada. */
   const abrirFichero = useCallback(
     (ruta: string | undefined) => {
       setFicheroAbierto(ruta);
-      if (ruta !== undefined) void enviar({ clase: "ficheros", ruta });
+      if (ruta !== undefined) void enviar({ clase: "revision", ruta });
     },
     [enviar]
   );
@@ -123,12 +123,12 @@ export function App({ store, enviar }: { store: Store; enviar: Conexion["enviar"
     // Solo el FLANCO de fin. Sin esto, abrir la pestaña dispararía este efecto además del
     // que `Ficheros` lleva dentro para pedir al montar, y saldrían dos peticiones iguales.
     if (!acabaDeTerminar || pestana !== "ficheros") return;
-    pedirFicheros();
-    if (ficheroAbierto !== undefined) void enviar({ clase: "ficheros", ruta: ficheroAbierto });
+    pedirRevision();
+    if (ficheroAbierto !== undefined) void enviar({ clase: "revision", ruta: ficheroAbierto });
     // `ficheroAbierto` NO va en las dependencias a propósito: desplegar una fila ya pide su
     // parche por su cuenta (`abrirFichero`), y tenerlo aquí lo pediría dos veces.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [turnoEnVuelo, pestana, pedirFicheros, enviar]);
+  }, [turnoEnVuelo, pestana, pedirRevision, enviar]);
   const [apariencia, setApariencia] = useState<Apariencia>(() => leerApariencia());
 
   useEffect(() => {
@@ -584,12 +584,12 @@ export function App({ store, enviar }: { store: Store; enviar: Conexion["enviar"
               ficheros={
                 <Ficheros
                   historica={estado.alta?.historica === true}
-                  {...(estado.ficheros === undefined ? {} : { via: estado.ficheros.via })}
-                  ficheros={estado.ficheros?.lista ?? []}
+                  {...(estado.revision === undefined ? {} : { via: estado.revision.via })}
+                  ficheros={estado.revision?.lista ?? []}
                   parches={estado.parches ?? {}}
                   {...(ficheroAbierto === undefined ? {} : { abierto: ficheroAbierto })}
                   alAbrir={abrirFichero}
-                  alRecargar={pedirFicheros}
+                  alRecargar={pedirRevision}
                 />
               }
             />

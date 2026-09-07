@@ -670,12 +670,12 @@ describe("montarRutas — el cable, por fin conectado", () => {
       await servidor.rutas.get(`GET ${RUTA_EVENTOS}`)!(cliente.peticion, cliente.respuesta);
       await asentar();
 
-      await enviarMensaje(servidor.rutas.get(`POST ${RUTA_ACCION}`)!, { clase: "ficheros" });
+      await enviarMensaje(servidor.rutas.get(`POST ${RUTA_ACCION}`)!, { clase: "revision" });
       await asentar();
 
-      const m = cliente.recibidos.filter((x) => x.clase === "ficheros").at(-1) as Extract<
+      const m = cliente.recibidos.filter((x) => x.clase === "revision").at(-1) as Extract<
         MensajeAlCliente,
-        { clase: "ficheros" }
+        { clase: "revision" }
       >;
       expect(m.via).toBe("sin-marca");
       expect(m.ficheros).toEqual([]);
@@ -691,12 +691,12 @@ describe("montarRutas — el cable, por fin conectado", () => {
       await servidor.rutas.get(`GET ${RUTA_EVENTOS}`)!(cliente.peticion, cliente.respuesta);
       await asentar();
 
-      await enviarMensaje(servidor.rutas.get(`POST ${RUTA_ACCION}`)!, { clase: "ficheros" });
+      await enviarMensaje(servidor.rutas.get(`POST ${RUTA_ACCION}`)!, { clase: "revision" });
       await asentar();
 
-      const m = cliente.recibidos.filter((x) => x.clase === "ficheros").at(-1) as Extract<
+      const m = cliente.recibidos.filter((x) => x.clase === "revision").at(-1) as Extract<
         MensajeAlCliente,
-        { clase: "ficheros" }
+        { clase: "revision" }
       >;
       expect(m.via).toBe("sin-marca");
       await vestibulo.cerrar();
@@ -726,12 +726,12 @@ describe("montarRutas — el cable, por fin conectado", () => {
       await asentar();
       expect(vestibulo.proyectoAbierto()?.sesion).toBeUndefined();
 
-      await enviarMensaje(accion, { clase: "ficheros" });
+      await enviarMensaje(accion, { clase: "revision" });
       await asentar();
 
-      const m = cliente.recibidos.filter((x) => x.clase === "ficheros").at(-1) as Extract<
+      const m = cliente.recibidos.filter((x) => x.clase === "revision").at(-1) as Extract<
         MensajeAlCliente,
-        { clase: "ficheros" }
+        { clase: "revision" }
       >;
       expect(m.via).toBe("sin-empezar");
       expect(m.ficheros).toEqual([]);
@@ -770,16 +770,16 @@ describe("montarRutas — el cable, por fin conectado", () => {
       await asentar();
       expect(vestibulo.proyectoAbierto()?.sesion).toBe("s1");
 
-      await enviarMensaje(accion, { clase: "ficheros" });
+      await enviarMensaje(accion, { clase: "revision" });
       await asentar();
-      const lista = cliente.recibidos.filter((x) => x.clase === "ficheros").at(-1) as Extract<
+      const lista = cliente.recibidos.filter((x) => x.clase === "revision").at(-1) as Extract<
         MensajeAlCliente,
-        { clase: "ficheros" }
+        { clase: "revision" }
       >;
       expect(lista.via).toBe("git");
       expect(lista.ficheros).toEqual([{ ruta: "src/app.xne", clase: "modificado", mas: 2, menos: 1 }]);
 
-      await enviarMensaje(accion, { clase: "ficheros", ruta: "src/app.xne" });
+      await enviarMensaje(accion, { clase: "revision", ruta: "src/app.xne" });
       await asentar();
       expect(pedidos).toEqual(["src/app.xne"]);
       const parche = cliente.recibidos.filter((x) => x.clase === "parche").at(-1) as Extract<
@@ -812,7 +812,7 @@ describe("montarRutas — el cable, por fin conectado", () => {
       await enviarMensaje(accion, { clase: "sesion", proyecto: "p1", sesion: "s1" });
       await asentar();
 
-      await enviarMensaje(accion, { clase: "ficheros", ruta: "src/app.xne" });
+      await enviarMensaje(accion, { clase: "revision", ruta: "src/app.xne" });
       await asentar();
 
       const parche = cliente.recibidos.filter((x) => x.clase === "parche").at(-1) as Extract<

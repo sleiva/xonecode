@@ -148,7 +148,7 @@ export type MensajeAlCliente =
    * abierta antes de que esto existiera—. Ninguna de las dos últimas es una lista vacía a
    * secas: «no has hecho nada» y «no se puede saber» no se pueden leer igual.
    */
-  | { clase: "ficheros"; via: "git" | "sin-marca" | "sin-empezar"; ficheros: FicheroTocado[] }
+  | { clase: "revision"; via: "git" | "sin-marca" | "sin-empezar"; ficheros: FicheroTocado[] }
   | { clase: "parche"; ruta: string; texto: string; recortado: boolean }
   | { clase: "secreto"; pregunta: string }
   /**
@@ -319,8 +319,8 @@ export type MensajeDelCliente =
     }
   /** Parar el turno en vuelo, dejando la sesión viva. */
   | { clase: "cancelar" }
-  /** Pide los ficheros de la sesión, o el parche de uno. */
-  | { clase: "ficheros"; ruta?: string }
+  /** Pide lo que la sesión abierta ha tocado, o el parche de un fichero concreto. */
+  | { clase: "revision"; ruta?: string }
   | { clase: "decision"; decisiones: Record<string, string> };
 
 /** Redeclarado de `core/dispositivos.ts` (ver la cabecera de este fichero). */

@@ -52,11 +52,12 @@ export interface EstadoDelCliente {
   /** Hay un turno corriendo AHORA. Lo dice el servidor; el cliente no lo deduce. */
   turnoEnVuelo?: boolean;
   /**
-   * Los ficheros de la sesión. Ausente = todavía no se han pedido; con `via: "sin-marca"`,
-   * que no se pueden saber. Los parches se guardan por ruta según se piden: uno grande no
-   * se vuelve a traer por plegar y desplegar la fila.
+   * Lo que la sesión ha tocado (pestaña Revisión). Ausente = todavía no se ha pedido. Los
+   * TRES `via` se guardan: «sin-empezar» se tiraba y la pestaña se quedaba consultando.
+   * Los parches se guardan por ruta según se piden: uno grande no se vuelve a traer por
+   * plegar y desplegar la fila.
    */
-  ficheros?: { via: "git" | "sin-marca"; lista: FicheroTocado[] };
+  revision?: { via: "git" | "sin-marca" | "sin-empezar"; lista: FicheroTocado[] };
   parches?: Record<string, { texto: string; recortado: boolean }>;
   selector?: {
     titulo: string;
@@ -429,12 +430,12 @@ export function crearStoreDelCliente(): {
           });
           return;
         }
-        case "ficheros": {
+        case "revision": {
           const m = mensaje as { via?: unknown; ficheros?: unknown };
-          if (m.via !== "git" && m.via !== "sin-marca") return;
+          if (m.via !== "git" && m.via !== "sin-marca" && m.via !== "sin-empezar") return;
           if (!Array.isArray(m.ficheros)) return;
           const lista = m.ficheros.filter(esFicheroTocado).map((f) => ({ ...f }));
-          mutar({ ficheros: { via: m.via, lista } });
+          mutar({ revision: { via: m.via, lista } });
           return;
         }
         case "parche": {
@@ -543,7 +544,7 @@ export function crearStoreDelCliente(): {
           const sesionDeAhora = typeof m.sesionActiva === "string" ? m.sesionActiva : undefined;
           const cambioDeSesion = sesionDeAhora !== estado.alta?.sesionActiva;
           mutar({
-            ...(cambioDeSesion ? { ficheros: undefined, parches: undefined } : {}),
+            ...(cambioDeSesion ? { revision: undefined, parches: undefined } : {}),
             alta: {
               pasos: m.pasos as PasoDelWizard[],
               proveedores: m.proveedores,
@@ -617,7 +618,7 @@ export function crearStoreDelCliente(): {
         // Los ficheros y sus parches son una FOTO: mientras no hay cable pueden haber
         // cambiado, y enseñarlos como si siguieran siendo verdad es peor que pedirlos otra
         // vez al volver.
-        ficheros: undefined,
+        revision: undefined,
         parches: undefined,
         // Los subagentes salen de ficheros en disco: mientras no hay cable pueden haberse
         // editado a mano, y la ventana de ajustes enseñaría una lista que ya no es. La

@@ -881,15 +881,15 @@ export function montarRutas(
    *   sabe mirar el repo—. No se sabe.
    * - **`git`**: comparado, y esto es lo que hay.
    */
-  const atenderFicheros = async (ruta?: string): Promise<void> => {
+  const atenderRevision = async (ruta?: string): Promise<void> => {
     const abierto = vestibulo.proyectoAbierto();
     const sesion = abierto?.sesion;
     if (abierto === undefined || opciones.cambiosDeSesion === undefined) {
-      emitir({ clase: "ficheros", via: "sin-marca", ficheros: [] });
+      emitir({ clase: "revision", via: "sin-marca", ficheros: [] });
       return;
     }
     if (sesion === undefined) {
-      emitir({ clase: "ficheros", via: "sin-empezar", ficheros: [] });
+      emitir({ clase: "revision", via: "sin-empezar", ficheros: [] });
       return;
     }
     if (ruta !== undefined) {
@@ -905,7 +905,7 @@ export function montarRutas(
       return;
     }
     const { via, ficheros } = await opciones.cambiosDeSesion(abierto.raiz, sesion);
-    emitir({ clase: "ficheros", via, ficheros });
+    emitir({ clase: "revision", via, ficheros });
   };
 
   /** Un paso del alta resuelto en el navegador. Cada rama termina volviendo a anunciar. */
@@ -1102,8 +1102,8 @@ export function montarRutas(
       respuesta.end();
       return;
     }
-    if (typeof mensaje === "object" && mensaje !== null && mensaje.clase === "ficheros") {
-      void atenderFicheros(mensaje.ruta).catch(contar);
+    if (typeof mensaje === "object" && mensaje !== null && mensaje.clase === "revision") {
+      void atenderRevision(mensaje.ruta).catch(contar);
       respuesta.writeHead(204);
       respuesta.end();
       return;

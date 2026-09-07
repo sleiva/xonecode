@@ -123,7 +123,7 @@ export type MensajeAlCliente =
    * «todavía no has hecho nada» y «no se puede saber» se leyeran igual, y la segunda haría
    * creer que un turno no escribió cuando lo que pasa es que no hay con qué comparar.
    */
-  | { clase: "ficheros"; via: "git" | "sin-marca" | "sin-empezar"; ficheros: FicheroTocado[] }
+  | { clase: "revision"; via: "git" | "sin-marca" | "sin-empezar"; ficheros: FicheroTocado[] }
   | { clase: "parche"; ruta: string; texto: string; recortado: boolean }
   | { clase: "secreto"; pregunta: string }
   /**
@@ -430,8 +430,8 @@ export type MensajeDelCliente =
   /** Parar el turno en vuelo. Aborta el `stream` del grafo (`SesionReal.cancelar`) y deja
    *  la sesión viva: es parar ESTO, no cerrar la conversación. */
   | { clase: "cancelar" }
-  /** Pide los ficheros de la sesión abierta, o el parche de uno concreto. */
-  | { clase: "ficheros"; ruta?: string }
+  /** Pide lo que la sesión abierta ha tocado, o el parche de un fichero concreto. */
+  | { clase: "revision"; ruta?: string }
   | { clase: "decision"; decisiones: Record<string, string> };
 
 /**
