@@ -128,7 +128,8 @@ export interface DatosDeProyecto {
  * verdad y el vestíbulo no puede saber si el `raiz` que le dan existe.
  */
 export interface PuertoDeSesiones {
-  crear(raiz: string): string;
+  /** El id lo decide quien abre: es también el `thread_id` del grafo. */
+  crear(raiz: string, id?: string): string;
   /** El índice de sesiones de un proyecto ya bajado. Una carpeta que no existe es una
    *  lista vacía, no un error: el proyecto todavía no se ha abierto nunca. */
   listar(raiz: string): { id: string; titulo: string }[];
@@ -190,6 +191,22 @@ export interface OpcionesDelVestibulo {
    * mejor que una lista vacía.
    */
   marcarSesion?: (raiz: string) => Promise<(id: string) => Promise<boolean>>;
+  /**
+   * ¿Queda memoria del agente para ese hilo? El `thread_id` ES el id de la sesión
+   * (`agent/checkpointer.ts`), así que preguntarlo es lo que convierte `historica` en un
+   * hecho comprobado en vez de en «se reabrió»: una sesión con checkpoint CONTINÚA, y una
+   * sin él —las de antes de que esto existiera, o una cuyo turno nunca llegó a correr—
+   * sigue siendo una relectura y se dice. Ausente = esta ejecución no persiste memoria, y
+   * entonces reabrir es releer, como siempre.
+   */
+  hayMemoriaDeHilo?: (raiz: string, hilo: string) => Promise<boolean>;
+  /**
+   * Olvida la memoria de una sesión borrada. Sin esto, borrar una conversación dejaría su
+   * checkpoint —con el contenido de los ficheros que se escribieron en ella— vivo en el
+   * fichero del proyecto para siempre, invisible desde la interfaz.
+   */
+  olvidarMemoriaDeHilo?: (raiz: string, hilo: string) => Promise<void>;
+
   /**
    * Quita la marca de una sesión que se borra (`agent/sesionGit.ts#olvidarSesion`). Va
    * aparejada a `marcarSesion` y por la misma razón que ella entra por opción: este fichero
@@ -269,9 +286,11 @@ export interface ConsolaDeProyecto {
   /** El id de la sesión, o `undefined` mientras no se haya volcado ningún acto. */
   readonly sesion: string | undefined;
   /**
-   * Reabierta y todavía sin turno nuevo. Deja de serlo en el PRIMER turno nuevo, no al
+   * Reabierta, SIN memoria del hilo y todavía sin turno nuevo. Las tres condiciones: desde
+   * que hay checkpointer persistente, reabrir una sesión con checkpoint continúa la
+   * conversación de verdad y no se marca nada. Deja de serlo en el PRIMER turno nuevo, no al
    * primer acto: un `/ayuda` no convierte en presente una conversación que el modelo no
-   * recuerda (el hilo vive en un `MemorySaver` que muere con el proceso).
+   * recuerda.
    */
   readonly historica: boolean;
   /**
@@ -636,8 +655,30 @@ export function crearVestibulo(opciones: OpcionesDelVestibulo): Vestibulo {
     // el rechazo se traga: sin marca, la vista lo dice.
     const foto = opciones.marcarSesion?.(raiz).catch(() => undefined);
 
-    let idSesion = sesion;
+    /**
+     * El id de la sesión, decidido al ABRIR y no en el primer volcado.
+     *
+     * Es el `thread_id` del grafo, y sin esa igualdad no hay nada que reanudar: al reabrir
+     * hay que preguntarle al checkpointer por la misma cadena con la que se escribió. Antes
+     * nacía en `volcar()` y el hilo era otro uuid, así que reabrir una sesión abría un hilo
+     * que no existía en ninguna parte.
+     *
+     * Lo que sigue siendo PEREZOSO es la entrada del índice (`anotada`): un uuid en memoria
+     * no ensucia nada, pero una entrada escrita al abrir dejaría una sesión vacía en la
+     * barra cada vez que alguien mira un proyecto y se va sin decir nada. Y un hilo sin
+     * turnos tampoco deja checkpoint: LangGraph solo escribe cuando el grafo corre.
+     */
+    const idSesion = sesion ?? randomUUID();
+    /** ¿Tiene ya entrada en el índice? Reabrir implica que sí. */
+    let anotada = sesion !== undefined;
+    /**
+     * Reabrir ya no implica releer: si el checkpointer guarda ese hilo, la conversación
+     * CONTINÚA de verdad y el aviso no sale. Solo se pregunta al reabrir —una sesión nueva
+     * no puede tener memoria— y una respuesta negativa deja el aviso puesto, que es el lado
+     * conservador: enseñarlo de más es preferible a prometer una memoria que no está.
+     */
     let historica = reabierta?.historica ?? false;
+    if (historica && (await opciones.hayMemoriaDeHilo?.(raiz, sesion!)) === true) historica = false;
     let dispositivo: DispositivoElegido | undefined = reabierta?.dispositivo;
     let cerrada = false;
     let volcados = 0;
@@ -686,17 +727,17 @@ export function crearVestibulo(opciones: OpcionesDelVestibulo): Vestibulo {
       if (esDoble(ejecutorEfectivo)) return;
       const todos = consolaWeb.actos();
       if (todos.length <= volcados) return;
-      if (idSesion === undefined) {
-        idSesion = sesiones.crear(raiz);
-        const nombrar = idSesion;
-        // Ahora sí hay a qué nombre apuntar la foto de la apertura.
-        void foto?.then((apuntar) => apuntar?.(nombrar));
+      if (!anotada) {
+        sesiones.crear(raiz, idSesion);
+        anotada = true;
+        // Ahora sí hay una sesión en el índice a la que apuntar la foto de la apertura.
+        void foto?.then((apuntar) => apuntar?.(idSesion));
       }
       for (const acto of todos.slice(volcados)) sesiones.anotar(raiz, idSesion, acto);
       volcados = todos.length;
-      // El dispositivo elegido ANTES de que la sesión tuviera id se anota ahora, que es la
-      // primera vez que hay una entrada en el índice a la que apuntarlo. Sin esto, elegir
-      // dispositivo y hablar después perdía la elección al reabrir.
+      // El dispositivo elegido ANTES de que la sesión estuviera en el índice se anota
+      // ahora, que es la primera vez que hay una entrada a la que apuntarlo. Sin esto,
+      // elegir dispositivo y hablar después perdía la elección al reabrir.
       if (dispositivo !== undefined) sesiones.elegirDispositivo?.(raiz, idSesion, dispositivo);
     };
 
@@ -726,7 +767,10 @@ export function crearVestibulo(opciones: OpcionesDelVestibulo): Vestibulo {
     // modelo en vigor no tendría qué enseñar hasta el primer `/modelo` — que es justo lo
     // que se quiere evitar (enseñar «no se sabe» cuando sí se sabe).
     let estadoDeSesion: EstadoDeSesion = {
-      hilo: `xonecode-${randomUUID()}`,
+      // El hilo ES el id de la sesión: es lo que permite que reabrirla continúe la
+      // conversación en vez de releerla. `/nuevo` sigue pudiendo cambiarlo — abre otro hilo
+      // dentro de la misma sesión, y eso es exactamente lo que dice que hace.
+      hilo: idSesion,
       raiz,
       fuentes: opciones.fuentes ?? {},
     };
@@ -756,7 +800,11 @@ export function crearVestibulo(opciones: OpcionesDelVestibulo): Vestibulo {
         return estadoDeSesion;
       },
       get sesion() {
-        return idSesion;
+        // Solo cuando está en el ÍNDICE. El id existe desde que se abre —es el hilo—, pero
+        // hacia fuera «hay sesión» significa «hay una entrada que la barra puede marcar»:
+        // devolver un uuid que no está en ninguna lista haría que la barra buscara una fila
+        // que no existe, y que Revisión dijera que la sesión ya empezó sin haber empezado.
+        return anotada ? idSesion : undefined;
       },
       get historica() {
         return historica;
@@ -766,10 +814,10 @@ export function crearVestibulo(opciones: OpcionesDelVestibulo): Vestibulo {
       },
       elegirDispositivo: (elegido) => {
         dispositivo = elegido;
-        // Si la sesión todavía no tiene id, se queda en memoria: `volcar()` lo anotará en
-        // cuanto la cree. Escribir aquí una entrada nueva la enseñaría en la barra como una
-        // sesión vacía que nadie ha empezado.
-        if (idSesion !== undefined) sesiones.elegirDispositivo?.(raiz, idSesion, elegido);
+        // Si todavía no está en el índice, se queda en memoria: `volcar()` lo anotará en
+        // cuanto cree la entrada. Escribir aquí una entrada nueva la enseñaría en la barra
+        // como una sesión vacía que nadie ha empezado.
+        if (anotada) sesiones.elegirDispositivo?.(raiz, idSesion, elegido);
       },
       get cerrada() {
         return cerrada;
@@ -940,6 +988,10 @@ export function crearVestibulo(opciones: OpcionesDelVestibulo): Vestibulo {
       // No es condicional al `borrada`: una entrada de índice ya perdida no es motivo para
       // dejar la ref colgada.
       await opciones.olvidarMarcaDeSesion?.(raiz, id);
+      // Y su memoria: el `thread_id` es el id de la sesión, así que el checkpoint queda
+      // huérfano y con el contenido de todo lo que se escribió en ella. Tampoco condicional
+      // al `borrada`, por lo mismo que la ref.
+      await opciones.olvidarMemoriaDeHilo?.(raiz, id);
       return { borrada, cerroLaAbierta };
     },
 

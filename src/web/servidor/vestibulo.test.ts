@@ -71,8 +71,10 @@ function sesionesEnMemoria() {
         [...jsonl.keys()]
           .filter((clave) => clave.startsWith(`${raiz}|`))
           .map((clave) => ({ id: clave.slice(raiz.length + 1), titulo: "sesión" })),
-      crear: (raiz: string) => {
-        const id = `s${jsonl.size + 1}`;
+      // El id ENTRA, desde que es también el `thread_id` del grafo: quien abre la consola
+      // lo decide al abrir. Sin id se genera uno corto, que es lo que usan los tests que
+      // solo necesitan una sesión guardada.
+      crear: (raiz: string, id: string = `s${jsonl.size + 1}`) => {
         jsonl.set(`${raiz}|${id}`, []);
         return id;
       },
@@ -601,6 +603,86 @@ describe("vestíbulo", () => {
     expect(a.cerrada).toBe(true);
     expect(b.cerrada).toBe(false);
     expect(v.proyectoAbierto()).toBe(b);
+    await v.cerrar();
+  });
+
+  it("con memoria del hilo, reabrir NO es histórico: la conversación continúa de verdad", async () => {
+    // El `thread_id` es el id de la sesión (`agent/checkpointer.ts`), así que se puede
+    // PREGUNTAR si queda checkpoint en vez de dar por hecho que reabrir es releer. Es lo
+    // que convierte el aviso en un hecho comprobado.
+    const s = sesionesEnMemoria();
+    s.jsonl.set("/w/a|vieja", [{ tipo: "usuario", texto: "lo de ayer" }]);
+    const preguntados: string[] = [];
+    const v = crearVestibulo({
+      ...dobles(),
+      origenDeTrabajo: "global",
+      sesiones: s.puerto,
+      hayMemoriaDeHilo: async (_raiz, hilo) => {
+        preguntados.push(hilo);
+        return true;
+      },
+    });
+    const proyecto = await v.abrirProyecto({ raiz: "/w/a", sesion: "vieja" });
+    expect(preguntados).toEqual(["vieja"]);
+    expect(proyecto.historica).toBe(false);
+    // Y el hilo del grafo ES el id de la sesión: sin esa igualdad no hay nada que reanudar.
+    expect(proyecto.estadoDeSesion.hilo).toBe("vieja");
+    await proyecto.cerrar();
+  });
+
+  it("sin memoria del hilo sigue siendo histórica: no se promete un recuerdo que no está", async () => {
+    const s = sesionesEnMemoria();
+    s.jsonl.set("/w/a|vieja", [{ tipo: "usuario", texto: "lo de ayer" }]);
+    const v = crearVestibulo({
+      ...dobles(),
+      origenDeTrabajo: "global",
+      sesiones: s.puerto,
+      hayMemoriaDeHilo: async () => false,
+    });
+    const proyecto = await v.abrirProyecto({ raiz: "/w/a", sesion: "vieja" });
+    expect(proyecto.historica).toBe(true);
+    await proyecto.cerrar();
+  });
+
+  it("el id de la sesión se decide al ABRIR, pero el índice sigue siendo perezoso", async () => {
+    // El hilo tiene que existir antes del primer turno; la ENTRADA del índice no, o cada
+    // proyecto que alguien abre y deja dejaría una sesión vacía en la barra.
+    const s = sesionesEnMemoria();
+    const v = crearVestibulo({
+      ...dobles(),
+      origenDeTrabajo: "global",
+      sesiones: s.puerto,
+      crearEjecutor: () => async () => {},
+    });
+    const proyecto = await v.abrirProyecto({ raiz: "/w/a" });
+    const hilo = proyecto.estadoDeSesion.hilo;
+    expect(hilo).toMatch(/^[0-9a-f-]{36}$/);
+    // Todavía no está en el índice, así que hacia fuera no hay sesión que marcar.
+    expect(proyecto.sesion).toBeUndefined();
+    expect(s.puerto.listar("/w/a")).toHaveLength(0);
+
+    proyecto.recibir({ clase: "prosa", texto: "hola" });
+    await new Promise((r) => setTimeout(r, 0));
+    await proyecto.cerrar();
+    // Y al anotarse, la entrada lleva EL MISMO id que el hilo: es lo que se reanuda.
+    expect(proyecto.sesion).toBe(hilo);
+    expect(s.puerto.listar("/w/a").map((e) => e.id)).toEqual([hilo]);
+  });
+
+  it("borrar una sesión se lleva también su memoria: un checkpoint huérfano es un secreto en disco", async () => {
+    const s = sesionesEnMemoria();
+    const olvidados: string[] = [];
+    const v = crearVestibulo({
+      ...dobles(),
+      origenDeTrabajo: "global",
+      sesiones: s.puerto,
+      olvidarMemoriaDeHilo: async (_raiz, hilo) => {
+        olvidados.push(hilo);
+      },
+    });
+    const id = s.puerto.crear("/w/a");
+    await v.borrarSesion("/w/a", id);
+    expect(olvidados).toEqual([id]);
     await v.cerrar();
   });
 

@@ -220,9 +220,11 @@ export type MensajeAlCliente =
        */
       dispositivoActivo?: { id: string; nombre: string; plataforma: "android" | "ios"; clase: "emulador" | "simulador" | "fisico" };
       /**
-       * La sesión abierta es una RELECTURA: se reabrió de otra sesión de xonecode y el
-       * agente no la recuerda (`ConsolaDeProyecto.historica`: el hilo vive en un
-       * `MemorySaver` que murió con aquel proceso). Deja de serlo en el primer turno nuevo,
+       * La sesión abierta es una RELECTURA: se reabrió y del hilo no queda memoria
+       * (`ConsolaDeProyecto.historica`, que lo PREGUNTA al checkpointer del proyecto en vez
+       * de darlo por hecho — una sesión con checkpoint continúa y no lleva esta marca; la
+       * llevan las de antes de que hubiera checkpointer y aquellas cuyo primer turno nunca
+       * llegó a correr). Deja de serlo en el primer turno nuevo,
        * y el alta se reanuncia en ese flanco. Solo viaja cuando es cierto: ausente es «no».
        * Sin esto el cliente pintaba una conversación y un compositor activo como si se
        * pudiera seguir hablando, que es lo que el propio `CLAUDE.md` dice que no pasa.

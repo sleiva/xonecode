@@ -3,6 +3,7 @@ import { join, sep, resolve } from "node:path";
 import { randomUUID } from "node:crypto";
 import { HumanMessage } from "@langchain/core/messages";
 import { Command, MemorySaver } from "@langchain/langgraph";
+import type { BaseCheckpointSaver } from "@langchain/langgraph-checkpoint";
 import { collectPending, type Decision, MAX_APPROVAL_ROUNDS } from "../vendor/hitl.js";
 
 /**
@@ -158,6 +159,22 @@ export async function abrirSesionReal(opciones: {
    * porque quien construye el turno no tiene por qué saber cómo se verifica.
    */
   verifier?: VerifierPort;
+  /**
+   * El `thread_id` del grafo. Entra por parámetro porque quien lo conoce es quien tiene
+   * IDENTIDAD para reanudar: en la web es el id de la sesión, y esa igualdad es lo que
+   * hace que reabrirla continúe el hilo en vez de releerlo. Sin él se genera uno, que es
+   * lo que hacía siempre.
+   *
+   * Antes había DOS ids para un mismo hilo —el de `EstadoDeSesion.hilo`, que es el que
+   * `/hilo` enseña, y el que se generaba aquí—, y solo coincidían después de un `/nuevo`.
+   */
+  hilo?: string;
+  /**
+   * Dónde se guarda la memoria del agente. Ausente = en memoria (`MemorySaver`), que es lo
+   * que hacía siempre y lo que sigue usando la consola de terminal: persistir un hilo que
+   * nadie puede volver a abrir solo engorda un fichero.
+   */
+  checkpointer?: BaseCheckpointSaver;
 }): Promise<SesionReal> {
   const { raiz, entorno } = opciones;
 
@@ -165,11 +182,11 @@ export async function abrirSesionReal(opciones: {
   // una memoria ya creada por el usuario o por otra sesión.
   asegurarMemoriaDeProyecto(raiz);
 
-  const checkpointer = new MemorySaver();
+  const checkpointer = opciones.checkpointer ?? new MemorySaver();
   const tracker = createTokenTracker();
   const diagnostico = crearDiagnosticoDeTools(raiz);
   let modelos = opciones.modelos;
-  let hilo = `xonecode-${randomUUID()}`;
+  let hilo = opciones.hilo ?? `xonecode-${randomUUID()}`;
   let cancelarEnCurso: (() => void) | undefined;
   let cerrada = false;
 

@@ -4,6 +4,7 @@ import type { MotorExterno, SubagenteExternoPort } from "../core/ports.js";
 import { RunnableLambda } from "@langchain/core/runnables";
 import { AIMessage, type BaseMessage } from "@langchain/core/messages";
 import { MemorySaver } from "@langchain/langgraph";
+import type { BaseCheckpointSaver } from "@langchain/langgraph-checkpoint";
 import { backendConSkills, backendDelProyecto, exponerMemoriaDeProyecto, sinVistasAplanadas } from "./proyecto.js";
 import { permisosDe, hitlDe } from "./perfiles.js";
 import { crearBusquedaRegex } from "./busquedaRegex.js";
@@ -35,7 +36,9 @@ export interface OpcionesDelAgente {
   subagenteExterno: SubagenteExternoPort;
   modelos: ModelosPort;
   skills: SkillsPort;
-  checkpointer?: MemorySaver;
+  /** `BaseCheckpointSaver` y no `MemorySaver`: desde que hay uno persistente
+   *  (`agent/checkpointer.ts`) el tipo tiene que ser el de la interfaz, no el del doble. */
+  checkpointer?: BaseCheckpointSaver;
   /** Opcional porque no siempre se viene a contar gasto; sin él la barra de estado enseña 0. */
   tracker?: TokenTracker;
   /** Registro local opt-in de llamadas y uso; nunca llega al modelo. */

@@ -638,13 +638,57 @@ sesiones llegaban a fuego como `[]`:
   cable, store y componente); colapsarla haría que elegir ninguno se leyera como no haber
   elegido. El ORDEN lo pone el listado del servidor, no el orden en que se marcaron.
 
+**El hilo del agente SOBREVIVE al proceso** (`agent/checkpointer.ts`,
+`.xonecode/checkpoint.sqlite`). Era un `MemorySaver`, así que reabrir una conversación era
+releerla: el texto a la vista y el modelo sin recordar una palabra, con la marca `historica`
+diciéndolo. Ahora es el `SqliteSaver` oficial de LangGraph
+(`@langchain/langgraph-checkpoint-sqlite`), y está MEDIDO de punta a punta: sesión reabierta
+tras reiniciar el servidor, «¿cómo se llamaba la colección que te pedí crear?» contestada en
+1,7 s, sin una sola tool y con los tres nombres de fichero correctos. Siete reglas:
+- **Uno por PROYECTO, particionado por `thread_id`**, no uno por sesión: es la forma que la
+  librería asume (`deleteThread(threadId)` existe para eso) y evita tantos ficheros y tantas
+  conexiones como conversaciones guardadas.
+- **El `thread_id` ES el id de la sesión.** Sin esa igualdad no hay nada que reanudar: al
+  reabrir hay que preguntar por la misma cadena con la que se escribió. Por eso el id se
+  decide al ABRIR (`vestibulo.ts`, `sesion ?? randomUUID()`) y no en el primer volcado — lo
+  que sigue siendo perezoso es la ENTRADA del índice, que es lo que ensuciaría la barra con
+  sesiones vacías.
+- **`historica` pasó de suposición a hecho comprobado**: se le PREGUNTA al checkpointer
+  (`hayCheckpoint`, puerto `hayMemoriaDeHilo`). Las que siguen marcadas son las de antes de
+  que esto existiera y aquellas cuyo primer turno nunca corrió — comprobado en el navegador:
+  la sesión de ayer sigue enseñando el aviso, la de hoy no.
+- **Se crea con el modo puesto, ANTES de abrirlo.** Medido: SQLite crea el fichero ya en
+  `fromConnString` y con 0644, así que un `chmod` de después deja una ventana con el
+  checkpoint legible — y un checkpoint lleva la lista de mensajes ENTERA, contenido de
+  ficheros y argumentos de tool incluidos, que es justo lo que el transcript de `sesiones.ts`
+  no puede llevar por construcción. Con el fichero pre-creado a 0600, los `-wal` y `-shm` que
+  SQLite añade heredan ese modo (comprobado sobre un proyecto real).
+- **La fábrica devuelve la MISMA conexión por proyecto.** `arranque.ts` la llama en cada
+  reapertura y en cada borrado; sin caché, cada llamada abriría un handle que nadie cierra, y
+  borrar un hilo con su sesión viva serían dos escritores sobre el mismo fichero.
+- **Borrar una sesión olvida su hilo** (`olvidarHilo` → `deleteThread`). Sin eso, la memoria
+  entera de la conversación borrada —con el contenido de lo que se escribió en ella— seguiría
+  viva en el fichero del proyecto para siempre e invisible desde la interfaz.
+- **La consola de TERMINAL no lo usa, a propósito.** Su hilo es un uuid nuevo en cada arranque
+  y no hay índice donde reanudarlo: persistirlo solo dejaría hilos irreabribles engordando el
+  fichero. Persistir es de quien tiene identidad que reanudar.
+Y dos cosas que hay que saber: **una aprobación que quedó sin contestar se vuelve a
+PREGUNTAR** —medido con un grafo mínimo sobre este mismo saver: el estado guardado trae
+`next` y un `pendingWrites` con el `__interrupt__`, y llegar con un mensaje humano normal no
+lanza ni aplica nada, reejecuta el nodo y vuelve a interrumpir—, y **esto CRECE**: una sesión
+de cuatro turnos deja 370 checkpoints y 30 MB, porque cada superpaso guarda el estado entero.
+No hay poda todavía. Consecuencia directa: **`/nuevo` en la web abre un hilo huérfano** —el de
+la sesión es su id, así que al reabrirla se vuelve al anterior— y el comando lo DICE en su
+salida; quien quiera empezar de cero y poder volver, abre una sesión nueva.
+
 **Cada sesión de la barra tiene su «…»** (`apps/web/src/componentes/MenuDeSesion.tsx`,
 `AccionDeSesion.tsx`, `clase: "sesionAccion"`), con **dos** entradas y no las cuatro del
 harness de deepseek. Su `SessionNodeItem` ofrece renombrar, bifurcar y archivar; las otras
-dos no es que falten, es que aquí no significan nada: **bifurcar** no tiene qué bifurcar
-—el hilo del agente vive en un `MemorySaver` que muere con el proceso, así que reabrir es
-RELEER y no seguir hablando (es lo mismo que dice la marca `historica`)—, y **archivar** es
-un estado que habría que inventar entero —campo en el índice, filtro en la barra, sitio
+dos no están, y por motivos distintos: **bifurcar** no está IMPLEMENTADA —su motivo viejo
+(«no hay hilo que bifurcar, el `MemorySaver` muere con el proceso») caducó con el
+checkpointer, así que copiar el hilo bajo otro id sí significaría algo hoy; dejar el motivo
+viejo puesto sería usarlo de excusa—, y **archivar** es un estado que habría que inventar
+entero —campo en el índice, filtro en la barra, sitio
 donde ver lo archivado— para que el botón significara algo; mientras no exista, «archivar»
 sería «desaparecer», o sea borrar sin decirlo. Cuatro cosas que no son negociables:
 - **La barra REPORTA la intención; no ejecuta.** Las dos escriben en el índice del proyecto
