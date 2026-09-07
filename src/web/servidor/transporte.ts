@@ -163,6 +163,24 @@ export type MensajeAlCliente =
    * que es la única forma de darle un documento—, sino para leer su fuente cuando se pide.
    */
   | ({ clase: "artefacto" } & FicheroDelProyecto)
+  /**
+   * Cómo va el paso de receta que se está EJECUTANDO, o cómo acabó.
+   *
+   * Va a TODOS los clientes, como la foto de la máquina y por lo mismo: la máquina es la
+   * misma para todos, y un `sdkmanager` corriendo lo está para las dos pestañas. `lineas` es
+   * la COLA del log —lo último, no todo—: un `sdkmanager` verboso son miles de líneas y el
+   * cable no es un sitio donde guardarlas.
+   */
+  | {
+      clase: "instalacion";
+      receta: string;
+      paso: number;
+      titulo: string;
+      estado: "corriendo" | "ok" | "fallo" | "cancelada" | "colgada";
+      lineas: string[];
+      ms: number;
+      motivo?: string;
+    }
   | { clase: "secreto"; pregunta: string }
   /**
    * El registro de comandos de barra, para que el compositor sugiera sin llevar una
@@ -564,6 +582,14 @@ export type MensajeDelCliente =
    * abrir a negociación justo la parte que es una barrera.
    */
   | { clase: "artefacto"; nombre: string }
+  /**
+   * Ejecuta —o cancela— un paso de una receta de instalación.
+   *
+   * Viajan el NOMBRE de la receta y el NÚMERO del paso, nunca un comando ni un binario: un
+   * comando que llegue del cliente es una shell abierta en la máquina del usuario. Qué se
+   * lanza lo decide una tabla cerrada del host (`agent/instalacionEnMaquina.ts`).
+   */
+  | { clase: "receta"; id: string; paso: number; accion: "ejecutar" | "cancelar" }
   | { clase: "decision"; decisiones: Record<string, string> };
 
 /**

@@ -12,6 +12,7 @@ import {
   IconUserOutline16,
   IconLinkOutline16,
 } from "@deepseek-ai/dsh-client-ui-primitives";
+import type { EstadoDelCliente } from "../store.js";
 import type {
   AgenteDelCable,
   AjustesDeDispositivos,
@@ -175,6 +176,9 @@ export function Ajustes({
   alCambiarDispositivos,
   alActualizarDispositivos,
   alInstalarHerramienta,
+  instalacion,
+  alEjecutarPaso,
+  alCancelarPaso,
   conectado = true,
   agentes,
   hayProyecto,
@@ -236,6 +240,12 @@ export function Ajustes({
    * decide el servidor. Ausente = no se ofrece el botón.
    */
   alInstalarHerramienta?: (herramienta: NombreDeHerramienta) => void;
+  /** El paso de receta que corre ahora, tal como lo dice el servidor. */
+  instalacion?: EstadoDelCliente["instalacion"];
+  /** Lanzar el paso `numero` de una receta, y cancelar el que corra. Ausentes = no se pinta
+   *  el botón: sin cable no hay a quién pedírselo. */
+  alEjecutarPaso?: (receta: string, numero: number) => void;
+  alCancelarPaso?: (receta: string) => void;
   /** Sin cable no se manda nada: lo que escribe en el servidor se apaga. */
   conectado?: boolean;
   /** Abre la petición de clave de ese proveedor (`/provider <id>` del otro lado). */
@@ -637,7 +647,18 @@ export function Ajustes({
                 hay todavía, y ahí el panel calla en vez de enseñar los pasos de macOS.
               */}
               {(dispositivos?.recetas ?? []).map((receta) => (
-                <Receta key={receta.id} receta={receta} />
+                <Receta
+                  key={receta.id}
+                  receta={receta}
+                  {...(instalacion === undefined ? {} : { instalacion })}
+                  // Sin cable no se ofrece lanzar nada: la petición se perdería sin decirlo.
+                  {...(conectado && alEjecutarPaso !== undefined
+                    ? { alEjecutar: (numero: number) => alEjecutarPaso(receta.id, numero) }
+                    : {})}
+                  {...(conectado && alCancelarPaso !== undefined
+                    ? { alCancelar: () => alCancelarPaso(receta.id) }
+                    : {})}
+                />
               ))}
 
               <h3 className={estilos.subencabezado}>Dispositivos</h3>

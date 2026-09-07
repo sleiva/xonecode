@@ -213,7 +213,7 @@ describe("alcanzables", () => {
 });
 
 describe("recetaDeEmuladorAndroid", () => {
-  const nada = { brew: false, sdkmanager: false, emulator: false, androidHome: false, avds: [] as string[] };
+  const nada = { brew: false, sdkmanager: false, emulator: false, androidHome: false, jdk: false, avds: [] as string[] };
 
   it("en un sistema que no es macOS todavía no hay receta, y no se finge una", () => {
     // Windows y Linux son otra receta —otros gestores, otras rutas— y escribir la de macOS
@@ -246,17 +246,17 @@ describe("recetaDeEmuladorAndroid", () => {
     expect(conSdk.pasos[1]!.hecho).toBe(false); // pero ANDROID_HOME no
 
     const conTodo = recetaDeEmuladorAndroid("darwin", {
-      brew: true, sdkmanager: true, emulator: true, androidHome: true, avds: ["pixel8"],
+      brew: true, sdkmanager: true, emulator: true, androidHome: true, jdk: true, avds: ["pixel8"],
     })!;
     expect(conTodo.pasos.map((p) => p.hecho)).toEqual([true, true, true, true]);
     expect(conTodo.completa).toBe(true);
   });
 
-  it("el paso de las licencias lo DICE, y el del tamaño también", () => {
+  it("el tamaño se dice en la nota; las licencias van en su propio campo", () => {
     const receta = recetaDeEmuladorAndroid("darwin", nada)!;
     const notas = receta.pasos.map((p) => p.nota ?? "").join(" ");
-    expect(notas).toMatch(/licencia/i);
     expect(notas).toMatch(/GB/);
+    expect(receta.pasos.map((p) => p.acepta ?? "").join(" ")).toMatch(/licencia/i);
   });
 
   it("el paso de las variables dice que xonecode NO lo necesita, y para qué sí", () => {
@@ -274,5 +274,30 @@ describe("recetaDeEmuladorAndroid", () => {
     const receta = recetaDeEmuladorAndroid("darwin", nada)!;
     expect(receta.pasos).toHaveLength(4);
     expect(receta.despues).toContain("emulator -avd");
+  });
+
+  it("solo los pasos 3 y 4 son ejecutables, y solo cuando pueden cumplirse", () => {
+    // `brew` puede pedir la contraseña de administrador, así que los pasos 1 y 2 nunca se
+    // lanzan desde aquí. Los otros dos, solo con las herramientas del paso 1 puestas: un
+    // botón que no puede cumplir es el botón muerto de siempre, y se dice por qué no.
+    const deCero = recetaDeEmuladorAndroid("darwin", nada)!;
+    expect(deCero.pasos.map((p) => p.ejecutable)).toEqual([false, false, false, false]);
+    expect(deCero.pasos[2]!.porQueNo).toMatch(/paso 1/i);
+
+    const conHerramientas = recetaDeEmuladorAndroid("darwin", { ...nada, brew: true, sdkmanager: true, jdk: true })!;
+    expect(conHerramientas.pasos.map((p) => p.ejecutable)).toEqual([false, false, true, false]);
+    // El 4 necesita la imagen del sistema, que la trae el 3.
+    expect(conHerramientas.pasos[3]!.porQueNo).toMatch(/paso 3/i);
+
+    const conImagen = recetaDeEmuladorAndroid("darwin", { ...nada, brew: true, sdkmanager: true, jdk: true, emulator: true })!;
+    expect(conImagen.pasos[3]!.ejecutable).toBe(true);
+  });
+
+  it("el paso que acepta licencias lo dice APARTE de su nota", () => {
+    // Aceptar una licencia en nombre de alguien no puede ser un efecto de rebote de un botón
+    // que dice «Ejecutar»: va en su propio campo para poder pintarlo junto al botón.
+    const receta = recetaDeEmuladorAndroid("darwin", nada)!;
+    expect(receta.pasos[2]!.acepta).toMatch(/licencias del SDK de Android/i);
+    expect(receta.pasos[0]!.acepta).toBeUndefined();
   });
 });

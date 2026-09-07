@@ -86,6 +86,23 @@ export interface EstadoDelCliente {
   arbol?: { rutas: string[]; recortado: boolean; error?: string };
   contenidos?: Record<string, FicheroDelProyecto>;
   /**
+   * El paso de receta que se está ejecutando, o cómo acabó el último.
+   *
+   * Lo dice el SERVIDOR: la máquina es una y el proceso corre allí, así que el cliente no
+   * deduce nada de haber pulsado — es la misma regla que el turno en vuelo. Se conserva al
+   * caerse el cable (como la foto de la máquina): un `sdkmanager` sigue descargando aunque
+   * este navegador se desconecte, y borrarlo diría que no pasó nada.
+   */
+  instalacion?: {
+    receta: string;
+    paso: number;
+    titulo: string;
+    estado: "corriendo" | "ok" | "fallo" | "cancelada" | "colgada";
+    lineas: string[];
+    ms: number;
+    motivo?: string;
+  };
+  /**
    * Los ARTEFACTOS ya traídos, por su ruta virtual (`/artefactos/<nombre>`).
    *
    * Aparte de `contenidos` porque son otra cosa: no son del proyecto, viven con la sesión y
@@ -496,11 +513,15 @@ export function crearStoreDelCliente(): {
                     .map((p) => ({
                       titulo: p.titulo,
                       comandos: p.comandos.filter((c): c is string => typeof c === "string"),
-                      // `hecho` solo con el booleano de verdad: la trampa del `"false"` de
-                      // cadena, que es verdadero en JavaScript y marcaría como hecho un paso
-                      // que no lo está.
+                      // `hecho` y `ejecutable`, solo con el booleano de verdad: la trampa del
+                      // `"false"` de cadena, que es verdadero en JavaScript — marcaría como
+                      // hecho un paso que no lo está, y ofrecería un botón que no se puede
+                      // cumplir.
                       hecho: p.hecho === true,
+                      ejecutable: p.ejecutable === true,
                       ...(typeof p.nota === "string" ? { nota: p.nota } : {}),
+                      ...(typeof p.porQueNo === "string" ? { porQueNo: p.porQueNo } : {}),
+                      ...(typeof p.acepta === "string" ? { acepta: p.acepta } : {}),
                     })),
                 })),
               herramientas: informe.herramientas
@@ -609,6 +630,26 @@ export function crearStoreDelCliente(): {
                 ...(typeof m.base64 === "string" ? { base64: m.base64 } : {}),
                 ...(typeof m.error === "string" ? { error: m.error } : {}),
               },
+            },
+          });
+          return;
+        }
+        case "instalacion": {
+          // Campo a campo, como todo lo de aquí. Y los estados por lista blanca: uno que no
+          // conozcamos dejaría el botón en un limbo, así que se descarta el mensaje entero.
+          const m = mensaje as Record<string, unknown>;
+          const estados = ["corriendo", "ok", "fallo", "cancelada", "colgada"] as const;
+          const estado = estados.find((e) => e === m["estado"]);
+          if (typeof m["receta"] !== "string" || typeof m["paso"] !== "number" || estado === undefined) return;
+          mutar({
+            instalacion: {
+              receta: m["receta"],
+              paso: m["paso"],
+              titulo: typeof m["titulo"] === "string" ? m["titulo"] : "",
+              estado,
+              lineas: Array.isArray(m["lineas"]) ? m["lineas"].filter((x): x is string => typeof x === "string") : [],
+              ms: typeof m["ms"] === "number" ? m["ms"] : 0,
+              ...(typeof m["motivo"] === "string" ? { motivo: m["motivo"] } : {}),
             },
           });
           return;

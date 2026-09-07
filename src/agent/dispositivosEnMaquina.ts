@@ -103,6 +103,77 @@ const RAICES_DE_SDK_POR_OMISION: Record<string, (home: string, entorno: Record<s
   linux: (home) => [join(home, "Android", "Sdk")],
 };
 
+/**
+ * Dónde están las cosas de Android en esta máquina: las raíces del SDK y cómo buscar en el
+ * PATH.
+ *
+ * Se extrajo de `detectarDispositivos` cuando el EJECUTOR de la receta
+ * (`agent/instalacionEnMaquina.ts`) necesitó lo mismo: lanzar `sdkmanager` pide saber dónde
+ * está el SDK y qué JDK usar, y una segunda copia de esta búsqueda habría divergido el
+ * primer día — con el síntoma peor posible, que el panel encontrara el SDK y el botón no.
+ *
+ * En Windows los binarios llevan `.exe`. `existe` entra por parámetro porque `npm test` no
+ * puede depender del disco de quien lo corre.
+ */
+export function localizadorDeAndroid(deps: {
+  plataforma: string;
+  entorno: Record<string, string | undefined>;
+  home: string;
+  existe: (ruta: string) => boolean;
+}): {
+  raicesDeSdk: string[];
+  enPath: (nombre: string) => string | undefined;
+  /** En el PATH y, si no, dentro del SDK bajo `subcarpeta`. */
+  enSdk: (nombre: string, subcarpeta: string) => string | undefined;
+} {
+  const ext = deps.plataforma === "win32" ? ".exe" : "";
+  const raicesDeSdk = [
+    deps.entorno.ANDROID_HOME,
+    deps.entorno.ANDROID_SDK_ROOT,
+    ...(RAICES_DE_SDK_POR_OMISION[deps.plataforma]?.(deps.home, deps.entorno) ?? []),
+  ].filter((r): r is string => r !== undefined && r !== "");
+  const enPath = (nombre: string): string | undefined => {
+    for (const carpeta of (deps.entorno.PATH ?? deps.entorno.Path ?? "").split(delimiter)) {
+      if (carpeta === "") continue;
+      const candidato = join(carpeta, nombre + ext);
+      if (deps.existe(candidato)) return candidato;
+    }
+    return undefined;
+  };
+  const enSdk = (nombre: string, subcarpeta: string): string | undefined => {
+    const delPath = enPath(nombre);
+    if (delPath !== undefined) return delPath;
+    for (const raiz of raicesDeSdk) {
+      const candidato = join(raiz, subcarpeta, nombre + ext);
+      if (deps.existe(candidato)) return candidato;
+    }
+    return undefined;
+  };
+  return { raicesDeSdk, enPath, enSdk };
+}
+
+/**
+ * El JDK con el que corre `sdkmanager`, que es un programa Java.
+ *
+ * `JAVA_HOME` si el usuario la puso; si no, el `openjdk@17` de Homebrew en los dos prefijos
+ * —igual que las raíces del SDK, y por lo mismo: preguntárselo a `brew --prefix` costaría un
+ * proceso en cada medida—. Lo usan el detector, para decir si el paso 3 se puede lanzar, y
+ * el ejecutor, para ponérselo al hijo: una segunda copia habría divergido con el síntoma
+ * peor, que el botón se ofreciera y luego no encontrara el JDK.
+ */
+export function jdkDeLaMaquina(
+  entorno: Record<string, string | undefined>,
+  existe: (ruta: string) => boolean
+): string | undefined {
+  const puesta = entorno.JAVA_HOME ?? "";
+  if (puesta !== "" && existe(puesta)) return puesta;
+  for (const prefijo of ["/opt/homebrew", "/usr/local"]) {
+    const candidato = join(prefijo, "opt", "openjdk@17");
+    if (existe(candidato)) return candidato;
+  }
+  return undefined;
+}
+
 export async function detectarDispositivos(
   deps: DependenciasDeDeteccion = {},
   /** Qué destinos se miran. Ausente = todos (`core/settings.ts#seMira`). */
@@ -130,29 +201,8 @@ export async function detectarDispositivos(
   const APAGADO = "no se mira: está desactivado en Ajustes";
 
   // --- Android: adb y emulator, en cualquier sistema.
-  const ext = plataforma === "win32" ? ".exe" : "";
-  const raicesDeSdk = [
-    entorno.ANDROID_HOME,
-    entorno.ANDROID_SDK_ROOT,
-    ...(RAICES_DE_SDK_POR_OMISION[plataforma]?.(home, entorno) ?? []),
-  ].filter((r): r is string => r !== undefined && r !== "");
-  const enPath = (nombre: string): string | undefined => {
-    for (const carpeta of (entorno.PATH ?? entorno.Path ?? "").split(delimiter)) {
-      if (carpeta === "") continue;
-      const candidato = join(carpeta, nombre + ext);
-      if (existe(candidato)) return candidato;
-    }
-    return undefined;
-  };
-  const localizar = (nombre: string, subcarpeta: string): string | undefined => {
-    const delPath = enPath(nombre);
-    if (delPath !== undefined) return delPath;
-    for (const raiz of raicesDeSdk) {
-      const candidato = join(raiz, subcarpeta, nombre + ext);
-      if (existe(candidato)) return candidato;
-    }
-    return undefined;
-  };
+  const { enPath, enSdk: localizar } = localizadorDeAndroid({ plataforma, entorno, home, existe });
+
 
   // adb sirve a los DOS destinos de Android, así que solo se salta si los dos están
   // apagados: con los emuladores encendidos hay que llamarlo igual, porque un emulador
@@ -305,6 +355,8 @@ export async function detectarDispositivos(
       localizar("sdkmanager", join("cmdline-tools", "latest", "bin")) !== undefined,
     emulator: emulator !== undefined,
     androidHome: (entorno.ANDROID_HOME ?? "") !== "",
+    // El JDK con el que corre `sdkmanager`: sin él, el botón de ejecutar no se ofrece.
+    jdk: jdkDeLaMaquina(entorno, existe) !== undefined,
     avds,
   });
 

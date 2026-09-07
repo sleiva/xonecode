@@ -124,3 +124,109 @@
   top: 4px;
   right: 4px;
 }
+
+/* El trabajo en curso: el estado con su tiempo arriba y la cola del log debajo. */
+.trabajo {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.estado {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  color: var(--dsw-alias-label-secondary);
+  font-size: 11px;
+}
+
+.estado[data-estado="fallo"],
+.estado[data-estado="colgada"] {
+  color: var(--dsw-alias-label-primary);
+}
+
+/* La señal de que algo se mueve. Es la única durante los tramos en que `sdkmanager` no
+   imprime nada —descomprimir 3 GB es silencioso—, y por eso hay además un cronómetro al
+   lado: si el giro se para porque el navegador está ocupado, el número sigue subiendo.
+   Con `prefers-reduced-motion` se queda quieto pero visible: quien pidió que no hubiera
+   movimiento no puede quedarse sin saber que hay algo en marcha. */
+.girando {
+  flex: 0 0 auto;
+  width: 9px;
+  height: 9px;
+  border: 1.5px solid var(--dsw-alias-border-l2);
+  border-top-color: var(--xonecode-cian);
+  border-radius: 50%;
+  animation: gira 0.8s linear infinite;
+}
+
+@keyframes gira {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .girando {
+    animation: none;
+    border-color: var(--xonecode-cian);
+  }
+}
+
+.log {
+  margin: 0;
+  max-height: 8.5em;
+  overflow: auto;
+  padding: 8px 10px;
+  border: 0.5px solid var(--dsw-alias-border-l2);
+  border-radius: 8px;
+  background: var(--dsw-alias-bg-layer-2);
+  color: var(--dsw-alias-label-tertiary);
+  font-family: var(--ds-font-family-code);
+  font-size: 10.5px;
+  line-height: 1.55;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.ejecutar,
+.cancelar {
+  padding: 3px 10px;
+  border: 0.5px solid var(--dsw-alias-border-l2);
+  border-radius: 8px;
+  background: var(--dsw-alias-bg-layer-1);
+  color: var(--dsw-alias-label-primary);
+  font: inherit;
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.ejecutar {
+  align-self: flex-start;
+}
+
+.ejecutar:hover:enabled,
+.cancelar:hover {
+  background: var(--dsw-alias-interactive-bg-hover);
+}
+
+.ejecutar:disabled {
+  color: var(--dsw-alias-label-tertiary);
+  cursor: default;
+}
+
+.cancelar {
+  margin-left: auto;
+}
+
+/* Lo que se acepta al pulsar. Discreto pero legible: no es una nota de pie, es la condición
+   del botón de al lado. */
+.acepta {
+  display: block;
+  margin-top: 4px;
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 10.5px;
+  line-height: 1.5;
+}

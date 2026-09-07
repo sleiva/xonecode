@@ -1271,14 +1271,40 @@ lanza ni un proceso. Reglas:
   `componentes/Receta.tsx`), que es otra cosa que un requisito: un requisito está o no está,
   y esto es un procedimiento con orden — cuatro pasos, una vez por máquina, para tener el
   emulador de Android. Cinco reglas:
-  - **Los comandos se COPIAN, no se pulsan**, y el criterio se afinó: la regla era «se ofrece
-    ejecutar lo que se puede cumplir» aplicada por herramienta, y ahora se aplica por
+  - **Qué se copia y qué se EJECUTA, por comando y no por herramienta.** La regla era «se
+    ofrece ejecutar lo que se puede cumplir» aplicada por herramienta; aquí se afina por
     COMANDO. `brew` puede pedir la contraseña de administrador y un hijo sin terminal detrás
-    se quedaría esperándola para siempre; `sdkmanager` y `avdmanager` no piden contraseña
-    —solo licencias y un perfil, que se contestan— y son los candidatos a ejecutarse, pero
-    eso necesita un canal de PROGRESO que no existe: son 2-3 GB, y un botón mudo durante diez
-    minutos se lee como que se ha colgado. Ese canal es el mismo que hará falta para arrancar
-    un emulador, así que va después.
+    se quedaría esperándola para siempre: los pasos 1 y 2 se copian. `sdkmanager` y
+    `avdmanager` no piden contraseña —solo las licencias y el perfil de hardware, que se
+    contestan por `stdin` de forma determinista— y esos SÍ los lanza xonecode
+    (`agent/instalacionEnMaquina.ts`, tabla cerrada por `receta:paso`), que además son los
+    largos: 2-3 GB.
+  - **Ejecutar un paso emite su LOG en vivo**, y eso es lo que lo hace usable: un botón mudo
+    durante diez minutos se lee como que se ha colgado. Por el cable van la COLA del log
+    (`LINEAS_DE_LOG`), el estado y los milisegundos, a ritmo (`MS_ENTRE_PROGRESOS`) porque
+    cada emisión manda la cola entera y por línea sería cuadrático en bytes — la misma razón
+    que `MS_ENTRE_PARCIALES` en la piel web. El último progreso se emite SIEMPRE, haya pasado
+    el plazo o no: es el que completa el log y dice cómo acabó. Y hay cronómetro además del
+    log porque descomprimir 3 GB no imprime nada: sin él, un tramo callado se lee como un
+    cuelgue.
+  - **Un trabajo a la vez, para toda la MÁQUINA.** Dos `sdkmanager` sobre el mismo SDK es una
+    carrera con una instalación de por medio, y la máquina es una aunque haya dos pestañas
+    —la misma regla que la medida compartida en vuelo—. Un segundo «ejecutar» no lanza nada:
+    reenvía el estado, que es lo que la otra pestaña necesita para pintar el log que ya va.
+  - **El silencio es el síntoma, no la lentitud** (`TOPE_SIN_SALIDA_MS`, 5 min). Mientras
+    `sdkmanager` diga algo se le espera lo que haga falta: matar una descarga de 3 GB por
+    lenta sería peor que esperarla. Lo que no es normal es que no diga nada — eso es un
+    prompt esperando a alguien que no está. Hay además un tope total (`TOPE_DE_TRABAJO_MS`).
+  - **Las licencias se aceptan con un clic que lo DICE**, en su propio campo (`acepta`) y
+    junto al botón: aceptar una licencia en nombre de alguien no puede ser un efecto de
+    rebote de algo que dice «Ejecutar». Se ejecuta `sdkmanager --licenses` alimentándole las
+    respuestas, que es aceptar de verdad; lo que NO se hace nunca es escribir a mano los
+    ficheros de licencia del SDK, que sería falsificar esa aceptación.
+  - **«Terminó bien» y «ya está» son dos cosas, y se pueden contradecir.** El proceso puede
+    salir con código 0 y la MEDIDA seguir sin encontrar nada; cuando pasa se dice, en vez de
+    poner «Hecho» al lado de una marca hueca y dejar que el lector elija a cuál creer. La
+    medida manda, que es la misma regla del botón de instalar una herramienta. Salió de
+    probarlo con un `sdkmanager` de mentira que no creaba nada.
   - **Ningún comando lleva una ruta de la máquina**, la misma regla por la que `ruta` se
     queda en el host: el prefijo de Homebrew se deriva con `$(brew --prefix)` en vez de
     escribirse, y de paso vale igual en Intel que en Apple Silicon. Hay test.
