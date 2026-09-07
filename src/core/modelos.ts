@@ -5,11 +5,13 @@ import type { ConfigDeFichero } from "./config.js";
 
 export const PAPELES: readonly Papel[] = ["rapido", "trabajo", "afilado"] as const;
 
-export type Proveedor =
+export type ProveedorDeSerie =
   | "gemini" | "openai" | "anthropic" | "ollama" | "ollama-cloud"
   | "nvidia" | "groq" | "xai";
 
-export const PROVEEDORES: readonly Proveedor[] = [
+export type Proveedor = ProveedorDeSerie;
+
+export const PROVEEDORES: readonly ProveedorDeSerie[] = [
   "gemini", "openai", "anthropic", "ollama", "ollama-cloud",
   "nvidia", "groq", "xai",
 ] as const;
@@ -65,6 +67,33 @@ export const VARIABLES_POR_PROVEEDOR: Partial<Record<Proveedor, string>> = {
     Object.entries(COMPATIBLES_OPENAI).map(([proveedor, { variable }]) => [proveedor, variable]),
   ),
 };
+
+/**
+ * Cómo se ESCRIBE el nombre de cada proveedor, que no es su id.
+ *
+ * El id es un identificador —minúsculas, sin espacios, el que se teclea en
+ * `/modelo <proveedor>/<modelo>`— y la ventana de Ajustes lo estaba enseñando tal cual:
+ * ocho filas diciendo «nvidia», «xai», «ollama-cloud». Un id crudo en una lista para leer
+ * es la misma clase de descuido que un `emulator-5554` en la pastilla de dispositivo.
+ *
+ * Los nombres son los que usa cada casa (NVIDIA en versales, xAI con la x minúscula), no
+ * una capitalización automática del id, que daría «Xai» y «Ollama-cloud». El id sigue
+ * viajando y sigue viéndose: en la fila va debajo, en mono, porque es dato de máquina.
+ */
+const NOMBRES: Record<ProveedorDeSerie, string> = {
+  gemini: "Google Gemini",
+  openai: "OpenAI",
+  anthropic: "Anthropic",
+  ollama: "Ollama",
+  "ollama-cloud": "Ollama Cloud",
+  nvidia: "NVIDIA",
+  groq: "Groq",
+  xai: "xAI",
+};
+
+export function nombreDeProveedor(proveedor: Proveedor): string {
+  return NOMBRES[proveedor];
+}
 
 /** La fila de un proveedor compatible con OpenAI, o nada si no lo es. */
 export function compatibleConOpenAi(

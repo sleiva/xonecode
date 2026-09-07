@@ -343,6 +343,11 @@ export interface FicheroDelProyecto {
 
 export interface ProveedorDeModelos {
   id: string;
+  /**
+   * Cómo se ESCRIBE, que no es el id. Lo pone el servidor (`core/modelos.ts#nombreDeProveedor`)
+   * y no el cliente: capitalizar un id en el navegador daría «Xai» y «Ollama-cloud».
+   */
+  nombre: string;
   credencial: "puesta" | "falta" | "nativa";
   /**
    * La credencial está en `auth.json` — o sea, es NUESTRA y se puede borrar desde la

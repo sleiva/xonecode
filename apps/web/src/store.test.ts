@@ -94,16 +94,20 @@ describe("store del cliente", () => {
       clase: "modelos",
       actual: "ollama/qwen3",
       proveedores: [
-        { id: "ollama", credencial: "nativa", modelos: [{ id: "qwen3", nombre: "Qwen 3" }] },
-        { id: "openai", credencial: "falta", error: "credencial no autorizada" },
+        { id: "ollama", nombre: "Ollama", credencial: "nativa", modelos: [{ id: "qwen3", nombre: "Qwen 3" }] },
+        { id: "openai", nombre: "OpenAI", credencial: "falta", error: "credencial no autorizada" },
         // Basura: se descarta la FILA, no el mensaje entero.
-        { id: 7, credencial: "puesta" },
-        { id: "gemini", credencial: "inventada" },
+        { id: 7, nombre: "Siete", credencial: "puesta" },
+        { id: "gemini", nombre: "Google Gemini", credencial: "inventada" },
+        // Sin `nombre` tampoco entra: el componente lo pinta sin comprobarlo, y una fila
+        // sin nombre saldría en blanco en vez de decir de quién es.
+        { id: "groq", credencial: "falta" },
       ],
     });
     const modelos = s.leer().modelos!;
     expect(modelos.actual).toBe("ollama/qwen3");
     expect(modelos.proveedores.map((p) => p.id)).toEqual(["ollama", "openai"]);
+    expect(modelos.proveedores[0]!.nombre).toBe("Ollama");
     expect(modelos.proveedores[1]!.error).toBe("credencial no autorizada");
 
     // Sin cable no se puede AFIRMAR qué modelo está en vigor: pudo cambiarlo otra pestaña

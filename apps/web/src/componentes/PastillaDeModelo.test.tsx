@@ -5,9 +5,9 @@ import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { PastillaDeModelo } from "./PastillaDeModelo.js";
 
 const PROVEEDORES = [
-  { id: "ollama", credencial: "nativa" as const },
-  { id: "anthropic", credencial: "puesta" as const },
-  { id: "openai", credencial: "falta" as const },
+  { id: "ollama", nombre: "Ollama", credencial: "nativa" as const },
+  { id: "anthropic", nombre: "Anthropic", credencial: "puesta" as const },
+  { id: "openai", nombre: "OpenAI", credencial: "falta" as const },
 ];
 
 describe("PastillaDeModelo", () => {
@@ -45,12 +45,12 @@ describe("PastillaDeModelo", () => {
     );
     fireEvent.click(screen.getByRole("button", { name: /elige modelo/i }));
     expect(alPedirCatalogo).not.toHaveBeenCalled();
-    fireEvent.click(screen.getByRole("menuitem", { name: /anthropic/i }));
+    fireEvent.click(screen.getByRole("menuitem", { name: /Anthropic/i }));
     expect(alPedirCatalogo).toHaveBeenCalledWith("anthropic");
     expect(screen.getByText(/consultando/i)).toBeTruthy();
     // Cerrar y volver a abrir no lo vuelve a pedir: el servidor ya lo tiene cacheado.
-    fireEvent.click(screen.getByRole("menuitem", { name: /anthropic/i }));
-    fireEvent.click(screen.getByRole("menuitem", { name: /anthropic/i }));
+    fireEvent.click(screen.getByRole("menuitem", { name: /Anthropic/i }));
+    fireEvent.click(screen.getByRole("menuitem", { name: /Anthropic/i }));
     expect(alPedirCatalogo).toHaveBeenCalledTimes(1);
   });
 
@@ -79,7 +79,7 @@ describe("PastillaDeModelo", () => {
       <PastillaDeModelo proveedores={PROVEEDORES} alPedirCatalogo={() => {}} alElegir={() => {}} />
     );
     fireEvent.click(screen.getByRole("button", { name: /elige modelo/i }));
-    const anthropic = screen.getByRole("menuitem", { name: /anthropic/i });
+    const anthropic = screen.getByRole("menuitem", { name: /Anthropic/i });
     fireEvent.mouseDown(anthropic);
     fireEvent.click(anthropic);
     expect(screen.getByRole("menu")).toBeTruthy();
@@ -91,7 +91,7 @@ describe("PastillaDeModelo", () => {
       <PastillaDeModelo
         actual="ollama/qwen3"
         proveedores={[
-          { id: "ollama", credencial: "nativa", modelos: [{ id: "qwen3", nombre: "Qwen 3" }, { id: "glm", nombre: "GLM" }] },
+          { id: "ollama", nombre: "Ollama", credencial: "nativa", modelos: [{ id: "qwen3", nombre: "Qwen 3" }, { id: "glm", nombre: "GLM" }] },
         ]}
         alPedirCatalogo={() => {}}
         alElegir={alElegir}
@@ -108,15 +108,15 @@ describe("PastillaDeModelo", () => {
     render(
       <PastillaDeModelo
         proveedores={[
-          { id: "openai", credencial: "falta", error: "credencial no autorizada para openai" },
-          { id: "ollama", credencial: "nativa", modelos: [{ id: "qwen3" }] },
+          { id: "openai", nombre: "OpenAI", credencial: "falta", error: "credencial no autorizada para openai" },
+          { id: "ollama", nombre: "Ollama", credencial: "nativa", modelos: [{ id: "qwen3" }] },
         ]}
         alPedirCatalogo={() => {}}
         alElegir={alElegir}
       />
     );
     fireEvent.click(screen.getByRole("button", { name: /elige modelo/i }));
-    fireEvent.click(screen.getByRole("menuitem", { name: /openai/i }));
+    fireEvent.click(screen.getByRole("menuitem", { name: /OpenAI/i }));
     expect(screen.getByRole("alert").textContent).toMatch(/no autorizada/);
     // Y el otro sigue funcionando: un desvío, no un callejón.
     fireEvent.click(screen.getByRole("menuitem", { name: /^ollama$/i }));
@@ -134,8 +134,8 @@ describe("PastillaDeModelo", () => {
       <PastillaDeModelo proveedores={PROVEEDORES} alPedirCatalogo={() => {}} alElegir={() => {}} />
     );
     fireEvent.click(screen.getByRole("button", { name: /elige modelo/i }));
-    expect(screen.getByRole("menuitem", { name: /anthropic/i }).querySelector("[data-credencial='puesta']")).toBeTruthy();
-    expect(screen.getByRole("menuitem", { name: /openai/i }).querySelector("[data-credencial='falta']")).toBeTruthy();
+    expect(screen.getByRole("menuitem", { name: /Anthropic/i }).querySelector("[data-credencial='puesta']")).toBeTruthy();
+    expect(screen.getByRole("menuitem", { name: /OpenAI/i }).querySelector("[data-credencial='falta']")).toBeTruthy();
     expect(screen.getByRole("menuitem", { name: /^ollama$/i }).querySelector("[data-credencial]")).toBeNull();
   });
 });
@@ -191,7 +191,7 @@ describe("el punto de un proveedor SIN credencial habla de la conexión", () => 
   it("un proveedor con clave sigue diciendo lo de siempre", () => {
     render(
       <PastillaDeModelo
-        proveedores={[{ id: "anthropic", credencial: "puesta", modelos: [{ id: "claude-x" }] }]}
+        proveedores={[{ id: "anthropic", nombre: "Anthropic", credencial: "puesta", modelos: [{ id: "claude-x" }] }]}
         alPedirCatalogo={() => {}}
         alElegirModelo={() => {}}
       />
@@ -213,8 +213,8 @@ describe("el punto no se cuela en el nombre del proveedor", () => {
     render(
       <PastillaDeModelo
         proveedores={[
-          { id: "ollama", credencial: "nativa", modelos: [{ id: "qwen3" }] },
-          { id: "anthropic", credencial: "puesta", modelos: [{ id: "claude-x" }] },
+          { id: "ollama", nombre: "Ollama", credencial: "nativa", modelos: [{ id: "qwen3" }] },
+          { id: "anthropic", nombre: "Anthropic", credencial: "puesta", modelos: [{ id: "claude-x" }] },
         ]}
         alPedirCatalogo={() => {}}
         alElegirModelo={() => {}}
@@ -233,7 +233,7 @@ describe("PastillaDeModelo: el filtro de una lista larga", () => {
     const modelos = Array.from({ length: 10 }, (_, i) => ({ id: `m${i}`, nombre: i === 3 ? "Qwen grande" : `Modelo ${i}` }));
     render(
       <PastillaDeModelo
-        proveedores={[{ id: "ollama", credencial: "nativa", modelos }]}
+        proveedores={[{ id: "ollama", nombre: "Ollama", credencial: "nativa", modelos }]}
         alPedirCatalogo={() => {}}
         alElegir={() => {}}
       />
@@ -241,7 +241,7 @@ describe("PastillaDeModelo: el filtro de una lista larga", () => {
     fireEvent.click(screen.getByRole("button", { name: /elige modelo/i }));
     fireEvent.click(screen.getByRole("menuitem", { name: /^ollama$/i }));
     expect(screen.getAllByRole("menuitemradio")).toHaveLength(10);
-    fireEvent.change(screen.getByRole("searchbox", { name: /filtrar los modelos de ollama/ }), { target: { value: "qwen" } });
+    fireEvent.change(screen.getByRole("searchbox", { name: /filtrar los modelos de Ollama/ }), { target: { value: "qwen" } });
     expect(screen.getAllByRole("menuitemradio").map((b) => b.textContent)).toEqual(["Qwen grande"]);
     fireEvent.change(screen.getByRole("searchbox"), { target: { value: "M7" } });
     expect(screen.getAllByRole("menuitemradio").map((b) => b.textContent)).toEqual(["Modelo 7"]);
@@ -250,7 +250,7 @@ describe("PastillaDeModelo: el filtro de una lista larga", () => {
   it("con pocos modelos no hay filtro: un campo para tres filas es ruido", () => {
     render(
       <PastillaDeModelo
-        proveedores={[{ id: "ollama", credencial: "nativa", modelos: [{ id: "a" }, { id: "b" }] }]}
+        proveedores={[{ id: "ollama", nombre: "Ollama", credencial: "nativa", modelos: [{ id: "a" }, { id: "b" }] }]}
         alPedirCatalogo={() => {}}
         alElegir={() => {}}
       />

@@ -28,6 +28,7 @@ import { Agentes } from "./Agentes.js";
 import { Pregunta } from "./Pregunta.js";
 import { urlDeEntornoAceptable, AVISO_DE_URL } from "./Wizard.js";
 import { PROYECTOS_POR_OMISION } from "./Barra.js";
+import { IconoDeProveedor } from "./IconoDeProveedor.js";
 import estilos from "./Ajustes.module.css";
 
 /**
@@ -555,8 +556,8 @@ export function Ajustes({
             <>
               <h2 className={estilos.encabezado}>Proveedores</h2>
               <p className={estilos.nota}>
-                La clave se guarda en el fichero de credenciales de xonecode, con permisos 0600,
-                y nunca en el navegador. El modelo en uso se elige en la pastilla del compositor.
+                La clave se guarda con permisos 0600 en el fichero de credenciales de xonecode,
+                nunca en el navegador. El modelo en uso se elige en la pastilla del compositor.
               </p>
               {proveedores.length === 0 ? (
                 <p className={estilos.vacio}>Todavía no ha llegado el estado de modelos.</p>
@@ -565,23 +566,32 @@ export function Ajustes({
                   {proveedores.map((p) => (
                     <li key={p.id} className={estilos.fila} data-columna="">
                       <div className={estilos.cabeceraDeFila}>
-                        {/* Sin punto para quien no necesita credencial: no hay nada que afirmar. */}
-                        {p.credencial === "nativa" ? null : (
-                          <span
-                            className={estilos.punto}
-                            data-credencial={p.credencial}
-                            aria-label={p.credencial === "puesta" ? "con credencial" : "sin credencial"}
-                          />
-                        )}
-                        <span className={estilos.nombre}>{p.id}</span>
-                        <span className={estilos.detalle}>
-                          {p.credencial === "nativa"
-                            ? "local, no necesita clave"
-                            : p.credencial === "puesta"
-                              ? p.enFichero === true
-                                ? "clave guardada"
-                                : "clave puesta por una variable de entorno"
-                              : "sin clave"}
+                        <IconoDeProveedor proveedor={p.id} size={22} className={estilos.logo} />
+                        {/* El nombre arriba y el id debajo en mono: el id es lo que se teclea
+                            en `/modelo <proveedor>/<modelo>`, o sea dato de máquina, y la
+                            fila lo enseña para que se pueda copiar sin salir de aquí. */}
+                        <span className={estilos.identidad}>
+                          <span className={estilos.nombre}>{p.nombre}</span>
+                          <span className={estilos.idDeProveedor}>{p.id}</span>
+                        </span>
+                        <span className={estilos.estadoDeClave}>
+                          {/* Sin punto para quien no necesita credencial: no hay nada que afirmar. */}
+                          {p.credencial === "nativa" ? null : (
+                            <span
+                              className={estilos.punto}
+                              data-credencial={p.credencial}
+                              aria-label={p.credencial === "puesta" ? "con credencial" : "sin credencial"}
+                            />
+                          )}
+                          <span className={estilos.detalle}>
+                            {p.credencial === "nativa"
+                              ? "local, no necesita clave"
+                              : p.credencial === "puesta"
+                                ? p.enFichero === true
+                                  ? "clave guardada"
+                                  : "clave de una variable de entorno"
+                                : "sin clave"}
+                          </span>
                         </span>
                         {p.credencial === "nativa" ? null : (
                           <Button

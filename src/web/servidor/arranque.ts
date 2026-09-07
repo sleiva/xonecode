@@ -44,6 +44,7 @@ import type { NombreDeHerramienta } from "../../core/dispositivos.js";
 import { instalarHerramientaDeDispositivos } from "../../agent/dispositivosEnMaquina.js";
 import {
   parsear,
+  nombreDeProveedor,
   PROVEEDORES,
   resolver,
   SIN_CREDENCIAL,
@@ -333,7 +334,7 @@ export function montarRutas(
     emitir({
       clase: "alta",
       pasos,
-      proveedores: PROVEEDORES.map((p) => ({ id: p, nombre: p })),
+      proveedores: PROVEEDORES.map((p) => ({ id: p, nombre: nombreDeProveedor(p) })),
       entornos: [...vestibulo.opcionesDeEntorno()],
       // Los registrados de verdad, además de los ofrecidos: la ventana de ajustes los
       // lista, y la barra lateral llevaba enseñando la lista OFRECIDA como si fuera ésta.
@@ -472,6 +473,7 @@ export function montarRutas(
       ...(trabajo === undefined ? {} : { actual: `${trabajo.proveedor}/${trabajo.modelo}` }),
       proveedores: PROVEEDORES.map((p) => ({
         id: p,
+        nombre: nombreDeProveedor(p),
         credencial: credencialDe(p),
         // Solo se marca lo que se puede afirmar: sin puerto para mirarlo, no se dice que
         // esté en el fichero (y la interfaz no ofrecerá borrarla).

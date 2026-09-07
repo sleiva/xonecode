@@ -15,14 +15,26 @@ const MANEJADORES = {
 };
 
 const PROVEEDORES = [
-  { id: "ollama", credencial: "nativa" as const },
-  { id: "anthropic", credencial: "puesta" as const, enFichero: true },
-  { id: "gemini", credencial: "puesta" as const },
-  { id: "openai", credencial: "falta" as const },
+  { id: "ollama", nombre: "Ollama", credencial: "nativa" as const },
+  { id: "anthropic", nombre: "Anthropic", credencial: "puesta" as const, enFichero: true },
+  { id: "gemini", nombre: "Google Gemini", credencial: "puesta" as const },
+  { id: "openai", nombre: "OpenAI", credencial: "falta" as const },
 ];
 
 describe("Ajustes", () => {
   afterEach(cleanup);
+
+  it("la fila enseña el NOMBRE del proveedor y su id, que son dos cosas distintas", () => {
+    render(<Ajustes {...MANEJADORES} proveedores={PROVEEDORES} />);
+    // El nombre lo manda el servidor (`core/modelos.ts#nombreDeProveedor`): capitalizar el
+    // id aquí daría «Ollama-cloud» y «Xai». El id sigue a la vista porque es lo que se
+    // teclea en `/modelo <proveedor>/<modelo>`.
+    const fila = screen.getByText("Google Gemini").closest("li")!;
+    expect(within(fila).getByText("gemini")).toBeTruthy();
+    // Y lleva su logo, que no se anuncia: el nombre ya está ahí en texto.
+    const logo = fila.querySelector("svg")!;
+    expect(logo.getAttribute("aria-hidden")).toBe("true");
+  });
 
   it("abre en Proveedores y las secciones se pueden cambiar", () => {
     render(<Ajustes {...MANEJADORES} proveedores={PROVEEDORES} />);

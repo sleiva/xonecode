@@ -271,6 +271,8 @@ export interface FicheroDelProyecto {
 
 export interface ProveedorDeModelos {
   id: string;
+  /** Cómo se escribe. Lo pone el servidor: capitalizar el id aquí daría «Xai». */
+  nombre: string;
   credencial: "puesta" | "falta" | "nativa";
   /** La credencial está en `auth.json` y por tanto se puede borrar desde aquí. Una que solo
    *  viene del entorno no lo lleva: desexportar la shell de nadie no está a nuestro alcance. */

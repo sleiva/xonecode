@@ -170,3 +170,11 @@
   font: inherit;
   font-size: 12px;
 }
+
+/* El logo del proveedor en la entrada del menú. Como en Ajustes: monocromo, heredando el
+   color de la fila, y un punto por debajo del texto —es una ayuda para reconocer la fila,
+   no el dato de la fila. */
+.logo {
+  flex-shrink: 0;
+  color: var(--dsw-alias-label-secondary);
+}

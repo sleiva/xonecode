@@ -239,8 +239,9 @@ function esAgenteDelCable(valor: unknown): valor is AgenteDelCable {
 
 function esProveedorDeModelos(valor: unknown): valor is ProveedorDeModelos {
   if (typeof valor !== "object" || valor === null) return false;
-  const p = valor as { id?: unknown; credencial?: unknown; modelos?: unknown; error?: unknown };
+  const p = valor as { id?: unknown; nombre?: unknown; credencial?: unknown; modelos?: unknown; error?: unknown };
   if (typeof p.id !== "string") return false;
+  if (typeof p.nombre !== "string") return false;
   if (p.credencial !== "puesta" && p.credencial !== "falta" && p.credencial !== "nativa") return false;
   if (p.error !== undefined && typeof p.error !== "string") return false;
   if ((p as { enFichero?: unknown }).enFichero !== undefined && typeof (p as { enFichero?: unknown }).enFichero !== "boolean") {
@@ -402,6 +403,10 @@ export function crearStoreDelCliente(): {
           if (!Array.isArray(m.proveedores)) return;
           const proveedores = m.proveedores.filter(esProveedorDeModelos).map((p) => ({
             id: p.id,
+            // Campo a campo, que es una lista BLANCA: lo que no se nombra aquí no llega al
+            // componente aunque venga por el cable. Es la trampa que dejó a las imágenes
+            // de Ficheros sin `mime` ni `base64` con los tests en verde.
+            nombre: p.nombre,
             credencial: p.credencial,
             ...(p.enFichero === undefined ? {} : { enFichero: p.enFichero }),
             ...(p.modelos === undefined ? {} : { modelos: [...p.modelos] }),
