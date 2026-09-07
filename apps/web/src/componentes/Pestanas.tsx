@@ -2,10 +2,10 @@ import clsx from "clsx";
 import conversacion from "../../estilos/ConversationRoot.module.css";
 import estilos from "./Pestanas.module.css";
 
-export type Pestana = "chat" | "trazas" | "ficheros";
+export type Pestana = "chat" | "ficheros" | "revision" | "trazas";
 
 /**
- * La tira de pestañas: Chat, Trazas y Ficheros.
+ * La tira de pestañas: Chat, Ficheros, Revisión y Trazas.
  *
  * Vive en el PANEL CENTRAL, no en la barra superior. Es la tercera casa que tiene —estuvo
  * en `Transcript`, luego en `Cabecera`— y esta vez la mudanza la decide una regla y no una
@@ -31,41 +31,30 @@ export function Pestanas({
   pestana: Pestana;
   alElegirPestana: (pestana: Pestana) => void;
 }) {
+  const pestanas: { id: Pestana; etiqueta: string }[] = [
+    { id: "chat", etiqueta: "Chat" },
+    // El árbol del proyecto en el que se trabaja, con visor de solo lectura.
+    { id: "ficheros", etiqueta: "Ficheros" },
+    // Lo que ESTA sesión ha tocado, con su diff: la única vista que responde a «¿qué me ha
+    // cambiado el agente?» sin salir a un terminal.
+    { id: "revision", etiqueta: "Revisión" },
+    // Para depurar el HARNESS, no para trabajar en una app XOne: por eso va la última.
+    { id: "trazas", etiqueta: "Trazas" },
+  ];
   return (
     <div className={clsx(conversacion.tabs, estilos.tira)} role="tablist">
-      <button
-        type="button"
-        role="tab"
-        aria-selected={pestana === "chat"}
-        className={clsx(conversacion.tab, pestana === "chat" && conversacion.tabActive)}
-        onClick={() => alElegirPestana("chat")}
-      >
-        Chat
-      </button>
-      <button
-        type="button"
-        role="tab"
-        aria-selected={pestana === "trazas"}
-        className={clsx(conversacion.tab, pestana === "trazas" && conversacion.tabActive)}
-        onClick={() => alElegirPestana("trazas")}
-      >
-        Trazas
-      </button>
-      {/*
-        La tercera pestaña: lo que ESTA sesión ha tocado en el disco. No está en el CSS
-        copiado —allí son dos— pero es la misma tira y el mismo botón; lo que la justifica
-        es que es la única vista que responde a «¿qué me ha cambiado el agente?» sin salir
-        a un terminal.
-      */}
-      <button
-        type="button"
-        role="tab"
-        aria-selected={pestana === "ficheros"}
-        className={clsx(conversacion.tab, pestana === "ficheros" && conversacion.tabActive)}
-        onClick={() => alElegirPestana("ficheros")}
-      >
-        Ficheros
-      </button>
+      {pestanas.map((p) => (
+        <button
+          key={p.id}
+          type="button"
+          role="tab"
+          aria-selected={pestana === p.id}
+          className={clsx(conversacion.tab, pestana === p.id && conversacion.tabActive)}
+          onClick={() => alElegirPestana(p.id)}
+        >
+          {p.etiqueta}
+        </button>
+      ))}
     </div>
   );
 }

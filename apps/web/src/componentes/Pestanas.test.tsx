@@ -15,6 +15,7 @@ describe("Pestanas", () => {
     expect(screen.getByRole("tab", { name: "Chat" }).getAttribute("aria-selected")).toBe("true");
     expect(screen.getByRole("tab", { name: "Trazas" }).getAttribute("aria-selected")).toBe("false");
     expect(screen.getByRole("tab", { name: "Ficheros" }).getAttribute("aria-selected")).toBe("false");
+    expect(screen.getByRole("tab", { name: "Revisión" }).getAttribute("aria-selected")).toBe("false");
   });
 
   it("pulsar una lo pide hacia arriba: quien recuerda la elección es `App`, no esto", () => {
@@ -24,13 +25,20 @@ describe("Pestanas", () => {
     expect(alElegirPestana).toHaveBeenCalledWith("trazas");
   });
 
-  it("las tres son `role=\"tab\"` dentro de un `role=\"tablist\"`", () => {
-    // No es adorno: es lo que hace que un lector de pantalla las anuncie como «1 de 3» y
-    // que la elegida se lea como elegida. Tres `<button>` sueltos se anunciarían como tres
-    // botones sin relación, que es justo lo que no son.
-    render(<Pestanas pestana="ficheros" alElegirPestana={vi.fn()} />);
+  it("son cuatro, en este orden: Chat · Ficheros · Revisión · Trazas", () => {
+    // Las tres primeras son para quien desarrolla una app XOne; Trazas es para depurar el
+    // harness, y lo de otro destinatario va al final.
+    render(<Pestanas pestana="revision" alElegirPestana={vi.fn()} />);
     expect(screen.getByRole("tablist")).not.toBeNull();
-    expect(screen.getAllByRole("tab")).toHaveLength(3);
+    expect(screen.getAllByRole("tab").map((t) => t.textContent)).toEqual(["Chat", "Ficheros", "Revisión", "Trazas"]);
+    expect(screen.getByRole("tab", { name: "Revisión" }).getAttribute("aria-selected")).toBe("true");
+  });
+
+  it("pulsar Revisión reporta «revision»", () => {
+    const alElegirPestana = vi.fn();
+    render(<Pestanas pestana="chat" alElegirPestana={alElegirPestana} />);
+    fireEvent.click(screen.getByRole("tab", { name: "Revisión" }));
+    expect(alElegirPestana).toHaveBeenCalledWith("revision");
   });
 
   it("la tira no se pinta sobre el azul: ese acento se lo quedó la barra superior", () => {

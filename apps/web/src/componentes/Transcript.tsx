@@ -24,6 +24,7 @@ export function Transcript({
   proyecto,
   modelo,
   ficheros,
+  revision,
 }: {
   actos: readonly Acto[];
   pestana: Pestana;
@@ -34,12 +35,13 @@ export function Transcript({
   proyecto?: string;
   modelo?: string;
   /**
-   * La vista de ficheros, ya montada por `App`. Va como ranura y no como cinco props
-   * sueltas porque lo que aporta este componente es ELEGIR la vista, no conocer los datos
-   * de cada una; y como el elemento solo se monta cuando se pinta, la petición al servidor
-   * que lleva dentro no sale hasta que alguien abre la pestaña.
+   * Las vistas de Ficheros y de Revisión, ya montadas por `App`. Van como ranuras y no como
+   * props sueltas porque lo que aporta este componente es ELEGIR la vista; y como el
+   * elemento solo se monta cuando se pinta, la petición al servidor que cada una lleva
+   * dentro no sale hasta que alguien abre su pestaña.
    */
   ficheros?: ReactNode;
+  revision?: ReactNode;
   /** Hay turno corriendo. Solo lo usa el Chat, para saber si el último mensaje sigue
    *  llegando — y con él, si toca resaltar el código o esperar al cierre. */
   turnoEnVuelo?: boolean;
@@ -58,6 +60,8 @@ export function Transcript({
           />
         ) : pestana === "trazas" ? (
           <Trazas actos={actos} />
+        ) : pestana === "revision" ? (
+          revision
         ) : (
           ficheros
         )}

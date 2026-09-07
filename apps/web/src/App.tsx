@@ -134,7 +134,7 @@ export function App({ store, enviar }: { store: Store; enviar: Conexion["enviar"
   }, [listaDeRevision, desplegados, pedirParche]);
 
   /**
-   * Al TERMINAR un turno, si la pestaña de ficheros está delante, se refresca sola.
+   * Al TERMINAR un turno, si la pestaña de Revisión está delante, se refresca sola.
    *
    * Es la pregunta que la vista contesta —«¿qué acaba de tocar el agente?»— y dejarla
    * esperando a que alguien pulse «Actualizar» significa enseñar la foto de ANTES del turno
@@ -153,7 +153,7 @@ export function App({ store, enviar }: { store: Store; enviar: Conexion["enviar"
     turnoAnterior.current = turnoEnVuelo;
     // Solo el FLANCO de fin. Sin esto, abrir la pestaña dispararía este efecto además del
     // que `Revision` lleva dentro para pedir al montar, y saldrían dos peticiones iguales.
-    if (!acabaDeTerminar || pestana !== "ficheros") return;
+    if (!acabaDeTerminar || pestana !== "revision") return;
     pedirRevision();
     // Los desplegados se vuelven a pedir: si no, seguirían enseñando el diff viejo del
     // fichero que el turno acaba de cambiar.
@@ -614,7 +614,7 @@ export function App({ store, enviar }: { store: Store; enviar: Conexion["enviar"
               // modelo va a trabajar. Los dos ya estaban en el estado.
               {...(nombreDelProyectoActivo === undefined ? {} : { proyecto: nombreDelProyectoActivo })}
               {...(estado.modelos?.actual === undefined ? {} : { modelo: estado.modelos.actual })}
-              ficheros={
+              revision={
                 <Revision
                   historica={estado.alta?.historica === true}
                   {...(estado.revision === undefined ? {} : { via: estado.revision.via })}

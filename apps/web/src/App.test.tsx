@@ -652,7 +652,7 @@ describe("App: Revisión despliega solos los primeros", () => {
 
   it("una lista vacía no fija nada; la primera con ficheros despliega los 8 primeros y pide su parche", () => {
     const { store, enviar } = montar();
-    fireEvent.click(screen.getByRole("tab", { name: "Ficheros" }));
+    fireEvent.click(screen.getByRole("tab", { name: "Revisión" }));
     // La sesión acaba de abrirse: «sin-empezar», lista vacía. Si esto inicializara el
     // conjunto en vacío, la lista de después del primer turno ya no desplegaría ninguno.
     act(() => store.aplicar({ clase: "revision", via: "sin-empezar", ficheros: [] }));
