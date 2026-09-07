@@ -44,6 +44,7 @@ export function PastillaDeModelo({
   proveedores,
   alPedirCatalogo,
   alElegir,
+  alAbrirAjustes,
 }: {
   /** «proveedor/modelo» en vigor. Ausente = no se sabe, y entonces no se afirma. */
   actual?: string;
@@ -52,6 +53,10 @@ export function PastillaDeModelo({
   alPedirCatalogo: (proveedor: string) => void;
   /** El id completo «proveedor/modelo». Quien monte esto lo manda como `/modelo <id>`. */
   alElegir: (id: string) => void;
+  /** Llevar a Ajustes → Proveedores, que es donde se configuran los que no están. Ausente
+   *  = la línea se dice igual pero no es pulsable: un botón que no lleva a ninguna parte es
+   *  el botón muerto de siempre. */
+  alAbrirAjustes?: () => void;
 }) {
   const [abierta, setAbierta] = useState(false);
   const envoltura = useRef<HTMLDivElement>(null);
@@ -83,6 +88,28 @@ export function PastillaDeModelo({
     }
   };
 
+  /**
+   * Lo que se puede USAR, que es lo único que tiene sentido ofrecer aquí.
+   *
+   * Un proveedor sin clave no se puede usar, y ponerlo en el menú de elegir modelo es
+   * ofrecer algo que falla al pulsarlo. «Comprobado» significa dos cosas distintas según el
+   * proveedor, y las dos son lo máximo que se puede afirmar de cada uno:
+   *  - Con clave: que la clave ESTÁ. Que valga lo dirá el primer uso — comprobarlas todas al
+   *    arrancar serían varias llamadas de red por sesión, y la clave puesta ya es una
+   *    decisión del usuario.
+   *  - Sin clave (Ollama, un personalizado local): que su catálogo CONTESTÓ. Ahí no hay
+   *    credencial que responda la pregunta, así que el servidor se lo pregunta al conectar.
+   *
+   * Y el que está EN VIGOR se enseña siempre: si el modelo de trabajo viene de una variable
+   * de entorno que este proceso no ve como credencial, esconderlo dejaría la pastilla
+   * enseñando arriba un proveedor que no está en su propia lista.
+   */
+  const enVigorDe = (id: string): boolean => actual !== undefined && actual.startsWith(`${id}/`);
+  const comprobados = proveedores.filter(
+    (p) => p.credencial === "puesta" || p.modelos !== undefined || enVigorDe(p.id)
+  );
+  const fuera = proveedores.length - comprobados.length;
+
   return (
     <div className={estilos.envoltura} ref={envoltura}>
       <button
@@ -99,7 +126,7 @@ export function PastillaDeModelo({
           <div className={estilos.titulo} role="presentation">
             Modelo de trabajo
           </div>
-          {proveedores.map((p) => {
+          {comprobados.map((p) => {
             const enVigor = actual !== undefined && actual.startsWith(`${p.id}/`);
             const esperando = p.modelos === undefined && p.error === undefined && pedidos.includes(p.id);
             /**
@@ -224,6 +251,30 @@ export function PastillaDeModelo({
               </div>
             );
           })}
+          {comprobados.length === 0 ? (
+            // Un menú en blanco se lee como que la consola está rota. Lo que pasa es otra
+            // cosa y se dice: no hay ninguno usable todavía.
+            <p className={estilos.vacio}>
+              Ninguno comprobado todavía: pon una clave, o levanta Ollama.
+            </p>
+          ) : null}
+          {fuera === 0 ? null : (
+            /*
+              Los que quedan fuera se CUENTAN, con el camino para arreglarlo — el mismo
+              patrón que la barra lateral con los proyectos sin enseñar. Esconderlos y
+              callarlo haría que Anthropic pareciera no existir; enseñarlos apagados sería
+              ofrecer algo que falla al pulsarlo.
+            */
+            alAbrirAjustes === undefined ? (
+              <p className={estilos.fuera}>
+                {fuera} {fuera === 1 ? "proveedor más" : "proveedores más"} sin comprobar.
+              </p>
+            ) : (
+              <button type="button" className={estilos.fuera} onClick={alAbrirAjustes}>
+                {fuera} {fuera === 1 ? "proveedor más" : "proveedores más"} sin comprobar · configúralos en Ajustes
+              </button>
+            )
+          )}
         </div>
       ) : null}
     </div>

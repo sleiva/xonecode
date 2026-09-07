@@ -626,6 +626,7 @@ export function montarRutas(
    */
   const adjuntar = (recien?: Sumidero): void => {
     if (recien !== undefined && informeDeDispositivos === undefined) void atenderDispositivos().catch(contar);
+    if (recien !== undefined) comprobarLosSinClave();
     const destino = destinoActual();
     const cambiaDeConsola = adjunto !== destino;
     if (adjunto !== undefined && cambiaDeConsola) adjunto.desconectar();
@@ -800,6 +801,36 @@ export function montarRutas(
       catalogos.set(id, { error: error instanceof Error ? error.message : String(error) });
     }
     emitirModelos();
+  };
+
+  /**
+   * Prueba, UNA vez por proceso, los proveedores que no llevan clave.
+   *
+   * «¿Puedo usar Ollama?» no la contesta ninguna credencial —no lleva ninguna—: la contesta
+   * si el demonio responde, y eso solo se sabe pidiéndole el catálogo. Sin esto, el
+   * proveedor por OMISIÓN de esta consola no aparecería nunca entre los comprobados, que es
+   * lo que la pastilla enseña.
+   *
+   * **Y solo esos.** La regla de «el catálogo se pide bajo demanda» está escrita porque cada
+   * uno es una llamada de red; aquí la excepción se gana sola: Ollama es `localhost` y un
+   * personalizado sin clave es el endpoint que el usuario levantó en su máquina. A los de
+   * pago no se les pregunta al arrancar — ahí la credencial ya responde.
+   *
+   * Una vez por PROCESO y no por cliente: la respuesta se guarda en `catalogos`, y una
+   * segunda pestaña no vuelve a llamar. Y no se espera: el resultado llega a todos por el
+   * SSE cuando esté, igual que la foto de la máquina.
+   */
+  let comprobados = false;
+  const comprobarLosSinClave = (): void => {
+    if (comprobados || opciones.catalogoDeModelos === undefined) return;
+    comprobados = true;
+    for (const p of [...PROVEEDORES, ...idsPersonalizados()]) {
+      if (credencialDe(p) === "puesta" || catalogos.has(p)) continue;
+      // Los de serie que no llevan clave (`SIN_CREDENCIAL`) y los personalizados a los que
+      // nadie se la ha puesto: en los dos casos, preguntar es la única forma de saberlo.
+      if (!SIN_CREDENCIAL.has(p) && !esProveedorPersonalizado(p)) continue;
+      void atenderCatalogo(p).catch(contar);
+    }
   };
 
   /**

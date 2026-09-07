@@ -178,3 +178,30 @@
   flex-shrink: 0;
   color: var(--dsw-alias-label-secondary);
 }
+
+/* La línea de los que no se enseñan, y la de cuando no hay ninguno. Discretas y al final:
+   son el pie del menú, no una opción más — de ahí que no lleven el aspecto de fila. */
+.fuera,
+.vacio {
+  display: block;
+  width: 100%;
+  margin: 4px 0 0;
+  padding: 6px 10px;
+  border: none;
+  border-top: 0.5px solid var(--dsw-alias-border-l2);
+  background: none;
+  color: var(--dsw-alias-label-tertiary);
+  font: inherit;
+  font-size: 11px;
+  line-height: 1.45;
+  text-align: left;
+}
+
+button.fuera {
+  cursor: pointer;
+}
+
+button.fuera:hover {
+  color: var(--dsw-alias-label-primary);
+  background: var(--dsw-alias-interactive-bg-hover);
+}
