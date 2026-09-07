@@ -71,11 +71,30 @@ no la confianza — y por eso solo es cierto en este camino, no en el de `write_
   if you really want to remember something per viewer, wrap it: `try { localStorage.setItem(k,
   v) } catch {}`.
 
-**Si en vez de esto tienes `renderizar_diagrama` y entregas con `write_file`**: nada de lo de
-arriba lo hace cumplir ningún servidor — el fichero queda tal cual en el proyecto del cliente,
-sin iframe, sin lista blanca de CDN, sin tope de 5 MB. `localStorage` no lanza ahí. Sigue siendo
-sensato no depender de red si el proyecto puede abrirse offline, pero no es una restricción
-técnica de este camino.
+## El contrato del OTRO camino, `write_file` en `/artefactos/` (xonecode)
+
+Este párrafo decía que sin `publish_artifact` no había sandbox: «el fichero queda tal cual en el
+proyecto del cliente, sin iframe, sin lista blanca de CDN, `localStorage` no lanza ahí». **Es
+falso desde que la consola los ABRE**, y era el error más caro que se podía dejar escrito: quien
+lo leyera usaría `localStorage` y el diagrama moriría en silencio.
+
+Aquí el sandbox lo impone el VISOR de la consola, no un servidor de publicación — y lo impone
+igual. Medido en el navegador (2026-09-07) sobre un artefacto real, con el iframe en
+`sandbox="allow-scripts"` y **sin** `allow-same-origin`:
+
+- **`localStorage`, `sessionStorage` e `indexedDB` LANZAN `SecurityError`.** Los tres, no solo el
+  primero. Vale entera la advertencia de arriba, incluido por qué es el error más caro de la
+  lista: falla EN SILENCIO, con la página perfecta y el diagrama sin dibujar.
+- **Las CDNs SÍ funcionan, con conexión.** `cdnjs.cloudflare.com` y `fonts.googleapis.com` /
+  `fonts.gstatic.com` contestaron 200 desde dentro del iframe. No hay lista blanca que cumplir
+  ni tope de 5 MB (el visor sirve hasta 20 MB) ni validador que rechace nada: lo que escribas es
+  lo que se verá. Usa esas dos CDNs igualmente.
+- **Al ORIGEN de la consola no se llega.** Un `fetch` a cualquier ruta suya muere en el propio
+  navegador («from origin 'null' has been blocked by CORS»), así que sus tipografías
+  empaquetadas y sus rutas no están a tu alcance: da igual que estén ahí al lado.
+- **Nada bloquea una petición a un tercero**, y justo por eso: no hagas ninguna que no
+  necesites. Hornea los datos dentro del HTML, como en el otro camino — un proyecto XOne puede
+  abrirse offline, y una petición saliente se lleva consigo lo que lleve en la URL.
 
 ## What you can use
 
