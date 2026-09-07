@@ -83,6 +83,15 @@ export interface EstadoDelCliente {
    */
   arbol?: { rutas: string[]; recortado: boolean; error?: string };
   contenidos?: Record<string, FicheroDelProyecto>;
+  /**
+   * Los ARTEFACTOS ya traídos, por su ruta virtual (`/artefactos/<nombre>`).
+   *
+   * Aparte de `contenidos` porque son otra cosa: no son del proyecto, viven con la sesión y
+   * su LISTA no sale de aquí —sale de los actos del transcript, que ya la traen y sobreviven
+   * a reabrir—. Esto es solo el contenido que se ha pedido para verlo, y se tira con la
+   * sesión y sin cable por lo mismo que los contenidos: son de la conversación de antes.
+   */
+  artefactos?: Record<string, FicheroDelProyecto>;
   selector?: {
     titulo: string;
     opciones: { id: string; etiqueta: string; detalle?: string }[];
@@ -573,6 +582,29 @@ export function crearStoreDelCliente(): {
           });
           return;
         }
+        case "artefacto": {
+          // Campo a campo, como el fichero, y con la misma trampa detrás: un campo que no se
+          // nombre aquí se cae en silencio y el visor se queda sin la mitad del dato.
+          const m = mensaje as Partial<FicheroDelProyecto>;
+          if (typeof m.ruta !== "string" || typeof m.bytes !== "number") return;
+          mutar({
+            artefactos: {
+              ...estado.artefactos,
+              [m.ruta]: {
+                ruta: m.ruta,
+                bytes: m.bytes,
+                recortado: m.recortado === true,
+                binario: m.binario === true,
+                ...(typeof m.texto === "string" ? { texto: m.texto } : {}),
+                ...(m.codificacion === "utf-8" || m.codificacion === "latin1" ? { codificacion: m.codificacion } : {}),
+                ...(typeof m.mime === "string" ? { mime: m.mime } : {}),
+                ...(typeof m.base64 === "string" ? { base64: m.base64 } : {}),
+                ...(typeof m.error === "string" ? { error: m.error } : {}),
+              },
+            },
+          });
+          return;
+        }
         case "turno": {
           const activo = (mensaje as { activo?: unknown }).activo;
           if (typeof activo !== "boolean") return;
@@ -670,7 +702,7 @@ export function crearStoreDelCliente(): {
           const sesionDeAhora = typeof m.sesionActiva === "string" ? m.sesionActiva : undefined;
           const cambioDeSesion = sesionDeAhora !== estado.alta?.sesionActiva;
           mutar({
-            ...(cambioDeSesion ? { revision: undefined, parches: undefined, arbol: undefined, contenidos: undefined } : {}),
+            ...(cambioDeSesion ? { revision: undefined, parches: undefined, arbol: undefined, contenidos: undefined, artefactos: undefined } : {}),
             alta: {
               pasos: m.pasos as PasoDelWizard[],
               proveedores: m.proveedores,
@@ -760,6 +792,7 @@ export function crearStoreDelCliente(): {
         parches: undefined,
         arbol: undefined,
         contenidos: undefined,
+        artefactos: undefined,
         // Los subagentes salen de ficheros en disco: mientras no hay cable pueden haberse
         // editado a mano, y la ventana de ajustes enseñaría una lista que ya no es. La
         // reconexión los trae enteros en la misma ráfaga que los modelos.

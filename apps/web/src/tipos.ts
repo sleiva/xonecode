@@ -163,6 +163,9 @@ export type MensajeAlCliente =
   /** El árbol del proyecto abierto y el contenido de uno de sus ficheros (pestaña Ficheros). */
   | { clase: "arbol"; rutas: string[]; recortado: boolean; error?: string }
   | ({ clase: "fichero" } & FicheroDelProyecto)
+  /** El contenido de un ARTEFACTO de la sesión, con la misma forma que un fichero del
+   *  proyecto: así los visores son los mismos. La `ruta` es la VIRTUAL, `/artefactos/<n>`. */
+  | ({ clase: "artefacto" } & FicheroDelProyecto)
   | { clase: "secreto"; pregunta: string }
   /**
    * El registro de comandos de barra (`COMANDOS` en `cli/consola.ts`), para que el
@@ -391,6 +394,9 @@ export type MensajeDelCliente =
   | { clase: "revision"; ruta?: string }
   | { clase: "arbol" }
   | { clase: "fichero"; ruta: string }
+  /** El contenido de un artefacto de la sesión abierta, por su NOMBRE: la carpeta la compone
+   *  el servidor con el id del hilo, y una ruta del cliente sería negociar la barrera. */
+  | { clase: "artefacto"; nombre: string }
   | { clase: "decision"; decisiones: Record<string, string> };
 
 /**

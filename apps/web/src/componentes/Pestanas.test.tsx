@@ -34,6 +34,25 @@ describe("Pestanas", () => {
     expect(screen.getByRole("tab", { name: "Revisión" }).getAttribute("aria-selected")).toBe("true");
   });
 
+  it("«Artefactos» solo está si la sesión dejó alguno: una pestaña vacía es un control sin dato", () => {
+    render(<Pestanas pestana="chat" alElegirPestana={vi.fn()} hayArtefactos />);
+    // Delante de Trazas, que sigue siendo la última: es la de otro destinatario.
+    expect(screen.getAllByRole("tab").map((t) => t.textContent)).toEqual([
+      "Chat",
+      "Ficheros",
+      "Revisión",
+      "Artefactos",
+      "Trazas",
+    ]);
+  });
+
+  it("pulsar Artefactos reporta «artefactos»", () => {
+    const alElegirPestana = vi.fn();
+    render(<Pestanas pestana="chat" alElegirPestana={alElegirPestana} hayArtefactos />);
+    fireEvent.click(screen.getByRole("tab", { name: "Artefactos" }));
+    expect(alElegirPestana).toHaveBeenCalledWith("artefactos");
+  });
+
   it("pulsar Revisión reporta «revision»", () => {
     const alElegirPestana = vi.fn();
     render(<Pestanas pestana="chat" alElegirPestana={alElegirPestana} />);
