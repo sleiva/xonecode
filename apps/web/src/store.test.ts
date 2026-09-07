@@ -223,6 +223,47 @@ describe("store del cliente", () => {
     expect(s.leer().arbol).toBeUndefined();
     expect(s.leer().contenidos).toBeUndefined();
   });
+
+  it("una imagen conserva su MIME y sus bytes: el fichero se copia campo a campo", () => {
+    // La trampa de esta lista blanca: un campo que no se nombre aquí se cae en silencio.
+    // Medido en el navegador —no en jsdom, donde el componente sí pintaba la imagen porque
+    // el test le pasaba el contenido a mano—: ninguna imagen se enseñaba, porque `mime` y
+    // `base64` no llegaban a `contenidos`.
+    const s = crearStoreDelCliente();
+    s.aplicar({ clase: "fichero", ruta: "logo.png", recortado: false, binario: true, bytes: 7, mime: "image/png", base64: "QUJD" });
+    expect(s.leer().contenidos?.["logo.png"]).toMatchObject({ mime: "image/png", base64: "QUJD", binario: true });
+  });
+});
+
+describe("el dispositivo de la sesión, en el alta", () => {
+  const alta = (extra: Record<string, unknown> = {}) => ({
+    clase: "alta" as const,
+    pasos: [],
+    proveedores: [],
+    entornos: [],
+    registrados: [],
+    proyectos: [],
+    ramas: [],
+    proyectoAbierto: true,
+    ...extra,
+  });
+
+  it("llega la FOTO entera, y una a medias se descarta", () => {
+    const s = crearStoreDelCliente();
+    const d = { id: "R58", nombre: "Galaxy S21", plataforma: "android", clase: "fisico" };
+    s.aplicar(alta({ dispositivoActivo: d }));
+    expect(s.leer().alta?.dispositivoActivo).toEqual(d);
+    // Media foto —un id sin nombre— pintaría un serial crudo en la pastilla, que es justo
+    // lo que guardar la foto viene a evitar.
+    s.aplicar(alta({ dispositivoActivo: { id: "R58" } }));
+    expect(s.leer().alta?.dispositivoActivo).toBeUndefined();
+  });
+
+  it("una plataforma o una clase que no existen no cuelan", () => {
+    const s = crearStoreDelCliente();
+    s.aplicar(alta({ dispositivoActivo: { id: "x", nombre: "X", plataforma: "windows", clase: "fisico" } }));
+    expect(s.leer().alta?.dispositivoActivo).toBeUndefined();
+  });
 });
 
 describe("el alta del wizard", () => {
@@ -410,20 +451,35 @@ describe("la foto de la máquina («dispositivos»)", () => {
 
   it("se guarda campo a campo, y un campo de más del servidor no entra", () => {
     const s = crearStoreDelCliente();
-    s.aplicar({ clase: "dispositivos", informe: { ...informe, extra: 1 } as unknown as typeof informe });
+    s.aplicar({ clase: "dispositivos", informe: { ...informe, extra: 1 } as unknown as typeof informe, ajustes: {} });
     expect(s.leer().dispositivos).toEqual(informe);
   });
 
   it("un informe malformado se descarta en vez de pintarse a medias", () => {
     const s = crearStoreDelCliente();
-    s.aplicar({ clase: "dispositivos", informe: { sistema: "mac" } as unknown as typeof informe });
+    s.aplicar({ clase: "dispositivos", informe: { sistema: "mac" } as unknown as typeof informe, ajustes: {} });
     expect(s.leer().dispositivos).toBeUndefined();
   });
 
   it("NO se tira al caerse el cable: es una foto con hora de la máquina, no un estado del servidor", () => {
     const s = crearStoreDelCliente();
-    s.aplicar({ clase: "dispositivos", informe });
+    s.aplicar({ clase: "dispositivos", informe, ajustes: { ios: false } });
     s.marcarDesconectado();
     expect(s.leer().dispositivos).toEqual(informe);
+    // Los interruptores tampoco: son configuración del equipo, no un estado en vuelo.
+    expect(s.leer().ajustesDeDispositivos).toEqual({ ios: false });
+  });
+
+  it("los cuatro interruptores llegan, y un «false» de CADENA no apaga nada", () => {
+    // La lista blanca de este `case` ya se comió `mime` y `base64` una vez: un campo nuevo
+    // no llega hasta que se nombra. Y `"false"` es verdadero en JavaScript, así que se
+    // descarta y manda la omisión —mirar—, que es el lado que no esconde nada.
+    const s = crearStoreDelCliente();
+    s.aplicar({
+      clase: "dispositivos",
+      informe,
+      ajustes: { android: false, ios: true, iosSimulador: "false" } as unknown as { android: boolean },
+    });
+    expect(s.leer().ajustesDeDispositivos).toEqual({ android: false, ios: true });
   });
 });

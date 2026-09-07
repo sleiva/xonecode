@@ -27,7 +27,10 @@ import type {
   Dispositivo,
   Herramienta,
   InformeDeDispositivos,
+  AjustesDeDispositivos,
+  DispositivoElegido,
 } from "./tipos.js";
+import { PLATAFORMAS_DE_DISPOSITIVO } from "./tipos.js";
 
 export interface EstadoDelCliente {
   actos: Acto[];
@@ -50,6 +53,13 @@ export interface EstadoDelCliente {
    * servidor pueda haber cambiado sin decirlo, y la reconexión la vuelve a mandar igual.
    */
   dispositivos?: InformeDeDispositivos;
+  /**
+   * Qué destinos se miran (`settings.json`), como los cuenta el servidor. Ausente = todavía
+   * no llegó ninguna foto; `{}` = nadie ha elegido y se miran todos. No se tira al caerse
+   * el cable, por lo mismo que el informe: es configuración del equipo, no un estado en
+   * vuelo.
+   */
+  ajustesDeDispositivos?: AjustesDeDispositivos;
   /** Hay un turno corriendo AHORA. Lo dice el servidor; el cliente no lo deduce. */
   turnoEnVuelo?: boolean;
   /**
@@ -117,6 +127,8 @@ export interface EstadoDelCliente {
      *  sabe, y entonces no se marca nada en vez de marcar el primero. */
     proyectoActivo?: string;
     sesionActiva?: string;
+    /** Con qué dispositivo trabaja la sesión. Ausente = ninguno elegido. */
+    dispositivoActivo?: DispositivoElegido;
     /** La sesión abierta es una relectura que el agente no recuerda. Ausente = no. */
     historica?: boolean;
     /** El saludo de la bienvenida. Ausente = sin nombre que saludar (`Bienvenida.tsx`). */
@@ -128,6 +140,36 @@ export interface EstadoDelCliente {
      *  servidor no lo sabe, y entonces no se pinta pastilla (`Cabecera.tsx`). */
     modo?: "offline" | "cloud";
   };
+}
+
+/**
+ * Los cuatro interruptores del cable, campo a campo y SOLO booleanos.
+ *
+ * Un `"false"` de cadena es verdadero en JavaScript, y esa trampa ya se pagó dos veces en
+ * este repo (el `soloLectura` de un subagente y el `compartido` de CloudStudio). Lo que no
+ * venga como booleano se queda ausente, que significa «se mira»: el lado que no esconde
+ * nada.
+ */
+function ajustesDelCable(candidato: unknown): AjustesDeDispositivos {
+  if (typeof candidato !== "object" || candidato === null) return {};
+  const c = candidato as Record<string, unknown>;
+  const salida: AjustesDeDispositivos = {};
+  for (const plataforma of PLATAFORMAS_DE_DISPOSITIVO) {
+    if (typeof c[plataforma] === "boolean") salida[plataforma] = c[plataforma] as boolean;
+  }
+  return salida;
+}
+
+/** La foto del dispositivo elegido: entera o nada. */
+function esDispositivoElegido(v: unknown): v is DispositivoElegido {
+  if (typeof v !== "object" || v === null) return false;
+  const d = v as Record<string, unknown>;
+  return (
+    typeof d.id === "string" &&
+    typeof d.nombre === "string" &&
+    (d.plataforma === "android" || d.plataforma === "ios") &&
+    (d.clase === "emulador" || d.clase === "simulador" || d.clase === "fisico")
+  );
 }
 
 const ESTADO_INICIAL: EstadoDelCliente = { actos: [], conectado: false, comandos: [] };
@@ -377,7 +419,7 @@ export function crearStoreDelCliente(): {
           return;
         }
         case "dispositivos": {
-          const m = mensaje as { informe?: unknown };
+          const m = mensaje as { informe?: unknown; ajustes?: unknown };
           const informe = m.informe as Partial<InformeDeDispositivos> | undefined;
           if (informe === undefined || informe === null || typeof informe !== "object") return;
           if (!Array.isArray(informe.herramientas) || !Array.isArray(informe.dispositivos) || !Array.isArray(informe.avds)) return;
@@ -409,6 +451,11 @@ export function crearStoreDelCliente(): {
                   ...(d.detalle === undefined ? {} : { detalle: d.detalle }),
                 })),
             },
+            // Los cuatro interruptores, campo a campo y solo booleanos: un `"false"` de
+            // cadena es verdadero en JavaScript, y esa trampa ya se pagó dos veces en este
+            // repo. Lo que no venga como booleano se queda ausente, que significa «se
+            // mira» — el lado que no esconde nada.
+            ajustesDeDispositivos: ajustesDelCable(m.ajustes),
           });
           return;
         }
@@ -481,6 +528,12 @@ export function crearStoreDelCliente(): {
                 binario: m.binario === true,
                 ...(typeof m.texto === "string" ? { texto: m.texto } : {}),
                 ...(m.codificacion === "utf-8" || m.codificacion === "latin1" ? { codificacion: m.codificacion } : {}),
+                // El fichero se copia campo a campo —lista blanca, no reenvío del mensaje
+                // entero— y eso tiene una trampa que ya mordió: un campo NUEVO no llega
+                // hasta que se nombra aquí. Las imágenes se pintaban en jsdom y no en el
+                // navegador porque `mime` y `base64` se quedaban en este case.
+                ...(typeof m.mime === "string" ? { mime: m.mime } : {}),
+                ...(typeof m.base64 === "string" ? { base64: m.base64 } : {}),
                 ...(typeof m.error === "string" ? { error: m.error } : {}),
               },
             },
@@ -514,6 +567,7 @@ export function crearStoreDelCliente(): {
             entornoActivo?: unknown;
             proyectoActivo?: unknown;
             sesionActiva?: unknown;
+            dispositivoActivo?: unknown;
             historica?: unknown;
             proyectos?: unknown;
             ramas?: unknown;
@@ -597,6 +651,10 @@ export function crearStoreDelCliente(): {
               ...(typeof m.entornoActivo === "string" ? { entornoActivo: m.entornoActivo } : {}),
               ...(typeof m.proyectoActivo === "string" ? { proyectoActivo: m.proyectoActivo } : {}),
               ...(typeof m.sesionActiva === "string" ? { sesionActiva: m.sesionActiva } : {}),
+              // La foto del dispositivo elegido, campo a campo y solo si está entera: media
+              // foto —un id sin nombre— pintaría un serial crudo en la pastilla, que es
+              // justo lo que guardar la foto viene a evitar.
+              ...(esDispositivoElegido(m.dispositivoActivo) ? { dispositivoActivo: m.dispositivoActivo } : {}),
               // Solo si es exactamente `true`: es una afirmación sobre lo que el agente NO
               // recuerda, y cualquier otra cosa se lee como «no».
               ...(m.historica === true ? { historica: true } : {}),
