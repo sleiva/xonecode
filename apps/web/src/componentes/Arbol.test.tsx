@@ -39,4 +39,15 @@ describe("Arbol", () => {
     render(<Arbol nodos={NODOS} alElegir={vi.fn()} insignia={(ruta) => <span data-testid="insignia">{ruta.endsWith(".xml") ? "M" : "A"}</span>} />);
     expect(screen.getAllByTestId("insignia").length).toBe(3); // app.xml, Clientes, Pedidos (base.css está plegada)
   });
+
+  it("el grupo de una carpeta se declara con aria-owns, y aria-level marca la profundidad", () => {
+    render(<Arbol nodos={NODOS} alElegir={vi.fn()} />);
+    const src = screen.getByRole("treeitem", { name: "src" });
+    const clientes = screen.getByRole("treeitem", { name: "Clientes.xne" });
+    const grupo = clientes.closest('ul[role="group"]');
+    expect(grupo).not.toBeNull();
+    expect(src.getAttribute("aria-owns")).toBe(grupo!.id);
+    expect(src.getAttribute("aria-level")).toBe("1");
+    expect(clientes.getAttribute("aria-level")).toBe("2");
+  });
 });
