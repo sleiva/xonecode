@@ -26,6 +26,11 @@ import "../estilos/marca.css";
 // leer color y el texto resaltado sale con lo que el navegador herede, no con la
 // paleta que `shiki.css` ya trae copiada para esto (Task 13b).
 import "../estilos/shiki.css";
+// NUESTRA: el cromo de lo que monta el renderizador de markdown del paquete —el botón de
+// copiar de las vallas y el cuerpo de un documento—, sin ámbito de módulo, porque lo usan
+// el chat y la pestaña Ficheros. Después de `marca.css`, de donde sale el icono de copiar
+// como máscara.
+import "../estilos/markdown.css";
 // NUESTRA, y la ÚLTIMA a propósito: aplica al documento los tokens de tipografía que las
 // hojas copiadas solo declaran. Sin ella la interfaz entera sale en serif — medido.
 import "../estilos/tipografia.css";

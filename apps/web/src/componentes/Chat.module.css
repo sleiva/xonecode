@@ -78,58 +78,10 @@
   color: var(--dsw-alias-label-primary);
 }
 
-/* Lo que sigue estiliza los elementos que `MarkdownText` monta dentro de `.asistente`
-   (Task 13b): son React de verdad, no HTML insertado, pero sus PROPIAS clases de módulo
-   están vacías en esta versión exacta —medido en `lib/index.js` del paquete instalado:
-   cada `X.module.css` publicado se reduce a `var X_module_css_default = {}`, así que
-   `clsx(stub.block, "md-code-block", className)` en `CodeBlock` deja solo `md-code-block`
-   como clase real y todo lo demás (`table`, `img`, el `div` que envuelve la tabla) sale
-   SIN clase alguna—. El único gancho de sobra es la etiqueta, igual que antes con el HTML
-   de `marked`, más el ÚNICO literal que el paquete sí conserva: `md-code-block`. */
-
-.asistente :global(.md-code-block) {
-  background: var(--dsw-alias-markdown-code-block);
-  padding: 10px;
-  border-radius: 6px;
-  overflow-x: auto;
-  margin: 4px 0;
-}
-
-/* El `pre`/`code` de dentro de la valla —resaltado por shiki o el `<pre>` llano de
-   respaldo cuando no hay gramática registrada— no lleva su propio fondo: ya lo pone
-   `.md-code-block`, y duplicarlo aquí encima del de shiki (que trae el suyo vía
-   `--shiki-background`, `estilos/shiki.css`) se vería como una caja dentro de otra caja. */
-.asistente :global(.md-code-block) :global(pre),
-.asistente :global(.md-code-block) :global(code) {
-  background: none;
-  padding: 0;
-}
-
-.asistente :global(code) {
-  background: var(--dsw-alias-markdown-inline-code);
-  border-radius: 3px;
-  padding: 0 4px;
-}
-
-.asistente :global(table) {
-  border-collapse: collapse;
-}
-
-.asistente :global(th),
-.asistente :global(td) {
-  border: 0.5px solid var(--dsw-alias-border-l2);
-  padding: 4px 8px;
-}
-
-/* Sin esto una imagen del asistente se sale del globo (`max-width: 70ch` es para
-   texto, no para el ancho nativo de la imagen) — `MarkdownText` ya exige http(s)
-   absoluto y `referrerPolicy="no-referrer"` antes de montar el `<img>` (`render.js`,
-   `remoteImageUrl`), así que esto es solo maquetación, no una segunda comprobación de
-   seguridad. */
-.asistente :global(img) {
-  max-width: 100%;
-  border-radius: 4px;
-}
+/* El CUERPO del markdown del asistente —la caja de las vallas, el código en línea, las
+   tablas y las imágenes— tampoco se pinta aquí. Estuvo en esta hoja bajo `.asistente` hasta
+   que la pestaña Ficheros tuvo que renderizar un `.md` con el mismo aspecto: ahora vive en
+   `estilos/markdown.css` bajo la clase `md-cuerpo`, que este globo PIDE en `Chat.tsx`. */
 
 /* EL PULSO DEL TURNO: razonamiento, tools y fases intercalados en la conversación.
 
@@ -214,54 +166,10 @@
   opacity: 1;
 }
 
-/* EL BOTÓN DE LAS VALLAS DE CÓDIGO. Lo pinta `MarkdownText` (paquete de deepseek) con la
-   PALABRA «Copiar»/«Copiado» y sin icono — se ve en su `CodeBlock`: el hijo del botón es la
-   etiqueta, no un `<svg>`. No se puede sustituir el hijo desde fuera, así que se le pone el
-   icono delante con el MISMO trazado que su propio `IconCopyOutline16`, como máscara: el
-   dibujo es suyo, copiado de `lib/index.js`, no uno parecido hecho a mano.
-
-   La palabra se queda —pequeña— porque es lo ÚNICO que distingue «Copiar» de «Copiado»: ese
-   botón no expone estado en ningún atributo, así que sin el texto no habría forma de saber
-   si la copia salió. */
-/* Y con BORDE: el botón del paquete llega plano —sin caja, porque su CSS Module es un stub
-   vacío— y no se distingue de la etiqueta del lenguaje que tiene al lado. Un control que no
-   se ve como control no invita a pulsarlo. */
-.asistente :global(.md-code-block) button {
-  display: inline-flex;
-  align-items: center;
-  padding: 2px 8px;
-  border: 0.5px solid var(--dsw-alias-border-l2);
-  border-radius: 6px;
-  background: var(--dsw-alias-bg-layer-1);
-  color: var(--dsw-alias-label-secondary);
-  font: inherit;
-  font-size: 11px;
-  cursor: pointer;
-}
-
-.asistente :global(.md-code-block) button:hover {
-  background: var(--dsw-alias-interactive-bg-hover);
-  color: var(--dsw-alias-label-primary);
-}
-
-.asistente :global(.md-code-block) button::before {
-  content: "";
-  display: inline-block;
-  width: 12px;
-  height: 12px;
-  margin-right: 4px;
-  vertical-align: -2px;
-  /* El alias y no `currentColor`: la disciplina de estilos prohíbe las palabras clave de
-     color en nuestras hojas, `currentcolor` incluida (`Barra.test.tsx`), y el tono que
-     queremos es justo el del texto apagado de al lado. */
-  background: var(--dsw-alias-label-secondary);
-  mask-image: var(--xonecode-icono-copiar);
-  mask-size: contain;
-  mask-repeat: no-repeat;
-  -webkit-mask-image: var(--xonecode-icono-copiar);
-  -webkit-mask-size: contain;
-  -webkit-mask-repeat: no-repeat;
-}
+/* El botón de copiar de las vallas de código NO se pinta aquí. Estuvo en esta hoja,
+   acotado bajo `.asistente`, hasta que el visor de Ficheros montó el mismo `CodeBlock` y se
+   quedó con el botón crudo del paquete: es el mismo control en dos pestañas, así que vive
+   sin ámbito en `estilos/codigo.css`. */
 
 /* El aviso de relectura, encabezando la conversación reabierta. En el tono de un dato y no
    de un error: no ha fallado nada, es lo que esta sesión ES. Los mismos alias que usa el

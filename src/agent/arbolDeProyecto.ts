@@ -1,5 +1,5 @@
 import { existsSync } from "node:fs";
-import { open, realpath, stat } from "node:fs/promises";
+import { open, readFile, realpath, stat } from "node:fs/promises";
 import { isAbsolute, relative, resolve, sep } from "node:path";
 import { ficherosDelProyecto } from "./turnoReal.js";
 import { puedeLeerRuta } from "./perfiles.js";
@@ -23,6 +23,46 @@ export const TOPE_DE_ENTRADAS = 5_000;
 export const TOPE_DE_FICHERO = 400_000;
 /** Ventana en la que un NUL delata un binario. */
 export const VENTANA_DE_BINARIO = 8_192;
+/**
+ * Bytes de IMAGEN que viajan como mucho. Tope propio y más alto que el del texto por dos
+ * razones: una imagen recortada no es una imagen a medias, es nada —el navegador pinta el
+ * icono roto—, así que aquí no hay término medio entre traerla entera y no traerla; y la
+ * codificación base64 infla un tercio, de modo que este tope son ~2,7 MB por el cable.
+ * Un mockup o un icono de un proyecto XOne caben de sobra; un PSD de veinte megas no, y
+ * eso se DICE en vez de colgar la pestaña.
+ */
+export const TOPE_DE_IMAGEN = 2_000_000;
+
+/**
+ * Extensión → tipo MIME de las imágenes que el visor sabe pintar. Tabla CERRADA y por
+ * EXTENSIÓN, no por olfateo del contenido: el `<img>` del navegador necesita un MIME en la
+ * URL de datos, y adivinarlo de los primeros bytes sería reimplementar `file(1)` para
+ * acabar en la misma lista. Un `Map` por lo mismo que `lenguajeDe` en el cliente: la
+ * extensión sale de un nombre de fichero y `constructor` resolvería una propiedad heredada.
+ *
+ * El SVG está aquí Y es texto: viaja con las dos cosas, para poder verlo pintado o leer su
+ * fuente. Se pinta con un `<img>` y una URL de datos —nunca inyectado en el DOM—, que es
+ * un contexto donde el navegador NO ejecuta el script que un SVG puede llevar dentro.
+ */
+const IMAGENES = new Map<string, string>([
+  ["png", "image/png"],
+  ["jpg", "image/jpeg"],
+  ["jpeg", "image/jpeg"],
+  ["gif", "image/gif"],
+  ["webp", "image/webp"],
+  ["bmp", "image/bmp"],
+  ["ico", "image/x-icon"],
+  ["avif", "image/avif"],
+  ["svg", "image/svg+xml"],
+]);
+
+/** El MIME de una ruta si es una imagen que sabemos pintar, o `undefined`. */
+export function mimeDeImagen(ruta: string): string | undefined {
+  const nombre = ruta.slice(ruta.lastIndexOf("/") + 1);
+  const punto = nombre.lastIndexOf(".");
+  if (punto <= 0) return undefined;
+  return IMAGENES.get(nombre.slice(punto + 1).toLowerCase());
+}
 
 /** El motivo con el que se rechaza una vista aplanada. Uno solo: se comprueba dos veces. */
 const MOTIVO_APLANADA = "es una vista aplanada que genera XOne Studio; la fuente es el .xne del mismo nombre";
@@ -43,6 +83,14 @@ export interface FicheroLeido {
   /** Tamaño real en disco, aunque el texto vaya recortado. */
   bytes: number;
   codificacion?: "utf-8" | "latin1";
+  /**
+   * El tipo MIME, solo si la ruta es una imagen que el visor sabe pintar. Va aunque los
+   * bytes NO viajen: es lo que deja distinguir «una imagen demasiado grande» de «un
+   * binario cualquiera», que son dos cosas distintas que decir.
+   */
+  mime?: string;
+  /** El contenido de la imagen, si cupo en `TOPE_DE_IMAGEN`. Sin recortar nunca. */
+  base64?: string;
   /** El motivo del paso que falló. Sin él, la lectura fue bien. */
   error?: string;
 }
@@ -146,19 +194,42 @@ export async function leerFicheroDeProyecto(raiz: string, ruta: string): Promise
 
   const info = await stat(real);
   if (!info.isFile()) return rechazo("no es un fichero");
+  const bytes = info.size;
+
+  // **Las imágenes se deciden por la EXTENSIÓN y ANTES de olfatear el NUL.** Al revés no
+  // funciona: un PNG lleva ceros en su propia cabecera (la longitud del primer trozo va en
+  // big-endian y empieza por `00 00`), así que todas caían por el camino del texto y salían
+  // como «es un fichero binario, no se enseña su contenido» — teniendo el visor delante.
+  const mime = mimeDeImagen(normal);
+  // El SVG NO se atiende aquí: es texto, y sigue por el camino de abajo para poder enseñar
+  // también su fuente. Solo se le añade el dibujo al final, si no hubo que recortarlo.
+  if (mime !== undefined && mime !== "image/svg+xml") {
+    // Demasiado grande: se dice QUÉ es y cuánto pesa en vez de traer un trozo. Media imagen
+    // no es media información, es el icono roto del navegador. `binario` sigue siendo
+    // cierto —no hay texto que enseñar— y el `mime` viaja igualmente: es lo que le permite
+    // al visor decir «una imagen de 12 MB» en lugar de «un binario».
+    if (bytes > TOPE_DE_IMAGEN) return { ruta, recortado: false, binario: true, bytes, mime };
+    const datos = await readFile(real);
+    return { ruta, recortado: false, binario: true, bytes, mime, base64: datos.toString("base64") };
+  }
 
   const fh = await open(real, "r");
   try {
     const buffer = Buffer.alloc(Math.min(info.size, TOPE_DE_FICHERO + 1));
     const { bytesRead } = await fh.read(buffer, 0, buffer.length, 0);
     const leido = buffer.subarray(0, bytesRead);
-    const bytes = info.size;
     if (leido.subarray(0, VENTANA_DE_BINARIO).includes(0)) {
       return { ruta, recortado: false, binario: true, bytes };
     }
     const recortado = bytesRead > TOPE_DE_FICHERO;
     const cuerpo = recortado ? leido.subarray(0, TOPE_DE_FICHERO) : leido;
     const { texto, codificacion } = decodificar(cuerpo, recortado);
+    // El SVG viaja con las dos caras: la fuente que se acaba de decodificar y el dibujo
+    // para pintarlo. El dibujo solo si el fichero entró ENTERO —un SVG cortado por la mitad
+    // no abre— y solo desde el mismo cuerpo que ya está en memoria.
+    if (mime === "image/svg+xml" && !recortado) {
+      return { ruta, texto, recortado, binario: false, bytes, codificacion, mime, base64: Buffer.from(cuerpo).toString("base64") };
+    }
     return { ruta, texto, recortado, binario: false, bytes, codificacion };
   } finally {
     await fh.close();

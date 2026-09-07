@@ -119,6 +119,37 @@ export function App({ store, enviar }: { store: Store; enviar: Conexion["enviar"
     });
   }, []);
 
+  /**
+   * ¿Se está mirando el ESCRITORIO teniendo un proyecto abierto?
+   *
+   * Es estado de VISTA y no del servidor, y esa es la parte que importa: volver al
+   * escritorio no cierra la sesión ni suelta el proyecto —la barra lo sigue marcando como
+   * activo y el turno que estuviera corriendo sigue corriendo—, solo cambia lo que se
+   * pinta en el centro. Hasta ahora el escritorio se veía SOLO si no había proyecto
+   * abierto, así que en cuanto abrías uno no había forma de volver a él: ni a los otros
+   * proyectos, ni a «Tu equipo», ni al entorno.
+   *
+   * Se apaga al abrir un proyecto o una sesión (`abrirSesion`) y no reaccionando a que el
+   * servidor cambie de sesión: el id de una sesión nueva nace al volcar su primer acto, y
+   * con un efecto sobre `sesionActiva` ese cambio te sacaría del escritorio a media
+   * mirada, sin que hubieras pedido nada.
+   */
+  const [enEscritorio, setEnEscritorio] = useState(false);
+
+  /**
+   * Abrir una sesión —nueva o guardada— es lo mismo desde los tres sitios que lo ofrecen
+   * (la barra, el escritorio y la ventana de sesión nueva), así que va por una función: y
+   * además de mandar el mensaje, saca del escritorio. Sin eso, pulsar un proyecto desde el
+   * escritorio no cambiaba nada de lo que se veía.
+   */
+  const abrirSesion = useCallback(
+    (proyecto: string, sesion?: string) => {
+      setEnEscritorio(false);
+      void enviar(sesion === undefined ? { clase: "sesion", proyecto } : { clase: "sesion", proyecto, sesion });
+    },
+    [enviar]
+  );
+
   /** Pedir el árbol del proyecto (pestaña Ficheros). Mismo motivo que `pedirRevision`. */
   const pedirArbol = useCallback(() => {
     void enviar({ clase: "arbol" });
@@ -346,6 +377,8 @@ export function App({ store, enviar }: { store: Store; enviar: Conexion["enviar"
   // abierto —era el único paso que podía quedar—; ahora hace falta mirarlo aparte.
   const proyectoAbierto = estado.alta?.proyectoAbierto ?? false;
 
+  const enSesion = proyectoAbierto && !enEscritorio;
+
   // El PRIMER acto de usuario, no el último: es la misma regla que titula una sesión en
   // disco (`web/servidor/sesiones.ts` — «titulo» se fija una vez y no se vuelve a tocar).
   // Dos reglas para el mismo título es cómo divergen — esta lo mira, no inventa una propia.
@@ -421,10 +454,11 @@ export function App({ store, enviar }: { store: Store; enviar: Conexion["enviar"
     // descarga nada, y medido en pantalla la ventana decía literalmente «se abre y ya» y
     // aun así pedía confirmar — un paso sin ninguna decisión dentro.
     if (identidad?.local === true) {
-      void enviar({ clase: "sesion", proyecto });
+      abrirSesion(proyecto);
       return;
     }
     setSesionNueva(proyecto);
+    setEnEscritorio(false);
     void enviar({ clase: "alta", paso: "proyecto", proyecto });
   };
 
@@ -462,11 +496,9 @@ export function App({ store, enviar }: { store: Store; enviar: Conexion["enviar"
           setSesionNueva(undefined);
           // Con copia local es una sesión nueva y ya; sin ella hay que darlo de alta y
           // bajarlo, que es lo que sabe hacer el camino del alta con su rama.
-          void enviar(
-            rama === undefined
-              ? { clase: "sesion", proyecto }
-              : { clase: "alta", paso: "proyecto", proyecto, rama }
-          );
+          setEnEscritorio(false);
+          if (rama === undefined) abrirSesion(proyecto);
+          else void enviar({ clase: "alta", paso: "proyecto", proyecto, rama });
         }}
         alCerrar={() => setSesionNueva(undefined)}
       />
@@ -529,6 +561,19 @@ export function App({ store, enviar }: { store: Store; enviar: Conexion["enviar"
         setApariencia(nueva);
         guardarApariencia(nueva);
       }}
+      // La misma foto y los mismos ajustes que el escritorio: es la máquina, una sola para
+      // todos los clientes. Ausentes mientras no lleguen — no se afirma un equipo vacío.
+      {...(estado.dispositivos === undefined ? {} : { dispositivos: estado.dispositivos })}
+      {...(estado.ajustesDeDispositivos === undefined ? {} : { ajustesDeDispositivos: estado.ajustesDeDispositivos })}
+      conectado={estado.conectado}
+      // Guardar y volver a medir van en el MISMO mensaje: configurar sin remedir dejaría la
+      // pantalla enseñando la foto de la configuración anterior.
+      alCambiarDispositivos={(ajustes) => void enviar({ clase: "dispositivos", ajustes })}
+      alActualizarDispositivos={() => void enviar({ clase: "dispositivos" })}
+      // Viaja el NOMBRE de la herramienta, nunca un comando: qué se lanza lo decide el
+      // servidor con su tabla cerrada. Y detrás vuelve a medir, así que la foto nueva es
+      // la que dice si la herramienta apareció.
+      alInstalarHerramienta={(herramienta) => void enviar({ clase: "dispositivos", instalar: herramienta })}
       // Ni «pedir» ni «borrar» pasan por el lazo de la consola: tienen su propio mensaje
       // porque esta ventana se abre también sin proyecto abierto, y ahí no hay lazo.
       alPedirClave={(proveedor) => void enviar({ clase: "credencial", accion: "pedir", proveedor })}
@@ -581,7 +626,7 @@ export function App({ store, enviar }: { store: Store; enviar: Conexion["enviar"
     trazas a los que llevar, y unas pestañas que no llevan a ningún sitio son el mismo
     botón muerto que este repo no consiente. `Cabecera` las omite cuando no se las pasan.
   */
-  const cabecera = proyectoAbierto ? (
+  const cabecera = enSesion ? (
     <Cabecera
       titulo={tituloDeLaSesion ?? nombreDelProyectoActivo ?? "Sesión nueva"}
       // El proyecto delante de la sesión: «AppDemo / Hola». `Cabecera` no lo repite si el
@@ -594,6 +639,8 @@ export function App({ store, enviar }: { store: Store; enviar: Conexion["enviar"
       barraContraida={barraContraida}
       alAlternarBarra={alternarBarra}
       alAbrirAjustes={() => setAjustesAbiertos(true)}
+      // La marca lleva al escritorio, y solo desde la sesión: en el escritorio ya estás.
+      alIrAlEscritorio={() => setEnEscritorio(true)}
     />
   ) : (
     <Cabecera
@@ -614,7 +661,7 @@ export function App({ store, enviar }: { store: Store; enviar: Conexion["enviar"
         // La rama ya NO se elige aquí: la pregunta de «qué proyecto abro y desde qué rama»
         // vive entera en `NuevaSesion`, que además dice que va a descargar. Un selector
         // suelto en mitad del centro no decía ni de qué proyecto era.
-        proyectoAbierto ? (
+        enSesion ? (
           <>
             {/*
               La tira de pestañas, en el PANEL CENTRAL y no en la barra superior: desde que
@@ -647,6 +694,7 @@ export function App({ store, enviar }: { store: Store; enviar: Conexion["enviar"
                   alDesplegar={desplegar}
                   alPlegar={plegar}
                   alRecargar={pedirRevision}
+                  conectado={estado.conectado}
                 />
               }
               ficheros={
@@ -656,6 +704,7 @@ export function App({ store, enviar }: { store: Store; enviar: Conexion["enviar"
                   {...(ficheroElegido === undefined ? {} : { elegido: ficheroElegido })}
                   alElegir={elegirFichero}
                   alRecargar={pedirArbol}
+                  conectado={estado.conectado}
                 />
               }
             />
@@ -723,6 +772,11 @@ export function App({ store, enviar }: { store: Store; enviar: Conexion["enviar"
               // no al conectar.
               alPedirCatalogo={(proveedor) => void enviar({ clase: "catalogo", proveedor })}
               alElegirModelo={(id) => void enviar({ clase: "modelo", id })}
+              // El dispositivo de la sesión: viaja el ID y el servidor resuelve la foto
+              // contra su última medida — el navegador no es fuente sobre la máquina.
+              {...(estado.alta?.dispositivoActivo === undefined ? {} : { dispositivo: estado.alta.dispositivoActivo })}
+              {...(estado.dispositivos === undefined ? {} : { dispositivos: estado.dispositivos })}
+              alElegirDispositivo={(id) => void enviar(id === undefined ? { clase: "dispositivo" } : { clase: "dispositivo", id })}
               // Lo dice el servidor, no se deduce de los actos: un turno que revienta no
               // siempre deja `fin`, y el compositor se quedaría apagado para siempre.
               turnoEnVuelo={estado.turnoEnVuelo === true}
@@ -779,7 +833,7 @@ export function App({ store, enviar }: { store: Store; enviar: Conexion["enviar"
             proyectos={estado.alta?.proyectos ?? []}
             {...(estado.modelos?.actual === undefined ? {} : { modelo: estado.modelos.actual })}
             alNuevaSesion={(proyecto) => abrirVentanaDeSesion(proyecto)}
-            alAbrirSesion={(proyecto, sesion) => void enviar({ clase: "sesion", proyecto, sesion })}
+            alAbrirSesion={(proyecto, sesion) => abrirSesion(proyecto, sesion)}
               alAbrirAjustes={() => setAjustesAbiertos(true)}
               {...(estado.dispositivos === undefined ? {} : { dispositivos: estado.dispositivos })}
               alActualizarDispositivos={() => void enviar({ clase: "dispositivos" })}
@@ -819,7 +873,7 @@ export function App({ store, enviar }: { store: Store; enviar: Conexion["enviar"
           // que la hace el servidor y contesta con la lista nueva.
           alElegirEntorno={(entorno) => void enviar({ clase: "entorno", accion: "activo", entorno })}
           // Reabrir una sesión guardada: el servidor abre esa copia local con ese hilo.
-          alAbrirSesion={(proyecto, sesion) => void enviar({ clase: "sesion", proyecto, sesion })}
+          alAbrirSesion={(proyecto, sesion) => abrirSesion(proyecto, sesion)}
           // Pide la rama del proyecto elegido (`vestibulo.ts#completarProyecto` la
           // necesita) sin abrir nada todavía: el `useEffect` de arriba decide, en cuanto
           // `estado.alta.ramas` responda, si la manda sola (una) o pinta el `Selector`

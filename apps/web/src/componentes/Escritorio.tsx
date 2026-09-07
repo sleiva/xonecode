@@ -17,6 +17,14 @@ import type { InformeDeDispositivos } from "../tipos.js";
  * No hay ni una tarjeta de relleno: cuando falta algo se dice qué falta y dónde se arregla,
  * que es lo que esta pantalla hacía mal — no decía nada.
  *
+ * **Solo se pintan los proyectos ELEGIDOS** (`visibles`, la misma elección que manda en la
+ * barra lateral; ausente = los `PROYECTOS_POR_OMISION` primeros, igual que ella). Los demás
+ * se CUENTAN en una línea con el camino a Ajustes, y no se pintan: estaban debajo con su
+ * propia rejilla de tarjetas, y eso deshacía la elección —el escritorio enseñaba los
+ * dieciocho proyectos del entorno y el grupo elegido se perdía entre ellos—. Elegir cuatro
+ * y ver dieciocho es no haber elegido. Pero la cuenta no se calla: sin ella, el escritorio
+ * afirmaría que el entorno solo tiene estos.
+ *
  * Y no se pinta NADA del mockup que no tenga dato detrás. El panel de dispositivos
  * (`Equipo.tsx`) existe desde que el servidor MIDE la máquina (`core/dispositivos.ts`:
  * sistema, adb/emulator, simuladores y dispositivos iOS); «Build & Run» y cualquier acción
@@ -105,20 +113,9 @@ export function Escritorio({
           </p>
         ) : (
           <>
-          {[
-            { clave: "destacados", lista: destacados, secundario: false },
-            { clave: "otros", lista: otros, secundario: true },
-          ].map(({ clave, lista, secundario }) =>
-            lista.length === 0 ? null : (
-          <section key={clave} aria-label={secundario ? "otros proyectos del entorno" : "proyectos en la barra"}>
-          {secundario && destacados.length > 0 ? (
-            <h2 className={estilos.subtituloDeGrupo}>
-              {lista.length === 1 ? "Otro proyecto del entorno" : `Otros ${lista.length} proyectos del entorno`} · se
-              eligen en Ajustes
-            </h2>
-          ) : null}
+          <section aria-label="proyectos elegidos">
           <ul className={estilos.rejilla}>
-            {lista.map((p) => {
+            {destacados.map((p) => {
               const sesiones = p.sesiones ?? [];
               return (
                 <li key={p.id} className={estilos.tarjeta} data-local={p.local === true ? "" : undefined}>
@@ -164,7 +161,7 @@ export function Escritorio({
                   )}
                   <button
                     type="button"
-                    className={secundario ? estilos.empezarSecundario : estilos.empezar}
+                    className={estilos.empezar}
                     disabled={apagado}
                     onClick={() => alNuevaSesion(p.id)}
                   >
@@ -175,7 +172,27 @@ export function Escritorio({
             })}
           </ul>
           </section>
-            )
+          {/*
+            Los que quedan FUERA se cuentan, no se pintan.
+
+            Antes se pintaban debajo con su propia rejilla de tarjetas, y eso deshacía la
+            elección: el escritorio enseñaba los dieciocho proyectos del entorno y el
+            grupo elegido se perdía entre ellos. Elegir cuatro y ver dieciocho es no haber
+            elegido.
+
+            Pero **contarlos y decir dónde se eligen no es negociable**, y es la misma regla
+            que ya cumple la barra lateral: callarlos haría creer que el entorno solo tiene
+            estos. La cifra va con un botón a Ajustes y no con la frase «se eligen en
+            Ajustes» a secas — es donde hay que ir, así que se va desde aquí.
+          */}
+          {otros.length === 0 ? null : (
+            <p className={estilos.resto}>
+              {otros.length === 1 ? "Otro proyecto del entorno" : `Otros ${otros.length} proyectos del entorno`} sin
+              enseñar{" "}
+              <button type="button" className={estilos.enlace} onClick={alAbrirAjustes}>
+                Elígelos en Ajustes
+              </button>
+            </p>
           )}
           </>
         )}

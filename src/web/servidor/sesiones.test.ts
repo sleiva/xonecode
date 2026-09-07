@@ -9,6 +9,7 @@ import { tituloDesde,
   reabrirSesion,
   borrarSesion,
   renombrarSesion,
+  elegirDispositivo,
   IndiceDeSesionesRoto,
 } from "./sesiones.js";
 
@@ -174,5 +175,52 @@ describe("tituloDesde: el título automático es la primera frase, entera", () =
 
   it("solo la primera línea, sin la comilla de apertura", () => {
     expect(tituloDesde("«hola»\notra línea")).toBe("hola»");
+  });
+});
+
+describe("el dispositivo preferido de una sesión", () => {
+  const GALAXY = { id: "R58", nombre: "Galaxy S21", plataforma: "android" as const, clase: "fisico" as const };
+
+  it("se guarda con la sesión y vuelve al reabrirla", () => {
+    const raiz = mkdtempSync(join(tmpdir(), "xonecode-ses-"));
+    const id = crearSesion(raiz);
+    expect(elegirDispositivo(raiz, id, GALAXY)).toBe(true);
+    expect(listarSesiones(raiz)[0]!.dispositivo).toEqual(GALAXY);
+    // Reabrir lo devuelve: es un dato de la SESIÓN, no uno de sus actos, así que sale del
+    // índice y no del `.jsonl`.
+    expect(reabrirSesion(raiz, id).dispositivo).toEqual(GALAXY);
+  });
+
+  it("se guarda la FOTO y no solo el id: los ids no son estables", () => {
+    // `emulator-5554` es un puerto y un teléfono se desenchufa. Con solo el id, al reabrir
+    // la pastilla enseñaría un serial crudo en vez de «Galaxy S21 · no está ahora».
+    const raiz = mkdtempSync(join(tmpdir(), "xonecode-ses-"));
+    const id = crearSesion(raiz);
+    elegirDispositivo(raiz, id, GALAXY);
+    expect(Object.keys(listarSesiones(raiz)[0]!.dispositivo!).sort()).toEqual(["clase", "id", "nombre", "plataforma"]);
+  });
+
+  it("con `undefined` se quita, sin dejar el campo puesto a nada", () => {
+    const raiz = mkdtempSync(join(tmpdir(), "xonecode-ses-"));
+    const id = crearSesion(raiz);
+    elegirDispositivo(raiz, id, GALAXY);
+    elegirDispositivo(raiz, id, undefined);
+    expect("dispositivo" in listarSesiones(raiz)[0]!).toBe(false);
+  });
+
+  it("una sesión que todavía no está en el índice se dice con `false`, no se inventa", () => {
+    // El id nace al volcar el primer acto: elegir dispositivo antes no tiene entrada que
+    // tocar, y crear una aquí la enseñaría en la barra como una sesión vacía.
+    const raiz = mkdtempSync(join(tmpdir(), "xonecode-ses-"));
+    expect(elegirDispositivo(raiz, "todavia-no", GALAXY)).toBe(false);
+    expect(listarSesiones(raiz)).toEqual([]);
+  });
+
+  it("anotar un acto después NO borra el dispositivo elegido", () => {
+    const raiz = mkdtempSync(join(tmpdir(), "xonecode-ses-"));
+    const id = crearSesion(raiz);
+    elegirDispositivo(raiz, id, GALAXY);
+    anotarActo(raiz, id, { tipo: "usuario", texto: "hola" });
+    expect(listarSesiones(raiz)[0]!.dispositivo).toEqual(GALAXY);
   });
 });

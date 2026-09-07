@@ -11,7 +11,8 @@
  * actos ni la traza de emisión los tocan, y por eso `emitir` no registra ese mensaje: lo
  * guarda quien lo tiene en vuelo, que lo suelta en cuanto hay decisión.
  */
-import type { Herramienta, InformeDeDispositivos } from "../../core/dispositivos.js";
+import type { Herramienta, InformeDeDispositivos, NombreDeHerramienta } from "../../core/dispositivos.js";
+import type { AjustesDeDispositivos } from "../../core/settings.js";
 import type { Acto } from "../../core/actos.js";
 import type { PendienteDeAprobacion } from "../../core/events.js";
 import type { LineaDeDiff } from "../../core/diff.js";
@@ -112,7 +113,17 @@ export type MensajeAlCliente =
    * segundos — un panel que se refresca solo cada pocos segundos lanzaría procesos en la
    * máquina del usuario sin que nadie lo pidiera.
    */
-  | { clase: "dispositivos"; informe: InformeDeDispositivosDelCable }
+  | {
+      clase: "dispositivos";
+      informe: InformeDeDispositivosDelCable;
+      /**
+       * Qué destinos se miran (`core/settings.ts#AjustesDeDispositivos`). Viaja CON la
+       * foto porque las dos cosas se leen juntas: una herramienta «desactivada» solo se
+       * entiende sabiendo qué interruptor la apagó. **Ausente = nadie ha elegido**, y
+       * entonces se miran todos; un `false` es una elección.
+       */
+      ajustes: AjustesDeDispositivos;
+    }
   /**
    * Los ficheros que ESTA sesión ha tocado, y el parche de uno.
    *
@@ -189,6 +200,16 @@ export type MensajeAlCliente =
        */
       proyectoActivo?: string;
       sesionActiva?: string;
+      /**
+       * Con qué dispositivo trabaja la sesión abierta. Ausente = ninguno elegido.
+       *
+       * Viaja la FOTO y no solo el id porque los ids no son estables —`emulator-5554` es un
+       * puerto, y un teléfono se desenchufa—: al reabrir una sesión, el selector puede decir
+       * «iPhone 16 · no está ahora» en vez de un serial crudo o nada. Si está a mano AHORA
+       * no se manda: eso lo resuelve el cliente contra la última medida, que es la única que
+       * lo sabe en este instante.
+       */
+      dispositivoActivo?: { id: string; nombre: string; plataforma: "android" | "ios"; clase: "emulador" | "simulador" | "fisico" };
       /**
        * La sesión abierta es una RELECTURA: se reabrió de otra sesión de xonecode y el
        * agente no la recuerda (`ConsolaDeProyecto.historica`: el hilo vive en un
@@ -310,6 +331,13 @@ export interface FicheroDelProyecto {
   binario: boolean;
   bytes: number;
   codificacion?: "utf-8" | "latin1";
+  /**
+   * El MIME, solo si la ruta es una imagen que el visor sabe pintar. Viaja aunque los bytes
+   * NO vengan: es lo que distingue «una imagen demasiado grande» de «un binario cualquiera».
+   */
+  mime?: string;
+  /** La imagen entera, si cupo en el tope. Nunca recortada: media imagen no se abre. */
+  base64?: string;
   error?: string;
 }
 
@@ -421,7 +449,28 @@ export type MensajeDelCliente =
    * Vuelve a mirar qué dispositivos y simuladores hay. La respuesta viaja por el SSE como
    * `dispositivos`, a todos los clientes: la máquina es la misma para todos.
    */
-  | { clase: "dispositivos" }
+  | {
+      clase: "dispositivos";
+      /**
+       * Con `ajustes` se GUARDAN antes de volver a medir; sin ellos solo se vuelve a medir.
+       * Es el mismo mensaje para las dos cosas porque configurar sin remedir dejaría la
+       * pantalla enseñando la foto de la configuración anterior.
+       */
+      ajustes?: AjustesDeDispositivos;
+      /**
+       * Instala una herramienta que falta, y después se vuelve a medir. El comando NO viaja
+       * del cliente: viaja el NOMBRE de la herramienta y el servidor decide qué lanzar
+       * (`INSTALADORES`, tabla cerrada) — un comando que llegue por el cable es una shell
+       * abierta en la máquina del usuario.
+       */
+      instalar?: NombreDeHerramienta;
+    }
+  /**
+   * Con qué dispositivo trabaja la sesión abierta. Viaja el ID y nada más: el servidor lo
+   * resuelve contra la última medida y guarda la foto — un nombre que llegue del cliente no
+   * es una fuente sobre la máquina. Sin `id`, se quita la elección.
+   */
+  | { clase: "dispositivo"; id?: string }
   /**
    * La credencial de un proveedor, desde la ventana de ajustes.
    *

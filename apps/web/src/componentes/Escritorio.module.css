@@ -165,12 +165,14 @@
   gap: 4px 8px;
 }
 
-/* El grupo de los que no están en la barra: un rótulo discreto entre las dos rejillas. */
-.subtituloDeGrupo {
-  margin: 20px 0 10px;
+/* Los que quedan fuera de la elección: UNA línea con la cuenta y el camino a Ajustes, no
+   una segunda rejilla de tarjetas. Discreta a propósito —es un dato de contexto, no una
+   sección— pero presente: callar que el entorno tiene más haría creer que no los tiene. */
+.resto {
+  margin: 20px 0 0;
   color: var(--dsw-alias-label-tertiary);
   font-size: 12px;
-  font-weight: 500;
+  line-height: 1.6;
 }
 
 /* El nombre es el ÚNICO que cede a lo ancho. Sin esto, medido en pantalla, un nombre largo
@@ -298,30 +300,6 @@
   font-size: 12px;
   font-weight: 600;
   cursor: pointer;
-}
-
-/* El mismo botón, en segundo plano, para los proyectos que NO están en la barra: dieciocho
-   primarios idénticos hacían que el primario no señalara nada. */
-.empezarSecundario {
-  margin-top: auto;
-  padding: 7px 10px;
-  border: 0.5px solid var(--dsw-alias-border-l2);
-  border-radius: 8px;
-  background: var(--dsw-alias-bg-layer-1);
-  color: var(--dsw-alias-label-primary);
-  font: inherit;
-  font-size: 12px;
-  font-weight: 600;
-  cursor: pointer;
-}
-
-.empezarSecundario:hover {
-  background: var(--dsw-alias-interactive-bg-hover);
-}
-
-.empezarSecundario:disabled {
-  opacity: 0.45;
-  cursor: not-allowed;
 }
 
 .empezar:hover {

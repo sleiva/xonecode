@@ -44,6 +44,7 @@ export function Revision({
   alPlegar,
   alRecargar,
   historica,
+  conectado,
 }: {
   /** Ausente = todavía no ha llegado la respuesta; se dice, en vez de enseñar vacío. */
   via?: "git" | "sin-marca" | "sin-empezar";
@@ -60,12 +61,19 @@ export function Revision({
   alDesplegar: (ruta: string) => void;
   alPlegar: (ruta: string) => void;
   alRecargar: () => void;
+  /** ¿Hay cable? Sin él no se pide nada: la petición se perdería sin decirlo. */
+  conectado?: boolean;
 }) {
-  // Se pide al montar la pestaña: entrar a mirar ES la petición. Y `alRecargar` es estable
-  // (viene de `App`), así que esto no se repite en cada render.
+  // Se pide siempre que NO se tenga la lista, no solo al montar: entrar a mirar ES la
+  // petición, pero también volver a tenerla vacía. Al cambiar de proyecto el store tira la
+  // revisión (es del anterior) sin que este componente se desmonte, y con la petición solo
+  // en el montaje la pestaña se quedaba en «Consultando los ficheros…» para siempre — el
+  // mismo fallo que tenía Ficheros, medido allí. `conectado` va en las dependencias para
+  // que la reconexión la recupere, y para no pedirla mientras no hay a quién.
   useEffect(() => {
+    if (conectado === false || via !== undefined) return;
     alRecargar();
-  }, [alRecargar]);
+  }, [via, conectado, alRecargar]);
 
   // Para desplazar la pila hasta un bloque cuando se pulsa su hoja en el árbol.
   const bloques = useRef(new Map<string, HTMLElement>());

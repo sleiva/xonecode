@@ -11,6 +11,9 @@ const LENGUAJES = new Map<string, string>([
   ["ini", "ini"],
   ["json", "json"],
   ["md", "markdown"],
+  // La FUENTE de un SVG, que la pestaña Ficheros deja ver con el interruptor Vista/Fuente:
+  // es XML, igual que un `.xne`. El dibujo lo pinta un `<img>`, no esto.
+  ["svg", "xml"],
 ]);
 
 export function lenguajeDe(ruta: string): string | undefined {

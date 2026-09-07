@@ -82,11 +82,32 @@ export function tituloDesde(texto: string): string {
   return `${(enPalabra > 20 ? corte.slice(0, enPalabra) : corte).replace(/[\s,;:]+$/u, "")}…`;
 }
 
+/**
+ * El dispositivo preferido de una sesión: con cuál trabaja el agente.
+ *
+ * Se guarda la FOTO y no solo el id, y esa es la decisión que importa: los ids no son
+ * estables. `emulator-5554` es un puerto, un AVD recién arrancado se queda con el serial que
+ * haya libre, y el de un teléfono sobrevive pero el teléfono puede estar desenchufado. Con
+ * solo el id, al reabrir una sesión el selector enseñaría un serial crudo o nada; con la
+ * foto puede decir «iPhone 16 · no está ahora», que es lo que se sabe.
+ *
+ * Si está conectado AHORA no se guarda: eso se resuelve contra la última medida en el
+ * momento de emitir. Un «conectado» escrito en disco es falso en cuanto se desenchufa.
+ */
+export interface DispositivoElegido {
+  id: string;
+  nombre: string;
+  plataforma: "android" | "ios";
+  clase: "emulador" | "simulador" | "fisico";
+}
+
 export interface EntradaIndice {
   id: string;
   titulo: string;
   creada: string;
   ultimoTurno: string;
+  /** Con cuál trabaja el agente. Ausente = ninguno elegido. */
+  dispositivo?: DispositivoElegido;
 }
 
 export interface SesionReabierta {
@@ -94,6 +115,8 @@ export interface SesionReabierta {
   actos: Acto[];
   /** Siempre `true`: `reabrirSesion` solo se llama para releer una sesión ya cerrada. */
   historica: boolean;
+  /** El dispositivo que tenía elegido. Ausente = ninguno, o la sesión es anterior a esto. */
+  dispositivo?: DispositivoElegido;
 }
 
 function carpetaSesiones(raiz: string): string {
@@ -286,6 +309,24 @@ export function renombrarSesion(raiz: string, id: string, titulo: string): boole
   return true;
 }
 
+/**
+ * Fija —o quita, con `undefined`— el dispositivo preferido de una sesión.
+ *
+ * Devuelve si había una entrada que tocar: una sesión cuyo id todavía no existe en el índice
+ * (nace al volcar el primer acto) no se puede anotar aquí, y quien llama tiene que guardarlo
+ * en memoria hasta entonces — decirlo con un `false` es mejor que crear una entrada a medias
+ * que la barra enseñaría como una sesión vacía.
+ */
+export function elegirDispositivo(raiz: string, id: string, dispositivo: DispositivoElegido | undefined): boolean {
+  const entradas = leerIndiceOAbortar(raiz);
+  const entrada = entradas.find((e) => e.id === id);
+  if (entrada === undefined) return false;
+  if (dispositivo === undefined) delete entrada.dispositivo;
+  else entrada.dispositivo = dispositivo;
+  escribirIndice(raiz, entradas);
+  return true;
+}
+
 /** El índice completo, tal cual lo enseña la lista de sesiones del proyecto. */
 export function listarSesiones(raiz: string): EntradaIndice[] {
   return leerIndice(raiz);
@@ -309,5 +350,8 @@ export function reabrirSesion(raiz: string, id: string): SesionReabierta {
       }
     }
   }
-  return { id, actos, historica: true };
+  // El dispositivo preferido sale del ÍNDICE y no del `.jsonl`: es un dato de la sesión, no
+  // uno de sus actos, y reabrir tiene que devolverlo o la elección se perdería al releer.
+  const dispositivo = leerIndice(raiz).find((e) => e.id === id)?.dispositivo;
+  return { id, actos, historica: true, ...(dispositivo === undefined ? {} : { dispositivo }) };
 }

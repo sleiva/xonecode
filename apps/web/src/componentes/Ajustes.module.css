@@ -321,3 +321,99 @@
   justify-content: flex-end;
   gap: 8px;
 }
+
+/* Un enlace de texto dentro de una nota: «Volver a mirar», al lado de la hora de la foto.
+   No es un `Button` porque no es una acción de la fila, es la continuación de la frase que
+   dice cuándo se midió — y un botón con caja ahí partiría el párrafo en dos. Con subrayado
+   siempre, que es lo que lo distingue del texto que tiene alrededor: aquí no hay ninguna
+   otra señal (ni icono, ni caja) de que se puede pulsar. */
+.enlace {
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--dsw-alias-label-secondary);
+  font: inherit;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.enlace:hover:enabled {
+  color: var(--dsw-alias-label-primary);
+}
+
+.enlace:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+  text-decoration: none;
+}
+
+/* El punto de una herramienta o de un destino. VERDE solo con «ok»: es lo único que
+   significa disponible y configurado. Lo que falta o falló va HUECO y no rojo, por la misma
+   razón que la credencial que falta —cuatro puntos rojos se leen como cuatro errores, y que
+   no tengas el SDK de Android si no desarrollas para Android no es ningún error—. Y sin
+   medir no se pinta relleno de ninguna clase: no se afirma nada que no se sepa. */
+.punto[data-herramienta="ok"] {
+  background: var(--dsw-alias-state-success-primary);
+}
+
+.punto[data-herramienta="no-encontrada"],
+.punto[data-herramienta="fallo"],
+.punto[data-herramienta="no-aplica"],
+.punto[data-herramienta="desactivada"],
+.punto[data-herramienta="otro"] {
+  background: var(--dsw-alias-bg-layer-1);
+  box-shadow: inset 0 0 0 1.5px var(--dsw-alias-label-tertiary);
+}
+
+.punto[data-herramienta="sin-medir"] {
+  background: var(--dsw-alias-bg-layer-1);
+  box-shadow: inset 0 0 0 1px var(--dsw-alias-border-l2);
+}
+
+/* El comando que hay que pegar en un terminal: DATO DE MÁQUINA, así que en mono y
+   seleccionable — es lo único que se puede hacer con él. Se ofrece en vez de un botón
+   cuando xonecode no puede lanzarlo él (`instalar.automatico: false`). */
+.comando {
+  flex-shrink: 0;
+  max-width: 100%;
+  padding: 4px 8px;
+  border: 0.5px solid var(--dsw-alias-border-l2);
+  border-radius: 6px;
+  background: var(--dsw-alias-bg-layer-1);
+  color: var(--dsw-alias-label-secondary);
+  font-family: var(--ds-font-family-code);
+  font-size: 11px;
+  overflow-wrap: anywhere;
+  user-select: all;
+}
+
+/* El tercer nivel de rótulo dentro de una sección: «Teléfonos y tablets», «Simuladores y
+   emuladores». Más pequeño y apagado que el `h3`, porque parte una lista, no abre un tema. */
+.subsubencabezado {
+  margin: 14px 0 4px;
+  color: var(--dsw-alias-label-secondary);
+  font-size: 12px;
+  font-weight: 500;
+}
+
+/* La lista de simuladores, acotada en alto y con scroll propio: esta máquina tiene 35, y sin
+   tope empujarían la sección de requisitos fuera de la pantalla — que es donde está lo único
+   accionable de la ventana. */
+.listaLarga {
+  max-height: 220px;
+  overflow-y: auto;
+}
+
+/* Las casillas del filtro de medida, en línea dentro de la frase «Buscar en: …». La fila
+   entera es la etiqueta —pulsar el nombre marca la casilla—, igual que `.casilla`, pero sin
+   ocupar el ancho: aquí son cuatro seguidas en un párrafo. */
+.casillaEnLinea {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  cursor: pointer;
+}
+
+.casillaEnLinea input {
+  cursor: pointer;
+}

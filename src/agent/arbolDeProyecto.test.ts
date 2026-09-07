@@ -6,9 +6,11 @@ import {
   arbolDeProyecto,
   leerFicheroDeProyecto,
   motivoDeRutaInaceptable,
+  mimeDeImagen,
   ordenarRutas,
   TOPE_DE_ENTRADAS,
   TOPE_DE_FICHERO,
+  TOPE_DE_IMAGEN,
 } from "./arbolDeProyecto.js";
 
 let raiz: string;
@@ -45,6 +47,10 @@ beforeEach(() => {
   mkdirSync(join(raiz, "node_modules", "x"), { recursive: true });
   writeFileSync(join(raiz, "node_modules", "x", "i.js"), "");
   writeFileSync(join(raiz, "logo.png"), Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x00, 0x01, 0x02]));
+  // Un binario que NO es una imagen: es el que prueba el olfateo del NUL, porque un `.png`
+  // ya no llega ahí — se decide antes, por la extensión.
+  writeFileSync(join(raiz, "datos.bin"), Buffer.from([0x01, 0x00, 0x02]));
+  writeFileSync(join(raiz, "icono.svg"), "<svg xmlns=\"http://www.w3.org/2000/svg\"/>");
   writeFileSync(join(raiz, "viejo.txt"), Buffer.from([0x68, 0x6f, 0x6c, 0x61, 0x20, 0xf1])); // «hola ñ» en cp1252
   writeFileSync(join(raiz, "grande.js"), "x".repeat(TOPE_DE_FICHERO + 10));
   writeFileSync(join(fuera, "secreto.txt"), "no");
@@ -118,9 +124,49 @@ describe("leerFicheroDeProyecto", () => {
   );
 
   it("un NUL en los primeros 8 KB es binario: sin texto, con tamaño", async () => {
-    const f = await leerFicheroDeProyecto(raiz, "logo.png");
-    expect(f).toMatchObject({ binario: true, bytes: 7 });
+    const f = await leerFicheroDeProyecto(raiz, "datos.bin");
+    expect(f).toMatchObject({ binario: true, bytes: 3 });
     expect(f.texto).toBeUndefined();
+    // Y no se disfraza de imagen: sin extensión conocida no hay MIME que ofrecer.
+    expect(f.mime).toBeUndefined();
+    expect(f.base64).toBeUndefined();
+  });
+
+  it("una imagen viaja con su MIME y sus bytes, aunque lleve un NUL en la cabecera", async () => {
+    // El PNG del fixture tiene un 0x00 en el quinto byte: por el camino del texto habría
+    // salido como «un fichero binario» y nunca se habría podido pintar.
+    const f = await leerFicheroDeProyecto(raiz, "logo.png");
+    expect(f).toMatchObject({ binario: true, bytes: 7, mime: "image/png" });
+    expect(Buffer.from(f.base64!, "base64")).toEqual(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x00, 0x01, 0x02]));
+    expect(f.texto).toBeUndefined();
+  });
+
+  it("una imagen que pasa del tope se declara con su MIME y SIN bytes", async () => {
+    const gorda = join(raiz, "gorda.png");
+    writeFileSync(gorda, Buffer.alloc(TOPE_DE_IMAGEN + 1));
+    const f = await leerFicheroDeProyecto(raiz, "gorda.png");
+    expect(f).toMatchObject({ binario: true, mime: "image/png", bytes: TOPE_DE_IMAGEN + 1 });
+    // Sin los bytes: media imagen no es media información, y el `mime` es lo que permite
+    // decir «una imagen de N KB» en vez de «un binario».
+    expect(f.base64).toBeUndefined();
+  });
+
+  it("un SVG viaja con las DOS caras: su fuente y su dibujo", async () => {
+    const f = await leerFicheroDeProyecto(raiz, "icono.svg");
+    expect(f.binario).toBe(false);
+    expect(f.texto).toContain("<svg");
+    expect(f.mime).toBe("image/svg+xml");
+    expect(Buffer.from(f.base64!, "base64").toString("utf8")).toBe(f.texto);
+  });
+
+  it("mimeDeImagen conoce las extensiones que el visor pinta, y nada más", () => {
+    expect(mimeDeImagen("a/b/logo.PNG")).toBe("image/png");
+    expect(mimeDeImagen("foto.jpeg")).toBe("image/jpeg");
+    expect(mimeDeImagen("icono.svg")).toBe("image/svg+xml");
+    expect(mimeDeImagen("app.xne")).toBeUndefined();
+    expect(mimeDeImagen("sinpunto")).toBeUndefined();
+    // Un fichero oculto sin extensión no es «un .png»: el punto inicial no cuenta.
+    expect(mimeDeImagen(".png")).toBeUndefined();
   });
 
   it("lo que no es UTF-8 se lee como latin1 y se dice", async () => {

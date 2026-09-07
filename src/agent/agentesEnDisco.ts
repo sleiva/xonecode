@@ -16,6 +16,7 @@
  * proyectos; un «experto en esta app», solo en uno.
  */
 
+import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
@@ -83,15 +84,22 @@ export function cargarAgentes(raizDelProyecto?: string): Lectura {
   // orquestador sin nadie a quien delegar, sin que nada diera error. Colgarlo del cargador
   // lo hace imposible de olvidar: quien necesita agentes los pide por aquí, y por
   // construcción hay algo que leer. Es idempotente y no hace nada si la carpeta existe.
-  sembrarAgentes();
+  const { desactualizados } = sembrarAgentes();
   const global = leerCarpetaDeAgentes(rutaGlobalDeAgentes(), "global");
   const proyecto =
     raizDelProyecto === undefined
       ? { agentes: [], problemas: [] }
       : leerCarpetaDeAgentes(rutaDeAgentes(raizDelProyecto), "proyecto");
+  // Los que se quedaron atrás se DICEN por el mismo canal que un `.md` roto, y por la misma
+  // razón: quien lo tiene que arreglar está mirando la ventana de subagentes, y un agente
+  // que se quedó en una versión anterior sin que nadie lo diga es exactamente el fallo que
+  // esta tanda viene a cerrar. No se pisa: el mensaje dice qué hacer si lo quiere nuevo.
+  const atrasados = desactualizados.map(
+    (n) => `${n}.md: no es el de serie y la versión de serie ha cambiado; se respeta el tuyo. Bórralo si quieres el nuevo.`
+  );
   return {
     agentes: fusionarAgentes(global.agentes, proyecto.agentes),
-    problemas: [...global.problemas, ...proyecto.problemas],
+    problemas: [...atrasados, ...global.problemas, ...proyecto.problemas],
   };
 }
 
@@ -125,7 +133,7 @@ export function borrarAgente(base: string, nombre: string): boolean {
 }
 
 /**
- * Los cuatro de siempre, sembrados en el GLOBAL la primera vez.
+ * Los especialistas de serie, sembrados en el GLOBAL.
  *
  * Dejan de ser un `Record` a fuego en `agent/perfiles.ts` y pasan a ser los mismos ficheros
  * que puede escribir el usuario. Lo pidió él, y además arregla algo que estaba señalado
@@ -133,28 +141,172 @@ export function borrarAgente(base: string, nombre: string): boolean {
  * especialistas vivían en código con un `nombre === "planner"` dentro para las
  * particularidades de uno de ellos.
  *
- * **Se siembra UNA VEZ, y la marca es la propia carpeta.** Si `agentes/` existe, no se
- * toca nada — ni siquiera para reponer uno que falte. La alternativa evidente («escribe los
- * que no estén») está mal medida: borrar `mockup` es una decisión, y reponerlo en el
- * siguiente arranque convierte el botón de eliminar en uno que no hace nada hasta que
- * reinicias. Y el mismo razonamiento vale para el que se AFINA: el usuario que reescribe el
- * prompt de `dev` no puede encontrárselo pisado al arrancar.
- *
- * No hace falta un fichero de marca para saber si ya se sembró: la carpeta ES la marca, y
- * un estado menos que mantener es un estado menos que puede quedarse mintiendo. Borrarla
- * entera vuelve a traer los cuatro, que es un «reiniciar» razonable y no un accidente
- * —hay que ir a por ella a propósito.
+ * Lo que sigue siendo intocable, y por lo que la regla anterior existía: **el prompt que el
+ * usuario afina no se pisa, y el agente que borra no se resucita.** Lo que cambió es cómo
+ * se sabe cuál es cuál — ver `sembrarAgentes`.
  */
-export function sembrarAgentes(base: string = homedir()): string[] {
-  const carpeta = rutaDeAgentes(base);
-  if (existsSync(carpeta)) return [];
-  mkdirSync(carpeta, { recursive: true });
-  const sembrados: string[] = [];
-  for (const agente of AGENTES_DE_SERIE) {
-    writeFileSync(join(carpeta, `${agente.nombre}.md`), escribirAgente(agente), "utf8");
-    sembrados.push(agente.nombre);
+/** Lo que la marca guarda de cada agente sembrado: el hash de lo que ESCRIBIMOS nosotros. */
+const AJENO = "ajeno";
+
+/** El nombre de la marca. Empieza por punto y no acaba en `.md`: el cargador la ignora. */
+export const FICHERO_DE_SEMILLA = ".semilla.json";
+
+function rutaDeSemilla(carpeta: string): string {
+  return join(carpeta, FICHERO_DE_SEMILLA);
+}
+
+function huella(contenido: string): string {
+  return createHash("sha256").update(contenido, "utf8").digest("hex").slice(0, 16);
+}
+
+/** La marca en disco. Ausente o rota = no hay marca: se ADOPTA lo que haya (ver abajo). */
+function leerSemilla(carpeta: string): Record<string, string> | undefined {
+  const ruta = rutaDeSemilla(carpeta);
+  if (!existsSync(ruta)) return undefined;
+  try {
+    const bruto: unknown = JSON.parse(readFileSync(ruta, "utf8"));
+    if (typeof bruto !== "object" || bruto === null || Array.isArray(bruto)) return undefined;
+    const salida: Record<string, string> = {};
+    for (const [nombre, valor] of Object.entries(bruto as Record<string, unknown>)) {
+      if (typeof valor === "string") salida[nombre] = valor;
+    }
+    return salida;
+  } catch {
+    // Una marca rota se trata como ausente y se REESCRIBE adoptando lo que hay. Es lo
+    // conservador: lo contrario —darla por vacía y sembrar— pisaría ficheros del usuario.
+    return undefined;
   }
-  return sembrados;
+}
+
+function escribirSemilla(carpeta: string, marca: Record<string, string>): void {
+  writeFileSync(rutaDeSemilla(carpeta), JSON.stringify(marca, null, 2) + "\n", "utf8");
+}
+
+export interface Siembra {
+  /** Los que se han escrito ahora: nuevos, o actualizados porque nadie los había tocado. */
+  escritos: string[];
+  /**
+   * Los que se quedan atrás: existen, no coinciden con lo que sembramos, y la versión de
+   * serie ha cambiado. No se pisan —puede ser trabajo del usuario— pero se DICEN: callarlo
+   * es lo que dejaba a un `docs.md` sin la consulta acotada durante semanas.
+   */
+  desactualizados: string[];
+}
+
+/**
+ * Siembra los agentes de serie, y ACTUALIZA los que nadie ha tocado.
+ *
+ * La regla anterior era «la carpeta es la marca»: si existía, no se escribía nada nunca más.
+ * Respetaba el prompt afinado por el usuario —que es lo que había que respetar— pero eligió
+ * un cuerno del dilema y el otro acabó mordiendo: **ningún agente nuevo, y ninguna
+ * corrección a uno existente, alcanzaba a quien ya hubiera arrancado una vez**. Medido: el
+ * `docs.md` de un usuario llevaba semanas sin la consulta acotada, y `probador` no le habría
+ * llegado jamás.
+ *
+ * Ahora la marca es un fichero, `.semilla.json`, con el HASH DE LO QUE ESCRIBIMOS NOSOTROS
+ * para cada agente. Con eso se distinguen los cuatro casos que antes eran uno solo:
+ *
+ * | en disco | en la marca | qué se hace |
+ * |---|---|---|
+ * | no está | no está | es un agente NUEVO: se escribe |
+ * | no está | está | lo BORRÓ el usuario: no se resucita |
+ * | está, y su hash es el nuestro | está | nadie lo tocó: se actualiza |
+ * | está, y su hash NO es el nuestro | cualquiera | es suyo: se deja, y se DICE |
+ *
+ * **Y una carpeta sin marca se ADOPTA, no se siembra.** Es la de quien ya venía de la regla
+ * vieja, y ahí no se puede saber qué borró a propósito: dar por nuevo lo que falta le
+ * resucitaría un agente que eliminó. Así que se anota lo que hay —como nuestro si coincide
+ * con la versión de serie de hoy, como `ajeno` si no— y no se escribe ningún `.md` esa vez.
+ * Desde la siguiente, todo lo de arriba funciona. El coste es una ronda de retraso para las
+ * instalaciones viejas; la alternativa es pisar o resucitar sin permiso.
+ *
+ * El fichero de marca empieza por punto y no acaba en `.md`, así que `leerCarpetaDeAgentes`
+ * ni lo mira — no hace falta excluirlo a mano en dos sitios.
+ */
+export function sembrarAgentes(base: string = homedir()): Siembra {
+  const carpeta = rutaDeAgentes(base);
+  const escritos: string[] = [];
+  const desactualizados: string[] = [];
+
+  if (!existsSync(carpeta)) {
+    mkdirSync(carpeta, { recursive: true });
+    const marca: Record<string, string> = {};
+    for (const agente of AGENTES_DE_SERIE) {
+      const contenido = escribirAgente(agente);
+      writeFileSync(join(carpeta, `${agente.nombre}.md`), contenido, "utf8");
+      marca[agente.nombre] = huella(contenido);
+      escritos.push(agente.nombre);
+    }
+    escribirSemilla(carpeta, marca);
+    return { escritos, desactualizados };
+  }
+
+  const previa = leerSemilla(carpeta);
+  const marca: Record<string, string> = { ...(previa ?? {}) };
+  /**
+   * Sin marca hay DOS carpetas distintas, y confundirlas cuesta caro en los dos sentidos.
+   *
+   * La de quien viene de la regla vieja tiene agentes dentro: ahí se adopta, porque no se
+   * puede saber qué borró a propósito. Pero una carpeta sin NINGUNO de los de serie no
+   * viene de ninguna siembra —la deja, por ejemplo, un `guardarAgente` con un nombre
+   * inválido— y adoptarla anotaría los cinco como entregados sin escribir uno solo: ese
+   * usuario se quedaría sin ningún subagente para siempre. Se siembra, que es lo que
+   * habría pasado si la carpeta no existiera.
+   */
+  const hayDeSerie = AGENTES_DE_SERIE.some((a) => existsSync(join(carpeta, `${a.nombre}.md`)));
+  const adoptando = previa === undefined && hayDeSerie;
+
+  for (const agente of AGENTES_DE_SERIE) {
+    const ruta = join(carpeta, `${agente.nombre}.md`);
+    const contenido = escribirAgente(agente);
+    const nuestro = huella(contenido);
+    let enDisco: string | undefined;
+    try {
+      enDisco = existsSync(ruta) ? huella(readFileSync(ruta, "utf8")) : undefined;
+    } catch {
+      // Un `.md` que no se puede leer no se puede comparar, y tampoco se pisa: el cargador
+      // ya dirá por qué no se pudo leer.
+      continue;
+    }
+
+    if (adoptando) {
+      // La ronda de adopción: se anota lo que hay y no se escribe nada.
+      if (enDisco === undefined) marca[agente.nombre] = nuestro;
+      else if (enDisco === nuestro) marca[agente.nombre] = nuestro;
+      else {
+        marca[agente.nombre] = AJENO;
+        desactualizados.push(agente.nombre);
+      }
+      continue;
+    }
+
+    if (enDisco === undefined) {
+      // Sin fichero: nuevo si no consta que lo hubiéramos entregado; borrado si consta.
+      if (marca[agente.nombre] === undefined) {
+        writeFileSync(ruta, contenido, "utf8");
+        marca[agente.nombre] = nuestro;
+        escritos.push(agente.nombre);
+      }
+      continue;
+    }
+    if (enDisco === nuestro) {
+      marca[agente.nombre] = nuestro;
+      continue;
+    }
+    if (marca[agente.nombre] !== undefined && marca[agente.nombre] !== AJENO && marca[agente.nombre] === enDisco) {
+      // Es exactamente lo que escribimos la última vez y la versión de serie ha cambiado:
+      // nadie lo ha tocado, así que se actualiza.
+      writeFileSync(ruta, contenido, "utf8");
+      marca[agente.nombre] = nuestro;
+      escritos.push(agente.nombre);
+      continue;
+    }
+    marca[agente.nombre] = AJENO;
+    desactualizados.push(agente.nombre);
+  }
+
+  escribirSemilla(carpeta, marca);
+  return { escritos, desactualizados };
 }
 
 /**
@@ -243,9 +395,42 @@ const HANDOFF_MOCKUP = [
 ].join("\n");
 
 /**
- * Los cuatro. Nacieron como una mudanza de los textos que había en código; desde entonces
- * `docs` lleva además la consulta acotada, y solo esa: cada regla que se añade aquí se mide
- * antes con los evals, porque un prompt más largo es coste en TODAS las llamadas.
+ * El probador de Android. Su conocimiento del protocolo NO va aquí: va en la skill
+ * `xone-android-hotswap`, que son 1.200 líneas de referencia y se cargan solo cuando hacen
+ * falta. Aquí queda lo que tiene que saber SIEMPRE, que es qué puede y qué no.
+ *
+ * **Y lo que hoy no puede es hablar con el dispositivo.** Este agente no tiene shell ni
+ * cliente del servidor hotswap: las tools que lo harían son el paso siguiente. Decirlo aquí
+ * —y decirlo en la `descripcion`, que es lo que el orquestador lee para delegar— es lo que
+ * evita el peor botón muerto de todos: uno dentro del grafo, que pulsa el modelo y del que
+ * se cree el resultado. Mientras tanto sirve para lo que sí puede: escribir el procedimiento
+ * exacto y leer lo que vuelva.
+ */
+const PROBADOR_ANDROID = [
+  "LO QUE PUEDES Y LO QUE NO, HOY:",
+  "- NO tienes conexión con el dispositivo: no puedes lanzar adb, ni abrir el WebSocket del",
+  "  servidor hotswap, ni subir un fichero, ni capturar una pantalla. No lo intentes ni digas",
+  "  que lo has hecho.",
+  "- Sí puedes leer el proyecto, y con eso escribir el PROCEDIMIENTO exacto: los comandos en",
+  "  orden, con el nombre real de cada colección y de cada control, y qué tiene que valer cada",
+  "  comprobación para dar la prueba por pasada.",
+  "- Y puedes LEER lo que te devuelvan: un volcado de `getAllElements`, un logcat, la salida de",
+  "  un `runSql`. Ahí sí diagnosticas.",
+  "",
+  "CÓMO ESCRIBES UNA PRUEBA:",
+  "- Un paso es una acción y su comprobación. Una acción sin comprobación no prueba nada.",
+  "- Por NOMBRE de control, nunca por coordenadas.",
+  "- Espera a un control (`waitForElement`), nunca a un número de segundos.",
+  "- Di qué evidencia esperas de cada comprobación (`getText` devuelve X, `isVisible` true) en",
+  "  vez de «comprobar que se ve bien».",
+  "- Si el proyecto no tiene el control que la prueba necesitaría, DILO: no inventes un nombre.",
+].join("\n");
+
+/**
+ * Los cinco. Nacieron como una mudanza de los textos que había en código; desde entonces
+ * `docs` lleva además la consulta acotada, y `probador` llegó con la documentación del
+ * protocolo hotswap. Cada regla que se añade aquí se mide antes con los evals, porque un
+ * prompt más largo es coste en TODAS las llamadas.
  */
 export const AGENTES_DE_SERIE: readonly Agente[] = [
   {
@@ -280,6 +465,19 @@ export const AGENTES_DE_SERIE: readonly Agente[] = [
     soloLectura: false,
     skills: ["xone-development", "xone-debugging", "archify", "artifacts-builder"],
     instrucciones: `${SKILLS_VISUALES}\n\n${MEMORIA_LEER}\n\n${MEMORIA_ESCRIBIR}`,
+    origen: "semilla",
+  },
+  {
+    nombre: "probador",
+    descripcion:
+      "Pruebas en un dispositivo ANDROID local, sobre la app XOneStudio del móvil o del " +
+      "emulador. Hoy NO se conecta al dispositivo: escribe el procedimiento de prueba con " +
+      "los comandos y las comprobaciones exactas, y diagnostica los volcados de controles, " +
+      "los logcat y las consultas que se le peguen. No modifica el proyecto.",
+    motor: "modelo",
+    soloLectura: true,
+    skills: ["xone-android-hotswap", "xone-debugging"],
+    instrucciones: PROBADOR_ANDROID,
     origen: "semilla",
   },
   {

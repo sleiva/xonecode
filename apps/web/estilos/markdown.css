@@ -1,0 +1,135 @@
+/* NUESTRA, no copiada de deepseek-harness — como `marca.css`, `tipografia.css` y
+ * `splash.css`.
+ *
+ * El cromo de lo que monta el renderizador de markdown del paquete: el BOTÓN DE COPIAR de
+ * las vallas de código y el CUERPO de un documento. Vive aquí y no en la hoja de ningún
+ * componente porque eso se monta en DOS sitios:
+ *   - en el chat, dentro de `MarkdownText` (`componentes/Chat.tsx`), y
+ *   - en el visor de la pestaña Ficheros (`componentes/Visor.tsx`), que instancia
+ *     `CodeBlock` directamente.
+ * Todo esto nació dentro de `Chat.module.css`, acotado bajo `.asistente`, así que el visor
+ * se quedaba con el botón CRUDO del paquete —sin caja y sin icono, porque su CSS Module es
+ * un stub vacío—: el mismo gesto se veía de dos maneras según la pestaña. Copiar el bloque
+ * en `Visor.module.css` habría sido la segunda copia que diverge el primer día.
+ *
+ * Se parte en dos alcances a propósito, y la diferencia importa:
+ *   - **el botón va sin ninguna envoltura**, porque es el mismo control dondequiera que
+ *     aparezca una valla de código;
+ *   - **el cuerpo va bajo `.md-cuerpo`**, una clase que se PIDE (`Chat.tsx` en el globo del
+ *     asistente, `Ficheros.tsx` en el documento renderizado). El visor de código monta el
+ *     mismo `CodeBlock` y NO la lleva: ahí la valla es la página entera y no debe salir
+ *     dentro de una caja con fondo, que es justo lo que el cuerpo de un mensaje sí quiere.
+ *
+ * `.md-code-block` es una clase LITERAL del paquete, no un hash de CSS Module: su
+ * `clsx(stub.block, "md-code-block", className)` la conserva tal cual (lo mismo que ya
+ * documenta `Chat.module.css`), y el `<button>` que hay dentro es uno solo — el de copiar.
+ *
+ * Solo alias `--dsw-alias-*` y variables de `marca.css`: ningún color literal, la misma
+ * disciplina que vigila `componentes/Barra.test.tsx` sobre los `.module.css` nuestros.
+ */
+
+/* EL BOTÓN DE LAS VALLAS DE CÓDIGO. El paquete lo pinta con la PALABRA «Copiar»/«Copiado» y
+   sin icono — se ve en su `CodeBlock`: el hijo del botón es la etiqueta, no un `<svg>`. No
+   se puede sustituir el hijo desde fuera, así que se le pone el icono delante con el MISMO
+   trazado que su propio `IconCopyOutline16`, como máscara (`--xonecode-icono-copiar`, en
+   `marca.css`): el dibujo es suyo, copiado de `lib/index.js`, no uno parecido hecho a mano.
+
+   La palabra se queda —pequeña— porque es lo ÚNICO que distingue «Copiar» de «Copiado»: ese
+   botón no expone estado en ningún atributo, así que sin el texto no habría forma de saber
+   si la copia salió.
+
+   Y con BORDE: el botón del paquete llega plano y no se distingue de la etiqueta del
+   lenguaje que tiene al lado. Un control que no se ve como control no invita a pulsarlo. Es
+   la misma caja que `componentes/BotonDeCopiar.module.css` da al de los mensajes: borde de
+   medio píxel, esquina de 6 y el fondo de la capa 1. */
+.md-code-block button {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border: 0.5px solid var(--dsw-alias-border-l2);
+  border-radius: 6px;
+  background: var(--dsw-alias-bg-layer-1);
+  color: var(--dsw-alias-label-secondary);
+  font: inherit;
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.md-code-block button:hover {
+  background: var(--dsw-alias-interactive-bg-hover);
+  color: var(--dsw-alias-label-primary);
+}
+
+.md-code-block button::before {
+  content: "";
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  margin-right: 4px;
+  vertical-align: -2px;
+  /* El alias y no `currentColor`: la disciplina de estilos prohíbe las palabras clave de
+     color en nuestras hojas, `currentcolor` incluida (`Barra.test.tsx`), y el tono que
+     queremos es justo el del texto apagado de al lado. */
+  background: var(--dsw-alias-label-secondary);
+  mask-image: var(--xonecode-icono-copiar);
+  mask-size: contain;
+  mask-repeat: no-repeat;
+  -webkit-mask-image: var(--xonecode-icono-copiar);
+  -webkit-mask-size: contain;
+  -webkit-mask-repeat: no-repeat;
+}
+
+/* EL CUERPO DE UN DOCUMENTO. Estiliza los elementos que `MarkdownText` monta dentro de
+   `.md-cuerpo`: son React de verdad, no HTML insertado, pero sus PROPIAS clases de módulo
+   están vacías en esta versión exacta —medido en `lib/index.js` del paquete instalado: cada
+   `X.module.css` publicado se reduce a `var X_module_css_default = {}`, así que
+   `clsx(stub.block, "md-code-block", className)` en `CodeBlock` deja solo `md-code-block`
+   como clase real y todo lo demás (`table`, `img`, el `div` que envuelve la tabla) sale SIN
+   clase alguna—. El único gancho de sobra es la etiqueta, más el ÚNICO literal que el
+   paquete sí conserva: `md-code-block`. */
+
+.md-cuerpo .md-code-block {
+  background: var(--dsw-alias-markdown-code-block);
+  padding: 10px;
+  border-radius: 6px;
+  overflow-x: auto;
+  margin: 4px 0;
+}
+
+/* El `pre`/`code` de dentro de la valla —resaltado por shiki o el `<pre>` llano de respaldo
+   cuando no hay gramática registrada— no lleva su propio fondo: ya lo pone `.md-code-block`,
+   y duplicarlo aquí encima del de shiki (que trae el suyo vía `--shiki-background`,
+   `estilos/shiki.css`) se vería como una caja dentro de otra caja. */
+.md-cuerpo .md-code-block pre,
+.md-cuerpo .md-code-block code {
+  background: none;
+  padding: 0;
+}
+
+.md-cuerpo code {
+  background: var(--dsw-alias-markdown-inline-code);
+  border-radius: 3px;
+  padding: 0 4px;
+}
+
+.md-cuerpo table {
+  border-collapse: collapse;
+}
+
+.md-cuerpo th,
+.md-cuerpo td {
+  border: 0.5px solid var(--dsw-alias-border-l2);
+  padding: 4px 8px;
+}
+
+/* Sin esto una imagen se sale de su columna: el ancho nativo del fichero no tiene nada que
+   ver con el de la caja. `MarkdownText` ya exige http(s) absoluto y pone
+   `referrerPolicy="no-referrer"` antes de montar el `<img>` (`render.js`, `remoteImageUrl`),
+   así que esto es solo maquetación, no una segunda comprobación de seguridad — y es también
+   la razón por la que una imagen enlazada con ruta RELATIVA dentro de un `.md` del proyecto
+   no se pinta en la pestaña Ficheros: el renderizador no la monta, y esta consola no sirve
+   los ficheros del proyecto por HTTP. */
+.md-cuerpo img {
+  max-width: 100%;
+  border-radius: 4px;
+}

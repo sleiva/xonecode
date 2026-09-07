@@ -40,10 +40,34 @@ describe("Revision: los avisos", () => {
     expect(screen.getByText(/no ha tocado ningún fichero/i)).toBeTruthy();
   });
 
-  it("pide la lista al montar: entrar a mirar ES la petición", () => {
+  it("pide la lista cuando NO la tiene: al montar y al quedarse sin ella", () => {
+    // Sin `via` no ha llegado respuesta: entrar a mirar ES la petición. Y al cambiar de
+    // proyecto el store la tira sin desmontar este componente, así que se vuelve a pedir
+    // — con la petición solo en el montaje, la pestaña se quedaba «Consultando…» para
+    // siempre (el mismo fallo medido en Ficheros).
     const recargar = vi.fn();
-    render(
+    const { rerender } = render(
+      <Revision ficheros={[]} parches={{}} desplegados={VACIO} alDesplegar={NADA} alPlegar={NADA} alRecargar={recargar} />
+    );
+    expect(recargar).toHaveBeenCalledTimes(1);
+    rerender(
       <Revision via="git" ficheros={[]} parches={{}} desplegados={VACIO} alDesplegar={NADA} alPlegar={NADA} alRecargar={recargar} />
+    );
+    expect(recargar).toHaveBeenCalledTimes(1); // ya la tiene: no se repite
+    rerender(
+      <Revision ficheros={[]} parches={{}} desplegados={VACIO} alDesplegar={NADA} alPlegar={NADA} alRecargar={recargar} />
+    );
+    expect(recargar).toHaveBeenCalledTimes(2);
+  });
+
+  it("sin cable no pide la lista, y la reconexión la recupera", () => {
+    const recargar = vi.fn();
+    const { rerender } = render(
+      <Revision ficheros={[]} parches={{}} desplegados={VACIO} alDesplegar={NADA} alPlegar={NADA} alRecargar={recargar} conectado={false} />
+    );
+    expect(recargar).not.toHaveBeenCalled();
+    rerender(
+      <Revision ficheros={[]} parches={{}} desplegados={VACIO} alDesplegar={NADA} alPlegar={NADA} alRecargar={recargar} conectado={true} />
     );
     expect(recargar).toHaveBeenCalledTimes(1);
   });

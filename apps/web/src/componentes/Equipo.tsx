@@ -171,12 +171,17 @@ function bloqueAndroid(informe: InformeDeDispositivos): DatosDeBloque {
   const { filas } = repartir(informe.dispositivos.filter((d) => d.plataforma === "android"));
   const cuentas: string[] = [];
   const fallos: string[] = [];
+  // Los dos destinos de Android apagados en Ajustes: no se ha mirado, que no es «no hay».
+  if (adb?.estado === "desactivada" && emulator?.estado === "desactivada") {
+    return { resumen: "Android no se mira: está desactivado en Ajustes.", filas: [], cuentas, fallos };
+  }
   if (adb?.estado === "no-encontrada" && emulator?.estado === "no-encontrada") {
     return { resumen: "Sin SDK de Android: no hay adb ni emulator en el PATH ni en ANDROID_HOME.", filas: [], cuentas, fallos };
   }
   for (const h of [adb, emulator]) {
     if (h?.estado === "fallo") fallos.push(`${h.nombre} falló: ${h.detalle ?? "sin motivo"}`);
     if (h?.estado === "no-encontrada") cuentas.push(`${h.nombre} no está instalado.`);
+    if (h?.estado === "desactivada") cuentas.push(`${h.nombre} no se ha mirado: desactivado en Ajustes.`);
   }
   if (adb?.estado === "ok" && filas.length === 0) cuentas.push("adb no ve ningún dispositivo ni emulador.");
   if (emulator?.estado === "ok") {
@@ -194,6 +199,9 @@ function bloqueIos(informe: InformeDeDispositivos): DatosDeBloque {
   const devicectl = herramienta(informe, "devicectl");
   const cuentas: string[] = [];
   const fallos: string[] = [];
+  if (xcrun?.estado === "desactivada" && devicectl?.estado === "desactivada") {
+    return { resumen: "iOS no se mira: está desactivado en Ajustes.", filas: [], cuentas, fallos };
+  }
   if (xcrun?.estado === "no-aplica") {
     return { resumen: "Los simuladores y dispositivos iOS solo se detectan en macOS.", filas: [], cuentas, fallos };
   }
@@ -203,6 +211,8 @@ function bloqueIos(informe: InformeDeDispositivos): DatosDeBloque {
   const { filas, apagados } = repartir(informe.dispositivos.filter((d) => d.plataforma === "ios"));
   if (xcrun?.estado === "fallo") fallos.push(`simctl falló: ${xcrun.detalle ?? "sin motivo"}`);
   if (devicectl?.estado === "fallo") fallos.push(`devicectl falló: ${devicectl.detalle ?? "sin motivo"}`);
+  if (xcrun?.estado === "desactivada") cuentas.push("Los simuladores no se miran: desactivados en Ajustes.");
+  if (devicectl?.estado === "desactivada") cuentas.push("Los iPhone y iPad no se miran: desactivados en Ajustes.");
   if (xcrun?.estado === "ok") {
     const arrancados = filas.filter((d) => d.clase === "simulador").length;
     if (apagados.length > 0) {

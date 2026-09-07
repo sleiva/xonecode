@@ -1,8 +1,9 @@
 import type { Acto } from "../tipos.js";
 import { usarPegadoAbajo } from "../pegadoAbajo.js";
 import { protegerDolares } from "../protegerDolares.js";
+import { ETIQUETAS_DE_CODIGO } from "../etiquetasDeCodigo.js";
 import { BotonDeCopiar } from "./BotonDeCopiar.js";
-import { MarkdownText, type MarkdownCodeLabels } from "@deepseek-ai/dsh-client-ui-primitives";
+import { MarkdownText } from "@deepseek-ai/dsh-client-ui-primitives";
 import vista from "../../estilos/ChatView.module.css";
 import estilos from "./Chat.module.css";
 
@@ -25,9 +26,10 @@ import estilos from "./Chat.module.css";
  * gris para siempre — medido en pantalla. Por eso hace falta saber si hay turno en vuelo, y
  * eso lo dice el servidor (`clase: "turno"`), no se deduce.
  *
- * `codeLabels` va en español porque el paquete es «zero-cordis» y no puede leer el
- * locale de la app: sin esto, el botón de copiar de cada valla de código saldría en
- * chino, que es el valor por omisión documentado en su propio README.
+ * `codeLabels` va en español porque el paquete es «zero-cordis» y no puede leer el locale
+ * de la app: sin esto, el botón de copiar de cada valla de código saldría en chino, que es
+ * el valor por omisión documentado en su propio README. La pareja de palabras vive en
+ * `etiquetasDeCodigo.ts` porque la pestaña Ficheros renderiza markdown con las mismas.
  *
  * El texto del USUARIO se pinta tal cual, sin pasar por `MarkdownText`: son sus propias
  * palabras, no hay nada que interpretar como markdown.
@@ -49,8 +51,6 @@ import estilos from "./Chat.module.css";
  * consola, no del turno) y `fin` (el resumen con la duración). La pestaña sigue siendo el
  * registro completo; esto es el pulso.
  */
-const ETIQUETAS_DE_CODIGO: MarkdownCodeLabels = { copyLabel: "Copiar", copiedLabel: "Copiado" };
-
 /** Los actos que son PULSO del turno y no conversación: se pliegan al terminar. */
 const ES_PULSO = new Set(["razonamiento", "herramientas", "fase"]);
 
@@ -238,7 +238,10 @@ export function Chat({
             }
             if (acto.tipo === "asistente") {
               return (
-                <div key={indice} className={`${vista.flowItem} ${estilos.globo} ${estilos.asistente}`}>
+                // `md-cuerpo` es una clase GLOBAL, no de módulo: el cuerpo de un documento
+                // markdown se pinta igual aquí y en el `.md` que enseña la pestaña
+                // Ficheros, así que sus reglas viven en `estilos/markdown.css`.
+                <div key={indice} className={`${vista.flowItem} ${estilos.globo} ${estilos.asistente} md-cuerpo`}>
                   <MarkdownText
                     // Con los dólares escapados: el renderizador los lee como TeX y no
                     // se puede apagar (`protegerDolares.ts`). El botón de copiar de abajo

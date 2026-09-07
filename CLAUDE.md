@@ -292,6 +292,14 @@ hijo—, así que se le añade el icono por CSS con el MISMO trazado, guardado c
 queda pequeña al lado porque es lo ÚNICO que distingue «Copiar» de «Copiado»: ese botón no
 expone su estado en ningún atributo. Y los dos llevan BORDE: el del paquete llega plano
 —su CSS Module es un stub vacío— y un control que no se ve como control no invita a pulsarlo.
+**Esas reglas viven en `apps/web/estilos/markdown.css`, no en la hoja de ningún componente**:
+nacieron acotadas bajo `.asistente` en `Chat.module.css` y, en cuanto el visor de Ficheros
+montó el mismo `CodeBlock`, ese se quedó con el botón crudo del paquete — el mismo gesto con
+dos aspectos según la pestaña. La hoja parte el alcance en dos a propósito: **el botón va sin
+envoltura**, porque es el mismo control donde sea que haya una valla, y **el cuerpo del
+documento va bajo la clase global `md-cuerpo`**, que se PIDE (el globo del asistente y el
+`.md` renderizado de Ficheros la llevan; el visor de código no, porque ahí la valla es la
+página y no debe salir metida en una caja con fondo).
 
 **La caja del compositor se anima mientras el agente trabaja** (borde vivo, `data-trabajando`
 en `Compositor.module.css`). Es la única señal en los tramos donde el modelo no habla —piensa,
@@ -466,7 +474,8 @@ se intentaba guardar bajo ollama, que ni pide credencial).
 `.xonecode/agentes/<nombre>.md`: `descripcion`, `motor` (`modelo` | `claude-code` | `codex`),
 `modelo`, `soloLectura`, `skills`, y el cuerpo con sus instrucciones. Los cuatro
 especialistas de siempre —`docs`, `planner`, `dev`, `mockup`— dejaron de estar a fuego en
-`perfiles.ts` y son ahora esos mismos ficheros, sembrados en el arranque. Reglas duras:
+`perfiles.ts` y son ahora esos mismos ficheros, sembrados en el arranque. El quinto es
+**`probador`**, para Android local (párrafo siguiente). Reglas duras:
 - **Las de XOne no salen del fichero.** `REGLAS_XONE` se antepone SIEMPRE desde código a
   todo subagente. Un agente que no sepa que XOne ignora en silencio lo desconocido escribe
   un atributo inventado y no da error: da un bug mudo. Poder quitarlas editando un `.md`
@@ -478,9 +487,25 @@ especialistas de siempre —`docs`, `planner`, `dev`, `mockup`— dejaron de est
 - **Sin `descripcion` no se carga**: es lo que el orquestador lee para decidir cuándo
   delegar, no un rótulo. Y **`soloLectura` solo es cierto con exactamente «true»** — la
   trampa del `"false"` de CloudStudio, que aquí concedería ESCRITURA.
-- **Se siembra UNA VEZ y la marca es la carpeta.** «Escribe los que falten» resucitaría un
-  agente borrado en el siguiente arranque, o sea convertiría el botón de eliminar en uno que
-  no hace nada hasta que reinicias.
+- **La marca de la siembra es un FICHERO, `.semilla.json`, con el hash de lo que escribimos
+  nosotros para cada agente.** Fue «la carpeta es la marca»: si `agentes/` existía, no se
+  escribía nada nunca más. Respetaba el prompt afinado por el usuario —que es lo que hay que
+  respetar— pero eligió un cuerno del dilema y el otro acabó mordiendo: **ningún agente
+  nuevo, y ninguna corrección a uno existente, alcanzaba a quien ya hubiera arrancado una
+  vez**. Medido: un `docs.md` llevaba semanas sin la consulta acotada, y `probador` no habría
+  llegado jamás. El hash distingue los cuatro casos que antes eran uno:
+  no está + no consta = agente NUEVO, se escribe; no está + consta = lo BORRÓ el usuario, no
+  se resucita; está y es el nuestro = nadie lo tocó, se actualiza; está y NO es el nuestro =
+  es suyo, se deja y se DICE (por `problemas`, el mismo canal que un `.md` roto, porque quien
+  lo tiene que arreglar está mirando esa ventana).
+- **Una carpeta sin marca se ADOPTA, no se siembra** — pero solo si tiene alguno de serie
+  dentro. Es la de quien viene de la regla vieja, y ahí no se puede saber qué borró a
+  propósito: dar por nuevo lo que falta le resucitaría un agente que eliminó. Se anota lo que
+  hay —como nuestro si coincide con la versión de hoy, como `ajeno` si no— y no se escribe
+  ningún `.md` esa vez; desde la siguiente todo lo de arriba funciona. Una carpeta VACÍA sin
+  marca es otra cosa y se siembra entera: no viene de ninguna siembra (la deja un
+  `guardarAgente` con nombre inválido), y adoptarla anotaría los cinco como entregados sin
+  escribir uno solo — ese usuario se quedaría sin ningún subagente para siempre.
 - **El prompt del orquestador se GENERA** de la lista (`xoneAgent.ts#promptOrquestador`): la
   constante que nombraba a los cuatro a pelo se queda mintiendo el día que alguien borre uno.
   La regla del encadenado de diagramas solo se escribe si existen los dos agentes de los que
@@ -534,9 +559,36 @@ especialistas de siempre —`docs`, `planner`, `dev`, `mockup`— dejaron de est
   Quien lo tiene que arreglar está mirando ahí, y un agente que no aparece sin explicación
   se lee como que la aplicación lo perdió.
 
+**El probador de Android** (`probador` en `AGENTES_DE_SERIE`, skill `xone-android-hotswap`).
+El interlocutor es la app **XOneStudio ya instalada** en el móvil o el emulador: no se
+compila ni se instala un APK por iteración. Levanta un servidor **solo en builds
+*debuggable*** y DENTRO del proceso de la app —si la app no está viva, el puerto no
+responde—, que habla WebSocket para los comandos (`launchApplication`, `getAllElements`,
+`getScreenshot`, `click`/`fill`/`getText`, `runSql`, `getLog`…) y HTTP para los ficheros
+(`/file_upload`, con el caso especial `debug_app_update.zip` + `appName` que despliega la app
+entera, y `/file_download`). Se llega por `adb forward tcp:8443 tcp:8443`, y entonces la IP es
+`127.0.0.1`. Cuatro cosas que la documentación deja claras y que cuestan un diagnóstico falso
+si se olvidan: el **puerto 8443 es el por omisión y cambia** si está ocupado; el certificado
+es **autofirmado** (`curl -k`); **subir no aplica** —hay que reiniciar la app, y medir sin
+reiniciar mide la versión anterior sin dar ningún síntoma—; y la base de datos va **cifrada
+con SQLCipher**, así que subir un `.db` en claro acaba en «database disk image is malformed».
+- **El protocolo NO va en el prompt**: son 1.200 líneas y viven en la skill, que se carga
+  cuando hace falta. En las instrucciones del agente queda solo lo que tiene que saber
+  siempre.
+- **Y lo primero que dice es lo que HOY no puede**: no tiene shell ni cliente del servidor
+  hotswap, así que no habla con el dispositivo. Sirve para escribir el procedimiento exacto
+  —comandos en orden, nombres reales de colección y de control, y qué tiene que valer cada
+  comprobación— y para leer lo que vuelva. Está en la `descripcion`, que es lo que el
+  orquestador lee para delegar: un especialista que no puede hacer lo que promete es el peor
+  botón muerto, porque quien lo pulsa es el modelo y se cree el resultado.
+- **`archify` y `artifacts-builder` no las lleva**, y con eso cayó una afirmación del test que
+  ya no era la regla: no es que TODOS los especialistas las tengan, es que **las dos viajan
+  juntas** —el bloque `SKILLS_VISUALES` habla de las dos—. Un probador no dibuja diagramas, y
+  dos skills que no usa son prompt en todas sus llamadas.
+
 **La ventana de ajustes** (`apps/web/src/componentes/Ajustes.tsx`), con la disposición del
-panel del harness: navegación a la izquierda y UNA sección a la vista — apariencia, modelos
-y entornos. Tres ausencias deliberadas, todas por la misma regla («un control sin dato
+panel del harness: navegación a la izquierda y UNA sección a la vista — apariencia, modelos,
+entornos, subagentes y dispositivos. Tres ausencias deliberadas, todas por la misma regla («un control sin dato
 detrás es la misma mentira que una lista vacía rellenada»):
 - **Los `TEMAS` de `cli/tema.ts` no están**: son paletas ANSI de la consola de terminal y en
   un navegador no pintan nada. Lo que sí es real es el claro/oscuro del cliente
@@ -784,6 +836,24 @@ llega con el teclado a botones que no se ven. La preferencia se recuerda en `loc
 apariencia, y con el mismo `try` alrededor de cada acceso porque en una ventana privada el
 accesor lanza.
 
+**Al escritorio se VUELVE, y el enlace es la marca** (`Cabecera.tsx#alIrAlEscritorio`,
+`App.tsx#enEscritorio`). El escritorio se pintaba solo cuando NO había proyecto abierto, así
+que en cuanto abrías uno no había forma de volver a él —ni a los otros proyectos, ni a «Tu
+equipo», ni al entorno—: medido en pantalla. Tres decisiones:
+- **La marca, no un control nuevo.** «xonecode» ya es la raíz de la miga que se lee al lado
+  («xonecode / AppDemo / Hola»), y pulsar el primer nivel de una miga es lo que hace
+  cualquier interfaz con migas. La alternativa —una entrada «Escritorio» arriba de la barra
+  lateral— añadía un control y encima desaparecía al plegar la barra, que es justo cuando
+  más falta hace. En el escritorio la marca deja de ser botón: ausente el manejador, se
+  pinta como rótulo — un botón que no lleva a ninguna parte es el botón muerto de siempre.
+- **Es estado de VISTA, no una orden al servidor.** Volver no cierra la sesión ni suelta el
+  proyecto: la barra lo sigue marcando como activo y el turno que estuviera corriendo sigue
+  corriendo. Por el cable no viaja nada.
+- **Se sale del escritorio al ABRIR algo** (`abrirSesion`, la función por la que pasan
+  ahora los tres sitios que abrían sesión), y no reaccionando a que el servidor cambie de
+  sesión: el id de una sesión nueva nace al volcar su primer acto, y un efecto sobre
+  `sesionActiva` te sacaría del escritorio a media mirada sin que hubieras pedido nada.
+
 **El centro sin sesión es el ESCRITORIO** (`Escritorio.tsx`), no un hueco con una frase
 («elige un proyecto en la barra lateral», que es lo que había). Pinta los proyectos con lo
 que el servidor ya manda —si tienen copia local, sus últimas sesiones—, el entorno activo
@@ -794,7 +864,13 @@ puente con el móvil que este producto todavía no cablea, salvo la DETECCIÓN, 
 (párrafo siguiente) (`docs/DISENO-DASHBOARD.md` lista
 pieza por pieza qué se sostiene y qué no). Los dos vacíos se distinguen, además: «no hay
 entorno registrado» manda a Ajustes; «el entorno no devolvió proyectos» no, porque ahí no
-hay nada que configurar.
+hay nada que configurar. **Y pinta solo los proyectos ELEGIDOS** —`Entorno.proyectos`, la
+misma elección que manda en la barra, con la misma omisión si nadie eligió—: los demás
+estaban debajo en su propia rejilla de tarjetas, y eso deshacía la elección, porque el
+escritorio enseñaba los dieciocho proyectos del entorno y el grupo elegido se perdía entre
+ellos. Se CUENTAN en una línea con el botón a Ajustes, que es la misma regla de la barra:
+elegir cuatro y ver dieciocho es no haber elegido, pero callar los otros catorce sería
+afirmar que el entorno solo tiene cuatro.
 
 **Qué hay en la máquina para probar la app** (`core/dispositivos.ts`,
 `agent/dispositivosEnMaquina.ts`, panel «Tu equipo» en `Equipo.tsx`, mensaje
@@ -830,6 +906,94 @@ lanza ni un proceso. Reglas:
   35 filas iguales no dicen nada que «35 disponibles, ninguno arrancado» no diga.
 - Sin la opción `detectarDispositivos` en `montarRutas` no se manda nada: el escritorio se
   queda en «consultando…» en vez de afirmar una máquina vacía.
+- **QUÉ se mira se elige en Ajustes → Dispositivos** (`core/settings.ts#AjustesDeDispositivos`,
+  guardado en `settings.json` por `guardarDispositivos`): cuatro destinos —Android, Android
+  Sim, iOS, iOS Sim—, que son las cuatro cosas distintas que se quieren mirar, no las cuatro
+  herramientas. Cinco reglas:
+  - **Apagar deja de LANZAR procesos**, no esconde filas. Ahí está el sentido del ajuste:
+    medir cuesta procesos en el equipo del usuario, `adb devices` arranca un demonio que se
+    queda vivo y `xcrun` tarda segundos. Con los dos destinos de iOS apagados no se llama ni
+    a `xcode-select -p`. Hay test que cuenta las invocaciones.
+  - **Una herramienta que sirve a DOS destinos solo se salta con los dos apagados**: `adb
+    devices` trae en la misma lista los Android físicos y los emuladores arrancados —un
+    emulador arrancado no aparece en ningún otro sitio—, así que con emuladores encendidos
+    adb se llama igual y lo que se filtra es la LISTA, después de medir.
+  - **Un quinto estado de herramienta, «desactivada»**, que no se pliega en «no-encontrada»
+    ni en «no-aplica»: una dice que falta el binario, otra que la máquina no puede, y esta
+    que no se ha mirado a propósito — y es la única de las tres que se arregla con un clic.
+  - **Ausente no es «no»: es «no lo he dicho»**, y entonces se miran todos; `{}` significa lo
+    mismo y por eso no se guarda (borra la clave del fichero). La misma distinción que
+    `Entorno.proyectos`. Un `"false"` de CADENA se descarta en las tres capas (disco, cable y
+    store) en vez de tomarse por falso: es verdadero en JavaScript, y apagaría un destino que
+    nadie apagó.
+  - **Configurar y volver a medir son el MISMO mensaje** (`{clase: "dispositivos", ajustes?}`)
+    y en ese orden: se guarda y luego se mide, porque el detector lee los ajustes de disco en
+    cada medida y al revés daría la foto de la configuración anterior. La ventana **dice que
+    hoy solo se DESCUBREN**: conectar por red, arrancar un emulador o instalar la app no está
+    cableado, y un botón que lo prometiera sería el botón muerto de siempre.
+- **REQUISITOS e INVENTARIO son dos bloques, no una lista.** Un requisito está o no está —y
+  si no está, se instala—; un dispositivo es algo que HAY. Juntos, «Android Sim · emulator no
+  está instalada» se leía como un ajuste que el botón de al lado podía arreglar. El punto va
+  VERDE solo con «ok» —lo único que significa disponible—, HUECO para lo que falta (cuatro
+  puntos rojos se leen como cuatro errores, y no tener el SDK de Android si no desarrollas
+  para Android no es un error) y sin relleno mientras no haya foto.
+- **El inventario va en los dos grupos que una persona distingue**: «Teléfonos y tablets» y
+  «Simuladores y emuladores» — lo que se enchufa y lo que se arranca. No por plataforma: un
+  emulador de Android y un simulador de iOS se eligen por lo mismo. Un **AVD definido y sin
+  arrancar también es un simulador disponible**: `emulator -list-avds` los da por NOMBRE y
+  no salen en `adb devices` hasta que arrancan, así que sin añadirlos la lista dejaba fuera
+  todos los de Android. La lista lleva scroll propio: esta máquina tiene 35 simuladores, y
+  sin tope empujan los requisitos fuera de la pantalla — que es donde está lo accionable.
+- **El filtro de medida son CASILLAS, no botones.** Fueron cuatro botones «Se mira» al lado
+  del punto verde, y ahí decían lo que no eran: el verde ya afirma que se puede usar, así
+  que un botón grande a su lado se leía como si concediera la capacidad. Degradado a una
+  línea de «Buscar en: …», que es exactamente lo que hace.
+- **Con qué dispositivo trabaja el agente NO se elige aquí**, y la ventana lo dice: es una
+  decisión de la SESIÓN y esta ventana es configuración global («Configuración global» en su
+  propia cabecera). Se elige en la pastilla del compositor, al lado del modelo.
+
+**El dispositivo de la sesión** (`PastillaDeDispositivo.tsx`, `alta.dispositivoActivo`,
+`{clase: "dispositivo", id?}`, `EntradaIndice.dispositivo`). Con cuál trabaja el agente es
+del mismo tipo que el modelo —una elección de la sesión que decide el servidor y el cliente
+pinta— y por eso comparte fila con él. Cinco reglas:
+- **Se guarda la FOTO, no solo el id.** Los ids no son estables: `emulator-5554` es un
+  puerto, un AVD recién arrancado se queda con el serial que haya libre, y el de un teléfono
+  sobrevive pero el teléfono se desenchufa. Con solo el id, al reabrir una sesión la pastilla
+  enseñaría un serial crudo o nada; con la foto puede decir «iPhone 16 · no está ahora».
+- **Si está a mano AHORA no se guarda**: eso se resuelve contra la última medida en el
+  momento de pintar. Un «conectado» escrito en disco es falso en cuanto se desenchufa.
+- **El cliente manda el ID y nada más.** El nombre, la plataforma y la clase salen de la
+  medida del servidor: el navegador no es fuente sobre la máquina, y aceptar su versión
+  dejaría entrar un «iPhone 16» que nadie ha visto. Un id que no esté en la medida se ignora
+  en silencio — es una foto vieja del cliente, no un error que contar.
+- **El elegido que ya no está se DICE, no se borra.** Quitarlo de la lista haría desaparecer
+  una elección que nadie ha deshecho. Y sin medida no se afirma que falte: no hay contra qué
+  comprobarlo.
+- **Elegirlo antes de que la sesión tenga id se queda en MEMORIA** y se anota en cuanto
+  `volcar()` crea la entrada: el id nace al volcar el primer acto (la misma trampa que
+  `sesionActiva`), así que sin esa espera, elegir dispositivo nada más abrir y hablar después
+  perdía la elección al reabrir. `elegirDispositivo` del índice devuelve `false` en vez de
+  crear una entrada a medias, que la barra enseñaría como una sesión vacía.
+La pastilla **dice que ninguna tool la consume todavía**: las de dispositivo son lo
+siguiente, y hasta entonces la elección se guarda y se enseña, nada más.
+- **Instalar lo que falta: se ofrece lo que se puede cumplir, y solo eso**
+  (`Herramienta.instalar`, `INSTALADORES` en `agent/dispositivosEnMaquina.ts`).
+  - **El comando no puede llevar NINGUNA ruta de la máquina**: se pinta en la ventana y
+    viaja por el cable, que puede ir por un túnel — la misma regla por la que `ruta` se
+    queda en el host (`sinRutas`). Por eso solo se propone lo que se resuelve por el PATH:
+    `sdkmanager --install …` si está, y si no `brew install --cask android-platform-tools`.
+  - **Solo `xcode-select --install` se lanza desde aquí** (`automatico: true`): devuelve en
+    el acto y abre el diálogo de Apple. `brew install --cask` tarda minutos y puede pedir la
+    contraseña de administrador, y un hijo sin terminal detrás se quedaría esperando esa
+    contraseña para siempre — un botón que se cuelga es peor que no tener botón, así que ese
+    comando se ENSEÑA para copiarlo.
+  - **Por el cable viaja el NOMBRE de la herramienta, nunca el comando**: un comando que
+    llegue del cliente es una shell abierta en la máquina del usuario. El host lo resuelve
+    con una tabla cerrada, y después vuelve a medir — la foto nueva es la que dice si la
+    herramienta apareció, no lo que conteste el instalador.
+  - **Un código de salida no nulo no es un fallo aquí**: `xcode-select --install` sale con
+    error cuando las herramientas ya están puestas. Se propaga lo que impide seguir (que el
+    binario no exista, o que se cuelgue).
 
 **La barra distingue dónde estás.** `proyectoAbierto` (booleano) decía SI había uno; la
 barra necesita CUÁL, y son dos preguntas distintas: el mensaje de alta lleva ahora
@@ -893,13 +1057,56 @@ alias (`alias.xml` → `app/Clientes.xml`, que no tiene ningún `alias.xne` al l
 NO recorre una carpeta detrás de un enlace (`ficherosDelProyecto` usa `lstatSync`), que era el
 otro lado del mismo agujero: seguirlo listaba `.xonecode` bajo un alias y nombres de ficheros
 de fuera del proyecto. Esa función alimenta también el completado del Tab y el universo de
-`esVistaAplanada`, y no seguir enlaces a carpeta es correcto para los tres. Binario es un NUL en los primeros 8 KB; lo que no es UTF-8 se lee como latin1 y se
-dice; el contenido se recorta al mismo tope que el parche. El visor es el `CodeBlock` de
-deepseek —un solo resaltador, un solo tema— y los números de línea son un contador CSS sobre
-los `.line` de shiki (`Visor.module.css`): con una gramática perezosa el primer render sale
-plano y se repinta solo. Las dos pestañas comparten `Arbol.tsx` (primer nivel abierto, filtro
-por subcadena de la ruta que abre lo que casa) y la maqueta de dos columnas con el corte por
-CONTENEDOR a 720 px, no por ventana. El árbol y los contenidos se tiran con la sesión y sin
+`esVistaAplanada`, y no seguir enlaces a carpeta es correcto para los tres.
+**Un fichero se enseña como lo que ES.** Un proyecto XOne no es solo `.xne`, `.js` y `.css`:
+lleva iconos, capturas y un `README.md`, y enseñarlos como «es un fichero binario» o como una
+pared de almohadillas mandaba a mirarlos a otro sitio. Tres reglas:
+- **La imagen se decide por la EXTENSIÓN y ANTES de olfatear el NUL** (`IMAGENES`, tabla
+  cerrada, y `mimeDeImagen`). Al revés no funciona: un PNG lleva ceros en su propia cabecera,
+  así que TODAS caían por el camino del texto. Viaja como `mime` + `base64` y la pinta un
+  `<img>` con una URL de datos — **nunca el marcado inyectado en el DOM**, porque un `.svg`
+  del proyecto puede traer un `<script>` y dentro de un `<img>` el navegador no lo ejecuta.
+- **Tope propio para las imágenes** (`TOPE_DE_IMAGEN`), y al pasarlo viaja el `mime` SIN los
+  bytes: una imagen recortada no es media imagen, es el icono roto, y el `mime` a secas es lo
+  que deja decir «una imagen de 9 MB» en vez de «un binario». Base64 infla un tercio, que es
+  la otra razón de que el tope no sea el del texto.
+- **El SVG enseña el dibujo Y el código, uno debajo del otro; el markdown lleva
+  interruptor.** No es la misma situación: un SVG es las dos cosas a la vez y quien lo abre
+  aquí está comprobando que ese código produce ese dibujo, así que alternar escondería la
+  mitad de la respuesta; un documento renderizado y su fuente, en cambio, son la MISMA
+  información dos veces, y ahí el interruptor Vista/Fuente (vista por omisión: quien abre un
+  `README` quiere leerlo) es lo correcto. El markdown lo pinta el MISMO `MarkdownText` del
+  chat, con `protegerDolares` por lo mismo de siempre (`$http` aparece en los `.md` de un
+  proyecto XOne). Una imagen enlazada con ruta RELATIVA dentro de un `.md` no se pinta: el
+  renderizador exige http(s) absoluto y esta consola no sirve los ficheros por HTTP.
+- **Las dos pestañas piden su foto cuando NO la tienen, no al montar.** `store.ts` tira
+  `arbol`, `contenidos`, `revision` y `parches` en cuanto el alta trae otra `sesionActiva`
+  —y hace bien: son del proyecto anterior—, pero el componente NO se desmonta si su pestaña
+  sigue delante, así que con la petición solo en el montaje **cambiar de proyecto dejaba
+  Ficheros en «Consultando el árbol…» para siempre** (medido en el navegador con dos
+  proyectos; Revisión tenía la misma forma). El efecto depende ahora de si hay dato y de
+  `conectado`: lo segundo es el otro caso de lo mismo —al caerse el cable el store también
+  lo tira, y sin esa dependencia la reconexión no lo recuperaría—, y de paso no se pide
+  nada mientras no hay a quién pedírselo. No hay lazo: la respuesta define el dato, también
+  cuando trae `error`.
+- **El fichero se copia campo a campo al entrar en el store** (`store.ts`, el `case
+  "fichero"`), que es una lista blanca: un campo NUEVO no llega hasta que se nombra ahí.
+  Medido —y era el motivo de que NINGUNA imagen se enseñara en el navegador mientras los
+  tests de jsdom pasaban en verde, porque esos le dan el contenido al componente a mano—:
+  `mime` y `base64` se caían en ese `case`. Hay test.
+Lo demás no cambia: binario es un NUL en los primeros 8 KB; lo que no es UTF-8 se lee como
+latin1 y se dice; el contenido se recorta al mismo tope que el parche. El visor es el
+`CodeBlock` de deepseek —un solo resaltador, un solo tema— y los números de línea son un
+contador CSS sobre los `.line` de shiki (`Visor.module.css`): con una gramática perezosa el
+primer render sale plano y se repinta solo. Las dos pestañas comparten `Arbol.tsx` y la
+maqueta de dos columnas con el corte por CONTENEDOR a 720 px, no por ventana. **Cuánto nace
+abierto lo decide quien monta el árbol** (`abiertas`), y no es lo mismo en las dos: en
+Ficheros nace TODO plegado, porque es el proyecto entero y con el primer nivel abierto se
+abría como una lista de cien ficheros donde no se ve la forma del proyecto; en Revisión son
+solo los ficheros que la sesión tocó —un puñado, y verlos es el objetivo—, así que ahí sigue
+la omisión de primer nivel abierto. El filtro es por subcadena de la ruta y abre lo que casa
+en los dos casos: filtrar es buscar, y una coincidencia dentro de una carpeta plegada no se
+ve. El árbol y los contenidos se tiran con la sesión y sin
 cable, como los parches.
 
 En Revisión, la marca de lo que la sesión tocó es una **ref propia**,

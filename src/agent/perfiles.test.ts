@@ -10,8 +10,25 @@ const PERFILES = Object.fromEntries(AGENTES_DE_SERIE.map((a) => [a.nombre, a]));
 const TODOS = [...AGENTES_DE_SERIE];
 
 describe("permisosDe", () => {
-  it("todos los especialistas reciben las skills compartidas de arquitectura y artefactos", () => {
+  /**
+   * `archify` y `artifacts-builder` van SIEMPRE juntas, y esa es la regla — no «todos las
+   * llevan».
+   *
+   * Se afirmaba lo segundo mientras los cuatro especialistas eran de desarrollo y dibujaban
+   * diagramas. `probador` no dibuja ninguno: darle dos skills que no va a usar sería prompt
+   * en TODAS sus llamadas, que es justo el coste que este repo mide antes de añadir una
+   * línea. Lo que sí se rompe solo es tener una de las dos: el bloque `SKILLS_VISUALES` que
+   * va en el cuerpo habla de las dos y manda usar `archify` antes que la otra, así que un
+   * perfil con `artifacts-builder` a secas leería instrucciones sobre una tool que no tiene.
+   */
+  it("archify y artifacts-builder viajan juntas: ninguna sin la otra", () => {
     for (const perfil of TODOS) {
+      expect(perfil.skills.includes("archify"), perfil.nombre).toBe(perfil.skills.includes("artifacts-builder"));
+    }
+  });
+
+  it("los especialistas de DESARROLLO sí las llevan las dos", () => {
+    for (const perfil of TODOS.filter((p) => ["docs", "planner", "dev", "mockup"].includes(p.nombre))) {
       expect(perfil.skills, perfil.nombre).toContain("archify");
       expect(perfil.skills, perfil.nombre).toContain("artifacts-builder");
     }

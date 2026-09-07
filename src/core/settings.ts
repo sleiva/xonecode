@@ -31,10 +31,44 @@ export interface Entorno {
   proyectos?: readonly string[];
 }
 
+/**
+ * Las cuatro clases de destino en que se prueba una app XOne. No son cuatro herramientas
+ * —`adb` sirve a la vez a los Android físicos y a los emuladores arrancados— sino las
+ * cuatro cosas distintas que una persona quiere mirar o dejar de mirar.
+ */
+export const PLATAFORMAS_DE_DISPOSITIVO = ["android", "androidEmulador", "ios", "iosSimulador"] as const;
+
+export type PlataformaDeDispositivo = (typeof PLATAFORMAS_DE_DISPOSITIVO)[number];
+
+/**
+ * Qué destinos se MIRAN al medir la máquina.
+ *
+ * Vive en global y no en el proyecto porque describe el equipo, no la app: el mismo Mac
+ * mira los mismos simuladores para todos los proyectos que se abran en él.
+ *
+ * **Ausente no es «no»: es «no lo he dicho»**, y entonces se miran todos — la misma
+ * distinción que `Entorno.proyectos`, y por la misma razón: apagar un destino es una
+ * elección legítima que hay que poder distinguir de no haber elegido nunca. Por eso cada
+ * campo es opcional en vez de arrancar en `true`.
+ *
+ * Y apagar no es cosmético: medir cuesta procesos en el equipo del usuario —`adb devices`
+ * arranca el demonio de adb y se queda vivo, `xcrun` tarda segundos—, así que un destino
+ * apagado no se consulta, y su herramienta se declara «desactivada» en vez de fingir que
+ * no está.
+ */
+export type AjustesDeDispositivos = { [K in PlataformaDeDispositivo]?: boolean };
+
+/** ¿Se mira este destino? Ausente = sí. */
+export function seMira(ajustes: AjustesDeDispositivos | undefined, plataforma: PlataformaDeDispositivo): boolean {
+  return ajustes?.[plataforma] !== false;
+}
+
 export interface Settings {
   entornos: Entorno[];
   /** La BASE del workspace. La disposición de dentro la fija `rutaDeWorkspace`. */
   workspace?: string;
+  /** Qué destinos se miran al medir la máquina. Ausente = todos. */
+  dispositivos?: AjustesDeDispositivos;
 }
 
 /**
@@ -123,10 +157,34 @@ export function validarSettings(bruto: unknown): { settings: Settings; avisos: A
   }
 
   const workspace = typeof objeto.workspace === "string" ? objeto.workspace : undefined;
+  const dispositivos = validarDispositivos(objeto.dispositivos);
   return {
-    settings: workspace === undefined ? { entornos } : { entornos, workspace },
+    settings: {
+      entornos,
+      ...(workspace === undefined ? {} : { workspace }),
+      ...(dispositivos === undefined ? {} : { dispositivos }),
+    },
     avisos,
   };
+}
+
+/**
+ * Solo BOOLEANOS, y solo los cuatro nombres conocidos: lo que no lo sea se descarta sin
+ * aviso, como cualquier campo desconocido. Un `"false"` de cadena NO se toma por falso —es
+ * verdadero en JavaScript, y esa es la trampa que este repo ya pagó con el `soloLectura`
+ * de un subagente y con el `compartido` de CloudStudio—; se descarta, y entonces manda la
+ * omisión, que es mirar. Un objeto sin ningún campo válido se devuelve como ausente: `{}`
+ * y «no lo he dicho» significan lo mismo aquí, mirar todo, y guardar un objeto vacío solo
+ * ensuciaría el fichero.
+ */
+function validarDispositivos(candidato: unknown): AjustesDeDispositivos | undefined {
+  if (typeof candidato !== "object" || candidato === null) return undefined;
+  const c = candidato as Record<string, unknown>;
+  const salida: AjustesDeDispositivos = {};
+  for (const plataforma of PLATAFORMAS_DE_DISPOSITIVO) {
+    if (typeof c[plataforma] === "boolean") salida[plataforma] = c[plataforma] as boolean;
+  }
+  return Object.keys(salida).length === 0 ? undefined : salida;
 }
 
 /**

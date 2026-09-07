@@ -140,7 +140,7 @@ export type MensajeAlCliente =
    * estado, y los dispositivos y simuladores a los que se llega. Es una foto con hora
    * (`medido`), no un estado en vivo. Redeclarado de `core/dispositivos.ts`.
    */
-  | { clase: "dispositivos"; informe: InformeDeDispositivos }
+  | { clase: "dispositivos"; informe: InformeDeDispositivos; ajustes: AjustesDeDispositivos }
   /**
    * Los ficheros que la sesión ha tocado, y el parche de uno. Los tres `via` son tres cosas
    * distintas: «git» es «comparado»; «sin-empezar», que la sesión no ha volcado ningún acto
@@ -192,6 +192,9 @@ export type MensajeAlCliente =
        */
       proyectoActivo?: string;
       sesionActiva?: string;
+      /** Con qué dispositivo trabaja la sesión. La FOTO, no solo el id: los ids no son
+       *  estables y al reabrir hay que poder decir «no está ahora» en vez de un serial. */
+      dispositivoActivo?: DispositivoElegido;
       /** La sesión abierta es una relectura y el agente no la recuerda. Ausente = no. */
       historica?: boolean;
       proyectos: {
@@ -256,6 +259,13 @@ export interface FicheroDelProyecto {
   binario: boolean;
   bytes: number;
   codificacion?: "utf-8" | "latin1";
+  /**
+   * El MIME, solo si la ruta es una imagen que el visor sabe pintar. Viaja aunque los bytes
+   * NO vengan: es lo que distingue «una imagen demasiado grande» de «un binario cualquiera».
+   */
+  mime?: string;
+  /** La imagen entera, si cupo en el tope. Nunca recortada: media imagen no se abre. */
+  base64?: string;
   error?: string;
 }
 
@@ -313,8 +323,13 @@ export type MensajeDelCliente =
     }
   /** «Dime qué modelos sirve este proveedor»: una llamada de red, y por eso bajo demanda. */
   | { clase: "catalogo"; proveedor: string }
-  /** Vuelve a mirar qué dispositivos hay; la respuesta llega por el SSE como `dispositivos`. */
-  | { clase: "dispositivos" }
+  /**
+   * Vuelve a mirar qué dispositivos hay; la respuesta llega por el SSE como `dispositivos`.
+   * Con `ajustes`, además los guarda antes de medir.
+   */
+  | { clase: "dispositivos"; ajustes?: AjustesDeDispositivos; instalar?: NombreDeHerramienta }
+  /** Con qué dispositivo trabaja la sesión. Viaja el ID; sin él, se quita la elección. */
+  | { clase: "dispositivo"; id?: string }
   /** Borrar la credencial de `auth.json`. Guardar no pasa por aquí: la clave viaja por
    *  «secreto», contestando al `leerSecreto` que abre `/provider`. */
   | { clase: "credencial"; accion: "pedir" | "borrar"; proveedor: string }
@@ -339,12 +354,41 @@ export type MensajeDelCliente =
   | { clase: "fichero"; ruta: string }
   | { clase: "decision"; decisiones: Record<string, string> };
 
+/**
+ * Las cuatro clases de destino en que se prueba una app, y qué se mira de cada una.
+ * Redeclarado de `core/settings.ts`. **Ausente = no se ha elegido**, y entonces se miran
+ * todos; distinguirlo de un `false` es lo que permite que apagar signifique algo.
+ */
+export const PLATAFORMAS_DE_DISPOSITIVO = ["android", "androidEmulador", "ios", "iosSimulador"] as const;
+
+export type PlataformaDeDispositivo = (typeof PLATAFORMAS_DE_DISPOSITIVO)[number];
+
+export type AjustesDeDispositivos = { [K in PlataformaDeDispositivo]?: boolean };
+
+/** ¿Se mira este destino? Ausente = sí. La misma función que el host (`core/settings.ts`). */
+export function seMira(ajustes: AjustesDeDispositivos | undefined, plataforma: PlataformaDeDispositivo): boolean {
+  return ajustes?.[plataforma] !== false;
+}
+
 /** Redeclarado de `core/dispositivos.ts` (ver la cabecera de este fichero). */
 export type SistemaOperativo = "mac" | "windows" | "linux" | "otro";
 
+/** El dispositivo preferido de una sesión. Redeclarado de `web/servidor/sesiones.ts`. */
+export interface DispositivoElegido {
+  id: string;
+  nombre: string;
+  plataforma: "android" | "ios";
+  clase: "emulador" | "simulador" | "fisico";
+}
+
+/** Redeclarado de `core/dispositivos.ts`. */
+export type NombreDeHerramienta = "adb" | "emulator" | "xcrun" | "devicectl";
+
 export interface Herramienta {
-  nombre: "adb" | "emulator" | "xcrun" | "devicectl";
-  estado: "ok" | "no-encontrada" | "fallo" | "no-aplica";
+  nombre: NombreDeHerramienta;
+  estado: "ok" | "no-encontrada" | "fallo" | "no-aplica" | "desactivada";
+  /** Cómo se instala si falta. `automatico` = xonecode puede lanzarlo él. */
+  instalar?: { comando: string; automatico: boolean };
   /** Sin `ruta`: se queda en el host, es una ruta del home del usuario. */
   detalle?: string;
 }
