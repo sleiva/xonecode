@@ -184,6 +184,17 @@
   line-height: 1.5;
 }
 
+/* Un acto de SISTEMA: la respuesta a un comando, una pausa, un aviso de honestidad. Sin
+   globo y en el color secundario —no es un mensaje de nadie, es la consola hablando— pero
+   con el tamaño del texto normal y no el del pulso: esto se lee, no se ojea. `pre-wrap`
+   porque la consola compone sus respuestas con saltos de línea. */
+.sistema {
+  margin: 12px 0 0;
+  color: var(--dsw-alias-label-secondary);
+  line-height: 1.5;
+  white-space: pre-wrap;
+}
+
 /* «Este proyecto escribe sin pedirte aprobación». En ROJO y no en el ámbar de la
    relectura, que es la única distinción de color que hace falta aquí: una conversación
    reabierta es una limitación —el agente no recuerda— y esto es una capacidad concedida,

@@ -71,10 +71,15 @@ describe("Transcript", () => {
   });
 
   /**
-   * Lo que sigue siendo SOLO de las trazas: los avisos de la consola (`sistema`) y el
-   * cierre con la duración (`fin`). El chat es el pulso; la pestaña, el registro completo.
+   * Los avisos de la consola SÍ se ven en el chat, y esto cambió a propósito: estaban solo
+   * en las trazas, y por ese canal pasan la respuesta a un comando que el usuario acaba de
+   * teclear y los avisos de honestidad (`core/bitacora.ts`). Un aviso que solo vive en la
+   * pestaña de depurar el harness es exactamente el aviso que nadie lee.
+   *
+   * Lo que sigue siendo SOLO de las trazas es el `fin`: es el cierre del turno con su
+   * duración, un dato del registro y no algo que nadie tenga que leer en la conversación.
    */
-  it("con «chat» NO se cuelan los avisos de sistema ni el cierre del turno", () => {
+  it("con «chat» se ven los avisos de sistema, pero no el cierre del turno", () => {
     render(
       <Transcript
         actos={[
@@ -84,7 +89,8 @@ describe("Transcript", () => {
         pestana="chat"
       />
     );
-    expect(screen.queryByText(/credencial guardada/)).toBeNull();
+    expect(screen.getByText(/credencial guardada/)).toBeTruthy();
+    expect(screen.queryByText(/1200|1,2 s|1\.2s/)).toBeNull();
   });
 
   it("con «trazas» pinta el detalle técnico", () => {

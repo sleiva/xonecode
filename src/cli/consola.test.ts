@@ -1260,3 +1260,66 @@ describe("crearCompleter", () => {
     expect(salida).toBe("");
   });
 });
+
+describe("/aprobacion", () => {
+  /** Un proyecto de verdad en un temporal: el comando lee su `config.json` del DISCO. */
+  function proyecto(config: Record<string, unknown>): string {
+    const raiz = mkdtempSync(join(tmpdir(), "xc-aprob-"));
+    mkdirSync(join(raiz, NOMBRE_CARPETA), { recursive: true });
+    writeFileSync(join(raiz, NOMBRE_CARPETA, "config.json"), JSON.stringify(config));
+    return raiz;
+  }
+
+  /**
+   * La rama que importa: en un proyecto conectado se RECHAZA en vez de guardarse sin
+   * aplicarse. Un ajuste escrito que no hace nada es peor que no poder ponerlo, porque
+   * quien lo puso se cree protegido al revés.
+   */
+  it("un proyecto conectado a CloudStudio lo rechaza, y no escribe nada", async () => {
+    const raiz = proyecto({ modo: "cloud", cloudstudio: { url: "https://mcp.example/mcp" } });
+    const { consola, salida } = consolaDeConSecreto({ lineas: [], interactivo: true });
+    const casa = mkdtempSync(join(tmpdir(), "xc-casa-"));
+    vi.stubEnv("HOME", casa);
+
+    await COMANDOS["aprobacion"]!.manejador(["automatica"], { ...estadoDe(), raiz }, consola);
+
+    expect(salida()).toContain("CloudStudio");
+    expect(existsSync(join(casa, NOMBRE_CARPETA, "settings.json"))).toBe(false);
+    vi.unstubAllEnvs();
+    rmSync(raiz, { recursive: true, force: true });
+    rmSync(casa, { recursive: true, force: true });
+  });
+
+  it("en un proyecto offline lo guarda, y lo dice con lo que cuesta", async () => {
+    const raiz = proyecto({ modo: "offline" });
+    const { consola, salida } = consolaDeConSecreto({ lineas: [], interactivo: true });
+    const casa = mkdtempSync(join(tmpdir(), "xc-casa-"));
+    vi.stubEnv("HOME", casa);
+
+    await COMANDOS["aprobacion"]!.manejador(["automatica"], { ...estadoDe(), raiz }, consola);
+
+    const guardado = JSON.parse(readFileSync(join(casa, NOMBRE_CARPETA, "settings.json"), "utf8"));
+    expect(guardado.sinAprobacion).toEqual({ [raiz]: true });
+    // Las dos cosas que hay que saber para usarlo: dónde vive y que se pierde al renombrar.
+    expect(salida()).toContain("no en el proyecto");
+    expect(salida()).toContain("renombrar");
+    vi.unstubAllEnvs();
+    rmSync(raiz, { recursive: true, force: true });
+    rmSync(casa, { recursive: true, force: true });
+  });
+
+  it("un argumento que no es ninguno de los dos enseña el uso y no toca nada", async () => {
+    const raiz = proyecto({ modo: "offline" });
+    const { consola, salida } = consolaDeConSecreto({ lineas: [], interactivo: true });
+    const casa = mkdtempSync(join(tmpdir(), "xc-casa-"));
+    vi.stubEnv("HOME", casa);
+
+    await COMANDOS["aprobacion"]!.manejador(["si"], { ...estadoDe(), raiz }, consola);
+
+    expect(salida()).toContain("uso: /aprobacion");
+    expect(existsSync(join(casa, NOMBRE_CARPETA, "settings.json"))).toBe(false);
+    vi.unstubAllEnvs();
+    rmSync(raiz, { recursive: true, force: true });
+    rmSync(casa, { recursive: true, force: true });
+  });
+});

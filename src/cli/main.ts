@@ -490,7 +490,13 @@ export function crearEjecutorReal(
             // Del DISCO y por la raíz, no de `estado.fuentes.proyecto`: en la web ese
             // campo no se rellena nunca, y la guarda habría dado «offline» para todos.
             cloudstudio: cloudstudioDelProyecto(estado.raiz),
-            interactivo: consolaReal.interactivo,
+            // `interactivo` SOLO no basta, y esto no es celo: `consolaWeb.ts` lo declara
+            // `true` a fuego, así que una pestaña que se cierra a mitad de turno seguiría
+            // auto-aprobando. «Hay alguien delante» ya está definido en este repo —
+            // `pedirDecisiones` lo calcula como `interactive && !eof()` (`cli/aprobar.ts`)—
+            // y esa es la misma cuenta. Con ella, al caerse el cable la escritura vuelve al
+            // camino de aprobación, donde el eof la rechaza.
+            interactivo: consolaReal.interactivo && !(consolaReal.eof?.() ?? false),
           }),
         // El simulador de verdad. Su ausencia en la máquina no se descubre aquí sino al
         // verificar, y entonces se dice en el turno — sin tumbar nada.

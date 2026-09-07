@@ -143,7 +143,6 @@ export function Chat({
       if (ultimo !== undefined) ultimo.ms = acto.ms;
       continue;
     }
-    if (acto.tipo === "sistema") continue;
     piezas.push({ tipo: "acto", acto, indice });
   }
   // El scroller sigue lo que llega, salvo que hayas subido a leer. Sin esto el texto crecía
@@ -323,6 +322,21 @@ export function Chat({
                     sube a CloudStudio. Todavía no se abre desde aquí.
                   </p>
                 </div>
+              );
+            }
+            if (acto.tipo === "sistema") {
+              // Los actos de SISTEMA se pintaban solo en Trazas, y eso estaba mal medido:
+              // por aquí pasan las dos cosas que más falta hacen a la vista. Una es la
+              // respuesta a un comando que el usuario acaba de teclear —`/aprobacion` decía
+              // su respuesta a una pestaña de depuración—; la otra son los avisos de
+              // honestidad (`core/bitacora.ts`), y un aviso que solo vive en la pestaña de
+              // depurar el harness es exactamente el aviso que nadie lee, que es lo que esa
+              // bitácora existe para evitar. Van fuera del tramo plegable a propósito: el
+              // pulso se dobla al terminar el turno y esto no puede desaparecer con él.
+              return (
+                <p key={indice} role="note" className={`${vista.flowItem} ${estilos.sistema}`}>
+                  {acto.texto}
+                </p>
               );
             }
             if (acto.tipo === "error") {

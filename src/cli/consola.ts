@@ -1004,7 +1004,10 @@ export const COMANDOS: Record<string, { descripcion: string; manejador: Manejado
           raiz,
           sinAprobacion: cargarSettings().settings.sinAprobacion,
           cloudstudio,
-          interactivo: consola.interactivo,
+          // La misma cuenta que `pedirDecisiones`: `interactivo` a secas es `true` a fuego
+          // en la consola web, así que sin el `eof` este comando diría «automatica» con la
+          // pestaña ya cerrada.
+          interactivo: consola.interactivo && !(consola.eof?.() ?? false),
         });
 
       const que = args[0];
@@ -1043,8 +1046,11 @@ export const COMANDOS: Record<string, { descripcion: string; manejador: Manejado
 
       const { ruta } = guardarSinAprobacion(undefined, raiz, que === "automatica");
       if (que === "automatica") {
+        // La ruta del SETTINGS sí se dice —es donde se edita a mano, y `/config` y `/tema`
+        // ya imprimen la suya—, pero la del proyecto no: quien teclea esto sabe dónde está,
+        // y por esta salida pasa un acto del transcript que viaja por el cable.
         consola.escribir(
-          `hecho: las escrituras de ${raiz} se aplicarán SIN preguntar.\n` +
+          "hecho: las escrituras de este proyecto se aplicarán SIN preguntar.\n" +
             `  Cada turno que escriba lo dirá, con los nombres de los ficheros.\n` +
             `  Se guarda en ${ruta} —en tu máquina, no en el proyecto— y renombrar la\n` +
             "  carpeta lo pierde: entonces se vuelve a preguntar.\n"

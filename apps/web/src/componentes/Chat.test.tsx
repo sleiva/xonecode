@@ -204,3 +204,26 @@ describe("Chat: el proyecto que escribe sin preguntar", () => {
     expect(screen.queryByText(/sin pedirte aprobación/i)).toBeNull();
   });
 });
+
+describe("Chat: lo que dice la consola", () => {
+  it("un acto de sistema se VE, y no se pliega con el trabajo del agente", () => {
+    // Vivía solo en Trazas. Por ahí pasan la respuesta a un comando que el usuario acaba de
+    // teclear y los avisos de honestidad — y un aviso que solo está en la pestaña de
+    // depurar el harness es exactamente el aviso que nadie lee.
+    render(
+      <Chat
+        actos={[
+          { tipo: "usuario", texto: "/aprobacion" },
+          { tipo: "sistema", texto: "humana: cada escritura pide aprobación con su diff delante" },
+          { tipo: "fin", ms: 10 },
+        ]}
+      />
+    );
+    expect(screen.getByText(/cada escritura pide aprobación/)).toBeTruthy();
+  });
+
+  it("y el aviso de honestidad de una escritura sin aprobar también", () => {
+    render(<Chat actos={[{ tipo: "sistema", texto: "⚠ 1 escritura(s) aplicadas SIN aprobación: /Clientes.xne" }]} />);
+    expect(screen.getByText(/SIN aprobación: \/Clientes.xne/)).toBeTruthy();
+  });
+});

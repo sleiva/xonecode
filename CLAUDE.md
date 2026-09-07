@@ -332,9 +332,14 @@ desengancharse solo.
 únicamente los globos de usuario y asistente y todo lo demás vivía en la otra pestaña:
 medido en pantalla, se escribía una petición y no pasaba nada durante minutos con el agente
 trabajando a la vista de nadie. Ahora `razonamiento`, `herramientas` y `fase` van
-intercalados en la conversación, en gris y en una línea — paisaje, no conversación. `sistema`
-y `fin` siguen siendo solo de la Trayectoria: son avisos de la consola y el cierre del turno,
-no el pulso.
+intercalados en la conversación, en gris y en una línea — paisaje, no conversación. **Los
+actos de `sistema` TAMBIÉN se ven, y eso cambió**: estaban solo en Trazas, y por ese canal
+pasan las dos cosas que más falta hacen delante — la respuesta a un comando que el usuario
+acaba de teclear (`/aprobacion` contestaba a una pestaña de depuración) y los avisos de
+honestidad (`core/bitacora.ts`), que en la pestaña de depurar el harness son exactamente el
+aviso que nadie lee. Van FUERA del tramo plegable: el pulso se dobla al terminar el turno y
+esto no puede irse con él. `fin` sí sigue siendo solo de Trazas: es el cierre con su
+duración, un dato del registro.
 
 **El razonamiento del modelo es su propio evento y su propio acto** (`razonamiento`), nunca
 parte de la respuesta. Gemini lo manda como bloques `{type:"thinking"}` dentro de `content`
