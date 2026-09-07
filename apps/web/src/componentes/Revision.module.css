@@ -1,0 +1,235 @@
+/* Alias comprobados contra `apps/web/estilos/design-platform.css`: bg-layer-1/2, border-l2,
+   label-primary/secondary/tertiary, interactive-bg-hover, interactive-bg-selected,
+   state-success-primary/secondary y state-error-primary/secondary. */
+
+.aviso {
+  margin: 12px 20px;
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 12px;
+  line-height: 1.6;
+  max-width: 60ch;
+}
+
+.recargar {
+  padding: 4px 10px;
+  border: 0.5px solid var(--dsw-alias-border-l2);
+  border-radius: 8px;
+  background: var(--dsw-alias-bg-layer-1);
+  color: var(--dsw-alias-label-secondary);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.recargar:hover {
+  background: var(--dsw-alias-interactive-bg-hover);
+  color: var(--dsw-alias-label-primary);
+}
+
+/* La letra de estado, como en `git status`: A, M, D. Cuadrada y monoespaciada para que las
+   tres ocupen lo mismo y las rutas queden alineadas. */
+.clase {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 18px;
+  height: 18px;
+  border-radius: 5px;
+  font-family: var(--ds-font-family-code);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+/* La letra en `label-primary` y no en el «primary» de su propio par: `state-success-primary`
+   es verde 500 sobre verde 400, luminosidades demasiado próximas —es la misma medición que
+   documenta `Aprobacion.module.css` para su diff—, y a 11px dentro de un cuadrado de 18 la
+   «A» directamente no se leía. Medido en pantalla. */
+.clase[data-clase="nuevo"] {
+  background: var(--dsw-alias-state-success-secondary);
+  color: var(--dsw-alias-label-primary);
+}
+
+.clase[data-clase="borrado"] {
+  background: var(--dsw-alias-state-error-secondary);
+  color: var(--dsw-alias-label-primary);
+}
+
+.clase[data-clase="modificado"] {
+  background: var(--dsw-alias-bg-layer-2);
+  color: var(--dsw-alias-label-secondary);
+}
+
+.ruta {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  font-family: var(--ds-font-family-code);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+/* La carpeta es la única que encoge (`min-width: 0` + `flex-shrink` implícito), y lo hace
+   con puntos suspensivos; el nombre lleva `flex: none` para que no ceda nunca. */
+.carpeta {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--dsw-alias-label-tertiary);
+}
+
+.hoja {
+  flex: none;
+}
+
+.cuenta,
+.binario {
+  flex-shrink: 0;
+  font-family: var(--ds-font-family-code);
+  font-size: 11px;
+}
+
+.binario {
+  color: var(--dsw-alias-label-tertiary);
+}
+
+.mas {
+  color: var(--dsw-alias-state-success-primary);
+}
+
+.menos {
+  color: var(--dsw-alias-state-error-primary);
+}
+
+/* Dos columnas: la PILA de diffs a la izquierda (cede y scrollea) y el índice a la
+   derecha (no cede). `min-height: 0` por lo que documenta `Maqueta.tsx` para `.viewArea`;
+   `container-type` porque lo que decide si caben dos columnas es el ancho de ESTA caja,
+   no el de la ventana — la barra lateral desplegada son 280 px que la ventana sí cuenta. */
+.revision {
+  display: flex;
+  flex: 1 1 auto;
+  min-height: 0;
+  container-type: inline-size;
+}
+
+.pila {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: auto;
+}
+
+.indice {
+  flex: 0 0 260px;
+  min-width: 0;
+  overflow-y: auto;
+  padding: 8px;
+  border-left: 0.5px solid var(--dsw-alias-border-l2);
+}
+
+/* Estrecho: el índice se va y queda la pila, que ya lleva el nombre de cada fichero en su
+   cabecera pegajosa — no se pierde el «dónde estoy». */
+@container (max-width: 720px) {
+  .indice {
+    display: none;
+  }
+}
+
+.cabecera {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 16px;
+  border-bottom: 0.5px solid var(--dsw-alias-border-l2);
+  color: var(--dsw-alias-label-secondary);
+  font-size: 12px;
+}
+
+.alcance {
+  font-weight: 600;
+  color: var(--dsw-alias-label-primary);
+}
+
+.total {
+  flex: 1;
+  font-family: var(--ds-font-family-code);
+  font-size: 12px;
+}
+
+.binarios {
+  color: var(--dsw-alias-label-tertiary);
+}
+
+.bloque {
+  border-bottom: 0.5px solid var(--dsw-alias-border-l2);
+}
+
+/* La cabecera del bloque, pegajosa y opaca: pasa por encima del diff al scrollear. */
+.cabeceraDeBloque {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 8px 16px;
+  border: none;
+  background: var(--dsw-alias-bg-layer-1);
+  color: var(--dsw-alias-label-primary);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.cabeceraDeBloque:hover {
+  background: var(--dsw-alias-interactive-bg-hover);
+}
+
+.parche {
+  padding: 4px 0 8px;
+}
+
+/* Fila del diff: número viejo, número nuevo, texto. Los números no se seleccionan, para
+   que copiar un trozo del diff no arrastre la numeración. */
+.linea {
+  display: grid;
+  grid-template-columns: 4ch 4ch 1fr;
+  gap: 0 12px;
+  padding: 0 16px;
+  font-family: var(--ds-font-family-code);
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--dsw-alias-label-secondary);
+}
+
+.numero {
+  text-align: right;
+  color: var(--dsw-alias-label-tertiary);
+  user-select: none;
+}
+
+.texto {
+  white-space: pre;
+}
+
+.linea[data-tipo="tramo"] {
+  color: var(--dsw-alias-label-tertiary);
+  background: color-mix(in srgb, var(--dsw-alias-state-business-tertiary) 45%, var(--dsw-alias-bg-layer-1));
+}
+
+.linea[data-tipo="nota"] {
+  color: var(--dsw-alias-label-tertiary);
+  font-style: italic;
+}
+
+/* Texto en `label-primary` sobre el fondo de estado al 45 %, mezclado contra `bg-layer-1`:
+   la misma medición que documenta `Aprobacion.module.css`. */
+.linea[data-tipo="mas"] {
+  color: var(--dsw-alias-label-primary);
+  background: color-mix(in srgb, var(--dsw-alias-state-success-secondary) 45%, var(--dsw-alias-bg-layer-1));
+}
+
+.linea[data-tipo="menos"] {
+  color: var(--dsw-alias-label-primary);
+  background: color-mix(in srgb, var(--dsw-alias-state-error-secondary) 45%, var(--dsw-alias-bg-layer-1));
+}

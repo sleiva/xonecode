@@ -21,7 +21,7 @@ import { Escritorio } from "./componentes/Escritorio.js";
 import { NuevaSesion } from "./componentes/NuevaSesion.js";
 import { AccionDeSesion, type AccionPendiente } from "./componentes/AccionDeSesion.js";
 import { Ajustes } from "./componentes/Ajustes.js";
-import { Ficheros } from "./componentes/Ficheros.js";
+import { DESPLEGADOS_AL_ABRIR, Revision } from "./componentes/Revision.js";
 import { aplicarApariencia, guardarApariencia, leerApariencia, type Apariencia } from "./apariencia.js";
 import { guardarBarraContraida, leerBarraContraida } from "./preferencias.js";
 
@@ -57,12 +57,12 @@ export function App({ store, enviar }: { store: Store; enviar: Conexion["enviar"
    */
   const [pestana, setPestana] = useState<Pestana>("chat");
   /**
-   * La ruta desplegada en la pestaña de ficheros. El parche se pide al desplegar y no al
-   * abrir la pestaña: un diff por fichero de un turno largo son megas y casi ninguno se
-   * mira. Vive aquí y no en el store por lo mismo que `pestana`: es de esta ventana, no del
-   * servidor.
+   * Las rutas con el diff desplegado en Revisión. `undefined` = la lista todavía no ha
+   * llegado (o la sesión cambió y se reinicia): al llegar, se despliegan solas las
+   * `DESPLEGADOS_AL_ABRIR` primeras y se pide su parche. Vive aquí y no en el store por lo
+   * mismo que `pestana`: es de esta ventana, no del servidor.
    */
-  const [ficheroAbierto, setFicheroAbierto] = useState<string | undefined>(undefined);
+  const [desplegados, setDesplegados] = useState<ReadonlySet<string> | undefined>(undefined);
   /**
    * Lo elegido en el «…» de una sesión, esperando confirmación. Vive aquí y no en la barra
    * porque la ventana se pinta sobre la pantalla entera, no dentro de una columna de 280px
@@ -85,7 +85,7 @@ export function App({ store, enviar }: { store: Store; enviar: Conexion["enviar"
   const [barraContraida, setBarraContraida] = useState(() => leerBarraContraida());
 
   /**
-   * Pedir la lista de ficheros de la sesión. Va en `useCallback` porque `Ficheros` la
+   * Pedir la lista de ficheros de la sesión. Va en `useCallback` porque `Revision` la
    * llama desde un `useEffect` al montar: una función nueva en cada render volvería a
    * disparar ese efecto en cada render y la pestaña pediría la lista en bucle.
    */
@@ -93,14 +93,45 @@ export function App({ store, enviar }: { store: Store; enviar: Conexion["enviar"
     void enviar({ clase: "revision" });
   }, [enviar]);
 
-  /** Desplegar (o plegar) un fichero. Al desplegar se pide su parche; al plegar, nada. */
-  const abrirFichero = useCallback(
-    (ruta: string | undefined) => {
-      setFicheroAbierto(ruta);
-      if (ruta !== undefined) void enviar({ clase: "revision", ruta });
+  const pedirParche = useCallback(
+    (ruta: string) => {
+      void enviar({ clase: "revision", ruta });
     },
     [enviar]
   );
+
+  const desplegar = useCallback(
+    (ruta: string) => {
+      setDesplegados((previas) => new Set([...(previas ?? []), ruta]));
+      pedirParche(ruta);
+    },
+    [pedirParche]
+  );
+
+  const plegar = useCallback((ruta: string) => {
+    setDesplegados((previas) => {
+      const siguientes = new Set(previas ?? []);
+      siguientes.delete(ruta);
+      return siguientes;
+    });
+  }, []);
+
+  // El despliegue inicial: solo la PRIMERA vez que llega una lista CON ficheros de esta
+  // sesión. Si el store la tira (otra sesión, cable caído), `revision` vuelve a
+  // `undefined` y esto se reinicia con ella. Y una lista vacía no inicializa nada: una
+  // sesión nueva contesta «sin-empezar» con lista vacía, y si eso fijara el conjunto en
+  // vacío la lista de después del primer turno ya no desplegaría ninguno.
+  const listaDeRevision = estado.revision?.lista;
+  useEffect(() => {
+    if (listaDeRevision === undefined) {
+      setDesplegados(undefined);
+      return;
+    }
+    if (desplegados !== undefined || listaDeRevision.length === 0) return;
+    const primeros = listaDeRevision.slice(0, DESPLEGADOS_AL_ABRIR).map((f) => f.ruta);
+    setDesplegados(new Set(primeros));
+    for (const ruta of primeros) pedirParche(ruta);
+  }, [listaDeRevision, desplegados, pedirParche]);
 
   /**
    * Al TERMINAR un turno, si la pestaña de ficheros está delante, se refresca sola.
@@ -109,8 +140,8 @@ export function App({ store, enviar }: { store: Store; enviar: Conexion["enviar"
    * esperando a que alguien pulse «Actualizar» significa enseñar la foto de ANTES del turno
    * justo en el momento en que deja de ser verdad. Se refresca al terminar y no durante:
    * a mitad de turno el agente todavía está escribiendo, y una lista que parpadea con cada
-   * fichero no se puede leer. Y si había una fila desplegada, se vuelve a pedir su parche:
-   * si no, seguiría enseñando el diff viejo del fichero que el turno acaba de cambiar.
+   * fichero no se puede leer. Y si había filas desplegadas, se vuelven a pedir sus parches:
+   * si no, seguirían enseñando el diff viejo del fichero que el turno acaba de cambiar.
    */
   const turnoEnVuelo = estado.turnoEnVuelo === true;
   // Desde cuándo: lo pintan el pie y el pulso mientras dura, en vez del tiempo del turno
@@ -121,14 +152,16 @@ export function App({ store, enviar }: { store: Store; enviar: Conexion["enviar"
     const acabaDeTerminar = turnoAnterior.current && !turnoEnVuelo;
     turnoAnterior.current = turnoEnVuelo;
     // Solo el FLANCO de fin. Sin esto, abrir la pestaña dispararía este efecto además del
-    // que `Ficheros` lleva dentro para pedir al montar, y saldrían dos peticiones iguales.
+    // que `Revision` lleva dentro para pedir al montar, y saldrían dos peticiones iguales.
     if (!acabaDeTerminar || pestana !== "ficheros") return;
     pedirRevision();
-    if (ficheroAbierto !== undefined) void enviar({ clase: "revision", ruta: ficheroAbierto });
-    // `ficheroAbierto` NO va en las dependencias a propósito: desplegar una fila ya pide su
-    // parche por su cuenta (`abrirFichero`), y tenerlo aquí lo pediría dos veces.
+    // Los desplegados se vuelven a pedir: si no, seguirían enseñando el diff viejo del
+    // fichero que el turno acaba de cambiar.
+    for (const ruta of desplegados ?? []) pedirParche(ruta);
+    // `desplegados` NO va en las dependencias a propósito: desplegar ya pide su parche por
+    // su cuenta, y tenerlo aquí lo pediría dos veces.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [turnoEnVuelo, pestana, pedirRevision, enviar]);
+  }, [turnoEnVuelo, pestana, pedirRevision, pedirParche]);
   const [apariencia, setApariencia] = useState<Apariencia>(() => leerApariencia());
 
   useEffect(() => {
@@ -574,7 +607,7 @@ export function App({ store, enviar }: { store: Store; enviar: Conexion["enviar"
               pestana={pestana}
               turnoEnVuelo={estado.turnoEnVuelo === true}
               // Lo dice el servidor (`alta.historica`): una sesión reabierta que el agente
-              // no recuerda. El chat lo enseña arriba y Ficheros cambia su explicación.
+              // no recuerda. El chat lo enseña arriba y Revisión cambia su explicación.
               historica={estado.alta?.historica === true}
               {...(segundosEnVuelo === undefined ? {} : { segundosEnVuelo })}
               // Para el estado vacío de una sesión nueva: en qué proyecto estás y con qué
@@ -582,13 +615,14 @@ export function App({ store, enviar }: { store: Store; enviar: Conexion["enviar"
               {...(nombreDelProyectoActivo === undefined ? {} : { proyecto: nombreDelProyectoActivo })}
               {...(estado.modelos?.actual === undefined ? {} : { modelo: estado.modelos.actual })}
               ficheros={
-                <Ficheros
+                <Revision
                   historica={estado.alta?.historica === true}
                   {...(estado.revision === undefined ? {} : { via: estado.revision.via })}
                   ficheros={estado.revision?.lista ?? []}
                   parches={estado.parches ?? {}}
-                  {...(ficheroAbierto === undefined ? {} : { abierto: ficheroAbierto })}
-                  alAbrir={abrirFichero}
+                  desplegados={desplegados ?? new Set()}
+                  alDesplegar={desplegar}
+                  alPlegar={plegar}
                   alRecargar={pedirRevision}
                 />
               }

@@ -2,6 +2,7 @@ import { render, screen, fireEvent, cleanup, act, waitFor, within } from "@testi
 import { describe, it, expect, vi, afterEach } from "vitest";
 import { App } from "./App.js";
 import { crearStoreDelCliente } from "./store.js";
+import { DESPLEGADOS_AL_ABRIR } from "./componentes/Revision.js";
 
 afterEach(cleanup);
 
@@ -641,5 +642,31 @@ describe("App: abrir un proyecto desde la barra (Layer C)", () => {
     // Y la ventana se retira: debajo queda el escritorio, con su tarjeta y su acción.
     expect(screen.queryByRole("button", { name: /^empezar$/i })).toBeNull();
     expect(screen.getByRole("heading", { name: "Tienda" })).toBeTruthy();
+  });
+});
+
+describe("App: Revisión despliega solos los primeros", () => {
+  const diez = () => Array.from({ length: 10 }, (_, i) => ({ ruta: `src/f${i}.xne`, clase: "modificado" as const, mas: 1, menos: 0 }));
+  const parchesPedidos = (enviar: ReturnType<typeof vi.fn>) =>
+    enviar.mock.calls.filter(([m]) => (m as { clase: string; ruta?: string }).clase === "revision" && (m as { ruta?: string }).ruta !== undefined);
+
+  it("una lista vacía no fija nada; la primera con ficheros despliega los 8 primeros y pide su parche", () => {
+    const { store, enviar } = montar();
+    fireEvent.click(screen.getByRole("tab", { name: "Ficheros" }));
+    // La sesión acaba de abrirse: «sin-empezar», lista vacía. Si esto inicializara el
+    // conjunto en vacío, la lista de después del primer turno ya no desplegaría ninguno.
+    act(() => store.aplicar({ clase: "revision", via: "sin-empezar", ficheros: [] }));
+    expect(parchesPedidos(enviar)).toHaveLength(0);
+
+    act(() => store.aplicar({ clase: "revision", via: "git", ficheros: diez() }));
+    const pedidos = parchesPedidos(enviar).map(([m]) => (m as { ruta: string }).ruta);
+    expect(pedidos).toEqual(diez().slice(0, DESPLEGADOS_AL_ABRIR).map((f) => f.ruta));
+    // Acotado al panel de Revisión: la barra superior lleva su PROPIO botón con
+    // aria-expanded (el de plegar la barra lateral), y contar sobre toda la pantalla lo
+    // sumaría de más.
+    const indice = screen.getByRole("complementary", { name: "Ficheros cambiados" });
+    expect(within(indice.parentElement as HTMLElement).getAllByRole("button", { expanded: true })).toHaveLength(
+      DESPLEGADOS_AL_ABRIR
+    );
   });
 });
