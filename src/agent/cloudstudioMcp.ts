@@ -17,6 +17,7 @@ import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/
 import { auth, type OAuthClientProvider } from "@modelcontextprotocol/sdk/client/auth.js";
 import type { OAuthClientInformationMixed, OAuthClientMetadata, OAuthTokens } from "@modelcontextprotocol/sdk/shared/auth.js";
 import type { Entorno } from "../core/settings.js";
+import { motivoDeEndpointInaceptable } from "../core/modelos.js";
 
 const NOMBRE_CARPETA = ".xonecode";
 const NOMBRE_AUTH = "cloudstudio-oauth.json";
@@ -402,12 +403,6 @@ export function abrirEnSistema(url: URL): void {
   proceso.unref();
 }
 
-/**
- * Los hosts que hacen de `http://` algo aceptable. Lista CERRADA, por el mismo motivo que
- * la de basura del sistema operativo en `arbolLimpio`: «lo que parezca local» deja pasar
- * `mcp.localhost.ejemplo.com`, que es una máquina de otro.
- */
-const LOOPBACK: ReadonlySet<string> = new Set(["127.0.0.1", "localhost", "::1", "[::1]"]);
 
 export const AVISO_DE_URL_DE_MCP =
   "la URL del MCP debe ser HTTPS —solo se admite http:// en 127.0.0.1 o localhost, para un on-premise en desarrollo— y no puede incluir credenciales";
@@ -430,16 +425,12 @@ export const AVISO_DE_URL_DE_MCP =
  * lo mismo y no puede importar esta: lo prohíbe `src/web/frontera.test.ts`.
  */
 export function urlDeMcpAceptable(valor: string): boolean {
-  let url: URL;
-  try {
-    url = new URL(valor);
-  } catch {
-    return false;
-  }
-  // Una URL con credenciales dentro acaba en `settings.json` y en cada traza que la enseñe.
-  if (url.username !== "" || url.password !== "") return false;
-  if (url.protocol === "https:") return true;
-  return url.protocol === "http:" && LOOPBACK.has(url.hostname);
+  // Delega en `core/`, que es donde vive la regla desde que los proveedores de modelos
+  // personalizados necesitaron la misma: HTTPS fuera de la máquina, `http://` solo en
+  // loopback, y nunca credenciales dentro de la URL (acabaría en `settings.json` y en cada
+  // traza que la enseñe). Dos copias de esto habrían divergido el día que una de las dos
+  // aflojara — que es exactamente cómo llegó a haber tres puertas con dos criterios.
+  return motivoDeEndpointInaceptable(valor) === undefined;
 }
 
 function urlSegura(valor: string): URL {

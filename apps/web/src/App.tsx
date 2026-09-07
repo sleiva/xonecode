@@ -583,6 +583,14 @@ export function App({ store, enviar }: { store: Store; enviar: Conexion["enviar"
       alRegistrarEntorno={(url) =>
         void enviar({ clase: "alta", paso: "entorno", entorno: { id: "", nombre: "", url } })
       }
+      // El identificador no viaja: lo deriva el servidor del nombre, para que esa regla
+      // viva en un solo sitio. Y la clave tampoco: se pone después, con «Añadir clave», por
+      // el único mensaje del cable que lleva credenciales.
+      alAltaDeProveedor={(nombre, baseUrl) =>
+        void enviar({ clase: "proveedor", accion: "alta", nombre, baseUrl })
+      }
+      alBajaDeProveedor={(slug) => void enviar({ clase: "proveedor", accion: "baja", slug })}
+      {...(estado.proveedor === undefined ? {} : { resultadoDeProveedor: estado.proveedor })}
       alElegirProyectos={(entorno, proyectos) =>
         void enviar({ clase: "entorno", accion: "visibles", entorno, proyectos })
       }

@@ -22,6 +22,7 @@ import {
   guardarEntornoDeProyecto,
   guardarModeloGlobal,
   guardarModelosDeProyecto,
+  proveedoresPersonalizados,
   guardarModoDeProyecto,
   guardarProyectoCloudStudioDeProyecto,
   guardarRamaDeProyecto,
@@ -863,7 +864,7 @@ export async function entrarEnConsola(
   raton: boolean = true,
   /** Adaptadores compartidos por stdio y TUI; `main` construye una sola instancia real. */
   dependencias: Pick<Consola, "catalogoModelos" | "guardarModeloGlobal" | "conectarCloudStudio"> = {
-    catalogoModelos: new CatalogoModelos(),
+    catalogoModelos: new CatalogoModelos(undefined, undefined, proveedoresPersonalizados),
     guardarModeloGlobal,
     conectarCloudStudio: (url, scopes, informar) =>
       // El entorno se resuelve por URL, no se omite: sin esto, un `/connect-studio` sobre
@@ -1144,7 +1145,7 @@ export async function main(argv: string[]): Promise<number> {
           crearEjecutor: crearEjecutorReal,
           dependenciasDeProyecto: (raiz) => ({
             ...adaptadoresDeProyecto(raiz),
-            catalogoModelos: new CatalogoModelos(),
+            catalogoModelos: new CatalogoModelos(undefined, undefined, proveedoresPersonalizados),
             guardarModeloGlobal,
             conectarCloudStudio: (url, scopes, informar) =>
               conectarCloudStudio(url, {
@@ -1176,7 +1177,7 @@ export async function main(argv: string[]): Promise<number> {
         return argv[i - 1] !== "--puerto";
       });
       const { fuentes } = extraerBanderasDeModelo(sinBanderasDeConsola);
-      const catalogoModelos = new CatalogoModelos();
+      const catalogoModelos = new CatalogoModelos(undefined, undefined, proveedoresPersonalizados);
       // Por defecto, TUI siempre. `--no-tui` fuerza stdio.
       return await entrarEnConsola(
         fuentes,

@@ -588,6 +588,149 @@ describe("montarRutas — el cable, por fin conectado", () => {
       expect(guardadas).toEqual(["anthropic:sk-buena"]);
     });
 
+    describe("proveedores personalizados", () => {
+      /** Un registro en memoria, que es lo que el host tiene en disco. */
+      function conRegistro(iniciales: { slug: string; nombre: string; baseUrl: string }[] = []) {
+        let registro = [...iniciales];
+        const borradas: string[] = [];
+        const servidor = servidorDeMentira();
+        montarRutas(servidor, vestibuloDePrueba(), {
+          proveedoresPersonalizados: () => registro,
+          guardarProveedor: (d) => {
+            registro = [...registro, d];
+            return { ruta: "/casa/.xonecode/config.json" };
+          },
+          borrarProveedor: (slug) => {
+            const antes = registro.length;
+            registro = registro.filter((d) => d.slug !== slug);
+            return { ruta: "/casa/.xonecode/config.json", borrado: registro.length !== antes };
+          },
+          borrarCredencial: (proveedor) => {
+            borradas.push(proveedor);
+            return { ruta: "/casa/.xonecode/auth.json", borrada: true, quedaEnEntorno: false };
+          },
+        });
+        return { servidor, borradas, registro: () => registro };
+      }
+
+      async function conectar(servidor: ReturnType<typeof servidorDeMentira>) {
+        const cliente = clienteDeMentira();
+        await servidor.rutas.get(`GET ${RUTA_EVENTOS}`)!(cliente.peticion, cliente.respuesta);
+        await asentar();
+        return { cliente, accion: servidor.rutas.get(`POST ${RUTA_ACCION}`)! };
+      }
+
+      const ultimoModelos = (cliente: ReturnType<typeof clienteDeMentira>) =>
+        [...cliente.recibidos].reverse().find((m) => m.clase === "modelos") as Extract<
+          MensajeAlCliente,
+          { clase: "modelos" }
+        >;
+
+      it("el alta deriva el identificador del NOMBRE y devuelve la fila con su URL", async () => {
+        const { servidor, registro } = conRegistro();
+        const { cliente, accion } = await conectar(servidor);
+
+        await enviarMensaje(accion, {
+          clase: "proveedor",
+          accion: "alta",
+          nombre: "Mi LM Studio",
+          baseUrl: "http://localhost:1234/v1",
+        });
+        await asentar();
+
+        // El cliente no manda el identificador: lo deriva el servidor, para que esa regla
+        // viva en un solo sitio.
+        expect(registro()).toEqual([
+          { slug: "mi-lm-studio", nombre: "Mi LM Studio", baseUrl: "http://localhost:1234/v1" },
+        ]);
+        const fila = ultimoModelos(cliente).proveedores.find((p) => p.id === "custom:mi-lm-studio")!;
+        expect(fila.nombre).toBe("Mi LM Studio");
+        expect(fila.personalizado).toBe(true);
+        expect(fila.baseUrl).toBe("http://localhost:1234/v1");
+        // Y los de serie NO llevan URL: la suya está en el repo, no hay nada que enseñar.
+        expect(ultimoModelos(cliente).proveedores.find((p) => p.id === "openai")!.baseUrl).toBeUndefined();
+      });
+
+      it("una URL que la regla no admite se rechaza con su motivo, y no escribe nada", async () => {
+        const { servidor, registro } = conRegistro();
+        const { cliente, accion } = await conectar(servidor);
+
+        await enviarMensaje(accion, {
+          clase: "proveedor",
+          accion: "alta",
+          nombre: "Ajeno",
+          baseUrl: "http://ajeno.example.com/v1",
+        });
+        await asentar();
+
+        const acuse = [...cliente.recibidos].reverse().find((m) => m.clase === "proveedor") as
+          { clase: "proveedor"; hecho: boolean; motivo?: string };
+        expect(acuse.hecho).toBe(false);
+        expect(acuse.motivo).toMatch(/https/);
+        expect(registro()).toEqual([]);
+      });
+
+      it("un identificador que ya existe se RECHAZA en vez de pisar al que hay", async () => {
+        // Pisarlo dejaría dos endpoints compartiendo entrada en `auth.json`: la clave del
+        // segundo viajaría al host del primero.
+        const { servidor, registro } = conRegistro([
+          { slug: "mi-llm", nombre: "Mi LLM", baseUrl: "https://uno.example.com/v1" },
+        ]);
+        const { cliente, accion } = await conectar(servidor);
+
+        await enviarMensaje(accion, {
+          clase: "proveedor",
+          accion: "alta",
+          nombre: "Mi LLM",
+          baseUrl: "https://dos.example.com/v1",
+        });
+        await asentar();
+
+        const acuse = [...cliente.recibidos].reverse().find((m) => m.clase === "proveedor") as
+          { clase: "proveedor"; hecho: boolean; motivo?: string };
+        expect(acuse.hecho).toBe(false);
+        expect(acuse.motivo).toMatch(/mi-llm/);
+        expect(registro()[0]!.baseUrl).toBe("https://uno.example.com/v1");
+      });
+
+      it("un nombre del que no sale identificador se rechaza diciéndolo", async () => {
+        const { servidor, registro } = conRegistro();
+        const { cliente, accion } = await conectar(servidor);
+        await enviarMensaje(accion, { clase: "proveedor", accion: "alta", nombre: "¿?¡!", baseUrl: "https://a.example.com/v1" });
+        await asentar();
+        const acuse = [...cliente.recibidos].reverse().find((m) => m.clase === "proveedor") as
+          { clase: "proveedor"; hecho: boolean; motivo?: string };
+        expect(acuse.hecho).toBe(false);
+        expect(registro()).toEqual([]);
+      });
+
+      it("la baja se lleva también la credencial: una clave huérfana sigue siendo un secreto", async () => {
+        const { servidor, borradas, registro } = conRegistro([
+          { slug: "mi-llm", nombre: "Mi LLM", baseUrl: "https://uno.example.com/v1" },
+        ]);
+        const { cliente, accion } = await conectar(servidor);
+
+        await enviarMensaje(accion, { clase: "proveedor", accion: "baja", slug: "mi-llm" });
+        await asentar();
+
+        expect(registro()).toEqual([]);
+        expect(borradas).toEqual(["custom:mi-llm"]);
+        expect(ultimoModelos(cliente).proveedores.some((p) => p.id === "custom:mi-llm")).toBe(false);
+      });
+
+      it("sin puerto para escribir se contesta que no se puede, no se calla", async () => {
+        const servidor = servidorDeMentira();
+        montarRutas(servidor, vestibuloDePrueba(), {});
+        const { cliente, accion } = await conectar(servidor);
+        await enviarMensaje(accion, { clase: "proveedor", accion: "alta", nombre: "X", baseUrl: "https://a.example.com/v1" });
+        await asentar();
+        const acuse = [...cliente.recibidos].reverse().find((m) => m.clase === "proveedor") as
+          { clase: "proveedor"; hecho: boolean; motivo?: string };
+        expect(acuse.hecho).toBe(false);
+        expect(acuse.motivo).toMatch(/no puede/);
+      });
+    });
+
     it("«borrar» borra, lo dice, y reemite el estado de modelos", async () => {
       const borrados: string[] = [];
       const servidor = servidorDeMentira();

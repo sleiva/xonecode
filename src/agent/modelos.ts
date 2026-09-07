@@ -3,8 +3,8 @@ import { ChatAnthropic } from "@langchain/anthropic";
 import { ChatOllama } from "@langchain/ollama";
 import type { ModelosPort, Papel } from "../core/ports.js";
 import {
-  COMPATIBLES_OPENAI, parsear, resolver,
-  type Eleccion, type FuentesDeEleccion, type Proveedor,
+  COMPATIBLES_OPENAI, compatibleConOpenAi, esProveedorPersonalizado, parsear, resolver,
+  type Eleccion, type FuentesDeEleccion, type Proveedor, type ProveedorDeclarado,
 } from "../core/modelos.js";
 import { baseUrlDeOllama, baseUrlDeOllamaCloud } from "./catalogoModelos.js";
 import { ChatGoogleGenerativeAICompatible } from "./gemini.js";
@@ -19,12 +19,21 @@ import { ChatGoogleGenerativeAICompatible } from "./gemini.js";
 export class Modelos implements ModelosPort {
   private readonly eleccion: Record<Papel, Eleccion>;
 
+  /**
+   * Los proveedores personalizados salen del `config.json` GLOBAL y de ningún otro sitio:
+   * es la misma regla que impone `core/config.ts` al validar, repetida aquí porque este
+   * es quien construye el cliente — si un día el fichero del proyecto colara uno, aquí no
+   * se usaría igualmente.
+   */
+  private readonly personalizados: readonly ProveedorDeclarado[];
+
   constructor(fuentes: FuentesDeEleccion = {}) {
     this.eleccion = resolver(fuentes);
+    this.personalizados = fuentes.global?.proveedores ?? [];
   }
 
   paraPapel(papel: Papel): unknown {
-    return construirModelo(this.eleccion[papel]);
+    return construirModelo(this.eleccion[papel], this.personalizados);
   }
 
   /**
@@ -33,7 +42,7 @@ export class Modelos implements ModelosPort {
    * que fallar igual y con el mismo mensaje que uno mal escrito en la línea de comandos.
    */
   paraModelo(id: string): unknown {
-    return construirModelo(parsear(id));
+    return construirModelo(parsear(id), this.personalizados);
   }
 
   descripcion(): Record<Papel, string> {
@@ -67,7 +76,22 @@ function construirCompatibleOpenAi(
 }
 
 /** El cliente de un `{proveedor, modelo}`, venga de un papel o de la elección de un agente. */
-function construirModelo({ proveedor, modelo }: { proveedor: Proveedor; modelo: string }): unknown {
+function construirModelo(
+  { proveedor, modelo }: { proveedor: Proveedor; modelo: string },
+  personalizados: readonly ProveedorDeclarado[] = [],
+): unknown {
+    // Un personalizado se resuelve ANTES del switch, contra el registro: sin él no hay URL
+    // base, y eso es un alta que falta y no un proveedor roto. El switch de abajo sigue
+    // siendo exhaustivo sobre los de serie.
+    if (esProveedorPersonalizado(proveedor)) {
+      const fila = compatibleConOpenAi(proveedor, personalizados);
+      if (fila === undefined) {
+        throw new Error(
+          `el proveedor personalizado «${proveedor}» no está dado de alta; añádelo en Ajustes → Proveedores`,
+        );
+      }
+      return construirCompatibleOpenAi(proveedor, modelo, fila);
+    }
     switch (proveedor) {
       case "nvidia":
       case "groq":

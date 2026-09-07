@@ -288,7 +288,13 @@
   box-shadow: inset 0 0 0 1.5px var(--dsw-alias-label-tertiary);
 }
 
+/* `nowrap` porque en la fila de un proveedor personalizado los botones se partían en dos
+   líneas —«Añadir / clave», «Dar de / baja»— para dejarle sitio a una URL larga. La
+   prioridad es la contraria: un control tiene el tamaño que tiene, y quien cede es la
+   identidad de al lado, que ya recorta con puntos suspensivos y lleva el texto entero en
+   su `title`. */
 .accion {
+  white-space: nowrap;
   padding: 6px 10px;
   border: 0.5px solid var(--dsw-alias-border-l2);
   border-radius: 8px;
@@ -324,7 +330,18 @@
   font-size: 12px;
 }
 
+/* `Input` del paquete envuelve el `<input>` en un `<span>`, así que este `width` solo
+   estiraba la envoltura: el campo de dentro se quedaba en su tamaño por omisión —167 px
+   medidos en el navegador contra 551 de hueco disponible—, y ahí no cabe ni una URL corta.
+   Se ve en el formulario de entorno desde que existe: «https://mcp.ejemplo.com/mcp»
+   entraba cortado. El hijo directo, no un descendiente cualquiera: dentro de un campo no
+   hay más inputs, pero la regla dice lo que quiere decir. */
 .campo {
+  display: block;
+  width: 100%;
+}
+
+.campo > input {
   width: 100%;
 }
 

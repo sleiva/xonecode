@@ -24,6 +24,134 @@ const PROVEEDORES = [
 describe("Ajustes", () => {
   afterEach(cleanup);
 
+  it("mientras se registra un entorno, la sección enseña SOLO el formulario", () => {
+    // Medido en pantalla: con la lista de proyectos debajo, el campo de la URL quedaba
+    // detrás de dieciocho casillas de 54 px — fuera de la vista justo después de pulsar el
+    // botón que lo abre. Dar de alta algo es una tarea, no una fila más de la lista.
+    render(
+      <Ajustes
+        {...MANEJADORES}
+        proveedores={PROVEEDORES}
+        entornos={[{ id: "uno", nombre: "XOne WebStudio", url: "https://mcp.ejemplo.com/mcp" }]}
+        entornoActivo="uno"
+        proyectos={[{ id: "p1", nombre: "AppDemo" }, { id: "p2", nombre: "AppDeve" }]}
+      />
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Entornos" }));
+    expect(screen.getByText("XOne WebStudio")).toBeTruthy();
+    expect(screen.getByText("AppDemo")).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: /registrar un entorno/i }));
+    expect(screen.getByLabelText(/url del mcp/i)).toBeTruthy();
+    expect(screen.queryByText("XOne WebStudio")).toBeNull();
+    expect(screen.queryByText("AppDemo")).toBeNull();
+
+    // Y al cancelar vuelve todo: no se ha perdido nada por el camino.
+    fireEvent.click(screen.getByRole("button", { name: /^cancelar$/i }));
+    expect(screen.getByText("XOne WebStudio")).toBeTruthy();
+    expect(screen.getByText("AppDemo")).toBeTruthy();
+  });
+
+  describe("proveedores personalizados", () => {
+    const CON_PROPIO = [
+      ...PROVEEDORES,
+      {
+        id: "custom:mi-lm-studio",
+        nombre: "Mi LM Studio",
+        credencial: "falta" as const,
+        personalizado: true,
+        baseUrl: "http://localhost:1234/v1",
+      },
+    ];
+
+    it("van en su propio grupo, con la URL a la vista: es a dónde iría la clave", () => {
+      render(<Ajustes {...MANEJADORES} proveedores={CON_PROPIO} alAltaDeProveedor={() => {}} />);
+      expect(screen.getByRole("heading", { name: /personalizados/i })).toBeTruthy();
+      const fila = screen.getByText("Mi LM Studio").closest("li")!;
+      expect(fila.textContent).toMatch(/custom:mi-lm-studio · http:\/\/localhost:1234\/v1/);
+    });
+
+    it("mientras se añade uno, la sección enseña SOLO el formulario", () => {
+      render(<Ajustes {...MANEJADORES} proveedores={CON_PROPIO} alAltaDeProveedor={() => {}} />);
+      fireEvent.click(screen.getByRole("button", { name: /añadir un proveedor/i }));
+      expect(screen.getByLabelText(/^nombre$/i)).toBeTruthy();
+      expect(screen.queryByText("Google Gemini")).toBeNull();
+      expect(screen.queryByText("Mi LM Studio")).toBeNull();
+    });
+
+    it("manda nombre y URL, nunca el identificador: lo deriva el servidor", () => {
+      const alAltaDeProveedor = vi.fn();
+      render(<Ajustes {...MANEJADORES} proveedores={PROVEEDORES} alAltaDeProveedor={alAltaDeProveedor} />);
+      fireEvent.click(screen.getByRole("button", { name: /añadir un proveedor/i }));
+      fireEvent.change(screen.getByLabelText(/^nombre$/i), { target: { value: "Mi LM Studio" } });
+      fireEvent.change(screen.getByLabelText(/url base/i), { target: { value: "http://localhost:1234/v1" } });
+      fireEvent.click(screen.getByRole("button", { name: /^añadir$/i }));
+      expect(alAltaDeProveedor).toHaveBeenCalledWith("Mi LM Studio", "http://localhost:1234/v1");
+    });
+
+    it("una URL que la regla no admite no llega a mandarse", () => {
+      const alAltaDeProveedor = vi.fn();
+      render(<Ajustes {...MANEJADORES} proveedores={PROVEEDORES} alAltaDeProveedor={alAltaDeProveedor} />);
+      fireEvent.click(screen.getByRole("button", { name: /añadir un proveedor/i }));
+      fireEvent.change(screen.getByLabelText(/^nombre$/i), { target: { value: "Ajeno" } });
+      // http fuera de loopback: en claro y cruzando la red, con la clave dentro.
+      fireEvent.change(screen.getByLabelText(/url base/i), { target: { value: "http://ajeno.example.com/v1" } });
+      fireEvent.click(screen.getByRole("button", { name: /^añadir$/i }));
+      expect(alAltaDeProveedor).not.toHaveBeenCalled();
+    });
+
+    it("el formulario se cierra cuando el SERVIDOR dice que se hizo, no al pulsar", () => {
+      const { rerender } = render(
+        <Ajustes {...MANEJADORES} proveedores={PROVEEDORES} alAltaDeProveedor={() => {}} />
+      );
+      fireEvent.click(screen.getByRole("button", { name: /añadir un proveedor/i }));
+      // Un fallo lo deja abierto, con el motivo DENTRO: esta ventana no pinta el transcript.
+      rerender(
+        <Ajustes
+          {...MANEJADORES}
+          proveedores={PROVEEDORES}
+          alAltaDeProveedor={() => {}}
+          resultadoDeProveedor={{ hecho: false, motivo: "ya hay uno con ese identificador" }}
+        />
+      );
+      expect(screen.getByRole("alert").textContent).toMatch(/ya hay uno con ese identificador/);
+      expect(screen.getByLabelText(/^nombre$/i)).toBeTruthy();
+
+      rerender(
+        <Ajustes
+          {...MANEJADORES}
+          proveedores={PROVEEDORES}
+          alAltaDeProveedor={() => {}}
+          resultadoDeProveedor={{ hecho: true }}
+        />
+      );
+      expect(screen.queryByLabelText(/^nombre$/i)).toBeNull();
+    });
+
+    it("la baja se confirma, dice que se lleva la clave, y manda el slug sin el prefijo", () => {
+      const alBajaDeProveedor = vi.fn();
+      render(
+        <Ajustes
+          {...MANEJADORES}
+          proveedores={CON_PROPIO}
+          alAltaDeProveedor={() => {}}
+          alBajaDeProveedor={alBajaDeProveedor}
+        />
+      );
+      fireEvent.click(screen.getByRole("button", { name: /^dar de baja$/i }));
+      expect(screen.getByRole("alert").textContent).toMatch(/se borra también su clave/i);
+      expect(alBajaDeProveedor).not.toHaveBeenCalled();
+      fireEvent.click(screen.getByRole("button", { name: /dar de baja «Mi LM Studio»/i }));
+      expect(alBajaDeProveedor).toHaveBeenCalledWith("mi-lm-studio");
+    });
+
+    it("sin puerto para darlos de alta no se pinta el botón: se dice que no se puede", () => {
+      render(<Ajustes {...MANEJADORES} proveedores={PROVEEDORES} />);
+      expect(screen.queryByRole("button", { name: /añadir un proveedor/i })).toBeNull();
+      expect(screen.getByText(/no puede dar de alta proveedores/i)).toBeTruthy();
+    });
+  });
+
   it("la fila enseña el NOMBRE del proveedor y su id, que son dos cosas distintas", () => {
     render(<Ajustes {...MANEJADORES} proveedores={PROVEEDORES} />);
     // El nombre lo manda el servidor (`core/modelos.ts#nombreDeProveedor`): capitalizar el

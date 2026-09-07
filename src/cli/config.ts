@@ -17,7 +17,10 @@ import {
   ModeloMalEscrito,
   PAPELES,
   resolver,
+  idDeProveedorPersonalizado,
+  PROVEEDORES,
   VARIABLES_POR_PROVEEDOR,
+  variableDeProveedor,
   type Eleccion,
   type FuentesDeEleccion,
   type Proveedor,
@@ -83,10 +86,14 @@ export function cmdConfig(
 
   // El entorno gana sobre auth.json (en runtime `aplicarAuth` no pisa una variable que
   // ya existe), así que el origen se decide mirando PRIMERO el entorno.
-  const credenciales: CredencialVista[] = (
-    Object.keys(VARIABLES_POR_PROVEEDOR) as Proveedor[]
-  ).map((proveedor) => {
-    const variable = VARIABLES_POR_PROVEEDOR[proveedor]!;
+  // Los de serie que llevan clave, MÁS los personalizados dados de alta: los segundos no
+  // están en `PROVEEDORES` —los declara el usuario en el `config.json` global— y sin
+  // esta suma `/config` no diría una palabra de una credencial que sí tiene guardada.
+  const credenciales: CredencialVista[] = [
+    ...PROVEEDORES.filter((p) => VARIABLES_POR_PROVEEDOR[p] !== undefined),
+    ...(cargado.config.global?.proveedores ?? []).map((d) => idDeProveedorPersonalizado(d.slug)),
+  ].map((proveedor) => {
+    const variable = variableDeProveedor(proveedor)!;
     const enEntorno = process.env[variable] !== undefined;
     const enAuth = !enEntorno && cargado.auth[proveedor] !== undefined;
     return {

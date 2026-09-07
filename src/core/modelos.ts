@@ -9,7 +9,123 @@ export type ProveedorDeSerie =
   | "gemini" | "openai" | "anthropic" | "ollama" | "ollama-cloud"
   | "nvidia" | "groq" | "xai";
 
-export type Proveedor = ProveedorDeSerie;
+/**
+ * Un endpoint compatible con OpenAI dado de alta por el USUARIO, con la forma
+ * `custom:<slug>`.
+ *
+ * Es un tipo de plantilla y no una entrada más de la lista cerrada porque estos no se
+ * conocen al compilar: los declara quien usa el programa. Lo que sí se puede afirmar sin
+ * registro es la FORMA, y con eso `parsear` sigue siendo una función pura —no hay que
+ * pasarle la lista de altas para partir «custom:mi-llm/qwen3»—; que ese slug esté dado de
+ * alta se comprueba donde importa, al construir el cliente y al pedir el catálogo, con un
+ * mensaje que dice dónde darlo de alta.
+ */
+export type ProveedorPersonalizado = `custom:${string}`;
+
+export type Proveedor = ProveedorDeSerie | ProveedorPersonalizado;
+
+export const PREFIJO_PERSONALIZADO = "custom:";
+
+/**
+ * El slug de un proveedor personalizado: minúsculas, cifras y guiones.
+ *
+ * No es cosmética. El slug acaba en tres sitios donde un carácter de más rompe algo: es
+ * la segunda mitad de un id que se parte por la PRIMERA barra (así que no puede llevar
+ * `/`), es la clave de una entrada de `auth.json`, y de él se deriva el nombre de una
+ * variable de entorno (así que no puede llevar `:` ni espacios). Treinta y un caracteres
+ * es de sobra para nombrar un servidor.
+ */
+const SLUG = /^[a-z0-9][a-z0-9-]{0,30}$/;
+
+export function motivoDeSlugInaceptable(slug: string): string | undefined {
+  if (slug === "") return "el identificador está vacío";
+  if (!SLUG.test(slug)) {
+    return "el identificador solo puede llevar minúsculas, cifras y guiones, empezar por letra o cifra y no pasar de 31 caracteres";
+  }
+  return undefined;
+}
+
+/**
+ * El identificador que le toca a un proveedor por su NOMBRE.
+ *
+ * Se deriva en vez de pedirse: un tercer campo en el formulario —«nombre», «id», «URL»—
+ * solo puede escribirse mal, y quien da de alta «Mi LM Studio» no tiene por qué saber que
+ * eso va a acabar siendo un segmento de un id y un trozo del nombre de una variable de
+ * entorno. Se quitan los acentos (`NFD` + la marca combinante), lo que no sea letra o
+ * cifra pasa a guion, y se recorta a lo que admite `SLUG`.
+ *
+ * Puede salir vacío —un nombre de solo signos— y entonces devuelve cadena vacía, que
+ * `motivoDeSlugInaceptable` rechaza con su motivo: adivinar un id ahí sería inventarlo.
+ */
+export function slugDesdeNombre(nombre: string): string {
+  return nombre
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 31)
+    .replace(/-+$/g, "");
+}
+
+export function esProveedorPersonalizado(valor: string): valor is ProveedorPersonalizado {
+  return valor.startsWith(PREFIJO_PERSONALIZADO)
+    && motivoDeSlugInaceptable(valor.slice(PREFIJO_PERSONALIZADO.length)) === undefined;
+}
+
+export function slugDeProveedor(proveedor: ProveedorPersonalizado): string {
+  return proveedor.slice(PREFIJO_PERSONALIZADO.length);
+}
+
+export function idDeProveedorPersonalizado(slug: string): ProveedorPersonalizado {
+  return `${PREFIJO_PERSONALIZADO}${slug}` as ProveedorPersonalizado;
+}
+
+/** Un proveedor personalizado tal como se declara y se guarda. */
+export interface ProveedorDeclarado {
+  /** Sin el prefijo. El id completo, el que se teclea, es `custom:<slug>`. */
+  slug: string;
+  /** Lo que escribe el usuario para reconocerlo. No es un identificador. */
+  nombre: string;
+  /** La URL base compatible con OpenAI. El catálogo pide `<baseUrl>/models`. */
+  baseUrl: string;
+}
+
+/**
+ * Los hosts en los que se admite `http://` sin cifrar.
+ *
+ * Copiada de `agent/cloudstudioMcp.ts#LOOPBACK`, que es la misma decisión por el mismo
+ * motivo, y puesta aquí porque `core/` no puede importar de `agent/` (sí al revés): la
+ * regla canónica vive ahora en datos puros y aquel módulo tira de ésta.
+ */
+const LOOPBACK: ReadonlySet<string> = new Set(["127.0.0.1", "localhost", "::1", "[::1]"]);
+
+/**
+ * ¿Vale eso como endpoint? Devuelve el MOTIVO del rechazo, o `undefined` si pasa.
+ *
+ * La misma regla que la URL de un MCP, y por la misma razón: HTTPS fuera de la máquina,
+ * `http://` solo en loopback, y nunca credenciales dentro de la URL —una URL con usuario
+ * y contraseña acaba escrita en `config.json` y en cada traza que la enseñe—.
+ *
+ * Que loopback pase NO es una concesión: es el caso principal. Un LM Studio, un
+ * `llama.cpp --server` o un vLLM escuchan en `http://localhost:1234/v1`, y ahí el texto
+ * plano no cruza ninguna red — el mismo trato que ya reciben el `redirect_uri` del
+ * callback de OAuth y esta propia consola.
+ */
+export function motivoDeEndpointInaceptable(valor: string): string | undefined {
+  let url: URL;
+  try {
+    url = new URL(valor);
+  } catch {
+    return "eso no es una URL: escribe algo como https://mi-servidor/v1";
+  }
+  if (url.username !== "" || url.password !== "") {
+    return "la URL no puede llevar usuario ni contraseña dentro: la clave se pide aparte";
+  }
+  if (url.protocol === "https:") return undefined;
+  if (url.protocol === "http:" && LOOPBACK.has(url.hostname)) return undefined;
+  return "la URL debe ser https — solo se admite http:// en 127.0.0.1 o localhost, para un servidor local";
+}
 
 export const PROVEEDORES: readonly ProveedorDeSerie[] = [
   "gemini", "openai", "anthropic", "ollama", "ollama-cloud",
@@ -58,7 +174,7 @@ export const COMPATIBLES_OPENAI: Record<
  * `ollama` no está: es local y no necesita clave. Esa ausencia es la misma que declara
  * `SIN_CREDENCIAL`, y hay un test que exige que las dos cuenten lo mismo.
  */
-export const VARIABLES_POR_PROVEEDOR: Partial<Record<Proveedor, string>> = {
+export const VARIABLES_POR_PROVEEDOR: Partial<Record<ProveedorDeSerie, string>> = {
   anthropic: "ANTHROPIC_API_KEY",
   openai: "OPENAI_API_KEY",
   gemini: "GOOGLE_API_KEY",
@@ -91,16 +207,57 @@ const NOMBRES: Record<ProveedorDeSerie, string> = {
   xai: "xAI",
 };
 
-export function nombreDeProveedor(proveedor: Proveedor): string {
+/**
+ * Cómo se escribe un proveedor. Para uno personalizado, el nombre que puso quien lo dio
+ * de alta; sin registro —o con un slug que ya no está— se cae a su slug, que es lo único
+ * que se puede afirmar: inventarle un nombre sería peor que enseñar el identificador.
+ */
+export function nombreDeProveedor(
+  proveedor: Proveedor,
+  declarados: readonly ProveedorDeclarado[] = [],
+): string {
+  if (esProveedorPersonalizado(proveedor)) {
+    const slug = slugDeProveedor(proveedor);
+    return declarados.find((d) => d.slug === slug)?.nombre ?? slug;
+  }
   return NOMBRES[proveedor];
 }
 
-/** La fila de un proveedor compatible con OpenAI, o nada si no lo es. */
+/**
+ * La variable de entorno donde vive la clave de un proveedor.
+ *
+ * Para los de serie, la tabla. Para uno personalizado se DERIVA del slug
+ * (`XONECODE_CLAVE_MI_LLM`) en vez de guardarse: una variable elegida por el usuario sería
+ * un cuarto campo del formulario que solo puede escribirse mal, y derivarla hace que todo
+ * lo que ya existe —`aplicarAuth`, `guardarCredencial`, el constructor del cliente y el
+ * catálogo— siga funcionando sin saber que estos proveedores existen.
+ */
+export function variableDeProveedor(proveedor: Proveedor): string | undefined {
+  if (esProveedorPersonalizado(proveedor)) {
+    return `XONECODE_CLAVE_${slugDeProveedor(proveedor).toUpperCase().replace(/-/g, "_")}`;
+  }
+  return VARIABLES_POR_PROVEEDOR[proveedor];
+}
+
+/**
+ * La fila de un proveedor compatible con OpenAI, o nada si no lo es.
+ *
+ * Un personalizado LO ES por definición —es lo único que se puede dar de alta—, pero solo
+ * si consta en el registro: sin su URL base no hay a dónde llamar, y devolver algo aquí
+ * sería fabricar un endpoint.
+ */
 export function compatibleConOpenAi(
   proveedor: Proveedor,
+  declarados: readonly ProveedorDeclarado[] = [],
 ): { baseUrl: string; variable: string } | undefined {
-  return (COMPATIBLES_OPENAI as Partial<Record<Proveedor, { baseUrl: string; variable: string }>>)[
-    proveedor
+  if (esProveedorPersonalizado(proveedor)) {
+    const slug = slugDeProveedor(proveedor);
+    const declarado = declarados.find((d) => d.slug === slug);
+    if (declarado === undefined) return undefined;
+    return { baseUrl: declarado.baseUrl, variable: variableDeProveedor(proveedor)! };
+  }
+  return (COMPATIBLES_OPENAI as Partial<Record<ProveedorDeSerie, { baseUrl: string; variable: string }>>)[
+    proveedor as ProveedorDeSerie
   ];
 }
 
@@ -162,9 +319,17 @@ export function parsear(texto: string): { proveedor: Proveedor; modelo: string }
   }
   const proveedor = texto.slice(0, corte);
   const modelo = texto.slice(corte + 1);
-  if (!(PROVEEDORES as readonly string[]).includes(proveedor)) {
+  // Un personalizado se acepta por su FORMA, sin mirar ningún registro: así `parsear`
+  // sigue siendo pura y la usa igual el `.md` de un agente, la bandera `--modelo` y el
+  // cable. Que ese slug esté dado de alta se comprueba al construir el cliente y al pedir
+  // el catálogo, que es donde se puede decir «dalo de alta en Ajustes».
+  if (
+    !(PROVEEDORES as readonly string[]).includes(proveedor)
+    && !esProveedorPersonalizado(proveedor)
+  ) {
     throw new ModeloMalEscrito(
       `proveedor «${proveedor}» desconocido. Los que hay: ${PROVEEDORES.join(", ")}`
+        + " (o «custom:<id>» para uno personalizado, dado de alta en Ajustes)"
     );
   }
   return { proveedor: proveedor as Proveedor, modelo };

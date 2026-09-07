@@ -344,3 +344,61 @@ describe("motivoDeClaveInaceptable", () => {
     expect(motivoDeClaveInaceptable("   ")).toMatch(/vacía/);
   });
 });
+
+describe("proveedores personalizados en el config", () => {
+  const BUENO = { slug: "mi-llm", nombre: "Mi LLM", baseUrl: "https://llm.example.com/v1" };
+
+  it("el config GLOBAL los acepta tal cual", () => {
+    const { config, avisos } = validar({ proveedores: [BUENO] }, "~/.xonecode/config.json", "global");
+    expect(config.proveedores).toEqual([BUENO]);
+    expect(avisos).toEqual([]);
+  });
+
+  /**
+   * El motivo NO es de ámbito: la clave de un personalizado se guarda en `auth.json` bajo su
+   * identificador, así que un proyecto que pudiera redefinir la URL de un slug ya dado de
+   * alta mandaría esa clave al host que él dijera. Un `config.json` de proyecto puede venir
+   * de fuera; el global es del dueño de la máquina.
+   */
+  it("el del PROYECTO los rechaza, y el aviso es GRAVE", () => {
+    const { config, avisos } = validar({ proveedores: [BUENO] }, RUTA, "proyecto");
+    expect(config.proveedores).toBeUndefined();
+    expect(avisos).toHaveLength(1);
+    expect(avisos[0]!.severidad).toBe("grave");
+    expect(avisos[0]!.texto).toMatch(/solo se admite en el config.json GLOBAL/);
+  });
+
+  it("una entrada mala se descarta ella sola, y el aviso no lleva la URL dentro", () => {
+    const { config, avisos } = validar(
+      {
+        proveedores: [
+          BUENO,
+          { slug: "MAYUS", nombre: "Malo", baseUrl: "https://a.example.com/v1" },
+          { slug: "sin-cifrar", nombre: "Malo", baseUrl: "http://ajeno.example.com/v1" },
+          { slug: "con-clave", nombre: "Malo", baseUrl: "https://u:p@a.example.com/v1" },
+          { slug: "sin-nombre", nombre: "  ", baseUrl: "https://a.example.com/v1" },
+          { slug: "mi-llm", nombre: "Repetido", baseUrl: "https://b.example.com/v1" },
+          "ni siquiera un objeto",
+        ],
+      },
+      "~/.xonecode/config.json",
+      "global",
+    );
+    expect(config.proveedores).toEqual([BUENO]);
+    expect(avisos).toHaveLength(6);
+    // Los avisos acaban en logs y en capturas: dicen QUÉ campo falla, nunca qué contenía.
+    for (const a of avisos) {
+      expect(a.texto).not.toMatch(/ajeno\.example\.com|u:p@/);
+    }
+  });
+
+  it("auth.json acepta la clave de un personalizado por su forma, sin registro que consultar", () => {
+    const { auth, avisos } = validarAuth({ "custom:mi-llm": "sk-1" }, RUTA_AUTH, 0o600, "global");
+    expect(auth["custom:mi-llm"]).toEqual({ key: "sk-1" });
+    expect(avisos).toEqual([]);
+    // Y lo que no tiene esa forma se sigue descartando.
+    const otro = validarAuth({ "custom:MAYUS": "sk-1" }, RUTA_AUTH, 0o600, "global");
+    expect(otro.auth["custom:MAYUS" as never]).toBeUndefined();
+    expect(otro.avisos).toHaveLength(1);
+  });
+});

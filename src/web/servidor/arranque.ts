@@ -44,10 +44,17 @@ import type { NombreDeHerramienta } from "../../core/dispositivos.js";
 import { instalarHerramientaDeDispositivos } from "../../agent/dispositivosEnMaquina.js";
 import {
   parsear,
+  compatibleConOpenAi,
+  esProveedorPersonalizado,
+  idDeProveedorPersonalizado,
+  motivoDeEndpointInaceptable,
+  motivoDeSlugInaceptable,
   nombreDeProveedor,
   PROVEEDORES,
+  slugDesdeNombre,
   resolver,
   SIN_CREDENCIAL,
+  type ProveedorDeclarado,
   type FuentesDeEleccion,
   type Proveedor,
 } from "../../core/modelos.js";
@@ -60,6 +67,9 @@ import {
   guardarModeloGlobal,
 } from "../../agent/configEnDisco.js";
 import { borrarCredencial, guardarCredencial } from "../../agent/authEnDisco.js";
+import {
+  borrarProveedorPersonalizado, guardarProveedorPersonalizado, proveedoresPersonalizados,
+} from "../../agent/configEnDisco.js";
 import { cargarSettings, guardarDispositivos, guardarEntorno as guardarEntornoEnDisco } from "../../agent/settingsEnDisco.js";
 import { abrirEnSistema } from "../../agent/cloudstudioMcp.js";
 import { nombreDePersona } from "../../agent/persona.js";
@@ -166,6 +176,19 @@ export interface OpcionesDeMontaje {
    */
   guardarCredencial?: (proveedor: Proveedor, clave: string) => { ruta: string };
   /**
+   * Los proveedores personalizados dados de alta. Es una FUNCIÓN y no una lista porque se
+   * dan de alta en caliente desde esta misma ventana: una lista leída al montar las rutas
+   * se quedaría vieja hasta reiniciar.
+   */
+  proveedoresPersonalizados?: () => readonly ProveedorDeclarado[];
+  /**
+   * Da de alta o reescribe un proveedor personalizado. Ausente = esta ejecución no puede,
+   * y la ventana no ofrece el formulario en vez de ofrecer uno que no guarda nada.
+   */
+  guardarProveedor?: (declarado: ProveedorDeclarado) => { ruta: string };
+  /** Retira uno. Su credencial la borra quien llama, con `borrarCredencial`. */
+  borrarProveedor?: (slug: string) => { ruta: string; borrado: boolean };
+  /**
    * El catálogo VIVO de un proveedor. Ausente = esta ejecución no puede consultarlo, y el
    * menú lo dice en vez de quedarse cargando para siempre.
    */
@@ -220,6 +243,14 @@ export function montarRutas(
 ): void {
   const informar = opciones.informar ?? (() => {});
   const hayCredencialDe = opciones.hayCredencial ?? (() => false);
+
+  /** Los personalizados dados de alta AHORA: se relee en cada mensaje, porque esta misma
+   *  ventana los da de alta y de baja sin reiniciar nada. */
+  const personalizados = (): readonly ProveedorDeclarado[] => opciones.proveedoresPersonalizados?.() ?? [];
+  const idsPersonalizados = (): Proveedor[] =>
+    personalizados().map((d) => idDeProveedorPersonalizado(d.slug));
+  const baseUrlDe = (proveedor: Proveedor): string | undefined =>
+    compatibleConOpenAi(proveedor, personalizados())?.baseUrl;
 
   /** Los tres estados que se pueden AFIRMAR de una credencial. Ver `ProveedorDeModelos`. */
   const credencialDe = (proveedor: Proveedor): "puesta" | "falta" | "nativa" =>
@@ -471,14 +502,20 @@ export function montarRutas(
     return {
       clase: "modelos",
       ...(trabajo === undefined ? {} : { actual: `${trabajo.proveedor}/${trabajo.modelo}` }),
-      proveedores: PROVEEDORES.map((p) => ({
+      proveedores: [...PROVEEDORES, ...idsPersonalizados()].map((p) => ({
         id: p,
-        nombre: nombreDeProveedor(p),
+        nombre: nombreDeProveedor(p, personalizados()),
         credencial: credencialDe(p),
         // Solo se marca lo que se puede afirmar: sin puerto para mirarlo, no se dice que
         // esté en el fichero (y la interfaz no ofrecerá borrarla).
         ...(opciones.credencialEnFichero?.(p) === true && opciones.borrarCredencial !== undefined
           ? { enFichero: true }
+          : {}),
+        // La URL viaja SOLO en los personalizados, y no es una ruta de la máquina: es lo
+        // que tecleó el usuario, y es justo lo que hay que ver al lado de su clave para
+        // saber a dónde va. Los de serie no la llevan: su URL está en el repo.
+        ...(esProveedorPersonalizado(p)
+          ? { personalizado: true as const, ...(baseUrlDe(p) === undefined ? {} : { baseUrl: baseUrlDe(p)! }) }
           : {}),
         ...(catalogos.get(p) ?? {}),
       })),
@@ -881,13 +918,102 @@ export function montarRutas(
   };
 
   /**
+   * Dar de alta o retirar un proveedor personalizado.
+   *
+   * Cinco reglas, y ninguna es de formulario:
+   * - **El identificador lo DERIVA el servidor** del nombre, con la función de `core/`.
+   *   Derivarlo también en el cliente sería una segunda copia de la regla, y divergiría.
+   * - **Un slug que ya existe se RECHAZA**, no se pisa: dos endpoints distintos con el
+   *   mismo nombre acabarían compartiendo entrada en `auth.json`, o sea que la clave del
+   *   segundo viajaría al host del primero. Para cambiar una URL hay que dar de baja y
+   *   volver a dar de alta, y la baja dice que se lleva la clave.
+   * - **La URL se comprueba con la MISMA regla que un MCP** (`motivoDeEndpointInaceptable`,
+   *   hoy en `core/`): https fuera de la máquina, http solo en loopback, sin credenciales
+   *   dentro. Loopback es el caso principal, no la excepción: LM Studio, llama.cpp y vLLM
+   *   escuchan ahí.
+   * - **La baja se lleva la credencial.** Una clave en `auth.json` bajo un proveedor que ya
+   *   no existe no se puede mandar a ninguna parte, pero sigue siendo un secreto en disco y
+   *   nadie volvería a verla en la interfaz para borrarla.
+   * - **El motivo vuelve por el cable**, no por el transcript: esta ventana no lo pinta.
+   */
+  const atenderProveedor = (mensaje: Extract<MensajeDelCliente, { clase: "proveedor" }>): void => {
+    const contestar = (hecho: boolean, motivo?: string): void =>
+      emitir({ clase: "proveedor", hecho, ...(motivo === undefined ? {} : { motivo }) });
+
+    if (mensaje.accion === "alta") {
+      if (opciones.guardarProveedor === undefined) {
+        contestar(false, "esta ejecución no puede dar de alta proveedores");
+        return;
+      }
+      const nombre = typeof mensaje.nombre === "string" ? mensaje.nombre.trim() : "";
+      const baseUrl = typeof mensaje.baseUrl === "string" ? mensaje.baseUrl.trim() : "";
+      if (nombre === "") {
+        contestar(false, "ponle un nombre para reconocerlo");
+        return;
+      }
+      const slug = slugDesdeNombre(nombre);
+      const malSlug = motivoDeSlugInaceptable(slug);
+      if (malSlug !== undefined) {
+        contestar(false, `de ese nombre no sale un identificador válido: ${malSlug}`);
+        return;
+      }
+      const malUrl = motivoDeEndpointInaceptable(baseUrl);
+      if (malUrl !== undefined) {
+        contestar(false, malUrl);
+        return;
+      }
+      if (personalizados().some((d) => d.slug === slug)) {
+        contestar(false, `ya hay un proveedor con el identificador «${slug}»: dale otro nombre, o da de baja el que hay`);
+        return;
+      }
+      try {
+        opciones.guardarProveedor({ slug, nombre, baseUrl });
+      } catch (error) {
+        contestar(false, error instanceof Error ? error.message : String(error));
+        return;
+      }
+      contestar(true);
+      emitirModelos();
+      return;
+    }
+
+    if (opciones.borrarProveedor === undefined) {
+      contestar(false, "esta ejecución no puede dar de baja proveedores");
+      return;
+    }
+    const slug = typeof mensaje.slug === "string" ? mensaje.slug : "";
+    if (!personalizados().some((d) => d.slug === slug)) {
+      // No está: una vista vieja del cliente, no un error que contar. Se contesta «hecho»
+      // porque el estado que pedía —que no esté— es el que hay.
+      contestar(true);
+      emitirModelos();
+      return;
+    }
+    try {
+      opciones.borrarProveedor(slug);
+      // Y su clave detrás, si esta ejecución puede: ver la regla de arriba.
+      opciones.borrarCredencial?.(idDeProveedorPersonalizado(slug));
+    } catch (error) {
+      contestar(false, error instanceof Error ? error.message : String(error));
+      return;
+    }
+    contestar(true);
+    emitirModelos();
+  };
+
+  /**
    * Borrar una credencial. Se DICE lo que pasó por el transcript —incluido el caso en que
    * el fichero ya no la tenía— y se reemite el estado de modelos, que es lo que repinta el
    * punto. Si la variable de entorno la sigue llevando, eso también se dice: el punto se
    * quedará verde y callarlo parecería un fallo del botón.
    */
   const atenderCredencial = (mensaje: Extract<MensajeDelCliente, { clase: "credencial" }>): void => {
-    if (!(PROVEEDORES as readonly string[]).includes(mensaje.proveedor)) return;
+    // De serie o personalizado DADO DE ALTA: un slug que no consta se ignora en silencio,
+    // como un id de dispositivo que ya no está — es una vista vieja del cliente, no un
+    // error que contar.
+    const conocido = (PROVEEDORES as readonly string[]).includes(mensaje.proveedor)
+      || idsPersonalizados().includes(mensaje.proveedor as Proveedor);
+    if (!conocido) return;
     const proveedor = mensaje.proveedor as Proveedor;
     if (mensaje.accion === "pedir") {
       void pedirCredencial(proveedor).catch(contar);
@@ -1270,6 +1396,12 @@ export function montarRutas(
       respuesta.end();
       return;
     }
+    if (typeof mensaje === "object" && mensaje !== null && mensaje.clase === "proveedor") {
+      atenderProveedor(mensaje);
+      respuesta.writeHead(204);
+      respuesta.end();
+      return;
+    }
     if (typeof mensaje === "object" && mensaje !== null && mensaje.clase === "credencial") {
       atenderCredencial(mensaje);
       respuesta.writeHead(204);
@@ -1515,9 +1647,15 @@ export async function arrancarConsolaWeb(opciones: OpcionesDeArranque): Promise<
     guardarAjustesDeDispositivos: (ajustes) => void guardarDispositivos(undefined, ajustes),
     instalarHerramienta: instalarHerramientaDeDispositivos,
     catalogoDeModelos: async (proveedor) => {
-      const modelos = await new CatalogoModelos().listar(proveedor);
+      const modelos = await new CatalogoModelos(undefined, undefined, proveedoresPersonalizados).listar(proveedor);
       return modelos.map((m) => ({ id: m.id, ...(m.nombre === undefined ? {} : { nombre: m.nombre }) }));
     },
+    // Se releen de disco en cada consulta, igual que los ajustes de dispositivos: esta
+    // misma ventana los da de alta, y una lista capturada al montar las rutas se quedaría
+    // vieja hasta reiniciar el proceso.
+    proveedoresPersonalizados: proveedoresPersonalizados,
+    guardarProveedor: (declarado) => guardarProveedorPersonalizado(declarado),
+    borrarProveedor: (slug) => borrarProveedorPersonalizado(slug),
   });
 
   escribir(`consola web en ${servidor.url}\n`);

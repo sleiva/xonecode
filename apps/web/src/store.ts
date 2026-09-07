@@ -43,6 +43,13 @@ export interface EstadoDelCliente {
    * reconexión lo vuelve a traer entero.
    */
   modelos?: { actual?: string; proveedores: ProveedorDeModelos[] };
+  /**
+   * Cómo fue el último alta o baja de proveedor personalizado. El motivo llega por el cable
+   * y no como acto de sistema porque la ventana de ajustes no pinta el transcript — mismo
+   * motivo que el `aviso` del selector durante el alta. Se tira al caerse el cable: es un
+   * acuse de una operación, no un estado.
+   */
+  proveedor?: { hecho: boolean; motivo?: string };
   /** Los subagentes y los `.md` que no se pudieron leer. Ausente = todavía no ha llegado el
    *  mensaje, que NO es lo mismo que «no hay ninguno»: la ventana lo distingue. */
   agentes?: { lista: AgenteDelCable[]; problemas: string[] };
@@ -239,11 +246,16 @@ function esAgenteDelCable(valor: unknown): valor is AgenteDelCable {
 
 function esProveedorDeModelos(valor: unknown): valor is ProveedorDeModelos {
   if (typeof valor !== "object" || valor === null) return false;
-  const p = valor as { id?: unknown; nombre?: unknown; credencial?: unknown; modelos?: unknown; error?: unknown };
+  const p = valor as {
+    id?: unknown; nombre?: unknown; credencial?: unknown; modelos?: unknown; error?: unknown;
+    personalizado?: unknown; baseUrl?: unknown;
+  };
   if (typeof p.id !== "string") return false;
   if (typeof p.nombre !== "string") return false;
   if (p.credencial !== "puesta" && p.credencial !== "falta" && p.credencial !== "nativa") return false;
   if (p.error !== undefined && typeof p.error !== "string") return false;
+  if (p.personalizado !== undefined && typeof p.personalizado !== "boolean") return false;
+  if (p.baseUrl !== undefined && typeof p.baseUrl !== "string") return false;
   if ((p as { enFichero?: unknown }).enFichero !== undefined && typeof (p as { enFichero?: unknown }).enFichero !== "boolean") {
     return false;
   }
@@ -408,6 +420,8 @@ export function crearStoreDelCliente(): {
             // de Ficheros sin `mime` ni `base64` con los tests en verde.
             nombre: p.nombre,
             credencial: p.credencial,
+            ...(p.personalizado === undefined ? {} : { personalizado: p.personalizado }),
+            ...(p.baseUrl === undefined ? {} : { baseUrl: p.baseUrl }),
             ...(p.enFichero === undefined ? {} : { enFichero: p.enFichero }),
             ...(p.modelos === undefined ? {} : { modelos: [...p.modelos] }),
             ...(p.error === undefined ? {} : { error: p.error }),
@@ -419,6 +433,17 @@ export function crearStoreDelCliente(): {
               // fila inventada.
               ...(typeof m.actual === "string" ? { actual: m.actual } : {}),
               proveedores,
+            },
+          });
+          return;
+        }
+        case "proveedor": {
+          const m = mensaje as { hecho?: unknown; motivo?: unknown };
+          if (typeof m.hecho !== "boolean") return;
+          mutar({
+            proveedor: {
+              hecho: m.hecho,
+              ...(typeof m.motivo === "string" ? { motivo: m.motivo } : {}),
             },
           });
           return;
@@ -713,6 +738,9 @@ export function crearStoreDelCliente(): {
         secreto: undefined,
         aprobacion: undefined,
         modelos: undefined,
+        // El acuse de un alta o una baja de proveedor es de esa operación, no un estado:
+        // guardado entre conexiones, al reconectar reaparecería un error ya resuelto.
+        proveedor: undefined,
         // Sin cable no se sabe si el turno sigue: dejarlo en `true` apagaría el compositor
         // para siempre en una pestaña que ya no recibe el «terminó».
         turnoEnVuelo: false,

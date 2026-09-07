@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import {
   Modal,
   Button,
@@ -181,6 +181,9 @@ export function Ajustes({
   alPedirClave,
   alBorrarClave,
   alRegistrarEntorno,
+  alAltaDeProveedor,
+  alBajaDeProveedor,
+  resultadoDeProveedor,
   alElegirProyectos,
   alResponderSecreto,
   alCerrar,
@@ -237,6 +240,16 @@ export function Ajustes({
   alPedirClave: (proveedor: string) => void;
   alBorrarClave: (proveedor: string) => void;
   alRegistrarEntorno: (url: string) => void;
+  /**
+   * Dar de alta un endpoint compatible con OpenAI. El identificador NO se manda: lo deriva
+   * el servidor del nombre, para que la regla viva en un solo sitio. Ausente = esta
+   * ejecución no puede, y no se pinta el botón en vez de pintar uno que no guarda nada.
+   */
+  alAltaDeProveedor?: (nombre: string, baseUrl: string) => void;
+  /** Darlo de baja, por su identificador. Se lleva su clave: la confirmación lo dice. */
+  alBajaDeProveedor?: (slug: string) => void;
+  /** El acuse del último alta o baja. `hecho` cierra el formulario; `motivo` se pinta en él. */
+  resultadoDeProveedor?: { hecho: boolean; motivo?: string };
   /** Qué proyectos de ese entorno se enseñan en la barra. Vacío = ninguno, y es elección. */
   alElegirProyectos: (entorno: string, proyectos: string[]) => void;
   alResponderSecreto: (valor: string) => void | Promise<unknown>;
@@ -247,6 +260,10 @@ export function Ajustes({
   const [editando, setEditando] = useState<string | undefined>(undefined);
   /** Registrar un entorno es un MODO: mientras dura, la lista no está (ver más abajo). */
   const [registrando, setRegistrando] = useState(false);
+  /** Dar de alta un proveedor es el MISMO modo, en la otra sección y por el mismo motivo. */
+  const [anadiendo, setAnadiendo] = useState(false);
+  const [nombreDeProveedor, setNombreDeProveedor] = useState("");
+  const [urlDeProveedor, setUrlDeProveedor] = useState("");
 
   /**
    * Trae a la vista lo que se acaba de abrir.
@@ -297,6 +314,180 @@ export function Ajustes({
     alRegistrarEntorno(url);
     setUrl("");
   };
+
+  /**
+   * El motivo del último intento, para pintarlo DENTRO del formulario. Solo mientras el
+   * formulario esté abierto: un error de hace dos minutos, reaparecido al volver a abrirlo,
+   * hablaría de algo que ya nadie recuerda.
+   */
+  const avisoDeProveedor = anadiendo ? resultadoDeProveedor?.motivo : undefined;
+
+  /**
+   * El formulario se cierra cuando el SERVIDOR dice que el alta se hizo, no al pulsar:
+   * pulsar es pedirlo, y cerrar antes de saberlo enseñaría un alta que pudo fallar. El
+   * mismo criterio que el resto de esta consola — la interfaz no afirma lo que no le han
+   * contado.
+   */
+  useEffect(() => {
+    if (!anadiendo || resultadoDeProveedor?.hecho !== true) return;
+    setAnadiendo(false);
+    setNombreDeProveedor("");
+    setUrlDeProveedor("");
+  }, [anadiendo, resultadoDeProveedor]);
+
+  const anadirProveedor = (evento: { preventDefault: () => void }): void => {
+    evento.preventDefault();
+    // La comprobación de la URL es la MISMA que la de un entorno (`Wizard.tsx`), que es la
+    // copia declarada de la regla del host: https fuera de la máquina, http solo en
+    // loopback. Aquí es de balde y evita un viaje; el servidor la vuelve a aplicar, que es
+    // quien manda.
+    if (!urlDeEntornoAceptable(urlDeProveedor)) return;
+    alAltaDeProveedor?.(nombreDeProveedor, urlDeProveedor);
+  };
+
+  /**
+   * De serie y personalizados van en dos grupos y en este orden, no mezclados y no
+   * ordenados por si tienen clave: una lista que se reordena al añadir una credencial hace
+   * saltar las filas bajo el cursor. Dentro de cada grupo manda el orden del servidor.
+   */
+  const deSerie = proveedores.filter((p) => p.personalizado !== true);
+  const propios = proveedores.filter((p) => p.personalizado === true);
+
+  const filaDeProveedor = (p: ProveedorDeModelos) => (
+                    <li key={p.id} className={estilos.fila} data-columna="">
+                      <div className={estilos.cabeceraDeFila}>
+                        <IconoDeProveedor proveedor={p.id} size={22} className={estilos.logo} />
+                        {/* El nombre arriba y el id debajo en mono: el id es lo que se teclea
+                            en `/modelo <proveedor>/<modelo>`, o sea dato de máquina, y la
+                            fila lo enseña para que se pueda copiar sin salir de aquí. */}
+                        <span className={estilos.identidad}>
+                          <span className={estilos.nombre}>{p.nombre}</span>
+                          {/* En uno personalizado el id no basta: a dónde va la clave es la
+                              URL, y es lo que hay que poder leer al lado del punto verde. */}
+                          {/* El `title` lleva el texto ENTERO porque la línea recorta: una
+                              URL larga se lee pasando el ratón, sin abrir nada. */}
+                          <span
+                            className={estilos.idDeProveedor}
+                            title={p.baseUrl === undefined ? p.id : `${p.id} · ${p.baseUrl}`}
+                          >
+                            {p.baseUrl === undefined ? p.id : `${p.id} · ${p.baseUrl}`}
+                          </span>
+                        </span>
+                        <span className={estilos.estadoDeClave}>
+                          {/* Sin punto para quien no necesita credencial: no hay nada que afirmar. */}
+                          {p.credencial === "nativa" ? null : (
+                            <span
+                              className={estilos.punto}
+                              data-credencial={p.credencial}
+                              aria-label={p.credencial === "puesta" ? "con credencial" : "sin credencial"}
+                            />
+                          )}
+                          <span className={estilos.detalle}>
+                            {p.credencial === "nativa"
+                              ? "local, no necesita clave"
+                              : p.credencial === "puesta"
+                                ? p.enFichero === true
+                                  ? "clave guardada"
+                                  : "clave de una variable de entorno"
+                                : "sin clave"}
+                          </span>
+                        </span>
+                        {p.credencial === "nativa" ? null : (
+                          <Button
+                            variant="outline"
+                            className={estilos.accion}
+                            onClick={() => {
+                              setBorrando(undefined);
+                              setEditando(p.id);
+                              alPedirClave(p.id);
+                            }}
+                          >
+                            {p.credencial === "puesta" ? "Cambiar clave" : "Añadir clave"}
+                          </Button>
+                        )}
+                        {p.enFichero === true ? (
+                          <Button
+                            variant="outline"
+                            className={estilos.accion}
+                            onClick={() => {
+                              setEditando(undefined);
+                              setBorrando(p.id);
+                            }}
+                          >
+                            Eliminar
+                          </Button>
+                        ) : null}
+                        {p.personalizado === true && alBajaDeProveedor !== undefined ? (
+                          <Button
+                            variant="outline"
+                            className={estilos.accion}
+                            disabled={!conectado}
+                            onClick={() => {
+                              setEditando(undefined);
+                              setBorrando(`baja:${p.id}`);
+                            }}
+                          >
+                            Dar de baja
+                          </Button>
+                        ) : null}
+                      </div>
+                      {borrando === `baja:${p.id}` ? (
+                        // Se dice que la clave se va con él: dejarla en `auth.json` bajo un
+                        // proveedor que ya no existe sería un secreto en disco que nadie
+                        // vuelve a ver para borrarlo.
+                        <p className={estilos.confirmacion} role="alert">
+                          <span>
+                            ¿Dar de baja «{p.nombre}»? Se borra también su clave del fichero de
+                            credenciales.
+                          </span>
+                          <Button
+                            variant="outline"
+                            className={estilos.accion}
+                            onClick={() => {
+                              setBorrando(undefined);
+                              alBajaDeProveedor?.(p.id.replace(/^custom:/, ""));
+                            }}
+                          >
+                            Dar de baja «{p.nombre}»
+                          </Button>
+                          <Button variant="outline" className={estilos.accion} onClick={() => setBorrando(undefined)}>
+                            Cancelar
+                          </Button>
+                        </p>
+                      ) : null}
+                      {editando === p.id && secreto !== undefined ? (
+                        <div ref={traerALaVista}>
+                        <Pregunta
+                          texto={secreto}
+                          oculta
+                          anidado
+                          alResponder={async (valor) => {
+                            await alResponderSecreto(valor);
+                            setEditando(undefined);
+                          }}
+                        />
+                        </div>
+                      ) : null}
+                      {borrando === p.id ? (
+                        <p className={estilos.confirmacion} role="alert">
+                          <span>¿Borrar la clave de {p.id} del fichero de credenciales?</span>
+                          <Button
+                            variant="outline"
+                            className={estilos.accion}
+                            onClick={() => {
+                              setBorrando(undefined);
+                              alBorrarClave(p.id);
+                            }}
+                          >
+                            Borrar la de {p.id}
+                          </Button>
+                          <Button variant="outline" className={estilos.accion} onClick={() => setBorrando(undefined)}>
+                            Cancelar
+                          </Button>
+                        </p>
+                      ) : null}
+                    </li>
+  );
 
   return (
     // `headless` como el modal de aprobación: la cabecera y el pie que trae `Modal` no se
@@ -561,98 +752,89 @@ export function Ajustes({
               </p>
               {proveedores.length === 0 ? (
                 <p className={estilos.vacio}>Todavía no ha llegado el estado de modelos.</p>
+              ) : anadiendo ? (
+                /*
+                  Añadir un proveedor es una TAREA: mientras dura, la sección enseña solo el
+                  formulario. Igual que registrar un entorno, y por lo mismo — un formulario
+                  al final de una lista de nueve tarjetas queda fuera de la vista justo
+                  después de pulsar el botón que lo abre.
+                */
+                <form className={estilos.formulario} ref={traerALaVista} onSubmit={anadirProveedor}>
+                  <label className={estilos.etiqueta} htmlFor="ajustes-proveedor-nombre">
+                    Nombre
+                  </label>
+                  <Input
+                    id="ajustes-proveedor-nombre"
+                    className={estilos.campo}
+                    value={nombreDeProveedor}
+                    placeholder="Mi LM Studio"
+                    onChange={(e) => setNombreDeProveedor(e.target.value)}
+                  />
+                  <label className={estilos.etiqueta} htmlFor="ajustes-proveedor-url">
+                    URL base compatible con OpenAI
+                  </label>
+                  <Input
+                    id="ajustes-proveedor-url"
+                    className={estilos.campo}
+                    value={urlDeProveedor}
+                    placeholder="http://localhost:1234/v1"
+                    onChange={(e) => setUrlDeProveedor(e.target.value)}
+                  />
+                  <p className={estilos.nota}>
+                    Se le pedirá <code>{"<URL base>/models"}</code> para listar sus modelos. La clave se
+                    añade después, en su fila: así viaja por el único mensaje que lleva credenciales.
+                    Debe ser https, salvo en 127.0.0.1 o localhost.
+                  </p>
+                  {avisoDeProveedor !== undefined ? (
+                    <p className={estilos.aviso} role="alert">
+                      {avisoDeProveedor}
+                    </p>
+                  ) : null}
+                  <div className={estilos.botones}>
+                    <Button
+                      variant="outline"
+                      className={estilos.accion}
+                      onClick={() => {
+                        setAnadiendo(false);
+                        setNombreDeProveedor("");
+                        setUrlDeProveedor("");
+                      }}
+                    >
+                      Cancelar
+                    </Button>
+                    <Button type="submit" variant="primary" className={estilos.accion}>
+                      Añadir
+                    </Button>
+                  </div>
+                </form>
               ) : (
-                <ul className={estilos.filas}>
-                  {proveedores.map((p) => (
-                    <li key={p.id} className={estilos.fila} data-columna="">
-                      <div className={estilos.cabeceraDeFila}>
-                        <IconoDeProveedor proveedor={p.id} size={22} className={estilos.logo} />
-                        {/* El nombre arriba y el id debajo en mono: el id es lo que se teclea
-                            en `/modelo <proveedor>/<modelo>`, o sea dato de máquina, y la
-                            fila lo enseña para que se pueda copiar sin salir de aquí. */}
-                        <span className={estilos.identidad}>
-                          <span className={estilos.nombre}>{p.nombre}</span>
-                          <span className={estilos.idDeProveedor}>{p.id}</span>
-                        </span>
-                        <span className={estilos.estadoDeClave}>
-                          {/* Sin punto para quien no necesita credencial: no hay nada que afirmar. */}
-                          {p.credencial === "nativa" ? null : (
-                            <span
-                              className={estilos.punto}
-                              data-credencial={p.credencial}
-                              aria-label={p.credencial === "puesta" ? "con credencial" : "sin credencial"}
-                            />
-                          )}
-                          <span className={estilos.detalle}>
-                            {p.credencial === "nativa"
-                              ? "local, no necesita clave"
-                              : p.credencial === "puesta"
-                                ? p.enFichero === true
-                                  ? "clave guardada"
-                                  : "clave de una variable de entorno"
-                                : "sin clave"}
-                          </span>
-                        </span>
-                        {p.credencial === "nativa" ? null : (
-                          <Button
-                            variant="outline"
-                            className={estilos.accion}
-                            onClick={() => {
-                              setBorrando(undefined);
-                              setEditando(p.id);
-                              alPedirClave(p.id);
-                            }}
-                          >
-                            {p.credencial === "puesta" ? "Cambiar clave" : "Añadir clave"}
-                          </Button>
-                        )}
-                        {p.enFichero === true ? (
-                          <Button
-                            variant="outline"
-                            className={estilos.accion}
-                            onClick={() => {
-                              setEditando(undefined);
-                              setBorrando(p.id);
-                            }}
-                          >
-                            Eliminar
-                          </Button>
-                        ) : null}
-                      </div>
-                      {editando === p.id && secreto !== undefined ? (
-                        <div ref={traerALaVista}>
-                        <Pregunta
-                          texto={secreto}
-                          oculta
-                          anidado
-                          alResponder={async (valor) => {
-                            await alResponderSecreto(valor);
-                            setEditando(undefined);
-                          }}
-                        />
-                        </div>
-                      ) : null}
-                      {borrando === p.id ? (
-                        <p className={estilos.confirmacion} role="alert">
-                          <span>¿Borrar la clave de {p.id} del fichero de credenciales?</span>
-                          <Button
-                            variant="outline"
-                            className={estilos.accion}
-                            onClick={() => {
-                              setBorrando(undefined);
-                              alBorrarClave(p.id);
-                            }}
-                          >
-                            Borrar la de {p.id}
-                          </Button>
-                          <Button variant="outline" className={estilos.accion} onClick={() => setBorrando(undefined)}>
-                            Cancelar
-                          </Button>
-                        </p>
-                      ) : null}
-                    </li>
-                  ))}
-                </ul>
+                <>
+                  <ul className={estilos.filas}>{deSerie.map(filaDeProveedor)}</ul>
+
+                  <h3 className={estilos.subencabezado}>Personalizados</h3>
+                  <p className={estilos.nota}>
+                    Cualquier servidor que hable la API de OpenAI: LM Studio, llama.cpp, vLLM o un
+                    endpoint de tu empresa. La URL y el nombre se guardan en el config global de tu
+                    cuenta, nunca en el del proyecto.
+                  </p>
+                  {alAltaDeProveedor === undefined ? (
+                    <p className={estilos.vacio}>Esta ejecución no puede dar de alta proveedores.</p>
+                  ) : (
+                    <Button
+                      variant="outline"
+                      className={estilos.accion}
+                      disabled={!conectado}
+                      onClick={() => setAnadiendo(true)}
+                    >
+                      Añadir un proveedor
+                    </Button>
+                  )}
+                  {propios.length === 0 ? (
+                    <p className={estilos.vacio}>No hay ninguno todavía.</p>
+                  ) : (
+                    <ul className={estilos.filas}>{propios.map(filaDeProveedor)}</ul>
+                  )}
+                </>
               )}
             </>
           ) : null}
@@ -669,8 +851,12 @@ export function Ajustes({
                 (`{clase:"alta", paso:"entorno"}`): id y nombre vacíos, que los deduce el
                 servidor. Un segundo camino para registrar lo mismo es cómo divergen.
 
-                Y va ENCIMA de las listas, no debajo: medido en pantalla quedaba detrás de
-                dieciocho casillas de 54 px, fuera de la vista al abrir la sección.
+                Mientras se registra, la sección enseña SOLO el formulario: ni el botón, ni
+                la lista de entornos, ni las casillas de proyectos. Fue «el botón arriba y
+                el formulario al final» y no bastaba —medido en pantalla: el campo de la URL
+                quedaba detrás de dieciocho casillas de 54 px, o sea fuera de la vista justo
+                después de pulsar el botón que lo abre—. Dar de alta algo es una tarea, no
+                una fila más de la lista: mientras dura, lo demás estorba.
               */}
               {registrando ? null : (
                 <Button
@@ -681,54 +867,6 @@ export function Ajustes({
                   Registrar un entorno
                 </Button>
               )}
-              {registrando ? null : entornos.length === 0 ? (
-                <p className={estilos.vacio}>No hay ninguno registrado todavía.</p>
-              ) : (
-                <ul className={estilos.filas}>
-                  {entornos.map((e) => (
-                    <li key={e.id} className={estilos.fila}>
-                      <span className={estilos.nombre}>{e.nombre}</span>
-                      <span className={estilos.url}>{e.url}</span>
-                    </li>
-                  ))}
-                </ul>
-              )}
-              {/*
-                Qué proyectos se enseñan, del entorno activo. La casilla marcada es lo que
-                se ve en la barra; sin ninguna elección hecha se marcan los que la barra
-                está enseñando por omisión, para que la primera vez la ventana refleje la
-                pantalla en vez de contradecirla.
-              */}
-              {entornoActivo !== undefined && proyectos.length > 0 ? (
-                <>
-                  <h3 className={estilos.subencabezado}>Proyectos en la barra</h3>
-                  <p className={estilos.nota}>
-                    Sin elegir ninguno se enseñan los {PROYECTOS_POR_OMISION} primeros. Lo que marques
-                    aquí manda sobre ese tope.
-                  </p>
-                  <ul className={estilos.filas}>
-                    {proyectos.map((p) => (
-                      <li key={p.id} className={estilos.fila}>
-                        <label className={estilos.casilla}>
-                          <input
-                            type="checkbox"
-                            checked={elegidos.includes(p.id)}
-                            onChange={(e) => {
-                              const siguiente = e.target.checked
-                                ? [...elegidos, p.id]
-                                : elegidos.filter((id) => id !== p.id);
-                              setElegidos(siguiente);
-                              alElegirProyectos(entornoActivo, siguiente);
-                            }}
-                          />
-                          <span className={estilos.nombre}>{p.nombre}</span>
-                        </label>
-                      </li>
-                    ))}
-                  </ul>
-                </>
-              ) : null}
-
               {!registrando ? null : (
               <form className={estilos.formulario} ref={traerALaVista} onSubmit={registrar}>
                 <label className={estilos.etiqueta} htmlFor="ajustes-url">
@@ -763,6 +901,54 @@ export function Ajustes({
                 </div>
               </form>
               )}
+              {registrando ? null : entornos.length === 0 ? (
+                <p className={estilos.vacio}>No hay ninguno registrado todavía.</p>
+              ) : (
+                <ul className={estilos.filas}>
+                  {entornos.map((e) => (
+                    <li key={e.id} className={estilos.fila}>
+                      <span className={estilos.nombre}>{e.nombre}</span>
+                      <span className={estilos.url}>{e.url}</span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+              {/*
+                Qué proyectos se enseñan, del entorno activo. La casilla marcada es lo que
+                se ve en la barra; sin ninguna elección hecha se marcan los que la barra
+                está enseñando por omisión, para que la primera vez la ventana refleje la
+                pantalla en vez de contradecirla.
+              */}
+              {!registrando && entornoActivo !== undefined && proyectos.length > 0 ? (
+                <>
+                  <h3 className={estilos.subencabezado}>Proyectos en la barra</h3>
+                  <p className={estilos.nota}>
+                    Sin elegir ninguno se enseñan los {PROYECTOS_POR_OMISION} primeros. Lo que marques
+                    aquí manda sobre ese tope.
+                  </p>
+                  <ul className={estilos.filas}>
+                    {proyectos.map((p) => (
+                      <li key={p.id} className={estilos.fila}>
+                        <label className={estilos.casilla}>
+                          <input
+                            type="checkbox"
+                            checked={elegidos.includes(p.id)}
+                            onChange={(e) => {
+                              const siguiente = e.target.checked
+                                ? [...elegidos, p.id]
+                                : elegidos.filter((id) => id !== p.id);
+                              setElegidos(siguiente);
+                              alElegirProyectos(entornoActivo, siguiente);
+                            }}
+                          />
+                          <span className={estilos.nombre}>{p.nombre}</span>
+                        </label>
+                      </li>
+                    ))}
+                  </ul>
+                </>
+              ) : null}
+
             </>
           ) : null}
 

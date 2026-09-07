@@ -202,7 +202,7 @@ export async function asistenteDeModelo(
       ...(enCurso === undefined ? {} : { aviso: enCurso }),
     })) as Proveedor | undefined;
 
-    if (proveedor === undefined || !PROVEEDORES.includes(proveedor)) {
+    if (proveedor === undefined || !(PROVEEDORES as readonly string[]).includes(proveedor)) {
       const salida = cancelar();
       if (salida !== undefined) return salida;
       continue;
