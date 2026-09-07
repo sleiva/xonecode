@@ -1,9 +1,11 @@
 import { readdirSync, lstatSync, statSync, existsSync, readFileSync } from "node:fs";
 import { join, sep, resolve } from "node:path";
 import { randomUUID } from "node:crypto";
-import { HumanMessage } from "@langchain/core/messages";
+import { HumanMessage, ToolMessage, type AIMessage, type BaseMessage } from "@langchain/core/messages";
 import { Command, MemorySaver } from "@langchain/langgraph";
+import type { BaseCheckpointSaver } from "@langchain/langgraph-checkpoint";
 import { collectPending, type Decision, MAX_APPROVAL_ROUNDS } from "../vendor/hitl.js";
+import { esRutaDeArtefacto, type Artefacto } from "../core/artefactos.js";
 
 /**
  * Cuántas veces se le devuelven los hallazgos al agente para que los corrija. Dos: tres
@@ -136,6 +138,78 @@ export function ficherosDelProyecto(raiz: string, prof = 0, tope = PROFUNDIDAD_D
 }
 
 /**
+ * El nodo de tools del grafo de `createAgent`, comprobado en el paquete instalado
+ * (`langchain/dist/agents/nodes/ToolNode.js`: `TOOLS_NODE_NAME = "tools"`). Hace falta para
+ * decirle a `updateState` de qué nodo viene lo que se añade; si el nombre cambiara, el
+ * remedio de abajo cae al `updateState` sin nodo, que es peor pero no rompe nada.
+ */
+const NODO_DE_TOOLS = "tools";
+
+/**
+ * Cierra las aprobaciones que se quedaron sin contestar cuando murió el proceso anterior.
+ *
+ * Solo existe desde que el hilo se guarda en disco (`agent/checkpointer.ts`), y arregla un
+ * fallo MEDIDO —y medido dos veces, porque la primera medida estaba mal—. La forma del
+ * grafo importa: un grafo de un solo nodo donde `START` va al nodo interrumpido reejecuta
+ * ese nodo con el mensaje nuevo y vuelve a preguntar, que es inofensivo. El grafo del
+ * agente NO tiene esa forma: `START` va al MODELO, y el nodo parado es el de tools. Así que
+ * al reabrir una sesión que se cerró con una aprobación delante, lo que le llega al modelo
+ * es `human → ai(tool_calls) → human`: un `AIMessage` con llamadas a tool y ningún
+ * `ToolMessage` detrás. Gemini y OpenAI rechazan exactamente eso, así que el primer mensaje
+ * tras reabrir se iba en un 400 — y nada lo explicaba.
+ *
+ * El remedio es una respuesta SINTÉTICA por cada llamada colgada, diciendo la verdad: no se
+ * aplicó, porque la sesión se cerró antes de que nadie decidiera. Con eso el historial es
+ * válido y además honesto — el modelo se entera de que aquella escritura no llegó a pasar,
+ * en vez de dar por hecho que sí. Y es cierto: el `interrupt` pausa ANTES de escribir, o
+ * sea que el disco no se tocó.
+ *
+ * Se hace al ABRIR y no al empezar el turno porque es un arreglo del pasado, no del turno:
+ * dentro de una sesión viva las aprobaciones se resuelven por su camino normal. Un fallo
+ * aquí no puede impedir abrir la sesión, así que se traga — lo que se pierde entonces es
+ * este arreglo, no la conversación.
+ *
+ * Se exporta para poder probarla sin montar un grafo de verdad, igual que `decisionDeTool`.
+ */
+export async function saldarAprobacionesHuerfanas(agente: unknown, hilo: string): Promise<void> {
+  const cfg = { configurable: { thread_id: hilo } };
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const grafo = agente as any;
+  try {
+    const estado = await grafo.getState(cfg);
+    const mensajes: BaseMessage[] = estado?.values?.messages ?? [];
+    if (mensajes.length === 0) return;
+    const contestadas = new Set(
+      mensajes.filter((m) => m.getType() === "tool").map((m) => (m as ToolMessage).tool_call_id)
+    );
+    const colgadas = mensajes
+      .filter((m) => m.getType() === "ai")
+      .flatMap((m) => (m as AIMessage).tool_calls ?? [])
+      .filter((c) => c.id !== undefined && !contestadas.has(c.id));
+    if (colgadas.length === 0) return;
+
+    const respuestas = colgadas.map(
+      (c) =>
+        new ToolMessage({
+          content:
+            "No se aplicó: la sesión se cerró antes de que nadie decidiera sobre esta escritura, " +
+            "así que el fichero no se tocó. Si sigue haciendo falta, vuelve a proponerlo.",
+          tool_call_id: c.id!,
+          name: c.name,
+          status: "error",
+        })
+    );
+    try {
+      await grafo.updateState(cfg, { messages: respuestas }, NODO_DE_TOOLS);
+    } catch {
+      await grafo.updateState(cfg, { messages: respuestas });
+    }
+  } catch {
+    // Abrir la sesión manda sobre arreglarla.
+  }
+}
+
+/**
  * Abre una sesión real: agente, checkpointer, hilo y tracker se construyen UNA vez aquí, y
  * viven en el cierre. Todo lo que sobreviva al primer turno tiene que salir de este cierre:
  * reconstruir el agente fuera (o un `MemorySaver` nuevo por llamada) tiraría la conversación.
@@ -158,6 +232,30 @@ export async function abrirSesionReal(opciones: {
    * porque quien construye el turno no tiene por qué saber cómo se verifica.
    */
   verifier?: VerifierPort;
+  /**
+   * El `thread_id` del grafo. Entra por parámetro porque quien lo conoce es quien tiene
+   * IDENTIDAD para reanudar: en la web es el id de la sesión, y esa igualdad es lo que
+   * hace que reabrirla continúe el hilo en vez de releerlo. Sin él se genera uno, que es
+   * lo que hacía siempre.
+   *
+   * Antes había DOS ids para un mismo hilo —el de `EstadoDeSesion.hilo`, que es el que
+   * `/hilo` enseña, y el que se generaba aquí—, y solo coincidían después de un `/nuevo`.
+   */
+  hilo?: string;
+  /**
+   * Dónde se guarda la memoria del agente. Ausente = en memoria (`MemorySaver`), que es lo
+   * que hacía siempre y lo que sigue usando la consola de terminal: persistir un hilo que
+   * nadie puede volver a abrir solo engorda un fichero.
+   */
+  checkpointer?: BaseCheckpointSaver;
+  /**
+   * La carpeta donde caen los artefactos de esta sesión — lo que el agente ve como
+   * `/artefactos/`. Entra por parámetro porque quien sabe si hay sesión con identidad es
+   * quien la abrió: en la web es `.xonecode/sesiones/<id>/artefactos`, y sin sesión (la
+   * consola de terminal) se cae a `.xonecode/artefactos` del proyecto, que existe igual y
+   * no ensucia el índice con carpetas de hilos que nadie puede reabrir.
+   */
+  artefactos?: string;
 }): Promise<SesionReal> {
   const { raiz, entorno } = opciones;
 
@@ -165,13 +263,21 @@ export async function abrirSesionReal(opciones: {
   // una memoria ya creada por el usuario o por otra sesión.
   asegurarMemoriaDeProyecto(raiz);
 
-  const checkpointer = new MemorySaver();
+  const checkpointer = opciones.checkpointer ?? new MemorySaver();
   const tracker = createTokenTracker();
   const diagnostico = crearDiagnosticoDeTools(raiz);
   let modelos = opciones.modelos;
-  let hilo = `xonecode-${randomUUID()}`;
+  let hilo = opciones.hilo ?? `xonecode-${randomUUID()}`;
   let cancelarEnCurso: (() => void) | undefined;
   let cerrada = false;
+
+  /**
+   * Los artefactos escritos en la pasada en curso. Los apunta el backend (es el único que
+   * sabe que la escritura ocurrió) y los VACÍA quien los anuncia, para que un artefacto se
+   * diga una vez y no en cada pasada de una reparación.
+   */
+  const artefactosDeLaPasada: Artefacto[] = [];
+  const carpetaDeArtefactos = opciones.artefactos ?? join(raiz, ".xonecode", "artefactos");
 
   const construir = async (): Promise<unknown> =>
     construirAgente({
@@ -189,9 +295,14 @@ export async function abrirSesionReal(opciones: {
       checkpointer: checkpointer,
       tracker,
       diagnostico,
+      artefactos: {
+        carpeta: carpetaDeArtefactos,
+        alEscribir: (a) => artefactosDeLaPasada.push(a),
+      },
     });
 
   let agente = await construir();
+  await saldarAprobacionesHuerfanas(agente, hilo);
 
   /**
    * Los pendientes de aprobación, del ESTADO y no del resultado del stream.
@@ -259,6 +370,8 @@ export async function abrirSesionReal(opciones: {
     // con las decisiones — también con rejects, que si no se resumen dejan el interrupt
     // colgado para siempre y el modelo nunca llega a saber que se rechazó.
     let cortadoPorTope = false;
+    /** Tandas seguidas de artefactos aprobados solos. Tope propio: ver dónde se usa. */
+    let tandasDeArtefactos = 0;
 
     /**
      * El estado del lazo, compartido entre el generador y el bucle de rondas.
@@ -307,6 +420,12 @@ export async function abrirSesionReal(opciones: {
       reparar = false;
 
       yield* eventos;
+
+      // Lo primero al agotarse la pasada: lo que el agente dejó escrito sin preguntar. Va
+      // ANTES de la decisión de cierre y antes del veredicto porque es trabajo TERMINADO de
+      // esta pasada — anunciarlo después del `fin` lo pintaría fuera del turno, que es el
+      // mismo motivo por el que el verificador está cosido aquí dentro.
+      for (const artefacto of artefactosDeLaPasada.splice(0)) yield { tipo: "artefacto", artefacto };
 
       if ((await leerPendientes()).lista.length > 0) {
         // Quedan escrituras por aprobar. Si el bucle va a seguir —hay quien apruebe y no se
@@ -489,25 +608,66 @@ export async function abrirSesionReal(opciones: {
       const { lista, ficheros, diffs } = await leerPendientes();
       if (lista.length === 0) break;
 
+      /**
+       * Los artefactos se aprueban SOLOS, y el resto sigue pidiendo permiso.
+       *
+       * La aprobación existe para proteger el proyecto del usuario, y un artefacto ya no lo
+       * toca: vive en la carpeta de la sesión, no entra en git y no sube a CloudStudio. Que
+       * dibujar un diagrama costara tres clics enseñaría a aprobar sin mirar, que es como se
+       * rompe la aprobación justo cuando importa. A cambio se ANUNCIA (evento `artefacto`):
+       * una escritura que nadie aprueba no puede ser además muda.
+       *
+       * `esRutaDeArtefacto` es una lista blanca de forma y no un `startsWith`, porque de
+       * ella depende que esto no sea un camino para escribir en el proyecto sin permiso.
+       */
+      const automaticas = new Map<string, Decision>();
+      const humanos: PendienteDeAprobacion[] = [];
+      for (const p of lista) {
+        if (esRutaDeArtefacto(ficheros.get(p.id))) automaticas.set(p.id, { type: "approve" } as Decision);
+        else humanos.push(p);
+      }
+      if (humanos.length === 0) {
+        // Ronda que no gastó a nadie: no cuenta para el tope de APROBACIÓN. Contarla haría
+        // que cinco diagramas cortaran el turno con `cortadoPorTope`, cuyo significado
+        // —«quedaron escrituras esperando aprobación»— sería falso. La predicción de cierre
+        // de la pasada usó el mismo `ronda`, y sigue siendo correcta: viene otra pasada.
+        //
+        // Pero tiene su PROPIO tope, y por el mismo motivo que el otro: cada pasada es una
+        // llamada al modelo, y un agente que escribe un artefacto por pasada sería un bucle
+        // que nadie corta —aquí no hay humano al que preguntar, que es justo lo que frena
+        // al otro—. Al agotarse se para y se dice, con `cortadoPorTope` puesto: quedaron
+        // escrituras sin aplicar, que es lo que ese código de salida significa.
+        tandasDeArtefactos += 1;
+        if (tandasDeArtefactos > MAX_APPROVAL_ROUNDS) {
+          piel.linea(`\n⚠ tope de ${MAX_APPROVAL_ROUNDS} tandas de artefactos agotado en este turno.`);
+          piel.linea(`  quedaban ${lista.length} sin escribir, y NO se han aplicado.`);
+          cortadoPorTope = true;
+          break;
+        }
+        ronda -= 1;
+        payload = new Command({ resume: buildResume(automaticas) });
+        continue;
+      }
+
       // El tope existe porque un modelo que insiste tras cada rechazo convierte esto en un
       // ciclo automático de ~200k tokens por ronda (medido en da04). Sin resumir: nada se
       // aplica, pero el interrupt queda en el estado.
       if (ronda >= MAX_APPROVAL_ROUNDS) {
         piel.linea(`\n⚠ tope de ${MAX_APPROVAL_ROUNDS} rondas de aprobación agotado.`);
-        piel.linea(`  quedaban ${lista.length} sin resolver, y NO se han aplicado.`);
+        piel.linea(`  quedaban ${humanos.length} sin resolver, y NO se han aplicado.`);
         cortadoPorTope = true;
         break;
       }
 
       if (!opciones.pedirAprobacion) {
-        piel.linea(`\n⏸  ${lista.length} escritura(s) piden aprobación, y no hay quién apruebe.`);
+        piel.linea(`\n⏸  ${humanos.length} escritura(s) piden aprobación, y no hay quién apruebe.`);
         piel.linea("   Nada se ha aprobado y nada se ha aplicado.");
         break;
       }
 
       let decisiones: Map<string, Decision>;
       try {
-        decisiones = await opciones.pedirAprobacion(lista, ficheros, diffs);
+        decisiones = await opciones.pedirAprobacion(humanos, ficheros, diffs);
       } catch (e) {
         // La ronda que acaba de pasar no cerró el turno —predijo que habría reanudación— y
         // la aprobación ha reventado en vez de contestar (el «sin humano» de `run.ts`, que
@@ -517,7 +677,10 @@ export async function abrirSesionReal(opciones: {
         if (!cerrarRonda) piel.fin(Date.now() - t0);
         throw e;
       }
-      payload = new Command({ resume: buildResume(decisiones) });
+      // Las dos mitades vuelven en UN solo resume: un interrupt que no se resume se queda
+      // colgado para siempre, así que los artefactos aprobados solos tienen que viajar con
+      // las decisiones humanas y no en una reanudación aparte.
+      payload = new Command({ resume: buildResume(new Map([...automaticas, ...decisiones])) });
     }
     } while (reparar);
 

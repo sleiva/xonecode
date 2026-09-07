@@ -16,12 +16,17 @@
  * (`consolaWeb.ts#aprobacionesTui`), que no es un acto y se suelta en cuanto hay decisión
  * — nunca llega aquí.
  *
- * Reabrir es RELEER, no seguir hablando: el hilo del agente vive en un `MemorySaver`
- * (`agent/turnoReal.ts`, `agent/xoneAgent.ts`) que muere con el proceso. Un checkpointer
- * persistente es una fase posterior, deliberadamente fuera de alcance aquí. La sesión
- * reabierta se marca `historica` y la interfaz lo dice, porque fingir que la conversación
- * continúa cuando el modelo no recuerda nada sería justo la clase de mentira muda que este
- * repo evita (`bitacora.ts` es el mismo principio aplicado a los avisos de honestidad).
+ * Reabrir ya NO es releer, y este fichero dejó de ser la única memoria. El hilo del agente
+ * vive en el checkpointer de SQLite del proyecto (`agent/checkpointer.ts`), indexado por el
+ * mismo id que titula estas entradas, así que una sesión reabierta continúa de verdad. Lo
+ * que sigue viviendo aquí es el TRANSCRIPT —lo que se pinta—, y son dos cosas distintas a
+ * propósito: un acto no puede llevar contenido de fichero ni argumentos de tool, y un
+ * checkpoint los lleva todos. Por eso el `.jsonl` puede viajar y el `.sqlite` no.
+ * `historica` deja de ser «se reabrió» y pasa a ser un hecho comprobado: se pregunta al
+ * checkpointer, y solo se marca si de ese hilo no queda memoria —una sesión de antes de que
+ * esto existiera, o una cuyo primer turno nunca corrió—. Fingir que la conversación continúa
+ * cuando el modelo no recuerda nada sería justo la clase de mentira muda que este repo evita
+ * (`bitacora.ts` es el mismo principio aplicado a los avisos de honestidad).
  * `historica` no se escribe a disco — no es un campo de `EntradaIndice` ni del `.jsonl` —
  * porque es un hecho del MOMENTO de reabrir, no del estado de la sesión: quien reabre
  * decide en memoria cuándo el primer turno nuevo la desactiva, y persistir la marca
@@ -44,12 +49,14 @@ import {
   openSync,
   readFileSync,
   renameSync,
+  rmSync,
   unlinkSync,
   writeFileSync,
 } from "node:fs";
 import { randomUUID } from "node:crypto";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import type { Acto } from "../../core/actos.js";
+import { carpetaDeArtefactosDeSesion } from "../../core/artefactos.js";
 import { segmentoSeguro } from "../../core/settings.js";
 
 /** Cuántos caracteres de la primera prosa del usuario se guardan como título. */
@@ -137,6 +144,7 @@ function rutaJsonl(raiz: string, id: string): string {
   return join(carpetaSesiones(raiz), `${segmentoSeguro(id, "id de sesión")}.jsonl`);
 }
 
+
 /** Una entrada que no es un objeto reconocible no cuenta: sin este filtro, un índice con
  * basura colada (`[null]`, `[42]`) hace que `entradas.find` reviente en cuanto alguien lea
  * `.id` de un elemento que no lo tiene.
@@ -223,8 +231,15 @@ function escribirIndice(raiz: string, entradas: EntradaIndice[]): void {
  * construcción, pero pasa igualmente por `rutaJsonl` (vía `segmentoSeguro`) en cuanto se
  * anota o se reabre — la guarda no distingue de dónde vino el id.
  */
-export function crearSesion(raiz: string): string {
-  const id = randomUUID();
+/**
+ * Da de alta una sesión en el índice.
+ *
+ * El id ENTRA por parámetro desde que es también el `thread_id` del grafo
+ * (`agent/checkpointer.ts`): quien abre la consola lo decide al abrir, porque el hilo tiene
+ * que existir antes del primer turno, y esto solo escribe la entrada. Sin id se genera uno,
+ * que es lo que hacía siempre y lo que sigue valiendo para quien no tenga hilo.
+ */
+export function crearSesion(raiz: string, id: string = randomUUID()): string {
   const ahora = new Date().toISOString();
   const entradas = leerIndiceOAbortar(raiz);
   entradas.push({ id, titulo: "", creada: ahora, ultimoTurno: ahora });
@@ -282,6 +297,11 @@ export function borrarSesion(raiz: string, id: string): boolean {
   const ruta = rutaJsonl(raiz, id);
   const habia = existsSync(ruta);
   if (habia) unlinkSync(ruta);
+  // Y sus artefactos, que son de esta sesión y de nadie más. Sin esto, borrar una
+  // conversación dejaría en disco los diagramas que se dibujaron en ella, invisibles desde
+  // la interfaz — el mismo agujero que dejaba su hilo del checkpointer antes de
+  // `olvidarHilo`. `force` porque la carpeta solo existe si el agente escribió algo.
+  rmSync(dirname(carpetaDeArtefactosDeSesion(raiz, id)), { recursive: true, force: true });
   const entradas = leerIndiceOAbortar(raiz);
   const quedan = entradas.filter((e) => e.id !== id);
   if (quedan.length === entradas.length) return habia;

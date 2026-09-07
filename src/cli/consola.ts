@@ -1002,7 +1002,19 @@ export const COMANDOS: Record<string, { descripcion: string; manejador: Manejado
     manejador: async (_args, estado, consola) => {
       // Mismo patrón que run.ts: prefijo xonecode- + uuid.
       const nuevoHilo = `xonecode-${randomUUID()}`;
-      consola.escribir(`hilo nuevo: ${nuevoHilo}\n`);
+      // Y se DICE lo que cuesta desde que el hilo se guarda en disco: en la web el hilo de
+      // una sesión ES su id, así que este hilo nuevo no es de ninguna sesión — al reabrirla
+      // se vuelve al de antes, y lo que se hable a partir de aquí no se podrá reabrir.
+      // Callarlo sería prometer que la conversación que empieza ahora se guarda como las
+      // demás. Quien quiere empezar de cero Y poder volver, abre una sesión nueva.
+      //
+      // En UN `escribir`, no en dos: `main.ts` repinta la barra de estado al ver una línea
+      // que empieza por «hilo nuevo:», así que partido en dos la barra caía en medio de las
+      // dos frases. El regex sigue casando porque la primera línea no cambia.
+      consola.escribir(
+        `hilo nuevo: ${nuevoHilo}\n` +
+          "ojo: este hilo no es el de la sesión; al reabrirla se vuelve al anterior\n"
+      );
       return { seguir: true, estado: { ...estado, hilo: nuevoHilo } };
     },
   },

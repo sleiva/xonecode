@@ -192,6 +192,7 @@ const TIPOS_DE_ACTO = {
   razonamiento: true,
   herramientas: true,
   sistema: true,
+  artefacto: true,
   fase: true,
   fin: true,
   error: true,

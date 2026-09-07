@@ -70,6 +70,9 @@ import { borrarCredencial, guardarCredencial } from "../../agent/authEnDisco.js"
 import {
   borrarProveedorPersonalizado, guardarProveedorPersonalizado, proveedoresPersonalizados,
 } from "../../agent/configEnDisco.js";
+import {
+  crearCheckpointerDeProyecto, hayCheckpoint, olvidarHilo,
+} from "../../agent/checkpointer.js";
 import { cargarSettings, guardarDispositivos, guardarEntorno as guardarEntornoEnDisco } from "../../agent/settingsEnDisco.js";
 import { abrirEnSistema } from "../../agent/cloudstudioMcp.js";
 import { nombreDePersona } from "../../agent/persona.js";
@@ -1775,6 +1778,10 @@ function vestibuloReal(
     // sesión tiene id. Ver `agent/sesionGit.ts` para por qué es una ref y no un tag.
     marcarSesion: fotoDeApertura,
     olvidarMarcaDeSesion: olvidarSesion,
+    // La memoria del agente por hilo. `historica` deja de ser «se reabrió» para ser «no hay
+    // checkpoint que cargar», y borrar una sesión se lleva también su checkpoint.
+    hayMemoriaDeHilo: async (raiz, hilo) => hayCheckpoint(crearCheckpointerDeProyecto(raiz), hilo),
+    olvidarMemoriaDeHilo: async (raiz, hilo) => olvidarHilo(crearCheckpointerDeProyecto(raiz), hilo),
     entornos: settings.entornos,
     ...(settings.workspace === undefined ? {} : { baseDeWorkspace: settings.workspace }),
     // La URL de la web para que la página del callback devuelva AQUÍ y no diga «vuelve a

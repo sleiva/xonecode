@@ -31,6 +31,36 @@ export function indicePrivado(etiqueta: string): { ruta: string; limpiar: () => 
 }
 
 /**
+ * Saca `.xonecode` de un índice PRIVADO recién construido con `git add -A`.
+ *
+ * Va aquí y no en un pathspec del `add` porque ese camino está medido y no vale: `git add`
+ * con `:(exclude).xonecode` en un repo donde la carpeta YA está ignorada —el caso normal,
+ * `prepararRepo` escribe `info/exclude`— da por nombrada una ruta ignorada y **sale con
+ * código 1**. `rm --cached` con `--ignore-unmatch` funciona en los dos casos y no dice nada
+ * cuando no había qué quitar.
+ *
+ * Y hace falta desde que ahí dentro vive el checkpointer: en un proyecto CLOUD la carpeta
+ * está excluida y esto es un no-op, pero en modo OFFLINE sobre el repo del usuario nadie
+ * escribió ese exclude —lo dice la cabecera de `sesionGit.ts`—, así que cada foto metía
+ * `checkpoint.sqlite` entero en `.git/objects`. Con `MemorySaver` eran unos KB de `.jsonl`
+ * y no se notaba; medido hoy, ese fichero son 30 MB que cambian en cada superpaso, y las
+ * refs `refs/xonecode/sesion/*` mantienen vivo cada blob para siempre.
+ *
+ * No cambia lo que se REPORTA en un proyecto cloud (ya no salía), y en uno offline alinea
+ * las dos vistas: `sesionGit.ts` ya excluye `.xonecode` de sus diffs a propósito.
+ */
+export async function sacarXonecodeDelIndice(
+  ejecutar: (cmd: string, args: string[], opciones: { cwd: string; env: NodeJS.ProcessEnv }) => Promise<unknown>,
+  raiz: string,
+  indice: string,
+): Promise<void> {
+  await ejecutar("git", ["rm", "-r", "--cached", "--ignore-unmatch", "-q", "--", ".xonecode"], {
+    cwd: raiz,
+    env: { ...process.env, GIT_INDEX_FILE: indice },
+  });
+}
+
+/**
  * Traduce la marca de una línea de `git diff --name-status` (la primera letra: `A`, `M`,
  * `D`, `R100`, …) a una de las tres clases de `Cambio`/`CambioLocal`.
  *

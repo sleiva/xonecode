@@ -42,6 +42,9 @@ export type TipoDeFila =
    *  tools pero no es una llamada a nada. Antes se etiquetaba «TOOL», que era falso. */
   | "paso"
   | "sistema"
+  /** Un artefacto que dejó el agente. Etiqueta propia y no «SISTEMA»: es la única escritura
+   *  del turno que no pasó por la aprobación, y aquí se viene justamente a eso. */
+  | "artefacto"
   | "fase"
   | "fin"
   | "error";
@@ -121,6 +124,13 @@ function filasDe(acto: Acto): FilaCruda[] {
       });
     case "sistema":
       return [cruda("sistema", "SISTEMA", acto.texto)];
+    case "artefacto":
+      // La etiqueta es propia y no «SISTEMA»: es la única escritura del turno que no pasó
+      // por la aprobación, y quien viene aquí a depurar qué hizo el agente necesita verla
+      // como lo que es. La ruta VIRTUAL, que es la que viaja; nunca la de la máquina.
+      return [
+        cruda("artefacto", "ARTEFACTO", `${acto.nombre} · ${acto.bytes} B · ${acto.ruta}`),
+      ];
     case "fase":
       // La etiqueta lleva la CATEGORÍA cuando el acto la trae: «VERIFICANDO» dice más que
       // «FASE», y no hay que re-parsear la prosa para saberlo. Sin ella —sesión anterior—

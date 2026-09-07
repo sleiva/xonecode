@@ -241,6 +241,13 @@
   color: var(--dsw-alias-state-business-primary);
 }
 
+/* El artefacto en el acento de la marca: no es un paso del motor ni un fallo, es la única
+   cosa que el turno DEJÓ escrita sin que nadie la aprobara. Que destaque es el punto. */
+.etiqueta[data-tipo="artefacto"] {
+  background: var(--dsw-alias-bg-module-platform);
+  color: var(--xonecode-cian);
+}
+
 .etiqueta[data-tipo="error"] {
   background: var(--dsw-alias-state-error-secondary);
   color: var(--dsw-alias-state-error-primary);

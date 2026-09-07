@@ -1,5 +1,9 @@
 import { describe, it, expect } from "vitest";
-import { esVistaAplanada, porQueNo, sinVistasAplanadas, backendConSkills, backendDelProyecto, exponerMemoriaDeProyecto } from "./proyecto.js";
+import { esVistaAplanada, porQueNo, sinVistasAplanadas, backendConArtefactos, backendConSkills, backendDelProyecto, exponerMemoriaDeProyecto } from "./proyecto.js";
+import { mkdtempSync, existsSync, readdirSync, readFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import type { Artefacto } from "../core/artefactos.js";
 import { RUTA_MEMORIA_VIRTUAL } from "./memoriaDeProyecto.js";
 
 const TODAS = new Set(["/p/Clientes.xne", "/p/Clientes.xml", "/p/app.xml", "/p/config.xml"]);
@@ -125,5 +129,53 @@ describe("exponerMemoriaDeProyecto", () => {
       "write:/.xonecode/memoria.md",
       "edit:/.xonecode/memoria.md",
     ]);
+  });
+});
+
+describe("backendConArtefactos", () => {
+  /** Un proyecto y una carpeta de artefactos que TODAVÍA no existe: es el caso normal. */
+  function montar() {
+    const proyecto = mkdtempSync(join(tmpdir(), "xc-proy-"));
+    const carpeta = join(mkdtempSync(join(tmpdir(), "xc-sesion-")), "artefactos");
+    const apuntados: Artefacto[] = [];
+    const backend = backendConArtefactos(
+      backendDelProyecto(proyecto),
+      carpeta,
+      (a) => apuntados.push(a)
+    ) as unknown as { routePrefixes: string[]; write(p: string, c: string): Promise<unknown> };
+    return { proyecto, carpeta, apuntados, backend };
+  }
+
+  it("lo escrito en /artefactos/ NO cae en el proyecto, y la carpeta se crea sola", async () => {
+    // Es el fallo que esto arregla: hoy un diagrama del `mockup` acaba en la raíz del
+    // proyecto, pasa por aprobación, entra en git y sube a CloudStudio.
+    const { proyecto, carpeta, backend } = montar();
+    expect(backend.routePrefixes).toContain("/artefactos/");
+    expect(existsSync(carpeta)).toBe(false); // no se crea al montar: la mayoría no dibuja nada
+
+    await backend.write("/artefactos/flujo.html", "<h1>hola</h1>");
+
+    expect(readdirSync(carpeta)).toEqual(["flujo.html"]);
+    expect(readFileSync(join(carpeta, "flujo.html"), "utf8")).toBe("<h1>hola</h1>");
+    expect(readdirSync(proyecto)).toEqual([]);
+  });
+
+  it("apunta lo que se escribe: nombre, mime y tamaño MEDIDO del disco", async () => {
+    // Un artefacto que nadie nombra es un fichero en una carpeta que nadie abre. Y el
+    // tamaño sale del disco y no del argumento porque por aquí pasa también `edit`, cuyo
+    // segundo argumento es el texto a sustituir y no el fichero resultante.
+    const { apuntados, backend } = montar();
+    await backend.write("/artefactos/flujo.html", "<h1>hola</h1>");
+
+    expect(apuntados).toEqual([
+      { ruta: "/artefactos/flujo.html", nombre: "flujo.html", mime: "text/html", bytes: 13 },
+    ]);
+  });
+
+  it("un fichero del proyecto sigue yendo al proyecto y no se apunta", async () => {
+    const { proyecto, apuntados, backend } = montar();
+    await backend.write("/Clientes.xne", "<coll/>");
+    expect(readdirSync(proyecto)).toEqual(["Clientes.xne"]);
+    expect(apuntados).toEqual([]);
   });
 });

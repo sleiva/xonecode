@@ -17,11 +17,13 @@ import estilos from "./MenuDeSesion.module.css";
  * `onFork`, `onArchive`). Aquí solo caben dos, y las otras dos no es que falten — es que no
  * significan nada en este producto:
  *
- * - **Bifurcar no tiene qué bifurcar.** El hilo del agente vive en un `MemorySaver` que
- *   muere con el proceso (`agent/turnoReal.ts`), así que reabrir una sesión es RELEER, no
- *   seguir hablando — está escrito en la cabecera de `web/servidor/sesiones.ts` y es lo que
- *   la marca `historica` dice en la interfaz. Bifurcar una conversación que el modelo no
- *   recuerda daría dos copias muertas del mismo texto.
+ * - **Bifurcar no está hecho, y el motivo CAMBIÓ.** Era que no había qué bifurcar: el hilo
+ *   moría con el proceso y reabrir era releer, así que dos copias de una conversación que el
+ *   modelo no recuerda son dos copias muertas. Desde que el hilo se guarda
+ *   (`agent/checkpointer.ts`) eso ya no es cierto — bifurcar sería copiar el hilo bajo otro
+ *   id y dar de alta otra sesión, y es una operación que ahora SÍ significa algo. No está
+ *   aquí porque no está implementada, que es distinto de no tener sentido, y decir lo
+ *   primero cuando pasa lo segundo es cómo un motivo viejo se queda de excusa.
  * - **Archivar es un estado que no existe.** Habría que inventarlo entero —un campo en el
  *   índice, un filtro en la barra, un sitio donde ver lo archivado— para que el botón
  *   significara algo. Mientras no exista, «archivar» sería «desaparecer», que es borrar

@@ -638,13 +638,123 @@ sesiones llegaban a fuego como `[]`:
   cable, store y componente); colapsarla haría que elegir ninguno se leyera como no haber
   elegido. El ORDEN lo pone el listado del servidor, no el orden en que se marcaron.
 
+**Los ARTEFACTOS del agente no son ficheros del proyecto** (`core/artefactos.ts`,
+`agent/proyecto.ts#backendConArtefactos`). Un diagrama de `archify`, un panel de
+`artifacts-builder`, la captura que el `probador` traerá el día que hable con el móvil: son
+salidas de la conversación, no código de la app. **Hasta ahora acababan dentro de la app
+XOne**, y no por descuido: las dos skills visuales reparten su entrega entre
+`renderizar_diagrama` y `publish_artifact`, y en xonecode **no existe ninguna de las dos**
+(cero apariciones en `src/`), así que el `mockup` caía siempre en el camino de reserva, que
+dice «con `write_file`, entrega el HTML autocontenido» en `/artifacts/<nombre>.html` — o sea
+la raíz del proyecto, con aprobación humana, git y subida a CloudStudio detrás. Arreglado y
+MEDIDO de punta a punta con el agente real: el `mockup` escribe en
+`/artefactos/diagrama_login.html`, no salta ninguna aprobación, el fichero aparece en
+`.xonecode/sesiones/<id>/artefactos/` y en el proyecto no queda nada.
+- **Es otro MONTAJE, la misma pieza que `/skills/`**: una raíz más en el `CompositeBackend`,
+  `/artefactos/` → `.xonecode/sesiones/<id>/artefactos/`. Dos diferencias con las skills: se
+  puede ESCRIBIR (las skills son instrucciones, y `permisosDe` las deniega) y se APUNTA lo
+  escrito, porque el backend es el único que sabe que la escritura ocurrió y cuánto pesó.
+- **La carpeta NO se crea al montar.** Medido: `FilesystemBackend` no exige que su `rootDir`
+  exista y el `write` lo crea. Crearla dejaría un `artefactos/` vacío en cada sesión que no
+  dibuja nada, que son casi todas.
+- **Se escriben SIN aprobación, y por eso se ANUNCIAN.** La aprobación protege el proyecto y
+  esto ya no lo toca; pedir permiso para dibujar un diagrama enseña a aprobar sin mirar, que
+  es como se rompe la aprobación justo cuando importa. La contrapartida es el evento
+  `artefacto` (nombre, tamaño, ruta virtual, nunca el contenido): una escritura que nadie
+  aprueba no puede ser además muda.
+- **`esRutaDeArtefacto` es una lista BLANCA de forma, no un `startsWith`.** De ella depende
+  que esto no sea un camino para escribir en el proyecto sin permiso: cada segmento tiene que
+  ser texto llano, lo que deja fuera `..`, `.`, el hueco de un `//`, la barra invertida y un
+  `%2e%2e` sin decodificar. Lo que no case pasa por la aprobación de siempre. (Medido aparte:
+  un `write` de `/artefactos/../pwn.html` no llega al proyecto —el `virtualMode` de la raíz
+  montada lo sujeta— pero devuelve OK sin escribir nada; la barrera no depende de eso.)
+- **Una tanda de solo artefactos no gasta ronda de aprobación**, o cinco diagramas cortarían
+  el turno con `cortadoPorTope`, cuyo significado —«quedaron escrituras esperando
+  aprobación»— sería falso. Tiene su propio tope, y por el mismo motivo que el otro: cada
+  pasada es una llamada al modelo y aquí no hay humano que frene el bucle.
+- **Se borran con su sesión** (`borrarSesion`), igual que el hilo del checkpointer: si no,
+  borrar una conversación dejaría en disco los diagramas que se dibujaron en ella, invisibles
+  desde la interfaz.
+- **La descripción de la TOOL era el último sitio, y el que ganaba.** Medido: con las skills
+  y el prompt del `mockup` ya corregidos, el agente listó las dos carpetas —o sea que el
+  montaje estaba— y escribió igual en `/artifacts/`, porque `DESCRIPCIONES_FICHEROS.write_file`
+  seguía nombrando esa ruta. Una descripción de tool está más cerca del modelo que un prompt
+  de sistema o una skill que hay que cargar; corregir las dos de arriba y no esa no habría
+  cambiado nada.
+- **En el chat es una TARJETA, no una línea del pulso** (`Chat.tsx`, acto `artefacto`), y por
+  eso no se pliega con el trabajo del agente: plegarla escondería lo único que se escribió sin
+  aprobar. Dice nombre, peso y DÓNDE — la ruta desde la raíz del proyecto, compuesta con el id
+  de la sesión que ya viaja en el alta, y la virtual a secas cuando ese id todavía no existe.
+  La ruta de la MÁQUINA no viaja: el cable puede ir por un túnel. En Trazas tiene etiqueta
+  propia (`ARTEFACTO`) y no «SISTEMA», porque quien viene ahí depura justo eso.
+- Y **todavía no se ABRE desde la consola**. No es una pantalla que falte: pintar un HTML que
+  escribió un modelo, en el mismo origen que tiene la cookie del token, es una decisión de
+  sandbox — el contrato de `artifacts-builder` da por hecho un servidor que lo impone y aquí
+  no existe. Mientras tanto la tarjeta da la ruta y el fichero se abre desde disco.
+
+**El hilo del agente SOBREVIVE al proceso** (`agent/checkpointer.ts`,
+`.xonecode/checkpoint.sqlite`). Era un `MemorySaver`, así que reabrir una conversación era
+releerla: el texto a la vista y el modelo sin recordar una palabra, con la marca `historica`
+diciéndolo. Ahora es el `SqliteSaver` oficial de LangGraph
+(`@langchain/langgraph-checkpoint-sqlite`), y está MEDIDO de punta a punta: sesión reabierta
+tras reiniciar el servidor, «¿cómo se llamaba la colección que te pedí crear?» contestada en
+1,7 s, sin una sola tool y con los tres nombres de fichero correctos. Siete reglas:
+- **Uno por PROYECTO, particionado por `thread_id`**, no uno por sesión: es la forma que la
+  librería asume (`deleteThread(threadId)` existe para eso) y evita tantos ficheros y tantas
+  conexiones como conversaciones guardadas.
+- **El `thread_id` ES el id de la sesión.** Sin esa igualdad no hay nada que reanudar: al
+  reabrir hay que preguntar por la misma cadena con la que se escribió. Por eso el id se
+  decide al ABRIR (`vestibulo.ts`, `sesion ?? randomUUID()`) y no en el primer volcado — lo
+  que sigue siendo perezoso es la ENTRADA del índice, que es lo que ensuciaría la barra con
+  sesiones vacías.
+- **`historica` pasó de suposición a hecho comprobado**: se le PREGUNTA al checkpointer
+  (`hayCheckpoint`, puerto `hayMemoriaDeHilo`). Las que siguen marcadas son las de antes de
+  que esto existiera y aquellas cuyo primer turno nunca corrió — comprobado en el navegador:
+  la sesión de ayer sigue enseñando el aviso, la de hoy no.
+- **Se crea con el modo puesto, ANTES de abrirlo.** Medido: SQLite crea el fichero ya en
+  `fromConnString` y con 0644, así que un `chmod` de después deja una ventana con el
+  checkpoint legible — y un checkpoint lleva la lista de mensajes ENTERA, contenido de
+  ficheros y argumentos de tool incluidos, que es justo lo que el transcript de `sesiones.ts`
+  no puede llevar por construcción. Con el fichero pre-creado a 0600, los `-wal` y `-shm` que
+  SQLite añade heredan ese modo (comprobado sobre un proyecto real).
+- **La fábrica devuelve la MISMA conexión por proyecto.** `arranque.ts` la llama en cada
+  reapertura y en cada borrado; sin caché, cada llamada abriría un handle que nadie cierra, y
+  borrar un hilo con su sesión viva serían dos escritores sobre el mismo fichero.
+- **Borrar una sesión olvida su hilo** (`olvidarHilo` → `deleteThread`). Sin eso, la memoria
+  entera de la conversación borrada —con el contenido de lo que se escribió en ella— seguiría
+  viva en el fichero del proyecto para siempre e invisible desde la interfaz.
+- **La consola de TERMINAL no lo usa, a propósito.** Su hilo es un uuid nuevo en cada arranque
+  y no hay índice donde reanudarlo: persistirlo solo dejaría hilos irreabribles engordando el
+  fichero. Persistir es de quien tiene identidad que reanudar.
+Y dos cosas que hay que saber: **una aprobación que quedó sin contestar se vuelve a
+PREGUNTAR** —medido con un grafo mínimo sobre este mismo saver: el estado guardado trae
+`next` y un `pendingWrites` con el `__interrupt__`— **pero no sola**: la primera medida usó
+un grafo de un nodo, donde `START` va al nodo interrumpido, y ahí reejecutar y volver a
+preguntar es inofensivo. El grafo del agente no tiene esa forma: `START` va al MODELO y el
+nodo parado es el de tools, así que al modelo le llegaba `human → ai(tool_calls) → human` —un
+`AIMessage` con llamadas y ningún `ToolMessage` detrás, que Gemini y OpenAI rechazan con un
+400—. Por eso `abrirSesionReal` SALDA las llamadas colgadas al abrir
+(`saldarAprobacionesHuerfanas`): una respuesta sintética por cada una diciendo la verdad —no
+se aplicó, la sesión se cerró antes de que nadie decidiera, y el `interrupt` pausa ANTES de
+escribir, así que el disco no se tocó—. Con eso el historial es válido y además honesto.
+Segundo: **esto CRECE**: una sesión de cinco turnos deja 370 checkpoints y 30 MB, porque cada
+superpaso guarda el estado entero. Por lo mismo, `.xonecode` se saca del índice privado con
+el que `instantanea.ts` y `sesionGit.ts` fotografían el árbol (`sacarXonecodeDelIndice`): en
+un proyecto CLOUD ya estaba excluida, pero en uno OFFLINE nadie escribió ese `info/exclude` y
+cada foto habría metido esos 30 MB en `.git/objects`, vivos para siempre porque las refs
+`refs/xonecode/sesion/*` los alcanzan.
+No hay poda todavía. Consecuencia directa: **`/nuevo` en la web abre un hilo huérfano** —el de
+la sesión es su id, así que al reabrirla se vuelve al anterior— y el comando lo DICE en su
+salida; quien quiera empezar de cero y poder volver, abre una sesión nueva.
+
 **Cada sesión de la barra tiene su «…»** (`apps/web/src/componentes/MenuDeSesion.tsx`,
 `AccionDeSesion.tsx`, `clase: "sesionAccion"`), con **dos** entradas y no las cuatro del
 harness de deepseek. Su `SessionNodeItem` ofrece renombrar, bifurcar y archivar; las otras
-dos no es que falten, es que aquí no significan nada: **bifurcar** no tiene qué bifurcar
-—el hilo del agente vive en un `MemorySaver` que muere con el proceso, así que reabrir es
-RELEER y no seguir hablando (es lo mismo que dice la marca `historica`)—, y **archivar** es
-un estado que habría que inventar entero —campo en el índice, filtro en la barra, sitio
+dos no están, y por motivos distintos: **bifurcar** no está IMPLEMENTADA —su motivo viejo
+(«no hay hilo que bifurcar, el `MemorySaver` muere con el proceso») caducó con el
+checkpointer, así que copiar el hilo bajo otro id sí significaría algo hoy; dejar el motivo
+viejo puesto sería usarlo de excusa—, y **archivar** es un estado que habría que inventar
+entero —campo en el índice, filtro en la barra, sitio
 donde ver lo archivado— para que el botón significara algo; mientras no exista, «archivar»
 sería «desaparecer», o sea borrar sin decirlo. Cuatro cosas que no son negociables:
 - **La barra REPORTA la intención; no ejecuta.** Las dos escriben en el índice del proyecto

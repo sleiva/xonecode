@@ -4,7 +4,9 @@ import type { MotorExterno, SubagenteExternoPort } from "../core/ports.js";
 import { RunnableLambda } from "@langchain/core/runnables";
 import { AIMessage, type BaseMessage } from "@langchain/core/messages";
 import { MemorySaver } from "@langchain/langgraph";
-import { backendConSkills, backendDelProyecto, exponerMemoriaDeProyecto, sinVistasAplanadas } from "./proyecto.js";
+import type { BaseCheckpointSaver } from "@langchain/langgraph-checkpoint";
+import { backendConArtefactos, backendConSkills, backendDelProyecto, exponerMemoriaDeProyecto, sinVistasAplanadas } from "./proyecto.js";
+import type { Artefacto } from "../core/artefactos.js";
 import { permisosDe, hitlDe } from "./perfiles.js";
 import { crearBusquedaRegex } from "./busquedaRegex.js";
 import type { DiagnosticoDeTools } from "./diagnosticoDeTools.js";
@@ -35,11 +37,20 @@ export interface OpcionesDelAgente {
   subagenteExterno: SubagenteExternoPort;
   modelos: ModelosPort;
   skills: SkillsPort;
-  checkpointer?: MemorySaver;
+  /** `BaseCheckpointSaver` y no `MemorySaver`: desde que hay uno persistente
+   *  (`agent/checkpointer.ts`) el tipo tiene que ser el de la interfaz, no el del doble. */
+  checkpointer?: BaseCheckpointSaver;
   /** Opcional porque no siempre se viene a contar gasto; sin él la barra de estado enseña 0. */
   tracker?: TokenTracker;
   /** Registro local opt-in de llamadas y uso; nunca llega al modelo. */
   diagnostico?: DiagnosticoDeTools;
+  /**
+   * Dónde caen los artefactos de la sesión (`/artefactos/` para el agente). Es una carpeta
+   * de `.xonecode/`, o sea FUERA del proyecto: ver `core/artefactos.ts`. Ausente = no se
+   * monta la carpeta, y entonces un `write_file` a `/artefactos/…` es un fichero más del
+   * proyecto — que es lo que pasaba antes de que esto existiera.
+   */
+  artefactos?: { carpeta: string; alEscribir: (a: Artefacto) => void };
 }
 
 /**
@@ -94,9 +105,12 @@ export const DESCRIPCIONES_FICHEROS = {
     "Escribe un fichero del proyecto en una ruta absoluta.",
     "Para diagramas, esquemas, arquitecturas y flujos: carga primero la skill `archify`;",
     "no escribas nunca dentro de `/skills`. Si el usuario pide el resultado renderizado,",
-    "guárdalo como HTML autocontenido en `/artifacts/<nombre>.html`.",
+    "guárdalo como HTML autocontenido en `/artefactos/<nombre>.html`.",
     "Para dashboards, informes o tablas HTML interactivas carga `artifacts-builder` y usa",
-    "también `/artifacts/<nombre>.html`. La ruta `/MEMORIA_PROYECTO.md` es exclusivamente",
+    "también `/artefactos/<nombre>.html`. `/artefactos/` NO es del proyecto: es la carpeta de",
+    "esta sesión, no pasa por aprobación, no entra en git y no sube a CloudStudio — un HTML",
+    "escrito fuera de ella acaba dentro de la app XOne del usuario. La ruta",
+    "`/MEMORIA_PROYECTO.md` es exclusivamente",
     "para hechos confirmados, decisiones y pendientes útiles; no guardes transcripciones ni secretos.",
   ].join(" "),
   edit_file: [
@@ -147,9 +161,21 @@ export const OPCIONES_BUSQUEDA_FICHEROS = {
  * 4. **El HITL va en las tools de fichero**, que en la v1 son las que escriben.
  */
 export async function construirAgente(opciones: OpcionesDelAgente): Promise<unknown> {
-  const backend = backendConSkills(
-    sinVistasAplanadas(exponerMemoriaDeProyecto(backendDelProyecto(opciones.raiz)), opciones.ficheros)
+  const delProyecto = sinVistasAplanadas(
+    exponerMemoriaDeProyecto(backendDelProyecto(opciones.raiz)),
+    opciones.ficheros
   );
+  // El orden importa poco entre estos dos —son dos rutas distintas del mismo compuesto—,
+  // pero los artefactos van DESPUÉS para que el compuesto de skills quede por dentro: así
+  // `/skills/` sigue resolviéndose igual que siempre.
+  const backend =
+    opciones.artefactos === undefined
+      ? backendConSkills(delProyecto)
+      : backendConArtefactos(
+          backendConSkills(delProyecto),
+          opciones.artefactos.carpeta,
+          opciones.artefactos.alEscribir
+        );
 
   // Si no hay tracker, no se añade el middleware: es opcional a propósito arriba.
   const middlewareTracker = (origen: string) =>

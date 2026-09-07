@@ -1,6 +1,9 @@
+import { statSync } from "node:fs";
+import { join } from "node:path";
 import { CompositeBackend, FilesystemBackend } from "deepagents";
 import { RUTA_MEMORIA_INTERNA, RUTA_MEMORIA_VIRTUAL } from "./memoriaDeProyecto.js";
 import { RAIZ_SKILLS } from "./skills.js";
+import { mimeDeArtefacto, nombreDeArtefacto, RUTA_ARTEFACTOS, type Artefacto } from "../core/artefactos.js";
 
 /**
  * El backend del proyecto: confinado, y sin las vistas aplanadas.
@@ -30,6 +33,64 @@ export function backendConSkills<T extends object>(backend: T): T {
     // reconstruye `//archify/...`, que FilesystemBackend interpreta fuera de su raíz.
     "/skills/": new FilesystemBackend({ rootDir: RAIZ_SKILLS, virtualMode: true }),
   }) as T;
+}
+
+/**
+ * Cuelga `/artefactos/` de la carpeta de la SESIÓN, fuera del proyecto.
+ *
+ * El porqué está en `core/artefactos.ts`: hoy los diagramas del `mockup` acaban en la raíz
+ * del proyecto y de ahí a git y a CloudStudio. Esto es el mismo mecanismo que `/skills/`
+ * —otra raíz en el `CompositeBackend`— con dos diferencias que importan:
+ *
+ * - **Se puede ESCRIBIR.** `/skills/` está denegada en `permisosDe` porque son instrucciones
+ *   del harness; esta es justamente donde el agente deja lo que produce.
+ * - **Se APUNTA lo que se escribe.** El backend es el único sitio que sabe que una escritura
+ *   ocurrió y cuánto pesó, y un artefacto que nadie nombra es un fichero en una carpeta que
+ *   nadie abre. El Proxy va sobre el sub-backend y no sobre el compuesto: así solo ve lo de
+ *   esta carpeta, sin filtrar las escrituras del proyecto por el mismo sitio.
+ *
+ * La carpeta **no se crea aquí**. Medido contra deepagents: `FilesystemBackend` no exige que
+ * su `rootDir` exista y el `write` lo crea. Crearla al montar dejaría un `artefactos/` vacío
+ * en cada sesión que no dibuja nada, que es la mayoría.
+ */
+export function backendConArtefactos<T extends object>(
+  backend: T,
+  carpeta: string,
+  alEscribir: (artefacto: Artefacto) => void,
+): T {
+  const destino = new FilesystemBackend({ rootDir: carpeta, virtualMode: true });
+
+  const anotado = new Proxy(destino, {
+    get(objetivo, prop, receptor) {
+      const valor = Reflect.get(objetivo, prop, receptor);
+      if (typeof valor !== "function") return valor;
+      if (prop !== "write" && prop !== "edit") {
+        return (valor as (...a: unknown[]) => unknown).bind(objetivo);
+      }
+      return async (...args: unknown[]) => {
+        const resultado = await (valor as (...a: unknown[]) => unknown).apply(objetivo, args);
+        // La ruta que llega aquí ya viene sin el prefijo (`CompositeBackend` lo retira antes
+        // de delegar), así que se rehace para que lo apuntado sea lo que el agente escribió
+        // y lo que después se le pide al lector.
+        const relativa = String(args[0] ?? "").replace(/^\/+/, "");
+        const ruta = RUTA_ARTEFACTOS + relativa;
+        const nombre = nombreDeArtefacto(ruta);
+        const mime = mimeDeArtefacto(nombre);
+        // El tamaño se mide del DISCO y no del argumento: por aquí pasa también `edit`,
+        // cuyo segundo argumento es el texto a sustituir y no el fichero resultante.
+        let bytes = 0;
+        try {
+          bytes = statSync(join(carpeta, relativa)).size;
+        } catch {
+          // Si no se puede medir, se dice cero: es un dato de adorno, no la existencia.
+        }
+        alEscribir({ ruta, nombre, bytes, ...(mime === undefined ? {} : { mime }) });
+        return resultado;
+      };
+    },
+  });
+
+  return new CompositeBackend(backend as never, { [RUTA_ARTEFACTOS]: anotado as never }) as T;
 }
 
 /**

@@ -1,6 +1,6 @@
 import { Bitacora } from "./bitacora.js";
 import { Colapsador } from "./notify.js";
-import type { DomainEvent, Fase, PendienteDeAprobacion } from "./events.js";
+import type { Artefacto, DomainEvent, Fase, PendienteDeAprobacion } from "./events.js";
 import type { DetalleDeLinea } from "./actos.js";
 
 /**
@@ -46,6 +46,16 @@ export interface Piel {
    * línea estática más.
    */
   notificacion?(texto: string): void;
+  /**
+   * Si la piel sabe enseñar un artefacto —un diagrama, un panel—, el motor le da el dato
+   * entero en vez de solo la línea. OPCIONAL, como `razonamiento` y `fase`: la piel que no
+   * lo implemente se queda con la línea de siempre, así que stdio y la TUI no cambian y la
+   * salida por una tubería sigue siendo byte-idéntica. Hoy solo la web lo implementa.
+   *
+   * La línea se escribe SIEMPRE, la implemente o no: el artefacto no pasa por aprobación,
+   * así que la constancia de que se escribió no puede depender de qué piel esté delante.
+   */
+  artefacto?(artefacto: Artefacto): void;
 }
 
 /** Cómo se le cuenta cada fase al usuario. En un solo sitio, no repartido por el motor. */
@@ -210,6 +220,18 @@ export async function correrTurno(
           bitacora.anota("reparacion", `${ev.intento}/${ev.tope}`);
           escribirLinea(`🔁 reparando (intento ${ev.intento} de ${ev.tope})`);
           break;
+
+        case "artefacto": {
+          // Se ANUNCIA porque no se aprueba. Un artefacto se escribe sin preguntar —no es
+          // del proyecto—, así que la línea es lo único que evita que sea una escritura
+          // muda. Lleva el tamaño porque un panel de 400 KB y un SVG de 2 KB no son la
+          // misma noticia, y la ruta virtual porque es con la que se pide después.
+          const { nombre, bytes, ruta } = ev.artefacto;
+          bitacora.anota("artefacto", nombre);
+          escribirLinea(`🖼  artefacto: ${nombre} (${Math.max(1, Math.round(bytes / 1024))} KB) · ${ruta}`);
+          piel.artefacto?.(ev.artefacto);
+          break;
+        }
 
         case "bloqueado":
           bitacora.anota("bloqueado", ev.motivo);

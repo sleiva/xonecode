@@ -3,7 +3,7 @@ import { promisify } from "node:util";
 import { createHash } from "node:crypto";
 import { readFileSync, readdirSync, statSync, existsSync } from "node:fs";
 import { join } from "node:path";
-import { indicePrivado, claseDeCambio } from "./git.js";
+import { indicePrivado, claseDeCambio, sacarXonecodeDelIndice } from "./git.js";
 
 const ejecutar = promisify(execFile);
 
@@ -40,6 +40,9 @@ async function porArbol(raiz: string, prefijo: string): Promise<Instantanea> {
         cwd: raiz,
         env: { ...process.env, GIT_INDEX_FILE: idx.ruta },
       });
+      // Y fuera `.xonecode`: en un proyecto offline no está ignorada, y desde que ahí vive
+      // el checkpointer eso serían 30 MB de blobs en `.git/objects` por cada foto.
+      await sacarXonecodeDelIndice(ejecutar, raiz, idx.ruta);
       const { stdout } = await ejecutar("git", ["write-tree"], {
         cwd: raiz,
         env: { ...process.env, GIT_INDEX_FILE: idx.ruta },

@@ -251,11 +251,11 @@ describe("el «…» de una sesión", () => {
   });
 
   /**
-   * Las que el harness de deepseek sí tiene y aquí no significan nada: bifurcar no tiene
-   * hilo que bifurcar (el `MemorySaver` muere con el proceso, reabrir es RELEER) y archivar
-   * es un estado que no existe — sería «desaparecer», o sea borrar sin decirlo.
+   * Las dos que el harness de deepseek sí tiene y aquí no están: bifurcar, que desde que el
+   * hilo se guarda sí significaría algo pero no está implementada, y archivar, que es un
+   * estado que no existe — sería «desaparecer», o sea borrar sin decirlo.
    */
-  it("no ofrece bifurcar ni archivar: no hay nada detrás de esas dos", () => {
+  it("no ofrece bifurcar ni archivar: ninguna de las dos está detrás", () => {
     montarConSesion();
     fireEvent.click(screen.getByRole("button", { name: /opciones de/i }));
     expect(screen.queryByRole("menuitem", { name: /bifurcar|fork/i })).toBeNull();

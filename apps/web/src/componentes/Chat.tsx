@@ -76,6 +76,7 @@ export function Chat({
   segundosEnVuelo,
   proyecto,
   modelo,
+  sesion,
 }: {
   actos: readonly Acto[];
   turnoEnVuelo?: boolean;
@@ -90,6 +91,13 @@ export function Chat({
   /** Para el estado vacío: dónde estás y con qué modelo. Ausentes = no se afirman. */
   proyecto?: string;
   modelo?: string;
+  /**
+   * El id de la sesión abierta (`alta.sesionActiva`), y solo para una cosa: componer la
+   * ruta del proyecto donde está un artefacto. Ausente —la sesión no tiene id hasta que se
+   * vuelca el primer acto— y la tarjeta enseña la ruta virtual a secas en vez de inventarse
+   * una. La ruta REAL de la máquina no viaja nunca: el cable puede ir por un túnel.
+   */
+  sesion?: string;
 }) {
   // Cuál es el último acto de asistente: es el único que puede estar llegando todavía.
   const ultimoAsistente = actos.map((a) => a.tipo).lastIndexOf("asistente");
@@ -263,6 +271,39 @@ export function Chat({
                   <div className={estilos.acciones}>
                     <BotonDeCopiar texto={acto.texto} etiqueta="Copiar la respuesta" />
                   </div>
+                </div>
+              );
+            }
+            if (acto.tipo === "artefacto") {
+              // La tarjeta existe porque este acto es el único del turno que se escribió
+              // SIN aprobación —no es un fichero del proyecto—, y una escritura que nadie
+              // aprueba no puede ser además muda. Dice qué es, cuánto pesa y dónde está.
+              //
+              // Dónde: la ruta desde la RAÍZ DEL PROYECTO, que se puede componer aquí
+              // porque el id de la sesión ya viaja en el alta. Nunca la ruta de la máquina
+              // —el cable puede ir por un túnel—, y sin id de sesión se enseña la virtual,
+              // que es la verdad que se tiene.
+              const donde =
+                sesion === undefined
+                  ? acto.ruta
+                  : `.xonecode/sesiones/${sesion}/artefactos/${acto.ruta.slice("/artefactos/".length)}`;
+              return (
+                <div key={indice} className={`${vista.flowItem} ${estilos.artefacto}`}>
+                  <div className={estilos.artefactoFila}>
+                    <span aria-hidden className={estilos.artefactoIcono}>
+                      🖼
+                    </span>
+                    <span className={estilos.artefactoNombre}>{acto.nombre}</span>
+                    <span className={estilos.artefactoPeso}>
+                      {Math.max(1, Math.round(acto.bytes / 1024))} KB
+                    </span>
+                    <BotonDeCopiar texto={donde} etiqueta="Copiar la ruta del artefacto" />
+                  </div>
+                  <p className={estilos.artefactoRuta}>{donde}</p>
+                  <p className={estilos.artefactoNota}>
+                    No es un fichero del proyecto: vive con esta sesión, no entra en git y no
+                    sube a CloudStudio. Todavía no se abre desde aquí.
+                  </p>
                 </div>
               );
             }

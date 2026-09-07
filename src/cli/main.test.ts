@@ -1053,7 +1053,14 @@ describe("los adaptadores de proyecto son los MISMOS en las dos pieles", () => {
     // distintas y la que faltaba era esta. Sin ella el vestíbulo cae en
     // `ejecutarTurnoGuionizado` y la web corre el agente de pega — hoy `arranque.ts` lanza
     // en vez de callarse, pero el cable de `main.ts` tiene que seguir estando.
-    expect(fuenteDeMain()).toMatch(/crearEjecutor:\s*crearEjecutorReal/);
+    //
+    // La web lo envuelve para darle dos cosas que la consola de terminal no lleva: el
+    // checkpointer PERSISTENTE —ahí cada conversación tiene id en el índice y su hilo se
+    // puede reanudar, y eso es lo que separa reabrir de releer— y la carpeta de artefactos
+    // de ESA sesión, que es lo que evita que un diagrama acabe dentro de la app XOne.
+    expect(fuenteDeMain()).toMatch(
+      /crearEjecutorReal\(alAbrir, crearCheckpointerDeProyecto, carpetaDeArtefactosDeSesion\)/
+    );
   });
 
   it("y le pasa también las dependencias de proyecto: sin ellas el alta no bajaría nada", () => {

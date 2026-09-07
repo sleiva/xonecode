@@ -152,3 +152,40 @@ describe("Chat: la sesión nueva no es un vacío", () => {
     expect(screen.queryByRole("region", { name: /sesión nueva/ })).toBeNull();
   });
 });
+
+describe("Chat: el artefacto", () => {
+  const artefacto = {
+    tipo: "artefacto" as const,
+    ruta: "/artefactos/flujo.html",
+    nombre: "flujo.html",
+    bytes: 43_008,
+  };
+
+  it("se ve, con su nombre y su peso, y dice que no es del proyecto", () => {
+    // No es decoración: es la ÚNICA escritura del turno que no pasó por la aprobación
+    // humana, así que si no se viera sería una escritura muda.
+    render(<Chat actos={[artefacto]} />);
+    expect(screen.getByText("flujo.html")).toBeTruthy();
+    expect(screen.getByText("42 KB")).toBeTruthy();
+    expect(screen.getByText(/No es un fichero del proyecto/i)).toBeTruthy();
+  });
+
+  it("con sesión dice la ruta DEL PROYECTO; sin ella, la virtual y no una inventada", () => {
+    // La ruta de la máquina no viaja nunca —el cable puede ir por un túnel—, así que la del
+    // proyecto se compone aquí con el id de la sesión. Y el id puede faltar: no existe hasta
+    // que se vuelca el primer acto.
+    const { unmount } = render(<Chat actos={[artefacto]} sesion="s-1" />);
+    expect(screen.getByText(".xonecode/sesiones/s-1/artefactos/flujo.html")).toBeTruthy();
+    unmount();
+
+    render(<Chat actos={[artefacto]} />);
+    expect(screen.getByText("/artefactos/flujo.html")).toBeTruthy();
+  });
+
+  it("no se pliega con el trabajo del agente: no es paisaje del pulso", () => {
+    // Un `fin` pliega el tramo de razonamiento/tools. El artefacto queda fuera de ese
+    // tramo, así que sigue a la vista cuando el turno termina.
+    render(<Chat actos={[{ tipo: "herramientas", lineas: ["→ lee x"] }, artefacto, { tipo: "fin", ms: 10 }]} />);
+    expect(screen.getByText("flujo.html")).toBeTruthy();
+  });
+});

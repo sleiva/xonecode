@@ -10,8 +10,9 @@ tipo de diagrama, qué evidencia del proyecto es relevante y cómo conservar nom
 interactivo, dashboard, informe o tabla. En ese caso, espera a que `archify` haya decidido el
 diagrama, crea su SVG y **lo incrusta inline** en el único HTML de este artefacto.
 
-- La salida se guarda en `/artifacts/<nombre>.html`, nunca en `/skills` ni dentro de la carpeta
-  de esta skill: allí viven solo instrucciones y recursos del harness.
+- La salida se guarda en `/artefactos/<nombre>.html`, nunca en la raíz del proyecto —de ahí
+  acabaría dentro de la app XOne del usuario, en git y en CloudStudio— ni en `/skills`, donde
+  viven solo instrucciones y recursos del harness.
 - No inventes `renderizar_diagrama`, `publish_artifact` ni una ejecución de scripts si esas
   herramientas no figuran en tu contexto. Con `write_file`, entrega el HTML autocontenido.
 - Usa Mermaid únicamente cuando el usuario lo pida expresamente o cuando un SVG manual no aporte

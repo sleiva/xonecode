@@ -7,6 +7,7 @@
 import * as readline from "node:readline";
 import { randomUUID } from "node:crypto";
 import { basename } from "node:path";
+import type { BaseCheckpointSaver } from "@langchain/langgraph-checkpoint";
 import { cmdRun } from "./run.js";
 import { cmdDescribe } from "./describe.js";
 import { cmdConfig } from "./config.js";
@@ -28,6 +29,8 @@ import {
   guardarRamaDeProyecto,
   guardarTemaDeProyecto,
 } from "../agent/configEnDisco.js";
+import { crearCheckpointerDeProyecto } from "../agent/checkpointer.js";
+import { carpetaDeArtefactosDeSesion } from "../core/artefactos.js";
 import { conectarCloudStudio, sesionCloudStudio, PUERTO_CALLBACK } from "../agent/cloudstudioMcp.js";
 import { clienteCloudStudio } from "../agent/cloudstudioClient.js";
 import { cargarSettings } from "../agent/settingsEnDisco.js";
@@ -416,7 +419,18 @@ export function parsearOpcionesWeb(argv: string[]): OpcionesWeb {
  * costura para poder CERRAR la sesión al cambiar de proyecto. Una segunda fábrica para la
  * web habría sido un segundo sitio donde arreglar cada bug del ejecutor real.
  */
-export function crearEjecutorReal(alAbrirSesion: (sesion: SesionReal) => void): EjecutorDeTurno {
+/**
+ * `checkpointerDeProyecto` entra por parámetro y no se importa aquí, y no es purismo: la
+ * consola de TERMINAL no lo pasa. Su hilo es un uuid nuevo en cada arranque y no hay índice
+ * de sesiones donde reanudarlo, así que persistirlo solo dejaría hilos que nadie puede
+ * volver a abrir engordando el fichero del proyecto. Persistir es de quien tiene identidad
+ * que reanudar — hoy, la consola web.
+ */
+export function crearEjecutorReal(
+  alAbrirSesion: (sesion: SesionReal) => void,
+  checkpointerDeProyecto?: (raiz: string) => BaseCheckpointSaver | undefined,
+  carpetaDeArtefactos?: (raiz: string, hilo: string) => string,
+): EjecutorDeTurno {
   let sesion: SesionReal | undefined;
   let fuentesVistas: FuentesDeEleccion | undefined;
   let hiloVisto: string | undefined;
@@ -431,11 +445,37 @@ export function crearEjecutorReal(alAbrirSesion: (sesion: SesionReal) => void): 
         consolaReal.escribir("✗ falta algo imprescindible: xonecode no puede trabajar aquí.\n");
         return;
       }
+      const persistente = checkpointerDeProyecto?.(estado.raiz);
+      // Y si había fábrica pero no dio nada, el fichero no se pudo abrir: se DICE. Sin esto
+      // la sesión funcionaba igual y en silencio dejaba de recordar entre arranques, que es
+      // justo la clase de degradación muda que este repo evita. El motivo no viaja —puede
+      // llevar la ruta absoluta del home—, así que se dice QUÉ pasa, no dónde.
+      if (checkpointerDeProyecto !== undefined && persistente === undefined) {
+        consolaReal.escribir(
+          "aviso: no se pudo abrir la memoria del proyecto (.xonecode/checkpoint.sqlite); " +
+            "esta conversación no se recordará al reabrirla.\n"
+        );
+      }
       sesion = await abrirSesionReal({
         raiz: estado.raiz,
         modelos: new Modelos(estado.fuentes, proveedoresPersonalizados),
         skills: new SkillsEnDisco(),
         entorno,
+        // El hilo de la CONSOLA, no uno propio. Había dos ids para lo mismo —el que
+        // `/hilo` enseña y el que se generaba dentro— y solo coincidían tras un `/nuevo`.
+        // Y en la web ese hilo es el id de la sesión, que es lo que la hace reanudable.
+        hilo: estado.hilo,
+        // La memoria del agente entre arranques. Ausente —porque nadie pasó fábrica, o
+        // porque abrir el fichero falló— y `abrirSesionReal` cae en el `MemorySaver` de
+        // siempre: se pierde la memoria entre arranques, que es lo que ya pasaba.
+        ...(persistente === undefined ? {} : { checkpointer: persistente }),
+        // Dónde caen los diagramas y demás salidas del agente. Con sesión (la web) van a la
+        // carpeta de ESA sesión; sin ella, `abrirSesionReal` cae a `.xonecode/artefactos`
+        // del proyecto — el hilo del terminal es un uuid nuevo por arranque, y una carpeta
+        // por hilo dejaría basura que nadie puede volver a abrir.
+        ...(carpetaDeArtefactos === undefined
+          ? {}
+          : { artefactos: carpetaDeArtefactos(estado.raiz, estado.hilo) }),
         // El simulador de verdad. Su ausencia en la máquina no se descubre aquí sino al
         // verificar, y entonces se dice en el turno — sin tumbar nada.
         verifier: new SimuladorVerifier(),
@@ -1142,7 +1182,11 @@ export async function main(argv: string[]): Promise<number> {
           // `crearEjecutor` el vestíbulo cae en el turno GUIONIZADO, y sin
           // `dependenciasDeProyecto` no hay `/sync`, o sea que la descarga del alta no
           // bajaría nada. Las dos cosas serían mudas.
-          crearEjecutor: crearEjecutorReal,
+          // Con checkpointer PERSISTENTE, al revés que la consola de terminal: aquí cada
+          // conversación tiene id en el índice, así que su hilo se puede reanudar — y esa
+          // es la diferencia entre reabrir y releer.
+          crearEjecutor: (alAbrir) =>
+            crearEjecutorReal(alAbrir, crearCheckpointerDeProyecto, carpetaDeArtefactosDeSesion),
           dependenciasDeProyecto: (raiz) => ({
             ...adaptadoresDeProyecto(raiz),
             catalogoModelos: new CatalogoModelos(undefined, undefined, proveedoresPersonalizados),
