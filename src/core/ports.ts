@@ -119,6 +119,15 @@ export interface PeticionExterna {
   /** La tarea que le encarga el orquestador. */
   tarea: string;
   /**
+   * Con qué modelo del PRODUCTO corre el hijo. Ausente = el que él use por su cuenta.
+   *
+   * Medido: el SDK de Claude Code acepta `options.model` —y documenta los alias `opus`,
+   * `sonnet`, `haiku`, `fable`— y el `ThreadStartParams` de Codex acepta `model`, cuyos
+   * valores da su propio `model/list`. Antes esto no se pasaba y el `.md` que lo llevara se
+   * rechazaba, con el argumento de que ahí el modelo lo elige el agente; era falso.
+   */
+  modelo?: string;
+  /**
    * Hoy siempre `false`, y el campo existe para que el día que se conecte la aprobación no
    * haya que cambiar la forma del puerto — y para que quien lea esto vea que la decisión
    * está tomada a propósito y no olvidada.

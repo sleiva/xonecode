@@ -181,6 +181,9 @@ export type MensajeAlCliente =
       ms: number;
       motivo?: string;
     }
+  /** Lo que ofrece un motor externo. `error` en vez de una lista vacía muda: un desplegable
+   *  vacío sin motivo se lee como que la ventana está rota. */
+  | { clase: "modelosDeMotor"; motor: string; modelos: { id: string; nombre: string }[]; error?: string }
   | { clase: "secreto"; pregunta: string }
   /**
    * El registro de comandos de barra, para que el compositor sugiera sin llevar una
@@ -590,6 +593,9 @@ export type MensajeDelCliente =
    * lanza lo decide una tabla cerrada del host (`agent/instalacionEnMaquina.ts`).
    */
   | { clase: "receta"; id: string; paso: number; accion: "ejecutar" | "cancelar" }
+  /** Los modelos que ofrece un MOTOR externo, para el desplegable de un subagente. Se pide
+   *  bajo demanda: el de Codex se le pregunta a él, y eso arranca un proceso. */
+  | { clase: "modelosDeMotor"; motor: string }
   | { clase: "decision"; decisiones: Record<string, string> };
 
 /**

@@ -2456,3 +2456,64 @@ describe("la comprobación de los proveedores que no llevan clave", () => {
     expect(cliente.recibidos.some((m) => m.clase === "modelos")).toBe(true);
   });
 });
+
+describe("los modelos de un motor externo, por el cable", () => {
+  const conectar = async (opciones: Parameters<typeof montarRutas>[2]) => {
+    const servidor = servidorDeMentira();
+    montarRutas(servidor, vestibuloDePrueba(), opciones);
+    const cliente = clienteDeMentira();
+    await servidor.rutas.get(`GET ${RUTA_EVENTOS}`)!(cliente.peticion, cliente.respuesta);
+    await asentar();
+    return { cliente, accion: servidor.rutas.get(`POST ${RUTA_ACCION}`)! };
+  };
+  const ultimo = (cliente: ReturnType<typeof clienteDeMentira>) =>
+    cliente.recibidos.filter((m) => m.clase === "modelosDeMotor").at(-1) as Extract<
+      MensajeAlCliente,
+      { clase: "modelosDeMotor" }
+    >;
+
+  it("se piden bajo demanda y se cachean: el de Codex arranca un proceso", async () => {
+    const pedidos: string[] = [];
+    const { cliente, accion } = await conectar({
+      modelosDeMotor: async (motor) => {
+        pedidos.push(motor);
+        return { modelos: [{ id: "gpt-5.6-sol", nombre: "GPT-5.6-Sol" }] };
+      },
+    });
+    // No se pregunta al conectar: la ventana de subagentes casi nadie la abre.
+    expect(pedidos).toEqual([]);
+
+    await enviarMensaje(accion, { clase: "modelosDeMotor", motor: "codex" });
+    await asentar();
+    expect(ultimo(cliente)).toMatchObject({ motor: "codex", modelos: [{ id: "gpt-5.6-sol", nombre: "GPT-5.6-Sol" }] });
+
+    // La segunda vez sale de la caché: no se lanza otro proceso.
+    await enviarMensaje(accion, { clase: "modelosDeMotor", motor: "codex" });
+    await asentar();
+    expect(pedidos).toEqual(["codex"]);
+  });
+
+  it("un fallo NO se cachea: instalar Codex después tiene que funcionar sin reiniciar", async () => {
+    let veces = 0;
+    const { cliente, accion } = await conectar({
+      modelosDeMotor: async () => {
+        veces += 1;
+        return veces === 1 ? { modelos: [], error: "codex no está instalado" } : { modelos: [{ id: "gpt-5.5", nombre: "GPT-5.5" }] };
+      },
+    });
+    await enviarMensaje(accion, { clase: "modelosDeMotor", motor: "codex" });
+    await asentar();
+    expect(ultimo(cliente).error).toMatch(/no está instalado/);
+
+    await enviarMensaje(accion, { clase: "modelosDeMotor", motor: "codex" });
+    await asentar();
+    expect(ultimo(cliente).modelos).toEqual([{ id: "gpt-5.5", nombre: "GPT-5.5" }]);
+  });
+
+  it("sin puerto se DICE, en vez de una lista vacía muda", async () => {
+    const { cliente, accion } = await conectar({});
+    await enviarMensaje(accion, { clase: "modelosDeMotor", motor: "claude-code" });
+    await asentar();
+    expect(ultimo(cliente)).toMatchObject({ modelos: [], error: expect.stringContaining("no puede") });
+  });
+});

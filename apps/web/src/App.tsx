@@ -633,6 +633,10 @@ export function App({ store, enviar }: { store: Store; enviar: Conexion["enviar"
       // servidor con su tabla cerrada. Y detrás vuelve a medir, así que la foto nueva es
       // la que dice si la herramienta apareció.
       alInstalarHerramienta={(herramienta) => void enviar({ clase: "dispositivos", instalar: herramienta })}
+      // Los modelos de un motor externo, para el desplegable de un subagente.
+      {...(estado.modelosDeMotor === undefined ? {} : { modelosDeMotor: estado.modelosDeMotor })}
+      alPedirModelosDeMotor={(motor) => void enviar({ clase: "modelosDeMotor", motor })}
+      alPedirCatalogo={(proveedor) => void enviar({ clase: "catalogo", proveedor })}
       // Ejecutar un paso de receta: viajan el nombre y el número, nunca un comando.
       {...(estado.instalacion === undefined ? {} : { instalacion: estado.instalacion })}
       alEjecutarPaso={(receta, numero) => void enviar({ clase: "receta", id: receta, paso: numero, accion: "ejecutar" })}

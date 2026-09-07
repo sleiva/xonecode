@@ -86,6 +86,11 @@ export interface EstadoDelCliente {
   arbol?: { rutas: string[]; recortado: boolean; error?: string };
   contenidos?: Record<string, FicheroDelProyecto>;
   /**
+   * Los modelos que ofrece cada MOTOR externo, por motor. Ausente = no se ha preguntado;
+   * con `error`, se preguntó y no se pudo saber — que es distinto de «no tiene ninguno».
+   */
+  modelosDeMotor?: Record<string, { modelos: { id: string; nombre: string }[]; error?: string }>;
+  /**
    * El paso de receta que se está ejecutando, o cómo acabó el último.
    *
    * Lo dice el SERVIDOR: la máquina es una y el proceso corre allí, así que el cliente no
@@ -629,6 +634,22 @@ export function crearStoreDelCliente(): {
                 ...(typeof m.mime === "string" ? { mime: m.mime } : {}),
                 ...(typeof m.base64 === "string" ? { base64: m.base64 } : {}),
                 ...(typeof m.error === "string" ? { error: m.error } : {}),
+              },
+            },
+          });
+          return;
+        }
+        case "modelosDeMotor": {
+          const m = mensaje as Record<string, unknown>;
+          if (typeof m["motor"] !== "string" || !Array.isArray(m["modelos"])) return;
+          mutar({
+            modelosDeMotor: {
+              ...estado.modelosDeMotor,
+              [m["motor"]]: {
+                modelos: (m["modelos"] as unknown[])
+                  .filter((x): x is { id: string; nombre?: unknown } => typeof x === "object" && x !== null && typeof (x as { id?: unknown }).id === "string")
+                  .map((x) => ({ id: x.id, nombre: typeof x.nombre === "string" ? x.nombre : x.id })),
+                ...(typeof m["error"] === "string" ? { error: m["error"] } : {}),
               },
             },
           });

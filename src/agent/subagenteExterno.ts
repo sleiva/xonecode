@@ -123,6 +123,11 @@ export function crearSubagenteExterno(): SubagenteExternoPort {
           // la nuestra: la primera puede cambiar de significado con una versión del SDK, la
           // segunda la decidimos aquí y es la que manda.
           permissionMode: "dontAsk",
+          // El modelo del PRODUCTO, si el `.md` lo pide. Ausente = el que Claude Code use
+          // por su cuenta, que es lo que hacía siempre. Los alias (`opus`, `sonnet`…) son
+          // los que su propio SDK documenta, y se prefieren a un id pinchado: sobreviven a
+          // la siguiente versión, que es justo para lo que el producto los ofrece.
+          ...(peticion.modelo === undefined ? {} : { model: peticion.modelo }),
           canUseTool: async (nombre: string) => decisionDeTool(nombre, peticion.permitirEscritura),
         },
       });

@@ -43,6 +43,7 @@ import { PLATAFORMAS_DE_DISPOSITIVO, type AjustesDeDispositivos } from "../../co
 import type { NombreDeHerramienta } from "../../core/dispositivos.js";
 import { instalarHerramientaDeDispositivos } from "../../agent/dispositivosEnMaquina.js";
 import { correrPasoDeReceta } from "../../agent/instalacionEnMaquina.js";
+import { modelosDeMotor } from "../../agent/modelosDeMotor.js";
 import {
   parsear,
   compatibleConOpenAi,
@@ -265,6 +266,11 @@ export interface OpcionesDeMontaje {
    * máquina del usuario. Ausente = esta ejecución no instala nada.
    */
   instalarHerramienta?: (herramienta: NombreDeHerramienta) => Promise<void>;
+  /**
+   * Los modelos que ofrece un motor EXTERNO (`agent/modelosDeMotor.ts`). Ausente = esta
+   * ejecución no los sabe, y el desplegable lo dice en vez de quedarse vacío.
+   */
+  modelosDeMotor?: (motor: string) => Promise<{ modelos: { id: string; nombre: string }[]; error?: string }>;
   /**
    * Ejecuta un paso de una receta (`agent/instalacionEnMaquina.ts`), con su salida en vivo.
    * Ausente = esta ejecución no lanza nada y el botón no se ofrece: el paso se copia, que es
@@ -1378,6 +1384,33 @@ export function montarRutas(
     })();
   };
 
+  /**
+   * Los modelos de un motor externo, para el desplegable de un subagente.
+   *
+   * Bajo demanda y cacheado por proceso: el de Claude Code es una tabla, pero el de Codex se
+   * le PREGUNTA a él —`model/list` sobre su `app-server`—, y eso arranca un proceso. Pedirlo
+   * al conectar lo lanzaría en cada arranque para una ventana que casi nadie abre.
+   */
+  const modelosPorMotor = new Map<string, { modelos: { id: string; nombre: string }[]; error?: string }>();
+  const atenderModelosDeMotor = async (motor: string): Promise<void> => {
+    const emitirlos = (r: { modelos: { id: string; nombre: string }[]; error?: string }): void =>
+      emitir({ clase: "modelosDeMotor", motor, modelos: r.modelos, ...(r.error === undefined ? {} : { error: r.error }) });
+    const guardado = modelosPorMotor.get(motor);
+    if (guardado !== undefined) {
+      emitirlos(guardado);
+      return;
+    }
+    if (opciones.modelosDeMotor === undefined) {
+      emitirlos({ modelos: [], error: "esta ejecución no puede consultar los modelos de ese motor" });
+      return;
+    }
+    const r = await opciones.modelosDeMotor(motor);
+    // Un fallo NO se cachea: es lo que pasa cuando Codex no estaba instalado todavía, y
+    // cachearlo dejaría el desplegable vacío hasta reiniciar la consola aunque lo instale.
+    if (r.error === undefined) modelosPorMotor.set(motor, r);
+    emitirlos(r);
+  };
+
   /** Un paso del alta resuelto en el navegador. Cada rama termina volviendo a anunciar. */
   const atenderAlta = async (mensaje: Extract<MensajeDelCliente, { clase: "alta" }>): Promise<void> => {
     // Se limpia al empezar: un aviso viejo pegado a un paso que ya salió bien mentiría.
@@ -1705,6 +1738,12 @@ export function montarRutas(
       respuesta.end();
       return;
     }
+    if (typeof mensaje === "object" && mensaje !== null && mensaje.clase === "modelosDeMotor" && typeof mensaje.motor === "string") {
+      void atenderModelosDeMotor(mensaje.motor).catch(contar);
+      respuesta.writeHead(204);
+      respuesta.end();
+      return;
+    }
     if (typeof mensaje === "object" && mensaje !== null && mensaje.clase === "cancelar") {
       // Parar ESTE turno, no cerrar la conversación. Sin proyecto abierto no hay turno que
       // parar y se dice: un botón que no puede cumplir no puede callar.
@@ -1988,6 +2027,7 @@ export async function arrancarConsolaWeb(opciones: OpcionesDeArranque): Promise<
     leerArtefacto: leerArtefactoDeSesion,
     leerArtefactoCrudo,
     correrPasoDeReceta: (receta, paso, alSalirLinea) => correrPasoDeReceta(receta, paso, { alSalirLinea }),
+    modelosDeMotor,
     // La máquina de verdad: adb/emulator del PATH o del SDK, xcrun solo en macOS y solo con
     // herramientas de desarrollo. Cada proceso con su tope.
     detectarDispositivos: () => detectarDispositivos({}, cargarSettings().settings.dispositivos ?? {}),

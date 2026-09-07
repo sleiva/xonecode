@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import clsx from "clsx";
 import {
   Button,
@@ -6,7 +6,8 @@ import {
   IconEditOutline16,
   IconTrashOutline16,
 } from "@deepseek-ai/dsh-client-ui-primitives";
-import type { AgenteDelCable } from "../tipos.js";
+import type {
+  ProveedorDeModelos, AgenteDelCable } from "../tipos.js";
 import estilos from "./Agentes.module.css";
 
 /**
@@ -81,10 +82,30 @@ function enBlanco(): AgenteDelCable {
   };
 }
 
+/** Qué significa dejar el modelo sin elegir, que no es lo mismo en los tres motores. */
+const VACIO_DE_MODELO: Record<string, string> = {
+  modelo: "El del papel que le toque",
+  "claude-code": "El que use Claude Code",
+  codex: "El que use Codex",
+};
+
+/** La pista del rótulo: de dónde sale la lista de cada uno. */
+const PISTA_DE_MODELO: Record<string, string> = {
+  modelo: "— de tus proveedores comprobados",
+  "claude-code": "— los alias de Claude Code",
+  codex: "— los que ofrece tu Codex",
+};
+
+const motorExterno = (motor: string): boolean => motor === "claude-code" || motor === "codex";
+
 export function Agentes({
   agentes,
   problemas,
   hayProyecto,
+  proveedores,
+  modelosDeMotor,
+  alPedirModelosDeMotor,
+  alPedirCatalogo,
   alGuardar,
   alBorrar,
 }: {
@@ -95,11 +116,65 @@ export function Agentes({
   hayProyecto: boolean;
   alGuardar: (agente: AgenteDelCable, ambito: "global" | "proyecto") => void;
   alBorrar: (nombre: string, ambito: "global" | "proyecto") => void;
+  /**
+   * Los proveedores del mensaje «modelos», para el desplegable del motor `modelo`. Se
+   * ofrecen solo los COMPROBADOS, igual que en la pastilla del compositor: uno sin
+   * credencial es algo que falla al usarlo, y ponerlo aquí es prometerlo.
+   */
+  proveedores?: readonly ProveedorDeModelos[];
+  /** Lo que ofrece cada motor externo, por motor. Ausente = no se ha preguntado. */
+  modelosDeMotor?: Record<string, { modelos: { id: string; nombre: string }[]; error?: string }>;
+  /** Pide los de un motor. Bajo demanda porque el de Codex arranca un proceso. */
+  alPedirModelosDeMotor?: (motor: string) => void;
+  /** Pide el catálogo de un proveedor nuestro. Sin esto el desplegable solo tendría los de
+   *  quien ya se hubiera consultado por otro sitio — Ollama, que se prueba al conectar. */
+  alPedirCatalogo?: (proveedor: string) => void;
 }) {
   const [editando, setEditando] = useState<AgenteDelCable | undefined>(undefined);
   const [creando, setCreando] = useState(false);
   const [ambito, setAmbito] = useState<"global" | "proyecto">("global");
   const [borrando, setBorrando] = useState<string | undefined>(undefined);
+
+  /**
+   * Los proveedores COMPROBADOS, la misma regla que la pastilla del compositor: con clave
+   * puesta, o —los que no la llevan— con su catálogo contestado. Ofrecer aquí uno sin
+   * credencial sería prometerle a un subagente un modelo que va a fallar al usarlo.
+   */
+  const comprobados = (proveedores ?? []).filter((p) => p.credencial === "puesta" || p.modelos !== undefined);
+
+  /** ¿El modelo guardado está entre los que se ofrecen ahora? Ver el `<option>` de reserva. */
+  const enLaLista = (a: AgenteDelCable): boolean =>
+    a.motor === "modelo"
+      ? comprobados.some((p) => (p.modelos ?? []).some((m) => `${p.id}/${m.id}` === a.modelo))
+      : (modelosDeMotor?.[a.motor]?.modelos ?? []).some((m) => m.id === a.modelo);
+
+  /**
+   * Los modelos de un motor externo se piden al ELEGIRLO, no al abrir la ventana: el de
+   * Codex se le pregunta a él y eso arranca un proceso. Una vez por motor y por sesión de
+   * ventana — el servidor además los cachea.
+   */
+  const motorEditado = editando?.motor;
+  useEffect(() => {
+    if (motorEditado === undefined || !motorExterno(motorEditado)) return;
+    if (modelosDeMotor?.[motorEditado] !== undefined) return;
+    alPedirModelosDeMotor?.(motorEditado);
+  }, [motorEditado, modelosDeMotor, alPedirModelosDeMotor]);
+
+  /**
+   * Con el motor `modelo`, los catálogos de los proveedores comprobados que aún no se hayan
+   * traído. Sin esto el desplegable solo tenía los de Ollama —el único que se prueba al
+   * conectar— y el grupo de los demás salía vacío: un grupo sin nada dentro es peor que no
+   * estar, porque parece que ese proveedor no tiene modelos.
+   *
+   * Al abrir el formulario y no antes: cada catálogo es una llamada de red, y la lista de
+   * subagentes se mira mucho más de lo que se edita uno.
+   */
+  const faltanCatalogos = comprobados.filter((p) => p.modelos === undefined && p.error === undefined);
+  const idsSinCatalogo = faltanCatalogos.map((p) => p.id).join(",");
+  useEffect(() => {
+    if (motorEditado !== "modelo" || idsSinCatalogo === "") return;
+    for (const id of idsSinCatalogo.split(",")) alPedirCatalogo?.(id);
+  }, [motorEditado, idsSinCatalogo, alPedirCatalogo]);
 
   const cerrar = (): void => {
     setEditando(undefined);
@@ -265,10 +340,10 @@ export function Agentes({
                 setEditando({
                   ...editando,
                   motor: e.target.value,
-                  // El modelo se va al cambiar de motor: con Claude Code o Codex no vale, y
-                  // el servidor rechaza el fichero que lo lleve. Dejarlo puesto haría que
-                  // guardar fallara con un error que el formulario podía haber evitado.
-                  ...(e.target.value === "modelo" ? {} : { modelo: undefined }),
+                  // El modelo se va al cambiar de motor SIEMPRE: un `opus` no vale para el
+                  // motor de modelo ni un `gemini/…` para Claude Code, y conservarlo
+                  // guardaría un valor que el otro producto rechaza.
+                  modelo: undefined,
                   // Un agente externo va a solo lectura y no se puede desmarcar: el
                   // servidor rechaza el fichero que pida escribir, así que dejar la casilla
                   // suelta solo serviría para que guardar fallara.
@@ -284,22 +359,68 @@ export function Agentes({
             </select>
           </label>
 
-          {editando.motor === "modelo" ? (
-            <label className={estilos.campo}>
-              <span className={estilos.rotulo}>
-                Modelo <span className={estilos.pista}>— «proveedor/modelo»; vacío = el del papel que le toca</span>
-              </span>
-              <Input
-                value={editando.modelo ?? ""}
-                onChange={(e) =>
-                  setEditando({
-                    ...editando,
-                    ...(e.target.value.trim() === "" ? { modelo: undefined } : { modelo: e.target.value }),
-                  })
-                }
-              />
-            </label>
-          ) : null}
+          {/*
+            El modelo se ELIGE, y de dónde sale la lista depende del MOTOR. Era un campo de
+            texto en el que había que acordarse de la sintaxis `proveedor/modelo`, y con los
+            motores externos no había campo — el `.md` que llevara `modelo` se rechazaba, con
+            el argumento de que ahí lo elige el agente. Medido: es falso, los dos productos
+            aceptan un modelo, así que el campo vale para los tres.
+          */}
+          <label className={estilos.campo}>
+            <span className={estilos.rotulo}>
+              Modelo <span className={estilos.pista}>{PISTA_DE_MODELO[editando.motor] ?? ""}</span>
+            </span>
+            <select
+              className={estilos.selector}
+              value={editando.modelo ?? ""}
+              onChange={(e) =>
+                setEditando({
+                  ...editando,
+                  ...(e.target.value === "" ? { modelo: undefined } : { modelo: e.target.value }),
+                })
+              }
+            >
+              {/* No elegir es una opción de verdad, y la que casi siempre vale: el modelo
+                  del papel que le toca, o el que el producto externo use por su cuenta. */}
+              <option value="">{VACIO_DE_MODELO[editando.motor] ?? "El que le toque"}</option>
+              {editando.motor === "modelo"
+                ? comprobados
+                    // Un grupo VACÍO es peor que no estar: parece que ese proveedor no tiene
+                    // modelos, cuando lo que pasa es que su catálogo no ha llegado todavía.
+                    .filter((p) => (p.modelos ?? []).length > 0)
+                    .map((p) => (
+                      // Agrupado por proveedor: el id que se guarda es `proveedor/modelo`, y
+                      // sin el grupo dos modelos con el mismo nombre serían indistinguibles.
+                      <optgroup key={p.id} label={p.nombre}>
+                        {(p.modelos ?? []).map((m) => (
+                          <option key={`${p.id}/${m.id}`} value={`${p.id}/${m.id}`}>
+                            {m.nombre ?? m.id}
+                          </option>
+                        ))}
+                      </optgroup>
+                    ))
+                : (modelosDeMotor?.[editando.motor]?.modelos ?? []).map((m) => (
+                    <option key={m.id} value={m.id}>
+                      {m.nombre}
+                    </option>
+                  ))}
+              {/* Lo que ya estaba guardado y no está en la lista se conserva como opción: si
+                  no, abrir el formulario y guardar sin tocar nada borraría su modelo. */}
+              {editando.modelo !== undefined && !enLaLista(editando) ? (
+                <option value={editando.modelo}>{editando.modelo} — el que ya tenía</option>
+              ) : null}
+            </select>
+            {editando.motor === "modelo" && faltanCatalogos.length > 0 ? (
+              <p className={estilos.pista}>Consultando los modelos de {faltanCatalogos.map((p) => p.nombre).join(", ")}…</p>
+            ) : null}
+            {motorExterno(editando.motor) && modelosDeMotor?.[editando.motor]?.error !== undefined ? (
+              // Un desplegable vacío sin motivo se lee como que la ventana está rota. El
+              // motivo dice que falta instalar Codex, que es accionable.
+              <p className={estilos.aviso} role="alert">
+                {modelosDeMotor[editando.motor]!.error}
+              </p>
+            ) : null}
+          </label>
 
           <label className={estilos.casilla}>
             <input

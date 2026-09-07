@@ -67,11 +67,18 @@ describe("leerAgente", () => {
     expect("error" in r && r.error).toMatch(/modelo, claude-code, codex/);
   });
 
-  it("un «modelo» con un motor que no lo usa se rechaza en vez de ignorarse", () => {
-    // Quien lo escribió cree que está eligiendo el modelo del hijo, y no es así: Claude
-    // Code usa el suyo. Tragárselo en silencio le dejaría creyendo una cosa falsa.
-    const r = leerAgente("x", "---\ndescripcion: d\nmotor: claude-code\nmodelo: openai/gpt-4o\n---\n", "proyecto");
-    expect("error" in r && r.error).toMatch(/solo vale con/);
+  it("un «modelo» vale con los TRES motores: los dos externos también lo aceptan", () => {
+    // Esto se rechazaba, con el argumento de que ahí el modelo lo elige el agente. Era falso
+    // y está medido: el SDK de Claude Code acepta `options.model` —y documenta los alias
+    // `opus`, `sonnet`, `haiku`, `fable`— y el `ThreadStartParams` de Codex acepta `model`,
+    // cuyos valores da su propio `model/list`. Rechazarlo dejaba fuera justo lo que el
+    // usuario quiere decidir: con qué modelo corre cada especialista.
+    // `soloLectura: true` porque los dos externos lo exigen, que es otra regla y sigue viva.
+    const claude = leerAgente("x", "---\ndescripcion: d\nmotor: claude-code\nsoloLectura: true\nmodelo: opus\n---\n", "proyecto");
+    expect("agente" in claude && claude.agente.modelo).toBe("opus");
+
+    const codex = leerAgente("x", "---\ndescripcion: d\nmotor: codex\nsoloLectura: true\nmodelo: gpt-5.6-sol\n---\n", "proyecto");
+    expect("agente" in codex && codex.agente.modelo).toBe("gpt-5.6-sol");
   });
 
   it("`soloLectura` solo es cierto con exactamente «true»", () => {

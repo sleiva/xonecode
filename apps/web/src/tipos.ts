@@ -177,6 +177,8 @@ export type MensajeAlCliente =
       ms: number;
       motivo?: string;
     }
+  /** Lo que ofrece un motor externo, o por qué no se pudo saber. */
+  | { clase: "modelosDeMotor"; motor: string; modelos: { id: string; nombre: string }[]; error?: string }
   | { clase: "secreto"; pregunta: string }
   /**
    * El registro de comandos de barra (`COMANDOS` en `cli/consola.ts`), para que el
@@ -410,6 +412,8 @@ export type MensajeDelCliente =
   | { clase: "artefacto"; nombre: string }
   /** Ejecuta o cancela un paso de receta. Viajan el nombre y el número, nunca un comando. */
   | { clase: "receta"; id: string; paso: number; accion: "ejecutar" | "cancelar" }
+  /** Los modelos de un motor externo, bajo demanda: el de Codex arranca un proceso. */
+  | { clase: "modelosDeMotor"; motor: string }
   | { clase: "decision"; decisiones: Record<string, string> };
 
 /**

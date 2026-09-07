@@ -35,15 +35,120 @@ describe("Agentes", () => {
     expect(screen.getByRole("alert").textContent).toContain("le falta «descripcion»");
   });
 
-  it("el campo de modelo solo existe con «motor: modelo»", () => {
-    // Con Claude Code o Codex el modelo lo elige el propio agente, así que el campo sería un
-    // control que no hace nada — y el servidor RECHAZA el fichero que lo lleve.
-    render(<Agentes {...manejadores} agentes={[]} />);
+  /**
+   * El modelo se ELIGE, no se teclea, y de dónde sale la lista depende del motor.
+   *
+   * Era un campo de texto libre en el que había que acordarse de la sintaxis
+   * `proveedor/modelo`; y con Claude Code o Codex no había campo, porque el `.md` que
+   * llevara `modelo` se rechazaba. Eso último era falso y está medido: los dos productos
+   * aceptan un modelo, y sus listas son las que ellos dicen.
+   */
+  const abrirNuevo = (props: Partial<Parameters<typeof Agentes>[0]> = {}) => {
+    render(<Agentes {...manejadores} agentes={[]} {...props} />);
     fireEvent.click(screen.getByRole("button", { name: "Nuevo subagente" }));
-    expect(screen.queryByText(/proveedor\/modelo/)).not.toBeNull();
+  };
 
+  it("con «motor: modelo» el modelo se elige de los proveedores COMPROBADOS", () => {
+    abrirNuevo({
+      proveedores: [
+        { id: "gemini", nombre: "Google Gemini", credencial: "puesta", modelos: [{ id: "gemini-flash-latest" }] },
+        // Sin comprobar: ofrecerlo sería ofrecer algo que falla al usarlo, igual que en la
+        // pastilla del compositor.
+        { id: "openai", nombre: "OpenAI", credencial: "falta" },
+      ],
+    });
+    const select = screen.getByLabelText(/^Modelo/);
+    const opciones = [...select.querySelectorAll("option")].map((o) => o.textContent);
+    expect(opciones.some((o) => /gemini-flash-latest/.test(o ?? ""))).toBe(true);
+    expect(opciones.some((o) => /OpenAI/.test(o ?? ""))).toBe(false);
+    // Y se puede no elegir ninguno: es lo que significa «el del papel que le toca».
+    expect(opciones.some((o) => /papel/i.test(o ?? ""))).toBe(true);
+  });
+
+  it("elegir un motor externo PIDE sus modelos, y solo si no se tienen", () => {
+    // Bajo demanda porque el de Codex se le pregunta a él y eso arranca un proceso: pedirlo
+    // al abrir la ventana lo lanzaría para quien solo viene a leer la lista de subagentes.
+    const pedidos: string[] = [];
+    abrirNuevo({ alPedirModelosDeMotor: (motor) => pedidos.push(motor) });
     fireEvent.change(screen.getByDisplayValue(/Un modelo/), { target: { value: "claude-code" } });
-    expect(screen.queryByText(/proveedor\/modelo/)).toBeNull();
+    expect(pedidos).toEqual(["claude-code"]);
+  });
+
+  it("no se vuelven a pedir los que ya están", () => {
+    const pedidos: string[] = [];
+    abrirNuevo({
+      alPedirModelosDeMotor: (motor) => pedidos.push(motor),
+      modelosDeMotor: { "claude-code": { modelos: [{ id: "opus", nombre: "opus" }] } },
+    });
+    fireEvent.change(screen.getByDisplayValue(/Un modelo/), { target: { value: "claude-code" } });
+    expect(pedidos).toEqual([]);
+  });
+
+  it("y se ofrecen los que el motor dijo, no una lista escrita a mano", () => {
+    abrirNuevo({
+      alPedirModelosDeMotor: () => {},
+      modelosDeMotor: { "claude-code": { modelos: [{ id: "opus", nombre: "opus" }, { id: "sonnet", nombre: "sonnet" }] } },
+    });
+    fireEvent.change(screen.getByDisplayValue(/Un modelo/), { target: { value: "claude-code" } });
+    const opciones = [...screen.getByLabelText(/^Modelo/).querySelectorAll("option")].map((o) => o.textContent);
+    expect(opciones).toContain("opus");
+    expect(opciones).toContain("sonnet");
+    // Y la opción de no elegir dice qué pasa entonces, que no es lo mismo en cada motor.
+    expect(opciones.some((o) => /use Claude Code/.test(o ?? ""))).toBe(true);
+  });
+
+  it("si el motor no pudo decir sus modelos, se DICE en vez de un desplegable vacío", () => {
+    abrirNuevo({
+      alPedirModelosDeMotor: () => {},
+      modelosDeMotor: { codex: { modelos: [], error: "codex no está instalado" } },
+    });
+    fireEvent.change(screen.getByDisplayValue(/Un modelo/), { target: { value: "codex" } });
+    expect(screen.getByText(/codex no está instalado/)).toBeTruthy();
+  });
+
+  it("con «motor: modelo» pide los catálogos que faltan, y no pinta grupos vacíos", () => {
+    // Sin esto el desplegable solo tenía los de Ollama —el único que se prueba al conectar—
+    // y el grupo de los demás salía vacío, que se lee como «ese proveedor no tiene modelos».
+    const pedidos: string[] = [];
+    abrirNuevo({
+      alPedirCatalogo: (p) => pedidos.push(p),
+      proveedores: [
+        { id: "gemini", nombre: "Google Gemini", credencial: "puesta" },
+        { id: "ollama", nombre: "Ollama", credencial: "nativa", modelos: [{ id: "qwen3" }] },
+      ],
+    });
+    expect(pedidos).toEqual(["gemini"]);
+    const grupos = [...screen.getByLabelText(/^Modelo/).querySelectorAll("optgroup")].map((g) => g.getAttribute("label"));
+    expect(grupos).toEqual(["Ollama"]);
+    // Y se dice que se está consultando, en vez de dejar un hueco sin explicar.
+    expect(screen.getByText(/Consultando los modelos de Google Gemini/)).toBeTruthy();
+  });
+
+  it("un proveedor cuyo catálogo ya falló no se vuelve a pedir en bucle", () => {
+    const pedidos: string[] = [];
+    abrirNuevo({
+      alPedirCatalogo: (p) => pedidos.push(p),
+      proveedores: [{ id: "gemini", nombre: "Google Gemini", credencial: "puesta", error: "no autorizada" }],
+    });
+    expect(pedidos).toEqual([]);
+  });
+
+  it("cambiar de motor limpia el modelo: un `opus` no vale para el motor de modelo", () => {
+    const guardado: unknown[] = [];
+    render(
+      <Agentes
+        {...manejadores}
+        agentes={[]}
+        alGuardar={(a) => guardado.push(a)}
+        modelosDeMotor={{ "claude-code": { modelos: [{ id: "opus", nombre: "opus" }] } }}
+        alPedirModelosDeMotor={() => {}}
+      />
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Nuevo subagente" }));
+    fireEvent.change(screen.getByDisplayValue(/Un modelo/), { target: { value: "claude-code" } });
+    fireEvent.change(screen.getByLabelText(/^Modelo/), { target: { value: "opus" } });
+    fireEvent.change(screen.getByDisplayValue(/Claude Code/), { target: { value: "modelo" } });
+    expect((screen.getByLabelText(/^Modelo/) as HTMLSelectElement).value).toBe("");
   });
 
   it("elegir un motor externo fuerza solo lectura y DICE por qué", () => {
