@@ -102,6 +102,50 @@ describe("leerFicheroDeProyecto", () => {
     expect(f.texto!.length).toBeLessThanOrEqual(TOPE_DE_FICHERO);
     expect(f.bytes).toBe(TOPE_DE_FICHERO + 10);
   });
+
+  it("una ruta con separadores de Windows se resuelve igual que con «/»", async () => {
+    // El «\\» sobrevive a la criba de balde (no es absoluta ni lleva «..») y a la de
+    // vista aplanada (que ya normaliza), así que tiene que sobrevivir también a la
+    // resolución en disco: resolver con la ruta CRUDA fallaba aquí con «no existe».
+    const f = await leerFicheroDeProyecto(raiz, "app\\Clientes.xne");
+    expect(f.ruta).toBe("app\\Clientes.xne"); // la pedida, no la normalizada
+    expect(f.texto).toBe("<coll name=\"Clientes\"/>");
+    expect(f.error).toBeUndefined();
+  });
+
+  it("un carácter multibyte partido justo en el tope se recorta como UTF-8, no como latin1", async () => {
+    // La «ñ» (2 bytes) empieza en TOPE_DE_FICHERO - 1: el corte cae en medio de su
+    // segundo byte, y el reintento de `decodificar` tiene que quitarla entera en vez
+    // de degradar el fichero a latin1 por un límite arbitrario.
+    const contenido = "a".repeat(TOPE_DE_FICHERO - 1) + "ñ" + "x".repeat(20);
+    writeFileSync(join(raiz, "frontera.txt"), contenido, "utf-8");
+    const f = await leerFicheroDeProyecto(raiz, "frontera.txt");
+    expect(f.codificacion).toBe("utf-8");
+    expect(f.recortado).toBe(true);
+    expect(f.texto!.endsWith("a")).toBe(true);
+  });
+
+  it("un fichero de exactamente TOPE_DE_FICHERO bytes no se recorta", async () => {
+    writeFileSync(join(raiz, "justo.txt"), "a".repeat(TOPE_DE_FICHERO));
+    const f = await leerFicheroDeProyecto(raiz, "justo.txt");
+    expect(f.recortado).toBe(false);
+    expect(f.texto!.length).toBe(TOPE_DE_FICHERO);
+    expect(f.bytes).toBe(TOPE_DE_FICHERO);
+  });
+
+  it("un fichero vacío se lee como texto vacío, no como binario", async () => {
+    writeFileSync(join(raiz, "vacio.txt"), "");
+    const f = await leerFicheroDeProyecto(raiz, "vacio.txt");
+    expect(f).toMatchObject({ texto: "", binario: false, recortado: false, bytes: 0, codificacion: "utf-8" });
+  });
+
+  it("un enlace simbólico DENTRO de la raíz se lee con normalidad", async () => {
+    symlinkSync(join(raiz, "app", "Clientes.xne"), join(raiz, "alias.xne"));
+    const f = await leerFicheroDeProyecto(raiz, "alias.xne");
+    expect(f.ruta).toBe("alias.xne");
+    expect(f.texto).toBe("<coll name=\"Clientes\"/>");
+    expect(f.error).toBeUndefined();
+  });
 });
 
 describe("motivoDeRutaInaceptable", () => {

@@ -110,7 +110,11 @@ export async function leerFicheroDeProyecto(raiz: string, ruta: string): Promise
   let raizReal: string;
   try {
     raizReal = await realpath(raiz);
-    real = await realpath(resolve(raiz, ruta));
+    // Se resuelve con `normal`, no con `ruta`: en POSIX `path.resolve` trata «\» como
+    // carácter literal de nombre, así que una ruta con separadores de Windows pasaba la
+    // criba de vista aplanada (ya normalizada) y luego se buscaba en disco con la barra
+    // invertida sin traducir, fallando con «no existe» aunque el fichero SÍ estuviera.
+    real = await realpath(resolve(raiz, normal));
   } catch {
     return rechazo("no existe");
   }
