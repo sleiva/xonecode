@@ -388,6 +388,19 @@ describe("ficherosDelProyecto", () => {
       rmSync(raiz, { recursive: true, force: true });
     }
   });
+
+  it("el tope de profundidad es un parámetro: el Tab para en 4, el árbol de la web pide más", () => {
+    const raiz = mkdtempSync(join(tmpdir(), "xc-prof-"));
+    try {
+      const hondo = join(raiz, "a", "b", "c", "d", "e", "f");
+      mkdirSync(hondo, { recursive: true });
+      writeFileSync(join(hondo, "x.xne"), "<x/>");
+      expect(ficherosDelProyecto(raiz).has("/a/b/c/d/e/f/x.xne")).toBe(false);
+      expect(ficherosDelProyecto(raiz, 0, 32).has("/a/b/c/d/e/f/x.xne")).toBe(true);
+    } finally {
+      rmSync(raiz, { recursive: true, force: true });
+    }
+  });
 });
 
 

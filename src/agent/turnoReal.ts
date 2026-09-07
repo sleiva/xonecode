@@ -94,8 +94,11 @@ export interface SesionReal {
  * importar de agent; al revés no). El recorrido se hace EN CADA llamada a propósito:
  * la lista no se cachea porque los ficheros cambian durante la sesión.
  */
-export function ficherosDelProyecto(raiz: string, prof = 0): ReadonlySet<string> {
-  if (prof > 4 || !existsSync(raiz)) return new Set();
+/** Hasta dónde baja el completado del Tab. El árbol de la consola web pide más (`arbolDeProyecto.ts`). */
+export const PROFUNDIDAD_DEL_TAB = 4;
+
+export function ficherosDelProyecto(raiz: string, prof = 0, tope = PROFUNDIDAD_DEL_TAB): ReadonlySet<string> {
+  if (prof > tope || !existsSync(raiz)) return new Set();
   const salida = new Set<string>();
   for (const entrada of readdirSync(raiz)) {
     if (entrada === "node_modules" || entrada === ".git") continue;
@@ -106,7 +109,7 @@ export function ficherosDelProyecto(raiz: string, prof = 0): ReadonlySet<string>
         // nombre, «app/Clientes.xne» saldría como «/Clientes.xne» y el Set dejaría de
         // responder por las vistas aplanadas ANIDADAS (este universo es el que consulta
         // `esVistaAplanada`).
-        for (const f of ficherosDelProyecto(ruta, prof + 1)) salida.add(`/${entrada}${f}`);
+        for (const f of ficherosDelProyecto(ruta, prof + 1, tope)) salida.add(`/${entrada}${f}`);
       } else {
         salida.add("/" + ruta.slice(raiz.length + 1).split(sep).join("/"));
       }

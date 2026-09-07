@@ -1,0 +1,116 @@
+import { mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import {
+  arbolDeProyecto,
+  leerFicheroDeProyecto,
+  motivoDeRutaInaceptable,
+  ordenarRutas,
+  TOPE_DE_ENTRADAS,
+  TOPE_DE_FICHERO,
+} from "./arbolDeProyecto.js";
+
+let raiz: string;
+let fuera: string;
+
+beforeEach(() => {
+  raiz = mkdtempSync(join(tmpdir(), "xc-arbol-"));
+  fuera = mkdtempSync(join(tmpdir(), "xc-fuera-"));
+  writeFileSync(join(raiz, "app.xml"), "<app/>");
+  mkdirSync(join(raiz, "app"));
+  writeFileSync(join(raiz, "app", "Clientes.xne"), "<coll name=\"Clientes\"/>");
+  writeFileSync(join(raiz, "app", "Clientes.xml"), "<vistas/>"); // aplanada
+  writeFileSync(join(raiz, ".env"), "SECRETO=1");
+  mkdirSync(join(raiz, ".xonecode"));
+  writeFileSync(join(raiz, ".xonecode", "config.json"), "{}");
+  mkdirSync(join(raiz, ".git"));
+  writeFileSync(join(raiz, ".git", "HEAD"), "ref");
+  mkdirSync(join(raiz, "node_modules", "x"), { recursive: true });
+  writeFileSync(join(raiz, "node_modules", "x", "i.js"), "");
+  writeFileSync(join(raiz, "logo.png"), Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x00, 0x01, 0x02]));
+  writeFileSync(join(raiz, "viejo.txt"), Buffer.from([0x68, 0x6f, 0x6c, 0x61, 0x20, 0xf1])); // «hola ñ» en cp1252
+  writeFileSync(join(raiz, "grande.js"), "x".repeat(TOPE_DE_FICHERO + 10));
+  writeFileSync(join(fuera, "secreto.txt"), "no");
+  symlinkSync(join(fuera, "secreto.txt"), join(raiz, "enlace.txt"));
+});
+
+afterEach(() => {
+  rmSync(raiz, { recursive: true, force: true });
+  rmSync(fuera, { recursive: true, force: true });
+});
+
+describe("arbolDeProyecto", () => {
+  it("lista lo que el agente ve y nada más: ni .env, ni .xonecode, ni .git, ni node_modules, ni la vista aplanada", () => {
+    const { rutas, recortado } = arbolDeProyecto(raiz);
+    expect(recortado).toBe(false);
+    expect(rutas).toContain("app/Clientes.xne");
+    expect(rutas).toContain("app.xml");
+    expect(rutas).not.toContain("app/Clientes.xml");
+    expect(rutas.some((r) => r.startsWith(".env") || r.startsWith(".xonecode") || r.startsWith(".git") || r.startsWith("node_modules"))).toBe(false);
+  });
+
+  it("ordena carpetas antes que ficheros en cada nivel, y alfabético sin mayúsculas", () => {
+    expect(ordenarRutas(["b.js", "a/z.xne", "A.js", "a/b/c.css", "Zeta/x"])).toEqual(["a/b/c.css", "a/z.xne", "Zeta/x", "A.js", "b.js"]);
+  });
+
+  it("declara el recorte al pasar el tope de entradas", () => {
+    const muchos = mkdtempSync(join(tmpdir(), "xc-muchos-"));
+    try {
+      for (let i = 0; i < TOPE_DE_ENTRADAS + 5; i++) writeFileSync(join(muchos, `f${String(i).padStart(5, "0")}.js`), "");
+      const { rutas, recortado } = arbolDeProyecto(muchos);
+      expect(recortado).toBe(true);
+      expect(rutas).toHaveLength(TOPE_DE_ENTRADAS);
+    } finally {
+      rmSync(muchos, { recursive: true, force: true });
+    }
+  });
+});
+
+describe("leerFicheroDeProyecto", () => {
+  it("lee un fichero de texto UTF-8", async () => {
+    const f = await leerFicheroDeProyecto(raiz, "app/Clientes.xne");
+    expect(f).toMatchObject({ ruta: "app/Clientes.xne", texto: "<coll name=\"Clientes\"/>", binario: false, recortado: false, codificacion: "utf-8" });
+    expect(f.bytes).toBe(Buffer.byteLength("<coll name=\"Clientes\"/>"));
+  });
+
+  it.each(["../x", "/etc/passwd", ".env", ".xonecode/config.json", "app/Clientes.xml", "enlace.txt", "app", "no-existe.xne", "a//b"])(
+    "rechaza «%s» con motivo y sin texto",
+    async (ruta) => {
+      const f = await leerFicheroDeProyecto(raiz, ruta);
+      expect(f.error).toBeTypeOf("string");
+      expect(f.texto).toBeUndefined();
+      expect(f.error).not.toContain(raiz); // nunca la ruta real de la máquina
+    }
+  );
+
+  it("un NUL en los primeros 8 KB es binario: sin texto, con tamaño", async () => {
+    const f = await leerFicheroDeProyecto(raiz, "logo.png");
+    expect(f).toMatchObject({ binario: true, bytes: 7 });
+    expect(f.texto).toBeUndefined();
+  });
+
+  it("lo que no es UTF-8 se lee como latin1 y se dice", async () => {
+    const f = await leerFicheroDeProyecto(raiz, "viejo.txt");
+    expect(f.codificacion).toBe("latin1");
+    expect(f.texto).toBe("hola ñ");
+  });
+
+  it("recorta al tope y lo declara, con el tamaño real", async () => {
+    const f = await leerFicheroDeProyecto(raiz, "grande.js");
+    expect(f.recortado).toBe(true);
+    expect(f.texto!.length).toBeLessThanOrEqual(TOPE_DE_FICHERO);
+    expect(f.bytes).toBe(TOPE_DE_FICHERO + 10);
+  });
+});
+
+describe("motivoDeRutaInaceptable", () => {
+  it("acepta una ruta relativa normal y rechaza las demás formas", () => {
+    expect(motivoDeRutaInaceptable("src/app.xne")).toBeUndefined();
+    expect(motivoDeRutaInaceptable("")).toBeTypeOf("string");
+    expect(motivoDeRutaInaceptable("./a")).toBeTypeOf("string");
+    expect(motivoDeRutaInaceptable("a/../b")).toBeTypeOf("string");
+    expect(motivoDeRutaInaceptable("C:\\x")).toBeTypeOf("string");
+    expect(motivoDeRutaInaceptable(".env.local")).toBeTypeOf("string");
+  });
+});
