@@ -6,6 +6,7 @@ import { ETIQUETAS_DE_CODIGO } from "../etiquetasDeCodigo.js";
 import { arbolDeRutas } from "../arbolDeRutas.js";
 import { lenguajeDe } from "../lenguajeDe.js";
 import { Arbol } from "./Arbol.js";
+import { Dibujo, kb } from "./Dibujo.js";
 import { Visor } from "./Visor.js";
 import estilos from "./Ficheros.module.css";
 
@@ -158,7 +159,7 @@ export function Ficheros({
             ) : contenido.error !== undefined ? (
               <p className={estilos.aviso}>No se puede enseñar este fichero: {contenido.error}.</p>
             ) : soloDibujo ? (
-              <Dibujo mime={contenido.mime!} base64={contenido.base64!} ruta={elegido} bytes={contenido.bytes} />
+              <Dibujo mime={contenido.mime!} base64={contenido.base64!} alt={elegido} bytes={contenido.bytes} />
             ) : contenido.mime !== undefined && contenido.base64 === undefined && contenido.binario ? (
               // Se sabe que es una imagen aunque sus bytes no hayan viajado: eso es lo que
               // el `mime` a secas significa, y decir «un binario» sería perder el dato.
@@ -175,7 +176,7 @@ export function Ficheros({
                 {/* El SVG: primero el dibujo, y debajo su código. Las dos caras a la vez. */}
                 {svgConDibujo ? (
                   <>
-                    <Dibujo mime={contenido.mime!} base64={contenido.base64!} ruta={elegido} bytes={contenido.bytes} />
+                    <Dibujo mime={contenido.mime!} base64={contenido.base64!} alt={elegido} bytes={contenido.bytes} />
                     <p className={estilos.rotulo}>Código</p>
                   </>
                 ) : null}
@@ -229,25 +230,4 @@ export function Ficheros({
       </aside>
     </div>
   );
-}
-
-/**
- * La imagen, con su tamaño debajo.
- *
- * Una URL de datos y un `<img>`, nunca el marcado metido en el DOM: un `.svg` del proyecto
- * puede traer un `<script>` dentro, y dentro de un `<img>` el navegador no lo ejecuta. El
- * `alt` es la ruta: es lo único cierto que se puede decir de la imagen sin mirarla.
- */
-function Dibujo({ mime, base64, ruta, bytes }: { mime: string; base64: string; ruta: string; bytes: number }) {
-  return (
-    <div className={estilos.imagen}>
-      <img src={`data:${mime};base64,${base64}`} alt={ruta} />
-      <p className={estilos.nota}>{kb(bytes)} KB</p>
-    </div>
-  );
-}
-
-/** Kilobytes redondeados, para leer: «2 KB», no «2048 bytes». */
-function kb(bytes: number): number {
-  return Math.max(1, Math.round(bytes / 1024));
 }
