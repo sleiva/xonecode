@@ -509,8 +509,54 @@ describe("la foto de la máquina («dispositivos»)", () => {
     herramientas: [{ nombre: "adb" as const, estado: "ok" as const }],
     dispositivos: [{ id: "U", nombre: "iPhone 17 · iOS 26.0", plataforma: "ios" as const, clase: "simulador" as const, estado: "arrancado" as const }],
     avds: ["Pixel_8"],
+    // Sin receta: esta máquina de mentira ya lo tiene todo. Va explícito porque el store lo
+    // resuelve siempre a una lista, y comparar el informe entero es lo que hace ese test.
+    recetas: [],
     medido: "2026-09-06T10:00:00.000Z",
   };
+
+  it("las RECETAS llegan al store: la lista blanca se come lo que no se nombre", () => {
+    // La misma trampa que ya mordió con `mime`/`base64` de una imagen: este `case` es una
+    // lista blanca, así que un campo nuevo no llega hasta que se escribe aquí — y el
+    // síntoma sería una ventana sin la receta con todos los tests en verde.
+    const s = crearStoreDelCliente();
+    s.aplicar({
+      clase: "dispositivos",
+      informe: {
+        sistema: "mac",
+        medido: "2026-09-07T10:00:00.000Z",
+        herramientas: [],
+        dispositivos: [],
+        avds: [],
+        recetas: [
+          {
+            id: "android-emulador",
+            titulo: "Instalar el emulador de Android",
+            descripcion: "Cuatro pasos.",
+            pasos: [{ titulo: "Instalar", comandos: ["brew install x"], nota: "ojo", hecho: false }],
+            completa: false,
+            despues: "emulator -avd pixel8",
+          },
+        ],
+      },
+      ajustes: {},
+    });
+    const receta = s.leer().dispositivos?.recetas?.[0];
+    expect(receta).toMatchObject({ id: "android-emulador", completa: false, despues: "emulator -avd pixel8" });
+    expect(receta?.pasos).toEqual([{ titulo: "Instalar", comandos: ["brew install x"], nota: "ojo", hecho: false }]);
+  });
+
+  it("un informe SIN recetas no revienta: llega la lista vacía", () => {
+    // Windows y Linux no tienen receta todavía, y una versión anterior del servidor tampoco
+    // manda el campo. Ausente no puede tumbar la foto entera de la máquina.
+    const s = crearStoreDelCliente();
+    s.aplicar({
+      clase: "dispositivos",
+      informe: { sistema: "windows", medido: "2026-09-07T10:00:00.000Z", herramientas: [], dispositivos: [], avds: [] },
+      ajustes: {},
+    });
+    expect(s.leer().dispositivos?.recetas).toEqual([]);
+  });
 
   it("se guarda campo a campo, y un campo de más del servidor no entra", () => {
     const s = crearStoreDelCliente();

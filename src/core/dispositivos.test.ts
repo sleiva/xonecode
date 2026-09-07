@@ -8,6 +8,7 @@ import {
   parsearSimctl,
   sistemaDe,
   type InformeDeDispositivos,
+  recetaDeEmuladorAndroid,
 } from "./dispositivos.js";
 
 describe("sistemaDe", () => {
@@ -197,6 +198,7 @@ describe("alcanzables", () => {
       sistema: "mac",
       herramientas: [],
       avds: [],
+    recetas: [],
       medido: "2026-09-06T10:00:00.000Z",
       dispositivos: [
         { id: "a", nombre: "a", plataforma: "android", clase: "fisico", estado: "conectado" },
@@ -207,5 +209,70 @@ describe("alcanzables", () => {
       ],
     };
     expect(alcanzables(informe).map((d) => d.id)).toEqual(["a", "b"]);
+  });
+});
+
+describe("recetaDeEmuladorAndroid", () => {
+  const nada = { brew: false, sdkmanager: false, emulator: false, androidHome: false, avds: [] as string[] };
+
+  it("en un sistema que no es macOS todavía no hay receta, y no se finge una", () => {
+    // Windows y Linux son otra receta —otros gestores, otras rutas— y escribir la de macOS
+    // con otro título sería el botón muerto de siempre. Se dirá que falta.
+    expect(recetaDeEmuladorAndroid("win32", nada)).toBeUndefined();
+    expect(recetaDeEmuladorAndroid("linux", nada)).toBeUndefined();
+  });
+
+  it("de cero, los cuatro pasos y ninguno hecho", () => {
+    const receta = recetaDeEmuladorAndroid("darwin", nada)!;
+    expect(receta.completa).toBe(false);
+    expect(receta.pasos.map((p) => p.hecho)).toEqual([false, false, false, false]);
+  });
+
+  it("ningún comando lleva una ruta de la máquina: se derivan con `brew --prefix`", () => {
+    // La misma regla por la que `ruta` se queda en el host: esto se pinta en la ventana y
+    // viaja por el cable, que puede ir por un túnel. Y de paso vale en Intel y en Apple
+    // Silicon, que tienen prefijos distintos.
+    const receta = recetaDeEmuladorAndroid("darwin", nada)!;
+    const todo = receta.pasos.flatMap((p) => p.comandos).join("\n");
+    expect(todo).not.toContain("/opt/homebrew");
+    expect(todo).not.toContain("/usr/local");
+    expect(todo).not.toContain("/Users/");
+    expect(todo).toContain("$(brew --prefix)");
+  });
+
+  it("cada paso se da por hecho por lo MEDIDO, no por recordar que se pulsó", () => {
+    const conSdk = recetaDeEmuladorAndroid("darwin", { ...nada, brew: true, sdkmanager: true })!;
+    expect(conSdk.pasos[0]!.hecho).toBe(true); // sdkmanager está ⇒ las herramientas están
+    expect(conSdk.pasos[1]!.hecho).toBe(false); // pero ANDROID_HOME no
+
+    const conTodo = recetaDeEmuladorAndroid("darwin", {
+      brew: true, sdkmanager: true, emulator: true, androidHome: true, avds: ["pixel8"],
+    })!;
+    expect(conTodo.pasos.map((p) => p.hecho)).toEqual([true, true, true, true]);
+    expect(conTodo.completa).toBe(true);
+  });
+
+  it("el paso de las licencias lo DICE, y el del tamaño también", () => {
+    const receta = recetaDeEmuladorAndroid("darwin", nada)!;
+    const notas = receta.pasos.map((p) => p.nota ?? "").join(" ");
+    expect(notas).toMatch(/licencia/i);
+    expect(notas).toMatch(/GB/);
+  });
+
+  it("el paso de las variables dice que xonecode NO lo necesita, y para qué sí", () => {
+    // Es la única parte que toca la shell del usuario, y desde que la detección mira la
+    // carpeta de Homebrew la consola encuentra el SDK sin ella. Decirlo evita que parezca
+    // que la consola no funciona hasta tocarse el `.zshrc`.
+    const paso = recetaDeEmuladorAndroid("darwin", nada)!.pasos[1]!;
+    expect(paso.nota).toMatch(/tu terminal/i);
+    expect(paso.nota).toMatch(/xonecode/i);
+  });
+
+  it("arrancar no es un paso de la receta, pero el comando se da", () => {
+    // Arrancar un emulador es un proceso de vida larga y otra capacidad; hoy no está
+    // cableado y el panel no puede prometerlo. El comando sí se dice.
+    const receta = recetaDeEmuladorAndroid("darwin", nada)!;
+    expect(receta.pasos).toHaveLength(4);
+    expect(receta.despues).toContain("emulator -avd");
   });
 });

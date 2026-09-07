@@ -447,10 +447,30 @@ export interface Dispositivo {
   detalle?: string;
 }
 
+/** Un paso de una receta, redeclarado como todo lo de este fichero. */
+export interface PasoDeReceta {
+  titulo: string;
+  comandos: string[];
+  nota?: string;
+  /** Sale de la MEDIDA del servidor, no de recordar que se pulsó. */
+  hecho: boolean;
+}
+
+export interface Receta {
+  id: "android-emulador";
+  titulo: string;
+  descripcion: string;
+  pasos: PasoDeReceta[];
+  completa: boolean;
+  despues: string;
+}
+
 export interface InformeDeDispositivos {
   sistema: SistemaOperativo;
   herramientas: Herramienta[];
   dispositivos: Dispositivo[];
   avds: string[];
+  /** Cómo conseguir lo que falta. Vacío si este sistema no tiene receta todavía. */
+  recetas: Receta[];
   medido: string;
 }

@@ -35,6 +35,7 @@ import { delimiter, join } from "node:path";
 import { promisify } from "node:util";
 import { seMira, type AjustesDeDispositivos } from "../core/settings.js";
 import {
+  recetaDeEmuladorAndroid,
   parsearAdbDevices,
   parsearAvds,
   parsearDevicectl,
@@ -79,8 +80,25 @@ export const TOPES_MS = {
   xcrun: 20_000,
 } as const;
 
+/**
+ * Dónde vive el SDK cuando nadie ha dicho dónde.
+ *
+ * En macOS hay DOS sitios y no uno: la carpeta de Android Studio (`~/Library/Android/sdk`) y
+ * la que deja `brew install --cask android-commandlinetools`, que es
+ * `<prefijo>/share/android-commandlinetools`. Los dos prefijos de Homebrew se prueban
+ * —`/opt/homebrew` en Apple Silicon, `/usr/local` en Intel— porque `existe()` filtra y
+ * preguntárselo a `brew --prefix` costaría lanzar un proceso en cada medida.
+ *
+ * Sin la de Homebrew, seguir los pasos de instalación al pie de la letra dejaba el panel
+ * diciendo «emulator no está instalado»: la consola exigiendo un cambio en la shell del
+ * usuario para ver algo que ya estaba en el disco.
+ */
 const RAICES_DE_SDK_POR_OMISION: Record<string, (home: string, entorno: Record<string, string | undefined>) => string[]> = {
-  darwin: (home) => [join(home, "Library", "Android", "sdk")],
+  darwin: (home) => [
+    join(home, "Library", "Android", "sdk"),
+    "/opt/homebrew/share/android-commandlinetools",
+    "/usr/local/share/android-commandlinetools",
+  ],
   win32: (_home, entorno) => (entorno.LOCALAPPDATA === undefined ? [] : [join(entorno.LOCALAPPDATA, "Android", "Sdk")]),
   linux: (home) => [join(home, "Android", "Sdk")],
 };
@@ -269,11 +287,33 @@ export async function detectarDispositivos(
     return d.clase === "simulador" ? miraIosSimulador : miraIos;
   });
 
+  /**
+   * La RECETA de lo que a esta máquina le falta, con cada paso marcado por lo MEDIDO.
+   *
+   * El texto es datos puros y vive en `core/`; aquí solo se le pasa lo que se ha visto. Un
+   * paso «hecho» que saliera de recordar un clic seguiría diciendo que sí después de que el
+   * usuario desinstalara el SDK, que es justo cuando hay que decirle que falta.
+   *
+   * `sdkmanager` se busca en el PATH y también dentro del SDK: Homebrew lo enlaza en su
+   * `bin`, pero un xonecode lanzado con un PATH escueto no lo vería, y el paso saldría
+   * pendiente teniendo el SDK instalado delante.
+   */
+  const receta = recetaDeEmuladorAndroid(plataforma, {
+    brew: enPath("brew") !== undefined,
+    sdkmanager:
+      enPath("sdkmanager") !== undefined ||
+      localizar("sdkmanager", join("cmdline-tools", "latest", "bin")) !== undefined,
+    emulator: emulator !== undefined,
+    androidHome: (entorno.ANDROID_HOME ?? "") !== "",
+    avds,
+  });
+
   return {
     sistema: sistemaDe(plataforma),
     herramientas,
     dispositivos: visibles,
     avds: miraAndroidEmulador ? avds : [],
+    recetas: receta === undefined ? [] : [receta],
     medido: ahora().toISOString(),
   };
 }

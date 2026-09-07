@@ -1917,7 +1917,7 @@ describe("qué hay en la máquina: el mensaje «dispositivos»", () => {
     sistema: "mac" as const,
     herramientas: [{ nombre: "adb" as const, estado: "no-encontrada" as const }],
     dispositivos: [],
-    avds: [],
+    avds: [], recetas: [],
     medido: "2026-09-06T10:00:00.000Z",
   };
 
