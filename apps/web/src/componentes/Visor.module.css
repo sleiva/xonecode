@@ -1,0 +1,38 @@
+/* Alias comprobados contra `estilos/design-platform.css`: label-tertiary, bg-layer-1,
+   border-l2. Los `--shiki-*` vienen de `estilos/shiki.css`. */
+
+.visor {
+  padding: 0 16px 16px;
+}
+
+/* El bloque ocupa el ancho del visor y no lleva el borde de tarjeta del chat: aquí es la
+   página entera, no una valla dentro de un globo. */
+.bloque {
+  margin: 0;
+}
+
+.bloque :global(pre) {
+  margin: 0;
+  padding: 8px 0;
+  overflow: auto;
+  font-family: var(--ds-font-family-code);
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+/* Los números de línea, por contador CSS sobre los `.line` de shiki (uno por línea). No se
+   seleccionan: copiar un trozo no arrastra la numeración. */
+.bloque :global(code) {
+  counter-reset: linea;
+}
+
+.bloque :global(.line)::before {
+  counter-increment: linea;
+  content: counter(linea);
+  display: inline-block;
+  width: 4ch;
+  margin-right: 16px;
+  text-align: right;
+  color: var(--dsw-alias-label-tertiary);
+  user-select: none;
+}
