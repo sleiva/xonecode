@@ -116,6 +116,49 @@ describe("store del cliente", () => {
     expect(s.leer().modelos).toBeUndefined();
   });
 
+  /**
+   * La lista blanca del `case "modelos"` es la misma trampa que dejó a las imágenes de
+   * Ficheros sin `mime` ni `base64`: un campo que no se nombra ahí no llega al componente
+   * aunque venga por el cable, y los tests de jsdom siguen en verde porque le dan las
+   * props a mano. Sin `personalizado` la fila no sabría en qué grupo va; sin `baseUrl` no
+   * se vería a dónde iría su clave.
+   */
+  it("un proveedor personalizado llega con su marca y su URL: la lista blanca los nombra", () => {
+    const s = crearStoreDelCliente();
+    s.aplicar({
+      clase: "modelos",
+      proveedores: [
+        {
+          id: "custom:mi-llm",
+          nombre: "Mi LLM",
+          credencial: "falta",
+          personalizado: true,
+          baseUrl: "https://uno.example.com/v1",
+        },
+      ],
+    });
+    expect(s.leer().modelos!.proveedores[0]).toEqual({
+      id: "custom:mi-llm",
+      nombre: "Mi LLM",
+      credencial: "falta",
+      personalizado: true,
+      baseUrl: "https://uno.example.com/v1",
+    });
+  });
+
+  it("el acuse de un alta de proveedor se guarda, y se TIRA al caerse el cable", () => {
+    const s = crearStoreDelCliente();
+    s.aplicar({ clase: "proveedor", hecho: false, motivo: "ya hay uno con ese identificador" });
+    expect(s.leer().proveedor).toEqual({ hecho: false, motivo: "ya hay uno con ese identificador" });
+    // Es el acuse de UNA operación, no un estado: guardado entre conexiones, al reconectar
+    // reaparecería un error que ya nadie recuerda.
+    s.marcarDesconectado();
+    expect(s.leer().proveedor).toBeUndefined();
+    // Y un mensaje sin `hecho` no muta nada.
+    s.aplicar({ clase: "proveedor", motivo: "suelto" } as never);
+    expect(s.leer().proveedor).toBeUndefined();
+  });
+
   it("un `actual` que no es texto no se pinta: mejor «Elige modelo» que una fila inventada", () => {
     const s = crearStoreDelCliente();
     s.aplicar({ clase: "modelos", actual: 7, proveedores: [] } as never);

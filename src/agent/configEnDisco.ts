@@ -216,7 +216,14 @@ export function borrarProveedorPersonalizado(
   const previos = Array.isArray(base.proveedores) ? base.proveedores : [];
   const proveedores = previos.filter((p) => !(esObjeto(p) && p.slug === slug));
   if (proveedores.length === previos.length) return { ruta, borrado: false };
-  escribirAtomico(ruta, JSON.stringify({ ...base, proveedores }, null, 2) + "\n", operaciones);
+  // Al quedarse vacía se BORRA la clave en vez de escribir `[]`. Aquí, al revés que en
+  // `Entorno.proyectos` o en los ajustes de dispositivos, ausente y vacío significan lo
+  // mismo —quien lee hace `?? []`—, así que dejar un `"proveedores": []` sería basura en el
+  // fichero del usuario diciendo lo mismo que no decir nada.
+  const fusionado = proveedores.length === 0
+    ? Object.fromEntries(Object.entries(base).filter(([clave]) => clave !== "proveedores"))
+    : { ...base, proveedores };
+  escribirAtomico(ruta, JSON.stringify(fusionado, null, 2) + "\n", operaciones);
   return { ruta, borrado: true };
 }
 

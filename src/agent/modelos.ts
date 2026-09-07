@@ -20,20 +20,30 @@ export class Modelos implements ModelosPort {
   private readonly eleccion: Record<Papel, Eleccion>;
 
   /**
-   * Los proveedores personalizados salen del `config.json` GLOBAL y de ningún otro sitio:
-   * es la misma regla que impone `core/config.ts` al validar, repetida aquí porque este
-   * es quien construye el cliente — si un día el fichero del proyecto colara uno, aquí no
-   * se usaría igualmente.
+   * Los proveedores personalizados, y es una FUNCIÓN y no una lista a propósito.
+   *
+   * `fuentes` se lee UNA vez, al arrancar el proceso, así que una lista capturada aquí
+   * dejaba muerto el flujo que el usuario hace primero: dar de alta un proveedor en
+   * Ajustes, ponerle la clave, elegir su modelo y hablar — y el turno reventaba con «no
+   * está dado de alta; añádelo en Ajustes», que es justo lo que acababa de hacer. Quien
+   * construye pasa `proveedoresPersonalizados` (`agent/configEnDisco.ts`), que relee el
+   * config global; sin nada, se cae a lo que trajera `fuentes`, que es lo que había.
+   *
+   * Del `config.json` GLOBAL y de ningún otro: la regla la impone `core/config.ts` al
+   * validar, y aquí no se vuelve a mirar el del proyecto ni por descuido.
    */
-  private readonly personalizados: readonly ProveedorDeclarado[];
+  private readonly personalizados: () => readonly ProveedorDeclarado[];
 
-  constructor(fuentes: FuentesDeEleccion = {}) {
+  constructor(
+    fuentes: FuentesDeEleccion = {},
+    personalizados?: () => readonly ProveedorDeclarado[],
+  ) {
     this.eleccion = resolver(fuentes);
-    this.personalizados = fuentes.global?.proveedores ?? [];
+    this.personalizados = personalizados ?? (() => fuentes.global?.proveedores ?? []);
   }
 
   paraPapel(papel: Papel): unknown {
-    return construirModelo(this.eleccion[papel], this.personalizados);
+    return construirModelo(this.eleccion[papel], this.personalizados());
   }
 
   /**
@@ -42,7 +52,7 @@ export class Modelos implements ModelosPort {
    * que fallar igual y con el mismo mensaje que uno mal escrito en la línea de comandos.
    */
   paraModelo(id: string): unknown {
-    return construirModelo(parsear(id), this.personalizados);
+    return construirModelo(parsear(id), this.personalizados());
   }
 
   descripcion(): Record<Papel, string> {

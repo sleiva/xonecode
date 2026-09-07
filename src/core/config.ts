@@ -174,8 +174,11 @@ export function validar(
 
     // El rechazo se comprueba PRIMERO, para que una clave denegada no salga también como
     // «campo desconocido»: el mismo campo con dos avisos es ruido en la dirección mala.
+    // También un personalizado: `{"custom:mi-llm": "sk-…"}` es exactamente el mismo intento
+    // de meter una credencial aquí, y el campo lo delata igual.
     const proveedorConCadena =
-      (PROVEEDORES as readonly string[]).includes(clave) && typeof valor === "string";
+      ((PROVEEDORES as readonly string[]).includes(clave) || esProveedorPersonalizado(clave))
+      && typeof valor === "string";
     if (CLAVES_DENEGADAS.includes(clave) || proveedorConCadena) {
       avisos.push({
         texto: `«${ruta}»: el campo «${clave}» parece una clave de API y NO se acepta en un config.json: las claves van en ~/.xonecode/auth.json.`,

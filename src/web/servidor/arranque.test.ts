@@ -704,6 +704,38 @@ describe("montarRutas — el cable, por fin conectado", () => {
         expect(registro()).toEqual([]);
       });
 
+      it("su catálogo se puede pedir: la puerta es la misma que la de los de serie", async () => {
+        // Era el botón muerto de este cambio: la puerta del catálogo miraba solo
+        // `PROVEEDORES` y devolvía en silencio para un `custom:…`, así que pulsar un
+        // proveedor recién dado de alta en la pastilla se quedaba en «consultando…» para
+        // siempre. Y quien lo pulsa acaba siendo el modelo.
+        const pedidos: string[] = [];
+        const servidor = servidorDeMentira();
+        montarRutas(servidor, vestibuloDePrueba(), {
+          proveedoresPersonalizados: () => [
+            { slug: "mi-llm", nombre: "Mi LLM", baseUrl: "https://uno.example.com/v1" },
+          ],
+          catalogoDeModelos: async (p) => {
+            pedidos.push(p);
+            return [{ id: "qwen3-coder" }];
+          },
+        });
+        const { cliente, accion } = await conectar(servidor);
+
+        await enviarMensaje(accion, { clase: "catalogo", proveedor: "custom:mi-llm" });
+        await asentar();
+
+        expect(pedidos).toEqual(["custom:mi-llm"]);
+        const fila = ultimoModelos(cliente).proveedores.find((p) => p.id === "custom:mi-llm")!;
+        expect(fila.modelos).toEqual([{ id: "qwen3-coder" }]);
+
+        // Y uno que NO está dado de alta se ignora: no se le pide catálogo a un endpoint
+        // que no existe.
+        await enviarMensaje(accion, { clase: "catalogo", proveedor: "custom:fantasma" });
+        await asentar();
+        expect(pedidos).toEqual(["custom:mi-llm"]);
+      });
+
       it("la baja se lleva también la credencial: una clave huérfana sigue siendo un secreto", async () => {
         const { servidor, borradas, registro } = conRegistro([
           { slug: "mi-llm", nombre: "Mi LLM", baseUrl: "https://uno.example.com/v1" },

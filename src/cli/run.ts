@@ -7,6 +7,7 @@ import { inspeccionar, type Entorno } from "../agent/entorno.js";
 import { tomarInstantanea, type Instantanea, type Cambio } from "../agent/instantanea.js";
 import { SkillsEnDisco } from "../agent/skills.js";
 import { Modelos } from "../agent/modelos.js";
+import { proveedoresPersonalizados } from "../agent/configEnDisco.js";
 import { abrirSesionReal } from "../agent/turnoReal.js";
 import { SimuladorVerifier } from "../agent/verificador.js";
 import type { FuentesDeEleccion } from "../core/modelos.js";
@@ -119,7 +120,7 @@ async function correrReal(opciones: OpcionesRun, escribir: Escribir): Promise<nu
   // 3. Lo que la sesión necesita. Los ficheros del proyecto NO se calculan aquí: los
   //    recorre la propia sesión al construir el agente.
   const skills = new SkillsEnDisco();
-  const modelos = new Modelos(opciones.fuentes ?? {});
+  const modelos = new Modelos(opciones.fuentes ?? {}, proveedoresPersonalizados);
 
   // 4. La cabecera va ANTES del turno: qué modelo, cuántas skills, cómo se tomó la foto.
   cabecera(escribir, modelos, skills, instantanea, entorno);

@@ -251,6 +251,16 @@ export function montarRutas(
     personalizados().map((d) => idDeProveedorPersonalizado(d.slug));
   const baseUrlDe = (proveedor: Proveedor): string | undefined =>
     compatibleConOpenAi(proveedor, personalizados())?.baseUrl;
+  /**
+   * ¿Existe ese proveedor? De serie, o personalizado DADO DE ALTA. Una sola función porque
+   * había dos puertas con el mismo criterio y una se quedó atrás: la del catálogo devolvía
+   * en silencio para un `custom:…`, así que pulsar un proveedor recién dado de alta en la
+   * pastilla se quedaba en «consultando…» para siempre — el botón muerto de siempre, y con
+   * el modelo pulsándolo.
+   */
+  const proveedorConocido = (id: string): boolean =>
+    (PROVEEDORES as readonly string[]).includes(id)
+    || personalizados().some((d) => idDeProveedorPersonalizado(d.slug) === id);
 
   /** Los tres estados que se pueden AFIRMAR de una credencial. Ver `ProveedorDeModelos`. */
   const credencialDe = (proveedor: Proveedor): "puesta" | "falta" | "nativa" =>
@@ -699,7 +709,7 @@ export function montarRutas(
   };
 
   const atenderCatalogo = async (proveedor: string): Promise<void> => {
-    if (!(PROVEEDORES as readonly string[]).includes(proveedor)) return;
+    if (!proveedorConocido(proveedor)) return;
     const id = proveedor as Proveedor;
     if (opciones.catalogoDeModelos === undefined) {
       catalogos.set(id, { error: "esta ejecución no puede consultar catálogos de modelos" });
@@ -1011,9 +1021,7 @@ export function montarRutas(
     // De serie o personalizado DADO DE ALTA: un slug que no consta se ignora en silencio,
     // como un id de dispositivo que ya no está — es una vista vieja del cliente, no un
     // error que contar.
-    const conocido = (PROVEEDORES as readonly string[]).includes(mensaje.proveedor)
-      || idsPersonalizados().includes(mensaje.proveedor as Proveedor);
-    if (!conocido) return;
+    if (!proveedorConocido(mensaje.proveedor)) return;
     const proveedor = mensaje.proveedor as Proveedor;
     if (mensaje.accion === "pedir") {
       void pedirCredencial(proveedor).catch(contar);

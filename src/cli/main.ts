@@ -433,7 +433,7 @@ export function crearEjecutorReal(alAbrirSesion: (sesion: SesionReal) => void): 
       }
       sesion = await abrirSesionReal({
         raiz: estado.raiz,
-        modelos: new Modelos(estado.fuentes),
+        modelos: new Modelos(estado.fuentes, proveedoresPersonalizados),
         skills: new SkillsEnDisco(),
         entorno,
         // El simulador de verdad. Su ausencia en la máquina no se descubre aquí sino al
@@ -464,7 +464,7 @@ export function crearEjecutorReal(alAbrirSesion: (sesion: SesionReal) => void): 
       // `/modelo` solo actualizó `estado.fuentes`; aquí es donde deja de ser un cambio
       // cosmético: el agente se reconstruye con el modelo nuevo y el hilo SE CONSERVA.
       if (JSON.stringify(estado.fuentes) !== JSON.stringify(fuentesVistas)) {
-        await sesion.cambiarModelos(new Modelos(estado.fuentes));
+        await sesion.cambiarModelos(new Modelos(estado.fuentes, proveedoresPersonalizados));
         consolaReal.escribir("  (agente reconstruido con el modelo nuevo — el hilo se conserva)\n");
         fuentesVistas = estado.fuentes;
       }
