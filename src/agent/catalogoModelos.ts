@@ -238,8 +238,10 @@ export class CatalogoModelos implements CatalogoModelosPort {
    *   Se descarta solo lo que con certeza no es de conversación —embeddings, rerankers,
    *   voz, imagen— y lo demás se ofrece: preferimos una lista con algo de más a una que
    *   esconde el modelo que el usuario venía a elegir.
-   * - **El contexto solo si el servidor lo dice.** Groq manda `context_window` en cada
-   *   fila; NVIDIA y xAI no mandan nada. Sin dato no hay campo, y por tanto la barra no
+   * - **El contexto solo si el servidor lo dice.** Por su documentación, Groq manda
+   *   `context_window` en cada fila y los otros dos no mandan nada — no está medido
+   *   contra los tres endpoints, y por eso se LEE si viene en vez de darse por hecho que
+   *   viene o que no. Sin dato no hay campo, y por tanto la barra no
    *   pinta porcentaje — que es lo correcto, no un hueco por rellenar
    *   (`core/contextos.ts` no tiene tabla para estas familias, y no se le inventa una).
    * - **Sin paginación.** Ninguno de los tres la declara en `/v1/models`; inventar un

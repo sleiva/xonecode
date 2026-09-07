@@ -1429,9 +1429,12 @@ el párrafo de las «tres ausencias» de la ventana de ajustes lo dice así. Cin
   un prefijo conocido dejaría la lista vacía. Se descarta solo lo que con certeza no es de
   conversación, y por eso «embedding» pasó a «embed» y se añadió «rerank» — NVIDIA nombra
   los suyos `nv-embedqa-e5-v5` y `nv-rerankqa-1b-v2`, que no contienen «embedding».
-- **El contexto solo si el servidor lo dice** (`context_window`, que manda Groq y los otros
-  dos no). `core/contextos.ts` no tiene tabla para estas familias y no se le inventa una:
-  sin tope no hay porcentaje, que es la respuesta honesta.
+- **El contexto solo si el servidor lo dice** (`context_window`; por su documentación lo
+  manda Groq y los otros dos no, pero eso NO está medido contra los endpoints reales — se
+  lee si viene). `core/contextos.ts` no tiene tabla para estas familias y no se le inventa
+  una: sin tope no hay porcentaje, que es la respuesta honesta. Nada de este párrafo se ha
+  comprobado contra los servidores: las URLs y las variables salen de su documentación, y
+  la primera llamada de verdad con una clave es lo que las confirma.
 - **Y la variable de entorno de cada proveedor vive en UN sitio**
   (`core/modelos.ts#VARIABLES_POR_PROVEEDOR`). Había CUATRO copias —`configEnDisco.ts`,
   `catalogoModelos.ts`, `cli/config.ts` y `cli/consola.ts`, duplicadas para que `cli/` no
