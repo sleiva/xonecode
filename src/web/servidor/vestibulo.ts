@@ -286,6 +286,18 @@ export interface ConsolaDeProyecto {
   /** El id de la sesión, o `undefined` mientras no se haya volcado ningún acto. */
   readonly sesion: string | undefined;
   /**
+   * El id con el que se abrió el HILO, que existe desde el primer instante.
+   *
+   * No es lo mismo que `sesion` y la diferencia importa: `sesion` contesta «¿hay una fila
+   * que la barra pueda marcar?», y para eso hace falta la entrada del índice, que nace al
+   * VOLCAR el primer acto — o sea al final del turno. Este contesta «¿con qué id se montó
+   * el disco de esta conversación?», y de él cuelgan el hilo del checkpointer y la carpeta
+   * de artefactos. Los ARTEFACTOS obligaron a distinguirlos: el acto que anuncia uno se
+   * emite a mitad de turno, así que su enlace se pulsa mucho antes de que `sesion` exista,
+   * y con el otro id el visor habría contestado «no existe» durante todo el turno.
+   */
+  readonly idDeHilo: string;
+  /**
    * Reabierta, SIN memoria del hilo y todavía sin turno nuevo. Las tres condiciones: desde
    * que hay checkpointer persistente, reabrir una sesión con checkpoint continúa la
    * conversación de verdad y no se marca nada. Deja de serlo en el PRIMER turno nuevo, no al
@@ -799,6 +811,8 @@ export function crearVestibulo(opciones: OpcionesDelVestibulo): Vestibulo {
       get estadoDeSesion() {
         return estadoDeSesion;
       },
+      // Ver `ConsolaDeProyecto.idDeHilo`: este es el id crudo, sin esperar al índice.
+      idDeHilo: idSesion,
       get sesion() {
         // Solo cuando está en el ÍNDICE. El id existe desde que se abre —es el hilo—, pero
         // hacia fuera «hay sesión» significa «hay una entrada que la barra puede marcar»:

@@ -153,6 +153,16 @@ export type MensajeAlCliente =
    */
   | { clase: "arbol"; rutas: string[]; recortado: boolean; error?: string }
   | ({ clase: "fichero" } & FicheroDelProyecto)
+  /**
+   * El contenido de un ARTEFACTO de la sesión, con la MISMA forma que un fichero del
+   * proyecto — a propósito: así los visores del cliente son los de la pestaña Ficheros y no
+   * una segunda familia de componentes para lo mismo. La `ruta` que trae es la VIRTUAL
+   * (`/artefactos/<nombre>`), que es la que el cliente ya conoce por el acto.
+   *
+   * El HTML no viaja por aquí para VERSE —eso lo pinta un iframe contra `GET /artefacto`,
+   * que es la única forma de darle un documento—, sino para leer su fuente cuando se pide.
+   */
+  | ({ clase: "artefacto" } & FicheroDelProyecto)
   | { clase: "secreto"; pregunta: string }
   /**
    * El registro de comandos de barra, para que el compositor sugiera sin llevar una
@@ -548,6 +558,12 @@ export type MensajeDelCliente =
   /** Pide el árbol del proyecto abierto, o el contenido de una ruta relativa a su raíz. */
   | { clase: "arbol" }
   | { clase: "fichero"; ruta: string }
+  /**
+   * El contenido de un artefacto de la sesión abierta. Se pide por NOMBRE y no por ruta: la
+   * carpeta la compone el servidor con el id del hilo, y aceptar una ruta del cliente sería
+   * abrir a negociación justo la parte que es una barrera.
+   */
+  | { clase: "artefacto"; nombre: string }
   | { clase: "decision"; decisiones: Record<string, string> };
 
 /**
