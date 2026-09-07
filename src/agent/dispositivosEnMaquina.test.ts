@@ -232,6 +232,69 @@ describe("detectarDispositivos", () => {
   });
 });
 
+  it("en macOS encuentra el SDK que instala Homebrew, sin ANDROID_HOME", async () => {
+    // Medido: `brew install --cask android-commandlinetools` deja el SDK en
+    // `<prefijo>/share/android-commandlinetools`, que NO es la carpeta por omisión de
+    // Android Studio. Sin esto, seguir los pasos de instalación al pie de la letra dejaba
+    // el panel diciendo «emulator no está instalado» hasta tocarse el `.zshrc` — la consola
+    // pidiendo un cambio en la shell del usuario para ver lo que ya estaba en el disco.
+    const raiz = "/opt/homebrew/share/android-commandlinetools";
+    const { ejecutar } = ejecutorDe({
+      [`${raiz}/platform-tools/adb`]: salida("List of devices attached\n"),
+      [`${raiz}/emulator/emulator`]: salida("pixel8\n"),
+      "xcode-select": new Error("no"),
+    });
+    const informe = await detectarDispositivos({
+      plataforma: "darwin",
+      entorno: { PATH: "/usr/bin" },
+      home: "/Users/yo",
+      existe: (ruta) => ruta.startsWith(raiz),
+      ejecutar,
+      ahora: () => new Date("2026-09-07T10:00:00Z"),
+    });
+    const porNombre = Object.fromEntries(informe.herramientas.map((h) => [h.nombre, h]));
+    expect(porNombre["adb"]!.estado).toBe("ok");
+    expect(porNombre["emulator"]!.estado).toBe("ok");
+    expect(informe.avds).toEqual(["pixel8"]);
+  });
+
+  it("y también el prefijo de Intel, que es otro", async () => {
+    const raiz = "/usr/local/share/android-commandlinetools";
+    const { ejecutar } = ejecutorDe({
+      [`${raiz}/platform-tools/adb`]: salida("List of devices attached\n"),
+      [`${raiz}/emulator/emulator`]: salida(""),
+      "xcode-select": new Error("no"),
+    });
+    const informe = await detectarDispositivos({
+      plataforma: "darwin",
+      entorno: { PATH: "/usr/bin" },
+      home: "/Users/yo",
+      existe: (ruta) => ruta.startsWith(raiz),
+      ejecutar,
+      ahora: () => new Date("2026-09-07T10:00:00Z"),
+    });
+    expect(informe.herramientas.find((h) => h.nombre === "adb")!.estado).toBe("ok");
+  });
+
+  it("la receta del emulador viaja con el informe, y en Windows no se inventa ninguna", async () => {
+    const { ejecutar } = ejecutorDe({ "xcode-select": new Error("no") });
+    const deps = (plataforma: string): DependenciasDeDeteccion => ({
+      plataforma,
+      entorno: { PATH: "/usr/bin", Path: "C:\\W" },
+      home: "/Users/yo",
+      existe: () => false,
+      ejecutar,
+      ahora: () => new Date("2026-09-07T10:00:00Z"),
+    });
+    const mac = await detectarDispositivos(deps("darwin"));
+    expect(mac.recetas.map((r) => r.id)).toEqual(["android-emulador"]);
+    expect(mac.recetas[0]!.completa).toBe(false);
+    expect(JSON.stringify(mac.recetas)).not.toContain("/Users/yo");
+
+    const win = await detectarDispositivos(deps("win32"));
+    expect(win.recetas).toEqual([]);
+  });
+
 describe("describirFallo", () => {
   it("prefiere la primera línea de stderr, recortada, y nunca la salida entera", () => {
     const largo = "x".repeat(300);

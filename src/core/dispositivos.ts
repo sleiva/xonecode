@@ -64,12 +64,139 @@ export interface Dispositivo {
   detalle?: string;
 }
 
+/**
+ * Un paso de una RECETA: lo que hay que hacer una vez para que una capacidad exista.
+ *
+ * Los comandos se pintan para COPIAR, no se ejecutan: `brew` puede pedir la contraseña de
+ * administrador y un hijo sin terminal detrás se quedaría esperándola para siempre. La
+ * regla de esta casa era «se ofrece ejecutar lo que se puede cumplir», aplicada por
+ * herramienta; aquí se aplica más fina, por COMANDO — y los dos de `brew` caen del lado
+ * que se copia. (Lo que sí se puede ejecutar sin pedir entrada, `sdkmanager` y
+ * `avdmanager`, es la fase siguiente: necesita un canal de progreso, porque son 2-3 GB.)
+ *
+ * **Ningún comando puede llevar una ruta de la máquina.** Se pinta en la ventana y viaja por
+ * el cable, que puede ir por un túnel: es la misma regla por la que `Herramienta.ruta` se
+ * queda en el host. Por eso el prefijo de Homebrew se deriva con `$(brew --prefix)` en vez
+ * de escribirse — y de paso vale igual en Intel que en Apple Silicon, que lo tienen distinto.
+ */
+export interface PasoDeReceta {
+  /** Qué consigue este paso, en una frase. */
+  titulo: string;
+  /** Las líneas a pegar en un terminal, en orden. */
+  comandos: string[];
+  /** Lo que hay que saber ANTES de pegarlo: que pregunta algo, que pesa, qué se acepta. */
+  nota?: string;
+  /**
+   * ¿Ya está hecho? Sale de la MEDIDA, nunca de recordar que alguien pulsó: una marca
+   * guardada seguiría diciendo «hecho» después de que el usuario desinstalara el SDK, que
+   * es exactamente cuando hay que decirle que falta.
+   */
+  hecho: boolean;
+}
+
+/** Cómo conseguir una capacidad que esta máquina no tiene. Hoy hay una. */
+export interface Receta {
+  id: "android-emulador";
+  titulo: string;
+  descripcion: string;
+  pasos: PasoDeReceta[];
+  /** Todo hecho: la receta se pliega y se dice que ya está. */
+  completa: boolean;
+  /** Lo que viene DESPUÉS de instalar y que esta consola no hace por ti. */
+  despues: string;
+}
+
+/** Lo medido que decide qué pasos están hechos. Entra ya resuelto: esto es `core/`. */
+export interface EstadoDeAndroid {
+  /** ¿Hay `brew`? Sin él la receta se puede leer igual, pero el primer paso no valdrá. */
+  brew: boolean;
+  sdkmanager: boolean;
+  emulator: boolean;
+  /** `ANDROID_HOME` puesta en el entorno del proceso, que es lo único que se puede saber
+   *  de la shell del usuario: la que lanzó xonecode. */
+  androidHome: boolean;
+  avds: readonly string[];
+}
+
+/**
+ * La receta del emulador de Android en macOS.
+ *
+ * **Solo macOS, y a propósito.** En Windows y en Linux los gestores y las rutas son otros,
+ * así que serán otra receta; devolver esta con otro título sería el botón muerto de siempre,
+ * y el panel prefiere decir que aún no la hay.
+ *
+ * Sale de los pasos que el usuario verificó a mano en su máquina, no de la documentación.
+ */
+export function recetaDeEmuladorAndroid(plataforma: string, estado: EstadoDeAndroid): Receta | undefined {
+  if (plataforma !== "darwin") return undefined;
+
+  const pasos: PasoDeReceta[] = [
+    {
+      titulo: "Instalar las herramientas: el JDK y el SDK de línea de comandos",
+      comandos: [
+        "brew install openjdk@17",
+        "brew install --cask android-commandlinetools android-platform-tools",
+      ],
+      nota: "Puede pedirte la contraseña de administrador, así que se pega en un terminal y no se lanza desde aquí.",
+      // `sdkmanager` es lo que instala el cask: si está, el paso está hecho.
+      hecho: estado.sdkmanager,
+    },
+    {
+      titulo: "Declarar las variables en tu shell",
+      comandos: [
+        'export ANDROID_HOME="$(brew --prefix)/share/android-commandlinetools"',
+        'export PATH="$PATH:$ANDROID_HOME/emulator:$ANDROID_HOME/platform-tools"',
+        'export JAVA_HOME="$(brew --prefix openjdk@17)"',
+      ],
+      nota:
+        "Va en `~/.zshrc`, y luego abre un terminal nuevo o haz `source ~/.zshrc`. " +
+        "xonecode NO lo necesita —ya mira la carpeta de Homebrew para encontrar el SDK—: " +
+        "esto es para que los comandos de abajo funcionen en tu terminal.",
+      hecho: estado.androidHome,
+    },
+    {
+      titulo: "Descargar el emulador y la imagen del sistema",
+      comandos: [
+        'sdkmanager --install "emulator" "platforms;android-35" "system-images;android-35;google_apis;arm64-v8a"',
+      ],
+      nota: "Son 2-3 GB y te pedirá aceptar las licencias del SDK de Android: responde `y`.",
+      hecho: estado.emulator,
+    },
+    {
+      titulo: "Crear el dispositivo virtual",
+      comandos: ['avdmanager create avd -n pixel8 -k "system-images;android-35;google_apis;arm64-v8a" -d pixel_8'],
+      nota: "Si pregunta por un perfil de hardware personalizado, responde `no`.",
+      hecho: estado.avds.length > 0,
+    },
+  ];
+
+  return {
+    id: "android-emulador",
+    titulo: "Instalar el emulador de Android",
+    descripcion:
+      "Cuatro pasos, una vez por máquina. Los comandos se pegan en un terminal; cada paso se " +
+      "marca solo cuando la medida lo encuentra, no cuando lo pulsas.",
+    pasos,
+    completa: pasos.every((p) => p.hecho),
+    // Arrancar un emulador es un proceso de vida larga y otra capacidad; hoy no está
+    // cableado, así que se da el comando en vez de prometer un botón.
+    despues:
+      "Para arrancarlo: `emulator -avd pixel8`. Con él abierto, `adb devices` lista " +
+      "`emulator-5554` y aparecerá aquí. Arrancarlo desde esta ventana todavía no está cableado.",
+  };
+}
+
 export interface InformeDeDispositivos {
   sistema: SistemaOperativo;
   herramientas: Herramienta[];
   dispositivos: Dispositivo[];
   /** Los AVD de Android definidos (imágenes de emulador), estén arrancados o no. */
   avds: string[];
+  /**
+   * Cómo conseguir lo que a esta máquina le falta. Vacío cuando no hay ninguna receta para
+   * este sistema —Windows y Linux son otras— o cuando no hace falta ninguna.
+   */
+  recetas: Receta[];
   /** Cuándo se midió (ISO). Lo que se enseña es una foto, no un estado en vivo. */
   medido: string;
 }

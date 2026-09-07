@@ -16,6 +16,8 @@
  * exactamente lo que la TUI ya evita en `cli/tui/store.ts` con la misma sustitución.
  */
 import type {
+  Receta,
+  PasoDeReceta,
   Acto,
   MensajeAlCliente,
   PasoDelWizard,
@@ -472,6 +474,35 @@ export function crearStoreDelCliente(): {
               sistema: informe.sistema,
               medido: informe.medido,
               avds: informe.avds.filter((x): x is string => typeof x === "string"),
+              // Las recetas, campo a campo como todo lo de aquí. AUSENTE no puede tumbar la
+              // foto: Windows y Linux no tienen ninguna todavía, y un servidor anterior
+              // tampoco manda el campo — se resuelve en lista vacía, que es la verdad.
+              recetas: (Array.isArray(informe.recetas) ? informe.recetas : [])
+                .filter(
+                  (r): r is Receta =>
+                    typeof r === "object" && r !== null && typeof r.id === "string" && Array.isArray(r.pasos)
+                )
+                .map((r) => ({
+                  id: r.id,
+                  titulo: String(r.titulo ?? ""),
+                  descripcion: String(r.descripcion ?? ""),
+                  completa: r.completa === true,
+                  despues: String(r.despues ?? ""),
+                  pasos: r.pasos
+                    .filter(
+                      (p): p is PasoDeReceta =>
+                        typeof p === "object" && p !== null && typeof p.titulo === "string" && Array.isArray(p.comandos)
+                    )
+                    .map((p) => ({
+                      titulo: p.titulo,
+                      comandos: p.comandos.filter((c): c is string => typeof c === "string"),
+                      // `hecho` solo con el booleano de verdad: la trampa del `"false"` de
+                      // cadena, que es verdadero en JavaScript y marcaría como hecho un paso
+                      // que no lo está.
+                      hecho: p.hecho === true,
+                      ...(typeof p.nota === "string" ? { nota: p.nota } : {}),
+                    })),
+                })),
               herramientas: informe.herramientas
                 .filter((h): h is Herramienta => typeof h === "object" && h !== null && typeof h.nombre === "string" && typeof h.estado === "string")
                 .map((h) => ({

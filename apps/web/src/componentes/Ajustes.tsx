@@ -25,6 +25,7 @@ import type {
 import { seMira } from "../tipos.js";
 import { ETIQUETA_DE_ESTADO, inventario } from "../inventarioDeDispositivos.js";
 import { Agentes } from "./Agentes.js";
+import { Receta } from "./Receta.js";
 import { Pregunta } from "./Pregunta.js";
 import { urlDeEntornoAceptable, AVISO_DE_URL } from "./Wizard.js";
 import { PROYECTOS_POR_OMISION } from "./Barra.js";
@@ -628,6 +629,16 @@ export function Ajustes({
                   })}
                 </ul>
               )}
+
+              {/*
+                La RECETA de lo que falta, debajo de los requisitos y no mezclada con ellos:
+                un requisito es un punto que está o no está, y esto es un procedimiento con
+                orden. Solo aparece si el servidor manda alguna — en Windows y en Linux no
+                hay todavía, y ahí el panel calla en vez de enseñar los pasos de macOS.
+              */}
+              {(dispositivos?.recetas ?? []).map((receta) => (
+                <Receta key={receta.id} receta={receta} />
+              ))}
 
               <h3 className={estilos.subencabezado}>Dispositivos</h3>
               {/*

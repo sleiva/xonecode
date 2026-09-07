@@ -1267,6 +1267,36 @@ lanza ni un proceso. Reglas:
     cada medida y al revés daría la foto de la configuración anterior. La ventana **dice que
     hoy solo se DESCUBREN**: conectar por red, arrancar un emulador o instalar la app no está
     cableado, y un botón que lo prometiera sería el botón muerto de siempre.
+- **Y lo que FALTA se explica con una RECETA** (`core/dispositivos.ts#recetaDeEmuladorAndroid`,
+  `componentes/Receta.tsx`), que es otra cosa que un requisito: un requisito está o no está,
+  y esto es un procedimiento con orden — cuatro pasos, una vez por máquina, para tener el
+  emulador de Android. Cinco reglas:
+  - **Los comandos se COPIAN, no se pulsan**, y el criterio se afinó: la regla era «se ofrece
+    ejecutar lo que se puede cumplir» aplicada por herramienta, y ahora se aplica por
+    COMANDO. `brew` puede pedir la contraseña de administrador y un hijo sin terminal detrás
+    se quedaría esperándola para siempre; `sdkmanager` y `avdmanager` no piden contraseña
+    —solo licencias y un perfil, que se contestan— y son los candidatos a ejecutarse, pero
+    eso necesita un canal de PROGRESO que no existe: son 2-3 GB, y un botón mudo durante diez
+    minutos se lee como que se ha colgado. Ese canal es el mismo que hará falta para arrancar
+    un emulador, así que va después.
+  - **Ningún comando lleva una ruta de la máquina**, la misma regla por la que `ruta` se
+    queda en el host: el prefijo de Homebrew se deriva con `$(brew --prefix)` en vez de
+    escribirse, y de paso vale igual en Intel que en Apple Silicon. Hay test.
+  - **Cada paso se marca por lo MEDIDO, no por recordar que se pulsó**: `sdkmanager` para el
+    primero, `ANDROID_HOME` para el segundo, `emulator` para el tercero y que haya algún AVD
+    para el cuarto. Una marca guardada seguiría diciendo «hecho» después de desinstalar el
+    SDK, que es justo cuando hay que decir que falta.
+  - **Solo macOS.** En Windows y en Linux los gestores y las rutas son otros, así que serán
+    otra receta; devolver esta con otro título sería el botón muerto de siempre, y el panel
+    prefiere no enseñar nada. `recetas` viaja vacío.
+  - **Y de aquí salió un fallo real de detección**: `brew install --cask
+    android-commandlinetools` deja el SDK en `<prefijo>/share/android-commandlinetools`, que
+    NO es la carpeta de Android Studio, así que seguir los pasos al pie de la letra dejaba el
+    panel diciendo «emulator no está instalado» hasta tocarse el `.zshrc` — la consola
+    exigiendo un cambio en la shell del usuario para ver algo que ya estaba en el disco. Las
+    dos rutas de Homebrew entran ahora en `RAICES_DE_SDK_POR_OMISION`, y por eso el paso de
+    las variables DICE que xonecode no lo necesita y para qué sí: para el terminal de quien
+    lo lee.
 - **REQUISITOS e INVENTARIO son dos bloques, no una lista.** Un requisito está o no está —y
   si no está, se instala—; un dispositivo es algo que HAY. Juntos, «Android Sim · emulator no
   está instalada» se leía como un ajuste que el botón de al lado podía arreglar. El punto va

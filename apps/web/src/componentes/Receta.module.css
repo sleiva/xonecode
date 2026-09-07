@@ -1,0 +1,126 @@
+/* Alias comprobados contra `estilos/design-platform.css`: bg-layer-1/2, border-l2,
+   label-primary/secondary/tertiary. */
+.receta {
+  margin: 12px 0 4px;
+  padding: 12px 14px;
+  border: 0.5px solid var(--dsw-alias-border-l2);
+  border-radius: 10px;
+  background: var(--dsw-alias-bg-layer-1);
+}
+
+.titulo {
+  margin: 0;
+  color: var(--dsw-alias-label-primary);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.descripcion,
+.hecha,
+.despues {
+  margin: 6px 0 0;
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.despues {
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 0.5px solid var(--dsw-alias-border-l2);
+}
+
+.pasos {
+  margin: 10px 0 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.paso {
+  display: flex;
+  gap: 10px;
+}
+
+/* El número es la POSICIÓN, y el orden importa aquí: el paso 3 no funciona sin el 2. Va en
+   mono y apagado, como el resto de lo que es dato de máquina. */
+.numero {
+  flex: 0 0 auto;
+  width: 18px;
+  color: var(--dsw-alias-label-tertiary);
+  font-family: var(--ds-font-family-code);
+  font-size: 12px;
+  line-height: 1.6;
+  text-align: right;
+}
+
+.cuerpo {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.pasoTitulo {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  color: var(--dsw-alias-label-primary);
+  font-size: 12px;
+}
+
+/* La marca de hecho: HUECA cuando falta, no roja. Que te falte el SDK de Android no es un
+   error —es que no lo has instalado—, y un punto rojo se lee como que algo va mal. Es el
+   mismo criterio que los puntos de los requisitos. */
+.marca {
+  flex: 0 0 auto;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  border: 1px solid var(--dsw-alias-label-tertiary);
+}
+
+.marca[data-hecho] {
+  border-color: var(--xonecode-cian);
+  background: var(--xonecode-cian);
+}
+
+.paso[data-hecho] .pasoTitulo {
+  color: var(--dsw-alias-label-tertiary);
+}
+
+.nota {
+  margin: 4px 0 0;
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+/* El bloque de comandos, con su botón de copiar en la esquina. Scroll horizontal PROPIO:
+   una línea de `sdkmanager` con tres paquetes no cabe en la columna de una ventana modal, y
+   partirla haría que al pegarla se rompiera. */
+.bloque {
+  position: relative;
+  margin-top: 6px;
+}
+
+.comandos {
+  margin: 0;
+  padding: 8px 34px 8px 10px;
+  overflow-x: auto;
+  border: 0.5px solid var(--dsw-alias-border-l2);
+  border-radius: 8px;
+  background: var(--dsw-alias-bg-layer-2);
+  color: var(--dsw-alias-label-secondary);
+  font-family: var(--ds-font-family-code);
+  font-size: 11px;
+  line-height: 1.6;
+  white-space: pre;
+}
+
+.bloque > :last-child {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+}
