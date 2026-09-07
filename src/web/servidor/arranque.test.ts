@@ -869,9 +869,11 @@ describe("montarRutas — el cable, por fin conectado", () => {
 
     it("si el puerto del árbol lanza, se contesta con error y lista vacía, no con silencio", async () => {
       const { base, servidor, vestibulo, raizDeVerdad } = await abrirProyecto();
+      const dichos: string[] = [];
       montarRutas(servidor, vestibulo, {
+        informar: (t) => dichos.push(t),
         arbolDelProyecto: async () => {
-          throw new Error(`EACCES: permission denied, scandir '${raizDeVerdad}'`);
+          throw Object.assign(new Error(`EACCES: permission denied, scandir '${raizDeVerdad}'`), { code: "EACCES" });
         },
       });
       const cliente = clienteDeMentira();
@@ -884,7 +886,11 @@ describe("montarRutas — el cable, por fin conectado", () => {
       await asentar();
       const m = cliente.recibidos.filter((x) => x.clase === "arbol").at(-1) as Extract<MensajeAlCliente, { clase: "arbol" }>;
       expect(m).toEqual({ clase: "arbol", rutas: [], recortado: false, error: "no se pudo listar el proyecto" });
-      expect(JSON.stringify(m)).not.toContain(raizDeVerdad);
+      // La ruta absoluta no sale por NINGÚN mensaje del cable ni por `informar`: en
+      // producción `informar` escribe un acto de sistema, o sea también viaja.
+      expect(JSON.stringify(cliente.recibidos)).not.toContain(raizDeVerdad);
+      expect(dichos.join("\n")).not.toContain(raizDeVerdad);
+      expect(dichos.join("\n")).toContain("EACCES");
       await vestibulo.cerrar();
       rmSync(base, { recursive: true, force: true });
     });
@@ -893,9 +899,11 @@ describe("montarRutas — el cable, por fin conectado", () => {
       // El lector devuelve los rechazos como `error`, pero un EACCES al abrir el fichero
       // sale como excepción: sin atraparla, el visor se queda en «Trayendo…» para siempre.
       const { base, servidor, vestibulo, raizDeVerdad } = await abrirProyecto();
+      const dichos: string[] = [];
       montarRutas(servidor, vestibulo, {
+        informar: (t) => dichos.push(t),
         leerFichero: async () => {
-          throw new Error(`EACCES: permission denied, open '${raizDeVerdad}/x.xne'`);
+          throw Object.assign(new Error(`EACCES: permission denied, open '${raizDeVerdad}/x.xne'`), { code: "EACCES" });
         },
       });
       const cliente = clienteDeMentira();
@@ -915,7 +923,9 @@ describe("montarRutas — el cable, por fin conectado", () => {
         bytes: 0,
         error: "no se pudo leer el fichero",
       });
-      expect(JSON.stringify(m)).not.toContain(raizDeVerdad);
+      expect(JSON.stringify(cliente.recibidos)).not.toContain(raizDeVerdad);
+      expect(dichos.join("\n")).not.toContain(raizDeVerdad);
+      expect(dichos.join("\n")).toContain("EACCES");
       await vestibulo.cerrar();
       rmSync(base, { recursive: true, force: true });
     });

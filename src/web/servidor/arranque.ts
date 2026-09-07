@@ -923,6 +923,16 @@ export function montarRutas(
   };
 
   /**
+   * Solo el CÓDIGO de un fallo de sistema de ficheros (`EACCES`, `EMFILE`…), nunca su
+   * mensaje: el de Node lleva la ruta absoluta del disco, y aquí `informar` acaba en el
+   * transcript. Sin código, el nombre del error; sin error, la palabra.
+   */
+  const codigoDe = (error: unknown): string => {
+    if (typeof error === "object" && error !== null && "code" in error && typeof error.code === "string") return error.code;
+    return error instanceof Error ? error.name : "error";
+  };
+
+  /**
    * El árbol del proyecto abierto. Sin proyecto no hay pestaña que lo pida, así que no se
    * contesta nada; sin PUERTO sí se contesta, con error: un árbol que nunca llega deja al
    * cliente en «consultando…» para siempre, y un cargando eterno es un fallo mudo.
@@ -939,8 +949,9 @@ export function montarRutas(
       emitir({ clase: "arbol", rutas, recortado });
     } catch (error) {
       // El mensaje de Node lleva la ruta absoluta del disco, y por el cable no viaja
-      // ninguna ruta de la máquina; la causa completa va al terminal.
-      informar(error instanceof Error ? error.message : String(error));
+      // ninguna ruta de la máquina. Eso vale TAMBIÉN para `informar`: en producción escribe
+      // un acto de sistema en el transcript, así que a él solo le llega el código (EACCES…).
+      informar(`no se pudo listar el proyecto (${codigoDe(error)})`);
       emitir({ clase: "arbol", rutas: [], recortado: false, error: "no se pudo listar el proyecto" });
     }
   };
@@ -964,9 +975,9 @@ export function montarRutas(
     try {
       emitir({ clase: "fichero", ...(await opciones.leerFichero(abierto.raiz, ruta)) });
     } catch (error) {
-      // El mensaje de Node lleva la ruta absoluta del disco, y por el cable no viaja
-      // ninguna ruta de la máquina; la causa completa va al terminal.
-      informar(error instanceof Error ? error.message : String(error));
+      // Como en el árbol: ni por el cable ni por `informar` viaja el mensaje de Node, que
+      // lleva la ruta absoluta; la `ruta` relativa es la que mandó el cliente.
+      informar(`no se pudo leer «${ruta}» (${codigoDe(error)})`);
       emitir({
         clase: "fichero",
         ruta,

@@ -875,7 +875,11 @@ tope de profundidad como parámetro) y filtra con las MISMAS reglas que ve el ag
 aplanados no salen ni se leen aunque alguien los teclee en el cable. El lector rechaza en
 orden ruta absoluta o con `..`, lo que la barrera niega, aplanadas, y cualquier `realpath` que
 salga de la raíz (el enlace simbólico que apunta fuera), y nunca devuelve la ruta real de la
-máquina. **Y la barrera se aplica DOS veces: sobre el texto que teclea el cliente —de balde,
+máquina. Tampoco por `informar` cuando el lector o el listado LANZAN (un `EACCES` tras el
+`realpath`): en producción `informar` escribe un acto de sistema en el transcript, o sea que
+también viaja por el cable, y el mensaje de Node lleva la ruta absoluta — a él solo le llega
+el `code` (`codigoDe`, `arranque.ts`); el test asegura que la ruta no está en NINGÚN mensaje
+recibido ni en lo informado. **Y la barrera se aplica DOS veces: sobre el texto que teclea el cliente —de balde,
 antes de tocar el disco— y otra vez sobre el camino REAL, el que devuelve `realpath`.** Con
 una sola no era verdad, y estaba medido: en un sistema de ficheros que no distingue mayúsculas
 —APFS, NTFS— `.ENV` no es `/.env` para `puedeLeerRuta` pero abre `.env`, y un enlace simbólico
