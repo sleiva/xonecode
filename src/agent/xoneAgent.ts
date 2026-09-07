@@ -5,7 +5,7 @@ import { RunnableLambda } from "@langchain/core/runnables";
 import { AIMessage, type BaseMessage } from "@langchain/core/messages";
 import { MemorySaver } from "@langchain/langgraph";
 import type { BaseCheckpointSaver } from "@langchain/langgraph-checkpoint";
-import { backendConArtefactos, backendConSkills, backendDelProyecto, exponerMemoriaDeProyecto, sinVistasAplanadas } from "./proyecto.js";
+import { backendDeAgente } from "./proyecto.js";
 import type { Artefacto } from "../core/artefactos.js";
 import { permisosDe, hitlDe } from "./perfiles.js";
 import { crearBusquedaRegex } from "./busquedaRegex.js";
@@ -161,21 +161,14 @@ export const OPCIONES_BUSQUEDA_FICHEROS = {
  * 4. **El HITL va en las tools de fichero**, que en la v1 son las que escriben.
  */
 export async function construirAgente(opciones: OpcionesDelAgente): Promise<unknown> {
-  const delProyecto = sinVistasAplanadas(
-    exponerMemoriaDeProyecto(backendDelProyecto(opciones.raiz)),
-    opciones.ficheros
-  );
-  // El orden importa poco entre estos dos —son dos rutas distintas del mismo compuesto—,
-  // pero los artefactos van DESPUÉS para que el compuesto de skills quede por dentro: así
-  // `/skills/` sigue resolviéndose igual que siempre.
-  const backend =
-    opciones.artefactos === undefined
-      ? backendConSkills(delProyecto)
-      : backendConArtefactos(
-          backendConSkills(delProyecto),
-          opciones.artefactos.carpeta,
-          opciones.artefactos.alEscribir
-        );
+  // Las cuatro capas y su orden están en `backendDeAgente`, que vive en `proyecto.ts` para
+  // poder PROBARSE: aquí no había forma, porque `construirAgente` se simula en todos los
+  // tests que lo tocan y el cableado se quedaba sin nadie mirándolo.
+  const backend = backendDeAgente({
+    raiz: opciones.raiz,
+    ficheros: opciones.ficheros,
+    ...(opciones.artefactos === undefined ? {} : { artefactos: opciones.artefactos }),
+  });
 
   // Si no hay tracker, no se añade el middleware: es opcional a propósito arriba.
   const middlewareTracker = (origen: string) =>

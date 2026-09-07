@@ -75,6 +75,47 @@ export function esRutaDeArtefacto(ruta: string | undefined): boolean {
   return segmentos.every((s) => SEGMENTO.test(s) && s !== "." && s !== "..");
 }
 
+/**
+ * ¿Es esta ruta un artefacto escrito en el SITIO EQUIVOCADO? Y si lo es, dónde iba.
+ *
+ * **Esto existe porque el prompt se agotó.** La carpeta buena la nombran los cuatro sitios
+ * que el modelo puede leer —las instrucciones del `mockup`, la skill `artifacts-builder`,
+ * `archify` y la descripción de `write_file`—, y aun así, medido el 2026-09-07 en dos
+ * delegaciones CONSECUTIVAS del mismo proyecto: la primera escribió
+ * `/artifacts/login_flow.html` y la segunda, un minuto después, `/artefactos/diagrama.html`.
+ * No falta ninguna instrucción: es deriva del modelo. Y el fallo no es cosmético — ahí el
+ * diagrama pasa por la aprobación humana, entra en git y **sube a CloudStudio, dentro de la
+ * app del cliente**.
+ *
+ * Es la misma clase de regla que las vistas aplanadas: se aplica en el BACKEND
+ * (`agent/proyecto.ts#sinArtefactosEnElProyecto`) y no en un prompt, porque un permiso solo
+ * protege a quien lo choca. Aquí vive solo la regla, que es datos puros.
+ *
+ * **Se mira el PRIMER segmento y nada más**, y eso acota el falso positivo a propósito: un
+ * `/src/artifacts.js` o un `/scripts/artifacts/util.js` del proyecto pasan sin enterarse.
+ * Lo que se deniega es la carpeta de la raíz que XOne no tiene y que ninguna convención de
+ * la plataforma usa. El precio, dicho: un proyecto que de verdad tuviera un `artifacts/` en
+ * su raíz no podría escribir ahí con el agente. Se acepta, porque el otro lado del error es
+ * un diagrama subido a la app del cliente sin que nadie se entere.
+ *
+ * Sin distinguir mayúsculas, que es la lección de APFS: `/Artifacts/` abre el mismo sitio.
+ */
+const CARPETAS_EQUIVOCADAS = new Set(["artifacts", "artifact"]);
+/** El fichero suelto que nombra el contrato de `publish_artifact` (`path="/artifact.html"`). */
+const FICHERO_EQUIVOCADO = "artifact.html";
+
+export function artefactoFueraDeSitio(ruta: string): string | undefined {
+  const segmentos = ruta.split(/[\\/]+/).filter((s) => s.length > 0);
+  if (segmentos.length === 0) return undefined;
+  const primero = segmentos[0]!.toLowerCase();
+  const esCarpeta = CARPETAS_EQUIVOCADAS.has(primero) && segmentos.length > 1;
+  const esFichero = primero === FICHERO_EQUIVOCADO && segmentos.length === 1;
+  if (!esCarpeta && !esFichero) return undefined;
+  // La carpeta de la sesión es PLANA hacia fuera: de `/artifacts/sub/x.html` se propone
+  // `x.html`, no `sub/x.html`. Un artefacto es una salida, no un árbol.
+  return `${RUTA_ARTEFACTOS}${segmentos[segmentos.length - 1]!}`;
+}
+
 /** El nombre que se le enseña a una persona: el último segmento y nada más. */
 export function nombreDeArtefacto(ruta: string): string {
   return ruta.slice(ruta.lastIndexOf("/") + 1);
