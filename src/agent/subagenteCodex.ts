@@ -162,6 +162,10 @@ export async function correrCodex(peticion: PeticionExterna): Promise<string> {
             // La caja del sistema operativo. `permitirEscritura` está aquí para el día que
             // la aprobación se conecte; hoy nadie lo pone a `true` (`core/ports.ts`).
             sandbox: peticion.permitirEscritura ? "workspace-write" : "read-only",
+            // El modelo, si el `.md` lo pide. `ThreadStartParams.model` existe —comprobado
+            // contra el esquema que el propio binario genera (`app-server
+            // generate-json-schema`)—, y sus valores son los que devuelve `model/list`.
+            ...(peticion.modelo === undefined ? {} : { model: peticion.modelo }),
           },
         });
         return;

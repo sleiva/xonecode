@@ -36,7 +36,20 @@ export interface Agente {
    */
   descripcion: string;
   motor: Motor;
-  /** `proveedor/modelo`. Solo con `motor: "modelo"`; ausente = el del papel `trabajo`. */
+  /**
+   * Qué modelo usa este subagente. Ausente = el que le tocaría por omisión, y lo que eso
+   * significa depende del MOTOR — que es justo por lo que este campo vale para los tres:
+   *  - `modelo`: `proveedor/modelo` de los nuestros; ausente, el del papel `trabajo`.
+   *  - `claude-code`: un alias del producto (`opus`, `sonnet`, `haiku`, `fable`) o un id
+   *    entero; ausente, el que Claude Code use por su cuenta.
+   *  - `codex`: un id de los que su propio `model/list` devuelve; ausente, el suyo.
+   *
+   * Este campo se RECHAZABA con los dos motores externos, con el argumento de que ahí el
+   * modelo lo elige el agente. Era falso y está medido: el SDK de Claude Code acepta
+   * `options.model` —y documenta esos alias— y el `ThreadStartParams` de Codex acepta
+   * `model`. Rechazarlo dejaba fuera lo que el usuario quería decidir de verdad: con qué
+   * modelo corre cada especialista.
+   */
   modelo?: string;
   /** Sin escribir nada. Decide `permisosDe` y si se le monta el HITL. */
   soloLectura: boolean;
@@ -192,11 +205,6 @@ export function leerAgente(
   }
 
   const modelo = (campos["modelo"] ?? "").trim();
-  // Un `modelo` con `motor: claude-code` no se ignora en silencio: quien lo escribió cree
-  // que va a elegir el modelo del hijo, y no es así — Claude Code usa el suyo.
-  if (modelo !== "" && motorCrudo !== "modelo") {
-    return { error: `«modelo» solo vale con «motor: modelo»; con «${motorCrudo}» lo elige el propio agente` };
-  }
 
   // Cualquier cosa que no sea exactamente «true» es false — ver abajo.
   const soloLectura = (campos["soloLectura"] ?? "").trim() === "true";

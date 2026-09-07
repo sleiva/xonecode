@@ -514,6 +514,30 @@ especialistas de siempre —`docs`, `planner`, `dev`, `mockup`— dejaron de est
 - **Sin `descripcion` no se carga**: es lo que el orquestador lee para decidir cuándo
   delegar, no un rótulo. Y **`soloLectura` solo es cierto con exactamente «true»** — la
   trampa del `"false"` de CloudStudio, que aquí concedería ESCRITURA.
+- **El modelo se ELIGE de un desplegable, y vale para los TRES motores.** Era un campo de
+  texto en el que había que acordarse de la sintaxis `proveedor/modelo`, y con los dos
+  motores externos no había campo: el `.md` que llevara `modelo` se RECHAZABA, con el
+  argumento de que ahí lo elige el agente. **Era falso**, y está medido: el SDK de Claude
+  Code acepta `options.model` y el `ThreadStartParams` de Codex acepta `model` —comprobado
+  contra el esquema que el propio binario genera (`codex app-server generate-json-schema`)—.
+  De dónde sale cada lista:
+  - **`modelo`**: los proveedores COMPROBADOS, la misma regla que la pastilla del compositor,
+    agrupados por proveedor. Sus catálogos se piden al ABRIR el formulario y no antes: cada
+    uno es una llamada de red y la lista de subagentes se mira mucho más de lo que se edita
+    uno. Un grupo sin modelos no se pinta —parecería que ese proveedor no tiene ninguno— y
+    mientras llegan se dice que se están consultando.
+  - **`claude-code`**: los ALIAS que documenta su propio SDK (`opus`, `sonnet`, `haiku`,
+    `fable`). Alias y no ids pinchados: es lo que el producto ofrece para que sobrevivan a
+    sus versiones, y un `claude-opus-4-8` escrito hoy se queda viejo solo.
+  - **`codex`**: se le PREGUNTAN a él (`model/list` sobre su `app-server`), bajo demanda
+    porque arranca un proceso, y cacheados por proceso — salvo el FALLO, que no se cachea:
+    instalar Codex después tiene que funcionar sin reiniciar la consola. De su respuesta se
+    guardan el id y el nombre para leer, y nada más: trae además esfuerzos de razonamiento,
+    modalidades y avisos de crédito de la cuenta, que no hacen falta para elegir un modelo.
+    Los que él marca `hidden` no se ofrecen.
+  En los tres, no elegir es una opción de verdad y dice qué pasa entonces («el del papel que
+  le toque», «el que use Claude Code»). Y cambiar de motor LIMPIA el modelo: un `opus` no
+  vale para el motor de modelo ni un `gemini/…` para Claude Code.
 - **La marca de la siembra es un FICHERO, `.semilla.json`, con el hash de lo que escribimos
   nosotros para cada agente.** Fue «la carpeta es la marca»: si `agentes/` existía, no se
   escribía nada nunca más. Respetaba el prompt afinado por el usuario —que es lo que hay que

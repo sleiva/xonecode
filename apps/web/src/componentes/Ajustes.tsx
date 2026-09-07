@@ -176,6 +176,9 @@ export function Ajustes({
   alCambiarDispositivos,
   alActualizarDispositivos,
   alInstalarHerramienta,
+  modelosDeMotor,
+  alPedirModelosDeMotor,
+  alPedirCatalogo,
   instalacion,
   alEjecutarPaso,
   alCancelarPaso,
@@ -240,6 +243,12 @@ export function Ajustes({
    * decide el servidor. Ausente = no se ofrece el botón.
    */
   alInstalarHerramienta?: (herramienta: NombreDeHerramienta) => void;
+  /** Lo que ofrece cada motor externo, por motor, para el desplegable de un subagente. */
+  modelosDeMotor?: Record<string, { modelos: { id: string; nombre: string }[]; error?: string }>;
+  /** Pide los de un motor. Bajo demanda: el de Codex arranca un proceso. */
+  alPedirModelosDeMotor?: (motor: string) => void;
+  /** Pide el catálogo de un proveedor nuestro, para el desplegable de un subagente. */
+  alPedirCatalogo?: (proveedor: string) => void;
   /** El paso de receta que corre ahora, tal como lo dice el servidor. */
   instalacion?: EstadoDelCliente["instalacion"];
   /** Lanzar el paso `numero` de una receta, y cancelar el que corra. Ausentes = no se pinta
@@ -995,6 +1004,12 @@ export function Ajustes({
               <Agentes
                 {...(agentes === undefined ? {} : { agentes: agentes.lista, problemas: agentes.problemas })}
                 hayProyecto={hayProyecto}
+                // El modelo de un subagente se elige de lo mismo que el del compositor —los
+                // proveedores comprobados— o de lo que diga su motor externo.
+                {...(proveedores === undefined ? {} : { proveedores })}
+                {...(modelosDeMotor === undefined ? {} : { modelosDeMotor })}
+                {...(alPedirModelosDeMotor === undefined ? {} : { alPedirModelosDeMotor })}
+                {...(alPedirCatalogo === undefined ? {} : { alPedirCatalogo })}
                 alGuardar={alGuardarAgente}
                 alBorrar={alBorrarAgente}
               />

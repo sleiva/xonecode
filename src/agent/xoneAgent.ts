@@ -211,6 +211,9 @@ export async function construirAgente(opciones: OpcionesDelAgente): Promise<unkn
           cwd: opciones.raiz,
           instrucciones: promptDeAgente(agente, repartirSkills(agente, catalogoDeSkills)),
           tarea,
+          // El modelo del producto que pida su `.md`, si pide alguno. Ausente = el que el
+          // agente externo use por su cuenta, que es lo de siempre.
+          ...(agente.modelo === undefined ? {} : { modelo: agente.modelo }),
           // Hoy siempre falso, y `core/ports.ts` explica por qué con detalle: el gancho del
           // SDK es un callback y nuestra aprobación son interrupts de LangGraph.
           permitirEscritura: false,
