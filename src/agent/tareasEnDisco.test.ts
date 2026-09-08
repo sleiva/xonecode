@@ -1,10 +1,33 @@
 // src/agent/tareasEnDisco.test.ts
-import { describe, expect, it, beforeEach, afterEach } from "vitest";
+import { describe, expect, it, beforeEach, afterEach, vi } from "vitest";
 import { mkdtempSync, rmSync, writeFileSync, mkdirSync, existsSync, readFileSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { crearTareasEnDisco } from "./tareasEnDisco.js";
 import type { Tarea } from "../core/tareas.js";
+
+/**
+ * Gancho para simular, en UN solo test, que otro proceso escribe el cerrojo justo después de
+ * que el nuestro gane su `wx` — el único punto donde una carrera de verdad puede colarse (ver
+ * el test de la relectura de confirmación, más abajo). `node:fs` no se puede espiar
+ * directamente (`vi.spyOn` falla con «Module namespace is not configurable in ESM»), así que
+ * se envuelve con `vi.mock`; el valor mutable vive en `vi.hoisted` porque la factoría de abajo
+ * se resuelve antes que el resto del módulo y necesita que ya exista. El resto de los tests
+ * no lo tocan (queda `undefined`) y ven el comportamiento real de `node:fs` sin diferencia.
+ */
+const gancho = vi.hoisted(() => ({ trasEscribir: undefined as ((ruta: unknown) => void) | undefined }));
+
+vi.mock("node:fs", async (importOriginal) => {
+  const real = await importOriginal<typeof import("node:fs")>();
+  return {
+    ...real,
+    writeFileSync: (...args: Parameters<typeof real.writeFileSync>) => {
+      const resultado = real.writeFileSync(...args);
+      gancho.trasEscribir?.(args[0]);
+      return resultado;
+    },
+  };
+});
 
 const TAREA: Tarea = {
   id: "t1",
@@ -22,7 +45,10 @@ describe("tareasEnDisco", () => {
   beforeEach(() => {
     base = mkdtempSync(join(tmpdir(), "xonecode-tareas-"));
   });
-  afterEach(() => rmSync(base, { recursive: true, force: true }));
+  afterEach(() => {
+    rmSync(base, { recursive: true, force: true });
+    gancho.trasEscribir = undefined;
+  });
 
   it("escribe y lee el índice", () => {
     const disco = crearTareasEnDisco({ base });
@@ -113,17 +139,57 @@ describe("tareasEnDisco", () => {
     expect(readFileSync(join(base, "tareas", "indice.json"), "utf8")).toBe("{}");
   });
 
-  it("el cerrojo es una creación EXCLUSIVA: quien pierde la carrera sabe de quién es, sin ventana entre comprobar y escribir", () => {
+  it("dos instancias SECUENCIALES no consiguen las dos el cerrojo: la segunda encuentra el fichero que dejó la primera", () => {
     const primero = crearTareasEnDisco({ base, pid: 100, vivo: () => true });
     const segundo = crearTareasEnDisco({ base, pid: 200, vivo: () => true });
-    // Sin ningún `existsSync` de por medio: si tomarCerrojo comprobara y escribiera en dos
-    // pasos, esta secuencia no distinguiría del caso con la ventana abierta. Lo que prueba
-    // que es atómico es que el SEGUNDO wx real (dentro de tomarCerrojo) es el que falla.
+    // Esta secuencia por sí sola NO demuestra atomicidad frente a una concurrencia de
+    // verdad — dos llamadas seguidas en el mismo hilo son indistinguibles de un
+    // `existsSync` + escritura si nadie se cuela entre medias, y aquí nadie lo hace. Lo que
+    // de verdad hace atómica la toma es el `flag: "wx"` del sistema de ficheros al escribir
+    // (falla con `EEXIST` si el fichero ya existe), que este test no puede provocar sin
+    // dos procesos —o dos hilos— reales. Lo que SÍ prueba esta secuencia es el resultado
+    // correcto del camino normal: quien llega después de que el primero ya tiene el
+    // cerrojo lee su pid y no el suyo.
     expect(primero.tomarCerrojo()).toEqual({ tomado: true });
     expect(segundo.tomarCerrojo()).toEqual({ tomado: false, dePid: 100 });
     // Y soltar el propio deja hueco para el siguiente.
     primero.soltarCerrojo();
     expect(segundo.tomarCerrojo()).toEqual({ tomado: true });
+  });
+
+  it("la relectura de confirmación cierra la carrera del cerrojo MUERTO: quien gana el wx pero lo pierde después no se cree dueño", () => {
+    // La secuencia real que esto cierra: A ve al dueño muerto y lo borra; B ve al mismo
+    // dueño muerto y también lo borra; A crea el suyo con `wx` y gana; y entonces B —que ya
+    // había decidido reclamar y solo le faltaba ejecutarlo— borra el fichero que A ACABA de
+    // crear y crea el suyo encima. Los dos `wx` tienen éxito EN SU PROPIO PROCESO, y sin la
+    // relectura los dos se creerían dueños.
+    //
+    // Aquí no hay dos procesos de verdad: se usa el gancho de `writeFileSync` (arriba del
+    // fichero) para que, justo cuando "A" gana el `wx` de la recogida, "B" se cuele y lo
+    // pise ANTES de que A vuelva a leer para confirmar.
+    const rutaCerrojo = join(base, "tareas", "corredor.lock");
+    mkdirSync(join(base, "tareas"), { recursive: true });
+    // Un cerrojo de un pid muerto ya en disco: es el que A (pid 100) va a recoger.
+    writeFileSync(rutaCerrojo, `${JSON.stringify({ pid: 999 })}\n`);
+
+    let vecesEscritoElCerrojo = 0;
+    gancho.trasEscribir = (ruta) => {
+      if (ruta !== rutaCerrojo) return;
+      vecesEscritoElCerrojo++;
+      // La 1ª vez que se dispara aquí es la escritura de A recogiendo el cerrojo muerto (su
+      // primer intento falló por EEXIST y ni siquiera dispara el gancho, porque el `throw`
+      // ocurre dentro de la propia escritura real, antes de llegar a esta línea). En cuanto
+      // esa recogida tiene éxito, "B" se cuela y escribe el suyo encima, ANTES de que A relea
+      // para confirmar.
+      if (vecesEscritoElCerrojo === 1) {
+        writeFileSync(rutaCerrojo, `${JSON.stringify({ pid: 777 })}\n`);
+      }
+    };
+
+    const a = crearTareasEnDisco({ base, pid: 100, vivo: () => false });
+    expect(a.tomarCerrojo()).toEqual({ tomado: false, dePid: 777 });
+    // Y el fichero en disco es el de "B": A no lo tocó después de perder la carrera.
+    expect(JSON.parse(readFileSync(rutaCerrojo, "utf8"))).toMatchObject({ pid: 777 });
   });
 
   it.skipIf(process.platform === "win32")(

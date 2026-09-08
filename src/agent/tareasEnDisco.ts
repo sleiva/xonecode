@@ -76,26 +76,26 @@ export function crearTareasEnDisco(opciones: {
   }
 
   /**
-   * Lee el índice y dice además si se PUDO leer. `listar()` es esto sin el segundo dato;
-   * `borrarTarea` necesita el segundo dato para no repetir el fallo de más abajo.
+   * Lee el índice y dice además si se PUDO leer — pero NO avisa por su cuenta: quien la
+   * llama sabe qué está haciendo (enseñar la cola, o borrar una tarea) y es quien tiene que
+   * elegir las palabras. Avisar aquí dentro con un solo mensaje fijo fue el propio error que
+   * esto corrige: `borrarTarea` heredaba el «la cola se enseña vacía» de `listar()`, que
+   * describe la situación de otro sitio — un aviso que manda a mirar donde no está el
+   * problema es peor que ninguno.
    *
    * Un índice sintácticamente válido pero que no es una lista (`{}`, por ejemplo) es tan
-   * ilegible como uno con JSON roto: las dos formas de «esto no es la cola» avisan igual y
-   * devuelven vacío, y ninguna de las dos se sobrescribe sola.
+   * ilegible como uno con JSON roto: las dos formas de «esto no es la cola» devuelven vacío
+   * y ninguna se sobrescribe sola.
    */
   function leerIndice(): { tareas: Tarea[]; legible: boolean } {
     if (!existsSync(indice)) return { tareas: [], legible: true };
     try {
       const leido = JSON.parse(readFileSync(indice, "utf8")) as unknown;
-      if (!Array.isArray(leido)) {
-        informar("el índice de tareas no es una lista; la cola se enseña vacía");
-        return { tareas: [], legible: false };
-      }
+      if (!Array.isArray(leido)) return { tareas: [], legible: false };
       return { tareas: leido as Tarea[], legible: true };
     } catch {
       // No se sobrescribe: perder la cola de alguien por no saber leerla sería peor que
       // no enseñarla. Misma postura que una línea corrupta del `.jsonl` de una sesión.
-      informar("el índice de tareas no se pudo leer; la cola se enseña vacía");
       return { tareas: [], legible: false };
     }
   }
@@ -112,7 +112,9 @@ export function crearTareasEnDisco(opciones: {
 
   return {
     listar() {
-      return leerIndice().tareas;
+      const { tareas, legible } = leerIndice();
+      if (!legible) informar("el índice de tareas no se pudo leer; la cola se enseña vacía");
+      return tareas;
     },
     guardar(tareas) {
       guardarIndice(tareas);
@@ -133,6 +135,16 @@ export function crearTareasEnDisco(opciones: {
      * tras recogerlo se reintenta la creación exclusiva UNA vez — si en ese hueco otro proceso
      * se adelantó, perdimos la carrera de verdad y se dice de quién es, en vez de fingir que
      * el cerrojo es nuestro.
+     *
+     * **Y después de CADA `wx` ganado, una RELECTURA de confirmación.** El `wx` por sí solo
+     * no basta cuando se llega por la vía de recoger un cerrojo muerto: A ve al dueño muerto
+     * y lo borra; B ve al mismo dueño muerto y también lo borra; A crea el suyo con `wx` y
+     * gana; y entonces B —que ya había decidido reclamar y solo le faltaba ejecutarlo— borra
+     * el fichero que A ACABA de crear y crea el suyo encima. Los dos `wx` tienen éxito en su
+     * propio proceso, y los dos se creerían dueños. La relectura es el árbitro: tras ganar el
+     * `wx`, se vuelve a leer el fichero y se comprueba que el pid de dentro es el NUESTRO. Si
+     * no lo es, alguien nos lo pisó entre la escritura y esta lectura, y se devuelve de quién
+     * es en vez de fingir que el cerrojo sigue siendo nuestro.
      */
     tomarCerrojo() {
       mkdirSync(base, { recursive: true, mode: 0o700 });
@@ -151,7 +163,17 @@ export function crearTareasEnDisco(opciones: {
         }
       };
 
-      if (intentar()) return { tomado: true };
+      const confirmar = (): { tomado: true } | { tomado: false; dePid: number } => {
+        const dueño = leerDueño();
+        if (dueño?.pid === pid) return { tomado: true };
+        // Alguien escribió encima entre nuestro `wx` y esta relectura: perdimos la carrera.
+        // -1 nunca es un pid real: es lo que se devuelve si ni siquiera el ganador se puede
+        // leer, que no debería pasar en la práctica pero no es motivo para lanzar — fallar
+        // aquí bloquearía al llamante sin decir por qué.
+        return { tomado: false, dePid: dueño?.pid ?? -1 };
+      };
+
+      if (intentar()) return confirmar();
 
       const dueño = leerDueño();
       if (dueño && dueño.pid !== pid && vivo(dueño.pid)) {
@@ -160,13 +182,10 @@ export function crearTareasEnDisco(opciones: {
 
       // Dueño soy yo, está muerto, o el fichero es ilegible: se recoge y se reintenta una vez.
       rmSync(cerrojo, { force: true });
-      if (intentar()) return { tomado: true };
+      if (intentar()) return confirmar();
 
       // Perdimos la carrera de verdad: alguien escribió entre el borrado y este intento.
       const otro = leerDueño();
-      // -1 nunca es un pid real: es lo que se devuelve si ni siquiera el ganador de la
-      // carrera se puede leer, que no debería pasar en la práctica pero no es motivo para
-      // lanzar — fallar aquí bloquearía al llamante sin decir por qué.
       return { tomado: false, dePid: otro?.pid ?? -1 };
     },
     soltarCerrojo() {
@@ -196,10 +215,15 @@ export function crearTareasEnDisco(opciones: {
     borrarTarea(id) {
       if (nombreAceptable(id)) rmSync(join(base, id), { recursive: true, force: true });
       const { tareas, legible } = leerIndice();
-      // Un índice que no se pudo leer no se toca: sobrescribirlo con una lista vacía sería
-      // la misma pérdida de datos que la lectura ya evita en `listar()` — sólo que por la
-      // puerta de atrás. `leerIndice` ya avisó por `informar`.
-      if (!legible) return;
+      if (!legible) {
+        // Un índice que no se pudo leer no se toca: sobrescribirlo con una lista vacía sería
+        // la misma pérdida de datos que la lectura ya evita en `listar()` — sólo que por la
+        // puerta de atrás. Y el aviso es el suyo propio, no el de `leerIndice`: ahí no se
+        // está enseñando una cola vacía, se está BORRANDO algo y dejando el índice intacto —
+        // un aviso que describe la situación equivocada manda a mirar donde no está.
+        informar("la tarea se borró del disco, pero el índice no se pudo leer y se deja intacto");
+        return;
+      }
       guardarIndice(tareas.filter((t) => t.id !== id));
     },
   };
