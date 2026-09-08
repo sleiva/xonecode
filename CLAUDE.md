@@ -884,6 +884,50 @@ No lo hacía en ninguna de sus tres capas, así que todo reintento abría un hil
 fue medir que el `.jsonl` de la sesión CRECE con las dos vueltas del turno, en vez de comprobar
 que el `thread_id` coincidía.
 
+**Lo que hace una tarea se puede MIRAR en vivo, y `mirar` no es `conectar`** (`transporte.ts`,
+`Transporte.mirar`). Los actos de un turno de tarea ya se guardaban en el transcript de SU
+sesión —`consolaParaTarea` le pasa la piel de su consola de proyecto, la misma que usa una
+persona— y no se filtraban al chat de nadie, porque cada `crearConsolaWeb` tiene su PROPIO
+transporte y el de una consola de tarea no tiene sumideros: `abrirParaTarea` no mueve el cable a
+propósito. Lo que faltaba era el enganche. Tres decisiones y dos trampas medidas:
+- **Es opt-in, de solo lectura, y la vista en vivo ES el transcript.** Nunca se muda el cable
+  solo: una tarea que arranca no puede cambiarle la pantalla a quien está trabajando. No hay
+  compositor, porque esa consola es de la tarea y una caja de texto ahí prometería una
+  conversación que el turno no va a leer —para intervenir está aparcar con feedback—. Y no hay
+  log paralelo: se mira el transcript de esa sesión, en vivo mientras corre y guardado cuando
+  acaba. Un segundo registro sería otra fuente que puede contradecir a la conversación, la misma
+  regla por la que la lista de artefactos «sale de los actos, no del disco».
+- **Un mirón no es alguien a quien preguntar**, y por eso `mirar` es un conjunto aparte que no
+  toca `hayCliente`. Medido: `conectar` en la consola de una tarea SÍ hace que su `eof()` pase de
+  `true` a `false` —y de `eof()` depende que una consola de tarea aparque en vez de esperar—,
+  pero resulta inerte porque `crearConsolaDeTarea` declara `interactivo: false` y `eof: () =>
+  true` a fuego. Depender de esa inercia sería depender de que otro fichero no se «simplifique»:
+  con el conjunto aparte, la propiedad es cierta por construcción y no por coincidencia.
+- **Y la trampa de verdad estaba en el otro extremo**: el transporte de una consola de tarea
+  emite el `{clase:"turno"}` de los flancos **sin mirar `alCable`** (`vestibulo.ts`), además de
+  los actos crudos. Enchufarle el sumidero SSE pelado le habría metido los actos de la tarea en
+  el chat de quien trabaja **y le habría apagado el compositor** — justo lo que las tres
+  decisiones de arriba existen para evitar, por un camino que no era el que se vigilaba. Se
+  cierra con dos listas BLANCAS (una en el transporte y otra en `arranque.ts`): lo que no se
+  nombra, no sale.
+- **El cable gana identidad de cliente** (`?cliente=` en el SSE y el campo en el mensaje), porque
+  el `POST /accion` y el SSE son dos peticiones y solo la segunda tiene sumidero: sin eso no se
+  puede desenganchar a UN mirón ni dejar que dos personas miren la misma tarea. Lo genera el
+  cliente, es tiempo más azar en texto llano, y **no lleva nada del navegador ni del equipo**; no
+  autoriza nada —eso es el token— y en el servidor solo es la clave de un `Map` que nace y muere
+  con el SSE. `crypto.randomUUID` se descartó a propósito: exige origen seguro y esto se sirve
+  por `http://127.0.0.1`.
+
+**Y abrir la sesión de una tarea EN CURSO se declina**, con el mismo predicado que usa
+`borrarSesion` (`esDeUnaTareaEnCurso`): dos consolas sobre el mismo `thread_id` del checkpointer
+son dos escritores del mismo hilo. Tres detalles que sostienen la guarda: va **antes** de
+`cerrarProyectoAbierto()` —tarde habría cerrado la sesión de la persona para luego negarse a
+abrir la otra, dos daños en vez de ninguno—, compara `sesion` **y** `idDeHilo`, que son dos
+momentos de la misma conversación y el segundo cubre la ventana anterior al primer volcado, y el
+motivo dice **qué sí se puede hacer**: mirarla ahora y abrirla cuando termine. Límite declarado,
+el mismo que `borrarSesion`: la guarda solo ve las consolas de ESTE proceso, así que una tarea
+que ejecute otro corredor no está en el conjunto — lo pone el sistema operativo, no nosotros.
+
 **Crear una TAREA es la autorización, y la ventana de crear es el único sitio donde eso se
 puede decir antes de que ocurra** (`apps/web/src/componentes/NuevaTarea.tsx`,
 `agent/aumentador.ts`, `core/adjuntos.ts`). Una tarea de fondo aplica sus escrituras sin
