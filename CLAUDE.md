@@ -715,6 +715,21 @@ leer ahora, con palabras y arriba. Lo que la sostiene:
   enseñaba «No se pudo preparar el encargo (ErrorDelAumentador)». La regla es la de
   `corredorDeTareas.ts#sinRutas` — el MENSAJE si lo escribimos nosotros, el CÓDIGO si lo
   escribió el sistema, porque el de Node lleva la ruta absoluta dentro.
+- **Y para un proyecto que no está en el equipo no se crea NADA**, ni se encola: la ventana
+  se cambia por el motivo y por la salida a `NuevaSesion`, que es quien descarga y quien
+  avisa de que baja el proyecto entero. Encolarla sería ofrecer un camino que no puede
+  funcionar —`abrirParaTarea` lanza si la raíz no es un proyecto, así que el corredor la coge,
+  la aparca, y `renunciarSiSigueNueva` impide que este proceso la vuelva a coger—, o sea el
+  botón muerto de siempre. Pero lo que obligó a quitar el formulario ENTERO y no solo el botón
+  es peor que un botón muerto: un formulario usable deja **subir adjuntos**, y eso escribe los
+  documentos de una persona en la carpeta de un borrador que ninguna tarea va a nombrar nunca.
+  Se ata por AUSENCIA —ni campo de petición, ni «Adjuntar ficheros», ni «Encolar»—, porque un
+  test que solo comprobara que el motivo aparece pasaría igual con el formulario debajo. Por lo
+  mismo `alAbrirProyecto` es OBLIGATORIO en el tipo: un rechazo sin nada que pulsar es el mismo
+  fallo que el rechazo viene a quitar, y pedirlo en el tipo lo hace imposible por construcción
+  en vez de recordable. Y la frase de la autorización se pinta solo en la rama donde se
+  CONCEDE: no es falsa en la otra, pero compite con lo único que esa pantalla tiene que
+  conseguir.
 - **Los ADJUNTOS son la misma pieza que `/skills/` y `/artefactos/`**: otra raíz del
   `CompositeBackend`, con la barra final obligatoria y sin crear la carpeta al montar.
   Viven en `~/.xonecode/tareas/<id>/adjuntos/`, o sea fuera del proyecto: no entran en git
