@@ -47,6 +47,27 @@ describe("TareasDelProyecto", () => {
     expect(screen.getByText(/La dio por buena una persona/)).toBeTruthy();
   });
 
+  /**
+   * F4 de la revisión final, y esta pestaña es donde más falta hace: aquí vive «Nueva
+   * tarea», así que es donde se CREA la tarea que se va a quedar quieta. El aviso va antes
+   * de crearla, no después de mirarla parada.
+   */
+  it("si las ejecuta otro proceso lo dice, y dice que una tarea creada aquí se queda quieta", () => {
+    render(<TareasDelProyecto tareas={[tarea()]} corriendoAqui={false} alNuevaTarea={() => {}} />);
+    expect(screen.getByText(/otro proceso/i)).toBeTruthy();
+    expect(screen.getByText(/no se le avisa|nadie le avisa/i)).toBeTruthy();
+  });
+
+  it("y no lo dice cuando SÍ las ejecuta este proceso, ni cuando no se sabe todavía", () => {
+    const { unmount } = render(<TareasDelProyecto tareas={[tarea()]} corriendoAqui={true} />);
+    expect(screen.queryByText(/otro proceso/i)).toBeNull();
+    unmount();
+    // Ausente = la cola no ha llegado con esa respuesta: no se afirma ni una cosa ni la
+    // otra, que es la regla de siempre con lo que no se ha medido.
+    render(<TareasDelProyecto tareas={[tarea()]} />);
+    expect(screen.queryByText(/otro proceso/i)).toBeNull();
+  });
+
   it("reintentar está en las aparcadas, y no en las que corren", () => {
     const alReintentar = vi.fn();
     const { unmount } = render(

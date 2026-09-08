@@ -82,6 +82,19 @@ describe("Kanban", () => {
     expect(screen.getByText(/otro proceso|no avanza/i)).toBeTruthy();
   });
 
+  /**
+   * F4 de la revisión final: una tarea creada desde el proceso que NO tiene el cerrojo no
+   * dispara nada en el que sí lo tiene —`revisar()` sale en `!miCerrojo` y no hay
+   * temporizador—, así que se queda `nuevo` hasta que ESE proceso mire la cola por su
+   * cuenta. Ningún texto lo cubría: «ábrelo desde el proceso que las corre para verlas
+   * moverse» promete que allí se mueven, y una tarea recién creada no se mueve todavía.
+   */
+  it("y dice qué le pasa a una tarea creada desde aquí: se queda quieta hasta que el otro proceso mire", () => {
+    render(<Kanban cola={{ lista: [tarea()], concurrencia: 2, corriendoAqui: false }} />);
+    expect(screen.getByText(/no se le avisa|nadie le avisa/i)).toBeTruthy();
+    expect(screen.getByText(/vuelva a mirar|mire la cola/i)).toBeTruthy();
+  });
+
   it("pulsar una tarea con sesión la abre; sin sesión, no es pulsable", () => {
     const abrir = vi.fn();
     const { unmount } = render(

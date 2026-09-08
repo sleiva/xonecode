@@ -46,6 +46,7 @@ const ETIQUETA_DE_ESTADO: Record<TareaDelCable["estado"], string> = {
 export function TareasDelProyecto({
   tareas,
   alNuevaTarea,
+  corriendoAqui,
   alReintentar,
   alDescartar,
   alTerminar,
@@ -78,6 +79,18 @@ export function TareasDelProyecto({
   /** Si el cable está vivo: apaga en `AccionesDeTarea` (y el botón «Nueva tarea» de aquí)
    *  lo que manda algo al servidor, y lo dice. Ausente = se asume conectado. */
   conectado?: boolean;
+  /**
+   * Si es ESTE proceso el que ejecuta las tareas (`corriendoAqui` del cable). `false`
+   * significa que el cerrojo lo tiene otro, y entonces hay que decir algo que no es obvio:
+   * una tarea creada desde aquí **no dispara nada allí** —`revisar()` sale en `!miCerrojo`,
+   * y no hay temporizador ni IPC—, así que se queda en «Nuevo» hasta que ese proceso mire
+   * la cola por su cuenta. Se dice en esta pestaña porque es donde vive «Nueva tarea», o
+   * sea donde se crea la tarea que se va a quedar quieta: el aviso sirve ANTES de crearla.
+   *
+   * **Ausente = no se sabe** —la cola todavía no ha llegado— y entonces no se afirma nada,
+   * la regla de siempre.
+   */
+  corriendoAqui?: boolean;
 }) {
   const apagado = conectado === false;
   return (
@@ -100,6 +113,15 @@ export function TareasDelProyecto({
       */}
       {apagado && alNuevaTarea !== undefined ? (
         <p className={estilos.avisoConexion}>Sin conexión: no se puede crear una tarea hasta reconectar.</p>
+      ) : null}
+      {/* Ver `corriendoAqui`: sin esto, una tarea creada desde el proceso que no manda se
+          queda quieta y muda, y eso se lee como un cuelgue. */}
+      {corriendoAqui === false ? (
+        <p className={estilos.avisoProceso} role="note">
+          Las tareas las ejecuta otro proceso: aquí se ven, pero no avanzan. Una que crees
+          desde aquí se queda en «Nuevo» hasta que ese proceso vuelva a mirar la cola por su
+          cuenta —al acabar otra tarea, o al reiniciarlo—: no se le avisa.
+        </p>
       ) : null}
       {tareas === undefined ? (
         <p className={estilos.aviso}>Consultando la cola de tareas de este proyecto…</p>

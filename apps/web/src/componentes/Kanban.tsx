@@ -10,6 +10,14 @@ import estilos from "./Kanban.module.css";
  * en realidad— igual que «Tu equipo». Y por eso mismo hay que decir cuándo este proceso NO
  * las ejecuta: se ve igual en dos ventanas y solo avanza en una.
  *
+ * **Y hay que decir la mitad que falta, que es la que muerde** (F4 de la revisión final):
+ * una tarea creada desde el proceso que no tiene el cerrojo no dispara nada en el que sí lo
+ * tiene —`revisar()` sale en `!miCerrojo` y no hay temporizador ni IPC—, así que se queda
+ * `nuevo` hasta que ESE proceso mire la cola por su cuenta: cuando acabe otra tarea, o al
+ * reiniciarlo. «Ábrelo desde el proceso que las corre para verlas moverse» prometía que
+ * allí se mueven; una recién creada, todavía no. Sin decirlo se lee como un cuelgue, que es
+ * el peor final de una cola.
+ *
  * **Sin barra de progreso, a propósito.** Un turno no sabe cuánto le queda, y una barra que
  * avanza sola es la mentira con forma de dato que este repo evita en todas partes. Lo que se
  * enseña es desde cuándo corre.
@@ -110,7 +118,9 @@ export function Kanban({
       {cola.corriendoAqui ? null : (
         <p className={estilos.aviso} role="note">
           Las tareas las ejecuta otro proceso: aquí se ven, pero este kanban no avanza —
-          ábrelo desde el proceso que las corre para verlas moverse.
+          ábrelo desde el proceso que las corre para verlas moverse. Y una tarea que crees
+          desde aquí se queda en «Nuevo» hasta que ese proceso vuelva a mirar la cola por su
+          cuenta —al acabar otra tarea, o al reiniciarlo—: no se le avisa.
         </p>
       )}
       <div className={estilos.columnas}>

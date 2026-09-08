@@ -841,6 +841,14 @@ probada — está escrita.**
   eso se lee como un cuelgue, que es el peor final de una cola.
 - **«No ha llegado» no es «no hay tareas»**: si esta ejecución no ejecuta tareas, el servidor no
   manda `tareas` y el panel lo dice en vez de afirmar una cola vacía.
+- **Y una tarea creada desde el proceso que NO manda se queda quieta, así que se DICE antes de
+  crearla.** `corriendoAqui` decía ya que este kanban no avanza, pero el aviso remataba con
+  «ábrelo desde el proceso que las corre para verlas moverse» — y eso promete de más: crear una
+  tarea aquí no dispara nada allí, porque `revisar()` sale en `!miCerrojo` y no hay temporizador
+  ni IPC. Se queda `nuevo` hasta que ESE proceso mire la cola por su cuenta (al acabar otra
+  tarea, o al reiniciarlo). Lo dicen las dos vistas, y en la del proyecto importa más: ahí vive
+  «Nueva tarea», o sea que el aviso llega ANTES de crear la que se va a quedar parada. **Ausente
+  no es `false`**: mientras la cola no ha llegado no se afirma ninguna de las dos cosas.
 
 **El feedback vuelve al agente como mensaje de USUARIO en el mismo hilo**, que es el camino que
 el lazo de reparación del verificador ya recorría — un encargo nuevo perdería todo lo que la
