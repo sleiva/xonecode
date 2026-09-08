@@ -570,9 +570,13 @@ describe("crearCorredorDeTareas", () => {
     expect(p.encargos).toEqual([]);
     expect(dichos.join(" ")).toMatch(/EACCES/);
     expect(dichos.join(" ")).not.toContain("/Users/x/.xonecode");
-    // Y `parar` no intenta soltar un cerrojo que nunca fue nuestro.
+    // Y se intenta soltar igualmente, que es lo correcto y es seguro: `soltarCerrojo` solo
+    // borra el cerrojo cuyo pid es el nuestro, así que un fallo ANTES de tomarlo no puede
+    // llevarse el de otro proceso por delante. Lo que no puede pasar es lo contrario —
+    // olvidarlo en memoria y dejarlo en disco—, que congela las tareas de toda la máquina.
+    expect(d.soltados()).toBe(1);
     await corredor.parar();
-    expect(d.soltados()).toBe(0);
+    expect(d.soltados()).toBe(1);
   });
 
   it("`parar` lleva PLAZO: un cierre que no devuelve no cuelga el Ctrl-C, y se dice", async () => {
@@ -610,6 +614,36 @@ describe("crearCorredorDeTareas", () => {
     expect(dichos.join(" ")).toMatch(/en proceso/i);
     expect(dichos.join(" ")).toMatch(/reconcili/i);
     // El cerrojo se suelta igual: este proceso se va.
+    expect(d.soltados()).toBe(1);
+  });
+
+  it("si la RECONCILIACIÓN revienta, el cerrojo se SUELTA: si no, se congela la máquina", async () => {
+    /**
+     * El peor fallo posible de esta pieza. Poner `miCerrojo = false` en memoria y dejar el
+     * fichero en disco hace que `corriendoAqui()` mienta, que `parar()` no suelte nada
+     * —cree que no lo tiene— y que las tareas de TODA la máquina se queden congeladas hasta
+     * que el proceso muera: un cerrojo que existe para que no haya dos corredores acabando
+     * con que no haya ninguno. Se suelta al dejar de ser corredor, no al creer que se dejó.
+     */
+    const dichos: string[] = [];
+    const d = discoDeMentira([TAREA({ estado: "en-proceso", pid: 999 })]);
+    d.disco.guardar = () => {
+      throw Object.assign(new Error("EACCES: permission denied"), { code: "EACCES" });
+    };
+    const p = proyectoDeMentira();
+    const corredor = crearCorredorDeTareas({
+      disco: d.disco,
+      abrirParaTarea: p.abrir,
+      pid: 1,
+      concurrencia: () => 1,
+      informar: (t) => dichos.push(t),
+    });
+    await corredor.arrancar();
+    expect(corredor.corriendoAqui()).toBe(false);
+    expect(d.soltados()).toBe(1);
+    expect(dichos.join(" ")).toMatch(/EACCES/);
+    // Y `parar` no lo suelta otra vez: ya se soltó.
+    await corredor.parar();
     expect(d.soltados()).toBe(1);
   });
 
@@ -654,6 +688,134 @@ describe("crearCorredorDeTareas", () => {
     await corredor.asentar();
     expect(d.estado()).toEqual([]);
     await corredor.parar();
+  });
+
+  it("si PREGUNTAR por la sesión lanza, la tarea acaba aparcada y la consola se cierra", async () => {
+    /**
+     * El bloque final de `correr` no puede quedarse sin guarda: una excepción ahí —el propio
+     * `sesionAbrible`, que en producción lee el índice del proyecto— caía al `catch` genérico
+     * del lazo, que aparcaba SIN pasar por la regla de `sesion` y sin cerrar la consola. Una
+     * regla que se cumple salvo cuando algo falla no es una regla: es lo que pasa cuando todo
+     * va bien.
+     *
+     * Y al no poder saber si hay algo abrible, NO se borra nada: «no se sabe» no es «no hay»,
+     * la misma dirección que el puerto ausente.
+     */
+    const olvidados: string[] = [];
+    const d = discoDeMentira([TAREA()]);
+    const p = proyectoDeMentira();
+    const corredor = crearCorredorDeTareas({
+      disco: d.disco,
+      abrirParaTarea: p.abrir,
+      pid: 1,
+      concurrencia: () => 1,
+      sesionAbrible: () => {
+        throw Object.assign(new Error("EACCES: permission denied, open '/Users/x/w/A/.xonecode'"), {
+          code: "EACCES",
+        });
+      },
+      olvidarHilo: async (raiz, sesion) => void olvidados.push(`${raiz}|${sesion}`),
+    });
+    await corredor.arrancar();
+    await corredor.asentar();
+    p.acabar();
+    await corredor.asentar();
+    // No se queda «en proceso» —eso ocuparía su proyecto para siempre— y la consola no se
+    // queda abierta: un handle por tarea que falle así.
+    expect(d.estado()[0]!.estado).toBe("terminada");
+    expect(d.estado()[0]!.sesion).toBe("hilo-/w/A");
+    expect(olvidados).toEqual([]);
+    expect(p.cierres).toEqual(["/w/A"]);
+    await corredor.parar();
+  });
+
+  it("y si revienta la ESCRITURA del final, lo que se aparca DESPUÉS pasa por la misma regla", async () => {
+    /**
+     * El último recurso del bloque final también tiene que aplicar la regla de `sesion`: si
+     * no, el único camino que se la salta es justo el de error.
+     *
+     * Y el test tiene que MIRAR LO ESCRITO, no que la regla se haya evaluado: la primera
+     * versión comprobaba `olvidarHilo`, que corre ANTES de la escritura y por tanto pasaba
+     * igual con la regla aplicada o no — comprobado por mutación, salía verde. Así que aquí
+     * revienta SOLO la escritura de «terminada» y se deja pasar la de aparcado, que es la que
+     * deja algo que leer.
+     */
+    const olvidados: string[] = [];
+    const d = discoDeMentira([TAREA()]);
+    const p = proyectoDeMentira();
+    let escrituras = 0;
+    const original = d.disco.guardar.bind(d.disco);
+    d.disco.guardar = (t) => {
+      escrituras += 1;
+      // 1) la marca de «en proceso»; 2) la de «terminada», que revienta; 3) el aparcado.
+      if (escrituras === 2) throw Object.assign(new Error("EIO: i/o error"), { code: "EIO" });
+      original(t);
+    };
+    const corredor = crearCorredorDeTareas({
+      disco: d.disco,
+      abrirParaTarea: p.abrir,
+      pid: 1,
+      concurrencia: () => 1,
+      sesionAbrible: () => false,
+      olvidarHilo: async (raiz, sesion) => void olvidados.push(`${raiz}|${sesion}`),
+    });
+    await corredor.arrancar();
+    await corredor.asentar();
+    p.acabar();
+    await corredor.asentar();
+    // Ni se queda «en proceso» sin nadie detrás, ni deja escrito un `sesion` que no nombra
+    // nada abrible — y el hilo se olvidó una sola vez.
+    expect(d.estado()[0]!.estado).toBe("requiere-atencion");
+    expect(d.estado()[0]!.motivo).toMatch(/EIO/);
+    expect(d.estado()[0]!.sesion).toBeUndefined();
+    expect(olvidados).toEqual(["/w/A|hilo-/w/A"]);
+    expect(p.cierres).toEqual(["/w/A"]);
+    await corredor.parar();
+  });
+
+  it("una marca de «en proceso» que no se puede escribir tampoco deja la consola abierta", async () => {
+    // El tercer camino sin guarda: la marca se escribe ANTES del `try` del turno, así que su
+    // excepción se saltaba el `cortar()` del `finally`.
+    const d = discoDeMentira([TAREA()]);
+    d.disco.guardar = () => {
+      throw Object.assign(new Error("EACCES: permission denied"), { code: "EACCES" });
+    };
+    let cerrados = 0;
+    const corredor = crearCorredorDeTareas({
+      disco: d.disco,
+      abrirParaTarea: async (raiz) => ({
+        raiz,
+        idDeHilo: "h",
+        correrTarea: async () => {},
+        cerrar: async () => void (cerrados += 1),
+      }),
+      pid: 1,
+      concurrencia: () => 1,
+    });
+    await corredor.arrancar();
+    await corredor.asentar();
+    expect(cerrados).toBe(1);
+    await corredor.parar();
+  });
+
+  it("un turno que acaba LIMPIO justo al parar no se cuenta como cortado", async () => {
+    // Carrera estrecha: `parando` sube mientras el turno resuelve, y el motivo salía
+    // «cortada a mitad» de un turno que terminó su trabajo. Es un motivo falso en el kanban.
+    const d = discoDeMentira([TAREA()]);
+    const p = proyectoDeMentira();
+    const corredor = crearCorredorDeTareas({
+      disco: d.disco,
+      abrirParaTarea: p.abrir,
+      pid: 1,
+      concurrencia: () => 1,
+    });
+    await corredor.arrancar();
+    await corredor.asentar();
+    // El turno resuelve y, en el mismo tick, alguien para el proceso.
+    p.acabar();
+    await corredor.parar();
+    expect(d.estado()[0]!.estado).toBe("terminada");
+    expect(d.estado()[0]!.motivo).toBeUndefined();
   });
 
   it("GANA LA PERSONA: no arranca nada en un proyecto cuya consola está abierta", async () => {
@@ -737,7 +899,20 @@ describe("el volcado de la sesión de una tarea", () => {
    * en disco (cero `writeFileSync`/`appendFileSync`/`mkdirSync`), así que lo único que se
    * escribe es lo que vuelca la sesión, dentro del proyecto temporal.
    */
-  function vestibuloReal(base: string, escritos: string[]) {
+  /**
+   * Un asidero para esperar la COSA y no el reloj: se resuelve con la promesa del marcado en
+   * cuanto `volcar()` aplica la foto de git. Sin él, la única forma de saber que la ref ya
+   * está sería sondear el disco cada pocos milisegundos — y entonces el test dependería de lo
+   * cargada que esté la máquina. Si nunca se resuelve, el plazo del test es el que avisa: eso
+   * significa que nadie aplicó la foto, que es justo lo que se está midiendo.
+   */
+  function asidero<T>(): { promesa: Promise<T>; cumplir: (valor: T) => void } {
+    let cumplir!: (valor: T) => void;
+    const promesa = new Promise<T>((r) => (cumplir = r));
+    return { promesa, cumplir };
+  }
+
+  function vestibuloReal(base: string, escritos: string[], marcada: { cumplir: (p: Promise<boolean>) => void }) {
     return crearVestibulo({
       origenDeTrabajo: "global",
       catalogoModelos: new CatalogoModelosEnMemoria(),
@@ -748,9 +923,24 @@ describe("el volcado de la sesión de una tarea", () => {
       guardarModeloGlobal: (_papel, id) => ({ ruta: "/casa/.xonecode/config.json", id }),
       baseDeWorkspace: base,
       entornos: [{ id: "webstudio", nombre: "XOne WebStudio", url: "https://mcp.xonewebstudio.com/mcp" }],
-      // La marca de la sesión, con git de verdad: es lo que hace que Revisión tenga con qué
-      // comparar el trabajo de la tarea.
-      marcarSesion: fotoDeApertura,
+      /**
+       * La marca de la sesión, con `fotoDeApertura` de verdad y git de verdad: es lo que hace
+       * que Revisión tenga con qué comparar el trabajo de la tarea.
+       *
+       * Lo único que añade el envoltorio es GUARDAR la promesa del marcado, para poder
+       * esperar la COSA y no el reloj: `volcar()` lanza la foto sin aguardarla —abrir un
+       * proyecto no puede quedarse esperando a git— así que sin este asidero la única
+       * alternativa sería sondear el disco cada 50 ms, y entonces el test dependería de lo
+       * cargada que esté la máquina.
+       */
+      marcarSesion: async (raiz) => {
+        const apuntar = await fotoDeApertura(raiz);
+        return (id) => {
+          const puesta = apuntar(id);
+          marcada.cumplir(puesta);
+          return puesta;
+        };
+      },
       // Un ejecutor que NO es doble (si lo fuera, `volcar` saldría por `esDoble`) y que
       // pinta por la PIEL, como el real: `crearEjecutorReal` hace `consola.piel?.() ??
       // crearPielStdio(consola.escribir)`.
@@ -774,7 +964,9 @@ describe("el volcado de la sesión de una tarea", () => {
   it("MEDIDO: deja el `.jsonl` con actos de CONVERSACIÓN y nombra su ref de git", async () => {
     const { base, raiz } = proyectoConGit();
     const escritos: string[] = [];
-    const v = vestibuloReal(base, escritos);
+    // El asidero del marcado: se cumple cuando `volcar()` aplica la foto de git.
+    const marcada = asidero<Promise<boolean>>();
+    const v = vestibuloReal(base, escritos, marcada);
     const { disco, estado } = discoDeMentira([
       TAREA({ proyecto: { id: "pa", raiz, nombre: "A" }, encargo: "arregla el login" }),
     ]);
@@ -805,21 +997,17 @@ describe("el volcado de la sesión de una tarea", () => {
     expect(actos.map((a) => a.tipo)).toContain("asistente");
     expect(actos.find((a) => a.tipo === "asistente")!.texto).toBe("ya está hecho");
 
-    // 2) Y la marca de git, o Revisión diría `sin-marca` para siempre. Se ESPERA porque
-    // `volcar()` lanza la foto sin aguardarla —abrir un proyecto no puede quedarse esperando
-    // a git—, así que la ref aterriza un poco después del primer volcado.
-    let ref = "";
-    for (let i = 0; i < 60 && ref === ""; i += 1) {
-      try {
-        ref = execFileSync("git", ["rev-parse", "--verify", `refs/xonecode/sesion/${sesion}`], {
-          cwd: raiz,
-          encoding: "utf8",
-          stdio: ["ignore", "pipe", "ignore"],
-        }).trim();
-      } catch {
-        await new Promise<void>((r) => setTimeout(r, 50));
-      }
-    }
+    // 2) Y la marca de git, o Revisión diría `sin-marca` para siempre.
+    //
+    // Se espera la COSA y no el reloj: `volcar()` lanza la foto sin aguardarla, así que el
+    // asidero de `marcarSesion` es la única forma de saber que ya terminó sin sondear el
+    // disco. Y esperarlo es además parte de la medida: si nadie aplicara la foto, aquí no se
+    // resolvería nunca.
+    expect(await (await marcada.promesa)).toBe(true);
+    const ref = execFileSync("git", ["rev-parse", "--verify", `refs/xonecode/sesion/${sesion}`], {
+      cwd: raiz,
+      encoding: "utf8",
+    }).trim();
     expect(ref).toMatch(/^[0-9a-f]{40}$/);
 
     await corredor.parar();

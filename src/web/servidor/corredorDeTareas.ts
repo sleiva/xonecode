@@ -262,17 +262,41 @@ export function crearCorredorDeTareas(opciones: {
    * Dejarlo vivo e inalcanzable desde la interfaz es exactamente lo que `borrarSesion` evita
    * al borrar una conversación.
    */
-  const conSesionSoloSiSePuedeAbrir = async (tarea: Tarea): Promise<Tarea> => {
-    const sesion = tarea.sesion;
-    if (sesion === undefined || opciones.sesionAbrible === undefined) return tarea;
-    if (opciones.sesionAbrible(tarea.proyecto.raiz, sesion)) return tarea;
+  const olvidarSiNoSePuedeAbrir = async (raiz: string, sesion: string | undefined): Promise<boolean> => {
+    if (sesion === undefined || opciones.sesionAbrible === undefined) return false;
+    try {
+      if (opciones.sesionAbrible(raiz, sesion)) return false;
+    } catch {
+      // Preguntarlo puede fallar (en producción lee el índice del proyecto). Entonces no se
+      // sabe, y no se borra nada: la misma dirección que el puerto ausente.
+      return false;
+    }
     // Primero olvidar y después escribir: si la escritura falla, el hilo que se ha olvidado
     // era inalcanzable de todas formas. Un fallo al olvidar no puede impedir la limpieza del
     // campo — el mismo trato que `olvidarHilo` le da a `borrarSesion`.
-    await opciones.olvidarHilo?.(tarea.proyecto.raiz, sesion).catch(() => undefined);
-    const sinSesion = { ...tarea };
-    delete sinSesion.sesion;
-    return sinSesion;
+    await opciones.olvidarHilo?.(raiz, sesion).catch(() => undefined);
+    return true;
+  };
+
+  /** La tarea sin su `sesion`. Ver la regla de arriba. */
+  const sinSesion = (tarea: Tarea): Tarea => {
+    const limpia = { ...tarea };
+    delete limpia.sesion;
+    return limpia;
+  };
+
+  /**
+   * Aparca una tarea pasando por la regla de `sesion`, releyendo del disco el id con el que
+   * quedó marcada.
+   *
+   * Existe para que el camino de ERROR pase por las MISMAS dos cosas que el bueno: una regla
+   * que se cumple salvo cuando algo falla no es una regla. Y relee el id en vez de recibirlo
+   * porque desde el último recurso del lazo no se sabe con qué hilo se marcó.
+   */
+  const aparcarMirandoLaSesion = async (tarea: Tarea, motivo: string): Promise<void> => {
+    const actual = opciones.disco.listar().find((t) => t.id === tarea.id);
+    const limpiar = await olvidarSiNoSePuedeAbrir(tarea.proyecto.raiz, actual?.sesion);
+    aparcar(tarea.id, motivo, limpiar ? sinSesion : (t) => t);
   };
 
   /**
@@ -353,31 +377,34 @@ export function crearCorredorDeTareas(opciones: {
       return;
     }
 
-    /**
-     * La marca de «en proceso», y es una PUERTA: si no se puede escribir, esta tarea ya no
-     * es nuestra —la descartaron, o el otro corredor se la llevó— y no se corre. Sin esa
-     * puerta el turno arrancaría igual sobre una tarea que en el kanban ya no existe.
-     *
-     * El id del hilo ES la sesión: es lo que hace que atender la tarea sea abrir su
-     * conversación.
-     */
     const hilo = consola.idDeHilo;
-    const marcada = escribirSiSigueSiendoNuestra(tarea.id, (actual) =>
-      actual.estado === "nuevo" ? conEstado({ ...actual, sesion: hilo }, "en-proceso", undefined, { pid }) : undefined
-    );
-    if (!marcada) {
-      await cortar();
-      renunciarSiSigueNueva(tarea.id);
-      return;
-    }
-
     let motivo: string | undefined;
+    /** ¿Devolvió el turno por su cuenta? Distingue «acabó» de «se lo cortamos». */
+    let terminoLimpio = false;
+    let marcada = false;
     try {
-      await consola.correrTarea(tarea.encargo, (m) => void (motivo ??= m));
+      /**
+       * La marca de «en proceso», y es una PUERTA: si no se puede escribir, esta tarea ya no
+       * es nuestra —la descartaron, o el otro corredor se la llevó— y no se corre. Sin esa
+       * puerta el turno arrancaría igual sobre una tarea que en el kanban ya no existe.
+       *
+       * El id del hilo ES la sesión: es lo que hace que atender la tarea sea abrir su
+       * conversación.
+       */
+      marcada = escribirSiSigueSiendoNuestra(tarea.id, (actual) =>
+        actual.estado === "nuevo" ? conEstado({ ...actual, sesion: hilo }, "en-proceso", undefined, { pid }) : undefined
+      );
+      if (marcada) {
+        await consola.correrTarea(tarea.encargo, (m) => void (motivo ??= m));
+        terminoLimpio = true;
+      }
     } catch (error) {
       // El `motivo ??=` conserva el primero: la consola de tarea aparca ANTES de lanzar, así
-      // que cuando el error llega aquí el motivo bueno ya está puesto.
-      motivo ??= parando ? MOTIVO_CORTADA_POR_CIERRE : `el turno falló (${codigoDe(error)})`;
+      // que cuando el error llega aquí el motivo bueno ya está puesto. Y si lo que reventó
+      // fue la propia marca, `marcada` sigue en falso y de aquí no sale ningún estado: no hay
+      // ninguna tarea nuestra que contar.
+      if (marcada) motivo ??= parando ? MOTIVO_CORTADA_POR_CIERRE : `el turno falló (${codigoDe(error)})`;
+      else renunciarSiSigueNueva(tarea.id, error);
     } finally {
       /**
        * **Cerrar ANTES de escribir el estado, y el orden es load-bearing.** Solo las tareas
@@ -387,32 +414,52 @@ export function crearCorredorDeTareas(opciones: {
        * es exactamente lo que el cerrojo por proyecto existe para evitar. Hay test del orden.
        *
        * Y es también lo que VUELCA el transcript de la sesión: `cerrar()` llama a `volcar()`.
+       * En el `finally` porque **ningún** camino puede dejar la consola abierta: la marca que
+       * no se pudo escribir y el turno que revienta son un handle filtrado por tarea, y con un
+       * lazo corriendo eso se acumula.
        */
       await cortar();
     }
+    if (!marcada) {
+      renunciarSiSigueNueva(tarea.id);
+      return;
+    }
     // Un turno que devolvió porque le cerramos la consola no está «terminado»: se dice, con
-    // las mismas palabras que la reconciliación, porque es la misma situación.
-    if (motivo === undefined && parando) motivo = MOTIVO_CORTADA_POR_CIERRE;
+    // las mismas palabras que la reconciliación, porque es la misma situación. Se mira si
+    // devolvió LIMPIO y no solo si estamos parando: un turno que acaba su trabajo en el mismo
+    // instante en que alguien pulsa Ctrl-C acabaría con un motivo falso en el kanban.
+    if (motivo === undefined && !terminoLimpio) motivo = MOTIVO_CORTADA_POR_CIERRE;
     /**
-     * Y aquí ya se sabe si el turno dejó conversación: `cortar()` acaba de volcarla. Un
-     * turno que no emitió un solo acto —revienta al abrir la sesión real— cierra sin volcar
-     * nada, y entonces su id no nombra nada abrible. Ver `conSesionSoloSiSePuedeAbrir`.
+     * El estado final, y **el camino de error pasa por lo mismo que el bueno**: la regla de
+     * `sesion` y la consola cerrada. Aquí ya se sabe si el turno dejó conversación —`cortar()`
+     * acaba de volcarla—: uno que no emitió un solo acto cierra sin volcar nada, y entonces su
+     * id no nombra nada abrible (ver `olvidarSiNoSePuedeAbrir`).
      */
-    const limpiarSesion = (await conSesionSoloSiSePuedeAbrir({ ...tarea, sesion: hilo })).sesion === undefined;
-    const conLoQueQuede = (actual: Tarea): Tarea => {
-      if (!limpiarSesion) return actual;
-      const sin = { ...actual };
-      delete sin.sesion;
-      return sin;
-    };
-    // Aparcada si algo pidió a una persona; terminada si acabó limpia. «Terminada» significa
-    // que el turno acabó, no que el resultado sea correcto: eso lo mira quien la lea.
-    if (motivo === undefined) {
-      escribirSiSigueSiendoNuestra(tarea.id, (actual) =>
-        actual.estado === "en-proceso" && actual.pid === pid ? conEstado(conLoQueQuede(actual), "terminada") : undefined
-      );
-    } else {
-      aparcar(tarea.id, motivo, conLoQueQuede);
+    // La regla se resuelve UNA vez y fuera del `try` de la escritura: así el camino de error
+    // reusa la decisión en vez de volver a preguntar —y a olvidar— el mismo hilo dos veces.
+    let conLoQueQuede: (t: Tarea) => Tarea = (t) => t;
+    try {
+      if (await olvidarSiNoSePuedeAbrir(tarea.proyecto.raiz, hilo)) conLoQueQuede = sinSesion;
+    } catch {
+      // Ni preguntar se pudo: no se sabe, y entonces no se borra nada.
+    }
+    try {
+      // Aparcada si algo pidió a una persona; terminada si acabó limpia. «Terminada» significa
+      // que el turno acabó, no que el resultado sea correcto: eso lo mira quien la lea.
+      if (motivo === undefined) {
+        escribirSiSigueSiendoNuestra(tarea.id, (actual) =>
+          actual.estado === "en-proceso" && actual.pid === pid
+            ? conEstado(conLoQueQuede(actual), "terminada")
+            : undefined
+        );
+      } else {
+        aparcar(tarea.id, motivo, conLoQueQuede);
+      }
+    } catch (error) {
+      // Ni escribir el final puede dejarla «en proceso» sin nadie detrás: se intenta aparcar
+      // diciéndolo, con la MISMA regla ya resuelta arriba.
+      aparcar(tarea.id, motivo ?? `el corredor no pudo cerrarla (${codigoDe(error)})`, conLoQueQuede);
+      renunciarSiSigueNueva(tarea.id, error);
     }
   };
 
@@ -473,8 +520,13 @@ export function crearCorredorDeTareas(opciones: {
         // Nada de `informar`: lo que le pasa a una tarea va a su registro. Si `correr` se
         // rompe fuera del turno, la tarea se queda aparcada diciéndolo — nunca «en proceso»
         // sin nadie detrás.
-        .catch((error: unknown) => {
-          aparcar(tarea.id, `el corredor no pudo con ella (${codigoDe(error)})`);
+        .catch(async (error: unknown) => {
+          // El último recurso, y pasa por la MISMA regla de `sesion` que el camino bueno:
+          // dejar escrito aquí un id que no nombra nada abrible sería la regla cumpliéndose
+          // solo cuando todo va bien.
+          await aparcarMirandoLaSesion(tarea, `el corredor no pudo con ella (${codigoDe(error)})`).catch(
+            () => undefined
+          );
           // Y si tras intentarlo SIGUE en `nuevo`, este proceso no puede moverla de sitio:
           // renuncia, o el `revisar()` de abajo la vuelve a coger en el acto y otra vez.
           // Medido: sin esto, un índice que no se puede escribir es una CPU al 100%.
@@ -519,8 +571,9 @@ export function crearCorredorDeTareas(opciones: {
       }
       // El hilo de un turno cortado a mitad no nombra nada abrible: se olvida antes de
       // aparcar. Ver `conSesionSoloSiSePuedeAbrir`.
+      const limpiar = await olvidarSiNoSePuedeAbrir(t.proyecto.raiz, t.sesion);
       reconciliada.push(
-        conEstado(await conSesionSoloSiSePuedeAbrir(t), "requiere-atencion", motivoDeReconciliacion(t.pid))
+        conEstado(limpiar ? sinSesion(t) : t, "requiere-atencion", motivoDeReconciliacion(t.pid))
       );
     }
     if (reconciliada.some((t, i) => t !== lista[i])) {
@@ -545,6 +598,21 @@ export function crearCorredorDeTareas(opciones: {
       try {
         await arrancarDeVerdad();
       } catch (error) {
+        /**
+         * **Y se SUELTA el cerrojo, no solo se olvida.** Poner `miCerrojo = false` y dejar el
+         * fichero en disco era el peor fallo posible de esta pieza: `corriendoAqui()` mentía,
+         * `parar()` no soltaba nada —creía que no lo tenía— y las tareas de TODA la máquina se
+         * quedaban congeladas hasta que el proceso muriera. Un cerrojo que existe para que no
+         * haya dos corredores acabando con que no haya ninguno.
+         *
+         * Llamarlo es seguro aunque el fallo ocurriera ANTES de tomarlo: `soltarCerrojo` solo
+         * borra el cerrojo cuyo pid es el nuestro.
+         */
+        try {
+          opciones.disco.soltarCerrojo();
+        } catch {
+          // Si tampoco se puede soltar, no hay nada más que hacer: lo de abajo lo dice.
+        }
         miCerrojo = false;
         informar(`las tareas de fondo no se pueden ejecutar aquí (${codigoDe(error)}); la consola sigue`);
       }
