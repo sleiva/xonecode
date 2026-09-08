@@ -93,7 +93,7 @@ import { CatalogoModelos } from "../../agent/catalogoModelos.js";
 import type { Entorno } from "../../core/settings.js";
 import { arrancarServidor, type ServidorWeb } from "./servidor.js";
 import { consolaParaTarea, crearCorredorDeTareas } from "./corredorDeTareas.js";
-import { CONCURRENCIA_POR_OMISION } from "../../core/tareas.js";
+import { CONCURRENCIA_POR_OMISION, type Tarea } from "../../core/tareas.js";
 import type { TareasEnDisco } from "../../agent/tareasEnDisco.js";
 import {
   conexionDeVestibulo,
@@ -113,6 +113,7 @@ import type {
   MensajeDelCliente,
   Sumidero,
   InformeDeDispositivosDelCable,
+  TareaDelCable,
 } from "./transporte.js";
 
 /** Las dos rutas del cable. El cliente las tiene escritas en `apps/web/src/conexion.ts`. */
@@ -296,6 +297,27 @@ export interface OpcionesDeMontaje {
    * tiene nada que ver, y en la pantalla eso se lee como un cuelgue.
    */
   revisarTareas?: () => void;
+  /**
+   * La cola de tareas y las acciones sobre ella. Ausentes = esta ejecución no las tiene, y
+   * no se manda ningún `tareas`: el kanban se queda diciendo que no ha llegado, en vez de
+   * afirmar que no hay tareas.
+   */
+  tareas?: () => { lista: readonly Tarea[]; concurrencia: number; corriendoAqui: boolean };
+  /** Encola una tarea `nueva`. Ausente = la ventana no puede crear ninguna. */
+  crearTarea?: (proyecto: string, peticion: string, encargo: string) => { id: string };
+  /**
+   * Reintentar, descartar o terminar una tarea existente. Una transición imposible no
+   * lanza aquí: quien la implemente la ignora y lo dice, la misma regla que
+   * `core/tareas.ts#conEstado` exige un motivo para aparcar.
+   */
+  accionDeTarea?: (accion: "reintentar" | "descartar" | "terminar", id: string) => void;
+  /** Cambia el tope de concurrencia del corredor. Ausente = Ajustes no puede tocarlo. */
+  guardarConcurrencia?: (concurrencia: number) => void;
+  /**
+   * Augmenta una petición en un encargo revisado (`agent/aumentador.ts`, Task 9). Ausente =
+   * el botón «Preparar el encargo» no está disponible.
+   */
+  augmentar?: (proyecto: string, peticion: string) => Promise<string>;
 }
 
 /** El `Content-Type` con el que se sirve un artefacto inline: al texto se le pone el juego
@@ -664,6 +686,9 @@ export function montarRutas(
     // se puede abrir en cuanto conecta, y sin esto enseñaría una lista vacía hasta que algo
     // los cambiara — que es indistinguible de «no tienes ninguno».
     const agentes = mensajeDeAgentes();
+    // La cola de tareas, si esta ejecución las tiene: la misma regla que `agentes`, sin
+    // esto la pestaña de tareas se quedaría vacía hasta el primer cambio de la cola.
+    const tareas = mensajeDeTareas();
     for (const cliente of destinatarios) {
       // El orden importa: primero el transcript, luego lo que el compositor necesita para
       // sugerir, y al final el estado de modelos que pinta su disparador. Al reconectar se
@@ -673,6 +698,7 @@ export function montarRutas(
       cliente({ clase: "comandos", comandos: comandosDelRegistro() });
       cliente(modelos);
       cliente(agentes);
+      if (tareas !== undefined) cliente(tareas);
       // La foto de la máquina, si ya se tomó. Si no, se dispara abajo UNA vez y llega a
       // todos por el SSE cuando termine: no se espera aquí, que son varios procesos.
       if (informeDeDispositivos !== undefined) {
@@ -780,6 +806,40 @@ export function montarRutas(
   /** Los cuatro nombres conocidos y nada más: lo que llega por el cable no elige binario. */
   const esNombreDeHerramienta = (v: string): v is NombreDeHerramienta =>
     v === "adb" || v === "emulator" || v === "xcrun" || v === "devicectl";
+
+  /** La tarea, sin su raíz: es una ruta de la máquina y el cable puede ir por un túnel. */
+  const filaDeTarea = (t: Tarea): TareaDelCable => ({
+    id: t.id,
+    // El ID, que es con lo que la interfaz filtra; el nombre va aparte, para leer. La RAÍZ
+    // no viaja: es una ruta de la máquina.
+    proyecto: t.proyecto.id,
+    proyectoNombre: t.proyecto.nombre,
+    titulo: t.titulo,
+    peticion: t.peticion,
+    encargo: t.encargo,
+    adjuntos: t.adjuntos,
+    estado: t.estado,
+    creada: t.creada,
+    ...(t.motivo === undefined ? {} : { motivo: t.motivo }),
+    ...(t.sesion === undefined ? {} : { sesion: t.sesion }),
+    ...(t.empezada === undefined ? {} : { empezada: t.empezada }),
+    ...(t.acabada === undefined ? {} : { acabada: t.acabada }),
+  });
+
+  const mensajeDeTareas = (): MensajeAlCliente | undefined => {
+    const cola = opciones.tareas?.();
+    if (cola === undefined) return undefined;
+    return {
+      clase: "tareas",
+      lista: cola.lista.map(filaDeTarea),
+      concurrencia: cola.concurrencia,
+      corriendoAqui: cola.corriendoAqui,
+    };
+  };
+  const emitirTareas = (): void => {
+    const m = mensajeDeTareas();
+    if (m !== undefined) emitir(m);
+  };
 
   /** Los ajustes de destino, o `{}` —que es «se miran todos»— si esta ejecución no los lee. */
   const ajustesDeDispositivos = (): AjustesDeDispositivos => opciones.ajustesDeDispositivos?.() ?? {};
@@ -1780,6 +1840,40 @@ export function montarRutas(
       (mensaje.accion === "ejecutar" || mensaje.accion === "cancelar")
     ) {
       atenderReceta(mensaje);
+      respuesta.writeHead(204);
+      respuesta.end();
+      return;
+    }
+    if (typeof mensaje === "object" && mensaje !== null && mensaje.clase === "tarea") {
+      if (mensaje.accion === "crear" && opciones.crearTarea !== undefined) {
+        opciones.crearTarea(mensaje.proyecto, mensaje.peticion, mensaje.encargo);
+        opciones.revisarTareas?.();
+        emitirTareas();
+      } else if (mensaje.accion === "augmentar" && opciones.augmentar !== undefined) {
+        void opciones
+          .augmentar(mensaje.proyecto, mensaje.peticion)
+          .then((encargo) => emitir({ clase: "tarea", accion: "augmentado", encargo }))
+          .catch((error) => emitir({ clase: "tarea", accion: "augmentado", error: codigoDe(error) }));
+      } else if (
+        mensaje.accion !== "crear" &&
+        mensaje.accion !== "augmentar" &&
+        opciones.accionDeTarea !== undefined
+      ) {
+        opciones.accionDeTarea(mensaje.accion, mensaje.id);
+        opciones.revisarTareas?.();
+        emitirTareas();
+      }
+      respuesta.writeHead(204);
+      respuesta.end();
+      return;
+    }
+    if (typeof mensaje === "object" && mensaje !== null && mensaje.clase === "tareas" && typeof mensaje.concurrencia === "number") {
+      // Cambiar el tope no vale nada sin volver a revisar: con la cola llena y hueco nuevo,
+      // sin este empujón se quedaría esperando al siguiente evento que no tiene nada que
+      // ver — la misma razón por la que crear y accionar revisan tras escribir.
+      opciones.guardarConcurrencia?.(mensaje.concurrencia);
+      opciones.revisarTareas?.();
+      emitirTareas();
       respuesta.writeHead(204);
       respuesta.end();
       return;

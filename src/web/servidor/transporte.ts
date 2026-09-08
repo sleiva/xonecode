@@ -112,6 +112,18 @@ export type MensajeAlCliente =
    */
   | { clase: "agentes"; agentes: AgenteDelCable[]; problemas: string[] }
   /**
+   * La cola de tareas entera. Va a TODOS los clientes, como la foto de la máquina y por lo
+   * mismo: la cola es de la máquina. `corriendoAqui` es falso en el segundo proceso, y es lo
+   * que deja decir que este kanban no avanza.
+   */
+  | { clase: "tareas"; lista: TareaDelCable[]; concurrencia: number; corriendoAqui: boolean }
+  /**
+   * Cómo fue la última augmentación pedida (`{clase:"tarea", accion:"augmentar"}`): el
+   * encargo que propone el modelo, o por qué no se pudo. Nunca los dos a la vez.
+   */
+  | { clase: "tarea"; accion: "augmentado"; encargo: string }
+  | { clase: "tarea"; accion: "augmentado"; error: string }
+  /**
    * Qué hay en la MÁQUINA para probar la app: el sistema, las herramientas de Android e
    * iOS (adb, emulator, xcrun/simctl, devicectl) con su estado, y a qué dispositivos y
    * simuladores se llega (`core/dispositivos.ts`).
@@ -390,6 +402,27 @@ export interface FicheroDelProyecto {
   error?: string;
 }
 
+/**
+ * Una tarea tal como viaja. **Sin la raíz del proyecto**: viajan su id y su nombre, que es
+ * lo que la interfaz necesita — la ruta se queda en el host, igual que `Herramienta.ruta`.
+ * Redeclarada en `apps/web/src/tipos.ts`.
+ */
+export interface TareaDelCable {
+  id: string;
+  proyecto: string;
+  proyectoNombre: string;
+  titulo: string;
+  peticion: string;
+  encargo: string;
+  adjuntos: { nombre: string; bytes: number; mime?: string }[];
+  estado: "nuevo" | "en-proceso" | "requiere-atencion" | "terminada";
+  motivo?: string;
+  sesion?: string;
+  creada: string;
+  empezada?: string;
+  acabada?: string;
+}
+
 export interface ProveedorDeModelos {
   id: string;
   /**
@@ -596,6 +629,15 @@ export type MensajeDelCliente =
   /** Los modelos que ofrece un MOTOR externo, para el desplegable de un subagente. Se pide
    *  bajo demanda: el de Codex se le pregunta a él, y eso arranca un proceso. */
   | { clase: "modelosDeMotor"; motor: string }
+  /**
+   * Las acciones sobre una tarea. Viaja el ID del proyecto y su nombre, NUNCA su raíz: es
+   * una ruta de la máquina, y el cable puede ir por un túnel.
+   */
+  | { clase: "tarea"; accion: "crear"; proyecto: string; peticion: string; encargo: string }
+  | { clase: "tarea"; accion: "augmentar"; proyecto: string; peticion: string }
+  | { clase: "tarea"; accion: "reintentar" | "descartar" | "terminar"; id: string }
+  /** Cambia el tope de concurrencia de la cola de tareas. */
+  | { clase: "tareas"; concurrencia: number }
   | { clase: "decision"; decisiones: Record<string, string> };
 
 /**

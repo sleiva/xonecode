@@ -2606,3 +2606,151 @@ describe("los modelos de un motor externo, por el cable", () => {
     expect(ultimo(cliente)).toMatchObject({ modelos: [], error: expect.stringContaining("no puede") });
   });
 });
+
+describe("las tareas en background, por el cable", () => {
+  const ultimo = (cliente: ReturnType<typeof clienteDeMentira>) =>
+    cliente.recibidos.filter((m) => m.clase === "tareas").at(-1) as Extract<MensajeAlCliente, { clase: "tareas" }>;
+
+  it("la cola va en la ráfaga de bienvenida, y sin la raíz del proyecto", async () => {
+    const servidor = servidorDeMentira();
+    montarRutas(servidor, vestibuloDePrueba(), {
+      tareas: () => ({
+        lista: [
+          {
+            id: "t1",
+            proyecto: { id: "p1", raiz: "/w/AppDemo", nombre: "AppDemo" },
+            titulo: "Arregla el login",
+            peticion: "Arregla el login",
+            encargo: "Arregla el login",
+            adjuntos: [],
+            estado: "nuevo" as const,
+            creada: "2026-09-08T10:00:00.000Z",
+          },
+        ],
+        concurrencia: 2,
+        corriendoAqui: true,
+      }),
+    });
+    const cliente = clienteDeMentira();
+    await servidor.rutas.get(`GET ${RUTA_EVENTOS}`)!(cliente.peticion, cliente.respuesta);
+    await asentar();
+    const mensaje = ultimo(cliente);
+    expect(mensaje.lista[0]).toMatchObject({ id: "t1", proyectoNombre: "AppDemo", estado: "nuevo" });
+    // La ruta de la máquina NO viaja.
+    expect(JSON.stringify(mensaje)).not.toContain("/w/AppDemo");
+  });
+
+  it("crear una tarea la encola y hace revisar al corredor", async () => {
+    const creadas: { proyecto: string; encargo: string }[] = [];
+    let revisado = 0;
+    const servidor = servidorDeMentira();
+    montarRutas(servidor, vestibuloDePrueba(), {
+      tareas: () => ({ lista: [], concurrencia: 2, corriendoAqui: true }),
+      crearTarea: (proyecto, peticion, encargo) => {
+        creadas.push({ proyecto, encargo });
+        return { id: "t9" };
+      },
+      revisarTareas: () => void (revisado += 1),
+    });
+    const cliente = clienteDeMentira();
+    await servidor.rutas.get(`GET ${RUTA_EVENTOS}`)!(cliente.peticion, cliente.respuesta);
+    const accion = servidor.rutas.get(`POST ${RUTA_ACCION}`)!;
+    await asentar();
+    expect(
+      await enviarMensaje(accion, { clase: "tarea", accion: "crear", proyecto: "p1", peticion: "Arregla", encargo: "Arregla bien" })
+    ).toBe(204);
+    await asentar();
+    expect(creadas).toEqual([{ proyecto: "p1", encargo: "Arregla bien" }]);
+    expect(revisado).toBe(1);
+  });
+
+  it("reintentar, descartar y terminar llegan con el id", async () => {
+    const hechas: string[] = [];
+    const servidor = servidorDeMentira();
+    montarRutas(servidor, vestibuloDePrueba(), {
+      tareas: () => ({ lista: [], concurrencia: 2, corriendoAqui: true }),
+      accionDeTarea: (accion, id) => void hechas.push(`${accion}:${id}`),
+    });
+    const cliente = clienteDeMentira();
+    await servidor.rutas.get(`GET ${RUTA_EVENTOS}`)!(cliente.peticion, cliente.respuesta);
+    const accion = servidor.rutas.get(`POST ${RUTA_ACCION}`)!;
+    await asentar();
+    for (const a of ["reintentar", "descartar", "terminar"] as const) {
+      await enviarMensaje(accion, { clase: "tarea", accion: a, id: "t1" });
+    }
+    await asentar();
+    expect(hechas).toEqual(["reintentar:t1", "descartar:t1", "terminar:t1"]);
+  });
+
+  it("sin puerto de tareas no se manda ninguna cola: no se afirma que no haya", async () => {
+    const servidor = servidorDeMentira();
+    montarRutas(servidor, vestibuloDePrueba(), {});
+    const cliente = clienteDeMentira();
+    await servidor.rutas.get(`GET ${RUTA_EVENTOS}`)!(cliente.peticion, cliente.respuesta);
+    await asentar();
+    expect(cliente.recibidos.some((m) => m.clase === "tareas")).toBe(false);
+  });
+
+  it("cambiar el tope de concurrencia lo guarda y hace revisar", async () => {
+    const concurrencias: number[] = [];
+    let revisado = 0;
+    const servidor = servidorDeMentira();
+    montarRutas(servidor, vestibuloDePrueba(), {
+      tareas: () => ({ lista: [], concurrencia: 2, corriendoAqui: true }),
+      guardarConcurrencia: (c) => void concurrencias.push(c),
+      revisarTareas: () => void (revisado += 1),
+    });
+    const cliente = clienteDeMentira();
+    await servidor.rutas.get(`GET ${RUTA_EVENTOS}`)!(cliente.peticion, cliente.respuesta);
+    const accion = servidor.rutas.get(`POST ${RUTA_ACCION}`)!;
+    await asentar();
+    expect(await enviarMensaje(accion, { clase: "tareas", concurrencia: 4 })).toBe(204);
+    await asentar();
+    expect(concurrencias).toEqual([4]);
+    expect(revisado).toBe(1);
+  });
+
+  it("sin puerto de augmentar no manda ningún «augmentado»", async () => {
+    const servidor = servidorDeMentira();
+    montarRutas(servidor, vestibuloDePrueba(), {
+      tareas: () => ({ lista: [], concurrencia: 2, corriendoAqui: true }),
+    });
+    const cliente = clienteDeMentira();
+    await servidor.rutas.get(`GET ${RUTA_EVENTOS}`)!(cliente.peticion, cliente.respuesta);
+    const accion = servidor.rutas.get(`POST ${RUTA_ACCION}`)!;
+    await asentar();
+    expect(
+      await enviarMensaje(accion, { clase: "tarea", accion: "augmentar", proyecto: "p1", peticion: "Arregla" })
+    ).toBe(204);
+    await asentar();
+    expect(cliente.recibidos.some((m) => m.clase === "tarea")).toBe(false);
+  });
+
+  it("con puerto de augmentar manda el encargo, o el error si revienta — nunca los dos", async () => {
+    const servidor = servidorDeMentira();
+    montarRutas(servidor, vestibuloDePrueba(), {
+      tareas: () => ({ lista: [], concurrencia: 2, corriendoAqui: true }),
+      augmentar: async (_proyecto, peticion) =>
+        peticion === "revienta" ? Promise.reject(new Error("boom")) : `encargo: ${peticion}`,
+    });
+    const cliente = clienteDeMentira();
+    await servidor.rutas.get(`GET ${RUTA_EVENTOS}`)!(cliente.peticion, cliente.respuesta);
+    const accion = servidor.rutas.get(`POST ${RUTA_ACCION}`)!;
+    await asentar();
+    await enviarMensaje(accion, { clase: "tarea", accion: "augmentar", proyecto: "p1", peticion: "Arregla" });
+    await asentar();
+    const augmentados = cliente.recibidos.filter(
+      (m): m is Extract<MensajeAlCliente, { clase: "tarea" }> => m.clase === "tarea"
+    );
+    expect(augmentados.at(-1)).toEqual({ clase: "tarea", accion: "augmentado", encargo: "encargo: Arregla" });
+
+    await enviarMensaje(accion, { clase: "tarea", accion: "augmentar", proyecto: "p1", peticion: "revienta" });
+    await asentar();
+    const ultimoAugmentado = cliente.recibidos.filter(
+      (m): m is Extract<MensajeAlCliente, { clase: "tarea" }> => m.clase === "tarea"
+    ).at(-1);
+    expect(ultimoAugmentado).toMatchObject({ clase: "tarea", accion: "augmentado" });
+    expect((ultimoAugmentado as { encargo?: string }).encargo).toBeUndefined();
+    expect((ultimoAugmentado as { error?: string }).error).toBeDefined();
+  });
+});

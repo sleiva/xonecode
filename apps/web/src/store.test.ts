@@ -653,3 +653,78 @@ describe("el paso de receta que se está ejecutando", () => {
     expect(s.leer().instalacion).toMatchObject({ estado: "fallo", motivo: "Warning: Failed to find package" });
   });
 });
+
+describe("la cola de tareas", () => {
+  it("se guarda campo a campo, y un estado inventado cae en «nuevo»", () => {
+    const s = crearStoreDelCliente();
+    s.aplicar({
+      clase: "tareas",
+      concurrencia: 3,
+      corriendoAqui: false,
+      lista: [
+        {
+          id: "t1",
+          proyecto: "p1",
+          proyectoNombre: "AppDemo",
+          titulo: "T",
+          peticion: "p",
+          encargo: "e",
+          adjuntos: [{ nombre: "a.png", bytes: 10, mime: "image/png" }],
+          estado: "requiere-atencion",
+          motivo: "una escritura sin aprobar",
+          creada: "2026-09-08T10:00:00.000Z",
+        },
+        { id: "", proyecto: "p1", estado: "nuevo" },
+      ],
+    });
+    const cola = s.leer().tareas!;
+    expect(cola.concurrencia).toBe(3);
+    expect(cola.corriendoAqui).toBe(false);
+    // La fila sin id se descarta: no hay nada que hacer con ella y la tarjeta no tendría clave.
+    expect(cola.lista).toHaveLength(1);
+    expect(cola.lista[0]).toMatchObject({ estado: "requiere-atencion", motivo: "una escritura sin aprobar" });
+    expect(cola.lista[0]!.adjuntos).toEqual([{ nombre: "a.png", bytes: 10, mime: "image/png" }]);
+  });
+
+  it("NO se tira al caerse el cable: las tareas siguen corriendo en la máquina", () => {
+    // Misma regla que la foto de la máquina y que el paso de instalación en marcha.
+    const s = crearStoreDelCliente();
+    s.aplicar({ clase: "tareas", concurrencia: 2, corriendoAqui: true, lista: [] });
+    s.marcarDesconectado();
+    expect(s.leer().tareas).toBeDefined();
+  });
+
+  it("un campo del mensaje que la lista blanca no nombra no llega al estado", () => {
+    // La lista blanca ya se comió `mime`, `recetas` y `ejecutable` en versiones anteriores
+    // del cable; este test es el que caza que un campo nuevo se nombre aquí antes de fiarse
+    // de él en un componente.
+    const s = crearStoreDelCliente();
+    s.aplicar({
+      clase: "tareas",
+      concurrencia: 2,
+      corriendoAqui: true,
+      lista: [
+        {
+          id: "t1",
+          proyecto: "p1",
+          proyectoNombre: "AppDemo",
+          titulo: "T",
+          peticion: "p",
+          encargo: "e",
+          adjuntos: [],
+          estado: "nuevo",
+          creada: "2026-09-08T10:00:00.000Z",
+          pid: 12345,
+        },
+      ],
+    });
+    const fila = s.leer().tareas!.lista[0]!;
+    expect((fila as Record<string, unknown>)["pid"]).toBeUndefined();
+  });
+
+  it("sin lista (mensaje malformado) no se guarda nada", () => {
+    const s = crearStoreDelCliente();
+    s.aplicar({ clase: "tareas", concurrencia: 2, corriendoAqui: true });
+    expect(s.leer().tareas).toBeUndefined();
+  });
+});

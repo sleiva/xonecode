@@ -24,6 +24,7 @@ import type {
   FicheroTocado,
   FicheroDelProyecto,
   AgenteDelCable,
+  TareaDelCable,
   ProveedorDeModelos,
   SelectorDeConsola,
   Dispositivo,
@@ -55,6 +56,14 @@ export interface EstadoDelCliente {
   /** Los subagentes y los `.md` que no se pudieron leer. Ausente = todavía no ha llegado el
    *  mensaje, que NO es lo mismo que «no hay ninguno»: la ventana lo distingue. */
   agentes?: { lista: AgenteDelCable[]; problemas: string[] };
+  /**
+   * La cola de tareas en background. Ausente = todavía no ha llegado el mensaje: el kanban
+   * dice que no ha llegado en vez de afirmar que no hay tareas. NO se tira al caerse el
+   * cable (`marcarDesconectado`), por la misma regla que la foto de la máquina y el paso
+   * de instalación en marcha: las tareas siguen corriendo en la máquina aunque este
+   * navegador se desconecte.
+   */
+  tareas?: { lista: TareaDelCable[]; concurrencia: number; corriendoAqui: boolean };
   /**
    * Qué hay en la máquina para probar la app (`core/dispositivos.ts`), tal como lo midió el
    * servidor. Ausente = todavía no llegó: el escritorio dice «consultando…». NO se tira al
@@ -579,6 +588,49 @@ export function crearStoreDelCliente(): {
               problemas: Array.isArray(m.problemas)
                 ? m.problemas.filter((x): x is string => typeof x === "string")
                 : [],
+            },
+          });
+          return;
+        }
+        case "tareas": {
+          // Campo a campo, como todo lo de aquí: esta lista blanca ya se comió `mime`,
+          // `recetas` y `ejecutable`, y el síntoma siempre es una interfaz vacía con los
+          // tests en verde.
+          const m = mensaje as Record<string, unknown>;
+          if (!Array.isArray(m["lista"])) return;
+          const estados = ["nuevo", "en-proceso", "requiere-atencion", "terminada"] as const;
+          mutar({
+            tareas: {
+              concurrencia: typeof m["concurrencia"] === "number" ? m["concurrencia"] : 2,
+              corriendoAqui: m["corriendoAqui"] === true,
+              lista: (m["lista"] as unknown[])
+                .filter((t): t is Record<string, unknown> => typeof t === "object" && t !== null)
+                .map((t) => ({
+                  id: String(t["id"] ?? ""),
+                  proyecto: String(t["proyecto"] ?? ""),
+                  proyectoNombre: String(t["proyectoNombre"] ?? ""),
+                  titulo: String(t["titulo"] ?? ""),
+                  peticion: String(t["peticion"] ?? ""),
+                  encargo: String(t["encargo"] ?? ""),
+                  estado: estados.find((e) => e === t["estado"]) ?? "nuevo",
+                  creada: String(t["creada"] ?? ""),
+                  adjuntos: Array.isArray(t["adjuntos"])
+                    ? (t["adjuntos"] as unknown[])
+                        .filter((a): a is { nombre: string; bytes: number } => typeof a === "object" && a !== null)
+                        .map((a) => ({
+                          nombre: String((a as Record<string, unknown>)["nombre"] ?? ""),
+                          bytes: Number((a as Record<string, unknown>)["bytes"] ?? 0),
+                          ...(typeof (a as Record<string, unknown>)["mime"] === "string"
+                            ? { mime: (a as Record<string, unknown>)["mime"] as string }
+                            : {}),
+                        }))
+                    : [],
+                  ...(typeof t["motivo"] === "string" ? { motivo: t["motivo"] } : {}),
+                  ...(typeof t["sesion"] === "string" ? { sesion: t["sesion"] } : {}),
+                  ...(typeof t["empezada"] === "string" ? { empezada: t["empezada"] } : {}),
+                  ...(typeof t["acabada"] === "string" ? { acabada: t["acabada"] } : {}),
+                }))
+                .filter((t) => t.id !== ""),
             },
           });
           return;
