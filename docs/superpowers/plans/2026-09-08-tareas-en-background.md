@@ -1067,6 +1067,15 @@ git commit -m "feat(web): la consola de una tarea aparca en vez de contestar por
 > su propia `Consola` aportar solo líneas y aprobaciones. Hay un test en
 > `vestibulo.test.ts` que empieza por «MEDIDO:» y está hecho para ponerse ROJO cuando esto
 > se arregle — es la señal, no un fallo.
+> 4. **La piel del volcado: el `MEDIDO:` de `vestibulo.test.ts` NO es el semáforo.** La
+> Task 4 dejó una opción `piel?` en `crearConsolaDeTarea` que esta tarea tiene que rellenar
+> con la piel de la consola de proyecto. Pero ese test solo se pondrá ROJO si el arreglo va
+> en el envoltorio de `vestibulo.ts`; si va en el adaptador de aquí, se queda VERDE y el
+> agujero parecerá seguir abierto. Así que no te fíes de su color: **vuelve a medir el
+> volcado** —un turno de tarea tiene que dejar su `.jsonl` con actos y su
+> `refs/xonecode/sesion/<id>` nombrada— y después invierte o borra ese test. Devolver el
+> agujero para que siga verde sería lo único inaceptable.
+
 > 3. **Una tarea y una persona sobre el mismo proyecto a la vez no tienen aislamiento de
 > ninguna clase**, y el cerrojo de un solo corredor no protege de eso: protege de dos
 > corredores. Dos agentes escribiendo el mismo árbol se pisan las ediciones, y además la

@@ -19,7 +19,7 @@
   {
    "id": 3,
    "subject": "Task 3: `abrirParaTarea` — la segunda puerta, sin mover el c",
-   "status": "pending",
+   "status": "completed",
    "blockedBy": [
     2
    ],
