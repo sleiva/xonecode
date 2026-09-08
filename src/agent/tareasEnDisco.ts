@@ -14,7 +14,7 @@
 import { chmodSync, existsSync, linkSync, mkdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync, readdirSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
-import type { Tarea } from "../core/tareas.js";
+import { conFeedback, type Tarea } from "../core/tareas.js";
 
 /** Bytes que se aceptan por adjunto y por tarea. */
 export const TOPE_DE_ADJUNTO = 20_000_000;
@@ -386,6 +386,56 @@ export function crearTareasEnDisco(opciones: {
       guardarIndice(tareas.filter((t) => t.id !== id));
     },
   };
+}
+
+export interface ResultadoDeFeedback {
+  hecho: boolean;
+  /** Por qué no, si `hecho` es falso. Una frase para enseñar, nunca una excepción cruda. */
+  motivo?: string;
+}
+
+/**
+ * Añade un feedback a una tarea «esperando feedback» y la devuelve al lazo (`nuevo`).
+ *
+ * §0 del diseño, textual: «se edita la tarea y se agrega el feedback del usuario». Esto es
+ * exactamente eso — y nada más: no toca el proyecto, no abre ninguna consola, solo escribe
+ * el índice. Quien lo recoge es el corredor, en su siguiente `revisar()`.
+ *
+ * Solo toma `listar`/`guardar` del puerto, no la interfaz entera: es lo mínimo que hace
+ * falta, y es lo que ya usa `atenderCrearTarea`/`atenderAccionDeTarea` en `arranque.ts`
+ * (`Pick<TareasEnDisco, "listar" | "guardar" | "borrarTarea">`) — con esto, `aplicarFeedback`
+ * encaja ahí sin ensanchar ese tipo.
+ *
+ * **El rechazo se DEVUELVE, nunca se lanza.** Es la misma regla que `write_file`
+ * (`agent/proyecto.ts`): quien llama —el cable, o un test— necesita poder decir por qué sin
+ * envolver esto en un `try`, y un `{hecho:false}` es más fácil de propagar hasta una persona
+ * que una excepción.
+ *
+ * **Dos motivos de rechazo, y los dos pasan por `conFeedback`/`conEstado` sin duplicar la
+ * lógica aquí**: un feedback en blanco —devolvería la tarea al lazo sin nada nuevo que
+ * decirle, el mismo argumento que rechaza un título vacío en `sesiones.ts#renombrarSesion`—
+ * y una tarea que no está `requiere-atencion` —no hay pregunta que este feedback esté
+ * contestando—. `conEstado` ya sabe decir la segunda (`«nuevo» no puede pasar a «nuevo»`,
+ * etc.); repetir esa comprobación aquí sería la misma regla en dos sitios que divergen.
+ */
+export function aplicarFeedback(
+  disco: Pick<TareasEnDisco, "listar" | "guardar">,
+  id: string,
+  texto: string
+): ResultadoDeFeedback {
+  const tareas = disco.listar();
+  const actual = tareas.find((t) => t.id === id);
+  if (actual === undefined) {
+    return { hecho: false, motivo: "la tarea ya no está en la cola" };
+  }
+  let siguiente: Tarea;
+  try {
+    siguiente = conFeedback(actual, texto);
+  } catch (error) {
+    return { hecho: false, motivo: error instanceof Error ? error.message : String(error) };
+  }
+  disco.guardar(tareas.map((t) => (t.id === id ? siguiente : t)));
+  return { hecho: true };
 }
 
 /** `kill(pid, 0)` no manda ninguna señal: solo pregunta si el proceso existe. */

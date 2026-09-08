@@ -469,8 +469,12 @@ export interface Vestibulo {
   /**
    * Abrir un proyecto para una TAREA de fondo: la misma construcción, sin registrarlo como
    * el proyecto abierto ni mudar el sumidero del cable. Ver la implementación.
+   *
+   * Con `sesion`, REABRE esa exacta en vez de abrir una en blanco — es lo que hace que
+   * reanudar una tarea (un reintento, o un feedback) siga la MISMA conversación: el
+   * checkpointer trae su memoria porque el `thread_id` es el mismo id.
    */
-  abrirParaTarea(raiz: string): Promise<ConsolaDeProyecto>;
+  abrirParaTarea(raiz: string, sesion?: string): Promise<ConsolaDeProyecto>;
   proyectoAbierto(): ConsolaDeProyecto | undefined;
   /** El usuario se va sin terminar. No escribe nada; DICE lo que ya quedó escrito. */
   cancelar(): Promise<void>;
@@ -1032,7 +1036,7 @@ export function crearVestibulo(opciones: OpcionesDelVestibulo): Vestibulo {
    */
   const deTareas = new Set<ConsolaDeProyecto>();
 
-  const abrirParaTarea = async (raiz: string): Promise<ConsolaDeProyecto> => {
+  const abrirParaTarea = async (raiz: string, sesion?: string): Promise<ConsolaDeProyecto> => {
     // ANTES de construir nada: sin esto, una raíz equivocada dejaba un `correrConsola`
     // vivo, una foto de git lanzada y un id de hilo gastado. Y el motivo no lleva la ruta
     // —puede ser la del home— porque de aquí el error sube al registro de la tarea.
@@ -1040,7 +1044,10 @@ export function crearVestibulo(opciones: OpcionesDelVestibulo): Vestibulo {
       throw new Error("esa raíz no es un proyecto de xonecode: falta su .xonecode/config.json");
     }
     for (const vieja of deTareas) if (vieja.cerrada) deTareas.delete(vieja);
-    const consolaDeProyecto = await construirConsolaDeProyecto({ raiz, alCable: false });
+    // `sesion` reenviada tal cual: es lo que hace que `construirConsolaDeProyecto` REABRA
+    // ese hilo —`idSesion = sesion ?? randomUUID()`— en vez de abrir uno nuevo. `undefined`
+    // en la primera ejecución de la tarea sigue dando una sesión nueva, como siempre.
+    const consolaDeProyecto = await construirConsolaDeProyecto({ raiz, sesion, alCable: false });
     deTareas.add(consolaDeProyecto);
     return consolaDeProyecto;
   };
@@ -1279,7 +1286,7 @@ export function crearVestibulo(opciones: OpcionesDelVestibulo): Vestibulo {
      * todavía vive. El precio, dicho: una tarea que llega mientras se cierra un turno
      * humano de minutos espera a que acabe. Para trabajo de fondo es el lado correcto.
      */
-    abrirParaTarea: (raiz) => enCola(() => abrirParaTarea(raiz)),
+    abrirParaTarea: (raiz, sesion) => enCola(() => abrirParaTarea(raiz, sesion)),
     proyectoAbierto: () => abierto,
 
     cancelar: () => enCola(async () => {

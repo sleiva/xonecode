@@ -947,6 +947,10 @@ export function App({ store, enviar }: { store: Store; enviar: Conexion["enviar"
               // La verdad sobre lo que la tarea escribió vive en Revisión, no en el chat:
               // sin aprobación previa, esa pestaña es la única forma de mirar.
               alAbrirRevisionDeTarea={(proyecto, sesion) => abrirSesion(proyecto, sesion, "revision")}
+              // «Se edita la tarea y se agrega el feedback del usuario»: el servidor decide
+              // cómo se aplica (`{clase:"tarea", accion:"feedback"}`, el mismo patrón que
+              // `/modelo` desde la pastilla) — el cliente no manda comandos, manda intención.
+              alEnviarFeedback={(id, texto) => void enviar({ clase: "tarea", accion: "feedback", id, texto })}
               {...(estado.alta?.proyectoActivo === undefined ? {} : { proyectoActivo: estado.alta.proyectoActivo })}
             />
           </>

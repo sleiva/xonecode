@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   conAutorizadas,
   conEstado,
+  conFeedback,
   conVeredicto,
   rutaRelativaDeTarea,
   siguientesAEjecutar,
@@ -225,6 +226,63 @@ describe("conVeredicto", () => {
       veredicto: "verde",
       resumen: "ya está",
     });
+  });
+});
+
+describe("conFeedback", () => {
+  it("añade el feedback, sin consumir, y devuelve la tarea a «nuevo»", () => {
+    const aparcada = tarea({ estado: "requiere-atencion", motivo: "¿con histórico?" });
+    const siguiente = conFeedback(aparcada, "sí, con histórico", "2026-09-08T11:00:00.000Z");
+    expect(siguiente.estado).toBe("nuevo");
+    // La transición borra el motivo: es la misma regla que cualquier salida de
+    // `requiere-atencion`, y aquí importa porque el motivo de AYER no puede seguir
+    // enseñándose como si la tarea siguiera esperando la misma pregunta.
+    expect(siguiente.motivo).toBeUndefined();
+    expect(siguiente.feedback).toEqual([
+      { texto: "sí, con histórico", creado: "2026-09-08T11:00:00.000Z", consumido: false },
+    ]);
+  });
+
+  it("un feedback en blanco (o solo espacios) SE RECHAZA, lanzando", () => {
+    // El mismo argumento que rechaza un título vacío en `sesiones.ts#renombrarSesion»: no
+    // es validación de formulario, es que aceptarlo devolvería la tarea al lazo sin nada
+    // nuevo que decirle — «resuelta» sin haberla resuelto.
+    const aparcada = tarea({ estado: "requiere-atencion", motivo: "?" });
+    expect(() => conFeedback(aparcada, "   ")).toThrow();
+    expect(() => conFeedback(aparcada, "")).toThrow();
+  });
+
+  it("solo vale desde «requiere-atencion»: en cualquier otro estado, `conEstado` lo rechaza", () => {
+    expect(() => conFeedback(tarea({ estado: "nuevo" }), "algo")).toThrow();
+    expect(() => conFeedback(tarea({ estado: "en-proceso" }), "algo")).toThrow();
+    expect(() => conFeedback(tarea({ estado: "terminada" }), "algo")).toThrow();
+  });
+
+  it("un SEGUNDO feedback se SUMA al primero: el historial no se pierde", () => {
+    const primero = conFeedback(
+      tarea({ estado: "requiere-atencion", motivo: "?" }),
+      "primero",
+      "2026-09-08T11:00:00.000Z"
+    );
+    // Se aparca otra vez (otra decisión pendiente) y llega un segundo feedback.
+    const aparcadaOtraVez = conEstado(primero, "en-proceso");
+    const otraVezAparcada = conEstado(aparcadaOtraVez, "requiere-atencion", "¿y ahora?");
+    const conSegundo = conFeedback(otraVezAparcada, "segundo", "2026-09-08T12:00:00.000Z");
+    expect(conSegundo.feedback).toEqual([
+      { texto: "primero", creado: "2026-09-08T11:00:00.000Z", consumido: false },
+      { texto: "segundo", creado: "2026-09-08T12:00:00.000Z", consumido: false },
+    ]);
+  });
+
+  it("recorta el texto, y guarda la hora que se le pasa", () => {
+    const siguiente = conFeedback(
+      tarea({ estado: "requiere-atencion", motivo: "?" }),
+      "  con espacios alrededor  ",
+      "2026-09-08T11:00:00.000Z"
+    );
+    expect(siguiente.feedback).toEqual([
+      { texto: "con espacios alrededor", creado: "2026-09-08T11:00:00.000Z", consumido: false },
+    ]);
   });
 });
 

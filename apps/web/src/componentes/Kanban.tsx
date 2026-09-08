@@ -1,3 +1,4 @@
+import { useState } from "react";
 import type { TareaDelCable } from "../tipos.js";
 import estilos from "./Kanban.module.css";
 
@@ -43,6 +44,7 @@ export function Kanban({
   cola,
   alAbrirSesion,
   alAbrirRevision,
+  alEnviarFeedback,
   proyectoActivo,
 }: {
   cola: { lista: readonly TareaDelCable[]; concurrencia: number; corriendoAqui: boolean };
@@ -51,6 +53,13 @@ export function Kanban({
   /** Abrir su pestaña Revisión: es la única forma de mirar lo que de verdad cambió en el
    *  disco, sin aprobación previa de por medio. Ausente = no se ofrece. */
   alAbrirRevision?: (proyecto: string, sesion: string) => void;
+  /**
+   * Añadir feedback a una tarea «esperando feedback»: es lo que la devuelve al lazo, en su
+   * mismo hilo (§0 del diseño, `docs/superpowers/…/design.md`). Ausente = no se ofrece —el
+   * mismo trato que `alAbrirSesion`—, y entonces la tarjeta se queda con la pista de texto
+   * de siempre en vez de un campo que no llevaría a ninguna parte.
+   */
+  alEnviarFeedback?: (id: string, texto: string) => void;
   /**
    * El proyecto cuya consola HUMANA está abierta ahora mismo (`estado.alta.proyectoActivo`,
    * la misma raíz que `bloqueados()` mira en `arranque.ts#construirCorredorDeTareasCableado`
@@ -88,7 +97,13 @@ export function Kanban({
               <ul className={estilos.tarjetas}>
                 {suyas.map((t) =>
                   c.estado === "requiere-atencion" ? (
-                    <TarjetaDeAtencion key={t.id} tarea={t} alAbrirSesion={alAbrirSesion} alAbrirRevision={alAbrirRevision} />
+                    <TarjetaDeAtencion
+                      key={t.id}
+                      tarea={t}
+                      alAbrirSesion={alAbrirSesion}
+                      alAbrirRevision={alAbrirRevision}
+                      alEnviarFeedback={alEnviarFeedback}
+                    />
                   ) : (
                     <TarjetaSimple
                       key={t.id}
@@ -162,10 +177,12 @@ function TarjetaDeAtencion({
   tarea: t,
   alAbrirSesion,
   alAbrirRevision,
+  alEnviarFeedback,
 }: {
   tarea: TareaDelCable;
   alAbrirSesion?: (proyecto: string, sesion: string) => void;
   alAbrirRevision?: (proyecto: string, sesion: string) => void;
+  alEnviarFeedback?: (id: string, texto: string) => void;
 }) {
   return (
     <li>
@@ -203,9 +220,15 @@ function TarjetaDeAtencion({
           </div>
         )}
 
-        <p className={estilos.pista}>
-          Se resuelve editando la tarea para añadir tu feedback: sigue desde ahí.
-        </p>
+        {/* «Se edita la tarea y se agrega el feedback del usuario» (§0 del diseño): sin
+            modal, es una frase y no una decisión con diff. Ausente `alEnviarFeedback` cae a
+            la pista de texto de siempre — no se pinta un campo que no llevaría a
+            ninguna parte. */}
+        {alEnviarFeedback === undefined ? (
+          <p className={estilos.pista}>Se resuelve editando la tarea para añadir tu feedback: sigue desde ahí.</p>
+        ) : (
+          <FormularioDeFeedback id={t.id} alEnviar={alEnviarFeedback} />
+        )}
 
         {t.sesion !== undefined && alAbrirRevision !== undefined ? (
           <button
@@ -218,5 +241,46 @@ function TarjetaDeAtencion({
         ) : null}
       </div>
     </li>
+  );
+}
+
+/**
+ * El campo de feedback: una frase, no una decisión con diff — por eso es un `<textarea>` y
+ * un botón, sin modal.
+ *
+ * **El vacío se rechaza AQUÍ TAMBIÉN**, y no solo en el servidor: `aplicarFeedback`
+ * (`agent/tareasEnDisco.ts`) ya lo rechaza y lo dice, pero mandarlo igual y esperar a que el
+ * servidor lo diga por un acto de sistema —en una ventana que no pinta el transcript— sería
+ * mudo. El botón deshabilitado es la respuesta inmediata; el servidor sigue siendo la
+ * autoridad, que es lo mismo que ya hace el paso de cuenta con el catálogo de modelos.
+ */
+function FormularioDeFeedback({ id, alEnviar }: { id: string; alEnviar: (id: string, texto: string) => void }) {
+  const [texto, setTexto] = useState("");
+  const limpio = texto.trim();
+  return (
+    <form
+      className={estilos.feedback}
+      onSubmit={(evento) => {
+        evento.preventDefault();
+        if (limpio === "") return;
+        alEnviar(id, limpio);
+        setTexto("");
+      }}
+    >
+      <label className={estilos.etiquetaFeedback} htmlFor={`feedback-${id}`}>
+        Tu feedback
+      </label>
+      <textarea
+        id={`feedback-${id}`}
+        className={estilos.campoFeedback}
+        rows={2}
+        value={texto}
+        onChange={(evento) => setTexto(evento.target.value)}
+        placeholder="Se manda al agente en el mismo hilo…"
+      />
+      <button type="submit" className={estilos.botonFeedback} disabled={limpio === ""}>
+        Enviar feedback
+      </button>
+    </form>
   );
 }

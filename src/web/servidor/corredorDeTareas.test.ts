@@ -10,9 +10,11 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
+  AVISO_SIN_HILO_REANUDABLE,
   MOTIVO_CORTADA_POR_CIERRE,
   consolaParaTarea,
   crearCorredorDeTareas,
+  peticionDeFeedback,
   revisionConGit,
   type ConsolaParaTarea,
   type RevisionDeSesion,
@@ -26,7 +28,7 @@ import { MAX_APPROVAL_ROUNDS } from "../../vendor/hitl.js";
 import { SALVEDAD_SIN_ESCRITURAS, type ResultadoDeTurno, type VeredictoDeTarea } from "../../core/entrega.js";
 import type { CasoDeJuez, JuezDeTareaPort } from "../../core/ports.js";
 import { ErrorDelJuezDeTarea } from "../../agent/juezDeTarea.js";
-import type { TareasEnDisco } from "../../agent/tareasEnDisco.js";
+import { aplicarFeedback, type TareasEnDisco } from "../../agent/tareasEnDisco.js";
 
 /** Un juez de mentira que siempre dice lo mismo, apuntando lo que se le preguntó. */
 function juezQueDice(veredicto: VeredictoDeTarea): JuezDeTareaPort & { casos: CasoDeJuez[] } {
@@ -319,6 +321,167 @@ describe("lo que una tarea AUTORIZÓ se guarda con su estado", () => {
       motivo: MOTIVO_CORTADA_POR_CIERRE,
       autorizadas: ["app.xne"],
     });
+  });
+});
+
+/**
+ * Task 12: «requiere-atencion» dejó de ser terminal — se resuelve editando la tarea para
+ * añadir el feedback del usuario, y la tarea sigue **en su mismo hilo** (§0 del diseño).
+ *
+ * Lo que hace que esto no sea de mentira es que `abrirParaTarea` recibe la `sesion` de la
+ * tarea y la REENVÍA — la costura real está en `vestibulo.ts#construirConsolaDeProyecto`
+ * (`idSesion = sesion ?? randomUUID()`), y esta batería solo prueba el CONTRATO desde este
+ * lado: qué se le pide a `abrirParaTarea` y qué se le manda al turno. La MEDIDA de punta a
+ * punta —que la conversación de verdad continúa, no solo que el id coincide— vive en
+ * `describe("el volcado de la sesión de una tarea", …)`, con git y el vestíbulo reales.
+ */
+describe("el feedback reanuda una tarea, en su mismo hilo", () => {
+  it("añadir feedback devuelve la tarea al lazo, en su mismo hilo", async () => {
+    // `requiere-atencion` dejó de ser terminal: es una pregunta al desarrollador. Y la
+    // respuesta entra como mensaje de USUARIO en el hilo que ya existe, igual que los
+    // hallazgos del verificador — un encargo nuevo perdería todo lo que la tarea ya sabe.
+    const d = discoDeMentira([
+      TAREA({ estado: "requiere-atencion", motivo: "¿la colección lleva histórico?", sesion: "s1" }),
+    ]);
+    const recibidos: string[] = [];
+    const corredor = crearCorredorDeTareas({
+      ...ENTREGA_VERDE,
+      disco: d.disco,
+      abrirParaTarea: async (raiz) => ({
+        raiz,
+        idDeHilo: "s1",
+        correrTarea: async (p) => {
+          recibidos.push(p);
+          return { verificador: "verde", pendientes: 0 };
+        },
+        cerrar: async () => {},
+      }),
+      pid: 1,
+      concurrencia: () => 1,
+    });
+    await corredor.arrancar();
+    aplicarFeedback(d.disco, "t1", "sí, con histórico");
+    corredor.revisar();
+    await corredor.asentar();
+    expect(recibidos.join(" ")).toContain("sí, con histórico");
+    expect(d.estado()[0]!.sesion).toBe("s1");
+    await corredor.parar();
+  });
+
+  it("un feedback vacío se rechaza: devolvería la tarea al lazo sin nada nuevo", () => {
+    const d = discoDeMentira([TAREA({ estado: "requiere-atencion", motivo: "?" })]);
+    expect(aplicarFeedback(d.disco, "t1", "   ")).toEqual({ hecho: false, motivo: expect.any(String) });
+    expect(d.estado()[0]!.estado).toBe("requiere-atencion");
+  });
+
+  it("reanuda pidiendo la MISMA sesión a `abrirParaTarea` — no se pierde al reanudar (mutación: pasar `undefined` siempre)", async () => {
+    const recibidas: (string | undefined)[] = [];
+    const d = discoDeMentira([TAREA({ estado: "requiere-atencion", motivo: "?", sesion: "s1" })]);
+    const corredor = crearCorredorDeTareas({
+      ...ENTREGA_VERDE,
+      disco: d.disco,
+      abrirParaTarea: async (raiz, sesion) => {
+        recibidas.push(sesion);
+        return {
+          raiz,
+          idDeHilo: sesion ?? "una-nueva",
+          correrTarea: async () => ({ verificador: "verde", pendientes: 0 }),
+          cerrar: async () => {},
+        };
+      },
+      pid: 1,
+      concurrencia: () => 1,
+    });
+    await corredor.arrancar();
+    aplicarFeedback(d.disco, "t1", "sigue así");
+    corredor.revisar();
+    await corredor.asentar();
+    // El `undefined` es de la primera vez que se despacha «nuevo» a secas, sin feedback —
+    // el arranque normal de la tarea, antes de aparcarla — y no está aquí porque la
+    // fixture ya nace `requiere-atencion`: solo se pide UNA vez, y es con «s1».
+    expect(recibidas).toEqual(["s1"]);
+    expect(d.estado()[0]!.sesion).toBe("s1");
+    await corredor.parar();
+  });
+
+  it("sin sesión que reanudar, el feedback se manda con el ENCARGO delante y lo DICE: no finge que continúa", async () => {
+    // El caso de la regla de `sesion`: se aparcó ANTES de tener nada abrible —el proyecto
+    // no se pudo abrir, o el turno se cortó a mitad y `sesion` ya se limpió— y aun así
+    // llega un feedback. El hilo que se abre es uno EN BLANCO, así que mandarle solo el
+    // feedback sería una frase sin sujeto.
+    const recibidos: string[] = [];
+    const d = discoDeMentira([
+      TAREA({ estado: "requiere-atencion", motivo: "no se pudo abrir el proyecto", encargo: "arregla el login" }),
+    ]);
+    const corredor = crearCorredorDeTareas({
+      ...ENTREGA_VERDE,
+      disco: d.disco,
+      abrirParaTarea: async (raiz, sesion) => ({
+        raiz,
+        idDeHilo: sesion ?? "hilo-nuevo",
+        correrTarea: async (p) => {
+          recibidos.push(p);
+          return { verificador: "verde", pendientes: 0 };
+        },
+        cerrar: async () => {},
+      }),
+      pid: 1,
+      concurrencia: () => 1,
+    });
+    await corredor.arrancar();
+    aplicarFeedback(d.disco, "t1", "sí, con histórico");
+    corredor.revisar();
+    await corredor.asentar();
+    expect(recibidos).toEqual([peticionDeFeedback("arregla el login", "sí, con histórico", false)]);
+    expect(recibidos[0]).toContain(AVISO_SIN_HILO_REANUDABLE);
+    expect(recibidos[0]).toContain("arregla el login");
+    expect(recibidos[0]).toContain("sí, con histórico");
+    // Y de verdad se abrió un hilo NUEVO — no el que ya no existía.
+    expect(d.estado()[0]!.sesion).toBe("hilo-nuevo");
+    await corredor.parar();
+  });
+
+  it("dos feedbacks seguidos: el segundo no borra el primero, y no se REPROCESA el ya consumido", async () => {
+    const recibidos: string[] = [];
+    const d = discoDeMentira([TAREA({ estado: "requiere-atencion", motivo: "primera", sesion: "s1" })]);
+    const corredor = crearCorredorDeTareas({
+      ...ENTREGA_VERDE,
+      disco: d.disco,
+      abrirParaTarea: async (raiz, sesion) => ({
+        raiz,
+        idDeHilo: sesion ?? "nueva",
+        correrTarea: async (p) => {
+          recibidos.push(p);
+          // La primera vuelta vuelve a aparcar (verificador rojo), para poder comprobar el
+          // SEGUNDO feedback sobre una tarea que ya consumió el primero.
+          return recibidos.length === 1 ? { verificador: "rojo", pendientes: 0 } : { verificador: "verde", pendientes: 0 };
+        },
+        cerrar: async () => {},
+      }),
+      pid: 1,
+      concurrencia: () => 1,
+    });
+    await corredor.arrancar();
+    aplicarFeedback(d.disco, "t1", "primero");
+    corredor.revisar();
+    await corredor.asentar();
+    expect(d.estado()[0]!.estado).toBe("requiere-atencion");
+    expect(d.estado()[0]!.sesion).toBe("s1");
+    expect(d.estado()[0]!.feedback).toEqual([{ texto: "primero", creado: expect.any(String), consumido: true }]);
+
+    aplicarFeedback(d.disco, "t1", "segundo");
+    corredor.revisar();
+    await corredor.asentar();
+
+    // Sin marcar «primero» como consumido, esta segunda vuelta lo habría vuelto a mandar
+    // en vez de avanzar a «segundo» — es la mutación que este test caza.
+    expect(recibidos).toEqual(["primero", "segundo"]);
+    expect(d.estado()[0]!.feedback).toEqual([
+      { texto: "primero", creado: expect.any(String), consumido: true },
+      { texto: "segundo", creado: expect.any(String), consumido: true },
+    ]);
+    expect(d.estado()[0]!.estado).toBe("terminada");
+    await corredor.parar();
   });
 });
 
@@ -1446,6 +1609,116 @@ describe("el volcado de la sesión de una tarea", () => {
     await v.cerrar();
     await (await marcada.promesa);
     rmSync(base, { recursive: true, force: true });
+  });
+
+  /**
+   * **MEDIDO de punta a punta: el feedback reanuda el MISMO hilo, con las piezas de
+   * producción.** No un doble que HARDCODEA el mismo id de las dos veces —eso solo
+   * demostraría que dos cadenas iguales son iguales—: aquí `abrirParaTarea` es
+   * `consolaParaTarea(await v.abrirParaTarea(r, sesion))`, la MISMA composición que
+   * `construirCorredorDeTareasCableado` monta en producción, contra un vestíbulo y un git
+   * de verdad. Lo que se mide es que la SEGUNDA vuelta —el turno del feedback— escribe en
+   * el `.jsonl` de la MISMA sesión que la primera, con los actos de las DOS vueltas
+   * presentes: es la prueba de que es una conversación que CRECE, no una sesión nueva que
+   * por casualidad se llama igual.
+   */
+  it("MEDIDO: el feedback reanuda el MISMO hilo — el transcript de la sesión trae las DOS vueltas", async () => {
+    const { base, raiz } = proyectoConGit();
+    const escritos: string[] = [];
+    /**
+     * Esta tarea abre el proyecto DOS veces (turno 1, y el reanudado del feedback), y cada
+     * apertura lanza su propia foto de git sin esperarla (`volcar()`, fire-and-forget). El
+     * `asidero` de las demás pruebas de este describe solo captura la PRIMERA —una promesa
+     * solo se resuelve una vez—, así que aquí se acumulan las de las DOS para poder
+     * esperarlas a las dos antes de borrar la carpeta: sin eso, el `rmSync` de al final
+     * carrera con el `git update-ref` de la segunda apertura y sale `ENOTEMPTY` — medido.
+     */
+    const marcas: Promise<boolean>[] = [];
+    const marcada = { cumplir: (p: Promise<boolean>) => void marcas.push(p) };
+    let vuelta = 0;
+    const v = vestibuloReal(base, escritos, marcada, async (peticion, _estado, consola) => {
+      vuelta += 1;
+      escritos.push(peticion);
+      const piel = consola.piel?.();
+      piel?.token(`respuesta ${vuelta}`);
+      piel?.cerrarLinea();
+      piel?.fin(1);
+      // La PRIMERA vuelta sale en rojo A PROPÓSITO: es lo que fuerza «esperando feedback»
+      // sin tocar el juez ni `revisable`, y `sesion` se queda puesta —nadie le pasa
+      // `sesionAbrible` a este corredor, así que la regla de `sesion` nunca la limpia—.
+      return { verificador: vuelta === 1 ? "rojo" : "verde", pendientes: 0 };
+    });
+    const { disco, estado } = discoDeMentira([
+      TAREA({ proyecto: { id: "pa", raiz, nombre: "A" }, encargo: "arregla el login" }),
+    ]);
+    const corredor = crearCorredorDeTareas({
+      ...ENTREGA_VERDE,
+      disco,
+      // El adaptador de PRODUCCIÓN, con la `sesion` reenviada — la misma composición que
+      // `construirCorredorDeTareasCableado` (`arranque.ts`).
+      abrirParaTarea: async (r, sesion) => consolaParaTarea(await v.abrirParaTarea(r, sesion)),
+      pid: 1,
+      concurrencia: () => 1,
+    });
+    await corredor.arrancar();
+    await esperarAQueAcabe(estado);
+
+    const tras1 = estado()[0]!;
+    expect(tras1.estado).toBe("requiere-atencion");
+    const sesion = tras1.sesion!;
+    expect(sesion).not.toBe("");
+
+    expect(aplicarFeedback(disco, tras1.id, "sí, con histórico").hecho).toBe(true);
+    corredor.revisar();
+    await esperarAQueAcabe(estado);
+
+    const tras2 = estado()[0]!;
+    expect(tras2.estado).toBe("terminada");
+    // LA MEDIDA #1: el mismo hilo, no uno nuevo.
+    expect(tras2.sesion).toBe(sesion);
+    // Y lo que de verdad se le mandó al turno en la segunda vuelta es el FEEDBACK, no el
+    // encargo repetido — el mismo patrón que los hallazgos del verificador.
+    expect(escritos).toEqual(["arregla el login", "sí, con histórico"]);
+
+    // LA MEDIDA #2, y la que de verdad descarta la coincidencia de nombres: el `.jsonl` de
+    // ESA sesión trae los actos de asistente de las DOS vueltas, en orden — la prueba de
+    // que `volcar()` AÑADIÓ al mismo fichero en vez de que alguien abriera uno nuevo con
+    // el mismo id por casualidad.
+    const jsonl = join(raiz, ".xonecode", "sesiones", `${sesion}.jsonl`);
+    const textos = readFileSync(jsonl, "utf8")
+      .split("\n")
+      .filter((l) => l.trim() !== "")
+      .map((l) => JSON.parse(l) as { tipo: string; texto?: string })
+      .filter((a) => a.tipo === "asistente")
+      .map((a) => a.texto);
+    expect(textos).toEqual(["respuesta 1", "respuesta 2"]);
+
+    // Y solo hay UNA entrada en el índice de sesiones del proyecto: si el feedback hubiera
+    // abierto una sesión nueva, habría dos.
+    expect(v.sesionesDe(raiz)).toHaveLength(1);
+
+    await corredor.parar();
+    await v.cerrar();
+    // La foto de la PRIMERA apertura, que es la única que este arnés puede esperar (ver el
+    // comentario de `marcas`). La foto de la SEGUNDA sigue en vuelo sin ningún asidero
+    // —al reabrir, `vestibulo.ts` no vuelve a NOMBRAR la ref (`anotada` ya es cierto), así
+    // que su cierre nunca invoca el `apuntar` que dispararía `marcada.cumplir`, aunque el
+    // `write-tree` de fondo sí corre—: por eso el `rmSync` de abajo lleva reintentos.
+    await Promise.all(marcas.map((p) => p.catch(() => undefined)));
+    // La escritura de git de la SEGUNDA apertura puede seguir en vuelo (arriba) y chocar
+    // con `rmSync` — medido, y más seguido con la máquina cargada: `maxRetries`/
+    // `retryDelay` de la propia API de Node no bastó (agotó sus reintentos y siguió dando
+    // `ENOTEMPTY`). Con espera de RELOJ REAL entre intentos —que sí le da vueltas de verdad
+    // al bucle de eventos, y con ellas al proceso hijo de git— sí converge.
+    for (let intento = 0; ; intento += 1) {
+      try {
+        rmSync(base, { recursive: true, force: true });
+        break;
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code !== "ENOTEMPTY" || intento >= 20) throw error;
+        await new Promise<void>((r) => setTimeout(r, 100));
+      }
+    }
   });
 });
 /**

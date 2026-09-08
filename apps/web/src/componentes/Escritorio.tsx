@@ -47,6 +47,7 @@ export function Escritorio({
   tareas,
   alAbrirSesionDeTarea,
   alAbrirRevisionDeTarea,
+  alEnviarFeedback,
   proyectoActivo,
 }: {
   /** El saludo (`agent/persona.ts`). Ausente = se saluda igual, sin inventarse un nombre. */
@@ -97,6 +98,12 @@ export function Escritorio({
   /** Abrir la pestaña Revisión de una tarea «esperando feedback»: la verdad sobre lo que
    *  cambió en el disco, sin aprobación previa de por medio. */
   alAbrirRevisionDeTarea?: (proyecto: string, sesion: string) => void;
+  /**
+   * «Se edita la tarea y se agrega el feedback del usuario» (§0 del diseño): añadir
+   * feedback a una tarea «esperando feedback», que la devuelve al lazo en su mismo hilo.
+   * Reenviada tal cual a `Kanban`; ausente = no se ofrece el campo.
+   */
+  alEnviarFeedback?: (id: string, texto: string) => void;
   /**
    * El proyecto cuya consola HUMANA está abierta ahora (`estado.alta.proyectoActivo`). El
    * escritorio se puede ver con una sesión de otro proyecto ya abierta detrás —volver a él
@@ -240,6 +247,7 @@ export function Escritorio({
             cola={tareas}
             {...(alAbrirSesionDeTarea === undefined ? {} : { alAbrirSesion: alAbrirSesionDeTarea })}
             {...(alAbrirRevisionDeTarea === undefined ? {} : { alAbrirRevision: alAbrirRevisionDeTarea })}
+            {...(alEnviarFeedback === undefined ? {} : { alEnviarFeedback })}
             {...(proyectoActivo === undefined ? {} : { proyectoActivo })}
           />
         )}

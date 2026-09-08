@@ -2709,6 +2709,46 @@ describe("las tareas en background, por el cable", () => {
     expect(mensaje.lista.find((t) => t.id === "t2")?.autorizadas).toBeUndefined();
   });
 
+  it("el historial de feedback viaja; ausente cuando nunca se le pidió nada", async () => {
+    const servidor = servidorDeMentira();
+    const cola = colaDeMentira([
+      {
+        id: "t1",
+        proyecto: { id: "p1", raiz: "/w/AppDemo", nombre: "AppDemo" },
+        titulo: "Arregla el login",
+        peticion: "Arregla el login",
+        encargo: "Arregla el login",
+        adjuntos: [],
+        estado: "nuevo" as const,
+        creada: "2026-09-08T10:00:00.000Z",
+        feedback: [
+          { texto: "primero", creado: "2026-09-08T10:00:00.000Z", consumido: true },
+          { texto: "segundo", creado: "2026-09-08T11:00:00.000Z", consumido: false },
+        ],
+      },
+      {
+        id: "t2",
+        proyecto: { id: "p1", raiz: "/w/AppDemo", nombre: "AppDemo" },
+        titulo: "Sin feedback nunca",
+        peticion: "x",
+        encargo: "x",
+        adjuntos: [],
+        estado: "nuevo" as const,
+        creada: "2026-09-08T10:00:00.000Z",
+      },
+    ]);
+    montarRutas(servidor, vestibuloDePrueba(), { colaDeTareas: cola });
+    const cliente = clienteDeMentira();
+    await servidor.rutas.get(`GET ${RUTA_EVENTOS}`)!(cliente.peticion, cliente.respuesta);
+    await asentar();
+    const mensaje = ultimo(cliente);
+    expect(mensaje.lista.find((t) => t.id === "t1")?.feedback).toEqual([
+      { texto: "primero", creado: "2026-09-08T10:00:00.000Z", consumido: true },
+      { texto: "segundo", creado: "2026-09-08T11:00:00.000Z", consumido: false },
+    ]);
+    expect(mensaje.lista.find((t) => t.id === "t2")?.feedback).toBeUndefined();
+  });
+
   it("crear una tarea RESUELVE el proyecto con el estado del propio cierre, la encola y hace revisar", async () => {
     let revisado = 0;
     const servidor = servidorDeMentira();
@@ -2800,6 +2840,96 @@ describe("las tareas en background, por el cable", () => {
     expect(cola.verTareas().find((t) => t.id === "t-en-curso")).toBeUndefined();
 
     expect(revisado).toBeGreaterThan(0);
+  });
+
+  /**
+   * Task 12: «se edita la tarea y se agrega el feedback del usuario» (§0 del diseño). Es su
+   * propia acción del cable (`{clase:"tarea", accion:"feedback", id, texto}`) y no un
+   * tercer campo en `reintentar`: lleva `texto`, que las otras tres no llevan.
+   */
+  it("un feedback devuelve la tarea a `nuevo`, con el texto guardado, y hace revisar", async () => {
+    const servidor = servidorDeMentira();
+    const cola = colaDeMentira([
+      {
+        id: "t1",
+        proyecto: { id: "p1", raiz: "/w/AppDemo", nombre: "AppDemo" },
+        titulo: "T",
+        peticion: "p",
+        encargo: "e",
+        adjuntos: [],
+        estado: "requiere-atencion",
+        motivo: "¿lleva histórico?",
+        sesion: "s1",
+        creada: "2026-09-08T10:00:00.000Z",
+      },
+    ]);
+    let revisado = 0;
+    montarRutas(servidor, vestibuloDePrueba(), {
+      colaDeTareas: cola,
+      revisarTareas: () => void (revisado += 1),
+    });
+    const cliente = clienteDeMentira();
+    await servidor.rutas.get(`GET ${RUTA_EVENTOS}`)!(cliente.peticion, cliente.respuesta);
+    const accion = servidor.rutas.get(`POST ${RUTA_ACCION}`)!;
+    await asentar();
+    expect(
+      await enviarMensaje(accion, { clase: "tarea", accion: "feedback", id: "t1", texto: "sí, con histórico" })
+    ).toBe(204);
+    await asentar();
+    const tarea = cola.verTareas().find((t) => t.id === "t1")!;
+    expect(tarea.estado).toBe("nuevo");
+    // El motivo de AYER no puede seguir enseñándose: es la misma regla de siempre al salir
+    // de `requiere-atencion`.
+    expect(tarea.motivo).toBeUndefined();
+    // Y el hilo NO se toca aquí: solo lo hace el corredor, al reanudar de verdad.
+    expect(tarea.sesion).toBe("s1");
+    expect(tarea.feedback).toEqual([
+      { texto: "sí, con histórico", creado: expect.any(String), consumido: false },
+    ]);
+    expect(revisado).toBeGreaterThan(0);
+  });
+
+  it("un feedback en blanco se rechaza y se DICE, sin escribir nada", async () => {
+    const servidor = servidorDeMentira();
+    const cola = colaDeMentira([
+      {
+        id: "t1",
+        proyecto: { id: "p1", raiz: "/w/AppDemo", nombre: "AppDemo" },
+        titulo: "T",
+        peticion: "p",
+        encargo: "e",
+        adjuntos: [],
+        estado: "requiere-atencion",
+        motivo: "¿lleva histórico?",
+        creada: "2026-09-08T10:00:00.000Z",
+      },
+    ]);
+    const avisos: string[] = [];
+    montarRutas(servidor, vestibuloDePrueba(), {
+      colaDeTareas: cola,
+      informar: (texto) => avisos.push(texto),
+    });
+    const cliente = clienteDeMentira();
+    await servidor.rutas.get(`GET ${RUTA_EVENTOS}`)!(cliente.peticion, cliente.respuesta);
+    const accion = servidor.rutas.get(`POST ${RUTA_ACCION}`)!;
+    await asentar();
+    expect(await enviarMensaje(accion, { clase: "tarea", accion: "feedback", id: "t1", texto: "   " })).toBe(204);
+    await asentar();
+    expect(cola.verTareas()[0]!.estado).toBe("requiere-atencion");
+    expect(cola.verTareas()[0]!.feedback).toBeUndefined();
+    expect(avisos.some((a) => a.includes("feedback"))).toBe(true);
+  });
+
+  it("sin puerto de tareas, un feedback tampoco hace nada", async () => {
+    const servidor = servidorDeMentira();
+    montarRutas(servidor, vestibuloDePrueba(), {});
+    const cliente = clienteDeMentira();
+    await servidor.rutas.get(`GET ${RUTA_EVENTOS}`)!(cliente.peticion, cliente.respuesta);
+    const accion = servidor.rutas.get(`POST ${RUTA_ACCION}`)!;
+    await asentar();
+    expect(await enviarMensaje(accion, { clase: "tarea", accion: "feedback", id: "t1", texto: "algo" })).toBe(204);
+    await asentar();
+    expect(cliente.recibidos.some((m) => m.clase === "tareas")).toBe(false);
   });
 
   it("una transición imposible se IGNORA y se DICE: nunca se lanza y nunca se escribe", async () => {

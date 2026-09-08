@@ -766,4 +766,58 @@ describe("la cola de tareas", () => {
     // La que nunca corrió no consta: no se sintetiza un `[]`.
     expect(t2!.autorizadas).toBeUndefined();
   });
+
+  /**
+   * Medido tres veces en este repo con `mime`, `recetas` y `ejecutable`: una lista blanca
+   * que se olvida un campo es una interfaz vacía con todos los tests en verde — porque el
+   * mensaje de fuera cambia sin que el store se entere. `feedback` es el campo que Task 12
+   * añade a `TareaDelCable`, y este test es la comprobación de que se copió.
+   */
+  it("«feedback» pasa campo a campo; ausente cuando nunca se le pidió nada a la tarea", () => {
+    const s = crearStoreDelCliente();
+    s.aplicar({
+      clase: "tareas",
+      concurrencia: 2,
+      corriendoAqui: true,
+      lista: [
+        {
+          id: "t1",
+          proyecto: "p1",
+          proyectoNombre: "AppDemo",
+          titulo: "T",
+          peticion: "p",
+          encargo: "e",
+          adjuntos: [],
+          estado: "nuevo",
+          creada: "2026-09-08T10:00:00.000Z",
+          feedback: [
+            { texto: "primero", creado: "2026-09-08T10:00:00.000Z", consumido: true },
+            // Cada campo se convierte por separado — el mismo trato que ya recibe
+            // `adjuntos` (`nombre`/`bytes`) —, y no una entrada entera que se descarta.
+            { texto: 7, creado: "2026-09-08T11:00:00.000Z", consumido: "sí" },
+          ],
+        },
+        {
+          id: "t2",
+          proyecto: "p1",
+          proyectoNombre: "AppDemo",
+          titulo: "T2",
+          peticion: "p",
+          encargo: "e",
+          adjuntos: [],
+          estado: "nuevo",
+          creada: "2026-09-08T10:00:00.000Z",
+        },
+      ],
+    });
+    const [t1, t2] = s.leer().tareas!.lista;
+    expect(t1!.feedback).toEqual([
+      { texto: "primero", creado: "2026-09-08T10:00:00.000Z", consumido: true },
+      // `String(7)` y la trampa de siempre: un `"sí"` no es el booleano `true`, y solo
+      // ese exacto cuenta como consumido.
+      { texto: "7", creado: "2026-09-08T11:00:00.000Z", consumido: false },
+    ]);
+    // La que nunca ha pedido feedback no lleva el campo: ausente, no `[]`.
+    expect(t2!.feedback).toBeUndefined();
+  });
 });

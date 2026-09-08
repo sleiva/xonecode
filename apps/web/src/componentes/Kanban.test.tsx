@@ -202,7 +202,7 @@ describe("Kanban", () => {
     expect(screen.queryByText(/cierre el proyecto/i)).toBeNull();
   });
 
-  it("«esperando feedback» dice el camino para añadir feedback, sin pintar un botón que no existe todavía", () => {
+  it("sin `alEnviarFeedback` no se ofrece el campo: un control sin dato detrás es la misma mentira que una lista vacía rellenada", () => {
     render(
       <Kanban
         cola={{
@@ -213,5 +213,60 @@ describe("Kanban", () => {
       />
     );
     expect(screen.getByText(/editando la tarea/i)).toBeTruthy();
+    expect(screen.queryByRole("textbox")).toBeNull();
+  });
+
+  /**
+   * Task 12: «se edita la tarea y se agrega el feedback del usuario» (§0 del diseño). Sin
+   * modal —es una frase, no una decisión con diff— y el vacío se rechaza también aquí, no
+   * solo en el servidor: mandarlo igual sería esperar a que un acto de sistema lo dijera en
+   * una ventana que no pinta el transcript.
+   */
+  it("«esperando feedback» con `alEnviarFeedback` pinta el campo, y manda el id y el texto recortado", () => {
+    const alEnviarFeedback = vi.fn();
+    render(
+      <Kanban
+        cola={{
+          lista: [tarea({ id: "t9", estado: "requiere-atencion", motivo: "hallazgo del juez", sesion: "s1" })],
+          concurrencia: 2,
+          corriendoAqui: true,
+        }}
+        alEnviarFeedback={alEnviarFeedback}
+      />
+    );
+    // Ya no hace falta la pista de texto: hay un campo de verdad.
+    expect(screen.queryByText(/editando la tarea/i)).toBeNull();
+    const campo = screen.getByRole("textbox", { name: /tu feedback/i });
+    const boton = screen.getByRole("button", { name: /enviar feedback/i });
+    expect(boton).toHaveProperty("disabled", true);
+
+    fireEvent.change(campo, { target: { value: "  sí, con histórico  " } });
+    expect(boton).toHaveProperty("disabled", false);
+    fireEvent.click(boton);
+
+    expect(alEnviarFeedback).toHaveBeenCalledWith("t9", "sí, con histórico");
+    // Y el campo se limpia tras mandarlo: no queda un borrador a medio escribir de algo
+    // que ya se envió.
+    expect((campo as HTMLTextAreaElement).value).toBe("");
+  });
+
+  it("un feedback en blanco no se manda: el botón se queda deshabilitado", () => {
+    const alEnviarFeedback = vi.fn();
+    render(
+      <Kanban
+        cola={{
+          lista: [tarea({ estado: "requiere-atencion", motivo: "hallazgo del juez", sesion: "s1" })],
+          concurrencia: 2,
+          corriendoAqui: true,
+        }}
+        alEnviarFeedback={alEnviarFeedback}
+      />
+    );
+    const boton = screen.getByRole("button", { name: /enviar feedback/i });
+    expect(boton).toHaveProperty("disabled", true);
+    fireEvent.change(screen.getByRole("textbox", { name: /tu feedback/i }), { target: { value: "   " } });
+    expect(boton).toHaveProperty("disabled", true);
+    fireEvent.click(boton);
+    expect(alEnviarFeedback).not.toHaveBeenCalled();
   });
 });

@@ -48,6 +48,26 @@ export interface AdjuntoDeTarea {
   mime?: string;
 }
 
+/**
+ * Un feedback del desarrollador sobre una tarea que estaba `requiere-atencion`.
+ *
+ * §0 del diseño, textual: «esperando por feedback, se edita la tarea y se agrega el
+ * feedback del usuario». Es el mismo patrón que los hallazgos del verificador
+ * (`agent/turnoReal.ts#conVerificacion`): entra al hilo que ya existe como un mensaje de
+ * USUARIO, nunca como un encargo nuevo que le haría perder a la tarea todo lo que ya sabe.
+ */
+export interface FeedbackDeTarea {
+  texto: string;
+  creado: string;
+  /**
+   * Si ya se le mandó al agente. Se pone al REANUDAR el turno con este feedback —no al
+   * añadirlo—, o la vuelta siguiente del corredor se lo mandaría otra vez: el mismo
+   * argumento que separa «autorizó» de «aplicado» en `Tarea.autorizadas`, aquí dentro de
+   * cada entrada en vez de en el campo entero.
+   */
+  consumido: boolean;
+}
+
 export interface Tarea {
   id: string;
   /**
@@ -101,6 +121,18 @@ export interface Tarea {
    * escritura», que es un dato distinto y el que el juez de la entrega necesita.
    */
   autorizadas?: string[];
+  /**
+   * El historial de lo que el desarrollador contestó mientras la tarea esperaba feedback.
+   *
+   * **Es una LISTA y no un campo**, porque puede haber varias vueltas —una tarea aparcada
+   * dos veces— y la segunda no puede borrar la primera: la misma regla que `autorizadas`.
+   * `conFeedback` solo AÑADE.
+   *
+   * **Ausente y vacío no son lo mismo, otra vez la misma regla.** Ausente es «nunca se le
+   * pidió nada a esta tarea»; `conFeedback` nunca produce `[]` porque solo se llama para
+   * AÑADIR un feedback, así que un array presente siempre tiene al menos uno.
+   */
+  feedback?: FeedbackDeTarea[];
   /**
    * El veredicto del juez de QA sobre lo que hizo la tarea: resumen y hallazgos, **nunca
    * contenido de ficheros** (`core/entrega.ts#VeredictoDeTarea` lo acota).
@@ -269,9 +301,9 @@ export function conEstado(
  * fichero que autorizó el primer intento desaparecería del registro **cuando muy
  * probablemente siga escrito**, que es justo la clase de mentira que este campo evita. Y así `[]` sigue
  * queriendo decir lo que dice: «este turno no autorizó nada» — no borra lo que autorizó el
- * anterior. (Lo que sí se pierde al reintentar es la `sesion` del intento anterior, que la
- * sustituye la nueva: juntar los DOS diffs de una tarea reintentada es otra cosa y no está
- * hecho.)
+ * anterior. (`sesion` NO se pierde al reintentar: el corredor reabre la MISMA —Task 12,
+ * `corredorDeTareas.ts#correr`—, así que el segundo turno cae en el mismo hilo y Revisión
+ * sigue comparando contra el «antes» de la primera apertura, no contra uno a medias.)
  *
  * Normaliza en un solo sitio: rutas relativas (`rutaRelativaDeTarea`), sin huecos y sin
  * repetidos — el mismo fichero escrito en dos rondas del turno, o en dos intentos, es un
@@ -288,6 +320,39 @@ export function conAutorizadas(tarea: Tarea, autorizadas: readonly string[] | un
     limpios.push(ruta);
   }
   return { ...tarea, autorizadas: limpios };
+}
+
+/**
+ * La tarea con un feedback nuevo, sin consumir, y devuelta al lazo (`requiere-atencion →
+ * nuevo`).
+ *
+ * **Rechaza el vacío, lanzando.** Un feedback en blanco devolvería la tarea al lazo sin
+ * nada nuevo que decirle: la aparcaron por una decisión que hacía falta tomar, y «nada» no
+ * es una decisión. Es el mismo argumento que rechaza un título vacío en
+ * `sesiones.ts#renombrarSesion` — no es validación de formulario, es que aceptarlo dejaría
+ * la tarea «resuelta» sin haberla resuelto, y el siguiente turno correría igual de
+ * bloqueado que este.
+ *
+ * **Solo vale desde `requiere-atencion`, y eso lo decide `conEstado` y no una comprobación
+ * aparte aquí.** Si la tarea no está aparcada, no hay pregunta que este feedback esté
+ * contestando; `conEstado` ya lanza con un motivo legible (`«nuevo» no puede pasar a
+ * «nuevo»`), y repetir esa regla en dos sitios es como acaban divergiendo.
+ *
+ * **Se SUMA a lo que ya hubiera, nunca lo sustituye** — la misma regla que
+ * `conAutorizadas`: un segundo feedback no puede borrar el primero, porque el agente ya
+ * actuó sobre lo que el primero dijo y perder el registro sería fingir que nunca se dijo.
+ * `consumido` nace en `false`: se pone en `true` cuando el corredor de verdad lo manda al
+ * turno (`corredorDeTareas.ts#correr`), no aquí — hasta entonces «no consta que se haya
+ * mandado» es la verdad.
+ */
+export function conFeedback(tarea: Tarea, texto: string, ahora?: string): Tarea {
+  const limpio = texto.trim();
+  if (limpio === "") {
+    throw new Error("un feedback vacío devolvería la tarea al lazo sin nada nuevo que decirle");
+  }
+  const nuevo: FeedbackDeTarea = { texto: limpio, creado: ahora ?? new Date().toISOString(), consumido: false };
+  const feedback = [...(tarea.feedback ?? []), nuevo];
+  return conEstado({ ...tarea, feedback }, "nuevo");
 }
 
 /**

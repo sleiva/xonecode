@@ -98,6 +98,34 @@ export const MOTIVO_CORTADA_POR_CIERRE =
   "recuerda el hilo. Reintenta cuando quieras.";
 
 /**
+ * Cuando llega un feedback pero el hilo anterior YA NO se puede reanudar —`Tarea.sesion`
+ * está ausente porque la regla de `sesion` ya lo limpió al no haber nada abrible—, el turno
+ * arranca un hilo NUEVO sin memoria de nada. Mandarle solo el feedback a ese hilo en blanco
+ * sería una frase sin sujeto: «sí, con histórico» no dice nada sin el encargo delante. Así
+ * que se dice la verdad —esto no continúa nada— y se manda el encargo entero al lado. Es
+ * la mitad de «no se finge que continúa» que le toca a esta capa: la otra mitad, que
+ * `sesion` sobreviva siempre que haya algo que abrir, ya está en la regla de `sesion`.
+ */
+export const AVISO_SIN_HILO_REANUDABLE =
+  "el hilo anterior de esta tarea ya no se pudo reanudar (no quedó nada que reabrir): esto " +
+  "es un turno nuevo, sin memoria de lo anterior. El encargo original y el feedback del " +
+  "desarrollador, juntos:";
+
+/**
+ * La petición que se le manda al turno cuando la tarea trae un feedback pendiente.
+ *
+ * **Reanudando, el feedback SOLO** — el mismo patrón que los hallazgos del verificador
+ * (`agent/turnoReal.ts#conVerificacion`): entra como un mensaje de USUARIO más en el hilo
+ * que ya sabe el encargo, lo que se intentó y por qué se aparcó. Repetir el encargo ahí
+ * sería ruido: el modelo ya lo tiene.
+ *
+ * **Sin hilo que reanudar, el encargo entero, con el aviso delante.** Ver
+ * `AVISO_SIN_HILO_REANUDABLE`.
+ */
+export const peticionDeFeedback = (encargo: string, texto: string, reanudando: boolean): string =>
+  reanudando ? texto : `${AVISO_SIN_HILO_REANUDABLE}\n\nEncargo original:\n${encargo}\n\nFeedback:\n${texto}`;
+
+/**
  * Lo que se espera como mucho a que un turno cortado devuelva, al parar el proceso.
  *
  * Generoso pero FINITO: un Ctrl-C que se cuelga para siempre es lo peor que puede hacer este
@@ -242,7 +270,18 @@ export function consolaParaTarea(consola: ConsolaDeProyecto): ConsolaParaTarea {
 
 export function crearCorredorDeTareas(opciones: {
   disco: TareasEnDisco;
-  abrirParaTarea: (raiz: string) => Promise<ConsolaParaTarea>;
+  /**
+   * Abre el proyecto para una tarea — y con `sesion`, lo REABRE con esa exacta, que es lo
+   * que hace que reanudar (un reintento, o un feedback) siga la MISMA conversación en vez
+   * de abrir una en blanco.
+   *
+   * `construirConsolaDeProyecto` (`vestibulo.ts`) ya hace lo que hace falta con `sesion`
+   * pasada — reabre el índice de la sesión, decide `idSesion = sesion` en vez de un
+   * `randomUUID()`, y el `thread_id` del checkpointer sale de ahí—, así que esto solo tiene
+   * que REENVIAR lo que la tarea ya sepa. `undefined` en la primera ejecución sigue dando
+   * una sesión nueva, igual que siempre.
+   */
+  abrirParaTarea: (raiz: string, sesion?: string) => Promise<ConsolaParaTarea>;
   /** Se lee en cada pasada: cambiar el tope en Ajustes tiene que notarse sin reiniciar. */
   concurrencia: () => number;
   /**
@@ -635,7 +674,9 @@ export function crearCorredorDeTareas(opciones: {
   const correr = async (tarea: Tarea, entrada: EnVuelo): Promise<void> => {
     let consola: ConsolaParaTarea | undefined;
     try {
-      consola = await opciones.abrirParaTarea(tarea.proyecto.raiz);
+      // `tarea.sesion`, si la hay, es lo que hace que reanudar siga la MISMA conversación:
+      // ver el comentario de `abrirParaTarea` más arriba.
+      consola = await opciones.abrirParaTarea(tarea.proyecto.raiz, tarea.sesion);
     } catch (error) {
       /**
        * El proyecto ya no está donde la tarea dice. Se aparca: la dirección de fallo aquí es
@@ -680,6 +721,13 @@ export function crearCorredorDeTareas(opciones: {
     }
 
     const hilo = consola.idDeHilo;
+    /**
+     * ¿Esto CONTINÚA una conversación, o abre una en blanco? `tarea.sesion` es la única
+     * fuente: si estaba puesta, es lo que se le pasó a `abrirParaTarea` para que reabriera
+     * justo esa —y con ella el checkpointer trae la memoria entera—; si no, `hilo` es una
+     * sesión nueva y el modelo no sabe nada de lo anterior. Ver `peticionDeFeedback`.
+     */
+    const reanudando = tarea.sesion !== undefined;
     let motivo: string | undefined;
     /**
      * Lo que el turno informó de sí mismo, o `undefined` si no informó — que es «no se
@@ -689,6 +737,14 @@ export function crearCorredorDeTareas(opciones: {
     /** ¿Devolvió el turno por su cuenta? Distingue «acabó» de «se lo cortamos». */
     let terminoLimpio = false;
     let marcada = false;
+    /**
+     * Lo que de verdad se le manda al turno: el encargo la primera vez, o el feedback
+     * pendiente si lo hay (`peticionDeFeedback`). Se decide DENTRO de la escritura CAS de
+     * abajo, sobre la tarea RELEÍDA del disco y no sobre el parámetro `tarea`: solo esa
+     * lectura sabe con qué feedback exacto se despacha esta pasada — el mismo motivo por
+     * el que `escribirSiSigueSiendoNuestra` relee en vez de fiarse de lo que se le pasó.
+     */
+    let peticion = tarea.encargo;
     try {
       /**
        * La marca de «en proceso», y es una PUERTA: si no se puede escribir, esta tarea ya no
@@ -696,11 +752,21 @@ export function crearCorredorDeTareas(opciones: {
        * puerta el turno arrancaría igual sobre una tarea que en el kanban ya no existe.
        *
        * El id del hilo ES la sesión: es lo que hace que atender la tarea sea abrir su
-       * conversación.
+       * conversación. Y aquí también se CONSUME el feedback pendiente, si lo hay, en la
+       * MISMA escritura que marca «en proceso»: si se consumiera aparte, un fallo entre
+       * medias dejaría un feedback marcado sin haberse mandado, o mandado sin marcar —y la
+       * vuelta siguiente lo repetiría.
        */
-      marcada = escribirSiSigueSiendoNuestra(tarea.id, (actual) =>
-        actual.estado === "nuevo" ? conEstado({ ...actual, sesion: hilo }, "en-proceso", undefined, { pid }) : undefined
-      );
+      marcada = escribirSiSigueSiendoNuestra(tarea.id, (actual) => {
+        if (actual.estado !== "nuevo") return undefined;
+        const pendiente = actual.feedback?.find((f) => !f.consumido);
+        const conPendienteConsumido =
+          pendiente === undefined
+            ? actual
+            : { ...actual, feedback: actual.feedback!.map((f) => (f === pendiente ? { ...f, consumido: true } : f)) };
+        if (pendiente !== undefined) peticion = peticionDeFeedback(actual.encargo, pendiente.texto, reanudando);
+        return conEstado({ ...conPendienteConsumido, sesion: hilo }, "en-proceso", undefined, { pid });
+      });
       if (marcada) {
         // La lista nace AQUÍ, cuando ya se sabe que el turno va a correr: hasta este punto
         // «no consta» es la verdad. Se acumula aunque el turno reviente —`preguntar` corta
@@ -708,7 +774,7 @@ export function crearCorredorDeTareas(opciones: {
         entrada.autorizadas = [];
         resultado =
           (await consola.correrTarea(
-            tarea.encargo,
+            peticion,
             (m) => void (motivo ??= m),
             (ficheros) => void entrada.autorizadas?.push(...ficheros)
           )) ?? undefined;

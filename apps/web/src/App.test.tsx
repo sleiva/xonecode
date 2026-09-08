@@ -744,6 +744,20 @@ describe("App: la tarjeta de tarea «esperando feedback» abre Revisión", () =>
     fireEvent.click(screen.getByRole("button", { name: "Arregla el login" }));
     expect(enviar).toHaveBeenCalledWith({ clase: "sesion", proyecto: "p1", sesion: "s1" });
   });
+
+  /**
+   * Task 12: «se edita la tarea y se agrega el feedback del usuario» (§0 del diseño). El
+   * cliente no manda comandos — manda la intención (`{clase:"tarea", accion:"feedback"}`)
+   * y el servidor decide cómo se aplica, el mismo patrón que la pastilla de modelo.
+   */
+  it("escribir feedback y enviarlo manda `{clase:\"tarea\", accion:\"feedback\"}` con el id y el texto", () => {
+    const { enviar } = montarConTareas();
+    fireEvent.change(screen.getByRole("textbox", { name: /tu feedback/i }), {
+      target: { value: "sí, con histórico" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /enviar feedback/i }));
+    expect(enviar).toHaveBeenCalledWith({ clase: "tarea", accion: "feedback", id: "t1", texto: "sí, con histórico" });
+  });
 });
 
 describe("App: Revisión despliega solos los primeros", () => {

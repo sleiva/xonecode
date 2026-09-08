@@ -639,6 +639,20 @@ export function crearStoreDelCliente(): {
                         ),
                       }
                     : {}),
+                  // Ausente = nunca se le pidió nada a esta tarea; distinto de una lista
+                  // vacía, que aquí no llega nunca (`conFeedback` solo AÑADE). Campo a
+                  // campo, como el resto de esta lista blanca.
+                  ...(Array.isArray(t["feedback"])
+                    ? {
+                        feedback: (t["feedback"] as unknown[])
+                          .filter((f): f is Record<string, unknown> => typeof f === "object" && f !== null)
+                          .map((f) => ({
+                            texto: String(f["texto"] ?? ""),
+                            creado: String(f["creado"] ?? ""),
+                            consumido: f["consumido"] === true,
+                          })),
+                      }
+                    : {}),
                 }))
                 .filter((t) => t.id !== ""),
             },

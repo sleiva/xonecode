@@ -109,7 +109,7 @@ import {
   type RevisionDeSesion,
 } from "./corredorDeTareas.js";
 import { CONCURRENCIA_POR_OMISION, conEstado, tituloDeTarea, type Tarea } from "../../core/tareas.js";
-import type { TareasEnDisco } from "../../agent/tareasEnDisco.js";
+import { aplicarFeedback, type TareasEnDisco } from "../../agent/tareasEnDisco.js";
 import {
   conexionDeVestibulo,
   crearVestibulo,
@@ -857,6 +857,7 @@ export function montarRutas(
     ...(t.empezada === undefined ? {} : { empezada: t.empezada }),
     ...(t.acabada === undefined ? {} : { acabada: t.acabada }),
     ...(t.autorizadas === undefined ? {} : { autorizadas: t.autorizadas }),
+    ...(t.feedback === undefined ? {} : { feedback: t.feedback }),
   });
 
   const mensajeDeTareas = (): MensajeAlCliente | undefined => {
@@ -952,6 +953,24 @@ export function montarRutas(
       // Una transición imposible SE IGNORA Y SE DICE: nunca se lanza hacia el cliente, y
       // nunca se escribe un estado a medias.
       informar(`no se pudo ${accion} la tarea «${actual.titulo}»: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  };
+
+  /**
+   * «Se edita la tarea y se agrega el feedback del usuario» (§0 del diseño, textual):
+   * añadir un feedback a una tarea «esperando feedback» la devuelve al lazo. Vive detrás de
+   * `aplicarFeedback` (`agent/tareasEnDisco.ts`) y no repite su lógica aquí, por el mismo
+   * motivo que `atenderCrearTarea`/`atenderAccionDeTarea` no reimplementan `conEstado`: la
+   * regla de qué feedback vale y qué transición es legal está en una sola función, probada
+   * sola y sin necesitar un servidor de mentira alrededor.
+   */
+  const atenderFeedbackDeTarea = (id: string, texto: string): void => {
+    if (opciones.colaDeTareas === undefined) return;
+    const resultado = aplicarFeedback(opciones.colaDeTareas, id, texto);
+    if (!resultado.hecho) {
+      // Nunca se propaga al cliente, igual que una transición imposible: se DICE, y no se
+      // escribe nada a medias.
+      informar(`no se pudo añadir el feedback: ${resultado.motivo ?? "motivo desconocido"}`);
     }
   };
 
@@ -1970,9 +1989,14 @@ export function montarRutas(
           .augmentar(mensaje.proyecto, mensaje.peticion)
           .then((encargo) => emitir({ clase: "tarea", accion: "augmentado", encargo }))
           .catch((error) => emitir({ clase: "tarea", accion: "augmentado", error: codigoDe(error) }));
+      } else if (mensaje.accion === "feedback" && opciones.colaDeTareas !== undefined) {
+        atenderFeedbackDeTarea(mensaje.id, mensaje.texto);
+        opciones.revisarTareas?.();
+        emitirTareas();
       } else if (
         mensaje.accion !== "crear" &&
         mensaje.accion !== "augmentar" &&
+        mensaje.accion !== "feedback" &&
         opciones.colaDeTareas !== undefined
       ) {
         atenderAccionDeTarea(mensaje.accion, mensaje.id);
@@ -2253,7 +2277,9 @@ export function construirCorredorDeTareasCableado(opciones: {
           // La costura de las tres piezas: la segunda puerta del vestíbulo (que no mueve el
           // cable), la consola que APARCA en vez de contestar por nadie, y el ejecutor de
           // siempre con las mismas barreras que el de una persona.
-          abrirParaTarea: async (raiz) => consolaParaTarea(await opciones.vestibulo.abrirParaTarea(raiz)),
+          // `sesion` reenviada: es lo que hace que reanudar (un reintento, o un feedback)
+          // reabra el MISMO hilo en vez de uno en blanco. Ver `corredorDeTareas.ts`.
+          abrirParaTarea: async (raiz, sesion) => consolaParaTarea(await opciones.vestibulo.abrirParaTarea(raiz, sesion)),
           // Se lee de disco en cada pasada: cambiar el tope en Ajustes se nota sin
           // reiniciar nada, en la siguiente ronda de planificación.
           concurrencia: concurrenciaDeTareas,

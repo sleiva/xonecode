@@ -273,4 +273,37 @@ describe("Escritorio: el kanban de tareas", () => {
     fireEvent.click(screen.getByRole("button", { name: /Arregla el login/ }));
     expect(alAbrirSesionDeTarea).toHaveBeenCalledWith("p1", "s1");
   });
+
+  it("reenvía `alEnviarFeedback` al kanban tal cual: es el mismo campo, no una copia", () => {
+    const alEnviarFeedback = vi.fn();
+    render(
+      <Escritorio
+        {...MANEJADORES}
+        proyectos={[]}
+        alEnviarFeedback={alEnviarFeedback}
+        tareas={{
+          concurrencia: 2,
+          corriendoAqui: true,
+          lista: [
+            {
+              id: "t1",
+              proyecto: "p1",
+              proyectoNombre: "AppDemo",
+              titulo: "Arregla el login",
+              peticion: "Arregla el login",
+              encargo: "Arregla el login",
+              adjuntos: [],
+              estado: "requiere-atencion",
+              motivo: "el juez marcó el trabajo en rojo",
+              sesion: "s1",
+              creada: "2026-09-08T10:00:00.000Z",
+            },
+          ],
+        }}
+      />
+    );
+    fireEvent.change(screen.getByRole("textbox", { name: /tu feedback/i }), { target: { value: "sí, con histórico" } });
+    fireEvent.click(screen.getByRole("button", { name: /enviar feedback/i }));
+    expect(alEnviarFeedback).toHaveBeenCalledWith("t1", "sí, con histórico");
+  });
 });

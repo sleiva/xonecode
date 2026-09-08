@@ -3,7 +3,7 @@ import { describe, expect, it, beforeEach, afterEach, vi } from "vitest";
 import { mkdtempSync, rmSync, writeFileSync, mkdirSync, existsSync, readFileSync, renameSync, statSync, linkSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { crearTareasEnDisco } from "./tareasEnDisco.js";
+import { aplicarFeedback, crearTareasEnDisco } from "./tareasEnDisco.js";
 import type { Tarea } from "../core/tareas.js";
 
 /**
@@ -382,4 +382,69 @@ describe("tareasEnDisco", () => {
       expect(modo(join(base, "tareas", "t1", "adjuntos", "doc.pdf"))).toBe(0o600);
     }
   );
+});
+
+describe("aplicarFeedback", () => {
+  let base: string;
+  beforeEach(() => {
+    base = mkdtempSync(join(tmpdir(), "xonecode-feedback-"));
+  });
+  afterEach(() => {
+    rmSync(base, { recursive: true, force: true });
+  });
+
+  it("añade el feedback y devuelve la tarea a `nuevo`: es la respuesta, no un encargo nuevo", () => {
+    const disco = crearTareasEnDisco({ base });
+    disco.guardar([{ ...TAREA, estado: "requiere-atencion", motivo: "¿con histórico?", sesion: "s1" }]);
+    expect(aplicarFeedback(disco, "t1", "sí, con histórico")).toEqual({ hecho: true });
+    const tarea = disco.listar()[0]!;
+    expect(tarea.estado).toBe("nuevo");
+    expect(tarea.sesion).toBe("s1");
+    expect(tarea.feedback).toEqual([
+      { texto: "sí, con histórico", creado: expect.any(String), consumido: false },
+    ]);
+  });
+
+  it("un feedback vacío se rechaza y se DICE, sin escribir nada", () => {
+    const disco = crearTareasEnDisco({ base });
+    disco.guardar([{ ...TAREA, estado: "requiere-atencion", motivo: "?" }]);
+    const resultado = aplicarFeedback(disco, "t1", "   ");
+    expect(resultado).toEqual({ hecho: false, motivo: expect.any(String) });
+    expect(disco.listar()[0]!.estado).toBe("requiere-atencion");
+    expect(disco.listar()[0]!.feedback).toBeUndefined();
+  });
+
+  it("una tarea que no está esperando feedback lo rechaza: no hay pregunta que este feedback conteste", () => {
+    const disco = crearTareasEnDisco({ base });
+    disco.guardar([{ ...TAREA, estado: "nuevo" }]);
+    const resultado = aplicarFeedback(disco, "t1", "algo");
+    expect(resultado.hecho).toBe(false);
+    expect(disco.listar()[0]!.estado).toBe("nuevo");
+  });
+
+  it("una tarea que ya no está en la cola lo dice, sin escribir nada", () => {
+    const disco = crearTareasEnDisco({ base });
+    disco.guardar([{ ...TAREA, estado: "requiere-atencion", motivo: "?" }]);
+    expect(aplicarFeedback(disco, "fantasma", "algo")).toEqual({
+      hecho: false,
+      motivo: expect.stringContaining("no está en la cola"),
+    });
+  });
+
+  it("un SEGUNDO feedback se SUMA al primero: el historial no se pierde", () => {
+    const disco = crearTareasEnDisco({ base });
+    disco.guardar([{ ...TAREA, estado: "requiere-atencion", motivo: "primera pregunta" }]);
+    expect(aplicarFeedback(disco, "t1", "primero").hecho).toBe(true);
+    // Se aparca otra vez, con otra pregunta, y llega un segundo feedback.
+    const tras1 = disco.listar()[0]!;
+    disco.guardar([
+      { ...tras1, estado: "en-proceso", pid: 1 },
+    ]);
+    disco.guardar([
+      { ...disco.listar()[0]!, estado: "requiere-atencion", motivo: "segunda pregunta" },
+    ]);
+    expect(aplicarFeedback(disco, "t1", "segundo").hecho).toBe(true);
+    const textos = disco.listar()[0]!.feedback!.map((f) => f.texto);
+    expect(textos).toEqual(["primero", "segundo"]);
+  });
 });

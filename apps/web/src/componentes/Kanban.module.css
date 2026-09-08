@@ -194,6 +194,51 @@ button.tarjeta:hover {
   font-style: italic;
 }
 
+/* Una frase, no una decisión con diff: sin modal. */
+.feedback {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 4px;
+}
+
+.etiquetaFeedback {
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 11px;
+}
+
+.campoFeedback {
+  padding: 6px 8px;
+  border: 0.5px solid var(--dsw-alias-border-l2);
+  border-radius: 8px;
+  background: var(--dsw-alias-bg-layer-2);
+  color: var(--dsw-alias-label-primary);
+  font: inherit;
+  font-size: 12px;
+  resize: vertical;
+}
+
+.botonFeedback {
+  align-self: flex-start;
+  padding: 4px 8px;
+  border: 0.5px solid var(--dsw-alias-border-l2);
+  border-radius: 8px;
+  background: var(--dsw-alias-bg-layer-2);
+  color: var(--dsw-alias-label-primary);
+  font: inherit;
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.botonFeedback:hover {
+  background: var(--dsw-alias-interactive-bg-hover);
+}
+
+.botonFeedback:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
 .enlaceRevision {
   align-self: flex-start;
   margin-top: 4px;

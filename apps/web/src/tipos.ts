@@ -341,6 +341,11 @@ export interface TareaDelCable {
    * autorizó ninguna.
    */
   autorizadas?: string[];
+  /**
+   * El historial de lo que el desarrollador contestó mientras la tarea esperaba feedback.
+   * Ausente = nunca se le pidió nada. `consumido` dice si ya se le mandó al agente.
+   */
+  feedback?: { texto: string; creado: string; consumido: boolean }[];
 }
 
 export interface ProveedorDeModelos {
@@ -461,6 +466,9 @@ export type MensajeDelCliente =
    */
   | { clase: "tarea"; accion: "crear"; proyecto: string; peticion: string; encargo: string }
   | { clase: "tarea"; accion: "augmentar"; proyecto: string; peticion: string }
+  /** «Se edita la tarea y se agrega el feedback del usuario»: la respuesta a una tarea
+   *  «esperando feedback», que la devuelve al lazo en su MISMO hilo. */
+  | { clase: "tarea"; accion: "feedback"; id: string; texto: string }
   | { clase: "tarea"; accion: "reintentar" | "descartar" | "terminar"; id: string }
   /** Cambia el tope de concurrencia de la cola de tareas. */
   | { clase: "tareas"; concurrencia: number }
