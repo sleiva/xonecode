@@ -303,6 +303,11 @@ export function crearCorredorDeTareas(opciones: {
    * Comprueba que la tarea salió de `nuevo`, y si no, renuncia a ella. Ver `renunciadas`.
    */
   const renunciarSiSigueNueva = (id: string, error?: unknown): void => {
+    // Renunciar dos veces es renunciar una: el camino de la marca que no se pudo escribir
+    // pasa por aquí con el error de verdad y otra vez, más abajo, sin él — y ese segundo
+    // aviso salía con «error» en vez del `EACCES` que es justo el dato que sirve. Dos avisos
+    // para un hecho, y el segundo peor que el primero, es cómo se enseña a no leerlos.
+    if (renunciadas.has(id)) return;
     if (opciones.disco.listar().find((t) => t.id === id)?.estado !== "nuevo") return;
     renunciadas.add(id);
     // Esto SÍ es del proceso y no de la tarea: su cola no se puede escribir, así que ni el

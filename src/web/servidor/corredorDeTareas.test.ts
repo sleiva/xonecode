@@ -535,6 +535,12 @@ describe("crearCorredorDeTareas", () => {
     // ni el motivo llegaría al kanban. Sin la ruta de la máquina, como todo lo que sale.
     expect(dichos.join(" ")).toMatch(/EACCES/);
     expect(dichos.join(" ")).not.toContain("/Users/x/.xonecode");
+    // UNA vez, y con el código de verdad. Este camino pasaba por la renuncia dos veces —con
+    // el error y, más abajo, sin él— y el segundo aviso decía «error» en vez del `EACCES`,
+    // que es justo el dato con el que una persona arregla esto. Dos avisos para un hecho, y
+    // el segundo peor que el primero, es cómo se aprende a no leerlos.
+    expect(dichos.filter((t) => t.includes("no se pudo escribir el estado"))).toHaveLength(1);
+    expect(dichos.join(" ")).not.toMatch(/\(error\)/);
     // Y una revisión más tampoco la vuelve a coger.
     corredor.revisar();
     await corredor.asentar();
