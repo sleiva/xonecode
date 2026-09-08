@@ -2179,6 +2179,34 @@ export interface CorredorDeTareasCableado {
  * cuenta —nace DENTRO del lazo, no de una petición del cliente— llega a
  * `emitirTareas`, y que si `emitirTareas` revienta el lazo de tareas no se entera.
  */
+/**
+ * Las fuentes con que se resuelve el papel del JUEZ para una tarea, por la raíz de SU
+ * proyecto.
+ *
+ * Está extraída y exportada por el mismo motivo que `revisionConGit` y que `backendDeAgente`:
+ * vivía dentro del cierre de `arrancarConsolaWeb`, que todos sus tests doblan, así que
+ * quitarle la capa de proyecto no ponía ni un test en rojo — comprobado por mutación. Es la
+ * cuarta vez en esta tanda que una composición de producción escondida en un cierre deja una
+ * regla sin montar con todo en verde.
+ *
+ * Las dos capas salen de `cargar(raiz)`, que trae el `config.json` del proyecto y el global:
+ * en la consola web `FuentesDeEleccion.proyecto` no se rellena nunca —el vestíbulo sirve
+ * muchos proyectos y las fuentes se construyen una vez al arrancar—, así que sin preguntarle
+ * al disco por la raíz de la tarea, un proyecto que apuntara `afilado` a otro modelo se
+ * ignoraba en silencio. La misma trampa que `cloudstudioDelProyecto` ya resolvió así.
+ *
+ * `proyecto` se omite en vez de ponerse a `undefined`: ausente es «este proyecto no dice
+ * nada», y la precedencia de `core/modelos.ts` cuenta con eso.
+ */
+export function fuentesDelJuez(raiz: string): FuentesDeEleccion {
+  const { config } = cargar(raiz);
+  return {
+    ...(config.proyecto === undefined ? {} : { proyecto: config.proyecto }),
+    global: config.global,
+    entorno: { XONECODE_MODELO: process.env.XONECODE_MODELO },
+  };
+}
+
 export function construirCorredorDeTareasCableado(opciones: {
   vestibulo: Pick<Vestibulo, "abrirParaTarea" | "proyectoAbierto" | "sesionesDe">;
   /** La fábrica de `OpcionesDeArranque.tareas`. Ausente = esta ejecución no ejecuta tareas. */
@@ -2455,18 +2483,18 @@ export async function arrancarConsolaWeb(opciones: OpcionesDeArranque): Promise<
      * de cuenta y `/provider` escriben la credencial y la elección de modelo mientras el
      * proceso vive, y un `Modelos` capturado al arrancar dejaría al juez con el reparto de
      * antes. Una consulta por tarea, así que leer el `config.json` ahí no cuesta nada.
+     *
+     * **Y se lee el del PROYECTO además del global, por la raíz de la tarea.** En la consola
+     * web `FuentesDeEleccion.proyecto` no se rellena nunca —el vestíbulo sirve muchos
+     * proyectos y las fuentes se construyen una vez al arrancar—, así que sin preguntarle al
+     * disco por la raíz, un `config.json` de proyecto que apuntara el papel `afilado` a otro
+     * modelo se ignoraba en silencio. Es la misma trampa que `cloudstudioDelProyecto` ya
+     * resolvió así, y el mismo motivo: un ajuste escrito que no hace nada es peor que no
+     * poder ponerlo, porque quien lo puso se cree servido.
      */
     juez: crearJuezDeTarea({
-      invocar: (papel, prompt) =>
-        invocarConModelos(
-          new Modelos(
-            {
-              global: cargar(opciones.cwd).config.global,
-              entorno: { XONECODE_MODELO: process.env.XONECODE_MODELO },
-            },
-            proveedoresPersonalizados
-          )
-        )(papel, prompt),
+      invocar: (papel, prompt, raiz) =>
+        invocarConModelos(new Modelos(fuentesDelJuez(raiz), proveedoresPersonalizados))(papel, prompt, raiz),
     }),
     /**
      * Que lo escrito se pueda REVISAR es `cambiosDeSesion(...).via === "git"`: la MISMA

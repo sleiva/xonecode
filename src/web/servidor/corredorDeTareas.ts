@@ -572,6 +572,7 @@ export function crearCorredorDeTareas(opciones: {
     const consulta = opciones.juez
       .juzgar({
         encargo: tarea.encargo,
+        raiz: tarea.proyecto.raiz,
         // Normalizadas por el MISMO sitio que las guarda en el índice, así que el juez ve
         // exactamente las rutas que verá la persona — relativas, sin repetidos y sin la
         // barra del backend virtual.

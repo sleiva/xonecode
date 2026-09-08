@@ -1643,7 +1643,14 @@ describe("una tarea se entrega por condiciones MEDIDAS más el juez", () => {
     expect(juez.casos).toHaveLength(1);
     expect(juez.casos[0]).toEqual({
       encargo: "crea la colección Clientes",
-      // RELATIVAS, como las guarda el índice: de aquí no sale ninguna ruta de la máquina.
+      // La raíz SÍ va, y es la única ruta de máquina del caso: sirve para resolver el papel
+      // `afilado` con el `config.json` del proyecto —en la web nadie rellena
+      // `FuentesDeEleccion.proyecto`, así que hay que preguntarle al disco por la raíz— y se
+      // queda en el host, porque el caso del juez no viaja por el cable. Este aserto es de
+      // claves EXACTAS a propósito: es lo que impide que un «ya que estamos, llevemos
+      // también…» cuele un dato de más camino del prompt de un modelo.
+      raiz: "/w/A",
+      // RELATIVAS, como las guarda el índice: de aquí no sale ninguna otra ruta de la máquina.
       autorizadas: ["Clientes.xne", "src/lista.js"],
       verificador: "verde",
       hallazgos: [{ code: "ATTR_UNKNOWN", severidad: "warning", mensaje: "atributo raro", fichero: "Clientes.xne" }],

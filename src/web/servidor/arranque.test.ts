@@ -20,6 +20,7 @@ import {
   RUTA_ACCION,
   RUTA_ARTEFACTO,
   RUTA_EVENTOS,
+  fuentesDelJuez,
 } from "./arranque.js";
 import { crearVestibulo, type Vestibulo } from "./vestibulo.js";
 import { COMANDOS } from "../../cli/consola.js";
@@ -3108,5 +3109,53 @@ describe("las tareas en background, el cableado del corredor con el cable — no
     expect(cola.verTareas()[0]!.estado).toBe("requiere-atencion");
     expect(mensajesDeTareas(cliente).at(-1)?.lista[0]).toMatchObject({ id: "t3", estado: "requiere-atencion" });
     expect(mensajesDeTareas(segundo).at(-1)?.lista[0]).toMatchObject({ id: "t3", estado: "requiere-atencion" });
+  });
+});
+
+describe("`fuentesDelJuez` — el papel del juez se resuelve con el `config.json` del PROYECTO", () => {
+  /**
+   * Esta función está extraída porque vivía dentro del cierre de `arrancarConsolaWeb`, que
+   * todos sus tests doblan: quitarle la capa de proyecto no ponía ni un test en rojo, medido
+   * por mutación. Es la cuarta vez en esta tanda que una composición de producción escondida
+   * en un cierre deja una regla sin montar con todo en verde — la misma lección de
+   * `backendDeAgente` y de `revisionConGit`.
+   *
+   * Y lo que la regla protege: en la consola web `FuentesDeEleccion.proyecto` no se rellena
+   * nunca, así que sin preguntarle al disco por la raíz de la tarea, un proyecto que apunte
+   * `afilado` a otro modelo se ignora EN SILENCIO. Un ajuste escrito que no hace nada es
+   * peor que no poder ponerlo, porque quien lo puso se cree servido.
+   */
+  it("el `afilado` del proyecto llega a las fuentes, y por eso gana al global", () => {
+    const raiz = mkdtempSync(join(tmpdir(), "xonecode-juez-"));
+    mkdirSync(join(raiz, ".xonecode"), { recursive: true });
+    writeFileSync(
+      join(raiz, ".xonecode", "config.json"),
+      JSON.stringify({ modelos: { afilado: "anthropic/claude-opus-4-5" } })
+    );
+
+    expect(fuentesDelJuez(raiz).proyecto?.modelos?.afilado).toBe("anthropic/claude-opus-4-5");
+    rmSync(raiz, { recursive: true, force: true });
+  });
+
+  it("un proyecto que no dice nada deja `proyecto` AUSENTE, no un objeto vacío", () => {
+    // Ausente es «este proyecto no opina» y con eso cuenta la precedencia de
+    // `core/modelos.ts`; un objeto vacío sería una capa que existe y no dice nada, que es
+    // otra cosa. La misma distinción que `Entorno.proyectos`.
+    const raiz = mkdtempSync(join(tmpdir(), "xonecode-juez-vacio-"));
+    expect("proyecto" in fuentesDelJuez(raiz)).toBe(false);
+    rmSync(raiz, { recursive: true, force: true });
+  });
+
+  it("la variable de entorno viaja, porque manda sobre los ficheros", () => {
+    const raiz = mkdtempSync(join(tmpdir(), "xonecode-juez-env-"));
+    const antes = process.env.XONECODE_MODELO;
+    process.env.XONECODE_MODELO = "ollama/qwen3";
+    try {
+      expect(fuentesDelJuez(raiz).entorno?.XONECODE_MODELO).toBe("ollama/qwen3");
+    } finally {
+      if (antes === undefined) delete process.env.XONECODE_MODELO;
+      else process.env.XONECODE_MODELO = antes;
+      rmSync(raiz, { recursive: true, force: true });
+    }
   });
 });

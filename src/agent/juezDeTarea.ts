@@ -57,7 +57,14 @@ export class ErrorDelJuezDeTarea extends Error {
 }
 
 /** Cómo se le habla al modelo. Un papel y un prompt entran, su texto sale. */
-export type InvocarModelo = (papel: Papel, prompt: string) => Promise<string>;
+/**
+ * El tercer parámetro es la RAÍZ del proyecto de la tarea, y existe para que el papel
+ * `afilado` se resuelva con la precedencia de siempre —proyecto sobre global—. En la consola
+ * web nadie rellena `FuentesDeEleccion.proyecto`, así que sin esto un `config.json` de
+ * proyecto que apuntara el juez a otro modelo se ignoraba en silencio: un ajuste escrito que
+ * no hace nada, que en este repo es peor que no poder ponerlo.
+ */
+export type InvocarModelo = (papel: Papel, prompt: string, raiz: string) => Promise<string>;
 
 /**
  * El `invocar` de PRODUCCIÓN, sobre `ModelosPort`.
@@ -232,7 +239,7 @@ export function crearJuezDeTarea(opciones: { invocar: InvocarModelo }): JuezDeTa
     juzgar: async (caso) => {
       let texto: string;
       try {
-        texto = await opciones.invocar(PAPEL_DEL_JUEZ, promptDelJuez(caso));
+        texto = await opciones.invocar(PAPEL_DEL_JUEZ, promptDelJuez(caso), caso.raiz);
       } catch (error) {
         // Lo que ya viene envuelto se deja: `invocarConModelos` distingue el fallo de
         // CONSTRUIR (cuyo mensaje es el accionable) del de LLAMAR (cuyo cuerpo no se

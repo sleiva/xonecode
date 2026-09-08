@@ -8,6 +8,11 @@ import {
 } from "./juezDeTarea.js";
 import type { Papel } from "../core/ports.js";
 
+/** Una raíz cualquiera: `CasoDeJuez.raiz` existe para que el papel `afilado` se resuelva con
+ *  el `config.json` del PROYECTO además del global, y aquí el `invocar` está doblado y no
+ *  lee disco — así que el valor da igual y lo que importa es que el caso la lleve. */
+const RAIZ = "/proyectos/AppDemo";
+
 describe("el juez entra por PUERTO y usa el papel afilado", () => {
   it("`npm test` no habla con ningún modelo: el `invocar` es un doble en línea", async () => {
     const pedidos: Papel[] = [];
@@ -17,7 +22,7 @@ describe("el juez entra por PUERTO y usa el papel afilado", () => {
         return JSON.stringify({ veredicto: "verde", resumen: "hace lo que pide" });
       },
     });
-    const v = await juez.juzgar({ encargo: "añade una colección Clientes", autorizadas: ["Clientes.xne"] });
+    const v = await juez.juzgar({ encargo: "añade una colección Clientes", raiz: RAIZ, autorizadas: ["Clientes.xne"] });
     // `afilado` está RESERVADO al juez (`core/modelos.ts`): es el suyo y no otro.
     expect(pedidos).toEqual([PAPEL_DEL_JUEZ]);
     expect(PAPEL_DEL_JUEZ).toBe("afilado");
@@ -27,7 +32,7 @@ describe("el juez entra por PUERTO y usa el papel afilado", () => {
   it("una respuesta que no se entiende NO es un verde", async () => {
     // Fail-closed por la misma razón que la aprobación: lo que no se entiende no se aprueba.
     const juez = crearJuezDeTarea({ invocar: async () => "no soy json" });
-    const v = await juez.juzgar({ encargo: "x", autorizadas: [] });
+    const v = await juez.juzgar({ encargo: "x", raiz: RAIZ, autorizadas: [] });
     expect(v.veredicto).toBe("indeterminado");
     // Y lo dice, porque de aquí sale lo que se lee en la tarjeta.
     expect(v.resumen).not.toBe("");
@@ -37,12 +42,12 @@ describe("el juez entra por PUERTO y usa el papel afilado", () => {
     const juez = crearJuezDeTarea({
       invocar: async () => JSON.stringify({ veredicto: "quizá", resumen: "pues no sé" }),
     });
-    expect((await juez.juzgar({ encargo: "x", autorizadas: [] })).veredicto).toBe("indeterminado");
+    expect((await juez.juzgar({ encargo: "x", raiz: RAIZ, autorizadas: [] })).veredicto).toBe("indeterminado");
   });
 
   it("un verde sin resumen no es un verde: un veredicto que no se puede leer no vale", async () => {
     const juez = crearJuezDeTarea({ invocar: async () => JSON.stringify({ veredicto: "verde" }) });
-    expect((await juez.juzgar({ encargo: "x", autorizadas: [] })).veredicto).toBe("indeterminado");
+    expect((await juez.juzgar({ encargo: "x", raiz: RAIZ, autorizadas: [] })).veredicto).toBe("indeterminado");
   });
 
   it("acepta la respuesta metida en una valla de código, que es como contestan de verdad", async () => {
@@ -50,7 +55,7 @@ describe("el juez entra por PUERTO y usa el papel afilado", () => {
       invocar: async () =>
         "Aquí va:\n```json\n{\"veredicto\":\"rojo\",\"resumen\":\"falta el campo\",\"hallazgos\":[\"no hay NOMBRE\"]}\n```\n",
     });
-    expect(await juez.juzgar({ encargo: "x", autorizadas: [] })).toEqual({
+    expect(await juez.juzgar({ encargo: "x", raiz: RAIZ, autorizadas: [] })).toEqual({
       veredicto: "rojo",
       resumen: "falta el campo",
       hallazgos: ["no hay NOMBRE"],
@@ -69,6 +74,7 @@ describe("el prompt lleva los HECHOS y nunca contenido de ficheros", () => {
     });
     await juez.juzgar({
       encargo: "añade una colección Clientes",
+      raiz: RAIZ,
       autorizadas: ["Clientes.xne", "src/lista.js"],
       verificador: "verde",
       hallazgos: [{ code: "ATTR_UNKNOWN", severidad: "warning", mensaje: "atributo raro", fichero: "Clientes.xne", linea: 3 }],
@@ -94,7 +100,7 @@ describe("el prompt lleva los HECHOS y nunca contenido de ficheros", () => {
         return JSON.stringify({ veredicto: "verde", resumen: "ok" });
       },
     });
-    await juez.juzgar({ encargo: "x", autorizadas: ["/Users/quien-sea/p/app.xne"] });
+    await juez.juzgar({ encargo: "x", raiz: RAIZ, autorizadas: ["/Users/quien-sea/p/app.xne"] });
     // Las rutas se dan tal cual llegan (el corredor ya las guarda relativas), pero el
     // prompt no ABRE ninguna: no hay `readFile` en este módulo. Se comprueba lo contrario
     // de lo esperable: que no aparece nada que el juez no le haya dado.
@@ -110,7 +116,7 @@ describe("el prompt lleva los HECHOS y nunca contenido de ficheros", () => {
         return JSON.stringify({ veredicto: "verde", resumen: "ok" });
       },
     });
-    await juez.juzgar({ encargo: "x", autorizadas: [], verificador: "no-corrio" });
+    await juez.juzgar({ encargo: "x", raiz: RAIZ, autorizadas: [], verificador: "no-corrio" });
     expect(prompt).toContain("NO HA CORRIDO");
   });
 });
@@ -121,7 +127,7 @@ describe("el texto del modelo se ACOTA antes de guardarse", () => {
     const juez = crearJuezDeTarea({
       invocar: async () => JSON.stringify({ veredicto: "rojo", resumen: largo }),
     });
-    const v = await juez.juzgar({ encargo: "x", autorizadas: [] });
+    const v = await juez.juzgar({ encargo: "x", raiz: RAIZ, autorizadas: [] });
     // Este texto acaba en el `motivo` de la tarea, que se pinta en el kanban y viaja por el
     // cable: un salto de línea ahí parte la tarjeta y un resumen de 4 KB la llena entera.
     expect(v.resumen.length).toBeLessThanOrEqual(TOPE_DE_RESUMEN);
@@ -137,7 +143,7 @@ describe("el texto del modelo se ACOTA antes de guardarse", () => {
           hallazgos: [...Array(50).keys()].map((i) => `hallazgo ${i}`).concat([{ raro: true } as never]),
         }),
     });
-    const v = await juez.juzgar({ encargo: "x", autorizadas: [] });
+    const v = await juez.juzgar({ encargo: "x", raiz: RAIZ, autorizadas: [] });
     expect(v.hallazgos!.length).toBeLessThanOrEqual(10);
     for (const h of v.hallazgos!) expect(typeof h).toBe("string");
   });
@@ -155,7 +161,7 @@ describe("que el juez no se pueda usar es fallo del ENTORNO", () => {
         throw new Error("Anthropic API key not found");
       },
     });
-    await expect(juez.juzgar({ encargo: "x", autorizadas: [] })).rejects.toThrow(ErrorDelJuezDeTarea);
+    await expect(juez.juzgar({ encargo: "x", raiz: RAIZ, autorizadas: [] })).rejects.toThrow(ErrorDelJuezDeTarea);
   });
 
   /**
@@ -172,8 +178,8 @@ describe("que el juez no se pueda usar es fallo del ENTORNO", () => {
       paraModelo: () => undefined,
       descripcion: () => ({ rapido: "", trabajo: "", afilado: "" }),
     });
-    await expect(invocar("afilado", "prompt")).rejects.toThrow(/NVIDIA_API_KEY/);
-    await expect(invocar("afilado", "prompt")).rejects.toThrow(ErrorDelJuezDeTarea);
+    await expect(invocar("afilado", "prompt", RAIZ)).rejects.toThrow(/NVIDIA_API_KEY/);
+    await expect(invocar("afilado", "prompt", RAIZ)).rejects.toThrow(ErrorDelJuezDeTarea);
   });
 
   /**
@@ -193,8 +199,8 @@ describe("que el juez no se pueda usar es fallo del ENTORNO", () => {
       paraModelo: () => undefined,
       descripcion: () => ({ rapido: "", trabajo: "", afilado: "" }),
     });
-    await expect(invocar("afilado", "prompt")).rejects.toThrow(/AuthenticationError/);
-    await expect(invocar("afilado", "prompt")).rejects.not.toThrow(/sk-abc/);
+    await expect(invocar("afilado", "prompt", RAIZ)).rejects.toThrow(/AuthenticationError/);
+    await expect(invocar("afilado", "prompt", RAIZ)).rejects.not.toThrow(/sk-abc/);
   });
 
   it("un modelo que no sabe invocar es fallo del entorno, no un veredicto", async () => {
@@ -203,7 +209,7 @@ describe("que el juez no se pueda usar es fallo del ENTORNO", () => {
       paraModelo: () => undefined,
       descripcion: () => ({ rapido: "", trabajo: "", afilado: "" }),
     });
-    await expect(invocar("afilado", "prompt")).rejects.toThrow(ErrorDelJuezDeTarea);
+    await expect(invocar("afilado", "prompt", RAIZ)).rejects.toThrow(ErrorDelJuezDeTarea);
   });
 
   it("el texto de la respuesta sale del `content`, venga como cadena o por bloques", async () => {
@@ -213,10 +219,10 @@ describe("que el juez no se pueda usar es fallo del ENTORNO", () => {
         paraModelo: () => undefined,
         descripcion: () => ({ rapido: "", trabajo: "", afilado: "" }),
       });
-    expect(await conContenido("hola")("afilado", "p")).toBe("hola");
+    expect(await conContenido("hola")("afilado", "p", RAIZ)).toBe("hola");
     // Gemini y Anthropic mandan bloques; el pensamiento NO es texto y no entra.
     expect(
-      await conContenido([{ type: "thinking", thinking: "mmm" }, { type: "text", text: "hola" }])("afilado", "p")
+      await conContenido([{ type: "thinking", thinking: "mmm" }, { type: "text", text: "hola" }])("afilado", "p", RAIZ)
     ).toBe("hola");
   });
 });

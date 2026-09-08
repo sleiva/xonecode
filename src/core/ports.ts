@@ -245,6 +245,13 @@ export interface VerifierPort {
  */
 export interface CasoDeJuez {
   encargo: string;
+  /** La raíz del proyecto de la tarea. Está aquí para que el papel `afilado` se resuelva con
+   *  la MISMA precedencia que en cualquier otro sitio —proyecto sobre global—: en la consola
+   *  web `FuentesDeEleccion.proyecto` no se rellena nunca (el vestíbulo sirve muchos
+   *  proyectos y las fuentes se construyen una vez al arrancar), así que hay que preguntarle
+   *  al disco POR LA RAÍZ, igual que `cloudstudioDelProyecto`. Se queda en el host: no viaja
+   *  por el cable. */
+  raiz: string;
   /** Lo que la tarea AUTORIZÓ escribir, relativo a la raíz. Ver `Tarea.autorizadas`: es
    *  una PISTA de lo que tocó, no la verdad sobre el disco (esa la tiene git). */
   autorizadas: readonly string[];
