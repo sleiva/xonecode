@@ -84,17 +84,22 @@ export function TareasDelProyecto({
       <div className={estilos.encabezado}>
         <span className={estilos.rotulo}>Tareas en background</span>
         {alNuevaTarea === undefined ? null : (
-          <button
-            type="button"
-            className={estilos.nueva}
-            disabled={apagado}
-            title={apagado ? "Sin cable: no se puede crear una tarea hasta reconectar." : undefined}
-            onClick={alNuevaTarea}
-          >
+          <button type="button" className={estilos.nueva} disabled={apagado} onClick={alNuevaTarea}>
             Nueva tarea
           </button>
         )}
       </div>
+      {/*
+        El motivo del apagado tiene que ser texto VISIBLE, no un `title`: un `title` no se ve
+        en táctil, la mayoría de navegadores no lo enseña de forma fiable con el ratón, y un
+        lector de pantalla puede no anunciarlo — la misma familia de fallo que un aviso que
+        nadie lee o un control en `display:none` sin tabular. Mismo texto y patrón que
+        `AccionesDeTarea.module.css#.avisoConexion` usa por fila; aquí es de la pestaña
+        entera, así que vive junto a la cabecera y no dentro de ninguna fila.
+      */}
+      {apagado && alNuevaTarea !== undefined ? (
+        <p className={estilos.avisoConexion}>Sin conexión: no se puede crear una tarea hasta reconectar.</p>
+      ) : null}
       {tareas === undefined ? (
         <p className={estilos.aviso}>Consultando la cola de tareas de este proyecto…</p>
       ) : tareas.length === 0 ? (

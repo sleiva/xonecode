@@ -25,17 +25,19 @@ describe("Pestanas", () => {
     expect(alElegirPestana).toHaveBeenCalledWith("trazas");
   });
 
-  it("son cinco por omisión, en este orden: Chat · Ficheros · Revisión · Tareas · Trazas", () => {
-    // Las cuatro primeras son para quien desarrolla una app XOne; Trazas es para depurar el
-    // harness, y lo de otro destinatario va al final. Tareas ya no necesita ningún dato para
-    // aparecer (Task 15): es una pestaña de ACCIÓN, no de registro.
+  it("son cinco por omisión, en este orden: Chat · Tareas · Ficheros · Revisión · Trazas", () => {
+    // Chat y Tareas son las dos pestañas de ACCIÓN —una habla con el agente, la otra le manda
+    // algo para que trabaje solo— y van juntas al principio. Ficheros, Revisión (y Artefactos,
+    // si lo hay) son de REGISTRO: enseñan lo que ya pasó, y Trazas —de otro destinatario, quien
+    // depura el harness— cierra la tira. Tareas ya no necesita ningún dato para aparecer
+    // (Task 15): es de acción, no de registro.
     render(<Pestanas pestana="revision" alElegirPestana={vi.fn()} />);
     expect(screen.getByRole("tablist")).not.toBeNull();
     expect(screen.getAllByRole("tab").map((t) => t.textContent)).toEqual([
       "Chat",
+      "Tareas",
       "Ficheros",
       "Revisión",
-      "Tareas",
       "Trazas",
     ]);
     expect(screen.getByRole("tab", { name: "Revisión" }).getAttribute("aria-selected")).toBe("true");
@@ -44,13 +46,14 @@ describe("Pestanas", () => {
   it("«Artefactos» solo está si la sesión dejó alguno: una pestaña vacía es un control sin dato", () => {
     render(<Pestanas pestana="chat" alElegirPestana={vi.fn()} hayArtefactos />);
     // Delante de Trazas, que sigue siendo la última: es la de otro destinatario. Tareas va
-    // detrás de Artefactos y delante de Trazas, y ya no depende de ningún prop.
+    // junto al Chat —las dos de acción— y Artefactos entre Revisión y Trazas, con el resto
+    // de las de registro.
     expect(screen.getAllByRole("tab").map((t) => t.textContent)).toEqual([
       "Chat",
+      "Tareas",
       "Ficheros",
       "Revisión",
       "Artefactos",
-      "Tareas",
       "Trazas",
     ]);
   });
@@ -82,14 +85,14 @@ describe("Pestanas", () => {
     expect(alElegirPestana).toHaveBeenCalledWith("tareas");
   });
 
-  it("Artefactos y Tareas conviven: Artefactos primero", () => {
+  it("Artefactos y Tareas conviven, cada una en su grupo: Tareas junto al Chat, Artefactos junto a Trazas", () => {
     render(<Pestanas pestana="chat" alElegirPestana={vi.fn()} hayArtefactos />);
     expect(screen.getAllByRole("tab").map((t) => t.textContent)).toEqual([
       "Chat",
+      "Tareas",
       "Ficheros",
       "Revisión",
       "Artefactos",
-      "Tareas",
       "Trazas",
     ]);
   });

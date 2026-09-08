@@ -5,7 +5,7 @@ import estilos from "./Pestanas.module.css";
 export type Pestana = "chat" | "ficheros" | "revision" | "artefactos" | "tareas" | "trazas";
 
 /**
- * La tira de pestañas: Chat, Ficheros, Revisión, Tareas y Trazas — más Artefactos, si la
+ * La tira de pestañas: Chat, Tareas, Ficheros, Revisión y Trazas — más Artefactos, si la
  * sesión dejó alguno.
  *
  * Vive en el PANEL CENTRAL, no en la barra superior. Es la tercera casa que tiene —estuvo
@@ -36,6 +36,12 @@ export type Pestana = "chat" | "ficheros" | "revision" | "artefactos" | "tareas"
  * falta. El criterio que queda, y que no hay que volver a decidir: **una pestaña de
  * REGISTRO existe si hay registro; una pestaña de ACCIÓN existe siempre, y su estado vacío
  * dice cómo se empieza** (ver `TareasDelProyecto.tsx`, que es quien pinta ese estado vacío).
+ *
+ * **Y por eso Tareas se sienta junto a Chat, no al final.** Chat y Tareas son las dos
+ * pestañas de ACCIÓN —una habla con el agente ahora mismo, la otra le manda un encargo para
+ * que trabaje solo—; Ficheros, Revisión y Artefactos son de REGISTRO —enseñan lo que YA
+ * pasó, y por eso siguen agrupadas donde estaban—, y Trazas es de otro destinatario (quien
+ * depura el harness, no quien desarrolla la app), así que sigue cerrando la tira.
  */
 export function Pestanas({
   pestana,
@@ -55,6 +61,10 @@ export function Pestanas({
 }) {
   const pestanas: { id: Pestana; etiqueta: string }[] = [
     { id: "chat", etiqueta: "Chat" },
+    // Junto al Chat, y no al final: las dos son de ACCIÓN (ver el comentario del componente,
+    // más arriba). La cola de tareas en background es del proyecto ABIERTO, no de la máquina
+    // entera — el kanban global ya vive en el escritorio. SIEMPRE presente, a propósito.
+    { id: "tareas", etiqueta: "Tareas" },
     // El árbol del proyecto en el que se trabaja, con visor de solo lectura.
     { id: "ficheros", etiqueta: "Ficheros" },
     // Lo que ESTA sesión ha tocado, con su diff: la única vista que responde a «¿qué me ha
@@ -63,10 +73,6 @@ export function Pestanas({
     // Lo que el agente DIBUJÓ, que no es del proyecto y por eso no está en las dos de
     // arriba. Solo si hay alguno.
     ...(hayArtefactos === true ? [{ id: "artefactos" as const, etiqueta: "Artefactos" }] : []),
-    // La cola de tareas en background del proyecto ABIERTO, no de la máquina entera — el
-    // kanban global ya vive en el escritorio. SIEMPRE presente, a propósito: es una pestaña
-    // de ACCIÓN y no de registro (ver el comentario del componente, más arriba).
-    { id: "tareas", etiqueta: "Tareas" },
     // Para depurar el HARNESS, no para trabajar en una app XOne: por eso va la última.
     { id: "trazas", etiqueta: "Trazas" },
   ];

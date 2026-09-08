@@ -57,6 +57,14 @@
   cursor: default;
 }
 
+/* El motivo del apagado de «Nueva tarea», visible y no solo en un `title`. Mismo alias y
+   tamaño que `AccionesDeTarea.module.css#.avisoConexion`, que es de donde sale el patrón. */
+.avisoConexion {
+  margin: 0 0 12px;
+  color: var(--dsw-alias-state-warn-label);
+  font-size: 11px;
+}
+
 /* El aviso de «consultando…» y el estado vacío: mismo trazo que `Revision.module.css#.aviso`. */
 .aviso {
   margin: 0;

@@ -123,4 +123,21 @@ describe("TareasDelProyecto", () => {
     render(<TareasDelProyecto tareas={[]} />);
     expect(screen.queryByRole("button", { name: /nueva tarea/i })).toBeNull();
   });
+
+  /**
+   * Vuelta del coordinador sobre esta misma tarea: un `title` en un botón deshabilitado NO
+   * es «decirlo» — no hay hover en táctil, la mayoría de navegadores no lo enseña de forma
+   * fiable, y un lector de pantalla puede no anunciarlo. El motivo tiene que ser texto
+   * VISIBLE junto al control, el mismo patrón que ya sigue `AccionesDeTarea` para cada fila
+   * («Sin conexión: no se puede mandar nada hasta reconectar.») — reusado aquí y no
+   * inventado de nuevo.
+   */
+  it("sin cable, «Nueva tarea» se apaga y lo DICE en texto visible — no en un `title`", () => {
+    render(<TareasDelProyecto tareas={[]} alNuevaTarea={vi.fn()} conectado={false} />);
+    const boton = screen.getByRole("button", { name: /nueva tarea/i });
+    expect(boton).toHaveProperty("disabled", true);
+    // El motivo se LEE en la pantalla, no solo en un atributo que el navegador puede callar.
+    expect(screen.getByText(/sin conexión/i)).toBeTruthy();
+    expect(boton.getAttribute("title")).toBeNull();
+  });
 });
