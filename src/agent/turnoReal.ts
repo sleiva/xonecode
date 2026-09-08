@@ -20,6 +20,7 @@ import { cargarAgentes } from "./agentesEnDisco.js";
 import { crearSubagenteExterno } from "./subagenteExterno.js";
 import type { PendienteDeAprobacion } from "../core/events.js";
 import type { LineaDeDiff } from "../core/diff.js";
+import { rutaRealDeVirtual } from "../core/rutaVirtual.js";
 import type { Piel } from "../core/turno.js";
 import { Bitacora } from "../core/bitacora.js";
 import { correrTurno } from "../core/turno.js";
@@ -338,12 +339,23 @@ export async function abrirSesionReal(opciones: {
     for (const c of crudos) {
       const f = ficheroDe(c);
       if (f) ficheros.set(c.id, f);
-      // El ANTES es el disco: el interrupt pausa ANTES de escribir. La ruta viene del
-      // backend, que es relativo a la raíz del proyecto — y si no está en el disco, el
-      // fichero es nuevo y su «antes» es la cadena vacía, no un error.
+      // El ANTES es el disco: el interrupt pausa ANTES de escribir. Y si no está en el
+      // disco, el fichero es nuevo y su «antes» es la cadena vacía, no un error.
+      //
+      // La ruta viene del backend del agente, que va con `virtualMode: true`, así que llega
+      // ROOTEADA en el proyecto (`/app.xne`) — y esto decía «es relativa a la raíz» y
+      // resolvía con `resolve(raiz, ruta)`, que con una absoluta DESCARTA la base. Medido:
+      // con la forma rooteada el ANTES salía siempre vacío, así que un fichero EXISTENTE se
+      // enseñaba como nuevo y sus líneas quitadas no se veían — en el único momento en que
+      // una persona ve lo que el agente va a escribir antes de que exista. Pasó desapercibido
+      // porque el test que lo cubría usaba `"app.xne"` sin barra, que es la otra forma que
+      // también puede llegar. `rutaRealDeVirtual` acepta las dos y además contiene el `..`,
+      // que por aquí traía al diff el contenido de un fichero de FUERA del proyecto.
       const vista = cambioDe(c, (ruta) => {
+        const real = rutaRealDeVirtual(raiz, ruta);
+        if (real === undefined) return "";
         try {
-          return readFileSync(resolve(raiz, ruta), "utf8");
+          return readFileSync(real, "utf8");
         } catch {
           return "";
         }

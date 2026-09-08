@@ -379,6 +379,64 @@ describe("abrirSesionReal", () => {
       rmSync(dir, { recursive: true, force: true });
     });
 
+    it("y con la ruta ROOTEADA también: es la forma que de verdad manda el backend", async () => {
+      // El test de arriba usaba `"app.xne"` sin barra, y por eso este agujero vivió sin que
+      // nada chistara: el backend del agente va con `virtualMode: true`, así que lo que llega
+      // en los argumentos del interrupt viene rooteado —`/app.xne`, la forma que usan las
+      // descripciones de las tools, las skills y `seDetieneEn`— y `resolve(raiz, "/app.xne")`
+      // devuelve `/app.xne`, porque una absoluta descarta la base. El ANTES salía vacío y un
+      // fichero EXISTENTE se enseñaba como nuevo: sus líneas quitadas, invisibles. En el
+      // único momento en que una persona ve lo que el agente va a escribir antes de que
+      // exista.
+      const dir = mkdtempSync(join(tmpdir(), "turnoreal-rooteada-"));
+      writeFileSync(join(dir, "app.xne"), "<coll>\nviejo\n</coll>\n");
+      const vistos: Array<Map<string, LineaDeDiff[]> | undefined> = [];
+
+      const sesion = await abrir({
+        escribe: true,
+        raiz: dir,
+        interruptArgs: { file_path: "/app.xne", content: "<coll>\nnuevo\n</coll>\n" },
+        pedir: async (pendientes, _ficheros, diffs) => {
+          vistos.push(diffs);
+          return rechazarTodo()(pendientes);
+        },
+      });
+      await sesion.turno("escribe algo", pielFalsa());
+
+      expect(vistos[0]?.get("int-1")).toEqual([
+        { tipo: "igual", texto: "<coll>" },
+        { tipo: "quitado", texto: "viejo" },
+        { tipo: "anadido", texto: "nuevo" },
+        { tipo: "igual", texto: "</coll>" },
+      ]);
+      rmSync(dir, { recursive: true, force: true });
+    });
+
+    it("una ruta que se SALE del proyecto no trae contenido de fuera al diff", async () => {
+      // De ese `readFileSync` sale lo que se pinta en la pantalla de la aprobación, así que
+      // un `..` que escapara enseñaría un fichero ajeno como si fuera del proyecto. Se queda
+      // sin ANTES, que es el lado conservador: el fichero no existe DENTRO.
+      const dir = mkdtempSync(join(tmpdir(), "turnoreal-fuera-"));
+      writeFileSync(join(dir, "secreto.txt"), "no soy del proyecto\n");
+      const raiz = join(dir, "proyecto");
+      mkdirSync(raiz, { recursive: true });
+      const vistos: Array<Map<string, LineaDeDiff[]> | undefined> = [];
+
+      const sesion = await abrir({
+        escribe: true,
+        raiz,
+        interruptArgs: { file_path: "../secreto.txt", content: "pisado\n" },
+        pedir: async (pendientes, _ficheros, diffs) => {
+          vistos.push(diffs);
+          return rechazarTodo()(pendientes);
+        },
+      });
+      await sesion.turno("escribe algo", pielFalsa());
+
+      expect(vistos[0]?.get("int-1")).toEqual([{ tipo: "anadido", texto: "pisado" }]);
+      rmSync(dir, { recursive: true, force: true });
+    });
+
     it("un pendiente sin vista (tool que no escribe) no aparece en el mapa de diffs", async () => {
       const vistos: Array<Map<string, LineaDeDiff[]> | undefined> = [];
       const sesion = await abrir({
