@@ -207,6 +207,17 @@ export function crearCorredorDeTareas(opciones: {
   };
 
   /**
+   * El mensaje si lo escribimos nosotros, y el código si lo escribió el sistema.
+   *
+   * Un error de Node trae `code` y su mensaje trae la ruta absoluta; uno escrito a mano en
+   * este repo no trae `code` y su mensaje es justo lo que hay que leer. Es la única forma de
+   * quedarse con «falta su .xonecode/config.json» sin quedarse también con
+   * «…, open '/Users/quien-sea/…'».
+   */
+  const sinRutas = (error: unknown): string =>
+    typeof error === "object" && error !== null && "code" in error ? codigoDe(error) : unaLinea(error);
+
+  /**
    * Comprueba que la tarea salió de `nuevo`, y si no, renuncia a ella. Ver `renunciadas`.
    */
   const renunciarSiSigueNueva = (id: string, error?: unknown): void => {
@@ -244,16 +255,18 @@ export function crearCorredorDeTareas(opciones: {
        * El proyecto ya no está donde la tarea dice. Se aparca: la dirección de fallo aquí es
        * no ejecutar, nunca ejecutar contra otra carpeta.
        *
-       * Aquí SÍ se usa el mensaje y no el código, y es la única excepción: el de
-       * `abrirParaTarea` (`vestibulo.ts`) está escrito para subir al registro de la tarea y
-       * no lleva ninguna ruta a propósito. Un fallo de más abajo sí podría llevarla, así que
-       * se acota a una línea corta y se le pone el código delante — con el mensaje entero, un
-       * `EACCES` de git traería el home del usuario al kanban.
+       * Aquí el mensaje SÍ se usa, y es la única excepción — pero solo el de la guarda de
+       * `abrirParaTarea` (`vestibulo.ts`), que está escrito para subir al registro de la
+       * tarea y no lleva ninguna ruta a propósito: es el que dice qué hacer (falta el
+       * `config.json`). Lo que viene DETRÁS de esa guarda no es nuestro —
+       * `dependenciasDeProyecto`, `crearEjecutor`, la foto de git— y puede lanzar un error de
+       * Node con el home dentro. Se distinguen por lo mismo que en todo el repo: un error del
+       * sistema trae `code`, y uno escrito a mano no. Ver `codigoDe`.
        */
       try {
         escribirSiSigueSiendoNuestra(tarea.id, (actual) =>
           actual.estado === "nuevo"
-            ? conEstado(actual, "requiere-atencion", `no se pudo abrir el proyecto: ${unaLinea(error)}`)
+            ? conEstado(actual, "requiere-atencion", `no se pudo abrir el proyecto: ${sinRutas(error)}`)
             : undefined
         );
       } finally {
@@ -402,39 +415,60 @@ export function crearCorredorDeTareas(opciones: {
     }
   };
 
+  /** El arranque de verdad. Lo envuelve `arrancar`, que es quien no puede lanzar. */
+  const arrancarDeVerdad = async (): Promise<void> => {
+    const cerrojo = opciones.disco.tomarCerrojo();
+    if (!cerrojo.tomado) {
+      miCerrojo = false;
+      informar(`las tareas las ejecuta otro proceso (pid ${cerrojo.dePid}); aquí solo se ven`);
+      return;
+    }
+    miCerrojo = true;
+    /**
+     * RECONCILIACIÓN. Toda tarea «en proceso» se aparca, **sin mirar el pid**.
+     *
+     * La cola sobrevive a parar el proceso, pero el turno en vuelo no, y al ARRANCAR este
+     * proceso no tiene ninguna tarea en vuelo por construcción: así que toda «en proceso»
+     * que haya en disco es vieja, y dejarla así sería afirmar lo que no se sabe. Mirar el
+     * pid —«las que no son mías»— parece más fino y es un agujero medido: los pid se
+     * REUSAN, y la tarea del proceso muerto que casualmente tenía este número se quedaba
+     * «en proceso» para siempre, sin nadie ejecutándola, sin transición posible desde ahí
+     * y con su proyecto ocupado para el planificador.
+     *
+     * Solo con el cerrojo NUESTRO: si lo tiene otro proceso, sus «en proceso» están
+     * corriendo de verdad y aparcarlas sería matarlas desde fuera.
+     */
+    const lista = opciones.disco.listar();
+    const reconciliada = lista.map((t) =>
+      t.estado === "en-proceso" ? conEstado(t, "requiere-atencion", motivoDeReconciliacion(t.pid)) : t
+    );
+    if (reconciliada.some((t, i) => t !== lista[i])) {
+      opciones.disco.guardar(reconciliada);
+      opciones.alCambiar?.(reconciliada);
+    }
+    revisar();
+  };
+
   return {
     async arrancar() {
-      const cerrojo = opciones.disco.tomarCerrojo();
-      if (!cerrojo.tomado) {
-        miCerrojo = false;
-        informar(`las tareas las ejecuta otro proceso (pid ${cerrojo.dePid}); aquí solo se ven`);
-        return;
-      }
-      miCerrojo = true;
       /**
-       * RECONCILIACIÓN. Toda tarea «en proceso» se aparca, **sin mirar el pid**.
-       *
-       * La cola sobrevive a parar el proceso, pero el turno en vuelo no, y al ARRANCAR este
-       * proceso no tiene ninguna tarea en vuelo por construcción: así que toda «en proceso»
-       * que haya en disco es vieja, y dejarla así sería afirmar lo que no se sabe. Mirar el
-       * pid —«las que no son mías»— parece más fino y es un agujero medido: los pid se
-       * REUSAN, y la tarea del proceso muerto que casualmente tenía este número se quedaba
-       * «en proceso» para siempre, sin nadie ejecutándola, sin transición posible desde ahí
-       * y con su proyecto ocupado para el planificador.
-       *
-       * Solo con el cerrojo NUESTRO: si lo tiene otro proceso, sus «en proceso» están
-       * corriendo de verdad y aparcarlas sería matarlas desde fuera.
+       * Un fallo aquí NO puede tumbar la consola web, que es la misma regla que ya siguen la
+       * conexión con CloudStudio y la apertura del navegador: las tareas de fondo son una
+       * pieza más, y quien está delante viene a trabajar en su proyecto. `tomarCerrojo`
+       * lanza ante cualquier cosa que no sea `EEXIST`/`ENOENT` —un `~/.xonecode/tareas` que
+       * no se puede escribir— y la reconciliación escribe el índice, así que las dos pueden
+       * reventar. Se dice con el código (esto es del PROCESO, no de ninguna tarea: es el
+       * canal del aviso del cerrojo) y este proceso se queda sin ejecutar, que es lo mismo
+       * que le pasa al segundo.
        */
-      const lista = opciones.disco.listar();
-      const reconciliada = lista.map((t) =>
-        t.estado === "en-proceso" ? conEstado(t, "requiere-atencion", motivoDeReconciliacion(t.pid)) : t
-      );
-      if (reconciliada.some((t, i) => t !== lista[i])) {
-        opciones.disco.guardar(reconciliada);
-        opciones.alCambiar?.(reconciliada);
+      try {
+        await arrancarDeVerdad();
+      } catch (error) {
+        miCerrojo = false;
+        informar(`las tareas de fondo no se pueden ejecutar aquí (${codigoDe(error)}); la consola sigue`);
       }
-      revisar();
     },
+
     async parar() {
       parando = true;
       /**

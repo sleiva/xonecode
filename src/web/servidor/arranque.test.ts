@@ -1787,6 +1787,56 @@ describe("montarRutas — el cable, por fin conectado", () => {
     const altas = cliente.recibidos.filter((m) => m.clase === "alta");
     expect((altas.at(-1) as { aviso?: string }).aviso).toBe(motivo);
   });
+
+  /**
+   * Borrar la sesión ABIERTA libera su proyecto, y hay que decírselo a la cola.
+   *
+   * En un proyecto con la consola de una persona abierta no arranca ninguna tarea (gana la
+   * persona, `core/tareas.ts#siguientesAEjecutar`), y el corredor no tiene temporizador: se
+   * revisa por evento. Este es el ÚNICO camino en el que la consola humana se cierra sin
+   * que se abra otra, así que sin esta llamada una tarea que esperaba a esa persona se
+   * quedaría esperando al siguiente evento que no tiene nada que ver — en pantalla, un
+   * cuelgue.
+   */
+  it("borrar la sesión abierta hace REVISAR la cola de tareas", async () => {
+    const servidor = servidorDeMentira();
+    let revisado = 0;
+    montarRutas(
+      servidor,
+      { ...vestibuloDePrueba(), borrarSesion: async () => ({ borrada: true, cerroLaAbierta: true }) },
+      { revisarTareas: () => void (revisado += 1) }
+    );
+    const cliente = clienteDeMentira();
+    await servidor.rutas.get(`GET ${RUTA_EVENTOS}`)!(cliente.peticion, cliente.respuesta);
+    await asentar();
+
+    await postear(
+      servidor.rutas.get(`POST ${RUTA_ACCION}`)!,
+      JSON.stringify({ clase: "sesionAccion", accion: "borrar", proyecto: "p1", sesion: "s1" })
+    );
+    await asentar();
+    expect(revisado).toBe(1);
+  });
+
+  it("y borrar una que NO era la abierta no revisa nada: no se ha liberado ningún proyecto", async () => {
+    const servidor = servidorDeMentira();
+    let revisado = 0;
+    montarRutas(
+      servidor,
+      { ...vestibuloDePrueba(), borrarSesion: async () => ({ borrada: true, cerroLaAbierta: false }) },
+      { revisarTareas: () => void (revisado += 1) }
+    );
+    const cliente = clienteDeMentira();
+    await servidor.rutas.get(`GET ${RUTA_EVENTOS}`)!(cliente.peticion, cliente.respuesta);
+    await asentar();
+
+    await postear(
+      servidor.rutas.get(`POST ${RUTA_ACCION}`)!,
+      JSON.stringify({ clase: "sesionAccion", accion: "borrar", proyecto: "p1", sesion: "s1" })
+    );
+    await asentar();
+    expect(revisado).toBe(0);
+  });
 });
 
 describe("arrancarConsolaWeb — las comprobaciones, en orden", () => {

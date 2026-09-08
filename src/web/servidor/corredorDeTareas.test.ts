@@ -270,6 +270,33 @@ describe("crearCorredorDeTareas", () => {
     await corredor.parar();
   });
 
+  it("y si lo que falla al abrir es de NODE, el motivo lleva el código y no la ruta", async () => {
+    /**
+     * La guarda de `abrirParaTarea` (`vestibulo.ts`) tiene un mensaje escrito para leerse en
+     * el kanban y sin rutas a propósito — el del test de arriba. Pero DETRÁS de esa guarda
+     * corren `dependenciasDeProyecto`, `crearEjecutor` y la foto de git, y cualquiera de
+     * esos puede lanzar un error de Node con el home del usuario dentro. Se distinguen por
+     * lo que los distingue de verdad: un error del sistema trae `code`.
+     */
+    const { disco, estado } = discoDeMentira([TAREA()]);
+    const corredor = crearCorredorDeTareas({
+      disco,
+      abrirParaTarea: async () => {
+        throw Object.assign(new Error("EACCES: permission denied, scandir '/Users/x/w/A/.xonecode'"), {
+          code: "EACCES",
+        });
+      },
+      pid: 1,
+      concurrencia: () => 1,
+    });
+    await corredor.arrancar();
+    await corredor.asentar();
+    const motivo = estado()[0]!.motivo!;
+    expect(motivo).toMatch(/no se pudo abrir el proyecto: EACCES/);
+    expect(motivo).not.toContain("/Users/x/w/A");
+    await corredor.parar();
+  });
+
   it("un error del turno aparca con el motivo y NO lleva rutas de la máquina", async () => {
     /**
      * El mensaje de un error de Node lleva la ruta absoluta («ENOENT: … open
@@ -430,6 +457,39 @@ describe("crearCorredorDeTareas", () => {
     await corredor.parar();
   });
 
+  it("si la COLA no se puede ni abrir, `arrancar` lo dice y la consola sigue en pie", async () => {
+    /**
+     * `tomarCerrojo` lanza ante cualquier cosa que no sea `EEXIST`/`ENOENT` — un
+     * `~/.xonecode/tareas` sin permisos. Las tareas de fondo son una pieza más de la consola
+     * web, así que un fallo aquí no puede tumbarla: es la misma regla que la conexión con
+     * CloudStudio y la apertura del navegador. Quien está delante viene a trabajar en su
+     * proyecto.
+     */
+    const dichos: string[] = [];
+    const d = discoDeMentira([TAREA()]);
+    d.disco.tomarCerrojo = () => {
+      throw Object.assign(new Error("EACCES: permission denied, open '/Users/x/.xonecode/tareas/corredor.lock'"), {
+        code: "EACCES",
+      });
+    };
+    const p = proyectoDeMentira();
+    const corredor = crearCorredorDeTareas({
+      disco: d.disco,
+      abrirParaTarea: p.abrir,
+      pid: 1,
+      concurrencia: () => 1,
+      informar: (t) => dichos.push(t),
+    });
+    await expect(corredor.arrancar()).resolves.toBeUndefined();
+    expect(corredor.corriendoAqui()).toBe(false);
+    expect(p.encargos).toEqual([]);
+    expect(dichos.join(" ")).toMatch(/EACCES/);
+    expect(dichos.join(" ")).not.toContain("/Users/x/.xonecode");
+    // Y `parar` no intenta soltar un cerrojo que nunca fue nuestro.
+    await corredor.parar();
+    expect(d.soltados()).toBe(0);
+  });
+
   it("con el cerrojo propio, `parar` SÍ lo suelta", async () => {
     const d = discoDeMentira([]);
     const p = proyectoDeMentira();
@@ -547,6 +607,13 @@ describe("el volcado de la sesión de una tarea", () => {
     return { base, raiz };
   }
 
+  /**
+   * A propósito SIN `correr: async () => 0`, al revés que el resto de los tests del
+   * vestíbulo: aquí corre el `correrConsola` de verdad, que es lo que hace de esto una
+   * medida y no una maqueta. Comprobado en `cli/consola.ts`: su arranque no escribe nada
+   * en disco (cero `writeFileSync`/`appendFileSync`/`mkdirSync`), así que lo único que se
+   * escribe es lo que vuelca la sesión, dentro del proyecto temporal.
+   */
   function vestibuloReal(base: string, escritos: string[]) {
     return crearVestibulo({
       origenDeTrabajo: "global",

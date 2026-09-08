@@ -957,7 +957,14 @@ export function montarRutas(
         );
         // Al cerrar la abierta, el cable se queda enganchado a una consola muerta: se muda
         // de vuelta al vestíbulo, que es lo que el cliente va a pintar (el escritorio).
-        if (cerroLaAbierta) adjuntar();
+        // Y es el TERCER sitio donde cambia qué raíz está bloqueada para las tareas: aquí no
+        // se abre nada, así que la raíz queda LIBRE, y sin revisar la cola una tarea que
+        // esperaba a esa persona se quedaría esperando al siguiente evento que no tiene nada
+        // que ver — que en pantalla se lee como un cuelgue.
+        if (cerroLaAbierta) {
+          adjuntar();
+          opciones.revisarTareas?.();
+        }
         return;
       }
       if (!vestibulo.renombrarSesion(raiz, peticion.sesion, peticion.titulo)) {
