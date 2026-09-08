@@ -31,6 +31,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { randomUUID } from "node:crypto";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { homedir } from "node:os";
 import type { Acto } from "../../core/actos.js";
@@ -92,8 +93,8 @@ import type { ProyectoRemoto } from "../../agent/cloudstudioMcp.js";
 import { CatalogoModelos } from "../../agent/catalogoModelos.js";
 import type { Entorno } from "../../core/settings.js";
 import { arrancarServidor, type ServidorWeb } from "./servidor.js";
-import { consolaParaTarea, crearCorredorDeTareas } from "./corredorDeTareas.js";
-import { CONCURRENCIA_POR_OMISION, type Tarea } from "../../core/tareas.js";
+import { consolaParaTarea, crearCorredorDeTareas, type Corredor } from "./corredorDeTareas.js";
+import { CONCURRENCIA_POR_OMISION, conEstado, tituloDeTarea, type Tarea } from "../../core/tareas.js";
 import type { TareasEnDisco } from "../../agent/tareasEnDisco.js";
 import {
   conexionDeVestibulo,
@@ -298,19 +299,29 @@ export interface OpcionesDeMontaje {
    */
   revisarTareas?: () => void;
   /**
-   * La cola de tareas y las acciones sobre ella. Ausentes = esta ejecución no las tiene, y
-   * no se manda ningún `tareas`: el kanban se queda diciendo que no ha llegado, en vez de
-   * afirmar que no hay tareas.
+   * La cola de tareas: el PUERTO de disco y el corredor, no operaciones sueltas.
+   *
+   * `crearTarea` no es una opción propia por lo mismo que `registrarEntorno` devuelve el
+   * entorno REGISTRADO en vez de que el llamante deduzca el id: **quien tiene el estado
+   * hace la resolución.** El cliente manda un id de proyecto y `Tarea.proyecto` necesita
+   * `{id, raiz, nombre}` — y esa raíz solo se puede calcular con `proyectos`,
+   * `entornoElegido` y `vestibulo.raizDeProyecto`, que son estado de este CIERRE (la misma
+   * resolución que ya hace `atenderSesion` para abrir por id). Un `crearTarea` recibido
+   * como función de fuera no tendría con qué resolverla — es justo el agujero que un
+   * primer intento de este cable dejó pasar. Por eso `montarRutas` construye los
+   * manejadores de crear/reintentar/descartar/terminar aquí dentro, con este `colaDeTareas`
+   * como único puerto de escritura. **No lo saques a una opción suelta**: quien lo intente
+   * se va a topar con la misma resolución que esto ya resuelve.
+   *
+   * Ausente = esta ejecución no ejecuta tareas, y no se manda ningún `tareas`: el kanban
+   * se queda diciendo que no ha llegado, en vez de afirmar que no hay tareas.
    */
-  tareas?: () => { lista: readonly Tarea[]; concurrencia: number; corriendoAqui: boolean };
-  /** Encola una tarea `nueva`. Ausente = la ventana no puede crear ninguna. */
-  crearTarea?: (proyecto: string, peticion: string, encargo: string) => { id: string };
-  /**
-   * Reintentar, descartar o terminar una tarea existente. Una transición imposible no
-   * lanza aquí: quien la implemente la ignora y lo dice, la misma regla que
-   * `core/tareas.ts#conEstado` exige un motivo para aparcar.
-   */
-  accionDeTarea?: (accion: "reintentar" | "descartar" | "terminar", id: string) => void;
+  colaDeTareas?: Pick<TareasEnDisco, "listar" | "guardar" | "borrarTarea">;
+  /** Lo mínimo del corredor que este cable necesita LEER: si ejecuta AQUÍ, para el campo
+   *  `corriendoAqui` del mensaje `tareas`. Nunca `arrancar`/`parar`: eso es del proceso. */
+  corredorDeTareas?: Pick<Corredor, "corriendoAqui">;
+  /** El tope de concurrencia vigente, para el mensaje `tareas`. Ausente = `CONCURRENCIA_POR_OMISION`. */
+  concurrenciaDeTareas?: () => number;
   /** Cambia el tope de concurrencia del corredor. Ausente = Ajustes no puede tocarlo. */
   guardarConcurrencia?: (concurrencia: number) => void;
   /**
@@ -335,12 +346,19 @@ function tipoServido(mime: string): string {
  * Separada de `arrancarConsolaWeb` para poder probar el cable entero —conexión, registro
  * de comandos, alta, cambio de proyecto— sin puerto, sin disco y sin navegador: los
  * manejadores se invocan con dobles de petición y respuesta.
+ *
+ * Devuelve `emitirTareas`: el corredor de tareas NACE antes que este cable (lo necesita
+ * `arrancarConsolaWeb` para pasarle `corredorDeTareas`), así que su `alCambiar` —un cambio
+ * de estado que nace DENTRO del lazo, no de una petición del cliente— no tiene manera de
+ * alcanzar el `emitir` de aquí salvo que se lo devuelva. Es la misma costura que
+ * `vestibulo.alCambiarEstadoDeSesion`, solo que el emisor nace después que quien lo
+ * necesita en vez de antes.
  */
 export function montarRutas(
   servidor: Pick<ServidorWeb, "registrarRuta">,
   vestibulo: Vestibulo,
   opciones: OpcionesDeMontaje = {}
-): void {
+): { emitirTareas: () => void } {
   const informar = opciones.informar ?? (() => {});
   const hayCredencialDe = opciones.hayCredencial ?? (() => false);
 
@@ -827,18 +845,99 @@ export function montarRutas(
   });
 
   const mensajeDeTareas = (): MensajeAlCliente | undefined => {
-    const cola = opciones.tareas?.();
-    if (cola === undefined) return undefined;
+    if (opciones.colaDeTareas === undefined) return undefined;
     return {
       clase: "tareas",
-      lista: cola.lista.map(filaDeTarea),
-      concurrencia: cola.concurrencia,
-      corriendoAqui: cola.corriendoAqui,
+      lista: opciones.colaDeTareas.listar().map(filaDeTarea),
+      concurrencia: opciones.concurrenciaDeTareas?.() ?? CONCURRENCIA_POR_OMISION,
+      corriendoAqui: opciones.corredorDeTareas?.corriendoAqui() ?? false,
     };
   };
   const emitirTareas = (): void => {
     const m = mensajeDeTareas();
     if (m !== undefined) emitir(m);
+  };
+
+  /**
+   * Un id de proyecto a su tripleta completa, o nada si no se puede resolver.
+   *
+   * La MISMA resolución que `atenderSesion` ya hace para abrir un proyecto por id
+   * (`proyectos.find` + `vestibulo.raizDeProyecto`): crear una tarea necesita la raíz para
+   * poder ejecutarla algún día, y esa raíz es una ruta de la máquina que el cliente nunca
+   * ha mandado — solo manda el id. Sin entorno elegido, o con un id que no está en la
+   * lista vigente de `proyectos`, no hay tripleta que resolver: falla CERRADO, nunca se
+   * inventa una raíz.
+   */
+  const proyectoParaTarea = (id: string): { id: string; raiz: string; nombre: string } | undefined => {
+    if (entornoElegido === undefined) return undefined;
+    const identidad = proyectos.find((p) => p.id === id);
+    if (identidad === undefined) return undefined;
+    try {
+      return { id: identidad.id, raiz: vestibulo.raizDeProyecto(entornoElegido, identidad.nombre), nombre: identidad.nombre };
+    } catch {
+      // `entornoElegido` dejó de estar registrado entre medias: no se sabe la raíz.
+      return undefined;
+    }
+  };
+
+  /**
+   * Crea una tarea `nueva`. Vive aquí y no en una opción de fuera por lo que documenta
+   * `OpcionesDeMontaje.colaDeTareas`: la resolución de `proyecto` necesita el estado de
+   * este cierre. Sin proyecto resoluble no se escribe nada, y se DICE — la misma regla que
+   * una transición imposible: no se falla en silencio.
+   */
+  const atenderCrearTarea = (proyectoId: string, peticion: string, encargo: string): { id: string } | undefined => {
+    if (opciones.colaDeTareas === undefined) return undefined;
+    const proyecto = proyectoParaTarea(proyectoId);
+    if (proyecto === undefined) {
+      informar(`no se pudo crear la tarea: el proyecto «${proyectoId}» no se pudo resolver`);
+      return undefined;
+    }
+    const nueva: Tarea = {
+      id: randomUUID(),
+      proyecto,
+      titulo: tituloDeTarea(peticion),
+      peticion,
+      encargo,
+      adjuntos: [],
+      estado: "nuevo",
+      creada: new Date().toISOString(),
+    };
+    opciones.colaDeTareas.guardar([...opciones.colaDeTareas.listar(), nueva]);
+    return { id: nueva.id };
+  };
+
+  /**
+   * Reintentar, descartar o terminar una tarea existente.
+   *
+   * **Descartar BORRA** y no comprueba el estado —no hay «cancelada» en `core/tareas.ts`—,
+   * ni siquiera si está `en-proceso`: el corredor ya cuenta con que una tarea corriendo se
+   * descarte por debajo (`corredorDeTareas.ts#revisar`, «la que DESCARTARON del índice
+   * mientras corría»); su turno sigue vivo y su hueco sigue ocupado hasta que devuelva.
+   * Reintentar y terminar pasan por `conEstado`, que LANZA ante una transición imposible;
+   * aquí se atrapa y se DICE con `informar` — nunca se propaga al cliente, y nunca se
+   * escribe nada a medias.
+   */
+  const atenderAccionDeTarea = (accion: "reintentar" | "descartar" | "terminar", id: string): void => {
+    if (opciones.colaDeTareas === undefined) return;
+    if (accion === "descartar") {
+      opciones.colaDeTareas.borrarTarea(id);
+      return;
+    }
+    const lista = opciones.colaDeTareas.listar();
+    const actual = lista.find((t) => t.id === id);
+    if (actual === undefined) {
+      informar(`no se pudo ${accion}: la tarea ya no está en la cola`);
+      return;
+    }
+    try {
+      const siguiente = conEstado(actual, accion === "reintentar" ? "nuevo" : "terminada");
+      opciones.colaDeTareas.guardar(lista.map((t) => (t.id === id ? siguiente : t)));
+    } catch (error) {
+      // Una transición imposible SE IGNORA Y SE DICE: nunca se lanza hacia el cliente, y
+      // nunca se escribe un estado a medias.
+      informar(`no se pudo ${accion} la tarea «${actual.titulo}»: ${error instanceof Error ? error.message : String(error)}`);
+    }
   };
 
   /** Los ajustes de destino, o `{}` —que es «se miran todos»— si esta ejecución no los lee. */
@@ -1845,10 +1944,12 @@ export function montarRutas(
       return;
     }
     if (typeof mensaje === "object" && mensaje !== null && mensaje.clase === "tarea") {
-      if (mensaje.accion === "crear" && opciones.crearTarea !== undefined) {
-        opciones.crearTarea(mensaje.proyecto, mensaje.peticion, mensaje.encargo);
-        opciones.revisarTareas?.();
-        emitirTareas();
+      if (mensaje.accion === "crear" && opciones.colaDeTareas !== undefined) {
+        const creada = atenderCrearTarea(mensaje.proyecto, mensaje.peticion, mensaje.encargo);
+        if (creada !== undefined) {
+          opciones.revisarTareas?.();
+          emitirTareas();
+        }
       } else if (mensaje.accion === "augmentar" && opciones.augmentar !== undefined) {
         void opciones
           .augmentar(mensaje.proyecto, mensaje.peticion)
@@ -1857,9 +1958,9 @@ export function montarRutas(
       } else if (
         mensaje.accion !== "crear" &&
         mensaje.accion !== "augmentar" &&
-        opciones.accionDeTarea !== undefined
+        opciones.colaDeTareas !== undefined
       ) {
-        opciones.accionDeTarea(mensaje.accion, mensaje.id);
+        atenderAccionDeTarea(mensaje.accion, mensaje.id);
         opciones.revisarTareas?.();
         emitirTareas();
       }
@@ -2024,6 +2125,150 @@ export function montarRutas(
     respuesta.writeHead(204);
     respuesta.end();
   });
+
+  return { emitirTareas };
+}
+
+export interface CorredorDeTareasCableado {
+  /** `undefined` si esta ejecución no tiene cola (`tareasFabrica` ausente): entonces no
+   *  hay nada que revisar. Sin `arrancar`: la única forma de arrancar el corredor devuelto
+   *  aquí fuera es `arrancarConectado`, que ata el orden puente-antes-que-arranque. Exponer
+   *  `arrancar` en este tipo dejaría `corredor?.arrancar()` compilando fuera de esa función
+   *  — el mismo fallo que esta extracción existe para hacer imposible. */
+  corredor: Omit<Corredor, "arrancar"> | undefined;
+  /** Lo que hay que fundir en las opciones de `montarRutas`. */
+  opcionesDeMontaje: Pick<
+    OpcionesDeMontaje,
+    "colaDeTareas" | "corredorDeTareas" | "concurrenciaDeTareas" | "guardarConcurrencia"
+  >;
+  /**
+   * Arranca el corredor YA conectado al cable. Es UNA función y no dos —«conecta el
+   * puente» y luego «arranca»— porque separarlas es exactamente el fallo que este
+   * cableado puede volver a cometer: un test que las llame en el orden que no toca no
+   * falla nunca si nada comprueba el orden, y en producción el corredor puede reconciliar
+   * y disparar `alCambiar` antes de que el puente esté puesto. Horneando el orden aquí
+   * dentro, quien llame no tiene manera de equivocarse.
+   */
+  arrancarConectado: (cable: { emitirTareas: () => void }) => Promise<void>;
+}
+
+/**
+ * Construye el corredor de tareas y la costura que lo conecta al cable.
+ *
+ * Extraído de `arrancarConsolaWeb` a su propia función por la MISMA razón que
+ * `backendDeAgente` (`agent/proyecto.ts`): la composición vivía inline dentro de una
+ * función que todos sus tests DOBLAN —`vestibulo`, `crearServidor`, `crearEjecutor`—, así
+ * que esta costura concreta podía dejar de estar montada con el resto en verde. Aquí
+ * tiene su propio test que la compone de VERDAD: construye un corredor real
+ * (`crearCorredorDeTareas`) y comprueba que un cambio que el corredor mueve por su
+ * cuenta —nace DENTRO del lazo, no de una petición del cliente— llega a
+ * `emitirTareas`, y que si `emitirTareas` revienta el lazo de tareas no se entera.
+ */
+export function construirCorredorDeTareasCableado(opciones: {
+  vestibulo: Pick<Vestibulo, "abrirParaTarea" | "proyectoAbierto" | "sesionesDe">;
+  /** La fábrica de `OpcionesDeArranque.tareas`. Ausente = esta ejecución no ejecuta tareas. */
+  tareasFabrica?: (informar: (texto: string) => void) => TareasEnDisco;
+  informar: (texto: string) => void;
+  olvidarHiloDeSesion: (raiz: string, hilo: string) => Promise<void>;
+}): CorredorDeTareasCableado {
+  const disco = opciones.tareasFabrica === undefined ? undefined : opciones.tareasFabrica(opciones.informar);
+
+  /**
+   * El tope de concurrencia, en MEMORIA y no en `settings.json` todavía: la sección
+   * «Tareas» de Ajustes que lo pediría desde el navegador no existe aún (Task 7), así que
+   * esto es lo mínimo que hace real «cambiar el tope de concurrencia lleguen de vuelta»
+   * sin inventarse una persistencia que nadie ha pedido. Se pierde al reiniciar el
+   * proceso, y es preferible a fingir que ya hay un campo en disco que no existe.
+   */
+  let concurrenciaDeTareas = CONCURRENCIA_POR_OMISION;
+
+  /**
+   * El puente hacia `emitirTareas`. El corredor nace ANTES que el cable —`montarRutas`
+   * necesita poder pedirle `revisar()` y `corriendoAqui()`—, pero su `alCambiar` (una
+   * tarea que el CORREDOR mueve por su cuenta: empieza, aparca, termina) solo puede
+   * alcanzar el cable una vez que existe. `arrancarConectado` es quien la rellena, antes
+   * de arrancar. Sin este puente, el kanban solo se movería cuando alguien tocara algo
+   * desde el navegador — la peor forma de estar roto: parece que funciona.
+   */
+  let emitirCambioDeTareas: (() => void) | undefined;
+
+  const corredor =
+    disco === undefined
+      ? undefined
+      : crearCorredorDeTareas({
+          disco,
+          // La costura de las tres piezas: la segunda puerta del vestíbulo (que no mueve el
+          // cable), la consola que APARCA en vez de contestar por nadie, y el ejecutor de
+          // siempre con las mismas barreras que el de una persona.
+          abrirParaTarea: async (raiz) => consolaParaTarea(await opciones.vestibulo.abrirParaTarea(raiz)),
+          // Se lee en cada pasada — cambiar el tope en Ajustes (Task 7) se notará sin
+          // reiniciar nada, en cuanto exista el botón que llame a `guardarConcurrencia`.
+          concurrencia: () => concurrenciaDeTareas,
+          /**
+           * GANA LA PERSONA: en el proyecto que alguien tiene abierto no arranca ninguna
+           * tarea. Una tarea y una persona sobre el mismo árbol no tienen aislamiento de
+           * ninguna clase, y el cerrojo del corredor no protege de eso — protege de dos
+           * corredores. Se pregunta en cada pasada, no al arrancar: abrir un proyecto no
+           * reinicia nada.
+           */
+          bloqueados: () => {
+            const abierto = opciones.vestibulo.proyectoAbierto();
+            return abierto === undefined ? [] : [abierto.raiz];
+          },
+          /**
+           * `sesion` sobrevive si y solo si hay algo que una persona pueda ABRIR, y esto es
+           * lo que lo decide: la sesión está en el índice del proyecto —o sea que su
+           * transcript se volcó y se lee desde la barra lateral— o no está. Es exactamente
+           * la lista que la barra pinta, no una segunda fuente que pueda contradecirla.
+           */
+          sesionAbrible: (raiz, sesion) => opciones.vestibulo.sesionesDe(raiz).some((s) => s.id === sesion),
+          // Y el hilo del agente de una sesión que no nombra nada abrible se olvida, igual
+          // que al borrar una conversación: un checkpoint es la lista de mensajes entera y
+          // crece, y ahí seguiría vivo e invisible desde la interfaz para siempre.
+          olvidarHilo: opciones.olvidarHiloDeSesion,
+          /**
+           * El puente hacia el cable, y NUNCA puede tumbar el lazo de tareas: un sumidero
+           * muerto —o cualquier otra cosa que `emitirTareas` haga mal— es un problema del
+           * cable, no de la tarea que el corredor acaba de escribir.
+           * `escribirSiSigueSiendoNuestra` llama a este `alCambiar` SIN su propio `try`,
+           * así que una excepción de aquí subiría hasta `aparcar`/`correr` y podría hacer
+           * que una escritura que SÍ funcionó se cuente como fallida. Se atrapa aquí, en
+           * el único sitio que sabe que lo que sigue es «avisar», no «guardar».
+           *
+           * El mensaje usa `error.message` y no `codigoDe` (la regla de `montarRutas` y de
+           * `corredorDeTareas.ts`): esa función existe para tapar la ruta absoluta de un
+           * fallo de FICHERO, y lo que puede fallar aquí es `emitirTareas()` — un recorrido
+           * de sumideros SSE que ya se protege cada uno por su cuenta (`sumidero` en la
+           * ruta `/eventos`), así que en producción esto no lanza nada con un disco detrás.
+           * Lo único que llega hasta aquí es un sumidero de mentira que revienta a propósito.
+           */
+          alCambiar: () => {
+            try {
+              emitirCambioDeTareas?.();
+            } catch (error) {
+              opciones.informar(
+                `no se pudo avisar del cambio en la cola de tareas (${error instanceof Error ? error.message : String(error)})`
+              );
+            }
+          },
+          informar: opciones.informar,
+        });
+
+  return {
+    corredor,
+    opcionesDeMontaje: {
+      ...(disco === undefined ? {} : { colaDeTareas: disco }),
+      ...(corredor === undefined ? {} : { corredorDeTareas: corredor }),
+      concurrenciaDeTareas: () => concurrenciaDeTareas,
+      guardarConcurrencia: (c) => {
+        concurrenciaDeTareas = c;
+      },
+    },
+    arrancarConectado: async (cable) => {
+      emitirCambioDeTareas = cable.emitirTareas;
+      await corredor?.arrancar();
+    },
+  };
 }
 
 async function leerCuerpo(peticion: IncomingMessage): Promise<string> {
@@ -2149,50 +2394,22 @@ export async function arrancarConsolaWeb(opciones: OpcionesDeArranque): Promise<
   const conVestibulo = vestibulo;
 
   /**
-   * El corredor de tareas: la cola de la máquina, el cerrojo y el lazo.
-   *
-   * Se construye ANTES de `montarRutas` porque las rutas necesitan poder pedirle una
-   * revisión —abrir o cerrar un proyecto cambia qué se puede arrancar— y solo necesita el
-   * vestíbulo, que ya está. Y ejecutar solo se ejecuta si hay cola: ver
-   * `OpcionesDeArranque.tareas`.
+   * El corredor de tareas y su costura con el cable — `construirCorredorDeTareasCableado`
+   * y no inline: es lo que la hace comprobable de verdad (ver su comentario). Se construye
+   * ANTES de `montarRutas` porque las rutas necesitan poder pedirle una revisión —abrir o
+   * cerrar un proyecto cambia qué se puede arrancar— y solo necesita el vestíbulo, que ya
+   * está. Y ejecutar solo se ejecuta si hay cola: ver `OpcionesDeArranque.tareas`.
    */
-  const corredor =
-    opciones.tareas === undefined
-      ? undefined
-      : crearCorredorDeTareas({
-          disco: opciones.tareas(informar),
-          // La costura de las tres piezas: la segunda puerta del vestíbulo (que no mueve el
-          // cable), la consola que APARCA en vez de contestar por nadie, y el ejecutor de
-          // siempre con las mismas barreras que el de una persona.
-          abrirParaTarea: async (raiz) => consolaParaTarea(await conVestibulo.abrirParaTarea(raiz)),
-          // El tope todavía no se puede cambiar: la sección «Tareas» de Ajustes llega
-          // después, y por eso esto es una FUNCIÓN — se lee en cada pasada, así que cuando
-          // haya ajuste bastará con leerlo aquí sin reiniciar nada.
-          concurrencia: () => CONCURRENCIA_POR_OMISION,
-          /**
-           * GANA LA PERSONA: en el proyecto que alguien tiene abierto no arranca ninguna
-           * tarea. Una tarea y una persona sobre el mismo árbol no tienen aislamiento de
-           * ninguna clase, y el cerrojo del corredor no protege de eso — protege de dos
-           * corredores. Se pregunta en cada pasada, no al arrancar: abrir un proyecto no
-           * reinicia nada.
-           */
-          bloqueados: () => {
-            const abierto = conVestibulo.proyectoAbierto();
-            return abierto === undefined ? [] : [abierto.raiz];
-          },
-          /**
-           * `sesion` sobrevive si y solo si hay algo que una persona pueda ABRIR, y esto es
-           * lo que lo decide: la sesión está en el índice del proyecto —o sea que su
-           * transcript se volcó y se lee desde la barra lateral— o no está. Es exactamente
-           * la lista que la barra pinta, no una segunda fuente que pueda contradecirla.
-           */
-          sesionAbrible: (raiz, sesion) => conVestibulo.sesionesDe(raiz).some((s) => s.id === sesion),
-          // Y el hilo del agente de una sesión que no nombra nada abrible se olvida, igual
-          // que al borrar una conversación: un checkpoint es la lista de mensajes entera y
-          // crece, y ahí seguiría vivo e invisible desde la interfaz para siempre.
-          olvidarHilo: async (raiz, hilo) => olvidarHilo(crearCheckpointerDeProyecto(raiz), hilo),
-          informar,
-        });
+  const {
+    corredor,
+    opcionesDeMontaje: opcionesDeTareas,
+    arrancarConectado: arrancarCorredorConectado,
+  } = construirCorredorDeTareasCableado({
+    vestibulo: conVestibulo,
+    tareasFabrica: opciones.tareas,
+    informar,
+    olvidarHiloDeSesion: async (raiz, hilo) => olvidarHilo(crearCheckpointerDeProyecto(raiz), hilo),
+  });
 
   if (offline && opciones.guion === true) {
     const abierto = await vestibulo.abrirProyecto({ raiz: opciones.cwd });
@@ -2210,9 +2427,15 @@ export async function arrancarConsolaWeb(opciones: OpcionesDeArranque): Promise<
     abierto.consola.consola.escribir(`${aviso}\n`);
   }
 
-  montarRutas(servidor, vestibulo, {
+  const cable = montarRutas(servidor, vestibulo, {
     informar,
     ...(corredor === undefined ? {} : { revisarTareas: () => corredor.revisar() }),
+    // El PUERTO de disco y el corredor, no operaciones sueltas: `montarRutas` resuelve
+    // `crearTarea`/`accionDeTarea` con SU propio estado (`proyectos`, `entornoElegido`,
+    // `vestibulo.raizDeProyecto`), que es la única forma de convertir un id de proyecto en
+    // la raíz que la tarea necesita para poder correr. Ver el comentario de
+    // `OpcionesDeMontaje.colaDeTareas`.
+    ...opcionesDeTareas,
     // Los dos puertos del selector de modelos, con las piezas reales: quién tiene
     // credencial (`auth.json` o el entorno, leído desde el cwd) y el catálogo VIVO.
     hayCredencial: (proveedor) => hayCredencial(proveedor, opciones.cwd),
@@ -2252,7 +2475,10 @@ export async function arrancarConsolaWeb(opciones: OpcionesDeArranque): Promise<
 
   // Con las rutas ya montadas: la reconciliación y el primer despacho cambian la cola, y
   // quien conecte después la recibe entera en su ráfaga de bienvenida.
-  await corredor?.arrancar();
+  // `arrancarConectado` es la ÚNICA forma de arrancar el corredor: conecta el puente hacia
+  // `cable.emitirTareas` y arranca en el orden correcto, así que no hay manera de llamarlo
+  // mal desde aquí.
+  await arrancarCorredorConectado(cable);
 
   escribir(`consola web en ${servidor.url}\n`);
   if (opciones.anfitrion !== undefined) {

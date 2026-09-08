@@ -15,6 +15,7 @@ import {
   arrancarConsolaWeb,
   comandosDelRegistro, descripcionParaLaWeb,
   montarRutas,
+  construirCorredorDeTareasCableado,
   FALTA_EL_BUILD,
   RUTA_ACCION,
   RUTA_ARTEFACTO,
@@ -24,6 +25,7 @@ import { crearVestibulo, type Vestibulo } from "./vestibulo.js";
 import { COMANDOS } from "../../cli/consola.js";
 import { CatalogoModelosEnMemoria } from "../../core/ports.js";
 import type { Entorno } from "../../core/settings.js";
+import type { Tarea } from "../../core/tareas.js";
 import type { ManejadorRuta } from "./servidor.js";
 import type { MensajeAlCliente, MensajeDelCliente } from "./transporte.js";
 
@@ -2607,86 +2609,197 @@ describe("los modelos de un motor externo, por el cable", () => {
   });
 });
 
+/**
+ * Una `TareasEnDisco` de mentira COMPLETA — la interfaz entera, no solo lo que
+ * `montarRutas` toca (`Pick<…, "listar" | "guardar" | "borrarTarea">`), porque este mismo
+ * doble se le pasa también al corredor de VERDAD (`crearCorredorDeTareas`) en el describe
+ * de más abajo, y ese sí necesita el cerrojo. El índice se guarda en un array del cierre,
+ * no en disco — es la misma disciplina que el resto de los dobles de este fichero.
+ */
+function colaDeMentira(iniciales: Tarea[] = []) {
+  let tareas: Tarea[] = iniciales;
+  return {
+    listar: (): Tarea[] => tareas,
+    guardar: (nuevas: readonly Tarea[]): void => void (tareas = [...nuevas]),
+    borrarTarea: (id: string): void => void (tareas = tareas.filter((t) => t.id !== id)),
+    // El cerrojo: un solo dueño de mentira, siempre concedido.
+    tomarCerrojo: (): { tomado: true } => ({ tomado: true }),
+    sigoSiendoDueño: (): boolean => true,
+    soltarCerrojo: (): void => {},
+    guardarAdjunto: (): { ok: boolean } => ({ ok: true }),
+    carpetaDeAdjuntos: (): string => "/no-usado-en-estos-tests/adjuntos",
+    // Para leer el estado en el test sin pasar por el cable.
+    verTareas: (): Tarea[] => tareas,
+  };
+}
+
 describe("las tareas en background, por el cable", () => {
   const ultimo = (cliente: ReturnType<typeof clienteDeMentira>) =>
     cliente.recibidos.filter((m) => m.clase === "tareas").at(-1) as Extract<MensajeAlCliente, { clase: "tareas" }>;
 
   it("la cola va en la ráfaga de bienvenida, y sin la raíz del proyecto", async () => {
     const servidor = servidorDeMentira();
+    const cola = colaDeMentira([
+      {
+        id: "t1",
+        proyecto: { id: "p1", raiz: "/w/AppDemo", nombre: "AppDemo" },
+        titulo: "Arregla el login",
+        peticion: "Arregla el login",
+        encargo: "Arregla el login",
+        adjuntos: [],
+        estado: "nuevo" as const,
+        creada: "2026-09-08T10:00:00.000Z",
+      },
+    ]);
     montarRutas(servidor, vestibuloDePrueba(), {
-      tareas: () => ({
-        lista: [
-          {
-            id: "t1",
-            proyecto: { id: "p1", raiz: "/w/AppDemo", nombre: "AppDemo" },
-            titulo: "Arregla el login",
-            peticion: "Arregla el login",
-            encargo: "Arregla el login",
-            adjuntos: [],
-            estado: "nuevo" as const,
-            creada: "2026-09-08T10:00:00.000Z",
-          },
-        ],
-        concurrencia: 2,
-        corriendoAqui: true,
-      }),
+      colaDeTareas: cola,
+      corredorDeTareas: { corriendoAqui: () => true },
+      concurrenciaDeTareas: () => 2,
     });
     const cliente = clienteDeMentira();
     await servidor.rutas.get(`GET ${RUTA_EVENTOS}`)!(cliente.peticion, cliente.respuesta);
     await asentar();
     const mensaje = ultimo(cliente);
     expect(mensaje.lista[0]).toMatchObject({ id: "t1", proyectoNombre: "AppDemo", estado: "nuevo" });
+    expect(mensaje.concurrencia).toBe(2);
+    expect(mensaje.corriendoAqui).toBe(true);
     // La ruta de la máquina NO viaja.
     expect(JSON.stringify(mensaje)).not.toContain("/w/AppDemo");
   });
 
-  it("crear una tarea la encola y hace revisar al corredor", async () => {
-    const creadas: { proyecto: string; encargo: string }[] = [];
+  it("crear una tarea RESUELVE el proyecto con el estado del propio cierre, la encola y hace revisar", async () => {
     let revisado = 0;
     const servidor = servidorDeMentira();
+    const cola = colaDeMentira();
     montarRutas(servidor, vestibuloDePrueba(), {
-      tareas: () => ({ lista: [], concurrencia: 2, corriendoAqui: true }),
-      crearTarea: (proyecto, peticion, encargo) => {
-        creadas.push({ proyecto, encargo });
-        return { id: "t9" };
-      },
+      colaDeTareas: cola,
+      revisarTareas: () => void (revisado += 1),
+    });
+    const cliente = clienteDeMentira();
+    await servidor.rutas.get(`GET ${RUTA_EVENTOS}`)!(cliente.peticion, cliente.respuesta);
+    const accion = servidor.rutas.get(`POST ${RUTA_ACCION}`)!;
+    // Sin ningún «entorno activo» a mano: conectar por SSE ya deja `proyectos`/
+    // `entornoElegido` resueltos por su cuenta (`poblarProyectosSiProcede`, el mismo
+    // auto-select de quien entra directo al Dashboard con un solo entorno registrado —
+    // aquí «webstudio», con «p1» → «Tienda» de fábrica en `vestibuloDePrueba`). Es la
+    // resolución REAL que usa `atenderCrearTarea`, no una preparación aparte del test.
+    await asentar();
+    expect(
+      await enviarMensaje(accion, { clase: "tarea", accion: "crear", proyecto: "p1", peticion: "Arregla", encargo: "Arregla bien" })
+    ).toBe(204);
+    await asentar();
+    const creadas = cola.verTareas();
+    expect(creadas).toHaveLength(1);
+    expect(creadas[0]).toMatchObject({
+      proyecto: { id: "p1", nombre: "Tienda" },
+      peticion: "Arregla",
+      encargo: "Arregla bien",
+      estado: "nuevo",
+    });
+    // La raíz SÍ se resolvió (es lo que hace falta para poder correrla algún día), pero
+    // nunca sale por el cable — en ESTE mensaje, el que la propia creación dispara
+    // (`emitirTareas()` tras `atenderCrearTarea`), no solo en el de la bienvenida de otro
+    // test con otra tarea.
+    expect(creadas[0]!.proyecto.raiz).toMatch(/Tienda$/);
+    expect(JSON.stringify(ultimo(cliente))).not.toContain(creadas[0]!.proyecto.raiz);
+    expect(revisado).toBe(1);
+  });
+
+  it("crear con un proyecto que no se puede resolver no escribe nada, y se DICE", async () => {
+    // Sin entorno elegido: `atenderCrearTarea` no tiene con qué resolver la raíz.
+    const servidor = servidorDeMentira();
+    const cola = colaDeMentira();
+    const avisos: string[] = [];
+    montarRutas(servidor, vestibuloDePrueba(), {
+      colaDeTareas: cola,
+      informar: (texto) => avisos.push(texto),
+    });
+    const cliente = clienteDeMentira();
+    await servidor.rutas.get(`GET ${RUTA_EVENTOS}`)!(cliente.peticion, cliente.respuesta);
+    const accion = servidor.rutas.get(`POST ${RUTA_ACCION}`)!;
+    await asentar();
+    await enviarMensaje(accion, { clase: "tarea", accion: "crear", proyecto: "fantasma", peticion: "x", encargo: "y" });
+    await asentar();
+    expect(cola.verTareas()).toEqual([]);
+    expect(avisos.some((a) => a.includes("fantasma"))).toBe(true);
+  });
+
+  it("reintentar y terminar transicionan la tarea; descartar la BORRA sin mirar el estado", async () => {
+    const servidor = servidorDeMentira();
+    const base = {
+      proyecto: { id: "p1", raiz: "/w/AppDemo", nombre: "AppDemo" },
+      titulo: "T",
+      peticion: "p",
+      encargo: "e",
+      adjuntos: [],
+      creada: "2026-09-08T10:00:00.000Z",
+    };
+    const cola = colaDeMentira([
+      { ...base, id: "t-park", estado: "requiere-atencion", motivo: "algo" },
+      { ...base, id: "t-en-curso", estado: "en-proceso" },
+    ]);
+    let revisado = 0;
+    montarRutas(servidor, vestibuloDePrueba(), {
+      colaDeTareas: cola,
       revisarTareas: () => void (revisado += 1),
     });
     const cliente = clienteDeMentira();
     await servidor.rutas.get(`GET ${RUTA_EVENTOS}`)!(cliente.peticion, cliente.respuesta);
     const accion = servidor.rutas.get(`POST ${RUTA_ACCION}`)!;
     await asentar();
-    expect(
-      await enviarMensaje(accion, { clase: "tarea", accion: "crear", proyecto: "p1", peticion: "Arregla", encargo: "Arregla bien" })
-    ).toBe(204);
+    await enviarMensaje(accion, { clase: "tarea", accion: "reintentar", id: "t-park" });
     await asentar();
-    expect(creadas).toEqual([{ proyecto: "p1", encargo: "Arregla bien" }]);
-    expect(revisado).toBe(1);
+    expect(cola.verTareas().find((t) => t.id === "t-park")?.estado).toBe("nuevo");
+    expect(cola.verTareas().find((t) => t.id === "t-park")?.motivo).toBeUndefined();
+
+    // Descartar borra aunque esté «en-proceso»: el corredor ya cuenta con esto.
+    await enviarMensaje(accion, { clase: "tarea", accion: "descartar", id: "t-en-curso" });
+    await asentar();
+    expect(cola.verTareas().find((t) => t.id === "t-en-curso")).toBeUndefined();
+
+    expect(revisado).toBeGreaterThan(0);
   });
 
-  it("reintentar, descartar y terminar llegan con el id", async () => {
-    const hechas: string[] = [];
+  it("una transición imposible se IGNORA y se DICE: nunca se lanza y nunca se escribe", async () => {
     const servidor = servidorDeMentira();
+    const cola = colaDeMentira([
+      {
+        id: "t1",
+        proyecto: { id: "p1", raiz: "/w/AppDemo", nombre: "AppDemo" },
+        titulo: "T",
+        peticion: "p",
+        encargo: "e",
+        adjuntos: [],
+        estado: "nuevo",
+        creada: "2026-09-08T10:00:00.000Z",
+      },
+    ]);
+    const avisos: string[] = [];
     montarRutas(servidor, vestibuloDePrueba(), {
-      tareas: () => ({ lista: [], concurrencia: 2, corriendoAqui: true }),
-      accionDeTarea: (accion, id) => void hechas.push(`${accion}:${id}`),
+      colaDeTareas: cola,
+      informar: (texto) => avisos.push(texto),
     });
     const cliente = clienteDeMentira();
     await servidor.rutas.get(`GET ${RUTA_EVENTOS}`)!(cliente.peticion, cliente.respuesta);
     const accion = servidor.rutas.get(`POST ${RUTA_ACCION}`)!;
     await asentar();
-    for (const a of ["reintentar", "descartar", "terminar"] as const) {
-      await enviarMensaje(accion, { clase: "tarea", accion: a, id: "t1" });
-    }
+    // «nuevo» → «terminada» no está en TRANSICIONES: conEstado lanzaría.
+    expect(await enviarMensaje(accion, { clase: "tarea", accion: "terminar", id: "t1" })).toBe(204);
     await asentar();
-    expect(hechas).toEqual(["reintentar:t1", "descartar:t1", "terminar:t1"]);
+    expect(cola.verTareas()[0]!.estado).toBe("nuevo");
+    expect(avisos.some((a) => a.includes("terminar"))).toBe(true);
   });
 
-  it("sin puerto de tareas no se manda ninguna cola: no se afirma que no haya", async () => {
+  it("sin puerto de tareas no se manda ninguna cola, y crear/accionar no hacen nada: no se afirma que no haya", async () => {
     const servidor = servidorDeMentira();
     montarRutas(servidor, vestibuloDePrueba(), {});
     const cliente = clienteDeMentira();
     await servidor.rutas.get(`GET ${RUTA_EVENTOS}`)!(cliente.peticion, cliente.respuesta);
+    const accion = servidor.rutas.get(`POST ${RUTA_ACCION}`)!;
+    await asentar();
+    expect(cliente.recibidos.some((m) => m.clase === "tareas")).toBe(false);
+    await enviarMensaje(accion, { clase: "tarea", accion: "crear", proyecto: "p1", peticion: "x", encargo: "y" });
+    await enviarMensaje(accion, { clase: "tarea", accion: "reintentar", id: "t1" });
     await asentar();
     expect(cliente.recibidos.some((m) => m.clase === "tareas")).toBe(false);
   });
@@ -2696,7 +2809,7 @@ describe("las tareas en background, por el cable", () => {
     let revisado = 0;
     const servidor = servidorDeMentira();
     montarRutas(servidor, vestibuloDePrueba(), {
-      tareas: () => ({ lista: [], concurrencia: 2, corriendoAqui: true }),
+      colaDeTareas: colaDeMentira(),
       guardarConcurrencia: (c) => void concurrencias.push(c),
       revisarTareas: () => void (revisado += 1),
     });
@@ -2713,7 +2826,7 @@ describe("las tareas en background, por el cable", () => {
   it("sin puerto de augmentar no manda ningún «augmentado»", async () => {
     const servidor = servidorDeMentira();
     montarRutas(servidor, vestibuloDePrueba(), {
-      tareas: () => ({ lista: [], concurrencia: 2, corriendoAqui: true }),
+      colaDeTareas: colaDeMentira(),
     });
     const cliente = clienteDeMentira();
     await servidor.rutas.get(`GET ${RUTA_EVENTOS}`)!(cliente.peticion, cliente.respuesta);
@@ -2729,7 +2842,7 @@ describe("las tareas en background, por el cable", () => {
   it("con puerto de augmentar manda el encargo, o el error si revienta — nunca los dos", async () => {
     const servidor = servidorDeMentira();
     montarRutas(servidor, vestibuloDePrueba(), {
-      tareas: () => ({ lista: [], concurrencia: 2, corriendoAqui: true }),
+      colaDeTareas: colaDeMentira(),
       augmentar: async (_proyecto, peticion) =>
         peticion === "revienta" ? Promise.reject(new Error("boom")) : `encargo: ${peticion}`,
     });
@@ -2752,5 +2865,141 @@ describe("las tareas en background, por el cable", () => {
     expect(ultimoAugmentado).toMatchObject({ clase: "tarea", accion: "augmentado" });
     expect((ultimoAugmentado as { encargo?: string }).encargo).toBeUndefined();
     expect((ultimoAugmentado as { error?: string }).error).toBeDefined();
+  });
+});
+
+/**
+ * El CABLEADO real, no solo sus piezas — lo que `montarRutas` en solitario no puede
+ * vigilar. Aquí se compone `construirCorredorDeTareasCableado` (`arranque.ts`) de VERDAD:
+ * la misma función que usa `arrancarConsolaWeb`, con un corredor real
+ * (`crearCorredorDeTareas` por debajo) y sin reimplementar su cableado en el test — es la
+ * MISMA lección que dejó `backendDeAgente` en `agent/proyecto.ts`: la composición vivía
+ * inline en una función que todos sus tests doblan, así que la costura concreta —aquí, que
+ * el puente hacia `emitirTareas` quede armado ANTES de que el corredor pueda disparar
+ * `alCambiar`— podía dejar de estar montada con el resto en verde.
+ *
+ * La RECONCILIACIÓN (`corredorDeTareas.ts#arrancarDeVerdad`) es el disparador: aparca TODA
+ * tarea que estuviera «en-proceso» al arrancar, sin mirar el pid ni tocar `abrirParaTarea`
+ * —no hay ninguna «nueva» que despachar—, así que sirve para probar el puente sin tener
+ * que fabricar un `ConsolaDeProyecto` entero.
+ */
+describe("las tareas en background, el cableado del corredor con el cable — no solo las piezas", () => {
+  /** Un vestíbulo que nunca debería necesitar abrir nada: no hay ninguna tarea «nueva». */
+  const vestibuloSinAbrir: Parameters<typeof construirCorredorDeTareasCableado>[0]["vestibulo"] = {
+    abrirParaTarea: async () => {
+      throw new Error("no debería llamarse: la reconciliación no abre consolas");
+    },
+    proyectoAbierto: () => undefined,
+    sesionesDe: () => [],
+  };
+
+  const tareaEnProceso = (id: string): Tarea => ({
+    id,
+    proyecto: { id: "p1", raiz: "/w/AppDemo", nombre: "AppDemo" },
+    titulo: "Arregla el login",
+    peticion: "Arregla el login",
+    encargo: "Arregla el login",
+    adjuntos: [],
+    estado: "en-proceso",
+    creada: "2026-09-08T10:00:00.000Z",
+  });
+
+  it("arrancarConectado conecta el puente ANTES de arrancar: una reconciliación que aparca por su cuenta llega al `emitirTareas` recibido", async () => {
+    const cola = colaDeMentira([tareaEnProceso("t1")]);
+    const { corredor, arrancarConectado } = construirCorredorDeTareasCableado({
+      vestibulo: vestibuloSinAbrir,
+      tareasFabrica: () => cola,
+      informar: () => {},
+      olvidarHiloDeSesion: async () => {},
+    });
+    expect(corredor).toBeDefined();
+    let llamado = 0;
+    // NADA de cable ni de servidor de por medio: solo lo que `arrancarConsolaWeb` le pasa
+    // a `arrancarConectado`, el `{emitirTareas}` que devuelve `montarRutas`.
+    await arrancarConectado({ emitirTareas: () => void (llamado += 1) });
+    await corredor!.asentar();
+
+    // La escritura ocurrió (la reconciliación aparca SIEMPRE una «en-proceso» huérfana)...
+    expect(cola.verTareas()[0]).toMatchObject({ estado: "requiere-atencion" });
+    // ...Y el cambio llegó al `emitirTareas` que se le pasó — es lo que demuestra que el
+    // puente estaba armado ANTES de que el corredor arrancara, no después.
+    expect(llamado).toBeGreaterThan(0);
+  });
+
+  it("si `emitirTareas` revienta, el corredor NO se tumba: la escritura se queda igual, y se avisa por `informar`", async () => {
+    const cola = colaDeMentira([tareaEnProceso("t2")]);
+    const avisos: string[] = [];
+    const { corredor, arrancarConectado } = construirCorredorDeTareasCableado({
+      vestibulo: vestibuloSinAbrir,
+      tareasFabrica: () => cola,
+      informar: (texto) => avisos.push(texto),
+      olvidarHiloDeSesion: async () => {},
+    });
+
+    await expect(
+      arrancarConectado({
+        emitirTareas: () => {
+          throw new Error("sumidero muerto");
+        },
+      })
+    ).resolves.toBeUndefined();
+    await corredor!.asentar();
+
+    // La escritura no se pierde por culpa de un sumidero roto...
+    expect(cola.verTareas()[0]).toMatchObject({ estado: "requiere-atencion" });
+    // ...y el fallo se dice por el canal del PROCESO, nunca lanzado hacia quien llamó.
+    expect(avisos.some((a) => a.includes("sumidero muerto"))).toBe(true);
+  });
+
+  it("sin `tareasFabrica`, no hay corredor y `arrancarConectado` no revienta", async () => {
+    const { corredor, arrancarConectado, opcionesDeMontaje } = construirCorredorDeTareasCableado({
+      vestibulo: vestibuloSinAbrir,
+      informar: () => {},
+      olvidarHiloDeSesion: async () => {},
+    });
+    expect(corredor).toBeUndefined();
+    expect(opcionesDeMontaje.colaDeTareas).toBeUndefined();
+    expect(opcionesDeMontaje.corredorDeTareas).toBeUndefined();
+    await expect(arrancarConectado({ emitirTareas: () => {} })).resolves.toBeUndefined();
+  });
+
+  /**
+   * Y el camino ENTERO, cable incluido: `construirCorredorDeTareasCableado` +
+   * `montarRutas`, con la misma composición que `arrancarConsolaWeb` hace — el mensaje
+   * `tareas` que nace de la reconciliación llega de verdad a un cliente SSE, sin que el
+   * cliente haya mandado nada.
+   */
+  it("de punta a punta: la reconciliación del corredor llega al cliente SSE sin que el cliente toque el cable", async () => {
+    const cola = colaDeMentira([tareaEnProceso("t3")]);
+    const { corredor, opcionesDeMontaje, arrancarConectado } = construirCorredorDeTareasCableado({
+      vestibulo: vestibuloSinAbrir,
+      tareasFabrica: () => cola,
+      informar: () => {},
+      olvidarHiloDeSesion: async () => {},
+    });
+    const servidor = servidorDeMentira();
+    const cable = montarRutas(servidor, vestibuloDePrueba(), opcionesDeMontaje);
+    const cliente = clienteDeMentira();
+    await servidor.rutas.get(`GET ${RUTA_EVENTOS}`)!(cliente.peticion, cliente.respuesta);
+    // Una SEGUNDA pestaña, conectada ANTES de que el corredor arranque: «el cable habla con
+    // TODOS los clientes, no con el último» (`transporte.ts`, el `Set` de sumideros) es
+    // justo lo que este `alCambiar` tiene que respetar — nace del corredor, no de una
+    // petición de ESTE cliente, así que no hay ninguna razón para que solo le llegue a uno.
+    const segundo = clienteDeMentira();
+    await servidor.rutas.get(`GET ${RUTA_EVENTOS}`)!(segundo.peticion, segundo.respuesta);
+    await asentar();
+    const mensajesDeTareas = (de: typeof cliente) =>
+      de.recibidos.filter((m): m is Extract<MensajeAlCliente, { clase: "tareas" }> => m.clase === "tareas");
+    // La bienvenida trajo la cola tal cual estaba: «en-proceso», el punto de partida.
+    expect(mensajesDeTareas(cliente).at(-1)?.lista[0]?.estado).toBe("en-proceso");
+    expect(mensajesDeTareas(segundo).at(-1)?.lista[0]?.estado).toBe("en-proceso");
+
+    // Igual que `arrancarConsolaWeb`: se arranca CONECTADO al cable recién montado.
+    await arrancarConectado(cable);
+    await corredor!.asentar();
+
+    expect(cola.verTareas()[0]!.estado).toBe("requiere-atencion");
+    expect(mensajesDeTareas(cliente).at(-1)?.lista[0]).toMatchObject({ id: "t3", estado: "requiere-atencion" });
+    expect(mensajesDeTareas(segundo).at(-1)?.lista[0]).toMatchObject({ id: "t3", estado: "requiere-atencion" });
   });
 });
