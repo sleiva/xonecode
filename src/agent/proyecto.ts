@@ -10,6 +10,7 @@ import {
   RUTA_ARTEFACTOS,
   type Artefacto,
 } from "../core/artefactos.js";
+import { RUTA_ADJUNTOS } from "../core/adjuntos.js";
 
 /**
  * El backend del proyecto: confinado, y sin las vistas aplanadas.
@@ -38,6 +39,33 @@ export function backendConSkills<T extends object>(backend: T): T {
     // La barra final importa: CompositeBackend la retira antes de delegar. Sin ella
     // reconstruye `//archify/...`, que FilesystemBackend interpreta fuera de su raíz.
     "/skills/": new FilesystemBackend({ rootDir: RAIZ_SKILLS, virtualMode: true }),
+  }) as T;
+}
+
+/**
+ * Cuelga `/adjuntos/` de la carpeta de la TAREA, de solo lectura.
+ *
+ * **La misma pieza que `/skills/` y `/artefactos/`**: otra raíz del `CompositeBackend`. Y de
+ * solo lectura por lo mismo que las skills — son material de ENTRADA, los documentos que
+ * anexó la persona que creó la tarea, no ficheros que reescribir. Quien lo deniega es
+ * `permisosDe` (`agent/perfiles.ts`), incondicionalmente y por patrón: aquí no hay Proxy que
+ * rechace, igual que no lo hay para `/skills/`, porque la denegación que el modelo choca es
+ * la del middleware de permisos y ese es el sitio donde vive la regla.
+ *
+ * La carpeta vive FUERA del proyecto (`~/.xonecode/tareas/<id>/adjuntos/`), y eso trae
+ * gratis lo que importaba: no entra en git y no sube a CloudStudio, sin depender de ninguna
+ * exclusión. El porqué entero está en `core/adjuntos.ts`.
+ *
+ * **La carpeta no se crea aquí**, misma medida que `/artefactos/`: `FilesystemBackend` no
+ * exige que su `rootDir` exista. Y quien monta esto solo lo hace cuando la tarea TRAE
+ * adjuntos (`web/servidor/corredorDeTareas.ts`): una raíz vacía sería mandar al agente a
+ * mirar un sitio donde no hay nada.
+ */
+export function backendConAdjuntos<T extends object>(backend: T, carpeta: string): T {
+  return new CompositeBackend(backend as never, {
+    // La barra final es obligatoria: `CompositeBackend` la retira antes de delegar, y sin
+    // ella reconstruye `//fichero`, fuera de la raíz montada. La misma trampa de `/skills/`.
+    [RUTA_ADJUNTOS]: new FilesystemBackend({ rootDir: carpeta, virtualMode: true }),
   }) as T;
 }
 
@@ -116,19 +144,30 @@ export function backendConArtefactos<T extends object>(
  * 3. `/skills/` colgada, de solo lectura por `permisosDe`.
  * 4. Y `/artefactos/` colgada por FUERA, que es lo que hace que escribir ahí no pase por la
  *    guarda de (2) — son dos raíces distintas del mismo compuesto.
+ * 5. Y `/adjuntos/`, cuando la tarea trae alguno: la misma pieza, de solo lectura por
+ *    `permisosDe`.
  */
 export function backendDeAgente(opciones: {
   raiz: string;
   ficheros: ReadonlySet<string>;
   artefactos?: { carpeta: string; alEscribir: (artefacto: Artefacto) => void };
+  /**
+   * La carpeta de los adjuntos de una TAREA, si la hay. Ausente —toda sesión de persona, y
+   * toda tarea sin adjuntos— y `/adjuntos/` no se monta; entonces esa ruta no es nada, y la
+   * denegación incondicional de `permisosDe` evita que se convierta en un fichero del
+   * proyecto (medido: sin ella lo era).
+   */
+  adjuntos?: string;
 }): FilesystemBackend {
   const delProyecto = sinArtefactosEnElProyecto(
     sinVistasAplanadas(exponerMemoriaDeProyecto(backendDelProyecto(opciones.raiz)), opciones.ficheros)
   );
   const conSkills = backendConSkills(delProyecto);
-  return opciones.artefactos === undefined
-    ? conSkills
-    : backendConArtefactos(conSkills, opciones.artefactos.carpeta, opciones.artefactos.alEscribir);
+  const conArtefactos =
+    opciones.artefactos === undefined
+      ? conSkills
+      : backendConArtefactos(conSkills, opciones.artefactos.carpeta, opciones.artefactos.alEscribir);
+  return opciones.adjuntos === undefined ? conArtefactos : backendConAdjuntos(conArtefactos, opciones.adjuntos);
 }
 
 /**

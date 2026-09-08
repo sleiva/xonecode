@@ -182,4 +182,60 @@ describe("conexión SSE", () => {
     expect(opciones.headers).toEqual({ "content-type": "application/json" });
     expect(opciones.body).toBe(JSON.stringify({ clase: "prosa", texto: "hola" }));
   });
+
+  /**
+   * La subida de un adjunto va por HTTP y no por el cable: el SSE lleva JSON y esto son
+   * bytes. Vive aquí y no en `App.tsx` por lo mismo que `enviar`: el `fetch` entra inyectado,
+   * así que se puede afirmar sobre la petición sin abrir un socket ni parchear el global.
+   */
+  it("subirAdjunto() hace POST /adjunto con el nombre en la QUERY y los bytes como cuerpo", async () => {
+    const store = crearStoreDelCliente();
+    const llamadas: [string, RequestInit][] = [];
+    const conexion = crearConexion(store, {
+      fabricaDeEventos: () => new FuenteFalsa(),
+      fetch: async (url, opciones) => {
+        llamadas.push([url, opciones]);
+        return { ok: true, status: 204, text: async () => "" };
+      },
+    });
+
+    const fichero = new File(["0123456789"], "mockup.png", { type: "image/png" });
+    expect(await conexion.subirAdjunto("b1", "mockup.png", fichero)).toEqual({ ok: true });
+
+    const [url, opciones] = llamadas[0]!;
+    // El nombre CODIFICADO en la query: `registrarRuta` casa por coincidencia exacta, así
+    // que no puede ir en el camino de la ruta.
+    expect(url).toBe("/adjunto?tarea=b1&nombre=mockup.png");
+    expect(opciones.method).toBe("POST");
+    expect(opciones.credentials).toBe("same-origin");
+    expect(opciones.body).toBe(fichero);
+    // Sin `content-type` propio: lo pone el navegador con el del fichero, y el servidor no
+    // lo mira — lee bytes.
+    expect(opciones.headers).toBeUndefined();
+  });
+
+  it("y devuelve el MOTIVO que contesta el servidor, que es lo que la fila del fichero pinta", async () => {
+    const store = crearStoreDelCliente();
+    const conexion = crearConexion(store, {
+      fabricaDeEventos: () => new FuenteFalsa(),
+      fetch: async () => ({ ok: false, status: 413, text: async () => "el adjunto es demasiado grande" }),
+    });
+    expect(await conexion.subirAdjunto("b1", "g.bin", new File(["x"], "g.bin"))).toEqual({
+      ok: false,
+      motivo: "el adjunto es demasiado grande",
+    });
+  });
+
+  it("un fallo de red no revienta la ventana: se dice como motivo", async () => {
+    const store = crearStoreDelCliente();
+    const conexion = crearConexion(store, {
+      fabricaDeEventos: () => new FuenteFalsa(),
+      fetch: async () => {
+        throw new Error("fetch failed");
+      },
+    });
+    const r = await conexion.subirAdjunto("b1", "a.png", new File(["x"], "a.png"));
+    expect(r.ok).toBe(false);
+    expect(r.motivo).toBeDefined();
+  });
 });

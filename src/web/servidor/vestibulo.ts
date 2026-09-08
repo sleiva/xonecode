@@ -281,7 +281,17 @@ export interface OpcionesDelVestibulo {
    * consume `cli/tui/correrTui.ts`. Se llama con un aviso de apertura porque el vestíbulo
    * necesita la `SesionReal` para poder CERRARLA al cambiar de proyecto.
    */
-  crearEjecutor?: (alAbrirSesion: (sesion: SesionCerrable) => void) => EjecutorDeTurno;
+  crearEjecutor?: (
+    alAbrirSesion: (sesion: SesionCerrable) => void,
+    /**
+     * Lo que depende de la CONSOLA que se está abriendo y no de su raíz. Hoy solo la
+     * carpeta de los adjuntos de una tarea (`core/adjuntos.ts`): el agente la ve como
+     * `/adjuntos/`, de solo lectura, y solo la conoce quien abrió esta consola —el corredor
+     * de tareas—. Ausente en toda apertura de PERSONA, que es lo que impide que una consola
+     * de humano acabe con los adjuntos de la última tarea montados dentro.
+     */
+    opciones?: { adjuntos?: string }
+  ) => EjecutorDeTurno;
   /** Fuentes del modelo con las que arranca cada consola de proyecto. */
   fuentes?: FuentesDeEleccion;
   /**
@@ -474,7 +484,7 @@ export interface Vestibulo {
    * reanudar una tarea (un reintento, o un feedback) siga la MISMA conversación: el
    * checkpointer trae su memoria porque el `thread_id` es el mismo id.
    */
-  abrirParaTarea(raiz: string, sesion?: string): Promise<ConsolaDeProyecto>;
+  abrirParaTarea(raiz: string, sesion?: string, adjuntos?: string): Promise<ConsolaDeProyecto>;
   proyectoAbierto(): ConsolaDeProyecto | undefined;
   /** El usuario se va sin terminar. No escribe nada; DICE lo que ya quedó escrito. */
   cancelar(): Promise<void>;
@@ -735,10 +745,19 @@ export function crearVestibulo(opciones: OpcionesDelVestibulo): Vestibulo {
   const construirConsolaDeProyecto = async ({
     raiz,
     sesion,
+    adjuntos,
     alCable,
   }: {
     raiz: string;
     sesion?: string;
+    /**
+     * La carpeta de los ADJUNTOS de la tarea que abre esta consola, si es de una tarea con
+     * alguno. Va hasta `crearEjecutor`, de donde cuelga el backend del agente: es lo que se
+     * monta como `/adjuntos/`. Por la puerta de las personas nunca llega — los adjuntos son
+     * de una tarea, y montar los de la última en la consola de alguien le metería en la
+     * vista un fichero de otra conversación.
+     */
+    adjuntos?: string;
     /**
      * ¿Se le cuentan al cable los flancos del turno y los cambios de modelo?
      *
@@ -815,10 +834,15 @@ export function crearVestibulo(opciones: OpcionesDelVestibulo): Vestibulo {
      */
     let cerrando = false;
 
-    const base = opciones.crearEjecutor?.((s) => {
-      sesionReal = s;
-      if (cerrando) s.cerrar();
-    });
+    const base = opciones.crearEjecutor?.(
+      (s) => {
+        sesionReal = s;
+        if (cerrando) s.cerrar();
+      },
+      // Solo si la hay: `undefined` es lo que reciben las aperturas de persona, y de ahí
+      // sale que su agente no tenga `/adjuntos/` montada.
+      adjuntos === undefined ? undefined : { adjuntos }
+    );
     // El ejecutor que de verdad va a correr los turnos de ESTA consola de proyecto — se
     // fija UNA vez, aquí, para que `volcar` y `ejecutarTurno` miren siempre el mismo valor.
     const ejecutorEfectivo = base ?? ejecutarTurnoGuionizado;
@@ -1036,7 +1060,7 @@ export function crearVestibulo(opciones: OpcionesDelVestibulo): Vestibulo {
    */
   const deTareas = new Set<ConsolaDeProyecto>();
 
-  const abrirParaTarea = async (raiz: string, sesion?: string): Promise<ConsolaDeProyecto> => {
+  const abrirParaTarea = async (raiz: string, sesion?: string, adjuntos?: string): Promise<ConsolaDeProyecto> => {
     // ANTES de construir nada: sin esto, una raíz equivocada dejaba un `correrConsola`
     // vivo, una foto de git lanzada y un id de hilo gastado. Y el motivo no lleva la ruta
     // —puede ser la del home— porque de aquí el error sube al registro de la tarea.
@@ -1047,7 +1071,9 @@ export function crearVestibulo(opciones: OpcionesDelVestibulo): Vestibulo {
     // `sesion` reenviada tal cual: es lo que hace que `construirConsolaDeProyecto` REABRA
     // ese hilo —`idSesion = sesion ?? randomUUID()`— en vez de abrir uno nuevo. `undefined`
     // en la primera ejecución de la tarea sigue dando una sesión nueva, como siempre.
-    const consolaDeProyecto = await construirConsolaDeProyecto({ raiz, sesion, alCable: false });
+    // `adjuntos` reenviada igual que `sesion`, y por el mismo motivo: quien la conoce es el
+    // corredor, que es el único que sabe de qué tarea es esta apertura.
+    const consolaDeProyecto = await construirConsolaDeProyecto({ raiz, sesion, adjuntos, alCable: false });
     deTareas.add(consolaDeProyecto);
     return consolaDeProyecto;
   };
@@ -1286,7 +1312,7 @@ export function crearVestibulo(opciones: OpcionesDelVestibulo): Vestibulo {
      * todavía vive. El precio, dicho: una tarea que llega mientras se cierra un turno
      * humano de minutos espera a que acabe. Para trabajo de fondo es el lado correcto.
      */
-    abrirParaTarea: (raiz, sesion) => enCola(() => abrirParaTarea(raiz, sesion)),
+    abrirParaTarea: (raiz, sesion, adjuntos) => enCola(() => abrirParaTarea(raiz, sesion, adjuntos)),
     proyectoAbierto: () => abierto,
 
     cancelar: () => enCola(async () => {

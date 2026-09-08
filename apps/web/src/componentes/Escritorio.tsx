@@ -44,6 +44,7 @@ export function Escritorio({
   visibles,
   dispositivos,
   alActualizarDispositivos,
+  alNuevaTarea,
   tareas,
   alAbrirSesionDeTarea,
   alAbrirRevisionDeTarea,
@@ -86,6 +87,14 @@ export function Escritorio({
   /** La foto de la máquina (`Equipo.tsx`). Ausente = aún no llegó. */
   dispositivos?: InformeDeDispositivos;
   alActualizarDispositivos?: () => void;
+  /**
+   * Crear una TAREA en background para ese proyecto. Ausente = no se ofrece.
+   *
+   * Vive en la tarjeta del proyecto, al lado de «Nueva sesión», porque son la misma clase de
+   * decisión sobre el mismo objeto — y porque es la ÚNICA puerta para la primera tarea: la
+   * pestaña de tareas de un proyecto solo existe si ya tiene alguna.
+   */
+  alNuevaTarea?: (proyecto: string) => void;
   /**
    * La cola de tareas en background (`Kanban.tsx`). Ausente = el servidor no ha mandado
    * `tareas` todavía — ni una vez, ni esta ejecución no las ejecuta—, y eso NO es lo mismo
@@ -196,14 +205,28 @@ export function Escritorio({
                       ))}
                     </ul>
                   )}
-                  <button
-                    type="button"
-                    className={estilos.empezar}
-                    disabled={apagado}
-                    onClick={() => alNuevaSesion(p.id)}
-                  >
-                    Nueva sesión
-                  </button>
+                  <div className={estilos.accionesDeTarjeta}>
+                    <button
+                      type="button"
+                      className={estilos.empezar}
+                      disabled={apagado}
+                      onClick={() => alNuevaSesion(p.id)}
+                    >
+                      Nueva sesión
+                    </button>
+                    {/* Crear una tarea manda algo al servidor, así que se apaga sin cable —
+                        igual que «Nueva sesión»—, y no se pinta si nadie la atiende. */}
+                    {alNuevaTarea === undefined ? null : (
+                      <button
+                        type="button"
+                        className={estilos.empezarTarea}
+                        disabled={apagado}
+                        onClick={() => alNuevaTarea(p.id)}
+                      >
+                        Nueva tarea
+                      </button>
+                    )}
+                  </div>
                 </li>
               );
             })}

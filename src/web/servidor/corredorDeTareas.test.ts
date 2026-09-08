@@ -73,6 +73,7 @@ function discoDeMentira(
     sigoSiendoDueño: () => dueño,
     soltarCerrojo: () => void (soltado += 1),
     guardarAdjunto: () => ({ ok: true }),
+    listarAdjuntos: () => [],
     carpetaDeAdjuntos: (id) => `/tmp/${id}/adjuntos`,
     borrarTarea: (id) => void (lista = lista.filter((t) => t.id !== id)),
   };
@@ -159,6 +160,106 @@ function proyectoDeMentira() {
     },
   };
 }
+
+/**
+ * Los ADJUNTOS, y las dos mitades del trabajo del corredor con ellos: **decir DÓNDE están**
+ * (la carpeta, que se le pasa a `abrirParaTarea` para montarla) y **decir QUE están** (el
+ * inventario que se le añade a la petición del turno). Las dos hacen falta: sin la primera el
+ * agente no puede abrirlos, y sin la segunda no sabe que existen — `/adjuntos/` es una raíz
+ * virtual que ninguna instrucción suya nombra.
+ */
+describe("los adjuntos de una tarea llegan a su turno", () => {
+  /** Como `proyectoDeMentira`, pero apuntando además los TRES argumentos de la apertura. */
+  function conAperturas() {
+    const p = proyectoDeMentira();
+    const aperturas: { raiz: string; sesion?: string; adjuntos?: string }[] = [];
+    return {
+      ...p,
+      aperturas,
+      abrir: async (raiz: string, sesion?: string, adjuntos?: string) => {
+        aperturas.push({ raiz, ...(sesion === undefined ? {} : { sesion }), ...(adjuntos === undefined ? {} : { adjuntos }) });
+        return p.abrir(raiz);
+      },
+    };
+  }
+
+  it("con adjuntos: se monta su carpeta y el encargo dice qué hay y dónde", async () => {
+    const { disco } = discoDeMentira([TAREA({ adjuntos: [{ nombre: "mockup.png", bytes: 2048, mime: "image/png" }] })]);
+    const p = conAperturas();
+    const corredor = crearCorredorDeTareas({ ...ENTREGA_VERDE, disco, abrirParaTarea: p.abrir, pid: 1, concurrencia: () => 1 });
+    await corredor.arrancar();
+    await corredor.asentar();
+    expect(p.aperturas).toEqual([{ raiz: "/w/A", adjuntos: "/tmp/t1/adjuntos" }]);
+    expect(p.encargos[0]).toContain("e");
+    expect(p.encargos[0]).toContain("/adjuntos/mockup.png");
+    // Y la limitación declarada: se leen, no se ven.
+    expect(p.encargos[0]).toMatch(/no las ves|no la ves/i);
+    p.acabar();
+    await corredor.asentar();
+    await corredor.parar();
+  });
+
+  it("sin adjuntos: no se monta nada y el encargo va tal cual", async () => {
+    // La carpeta se monta solo cuando hay algo dentro: una raíz vacía mandaría al agente a
+    // mirar un sitio donde no hay nada, y el encargo hablaría de ficheros que no existen.
+    const { disco } = discoDeMentira([TAREA()]);
+    const p = conAperturas();
+    const corredor = crearCorredorDeTareas({ ...ENTREGA_VERDE, disco, abrirParaTarea: p.abrir, pid: 1, concurrencia: () => 1 });
+    await corredor.arrancar();
+    await corredor.asentar();
+    expect(p.aperturas).toEqual([{ raiz: "/w/A" }]);
+    expect(p.encargos).toEqual(["e"]);
+    p.acabar();
+    await corredor.asentar();
+    await corredor.parar();
+  });
+
+  it("y el inventario acompaña también al FEEDBACK, no solo al primer encargo", async () => {
+    // Una tarea que se reanuda con feedback sigue teniendo sus adjuntos montados, así que el
+    // aviso tiene que ir con lo que se mande esa vuelta: si solo fuera con el encargo, la
+    // segunda pasada le hablaría de `/adjuntos/` a un agente que ya no sabe que existe (un
+    // hilo nuevo, o una reanudación donde el encargo no se repite).
+    const { disco } = discoDeMentira([
+      TAREA({
+        estado: "requiere-atencion",
+        motivo: "¿la lista lleva histórico?",
+        adjuntos: [{ nombre: "notas.md", bytes: 12, mime: "text/markdown" }],
+      }),
+    ]);
+    const p = conAperturas();
+    const corredor = crearCorredorDeTareas({ ...ENTREGA_VERDE, disco, abrirParaTarea: p.abrir, pid: 1, concurrencia: () => 1 });
+    await corredor.arrancar();
+    aplicarFeedback(disco, "t1", "sí, con histórico");
+    corredor.revisar();
+    await corredor.asentar();
+    expect(p.encargos[0]).toContain("sí, con histórico");
+    expect(p.encargos[0]).toContain("/adjuntos/notas.md");
+    p.acabar();
+    await corredor.asentar();
+    await corredor.parar();
+  });
+
+  it("una carpeta que el puerto NO puede resolver no se monta: falla cerrado", async () => {
+    // `carpetaDeAdjuntos` devuelve `undefined` cuando el id no es un segmento llano o su
+    // camino real se sale de la cola (un enlace simbólico plantado ahí). Entonces no se monta
+    // nada — nunca se compone una ruta a mano para salir del paso.
+    const { disco } = discoDeMentira([TAREA({ adjuntos: [{ nombre: "x.md", bytes: 1 }] })]);
+    const p = conAperturas();
+    const corredor = crearCorredorDeTareas({
+      ...ENTREGA_VERDE,
+      disco: { ...disco, carpetaDeAdjuntos: () => undefined },
+      abrirParaTarea: p.abrir,
+      pid: 1,
+      concurrencia: () => 1,
+    });
+    await corredor.arrancar();
+    await corredor.asentar();
+    expect(p.aperturas).toEqual([{ raiz: "/w/A" }]);
+    p.acabar();
+    await corredor.asentar();
+    await corredor.parar();
+  });
+});
 
 describe("lo que una tarea AUTORIZÓ se guarda con su estado", () => {
   /**

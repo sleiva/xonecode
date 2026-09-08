@@ -1,6 +1,6 @@
 // src/agent/tareasEnDisco.test.ts
 import { describe, expect, it, beforeEach, afterEach, vi } from "vitest";
-import { mkdtempSync, rmSync, writeFileSync, mkdirSync, existsSync, readFileSync, renameSync, statSync, linkSync } from "node:fs";
+import { mkdtempSync, rmSync, writeFileSync, mkdirSync, existsSync, readFileSync, renameSync, statSync, linkSync, symlinkSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { aplicarFeedback, crearTareasEnDisco } from "./tareasEnDisco.js";
@@ -108,6 +108,74 @@ describe("tareasEnDisco", () => {
     disco.borrarTarea("t1");
     expect(existsSync(join(base, "tareas", "t1"))).toBe(false);
     expect(disco.listar()).toEqual([]);
+  });
+
+  it("los adjuntos guardados se LISTAN, con su peso del disco y su mime por extensión", () => {
+    const disco = crearTareasEnDisco({ base });
+    disco.guardarAdjunto("t1", "mockup.png", Buffer.alloc(2048));
+    disco.guardarAdjunto("t1", "notas.md", Buffer.from("hola"));
+    disco.guardarAdjunto("t1", "cosa.xyz", Buffer.from("x"));
+    // El peso se mide del DISCO y no de lo que dijera nadie: de aquí sale lo que la
+    // tarjeta enseña y lo que se le cuenta al agente.
+    expect(disco.listarAdjuntos("t1")).toEqual([
+      { nombre: "cosa.xyz", bytes: 1 },
+      { nombre: "mockup.png", bytes: 2048, mime: "image/png" },
+      { nombre: "notas.md", bytes: 4, mime: "text/markdown" },
+    ]);
+  });
+
+  it("una tarea sin adjuntos lista vacío, no falla: la carpeta no existe hasta el primero", () => {
+    expect(crearTareasEnDisco({ base }).listarAdjuntos("t1")).toEqual([]);
+  });
+
+  /**
+   * El ENLACE SIMBÓLICO en la carpeta de la tarea, que estaba abierto y está MEDIDO.
+   *
+   * Con `<base>/tareas/t1` apuntando a otra carpeta, `mkdirSync(…, {recursive:true})` lo
+   * SIGUE y `guardarAdjunto` escribía fuera de la cola — comprobado: `escribió FUERA? true`.
+   * No es alcanzable desde el cable (hay que plantar el enlace en un `~/.xonecode/tareas` a
+   * 0700), pero es exactamente el agujero que `arbolDeProyecto.ts` ya cierra en el proyecto y
+   * la misma regla: **lo que falla no es el sitio, es el destino**, así que se recomprueba
+   * sobre el camino REAL además de sobre el texto del nombre.
+   *
+   * Y lo que más importa es la tercera línea: de esa carpeta cuelga el `/adjuntos/` que se
+   * monta en el backend del agente, así que un enlace ahí le daría lectura fuera de la cola.
+   */
+  it("un enlace simbólico en la carpeta de la tarea no deja escribir, listar ni montar fuera", () => {
+    const fuera = mkdtempSync(join(tmpdir(), "xonecode-fuera-"));
+    mkdirSync(join(base, "tareas"), { recursive: true });
+    symlinkSync(fuera, join(base, "tareas", "t1"));
+    const disco = crearTareasEnDisco({ base });
+    expect(disco.guardarAdjunto("t1", "x.txt", Buffer.from("hola"))).toMatchObject({ ok: false });
+    expect(existsSync(join(fuera, "adjuntos", "x.txt"))).toBe(false);
+    expect(disco.listarAdjuntos("t1")).toEqual([]);
+    expect(disco.carpetaDeAdjuntos("t1")).toBeUndefined();
+    rmSync(fuera, { recursive: true, force: true });
+  });
+
+  it("y tampoco si el enlace es la propia carpeta `adjuntos`", () => {
+    const fuera = mkdtempSync(join(tmpdir(), "xonecode-fuera2-"));
+    writeFileSync(join(fuera, "secreto.txt"), "no es un adjunto");
+    mkdirSync(join(base, "tareas", "t1"), { recursive: true });
+    symlinkSync(fuera, join(base, "tareas", "t1", "adjuntos"));
+    const disco = crearTareasEnDisco({ base });
+    expect(disco.guardarAdjunto("t1", "x.txt", Buffer.from("hola"))).toMatchObject({ ok: false });
+    expect(disco.listarAdjuntos("t1")).toEqual([]);
+    expect(disco.carpetaDeAdjuntos("t1")).toBeUndefined();
+    rmSync(fuera, { recursive: true, force: true });
+  });
+
+  it("la carpeta buena SÍ se puede montar: la guarda no es un «no» a todo", () => {
+    const disco = crearTareasEnDisco({ base });
+    disco.guardarAdjunto("t1", "notas.md", Buffer.from("hola"));
+    expect(disco.carpetaDeAdjuntos("t1")).toBe(join(base, "tareas", "t1", "adjuntos"));
+    // Y antes del primer adjunto también: la carpeta se crea al escribir, no al montar, y
+    // devolver `undefined` por «todavía no existe» confundiría «no hay» con «no vale».
+    expect(crearTareasEnDisco({ base }).carpetaDeAdjuntos("t2")).toBe(join(base, "tareas", "t2", "adjuntos"));
+  });
+
+  it("un id de tarea que no es segmento llano no monta nada", () => {
+    expect(crearTareasEnDisco({ base }).carpetaDeAdjuntos("../fuera")).toBeUndefined();
   });
 
   it("ningún error lleva una ruta de la máquina", () => {

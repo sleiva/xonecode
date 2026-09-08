@@ -464,8 +464,15 @@ export type MensajeDelCliente =
    * Las acciones sobre una tarea. Viaja el ID del proyecto y su nombre, NUNCA su raíz: es
    * una ruta de la máquina, y el cable puede ir por un túnel.
    */
-  | { clase: "tarea"; accion: "crear"; proyecto: string; peticion: string; encargo: string }
-  | { clase: "tarea"; accion: "augmentar"; proyecto: string; peticion: string }
+  /**
+   * `borrador` es el identificador bajo el que ya se subieron los adjuntos por
+   * `POST /adjunto` — los bytes tienen que estar en disco ANTES de crear la tarea, porque
+   * crear la encola y el corredor puede arrancarla en el acto. El servidor lo ADOPTA como
+   * id de la tarea si es un segmento llano y no es ya una tarea; los adjuntos los lee del
+   * disco, nunca de lo que diga el cliente.
+   */
+  | { clase: "tarea"; accion: "crear"; proyecto: string; peticion: string; encargo: string; borrador?: string }
+  | { clase: "tarea"; accion: "augmentar"; proyecto: string; peticion: string; borrador?: string }
   /** «Se edita la tarea y se agrega el feedback del usuario»: la respuesta a una tarea
    *  «esperando feedback», que la devuelve al lazo en su MISMO hilo. */
   | { clase: "tarea"; accion: "feedback"; id: string; texto: string }

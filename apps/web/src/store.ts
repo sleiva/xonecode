@@ -65,6 +65,19 @@ export interface EstadoDelCliente {
    */
   tareas?: { lista: TareaDelCable[]; concurrencia: number; corriendoAqui: boolean };
   /**
+   * El ENCARGO que el aumentador propuso para la tarea que se está creando, o el motivo por
+   * el que no pudo.
+   *
+   * Ausente = nadie ha pedido ninguno todavía. **Nunca las dos cosas a la vez**: un encargo
+   * y un fallo del mismo intento se contradicen, y el mensaje del servidor ya llega con uno
+   * o con otro.
+   *
+   * **Se puede LIMPIAR, y hace falta**: este mensaje va a TODOS los clientes (el cable habla
+   * con todos, no con el último), así que un encargo que pidió otra pestaña se quedaría aquí
+   * y prerrellenaría el campo de la ventana de esta. La ventana lo limpia al abrirse.
+   */
+  encargoPropuesto?: { encargo?: string; error?: string };
+  /**
    * Qué hay en la máquina para probar la app (`core/dispositivos.ts`), tal como lo midió el
    * servidor. Ausente = todavía no llegó: el escritorio dice «consultando…». NO se tira al
    * caerse el cable como `modelos`: es una foto con hora de la máquina, no un estado que el
@@ -381,6 +394,8 @@ export function crearStoreDelCliente(): {
    *  cuenta encadena selectores sin viaje de red entre ellos). Sin él, retira lo que haya. */
   contestarSelector: (contestado?: EstadoDelCliente["selector"]) => void;
   cerrarAprobacion: () => void;
+  /** Tira el encargo propuesto. Ver `EstadoDelCliente.encargoPropuesto`. */
+  limpiarEncargoPropuesto: () => void;
   suscribir: (escucha: () => void) => () => void;
 } {
   let estado: EstadoDelCliente = ESTADO_INICIAL;
@@ -590,6 +605,15 @@ export function crearStoreDelCliente(): {
                 : [],
             },
           });
+          return;
+        }
+        case "tarea": {
+          // La única variante que el cliente recibe por esta clase es la respuesta a
+          // `augmentar` (las demás son cliente → servidor). Campo a campo y uno de los dos:
+          // un mensaje sin ninguno de ellos no cambia nada, en vez de borrar lo que había.
+          const m = mensaje as { encargo?: unknown; error?: unknown };
+          if (typeof m.encargo === "string") mutar({ encargoPropuesto: { encargo: m.encargo } });
+          else if (typeof m.error === "string") mutar({ encargoPropuesto: { error: m.error } });
           return;
         }
         case "tareas": {
@@ -928,6 +952,10 @@ export function crearStoreDelCliente(): {
 
     marcarConectado(): void {
       mutar({ conectado: true });
+    },
+
+    limpiarEncargoPropuesto(): void {
+      mutar({ encargoPropuesto: undefined });
     },
 
     marcarDesconectado(): void {

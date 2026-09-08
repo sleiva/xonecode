@@ -433,6 +433,17 @@ export function crearEjecutorReal(
   alAbrirSesion: (sesion: SesionReal) => void,
   checkpointerDeProyecto?: (raiz: string) => BaseCheckpointSaver | undefined,
   carpetaDeArtefactos?: (raiz: string, hilo: string) => string,
+  /**
+   * La carpeta de los ADJUNTOS de una tarea — `/adjuntos/` para el agente, de solo lectura.
+   *
+   * Es un valor y no una función de `(raiz, hilo)` como las dos de arriba, y esa diferencia
+   * es el dato: los artefactos se derivan de la sesión, pero los adjuntos son de la TAREA, y
+   * la tarea solo la conoce quien abrió esta consola (el corredor). Por eso llega a la
+   * FÁBRICA: es una propiedad de la consola, igual que su checkpointer.
+   *
+   * Ausente en toda consola de persona y en toda tarea sin adjuntos.
+   */
+  carpetaDeAdjuntos?: string,
 ): EjecutorDeTurno {
   let sesion: SesionReal | undefined;
   let fuentesVistas: FuentesDeEleccion | undefined;
@@ -479,6 +490,9 @@ export function crearEjecutorReal(
         ...(carpetaDeArtefactos === undefined
           ? {}
           : { artefactos: carpetaDeArtefactos(estado.raiz, estado.hilo) }),
+        // Los adjuntos de la tarea, si esta consola es de una tarea con alguno. Ausente es
+        // «no hay», y el campo NO se pone: una cadena vacía montaría el cwd del proceso.
+        ...(carpetaDeAdjuntos === undefined ? {} : { adjuntos: carpetaDeAdjuntos }),
         // Si las escrituras de ESTE proyecto se aplican sin preguntar. Se pregunta en cada
         // ronda —de ahí la función— porque `/aprobacion` lo cambia sin cerrar la sesión, y
         // porque `interactivo` es de la consola que esté delante. Los settings se releen
@@ -1239,8 +1253,16 @@ export async function main(argv: string[]): Promise<number> {
           // Con checkpointer PERSISTENTE, al revés que la consola de terminal: aquí cada
           // conversación tiene id en el índice, así que su hilo se puede reanudar — y esa
           // es la diferencia entre reabrir y releer.
-          crearEjecutor: (alAbrir) =>
-            crearEjecutorReal(alAbrir, crearCheckpointerDeProyecto, carpetaDeArtefactosDeSesion),
+          // Y la carpeta de ADJUNTOS cuando la apertura es de una tarea con alguno: el
+          // vestíbulo la reenvía desde `abrirParaTarea`, que es quien la recibe del
+          // corredor — el único que sabe de qué tarea se trata.
+          crearEjecutor: (alAbrir, opcionesDeConsola) =>
+            crearEjecutorReal(
+              alAbrir,
+              crearCheckpointerDeProyecto,
+              carpetaDeArtefactosDeSesion,
+              opcionesDeConsola?.adjuntos
+            ),
           // La cola de tareas de la MÁQUINA, y con ella el corredor. Se pasa desde aquí y
           // no se construye allí por la misma razón que las dos de arriba, más una: la
           // omisión de `arrancarConsolaWeb` tiene que ser NO ejecutar tareas, porque sus

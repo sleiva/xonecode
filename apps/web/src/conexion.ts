@@ -45,6 +45,14 @@ export interface Conexion {
   /** Cierra el `EventSource` en curso y cancela cualquier reintento pendiente. */
   cerrar(): void;
   enviar(mensaje: MensajeDelCliente): Promise<unknown>;
+  /**
+   * Sube los bytes de un adjunto de tarea (`POST /adjunto`).
+   *
+   * Por HTTP y no por el cable: el SSE lleva JSON y esto son bytes. Devuelve `{ok, motivo?}`
+   * en vez de lanzar, porque quien lo llama lo pinta en la fila de ese fichero — un
+   * `try/catch` en la ventana para enseñar un texto sería el mismo trato con más ruido.
+   */
+  subirAdjunto(tarea: string, nombre: string, fichero: Blob): Promise<{ ok: boolean; motivo?: string }>;
 }
 
 /**
@@ -114,6 +122,26 @@ export function crearConexion(store: Store, opciones: OpcionesDeConexion = {}): 
         headers: { "content-type": "application/json" },
         body: JSON.stringify(mensaje),
       });
+    },
+    async subirAdjunto(tarea, nombre, fichero) {
+      // El nombre va CODIFICADO en la query y no en el camino de la ruta: `registrarRuta`
+      // casa por coincidencia exacta (la misma razón que documenta `RUTA_ARTEFACTO`). Y sin
+      // `content-type` propio: el servidor lee bytes, y ponerle uno solo podría mentir.
+      const url = `/adjunto?tarea=${encodeURIComponent(tarea)}&nombre=${encodeURIComponent(nombre)}`;
+      let respuesta: unknown;
+      try {
+        respuesta = await fetchInyectado(url, { method: "POST", credentials: "same-origin", body: fichero });
+      } catch (error) {
+        // Un fallo de red no puede tumbar la ventana: se dice en la fila del fichero.
+        return { ok: false, motivo: error instanceof Error ? error.message : "no se pudo subir" };
+      }
+      const r = respuesta as { ok?: unknown; status?: unknown; text?: () => Promise<string> } | undefined;
+      if (r?.ok === true) return { ok: true };
+      // El MOTIVO lo escribe el servidor y no lleva ninguna ruta de la máquina (su test lo
+      // vigila): es lo que hace que un tope o un nombre rechazado se lean en su fila en vez
+      // de como un número de estado.
+      const motivo = (await r?.text?.().catch(() => "")) ?? "";
+      return { ok: false, motivo: motivo.trim() === "" ? `el servidor contestó ${String(r?.status ?? "?")}` : motivo.trim() };
     },
   };
 }

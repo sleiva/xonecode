@@ -75,6 +75,7 @@
 
 /* Apagados sin conexión: lo que manda algo al servidor no puede fingir que funciona. */
 .empezar:disabled,
+.empezarTarea:disabled,
 .sesion:disabled {
   opacity: 0.45;
   cursor: not-allowed;
@@ -287,10 +288,15 @@
   font-size: 12px;
 }
 
-/* `margin-top: auto` pega la acción al fondo de la tarjeta: con sesiones o sin ellas, el
-   botón queda a la misma altura en toda la fila. */
-.empezar {
+/* `margin-top: auto` pega las acciones al fondo de la tarjeta: con sesiones o sin ellas,
+   quedan a la misma altura en toda la fila. */
+.accionesDeTarjeta {
+  display: flex;
+  gap: 6px;
   margin-top: auto;
+}
+
+.empezar {
   padding: 7px 10px;
   border: none;
   border-radius: 8px;
@@ -304,6 +310,26 @@
 
 .empezar:hover {
   background: var(--dsw-alias-button-primary-hover);
+}
+
+/*
+ * «Nueva tarea» es la SEGUNDA acción de la tarjeta, y va secundaria a propósito: la primaria
+ * sigue siendo sentarse a trabajar. Y esta autoriza al agente a escribir sin aprobación —lo
+ * dice su ventana—, así que no puede además ser el botón que el pulgar pulsa por inercia.
+ */
+.empezarTarea {
+  padding: 7px 10px;
+  border: 0.5px solid var(--dsw-alias-border-l2);
+  border-radius: 8px;
+  background: var(--dsw-alias-bg-layer-1);
+  color: var(--dsw-alias-label-primary);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.empezarTarea:hover {
+  background: var(--dsw-alias-interactive-bg-hover);
 }
 
 .pie {

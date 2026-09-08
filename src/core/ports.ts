@@ -279,6 +279,49 @@ export interface JuezDeTareaPort {
   juzgar(caso: CasoDeJuez): Promise<VeredictoDeTarea>;
 }
 
+/**
+ * Lo que se le da al aumentador para redactar el encargo, y nada más.
+ *
+ * **El árbol del proyecto NO está aquí, a propósito**: sería contexto por gastar en una
+ * llamada cuyo trabajo es redactar, no analizar. Lo que hay es lo que una persona necesitaría
+ * para escribir el encargo por su cuenta.
+ */
+export interface PeticionDeTarea {
+  /** Lo que escribió la persona, tal cual. */
+  texto: string;
+  /**
+   * El proyecto para el que es la tarea. La `raiz` está aquí por lo MISMO que en
+   * `CasoDeJuez`: el papel `trabajo` se resuelve con la precedencia de siempre —proyecto
+   * sobre global— y en la consola web `FuentesDeEleccion.proyecto` no se rellena nunca, así
+   * que hay que preguntarle al disco POR LA RAÍZ. Se queda en el host: no viaja por el cable.
+   */
+  proyecto: { nombre: string; raiz: string; rama?: string };
+  /** Nombres y tipos de los adjuntos, NUNCA su contenido: la redacción tiene que poder decir
+   *  para qué sirve cada uno, y para eso basta el nombre. */
+  adjuntos: readonly { nombre: string; mime?: string }[];
+  /** La memoria del proyecto, si existe (`.xonecode/memoria.md`). El árbol entero sería
+   *  contexto por gastar; esto son las decisiones que ya se tomaron. */
+  memoria?: string;
+}
+
+/**
+ * Convierte la petición de un humano en un ENCARGO que una tarea autónoma pueda ejecutar.
+ *
+ * Existe como puerto por las dos razones de siempre, y aquí la segunda es la que manda:
+ * `npm test` sigue sin red ni clave, y **el fallo tiene que ser recuperable**. Si no hay
+ * modelo, la tarea se encola con el texto original y se DICE — perder lo que una persona
+ * acaba de escribir porque un modelo no contestó sería lo peor que puede hacer esa ventana.
+ *
+ * A diferencia del juez (`JuezDeTareaPort`, que no tiene doble a propósito), este SÍ lo
+ * tiene: de un veredicto del juez depende que una tarea se dé por terminada, y un doble que
+ * conteste «verde» sin juzgar es exactamente lo que `ES_DOBLE` existe para impedir; de un
+ * encargo augmentado no depende ninguna afirmación — lo lee una persona y lo edita antes de
+ * encolar.
+ */
+export interface AumentadorPort {
+  augmentar(peticion: PeticionDeTarea): Promise<string>;
+}
+
 // ─────────────────────────── LOS DOBLES ───────────────────────────
 // Viven aquí, junto a los puertos, y NO en una carpeta de tests. El motivo: el modo
 // offline es un modo de USO de primera clase (`xonecode describe` lo enseña al usuario),
@@ -331,6 +374,29 @@ export class ModeloGuionizado implements ModelosPort {
       trabajo: "[DOBLE] guionizado",
       afilado: "[DOBLE] guionizado",
     };
+  }
+}
+
+/**
+ * El doble del aumentador: devuelve el texto original, DICIENDO que no lo redactó nadie.
+ *
+ * La marca `[DOBLE]` no es adorno y es la misma disciplina que `McpVacio` y
+ * `SkillsEnMemoria`: este texto se le enseña a una persona en la ventana de crear —para que
+ * lo edite— y después se le manda al agente, así que sin la marca pasaría por una redacción
+ * de verdad. Con `--guion` es lo que se monta, que es exactamente el caso que la marca
+ * describe.
+ *
+ * La plantilla entra por parámetro para que un test pueda afirmar sobre el paso de datos sin
+ * la marca de por medio.
+ */
+export class AumentadorGuionizado implements AumentadorPort {
+  readonly [ES_DOBLE] = true;
+  constructor(
+    private readonly plantilla = (t: string) =>
+      `[DOBLE] no hay aumentador real en esta consola, así que este encargo es la petición tal cual:\n\n${t}`
+  ) {}
+  async augmentar(peticion: PeticionDeTarea): Promise<string> {
+    return this.plantilla(peticion.texto);
   }
 }
 

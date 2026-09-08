@@ -19,6 +19,7 @@ import { TarjetaDeAlta } from "./componentes/TarjetaDeAlta.js";
 import type { PasoDeAlta } from "./componentes/PasosDelAlta.js";
 import { Escritorio } from "./componentes/Escritorio.js";
 import { NuevaSesion } from "./componentes/NuevaSesion.js";
+import { NuevaTarea } from "./componentes/NuevaTarea.js";
 import { AccionDeSesion, type AccionPendiente } from "./componentes/AccionDeSesion.js";
 import { Ajustes } from "./componentes/Ajustes.js";
 import { DESPLEGADOS_AL_ABRIR, Revision } from "./componentes/Revision.js";
@@ -38,7 +39,20 @@ type Store = ReturnType<typeof crearStoreDelCliente>;
  * que un `new EventSource` a nivel de módulo de este fichero mataría cualquier test que
  * algún día monte `App`.
  */
-export function App({ store, enviar }: { store: Store; enviar: Conexion["enviar"] }) {
+export function App({
+  store,
+  enviar,
+  subirAdjunto,
+}: {
+  store: Store;
+  enviar: Conexion["enviar"];
+  /**
+   * Los BYTES de un adjunto de tarea, por HTTP (`POST /adjunto`). Entra inyectado igual que
+   * `enviar` y por el mismo motivo: el `fetch` vive en `conexion.ts`, así que aquí no hay
+   * ninguno y los tests no tienen que parchear el global.
+   */
+  subirAdjunto: Conexion["subirAdjunto"];
+}) {
   const estado = useSyncExternalStore(store.suscribir, store.leer);
 
   /**
@@ -325,6 +339,19 @@ export function App({ store, enviar }: { store: Store; enviar: Conexion["enviar"
    * enseñárselo.
    */
   const [sesionNueva, setSesionNueva] = useState<string | undefined>(undefined);
+  /**
+   * La ventana de tarea nueva: para qué proyecto, y bajo qué BORRADOR se suben sus adjuntos.
+   *
+   * El borrador se decide al ABRIR y no al primer adjunto, porque tiene que ser el mismo
+   * para las tres cosas que lo usan: cada subida (`POST /adjunto?tarea=…`), la augmentación
+   * —que lista esa carpeta para saber qué hay— y el `crear`, que lo ADOPTA como id de la
+   * tarea. Es un `uuid` del navegador y el servidor no se lo cree a ciegas: comprueba su
+   * forma y rechaza el que ya sea una tarea (409 en la subida, y nada creado en el `crear`).
+   */
+  const [tareaNueva, setTareaNueva] = useState<{ proyecto: string; borrador: string } | undefined>(undefined);
+  /** ¿Se subió algún adjunto bajo este borrador? Sin ninguno, el `crear` no lo menciona: no
+   *  se nombra una carpeta que no existe. */
+  const [conAdjuntos, setConAdjuntos] = useState(false);
 
   // El alta es lo ÚNICO que se enseña mientras falte cuenta o entorno — nada de armazón
   // vacío alrededor esperando datos que todavía no llegan (la barra sin entornos, las
@@ -586,6 +613,62 @@ export function App({ store, enviar }: { store: Store; enviar: Conexion["enviar"
           else void enviar({ clase: "alta", paso: "proyecto", proyecto, rama });
         }}
         alCerrar={() => setSesionNueva(undefined)}
+      />
+    ) : null;
+
+  /** El proyecto de la ventana de tarea nueva, con lo que el servidor sabe de él. */
+  const proyectoDeLaTarea = estado.alta?.proyectos.find((p) => p.id === tareaNueva?.proyecto);
+
+  /**
+   * La ventana de TAREA nueva.
+   *
+   * Al abrirla se TIRA el encargo propuesto que hubiera: `{clase:"tarea",
+   * accion:"augmentado"}` va a todos los clientes —el cable habla con todos, no con el
+   * último—, así que uno pedido desde otra pestaña habría prerrellenado este campo.
+   */
+  const abrirVentanaDeTarea = (proyecto: string): void => {
+    store.limpiarEncargoPropuesto();
+    setConAdjuntos(false);
+    setTareaNueva({ proyecto, borrador: crypto.randomUUID() });
+  };
+
+  const ventanaDeTarea =
+    tareaNueva !== undefined && proyectoDeLaTarea !== undefined ? (
+      <NuevaTarea
+        proyecto={{ id: proyectoDeLaTarea.id, nombre: proyectoDeLaTarea.nombre }}
+        local={proyectoDeLaTarea.local === true}
+        {...(estado.encargoPropuesto === undefined ? {} : { encargoPropuesto: estado.encargoPropuesto })}
+        // El borrador viaja con la augmentación para que el servidor pueda LISTAR los
+        // adjuntos ya subidos y decirle al modelo para qué sirve cada uno.
+        alAugmentar={(peticion) =>
+          void enviar({
+            clase: "tarea",
+            accion: "augmentar",
+            proyecto: tareaNueva.proyecto,
+            peticion,
+            borrador: tareaNueva.borrador,
+          })
+        }
+        alSubirAdjunto={async (fichero, nombre) => {
+          const r = await subirAdjunto(tareaNueva.borrador, nombre, fichero);
+          // Solo si alguno LLEGÓ: el `crear` menciona el borrador para que el servidor
+          // adopte esa carpeta, y mencionarla vacía sería adoptar una carpeta que no existe.
+          if (r.ok) setConAdjuntos(true);
+          return r;
+        }}
+        alEncolar={({ peticion, encargo }) => {
+          const { proyecto, borrador } = tareaNueva;
+          setTareaNueva(undefined);
+          void enviar({
+            clase: "tarea",
+            accion: "crear",
+            proyecto,
+            peticion,
+            encargo,
+            ...(conAdjuntos ? { borrador } : {}),
+          });
+        }}
+        alCerrar={() => setTareaNueva(undefined)}
       />
     ) : null;
 
@@ -972,6 +1055,7 @@ export function App({ store, enviar }: { store: Store; enviar: Conexion["enviar"
             proyectos={estado.alta?.proyectos ?? []}
             {...(estado.modelos?.actual === undefined ? {} : { modelo: estado.modelos.actual })}
             alNuevaSesion={(proyecto) => abrirVentanaDeSesion(proyecto)}
+            alNuevaTarea={(proyecto) => abrirVentanaDeTarea(proyecto)}
             alAbrirSesion={(proyecto, sesion) => abrirSesion(proyecto, sesion)}
               alAbrirAjustes={() => setAjustesAbiertos(true)}
               {...(estado.dispositivos === undefined ? {} : { dispositivos: estado.dispositivos })}
@@ -1053,6 +1137,7 @@ export function App({ store, enviar }: { store: Store; enviar: Conexion["enviar"
     />
     {ventanaDeAjustes}
     {ventanaDeSesion}
+    {ventanaDeTarea}
     {ventanaDeAccionDeSesion}
     </>
   );

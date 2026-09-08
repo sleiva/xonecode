@@ -38,6 +38,7 @@ import {
 import type { JuezDeTareaPort } from "../../core/ports.js";
 import type { Entrega } from "../../core/entrega.js";
 import { crearConsolaDeTarea } from "./consolaDeTarea.js";
+import { conAdjuntos } from "../../core/adjuntos.js";
 import { ErrorDelJuezDeTarea } from "../../agent/juezDeTarea.js";
 import type { Consola } from "../../cli/consola.js";
 import type { ConsolaDeProyecto } from "./vestibulo.js";
@@ -281,7 +282,7 @@ export function crearCorredorDeTareas(opciones: {
    * que REENVIAR lo que la tarea ya sepa. `undefined` en la primera ejecución sigue dando
    * una sesión nueva, igual que siempre.
    */
-  abrirParaTarea: (raiz: string, sesion?: string) => Promise<ConsolaParaTarea>;
+  abrirParaTarea: (raiz: string, sesion?: string, adjuntos?: string) => Promise<ConsolaParaTarea>;
   /** Se lee en cada pasada: cambiar el tope en Ajustes tiene que notarse sin reiniciar. */
   concurrencia: () => number;
   /**
@@ -671,12 +672,25 @@ export function crearCorredorDeTareas(opciones: {
     }
   };
 
+  /**
+   * Dónde están los adjuntos de esta tarea, **solo si tiene alguno**.
+   *
+   * Las dos mitades importan. Se monta solo con adjuntos porque una raíz vacía sería mandar
+   * al agente a mirar un sitio donde no hay nada — el «control sin dato detrás» de siempre,
+   * aquí en forma de carpeta. Y se le pregunta al PUERTO en vez de componer la ruta a mano:
+   * él es quien comprueba el id y quien recomprueba el camino real (un enlace simbólico en
+   * la cola daría lectura fuera de ella), y su `undefined` significa «no se puede montar» —
+   * que aquí se respeta tal cual, sin ruta de reserva.
+   */
+  const carpetaDeAdjuntos = (tarea: Tarea): string | undefined =>
+    tarea.adjuntos.length === 0 ? undefined : opciones.disco.carpetaDeAdjuntos(tarea.id);
+
   const correr = async (tarea: Tarea, entrada: EnVuelo): Promise<void> => {
     let consola: ConsolaParaTarea | undefined;
     try {
       // `tarea.sesion`, si la hay, es lo que hace que reanudar siga la MISMA conversación:
       // ver el comentario de `abrirParaTarea` más arriba.
-      consola = await opciones.abrirParaTarea(tarea.proyecto.raiz, tarea.sesion);
+      consola = await opciones.abrirParaTarea(tarea.proyecto.raiz, tarea.sesion, carpetaDeAdjuntos(tarea));
     } catch (error) {
       /**
        * El proyecto ya no está donde la tarea dice. Se aparca: la dirección de fallo aquí es
@@ -765,6 +779,10 @@ export function crearCorredorDeTareas(opciones: {
             ? actual
             : { ...actual, feedback: actual.feedback!.map((f) => (f === pendiente ? { ...f, consumido: true } : f)) };
         if (pendiente !== undefined) peticion = peticionDeFeedback(actual.encargo, pendiente.texto, reanudando);
+        // El inventario de los adjuntos va DETRÁS de lo que se manda esta pasada, sea el
+        // encargo o el feedback: montar `/adjuntos/` no basta, porque es una raíz virtual
+        // que ninguna instrucción del agente nombra. Ver `core/adjuntos.ts#conAdjuntos`.
+        peticion = conAdjuntos(peticion, actual.adjuntos);
         return conEstado({ ...conPendienteConsumido, sesion: hilo }, "en-proceso", undefined, { pid });
       });
       if (marcada) {

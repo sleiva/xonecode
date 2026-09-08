@@ -27,7 +27,7 @@ afterEach(cleanup);
  */
 function montar(enviar = vi.fn(() => Promise.resolve(undefined as unknown))) {
   const store = crearStoreDelCliente();
-  const vista = render(<App store={store} enviar={enviar} />);
+  const vista = render(<App store={store} enviar={enviar} subirAdjunto={subirAdjuntoDeMentira} />);
   act(() => store.marcarConectado());
   act(() =>
     store.aplicar({
@@ -42,6 +42,9 @@ function montar(enviar = vi.fn(() => Promise.resolve(undefined as unknown))) {
   );
   return { store, enviar, vista };
 }
+
+/** La subida de adjuntos, concedida y sin red: `App` la recibe inyectada igual que `enviar`. */
+const subirAdjuntoDeMentira = async (): Promise<{ ok: boolean; motivo?: string }> => ({ ok: true });
 
 /** Un `enviar` que revienta, como un `fetch` sin red. */
 const enviarQueFalla = () => vi.fn(() => Promise.reject(new Error("sin red")) as Promise<unknown>);
@@ -230,7 +233,7 @@ describe("App: la pantalla de arranque no enseña nada más", () => {
   function montarSinAbrir() {
     const store = crearStoreDelCliente();
     const enviar = vi.fn(() => Promise.resolve(undefined as unknown));
-    const vista = render(<App store={store} enviar={enviar} />);
+    const vista = render(<App store={store} enviar={enviar} subirAdjunto={subirAdjuntoDeMentira} />);
     act(() => store.marcarConectado());
     return { store, enviar, vista };
   }
@@ -267,7 +270,7 @@ describe("App: la pantalla de arranque no enseña nada más", () => {
    */
   it("desconectado y sin nada del alta todavía, lo dice — no un splash mudo", () => {
     const store = crearStoreDelCliente();
-    render(<App store={store} enviar={vi.fn()} />);
+    render(<App store={store} enviar={vi.fn()} subirAdjunto={subirAdjuntoDeMentira} />);
     // Sin `marcarConectado()`: `ESTADO_INICIAL` (`store.ts`) ya nace `conectado: false`.
     expect(screen.getByText(/sin conexión con xonecode/i)).toBeTruthy();
   });
@@ -469,7 +472,7 @@ describe("App: abrir un proyecto desde la barra (Layer C)", () => {
   function montarConProyectos(proyectos: { id: string; nombre: string }[]) {
     const store = crearStoreDelCliente();
     const enviar = vi.fn(() => Promise.resolve(undefined as unknown));
-    const vista = render(<App store={store} enviar={enviar} />);
+    const vista = render(<App store={store} enviar={enviar} subirAdjunto={subirAdjuntoDeMentira} />);
     act(() => store.marcarConectado());
     act(() =>
       store.aplicar({
@@ -674,7 +677,7 @@ describe("App: la tarjeta de tarea «esperando feedback» abre Revisión", () =>
   function montarConTareas() {
     const store = crearStoreDelCliente();
     const enviar = vi.fn(() => Promise.resolve(undefined as unknown));
-    render(<App store={store} enviar={enviar} />);
+    render(<App store={store} enviar={enviar} subirAdjunto={subirAdjuntoDeMentira} />);
     act(() => store.marcarConectado());
     act(() =>
       store.aplicar({
@@ -875,7 +878,7 @@ describe("App: la pestaña Tareas", () => {
   function montarConProyectoActivo() {
     const store = crearStoreDelCliente();
     const enviar = vi.fn(() => Promise.resolve(undefined as unknown));
-    render(<App store={store} enviar={enviar} />);
+    render(<App store={store} enviar={enviar} subirAdjunto={subirAdjuntoDeMentira} />);
     act(() => store.marcarConectado());
     act(() =>
       store.aplicar({
@@ -951,5 +954,104 @@ describe("App: la pestaña Tareas", () => {
     act(() => store.aplicar({ clase: "tareas", concurrencia: 2, corriendoAqui: true, lista: [] }));
     expect(screen.queryByRole("tab", { name: "Tareas" })).toBeNull();
     expect(screen.getByRole("tab", { name: "Chat" }).getAttribute("aria-selected")).toBe("true");
+  });
+});
+
+/**
+ * Crear una TAREA de fondo: lo que ningún test de componente ve — que `App` monta la
+ * ventana desde el escritorio, que los ADJUNTOS se suben antes de encolar y bajo un
+ * identificador de BORRADOR que después se manda en el `crear`, y que el encargo propuesto
+ * se limpia al abrir (ese mensaje va a todas las pestañas).
+ */
+describe("App: crear una tarea en background", () => {
+  /** El escritorio, con un proyecto y sin sesión abierta. */
+  function conEscritorio(enviar = vi.fn(() => Promise.resolve(undefined as unknown)), subir = subirAdjuntoDeMentira) {
+    const store = crearStoreDelCliente();
+    const vista = render(<App store={store} enviar={enviar} subirAdjunto={subir} />);
+    act(() => store.marcarConectado());
+    act(() =>
+      store.aplicar({
+        clase: "alta",
+        pasos: [],
+        proveedores: [],
+        entornos: [],
+        registrados: [{ id: "webstudio", nombre: "WebStudio", url: "https://x/mcp" }],
+        entornoActivo: "webstudio",
+        proyectos: [{ id: "p1", nombre: "AppDemo", local: true }],
+        ramas: [],
+        proyectoAbierto: false,
+      })
+    );
+    return { store, enviar, vista };
+  }
+
+  it("desde el escritorio se abre la ventana y encolar manda `crear` con petición y encargo", async () => {
+    const { enviar } = conEscritorio();
+    fireEvent.click(screen.getByRole("button", { name: /nueva tarea/i }));
+    fireEvent.change(screen.getByLabelText(/qué hay que hacer/i), { target: { value: "Arregla el login" } });
+    fireEvent.click(screen.getByRole("button", { name: /encolar/i }));
+    await waitFor(() =>
+      expect(enviar).toHaveBeenCalledWith({
+        clase: "tarea",
+        accion: "crear",
+        proyecto: "p1",
+        peticion: "Arregla el login",
+        encargo: "Arregla el login",
+      })
+    );
+  });
+
+  it("«Preparar el encargo» manda `augmentar` con el MISMO borrador que después lleva `crear`", async () => {
+    // Las dos mitades: el aumentador tiene que ver los adjuntos ya subidos (por eso lleva el
+    // borrador) y el `crear` tiene que adoptar esa misma carpeta (por eso lleva el mismo).
+    const subidas: { tarea: string; nombre: string }[] = [];
+    const { enviar } = conEscritorio(undefined, async (tarea: string, nombre: string) => {
+      subidas.push({ tarea, nombre });
+      return { ok: true };
+    });
+    fireEvent.click(screen.getByRole("button", { name: /nueva tarea/i }));
+    fireEvent.change(screen.getByLabelText(/adjuntar/i), {
+      target: { files: [new File(["x"], "mockup.png", { type: "image/png" })] },
+    });
+    await waitFor(() => expect(subidas).toHaveLength(1));
+    fireEvent.change(screen.getByLabelText(/qué hay que hacer/i), { target: { value: "Arregla" } });
+    fireEvent.click(screen.getByRole("button", { name: /preparar el encargo/i }));
+    const augmentar = enviar.mock.calls.map((c) => c[0]).find((m) => (m as { accion?: string }).accion === "augmentar");
+    expect(augmentar).toMatchObject({ clase: "tarea", accion: "augmentar", proyecto: "p1", peticion: "Arregla" });
+    const borrador = (augmentar as { borrador?: string }).borrador;
+    // El borrador es el mismo bajo el que se subieron los bytes: si no, el servidor listaría
+    // una carpeta vacía y la tarea nacería sin sus adjuntos.
+    expect(borrador).toBe(subidas[0]!.tarea);
+
+    fireEvent.click(screen.getByRole("button", { name: /encolar/i }));
+    await waitFor(() =>
+      expect(enviar).toHaveBeenCalledWith(expect.objectContaining({ accion: "crear", borrador }))
+    );
+  });
+
+  it("sin ningún adjunto, `crear` NO lleva borrador: no se nombra una carpeta que no existe", async () => {
+    const { enviar } = conEscritorio();
+    fireEvent.click(screen.getByRole("button", { name: /nueva tarea/i }));
+    fireEvent.change(screen.getByLabelText(/qué hay que hacer/i), { target: { value: "Arregla" } });
+    fireEvent.click(screen.getByRole("button", { name: /encolar/i }));
+    await waitFor(() => expect(enviar).toHaveBeenCalled());
+    const crear = enviar.mock.calls.map((c) => c[0]).find((m) => (m as { accion?: string }).accion === "crear");
+    expect(crear).not.toHaveProperty("borrador");
+  });
+
+  it("al abrir la ventana se TIRA el encargo propuesto de antes: ese mensaje va a todas las pestañas", () => {
+    const { store } = conEscritorio();
+    act(() => store.aplicar({ clase: "tarea", accion: "augmentado", encargo: "DE OTRA PESTAÑA" }));
+    fireEvent.click(screen.getByRole("button", { name: /nueva tarea/i }));
+    expect((screen.getByLabelText(/encargo/i) as HTMLTextAreaElement).value).toBe("");
+  });
+
+  it("y cerrar no encola nada", async () => {
+    const { enviar } = conEscritorio();
+    fireEvent.click(screen.getByRole("button", { name: /nueva tarea/i }));
+    fireEvent.change(screen.getByLabelText(/qué hay que hacer/i), { target: { value: "Arregla" } });
+    fireEvent.click(screen.getByRole("button", { name: /cancelar/i }));
+    expect(screen.queryByLabelText(/qué hay que hacer/i)).toBeNull();
+    expect(enviar.mock.calls.map((c) => (c[0] as { accion?: string }).accion)).not.toContain("crear");
   });
 });

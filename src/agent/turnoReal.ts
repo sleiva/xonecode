@@ -271,6 +271,17 @@ export async function abrirSesionReal(opciones: {
    */
   artefactos?: string;
   /**
+   * La carpeta de los ADJUNTOS de la tarea — lo que el agente ve como `/adjuntos/`, de solo
+   * lectura (`core/adjuntos.ts`).
+   *
+   * Entra por parámetro y no se deduce, por lo mismo que `artefactos`: quien sabe si hay
+   * adjuntos es quien abrió la consola, y aquí solo hay una raíz de proyecto. Ausente en
+   * toda sesión de persona y en toda tarea sin adjuntos — y entonces **el campo no se pone**,
+   * porque una cadena vacía montaría el cwd del proceso como si fueran los adjuntos de
+   * alguien.
+   */
+  adjuntos?: string;
+  /**
    * ¿Las escrituras de ESTE proyecto se aplican sin pedir aprobación?
    *
    * Es una FUNCIÓN y no un booleano porque se pregunta en cada ronda: el ajuste se cambia
@@ -352,6 +363,8 @@ export async function abrirSesionReal(opciones: {
         carpeta: carpetaDeArtefactos,
         alEscribir: (a) => artefactosDeLaPasada.push(a),
       },
+      // Ausente es «no hay», no una carpeta vacía: ver `OpcionesDeSesion.adjuntos`.
+      ...(opciones.adjuntos === undefined ? {} : { adjuntos: opciones.adjuntos }),
     });
 
   let agente = await construir();

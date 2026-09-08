@@ -11,19 +11,20 @@
  * puerta de atrás. Fuera del proyecto se gana además gratis lo que importaba — no entran en
  * git y no suben a CloudStudio — sin depender de ninguna exclusión.
  */
-import { chmodSync, existsSync, linkSync, mkdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync, readdirSync } from "node:fs";
+import { chmodSync, existsSync, linkSync, lstatSync, mkdirSync, readFileSync, realpathSync, renameSync, rmSync, statSync, writeFileSync, readdirSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
-import { conFeedback, type Tarea } from "../core/tareas.js";
+import { conFeedback, type AdjuntoDeTarea, type Tarea } from "../core/tareas.js";
+import { mimeDeAdjunto, nombreDeAdjuntoAceptable } from "../core/adjuntos.js";
 
 /** Bytes que se aceptan por adjunto y por tarea. */
 export const TOPE_DE_ADJUNTO = 20_000_000;
 export const TOPE_DE_ADJUNTOS_POR_TAREA = 50_000_000;
 
-/** Un nombre de adjunto: un segmento llano y nada más. La misma lista BLANCA de forma que
- *  `esRutaDeArtefacto`, y por lo mismo — de ella depende que esto no escriba fuera. */
-const SEGMENTO = /^[A-Za-z0-9._-]+$/;
-const nombreAceptable = (n: string): boolean => SEGMENTO.test(n) && n !== "." && n !== "..";
+/** Un nombre de adjunto: un segmento llano y nada más. La lista BLANCA de forma vive en
+ *  `core/adjuntos.ts` —la comparten esto, la ruta de subida y el listado—, y de ella depende
+ *  que esto no escriba fuera. */
+const nombreAceptable = nombreDeAdjuntoAceptable;
 
 export interface ResultadoDeAdjunto {
   ok: boolean;
@@ -45,9 +46,29 @@ export interface TareasEnDisco {
   sigoSiendoDueño(): boolean;
   soltarCerrojo(): void;
   guardarAdjunto(tarea: string, nombre: string, datos: Buffer): ResultadoDeAdjunto;
-  /** La carpeta REAL de los adjuntos de una tarea, para montarla en el backend. Se queda
-   *  en el host: es una ruta de la máquina. */
-  carpetaDeAdjuntos(tarea: string): string;
+  /**
+   * Lo que hay en la carpeta de adjuntos de una tarea, medido del DISCO.
+   *
+   * De aquí sale el `Tarea.adjuntos` que se guarda al crear, y por eso se lee del disco y no
+   * de lo que diga el cliente: el navegador sube los bytes por `POST /adjunto` y después
+   * manda «crear», así que la única fuente que sabe qué llegó de verdad —y cuánto pesa— es
+   * la carpeta. Aceptar la lista del cliente dejaría entrar un adjunto que nadie subió.
+   *
+   * Ordenado por nombre, y solo FICHEROS llanos: una carpeta o un enlace ahí no es un
+   * adjunto, y `readdirSync` los daría igual.
+   */
+  listarAdjuntos(tarea: string): AdjuntoDeTarea[];
+  /**
+   * La carpeta REAL de los adjuntos de una tarea, para montarla en el backend. Se queda en
+   * el host: es una ruta de la máquina.
+   *
+   * `undefined` = **no se puede montar**, y falla cerrado por TIPO para que quien la monte
+   * tenga que decidir qué hacer con eso. Dos casos: un id que no es segmento llano, y una
+   * carpeta cuyo camino REAL se sale de la cola (un enlace simbólico plantado ahí). Que la
+   * carpeta todavía no exista NO es uno de ellos: se crea al escribir el primer adjunto, y
+   * confundir «no hay» con «no vale» dejaría sin montar la carpeta buena.
+   */
+  carpetaDeAdjuntos(tarea: string): string | undefined;
   borrarTarea(id: string): void;
 }
 
@@ -95,7 +116,40 @@ export function crearTareasEnDisco(opciones: {
   const indice = join(base, "indice.json");
   const cerrojo = join(base, "corredor.lock");
 
-  const carpetaDeAdjuntos = (tarea: string): string => join(base, tarea, "adjuntos");
+  /**
+   * La carpeta de adjuntos de una tarea, **si su camino REAL sigue dentro de la cola**.
+   *
+   * La barrera se aplica DOS veces, igual que la del lector de ficheros del proyecto
+   * (`agent/arbolDeProyecto.ts`): sobre el TEXTO del id —de balde, antes de tocar el
+   * disco— y sobre el camino REAL, que es lo único que caza un enlace simbólico. Y hace
+   * falta, porque estaba medido: con `<base>/<id>` apuntando a otra carpeta,
+   * `mkdirSync(…, {recursive:true})` lo SIGUE y `guardarAdjunto` escribía fuera de la cola.
+   * No es alcanzable desde el cable —hay que plantar el enlace en un directorio a 0700 del
+   * home—, pero es la misma clase de agujero que ese lector ya cierra, y aquí de esta
+   * carpeta cuelga además el `/adjuntos/` que se monta en el backend del agente: un enlace
+   * ahí le daría lectura fuera de la cola.
+   *
+   * **Se mira con `lstatSync` los dos segmentos, y no solo el `realpath` del final.** Un
+   * enlace que apunte a otra carpeta DENTRO de la cola pasaría la comprobación de
+   * contención y seguiría siendo un alias de los adjuntos de otra tarea. Y `lstat` no
+   * necesita que exista nada: `ENOENT` es «no hay enlace», que es el caso normal.
+   */
+  const carpetaDeAdjuntos = (tarea: string): string | undefined => {
+    if (!nombreAceptable(tarea)) return undefined;
+    const carpeta = join(base, tarea, "adjuntos");
+    if (esEnlace(join(base, tarea)) || esEnlace(carpeta)) return undefined;
+    try {
+      // Y si ya existe, que su camino real siga dentro. Los dos lados se canonicalizan: en
+      // macOS el propio temporal del sistema es `/var` → `/private/var`, así que comparar
+      // un `realpath` contra una ruta sin resolver daría falsos negativos.
+      if (existsSync(carpeta) && !realpathSync(carpeta).startsWith(realpathSync(base))) return undefined;
+    } catch {
+      // No se pudo resolver: no se afirma que valga. Falla cerrado, como todo lo que
+      // decide sobre una ruta.
+      return undefined;
+    }
+    return carpeta;
+  };
 
   /**
    * **El índice lleva el ENCARGO entero del usuario**, así que la carpeta y el fichero van a
@@ -353,13 +407,17 @@ export function crearTareasEnDisco(opciones: {
       if (dueño && dueño.pid === pid) rmSync(cerrojo, { force: true });
     },
     guardarAdjunto(tarea, nombre, datos) {
-      if (!nombreAceptable(tarea) || !nombreAceptable(nombre)) {
+      if (!nombreAceptable(nombre)) {
         return { ok: false, motivo: "ese nombre no vale para un adjunto" };
       }
       if (datos.length > topeDeAdjunto) {
         return { ok: false, motivo: `el fichero es demasiado grande (tope ${Math.round(topeDeAdjunto / 1_000_000)} MB)` };
       }
+      // La carpeta y no `join` a pelo: `carpetaDeAdjuntos` es quien comprueba el id y quien
+      // recomprueba el camino real. Sin ella, un enlace simbólico plantado en la cola hacía
+      // que esto escribiera fuera (medido).
       const carpeta = carpetaDeAdjuntos(tarea);
+      if (carpeta === undefined) return { ok: false, motivo: "ese nombre no vale para un adjunto" };
       mkdirSync(carpeta, { recursive: true, mode: 0o700 });
       const ya = readdirSync(carpeta).reduce((suma, f) => suma + statSync(join(carpeta, f)).size, 0);
       if (ya + datos.length > topePorTarea) {
@@ -369,6 +427,28 @@ export function crearTareasEnDisco(opciones: {
       // índice.
       writeFileSync(join(carpeta, nombre), datos, { mode: 0o600 });
       return { ok: true };
+    },
+    listarAdjuntos(tarea) {
+      const carpeta = carpetaDeAdjuntos(tarea);
+      if (carpeta === undefined || !existsSync(carpeta)) return [];
+      const salida: AdjuntoDeTarea[] = [];
+      for (const nombre of readdirSync(carpeta).sort()) {
+        // Solo ficheros llanos y con nombre aceptable: lo que haya llegado ahí por otro
+        // camino (una carpeta, un enlace) no es un adjunto, y `lstatSync` es lo que
+        // distingue el enlace del fichero al que apunta.
+        if (!nombreAceptable(nombre)) continue;
+        let bytes: number;
+        try {
+          const info = lstatSync(join(carpeta, nombre));
+          if (!info.isFile()) continue;
+          bytes = info.size;
+        } catch {
+          continue;
+        }
+        const mime = mimeDeAdjunto(nombre);
+        salida.push({ nombre, bytes, ...(mime === undefined ? {} : { mime }) });
+      }
+      return salida;
     },
     carpetaDeAdjuntos,
     borrarTarea(id) {
@@ -436,6 +516,20 @@ export function aplicarFeedback(
   }
   disco.guardar(tareas.map((t) => (t.id === id ? siguiente : t)));
   return { hecho: true };
+}
+
+/**
+ * ¿Es esa ruta un enlace simbólico? `ENOENT` es «no hay nada ahí», que no es un enlace.
+ *
+ * `lstatSync` y no `statSync`, que es la misma elección que `ficherosDelProyecto`: `stat`
+ * sigue el enlace y contestaría por el destino, o sea justo lo que hay que detectar.
+ */
+function esEnlace(ruta: string): boolean {
+  try {
+    return lstatSync(ruta).isSymbolicLink();
+  } catch {
+    return false;
+  }
 }
 
 /** `kill(pid, 0)` no manda ninguna señal: solo pregunta si el proceso existe. */

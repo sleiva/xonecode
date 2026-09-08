@@ -972,6 +972,64 @@ describe("abrirParaTarea — la segunda puerta", () => {
     rmSync(base, { recursive: true, force: true });
   });
 
+  /**
+   * El HOP de los adjuntos por la puerta de las TAREAS.
+   *
+   * La carpeta la conoce el corredor —es el único que sabe de qué tarea se trata— y tiene
+   * que llegar hasta `crearEjecutor`, que es de donde cuelga el backend del agente. El
+   * camino entero (`abrirParaTarea` → `construirConsolaDeProyecto` → `crearEjecutor` →
+   * `crearEjecutorReal` → `abrirSesionReal` → `construirAgente` → `backendDeAgente`) tiene
+   * un test por salto a propósito: es la clase de cableado que en este plan ha dejado cuatro
+   * veces una regla sin montar con todo en verde, porque el eslabón de producción vivía
+   * donde todos los tests doblan.
+   */
+  it("la puerta de tareas le pasa la carpeta de adjuntos a `crearEjecutor`", async () => {
+    const base = baseTemporal();
+    const s = sesionesEnMemoria();
+    const extras: unknown[] = [];
+    const v = crearVestibulo({
+      ...dobles(),
+      origenDeTrabajo: "global",
+      sesiones: s.puerto,
+      baseDeWorkspace: base,
+      crearEjecutor: (_alAbrir, opciones) => {
+        extras.push(opciones);
+        return async () => {};
+      },
+      correr: async () => 0,
+    });
+    const raiz = proyectoEnDisco(base, "A");
+    const deTarea = await v.abrirParaTarea(raiz, undefined, "/casa/.xonecode/tareas/t1/adjuntos");
+    expect(extras).toEqual([{ adjuntos: "/casa/.xonecode/tareas/t1/adjuntos" }]);
+    await deTarea.cerrar();
+    await v.cerrar();
+    rmSync(base, { recursive: true, force: true });
+  });
+
+  it("y la puerta de las PERSONAS no monta ninguna: los adjuntos son de una tarea", async () => {
+    // Sin esto, una consola de persona podría acabar con `/adjuntos/` montada apuntando a
+    // la carpeta de la última tarea que corrió — un fichero de otra conversación dentro de
+    // la vista del agente.
+    const base = baseTemporal();
+    const s = sesionesEnMemoria();
+    const extras: unknown[] = [];
+    const v = crearVestibulo({
+      ...dobles(),
+      origenDeTrabajo: "global",
+      sesiones: s.puerto,
+      baseDeWorkspace: base,
+      crearEjecutor: (_alAbrir, opciones) => {
+        extras.push(opciones);
+        return async () => {};
+      },
+      correr: async () => 0,
+    });
+    await v.abrirProyecto({ raiz: proyectoEnDisco(base, "A") });
+    expect(extras).toEqual([undefined]);
+    await v.cerrar();
+    rmSync(base, { recursive: true, force: true });
+  });
+
   it("las dos puertas pasan por las MISMAS costuras: una construcción, no dos", async () => {
     // El criterio de aceptación es «el backend de las dos puertas monta las mismas
     // barreras», y esto es lo que lo prueba sin tautología: el backend con las vistas

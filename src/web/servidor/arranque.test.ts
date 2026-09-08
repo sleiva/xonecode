@@ -18,15 +18,22 @@ import {
   construirCorredorDeTareasCableado,
   FALTA_EL_BUILD,
   RUTA_ACCION,
+  RUTA_ADJUNTO,
   RUTA_ARTEFACTO,
   RUTA_EVENTOS,
   fuentesDelJuez,
+  augmentacionCableada,
+  contextoDelProyecto,
+  TOPE_DE_MEMORIA,
 } from "./arranque.js";
+import { ErrorDelAumentador } from "../../agent/aumentador.js";
+import type { PeticionDeTarea } from "../../core/ports.js";
 import { crearVestibulo, type Vestibulo } from "./vestibulo.js";
 import { COMANDOS } from "../../cli/consola.js";
 import { CatalogoModelosEnMemoria } from "../../core/ports.js";
 import type { Entorno } from "../../core/settings.js";
-import type { Tarea } from "../../core/tareas.js";
+import type { AdjuntoDeTarea, Tarea } from "../../core/tareas.js";
+import { TOPE_DE_ADJUNTO } from "../../agent/tareasEnDisco.js";
 import type { ManejadorRuta } from "./servidor.js";
 import type { MensajeAlCliente, MensajeDelCliente } from "./transporte.js";
 
@@ -142,6 +149,8 @@ describe("montarRutas — el cable, por fin conectado", () => {
       `GET ${RUTA_ARTEFACTO}`,
       `GET ${RUTA_EVENTOS}`,
       `POST ${RUTA_ACCION}`,
+      // Y la cuarta son los BYTES de un adjunto de tarea, por lo mismo: el cable lleva JSON.
+      `POST ${RUTA_ADJUNTO}`,
     ]);
   });
 
@@ -1986,6 +1995,65 @@ describe("arrancarConsolaWeb — las comprobaciones, en orden", () => {
 });
 
 /** Un `ServidorWeb` que no ata ningún puerto. */
+/**
+ * Que el AUMENTADOR está montado en producción — no solo que `augmentacionCableada`
+ * funciona.
+ *
+ * El hueco que esto cierra es el de siempre en esta tanda: `arrancarConsolaWeb` compone las
+ * opciones de `montarRutas` dentro de su cierre, y todos sus tests doblan el servidor y el
+ * vestíbulo, así que `augmentar` podía dejar de pasarse y nada chistaría — el botón
+ * «Preparar el encargo» simplemente no aparecería.
+ *
+ * Se mide desde DENTRO, por `esperarCierre`: cuando esa función corre, las rutas están
+ * montadas y el cable vivo. Y el proyecto se deja SIN resolver a propósito: entonces el
+ * servidor contesta un `augmentado` con su motivo, que es lo que demuestra que el manejador
+ * está ahí — sin `augmentar` no se emite ningún mensaje de clase `tarea` (hay un test suyo
+ * justo arriba). Con `guion: true` no se le pregunta a ningún modelo.
+ */
+describe("arrancarConsolaWeb monta el aumentador", () => {
+  it("un `augmentar` por el cable recibe respuesta: el puerto está pasado", async () => {
+    const raizDelCliente = mkdtempSync(join(tmpdir(), "xonecode-web-aum-"));
+    writeFileSync(join(raizDelCliente, "index.html"), "<!doctype html>");
+    const rutas = new Map<string, ManejadorRuta>();
+    const cliente = clienteDeMentira();
+    await arrancarConsolaWeb({
+      puerto: 0,
+      abrir: false,
+      guion: true,
+      cwd: mkdtempSync(join(tmpdir(), "xonecode-cwd-aum-")),
+      raizDelCliente,
+      crearServidor: async () => ({
+        puerto: 4173,
+        direccion: "127.0.0.1",
+        token: "t0k3n",
+        url: "http://127.0.0.1:4173/?t=t0k3n",
+        registrarRuta: (metodo: string, ruta: string, manejador: ManejadorRuta) => {
+          rutas.set(`${metodo} ${ruta}`, manejador);
+        },
+        cerrar: async () => {},
+      }),
+      vestibulo: vestibuloDePrueba(),
+      escribir: () => {},
+      // Aquí dentro todo está montado y el cable vivo: es el único momento en que se puede
+      // hablar con las rutas de PRODUCCIÓN de esta función.
+      esperarCierre: async () => {
+        await rutas.get(`GET ${RUTA_EVENTOS}`)!(cliente.peticion, cliente.respuesta);
+        await asentar();
+        await enviarMensaje(rutas.get(`POST ${RUTA_ACCION}`)!, {
+          clase: "tarea",
+          accion: "augmentar",
+          proyecto: "no-resoluble",
+          peticion: "Arregla el login",
+        });
+        await asentar();
+      },
+    });
+    const respuestas = cliente.recibidos.filter((m) => m.clase === "tarea");
+    expect(respuestas).toHaveLength(1);
+    expect(respuestas[0]).toMatchObject({ accion: "augmentado" });
+  });
+});
+
 function servidorLevantado() {
   const rutas = new Map<string, ManejadorRuta>();
   return {
@@ -2628,6 +2696,7 @@ function colaDeMentira(iniciales: Tarea[] = []) {
     sigoSiendoDueño: (): boolean => true,
     soltarCerrojo: (): void => {},
     guardarAdjunto: (): { ok: boolean } => ({ ok: true }),
+    listarAdjuntos: (): AdjuntoDeTarea[] => [],
     carpetaDeAdjuntos: (): string => "/no-usado-en-estos-tests/adjuntos",
     // Para leer el estado en el test sin pasar por el cable.
     verTareas: (): Tarea[] => tareas,
@@ -3015,8 +3084,8 @@ describe("las tareas en background, por el cable", () => {
     const servidor = servidorDeMentira();
     montarRutas(servidor, vestibuloDePrueba(), {
       colaDeTareas: colaDeMentira(),
-      augmentar: async (_proyecto, peticion) =>
-        peticion === "revienta" ? Promise.reject(new Error("boom")) : `encargo: ${peticion}`,
+      augmentar: async ({ texto }) =>
+        texto === "revienta" ? Promise.reject(new Error("boom")) : `encargo: ${texto}`,
     });
     const cliente = clienteDeMentira();
     await servidor.rutas.get(`GET ${RUTA_EVENTOS}`)!(cliente.peticion, cliente.respuesta);
@@ -3037,6 +3106,411 @@ describe("las tareas en background, por el cable", () => {
     expect(ultimoAugmentado).toMatchObject({ clase: "tarea", accion: "augmentado" });
     expect((ultimoAugmentado as { encargo?: string }).encargo).toBeUndefined();
     expect((ultimoAugmentado as { error?: string }).error).toBeDefined();
+  });
+});
+
+/**
+ * `POST /adjunto`: los BYTES de un adjunto, por HTTP y no por el cable (el SSE lleva JSON).
+ *
+ * Las comprobaciones de `Host`, `Origin` y token las hace `servidor.ts` antes de llegar
+ * aquí, igual que a todas las rutas. Lo que se prueba aquí es lo propio: que el nombre pasa
+ * la MISMA barrera de segmento llano que un artefacto —de ella depende que esto no escriba
+ * fuera de la carpeta de la tarea—, que los topes se respetan, y que **una subida no puede
+ * caer nunca en la carpeta de una tarea que ya existe**.
+ */
+describe("POST /adjunto", () => {
+  /** El manejador y lo que la cola vio. `colaDeMentira` aquí guarda los adjuntos en memoria. */
+  function conRutaDeAdjunto(iniciales: Tarea[] = [], topeDeAdjunto = 1_000) {
+    const guardados: { tarea: string; nombre: string; bytes: number }[] = [];
+    const cola = {
+      ...colaDeMentira(iniciales),
+      guardarAdjunto: (tarea: string, nombre: string, datos: Buffer) => {
+        if (datos.length > topeDeAdjunto) return { ok: false, motivo: "el fichero es demasiado grande (tope 1 MB)" };
+        guardados.push({ tarea, nombre, bytes: datos.length });
+        return { ok: true };
+      },
+    };
+    const servidor = servidorDeMentira();
+    montarRutas(servidor, vestibuloDePrueba(), { colaDeTareas: cola });
+    return { guardados, cola, manejador: servidor.rutas.get(`POST ${RUTA_ADJUNTO}`)! };
+  }
+
+  /** Un POST con su query y su cuerpo binario. Devuelve el estado y el texto contestado. */
+  async function subir(
+    manejador: ManejadorRuta,
+    query: string,
+    cuerpo: Buffer | string = "unos bytes"
+  ): Promise<{ estado: number; texto: string }> {
+    const peticion = Readable.from([Buffer.from(cuerpo)]) as unknown as IncomingMessage;
+    (peticion as { url?: string }).url = `${RUTA_ADJUNTO}?${query}`;
+    let estado = 0;
+    let texto = "";
+    const respuesta = {
+      writeHead: (codigo: number) => {
+        estado = codigo;
+        return respuesta;
+      },
+      end: (cuerpoDeSalida?: string) => {
+        texto = cuerpoDeSalida ?? "";
+        return respuesta;
+      },
+    } as unknown as ServerResponse;
+    await manejador(peticion, respuesta);
+    return { estado, texto };
+  }
+
+  it("guarda el cuerpo con el nombre dado", async () => {
+    const { manejador, guardados } = conRutaDeAdjunto();
+    expect((await subir(manejador, "tarea=b1&nombre=mockup.png", "PNGPNGPNG")).estado).toBe(204);
+    expect(guardados).toEqual([{ tarea: "b1", nombre: "mockup.png", bytes: 9 }]);
+  });
+
+  it("sin `tarea` o sin `nombre`, 400", async () => {
+    const { manejador, guardados } = conRutaDeAdjunto();
+    expect((await subir(manejador, "nombre=x.png")).estado).toBe(400);
+    expect((await subir(manejador, "tarea=b1")).estado).toBe(400);
+    expect(guardados).toEqual([]);
+  });
+
+  it("un nombre que podría salir de su carpeta, 403 — sobre el TEXTO y ya decodificado", async () => {
+    // `URLSearchParams` decodifica una vez, así que un `%2e%2e` llega ya como `..` y lo caza
+    // la lista blanca; un `%252e%252e` llega con el `%` dentro, que tampoco es texto llano.
+    const { manejador, guardados } = conRutaDeAdjunto();
+    for (const nombre of ["..", "%2e%2e", "%252e%252e", "a%2Fb.png", "a%5Cb.png", "con%20espacio.png", "%2e%2e%2Ffuera.png"]) {
+      expect((await subir(manejador, `tarea=b1&nombre=${nombre}`)).estado, nombre).toBe(403);
+    }
+    // Y el id de la tarea pasa la misma barrera: por ahí se compone la carpeta.
+    for (const tarea of ["..", "%2e%2e", "a%2Fb"]) {
+      expect((await subir(manejador, `tarea=${tarea}&nombre=x.png`)).estado, tarea).toBe(403);
+    }
+    expect(guardados).toEqual([]);
+  });
+
+  it("una subida NUNCA cae en la carpeta de una tarea que ya existe: 409", async () => {
+    // Es la regla que hace segura la subida antes de crear: el cliente elige el id del
+    // BORRADOR, así que sin esto podría escribir en la carpeta de una tarea viva —una que
+    // el corredor puede estar ejecutando ahora mismo, con `/adjuntos/` montada—.
+    const ya: Tarea = {
+      id: "t1",
+      proyecto: { id: "p1", raiz: "/w/AppDemo", nombre: "AppDemo" },
+      titulo: "t", peticion: "p", encargo: "e", adjuntos: [],
+      estado: "en-proceso", creada: "2026-09-08T10:00:00.000Z",
+    };
+    const { manejador, guardados } = conRutaDeAdjunto([ya]);
+    expect((await subir(manejador, "tarea=t1&nombre=x.png")).estado).toBe(409);
+    expect(guardados).toEqual([]);
+  });
+
+  it("por encima del tope del PUERTO, 413 con su motivo", async () => {
+    const { manejador, guardados } = conRutaDeAdjunto([], 10);
+    const r = await subir(manejador, "tarea=b1&nombre=grande.bin", Buffer.alloc(50));
+    expect(r.estado).toBe(413);
+    expect(guardados).toEqual([]);
+  });
+
+  it("y por encima del tope del CUERPO también, con un puerto que lo aceptaría", async () => {
+    // Son dos topes distintos y este es el que importa para la MEMORIA de este proceso: el
+    // cuerpo se corta al leerlo, no después de acumularlo. Con el tope del puerto puesto muy
+    // alto, lo único que puede contestar 413 es el lector.
+    const { manejador, guardados } = conRutaDeAdjunto([], Number.MAX_SAFE_INTEGER);
+    const r = await subir(manejador, "tarea=b1&nombre=g.bin", Buffer.alloc(TOPE_DE_ADJUNTO + 1));
+    expect(r.estado).toBe(413);
+    expect(guardados).toEqual([]);
+  });
+
+  it("ninguna respuesta lleva una ruta de la máquina", async () => {
+    const { manejador } = conRutaDeAdjunto([], 10);
+    const respuestas = [
+      await subir(manejador, "tarea=b1&nombre=..%2Fx.png"),
+      await subir(manejador, "tarea=b1&nombre=g.bin", Buffer.alloc(50)),
+      await subir(manejador, "nombre=x.png"),
+    ];
+    for (const r of respuestas) expect(r.texto).not.toMatch(/[/\\](Users|home|var|tmp|casa)[/\\]/);
+  });
+
+  it("sin cola de tareas la ruta contesta 404, no revienta", async () => {
+    const servidor = servidorDeMentira();
+    montarRutas(servidor, vestibuloDePrueba(), {});
+    const manejador = servidor.rutas.get(`POST ${RUTA_ADJUNTO}`)!;
+    expect(manejador).toBeDefined();
+    expect((await subir(manejador, "tarea=b1&nombre=x.png")).estado).toBe(404);
+  });
+});
+
+describe("crear una tarea con adjuntos", () => {
+  /** Una cola que sabe listar adjuntos por id de borrador. */
+  function colaConAdjuntos(porTarea: Record<string, AdjuntoDeTarea[]>, iniciales: Tarea[] = []) {
+    return { ...colaDeMentira(iniciales), listarAdjuntos: (id: string): AdjuntoDeTarea[] => porTarea[id] ?? [] };
+  }
+
+  it("el `borrador` se adopta como id, y los adjuntos salen del DISCO", async () => {
+    // Nunca de lo que diga el cliente: el navegador sube los bytes por `POST /adjunto` y
+    // después manda «crear», así que la única fuente de qué llegó de verdad es la carpeta.
+    const cola = colaConAdjuntos({ b1: [{ nombre: "mockup.png", bytes: 2048, mime: "image/png" }] });
+    const servidor = servidorDeMentira();
+    montarRutas(servidor, vestibuloDePrueba(), { colaDeTareas: cola });
+    const cliente = clienteDeMentira();
+    await servidor.rutas.get(`GET ${RUTA_EVENTOS}`)!(cliente.peticion, cliente.respuesta);
+    const accion = servidor.rutas.get(`POST ${RUTA_ACCION}`)!;
+    await asentar();
+    await enviarMensaje(accion, {
+      clase: "tarea", accion: "crear", proyecto: "p1", peticion: "Arregla", encargo: "ENCARGO", borrador: "b1",
+    });
+    await asentar();
+    expect(cola.verTareas()[0]).toMatchObject({
+      id: "b1",
+      adjuntos: [{ nombre: "mockup.png", bytes: 2048, mime: "image/png" }],
+    });
+  });
+
+  it("sin `borrador` la tarea nace con id propio y sin adjuntos", async () => {
+    const cola = colaConAdjuntos({});
+    const servidor = servidorDeMentira();
+    montarRutas(servidor, vestibuloDePrueba(), { colaDeTareas: cola });
+    const cliente = clienteDeMentira();
+    await servidor.rutas.get(`GET ${RUTA_EVENTOS}`)!(cliente.peticion, cliente.respuesta);
+    const accion = servidor.rutas.get(`POST ${RUTA_ACCION}`)!;
+    await asentar();
+    await enviarMensaje(accion, { clase: "tarea", accion: "crear", proyecto: "p1", peticion: "Arregla", encargo: "E" });
+    await asentar();
+    expect(cola.verTareas()[0]!.id).not.toBe("");
+    expect(cola.verTareas()[0]!.adjuntos).toEqual([]);
+  });
+
+  it("un `borrador` que ya es una tarea NO se pisa: no se crea nada y se DICE", async () => {
+    // Fail-closed, y con el mismo argumento que el 409 de la subida: el borrador es un id
+    // que elige el cliente. Y no se cae a un id nuevo en silencio — eso perdería los
+    // adjuntos que la persona acaba de subir sin decírselo.
+    const ya: Tarea = {
+      id: "t1", proyecto: { id: "p1", raiz: "/w/AppDemo", nombre: "AppDemo" },
+      titulo: "t", peticion: "p", encargo: "e", adjuntos: [], estado: "nuevo",
+      creada: "2026-09-08T10:00:00.000Z",
+    };
+    const dichos: string[] = [];
+    const cola = colaConAdjuntos({}, [ya]);
+    const servidor = servidorDeMentira();
+    montarRutas(servidor, vestibuloDePrueba(), { colaDeTareas: cola, informar: (t) => dichos.push(t) });
+    const cliente = clienteDeMentira();
+    await servidor.rutas.get(`GET ${RUTA_EVENTOS}`)!(cliente.peticion, cliente.respuesta);
+    const accion = servidor.rutas.get(`POST ${RUTA_ACCION}`)!;
+    await asentar();
+    await enviarMensaje(accion, {
+      clase: "tarea", accion: "crear", proyecto: "p1", peticion: "Arregla", encargo: "E", borrador: "t1",
+    });
+    await asentar();
+    expect(cola.verTareas()).toHaveLength(1);
+    expect(dichos.join(" ")).toMatch(/borrador/i);
+  });
+
+  it("un `borrador` que no es segmento llano tampoco crea nada", async () => {
+    const dichos: string[] = [];
+    const cola = colaConAdjuntos({});
+    const servidor = servidorDeMentira();
+    montarRutas(servidor, vestibuloDePrueba(), { colaDeTareas: cola, informar: (t) => dichos.push(t) });
+    const cliente = clienteDeMentira();
+    await servidor.rutas.get(`GET ${RUTA_EVENTOS}`)!(cliente.peticion, cliente.respuesta);
+    const accion = servidor.rutas.get(`POST ${RUTA_ACCION}`)!;
+    await asentar();
+    await enviarMensaje(accion, {
+      clase: "tarea", accion: "crear", proyecto: "p1", peticion: "Arregla", encargo: "E", borrador: "../fuera",
+    });
+    await asentar();
+    expect(cola.verTareas()).toEqual([]);
+    expect(dichos.join(" ")).toMatch(/borrador/i);
+  });
+});
+
+describe("augmentar: lo que se le da y cómo se dice que falló", () => {
+  function conAumentador(
+    augmentar: NonNullable<NonNullable<Parameters<typeof montarRutas>[2]>["augmentar"]>,
+    porTarea: Record<string, AdjuntoDeTarea[]> = {}
+  ) {
+    const servidor = servidorDeMentira();
+    montarRutas(servidor, vestibuloDePrueba(), {
+      colaDeTareas: { ...colaDeMentira(), listarAdjuntos: (id: string) => porTarea[id] ?? [] },
+      augmentar,
+    });
+    return servidor;
+  }
+
+  async function pedir(servidor: ReturnType<typeof servidorDeMentira>, mensaje: MensajeDelCliente) {
+    const cliente = clienteDeMentira();
+    await servidor.rutas.get(`GET ${RUTA_EVENTOS}`)!(cliente.peticion, cliente.respuesta);
+    await asentar();
+    await enviarMensaje(servidor.rutas.get(`POST ${RUTA_ACCION}`)!, mensaje);
+    await asentar();
+    return cliente.recibidos.filter(
+      (m): m is Extract<MensajeAlCliente, { clase: "tarea" }> => m.clase === "tarea"
+    );
+  }
+
+  it("recibe el proyecto RESUELTO —nombre y raíz— y los adjuntos del borrador", async () => {
+    // La raíz no la manda el cliente (nunca la ha visto): la resuelve el servidor, igual que
+    // al crear. Está para resolver el papel `trabajo` con el `config.json` del proyecto.
+    const vistas: unknown[] = [];
+    const servidor = conAumentador(
+      async (p) => {
+        vistas.push(p);
+        return "ENCARGO";
+      },
+      { b1: [{ nombre: "notas.md", bytes: 4, mime: "text/markdown" }] }
+    );
+    await pedir(servidor, { clase: "tarea", accion: "augmentar", proyecto: "p1", peticion: "Arregla", borrador: "b1" });
+    expect(vistas).toEqual([
+      {
+        texto: "Arregla",
+        proyecto: { id: "p1", raiz: "/w/webstudio/workspace/Tienda", nombre: "Tienda" },
+        adjuntos: [{ nombre: "notas.md", mime: "text/markdown" }],
+      },
+    ]);
+  });
+
+  it("un proyecto que no se puede resolver NO se augmenta: se contesta el error", async () => {
+    // Falla cerrado, igual que al crear: sin proyecto resoluble no hay raíz con la que
+    // resolver el modelo, y no se inventa ninguna.
+    const servidor = conAumentador(async () => "ENCARGO");
+    const mensajes = await pedir(servidor, { clase: "tarea", accion: "augmentar", proyecto: "no-existe", peticion: "x" });
+    expect(mensajes.at(-1)).toMatchObject({ accion: "augmentado" });
+    expect((mensajes.at(-1) as { error?: string }).error).toBeDefined();
+    expect((mensajes.at(-1) as { encargo?: string }).encargo).toBeUndefined();
+  });
+
+  it("el MOTIVO de un fallo nuestro se dice con palabras, no con el nombre de la clase", async () => {
+    // Era `codigoDe(error)`, que para un error escrito a mano devuelve su `name`: la ventana
+    // habría enseñado «No se pudo preparar el encargo (ErrorDelAumentador)», que no dice
+    // nada de lo que hay que arreglar. La regla es la del corredor: el MENSAJE si lo
+    // escribimos nosotros, el CÓDIGO si lo escribió el sistema.
+    const servidor = conAumentador(async () => {
+      const error = new Error("no se pudo preparar el encargo (papel «trabajo»): falta la credencial para openai");
+      error.name = "ErrorDelAumentador";
+      throw error;
+    });
+    const mensajes = await pedir(servidor, { clase: "tarea", accion: "augmentar", proyecto: "p1", peticion: "x" });
+    expect((mensajes.at(-1) as { error?: string }).error).toContain("falta la credencial");
+  });
+
+  it("y un fallo del SISTEMA sigue diciendo solo su código: ahí el mensaje lleva la ruta", async () => {
+    const servidor = conAumentador(async () => {
+      throw Object.assign(new Error("ENOENT: no such file or directory, open '/Users/quien-sea/.xonecode/auth.json'"), {
+        code: "ENOENT",
+      });
+    });
+    const mensajes = await pedir(servidor, { clase: "tarea", accion: "augmentar", proyecto: "p1", peticion: "x" });
+    expect((mensajes.at(-1) as { error?: string }).error).toBe("ENOENT");
+  });
+});
+
+/**
+ * El CABLEADO de la augmentación: `augmentacionCableada`.
+ *
+ * Extraída de `arrancarConsolaWeb` y exportada por el MISMO motivo que `revisionConGit` y
+ * `fuentesDelJuez`: en esta tanda, CUATRO veces una composición de producción vivía en un
+ * cierre que todos sus tests doblan, y una regla podía dejar de estar montada con todo en
+ * verde. Aquí lo que se caería sin síntoma es la mitad del contexto del aumentador: sin la
+ * rama y sin la memoria del proyecto, el encargo se redacta a ciegas y nada falla.
+ */
+describe("augmentacionCableada", () => {
+  it("le da al aumentador el texto, el proyecto RESUELTO con su rama, los adjuntos y la memoria", async () => {
+    const vistas: PeticionDeTarea[] = [];
+    const augmentar = augmentacionCableada({
+      aumentador: {
+        augmentar: async (p) => {
+          vistas.push(p);
+          return "ENCARGO";
+        },
+      },
+      contexto: (raiz) => ({ rama: `rama-de-${raiz}`, memoria: `memoria-de-${raiz}` }),
+    });
+    const encargo = await augmentar({
+      texto: "Arregla el login",
+      proyecto: { id: "p1", raiz: "/w/AppDemo", nombre: "AppDemo" },
+      adjuntos: [{ nombre: "mockup.png", mime: "image/png" }],
+    });
+    expect(encargo).toBe("ENCARGO");
+    expect(vistas).toEqual([
+      {
+        texto: "Arregla el login",
+        // La RAÍZ va dentro: es lo que deja resolver el papel `trabajo` con el `config.json`
+        // del proyecto, la misma trampa que `CasoDeJuez.raiz`.
+        proyecto: { nombre: "AppDemo", raiz: "/w/AppDemo", rama: "rama-de-/w/AppDemo" },
+        adjuntos: [{ nombre: "mockup.png", mime: "image/png" }],
+        memoria: "memoria-de-/w/AppDemo",
+      },
+    ]);
+  });
+
+  it("lo que el disco no dice no se pone: ausente es «no hay», no una cadena vacía", async () => {
+    // Un `rama: undefined` o un `memoria: ""` en el prompt harían que el modelo hablara de
+    // una rama sin nombre y de una memoria en blanco como si fueran datos.
+    const vistas: PeticionDeTarea[] = [];
+    const augmentar = augmentacionCableada({
+      aumentador: {
+        augmentar: async (p) => {
+          vistas.push(p);
+          return "E";
+        },
+      },
+      contexto: () => ({}),
+    });
+    await augmentar({ texto: "x", proyecto: { id: "p1", raiz: "/w/A", nombre: "A" }, adjuntos: [] });
+    // `toEqual` trata `{rama: undefined}` igual que `{}`, así que se miran las CLAVES: un
+    // `rama: undefined` que llegue al prompt es lo que hay que cazar aquí.
+    expect(Object.keys(vistas[0]!).sort()).toEqual(["adjuntos", "proyecto", "texto"]);
+    expect(Object.keys(vistas[0]!.proyecto).sort()).toEqual(["nombre", "raiz"]);
+  });
+
+  it("sin `contexto` no se lee el disco: la composición sigue funcionando sin él", async () => {
+    const augmentar = augmentacionCableada({ aumentador: { augmentar: async () => "E" } });
+    expect(await augmentar({ texto: "x", proyecto: { id: "p", raiz: "/w/A", nombre: "A" }, adjuntos: [] })).toBe("E");
+  });
+
+  it("el error del aumentador se PROPAGA: quien lo convierte en palabras es el cable", async () => {
+    // `atenderAugmentar` aplica la regla del mensaje-o-código; tragárselo aquí dejaría a la
+    // ventana con un encargo vacío y sin motivo.
+    const augmentar = augmentacionCableada({
+      aumentador: {
+        augmentar: () => Promise.reject(new ErrorDelAumentador("falta la credencial para openai")),
+      },
+    });
+    await expect(
+      augmentar({ texto: "x", proyecto: { id: "p", raiz: "/w/A", nombre: "A" }, adjuntos: [] })
+    ).rejects.toThrow(/falta la credencial/);
+  });
+});
+
+describe("contextoDelProyecto", () => {
+  it("lee la rama de CloudStudio y la memoria del proyecto, del disco y por la raíz", () => {
+    const raiz = mkdtempSync(join(tmpdir(), "xonecode-ctx-"));
+    mkdirSync(join(raiz, ".xonecode"), { recursive: true });
+    writeFileSync(
+      join(raiz, ".xonecode", "config.json"),
+      JSON.stringify({ modo: "cloud", cloudstudio: { url: "https://x/mcp", proyecto: "AppDemo", rama: "master" } })
+    );
+    writeFileSync(join(raiz, ".xonecode", "memoria.md"), "# Memoria\nEl login usa $http");
+    const ctx = contextoDelProyecto(raiz);
+    expect(ctx.rama).toBe("master");
+    expect(ctx.memoria).toContain("El login usa $http");
+    rmSync(raiz, { recursive: true, force: true });
+  });
+
+  it("un proyecto offline y sin memoria no afirma ninguna de las dos", () => {
+    const raiz = mkdtempSync(join(tmpdir(), "xonecode-ctx2-"));
+    mkdirSync(join(raiz, ".xonecode"), { recursive: true });
+    writeFileSync(join(raiz, ".xonecode", "config.json"), JSON.stringify({ modo: "offline" }));
+    expect(contextoDelProyecto(raiz)).toEqual({});
+    rmSync(raiz, { recursive: true, force: true });
+  });
+
+  it("una raíz que no existe no lanza: se queda sin contexto y se redacta igual", () => {
+    expect(contextoDelProyecto(join(tmpdir(), "no-existe-xonecode-ctx"))).toEqual({});
+  });
+
+  it("una memoria enorme se acota: es contexto de una llamada, no un fichero que servir", () => {
+    const raiz = mkdtempSync(join(tmpdir(), "xonecode-ctx3-"));
+    mkdirSync(join(raiz, ".xonecode"), { recursive: true });
+    writeFileSync(join(raiz, ".xonecode", "memoria.md"), "a".repeat(TOPE_DE_MEMORIA + 5_000));
+    expect(contextoDelProyecto(raiz).memoria!.length).toBeLessThanOrEqual(TOPE_DE_MEMORIA);
+    rmSync(raiz, { recursive: true, force: true });
   });
 });
 
@@ -3085,6 +3559,44 @@ describe("las tareas en background, el cableado del corredor con el cable — no
     adjuntos: [],
     estado: "en-proceso",
     creada: "2026-09-08T10:00:00.000Z",
+  });
+
+  /**
+   * El ÚLTIMO salto de la cadena de los adjuntos: la costura que le da al vestíbulo lo que
+   * el corredor calculó. Vivía inline en `arrancarConsolaWeb` —el sitio donde este plan ha
+   * perdido cuatro veces una regla con todo en verde—, así que se comprueba aquí, sobre la
+   * MISMA función que usa producción: si el tercer argumento se cae, una tarea con adjuntos
+   * corre sin `/adjuntos/` montada y ningún test de las piezas se enteraría.
+   */
+  it("la costura reenvía al vestíbulo la carpeta de adjuntos que el corredor resolvió", async () => {
+    const aperturas: (string | undefined)[] = [];
+    const cola = colaDeMentira([
+      {
+        ...tareaEnProceso("t1"),
+        estado: "nuevo",
+        adjuntos: [{ nombre: "mockup.png", bytes: 10 }],
+      },
+    ]);
+    const { corredor, arrancarConectado } = construirCorredorDeTareasCableado({
+      vestibulo: {
+        abrirParaTarea: async (_raiz, _sesion, adjuntos) => {
+          aperturas.push(adjuntos);
+          // No hace falta una consola de verdad: con que la apertura reviente, la tarea se
+          // aparca y el test ya tiene lo único que venía a medir — qué se le pasó.
+          throw new Error("no hay proyecto de verdad en este test");
+        },
+        proyectoAbierto: () => undefined,
+        sesionesDe: () => [],
+      },
+      tareasFabrica: () => cola,
+      informar: () => {},
+      olvidarHiloDeSesion: async () => {},
+      ...ENTREGA_DE_TAREAS,
+    });
+    await arrancarConectado({ emitirTareas: () => {} });
+    await corredor!.asentar();
+    expect(aperturas).toEqual(["/no-usado-en-estos-tests/adjuntos"]);
+    await corredor!.parar();
   });
 
   it("arrancarConectado conecta el puente ANTES de arrancar: una reconciliación que aparca por su cuenta llega al `emitirTareas` recibido", async () => {

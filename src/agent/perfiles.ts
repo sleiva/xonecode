@@ -36,6 +36,19 @@ export const DENEGADO_SIEMPRE = [
   },
   // Las skills son instrucciones del harness, nunca ficheros que el agente pueda alterar.
   { operations: ["write"] as const, paths: ["/skills", "/skills/**"], mode: "deny" as const },
+  /**
+   * Los ADJUNTOS de una tarea (`core/adjuntos.ts`), de solo lectura por lo mismo que las
+   * skills: son material de ENTRADA —los documentos que anexó la persona que creó la
+   * tarea—, no ficheros que reescribir. Leerlos es justamente su razón de ser, así que la
+   * denegación es solo de `write`.
+   *
+   * **Y es incondicional, no «solo si están montados».** Medido contra deepagents 1.13.2:
+   * sin esta fila, un `write_file` a `/adjuntos/x.txt` en una consola donde la carpeta NO
+   * está montada escribe `<raiz>/adjuntos/x.txt` — o sea un fichero del proyecto, con un
+   * nombre que la interfaz presenta como «lo que te adjuntaron». Con la fila puesta, las dos
+   * situaciones contestan «permission denied» y el disco no se toca (también medido).
+   */
+  { operations: ["write"] as const, paths: ["/adjuntos", "/adjuntos/**"], mode: "deny" as const },
 ];
 
 /**

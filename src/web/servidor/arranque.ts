@@ -98,7 +98,8 @@ import type { ProyectoRemoto } from "../../agent/cloudstudioMcp.js";
 import { CatalogoModelos } from "../../agent/catalogoModelos.js";
 import { Modelos } from "../../agent/modelos.js";
 import { crearJuezDeTarea, invocarConModelos } from "../../agent/juezDeTarea.js";
-import type { JuezDeTareaPort } from "../../core/ports.js";
+import type { AumentadorPort, JuezDeTareaPort } from "../../core/ports.js";
+import { AumentadorGuionizado } from "../../core/ports.js";
 import type { Entorno } from "../../core/settings.js";
 import { arrancarServidor, type ServidorWeb } from "./servidor.js";
 import {
@@ -109,7 +110,10 @@ import {
   type RevisionDeSesion,
 } from "./corredorDeTareas.js";
 import { CONCURRENCIA_POR_OMISION, conEstado, tituloDeTarea, type Tarea } from "../../core/tareas.js";
-import { aplicarFeedback, type TareasEnDisco } from "../../agent/tareasEnDisco.js";
+import { aplicarFeedback, TOPE_DE_ADJUNTO, type TareasEnDisco } from "../../agent/tareasEnDisco.js";
+import { nombreDeAdjuntoAceptable } from "../../core/adjuntos.js";
+import { rutaMemoriaDeProyecto } from "../../agent/memoriaDeProyecto.js";
+import { crearAumentador, invocarParaAumentar } from "../../agent/aumentador.js";
 import {
   conexionDeVestibulo,
   crearVestibulo,
@@ -144,6 +148,14 @@ export const RUTA_ACCION = "/accion";
  * el contrato de las skills que los escriben es «autocontenido».
  */
 export const RUTA_ARTEFACTO = "/artefacto";
+/**
+ * `POST /adjunto?tarea=<id>&nombre=<fichero>` — los BYTES de un adjunto.
+ *
+ * Por HTTP y no por el cable: el SSE lleva JSON y esto son bytes. El nombre va en la QUERY
+ * y no en la ruta por lo mismo que el del artefacto: `registrarRuta` casa por coincidencia
+ * EXACTA, así que `/adjunto/<nombre>` no encontraría manejador.
+ */
+export const RUTA_ADJUNTO = "/adjunto";
 
 /** Cuántas líneas del log de una instalación viajan: la COLA, lo último. */
 export const LINEAS_DE_LOG = 12;
@@ -330,7 +342,10 @@ export interface OpcionesDeMontaje {
    * Ausente = esta ejecución no ejecuta tareas, y no se manda ningún `tareas`: el kanban
    * se queda diciendo que no ha llegado, en vez de afirmar que no hay tareas.
    */
-  colaDeTareas?: Pick<TareasEnDisco, "listar" | "guardar" | "borrarTarea">;
+  colaDeTareas?: Pick<
+    TareasEnDisco,
+    "listar" | "guardar" | "borrarTarea" | "guardarAdjunto" | "listarAdjuntos"
+  >;
   /** Lo mínimo del corredor que este cable necesita LEER: si ejecuta AQUÍ, para el campo
    *  `corriendoAqui` del mensaje `tareas`. Nunca `arrancar`/`parar`: eso es del proceso. */
   corredorDeTareas?: Pick<Corredor, "corriendoAqui">;
@@ -342,7 +357,18 @@ export interface OpcionesDeMontaje {
    * Augmenta una petición en un encargo revisado (`agent/aumentador.ts`, Task 9). Ausente =
    * el botón «Preparar el encargo» no está disponible.
    */
-  augmentar?: (proyecto: string, peticion: string) => Promise<string>;
+  augmentar?: (peticion: {
+    texto: string;
+    /**
+     * El proyecto RESUELTO, con su raíz. La resuelve este cierre —igual que al crear una
+     * tarea— porque el cliente solo manda el id: nunca ha visto una ruta de la máquina. Y la
+     * raíz hace falta para que el papel `trabajo` se resuelva con el `config.json` del
+     * proyecto, la misma trampa que `CasoDeJuez.raiz` documenta.
+     */
+    proyecto: { id: string; raiz: string; nombre: string };
+    /** Nombres y tipos, nunca contenido: salen del DISCO, de la carpeta del borrador. */
+    adjuntos: readonly { nombre: string; mime?: string }[];
+  }) => Promise<string>;
 }
 
 /** El `Content-Type` con el que se sirve un artefacto inline: al texto se le pone el juego
@@ -902,25 +928,106 @@ export function montarRutas(
    * este cierre. Sin proyecto resoluble no se escribe nada, y se DICE — la misma regla que
    * una transición imposible: no se falla en silencio.
    */
-  const atenderCrearTarea = (proyectoId: string, peticion: string, encargo: string): { id: string } | undefined => {
+  const atenderCrearTarea = (
+    proyectoId: string,
+    peticion: string,
+    encargo: string,
+    /**
+     * El id del BORRADOR bajo el que el navegador subió los adjuntos, si subió alguno.
+     *
+     * Los bytes viajan por `POST /adjunto` ANTES de que la tarea exista —hay que tenerlos en
+     * disco antes de encolarla, porque crear dispara `revisarTareas()` y el corredor puede
+     * arrancarla en el acto—, así que el cliente elige un id y este es el momento de
+     * ADOPTARLO. Lo que hace que eso sea seguro son las dos guardas de abajo, y las mismas
+     * que la propia ruta de subida aplica: forma de segmento llano, y que no sea ya una
+     * tarea.
+     */
+    borrador?: string
+  ): { id: string } | undefined => {
     if (opciones.colaDeTareas === undefined) return undefined;
     const proyecto = proyectoParaTarea(proyectoId);
     if (proyecto === undefined) {
       informar(`no se pudo crear la tarea: el proyecto «${proyectoId}» no se pudo resolver`);
       return undefined;
     }
+    const lista = opciones.colaDeTareas.listar();
+    if (borrador !== undefined && !esBorradorLibre(borrador, lista)) {
+      // **No se cae a un id nuevo en silencio**, y esa es la decisión: seguir con un uuid
+      // dejaría los adjuntos que la persona acaba de subir colgando de una carpeta que
+      // ninguna tarea nombra — encolaría el trabajo sin ellos y sin decirlo.
+      informar("no se pudo crear la tarea: ese borrador de adjuntos no vale (o ya es una tarea)");
+      return undefined;
+    }
+    const id = borrador ?? randomUUID();
     const nueva: Tarea = {
-      id: randomUUID(),
+      id,
       proyecto,
       titulo: tituloDeTarea(peticion),
       peticion,
       encargo,
-      adjuntos: [],
+      // Del DISCO y no de lo que diga el cliente: es la única fuente que sabe qué llegó de
+      // verdad y cuánto pesa. Ver `TareasEnDisco.listarAdjuntos`.
+      adjuntos: opciones.colaDeTareas.listarAdjuntos(id),
       estado: "nuevo",
       creada: new Date().toISOString(),
     };
-    opciones.colaDeTareas.guardar([...opciones.colaDeTareas.listar(), nueva]);
+    opciones.colaDeTareas.guardar([...lista, nueva]);
     return { id: nueva.id };
+  };
+
+  /**
+   * ¿Se puede adoptar ese id de borrador? Segmento llano Y que no sea ya una tarea.
+   *
+   * Las dos mitades son la misma regla que la ruta de subida: el id lo elige el CLIENTE, así
+   * que la forma es lo que evita que se salga de la carpeta de la cola, y la segunda evita
+   * que un borrador aterrice sobre una tarea viva — una que el corredor puede estar
+   * ejecutando ahora mismo con su `/adjuntos/` montada.
+   */
+  const esBorradorLibre = (id: string, lista: readonly Tarea[]): boolean =>
+    nombreDeAdjuntoAceptable(id) && !lista.some((t) => t.id === id);
+
+  /**
+   * La augmentación: una llamada al modelo, bajo demanda, con el proyecto RESUELTO.
+   *
+   * Vive aquí y no en el despachador de mensajes por lo mismo que `atenderCrearTarea`: la
+   * resolución de `{id, raiz, nombre}` necesita el estado de este cierre, y el cliente solo
+   * manda el id. Sin proyecto resoluble no se pregunta a nadie: se contesta el error, que es
+   * lo que la ventana pinta — nunca se inventa una raíz.
+   */
+  const atenderAugmentar = async (
+    augmentar: NonNullable<OpcionesDeMontaje["augmentar"]>,
+    proyectoId: string,
+    texto: string,
+    borrador?: string
+  ): Promise<void> => {
+    const proyecto = proyectoParaTarea(proyectoId);
+    if (proyecto === undefined) {
+      emitir({
+        clase: "tarea",
+        accion: "augmentado",
+        error: `el proyecto «${proyectoId}» no se pudo resolver`,
+      });
+      return;
+    }
+    // Los adjuntos ya subidos, por NOMBRE y tipo. Del disco, igual que al crear.
+    const adjuntos =
+      borrador === undefined || opciones.colaDeTareas === undefined || !nombreDeAdjuntoAceptable(borrador)
+        ? []
+        : opciones.colaDeTareas
+            .listarAdjuntos(borrador)
+            .map((a) => ({ nombre: a.nombre, ...(a.mime === undefined ? {} : { mime: a.mime }) }));
+    try {
+      const encargo = await augmentar({ texto, proyecto, adjuntos });
+      emitir({ clase: "tarea", accion: "augmentado", encargo });
+    } catch (error) {
+      // **El MENSAJE si lo escribimos nosotros, el CÓDIGO si lo escribió el sistema**, que
+      // es la regla de `corredorDeTareas.ts#sinRutas`. Esto era `codigoDe(error)` a secas, y
+      // para un `ErrorDelAumentador` eso devuelve su `name`: la ventana enseñaba «No se pudo
+      // preparar el encargo (ErrorDelAumentador)», que no dice nada de lo que hay que
+      // arreglar. El mensaje de los nuestros está escrito para leerse y no lleva rutas; el de
+      // un error de Node sí las lleva, y de ese solo sale el `code`.
+      emitir({ clase: "tarea", accion: "augmentado", error: motivoLegible(error) });
+    }
   };
 
   /**
@@ -1447,6 +1554,20 @@ export function montarRutas(
   };
 
   /**
+   * El MENSAJE si lo escribimos nosotros, y el CÓDIGO si lo escribió el sistema.
+   *
+   * La misma función que `corredorDeTareas.ts#sinRutas`, y por el mismo motivo: un error de
+   * Node trae `code` y su mensaje lleva la ruta absoluta, mientras que uno escrito a mano en
+   * este repo no trae `code` y su mensaje es justo lo que hay que leer. `codigoDe` a secas
+   * convierte «falta la credencial para openai; usa /provider openai» en
+   * «ErrorDelAumentador», que es un nombre de clase enseñado a una persona.
+   */
+  const motivoLegible = (error: unknown): string =>
+    typeof error === "object" && error !== null && "code" in error
+      ? codigoDe(error)
+      : (error instanceof Error ? error.message : String(error)).split(/\r?\n/)[0]!.slice(0, 200);
+
+  /**
    * El árbol del proyecto abierto. Sin proyecto no hay pestaña que lo pida, así que no se
    * contesta nada; sin PUERTO sí se contesta, con error: un árbol que nunca llega deja al
    * cliente en «consultando…» para siempre, y un cargando eterno es un fallo mudo.
@@ -1904,6 +2025,74 @@ export function montarRutas(
     respuesta.end(leido.datos);
   });
 
+  /**
+   * `POST /adjunto?tarea=<id>&nombre=<fichero>` — los BYTES de un adjunto de tarea.
+   *
+   * Por HTTP y no por el cable, que lleva JSON. Las comprobaciones de `Host`, `Origin` y
+   * token las hace `servidor.ts` antes de llegar aquí, igual que a todas las rutas. Lo
+   * propio de esta son cuatro cosas:
+   *
+   * - **El nombre pasa la MISMA barrera de segmento llano que un artefacto**
+   *   (`nombreDeAdjuntoAceptable`, `core/adjuntos.ts`), y el id de la tarea también: de ellos
+   *   se compone una ruta de disco. `searchParams` decodifica una vez, así que un `%2e%2e`
+   *   llega ya como `..` y lo caza la lista blanca; un `%252e%252e` llega con el `%` dentro,
+   *   que tampoco es texto llano. La barrera se aplica además OTRA vez dentro del puerto
+   *   —sobre el texto y sobre el camino real—, que es donde se caza un enlace simbólico.
+   * - **Una subida no puede caer en la carpeta de una tarea que ya existe** (409). El id lo
+   *   elige el cliente, porque los bytes tienen que estar en disco ANTES de crear la tarea
+   *   (crear dispara `revisarTareas()` y el corredor puede arrancarla en el acto). Sin esta
+   *   guarda, un adjunto podría aterrizar en la carpeta de una tarea viva que el agente está
+   *   leyendo por `/adjuntos/` ahora mismo.
+   * - **El cuerpo se lee con el tope del ADJUNTO, no con el del cable** (1 MB): 413 en
+   *   cuanto se pasa, y se corta ahí — no se acumulan 20 MB para después rechazarlos.
+   * - **Ninguna respuesta lleva una ruta de la máquina** ni nada de lo recibido, que es la
+   *   regla de `POST /accion`.
+   */
+  servidor.registrarRuta("POST", RUTA_ADJUNTO, async (peticion, respuesta) => {
+    const responder = (codigo: number, texto: string): void => {
+      respuesta.writeHead(codigo, { "Content-Type": "text/plain; charset=utf-8" });
+      respuesta.end(texto);
+    };
+    const query = new URLSearchParams((peticion.url ?? "").split("?")[1] ?? "");
+    const tarea = query.get("tarea");
+    const nombre = query.get("nombre");
+    if (tarea === null || tarea === "" || nombre === null || nombre === "") {
+      responder(400, "faltan «tarea» o «nombre»");
+      return;
+    }
+    if (!nombreDeAdjuntoAceptable(tarea) || !nombreDeAdjuntoAceptable(nombre)) {
+      responder(403, "ese nombre no vale para un adjunto");
+      return;
+    }
+    if (opciones.colaDeTareas === undefined) {
+      responder(404, "esta consola no ejecuta tareas");
+      return;
+    }
+    if (opciones.colaDeTareas.listar().some((t) => t.id === tarea)) {
+      responder(409, "ese identificador ya es de una tarea: los adjuntos se suben antes de crearla");
+      return;
+    }
+    let datos: Buffer;
+    try {
+      datos = await leerCuerpoCrudo(peticion, TOPE_DE_ADJUNTO);
+    } catch {
+      // Se pasó del tope, o el flujo se cortó. NO se devuelve nada de lo recibido: es la
+      // misma regla que `POST /accion`, y aquí lo recibido son los bytes de un documento
+      // de una persona.
+      responder(413, "el adjunto es demasiado grande");
+      return;
+    }
+    const guardado = opciones.colaDeTareas.guardarAdjunto(tarea, nombre, datos);
+    if (!guardado.ok) {
+      // El motivo lo escribe el puerto y no lleva ninguna ruta (su test lo vigila). 413 para
+      // los dos topes —por fichero y por tarea— porque los dos son «no cabe».
+      responder(413, guardado.motivo ?? "no se pudo guardar el adjunto");
+      return;
+    }
+    respuesta.writeHead(204);
+    respuesta.end();
+  });
+
   servidor.registrarRuta("POST", RUTA_ACCION, async (peticion, respuesta) => {
     let mensaje: MensajeDelCliente;
     try {
@@ -1979,16 +2168,13 @@ export function montarRutas(
     }
     if (typeof mensaje === "object" && mensaje !== null && mensaje.clase === "tarea") {
       if (mensaje.accion === "crear" && opciones.colaDeTareas !== undefined) {
-        const creada = atenderCrearTarea(mensaje.proyecto, mensaje.peticion, mensaje.encargo);
+        const creada = atenderCrearTarea(mensaje.proyecto, mensaje.peticion, mensaje.encargo, mensaje.borrador);
         if (creada !== undefined) {
           opciones.revisarTareas?.();
           emitirTareas();
         }
       } else if (mensaje.accion === "augmentar" && opciones.augmentar !== undefined) {
-        void opciones
-          .augmentar(mensaje.proyecto, mensaje.peticion)
-          .then((encargo) => emitir({ clase: "tarea", accion: "augmentado", encargo }))
-          .catch((error) => emitir({ clase: "tarea", accion: "augmentado", error: codigoDe(error) }));
+        void atenderAugmentar(opciones.augmentar, mensaje.proyecto, mensaje.peticion, mensaje.borrador);
       } else if (mensaje.accion === "feedback" && opciones.colaDeTareas !== undefined) {
         atenderFeedbackDeTarea(mensaje.id, mensaje.texto);
         opciones.revisarTareas?.();
@@ -2231,6 +2417,77 @@ export function fuentesDelJuez(raiz: string): FuentesDeEleccion {
   };
 }
 
+/**
+ * Cuánta memoria de proyecto se le da al aumentador.
+ *
+ * Es CONTEXTO de una llamada, no un fichero que servir: `.xonecode/memoria.md` lo escribe el
+ * agente turno tras turno y puede crecer sin tope. Y el árbol del proyecto ya se descartó por
+ * lo mismo (§7 del diseño: «el árbol entero sería contexto por gastar»); dejar la memoria sin
+ * acotar reintroduciría el problema por la puerta de al lado.
+ */
+export const TOPE_DE_MEMORIA = 4_000;
+
+/**
+ * Lo que se le añade a la petición del aumentador leyendo el DISCO por la raíz: la rama del
+ * proyecto y su memoria.
+ *
+ * **Por la raíz y no por las fuentes**, la trampa que `cloudstudioDelProyecto` ya resolvió:
+ * en la consola web `FuentesDeEleccion.proyecto` no se rellena nunca. Y lo que el disco no
+ * dice NO se pone —ausente es «no hay»—: un `rama: undefined` o un `memoria: ""` en el prompt
+ * harían que el modelo hablara de una rama sin nombre como si fuera un dato.
+ *
+ * Nada de esto lanza. Que no haya memoria, o que el `config.json` no se pueda leer, no puede
+ * impedir redactar un encargo.
+ */
+export function contextoDelProyecto(raiz: string): { rama?: string; memoria?: string } {
+  const rama = cloudstudioDelProyecto(raiz)?.rama;
+  let memoria: string | undefined;
+  try {
+    const leido = readFileSync(rutaMemoriaDeProyecto(raiz), "utf8").trim();
+    if (leido !== "") memoria = leido.slice(0, TOPE_DE_MEMORIA);
+  } catch {
+    // No hay memoria, o no se puede leer: no se afirma ninguna.
+  }
+  return {
+    ...(rama === undefined || rama === "" ? {} : { rama }),
+    ...(memoria === undefined ? {} : { memoria }),
+  };
+}
+
+/**
+ * La costura entre el cable y el aumentador: convierte lo que `montarRutas` resuelve
+ * —proyecto y adjuntos— en la `PeticionDeTarea` del puerto, añadiéndole lo que solo se sabe
+ * mirando el disco.
+ *
+ * **Extraída y exportada, no inline en `arrancarConsolaWeb`**, por la misma razón que
+ * `revisionConGit` y `fuentesDelJuez`: en esta tanda cuatro veces una composición de
+ * producción vivía en un cierre que todos sus tests doblan, y una regla se quedó sin montar
+ * con todo en verde. Lo que aquí se caería sin dar ni un síntoma es la mitad del contexto: un
+ * encargo redactado sin la rama ni la memoria del proyecto se ve perfectamente normal.
+ *
+ * El error se PROPAGA: quien lo convierte en palabras para la ventana es `atenderAugmentar`,
+ * que aplica la regla del mensaje-o-código. Tragárselo aquí dejaría a la ventana con un
+ * encargo vacío y sin motivo.
+ */
+export function augmentacionCableada(opciones: {
+  aumentador: AumentadorPort;
+  /** Por parámetro para poder probar esta composición sin tocar disco. Por omisión,
+   *  `contextoDelProyecto`; ausente del todo = sin rama ni memoria. */
+  contexto?: (raiz: string) => { rama?: string; memoria?: string };
+}): NonNullable<OpcionesDeMontaje["augmentar"]> {
+  return async ({ texto, proyecto, adjuntos }) => {
+    const extra = opciones.contexto?.(proyecto.raiz) ?? {};
+    return opciones.aumentador.augmentar({
+      texto,
+      // El `id` del proyecto NO viaja al modelo: es un identificador de CloudStudio y para
+      // redactar no aporta nada. Sí la raíz, que es con lo que se resuelve el papel.
+      proyecto: { nombre: proyecto.nombre, raiz: proyecto.raiz, ...(extra.rama === undefined ? {} : { rama: extra.rama }) },
+      adjuntos,
+      ...(extra.memoria === undefined ? {} : { memoria: extra.memoria }),
+    });
+  };
+}
+
 export function construirCorredorDeTareasCableado(opciones: {
   vestibulo: Pick<Vestibulo, "abrirParaTarea" | "proyectoAbierto" | "sesionesDe">;
   /** La fábrica de `OpcionesDeArranque.tareas`. Ausente = esta ejecución no ejecuta tareas. */
@@ -2279,7 +2536,13 @@ export function construirCorredorDeTareasCableado(opciones: {
           // siempre con las mismas barreras que el de una persona.
           // `sesion` reenviada: es lo que hace que reanudar (un reintento, o un feedback)
           // reabra el MISMO hilo en vez de uno en blanco. Ver `corredorDeTareas.ts`.
-          abrirParaTarea: async (raiz, sesion) => consolaParaTarea(await opciones.vestibulo.abrirParaTarea(raiz, sesion)),
+          // `sesion` y `adjuntos` reenviadas TAL CUAL, y las dos por el mismo motivo: quien
+          // sabe de qué tarea es esta apertura es el corredor. La primera hace que reanudar
+          // siga la MISMA conversación; la segunda es lo que monta `/adjuntos/` en el
+          // backend del agente (`core/adjuntos.ts`). Dejarse cualquiera de las dos no da
+          // ningún síntoma: un hilo en blanco, o unos adjuntos que el agente no puede abrir.
+          abrirParaTarea: async (raiz, sesion, adjuntos) =>
+            consolaParaTarea(await opciones.vestibulo.abrirParaTarea(raiz, sesion, adjuntos)),
           // Se lee de disco en cada pasada: cambiar el tope en Ajustes se nota sin
           // reiniciar nada, en la siguiente ronda de planificación.
           concurrencia: concurrenciaDeTareas,
@@ -2362,6 +2625,26 @@ export function construirCorredorDeTareasCableado(opciones: {
   };
 }
 
+/**
+ * El cuerpo en BYTES, con su propio tope.
+ *
+ * No se reutiliza `leerCuerpo`: ese acota a `TOPE_DE_CUERPO` (1 MB) y devuelve `utf8`, o sea
+ * las dos cosas equivocadas para un adjunto — un PNG de 3 MB se rechazaría, y pasarlo por
+ * utf8 lo destrozaría. El tope se corta EN CUANTO se pasa y no al final: acumular 20 MB para
+ * después decir que no caben sería pagar la memoria del rechazo.
+ */
+async function leerCuerpoCrudo(peticion: IncomingMessage, tope: number): Promise<Buffer> {
+  const trozos: Buffer[] = [];
+  let total = 0;
+  for await (const trozo of peticion) {
+    const buffer = Buffer.from(trozo as Buffer);
+    total += buffer.length;
+    if (total > tope) throw new Error("cuerpo demasiado grande");
+    trozos.push(buffer);
+  }
+  return Buffer.concat(trozos);
+}
+
 async function leerCuerpo(peticion: IncomingMessage): Promise<string> {
   const trozos: Buffer[] = [];
   let total = 0;
@@ -2395,7 +2678,13 @@ export interface OpcionesDeArranque {
    * no se importa: `cli/main.ts` ya carga este módulo, e importarlo de vuelta sería un
    * ciclo entre el despachador y la piel que monta.
    */
-  crearEjecutor?: (alAbrirSesion: (sesion: SesionCerrable) => void) => EjecutorDeTurno;
+  crearEjecutor?: (
+    alAbrirSesion: (sesion: SesionCerrable) => void,
+    /** Lo que depende de la CONSOLA y no de su raíz: hoy la carpeta de adjuntos de una
+     *  tarea. La misma forma que `OpcionesDelVestibulo.crearEjecutor`, porque esto se le
+     *  pasa tal cual. */
+    opciones?: { adjuntos?: string }
+  ) => EjecutorDeTurno;
   /** Lo que la consola de proyecto necesita y depende de la raíz (`/sync`, los escritores). */
   dependenciasDeProyecto?: (raiz: string) => Partial<Consola>;
   /**
@@ -2601,6 +2890,32 @@ export async function arrancarConsolaWeb(opciones: OpcionesDeArranque): Promise<
     proveedoresPersonalizados: proveedoresPersonalizados,
     guardarProveedor: (declarado) => guardarProveedorPersonalizado(declarado),
     borrarProveedor: (slug) => borrarProveedorPersonalizado(slug),
+    /**
+     * El AUMENTADOR de la ventana de crear una tarea (`agent/aumentador.ts`), con el papel
+     * `trabajo` — es una tarea de redacción, no una clasificación.
+     *
+     * Tres cosas que se deciden aquí:
+     * - **La composición vive en `augmentacionCableada` y no inline**, por lo mismo que
+     *   `revisionConGit` y `fuentesDelJuez`: es la quinta vez en esta tanda que hace falta
+     *   decirlo, y lo que se caería sin síntoma es la mitad del contexto del encargo.
+     * - **Los `Modelos` se construyen en CADA llamada**, igual que los del juez: el
+     *   asistente de cuenta y `/provider` escriben la credencial mientras el proceso vive, y
+     *   uno capturado al arrancar se quedaría con el reparto de antes. Y con
+     *   `fuentesDelJuez(raiz)`, que es «las fuentes de ESE proyecto»: sin la capa de
+     *   proyecto, un `config.json` que apunte `trabajo` a otro modelo se ignoraría.
+     * - **Con `--guion` se monta el DOBLE**, no el real: esa bandera significa «sin gastar
+     *   ni conectar», y el doble dice en el propio encargo que es de pega (`[DOBLE]`).
+     */
+    augmentar: augmentacionCableada({
+      aumentador:
+        opciones.guion === true
+          ? new AumentadorGuionizado()
+          : crearAumentador({
+              invocar: (papel, prompt, raiz) =>
+                invocarParaAumentar(new Modelos(fuentesDelJuez(raiz), proveedoresPersonalizados))(papel, prompt, raiz),
+            }),
+      contexto: contextoDelProyecto,
+    }),
   });
 
   // Con las rutas ya montadas: la reconciliación y el primer despacho cambian la cola, y

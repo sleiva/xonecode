@@ -1088,3 +1088,41 @@ describe("el tope de rondas es de quien monta la consola, y el turno lo CUENTA",
     expect(r.motivoSinVerificar).toContain("no tiene verificador");
   });
 });
+
+/**
+ * El HOP de los adjuntos: `abrirSesionReal` → `construirAgente`.
+ *
+ * `construirAgente` está simulado en este fichero, así que lo que se afirma aquí es
+ * exactamente lo que le llega: la carpeta que se le pasó, sin inventarse ninguna cuando no
+ * la hay. El otro extremo —que `construirAgente` la MONTE— tiene su propio test
+ * (`xoneAgent.adjuntos.test.ts`), y hacen falta los dos: es la clase de cableado que en este
+ * plan ha dejado cuatro veces una regla sin montar con todos los tests en verde.
+ */
+describe("la carpeta de adjuntos llega al agente", () => {
+  it("se le pasa tal cual la que reciba la sesión", async () => {
+    mocks.construirAgente.mockImplementation(() => agenteFalso());
+    await abrirSesionReal({
+      raiz: "/tmp/turno-real-test",
+      modelos: new ModeloGuionizado(),
+      skills: new SkillsEnMemoria(),
+      entorno: entornoFalso,
+      adjuntos: "/casa/.xonecode/tareas/t1/adjuntos",
+    });
+    expect(mocks.construirAgente).toHaveBeenCalledWith(
+      expect.objectContaining({ adjuntos: "/casa/.xonecode/tareas/t1/adjuntos" })
+    );
+  });
+
+  it("y sin ella, el campo NO va: ausente es «no hay», no una carpeta vacía", async () => {
+    // La diferencia importa: `backendDeAgente` monta `/adjuntos/` si el campo llega, y una
+    // cadena vacía montaría el cwd del proceso como si fueran los adjuntos de alguien.
+    mocks.construirAgente.mockImplementation(() => agenteFalso());
+    await abrirSesionReal({
+      raiz: "/tmp/turno-real-test",
+      modelos: new ModeloGuionizado(),
+      skills: new SkillsEnMemoria(),
+      entorno: entornoFalso,
+    });
+    expect(mocks.construirAgente.mock.calls.at(-1)?.[0]).not.toHaveProperty("adjuntos");
+  });
+});

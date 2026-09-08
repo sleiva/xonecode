@@ -186,3 +186,33 @@ describe("el tope de rondas de la consola llega hasta la sesión", () => {
     expect(deTarea.topeDeAprobaciones).toBeUndefined();
   });
 });
+
+/**
+ * El HOP de los adjuntos: `crearEjecutorReal` → `abrirSesionReal`.
+ *
+ * La carpeta la sabe quien ABRIÓ la consola —el corredor de tareas, que es el único que
+ * conoce la tarea—, así que llega a la FÁBRICA y no a la llamada del turno: es un dato de la
+ * consola, igual que el checkpointer. Y aquí es donde el hilo entero se puede cortar sin que
+ * nada chiste, que es por lo que este test existe.
+ */
+describe("la carpeta de adjuntos llega desde la fábrica del ejecutor", () => {
+  beforeEach(() => {
+    dobles.abrirSesionReal.mockImplementation(async () => ({ turno: async () => ({ bitacora: { todo: [] }, cambios: [] }) }));
+  });
+
+  it("se le pasa a `abrirSesionReal` la que reciba la fábrica", async () => {
+    const ejecutor = crearEjecutorReal(() => {}, undefined, undefined, "/casa/.xonecode/tareas/t1/adjuntos");
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    await ejecutor("haz algo", ESTADO, consolaDeMentira() as any);
+    expect(dobles.abrirSesionReal).toHaveBeenCalledWith(
+      expect.objectContaining({ adjuntos: "/casa/.xonecode/tareas/t1/adjuntos" })
+    );
+  });
+
+  it("y sin ella el campo NO va: ausente es «no hay adjuntos», no una carpeta vacía", async () => {
+    const ejecutor = crearEjecutorReal(() => {});
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    await ejecutor("haz algo", ESTADO, consolaDeMentira() as any);
+    expect(dobles.abrirSesionReal.mock.calls.at(-1)?.[0]).not.toHaveProperty("adjuntos");
+  });
+});

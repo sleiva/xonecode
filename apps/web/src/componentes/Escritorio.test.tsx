@@ -306,4 +306,52 @@ describe("Escritorio: el kanban de tareas", () => {
     fireEvent.click(screen.getByRole("button", { name: /enviar feedback/i }));
     expect(alEnviarFeedback).toHaveBeenCalledWith("t1", "sí, con histórico");
   });
+
+  /**
+   * «Nueva tarea» vive en la tarjeta del proyecto, junto a «Nueva sesión», porque son la
+   * misma clase de decisión sobre el mismo objeto: qué hacer con ESTE proyecto. El kanban de
+   * abajo dice «se crean desde un proyecto» y esto es lo que lo hace verdad — sin este botón
+   * la única puerta sería la pestaña de tareas del proyecto, que solo existe si ya hay
+   * alguna: no habría forma de crear la primera.
+   */
+  it("cada proyecto ofrece «Nueva tarea», y dice de cuál", () => {
+    const alNuevaTarea = vi.fn();
+    render(
+      <Escritorio
+        proyectos={[{ id: "p1", nombre: "AppDemo", local: true }]}
+        alAbrirSesion={() => {}}
+        alNuevaSesion={() => {}}
+        alNuevaTarea={alNuevaTarea}
+        alAbrirAjustes={() => {}}
+      />
+    );
+    fireEvent.click(screen.getByRole("button", { name: /nueva tarea/i }));
+    expect(alNuevaTarea).toHaveBeenCalledWith("p1");
+  });
+
+  it("sin manejador no se pinta: un control sin nada detrás no se ofrece", () => {
+    render(
+      <Escritorio
+        proyectos={[{ id: "p1", nombre: "AppDemo", local: true }]}
+        alAbrirSesion={() => {}}
+        alNuevaSesion={() => {}}
+        alAbrirAjustes={() => {}}
+      />
+    );
+    expect(screen.queryByRole("button", { name: /nueva tarea/i })).toBeNull();
+  });
+
+  it("y sin cable se apaga, como «Nueva sesión»: crear una tarea manda algo al servidor", () => {
+    render(
+      <Escritorio
+        proyectos={[{ id: "p1", nombre: "AppDemo", local: true }]}
+        alAbrirSesion={() => {}}
+        alNuevaSesion={() => {}}
+        alNuevaTarea={() => {}}
+        alAbrirAjustes={() => {}}
+        conectado={false}
+      />
+    );
+    expect((screen.getByRole("button", { name: /nueva tarea/i }) as HTMLButtonElement).disabled).toBe(true);
+  });
 });

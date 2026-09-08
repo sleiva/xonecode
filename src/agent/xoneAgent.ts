@@ -51,6 +51,16 @@ export interface OpcionesDelAgente {
    * proyecto — que es lo que pasaba antes de que esto existiera.
    */
   artefactos?: { carpeta: string; alEscribir: (a: Artefacto) => void };
+  /**
+   * La carpeta de los ADJUNTOS de una tarea (`/adjuntos/` para el agente), de solo lectura.
+   * Es de `~/.xonecode/tareas/<id>/`, o sea fuera del proyecto: ver `core/adjuntos.ts`.
+   *
+   * Ausente = no se monta, que es el caso de toda sesión de persona y de toda tarea sin
+   * adjuntos. Entonces esa ruta no es nada, y lo que evita que un `write_file` a
+   * `/adjuntos/x` acabe siendo un fichero del proyecto es la denegación incondicional de
+   * `permisosDe` (medido: sin ella lo era).
+   */
+  adjuntos?: string;
 }
 
 /**
@@ -168,6 +178,7 @@ export async function construirAgente(opciones: OpcionesDelAgente): Promise<unkn
     raiz: opciones.raiz,
     ficheros: opciones.ficheros,
     ...(opciones.artefactos === undefined ? {} : { artefactos: opciones.artefactos }),
+    ...(opciones.adjuntos === undefined ? {} : { adjuntos: opciones.adjuntos }),
   });
 
   // Si no hay tracker, no se añade el middleware: es opcional a propósito arriba.

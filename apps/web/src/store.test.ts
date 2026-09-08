@@ -820,4 +820,34 @@ describe("la cola de tareas", () => {
     // La que nunca ha pedido feedback no lleva el campo: ausente, no `[]`.
     expect(t2!.feedback).toBeUndefined();
   });
+
+  /**
+   * El ENCARGO propuesto por el aumentador, y la mitad que hay que contar: **el mensaje va a
+   * TODOS los clientes** (el cable habla con todos, no con el último), así que el store
+   * guarda el último y quien abre la ventana de crear lo LIMPIA — si no, un encargo que pidió
+   * otra pestaña prerrellenaría el campo de esta.
+   */
+  describe("el encargo augmentado", () => {
+    it("un encargo llega y se guarda; el fallo llega como motivo, nunca los dos", () => {
+      const s = crearStoreDelCliente();
+      s.aplicar({ clase: "tarea", accion: "augmentado", encargo: "## Objetivo\nBuscar por NIF" });
+      expect(s.leer().encargoPropuesto).toEqual({ encargo: "## Objetivo\nBuscar por NIF" });
+      s.aplicar({ clase: "tarea", accion: "augmentado", error: "falta la credencial para openai" });
+      expect(s.leer().encargoPropuesto).toEqual({ error: "falta la credencial para openai" });
+    });
+
+    it("se puede LIMPIAR: la ventana lo hace al abrirse, porque este mensaje va a todas las pestañas", () => {
+      const s = crearStoreDelCliente();
+      s.aplicar({ clase: "tarea", accion: "augmentado", encargo: "E" });
+      s.limpiarEncargoPropuesto();
+      expect(s.leer().encargoPropuesto).toBeUndefined();
+    });
+
+    it("lo que no trae ni encargo ni error no cambia nada: campo a campo, como todo lo de aquí", () => {
+      const s = crearStoreDelCliente();
+      s.aplicar({ clase: "tarea", accion: "augmentado", encargo: "E" });
+      s.aplicar({ clase: "tarea", accion: "augmentado" } as never);
+      expect(s.leer().encargoPropuesto).toEqual({ encargo: "E" });
+    });
+  });
 });
