@@ -484,6 +484,12 @@ export function crearEjecutorReal(
         // porque `interactivo` es de la consola que esté delante. Los settings se releen
         // cada vez por lo mismo: la alternativa es que el cambio no surta efecto hasta
         // reabrir, y la mitad de las veces eso sería en la dirección peligrosa.
+        // Cuántas rondas de aprobación admite un turno de ESTA consola. La pone quien la
+        // monta porque es quien sabe quién está detrás (ver `Consola.topeDeAprobaciones`);
+        // ausente y `abrirSesionReal` usa el `MAX_APPROVAL_ROUNDS` de siempre.
+        ...(consolaReal.topeDeAprobaciones === undefined
+          ? {}
+          : { topeDeRondas: consolaReal.topeDeAprobaciones }),
         sinAprobacion: () =>
           seAplicaSinAprobacion({
             raiz: estado.raiz,
@@ -545,7 +551,32 @@ export function crearEjecutorReal(
 
     // La piel del turno: la de la consola si la aporta (la TUI), y el render stdio de
     // siempre si no — mismo reparto que `ejecutarTurnoGuionizado`.
-    await sesion.turno(peticion, consolaReal.piel?.() ?? crearPielStdio(consolaReal.escribir));
+    const resultado = await sesion.turno(
+      peticion,
+      consolaReal.piel?.() ?? crearPielStdio(consolaReal.escribir)
+    );
+    /**
+     * **Y se DEVUELVE lo que el turno sabe de sí mismo**, que antes se tiraba aquí.
+     *
+     * Era una deuda medida: `EjecutorDeTurno` devolvía `void`, así que el `cortadoPorTope`
+     * —y con él el hecho de que quedaron escrituras sin aplicar y el veredicto del
+     * verificador— morían en esta línea. Con las tareas de fondo aplicando escrituras
+     * solas, eso se veía en el kanban: cuatro ficheros escritos, una escritura abandonada,
+     * el verificador sin correr ni una vez, y la tarea diciendo «terminada». Quien decide
+     * si eso es entregable es `core/entrega.ts`; aquí solo se abre el canal.
+     *
+     * Se reenvían los campos de `ResultadoDeTurno` y NO el objeto entero: la bitácora y
+     * los `Cambio` son piezas de `agent/` que no tienen por qué cruzar hasta el corredor
+     * de tareas, y `cambios` lleva rutas del proyecto que nadie de ahí necesita.
+     */
+    return {
+      verificador: resultado.verificador,
+      pendientes: resultado.pendientes,
+      ...(resultado.hallazgos === undefined ? {} : { hallazgos: resultado.hallazgos }),
+      ...(resultado.motivoSinVerificar === undefined
+        ? {}
+        : { motivoSinVerificar: resultado.motivoSinVerificar }),
+    };
   };
 }
 

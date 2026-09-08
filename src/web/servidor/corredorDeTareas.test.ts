@@ -16,11 +16,39 @@ import {
   type ConsolaParaTarea,
 } from "./corredorDeTareas.js";
 import { crearVestibulo } from "./vestibulo.js";
-import { fotoDeApertura } from "../../agent/sesionGit.js";
+import { cambiosDeSesion, fotoDeApertura } from "../../agent/sesionGit.js";
 import { CatalogoModelosEnMemoria } from "../../core/ports.js";
 import type { Consola } from "../../cli/consola.js";
 import type { Tarea } from "../../core/tareas.js";
+import type { ResultadoDeTurno, VeredictoDeTarea } from "../../core/entrega.js";
+import type { CasoDeJuez, JuezDeTareaPort } from "../../core/ports.js";
+import { ErrorDelJuezDeTarea } from "../../agent/juezDeTarea.js";
 import type { TareasEnDisco } from "../../agent/tareasEnDisco.js";
+
+/** Un juez de mentira que siempre dice lo mismo, apuntando lo que se le preguntó. */
+function juezQueDice(veredicto: VeredictoDeTarea): JuezDeTareaPort & { casos: CasoDeJuez[] } {
+  const casos: CasoDeJuez[] = [];
+  return {
+    casos,
+    juzgar: async (caso) => {
+      casos.push(caso);
+      return veredicto;
+    },
+  };
+}
+
+/**
+ * Las dos piezas de la ENTREGA en verde, que se le pasan a todos los corredores de este
+ * fichero salvo a los de la batería que las prueba.
+ *
+ * Son OBLIGATORIAS en el tipo a propósito —fail-closed por tipo, como
+ * `PoliticaDeAprobacion`—, así que sin ellas ninguna tarea se entregaría y todos estos
+ * tests, que son sobre el lazo y no sobre la puerta, dirían «requiere-atencion».
+ */
+const ENTREGA_VERDE = {
+  juez: juezQueDice({ veredicto: "verde" as const, resumen: "hace lo que pide" }),
+  revisable: async () => true,
+};
 
 /** La cola en memoria, con el cerrojo y su dueño controlables desde el test. */
 function discoDeMentira(
@@ -72,14 +100,31 @@ function proyectoDeMentira() {
   const aparcadores: ((motivo: string) => void)[] = [];
   const autorizadores: ((ficheros: readonly string[]) => void)[] = [];
   interface Viva {
-    resolver: () => void;
+    resolver: (resultado: ResultadoDeTurno | undefined) => void;
     rechazar: (error: unknown) => void;
   }
   const vivas: Viva[] = [];
   return {
     encargos,
     cierres,
-    acabar: () => vivas.pop()?.resolver(),
+    /**
+     * El turno acaba, informando de cómo acabó. Por omisión, como un turno que fue bien:
+     * verificador en verde y nada pendiente — porque casi todos estos tests son sobre el
+     * LAZO (el cerrojo, la reconciliación, el registro) y no sobre la puerta de la entrega,
+     * que tiene su propia batería. Lo importante es que **`undefined` sigue siendo posible**
+     * y significa «no informó»: es lo que devuelve el ejecutor guionizado, y por eso hay un
+     * test suyo.
+     */
+    acabar: (resultado: ResultadoDeTurno = { verificador: "verde", pendientes: 0 }) =>
+      vivas.pop()?.resolver(resultado),
+    /**
+     * El turno acaba SIN informar de nada, que es lo que hace el ejecutor guionizado y
+     * cualquier piel que no reenvíe el retorno. Es un método aparte y no un `acabar(undefined)`
+     * porque un parámetro por omisión se aplica también al `undefined` explícito: con eso,
+     * el caso que hay que probar —«no se sabe» no es «todo bien»— se convertía en el verde
+     * de al lado sin que nada chistara.
+     */
+    acabarMudo: () => vivas.pop()?.resolver(undefined),
     romper: (error: unknown) => vivas.pop()?.rechazar(error),
     aparcar: (motivo: string) => aparcadores.at(-1)?.(motivo),
     /** Lo que la consola de tarea apunta al AUTORIZAR una escritura sin aprobación. */
@@ -93,7 +138,7 @@ function proyectoDeMentira() {
           encargos.push(encargo);
           aparcadores.push(aparcar);
           if (autorizado !== undefined) autorizadores.push(autorizado);
-          await new Promise<void>((resolver, rechazar) => {
+          return await new Promise<ResultadoDeTurno | undefined>((resolver, rechazar) => {
             viva = { resolver, rechazar };
             vivas.push(viva);
           });
@@ -120,7 +165,7 @@ describe("lo que una tarea AUTORIZÓ se guarda con su estado", () => {
   it("una tarea que autoriza y termina deja los ficheros en el índice, RELATIVOS", async () => {
     const { disco, estado } = discoDeMentira([TAREA()]);
     const p = proyectoDeMentira();
-    const corredor = crearCorredorDeTareas({ disco, abrirParaTarea: p.abrir, pid: 1, concurrencia: () => 1 });
+    const corredor = crearCorredorDeTareas({ ...ENTREGA_VERDE, disco, abrirParaTarea: p.abrir, pid: 1, concurrencia: () => 1 });
     await corredor.arrancar();
     await corredor.asentar();
     // Dos tandas, como un turno de verdad: se autoriza en varias rondas de aprobación.
@@ -147,7 +192,7 @@ describe("lo que una tarea AUTORIZÓ se guarda con su estado", () => {
     // las dos cosas hacen falta para poder atenderla.
     const { disco, estado } = discoDeMentira([TAREA()]);
     const p = proyectoDeMentira();
-    const corredor = crearCorredorDeTareas({ disco, abrirParaTarea: p.abrir, pid: 1, concurrencia: () => 1 });
+    const corredor = crearCorredorDeTareas({ ...ENTREGA_VERDE, disco, abrirParaTarea: p.abrir, pid: 1, concurrencia: () => 1 });
     await corredor.arrancar();
     await corredor.asentar();
     p.autorizar(["/app.xne"]);
@@ -166,7 +211,7 @@ describe("lo que una tarea AUTORIZÓ se guarda con su estado", () => {
   it("un turno que no autorizó nada lo dice con `[]`, que NO es lo mismo que no constar", async () => {
     const { disco, estado } = discoDeMentira([TAREA()]);
     const p = proyectoDeMentira();
-    const corredor = crearCorredorDeTareas({ disco, abrirParaTarea: p.abrir, pid: 1, concurrencia: () => 1 });
+    const corredor = crearCorredorDeTareas({ ...ENTREGA_VERDE, disco, abrirParaTarea: p.abrir, pid: 1, concurrencia: () => 1 });
     await corredor.arrancar();
     await corredor.asentar();
     p.acabar();
@@ -183,7 +228,7 @@ describe("lo que una tarea AUTORIZÓ se guarda con su estado", () => {
      * como «corrió y no tocó nada».
      */
     const { disco, estado } = discoDeMentira([TAREA()]);
-    const corredor = crearCorredorDeTareas({
+    const corredor = crearCorredorDeTareas({ ...ENTREGA_VERDE,
       disco,
       abrirParaTarea: async () => {
         throw new Error("falta su .xonecode/config.json");
@@ -236,7 +281,7 @@ describe("lo que una tarea AUTORIZÓ se guarda con su estado", () => {
       },
     };
     const p = proyectoDeMentira();
-    const corredor = crearCorredorDeTareas({ disco, abrirParaTarea: p.abrir, pid: 1, concurrencia: () => 1 });
+    const corredor = crearCorredorDeTareas({ ...ENTREGA_VERDE, disco, abrirParaTarea: p.abrir, pid: 1, concurrencia: () => 1 });
     await corredor.arrancar();
     await corredor.asentar();
     p.autorizar(["/app.xne", "/src/lista.js"]);
@@ -255,7 +300,7 @@ describe("lo que una tarea AUTORIZÓ se guarda con su estado", () => {
   it("el corte por cierre también lo guarda: la consola se fue, lo escrito sigue escrito", async () => {
     const { disco, estado } = discoDeMentira([TAREA()]);
     const p = proyectoDeMentira();
-    const corredor = crearCorredorDeTareas({
+    const corredor = crearCorredorDeTareas({ ...ENTREGA_VERDE,
       disco,
       abrirParaTarea: p.abrir,
       pid: 1,
@@ -279,7 +324,7 @@ describe("crearCorredorDeTareas", () => {
     // Dejarla diciendo «en proceso» sin nadie ejecutándola sería afirmar lo que no se sabe.
     const { disco, estado } = discoDeMentira([TAREA({ estado: "en-proceso", pid: 999 })]);
     const p = proyectoDeMentira();
-    const corredor = crearCorredorDeTareas({ disco, abrirParaTarea: p.abrir, pid: 1, concurrencia: () => 1 });
+    const corredor = crearCorredorDeTareas({ ...ENTREGA_VERDE, disco, abrirParaTarea: p.abrir, pid: 1, concurrencia: () => 1 });
     await corredor.arrancar();
     expect(estado()[0]).toMatchObject({ estado: "requiere-atencion", motivo: expect.stringMatching(/cerró/i) });
     await corredor.parar();
@@ -299,7 +344,7 @@ describe("crearCorredorDeTareas", () => {
       TAREA({ id: "mia", estado: "en-proceso", pid: 1, proyecto: { id: "pb", raiz: "/w/B", nombre: "B" } }),
     ]);
     const p = proyectoDeMentira();
-    const corredor = crearCorredorDeTareas({ disco, abrirParaTarea: p.abrir, pid: 1, concurrencia: () => 2 });
+    const corredor = crearCorredorDeTareas({ ...ENTREGA_VERDE, disco, abrirParaTarea: p.abrir, pid: 1, concurrencia: () => 2 });
     await corredor.arrancar();
     expect(estado().map((t) => t.estado)).toEqual(["requiere-atencion", "requiere-atencion"]);
     // Y la sesión se CONSERVA: es lo que deja abrir la conversación para ver por dónde iba.
@@ -309,7 +354,7 @@ describe("crearCorredorDeTareas", () => {
   it("la reconciliación deja el motivo ACCIONABLE y con el pid, no un «Error:» de Node", async () => {
     const { disco, estado } = discoDeMentira([TAREA({ estado: "en-proceso", pid: 999, sesion: "s7" })]);
     const p = proyectoDeMentira();
-    const corredor = crearCorredorDeTareas({ disco, abrirParaTarea: p.abrir, pid: 1, concurrencia: () => 1 });
+    const corredor = crearCorredorDeTareas({ ...ENTREGA_VERDE, disco, abrirParaTarea: p.abrir, pid: 1, concurrencia: () => 1 });
     await corredor.arrancar();
     const motivo = estado()[0]!.motivo!;
     // MEDIDO (ver el informe): un turno cortado a mitad no deja NADA en el índice de
@@ -334,7 +379,7 @@ describe("crearCorredorDeTareas", () => {
     const { disco, estado } = discoDeMentira([TAREA({ estado: "en-proceso", pid: 999, sesion: "s9" })]);
     const olvidados: string[] = [];
     const p = proyectoDeMentira();
-    const corredor = crearCorredorDeTareas({
+    const corredor = crearCorredorDeTareas({ ...ENTREGA_VERDE,
       disco,
       abrirParaTarea: p.abrir,
       pid: 1,
@@ -356,7 +401,7 @@ describe("crearCorredorDeTareas", () => {
     const { disco, estado } = discoDeMentira([TAREA({ estado: "en-proceso", pid: 999, sesion: "s9" })]);
     const olvidados: string[] = [];
     const p = proyectoDeMentira();
-    const corredor = crearCorredorDeTareas({
+    const corredor = crearCorredorDeTareas({ ...ENTREGA_VERDE,
       disco,
       abrirParaTarea: p.abrir,
       pid: 1,
@@ -377,7 +422,7 @@ describe("crearCorredorDeTareas", () => {
     // `historica` cuando no se puede preguntar al checkpointer.
     const { disco, estado } = discoDeMentira([TAREA({ estado: "en-proceso", pid: 999, sesion: "s9" })]);
     const p = proyectoDeMentira();
-    const corredor = crearCorredorDeTareas({ disco, abrirParaTarea: p.abrir, pid: 1, concurrencia: () => 1 });
+    const corredor = crearCorredorDeTareas({ ...ENTREGA_VERDE, disco, abrirParaTarea: p.abrir, pid: 1, concurrencia: () => 1 });
     await corredor.arrancar();
     await corredor.asentar();
     expect(estado()[0]!.sesion).toBe("s9");
@@ -390,7 +435,7 @@ describe("crearCorredorDeTareas", () => {
     const olvidados: string[] = [];
     const { disco, estado } = discoDeMentira([TAREA()]);
     const p = proyectoDeMentira();
-    const corredor = crearCorredorDeTareas({
+    const corredor = crearCorredorDeTareas({ ...ENTREGA_VERDE,
       disco,
       abrirParaTarea: p.abrir,
       pid: 1,
@@ -412,7 +457,7 @@ describe("crearCorredorDeTareas", () => {
     const dichos: string[] = [];
     const { disco, estado } = discoDeMentira([TAREA()], { tomado: false, dePid: 77 });
     const p = proyectoDeMentira();
-    const corredor = crearCorredorDeTareas({
+    const corredor = crearCorredorDeTareas({ ...ENTREGA_VERDE,
       disco,
       abrirParaTarea: p.abrir,
       pid: 1,
@@ -435,7 +480,7 @@ describe("crearCorredorDeTareas", () => {
       dePid: 77,
     });
     const p = proyectoDeMentira();
-    const corredor = crearCorredorDeTareas({ disco, abrirParaTarea: p.abrir, pid: 1, concurrencia: () => 2 });
+    const corredor = crearCorredorDeTareas({ ...ENTREGA_VERDE, disco, abrirParaTarea: p.abrir, pid: 1, concurrencia: () => 2 });
     await corredor.arrancar();
     expect(estado()[0]).toMatchObject({ estado: "en-proceso", pid: 77 });
     await corredor.parar();
@@ -444,7 +489,7 @@ describe("crearCorredorDeTareas", () => {
   it("una tarea que acaba limpia queda TERMINADA, y se le manda el ENCARGO", async () => {
     const { disco, estado } = discoDeMentira([TAREA({ encargo: "El encargo augmentado" })]);
     const p = proyectoDeMentira();
-    const corredor = crearCorredorDeTareas({ disco, abrirParaTarea: p.abrir, pid: 1, concurrencia: () => 1 });
+    const corredor = crearCorredorDeTareas({ ...ENTREGA_VERDE, disco, abrirParaTarea: p.abrir, pid: 1, concurrencia: () => 1 });
     await corredor.arrancar();
     await corredor.asentar();
     expect(p.encargos).toEqual(["El encargo augmentado"]);
@@ -458,7 +503,7 @@ describe("crearCorredorDeTareas", () => {
   it("si la consola aparca, la tarea acaba en «requiere atención» con SU motivo", async () => {
     const { disco, estado } = discoDeMentira([TAREA()]);
     const p = proyectoDeMentira();
-    const corredor = crearCorredorDeTareas({ disco, abrirParaTarea: p.abrir, pid: 1, concurrencia: () => 1 });
+    const corredor = crearCorredorDeTareas({ ...ENTREGA_VERDE, disco, abrirParaTarea: p.abrir, pid: 1, concurrencia: () => 1 });
     await corredor.arrancar();
     await corredor.asentar();
     p.aparcar("2 escritura(s) esperando la aprobación de una persona: src/app.xne");
@@ -482,7 +527,7 @@ describe("crearCorredorDeTareas", () => {
       original(t);
     };
     let acabar: (() => void) | undefined;
-    const corredor = crearCorredorDeTareas({
+    const corredor = crearCorredorDeTareas({ ...ENTREGA_VERDE,
       disco,
       abrirParaTarea: async (raiz) => ({
         raiz,
@@ -506,7 +551,7 @@ describe("crearCorredorDeTareas", () => {
     // La tarea referencia su proyecto por ruta absoluta: mover la carpeta la deja huérfana,
     // y la dirección de fallo es no ejecutar — nunca ejecutar contra otra carpeta.
     const { disco, estado } = discoDeMentira([TAREA()]);
-    const corredor = crearCorredorDeTareas({
+    const corredor = crearCorredorDeTareas({ ...ENTREGA_VERDE,
       disco,
       abrirParaTarea: async () => {
         throw new Error("esa raíz no es un proyecto de xonecode: falta su .xonecode/config.json");
@@ -533,7 +578,7 @@ describe("crearCorredorDeTareas", () => {
      * lo que los distingue de verdad: un error del sistema trae `code`.
      */
     const { disco, estado } = discoDeMentira([TAREA()]);
-    const corredor = crearCorredorDeTareas({
+    const corredor = crearCorredorDeTareas({ ...ENTREGA_VERDE,
       disco,
       abrirParaTarea: async () => {
         throw Object.assign(new Error("EACCES: permission denied, scandir '/Users/x/w/A/.xonecode'"), {
@@ -560,7 +605,7 @@ describe("crearCorredorDeTareas", () => {
      */
     const { disco, estado } = discoDeMentira([TAREA()]);
     const p = proyectoDeMentira();
-    const corredor = crearCorredorDeTareas({ disco, abrirParaTarea: p.abrir, pid: 1, concurrencia: () => 1 });
+    const corredor = crearCorredorDeTareas({ ...ENTREGA_VERDE, disco, abrirParaTarea: p.abrir, pid: 1, concurrencia: () => 1 });
     await corredor.arrancar();
     await corredor.asentar();
     const enoent = Object.assign(new Error("ENOENT: no such file or directory, open '/Users/x/w/A/app.xne'"), {
@@ -583,7 +628,7 @@ describe("crearCorredorDeTareas", () => {
       TAREA({ id: "b", creada: "2026-09-08T10:00:02.000Z" }),
     ]);
     const p = proyectoDeMentira();
-    const corredor = crearCorredorDeTareas({ disco, abrirParaTarea: p.abrir, pid: 1, concurrencia: () => 5 });
+    const corredor = crearCorredorDeTareas({ ...ENTREGA_VERDE, disco, abrirParaTarea: p.abrir, pid: 1, concurrencia: () => 5 });
     await corredor.arrancar();
     await corredor.asentar();
     expect(p.encargos).toHaveLength(1);
@@ -599,7 +644,7 @@ describe("crearCorredorDeTareas", () => {
      */
     const { disco } = discoDeMentira([TAREA()]);
     const p = proyectoDeMentira();
-    const corredor = crearCorredorDeTareas({ disco, abrirParaTarea: p.abrir, pid: 1, concurrencia: () => 3 });
+    const corredor = crearCorredorDeTareas({ ...ENTREGA_VERDE, disco, abrirParaTarea: p.abrir, pid: 1, concurrencia: () => 3 });
     await corredor.arrancar();
     corredor.revisar();
     corredor.revisar();
@@ -620,7 +665,7 @@ describe("crearCorredorDeTareas", () => {
       TAREA({ id: "b", creada: "2026-09-08T10:00:02.000Z", proyecto: { id: "pb", raiz: "/w/B", nombre: "B" } }),
     ]);
     const p = proyectoDeMentira();
-    const corredor = crearCorredorDeTareas({
+    const corredor = crearCorredorDeTareas({ ...ENTREGA_VERDE,
       disco: d.disco,
       abrirParaTarea: p.abrir,
       pid: 1,
@@ -656,7 +701,7 @@ describe("crearCorredorDeTareas", () => {
     // Cierta para la pasada y para la primera tarea; falsa a partir de la segunda.
     d.disco.sigoSiendoDueño = () => (preguntas += 1) <= 2;
     const p = proyectoDeMentira();
-    const corredor = crearCorredorDeTareas({
+    const corredor = crearCorredorDeTareas({ ...ENTREGA_VERDE,
       disco: d.disco,
       abrirParaTarea: p.abrir,
       pid: 1,
@@ -686,7 +731,7 @@ describe("crearCorredorDeTareas", () => {
       });
     };
     let aperturas = 0;
-    const corredor = crearCorredorDeTareas({
+    const corredor = crearCorredorDeTareas({ ...ENTREGA_VERDE,
       disco: d.disco,
       abrirParaTarea: async (raiz) => {
         aperturas += 1;
@@ -733,7 +778,7 @@ describe("crearCorredorDeTareas", () => {
       });
     };
     const p = proyectoDeMentira();
-    const corredor = crearCorredorDeTareas({
+    const corredor = crearCorredorDeTareas({ ...ENTREGA_VERDE,
       disco: d.disco,
       abrirParaTarea: p.abrir,
       pid: 1,
@@ -763,7 +808,7 @@ describe("crearCorredorDeTareas", () => {
      */
     const dichos: string[] = [];
     const d = discoDeMentira([TAREA()]);
-    const corredor = crearCorredorDeTareas({
+    const corredor = crearCorredorDeTareas({ ...ENTREGA_VERDE,
       disco: d.disco,
       // Una consola que se queda colgada al cerrar: el turno nunca devuelve.
       abrirParaTarea: async (raiz) => ({
@@ -806,7 +851,7 @@ describe("crearCorredorDeTareas", () => {
       throw Object.assign(new Error("EACCES: permission denied"), { code: "EACCES" });
     };
     const p = proyectoDeMentira();
-    const corredor = crearCorredorDeTareas({
+    const corredor = crearCorredorDeTareas({ ...ENTREGA_VERDE,
       disco: d.disco,
       abrirParaTarea: p.abrir,
       pid: 1,
@@ -825,7 +870,7 @@ describe("crearCorredorDeTareas", () => {
   it("con el cerrojo propio, `parar` SÍ lo suelta", async () => {
     const d = discoDeMentira([]);
     const p = proyectoDeMentira();
-    const corredor = crearCorredorDeTareas({ disco: d.disco, abrirParaTarea: p.abrir, pid: 1, concurrencia: () => 1 });
+    const corredor = crearCorredorDeTareas({ ...ENTREGA_VERDE, disco: d.disco, abrirParaTarea: p.abrir, pid: 1, concurrencia: () => 1 });
     await corredor.arrancar();
     await corredor.parar();
     expect(d.soltados()).toBe(1);
@@ -841,7 +886,7 @@ describe("crearCorredorDeTareas", () => {
      */
     const d = discoDeMentira([TAREA()]);
     const p = proyectoDeMentira();
-    const corredor = crearCorredorDeTareas({ disco: d.disco, abrirParaTarea: p.abrir, pid: 1, concurrencia: () => 1 });
+    const corredor = crearCorredorDeTareas({ ...ENTREGA_VERDE, disco: d.disco, abrirParaTarea: p.abrir, pid: 1, concurrencia: () => 1 });
     await corredor.arrancar();
     await corredor.asentar();
     // Otro proceso se la ha llevado.
@@ -855,7 +900,7 @@ describe("crearCorredorDeTareas", () => {
   it("una tarea DESCARTADA a mitad no resucita al acabar", async () => {
     const d = discoDeMentira([TAREA()]);
     const p = proyectoDeMentira();
-    const corredor = crearCorredorDeTareas({ disco: d.disco, abrirParaTarea: p.abrir, pid: 1, concurrencia: () => 1 });
+    const corredor = crearCorredorDeTareas({ ...ENTREGA_VERDE, disco: d.disco, abrirParaTarea: p.abrir, pid: 1, concurrencia: () => 1 });
     await corredor.arrancar();
     await corredor.asentar();
     d.disco.borrarTarea("t1");
@@ -879,7 +924,7 @@ describe("crearCorredorDeTareas", () => {
     const olvidados: string[] = [];
     const d = discoDeMentira([TAREA()]);
     const p = proyectoDeMentira();
-    const corredor = crearCorredorDeTareas({
+    const corredor = crearCorredorDeTareas({ ...ENTREGA_VERDE,
       disco: d.disco,
       abrirParaTarea: p.abrir,
       pid: 1,
@@ -926,7 +971,7 @@ describe("crearCorredorDeTareas", () => {
       if (escrituras === 2) throw Object.assign(new Error("EIO: i/o error"), { code: "EIO" });
       original(t);
     };
-    const corredor = crearCorredorDeTareas({
+    const corredor = crearCorredorDeTareas({ ...ENTREGA_VERDE,
       disco: d.disco,
       abrirParaTarea: p.abrir,
       pid: 1,
@@ -956,7 +1001,7 @@ describe("crearCorredorDeTareas", () => {
       throw Object.assign(new Error("EACCES: permission denied"), { code: "EACCES" });
     };
     let cerrados = 0;
-    const corredor = crearCorredorDeTareas({
+    const corredor = crearCorredorDeTareas({ ...ENTREGA_VERDE,
       disco: d.disco,
       abrirParaTarea: async (raiz) => ({
         raiz,
@@ -978,7 +1023,7 @@ describe("crearCorredorDeTareas", () => {
     // «cortada a mitad» de un turno que terminó su trabajo. Es un motivo falso en el kanban.
     const d = discoDeMentira([TAREA()]);
     const p = proyectoDeMentira();
-    const corredor = crearCorredorDeTareas({
+    const corredor = crearCorredorDeTareas({ ...ENTREGA_VERDE,
       disco: d.disco,
       abrirParaTarea: p.abrir,
       pid: 1,
@@ -997,7 +1042,7 @@ describe("crearCorredorDeTareas", () => {
     const { disco, estado } = discoDeMentira([TAREA()]);
     const p = proyectoDeMentira();
     let abiertoPorAlguien: string | undefined = "/w/A";
-    const corredor = crearCorredorDeTareas({
+    const corredor = crearCorredorDeTareas({ ...ENTREGA_VERDE,
       disco,
       abrirParaTarea: p.abrir,
       pid: 1,
@@ -1029,7 +1074,7 @@ describe("crearCorredorDeTareas", () => {
      */
     const d = discoDeMentira([TAREA()]);
     const p = proyectoDeMentira();
-    const corredor = crearCorredorDeTareas({ disco: d.disco, abrirParaTarea: p.abrir, pid: 1, concurrencia: () => 1 });
+    const corredor = crearCorredorDeTareas({ ...ENTREGA_VERDE, disco: d.disco, abrirParaTarea: p.abrir, pid: 1, concurrencia: () => 1 });
     await corredor.arrancar();
     await corredor.asentar();
     expect(d.estado()[0]!.estado).toBe("en-proceso");
@@ -1081,6 +1126,20 @@ describe("el volcado de la sesión de una tarea", () => {
    * cargada que esté la máquina. Si nunca se resuelve, el plazo del test es el que avisa: eso
    * significa que nadie aplicó la foto, que es justo lo que se está midiendo.
    */
+  /**
+   * Espera con RELOJ REAL a que la tarea salga de la cola de trabajo.
+   *
+   * `asentar()` drena microtareas y con eso bastaba mientras el corredor no tocaba disco.
+   * Ya no: la puerta de la entrega mide con `cambiosDeSesion` y cerrar la consola espera a
+   * que la ref de la sesión esté escrita — las dos cosas son procesos hijos de git. Con
+   * tope, para que un fallo dé un `expect` que se lee y no un test colgado.
+   */
+  async function esperarAQueAcabe(estado: () => Tarea[]): Promise<void> {
+    for (let i = 0; i < 300 && ["nuevo", "en-proceso"].includes(estado()[0]!.estado); i += 1) {
+      await new Promise<void>((r) => setTimeout(r, 10));
+    }
+  }
+
   function asidero<T>(): { promesa: Promise<T>; cumplir: (valor: T) => void } {
     let cumplir!: (valor: T) => void;
     const promesa = new Promise<T>((r) => (cumplir = r));
@@ -1092,7 +1151,11 @@ describe("el volcado de la sesión de una tarea", () => {
     escritos: string[],
     marcada: { cumplir: (p: Promise<boolean>) => void },
     /** El turno, si el test necesita otro. Por omisión, el que pinta por la piel. */
-    ejecutor?: (peticion: string, estado: unknown, consola: Consola) => Promise<void>
+    ejecutor?: (
+      peticion: string,
+      estado: unknown,
+      consola: Consola
+    ) => Promise<ResultadoDeTurno | void>
   ) {
     return crearVestibulo({
       origenDeTrabajo: "global",
@@ -1138,6 +1201,9 @@ describe("el volcado de la sesión de una tarea", () => {
         piel.token("ya está hecho");
         piel.cerrarLinea();
         piel.fin(1);
+        // Como el real: el turno DICE cómo acabó. Un ejecutor que no informa se trata como
+        // «no se sabe» (`medidaDeEntrega`), y esta medida es sobre un turno que fue bien.
+        return { verificador: "verde", pendientes: 0 };
       },
       informar: () => {},
     });
@@ -1152,7 +1218,7 @@ describe("el volcado de la sesión de una tarea", () => {
     const { disco, estado } = discoDeMentira([
       TAREA({ proyecto: { id: "pa", raiz, nombre: "A" }, encargo: "arregla el login" }),
     ]);
-    const corredor = crearCorredorDeTareas({
+    const corredor = crearCorredorDeTareas({ ...ENTREGA_VERDE,
       disco,
       // EL adaptador de producción, no una copia: es la costura que junta las tres piezas.
       abrirParaTarea: async (r) => consolaParaTarea(await v.abrirParaTarea(r)),
@@ -1161,7 +1227,7 @@ describe("el volcado de la sesión de una tarea", () => {
     });
     await corredor.arrancar();
     // El turno de este ejecutor termina solo, así que basta con asentar.
-    for (let i = 0; i < 10 && estado()[0]!.estado !== "terminada"; i += 1) await corredor.asentar();
+    await esperarAQueAcabe(estado);
 
     expect(escritos).toEqual(["arregla el login"]);
     const tarea = estado()[0]!;
@@ -1230,18 +1296,19 @@ describe("el volcado de la sesión de una tarea", () => {
       piel?.token("hecho");
       piel?.cerrarLinea();
       piel?.fin(1);
+      return { verificador: "verde", pendientes: 0 };
     });
     const { disco, estado } = discoDeMentira([
       TAREA({ proyecto: { id: "pa", raiz, nombre: "A" }, encargo: "crea la colección Clientes" }),
     ]);
-    const corredor = crearCorredorDeTareas({
+    const corredor = crearCorredorDeTareas({ ...ENTREGA_VERDE,
       disco,
       abrirParaTarea: async (r) => consolaParaTarea(await v.abrirParaTarea(r)),
       pid: 1,
       concurrencia: () => 1,
     });
     await corredor.arrancar();
-    for (let i = 0; i < 10 && estado()[0]!.estado !== "terminada"; i += 1) await corredor.asentar();
+    await esperarAQueAcabe(estado);
 
     expect(estado()[0]).toMatchObject({ estado: "terminada", autorizadas: ["Clientes.xne"] });
     // Y en el transcript, con el nombre: es lo que lee quien abra la sesión después.
@@ -1257,5 +1324,331 @@ describe("el volcado de la sesión de una tarea", () => {
     // `ENOTEMPTY` que no es del código medido. Es el mismo asidero que el test de al lado.
     await (await marcada.promesa);
     rmSync(base, { recursive: true, force: true });
+  });
+
+  /**
+   * **MEDIDO: la condición «revisable» con el git de verdad, no con un doble.**
+   *
+   * Es la única forma de descartar una carrera real: `volcar()` (`vestibulo.ts`) apunta la
+   * ref con `void foto?.then(...)`, o sea sin aguardar un `git update-ref` que es un
+   * proceso hijo — mientras el corredor mide la condición justo después de `cortar()`. Si
+   * la ref llegara tarde, `cambiosDeSesion` diría `sin-marca` y la tarea se aparcaría
+   * diciendo que nadie puede revisarla, en un proyecto donde sí se puede.
+   *
+   * Se usa `cambiosDeSesion` a pelo, que es la misma función que pinta la pestaña Revisión:
+   * «revisable» tiene que significar «Revisión lo enseña» y no algo parecido.
+   */
+  it("MEDIDO: la condición de revisable, con `cambiosDeSesion` de verdad y sin doble de git", async () => {
+    const { base, raiz } = proyectoConGit();
+    const marcada = asidero<Promise<boolean>>();
+    // El turno escribe un fichero de verdad: sin escritura no habría nada que revisar, y la
+    // condición se cumpliría por vacío.
+    const v = vestibuloReal(base, [], marcada, async (_peticion, _estado, consola) => {
+      writeFileSync(join(raiz, "Clientes.xne"), '<collection name="Clientes"/>');
+      const piel = consola.piel?.();
+      piel?.token("hecho");
+      piel?.cerrarLinea();
+      piel?.fin(1);
+      return { verificador: "verde", pendientes: 0 };
+    });
+    const { disco, estado } = discoDeMentira([
+      TAREA({ proyecto: { id: "pa", raiz, nombre: "A" }, encargo: "crea la colección Clientes" }),
+    ]);
+    /** Lo que la condición contestó cada vez, para poder decir POR QUÉ si falla. */
+    const medidas: boolean[] = [];
+    const corredor = crearCorredorDeTareas({
+      disco,
+      abrirParaTarea: async (r) => consolaParaTarea(await v.abrirParaTarea(r)),
+      pid: 1,
+      concurrencia: () => 1,
+      juez: juezQueDice({ veredicto: "verde", resumen: "la colección está creada" }),
+      revisable: async (r, sesion) => {
+        const via = (await cambiosDeSesion(r, sesion)).via;
+        medidas.push(via === "git");
+        return via === "git";
+      },
+    });
+    await corredor.arrancar();
+    /**
+     * Aquí NO basta con `asentar()`: la condición de revisable lanza `git` de verdad, o sea
+     * procesos hijos con E/S, y `asentar` solo drena microtareas. Se espera por el HECHO —que
+     * la tarea salga de «en proceso»— con reloj real y tope, que es lo que hacen los tests
+     * del repo que tocan git.
+     */
+    await esperarAQueAcabe(estado);
+
+    // La medida: la condición se preguntó UNA vez y contestó que sí. Antes de esperar la ref
+    // en `cerrar()` (`vestibulo.ts`), esto era `[false]` y la tarea acababa aparcada
+    // diciendo que nadie podía revisarla — en un proyecto donde sí se podía.
+    expect(medidas).toEqual([true]);
+    expect(estado()[0]!.estado).toBe("terminada");
+    // Y hay «antes» con el que comparar, que es lo que «revisable» promete. QUÉ ficheros
+    // lista es cosa de `cambiosDeSesion`, que tiene sus propios tests: aquí el turno de
+    // mentira escribe en el mismo tick en que se toma la foto de apertura, así que exigir
+    // la lista sería medir esa carrera del doble y no la condición.
+    expect((await cambiosDeSesion(raiz, estado()[0]!.sesion!)).via).toBe("git");
+
+    await corredor.parar();
+    await v.cerrar();
+    await (await marcada.promesa);
+    rmSync(base, { recursive: true, force: true });
+  });
+});
+/**
+ * LA PUERTA DE LA ENTREGA. «Terminada» dejó de significar «el turno acabó».
+ *
+ * Desde §0 del diseño una tarea aplica sus escrituras sin que nadie vea el diff, así que el
+ * sitio del modal lo ocupan dos piezas: el verificador —que ya corre dentro del turno— y un
+ * juez de QA. Y con la regla que este repo ya tenía escrita para la subida autónoma
+ * (`core/cloudstudio.ts#PoliticaDeAprobacion`): **el veredicto del juez no basta solo**,
+ * porque a un modelo se le puede pedir que avise y a veces no avisa.
+ */
+describe("una tarea se entrega por condiciones MEDIDAS más el juez", () => {
+  /** El corredor con las dos piezas de la entrega elegidas por el test. */
+  function conEntrega(
+    tareas: Tarea[],
+    entrega: {
+      juez: JuezDeTareaPort;
+      revisable?: (raiz: string, sesion: string) => Promise<boolean>;
+    }
+  ) {
+    const { disco, estado } = discoDeMentira(tareas);
+    const p = proyectoDeMentira();
+    const corredor = crearCorredorDeTareas({
+      disco,
+      abrirParaTarea: p.abrir,
+      pid: 1,
+      concurrencia: () => 1,
+      juez: entrega.juez,
+      revisable: entrega.revisable ?? (async () => true),
+    });
+    return { corredor, estado, p };
+  }
+
+  it("las tres condiciones y el juez en verde: terminada, y con el veredicto guardado", async () => {
+    const juez = juezQueDice({ veredicto: "verde", resumen: "la colección está creada" });
+    const { corredor, estado, p } = conEntrega([TAREA()], { juez });
+    await corredor.arrancar();
+    await corredor.asentar();
+    p.autorizar(["/Clientes.xne"]);
+    p.acabar({ verificador: "verde", pendientes: 0 });
+    await corredor.asentar();
+
+    const tarea = estado()[0]!;
+    expect(tarea.estado).toBe("terminada");
+    // El veredicto se guarda también en verde: si no, una tarea terminada no podría
+    // distinguir «el juez la aprobó» de «se entregó sin que nadie la juzgara».
+    expect(tarea.veredicto).toEqual({ veredicto: "verde", resumen: "la colección está creada" });
+  });
+
+  it("el juez en verde con una condición en rojo NO entrega, y el motivo dice cuál falló", async () => {
+    const juez = juezQueDice({ veredicto: "verde", resumen: "por mí bien" });
+    const { corredor, estado, p } = conEntrega([TAREA()], { juez });
+    await corredor.arrancar();
+    await corredor.asentar();
+    // Un turno cortado por el tope: quedó una escritura sin aplicar.
+    p.acabar({ verificador: "verde", pendientes: 1 });
+    await corredor.asentar();
+
+    const tarea = estado()[0]!;
+    expect(tarea.estado).toBe("requiere-atencion");
+    expect(tarea.motivo).toContain("aprobación");
+    /**
+     * Y al juez NO se le pregunta: cada consulta es una llamada del modelo más caro del
+     * reparto (`afilado`), y ya se sabe que no se entrega. Esta cuenta es además lo que
+     * detecta la mutación de preguntar antes de medir.
+     */
+    expect(juez.casos).toHaveLength(0);
+  });
+
+  it("las tres condiciones en verde y el juez en rojo tampoco entrega, y lleva lo que dijo", async () => {
+    const juez = juezQueDice({ veredicto: "rojo", resumen: "falta el campo NOMBRE en la colección" });
+    const { corredor, estado, p } = conEntrega([TAREA()], { juez });
+    await corredor.arrancar();
+    await corredor.asentar();
+    p.acabar({ verificador: "verde", pendientes: 0 });
+    await corredor.asentar();
+
+    const tarea = estado()[0]!;
+    expect(tarea.estado).toBe("requiere-atencion");
+    expect(tarea.motivo).toContain("falta el campo NOMBRE en la colección");
+    // Y el veredicto queda guardado, que es lo que hace la tarjeta accionable al reintentar.
+    expect(tarea.veredicto?.veredicto).toBe("rojo");
+  });
+
+  it("un verificador en rojo no se entrega aunque el juez esté encantado", async () => {
+    const juez = juezQueDice({ veredicto: "verde", resumen: "a mí me parece bien" });
+    const { corredor, estado, p } = conEntrega([TAREA()], { juez });
+    await corredor.arrancar();
+    await corredor.asentar();
+    p.acabar({
+      verificador: "rojo",
+      pendientes: 0,
+      hallazgos: [{ code: "COLL_MISSING_PROGID", severidad: "error", mensaje: "falta progid" }],
+    });
+    await corredor.asentar();
+
+    expect(estado()[0]!.estado).toBe("requiere-atencion");
+    expect(estado()[0]!.motivo).toContain("verificador");
+    expect(juez.casos).toHaveLength(0);
+  });
+
+  /**
+   * La tercera condición NO es «árbol de git limpio», y está MEDIDO: una tarea que escribe
+   * un fichero deja `git status --porcelain` con `?? Clientes.xne`, así que con esa
+   * condición ninguna tarea se entregaría jamás. Lo que se exige es que lo escrito se pueda
+   * REVISAR — sin aprobación previa, ese diff es el único momento en que alguien puede
+   * mirar lo que hizo una tarea.
+   */
+  it("sin marca de git no se entrega: nadie podría revisar lo que escribió", async () => {
+    const juez = juezQueDice({ veredicto: "verde", resumen: "bien" });
+    const { corredor, estado, p } = conEntrega([TAREA()], { juez, revisable: async () => false });
+    await corredor.arrancar();
+    await corredor.asentar();
+    p.acabar({ verificador: "verde", pendientes: 0 });
+    await corredor.asentar();
+
+    expect(estado()[0]!.estado).toBe("requiere-atencion");
+    expect(estado()[0]!.motivo).toContain("revisar");
+  });
+
+  it("si ni se puede preguntar por la marca, se falla CERRADO", async () => {
+    const juez = juezQueDice({ veredicto: "verde", resumen: "bien" });
+    const { corredor, estado, p } = conEntrega([TAREA()], {
+      juez,
+      revisable: async () => {
+        throw Object.assign(new Error("ENOENT: no such file or directory, open '/casa/.git'"), { code: "ENOENT" });
+      },
+    });
+    await corredor.arrancar();
+    await corredor.asentar();
+    p.acabar({ verificador: "verde", pendientes: 0 });
+    await corredor.asentar();
+
+    const tarea = estado()[0]!;
+    expect(tarea.estado).toBe("requiere-atencion");
+    // Y sin la ruta absoluta del mensaje de Node: el motivo se pinta en el kanban y viaja
+    // por el cable, que puede ir por un túnel.
+    expect(tarea.motivo).not.toContain("/casa");
+  });
+
+  /**
+   * Un ejecutor que no informa —el guionizado, o una piel que no reenvíe el retorno— no ha
+   * dicho que el verificador esté verde: ha dicho nada. Y «no se sabe» no se entrega.
+   */
+  it("un turno que no informa de nada no se entrega, y lo dice", async () => {
+    const juez = juezQueDice({ veredicto: "verde", resumen: "bien" });
+    const { corredor, estado, p } = conEntrega([TAREA()], { juez });
+    await corredor.arrancar();
+    await corredor.asentar();
+    p.acabarMudo();
+    await corredor.asentar();
+
+    expect(estado()[0]!.estado).toBe("requiere-atencion");
+    expect(estado()[0]!.motivo).toContain("no informa");
+  });
+
+  /**
+   * AC de la tarea: que el juez no se pueda usar (sin modelo, sin clave, sin red) es fallo
+   * del ENTORNO, no un veredicto. Se dice, la tarea queda esperando feedback, y NO se
+   * entrega en silencio.
+   */
+  it("que el juez no se pueda usar es fallo del entorno: se dice y NO se entrega", async () => {
+    const juez: JuezDeTareaPort = {
+      juzgar: async () => {
+        throw new ErrorDelJuezDeTarea("falta la credencial para nvidia (NVIDIA_API_KEY); usa /provider nvidia");
+      },
+    };
+    const { corredor, estado, p } = conEntrega([TAREA()], { juez });
+    await corredor.arrancar();
+    await corredor.asentar();
+    p.acabar({ verificador: "verde", pendientes: 0 });
+    await corredor.asentar();
+
+    const tarea = estado()[0]!;
+    expect(tarea.estado).toBe("requiere-atencion");
+    expect(tarea.motivo).toContain("juez");
+    // El mensaje del fallo de CONSTRUIR sí se conserva: es la única línea que dice qué hacer.
+    expect(tarea.motivo).toContain("NVIDIA_API_KEY");
+    expect(tarea.veredicto).toBeUndefined();
+  });
+
+  it("al juez se le cuentan los HECHOS: encargo, ficheros autorizados y el verificador", async () => {
+    const juez = juezQueDice({ veredicto: "verde", resumen: "bien" });
+    const { corredor, p } = conEntrega([TAREA({ encargo: "crea la colección Clientes" })], { juez });
+    await corredor.arrancar();
+    await corredor.asentar();
+    p.autorizar(["/Clientes.xne", "/src/lista.js"]);
+    p.acabar({
+      verificador: "verde",
+      pendientes: 0,
+      hallazgos: [{ code: "ATTR_UNKNOWN", severidad: "warning", mensaje: "atributo raro", fichero: "Clientes.xne" }],
+    });
+    await corredor.asentar();
+
+    expect(juez.casos).toHaveLength(1);
+    expect(juez.casos[0]).toEqual({
+      encargo: "crea la colección Clientes",
+      // RELATIVAS, como las guarda el índice: de aquí no sale ninguna ruta de la máquina.
+      autorizadas: ["Clientes.xne", "src/lista.js"],
+      verificador: "verde",
+      hallazgos: [{ code: "ATTR_UNKNOWN", severidad: "warning", mensaje: "atributo raro", fichero: "Clientes.xne" }],
+    });
+  });
+
+  /**
+   * El veredicto entra por el MISMO camino que la regla de `sesion` y la de `autorizadas`,
+   * y eso incluye el camino de error: una regla que se cumple salvo cuando algo falla no es
+   * una regla. Aquí revienta la escritura del estado final y el aparcado que viene detrás
+   * tiene que llevar las tres cosas.
+   */
+  it("si la escritura final revienta, el aparcado sigue llevando veredicto y autorizadas", async () => {
+    const juez = juezQueDice({ veredicto: "verde", resumen: "bien" });
+    const { disco, estado } = discoDeMentira([TAREA()]);
+    const p = proyectoDeMentira();
+    let escrituras = 0;
+    const guardar = disco.guardar.bind(disco);
+    disco.guardar = (lista) => {
+      escrituras += 1;
+      // 1) la marca de «en proceso»; 2) la de «terminada», que revienta; 3) el aparcado.
+      if (escrituras === 2) throw Object.assign(new Error("EACCES"), { code: "EACCES" });
+      guardar(lista);
+    };
+    const corredor = crearCorredorDeTareas({
+      disco,
+      abrirParaTarea: p.abrir,
+      pid: 1,
+      concurrencia: () => 1,
+      juez,
+      revisable: async () => true,
+    });
+    await corredor.arrancar();
+    await corredor.asentar();
+    p.autorizar(["/Clientes.xne"]);
+    p.acabar({ verificador: "verde", pendientes: 0 });
+    await corredor.asentar();
+
+    const tarea = estado()[0]!;
+    expect(tarea.estado).toBe("requiere-atencion");
+    expect(tarea.autorizadas).toEqual(["Clientes.xne"]);
+    expect(tarea.veredicto?.veredicto).toBe("verde");
+  });
+
+  /**
+   * Un turno que se aparcó por su cuenta —una pregunta sin nadie a quien preguntar— no pasa
+   * por la puerta: ya hay un motivo, y es el bueno. Preguntarle al juez sobre un trabajo que
+   * se cortó a mitad sería gastar una llamada para tapar el motivo que sí explica qué pasó.
+   */
+  it("una tarea que ya se aparcó no pasa por el juez: su motivo es el que explica de verdad", async () => {
+    const juez = juezQueDice({ veredicto: "verde", resumen: "bien" });
+    const { corredor, estado, p } = conEntrega([TAREA()], { juez });
+    await corredor.arrancar();
+    await corredor.asentar();
+    p.aparcar("el agente preguntó y no había nadie");
+    p.acabar({ verificador: "verde", pendientes: 0 });
+    await corredor.asentar();
+
+    expect(estado()[0]!.motivo).toBe("el agente preguntó y no había nadie");
+    expect(juez.casos).toHaveLength(0);
   });
 });

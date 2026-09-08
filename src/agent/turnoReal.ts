@@ -25,6 +25,7 @@ import type { Piel } from "../core/turno.js";
 import { Bitacora } from "../core/bitacora.js";
 import { correrTurno } from "../core/turno.js";
 import type { ModelosPort, SkillsPort, VerifierPort } from "../core/ports.js";
+import type { EstadoDeVerificador, ResultadoDeTurno } from "../core/entrega.js";
 import type { DomainEvent, HallazgoDelTurno } from "../core/events.js";
 import { relative, resolve as resolverRuta } from "node:path";
 import type { Entorno } from "./entorno.js";
@@ -45,16 +46,28 @@ import { crearDiagnosticoDeTools } from "./diagnosticoDeTools.js";
  * el turno 3 reportaría también lo que escribió el turno 1.
  */
 export interface SesionReal {
-  /** Un turno. Devuelve la bitácora y los cambios que dejó en el proyecto. */
+  /**
+   * Un turno. Devuelve la bitácora, los cambios que dejó en el proyecto y **lo que hay que
+   * saber para decidir si el trabajo se puede dar por bueno** (`ResultadoDeTurno`).
+   *
+   * Esas tres últimas cosas —cómo acabó el verificador, cuántas escrituras quedaron sin
+   * aplicar y los hallazgos— no estaban, y su ausencia era una deuda MEDIDA: con las
+   * tareas de fondo aplicando escrituras solas, un turno se cortó por el tope de rondas
+   * con cuatro ficheros escritos, una escritura abandonada, el verificador sin correr ni
+   * una vez… y el kanban diciendo «terminada». La bitácora no sirve para esto: `corrio`
+   * responde si un nodo pasó, no con qué veredicto.
+   */
   turno(
     peticion: string,
     piel: Piel
-  ): Promise<{
-    bitacora: Bitacora;
-    cambios: Cambio[];
-    /** Se agotó `MAX_APPROVAL_ROUNDS` con aprobaciones sin resolver. */
-    cortadoPorTope: boolean;
-  }>;
+  ): Promise<
+    ResultadoDeTurno & {
+      bitacora: Bitacora;
+      cambios: Cambio[];
+      /** Se agotó el tope de rondas con aprobaciones sin resolver. */
+      cortadoPorTope: boolean;
+    }
+  >;
   /** Rehace el agente con modelos nuevos, CONSERVANDO el hilo. Para `/modelo`. */
   cambiarModelos(modelos: ModelosPort): Promise<void>;
   /** Abre un hilo nuevo. Para `/nuevo`. */
@@ -269,12 +282,39 @@ export async function abrirSesionReal(opciones: {
    * está conectado a CloudStudio, y hay alguien delante) y ninguna se puede comprobar aquí.
    */
   sinAprobacion?: () => boolean;
+  /**
+   * Cuántas RONDAS de aprobación admite un turno. Ausente = `MAX_APPROVAL_ROUNDS`, el de
+   * siempre.
+   *
+   * Existe porque el de la persona no vale para una tarea de fondo, y las dos mitades del
+   * argumento importan. `MAX_APPROVAL_ROUNDS` se dimensionó para alguien pulsando —«te lo
+   * he preguntado cinco veces, para»—; en una tarea autónoma una ronda no es una pregunta,
+   * es una TANDA de escrituras que se autorizan solas, y cinco tandas se agotan en un
+   * encargo mediano: medido, un turno se cortó con cuatro ficheros escritos y una escritura
+   * abandonada. Y quitarlo no vale, por el mismo argumento que el tope propio de los
+   * artefactos: cada pasada es una llamada al modelo y aquí no hay humano que frene el
+   * bucle.
+   *
+   * Gobierna los TRES sitios que miraban esa constante —el corte por rondas, el corte por
+   * tandas automáticas y la PREDICCIÓN de si la pasada cierra el turno—, y tiene que
+   * gobernar los tres: si la predicción divergiera del corte, un turno se quedaría sin
+   * `fin` o cerraría dos veces.
+   */
+  topeDeRondas?: number;
 }): Promise<SesionReal> {
   const { raiz, entorno } = opciones;
 
   // Persiste fuera del checkpointer (que es solo de la sesión), pero no sobrescribe nunca
   // una memoria ya creada por el usuario o por otra sesión.
   asegurarMemoriaDeProyecto(raiz);
+
+  /**
+   * El tope de rondas de ESTA sesión, resuelto una vez. Ver `OpcionesDeSesion.topeDeRondas`:
+   * gobierna los tres sitios que antes miraban `MAX_APPROVAL_ROUNDS` a pelo, y ninguno de
+   * los tres puede quedarse fuera — la predicción de cierre tiene que usar exactamente el
+   * mismo número que el corte, o un turno se queda sin `fin` o cierra dos veces.
+   */
+  const topeDeRondas = opciones.topeDeRondas ?? MAX_APPROVAL_ROUNDS;
 
   const checkpointer = opciones.checkpointer ?? new MemorySaver();
   const tracker = createTokenTracker();
@@ -394,7 +434,9 @@ export async function abrirSesionReal(opciones: {
   const turno = async (
     peticion: string,
     piel: Piel
-  ): Promise<{ bitacora: Bitacora; cambios: Cambio[]; cortadoPorTope: boolean }> => {
+  ): Promise<
+    ResultadoDeTurno & { bitacora: Bitacora; cambios: Cambio[]; cortadoPorTope: boolean }
+  > => {
     // Un turno sobre una sesión ya cerrada reviviría un hilo que su dueño soltó al cambiar
     // de proyecto. Falla en vez de trabajar en silencio sobre la raíz equivocada.
     if (cerrada) throw new Error("la sesión ya está cerrada");
@@ -432,6 +474,16 @@ export async function abrirSesionReal(opciones: {
      */
     let rondaEscribio = false;
     let motivoSinVerificar: string | undefined;
+    /**
+     * Cómo acabó el verificador en la pasada, y sus hallazgos.
+     *
+     * Viven aquí y no en la bitácora porque la bitácora responde a otra pregunta: `corrio`
+     * dice si un nodo pasó, no con qué veredicto —y de esto depende que una tarea se dé
+     * por terminada—. Se reinician en CADA ronda, como `rondaEscribio`: lo que vale es lo
+     * que dijo la última pasada, que es la que dejó el proyecto como está.
+     */
+    let veredicto: EstadoDeVerificador = "no-corrio";
+    let hallazgosDelTurno: HallazgoDelTurno[] = [];
     /** Si esta pasada cierra el turno. `false` = detrás viene otra ronda o un intento. */
     let cerrarRonda = true;
     /** Si tras esta pasada hay que lanzar un intento de reparación. */
@@ -481,7 +533,7 @@ export async function abrirSesionReal(opciones: {
         // ha agotado el tope de rondas— esta pasada NO es el final del turno y no cierra.
         // Son las mismas dos condiciones del `break` del bucle, y tienen que serlo: si
         // divergen, un turno se queda sin `fin` o cierra dos veces.
-        cerrarRonda = !(ronda < MAX_APPROVAL_ROUNDS && opciones.pedirAprobacion !== undefined);
+        cerrarRonda = !(ronda < topeDeRondas && opciones.pedirAprobacion !== undefined);
         return;
       }
       cerrarRonda = true;
@@ -490,7 +542,13 @@ export async function abrirSesionReal(opciones: {
         (c) => c.clase !== "borrado" && !c.ruta.startsWith(".xonecode/") && c.ruta !== ".xonecode"
       );
       rondaEscribio = cambios.length > 0;
-      if (!rondaEscribio) return;
+      if (!rondaEscribio) {
+        // No hay nada que verificar, y eso NO es un verde. Se DICE, porque este motivo
+        // acaba en la tarjeta de una tarea aparcada y «no se sabe» tiene que distinguirse
+        // de «el simulador no está» y de «el turno se cortó antes de llegar».
+        motivoSinVerificar = "el turno no escribió ningún fichero del proyecto";
+        return;
+      }
 
       if (opciones.verifier === undefined) {
         motivoSinVerificar = "esta ejecución no tiene verificador";
@@ -528,6 +586,10 @@ export async function abrirSesionReal(opciones: {
         ...(h.linea === undefined ? {} : { linea: h.linea }),
       }));
 
+      // Lo mismo que va al evento, apuntado para el retorno: NO se recalcula ni se
+      // re-parsea de la bitácora, que es cómo dos copias de una cuenta acaban discrepando.
+      veredicto = errores === 0 ? "verde" : "rojo";
+      hallazgosDelTurno = hallazgos;
       yield {
         tipo: "verificacion",
         verde: errores === 0,
@@ -612,6 +674,8 @@ export async function abrirSesionReal(opciones: {
       ronda += 1;
       rondaEscribio = false;
       motivoSinVerificar = undefined;
+      veredicto = "no-corrio";
+      hallazgosDelTurno = [];
       cerrarRonda = true;
       const aborto = new AbortController();
       cancelarEnCurso = () => aborto.abort(new Error("turno cancelado por el usuario"));
@@ -709,12 +773,12 @@ export async function abrirSesionReal(opciones: {
         // al otro—. Al agotarse se para y se dice, con `cortadoPorTope` puesto: quedaron
         // escrituras sin aplicar, que es lo que ese código de salida significa.
         tandasAutomaticas += 1;
-        if (tandasAutomaticas > MAX_APPROVAL_ROUNDS) {
+        if (tandasAutomaticas > topeDeRondas) {
           // El texto dice de QUÉ tandas habla: con «sin aprobación» puesto, por aquí pasan
           // también las escrituras del proyecto, y llamarlas «artefactos» sería mentir en
           // el único mensaje que explica por qué el turno se cortó.
           const que = todoAutomatico ? "escrituras sin aprobación" : "artefactos";
-          piel.linea(`\n⚠ tope de ${MAX_APPROVAL_ROUNDS} tandas de ${que} agotado en este turno.`);
+          piel.linea(`\n⚠ tope de ${topeDeRondas} tandas de ${que} agotado en este turno.`);
           piel.linea(`  quedaban ${lista.length} sin escribir, y NO se han aplicado.`);
           cortadoPorTope = true;
           break;
@@ -727,8 +791,8 @@ export async function abrirSesionReal(opciones: {
       // El tope existe porque un modelo que insiste tras cada rechazo convierte esto en un
       // ciclo automático de ~200k tokens por ronda (medido en da04). Sin resumir: nada se
       // aplica, pero el interrupt queda en el estado.
-      if (ronda >= MAX_APPROVAL_ROUNDS) {
-        piel.linea(`\n⚠ tope de ${MAX_APPROVAL_ROUNDS} rondas de aprobación agotado.`);
+      if (ronda >= topeDeRondas) {
+        piel.linea(`\n⚠ tope de ${topeDeRondas} rondas de aprobación agotado.`);
         piel.linea(`  quedaban ${humanos.length} sin resolver, y NO se han aplicado.`);
         cortadoPorTope = true;
         break;
@@ -761,10 +825,32 @@ export async function abrirSesionReal(opciones: {
 
     // El diff contra la foto de ESTE turno. Un turno que no tocó nada TIENE que verse igual.
     const cambios = await instantanea.cambios();
+    /**
+     * Las escrituras que quedaron esperando aprobación, MEDIDAS y no recordadas.
+     *
+     * Se le pregunta al estado del grafo una vez, aquí, en vez de apuntarlas en cada
+     * `break`: hay CUATRO salidas del bucle y tres de ellas usan variables distintas
+     * (`lista.length` en el tope de tandas, `humanos.length` en el de rondas y en el «no
+     * hay quién apruebe»), así que una contabilidad repartida es una contabilidad que
+     * deriva. Y no se deduce de `cortadoPorTope`: por «no hay quién apruebe» se sale sin
+     * ponerlo y también quedan escrituras colgando.
+     */
+    const pendientes = (await leerPendientes()).lista.length;
     // `cortadoPorTope` viaja en el retorno y no en la bitácora porque es lo que decide el
     // CÓDIGO DE SALIDA de quien invoca: un turno que se quedó con escrituras sin resolver
-    // no es un éxito, y CI no puede leerlo como tal.
-    return { bitacora: bitacora!, cambios, cortadoPorTope };
+    // no es un éxito, y CI no puede leerlo como tal. Y con él viaja ahora lo que decide si
+    // una TAREA se puede dar por terminada (`core/entrega.ts`), que hasta ahora se tiraba.
+    return {
+      bitacora: bitacora!,
+      cambios,
+      cortadoPorTope,
+      verificador: veredicto,
+      pendientes,
+      // Ausente y vacío: sin hallazgos el campo no se pone, para que quien lo lea no
+      // confunda «no hubo» con «no se sabe».
+      ...(hallazgosDelTurno.length === 0 ? {} : { hallazgos: hallazgosDelTurno }),
+      ...(motivoSinVerificar === undefined ? {} : { motivoSinVerificar }),
+    };
   };
 
   return {

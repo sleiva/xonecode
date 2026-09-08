@@ -2,11 +2,14 @@ import { describe, expect, it } from "vitest";
 import {
   conAutorizadas,
   conEstado,
+  conVeredicto,
   rutaRelativaDeTarea,
   siguientesAEjecutar,
   tituloDeTarea,
+  TOPE_DE_RONDAS_DE_TAREA,
   type Tarea,
 } from "./tareas.js";
+import { MAX_APPROVAL_ROUNDS } from "../vendor/hitl.js";
 
 function tarea(extra: Partial<Tarea> = {}): Tarea {
   return {
@@ -202,5 +205,37 @@ describe("conAutorizadas", () => {
       "b.xne",
       "a.xne",
     ]);
+  });
+});
+
+describe("conVeredicto", () => {
+  it("sin veredicto no se toca el campo: «no se le preguntó» no borra lo último que se supo", () => {
+    const antes = { ...tarea(), veredicto: { veredicto: "rojo" as const, resumen: "faltaba el campo" } };
+    expect(conVeredicto(antes, undefined)).toBe(antes);
+  });
+
+  /**
+   * Al contrario que `conAutorizadas`, que acumula: un fichero escrito sigue escrito, pero
+   * un veredicto es una opinión sobre el estado ACTUAL y dos a la vez serían dos respuestas
+   * a una sola pregunta.
+   */
+  it("un veredicto nuevo SUSTITUYE al anterior", () => {
+    const antes = { ...tarea(), veredicto: { veredicto: "rojo" as const, resumen: "faltaba el campo" } };
+    expect(conVeredicto(antes, { veredicto: "verde", resumen: "ya está" }).veredicto).toEqual({
+      veredicto: "verde",
+      resumen: "ya está",
+    });
+  });
+});
+
+describe("TOPE_DE_RONDAS_DE_TAREA", () => {
+  /**
+   * Las dos mitades del argumento, atadas: no es el de la persona (que se dimensionó para
+   * alguien pulsando) y no es infinito (cada pasada es una llamada al modelo y aquí no hay
+   * nadie que frene el bucle).
+   */
+  it("es más alto que el de la persona, y es finito", () => {
+    expect(TOPE_DE_RONDAS_DE_TAREA).toBeGreaterThan(MAX_APPROVAL_ROUNDS);
+    expect(Number.isFinite(TOPE_DE_RONDAS_DE_TAREA)).toBe(true);
   });
 });

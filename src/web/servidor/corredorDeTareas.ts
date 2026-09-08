@@ -20,8 +20,25 @@
  * La política de QUÉ arranca no está aquí: es `core/tareas.ts#siguientesAEjecutar`, pura y
  * con sus tests. Aquí está el lazo, que es lo que no se puede probar sin dobles.
  */
-import { conAutorizadas, conEstado, siguientesAEjecutar, type Tarea } from "../../core/tareas.js";
+import {
+  conAutorizadas,
+  conEstado,
+  conVeredicto,
+  siguientesAEjecutar,
+  TOPE_DE_RONDAS_DE_TAREA,
+  type Tarea,
+} from "../../core/tareas.js";
+import {
+  condicionesDeEntrega,
+  decisionDeEntrega,
+  medidaDeEntrega,
+  type ResultadoDeTurno,
+  type VeredictoDeTarea,
+} from "../../core/entrega.js";
+import type { JuezDeTareaPort } from "../../core/ports.js";
 import { crearConsolaDeTarea } from "./consolaDeTarea.js";
+import { ErrorDelJuezDeTarea } from "../../agent/juezDeTarea.js";
+import type { Consola } from "../../cli/consola.js";
 import type { ConsolaDeProyecto } from "./vestibulo.js";
 import type { TareasEnDisco } from "../../agent/tareasEnDisco.js";
 
@@ -74,7 +91,7 @@ export interface ConsolaParaTarea {
     encargo: string,
     aparcar: (motivo: string) => void,
     autorizado?: (ficheros: readonly string[]) => void
-  ): Promise<void>;
+  ): Promise<ResultadoDeTurno | void>;
   cerrar(): Promise<void>;
 }
 
@@ -120,7 +137,8 @@ export function consolaParaTarea(consola: ConsolaDeProyecto): ConsolaParaTarea {
     correrTarea: async (encargo, aparcar, autorizado) => {
       // Una consola de tarea por TURNO: su «se aparca una vez» vale por turno, y reusarla
       // para un segundo turno lo dejaría mudo.
-      const deTarea = crearConsolaDeTarea({
+      const deTarea: Consola = {
+        ...crearConsolaDeTarea({
         aparcar,
         // Lo que la tarea autorice sin aprobación sube al corredor, que lo guarda con el
         // estado final. Se reenvía o no está, como la piel: `autorizado: undefined` haría
@@ -129,10 +147,27 @@ export function consolaParaTarea(consola: ConsolaDeProyecto): ConsolaParaTarea {
         // Lo que escriba el turno va al transcript de SU sesión.
         escribir: (texto) => dentro.escribir(texto),
         ...(dentro.piel === undefined ? {} : { piel: dentro.piel.bind(dentro) }),
-        catalogoModelos: dentro.catalogoModelos,
-        guardarModeloGlobal: dentro.guardarModeloGlobal,
-      });
-      await consola.ejecutarTurno(encargo, consola.estadoDeSesion, deTarea);
+          catalogoModelos: dentro.catalogoModelos,
+          guardarModeloGlobal: dentro.guardarModeloGlobal,
+        }),
+        /**
+         * **El tope de rondas de una TAREA, que no es el de la persona.**
+         *
+         * Se cablea aquí y no dentro de `crearConsolaDeTarea` porque este es el punto de
+         * MONTAJE —el mismo motivo por el que esta función vive en este fichero y no en el
+         * cierre de `arranque.ts`—: quién está detrás lo sabe quien junta las piezas.
+         *
+         * El porqué del número está en `TOPE_DE_RONDAS_DE_TAREA`. El porqué de que haga
+         * falta está medido: con las escrituras aprobándose solas, cada tanda gastaba una de
+         * las cinco rondas de la persona, y un turno acabó con cuatro ficheros escritos, una
+         * escritura abandonada y el verificador sin correr ni una vez.
+         */
+        topeDeAprobaciones: TOPE_DE_RONDAS_DE_TAREA,
+      };
+      // Se DEVUELVE lo que el turno informe: es con lo que el corredor mide si el trabajo
+      // se puede dar por bueno. Sin este `return`, la puerta de la entrega no tendría datos
+      // y toda tarea acabaría esperando feedback — la dirección segura, pero inútil.
+      return await consola.ejecutarTurno(encargo, consola.estadoDeSesion, deTarea);
     },
     cerrar: () => consola.cerrar(),
   };
@@ -180,6 +215,29 @@ export function crearCorredorDeTareas(opciones: {
    * en medio de la conversación de alguien es ruido que además no es accionable ahí.
    */
   informar?: (texto: string) => void;
+  /**
+   * El juez de QA que decide si el trabajo hace lo que se pedía.
+   *
+   * **Es OBLIGATORIO, fail-closed por TIPO**, igual que `PoliticaDeAprobacion` en
+   * `core/cloudstudio.ts`: «no se puede invocar sin decir quién autoriza». Un puerto
+   * opcional con omisión conservadora compilaría sin el cableado de producción, y entonces
+   * la pieza estaría sin montar con todo en verde — que es exactamente el agujero que
+   * `construirCorredorDeTareasCableado` y `backendDeAgente` existen para cerrar.
+   */
+  juez: JuezDeTareaPort;
+  /**
+   * ¿Se puede REVISAR lo que la tarea escribió en esa sesión?
+   *
+   * En producción es `cambiosDeSesion(raiz, sesion).via === "git"` — la MISMA función que
+   * pinta la pestaña Revisión, no una parecida, así que «revisable» significa literalmente
+   * «Revisión lo enseña». Entra por parámetro porque es git y `npm test` no puede
+   * necesitarlo en cada caso.
+   *
+   * **No es «el árbol está limpio», y eso está medido**: una tarea que escribe un fichero
+   * deja el árbol sucio por definición (`git status --porcelain` → `?? Clientes.xne`), así
+   * que con esa condición ninguna tarea se entregaría nunca. Ver `core/entrega.ts`.
+   */
+  revisable: (raiz: string, sesion: string) => Promise<boolean>;
 }): Corredor {
   const pid = opciones.pid ?? process.pid;
   const informar = opciones.informar ?? (() => {});
@@ -222,6 +280,15 @@ export function crearCorredorDeTareas(opciones: {
      * se queda sin escribir en vez de afirmar que no autorizó nada.
      */
     autorizadas?: string[];
+    /**
+     * El veredicto del juez, si se llegó a preguntar.
+     *
+     * Vive en la entrada por el mismo motivo que `autorizadas`: para que el ÚLTIMO RECURSO
+     * también lo escriba. El `.catch` que envuelve a `correr` es un camino de error, y un
+     * veredicto que se consiguió y se pierde ahí obliga a gastar otra llamada del modelo
+     * más caro para volver a saber lo mismo.
+     */
+    veredicto?: VeredictoDeTarea;
   }
   const enVuelo = new Map<string, EnVuelo>();
 
@@ -327,14 +394,83 @@ export function crearCorredorDeTareas(opciones: {
     tarea: Tarea,
     motivo: string,
     /** Lo que el turno autorizó, si llegó a correr. Ver `EnVuelo.autorizadas`. */
-    autorizadas?: readonly string[]
+    autorizadas?: readonly string[],
+    /** Lo que dijo el juez, si se llegó a preguntar. Ver `EnVuelo.veredicto`. */
+    veredicto?: VeredictoDeTarea
   ): Promise<void> => {
     const actual = opciones.disco.listar().find((t) => t.id === tarea.id);
     const limpiar = await olvidarSiNoSePuedeAbrir(tarea.proyecto.raiz, actual?.sesion);
-    // Las dos reglas, aquí también: por este camino se llega cuando `correr` se rompió por
+    // Las TRES reglas, aquí también: por este camino se llega cuando `correr` se rompió por
     // su cuenta, y era el único de los cuatro que perdía el registro de lo autorizado.
-    const conLoQueQuede = (t: Tarea): Tarea => conAutorizadas(limpiar ? sinSesion(t) : t, autorizadas);
+    const conLoQueQuede = (t: Tarea): Tarea =>
+      conVeredicto(conAutorizadas(limpiar ? sinSesion(t) : t, autorizadas), veredicto);
     aparcar(tarea.id, motivo, conLoQueQuede);
+  };
+
+  /**
+   * Que el juez no se pueda usar es fallo del ENTORNO, y el motivo tiene que decirlo.
+   *
+   * `ErrorDelJuezDeTarea` ya se nombra a sí mismo y ya trae, cuando lo hay, el mensaje
+   * accionable —el de CONSTRUIR el modelo: «falta la credencial para nvidia
+   * (NVIDIA_API_KEY); usa /provider nvidia»—, así que se usa tal cual y no se le pone otro
+   * prefacio encima. Cualquier otra cosa que lance el puerto se nombra desde aquí: un
+   * motivo que no dijera quién falló mandaría a buscar el problema en el trabajo del
+   * agente.
+   */
+  const motivoDelJuez = (error: unknown): string =>
+    error instanceof ErrorDelJuezDeTarea
+      ? unaLinea(error)
+      : `no se pudo consultar al juez de QA (${sinRutas(error)})`;
+
+  /**
+   * **LA PUERTA DE LA ENTREGA**: qué impide dar la tarea por terminada, o `undefined` si
+   * nada lo impide.
+   *
+   * Las condiciones las comprueba el CÓDIGO y el juez opina, y hacen falta las dos: es la
+   * regla que este repo ya tenía escrita para la subida autónoma
+   * (`core/cloudstudio.ts#PoliticaDeAprobacion`), y el motivo es el mismo por el que los
+   * avisos de honestidad son código y no prompt — a un modelo se le puede pedir que avise y
+   * a veces no avisa. Quién DECIDE es `core/entrega.ts`, que es puro; aquí solo se mide.
+   *
+   * **Al juez se le pregunta DESPUÉS de medir, y solo si las condiciones pasan.** Cada
+   * consulta es una llamada al modelo del papel `afilado`, el más caro del reparto, y
+   * gastarla para tapar un hecho que ya se sabe es gastarla para nada. `decisionDeEntrega`
+   * vuelve a comprobar las condiciones de todas formas: la garantía no puede depender de
+   * que quien llama lo haya hecho en este orden.
+   */
+  const puertaDeEntrega = async (
+    tarea: Tarea,
+    sesion: string,
+    entrada: EnVuelo,
+    resultado: ResultadoDeTurno | undefined
+  ): Promise<string | undefined> => {
+    let revisable = false;
+    try {
+      revisable = await opciones.revisable(tarea.proyecto.raiz, sesion);
+    } catch {
+      // Ni preguntarlo se pudo (en producción es git). Entonces no se sabe, y no se
+      // entrega: la única dirección posible aquí, y la misma que toma el resto del fichero.
+      revisable = false;
+    }
+    const medida = medidaDeEntrega(resultado, revisable);
+    const condiciones = condicionesDeEntrega(medida);
+    if (!condiciones.entregable) return condiciones.motivo;
+    let veredicto: VeredictoDeTarea;
+    try {
+      veredicto = await opciones.juez.juzgar({
+        encargo: tarea.encargo,
+        // Normalizadas por el MISMO sitio que las guarda en el índice, así que el juez ve
+        // exactamente las rutas que verá la persona — relativas, sin repetidos y sin la
+        // barra del backend virtual.
+        autorizadas: conAutorizadas(tarea, entrada.autorizadas ?? []).autorizadas ?? [],
+        verificador: medida.verificador,
+        ...(medida.hallazgos === undefined ? {} : { hallazgos: medida.hallazgos }),
+      });
+    } catch (error) {
+      return motivoDelJuez(error);
+    }
+    entrada.veredicto = veredicto;
+    return decisionDeEntrega(medida, veredicto).motivo;
   };
 
   /**
@@ -422,6 +558,11 @@ export function crearCorredorDeTareas(opciones: {
 
     const hilo = consola.idDeHilo;
     let motivo: string | undefined;
+    /**
+     * Lo que el turno informó de sí mismo, o `undefined` si no informó — que es «no se
+     * sabe» y NO «todo bien» (`medidaDeEntrega`). De aquí sale la medida de la entrega.
+     */
+    let resultado: ResultadoDeTurno | undefined;
     /** ¿Devolvió el turno por su cuenta? Distingue «acabó» de «se lo cortamos». */
     let terminoLimpio = false;
     let marcada = false;
@@ -442,11 +583,12 @@ export function crearCorredorDeTareas(opciones: {
         // «no consta» es la verdad. Se acumula aunque el turno reviente —`preguntar` corta
         // lanzando— porque lo que se autorizó antes se autorizó.
         entrada.autorizadas = [];
-        await consola.correrTarea(
-          tarea.encargo,
-          (m) => void (motivo ??= m),
-          (ficheros) => void entrada.autorizadas?.push(...ficheros)
-        );
+        resultado =
+          (await consola.correrTarea(
+            tarea.encargo,
+            (m) => void (motivo ??= m),
+            (ficheros) => void entrada.autorizadas?.push(...ficheros)
+          )) ?? undefined;
         terminoLimpio = true;
       }
     } catch (error) {
@@ -481,6 +623,15 @@ export function crearCorredorDeTareas(opciones: {
     // instante en que alguien pulsa Ctrl-C acabaría con un motivo falso en el kanban.
     if (motivo === undefined && !terminoLimpio) motivo = MOTIVO_CORTADA_POR_CIERRE;
     /**
+     * **Y aquí «terminada» deja de significar «el turno acabó».**
+     *
+     * Solo se pasa por la puerta si no hay ya un motivo: una tarea que se aparcó por su
+     * cuenta —el agente preguntó y no había nadie, la consola se cerró a mitad— ya tiene el
+     * motivo que explica de verdad qué pasó, y preguntarle al juez sobre un trabajo que se
+     * cortó a mitad gastaría una llamada del modelo más caro para taparlo.
+     */
+    if (motivo === undefined) motivo = await puertaDeEntrega(tarea, hilo, entrada, resultado);
+    /**
      * El estado final, y **el camino de error pasa por lo mismo que el bueno**: la regla de
      * `sesion` y la consola cerrada. Aquí ya se sabe si el turno dejó conversación —`cortar()`
      * acaba de volcarla—: uno que no emitió un solo acto cierra sin volcar nada, y entonces su
@@ -495,17 +646,21 @@ export function crearCorredorDeTareas(opciones: {
     // puede quedarse sin registrar lo que la tarea autorizó. Va sobre la tarea RELEÍDA del
     // disco (`escribirSiSigueSiendoNuestra` le pasa la actual), no sobre la que se despachó,
     // para no pisar lo que el cable cambiara entre medias.
-    let conLoQueQuede: (t: Tarea) => Tarea = (t) => conAutorizadas(t, entrada.autorizadas);
+    let conLoQueQuede: (t: Tarea) => Tarea = (t) =>
+      conVeredicto(conAutorizadas(t, entrada.autorizadas), entrada.veredicto);
     try {
       if (await olvidarSiNoSePuedeAbrir(tarea.proyecto.raiz, hilo)) {
-        conLoQueQuede = (t) => sinSesion(conAutorizadas(t, entrada.autorizadas));
+        conLoQueQuede = (t) =>
+          sinSesion(conVeredicto(conAutorizadas(t, entrada.autorizadas), entrada.veredicto));
       }
     } catch {
       // Ni preguntar se pudo: no se sabe, y entonces no se borra nada.
     }
     try {
-      // Aparcada si algo pidió a una persona; terminada si acabó limpia. «Terminada» significa
-      // que el turno acabó, no que el resultado sea correcto: eso lo mira quien la lea.
+      // Aparcada si algo pidió a una persona o si la puerta de la entrega no la dejó pasar;
+      // terminada si acabó limpia Y pasó la puerta. «Terminada» ya NO significa «el turno
+      // acabó»: significa que las tres condiciones se midieron en verde y que el juez de QA
+      // dijo que el trabajo hace lo que se pedía. Ver `puertaDeEntrega`.
       if (motivo === undefined) {
         escribirSiSigueSiendoNuestra(tarea.id, (actual) =>
           actual.estado === "en-proceso" && actual.pid === pid
@@ -589,7 +744,8 @@ export function crearCorredorDeTareas(opciones: {
           await aparcarMirandoLaSesion(
             tarea,
             `el corredor no pudo con ella (${codigoDe(error)})`,
-            entrada.autorizadas
+            entrada.autorizadas,
+            entrada.veredicto
           ).catch(() => undefined);
           // Y si tras intentarlo SIGUE en `nuevo`, este proceso no puede moverla de sitio:
           // renuncia, o el `revisar()` de abajo la vuelve a coger en el acto y otra vez.

@@ -6,6 +6,7 @@
  * donde una equivocación se paga con dos turnos a la vez sobre el mismo proyecto.
  */
 import { tituloDesde } from "./textos.js";
+import type { VeredictoDeTarea } from "./entrega.js";
 
 /**
  * Los cuatro estados, y ninguno más.
@@ -100,6 +101,23 @@ export interface Tarea {
    * escritura», que es un dato distinto y el que el juez de la entrega necesita.
    */
   autorizadas?: string[];
+  /**
+   * El veredicto del juez de QA sobre lo que hizo la tarea: resumen y hallazgos, **nunca
+   * contenido de ficheros** (`core/entrega.ts#VeredictoDeTarea` lo acota).
+   *
+   * Se guarda porque es la mitad de la decisión de «terminada» —la otra son las condiciones
+   * que comprueba el código— y porque cuando el veredicto es el motivo de que la tarea NO
+   * se entregue, sus palabras son lo único que dice qué falta. Se guarda **siempre que haya
+   * uno**, también en verde: si no, una tarea terminada no podría distinguir «el juez la
+   * aprobó» de «se entregó sin que nadie la juzgara», que es la duda que este campo existe
+   * para cerrar.
+   *
+   * **Y este SUSTITUYE, al contrario que `autorizadas`.** Aquello acumula porque un
+   * fichero escrito en el primer intento sigue escrito; un veredicto, en cambio, es una
+   * opinión sobre el estado ACTUAL del trabajo, y conservar el del intento anterior al lado
+   * del nuevo enseñaría dos respuestas a una sola pregunta.
+   */
+  veredicto?: VeredictoDeTarea;
 }
 
 /**
@@ -119,6 +137,25 @@ export const tituloDeTarea = (peticion: string): string => tituloDesde(peticion)
 /** Tope de concurrencia por omisión. Dos: una corriendo y otra avanzando sin que la máquina
  *  se quede sin aire para lo que esté haciendo la persona delante. */
 export const CONCURRENCIA_POR_OMISION = 2;
+
+/**
+ * Cuántas RONDAS de aprobación admite el turno de una tarea. **Su propio tope, y no el de
+ * la persona.**
+ *
+ * `MAX_APPROVAL_ROUNDS` son cinco y se dimensionaron para alguien pulsando: «te lo he
+ * preguntado cinco veces, para». En una tarea autónoma una ronda no es una pregunta, es una
+ * TANDA de escrituras que se autorizan solas — y cinco tandas se agotan en un encargo
+ * mediano: medido, un turno de tarea acabó con cuatro ficheros escritos, una escritura
+ * abandonada y el verificador sin correr, porque cada tanda gastaba ronda.
+ *
+ * **Y no es infinito**, por el mismo argumento que el tope propio de los artefactos: cada
+ * pasada es una llamada al modelo y aquí no hay ningún humano que frene el bucle. Veinte es
+ * cuatro veces el de la persona, sobre una observación y no sobre un gusto: el turno medido
+ * necesitaba cinco, así que veinte deja sitio a un encargo bastante mayor y sigue cortando
+ * un bucle en un tiempo finito. Cuando se corta se DICE y la tarea no se entrega: quedaron
+ * escrituras sin aplicar, y eso no es un trabajo terminado.
+ */
+export const TOPE_DE_RONDAS_DE_TAREA = 20;
 
 /**
  * Qué tareas pueden arrancar AHORA.
@@ -245,4 +282,19 @@ export function conAutorizadas(tarea: Tarea, autorizadas: readonly string[] | un
     limpios.push(ruta);
   }
   return { ...tarea, autorizadas: limpios };
+}
+
+/**
+ * La tarea con el veredicto del juez, si es que hay uno.
+ *
+ * `undefined` significa «no se le preguntó» y entonces no se toca el campo: se llega aquí
+ * también por los caminos que aparcan antes de llegar al juez —el proyecto que ya no está,
+ * el turno que revienta—, y escribir ahí una ausencia borraría el veredicto del intento
+ * anterior, que sigue siendo lo último que se supo del trabajo.
+ *
+ * Cuando SÍ hay veredicto, sustituye: ver `Tarea.veredicto`.
+ */
+export function conVeredicto(tarea: Tarea, veredicto: VeredictoDeTarea | undefined): Tarea {
+  if (veredicto === undefined) return tarea;
+  return { ...tarea, veredicto };
 }

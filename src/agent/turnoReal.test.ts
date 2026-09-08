@@ -20,7 +20,7 @@ import { ModeloGuionizado, SkillsEnMemoria, type VerifierPort } from "../core/po
 import type { Piel } from "../core/turno.js";
 import type { PendienteDeAprobacion } from "../core/events.js";
 import type { LineaDeDiff } from "../core/diff.js";
-import type { Decision } from "../vendor/hitl.js";
+import { MAX_APPROVAL_ROUNDS, type Decision } from "../vendor/hitl.js";
 import type { Entorno } from "./entorno.js";
 import type { Cambio } from "./instantanea.js";
 
@@ -41,6 +41,16 @@ function agenteFalso(
     /** Una SEGUNDA petición en la misma tanda: es lo que hace falta para probar que la
      *  partición entre artefactos y ficheros del proyecto reparte bien. */
     interruptArgs2?: Record<string, unknown>;
+    /**
+     * Vuelve a proponer la escritura después de cada resume, apruebes o rechaces.
+     *
+     * No es un caso hipotético: es lo MEDIDO («el modelo que vuelve a proponer tras cada
+     * rechazo hace que esto se llame CUATRO veces en un solo turno»), y es la única forma
+     * de recorrer el tope de rondas — que con las tareas de fondo dejó de ser una guarda
+     * teórica para ser el camino por el que un turno acabó diciendo «terminada» con una
+     * escritura abandonada.
+     */
+    insiste?: boolean;
   } = {}
 ) {
   let ejecuto = false;
@@ -53,7 +63,7 @@ function agenteFalso(
       if (resume !== undefined) {
         const aprobado = Object.values(resume).every((r) => r.decisions[0]?.type === "approve");
         if (aprobado) ejecuto = true;
-        interrumpido = false;
+        interrumpido = opts.insiste === true;
       } else if (opts.escribe) {
         interrumpido = true;
       }
@@ -157,6 +167,8 @@ async function abrir(
     cambios?: Cambio[];
     verifier?: VerifierPort;
     sinAprobacion?: () => boolean;
+    insiste?: boolean;
+    topeDeRondas?: number;
   } = {}
 ) {
   mocks.construirAgente.mockImplementation(() =>
@@ -164,6 +176,7 @@ async function abrir(
       escribe: opts.escribe,
       interruptArgs: opts.interruptArgs,
       interruptArgs2: opts.interruptArgs2,
+      ...(opts.insiste === undefined ? {} : { insiste: opts.insiste }),
     })
   );
   if (opts.cambios !== undefined) {
@@ -178,6 +191,7 @@ async function abrir(
     pedirAprobacion: opts.pedir,
     ...(opts.sinAprobacion === undefined ? {} : { sinAprobacion: opts.sinAprobacion }),
     ...(opts.verifier === undefined ? {} : { verifier: opts.verifier }),
+    ...(opts.topeDeRondas === undefined ? {} : { topeDeRondas: opts.topeDeRondas }),
   });
 }
 
@@ -954,5 +968,123 @@ describe("un proyecto en «sin aprobación»", () => {
     const piel = pielFalsa();
     await sesion.turno("cuéntame un chiste", piel);
     expect(lineasDe(piel).some((l) => l.includes("SIN aprobación"))).toBe(false);
+  });
+});
+
+/**
+ * El tope de rondas y lo que el turno DEVUELVE de sí mismo.
+ *
+ * Las dos cosas son la misma deuda, medida por la tanda de tareas autónomas: con todo
+ * aprobándose solo, un turno gastó las cinco rondas de la persona, se cortó con una
+ * escritura abandonada, el verificador no corrió ni una vez — y como `EjecutorDeTurno`
+ * devolvía `void`, nada de eso salía de aquí y el kanban decía «terminada».
+ */
+describe("el tope de rondas es de quien monta la consola, y el turno lo CUENTA", () => {
+  it("por omisión sigue siendo el de la persona: cinco rondas, cuatro preguntas", async () => {
+    let preguntas = 0;
+    const pedir = async (pendientes: PendienteDeAprobacion[]): Promise<Map<string, Decision>> => {
+      preguntas += 1;
+      return new Map(pendientes.map((p) => [p.id, { type: "approve" } as Decision]));
+    };
+    const sesion = await abrir({ escribe: true, insiste: true, pedir });
+    const piel = pielFalsa();
+    const r = await sesion.turno("escribe", piel);
+    // La 5ª ronda es la que corta, así que se pregunta cuatro veces. Es exactamente la
+    // cuenta medida sobre este bucle.
+    expect(preguntas).toBe(MAX_APPROVAL_ROUNDS - 1);
+    expect(r.cortadoPorTope).toBe(true);
+  });
+
+  it("una consola puede pedir más rondas, y entonces se preguntan más", async () => {
+    let preguntas = 0;
+    const pedir = async (pendientes: PendienteDeAprobacion[]): Promise<Map<string, Decision>> => {
+      preguntas += 1;
+      return new Map(pendientes.map((p) => [p.id, { type: "approve" } as Decision]));
+    };
+    const sesion = await abrir({ escribe: true, insiste: true, pedir, topeDeRondas: 9 });
+    const r = await sesion.turno("escribe", pielFalsa());
+    expect(preguntas).toBe(8);
+    expect(r.cortadoPorTope).toBe(true);
+  });
+
+  /**
+   * La PREDICCIÓN de si la pasada cierra el turno usa el mismo número que el corte, y tiene
+   * que usarlo: si divergieran, un turno se quedaría sin `fin` o cerraría dos veces
+   * (CLAUDE.md lo declara así, y es lo que este test ata). Con un tope más alto que el de
+   * la persona, un turno de nueve rondas sigue cerrando UNA vez.
+   */
+  it("con el tope subido, el turno cierra UNA vez: la predicción no divergió del corte", async () => {
+    const pedir = aprobarTodo();
+    const sesion = await abrir({ escribe: true, insiste: true, pedir, topeDeRondas: 9 });
+    const piel = pielFalsa();
+    await sesion.turno("escribe", piel);
+    expect((piel.fin as ReturnType<typeof vi.fn>).mock.calls).toHaveLength(1);
+  });
+
+  it("un turno cortado por el tope DICE cuántas escrituras quedaron, y que no se verificó", async () => {
+    const sesion = await abrir({ escribe: true, insiste: true, pedir: aprobarTodo(), cambios: [XNE] });
+    const r = await sesion.turno("escribe", pielFalsa());
+    // Esto es el `terminada` falso, contado con números: hay escrituras colgando y nadie
+    // midió nada. Quien decide qué hacer con ello es `core/entrega.ts`.
+    expect(r.pendientes).toBeGreaterThan(0);
+    expect(r.verificador).toBe("no-corrio");
+  });
+
+  it("un turno normal que verifica en verde lo devuelve, con cero pendientes", async () => {
+    const sesion = await abrir({
+      escribe: true,
+      pedir: aprobarTodo(),
+      cambios: [XNE],
+      verifier: { verificar: async () => ({ verde: true, hallazgos: [] }) },
+    });
+    const r = await sesion.turno("escribe", pielFalsa());
+    expect(r.verificador).toBe("verde");
+    expect(r.pendientes).toBe(0);
+    expect(r.hallazgos).toBeUndefined();
+  });
+
+  it("un veredicto rojo viaja con sus hallazgos, con fichero RELATIVO y sin contenido", async () => {
+    const sesion = await abrir({
+      escribe: true,
+      pedir: aprobarTodo(),
+      cambios: [XNE],
+      raiz: RAIZ,
+      verifier: {
+        verificar: async () => ({
+          verde: false,
+          hallazgos: [
+            {
+              code: "COLL_MISSING_PROGID",
+              severidad: "error" as const,
+              mensaje: "falta progid",
+              fichero: `${RAIZ}/Clientes.xne`,
+              linea: 4,
+            },
+          ],
+        }),
+      },
+    });
+    const r = await sesion.turno("escribe", pielFalsa());
+    expect(r.verificador).toBe("rojo");
+    expect(r.hallazgos).toEqual([
+      { code: "COLL_MISSING_PROGID", severidad: "error", mensaje: "falta progid", fichero: "Clientes.xne", linea: 4 },
+    ]);
+    // Ni una ruta de la máquina: de aquí sale lo que se le cuenta al juez y lo que acaba en
+    // el motivo de una tarea, que viaja por el cable.
+    expect(JSON.stringify(r.hallazgos)).not.toContain(RAIZ);
+  });
+
+  it("un turno que no escribió nada dice que el verificador no corrió, y POR QUÉ", async () => {
+    const sesion = await abrir({ verifier: { verificar: async () => ({ verde: true, hallazgos: [] }) } });
+    const r = await sesion.turno("hola", pielFalsa());
+    expect(r.verificador).toBe("no-corrio");
+    expect(r.motivoSinVerificar).toContain("no escribió");
+  });
+
+  it("sin verificador se dice que esta ejecución no lo tiene, no que esté verde", async () => {
+    const sesion = await abrir({ escribe: false, cambios: [XNE] });
+    const r = await sesion.turno("escribe", pielFalsa());
+    expect(r.verificador).toBe("no-corrio");
+    expect(r.motivoSinVerificar).toContain("no tiene verificador");
   });
 });

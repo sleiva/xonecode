@@ -750,6 +750,19 @@ export function crearVestibulo(opciones: OpcionesDelVestibulo): Vestibulo {
     // cuando el id existe. Se lanza sin esperar —abrir no puede quedarse esperando a git— y
     // el rechazo se traga: sin marca, la vista lo dice.
     const foto = opciones.marcarSesion?.(raiz).catch(() => undefined);
+    /**
+     * La ref ya APUNTADA, para poder esperarla al cerrar.
+     *
+     * `volcar()` la lanza y no la aguarda —es síncrono y corre en el `finally` de cada
+     * turno—, y eso está bien para quien mira: la pestaña Revisión pregunta cuando alguien
+     * la abre, mucho después. Lo que no vale es para quien MIDE: el corredor de tareas
+     * comprueba que lo escrito se pueda revisar justo después de cerrar la consola, y
+     * medido con git de verdad la ref todavía no estaba —`cambiosDeSesion` devolvía
+     * `sin-marca`— así que TODA tarea se habría aparcado diciendo que nadie puede revisarla
+     * en un proyecto donde sí se puede. Guardarla aquí y esperarla en `cerrar()` es lo que
+     * lo cierra sin que abrir un proyecto tenga que aguardar a git.
+     */
+    let marcado: Promise<unknown> | undefined;
 
     /**
      * El id de la sesión, decidido al ABRIR y no en el primer volcado.
@@ -827,7 +840,8 @@ export function crearVestibulo(opciones: OpcionesDelVestibulo): Vestibulo {
         sesiones.crear(raiz, idSesion);
         anotada = true;
         // Ahora sí hay una sesión en el índice a la que apuntar la foto de la apertura.
-        void foto?.then((apuntar) => apuntar?.(idSesion));
+        // Se guarda la promesa en vez de tirarla: `cerrar()` la espera. Ver `marcado`.
+        marcado = foto?.then((apuntar) => apuntar?.(idSesion));
       }
       for (const acto of todos.slice(volcados)) sesiones.anotar(raiz, idSesion, acto);
       volcados = todos.length;
@@ -867,7 +881,11 @@ export function crearVestibulo(opciones: OpcionesDelVestibulo): Vestibulo {
       consolaWeb.turno(true);
       if (alCable) escuchaDeTurno?.(true);
       try {
-        await ejecutorEfectivo(peticion, estado, consola);
+        // Se DEVUELVE lo que el turno informe. Sin este `return`, el canal que
+        // `crearEjecutorReal` acaba de abrir moría en este envoltorio: el corredor de
+        // tareas no tendría con qué medir si lo hecho es entregable, y ninguna piel se
+        // enteraría — que es exactamente cómo el `terminada` falso pasó desapercibido.
+        return await ejecutorEfectivo(peticion, estado, consola);
       } finally {
         // En el `finally`: un turno que revienta o que se cancela también TERMINA, y dejar
         // el compositor apagado para siempre sería peor que no haberlo apagado nunca.
@@ -965,6 +983,10 @@ export function crearVestibulo(opciones: OpcionesDelVestibulo): Vestibulo {
         consolaWeb.cerrar();
         await terminada.catch(() => 0);
         volcar();
+        // Y la ref de la sesión queda ya APUNTADA cuando esto devuelve: quien cierra la
+        // consola es también quien mide si lo escrito se puede revisar (el corredor de
+        // tareas), y sin esta espera medía antes de que git hubiera escrito. Ver `marcado`.
+        await marcado?.catch(() => undefined);
       },
       // El MISMO objeto que se le acaba de pasar a `correr`, no un segundo envoltorio: dos
       // versiones del turno divergen en la primera corrección que solo toque a una.

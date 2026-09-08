@@ -2893,6 +2893,17 @@ describe("las tareas en background, el cableado del corredor con el cable — no
     sesionesDe: () => [],
   };
 
+  /**
+   * Las dos piezas de la puerta de la ENTREGA, que el corredor exige por tipo. Estos tests
+   * son sobre la costura con el CABLE —una reconciliación que llega al SSE—, no sobre la
+   * puerta, que tiene su batería en `corredorDeTareas.test.ts`; aquí basta con que estén
+   * montadas. `npm test` no le pregunta a ningún modelo: el juez es este doble.
+   */
+  const ENTREGA_DE_TAREAS = {
+    juez: { juzgar: async () => ({ veredicto: "verde" as const, resumen: "bien" }) },
+    revisable: async () => true,
+  };
+
   const tareaEnProceso = (id: string): Tarea => ({
     id,
     proyecto: { id: "p1", raiz: "/w/AppDemo", nombre: "AppDemo" },
@@ -2911,6 +2922,7 @@ describe("las tareas en background, el cableado del corredor con el cable — no
       tareasFabrica: () => cola,
       informar: () => {},
       olvidarHiloDeSesion: async () => {},
+      ...ENTREGA_DE_TAREAS,
     });
     expect(corredor).toBeDefined();
     let llamado = 0;
@@ -2934,6 +2946,7 @@ describe("las tareas en background, el cableado del corredor con el cable — no
       tareasFabrica: () => cola,
       informar: (texto) => avisos.push(texto),
       olvidarHiloDeSesion: async () => {},
+      ...ENTREGA_DE_TAREAS,
     });
 
     await expect(
@@ -2956,6 +2969,7 @@ describe("las tareas en background, el cableado del corredor con el cable — no
       vestibulo: vestibuloSinAbrir,
       informar: () => {},
       olvidarHiloDeSesion: async () => {},
+      ...ENTREGA_DE_TAREAS,
     });
     expect(corredor).toBeUndefined();
     expect(opcionesDeMontaje.colaDeTareas).toBeUndefined();
@@ -2976,6 +2990,7 @@ describe("las tareas en background, el cableado del corredor con el cable — no
       tareasFabrica: () => cola,
       informar: () => {},
       olvidarHiloDeSesion: async () => {},
+      ...ENTREGA_DE_TAREAS,
     });
     const servidor = servidorDeMentira();
     const cable = montarRutas(servidor, vestibuloDePrueba(), opcionesDeMontaje);

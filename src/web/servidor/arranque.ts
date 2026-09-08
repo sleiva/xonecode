@@ -91,6 +91,9 @@ import {
 } from "../../agent/artefactosEnDisco.js";
 import type { ProyectoRemoto } from "../../agent/cloudstudioMcp.js";
 import { CatalogoModelos } from "../../agent/catalogoModelos.js";
+import { Modelos } from "../../agent/modelos.js";
+import { crearJuezDeTarea, invocarConModelos } from "../../agent/juezDeTarea.js";
+import type { JuezDeTareaPort } from "../../core/ports.js";
 import type { Entorno } from "../../core/settings.js";
 import { arrancarServidor, type ServidorWeb } from "./servidor.js";
 import { consolaParaTarea, crearCorredorDeTareas, type Corredor } from "./corredorDeTareas.js";
@@ -2170,6 +2173,15 @@ export function construirCorredorDeTareasCableado(opciones: {
   tareasFabrica?: (informar: (texto: string) => void) => TareasEnDisco;
   informar: (texto: string) => void;
   olvidarHiloDeSesion: (raiz: string, hilo: string) => Promise<void>;
+  /**
+   * Las DOS piezas de la puerta de la entrega, obligatorias porque el corredor las exige por
+   * TIPO (ver `crearCorredorDeTareas`): un juez que decida si el trabajo hace lo que se
+   * pedía, y con qué se comprueba que lo escrito se puede revisar. Suben hasta aquí para que
+   * el test de esta costura las componga de verdad, que es el motivo de que esta función
+   * exista.
+   */
+  juez: JuezDeTareaPort;
+  revisable: (raiz: string, sesion: string) => Promise<boolean>;
 }): CorredorDeTareasCableado {
   const disco = opciones.tareasFabrica === undefined ? undefined : opciones.tareasFabrica(opciones.informar);
 
@@ -2226,6 +2238,15 @@ export function construirCorredorDeTareasCableado(opciones: {
           // que al borrar una conversación: un checkpoint es la lista de mensajes entera y
           // crece, y ahí seguiría vivo e invisible desde la interfaz para siempre.
           olvidarHilo: opciones.olvidarHiloDeSesion,
+          /**
+           * La puerta de la ENTREGA: «terminada» ya no significa «el turno acabó». Las tres
+           * condiciones las comprueba el código (`core/entrega.ts`) y el juez de QA opina, y
+           * hacen falta las dos — es la regla que este repo ya tenía escrita para la subida
+           * autónoma, y el mismo motivo por el que los avisos de honestidad son código y no
+           * prompt.
+           */
+          juez: opciones.juez,
+          revisable: opciones.revisable,
           /**
            * El puente hacia el cable, y NUNCA puede tumbar el lazo de tareas: un sumidero
            * muerto —o cualquier otra cosa que `emitirTareas` haga mal— es un problema del
@@ -2409,6 +2430,39 @@ export async function arrancarConsolaWeb(opciones: OpcionesDeArranque): Promise<
     tareasFabrica: opciones.tareas,
     informar,
     olvidarHiloDeSesion: async (raiz, hilo) => olvidarHilo(crearCheckpointerDeProyecto(raiz), hilo),
+    /**
+     * El juez de QA de las tareas, con el papel `afilado` — el que `core/modelos.ts` le
+     * reserva.
+     *
+     * **Los `Modelos` se construyen en CADA consulta**, no una vez al arrancar, y es la
+     * misma razón por la que `sinAprobacion` relee los settings en cada ronda: el asistente
+     * de cuenta y `/provider` escriben la credencial y la elección de modelo mientras el
+     * proceso vive, y un `Modelos` capturado al arrancar dejaría al juez con el reparto de
+     * antes. Una consulta por tarea, así que leer el `config.json` ahí no cuesta nada.
+     */
+    juez: crearJuezDeTarea({
+      invocar: (papel, prompt) =>
+        invocarConModelos(
+          new Modelos(
+            {
+              global: cargar(opciones.cwd).config.global,
+              entorno: { XONECODE_MODELO: process.env.XONECODE_MODELO },
+            },
+            proveedoresPersonalizados
+          )
+        )(papel, prompt),
+    }),
+    /**
+     * Que lo escrito se pueda REVISAR es `cambiosDeSesion(...).via === "git"`: la MISMA
+     * función que pinta la pestaña Revisión, no una parecida, así que la condición significa
+     * literalmente «Revisión lo enseña». Sin aprobación previa ese diff es el único momento
+     * en que una persona puede mirar lo que hizo una tarea, y entregar trabajo que nadie
+     * puede ver sería dejar vacío el sitio del modal.
+     *
+     * Y NO es «el árbol de git está limpio»: eso está medido y sería falso siempre — una
+     * tarea que escribe un fichero deja el árbol sucio por definición.
+     */
+    revisable: async (raiz, sesion) => (await cambiosDeSesion(raiz, sesion)).via === "git",
   });
 
   if (offline && opciones.guion === true) {

@@ -10,6 +10,8 @@
  */
 
 import type { Proveedor } from "./modelos.js";
+import type { EstadoDeVerificador, VeredictoDeTarea } from "./entrega.js";
+import type { HallazgoDelTurno } from "./events.js";
 import type {
   ContextoRemoto, EntradaRemota, EstructuraRemota, ManifiestoRemoto,
 } from "./cloudstudio.js";
@@ -229,6 +231,45 @@ export function huella(h: Hallazgo): string {
 /** El verificador determinista. Establece HECHOS: no opina y no auto-corrige. */
 export interface VerifierPort {
   verificar(rutaProyecto: string): Promise<InformeVerificacion>;
+}
+
+/**
+ * Lo que se le cuenta al juez de QA de una tarea, y **nada más que esto**.
+ *
+ * El encargo es el brief, y el resto son HECHOS que ya midió alguien: qué ficheros se
+ * autorizó escribir (nombres relativos) y cómo acabó el verificador con sus hallazgos —
+ * que es lo que `InformeVerificacion` ya declara que viaja «al juez como hecho». Ni un
+ * byte de contenido de ningún fichero: el juez decide si el trabajo hace lo que se pedía,
+ * y para eso no hace falta abrir nada. Es la misma regla que gobierna los eventos de
+ * dominio, aplicada al único sitio nuevo por donde podría escaparse.
+ */
+export interface CasoDeJuez {
+  encargo: string;
+  /** Lo que la tarea AUTORIZÓ escribir, relativo a la raíz. Ver `Tarea.autorizadas`: es
+   *  una PISTA de lo que tocó, no la verdad sobre el disco (esa la tiene git). */
+  autorizadas: readonly string[];
+  /** Cómo acabó el verificador, si se sabe. `no-corrio` se le DICE: un juez que no sabe
+   *  que nadie midió juzgaría sobre un hecho que no existe. */
+  verificador?: EstadoDeVerificador;
+  hallazgos?: readonly HallazgoDelTurno[];
+}
+
+/**
+ * El juez de QA: una de las DOS piezas que ocupan el sitio que dejó el modal de aprobación
+ * cuando las tareas pasaron a aplicar sus escrituras (§0 del diseño). La otra es el
+ * verificador, que ya corre dentro del turno.
+ *
+ * Es un PUERTO por la razón de siempre —`npm test` no puede necesitar una clave ni una
+ * conexión— y usa el papel `afilado`, que en `core/modelos.ts` está RESERVADO al juez.
+ *
+ * **No tiene doble, y es a propósito.** El modo offline lo cubre el propio papel: por
+ * omisión `afilado` resuelve a Ollama local, que es una consola usable sin red externa. Un
+ * doble aquí solo podría contestar «verde» o «rojo» sin haber juzgado nada, y de este
+ * veredicto depende que una tarea se dé por terminada: exactamente lo que `ES_DOBLE`
+ * existe para impedir. Que no se pueda usar es fallo del ENTORNO y se dice como tal.
+ */
+export interface JuezDeTareaPort {
+  juzgar(caso: CasoDeJuez): Promise<VeredictoDeTarea>;
 }
 
 // ─────────────────────────── LOS DOBLES ───────────────────────────
