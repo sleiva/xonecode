@@ -2623,6 +2623,19 @@ git commit -m "feat: una tarea se entrega por condiciones medidas MÁS el juez, 
 
 ## Task 12: esperando feedback — editar la tarea y que siga
 
+> **Desviación de ficheros, dicha con su procedencia.** Esta tarea tuvo que tocar
+> `web/servidor/vestibulo.ts`, que NO está en su lista: `abrirParaTarea` no reenviaba
+> `tarea.sesion` en ninguna de sus tres capas, así que **todo reintento abría un hilo en
+> blanco** y el criterio central de esta tarea era falso en producción aunque su test
+> superficial pasara. No es un agujero de la Task 11: **lo vio el implementador de la Task 3**
+> —dejó escrito que reusar la sesión pedía `abrirParaTarea(raiz, sesion?)` y que era
+> superficie suya— y el controlador dictaminó no extenderlo, con el argumento de que el hilo
+> huérfano se olvida y por tanto no hay id que reusar. Ese argumento cubría **la mitad** de
+> los casos: vale para una tarea cortada a mitad de turno (sin transcript, `sesion`
+> limpiada) y no vale para una tarea aparcada esperando feedback, que sí tiene transcript y
+> sí conserva su `sesion`. La lección para el que venga: un ruling que descarta un hallazgo
+> tiene que enumerar los casos que cubre, o se descarta también lo que no había mirado.
+
 **Goal:** Que una tarea aparcada por una decisión que necesita al desarrollador se resuelva editando la tarea para añadir el feedback, y que entonces continúe en el mismo hilo.
 
 **Files:**
