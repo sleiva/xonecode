@@ -45,7 +45,11 @@ export function NuevaTarea({
    * igual, `abrirParaTarea` (`vestibulo.ts`) lanza porque falta el `.xonecode/config.json`, y
    * `correr` la aparca en `requiere-atencion` con ese motivo; `renunciarSiSigueNueva` remata
    * que este proceso no la vuelva a coger solo. O sea que hay que descargar el proyecto y
-   * **reintentarla a mano** desde el tablero. La frase de antes —«no arrancará hasta que se
+   * **reintentarla a mano** con el botón «Reintentar» de la tarea aparcada
+   * (`TareasDelProyecto`). La frase NO nombra dónde está ese botón a propósito: hoy vive en la
+   * lista de tareas del proyecto y no en el kanban, así que decir «desde el tablero» habría
+   * sido la misma clase de fallo que se está corrigiendo — mandar a un sitio que no ofrece la
+   * acción. La frase de antes —«no arrancará hasta que se
    * descargue»— prometía una espera que no existe, en la ventana donde justamente se está
    * concediendo la autorización.
    */
@@ -166,7 +170,7 @@ export function NuevaTarea({
             <p className={estilos.nota}>
               Este proyecto todavía no está en tu equipo. La tarea se encola igual, pero al
               cogerla se aparcará diciendo que el proyecto no está. Descárgalo abriéndolo una vez
-              con «Nueva sesión» y luego reintentala desde el tablero.
+              con «Nueva sesión» y luego reinténtala.
             </p>
           )}
 
