@@ -426,6 +426,126 @@ describe("lo que una tarea AUTORIZÓ se guarda con su estado", () => {
 });
 
 /**
+ * Task 14: `descartar` corta el turno en vuelo ANTES de borrar — medido a partir de lo que
+ * `parar()` ya sabía hacer (`entrada.cortar`), no inventado. La razón: sin cortar, el turno
+ * de una tarea `en-proceso` seguía corriendo —y escribiendo en el proyecto— después de que
+ * la tarea desapareciera del kanban, y su carpeta de adjuntos (montada viva como
+ * `/adjuntos/`) se borraba por debajo mientras el turno la seguía usando.
+ */
+describe("Corredor.cortar(id): la salida que usa `descartar` antes de borrar", () => {
+  it("sin nada en vuelo con ese id, no hay nada que cortar: resuelve `true` en el acto", async () => {
+    const { disco } = discoDeMentira([TAREA({ estado: "nuevo" })]);
+    const corredor = crearCorredorDeTareas({ ...ENTREGA_VERDE, disco, abrirParaTarea: async () => {
+      throw new Error("no debería llamarse: nada corre todavía");
+    }, pid: 1, concurrencia: () => 1 });
+    await expect(corredor.cortar("t1")).resolves.toBe(true);
+    await corredor.parar();
+  });
+
+  /**
+   * El caso común: la tarea ya está corriendo (la consola está abierta), así que cortar
+   * ABORTA el turno de verdad — la misma `AbortError` que `parar()` ya sabe contar — y solo
+   * ESA tarea se ve afectada.
+   */
+  it("con la tarea en vuelo, corta SU turno —y solo el suyo— y resuelve `true`", async () => {
+    const { disco, estado } = discoDeMentira([TAREA({ id: "t1" }), TAREA({ id: "t2", proyecto: { id: "pb", raiz: "/w/B", nombre: "B" } })]);
+    const p = proyectoDeMentira();
+    const corredor = crearCorredorDeTareas({ ...ENTREGA_VERDE, disco, abrirParaTarea: p.abrir, pid: 1, concurrencia: () => 2 });
+    await corredor.arrancar();
+    await corredor.asentar();
+    expect(p.encargos.length).toBe(2);
+
+    await expect(corredor.cortar("t1")).resolves.toBe(true);
+
+    // La cortada quedó aparcada CON el motivo de un corte, no de un fallo — es la
+    // comprobación exacta que el docblock de `entrada.cortarPedido` promete: sin ella,
+    // `motivo` habría salido «el turno falló (AbortError)», que es falso.
+    expect(estado().find((t) => t.id === "t1")).toMatchObject({
+      estado: "requiere-atencion",
+      motivo: MOTIVO_CORTADA_POR_CIERRE,
+    });
+    // La OTRA tarea ni se enteró: sigue en vuelo, sin motivo ni marca de corte.
+    expect(estado().find((t) => t.id === "t2")).toMatchObject({ estado: "en-proceso" });
+    expect(p.cierres).toEqual(["/w/A"]);
+
+    await corredor.parar();
+  });
+
+  /**
+   * La carrera MEDIDA: `cortar(id)` llega mientras `abrirParaTarea` todavía no ha resuelto
+   * —la consola no existe, `entrada.cortar` sigue siendo el de mentira—. Sin `cortarPedido`,
+   * ese corte no haría nada y el turno arrancaría un instante después de haber sido
+   * «cortado». Con él, `correr()` lo ve en cuanto abre y nunca llega a marcar «en proceso»
+   * ni a mandar el encargo.
+   */
+  it("pedir el corte MIENTRAS la consola se abre igual impide que el turno arranque", async () => {
+    const { disco, estado } = discoDeMentira([TAREA()]);
+    let dejarAbrir: (() => void) | undefined;
+    const p = proyectoDeMentira();
+    const abriendo = new Promise<void>((r) => void (dejarAbrir = r));
+    const corredor = crearCorredorDeTareas({
+      ...ENTREGA_VERDE,
+      disco,
+      abrirParaTarea: async (raiz) => {
+        await abriendo; // se queda aquí hasta que el test suelte el cerrojo
+        return p.abrir(raiz);
+      },
+      pid: 1,
+      concurrencia: () => 1,
+    });
+    await corredor.arrancar();
+    // La tarea sigue en «nuevo»: `abrirParaTarea` está bloqueada, así que `correr()` no ha
+    // llegado ni a reasignar `entrada.cortar`.
+    expect(estado()[0]).toMatchObject({ estado: "nuevo" });
+
+    const cortando = corredor.cortar("t1");
+    dejarAbrir!();
+    await expect(cortando).resolves.toBe(true);
+
+    // Nunca llegó a correr: cero encargos mandados, y sigue en «nuevo» — no «requiere-
+    // atencion» con un motivo inventado, porque nunca se marcó «en proceso».
+    expect(p.encargos).toEqual([]);
+    expect(estado()[0]).toMatchObject({ estado: "nuevo" });
+
+    await corredor.parar();
+  });
+
+  /**
+   * El plazo, igual que `parar()`: si la consola no suelta a tiempo, `cortar` dice que NO se
+   * puede seguir en vez de fingir que sí. Es la única señal con la que `atenderAccionDeTarea`
+   * (`arranque.ts`) puede negarse a borrar una tarea cuyo turno sigue de verdad en marcha.
+   */
+  it("si la consola no suelta a tiempo, resuelve `false`: no está seguro borrar todavía", async () => {
+    const { disco, estado } = discoDeMentira([TAREA()]);
+    const encargos: string[] = [];
+    const corredor = crearCorredorDeTareas({
+      ...ENTREGA_VERDE,
+      disco,
+      abrirParaTarea: async (raiz) => ({
+        raiz,
+        idDeHilo: "hilo",
+        correrTarea: async (encargo) => {
+          encargos.push(encargo);
+          return new Promise(() => {}); // nunca devuelve
+        },
+        cerrar: async () => new Promise(() => {}), // nunca suelta
+      }),
+      pid: 1,
+      concurrencia: () => 1,
+      esperaAlParar: 20,
+    });
+    await corredor.arrancar();
+    await corredor.asentar();
+    expect(encargos.length).toBe(1);
+
+    await expect(corredor.cortar("t1")).resolves.toBe(false);
+    // Y no se mintió tampoco en el índice: sigue «en proceso», no una «requiere-atencion»
+    // que no ha pasado todavía.
+    expect(estado()[0]).toMatchObject({ estado: "en-proceso" });
+  });
+});
+
+/**
  * Task 12: «requiere-atencion» dejó de ser terminal — se resuelve editando la tarea para
  * añadir el feedback del usuario, y la tarea sigue **en su mismo hilo** (§0 del diseño).
  *

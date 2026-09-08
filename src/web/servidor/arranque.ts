@@ -346,9 +346,14 @@ export interface OpcionesDeMontaje {
     TareasEnDisco,
     "listar" | "guardar" | "borrarTarea" | "guardarAdjunto" | "listarAdjuntos"
   >;
-  /** Lo mínimo del corredor que este cable necesita LEER: si ejecuta AQUÍ, para el campo
-   *  `corriendoAqui` del mensaje `tareas`. Nunca `arrancar`/`parar`: eso es del proceso. */
-  corredorDeTareas?: Pick<Corredor, "corriendoAqui">;
+  /**
+   * Lo mínimo del corredor que este cable toca: `corriendoAqui` para LEER (el campo del
+   * mensaje `tareas`), y `cortar` para escribir — pero acotado a UNA tarea, nunca
+   * `arrancar`/`parar` el proceso entero. Task 14: `atenderAccionDeTarea` lo llama ANTES de
+   * `borrarTarea` para que descartar una `en-proceso` no deje su turno huérfano escribiendo
+   * en el proyecto sin que ninguna pantalla lo diga.
+   */
+  corredorDeTareas?: Pick<Corredor, "corriendoAqui" | "cortar">;
   /** El tope de concurrencia vigente, para el mensaje `tareas`. Ausente = `CONCURRENCIA_POR_OMISION`. */
   concurrenciaDeTareas?: () => number;
   /** Cambia el tope de concurrencia del corredor. Ausente = Ajustes no puede tocarlo. */
@@ -1034,16 +1039,53 @@ export function montarRutas(
    * Reintentar, descartar o terminar una tarea existente.
    *
    * **Descartar BORRA** y no comprueba el estado —no hay «cancelada» en `core/tareas.ts`—,
-   * ni siquiera si está `en-proceso`: el corredor ya cuenta con que una tarea corriendo se
-   * descarte por debajo (`corredorDeTareas.ts#revisar`, «la que DESCARTARON del índice
-   * mientras corría»); su turno sigue vivo y su hueco sigue ocupado hasta que devuelva.
-   * Reintentar y terminar pasan por `conEstado`, que LANZA ante una transición imposible;
-   * aquí se atrapa y se DICE con `informar` — nunca se propaga al cliente, y nunca se
-   * escribe nada a medias.
+   * ni siquiera si está `en-proceso`. Reintentar y terminar pasan por `conEstado`, que LANZA
+   * ante una transición imposible; aquí se atrapa y se DICE con `informar` — nunca se
+   * propaga al cliente, y nunca se escribe nada a medias.
+   *
+   * **Descartar CORTA el turno en vuelo ANTES de borrar (Task 14).** Antes de esto, el
+   * comentario de aquí decía que «el corredor ya cuenta con que una tarea corriendo se
+   * descarte por debajo» — y era cierto que CONTABA con ello (`corredorDeTareas.ts#revisar`
+   * no se rompía), pero contarlo no es lo mismo que MANEJARLO: el turno seguía corriendo de
+   * verdad, escribiendo en el proyecto de alguien sin que ninguna pantalla lo dijera, y su
+   * carpeta de adjuntos —montada viva como `/adjuntos/` para ese turno— se borraba en el
+   * acto por debajo suyo. `Corredor.cortar(id)` (medido y cableado en `corredorDeTareas.ts`,
+   * reusando `entrada.cortar`, lo mismo que ya usa `parar()`) se espera ANTES de
+   * `borrarTarea`, así que la carpeta de adjuntos solo se toca DESPUÉS de que la consola
+   * haya soltado su montaje — nunca antes: quitarle el suelo a un turno vivo es un fallo por
+   * sí solo, con independencia de todo lo demás.
+   *
+   * **Y si no se puede cortar a tiempo, NO se borra.** `Corredor.cortar` devuelve `false`
+   * cuando la tarea SÍ corría aquí y no soltó el proyecto dentro del plazo — la misma
+   * situación que `parar()` ya sabe contar sin mentir. Borrar de todos modos dejaría el
+   * turno huérfano exactamente igual que antes de este arreglo, solo que con menos excusa:
+   * se prefiere el aviso honesto («sigue en marcha, reinténtalo») a un corte que promete
+   * haber parado algo que no paró.
+   *
+   * **Y si corre en OTRO proceso, tampoco.** `corredorDeTareas?.corriendoAqui() === false`
+   * con la tarea `en-proceso` en disco solo puede significar eso —ESTE proceso solo sirve el
+   * dashboard, y el que de verdad la ejecuta no está aquí para preguntarle—; `Corredor.cortar`
+   * no tiene con qué alcanzarlo (el límite lo pone el sistema operativo, no esta función), así
+   * que forzar el borrado sería la misma orfandad de antes, disfrazada de arreglada. Es la
+   * MISMA regla que ya sigue `Vestibulo.borrarSesion` con la sesión de una tarea en curso:
+   * declinar con el motivo, no matar un turno ajeno porque alguien limpió una fila.
    */
-  const atenderAccionDeTarea = (accion: "reintentar" | "descartar" | "terminar", id: string): void => {
+  const atenderAccionDeTarea = async (accion: "reintentar" | "descartar" | "terminar", id: string): Promise<void> => {
     if (opciones.colaDeTareas === undefined) return;
     if (accion === "descartar") {
+      const actual = opciones.colaDeTareas.listar().find((t) => t.id === id);
+      if (actual?.estado === "en-proceso" && opciones.corredorDeTareas?.corriendoAqui() === false) {
+        informar(`no se pudo descartar «${actual.titulo}»: su turno lo ejecuta otro proceso, y no se puede cortar desde aquí`);
+        return;
+      }
+      // Ausente = no hay corredor cableado en esta ejecución, y entonces no hay ningún
+      // turno que pueda estar corriendo: seguro proceder, la misma lectura que «no había
+      // nada en vuelo» dentro del propio corredor.
+      const cortada = (await opciones.corredorDeTareas?.cortar(id)) ?? true;
+      if (!cortada) {
+        informar(`no se pudo descartar «${actual?.titulo ?? id}»: su turno no soltó el proyecto a tiempo — sigue en marcha, reinténtalo`);
+        return;
+      }
       opciones.colaDeTareas.borrarTarea(id);
       return;
     }
@@ -2185,9 +2227,22 @@ export function montarRutas(
         mensaje.accion !== "feedback" &&
         opciones.colaDeTareas !== undefined
       ) {
-        atenderAccionDeTarea(mensaje.accion, mensaje.id);
-        opciones.revisarTareas?.();
-        emitirTareas();
+        /**
+         * Ya no es `void x(); revisarTareas(); emitirTareas();` seguidas — reintentar y
+         * terminar siguen siendo instantáneos, pero descartar puede esperar a que el
+         * corredor corte un turno en vuelo (Task 14), y emitir la cola ANTES de que eso
+         * termine enseñaría la tarea todavía «en proceso» un instante antes de que
+         * `borrarTarea` la quite de verdad. Se secuencia con `.then()`, el mismo patrón que
+         * el resto de acciones asíncronas de este manejador (`atenderRevision`,
+         * `atenderArbol`…), y el fallo se cuenta y no se propaga: la respuesta HTTP ya se
+         * mandó en el acto.
+         */
+        void atenderAccionDeTarea(mensaje.accion, mensaje.id)
+          .then(() => {
+            opciones.revisarTareas?.();
+            emitirTareas();
+          })
+          .catch(contar);
       }
       respuesta.writeHead(204);
       respuesta.end();

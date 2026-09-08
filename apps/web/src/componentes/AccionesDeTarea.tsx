@@ -50,19 +50,20 @@ import modal from "./NuevaSesion.module.css";
  * estados, incluido `en-proceso`: la misma razón por la que una sesión se borra desde una
  * ventana y no al primer clic de su «…» — «eliminar al primer clic en una fila de 34 px es
  * cómo se pierde la conversación de una tarde» — aplica igual aquí, y la tarjeta del kanban
- * es tan estrecha como esa fila. Y la ventana DICE lo que de verdad pasa, medido y no
- * supuesto:
- * - **El encargo y sus adjuntos se borran, sin papelera**
- *   (`agent/tareasEnDisco.ts#borrarTarea`: `rmSync` de la carpeta de la tarea).
- * - **Si está `en-proceso`, descartarla NO para el turno.** `atenderAccionDeTarea("descartar")`
- *   solo borra del índice — nunca llama a `cortar()` — y `corredorDeTareas.ts` cuenta con
- *   exactamente esto («la que DESCARTARON del índice mientras corría: su turno sigue vivo»):
- *   el turno sigue trabajando sobre el proyecto y sus escrituras se siguen aplicando, sin
- *   que la interfaz vuelva a enseñarlas en ningún sitio.
- * - **Y sus adjuntos desaparecen EN EL ACTO**, aunque el turno los siga necesitando: el
- *   `rmSync` de arriba no comprueba el estado —es la misma «no comprueba estado, a
- *   propósito» de más arriba— y esa misma carpeta es la que el backend del agente tiene
- *   montada como `/adjuntos/` mientras dure la consola.
+ * es tan estrecha como esa fila.
+ *
+ * **Y desde Task 14, lo que la ventana DICE es corto porque ya es verdad entera.** La
+ * primera versión de esta ventana tenía que avisar de que una tarea `en-proceso` seguía
+ * corriendo —y escribiendo en el proyecto— DESPUÉS de descartarla, porque
+ * `atenderAccionDeTarea("descartar")` solo borraba del índice sin tocar el turno. Ese aviso
+ * era honesto pero describía un FALLO, no una advertencia razonable — «esto va a seguir
+ * escribiendo en tu proyecto y no vas a verlo» es la confesión de algo que se puede
+ * arreglar, no el precio de borrar. Se arregló ahí, no aquí: `web/servidor/arranque.ts`
+ * ahora espera a `Corredor.cortar(id)` —que aborta el turno de verdad y espera a que la
+ * consola suelte su montaje de `/adjuntos/`— ANTES de `borrarTarea`. Con eso, la única
+ * frase que la ventana necesita decir es la misma para todos los estados: se para el turno
+ * si está en marcha, y se borra todo. Dejar el párrafo viejo puesto habría sido la trampa
+ * de siempre: un aviso que describe una versión del producto que ya no existe.
  */
 export function AccionesDeTarea({
   tarea: t,
@@ -150,10 +151,11 @@ export function AccionesDeTarea({
  * cual la usa `AccionDeSesion.tsx` para lo mismo con una sesión — mismo modal, mismo motivo:
  * dos copias del mismo velo es cómo se acaba con dos velos distintos.
  *
- * **El aviso de `en-proceso` es el único que cambia según el estado**, y dice lo MEDIDO
- * (ver el comentario de `AccionesDeTarea` más arriba), no un «¿seguro?» genérico: sin él, la
- * persona no tiene forma de saber que el turno sigue corriendo y que sus escrituras se
- * siguen aplicando después de que la tarjeta desaparezca de su pantalla.
+ * **Una sola frase para los cuatro estados, y no una condicional por `en-proceso`.** Antes
+ * de Task 14 hacía falta un párrafo aparte para avisar de que el turno de una `en-proceso`
+ * seguía corriendo tras el borrado; ahora el servidor lo corta ANTES de borrar
+ * (`web/servidor/arranque.ts#atenderAccionDeTarea`), así que la frase de siempre ya es
+ * cierta para las cuatro: el turno se para si está en marcha, y se borra todo.
  */
 function ConfirmarDescarte({
   tarea: t,
@@ -175,15 +177,9 @@ function ConfirmarDescarte({
         <div className={modal.ventana}>
           <h2 className={modal.titulo}>Descartar tarea</h2>
           <p className={modal.nota}>
-            Se borra «{t.titulo}»: el encargo y sus adjuntos. No hay papelera.
+            Se para el turno de «{t.titulo}» si está en marcha, y se borra todo: el encargo
+            y sus adjuntos. No hay papelera.
           </p>
-          {t.estado === "en-proceso" ? (
-            <p className={modal.nota}>
-              Está en marcha: el turno sigue corriendo sobre el proyecto aunque la descartes
-              —no se para, y lo que escriba se sigue aplicando aunque ya no lo veas aquí—, y
-              sus adjuntos se borran ahora mismo aunque el turno los siga necesitando.
-            </p>
-          ) : null}
           <div className={modal.acciones}>
             <Button variant="outline" className={modal.accion} onClick={onCancelar}>
               Cancelar

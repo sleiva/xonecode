@@ -2723,7 +2723,7 @@ describe("las tareas en background, por el cable", () => {
     ]);
     montarRutas(servidor, vestibuloDePrueba(), {
       colaDeTareas: cola,
-      corredorDeTareas: { corriendoAqui: () => true },
+      corredorDeTareas: { corriendoAqui: () => true, cortar: async () => true },
       concurrenciaDeTareas: () => 2,
     });
     const cliente = clienteDeMentira();
@@ -2766,7 +2766,7 @@ describe("las tareas en background, por el cable", () => {
     ]);
     montarRutas(servidor, vestibuloDePrueba(), {
       colaDeTareas: cola,
-      corredorDeTareas: { corriendoAqui: () => true },
+      corredorDeTareas: { corriendoAqui: () => true, cortar: async () => true },
       concurrenciaDeTareas: () => 2,
     });
     const cliente = clienteDeMentira();
@@ -2903,12 +2903,151 @@ describe("las tareas en background, por el cable", () => {
     expect(cola.verTareas().find((t) => t.id === "t-park")?.estado).toBe("nuevo");
     expect(cola.verTareas().find((t) => t.id === "t-park")?.motivo).toBeUndefined();
 
-    // Descartar borra aunque esté «en-proceso»: el corredor ya cuenta con esto.
+    // Descartar borra aunque esté «en-proceso»: SIN corredor cableado no hay turno que
+    // cortar (ver la batería de Task 14 más abajo para el caso CON corredor).
     await enviarMensaje(accion, { clase: "tarea", accion: "descartar", id: "t-en-curso" });
     await asentar();
     expect(cola.verTareas().find((t) => t.id === "t-en-curso")).toBeUndefined();
 
     expect(revisado).toBeGreaterThan(0);
+  });
+
+  /**
+   * Task 14: antes de esto, descartar una tarea `en-proceso` la borraba en el ACTO — el
+   * turno seguía corriendo por debajo, escribiendo en el proyecto, sin que ninguna pantalla
+   * lo dijera. `atenderAccionDeTarea` ahora espera a `corredorDeTareas.cortar(id)` ANTES de
+   * `borrarTarea`: esta batería prueba el CABLEADO (que se llama, en qué orden, qué hace con
+   * cada resultado), no el corte de verdad —eso ya lo prueba `corredorDeTareas.test.ts`
+   * contra un corredor real—.
+   */
+  describe("descartar corta el turno en vuelo ANTES de borrar (Task 14)", () => {
+    const tareaEnCurso = {
+      id: "t-en-curso",
+      proyecto: { id: "p1", raiz: "/w/AppDemo", nombre: "AppDemo" },
+      titulo: "Arregla el login",
+      peticion: "p",
+      encargo: "e",
+      adjuntos: [],
+      estado: "en-proceso" as const,
+      creada: "2026-09-08T10:00:00.000Z",
+    };
+
+    it("el orden es load-bearing: cortar() se resuelve ANTES de que borrarTarea() se llame", async () => {
+      const orden: string[] = [];
+      const servidor = servidorDeMentira();
+      const cola = colaDeMentira([tareaEnCurso]);
+      const colaConOrden = {
+        ...cola,
+        borrarTarea: (id: string) => {
+          orden.push("borrar");
+          cola.borrarTarea(id);
+        },
+      };
+      montarRutas(servidor, vestibuloDePrueba(), {
+        colaDeTareas: colaConOrden,
+        corredorDeTareas: {
+          corriendoAqui: () => true,
+          cortar: async () => {
+            orden.push("cortar");
+            return true;
+          },
+        },
+      });
+      const cliente = clienteDeMentira();
+      await servidor.rutas.get(`GET ${RUTA_EVENTOS}`)!(cliente.peticion, cliente.respuesta);
+      const accion = servidor.rutas.get(`POST ${RUTA_ACCION}`)!;
+      await asentar();
+      await enviarMensaje(accion, { clase: "tarea", accion: "descartar", id: "t-en-curso" });
+      await asentar();
+      expect(orden).toEqual(["cortar", "borrar"]);
+      expect(colaConOrden.listar().find((t) => t.id === "t-en-curso")).toBeUndefined();
+    });
+
+    it("si el corte no llega a tiempo (`cortar` resuelve `false`), NO se borra, y se avisa", async () => {
+      const servidor = servidorDeMentira();
+      const cola = colaDeMentira([tareaEnCurso]);
+      const avisos: string[] = [];
+      montarRutas(servidor, vestibuloDePrueba(), {
+        colaDeTareas: cola,
+        corredorDeTareas: { corriendoAqui: () => true, cortar: async () => false },
+        informar: (texto) => avisos.push(texto),
+      });
+      const cliente = clienteDeMentira();
+      await servidor.rutas.get(`GET ${RUTA_EVENTOS}`)!(cliente.peticion, cliente.respuesta);
+      const accion = servidor.rutas.get(`POST ${RUTA_ACCION}`)!;
+      await asentar();
+      await enviarMensaje(accion, { clase: "tarea", accion: "descartar", id: "t-en-curso" });
+      await asentar();
+      // Sigue ahí: no se le quitó la carpeta de adjuntos a un turno que sigue de verdad
+      // corriendo.
+      expect(cola.verTareas().find((t) => t.id === "t-en-curso")).toBeDefined();
+      expect(avisos.some((a) => a.includes("sigue en marcha"))).toBe(true);
+    });
+
+    it("si la ejecuta OTRO proceso (`corriendoAqui` falso), tampoco se borra: no hay forma de cortarla desde aquí", async () => {
+      const servidor = servidorDeMentira();
+      const cola = colaDeMentira([tareaEnCurso]);
+      const avisos: string[] = [];
+      let cortarLlamado = 0;
+      montarRutas(servidor, vestibuloDePrueba(), {
+        colaDeTareas: cola,
+        corredorDeTareas: {
+          corriendoAqui: () => false,
+          cortar: async () => {
+            cortarLlamado += 1;
+            return true;
+          },
+        },
+        informar: (texto) => avisos.push(texto),
+      });
+      const cliente = clienteDeMentira();
+      await servidor.rutas.get(`GET ${RUTA_EVENTOS}`)!(cliente.peticion, cliente.respuesta);
+      const accion = servidor.rutas.get(`POST ${RUTA_ACCION}`)!;
+      await asentar();
+      await enviarMensaje(accion, { clase: "tarea", accion: "descartar", id: "t-en-curso" });
+      await asentar();
+      expect(cola.verTareas().find((t) => t.id === "t-en-curso")).toBeDefined();
+      expect(avisos.some((a) => a.includes("otro proceso"))).toBe(true);
+      // Ni se intenta: `cortar` no tiene con qué alcanzar un turno de OTRO proceso.
+      expect(cortarLlamado).toBe(0);
+    });
+
+    it("descartar una que NO está en proceso también pasa por `cortar` —sin efecto, pero por el mismo camino— y borra igual", async () => {
+      const servidor = servidorDeMentira();
+      const cola = colaDeMentira([{ ...tareaEnCurso, id: "t-nueva", estado: "nuevo" as const }]);
+      let cortarLlamadoCon: string | undefined;
+      montarRutas(servidor, vestibuloDePrueba(), {
+        colaDeTareas: cola,
+        corredorDeTareas: {
+          corriendoAqui: () => true,
+          cortar: async (id) => {
+            cortarLlamadoCon = id;
+            return true; // nada en vuelo con ese id: seguro seguir
+          },
+        },
+      });
+      const cliente = clienteDeMentira();
+      await servidor.rutas.get(`GET ${RUTA_EVENTOS}`)!(cliente.peticion, cliente.respuesta);
+      const accion = servidor.rutas.get(`POST ${RUTA_ACCION}`)!;
+      await asentar();
+      await enviarMensaje(accion, { clase: "tarea", accion: "descartar", id: "t-nueva" });
+      await asentar();
+      expect(cortarLlamadoCon).toBe("t-nueva");
+      expect(cola.verTareas().find((t) => t.id === "t-nueva")).toBeUndefined();
+    });
+
+    it("sin `corredorDeTareas` cableado, descartar borra directo: no hay ningún turno que pueda estar corriendo", async () => {
+      const servidor = servidorDeMentira();
+      const cola = colaDeMentira([tareaEnCurso]);
+      montarRutas(servidor, vestibuloDePrueba(), { colaDeTareas: cola });
+      const cliente = clienteDeMentira();
+      await servidor.rutas.get(`GET ${RUTA_EVENTOS}`)!(cliente.peticion, cliente.respuesta);
+      const accion = servidor.rutas.get(`POST ${RUTA_ACCION}`)!;
+      await asentar();
+      await enviarMensaje(accion, { clase: "tarea", accion: "descartar", id: "t-en-curso" });
+      await asentar();
+      expect(cola.verTareas().find((t) => t.id === "t-en-curso")).toBeUndefined();
+    });
   });
 
   /**

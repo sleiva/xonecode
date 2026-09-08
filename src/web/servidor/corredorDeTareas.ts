@@ -194,6 +194,24 @@ export interface Corredor {
   arrancar(): Promise<void>;
   /** Corta lo que esté en vuelo —un turno tarda minutos— y suelta el cerrojo si es nuestro. */
   parar(): Promise<void>;
+  /**
+   * Corta el turno de ESA tarea si corre AQUÍ, sin tocar las demás — es `parar()` acotado a
+   * una sola entrada. Task 14: `descartar` lo llama ANTES de borrar, porque sin esto el
+   * turno seguía corriendo (y escribiendo en el proyecto) después de que la tarea
+   * desapareciera del kanban, sin que ninguna pantalla lo dijera.
+   *
+   * **Devuelve si se puede seguir** — `true` también cuando no había NADA que cortar (la
+   * tarea no corre en este proceso: no está en `enVuelo`, así que borrarla es seguro sin
+   * esperar nada). `false` solo cuando SÍ corría aquí y no soltó el proyecto dentro del
+   * plazo (`TOPE_DE_PARADA_MS`, el mismo de `parar()`): quien llama tiene que leerlo como
+   * «no está seguro borrar todavía», nunca como «bórrala igual» — un turno que sigue
+   * escribiendo no puede perder también su carpeta de adjuntos por debajo.
+   *
+   * Espera a `EnVuelo.trabajo` entero, no solo a que `cortar()` dispare el abort: son dos
+   * cosas distintas y solo la segunda dice que la consola SOLTÓ su montaje de `/adjuntos/`
+   * — antes de eso, borrar esa carpeta es quitarle el suelo a un turno vivo.
+   */
+  cortar(id: string): Promise<boolean>;
   /** ¿Ejecuta ESTE proceso? Falso si el cerrojo lo tiene otro, o si lo hemos perdido. */
   corriendoAqui(): boolean;
   /** Vuelve a mirar la cola: se llama al crear una tarea, al terminar una, y al abrir o
@@ -360,15 +378,29 @@ export function crearCorredorDeTareas(opciones: {
   let parando = false;
 
   /**
-   * Las que este proceso no vuelve a coger porque no pudo escribir su estado.
+   * Las que este proceso no vuelve a coger, por DOS motivos distintos que comparten el
+   * mismo freno.
    *
-   * Es el freno de un lazo que no tiene temporizador: `revisar` se dispara al terminar cada
-   * tarea, así que una tarea que se queda en `nuevo` porque el índice no se puede escribir
-   * (disco lleno, permisos) se elegiría otra vez, y otra, sin decir nada — medido con la
-   * transición que faltaba: no es un error que se lee, es una CPU al 100%. Solo se renuncia
-   * cuando se ha COMPROBADO que sigue en `nuevo` tras intentar moverla; que ya no esté o que
-   * la tenga otro no es renunciar, es que no era nuestra. Se olvida al reiniciar el proceso,
-   * que es cuando el disco pudo cambiar.
+   * **El original: no pudo escribir su estado.** Es el freno de un lazo que no tiene
+   * temporizador: `revisar` se dispara al terminar cada tarea, así que una que se queda en
+   * `nuevo` porque el índice no se puede escribir (disco lleno, permisos) se elegiría otra
+   * vez, y otra, sin decir nada — medido con la transición que faltaba: no es un error que
+   * se lee, es una CPU al 100%. Solo se renuncia cuando se ha COMPROBADO que sigue en
+   * `nuevo` tras intentar moverla; que ya no esté o que la tenga otro no es renunciar, es
+   * que no era nuestra.
+   *
+   * **El de Task 14: se pidió cortarla (`cortarPedido`) antes de que llegara a marcar «en
+   * proceso».** Ese corte también deja la tarea en `nuevo` —nunca llegó a escribir nada—, y
+   * es EL MISMO lazo caliente: `entrada.trabajo` se asienta, su `.finally()` llama a
+   * `revisar()` en el acto, y sin esta entrada el turno recién cortado arrancaría de nuevo
+   * un instante después. Medido: sin ella, `Corredor.cortar(id)` sobre una tarea que aún no
+   * había abierto consola SÍ la cortaba… y el redespacho inmediato la corría entera, con su
+   * encargo mandado y todo — el fallo exacto que esta tarea existe para cerrar, reabierto
+   * por el propio arreglo.
+   *
+   * Los dos casos se olvidan igual: al reiniciar el proceso, que es cuando el disco pudo
+   * cambiar — y para el segundo caso además da igual, porque una tarea CORTADA se borra
+   * segundos después y su id no vuelve a existir.
    */
   const renunciadas = new Set<string>();
 
@@ -381,6 +413,22 @@ export function crearCorredorDeTareas(opciones: {
     /** Corta el turno. Memoizado: cerrar dos veces la misma consola no puede volver a
      *  abortar nada ni volver a volcar. */
     cortar: () => Promise<void>;
+    /**
+     * Se pidió cortar ESTA tarea, y todavía no se pudo: nace `false` y `Corredor.cortar` lo
+     * pone en `true`.
+     *
+     * **Cierra una carrera MEDIDA, no teórica.** Entre `revisar()` registrando la entrada
+     * (con el `cortar` de mentira de más abajo) y que `correr()` reemplace ese campo por el
+     * de verdad hay un `await` real —`abrirParaTarea`, que lee git y disco— y la tarea sigue
+     * en `nuevo` durante toda esa ventana. Si `Corredor.cortar` llegara justo ahí, llamar al
+     * `cortar` de mentira no corta nada y el turno arrancaría igual un instante después,
+     * exactamente el fallo que esta tarea entera existe para cerrar: un turno que empieza a
+     * escribir DESPUÉS de que alguien pidió que se descartara. Con esta marca, `correr()` la
+     * mira en el MISMO sitio donde ya miraba `parando` —antes de marcar «en proceso» y de
+     * mandar el encargo— así que un corte pedido en esa ventana estrecha se cumple en cuanto
+     * la consola termina de abrirse, en vez de perderse.
+     */
+    cortarPedido: boolean;
     /**
      * Las escrituras que el turno AUTORIZÓ sin aprobación, con ruta relativa.
      *
@@ -728,9 +776,20 @@ export function crearCorredorDeTareas(opciones: {
     // existía todavía y no había nada que cortar.
     entrada.cortar = cortar;
     // Y si el corte llegó mientras se abría, no se arranca nada: marcar «en proceso» ahora
-    // dejaría una tarea corriendo justo cuando el proceso se está yendo.
-    if (parando) {
+    // dejaría una tarea corriendo justo cuando el proceso se está yendo — o, con
+    // `cortarPedido`, justo cuando alguien la acaba de descartar. Los dos casos comparten
+    // esta puerta a propósito: ninguno de los dos puede dejar arrancar el turno.
+    if (parando || entrada.cortarPedido) {
       await cortar();
+      // Igual que `renunciadas` un poco más abajo, y por el mismo mecanismo: si esta tarea
+      // se queda «nuevo» en disco, `revisar()` la volvería a coger en el MISMO tick —su
+      // `.finally()` llama a `revisar()` en cuanto este `correr()` termina— y el turno que
+      // se acaba de cortar arrancaría un instante después. Medido: sin esta línea, cortar
+      // una tarea que todavía no había llegado a marcar «en proceso» la cortaba de
+      // verdad… y el REDESPACHO inmediato la volvía a correr entera, con su encargo y todo.
+      // Solo para `cortarPedido`: con `parando`, `revisar()` ya se frena sola en su primera
+      // línea (`if (!miCerrojo || parando) return;`), así que ahí no hace falta.
+      if (entrada.cortarPedido) renunciadas.add(tarea.id);
       return;
     }
 
@@ -803,8 +862,16 @@ export function crearCorredorDeTareas(opciones: {
       // que cuando el error llega aquí el motivo bueno ya está puesto. Y si lo que reventó
       // fue la propia marca, `marcada` sigue en falso y de aquí no sale ningún estado: no hay
       // ninguna tarea nuestra que contar.
-      if (marcada) motivo ??= parando ? MOTIVO_CORTADA_POR_CIERRE : `el turno falló (${codigoDe(error)})`;
-      else renunciarSiSigueNueva(tarea.id, error);
+      //
+      // `entrada.cortarPedido` cuenta AQUÍ TAMBIÉN, igual que `parando`: si el turno ya
+      // estaba corriendo cuando alguien pidió descartarla, `cortar()` lo aborta y esa
+      // `AbortError` llega a este `catch` exactamente igual que un Ctrl-C — sin la
+      // comprobación, el motivo saldría «el turno falló (AbortError)», que es FALSO: nadie
+      // falló, alguien lo cortó a propósito. Medido: sin esto, el kanban enseñaría ese
+      // motivo engañoso durante el instante entre el corte y el borrado.
+      if (marcada) {
+        motivo ??= parando || entrada.cortarPedido ? MOTIVO_CORTADA_POR_CIERRE : `el turno falló (${codigoDe(error)})`;
+      } else renunciarSiSigueNueva(tarea.id, error);
     } finally {
       /**
        * **Cerrar ANTES de escribir el estado, y el orden es load-bearing.** Solo las tareas
@@ -944,10 +1011,12 @@ export function crearCorredorDeTareas(opciones: {
        * La entrada se registra ANTES de arrancar el trabajo, y su `cortar` lo rellena
        * `correr` en cuanto tiene la consola: hasta ese momento no hay nada que cortar, y un
        * `parar()` que llegue en esa ventana lo ve el propio `correr` y no arranca el turno.
+       * `cortarPedido` nace en `false` por lo mismo: es la marca que sobrevive esa misma
+       * ventana cuando quien pide el corte es `Corredor.cortar(id)` y no `parar()`.
        */
       // Sin `autorizadas`: no está puesta hasta que el turno arranca, que es lo que
       // distingue «no consta» de «no autorizó nada».
-      const entrada: EnVuelo = { tarea, trabajo: Promise.resolve(), cortar: async () => {} };
+      const entrada: EnVuelo = { tarea, trabajo: Promise.resolve(), cortar: async () => {}, cortarPedido: false };
       enVuelo.set(tarea.id, entrada);
       entrada.trabajo = correr(tarea, entrada)
         // Nada de `informar`: lo que le pasa a una tarea va a su registro. Si `correr` se
@@ -1090,6 +1159,35 @@ export function crearCorredorDeTareas(opciones: {
       // siguiente a recogerlo por el camino que no es atómico.
       if (miCerrojo) opciones.disco.soltarCerrojo();
       miCerrojo = false;
+    },
+
+    /**
+     * `parar()` acotado a UNA tarea. Ver el docblock de `Corredor.cortar` para el contrato
+     * completo; aquí solo el porqué de cada línea.
+     */
+    async cortar(id) {
+      const entrada = enVuelo.get(id);
+      // No corre AQUÍ: ni hueco que liberar ni consola que cerrar. Puede que no corra en
+      // ningún sitio, o que corra en OTRO proceso —el dashboard de un segundo corredor no
+      // puede alcanzarlo, y ese límite lo pone el sistema operativo, no esta función—, pero
+      // ninguno de los dos casos es «espera»: son «aquí no hay nada que hacer».
+      if (entrada === undefined) return true;
+      // La marca sobrevive aunque `entrada.cortar` todavía sea el de mentira de `revisar()`
+      // —la tarea sigue en `nuevo`, la consola no ha terminado de abrirse—: es la ventana
+      // que el docblock de `EnVuelo.cortarPedido` mide, y `correr()` la mira en cuanto abre.
+      entrada.cortarPedido = true;
+      // Se DISPARA el corte —si la consola ya está abierta, esto es lo que aborta el turno
+      // de verdad— y se espera a `trabajo` ENTERO, no solo a que el corte dispare: solo
+      // cuando `trabajo` se asienta es cierto que `correr()` pasó por su `finally` y la
+      // consola soltó `/adjuntos/`. El mismo plazo que `parar()`, y por el mismo motivo: un
+      // cierre puede colgarse igual que un turno.
+      return conPlazo(
+        (async () => {
+          await entrada.cortar();
+          await entrada.trabajo;
+        })(),
+        opciones.esperaAlParar ?? TOPE_DE_PARADA_MS
+      );
     },
     corriendoAqui: () => miCerrojo,
     revisar,

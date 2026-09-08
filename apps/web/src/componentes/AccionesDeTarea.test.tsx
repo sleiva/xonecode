@@ -177,24 +177,28 @@ describe("AccionesDeTarea", () => {
    * antes de Task 13, reutilizando la coraza de `NuevaSesion.module.css` — el mismo camino
    * que ya usa `AccionDeSesion.tsx` para borrar una sesión, y por el mismo motivo: «eliminar
    * al primer clic en una fila de 34 px es cómo se pierde la conversación de una tarde», y
-   * la tarjeta del kanban es tan estrecha como esa fila. Y tiene que decir la VERDAD medida,
-   * no solo «¿seguro?»: para una tarea EN PROCESO, descartarla no para el turno —sigue
-   * corriendo y sus escrituras se siguen aplicando al proyecto sin que la interfaz las
-   * vuelva a enseñar— y sus adjuntos se borran en el acto aunque el turno los siga
-   * necesitando (medido en `agent/tareasEnDisco.ts#borrarTarea` y
-   * `web/servidor/corredorDeTareas.ts`, sin `cortar()` de por medio).
+   * la tarjeta del kanban es tan estrecha como esa fila.
+   *
+   * Task 14: la ventana YA NO lleva un párrafo aparte para `en-proceso` avisando de que el
+   * turno seguía corriendo tras el borrado — ese aviso era la confesión de un fallo, y el
+   * fallo se arregló en el SERVIDOR (`web/servidor/arranque.ts#atenderAccionDeTarea` corta
+   * el turno con `Corredor.cortar` antes de `borrarTarea`), no aquí con más texto. La misma
+   * frase corta vale ya para las cuatro: se para el turno si está en marcha, y se borra
+   * todo. Dejar el párrafo viejo habría sido describir una versión del producto que ya no
+   * existe.
    */
-  it("descartar una tarea EN PROCESO avisa de que el turno sigue corriendo y los adjuntos se borran ya", () => {
-    render(<AccionesDeTarea tarea={TAREA({ id: "t7", estado: "en-proceso", motivo: undefined })} conectado alDescartar={vi.fn()} />);
+  it("la ventana dice la MISMA frase corta para «en-proceso» y para cualquier otro estado", () => {
+    const { unmount } = render(
+      <AccionesDeTarea tarea={TAREA({ id: "t7", estado: "en-proceso", motivo: undefined })} conectado alDescartar={vi.fn()} />
+    );
     fireEvent.click(screen.getByRole("button", { name: /^descartar$/i }));
-    expect(screen.getByText(/sigue corriendo/i)).toBeTruthy();
-    expect(screen.getAllByText(/adjuntos/i).length).toBeGreaterThan(0);
-  });
+    expect(screen.getByText(/se para el turno/i)).toBeTruthy();
+    expect(screen.queryByText(/sigue corriendo/i)).toBeNull();
+    unmount();
 
-  it("una tarea que NO está en proceso no lleva ese aviso: no hay turno que siga corriendo", () => {
     render(<AccionesDeTarea tarea={TAREA({ id: "t7", estado: "nuevo", motivo: undefined })} conectado alDescartar={vi.fn()} />);
     fireEvent.click(screen.getByRole("button", { name: /^descartar$/i }));
-    expect(screen.queryByText(/sigue corriendo/i)).toBeNull();
+    expect(screen.getByText(/se para el turno/i)).toBeTruthy();
   });
 
   it("feedback: vacío no manda, se recorta y el campo se limpia tras enviar", () => {
