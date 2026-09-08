@@ -2819,3 +2819,46 @@ git commit -m "feat(web): las acciones de una tarea, una pieza para las dos vist
 ```json:metadata
 {"files": ["src/web/servidor/corredorDeTareas.ts", "src/web/servidor/arranque.ts", "apps/web/src/componentes/ConfirmarDescarte.tsx"], "acceptanceCriteria": ["corta antes de borrar reusando `entrada.cortar`", "la carpeta se borra tras soltar el montaje", "si no se puede cortar, declina e informa", "fuera el párrafo de la advertencia vieja", "cortar a propósito no es «el turno falló»"], "modelTier": "standard", "userGate": false}
 ```
+
+---
+
+## Task 15: las tareas se encuentran desde donde estás
+
+**Goal:** Que crear una tarea y ver las del proyecto se puedan hacer sin salir del proyecto abierto, y que la pestaña exista aunque no haya ninguna.
+
+> **De dónde sale: el usuario abrió la consola y no encontró nada de esto.** Medido en su
+> sesión real: con `proyectoActivo` puesto el centro pinta el chat, y el kanban y «Nueva tarea»
+> viven SOLO en el escritorio, al que se vuelve pulsando la marca «xonecode» —que funciona si lo
+> sabes, y no se descubre—. Y la pestaña «Tareas» solo existe si el proyecto ya tiene alguna, o
+> sea que **desaparece justo cuando alguien busca dónde se crean**. Los tres son míos, no
+> despistes suyos: con un proyecto abierto no hay forma de decir «esto que estoy viendo, hazlo
+> en background», que es el momento en que más sentido tiene.
+>
+> **Y esto matiza una regla del repo, así que se escribe el matiz.** «La pestaña solo existe si
+> hay alguno» se estableció para Artefactos, y ahí es correcta: un artefacto es el REGISTRO de
+> algo que pasó, y una pestaña vacía de registro es el control sin dato detrás. Una pestaña
+> donde se ACTÚA es otra cosa: si desaparece cuando no hay nada, se lleva consigo el único sitio
+> donde aprender que se puede hacer algo. El criterio afinado: **una pestaña de registro existe
+> si hay registro; una pestaña de acción existe siempre, y su estado vacío dice cómo se empieza.**
+
+**Files:**
+- Modify: `apps/web/src/componentes/Pestanas.tsx` + test (la pestaña deja de depender de `hayTareas`)
+- Modify: `apps/web/src/componentes/TareasDelProyecto.tsx` + test (estado vacío que dice cómo se crea)
+- Modify: `apps/web/src/App.tsx` (el punto de entrada dentro del proyecto abierto)
+
+**Acceptance Criteria:**
+- [ ] Con un proyecto abierto se puede crear una tarea PARA ESE proyecto sin volver al escritorio, y la ventana llega con el proyecto ya resuelto
+- [ ] La pestaña «Tareas» existe con proyecto abierto aunque la cola esté vacía
+- [ ] Su estado vacío DICE cómo se crea una, y no es un hueco
+- [ ] Con la cola sin llegar del servidor sigue distinguiéndose de «no hay ninguna» (no se puede afirmar una cola vacía que nadie ha medido)
+- [ ] Ningún color literal; nada fuera del orden del Tab por estar en `display:none`
+
+**Verify:** `npx vitest run --maxWorkers=2 apps/web/src` → en verde
+
+**Steps:** TDD en las tres superficies, con el rojo comprobado antes. Mutaciones obligatorias:
+volver a condicionar la pestaña a `hayTareas`; quitar el texto del estado vacío; y que el punto
+de entrada del proyecto abra la ventana sin proyecto resuelto.
+
+```json:metadata
+{"files": ["apps/web/src/componentes/Pestanas.tsx", "apps/web/src/componentes/TareasDelProyecto.tsx", "apps/web/src/App.tsx"], "acceptanceCriteria": ["crear una tarea sin salir del proyecto", "la pestaña existe con la cola vacía", "el estado vacío dice cómo se crea", "ausente sigue distinto de vacío", "sin colores literales ni display:none tabulable"], "modelTier": "standard", "userGate": false}
+```
