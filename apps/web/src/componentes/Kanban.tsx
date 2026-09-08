@@ -1,5 +1,5 @@
-import { useState } from "react";
 import type { TareaDelCable } from "../tipos.js";
+import { AccionesDeTarea } from "./AccionesDeTarea.js";
 import estilos from "./Kanban.module.css";
 
 /**
@@ -21,6 +21,12 @@ import estilos from "./Kanban.module.css";
  * aprobó, es lo que la tarea AUTORIZÓ escribir (`t.autorizadas`, nunca «lo que escribió»: una
  * ruta que las guardas de sitio rechazan sale ahí sin haberse escrito) y el enlace a su
  * Revisión, que es donde vive la verdad sobre el disco.
+ *
+ * **Reintentar, descartar, terminar y feedback son de `AccionesDeTarea.tsx`**, la misma
+ * pieza que monta `TareasDelProyecto.tsx`: antes esta vista solo ofrecía feedback, y la
+ * lista solo reintentar/terminar/descartar, así que una tarea bloqueada solo se
+ * desbloqueaba desde una de las dos pantallas (Task 13). `conectado` viaja igual que en
+ * Ficheros, Revisión y Artefactos: sin cable, esos controles se apagan y lo dicen.
  */
 const COLUMNAS: readonly { estado: TareaDelCable["estado"]; etiqueta: string }[] = [
   { estado: "nuevo", etiqueta: "Nuevo" },
@@ -44,8 +50,12 @@ export function Kanban({
   cola,
   alAbrirSesion,
   alAbrirRevision,
+  alReintentar,
+  alDescartar,
+  alTerminar,
   alEnviarFeedback,
   proyectoActivo,
+  conectado,
 }: {
   cola: { lista: readonly TareaDelCable[]; concurrencia: number; corriendoAqui: boolean };
   /** Abrir la conversación de una tarea: es cómo se atiende. Ausente = no se ofrece. */
@@ -53,6 +63,12 @@ export function Kanban({
   /** Abrir su pestaña Revisión: es la única forma de mirar lo que de verdad cambió en el
    *  disco, sin aprobación previa de por medio. Ausente = no se ofrece. */
   alAbrirRevision?: (proyecto: string, sesion: string) => void;
+  /** Reenviado tal cual a `AccionesDeTarea`. Ausente = no se ofrece. */
+  alReintentar?: (id: string) => void;
+  /** Reenviado tal cual a `AccionesDeTarea`. Ausente = no se ofrece. */
+  alDescartar?: (id: string) => void;
+  /** Reenviado tal cual a `AccionesDeTarea`. Ausente = no se ofrece. */
+  alTerminar?: (id: string) => void;
   /**
    * Añadir feedback a una tarea «esperando feedback»: es lo que la devuelve al lazo, en su
    * mismo hilo (§0 del diseño, `docs/superpowers/…/design.md`). Ausente = no se ofrece —el
@@ -68,6 +84,10 @@ export function Kanban({
    * un cuelgue: se queda quieta en la primera columna sin que nada lo explique.
    */
   proyectoActivo?: string;
+  /** Si el cable está vivo: apaga en `AccionesDeTarea` lo que manda algo al servidor
+   *  (reintentar, descartar, terminar, feedback) y dice por qué. Ausente = se asume
+   *  conectado. */
+  conectado?: boolean;
 }) {
   if (cola.lista.length === 0) {
     return (
@@ -102,13 +122,19 @@ export function Kanban({
                       tarea={t}
                       alAbrirSesion={alAbrirSesion}
                       alAbrirRevision={alAbrirRevision}
+                      alReintentar={alReintentar}
+                      alDescartar={alDescartar}
+                      alTerminar={alTerminar}
                       alEnviarFeedback={alEnviarFeedback}
+                      conectado={conectado}
                     />
                   ) : (
                     <TarjetaSimple
                       key={t.id}
                       tarea={t}
                       alAbrirSesion={alAbrirSesion}
+                      alDescartar={alDescartar}
+                      conectado={conectado}
                       // Solo tiene sentido decirlo de una `nuevo` —«en-proceso» ya corre y
                       // «terminada» ya acabó— y solo si ESTE kanban es el que ejecuta: en el
                       // segundo proceso el aviso global de arriba ya cubre por qué nada
@@ -129,60 +155,79 @@ export function Kanban({
   );
 }
 
-/** Nuevo, en proceso y terminada: proyecto, título y tiempo, y nada más que decidir. */
+/**
+ * Nuevo, en proceso y terminada: proyecto, título, tiempo y lo que `AccionesDeTarea` ofrezca
+ * (hoy, solo descartar — reintentar/terminar/feedback son de la aparcada).
+ *
+ * **Ya NO es un `<button>` envolviendo la tarjeta entera** (como antes de Task 13): con
+ * descartar ofrecido también aquí, un botón dentro de otro botón es HTML inválido — la misma
+ * razón por la que `TarjetaDeAtencion` ya era un `<div>`. El título es su propio control.
+ */
 function TarjetaSimple({
   tarea: t,
   alAbrirSesion,
+  alDescartar,
+  conectado,
   bloqueadaPorProyectoAbierto,
 }: {
   tarea: TareaDelCable;
   alAbrirSesion?: (proyecto: string, sesion: string) => void;
+  alDescartar?: (id: string) => void;
+  conectado?: boolean;
   bloqueadaPorProyectoAbierto?: boolean;
 }) {
-  const cuerpo = (
-    <>
-      <span className={estilos.proyecto}>{t.proyectoNombre}</span>
-      <span className={estilos.tituloDeTarea}>{t.titulo}</span>
-      <span className={estilos.cuando}>{cuando(t)}</span>
-      {bloqueadaPorProyectoAbierto === true ? (
-        <span className={estilos.bloqueada}>
-          Esperando a que se cierre el proyecto: mientras alguien lo tenga abierto, gana la persona.
-        </span>
-      ) : null}
-    </>
-  );
-  // Sin sesión no hay nada que abrir —la tarea no ha corrido— y un botón que no lleva a
-  // ninguna parte es el botón muerto de siempre.
-  return t.sesion !== undefined && alAbrirSesion !== undefined ? (
+  return (
     <li>
-      <button type="button" className={estilos.tarjeta} onClick={() => alAbrirSesion(t.proyecto, t.sesion!)}>
-        {cuerpo}
-      </button>
-    </li>
-  ) : (
-    <li>
-      <div className={estilos.tarjeta}>{cuerpo}</div>
+      <div className={estilos.tarjeta}>
+        <span className={estilos.proyecto}>{t.proyectoNombre}</span>
+        {/* Sin sesión no hay nada que abrir —la tarea no ha corrido— y un botón que no
+            lleva a ninguna parte es el botón muerto de siempre. */}
+        {t.sesion !== undefined && alAbrirSesion !== undefined ? (
+          <button type="button" className={estilos.tituloBoton} onClick={() => alAbrirSesion(t.proyecto, t.sesion!)}>
+            {t.titulo}
+          </button>
+        ) : (
+          <span className={estilos.tituloDeTarea}>{t.titulo}</span>
+        )}
+        <span className={estilos.cuando}>{cuando(t)}</span>
+        {bloqueadaPorProyectoAbierto === true ? (
+          <span className={estilos.bloqueada}>
+            Esperando a que se cierre el proyecto: mientras alguien lo tenga abierto, gana la persona.
+          </span>
+        ) : null}
+        <AccionesDeTarea tarea={t} conectado={conectado} alDescartar={alDescartar} />
+      </div>
     </li>
   );
 }
 
 /**
- * «Esperando feedback»: el motivo, lo que se autorizó a escribir y el enlace a Revisión.
+ * «Esperando feedback»: el motivo, lo que se autorizó a escribir, las acciones de
+ * `AccionesDeTarea` y el enlace a Revisión.
  *
- * NO es un botón envolviendo todo lo demás —a diferencia de `TarjetaSimple`— porque «abrir
- * conversación» y «abrir Revisión» son dos acciones distintas y un botón dentro de otro
- * botón es HTML inválido: el título es su propio control, separado del enlace a Revisión.
+ * Es un `<div>` y no un botón envolviéndolo todo —igual que `TarjetaSimple` desde Task 13—
+ * porque aquí hay VARIAS acciones distintas (abrir conversación, ir a Revisión, y las de
+ * `AccionesDeTarea`) y un botón dentro de otro botón es HTML inválido: el título es su
+ * propio control, separado del resto.
  */
 function TarjetaDeAtencion({
   tarea: t,
   alAbrirSesion,
   alAbrirRevision,
+  alReintentar,
+  alDescartar,
+  alTerminar,
   alEnviarFeedback,
+  conectado,
 }: {
   tarea: TareaDelCable;
   alAbrirSesion?: (proyecto: string, sesion: string) => void;
   alAbrirRevision?: (proyecto: string, sesion: string) => void;
+  alReintentar?: (id: string) => void;
+  alDescartar?: (id: string) => void;
+  alTerminar?: (id: string) => void;
   alEnviarFeedback?: (id: string, texto: string) => void;
+  conectado?: boolean;
 }) {
   return (
     <li>
@@ -220,15 +265,14 @@ function TarjetaDeAtencion({
           </div>
         )}
 
-        {/* «Se edita la tarea y se agrega el feedback del usuario» (§0 del diseño): sin
-            modal, es una frase y no una decisión con diff. Ausente `alEnviarFeedback` cae a
-            la pista de texto de siempre — no se pinta un campo que no llevaría a
-            ninguna parte. */}
-        {alEnviarFeedback === undefined ? (
-          <p className={estilos.pista}>Se resuelve editando la tarea para añadir tu feedback: sigue desde ahí.</p>
-        ) : (
-          <FormularioDeFeedback id={t.id} alEnviar={alEnviarFeedback} />
-        )}
+        <AccionesDeTarea
+          tarea={t}
+          conectado={conectado}
+          alReintentar={alReintentar}
+          alDescartar={alDescartar}
+          alTerminar={alTerminar}
+          alEnviarFeedback={alEnviarFeedback}
+        />
 
         {t.sesion !== undefined && alAbrirRevision !== undefined ? (
           <button
@@ -241,46 +285,5 @@ function TarjetaDeAtencion({
         ) : null}
       </div>
     </li>
-  );
-}
-
-/**
- * El campo de feedback: una frase, no una decisión con diff — por eso es un `<textarea>` y
- * un botón, sin modal.
- *
- * **El vacío se rechaza AQUÍ TAMBIÉN**, y no solo en el servidor: `aplicarFeedback`
- * (`agent/tareasEnDisco.ts`) ya lo rechaza y lo dice, pero mandarlo igual y esperar a que el
- * servidor lo diga por un acto de sistema —en una ventana que no pinta el transcript— sería
- * mudo. El botón deshabilitado es la respuesta inmediata; el servidor sigue siendo la
- * autoridad, que es lo mismo que ya hace el paso de cuenta con el catálogo de modelos.
- */
-function FormularioDeFeedback({ id, alEnviar }: { id: string; alEnviar: (id: string, texto: string) => void }) {
-  const [texto, setTexto] = useState("");
-  const limpio = texto.trim();
-  return (
-    <form
-      className={estilos.feedback}
-      onSubmit={(evento) => {
-        evento.preventDefault();
-        if (limpio === "") return;
-        alEnviar(id, limpio);
-        setTexto("");
-      }}
-    >
-      <label className={estilos.etiquetaFeedback} htmlFor={`feedback-${id}`}>
-        Tu feedback
-      </label>
-      <textarea
-        id={`feedback-${id}`}
-        className={estilos.campoFeedback}
-        rows={2}
-        value={texto}
-        onChange={(evento) => setTexto(evento.target.value)}
-        placeholder="Se manda al agente en el mismo hilo…"
-      />
-      <button type="submit" className={estilos.botonFeedback} disabled={limpio === ""}>
-        Enviar feedback
-      </button>
-    </form>
   );
 }

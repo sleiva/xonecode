@@ -83,17 +83,10 @@
   list-style: none;
 }
 
-/* La tarjeta simple es un `<button>` entero: pulsarla en cualquier punto abre la
-   conversación. La de «esperando feedback» es un `<div>` con sus propios controles dentro
-   (ver `TarjetaDeAtencion`), porque ahí hay DOS acciones distintas y un botón no puede
-   contener otro botón. */
-button.tarjeta {
-  width: 100%;
-  text-align: left;
-  cursor: pointer;
-  font: inherit;
-}
-
+/* Las dos tarjetas son `<div>` con sus propios controles dentro (título, acciones…), nunca
+   un `<button>` envolviéndolo todo: desde que `TarjetaSimple` también ofrece Descartar
+   (Task 13), un botón por fuera metería un botón dentro de otro botón, que es HTML
+   inválido — la misma razón por la que `TarjetaDeAtencion` ya era un `<div>`. */
 .tarjeta {
   display: flex;
   flex-direction: column;
@@ -103,10 +96,6 @@ button.tarjeta {
   border-radius: 10px;
   background: var(--dsw-alias-bg-layer-1);
   color: inherit;
-}
-
-button.tarjeta:hover {
-  background: var(--dsw-alias-interactive-bg-hover);
 }
 
 /* La que espera feedback lleva una barra de acento a la izquierda: es la columna con algo
@@ -165,6 +154,10 @@ button.tarjeta:hover {
   font-size: 11px;
 }
 
+/* Botones, feedback y la pista de reserva: en `AccionesDeTarea.module.css` desde que esa
+   pieza es la única que los pinta (Task 13) — vivía aquí y en `TareasDelProyecto.module.css`
+   casi duplicado. */
+
 .ficheros {
   margin: 2px 0 0;
   color: var(--dsw-alias-label-tertiary);
@@ -185,58 +178,6 @@ button.tarjeta:hover {
   color: var(--dsw-alias-label-secondary);
   font-family: var(--ds-font-family-code);
   font-size: 11px;
-}
-
-.pista {
-  margin: 4px 0 0;
-  color: var(--dsw-alias-label-tertiary);
-  font-size: 11px;
-  font-style: italic;
-}
-
-/* Una frase, no una decisión con diff: sin modal. */
-.feedback {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  margin-top: 4px;
-}
-
-.etiquetaFeedback {
-  color: var(--dsw-alias-label-tertiary);
-  font-size: 11px;
-}
-
-.campoFeedback {
-  padding: 6px 8px;
-  border: 0.5px solid var(--dsw-alias-border-l2);
-  border-radius: 8px;
-  background: var(--dsw-alias-bg-layer-2);
-  color: var(--dsw-alias-label-primary);
-  font: inherit;
-  font-size: 12px;
-  resize: vertical;
-}
-
-.botonFeedback {
-  align-self: flex-start;
-  padding: 4px 8px;
-  border: 0.5px solid var(--dsw-alias-border-l2);
-  border-radius: 8px;
-  background: var(--dsw-alias-bg-layer-2);
-  color: var(--dsw-alias-label-primary);
-  font: inherit;
-  font-size: 11px;
-  cursor: pointer;
-}
-
-.botonFeedback:hover {
-  background: var(--dsw-alias-interactive-bg-hover);
-}
-
-.botonFeedback:disabled {
-  opacity: 0.5;
-  cursor: default;
 }
 
 .enlaceRevision {

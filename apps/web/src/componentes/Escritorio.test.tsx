@@ -308,6 +308,82 @@ describe("Escritorio: el kanban de tareas", () => {
   });
 
   /**
+   * Task 13: antes el escritorio solo sabía reenviar `alEnviarFeedback` al kanban —
+   * reintentar, descartar y terminar eran solo de `TareasDelProyecto.tsx`, así que una
+   * tarea aparcada no se podía desbloquear desde aquí. Ahora las tres se reenvían tal cual.
+   */
+  it("reenvía alReintentarTarea/alDescartarTarea/alTerminarTarea al kanban tal cual", () => {
+    const alReintentarTarea = vi.fn();
+    const alDescartarTarea = vi.fn();
+    const alTerminarTarea = vi.fn();
+    render(
+      <Escritorio
+        {...MANEJADORES}
+        proyectos={[]}
+        alReintentarTarea={alReintentarTarea}
+        alDescartarTarea={alDescartarTarea}
+        alTerminarTarea={alTerminarTarea}
+        tareas={{
+          concurrencia: 2,
+          corriendoAqui: true,
+          lista: [
+            {
+              id: "t1",
+              proyecto: "p1",
+              proyectoNombre: "AppDemo",
+              titulo: "Arregla el login",
+              peticion: "Arregla el login",
+              encargo: "Arregla el login",
+              adjuntos: [],
+              estado: "requiere-atencion",
+              motivo: "el juez marcó el trabajo en rojo",
+              creada: "2026-09-08T10:00:00.000Z",
+            },
+          ],
+        }}
+      />
+    );
+    fireEvent.click(screen.getByRole("button", { name: /^reintentar$/i }));
+    expect(alReintentarTarea).toHaveBeenCalledWith("t1");
+    fireEvent.click(screen.getByRole("button", { name: /dar por bueno/i }));
+    expect(alTerminarTarea).toHaveBeenCalledWith("t1");
+    fireEvent.click(screen.getByRole("button", { name: /^descartar$/i }));
+    fireEvent.click(screen.getByRole("button", { name: /sí, descartar/i }));
+    expect(alDescartarTarea).toHaveBeenCalledWith("t1");
+  });
+
+  it("sin cable, las acciones del kanban se apagan: `conectado` llega hasta AccionesDeTarea", () => {
+    render(
+      <Escritorio
+        {...MANEJADORES}
+        proyectos={[]}
+        conectado={false}
+        alReintentarTarea={vi.fn()}
+        tareas={{
+          concurrencia: 2,
+          corriendoAqui: true,
+          lista: [
+            {
+              id: "t1",
+              proyecto: "p1",
+              proyectoNombre: "AppDemo",
+              titulo: "Arregla el login",
+              peticion: "Arregla el login",
+              encargo: "Arregla el login",
+              adjuntos: [],
+              estado: "requiere-atencion",
+              motivo: "el juez marcó el trabajo en rojo",
+              creada: "2026-09-08T10:00:00.000Z",
+            },
+          ],
+        }}
+      />
+    );
+    expect(screen.getByRole("button", { name: /^reintentar$/i })).toHaveProperty("disabled", true);
+    expect(screen.getByText(/sin conexión/i)).toBeTruthy();
+  });
+
+  /**
    * «Nueva tarea» vive en la tarjeta del proyecto, junto a «Nueva sesión», porque son la
    * misma clase de decisión sobre el mismo objeto: qué hacer con ESTE proyecto. El kanban de
    * abajo dice «se crean desde un proyecto» y esto es lo que lo hace verdad — sin este botón

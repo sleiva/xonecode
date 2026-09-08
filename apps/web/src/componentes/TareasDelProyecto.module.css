@@ -1,8 +1,9 @@
 /* Alias comprobados contra `apps/web/estilos/design-platform.css` (los mismos que
-   `Equipo.module.css` y `Kanban.module.css`): bg-layer-1/2, border-l2, label-primary/
-   secondary/tertiary, state-success-primary, state-warn-primary, state-warn-label,
-   interactive-bg-hover. `--xonecode-cian` es de `estilos/marca.css`. Ningún color
-   literal (`Barra.test.tsx`). */
+   `Equipo.module.css` y `Kanban.module.css`): bg-layer-1, border-l2, label-primary/
+   secondary/tertiary, state-success-primary, state-warn-primary, state-warn-label.
+   `--xonecode-cian` es de `estilos/marca.css`. Ningún color literal (`Barra.test.tsx`).
+   Los botones, el aviso de descarte y el campo de feedback ya no viven aquí — son de
+   `AccionesDeTarea.module.css` desde Task 13. */
 
 .lista {
   padding: 16px;
@@ -90,44 +91,13 @@
   font-size: 12px;
 }
 
+/* Solo el LAYOUT del hueco donde vive `AccionesDeTarea`: los botones, el aviso de
+   descarte y el campo de feedback son suyos (`AccionesDeTarea.module.css`) desde que esa
+   pieza es la única que los pinta (Task 13) — vivían aquí casi duplicados con
+   `Kanban.module.css`. */
 .acciones {
   display: flex;
   align-items: center;
   flex-shrink: 0;
   gap: 6px;
-}
-
-.boton {
-  padding: 4px 8px;
-  border: 0.5px solid var(--dsw-alias-border-l2);
-  border-radius: 8px;
-  background: var(--dsw-alias-bg-layer-2);
-  color: var(--dsw-alias-label-primary);
-  font: inherit;
-  font-size: 11px;
-  cursor: pointer;
-}
-
-.boton:hover {
-  background: var(--dsw-alias-interactive-bg-hover);
-}
-
-.botonPeligro {
-  padding: 4px 8px;
-  border: 0.5px solid var(--dsw-alias-state-warn-primary);
-  border-radius: 8px;
-  background: var(--dsw-alias-bg-layer-2);
-  color: var(--dsw-alias-state-warn-label);
-  font: inherit;
-  font-size: 11px;
-  cursor: pointer;
-}
-
-.botonPeligro:hover {
-  background: var(--dsw-alias-interactive-bg-hover);
-}
-
-.avisoDescarte {
-  color: var(--dsw-alias-state-warn-label);
-  font-size: 11px;
 }

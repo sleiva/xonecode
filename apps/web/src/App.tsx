@@ -174,6 +174,21 @@ export function App({
   );
 
   /**
+   * Las cuatro acciones de una tarea, hoisted una sola vez: el kanban del escritorio
+   * (`Escritorio`→`Kanban`) y la lista del proyecto (`TareasDelProyecto`) montan la MISMA
+   * `AccionesDeTarea` (Task 13), así que necesitan los mismos cuatro manejadores en los dos
+   * sitios. Definirlos aquí y no inline en cada JSX es lo que impide que las dos copias
+   * del `enviar({clase:"tarea", …})` diverjan otra vez.
+   */
+  const alReintentarTarea = useCallback((id: string) => void enviar({ clase: "tarea", accion: "reintentar", id }), [enviar]);
+  const alDescartarTarea = useCallback((id: string) => void enviar({ clase: "tarea", accion: "descartar", id }), [enviar]);
+  const alTerminarTarea = useCallback((id: string) => void enviar({ clase: "tarea", accion: "terminar", id }), [enviar]);
+  const alEnviarFeedbackTarea = useCallback(
+    (id: string, texto: string) => void enviar({ clase: "tarea", accion: "feedback", id, texto }),
+    [enviar]
+  );
+
+  /**
    * Los ARTEFACTOS de la sesión, sacados de los actos.
    *
    * La lista no se le pide al servidor: los actos ya la traen —ruta, nombre, peso y mime— y
@@ -951,9 +966,14 @@ export function App({
               tareas={
                 <TareasDelProyecto
                   tareas={tareasDelProyecto}
-                  alReintentar={(id) => void enviar({ clase: "tarea", accion: "reintentar", id })}
-                  alDescartar={(id) => void enviar({ clase: "tarea", accion: "descartar", id })}
-                  alTerminar={(id) => void enviar({ clase: "tarea", accion: "terminar", id })}
+                  alReintentar={alReintentarTarea}
+                  alDescartar={alDescartarTarea}
+                  alTerminar={alTerminarTarea}
+                  // Antes esta lista no tenía forma de mandar feedback — eso era solo del
+                  // kanban del escritorio, así que una tarea aparcada solo se podía atender
+                  // desde ahí (Task 13). `AccionesDeTarea` ya la ofrece en las dos vistas.
+                  alEnviarFeedback={alEnviarFeedbackTarea}
+                  conectado={estado.conectado}
                 />
               }
               // La tarjeta del chat abre el artefacto: cambia de pestaña y lo elige.
@@ -1096,10 +1116,16 @@ export function App({
               // La verdad sobre lo que la tarea escribió vive en Revisión, no en el chat:
               // sin aprobación previa, esa pestaña es la única forma de mirar.
               alAbrirRevisionDeTarea={(proyecto, sesion) => abrirSesion(proyecto, sesion, "revision")}
+              // Antes el escritorio solo reenviaba feedback — reintentar, descartar y
+              // terminar eran solo de `TareasDelProyecto.tsx`, así que una tarea bloqueada
+              // solo se desbloqueaba desde la pestaña del proyecto (Task 13).
+              alReintentarTarea={alReintentarTarea}
+              alDescartarTarea={alDescartarTarea}
+              alTerminarTarea={alTerminarTarea}
               // «Se edita la tarea y se agrega el feedback del usuario»: el servidor decide
               // cómo se aplica (`{clase:"tarea", accion:"feedback"}`, el mismo patrón que
               // `/modelo` desde la pastilla) — el cliente no manda comandos, manda intención.
-              alEnviarFeedback={(id, texto) => void enviar({ clase: "tarea", accion: "feedback", id, texto })}
+              alEnviarFeedback={alEnviarFeedbackTarea}
               {...(estado.alta?.proyectoActivo === undefined ? {} : { proyectoActivo: estado.alta.proyectoActivo })}
             />
           </>

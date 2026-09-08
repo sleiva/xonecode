@@ -45,4 +45,43 @@ describe("TareasDelProyecto", () => {
     fireEvent.click(screen.getByRole("button", { name: /sí, descartar/i }));
     expect(alDescartar).toHaveBeenCalledWith("t1");
   });
+
+  /**
+   * Task 13: antes esta lista no tenía forma de mandar feedback — eso era solo del kanban,
+   * así que una tarea aparcada solo se podía atender desde el escritorio. Ahora las cuatro
+   * acciones viven en `AccionesDeTarea`, y esta vista la monta igual que el kanban.
+   */
+  it("también ofrece feedback en una aparcada, no solo reintentar/terminar/descartar", () => {
+    const alEnviarFeedback = vi.fn();
+    render(
+      <TareasDelProyecto
+        tareas={[tarea({ estado: "requiere-atencion", motivo: "¿lleva histórico?" })]}
+        alEnviarFeedback={alEnviarFeedback}
+      />
+    );
+    const campo = screen.getByRole("textbox", { name: /tu feedback/i });
+    fireEvent.change(campo, { target: { value: "sí" } });
+    fireEvent.click(screen.getByRole("button", { name: /enviar feedback/i }));
+    expect(alEnviarFeedback).toHaveBeenCalledWith("t1", "sí");
+  });
+
+  it("descartar YA NO mira el estado: también se ofrece en-proceso, a propósito", () => {
+    // `web/servidor/arranque.ts#atenderAccionDeTarea`: «Descartar BORRA y no comprueba el
+    // estado... ni siquiera si está en-proceso». Restringirlo aquí era una regla que esta
+    // pantalla se inventaba y el servidor nunca aplicó.
+    render(<TareasDelProyecto tareas={[tarea({ estado: "en-proceso" })]} alDescartar={vi.fn()} />);
+    expect(screen.getByRole("button", { name: /descartar/i })).toBeTruthy();
+  });
+
+  it("sin cable, reintentar se apaga y se dice por qué", () => {
+    render(
+      <TareasDelProyecto
+        tareas={[tarea({ estado: "requiere-atencion", motivo: "x" })]}
+        alReintentar={vi.fn()}
+        conectado={false}
+      />
+    );
+    expect(screen.getByRole("button", { name: /reintentar/i })).toHaveProperty("disabled", true);
+    expect(screen.getByText(/sin conexión/i)).toBeTruthy();
+  });
 });

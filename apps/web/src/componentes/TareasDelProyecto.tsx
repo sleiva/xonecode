@@ -1,5 +1,5 @@
-import { useState } from "react";
 import type { TareaDelCable } from "../tipos.js";
+import { AccionesDeTarea } from "./AccionesDeTarea.js";
 import estilos from "./TareasDelProyecto.module.css";
 
 const ETIQUETA_DE_ESTADO: Record<TareaDelCable["estado"], string> = {
@@ -22,12 +22,20 @@ const ETIQUETA_DE_ESTADO: Record<TareaDelCable["estado"], string> = {
  *
  * No pide nada al servidor: la cola entera viaja en `{clase:"tareas"}` y ya está en el
  * store (`App.tsx` filtra por `proyecto`), así que aquí no hay ningún `useEffect` de red.
+ *
+ * **Las cuatro acciones son de `AccionesDeTarea.tsx`**, la misma pieza que monta
+ * `Kanban.tsx`: antes esta lista ofrecía reintentar/terminar/descartar y no feedback, así
+ * que una tarea aparcada solo se podía atender desde el kanban del escritorio (Task 13).
+ * `conectado` se reenvía tal cual: sin cable, esos controles se apagan y lo dicen — la
+ * misma regla que ya siguen Ficheros, Revisión y Artefactos.
  */
 export function TareasDelProyecto({
   tareas,
   alReintentar,
   alDescartar,
   alTerminar,
+  alEnviarFeedback,
+  conectado,
 }: {
   tareas: readonly TareaDelCable[];
   /** `nuevo → en-proceso` se salta desde aquí: reintentar es lo que devuelve una tarea
@@ -39,6 +47,12 @@ export function TareasDelProyecto({
   /** «La persona da el trabajo por bueno»: `requiere-atencion → terminada` sin pasar por
    *  un reintento. Ausente = no se ofrece. */
   alTerminar?: (id: string) => void;
+  /** «Se edita la tarea y se agrega el feedback del usuario»: la devuelve al lazo, en su
+   *  mismo hilo. Ausente = no se ofrece — la aparcada cae a la pista de siempre. */
+  alEnviarFeedback?: (id: string, texto: string) => void;
+  /** Si el cable está vivo: apaga en `AccionesDeTarea` lo que manda algo al servidor y
+   *  dice por qué. Ausente = se asume conectado. */
+  conectado?: boolean;
 }) {
   return (
     <section className={estilos.lista} aria-label="Tareas del proyecto">
@@ -47,9 +61,11 @@ export function TareasDelProyecto({
           <Fila
             key={t.id}
             tarea={t}
+            conectado={conectado}
             {...(alReintentar === undefined ? {} : { alReintentar })}
             {...(alDescartar === undefined ? {} : { alDescartar })}
             {...(alTerminar === undefined ? {} : { alTerminar })}
+            {...(alEnviarFeedback === undefined ? {} : { alEnviarFeedback })}
           />
         ))}
       </ul>
@@ -62,17 +78,16 @@ function Fila({
   alReintentar,
   alDescartar,
   alTerminar,
+  alEnviarFeedback,
+  conectado,
 }: {
   tarea: TareaDelCable;
   alReintentar?: (id: string) => void;
   alDescartar?: (id: string) => void;
   alTerminar?: (id: string) => void;
+  alEnviarFeedback?: (id: string, texto: string) => void;
+  conectado?: boolean;
 }) {
-  // Confirmación EN LA FILA, no un modal: es una fila, no una ventana. Vive aquí y no en
-  // el padre porque es de ESTA tarea y de ninguna otra — confirmar una no puede dejar la
-  // fila de al lado con el botón a medio pulsar.
-  const [confirmando, setConfirmando] = useState(false);
-  const puedeDescartar = t.estado !== "en-proceso" && alDescartar !== undefined;
   return (
     <li className={estilos.fila} data-estado={t.estado}>
       <span className={estilos.punto} aria-hidden="true" />
@@ -85,38 +100,14 @@ function Fila({
         {t.motivo === undefined ? null : <p className={estilos.motivo}>{t.motivo}</p>}
       </div>
       <div className={estilos.acciones}>
-        {t.estado === "requiere-atencion" && alReintentar !== undefined ? (
-          <button type="button" className={estilos.boton} onClick={() => alReintentar(t.id)}>
-            Reintentar
-          </button>
-        ) : null}
-        {t.estado === "requiere-atencion" && alTerminar !== undefined ? (
-          <button type="button" className={estilos.boton} onClick={() => alTerminar(t.id)}>
-            Dar por bueno
-          </button>
-        ) : null}
-        {!puedeDescartar ? null : confirmando ? (
-          <>
-            <span className={estilos.avisoDescarte}>¿Borrar la tarea?</span>
-            <button
-              type="button"
-              className={estilos.botonPeligro}
-              onClick={() => {
-                alDescartar(t.id);
-                setConfirmando(false);
-              }}
-            >
-              Sí, descartar
-            </button>
-            <button type="button" className={estilos.boton} onClick={() => setConfirmando(false)}>
-              Cancelar
-            </button>
-          </>
-        ) : (
-          <button type="button" className={estilos.boton} onClick={() => setConfirmando(true)}>
-            Descartar
-          </button>
-        )}
+        <AccionesDeTarea
+          tarea={t}
+          conectado={conectado}
+          alReintentar={alReintentar}
+          alDescartar={alDescartar}
+          alTerminar={alTerminar}
+          alEnviarFeedback={alEnviarFeedback}
+        />
       </div>
     </li>
   );

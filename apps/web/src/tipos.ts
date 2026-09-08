@@ -348,6 +348,23 @@ export interface TareaDelCable {
   feedback?: { texto: string; creado: string; consumido: boolean }[];
 }
 
+/**
+ * A dónde se puede ir desde cada estado de una tarea. Redeclarado de
+ * `src/core/tareas.ts#TRANSICIONES` — la frontera del cliente (`src/web/frontera.test.ts`)
+ * no deja importar de `src/`, así que esto se compara por TEXTO contra el host
+ * (`tipos.test.ts`), igual que los literales `tipo:`/`clase:` de más abajo.
+ *
+ * Es lo que `AccionesDeTarea.tsx` usa para decidir qué botón ofrecer: sin esto, esa pieza
+ * tendría que adivinar la regla o copiarla a mano, que es exactamente la clase de
+ * divergencia que esta tarea existe para cerrar.
+ */
+export const TRANSICIONES: Readonly<Record<TareaDelCable["estado"], readonly TareaDelCable["estado"][]>> = {
+  nuevo: ["en-proceso", "requiere-atencion"],
+  "en-proceso": ["terminada", "requiere-atencion"],
+  "requiere-atencion": ["nuevo", "terminada"],
+  terminada: [],
+};
+
 export interface ProveedorDeModelos {
   id: string;
   /** Cómo se escribe. Lo pone el servidor: capitalizar el id aquí daría «Xai». */

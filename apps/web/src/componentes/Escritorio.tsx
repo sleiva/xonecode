@@ -48,6 +48,9 @@ export function Escritorio({
   tareas,
   alAbrirSesionDeTarea,
   alAbrirRevisionDeTarea,
+  alReintentarTarea,
+  alDescartarTarea,
+  alTerminarTarea,
   alEnviarFeedback,
   proyectoActivo,
 }: {
@@ -107,6 +110,15 @@ export function Escritorio({
   /** Abrir la pestaña Revisión de una tarea «esperando feedback»: la verdad sobre lo que
    *  cambió en el disco, sin aprobación previa de por medio. */
   alAbrirRevisionDeTarea?: (proyecto: string, sesion: string) => void;
+  /**
+   * Reintentar, descartar y terminar una tarea del kanban: las tres reenviadas tal cual a
+   * `AccionesDeTarea` a través de `Kanban`. Antes solo `TareasDelProyecto.tsx` las
+   * ofrecía, así que una tarea bloqueada solo se desbloqueaba desde la pestaña del
+   * proyecto y no desde aquí (Task 13). Ausentes = no se ofrecen.
+   */
+  alReintentarTarea?: (id: string) => void;
+  alDescartarTarea?: (id: string) => void;
+  alTerminarTarea?: (id: string) => void;
   /**
    * «Se edita la tarea y se agrega el feedback del usuario» (§0 del diseño): añadir
    * feedback a una tarea «esperando feedback», que la devuelve al lazo en su mismo hilo.
@@ -270,8 +282,12 @@ export function Escritorio({
             cola={tareas}
             {...(alAbrirSesionDeTarea === undefined ? {} : { alAbrirSesion: alAbrirSesionDeTarea })}
             {...(alAbrirRevisionDeTarea === undefined ? {} : { alAbrirRevision: alAbrirRevisionDeTarea })}
+            {...(alReintentarTarea === undefined ? {} : { alReintentar: alReintentarTarea })}
+            {...(alDescartarTarea === undefined ? {} : { alDescartar: alDescartarTarea })}
+            {...(alTerminarTarea === undefined ? {} : { alTerminar: alTerminarTarea })}
             {...(alEnviarFeedback === undefined ? {} : { alEnviarFeedback })}
             {...(proyectoActivo === undefined ? {} : { proyectoActivo })}
+            conectado={conectado}
           />
         )}
 

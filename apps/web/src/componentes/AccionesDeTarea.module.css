@@ -1,0 +1,125 @@
+/* Alias comprobados contra `apps/web/estilos/design-platform.css` (los mismos que
+   `Kanban.module.css` y `TareasDelProyecto.module.css`, que se quedaron SIN estas reglas
+   duplicadas desde que viven aquí: border-l2, label-primary/secondary/tertiary,
+   state-warn-primary/label, bg-layer-2, interactive-bg-hover. Ningún color literal
+   (`Barra.test.tsx`). */
+
+.acciones {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+/* La regla de `Barra`/`Escritorio`: se apaga lo que manda algo al servidor, y se DICE por
+   qué — un botón deshabilitado y mudo deja adivinando si falló el botón o el servidor.
+   `flex-basis: 100%` para que ocupe su propia línea y no se lea pegado al primer botón. */
+.avisoConexion {
+  flex-basis: 100%;
+  margin: 0;
+  color: var(--dsw-alias-state-warn-label);
+  font-size: 11px;
+}
+
+.boton {
+  padding: 4px 8px;
+  border: 0.5px solid var(--dsw-alias-border-l2);
+  border-radius: 8px;
+  background: var(--dsw-alias-bg-layer-2);
+  color: var(--dsw-alias-label-primary);
+  font: inherit;
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.boton:hover {
+  background: var(--dsw-alias-interactive-bg-hover);
+}
+
+.boton:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.botonPeligro {
+  padding: 4px 8px;
+  border: 0.5px solid var(--dsw-alias-state-warn-primary);
+  border-radius: 8px;
+  background: var(--dsw-alias-bg-layer-2);
+  color: var(--dsw-alias-state-warn-label);
+  font: inherit;
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.botonPeligro:hover {
+  background: var(--dsw-alias-interactive-bg-hover);
+}
+
+.botonPeligro:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.avisoDescarte {
+  color: var(--dsw-alias-state-warn-label);
+  font-size: 11px;
+}
+
+/* Una frase, no una decisión con diff: sin modal. `flex-basis: 100%` para que el campo no
+   se apriete al lado de los botones de reintentar/descartar/terminar. */
+.feedback {
+  display: flex;
+  flex-direction: column;
+  flex-basis: 100%;
+  gap: 4px;
+}
+
+.etiquetaFeedback {
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 11px;
+}
+
+.campoFeedback {
+  padding: 6px 8px;
+  border: 0.5px solid var(--dsw-alias-border-l2);
+  border-radius: 8px;
+  background: var(--dsw-alias-bg-layer-2);
+  color: var(--dsw-alias-label-primary);
+  font: inherit;
+  font-size: 12px;
+  resize: vertical;
+}
+
+.campoFeedback:disabled {
+  opacity: 0.5;
+}
+
+.botonFeedback {
+  align-self: flex-start;
+  padding: 4px 8px;
+  border: 0.5px solid var(--dsw-alias-border-l2);
+  border-radius: 8px;
+  background: var(--dsw-alias-bg-layer-2);
+  color: var(--dsw-alias-label-primary);
+  font: inherit;
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.botonFeedback:hover {
+  background: var(--dsw-alias-interactive-bg-hover);
+}
+
+.botonFeedback:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.pista {
+  flex-basis: 100%;
+  margin: 0;
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 11px;
+  font-style: italic;
+}

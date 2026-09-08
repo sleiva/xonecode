@@ -269,4 +269,66 @@ describe("Kanban", () => {
     fireEvent.click(boton);
     expect(alEnviarFeedback).not.toHaveBeenCalled();
   });
+
+  /**
+   * Task 13: antes de esta pieza el kanban solo ofrecía feedback — reintentar, terminar y
+   * descartar eran solo de `TareasDelProyecto.tsx`, así que una tarea bloqueada solo se
+   * desbloqueaba desde la lista del proyecto. Ahora las cuatro viven en `AccionesDeTarea`,
+   * y las dos vistas la montan igual.
+   */
+  it("«esperando feedback» también ofrece reintentar, dar por bueno y descartar, no solo feedback", () => {
+    const alReintentar = vi.fn();
+    const alTerminar = vi.fn();
+    render(
+      <Kanban
+        cola={{
+          lista: [tarea({ id: "t9", estado: "requiere-atencion", motivo: "hallazgo del juez" })],
+          concurrencia: 2,
+          corriendoAqui: true,
+        }}
+        alReintentar={alReintentar}
+        alTerminar={alTerminar}
+        alDescartar={vi.fn()}
+      />
+    );
+    fireEvent.click(screen.getByRole("button", { name: /^reintentar$/i }));
+    expect(alReintentar).toHaveBeenCalledWith("t9");
+    fireEvent.click(screen.getByRole("button", { name: /dar por bueno/i }));
+    expect(alTerminar).toHaveBeenCalledWith("t9");
+    expect(screen.getByRole("button", { name: /^descartar$/i })).toBeTruthy();
+  });
+
+  /**
+   * Una `nuevo`/`en-proceso`/`terminada` (`TarjetaSimple`) también puede descartarse: antes
+   * el kanban no ofrecía descartar en NINGÚN estado, y `TareasDelProyecto.tsx` sí lo hacía
+   * para casi todos — otra mitad de la misma divergencia.
+   */
+  it("una tarjeta simple (nuevo/en proceso/terminada) también ofrece descartar", () => {
+    const alDescartar = vi.fn();
+    render(
+      <Kanban
+        cola={{ lista: [tarea({ id: "t3", estado: "nuevo" })], concurrencia: 2, corriendoAqui: true }}
+        alDescartar={alDescartar}
+      />
+    );
+    fireEvent.click(screen.getByRole("button", { name: /^descartar$/i }));
+    fireEvent.click(screen.getByRole("button", { name: /sí, descartar/i }));
+    expect(alDescartar).toHaveBeenCalledWith("t3");
+  });
+
+  it("sin cable, las acciones de la tarjeta se apagan y se dice por qué", () => {
+    render(
+      <Kanban
+        cola={{
+          lista: [tarea({ id: "t9", estado: "requiere-atencion", motivo: "hallazgo del juez" })],
+          concurrencia: 2,
+          corriendoAqui: true,
+        }}
+        alReintentar={vi.fn()}
+        conectado={false}
+      />
+    );
+    expect(screen.getByRole("button", { name: /^reintentar$/i })).toHaveProperty("disabled", true);
+    expect(screen.getByText(/sin conexión/i)).toBeTruthy();
+  });
 });

@@ -14,6 +14,7 @@ const aqui = dirname(fileURLToPath(import.meta.url));
 const RUTA_TIPOS = join(aqui, "tipos.ts");
 const RUTA_ACTOS = join(aqui, "..", "..", "..", "src", "core", "actos.ts");
 const RUTA_TRANSPORTE = join(aqui, "..", "..", "..", "src", "web", "servidor", "transporte.ts");
+const RUTA_TAREAS = join(aqui, "..", "..", "..", "src", "core", "tareas.ts");
 
 /**
  * `[a-z0-9_-]+` y no `[a-z]+`: la primera versión de este detector (la del brief) no veía
@@ -53,4 +54,38 @@ describe("tipos del cliente", () => {
     const regex = /\{\s*tipo:\s*"([a-z0-9_-]+)"/g;
     expect([...conGuionBajo.matchAll(regex)].map((m) => m[1])).toEqual(["fantasma_review"]);
   });
+
+  /**
+   * Task 13: `AccionesDeTarea.tsx` decide qué botón ofrecer mirando `TRANSICIONES`, y esa
+   * tabla vive en `core/tareas.ts` — la frontera del cliente no deja importarla, así que
+   * `tipos.ts` la redeclara. Sin este test, la copia del cliente se podría quedar vieja el
+   * día que alguien cambie una transición en el host y nadie lo note: exactamente la
+   * divergencia silenciosa que esta tarea existe para cerrar.
+   */
+  it("TRANSICIONES del cliente y del host no divergen", () => {
+    expect(transicionesDe(RUTA_TIPOS)).toEqual(transicionesDe(RUTA_TAREAS));
+  });
 });
+
+/**
+ * Extrae, para cada estado conocido, la lista de estados a los que puede ir — de un bloque
+ * `TRANSICIONES: … = { … };`, por TEXTO y no por import (misma razón que `literalesDe`).
+ * El regex acepta la clave con o sin comillas (`nuevo:` en el host, `"en-proceso":` al
+ * lado) y no le importan los comentarios intercalados, porque solo mira dentro de cada
+ * `[...]`.
+ */
+function transicionesDe(ruta: string): Record<string, string[]> {
+  const fuente = readFileSync(ruta, "utf8");
+  const bloque = fuente.match(/TRANSICIONES[^=]*=\s*\{([\s\S]*?)\n\};/);
+  if (bloque === null) throw new Error(`no se encontró TRANSICIONES en ${ruta}`);
+  const resultado: Record<string, string[]> = {};
+  const regex = /"?([a-z][a-z-]*)"?:\s*\[([^\]]*)\]/g;
+  for (const m of bloque[1].matchAll(regex)) {
+    resultado[m[1]] = m[2]
+      .split(",")
+      .map((v) => v.trim().replace(/^"|"$/g, ""))
+      .filter((v) => v !== "")
+      .sort();
+  }
+  return resultado;
+}
