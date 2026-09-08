@@ -247,6 +247,17 @@ describe("NuevaTarea", () => {
     expect(alEncolar).not.toHaveBeenCalled();
     // Y no es un callejón: lleva al camino que YA existe para descargar el proyecto.
     expect(screen.getByRole("button", { name: /abrir el proyecto/i })).toBeTruthy();
+    /**
+     * Y **tampoco se pinta la frase de la autorización**, que es lo que esta ventana dice
+     * cuando sí se puede crear. No es que sea falsa: es que explica una acción que aquí no
+     * está disponible, y compite con lo único que esta pantalla tiene que conseguir —«no
+     * puedes crearla aquí, abre el proyecto primero»—. Una pantalla que dice dos cosas a la
+     * vez consigue que se lea la menos importante. Atado por AUSENCIA, igual que el
+     * formulario: un test que solo comprobara que el rechazo aparece pasaría con la frase
+     * encima y con el formulario debajo.
+     */
+    expect(texto, "la autorización no se explica donde no se concede").not.toMatch(/sin pedirte permiso/i);
+    expect(texto).not.toMatch(/crearla es autorizarlo/i);
   });
 
   it("y el rechazo manda al camino que ya existe: abrir el proyecto", () => {

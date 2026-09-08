@@ -174,16 +174,6 @@ export function NuevaTarea({
       >
         <div className={estilos.ventana}>
           <h2 className={estilos.titulo}>Nueva tarea en {proyecto.nombre}</h2>
-          {/*
-            LA FRASE. No es un aviso de cortesía: crear esta tarea ES la autorización para
-            que el agente escriba en el proyecto sin que nadie apruebe cada fichero, y este
-            es el único momento en que se puede decir antes de que pase.
-          */}
-          <p className={estilos.autorizacion}>
-            Esta tarea trabaja sola: <strong>escribe en el proyecto sin pedirte permiso</strong> fichero
-            por fichero. Crearla es autorizarlo. Después se puede revisar lo que tocó, en la pestaña
-            Revisión de su sesión.
-          </p>
           {local ? null : (
             <>
               <p className={estilos.fallo} role="alert">
@@ -211,6 +201,23 @@ export function NuevaTarea({
           )}
           {local ? (
             <>
+              {/*
+                LA FRASE. No es un aviso de cortesía: crear esta tarea ES la autorización para
+                que el agente escriba en el proyecto sin que nadie apruebe cada fichero, y este
+                es el único momento en que se puede decir antes de que pase.
+
+                Va DENTRO de la rama en que se puede crear, y no arriba para las dos. En el
+                estado de rechazo no se está creando ninguna tarea, así que ahí esta frase
+                explica una acción que no está disponible y compite con lo único que esa
+                pantalla tiene que conseguir: «no puedes crearla aquí, abre el proyecto
+                primero». Una pantalla que dice dos cosas a la vez consigue que se lea la menos
+                importante. Hay test de AUSENCIA.
+              */}
+              <p className={estilos.autorizacion}>
+                Esta tarea trabaja sola: <strong>escribe en el proyecto sin pedirte permiso</strong> fichero
+                por fichero. Crearla es autorizarlo. Después se puede revisar lo que tocó, en la pestaña
+                Revisión de su sesión.
+              </p>
 
           <label className={estilos.etiqueta} htmlFor="nueva-tarea-peticion">
             Qué hay que hacer
