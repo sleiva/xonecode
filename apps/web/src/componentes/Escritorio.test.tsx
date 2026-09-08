@@ -386,9 +386,11 @@ describe("Escritorio: el kanban de tareas", () => {
   /**
    * «Nueva tarea» vive en la tarjeta del proyecto, junto a «Nueva sesión», porque son la
    * misma clase de decisión sobre el mismo objeto: qué hacer con ESTE proyecto. El kanban de
-   * abajo dice «se crean desde un proyecto» y esto es lo que lo hace verdad — sin este botón
-   * la única puerta sería la pestaña de tareas del proyecto, que solo existe si ya hay
-   * alguna: no habría forma de crear la primera.
+   * abajo dice «se crean desde un proyecto» y esto es lo que lo hace verdad. Desde Task 15
+   * ya no es la ÚNICA puerta —con el proyecto abierto, su propia pestaña Tareas ofrece el
+   * mismo botón (`TareasDelProyecto.tsx`)—, pero sigue siendo la única para quien todavía no
+   * ha abierto ese proyecto: sin ella, no habría forma de crear la primera tarea sin abrirlo
+   * antes.
    */
   it("cada proyecto ofrece «Nueva tarea», y dice de cuál", () => {
     const alNuevaTarea = vi.fn();

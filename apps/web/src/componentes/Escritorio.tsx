@@ -94,8 +94,12 @@ export function Escritorio({
    * Crear una TAREA en background para ese proyecto. Ausente = no se ofrece.
    *
    * Vive en la tarjeta del proyecto, al lado de «Nueva sesión», porque son la misma clase de
-   * decisión sobre el mismo objeto — y porque es la ÚNICA puerta para la primera tarea: la
-   * pestaña de tareas de un proyecto solo existe si ya tiene alguna.
+   * decisión sobre el mismo objeto. **Hasta Task 15 era además la ÚNICA puerta** —la pestaña
+   * de tareas de un proyecto solo existía si ya tenía alguna—, así que con un proyecto
+   * abierto no había forma de crear la primera sin volver aquí. Esa pestaña
+   * (`TareasDelProyecto.tsx`) vive ahora SIEMPRE dentro del proyecto abierto y ofrece el
+   * mismo botón; esta tarjeta se queda porque sigue siendo la única puerta para quien
+   * TODAVÍA no ha abierto ningún proyecto.
    */
   alNuevaTarea?: (proyecto: string) => void;
   /**

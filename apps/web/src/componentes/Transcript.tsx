@@ -54,8 +54,9 @@ export function Transcript({
   /** Lo que el agente DIBUJÓ en esta sesión. Su pestaña solo existe si hay alguno, y de eso
    *  se encarga `Pestanas`: aquí es una ranura más. */
   artefactos?: ReactNode;
-  /** Las tareas en background del proyecto ABIERTO. Su pestaña solo existe si hay alguna,
-   *  igual que `artefactos`: aquí también es solo una ranura más. */
+  /** Las tareas en background del proyecto ABIERTO. Desde Task 15 su pestaña existe SIEMPRE
+   *  —es de acción, no de registro como `artefactos` (`Pestanas.tsx`)—; aquí sigue siendo
+   *  solo una ranura más. */
   tareas?: ReactNode;
   /** Abrir un artefacto desde su tarjeta del Chat. Lo resuelve `App`, que es quien recuerda
    *  la pestaña y el elegido. */

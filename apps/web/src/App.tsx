@@ -230,20 +230,33 @@ export function App({
    * `{clase:"tareas"}` y ya está en el store —el kanban del escritorio la enseña sin
    * filtrar—, así que aquí no se pide nada nuevo al servidor. El filtro es por el ID del
    * proyecto (`estado.alta.proyectoActivo`), que es lo que cada tarea trae en `proyecto`.
+   *
+   * **Ausente y vacío no son lo mismo, y Task 15 lo lleva hasta la pestaña.** Antes esto
+   * colapsaba los dos en un `?? []`: valía mientras la pestaña solo aparecía CON tareas
+   * (nunca se veía el caso vacío), pero desde que es una pestaña de ACCIÓN que existe
+   * siempre, su estado vacío AFIRMA que no hay ninguna — y afirmarlo sin que la cola haya
+   * llegado del servidor sería la misma mentira que `Revision` evita con `via`. `undefined`
+   * se propaga tal cual hasta `TareasDelProyecto`, que es quien decide qué decir.
    */
   const tareasDelProyecto = useMemo(
-    () => (estado.tareas?.lista ?? []).filter((t) => t.proyecto === estado.alta?.proyectoActivo),
+    () =>
+      estado.tareas === undefined
+        ? undefined
+        : estado.tareas.lista.filter((t) => t.proyecto === estado.alta?.proyectoActivo),
     [estado.tareas, estado.alta?.proyectoActivo]
   );
 
   /**
-   * Mismo caso que Artefactos: si el proyecto activo se queda sin tareas, la pestaña
-   * desaparece de la tira y la elección tiene que caerse con ella — si no, el centro
-   * seguiría enseñando ese panel sin ninguna pestaña marcada.
+   * El id del proyecto ABIERTO, para la única puerta de creación que hace falta desde
+   * DENTRO de él: a diferencia del escritorio (`alNuevaTarea(proyecto)`, una tarjeta por
+   * proyecto), aquí no hay nada que elegir.
+   *
+   * Ausente = no se ofrece el botón: `proyectoActivo` se DEDUCE comparando raíces
+   * (`web/servidor/arranque.ts`, ver CLAUDE.md) y puede no cuadrar. Abrir la ventana sin
+   * este id resuelto es justo la mutación que Task 15 prohíbe: `proyectoDeLaTarea` no
+   * encontraría con qué pintarla y la ventana se quedaría sin montar.
    */
-  useEffect(() => {
-    if (tareasDelProyecto.length === 0) setPestana((actual) => (actual === "tareas" ? "chat" : actual));
-  }, [tareasDelProyecto.length]);
+  const proyectoActivoId = estado.alta?.proyectoActivo;
 
   const pedirArtefacto = useCallback(
     (nombre: string) => {
@@ -904,12 +917,7 @@ export function App({
               son de aquí. Arriba quedaban además centradas sobre la barra lateral,
               señalando a una columna que no cambian.
             */}
-            <Pestanas
-              pestana={pestana}
-              alElegirPestana={setPestana}
-              hayArtefactos={artefactos.length > 0}
-              hayTareas={tareasDelProyecto.length > 0}
-            />
+            <Pestanas pestana={pestana} alElegirPestana={setPestana} hayArtefactos={artefactos.length > 0} />
             <AvisoDeConexion conectado={estado.conectado} />
             <Transcript
               actos={estado.actos}
@@ -974,6 +982,13 @@ export function App({
                   // desde ahí (Task 13). `AccionesDeTarea` ya la ofrece en las dos vistas.
                   alEnviarFeedback={alEnviarFeedbackTarea}
                   conectado={estado.conectado}
+                  // Task 15: crear una tarea PARA este proyecto sin salir de la pestaña ni
+                  // volver al escritorio, con el proyecto ya resuelto — es el mismo id que
+                  // abre esta ventana desde una tarjeta del escritorio, solo que aquí no hay
+                  // nada que elegir.
+                  {...(proyectoActivoId === undefined
+                    ? {}
+                    : { alNuevaTarea: () => abrirVentanaDeTarea(proyectoActivoId) })}
                 />
               }
               // La tarjeta del chat abre el artefacto: cambia de pestaña y lo elige.

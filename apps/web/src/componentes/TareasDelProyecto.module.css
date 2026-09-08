@@ -1,13 +1,69 @@
 /* Alias comprobados contra `apps/web/estilos/design-platform.css` (los mismos que
-   `Equipo.module.css` y `Kanban.module.css`): bg-layer-1, border-l2, label-primary/
-   secondary/tertiary, state-success-primary, state-warn-primary, state-warn-label.
-   `--xonecode-cian` es de `estilos/marca.css`. Ningún color literal (`Barra.test.tsx`).
-   Los botones, el aviso de descarte y el campo de feedback ya no viven aquí — son de
-   `AccionesDeTarea.module.css` desde Task 13. */
+   `Equipo.module.css` y `Kanban.module.css`, más `interactive-bg-hover` que ya usa
+   `Revision.module.css` para su propio botón de recargar): bg-layer-1, border-l2,
+   label-primary/secondary/tertiary, interactive-bg-hover, state-success-primary,
+   state-warn-primary, state-warn-label. `--xonecode-cian` es de `estilos/marca.css`.
+   Ningún color literal (`Barra.test.tsx`). Los botones de fila, el aviso de descarte y el
+   campo de feedback ya no viven aquí — son de `AccionesDeTarea.module.css` desde Task 13. */
 
 .lista {
   padding: 16px;
   overflow-y: auto;
+}
+
+/* La cabecera de la PESTAÑA (Task 15): título + «Nueva tarea». Es lo que hace que la
+   pestaña exista SIEMPRE tenga sentido — sin esto, un proyecto sin tareas todavía no tendría
+   ningún control aquí, solo el párrafo del estado vacío.
+   NOMBRES DISTINTOS de `.cabecera`/`.titulo` de más abajo A PROPÓSITO: esos son de la
+   cabecera de CADA FILA (`Fila`), y CSS Modules no aísla dos bloques con el mismo nombre en
+   el mismo fichero — comparten clase generada, y el que gana es el que aparece último en el
+   fichero. Medido: con el mismo nombre, cada fila heredaba `justify-content: space-between`
+   y `padding-bottom: 12px` de este bloque sin que ningún test en jsdom lo viera, porque
+   jsdom no calcula estilos. */
+.encabezado {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding-bottom: 12px;
+}
+
+.rotulo {
+  color: var(--dsw-alias-label-primary);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+/* Mismo trazo que `.recargar` de `Revision.module.css`: es el mismo tipo de botón
+   secundario, en la cabecera de una pestaña. */
+.nueva {
+  padding: 4px 10px;
+  border: 0.5px solid var(--dsw-alias-border-l2);
+  border-radius: 8px;
+  background: var(--dsw-alias-bg-layer-1);
+  color: var(--dsw-alias-label-secondary);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.nueva:hover:not(:disabled) {
+  background: var(--dsw-alias-interactive-bg-hover);
+  color: var(--dsw-alias-label-primary);
+}
+
+.nueva:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+/* El aviso de «consultando…» y el estado vacío: mismo trazo que `Revision.module.css#.aviso`. */
+.aviso {
+  margin: 0;
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 12px;
+  line-height: 1.6;
+  max-width: 60ch;
 }
 
 .filas {
@@ -67,6 +123,8 @@
   flex: 1;
 }
 
+/* La cabecera de CADA FILA — no confundir con `.encabezado` de la pestaña, más arriba: el
+   mismo nombre en las dos habría chocado (ver el comentario de `.encabezado`). */
 .cabecera {
   display: flex;
   flex-wrap: wrap;

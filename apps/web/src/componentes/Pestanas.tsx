@@ -5,7 +5,8 @@ import estilos from "./Pestanas.module.css";
 export type Pestana = "chat" | "ficheros" | "revision" | "artefactos" | "tareas" | "trazas";
 
 /**
- * La tira de pestañas: Chat, Ficheros, Revisión y Trazas.
+ * La tira de pestañas: Chat, Ficheros, Revisión, Tareas y Trazas — más Artefactos, si la
+ * sesión dejó alguno.
  *
  * Vive en el PANEL CENTRAL, no en la barra superior. Es la tercera casa que tiene —estuvo
  * en `Transcript`, luego en `Cabecera`— y esta vez la mudanza la decide una regla y no una
@@ -23,12 +24,23 @@ export type Pestana = "chat" | "ficheros" | "revision" | "artefactos" | "tareas"
  *
  * No recuerda nada: cuál está elegida lo sabe `App`, que es quien también decide qué pintar
  * debajo. Este componente solo dice qué se ha pulsado.
+ *
+ * **«Tareas» NO se condiciona a que haya alguna (Task 15), y eso matiza la regla de
+ * `hayArtefactos` de aquí abajo — no la contradice.** Un artefacto es el REGISTRO de algo
+ * que el agente ya dibujó, así que una pestaña de artefactos vacía es el control sin dato
+ * detrás que este proyecto no se permite en ninguna parte: bien escondida. Una tarea es lo
+ * contrario — es donde se ACTÚA —, y antes de esta tarea la pestaña de Tareas SÍ se
+ * condicionaba igual que Artefactos: la consecuencia medida fue que, con proyecto abierto,
+ * la única puerta para crear la primera tarea de ese proyecto era volver al escritorio (la
+ * marca «xonecode»), y la pestaña que enseñaría cómo hacerlo desaparecía justo cuando hacía
+ * falta. El criterio que queda, y que no hay que volver a decidir: **una pestaña de
+ * REGISTRO existe si hay registro; una pestaña de ACCIÓN existe siempre, y su estado vacío
+ * dice cómo se empieza** (ver `TareasDelProyecto.tsx`, que es quien pinta ese estado vacío).
  */
 export function Pestanas({
   pestana,
   alElegirPestana,
   hayArtefactos,
-  hayTareas,
 }: {
   pestana: Pestana;
   alElegirPestana: (pestana: Pestana) => void;
@@ -40,13 +52,6 @@ export function Pestanas({
    * permite en ninguna otra parte. Lo sabe `App` mirando los actos, que ya traen la lista.
    */
   hayArtefactos?: boolean;
-  /**
-   * ¿Tiene el proyecto ABIERTO alguna tarea en background? Su pestaña solo existe entonces
-   * — la misma regla que `hayArtefactos`: un control sin dato detrás es la misma mentira
-   * que una lista vacía rellenada. `App` la calcula filtrando `estado.tareas.lista` por el
-   * proyecto activo, no pidiendo nada nuevo al servidor.
-   */
-  hayTareas?: boolean;
 }) {
   const pestanas: { id: Pestana; etiqueta: string }[] = [
     { id: "chat", etiqueta: "Chat" },
@@ -59,8 +64,9 @@ export function Pestanas({
     // arriba. Solo si hay alguno.
     ...(hayArtefactos === true ? [{ id: "artefactos" as const, etiqueta: "Artefactos" }] : []),
     // La cola de tareas en background del proyecto ABIERTO, no de la máquina entera — el
-    // kanban global ya vive en el escritorio. Solo si hay alguna.
-    ...(hayTareas === true ? [{ id: "tareas" as const, etiqueta: "Tareas" }] : []),
+    // kanban global ya vive en el escritorio. SIEMPRE presente, a propósito: es una pestaña
+    // de ACCIÓN y no de registro (ver el comentario del componente, más arriba).
+    { id: "tareas", etiqueta: "Tareas" },
     // Para depurar el HARNESS, no para trabajar en una app XOne: por eso va la última.
     { id: "trazas", etiqueta: "Trazas" },
   ];

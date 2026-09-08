@@ -16,9 +16,22 @@ const ETIQUETA_DE_ESTADO: Record<TareaDelCable["estado"], string> = {
 /**
  * La lista de tareas en background del proyecto ABIERTO, como pestaña.
  *
- * «Solo existe si hay dato detrás» (`Pestanas.tsx#hayArtefactos`, la misma regla): quien
- * monta esto ya filtró por proyecto y decide si la pestaña aparece — este componente pinta
- * lo que le llega, sin volver a preguntarse si está vacío.
+ * **Task 15: esta pestaña ya NO depende de si hay alguna tarea, y eso MATIZA la regla de
+ * `Pestanas.tsx#hayArtefactos` en vez de contradecirla.** Un artefacto es el REGISTRO de
+ * algo que el agente ya dibujó: una pestaña de registro vacía es el control sin dato
+ * detrás, y por eso solo existe con al menos uno. Una tarea es lo contrario — es donde se
+ * ACTÚA —, y antes de esta tarea la única puerta para crear la primera de un proyecto
+ * abierto era volver al escritorio (la marca «xonecode»): la pestaña que enseñaría cómo
+ * hacerlo desaparecía justo cuando alguien la buscaba. El criterio que queda, para quien
+ * lea la regla de Artefactos y quiera «arreglar» esto: **una pestaña de REGISTRO existe si
+ * hay registro; una pestaña de ACCIÓN existe siempre, y su estado vacío dice cómo se
+ * empieza.** No es un hueco: es la respuesta a «¿y cómo se crea una?».
+ *
+ * **Ausente y vacío no son lo mismo, y esta vista es la que tiene que sostener esa
+ * distinción hasta el final.** `tareas` ausente significa que la cola todavía no ha llegado
+ * del servidor (`estado.tareas` en `store.ts`) — no se puede afirmar «no hay ninguna» sin
+ * haber medido, la misma regla que `Revision#via`. `tareas={[]}` significa que sí llegó y
+ * este proyecto no tiene ninguna: solo ENTONCES se pinta el estado vacío.
  *
  * No pide nada al servidor: la cola entera viaja en `{clase:"tareas"}` y ya está en el
  * store (`App.tsx` filtra por `proyecto`), así que aquí no hay ningún `useEffect` de red.
@@ -31,13 +44,24 @@ const ETIQUETA_DE_ESTADO: Record<TareaDelCable["estado"], string> = {
  */
 export function TareasDelProyecto({
   tareas,
+  alNuevaTarea,
   alReintentar,
   alDescartar,
   alTerminar,
   alEnviarFeedback,
   conectado,
 }: {
-  tareas: readonly TareaDelCable[];
+  /** Ausente = la cola todavía no ha llegado del servidor. `[]` = llegó, y este proyecto no
+   *  tiene ninguna. Los dos casos NO son el mismo texto. */
+  tareas?: readonly TareaDelCable[];
+  /**
+   * Crear una tarea PARA ESTE proyecto, sin salir de esta pestaña ni volver al escritorio.
+   * Ausente = no se ofrece — hoy solo pasa si `App` no puede resolver el id del proyecto
+   * activo (`alta.proyectoActivo` se DEDUCE comparando raíces y puede no cuadrar). No lleva
+   * parámetro: a diferencia del botón del escritorio, que elige entre varias tarjetas, aquí
+   * ya se está DENTRO del proyecto — pedirlo sería preguntar algo que ya se sabe.
+   */
+  alNuevaTarea?: () => void;
   /** `nuevo → en-proceso` se salta desde aquí: reintentar es lo que devuelve una tarea
    *  aparcada a la cola. Ausente = no se ofrece. */
   alReintentar?: (id: string) => void;
@@ -50,25 +74,50 @@ export function TareasDelProyecto({
   /** «Se edita la tarea y se agrega el feedback del usuario»: la devuelve al lazo, en su
    *  mismo hilo. Ausente = no se ofrece — la aparcada cae a la pista de siempre. */
   alEnviarFeedback?: (id: string, texto: string) => void;
-  /** Si el cable está vivo: apaga en `AccionesDeTarea` lo que manda algo al servidor y
-   *  dice por qué. Ausente = se asume conectado. */
+  /** Si el cable está vivo: apaga en `AccionesDeTarea` (y el botón «Nueva tarea» de aquí)
+   *  lo que manda algo al servidor, y lo dice. Ausente = se asume conectado. */
   conectado?: boolean;
 }) {
+  const apagado = conectado === false;
   return (
     <section className={estilos.lista} aria-label="Tareas del proyecto">
-      <ul className={estilos.filas}>
-        {tareas.map((t) => (
-          <Fila
-            key={t.id}
-            tarea={t}
-            conectado={conectado}
-            {...(alReintentar === undefined ? {} : { alReintentar })}
-            {...(alDescartar === undefined ? {} : { alDescartar })}
-            {...(alTerminar === undefined ? {} : { alTerminar })}
-            {...(alEnviarFeedback === undefined ? {} : { alEnviarFeedback })}
-          />
-        ))}
-      </ul>
+      <div className={estilos.encabezado}>
+        <span className={estilos.rotulo}>Tareas en background</span>
+        {alNuevaTarea === undefined ? null : (
+          <button
+            type="button"
+            className={estilos.nueva}
+            disabled={apagado}
+            title={apagado ? "Sin cable: no se puede crear una tarea hasta reconectar." : undefined}
+            onClick={alNuevaTarea}
+          >
+            Nueva tarea
+          </button>
+        )}
+      </div>
+      {tareas === undefined ? (
+        <p className={estilos.aviso}>Consultando la cola de tareas de este proyecto…</p>
+      ) : tareas.length === 0 ? (
+        <p className={estilos.aviso}>
+          Este proyecto todavía no tiene ninguna tarea en background. Pulsa «Nueva tarea» para
+          darle al agente un encargo que trabaje solo, sin que tengas que quedarte mirando: se
+          aplica sin pedir aprobación, porque la autorización es crearla.
+        </p>
+      ) : (
+        <ul className={estilos.filas}>
+          {tareas.map((t) => (
+            <Fila
+              key={t.id}
+              tarea={t}
+              conectado={conectado}
+              {...(alReintentar === undefined ? {} : { alReintentar })}
+              {...(alDescartar === undefined ? {} : { alDescartar })}
+              {...(alTerminar === undefined ? {} : { alTerminar })}
+              {...(alEnviarFeedback === undefined ? {} : { alEnviarFeedback })}
+            />
+          ))}
+        </ul>
+      )}
     </section>
   );
 }

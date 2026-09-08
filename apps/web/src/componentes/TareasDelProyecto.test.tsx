@@ -84,4 +84,43 @@ describe("TareasDelProyecto", () => {
     expect(screen.getByRole("button", { name: /reintentar/i })).toHaveProperty("disabled", true);
     expect(screen.getByText(/sin conexión/i)).toBeTruthy();
   });
+
+  /**
+   * Task 15: esta pestaña ya no depende de si hay tareas (`Pestanas.tsx`), así que ahora
+   * tiene que valer también para el caso vacío — y para el caso en que la cola ni siquiera
+   * ha llegado del servidor, que NO es lo mismo.
+   */
+  describe("ausente y vacío no son lo mismo", () => {
+    it("sin `tareas` (ausente), dice que está consultando y NO afirma que no hay ninguna", () => {
+      render(<TareasDelProyecto />);
+      expect(screen.getByText(/consultando/i)).toBeTruthy();
+      expect(screen.queryByText(/todavía no tiene ninguna/i)).toBeNull();
+    });
+
+    it("con `tareas={[]}` (vacío, ya medido), el estado vacío DICE cómo se crea una: no es un hueco", () => {
+      render(<TareasDelProyecto tareas={[]} alNuevaTarea={vi.fn()} />);
+      // Mutación obligatoria: quitar este texto tiene que tumbar el test. Un párrafo vacío,
+      // o un `<div />` sin nada, no es un estado vacío que dice cómo se empieza.
+      expect(screen.getByText(/todavía no tiene ninguna/i)).toBeTruthy();
+      expect(screen.getByRole("button", { name: /nueva tarea/i })).toBeTruthy();
+      expect(screen.queryByText(/consultando/i)).toBeNull();
+    });
+  });
+
+  it("el botón «Nueva tarea» llama al manejador, con la lista vacía o llena", () => {
+    const alNuevaTarea = vi.fn();
+    const { unmount } = render(<TareasDelProyecto tareas={[]} alNuevaTarea={alNuevaTarea} />);
+    fireEvent.click(screen.getByRole("button", { name: /nueva tarea/i }));
+    expect(alNuevaTarea).toHaveBeenCalledTimes(1);
+    unmount();
+
+    render(<TareasDelProyecto tareas={[tarea()]} alNuevaTarea={alNuevaTarea} />);
+    fireEvent.click(screen.getByRole("button", { name: /nueva tarea/i }));
+    expect(alNuevaTarea).toHaveBeenCalledTimes(2);
+  });
+
+  it("sin manejador, «Nueva tarea» no se pinta: un control sin nada detrás no se ofrece", () => {
+    render(<TareasDelProyecto tareas={[]} />);
+    expect(screen.queryByRole("button", { name: /nueva tarea/i })).toBeNull();
+  });
 });

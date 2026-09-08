@@ -25,23 +25,32 @@ describe("Pestanas", () => {
     expect(alElegirPestana).toHaveBeenCalledWith("trazas");
   });
 
-  it("son cuatro, en este orden: Chat · Ficheros · Revisión · Trazas", () => {
-    // Las tres primeras son para quien desarrolla una app XOne; Trazas es para depurar el
-    // harness, y lo de otro destinatario va al final.
+  it("son cinco por omisión, en este orden: Chat · Ficheros · Revisión · Tareas · Trazas", () => {
+    // Las cuatro primeras son para quien desarrolla una app XOne; Trazas es para depurar el
+    // harness, y lo de otro destinatario va al final. Tareas ya no necesita ningún dato para
+    // aparecer (Task 15): es una pestaña de ACCIÓN, no de registro.
     render(<Pestanas pestana="revision" alElegirPestana={vi.fn()} />);
     expect(screen.getByRole("tablist")).not.toBeNull();
-    expect(screen.getAllByRole("tab").map((t) => t.textContent)).toEqual(["Chat", "Ficheros", "Revisión", "Trazas"]);
+    expect(screen.getAllByRole("tab").map((t) => t.textContent)).toEqual([
+      "Chat",
+      "Ficheros",
+      "Revisión",
+      "Tareas",
+      "Trazas",
+    ]);
     expect(screen.getByRole("tab", { name: "Revisión" }).getAttribute("aria-selected")).toBe("true");
   });
 
   it("«Artefactos» solo está si la sesión dejó alguno: una pestaña vacía es un control sin dato", () => {
     render(<Pestanas pestana="chat" alElegirPestana={vi.fn()} hayArtefactos />);
-    // Delante de Trazas, que sigue siendo la última: es la de otro destinatario.
+    // Delante de Trazas, que sigue siendo la última: es la de otro destinatario. Tareas va
+    // detrás de Artefactos y delante de Trazas, y ya no depende de ningún prop.
     expect(screen.getAllByRole("tab").map((t) => t.textContent)).toEqual([
       "Chat",
       "Ficheros",
       "Revisión",
       "Artefactos",
+      "Tareas",
       "Trazas",
     ]);
   });
@@ -53,28 +62,28 @@ describe("Pestanas", () => {
     expect(alElegirPestana).toHaveBeenCalledWith("artefactos");
   });
 
-  it("«Tareas» solo está si el proyecto tiene alguna: la misma regla que Artefactos", () => {
-    render(<Pestanas pestana="chat" alElegirPestana={vi.fn()} hayTareas />);
-    // Delante de Trazas, detrás de Artefactos: es la última de las de trabajar en el
-    // proyecto, y Trazas sigue siendo la de otro destinatario.
-    expect(screen.getAllByRole("tab").map((t) => t.textContent)).toEqual([
-      "Chat",
-      "Ficheros",
-      "Revisión",
-      "Tareas",
-      "Trazas",
-    ]);
+  it("«Tareas» está SIEMPRE, aunque el proyecto no tenga ninguna: matiza la regla de Artefactos, no la copia", () => {
+    // «La pestaña solo existe si hay dato» es correcta para Artefactos —un artefacto es el
+    // REGISTRO de algo que ya pasó, y un registro vacío es el control sin dato detrás—, pero
+    // Tareas es una pestaña de ACCIÓN: si desaparece cuando no hay ninguna, se lleva consigo
+    // el único sitio donde aprender que se puede crear una. El criterio que queda: una
+    // pestaña de registro existe si hay registro; una de acción existe siempre, y su estado
+    // vacío dice cómo se empieza (`TareasDelProyecto.tsx`). Por eso este test NO pasa ningún
+    // prop de tareas — si alguien reintrodujera un `hayTareas` que la condicione, esta prueba
+    // es la que lo tiene que pillar.
+    render(<Pestanas pestana="chat" alElegirPestana={vi.fn()} />);
+    expect(screen.getByRole("tab", { name: "Tareas" })).toBeTruthy();
   });
 
   it("pulsar Tareas reporta «tareas»", () => {
     const alElegirPestana = vi.fn();
-    render(<Pestanas pestana="chat" alElegirPestana={alElegirPestana} hayTareas />);
+    render(<Pestanas pestana="chat" alElegirPestana={alElegirPestana} />);
     fireEvent.click(screen.getByRole("tab", { name: "Tareas" }));
     expect(alElegirPestana).toHaveBeenCalledWith("tareas");
   });
 
   it("Artefactos y Tareas conviven: Artefactos primero", () => {
-    render(<Pestanas pestana="chat" alElegirPestana={vi.fn()} hayArtefactos hayTareas />);
+    render(<Pestanas pestana="chat" alElegirPestana={vi.fn()} hayArtefactos />);
     expect(screen.getAllByRole("tab").map((t) => t.textContent)).toEqual([
       "Chat",
       "Ficheros",
