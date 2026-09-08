@@ -2,7 +2,7 @@ import clsx from "clsx";
 import conversacion from "../../estilos/ConversationRoot.module.css";
 import estilos from "./Pestanas.module.css";
 
-export type Pestana = "chat" | "ficheros" | "revision" | "artefactos" | "trazas";
+export type Pestana = "chat" | "ficheros" | "revision" | "artefactos" | "tareas" | "trazas";
 
 /**
  * La tira de pestañas: Chat, Ficheros, Revisión y Trazas.
@@ -28,6 +28,7 @@ export function Pestanas({
   pestana,
   alElegirPestana,
   hayArtefactos,
+  hayTareas,
 }: {
   pestana: Pestana;
   alElegirPestana: (pestana: Pestana) => void;
@@ -39,6 +40,13 @@ export function Pestanas({
    * permite en ninguna otra parte. Lo sabe `App` mirando los actos, que ya traen la lista.
    */
   hayArtefactos?: boolean;
+  /**
+   * ¿Tiene el proyecto ABIERTO alguna tarea en background? Su pestaña solo existe entonces
+   * — la misma regla que `hayArtefactos`: un control sin dato detrás es la misma mentira
+   * que una lista vacía rellenada. `App` la calcula filtrando `estado.tareas.lista` por el
+   * proyecto activo, no pidiendo nada nuevo al servidor.
+   */
+  hayTareas?: boolean;
 }) {
   const pestanas: { id: Pestana; etiqueta: string }[] = [
     { id: "chat", etiqueta: "Chat" },
@@ -50,6 +58,9 @@ export function Pestanas({
     // Lo que el agente DIBUJÓ, que no es del proyecto y por eso no está en las dos de
     // arriba. Solo si hay alguno.
     ...(hayArtefactos === true ? [{ id: "artefactos" as const, etiqueta: "Artefactos" }] : []),
+    // La cola de tareas en background del proyecto ABIERTO, no de la máquina entera — el
+    // kanban global ya vive en el escritorio. Solo si hay alguna.
+    ...(hayTareas === true ? [{ id: "tareas" as const, etiqueta: "Tareas" }] : []),
     // Para depurar el HARNESS, no para trabajar en una app XOne: por eso va la última.
     { id: "trazas", etiqueta: "Trazas" },
   ];

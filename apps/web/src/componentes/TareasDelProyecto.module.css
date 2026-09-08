@@ -1,0 +1,133 @@
+/* Alias comprobados contra `apps/web/estilos/design-platform.css` (los mismos que
+   `Equipo.module.css` y `Kanban.module.css`): bg-layer-1/2, border-l2, label-primary/
+   secondary/tertiary, state-success-primary, state-warn-primary, state-warn-label,
+   interactive-bg-hover. `--xonecode-cian` es de `estilos/marca.css`. Ningún color
+   literal (`Barra.test.tsx`). */
+
+.lista {
+  padding: 16px;
+  overflow-y: auto;
+}
+
+.filas {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.fila {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 0.5px solid var(--dsw-alias-border-l2);
+  border-radius: 10px;
+  background: var(--dsw-alias-bg-layer-1);
+}
+
+/* El punto de estado: hueco mientras espera turno, acento mientras corre, verde en cuanto
+   acaba, y el de atención con su FORMA propia (rombo) y no solo otro color — es la fila
+   con algo que decidir, y una forma distinta se lee incluso sin color. */
+.punto {
+  flex-shrink: 0;
+  align-self: center;
+  width: 9px;
+  height: 9px;
+  margin-top: 1px;
+  border-radius: 50%;
+  border: 1px solid var(--dsw-alias-border-l2);
+}
+
+.fila[data-estado="en-proceso"] .punto {
+  border-color: var(--xonecode-cian);
+  background: var(--xonecode-cian);
+}
+
+.fila[data-estado="terminada"] .punto {
+  border-color: var(--dsw-alias-state-success-primary);
+  background: var(--dsw-alias-state-success-primary);
+}
+
+.fila[data-estado="requiere-atencion"] .punto {
+  border-radius: 2px;
+  transform: rotate(45deg);
+  border-color: var(--dsw-alias-state-warn-primary);
+  background: var(--dsw-alias-state-warn-primary);
+}
+
+.cuerpo {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  flex: 1;
+}
+
+.cabecera {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 6px;
+}
+
+.titulo {
+  color: var(--dsw-alias-label-primary);
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.etiquetaEstado {
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 11px;
+}
+
+.motivo {
+  margin: 2px 0 0;
+  color: var(--dsw-alias-state-warn-label);
+  font-size: 12px;
+}
+
+.acciones {
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+  gap: 6px;
+}
+
+.boton {
+  padding: 4px 8px;
+  border: 0.5px solid var(--dsw-alias-border-l2);
+  border-radius: 8px;
+  background: var(--dsw-alias-bg-layer-2);
+  color: var(--dsw-alias-label-primary);
+  font: inherit;
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.boton:hover {
+  background: var(--dsw-alias-interactive-bg-hover);
+}
+
+.botonPeligro {
+  padding: 4px 8px;
+  border: 0.5px solid var(--dsw-alias-state-warn-primary);
+  border-radius: 8px;
+  background: var(--dsw-alias-bg-layer-2);
+  color: var(--dsw-alias-state-warn-label);
+  font: inherit;
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.botonPeligro:hover {
+  background: var(--dsw-alias-interactive-bg-hover);
+}
+
+.avisoDescarte {
+  color: var(--dsw-alias-state-warn-label);
+  font-size: 11px;
+}

@@ -856,3 +856,100 @@ describe("App: la pestaña Ficheros", () => {
     expect(arboles(enviar)).toHaveLength(0);
   });
 });
+
+describe("App: la pestaña Tareas", () => {
+  const TAREA = (extra: Record<string, unknown> = {}) => ({
+    id: "t1",
+    proyecto: "p1",
+    proyectoNombre: "Tienda",
+    titulo: "Arregla el login",
+    peticion: "Arregla el login",
+    encargo: "Arregla el login",
+    adjuntos: [],
+    estado: "nuevo" as const,
+    creada: "2026-09-08T10:00:00.000Z",
+    ...extra,
+  });
+
+  /** Con proyecto ABIERTO y ACTIVO, que es lo que la pestaña filtra por (`t.proyecto`). */
+  function montarConProyectoActivo() {
+    const store = crearStoreDelCliente();
+    const enviar = vi.fn(() => Promise.resolve(undefined as unknown));
+    render(<App store={store} enviar={enviar} />);
+    act(() => store.marcarConectado());
+    act(() =>
+      store.aplicar({
+        clase: "alta",
+        pasos: [],
+        proveedores: [],
+        entornos: [],
+        proyectos: [{ id: "p1", nombre: "Tienda" }],
+        ramas: [],
+        proyectoAbierto: true,
+        proyectoActivo: "p1",
+      })
+    );
+    return { store, enviar };
+  }
+
+  it("solo aparece con tareas del proyecto ACTIVO: una de otro proyecto no cuenta", () => {
+    const { store } = montarConProyectoActivo();
+    expect(screen.queryByRole("tab", { name: "Tareas" })).toBeNull();
+    act(() =>
+      store.aplicar({
+        clase: "tareas",
+        concurrencia: 2,
+        corriendoAqui: true,
+        lista: [TAREA({ id: "otro", proyecto: "p2", proyectoNombre: "Otra" })],
+      })
+    );
+    expect(screen.queryByRole("tab", { name: "Tareas" })).toBeNull();
+    act(() =>
+      store.aplicar({
+        clase: "tareas",
+        concurrencia: 2,
+        corriendoAqui: true,
+        lista: [TAREA({ id: "otro", proyecto: "p2", proyectoNombre: "Otra" }), TAREA()],
+      })
+    );
+    expect(screen.getByRole("tab", { name: "Tareas" })).toBeTruthy();
+  });
+
+  it("pinta el estado y el motivo, y reintentar/dar-por-bueno/descartar mandan la acción sobre el cable", () => {
+    const { store, enviar } = montarConProyectoActivo();
+    act(() =>
+      store.aplicar({
+        clase: "tareas",
+        concurrencia: 2,
+        corriendoAqui: true,
+        lista: [TAREA({ estado: "requiere-atencion", motivo: "el juez marcó el trabajo en rojo" })],
+      })
+    );
+    fireEvent.click(screen.getByRole("tab", { name: "Tareas" }));
+    expect(screen.getByText(/el juez marcó el trabajo en rojo/)).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: /reintentar/i }));
+    expect(enviar).toHaveBeenCalledWith({ clase: "tarea", accion: "reintentar", id: "t1" });
+
+    fireEvent.click(screen.getByRole("button", { name: /dar por bueno/i }));
+    expect(enviar).toHaveBeenCalledWith({ clase: "tarea", accion: "terminar", id: "t1" });
+
+    fireEvent.click(screen.getByRole("button", { name: /^descartar$/i }));
+    fireEvent.click(screen.getByRole("button", { name: /sí, descartar/i }));
+    expect(enviar).toHaveBeenCalledWith({ clase: "tarea", accion: "descartar", id: "t1" });
+  });
+
+  it("al quedarse el proyecto activo sin tareas, la pestaña se va y la elección vuelve al Chat", () => {
+    // Mismo caso que Artefactos: la pestaña desaparece de la tira y la elección tiene que
+    // caerse con ella, o el centro enseña ese panel sin ninguna pestaña marcada.
+    const { store } = montarConProyectoActivo();
+    act(() =>
+      store.aplicar({ clase: "tareas", concurrencia: 2, corriendoAqui: true, lista: [TAREA()] })
+    );
+    fireEvent.click(screen.getByRole("tab", { name: "Tareas" }));
+    expect(screen.getByRole("tab", { name: "Tareas" }).getAttribute("aria-selected")).toBe("true");
+    act(() => store.aplicar({ clase: "tareas", concurrencia: 2, corriendoAqui: true, lista: [] }));
+    expect(screen.queryByRole("tab", { name: "Tareas" })).toBeNull();
+    expect(screen.getByRole("tab", { name: "Chat" }).getAttribute("aria-selected")).toBe("true");
+  });
+});

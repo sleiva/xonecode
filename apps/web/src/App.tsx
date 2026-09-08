@@ -24,6 +24,7 @@ import { Ajustes } from "./componentes/Ajustes.js";
 import { DESPLEGADOS_AL_ABRIR, Revision } from "./componentes/Revision.js";
 import { Ficheros } from "./componentes/Ficheros.js";
 import { Artefactos, type ArtefactoEnLista } from "./componentes/Artefactos.js";
+import { TareasDelProyecto } from "./componentes/TareasDelProyecto.js";
 import { aplicarApariencia, guardarApariencia, leerApariencia, type Apariencia } from "./apariencia.js";
 import { guardarBarraContraida, leerBarraContraida } from "./preferencias.js";
 
@@ -194,6 +195,26 @@ export function App({ store, enviar }: { store: Store; enviar: Conexion["enviar"
   useEffect(() => {
     if (artefactos.length === 0) setPestana((actual) => (actual === "artefactos" ? "chat" : actual));
   }, [artefactos.length]);
+
+  /**
+   * Las tareas en background del proyecto ABIERTO, y solo de él: la cola entera viaja en
+   * `{clase:"tareas"}` y ya está en el store —el kanban del escritorio la enseña sin
+   * filtrar—, así que aquí no se pide nada nuevo al servidor. El filtro es por el ID del
+   * proyecto (`estado.alta.proyectoActivo`), que es lo que cada tarea trae en `proyecto`.
+   */
+  const tareasDelProyecto = useMemo(
+    () => (estado.tareas?.lista ?? []).filter((t) => t.proyecto === estado.alta?.proyectoActivo),
+    [estado.tareas, estado.alta?.proyectoActivo]
+  );
+
+  /**
+   * Mismo caso que Artefactos: si el proyecto activo se queda sin tareas, la pestaña
+   * desaparece de la tira y la elección tiene que caerse con ella — si no, el centro
+   * seguiría enseñando ese panel sin ninguna pestaña marcada.
+   */
+  useEffect(() => {
+    if (tareasDelProyecto.length === 0) setPestana((actual) => (actual === "tareas" ? "chat" : actual));
+  }, [tareasDelProyecto.length]);
 
   const pedirArtefacto = useCallback(
     (nombre: string) => {
@@ -754,7 +775,12 @@ export function App({ store, enviar }: { store: Store; enviar: Conexion["enviar"
               son de aquí. Arriba quedaban además centradas sobre la barra lateral,
               señalando a una columna que no cambian.
             */}
-            <Pestanas pestana={pestana} alElegirPestana={setPestana} hayArtefactos={artefactos.length > 0} />
+            <Pestanas
+              pestana={pestana}
+              alElegirPestana={setPestana}
+              hayArtefactos={artefactos.length > 0}
+              hayTareas={tareasDelProyecto.length > 0}
+            />
             <AvisoDeConexion conectado={estado.conectado} />
             <Transcript
               actos={estado.actos}
@@ -806,6 +832,14 @@ export function App({ store, enviar }: { store: Store; enviar: Conexion["enviar"
                   alElegir={setArtefactoElegido}
                   alPedir={pedirArtefacto}
                   conectado={estado.conectado}
+                />
+              }
+              tareas={
+                <TareasDelProyecto
+                  tareas={tareasDelProyecto}
+                  alReintentar={(id) => void enviar({ clase: "tarea", accion: "reintentar", id })}
+                  alDescartar={(id) => void enviar({ clase: "tarea", accion: "descartar", id })}
+                  alTerminar={(id) => void enviar({ clase: "tarea", accion: "terminar", id })}
                 />
               }
               // La tarjeta del chat abre el artefacto: cambia de pestaña y lo elige.

@@ -53,6 +53,38 @@ describe("Pestanas", () => {
     expect(alElegirPestana).toHaveBeenCalledWith("artefactos");
   });
 
+  it("«Tareas» solo está si el proyecto tiene alguna: la misma regla que Artefactos", () => {
+    render(<Pestanas pestana="chat" alElegirPestana={vi.fn()} hayTareas />);
+    // Delante de Trazas, detrás de Artefactos: es la última de las de trabajar en el
+    // proyecto, y Trazas sigue siendo la de otro destinatario.
+    expect(screen.getAllByRole("tab").map((t) => t.textContent)).toEqual([
+      "Chat",
+      "Ficheros",
+      "Revisión",
+      "Tareas",
+      "Trazas",
+    ]);
+  });
+
+  it("pulsar Tareas reporta «tareas»", () => {
+    const alElegirPestana = vi.fn();
+    render(<Pestanas pestana="chat" alElegirPestana={alElegirPestana} hayTareas />);
+    fireEvent.click(screen.getByRole("tab", { name: "Tareas" }));
+    expect(alElegirPestana).toHaveBeenCalledWith("tareas");
+  });
+
+  it("Artefactos y Tareas conviven: Artefactos primero", () => {
+    render(<Pestanas pestana="chat" alElegirPestana={vi.fn()} hayArtefactos hayTareas />);
+    expect(screen.getAllByRole("tab").map((t) => t.textContent)).toEqual([
+      "Chat",
+      "Ficheros",
+      "Revisión",
+      "Artefactos",
+      "Tareas",
+      "Trazas",
+    ]);
+  });
+
   it("pulsar Revisión reporta «revision»", () => {
     const alElegirPestana = vi.fn();
     render(<Pestanas pestana="chat" alElegirPestana={alElegirPestana} />);
