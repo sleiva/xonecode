@@ -66,6 +66,17 @@ export const MENSAJE_DE_RECHAZO_DE_TAREA =
  * Medido: una excepción desde ahí sale por `sesion.turno` y llega a quien corre el turno.
  * Con `aparcar` llamado ANTES de lanzar, el motivo bueno ya está escrito cuando el corredor
  * recoja el error — y su `motivo ??=` conserva el primero.
+ *
+ * **La asimetría, dicha para que se encuentre en un `grep` y no en un turno que no cierra:**
+ * ese `catch` de `turnoReal.ts` envuelve SOLO la llamada a `pedirAprobacion`, no el cuerpo
+ * del bucle. Hoy da igual, y por eso no se ha ampliado: dentro de un turno de tarea las
+ * aprobaciones van por `aprobacionesTui`, así que la rama `pedirDecisiones` —la única que
+ * usa `Consola.preguntar` dentro del turno— no se toma nunca, y ampliar el `catch` sería
+ * código para una hipótesis. Pero si algún día un `preguntar` acaba DENTRO de un turno, la
+ * excepción de aquí se saltará ese `catch` y **ese turno se queda sin `piel.fin`**: sin
+ * línea de tiempo en stdio y sin plegarse en la web. Entonces hay que ampliarlo al cuerpo
+ * del bucle. La tarea sí queda aparcada y con su motivo en los dos casos, que es la
+ * propiedad que sostiene todo esto.
  */
 export class ErrorDeTareaSinHumano extends Error {
   constructor(motivo: string) {
@@ -132,6 +143,9 @@ export function crearConsolaDeTarea(opciones: {
     eof: () => true,
     preguntar: async (pregunta: string) => {
       aparcar(`el agente preguntó y no había nadie: «${pregunta}»`);
+      // El `catch` de `turnoReal.ts` envuelve solo `pedirAprobacion`: si algún día un
+      // `preguntar` llega a correr DENTRO de un turno, este throw lo esquiva y ese turno se
+      // queda sin `piel.fin`. Ver el docblock de `ErrorDeTareaSinHumano`.
       throw new ErrorDeTareaSinHumano("hizo una pregunta");
     },
     leerSecreto: async () => {
