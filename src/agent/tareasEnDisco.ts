@@ -67,6 +67,14 @@ export function crearTareasEnDisco(opciones: {
    * eso no se puede pedir de verdad sin dos procesos reales.
    */
   enlazar?: (existente: string, nuevo: string) => void;
+  /**
+   * Cómo se BORRA la cuarentena al final de la recogida. Por omisión, `rmSync` de verdad.
+   * Entra por el mismo motivo que `renombrar` y `enlazar`: es el único punto desde el que se
+   * puede provocar el orden en que la cuarentena COMPARTIDA se llevaba por delante un
+   * cerrojo vivo (ver `tomarCerrojo`), y ese orden no se puede pedir de verdad sin dos
+   * procesos reales.
+   */
+  borrar?: (ruta: string) => void;
 }): TareasEnDisco {
   const base = join(opciones.base ?? join(homedir(), ".xonecode"), "tareas");
   const pid = opciones.pid ?? process.pid;
@@ -76,6 +84,7 @@ export function crearTareasEnDisco(opciones: {
   const topePorTarea = opciones.topePorTarea ?? TOPE_DE_ADJUNTOS_POR_TAREA;
   const renombrar = opciones.renombrar ?? renameSync;
   const enlazar = opciones.enlazar ?? linkSync;
+  const borrar = opciones.borrar ?? ((ruta: string) => rmSync(ruta, { force: true }));
   const indice = join(base, "indice.json");
   const cerrojo = join(base, "corredor.lock");
 
@@ -222,7 +231,17 @@ export function crearTareasEnDisco(opciones: {
       // Dueño soy yo según esta FOTO, está muerto, o el fichero es ilegible: se aparta para
       // poder comprobar con autoridad qué era, después — esa foto puede haberse quedado
       // vieja mientras el `rename` corría (ver el comentario de arriba).
-      const caduco = `${cerrojo}.caduco`;
+      // La cuarentena lleva el PID, y eso NO es cosmético: con un nombre compartido
+      // (`.caduco` a secas) la propia limpieza de más abajo se llevaba por delante el
+      // cerrojo vivo de otro. Medido: A recoge —`rename` a la cuarentena, `wx`, confirma— y,
+      // en el hueco entre su confirmación y su limpieza, el `rename` de B mete el cerrojo
+      // VIVO de A en esa misma ruta compartida (POSIX `rename` reemplaza el destino sin
+      // chistar); el `rmSync` de A borra entonces su PROPIO cerrojo creyendo borrar el
+      // muerto de antes, y B —que ya no encuentra nada que leer ahí— se cree la recogida
+      // legítima. A decía `{tomado:true}` sin fichero en disco y B se lo llevaba: dos
+      // dueños. Con la ruta por proceso, el `rename` de B solo puede aterrizar en la
+      // cuarentena de B, donde la lectura autoritativa de abajo ve a A vivo y lo restituye.
+      const caduco = `${cerrojo}.caduco-${pid}`;
       try {
         renombrar(cerrojo, caduco);
       } catch (error) {
@@ -248,10 +267,10 @@ export function crearTareasEnDisco(opciones: {
         } catch (error) {
           if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
           const tercero = leerDueño();
-          rmSync(caduco, { force: true });
+          borrar(caduco);
           return { tomado: false, dePid: tercero?.pid ?? -1 };
         }
-        rmSync(caduco, { force: true });
+        borrar(caduco);
         return { tomado: false, dePid: apartado.pid };
       }
 
@@ -262,8 +281,10 @@ export function crearTareasEnDisco(opciones: {
       // ve como cualquier otro «ya hay uno» y no hace falta un caso especial.
       const resultado = intentar() ? confirmar() : { tomado: false as const, dePid: leerDueño()?.pid ?? -1 };
       // Basura de un cuelgue ajeno: se borra tras resolver, y si el borrado falla da igual —
-      // nadie vuelve a mirar esa ruta.
-      rmSync(caduco, { force: true });
+      // nadie vuelve a mirar esa ruta. Un proceso que muera entre el `rename` y esta línea
+      // deja su `.caduco-<pid>` ahí para siempre: es un fichero de basura y no un cerrojo,
+      // porque `tomarCerrojo` solo mira `corredor.lock` — que ese `rename` dejó libre.
+      borrar(caduco);
       return resultado;
     },
     soltarCerrojo() {

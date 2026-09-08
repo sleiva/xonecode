@@ -260,6 +260,51 @@ describe("tareasEnDisco", () => {
     expect(JSON.parse(readFileSync(rutaCerrojo, "utf8"))).toMatchObject({ pid: 100 });
   });
 
+  it("la limpieza de A no se lleva su PROPIO cerrojo: la cuarentena es por proceso", () => {
+    // El tercer orden, y el que ni el `rename` ni la restitución cerraban: la cuarentena era
+    // una ruta COMPARTIDA (`corredor.lock.caduco` a secas), y POSIX `rename` reemplaza el
+    // destino sin chistar. Con B ya decidido a recoger sobre una foto vieja:
+    //   1. A recoge entero: `rename` del muerto a la cuarentena, `wx`, confirma.
+    //   2. el `rename` de B mete el cerrojo VIVO de A en esa MISMA ruta compartida.
+    //   3. la limpieza de A borra la cuarentena — que ya no es el muerto, es el cerrojo de A.
+    //   4. B lee su cuarentena, no encuentra nada, da la recogida por legítima y se lo queda.
+    // A devolvía `{tomado:true}` sin fichero en disco y B se lo llevaba: dos dueños.
+    //
+    // Ese orden exige que la limpieza de A caiga DESPUÉS del `rename` de B, así que los dos
+    // dobles se anidan: el `renombrar` de B corre a A entero, y la costura `borrar` de A
+    // —el único punto entre su confirmación y su limpieza— es la que deja pasar el `rename`
+    // de verdad de B. Comprobado que distingue: con la cuarentena compartida, este test sale
+    // rojo por las dos mitades.
+    mkdirSync(join(base, "tareas"), { recursive: true });
+    const rutaCerrojo = join(base, "tareas", "corredor.lock");
+    writeFileSync(rutaCerrojo, `${JSON.stringify({ pid: 999 })}\n`);
+
+    let renameDeB: (() => void) | undefined;
+    const borrarDeA = (ruta: string): void => {
+      renameDeB?.();
+      renameDeB = undefined;
+      rmSync(ruta, { force: true });
+    };
+    const a = crearTareasEnDisco({ base, pid: 100, vivo: () => false, borrar: borrarDeA });
+
+    let deA: { tomado: boolean } | undefined;
+    const renombrarDeB = (origen: string, destino: string): void => {
+      renameDeB = () => renameSync(origen, destino);
+      deA = a.tomarCerrojo();
+    };
+
+    // Para B, 999 está muerto (la foto que leyó) y cualquier otro pid está vivo — en
+    // particular el 100 de A, que es lo que hace disparar la restitución.
+    const b = crearTareasEnDisco({ base, pid: 200, vivo: (p) => p !== 999, renombrar: renombrarDeB });
+    const deB = b.tomarCerrojo();
+
+    // A tomó el cerrojo y sigue siendo suyo EN DISCO: ni su propia limpieza ni el `rename`
+    // de B se lo llevaron. Y B no se lo quedó.
+    expect(deA).toEqual({ tomado: true });
+    expect(JSON.parse(readFileSync(rutaCerrojo, "utf8"))).toMatchObject({ pid: 100 });
+    expect(deB).toEqual({ tomado: false, dePid: 100 });
+  });
+
   it.skipIf(process.platform === "win32")(
     "el índice, el cerrojo y un adjunto se escriben en 0600: llevan el encargo y los documentos de una persona",
     () => {
