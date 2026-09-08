@@ -180,15 +180,6 @@ const erroresDe = (hallazgos: readonly HallazgoDelTurno[] | undefined): number =
   (hallazgos ?? []).filter((h) => h.severidad === "error").length;
 
 /**
- * Las tres condiciones que comprueba el CÓDIGO. Pura.
- *
- * El motivo nombra TODAS las que fallaron y no la primera: es el caso medido de la deuda
- * que esta pieza hereda —un turno cortado por el tope tiene escrituras pendientes Y un
- * verificador que no corrió—, y decir solo una de las dos manda a adivinar la otra. Es la
- * misma regla del aviso de honestidad que saca los NOMBRES de los ficheros en vez de un
- * contador.
- */
-/**
  * Lo que se dice de una entrega a la que le faltó una condición porque no APLICABA.
  *
  * Se exporta para que quien la lea (y quien la pruebe) no la reescriba a mano.
@@ -197,6 +188,15 @@ export const SALVEDAD_SIN_ESCRITURAS =
   "el turno no cambió ningún fichero, así que no había nada que verificar: la entrega va " +
   "solo con la valoración del juez";
 
+/**
+ * Las tres condiciones que comprueba el CÓDIGO. Pura.
+ *
+ * El motivo nombra TODAS las que fallaron y no la primera: es el caso medido de la deuda
+ * que esta pieza hereda —un turno cortado por el tope tiene escrituras pendientes Y un
+ * verificador que no corrió—, y decir solo una de las dos manda a adivinar la otra. Es la
+ * misma regla del aviso de honestidad que saca los NOMBRES de los ficheros en vez de un
+ * contador.
+ */
 export function condicionesDeEntrega(medida: MedidaDeEntrega): Entrega {
   const fallos: string[] = [];
   /**

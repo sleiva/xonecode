@@ -46,10 +46,18 @@
  * nada se aplicó. Aquí lo que no puede resolverse sin una persona se APARCA con su motivo,
  * que es lo único que hace que el estado «requiere atención» sea verdad.
  *
- * **`aparcar` es el ÚNICO canal, y está medido**: `EjecutorDeTurno` devuelve `Promise<void>`
- * y `crearEjecutorReal` (`cli/main.ts`) tira el retorno de `sesion.turno`, así que el
- * `cortadoPorTope` que sí sabría que quedaron escrituras sin aplicar no sale de ahí. Sin
- * este objeto, una tarea que se topa con una aprobación acabaría marcada «terminada».
+ * **`aparcar` FUE el único canal, y ya no lo es — son dos, y hacen dos cosas distintas.**
+ * Cuando esto se escribió, `EjecutorDeTurno` devolvía `Promise<void>` y `crearEjecutorReal`
+ * (`cli/main.ts`) tiraba el retorno de `sesion.turno`, así que el `cortadoPorTope` que sabe
+ * que quedaron escrituras sin aplicar no salía de ahí y una tarea que se topaba con una
+ * aprobación acababa marcada «terminada». Hoy ese canal existe: el ejecutor devuelve
+ * `ResultadoDeTurno | void` (`cli/consola.ts`), `main.ts` lo devuelve y `vestibulo.ts` lo
+ * reenvía, y `pendientes` es una de las tres condiciones de la entrega
+ * (`core/entrega.ts`). Los dos siguen haciendo falta y no se pisan: **`aparcar` es lo que
+ * pasa cuando el turno no puede seguir** —alguien tenía que decidir y no había nadie— y el
+ * RESULTADO es lo que el turno cuenta cuando sí acabó. Sin `aparcar`, un turno que se topa
+ * con una pregunta se remataría solo; sin el resultado, uno que acaba dejando escrituras
+ * colgando se daría por bueno.
  *
  * No se guarda el `interrupt` esperando una decisión: el proceso puede vivir días y morir
  * en medio. La aprobación se retoma al abrir la sesión —`saldarAprobacionesHuerfanas` salda

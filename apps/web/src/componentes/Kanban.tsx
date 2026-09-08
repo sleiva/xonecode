@@ -263,8 +263,9 @@ function TarjetaDeAtencion({
         )}
         <span className={estilos.cuando}>{cuando(t)}</span>
 
-        {/* El motivo: lo único accionable de esta columna hasta que exista un botón real
-            de feedback (Task 12). Sin abrir nada. */}
+        {/* El motivo: es lo que dice QUÉ hay que decidir, y por tanto lo que hay que leer
+            antes de tocar el feedback o el reintento que `AccionesDeTarea` ofrece justo
+            debajo. Sin abrir nada. */}
         {t.motivo === undefined ? null : <p className={estilos.motivo}>{t.motivo}</p>}
 
         {/* Lo que la tarea AUTORIZÓ, nunca «lo que escribió»: una ruta que las guardas de

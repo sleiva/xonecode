@@ -67,8 +67,9 @@ export function TareasDelProyecto({
   /** `nuevo → en-proceso` se salta desde aquí: reintentar es lo que devuelve una tarea
    *  aparcada a la cola. Ausente = no se ofrece. */
   alReintentar?: (id: string) => void;
-  /** Borra la tarea, con su carpeta de adjuntos. Irreversible, y por eso confirma en la
-   *  propia fila antes de mandarlo. Ausente = no se ofrece. */
+  /** Borra la tarea, con su carpeta de adjuntos. Irreversible, y por eso `AccionesDeTarea`
+   *  lo confirma en una VENTANA —una fila de 34 px no es sitio para eso, el mismo argumento
+   *  que el borrado de una sesión—. Ausente = no se ofrece. */
   alDescartar?: (id: string) => void;
   /** «La persona da el trabajo por bueno»: `requiere-atencion → terminada` sin pasar por
    *  un reintento. Ausente = no se ofrece. */
