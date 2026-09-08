@@ -15,11 +15,12 @@ import {
   crearCorredorDeTareas,
   type ConsolaParaTarea,
 } from "./corredorDeTareas.js";
-import { crearVestibulo } from "./vestibulo.js";
+import { crearVestibulo, type ConsolaDeProyecto } from "./vestibulo.js";
 import { cambiosDeSesion, fotoDeApertura } from "../../agent/sesionGit.js";
 import { CatalogoModelosEnMemoria } from "../../core/ports.js";
 import type { Consola } from "../../cli/consola.js";
-import type { Tarea } from "../../core/tareas.js";
+import { TOPE_DE_RONDAS_DE_TAREA, type Tarea } from "../../core/tareas.js";
+import { MAX_APPROVAL_ROUNDS } from "../../vendor/hitl.js";
 import type { ResultadoDeTurno, VeredictoDeTarea } from "../../core/entrega.js";
 import type { CasoDeJuez, JuezDeTareaPort } from "../../core/ports.js";
 import { ErrorDelJuezDeTarea } from "../../agent/juezDeTarea.js";
@@ -1650,5 +1651,59 @@ describe("una tarea se entrega por condiciones MEDIDAS más el juez", () => {
 
     expect(estado()[0]!.motivo).toBe("el agente preguntó y no había nadie");
     expect(juez.casos).toHaveLength(0);
+  });
+});
+
+/**
+ * `consolaParaTarea`: el punto de MONTAJE, y lo que solo se puede comprobar aquí.
+ *
+ * Los tests de arriba entran por un doble de `ConsolaParaTarea`, así que el día que este
+ * adaptador deje de reenviar algo se quedarían todos en verde — es la misma razón por la que
+ * la batería de git de más abajo usa las piezas de producción.
+ */
+describe("consolaParaTarea monta la consola con la que corre una tarea", () => {
+  /** Lo mínimo que `consolaParaTarea` le pide a una consola de proyecto. */
+  function proyectoAbierto() {
+    const recibidas: Consola[] = [];
+    const dentro = {
+      escribir: () => {},
+      catalogoModelos: new CatalogoModelosEnMemoria(),
+      guardarModeloGlobal: () => ({ ruta: "/x", id: "y" }),
+    };
+    const consola = {
+      raiz: "/w/A",
+      idDeHilo: "hilo-1",
+      estadoDeSesion: { hilo: "hilo-1", raiz: "/w/A", fuentes: {} },
+      consola: { consola: dentro },
+      ejecutarTurno: async (_peticion: string, _estado: unknown, deTarea: Consola) => {
+        recibidas.push(deTarea);
+        return { verificador: "verde" as const, pendientes: 0 };
+      },
+      cerrar: async () => {},
+    };
+    return { recibidas, consola: consola as unknown as ConsolaDeProyecto };
+  }
+
+  /**
+   * **Una tarea lleva su PROPIO tope de rondas.** El de la persona son cinco y se
+   * dimensionaron para alguien pulsando; en una tarea una ronda no es una pregunta, es una
+   * tanda que se autoriza sola — y medido, un turno se cortó con cuatro ficheros escritos y
+   * una escritura abandonada porque cada tanda gastaba ronda. Sin este cableado el campo
+   * existiría y no haría nada.
+   */
+  it("le pone el tope de rondas de una TAREA, no el de la persona", async () => {
+    const { recibidas, consola } = proyectoAbierto();
+    await consolaParaTarea(consola).correrTarea("haz algo", () => {});
+    expect(recibidas).toHaveLength(1);
+    expect(recibidas[0]!.topeDeAprobaciones).toBe(TOPE_DE_RONDAS_DE_TAREA);
+    expect(TOPE_DE_RONDAS_DE_TAREA).not.toBe(MAX_APPROVAL_ROUNDS);
+  });
+
+  it("y DEVUELVE lo que el turno informó: es con lo que se mide la entrega", async () => {
+    const { consola } = proyectoAbierto();
+    expect(await consolaParaTarea(consola).correrTarea("haz algo", () => {})).toEqual({
+      verificador: "verde",
+      pendientes: 0,
+    });
   });
 });
