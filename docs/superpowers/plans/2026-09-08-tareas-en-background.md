@@ -1058,6 +1058,37 @@ git commit -m "feat(web): la consola de una tarea aparca en vez de contestar por
 > que solo borra el propio y aquí el fichero ya es de otro. El comentario de `recoger` en
 > `agent/tareasEnDisco.ts` trae el orden exacto.
 
+> **Y dos cosas que la Task 3 midió y dejó abiertas para aquí:**
+> 1. **La sesión de una tarea se PERSISTE** (resuelto: `Tarea.sesion` sería mentira, y sin
+> nombrar `refs/xonecode/sesion/<id>` el árbol se lo lleva `git gc` y Revisión diría
+> `sin-marca` para siempre — un agente autónomo escribiendo sin diff que revisar). Pero
+> `volcar()` lee la piel de SU consola, así que un turno corrido con la `Consola` del
+> corredor no vuelca nada: el corredor tiene que usar la piel de la consola de proyecto y
+> su propia `Consola` aportar solo líneas y aprobaciones. Hay un test en
+> `vestibulo.test.ts` que empieza por «MEDIDO:» y está hecho para ponerse ROJO cuando esto
+> se arregle — es la señal, no un fallo.
+> 3. **Una tarea y una persona sobre el mismo proyecto a la vez no tienen aislamiento de
+> ninguna clase**, y el cerrojo de un solo corredor no protege de eso: protege de dos
+> corredores. Dos agentes escribiendo el mismo árbol se pisan las ediciones, y además la
+> foto por turno de `instantanea.ts` metería las escrituras de la tarea en el diff de la
+> persona — atribuyéndoselas. **Resuelto: gana la persona.** Una tarea NO ARRANCA en un
+> proyecto cuya consola humana está abierta. La condición es «abierta» y no «hay turno en
+> vuelo» porque solo la primera es estable en el instante de despachar: con la segunda, una
+> tarea arrancaría y chocaría después, que es el fallo que se quiere evitar. Eso pide un
+> parámetro más en `siguientesAEjecutar` (`core/tareas.ts`, función pura — extiéndela con
+> los proyectos que no se pueden arrancar y su test), y que el kanban DIGA por qué una tarea
+> espera (Task 7): sin eso, una tarea parada por una pestaña abierta se lee como un cuelgue.
+> El precio, dicho: una tarea puede esperar a que alguien cierre un proyecto, y eso se ve en
+> la pantalla en vez de corromper un diff en silencio. Y al revés —una persona abre un
+> proyecto que tiene una tarea en curso— la tarea NO se mata (perdería su turno y quizá la
+> persona solo venía a mirar): se le DICE a la persona, arriba en el chat, que hay una tarea
+> corriendo y que sus diffs pueden llevar escrituras que no son suyas.
+
+> 2. **El fallo del lazo de una tarea no puede salir por `informar`**, que escribe un acto
+> de sistema en la pantalla de un humano. Va al registro de la tarea. La Task 3 lo dejó
+> sin gatear a propósito: un lazo que muere en silencio es peor.
+
+
 
 **Goal:** El lazo que coge tareas, las corre y escribe sus transiciones, con cerrojo de pid y reconciliación al arrancar.
 
