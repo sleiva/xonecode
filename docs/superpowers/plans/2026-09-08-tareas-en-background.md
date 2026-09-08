@@ -2711,3 +2711,79 @@ git commit -m "feat(web): esperando feedback — se edita la tarea y sigue en su
 ```json:metadata
 {"files": ["src/core/tareas.ts", "src/agent/tareasEnDisco.ts", "src/web/servidor/arranque.ts", "src/web/servidor/corredorDeTareas.ts", "apps/web/src/store.ts", "apps/web/src/componentes/Kanban.tsx"], "acceptanceCriteria": ["el feedback devuelve la tarea a `nuevo` y el corredor la mira", "llega como mensaje de usuario en el mismo hilo", "un feedback vacío se rechaza y se dice", "conserva `sesion` y el hilo", "si el hilo no se puede reanudar se dice", "el historial de feedbacks no se pierde"], "modelTier": "standard", "userGate": false}
 ```
+
+---
+
+## Task 13: las acciones de una tarea, UNA pieza para las dos vistas
+
+**Goal:** Que las acciones de una tarea sean las mismas en el kanban y en la lista del proyecto, con una sola implementación, y que se apaguen cuando no hay cable.
+
+> **De dónde sale.** Lo levantó la Task 8 como dos dudas y son un defecto de coherencia:
+> la lista del proyecto ofrece `reintentar`/`terminar` y **no** feedback, y el kanban ofrece
+> feedback y **no** `reintentar`/`terminar` — así que **una tarea bloqueada solo se desbloquea
+> desde una de las dos pantallas**, y quien esté en la otra no tiene camino. Y **ninguna de las
+> dos recibe `conectado`**, al contrario que Ficheros, Revisión y Artefactos, así que sus
+> controles siguen vivos sin cable: mandan algo al servidor y no pasa nada, que es el control
+> sin dato detrás que este repo no se permite. No se arregla duplicando acciones en dos
+> componentes: se arregla con UNA pieza compartida, que es el patrón de `Arbol.tsx` entre
+> Ficheros y Revisión y de `cerrarAlPulsarFuera.ts` en cuanto hubo un segundo menú. Duplicar
+> es cómo las dos copias divergen otra vez, y esta divergencia es precisamente el defecto.
+
+**Files:**
+- Create: `apps/web/src/componentes/AccionesDeTarea.tsx` + su test
+- Modify: `apps/web/src/componentes/Kanban.tsx`, `TareasDelProyecto.tsx` y sus tests
+- Modify: `apps/web/src/App.tsx` (pasar `conectado` a las dos)
+
+**Acceptance Criteria:**
+- [ ] Las cuatro acciones (`reintentar`, `descartar`, `terminar`, feedback) las ofrece la MISMA pieza, y las dos vistas la montan
+- [ ] Cada acción se ofrece solo en los estados en que su transición es válida (`TRANSICIONES`), no en todos
+- [ ] Sin cable (`conectado: false`) los controles que mandan algo al servidor están deshabilitados, y se dice por qué
+- [ ] Un test comprueba que las dos vistas ofrecen el MISMO conjunto para el mismo estado — y falla si una gana una acción que la otra no
+- [ ] Ningún color literal; nada que quede fuera del orden del Tab por estar en `display:none`
+
+**Verify:** `npx vitest run apps/web/src` → en verde
+
+**Steps:**
+
+- [ ] **Step 1: el test que falla — las dos vistas ofrecen lo mismo**
+
+```tsx
+it("las dos vistas ofrecen las MISMAS acciones para el mismo estado", () => {
+  // El defecto que esta tarea arregla: la lista daba reintentar/terminar y el kanban
+  // feedback, así que una tarea bloqueada solo se desbloqueaba desde una pantalla. Este
+  // test es lo que impide que vuelvan a divergir — y por eso compara los DOS conjuntos en
+  // vez de comprobar una lista escrita a mano, que se queda vieja sin avisar.
+  const tarea = TAREA({ estado: "requiere-atencion", motivo: "¿lleva histórico?" });
+  const enKanban = accionesVisibles(render(<Kanban tareas={[tarea]} conectado {...manejadores} />));
+  const enLista = accionesVisibles(render(<TareasDelProyecto tareas={[tarea]} conectado {...manejadores} />));
+  expect(enKanban).toEqual(enLista);
+  expect(enKanban).toContain("Añadir feedback");
+});
+```
+
+- [ ] **Step 2: el test que falla — sin cable no se manda nada**
+
+```tsx
+it("sin cable los controles se apagan y se DICE por qué", () => {
+  // Es la regla de `Barra` y `Escritorio`: se apaga lo que manda algo al servidor. Un botón
+  // vivo sin cable se pulsa, no pasa nada, y no hay forma de saber si falló el botón o el
+  // servidor.
+  const { getByRole, getByText } = render(<Kanban tareas={[TAREA()]} conectado={false} {...manejadores} />);
+  expect(getByRole("button", { name: /reintentar/i })).toBeDisabled();
+  expect(getByText(/sin conexión/i)).toBeTruthy();
+});
+```
+
+- [ ] **Step 3: implementar, mutar y commitear**
+
+Mutaciones obligatorias: quitar una acción de una sola vista; ofrecer una acción en un estado
+cuya transición no es válida; ignorar `conectado`; y quitar el motivo del apagado.
+
+```bash
+npx vitest run apps/web/src && npm run typecheck
+git commit -m "feat(web): las acciones de una tarea, una pieza para las dos vistas"
+```
+
+```json:metadata
+{"files": ["apps/web/src/componentes/AccionesDeTarea.tsx", "apps/web/src/componentes/Kanban.tsx", "apps/web/src/componentes/TareasDelProyecto.tsx", "apps/web/src/App.tsx"], "acceptanceCriteria": ["una sola pieza para las cuatro acciones", "cada acción solo donde su transición es válida", "sin cable se apagan y se dice", "un test compara los dos conjuntos", "sin colores literales ni display:none tabulable"], "modelTier": "standard", "userGate": false}
+```
