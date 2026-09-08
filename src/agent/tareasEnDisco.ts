@@ -65,55 +65,114 @@ export function crearTareasEnDisco(opciones: {
 
   const carpetaDeAdjuntos = (tarea: string): string => join(base, tarea, "adjuntos");
 
+  /**
+   * **El índice lleva el ENCARGO entero del usuario**, así que la carpeta y el fichero van a
+   * 0600/0700: la misma regla que ya sigue `checkpoint.sqlite`, y por el mismo motivo — es
+   * contenido de una persona, no un dato de sistema.
+   */
+  function guardarIndice(tareas: readonly Tarea[]): void {
+    mkdirSync(base, { recursive: true, mode: 0o700 });
+    writeFileSync(indice, `${JSON.stringify(tareas, null, 1)}\n`, { encoding: "utf8", mode: 0o600 });
+  }
+
+  /**
+   * Lee el índice y dice además si se PUDO leer. `listar()` es esto sin el segundo dato;
+   * `borrarTarea` necesita el segundo dato para no repetir el fallo de más abajo.
+   *
+   * Un índice sintácticamente válido pero que no es una lista (`{}`, por ejemplo) es tan
+   * ilegible como uno con JSON roto: las dos formas de «esto no es la cola» avisan igual y
+   * devuelven vacío, y ninguna de las dos se sobrescribe sola.
+   */
+  function leerIndice(): { tareas: Tarea[]; legible: boolean } {
+    if (!existsSync(indice)) return { tareas: [], legible: true };
+    try {
+      const leido = JSON.parse(readFileSync(indice, "utf8")) as unknown;
+      if (!Array.isArray(leido)) {
+        informar("el índice de tareas no es una lista; la cola se enseña vacía");
+        return { tareas: [], legible: false };
+      }
+      return { tareas: leido as Tarea[], legible: true };
+    } catch {
+      // No se sobrescribe: perder la cola de alguien por no saber leerla sería peor que
+      // no enseñarla. Misma postura que una línea corrupta del `.jsonl` de una sesión.
+      informar("el índice de tareas no se pudo leer; la cola se enseña vacía");
+      return { tareas: [], legible: false };
+    }
+  }
+
+  /** Quién tiene el cerrojo, si el fichero se puede leer y trae un pid. */
+  function leerDueño(): { pid: number } | undefined {
+    try {
+      const dueño = JSON.parse(readFileSync(cerrojo, "utf8")) as { pid?: unknown };
+      return typeof dueño.pid === "number" ? { pid: dueño.pid } : undefined;
+    } catch {
+      return undefined;
+    }
+  }
+
   return {
     listar() {
-      if (!existsSync(indice)) return [];
-      try {
-        const leido = JSON.parse(readFileSync(indice, "utf8")) as unknown;
-        return Array.isArray(leido) ? (leido as Tarea[]) : [];
-      } catch {
-        // No se sobrescribe: perder la cola de alguien por no saber leerla sería peor que
-        // no enseñarla. Misma postura que una línea corrupta del `.jsonl` de una sesión.
-        informar("el índice de tareas no se pudo leer; la cola se enseña vacía");
-        return [];
-      }
+      return leerIndice().tareas;
     },
     guardar(tareas) {
-      mkdirSync(base, { recursive: true });
-      writeFileSync(indice, `${JSON.stringify(tareas, null, 1)}\n`, "utf8");
+      guardarIndice(tareas);
     },
     /**
      * **Un solo corredor por máquina.** Dos consolas abiertas serían dos ejecutores sobre la
      * misma cola, y con ellos dos turnos del mismo proyecto a la vez — que es exactamente lo
      * que el cerrojo por proyecto existe para evitar.
      *
+     * **La toma es atómica**: `flag: "wx"` crea el fichero solo si no existe, y falla con
+     * `EEXIST` si ya está — comprobar con `existsSync` y escribir después, como antes, deja
+     * una ventana entre las dos llamadas donde dos procesos que arrancan a la vez pueden leer
+     * los dos «no hay cerrojo» y escribir los dos: perder esa carrera es exactamente lo que
+     * este cerrojo existe para impedir.
+     *
      * Un cerrojo de un proceso MUERTO se recoge: si no, un cuelgue o un `kill -9` dejaría la
-     * cola parada para siempre y sin forma de arrancarla salvo borrando un fichero a mano.
+     * cola parada para siempre y sin forma de arrancarla salvo borrando un fichero a mano. Y
+     * tras recogerlo se reintenta la creación exclusiva UNA vez — si en ese hueco otro proceso
+     * se adelantó, perdimos la carrera de verdad y se dice de quién es, en vez de fingir que
+     * el cerrojo es nuestro.
      */
     tomarCerrojo() {
-      mkdirSync(base, { recursive: true });
-      if (existsSync(cerrojo)) {
+      mkdirSync(base, { recursive: true, mode: 0o700 });
+
+      const intentar = (): boolean => {
         try {
-          const dueño = JSON.parse(readFileSync(cerrojo, "utf8")) as { pid?: unknown };
-          if (typeof dueño.pid === "number" && dueño.pid !== pid && vivo(dueño.pid)) {
-            return { tomado: false, dePid: dueño.pid };
-          }
-        } catch {
-          // Un cerrojo ilegible se trata como libre: lo escribimos nosotros, así que uno roto
-          // es basura, no el reclamo de otro proceso.
+          writeFileSync(cerrojo, `${JSON.stringify({ pid, desde: new Date().toISOString() })}\n`, {
+            encoding: "utf8",
+            mode: 0o600,
+            flag: "wx",
+          });
+          return true;
+        } catch (error) {
+          if ((error as NodeJS.ErrnoException).code === "EEXIST") return false;
+          throw error;
         }
+      };
+
+      if (intentar()) return { tomado: true };
+
+      const dueño = leerDueño();
+      if (dueño && dueño.pid !== pid && vivo(dueño.pid)) {
+        return { tomado: false, dePid: dueño.pid };
       }
-      writeFileSync(cerrojo, `${JSON.stringify({ pid, desde: new Date().toISOString() })}\n`, "utf8");
-      return { tomado: true };
+
+      // Dueño soy yo, está muerto, o el fichero es ilegible: se recoge y se reintenta una vez.
+      rmSync(cerrojo, { force: true });
+      if (intentar()) return { tomado: true };
+
+      // Perdimos la carrera de verdad: alguien escribió entre el borrado y este intento.
+      const otro = leerDueño();
+      // -1 nunca es un pid real: es lo que se devuelve si ni siquiera el ganador de la
+      // carrera se puede leer, que no debería pasar en la práctica pero no es motivo para
+      // lanzar — fallar aquí bloquearía al llamante sin decir por qué.
+      return { tomado: false, dePid: otro?.pid ?? -1 };
     },
     soltarCerrojo() {
-      try {
-        const dueño = JSON.parse(readFileSync(cerrojo, "utf8")) as { pid?: unknown };
-        // Solo el propio: soltar el de otro dejaría dos corredores.
-        if (dueño.pid === pid) rmSync(cerrojo, { force: true });
-      } catch {
-        // No había, o estaba roto: nada que soltar.
-      }
+      // Solo el propio: soltar el de otro dejaría dos corredores.
+      const dueño = leerDueño();
+      if (dueño && dueño.pid === pid) rmSync(cerrojo, { force: true });
     },
     guardarAdjunto(tarea, nombre, datos) {
       if (!nombreAceptable(tarea) || !nombreAceptable(nombre)) {
@@ -123,18 +182,25 @@ export function crearTareasEnDisco(opciones: {
         return { ok: false, motivo: `el fichero es demasiado grande (tope ${Math.round(topeDeAdjunto / 1_000_000)} MB)` };
       }
       const carpeta = carpetaDeAdjuntos(tarea);
-      mkdirSync(carpeta, { recursive: true });
+      mkdirSync(carpeta, { recursive: true, mode: 0o700 });
       const ya = readdirSync(carpeta).reduce((suma, f) => suma + statSync(join(carpeta, f)).size, 0);
       if (ya + datos.length > topePorTarea) {
         return { ok: false, motivo: `esta tarea ya no admite más adjuntos (tope ${Math.round(topePorTarea / 1_000_000)} MB)` };
       }
-      writeFileSync(join(carpeta, nombre), datos);
+      // Un adjunto es un documento de la persona, no un dato de sistema: mismo 0600 que el
+      // índice.
+      writeFileSync(join(carpeta, nombre), datos, { mode: 0o600 });
       return { ok: true };
     },
     carpetaDeAdjuntos,
     borrarTarea(id) {
       if (nombreAceptable(id)) rmSync(join(base, id), { recursive: true, force: true });
-      this.guardar(this.listar().filter((t) => t.id !== id));
+      const { tareas, legible } = leerIndice();
+      // Un índice que no se pudo leer no se toca: sobrescribirlo con una lista vacía sería
+      // la misma pérdida de datos que la lectura ya evita en `listar()` — sólo que por la
+      // puerta de atrás. `leerIndice` ya avisó por `informar`.
+      if (!legible) return;
+      guardarIndice(tareas.filter((t) => t.id !== id));
     },
   };
 }
