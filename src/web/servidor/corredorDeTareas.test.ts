@@ -12,6 +12,7 @@ import { join } from "node:path";
 import {
   AVISO_SIN_HILO_REANUDABLE,
   MOTIVO_CORTADA_POR_CIERRE,
+  motivoDeCorteAMitad,
   consolaParaTarea,
   crearCorredorDeTareas,
   peticionDeFeedback,
@@ -801,6 +802,79 @@ describe("crearCorredorDeTareas", () => {
     expect(olvidados).toEqual([]);
     expect(estado()[0]!.sesion).toBe("s9");
     await corredor.parar();
+  });
+
+  /**
+   * F2 de la revisión final. `MOTIVO_CORTADA_POR_CIERRE` afirmaba «aunque el agente recuerda
+   * el hilo» y se escribía TAMBIÉN en la rama donde `olvidarSiNoSePuedeAbrir` acaba de
+   * BORRAR el checkpoint: era cierto cuando se escribió (`5ba53c8`) y dos commits después
+   * (`7ad4962`) dejó de serlo, sin que nadie revisara el texto. Los dos commits eran
+   * correctos contra su propio brief; la contradicción solo se ve leyéndolos juntos.
+   *
+   * La tarjeta miente entonces sobre lo que pasó Y sobre lo que va a pasar al reintentar:
+   * el agente NO recuerda nada, y ese turno arranca un hilo nuevo con el encargo entero
+   * (`AVISO_SIN_HILO_REANUDABLE`, que sí dice la verdad… pero al modelo, no a la persona
+   * que tiene que decidir).
+   */
+  it("si el hilo se OLVIDÓ, el motivo no dice que el agente lo recuerda", async () => {
+    const { disco, estado } = discoDeMentira([TAREA({ estado: "en-proceso", pid: 999, sesion: "s9" })]);
+    const p = proyectoDeMentira();
+    const corredor = crearCorredorDeTareas({ ...ENTREGA_VERDE,
+      disco,
+      abrirParaTarea: p.abrir,
+      pid: 1,
+      concurrencia: () => 1,
+      sesionAbrible: () => false,
+      olvidarHilo: async () => undefined,
+    });
+    await corredor.arrancar();
+    await corredor.asentar();
+    const motivo = estado()[0]!.motivo!;
+    expect(motivo).not.toMatch(/recuerda/);
+    expect(motivo).toMatch(/de cero|desde el principio|el encargo entero/);
+    expect(motivo).toBe(motivoDeCorteAMitad(true) + " (era el pid 999)");
+    await corredor.parar();
+  });
+
+  it("y si el hilo SOBREVIVIÓ, sigue diciendo que el agente lo recuerda", async () => {
+    // La otra mitad: aquí el texto viejo es la verdad, y por eso no se cambió por uno
+    // genérico — un texto que valga para las dos situaciones no diría ninguna de las dos.
+    const { disco, estado } = discoDeMentira([TAREA({ estado: "en-proceso", pid: 999, sesion: "s9" })]);
+    const p = proyectoDeMentira();
+    const corredor = crearCorredorDeTareas({ ...ENTREGA_VERDE,
+      disco,
+      abrirParaTarea: p.abrir,
+      pid: 1,
+      concurrencia: () => 1,
+      sesionAbrible: () => true,
+    });
+    await corredor.arrancar();
+    await corredor.asentar();
+    expect(estado()[0]!.motivo).toBe(MOTIVO_CORTADA_POR_CIERRE + " (era el pid 999)");
+    await corredor.parar();
+  });
+
+  /**
+   * Y el mismo texto se escribe por el OTRO camino —el turno cortado al parar el proceso—,
+   * así que también ahí tiene que depender de si el hilo sobrevivió.
+   */
+  it("al PARAR con el hilo olvidado, el mismo motivo corregido", async () => {
+    const { disco, estado } = discoDeMentira([TAREA()]);
+    const p = proyectoDeMentira();
+    const corredor = crearCorredorDeTareas({ ...ENTREGA_VERDE,
+      disco,
+      abrirParaTarea: p.abrir,
+      pid: 1,
+      concurrencia: () => 1,
+      esperaAlParar: 50,
+      sesionAbrible: () => false,
+      olvidarHilo: async () => undefined,
+    });
+    await corredor.arrancar();
+    await corredor.asentar();
+    await corredor.parar();
+    expect(estado()[0]!.motivo).toBe(motivoDeCorteAMitad(true));
+    expect(estado()[0]!.sesion).toBeUndefined();
   });
 
   it("sin puerto que lo diga NO se borra nada: «no se sabe» no es «no hay»", async () => {

@@ -45,18 +45,6 @@ import type { ConsolaDeProyecto } from "./vestibulo.js";
 import type { TareasEnDisco } from "../../agent/tareasEnDisco.js";
 
 /**
- * Lo que le pasa a una tarea cuya consola se cierra debajo: al parar el proceso, y al
- * encontrarla «en proceso» sin nadie detrás en el arranque siguiente.
- *
- * Es UN texto y no dos porque es UNA situación —el turno se cortó a mitad y no hay
- * resultado— y dos redacciones para lo mismo se leerían como dos problemas distintos. Lo
- * que dice sale de lo MEDIDO: `volcar()` corre en el `finally` del turno, así que un corte
- * a mitad no deja transcript ni entrada en el índice de sesiones, mientras el hilo del
- * checkpointer sí queda escrito — o sea que el agente recuerda una conversación que no se
- * puede leer. Decirlo es lo que hace la tarjeta accionable: reintentar no repite un trabajo
- * ya hecho a medias, lo continúa.
- */
-/**
  * Lo que git sabe de una sesión, y que la puerta de la entrega necesita entero.
  *
  * Las dos cosas salen de UNA pregunta (`cambiosDeSesion`): si hay «antes» con que comparar,
@@ -94,9 +82,42 @@ export function revisionConGit(
   };
 }
 
+/**
+ * Lo que le pasa a una tarea cuya consola se cierra debajo: al parar el proceso, y al
+ * encontrarla «en proceso» sin nadie detrás en el arranque siguiente.
+ *
+ * Es UNA situación —el turno se cortó a mitad y no hay resultado— pero **tiene dos finales
+ * distintos, y de eso depende lo que reintentar signifique**. `volcar()` corre en el
+ * `finally` del turno, así que un corte a mitad no deja transcript ni entrada en el índice
+ * de sesiones; el hilo del checkpointer, en cambio, puede sobrevivir o no:
+ *  - **Si sobrevive** —hay conversación volcada, así que `sesionAbrible` dice que sí—, el
+ *    agente recuerda el hilo y reintentar CONTINÚA lo que llevaba hecho. Es el texto de
+ *    siempre, y sigue siendo verdad en ese caso.
+ *  - **Si no** —el corte antes de volcar nada—, `olvidarSiNoSePuedeAbrir` acaba de BORRAR
+ *    el checkpoint: un id que no lleva a ninguna parte son además decenas de megas que
+ *    nadie puede alcanzar. Ahí reintentar arranca un hilo nuevo con el encargo entero
+ *    (`AVISO_SIN_HILO_REANUDABLE`), y decir que el agente lo recuerda miente dos veces:
+ *    sobre lo que pasó y sobre lo que va a pasar.
+ *
+ * **De dónde sale que sean dos y no uno.** El texto único se escribió cuando el hilo SÍ
+ * quedaba escrito siempre, y un commit posterior introdujo `olvidarSiNoSePuedeAbrir`, que
+ * lo borra en ese mismo caso. Los dos cambios eran correctos contra su propio encargo; la
+ * contradicción solo se veía leyéndolos juntos. Por eso el motivo se compone DESPUÉS de
+ * saber si el hilo se olvidó, y no antes: quien lo escribe es el único que lo sabe.
+ */
 export const MOTIVO_CORTADA_POR_CIERRE =
   "la consola se cerró a mitad del turno: no quedó respuesta guardada, aunque el agente " +
   "recuerda el hilo. Reintenta cuando quieras.";
+
+/** El mismo corte, con el hilo ya olvidado. Ver arriba. */
+export const MOTIVO_CORTADA_SIN_HILO =
+  "la consola se cerró a mitad del turno: no quedó respuesta guardada y tampoco nada que " +
+  "reabrir, así que el hilo del agente se olvidó. Reintentar empieza de cero, con el " +
+  "encargo entero.";
+
+/** Cuál de los dos, según lo que la regla de `sesion` acabara de decidir. */
+export const motivoDeCorteAMitad = (hiloOlvidado: boolean): string =>
+  hiloOlvidado ? MOTIVO_CORTADA_SIN_HILO : MOTIVO_CORTADA_POR_CIERRE;
 
 /**
  * Cuando llega un feedback pero el hilo anterior YA NO se puede reanudar —`Tarea.sesion`
@@ -153,9 +174,11 @@ export const TOPE_DE_PARADA_MS = 30_000;
  */
 export const TOPE_DEL_JUEZ_MS = 120_000;
 
-/** El mismo motivo, diciendo qué proceso la tenía. Ver `MOTIVO_CORTADA_POR_CIERRE`. */
-const motivoDeReconciliacion = (pid: number | undefined): string =>
-  pid === undefined ? MOTIVO_CORTADA_POR_CIERRE : `${MOTIVO_CORTADA_POR_CIERRE} (era el pid ${pid})`;
+/** El mismo motivo, diciendo qué proceso la tenía. Ver `motivoDeCorteAMitad`. */
+const motivoDeReconciliacion = (pid: number | undefined, hiloOlvidado: boolean): string => {
+  const motivo = motivoDeCorteAMitad(hiloOlvidado);
+  return pid === undefined ? motivo : `${motivo} (era el pid ${pid})`;
+};
 
 /** Lo que el corredor necesita de una consola de proyecto abierta para una tarea. */
 export interface ConsolaParaTarea {
@@ -809,6 +832,13 @@ export function crearCorredorDeTareas(opciones: {
     let resultado: ResultadoDeTurno | undefined;
     /** ¿Devolvió el turno por su cuenta? Distingue «acabó» de «se lo cortamos». */
     let terminoLimpio = false;
+    /**
+     * Si el final es «el turno se cortó a mitad», que tiene DOS textos según sobreviva o no
+     * el hilo del agente (ver `motivoDeCorteAMitad`). Se decide aquí y se REDACTA abajo,
+     * cuando ya se sabe: al revés, la tarjeta diría que el agente recuerda el hilo justo en
+     * la rama donde el código acaba de borrarlo.
+     */
+    let cortadaAMitad = false;
     let marcada = false;
     /**
      * Lo que de verdad se le manda al turno: el encargo la primera vez, o el feedback
@@ -870,7 +900,11 @@ export function crearCorredorDeTareas(opciones: {
       // falló, alguien lo cortó a propósito. Medido: sin esto, el kanban enseñaría ese
       // motivo engañoso durante el instante entre el corte y el borrado.
       if (marcada) {
-        motivo ??= parando || entrada.cortarPedido ? MOTIVO_CORTADA_POR_CIERRE : `el turno falló (${codigoDe(error)})`;
+        // Se marca la SITUACIÓN, no el texto: cuál de las dos verdades es depende de si el
+        // hilo sobrevive, y eso no se sabe hasta `olvidarSiNoSePuedeAbrir`, más abajo. El
+        // texto provisional es el que valdría sin borrado, y se recompone al final.
+        if (motivo === undefined && (parando || entrada.cortarPedido)) cortadaAMitad = true;
+        motivo ??= cortadaAMitad ? MOTIVO_CORTADA_POR_CIERRE : `el turno falló (${codigoDe(error)})`;
       } else renunciarSiSigueNueva(tarea.id, error);
     } finally {
       /**
@@ -895,7 +929,10 @@ export function crearCorredorDeTareas(opciones: {
     // las mismas palabras que la reconciliación, porque es la misma situación. Se mira si
     // devolvió LIMPIO y no solo si estamos parando: un turno que acaba su trabajo en el mismo
     // instante en que alguien pulsa Ctrl-C acabaría con un motivo falso en el kanban.
-    if (motivo === undefined && !terminoLimpio) motivo = MOTIVO_CORTADA_POR_CIERRE;
+    if (motivo === undefined && !terminoLimpio) {
+      cortadaAMitad = true;
+      motivo = MOTIVO_CORTADA_POR_CIERRE;
+    }
     /**
      * **Y aquí «terminada» deja de significar «el turno acabó».**
      *
@@ -935,6 +972,8 @@ export function crearCorredorDeTareas(opciones: {
       if (await olvidarSiNoSePuedeAbrir(tarea.proyecto.raiz, hilo)) {
         conLoQueQuede = (t) =>
           sinSesion(conVeredicto(conAutorizadas(t, entrada.autorizadas), entrada.veredicto));
+        // Y ahora sí se sabe: el hilo se ha borrado, así que reintentar no continúa nada.
+        if (cortadaAMitad) motivo = motivoDeCorteAMitad(true);
       }
     } catch {
       // Ni preguntar se pudo: no se sabe, y entonces no se borra nada.
@@ -1077,8 +1116,10 @@ export function crearCorredorDeTareas(opciones: {
       // El hilo de un turno cortado a mitad no nombra nada abrible: se olvida antes de
       // aparcar. Ver `conSesionSoloSiSePuedeAbrir`.
       const limpiar = await olvidarSiNoSePuedeAbrir(t.proyecto.raiz, t.sesion);
+      // El motivo se compone CON lo que acaba de decidirse: si el hilo se olvidó, decir que
+      // el agente lo recuerda sería falso justo en la rama que lo borró.
       reconciliada.push(
-        conEstado(limpiar ? sinSesion(t) : t, "requiere-atencion", motivoDeReconciliacion(t.pid))
+        conEstado(limpiar ? sinSesion(t) : t, "requiere-atencion", motivoDeReconciliacion(t.pid, limpiar))
       );
     }
     if (reconciliada.some((t, i) => t !== lista[i])) {
