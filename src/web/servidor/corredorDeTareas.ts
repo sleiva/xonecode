@@ -41,6 +41,17 @@ export const MOTIVO_CORTADA_POR_CIERRE =
   "la consola se cerró a mitad del turno: no quedó respuesta guardada, aunque el agente " +
   "recuerda el hilo. Reintenta cuando quieras.";
 
+/**
+ * Lo que se espera como mucho a que un turno cortado devuelva, al parar el proceso.
+ *
+ * Generoso pero FINITO: un Ctrl-C que se cuelga para siempre es lo peor que puede hacer este
+ * camino, y el repo ya trata esta clase con tope (el `TOPE_MS` de Codex, los `TOPES_MS` de
+ * los dispositivos). Al agotarse no se miente diciendo que se paró: la tarea se queda «en
+ * proceso» y la reconciliación del siguiente arranque la aparca, que es justo para lo que
+ * existe.
+ */
+export const TOPE_DE_PARADA_MS = 30_000;
+
 /** El mismo motivo, diciendo qué proceso la tenía. Ver `MOTIVO_CORTADA_POR_CIERRE`. */
 const motivoDeReconciliacion = (pid: number | undefined): string =>
   pid === undefined ? MOTIVO_CORTADA_POR_CIERRE : `${MOTIVO_CORTADA_POR_CIERRE} (era el pid ${pid})`;
@@ -123,6 +134,25 @@ export function crearCorredorDeTareas(opciones: {
    * qué («gana la persona»).
    */
   bloqueados?: () => readonly string[];
+  /**
+   * ¿Hay algo que una persona pueda ABRIR con ese id de sesión? O sea: ¿está en el índice
+   * de sesiones del proyecto, con su transcript volcado?
+   *
+   * Ausente = **no se sabe**, y entonces no se toca nada: quitar la `sesion` y olvidar un
+   * hilo son destructivos, así que sin nadie que pueda afirmar que no hay nada abrible se
+   * conserva — la misma dirección conservadora que `historica` cuando no se le puede
+   * preguntar al checkpointer. Ver `conSesionSoloSiSePuedeAbrir`.
+   */
+  sesionAbrible?: (raiz: string, sesion: string) => boolean;
+  /** Olvida el hilo del agente de una sesión que no nombra nada abrible
+   *  (`agent/checkpointer.ts#olvidarHilo`). Ver `conSesionSoloSiSePuedeAbrir`. */
+  olvidarHilo?: (raiz: string, sesion: string) => Promise<void>;
+  /**
+   * Cuánto se espera, como MUCHO, a que los turnos cortados devuelvan en `parar()`. Entra
+   * por parámetro como el `msDeEspera` de la consola web y por lo mismo: `npm test` no puede
+   * esperar un tope de verdad. Ver `TOPE_DE_PARADA_MS`.
+   */
+  esperaAlParar?: number;
   pid?: number;
   /** Se llama en cada cambio, para que el cable emita la cola nueva. */
   alCambiar?: (tareas: readonly Tarea[]) => void;
@@ -218,6 +248,34 @@ export function crearCorredorDeTareas(opciones: {
     typeof error === "object" && error !== null && "code" in error ? codigoDe(error) : unaLinea(error);
 
   /**
+   * La tarea con su `sesion`, **si y solo si hay algo que una persona pueda abrir**; y si no
+   * la hay, se OLVIDA el hilo del agente.
+   *
+   * Con transcript volcado, la entrada está en el índice del proyecto y la conversación se
+   * lee desde la barra lateral: se conserva. Sin transcript —el corte a mitad de turno que
+   * se midió: checkpoint sí, transcript no— ese id no nombra nada abrible, así que se olvida
+   * el hilo y se limpia `sesion`. Un campo que apunta a algo que no se puede abrir es la
+   * misma mentira que un control sin dato detrás.
+   *
+   * Y olvidarlo no es cosmético: un checkpoint es la lista de mensajes ENTERA —contenido de
+   * ficheros incluido— y CRECE (medido en CLAUDE.md: cinco turnos, 370 checkpoints, 30 MB).
+   * Dejarlo vivo e inalcanzable desde la interfaz es exactamente lo que `borrarSesion` evita
+   * al borrar una conversación.
+   */
+  const conSesionSoloSiSePuedeAbrir = async (tarea: Tarea): Promise<Tarea> => {
+    const sesion = tarea.sesion;
+    if (sesion === undefined || opciones.sesionAbrible === undefined) return tarea;
+    if (opciones.sesionAbrible(tarea.proyecto.raiz, sesion)) return tarea;
+    // Primero olvidar y después escribir: si la escritura falla, el hilo que se ha olvidado
+    // era inalcanzable de todas formas. Un fallo al olvidar no puede impedir la limpieza del
+    // campo — el mismo trato que `olvidarHilo` le da a `borrarSesion`.
+    await opciones.olvidarHilo?.(tarea.proyecto.raiz, sesion).catch(() => undefined);
+    const sinSesion = { ...tarea };
+    delete sinSesion.sesion;
+    return sinSesion;
+  };
+
+  /**
    * Comprueba que la tarea salió de `nuevo`, y si no, renuncia a ella. Ver `renunciadas`.
    */
   const renunciarSiSigueNueva = (id: string, error?: unknown): void => {
@@ -234,10 +292,12 @@ export function crearCorredorDeTareas(opciones: {
    * `conEstado` LANZA ante una transición imposible, y aquí eso solo puede pasar si la
    * tarea cambió de estado por debajo — o sea, justo el caso en el que no hay que escribir.
    */
-  const aparcar = (id: string, motivo: string): void => {
+  const aparcar = (id: string, motivo: string, antes: (actual: Tarea) => Tarea = (t) => t): void => {
     try {
       escribirSiSigueSiendoNuestra(id, (actual) =>
-        actual.estado === "en-proceso" && actual.pid === pid ? conEstado(actual, "requiere-atencion", motivo) : undefined
+        actual.estado === "en-proceso" && actual.pid === pid
+          ? conEstado(antes(actual), "requiere-atencion", motivo)
+          : undefined
       );
     } catch (error) {
       // Ver arriba: si no se puede, es porque ya no es nuestra… o porque el índice no se
@@ -333,14 +393,26 @@ export function crearCorredorDeTareas(opciones: {
     // Un turno que devolvió porque le cerramos la consola no está «terminado»: se dice, con
     // las mismas palabras que la reconciliación, porque es la misma situación.
     if (motivo === undefined && parando) motivo = MOTIVO_CORTADA_POR_CIERRE;
+    /**
+     * Y aquí ya se sabe si el turno dejó conversación: `cortar()` acaba de volcarla. Un
+     * turno que no emitió un solo acto —revienta al abrir la sesión real— cierra sin volcar
+     * nada, y entonces su id no nombra nada abrible. Ver `conSesionSoloSiSePuedeAbrir`.
+     */
+    const limpiarSesion = (await conSesionSoloSiSePuedeAbrir({ ...tarea, sesion: hilo })).sesion === undefined;
+    const conLoQueQuede = (actual: Tarea): Tarea => {
+      if (!limpiarSesion) return actual;
+      const sin = { ...actual };
+      delete sin.sesion;
+      return sin;
+    };
     // Aparcada si algo pidió a una persona; terminada si acabó limpia. «Terminada» significa
     // que el turno acabó, no que el resultado sea correcto: eso lo mira quien la lea.
     if (motivo === undefined) {
       escribirSiSigueSiendoNuestra(tarea.id, (actual) =>
-        actual.estado === "en-proceso" && actual.pid === pid ? conEstado(actual, "terminada") : undefined
+        actual.estado === "en-proceso" && actual.pid === pid ? conEstado(conLoQueQuede(actual), "terminada") : undefined
       );
     } else {
-      aparcar(tarea.id, motivo);
+      aparcar(tarea.id, motivo, conLoQueQuede);
     }
   };
 
@@ -439,9 +511,18 @@ export function crearCorredorDeTareas(opciones: {
      * corriendo de verdad y aparcarlas sería matarlas desde fuera.
      */
     const lista = opciones.disco.listar();
-    const reconciliada = lista.map((t) =>
-      t.estado === "en-proceso" ? conEstado(t, "requiere-atencion", motivoDeReconciliacion(t.pid)) : t
-    );
+    const reconciliada: Tarea[] = [];
+    for (const t of lista) {
+      if (t.estado !== "en-proceso") {
+        reconciliada.push(t);
+        continue;
+      }
+      // El hilo de un turno cortado a mitad no nombra nada abrible: se olvida antes de
+      // aparcar. Ver `conSesionSoloSiSePuedeAbrir`.
+      reconciliada.push(
+        conEstado(await conSesionSoloSiSePuedeAbrir(t), "requiere-atencion", motivoDeReconciliacion(t.pid))
+      );
+    }
     if (reconciliada.some((t, i) => t !== lista[i])) {
       opciones.disco.guardar(reconciliada);
       opciones.alCambiar?.(reconciliada);
@@ -480,8 +561,29 @@ export function crearCorredorDeTareas(opciones: {
        */
       const cortando = [...enVuelo.values()].map((e) => e.cortar());
       const trabajos = [...enVuelo.values()].map((e) => e.trabajo);
-      await Promise.allSettled(cortando);
-      await Promise.allSettled(trabajos);
+      const cuantas = trabajos.length;
+      /**
+       * Con PLAZO, y el plazo cubre las dos esperas: el cierre de la consola puede colgarse
+       * igual que el turno. Al agotarse **no se miente** — la tarea se queda «en proceso» y
+       * la reconciliación del siguiente arranque la aparca, que es exactamente para lo que
+       * existe. Se DICE, porque una tarea que se queda diciendo «en proceso» sin nadie
+       * detrás y sin explicación es el estado más confuso que puede quedar en el kanban.
+       */
+      const aTiempo = await conPlazo(
+        (async () => {
+          await Promise.allSettled(cortando);
+          await Promise.allSettled(trabajos);
+        })(),
+        opciones.esperaAlParar ?? TOPE_DE_PARADA_MS
+      );
+      if (!aTiempo) {
+        informar(
+          `${cuantas} tarea(s) no han devuelto al cerrar: se quedan «en proceso» y el próximo ` +
+            `arranque las reconcilia`
+        );
+      }
+      // El cerrojo se suelta igual: este proceso se va, y dejarlo puesto obligaría al
+      // siguiente a recogerlo por el camino que no es atómico.
       if (miCerrojo) opciones.disco.soltarCerrojo();
       miCerrojo = false;
     },
@@ -497,6 +599,25 @@ export function crearCorredorDeTareas(opciones: {
       for (let i = 0; i < 3; i += 1) await new Promise<void>((r) => setImmediate(r));
     },
   };
+}
+
+/**
+ * Espera una promesa con plazo. Devuelve si llegó a tiempo.
+ *
+ * El temporizador se limpia SIEMPRE: uno vivo mantiene el proceso en pie, y esto corre justo
+ * en el camino por el que el proceso se está yendo — un `setTimeout` de treinta segundos sin
+ * `clearTimeout` haría que el Ctrl-C tardara treinta segundos aunque todo hubiera cerrado ya.
+ */
+async function conPlazo(promesa: Promise<unknown>, ms: number): Promise<boolean> {
+  let temporizador: ReturnType<typeof setTimeout> | undefined;
+  const plazo = new Promise<false>((resuelto) => {
+    temporizador = setTimeout(() => resuelto(false), ms);
+  });
+  try {
+    return await Promise.race([promesa.then(() => true), plazo]);
+  } finally {
+    if (temporizador !== undefined) clearTimeout(temporizador);
+  }
 }
 
 /** Una línea, nunca una traza con rutas de la máquina. */

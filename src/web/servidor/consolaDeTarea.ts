@@ -165,7 +165,20 @@ export function crearConsolaDeTarea(opciones: {
         const ruta = ficheros.get(p.id);
         return ruta === undefined ? p.descripcion : relativa(ruta);
       });
-      aparcar(`${pendientes.length} escritura(s) esperando aprobación: ${rutas.join(", ")}`);
+      /**
+       * El motivo dice que hace falta una PERSONA, y a propósito no se lee como un rechazo.
+       *
+       * Es lo que se pinta en la tarjeta del kanban, y hoy es el final más frecuente de una
+       * tarea que toca ficheros: la aprobación es fail-closed y aquí no hay nadie delante.
+       * Un «rechazado» pelado —que es lo que se DEVUELVE aguas abajo, y con razón— se leería
+       * como que el agente hizo algo mal, o como que alguien miró y dijo que no. Lo que pasa
+       * es otra cosa: la escritura está propuesta y espera a alguien. Y con los nombres de
+       * los ficheros, que es la misma regla del aviso de honestidad — un contador a secas es
+       * el aviso que enseña a ignorar los avisos.
+       */
+      aparcar(
+        `${pendientes.length} escritura(s) esperando la aprobación de una persona: ${rutas.join(", ")}`
+      );
       /**
        * **Rechazo, y con su mensaje.** El rechazo es lo que deja el turno cerrar limpio:
        * medido sobre el bucle de `turnoReal.ts`, se reanuda con las decisiones, el modelo

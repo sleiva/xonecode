@@ -46,6 +46,24 @@ describe("crearConsolaDeTarea", () => {
     expect(aparcado[0]).toMatch(/aprobaci/i);
   });
 
+  it("el motivo dice que hace falta una PERSONA, y no se lee como un rechazo", async () => {
+    /**
+     * Este motivo es lo que una persona lee en la tarjeta del kanban, y hoy es el final más
+     * frecuente de una tarea que toca ficheros: la aprobación es fail-closed y una tarea de
+     * fondo no tiene a nadie delante. Un «rechazado» pelado se leería como que el agente
+     * hizo algo mal —o peor, como que alguien miró y dijo que no—, cuando lo que pasa es que
+     * la escritura está propuesta y **espera a alguien**. Eso es lo accionable: abrir la
+     * sesión y decidir.
+     */
+    const { consola, aparcado } = montar();
+    await consola.aprobacionesTui!([PENDIENTE], new Map([["1", "/src/app.xne"]]), new Map());
+    expect(aparcado[0]).toMatch(/persona/i);
+    expect(aparcado[0]).not.toMatch(/rechaz/i);
+    // Y sigue diciendo QUÉ ficheros: un contador a secas es el aviso que enseña a ignorar
+    // los avisos.
+    expect(aparcado[0]).toMatch(/src\/app\.xne/);
+  });
+
   it("el rechazo lleva el MENSAJE: sin él el modelo remata como si hubiera escrito", async () => {
     // `vendor/hitl.ts` documenta este modo de fallo en el propio `REJECT_MESSAGE`: un
     // rechazo pelado deja al modelo sintetizar la respuesta final como si la escritura

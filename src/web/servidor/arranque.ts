@@ -2086,6 +2086,17 @@ export async function arrancarConsolaWeb(opciones: OpcionesDeArranque): Promise<
             const abierto = conVestibulo.proyectoAbierto();
             return abierto === undefined ? [] : [abierto.raiz];
           },
+          /**
+           * `sesion` sobrevive si y solo si hay algo que una persona pueda ABRIR, y esto es
+           * lo que lo decide: la sesión está en el índice del proyecto —o sea que su
+           * transcript se volcó y se lee desde la barra lateral— o no está. Es exactamente
+           * la lista que la barra pinta, no una segunda fuente que pueda contradecirla.
+           */
+          sesionAbrible: (raiz, sesion) => conVestibulo.sesionesDe(raiz).some((s) => s.id === sesion),
+          // Y el hilo del agente de una sesión que no nombra nada abrible se olvida, igual
+          // que al borrar una conversación: un checkpoint es la lista de mensajes entera y
+          // crece, y ahí seguiría vivo e invisible desde la interfaz para siempre.
+          olvidarHilo: async (raiz, hilo) => olvidarHilo(crearCheckpointerDeProyecto(raiz), hilo),
           informar,
         });
 

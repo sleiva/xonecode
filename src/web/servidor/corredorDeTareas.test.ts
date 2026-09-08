@@ -154,6 +154,91 @@ describe("crearCorredorDeTareas", () => {
     await corredor.parar();
   });
 
+  it("un hilo que no nombra nada ABRIBLE se olvida, y `sesion` se limpia", async () => {
+    /**
+     * La regla: `sesion` sobrevive si y solo si hay algo que una persona pueda abrir. En el
+     * corte a mitad de turno que medí no hay transcript —`volcar()` corre en el `finally`,
+     * así que no hay ni entrada en el índice— pero el hilo del checkpointer sí está: un id
+     * que no lleva a ninguna parte y decenas de megas que nadie puede alcanzar ni borrar
+     * desde la interfaz. Se olvida el hilo y se quita el campo.
+     */
+    const { disco, estado } = discoDeMentira([TAREA({ estado: "en-proceso", pid: 999, sesion: "s9" })]);
+    const olvidados: string[] = [];
+    const p = proyectoDeMentira();
+    const corredor = crearCorredorDeTareas({
+      disco,
+      abrirParaTarea: p.abrir,
+      pid: 1,
+      concurrencia: () => 1,
+      sesionAbrible: () => false,
+      olvidarHilo: async (raiz, sesion) => void olvidados.push(`${raiz}|${sesion}`),
+    });
+    await corredor.arrancar();
+    await corredor.asentar();
+    expect(olvidados).toEqual(["/w/A|s9"]);
+    expect(estado()[0]!.estado).toBe("requiere-atencion");
+    expect(estado()[0]!.sesion).toBeUndefined();
+    await corredor.parar();
+  });
+
+  it("y si la conversación SÍ se puede abrir, no se toca ni el hilo ni el campo", async () => {
+    // Es la mitad que hace que la regla no sea «borra siempre»: con transcript volcado, la
+    // sesión está en el índice del proyecto y se lee desde la barra lateral.
+    const { disco, estado } = discoDeMentira([TAREA({ estado: "en-proceso", pid: 999, sesion: "s9" })]);
+    const olvidados: string[] = [];
+    const p = proyectoDeMentira();
+    const corredor = crearCorredorDeTareas({
+      disco,
+      abrirParaTarea: p.abrir,
+      pid: 1,
+      concurrencia: () => 1,
+      sesionAbrible: () => true,
+      olvidarHilo: async (raiz, sesion) => void olvidados.push(`${raiz}|${sesion}`),
+    });
+    await corredor.arrancar();
+    await corredor.asentar();
+    expect(olvidados).toEqual([]);
+    expect(estado()[0]!.sesion).toBe("s9");
+    await corredor.parar();
+  });
+
+  it("sin puerto que lo diga NO se borra nada: «no se sabe» no es «no hay»", async () => {
+    // Quitar la `sesion` y olvidar un hilo son destructivos, así que sin nadie que pueda
+    // afirmar que no hay nada abrible se conserva — la misma dirección conservadora que
+    // `historica` cuando no se puede preguntar al checkpointer.
+    const { disco, estado } = discoDeMentira([TAREA({ estado: "en-proceso", pid: 999, sesion: "s9" })]);
+    const p = proyectoDeMentira();
+    const corredor = crearCorredorDeTareas({ disco, abrirParaTarea: p.abrir, pid: 1, concurrencia: () => 1 });
+    await corredor.arrancar();
+    await corredor.asentar();
+    expect(estado()[0]!.sesion).toBe("s9");
+    await corredor.parar();
+  });
+
+  it("la misma regla al ACABAR: un turno que no dejó conversación no deja `sesion`", async () => {
+    // No es solo de la reconciliación: un turno que revienta antes de emitir un solo acto
+    // cierra sin volcar nada, y su id tampoco nombraría nada abrible.
+    const olvidados: string[] = [];
+    const { disco, estado } = discoDeMentira([TAREA()]);
+    const p = proyectoDeMentira();
+    const corredor = crearCorredorDeTareas({
+      disco,
+      abrirParaTarea: p.abrir,
+      pid: 1,
+      concurrencia: () => 1,
+      sesionAbrible: () => false,
+      olvidarHilo: async (raiz, sesion) => void olvidados.push(`${raiz}|${sesion}`),
+    });
+    await corredor.arrancar();
+    await corredor.asentar();
+    p.acabar();
+    await corredor.asentar();
+    expect(estado()[0]!.estado).toBe("terminada");
+    expect(estado()[0]!.sesion).toBeUndefined();
+    expect(olvidados).toEqual(["/w/A|hilo-/w/A"]);
+    await corredor.parar();
+  });
+
   it("sin cerrojo no ejecuta, y lo dice", async () => {
     const dichos: string[] = [];
     const { disco, estado } = discoDeMentira([TAREA()], { tomado: false, dePid: 77 });
@@ -207,12 +292,12 @@ describe("crearCorredorDeTareas", () => {
     const corredor = crearCorredorDeTareas({ disco, abrirParaTarea: p.abrir, pid: 1, concurrencia: () => 1 });
     await corredor.arrancar();
     await corredor.asentar();
-    p.aparcar("2 escritura(s) esperando aprobación: src/app.xne");
+    p.aparcar("2 escritura(s) esperando la aprobación de una persona: src/app.xne");
     p.acabar();
     await corredor.asentar();
     expect(estado()[0]).toMatchObject({
       estado: "requiere-atencion",
-      motivo: "2 escritura(s) esperando aprobación: src/app.xne",
+      motivo: "2 escritura(s) esperando la aprobación de una persona: src/app.xne",
     });
     await corredor.parar();
   });
@@ -488,6 +573,44 @@ describe("crearCorredorDeTareas", () => {
     // Y `parar` no intenta soltar un cerrojo que nunca fue nuestro.
     await corredor.parar();
     expect(d.soltados()).toBe(0);
+  });
+
+  it("`parar` lleva PLAZO: un cierre que no devuelve no cuelga el Ctrl-C, y se dice", async () => {
+    /**
+     * Un Ctrl-C que se queda esperando para siempre es lo peor que puede hacer este camino,
+     * y el repo ya trata esta clase con tope (`TOPE_MS` de Codex, los `TOPES_MS` de adb).
+     * Al agotarse NO se miente: la tarea se queda «en proceso» y el siguiente proceso la
+     * reconcilia, que es exactamente para lo que existe la reconciliación.
+     */
+    const dichos: string[] = [];
+    const d = discoDeMentira([TAREA()]);
+    const corredor = crearCorredorDeTareas({
+      disco: d.disco,
+      // Una consola que se queda colgada al cerrar: el turno nunca devuelve.
+      abrirParaTarea: async (raiz) => ({
+        raiz,
+        idDeHilo: "h",
+        correrTarea: async () => new Promise<void>(() => {}),
+        cerrar: () => new Promise<void>(() => {}),
+      }),
+      pid: 1,
+      concurrencia: () => 1,
+      // El plazo entra por parámetro, como `msDeEspera` de la consola web: `npm test` no
+      // puede esperar un tope de verdad.
+      esperaAlParar: 5,
+      informar: (t) => dichos.push(t),
+    });
+    await corredor.arrancar();
+    await corredor.asentar();
+    expect(d.estado()[0]!.estado).toBe("en-proceso");
+
+    await corredor.parar();
+    // Se queda «en proceso» a propósito, y el aviso lo DICE.
+    expect(d.estado()[0]!.estado).toBe("en-proceso");
+    expect(dichos.join(" ")).toMatch(/en proceso/i);
+    expect(dichos.join(" ")).toMatch(/reconcili/i);
+    // El cerrojo se suelta igual: este proceso se va.
+    expect(d.soltados()).toBe(1);
   });
 
   it("con el cerrojo propio, `parar` SÍ lo suelta", async () => {
