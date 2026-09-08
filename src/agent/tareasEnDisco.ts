@@ -11,7 +11,7 @@
  * puerta de atrás. Fuera del proyecto se gana además gratis lo que importaba — no entran en
  * git y no suben a CloudStudio — sin depender de ninguna exclusión.
  */
-import { existsSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync, readdirSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync, readdirSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import type { Tarea } from "../core/tareas.js";
@@ -53,6 +53,13 @@ export function crearTareasEnDisco(opciones: {
   informar?: (texto: string) => void;
   topeDeAdjunto?: number;
   topePorTarea?: number;
+  /**
+   * Cómo se APARTA un cerrojo caduco al recogerlo. Por omisión, `renameSync` de verdad.
+   * Entra por parámetro por lo mismo que `vivo`: un test necesita poder provocar que OTRO
+   * proceso gane esa carrera (el `rename` lanzando `ENOENT`), y eso no se puede pedir de
+   * verdad sin dos procesos reales.
+   */
+  renombrar?: (origen: string, destino: string) => void;
 }): TareasEnDisco {
   const base = join(opciones.base ?? join(homedir(), ".xonecode"), "tareas");
   const pid = opciones.pid ?? process.pid;
@@ -60,6 +67,7 @@ export function crearTareasEnDisco(opciones: {
   const informar = opciones.informar ?? (() => {});
   const topeDeAdjunto = opciones.topeDeAdjunto ?? TOPE_DE_ADJUNTO;
   const topePorTarea = opciones.topePorTarea ?? TOPE_DE_ADJUNTOS_POR_TAREA;
+  const renombrar = opciones.renombrar ?? renameSync;
   const indice = join(base, "indice.json");
   const cerrojo = join(base, "corredor.lock");
 
@@ -122,29 +130,37 @@ export function crearTareasEnDisco(opciones: {
     /**
      * **Un solo corredor por máquina.** Dos consolas abiertas serían dos ejecutores sobre la
      * misma cola, y con ellos dos turnos del mismo proyecto a la vez — que es exactamente lo
-     * que el cerrojo por proyecto existe para evitar.
+     * que el cerrojo por proyecto existe para evitar. Un cerrojo con una carrera conocida,
+     * por estrecha que sea, no cumple ese único trabajo: por eso el camino de abajo cierra
+     * las dos direcciones, no solo la más probable.
      *
-     * **La toma es atómica**: `flag: "wx"` crea el fichero solo si no existe, y falla con
-     * `EEXIST` si ya está — comprobar con `existsSync` y escribir después, como antes, deja
-     * una ventana entre las dos llamadas donde dos procesos que arrancan a la vez pueden leer
-     * los dos «no hay cerrojo» y escribir los dos: perder esa carrera es exactamente lo que
-     * este cerrojo existe para impedir.
+     * **La toma directa es atómica**: `flag: "wx"` crea el fichero solo si no existe, y falla
+     * con `EEXIST` si ya está — comprobar con `existsSync` y escribir después, como antes,
+     * deja una ventana entre las dos llamadas donde dos procesos que arrancan a la vez pueden
+     * leer los dos «no hay cerrojo» y escribir los dos.
      *
-     * Un cerrojo de un proceso MUERTO se recoge: si no, un cuelgue o un `kill -9` dejaría la
-     * cola parada para siempre y sin forma de arrancarla salvo borrando un fichero a mano. Y
-     * tras recogerlo se reintenta la creación exclusiva UNA vez — si en ese hueco otro proceso
-     * se adelantó, perdimos la carrera de verdad y se dice de quién es, en vez de fingir que
-     * el cerrojo es nuestro.
+     * **La recogida de un cerrojo MUERTO se hace con `renameSync`, nunca con `rmSync`.** Un
+     * cuelgue o un `kill -9` no debe dejar la cola parada para siempre sin forma de
+     * arrancarla salvo borrando un fichero a mano — pero APARTAR un inodo (renombrarlo) lo
+     * consigue un SOLO proceso: si A y B ven al mismo dueño muerto a la vez y los dos
+     * intentan `renameSync` el mismo origen al mismo destino, solo uno tiene éxito y el otro
+     * recibe `ENOENT` — el segundo `rename` no encuentra ya el fichero de origen, porque el
+     * primero se lo llevó. `rmSync(force)`, en cambio, lo consiguen los DOS: no falla si el
+     * fichero ya no está, así que el perdedor borra sin efecto y crea el suyo igual, sin
+     * enterarse de que ya había un ganador — ese hueco es justo lo que dejaba abierto la
+     * versión anterior de esta función, en el orden donde B pisa a A DESPUÉS de que A ya
+     * hubiera confirmado. El `.caduco` que queda tras ganar es basura de un cuelgue ajeno y
+     * se borra sin mirar si el borrado tiene éxito: nadie vuelve a mirar esa ruta.
      *
-     * **Y después de CADA `wx` ganado, una RELECTURA de confirmación.** El `wx` por sí solo
-     * no basta cuando se llega por la vía de recoger un cerrojo muerto: A ve al dueño muerto
-     * y lo borra; B ve al mismo dueño muerto y también lo borra; A crea el suyo con `wx` y
-     * gana; y entonces B —que ya había decidido reclamar y solo le faltaba ejecutarlo— borra
-     * el fichero que A ACABA de crear y crea el suyo encima. Los dos `wx` tienen éxito en su
-     * propio proceso, y los dos se creerían dueños. La relectura es el árbitro: tras ganar el
-     * `wx`, se vuelve a leer el fichero y se comprueba que el pid de dentro es el NUESTRO. Si
-     * no lo es, alguien nos lo pisó entre la escritura y esta lectura, y se devuelve de quién
-     * es en vez de fingir que el cerrojo sigue siendo nuestro.
+     * **Y después de CADA `wx` ganado, una RELECTURA de confirmación.** Cierra el OTRO
+     * orden, el que el `rename` no toca: A gana su `wx` de recogida y relee ANTES de que B
+     * complete su propio `rename`+`wx` — ahí el `rename` de B ya falla (A se llevó el
+     * inodo), así que este caso en realidad ya lo cierra el `rename`. La relectura sigue
+     * haciendo falta para el caso simétrico en la toma DIRECTA (sin dueño previo): dos
+     * `wx` no pueden tener éxito los dos sobre el mismo fichero nuevo, así que ahí no hay
+     * carrera que cerrar — pero si algún día cambia esa premisa, la relectura es quien la
+     * detecta, así que se mantiene en los dos caminos por igual en vez de solo en el de
+     * recogida.
      */
     tomarCerrojo() {
       mkdirSync(base, { recursive: true, mode: 0o700 });
@@ -180,13 +196,30 @@ export function crearTareasEnDisco(opciones: {
         return { tomado: false, dePid: dueño.pid };
       }
 
-      // Dueño soy yo, está muerto, o el fichero es ilegible: se recoge y se reintenta una vez.
-      rmSync(cerrojo, { force: true });
-      if (intentar()) return confirmar();
+      // Dueño soy yo, está muerto, o el fichero es ilegible: se recoge — apartándolo, no
+      // borrándolo (ver el comentario de arriba).
+      const caduco = `${cerrojo}.caduco`;
+      try {
+        renombrar(cerrojo, caduco);
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+        // Otro proceso ya apartó el mismo cerrojo: nos ganó la recogida. Puede que ya tenga
+        // el suyo escrito, o que lo esté escribiendo en este instante — un solo reintento
+        // del `wx` y, si sigue ocupado, se dice de quién es.
+        if (intentar()) return confirmar();
+        const otro = leerDueño();
+        return { tomado: false, dePid: otro?.pid ?? -1 };
+      }
 
-      // Perdimos la carrera de verdad: alguien escribió entre el borrado y este intento.
-      const otro = leerDueño();
-      return { tomado: false, dePid: otro?.pid ?? -1 };
+      // La recogida es NUESTRA: nadie más pudo apartar el mismo inodo. Si alguien crea un
+      // cerrojo nuevo en el hueco minúsculo entre este `rename` y nuestro `wx` de abajo
+      // (un tercer proceso arrancando desde cero, sin dueño previo que recoger), nuestro
+      // propio `wx` lo ve como cualquier otro «ya hay uno» y no hace falta un caso especial.
+      const resultado = intentar() ? confirmar() : { tomado: false as const, dePid: leerDueño()?.pid ?? -1 };
+      // Basura de un cuelgue ajeno: se borra tras resolver, y si el borrado falla da igual —
+      // nadie vuelve a mirar esa ruta.
+      rmSync(caduco, { force: true });
+      return resultado;
     },
     soltarCerrojo() {
       // Solo el propio: soltar el de otro dejaría dos corredores.

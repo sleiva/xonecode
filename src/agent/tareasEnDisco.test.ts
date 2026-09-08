@@ -192,6 +192,34 @@ describe("tareasEnDisco", () => {
     expect(JSON.parse(readFileSync(rutaCerrojo, "utf8"))).toMatchObject({ pid: 777 });
   });
 
+  it("otro proceso gana la RECOGIDA del cerrojo muerto: el renombrar que falla con ENOENT no nos deja creernos dueños", () => {
+    // El orden que la relectura por sí sola no cerraba: A ve al mismo dueño muerto (pid 999)
+    // y va a recogerlo con `renameSync`; pero justo en ese instante OTRO proceso ya completó
+    // su propia recogida entera —su `rename` + su `wx`— y escribió su cerrojo. Apartar un
+    // inodo (renombrarlo) lo consigue un SOLO proceso: el `rename` de A llega tarde y recibe
+    // `ENOENT`, porque el fichero de origen ya no está donde A lo vio.
+    //
+    // Aquí no hay dos procesos de verdad: se inyecta `renombrar` —el parámetro que existe
+    // justo para esto, con `renameSync` real por omisión— con un doble que representa la
+    // situación completa: deja escrito el cerrojo del "ganador" (como si su `rename`+`wx` ya
+    // hubieran corrido) y lanza `ENOENT`, en vez de renombrar nada de verdad.
+    mkdirSync(join(base, "tareas"), { recursive: true });
+    const rutaCerrojo = join(base, "tareas", "corredor.lock");
+    writeFileSync(rutaCerrojo, `${JSON.stringify({ pid: 999 })}\n`);
+
+    const renombrarQueOtroGana = (): never => {
+      writeFileSync(rutaCerrojo, `${JSON.stringify({ pid: 555 })}\n`);
+      const error = new Error("simulado: otro proceso ganó la recogida") as NodeJS.ErrnoException;
+      error.code = "ENOENT";
+      throw error;
+    };
+
+    const disco = crearTareasEnDisco({ base, pid: 100, vivo: () => false, renombrar: renombrarQueOtroGana });
+    expect(disco.tomarCerrojo()).toEqual({ tomado: false, dePid: 555 });
+    // Y el fichero en disco sigue siendo el del ganador: nosotros no lo tocamos.
+    expect(JSON.parse(readFileSync(rutaCerrojo, "utf8"))).toMatchObject({ pid: 555 });
+  });
+
   it.skipIf(process.platform === "win32")(
     "el índice, el cerrojo y un adjunto se escriben en 0600: llevan el encargo y los documentos de una persona",
     () => {
