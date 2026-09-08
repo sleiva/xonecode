@@ -1,6 +1,6 @@
 // src/agent/tareasEnDisco.test.ts
 import { describe, expect, it, beforeEach, afterEach, vi } from "vitest";
-import { mkdtempSync, rmSync, writeFileSync, mkdirSync, existsSync, readFileSync, statSync } from "node:fs";
+import { mkdtempSync, rmSync, writeFileSync, mkdirSync, existsSync, readFileSync, renameSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { crearTareasEnDisco } from "./tareasEnDisco.js";
@@ -218,6 +218,46 @@ describe("tareasEnDisco", () => {
     expect(disco.tomarCerrojo()).toEqual({ tomado: false, dePid: 555 });
     // Y el fichero en disco sigue siendo el del ganador: nosotros no lo tocamos.
     expect(JSON.parse(readFileSync(rutaCerrojo, "utf8"))).toMatchObject({ pid: 555 });
+  });
+
+  it("B no se lleva por delante el cerrojo VIVO de A: la restitución con link lo devuelve tal cual estaba", () => {
+    // El orden que ni el `rename` ni la relectura, por separado, cerraban (medido antes con
+    // un script de fuera de la suite; aquí como test de verdad): A y B ven los dos al mismo
+    // dueño muerto (pid 999). B ya ha decidido apartarlo y llama a `renombrar`; justo en ese
+    // instante, A completa su PROPIA recogida entera — de verdad, con `renameSync` — y deja
+    // su cerrojo VIVO escrito en la ruta. B, con su decisión ya tomada sobre una foto vieja,
+    // aparta lo que haya AHORA: se lleva el cerrojo de A, no el de 999. `rename` arbitra
+    // quién aparta un inodo dado, no si ese inodo se podía apartar — por eso el `rename` de
+    // B tiene éxito igual. Lo que lo cierra es la lectura AUTORITATIVA de después: B lee el
+    // `.caduco` que acaba de crear, ve el pid de A (vivo, no el suyo) y lo restituye con
+    // `linkSync` antes de decir que no lo tomó.
+    mkdirSync(join(base, "tareas"), { recursive: true });
+    const rutaCerrojo = join(base, "tareas", "corredor.lock");
+    writeFileSync(rutaCerrojo, `${JSON.stringify({ pid: 999 })}\n`);
+
+    const a = crearTareasEnDisco({ base, pid: 100, vivo: () => false });
+
+    const renombrarDeB = (origen: string, destino: string): void => {
+      // A completa su recogida ENTERA (rename real + wx + confirmar + limpieza) justo
+      // cuando B, que ya había leído al mismo dueño muerto, ejecuta su propio `renombrar`.
+      a.tomarCerrojo();
+      // Y ahora sigue el `rename` de B de verdad: la ruta de origen ya no tiene al 999 que B
+      // vio, tiene el cerrojo VIVO que A acaba de escribir — y `rename` no lo sabe ni le
+      // importa, así que tiene éxito igual.
+      renameSync(origen, destino);
+    };
+
+    // Para B, 999 está muerto (lo que vio) y CUALQUIER OTRO pid está vivo — en particular el
+    // de A, que es lo que hace falta para que la restitución dispare.
+    const b = crearTareasEnDisco({ base, pid: 200, vivo: (p) => p !== 999, renombrar: renombrarDeB });
+    const deB = b.tomarCerrojo();
+
+    // Las DOS mitades del aserto importan: que B no se crea dueño, y que el cerrojo de A
+    // sigue siendo de A. Sin la segunda, «B no lo tomó» se cumpliría igual habiéndose
+    // llevado el cerrojo de A por delante sin devolverlo — que es peor que la carrera
+    // original, no mejor.
+    expect(deB).toEqual({ tomado: false, dePid: 100 });
+    expect(JSON.parse(readFileSync(rutaCerrojo, "utf8"))).toMatchObject({ pid: 100 });
   });
 
   it.skipIf(process.platform === "win32")(
