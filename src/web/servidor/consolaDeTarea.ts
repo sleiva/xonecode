@@ -71,11 +71,15 @@ import { rutaRelativaDeTarea } from "../../core/tareas.js";
 /**
  * El mensaje que acompaña al rechazo, hermano de `REJECT_MESSAGE` (`vendor/hitl.ts`).
  *
- * **Quién lo usa desde que las escrituras se aplican**: la pendiente que NO admite
- * `approve`. `decisionesPermitidas` viene del `reviewConfigs` del interrupt y hay tools que
- * solo ofrecen rechazo; aprobar una de esas sería inventarse una decisión que la librería
- * no acepta. Ahí se rechaza con este mensaje Y se aparca, que es fail-closed: no se puede
- * resolver sin una persona.
+ * **Quién lo usa desde que las escrituras se aplican**: hoy, el corte de `preguntar` — y
+ * nada más. La otra rama, la pendiente que NO admite `approve`, es defensiva y **no se
+ * alcanza**: `decisionesPermitidas` viene del `reviewConfigs` del interrupt, y el único que
+ * los fija en este repo es `perfiles.ts`, que siempre pone `["approve", "reject"]`. Se deja
+ * puesta porque aprobar una pendiente que no admite `approve` sería inventarse una decisión
+ * que la librería no acepta, y la dirección de fallo ahí tiene que ser rechazar y aparcar
+ * —fail-closed— el día que alguien añada una tool que solo ofrezca rechazo. Dicho como
+ * defensiva y no como camino vivo a propósito: un comentario que da por ocurrido lo que no
+ * ocurre es la trampa que este repo ya ha pagado varias veces.
  *
  * Se copian sus tres cláusulas operativas —no se ejecutó, no lo reintentes, DILO en la
  * respuesta final— porque su docblock describe exactamente el fallo que aquí más duele: un
