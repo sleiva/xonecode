@@ -96,7 +96,13 @@ import { crearJuezDeTarea, invocarConModelos } from "../../agent/juezDeTarea.js"
 import type { JuezDeTareaPort } from "../../core/ports.js";
 import type { Entorno } from "../../core/settings.js";
 import { arrancarServidor, type ServidorWeb } from "./servidor.js";
-import { consolaParaTarea, crearCorredorDeTareas, type Corredor } from "./corredorDeTareas.js";
+import {
+  consolaParaTarea,
+  crearCorredorDeTareas,
+  type Corredor,
+  revisionConGit,
+  type RevisionDeSesion,
+} from "./corredorDeTareas.js";
 import { CONCURRENCIA_POR_OMISION, conEstado, tituloDeTarea, type Tarea } from "../../core/tareas.js";
 import type { TareasEnDisco } from "../../agent/tareasEnDisco.js";
 import {
@@ -2181,7 +2187,7 @@ export function construirCorredorDeTareasCableado(opciones: {
    * exista.
    */
   juez: JuezDeTareaPort;
-  revisable: (raiz: string, sesion: string) => Promise<boolean>;
+  revisable: (raiz: string, sesion: string) => Promise<RevisionDeSesion>;
 }): CorredorDeTareasCableado {
   const disco = opciones.tareasFabrica === undefined ? undefined : opciones.tareasFabrica(opciones.informar);
 
@@ -2461,8 +2467,14 @@ export async function arrancarConsolaWeb(opciones: OpcionesDeArranque): Promise<
      *
      * Y NO es «el árbol de git está limpio»: eso está medido y sería falso siempre — una
      * tarea que escribe un fichero deja el árbol sucio por definición.
+     *
+     * De la MISMA respuesta sale si la sesión cambió algo, y solo se afirma cuando hay
+     * marca: sin ella no es que no escribiera, es que no hay con qué mirarlo. Eso es lo que
+     * permite entregar una tarea de solo lectura sin abrir un camino para entregar sin
+     * verificar, y lo que impide decidirlo con `autorizadas` — que es la intención del
+     * agente y no el hecho.
      */
-    revisable: async (raiz, sesion) => (await cambiosDeSesion(raiz, sesion)).via === "git",
+    revisable: revisionConGit(cambiosDeSesion),
   });
 
   if (offline && opciones.guion === true) {

@@ -94,6 +94,20 @@ export interface MedidaDeEntrega extends ResultadoDeTurno {
    * que el modal de aprobación dejó.
    */
   revisable: boolean;
+  /**
+   * ¿Cambió la sesión algún fichero, **SEGÚN GIT**? `undefined` = no se sabe.
+   *
+   * De aquí depende que una tarea de SOLO LECTURA se pueda entregar, y la fuente importa:
+   * lo dice `cambiosDeSesion` —la misma que `revisable`— y **nunca `autorizadas`**. Aquello
+   * es una pista de lo que el agente quiso escribir, y puede llevar rutas que las guardas
+   * rechazaron; decidir con ella sería decidir con la intención en vez de con el hecho.
+   *
+   * Solo se puede afirmar cuando hay marca (`via: "git"`): sin ella no es que no escribiera,
+   * es que no hay con qué mirarlo — y entonces esto queda `undefined` y la condición del
+   * verificador se exige como siempre. Es la distinción de siempre entre «ninguno» y «no se
+   * sabe», y aquí colapsarla sería un camino para entregar sin verificar.
+   */
+  escribio?: boolean;
 }
 
 /** El veredicto de un juez de QA. Texto para leer y hallazgos, nunca contenido de ficheros. */
@@ -104,12 +118,30 @@ export interface VeredictoDeTarea {
   resumen: string;
   /** Lo que le falta o le sobra, una frase por hallazgo. */
   hallazgos?: string[];
+  /**
+   * Con qué condición de MENOS se entregó. **Lo pone el CÓDIGO, no el juez**, y viaja aquí
+   * porque el `motivo` de una tarea terminada no existe (`conEstado` lo borra a propósito:
+   * «el motivo vive SOLO en el estado que lo explica») y este es el único sitio que
+   * sobrevive a una entrega.
+   *
+   * Hoy la única es `SALVEDAD_SIN_ESCRITURAS`. Una entrega con una condición menos no puede
+   * parecer una entrega normal.
+   */
+  salvedad?: string;
 }
 
 /** ¿Se entrega? Y si no, POR QUÉ — que es lo único accionable de una tarjeta aparcada. */
 export interface Entrega {
   entregable: boolean;
   motivo?: string;
+  /**
+   * Con qué condición de MENOS se entregó, cuando fue el caso. Texto para leer.
+   *
+   * Una entrega con una condición menos no puede parecer una entrega normal: hoy la única
+   * es la tarea que no escribió nada, donde el verificador no aplica y el veredicto del
+   * juez queda como la única condición de contenido. Quien lo lea tiene derecho a saberlo.
+   */
+  salvedad?: string;
 }
 
 /**
@@ -122,17 +154,22 @@ export interface Entrega {
  */
 export function medidaDeEntrega(
   resultado: ResultadoDeTurno | undefined,
-  revisable: boolean
+  /** Lo que dice git de la sesión. `escribio` solo se afirma con marca: ver el campo. */
+  revision: { revisable: boolean; escribio?: boolean }
 ): MedidaDeEntrega {
+  const deGit = {
+    revisable: revision.revisable,
+    ...(revision.escribio === undefined ? {} : { escribio: revision.escribio }),
+  };
   if (resultado === undefined) {
     return {
       verificador: "no-corrio",
       pendientes: 0,
-      revisable,
+      ...deGit,
       motivoSinVerificar: "el ejecutor de este turno no informa de lo que pasó",
     };
   }
-  return { ...resultado, revisable };
+  return { ...resultado, ...deGit };
 }
 
 /** Cuántos ERRORES trae un veredicto rojo. Los avisos no tumban la entrega. */
@@ -148,9 +185,35 @@ const erroresDe = (hallazgos: readonly HallazgoDelTurno[] | undefined): number =
  * misma regla del aviso de honestidad que saca los NOMBRES de los ficheros en vez de un
  * contador.
  */
+/**
+ * Lo que se dice de una entrega a la que le faltó una condición porque no APLICABA.
+ *
+ * Se exporta para que quien la lea (y quien la pruebe) no la reescriba a mano.
+ */
+export const SALVEDAD_SIN_ESCRITURAS =
+  "el turno no cambió ningún fichero, así que no había nada que verificar: la entrega va " +
+  "solo con la valoración del juez";
+
 export function condicionesDeEntrega(medida: MedidaDeEntrega): Entrega {
   const fallos: string[] = [];
-  if (medida.verificador === "rojo") {
+  /**
+   * **El verificador no aplica cuando no se escribió nada, y eso NO es relajar la regla.**
+   *
+   * «Un verificador que no corrió no es verde» existe porque una tarea que ESCRIBIÓ sin
+   * verificarse está sin verificar. Una que no cambió ningún fichero no tiene nada que
+   * verificar: el dominio del verificador son las escrituras, así que ahí la condición no
+   * aplica en vez de fallar — y cuando no aplica, se DICE (ver `salvedad`), porque una
+   * entrega con una condición menos no puede parecer una entrega normal.
+   *
+   * Se compara con `=== false` y no con un `!`: `undefined` es «no se sabe» y entonces la
+   * condición se exige como siempre.
+   */
+  const nadaQueVerificar = medida.escribio === false;
+  if (nadaQueVerificar) {
+    // Nada. Las otras dos condiciones siguen enteras: unas escrituras que quedaron
+    // esperando aprobación son escrituras que el turno quiso hacer y no hizo, y sin marca de
+    // git no se puede afirmar que no escribiera nada — ese caso no llega aquí.
+  } else if (medida.verificador === "rojo") {
     const errores = erroresDe(medida.hallazgos);
     fallos.push(
       errores > 0
@@ -170,7 +233,9 @@ export function condicionesDeEntrega(medida: MedidaDeEntrega): Entrega {
   if (!medida.revisable) {
     fallos.push("no se puede revisar lo que ha escrito: la sesión no dejó marca de git con la que comparar");
   }
-  if (fallos.length === 0) return { entregable: true };
+  if (fallos.length === 0) {
+    return { entregable: true, ...(nadaQueVerificar ? { salvedad: SALVEDAD_SIN_ESCRITURAS } : {}) };
+  }
   return { entregable: false, motivo: fallos.join("; ") };
 }
 
@@ -204,5 +269,8 @@ export function decisionDeEntrega(
       motivo: `el juez de QA dijo «${veredicto.veredicto}»: ${veredicto.resumen}`,
     };
   }
-  return { entregable: true };
+  // La salvedad de las condiciones viaja hasta aquí: es la entrega la que hay que poder
+  // leer, no un paso intermedio. Con el verificador fuera de juego, el veredicto del juez
+  // es la única condición de CONTENIDO que quedaba, y eso es lo que dice.
+  return { entregable: true, ...(condiciones.salvedad === undefined ? {} : { salvedad: condiciones.salvedad }) };
 }

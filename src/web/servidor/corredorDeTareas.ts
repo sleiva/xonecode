@@ -36,6 +36,7 @@ import {
   type VeredictoDeTarea,
 } from "../../core/entrega.js";
 import type { JuezDeTareaPort } from "../../core/ports.js";
+import type { Entrega } from "../../core/entrega.js";
 import { crearConsolaDeTarea } from "./consolaDeTarea.js";
 import { ErrorDelJuezDeTarea } from "../../agent/juezDeTarea.js";
 import type { Consola } from "../../cli/consola.js";
@@ -54,6 +55,44 @@ import type { TareasEnDisco } from "../../agent/tareasEnDisco.js";
  * puede leer. Decirlo es lo que hace la tarjeta accionable: reintentar no repite un trabajo
  * ya hecho a medias, lo continúa.
  */
+/**
+ * Lo que git sabe de una sesión, y que la puerta de la entrega necesita entero.
+ *
+ * Las dos cosas salen de UNA pregunta (`cambiosDeSesion`): si hay «antes» con que comparar,
+ * y si la sesión cambió algo. `escribio` solo se puede afirmar con marca — sin ella no es
+ * que no escribiera, es que no hay con qué mirarlo (ver `MedidaDeEntrega.escribio`).
+ */
+export interface RevisionDeSesion {
+  revisable: boolean;
+  escribio?: boolean;
+}
+
+/**
+ * La `revisable` de PRODUCCIÓN, sobre `cambiosDeSesion`.
+ *
+ * Vive aquí y no en un cierre de `arrancarConsolaWeb` por la razón de siempre en este repo:
+ * ahí dentro no se puede llamar, y todos los tests de esa función doblan lo que la rodea —
+ * así que esta derivación podía quedarse mal con todo en verde. Medido: una mutación que
+ * hacía `escribio: true` a fuego sobrevivió a las 25 mutaciones de la tanda anterior.
+ *
+ * Las tres respuestas posibles, y la del medio es la que sostiene todo:
+ *  - `via: "git"` con ficheros → hay «antes» con que comparar y la sesión cambió algo.
+ *  - `via: "git"` sin ficheros → hay «antes» y la sesión NO cambió nada. Es lo único que
+ *    permite entregar una tarea de solo lectura, y viene de git y nunca de `autorizadas`,
+ *    que es la intención del agente y no el hecho.
+ *  - `sin-marca` → no hay con qué mirarlo, así que **no se afirma nada** sobre si escribió:
+ *    el campo se queda ausente y la condición del verificador se exige como siempre.
+ */
+export function revisionConGit(
+  cambiosDeSesion: (raiz: string, sesion: string) => Promise<{ via: string; ficheros: readonly unknown[] }>
+): (raiz: string, sesion: string) => Promise<RevisionDeSesion> {
+  return async (raiz, sesion) => {
+    const cambios = await cambiosDeSesion(raiz, sesion);
+    if (cambios.via !== "git") return { revisable: false };
+    return { revisable: true, escribio: cambios.ficheros.length > 0 };
+  };
+}
+
 export const MOTIVO_CORTADA_POR_CIERRE =
   "la consola se cerró a mitad del turno: no quedó respuesta guardada, aunque el agente " +
   "recuerda el hilo. Reintenta cuando quieras.";
@@ -109,6 +148,17 @@ export interface ConsolaParaTarea {
     autorizado?: (ficheros: readonly string[]) => void
   ): Promise<ResultadoDeTurno | void>;
   cerrar(): Promise<void>;
+  /**
+   * Espera a que la marca de git de la sesión esté escrita.
+   *
+   * Opcional porque los dobles de test no la tienen, y su ausencia es inofensiva: lo único
+   * que pasa es que la medida de «revisable» puede llegar antes que la ref. En producción
+   * la aporta `consolaParaTarea`, y es lo que cierra una carrera MEDIDA — sin ella
+   * `cambiosDeSesion` decía `sin-marca` y TODA tarea se aparcaba diciendo que nadie podía
+   * revisarla. La espera vive aquí y no en `cerrar()` para no cobrársela a quien cierra un
+   * proyecto estando sentado delante.
+   */
+  esperarMarca?(): Promise<void>;
 }
 
 export interface Corredor {
@@ -186,6 +236,7 @@ export function consolaParaTarea(consola: ConsolaDeProyecto): ConsolaParaTarea {
       return await consola.ejecutarTurno(encargo, consola.estadoDeSesion, deTarea);
     },
     cerrar: () => consola.cerrar(),
+    esperarMarca: () => consola.esperarMarca(),
   };
 }
 
@@ -255,8 +306,13 @@ export function crearCorredorDeTareas(opciones: {
    * **No es «el árbol está limpio», y eso está medido**: una tarea que escribe un fichero
    * deja el árbol sucio por definición (`git status --porcelain` → `?? Clientes.xne`), así
    * que con esa condición ninguna tarea se entregaría nunca. Ver `core/entrega.ts`.
+   *
+   * Devuelve DOS cosas y no una porque las dos salen de la misma pregunta a git: si hay
+   * «antes» con que comparar, y **cuántos ficheros cambió la sesión** — de lo segundo
+   * depende que una tarea de solo lectura se pueda entregar, y tiene que salir de git y no
+   * de `autorizadas` (ver `MedidaDeEntrega.escribio`).
    */
-  revisable: (raiz: string, sesion: string) => Promise<boolean>;
+  revisable: (raiz: string, sesion: string) => Promise<RevisionDeSesion>;
 }): Corredor {
   const pid = opciones.pid ?? process.pid;
   const informar = opciones.informar ?? (() => {});
@@ -461,19 +517,32 @@ export function crearCorredorDeTareas(opciones: {
     tarea: Tarea,
     sesion: string,
     entrada: EnVuelo,
-    resultado: ResultadoDeTurno | undefined
-  ): Promise<string | undefined> => {
-    let revisable = false;
+    resultado: ResultadoDeTurno | undefined,
+    /** Espera a que la ref de la sesión esté escrita, si quien abrió sabe hacerlo. */
+    esperarMarca?: () => Promise<void>
+  ): Promise<Entrega> => {
+    /**
+     * Antes de preguntarle a git, esperar a que git haya acabado de escribir.
+     *
+     * `volcar()` (`vestibulo.ts`) apunta la ref de la sesión sin aguardarla, y medido con
+     * git de verdad la ref todavía no estaba cuando esto medía: `cambiosDeSesion` devolvía
+     * `sin-marca` y **toda** tarea se aparcaba diciendo que nadie podía revisarla, en
+     * proyectos donde sí se podía. La espera está AQUÍ y no en `cerrar()` porque quien la
+     * necesita es esto: cerrar un proyecto estando sentado delante no puede pasar a
+     * aguardar un `write-tree` del árbol entero.
+     */
+    await esperarMarca?.().catch(() => undefined);
+    let revision: RevisionDeSesion = { revisable: false };
     try {
-      revisable = await opciones.revisable(tarea.proyecto.raiz, sesion);
+      revision = await opciones.revisable(tarea.proyecto.raiz, sesion);
     } catch {
       // Ni preguntarlo se pudo (en producción es git). Entonces no se sabe, y no se
       // entrega: la única dirección posible aquí, y la misma que toma el resto del fichero.
-      revisable = false;
+      revision = { revisable: false };
     }
-    const medida = medidaDeEntrega(resultado, revisable);
+    const medida = medidaDeEntrega(resultado, revision);
     const condiciones = condicionesDeEntrega(medida);
-    if (!condiciones.entregable) return condiciones.motivo;
+    if (!condiciones.entregable) return condiciones;
     /**
      * Y si el proceso se está yendo, NO se pregunta — y se dice la verdad de este caso, que
      * no es ninguna de las otras.
@@ -485,10 +554,12 @@ export function crearCorredorDeTareas(opciones: {
      * Lo único que se interrumpió fue el juicio, y eso es lo que hay que poder leer.
      */
     if (parando) {
-      return (
-        "la consola se cerró antes de evaluar la entrega: el turno acabó y su conversación " +
-        "está guardada; reintenta para que el juez la mire"
-      );
+      return {
+        entregable: false,
+        motivo:
+          "la consola se cerró antes de evaluar la entrega: el turno acabó y su conversación " +
+          "está guardada; reintenta para que el juez la mire",
+      };
     }
     let veredicto: VeredictoDeTarea | undefined;
     let fallo: unknown;
@@ -514,11 +585,14 @@ export function crearCorredorDeTareas(opciones: {
         fallo = error;
       });
     if (!(await conPlazo(consulta, opciones.esperaDelJuez ?? TOPE_DEL_JUEZ_MS))) {
-      return `el juez de QA no contestó en ${Math.round((opciones.esperaDelJuez ?? TOPE_DEL_JUEZ_MS) / 1000)} s`;
+      return {
+        entregable: false,
+        motivo: `el juez de QA no contestó en ${Math.round((opciones.esperaDelJuez ?? TOPE_DEL_JUEZ_MS) / 1000)} s`,
+      };
     }
-    if (reventó) return motivoDelJuez(fallo);
+    if (reventó) return { entregable: false, motivo: motivoDelJuez(fallo) };
     entrada.veredicto = veredicto;
-    return decisionDeEntrega(medida, veredicto).motivo;
+    return decisionDeEntrega(medida, veredicto);
   };
 
   /**
@@ -678,7 +752,16 @@ export function crearCorredorDeTareas(opciones: {
      * motivo que explica de verdad qué pasó, y preguntarle al juez sobre un trabajo que se
      * cortó a mitad gastaría una llamada del modelo más caro para taparlo.
      */
-    if (motivo === undefined) motivo = await puertaDeEntrega(tarea, hilo, entrada, resultado);
+    if (motivo === undefined) {
+      const entrega = await puertaDeEntrega(tarea, hilo, entrada, resultado, consola.esperarMarca?.bind(consola));
+      motivo = entrega.motivo;
+      // Con qué condición de MENOS se entregó, si fue el caso: viaja pegada al veredicto,
+      // porque una entrega con una condición menos no puede parecer una entrega normal y el
+      // `motivo` de una tarea terminada no existe (`conEstado` lo borra, a propósito).
+      if (entrega.salvedad !== undefined && entrada.veredicto !== undefined) {
+        entrada.veredicto = { ...entrada.veredicto, salvedad: entrega.salvedad };
+      }
+    }
     /**
      * El estado final, y **el camino de error pasa por lo mismo que el bueno**: la regla de
      * `sesion` y la consola cerrada. Aquí ya se sabe si el turno dejó conversación —`cortar()`

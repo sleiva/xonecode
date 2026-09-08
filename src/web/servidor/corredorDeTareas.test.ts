@@ -13,7 +13,9 @@ import {
   MOTIVO_CORTADA_POR_CIERRE,
   consolaParaTarea,
   crearCorredorDeTareas,
+  revisionConGit,
   type ConsolaParaTarea,
+  type RevisionDeSesion,
 } from "./corredorDeTareas.js";
 import { crearVestibulo, type ConsolaDeProyecto } from "./vestibulo.js";
 import { cambiosDeSesion, fotoDeApertura } from "../../agent/sesionGit.js";
@@ -21,7 +23,7 @@ import { CatalogoModelosEnMemoria } from "../../core/ports.js";
 import type { Consola } from "../../cli/consola.js";
 import { TOPE_DE_RONDAS_DE_TAREA, type Tarea } from "../../core/tareas.js";
 import { MAX_APPROVAL_ROUNDS } from "../../vendor/hitl.js";
-import type { ResultadoDeTurno, VeredictoDeTarea } from "../../core/entrega.js";
+import { SALVEDAD_SIN_ESCRITURAS, type ResultadoDeTurno, type VeredictoDeTarea } from "../../core/entrega.js";
 import type { CasoDeJuez, JuezDeTareaPort } from "../../core/ports.js";
 import { ErrorDelJuezDeTarea } from "../../agent/juezDeTarea.js";
 import type { TareasEnDisco } from "../../agent/tareasEnDisco.js";
@@ -48,7 +50,7 @@ function juezQueDice(veredicto: VeredictoDeTarea): JuezDeTareaPort & { casos: Ca
  */
 const ENTREGA_VERDE = {
   juez: juezQueDice({ veredicto: "verde" as const, resumen: "hace lo que pide" }),
-  revisable: async () => true,
+  revisable: async () => ({ revisable: true, escribio: true }),
 };
 
 /** La cola en memoria, con el cerrojo y su dueño controlables desde el test. */
@@ -1040,7 +1042,7 @@ describe("crearCorredorDeTareas", () => {
       pid: 1,
       concurrencia: () => 1,
       juez,
-      revisable: async () => true,
+      revisable: async () => ({ revisable: true, escribio: true }),
     });
     await corredor.arrancar();
     await corredor.asentar();
@@ -1361,6 +1363,34 @@ describe("el volcado de la sesión de una tarea", () => {
    * Se usa `cambiosDeSesion` a pelo, que es la misma función que pinta la pestaña Revisión:
    * «revisable» tiene que significar «Revisión lo enseña» y no algo parecido.
    */
+  /**
+   * `revisionConGit`, la derivación de PRODUCCIÓN, contra git de verdad y en sus tres
+   * respuestas. Está en su propia función y con test propio porque dentro de un cierre de
+   * `arrancarConsolaWeb` no se podía llamar: una mutación que ponía `escribio: true` a fuego
+   * sobrevivió a las 25 mutaciones de la tanda anterior justo por eso.
+   */
+  it("MEDIDO: `revisionConGit` distingue las TRES respuestas de git", async () => {
+    const { base, raiz } = proyectoConGit();
+    const revision = revisionConGit(cambiosDeSesion);
+
+    // 1) Sin marca: no hay con qué mirarlo, así que no se afirma NADA sobre si escribió.
+    expect(await revision(raiz, "sesion-sin-ref")).toEqual({ revisable: false });
+
+    // 2) Con marca y sin cambios: la sesión no escribió nada, y eso SÍ se puede afirmar.
+    writeFileSync(join(raiz, "app.xml"), "<app/>");
+    execFileSync("git", ["add", "-A"], { cwd: raiz });
+    execFileSync("git", ["commit", "-qm", "base"], { cwd: raiz });
+    const apuntar = await fotoDeApertura(raiz);
+    expect(await apuntar("s1")).toBe(true);
+    expect(await revision(raiz, "s1")).toEqual({ revisable: true, escribio: false });
+
+    // 3) Con marca y con cambios: escribió, y el verificador se exige.
+    writeFileSync(join(raiz, "Clientes.xne"), '<collection name="Clientes"/>');
+    expect(await revision(raiz, "s1")).toEqual({ revisable: true, escribio: true });
+
+    rmSync(base, { recursive: true, force: true });
+  });
+
   it("MEDIDO: la condición de revisable, con `cambiosDeSesion` de verdad y sin doble de git", async () => {
     const { base, raiz } = proyectoConGit();
     const marcada = asidero<Promise<boolean>>();
@@ -1386,9 +1416,10 @@ describe("el volcado de la sesión de una tarea", () => {
       concurrencia: () => 1,
       juez: juezQueDice({ veredicto: "verde", resumen: "la colección está creada" }),
       revisable: async (r, sesion) => {
-        const via = (await cambiosDeSesion(r, sesion)).via;
-        medidas.push(via === "git");
-        return via === "git";
+        const cambios = await cambiosDeSesion(r, sesion);
+        medidas.push(cambios.via === "git");
+        if (cambios.via !== "git") return { revisable: false };
+        return { revisable: true, escribio: cambios.ficheros.length > 0 };
       },
     });
     await corredor.arrancar();
@@ -1432,7 +1463,7 @@ describe("una tarea se entrega por condiciones MEDIDAS más el juez", () => {
     tareas: Tarea[],
     entrega: {
       juez: JuezDeTareaPort;
-      revisable?: (raiz: string, sesion: string) => Promise<boolean>;
+      revisable?: (raiz: string, sesion: string) => Promise<RevisionDeSesion>;
     }
   ) {
     const { disco, estado } = discoDeMentira(tareas);
@@ -1443,7 +1474,7 @@ describe("una tarea se entrega por condiciones MEDIDAS más el juez", () => {
       pid: 1,
       concurrencia: () => 1,
       juez: entrega.juez,
-      revisable: entrega.revisable ?? (async () => true),
+      revisable: entrega.revisable ?? (async () => ({ revisable: true, escribio: true })),
     });
     return { corredor, estado, p };
   }
@@ -1525,7 +1556,7 @@ describe("una tarea se entrega por condiciones MEDIDAS más el juez", () => {
    */
   it("sin marca de git no se entrega: nadie podría revisar lo que escribió", async () => {
     const juez = juezQueDice({ veredicto: "verde", resumen: "bien" });
-    const { corredor, estado, p } = conEntrega([TAREA()], { juez, revisable: async () => false });
+    const { corredor, estado, p } = conEntrega([TAREA()], { juez, revisable: async () => ({ revisable: false }) });
     await corredor.arrancar();
     await corredor.asentar();
     p.acabar({ verificador: "verde", pendientes: 0 });
@@ -1620,6 +1651,128 @@ describe("una tarea se entrega por condiciones MEDIDAS más el juez", () => {
   });
 
   /**
+   * Una tarea de SOLO LECTURA se entrega, y quién dice que no escribió importa: lo dice
+   * GIT y nunca `autorizadas`. Aquello es una pista de lo que el agente quiso hacer —puede
+   * llevar rutas que las guardas rechazaron—, y decidir con ella sería decidir con la
+   * intención en vez de con el hecho.
+   */
+  it("una tarea que no cambió nada se entrega, con la salvedad guardada", async () => {
+    const juez = juezQueDice({ veredicto: "verde", resumen: "no había nada que escribir" });
+    const { corredor, estado, p } = conEntrega([TAREA({ encargo: "explícame la colección Clientes" })], {
+      juez,
+      revisable: async () => ({ revisable: true, escribio: false }),
+    });
+    await corredor.arrancar();
+    await corredor.asentar();
+    p.acabar({ verificador: "no-corrio", pendientes: 0, motivoSinVerificar: "el turno no escribió ningún fichero del proyecto" });
+    await corredor.asentar();
+
+    const tarea = estado()[0]!;
+    expect(tarea.estado).toBe("terminada");
+    // Con el verificador fuera de juego, al juez SÍ se le pregunta: es la única condición
+    // de contenido que queda, así que manda entero.
+    expect(juez.casos).toHaveLength(1);
+    // Y la entrega no puede parecer una entrega normal: la salvedad va con el veredicto,
+    // porque el `motivo` de una tarea terminada no existe (`conEstado` lo borra).
+    expect(tarea.veredicto?.salvedad).toBe(SALVEDAD_SIN_ESCRITURAS);
+  });
+
+  it("y si git dice que SÍ cambió algo, el verificador se exige aunque `autorizadas` esté vacía", async () => {
+    const juez = juezQueDice({ veredicto: "verde", resumen: "bien" });
+    const { corredor, estado, p } = conEntrega([TAREA()], {
+      juez,
+      // Git vio cambios; el turno no llegó a apuntar ninguna autorización (una escritura
+      // aplicada por otro camino, o un `autorizado` que no se cableó).
+      revisable: async () => ({ revisable: true, escribio: true }),
+    });
+    await corredor.arrancar();
+    await corredor.asentar();
+    p.acabar({ verificador: "no-corrio", pendientes: 0 });
+    await corredor.asentar();
+
+    expect(estado()[0]!.estado).toBe("requiere-atencion");
+    expect(estado()[0]!.motivo).toContain("verificador");
+    expect(juez.casos).toHaveLength(0);
+  });
+
+  /**
+   * Y sin MARCA no se afirma que no escribiera: eso es «no se sabe», y ahí la condición del
+   * verificador se exige como siempre. Colapsar las dos sería un camino para entregar sin
+   * verificar — el agujero que este caso abriría si se hiciera mal.
+   */
+  it("sin marca de git no se entrega ni con el turno diciendo que no verificó", async () => {
+    const juez = juezQueDice({ veredicto: "verde", resumen: "bien" });
+    const { corredor, estado, p } = conEntrega([TAREA()], { juez, revisable: async () => ({ revisable: false }) });
+    await corredor.arrancar();
+    await corredor.asentar();
+    p.acabar({ verificador: "no-corrio", pendientes: 0 });
+    await corredor.asentar();
+
+    expect(estado()[0]!.estado).toBe("requiere-atencion");
+    expect(estado()[0]!.motivo).toContain("verificador");
+    expect(estado()[0]!.motivo).toContain("revisar");
+  });
+
+  /**
+   * La marca de git se ESPERA antes de medir, y la espera es de quien la necesita.
+   *
+   * Sin ella la medida llegaba antes que el `update-ref` que `volcar()` lanza sin aguardar,
+   * y toda tarea se aparcaba diciendo que nadie podía revisarla (medido con git de verdad,
+   * ver la batería del final). Lo que este test fija es el ORDEN: primero esperar, después
+   * preguntar.
+   */
+  it("espera la marca de git ANTES de medir si se puede revisar", async () => {
+    const orden: string[] = [];
+    const { disco, estado } = discoDeMentira([TAREA()]);
+    const p = proyectoDeMentira();
+    const corredor = crearCorredorDeTareas({
+      disco,
+      abrirParaTarea: async (raiz) => ({
+        ...(await p.abrir(raiz)),
+        esperarMarca: async () => void orden.push("esperar"),
+      }),
+      pid: 1,
+      concurrencia: () => 1,
+      juez: juezQueDice({ veredicto: "verde", resumen: "bien" }),
+      revisable: async () => {
+        orden.push("medir");
+        return { revisable: true, escribio: true };
+      },
+    });
+    await corredor.arrancar();
+    await corredor.asentar();
+    p.acabar({ verificador: "verde", pendientes: 0 });
+    await corredor.asentar();
+
+    expect(orden).toEqual(["esperar", "medir"]);
+    expect(estado()[0]!.estado).toBe("terminada");
+  });
+
+  it("una espera que revienta no tumba la tarea: se mide igual y la medida decide", async () => {
+    const { disco, estado } = discoDeMentira([TAREA()]);
+    const p = proyectoDeMentira();
+    const corredor = crearCorredorDeTareas({
+      disco,
+      abrirParaTarea: async (raiz) => ({
+        ...(await p.abrir(raiz)),
+        esperarMarca: async () => {
+          throw new Error("git se atragantó");
+        },
+      }),
+      pid: 1,
+      concurrencia: () => 1,
+      juez: juezQueDice({ veredicto: "verde", resumen: "bien" }),
+      revisable: async () => ({ revisable: true, escribio: true }),
+    });
+    await corredor.arrancar();
+    await corredor.asentar();
+    p.acabar({ verificador: "verde", pendientes: 0 });
+    await corredor.asentar();
+
+    expect(estado()[0]!.estado).toBe("terminada");
+  });
+
+  /**
    * El veredicto entra por el MISMO camino que la regla de `sesion` y la de `autorizadas`,
    * y eso incluye el camino de error: una regla que se cumple salvo cuando algo falla no es
    * una regla. Aquí revienta la escritura del estado final y el aparcado que viene detrás
@@ -1643,7 +1796,7 @@ describe("una tarea se entrega por condiciones MEDIDAS más el juez", () => {
       pid: 1,
       concurrencia: () => 1,
       juez,
-      revisable: async () => true,
+      revisable: async () => ({ revisable: true, escribio: true }),
     });
     await corredor.arrancar();
     await corredor.asentar();
@@ -1678,7 +1831,7 @@ describe("una tarea se entrega por condiciones MEDIDAS más el juez", () => {
       concurrencia: () => 1,
       // Nunca resuelve: es el cuelgue.
       juez: { juzgar: () => new Promise(() => {}) },
-      revisable: async () => true,
+      revisable: async () => ({ revisable: true, escribio: true }),
       esperaDelJuez: 20,
     });
     await corredor.arrancar();
@@ -1738,6 +1891,7 @@ describe("consolaParaTarea monta la consola con la que corre una tarea", () => {
         return { verificador: "verde" as const, pendientes: 0 };
       },
       cerrar: async () => {},
+      esperarMarca: async () => {},
     };
     return { recibidas, consola: consola as unknown as ConsolaDeProyecto };
   }

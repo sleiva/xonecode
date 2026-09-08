@@ -149,11 +149,17 @@ export const CONCURRENCIA_POR_OMISION = 2;
  * abandonada y el verificador sin correr, porque cada tanda gastaba ronda.
  *
  * **Y no es infinito**, por el mismo argumento que el tope propio de los artefactos: cada
- * pasada es una llamada al modelo y aquí no hay ningún humano que frene el bucle. Veinte es
- * cuatro veces el de la persona, sobre una observación y no sobre un gusto: el turno medido
- * necesitaba cinco, así que veinte deja sitio a un encargo bastante mayor y sigue cortando
- * un bucle en un tiempo finito. Cuando se corta se DICE y la tarea no se entrega: quedaron
- * escrituras sin aplicar, y eso no es un trabajo terminado.
+ * pasada es una llamada al modelo y aquí no hay ningún humano que frene el bucle.
+ *
+ * **De dónde sale el 20, dicho como lo que es: una observación por cuatro, no un encargo
+ * grande medido.** Lo único medido es el turno que se cortó, que necesitaba cinco tandas;
+ * veinte deja sitio a un encargo bastante mayor y sigue cortando un bucle en un tiempo
+ * finito. No hay medida de un encargo de verdad grande detrás, y por eso es un número
+ * provisional que se puede afinar. Lo que lo hace aceptable mientras tanto es su MODO DE
+ * FALLO: al agotarse se dice, quedan escrituras sin aplicar, y `core/entrega.ts` no entrega
+ * — o sea que un tope corto aparca con un motivo VERDADERO en vez de dar por bueno un
+ * trabajo a medias. Un número provisional con un fallo honesto se afina luego; lo que no se
+ * puede es que al agotarse mienta.
  */
 export const TOPE_DE_RONDAS_DE_TAREA = 20;
 

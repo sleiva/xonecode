@@ -3,6 +3,7 @@ import {
   condicionesDeEntrega,
   decisionDeEntrega,
   medidaDeEntrega,
+  SALVEDAD_SIN_ESCRITURAS,
   type MedidaDeEntrega,
 } from "./entrega.js";
 
@@ -132,7 +133,7 @@ describe("medidaDeEntrega: ausente NO es vacío", () => {
    * sería la entrega silenciosa que toda esta tarea existe para impedir.
    */
   it("un turno que no informa de nada no es un turno verde", () => {
-    const medida = medidaDeEntrega(undefined, true);
+    const medida = medidaDeEntrega(undefined, { revisable: true });
     expect(medida.verificador).toBe("no-corrio");
     expect(condicionesDeEntrega(medida).entregable).toBe(false);
     // Y lo dice: «no se sabe» tiene que distinguirse de «el simulador no está».
@@ -140,10 +141,109 @@ describe("medidaDeEntrega: ausente NO es vacío", () => {
   });
 
   it("lo que el turno informó se conserva tal cual, con el revisable de fuera", () => {
-    expect(medidaDeEntrega({ verificador: "verde", pendientes: 0 }, false)).toEqual({
+    expect(medidaDeEntrega({ verificador: "verde", pendientes: 0 }, { revisable: false })).toEqual({
       verificador: "verde",
       pendientes: 0,
       revisable: false,
+    });
+  });
+});
+
+/**
+ * **Una tarea de SOLO LECTURA sí se entrega, y no es relajar la regla.**
+ *
+ * «Un verificador que no corrió no es verde» existe porque una tarea que ESCRIBIÓ sin
+ * verificarse está sin verificar. Una que no cambió ningún fichero no tiene nada que
+ * verificar: el dominio del verificador son las escrituras, así que ahí la condición **no
+ * aplica** en vez de fallar. Lo que sostiene que esto no sea un agujero son tres cosas, y
+ * las tres tienen test aquí.
+ */
+describe("cuando el turno no escribió nada, el verificador no APLICA", () => {
+  it("un turno sin escrituras se entrega aunque el verificador no corriera", () => {
+    const medida: MedidaDeEntrega = {
+      verificador: "no-corrio",
+      pendientes: 0,
+      revisable: true,
+      escribio: false,
+      motivoSinVerificar: "el turno no escribió ningún fichero del proyecto",
+    };
+    expect(condicionesDeEntrega(medida).entregable).toBe(true);
+  });
+
+  /** Y se DICE: una entrega con una condición menos no puede parecer una entrega normal. */
+  it("y lo DICE, con la salvedad — que llega hasta la decisión final", () => {
+    const medida: MedidaDeEntrega = { verificador: "no-corrio", pendientes: 0, revisable: true, escribio: false };
+    expect(condicionesDeEntrega(medida).salvedad).toBe(SALVEDAD_SIN_ESCRITURAS);
+    expect(decisionDeEntrega(medida, { veredicto: "verde", resumen: "no había nada que hacer" })).toEqual({
+      entregable: true,
+      salvedad: SALVEDAD_SIN_ESCRITURAS,
+    });
+    // La salvedad nombra las dos cosas: que no cambió nada, y quién decide entonces.
+    expect(SALVEDAD_SIN_ESCRITURAS).toContain("juez");
+  });
+
+  /**
+   * **El juez manda entero.** Con el verificador fuera de juego, su veredicto es la única
+   * condición de contenido que queda — así que un rojo suyo tumba la entrega igual, y sin
+   * él tampoco se entrega.
+   */
+  it("con el verificador fuera de juego, un juez en rojo sigue tumbando la entrega", () => {
+    const medida: MedidaDeEntrega = { verificador: "no-corrio", pendientes: 0, revisable: true, escribio: false };
+    expect(decisionDeEntrega(medida, { veredicto: "rojo", resumen: "no ha hecho lo que se pedía" })).toEqual({
+      entregable: false,
+      motivo: expect.stringContaining("no ha hecho lo que se pedía"),
+    });
+    expect(decisionDeEntrega(medida, undefined).entregable).toBe(false);
+  });
+
+  /**
+   * **Y no aplica solo cuando GIT dice que no escribió**: `undefined` es «no se sabe» —sin
+   * marca no es que no escribiera, es que no hay con qué mirarlo— y ahí la condición se
+   * exige como siempre. Colapsar las dos sería un camino para entregar sin verificar.
+   */
+  it("«no se sabe» no es «no escribió»: sin marca, el verificador se exige igual", () => {
+    const sinSaber: MedidaDeEntrega = { verificador: "no-corrio", pendientes: 0, revisable: true };
+    expect(condicionesDeEntrega(sinSaber).entregable).toBe(false);
+    expect(condicionesDeEntrega(sinSaber).motivo).toContain("verificador");
+    expect(condicionesDeEntrega(sinSaber).salvedad).toBeUndefined();
+  });
+
+  it("las otras dos condiciones siguen enteras: pendientes y revisable", () => {
+    // Unas escrituras esperando aprobación son escrituras que el turno QUISO hacer y no
+    // hizo: eso no es una tarea de solo lectura, es una tarea a medias.
+    expect(
+      condicionesDeEntrega({ verificador: "no-corrio", pendientes: 2, revisable: true, escribio: false }).entregable
+    ).toBe(false);
+    expect(
+      condicionesDeEntrega({ verificador: "no-corrio", pendientes: 0, revisable: false, escribio: false }).entregable
+    ).toBe(false);
+  });
+
+  it("un verificador que sí corrió y salió ROJO no se tapa con esto", () => {
+    // No puede pasar por construcción (si escribió, `escribio` es cierto), pero si pasara,
+    // la dirección tiene que ser la conservadora: la salvedad no es una amnistía.
+    const medida: MedidaDeEntrega = { verificador: "rojo", pendientes: 0, revisable: true, escribio: true };
+    expect(condicionesDeEntrega(medida).entregable).toBe(false);
+  });
+});
+
+describe("medidaDeEntrega conserva lo que git supo, y solo eso", () => {
+  it("`escribio` viaja cuando se sabe, y no se pone cuando no", () => {
+    expect(medidaDeEntrega({ verificador: "verde", pendientes: 0 }, { revisable: true, escribio: false })).toEqual({
+      verificador: "verde",
+      pendientes: 0,
+      revisable: true,
+      escribio: false,
+    });
+    expect("escribio" in medidaDeEntrega({ verificador: "verde", pendientes: 0 }, { revisable: false })).toBe(false);
+  });
+
+  /** Un ejecutor mudo no informa del turno, pero de git sí se sabe lo que se sabe. */
+  it("un turno que no informa conserva igual lo que dijo git", () => {
+    expect(medidaDeEntrega(undefined, { revisable: true, escribio: false })).toMatchObject({
+      verificador: "no-corrio",
+      revisable: true,
+      escribio: false,
     });
   });
 });

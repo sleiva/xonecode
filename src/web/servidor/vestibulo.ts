@@ -374,6 +374,16 @@ export interface ConsolaDeProyecto {
    * puerta y no a la otra. Lo que cambia entre las dos es la `Consola` que se le da.
    */
   readonly ejecutarTurno: EjecutorDeTurno;
+  /**
+   * Espera a que la marca de git de esta sesión esté escrita. Devuelve en el acto si no hay
+   * ninguna pendiente (nadie volcó nada, o el proyecto no tiene git usable).
+   *
+   * Existe para el corredor de tareas, que mide si lo escrito se puede REVISAR y lo mide
+   * justo después de cerrar: `volcar()` apunta la ref sin aguardarla, y medido con git de
+   * verdad la ref todavía no estaba. La espera NO va dentro de `cerrar()` a propósito —
+   * ver `esperarMarca` en la implementación.
+   */
+  esperarMarca(): Promise<void>;
   /** El retorno de `correrConsola`. Resuelve cuando el lazo termina (EOF o `/salir`). */
   readonly terminada: Promise<number>;
 }
@@ -983,11 +993,18 @@ export function crearVestibulo(opciones: OpcionesDelVestibulo): Vestibulo {
         consolaWeb.cerrar();
         await terminada.catch(() => 0);
         volcar();
-        // Y la ref de la sesión queda ya APUNTADA cuando esto devuelve: quien cierra la
-        // consola es también quien mide si lo escrito se puede revisar (el corredor de
-        // tareas), y sin esta espera medía antes de que git hubiera escrito. Ver `marcado`.
-        await marcado?.catch(() => undefined);
       },
+      /**
+       * Espera a que la ref de la sesión esté ESCRITA, para quien vaya a mirarla.
+       *
+       * Estuvo un rato dentro de `cerrar()` y era una regresión para quien está sentado
+       * delante: cerrar un proyecto pasaba a aguardar un `git add -A` + `write-tree` sobre
+       * el árbol entero, o sea una pausa visible en un proyecto grande — y por un camino
+       * que no la necesita. Quien la necesita es el CORREDOR de tareas, que mide la
+       * condición de «revisable» justo después de cerrar; así que la espera la hace él y no
+       * se le cobra a nadie más. Ver `marcado`.
+       */
+      esperarMarca: async () => void (await marcado?.catch(() => undefined)),
       // El MISMO objeto que se le acaba de pasar a `correr`, no un segundo envoltorio: dos
       // versiones del turno divergen en la primera corrección que solo toque a una.
       ejecutarTurno,

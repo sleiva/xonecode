@@ -1026,6 +1026,51 @@ describe("abrirParaTarea — la segunda puerta", () => {
     rmSync(base, { recursive: true, force: true });
   });
 
+  /**
+   * **Cerrar un proyecto NO espera a la marca de git, y esperarla es de quien la necesita.**
+   *
+   * La espera estuvo un rato dentro de `cerrar()` y era una regresión para quien está
+   * sentado delante: `fotoDeApertura` es un `git add -A` + `write-tree` sobre el árbol
+   * entero, o sea una pausa visible en un proyecto grande, por un camino que no la
+   * necesita. Quien la necesita es el corredor de tareas —mide si lo escrito se puede
+   * revisar justo después de cerrar—, así que la pide él con `esperarMarca()`.
+   *
+   * El doble no resuelve NUNCA su marcado: si `cerrar()` la aguardara, este test se
+   * quedaría colgado hasta el plazo de vitest, que es exactamente la medida.
+   */
+  it("cerrar un proyecto no aguarda la marca de git; `esperarMarca` sí", async () => {
+    const base = baseTemporal();
+    const s = sesionesEnMemoria();
+    let apuntada = false;
+    const v = crearVestibulo({
+      ...dobles(),
+      origenDeTrabajo: "global",
+      sesiones: s.puerto,
+      baseDeWorkspace: base,
+      // El turno emite un acto, que es lo que hace que `volcar()` nombre la foto.
+      crearEjecutor: () => async (_peticion, _estado, consola) => void consola.escribir("hecho\n"),
+      marcarSesion: async () => (_id) =>
+        new Promise<boolean>(() => {
+          // No resuelve jamás: es el `git update-ref` que se queda a medias.
+          apuntada = true;
+        }),
+    });
+    const abierta = await v.abrirProyecto({ raiz: proyectoEnDisco(base, "A") });
+    await abierta.ejecutarTurno("haz algo", abierta.estadoDeSesion, abierta.consola.consola);
+    expect(apuntada).toBe(true);
+
+    // Lo que se mide: cerrar devuelve, con el marcado todavía en vuelo.
+    await abierta.cerrar();
+
+    // Y `esperarMarca` sí aguarda — se comprueba con una carrera, porque esperarla de
+    // verdad colgaría el test: gana el testigo, o sea que no había devuelto.
+    const testigo = new Promise<string>((r) => setTimeout(() => r("sigue esperando"), 30));
+    expect(await Promise.race([abierta.esperarMarca().then(() => "devolvió"), testigo])).toBe("sigue esperando");
+
+    await v.cerrar();
+    rmSync(base, { recursive: true, force: true });
+  });
+
   it("una raíz que no es un proyecto se rechaza con motivo, sin crear nada", async () => {
     const base = baseTemporal();
     const s = sesionesEnMemoria();

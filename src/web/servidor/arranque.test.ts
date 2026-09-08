@@ -2901,7 +2901,7 @@ describe("las tareas en background, el cableado del corredor con el cable — no
    */
   const ENTREGA_DE_TAREAS = {
     juez: { juzgar: async () => ({ veredicto: "verde" as const, resumen: "bien" }) },
-    revisable: async () => true,
+    revisable: async () => ({ revisable: true, escribio: true }),
   };
 
   const tareaEnProceso = (id: string): Tarea => ({
