@@ -108,11 +108,23 @@ export function tituloDesde(texto: string): string {
 }
 ```
 
-En `src/web/servidor/sesiones.ts`, sustituir el cuerpo de `tituloDesde` por la reexportación (mantener el nombre exportado: lo usan `anotarActo` y sus tests):
+En `src/web/servidor/sesiones.ts`, sustituir el cuerpo de `tituloDesde` por un import y una
+reexportación LOCAL (mantener el nombre exportado: lo usan `anotarActo` y sus tests):
 
 ```ts
-export { tituloDesde } from "../../core/textos.js";
+import { tituloDesde } from "../../core/textos.js";
+// …
+export { tituloDesde };
 ```
+
+**Un `export { x } from "…"` no vale aquí**, y es la trampa de este paso: reexporta sin crear
+binding local, y `anotarActo` llama a `tituloDesde` en este mismo fichero — reventaría en
+runtime con los tests de tipos en verde.
+
+Y el cuerpo que se mueve es el que YA ESTÁ, copiado tal cual: usa las constantes
+`LARGO_TITULO`/`LARGO_TITULO_AUTOMATICO` y recorta la cola con `.replace(/[\s,;:]+$/u, "")`.
+El bloque de arriba es una versión legible del mismo algoritmo, no el texto a pegar: los
+tests de `sesiones.test.ts` dependen de esos detalles.
 
 - [ ] **Step 2: Escribir el test de la planificación (falla)**
 
@@ -1036,6 +1048,7 @@ git commit -m "feat(web): la consola de una tarea aparca en vez de contestar por
 - [ ] Un proyecto cuya raíz ya no existe aparca la tarea sin ejecutarla
 - [ ] Un error del turno aparca con el motivo, y no tumba el corredor
 - [ ] Nunca se abren dos tareas del mismo proyecto a la vez
+- [ ] **La consola se CIERRA antes de escribir el estado final**, y hay test de ese orden: solo las `en-proceso` ocupan su proyecto, así que si se aparcara con la sesión todavía abierta el planificador dejaría arrancar otra tarea sobre el mismo proyecto — justo lo que el cerrojo por proyecto existe para evitar
 
 **Verify:** `npx vitest run src/web/servidor/corredorDeTareas.test.ts` → en verde
 
@@ -1147,6 +1160,37 @@ describe("crearCorredorDeTareas", () => {
       estado: "requiere-atencion",
       motivo: "2 escritura(s) esperando aprobación: src/app.xne",
     });
+    await corredor.parar();
+  });
+
+  it("la consola se CIERRA antes de escribir el estado final", async () => {
+    // Solo las `en-proceso` ocupan su proyecto, así que aparcar con la sesión abierta
+    // dejaría arrancar otra tarea sobre el mismo — dos turnos sobre el mismo disco.
+    const orden: string[] = [];
+    const { disco } = discoDeMentira([TAREA()]);
+    const original = disco.guardar.bind(disco);
+    disco.guardar = (t) => {
+      orden.push("guardar");
+      original(t);
+    };
+    let acabar: (() => void) | undefined;
+    const corredor = crearCorredorDeTareas({
+      disco,
+      abrirParaTarea: async (raiz) => ({
+        raiz,
+        idDeHilo: "h",
+        correrTarea: async () => new Promise<void>((r) => (acabar = r)),
+        cerrar: async () => void orden.push("cerrar"),
+      }),
+      pid: 1,
+      concurrencia: () => 1,
+    });
+    await corredor.arrancar();
+    await corredor.asentar();
+    acabar!();
+    await corredor.asentar();
+    // El último `guardar` (el estado final) va DESPUÉS del `cerrar`.
+    expect(orden.lastIndexOf("cerrar")).toBeLessThan(orden.lastIndexOf("guardar"));
     await corredor.parar();
   });
 
@@ -1271,6 +1315,13 @@ export function crearCorredorDeTareas(opciones: {
     } catch (error) {
       motivo ??= `el turno falló: ${unaLinea(error)}`;
     } finally {
+      /**
+       * **Cerrar ANTES de escribir el estado, y el orden es load-bearing.** Solo las tareas
+       * `en-proceso` ocupan su proyecto (`siguientesAEjecutar`), así que si esto se aparcara
+       * con la sesión todavía abierta, el planificador dejaría arrancar otra tarea sobre el
+       * mismo proyecto — dos turnos a la vez sobre el mismo disco, git y checkpointer, que
+       * es exactamente lo que el cerrojo por proyecto existe para evitar. Hay test del orden.
+       */
       await consola.cerrar().catch(() => {});
     }
     // Aparcada si algo pidió a una persona; terminada si acabó limpia. «Terminada» significa
