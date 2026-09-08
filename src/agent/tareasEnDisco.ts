@@ -11,7 +11,7 @@
  * puerta de atrás. Fuera del proyecto se gana además gratis lo que importaba — no entran en
  * git y no suben a CloudStudio — sin depender de ninguna exclusión.
  */
-import { existsSync, linkSync, mkdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync, readdirSync } from "node:fs";
+import { chmodSync, existsSync, linkSync, mkdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync, readdirSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import type { Tarea } from "../core/tareas.js";
@@ -36,6 +36,13 @@ export interface TareasEnDisco {
   guardar(tareas: readonly Tarea[]): void;
   /** Concede el cerrojo, o dice de quién es. Ver `tomarCerrojo` abajo. */
   tomarCerrojo(): { tomado: true } | { tomado: false; dePid: number };
+  /**
+   * ¿El cerrojo en disco sigue siendo NUESTRO? Hay que preguntarlo antes de cada cosa
+   * consecuente —despachar una tarea—, no solo al tomarlo: `tomarCerrojo` no puede
+   * garantizar por sí solo que no haya dos dueños (ver su comentario), y esto es lo que
+   * hace que el que perdió se entere ANTES de arrancar nada.
+   */
+  sigoSiendoDueño(): boolean;
   soltarCerrojo(): void;
   guardarAdjunto(tarea: string, nombre: string, datos: Buffer): ResultadoDeAdjunto;
   /** La carpeta REAL de los adjuntos de una tarea, para montarla en el backend. Se queda
@@ -96,8 +103,16 @@ export function crearTareasEnDisco(opciones: {
    * contenido de una persona, no un dato de sistema.
    */
   function guardarIndice(tareas: readonly Tarea[]): void {
+    // El `mode` de estas dos llamadas solo se aplica al CREAR: si la carpeta o el índice ya
+    // existían con permisos más flojos —los dejó una versión anterior, o un `umask` raro—,
+    // seguirían flojos para siempre. Es la lección de `checkpoint.sqlite`, y aquí importa
+    // por lo mismo: el índice lleva el encargo que escribió una persona. El `chmod` es
+    // aparte y no falla el guardado si no se puede aplicar (un sistema de ficheros sin
+    // permisos POSIX): el aviso sería inútil y la escritura sí valió.
     mkdirSync(base, { recursive: true, mode: 0o700 });
+    asegurarModo(base, 0o700);
     writeFileSync(indice, `${JSON.stringify(tareas, null, 1)}\n`, { encoding: "utf8", mode: 0o600 });
+    asegurarModo(indice, 0o600);
   }
 
   /**
@@ -132,6 +147,14 @@ export function crearTareasEnDisco(opciones: {
    * era lo que se apartó, porque en cuanto el `rename` tiene éxito ese inodo es nuestro y
    * nadie más puede tocarlo.
    */
+  function asegurarModo(ruta: string, modo: number): void {
+    try {
+      chmodSync(ruta, modo);
+    } catch {
+      // Ver el comentario de `guardar`.
+    }
+  }
+
   function leerDueño(ruta: string = cerrojo): { pid: number } | undefined {
     try {
       const dueño = JSON.parse(readFileSync(ruta, "utf8")) as { pid?: unknown };
@@ -139,6 +162,147 @@ export function crearTareasEnDisco(opciones: {
     } catch {
       return undefined;
     }
+  }
+
+  function intentar(): boolean {
+    try {
+      writeFileSync(cerrojo, `${JSON.stringify({ pid, desde: new Date().toISOString() })}\n`, {
+        encoding: "utf8",
+        mode: 0o600,
+        flag: "wx",
+      });
+      return true;
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === "EEXIST") return false;
+      throw error;
+    }
+  }
+
+  function confirmar(): { tomado: true } | { tomado: false; dePid: number } {
+    const dueño = leerDueño();
+    if (dueño?.pid === pid) return { tomado: true };
+    // Alguien escribió encima entre nuestro `wx` y esta relectura: perdimos la carrera.
+    // -1 nunca es un pid real: es lo que se devuelve si ni siquiera el ganador se puede
+    // leer, que no debería pasar en la práctica pero no es motivo para lanzar — fallar
+    // aquí bloquearía al llamante sin decir por qué.
+    return { tomado: false, dePid: dueño?.pid ?? -1 };
+  }
+
+  /**
+   * Recoge un cerrojo que la FOTO de `tomarCerrojo` dio por caduco: lo aparta, comprueba
+   * con autoridad qué era, y lo restituye si resultó estar vivo.
+   *
+   * **La recogida de un cerrojo MUERTO usa `renameSync` para apartarlo, y una relectura
+   * de confirmación tras cada `wx` ganado — pero esas dos piezas, SOLAS, no bastan.** Un
+   * commit anterior de este mismo fichero afirmó que sí bastaban («cierra las dos
+   * direcciones de la carrera»), y no era cierto — quedó sin medir, y se midió después con
+   * un script que reproduce el orden que sigue: A y B ven los dos al mismo dueño muerto; A
+   * recoge, gana su `wx` y CONFIRMA (`{tomado:true}`); SOLO ENTONCES B, que ya había
+   * decidido apartar el cerrojo que vio muerto, ejecuta su `renameSync` — y ese `rename`
+   * tiene éxito igual, porque `rename` arbitra QUIÉN aparta un inodo dado, no si ESE
+   * inodo se podía apartar. B se lleva por delante el cerrojo VIVO de A, hace su propio
+   * `wx` sobre la ruta que él mismo dejó libre, relee, confirma con su propio pid — y los
+   * dos procesos terminan con `{tomado:true}`. Medido con un script de dos instancias
+   * (`vivo` de B disparando la recogida completa de A a mitad de su propia decisión):
+   * `deA` y `deB` salían los dos `{tomado:true}`.
+   *
+   * **Lo que de verdad falta es comprobar DESPUÉS del `rename`, no solo antes.** Antes del
+   * `rename` solo se puede leer una FOTO (`dueño`, más abajo) que puede quedarse vieja en
+   * el instante que tarda el propio `rename` en correr. Tras un `rename` con éxito, en
+   * cambio, se tiene acceso EXCLUSIVO al inodo que se acaba de apartar — nadie más puede
+   * ya estar escribiéndolo — así que ES el único momento en que leerlo vale con autoridad:
+   * - Si el `.caduco` nombra un pid VIVO que no es el nuestro, apartamos un cerrojo que no
+   *   estaba muerto de verdad, y hay que DEVOLVERLO. `linkSync(caduco, cerrojo)` crea un
+   *   segundo nombre para el MISMO inodo del `.caduco` en la ruta del cerrojo: si esa ruta
+   *   sigue libre (nadie más ha escrito ahí desde que la dejamos vacía con el `rename`),
+   *   tiene éxito y el cerrojo vivo queda restituido tal cual estaba. Si un TERCERO ya
+   *   escribió un cerrojo nuevo en esa ruta mientras tanto, `link` falla con `EEXIST` —esa
+   *   es una carrera de orden superior, exige un tercer proceso en el mismo instante— y
+   *   entonces no se restituye nada (machacar el cerrojo del tercero sería la misma pérdida
+   *   que se intenta evitar): se dice el dueño que haya. El `.caduco` se borra al final de
+   *   las dos ramas.
+   * - Si el `.caduco` nombra un pid muerto, el nuestro, o es ilegible, la recogida era
+   *   legítima y sigue el camino de siempre: `wx` sobre la ruta que quedó libre, y
+   *   relectura de confirmación.
+   *
+   * **Y queda un residuo que esta capa NO puede cerrar, dicho aquí en vez de prometido de
+   * más.** Decidir «el dueño está muerto» es una observación de un INSTANTE, y con
+   * primitivas de sistema de ficheros no hay forma de actuar sobre ella atómicamente: no
+   * existe un «renombra solo si sigue siendo este inodo». Así que toda recogida de un
+   * cerrojo caduco puede apartar uno que revivió entre la observación y el `rename`. La
+   * restitución con `link` cubre ese caso salvo cuando un TERCER proceso ocupó la ruta en
+   * el hueco — entonces `link` falla con `EEXIST`, no se restituye (machacar al tercero
+   * sería la misma pérdida) y el dueño apartado se queda creyéndose dueño mientras el
+   * tercero también lo es. Un `flock` del núcleo no tendría este problema —el sistema lo
+   * suelta al morir el proceso, así que no hay cerrojo caduco que recoger— pero Node no lo
+   * expone sin un módulo nativo.
+   *
+   * Lo que hace verdad «un solo corredor» no es entonces esta función sola: es
+   * `sigoSiendoDueño`, que el corredor pregunta antes de cada cosa consecuente. Todo lo de
+   * arriba estrecha la ventana; la comprobación del dueño es la que hace que el perdedor se
+   * entere antes de arrancar una tarea.
+   */
+  function recoger(): { tomado: true } | { tomado: false; dePid: number } {
+    // Dueño soy yo según esta FOTO, está muerto, o el fichero es ilegible: se aparta para
+    // poder comprobar con autoridad qué era, después — esa foto puede haberse quedado
+    // vieja mientras el `rename` corría (ver el comentario de esta función).
+    // La cuarentena lleva el PID, y eso NO es cosmético: con un nombre compartido
+    // (`.caduco` a secas) la propia limpieza de más abajo se llevaba por delante el
+    // cerrojo vivo de otro. Medido: A recoge —`rename` a la cuarentena, `wx`, confirma— y,
+    // en el hueco entre su confirmación y su limpieza, el `rename` de B mete el cerrojo
+    // VIVO de A en esa misma ruta compartida (POSIX `rename` reemplaza el destino sin
+    // chistar); el `rmSync` de A borra entonces su PROPIO cerrojo creyendo borrar el
+    // muerto de antes, y B —que ya no encuentra nada que leer ahí— se cree la recogida
+    // legítima. A decía `{tomado:true}` sin fichero en disco y B se lo llevaba: dos
+    // dueños. Con la ruta por proceso, el `rename` de B solo puede aterrizar en la
+    // cuarentena de B, donde la lectura autoritativa de abajo ve a A vivo y lo restituye.
+    const caduco = `${cerrojo}.caduco-${pid}`;
+    try {
+      renombrar(cerrojo, caduco);
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+      // Otro proceso ya apartó el mismo cerrojo: nos ganó la recogida. Puede que ya tenga
+      // el suyo escrito, o que lo esté escribiendo en este instante — un solo reintento
+      // del `wx` y, si sigue ocupado, se dice de quién es.
+      if (intentar()) return confirmar();
+      const otro = leerDueño();
+      return { tomado: false, dePid: otro?.pid ?? -1 };
+    }
+
+    // El `rename` tuvo éxito: el inodo apartado es EXCLUSIVAMENTE nuestro ya, así que esta
+    // lectura sí vale con autoridad — al contrario que la de `dueño`, de antes del rename.
+    const apartado = leerDueño(caduco);
+    if (apartado && apartado.pid !== pid && vivo(apartado.pid)) {
+      // Nos llevamos por delante un cerrojo VIVO: hay que devolverlo. `link` falla con
+      // `EEXIST` si un TERCERO ya escribió un cerrojo nuevo en esa ruta mientras tanto, y
+      // ahí NO se restituye nada: machacar el del tercero sería la misma pérdida que se
+      // intenta evitar. Y esa rama es el residuo que no se puede cerrar aquí — el dueño
+      // que apartamos sigue creyéndose dueño y el tercero también lo es. Se dice el dueño
+      // que haya, y lo que hace que el perdedor se entere es `sigoSiendoDueño`.
+      try {
+        enlazar(caduco, cerrojo);
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
+        const tercero = leerDueño();
+        borrar(caduco);
+        return { tomado: false, dePid: tercero?.pid ?? -1 };
+      }
+      borrar(caduco);
+      return { tomado: false, dePid: apartado.pid };
+    }
+
+    // El `.caduco` nombraba un cerrojo muerto de verdad, el nuestro, o era ilegible: la
+    // recogida es legítima. La ruta quedó libre con el `rename` de arriba. Si alguien crea
+    // un cerrojo nuevo en el hueco minúsculo entre eso y nuestro `wx` de abajo (un tercer
+    // proceso arrancando desde cero, sin dueño previo que recoger), nuestro propio `wx` lo
+    // ve como cualquier otro «ya hay uno» y no hace falta un caso especial.
+    const resultado = intentar() ? confirmar() : { tomado: false as const, dePid: leerDueño()?.pid ?? -1 };
+    // Basura de un cuelgue ajeno: se borra tras resolver, y si el borrado falla da igual —
+    // nadie vuelve a mirar esa ruta. Un proceso que muera entre el `rename` y esta línea
+    // deja su `.caduco-<pid>` ahí para siempre: es un fichero de basura y no un cerrojo,
+    // porque `tomarCerrojo` solo mira `corredor.lock` — que ese `rename` dejó libre.
+    borrar(caduco);
+    return resultado;
   }
 
   return {
@@ -153,73 +317,23 @@ export function crearTareasEnDisco(opciones: {
     /**
      * **Un solo corredor por máquina.** Dos consolas abiertas serían dos ejecutores sobre la
      * misma cola, y con ellos dos turnos del mismo proyecto a la vez — que es exactamente lo
-     * que el cerrojo por proyecto existe para evitar. Un cerrojo con una carrera conocida,
-     * por estrecha que sea, no cumple ese único trabajo.
+     * que el cerrojo por proyecto existe para evitar.
+     *
+     * La toma tiene dos caminos, y solo el primero es atómico de verdad: `wx` cuando no hay
+     * cerrojo, y `recoger()` cuando hay uno cuyo dueño parece muerto. El segundo NO se puede
+     * hacer atómico con primitivas de ficheros y deja un residuo declarado —está escrito en
+     * `recoger`, con el orden exacto—, así que «un solo corredor» no lo sostiene esta función
+     * sola: lo sostiene `sigoSiendoDueño`, que el corredor pregunta antes de cada cosa
+     * consecuente.
      *
      * **La toma directa es atómica**: `flag: "wx"` crea el fichero solo si no existe, y falla
      * con `EEXIST` si ya está — comprobar con `existsSync` y escribir después, como antes,
      * deja una ventana entre las dos llamadas donde dos procesos que arrancan a la vez pueden
      * leer los dos «no hay cerrojo» y escribir los dos.
-     *
-     * **La recogida de un cerrojo MUERTO usa `renameSync` para apartarlo, y una relectura
-     * de confirmación tras cada `wx` ganado — pero esas dos piezas, SOLAS, no bastan.** Un
-     * commit anterior de este mismo fichero afirmó que sí bastaban («cierra las dos
-     * direcciones de la carrera»), y no era cierto — quedó sin medir, y se midió después con
-     * un script que reproduce el orden que sigue: A y B ven los dos al mismo dueño muerto; A
-     * recoge, gana su `wx` y CONFIRMA (`{tomado:true}`); SOLO ENTONCES B, que ya había
-     * decidido apartar el cerrojo que vio muerto, ejecuta su `renameSync` — y ese `rename`
-     * tiene éxito igual, porque `rename` arbitra QUIÉN aparta un inodo dado, no si ESE
-     * inodo se podía apartar. B se lleva por delante el cerrojo VIVO de A, hace su propio
-     * `wx` sobre la ruta que él mismo dejó libre, relee, confirma con su propio pid — y los
-     * dos procesos terminan con `{tomado:true}`. Medido con un script de dos instancias
-     * (`vivo` de B disparando la recogida completa de A a mitad de su propia decisión):
-     * `deA` y `deB` salían los dos `{tomado:true}`.
-     *
-     * **Lo que de verdad falta es comprobar DESPUÉS del `rename`, no solo antes.** Antes del
-     * `rename` solo se puede leer una FOTO (`dueño`, más abajo) que puede quedarse vieja en
-     * el instante que tarda el propio `rename` en correr. Tras un `rename` con éxito, en
-     * cambio, se tiene acceso EXCLUSIVO al inodo que se acaba de apartar — nadie más puede
-     * ya estar escribiéndolo — así que ES el único momento en que leerlo vale con autoridad:
-     * - Si el `.caduco` nombra un pid VIVO que no es el nuestro, apartamos un cerrojo que no
-     *   estaba muerto de verdad, y hay que DEVOLVERLO. `linkSync(caduco, cerrojo)` crea un
-     *   segundo nombre para el MISMO inodo del `.caduco` en la ruta del cerrojo: si esa ruta
-     *   sigue libre (nadie más ha escrito ahí desde que la dejamos vacía con el `rename`),
-     *   tiene éxito y el cerrojo vivo queda restituido tal cual estaba. Si un TERCERO ya
-     *   escribió un cerrojo nuevo en esa ruta mientras tanto, `link` falla con `EEXIST` —esa
-     *   es una carrera de orden superior, exige un tercer proceso en el mismo instante— y
-     *   entonces no se restituye nada (machacar el cerrojo del tercero sería la misma pérdida
-     *   que se intenta evitar): se dice el dueño que haya. El `.caduco` se borra al final de
-     *   las dos ramas.
-     * - Si el `.caduco` nombra un pid muerto, el nuestro, o es ilegible, la recogida era
-     *   legítima y sigue el camino de siempre: `wx` sobre la ruta que quedó libre, y
-     *   relectura de confirmación.
      */
     tomarCerrojo() {
       mkdirSync(base, { recursive: true, mode: 0o700 });
-
-      const intentar = (): boolean => {
-        try {
-          writeFileSync(cerrojo, `${JSON.stringify({ pid, desde: new Date().toISOString() })}\n`, {
-            encoding: "utf8",
-            mode: 0o600,
-            flag: "wx",
-          });
-          return true;
-        } catch (error) {
-          if ((error as NodeJS.ErrnoException).code === "EEXIST") return false;
-          throw error;
-        }
-      };
-
-      const confirmar = (): { tomado: true } | { tomado: false; dePid: number } => {
-        const dueño = leerDueño();
-        if (dueño?.pid === pid) return { tomado: true };
-        // Alguien escribió encima entre nuestro `wx` y esta relectura: perdimos la carrera.
-        // -1 nunca es un pid real: es lo que se devuelve si ni siquiera el ganador se puede
-        // leer, que no debería pasar en la práctica pero no es motivo para lanzar — fallar
-        // aquí bloquearía al llamante sin decir por qué.
-        return { tomado: false, dePid: dueño?.pid ?? -1 };
-      };
+      asegurarModo(base, 0o700);
 
       if (intentar()) return confirmar();
 
@@ -227,65 +341,11 @@ export function crearTareasEnDisco(opciones: {
       if (dueño && dueño.pid !== pid && vivo(dueño.pid)) {
         return { tomado: false, dePid: dueño.pid };
       }
+      return recoger();
+    },
 
-      // Dueño soy yo según esta FOTO, está muerto, o el fichero es ilegible: se aparta para
-      // poder comprobar con autoridad qué era, después — esa foto puede haberse quedado
-      // vieja mientras el `rename` corría (ver el comentario de arriba).
-      // La cuarentena lleva el PID, y eso NO es cosmético: con un nombre compartido
-      // (`.caduco` a secas) la propia limpieza de más abajo se llevaba por delante el
-      // cerrojo vivo de otro. Medido: A recoge —`rename` a la cuarentena, `wx`, confirma— y,
-      // en el hueco entre su confirmación y su limpieza, el `rename` de B mete el cerrojo
-      // VIVO de A en esa misma ruta compartida (POSIX `rename` reemplaza el destino sin
-      // chistar); el `rmSync` de A borra entonces su PROPIO cerrojo creyendo borrar el
-      // muerto de antes, y B —que ya no encuentra nada que leer ahí— se cree la recogida
-      // legítima. A decía `{tomado:true}` sin fichero en disco y B se lo llevaba: dos
-      // dueños. Con la ruta por proceso, el `rename` de B solo puede aterrizar en la
-      // cuarentena de B, donde la lectura autoritativa de abajo ve a A vivo y lo restituye.
-      const caduco = `${cerrojo}.caduco-${pid}`;
-      try {
-        renombrar(cerrojo, caduco);
-      } catch (error) {
-        if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
-        // Otro proceso ya apartó el mismo cerrojo: nos ganó la recogida. Puede que ya tenga
-        // el suyo escrito, o que lo esté escribiendo en este instante — un solo reintento
-        // del `wx` y, si sigue ocupado, se dice de quién es.
-        if (intentar()) return confirmar();
-        const otro = leerDueño();
-        return { tomado: false, dePid: otro?.pid ?? -1 };
-      }
-
-      // El `rename` tuvo éxito: el inodo apartado es EXCLUSIVAMENTE nuestro ya, así que esta
-      // lectura sí vale con autoridad — al contrario que la de `dueño`, de antes del rename.
-      const apartado = leerDueño(caduco);
-      if (apartado && apartado.pid !== pid && vivo(apartado.pid)) {
-        // Nos llevamos por delante un cerrojo VIVO: hay que devolverlo. `link` falla con
-        // `EEXIST` si un TERCERO ya escribió un cerrojo nuevo en esa ruta mientras tanto —
-        // ahí no se restituye nada, porque machacar el suyo sería la misma pérdida que se
-        // intenta evitar — y se dice el dueño que haya.
-        try {
-          enlazar(caduco, cerrojo);
-        } catch (error) {
-          if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
-          const tercero = leerDueño();
-          borrar(caduco);
-          return { tomado: false, dePid: tercero?.pid ?? -1 };
-        }
-        borrar(caduco);
-        return { tomado: false, dePid: apartado.pid };
-      }
-
-      // El `.caduco` nombraba un cerrojo muerto de verdad, el nuestro, o era ilegible: la
-      // recogida es legítima. La ruta quedó libre con el `rename` de arriba. Si alguien crea
-      // un cerrojo nuevo en el hueco minúsculo entre eso y nuestro `wx` de abajo (un tercer
-      // proceso arrancando desde cero, sin dueño previo que recoger), nuestro propio `wx` lo
-      // ve como cualquier otro «ya hay uno» y no hace falta un caso especial.
-      const resultado = intentar() ? confirmar() : { tomado: false as const, dePid: leerDueño()?.pid ?? -1 };
-      // Basura de un cuelgue ajeno: se borra tras resolver, y si el borrado falla da igual —
-      // nadie vuelve a mirar esa ruta. Un proceso que muera entre el `rename` y esta línea
-      // deja su `.caduco-<pid>` ahí para siempre: es un fichero de basura y no un cerrojo,
-      // porque `tomarCerrojo` solo mira `corredor.lock` — que ese `rename` dejó libre.
-      borrar(caduco);
-      return resultado;
+    sigoSiendoDueño() {
+      return leerDueño()?.pid === pid;
     },
     soltarCerrojo() {
       // Solo el propio: soltar el de otro dejaría dos corredores.

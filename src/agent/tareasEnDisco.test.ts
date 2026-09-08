@@ -1,6 +1,6 @@
 // src/agent/tareasEnDisco.test.ts
 import { describe, expect, it, beforeEach, afterEach, vi } from "vitest";
-import { mkdtempSync, rmSync, writeFileSync, mkdirSync, existsSync, readFileSync, renameSync, statSync } from "node:fs";
+import { mkdtempSync, rmSync, writeFileSync, mkdirSync, existsSync, readFileSync, renameSync, statSync, linkSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { crearTareasEnDisco } from "./tareasEnDisco.js";
@@ -303,6 +303,70 @@ describe("tareasEnDisco", () => {
     expect(deA).toEqual({ tomado: true });
     expect(JSON.parse(readFileSync(rutaCerrojo, "utf8"))).toMatchObject({ pid: 100 });
     expect(deB).toEqual({ tomado: false, dePid: 100 });
+  });
+
+  it("el residuo que esta capa NO cierra: con un TERCERO en la ruta, el apartado se pierde", () => {
+    // La rama `EEXIST` de la restitución, dicha como lo que es en vez de como una negativa
+    // inofensiva. Orden, con tres procesos: A recoge el cerrojo muerto y se lo queda; B, con
+    // una foto vieja, aparta el cerrojo VIVO de A con su `rename`; en el hueco que B acaba de
+    // abrir, un TERCERO (300) escribe el suyo en la ruta libre; B intenta restituir el de A y
+    // `link` falla con `EEXIST`. B no machaca al tercero —sería la misma pérdida— así que
+    // declina diciendo de quién es AHORA, y el cerrojo de A se queda sin restituir.
+    //
+    // Decidir «el dueño está muerto» es una observación de un instante y no hay primitiva de
+    // ficheros que permita actuar sobre ella atómicamente, así que este orden no se puede
+    // cerrar aquí. El test lo fija como comportamiento CONOCIDO —no como el deseado— y la
+    // segunda mitad es la que importa: lo que hace que A se entere es `sigoSiendoDueño`.
+    mkdirSync(join(base, "tareas"), { recursive: true });
+    const rutaCerrojo = join(base, "tareas", "corredor.lock");
+    writeFileSync(rutaCerrojo, `${JSON.stringify({ pid: 999 })}\n`);
+
+    const a = crearTareasEnDisco({ base, pid: 100, vivo: () => false });
+    let deA: { tomado: boolean } | undefined;
+
+    const renombrarDeB = (origen: string, destino: string): void => {
+      deA = a.tomarCerrojo();
+      renameSync(origen, destino);
+    };
+    // El tercero entra justo antes de que B intente restituir: `link` se encuentra la ruta
+    // ocupada, que es la única forma de llegar a esa rama.
+    const enlazarConTerceroDelante = (existente: string, nuevo: string): void => {
+      writeFileSync(nuevo, `${JSON.stringify({ pid: 300 })}\n`);
+      linkSync(existente, nuevo);
+    };
+
+    const b = crearTareasEnDisco({
+      base,
+      pid: 200,
+      vivo: (p) => p !== 999,
+      renombrar: renombrarDeB,
+      enlazar: enlazarConTerceroDelante,
+    });
+
+    // B declina y nombra al tercero, no a A: es de quien es la ruta ahora.
+    expect(b.tomarCerrojo()).toEqual({ tomado: false, dePid: 300 });
+    expect(deA).toEqual({ tomado: true });
+    // Y aquí está el residuo, sin disfrazarlo: A creyó tomarlo y ya no lo tiene.
+    expect(JSON.parse(readFileSync(rutaCerrojo, "utf8"))).toMatchObject({ pid: 300 });
+    expect(a.sigoSiendoDueño()).toBe(false);
+  });
+
+  it("`sigoSiendoDueño` es lo que hace verdad «un solo corredor»: se pregunta en disco, cada vez", () => {
+    // No es un booleano guardado al tomar el cerrojo: `tomarCerrojo` no puede garantizar por
+    // sí solo que no haya dos dueños (su comentario dice por qué), así que la pregunta tiene
+    // que ir al disco antes de cada cosa consecuente. Con una marca en memoria, el que perdió
+    // el cerrojo arrancaría tareas igual.
+    const disco = crearTareasEnDisco({ base, pid: 100 });
+    expect(disco.tomarCerrojo()).toEqual({ tomado: true });
+    expect(disco.sigoSiendoDueño()).toBe(true);
+
+    // Otro proceso se lo lleva por delante (el residuo de arriba, o un borrado a mano).
+    writeFileSync(join(base, "tareas", "corredor.lock"), `${JSON.stringify({ pid: 200 })}\n`);
+    expect(disco.sigoSiendoDueño()).toBe(false);
+
+    // Y sin cerrojo tampoco: no hay dueño que confirmar.
+    rmSync(join(base, "tareas", "corredor.lock"));
+    expect(disco.sigoSiendoDueño()).toBe(false);
   });
 
   it.skipIf(process.platform === "win32")(
