@@ -171,11 +171,9 @@ const SESIONES_EN_DISCO: PuertoDeSesiones = {
  * enlace roto) no es un proyecto sobre el que abrir nada, y esta puerta falla CERRADO.
  */
 export function esProyectoEnDisco(raiz: string): boolean {
-  try {
-    return existsSync(join(raiz, ".xonecode", "config.json"));
-  } catch {
-    return false;
-  }
+  // Sin `try`: `existsSync` no lanza nunca —traga cualquier error del sistema y devuelve
+  // false—, así que envolverlo sugeriría un peligro que no existe.
+  return existsSync(join(raiz, ".xonecode", "config.json"));
 }
 
 /** Lo mínimo que el vestíbulo necesita de una `SesionReal` para cambiar de proyecto. */
