@@ -9,6 +9,73 @@ Estados, los cuatro que se pidieron y ninguno más: **nuevo**, **en proceso**,
 
 ---
 
+## 0. Revisión del 8-09-2026: las tareas son AUTÓNOMAS
+
+Decisión del usuario, después de que este documento se escribiera y con las cinco primeras
+tareas ya implementadas. Su enunciado:
+
+> Las tareas debieran hacer todo sin intervención del usuario: nuevas funcionalidades,
+> refactorizar y arreglar errores, documentar, etc. Además debiera ser autónomo a no ser que
+> sea una decisión imprescindible que debe tomar el desarrollador; en ese caso cambia el
+> estado a esperando por feedback, se edita la tarea y se agrega el feedback del usuario. El
+> plan no necesita aprobación del usuario: se planifica, se desarrolla, se evalúa con un QA o
+> juez, y se entrega.
+
+Lo que eso cambia, y lo que NO:
+
+**Una tarea APLICA sus escrituras.** No pide aprobación al escribir un `.xne`. La
+autorización no es un interruptor nuevo: **es el acto de crear la tarea**. Elegir un
+proyecto y escribir un encargo ES decir «trabaja en esto sin preguntarme», y por eso no hay
+un ajuste aparte que armar ni que recordar — sin tarea creada no hay escritura autónoma
+posible. Es la misma forma del `seAplicaSinAprobacion` de un proyecto offline (la decisión la
+toma un humano, una vez, a sabiendas) pero por un camino distinto y con otro alcance, así que
+**no se reutiliza ese ajuste**: el suyo dice «el humano que está aquí ha decidido no pulsar»,
+y aquí no hay nadie aquí.
+
+**Y por eso el sitio de la aprobación no se queda vacío.** La aprobación no estaba por la
+propiedad del repo: estaba porque XOne ignora en silencio lo desconocido, así que un atributo
+inventado no da error sino un bug mudo, y el diff era el único momento en que alguien lo veía
+antes de que existiera. Quitando al humano, ese papel lo ocupan DOS piezas, y las dos hacen
+falta:
+1. **El verificador, que ya está en el turno** (`turnoReal.ts#conVerificacion`): corre
+   `xone-simulator validate --json` al terminar un turno que escribió, reparte los hallazgos
+   entre lo que el turno tocó y lo preexistente, y repara hasta dos veces. Eso ya existe y ya
+   corre; para una tarea pasa de red de seguridad a requisito.
+2. **Un juez de QA antes de entregar**, que es lo que el usuario pide. Y con la regla que este
+   repo ya tiene escrita para la subida autónoma: **el veredicto del juez no basta solo.** Las
+   condiciones las comprueba el CÓDIGO —verificador en verde, árbol de git limpio, nada
+   pendiente— porque a un modelo se le puede pedir que avise y a veces no avisa. Es el mismo
+   argumento por el que los avisos de honestidad son código y no prompt.
+
+**El plan no se aprueba.** Planificar y desarrollar son ya lo que el orquestador hace
+delegando en `planner` y `dev`; lo que se quita es la idea de un paso de revisión humana
+entre los dos.
+
+**«Requiere atención» pasa a significar «esperando feedback», y solo eso.** Ya no es donde
+cae toda escritura: es donde cae una decisión que el desarrollador tiene que tomar de verdad.
+Y deja de ser un estado terminal de hecho — se resuelve **editando la tarea** para añadir el
+feedback, y la tarea sigue. El identificador del enum (`requiere-atencion`) no se toca: está
+en disco, en el cable, en el store y en los tests, y renombrarlo sería churn por una etiqueta.
+Lo que dice la interfaz sí es lo que el usuario pidió.
+
+**Lo que NO cambia, y ahora importa más:**
+- **Gana la persona.** Una tarea no arranca en un proyecto cuya consola humana está abierta.
+  Con escrituras aplicándose solas, dos agentes sobre el mismo árbol pasa de molesto a
+  destructivo.
+- **La sesión de la tarea se persiste, con su ref de git.** Es lo que hace que lo que escribió
+  una tarea se pueda REVISAR después en la pestaña Revisión. Sin aprobación previa, la
+  revisión posterior es la única forma de mirar; un diff por tarea deja de ser una comodidad.
+- **Lo que la tarea aplicó se DICE.** El mismo criterio que el aviso de honestidad de
+  `seAplicaSinAprobacion`, que saca los NOMBRES de los ficheros y no un contador: una
+  escritura que nadie aprobó no puede ser además muda.
+- **Fuera del proyecto no se escribe.** Las guardas de ruta (`artefactoFueraDeSitio`, las
+  vistas aplanadas, `/.env`, `/.git`, `/.xonecode`) no eran parte de la aprobación y siguen
+  enteras. Quitar el modal no abre ninguna de esas puertas.
+
+**Lo que sigue fuera de alcance:** deshacer lo que hizo una tarea con un botón. La ref de
+sesión hace que sea posible y la pestaña Revisión que sea visible, pero un «revertir esta
+tarea» es otra tanda, y decirlo es mejor que insinuarlo.
+
 ## 1. El hallazgo que gobierna el diseño
 
 **Una consola de proyecto sin cliente enganchado hoy rechaza toda aprobación en silencio.**
@@ -28,16 +95,22 @@ De ahí la regla dura de todo el documento:
 > nunca se declara terminada porque el tiempo se agotó. Lo que no puede resolver sola, lo
 > aparca con el motivo.
 
+**Esa regla se REVISÓ, y su primera mitad ya no vale.** Lo que sigue siendo cierto es el
+hallazgo: una consola sin cliente rechaza en silencio, y por eso hacía falta
+`consolaDeTarea` — sin ella una tarea autónoma habría mentido. Lo que cambia es la
+conclusión que se sacó de él. Ver §0.
+
 ## 2. Lo que NO se decide aquí
 
 - **Un demonio que sobreviva al proceso.** Las tareas corren dentro del proceso de la consola.
   Ver §6: la cola sobrevive, el turno en vuelo no, y eso se dice.
 - **Que el agente VEA una imagen.** Los adjuntos se montan como ficheros; pasarlos como
   imagen en el contexto del modelo es multimodal de verdad y es otra tanda (§7).
-- **Un juez que decida si el trabajo está bien hecho.** «Terminada» significa que el turno
-  acabó limpio, no que el resultado sea correcto — igual que hoy la subida autónoma está
-  declarada y sin implementar porque el veredicto de un juez no basta solo
-  (`core/cloudstudio.ts#PoliticaDeAprobacion`).
+- ~~**Un juez que decida si el trabajo está bien hecho.**~~ **Esto ENTRÓ en el alcance** con
+  la revisión de §0: sin un humano que apruebe, el juez es una de las dos piezas que ocupan
+  su sitio. Lo que sigue en pie del argumento viejo es que **el veredicto de un juez no basta
+  solo** (`core/cloudstudio.ts#PoliticaDeAprobacion`): las condiciones las comprueba el
+  código.
 - **Tareas que se disparan por tiempo o por evento.** Aquí las crea una persona.
 
 ## 3. Los estados, y por qué cuatro bastan
