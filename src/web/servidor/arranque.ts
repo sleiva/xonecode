@@ -922,7 +922,16 @@ export function montarRutas(
       const identidad = proyectos.find((p) => p.id === peticion.proyecto);
       const raiz = vestibulo.raizDeProyecto(entornoElegido, identidad?.nombre ?? peticion.proyecto);
       if (peticion.accion === "borrar") {
-        const { borrada, cerroLaAbierta } = await vestibulo.borrarSesion(raiz, peticion.sesion);
+        const { borrada, cerroLaAbierta, motivo } = await vestibulo.borrarSesion(raiz, peticion.sesion);
+        // Un `motivo` es que el vestíbulo DECLINÓ, y entonces se dice ese motivo y no el
+        // «ya no estaba» de siempre: la sesión sigue ahí, y contar lo contrario dejaría al
+        // usuario creyendo que la fila se va a ir del listado. Va además a `aviso`, como
+        // los demás rechazos de este camino.
+        if (motivo !== undefined) {
+          aviso = motivo;
+          informar(motivo);
+          return;
+        }
         // Se dice lo que pasó, incluido el «no había nada»: un menú que borra y calla deja
         // dudando de si la fila se fue porque se borró o porque falló el listado.
         informar(

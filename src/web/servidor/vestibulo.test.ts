@@ -1133,6 +1133,85 @@ describe("abrirParaTarea — la segunda puerta", () => {
   });
 
   /**
+   * Borrar la sesión que una TAREA está usando: se declina, no se borra ni se resucita.
+   *
+   * `borrarSesion` cierra antes de borrar solo la sesión ABIERTA, porque `cerrar()` llama a
+   * `volcar()` y anotar RESUCITA la entrada del índice. Una consola de tarea tiene la misma
+   * `volcar` y no está en `abierto`, así que nadie la cerraba: el usuario borraba, la barra
+   * se lo confirmaba, y al siguiente refresco la sesión estaba otra vez ahí — como si el
+   * botón no hubiera hecho nada. Y con las sesiones de tarea persistiéndose eso deja de ser
+   * hipotético.
+   *
+   * Cerrar la consola de la tarea tampoco vale: sería matar un turno en curso porque alguien
+   * limpió una fila de la barra. Así que se declina CON MOTIVO — y antes de tocar nada, que
+   * es lo que importa: `olvidarMarcaDeSesion` y `olvidarMemoriaDeHilo` no son condicionales,
+   * así que borrar aquí se habría llevado la ref de git y el checkpoint de una conversación
+   * que el agente sigue escribiendo.
+   */
+  it("borrar la sesión de una tarea en curso se DECLINA: ni se borra ni resucita", async () => {
+    const base = baseTemporal();
+    const s = sesionesEnMemoria();
+    const olvidadas: string[] = [];
+    const memoriasOlvidadas: string[] = [];
+    const v = crearVestibulo({
+      ...dobles(),
+      origenDeTrabajo: "global",
+      sesiones: s.puerto,
+      baseDeWorkspace: base,
+      olvidarMarcaDeSesion: async (_raiz, id) => {
+        olvidadas.push(id);
+      },
+      olvidarMemoriaDeHilo: async (_raiz, id) => {
+        memoriasOlvidadas.push(id);
+      },
+      // Un ejecutor que NO es doble: `volcar` sale antes por `esDoble` con el guionizado, y
+      // sin volcado no hay entrada en el índice que borrar.
+      crearEjecutor: () => async (_peticion, _estado, consola) => {
+        consola.escribir("hecho\n");
+      },
+      // Con el `correrConsola` de verdad, y no un `correr` que devuelve al instante: la
+      // guarda es sobre una tarea EN CURSO, y un lazo que retorna ya deja `cerrada` en
+      // `true` — el test no probaría el caso que le importa.
+    });
+    const raiz = proyectoEnDisco(base, "A");
+    const deTarea = await v.abrirParaTarea(raiz);
+    // Un turno vuelca, y con el volcado nace la entrada del índice: desde ahí la sesión de
+    // la tarea se ve en la barra y tiene un «…» con «eliminar».
+    await deTarea.ejecutarTurno("arregla el login", deTarea.estadoDeSesion, deTarea.consola.consola);
+    const id = deTarea.sesion;
+    expect(id).toBe(deTarea.idDeHilo);
+    expect(v.sesionesDe(raiz).map((x) => x.id)).toEqual([id]);
+
+    const resultado = await v.borrarSesion(raiz, id!);
+
+    // El DAÑO primero, y con `soft` para que se vean todos: lo que hay que vigilar no es el
+    // valor devuelto sino que no se haya tocado nada. La entrada sigue ahí en el INSTANTE
+    // de después —no «vuelve» en el siguiente volcado, que es cómo el usuario lo veía—, y
+    // ni la ref de git ni el checkpoint se han ido: las dos llamadas son incondicionales en
+    // ese camino, y el agente sigue escribiendo en esa conversación.
+    expect.soft(v.sesionesDe(raiz).map((x) => x.id)).toEqual([id]);
+    expect.soft(olvidadas).toEqual([]);
+    expect.soft(memoriasOlvidadas).toEqual([]);
+    // La tarea sigue trabajando, sin enterarse.
+    expect.soft(deTarea.cerrada).toBe(false);
+    // Y ya después, lo que se le contesta a quien pulsó.
+    expect.soft(resultado.borrada).toBe(false);
+    expect.soft(resultado.motivo).toMatch(/tarea/i);
+    // El motivo sale al cable, que puede ir por un túnel: ninguna ruta de la máquina.
+    expect.soft(resultado.motivo).not.toContain(base);
+    await deTarea.ejecutarTurno("y ahora el logout", deTarea.estadoDeSesion, deTarea.consola.consola);
+    expect(v.sesionesDe(raiz).map((x) => x.id)).toEqual([id]);
+
+    await deTarea.cerrar();
+    // Cerrada la tarea, la sesión ya se puede borrar: la guarda es «en curso», no «para
+    // siempre».
+    expect(await v.borrarSesion(raiz, id!)).toEqual({ borrada: true, cerroLaAbierta: false });
+    expect(v.sesionesDe(raiz)).toEqual([]);
+    await v.cerrar();
+    rmSync(base, { recursive: true, force: true });
+  });
+
+  /**
    * Lo que esta puerta NO resuelve, MEDIDO aquí para que no se descubra en producción.
    *
    * `volcar()` lee `consolaWeb.actos()`, o sea la piel de ESTA consola de proyecto. Un

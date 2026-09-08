@@ -437,8 +437,18 @@ export interface Vestibulo {
    * índice que se acaba de borrar. Cerrando antes, lo que se borra ya no lo va a reescribir
    * nadie — y el cliente se queda sin proyecto abierto, que es lo honesto: la conversación
    * que estaba mirando ya no existe.
+   *
+   * Y si la sesión es la de una TAREA en curso, no se borra: se DECLINA con `motivo`. Es el
+   * mismo problema con otro dueño —una consola de tarea tiene la misma `volcar` y no está
+   * en `abierto`, así que resucitaría la entrada al siguiente turno— pero no se puede
+   * resolver igual: cerrarla sería matar un turno del agente porque alguien limpió una fila
+   * de la barra. El `motivo` no lleva ninguna ruta de la máquina: sale por el cable, que
+   * puede ir por un túnel (`--anfitrion`).
    */
-  borrarSesion(raiz: string, id: string): Promise<{ borrada: boolean; cerroLaAbierta: boolean }>;
+  borrarSesion(
+    raiz: string,
+    id: string
+  ): Promise<{ borrada: boolean; cerroLaAbierta: boolean; motivo?: string }>;
   /** Le pone nombre a una sesión guardada. `false` si no existe o el título viene vacío. */
   renombrarSesion(raiz: string, id: string, titulo: string): boolean;
   /** El paso 3 completo: escribe el alta y baja la copia local. */
@@ -1134,6 +1144,21 @@ export function crearVestibulo(opciones: OpcionesDelVestibulo): Vestibulo {
     },
 
     async borrarSesion(raiz, id) {
+      // Antes de tocar NADA: si esa conversación es la de una tarea en curso, no se borra.
+      // `olvidarMarcaDeSesion` y `olvidarMemoriaDeHilo` no son condicionales, así que
+      // borrar aquí se habría llevado la ref de git y el checkpoint de un hilo que el
+      // agente sigue escribiendo — y su siguiente `volcar()` habría devuelto la fila a la
+      // barra, dejando al usuario con un botón que parece no funcionar. Ver `deTareas`.
+      const deUnaTarea = [...deTareas].some(
+        (consola) => consola.raiz === raiz && !consola.cerrada && (consola.sesion === id || consola.idDeHilo === id)
+      );
+      if (deUnaTarea) {
+        return {
+          borrada: false,
+          cerroLaAbierta: false,
+          motivo: "esa conversación es la de una tarea en curso: se podrá borrar cuando termine",
+        };
+      }
       // Cerrar ANTES de borrar: ver el comentario del contrato. Y solo si es ESA sesión —
       // cerrar el proyecto entero porque se borró una conversación vieja de la lista sería
       // llevarse por delante el trabajo en curso.

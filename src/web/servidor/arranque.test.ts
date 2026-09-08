@@ -1748,6 +1748,45 @@ describe("montarRutas — el cable, por fin conectado", () => {
       expect(dos.recibidos.filter((m) => m.clase === "selector")).toHaveLength(0);
     });
   });
+
+  /**
+   * Un borrado DECLINADO no se cuenta como «ya no estaba».
+   *
+   * `borrarSesion` declina cuando la conversación es la de una tarea en curso (ver
+   * `vestibulo.ts`), y el mensaje de siempre para `borrada: false` es «esa sesión ya no
+   * estaba» — que ahí sería falso en la dirección peor: la fila sigue en la barra, y al
+   * usuario le habríamos dicho que se fue. Se dice el motivo del vestíbulo y nada más.
+   */
+  it("un borrado declinado dice el MOTIVO, no «esa sesión ya no estaba»", async () => {
+    const servidor = servidorDeMentira();
+    const dichos: string[] = [];
+    const motivo = "esa conversación es la de una tarea en curso: se podrá borrar cuando termine";
+    montarRutas(
+      servidor,
+      {
+        ...vestibuloDePrueba(),
+        borrarSesion: async () => ({ borrada: false, cerroLaAbierta: false, motivo }),
+      },
+      { informar: (texto) => dichos.push(texto) }
+    );
+    const cliente = clienteDeMentira();
+    await servidor.rutas.get(`GET ${RUTA_EVENTOS}`)!(cliente.peticion, cliente.respuesta);
+    await asentar();
+
+    await postear(
+      servidor.rutas.get(`POST ${RUTA_ACCION}`)!,
+      JSON.stringify({ clase: "sesionAccion", accion: "borrar", proyecto: "p1", sesion: "s1" })
+    );
+    await asentar();
+
+    expect(dichos).toContain(motivo);
+    expect(dichos).not.toContain("esa sesión ya no estaba");
+    expect(dichos).not.toContain("sesión borrada");
+    // Y viaja en el alta como los demás rechazos de este camino, que es lo que la barra
+    // pinta sin tener que leer el transcript.
+    const altas = cliente.recibidos.filter((m) => m.clase === "alta");
+    expect((altas.at(-1) as { aviso?: string }).aviso).toBe(motivo);
+  });
 });
 
 describe("arrancarConsolaWeb — las comprobaciones, en orden", () => {
