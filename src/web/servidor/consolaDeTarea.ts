@@ -20,21 +20,23 @@
  * aplicar nada. Y al revés: la marca del `settings.json` de un proyecto offline no decide
  * sobre las tareas de nadie. Dos autorizaciones distintas, con alcances distintos.
  *
- * **Lo aplicado se DICE**, por dos canales y con los NOMBRES: al transcript (que es lo que
- * lee quien abre la sesión) y por `aplicado`, que el corredor guarda en la tarea. Una
+ * **Lo autorizado se DICE**, por dos canales y con los NOMBRES: al transcript (que es lo que
+ * lee quien abre la sesión) y por `autorizado`, que el corredor guarda en la tarea. Una
  * escritura que nadie aprueba no puede ser además muda — es la regla del evento `artefacto`
  * y la del aviso de honestidad de `seAplicaSinAprobacion`, y aquí es el ÚNICO aviso que
  * hay: el de `turnoReal.ts` sale solo por su rama `todoAutomatico`, que este camino no
  * toma. Con los nombres y no un contador, porque un contador a secas es el aviso que enseña
  * a ignorar los avisos.
  *
- * **Lo que se apunta es lo AUTORIZADO, no lo escrito.** La decisión se toma antes de que el
- * backend escriba, así que una ruta que las guardas de ruta rechazan —`/artifacts/`, una
- * vista aplanada, `/.env`— se apunta aquí y no aparece en el disco (medido en el test de
- * este fichero: las cinco se siguen rechazando, unas por el backend y otras por
- * `permisosDe`). Quien dice qué hay en el disco es git, y eso se lee en Revisión con la ref
- * de la sesión. La misma imprecisión tiene `aplicadasSinPreguntar` en `turnoReal.ts`, y por
- * el mismo motivo.
+ * **Lo que se apunta es lo AUTORIZADO, no lo escrito, y de ahí sale el nombre.** La decisión
+ * se toma antes de que el backend escriba, así que una ruta que las guardas de ruta rechazan
+ * —`/artifacts/`, una vista aplanada, `/.env`— se apunta aquí y no aparece en el disco
+ * (medido en el test de este fichero: las cinco se siguen rechazando, unas por el backend y
+ * otras por `permisosDe`). En el transcript eso se ve como esta línea seguida de la línea de
+ * la tool marcada en ERROR, que es cómo quien lo lee recupera la verdad — y es la razón de
+ * que las guardas devuelvan `{error}` en vez de lanzar. Quien dice qué hay en el disco es
+ * git, y eso se lee en Revisión con la ref de la sesión. La misma imprecisión tiene
+ * `aplicadasSinPreguntar` en `turnoReal.ts`, y por el mismo motivo.
  *
  * **Lo que NO cambia: `preguntar` y `leerSecreto`.** Aplicar una escritura no es contestar
  * por una persona. Hoy una consola de proyecto sin
@@ -133,7 +135,11 @@ export function crearConsolaDeTarea(opciones: {
   /** Aparca la tarea con este motivo. Se llama UNA vez por turno. */
   aparcar: (motivo: string) => void;
   /**
-   * Los ficheros que se acaban de aplicar sin que nadie los aprobara, con ruta relativa.
+   * Las escrituras que se acaban de AUTORIZAR sin que nadie las aprobara, con ruta relativa.
+   *
+   * «Autorizar» y no «aplicar»: esto se llama cuando se toma la decisión, y el backend
+   * puede rechazar la ruta después (ver la cabecera). El nombre del campo donde acaba
+   * (`Tarea.autorizadas`) dice lo mismo y por lo mismo.
    *
    * Se llama una vez por TANDA aprobada y no una por turno, al contrario que `aparcar`: un
    * turno aplica en varias rondas de aprobación (medido: cuatro en un turno que insiste), y
@@ -141,9 +147,9 @@ export function crearConsolaDeTarea(opciones: {
    * los acumula y los guarda en la tarea.
    *
    * Opcional porque quien monta esta consola puede no tener dónde guardarlos; entonces lo
-   * aplicado se dice igualmente en el transcript, que es lo que no puede faltar.
+   * autorizado se dice igualmente en el transcript, que es lo que no puede faltar.
    */
-  aplicado?: (ficheros: readonly string[]) => void;
+  autorizado?: (ficheros: readonly string[]) => void;
   escribir: Escribir;
   /**
    * La piel con la que el turno se pinta. Ausente y `crearEjecutorReal` cae en
@@ -220,7 +226,7 @@ export function crearConsolaDeTarea(opciones: {
       };
 
       const decisiones = new Map<string, Decision>();
-      const aplicadas: string[] = [];
+      const autorizadas: string[] = [];
       const sinResolver: string[] = [];
       for (const p of pendientes) {
         /**
@@ -237,17 +243,17 @@ export function crearConsolaDeTarea(opciones: {
           continue;
         }
         decisiones.set(p.id, { type: "approve" });
-        aplicadas.push(nombreDe(p));
+        autorizadas.push(nombreDe(p));
       }
 
-      if (aplicadas.length > 0) {
+      if (autorizadas.length > 0) {
         // Con los NOMBRES, y diciendo POR QUÉ no hubo aprobación: sin la palabra «tarea»
         // esto se lee como que la aprobación se rompió.
         opciones.escribir(
-          `\n✎ ${aplicadas.length} escritura(s) aplicadas sin aprobación —es una tarea de fondo, y ` +
-            `la autorización fue crearla—: ${aplicadas.join(", ")}\n`
+          `\n✎ ${autorizadas.length} escritura(s) autorizadas sin aprobación —es una tarea de fondo, ` +
+            `y la autorización fue crearla—: ${autorizadas.join(", ")}\n`
         );
-        opciones.aplicado?.(aplicadas);
+        opciones.autorizado?.(autorizadas);
       }
       /**
        * Y lo que no se pudo resolver aparca la tarea, con los nombres y sin leerse como un

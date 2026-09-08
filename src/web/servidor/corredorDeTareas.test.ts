@@ -70,7 +70,7 @@ function proyectoDeMentira() {
   const encargos: string[] = [];
   const cierres: string[] = [];
   const aparcadores: ((motivo: string) => void)[] = [];
-  const aplicadores: ((ficheros: readonly string[]) => void)[] = [];
+  const autorizadores: ((ficheros: readonly string[]) => void)[] = [];
   interface Viva {
     resolver: () => void;
     rechazar: (error: unknown) => void;
@@ -82,17 +82,17 @@ function proyectoDeMentira() {
     acabar: () => vivas.pop()?.resolver(),
     romper: (error: unknown) => vivas.pop()?.rechazar(error),
     aparcar: (motivo: string) => aparcadores.at(-1)?.(motivo),
-    /** Lo que la consola de tarea apunta al APLICAR una escritura sin aprobación. */
-    aplicar: (ficheros: readonly string[]) => aplicadores.at(-1)?.(ficheros),
+    /** Lo que la consola de tarea apunta al AUTORIZAR una escritura sin aprobación. */
+    autorizar: (ficheros: readonly string[]) => autorizadores.at(-1)?.(ficheros),
     abrir: async (raiz: string): Promise<ConsolaParaTarea> => {
       let viva: Viva | undefined;
       return {
         raiz,
         idDeHilo: `hilo-${raiz}`,
-        correrTarea: async (encargo, aparcar, aplicado) => {
+        correrTarea: async (encargo, aparcar, autorizado) => {
           encargos.push(encargo);
           aparcadores.push(aparcar);
-          if (aplicado !== undefined) aplicadores.push(aplicado);
+          if (autorizado !== undefined) autorizadores.push(autorizado);
           await new Promise<void>((resolver, rechazar) => {
             viva = { resolver, rechazar };
             vivas.push(viva);
@@ -110,22 +110,22 @@ function proyectoDeMentira() {
   };
 }
 
-describe("lo que una tarea APLICÓ se guarda con su estado", () => {
+describe("lo que una tarea AUTORIZÓ se guarda con su estado", () => {
   /**
    * Desde §0 del diseño una tarea aplica sus escrituras sin aprobación, y su autorización
    * es el acto de crearla. Lo que queda entonces es el REGISTRO: nadie vio el diff antes,
-   * así que la única forma de saber qué tocó es lo que se apunte aquí. Con los NOMBRES y no
-   * un contador, igual que el aviso de honestidad de `seAplicaSinAprobacion`.
+   * así que la única pista de qué tocó es lo que se apunte aquí. Con los NOMBRES y no un
+   * contador, igual que el aviso de honestidad de `seAplicaSinAprobacion`.
    */
-  it("una tarea que aplica y termina deja los ficheros en el índice, RELATIVOS", async () => {
+  it("una tarea que autoriza y termina deja los ficheros en el índice, RELATIVOS", async () => {
     const { disco, estado } = discoDeMentira([TAREA()]);
     const p = proyectoDeMentira();
     const corredor = crearCorredorDeTareas({ disco, abrirParaTarea: p.abrir, pid: 1, concurrencia: () => 1 });
     await corredor.arrancar();
     await corredor.asentar();
-    // Dos tandas, como un turno de verdad: se aplica en varias rondas de aprobación.
-    p.aplicar(["/src/lista.js"]);
-    p.aplicar(["/app.xne", "/src/lista.js"]);
+    // Dos tandas, como un turno de verdad: se autoriza en varias rondas de aprobación.
+    p.autorizar(["/src/lista.js"]);
+    p.autorizar(["/app.xne", "/src/lista.js"]);
     p.acabar();
     await corredor.asentar();
 
@@ -133,24 +133,24 @@ describe("lo que una tarea APLICÓ se guarda con su estado", () => {
     expect(tarea.estado).toBe("terminada");
     // Sin repetidos, en orden, y sin la barra del backend virtual: de aquí sale lo que el
     // juez de la entrega lee, y estas cadenas viven en un fichero del usuario.
-    expect(tarea.aplicados).toEqual(["src/lista.js", "app.xne"]);
-    for (const ruta of tarea.aplicados!) {
+    expect(tarea.autorizadas).toEqual(["src/lista.js", "app.xne"]);
+    for (const ruta of tarea.autorizadas!) {
       expect(ruta.startsWith("/")).toBe(false);
       expect(ruta).not.toContain(tarea.proyecto.raiz);
     }
     await corredor.parar();
   });
 
-  it("y también al APARCAR: lo que se aplicó antes de pararse no se pierde", async () => {
+  it("y también al APARCAR: lo que se autorizó antes de pararse no se pierde", async () => {
     // El caso de verdad: la tarea escribe dos ficheros y DESPUÉS pregunta algo que necesita
-    // a una persona. El motivo explica por qué paró; lo aplicado dice qué dejó tocado, y las
-    // dos cosas hacen falta para poder atenderla.
+    // a una persona. El motivo explica por qué paró; lo autorizado dice qué dejó tocado, y
+    // las dos cosas hacen falta para poder atenderla.
     const { disco, estado } = discoDeMentira([TAREA()]);
     const p = proyectoDeMentira();
     const corredor = crearCorredorDeTareas({ disco, abrirParaTarea: p.abrir, pid: 1, concurrencia: () => 1 });
     await corredor.arrancar();
     await corredor.asentar();
-    p.aplicar(["/app.xne"]);
+    p.autorizar(["/app.xne"]);
     p.aparcar("el agente preguntó y no había nadie");
     p.acabar();
     await corredor.asentar();
@@ -158,12 +158,12 @@ describe("lo que una tarea APLICÓ se guarda con su estado", () => {
     expect(estado()[0]).toMatchObject({
       estado: "requiere-atencion",
       motivo: expect.stringMatching(/preguntó/),
-      aplicados: ["app.xne"],
+      autorizadas: ["app.xne"],
     });
     await corredor.parar();
   });
 
-  it("un turno que no aplicó nada lo dice con `[]`, que NO es lo mismo que no constar", async () => {
+  it("un turno que no autorizó nada lo dice con `[]`, que NO es lo mismo que no constar", async () => {
     const { disco, estado } = discoDeMentira([TAREA()]);
     const p = proyectoDeMentira();
     const corredor = crearCorredorDeTareas({ disco, abrirParaTarea: p.abrir, pid: 1, concurrencia: () => 1 });
@@ -171,14 +171,14 @@ describe("lo que una tarea APLICÓ se guarda con su estado", () => {
     await corredor.asentar();
     p.acabar();
     await corredor.asentar();
-    expect(estado()[0]!.aplicados).toEqual([]);
+    expect(estado()[0]!.autorizadas).toEqual([]);
     await corredor.parar();
   });
 
   it("una tarea que ni pudo ABRIR su proyecto se queda sin el campo: ausente es «no se sabe»", async () => {
     /**
      * La trampa de siempre, y aquí la dirección importa: esta tarea no corrió ningún turno
-     * —su carpeta se movió—, así que no se puede afirmar que no escribiera nada. Escribir
+     * —su carpeta se movió—, así que no se puede afirmar que no autorizara nada. Escribir
      * `[]` sería contar como medido lo que nadie midió, y el juez de la entrega lo leería
      * como «corrió y no tocó nada».
      */
@@ -195,7 +195,60 @@ describe("lo que una tarea APLICÓ se guarda con su estado", () => {
     await corredor.asentar();
     const tarea = estado()[0]!;
     expect(tarea.estado).toBe("requiere-atencion");
-    expect("aplicados" in tarea).toBe(false);
+    expect("autorizadas" in tarea).toBe(false);
+    await corredor.parar();
+  });
+
+  it("el ÚLTIMO RECURSO también lo guarda: era el único de los cuatro caminos que lo perdía", async () => {
+    /**
+     * El `.catch` que envuelve a `correr` es el último recurso: se toma cuando `correr` se
+     * rompe por su cuenta DESPUÉS del turno. El registro de unas escrituras que nadie
+     * aprobó no puede perderse justo ahí — es el mismo argumento de la regla de `sesion`:
+     * lo que se pierde cuando algo falla es lo que nadie podrá revisar después.
+     *
+     * Se llega con un índice que falla A RATOS, que es la forma real de llegar: la
+     * escritura final revienta, `aparcar` no puede escribir tampoco, y el `listar` de
+     * `renunciarSiSigueNueva` —que no está envuelto en nada— se lleva la excepción fuera de
+     * `correr`. Con el disco recuperado un instante después, este camino sí puede escribir,
+     * y lo que escriba tiene que llevar lo autorizado.
+     */
+    const base = discoDeMentira([TAREA()]);
+    let guardadas = 0;
+    /** Lecturas que quedan por reventar. Se arma al fallar la escritura final. */
+    let listadosRotos = 0;
+    const disco: TareasEnDisco = {
+      ...base.disco,
+      listar: () => {
+        if (listadosRotos > 0) {
+          listadosRotos -= 1;
+          throw Object.assign(new Error("EIO: no se puede leer el índice"), { code: "EIO" });
+        }
+        return base.disco.listar();
+      },
+      guardar: (t) => {
+        guardadas += 1;
+        // La primera es la marca de «en proceso»; la segunda es el estado final.
+        if (guardadas === 2) {
+          listadosRotos = 2;
+          throw Object.assign(new Error("EIO: no se puede escribir el índice"), { code: "EIO" });
+        }
+        base.disco.guardar(t);
+      },
+    };
+    const p = proyectoDeMentira();
+    const corredor = crearCorredorDeTareas({ disco, abrirParaTarea: p.abrir, pid: 1, concurrencia: () => 1 });
+    await corredor.arrancar();
+    await corredor.asentar();
+    p.autorizar(["/app.xne", "/src/lista.js"]);
+    p.acabar();
+    await corredor.asentar();
+
+    // Aparcada por el último recurso —no «terminada», que sería mentira— y CON el registro.
+    expect(base.estado()[0]).toMatchObject({
+      estado: "requiere-atencion",
+      motivo: expect.stringMatching(/no pudo con ella/),
+      autorizadas: ["app.xne", "src/lista.js"],
+    });
     await corredor.parar();
   });
 
@@ -211,12 +264,12 @@ describe("lo que una tarea APLICÓ se guarda con su estado", () => {
     });
     await corredor.arrancar();
     await corredor.asentar();
-    p.aplicar(["/app.xne"]);
+    p.autorizar(["/app.xne"]);
     await corredor.parar();
     expect(estado()[0]).toMatchObject({
       estado: "requiere-atencion",
       motivo: MOTIVO_CORTADA_POR_CIERRE,
-      aplicados: ["app.xne"],
+      autorizadas: ["app.xne"],
     });
   });
 });
@@ -1190,7 +1243,7 @@ describe("el volcado de la sesión de una tarea", () => {
     await corredor.arrancar();
     for (let i = 0; i < 10 && estado()[0]!.estado !== "terminada"; i += 1) await corredor.asentar();
 
-    expect(estado()[0]).toMatchObject({ estado: "terminada", aplicados: ["Clientes.xne"] });
+    expect(estado()[0]).toMatchObject({ estado: "terminada", autorizadas: ["Clientes.xne"] });
     // Y en el transcript, con el nombre: es lo que lee quien abra la sesión después.
     const sesion = estado()[0]!.sesion!;
     const jsonl = readFileSync(join(raiz, ".xonecode", "sesiones", `${sesion}.jsonl`), "utf8");

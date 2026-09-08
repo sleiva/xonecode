@@ -20,7 +20,7 @@
  * La política de QUÉ arranca no está aquí: es `core/tareas.ts#siguientesAEjecutar`, pura y
  * con sus tests. Aquí está el lazo, que es lo que no se puede probar sin dobles.
  */
-import { conAplicados, conEstado, siguientesAEjecutar, type Tarea } from "../../core/tareas.js";
+import { conAutorizadas, conEstado, siguientesAEjecutar, type Tarea } from "../../core/tareas.js";
 import { crearConsolaDeTarea } from "./consolaDeTarea.js";
 import type { ConsolaDeProyecto } from "./vestibulo.js";
 import type { TareasEnDisco } from "../../agent/tareasEnDisco.js";
@@ -64,16 +64,16 @@ export interface ConsolaParaTarea {
    * Corre el encargo.
    *
    * `aparcar` es lo que la consola de tarea llama al toparse con algo que necesita a una
-   * persona; `aplicado` es lo que llama al APLICAR escrituras sin aprobación, con las rutas
-   * relativas. Los dos son callbacks y no un valor de retorno porque el turno puede LANZAR
-   * después de haber aplicado —eso es justo lo que hace `preguntar`—, y un retorno se
-   * perdería con la excepción. `aplicado` puede llamarse varias veces: un turno aplica en
-   * varias rondas.
+   * persona; `autorizado` es lo que llama al AUTORIZAR escrituras sin aprobación, con las
+   * rutas relativas. Los dos son callbacks y no un valor de retorno porque el turno puede
+   * LANZAR después de haber autorizado —eso es justo lo que hace `preguntar`—, y un retorno
+   * se perdería con la excepción. `autorizado` puede llamarse varias veces: un turno
+   * autoriza en varias rondas de aprobación.
    */
   correrTarea(
     encargo: string,
     aparcar: (motivo: string) => void,
-    aplicado?: (ficheros: readonly string[]) => void
+    autorizado?: (ficheros: readonly string[]) => void
   ): Promise<void>;
   cerrar(): Promise<void>;
 }
@@ -117,15 +117,15 @@ export function consolaParaTarea(consola: ConsolaDeProyecto): ConsolaParaTarea {
   return {
     raiz: consola.raiz,
     idDeHilo: consola.idDeHilo,
-    correrTarea: async (encargo, aparcar, aplicado) => {
+    correrTarea: async (encargo, aparcar, autorizado) => {
       // Una consola de tarea por TURNO: su «se aparca una vez» vale por turno, y reusarla
       // para un segundo turno lo dejaría mudo.
       const deTarea = crearConsolaDeTarea({
         aparcar,
-        // Lo que la tarea aplique sin aprobación sube al corredor, que lo guarda con el
-        // estado final. Se reenvía o no está, como la piel: `aplicado: undefined` haría que
-        // un `"aplicado" in opciones` dijera que sí.
-        ...(aplicado === undefined ? {} : { aplicado }),
+        // Lo que la tarea autorice sin aprobación sube al corredor, que lo guarda con el
+        // estado final. Se reenvía o no está, como la piel: `autorizado: undefined` haría
+        // que un `"autorizado" in opciones` dijera que sí.
+        ...(autorizado === undefined ? {} : { autorizado }),
         // Lo que escriba el turno va al transcript de SU sesión.
         escribir: (texto) => dentro.escribir(texto),
         ...(dentro.piel === undefined ? {} : { piel: dentro.piel.bind(dentro) }),
@@ -208,6 +208,20 @@ export function crearCorredorDeTareas(opciones: {
     /** Corta el turno. Memoizado: cerrar dos veces la misma consola no puede volver a
      *  abortar nada ni volver a volcar. */
     cortar: () => Promise<void>;
+    /**
+     * Las escrituras que el turno AUTORIZÓ sin aprobación, con ruta relativa.
+     *
+     * **Vive en la entrada y no dentro de `correr` para que el ÚLTIMO RECURSO también las
+     * escriba.** El `.catch` que envuelve a `correr` es un camino de error, y el registro de
+     * unas escrituras que nadie aprobó es justo lo que no puede perderse ahí: es el mismo
+     * argumento de la regla de `sesion` —lo que se pierde cuando algo falla es lo que nadie
+     * podrá revisar después—.
+     *
+     * `undefined` mientras el turno no ha arrancado, y eso es la mitad de «ausente no es
+     * vacío»: una tarea cuyo proyecto ya no está nunca llega a tener lista, así que su campo
+     * se queda sin escribir en vez de afirmar que no autorizó nada.
+     */
+    autorizadas?: string[];
   }
   const enVuelo = new Map<string, EnVuelo>();
 
@@ -309,10 +323,18 @@ export function crearCorredorDeTareas(opciones: {
    * que se cumple salvo cuando algo falla no es una regla. Y relee el id en vez de recibirlo
    * porque desde el último recurso del lazo no se sabe con qué hilo se marcó.
    */
-  const aparcarMirandoLaSesion = async (tarea: Tarea, motivo: string): Promise<void> => {
+  const aparcarMirandoLaSesion = async (
+    tarea: Tarea,
+    motivo: string,
+    /** Lo que el turno autorizó, si llegó a correr. Ver `EnVuelo.autorizadas`. */
+    autorizadas?: readonly string[]
+  ): Promise<void> => {
     const actual = opciones.disco.listar().find((t) => t.id === tarea.id);
     const limpiar = await olvidarSiNoSePuedeAbrir(tarea.proyecto.raiz, actual?.sesion);
-    aparcar(tarea.id, motivo, limpiar ? sinSesion : (t) => t);
+    // Las dos reglas, aquí también: por este camino se llega cuando `correr` se rompió por
+    // su cuenta, y era el único de los cuatro que perdía el registro de lo autorizado.
+    const conLoQueQuede = (t: Tarea): Tarea => conAutorizadas(limpiar ? sinSesion(t) : t, autorizadas);
+    aparcar(tarea.id, motivo, conLoQueQuede);
   };
 
   /**
@@ -400,17 +422,6 @@ export function crearCorredorDeTareas(opciones: {
 
     const hilo = consola.idDeHilo;
     let motivo: string | undefined;
-    /**
-     * Los ficheros que este turno APLICÓ sin que nadie los aprobara, tal como los apunta la
-     * consola de tarea. Se acumula aunque el turno reviente: `preguntar` corta lanzando, y
-     * lo que se aplicó antes sigue aplicado.
-     *
-     * Que esté declarado aquí y no antes de `abrirParaTarea` es la mitad de la regla de
-     * «ausente no es vacío»: por el camino en que el proyecto ya no está, este `correr`
-     * devuelve antes de llegar aquí y la tarea se queda SIN el campo, que es la verdad —
-     * no corrió ningún turno, así que no se puede afirmar que no escribiera nada.
-     */
-    const aplicados: string[] = [];
     /** ¿Devolvió el turno por su cuenta? Distingue «acabó» de «se lo cortamos». */
     let terminoLimpio = false;
     let marcada = false;
@@ -427,10 +438,14 @@ export function crearCorredorDeTareas(opciones: {
         actual.estado === "nuevo" ? conEstado({ ...actual, sesion: hilo }, "en-proceso", undefined, { pid }) : undefined
       );
       if (marcada) {
+        // La lista nace AQUÍ, cuando ya se sabe que el turno va a correr: hasta este punto
+        // «no consta» es la verdad. Se acumula aunque el turno reviente —`preguntar` corta
+        // lanzando— porque lo que se autorizó antes se autorizó.
+        entrada.autorizadas = [];
         await consola.correrTarea(
           tarea.encargo,
           (m) => void (motivo ??= m),
-          (ficheros) => void aplicados.push(...ficheros)
+          (ficheros) => void entrada.autorizadas?.push(...ficheros)
         );
         terminoLimpio = true;
       }
@@ -474,16 +489,16 @@ export function crearCorredorDeTareas(opciones: {
     // La regla se resuelve UNA vez y fuera del `try` de la escritura: así el camino de error
     // reusa la decisión en vez de volver a preguntar —y a olvidar— el mismo hilo dos veces.
     //
-    // Y lo APLICADO se compone en la misma transformación, por el mismo motivo por el que la
-    // regla de `sesion` vive aquí: los tres finales —terminada, aparcada y el último recurso
-    // de más abajo— pasan por ella, así que ninguno puede quedarse sin registrar lo que la
-    // tarea escribió. Va sobre la tarea RELEÍDA del disco (`escribirSiSigueSiendoNuestra` le
-    // pasa la actual), no sobre la que se despachó, para no pisar lo que el cable cambiara
-    // entre medias.
-    let conLoQueQuede: (t: Tarea) => Tarea = (t) => conAplicados(t, aplicados);
+    // Y lo AUTORIZADO se compone en la misma transformación, por el mismo motivo por el que
+    // la regla de `sesion` vive aquí: los CUATRO finales —terminada, aparcada, el error de la
+    // escritura final y el último recurso de `revisar`— pasan por lo mismo, así que ninguno
+    // puede quedarse sin registrar lo que la tarea autorizó. Va sobre la tarea RELEÍDA del
+    // disco (`escribirSiSigueSiendoNuestra` le pasa la actual), no sobre la que se despachó,
+    // para no pisar lo que el cable cambiara entre medias.
+    let conLoQueQuede: (t: Tarea) => Tarea = (t) => conAutorizadas(t, entrada.autorizadas);
     try {
       if (await olvidarSiNoSePuedeAbrir(tarea.proyecto.raiz, hilo)) {
-        conLoQueQuede = (t) => sinSesion(conAplicados(t, aplicados));
+        conLoQueQuede = (t) => sinSesion(conAutorizadas(t, entrada.autorizadas));
       }
     } catch {
       // Ni preguntar se pudo: no se sabe, y entonces no se borra nada.
@@ -559,6 +574,8 @@ export function crearCorredorDeTareas(opciones: {
        * `correr` en cuanto tiene la consola: hasta ese momento no hay nada que cortar, y un
        * `parar()` que llegue en esa ventana lo ve el propio `correr` y no arranca el turno.
        */
+      // Sin `autorizadas`: no está puesta hasta que el turno arranca, que es lo que
+      // distingue «no consta» de «no autorizó nada».
       const entrada: EnVuelo = { tarea, trabajo: Promise.resolve(), cortar: async () => {} };
       enVuelo.set(tarea.id, entrada);
       entrada.trabajo = correr(tarea, entrada)
@@ -569,9 +586,11 @@ export function crearCorredorDeTareas(opciones: {
           // El último recurso, y pasa por la MISMA regla de `sesion` que el camino bueno:
           // dejar escrito aquí un id que no nombra nada abrible sería la regla cumpliéndose
           // solo cuando todo va bien.
-          await aparcarMirandoLaSesion(tarea, `el corredor no pudo con ella (${codigoDe(error)})`).catch(
-            () => undefined
-          );
+          await aparcarMirandoLaSesion(
+            tarea,
+            `el corredor no pudo con ella (${codigoDe(error)})`,
+            entrada.autorizadas
+          ).catch(() => undefined);
           // Y si tras intentarlo SIGUE en `nuevo`, este proceso no puede moverla de sitio:
           // renuncia, o el `revisar()` de abajo la vuelve a coger en el acto y otra vez.
           // Medido: sin esto, un índice que no se puede escribir es una CPU al 100%.

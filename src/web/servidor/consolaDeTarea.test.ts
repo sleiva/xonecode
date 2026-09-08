@@ -25,15 +25,15 @@ const OTRO: PendienteDeAprobacion = { ...PENDIENTE, id: "2", origen: "mockup" };
 function montar() {
   const aparcado: string[] = [];
   const escrito: string[] = [];
-  const aplicado: string[][] = [];
+  const autorizado: string[][] = [];
   const consola = crearConsolaDeTarea({
     aparcar: (motivo) => aparcado.push(motivo),
-    aplicado: (ficheros) => aplicado.push([...ficheros]),
+    autorizado: (ficheros) => autorizado.push([...ficheros]),
     escribir: (texto) => escrito.push(texto),
     catalogoModelos: new CatalogoModelosEnMemoria(),
     guardarModeloGlobal: (_papel, id) => ({ ruta: "/casa/.xonecode/config.json", id }),
   });
-  return { consola, aparcado, escrito, aplicado };
+  return { consola, aparcado, escrito, autorizado };
 }
 
 describe("crearConsolaDeTarea", () => {
@@ -63,13 +63,15 @@ describe("crearConsolaDeTarea", () => {
     expect(aparcado).toEqual([]);
   });
 
-  it("lo aplicado se APUNTA, con ruta relativa y por el canal de la tarea", async () => {
-    // «Lo que la tarea aplicó se DICE», y con los NOMBRES: es el mismo criterio del aviso
+  it("lo autorizado se APUNTA, con ruta relativa y por el canal de la tarea", async () => {
+    // «Lo que la tarea escribe se DICE», y con los NOMBRES: es el mismo criterio del aviso
     // de honestidad de `seAplicaSinAprobacion`, que saca los ficheros y no un contador,
-    // porque un contador a secas es el aviso que enseña a ignorar los avisos.
-    const { consola, aplicado } = montar();
+    // porque un contador a secas es el aviso que enseña a ignorar los avisos. Se llama
+    // «autorizado» y no «aplicado» porque esto se apunta ANTES de que el backend escriba:
+    // el nombre no puede prometer un hecho sobre el disco (la verdad la da Revisión).
+    const { consola, autorizado } = montar();
     await consola.aprobacionesTui!([PENDIENTE], new Map([["1", "/src/app.xne"]]), new Map());
-    expect(aplicado).toEqual([["src/app.xne"]]);
+    expect(autorizado).toEqual([["src/app.xne"]]);
   });
 
   it("aplicar no se consulta con `seAplicaSinAprobacion`: es otra decisión, de otro humano", async () => {
@@ -107,7 +109,7 @@ describe("crearConsolaDeTarea", () => {
      * evita que el modelo remate el turno como si hubiera escrito.
      */
     const soloRechazable: PendienteDeAprobacion = { ...PENDIENTE, decisionesPermitidas: ["reject"] };
-    const { consola, aparcado, aplicado } = montar();
+    const { consola, aparcado, autorizado } = montar();
     const decisiones = await consola.aprobacionesTui!(
       [soloRechazable],
       new Map([["1", "/src/app.xne"]]),
@@ -117,13 +119,13 @@ describe("crearConsolaDeTarea", () => {
     expect(aparcado).toHaveLength(1);
     expect(aparcado[0]).toMatch(/src\/app\.xne/);
     expect(aparcado[0]).toMatch(/persona/i);
-    // Y no se apunta como aplicada: no se aplicó.
-    expect(aplicado).toEqual([]);
+    // Y no se apunta como autorizada: no se autorizó.
+    expect(autorizado).toEqual([]);
   });
 
   it("una tanda MIXTA aplica lo que puede y aparca por lo que no", async () => {
     const soloRechazable: PendienteDeAprobacion = { ...OTRO, decisionesPermitidas: ["reject"] };
-    const { consola, aparcado, aplicado } = montar();
+    const { consola, aparcado, autorizado } = montar();
     const decisiones = await consola.aprobacionesTui!(
       [PENDIENTE, soloRechazable],
       new Map([
@@ -134,7 +136,7 @@ describe("crearConsolaDeTarea", () => {
     );
     expect(decisiones.get("1")).toEqual({ type: "approve" });
     expect(decisiones.get("2")).toMatchObject({ type: "reject" });
-    expect(aplicado).toEqual([["a.xne"]]);
+    expect(autorizado).toEqual([["a.xne"]]);
     // El motivo nombra SOLO lo que quedó sin resolver: decir «a.xne» ahí mandaría a mirar
     // un fichero que ya está escrito.
     expect(aparcado[0]).toMatch(/b\.xne/);
@@ -162,9 +164,9 @@ describe("crearConsolaDeTarea", () => {
     // máquina, pero con una barra delante que las hace parecer absolutas. Lo apuntado se
     // guarda en el índice de tareas —y de ahí lo lee el juez de la entrega—, así que una
     // barra de más viajaría con ella.
-    const { consola, escrito, aplicado } = montar();
+    const { consola, escrito, autorizado } = montar();
     await consola.aprobacionesTui!([PENDIENTE], new Map([["1", "/app.xne"]]), new Map());
-    expect(aplicado).toEqual([["app.xne"]]);
+    expect(autorizado).toEqual([["app.xne"]]);
     expect(escrito.join("")).toMatch(/\bapp\.xne\b/);
     expect(escrito.join("")).not.toMatch(/\/app\.xne/);
   });
@@ -173,9 +175,9 @@ describe("crearConsolaDeTarea", () => {
     // Mismo trato que `aplicadasSinPreguntar` en `turnoReal.ts`: sin `file_path` no hay
     // nombre que dar, y un hueco haría desaparecer del registro una escritura que se
     // aplicó. La descripción del interrupt es texto fijo del harness, no una ruta.
-    const { consola, aplicado, escrito } = montar();
+    const { consola, autorizado, escrito } = montar();
     await consola.aprobacionesTui!([PENDIENTE], new Map(), new Map());
-    expect(aplicado).toEqual([["[dev] quiere escribir un fichero del proyecto"]]);
+    expect(autorizado).toEqual([["[dev] quiere escribir un fichero del proyecto"]]);
     expect(escrito.join("")).toContain("[dev] quiere escribir un fichero del proyecto");
   });
 
@@ -203,12 +205,12 @@ describe("crearConsolaDeTarea", () => {
     expect(aparcado[0]).not.toMatch(/clave de anthropic/);
   });
 
-  it("cuatro tandas seguidas se aplican TODAS, y ninguna aparca", async () => {
+  it("cuatro tandas seguidas se autorizan TODAS, y ninguna aparca", async () => {
     // Medido en `turnoReal.ts` con un agente que vuelve a proponer: `pedirAprobacion` se
     // llama una vez por ronda. Antes cada ronda era un rechazo y el motivo se guardaba solo
-    // de la primera; ahora cada una se aplica, y lo apuntado tiene que llevarlas todas — un
-    // registro que se quedara con la primera escondería tres ficheros escritos.
-    const { consola, aparcado, aplicado } = montar();
+    // de la primera; ahora cada una se autoriza, y lo apuntado tiene que llevarlas todas —
+    // un registro que se quedara con la primera escondería tres ficheros escritos.
+    const { consola, aparcado, autorizado } = montar();
     for (let i = 0; i < 4; i += 1) {
       const decisiones = await consola.aprobacionesTui!(
         [PENDIENTE],
@@ -218,24 +220,24 @@ describe("crearConsolaDeTarea", () => {
       expect(decisiones.get("1")).toEqual({ type: "approve" });
     }
     expect(aparcado).toEqual([]);
-    expect(aplicado).toEqual([["ronda0.xne"], ["ronda1.xne"], ["ronda2.xne"], ["ronda3.xne"]]);
+    expect(autorizado).toEqual([["ronda0.xne"], ["ronda1.xne"], ["ronda2.xne"], ["ronda3.xne"]]);
   });
 
-  it("se aparca UNA vez por turno, aunque antes se hayan aplicado escrituras", async () => {
+  it("se aparca UNA vez por turno, aunque antes se hayan autorizado escrituras", async () => {
     // El «una vez» sigue valiendo, y ahora tiene un caso nuevo: una tarea que escribe dos
     // ficheros y DESPUÉS pregunta. El motivo bueno es el de la pregunta —es lo que la
-    // paró—, y lo aplicado no se pierde: va por su propio canal.
-    const { consola, aparcado, aplicado } = montar();
+    // paró—, y lo autorizado no se pierde: va por su propio canal.
+    const { consola, aparcado, autorizado } = montar();
     await consola.aprobacionesTui!([PENDIENTE], new Map([["1", "/a.xne"]]), new Map());
     await expect(consola.preguntar("¿la borro?")).rejects.toBeInstanceOf(ErrorDeTareaSinHumano);
     await expect(consola.leerSecreto("clave:")).rejects.toBeInstanceOf(ErrorDeTareaSinHumano);
     expect(aparcado).toHaveLength(1);
     expect(aparcado[0]).toMatch(/¿la borro\?/);
-    expect(aplicado).toEqual([["a.xne"]]);
+    expect(autorizado).toEqual([["a.xne"]]);
   });
 
-  it("dos pendientes en la MISMA tanda se aplican las dos, en un solo apunte", async () => {
-    const { consola, aparcado, aplicado } = montar();
+  it("dos pendientes en la MISMA tanda se autorizan las dos, en un solo apunte", async () => {
+    const { consola, aparcado, autorizado } = montar();
     const decisiones = await consola.aprobacionesTui!(
       [PENDIENTE, OTRO],
       new Map([
@@ -247,7 +249,7 @@ describe("crearConsolaDeTarea", () => {
     expect([...decisiones.keys()]).toEqual(["1", "2"]);
     expect([...decisiones.values()]).toEqual([{ type: "approve" }, { type: "approve" }]);
     expect(aparcado).toEqual([]);
-    expect(aplicado).toEqual([["a.xne", "b.xne"]]);
+    expect(autorizado).toEqual([["a.xne", "b.xne"]]);
   });
 
   it("`eof` dice la verdad —no hay humano— y no se usa para aprobar ni rechazar por detrás", () => {
@@ -272,7 +274,7 @@ describe("crearConsolaDeTarea", () => {
     expect(escrito.join("")).toMatch(/aparcad/i);
   });
 
-  it("aplicar TAMPOCO es mudo, y es lo que más falta hace decir", async () => {
+  it("autorizar TAMPOCO es mudo, y es lo que más falta hace decir", async () => {
     /**
      * Una escritura que nadie aprueba no puede ser además muda — es la regla del evento
      * `artefacto` y la del aviso de honestidad de `seAplicaSinAprobacion`, y aquí es el
