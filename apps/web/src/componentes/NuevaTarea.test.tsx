@@ -191,11 +191,50 @@ describe("NuevaTarea", () => {
     await waitFor(() => expect(screen.getByText(/ya hay un adjunto con ese nombre/i)).toBeTruthy());
   });
 
-  it("un proyecto SIN copia local lo dice: la tarea esperará en vez de arrancar", () => {
+  it("y dos con el mismo nombre en la MISMA elección tampoco: solo se sube uno", async () => {
+    /**
+     * La misma regla, en el caso que de verdad ocurre con `<input multiple>`: se eligen dos
+     * ficheros de golpe y los dos se llaman igual (dos «captura.png» de dos carpetas, o dos
+     * nombres distintos que el saneado convierte en el mismo segmento). Aquí el bucle no tiene
+     * un render de por medio entre las dos vueltas, así que si el «¿ya está?» se lee de dentro
+     * de un actualizador de estado —que React solo ejecuta en el acto por su vía de estado
+     * eager— la segunda vuelta lo ve en `false`, sube igual, y el servidor sobrescribe el
+     * fichero en silencio: exactamente lo que el rechazo existe para evitar.
+     */
+    const subidos: string[] = [];
+    render(
+      <NuevaTarea
+        {...base}
+        alSubirAdjunto={async (_f, nombre) => {
+          subidos.push(nombre);
+          return { ok: true };
+        }}
+      />
+    );
+    fireEvent.change(screen.getByLabelText(/adjuntar/i), {
+      target: { files: [new File(["x"], "captura.png"), new File(["y"], "captura.png")] },
+    });
+    await waitFor(() => expect(screen.getByText(/ya hay un adjunto con ese nombre/i)).toBeTruthy());
+    expect(subidos, "el segundo con el mismo nombre no se sube").toEqual(["captura.png"]);
+  });
+
+  it("un proyecto SIN copia local dice lo que PASA de verdad: se aparca y hay que reintentarla", () => {
     // El dato es del servidor (`proyectos[].local`), no una adivinanza — la misma regla que
     // `NuevaSesion`. Y no se prohíbe crearla: se dice qué va a pasar.
+    //
+    // **Y lo que pasa NO es que espere**, medido en el código del corredor: `siguientesAEjecutar`
+    // la coge igual, `abrirParaTarea` (`vestibulo.ts`) lanza porque falta el
+    // `.xonecode/config.json`, y `correr` la aparca en `requiere-atencion` — más
+    // `renunciarSiSigueNueva`, así que este proceso NO la vuelve a coger solo. O sea que
+    // después de descargar el proyecto hay que reintentarla a mano desde el kanban. Decir
+    // «no arrancará hasta que se descargue» prometía una espera que no existe: es el control
+    // que promete lo que no hace, y encima en la ventana donde se concede la autorización.
     render(<NuevaTarea {...base} local={false} />);
-    expect(document.body.textContent).toMatch(/no est[áa].*en tu equipo|todav[íi]a no est[áa]/i);
+    const texto = document.body.textContent ?? "";
+    expect(texto).toMatch(/no est[áa].*en tu equipo/i);
+    expect(texto, "tiene que decir que se APARCA, no que espere").toMatch(/aparca/i);
+    expect(texto, "y que hay que reintentarla a mano").toMatch(/reint[eé]ntala|reintentarla/i);
+    expect(texto, "no puede prometer una espera que no existe").not.toMatch(/no arrancar[áa] hasta/i);
   });
 
   it("cerrar no encola nada", () => {

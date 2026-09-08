@@ -39,7 +39,15 @@ export function NuevaTarea({
    * ¿Existe ya la copia local del proyecto? Lo dice el SERVIDOR (`proyectos[].local`), no se
    * adivina — la misma regla que `NuevaSesion`. Sin ella la tarea no se puede ejecutar
    * todavía, así que se DICE: crear se permite igual (la cola sobrevive), pero quien crea
-   * tiene que saber que va a esperar en vez de arrancar.
+   * tiene que saber qué va a pasar.
+   *
+   * **Y lo que pasa no es que espere.** Medido en el código del corredor: la tarea se coge
+   * igual, `abrirParaTarea` (`vestibulo.ts`) lanza porque falta el `.xonecode/config.json`, y
+   * `correr` la aparca en `requiere-atencion` con ese motivo; `renunciarSiSigueNueva` remata
+   * que este proceso no la vuelva a coger solo. O sea que hay que descargar el proyecto y
+   * **reintentarla a mano** desde el tablero. La frase de antes —«no arrancará hasta que se
+   * descargue»— prometía una espera que no existe, en la ventana donde justamente se está
+   * concediendo la autorización.
    */
   local: boolean;
   /** ¿Tiene esta consola con qué augmentar? Falso = el botón no se pinta, y se dice por qué:
@@ -80,6 +88,22 @@ export function NuevaTarea({
   const sePuedeEncolar = peticion.trim() !== "" && !enVuelo && !algunoFalló;
 
   const añadir = async (elegidos: FileList | null): Promise<void> => {
+    /**
+     * Los nombres ya tomados, en una variable LOCAL y no leídos del estado.
+     *
+     * Esta es la parte delicada. El «¿ya hay uno con este nombre?» se leía de dentro del
+     * actualizador de `setAdjuntos`, y React solo ejecuta ese actualizador en el acto por su
+     * vía de estado *eager* —con la fibra sin trabajo pendiente—. Con `<input multiple>` y dos
+     * ficheros del mismo nombre en UNA elección, la segunda vuelta del bucle llega después de
+     * un `await` con una actualización posiblemente en cola: veía `false`, subía igual, y el
+     * servidor sobrescribía el fichero en silencio. Medido: `alSubirAdjunto` se llamaba dos
+     * veces con «captura.png» mientras la fila decía «ya hay un adjunto con ese nombre».
+     *
+     * El Set se siembra con lo que hay en el estado —esta ventana solo AÑADE adjuntos, así
+     * que lo que se leyó al pintar sigue siendo cierto— y crece dentro del bucle, que es lo
+     * único que la vía eager no garantizaba.
+     */
+    const tomados = new Set(adjuntos.map((a) => a.nombre));
     for (const fichero of Array.from(elegidos ?? [])) {
       const nombre = nombreDeAdjuntoSeguro(fichero.name);
       if (nombre === undefined) {
@@ -90,15 +114,16 @@ export function NuevaTarea({
         ]);
         continue;
       }
-      let repetido = false;
-      setAdjuntos((ya) => {
-        repetido = ya.some((a) => a.nombre === nombre);
-        return repetido
-          ? [...ya, { nombre, bytes: fichero.size, estado: "falló", motivo: "ya hay un adjunto con ese nombre" }]
-          : [...ya, { nombre, bytes: fichero.size, estado: "subiendo" }];
-      });
-      // Sin `await` dentro del `setAdjuntos`: el segundo con el mismo nombre se rechaza aquí
-      // y no se sube, porque el servidor lo sobrescribiría en silencio.
+      const repetido = tomados.has(nombre);
+      tomados.add(nombre);
+      setAdjuntos((ya) => [
+        ...ya,
+        repetido
+          ? { nombre, bytes: fichero.size, estado: "falló" as const, motivo: "ya hay un adjunto con ese nombre" }
+          : { nombre, bytes: fichero.size, estado: "subiendo" as const },
+      ]);
+      // El segundo con el mismo nombre se rechaza aquí y no se sube, porque el servidor lo
+      // sobrescribiría en silencio.
       if (repetido) continue;
       const r = await alSubirAdjunto(fichero, nombre);
       setAdjuntos((ya) =>
@@ -139,8 +164,9 @@ export function NuevaTarea({
           </p>
           {local ? null : (
             <p className={estilos.nota}>
-              Este proyecto todavía no está en tu equipo. La tarea se encola igual, pero no
-              arrancará hasta que se descargue: ábrelo una vez con «Nueva sesión».
+              Este proyecto todavía no está en tu equipo. La tarea se encola igual, pero al
+              cogerla se aparcará diciendo que el proyecto no está. Descárgalo abriéndolo una vez
+              con «Nueva sesión» y luego reintentala desde el tablero.
             </p>
           )}
 

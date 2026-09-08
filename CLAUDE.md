@@ -2087,6 +2087,29 @@ Un fallo del entorno no se reporta como un proyecto roto: `agent/verificador.ts`
 
 ## Trampas verificadas
 
+- **`DENEGADO_SIEMPRE` no alcanza al ORQUESTADOR: sus tools de fichero se montan sin
+  `permissions`.** Medido contra deepagents 1.13.2 construyendo el agente de verdad y
+  buscándole su `write_file`: contesta «Successfully wrote» a `/adjuntos/pwn.txt`, a
+  `/skills/pwn.txt` **y a `/.env`**, y los tres ficheros quedan en disco — el de `/skills/`
+  **en la carpeta `skills/` de ESTE repo**, no en el temporal del proyecto de la medida, que
+  es lo que hace la trampa: la raíz montada es `RAIZ_SKILLS`, o sea las instrucciones del
+  propio harness. La causa está a la vista en `xoneAgent.ts`: el `createFilesystemMiddleware` del orquestador lleva `backend`,
+  descripciones y opciones de búsqueda, y **no lleva `permisosDe`** — eso solo lo reciben los
+  subagentes. Tres cosas que hay que tener claras antes de tocarlo:
+  - **Es anterior a los adjuntos y no es de ellos.** Le pasa igual a `.env`, `.git`,
+    `.xonecode` y las skills, o sea a las tres filas de la lista. Lo que la fila de
+    `/adjuntos/**` sí evita —y está medido— es que un `write_file` de un ESPECIALISTA se
+    convierta en un fichero del proyecto cuando la carpeta no está montada.
+  - **Lo que hoy lo tapa es el prompt, que es exactamente lo que este repo no acepta como
+    barrera**: el orquestador tiene instrucciones de no escribir y de delegar todo, y por eso
+    no se ha visto nunca. Las guardas del BACKEND sí le aplican (vistas aplanadas, artefactos
+    fuera de sitio), porque están en el backend y no en los permisos.
+  - **Y el HITL tampoco**: `hitlDe` se monta por subagente, así que una escritura del
+    orquestador no pasaría por ninguna aprobación. Arreglarlo es una decisión de producto —o
+    se le pasan los permisos, o se le quitan las tools de fichero, que es lo que su propio
+    prompt afirma— y toca todo el agente, no los adjuntos; por eso se deja declarado aquí en
+    vez de cambiarse de lado.
+
 - **La caché implícita de Gemini no entra a los tamaños de contexto de estos agentes, y el
   adaptador la sobrecuenta en streaming.** Medido con un gancho de hashes sobre el cuerpo de
   cada petición (el prefijo que mandamos es byte-idéntico entre llamadas consecutivas: no es
