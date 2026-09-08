@@ -12,6 +12,16 @@
 
 ## Global Constraints
 
+> **REVISIÓN DEL 8-09-2026 — LAS TAREAS SON AUTÓNOMAS (§0 del spec, léela).** Decisión del
+> usuario tomada con las Tasks 1-5 ya hechas. Una tarea **aplica** sus escrituras sin pedir
+> aprobación; la autorización es el acto de crear la tarea. `requiere-atencion` pasa a
+> significar «esperando feedback del desarrollador» y se resuelve EDITANDO la tarea, no
+> aprobando un diff. El plan no se aprueba: se planifica, se desarrolla, lo evalúa un juez de
+> QA, y se entrega. El sitio que deja la aprobación lo ocupan el verificador (que ya corre en
+> el turno) y ese juez — y **el veredicto del juez no basta solo**: las condiciones las
+> comprueba el código. Las Tasks 10, 11 y 12 son las nuevas; las 7 y 9 cambian, y su texto
+> lo dice donde toca.
+
 - **`npm test` no necesita clave, red, simulador ni procesos.** Todo lo que toca disco, modelo o proceso entra por opción con su doble: el corredor recibe el abridor y el reloj, el aumentador es un puerto, y la persistencia se prueba contra un directorio temporal.
 - **Una tarea NUNCA decide lo que le toca a una persona.** No aprueba, no contesta preguntas y no se declara terminada por agotarse un plazo. Lo que no puede resolver, lo aparca con `motivo`. Es la regla que sostiene el spec entero (§1) y la que los tests de la Task 4 protegen.
 - **Frontera del cliente** (`src/web/frontera.test.ts`): nada de `apps/web/` importa de `src/`. Los tipos del cable se REDECLARAN en `apps/web/src/tipos.ts`, y `tipos.test.ts` compara los literales `clase:` de las dos uniones con los del host — los dos ficheros tienen que llevar exactamente los mismos.
@@ -1852,6 +1862,14 @@ git commit -m "feat(web): el cable de las tareas — la cola a todos los cliente
 
 ## Task 7: el kanban en el escritorio
 
+> **Cambia con la revisión de §0.** La tarjeta de `requiere-atencion` NO lleva un diff ni un
+> botón de aprobar: lleva el motivo y el camino para **añadir feedback** (que es editar la
+> tarea, Task 12). Y la columna se rotula «Esperando feedback», que es lo que el usuario pidió
+> y lo que el estado significa ahora — el identificador del enum no se toca. Lo que sí tiene
+> que decir la tarjeta, porque nadie lo aprobó, es **qué ficheros escribió** la tarea y el
+> enlace a su Revisión: sin aprobación previa, la revisión posterior es la única forma de
+> mirar.
+
 **Goal:** Las cuatro columnas, con el motivo a la vista en «requiere atención» y con el aviso de cuándo este proceso no ejecuta.
 
 **Files:**
@@ -2217,6 +2235,13 @@ git commit -m "feat(web): la lista de tareas del proyecto, como pestaña"
 
 ## Task 9: crear una tarea — augmentación y adjuntos
 
+> **Cambia con la revisión de §0.** La augmentación describe un trabajo que se hace ENTERO sin
+> volver a preguntar —funcionalidad, refactor, arreglo de errores, documentación—, así que no
+> puede redactar un encargo que dé por hecho un paso de aprobación humana por medio. Y la
+> ventana de crear tiene que decir con palabras que la tarea **va a escribir en el proyecto
+> sin pedir permiso**: es el momento en que se concede esa autorización, y es el único sitio
+> donde se puede decir antes de que ocurra.
+
 **Goal:** La UX de crear: petición, encargo augmentado **editable antes de encolar**, y adjuntos que el agente ve en `/adjuntos/` de solo lectura.
 
 **Files:**
@@ -2355,3 +2380,300 @@ Antes de dar el trabajo por hecho:
    - Con dos consolas abiertas, comprobar que la segunda dice que no ejecuta.
    - Parar el proceso a mitad de una tarea y comprobar que al arrancar aparece aparcada con «la consola se cerró a mitad».
 4. Actualizar `CLAUDE.md` con las reglas nuevas y el porqué de cada una.
+
+---
+
+## Task 10: una tarea APLICA lo que escribe, y lo dice
+
+**Goal:** Que el turno de una tarea aplique sus escrituras sin aprobación humana, por una política propia y no reutilizando la del proyecto, y que cada tarea diga qué ficheros escribió.
+
+**Files:**
+- Modify: `src/core/tareas.ts` (el registro de lo aplicado en la `Tarea`)
+- Modify: `src/web/servidor/consolaDeTarea.ts` (la política, donde hoy se rechaza)
+- Modify: `src/web/servidor/consolaDeTarea.test.ts`
+- Modify: `src/web/servidor/corredorDeTareas.ts` (recoger lo aplicado y guardarlo)
+- Modify: `src/web/servidor/corredorDeTareas.test.ts`
+
+**Acceptance Criteria:**
+- [ ] Una escritura de una tarea se APLICA: la decisión que devuelve la consola de tarea es aprobar, no rechazar
+- [ ] La política es PROPIA y no `seAplicaSinAprobacion`: un proyecto sin ese ajuste, conectado y con `settings.json` intacto, igualmente aplica cuando quien escribe es una tarea — y hay test de que ese ajuste no se consulta
+- [ ] Las guardas de RUTA siguen enteras: una escritura a `/artifacts/`, a una vista aplanada, a `/.env`, `/.git` o `/.xonecode` se rechaza igual que antes (test por cada una)
+- [ ] `Tarea` guarda los ficheros que aplicó (rutas RELATIVAS a la raíz, nunca absolutas) y el corredor los escribe al terminar
+- [ ] `preguntar` y `leerSecreto` NO cambian: siguen aparcando y cortando — aplicar una escritura no es contestar por una persona
+- [ ] Con la política de tarea puesta, ninguna ruta absoluta llega ni al índice ni al cable
+
+**Verify:** `npx vitest run src/web/servidor/consolaDeTarea.test.ts src/web/servidor/corredorDeTareas.test.ts src/core/tareas.test.ts` → en verde
+
+**Steps:**
+
+- [ ] **Step 1: el test que falla — la escritura se aplica**
+
+En `consolaDeTarea.test.ts`, junto al test que hoy exige rechazo. El de hoy describe el
+comportamiento viejo y **se reescribe**, no se borra: lo que sigue siendo verdad es que
+`preguntar` corta, y eso se queda.
+
+```ts
+it("una escritura de una tarea se APLICA: la autorización fue crear la tarea", async () => {
+  // La aprobación no estaba por la propiedad del repo, estaba porque XOne ignora en silencio
+  // lo desconocido. Quien ocupa ese sitio ahora es el verificador del turno y el juez de QA
+  // (Task 11), no un modal que nadie va a ver. Y esto NO es `seAplicaSinAprobacion`: ese
+  // ajuste dice «el humano que está aquí ha decidido no pulsar», y aquí no hay nadie aquí.
+  const { consola, aparcado } = montar();
+  const decisiones = await consola.aprobaciones!([PENDIENTE], new Map(), new Map());
+  expect(decisiones).toEqual([{ id: "1", decision: { type: "approve" } }]);
+  expect(aparcado).toEqual([]);
+});
+```
+
+- [ ] **Step 2: el test que falla — el ajuste del proyecto no se consulta**
+
+```ts
+it("no se consulta `seAplicaSinAprobacion`: es otra decisión, de otro humano y con otro alcance", () => {
+  // Reutilizarlo habría hecho que un proyecto CONECTADO no aplicara nada (el ajuste lo
+  // rechaza) y que la marca del `settings.json` de un proyecto offline decidiera sobre las
+  // tareas de todos. Son dos autorizaciones distintas: esta la concede crear la tarea.
+  let consultado = false;
+  const consola = crearConsolaDeTarea({ ...base, seAplicaSinAprobacion: () => { consultado = true; return false; } } as never);
+  void consola;
+  expect(consultado).toBe(false);
+});
+```
+
+- [ ] **Step 3: el test que falla — las guardas de ruta siguen**
+
+```ts
+it.each(["/artifacts/x.html", "/Clientes.xml", "/.env", "/.git/config", "/.xonecode/memoria.md"])(
+  "aplicar no abre las guardas de ruta: %s se sigue rechazando",
+  async (ruta) => {
+    // Estas guardas nunca fueron parte de la aprobación: viven en el backend
+    // (`backendDeAgente`) y en `permisosDe`, y una tarea entra por el MISMO backend. El test
+    // está aquí para que se note el día que alguien intente conceder la escritura tocando el
+    // sitio equivocado.
+    const { consola } = montar();
+    const decisiones = await consola.aprobaciones!([{ ...PENDIENTE, descripcion: `escribir ${ruta}` }], new Map([["1", ruta]]), new Map());
+    expect(decisiones[0]!.decision.type).toBe("approve");
+    // Y quien lo corta es el backend, que devuelve `{error}` al modelo: hay test propio en
+    // `proyecto.test.ts` y en `perfiles.test.ts`. Aquí solo se fija que la consola no es
+    // quien decide sobre la ruta — si lo fuera, habría DOS reglas que pueden divergir.
+  }
+);
+```
+
+- [ ] **Step 4: implementarlo**
+
+En `consolaDeTarea.ts`, donde hoy se construye el rechazo: devolver `approve` por cada
+pendiente, apuntar los ficheros por su ruta relativa, y dejar el mensaje de rechazo solo para
+lo que ya lo usaba. La constante del rechazo NO se borra: `preguntar` y el corte siguen.
+
+En `core/tareas.ts`, un campo nuevo en `Tarea` para lo aplicado — con la regla de siempre:
+ausente («no se sabe») no es lista vacía («no escribió nada»).
+
+En `corredorDeTareas.ts`, recogerlo de la consola al cerrar el turno y guardarlo con el
+estado final, por el mismo camino por el que ya se guarda `sesion`.
+
+- [ ] **Step 5: correr, mutar y commitear**
+
+```bash
+npx vitest run src/web/servidor src/core/tareas.test.ts
+npm run typecheck && npm test
+```
+
+Mutaciones obligatorias: devolver `reject`; consultar el ajuste del proyecto; guardar la ruta
+absoluta en vez de la relativa; y tratar el campo ausente como lista vacía.
+
+```bash
+git commit -m "feat(web): una tarea aplica lo que escribe, y dice qué ficheros tocó"
+```
+
+```json:metadata
+{"files": ["src/core/tareas.ts", "src/web/servidor/consolaDeTarea.ts", "src/web/servidor/corredorDeTareas.ts"], "acceptanceCriteria": ["la escritura se aplica", "la política es propia y no `seAplicaSinAprobacion`", "las guardas de ruta siguen enteras", "`Tarea` guarda los ficheros aplicados con ruta relativa", "`preguntar` sigue aparcando", "ninguna ruta absoluta al índice ni al cable"], "modelTier": "frontier", "userGate": true, "tags": ["user-gate"]}
+```
+
+---
+
+## Task 11: el juez de QA, y qué significa «terminada»
+
+**Goal:** Que una tarea no se declare terminada por haber acabado el turno, sino por pasar unas condiciones que comprueba el código MÁS el veredicto de un juez.
+
+**Files:**
+- Create: `src/core/entrega.ts` (las condiciones, puras)
+- Create: `src/core/entrega.test.ts`
+- Create: `src/agent/juezDeTarea.ts` (el juez, por puerto)
+- Create: `src/agent/juezDeTarea.test.ts`
+- Modify: `src/core/tareas.ts` (el veredicto en la `Tarea`)
+- Modify: `src/web/servidor/corredorDeTareas.ts` + su test
+
+**Acceptance Criteria:**
+- [ ] `condicionesDeEntrega` es pura y exige las tres que el código puede comprobar: verificador en VERDE, nada pendiente de aprobar, y árbol de git sin cambios sin registrar de la sesión
+- [ ] El veredicto del juez NO basta solo: con el juez en verde y una condición en rojo, la tarea NO se entrega, y el motivo dice cuál falló
+- [ ] Al revés también: con las tres condiciones en verde y el juez en rojo, tampoco — y el motivo lleva lo que dijo el juez
+- [ ] El juez entra por PUERTO y usa el papel `afilado`; `npm test` no le pregunta a ningún modelo
+- [ ] Que el juez no se pueda usar (sin modelo, sin clave) es fallo del ENTORNO: se dice, la tarea queda esperando feedback, y NO se entrega en silencio
+- [ ] El veredicto se guarda en la `Tarea` (resumen y hallazgos, nunca contenido de ficheros)
+
+**Verify:** `npx vitest run src/core/entrega.test.ts src/agent/juezDeTarea.test.ts src/web/servidor/corredorDeTareas.test.ts` → en verde
+
+**Steps:**
+
+- [ ] **Step 1: el test que falla — el juez no basta solo**
+
+```ts
+// src/core/entrega.test.ts
+it("el veredicto del juez NO basta solo: una condición en rojo lo tumba", () => {
+  // Es la regla que este repo ya tenía escrita para la subida autónoma, y el motivo es el
+  // mismo por el que los avisos de honestidad son código y no prompt: a un modelo se le
+  // puede pedir que avise y a veces no avisa. Si el juez pudiera entregar solo, «terminada»
+  // valdría lo que valga la buena voluntad de un modelo esa vez.
+  expect(condicionesDeEntrega({ verificador: "rojo", pendientes: 0, arbolSucio: false })).toEqual({
+    entregable: false,
+    motivo: expect.stringContaining("verificador"),
+  });
+});
+
+it("con las tres en verde, es entregable — y sigue faltando el juez, que decide aparte", () => {
+  expect(condicionesDeEntrega({ verificador: "verde", pendientes: 0, arbolSucio: false })).toEqual({ entregable: true });
+});
+
+it("nada pendiente de aprobar y árbol limpio son condiciones, no detalles", () => {
+  expect(condicionesDeEntrega({ verificador: "verde", pendientes: 2, arbolSucio: false }).entregable).toBe(false);
+  expect(condicionesDeEntrega({ verificador: "verde", pendientes: 0, arbolSucio: true }).entregable).toBe(false);
+});
+
+it("un verificador que NO CORRIÓ no es verde", () => {
+  // La trampa de siempre: «no se sabe» no es «está bien». Un turno que no escribió no corre
+  // el simulador, y dar eso por verde entregaría trabajo que nadie midió.
+  expect(condicionesDeEntrega({ verificador: "no-corrio", pendientes: 0, arbolSucio: false }).entregable).toBe(false);
+});
+```
+
+- [ ] **Step 2: el test que falla — el juez por puerto**
+
+```ts
+// src/agent/juezDeTarea.test.ts
+it("el juez usa el papel `afilado` y entra por puerto: `npm test` no habla con ningún modelo", async () => {
+  const pedidos: string[] = [];
+  const juez = crearJuezDeTarea({
+    invocar: async (papel, prompt) => { pedidos.push(papel); return JSON.stringify({ veredicto: "verde", resumen: "hace lo que pide" }); },
+  });
+  const v = await juez.juzgar({ encargo: "añade una colección Clientes", aplicados: ["Clientes.xne"] });
+  expect(pedidos).toEqual(["afilado"]);
+  expect(v).toEqual({ veredicto: "verde", resumen: "hace lo que pide" });
+});
+
+it("una respuesta que no se entiende NO es un verde", async () => {
+  // Fail-closed por la misma razón que la aprobación: lo que no se entiende no se aprueba.
+  const juez = crearJuezDeTarea({ invocar: async () => "no soy json" });
+  const v = await juez.juzgar({ encargo: "x", aplicados: [] });
+  expect(v.veredicto).toBe("indeterminado");
+});
+```
+
+- [ ] **Step 3: implementarlo**
+
+`core/entrega.ts` son datos y una función pura — nada de `fs`, nada de modelos. El estado del
+verificador tiene TRES valores (`verde`, `rojo`, `no-corrio`) y no un booleano, por la misma
+razón que los cuatro estados de una herramienta en `dispositivos.ts`.
+
+`agent/juezDeTarea.ts` recibe un `invocar` por parámetro, pide el papel `afilado`, y su prompt
+lleva el encargo y los ficheros aplicados — **nunca el contenido**. Una respuesta que no
+parsea es `indeterminado`, que no es verde.
+
+En `corredorDeTareas.ts`: al acabar el turno, medir las condiciones, preguntar al juez solo si
+las condiciones pasan (preguntarle antes gasta una llamada del modelo más caro para nada), y
+poner `terminada` solo con las dos cosas. Lo que no entrega va a esperando feedback con el
+motivo.
+
+- [ ] **Step 4: correr, mutar y commitear**
+
+Mutaciones obligatorias: entregar con el juez en verde y una condición en rojo; entregar con
+las condiciones en verde y el juez en rojo; tratar `no-corrio` como verde; y preguntar al juez
+antes de medir las condiciones.
+
+```bash
+npm run typecheck && npm test
+git commit -m "feat: una tarea se entrega por condiciones medidas MÁS el juez, no por acabar"
+```
+
+```json:metadata
+{"files": ["src/core/entrega.ts", "src/agent/juezDeTarea.ts", "src/core/tareas.ts", "src/web/servidor/corredorDeTareas.ts"], "acceptanceCriteria": ["`condicionesDeEntrega` pura con las tres condiciones", "el juez no basta solo", "las condiciones tampoco bastan solas", "el juez por puerto con el papel `afilado`", "que el juez no se pueda usar es fallo del entorno y no entrega", "el veredicto se guarda sin contenido de ficheros"], "modelTier": "frontier", "userGate": true, "tags": ["user-gate"]}
+```
+
+---
+
+## Task 12: esperando feedback — editar la tarea y que siga
+
+**Goal:** Que una tarea aparcada por una decisión que necesita al desarrollador se resuelva editando la tarea para añadir el feedback, y que entonces continúe en el mismo hilo.
+
+**Files:**
+- Modify: `src/core/tareas.ts` (el feedback en la `Tarea`)
+- Modify: `src/agent/tareasEnDisco.ts` (guardarlo)
+- Modify: `src/web/servidor/arranque.ts` (la acción del cable) + su test
+- Modify: `src/web/servidor/corredorDeTareas.ts` (reanudar con el feedback) + su test
+- Modify: `apps/web/src/tipos.ts`, `store.ts`, `store.test.ts`
+- Modify: `apps/web/src/componentes/Kanban.tsx` (el campo)
+
+**Acceptance Criteria:**
+- [ ] Añadir feedback a una tarea en `requiere-atencion` la devuelve a `nuevo` y hace que el corredor la mire
+- [ ] El feedback se guarda con la tarea y llega al agente como mensaje de USUARIO en el mismo hilo — el mismo camino que los hallazgos del verificador, no un encargo nuevo
+- [ ] Un feedback vacío se rechaza y se dice: devolvería la tarea al lazo sin nada nuevo que decirle
+- [ ] La tarea conserva su `sesion` y su hilo al reanudar, así que la conversación se lee entera
+- [ ] Si su hilo ya no se puede reanudar (`sesion` limpiada porque no había nada abrible), se dice y se empieza uno nuevo — no se finge que continúa
+- [ ] El historial de feedbacks no se pierde: añadir uno segundo no borra el primero
+
+**Verify:** `npx vitest run src/web src/core/tareas.test.ts apps/web/src/store.test.ts` → en verde
+
+**Steps:**
+
+- [ ] **Step 1: el test que falla — el feedback reanuda**
+
+```ts
+it("añadir feedback devuelve la tarea al lazo, en su mismo hilo", async () => {
+  // `requiere-atencion` dejó de ser terminal: es una pregunta al desarrollador. Y la
+  // respuesta entra como mensaje de USUARIO en el hilo que ya existe, igual que los
+  // hallazgos del verificador — un encargo nuevo perdería todo lo que la tarea ya sabe.
+  const d = discoDeMentira([TAREA({ estado: "requiere-atencion", motivo: "¿la colección lleva histórico?", sesion: "s1" })]);
+  const recibidos: string[] = [];
+  const corredor = crearCorredorDeTareas({ disco: d.disco, abrirParaTarea: async (raiz) => ({ raiz, idDeHilo: "s1", correrTarea: async (p) => { recibidos.push(p); }, cerrar: async () => {} }), pid: 1, concurrencia: () => 1 });
+  await corredor.arrancar();
+  aplicarFeedback(d.disco, "t1", "sí, con histórico");
+  corredor.revisar();
+  await corredor.asentar();
+  expect(recibidos.join(" ")).toContain("sí, con histórico");
+  expect(d.estado()[0]!.sesion).toBe("s1");
+  await corredor.parar();
+});
+
+it("un feedback vacío se rechaza: devolvería la tarea al lazo sin nada nuevo", () => {
+  const d = discoDeMentira([TAREA({ estado: "requiere-atencion", motivo: "?" })]);
+  expect(aplicarFeedback(d.disco, "t1", "   ")).toEqual({ hecho: false, motivo: expect.any(String) });
+  expect(d.estado()[0]!.estado).toBe("requiere-atencion");
+});
+```
+
+- [ ] **Step 2: implementarlo**
+
+`core/tareas.ts`: `feedback` es una LISTA y no un campo, porque puede haber varias vueltas y
+la segunda no puede borrar la primera. Con la regla de siempre: ausente no es vacía.
+
+`arranque.ts`: una acción más del `{clase:"tarea"}` que ya existe, por el mismo camino.
+
+`corredorDeTareas.ts`: al ejecutar una tarea que trae feedback sin consumir, la petición que
+se le pasa al turno es el feedback y no el encargo — y se marca consumido, o la vuelta
+siguiente lo repetiría.
+
+`Kanban.tsx`: en la tarjeta de esperando feedback, el motivo y un campo para contestar. Sin
+modal: es una frase, no una decisión con diff.
+
+- [ ] **Step 3: correr, mutar y commitear**
+
+Mutaciones obligatorias: aceptar el feedback vacío; no marcarlo consumido; pisar el feedback
+anterior; perder `sesion` al reanudar; y quitar el campo de la lista blanca del store.
+
+```bash
+npm run typecheck && npm test
+git commit -m "feat(web): esperando feedback — se edita la tarea y sigue en su hilo"
+```
+
+```json:metadata
+{"files": ["src/core/tareas.ts", "src/agent/tareasEnDisco.ts", "src/web/servidor/arranque.ts", "src/web/servidor/corredorDeTareas.ts", "apps/web/src/store.ts", "apps/web/src/componentes/Kanban.tsx"], "acceptanceCriteria": ["el feedback devuelve la tarea a `nuevo` y el corredor la mira", "llega como mensaje de usuario en el mismo hilo", "un feedback vacío se rechaza y se dice", "conserva `sesion` y el hilo", "si el hilo no se puede reanudar se dice", "el historial de feedbacks no se pierde"], "modelTier": "standard", "userGate": false}
+```

@@ -28,7 +28,7 @@
   {
    "id": 4,
    "subject": "Task 4: `consolaDeTarea` — aparcar en vez de contestar",
-   "status": "pending",
+   "status": "completed",
    "blockedBy": [
     3
    ],
@@ -37,7 +37,7 @@
   {
    "id": 5,
    "subject": "Task 5: `corredorDeTareas` — cerrojo, reconciliación y lazo",
-   "status": "pending",
+   "status": "completed",
    "blockedBy": [
     4
    ],
