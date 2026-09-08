@@ -4278,3 +4278,62 @@ describe("mirar en vivo lo que hace una tarea — el cable", () => {
     }
   });
 });
+
+/**
+ * **Una reconexión que reclama el mismo id desengancha lo que la conexión vieja miraba.**
+ *
+ * F2 de la revisión, y la carrera es la que el propio `close` documenta: una pestaña
+ * recargada puede cerrar su SSE DESPUÉS de que su reconexión haya reclamado el id, y el
+ * `close` viejo se salta la limpieza por la guarda de `enviar === sumidero` — que está bien
+ * puesta, porque si no se llevaría por delante las miradas del recién llegado. La
+ * consecuencia era que los envoltorios de la conexión vieja se quedaban en el `mirones` del
+ * transporte de la tarea hasta que su consola cerrara, escribiendo en un socket que ya no
+ * está (el `try/catch` del sumidero se lo traga, así que ni se veía). Se limpia al RECLAMAR
+ * el id, que es el único momento en que se sabe con certeza que la conexión anterior murió.
+ */
+describe("mirar: la reconexión no deja envoltorios huérfanos", () => {
+  it("reclamar el mismo id de cliente desengancha las miradas de la conexión anterior", async () => {
+    const servidor = servidorDeMentira();
+    const mirones = new Map<string, Set<Sumidero>>();
+    montarRutas(servidor, vestibuloDePrueba(), {
+      corredorDeTareas: {
+        corriendoAqui: () => true,
+        cortar: async () => true,
+        mirar: (id: string, enviar: Sumidero) => {
+          const suyos = mirones.get(id) ?? new Set<Sumidero>();
+          suyos.add(enviar);
+          mirones.set(id, suyos);
+          return [];
+        },
+        dejarDeMirar: (id: string, enviar: Sumidero) => void mirones.get(id)?.delete(enviar),
+      },
+    });
+    const eventos = servidor.rutas.get("GET /eventos")!;
+    const accion = servidor.rutas.get("POST /accion")!;
+
+    const vieja = clienteDeMentira("c1");
+    eventos(vieja.peticion, vieja.respuesta);
+    // Y OTRA persona mirando la misma tarea desde otra pestaña: lo que se limpia es lo del
+    // id que se reclama y no «todo», o una recarga dejaría muda a la de al lado.
+    const ajena = clienteDeMentira("c2");
+    eventos(ajena.peticion, ajena.respuesta);
+    await asentar();
+    await enviarMensaje(accion, { clase: "mirar", tarea: "t1", ver: true, cliente: "c1" });
+    await enviarMensaje(accion, { clase: "mirar", tarea: "t1", ver: true, cliente: "c2" });
+    expect(mirones.get("t1")!.size).toBe(2);
+
+    // La pestaña se recarga: el SSE nuevo llega ANTES de que el `close` de la vieja se
+    // dispare, que es el orden que la guarda del `close` existe para sobrevivir.
+    const nueva = clienteDeMentira("c1");
+    eventos(nueva.peticion, nueva.respuesta);
+    await asentar();
+    // Solo se fue el de «c1»: el de «c2» sigue enganchado.
+    expect(mirones.get("t1")!.size).toBe(1);
+
+    // Y el `close` tardío de la vieja no puede llevarse por delante lo del recién llegado.
+    await enviarMensaje(accion, { clase: "mirar", tarea: "t1", ver: true, cliente: "c1" });
+    expect(mirones.get("t1")!.size).toBe(2);
+    vieja.cerrar();
+    expect(mirones.get("t1")!.size).toBe(2);
+  });
+});

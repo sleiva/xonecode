@@ -27,11 +27,25 @@ import estilos from "./MirarTarea.module.css";
 export function MirarTarea({
   titulo,
   actos,
+  corre = true,
   alCerrar,
 }: {
   /** El título de la tarea, para saber de cuál es este transcript. */
   titulo: string;
   actos: readonly Acto[];
+  /**
+   * ¿Sigue corriendo el turno de esta tarea en este proceso?
+   *
+   * Solo cambia una cosa, y hace falta: **qué significa que la lista venga vacía.**
+   * Corriendo, es «todavía no ha pintado nada» — y decirlo evita que un tramo callado (el
+   * modelo pensando) se lea como un cuelgue. Ya no corriendo, esa frase es falsa, y hay dos
+   * caminos reales que llegan ahí: el panel se queda abierto cuando la tarea acaba (a
+   * propósito: cerrarlo tiraría lo último que se estaba leyendo), y en cuanto el cable hipa
+   * el store tira el transcript y la repetición pide una tarea que ya no está en `enVuelo`,
+   * así que el servidor no manda nada. Un panel afirmando que un turno terminado no ha
+   * empezado es la misma mentira que una lista vacía rellenada.
+   */
+  corre?: boolean;
   alCerrar: () => void;
 }) {
   return (
@@ -48,9 +62,13 @@ export function MirarTarea({
         contéstale con el feedback de su tarjeta cuando la tarea lo pida.
       </p>
       {actos.length === 0 ? (
-        // Distinto de «se ha colgado»: la tarea corre y todavía no ha pintado nada. Decirlo
-        // es lo que evita que un tramo callado —el modelo pensando— se lea como un cuelgue.
-        <p className={estilos.vacio}>Todavía no ha pintado nada. En cuanto empiece, aparecerá aquí.</p>
+        // Dos frases y no una: ver `corre`. Distinto de «se ha colgado» en el primer caso, y
+        // distinto de «no ha empezado» en el segundo.
+        <p className={estilos.vacio}>
+          {corre
+            ? "Todavía no ha pintado nada. En cuanto empiece, aparecerá aquí."
+            : "Esta tarea ya no corre aquí. Lo que hizo está en su conversación: pulsa su título en la tarjeta para abrirla."}
+        </p>
       ) : (
         <ul className={estilos.transcript}>
           {actos.map((acto, indice) => (

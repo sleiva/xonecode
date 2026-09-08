@@ -332,6 +332,14 @@ export function Escritorio({
           <MirarTarea
             titulo={tareas?.lista.find((t) => t.id === mirandoTarea)?.titulo ?? mirandoTarea}
             actos={mirada?.tarea === mirandoTarea ? mirada.actos : []}
+            // Con qué frase se lee un panel vacío. Las MISMAS dos condiciones que ofrecen el
+            // botón: si la tarea ya no está `en-proceso`, o la ejecuta el otro proceso, este
+            // servidor no tiene su consola y no va a llegar nada más — decir «todavía no ha
+            // pintado nada» de un turno terminado sería la mentira de siempre.
+            corre={
+              tareas?.lista.find((t) => t.id === mirandoTarea)?.estado === "en-proceso" &&
+              tareas.corriendoAqui
+            }
             alCerrar={() => alDejarDeMirarTarea(mirandoTarea)}
           />
         )}

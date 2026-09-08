@@ -73,3 +73,37 @@ describe("MirarTarea", () => {
     expect(screen.queryByText(/4200/)).toBeNull();
   });
 });
+
+/**
+ * **Vacío no significa lo mismo según si la tarea sigue corriendo aquí, y son dos frases.**
+ *
+ * F1 de la revisión: el panel decía «todavía no ha pintado nada» siempre que la lista llegaba
+ * vacía, y eso es falso en dos caminos reales — el panel se queda abierto cuando la tarea
+ * acaba (a propósito: cerrarlo tiraría lo último que se estaba leyendo), y en cuanto el SSE
+ * hipa, el store tira el transcript y la repetición pide una tarea que ya no está en
+ * `enVuelo`, así que el servidor no manda nada. El resultado era un panel afirmando que un
+ * turno terminado no ha empezado. Es la regla de siempre de este repo: un hueco con la frase
+ * equivocada es la misma mentira que una lista vacía rellenada.
+ */
+describe("MirarTarea: vacío no es una sola cosa", () => {
+  it("corriendo y sin actos: todavía no ha pintado nada", () => {
+    render(<MirarTarea titulo="t" actos={[]} corre alCerrar={() => {}} />);
+    expect(screen.getByText(/todavía no ha pintado nada/i)).toBeTruthy();
+  });
+
+  it("ya NO corre aquí: se dice, y se dice dónde está lo que hizo", () => {
+    render(<MirarTarea titulo="t" actos={[]} corre={false} alCerrar={() => {}} />);
+    expect(screen.queryByText(/todavía no ha pintado nada/i)).toBeNull();
+    expect(screen.getByText(/ya no corre aquí/i)).toBeTruthy();
+    // Y a dónde ir: su conversación guardada, que es el MISMO transcript. Se busca en la
+    // frase del hueco y no por texto suelto: la nota de la cabecera dice «su conversación»
+    // también, y `getByText` se quejaría de dos.
+    expect(screen.getByText(/pulsa su título/i)).toBeTruthy();
+  });
+
+  it("con actos, que corra o no no cambia lo que se lee: el transcript es el transcript", () => {
+    const actos: Acto[] = [{ tipo: "asistente", texto: "listo" }];
+    render(<MirarTarea titulo="t" actos={actos} corre={false} alCerrar={() => {}} />);
+    expect(screen.getByText("listo")).toBeTruthy();
+  });
+});

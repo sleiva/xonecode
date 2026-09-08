@@ -2045,6 +2045,23 @@ export function montarRutas(
      */
     const idDeCliente = new URLSearchParams((peticion.url ?? "").split("?")[1] ?? "").get("cliente") ?? undefined;
     if (idDeCliente !== undefined && idDeCliente !== "") {
+      /**
+       * Si el id ya estaba, es la MISMA pestaña reconectando, y sus envoltorios viejos hay
+       * que desengancharlos AQUÍ: el `close` de la conexión anterior puede llegar después
+       * —es la carrera que documenta el `close` de abajo— y entonces se salta la limpieza por
+       * la guarda de `enviar === sumidero`, que está bien puesta porque si no se llevaría por
+       * delante las miradas del recién llegado. Sin esto, esos envoltorios se quedaban en el
+       * `mirones` del transporte de la tarea hasta que su consola cerrara, escribiendo en un
+       * socket que ya no está (el `try/catch` del sumidero se lo traga: ni se veía). Reclamar
+       * el id es el único momento en que consta que la conexión anterior murió, y el cliente
+       * vuelve a pedir lo que mirara al reconectar.
+       */
+      const anterior = porIdDeCliente.get(idDeCliente);
+      if (anterior !== undefined) {
+        for (const [tarea, envoltorio] of anterior.mirando) {
+          opciones.corredorDeTareas?.dejarDeMirar?.(tarea, envoltorio);
+        }
+      }
       porIdDeCliente.set(idDeCliente, { enviar: sumidero, mirando: new Map() });
     }
     // Un comentario SSE abre el stream de verdad: sin nada escrito, algunos navegadores no

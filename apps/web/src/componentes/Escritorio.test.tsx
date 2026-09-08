@@ -433,3 +433,118 @@ describe("Escritorio: el kanban de tareas", () => {
     expect((screen.getByRole("button", { name: /nueva tarea/i }) as HTMLButtonElement).disabled).toBe(true);
   });
 });
+
+/**
+ * **El panel de «lo que hace una tarea» y la frase de su hueco** (Task 16).
+ *
+ * Lo que se comprueba aquí y no en `MirarTarea.test.tsx` es la COSTURA: `corre` se compone de
+ * la cola —el estado de esa tarea y `corriendoAqui`—, y ese cálculo vive en este componente.
+ * Una mutación que lo pusiera a fuego dejaría el panel diciendo «todavía no ha pintado nada»
+ * de un turno terminado con los tests de la pieza en verde (medido: sobrevivía).
+ */
+describe("Escritorio: mirar lo que hace una tarea", () => {
+  afterEach(cleanup);
+
+  const TAREA = {
+    id: "t1",
+    proyecto: "p1",
+    proyectoNombre: "AppDemo",
+    titulo: "Arregla el login",
+    peticion: "Arregla el login",
+    encargo: "Arregla el login",
+    adjuntos: [],
+    creada: "2026-09-08T10:00:00.000Z",
+  };
+
+  const cola = (estado: "en-proceso" | "terminada", corriendoAqui = true) => ({
+    lista: [{ ...TAREA, estado }],
+    concurrencia: 2,
+    corriendoAqui,
+  });
+
+  it("con la tarea en proceso aquí y sin actos: todavía no ha pintado nada", () => {
+    render(
+      <Escritorio
+        {...MANEJADORES}
+        proyectos={[]}
+        tareas={cola("en-proceso")}
+        alMirarTarea={() => {}}
+        alDejarDeMirarTarea={() => {}}
+        mirandoTarea="t1"
+      />
+    );
+    expect(screen.getByText(/todavía no ha pintado nada/i)).toBeTruthy();
+  });
+
+  it("con la tarea ya terminada, el panel abierto y vacío DICE que ya no corre", () => {
+    render(
+      <Escritorio
+        {...MANEJADORES}
+        proyectos={[]}
+        tareas={cola("terminada")}
+        alMirarTarea={() => {}}
+        alDejarDeMirarTarea={() => {}}
+        mirandoTarea="t1"
+      />
+    );
+    // El camino real: el panel se queda abierto al acabar la tarea, y el primer hipo del
+    // cable tira el transcript y la repetición no trae nada porque ya no está en `enVuelo`.
+    expect(screen.getByText(/ya no corre aquí/i)).toBeTruthy();
+  });
+
+  it("si la ejecuta el otro proceso, tampoco va a llegar nada: se dice igual", () => {
+    render(
+      <Escritorio
+        {...MANEJADORES}
+        proyectos={[]}
+        tareas={cola("en-proceso", false)}
+        alMirarTarea={() => {}}
+        alDejarDeMirarTarea={() => {}}
+        mirandoTarea="t1"
+      />
+    );
+    expect(screen.getByText(/ya no corre aquí/i)).toBeTruthy();
+  });
+
+  it("el transcript que llega se pinta, y solo el de la tarea que se mira", () => {
+    const { rerender } = render(
+      <Escritorio
+        {...MANEJADORES}
+        proyectos={[]}
+        tareas={cola("en-proceso")}
+        alMirarTarea={() => {}}
+        alDejarDeMirarTarea={() => {}}
+        mirandoTarea="t1"
+        mirada={{ tarea: "t1", actos: [{ tipo: "asistente", texto: "voy con el campo" }] }}
+      />
+    );
+    expect(screen.getByText("voy con el campo")).toBeTruthy();
+    // Y el de OTRA tarea no: el store ya lo separa, pero pintar el que no toca sería contar
+    // lo que hizo otro agente bajo este título.
+    rerender(
+      <Escritorio
+        {...MANEJADORES}
+        proyectos={[]}
+        tareas={cola("en-proceso")}
+        alMirarTarea={() => {}}
+        alDejarDeMirarTarea={() => {}}
+        mirandoTarea="t1"
+        mirada={{ tarea: "t2", actos: [{ tipo: "asistente", texto: "de otra" }] }}
+      />
+    );
+    expect(screen.queryByText("de otra")).toBeNull();
+  });
+
+  it("sin tarea elegida no hay panel", () => {
+    render(
+      <Escritorio
+        {...MANEJADORES}
+        proyectos={[]}
+        tareas={cola("en-proceso")}
+        alMirarTarea={() => {}}
+        alDejarDeMirarTarea={() => {}}
+      />
+    );
+    expect(screen.queryByText(/lo que hace:/i)).toBeNull();
+  });
+});
