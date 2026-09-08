@@ -69,6 +69,9 @@ export function Kanban({
   alDescartar,
   alTerminar,
   alEnviarFeedback,
+  alMirar,
+  alDejarDeMirar,
+  mirando,
   proyectoActivo,
   conectado,
 }: {
@@ -98,6 +101,20 @@ export function Kanban({
    * de siempre en vez de un campo que no llevaría a ninguna parte.
    */
   alEnviarFeedback?: (id: string, texto: string) => void;
+  /**
+   * Ver EN VIVO lo que hace el turno de una tarea. Ausente = no se ofrece.
+   *
+   * Solo se pinta en una `en-proceso`, y solo si la ejecuta ESTE proceso: sin su consola
+   * aquí no hay transcript que enseñar, y un botón que no puede cumplir lo que dice es el
+   * botón muerto de siempre. Para una terminada, lo que hay es su transcript GUARDADO — se
+   * abre pulsando el título, y es el MISMO (no hay un segundo registro).
+   */
+  alMirar?: (id: string) => void;
+  /** Cerrar esa vista. Ausente = no se ofrece cerrarla desde aquí. */
+  alDejarDeMirar?: (id: string) => void;
+  /** Cuál se está mirando ahora, si alguna: su tarjeta lo dice y su botón cierra en vez de
+   *  abrir. Sin esto, con el panel abierto no se sabría de qué tarjeta es lo que se lee. */
+  mirando?: string;
   /**
    * El proyecto cuya consola HUMANA está abierta ahora mismo (`estado.alta.proyectoActivo`,
    * la misma raíz que `bloqueados()` mira en `arranque.ts#construirCorredorDeTareasCableado`
@@ -158,6 +175,14 @@ export function Kanban({
                       alAbrirSesion={alAbrirSesion}
                       alDescartar={alDescartar}
                       conectado={conectado}
+                      // Las tres condiciones de «Ver lo que hace» se resuelven AQUÍ y no en
+                      // la tarjeta: `corriendoAqui` es de la cola, no de la tarea, así que
+                      // la tarjeta no lo puede saber sin que se le pase.
+                      {...(alMirar !== undefined && t.estado === "en-proceso" && cola.corriendoAqui && conectado !== false
+                        ? { alMirar }
+                        : {})}
+                      {...(alDejarDeMirar === undefined ? {} : { alDejarDeMirar })}
+                      {...(mirando === undefined ? {} : { mirando })}
                       // Solo tiene sentido decirlo de una `nuevo` —«en-proceso» ya corre y
                       // «terminada» ya acabó— y solo si ESTE kanban es el que ejecuta: en el
                       // segundo proceso el aviso global de arriba ya cubre por qué nada
@@ -191,14 +216,23 @@ function TarjetaSimple({
   alAbrirSesion,
   alDescartar,
   conectado,
+  alMirar,
+  alDejarDeMirar,
+  mirando,
   bloqueadaPorProyectoAbierto,
 }: {
   tarea: TareaDelCable;
   alAbrirSesion?: (proyecto: string, sesion: string) => void;
   alDescartar?: (id: string) => void;
   conectado?: boolean;
+  /** Presente = esta tarjeta puede ofrecer la vista en vivo. Las condiciones las decide
+   *  `Kanban`, que es quien conoce la cola. */
+  alMirar?: (id: string) => void;
+  alDejarDeMirar?: (id: string) => void;
+  mirando?: string;
   bloqueadaPorProyectoAbierto?: boolean;
 }) {
+  const seMira = mirando === t.id;
   return (
     <li>
       <div className={estilos.tarjeta}>
@@ -221,6 +255,19 @@ function TarjetaSimple({
           <span className={estilos.bloqueada}>
             Esperando a que se cierre el proyecto: mientras alguien lo tenga abierto, gana la persona.
           </span>
+        ) : null}
+        {/* Ver lo que hace, en vivo. El MISMO control abre y cierra: dos botones para una
+            cosa dejarían al lector adivinando cuál de las dos tarjetas está pintando el
+            panel. Lo que se abre es el transcript de su sesión —no un log paralelo—, así
+            que cuando la tarea acabe, lo que se lee pulsando el título es esto mismo. */}
+        {seMira && alDejarDeMirar !== undefined ? (
+          <button type="button" className={estilos.enlaceRevision} onClick={() => alDejarDeMirar(t.id)}>
+            Dejar de ver lo que hace
+          </button>
+        ) : alMirar !== undefined ? (
+          <button type="button" className={estilos.enlaceRevision} onClick={() => alMirar(t.id)}>
+            Ver lo que hace
+          </button>
         ) : null}
         <AccionesDeTarea tarea={t} conectado={conectado} alDescartar={alDescartar} />
       </div>

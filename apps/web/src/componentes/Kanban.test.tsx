@@ -429,3 +429,70 @@ describe("Kanban", () => {
     expect(screen.getByText(/sin conexión/i)).toBeTruthy();
   });
 });
+
+/**
+ * **«Ver lo que hace»** (Task 16): la puerta a la vista en vivo del turno de una tarea.
+ *
+ * Solo aparece donde puede cumplir lo que promete, y son tres condiciones a la vez:
+ *  - **`en-proceso`**: una `nuevo` no ha arrancado y una `terminada` ya acabó; para esa, lo
+ *    que hay es su transcript guardado, que se abre pulsando el título.
+ *  - **`corriendoAqui`**: si el turno lo ejecuta el OTRO proceso, este servidor no tiene su
+ *    consola y no puede enseñar nada. Un botón ahí es el botón muerto de siempre.
+ *  - **cable vivo**: manda algo al servidor, como reintentar o descartar.
+ */
+describe("Kanban: ver lo que hace una tarea en proceso", () => {
+  const enProceso = tarea({ estado: "en-proceso", empezada: "2026-09-08T10:01:00.000Z" });
+
+  it("se ofrece en una tarea «en proceso» de este proceso, y avisa al pulsar", () => {
+    const alMirar = vi.fn();
+    render(<Kanban cola={{ lista: [enProceso], concurrencia: 2, corriendoAqui: true }} alMirar={alMirar} />);
+    fireEvent.click(screen.getByRole("button", { name: /ver lo que hace/i }));
+    expect(alMirar).toHaveBeenCalledWith("t1");
+  });
+
+  it("no se ofrece en «nuevo», «esperando feedback» ni «terminada»", () => {
+    for (const estado of ["nuevo", "requiere-atencion", "terminada"] as const) {
+      cleanup();
+      render(<Kanban cola={{ lista: [tarea({ estado })], concurrencia: 2, corriendoAqui: true }} alMirar={() => {}} />);
+      expect(screen.queryByRole("button", { name: /ver lo que hace/i })).toBeNull();
+    }
+  });
+
+  it("no se ofrece si el turno lo ejecuta otro proceso: aquí no hay nada que enseñar", () => {
+    render(
+      <Kanban
+        cola={{ lista: [enProceso], concurrencia: 2, corriendoAqui: false, ejecutaOtroProceso: true }}
+        alMirar={() => {}}
+      />
+    );
+    expect(screen.queryByRole("button", { name: /ver lo que hace/i })).toBeNull();
+  });
+
+  it("sin cable no se ofrece", () => {
+    render(
+      <Kanban cola={{ lista: [enProceso], concurrencia: 2, corriendoAqui: true }} alMirar={() => {}} conectado={false} />
+    );
+    expect(screen.queryByRole("button", { name: /ver lo que hace/i })).toBeNull();
+  });
+
+  it("sin manejador no se pinta: un botón que no lleva a ninguna parte es el botón muerto de siempre", () => {
+    render(<Kanban cola={{ lista: [enProceso], concurrencia: 2, corriendoAqui: true }} />);
+    expect(screen.queryByRole("button", { name: /ver lo que hace/i })).toBeNull();
+  });
+
+  it("la que se está mirando lo DICE, y deja de mirarla es el mismo control", () => {
+    const alDejarDeMirar = vi.fn();
+    render(
+      <Kanban
+        cola={{ lista: [enProceso], concurrencia: 2, corriendoAqui: true }}
+        alMirar={() => {}}
+        alDejarDeMirar={alDejarDeMirar}
+        mirando="t1"
+      />
+    );
+    // Sin esto, con el panel abierto el botón seguiría diciendo «ver» y no habría forma de
+    // saber de qué tarjeta es el transcript que se está leyendo.
+    fireEvent.click(screen.getByRole("button", { name: /dejar de ver/i }));
+    expect(alDejarDeMirar).toHaveBeenCalledWith("t1");
+  });
+});

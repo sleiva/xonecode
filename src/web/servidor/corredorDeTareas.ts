@@ -42,6 +42,8 @@ import { conAdjuntos } from "../../core/adjuntos.js";
 import { ErrorDelJuezDeTarea } from "../../agent/juezDeTarea.js";
 import type { Consola } from "../../cli/consola.js";
 import type { ConsolaDeProyecto } from "./vestibulo.js";
+import type { Sumidero } from "./transporte.js";
+import type { Acto } from "../../core/actos.js";
 import type { TareasEnDisco } from "../../agent/tareasEnDisco.js";
 
 /**
@@ -211,6 +213,23 @@ export interface ConsolaParaTarea {
    * proyecto estando sentado delante.
    */
   esperarMarca?(): Promise<void>;
+  /**
+   * Engancha a alguien que MIRA en vivo lo que hace este turno, y devuelve el transcript de
+   * ese instante. Opcional porque los dobles de test no lo tienen; su ausencia solo
+   * significa que esa consola no se puede mirar.
+   *
+   * **Lo que se mira son los actos de SU sesión, no un registro nuevo.** Son los mismos que
+   * `volcar()` escribe en el `.jsonl`, así que la vista en vivo y el transcript que se lee
+   * al abrir la sesión después son lo MISMO — la misma regla que la lista de artefactos,
+   * que sale de los actos y nunca del disco.
+   *
+   * En producción esto reenvía a `ConsolaWeb.mirar` y **no** a `conectar`: con `conectar`,
+   * el `eof()` de esa consola pasaría a decir que hay un humano al que preguntar (medido), y
+   * la consola de una tarea es justo la que no tiene a nadie.
+   */
+  mirar?(enviar: Sumidero): readonly Acto[];
+  /** Se va UN mirón. Los demás siguen: dos personas pueden mirar la misma tarea. */
+  dejarDeMirar?(enviar: Sumidero): void;
 }
 
 export interface Corredor {
@@ -235,6 +254,21 @@ export interface Corredor {
    * — antes de eso, borrar esa carpeta es quitarle el suelo a un turno vivo.
    */
   cortar(id: string): Promise<boolean>;
+  /**
+   * Engancha a quien quiere MIRAR en vivo lo que hace una tarea, y devuelve su transcript
+   * hasta ese instante.
+   *
+   * `undefined` = esa tarea no corre en este proceso (ya acabó, o la ejecuta el otro
+   * corredor, que este no puede alcanzar). **No es `[]`**: una lista vacía significaría
+   * «corre y todavía no ha pintado nada», y confundirlas dejaría una pantalla esperando
+   * para siempre los actos de un turno que no existe.
+   *
+   * Es de SOLO lectura por construcción: por aquí no entra nada hacia el turno, solo sale
+   * lo que ya se está guardando en el transcript de su sesión.
+   */
+  mirar(id: string, enviar: Sumidero): readonly Acto[] | undefined;
+  /** Se va UN mirón de esa tarea. Los demás siguen mirándola. */
+  dejarDeMirar(id: string, enviar: Sumidero): void;
   /** ¿Ejecuta ESTE proceso? Falso si el cerrojo lo tiene otro, o si lo hemos perdido. */
   corriendoAqui(): boolean;
   /**
@@ -323,6 +357,9 @@ export function consolaParaTarea(consola: ConsolaDeProyecto): ConsolaParaTarea {
     },
     cerrar: () => consola.cerrar(),
     esperarMarca: () => consola.esperarMarca(),
+    // A la consola WEB y por `mirar`, nunca por `conectar`: ver `ConsolaParaTarea.mirar`.
+    mirar: (enviar) => consola.consola.mirar(enviar),
+    dejarDeMirar: (enviar) => consola.consola.dejarDeMirar(enviar),
   };
 }
 
@@ -493,6 +530,23 @@ export function crearCorredorDeTareas(opciones: {
      * más caro para volver a saber lo mismo.
      */
     veredicto?: VeredictoDeTarea;
+    /**
+     * La consola de esta tarea, en cuanto existe. Es lo que deja enganchar a un mirón
+     * DESPUÉS de que el turno haya arrancado — el caso normal, porque la tarea se ve «en
+     * proceso» en el kanban mucho antes de que alguien pulse «Ver lo que hace».
+     */
+    consola?: ConsolaParaTarea;
+    /**
+     * Quien la MIRA ahora mismo.
+     *
+     * Vive en la entrada y no en la consola porque cubre la ventana en que la consola
+     * todavía no existe: entre que `revisar()` registra esto y que `abrirParaTarea`
+     * resuelve hay un `await` de verdad (git y disco) y la tarea YA se enseña «en proceso»
+     * (ver el `map` de `revisar`). Pulsar «ver» ahí no puede perderse — es la misma carrera
+     * que `cortarPedido` cubre para el corte, y se cierra igual: `correr()` engancha lo que
+     * haya pendiente en cuanto tiene la consola.
+     */
+    mirones: Set<Sumidero>;
   }
   const enVuelo = new Map<string, EnVuelo>();
 
@@ -816,6 +870,17 @@ export function crearCorredorDeTareas(opciones: {
     // Desde aquí, `parar()` sabe cómo cortar ESTE turno. Antes de esta línea la consola no
     // existía todavía y no había nada que cortar.
     entrada.cortar = cortar;
+    /**
+     * Y desde aquí se puede mirar. Lo que ya estaba pedido se engancha ahora, con una
+     * REEMISIÓN del transcript por delante: quien pulsó «ver» durante la apertura recibió
+     * una lista vacía, y sin esto se quedaría esperando el primer acto NUEVO — perdiéndose
+     * todo lo que el turno hubiera pintado entre medias.
+     */
+    entrada.consola = consola;
+    for (const miron of entrada.mirones) {
+      const actos = consola.mirar?.(miron);
+      if (actos !== undefined) miron({ clase: "reemision", actos: [...actos] });
+    }
     // Y si el corte llegó mientras se abría, no se arranca nada: marcar «en proceso» ahora
     // dejaría una tarea corriendo justo cuando el proceso se está yendo — o, con
     // `cortarPedido`, justo cuando alguien la acaba de descartar. Los dos casos comparten
@@ -1076,7 +1141,13 @@ export function crearCorredorDeTareas(opciones: {
        */
       // Sin `autorizadas`: no está puesta hasta que el turno arranca, que es lo que
       // distingue «no consta» de «no autorizó nada».
-      const entrada: EnVuelo = { tarea, trabajo: Promise.resolve(), cortar: async () => {}, cortarPedido: false };
+      const entrada: EnVuelo = {
+        tarea,
+        trabajo: Promise.resolve(),
+        cortar: async () => {},
+        cortarPedido: false,
+        mirones: new Set(),
+      };
       enVuelo.set(tarea.id, entrada);
       entrada.trabajo = correr(tarea, entrada)
         // Nada de `informar`: lo que le pasa a una tarea va a su registro. Si `correr` se
@@ -1253,6 +1324,26 @@ export function crearCorredorDeTareas(opciones: {
         })(),
         opciones.esperaAlParar ?? TOPE_DE_PARADA_MS
       );
+    },
+    mirar(id, enviar) {
+      const entrada = enVuelo.get(id);
+      // No corre AQUÍ. `undefined` y no `[]`: una lista vacía diría «corre y todavía no ha
+      // hecho nada», que es otra cosa — y quien pregunta necesita distinguirlas para no
+      // dejar una pantalla esperando actos de un turno que no existe.
+      if (entrada === undefined) return undefined;
+      entrada.mirones.add(enviar);
+      // Con la consola ya abierta, el transcript de ese instante. Sin ella —la ventana de la
+      // apertura— una lista vacía y el enganche apuntado: `correr()` lo cumple con una
+      // reemisión en cuanto la consola existe.
+      return entrada.consola?.mirar?.(enviar) ?? [];
+    },
+    dejarDeMirar(id, enviar) {
+      const entrada = enVuelo.get(id);
+      // La tarea puede haber terminado entre que se pulsó y que llegó el mensaje: no es un
+      // error, es que ya no hay de qué desengancharse.
+      if (entrada === undefined) return;
+      entrada.mirones.delete(enviar);
+      entrada.consola?.dejarDeMirar?.(enviar);
     },
     corriendoAqui: () => miCerrojo,
     // La otra mitad, y nunca deducida de la primera: ver `Corredor.ejecutaOtroProceso`.

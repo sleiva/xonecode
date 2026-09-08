@@ -1,7 +1,8 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { filaDeTarea } from "./transporte.js";
+import { crearTransporte, filaDeTarea, type MensajeAlCliente } from "./transporte.js";
+import type { Acto } from "../../core/actos.js";
 import type { Tarea } from "../../core/tareas.js";
 import type { VeredictoDeTarea } from "../../core/entrega.js";
 
@@ -162,5 +163,112 @@ describe("filaDeTarea", () => {
       veredicto: { veredicto: "verde", resumen: "vale", colado: "no debería viajar" } as VeredictoDeTarea,
     });
     expect(conColado.veredicto).toEqual({ veredicto: "verde", resumen: "vale" });
+  });
+});
+
+/**
+ * **Los MIRONES: quien mira una tarea de fondo no cuenta como cliente.**
+ *
+ * Task 16. La vista en vivo de una tarea se hace enganchando un sumidero al transporte de
+ * SU consola, y ahí hay dos trampas medidas que este bloque fija:
+ *
+ * 1. **`conectar()` habría vuelto `eof()` mentiroso.** Medido antes de escribir nada: con
+ *    un sumidero enganchado por `conectar`, el `eof()` de esa consola de proyecto pasa de
+ *    `true` a `false` — o sea, «hay un humano al que preguntar». Y no lo hay: la vista es
+ *    de SOLO lectura (decisión 2 del diseño), no hay compositor, y nadie puede contestar
+ *    una pregunta ni aprobar nada desde ahí. El turno de la tarea no se entera hoy porque
+ *    corre con `crearConsolaDeTarea` (`eof: () => true` a fuego, medido), pero apoyarse en
+ *    eso sería dejar puesta la trampa para el día que un mensaje del cliente llegue a esa
+ *    consola. Por eso `mirar` es un conjunto APARTE que no toca `hayCliente`.
+ * 2. **Al mirón NO se le manda todo lo que se emite.** Por el transporte de una consola de
+ *    tarea viajan además del transcript el `{clase:"turno"}` de los flancos —lo emite el
+ *    envoltorio de `vestibulo.ts` sin mirar `alCable`, medido— y en teoría cualquier otra
+ *    clase. Si eso llegara al cliente por el mismo cable que su propia sesión, el
+ *    compositor de quien esté trabajando se apagaría por un turno que no es suyo. Al mirón
+ *    va SOLO el transcript: `acto`, `sustitucion` y `reemision`.
+ */
+describe("mirar — la vista en vivo de una tarea", () => {
+  it("un mirón NO cuenta como cliente: `conectado()` sigue diciendo que no hay nadie", () => {
+    const t = crearTransporte(() => []);
+    const visto: MensajeAlCliente[] = [];
+    expect(t.conectado()).toBe(false);
+    t.mirar((m) => visto.push(m));
+    // Lo que sostiene el fail-closed de la consola de tarea: `eof()` es `!conectado()`.
+    expect(t.conectado()).toBe(false);
+  });
+
+  it("al mirón le llega el transcript, y NADA más: ni `turno`, ni aprobaciones, ni preguntas", () => {
+    const t = crearTransporte(() => []);
+    const visto: MensajeAlCliente[] = [];
+    t.mirar((m) => visto.push(m));
+    t.emitir({ clase: "acto", acto: { tipo: "asistente", texto: "voy" } });
+    t.emitir({ clase: "sustitucion", acto: { tipo: "asistente", texto: "voy allá" } });
+    t.emitir({ clase: "reemision", actos: [{ tipo: "asistente", texto: "voy allá" }] });
+    // Lo que NO puede pasar: el `turno` apagaría el compositor de quien mira, y la
+    // aprobación es el ÚNICO mensaje con contenido de fichero y diff dentro.
+    t.emitir({ clase: "turno", activo: true });
+    t.emitir({ clase: "pregunta", texto: "¿qué rama?" });
+    t.emitir({ clase: "secreto", pregunta: "la clave de openai" });
+    t.emitir({ clase: "selector", selector: { titulo: "elige", opciones: [] } });
+    t.emitir({ clase: "aprobacion", pendientes: [], ficheros: {}, diffs: {} });
+    expect(visto.map((m) => m.clase)).toEqual(["acto", "sustitucion", "reemision"]);
+  });
+
+  it("`mirar` devuelve el transcript de ese instante, y no lo emite a nadie más", () => {
+    const actos: Acto[] = [{ tipo: "usuario", texto: "arregla el login" }];
+    const t = crearTransporte(() => actos);
+    const delCliente: MensajeAlCliente[] = [];
+    t.conectar((m) => delCliente.push(m));
+    const delMiron: MensajeAlCliente[] = [];
+    expect(t.mirar((m) => delMiron.push(m))).toEqual(actos);
+    // Empezar a mirar no le manda nada a nadie: quien mira recibe su transcript por el
+    // valor de retorno, igual que hace `conectar`.
+    expect(delCliente).toEqual([]);
+    expect(delMiron).toEqual([]);
+  });
+
+  it("dejar de mirar desengancha ESE sumidero y no los demás", () => {
+    const t = crearTransporte(() => []);
+    const uno: MensajeAlCliente[] = [];
+    const otro: MensajeAlCliente[] = [];
+    const sumideroUno = (m: MensajeAlCliente): void => {
+      uno.push(m);
+    };
+    const sumideroOtro = (m: MensajeAlCliente): void => {
+      otro.push(m);
+    };
+    t.mirar(sumideroUno);
+    t.mirar(sumideroOtro);
+    t.emitir({ clase: "acto", acto: { tipo: "fase", texto: "planificando", ms: 1, fase: "planificando" } });
+    expect(uno).toHaveLength(1);
+    expect(otro).toHaveLength(1);
+    t.dejarDeMirar(sumideroUno);
+    t.emitir({ clase: "acto", acto: { tipo: "asistente", texto: "listo" } });
+    // Dos personas mirando la misma tarea: que una cierre no puede dejar muda a la otra.
+    expect(uno).toHaveLength(1);
+    expect(otro).toHaveLength(2);
+  });
+
+  it("irse el último mirón NO despierta a quien esperaba respuesta: no era un humano", () => {
+    const t = crearTransporte(() => []);
+    let cortes = 0;
+    t.alDesconectar(() => cortes++);
+    const sumidero = (): void => {};
+    t.mirar(sumidero);
+    t.dejarDeMirar(sumidero);
+    // `alDesconectar` es lo que responde cadena vacía a cada pregunta y resuelve la
+    // aprobación en vuelo. Un mirón que se va no ha dejado a nadie sin contestar.
+    expect(cortes).toBe(0);
+  });
+
+  it("`desconectar()` sin sumidero se lleva también a los mirones: la consola se abandona", () => {
+    const t = crearTransporte(() => []);
+    const visto: MensajeAlCliente[] = [];
+    t.mirar((m) => visto.push(m));
+    // Es lo que hace `ConsolaWeb.cerrar()` y lo que hace mudarse de consola: no queda nadie
+    // a quien escribirle, y un sumidero de una consola cerrada es un socket que ya se fue.
+    t.desconectar();
+    t.emitir({ clase: "acto", acto: { tipo: "asistente", texto: "listo" } });
+    expect(visto).toEqual([]);
   });
 });

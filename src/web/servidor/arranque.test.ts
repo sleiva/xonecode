@@ -35,7 +35,8 @@ import type { Entorno } from "../../core/settings.js";
 import type { AdjuntoDeTarea, Tarea } from "../../core/tareas.js";
 import { TOPE_DE_ADJUNTO } from "../../agent/tareasEnDisco.js";
 import type { ManejadorRuta } from "./servidor.js";
-import type { MensajeAlCliente, MensajeDelCliente } from "./transporte.js";
+import type { MensajeAlCliente, MensajeDelCliente, Sumidero } from "./transporte.js";
+import type { Acto } from "../../core/actos.js";
 
 /** El servidor visto por `montarRutas`: solo apunta lo que se le registra. */
 function servidorDeMentira() {
@@ -48,11 +49,20 @@ function servidorDeMentira() {
   };
 }
 
-/** El SSE del navegador: apunta cada mensaje ya parseado y sabe avisar del cierre. */
-function clienteDeMentira() {
+/**
+ * El SSE del navegador: apunta cada mensaje ya parseado y sabe avisar del cierre.
+ *
+ * `id` es el identificador de cliente que el navegador manda en la query (`/eventos?cliente=`)
+ * y que después repite en un `{clase:"mirar"}`: sin él el servidor no podría saber a qué
+ * pestaña engancharle la mirada de una tarea, porque el SSE y el `POST /accion` son dos
+ * peticiones distintas. Ausente = un cliente que no pide mirar nada, que es el caso de casi
+ * todos estos tests.
+ */
+function clienteDeMentira(id?: string) {
   const recibidos: MensajeAlCliente[] = [];
   let alCerrar: (() => void) | undefined;
   const peticion = {
+    url: id === undefined ? "/eventos" : `/eventos?cliente=${id}`,
     on: (evento: string, escucha: () => void) => {
       if (evento === "close") alCerrar = escucha;
     },
@@ -3812,6 +3822,25 @@ describe("las tareas en background, el cableado del corredor con el cable — no
     await corredor!.parar();
   });
 
+  /**
+   * El corredor llega a `montarRutas` ENTERO y no recortado, así que `mirar`/`dejarDeMirar`
+   * están montados en producción. Un `Pick` de más en el camino dejaría el botón «Ver lo que
+   * hace» sin nada detrás con todos los tests de las piezas en verde — es la misma lección
+   * que este `describe` entero recoge.
+   */
+  it("el cableado real le pasa al cable un corredor que sabe de mirones", () => {
+    const cola = colaDeMentira([]);
+    const { opcionesDeMontaje } = construirCorredorDeTareasCableado({
+      vestibulo: vestibuloSinAbrir,
+      tareasFabrica: () => cola,
+      informar: () => {},
+      olvidarHiloDeSesion: async () => {},
+      ...ENTREGA_DE_TAREAS,
+    });
+    expect(typeof opcionesDeMontaje.corredorDeTareas?.mirar).toBe("function");
+    expect(typeof opcionesDeMontaje.corredorDeTareas?.dejarDeMirar).toBe("function");
+  });
+
   it("arrancarConectado conecta el puente ANTES de arrancar: una reconciliación que aparca por su cuenta llega al `emitirTareas` recibido", async () => {
     const cola = colaDeMentira([tareaEnProceso("t1")]);
     const { corredor, arrancarConectado } = construirCorredorDeTareasCableado({
@@ -4011,6 +4040,241 @@ describe("`fuentesDelJuez` — el papel del juez se resuelve con el `config.json
       if (antes === undefined) delete process.env.XONECODE_MODELO;
       else process.env.XONECODE_MODELO = antes;
       rmSync(raiz, { recursive: true, force: true });
+    }
+  });
+});
+
+/**
+ * **Ver en vivo lo que hace una tarea** (Task 16).
+ *
+ * Los actos de un turno de tarea ya se guardaban en el transcript de su sesión —medido:
+ * `consolaParaTarea` le pasa la piel de su propia consola de proyecto— y ya NO se filtraban
+ * al chat de nadie, porque el transporte de una consola de tarea no tiene sumideros
+ * enganchados. Lo que faltaba era exactamente el enganche, y es lo que estos tests fijan.
+ *
+ * Las tres decisiones del diseño, y dónde se ven aquí:
+ *  1. **Opt-in**: nada de esto pasa hasta que llega un `{clase:"mirar", ver:true}`. No se
+ *     muda el cable ni se abre ningún proyecto.
+ *  2. **Solo lectura**: por este camino no entra NADA hacia el turno. El mensaje `mirar` se
+ *     ataja antes del `recibir` de la consola, y hay aserto.
+ *  3. **La vista en vivo y el transcript son lo MISMO**: lo que viaja son los actos de esa
+ *     consola, no un registro paralelo.
+ */
+describe("mirar en vivo lo que hace una tarea — el cable", () => {
+  /** Un corredor de mentira con `mirar`/`dejarDeMirar`, y una tarea en vuelo. */
+  function corredorConMirones(actosIniciales: Acto[] = []) {
+    const mirones = new Map<string, Set<Sumidero>>();
+    return {
+      mirones,
+      /** El turno de esa tarea pinta un acto: le llega a quien la esté mirando. */
+      pintar: (tarea: string, mensaje: MensajeAlCliente) => {
+        for (const m of mirones.get(tarea) ?? []) m(mensaje);
+      },
+      corredor: {
+        corriendoAqui: () => true,
+        cortar: async () => true,
+        mirar: (id: string, enviar: Sumidero) => {
+          if (id !== "t1") return undefined;
+          const suyos = mirones.get(id) ?? new Set<Sumidero>();
+          suyos.add(enviar);
+          mirones.set(id, suyos);
+          return actosIniciales;
+        },
+        dejarDeMirar: (id: string, enviar: Sumidero) => void mirones.get(id)?.delete(enviar),
+      },
+    };
+  }
+
+  function montarConCorredor(actosIniciales: Acto[] = []) {
+    const servidor = servidorDeMentira();
+    const vestibulo = vestibuloDePrueba();
+    const c = corredorConMirones(actosIniciales);
+    montarRutas(servidor, vestibulo, { corredorDeTareas: c.corredor });
+    return {
+      ...c,
+      vestibulo,
+      eventos: servidor.rutas.get("GET /eventos")!,
+      accion: servidor.rutas.get("POST /accion")!,
+    };
+  }
+
+  it("«ver» trae el transcript de la tarea, etiquetado, y SOLO al cliente que lo pidió", async () => {
+    const actos: Acto[] = [
+      { tipo: "usuario", texto: "arregla el login" },
+      { tipo: "razonamiento", texto: "mirando app.xne" },
+    ];
+    const m = montarConCorredor(actos);
+    const mira = clienteDeMentira("c1");
+    const otra = clienteDeMentira("c2");
+    m.eventos(mira.peticion, mira.respuesta);
+    m.eventos(otra.peticion, otra.respuesta);
+    await asentar();
+    mira.recibidos.length = 0;
+    otra.recibidos.length = 0;
+
+    await enviarMensaje(m.accion, { clase: "mirar", tarea: "t1", ver: true, cliente: "c1" });
+    expect(mira.recibidos).toEqual([{ clase: "mirada", tarea: "t1", via: "todos", actos }]);
+    // La pestaña de al lado está trabajando en otra cosa: los actos de una tarea de fondo no
+    // pueden aparecer en su chat. Es el aserto que hay que conservar.
+    expect(otra.recibidos).toEqual([]);
+  });
+
+  it("lo que el turno pinta después llega en vivo, con `alta` y `sustitucion`", async () => {
+    const m = montarConCorredor();
+    const mira = clienteDeMentira("c1");
+    m.eventos(mira.peticion, mira.respuesta);
+    await asentar();
+    await enviarMensaje(m.accion, { clase: "mirar", tarea: "t1", ver: true, cliente: "c1" });
+    mira.recibidos.length = 0;
+
+    m.pintar("t1", { clase: "acto", acto: { tipo: "herramientas", lineas: ["→ lee"], detalles: [{ nombre: "read_file" }] } });
+    m.pintar("t1", { clase: "sustitucion", acto: { tipo: "herramientas", lineas: ["→ lee ×3"], detalles: [{ nombre: "read_file" }] } });
+    m.pintar("t1", { clase: "reemision", actos: [{ tipo: "asistente", texto: "listo" }] });
+    expect(mira.recibidos).toEqual([
+      {
+        clase: "mirada",
+        tarea: "t1",
+        via: "alta",
+        actos: [{ tipo: "herramientas", lineas: ["→ lee"], detalles: [{ nombre: "read_file" }] }],
+      },
+      {
+        clase: "mirada",
+        tarea: "t1",
+        via: "sustitucion",
+        actos: [{ tipo: "herramientas", lineas: ["→ lee ×3"], detalles: [{ nombre: "read_file" }] }],
+      },
+      { clase: "mirada", tarea: "t1", via: "todos", actos: [{ tipo: "asistente", texto: "listo" }] },
+    ]);
+  });
+
+  it("mirar no abre ningún proyecto ni mueve el cable de nadie", async () => {
+    const m = montarConCorredor();
+    const mira = clienteDeMentira("c1");
+    m.eventos(mira.peticion, mira.respuesta);
+    await asentar();
+    expect(m.vestibulo.proyectoAbierto()).toBeUndefined();
+    await enviarMensaje(m.accion, { clase: "mirar", tarea: "t1", ver: true, cliente: "c1" });
+    // La razón de ser de `abrirParaTarea` («no le cambies la pantalla a quien trabaja») no
+    // la puede deshacer esta pantalla.
+    expect(m.vestibulo.proyectoAbierto()).toBeUndefined();
+  });
+
+  it("el mensaje `mirar` NO llega a la consola: por aquí no entra nada hacia el turno", async () => {
+    const servidor = servidorDeMentira();
+    const vestibulo = vestibuloDePrueba();
+    const c = corredorConMirones();
+    const recibidos: MensajeDelCliente[] = [];
+    // La consola del vestíbulo es el destino del cable mientras no hay proyecto abierto:
+    // si `mirar` cayera en el `recibir` de abajo, `correrConsola` podría acabar corriendo
+    // un turno de verdad sobre esa consola — y con un mirón enganchado su `eof()` diría
+    // que hay alguien a quien preguntar. Fail-closed: el mensaje se ataja antes.
+    const original = vestibulo.consola.recibir.bind(vestibulo.consola);
+    vestibulo.consola.recibir = (mensaje) => {
+      recibidos.push(mensaje);
+      original(mensaje);
+    };
+    montarRutas(servidor, vestibulo, { corredorDeTareas: c.corredor });
+    const mira = clienteDeMentira("c1");
+    servidor.rutas.get("GET /eventos")!(mira.peticion, mira.respuesta);
+    await asentar();
+    await enviarMensaje(servidor.rutas.get("POST /accion")!, { clase: "mirar", tarea: "t1", ver: true, cliente: "c1" });
+    await enviarMensaje(servidor.rutas.get("POST /accion")!, { clase: "mirar", tarea: "t1", ver: false, cliente: "c1" });
+    expect(recibidos).toEqual([]);
+  });
+
+  it("dos personas pueden mirar la misma tarea, y dejar de mirar corta solo la suya", async () => {
+    const m = montarConCorredor();
+    const una = clienteDeMentira("c1");
+    const otra = clienteDeMentira("c2");
+    m.eventos(una.peticion, una.respuesta);
+    m.eventos(otra.peticion, otra.respuesta);
+    await asentar();
+    await enviarMensaje(m.accion, { clase: "mirar", tarea: "t1", ver: true, cliente: "c1" });
+    await enviarMensaje(m.accion, { clase: "mirar", tarea: "t1", ver: true, cliente: "c2" });
+    una.recibidos.length = 0;
+    otra.recibidos.length = 0;
+
+    m.pintar("t1", { clase: "acto", acto: { tipo: "asistente", texto: "voy" } });
+    expect(una.recibidos).toHaveLength(1);
+    expect(otra.recibidos).toHaveLength(1);
+
+    await enviarMensaje(m.accion, { clase: "mirar", tarea: "t1", ver: false, cliente: "c1" });
+    m.pintar("t1", { clase: "acto", acto: { tipo: "asistente", texto: "listo" } });
+    // Que una cierre la vista no puede dejar muda a la otra.
+    expect(una.recibidos).toHaveLength(1);
+    expect(otra.recibidos).toHaveLength(2);
+  });
+
+  it("cerrar la pestaña desengancha sus miradas, y no las de la otra", async () => {
+    const m = montarConCorredor();
+    const una = clienteDeMentira("c1");
+    const otra = clienteDeMentira("c2");
+    m.eventos(una.peticion, una.respuesta);
+    m.eventos(otra.peticion, otra.respuesta);
+    await asentar();
+    await enviarMensaje(m.accion, { clase: "mirar", tarea: "t1", ver: true, cliente: "c1" });
+    await enviarMensaje(m.accion, { clase: "mirar", tarea: "t1", ver: true, cliente: "c2" });
+    expect(m.mirones.get("t1")!.size).toBe(2);
+    // Sin esto, un sumidero de una pestaña cerrada se queda enganchado al turno para
+    // siempre: escribiría en un socket que ya no está.
+    una.cerrar();
+    expect(m.mirones.get("t1")!.size).toBe(1);
+    otra.recibidos.length = 0;
+    m.pintar("t1", { clase: "acto", acto: { tipo: "asistente", texto: "listo" } });
+    expect(otra.recibidos).toHaveLength(1);
+  });
+
+  it("una tarea que no corre aquí no emite nada: no se finge un transcript vacío", async () => {
+    const m = montarConCorredor();
+    const mira = clienteDeMentira("c1");
+    m.eventos(mira.peticion, mira.respuesta);
+    await asentar();
+    mira.recibidos.length = 0;
+    await enviarMensaje(m.accion, { clase: "mirar", tarea: "otra", ver: true, cliente: "c1" });
+    // `{via:"todos", actos:[]}` diría «corre y no ha hecho nada», que es otra cosa. Lo que
+    // esa tarea SÍ es —terminada, o de otro proceso— ya lo dice el mensaje de la cola.
+    expect(mira.recibidos).toEqual([]);
+  });
+
+  it("un `cliente` desconocido no engancha nada y no lanza", async () => {
+    const m = montarConCorredor();
+    const mira = clienteDeMentira("c1");
+    m.eventos(mira.peticion, mira.respuesta);
+    await asentar();
+    mira.recibidos.length = 0;
+    expect(await enviarMensaje(m.accion, { clase: "mirar", tarea: "t1", ver: true, cliente: "fantasma" })).toBe(204);
+    expect(m.mirones.get("t1") ?? new Set()).toHaveLength(0);
+    expect(mira.recibidos).toEqual([]);
+  });
+
+  it("mirar dos veces la misma tarea no duplica el enganche ni reemite dos veces", async () => {
+    const m = montarConCorredor([{ tipo: "usuario", texto: "x" }]);
+    const mira = clienteDeMentira("c1");
+    m.eventos(mira.peticion, mira.respuesta);
+    await asentar();
+    await enviarMensaje(m.accion, { clase: "mirar", tarea: "t1", ver: true, cliente: "c1" });
+    mira.recibidos.length = 0;
+    // Idempotente: un doble clic, o un efecto de React que se dispare dos veces, no puede
+    // dejar dos sumideros del mismo cliente enganchados al mismo turno.
+    await enviarMensaje(m.accion, { clase: "mirar", tarea: "t1", ver: true, cliente: "c1" });
+    expect(mira.recibidos).toEqual([]);
+    m.pintar("t1", { clase: "acto", acto: { tipo: "asistente", texto: "listo" } });
+    expect(mira.recibidos).toHaveLength(1);
+  });
+
+  it("ninguna ruta de la máquina viaja en esos mensajes", async () => {
+    // El acto de una tool lleva ruta RELATIVA por construcción (`agent/resumenDeTool.ts`),
+    // y el mensaje que envuelve no añade ninguna: ni la raíz del proyecto, ni la carpeta de
+    // la sesión, ni el fichero del checkpointer. El cable puede ir por un túnel.
+    const m = montarConCorredor([{ tipo: "usuario", texto: "arregla el login" }]);
+    const mira = clienteDeMentira("c1");
+    m.eventos(mira.peticion, mira.respuesta);
+    await asentar();
+    await enviarMensaje(m.accion, { clase: "mirar", tarea: "t1", ver: true, cliente: "c1" });
+    m.pintar("t1", { clase: "acto", acto: { tipo: "herramientas", lineas: ["← edita app.xne"], detalles: [{ nombre: "edit_file" }] } });
+    const texto = JSON.stringify(mira.recibidos);
+    for (const sospechosa of ["/w/", "/Users/", ".xonecode", "/tmp/", "C:\\"]) {
+      expect(texto).not.toContain(sospechosa);
     }
   });
 });

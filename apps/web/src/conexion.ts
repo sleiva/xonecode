@@ -34,6 +34,12 @@ export function esperaDeReintento(intento: number): number {
 }
 
 export interface OpcionesDeConexion {
+  /**
+   * El identificador de ESTA conexión, para que el servidor sepa a qué pestaña engancharle
+   * la mirada de una tarea (ver `Conexion.mirar`). Por omisión se genera uno; entra por
+   * opción para poder afirmar sobre la URL del SSE y sobre el mensaje en un test.
+   */
+  idDeCliente?: string;
   fabricaDeEventos?: FabricaDeEventos;
   fetch?: FuncionFetch;
   /** Costura de test del reloj: el backoff no puede dormir el test. */
@@ -53,6 +59,30 @@ export interface Conexion {
    * `try/catch` en la ventana para enseñar un texto sería el mismo trato con más ruido.
    */
   subirAdjunto(tarea: string, nombre: string, fichero: Blob): Promise<{ ok: boolean; motivo?: string }>;
+  /**
+   * Empieza (`ver: true`) o deja de mirar en vivo lo que hace una tarea de fondo.
+   *
+   * **Tiene método propio y no se manda con `enviar` porque lleva el id de ESTA conexión**, y
+   * ese es un dato del transporte: el SSE y el `POST /accion` son dos peticiones distintas,
+   * así que sin él el servidor no sabría a qué pestaña engancharle la mirada — y tendría que
+   * emitirle el transcript de la tarea a todo el mundo, que es exactamente lo que no puede
+   * pasar. Quien pulsa el botón no tiene por qué conocerlo, y pasarlo a mano por los
+   * componentes sería otra copia que mantener de acuerdo.
+   */
+  mirar(tarea: string, ver: boolean): Promise<unknown>;
+}
+
+/**
+ * El id de una conexión: texto llano y corto. No es una ruta ni un nombre de fichero —es la
+ * clave de un mapa del servidor— pero se mantiene en `[A-Za-z0-9_-]` para que no haya nada
+ * que escapar en ninguna de las capas por las que pasa (la query del SSE y un JSON).
+ *
+ * `crypto.randomUUID` no se usa a propósito: no está en todos los contextos (hace falta un
+ * origen seguro) y esta consola se sirve por `http://127.0.0.1`. Aquí no hace falta que sea
+ * imprevisible: el token del servidor es lo que autoriza, esto solo distingue pestañas.
+ */
+function idNuevoDeCliente(): string {
+  return `c${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`;
 }
 
 /**
@@ -75,8 +105,15 @@ export function crearConexion(store: Store, opciones: OpcionesDeConexion = {}): 
   let fuente: FuenteDeEventos | undefined;
   let cerrada = false;
 
+  /**
+   * UNO por conexión, y el MISMO entre reconexiones: un id nuevo por caída dejaría en el
+   * servidor una entrada muerta por cada una, y su `close` no se podría distinguir del de la
+   * reconexión que acaba de reclamar el mismo hueco.
+   */
+  const idDeCliente = opciones.idDeCliente ?? idNuevoDeCliente();
+
   const conectar = (): void => {
-    const es = fabricaDeEventos("/eventos");
+    const es = fabricaDeEventos(`/eventos?cliente=${idDeCliente}`);
     fuente = es;
 
     es.onopen = () => {
@@ -109,20 +146,28 @@ export function crearConexion(store: Store, opciones: OpcionesDeConexion = {}): 
 
   conectar();
 
+  // Función y no método del objeto: `mirar` la reusa, y con `this.enviar` un
+  // `const {mirar} = conexion` —o un manejador pasado como prop— se quedaría sin `this`.
+  const enviar = (mensaje: MensajeDelCliente): Promise<unknown> =>
+    fetchInyectado("/accion", {
+      method: "POST",
+      credentials: "same-origin",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(mensaje),
+    });
+
   return {
     cerrar(): void {
       cerrada = true;
       if (idDeReintento !== undefined) cancelarTemporizador(idDeReintento);
       fuente?.close();
     },
-    enviar(mensaje: MensajeDelCliente): Promise<unknown> {
-      return fetchInyectado("/accion", {
-        method: "POST",
-        credentials: "same-origin",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify(mensaje),
-      });
+    mirar(tarea: string, ver: boolean): Promise<unknown> {
+      // Por el mismo `POST /accion` que todo lo demás; lo único que esta capa añade es el
+      // id, que es suyo. Ver `Conexion.mirar`.
+      return enviar({ clase: "mirar", tarea, ver, cliente: idDeCliente });
     },
+    enviar,
     async subirAdjunto(tarea, nombre, fichero) {
       // El nombre va CODIFICADO en la query y no en el camino de la ruta: `registrarRuta`
       // casa por coincidencia exacta (la misma razón que documenta `RUTA_ARTEFACTO`). Y sin

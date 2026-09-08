@@ -102,6 +102,21 @@ export interface EstadoDelCliente {
    * vuelo.
    */
   ajustesDeDispositivos?: AjustesDeDispositivos;
+  /**
+   * El transcript EN VIVO de la tarea de fondo que se está mirando, y de cuál.
+   *
+   * Ausente = no se está mirando ninguna. Nunca se mezcla con `actos`: los actos de una
+   * tarea de fondo no pueden aparecer en el chat de nadie, que es la regla que sostiene todo
+   * esto — y por eso van etiquetados con el id de la tarea por el cable.
+   *
+   * **No es un segundo registro**: son los MISMOS actos que se guardan en el `.jsonl` de esa
+   * sesión, así que cuando la tarea acabe, abrir su conversación enseña esto mismo.
+   *
+   * **Se tira al caerse el cable** (`marcarDesconectado`), como `modelos` y al contrario que
+   * `tareas`: el enganche vive en el SERVIDOR y se va con el SSE, así que guardarla dejaría
+   * un transcript congelado presentado como si siguiera en vivo.
+   */
+  mirada?: { tarea: string; actos: Acto[] };
   /** Hay un turno corriendo AHORA. Lo dice el servidor; el cliente no lo deduce. */
   turnoEnVuelo?: boolean;
   /**
@@ -436,6 +451,14 @@ export function crearStoreDelCliente(): {
   cerrarAprobacion: () => void;
   /** Tira el encargo propuesto. Ver `EstadoDelCliente.encargoPropuesto`. */
   limpiarEncargoPropuesto: () => void;
+  /**
+   * Cierra el panel de la mirada sin esperar al servidor.
+   *
+   * Hace falta por lo mismo que `contestarPregunta`: el servidor no manda ningún «ya no
+   * mira» al desengancharse, así que nadie retiraría el transcript y el panel se quedaría
+   * pintado y quieto — indistinguible de una tarea que se ha colgado.
+   */
+  dejarDeMirar: () => void;
   suscribir: (escucha: () => void) => () => void;
 } {
   let estado: EstadoDelCliente = ESTADO_INICIAL;
@@ -476,6 +499,43 @@ export function crearStoreDelCliente(): {
           const actos = (mensaje as Partial<Extract<MensajeAlCliente, { clase: "reemision" }>>).actos;
           if (!Array.isArray(actos) || !actos.every(esActo)) return;
           mutar({ actos: [...actos] });
+          return;
+        }
+        /**
+         * El transcript en vivo de una tarea de fondo, campo a campo como todo lo que entra
+         * aquí. Los tres `via` son los tres mensajes del transcript de siempre con otro
+         * nombre, y se aplican igual (`reemision`, `acto`, `sustitucion`) — pero sobre
+         * `mirada` y nunca sobre `actos`.
+         *
+         * **Un trozo de OTRA tarea no se anexa.** El servidor solo manda lo que este cliente
+         * pidió, pero mezclar dos transcripts sería la peor forma de fallar aquí: una
+         * conversación contando lo que hizo otro agente. Un `todos` de otra tarea sí cambia
+         * de tarea, porque eso es exactamente lo que hace «mirar esta otra».
+         */
+        case "mirada": {
+          const m = mensaje as Partial<Extract<MensajeAlCliente, { clase: "mirada" }>>;
+          const tarea = m.tarea;
+          const via = m.via;
+          const actos = m.actos;
+          if (typeof tarea !== "string" || tarea === "") return;
+          if (!Array.isArray(actos) || !actos.every(esActo)) return;
+          if (via === "todos") {
+            mutar({ mirada: { tarea, actos: [...actos] } });
+            return;
+          }
+          const actual = estado.mirada;
+          if (actual === undefined || actual.tarea !== tarea) return;
+          if (via === "alta") {
+            mutar({ mirada: { tarea, actos: [...actual.actos, ...actos] } });
+            return;
+          }
+          if (via !== "sustitucion") return;
+          // Transcript vacío: el servidor no manda `sustitucion` sin un último acto que
+          // sustituir, así que esto solo es la red bajo un cable del que no se fía nada —
+          // cae a anexar en vez de perder el mensaje, igual que el `sustitucion` de arriba.
+          mutar({
+            mirada: { tarea, actos: actual.actos.length === 0 ? [...actos] : [...actual.actos.slice(0, -1), ...actos] },
+          });
           return;
         }
         case "bienvenida": {
@@ -1050,6 +1110,10 @@ export function crearStoreDelCliente(): {
         // editado a mano, y la ventana de ajustes enseñaría una lista que ya no es. La
         // reconexión los trae enteros en la misma ráfaga que los modelos.
         agentes: undefined,
+        // La mirada a una tarea la sostiene el SERVIDOR: su enganche se va con el SSE
+        // (`arranque.ts`, el `close`), así que guardarla dejaría un transcript congelado
+        // presentado como si siguiera llegando. La reconexión la vuelve a pedir.
+        mirada: undefined,
       });
     },
 
@@ -1074,6 +1138,10 @@ export function crearStoreDelCliente(): {
 
     contestarSecreto(): void {
       mutar({ secreto: undefined });
+    },
+
+    dejarDeMirar(): void {
+      mutar({ mirada: undefined });
     },
 
     /**

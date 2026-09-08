@@ -3,7 +3,8 @@ import { IconoDeEntorno } from "./IconoDeEntorno.js";
 import estilos from "./Escritorio.module.css";
 import { Equipo } from "./Equipo.js";
 import { Kanban } from "./Kanban.js";
-import type { InformeDeDispositivos, TareaDelCable } from "../tipos.js";
+import { MirarTarea } from "./MirarTarea.js";
+import type { Acto, InformeDeDispositivos, TareaDelCable } from "../tipos.js";
 
 /**
  * El centro cuando no hay sesión abierta: el escritorio.
@@ -52,6 +53,10 @@ export function Escritorio({
   alDescartarTarea,
   alTerminarTarea,
   alEnviarFeedback,
+  alMirarTarea,
+  alDejarDeMirarTarea,
+  mirandoTarea,
+  mirada,
   proyectoActivo,
 }: {
   /** El saludo (`agent/persona.ts`). Ausente = se saluda igual, sin inventarse un nombre. */
@@ -136,6 +141,20 @@ export function Escritorio({
    * Reenviada tal cual a `Kanban`; ausente = no se ofrece el campo.
    */
   alEnviarFeedback?: (id: string, texto: string) => void;
+  /**
+   * Ver, y dejar de ver, EN VIVO lo que hace el turno de una tarea. Ausentes = no se ofrece
+   * (esta ventana no tiene el canal del transporte).
+   */
+  alMirarTarea?: (id: string) => void;
+  alDejarDeMirarTarea?: (id: string) => void;
+  /** Cuál se está mirando: lo elige esta ventana, y es lo que hace que su tarjeta lo diga. */
+  mirandoTarea?: string;
+  /**
+   * El transcript que el servidor está mandando de esa tarea. Ausente = todavía no ha
+   * llegado —o el cable se cayó y se pidió otra vez—, y entonces el panel dice que aún no ha
+   * pintado nada en vez de afirmar un turno vacío.
+   */
+  mirada?: { tarea: string; actos: readonly Acto[] };
   /**
    * El proyecto cuya consola HUMANA está abierta ahora (`estado.alta.proyectoActivo`). El
    * escritorio se puede ver con una sesión de otro proyecto ya abierta detrás —volver a él
@@ -297,8 +316,23 @@ export function Escritorio({
             {...(alDescartarTarea === undefined ? {} : { alDescartar: alDescartarTarea })}
             {...(alTerminarTarea === undefined ? {} : { alTerminar: alTerminarTarea })}
             {...(alEnviarFeedback === undefined ? {} : { alEnviarFeedback })}
+            {...(alMirarTarea === undefined ? {} : { alMirar: alMirarTarea })}
+            {...(alDejarDeMirarTarea === undefined ? {} : { alDejarDeMirar: alDejarDeMirarTarea })}
+            {...(mirandoTarea === undefined ? {} : { mirando: mirandoTarea })}
             {...(proyectoActivo === undefined ? {} : { proyectoActivo })}
             conectado={conectado}
+          />
+        )}
+
+        {/* Lo que hace la tarea que se está mirando, DEBAJO del kanban y no en un modal: se
+            lee mientras se ve el resto de la cola, y un turno tarda minutos. Solo se pinta
+            con una elegida y con el canal puesto; el transcript puede no haber llegado
+            todavía, y `MirarTarea` lo dice en vez de afirmar un turno vacío. */}
+        {mirandoTarea === undefined || alDejarDeMirarTarea === undefined ? null : (
+          <MirarTarea
+            titulo={tareas?.lista.find((t) => t.id === mirandoTarea)?.titulo ?? mirandoTarea}
+            actos={mirada?.tarea === mirandoTarea ? mirada.actos : []}
+            alCerrar={() => alDejarDeMirarTarea(mirandoTarea)}
           />
         )}
 

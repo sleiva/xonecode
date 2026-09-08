@@ -139,6 +139,26 @@ export type MensajeAlCliente =
   | { clase: "tarea"; accion: "augmentado"; encargo: string }
   | { clase: "tarea"; accion: "augmentado"; error: string }
   /**
+   * Un trozo del transcript de la sesión de una TAREA que alguien está mirando en vivo.
+   *
+   * **No es un segundo registro** (decisión 3 del diseño): son los MISMOS actos que se
+   * guardan en el `.jsonl` de esa sesión, los mismos que se leen al abrirla después. La
+   * lista sale de los actos y nunca del disco, igual que la de artefactos.
+   *
+   * Va SOLO al cliente que lo pidió y no a todos: el transcript de una tarea no puede
+   * aparecer en el chat de quien está trabajando en otra cosa. Y lleva el `tarea` delante
+   * porque por el mismo cable puede llegar el transcript de la sesión propia: sin la
+   * etiqueta, los actos de una tarea de fondo se mezclarían con la conversación.
+   *
+   * Los tres `via` son los tres mensajes del transcript de siempre, con otro nombre:
+   * `todos` es la reemisión entera (al empezar a mirar y cuando el servidor reemite),
+   * `alta` un acto nuevo al final, y `sustitucion` el último que cambió (el cierre de una
+   * racha de tools sustituye a su apertura). `actos` es SIEMPRE una lista: con `alta` y
+   * `sustitucion`, de un solo elemento — un campo opcional por cada forma habría sido un
+   * «ausente no es vacío» de más en la lista blanca del store.
+   */
+  | { clase: "mirada"; tarea: string; via: "todos" | "alta" | "sustitucion"; actos: Acto[] }
+  /**
    * Qué hay en la MÁQUINA para probar la app: el sistema, las herramientas de Android e
    * iOS (adb, emulator, xcrun/simctl, devicectl) con su estado, y a qué dispositivos y
    * simuladores se llega (`core/dispositivos.ts`).
@@ -759,6 +779,21 @@ export type MensajeDelCliente =
   | { clase: "tarea"; accion: "reintentar" | "descartar" | "terminar"; id: string }
   /** Cambia el tope de concurrencia de la cola de tareas. */
   | { clase: "tareas"; concurrencia: number }
+  /**
+   * Empezar (`ver: true`) o dejar de mirar en vivo lo que hace una tarea.
+   *
+   * **`cliente` es lo que hace que esto sea por CLIENTE y no una emisión a todos.** El SSE
+   * y el `POST /accion` son dos peticiones distintas, así que el único sitio con un sumidero
+   * en la mano es la ruta del SSE: sin un identificador, el servidor no podría saber a qué
+   * pestaña engancharle la mirada, y tendría que mandarle el transcript de la tarea a todo
+   * el mundo. Lo elige el cliente —una vez por conexión— igual que elige el id de una tarea
+   * al subirle un adjunto por `POST /adjunto`, y se valida como un segmento llano; uno que
+   * no conste es un fallo de lookup y no un error que contar.
+   *
+   * `ver` es explícito y no «ausente = dejar de mirar»: son dos intenciones opuestas y
+   * confundirlas dejaría un sumidero enganchado a un turno que nadie mira.
+   */
+  | { clase: "mirar"; tarea: string; ver: boolean; cliente: string }
   | { clase: "decision"; decisiones: Record<string, string> };
 
 /**
@@ -809,6 +844,29 @@ export interface Transporte {
   /** ¿Queda alguien al otro lado? Es lo que `consolaWeb.eof()` usa para saber si hay humano. */
   conectado(): boolean;
   /**
+   * Alguien MIRA lo que esta consola pinta, sin ser su cliente. Devuelve el transcript de
+   * ese instante, igual que `conectar` y por lo mismo: emitirlo aquí se lo mandaría también
+   * a los demás, que ya lo tienen.
+   *
+   * Es un conjunto APARTE del de los clientes, y las dos diferencias son el motivo de que
+   * exista en vez de reusar `conectar`:
+   *  - **No cuenta como cliente**, así que `conectado()` —y con él `consolaWeb.eof()`— sigue
+   *    diciendo la verdad. Medido antes de escribir esto: con un `conectar` de más, el
+   *    `eof()` de la consola de una tarea de fondo pasaba de `true` a `false`, o sea «hay un
+   *    humano al que preguntar». Y no lo hay: esta vista es de SOLO lectura, no tiene
+   *    compositor y nadie puede contestar una pregunta ni aprobar una escritura desde ahí.
+   *    Irse el último mirón tampoco dispara `alDesconectar`: no ha dejado a nadie sin
+   *    contestar.
+   *  - **Recibe SOLO el transcript** (`acto`, `sustitucion`, `reemision`). Por el transporte
+   *    de una consola de tarea viaja además el mensaje `turno` de los flancos —lo emite el
+   *    envoltorio del ejecutor sin mirar `alCable`, medido—, y ese mensaje apagaría el
+   *    compositor de quien mira por un turno que no es suyo. La lista es BLANCA a propósito:
+   *    una clase nueva no llega a un mirón hasta que alguien la nombre aquí.
+   */
+  mirar(enviar: Sumidero): readonly Acto[];
+  /** Se va UN mirón. Los demás siguen: dos personas pueden mirar la misma tarea. */
+  dejarDeMirar(enviar: Sumidero): void;
+  /**
    * Produce un mensaje: lo anota en la traza y, si hay cliente, lo escribe. Anota aunque
    * no haya nadie porque la traza cuenta lo que el servidor PRODUJO — que es lo que los
    * tests de «esto no viaja» tienen que poder mirar.
@@ -824,12 +882,27 @@ export interface Transporte {
   alDesconectar(escucha: () => void): void;
 }
 
+/**
+ * Las clases de mensaje que SON el transcript, y las únicas que llegan a un mirón.
+ *
+ * Lista blanca y no negra: con una negra, la clase que alguien añada mañana al cable
+ * llegaría permitida a quien mira una tarea de fondo — y por ahí ya pasan hoy el
+ * mensaje `turno` que apagaría su compositor y el `aprobacion` que es el único mensaje con
+ * contenido de fichero dentro.
+ */
+const ES_DE_TRANSCRIPT: ReadonlySet<MensajeAlCliente["clase"]> = new Set(["acto", "sustitucion", "reemision"]);
+
 export function crearTransporte(actos: () => readonly Acto[]): Transporte {
   const traza: MensajeAlCliente[] = [];
   const escuchasDeCorte: (() => void)[] = [];
   /** Todos los clientes vivos. `Set` y no lista: conectar dos veces el MISMO sumidero
    *  —una reconexión que se solapa con su propio cierre— no puede duplicar sus mensajes. */
   const sumideros = new Set<Sumidero>();
+  /**
+   * Quien MIRA sin ser cliente. Ver `Transporte.mirar`: aparte del otro conjunto porque no
+   * cuenta como humano y porque no recibe todo lo que se emite.
+   */
+  const mirones = new Set<Sumidero>();
   /**
    * Hubo cliente alguna vez y todavía no se ha ido el último. Se lleva aparte del `Set`
    * porque `conectar()` sin sumidero (los tests que no miran lo emitido) también cuenta
@@ -851,16 +924,29 @@ export function crearTransporte(actos: () => readonly Acto[]): Transporte {
         if (sumideros.size > 0) return;
       } else {
         sumideros.clear();
+        // Sin sumidero es «se van todos»: lo hace `cerrar()` y lo hace mudarse de consola.
+        // Un mirón de una consola que se abandona escribe en un socket que ya no está.
+        mirones.clear();
       }
       hayCliente = false;
       for (const escucha of escuchasDeCorte) escucha();
     },
     conectado: () => hayCliente,
+    mirar(enviar) {
+      mirones.add(enviar);
+      return [...actos()];
+    },
+    dejarDeMirar(enviar) {
+      mirones.delete(enviar);
+    },
     emitir(mensaje) {
       if (mensaje.clase !== "aprobacion") traza.push(mensaje);
       // A TODOS los clientes vivos. Con una sola ranura, el último en conectar dejaba mudos
       // a los anteriores sin decírselo.
       for (const sumidero of sumideros) sumidero(mensaje);
+      // Y a los mirones, solo el TRANSCRIPT. Ver `Transporte.mirar`.
+      if (!ES_DE_TRANSCRIPT.has(mensaje.clase)) return;
+      for (const miron of mirones) miron(mensaje);
     },
     emitidos: () => traza,
     alDesconectar(escucha) {

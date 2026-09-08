@@ -158,6 +158,19 @@ export type MensajeAlCliente =
   | { clase: "tarea"; accion: "augmentado"; encargo: string }
   | { clase: "tarea"; accion: "augmentado"; error: string }
   /**
+   * Un trozo del transcript de la sesión de una TAREA que se está mirando en vivo.
+   *
+   * No es un segundo registro: son los MISMOS actos que se guardan en el `.jsonl` de esa
+   * sesión, los mismos que se leen al abrirla cuando la tarea acabe. Y llega etiquetado con
+   * el id de la tarea porque por este mismo cable llega el transcript de la sesión PROPIA:
+   * sin la etiqueta, los actos de una tarea de fondo se mezclarían con la conversación.
+   *
+   * `todos` es la reemisión entera (al empezar a mirar), `alta` un acto nuevo al final y
+   * `sustitucion` el último que cambió. `actos` es siempre una lista: con las dos últimas,
+   * de un solo elemento. Redeclarado de `web/servidor/transporte.ts`.
+   */
+  | { clase: "mirada"; tarea: string; via: "todos" | "alta" | "sustitucion"; actos: Acto[] }
+  /**
    * Qué hay en la máquina para probar la app: sistema, herramientas de Android e iOS con su
    * estado, y los dispositivos y simuladores a los que se llega. Es una foto con hora
    * (`medido`), no un estado en vivo. Redeclarado de `core/dispositivos.ts`.
@@ -520,6 +533,15 @@ export type MensajeDelCliente =
   | { clase: "tarea"; accion: "reintentar" | "descartar" | "terminar"; id: string }
   /** Cambia el tope de concurrencia de la cola de tareas. */
   | { clase: "tareas"; concurrencia: number }
+  /**
+   * Empezar (`ver: true`) o dejar de mirar en vivo lo que hace una tarea.
+   *
+   * `cliente` es el identificador de ESTA conexión del SSE, y lo pone `conexion.ts` y no
+   * quien pulsa el botón: el SSE y el `POST /accion` son dos peticiones distintas, así que
+   * sin él el servidor no sabría a qué pestaña engancharle la mirada — y tendría que
+   * emitirle el transcript de la tarea a todo el mundo.
+   */
+  | { clase: "mirar"; tarea: string; ver: boolean; cliente: string }
   | { clase: "decision"; decisiones: Record<string, string> };
 
 /**

@@ -24,6 +24,8 @@ import { crearVestibulo, type ConsolaDeProyecto } from "./vestibulo.js";
 import { cambiosDeSesion, fotoDeApertura } from "../../agent/sesionGit.js";
 import { CatalogoModelosEnMemoria } from "../../core/ports.js";
 import type { Consola } from "../../cli/consola.js";
+import type { Acto } from "../../core/actos.js";
+import type { MensajeAlCliente } from "./transporte.js";
 import { TOPE_DE_RONDAS_DE_TAREA, type Tarea } from "../../core/tareas.js";
 import { MAX_APPROVAL_ROUNDS } from "../../vendor/hitl.js";
 import { SALVEDAD_SIN_ESCRITURAS, type ResultadoDeTurno, type VeredictoDeTarea } from "../../core/entrega.js";
@@ -1824,6 +1826,98 @@ describe("el volcado de la sesión de una tarea", () => {
     rmSync(base, { recursive: true, force: true });
   });
 
+  /**
+   * **La vista en vivo y el transcript guardado son LO MISMO** (Task 16, decisión 3 del
+   * diseño), y esto lo MIDE con las piezas de producción: el vestíbulo de verdad,
+   * `consolaParaTarea` de verdad y el `.jsonl` que `volcar()` escribe en disco.
+   *
+   * Sin esta medida, «no hay un segundo registro» sería una afirmación de un docblock: los
+   * tests de las piezas usan dobles de consola, así que un `mirar` que enganchara a otra
+   * fuente —una lista propia del corredor, un log paralelo— pasaría en verde. Lo que aquí se
+   * compara es exactamente eso: lo que el mirón recibió, aplicado como el cliente lo aplica,
+   * contra lo que quedó escrito en la sesión.
+   */
+  it("MEDIDO: lo que ve quien MIRA es, acto por acto, el transcript que se guarda", async () => {
+    const { base, raiz } = proyectoConGit();
+    const marcada = asidero<Promise<boolean>>();
+    // El turno espera a que el mirón esté enganchado, pinta y termina: sin la pausa, el
+    // turno acabaría antes de que hubiera nada que mirar.
+    const dentro = asidero<void>();
+    const seguir = asidero<void>();
+    const v = vestibuloReal(base, [], marcada, async (_peticion, _estado, consola) => {
+      const piel = consola.piel!();
+      piel.token("empiezo");
+      piel.cerrarLinea();
+      dentro.cumplir();
+      await seguir.promesa;
+      piel.fase?.("desarrollando", "ejecutando");
+      // DOS líneas de tool seguidas a propósito: la segunda no es un acto nuevo, sustituye
+      // al primero dentro del mismo acto `herramientas` (`core/actos.ts#conLineaDeTool`), así
+      // que esto es lo que hace pasar por el camino de `sustitucion`. Sin ella, el mirón
+      // podría estar perdiéndose ese mensaje y el transcript seguiría cuadrando.
+      piel.linea("→ lee app.xne", { nombre: "read_file" });
+      piel.linea("← edita app.xne", { nombre: "edit_file" });
+      piel.token("ya está hecho");
+      piel.cerrarLinea();
+      piel.fin(1);
+      return { verificador: "verde", pendientes: 0 };
+    });
+    const { disco, estado } = discoDeMentira([
+      TAREA({ proyecto: { id: "pa", raiz, nombre: "A" }, encargo: "arregla el login" }),
+    ]);
+    const corredor = crearCorredorDeTareas({
+      ...ENTREGA_VERDE,
+      disco,
+      abrirParaTarea: async (r) => consolaParaTarea(await v.abrirParaTarea(r)),
+      pid: 1,
+      concurrencia: () => 1,
+    });
+    await corredor.arrancar();
+    await dentro.promesa;
+
+    /**
+     * El cliente, reconstruyendo su lista con las MISMAS tres reglas del cable: `acto`
+     * anexa, `sustitucion` cambia el último y `reemision` sustituye todo (`store.ts`, el
+     * `case "mirada"`). Aquí llegan sin etiquetar porque etiquetar es de `arranque.ts`.
+     */
+    let vistos: Acto[] = [];
+    const sumidero = (m: MensajeAlCliente): void => {
+      if (m.clase === "acto") vistos = [...vistos, m.acto];
+      else if (m.clase === "sustitucion") vistos = [...vistos.slice(0, -1), m.acto];
+      else if (m.clase === "reemision") vistos = [...m.actos];
+    };
+    const iniciales = corredor.mirar("t1", sumidero);
+    expect(iniciales).toBeDefined();
+    vistos = [...iniciales!];
+    // Ya hay algo: el turno pintó antes de que nadie mirara, y el transcript de ese instante
+    // llega por el valor de retorno — sin él, el mirón empezaría a media conversación.
+    expect(vistos.length).toBeGreaterThan(0);
+
+    seguir.cumplir();
+    await esperarAQueAcabe(estado);
+
+    const sesion = estado()[0]!.sesion!;
+    const jsonl = join(raiz, ".xonecode", "sesiones", `${sesion}.jsonl`);
+    const guardados = readFileSync(jsonl, "utf8")
+      .split("\n")
+      .filter((l) => l.trim() !== "")
+      .map((l) => JSON.parse(l) as Acto);
+    // **La igualdad es el test.** No «contiene» ni «tiene la misma longitud»: acto por acto,
+    // porque cualquier holgura dejaría pasar justo lo que esto vigila — una segunda fuente
+    // que se parece a la conversación y no lo es.
+    expect(vistos).toEqual(guardados);
+    // Y que no sea la lista trivial: si el turno no hubiera pintado nada, dos vacíos
+    // también serían iguales.
+    expect(guardados.map((a) => a.tipo)).toContain("asistente");
+    expect(guardados.map((a) => a.tipo)).toContain("herramientas");
+    // Y que ese acto llegó SUSTITUIDO y no duplicado: las dos líneas viven en uno solo.
+    expect(guardados.filter((a) => a.tipo === "herramientas")).toHaveLength(1);
+
+    await corredor.parar();
+    await v.cerrar();
+    rmSync(base, { recursive: true, force: true });
+  }, 20000);
+
   it("MEDIDO de punta a punta: aprobar dentro del turno deja los ficheros en el ÍNDICE", async () => {
     /**
      * La costura entera y con las piezas de producción: el vestíbulo de verdad,
@@ -2570,5 +2664,179 @@ describe("consolaParaTarea monta la consola con la que corre una tarea", () => {
       verificador: "verde",
       pendientes: 0,
     });
+  });
+});
+
+/**
+ * **Mirar en vivo lo que hace una tarea** (Task 16).
+ *
+ * El corredor es el único que sabe qué consola es de qué tarea —el registro es `enVuelo`,
+ * el mismo que `cortar(id)` usa—, así que es él quien engancha y desengancha al mirón. Lo
+ * que NO hace es inventar un registro: lo que se mira son los actos de la consola de esa
+ * tarea, los mismos que se vuelcan a su `.jsonl`.
+ *
+ * La ventana que hay que cubrir: entre que `revisar()` registra la entrada y que
+ * `abrirParaTarea` resuelve hay un `await` de verdad (git y disco) y la tarea ya se ve
+ * «en proceso» en el kanban. Pulsar «Ver lo que hace» ahí no puede perderse — es la misma
+ * carrera que `cortarPedido` cubre para el corte.
+ */
+describe("mirar en vivo lo que hace una tarea", () => {
+  /** Como `proyectoDeMentira`, pero con una consola que sabe de mirones. */
+  function conMirones() {
+    const p = proyectoDeMentira();
+    const emitir: ((mensaje: unknown) => void)[] = [];
+    const mirones = new Set<(mensaje: unknown) => void>();
+    const actos: unknown[] = [];
+    let abierta: (() => void) | undefined;
+    return {
+      ...p,
+      mirones,
+      actos,
+      /** El turno pinta un acto: le llega a todos los mirones enganchados. */
+      pintar: (acto: unknown) => {
+        actos.push(acto);
+        for (const m of mirones) m({ clase: "acto", acto });
+      },
+      /** Deja que `abrirParaTarea` resuelva, para poder pulsar «ver» antes. */
+      dejarAbrir: () => abierta?.(),
+      abrir: async (raiz: string): Promise<ConsolaParaTarea> => {
+        await new Promise<void>((resolver) => {
+          abierta = resolver;
+        });
+        const base = await p.abrir(raiz);
+        return {
+          ...base,
+          mirar: (enviar) => {
+            mirones.add(enviar as (mensaje: unknown) => void);
+            return actos as never;
+          },
+          dejarDeMirar: (enviar) => void mirones.delete(enviar as (mensaje: unknown) => void),
+        };
+      },
+      emitir,
+    };
+  }
+
+  it("engancha al mirón a la consola de ESA tarea y devuelve su transcript", async () => {
+    const { disco } = discoDeMentira([TAREA()]);
+    const p = conMirones();
+    const corredor = crearCorredorDeTareas({ ...ENTREGA_VERDE, disco, abrirParaTarea: p.abrir, pid: 1, concurrencia: () => 1 });
+    await corredor.arrancar();
+    p.dejarAbrir();
+    await corredor.asentar();
+    p.pintar({ tipo: "usuario", texto: "arregla el login" });
+
+    const visto: unknown[] = [];
+    const actos = corredor.mirar("t1", (m) => visto.push(m));
+    // El transcript de ese instante llega por el valor de retorno, no emitido.
+    expect(actos).toEqual([{ tipo: "usuario", texto: "arregla el login" }]);
+    expect(visto).toEqual([]);
+    // Y lo que venga después, en vivo.
+    p.pintar({ tipo: "fase", texto: "planificando", ms: 1, fase: "planificando" });
+    expect(visto).toEqual([{ clase: "acto", acto: { tipo: "fase", texto: "planificando", ms: 1, fase: "planificando" } }]);
+
+    p.acabar();
+    await corredor.asentar();
+    await corredor.parar();
+  });
+
+  it("una tarea que no corre AQUÍ contesta `undefined`: no se finge un transcript vacío", async () => {
+    const { disco } = discoDeMentira([TAREA()]);
+    const p = conMirones();
+    const corredor = crearCorredorDeTareas({ ...ENTREGA_VERDE, disco, abrirParaTarea: p.abrir, pid: 1, concurrencia: () => 1 });
+    await corredor.arrancar();
+    p.dejarAbrir();
+    await corredor.asentar();
+    // `[]` diría «está corriendo y todavía no ha hecho nada», que es otra cosa.
+    expect(corredor.mirar("otra", () => {})).toBeUndefined();
+    p.acabar();
+    await corredor.asentar();
+    await corredor.parar();
+  });
+
+  it("pulsar «ver» ANTES de que la consola exista no se pierde: se engancha al abrirse", async () => {
+    const { disco } = discoDeMentira([TAREA()]);
+    const p = conMirones();
+    const corredor = crearCorredorDeTareas({ ...ENTREGA_VERDE, disco, abrirParaTarea: p.abrir, pid: 1, concurrencia: () => 1 });
+    await corredor.arrancar();
+    // La entrada ya está en `enVuelo` (el kanban la ve «en proceso») y la consola aún no.
+    const visto: { clase: string }[] = [];
+    expect(corredor.mirar("t1", (m) => visto.push(m))).toEqual([]);
+    p.dejarAbrir();
+    await corredor.asentar();
+    // Al abrirse, se le manda el transcript que hubiera: sin esto, el mirón se quedaría
+    // esperando el primer acto NUEVO y se perdería todo lo anterior.
+    expect(visto.map((m) => m.clase)).toEqual(["reemision"]);
+    p.pintar({ tipo: "asistente", texto: "listo" });
+    expect(visto.map((m) => m.clase)).toEqual(["reemision", "acto"]);
+    p.acabar();
+    await corredor.asentar();
+    await corredor.parar();
+  });
+
+  it("dejar de mirar desengancha ESE sumidero y no el de la otra persona", async () => {
+    const { disco } = discoDeMentira([TAREA()]);
+    const p = conMirones();
+    const corredor = crearCorredorDeTareas({ ...ENTREGA_VERDE, disco, abrirParaTarea: p.abrir, pid: 1, concurrencia: () => 1 });
+    await corredor.arrancar();
+    p.dejarAbrir();
+    await corredor.asentar();
+    const uno: unknown[] = [];
+    const otro: unknown[] = [];
+    const sumideroUno = (m: unknown): void => {
+      uno.push(m);
+    };
+    corredor.mirar("t1", sumideroUno);
+    corredor.mirar("t1", (m) => otro.push(m));
+    p.pintar({ tipo: "asistente", texto: "voy" });
+    corredor.dejarDeMirar("t1", sumideroUno);
+    p.pintar({ tipo: "asistente", texto: "listo" });
+    expect(uno).toHaveLength(1);
+    expect(otro).toHaveLength(2);
+    p.acabar();
+    await corredor.asentar();
+    await corredor.parar();
+  });
+
+  it("`dejarDeMirar` de una tarea que ya no corre no lanza", async () => {
+    const { disco } = discoDeMentira([]);
+    const p = conMirones();
+    const corredor = crearCorredorDeTareas({ ...ENTREGA_VERDE, disco, abrirParaTarea: p.abrir, pid: 1, concurrencia: () => 1 });
+    await corredor.arrancar();
+    expect(() => corredor.dejarDeMirar("fantasma", () => {})).not.toThrow();
+    await corredor.parar();
+  });
+});
+
+/**
+ * `consolaParaTarea` reenvía el mirar a la consola WEB de esa consola de proyecto, y ahí
+ * está el punto delicado: tiene que ser `mirar` y **no** `conectar`. Con `conectar`, el
+ * `eof()` de esa consola pasaría a decir que hay un humano al que preguntar (medido), y esa
+ * consola es justo la que no puede tener a nadie.
+ */
+describe("consolaParaTarea: el mirar se reenvía a la consola web, y no como cliente", () => {
+  it("delega en `consola.mirar` y no toca `conectar`", () => {
+    const llamadas: string[] = [];
+    const falsa = {
+      raiz: "/w/A",
+      idDeHilo: "h1",
+      estadoDeSesion: { hilo: "h1", raiz: "/w/A", fuentes: {} },
+      ejecutarTurno: async () => undefined,
+      cerrar: async () => {},
+      esperarMarca: async () => {},
+      consola: {
+        consola: {},
+        mirar: (_enviar: unknown) => {
+          llamadas.push("mirar");
+          return [{ tipo: "usuario", texto: "x" }];
+        },
+        dejarDeMirar: () => void llamadas.push("dejarDeMirar"),
+        conectar: () => void llamadas.push("conectar"),
+      },
+    } as unknown as ConsolaDeProyecto;
+    const para = consolaParaTarea(falsa);
+    expect(para.mirar!(() => {})).toEqual([{ tipo: "usuario", texto: "x" }]);
+    para.dejarDeMirar!(() => {});
+    expect(llamadas).toEqual(["mirar", "dejarDeMirar"]);
   });
 });

@@ -941,3 +941,86 @@ describe("la cola de tareas", () => {
     });
   });
 });
+
+/**
+ * **Mirar en vivo lo que hace una tarea** (Task 16).
+ *
+ * Lo que llega es el transcript de la sesión de ESA tarea, etiquetado con su id porque por
+ * el mismo cable llega el de la sesión propia. Dos reglas que este bloque fija:
+ *  - **Nunca se mezcla con `actos`**: los actos de una tarea de fondo no pueden aparecer en
+ *    el chat de quien la mira, que es el aserto que hay que conservar de todo esto.
+ *  - **Se tira al caerse el cable**, como `modelos` y al contrario que la cola de tareas: la
+ *    mirada es un enganche que vive en el servidor, y al caerse el SSE ese enganche se va con
+ *    él (`arranque.ts`, el `close`). Guardarla haría que la pantalla siguiera enseñando un
+ *    transcript congelado como si estuviera en vivo.
+ */
+describe("mirar en vivo una tarea", () => {
+  const ACTOS = [
+    { tipo: "usuario" as const, texto: "arregla el login" },
+    { tipo: "razonamiento" as const, texto: "mirando app.xne" },
+  ];
+
+  it("`todos` deja el transcript de esa tarea, y no toca los actos de la sesión propia", () => {
+    const s = crearStoreDelCliente();
+    s.aplicar({ clase: "acto", acto: { tipo: "usuario", texto: "lo mío" } });
+    s.aplicar({ clase: "mirada", tarea: "t1", via: "todos", actos: ACTOS });
+    expect(s.leer().mirada).toEqual({ tarea: "t1", actos: ACTOS });
+    // La regla que no se puede romper: el transcript de una tarea de fondo no entra en la
+    // conversación de nadie.
+    expect(s.leer().actos).toEqual([{ tipo: "usuario", texto: "lo mío" }]);
+  });
+
+  it("`alta` anexa y `sustitucion` reemplaza el último", () => {
+    const s = crearStoreDelCliente();
+    s.aplicar({ clase: "mirada", tarea: "t1", via: "todos", actos: [ACTOS[0]!] });
+    s.aplicar({ clase: "mirada", tarea: "t1", via: "alta", actos: [{ tipo: "herramientas", lineas: ["→ lee"], detalles: [{}] }] });
+    expect(s.leer().mirada!.actos).toHaveLength(2);
+    s.aplicar({ clase: "mirada", tarea: "t1", via: "sustitucion", actos: [{ tipo: "herramientas", lineas: ["→ lee ×3"], detalles: [{}] }] });
+    expect(s.leer().mirada!.actos).toEqual([
+      ACTOS[0],
+      { tipo: "herramientas", lineas: ["→ lee ×3"], detalles: [{}] },
+    ]);
+  });
+
+  it("un trozo de OTRA tarea no se anexa al transcript de la que se mira", () => {
+    const s = crearStoreDelCliente();
+    s.aplicar({ clase: "mirada", tarea: "t1", via: "todos", actos: [ACTOS[0]!] });
+    // El servidor solo manda lo que este cliente pidió, pero el store no puede fiarse de
+    // eso: mezclar dos transcripts sería la peor forma de fallar aquí — una conversación
+    // que cuenta lo que hizo otro agente.
+    s.aplicar({ clase: "mirada", tarea: "t2", via: "alta", actos: [{ tipo: "asistente", texto: "de otra" }] });
+    expect(s.leer().mirada).toEqual({ tarea: "t1", actos: [ACTOS[0]] });
+  });
+
+  it("un `todos` de otra tarea SÍ cambia de tarea: es lo que hace «mirar esta otra»", () => {
+    const s = crearStoreDelCliente();
+    s.aplicar({ clase: "mirada", tarea: "t1", via: "todos", actos: [ACTOS[0]!] });
+    s.aplicar({ clase: "mirada", tarea: "t2", via: "todos", actos: [{ tipo: "asistente", texto: "de otra" }] });
+    expect(s.leer().mirada).toEqual({ tarea: "t2", actos: [{ tipo: "asistente", texto: "de otra" }] });
+  });
+
+  it("un mensaje sin `via` conocida o con actos que no lo son se ignora", () => {
+    const s = crearStoreDelCliente();
+    s.aplicar({ clase: "mirada", tarea: "t1", via: "todos", actos: ACTOS });
+    s.aplicar({ clase: "mirada", tarea: "t1", via: "fantasma", actos: ACTOS } as never);
+    s.aplicar({ clase: "mirada", tarea: "t1", via: "alta", actos: [{ tipo: "inventado" }] } as never);
+    s.aplicar({ clase: "mirada", tarea: "t1", via: "alta" } as never);
+    expect(s.leer().mirada).toEqual({ tarea: "t1", actos: ACTOS });
+  });
+
+  it("se tira al caerse el cable: la mirada la sostiene el servidor, no este navegador", () => {
+    const s = crearStoreDelCliente();
+    s.aplicar({ clase: "mirada", tarea: "t1", via: "todos", actos: ACTOS });
+    s.marcarDesconectado();
+    // Y la cola de tareas NO se tira, que es la otra mitad: las tareas siguen corriendo en
+    // la máquina, pero el enganche a esta pantalla no.
+    expect(s.leer().mirada).toBeUndefined();
+  });
+
+  it("`dejarDeMirar` la borra sin esperar al servidor: el panel se cierra al pulsar", () => {
+    const s = crearStoreDelCliente();
+    s.aplicar({ clase: "mirada", tarea: "t1", via: "todos", actos: ACTOS });
+    s.dejarDeMirar();
+    expect(s.leer().mirada).toBeUndefined();
+  });
+});

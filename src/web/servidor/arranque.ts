@@ -369,7 +369,8 @@ export interface OpcionesDeMontaje {
    * un corredor que no la sepa dar deja el campo AUSENTE en el cable, que es «no se sabe» —
    * distinto de «nadie». Los dobles de test que no la implementan ejercitan justo ese caso.
    */
-  corredorDeTareas?: Pick<Corredor, "corriendoAqui" | "cortar"> & Partial<Pick<Corredor, "ejecutaOtroProceso">>;
+  corredorDeTareas?: Pick<Corredor, "corriendoAqui" | "cortar"> &
+    Partial<Pick<Corredor, "ejecutaOtroProceso" | "mirar" | "dejarDeMirar">>;
   /** El tope de concurrencia vigente, para el mensaje `tareas`. Ausente = `CONCURRENCIA_POR_OMISION`. */
   concurrenciaDeTareas?: () => number;
   /** Cambia el tope de concurrencia del corredor. Ausente = Ajustes no puede tocarlo. */
@@ -451,6 +452,24 @@ export function montarRutas(
    * Emitir es escribirle a todos; el transporte hace lo mismo por su lado.
    */
   const clientes = new Set<Sumidero>();
+  /**
+   * Los clientes por su IDENTIFICADOR, y qué tareas está mirando cada uno.
+   *
+   * **Existe porque el SSE y el `POST /accion` son dos peticiones distintas.** El único
+   * sitio con un sumidero en la mano es la ruta del SSE, así que sin un identificador que
+   * el cliente repita en su `{clase:"mirar"}` el servidor no sabría a qué pestaña
+   * engancharle la mirada — y tendría que emitirle el transcript de una tarea de fondo a
+   * TODO el mundo, que es justo lo que no puede pasar (los actos de una tarea no aparecen
+   * en el chat de nadie). Lo elige el cliente, una vez por conexión, igual que elige el id
+   * de una tarea al subirle un adjunto por `POST /adjunto`.
+   *
+   * El id **nunca es una ruta ni un nombre de fichero**: es solo la clave de este mapa, y
+   * las entradas nacen y mueren con la conexión del SSE — no crece con los mensajes.
+   *
+   * `mirando` guarda el ENVOLTORIO que se enganchó al corredor (no el sumidero pelado),
+   * porque es el que hay que pasarle a `dejarDeMirar` para quitar ESE y no los demás.
+   */
+  const porIdDeCliente = new Map<string, { enviar: Sumidero; mirando: Map<string, Sumidero> }>();
   /**
    * La consola a la que está ENGANCHADO el cable ahora mismo. No se recalcula al cerrar:
    * hay que desconectar la que se conectó, no la que sea la actual en ese momento — entre
@@ -1069,6 +1088,74 @@ export function montarRutas(
    * MISMA regla que ya sigue `Vestibulo.borrarSesion` con la sesión de una tarea en curso:
    * declinar con el motivo, no matar un turno ajeno porque alguien limpió una fila.
    */
+  /**
+   * El transcript de una tarea, etiquetado con SU id.
+   *
+   * La etiqueta no es decoración: por este mismo cable llega el transcript de la sesión
+   * propia (`acto`, `sustitucion`, `reemision`), así que sin ella los actos de una tarea de
+   * fondo se mezclarían con la conversación de quien mira. Con `mirada` delante, el cliente
+   * los pinta en su panel y en ningún otro sitio.
+   *
+   * Y es una lista BLANCA por segunda vez: el transporte solo le manda a un mirón el
+   * transcript (`Transporte.mirar`), y aquí solo se traduce ese transcript. Una clase nueva
+   * del cable no llega a esta pantalla hasta que alguien la nombre en los dos sitios.
+   */
+  const etiquetarComoMirada = (tarea: string, enviar: Sumidero): Sumidero => (mensaje) => {
+    if (mensaje.clase === "acto") {
+      enviar({ clase: "mirada", tarea, via: "alta", actos: [mensaje.acto] });
+      return;
+    }
+    if (mensaje.clase === "sustitucion") {
+      enviar({ clase: "mirada", tarea, via: "sustitucion", actos: [mensaje.acto] });
+      return;
+    }
+    if (mensaje.clase === "reemision") {
+      enviar({ clase: "mirada", tarea, via: "todos", actos: mensaje.actos });
+    }
+  };
+
+  /**
+   * Empezar o dejar de mirar en vivo lo que hace una tarea.
+   *
+   * **Es OPT-IN y de SOLO lectura, y las dos cosas son estructurales aquí.** No se abre
+   * ningún proyecto, no se muda el cable y no se le pasa NADA a la consola de la tarea: lo
+   * único que ocurre es que un sumidero se engancha a su transporte para recibir el
+   * transcript que ya se estaba guardando. El mensaje se ataja en `POST /accion` antes del
+   * `recibir` de la consola precisamente por eso — si cayera ahí, `correrConsola` podría
+   * acabar corriendo un turno sobre la consola de una tarea, y con un mirón enganchado su
+   * `eof()` diría que hay alguien a quien preguntar. Medido: `conectar` volvía ese `eof()`
+   * falso; `mirar` (`transporte.ts`) es el conjunto aparte que lo evita.
+   *
+   * Tres silencios a propósito, y ninguno es un error que contar:
+   *  - **Un `cliente` que no consta**: es una pestaña que ya se fue, o un id viejo tras una
+   *    reconexión. Un fallo de lookup.
+   *  - **Una tarea que no corre AQUÍ** (`mirar` devuelve `undefined`): ya terminó, o la
+   *    ejecuta el otro proceso. No se emite `{actos: []}`, que diría «corre y no ha hecho
+   *    nada»; lo que esa tarea sí es ya lo cuenta el mensaje de la cola.
+   *  - **Mirar dos veces lo mismo**: idempotente. Un doble clic o un efecto que se dispare
+   *    dos veces no puede dejar dos sumideros del mismo cliente en el mismo turno.
+   */
+  const atenderMirar = (mensaje: { tarea: string; ver: boolean; cliente: string }): void => {
+    const cliente = porIdDeCliente.get(mensaje.cliente);
+    if (cliente === undefined) return;
+    const yaEnganchado = cliente.mirando.get(mensaje.tarea);
+    if (!mensaje.ver) {
+      if (yaEnganchado === undefined) return;
+      cliente.mirando.delete(mensaje.tarea);
+      // ESE envoltorio y no otro: la otra persona que mire la misma tarea sigue mirándola.
+      opciones.corredorDeTareas?.dejarDeMirar?.(mensaje.tarea, yaEnganchado);
+      return;
+    }
+    if (yaEnganchado !== undefined) return;
+    const envoltorio = etiquetarComoMirada(mensaje.tarea, cliente.enviar);
+    const actos = opciones.corredorDeTareas?.mirar?.(mensaje.tarea, envoltorio);
+    if (actos === undefined) return;
+    cliente.mirando.set(mensaje.tarea, envoltorio);
+    // El transcript de ese instante, SOLO al que lo pidió — el corredor lo devuelve en vez
+    // de emitirlo, igual que `conectar`, para no mandárselo a quien ya lo tenga.
+    cliente.enviar({ clase: "mirada", tarea: mensaje.tarea, via: "todos", actos: [...actos] });
+  };
+
   const atenderAccionDeTarea = async (accion: "reintentar" | "descartar" | "terminar", id: string): Promise<void> => {
     if (opciones.colaDeTareas === undefined) return;
     if (accion === "descartar") {
@@ -1945,6 +2032,21 @@ export function montarRutas(
       }
     };
     clientes.add(sumidero);
+    /**
+     * El identificador que el navegador eligió para ESTA conexión, si lo mandó. Es lo que
+     * después le permite decir «engánchame a la tarea t1» por `POST /accion`, que es otra
+     * petición y no trae sumidero ninguno. Ausente = un cliente que no va a mirar nada, y
+     * entonces no se apunta: nada que limpiar al cerrarse.
+     *
+     * Se lee de la query a mano y no con `new URL()` por la misma razón que
+     * `servidor.ts#manejarPeticion`, aunque aquí no haya segmentos que preservar: es el
+     * patrón del fichero. Y no es una ruta ni un nombre de fichero: solo la clave de
+     * `porIdDeCliente`.
+     */
+    const idDeCliente = new URLSearchParams((peticion.url ?? "").split("?")[1] ?? "").get("cliente") ?? undefined;
+    if (idDeCliente !== undefined && idDeCliente !== "") {
+      porIdDeCliente.set(idDeCliente, { enviar: sumidero, mirando: new Map() });
+    }
     // Un comentario SSE abre el stream de verdad: sin nada escrito, algunos navegadores no
     // disparan `onopen` hasta el primer dato.
     respuesta.write(": xonecode\n\n");
@@ -1967,6 +2069,23 @@ export function montarRutas(
       // SSE nuevo se enganche, y con una sola ranura eso desconectaba al recién llegado;
       // con un conjunto, quitar el suyo es exacto y esa carrera desaparece.
       clientes.delete(sumidero);
+      /**
+       * Y se desenganchan sus MIRADAS. Sin esto, el envoltorio de una pestaña cerrada se
+       * queda enganchado al turno de la tarea para siempre, escribiendo en un socket que ya
+       * no está. La guarda de `enviar === sumidero` es la misma carrera que documenta el
+       * `close` de aquí arriba: una pestaña recargada puede cerrar DESPUÉS de que su
+       * reconexión haya reclamado el mismo id, y sin comparar el sumidero el cierre viejo se
+       * llevaría por delante las miradas del recién llegado.
+       */
+      if (idDeCliente !== undefined) {
+        const entrada = porIdDeCliente.get(idDeCliente);
+        if (entrada !== undefined && entrada.enviar === sumidero) {
+          for (const [tarea, envoltorio] of entrada.mirando) {
+            opciones.corredorDeTareas?.dejarDeMirar?.(tarea, envoltorio);
+          }
+          porIdDeCliente.delete(idDeCliente);
+        }
+      }
       // Y la consola solo se da por sola cuando se va el ÚLTIMO: el transporte lo decide
       // mirando sus sumideros. Cortar a la primera baja rechazaría la aprobación que otra
       // pestaña todavía tiene delante.
@@ -2208,6 +2327,23 @@ export function montarRutas(
       (mensaje.accion === "ejecutar" || mensaje.accion === "cancelar")
     ) {
       atenderReceta(mensaje);
+      respuesta.writeHead(204);
+      respuesta.end();
+      return;
+    }
+    /**
+     * ANTES del `recibir` de la consola, y también antes que las demás clases de tarea: por
+     * aquí no entra nada hacia ningún turno. Ver `atenderMirar`.
+     */
+    if (
+      typeof mensaje === "object" &&
+      mensaje !== null &&
+      mensaje.clase === "mirar" &&
+      typeof mensaje.tarea === "string" &&
+      typeof mensaje.cliente === "string" &&
+      typeof mensaje.ver === "boolean"
+    ) {
+      atenderMirar(mensaje);
       respuesta.writeHead(204);
       respuesta.end();
       return;

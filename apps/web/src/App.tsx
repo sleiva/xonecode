@@ -43,6 +43,7 @@ export function App({
   store,
   enviar,
   subirAdjunto,
+  mirar,
 }: {
   store: Store;
   enviar: Conexion["enviar"];
@@ -52,6 +53,13 @@ export function App({
    * ninguno y los tests no tienen que parchear el global.
    */
   subirAdjunto: Conexion["subirAdjunto"];
+  /**
+   * Empezar o dejar de mirar en vivo lo que hace una tarea. Tiene canal propio y no va por
+   * `enviar` porque lleva el id de ESTA conexión del SSE, que es un dato del transporte y no
+   * de esta pantalla (ver `Conexion.mirar`). Ausente = esta ventana no lo ofrece, que es lo
+   * que necesitan los tests que montan `App` sin cable.
+   */
+  mirar?: Conexion["mirar"];
 }) {
   const estado = useSyncExternalStore(store.suscribir, store.leer);
 
@@ -187,6 +195,42 @@ export function App({
     (id: string, texto: string) => void enviar({ clase: "tarea", accion: "feedback", id, texto }),
     [enviar]
   );
+
+  /**
+   * Qué tarea se está mirando en vivo. Vive AQUÍ y no en el store por lo mismo que
+   * `pestana`: es la elección de esta ventana. El transcript sí es del servidor y vive en
+   * `estado.mirada`.
+   */
+  const [mirandoTarea, setMirandoTarea] = useState<string | undefined>(undefined);
+  const alMirarTarea = useCallback(
+    (id: string) => {
+      setMirandoTarea(id);
+      void mirar?.(id, true);
+    },
+    [mirar]
+  );
+  const alDejarDeMirarTarea = useCallback(
+    (id: string) => {
+      setMirandoTarea(undefined);
+      // El panel se cierra al pulsar y no cuando el servidor conteste: el servidor no manda
+      // ningún «ya no miras» al desengancharse, así que nadie lo retiraría.
+      store.dejarDeMirar();
+      void mirar?.(id, false);
+    },
+    [mirar, store]
+  );
+  /**
+   * Al caerse el cable el enganche se va con el SSE (`arranque.ts`, el `close`) y el store
+   * tira el transcript: la reconexión lo vuelve a pedir. Es la misma forma que Ficheros y
+   * Revisión —«se pide cuando NO se tiene, no al montar»—, y por eso depende de si hay dato
+   * y de `conectado`: sin las dos, o no se recupera al reconectar, o se pide a un servidor
+   * que no está.
+   */
+  useEffect(() => {
+    if (mirandoTarea === undefined || !estado.conectado) return;
+    if (estado.mirada?.tarea === mirandoTarea) return;
+    void mirar?.(mirandoTarea, true);
+  }, [mirandoTarea, estado.conectado, estado.mirada?.tarea, mirar]);
 
   /**
    * Los ARTEFACTOS de la sesión, sacados de los actos.
@@ -1148,6 +1192,11 @@ export function App({
               alReintentarTarea={alReintentarTarea}
               alDescartarTarea={alDescartarTarea}
               alTerminarTarea={alTerminarTarea}
+              // Ver en vivo lo que hace una tarea. Solo se ofrece si esta ventana tiene el
+              // canal: sin `mirar` inyectado el botón no llevaría a ninguna parte.
+              {...(mirar === undefined ? {} : { alMirarTarea, alDejarDeMirarTarea })}
+              {...(mirandoTarea === undefined ? {} : { mirandoTarea })}
+              {...(estado.mirada === undefined ? {} : { mirada: estado.mirada })}
               // «Se edita la tarea y se agrega el feedback del usuario»: el servidor decide
               // cómo se aplica (`{clase:"tarea", accion:"feedback"}`, el mismo patrón que
               // `/modelo` desde la pastilla) — el cliente no manda comandos, manda intención.
