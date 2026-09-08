@@ -1,5 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { conEstado, siguientesAEjecutar, tituloDeTarea, type Tarea } from "./tareas.js";
+import {
+  conAplicados,
+  conEstado,
+  rutaRelativaDeTarea,
+  siguientesAEjecutar,
+  tituloDeTarea,
+  type Tarea,
+} from "./tareas.js";
 
 function tarea(extra: Partial<Tarea> = {}): Tarea {
   return {
@@ -134,5 +141,66 @@ describe("conEstado", () => {
 describe("tituloDeTarea", () => {
   it("es la primera frase de la petición, como el de una sesión", () => {
     expect(tituloDeTarea("Arregla el login. Y de paso el menú.")).toBe("Arregla el login");
+  });
+});
+
+describe("rutaRelativaDeTarea", () => {
+  it("quita la barra del backend virtual: lo apuntado no puede parecer una ruta de la máquina", () => {
+    // Las rutas del interrupt vienen del backend con `virtualMode: true` (`/app.xne`), así
+    // que ya son relativas a la raíz — pero con una barra delante que las hace parecerlo.
+    expect(rutaRelativaDeTarea("/app.xne")).toBe("app.xne");
+    expect(rutaRelativaDeTarea("//src//a.js")).toBe("src//a.js");
+    // Y una que ya viene relativa no se toca: `file_path` llega de las dos formas.
+    expect(rutaRelativaDeTarea("src/a.js")).toBe("src/a.js");
+  });
+});
+
+describe("conAplicados", () => {
+  it("ausente NO es lista vacía: sin saberlo, el campo no se toca", () => {
+    /**
+     * La distinción de siempre, y aquí decide qué puede afirmar el juez de la entrega:
+     * ausente es «no consta» —una tarea que nunca llegó a correr un turno porque su
+     * proyecto se movió, o una de antes de que este campo existiera— y `[]` es «corrió y no
+     * aplicó ningún fichero». Colapsarlas contaría como medido lo que nadie midió.
+     */
+    const sinSaber = conAplicados(tarea(), undefined);
+    expect("aplicados" in sinSaber).toBe(false);
+    // Y no borra lo que ya hubiera: un reintento que no llega a correr no puede olvidar lo
+    // que aplicó el intento anterior.
+    expect(conAplicados(tarea({ aplicados: ["a.xne"] }), undefined).aplicados).toEqual(["a.xne"]);
+
+    // Corrió y no escribió nada: eso SÍ se afirma.
+    expect(conAplicados(tarea(), []).aplicados).toEqual([]);
+  });
+
+  it("las rutas se guardan RELATIVAS: el índice no lleva rutas de la máquina", () => {
+    expect(conAplicados(tarea(), ["/app.xne", "/src/lista.js"]).aplicados).toEqual([
+      "app.xne",
+      "src/lista.js",
+    ]);
+  });
+
+  it("un REINTENTO suma, no sustituye: lo del primer intento sigue en el disco", () => {
+    /**
+     * Una tarea aparcada se reintenta (`requiere-atencion → nuevo`) y su segundo turno es
+     * otro turno. Sustituyendo, el fichero que aplicó el primer intento desaparecía del
+     * registro estando todavía escrito — la mentira que este campo existe para evitar.
+     */
+    const reintentada = tarea({ aplicados: ["a.xne"] });
+    expect(conAplicados(reintentada, ["/b.xne"]).aplicados).toEqual(["a.xne", "b.xne"]);
+    // Y un segundo intento que no aplica nada no borra lo del primero: `[]` dice «este
+    // turno no aplicó nada», no «esta tarea nunca aplicó nada».
+    expect(conAplicados(reintentada, []).aplicados).toEqual(["a.xne"]);
+    // Sin duplicar lo que se reescribe en el segundo intento.
+    expect(conAplicados(reintentada, ["/a.xne", "/b.xne"]).aplicados).toEqual(["a.xne", "b.xne"]);
+  });
+
+  it("el mismo fichero en dos rondas es UN fichero tocado, y el orden se conserva", () => {
+    // Un turno aplica en varias rondas, y el modelo reescribe el mismo fichero al corregir:
+    // un registro con «app.xne, app.xne, app.xne» se lee como tres cambios que no hubo.
+    expect(conAplicados(tarea(), ["/b.xne", "/a.xne", "b.xne", "  ", "/a.xne"]).aplicados).toEqual([
+      "b.xne",
+      "a.xne",
+    ]);
   });
 });

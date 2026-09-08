@@ -1,7 +1,43 @@
 /**
  * La `Consola` con la que corre una tarea en background.
  *
- * **Aparca en vez de contestar, y eso es todo el fichero.** Hoy una consola de proyecto sin
+ * **Aplica lo que escribe, y aparca lo que necesita a una persona.** Son dos cosas
+ * distintas y esa distinción es todo el fichero.
+ *
+ * **Por qué APLICA** (§0 del diseño, decisión del usuario): la aprobación no estaba por la
+ * propiedad del repo, estaba porque XOne ignora en silencio lo desconocido —un atributo
+ * inventado no da error sino un bug mudo— y el diff era el único momento en que alguien lo
+ * veía antes de que existiera. La autorización de una tarea es el acto de CREARLA: elegir
+ * un proyecto y escribir un encargo es decir «trabaja en esto sin preguntarme», y por eso
+ * no hay ningún interruptor nuevo que armar — sin tarea creada no hay escritura autónoma
+ * posible. El sitio que deja libre el modal lo ocupan el verificador del turno
+ * (`turnoReal.ts#conVerificacion`, que corre por este camino igual que por el de una
+ * persona — MEDIDO) y el juez de la entrega.
+ *
+ * **Y NO es `seAplicaSinAprobacion`.** Ese ajuste dice «el humano que está aquí ha decidido
+ * no pulsar» —lo calcula como `interactivo && !eof()`— y aquí no hay nadie aquí: con esta
+ * consola devuelve `false` siempre, así que reutilizarlo habría dejado a las tareas sin
+ * aplicar nada. Y al revés: la marca del `settings.json` de un proyecto offline no decide
+ * sobre las tareas de nadie. Dos autorizaciones distintas, con alcances distintos.
+ *
+ * **Lo aplicado se DICE**, por dos canales y con los NOMBRES: al transcript (que es lo que
+ * lee quien abre la sesión) y por `aplicado`, que el corredor guarda en la tarea. Una
+ * escritura que nadie aprueba no puede ser además muda — es la regla del evento `artefacto`
+ * y la del aviso de honestidad de `seAplicaSinAprobacion`, y aquí es el ÚNICO aviso que
+ * hay: el de `turnoReal.ts` sale solo por su rama `todoAutomatico`, que este camino no
+ * toma. Con los nombres y no un contador, porque un contador a secas es el aviso que enseña
+ * a ignorar los avisos.
+ *
+ * **Lo que se apunta es lo AUTORIZADO, no lo escrito.** La decisión se toma antes de que el
+ * backend escriba, así que una ruta que las guardas de ruta rechazan —`/artifacts/`, una
+ * vista aplanada, `/.env`— se apunta aquí y no aparece en el disco (medido en el test de
+ * este fichero: las cinco se siguen rechazando, unas por el backend y otras por
+ * `permisosDe`). Quien dice qué hay en el disco es git, y eso se lee en Revisión con la ref
+ * de la sesión. La misma imprecisión tiene `aplicadasSinPreguntar` en `turnoReal.ts`, y por
+ * el mismo motivo.
+ *
+ * **Lo que NO cambia: `preguntar` y `leerSecreto`.** Aplicar una escritura no es contestar
+ * por una persona. Hoy una consola de proyecto sin
  * cliente enganchado rechaza toda aprobación en silencio —`consolaWeb.eof()` es
  * `!transporte.conectado()`— y contesta cadena vacía a cada pregunta. Para una tarea
  * autónoma eso es la peor combinación posible: el turno «acaba» y nadie se enteró de que
@@ -28,9 +64,16 @@ import type { PendienteDeAprobacion } from "../../core/events.js";
 import type { Piel } from "../../core/turno.js";
 import type { CatalogoModelosPort, Papel } from "../../core/ports.js";
 import type { Decision } from "../../vendor/hitl.js";
+import { rutaRelativaDeTarea } from "../../core/tareas.js";
 
 /**
  * El mensaje que acompaña al rechazo, hermano de `REJECT_MESSAGE` (`vendor/hitl.ts`).
+ *
+ * **Quién lo usa desde que las escrituras se aplican**: la pendiente que NO admite
+ * `approve`. `decisionesPermitidas` viene del `reviewConfigs` del interrupt y hay tools que
+ * solo ofrecen rechazo; aprobar una de esas sería inventarse una decisión que la librería
+ * no acepta. Ahí se rechaza con este mensaje Y se aparca, que es fail-closed: no se puede
+ * resolver sin una persona.
  *
  * Se copian sus tres cláusulas operativas —no se ejecutó, no lo reintentes, DILO en la
  * respuesta final— porque su docblock describe exactamente el fallo que aquí más duele: un
@@ -85,18 +128,22 @@ export class ErrorDeTareaSinHumano extends Error {
   }
 }
 
-/**
- * La ruta como la dicen los hallazgos del verificador: relativa a la raíz del proyecto.
- *
- * Las del interrupt vienen del backend virtual (`/app.xne`), así que nunca son de la
- * máquina — pero la barra de delante las hace parecerlo, y el motivo viaja por el cable,
- * que puede ir por un túnel.
- */
-const relativa = (ruta: string): string => ruta.replace(/^\/+/, "");
 
 export function crearConsolaDeTarea(opciones: {
   /** Aparca la tarea con este motivo. Se llama UNA vez por turno. */
   aparcar: (motivo: string) => void;
+  /**
+   * Los ficheros que se acaban de aplicar sin que nadie los aprobara, con ruta relativa.
+   *
+   * Se llama una vez por TANDA aprobada y no una por turno, al contrario que `aparcar`: un
+   * turno aplica en varias rondas de aprobación (medido: cuatro en un turno que insiste), y
+   * quedarse con la primera escondería los demás ficheros. Quien lo recoge —el corredor—
+   * los acumula y los guarda en la tarea.
+   *
+   * Opcional porque quien monta esta consola puede no tener dónde guardarlos; entonces lo
+   * aplicado se dice igualmente en el transcript, que es lo que no puede faltar.
+   */
+  aplicado?: (ficheros: readonly string[]) => void;
   escribir: Escribir;
   /**
    * La piel con la que el turno se pinta. Ausente y `crearEjecutorReal` cae en
@@ -133,12 +180,13 @@ export function crearConsolaDeTarea(opciones: {
     // Se reenvía o no está: `piel: undefined` en el objeto haría que un `"piel" in consola`
     // dijera que sí, y quien la busque lo hace para saber si tiene una mejor que la de stdio.
     ...(opciones.piel === undefined ? {} : { piel: opciones.piel }),
-    // `interactivo: false` y `eof: true` dicen la verdad. Lo que NO se hace es dejar que de
-    // ahí se deduzca una decisión: quien decide es la persona que atienda la tarea. De
-    // rebote —y a propósito— `seAplicaSinAprobacion` calcula «hay alguien delante» con
-    // exactamente esta cuenta (`interactivo && !eof()`), así que una tarea NO auto-aplica
-    // ni en un proyecto puesto en «sin aprobación»: ese ajuste es «el humano que está aquí
-    // ha decidido no pulsar», y aquí no hay ninguno.
+    // `interactivo: false` y `eof: true` dicen la verdad: no hay nadie delante. Lo que NO
+    // se hace es dejar que de ahí se deduzca una decisión — quien contesta una PREGUNTA es
+    // la persona que atienda la tarea, y las escrituras se aplican por la política de este
+    // fichero y no por lo que estos dos campos digan. De rebote, `seAplicaSinAprobacion`
+    // calcula «hay alguien delante» con exactamente esta cuenta (`interactivo && !eof()`),
+    // así que con esta consola devuelve `false` siempre y no aporta nada por aquí: ese
+    // ajuste es «el humano que está aquí ha decidido no pulsar».
     interactivo: false,
     eof: () => true,
     preguntar: async (pregunta: string) => {
@@ -161,34 +209,54 @@ export function crearConsolaDeTarea(opciones: {
       pendientes: PendienteDeAprobacion[],
       ficheros: Map<string, string>
     ): Promise<Map<string, Decision>> => {
-      const rutas = pendientes.map((p) => {
+      /** Cómo se nombra una pendiente: su ruta relativa, o su descripción si no la hay. */
+      const nombreDe = (p: PendienteDeAprobacion): string => {
         const ruta = ficheros.get(p.id);
-        return ruta === undefined ? p.descripcion : relativa(ruta);
-      });
-      /**
-       * El motivo dice que hace falta una PERSONA, y a propósito no se lee como un rechazo.
-       *
-       * Es lo que se pinta en la tarjeta del kanban, y hoy es el final más frecuente de una
-       * tarea que toca ficheros: la aprobación es fail-closed y aquí no hay nadie delante.
-       * Un «rechazado» pelado —que es lo que se DEVUELVE aguas abajo, y con razón— se leería
-       * como que el agente hizo algo mal, o como que alguien miró y dijo que no. Lo que pasa
-       * es otra cosa: la escritura está propuesta y espera a alguien. Y con los nombres de
-       * los ficheros, que es la misma regla del aviso de honestidad — un contador a secas es
-       * el aviso que enseña a ignorar los avisos.
-       */
-      aparcar(
-        `${pendientes.length} escritura(s) esperando la aprobación de una persona: ${rutas.join(", ")}`
-      );
-      /**
-       * **Rechazo, y con su mensaje.** El rechazo es lo que deja el turno cerrar limpio:
-       * medido sobre el bucle de `turnoReal.ts`, se reanuda con las decisiones, el modelo
-       * se entera de que no se escribió y el turno termina con `cortadoPorTope` en `false`.
-       * Sin resumir, el interrupt se queda colgado para siempre. La escritura NO se pierde:
-       * al atender la tarea, el modelo la vuelve a proponer con alguien delante.
-       */
+        // Sin `file_path` no hay nombre que dar, y un hueco haría desaparecer del registro
+        // una escritura que se aplicó. La descripción del interrupt es texto fijo del
+        // harness («[dev] quiere escribir un fichero del proyecto»), no una ruta: mismo
+        // trato que `aplicadasSinPreguntar` en `turnoReal.ts`.
+        return ruta === undefined ? p.descripcion : rutaRelativaDeTarea(ruta);
+      };
+
       const decisiones = new Map<string, Decision>();
+      const aplicadas: string[] = [];
+      const sinResolver: string[] = [];
       for (const p of pendientes) {
-        decisiones.set(p.id, { type: "reject", message: MENSAJE_DE_RECHAZO_DE_TAREA });
+        /**
+         * **Solo se aprueba lo que admite aprobación.** `decisionesPermitidas` sale del
+         * `reviewConfigs` del interrupt, y hay tools que solo ofrecen rechazo
+         * (`consolaWeb.test.ts` ya cubre ese caso por la puerta de las personas). Aprobar
+         * una de esas sería inventarse una decisión que la librería no acepta; y como no se
+         * puede resolver sin una persona, se rechaza con su mensaje y se APARCA. Fail
+         * closed, que es la única dirección posible aquí.
+         */
+        if (!p.decisionesPermitidas.includes("approve")) {
+          decisiones.set(p.id, { type: "reject", message: MENSAJE_DE_RECHAZO_DE_TAREA });
+          sinResolver.push(nombreDe(p));
+          continue;
+        }
+        decisiones.set(p.id, { type: "approve" });
+        aplicadas.push(nombreDe(p));
+      }
+
+      if (aplicadas.length > 0) {
+        // Con los NOMBRES, y diciendo POR QUÉ no hubo aprobación: sin la palabra «tarea»
+        // esto se lee como que la aprobación se rompió.
+        opciones.escribir(
+          `\n✎ ${aplicadas.length} escritura(s) aplicadas sin aprobación —es una tarea de fondo, y ` +
+            `la autorización fue crearla—: ${aplicadas.join(", ")}\n`
+        );
+        opciones.aplicado?.(aplicadas);
+      }
+      /**
+       * Y lo que no se pudo resolver aparca la tarea, con los nombres y sin leerse como un
+       * rechazo: la escritura está propuesta y espera a alguien, que es lo accionable.
+       */
+      if (sinResolver.length > 0) {
+        aparcar(
+          `${sinResolver.length} escritura(s) que no se pueden aplicar sin una persona: ${sinResolver.join(", ")}`
+        );
       }
       return decisiones;
     },

@@ -18,6 +18,7 @@ import {
 import { crearVestibulo } from "./vestibulo.js";
 import { fotoDeApertura } from "../../agent/sesionGit.js";
 import { CatalogoModelosEnMemoria } from "../../core/ports.js";
+import type { Consola } from "../../cli/consola.js";
 import type { Tarea } from "../../core/tareas.js";
 import type { TareasEnDisco } from "../../agent/tareasEnDisco.js";
 
@@ -69,6 +70,7 @@ function proyectoDeMentira() {
   const encargos: string[] = [];
   const cierres: string[] = [];
   const aparcadores: ((motivo: string) => void)[] = [];
+  const aplicadores: ((ficheros: readonly string[]) => void)[] = [];
   interface Viva {
     resolver: () => void;
     rechazar: (error: unknown) => void;
@@ -80,14 +82,17 @@ function proyectoDeMentira() {
     acabar: () => vivas.pop()?.resolver(),
     romper: (error: unknown) => vivas.pop()?.rechazar(error),
     aparcar: (motivo: string) => aparcadores.at(-1)?.(motivo),
+    /** Lo que la consola de tarea apunta al APLICAR una escritura sin aprobación. */
+    aplicar: (ficheros: readonly string[]) => aplicadores.at(-1)?.(ficheros),
     abrir: async (raiz: string): Promise<ConsolaParaTarea> => {
       let viva: Viva | undefined;
       return {
         raiz,
         idDeHilo: `hilo-${raiz}`,
-        correrTarea: async (encargo, aparcar) => {
+        correrTarea: async (encargo, aparcar, aplicado) => {
           encargos.push(encargo);
           aparcadores.push(aparcar);
+          if (aplicado !== undefined) aplicadores.push(aplicado);
           await new Promise<void>((resolver, rechazar) => {
             viva = { resolver, rechazar };
             vivas.push(viva);
@@ -104,6 +109,117 @@ function proyectoDeMentira() {
     },
   };
 }
+
+describe("lo que una tarea APLICÓ se guarda con su estado", () => {
+  /**
+   * Desde §0 del diseño una tarea aplica sus escrituras sin aprobación, y su autorización
+   * es el acto de crearla. Lo que queda entonces es el REGISTRO: nadie vio el diff antes,
+   * así que la única forma de saber qué tocó es lo que se apunte aquí. Con los NOMBRES y no
+   * un contador, igual que el aviso de honestidad de `seAplicaSinAprobacion`.
+   */
+  it("una tarea que aplica y termina deja los ficheros en el índice, RELATIVOS", async () => {
+    const { disco, estado } = discoDeMentira([TAREA()]);
+    const p = proyectoDeMentira();
+    const corredor = crearCorredorDeTareas({ disco, abrirParaTarea: p.abrir, pid: 1, concurrencia: () => 1 });
+    await corredor.arrancar();
+    await corredor.asentar();
+    // Dos tandas, como un turno de verdad: se aplica en varias rondas de aprobación.
+    p.aplicar(["/src/lista.js"]);
+    p.aplicar(["/app.xne", "/src/lista.js"]);
+    p.acabar();
+    await corredor.asentar();
+
+    const tarea = estado()[0]!;
+    expect(tarea.estado).toBe("terminada");
+    // Sin repetidos, en orden, y sin la barra del backend virtual: de aquí sale lo que el
+    // juez de la entrega lee, y estas cadenas viven en un fichero del usuario.
+    expect(tarea.aplicados).toEqual(["src/lista.js", "app.xne"]);
+    for (const ruta of tarea.aplicados!) {
+      expect(ruta.startsWith("/")).toBe(false);
+      expect(ruta).not.toContain(tarea.proyecto.raiz);
+    }
+    await corredor.parar();
+  });
+
+  it("y también al APARCAR: lo que se aplicó antes de pararse no se pierde", async () => {
+    // El caso de verdad: la tarea escribe dos ficheros y DESPUÉS pregunta algo que necesita
+    // a una persona. El motivo explica por qué paró; lo aplicado dice qué dejó tocado, y las
+    // dos cosas hacen falta para poder atenderla.
+    const { disco, estado } = discoDeMentira([TAREA()]);
+    const p = proyectoDeMentira();
+    const corredor = crearCorredorDeTareas({ disco, abrirParaTarea: p.abrir, pid: 1, concurrencia: () => 1 });
+    await corredor.arrancar();
+    await corredor.asentar();
+    p.aplicar(["/app.xne"]);
+    p.aparcar("el agente preguntó y no había nadie");
+    p.acabar();
+    await corredor.asentar();
+
+    expect(estado()[0]).toMatchObject({
+      estado: "requiere-atencion",
+      motivo: expect.stringMatching(/preguntó/),
+      aplicados: ["app.xne"],
+    });
+    await corredor.parar();
+  });
+
+  it("un turno que no aplicó nada lo dice con `[]`, que NO es lo mismo que no constar", async () => {
+    const { disco, estado } = discoDeMentira([TAREA()]);
+    const p = proyectoDeMentira();
+    const corredor = crearCorredorDeTareas({ disco, abrirParaTarea: p.abrir, pid: 1, concurrencia: () => 1 });
+    await corredor.arrancar();
+    await corredor.asentar();
+    p.acabar();
+    await corredor.asentar();
+    expect(estado()[0]!.aplicados).toEqual([]);
+    await corredor.parar();
+  });
+
+  it("una tarea que ni pudo ABRIR su proyecto se queda sin el campo: ausente es «no se sabe»", async () => {
+    /**
+     * La trampa de siempre, y aquí la dirección importa: esta tarea no corrió ningún turno
+     * —su carpeta se movió—, así que no se puede afirmar que no escribiera nada. Escribir
+     * `[]` sería contar como medido lo que nadie midió, y el juez de la entrega lo leería
+     * como «corrió y no tocó nada».
+     */
+    const { disco, estado } = discoDeMentira([TAREA()]);
+    const corredor = crearCorredorDeTareas({
+      disco,
+      abrirParaTarea: async () => {
+        throw new Error("falta su .xonecode/config.json");
+      },
+      pid: 1,
+      concurrencia: () => 1,
+    });
+    await corredor.arrancar();
+    await corredor.asentar();
+    const tarea = estado()[0]!;
+    expect(tarea.estado).toBe("requiere-atencion");
+    expect("aplicados" in tarea).toBe(false);
+    await corredor.parar();
+  });
+
+  it("el corte por cierre también lo guarda: la consola se fue, lo escrito sigue escrito", async () => {
+    const { disco, estado } = discoDeMentira([TAREA()]);
+    const p = proyectoDeMentira();
+    const corredor = crearCorredorDeTareas({
+      disco,
+      abrirParaTarea: p.abrir,
+      pid: 1,
+      concurrencia: () => 1,
+      esperaAlParar: 50,
+    });
+    await corredor.arrancar();
+    await corredor.asentar();
+    p.aplicar(["/app.xne"]);
+    await corredor.parar();
+    expect(estado()[0]).toMatchObject({
+      estado: "requiere-atencion",
+      motivo: MOTIVO_CORTADA_POR_CIERRE,
+      aplicados: ["app.xne"],
+    });
+  });
+});
 
 describe("crearCorredorDeTareas", () => {
   it("al arrancar, una tarea «en proceso» de otro proceso se APARCA", async () => {
@@ -918,7 +1034,13 @@ describe("el volcado de la sesión de una tarea", () => {
     return { promesa, cumplir };
   }
 
-  function vestibuloReal(base: string, escritos: string[], marcada: { cumplir: (p: Promise<boolean>) => void }) {
+  function vestibuloReal(
+    base: string,
+    escritos: string[],
+    marcada: { cumplir: (p: Promise<boolean>) => void },
+    /** El turno, si el test necesita otro. Por omisión, el que pinta por la piel. */
+    ejecutor?: (peticion: string, estado: unknown, consola: Consola) => Promise<void>
+  ) {
     return crearVestibulo({
       origenDeTrabajo: "global",
       catalogoModelos: new CatalogoModelosEnMemoria(),
@@ -950,7 +1072,8 @@ describe("el volcado de la sesión de una tarea", () => {
       // Un ejecutor que NO es doble (si lo fuera, `volcar` saldría por `esDoble`) y que
       // pinta por la PIEL, como el real: `crearEjecutorReal` hace `consola.piel?.() ??
       // crearPielStdio(consola.escribir)`.
-      crearEjecutor: () => async (peticion, _estado, consola) => {
+      crearEjecutor: () => async (peticion, estado, consola) => {
+        if (ejecutor !== undefined) return ejecutor(peticion, estado, consola);
         escritos.push(peticion);
         const piel = consola.piel?.();
         if (piel === undefined) {
@@ -1018,6 +1141,68 @@ describe("el volcado de la sesión de una tarea", () => {
 
     await corredor.parar();
     await v.cerrar();
+    rmSync(base, { recursive: true, force: true });
+  });
+
+  it("MEDIDO de punta a punta: aprobar dentro del turno deja los ficheros en el ÍNDICE", async () => {
+    /**
+     * La costura entera y con las piezas de producción: el vestíbulo de verdad,
+     * `consolaParaTarea` de verdad y la consola de tarea de verdad. Lo que mide es que la
+     * decisión que toma la POLÍTICA (aprobar, en `consolaDeTarea.ts`) llega hasta el índice
+     * de tareas — que es el único sitio donde queda constancia de una escritura que nadie
+     * aprobó. Los tests de arriba usan un doble de consola, así que el día que
+     * `consolaParaTarea` deje de reenviar el canal se quedarían todos en verde.
+     *
+     * El turno de mentira hace lo que hace el de verdad: llamar a `aprobacionesTui` con lo
+     * que el interrupt trae. No hay agente, ni modelo, ni backend.
+     */
+    const { base, raiz } = proyectoConGit();
+    const marcada = asidero<Promise<boolean>>();
+    const v = vestibuloReal(base, [], marcada, async (_peticion, _estado, consola) => {
+      const decisiones = await consola.aprobacionesTui!(
+        [
+          {
+            id: "i1",
+            origen: "dev",
+            descripcion: "[dev] quiere escribir un fichero del proyecto",
+            decisionesPermitidas: ["approve", "reject"],
+          },
+        ],
+        new Map([["i1", "/Clientes.xne"]]),
+        new Map()
+      );
+      // Y es aprobar: si esto fuera un rechazo, el resto del test no significaría nada.
+      expect(decisiones.get("i1")).toEqual({ type: "approve" });
+      const piel = consola.piel?.();
+      piel?.token("hecho");
+      piel?.cerrarLinea();
+      piel?.fin(1);
+    });
+    const { disco, estado } = discoDeMentira([
+      TAREA({ proyecto: { id: "pa", raiz, nombre: "A" }, encargo: "crea la colección Clientes" }),
+    ]);
+    const corredor = crearCorredorDeTareas({
+      disco,
+      abrirParaTarea: async (r) => consolaParaTarea(await v.abrirParaTarea(r)),
+      pid: 1,
+      concurrencia: () => 1,
+    });
+    await corredor.arrancar();
+    for (let i = 0; i < 10 && estado()[0]!.estado !== "terminada"; i += 1) await corredor.asentar();
+
+    expect(estado()[0]).toMatchObject({ estado: "terminada", aplicados: ["Clientes.xne"] });
+    // Y en el transcript, con el nombre: es lo que lee quien abra la sesión después.
+    const sesion = estado()[0]!.sesion!;
+    const jsonl = readFileSync(join(raiz, ".xonecode", "sesiones", `${sesion}.jsonl`), "utf8");
+    expect(jsonl).toMatch(/Clientes\.xne/);
+    expect(jsonl).toMatch(/sin aprobaci/i);
+
+    await corredor.parar();
+    await v.cerrar();
+    // Se espera la foto de git ANTES de borrar la carpeta: `volcar()` la lanza sin
+    // aguardarla, así que borrar el proyecto a media escritura de `.git/objects` daba un
+    // `ENOTEMPTY` que no es del código medido. Es el mismo asidero que el test de al lado.
+    await (await marcada.promesa);
     rmSync(base, { recursive: true, force: true });
   });
 });

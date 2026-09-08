@@ -75,7 +75,40 @@ export interface Tarea {
   acabada?: string;
   /** El proceso que la tiene. Se usa para reconciliar al arrancar; se va al parar. */
   pid?: number;
+  /**
+   * Los ficheros que la tarea APLICÓ sin que ninguna persona los aprobara, con la ruta
+   * RELATIVA a la raíz del proyecto.
+   *
+   * **Se guarda porque nadie los aprobó.** La autorización de una tarea es el acto de
+   * crearla, así que el diff dejó de ser el momento en que alguien ve lo que se va a
+   * escribir; lo único que queda es el registro de lo que se escribió. Con los NOMBRES y
+   * no un contador, que es el mismo criterio del aviso de honestidad de
+   * `seAplicaSinAprobacion` — un contador a secas es el aviso que enseña a ignorar los
+   * avisos.
+   *
+   * **Ausente y vacío no son lo mismo**, y aquí la diferencia es la de siempre: ausente es
+   * «no consta» —una tarea de antes de que esto existiera, o una que nunca llegó a correr
+   * un turno porque su proyecto no estaba— y `[]` es «corrió y no aplicó ningún fichero»,
+   * que es un dato distinto y el que el juez de la entrega necesita.
+   *
+   * **Es lo AUTORIZADO, no lo comprobado contra el disco.** Se apunta cuando la decisión
+   * se toma, que es antes de que el backend escriba: una ruta que las guardas de ruta
+   * rechazan (`/artifacts/`, una vista aplanada) sale aquí y no en el disco. Quien dice qué
+   * hay en el disco es git, y eso se lee en la pestaña Revisión con la ref de la sesión.
+   */
+  aplicados?: string[];
 }
+
+/**
+ * La ruta de un fichero tal como se apunta y se dice en una tarea: relativa a la raíz.
+ *
+ * Las rutas que llegan de un interrupt vienen del backend virtual del agente (`/app.xne`),
+ * así que nunca son de la máquina — pero la barra de delante las hace parecerlo, y estas
+ * cadenas acaban en el índice de tareas y en el registro que una persona lee. Vive aquí, y
+ * no en quien las escribe, porque la usan los dos extremos: el texto que se pinta en el
+ * transcript y la lista que se guarda. Dos copias de esto son dos reglas que divergen.
+ */
+export const rutaRelativaDeTarea = (ruta: string): string => ruta.replace(/^\/+/, "");
 
 /** El título de una tarea: la primera frase de su petición, como el de una sesión. */
 export const tituloDeTarea = (peticion: string): string => tituloDesde(peticion);
@@ -175,4 +208,38 @@ export function conEstado(
   }
   if (estado === "terminada") siguiente.acabada = ahora;
   return siguiente;
+}
+
+/**
+ * La tarea con lo que APLICÓ, si es que se sabe.
+ *
+ * `undefined` significa «no se sabe» y entonces no se toca el campo: una tarea que ni
+ * llegó a correr un turno —su proyecto se movió— no aplicó nada, pero afirmarlo con una
+ * lista vacía sería contar como medido algo que nadie midió. Es la misma distinción que
+ * `Entorno.proyectos` y la que `detalles` de un acto guardado conserva.
+ *
+ * **Se SUMA a lo que ya hubiera, no lo sustituye.** Una tarea aparcada se reintenta
+ * (`requiere-atencion → nuevo`) y su segundo turno es otro turno: si esto reemplazara, el
+ * fichero que aplicó el primer intento desaparecería del registro **estando todavía en el
+ * disco**, que es justo la mentira que este campo existe para evitar. Y así `[]` sigue
+ * queriendo decir lo que dice: «este turno no aplicó nada» — no borra lo que aplicó el
+ * anterior. (Lo que sí se pierde al reintentar es la `sesion` del intento anterior, que la
+ * sustituye la nueva: juntar los DOS diffs de una tarea reintentada es otra cosa y no está
+ * hecho.)
+ *
+ * Normaliza en un solo sitio: rutas relativas (`rutaRelativaDeTarea`), sin huecos y sin
+ * repetidos — el mismo fichero escrito en dos rondas del turno, o en dos intentos, es un
+ * fichero tocado y no dos—, conservando el orden en que se aplicaron.
+ */
+export function conAplicados(tarea: Tarea, aplicados: readonly string[] | undefined): Tarea {
+  if (aplicados === undefined) return tarea;
+  const vistos = new Set<string>();
+  const limpios: string[] = [];
+  for (const cruda of [...(tarea.aplicados ?? []), ...aplicados]) {
+    const ruta = rutaRelativaDeTarea(cruda).trim();
+    if (ruta === "" || vistos.has(ruta)) continue;
+    vistos.add(ruta);
+    limpios.push(ruta);
+  }
+  return { ...tarea, aplicados: limpios };
 }

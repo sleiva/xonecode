@@ -20,7 +20,7 @@
  * La política de QUÉ arranca no está aquí: es `core/tareas.ts#siguientesAEjecutar`, pura y
  * con sus tests. Aquí está el lazo, que es lo que no se puede probar sin dobles.
  */
-import { conEstado, siguientesAEjecutar, type Tarea } from "../../core/tareas.js";
+import { conAplicados, conEstado, siguientesAEjecutar, type Tarea } from "../../core/tareas.js";
 import { crearConsolaDeTarea } from "./consolaDeTarea.js";
 import type { ConsolaDeProyecto } from "./vestibulo.js";
 import type { TareasEnDisco } from "../../agent/tareasEnDisco.js";
@@ -60,9 +60,21 @@ const motivoDeReconciliacion = (pid: number | undefined): string =>
 export interface ConsolaParaTarea {
   raiz: string;
   idDeHilo: string;
-  /** Corre el encargo. `aparcar` es lo que la consola de tarea llama al toparse con algo
-   *  que necesita a una persona. */
-  correrTarea(encargo: string, aparcar: (motivo: string) => void): Promise<void>;
+  /**
+   * Corre el encargo.
+   *
+   * `aparcar` es lo que la consola de tarea llama al toparse con algo que necesita a una
+   * persona; `aplicado` es lo que llama al APLICAR escrituras sin aprobación, con las rutas
+   * relativas. Los dos son callbacks y no un valor de retorno porque el turno puede LANZAR
+   * después de haber aplicado —eso es justo lo que hace `preguntar`—, y un retorno se
+   * perdería con la excepción. `aplicado` puede llamarse varias veces: un turno aplica en
+   * varias rondas.
+   */
+  correrTarea(
+    encargo: string,
+    aparcar: (motivo: string) => void,
+    aplicado?: (ficheros: readonly string[]) => void
+  ): Promise<void>;
   cerrar(): Promise<void>;
 }
 
@@ -105,11 +117,15 @@ export function consolaParaTarea(consola: ConsolaDeProyecto): ConsolaParaTarea {
   return {
     raiz: consola.raiz,
     idDeHilo: consola.idDeHilo,
-    correrTarea: async (encargo, aparcar) => {
+    correrTarea: async (encargo, aparcar, aplicado) => {
       // Una consola de tarea por TURNO: su «se aparca una vez» vale por turno, y reusarla
       // para un segundo turno lo dejaría mudo.
       const deTarea = crearConsolaDeTarea({
         aparcar,
+        // Lo que la tarea aplique sin aprobación sube al corredor, que lo guarda con el
+        // estado final. Se reenvía o no está, como la piel: `aplicado: undefined` haría que
+        // un `"aplicado" in opciones` dijera que sí.
+        ...(aplicado === undefined ? {} : { aplicado }),
         // Lo que escriba el turno va al transcript de SU sesión.
         escribir: (texto) => dentro.escribir(texto),
         ...(dentro.piel === undefined ? {} : { piel: dentro.piel.bind(dentro) }),
@@ -384,6 +400,17 @@ export function crearCorredorDeTareas(opciones: {
 
     const hilo = consola.idDeHilo;
     let motivo: string | undefined;
+    /**
+     * Los ficheros que este turno APLICÓ sin que nadie los aprobara, tal como los apunta la
+     * consola de tarea. Se acumula aunque el turno reviente: `preguntar` corta lanzando, y
+     * lo que se aplicó antes sigue aplicado.
+     *
+     * Que esté declarado aquí y no antes de `abrirParaTarea` es la mitad de la regla de
+     * «ausente no es vacío»: por el camino en que el proyecto ya no está, este `correr`
+     * devuelve antes de llegar aquí y la tarea se queda SIN el campo, que es la verdad —
+     * no corrió ningún turno, así que no se puede afirmar que no escribiera nada.
+     */
+    const aplicados: string[] = [];
     /** ¿Devolvió el turno por su cuenta? Distingue «acabó» de «se lo cortamos». */
     let terminoLimpio = false;
     let marcada = false;
@@ -400,7 +427,11 @@ export function crearCorredorDeTareas(opciones: {
         actual.estado === "nuevo" ? conEstado({ ...actual, sesion: hilo }, "en-proceso", undefined, { pid }) : undefined
       );
       if (marcada) {
-        await consola.correrTarea(tarea.encargo, (m) => void (motivo ??= m));
+        await consola.correrTarea(
+          tarea.encargo,
+          (m) => void (motivo ??= m),
+          (ficheros) => void aplicados.push(...ficheros)
+        );
         terminoLimpio = true;
       }
     } catch (error) {
@@ -442,9 +473,18 @@ export function crearCorredorDeTareas(opciones: {
      */
     // La regla se resuelve UNA vez y fuera del `try` de la escritura: así el camino de error
     // reusa la decisión en vez de volver a preguntar —y a olvidar— el mismo hilo dos veces.
-    let conLoQueQuede: (t: Tarea) => Tarea = (t) => t;
+    //
+    // Y lo APLICADO se compone en la misma transformación, por el mismo motivo por el que la
+    // regla de `sesion` vive aquí: los tres finales —terminada, aparcada y el último recurso
+    // de más abajo— pasan por ella, así que ninguno puede quedarse sin registrar lo que la
+    // tarea escribió. Va sobre la tarea RELEÍDA del disco (`escribirSiSigueSiendoNuestra` le
+    // pasa la actual), no sobre la que se despachó, para no pisar lo que el cable cambiara
+    // entre medias.
+    let conLoQueQuede: (t: Tarea) => Tarea = (t) => conAplicados(t, aplicados);
     try {
-      if (await olvidarSiNoSePuedeAbrir(tarea.proyecto.raiz, hilo)) conLoQueQuede = sinSesion;
+      if (await olvidarSiNoSePuedeAbrir(tarea.proyecto.raiz, hilo)) {
+        conLoQueQuede = (t) => sinSesion(conAplicados(t, aplicados));
+      }
     } catch {
       // Ni preguntar se pudo: no se sabe, y entonces no se borra nada.
     }
