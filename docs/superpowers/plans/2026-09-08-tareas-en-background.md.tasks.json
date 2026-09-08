@@ -64,7 +64,7 @@
   {
    "id": 8,
    "subject": "Task 8: la lista por proyecto",
-   "status": "pending",
+   "status": "completed",
    "blockedBy": [
     7
    ],
@@ -73,7 +73,7 @@
   {
    "id": 9,
    "subject": "Task 9: crear una tarea — augmentación y adjuntos",
-   "status": "pending",
+   "status": "completed",
    "blockedBy": [
     8
    ],
@@ -94,7 +94,7 @@
   {
    "subject": "Task 12: esperando feedback — editar la tarea y que siga",
    "description": "## Task 12: esperando feedback — editar la tarea y que siga\n\n**Goal:** Que una tarea aparcada por una decisión que necesita al desarrollador se resuelva editando la tarea para añadir el feedback, y que entonces continúe en el mismo hilo.\n\n**Files:**\n- Modify: `src/core/tareas.ts` (el feedback en la `Tarea`)\n- Modify: `src/agent/tareasEnDisco.ts` (guardarlo)\n- Modify: `src/web/servidor/arranque.ts` (la acción del cable) + su test\n- Modify: `src/web/servidor/corredorDeTareas.ts` (reanudar con el feedback) + su test\n- Modify: `apps/web/src/tipos.ts`, `store.ts`, `store.test.ts`\n- Modify: `apps/web/src/componentes/Kanban.tsx` (el campo)\n\n**Acceptance Criteria:**\n- [ ] Añadir feedback a una tarea en `requiere-atencion` la devuelve a `nuevo` y hace que el corredor la mire\n- [ ] El feedback se guarda con la tarea y llega al agente como mensaje de USUARIO en el mismo hilo — el mismo camino que los hallazgos del verificador, no un encargo nuevo\n- [ ] Un feedback vacío se rechaza y se dice: devolvería la tarea al lazo sin nada nuevo que decirle\n- [ ] La tarea conserva su `sesion` y su hilo al reanudar, así que la conversación se lee entera\n- [ ] Si su hilo ya no se puede reanudar (`sesion` limpiada porque no había nada abrible), se dice y se empieza uno nuevo — no se finge que continúa\n- [ ] El historial de feedbacks no se pierde: añadir uno segundo no borra el primero\n\n**Verify:** `npx vitest run src/web src/core/tareas.test.ts apps/web/src/store.test.ts` → en verde\n\n**Steps:**\n\n- [ ] **Step 1: el test que falla — el feedback reanuda**\n\n```ts\nit(\"añadir feedback devuelve la tarea al lazo, en su mismo hilo\", async () => {\n  // `requiere-atencion` dejó de ser terminal: es una pregunta al desarrollador. Y la\n  // respuesta entra como mensaje de USUARIO en el hilo que ya existe, igual que los\n  // hallazgos del verificador — un encargo nuevo perdería todo lo que la tarea ya sabe.\n  const d = discoDeMentira([TAREA({ estado: \"requiere-atencion\", motivo: \"¿la colección lleva histórico?\", sesion: \"s1\" })]);\n  const recibidos: string[] = [];\n  const corredor = crearCorredorDeTareas({ disco: d.disco, abrirParaTarea: async (raiz) => ({ raiz, idDeHilo: \"s1\", correrTarea: async (p) => { recibidos.push(p); }, cerrar: async () => {} }), pid: 1, concurrencia: () => 1 });\n  await corredor.arrancar();\n  aplicarFeedback(d.disco, \"t1\", \"sí, con histórico\");\n  corredor.revisar();\n  await corredor.asentar();\n  expect(recibidos.join(\" \")).toContain(\"sí, con histórico\");\n  expect(d.estado()[0]!.sesion).toBe(\"s1\");\n  await corredor.parar();\n});\n\nit(\"un feedback vacío se rechaza: devolvería la tarea al lazo sin nada nuevo\", () => {\n  const d = discoDeMentira([TAREA({ estado: \"requiere-atencion\", motivo: \"?\" })]);\n  expect(aplicarFeedback(d.disco, \"t1\", \"   \")).toEqual({ hecho: false, motivo: expect.any(String) });\n  expect(d.estado()[0]!.estado).toBe(\"requiere-atencion\");\n});\n```\n\n- [ ] **Step 2: implementarlo**\n\n`core/tareas.ts`: `feedback` es una LISTA y no un campo, porque puede haber varias vueltas y\nla segunda no puede borrar la primera. Con la regla de siempre: ausente no es vacía.\n\n`arranque.ts`: una acción más del `{clase:\"tarea\"}` que ya existe, por el mismo camino.\n\n`corredorDeTareas.ts`: al ejecutar una tarea que trae feedback sin consumir, la petición que\nse le pasa al turno es el feedback y no el encargo — y se marca consumido, o la vuelta\nsiguiente lo repetiría.\n\n`Kanban.tsx`: en la tarjeta de esperando feedback, el motivo y un campo para contestar. Sin\nmodal: es una frase, no una decisión con diff.\n\n- [ ] **Step 3: correr, mutar y commitear**\n\nMutaciones obligatorias: aceptar el feedback vacío; no marcarlo consumido; pisar el feedback\nanterior; perder `sesion` al reanudar; y quitar el campo de la lista blanca del store.\n\n```bash\nnpm run typecheck && npm test\ngit commit -m \"feat(web): esperando feedback — se edita la tarea y sigue en su hilo\"\n```\n\n```json:metadata\n{\"files\": [\"src/core/tareas.ts\", \"src/agent/tareasEnDisco.ts\", \"src/web/servidor/arranque.ts\", \"src/web/servidor/corredorDeTareas.ts\", \"apps/web/src/store.ts\", \"apps/web/src/componentes/Kanban.tsx\"], \"acceptanceCriteria\": [\"el feedback devuelve la tarea a `nuevo` y el corredor la mira\", \"llega como mensaje de usuario en el mismo hilo\", \"un feedback vacío se rechaza y se dice\", \"conserva `sesion` y el hilo\", \"si el hilo no se puede reanudar se dice\", \"el historial de feedbacks no se pierde\"], \"modelTier\": \"standard\", \"userGate\": false}\n```\n",
-   "status": "pending",
+   "status": "completed",
    "activeForm": "Implementando Task 12: esperando feedback — editar la tarea y que siga"
   }
  ],
