@@ -178,6 +178,18 @@ describe("tareasEnDisco", () => {
     expect(crearTareasEnDisco({ base }).carpetaDeAdjuntos("../fuera")).toBeUndefined();
   });
 
+  it("borrar un BORRADOR que no está en el índice se lleva su carpeta y deja el índice igual", () => {
+    // Es el camino de «cancelar la ventana de crear con adjuntos ya subidos»: los bytes se
+    // suben antes de que la tarea exista, así que sin esto quedaría una carpeta con
+    // documentos de una persona que ninguna tarea nombra.
+    const disco = crearTareasEnDisco({ base });
+    disco.guardar([TAREA]);
+    disco.guardarAdjunto("borrador-1", "notas.md", Buffer.from("x"));
+    disco.borrarTarea("borrador-1");
+    expect(existsSync(join(base, "tareas", "borrador-1"))).toBe(false);
+    expect(disco.listar()).toHaveLength(1);
+  });
+
   it("ningún error lleva una ruta de la máquina", () => {
     const disco = crearTareasEnDisco({ base });
     const r = disco.guardarAdjunto("t1", "../fuera.png", Buffer.from("x"));

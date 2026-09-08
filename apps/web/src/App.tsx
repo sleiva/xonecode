@@ -668,7 +668,16 @@ export function App({
             ...(conAdjuntos ? { borrador } : {}),
           });
         }}
-        alCerrar={() => setTareaNueva(undefined)}
+        alCerrar={() => {
+          // **Cancelar con adjuntos ya subidos BORRA su carpeta.** Los bytes se suben antes
+          // de que la tarea exista (crear la encola, y el corredor puede arrancarla en el
+          // acto), así que cerrar sin encolar dejaría en `~/.xonecode/tareas/<borrador>/`
+          // documentos de una persona que ninguna tarea nombra y que nadie va a volver a
+          // ver. `descartar` sobre un id que no está en el índice hace exactamente eso:
+          // borra la carpeta y deja el índice intacto.
+          if (conAdjuntos) void enviar({ clase: "tarea", accion: "descartar", id: tareaNueva.borrador });
+          setTareaNueva(undefined);
+        }}
       />
     ) : null;
 

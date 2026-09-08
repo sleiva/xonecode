@@ -689,6 +689,96 @@ sesiones llegaban a fuego como `[]`:
   cable, store y componente); colapsarla haría que elegir ninguno se leyera como no haber
   elegido. El ORDEN lo pone el listado del servidor, no el orden en que se marcaron.
 
+**Crear una TAREA es la autorización, y la ventana de crear es el único sitio donde eso se
+puede decir antes de que ocurra** (`apps/web/src/componentes/NuevaTarea.tsx`,
+`agent/aumentador.ts`, `core/adjuntos.ts`). Una tarea de fondo aplica sus escrituras sin
+pedir permiso —§0 del diseño: «la autorización no es un interruptor nuevo, es el acto de
+crear la tarea»—, así que aquí no hay un diff que mirar después: hay una frase que hay que
+leer ahora, con palabras y arriba. Lo que la sostiene:
+- **El encargo se AUGMENTA y se enseña EDITABLE antes de encolar**, y ese paso es lo que
+  ocupa el sitio del diff: ejecutar sin nadie delante algo que nadie ha leído es justo lo
+  que la aprobación existía para evitar. Entra por puerto (`AumentadorPort`) con papel
+  `trabajo` —es redacción, no clasificación— y **su fallo es recuperable por diseño**: si
+  no hay modelo, la tarea se encola con el texto original y se DICE. Perder lo que una
+  persona acaba de escribir porque un modelo no contestó sería lo peor que puede hacer esa
+  ventana. El prompt describe además un trabajo que se hace ENTERO sin volver a preguntar
+  y prohíbe redactar un paso de aprobación humana: ese paso ya no existe, y el agente se
+  quedaría esperando a alguien que no está. Medido con `gemini-flash` en la consola real:
+  el encargo salió con los cuatro apartados y con «si hay ambigüedad, PARAR y preguntar»,
+  nunca con un «cuando lo apruebes».
+- **El aumentador SÍ tiene doble** (`AumentadorGuionizado`), al revés que el juez: de un
+  veredicto del juez depende que una tarea se dé por terminada, y de un encargo no depende
+  ninguna afirmación — lo lee una persona y lo edita. Con `--guion` se monta ese doble, y
+  su texto lleva `[DOBLE]` porque se enseña para editarlo y después se le manda al agente.
+- **El motivo de un fallo se dice con palabras, no con el nombre de la clase.** Era
+  `codigoDe(error)`, que para un error escrito a mano devuelve su `name`: la ventana
+  enseñaba «No se pudo preparar el encargo (ErrorDelAumentador)». La regla es la de
+  `corredorDeTareas.ts#sinRutas` — el MENSAJE si lo escribimos nosotros, el CÓDIGO si lo
+  escribió el sistema, porque el de Node lleva la ruta absoluta dentro.
+- **Los ADJUNTOS son la misma pieza que `/skills/` y `/artefactos/`**: otra raíz del
+  `CompositeBackend`, con la barra final obligatoria y sin crear la carpeta al montar.
+  Viven en `~/.xonecode/tareas/<id>/adjuntos/`, o sea fuera del proyecto: no entran en git
+  y no suben a CloudStudio sin depender de ninguna exclusión, y una tarea puede crearse
+  para un proyecto que nadie ha abierto nunca. Solo se monta si la tarea TRAE adjuntos:
+  una raíz vacía sería mandar al agente a mirar donde no hay nada.
+- **De solo lectura, y lo deniega `permisosDe` INCONDICIONALMENTE.** Son documentos de una
+  persona, material de entrada, no ficheros que reescribir — el mismo argumento que las
+  skills. Y la fila no puede ser condicional: medido contra deepagents 1.13.2, sin ella un
+  `write_file` a `/adjuntos/x.txt` con la carpeta SIN montar escribe
+  `<raiz>/adjuntos/x.txt`, o sea un fichero del proyecto con el nombre de algo que la
+  interfaz presenta como «lo que te adjuntaron». Con la fila puesta las dos situaciones
+  contestan «permission denied» y el disco no se toca (medido con el backend real y el
+  middleware de la librería, no con dobles: la lectura la da el montaje y la denegación el
+  middleware, así que probar cada mitad por separado dejaría en verde el día que una deje
+  de estar puesta).
+- **Montar esa carpeta cruza OCHO saltos, y hay un test por salto.** `abrirParaTarea` →
+  `construirConsolaDeProyecto` → `crearEjecutor` → `crearEjecutorReal` → `abrirSesionReal`
+  → `construirAgente` → `backendDeAgente`, más la costura de `arranque.ts` que le da al
+  vestíbulo lo que el corredor resolvió. Es la clase de cableado que en este plan ha
+  dejado CINCO veces una regla sin montar con todo en verde, y por eso
+  `augmentacionCableada` y `contextoDelProyecto` también están extraídas y exportadas en
+  vez de vivir en el cierre de `arrancarConsolaWeb`.
+- **Montar no basta: hay que DECIR que están** (`core/adjuntos.ts#conAdjuntos`).
+  `/adjuntos/` es una raíz virtual que ninguna instrucción del agente nombra, y el encargo
+  no sirve para decírselo: lo redacta el aumentador —que puede haber fallado— o lo edita
+  quien crea la tarea, y las dos cosas pueden borrar la única mención. Así que el
+  inventario se añade al MANDAR el turno, junto a `peticionDeFeedback`, que es el único
+  momento en que se sabe qué hay en disco.
+- **Y se dice que el agente los LEE y no los VE.** Que mire una imagen de verdad es
+  multimodal y está fuera de alcance (§2); prometerlo es la peor clase de mentira aquí,
+  porque quien se la cree es el modelo y contestará que ha mirado la captura. Lo dice la
+  ventana y lo dice también el aviso que va con el turno.
+- **Los bytes suben por `POST /adjunto`**, no por el cable: el SSE lleva JSON. Con su
+  propio lector de cuerpo (`leerCuerpoCrudo`), porque el del cable acota a 1 MB y devuelve
+  utf8 — las dos cosas equivocadas para un PNG— y porque el tope se corta al LEER y no
+  después de acumular. El nombre pasa la misma lista blanca de forma que un artefacto
+  (`nombreDeAdjuntoAceptable`), dos veces: en la ruta y dentro del puerto de disco.
+- **El cliente CONVIERTE el nombre, no lo valida** (`apps/web/src/nombreDeAdjunto.ts`), y
+  esa distinción es lo que hace que no sea una copia peligrosa de la regla: si divergiera,
+  la subida falla a la vista con su motivo en la fila del fichero. Y hace falta de verdad
+  — medido: una captura de macOS se llama «Screenshot 2026-09-08 at 17.03.12.png», con
+  espacios, así que sin conversión el caso más común daría 403.
+- **Los bytes llegan a disco ANTES de que la tarea exista**, porque crear la encola y el
+  corredor puede arrancarla en el acto. De ahí el id de BORRADOR: lo elige el navegador,
+  se sube bajo él, y `crear` lo ADOPTA como id de la tarea. Lo que hace eso seguro son dos
+  guardas, la misma pareja en los dos sitios: forma de segmento llano, y **que no sea ya
+  una tarea** (409 en la subida; y en `crear` no se crea nada y se DICE — caerse a un id
+  nuevo dejaría los adjuntos que la persona acaba de subir colgando de una carpeta que
+  ninguna tarea nombra). El `Tarea.adjuntos` se lee del DISCO (`listarAdjuntos`), nunca de
+  lo que diga el cliente.
+- **Y cancelar con adjuntos ya subidos borra su carpeta**: si no, quedan documentos de una
+  persona en `~/.xonecode/tareas/<borrador>/` que nadie va a volver a ver. Es un
+  `descartar` sobre un id que no está en el índice, que hace exactamente eso.
+- **Un enlace simbólico en la cola era un agujero real, y está MEDIDO.** Con
+  `~/.xonecode/tareas/<id>` apuntando a otra carpeta, `mkdirSync(…, {recursive:true})` lo
+  SIGUE y `guardarAdjunto` escribía fuera de la cola («escribió FUERA? true»). No es
+  alcanzable desde el cable —hay que plantar el enlace en un directorio a 0700 del home—
+  pero de esa carpeta cuelga además el `/adjuntos/` que ve el agente, así que un enlace
+  ahí le daría lectura fuera. La barrera se aplica ahora dos veces, sobre el TEXTO del id
+  y sobre el camino REAL, que es la misma regla que `arbolDeProyecto.ts`: lo que falla no
+  es el sitio, es el destino. `carpetaDeAdjuntos` devuelve `string | undefined` para que
+  quien la monte tenga que decidir por tipo qué hacer con «no se puede».
+
 **Un proyecto puede escribir SIN aprobación, y es la única grieta del fail-closed**
 (`core/settings.ts#seAplicaSinAprobacion`, comando `/aprobacion`). El caso es real —en un
 proyecto offline que el agente crea no hay nadie más— pero la aprobación no está ahí por la

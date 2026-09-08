@@ -1046,6 +1046,31 @@ describe("App: crear una tarea en background", () => {
     expect((screen.getByLabelText(/encargo/i) as HTMLTextAreaElement).value).toBe("");
   });
 
+  it("cerrar con adjuntos ya subidos DESCARTA el borrador: si no, la carpeta queda de basura", async () => {
+    // Los bytes se suben antes de que la tarea exista, así que cancelar después deja una
+    // carpeta en `~/.xonecode/tareas/<borrador>/` que ninguna tarea nombra y que nadie va a
+    // volver a ver — con documentos de una persona dentro. `descartar` sobre un id que no
+    // está en el índice hace exactamente esto: borra la carpeta y deja el índice igual.
+    const { enviar } = conEscritorio();
+    fireEvent.click(screen.getByRole("button", { name: /nueva tarea/i }));
+    fireEvent.change(screen.getByLabelText(/adjuntar/i), { target: { files: [new File(["x"], "a.png")] } });
+    await waitFor(() => expect(screen.getByText(/a\.png/)).toBeTruthy());
+    fireEvent.click(screen.getByRole("button", { name: /cancelar/i }));
+    const descartes = enviar.mock.calls
+      .map((c) => c[0] as { accion?: string; id?: string })
+      .filter((m) => m.accion === "descartar");
+    expect(descartes).toHaveLength(1);
+    expect(descartes[0]!.id).toBeDefined();
+    expect(enviar.mock.calls.map((c) => (c[0] as { accion?: string }).accion)).not.toContain("crear");
+  });
+
+  it("y cerrar SIN adjuntos no descarta nada: no hay carpeta que borrar", async () => {
+    const { enviar } = conEscritorio();
+    fireEvent.click(screen.getByRole("button", { name: /nueva tarea/i }));
+    fireEvent.click(screen.getByRole("button", { name: /cancelar/i }));
+    expect(enviar.mock.calls.map((c) => (c[0] as { accion?: string }).accion)).not.toContain("descartar");
+  });
+
   it("y cerrar no encola nada", async () => {
     const { enviar } = conEscritorio();
     fireEvent.click(screen.getByRole("button", { name: /nueva tarea/i }));
