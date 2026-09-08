@@ -44,6 +44,38 @@ describe("Kanban", () => {
     expect(screen.getByText(/falta decidir cómo tratar los duplicados/)).toBeTruthy();
   });
 
+  /**
+   * F1 de la revisión final: las tres «Terminada» eran byte a byte la misma tarjeta. Lo que
+   * las separa lo pinta `EntregaDeTarea`; aquí se comprueba que el kanban la MONTA — el
+   * fallo de esta rama fue exactamente ese, una regla que existía y no estaba cableada.
+   */
+  it("las tres formas de estar «Terminada» no se ven igual", () => {
+    render(
+      <Kanban
+        cola={{
+          lista: [
+            tarea({ id: "a", estado: "terminada", veredicto: { veredicto: "verde", resumen: "hace lo que se pedía" } }),
+            tarea({
+              id: "b",
+              estado: "terminada",
+              veredicto: {
+                veredicto: "verde",
+                resumen: "hace lo que se pedía",
+                salvedad: "el turno no cambió ningún fichero",
+              },
+            }),
+            tarea({ id: "c", estado: "terminada", terminadaAMano: true }),
+          ],
+          concurrencia: 2,
+          corriendoAqui: true,
+        }}
+      />
+    );
+    expect(screen.getAllByText(/El juez de QA la aprobó/)).toHaveLength(2);
+    expect(screen.getByText(/una condición menos/i)).toBeTruthy();
+    expect(screen.getByText(/La dio por buena una persona/)).toBeTruthy();
+  });
+
   it("dice cuándo este kanban NO avanza", () => {
     // Se ve igual en dos ventanas y solo avanza en una: hay que decir en cuál.
     render(<Kanban cola={{ lista: [tarea()], concurrencia: 2, corriendoAqui: false }} />);

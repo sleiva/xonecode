@@ -109,7 +109,13 @@ import {
   revisionConGit,
   type RevisionDeSesion,
 } from "./corredorDeTareas.js";
-import { CONCURRENCIA_POR_OMISION, conEstado, tituloDeTarea, type Tarea } from "../../core/tareas.js";
+import {
+  CONCURRENCIA_POR_OMISION,
+  conEstado,
+  darPorBuenaAMano,
+  tituloDeTarea,
+  type Tarea,
+} from "../../core/tareas.js";
 import { aplicarFeedback, TOPE_DE_ADJUNTO, type TareasEnDisco } from "../../agent/tareasEnDisco.js";
 import { nombreDeAdjuntoAceptable } from "../../core/adjuntos.js";
 import { rutaMemoriaDeProyecto } from "../../agent/memoriaDeProyecto.js";
@@ -132,8 +138,13 @@ import type {
   MensajeDelCliente,
   Sumidero,
   InformeDeDispositivosDelCable,
-  TareaDelCable,
 } from "./transporte.js";
+// Valor y no tipo: la traducción de una `Tarea` a lo que viaja vive JUNTO al tipo que
+// produce y no aquí. Estuvo en este cierre, y ahí se cayó `veredicto` sin que nada se
+// pusiera rojo (F1 de la revisión final) — el patrón de fallo que este repo ya tiene
+// documentado cinco veces: una composición de producción dentro de algo que los tests
+// doblan.
+import { filaDeTarea } from "./transporte.js";
 
 /** Las dos rutas del cable. El cliente las tiene escritas en `apps/web/src/conexion.ts`. */
 export const RUTA_EVENTOS = "/eventos";
@@ -870,27 +881,6 @@ export function montarRutas(
   const esNombreDeHerramienta = (v: string): v is NombreDeHerramienta =>
     v === "adb" || v === "emulator" || v === "xcrun" || v === "devicectl";
 
-  /** La tarea, sin su raíz: es una ruta de la máquina y el cable puede ir por un túnel. */
-  const filaDeTarea = (t: Tarea): TareaDelCable => ({
-    id: t.id,
-    // El ID, que es con lo que la interfaz filtra; el nombre va aparte, para leer. La RAÍZ
-    // no viaja: es una ruta de la máquina.
-    proyecto: t.proyecto.id,
-    proyectoNombre: t.proyecto.nombre,
-    titulo: t.titulo,
-    peticion: t.peticion,
-    encargo: t.encargo,
-    adjuntos: t.adjuntos,
-    estado: t.estado,
-    creada: t.creada,
-    ...(t.motivo === undefined ? {} : { motivo: t.motivo }),
-    ...(t.sesion === undefined ? {} : { sesion: t.sesion }),
-    ...(t.empezada === undefined ? {} : { empezada: t.empezada }),
-    ...(t.acabada === undefined ? {} : { acabada: t.acabada }),
-    ...(t.autorizadas === undefined ? {} : { autorizadas: t.autorizadas }),
-    ...(t.feedback === undefined ? {} : { feedback: t.feedback }),
-  });
-
   const mensajeDeTareas = (): MensajeAlCliente | undefined => {
     if (opciones.colaDeTareas === undefined) return undefined;
     return {
@@ -1096,7 +1086,12 @@ export function montarRutas(
       return;
     }
     try {
-      const siguiente = conEstado(actual, accion === "reintentar" ? "nuevo" : "terminada");
+      // **Terminar a mano pasa por `darPorBuenaAMano` y no por `conEstado` a secas**, y no
+      // es cosmético: es la CUARTA forma de llegar a «Terminada» —sin verificador y sin
+      // juez—, `conEstado` borra el `motivo`, y sin la marca la tarjeta resultante es
+      // indistinguible de una entrega por la puerta completa. Ver `Tarea.terminadaAMano`.
+      const siguiente =
+        accion === "reintentar" ? conEstado(actual, "nuevo") : darPorBuenaAMano(actual);
       opciones.colaDeTareas.guardar(lista.map((t) => (t.id === id ? siguiente : t)));
     } catch (error) {
       // Una transición imposible SE IGNORA Y SE DICE: nunca se lanza hacia el cliente, y

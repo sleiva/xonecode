@@ -142,7 +142,11 @@ export interface Tarea {
    * se entregue, sus palabras son lo único que dice qué falta. Se guarda **siempre que haya
    * uno**, también en verde: si no, una tarea terminada no podría distinguir «el juez la
    * aprobó» de «se entregó sin que nadie la juzgara», que es la duda que este campo existe
-   * para cerrar.
+   * para cerrar. Y la cierra en la PANTALLA, no solo en disco: viaja entero por el cable
+   * (`web/servidor/transporte.ts#filaDeTarea`) y lo pinta `EntregaDeTarea.tsx`. La cuarta
+   * forma de llegar a «terminada» —que la dé por buena una persona— no la puede distinguir
+   * este campo, porque el veredicto que hubiera se conserva: la distingue
+   * `terminadaAMano`.
    *
    * **Y este SUSTITUYE, al contrario que `autorizadas`.** Aquello acumula porque un
    * fichero escrito en el primer intento sigue escrito; un veredicto, en cambio, es una
@@ -150,6 +154,24 @@ export interface Tarea {
    * del nuevo enseñaría dos respuestas a una sola pregunta.
    */
   veredicto?: VeredictoDeTarea;
+  /**
+   * La dio por buena una PERSONA, con el botón «Dar por bueno», en vez de la puerta de
+   * entrega (`core/entrega.ts#decisionDeEntrega`).
+   *
+   * **Existe porque el veredicto no basta para distinguirlo, y eso está razonado sobre el
+   * código y no supuesto.** Una tarea aparcada puede llegar a ese botón con un veredicto
+   * ROJO (el juez dijo que no y la persona lo pisa), con NINGUNO (se cortó a mitad, el turno
+   * falló, el proyecto ya no estaba: el juez no llegó a hablar) y también con uno VERDE —el
+   * camino es estrecho pero existe: la puerta la aprueba y la escritura del estado final
+   * revienta, así que se aparca «el corredor no pudo cerrarla» con el verde ya guardado
+   * (`corredorDeTareas.ts`)—. En ese último caso, sin esta marca, la tarjeta resultante
+   * sería byte a byte la de una entrega por la puerta completa.
+   *
+   * **Solo la pone `darPorBuenaAMano`**, nunca `conEstado`: marcar ahí una entrega del
+   * corredor sería la mentira simétrica. Y `undefined` es «no consta» —una tarea de antes
+   * de que esto existiera—, que no es lo mismo que `false`.
+   */
+  terminadaAMano?: boolean;
 }
 
 /**
@@ -368,4 +390,20 @@ export function conFeedback(tarea: Tarea, texto: string, ahora?: string): Tarea 
 export function conVeredicto(tarea: Tarea, veredicto: VeredictoDeTarea | undefined): Tarea {
   if (veredicto === undefined) return tarea;
   return { ...tarea, veredicto };
+}
+
+/**
+ * La tarea que una PERSONA da por buena, con la marca puesta.
+ *
+ * `conEstado` borra el `motivo` a propósito («el motivo vive SOLO en el estado que lo
+ * explica»), así que después de esto no queda ni una palabra que diga que aquí no hubo ni
+ * verificador ni juez: eso es lo que guarda `terminadaAMano`, y de ahí sale lo que la
+ * tarjeta pinta. El `veredicto` que hubiera **no se toca** — la persona lo pisa, no lo
+ * desmiente, y lo que el juez dijo sigue siendo lo que hay que poder leer al lado.
+ *
+ * La transición la decide `conEstado`, que LANZA si no vale: repetir esa regla aquí es como
+ * acaban divergiendo (el mismo argumento de `conFeedback`).
+ */
+export function darPorBuenaAMano(tarea: Tarea, ahora?: string): Tarea {
+  return { ...conEstado(tarea, "terminada", undefined, ahora === undefined ? {} : { ahora }), terminadaAMano: true };
 }

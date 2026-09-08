@@ -1,5 +1,6 @@
 import type { TareaDelCable } from "../tipos.js";
 import { AccionesDeTarea } from "./AccionesDeTarea.js";
+import { EntregaDeTarea } from "./EntregaDeTarea.js";
 import estilos from "./Kanban.module.css";
 
 /**
@@ -21,6 +22,12 @@ import estilos from "./Kanban.module.css";
  * aprobó, es lo que la tarea AUTORIZÓ escribir (`t.autorizadas`, nunca «lo que escribió»: una
  * ruta que las guardas de sitio rechazan sale ahí sin haberse escrito) y el enlace a su
  * Revisión, que es donde vive la verdad sobre el disco.
+ *
+ * **Y una «Terminada» dice CÓMO llegó ahí** (`EntregaDeTarea.tsx`): el juez la aprobó, se
+ * entregó con una condición de menos, o la dio por buena una persona. Las tres se pintaban
+ * igual —proyecto, título, hora— porque el `veredicto` y su `salvedad` no salían del host
+ * (F1 de la revisión final), y `conEstado` borra el `motivo` al entregar: sin eso, la
+ * tarjeta de una entrega sin nada verificado y la de una entrega completa eran la misma.
  *
  * **Reintentar, descartar, terminar y feedback son de `AccionesDeTarea.tsx`**, la misma
  * pieza que monta `TareasDelProyecto.tsx`: antes esta vista solo ofrecía feedback, y la
@@ -190,6 +197,10 @@ function TarjetaSimple({
           <span className={estilos.tituloDeTarea}>{t.titulo}</span>
         )}
         <span className={estilos.cuando}>{cuando(t)}</span>
+        {/* Cómo llegó a «Terminada»: el juez, una condición de menos, o una persona. La
+            misma pieza que monta `TareasDelProyecto.tsx`, y no pinta nada en los otros
+            estados (ver su docblock). */}
+        <EntregaDeTarea tarea={t} />
         {bloqueadaPorProyectoAbierto === true ? (
           <span className={estilos.bloqueada}>
             Esperando a que se cierre el proyecto: mientras alguien lo tenga abierto, gana la persona.

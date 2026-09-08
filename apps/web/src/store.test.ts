@@ -822,6 +822,81 @@ describe("la cola de tareas", () => {
   });
 
   /**
+   * F1 de la revisión final: el veredicto del juez es lo que separa las tres formas de estar
+   * «Terminada», así que la lista blanca no puede fiarse de lo que llegue. Que el campo
+   * SOBREVIVE lo prueba `tipos.test.ts` contra los campos declarados del tipo; esto prueba
+   * las dos trampas de siempre.
+   */
+  it("un veredicto que no es ninguno de los tres se descarta ENTERO, no cae en verde", () => {
+    const s = crearStoreDelCliente();
+    const base = {
+      proyecto: "p1",
+      proyectoNombre: "AppDemo",
+      titulo: "T",
+      peticion: "p",
+      encargo: "e",
+      adjuntos: [],
+      estado: "terminada",
+      creada: "2026-09-08T10:00:00.000Z",
+    };
+    s.aplicar({
+      clase: "tareas",
+      concurrencia: 2,
+      corriendoAqui: true,
+      lista: [
+        { ...base, id: "t1", veredicto: { veredicto: "casi", resumen: "algo" } },
+        // Sin resumen no hay nada que leer, y un veredicto sin palabras en la tarjeta sería
+        // una etiqueta sin dato detrás.
+        { ...base, id: "t2", veredicto: { veredicto: "verde" } },
+        { ...base, id: "t3", veredicto: "verde" },
+        {
+          ...base,
+          id: "t4",
+          veredicto: { veredicto: "verde", resumen: "vale", hallazgos: ["uno", 7], salvedad: 3 },
+        },
+      ],
+    });
+    const [t1, t2, t3, t4] = s.leer().tareas!.lista;
+    expect(t1!.veredicto).toBeUndefined();
+    expect(t2!.veredicto).toBeUndefined();
+    expect(t3!.veredicto).toBeUndefined();
+    // Lo que no es cadena se descarta dentro de los hallazgos, y una salvedad que no es
+    // texto no se pinta: el resto del veredicto sigue valiendo.
+    expect(t4!.veredicto).toEqual({ veredicto: "verde", resumen: "vale", hallazgos: ["uno"] });
+  });
+
+  it("«terminadaAMano» solo con el booleano true: un «false» de cadena no marca nada", () => {
+    const s = crearStoreDelCliente();
+    const base = {
+      proyecto: "p1",
+      proyectoNombre: "AppDemo",
+      titulo: "T",
+      peticion: "p",
+      encargo: "e",
+      adjuntos: [],
+      estado: "terminada",
+      creada: "2026-09-08T10:00:00.000Z",
+    };
+    s.aplicar({
+      clase: "tareas",
+      concurrencia: 2,
+      corriendoAqui: true,
+      lista: [
+        { ...base, id: "t1", terminadaAMano: "false" },
+        { ...base, id: "t2", terminadaAMano: true },
+        { ...base, id: "t3" },
+      ],
+    });
+    const [t1, t2, t3] = s.leer().tareas!.lista;
+    // La trampa de siempre: `"false"` es verdadero en JavaScript, y aquí marcaría como dada
+    // por buena a mano una entrega del corredor.
+    expect(t1!.terminadaAMano).toBeUndefined();
+    expect(t2!.terminadaAMano).toBe(true);
+    // Ausente = no consta, que no es `false`.
+    expect("terminadaAMano" in t3!).toBe(false);
+  });
+
+  /**
    * El ENCARGO propuesto por el aumentador, y la mitad que hay que contar: **el mensaje va a
    * TODOS los clientes** (el cable habla con todos, no con el último), así que el store
    * guarda el último y quien abre la ventana de crear lo LIMPIA — si no, un encargo que pidió

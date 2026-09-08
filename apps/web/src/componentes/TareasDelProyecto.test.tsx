@@ -23,6 +23,30 @@ describe("TareasDelProyecto", () => {
     expect(screen.getByText(/sin aprobar src\/app\.xne/)).toBeTruthy();
   });
 
+  /**
+   * F1 de la revisión final, y en esta vista por el mismo motivo que en el kanban: las
+   * tres «Terminada» se pintaban igual. La pieza es la misma (`EntregaDeTarea`) para que las
+   * dos vistas no puedan afirmar cosas distintas de la misma tarea.
+   */
+  it("las tres formas de estar «Terminada» no se ven igual", () => {
+    render(
+      <TareasDelProyecto
+        tareas={[
+          tarea({ id: "a", estado: "terminada", veredicto: { veredicto: "verde", resumen: "hace lo que se pedía" } }),
+          tarea({
+            id: "b",
+            estado: "terminada",
+            veredicto: { veredicto: "verde", resumen: "hace lo que se pedía", salvedad: "no cambió ningún fichero" },
+          }),
+          tarea({ id: "c", estado: "terminada", terminadaAMano: true }),
+        ]}
+      />
+    );
+    expect(screen.getAllByText(/El juez de QA la aprobó/)).toHaveLength(2);
+    expect(screen.getByText(/una condición menos/i)).toBeTruthy();
+    expect(screen.getByText(/La dio por buena una persona/)).toBeTruthy();
+  });
+
   it("reintentar está en las aparcadas, y no en las que corren", () => {
     const alReintentar = vi.fn();
     const { unmount } = render(

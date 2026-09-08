@@ -2913,6 +2913,42 @@ describe("las tareas en background, por el cable", () => {
   });
 
   /**
+   * F1 de la revisión final: «Dar por bueno» es la CUARTA forma de llegar a «Terminada»
+   * —sin verificador y sin juez—, y `conEstado` borra el `motivo`, así que sin una marca la
+   * tarea resultante es indistinguible de una entregada por la puerta completa. La marca la
+   * pone `core/tareas.ts#darPorBuenaAMano`, y esto comprueba que este camino pasa por ahí.
+   */
+  it("terminar a mano DEJA LA MARCA, y no toca el veredicto que hubiera", async () => {
+    const servidor = servidorDeMentira();
+    const cola = colaDeMentira([
+      {
+        id: "t-park",
+        proyecto: { id: "p1", raiz: "/w/AppDemo", nombre: "AppDemo" },
+        titulo: "T",
+        peticion: "p",
+        encargo: "e",
+        adjuntos: [],
+        creada: "2026-09-08T10:00:00.000Z",
+        estado: "requiere-atencion",
+        motivo: "el juez de QA dijo «rojo»: falta el campo",
+        veredicto: { veredicto: "rojo", resumen: "falta el campo" },
+      },
+    ]);
+    montarRutas(servidor, vestibuloDePrueba(), { colaDeTareas: cola });
+    const cliente = clienteDeMentira();
+    await servidor.rutas.get(`GET ${RUTA_EVENTOS}`)!(cliente.peticion, cliente.respuesta);
+    const accion = servidor.rutas.get(`POST ${RUTA_ACCION}`)!;
+    await asentar();
+    await enviarMensaje(accion, { clase: "tarea", accion: "terminar", id: "t-park" });
+    await asentar();
+    const terminada = cola.verTareas().find((t) => t.id === "t-park")!;
+    expect(terminada.estado).toBe("terminada");
+    expect(terminada.terminadaAMano).toBe(true);
+    expect(terminada.veredicto).toEqual({ veredicto: "rojo", resumen: "falta el campo" });
+  });
+
+
+  /**
    * Task 14: antes de esto, descartar una tarea `en-proceso` la borraba en el ACTO — el
    * turno seguía corriendo por debajo, escribiendo en el proyecto, sin que ninguna pantalla
    * lo dijera. `atenderAccionDeTarea` ahora espera a `corredorDeTareas.cortar(id)` ANTES de

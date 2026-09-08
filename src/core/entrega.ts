@@ -125,7 +125,10 @@ export interface VeredictoDeTarea {
    * sobrevive a una entrega.
    *
    * Hoy la única es `SALVEDAD_SIN_ESCRITURAS`. Una entrega con una condición menos no puede
-   * parecer una entrega normal.
+   * parecer una entrega normal — y eso solo es cierto porque este campo VIAJA: el veredicto
+   * entero sale por el cable (`web/servidor/transporte.ts#filaDeTarea`) y lo pinta
+   * `apps/web/src/componentes/EntregaDeTarea.tsx`. Estuvo un tiempo sin cablearse, y
+   * entonces esta frase era falsa en la única pantalla donde importa.
    */
   salvedad?: string;
 }

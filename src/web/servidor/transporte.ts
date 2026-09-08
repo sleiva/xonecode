@@ -14,6 +14,7 @@
 import type { Herramienta, InformeDeDispositivos, NombreDeHerramienta } from "../../core/dispositivos.js";
 import type { AjustesDeDispositivos } from "../../core/settings.js";
 import type { Acto } from "../../core/actos.js";
+import type { Tarea } from "../../core/tareas.js";
 import type { PendienteDeAprobacion } from "../../core/events.js";
 import type { LineaDeDiff } from "../../core/diff.js";
 import type { SelectorDeConsola } from "../../cli/consola.js";
@@ -435,6 +436,83 @@ export interface TareaDelCable {
    * si ya se le mandó al agente en un turno.
    */
   feedback?: { texto: string; creado: string; consumido: boolean }[];
+  /**
+   * El veredicto del juez de QA (`core/entrega.ts#VeredictoDeTarea`), y con él la
+   * SALVEDAD: con qué condición de menos se entregó.
+   *
+   * **Sin esto, «Terminada» no distingue tres cosas distintas** —F1 de la revisión final—:
+   * que el juez la aprobó con el verificador en verde, que se entregó SIN NADA que
+   * verificar (una tarea de solo lectura: la salvedad), y —con `terminadaAMano`— que la dio
+   * por buena una persona. El campo se guardaba en el índice de tareas desde que existe la
+   * puerta de entrega y se quedaba en el host: la mitad del contrato en `core/` y en disco,
+   * y la mitad que una persona lee sin cablear.
+   *
+   * **Y viaja completo porque no puede llevar nada más que texto para leer.** Medido en
+   * `agent/juezDeTarea.ts#promptDelJuez`: el juez recibe el encargo, las rutas RELATIVAS de
+   * lo autorizado y los hallazgos del verificador (código, fichero relativo, línea,
+   * mensaje) — no hay un solo `readFile` en ese módulo, así que su prosa no puede citar el
+   * contenido de un fichero ni una ruta de la máquina. El `resumen` ya cruzaba el cable de
+   * todos modos: para un veredicto rojo va dentro del `motivo`.
+   */
+  veredicto?: {
+    veredicto: "verde" | "rojo" | "indeterminado";
+    resumen: string;
+    hallazgos?: string[];
+    salvedad?: string;
+  };
+  /**
+   * La dio por buena una PERSONA («Dar por bueno»), no la puerta de entrega
+   * (`core/tareas.ts#Tarea.terminadaAMano`). Ausente = no consta.
+   */
+  terminadaAMano?: boolean;
+}
+
+/**
+ * Una `Tarea` del índice traducida a lo que viaja. **La raíz del proyecto se queda aquí.**
+ *
+ * **Vive en este fichero, exportada, y eso es el arreglo de F1.** Era una copia de campos a
+ * mano enterrada en el cierre de `montarRutas` (`arranque.ts`), a mil líneas del tipo que
+ * traduce y dentro de algo que todos sus tests doblan — o sea el patrón de fallo que
+ * `CLAUDE.md` documenta cinco veces en esta misma tanda: «si una regla de producción se
+ * compone dentro de algo que los tests simulan, esa regla no está probada: está escrita».
+ * `veredicto` se cayó aquí y en el store del cliente sin que nada se pusiera rojo. Ahora
+ * `transporte.test.ts` recorre los campos de `Tarea` y exige decisión explícita por cada
+ * uno.
+ *
+ * Campo a campo, y también DENTRO del veredicto: un `...tarea.veredicto` dejaría pasar sin
+ * nombrar el campo que alguien le añada mañana a `VeredictoDeTarea`.
+ */
+export function filaDeTarea(t: Tarea): TareaDelCable {
+  return {
+    id: t.id,
+    // El ID, que es con lo que la interfaz filtra; el nombre va aparte, para leer. La RAÍZ
+    // no viaja: es una ruta de la máquina.
+    proyecto: t.proyecto.id,
+    proyectoNombre: t.proyecto.nombre,
+    titulo: t.titulo,
+    peticion: t.peticion,
+    encargo: t.encargo,
+    adjuntos: t.adjuntos,
+    estado: t.estado,
+    creada: t.creada,
+    ...(t.motivo === undefined ? {} : { motivo: t.motivo }),
+    ...(t.sesion === undefined ? {} : { sesion: t.sesion }),
+    ...(t.empezada === undefined ? {} : { empezada: t.empezada }),
+    ...(t.acabada === undefined ? {} : { acabada: t.acabada }),
+    ...(t.autorizadas === undefined ? {} : { autorizadas: t.autorizadas }),
+    ...(t.feedback === undefined ? {} : { feedback: t.feedback }),
+    ...(t.veredicto === undefined
+      ? {}
+      : {
+          veredicto: {
+            veredicto: t.veredicto.veredicto,
+            resumen: t.veredicto.resumen,
+            ...(t.veredicto.hallazgos === undefined ? {} : { hallazgos: t.veredicto.hallazgos }),
+            ...(t.veredicto.salvedad === undefined ? {} : { salvedad: t.veredicto.salvedad }),
+          },
+        }),
+    ...(t.terminadaAMano === undefined ? {} : { terminadaAMano: t.terminadaAMano }),
+  };
 }
 
 export interface ProveedorDeModelos {

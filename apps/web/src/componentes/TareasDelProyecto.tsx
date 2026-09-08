@@ -1,5 +1,6 @@
 import type { TareaDelCable } from "../tipos.js";
 import { AccionesDeTarea } from "./AccionesDeTarea.js";
+import { EntregaDeTarea } from "./EntregaDeTarea.js";
 import estilos from "./TareasDelProyecto.module.css";
 
 const ETIQUETA_DE_ESTADO: Record<TareaDelCable["estado"], string> = {
@@ -152,6 +153,10 @@ function Fila({
         </div>
         {/* Ausente = no consta ningún motivo; nunca se inventa uno para rellenar la fila. */}
         {t.motivo === undefined ? null : <p className={estilos.motivo}>{t.motivo}</p>}
+        {/* Y cómo llegó a «Terminada», que es donde el motivo ya no existe: la MISMA pieza
+            que monta `Kanban.tsx`, para que las dos vistas no puedan afirmar cosas
+            distintas de la misma tarea. */}
+        <EntregaDeTarea tarea={t} />
       </div>
       <div className={estilos.acciones}>
         <AccionesDeTarea

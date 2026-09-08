@@ -4,6 +4,7 @@ import {
   conEstado,
   conFeedback,
   conVeredicto,
+  darPorBuenaAMano,
   rutaRelativaDeTarea,
   siguientesAEjecutar,
   tituloDeTarea,
@@ -295,5 +296,37 @@ describe("TOPE_DE_RONDAS_DE_TAREA", () => {
   it("es más alto que el de la persona, y es finito", () => {
     expect(TOPE_DE_RONDAS_DE_TAREA).toBeGreaterThan(MAX_APPROVAL_ROUNDS);
     expect(Number.isFinite(TOPE_DE_RONDAS_DE_TAREA)).toBe(true);
+  });
+});
+
+describe("darPorBuenaAMano", () => {
+  it("termina la tarea y DEJA LA MARCA: sin ella, «terminada» a mano no se distingue de una entregada por la puerta", () => {
+    const aparcada = tarea({
+      estado: "requiere-atencion",
+      motivo: "el juez de QA dijo «rojo»: falta el campo",
+      veredicto: { veredicto: "rojo", resumen: "falta el campo" },
+    });
+    const siguiente = darPorBuenaAMano(aparcada, "2026-09-08T12:00:00.000Z");
+    expect(siguiente.estado).toBe("terminada");
+    expect(siguiente.terminadaAMano).toBe(true);
+    expect(siguiente.acabada).toBe("2026-09-08T12:00:00.000Z");
+    // El veredicto del juez NO se borra ni se falsea: la persona lo pisa, y lo que el juez
+    // dijo sigue siendo lo que hay que poder leer al lado de quién la dio por buena.
+    expect(siguiente.veredicto).toEqual({ veredicto: "rojo", resumen: "falta el campo" });
+    // Y el motivo se va, como en cualquier otra salida de `requiere-atencion`.
+    expect(siguiente.motivo).toBeUndefined();
+  });
+
+  /**
+   * La marca la pone SOLO este camino: si `conEstado` la pusiera, o si la pusiera el
+   * corredor, una entrega por la puerta completa acabaría marcada como manual — que es la
+   * mentira simétrica de la que este arreglo cierra.
+   */
+  it("una entrega por la puerta (en-proceso → terminada) NO lleva la marca", () => {
+    expect(conEstado(tarea({ estado: "en-proceso" }), "terminada").terminadaAMano).toBeUndefined();
+  });
+
+  it("una transición imposible sigue lanzando: la decide `conEstado`, no una comprobación aparte", () => {
+    expect(() => darPorBuenaAMano(tarea({ estado: "nuevo" }))).toThrow(/no puede pasar/);
   });
 });

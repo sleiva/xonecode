@@ -1,0 +1,44 @@
+/* Alias comprobados contra `apps/web/estilos/design-platform.css`, los mismos que usan
+   `Kanban.module.css` y `TareasDelProyecto.module.css`: label-secondary/tertiary,
+   state-warn-primary/label, bg-layer-1. Ningún color literal. */
+
+.entrega {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 4px 0 0;
+}
+
+.frase {
+  margin: 0;
+  color: var(--dsw-alias-label-secondary);
+  font-size: 11px;
+}
+
+/* Lo que el juez había dicho cuando una persona lo pisó, y el «cómo llegó aquí» de una
+   terminada que la puerta no pudo entregar: es contexto de la línea de arriba, no la
+   afirmación principal. */
+.detalle {
+  margin: 0;
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 11px;
+}
+
+/* «Una entrega con una condición menos no puede parecer una entrega normal»
+   (`core/entrega.ts`): por eso lleva el mismo aviso visual que una tarea bloqueada y no el
+   gris de un detalle más. */
+.salvedad {
+  margin: 2px 0 0;
+  padding: 4px 6px;
+  border-left: 2px solid var(--dsw-alias-state-warn-primary);
+  background: var(--dsw-alias-bg-layer-1);
+  color: var(--dsw-alias-state-warn-label);
+  font-size: 11px;
+}
+
+.hallazgos {
+  margin: 2px 0 0;
+  padding-left: 14px;
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 11px;
+}

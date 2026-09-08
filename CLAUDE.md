@@ -730,6 +730,35 @@ avisa. Cinco reglas que sostienen esto:
   (sin `via: "git"` queda ausente y el verificador se exige como siempre — es la mutación que más
   tests tumba); y la salvedad viaja pegada al **veredicto** y no al `motivo`, porque el motivo de
   una tarea terminada no existe: `conEstado` lo borra a propósito.
+- **Y a «Terminada» se llega por CUATRO caminos, así que la tarjeta dice por cuál**
+  (`EntregaDeTarea.tsx`, una pieza para el kanban y para la lista, como `AccionesDeTarea`). Los
+  cuatro: el juez la aprobó con las tres condiciones en verde; se entregó con una condición de
+  MENOS (la salvedad: no había nada que verificar); la dio por buena una PERSONA con «Dar por
+  bueno»; y «no consta», que son las de antes de que la puerta existiera. Se pintaban las cuatro
+  igual —proyecto, título y hora— porque `Tarea.veredicto` **no salía del host**: ni `filaDeTarea`
+  lo copiaba, ni `TareaDelCable` lo declaraba, ni la lista blanca del store, y `grep veredicto
+  apps/web/src/` daba cero. O sea la mitad del contrato en `core/` y en disco, y la mitad que una
+  persona lee sin cablear — con `core/entrega.ts` afirmando que una entrega con una condición
+  menos no puede parecer normal, cosa que en la pantalla era falsa. Tres reglas:
+  - **La marca de la persona es un campo propio** (`Tarea.terminadaAMano`, que solo pone
+    `darPorBuenaAMano`) y no se deduce del veredicto: una tarea puede llegar a ese botón con un
+    VERDE ya guardado —la puerta la aprobó y la escritura del estado final reventó, así que se
+    aparcó «el corredor no pudo cerrarla»—, y entonces «tiene verde» significaría dos cosas. La
+    marca GANA al veredicto al pintar, y el veredicto se conserva y se lee al lado: es lo único
+    que dice qué se decidió ignorar.
+  - **El veredicto viaja ENTERO y solo lleva texto para leer.** Medido en
+    `juezDeTarea.ts#promptDelJuez`: el juez recibe el encargo, las rutas RELATIVAS de lo
+    autorizado y los hallazgos del verificador, y no hay un solo `readFile` en ese módulo — no
+    puede citar el contenido de un fichero ni una ruta de la máquina. El `resumen` ya cruzaba el
+    cable de todos modos, dentro del `motivo` de una tarea aparcada por el juez.
+  - **`filaDeTarea` salió del cierre de `montarRutas`** a `transporte.ts`, junto al tipo que
+    traduce, con un test que recorre los campos de `Tarea` y exige decisión explícita por cada
+    uno (viaja / no viaja y por qué) — es la SEXTA instancia del patrón de fallo de abajo, y el
+    mismo remedio: `raiz` y `pid` se quedan declarados como «no viaja» en vez de olvidados. Y las
+    otras dos capas tienen su red: `tipos.test.ts` compara los CAMPOS de `TareaDelCable` entre
+    cliente y host (los literales `clase:` no lo veían: el mensaje seguía llamándose `tareas`), y
+    la lista blanca del store se prueba mandando una fila con todos los campos declarados y
+    exigiendo que sobrevivan todos — rojo si uno se CAE, no solo si sobra.
 
 **Un solo corredor por máquina, y el cerrojo NO lo garantiza solo** (`tareasEnDisco.ts#tomarCerrojo`).
 La toma directa es atómica (`wx`), pero **recoger un cerrojo cuyo dueño parece muerto no se puede

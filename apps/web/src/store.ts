@@ -337,6 +337,35 @@ function esFicheroTocado(valor: unknown): valor is FicheroTocado {
   return true;
 }
 
+/**
+ * El veredicto del juez de una tarea, campo a campo, o `{}` si no vino uno usable.
+ *
+ * Devuelve el TROZO a esparcir y no el objeto, para que «no vino» siga siendo AUSENTE: un
+ * `veredicto: undefined` en el estado se leería igual al pintar, pero rompería la
+ * comparación de campos que vigila esta lista blanca (F1 de la revisión final) y, sobre
+ * todo, un `{veredicto: "verde"}` sintetizado a la mínima afirmaría que el juez aprobó
+ * algo que nunca vio.
+ *
+ * Un veredicto que no es ninguno de los tres se descarta ENTERO: dejar el resumen sin el
+ * veredicto pintaría las palabras del juez sin decir si aprobó o no.
+ */
+function veredictoDeTarea(valor: unknown): { veredicto?: TareaDelCable["veredicto"] } {
+  if (typeof valor !== "object" || valor === null) return {};
+  const v = valor as Record<string, unknown>;
+  if (v["veredicto"] !== "verde" && v["veredicto"] !== "rojo" && v["veredicto"] !== "indeterminado") return {};
+  if (typeof v["resumen"] !== "string") return {};
+  return {
+    veredicto: {
+      veredicto: v["veredicto"],
+      resumen: v["resumen"],
+      ...(Array.isArray(v["hallazgos"])
+        ? { hallazgos: (v["hallazgos"] as unknown[]).filter((h): h is string => typeof h === "string") }
+        : {}),
+      ...(typeof v["salvedad"] === "string" ? { salvedad: v["salvedad"] } : {}),
+    },
+  };
+}
+
 /** `{id, titulo}`: una sesión guardada. NO vale `sonIdentidades` —una sesión no tiene
  *  `nombre`, tiene título— y usarla dejaba la lista siempre vacía sin decir por qué. */
 function sonSesiones(valor: unknown): valor is { id: string; titulo: string }[] {
@@ -677,6 +706,16 @@ export function crearStoreDelCliente(): {
                           })),
                       }
                     : {}),
+                  // El veredicto del juez y su SALVEDAD. Ausente = nunca se le preguntó al
+                  // juez, y eso NO es «lo aprobó»: de esa distinción depende que «Terminada»
+                  // no signifique tres cosas a la vez. Campo a campo también aquí dentro, y
+                  // un veredicto que no es ninguno de los tres se descarta entero en vez de
+                  // caer en «verde» por omisión — la dirección de siempre.
+                  ...veredictoDeTarea(t["veredicto"]),
+                  // Solo el booleano `true`: un `"false"` de cadena es verdadero en
+                  // JavaScript y marcaría como dada por buena a mano una entrega del
+                  // corredor. La trampa de siempre.
+                  ...(t["terminadaAMano"] === true ? { terminadaAMano: true } : {}),
                 }))
                 .filter((t) => t.id !== ""),
             },

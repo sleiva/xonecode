@@ -346,6 +346,30 @@ export interface TareaDelCable {
    * Ausente = nunca se le pidió nada. `consumido` dice si ya se le mandó al agente.
    */
   feedback?: { texto: string; creado: string; consumido: boolean }[];
+  /**
+   * El veredicto del juez de QA, y con él la SALVEDAD: con qué condición de menos se
+   * entregó. Redeclarado de `core/entrega.ts#VeredictoDeTarea`.
+   *
+   * **Es lo que hace que «Terminada» no signifique tres cosas a la vez**: el juez la aprobó
+   * con el verificador en verde, se entregó sin NADA que verificar (una tarea de solo
+   * lectura: eso es la salvedad), o —con `terminadaAMano`— la dio por buena una persona.
+   * Ausente = a esta tarea no se le ha preguntado nunca al juez.
+   *
+   * Solo texto para leer: el juez no ve el contenido de ningún fichero (solo el encargo, las
+   * rutas relativas de lo autorizado y los hallazgos del verificador), así que su prosa no
+   * puede citarlo. `indeterminado` = no se entendió lo que contestó; no es verde.
+   */
+  veredicto?: {
+    veredicto: "verde" | "rojo" | "indeterminado";
+    resumen: string;
+    hallazgos?: string[];
+    salvedad?: string;
+  };
+  /**
+   * La dio por buena una PERSONA con «Dar por bueno», no la puerta de entrega. Ausente = no
+   * consta — que no es lo mismo que `false`.
+   */
+  terminadaAMano?: boolean;
 }
 
 /**
