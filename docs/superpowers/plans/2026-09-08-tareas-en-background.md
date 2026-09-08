@@ -2862,3 +2862,49 @@ de entrada del proyecto abra la ventana sin proyecto resuelto.
 ```json:metadata
 {"files": ["apps/web/src/componentes/Pestanas.tsx", "apps/web/src/componentes/TareasDelProyecto.tsx", "apps/web/src/App.tsx"], "acceptanceCriteria": ["crear una tarea sin salir del proyecto", "la pestaña existe con la cola vacía", "el estado vacío dice cómo se crea", "ausente sigue distinto de vacío", "sin colores literales ni display:none tabulable"], "modelTier": "standard", "userGate": false}
 ```
+
+---
+
+## Task 16: ver en vivo lo que hace una tarea
+
+**Goal:** Poder mirar lo que un agente de fondo está haciendo mientras lo hace, sin robarle la vista a nadie y sin inventar un segundo registro.
+
+> **De dónde sale.** Lo pidió el usuario: «el agente que ejecuta la tarea tiene que mostrar qué
+> hace, quizás en alguna consola». Medido: los actos de un turno de tarea **sí** se guardan en
+> el transcript de su sesión —razonamiento, tools, tarjetas de artefacto— porque
+> `consolaParaTarea` le pasa la piel de su propia consola de proyecto; y **no** se filtran al
+> chat de nadie, porque cada `crearConsolaWeb` tiene su propio `crearTransporte` y el de una
+> tarea no tiene sumideros enganchados (`abrirParaTarea` no mueve el cable a propósito). Lo que
+> falta es exactamente el enganche: **mirar en vivo no existe.**
+>
+> **Tres decisiones de diseño, y la tercera es la que evita duplicar el producto:**
+> 1. **Es OPT-IN y no roba la vista.** «Ver lo que hace» se pulsa; nunca se muda el cable solo.
+> Es la razón de ser de `abrirParaTarea`, y esta tarea no la puede deshacer: una tarea que
+> arranca no puede cambiarle la pantalla a quien esté trabajando.
+> 2. **Es de SOLO LECTURA.** No hay compositor: esa consola es de la tarea, y darle a alguien
+> una caja de texto ahí prometería una conversación que el turno no va a leer. Lo que sí hay
+> es lo que ya existe para intervenir: aparcar con feedback.
+> 3. **La vista en vivo y el transcript de después son LO MISMO.** No se inventa un log
+> paralelo: se mira el transcript de esa sesión, en vivo mientras corre y guardado cuando
+> acaba. Un segundo registro sería otra fuente que puede contradecir a la conversación, y este
+> repo ya tiene esa regla escrita para la lista de artefactos («sale de los actos, no del
+> disco»).
+
+**Files:** `src/web/servidor/arranque.ts` (enganchar el sumidero al transporte de la tarea y
+etiquetar por tarea), `transporte.ts` si hace falta, `apps/web/src/{tipos,store}.ts`, y la vista
+en `Kanban.tsx`/`TareasDelProyecto.tsx` + tests de todo.
+
+**Acceptance Criteria:**
+- [ ] Con una tarea `en-proceso`, «Ver lo que hace» enseña sus actos EN VIVO (razonamiento, tools, fases) y se cierra sin dejar nada tocado
+- [ ] Mirar una tarea **no** cambia el proyecto ni la sesión abiertos, ni mueve el cable de nadie: hay aserto
+- [ ] Los actos de una tarea **nunca** aparecen en el chat de una persona — el aserto que hay que conservar
+- [ ] Dos personas pueden mirar la misma tarea (el transporte es un `Set`, no una ranura)
+- [ ] Al terminar la tarea, la misma vista es su transcript guardado: no hay un segundo registro
+- [ ] Dejar de mirar desengancha ESE sumidero y no los demás
+- [ ] Ninguna ruta de la máquina viaja en esos actos
+
+**Verify:** `npx vitest run --maxWorkers=2 src/web apps/web/src` → en verde
+
+```json:metadata
+{"files": ["src/web/servidor/arranque.ts", "src/web/servidor/transporte.ts", "apps/web/src/store.ts", "apps/web/src/componentes/Kanban.tsx"], "acceptanceCriteria": ["ver en vivo los actos de una tarea en proceso", "mirar no mueve el cable de nadie", "los actos de una tarea nunca salen en el chat de una persona", "dos personas pueden mirar la misma", "la vista en vivo y el transcript son lo mismo", "dejar de mirar desengancha solo ese sumidero", "ninguna ruta de máquina en esos actos"], "modelTier": "frontier", "userGate": false}
+```
