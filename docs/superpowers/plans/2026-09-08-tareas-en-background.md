@@ -2493,6 +2493,27 @@ git commit -m "feat(web): una tarea aplica lo que escribe, y dice qué ficheros 
 
 ## Task 11: el juez de QA, y qué significa «terminada»
 
+> **Y esto es AHORA parte de esta tarea, medido por la Task 10: la rama lleva un `terminada`
+> FALSO conocido.** Con todo aprobándose solo, cada tanda de escrituras gasta ronda de
+> aprobación: `pedirAprobacion` se llama 4 veces, la 5ª se corta con `cortadoPorTope = true`,
+> **el verificador no corre ni una vez**, `crearEjecutorReal` tira ese retorno y `aparcar`
+> nunca se llama. Resultado medido: cuatro ficheros escritos, una escritura abandonada, nada
+> verificado, y el kanban diciendo «terminada». Dos mitades, y las dos son de aquí:
+> 1. **La señal tiene que llegar.** `EjecutorDeTurno` devuelve `void` y `crearEjecutorReal`
+> descarta `cortadoPorTope` (`core/ports.ts`, `cli/main.ts`). Sin abrir ese canal, la
+> condición `pendientes: 0` de esta tarea no tiene con qué medirse — no es un parche
+> incidental, es parte de por qué esta tarea existe. Un turno cortado por tope NO es
+> entregable, y su motivo lo dice.
+> 2. **Una tarea lleva su PROPIO tope de rondas, más alto que el de la persona.** El de
+> `MAX_APPROVAL_ROUNDS` se dimensionó para alguien pulsando —«te lo he preguntado cinco
+> veces, para»—; en una tarea una ronda no es una pregunta, es una tanda. Quitarlo no vale
+> (cada pasada es una llamada al modelo y no hay humano que frene el bucle: el mismo
+> argumento que el tope propio de los artefactos) y reusar el de la persona tampoco.
+>
+> Nota de nombres: el campo de la Task 10 se llama `autorizadas` y no `aplicados`, porque
+> guarda lo AUTORIZADO — una ruta que las guardas rechazan sale ahí sin tocar el disco. La
+> verdad sobre lo que cambió la tiene Revisión, que es un diff de git.
+
 **Goal:** Que una tarea no se declare terminada por haber acabado el turno, sino por pasar unas condiciones que comprueba el código MÁS el veredicto de un juez.
 
 **Files:**

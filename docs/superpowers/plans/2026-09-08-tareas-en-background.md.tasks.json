@@ -46,7 +46,7 @@
   {
    "id": 6,
    "subject": "Task 6: el cable — mensajes `tareas` y `tarea`",
-   "status": "pending",
+   "status": "completed",
    "blockedBy": [
     5
    ],
