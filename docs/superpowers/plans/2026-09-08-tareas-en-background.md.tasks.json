@@ -10,7 +10,7 @@
   {
    "id": 2,
    "subject": "Task 2: `agent/tareasEnDisco.ts` — la cola, el cerrojo y la ",
-   "status": "pending",
+   "status": "completed",
    "blockedBy": [
     1
    ],

@@ -408,7 +408,12 @@ git commit -m "feat(core): las tareas en background — estados, transiciones y 
 - [ ] El índice se lee y se escribe en `<base>/tareas/indice.json`, y una línea corrupta no tumba la lectura
 - [ ] `tomarCerrojo` lo concede si no hay dueño vivo y lo niega si lo hay, diciendo el pid
 - [ ] `guardarAdjunto` rechaza un nombre que no sea un segmento llano y respeta los dos topes
-- [ ] `borrarTarea` se lleva su carpeta de adjuntos
+- [ ] `borrarTarea` se lleva su carpeta de adjuntos, y **NO toca el índice si no se pudo leer**: `listar()` declara que no sobrescribe, y borrar por detrás lo contradecía — es pérdida de datos
+- [ ] Un índice válido pero que NO es un array se trata como ilegible: avisa y no se sobrescribe
+- [ ] El cerrojo se toma con creación EXCLUSIVA (`flag: "wx"`), no con comprobar-y-escribir: perder esa carrera son DOS corredores sobre la misma cola
+- [ ] Y tras tomarlo se **RELEE para confirmar** que el pid de dentro es el nuestro: cierra el orden «B pisa a A antes de que A relea»
+- [ ] Un cerrojo caduco se recoge **APARTÁNDOLO con `renameSync`**, nunca borrándolo: solo un proceso puede renombrar un inodo dado —el otro recibe `ENOENT` y concede—, mientras que borrar y volver a crear lo consiguen los DOS. Es lo que cierra el orden inverso (B pisa a A DESPUÉS de su relectura), que la relectura sola no cubre
+- [ ] Índice, cerrojo y adjuntos se escriben con modo **0600**, la misma regla que `checkpoint.sqlite` — el índice lleva el encargo entero del usuario y los adjuntos son sus documentos
 - [ ] Ninguna función devuelve una ruta de la máquina en un error
 
 **Verify:** `npx vitest run src/agent/tareasEnDisco.test.ts` → en verde
@@ -655,8 +660,16 @@ export function crearTareasEnDisco(opciones: {
     },
     carpetaDeAdjuntos,
     borrarTarea(id) {
+      // La carpeta se borra siempre: eso es seguro. El ÍNDICE solo si se pudo leer — si no,
+      // `guardar(listar().filter(...))` escribiría `[]` sobre un fichero que no entendemos,
+      // que es exactamente lo que `listar()` promete no hacer. Se avisa y se para.
       if (nombreAceptable(id)) rmSync(join(base, id), { recursive: true, force: true });
-      this.guardar(this.listar().filter((t) => t.id !== id));
+      const { tareas, legible } = leer();
+      if (!legible) {
+        informar("la tarea se borró del disco, pero el índice no se pudo leer y se deja intacto");
+        return;
+      }
+      this.guardar(tareas.filter((t) => t.id !== id));
     },
   };
 }
@@ -1034,6 +1047,17 @@ git commit -m "feat(web): la consola de una tarea aparca en vez de contestar por
 ---
 
 ## Task 5: `corredorDeTareas` — cerrojo, reconciliación y lazo
+
+> **Lo que cambió en la Task 2 y esta tarea tiene que respetar:** el puerto ganó
+> `sigoSiendoDueño(): boolean`, y NO es opcional. La recogida de un cerrojo cuyo dueño
+> parece muerto no se puede hacer atómica con primitivas de sistema de ficheros —decidir
+> «está muerto» es una observación de un instante—, así que queda un residuo declarado en
+> el que dos procesos pueden creerse dueños a la vez. Lo que hace verdad «un solo
+> corredor» es que el corredor pregunte `sigoSiendoDueño()` **antes de despachar cada
+> tarea**, no solo al arrancar: si dice que no, para el lazo y suelta —sin `soltarCerrojo`,
+> que solo borra el propio y aquí el fichero ya es de otro. El comentario de `recoger` en
+> `agent/tareasEnDisco.ts` trae el orden exacto.
+
 
 **Goal:** El lazo que coge tareas, las corre y escribe sus transiciones, con cerrojo de pid y reconciliación al arrancar.
 
