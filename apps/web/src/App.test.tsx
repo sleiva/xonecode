@@ -664,6 +664,88 @@ describe("App: abrir un proyecto desde la barra (Layer C)", () => {
   });
 });
 
+/**
+ * El enlace a Revisión de una tarjeta «esperando feedback»: sin aprobación previa, esa
+ * pestaña es la ÚNICA forma de mirar lo que la tarea autorizó a escribir. `abrirSesion`
+ * gana un tercer parámetro para esto —solo lo usa este camino— y el resto de quien la abre
+ * (la barra, el «+», una fila del escritorio) sigue cayendo en «chat», sin tocar.
+ */
+describe("App: la tarjeta de tarea «esperando feedback» abre Revisión", () => {
+  function montarConTareas() {
+    const store = crearStoreDelCliente();
+    const enviar = vi.fn(() => Promise.resolve(undefined as unknown));
+    render(<App store={store} enviar={enviar} />);
+    act(() => store.marcarConectado());
+    act(() =>
+      store.aplicar({
+        clase: "alta",
+        pasos: [],
+        proveedores: [],
+        entornos: [{ id: "webstudio", nombre: "XOne WebStudio", url: "https://mcp.example/mcp" }],
+        proyectos: [{ id: "p1", nombre: "Tienda" }],
+        ramas: [],
+        proyectoAbierto: false,
+      })
+    );
+    act(() =>
+      store.aplicar({
+        clase: "tareas",
+        concurrencia: 2,
+        corriendoAqui: true,
+        lista: [
+          {
+            id: "t1",
+            proyecto: "p1",
+            proyectoNombre: "Tienda",
+            titulo: "Arregla el login",
+            peticion: "Arregla el login",
+            encargo: "Arregla el login",
+            adjuntos: [],
+            estado: "requiere-atencion",
+            motivo: "el juez marcó el trabajo en rojo",
+            sesion: "s1",
+            creada: "2026-09-08T10:00:00.000Z",
+          },
+        ],
+      })
+    );
+    return { store, enviar };
+  }
+
+  it("pulsar «Ver Revisión» abre la sesión de la tarea Y dice al servidor que se abre en Revisión", () => {
+    const { store, enviar } = montarConTareas();
+    fireEvent.click(screen.getByRole("button", { name: /revisión/i }));
+    expect(enviar).toHaveBeenCalledWith({ clase: "sesion", proyecto: "p1", sesion: "s1" });
+
+    // El servidor contesta abriendo esa sesión: la pestaña Revisión ya estaba elegida
+    // ANTES de que la respuesta llegara —es estado de vista, no algo que el cable decida—,
+    // así que en cuanto la maqueta de sesión aparece, se ve activa.
+    enviar.mockClear();
+    act(() =>
+      store.aplicar({
+        clase: "alta",
+        pasos: [],
+        proveedores: [],
+        entornos: [{ id: "webstudio", nombre: "XOne WebStudio", url: "https://mcp.example/mcp" }],
+        proyectos: [{ id: "p1", nombre: "Tienda" }],
+        ramas: [],
+        proyectoAbierto: true,
+        proyectoActivo: "p1",
+        sesionActiva: "s1",
+      })
+    );
+    expect(screen.getByRole("tab", { name: "Revisión", selected: true })).toBeTruthy();
+    // Y Revisión pide su foto sola, sin que nadie más la pulse.
+    expect(enviar).toHaveBeenCalledWith({ clase: "revision" });
+  });
+
+  it("pulsar el TÍTULO de la tarjeta abre la conversación, en Chat — es una acción distinta", () => {
+    const { enviar } = montarConTareas();
+    fireEvent.click(screen.getByRole("button", { name: "Arregla el login" }));
+    expect(enviar).toHaveBeenCalledWith({ clase: "sesion", proyecto: "p1", sesion: "s1" });
+  });
+});
+
 describe("App: Revisión despliega solos los primeros", () => {
   const diez = () => Array.from({ length: 10 }, (_, i) => ({ ruta: `src/f${i}.xne`, clase: "modificado" as const, mas: 1, menos: 0 }));
   const parchesPedidos = (enviar: ReturnType<typeof vi.fn>) =>

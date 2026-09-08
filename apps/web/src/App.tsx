@@ -146,8 +146,13 @@ export function App({ store, enviar }: { store: Store; enviar: Conexion["enviar"
    * escritorio no cambiaba nada de lo que se veía.
    */
   const abrirSesion = useCallback(
-    (proyecto: string, sesion?: string) => {
+    (proyecto: string, sesion?: string, pestanaAlAbrir?: Pestana) => {
       setEnEscritorio(false);
+      // Solo si el llamador la nombra: por omisión no toca `pestana`, que es el
+      // comportamiento de siempre para la barra y el escritorio. Quien abre desde una
+      // tarjeta de tarea «esperando feedback» sí la nombra —«revision»—, porque ahí la
+      // verdad sobre lo que cambió está en esa pestaña y no en el chat.
+      if (pestanaAlAbrir !== undefined) setPestana(pestanaAlAbrir);
       void enviar(sesion === undefined ? { clase: "sesion", proyecto } : { clase: "sesion", proyecto, sesion });
     },
     [enviar]
@@ -633,6 +638,10 @@ export function App({ store, enviar }: { store: Store; enviar: Conexion["enviar"
       // servidor con su tabla cerrada. Y detrás vuelve a medir, así que la foto nueva es
       // la que dice si la herramienta apareció.
       alInstalarHerramienta={(herramienta) => void enviar({ clase: "dispositivos", instalar: herramienta })}
+      // El tope de concurrencia de la cola de tareas: mismo mensaje que manda el kanban al
+      // pedirlo la primera vez, con el número que puso quien lo cambia.
+      {...(estado.tareas === undefined ? {} : { tareas: { concurrencia: estado.tareas.concurrencia } })}
+      alCambiarConcurrencia={(concurrencia) => void enviar({ clase: "tareas", concurrencia })}
       // Los modelos de un motor externo, para el desplegable de un subagente.
       {...(estado.modelosDeMotor === undefined ? {} : { modelosDeMotor: estado.modelosDeMotor })}
       alPedirModelosDeMotor={(motor) => void enviar({ clase: "modelosDeMotor", motor })}
@@ -933,6 +942,12 @@ export function App({ store, enviar }: { store: Store; enviar: Conexion["enviar"
               alAbrirAjustes={() => setAjustesAbiertos(true)}
               {...(estado.dispositivos === undefined ? {} : { dispositivos: estado.dispositivos })}
               alActualizarDispositivos={() => void enviar({ clase: "dispositivos" })}
+              {...(estado.tareas === undefined ? {} : { tareas: estado.tareas })}
+              alAbrirSesionDeTarea={(proyecto, sesion) => abrirSesion(proyecto, sesion)}
+              // La verdad sobre lo que la tarea escribió vive en Revisión, no en el chat:
+              // sin aprobación previa, esa pestaña es la única forma de mirar.
+              alAbrirRevisionDeTarea={(proyecto, sesion) => abrirSesion(proyecto, sesion, "revision")}
+              {...(estado.alta?.proyectoActivo === undefined ? {} : { proyectoActivo: estado.alta.proyectoActivo })}
             />
           </>
         )

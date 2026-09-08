@@ -76,7 +76,12 @@ import {
 import {
   crearCheckpointerDeProyecto, hayCheckpoint, olvidarHilo,
 } from "../../agent/checkpointer.js";
-import { cargarSettings, guardarDispositivos, guardarEntorno as guardarEntornoEnDisco } from "../../agent/settingsEnDisco.js";
+import {
+  cargarSettings,
+  guardarConcurrenciaDeTareas,
+  guardarDispositivos,
+  guardarEntorno as guardarEntornoEnDisco,
+} from "../../agent/settingsEnDisco.js";
 import { seAplicaSinAprobacion } from "../../core/settings.js";
 import { cloudstudioDelProyecto } from "../../agent/configEnDisco.js";
 import { abrirEnSistema } from "../../agent/cloudstudioMcp.js";
@@ -851,6 +856,7 @@ export function montarRutas(
     ...(t.sesion === undefined ? {} : { sesion: t.sesion }),
     ...(t.empezada === undefined ? {} : { empezada: t.empezada }),
     ...(t.acabada === undefined ? {} : { acabada: t.acabada }),
+    ...(t.autorizadas === undefined ? {} : { autorizadas: t.autorizadas }),
   });
 
   const mensajeDeTareas = (): MensajeAlCliente | undefined => {
@@ -2192,13 +2198,14 @@ export function construirCorredorDeTareasCableado(opciones: {
   const disco = opciones.tareasFabrica === undefined ? undefined : opciones.tareasFabrica(opciones.informar);
 
   /**
-   * El tope de concurrencia, en MEMORIA y no en `settings.json` todavía: la sección
-   * «Tareas» de Ajustes que lo pediría desde el navegador no existe aún (Task 7), así que
-   * esto es lo mínimo que hace real «cambiar el tope de concurrencia lleguen de vuelta»
-   * sin inventarse una persistencia que nadie ha pedido. Se pierde al reiniciar el
-   * proceso, y es preferible a fingir que ya hay un campo en disco que no existe.
+   * El tope de concurrencia se LEE de `settings.json` en cada llamada, nunca se cachea —la
+   * misma disciplina que `ajustesDeDispositivos` (más abajo) y que `sinAprobacion`: la
+   * sección «Tareas» de Ajustes escribe con `guardarConcurrenciaDeTareas` mientras el
+   * proceso vive, y una copia capturada al construir este corredor no la vería. Ausente en
+   * disco = `CONCURRENCIA_POR_OMISION` (2), la misma omisión que ya usaba la variable en
+   * memoria que esto sustituye.
    */
-  let concurrenciaDeTareas = CONCURRENCIA_POR_OMISION;
+  const concurrenciaDeTareas = (): number => cargarSettings().settings.concurrenciaDeTareas ?? CONCURRENCIA_POR_OMISION;
 
   /**
    * El puente hacia `emitirTareas`. El corredor nace ANTES que el cable —`montarRutas`
@@ -2219,9 +2226,9 @@ export function construirCorredorDeTareasCableado(opciones: {
           // cable), la consola que APARCA en vez de contestar por nadie, y el ejecutor de
           // siempre con las mismas barreras que el de una persona.
           abrirParaTarea: async (raiz) => consolaParaTarea(await opciones.vestibulo.abrirParaTarea(raiz)),
-          // Se lee en cada pasada — cambiar el tope en Ajustes (Task 7) se notará sin
-          // reiniciar nada, en cuanto exista el botón que llame a `guardarConcurrencia`.
-          concurrencia: () => concurrenciaDeTareas,
+          // Se lee de disco en cada pasada: cambiar el tope en Ajustes se nota sin
+          // reiniciar nada, en la siguiente ronda de planificación.
+          concurrencia: concurrenciaDeTareas,
           /**
            * GANA LA PERSONA: en el proyecto que alguien tiene abierto no arranca ninguna
            * tarea. Una tarea y una persona sobre el mismo árbol no tienen aislamiento de
@@ -2286,9 +2293,12 @@ export function construirCorredorDeTareasCableado(opciones: {
     opcionesDeMontaje: {
       ...(disco === undefined ? {} : { colaDeTareas: disco }),
       ...(corredor === undefined ? {} : { corredorDeTareas: corredor }),
-      concurrenciaDeTareas: () => concurrenciaDeTareas,
+      concurrenciaDeTareas,
+      // Persiste en `settings.json` — `guardarConcurrenciaDeTareas` acota a
+      // `0..TOPE_DE_CONCURRENCIA_DE_TAREAS` por su cuenta, así que un valor fuera de rango
+      // que llegara por el cable no deja basura en el fichero.
       guardarConcurrencia: (c) => {
-        concurrenciaDeTareas = c;
+        guardarConcurrenciaDeTareas(undefined, c);
       },
     },
     arrancarConectado: async (cable) => {

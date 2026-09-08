@@ -1,0 +1,221 @@
+/* Alias comprobados contra `apps/web/estilos/design-platform.css` (los mismos que
+   `Equipo.module.css` y `Escritorio.module.css`): bg-layer-1/2, border-l2, label-primary/
+   secondary/tertiary, interactive-bg-hover, state-warn-primary/label. `--xonecode-cian` es
+   de `estilos/marca.css`. Ningún color literal. */
+
+.kanban {
+  margin: 24px 0 0;
+  padding: 14px;
+  border: 0.5px solid var(--dsw-alias-border-l2);
+  border-radius: 12px;
+  background: var(--dsw-alias-bg-layer-2);
+  /* Lo que decide si caben las cuatro columnas lado a lado es el ancho de ESTA caja, no el
+     de la ventana: la misma razón que `Revision.module.css` documenta. */
+  container-type: inline-size;
+}
+
+.titulo {
+  margin: 0 0 10px;
+  color: var(--dsw-alias-label-primary);
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.vacio {
+  margin: 0;
+  color: var(--dsw-alias-label-secondary);
+  font-size: 13px;
+}
+
+/* Se ve igual en dos ventanas y solo avanza en una: sin esto, una tarea parada se lee como
+   un cuelgue. */
+.aviso {
+  margin: 0 0 12px;
+  padding: 8px 10px;
+  border: 0.5px solid var(--dsw-alias-state-warn-primary);
+  border-radius: 8px;
+  background: var(--dsw-alias-bg-layer-1);
+  color: var(--dsw-alias-state-warn-label);
+  font-size: 12px;
+}
+
+.columnas {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+}
+
+/* Con más de cuatro tarjetas, la columna scrollea en vez de estirar la ventana entera:
+   `Ajustes.tsx` usa el mismo recurso con su lista de simuladores. */
+.columna {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-height: 0;
+  max-height: 420px;
+  overflow-y: auto;
+}
+
+.encabezado {
+  position: sticky;
+  top: 0;
+  margin: 0;
+  padding: 2px 0 6px;
+  background: var(--dsw-alias-bg-layer-2);
+  color: var(--dsw-alias-label-secondary);
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+
+.cuenta {
+  color: var(--dsw-alias-label-tertiary);
+  font-weight: 400;
+}
+
+.tarjetas {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+/* La tarjeta simple es un `<button>` entero: pulsarla en cualquier punto abre la
+   conversación. La de «esperando feedback» es un `<div>` con sus propios controles dentro
+   (ver `TarjetaDeAtencion`), porque ahí hay DOS acciones distintas y un botón no puede
+   contener otro botón. */
+button.tarjeta {
+  width: 100%;
+  text-align: left;
+  cursor: pointer;
+  font: inherit;
+}
+
+.tarjeta {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 10px;
+  border: 0.5px solid var(--dsw-alias-border-l2);
+  border-radius: 10px;
+  background: var(--dsw-alias-bg-layer-1);
+  color: inherit;
+}
+
+button.tarjeta:hover {
+  background: var(--dsw-alias-interactive-bg-hover);
+}
+
+/* La que espera feedback lleva una barra de acento a la izquierda: es la columna con algo
+   que decidir. */
+.tarjeta[data-atencion] {
+  border-left: 2px solid var(--xonecode-cian);
+}
+
+.proyecto {
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 11px;
+}
+
+.tituloDeTarea {
+  color: var(--dsw-alias-label-primary);
+  font-size: 13px;
+  font-weight: 500;
+}
+
+/* El título de la tarjeta de atención es su propio botón, separado del de Revisión: los
+   dos disparan acciones distintas. Sin fondo propio, para que no se confunda con el botón
+   de Revisión de más abajo. */
+.tituloBoton {
+  align-self: flex-start;
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--dsw-alias-label-primary);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  text-align: left;
+  cursor: pointer;
+}
+
+.tituloBoton:hover {
+  text-decoration: underline;
+}
+
+.cuando {
+  color: var(--dsw-alias-label-tertiary);
+  font-family: var(--ds-font-family-code);
+  font-size: 11px;
+}
+
+/* Una «nuevo» del proyecto que tienes abierto: sin esto se queda quieta en la primera
+   columna sin que nada lo explique, y eso se lee como un cuelgue. */
+.bloqueada {
+  color: var(--dsw-alias-state-warn-label);
+  font-size: 11px;
+}
+
+.motivo {
+  margin: 2px 0 0;
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 11px;
+}
+
+.ficheros {
+  margin: 2px 0 0;
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 11px;
+}
+
+.ficheros p {
+  margin: 0 0 2px;
+}
+
+.listaDeFicheros {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.listaDeFicheros code {
+  color: var(--dsw-alias-label-secondary);
+  font-family: var(--ds-font-family-code);
+  font-size: 11px;
+}
+
+.pista {
+  margin: 4px 0 0;
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 11px;
+  font-style: italic;
+}
+
+.enlaceRevision {
+  align-self: flex-start;
+  margin-top: 4px;
+  padding: 4px 8px;
+  border: 0.5px solid var(--dsw-alias-border-l2);
+  border-radius: 8px;
+  background: var(--dsw-alias-bg-layer-2);
+  color: var(--dsw-alias-label-primary);
+  font: inherit;
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.enlaceRevision:hover {
+  background: var(--dsw-alias-interactive-bg-hover);
+}
+
+/* Columnas apiladas cuando el contenedor no da para las cuatro lado a lado — el mismo
+   recurso que `Equipo.module.css` usa con sus dos bloques, pero por CONTENEDOR y no por
+   ventana: esta sección vive dentro del escritorio, no a pantalla completa. */
+@container (max-width: 720px) {
+  .columnas {
+    grid-template-columns: 1fr;
+  }
+}

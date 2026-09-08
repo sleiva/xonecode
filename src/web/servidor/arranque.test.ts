@@ -5,7 +5,7 @@
  * invocan con una petición y una respuesta de mentira — que es lo que permite afirmar
  * sobre el CABLE (qué se emite, en qué orden, a qué consola) sin abrir un socket.
  */
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
@@ -2667,6 +2667,47 @@ describe("las tareas en background, por el cable", () => {
     expect(JSON.stringify(mensaje)).not.toContain("/w/AppDemo");
   });
 
+  it("lo que la tarea AUTORIZÓ viaja, con ruta relativa; ausente cuando no consta", async () => {
+    const servidor = servidorDeMentira();
+    const cola = colaDeMentira([
+      {
+        id: "t1",
+        proyecto: { id: "p1", raiz: "/w/AppDemo", nombre: "AppDemo" },
+        titulo: "Arregla el login",
+        peticion: "Arregla el login",
+        encargo: "Arregla el login",
+        adjuntos: [],
+        estado: "requiere-atencion" as const,
+        motivo: "el juez marcó el trabajo en rojo",
+        sesion: "s1",
+        creada: "2026-09-08T10:00:00.000Z",
+        autorizadas: ["src/app.xne", "src/Login.xne"],
+      },
+      {
+        id: "t2",
+        proyecto: { id: "p1", raiz: "/w/AppDemo", nombre: "AppDemo" },
+        titulo: "Sin correr todavía",
+        peticion: "Sin correr todavía",
+        encargo: "Sin correr todavía",
+        adjuntos: [],
+        estado: "nuevo" as const,
+        creada: "2026-09-08T10:00:00.000Z",
+      },
+    ]);
+    montarRutas(servidor, vestibuloDePrueba(), {
+      colaDeTareas: cola,
+      corredorDeTareas: { corriendoAqui: () => true },
+      concurrenciaDeTareas: () => 2,
+    });
+    const cliente = clienteDeMentira();
+    await servidor.rutas.get(`GET ${RUTA_EVENTOS}`)!(cliente.peticion, cliente.respuesta);
+    await asentar();
+    const mensaje = ultimo(cliente);
+    expect(mensaje.lista.find((t) => t.id === "t1")?.autorizadas).toEqual(["src/app.xne", "src/Login.xne"]);
+    // La que nunca corrió no lleva el campo: no consta, y no es lo mismo que «ninguna».
+    expect(mensaje.lista.find((t) => t.id === "t2")?.autorizadas).toBeUndefined();
+  });
+
   it("crear una tarea RESUELVE el proyecto con el estado del propio cierre, la encola y hace revisar", async () => {
     let revisado = 0;
     const servidor = servidorDeMentira();
@@ -2936,6 +2977,57 @@ describe("las tareas en background, el cableado del corredor con el cable — no
     // ...Y el cambio llegó al `emitirTareas` que se le pasó — es lo que demuestra que el
     // puente estaba armado ANTES de que el corredor arrancara, no después.
     expect(llamado).toBeGreaterThan(0);
+  });
+
+  /**
+   * El tope de concurrencia PERSISTE en `settings.json` (Task 7) y ya no en una variable
+   * del cierre — la composición exacta que este describe existe para vigilar: una regla
+   * puede dejar de estar montada con todo lo demás en verde. `cargarSettings`/
+   * `guardarConcurrenciaDeTareas` leen `homedir()`, así que aquí se apunta `HOME` a un
+   * temporal — el mismo recurso que `cli/main.test.ts` documenta para no depender del
+   * disco de quien corre la suite.
+   */
+  describe("el tope de concurrencia persiste en settings.json, no en memoria", () => {
+    const homeOriginal = process.env.HOME;
+
+    beforeEach(() => {
+      process.env.HOME = mkdtempSync(join(tmpdir(), "xonecode-home-tareas-"));
+    });
+
+    afterEach(() => {
+      if (homeOriginal === undefined) delete process.env.HOME;
+      else process.env.HOME = homeOriginal;
+    });
+
+    it("sin nada guardado, la omisión es CONCURRENCIA_POR_OMISION (2)", () => {
+      const { opcionesDeMontaje } = construirCorredorDeTareasCableado({
+        vestibulo: vestibuloSinAbrir,
+        informar: () => {},
+        olvidarHiloDeSesion: async () => {},
+        ...ENTREGA_DE_TAREAS,
+      });
+      expect(opcionesDeMontaje.concurrenciaDeTareas?.()).toBe(2);
+    });
+
+    it("guardarConcurrencia escribe en disco, y se relee — no queda solo en un cierre", () => {
+      const { opcionesDeMontaje } = construirCorredorDeTareasCableado({
+        vestibulo: vestibuloSinAbrir,
+        informar: () => {},
+        olvidarHiloDeSesion: async () => {},
+        ...ENTREGA_DE_TAREAS,
+      });
+      opcionesDeMontaje.guardarConcurrencia?.(5);
+      expect(opcionesDeMontaje.concurrenciaDeTareas?.()).toBe(5);
+      // Y la prueba de que es de VERDAD disco y no una variable: una instancia SEGUNDA,
+      // construida después de escribir, ve el mismo valor sin que nadie se lo pasara.
+      const { opcionesDeMontaje: otraVez } = construirCorredorDeTareasCableado({
+        vestibulo: vestibuloSinAbrir,
+        informar: () => {},
+        olvidarHiloDeSesion: async () => {},
+        ...ENTREGA_DE_TAREAS,
+      });
+      expect(otraVez.concurrenciaDeTareas?.()).toBe(5);
+    });
   });
 
   it("si `emitirTareas` revienta, el corredor NO se tumba: la escritura se queda igual, y se avisa por `informar`", async () => {

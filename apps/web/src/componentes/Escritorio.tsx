@@ -2,7 +2,8 @@ import { PROYECTOS_POR_OMISION } from "./Barra.js";
 import { IconoDeEntorno } from "./IconoDeEntorno.js";
 import estilos from "./Escritorio.module.css";
 import { Equipo } from "./Equipo.js";
-import type { InformeDeDispositivos } from "../tipos.js";
+import { Kanban } from "./Kanban.js";
+import type { InformeDeDispositivos, TareaDelCable } from "../tipos.js";
 
 /**
  * El centro cuando no hay sesión abierta: el escritorio.
@@ -43,6 +44,10 @@ export function Escritorio({
   visibles,
   dispositivos,
   alActualizarDispositivos,
+  tareas,
+  alAbrirSesionDeTarea,
+  alAbrirRevisionDeTarea,
+  proyectoActivo,
 }: {
   /** El saludo (`agent/persona.ts`). Ausente = se saluda igual, sin inventarse un nombre. */
   nombre?: string;
@@ -80,6 +85,26 @@ export function Escritorio({
   /** La foto de la máquina (`Equipo.tsx`). Ausente = aún no llegó. */
   dispositivos?: InformeDeDispositivos;
   alActualizarDispositivos?: () => void;
+  /**
+   * La cola de tareas en background (`Kanban.tsx`). Ausente = el servidor no ha mandado
+   * `tareas` todavía — ni una vez, ni esta ejecución no las ejecuta—, y eso NO es lo mismo
+   * que «no hay ninguna»: el panel lo dice en vez de afirmar una cola vacía que nadie ha
+   * medido, la misma regla que `dispositivos` ausente en «Tu equipo».
+   */
+  tareas?: { lista: readonly TareaDelCable[]; concurrencia: number; corriendoAqui: boolean };
+  /** Abrir la conversación de una tarea, desde su tarjeta del kanban. */
+  alAbrirSesionDeTarea?: (proyecto: string, sesion: string) => void;
+  /** Abrir la pestaña Revisión de una tarea «esperando feedback»: la verdad sobre lo que
+   *  cambió en el disco, sin aprobación previa de por medio. */
+  alAbrirRevisionDeTarea?: (proyecto: string, sesion: string) => void;
+  /**
+   * El proyecto cuya consola HUMANA está abierta ahora (`estado.alta.proyectoActivo`). El
+   * escritorio se puede ver con una sesión de otro proyecto ya abierta detrás —volver a él
+   * es solo estado de vista, no cierra nada—, así que esto puede estar definido aquí; se le
+   * pasa al kanban para que una tarea `nuevo` de ESE proyecto diga que espera, en vez de
+   * quedarse quieta sin explicación.
+   */
+  proyectoActivo?: string;
 }) {
   const apagado = conectado === false;
   const destacados =
@@ -200,6 +225,23 @@ export function Escritorio({
             </p>
           )}
           </>
+        )}
+
+        {/*
+          Las tareas en background, entre lo elegido y «Tu equipo»: son de la aplicación,
+          igual que el resto de este panel. Ausente no es «no hay ninguna» —es «no ha
+          llegado la cola»—, la misma regla que la foto de la máquina de más abajo, así que
+          se dice en vez de afirmar un kanban vacío que nadie ha medido.
+        */}
+        {tareas === undefined ? (
+          <p className={estilos.vacio}>Todavía no ha llegado la cola de tareas en background.</p>
+        ) : (
+          <Kanban
+            cola={tareas}
+            {...(alAbrirSesionDeTarea === undefined ? {} : { alAbrirSesion: alAbrirSesionDeTarea })}
+            {...(alAbrirRevisionDeTarea === undefined ? {} : { alAbrirRevision: alAbrirRevisionDeTarea })}
+            {...(proyectoActivo === undefined ? {} : { proyectoActivo })}
+          />
         )}
 
         <Equipo

@@ -421,6 +421,14 @@ export interface TareaDelCable {
   creada: string;
   empezada?: string;
   acabada?: string;
+  /**
+   * Lo que la tarea AUTORIZÓ escribir sin que nadie lo aprobara, con ruta relativa al
+   * proyecto (`core/tareas.ts#Tarea.autorizadas`). **No es lo mismo que lo que cambió en el
+   * disco** —una ruta que las guardas de sitio rechazan sale aquí sin haberse escrito—: la
+   * verdad sobre el disco la tiene la pestaña Revisión, con la ref de esta `sesion`. Ausente
+   * = no consta (la tarea no llegó a correr un turno); `[]` = corrió y no autorizó ninguna.
+   */
+  autorizadas?: string[];
 }
 
 export interface ProveedorDeModelos {

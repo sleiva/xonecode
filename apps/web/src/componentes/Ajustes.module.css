@@ -492,3 +492,35 @@
 .casillaEnLinea input {
   cursor: pointer;
 }
+
+/* El tope de concurrencia de tareas: una etiqueta y su número, en línea. Es el ÚNICO
+   control de la subsección, así que no hace falta la maquinaria de `.fila` (icono, nombre,
+   detalle, acción a la derecha) que sí gana su sitio con listas más largas. */
+.filaDeConcurrencia {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 8px 0;
+  color: var(--dsw-alias-label-primary);
+  font-size: 13px;
+}
+
+.filaDeConcurrencia input {
+  width: 56px;
+  padding: 4px 8px;
+  border: 0.5px solid var(--dsw-alias-border-l2);
+  border-radius: 6px;
+  background: var(--dsw-alias-bg-layer-1);
+  color: var(--dsw-alias-label-primary);
+  font: inherit;
+}
+
+.filaDeConcurrencia input:disabled {
+  opacity: 0.45;
+}
+
+.pistaEnLinea {
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 12px;
+  font-weight: 400;
+}

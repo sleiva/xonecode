@@ -727,4 +727,43 @@ describe("la cola de tareas", () => {
     s.aplicar({ clase: "tareas", concurrencia: 2, corriendoAqui: true });
     expect(s.leer().tareas).toBeUndefined();
   });
+
+  it("«autorizadas» pasa campo a campo; ausente y vacío no son lo mismo", () => {
+    const s = crearStoreDelCliente();
+    s.aplicar({
+      clase: "tareas",
+      concurrencia: 2,
+      corriendoAqui: true,
+      lista: [
+        {
+          id: "t1",
+          proyecto: "p1",
+          proyectoNombre: "AppDemo",
+          titulo: "T",
+          peticion: "p",
+          encargo: "e",
+          adjuntos: [],
+          estado: "requiere-atencion",
+          creada: "2026-09-08T10:00:00.000Z",
+          autorizadas: ["src/app.xne", 7, "src/Login.xne"],
+        },
+        {
+          id: "t2",
+          proyecto: "p1",
+          proyectoNombre: "AppDemo",
+          titulo: "T2",
+          peticion: "p",
+          encargo: "e",
+          adjuntos: [],
+          estado: "nuevo",
+          creada: "2026-09-08T10:00:00.000Z",
+        },
+      ],
+    });
+    const [t1, t2] = s.leer().tareas!.lista;
+    // Lo que no es cadena se descarta, como en cualquier otra lista blanca de aquí.
+    expect(t1!.autorizadas).toEqual(["src/app.xne", "src/Login.xne"]);
+    // La que nunca corrió no consta: no se sintetiza un `[]`.
+    expect(t2!.autorizadas).toBeUndefined();
+  });
 });

@@ -2,7 +2,16 @@ import { mkdirSync, mkdtempSync, readFileSync, statSync, writeFileSync } from "n
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, it, expect } from "vitest";
-import { cargarSettings, guardarDispositivos, guardarEntorno, guardarSinAprobacion, guardarWorkspace, rutaSettings, SettingsRotosEnDisco } from "./settingsEnDisco.js";
+import {
+  cargarSettings,
+  guardarConcurrenciaDeTareas,
+  guardarDispositivos,
+  guardarEntorno,
+  guardarSinAprobacion,
+  guardarWorkspace,
+  rutaSettings,
+  SettingsRotosEnDisco,
+} from "./settingsEnDisco.js";
 
 /** Cada test recibe su propia «casa» temporal: nunca toca el ~/.xonecode real. */
 function casa(): string {
@@ -90,6 +99,29 @@ describe("settingsEnDisco", () => {
     const crudo = JSON.parse(readFileSync(join(c, ".xonecode", "settings.json"), "utf8")) as Record<string, unknown>;
     expect("dispositivos" in crudo).toBe(false);
     expect(cargarSettings(c).settings.entornos.map((e) => e.id)).toEqual(["a"]);
+  });
+
+  it("guardarConcurrenciaDeTareas escribe el tope sin tocar los entornos", () => {
+    const c = casa();
+    guardarEntorno(c, { id: "a", nombre: "A", url: "https://a/mcp" });
+    guardarConcurrenciaDeTareas(c, 5);
+    const { settings } = cargarSettings(c);
+    expect(settings.concurrenciaDeTareas).toBe(5);
+    expect(settings.entornos.map((e) => e.id)).toEqual(["a"]);
+  });
+
+  it("guardarConcurrenciaDeTareas acepta CERO: es cómo se pausa la cola", () => {
+    const c = casa();
+    guardarConcurrenciaDeTareas(c, 0);
+    expect(cargarSettings(c).settings.concurrenciaDeTareas).toBe(0);
+  });
+
+  it("guardarConcurrenciaDeTareas acota fuera de rango en vez de escribir basura", () => {
+    const c = casa();
+    guardarConcurrenciaDeTareas(c, -3);
+    expect(cargarSettings(c).settings.concurrenciaDeTareas).toBe(0);
+    guardarConcurrenciaDeTareas(c, 99);
+    expect(cargarSettings(c).settings.concurrenciaDeTareas).toBe(8);
   });
 
   it("guardarWorkspace fija la base sin tocar los entornos ya guardados", () => {

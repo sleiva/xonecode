@@ -629,6 +629,16 @@ export function crearStoreDelCliente(): {
                   ...(typeof t["sesion"] === "string" ? { sesion: t["sesion"] } : {}),
                   ...(typeof t["empezada"] === "string" ? { empezada: t["empezada"] } : {}),
                   ...(typeof t["acabada"] === "string" ? { acabada: t["acabada"] } : {}),
+                  // Ausente = no consta (no llegó a correr); `[]` = corrió y no autorizó
+                  // ninguna. Las dos cosas son distintas, así que solo se copia si LLEGÓ
+                  // como array de verdad, nunca se sintetiza `[]`.
+                  ...(Array.isArray(t["autorizadas"])
+                    ? {
+                        autorizadas: (t["autorizadas"] as unknown[]).filter(
+                          (x): x is string => typeof x === "string"
+                        ),
+                      }
+                    : {}),
                 }))
                 .filter((t) => t.id !== ""),
             },

@@ -205,3 +205,72 @@ describe("Escritorio: solo los proyectos elegidos, y el resto contado", () => {
     expect(screen.queryByText(/del entorno/)).toBeNull();
   });
 });
+
+describe("Escritorio: el kanban de tareas", () => {
+  afterEach(cleanup);
+
+  it("sin `tareas` no se afirma que no hay ninguna: se dice que no ha llegado", () => {
+    render(<Escritorio {...MANEJADORES} proyectos={[]} />);
+    expect(screen.getByText(/todavía no ha llegado la cola de tareas/i)).toBeTruthy();
+    expect(screen.queryByRole("heading", { name: /^Nuevo/ })).toBeNull();
+  });
+
+  it("con `tareas`, el kanban se pinta con sus cuatro columnas", () => {
+    render(
+      <Escritorio
+        {...MANEJADORES}
+        proyectos={[]}
+        tareas={{
+          concurrencia: 2,
+          corriendoAqui: true,
+          lista: [
+            {
+              id: "t1",
+              proyecto: "p1",
+              proyectoNombre: "AppDemo",
+              titulo: "Arregla el login",
+              peticion: "Arregla el login",
+              encargo: "Arregla el login",
+              adjuntos: [],
+              estado: "nuevo",
+              creada: "2026-09-08T10:00:00.000Z",
+            },
+          ],
+        }}
+      />
+    );
+    expect(screen.getByRole("heading", { name: /^Nuevo/ })).toBeTruthy();
+    expect(screen.getByText("Arregla el login")).toBeTruthy();
+  });
+
+  it("pulsar una tarea con sesión llama a `alAbrirSesionDeTarea`", () => {
+    const alAbrirSesionDeTarea = vi.fn();
+    render(
+      <Escritorio
+        {...MANEJADORES}
+        proyectos={[]}
+        alAbrirSesionDeTarea={alAbrirSesionDeTarea}
+        tareas={{
+          concurrencia: 2,
+          corriendoAqui: true,
+          lista: [
+            {
+              id: "t1",
+              proyecto: "p1",
+              proyectoNombre: "AppDemo",
+              titulo: "Arregla el login",
+              peticion: "Arregla el login",
+              encargo: "Arregla el login",
+              adjuntos: [],
+              estado: "nuevo",
+              sesion: "s1",
+              creada: "2026-09-08T10:00:00.000Z",
+            },
+          ],
+        }}
+      />
+    );
+    fireEvent.click(screen.getByRole("button", { name: /Arregla el login/ }));
+    expect(alAbrirSesionDeTarea).toHaveBeenCalledWith("p1", "s1");
+  });
+});

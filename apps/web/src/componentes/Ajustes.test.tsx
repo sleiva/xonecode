@@ -465,3 +465,52 @@ describe("Ajustes: la sección de Dispositivos", () => {
     expect(screen.getByRole("button", { name: /volver a mirar/i })).toHaveProperty("disabled", true);
   });
 });
+
+describe("Ajustes: el tope de concurrencia de tareas", () => {
+  afterEach(cleanup);
+
+  const abrir = (extra: Record<string, unknown> = {}) => {
+    render(<Ajustes {...MANEJADORES} {...extra} />);
+    fireEvent.click(screen.getByRole("button", { name: "Dispositivos" }));
+    return screen.getByRole("heading", { name: "Tareas" }).parentElement!;
+  };
+
+  it("cambiarlo manda el valor acotado a 0-8", () => {
+    const alCambiarConcurrencia = vi.fn();
+    const panel = abrir({ alCambiarConcurrencia });
+    const entrada = within(panel).getByRole("spinbutton") as HTMLInputElement;
+    expect(entrada.value).toBe("2");
+    fireEvent.change(entrada, { target: { value: "5" } });
+    expect(alCambiarConcurrencia).toHaveBeenCalledWith(5);
+    // Fuera de rango se acota, no se rechaza en silencio.
+    fireEvent.change(entrada, { target: { value: "99" } });
+    expect(alCambiarConcurrencia).toHaveBeenCalledWith(8);
+    fireEvent.change(entrada, { target: { value: "-3" } });
+    expect(alCambiarConcurrencia).toHaveBeenCalledWith(0);
+  });
+
+  it("enseña el valor vigente que llega por props", () => {
+    const panel = abrir({ tareas: { concurrencia: 4 } });
+    expect((within(panel).getByRole("spinbutton") as HTMLInputElement).value).toBe("4");
+  });
+
+  it("con 0 se DICE que la cola queda pausada", () => {
+    const panel = abrir({ tareas: { concurrencia: 0 } });
+    expect(within(panel).getByText(/pausada/i)).toBeTruthy();
+  });
+
+  it("con un valor distinto de 0 no se afirma que esté pausada", () => {
+    const panel = abrir({ tareas: { concurrencia: 3 } });
+    expect(within(panel).queryByText(/pausada/i)).toBeNull();
+  });
+
+  it("sin manejador, el selector se apaga: no hay a quién pedírselo", () => {
+    const panel = abrir();
+    expect(within(panel).getByRole("spinbutton")).toHaveProperty("disabled", true);
+  });
+
+  it("sin cable el selector también se apaga, aunque haya manejador", () => {
+    const panel = abrir({ alCambiarConcurrencia: () => {}, conectado: false });
+    expect(within(panel).getByRole("spinbutton")).toHaveProperty("disabled", true);
+  });
+});
