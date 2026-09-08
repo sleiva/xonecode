@@ -4337,3 +4337,62 @@ describe("mirar: la reconexión no deja envoltorios huérfanos", () => {
     expect(mirones.get("t1")!.size).toBe(2);
   });
 });
+
+/**
+ * **Abrir la sesión de una tarea en curso se DECLINA por el cable, y con el motivo delante.**
+ *
+ * Task 16, y el arreglo de la duda que la vista en vivo hizo visible: el título de una
+ * tarjeta «en proceso» manda `{clase:"sesion", proyecto, sesion}`, y eso ponía dos consolas
+ * sobre el mismo `thread_id` del checkpointer. La guarda vive en el vestíbulo
+ * (`MOTIVO_SESION_DE_TAREA_EN_CURSO`) porque es quien sabe qué consolas de tarea están vivas;
+ * lo que se comprueba aquí es que el cable no se lo come: el motivo llega y NADA se mueve.
+ */
+describe("abrir la sesión de una tarea en curso, por el cable", () => {
+  it("dice el motivo y no muda el cable: el transcript de quien mira no cambia", async () => {
+    const servidor = servidorDeMentira();
+    const dichos: string[] = [];
+    let aperturas = 0;
+    const motivo = "esa conversación es la de una tarea en curso: pulsa «Ver lo que hace»";
+    // Con copia local DE VERDAD: `atenderSesion` usa `esProyectoEnDisco` del módulo (no un
+    // predicado inyectado), y sin la carpeta se iría por la rama de «todavía no está bajado»
+    // — el test se quedaría verde sin haber llamado a `abrirProyecto` ni una vez.
+    const base = mkdtempSync(join(tmpdir(), "xonecode-abrir-tarea-"));
+    mkdirSync(join(base, ".xonecode"), { recursive: true });
+    writeFileSync(join(base, ".xonecode", "config.json"), JSON.stringify({ modo: "offline" }));
+    montarRutas(
+      servidor,
+      {
+        ...vestibuloDePrueba(),
+        raizDeProyecto: () => base,
+        abrirProyecto: async () => {
+          aperturas += 1;
+          throw new Error(motivo);
+        },
+      },
+      { informar: (texto) => dichos.push(texto) }
+    );
+    const cliente = clienteDeMentira();
+    await servidor.rutas.get(`GET ${RUTA_EVENTOS}`)!(cliente.peticion, cliente.respuesta);
+    await asentar();
+
+    expect(
+      await enviarMensaje(servidor.rutas.get(`POST ${RUTA_ACCION}`)!, {
+        clase: "sesion",
+        proyecto: "p1",
+        sesion: "s1",
+      })
+    ).toBe(204);
+    await asentar();
+
+    // Se intentó UNA vez y se negó ahí: la guarda es del vestíbulo, no de este manejador.
+    expect(aperturas).toBe(1);
+    // El motivo se DICE, por los dos canales que este camino ya usa: el transcript y el
+    // alta —que es lo que la barra pinta sin tener que leer el transcript—.
+    expect(dichos).toContain(motivo);
+    const altas = cliente.recibidos.filter((m) => m.clase === "alta");
+    expect((altas.at(-1) as { aviso?: string }).aviso).toBe(motivo);
+    // Y el cable sigue donde estaba: sin proyecto abierto, el alta lo dice.
+    expect((altas.at(-1) as { proyectoAbierto?: boolean }).proyectoAbierto).toBe(false);
+    rmSync(base, { recursive: true, force: true });
+  });
+});

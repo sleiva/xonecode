@@ -311,6 +311,19 @@ export interface OpcionesDelVestibulo {
   nombre?: string;
 }
 
+/**
+ * Lo que se contesta a quien intenta abrir —o borrar— la conversación de una tarea que sigue
+ * corriendo. Vive en una constante porque lo leen las dos guardas y su test, y porque es lo
+ * ÚNICO que el usuario ve de esta regla.
+ *
+ * **Dice qué SÍ se puede hacer**, y no es cortesía: la vista en vivo existe justo al lado, así
+ * que un «no puedes» a secas es lo que hace que alguien insista o dé el botón por roto. Y no
+ * lleva ninguna ruta de la máquina: sale por el cable, que puede ir por un túnel.
+ */
+export const MOTIVO_SESION_DE_TAREA_EN_CURSO =
+  "esa conversación es la de una tarea en curso: el agente está escribiendo en ella ahora " +
+  "mismo. Pulsa «Ver lo que hace» en su tarjeta para mirarla, y ábrela cuando termine.";
+
 /** Una consola de proyecto viva. Solo hay una a la vez. */
 export interface ConsolaDeProyecto {
   readonly raiz: string;
@@ -1042,6 +1055,29 @@ export function crearVestibulo(opciones: OpcionesDelVestibulo): Vestibulo {
   };
 
   const abrirDeVerdad = async (apertura: { raiz: string; sesion?: string }): Promise<ConsolaDeProyecto> => {
+    /**
+     * ANTES de cerrar nada: si esa conversación es la de una tarea en curso, no se abre.
+     *
+     * Es la MISMA guarda que `borrarSesion`, con el mismo motivo de fondo —el hilo lo está
+     * escribiendo alguien— y sobre la misma fuente (`deTareas`, que es quien sabe qué
+     * consolas están vivas). Lo que pasaba sin ella: el `thread_id` del checkpointer ES el id
+     * de la sesión, así que abrirla aquí ponía DOS consolas escribiendo el mismo hilo, con el
+     * agente a mitad de turno en una de ellas. El botón existía desde siempre (el título de
+     * la tarjeta del kanban), y con «Ver lo que hace» a su lado un botón correcto pegado a uno
+     * peligroso enseña que los dos son igual de seguros.
+     *
+     * **El orden es la mitad del arreglo**: `cerrarProyectoAbierto()` es la primera línea de
+     * abajo, así que una guarda puesta después habría cerrado la sesión de la persona para
+     * después negarse a abrir la otra — dos daños en vez de ninguno.
+     *
+     * Se compara con `sesion` Y con `idDeHilo` porque son dos momentos de la misma
+     * conversación: `sesion` no existe hasta que se vuelca el primer acto, y `idDeHilo` desde
+     * el primer instante. El que viaja en la tarjeta es el primero; el que cubre la ventana
+     * anterior al volcado es el segundo.
+     */
+    if (apertura.sesion !== undefined && esDeUnaTareaEnCurso(apertura.raiz, apertura.sesion)) {
+      throw new Error(MOTIVO_SESION_DE_TAREA_EN_CURSO);
+    }
     await cerrarProyectoAbierto();
     const consolaDeProyecto = await construirConsolaDeProyecto({ ...apertura, alCable: true });
     abierto = consolaDeProyecto;
@@ -1059,6 +1095,19 @@ export function crearVestibulo(opciones: OpcionesDelVestibulo): Vestibulo {
    * ya cerradas se PODAN al abrir la siguiente, que es cuando puede empezar a crecer.
    */
   const deTareas = new Set<ConsolaDeProyecto>();
+
+  /**
+   * ¿Esa conversación la está escribiendo una tarea de fondo AHORA?
+   *
+   * La fuente es `deTareas` y no el índice de tareas a propósito: lo que hace daño es que
+   * haya dos consolas de ESTE proceso sobre el mismo hilo, y eso solo lo sabe este conjunto.
+   * Una tarea `en-proceso` en el OTRO proceso no aparece aquí, y esa limitación es la misma
+   * que ya declara `borrarSesion` — el límite lo pone el sistema operativo, no esta función.
+   */
+  const esDeUnaTareaEnCurso = (raiz: string, sesion: string): boolean =>
+    [...deTareas].some(
+      (consola) => consola.raiz === raiz && !consola.cerrada && (consola.sesion === sesion || consola.idDeHilo === sesion)
+    );
 
   const abrirParaTarea = async (raiz: string, sesion?: string, adjuntos?: string): Promise<ConsolaDeProyecto> => {
     // ANTES de construir nada: sin esto, una raíz equivocada dejaba un `correrConsola`
@@ -1219,10 +1268,10 @@ export function crearVestibulo(opciones: OpcionesDelVestibulo): Vestibulo {
       // borrar aquí se habría llevado la ref de git y el checkpoint de un hilo que el
       // agente sigue escribiendo — y su siguiente `volcar()` habría devuelto la fila a la
       // barra, dejando al usuario con un botón que parece no funcionar. Ver `deTareas`.
-      const deUnaTarea = [...deTareas].some(
-        (consola) => consola.raiz === raiz && !consola.cerrada && (consola.sesion === id || consola.idDeHilo === id)
-      );
-      if (deUnaTarea) {
+      // El MISMO predicado que la guarda de `abrirDeVerdad`: dos copias de «¿la está
+      // escribiendo una tarea?» acabarían discrepando, y la que se quedara vieja sería la
+      // que deja pasar el daño.
+      if (esDeUnaTareaEnCurso(raiz, id)) {
         return {
           borrada: false,
           cerroLaAbierta: false,

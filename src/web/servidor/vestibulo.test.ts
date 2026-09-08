@@ -1315,6 +1315,81 @@ describe("abrirParaTarea — la segunda puerta", () => {
   });
 
   /**
+   * **Y ABRIR la sesión de una tarea en curso se declina igual, por lo mismo** (Task 16).
+   *
+   * Es el hermano del test de arriba y nació con la vista en vivo: hasta ahora el título de
+   * una tarjeta «en proceso» abría su sesión como la tuya —`abrirProyecto({raiz, sesion})`—
+   * y eso pone DOS consolas sobre el mismo `thread_id` del checkpointer, con el agente
+   * escribiendo en una de ellas. Es el mismo daño que `borrarSesion` ya cerró y por el mismo
+   * motivo: el hilo lo está escribiendo alguien. Antes se podía argumentar que era un botón
+   * raro; con «Ver lo que hace» al lado, un botón correcto pegado a uno peligroso enseña que
+   * los dos son igual de seguros.
+   *
+   * **Se declina ANTES de tocar nada, y eso es la mitad que importa**: `abrirDeVerdad` empieza
+   * con `cerrarProyectoAbierto()`, así que una guarda puesta después habría cerrado la sesión
+   * de la persona para luego negarse a abrir la otra — dos daños en vez de uno.
+   *
+   * Y el motivo DICE qué sí se puede hacer. Un «no puedes» a secas, con la vista en vivo
+   * existiendo justo al lado, es la clase de mensaje que hace que alguien insista.
+   */
+  it("abrir la sesión de una tarea en curso se DECLINA, y no cierra la que estaba abierta", async () => {
+    const base = baseTemporal();
+    const s = sesionesEnMemoria();
+    const v = crearVestibulo({
+      ...dobles(),
+      origenDeTrabajo: "global",
+      sesiones: s.puerto,
+      baseDeWorkspace: base,
+      crearEjecutor: () => async (_peticion, _estado, consola) => {
+        consola.escribir("hecho\n");
+      },
+    });
+    const raizA = proyectoEnDisco(base, "A");
+    const raizB = proyectoEnDisco(base, "B");
+    // Alguien trabajando en A, y una tarea corriendo en B.
+    const humana = await v.abrirProyecto({ raiz: raizA });
+    const deTarea = await v.abrirParaTarea(raizB);
+    const hilo = deTarea.idDeHilo;
+
+    // 1) Por el id del HILO, que existe desde el primer instante: es el caso normal, porque
+    //    `sesion` no nace hasta que se vuelca el primer acto.
+    await expect(v.abrirProyecto({ raiz: raizB, sesion: hilo })).rejects.toThrow(/tarea en curso/i);
+    // El daño primero: ni se cerró lo de la persona, ni se tocó la tarea.
+    expect.soft(v.proyectoAbierto()).toBe(humana);
+    expect.soft(humana.cerrada).toBe(false);
+    expect.soft(deTarea.cerrada).toBe(false);
+
+    // 2) Y por el id de SESIÓN, en cuanto el volcado la crea: es el que viaja en la tarjeta
+    //    del kanban (`TareaDelCable.sesion`), o sea el que el botón manda de verdad.
+    await deTarea.ejecutarTurno("arregla el login", deTarea.estadoDeSesion, deTarea.consola.consola);
+    expect(deTarea.sesion).toBe(hilo);
+    await expect(v.abrirProyecto({ raiz: raizB, sesion: deTarea.sesion })).rejects.toThrow(/tarea en curso/i);
+
+    // 3) El motivo no lleva ninguna ruta de la máquina: sale por el cable, que puede ir por
+    //    un túnel — la misma regla que el de `borrarSesion`.
+    const motivo = await v
+      .abrirProyecto({ raiz: raizB, sesion: hilo })
+      .then(() => "", (e: Error) => e.message);
+    expect.soft(motivo).not.toContain(base);
+    // Y dice qué SÍ se puede hacer: con la vista en vivo al lado, un «no puedes» a secas es
+    // lo que hace que alguien insista.
+    expect.soft(motivo).toMatch(/ver lo que hace|mirar/i);
+
+    // 4) La guarda es por SESIÓN y no por proyecto: otra conversación del mismo proyecto se
+    //    abre con normalidad, y abrirlo SIN sesión también.
+    await v.abrirProyecto({ raiz: raizB, sesion: "otra-sesion" });
+    expect(v.proyectoAbierto()?.raiz).toBe(raizB);
+
+    // 5) Y es «en curso», no «para siempre»: cerrada la tarea, su sesión se abre.
+    await deTarea.cerrar();
+    await v.abrirProyecto({ raiz: raizB, sesion: hilo });
+    expect(v.proyectoAbierto()?.idDeHilo).toBe(hilo);
+
+    await v.cerrar();
+    rmSync(base, { recursive: true, force: true });
+  });
+
+  /**
    * El volcado sigue a la PIEL, no a la puerta — y por eso el adaptador del corredor le
    * pasa la de esta consola.
    *
