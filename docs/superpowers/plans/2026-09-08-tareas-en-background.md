@@ -1058,7 +1058,7 @@ git commit -m "feat(web): la consola de una tarea aparca en vez de contestar por
 > que solo borra el propio y aquí el fichero ya es de otro. El comentario de `recoger` en
 > `agent/tareasEnDisco.ts` trae el orden exacto.
 
-> **Y dos cosas que la Task 3 midió y dejó abiertas para aquí:**
+> **Y cuatro cosas que las Tasks 3 y 4 midieron y dejaron abiertas para aquí:**
 > 1. **La sesión de una tarea se PERSISTE** (resuelto: `Tarea.sesion` sería mentira, y sin
 > nombrar `refs/xonecode/sesion/<id>` el árbol se lo lleva `git gc` y Revisión diría
 > `sin-marca` para siempre — un agente autónomo escribiendo sin diff que revisar). Pero
@@ -1067,7 +1067,7 @@ git commit -m "feat(web): la consola de una tarea aparca en vez de contestar por
 > su propia `Consola` aportar solo líneas y aprobaciones. Hay un test en
 > `vestibulo.test.ts` que empieza por «MEDIDO:» y está hecho para ponerse ROJO cuando esto
 > se arregle — es la señal, no un fallo.
-> 4. **La piel del volcado: el `MEDIDO:` de `vestibulo.test.ts` NO es el semáforo.** La
+> 2. **La piel del volcado: el `MEDIDO:` de `vestibulo.test.ts` NO es el semáforo.** La
 > Task 4 dejó una opción `piel?` en `crearConsolaDeTarea` que esta tarea tiene que rellenar
 > con la piel de la consola de proyecto. Pero ese test solo se pondrá ROJO si el arreglo va
 > en el envoltorio de `vestibulo.ts`; si va en el adaptador de aquí, se queda VERDE y el
@@ -1093,7 +1093,7 @@ git commit -m "feat(web): la consola de una tarea aparca en vez de contestar por
 > persona solo venía a mirar): se le DICE a la persona, arriba en el chat, que hay una tarea
 > corriendo y que sus diffs pueden llevar escrituras que no son suyas.
 
-> 2. **El fallo del lazo de una tarea no puede salir por `informar`**, que escribe un acto
+> 4. **El fallo del lazo de una tarea no puede salir por `informar`**, que escribe un acto
 > de sistema en la pantalla de un humano. Va al registro de la tarea. La Task 3 lo dejó
 > sin gatear a propósito: un lazo que muere en silencio es peor.
 
