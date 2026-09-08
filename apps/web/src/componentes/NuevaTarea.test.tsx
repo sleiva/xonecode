@@ -12,6 +12,7 @@ const base = {
   local: true,
   alAugmentar: () => {},
   alSubirAdjunto: async () => ({ ok: true }),
+  alAbrirProyecto: () => {},
   alEncolar: () => {},
   alCerrar: () => {},
 };
@@ -218,23 +219,47 @@ describe("NuevaTarea", () => {
     expect(subidos, "el segundo con el mismo nombre no se sube").toEqual(["captura.png"]);
   });
 
-  it("un proyecto SIN copia local dice lo que PASA de verdad: se aparca y hay que reintentarla", () => {
-    // El dato es del servidor (`proyectos[].local`), no una adivinanza — la misma regla que
-    // `NuevaSesion`. Y no se prohíbe crearla: se dice qué va a pasar.
-    //
-    // **Y lo que pasa NO es que espere**, medido en el código del corredor: `siguientesAEjecutar`
-    // la coge igual, `abrirParaTarea` (`vestibulo.ts`) lanza porque falta el
-    // `.xonecode/config.json`, y `correr` la aparca en `requiere-atencion` — más
-    // `renunciarSiSigueNueva`, así que este proceso NO la vuelve a coger solo. O sea que
-    // después de descargar el proyecto hay que reintentarla a mano desde el kanban. Decir
-    // «no arrancará hasta que se descargue» prometía una espera que no existe: es el control
-    // que promete lo que no hace, y encima en la ventana donde se concede la autorización.
-    render(<NuevaTarea {...base} local={false} />);
+  it("un proyecto SIN copia local NO deja crear la tarea: se rechaza con el motivo", () => {
+    /**
+     * Aquí no vale decirlo bien: hay que no dejarlo.
+     *
+     * Trazado en el corredor —`siguientesAEjecutar` la coge igual, `abrirParaTarea`
+     * (`vestibulo.ts`) lanza porque falta el `.xonecode/config.json`, `correr` la aparca en
+     * `requiere-atencion` y `renunciarSiSigueNueva` impide que este proceso la vuelva a
+     * coger—, una tarea creada sobre un proyecto sin copia local **no puede acabar bien**: se
+     * queda quieta hasta que alguien haga otra cosa. Un control cuyo único final posible es un
+     * fallo es el botón muerto de siempre, y este además promete una autorización de
+     * escritura.
+     *
+     * Y ni siquiera se pinta el formulario, que es la parte con consecuencia: subir un adjunto
+     * escribe bytes en `~/.xonecode/tareas/<borrador>/` ANTES de que la tarea exista, así que
+     * un formulario usable aquí dejaría documentos de una persona en una carpeta que ninguna
+     * tarea va a nombrar nunca.
+     */
+    const alEncolar = vi.fn();
+    render(<NuevaTarea {...base} local={false} alEncolar={alEncolar} />);
     const texto = document.body.textContent ?? "";
-    expect(texto).toMatch(/no est[áa].*en tu equipo/i);
-    expect(texto, "tiene que decir que se APARCA, no que espere").toMatch(/aparca/i);
-    expect(texto, "y que hay que reintentarla a mano").toMatch(/reint[eé]ntala|reintentarla/i);
-    expect(texto, "no puede prometer una espera que no existe").not.toMatch(/no arrancar[áa] hasta/i);
+    expect(texto, "el motivo, con palabras").toMatch(/no est[áa].*en tu equipo/i);
+    expect(texto, "y que por eso no se puede crear").toMatch(/no se puede crear|no puede crearse/i);
+    expect(screen.queryByLabelText(/qué hay que hacer/i), "sin campo de petición").toBeNull();
+    expect(screen.queryByLabelText(/adjuntar/i), "y sin subir adjuntos").toBeNull();
+    expect(screen.queryByRole("button", { name: /encolar/i }), "no hay botón de encolar").toBeNull();
+    expect(alEncolar).not.toHaveBeenCalled();
+    // Y no es un callejón: lleva al camino que YA existe para descargar el proyecto.
+    expect(screen.getByRole("button", { name: /abrir el proyecto/i })).toBeTruthy();
+  });
+
+  it("y el rechazo manda al camino que ya existe: abrir el proyecto", () => {
+    // `NuevaSesion` es quien descarga —y quien DICE que va a descargar el proyecto entero—,
+    // así que este botón no descarga nada: cede a esa ventana. Encolar la tarea y disparar la
+    // descarga de rebote metería una descarga entera como efecto secundario de crear una
+    // tarea, que es justo lo que esa otra ventana existe para evitar.
+    const alAbrirProyecto = vi.fn();
+    const alEncolar = vi.fn();
+    render(<NuevaTarea {...base} local={false} alAbrirProyecto={alAbrirProyecto} alEncolar={alEncolar} />);
+    fireEvent.click(screen.getByRole("button", { name: /abrir el proyecto/i }));
+    expect(alAbrirProyecto).toHaveBeenCalledTimes(1);
+    expect(alEncolar).not.toHaveBeenCalled();
   });
 
   it("cerrar no encola nada", () => {

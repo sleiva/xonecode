@@ -632,6 +632,26 @@ export function App({
     setTareaNueva({ proyecto, borrador: crypto.randomUUID() });
   };
 
+  /**
+   * Cerrar la ventana de tarea, por las DOS salidas que tiene (Cancelar y «Abrir el
+   * proyecto»).
+   *
+   * **Cancelar con adjuntos ya subidos BORRA su carpeta.** Los bytes se suben antes de que
+   * la tarea exista (crear la encola, y el corredor puede arrancarla en el acto), así que
+   * cerrar sin encolar dejaría en `~/.xonecode/tareas/<borrador>/` documentos de una persona
+   * que ninguna tarea nombra y que nadie va a volver a ver. `descartar` sobre un id que no
+   * está en el índice hace exactamente eso: borra la carpeta y deja el índice intacto.
+   *
+   * Es una función y no dos manejadores iguales porque la segunda salida llegó después: dos
+   * copias de esta limpieza es como una de las dos se queda sin ella.
+   */
+  const cerrarVentanaDeTarea = (): void => {
+    if (tareaNueva !== undefined && conAdjuntos) {
+      void enviar({ clase: "tarea", accion: "descartar", id: tareaNueva.borrador });
+    }
+    setTareaNueva(undefined);
+  };
+
   const ventanaDeTarea =
     tareaNueva !== undefined && proyectoDeLaTarea !== undefined ? (
       <NuevaTarea
@@ -668,16 +688,18 @@ export function App({
             ...(conAdjuntos ? { borrador } : {}),
           });
         }}
-        alCerrar={() => {
-          // **Cancelar con adjuntos ya subidos BORRA su carpeta.** Los bytes se suben antes
-          // de que la tarea exista (crear la encola, y el corredor puede arrancarla en el
-          // acto), así que cerrar sin encolar dejaría en `~/.xonecode/tareas/<borrador>/`
-          // documentos de una persona que ninguna tarea nombra y que nadie va a volver a
-          // ver. `descartar` sobre un id que no está en el índice hace exactamente eso:
-          // borra la carpeta y deja el índice intacto.
-          if (conAdjuntos) void enviar({ clase: "tarea", accion: "descartar", id: tareaNueva.borrador });
-          setTareaNueva(undefined);
+        // Sin copia local la ventana RECHAZA crear la tarea —se aparcaría y ahí se
+        // quedaría— y ofrece el camino que sí funciona: abrir el proyecto, que es donde se
+        // descarga. Se cede a `NuevaSesion` en vez de encolar y bajar de rebote, porque esa
+        // ventana existe justamente para que una descarga entera no sea un efecto
+        // secundario de otra cosa. Se cierra por el camino normal para que el borrador se
+        // limpie igual.
+        alAbrirProyecto={() => {
+          const { proyecto } = tareaNueva;
+          cerrarVentanaDeTarea();
+          abrirVentanaDeSesion(proyecto);
         }}
+        alCerrar={cerrarVentanaDeTarea}
       />
     ) : null;
 

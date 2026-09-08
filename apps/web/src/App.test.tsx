@@ -1079,4 +1079,40 @@ describe("App: crear una tarea en background", () => {
     expect(screen.queryByLabelText(/qué hay que hacer/i)).toBeNull();
     expect(enviar.mock.calls.map((c) => (c[0] as { accion?: string }).accion)).not.toContain("crear");
   });
+
+  it("y en un proyecto SIN copia local, «Abrir el proyecto» cede a la ventana que descarga", async () => {
+    /**
+     * El rechazo tiene que llevar a algún sitio, y el sitio existe ya: `NuevaSesion`, que es
+     * quien pide la rama y AVISA de que se descarga el proyecto entero. Este test comprueba
+     * la costura que ningún test de componente ve —que `App` cambia una ventana por la otra
+     * para el MISMO proyecto—, y que crear la tarea no se cuela por el camino.
+     */
+    const enviar = vi.fn(() => Promise.resolve(undefined as unknown));
+    const store = crearStoreDelCliente();
+    render(<App store={store} enviar={enviar} subirAdjunto={subirAdjuntoDeMentira} />);
+    act(() => store.marcarConectado());
+    act(() =>
+      store.aplicar({
+        clase: "alta",
+        pasos: [],
+        proveedores: [],
+        entornos: [],
+        registrados: [{ id: "webstudio", nombre: "WebStudio", url: "https://x/mcp" }],
+        entornoActivo: "webstudio",
+        // `local` AUSENTE: el proyecto está en el entorno y no en el equipo.
+        proyectos: [{ id: "p1", nombre: "AppDemo" }],
+        ramas: [],
+        proyectoAbierto: false,
+      })
+    );
+    fireEvent.click(screen.getByRole("button", { name: /nueva tarea/i }));
+    expect(document.body.textContent).toMatch(/no se puede crear/i);
+    fireEvent.click(screen.getByRole("button", { name: /abrir el proyecto/i }));
+    // La ventana de tarea se fue y está la de sesión, que es la que dice que va a descargar.
+    expect(screen.queryByRole("button", { name: /abrir el proyecto/i })).toBeNull();
+    await waitFor(() =>
+      expect(enviar).toHaveBeenCalledWith({ clase: "alta", paso: "proyecto", proyecto: "p1" })
+    );
+    expect(enviar.mock.calls.map((c) => (c[0] as { accion?: string }).accion)).not.toContain("crear");
+  });
 });

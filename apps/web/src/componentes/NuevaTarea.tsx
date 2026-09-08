@@ -27,6 +27,7 @@ import estilos from "./NuevaTarea.module.css";
 export function NuevaTarea({
   proyecto,
   local,
+  alAbrirProyecto,
   puedeAugmentar = true,
   encargoPropuesto,
   alAugmentar,
@@ -37,23 +38,40 @@ export function NuevaTarea({
   proyecto: { id: string; nombre: string };
   /**
    * ¿Existe ya la copia local del proyecto? Lo dice el SERVIDOR (`proyectos[].local`), no se
-   * adivina — la misma regla que `NuevaSesion`. Sin ella la tarea no se puede ejecutar
-   * todavía, así que se DICE: crear se permite igual (la cola sobrevive), pero quien crea
-   * tiene que saber qué va a pasar.
+   * adivina — la misma regla que `NuevaSesion`. **Sin ella no se deja crear la tarea**, y esa
+   * decisión pasó por dos versiones equivocadas antes de esta:
    *
-   * **Y lo que pasa no es que espere.** Medido en el código del corredor: la tarea se coge
-   * igual, `abrirParaTarea` (`vestibulo.ts`) lanza porque falta el `.xonecode/config.json`, y
-   * `correr` la aparca en `requiere-atencion` con ese motivo; `renunciarSiSigueNueva` remata
-   * que este proceso no la vuelva a coger solo. O sea que hay que descargar el proyecto y
-   * **reintentarla a mano** con el botón «Reintentar» de la tarea aparcada
-   * (`TareasDelProyecto`). La frase NO nombra dónde está ese botón a propósito: hoy vive en la
-   * lista de tareas del proyecto y no en el kanban, así que decir «desde el tablero» habría
-   * sido la misma clase de fallo que se está corrigiendo — mandar a un sitio que no ofrece la
-   * acción. La frase de antes —«no arrancará hasta que se
-   * descargue»— prometía una espera que no existe, en la ventana donde justamente se está
-   * concediendo la autorización.
+   * 1. Primero decía «se encola igual, pero no arrancará hasta que se descargue». Es FALSO,
+   *    medido en el corredor: `siguientesAEjecutar` la coge igual, `abrirParaTarea`
+   *    (`vestibulo.ts`) lanza porque falta el `.xonecode/config.json`, `correr` la aparca en
+   *    `requiere-atencion` y `renunciarSiSigueNueva` impide que este proceso la vuelva a
+   *    coger. No espera: arranca, se aparca y se queda quieta.
+   * 2. Después lo decía bien —se aparca, descárgalo y reinténtala—. Mejor, pero el problema no
+   *    era la redacción: **el control ofrecía un camino cuyo único final posible es un
+   *    fallo**, que es el botón muerto de siempre, aquí encima prometiendo una autorización de
+   *    escritura.
+   *
+   * Así que se RECHAZA con el motivo y se manda al camino que ya existe: abrir el proyecto,
+   * que es donde se descarga (`NuevaSesion`, que además avisa de que baja el proyecto entero).
+   * Lo que NO se hace es encolar y disparar la descarga de rebote: eso metería una descarga
+   * entera como efecto secundario de crear una tarea, y esa otra ventana existe justamente
+   * para que descargar no sea un accidente.
+   *
+   * Y el rechazo se pinta EN LUGAR del formulario, no como un aviso encima. Es la parte con
+   * consecuencia: subir un adjunto escribe bytes en `~/.xonecode/tareas/<borrador>/` antes de
+   * que la tarea exista, así que un formulario usable aquí dejaría documentos de una persona
+   * en una carpeta que ninguna tarea va a nombrar nunca.
    */
   local: boolean;
+  /**
+   * Lleva al camino que sí puede descargar el proyecto (`NuevaSesion`).
+   *
+   * **Obligatorio, y a propósito**, aunque con copia local no se use nunca: un rechazo sin
+   * salida es un callejón, o sea la misma clase de fallo que el rechazo viene a quitar.
+   * Siendo opcional, el día que alguien monte esta ventana sin pasarlo, el mensaje diría «no
+   * se puede crear» y no habría nada que pulsar. Pedirlo en el tipo lo hace imposible.
+   */
+  alAbrirProyecto: () => void;
   /** ¿Tiene esta consola con qué augmentar? Falso = el botón no se pinta, y se dice por qué:
    *  un control que no puede cumplir lo que ofrece es el botón muerto de siempre. */
   puedeAugmentar?: boolean;
@@ -167,12 +185,32 @@ export function NuevaTarea({
             Revisión de su sesión.
           </p>
           {local ? null : (
-            <p className={estilos.nota}>
-              Este proyecto todavía no está en tu equipo. La tarea se encola igual, pero al
-              cogerla se aparcará diciendo que el proyecto no está. Descárgalo abriéndolo una vez
-              con «Nueva sesión» y luego reinténtala.
-            </p>
+            <>
+              <p className={estilos.fallo} role="alert">
+                Este proyecto todavía no está en tu equipo, así que <strong>no se puede crear
+                una tarea</strong> para él: al cogerla se aparcaría diciendo que el proyecto no
+                está, y ahí se quedaría.
+              </p>
+              <p className={estilos.nota}>
+                Ábrelo una vez para traértelo —desde ahí se descarga— y luego vuelve a esta
+                ventana.
+              </p>
+              <div className={estilos.acciones}>
+                <Button variant="outline" className={estilos.accion} onClick={alCerrar}>
+                  Cancelar
+                </Button>
+                <Button
+                  variant="primary"
+                  className={`${estilos.accion} ${estilos.principal}`}
+                  onClick={alAbrirProyecto}
+                >
+                  Abrir el proyecto
+                </Button>
+              </div>
+            </>
           )}
+          {local ? (
+            <>
 
           <label className={estilos.etiqueta} htmlFor="nueva-tarea-peticion">
             Qué hay que hacer
@@ -277,6 +315,8 @@ export function NuevaTarea({
               Encolar
             </Button>
           </div>
+            </>
+          ) : null}
         </div>
       </div>
     </Modal>
