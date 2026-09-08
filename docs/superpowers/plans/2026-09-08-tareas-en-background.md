@@ -2787,3 +2787,35 @@ git commit -m "feat(web): las acciones de una tarea, una pieza para las dos vist
 ```json:metadata
 {"files": ["apps/web/src/componentes/AccionesDeTarea.tsx", "apps/web/src/componentes/Kanban.tsx", "apps/web/src/componentes/TareasDelProyecto.tsx", "apps/web/src/App.tsx"], "acceptanceCriteria": ["una sola pieza para las cuatro acciones", "cada acción solo donde su transición es válida", "sin cable se apagan y se dice", "un test compara los dos conjuntos", "sin colores literales ni display:none tabulable"], "modelTier": "standard", "userGate": false}
 ```
+
+---
+
+## Task 14: `descartar` para el turno antes de borrar
+
+**Goal:** Que descartar una tarea en proceso corte su turno en vez de dejarlo escribiendo en el proyecto sin registro.
+
+> **De dónde sale, y por qué no era un aviso.** Al añadir la confirmación de `descartar` (Task 13)
+> se midió qué pasaba de verdad con una tarea `en-proceso`: el turno **seguía corriendo**
+> (`atenderAccionDeTarea` no llamaba a `cortar()`), la consola no se cerraba, y la carpeta de
+> adjuntos se borraba **en el acto** — la misma que ese turno tenía montada viva como
+> `/adjuntos/`. Las tres juntas dejaban un agente escribiendo en el proyecto de alguien sin que
+> ninguna pantalla lo mostrara y con sus lecturas fallándole por debajo. El comentario del
+> corredor decía «contar con» el descarte por debajo, y **contarlo no es manejarlo**. Un aviso
+> honesto ahí es la confesión de un fallo que se puede arreglar, no el remedio.
+
+**Files:** `src/web/servidor/corredorDeTareas.ts` (+`cortar(id)`), `arranque.ts`, `ConfirmarDescarte`, y sus tests.
+
+**Acceptance Criteria:**
+- [ ] `descartar` corta el turno en vuelo ANTES de borrar, reusando `entrada.cortar` (el mismo primitivo que `parar()`), no uno nuevo
+- [ ] La carpeta de adjuntos se borra DESPUÉS de que la consola suelte el montaje
+- [ ] Si el corte no se puede hacer (tope agotado, o la tarea corre en otro proceso) se DECLINA y se informa, en vez de forzar el borrado — borrar sin cortar reintroduce el fallo
+- [ ] El párrafo de la advertencia vieja se va: con el turno parado de verdad, la frase corta es cierta en los cuatro estados
+- [ ] Cortar a propósito NO se cuenta como «el turno falló»
+
+**Verify:** `npx vitest run --maxWorkers=2 src/web/servidor apps/web/src` → en verde
+
+**Steps:** ver el §Task 14 del informe (`.superpowers/sdd/…/task-13-report.md`): el orden corte→borrado, la carrera del despacho con `EnVuelo.cortarPedido`, el re-despacho inmediato que ese arreglo reabrió (cerrado con `renunciadas`), y el motivo honesto del corte.
+
+```json:metadata
+{"files": ["src/web/servidor/corredorDeTareas.ts", "src/web/servidor/arranque.ts", "apps/web/src/componentes/ConfirmarDescarte.tsx"], "acceptanceCriteria": ["corta antes de borrar reusando `entrada.cortar`", "la carpeta se borra tras soltar el montaje", "si no se puede cortar, declina e informa", "fuera el párrafo de la advertencia vieja", "cortar a propósito no es «el turno falló»"], "modelTier": "standard", "userGate": false}
+```
