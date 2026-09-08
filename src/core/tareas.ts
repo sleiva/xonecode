@@ -24,7 +24,15 @@ export type EstadoDeTarea = "nuevo" | "en-proceso" | "requiere-atencion" | "term
 
 /** A dónde se puede ir desde cada estado. Lo que no esté aquí se rechaza al escribirlo. */
 export const TRANSICIONES: Readonly<Record<EstadoDeTarea, readonly EstadoDeTarea[]>> = {
-  nuevo: ["en-proceso"],
+  /**
+   * De `nuevo` se sale corriendo… o aparcando, y esa segunda salida es MEDIDA y no
+   * teórica: si el proyecto ya no está donde la tarea dice, la consola no se puede ni
+   * abrir, así que la tarea nunca pasa por `en-proceso`. Sin esta transición `conEstado`
+   * lanza, la tarea se queda en `nuevo` y el corredor la vuelve a elegir en la pasada que
+   * él mismo dispara al terminar con ella — un lazo caliente que se come una CPU y no dice
+   * nada, en vez de una tarjeta que explica que la carpeta se movió.
+   */
+  nuevo: ["en-proceso", "requiere-atencion"],
   "en-proceso": ["terminada", "requiere-atencion"],
   // Las dos salidas de una tarea aparcada: reintentar, o darla por buena a mano.
   "requiere-atencion": ["nuevo", "terminada"],
@@ -79,22 +87,45 @@ export const CONCURRENCIA_POR_OMISION = 2;
 /**
  * Qué tareas pueden arrancar AHORA.
  *
- * Tres reglas, y la tercera es la que importa:
+ * Cuatro reglas, y las dos últimas son las que importan:
  *  - **FIFO por fecha de creación**, global: predecible y explicable. Una prioridad es un
  *    campo más que nadie ha pedido.
  *  - **Tope de concurrencia**, contando las que ya corren.
  *  - **Nunca dos del mismo proyecto**, ni con las que corren ni entre las elegidas en esta
  *    misma pasada: comparten disco, índice de git, checkpointer y `sync`, y dos turnos a la
  *    vez sobre eso es una carrera con escrituras de por medio.
+ *  - **Y GANA LA PERSONA**: ver `bloqueados`.
  */
 export function siguientesAEjecutar(
   tareas: readonly Tarea[],
-  opciones: { concurrencia: number }
+  opciones: {
+    concurrencia: number;
+    /**
+     * Raíces en las que NO se puede arrancar nada, aunque haya hueco.
+     *
+     * Existe por el hueco que el cerrojo del corredor no cubre: ese arbitra dos
+     * CORREDORES, y esto es una tarea y una PERSONA sobre el mismo árbol, que no tienen
+     * aislamiento de ninguna clase — se pisan las ediciones, y la foto por turno de
+     * `instantanea.ts` metería las escrituras de la tarea en el diff de la persona,
+     * atribuyéndoselas. Gana la persona: la tarea espera.
+     *
+     * La condición que se le pasa es «la consola está ABIERTA» y no «hay un turno en
+     * vuelo», porque solo la primera es estable en el instante de despachar: con la
+     * segunda, una tarea arrancaría y chocaría después, que es justo el fallo que se
+     * quiere evitar.
+     *
+     * **No gasta hueco de concurrencia** —no está corriendo nada— y **no para la cola**:
+     * el hueco se lo lleva la siguiente de otro proyecto. Ausente y vacía significan lo
+     * mismo aquí (nada que bloquear), al contrario que en `Entorno.proyectos`: no hay
+     * ninguna omisión que una lista vacía pudiera estar contradiciendo.
+     */
+    bloqueados?: readonly string[];
+  }
 ): Tarea[] {
   const corriendo = tareas.filter((t) => t.estado === "en-proceso");
   const huecos = opciones.concurrencia - corriendo.length;
   if (huecos <= 0) return [];
-  const ocupados = new Set(corriendo.map((t) => t.proyecto.raiz));
+  const ocupados = new Set([...corriendo.map((t) => t.proyecto.raiz), ...(opciones.bloqueados ?? [])]);
   const elegidas: Tarea[] = [];
   const candidatas = tareas
     .filter((t) => t.estado === "nuevo")

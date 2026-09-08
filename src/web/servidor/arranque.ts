@@ -92,6 +92,9 @@ import type { ProyectoRemoto } from "../../agent/cloudstudioMcp.js";
 import { CatalogoModelos } from "../../agent/catalogoModelos.js";
 import type { Entorno } from "../../core/settings.js";
 import { arrancarServidor, type ServidorWeb } from "./servidor.js";
+import { consolaParaTarea, crearCorredorDeTareas } from "./corredorDeTareas.js";
+import { CONCURRENCIA_POR_OMISION } from "../../core/tareas.js";
+import type { TareasEnDisco } from "../../agent/tareasEnDisco.js";
 import {
   conexionDeVestibulo,
   crearVestibulo,
@@ -282,6 +285,17 @@ export interface OpcionesDeMontaje {
     paso: number,
     alSalirLinea: (linea: string) => void
   ) => { titulo: string; cancelar: () => void; terminado: Promise<{ estado: string; motivo?: string; ms: number }> };
+  /**
+   * «Vuelve a mirar la cola de tareas» (`corredorDeTareas.ts#revisar`). Ausente = esta
+   * ejecución no ejecuta tareas.
+   *
+   * Hace falta AQUÍ porque abrir un proyecto es lo que BLOQUEA su raíz —gana la persona— y
+   * cerrarlo lo que la libera, y el corredor no tiene forma de enterarse: no hay
+   * temporizador, se revisa por evento. Sin esta llamada, una tarea que esperaba a que
+   * alguien cerrara un proyecto se quedaría esperando hasta el siguiente evento que no
+   * tiene nada que ver, y en la pantalla eso se lee como un cuelgue.
+   */
+  revisarTareas?: () => void;
 }
 
 /** El `Content-Type` con el que se sirve un artefacto inline: al texto se le pone el juego
@@ -983,6 +997,9 @@ export function montarRutas(
       // El cable se muda a la consola del proyecto, como en el alta: sin esto el usuario
       // mira un transcript vivo cuyas aprobaciones se rechazan solas al otro lado.
       adjuntar();
+      // Y la cola se vuelve a mirar: este proyecto queda bloqueado para las tareas —gana la
+      // persona— y el que estuviera abierto antes acaba de quedar libre.
+      opciones.revisarTareas?.();
     } catch (error) {
       aviso = error instanceof Error ? error.message : String(error);
       contar(error);
@@ -1510,6 +1527,9 @@ export function montarRutas(
       // el estado de modelos, que hasta ahora no tenía `actual` que dar: sin sesión abierta
       // no hay modelo en vigor.
       adjuntar();
+      // Como en `atenderSesion`: abrir bloquea esta raíz para las tareas y libera la que
+      // estuviera abierta antes.
+      opciones.revisarTareas?.();
     } catch (error) {
       // El aviso se fija ANTES de anunciar: el `finally` de abajo es quien lo lleva al paso.
       aviso = error instanceof Error ? error.message : String(error);
@@ -1941,6 +1961,21 @@ export interface OpcionesDeArranque {
   crearEjecutor?: (alAbrirSesion: (sesion: SesionCerrable) => void) => EjecutorDeTurno;
   /** Lo que la consola de proyecto necesita y depende de la raíz (`/sync`, los escritores). */
   dependenciasDeProyecto?: (raiz: string) => Partial<Consola>;
+  /**
+   * La cola de TAREAS de fondo (`agent/tareasEnDisco.ts`), y con ella el corredor.
+   *
+   * **Ausente = esta ejecución no ejecuta tareas y no toma ningún cerrojo**, que es la
+   * omisión obligada y no una comodidad: el cerrojo y el índice viven en el
+   * `~/.xonecode/tareas` de la MÁQUINA, así que una omisión que construyera la cola de
+   * verdad haría que los tests de este fichero —que llaman a `arrancarConsolaWeb` entero—
+   * reconciliaran la cola real de quien los corre y le quitaran el cerrojo a su consola
+   * abierta. Es la misma razón por la que `detectarDispositivos` entra por opción.
+   *
+   * Es una FÁBRICA y no el puerto ya construido para poder darle el `informar` de aquí: el
+   * de un índice que no se puede leer tiene que llegar al navegador —es donde se está
+   * mirando el kanban—, y ese `informar` no existe hasta que existe el vestíbulo.
+   */
+  tareas?: (informar: (texto: string) => void) => TareasEnDisco;
   /** Costuras de test: nada de esto toca disco, red ni navegador cuando se inyecta. */
   raizDelCliente?: string;
   escribir?: (texto: string) => void;
@@ -2010,6 +2045,42 @@ export async function arrancarConsolaWeb(opciones: OpcionesDeArranque): Promise<
   };
 
   vestibulo = opciones.vestibulo ?? vestibuloReal(opciones, servidor, escribir, informar);
+  const conVestibulo = vestibulo;
+
+  /**
+   * El corredor de tareas: la cola de la máquina, el cerrojo y el lazo.
+   *
+   * Se construye ANTES de `montarRutas` porque las rutas necesitan poder pedirle una
+   * revisión —abrir o cerrar un proyecto cambia qué se puede arrancar— y solo necesita el
+   * vestíbulo, que ya está. Y ejecutar solo se ejecuta si hay cola: ver
+   * `OpcionesDeArranque.tareas`.
+   */
+  const corredor =
+    opciones.tareas === undefined
+      ? undefined
+      : crearCorredorDeTareas({
+          disco: opciones.tareas(informar),
+          // La costura de las tres piezas: la segunda puerta del vestíbulo (que no mueve el
+          // cable), la consola que APARCA en vez de contestar por nadie, y el ejecutor de
+          // siempre con las mismas barreras que el de una persona.
+          abrirParaTarea: async (raiz) => consolaParaTarea(await conVestibulo.abrirParaTarea(raiz)),
+          // El tope todavía no se puede cambiar: la sección «Tareas» de Ajustes llega
+          // después, y por eso esto es una FUNCIÓN — se lee en cada pasada, así que cuando
+          // haya ajuste bastará con leerlo aquí sin reiniciar nada.
+          concurrencia: () => CONCURRENCIA_POR_OMISION,
+          /**
+           * GANA LA PERSONA: en el proyecto que alguien tiene abierto no arranca ninguna
+           * tarea. Una tarea y una persona sobre el mismo árbol no tienen aislamiento de
+           * ninguna clase, y el cerrojo del corredor no protege de eso — protege de dos
+           * corredores. Se pregunta en cada pasada, no al arrancar: abrir un proyecto no
+           * reinicia nada.
+           */
+          bloqueados: () => {
+            const abierto = conVestibulo.proyectoAbierto();
+            return abierto === undefined ? [] : [abierto.raiz];
+          },
+          informar,
+        });
 
   if (offline && opciones.guion === true) {
     const abierto = await vestibulo.abrirProyecto({ raiz: opciones.cwd });
@@ -2029,6 +2100,7 @@ export async function arrancarConsolaWeb(opciones: OpcionesDeArranque): Promise<
 
   montarRutas(servidor, vestibulo, {
     informar,
+    ...(corredor === undefined ? {} : { revisarTareas: () => corredor.revisar() }),
     // Los dos puertos del selector de modelos, con las piezas reales: quién tiene
     // credencial (`auth.json` o el entorno, leído desde el cwd) y el catálogo VIVO.
     hayCredencial: (proveedor) => hayCredencial(proveedor, opciones.cwd),
@@ -2066,6 +2138,10 @@ export async function arrancarConsolaWeb(opciones: OpcionesDeArranque): Promise<
     borrarProveedor: (slug) => borrarProveedorPersonalizado(slug),
   });
 
+  // Con las rutas ya montadas: la reconciliación y el primer despacho cambian la cola, y
+  // quien conecte después la recibe entera en su ráfaga de bienvenida.
+  await corredor?.arrancar();
+
   escribir(`consola web en ${servidor.url}\n`);
   if (opciones.anfitrion !== undefined) {
     // Se dice SIEMPRE y con lo que hay detrás nombrado. Una puerta abierta que solo consta
@@ -2087,6 +2163,15 @@ export async function arrancarConsolaWeb(opciones: OpcionesDeArranque): Promise<
   }
 
   await (opciones.esperarCierre ?? esperarInterrupcion)();
+  /**
+   * El corredor PRIMERO, y el orden es load-bearing: `parar()` corta los turnos en vuelo y
+   * los deja aparcados diciendo que la consola se cerró a mitad. Al revés, el
+   * `cerrarLasDeTareas` del vestíbulo abortaría esos mismos turnos por debajo del corredor,
+   * que lo contaría como un fallo del turno —«el turno falló (AbortError)»— cuando lo que
+   * pasó es que alguien paró el proceso. El motivo se lee en el kanban, así que la
+   * diferencia no es interna.
+   */
+  await corredor?.parar();
   await vestibulo.cerrar();
   await servidor.cerrar();
   return 0;

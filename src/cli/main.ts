@@ -31,6 +31,7 @@ import {
   guardarTemaDeProyecto,
 } from "../agent/configEnDisco.js";
 import { crearCheckpointerDeProyecto } from "../agent/checkpointer.js";
+import { crearTareasEnDisco } from "../agent/tareasEnDisco.js";
 import { carpetaDeArtefactosDeSesion } from "../core/artefactos.js";
 import { seAplicaSinAprobacion } from "../core/settings.js";
 import { conectarCloudStudio, sesionCloudStudio, PUERTO_CALLBACK } from "../agent/cloudstudioMcp.js";
@@ -1209,6 +1210,11 @@ export async function main(argv: string[]): Promise<number> {
           // es la diferencia entre reabrir y releer.
           crearEjecutor: (alAbrir) =>
             crearEjecutorReal(alAbrir, crearCheckpointerDeProyecto, carpetaDeArtefactosDeSesion),
+          // La cola de tareas de la MÁQUINA, y con ella el corredor. Se pasa desde aquí y
+          // no se construye allí por la misma razón que las dos de arriba, más una: la
+          // omisión de `arrancarConsolaWeb` tiene que ser NO ejecutar tareas, porque sus
+          // propios tests lo llaman entero y tomarían el cerrojo de quien los corre.
+          tareas: (informar) => crearTareasEnDisco({ informar }),
           dependenciasDeProyecto: (raiz) => ({
             ...adaptadoresDeProyecto(raiz),
             catalogoModelos: new CatalogoModelos(undefined, undefined, proveedoresPersonalizados),

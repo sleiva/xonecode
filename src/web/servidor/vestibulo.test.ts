@@ -1212,16 +1212,23 @@ describe("abrirParaTarea — la segunda puerta", () => {
   });
 
   /**
-   * Lo que esta puerta NO resuelve, MEDIDO aquí para que no se descubra en producción.
+   * El volcado sigue a la PIEL, no a la puerta — y por eso el adaptador del corredor le
+   * pasa la de esta consola.
    *
-   * `volcar()` lee `consolaWeb.actos()`, o sea la piel de ESTA consola de proyecto. Un
-   * turno corrido con una `Consola` ajena —que es exactamente lo que va a pasar: el
-   * corredor le pasará la suya— escribe sus eventos en esa otra piel, así que el `.jsonl`
-   * de la sesión se queda vacío y `sesion` no llega a existir nunca. No se arregla aquí: la
-   * tarea 4 es la que decide qué piel usa el corredor, y con esa decisión delante se sabrá
-   * si la sesión de una tarea tiene que quedar guardada o no.
+   * Este test se escribió como «lo que esta puerta NO resuelve», esperando ponerse ROJO
+   * cuando alguien lo arreglara. No es el semáforo de nada, y eso ya se sabía al planificar
+   * la tarea 5: el arreglo vive en el adaptador (`corredorDeTareas.ts#consolaParaTarea`,
+   * que le pasa `consola.consola.consola.piel`), así que este test se queda verde con el
+   * agujero abierto o cerrado. Lo que sí es cierto —y es la razón de ser de ese adaptador—
+   * es lo que aquí se afirma: `volcar()` lee `consolaWeb.actos()`, o sea la piel de ESTA
+   * consola, y un turno corrido con una `Consola` ajena que no la reenvíe escribe sus
+   * eventos en otra parte y deja la sesión sin `.jsonl` y sin entrada en el índice.
+   *
+   * Que el volcado de una tarea ocurre de verdad se mide con las piezas reales —el
+   * transcript con actos de asistente y la ref de git nombrada— en
+   * `corredorDeTareas.test.ts`, «el volcado de la sesión de una tarea». Ese es el semáforo.
    */
-  it("MEDIDO: un turno con una Consola ajena no vuelca nada en el índice de la sesión", async () => {
+  it("el volcado sigue a la PIEL de la consola, no a la puerta por la que se abrió", async () => {
     const base = baseTemporal();
     const s = sesionesEnMemoria();
     const v = crearVestibulo({
@@ -1243,7 +1250,7 @@ describe("abrirParaTarea — la segunda puerta", () => {
     expect(deTarea.sesion).toBeUndefined();
     expect(v.sesionesDe(raiz)).toEqual([]);
 
-    // Con la piel de la propia consola sí se vuelca: el agujero es la piel, no la puerta.
+    // Con la piel de la propia consola sí se vuelca: lo que decide es la piel, no la puerta.
     await deTarea.ejecutarTurno("y ahora sí", deTarea.estadoDeSesion, deTarea.consola.consola);
     expect(deTarea.sesion).toBe(deTarea.idDeHilo);
 
