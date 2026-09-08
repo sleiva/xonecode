@@ -1,6 +1,7 @@
 import type { TareaDelCable } from "../tipos.js";
 import { AccionesDeTarea } from "./AccionesDeTarea.js";
 import { EntregaDeTarea } from "./EntregaDeTarea.js";
+import { QuienEjecutaTareas } from "./QuienEjecutaTareas.js";
 import estilos from "./Kanban.module.css";
 
 /**
@@ -10,13 +11,12 @@ import estilos from "./Kanban.module.css";
  * en realidad— igual que «Tu equipo». Y por eso mismo hay que decir cuándo este proceso NO
  * las ejecuta: se ve igual en dos ventanas y solo avanza en una.
  *
- * **Y hay que decir la mitad que falta, que es la que muerde** (F4 de la revisión final):
- * una tarea creada desde el proceso que no tiene el cerrojo no dispara nada en el que sí lo
- * tiene —`revisar()` sale en `!miCerrojo` y no hay temporizador ni IPC—, así que se queda
- * `nuevo` hasta que ESE proceso mire la cola por su cuenta: cuando acabe otra tarea, o al
- * reiniciarlo. «Ábrelo desde el proceso que las corre para verlas moverse» prometía que
- * allí se mueven; una recién creada, todavía no. Sin decirlo se lee como un cuelgue, que es
- * el peor final de una cola.
+ * **Y lo que se dice de eso son TRES frases y no una** (`QuienEjecutaTareas.tsx`, la misma
+ * pieza que monta la lista del proyecto): las ejecuta otro proceso —y entonces una tarea
+ * creada aquí se queda `nuevo` hasta que ESE proceso mire la cola, porque `revisar()` sale
+ * en `!miCerrojo` y no hay temporizador ni IPC—, no las ejecuta nadie, o no se sabe. «No soy
+ * yo» y «no hay nadie» significan lo contrario, y un aviso que manda a esperar a un proceso
+ * que no existe es peor que uno mudo.
  *
  * **Sin barra de progreso, a propósito.** Un turno no sabe cuánto le queda, y una barra que
  * avanza sola es la mentira con forma de dato que este repo evita en todas partes. Lo que se
@@ -72,7 +72,14 @@ export function Kanban({
   proyectoActivo,
   conectado,
 }: {
-  cola: { lista: readonly TareaDelCable[]; concurrencia: number; corriendoAqui: boolean };
+  cola: {
+    lista: readonly TareaDelCable[];
+    concurrencia: number;
+    corriendoAqui: boolean;
+    /** Si las ejecuta OTRO proceso. Ausente = no se sabe, que no es lo mismo que «nadie»:
+     *  ver `QuienEjecutaTareas`. */
+    ejecutaOtroProceso?: boolean;
+  };
   /** Abrir la conversación de una tarea: es cómo se atiende. Ausente = no se ofrece. */
   alAbrirSesion?: (proyecto: string, sesion: string) => void;
   /** Abrir su pestaña Revisión: es la única forma de mirar lo que de verdad cambió en el
@@ -115,14 +122,13 @@ export function Kanban({
   return (
     <section className={estilos.kanban} aria-label="Tareas en background">
       <h2 className={estilos.titulo}>Tareas</h2>
-      {cola.corriendoAqui ? null : (
-        <p className={estilos.aviso} role="note">
-          Las tareas las ejecuta otro proceso: aquí se ven, pero este kanban no avanza —
-          ábrelo desde el proceso que las corre para verlas moverse. Y una tarea que crees
-          desde aquí se queda en «Nuevo» hasta que ese proceso vuelva a mirar la cola por su
-          cuenta —al acabar otra tarea, o al reiniciarlo—: no se le avisa.
-        </p>
-      )}
+      {/* Quién las ejecuta si no es este proceso, y qué le pasa a una creada aquí: la MISMA
+          pieza que la lista del proyecto, porque son tres frases y dos copias divergen. */}
+      <QuienEjecutaTareas
+        corriendoAqui={cola.corriendoAqui}
+        {...(cola.ejecutaOtroProceso === undefined ? {} : { ejecutaOtroProceso: cola.ejecutaOtroProceso })}
+        donde="este kanban"
+      />
       <div className={estilos.columnas}>
         {COLUMNAS.map((c) => {
           const suyas = cola.lista.filter((t) => t.estado === c.estado);
@@ -267,6 +273,11 @@ function TarjetaDeAtencion({
             antes de tocar el feedback o el reintento que `AccionesDeTarea` ofrece justo
             debajo. Sin abrir nada. */}
         {t.motivo === undefined ? null : <p className={estilos.motivo}>{t.motivo}</p>}
+
+        {/* Lo que el juez echó en falta, si habló: sus hallazgos son lo accionable de esta
+            columna —lo que hay que contestar— y el resumen no se repite si el motivo de
+            arriba ya lo lleva. La MISMA pieza que la tarjeta de una entregada. */}
+        <EntregaDeTarea tarea={t} />
 
         {/* Lo que la tarea AUTORIZÓ, nunca «lo que escribió»: una ruta que las guardas de
             sitio rechazan sale aquí sin haberse escrito. Ausente = no consta (no llegó a

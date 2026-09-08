@@ -1,0 +1,15 @@
+/* Alias comprobados contra `apps/web/estilos/design-platform.css`: state-warn-primary,
+   state-warn-label, bg-layer-1 — los mismos que usaban las dos copias de este aviso antes de
+   que fuera una pieza. Ningún color literal. */
+
+.aviso {
+  margin: 0 0 12px;
+  padding: 8px 10px;
+  border: 0.5px solid var(--dsw-alias-state-warn-primary);
+  border-radius: 8px;
+  background: var(--dsw-alias-bg-layer-1);
+  color: var(--dsw-alias-state-warn-label);
+  font-size: 12px;
+  line-height: 1.5;
+  max-width: 70ch;
+}

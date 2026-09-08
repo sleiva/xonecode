@@ -987,6 +987,12 @@ export function App({
                   // queda quieta hasta que ese proceso mire la cola por su cuenta (F4 de la
                   // revisión final). Ausente mientras la cola no ha llegado: no se afirma.
                   {...(estado.tareas === undefined ? {} : { corriendoAqui: estado.tareas.corriendoAqui })}
+                  // Y si las ejecuta OTRO, que no es lo mismo que que no las ejecute nadie:
+                  // el primero manda a esperar y el segundo dice que no va a pasar nada.
+                  // Ausente se propaga como ausente, que es «no se sabe».
+                  {...(estado.tareas?.ejecutaOtroProceso === undefined
+                    ? {}
+                    : { ejecutaOtroProceso: estado.tareas.ejecutaOtroProceso })}
                   // Task 15: crear una tarea PARA este proyecto sin salir de la pestaña ni
                   // volver al escritorio, con el proyecto ya resuelto — es el mismo id que
                   // abre esta ventana desde una tarjeta del escritorio, solo que aquí no hay

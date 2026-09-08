@@ -27,18 +27,6 @@
   font-size: 13px;
 }
 
-/* Se ve igual en dos ventanas y solo avanza en una: sin esto, una tarea parada se lee como
-   un cuelgue. */
-.aviso {
-  margin: 0 0 12px;
-  padding: 8px 10px;
-  border: 0.5px solid var(--dsw-alias-state-warn-primary);
-  border-radius: 8px;
-  background: var(--dsw-alias-bg-layer-1);
-  color: var(--dsw-alias-state-warn-label);
-  font-size: 12px;
-}
-
 .columnas {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));

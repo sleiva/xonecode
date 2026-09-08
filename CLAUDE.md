@@ -759,6 +759,14 @@ avisa. Cinco reglas que sostienen esto:
     cliente y host (los literales `clase:` no lo veían: el mensaje seguía llamándose `tareas`), y
     la lista blanca del store se prueba mandando una fila con todos los campos declarados y
     exigiendo que sobrevivan todos — rojo si uno se CAE, no solo si sobra.
+  - **Y en una tarea APARCADA lo que se enseña son los HALLAZGOS**, con la misma pieza: el
+    `motivo` da el qué —el corredor lo compone como «el juez de QA dijo «rojo»: <resumen>»— y
+    los hallazgos son la lista de lo que falta, o sea lo que hace falta para contestar el
+    feedback. El resumen se pinta UNA vez, y no escondiendo el bloque: se comprueba si el
+    `motivo` ya lo lleva dentro —los dos salen del mismo dato del servidor, así que la
+    comparación es exacta— porque si la aparcó otra cosa (un corte a mitad con el veredicto del
+    intento anterior guardado) el motivo no habla del juez y entonces el resumen sí hace falta.
+    Lo que NO se dice ahí es la salvedad: eso es «se entregó», y todavía no se ha entregado.
 
 **Un solo corredor por máquina, y el cerrojo NO lo garantiza solo** (`tareasEnDisco.ts#tomarCerrojo`).
 La toma directa es atómica (`wx`), pero **recoger un cerrojo cuyo dueño parece muerto no se puede
@@ -842,13 +850,24 @@ probada — está escrita.**
 - **«No ha llegado» no es «no hay tareas»**: si esta ejecución no ejecuta tareas, el servidor no
   manda `tareas` y el panel lo dice en vez de afirmar una cola vacía.
 - **Y una tarea creada desde el proceso que NO manda se queda quieta, así que se DICE antes de
-  crearla.** `corriendoAqui` decía ya que este kanban no avanza, pero el aviso remataba con
-  «ábrelo desde el proceso que las corre para verlas moverse» — y eso promete de más: crear una
-  tarea aquí no dispara nada allí, porque `revisar()` sale en `!miCerrojo` y no hay temporizador
-  ni IPC. Se queda `nuevo` hasta que ESE proceso mire la cola por su cuenta (al acabar otra
-  tarea, o al reiniciarlo). Lo dicen las dos vistas, y en la del proyecto importa más: ahí vive
-  «Nueva tarea», o sea que el aviso llega ANTES de crear la que se va a quedar parada. **Ausente
-  no es `false`**: mientras la cola no ha llegado no se afirma ninguna de las dos cosas.
+  crearla — con TRES frases y no una** (`QuienEjecutaTareas.tsx`, una pieza para las dos vistas,
+  la tercera vez que se aplica esa regla). `corriendoAqui` decía ya que este kanban no avanza,
+  pero el aviso remataba con «ábrelo desde el proceso que las corre para verlas moverse», y eso
+  promete de más por dos motivos:
+  - **Crear una tarea aquí no dispara nada allí**: `revisar()` sale en `!miCerrojo` y no hay
+    temporizador ni IPC, así que se queda `nuevo` hasta que ESE proceso mire la cola por su
+    cuenta (al acabar otra tarea, o al reiniciarlo).
+  - **Y «no soy yo» no es «no hay nadie»**, que es la diferencia entre esperar y que no vaya a
+    pasar nada: mandar a esperar a un proceso que no existe es peor que un aviso mudo. El
+    corredor ya sabe cuál es —`tomarCerrojo` distingue las dos— y lo dice por el cable con
+    `ejecutaOtroProceso`, **sin el pid**: es un dato de la máquina y no le dice nada a quien lee.
+    Los tres valores salen de lo MEDIDO: `true` si el cerrojo lo tenía otro o si se perdió en
+    marcha, `false` si lo tomamos nosotros —y por ahí «nadie» es alcanzable de verdad: el
+    arranque de las tareas revienta tras tomarlo y se suelta— y **ausente = no se pudo mirar**,
+    donde no se afirma ninguna de las dos. Es la distinción de siempre, sostenida en las cuatro
+    capas.
+  Lo dicen las dos vistas, y en la del proyecto importa más: ahí vive «Nueva tarea», o sea que
+  el aviso llega ANTES de crear la que se va a quedar parada.
 
 **El feedback vuelve al agente como mensaje de USUARIO en el mismo hilo**, que es el camino que
 el lazo de reparación del verificador ya recorría — un encargo nuevo perdería todo lo que la

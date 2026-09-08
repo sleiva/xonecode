@@ -914,6 +914,84 @@ describe("crearCorredorDeTareas", () => {
     await corredor.parar();
   });
 
+  /**
+   * «No soy yo» y «no hay nadie» son la diferencia entre ESPERAR y que no vaya a pasar nada:
+   * un aviso que manda a esperar a un proceso que no existe es peor que uno mudo. El
+   * corredor ya lo sabe —`tomarCerrojo` distingue las dos— y lo dice sin el pid, que es un
+   * dato de la máquina y no le aporta nada a quien lee.
+   */
+  describe("quién ejecuta las tareas de la máquina", () => {
+    it("con el cerrojo NUESTRO: aquí, y no hay ningún otro dueño", async () => {
+      const { disco } = discoDeMentira([]);
+      const corredor = crearCorredorDeTareas({ ...ENTREGA_VERDE, disco, abrirParaTarea: proyectoDeMentira().abrir, pid: 1, concurrencia: () => 1 });
+      await corredor.arrancar();
+      expect(corredor.corriendoAqui()).toBe(true);
+      expect(corredor.ejecutaOtroProceso()).toBe(false);
+      await corredor.parar();
+    });
+
+    it("con el cerrojo de OTRO: no aquí, y sí hay dueño", async () => {
+      const { disco } = discoDeMentira([], { tomado: false, dePid: 77 });
+      const corredor = crearCorredorDeTareas({ ...ENTREGA_VERDE, disco, abrirParaTarea: proyectoDeMentira().abrir, pid: 1, concurrencia: () => 1 });
+      await corredor.arrancar();
+      expect(corredor.corriendoAqui()).toBe(false);
+      expect(corredor.ejecutaOtroProceso()).toBe(true);
+      await corredor.parar();
+    });
+
+    it("antes de arrancar no se afirma nada: no se ha mirado", () => {
+      const { disco } = discoDeMentira([]);
+      const corredor = crearCorredorDeTareas({ ...ENTREGA_VERDE, disco, abrirParaTarea: proyectoDeMentira().abrir, pid: 1, concurrencia: () => 1 });
+      expect(corredor.ejecutaOtroProceso()).toBeUndefined();
+    });
+
+    it("si el cerrojo ni se pudo mirar, tampoco se afirma nada", async () => {
+      // `tomarCerrojo` lanza con lo que no es EEXIST/ENOENT: un `~/.xonecode/tareas` que no
+      // se puede escribir. Entonces no se sabe si otro proceso las ejecuta — y decir «nadie»
+      // sería afirmar lo que no se ha podido leer.
+      const { disco } = discoDeMentira([]);
+      const roto: TareasEnDisco = {
+        ...disco,
+        tomarCerrojo: () => {
+          throw new Error("EACCES");
+        },
+      };
+      const corredor = crearCorredorDeTareas({ ...ENTREGA_VERDE, disco: roto, abrirParaTarea: proyectoDeMentira().abrir, pid: 1, concurrencia: () => 1 });
+      await corredor.arrancar();
+      expect(corredor.corriendoAqui()).toBe(false);
+      expect(corredor.ejecutaOtroProceso()).toBeUndefined();
+    });
+
+    it("y si lo TOMAMOS pero el arranque revienta después, no hay dueño: nadie las ejecuta", async () => {
+      // Este es el caso que hace que «nadie» sea alcanzable y no una rama muerta: el cerrojo
+      // era nuestro, se ha soltado, y nadie más lo tenía. Una tarea creada aquí no va a
+      // arrancar hasta que alguna consola tome el relevo, y eso NO es «espera a que el otro
+      // proceso mire».
+      const { disco } = discoDeMentira([TAREA({ estado: "en-proceso", pid: 9 })]);
+      const roto: TareasEnDisco = {
+        ...disco,
+        guardar: () => {
+          throw new Error("EACCES");
+        },
+      };
+      const corredor = crearCorredorDeTareas({ ...ENTREGA_VERDE, disco: roto, abrirParaTarea: proyectoDeMentira().abrir, pid: 1, concurrencia: () => 1 });
+      await corredor.arrancar();
+      expect(corredor.corriendoAqui()).toBe(false);
+      expect(corredor.ejecutaOtroProceso()).toBe(false);
+    });
+
+    it("perder el cerrojo en marcha es que lo tiene OTRO", async () => {
+      const { disco, perderElCerrojo } = discoDeMentira([]);
+      const corredor = crearCorredorDeTareas({ ...ENTREGA_VERDE, disco, abrirParaTarea: proyectoDeMentira().abrir, pid: 1, concurrencia: () => 1 });
+      await corredor.arrancar();
+      perderElCerrojo();
+      corredor.revisar();
+      expect(corredor.corriendoAqui()).toBe(false);
+      expect(corredor.ejecutaOtroProceso()).toBe(true);
+      await corredor.parar();
+    });
+  });
+
   it("sin cerrojo no ejecuta, y lo dice", async () => {
     const dichos: string[] = [];
     const { disco, estado } = discoDeMentira([TAREA()], { tomado: false, dePid: 77 });

@@ -2723,7 +2723,7 @@ describe("las tareas en background, por el cable", () => {
     ]);
     montarRutas(servidor, vestibuloDePrueba(), {
       colaDeTareas: cola,
-      corredorDeTareas: { corriendoAqui: () => true, cortar: async () => true },
+      corredorDeTareas: { corriendoAqui: () => true, ejecutaOtroProceso: () => false, cortar: async () => true },
       concurrenciaDeTareas: () => 2,
     });
     const cliente = clienteDeMentira();
@@ -2733,6 +2733,10 @@ describe("las tareas en background, por el cable", () => {
     expect(mensaje.lista[0]).toMatchObject({ id: "t1", proyectoNombre: "AppDemo", estado: "nuevo" });
     expect(mensaje.concurrencia).toBe(2);
     expect(mensaje.corriendoAqui).toBe(true);
+    // «No soy yo» y «no hay nadie» son la diferencia entre esperar y que no pase nada nunca,
+    // así que la respuesta del corredor viaja tal cual — y sin el pid, que es un dato de la
+    // máquina.
+    expect(mensaje.ejecutaOtroProceso).toBe(false);
     // La ruta de la máquina NO viaja.
     expect(JSON.stringify(mensaje)).not.toContain("/w/AppDemo");
   });
@@ -2918,6 +2922,40 @@ describe("las tareas en background, por el cable", () => {
    * tarea resultante es indistinguible de una entregada por la puerta completa. La marca la
    * pone `core/tareas.ts#darPorBuenaAMano`, y esto comprueba que este camino pasa por ahí.
    */
+  it("«no lo ejecuta nadie» y «no se sabe» viajan distintos, y ninguno se sintetiza", async () => {
+    const base = {
+      proyecto: { id: "p1", raiz: "/w/AppDemo", nombre: "AppDemo" },
+      titulo: "T",
+      peticion: "p",
+      encargo: "e",
+      adjuntos: [],
+      creada: "2026-09-08T10:00:00.000Z",
+      estado: "nuevo" as const,
+    };
+    // Nadie lo ejecuta: el corredor lo AFIRMA (tomó el cerrojo y lo soltó).
+    const s1 = servidorDeMentira();
+    montarRutas(s1, vestibuloDePrueba(), {
+      colaDeTareas: colaDeMentira([{ ...base, id: "t1" }]),
+      corredorDeTareas: { corriendoAqui: () => false, ejecutaOtroProceso: () => false, cortar: async () => true },
+    });
+    const c1 = clienteDeMentira();
+    await s1.rutas.get(`GET ${RUTA_EVENTOS}`)!(c1.peticion, c1.respuesta);
+    await asentar();
+    expect(ultimo(c1).ejecutaOtroProceso).toBe(false);
+
+    // Y un corredor que no sabe contestarlo no manda el campo: ausente es «no se sabe», que
+    // no es «nadie» — la interfaz no puede prometer una espera que quizá no acabe nunca.
+    const s2 = servidorDeMentira();
+    montarRutas(s2, vestibuloDePrueba(), {
+      colaDeTareas: colaDeMentira([{ ...base, id: "t1" }]),
+      corredorDeTareas: { corriendoAqui: () => false, cortar: async () => true },
+    });
+    const c2 = clienteDeMentira();
+    await s2.rutas.get(`GET ${RUTA_EVENTOS}`)!(c2.peticion, c2.respuesta);
+    await asentar();
+    expect("ejecutaOtroProceso" in ultimo(c2)).toBe(false);
+  });
+
   it("terminar a mano DEJA LA MARCA, y no toca el veredicto que hubiera", async () => {
     const servidor = servidorDeMentira();
     const cola = colaDeMentira([

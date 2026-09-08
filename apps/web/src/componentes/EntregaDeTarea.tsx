@@ -2,10 +2,11 @@ import type { TareaDelCable } from "../tipos.js";
 import estilos from "./EntregaDeTarea.module.css";
 
 /**
- * Cómo llegó a «Terminada» una tarea, UNA sola pieza para el kanban del escritorio
- * (`Kanban.tsx`) y la lista del proyecto (`TareasDelProyecto.tsx`) — el mismo patrón que
- * `AccionesDeTarea.tsx` y por el mismo motivo: dos copias de lo que una tarjeta AFIRMA es
- * cómo una de las dos acaba afirmando otra cosa.
+ * Qué dijo el juez de QA de una tarea, y —si está entregada— por cuál de los cuatro caminos
+ * llegó. UNA sola pieza para el kanban del escritorio (`Kanban.tsx`) y la lista del
+ * proyecto (`TareasDelProyecto.tsx`) — el mismo patrón que `AccionesDeTarea.tsx` y por el
+ * mismo motivo: dos copias de lo que una tarjeta AFIRMA es cómo una de las dos acaba
+ * afirmando otra cosa.
  *
  * **De dónde sale (F1 de la revisión final).** «Terminada» se puede alcanzar por cuatro
  * caminos y hasta ahora los cuatro se pintaban IGUAL: proyecto, título, hora y descartar.
@@ -19,7 +20,7 @@ import estilos from "./EntregaDeTarea.module.css";
  * «Dar por bueno» de la Task 13 añadió una CUARTA forma de llegar ahí —sin verificador y
  * sin juez— justo cuando el único campo que podía distinguirla no viajaba.
  *
- * Las cuatro situaciones y qué se dice de cada una:
+ * **Entregada**, las cuatro situaciones y qué se dice de cada una:
  *  - **La aprobó el juez**, con el verificador en verde y nada pendiente: se dice, con sus
  *    palabras, que son las que explican QUÉ se dio por bueno.
  *  - **Se entregó con una condición de MENOS** (`salvedad`): además de lo anterior, cuál.
@@ -35,20 +36,38 @@ import estilos from "./EntregaDeTarea.module.css";
  *    las tareas de antes de que la puerta existiera; inventarles un «la aprobó el juez»
  *    sería la mentira que este campo existe para cerrar.
  *
- * **Solo en `terminada`, y eso es una decisión.** En los otros tres estados el `motivo` ya
- * lleva las palabras del juez cuando fue él quien la aparcó (`corredorDeTareas.ts` compone
- * «el juez de QA dijo «rojo»: …»), y repetir la misma frase dos veces en una tarjeta de 280
- * px enseña a no leerla. Lo que aquí no se puede leer de ninguna otra forma es lo que pasa
- * cuando el `motivo` YA NO EXISTE, que es exactamente el caso de una tarea entregada.
+ * **Sin entregar, lo que se enseña son los HALLAZGOS**, y esa es la parte accionable: el
+ * `motivo` de una aparcada dice el qué —`corredorDeTareas.ts` lo compone como «el juez de
+ * QA dijo «rojo»: <resumen>»— y los hallazgos son la lista de lo que falta, que es lo que
+ * una persona necesita para contestar el feedback. Nada de esto es «cómo se entregó»:
+ * todavía no se ha entregado, y decirlo ahí sería afirmar un final que no ha llegado.
+ *
+ * **Y el resumen se pinta UNA vez.** No se esconde el bloque para no repetirlo: se
+ * comprueba si el `motivo` ya lo lleva dentro —los dos salen del mismo dato del servidor,
+ * así que la comparación es exacta y no una heurística—. Si la aparcó otra cosa (un corte a
+ * mitad, con el veredicto del intento anterior guardado), el motivo no habla del juez y
+ * entonces el resumen SÍ hace falta: sin él, los hallazgos flotarían sin sujeto.
  */
 export function EntregaDeTarea({ tarea: t }: { tarea: TareaDelCable }) {
-  if (t.estado !== "terminada") return null;
   const v = t.veredicto;
+  const entregada = t.estado === "terminada";
+  if (!entregada && v === undefined) return null;
   const aMano = t.terminadaAMano === true;
   const hallazgos = v?.hallazgos ?? [];
+  // Los dos vienen del servidor y el motivo del juez se compone con el resumen dentro, así
+  // que esto es una comparación exacta: no hay heurística que se pueda quedar corta.
+  const resumenYaDicho = v !== undefined && t.motivo !== undefined && t.motivo.includes(v.resumen);
   return (
     <div className={estilos.entrega}>
-      {aMano ? (
+      {!entregada ? (
+        // Sin entregar no se dice ningún «cómo llegó»: no ha llegado. Solo lo que el juez
+        // dijo, y solo si no está ya en el motivo que la tarjeta pinta encima.
+        resumenYaDicho ? null : (
+          <p className={estilos.frase} data-via="juez-pendiente">
+            El juez de QA dijo «{v!.veredicto}»: {v!.resumen}
+          </p>
+        )
+      ) : aMano ? (
         <p className={estilos.frase} data-via="persona">
           La dio por buena una persona, sin verificador y sin juez.
         </p>
@@ -68,12 +87,16 @@ export function EntregaDeTarea({ tarea: t }: { tarea: TareaDelCable }) {
           Terminada, pero el juez de QA había dicho «{v.veredicto}»: {v.resumen}
         </p>
       )}
-      {aMano && v !== undefined ? (
+      {entregada && aMano && v !== undefined ? (
         <p className={estilos.detalle}>
           El juez de QA había dicho «{v.veredicto}»: {v.resumen}
         </p>
       ) : null}
-      {v?.salvedad === undefined ? null : (
+      {/* Solo entregada: la salvedad se compone al entregar, pero puede quedar guardada en
+          una aparcada por el mismo camino estrecho que deja ahí un verde (la puerta aprueba
+          y la escritura del estado revienta) — y decir «se entregó» de algo que no se
+          entregó es justo la mentira que esta pieza quita. */}
+      {!entregada || v?.salvedad === undefined ? null : (
         <p className={estilos.salvedad}>Se entregó con una condición menos: {v.salvedad}</p>
       )}
       {hallazgos.length === 0 ? null : (

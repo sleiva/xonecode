@@ -65,21 +65,6 @@
   font-size: 11px;
 }
 
-/* «Las ejecuta otro proceso»: el mismo recinto que el aviso del kanban
-   (`Kanban.module.css#.aviso`) y por lo mismo — es una condición de la MÁQUINA que dura, no
-   un fallo puntual, así que va enmarcado y no como una línea de texto más. */
-.avisoProceso {
-  margin: 0 0 12px;
-  padding: 8px 10px;
-  border: 0.5px solid var(--dsw-alias-state-warn-primary);
-  border-radius: 8px;
-  background: var(--dsw-alias-bg-layer-1);
-  color: var(--dsw-alias-state-warn-label);
-  font-size: 12px;
-  line-height: 1.5;
-  max-width: 70ch;
-}
-
 /* El aviso de «consultando…» y el estado vacío: mismo trazo que `Revision.module.css#.aviso`. */
 .aviso {
   margin: 0;

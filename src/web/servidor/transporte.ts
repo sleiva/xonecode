@@ -116,8 +116,22 @@ export type MensajeAlCliente =
    * La cola de tareas entera. Va a TODOS los clientes, como la foto de la máquina y por lo
    * mismo: la cola es de la máquina. `corriendoAqui` es falso en el segundo proceso, y es lo
    * que deja decir que este kanban no avanza.
+   *
+   * **Y `ejecutaOtroProceso` es la otra mitad, porque «no soy yo» y «no hay nadie»
+   * significan lo contrario**: el primero manda a esperar —una tarea creada aquí arrancará
+   * cuando ese proceso mire la cola— y el segundo dice que no va a pasar nada hasta que
+   * alguna consola tome el relevo. Con un solo booleano, el aviso mandaba a esperar a un
+   * proceso que puede no existir. **Ausente = no se sabe** (el cerrojo ni se pudo mirar, o
+   * esta ejecución no tiene corredor), y entonces no se afirma ninguna de las dos.
+   * **El pid no viaja**: es un dato de la máquina y no le dice nada a quien lo lee.
    */
-  | { clase: "tareas"; lista: TareaDelCable[]; concurrencia: number; corriendoAqui: boolean }
+  | {
+      clase: "tareas";
+      lista: TareaDelCable[];
+      concurrencia: number;
+      corriendoAqui: boolean;
+      ejecutaOtroProceso?: boolean;
+    }
   /**
    * Cómo fue la última augmentación pedida (`{clase:"tarea", accion:"augmentar"}`): el
    * encargo que propone el modelo, o por qué no se pudo. Nunca los dos a la vez.

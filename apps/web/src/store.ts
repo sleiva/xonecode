@@ -63,7 +63,18 @@ export interface EstadoDelCliente {
    * de instalación en marcha: las tareas siguen corriendo en la máquina aunque este
    * navegador se desconecte.
    */
-  tareas?: { lista: TareaDelCable[]; concurrencia: number; corriendoAqui: boolean };
+  /**
+   * `corriendoAqui` es si las ejecuta ESTE proceso; `ejecutaOtroProceso` es si las ejecuta
+   * otro, con **ausente = no se sabe**. Los dos, porque «no soy yo» manda a esperar y «no
+   * hay nadie» dice que no va a pasar nada: colapsarlos hacía que el aviso mandara a esperar
+   * a un proceso que puede no existir.
+   */
+  tareas?: {
+    lista: TareaDelCable[];
+    concurrencia: number;
+    corriendoAqui: boolean;
+    ejecutaOtroProceso?: boolean;
+  };
   /**
    * El ENCARGO que el aumentador propuso para la tarea que se está creando, o el motivo por
    * el que no pudo.
@@ -656,6 +667,12 @@ export function crearStoreDelCliente(): {
             tareas: {
               concurrencia: typeof m["concurrencia"] === "number" ? m["concurrencia"] : 2,
               corriendoAqui: m["corriendoAqui"] === true,
+              // Los TRES valores se conservan: solo un booleano de verdad se copia, y
+              // cualquier otra cosa (ausente, o un `"false"` de cadena) queda como «no se
+              // sabe». Sintetizar `false` aquí afirmaría que NADIE las ejecuta.
+              ...(typeof m["ejecutaOtroProceso"] === "boolean"
+                ? { ejecutaOtroProceso: m["ejecutaOtroProceso"] }
+                : {}),
               lista: (m["lista"] as unknown[])
                 .filter((t): t is Record<string, unknown> => typeof t === "object" && t !== null)
                 .map((t) => ({

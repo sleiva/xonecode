@@ -686,6 +686,21 @@ describe("la cola de tareas", () => {
     expect(cola.lista[0]!.adjuntos).toEqual([{ nombre: "a.png", bytes: 10, mime: "image/png" }]);
   });
 
+  it("«lo ejecuta otro proceso» pasa con sus TRES valores: sí, no, y no se sabe", () => {
+    // «No soy yo» manda a esperar; «no hay nadie» dice que no va a pasar nada. Colapsar el
+    // tercero (ausente) en `false` haría que la interfaz prometiera lo segundo sin saberlo.
+    const s = crearStoreDelCliente();
+    s.aplicar({ clase: "tareas", concurrencia: 2, corriendoAqui: false, lista: [], ejecutaOtroProceso: true });
+    expect(s.leer().tareas!.ejecutaOtroProceso).toBe(true);
+    s.aplicar({ clase: "tareas", concurrencia: 2, corriendoAqui: false, lista: [], ejecutaOtroProceso: false });
+    expect(s.leer().tareas!.ejecutaOtroProceso).toBe(false);
+    s.aplicar({ clase: "tareas", concurrencia: 2, corriendoAqui: false, lista: [] });
+    expect(s.leer().tareas!.ejecutaOtroProceso).toBeUndefined();
+    // Y un valor que no es booleano no se toma por verdadero: la trampa del `"false"`.
+    s.aplicar({ clase: "tareas", concurrencia: 2, corriendoAqui: false, lista: [], ejecutaOtroProceso: "false" });
+    expect(s.leer().tareas!.ejecutaOtroProceso).toBeUndefined();
+  });
+
   it("NO se tira al caerse el cable: las tareas siguen corriendo en la máquina", () => {
     // Misma regla que la foto de la máquina y que el paso de instalación en marcha.
     const s = crearStoreDelCliente();

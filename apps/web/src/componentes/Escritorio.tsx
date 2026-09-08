@@ -108,7 +108,14 @@ export function Escritorio({
    * que «no hay ninguna»: el panel lo dice en vez de afirmar una cola vacía que nadie ha
    * medido, la misma regla que `dispositivos` ausente en «Tu equipo».
    */
-  tareas?: { lista: readonly TareaDelCable[]; concurrencia: number; corriendoAqui: boolean };
+  tareas?: {
+    lista: readonly TareaDelCable[];
+    concurrencia: number;
+    corriendoAqui: boolean;
+    /** Si las ejecuta OTRO proceso. Ausente = no se sabe, que no es «nadie»: se propaga tal
+     *  cual hasta `QuienEjecutaTareas`, que es quien decide qué decir de cada caso. */
+    ejecutaOtroProceso?: boolean;
+  };
   /** Abrir la conversación de una tarea, desde su tarjeta del kanban. */
   alAbrirSesionDeTarea?: (proyecto: string, sesion: string) => void;
   /** Abrir la pestaña Revisión de una tarea «esperando feedback»: la verdad sobre lo que

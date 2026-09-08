@@ -237,6 +237,22 @@ export interface Corredor {
   cortar(id: string): Promise<boolean>;
   /** ¿Ejecuta ESTE proceso? Falso si el cerrojo lo tiene otro, o si lo hemos perdido. */
   corriendoAqui(): boolean;
+  /**
+   * ¿Lo ejecuta OTRO proceso? `undefined` = no se ha podido mirar.
+   *
+   * Es la otra mitad de `corriendoAqui`, y sin ella la interfaz no puede distinguir dos
+   * cosas que significan lo contrario: **«no soy yo» manda a esperar y «no hay nadie» dice
+   * que no va a pasar nada** hasta que alguna consola tome el relevo. Un aviso que manda a
+   * esperar a un proceso que no existe es peor que uno mudo.
+   *
+   * Los tres valores salen de lo MEDIDO en `tomarCerrojo`, y ninguno se deduce: `true` si
+   * el cerrojo lo tenía otro (o si lo hemos perdido en marcha), `false` si lo tomamos
+   * nosotros —aunque después lo hayamos soltado, que es cómo «nadie» es alcanzable de
+   * verdad: el arranque revienta tras tomarlo— y `undefined` si ni se pudo consultar (un
+   * `~/.xonecode/tareas` que no se puede escribir). **El pid NO sale de aquí**: es un dato
+   * de la máquina, no le dice nada a quien lo lee, y este valor viaja por el cable.
+   */
+  ejecutaOtroProceso(): boolean | undefined;
   /** Vuelve a mirar la cola: se llama al crear una tarea, al terminar una, y al abrir o
    *  cerrar un proyecto (que es lo que bloquea y desbloquea su raíz). */
   revisar(): void;
@@ -398,6 +414,8 @@ export function crearCorredorDeTareas(opciones: {
   const pid = opciones.pid ?? process.pid;
   const informar = opciones.informar ?? (() => {});
   let miCerrojo = false;
+  /** Ver `Corredor.ejecutaOtroProceso`. Nace sin afirmar nada: todavía no se ha mirado. */
+  let cerrojoAjeno: boolean | undefined;
   let parando = false;
 
   /**
@@ -1014,6 +1032,9 @@ export function crearCorredorDeTareas(opciones: {
     if (opciones.disco.sigoSiendoDueño()) return true;
     if (miCerrojo) informar("el cerrojo de las tareas lo tiene ya otro proceso: aquí se dejan de ejecutar");
     miCerrojo = false;
+    // Perderlo es que lo tiene otro, y eso es lo que la pantalla necesita saber: aquí no
+    // avanza, pero allí sí — o sea que hay a quién esperar.
+    cerrojoAjeno = true;
     return false;
   };
 
@@ -1086,6 +1107,9 @@ export function crearCorredorDeTareas(opciones: {
   /** El arranque de verdad. Lo envuelve `arrancar`, que es quien no puede lanzar. */
   const arrancarDeVerdad = async (): Promise<void> => {
     const cerrojo = opciones.disco.tomarCerrojo();
+    // Lo que se apunta es lo MEDIDO, y en este orden: si esto lanza, `cerrojoAjeno` se queda
+    // sin afirmar nada, que es la verdad — no se ha podido leer quién lo tiene.
+    cerrojoAjeno = !cerrojo.tomado;
     if (!cerrojo.tomado) {
       miCerrojo = false;
       informar(`las tareas las ejecuta otro proceso (pid ${cerrojo.dePid}); aquí solo se ven`);
@@ -1231,6 +1255,8 @@ export function crearCorredorDeTareas(opciones: {
       );
     },
     corriendoAqui: () => miCerrojo,
+    // La otra mitad, y nunca deducida de la primera: ver `Corredor.ejecutaOtroProceso`.
+    ejecutaOtroProceso: () => cerrojoAjeno,
     revisar,
     /**
      * Deja que se asiente lo lanzado. Vive en producción y no en el test porque solo el

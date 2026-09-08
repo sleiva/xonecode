@@ -53,9 +53,30 @@ describe("TareasDelProyecto", () => {
    * de crearla, no después de mirarla parada.
    */
   it("si las ejecuta otro proceso lo dice, y dice que una tarea creada aquí se queda quieta", () => {
-    render(<TareasDelProyecto tareas={[tarea()]} corriendoAqui={false} alNuevaTarea={() => {}} />);
+    render(
+      <TareasDelProyecto
+        tareas={[tarea()]}
+        corriendoAqui={false}
+        ejecutaOtroProceso={true}
+        alNuevaTarea={() => {}}
+      />
+    );
     expect(screen.getByText(/otro proceso/i)).toBeTruthy();
     expect(screen.getByText(/no se le avisa|nadie le avisa/i)).toBeTruthy();
+  });
+
+  it("y si NADIE las ejecuta no manda a esperar a un proceso que no existe", () => {
+    render(
+      <TareasDelProyecto
+        tareas={[tarea()]}
+        corriendoAqui={false}
+        ejecutaOtroProceso={false}
+        alNuevaTarea={() => {}}
+      />
+    );
+    expect(screen.getByText(/no las ejecuta nadie/i)).toBeTruthy();
+    expect(screen.queryByText(/vuelva a mirar|verlas moverse/i)).toBeNull();
+    expect(screen.getByText(/reinicia/i)).toBeTruthy();
   });
 
   it("y no lo dice cuando SÍ las ejecuta este proceso, ni cuando no se sabe todavía", () => {

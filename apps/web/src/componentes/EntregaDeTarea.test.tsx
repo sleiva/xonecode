@@ -114,12 +114,82 @@ describe("EntregaDeTarea", () => {
     expect(screen.queryByText(/aprobó/i)).toBeNull();
   });
 
-  it("en los otros tres estados no pinta nada: ahí lo que hay que leer es el motivo", () => {
-    const { container } = render(
+  /**
+   * En una tarjeta APARCADA el `motivo` ya da el qué —`corredorDeTareas.ts` lo compone como
+   * «el juez de QA dijo «rojo»: <resumen>»— y los hallazgos son lo ACCIONABLE: es lo que una
+   * persona necesita para contestar el feedback. Que no se repita el resumen se resuelve
+   * pintándolo una vez, no escondiendo los hallazgos.
+   */
+  it("en una aparcada enseña los hallazgos, y NO repite el resumen que el motivo ya lleva", () => {
+    render(
       <EntregaDeTarea
-        tarea={tarea({ estado: "requiere-atencion", veredicto: { veredicto: "rojo", resumen: "falta el campo" } })}
+        tarea={tarea({
+          estado: "requiere-atencion",
+          motivo: "el juez de QA dijo «rojo»: falta el campo de la fecha",
+          veredicto: {
+            veredicto: "rojo",
+            resumen: "falta el campo de la fecha",
+            hallazgos: ["Clientes.xne:14 no declara el campo", "la lista no tiene título"],
+          },
+        })}
       />
     );
+    expect(screen.getByText(/Clientes\.xne:14 no declara el campo/)).toBeTruthy();
+    expect(screen.getByText(/la lista no tiene título/)).toBeTruthy();
+    // Una sola vez en la tarjeta, y la que se queda es la del motivo (que lo pinta la
+    // tarjeta, no esta pieza): aquí no sale.
+    expect(screen.queryByText(/falta el campo de la fecha/)).toBeNull();
+  });
+
+  it("y si la aparcó OTRA cosa, el veredicto se dice entero: el motivo no habla del juez", () => {
+    // Una tarea aparcada por un corte a mitad puede llevar el veredicto rojo del intento
+    // anterior. Ahí los hallazgos solos flotarían sin sujeto.
+    render(
+      <EntregaDeTarea
+        tarea={tarea({
+          estado: "requiere-atencion",
+          motivo: "la consola se cerró a mitad del turno",
+          veredicto: { veredicto: "rojo", resumen: "falta el campo de la fecha", hallazgos: ["sin título"] },
+        })}
+      />
+    );
+    expect(screen.getByText(/falta el campo de la fecha/)).toBeTruthy();
+    expect(screen.getByText(/sin título/)).toBeTruthy();
+  });
+
+  it("sin veredicto y sin ser terminada no pinta nada: no hay nada que decir", () => {
+    const { container } = render(<EntregaDeTarea tarea={tarea({ estado: "en-proceso" })} />);
     expect(container.textContent).toBe("");
+  });
+
+  /**
+   * La salvedad solo se compone al ENTREGAR (`corredorDeTareas.ts` la pega al veredicto en
+   * la rama entregable), pero puede quedar guardada en una aparcada por el mismo camino
+   * estrecho que deja un verde ahí: la puerta aprueba y la escritura del estado revienta.
+   * Decir «se entregó» de una tarea que no se entregó es la mentira que esta pieza existe
+   * para quitar.
+   */
+  it("la salvedad NO se dice en una aparcada: ahí no se entregó nada", () => {
+    render(
+      <EntregaDeTarea
+        tarea={tarea({
+          estado: "requiere-atencion",
+          motivo: "el corredor no pudo cerrarla (EACCES)",
+          veredicto: { veredicto: "verde", resumen: "vale", salvedad: "no cambió ningún fichero" },
+        })}
+      />
+    );
+    expect(screen.queryByText(/se entregó/i)).toBeNull();
+    expect(screen.queryByText(/no cambió ningún fichero/)).toBeNull();
+  });
+
+  it("una aparcada NO dice cómo se entregó: no se ha entregado", () => {
+    render(
+      <EntregaDeTarea
+        tarea={tarea({ estado: "requiere-atencion", veredicto: { veredicto: "verde", resumen: "vale" } })}
+      />
+    );
+    expect(screen.queryByText(/la aprobó/i)).toBeNull();
+    expect(screen.queryByText(/no consta/i)).toBeNull();
   });
 });

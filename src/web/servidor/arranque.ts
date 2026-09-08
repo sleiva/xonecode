@@ -364,7 +364,12 @@ export interface OpcionesDeMontaje {
    * `borrarTarea` para que descartar una `en-proceso` no deje su turno huérfano escribiendo
    * en el proyecto sin que ninguna pantalla lo diga.
    */
-  corredorDeTareas?: Pick<Corredor, "corriendoAqui" | "cortar">;
+  /**
+   * `ejecutaOtroProceso` va en un `Partial` a propósito: es la respuesta a «¿hay dueño?» y
+   * un corredor que no la sepa dar deja el campo AUSENTE en el cable, que es «no se sabe» —
+   * distinto de «nadie». Los dobles de test que no la implementan ejercitan justo ese caso.
+   */
+  corredorDeTareas?: Pick<Corredor, "corriendoAqui" | "cortar"> & Partial<Pick<Corredor, "ejecutaOtroProceso">>;
   /** El tope de concurrencia vigente, para el mensaje `tareas`. Ausente = `CONCURRENCIA_POR_OMISION`. */
   concurrenciaDeTareas?: () => number;
   /** Cambia el tope de concurrencia del corredor. Ausente = Ajustes no puede tocarlo. */
@@ -883,11 +888,15 @@ export function montarRutas(
 
   const mensajeDeTareas = (): MensajeAlCliente | undefined => {
     if (opciones.colaDeTareas === undefined) return undefined;
+    const otro = opciones.corredorDeTareas?.ejecutaOtroProceso?.();
     return {
       clase: "tareas",
       lista: opciones.colaDeTareas.listar().map(filaDeTarea),
       concurrencia: opciones.concurrenciaDeTareas?.() ?? CONCURRENCIA_POR_OMISION,
       corriendoAqui: opciones.corredorDeTareas?.corriendoAqui() ?? false,
+      // Ausente = no se sabe, y no se sintetiza: con `false` a la mínima, la pantalla diría
+      // «nadie las ejecuta» de una máquina donde sí las ejecuta otro proceso.
+      ...(otro === undefined ? {} : { ejecutaOtroProceso: otro }),
     };
   };
   const emitirTareas = (): void => {

@@ -76,6 +76,34 @@ describe("Kanban", () => {
     expect(screen.getByText(/La dio por buena una persona/)).toBeTruthy();
   });
 
+  /**
+   * La tarjeta de «Esperando feedback» también monta la pieza: ahí los hallazgos del juez
+   * son lo ACCIONABLE —lo que hay que contestar en el feedback— y el motivo solo da el qué.
+   */
+  it("la tarjeta aparcada enseña los hallazgos del juez, sin repetir el resumen del motivo", () => {
+    render(
+      <Kanban
+        cola={{
+          lista: [
+            tarea({
+              estado: "requiere-atencion",
+              motivo: "el juez de QA dijo «rojo»: falta el campo de la fecha",
+              veredicto: {
+                veredicto: "rojo",
+                resumen: "falta el campo de la fecha",
+                hallazgos: ["Clientes.xne:14 no declara el campo"],
+              },
+            }),
+          ],
+          concurrencia: 2,
+          corriendoAqui: true,
+        }}
+      />
+    );
+    expect(screen.getByText(/Clientes\.xne:14 no declara el campo/)).toBeTruthy();
+    expect(screen.getAllByText(/falta el campo de la fecha/)).toHaveLength(1);
+  });
+
   it("dice cuándo este kanban NO avanza", () => {
     // Se ve igual en dos ventanas y solo avanza en una: hay que decir en cuál.
     render(<Kanban cola={{ lista: [tarea()], concurrencia: 2, corriendoAqui: false }} />);
@@ -90,9 +118,33 @@ describe("Kanban", () => {
    * moverse» promete que allí se mueven, y una tarea recién creada no se mueve todavía.
    */
   it("y dice qué le pasa a una tarea creada desde aquí: se queda quieta hasta que el otro proceso mire", () => {
-    render(<Kanban cola={{ lista: [tarea()], concurrencia: 2, corriendoAqui: false }} />);
+    render(
+      <Kanban cola={{ lista: [tarea()], concurrencia: 2, corriendoAqui: false, ejecutaOtroProceso: true }} />
+    );
     expect(screen.getByText(/no se le avisa|nadie le avisa/i)).toBeTruthy();
     expect(screen.getByText(/vuelva a mirar|mire la cola/i)).toBeTruthy();
+  });
+
+  /**
+   * «No soy yo» y «no hay nadie» significan lo contrario: el primero manda a ESPERAR, el
+   * segundo dice que no va a pasar nada. Mandar a esperar a un proceso que no existe es peor
+   * que un aviso mudo.
+   */
+  it("si NADIE las ejecuta no manda a esperar a nadie: lo dice y dice qué hacer", () => {
+    render(
+      <Kanban cola={{ lista: [tarea()], concurrencia: 2, corriendoAqui: false, ejecutaOtroProceso: false }} />
+    );
+    expect(screen.getByText(/no las ejecuta nadie/i)).toBeTruthy();
+    // Lo que NO puede decir es que otro proceso las mueva: no hay ninguno. Y sí dice qué
+    // hacer, que es lo que distingue este caso del otro.
+    expect(screen.queryByText(/vuelva a mirar|verlas moverse/i)).toBeNull();
+    expect(screen.getByText(/reinicia/i)).toBeTruthy();
+  });
+
+  it("y si no se sabe, no se afirma ninguna de las dos", () => {
+    render(<Kanban cola={{ lista: [tarea()], concurrencia: 2, corriendoAqui: false }} />);
+    expect(screen.getByText(/no se sabe|no se ha podido/i)).toBeTruthy();
+    expect(screen.queryByText(/vuelva a mirar/i)).toBeNull();
   });
 
   it("pulsar una tarea con sesión la abre; sin sesión, no es pulsable", () => {

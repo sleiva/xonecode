@@ -1,6 +1,7 @@
 import type { TareaDelCable } from "../tipos.js";
 import { AccionesDeTarea } from "./AccionesDeTarea.js";
 import { EntregaDeTarea } from "./EntregaDeTarea.js";
+import { QuienEjecutaTareas } from "./QuienEjecutaTareas.js";
 import estilos from "./TareasDelProyecto.module.css";
 
 const ETIQUETA_DE_ESTADO: Record<TareaDelCable["estado"], string> = {
@@ -47,6 +48,7 @@ export function TareasDelProyecto({
   tareas,
   alNuevaTarea,
   corriendoAqui,
+  ejecutaOtroProceso,
   alReintentar,
   alDescartar,
   alTerminar,
@@ -92,6 +94,12 @@ export function TareasDelProyecto({
    * la regla de siempre.
    */
   corriendoAqui?: boolean;
+  /**
+   * Y si las ejecuta OTRO proceso, que no es lo mismo que que no las ejecute nadie: el
+   * primero manda a esperar y el segundo dice que no va a pasar nada. Ausente = no se sabe.
+   * Ver `QuienEjecutaTareas`.
+   */
+  ejecutaOtroProceso?: boolean;
 }) {
   const apagado = conectado === false;
   return (
@@ -115,15 +123,16 @@ export function TareasDelProyecto({
       {apagado && alNuevaTarea !== undefined ? (
         <p className={estilos.avisoConexion}>Sin conexión: no se puede crear una tarea hasta reconectar.</p>
       ) : null}
-      {/* Ver `corriendoAqui`: sin esto, una tarea creada desde el proceso que no manda se
-          queda quieta y muda, y eso se lee como un cuelgue. */}
-      {corriendoAqui === false ? (
-        <p className={estilos.avisoProceso} role="note">
-          Las tareas las ejecuta otro proceso: aquí se ven, pero no avanzan. Una que crees
-          desde aquí se queda en «Nuevo» hasta que ese proceso vuelva a mirar la cola por su
-          cuenta —al acabar otra tarea, o al reiniciarlo—: no se le avisa.
-        </p>
-      ) : null}
+      {/* Quién las ejecuta si no es este proceso: la MISMA pieza que el kanban. Aquí
+          importa más que allí, porque aquí vive «Nueva tarea» — el aviso llega ANTES de
+          crear la que se va a quedar parada. */}
+      {corriendoAqui === undefined ? null : (
+        <QuienEjecutaTareas
+          corriendoAqui={corriendoAqui}
+          {...(ejecutaOtroProceso === undefined ? {} : { ejecutaOtroProceso })}
+          donde="esta lista"
+        />
+      )}
       {tareas === undefined ? (
         <p className={estilos.aviso}>Consultando la cola de tareas de este proyecto…</p>
       ) : tareas.length === 0 ? (
