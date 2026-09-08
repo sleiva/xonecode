@@ -69,6 +69,22 @@ export const MOTIVO_CORTADA_POR_CIERRE =
  */
 export const TOPE_DE_PARADA_MS = 30_000;
 
+/**
+ * Lo que se espera, como MUCHO, a que el juez de QA conteste.
+ *
+ * Es la regla de siempre en este repo —«cada proceso lleva tope», y «un cuelgue se dice
+ * como *no respondió*, nunca se queda el panel en *consultando…*»— aplicada a una llamada
+ * de modelo: los SDK traen plazos por omisión del orden de diez minutos, y durante todo ese
+ * rato la tarea diría «en proceso» ocupando el hueco y el proyecto sin que nadie pueda
+ * saber por qué. Dos minutos es de sobra para un veredicto de dos frases sobre una lista de
+ * nombres.
+ *
+ * Al agotarse NO se entrega: la consulta se abandona (la llamada sigue viva en segundo
+ * plano, no hay con qué abortarla desde aquí) y la tarea queda esperando feedback con el
+ * motivo — que es lo mismo que hace `parar()` cuando su plazo se agota: no mentir.
+ */
+export const TOPE_DEL_JUEZ_MS = 120_000;
+
 /** El mismo motivo, diciendo qué proceso la tenía. Ver `MOTIVO_CORTADA_POR_CIERRE`. */
 const motivoDeReconciliacion = (pid: number | undefined): string =>
   pid === undefined ? MOTIVO_CORTADA_POR_CIERRE : `${MOTIVO_CORTADA_POR_CIERRE} (era el pid ${pid})`;
@@ -204,6 +220,9 @@ export function crearCorredorDeTareas(opciones: {
    * esperar un tope de verdad. Ver `TOPE_DE_PARADA_MS`.
    */
   esperaAlParar?: number;
+  /** Cuánto se espera al juez. Por parámetro por lo mismo que `esperaAlParar`: `npm test`
+   *  no puede esperar un tope de verdad. Ver `TOPE_DEL_JUEZ_MS`. */
+  esperaDelJuez?: number;
   pid?: number;
   /** Se llama en cada cambio, para que el cable emita la cola nueva. */
   alCambiar?: (tareas: readonly Tarea[]) => void;
@@ -455,9 +474,32 @@ export function crearCorredorDeTareas(opciones: {
     const medida = medidaDeEntrega(resultado, revisable);
     const condiciones = condicionesDeEntrega(medida);
     if (!condiciones.entregable) return condiciones.motivo;
-    let veredicto: VeredictoDeTarea;
-    try {
-      veredicto = await opciones.juez.juzgar({
+    /**
+     * Y si el proceso se está yendo, NO se pregunta — y se dice la verdad de este caso, que
+     * no es ninguna de las otras.
+     *
+     * Sin esta guarda, un Ctrl-C durante la consulta dejaba a la tarea colgada del plazo de
+     * `parar()`; al agotarse se queda «en proceso» y la reconciliación del arranque
+     * siguiente la aparca con `MOTIVO_CORTADA_POR_CIERRE`, que aquí sería FALSO: dice que
+     * no quedó respuesta guardada, y el turno acabó y `volcar()` ya escribió su transcript.
+     * Lo único que se interrumpió fue el juicio, y eso es lo que hay que poder leer.
+     */
+    if (parando) {
+      return (
+        "la consola se cerró antes de evaluar la entrega: el turno acabó y su conversación " +
+        "está guardada; reintenta para que el juez la mire"
+      );
+    }
+    let veredicto: VeredictoDeTarea | undefined;
+    let fallo: unknown;
+    let reventó = false;
+    /**
+     * La consulta, con PLAZO. Ver `TOPE_DEL_JUEZ_MS`: una llamada de modelo colgada dejaría
+     * la tarea diciendo «en proceso» durante el plazo del SDK, con su hueco y su proyecto
+     * ocupados y sin que nadie pueda saber por qué.
+     */
+    const consulta = opciones.juez
+      .juzgar({
         encargo: tarea.encargo,
         // Normalizadas por el MISMO sitio que las guarda en el índice, así que el juez ve
         // exactamente las rutas que verá la persona — relativas, sin repetidos y sin la
@@ -465,10 +507,16 @@ export function crearCorredorDeTareas(opciones: {
         autorizadas: conAutorizadas(tarea, entrada.autorizadas ?? []).autorizadas ?? [],
         verificador: medida.verificador,
         ...(medida.hallazgos === undefined ? {} : { hallazgos: medida.hallazgos }),
+      })
+      .then((v) => void (veredicto = v))
+      .catch((error: unknown) => {
+        reventó = true;
+        fallo = error;
       });
-    } catch (error) {
-      return motivoDelJuez(error);
+    if (!(await conPlazo(consulta, opciones.esperaDelJuez ?? TOPE_DEL_JUEZ_MS))) {
+      return `el juez de QA no contestó en ${Math.round((opciones.esperaDelJuez ?? TOPE_DEL_JUEZ_MS) / 1000)} s`;
     }
+    if (reventó) return motivoDelJuez(fallo);
     entrada.veredicto = veredicto;
     return decisionDeEntrega(medida, veredicto).motivo;
   };

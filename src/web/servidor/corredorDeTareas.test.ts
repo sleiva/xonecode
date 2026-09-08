@@ -1019,24 +1019,46 @@ describe("crearCorredorDeTareas", () => {
     await corredor.parar();
   });
 
-  it("un turno que acaba LIMPIO justo al parar no se cuenta como cortado", async () => {
-    // Carrera estrecha: `parando` sube mientras el turno resuelve, y el motivo salía
-    // «cortada a mitad» de un turno que terminó su trabajo. Es un motivo falso en el kanban.
+  /**
+   * Este test EXIGÍA «terminada», y desde la puerta de la entrega ya no puede.
+   *
+   * Lo que protege sigue en pie y es lo que se comprueba: un turno que terminó su trabajo no
+   * puede llevar el motivo de «cortada a mitad», que sería falso en el kanban —`volcar()` ya
+   * escribió su conversación—. Lo que cambia es la otra mitad: «terminada» significa ahora
+   * que las condiciones se midieron en verde Y que el juez dijo que el trabajo hace lo que
+   * se pedía, y con el proceso cerrándose al juez no se le puede preguntar. Dar la tarea por
+   * buena ahí sería entregar sin juez, que es justo lo que esta tanda impide. Así que se
+   * aparca, con el motivo que dice exactamente qué pasó.
+   */
+  it("un turno que acaba LIMPIO justo al parar no se cuenta como cortado, pero tampoco se entrega", async () => {
     const d = discoDeMentira([TAREA()]);
     const p = proyectoDeMentira();
-    const corredor = crearCorredorDeTareas({ ...ENTREGA_VERDE,
+    const juez = juezQueDice({ veredicto: "verde", resumen: "bien" });
+    const corredor = crearCorredorDeTareas({
       disco: d.disco,
       abrirParaTarea: p.abrir,
       pid: 1,
       concurrencia: () => 1,
+      juez,
+      revisable: async () => true,
     });
     await corredor.arrancar();
     await corredor.asentar();
-    // El turno resuelve y, en el mismo tick, alguien para el proceso.
+    /**
+     * El turno resuelve y, en el mismo tick, alguien para el proceso. El orden es
+     * load-bearing: `acabar()` resuelve la promesa del turno (una microtarea) y `parar()`
+     * pone `parando` de forma SÍNCRONA antes de su primer `await`, así que `correr` sigue
+     * con `terminoLimpio` y `parando` a la vez — la ventana exacta que la guarda cubre.
+     */
     p.acabar();
     await corredor.parar();
-    expect(d.estado()[0]!.estado).toBe("terminada");
-    expect(d.estado()[0]!.motivo).toBeUndefined();
+    expect(d.estado()[0]!.estado).toBe("requiere-atencion");
+    expect(d.estado()[0]!.motivo).toContain("antes de evaluar la entrega");
+    // Y NO el de la reconciliación, que aquí mentiría: la conversación sí se guardó.
+    expect(d.estado()[0]!.motivo).not.toContain(MOTIVO_CORTADA_POR_CIERRE);
+    // Al juez no se le preguntó: el proceso se va, y una llamada de modelo que nadie va a
+    // esperar es tiempo y dinero por nada.
+    expect(juez.casos).toHaveLength(0);
   });
 
   it("GANA LA PERSONA: no arranca nada en un proyecto cuya consola está abierta", async () => {
@@ -1633,6 +1655,42 @@ describe("una tarea se entrega por condiciones MEDIDAS más el juez", () => {
     expect(tarea.estado).toBe("requiere-atencion");
     expect(tarea.autorizadas).toEqual(["Clientes.xne"]);
     expect(tarea.veredicto?.veredicto).toBe("verde");
+  });
+
+  /**
+   * El TERCER modo de «el juez no se puede usar» —el proceso se está yendo— vive con los
+   * tests de `parar()`: ver «un turno que acaba LIMPIO justo al parar…», que es la misma
+   * ventana y donde estaba ya la afirmación que este cambio tuvo que corregir.
+   */
+
+  /**
+   * Un juez colgado no puede dejar la tarea diciendo «en proceso» durante el plazo del SDK
+   * —del orden de diez minutos— con su hueco y su proyecto ocupados. Es la regla de siempre:
+   * cada proceso lleva tope, y un cuelgue se DICE.
+   */
+  it("un juez que no contesta se corta por plazo, y la tarea lo dice", async () => {
+    const { disco, estado } = discoDeMentira([TAREA()]);
+    const p = proyectoDeMentira();
+    const corredor = crearCorredorDeTareas({
+      disco,
+      abrirParaTarea: p.abrir,
+      pid: 1,
+      concurrencia: () => 1,
+      // Nunca resuelve: es el cuelgue.
+      juez: { juzgar: () => new Promise(() => {}) },
+      revisable: async () => true,
+      esperaDelJuez: 20,
+    });
+    await corredor.arrancar();
+    await corredor.asentar();
+    p.acabar({ verificador: "verde", pendientes: 0 });
+    for (let i = 0; i < 100 && estado()[0]!.estado === "en-proceso"; i += 1) {
+      await new Promise<void>((r) => setTimeout(r, 5));
+    }
+
+    expect(estado()[0]!.estado).toBe("requiere-atencion");
+    expect(estado()[0]!.motivo).toContain("no contestó");
+    await corredor.parar();
   });
 
   /**
