@@ -689,6 +689,145 @@ sesiones llegaban a fuego como `[]`:
   cable, store y componente); colapsarla haría que elegir ninguno se leyera como no haber
   elegido. El ORDEN lo pone el listado del servidor, no el orden en que se marcaron.
 
+**Las tareas en BACKGROUND** (`core/tareas.ts`, `agent/tareasEnDisco.ts`, `web/servidor/corredorDeTareas.ts`,
+`consolaDeTarea.ts`, `core/entrega.ts`, `agent/juezDeTarea.ts`). Un encargo por proyecto que se
+ejecuta **solo**: se encola, corre cuando le toca, escribe en el proyecto sin pedir aprobación, y
+se entrega si pasa unas condiciones más el veredicto de un juez. Cuatro estados —`nuevo`,
+`en-proceso`, `requiere-atencion`, `terminada`— y `requiere-atencion` significa **esperando
+feedback del desarrollador**: no es terminal, se resuelve editando la tarea.
+
+**Que una tarea escriba sin aprobación es una decisión de producto, y el sitio del diff NO se
+queda vacío.** La aprobación no estaba por la propiedad del repo: estaba porque XOne ignora en
+silencio lo desconocido, así que un atributo inventado no da error sino un bug mudo, y el diff era
+el único momento en que alguien lo veía antes de que existiera. Quitando al humano, ese papel lo
+ocupan DOS piezas y las dos hacen falta: el **verificador**, que ya corre en el turno (medido: sí
+corre por el camino de una tarea), y el **juez** de QA. Y el juez **no basta solo** —la regla que
+`core/cloudstudio.ts#PoliticaDeAprobacion` ya tenía escrita para la subida autónoma—: las
+condiciones las comprueba el CÓDIGO, porque a un modelo se le puede pedir que avise y a veces no
+avisa. Cinco reglas que sostienen esto:
+- **La autorización es el ACTO DE CREAR LA TAREA**, no un interruptor. Elegir un proyecto y
+  escribir un encargo es decir «trabaja en esto sin preguntarme», y sin tarea creada no hay
+  escritura autónoma posible — un ajuste aparte sería algo que armar y recordar. Y **no se
+  reutiliza `seAplicaSinAprobacion`**: su significado es «el humano que está aquí ha decidido no
+  pulsar», rechaza los proyectos conectados, y su marca vive en el `settings.json` de un proyecto.
+- **Las guardas de RUTA siguen enteras**, y eso está probado montando el backend real más
+  `permisosDe`: `/artifacts/`, las vistas aplanadas, `/.env`, `/.git` y `/.xonecode` se rechazan
+  igual. Quitar el modal no abre ninguna de esas puertas. Y no son la misma guarda ni contestan
+  igual —las tres últimas las corta `permissions` con un `ToolMessage` de error, no el backend con
+  una cadena—, así que un test que exigiera una sola forma daría por roto el otro camino.
+- **`Tarea.autorizadas` guarda lo AUTORIZADO, no lo escrito.** Una ruta que las guardas rechazan
+  sale ahí sin tocar el disco. Es una pista y su nombre no puede prometer más: la verdad sobre lo
+  que cambió la tiene la ref de git de la sesión, o sea la pestaña Revisión.
+- **«Terminada» ya no significa «el turno acabó».** `condicionesDeEntrega` (`core/entrega.ts`,
+  pura) exige verificador en VERDE, nada pendiente de aprobar y `revisable`. Esa tercera **no es
+  «árbol limpio»**, y está medido: una tarea que escribe deja `git status` sucio por definición, así
+  que esa condición habría impedido entregar cualquier tarea — es `cambiosDeSesion().via === "git"`,
+  «alguien puede revisar esto», con la misma función que pinta Revisión para que no puedan
+  divergir. El verificador que **NO CORRIÓ no es verde**: «no se sabe» no es «está bien».
+- **Una tarea de SOLO LECTURA sí se entrega**, y no es relajar lo anterior: el dominio del
+  verificador son las escrituras, así que sin cambios la condición **no aplica**. Con tres
+  candados: que no escribió lo dice GIT y no `autorizadas`; `escribio` solo se afirma **con marca**
+  (sin `via: "git"` queda ausente y el verificador se exige como siempre — es la mutación que más
+  tests tumba); y la salvedad viaja pegada al **veredicto** y no al `motivo`, porque el motivo de
+  una tarea terminada no existe: `conEstado` lo borra a propósito.
+
+**Un solo corredor por máquina, y el cerrojo NO lo garantiza solo** (`tareasEnDisco.ts#tomarCerrojo`).
+La toma directa es atómica (`wx`), pero **recoger un cerrojo cuyo dueño parece muerto no se puede
+hacer atómico con primitivas de ficheros**: decidir «está muerto» es una observación de un instante
+y no existe un «renombra solo si sigue siendo este inodo». Cinco vueltas de arreglos midieron tres
+órdenes distintos y cerraron dos; el tercero queda **declarado** en el código, con su secuencia. Lo
+que hace verdad «un solo corredor» es `sigoSiendoDueño()`, que el corredor pregunta **antes de
+despachar cada tarea** — no una marca en memoria, y no solo al arrancar. Un `flock` del núcleo no
+tendría el problema (el sistema lo suelta al morir el proceso) pero Node no lo expone sin módulo
+nativo. Y la cuarentena del cerrojo lleva el **pid** en el nombre: con una ruta compartida, la
+limpieza de un proceso se llevaba por delante el cerrojo vivo de otro.
+
+**Gana la persona.** Una tarea NO arranca en un proyecto cuya consola humana está abierta. La
+condición es «abierta» y no «hay turno en vuelo» porque solo la primera es estable en el instante de
+despachar: con la segunda, una tarea arrancaría y chocaría después. El precio se dice en la pantalla
+—una tarea puede esperar a que alguien cierre un proyecto— en vez de corromper un diff en silencio;
+sin decirlo, una tarea parada se lee como un cuelgue.
+
+**La tarea abre el proyecto por su PROPIA puerta** (`vestibulo.ts#abrirParaTarea`), que no registra
+el proyecto abierto ni muda el sumidero del cable: si reusara `abrirProyecto`, cada tarea que
+arrancara le movería la vista al navegador de quien esté trabajando. Las dos puertas montan las
+mismas barreras porque **comparten un solo cuerpo de función**, no porque un test las enumere.
+
+**Su consola APARCA en vez de contestar por nadie** (`consolaDeTarea.ts`). El hallazgo que gobernó
+el diseño: `consolaWeb.eof()` es `!transporte.conectado()`, así que una consola sin cliente
+enganchado rechaza toda aprobación y contesta cadena vacía a todo `preguntar` **sin decir por qué**.
+`preguntar` y `leerSecreto` no devuelven `""` —16 de sus 18 llamadores lo leen como «usa el valor por
+omisión»—: aparcan y **cortan**. Y el rechazo que sí se usa lleva mensaje propio, sin el «por el
+usuario» del `REJECT_MESSAGE` de la librería, que aquí afirmaría un rechazo que nadie hizo; sin
+`message`, medido en su propia documentación, el modelo remata el turno como si hubiera escrito.
+
+**La sesión de una tarea se PERSISTE, y su `sesion` sobrevive si y solo si hay algo que una persona
+pueda abrir.** Con transcript volcado la conversación se lee desde la barra lateral; sin transcript
+—el corte a mitad de turno: checkpoint sí, transcript no— ese id no nombra nada abrible, así que se
+olvida el hilo y se limpia el campo. Un id que no lleva a ninguna parte miente igual que un control
+sin dato detrás, y además deja 30 MB de checkpoint inalcanzable. Sin aprobación previa, la revisión
+POSTERIOR es la única forma de mirar, así que la ref `refs/xonecode/sesion/<id>` deja de ser una
+comodidad: es la condición `revisable`.
+
+**Y borrar una sesión que una tarea está usando DECLINA con motivo**, no borra ni resucita. El daño
+no era la fila del índice: `olvidarMarcaDeSesion` y `olvidarMemoriaDeHilo` no son condicionales en
+ese camino, así que borrar se llevaba la ref de git y el checkpoint de un hilo que el agente sigue
+escribiendo.
+
+**El cable de las tareas, y el CABLEADO que se probó aparte.** La cola entera viaja en
+`{clase:"tareas"}` —a todos los clientes, y la ráfaga de bienvenida solo al recién llegado— y
+las intenciones vuelven en `{clase:"tarea"}`. Dos cosas que no son obvias:
+- **`crearTarea` no es una opción suelta**, y no por purismo: resolver el id de proyecto a
+  `{id, raiz, nombre}` necesita `proyectos`, `entornoElegido` y `vestibulo.raizDeProyecto`, que
+  solo existen dentro del cierre de `montarRutas`. Entran el PUERTO de la cola y el corredor, y
+  `montarRutas` construye los manejadores con su propio estado — la misma razón por la que
+  `registrarEntorno` devuelve el entorno REGISTRADO en vez de que el llamante deduzca el id.
+- **`arrancarConectado` es UNA función con el orden dentro**: conectar el puente al cable y
+  LUEGO arrancar el corredor. Como dos llamadas, el orden sería una convención que nada
+  comprueba, y en producción el corredor puede reconciliar y disparar `alCambiar` antes de que
+  el puente esté puesto. Medido: invertirlo pone tres tests en rojo.
+- **Y el `try` alrededor de `alCambiar` no es higiene.** Medido: sin él, una excepción al emitir
+  sube al `catch` de `arrancar()`, que llama a `soltarCerrojo()` y **para el corredor entero** —
+  todas las tareas de la máquina, no una notificación perdida.
+
+**El patrón de fallo de esta arquitectura, medido CINCO veces en una sola tanda: una
+composición de producción viviendo en un cierre que todos los tests doblan.** Los cinco:
+`backendDeAgente` (el que dejó la lección escrita), el corredor sin cablear en
+`arrancarConsolaWeb`, el `escribio` a fuego en la derivación de `revisionConGit`, la capa de
+proyecto de `fuentesDelJuez`, y el montaje de `/adjuntos/` con sus ocho saltos. En los cinco la
+regla podía dejar de estar montada **con todo en verde**, y en los cinco el remedio fue el mismo:
+extraer la composición a una función exportada y probarla contra lo real. Regla práctica: **si
+una regla de producción se compone dentro de algo que los tests simulan, esa regla no está
+probada — está escrita.**
+
+**El kanban vive en el escritorio** (`componentes/Kanban.tsx`), con una columna por estado y la de
+`requiere-atencion` rotulada **«Esperando feedback»**, que es lo que significa. Cuatro reglas:
+- **La tarjeta de esperando feedback no lleva diff ni botón de aprobar.** No es una aprobación
+  pendiente: es una pregunta al desarrollador, y se contesta escribiendo. Un modal con un diff
+  ahí prometería una decisión que ya se tomó al crear la tarea.
+- **Dice lo que la tarea AUTORIZÓ escribir, nunca «escribió»**, y enlaza a Revisión. Sin
+  aprobación previa, la revisión posterior es la única forma de mirar, así que el enlace es la
+  pieza y no un adorno.
+- **Una tarea que no arranca porque su proyecto tiene la consola humana abierta lo DICE.** Sin
+  eso se lee como un cuelgue, que es el peor final de una cola.
+- **«No ha llegado» no es «no hay tareas»**: si esta ejecución no ejecuta tareas, el servidor no
+  manda `tareas` y el panel lo dice en vez de afirmar una cola vacía.
+
+**El feedback vuelve al agente como mensaje de USUARIO en el mismo hilo**, que es el camino que
+el lazo de reparación del verificador ya recorría — un encargo nuevo perdería todo lo que la
+tarea sabe. Cuatro reglas: el feedback es una LISTA y no un campo (varias vueltas, y la segunda
+no puede borrar la primera); se marca CONSUMIDO o la vuelta siguiente lo repetiría; un feedback
+vacío se rechaza (devolvería la tarea al lazo sin nada nuevo que decirle, el mismo argumento por
+el que un título vacío se rechaza en `sesiones.ts`); y **si el hilo ya no se puede reanudar se
+DICE** —se manda el encargo entero, el feedback y un aviso explícito— en vez de aparentar una
+continuidad que no existe.
+
+**Y una trampa que costó una tarea entera: `abrirParaTarea` tiene que REENVIAR `tarea.sesion`.**
+No lo hacía en ninguna de sus tres capas, así que todo reintento abría un hilo en blanco y
+«sigue en su hilo» era falso en producción aunque el test superficial pasara. Lo que lo destapó
+fue medir que el `.jsonl` de la sesión CRECE con las dos vueltas del turno, en vez de comprobar
+que el `thread_id` coincidía.
+
 **Crear una TAREA es la autorización, y la ventana de crear es el único sitio donde eso se
 puede decir antes de que ocurra** (`apps/web/src/componentes/NuevaTarea.tsx`,
 `agent/aumentador.ts`, `core/adjuntos.ts`). Una tarea de fondo aplica sus escrituras sin
