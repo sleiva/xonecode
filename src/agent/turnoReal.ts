@@ -1,4 +1,4 @@
-import { readdirSync, lstatSync, statSync, existsSync, readFileSync } from "node:fs";
+import { readdirSync, lstatSync, statSync, existsSync, readFileSync, realpathSync } from "node:fs";
 import { join, sep, resolve } from "node:path";
 import { randomUUID } from "node:crypto";
 import { HumanMessage, ToolMessage, type AIMessage, type BaseMessage } from "@langchain/core/messages";
@@ -325,6 +325,27 @@ export async function abrirSesionReal(opciones: {
    * —`write_file` lleva el contenido entero—, pero aprobar a ciegas es peor que no aprobar,
    * así que la ruta sí. Una sola llamada a `getState` para las dos cosas.
    */
+  /**
+   * El ANTES del diff de una aprobación, leído del disco con las dos barreras: la lexical de
+   * `rutaRealDeVirtual` y la recomprobación sobre el camino REAL. Un fichero que no existe
+   * —el caso normal de un fichero nuevo— y uno cuyo destino se sale del proyecto dan lo
+   * mismo: cadena vacía, que es el lado conservador. No se distinguen a propósito: por aquí
+   * no se informa de nada, y decir «ese enlace apunta fuera» exigiría un canal que este
+   * lector no tiene.
+   */
+  const leerElAntes = (ruta: string): string => {
+    const real = rutaRealDeVirtual(raiz, ruta);
+    if (real === undefined) return "";
+    try {
+      const raizReal = realpathSync(raiz);
+      const destino = realpathSync(real);
+      if (destino !== raizReal && !destino.startsWith(raizReal + sep)) return "";
+      return readFileSync(destino, "utf8");
+    } catch {
+      return "";
+    }
+  };
+
   const leerPendientes = async (): Promise<{
     lista: PendienteDeAprobacion[];
     ficheros: Map<string, string>;
@@ -351,15 +372,14 @@ export async function abrirSesionReal(opciones: {
       // porque el test que lo cubría usaba `"app.xne"` sin barra, que es la otra forma que
       // también puede llegar. `rutaRealDeVirtual` acepta las dos y además contiene el `..`,
       // que por aquí traía al diff el contenido de un fichero de FUERA del proyecto.
-      const vista = cambioDe(c, (ruta) => {
-        const real = rutaRealDeVirtual(raiz, ruta);
-        if (real === undefined) return "";
-        try {
-          return readFileSync(real, "utf8");
-        } catch {
-          return "";
-        }
-      });
+      //
+      // Y la contención lexical NO basta sola: un enlace simbólico DENTRO del proyecto que
+      // apunte fuera la pasa —su sitio sí está dentro— y `readFileSync` lo sigue, así que el
+      // contenido de fuera acabaría igual en la pantalla de la aprobación. Lo que falla no es
+      // el sitio, es el DESTINO: la misma lección que `arbolDeProyecto.ts` ya pagó, y por eso
+      // se recomprueba sobre el camino REAL. `realpath` canonicaliza además las mayúsculas,
+      // que en APFS y en NTFS es la otra mitad del mismo agujero.
+      const vista = cambioDe(c, (ruta) => leerElAntes(ruta));
       if (vista) diffs.set(c.id, vista.lineas);
     }
     return { lista: crudos.map(aPendiente), ficheros, diffs };

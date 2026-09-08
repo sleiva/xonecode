@@ -437,6 +437,35 @@ describe("abrirSesionReal", () => {
       rmSync(dir, { recursive: true, force: true });
     });
 
+    it("un enlace simbólico dentro del proyecto que apunta FUERA no trae su contenido", async () => {
+      // La contención lexical no lo caza: el sitio del enlace sí está dentro del proyecto, y
+      // `readFileSync` lo sigue sin enterarse. Lo que falla no es el sitio, es el DESTINO —
+      // la misma lección que `arbolDeProyecto.ts` ya pagó con `enlace-env.txt` → `.env`. Sin
+      // la recomprobación sobre el camino real, el contenido de un fichero de fuera se pinta
+      // en la pantalla donde una persona decide creyendo que mira su proyecto.
+      const dir = mkdtempSync(join(tmpdir(), "turnoreal-enlace-"));
+      writeFileSync(join(dir, "secreto.txt"), "no soy del proyecto\n");
+      const raiz = join(dir, "proyecto");
+      mkdirSync(raiz, { recursive: true });
+      symlinkSync(join(dir, "secreto.txt"), join(raiz, "enlace.txt"));
+      const vistos: Array<Map<string, LineaDeDiff[]> | undefined> = [];
+
+      const sesion = await abrir({
+        escribe: true,
+        raiz,
+        interruptArgs: { file_path: "/enlace.txt", content: "pisado\n" },
+        pedir: async (pendientes, _ficheros, diffs) => {
+          vistos.push(diffs);
+          return rechazarTodo()(pendientes);
+        },
+      });
+      await sesion.turno("escribe algo", pielFalsa());
+
+      // Sin ANTES: para el diff, el destino no está en el proyecto.
+      expect(vistos[0]?.get("int-1")).toEqual([{ tipo: "anadido", texto: "pisado" }]);
+      rmSync(dir, { recursive: true, force: true });
+    });
+
     it("un pendiente sin vista (tool que no escribe) no aparece en el mapa de diffs", async () => {
       const vistos: Array<Map<string, LineaDeDiff[]> | undefined> = [];
       const sesion = await abrir({
