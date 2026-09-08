@@ -959,7 +959,13 @@ leer ahora, con palabras y arriba. Lo que la sostiene:
   lo que diga el cliente.
 - **Y cancelar con adjuntos ya subidos borra su carpeta**: si no, quedan documentos de una
   persona en `~/.xonecode/tareas/<borrador>/` que nadie va a volver a ver. Es un
-  `descartar` sobre un id que no está en el índice, que hace exactamente eso.
+  `descartar` sobre un id que no está en el índice, que hace exactamente eso. **Lo que NO
+  hay es poda de HUÉRFANOS**, y se declara: un navegador que se cierre entre la subida y el
+  «Encolar» —o un «Cancelar» que no llegue— deja hasta el tope de la subida (50 MB) bajo un
+  id de borrador que ninguna tarea nombra, y nada lo barre. El camino normal lo limpia; los
+  accidentes, no. Es la misma deuda que el checkpointer, que tampoco tiene poda: en este
+  repo no hay barrido de nada todavía, así que inventarlo aquí sería empezar por la esquina
+  menos costosa.
 - **Un enlace simbólico en la cola era un agujero real, y está MEDIDO.** Con
   `~/.xonecode/tareas/<id>` apuntando a otra carpeta, `mkdirSync(…, {recursive:true})` lo
   SIGUE y `guardarAdjunto` escribía fuera de la cola («escribió FUERA? true»). No es
@@ -2291,6 +2297,13 @@ Un fallo del entorno no se reporta como un proyecto roto: `agent/verificador.ts`
     `.xonecode` y las skills, o sea a las tres filas de la lista. Lo que la fila de
     `/adjuntos/**` sí evita —y está medido— es que un `write_file` de un ESPECIALISTA se
     convierta en un fichero del proyecto cuando la carpeta no está montada.
+  - **Pero su ALCANCE creció con las tareas, y hay que decirlo.** Con `/adjuntos/` montada
+    —o sea en el turno de una tarea que trae adjuntos—, ese `write_file` del orquestador
+    aterriza en `~/.xonecode/tareas/<id>/adjuntos/`, o sea **fuera del proyecto**: no solo
+    escribe donde no debe, escribe donde una persona guarda sus documentos de entrada y
+    donde la interfaz presenta lo que hay como «lo que te adjuntaron». La causa no cambia y
+    el arreglo tampoco (o permisos, o quitarle las tools de fichero); lo que cambia es el
+    daño posible, y un hueco declarado tiene que declarar hasta dónde llega.
   - **Lo que hoy lo tapa es el prompt, que es exactamente lo que este repo no acepta como
     barrera**: el orquestador tiene instrucciones de no escribir y de delegar todo, y por eso
     no se ha visto nunca. Las guardas del BACKEND sí le aplican (vistas aplanadas, artefactos
