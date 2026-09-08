@@ -161,6 +161,42 @@ describe("AccionesDeTarea", () => {
     expect(alDescartar).toHaveBeenCalledWith("t7");
   });
 
+  it("cancelar la confirmación no manda nada, y se puede volver a abrir", () => {
+    const alDescartar = vi.fn();
+    render(<AccionesDeTarea tarea={TAREA({ id: "t7", estado: "nuevo", motivo: undefined })} conectado alDescartar={alDescartar} />);
+    fireEvent.click(screen.getByRole("button", { name: /^descartar$/i }));
+    fireEvent.click(screen.getByRole("button", { name: /^cancelar$/i }));
+    expect(alDescartar).not.toHaveBeenCalled();
+    expect(screen.queryByRole("button", { name: /sí, descartar/i })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: /^descartar$/i }));
+    expect(screen.getByRole("button", { name: /sí, descartar/i })).toBeTruthy();
+  });
+
+  /**
+   * La confirmación de descartar es una VENTANA (`Modal`), no la fila de dos botones de
+   * antes de Task 13, reutilizando la coraza de `NuevaSesion.module.css` — el mismo camino
+   * que ya usa `AccionDeSesion.tsx` para borrar una sesión, y por el mismo motivo: «eliminar
+   * al primer clic en una fila de 34 px es cómo se pierde la conversación de una tarde», y
+   * la tarjeta del kanban es tan estrecha como esa fila. Y tiene que decir la VERDAD medida,
+   * no solo «¿seguro?»: para una tarea EN PROCESO, descartarla no para el turno —sigue
+   * corriendo y sus escrituras se siguen aplicando al proyecto sin que la interfaz las
+   * vuelva a enseñar— y sus adjuntos se borran en el acto aunque el turno los siga
+   * necesitando (medido en `agent/tareasEnDisco.ts#borrarTarea` y
+   * `web/servidor/corredorDeTareas.ts`, sin `cortar()` de por medio).
+   */
+  it("descartar una tarea EN PROCESO avisa de que el turno sigue corriendo y los adjuntos se borran ya", () => {
+    render(<AccionesDeTarea tarea={TAREA({ id: "t7", estado: "en-proceso", motivo: undefined })} conectado alDescartar={vi.fn()} />);
+    fireEvent.click(screen.getByRole("button", { name: /^descartar$/i }));
+    expect(screen.getByText(/sigue corriendo/i)).toBeTruthy();
+    expect(screen.getAllByText(/adjuntos/i).length).toBeGreaterThan(0);
+  });
+
+  it("una tarea que NO está en proceso no lleva ese aviso: no hay turno que siga corriendo", () => {
+    render(<AccionesDeTarea tarea={TAREA({ id: "t7", estado: "nuevo", motivo: undefined })} conectado alDescartar={vi.fn()} />);
+    fireEvent.click(screen.getByRole("button", { name: /^descartar$/i }));
+    expect(screen.queryByText(/sigue corriendo/i)).toBeNull();
+  });
+
   it("feedback: vacío no manda, se recorta y el campo se limpia tras enviar", () => {
     const alEnviarFeedback = vi.fn();
     render(<AccionesDeTarea tarea={TAREA({ id: "t9" })} conectado alEnviarFeedback={alEnviarFeedback} />);

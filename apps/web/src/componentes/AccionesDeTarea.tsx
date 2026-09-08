@@ -1,6 +1,13 @@
 import { useState } from "react";
+import { Modal, Button } from "@deepseek-ai/dsh-client-ui-primitives";
 import { TRANSICIONES, type TareaDelCable } from "../tipos.js";
 import estilos from "./AccionesDeTarea.module.css";
+// La coraza del modal —capa, velo, ventana, título, nota, acciones, el botón primario— es
+// la de `NuevaSesion.module.css`, la MISMA que reutiliza `AccionDeSesion.tsx` para
+// confirmar el borrado de una sesión: «es el mismo modal, y dos copias del mismo velo es
+// cómo se acaba con dos velos distintos». Descartar una tarea es la misma clase de
+// decisión —irreversible, sin papelera— así que es el mismo camino y no una ventana nueva.
+import modal from "./NuevaSesion.module.css";
 
 /**
  * Las acciones de una tarea, UNA sola pieza para el kanban del escritorio
@@ -36,6 +43,26 @@ import estilos from "./AccionesDeTarea.module.css";
  * falló el botón o el servidor. El aviso vive dentro del propio grupo — no en cada
  * botón por separado, que sería el mismo aviso repetido cuatro veces sin decir nada
  * distinto cada vez.
+ *
+ * **Descartar confirma en una VENTANA, no en la fila.** Antes era una fila de dos botones
+ * («¿Borrar la tarea? / Sí, descartar / Cancelar») dentro del mismo hueco estrecho —una
+ * tarjeta del kanban o una fila de lista—, y esta pieza ahora ofrece descartar en TODOS los
+ * estados, incluido `en-proceso`: la misma razón por la que una sesión se borra desde una
+ * ventana y no al primer clic de su «…» — «eliminar al primer clic en una fila de 34 px es
+ * cómo se pierde la conversación de una tarde» — aplica igual aquí, y la tarjeta del kanban
+ * es tan estrecha como esa fila. Y la ventana DICE lo que de verdad pasa, medido y no
+ * supuesto:
+ * - **El encargo y sus adjuntos se borran, sin papelera**
+ *   (`agent/tareasEnDisco.ts#borrarTarea`: `rmSync` de la carpeta de la tarea).
+ * - **Si está `en-proceso`, descartarla NO para el turno.** `atenderAccionDeTarea("descartar")`
+ *   solo borra del índice — nunca llama a `cortar()` — y `corredorDeTareas.ts` cuenta con
+ *   exactamente esto («la que DESCARTARON del índice mientras corría: su turno sigue vivo»):
+ *   el turno sigue trabajando sobre el proyecto y sus escrituras se siguen aplicando, sin
+ *   que la interfaz vuelva a enseñarlas en ningún sitio.
+ * - **Y sus adjuntos desaparecen EN EL ACTO**, aunque el turno los siga necesitando: el
+ *   `rmSync` de arriba no comprueba el estado —es la misma «no comprueba estado, a
+ *   propósito» de más arriba— y esa misma carpeta es la que el backend del agente tiene
+ *   montada como `/adjuntos/` mientras dure la consola.
  */
 export function AccionesDeTarea({
   tarea: t,
@@ -91,29 +118,22 @@ export function AccionesDeTarea({
           Dar por bueno
         </button>
       ) : null}
-      {!ofrecerDescartar ? null : confirmando ? (
+      {!ofrecerDescartar ? null : (
         <>
-          <span className={estilos.avisoDescarte}>¿Borrar la tarea?</span>
-          <button
-            type="button"
-            className={estilos.botonPeligro}
-            disabled={apagado}
-            onClick={() => {
-              alDescartar!(t.id);
-              setConfirmando(false);
-            }}
-          >
-            Sí, descartar
+          <button type="button" className={estilos.boton} disabled={apagado} onClick={() => setConfirmando(true)}>
+            Descartar
           </button>
-          {/* Cancelar no manda nada al servidor: no se apaga con el cable. */}
-          <button type="button" className={estilos.boton} onClick={() => setConfirmando(false)}>
-            Cancelar
-          </button>
+          {confirmando ? (
+            <ConfirmarDescarte
+              tarea={t}
+              onCancelar={() => setConfirmando(false)}
+              onConfirmar={() => {
+                alDescartar!(t.id);
+                setConfirmando(false);
+              }}
+            />
+          ) : null}
         </>
-      ) : (
-        <button type="button" className={estilos.boton} disabled={apagado} onClick={() => setConfirmando(true)}>
-          Descartar
-        </button>
       )}
       {ofrecerFeedback ? (
         <FormularioDeFeedback id={t.id} apagado={apagado} alEnviar={alEnviarFeedback!} />
@@ -121,6 +141,64 @@ export function AccionesDeTarea({
         <p className={estilos.pista}>Se resuelve editando la tarea para añadir tu feedback: sigue desde ahí.</p>
       ) : null}
     </div>
+  );
+}
+
+/**
+ * La ventana que confirma descartar una tarea. Reutiliza la coraza de
+ * `NuevaSesion.module.css` (`capa`/`velo`/`ventana`/`titulo`/`nota`/`acciones`/`accion`) tal
+ * cual la usa `AccionDeSesion.tsx` para lo mismo con una sesión — mismo modal, mismo motivo:
+ * dos copias del mismo velo es cómo se acaba con dos velos distintos.
+ *
+ * **El aviso de `en-proceso` es el único que cambia según el estado**, y dice lo MEDIDO
+ * (ver el comentario de `AccionesDeTarea` más arriba), no un «¿seguro?» genérico: sin él, la
+ * persona no tiene forma de saber que el turno sigue corriendo y que sus escrituras se
+ * siguen aplicando después de que la tarjeta desaparezca de su pantalla.
+ */
+function ConfirmarDescarte({
+  tarea: t,
+  onCancelar,
+  onConfirmar,
+}: {
+  tarea: TareaDelCable;
+  onCancelar: () => void;
+  onConfirmar: () => void;
+}) {
+  return (
+    <Modal open onClose={onCancelar} title="Descartar tarea" headless className={modal.capa}>
+      <div
+        className={modal.velo}
+        onClick={(evento) => {
+          if (evento.target === evento.currentTarget) onCancelar();
+        }}
+      >
+        <div className={modal.ventana}>
+          <h2 className={modal.titulo}>Descartar tarea</h2>
+          <p className={modal.nota}>
+            Se borra «{t.titulo}»: el encargo y sus adjuntos. No hay papelera.
+          </p>
+          {t.estado === "en-proceso" ? (
+            <p className={modal.nota}>
+              Está en marcha: el turno sigue corriendo sobre el proyecto aunque la descartes
+              —no se para, y lo que escriba se sigue aplicando aunque ya no lo veas aquí—, y
+              sus adjuntos se borran ahora mismo aunque el turno los siga necesitando.
+            </p>
+          ) : null}
+          <div className={modal.acciones}>
+            <Button variant="outline" className={modal.accion} onClick={onCancelar}>
+              Cancelar
+            </Button>
+            <Button
+              variant="primary"
+              className={`${modal.accion} ${modal.principal} ${estilos.destructiva}`}
+              onClick={onConfirmar}
+            >
+              Sí, descartar
+            </Button>
+          </div>
+        </div>
+      </div>
+    </Modal>
   );
 }
 

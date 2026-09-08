@@ -1,8 +1,12 @@
 /* Alias comprobados contra `apps/web/estilos/design-platform.css` (los mismos que
    `Kanban.module.css` y `TareasDelProyecto.module.css`, que se quedaron SIN estas reglas
    duplicadas desde que viven aquí: border-l2, label-primary/secondary/tertiary,
-   state-warn-primary/label, bg-layer-2, interactive-bg-hover. Ningún color literal
-   (`Barra.test.tsx`). */
+   state-warn-label, bg-layer-2, interactive-bg-hover, state-error-primary,
+   label-primary-inverted (esta última compartida con `AccionDeSesion.module.css`, que ya la
+   comprobó para el mismo botón destructivo). Ningún color literal (`Barra.test.tsx`).
+   La coraza del modal de descartar —capa, velo, ventana, título, nota, acciones, el botón
+   primario— vive en `NuevaSesion.module.css` y no aquí: es la misma que ya usa
+   `AccionDeSesion.tsx`, y copiarla sería la tercera versión del mismo velo. */
 
 .acciones {
   display: flex;
@@ -41,29 +45,15 @@
   cursor: default;
 }
 
-.botonPeligro {
-  padding: 4px 8px;
-  border: 0.5px solid var(--dsw-alias-state-warn-primary);
-  border-radius: 8px;
-  background: var(--dsw-alias-bg-layer-2);
-  color: var(--dsw-alias-state-warn-label);
-  font: inherit;
-  font-size: 11px;
-  cursor: pointer;
-}
-
-.botonPeligro:hover {
-  background: var(--dsw-alias-interactive-bg-hover);
-}
-
-.botonPeligro:disabled {
-  opacity: 0.5;
-  cursor: default;
-}
-
-.avisoDescarte {
-  color: var(--dsw-alias-state-warn-label);
-  font-size: 11px;
+/* El botón que confirma descartar, dentro del modal (`ConfirmarDescarte`, coraza de
+   `NuevaSesion.module.css`). MISMA regla que `AccionDeSesion.module.css#destructiva`, y el
+   mismo selector doblado por el mismo motivo: ganarle a `.principal.principal` de
+   `NuevaSesion.module.css`, que también pisa el botón "primario" con dos clases. Relleno
+   rojo lleno y no un tinte suave: es una acción irreversible y sin papelera. */
+.destructiva.destructiva {
+  border-color: var(--dsw-alias-state-error-primary);
+  background: var(--dsw-alias-state-error-primary);
+  color: var(--dsw-alias-label-primary-inverted);
 }
 
 /* Una frase, no una decisión con diff: sin modal. `flex-basis: 100%` para que el campo no
