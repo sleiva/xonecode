@@ -16,9 +16,15 @@
  * escribiera en el `~/.xonecode` de verdad convertiría cualquier test en una escritura en
  * la casa del usuario, y uno que no escribiera sería el no-op silencioso que este repo
  * evita en todas partes.
+ *
+ * La única LECTURA de disco con valor por omisión es `esProyecto` («¿hay copia local
+ * aquí?»), y sigue la misma regla que `sesiones ?? SESIONES_EN_DISCO`: entra por opción
+ * para que un test pueda contestarla sin carpetas, y su omisión es la de verdad porque
+ * mentir en esa pregunta abre un proyecto que no existe.
  */
 
 import { randomUUID } from "node:crypto";
+import { existsSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import type { Acto } from "../../core/actos.js";
@@ -155,6 +161,23 @@ const SESIONES_EN_DISCO: PuertoDeSesiones = {
   elegirDispositivo,
 };
 
+/**
+ * ¿Hay una copia local de proyecto en esa raíz? Es el MISMO criterio con el que el alta
+ * decide `proyectos[].local` (`arranque.ts#hayCopiaLocal`, que tira de aquí): existe su
+ * `.xonecode/config.json`. Dos copias del predicado es cómo divergen el día que una se
+ * afine — el mismo motivo por el que la regla de URL de MCP vive en un solo sitio.
+ *
+ * Se lo traga todo y devuelve `false`: una raíz que no se puede ni mirar (permisos, un
+ * enlace roto) no es un proyecto sobre el que abrir nada, y esta puerta falla CERRADO.
+ */
+export function esProyectoEnDisco(raiz: string): boolean {
+  try {
+    return existsSync(join(raiz, ".xonecode", "config.json"));
+  } catch {
+    return false;
+  }
+}
+
 /** Lo mínimo que el vestíbulo necesita de una `SesionReal` para cambiar de proyecto. */
 export interface SesionCerrable {
   cerrar(): void;
@@ -245,6 +268,12 @@ export interface OpcionesDelVestibulo {
    *  identificador. Ver `clienteCloudStudio`. */
   ramasDeProyecto?: (entorno: Entorno, proyecto: string) => Promise<string[]>;
   sesiones?: PuertoDeSesiones;
+  /**
+   * ¿Es esa raíz un proyecto con copia local? Solo la usa `abrirParaTarea`, que es la
+   * puerta sin nadie delante: por la otra, quien abre acaba de pulsar un proyecto de una
+   * lista que el servidor le dio. Por omisión, `esProyectoEnDisco`.
+   */
+  esProyecto?: (raiz: string) => boolean;
   /** Costura de test: por omisión, la consola web de verdad. */
   crearConsola?: (opciones: OpcionesDeConsolaWeb) => ConsolaWeb;
   /** Costura de test: por omisión, `correrConsola`. */
@@ -334,6 +363,19 @@ export interface ConsolaDeProyecto {
   desconectar(enviar?: Sumidero): void;
   actos(): readonly Acto[];
   cerrar(): Promise<void>;
+  /**
+   * Corre UN turno sobre esta consola con la `Consola` que se le pase.
+   *
+   * Existe para las tareas de fondo, y por una razón mecánica: el lazo (`correrConsola`)
+   * consume LÍNEAS de una conversación, y una tarea no es una conversación — tiene un
+   * encargo y nada más. Sin este campo, quien abre por `abrirParaTarea` no tendría forma
+   * de correr nada: el lazo vive dentro y desde fuera solo se le pueden meter líneas.
+   *
+   * Es EXACTAMENTE la función que este objeto le pasó a `correrConsola` —el mismo objeto,
+   * y hay un test que lo asegura—, así que una corrección al turno no puede alcanzar a una
+   * puerta y no a la otra. Lo que cambia entre las dos es la `Consola` que se le da.
+   */
+  readonly ejecutarTurno: EjecutorDeTurno;
   /** El retorno de `correrConsola`. Resuelve cuando el lazo termina (EOF o `/salir`). */
   readonly terminada: Promise<number>;
 }
@@ -406,6 +448,11 @@ export interface Vestibulo {
     rama: string;
   }): Promise<{ raiz: string; ruta: string }>;
   abrirProyecto(apertura: { raiz: string; sesion?: string }): Promise<ConsolaDeProyecto>;
+  /**
+   * Abrir un proyecto para una TAREA de fondo: la misma construcción, sin registrarlo como
+   * el proyecto abierto ni mudar el sumidero del cable. Ver la implementación.
+   */
+  abrirParaTarea(raiz: string): Promise<ConsolaDeProyecto>;
   proyectoAbierto(): ConsolaDeProyecto | undefined;
   /** El usuario se va sin terminar. No escribe nada; DICE lo que ya quedó escrito. */
   cancelar(): Promise<void>;
@@ -557,6 +604,7 @@ export function crearVestibulo(opciones: OpcionesDelVestibulo): Vestibulo {
     // que esta cabecera condena, y `cloudstudioMcp.ts` la exporta justo para esto.
     ((entorno: Entorno) => adoptarLegadoSiProcede(rutaAuthPorDefecto(), entorno));
   const guardarModeloGlobal = opciones.guardarModeloGlobal ?? guardarModeloGlobalEnDisco;
+  const esProyecto = opciones.esProyecto ?? esProyectoEnDisco;
 
   const consolaDelVestibulo = crearConsola({
     catalogoModelos: opciones.catalogoModelos,
@@ -648,9 +696,37 @@ export function crearVestibulo(opciones: OpcionesDelVestibulo): Vestibulo {
     return resultado;
   };
 
-  const abrirDeVerdad = async ({ raiz, sesion }: { raiz: string; sesion?: string }): Promise<ConsolaDeProyecto> => {
-    await cerrarProyectoAbierto();
-
+  /**
+   * Construye una consola de proyecto — y NADA de la contabilidad del cable.
+   *
+   * Se extrajo de `abrirDeVerdad` cuando apareció la segunda puerta (`abrirParaTarea`), y
+   * la línea del corte es exactamente esa: aquí dentro está TODO lo que decide con qué
+   * barreras corre el agente —el ejecutor real por `crearEjecutor`, de donde cuelga el
+   * backend con las vistas aplanadas retiradas y la guarda de artefactos; las dependencias
+   * de la raíz; la foto del antes; el volcado— y fuera se queda solo quién está enganchado
+   * al cable (`abierto`, y el cierre de lo anterior).
+   *
+   * Que sea UNA función no es comodidad: si las dos puertas divergieran, una tarea correría
+   * con menos barreras que una persona, y eso no se ve — se descubre cuando el agente ya
+   * escribió. Lo único que `alCable` apaga son los dos AVISOS al navegador; ni una regla.
+   */
+  const construirConsolaDeProyecto = async ({
+    raiz,
+    sesion,
+    alCable,
+  }: {
+    raiz: string;
+    sesion?: string;
+    /**
+     * ¿Se le cuentan al cable los flancos del turno y los cambios de modelo?
+     *
+     * Por la puerta de las personas, sí: son lo que apaga el compositor, saca el botón de
+     * parar y reemite el estado de modelos. Por la de las tareas, NO — el mismo aviso
+     * apagaría el compositor en el navegador de quien esté trabajando en otra cosa, y le
+     * pintaría un turno en vuelo que no es suyo.
+     */
+    alCable: boolean;
+  }): Promise<ConsolaDeProyecto> => {
     const reabierta = sesion === undefined ? undefined : sesiones.reabrir(raiz, sesion);
     const consolaWeb = crearConsola({
       catalogoModelos: opciones.catalogoModelos,
@@ -754,6 +830,25 @@ export function crearVestibulo(opciones: OpcionesDelVestibulo): Vestibulo {
     };
 
     const ejecutarTurno: EjecutorDeTurno = async (peticion, estado, consola) => {
+      /**
+       * La raíz del estado tiene que ser la de ESTA consola, y aquí se comprueba.
+       *
+       * Desde que `ejecutarTurno` se expone (`ConsolaDeProyecto.ejecutarTurno`, para las
+       * tareas), el estado lo puede construir quien llama — y de `estado.raiz` sale el
+       * backend del agente (`crearEjecutorReal` → `abrirSesionReal` → `backendDeAgente`).
+       * Una raíz equivocada no da error: hace que el agente lea y ESCRIBA en otro proyecto,
+       * con la aprobación de ese otro y sin un solo síntoma. Falla cerrado, como todo lo
+       * que decide sobre escrituras.
+       *
+       * Por la puerta de las personas esto no puede saltar nunca: el estado lo lleva
+       * `correrConsola` y ningún comando cambia `raiz` (medido en `cli/consola.ts`: solo
+       * `fuentes`, `seleccionesDeCatalogo` y `hilo`). Por eso la guarda va en el envoltorio
+       * COMPARTIDO y no solo en la puerta nueva — una guarda que solo vigila una puerta es
+       * la divergencia que esto viene a evitar.
+       */
+      if (estado.raiz !== raiz) {
+        throw new Error("ese turno trae la raíz de otro proyecto: esta consola solo corre turnos sobre la suya");
+      }
       // El primer turno NUEVO es lo que deja de ser histórica una sesión reabierta.
       // `sesiones.ts` no puede hacerlo —`reabrirSesion` es una lectura pura sin estado
       // entre llamadas—, así que lo hace quien es dueño de la sesión viva, que es esto.
@@ -762,14 +857,14 @@ export function crearVestibulo(opciones: OpcionesDelVestibulo): Vestibulo {
       // `correrConsola` solo lo espera y la piel solo ve eventos. De aquí sale lo que apaga
       // el compositor, saca el botón de parar y enciende el borde vivo.
       consolaWeb.turno(true);
-      escuchaDeTurno?.(true);
+      if (alCable) escuchaDeTurno?.(true);
       try {
         await ejecutorEfectivo(peticion, estado, consola);
       } finally {
         // En el `finally`: un turno que revienta o que se cancela también TERMINA, y dejar
         // el compositor apagado para siempre sería peor que no haberlo apagado nunca.
         consolaWeb.turno(false);
-        escuchaDeTurno?.(false);
+        if (alCable) escuchaDeTurno?.(false);
         volcar();
       }
     };
@@ -790,7 +885,11 @@ export function crearVestibulo(opciones: OpcionesDelVestibulo): Vestibulo {
     // es la única forma de enterarse. Ver `Consola.alEstado`.
     consolaWeb.consola.alEstado = (nuevo) => {
       estadoDeSesion = nuevo;
-      escuchaDeEstado?.(nuevo);
+      // Al cable solo por la puerta de las personas: la escucha reemite el estado de
+      // modelos a los navegadores conectados, y el modelo de una tarea no es el que está
+      // en vigor para quien mira. El estado LOCAL se actualiza igual — `/modelo` dentro de
+      // la tarea tiene que surtir efecto en la tarea.
+      if (alCable) escuchaDeEstado?.(nuevo);
     };
 
     const terminada = correr(
@@ -859,10 +958,54 @@ export function crearVestibulo(opciones: OpcionesDelVestibulo): Vestibulo {
         await terminada.catch(() => 0);
         volcar();
       },
+      // El MISMO objeto que se le acaba de pasar a `correr`, no un segundo envoltorio: dos
+      // versiones del turno divergen en la primera corrección que solo toque a una.
+      ejecutarTurno,
       terminada,
     };
+    return consolaDeProyecto;
+  };
+
+  const abrirDeVerdad = async (apertura: { raiz: string; sesion?: string }): Promise<ConsolaDeProyecto> => {
+    await cerrarProyectoAbierto();
+    const consolaDeProyecto = await construirConsolaDeProyecto({ ...apertura, alCable: true });
     abierto = consolaDeProyecto;
     return consolaDeProyecto;
+  };
+
+  /**
+   * Las consolas abiertas para tareas. No son `abierto` —nadie las mira— pero cada una
+   * tiene su `correrConsola` vivo, así que `cerrar()` tiene que llevárselas: un lazo que
+   * nadie cierra deja el proceso sin terminar, y «cierra el propio vestíbulo» sería falso.
+   *
+   * El objeto se guarda TAL CUAL, sin envolver su `cerrar`: `ConsolaDeProyecto` expone
+   * captadores (`sesion`, `historica`, `cerrada`) y una copia con `...` los congelaría en
+   * el valor que tuvieran al abrir — `sesion` se quedaría en `undefined` para siempre. Las
+   * ya cerradas se PODAN al abrir la siguiente, que es cuando puede empezar a crecer.
+   */
+  const deTareas = new Set<ConsolaDeProyecto>();
+
+  const abrirParaTarea = async (raiz: string): Promise<ConsolaDeProyecto> => {
+    // ANTES de construir nada: sin esto, una raíz equivocada dejaba un `correrConsola`
+    // vivo, una foto de git lanzada y un id de hilo gastado. Y el motivo no lleva la ruta
+    // —puede ser la del home— porque de aquí el error sube al registro de la tarea.
+    if (!esProyecto(raiz)) {
+      throw new Error("esa raíz no es un proyecto de xonecode: falta su .xonecode/config.json");
+    }
+    for (const vieja of deTareas) if (vieja.cerrada) deTareas.delete(vieja);
+    const consolaDeProyecto = await construirConsolaDeProyecto({ raiz, alCable: false });
+    deTareas.add(consolaDeProyecto);
+    return consolaDeProyecto;
+  };
+
+  /** Cierra las consolas de tarea que queden vivas. Ver `deTareas`. */
+  const cerrarLasDeTareas = async (): Promise<void> => {
+    for (const consola of [...deTareas]) {
+      deTareas.delete(consola);
+      // Una que ya cerró el corredor no se vuelve a cerrar, y un fallo al cerrar una no
+      // puede dejar a las demás vivas: el cierre es lo último que corre.
+      if (!consola.cerrada) await consola.cerrar().catch(() => undefined);
+    }
   };
 
   return {
@@ -1059,6 +1202,22 @@ export function crearVestibulo(opciones: OpcionesDelVestibulo): Vestibulo {
     },
 
     abrirProyecto: (apertura) => enCola(() => abrirDeVerdad(apertura)),
+    /**
+     * Abrir un proyecto para una TAREA: la misma construcción, sin registrarlo como el
+     * proyecto abierto ni mudar el sumidero del cable.
+     *
+     * Existe porque el vestíbulo sirve UN proyecto a la vez (`proyectoAbierto()` devuelve
+     * uno) y el cable se muda a esa consola (`arranque.ts#adjuntar`): si el corredor
+     * reusara `abrirProyecto`, cada tarea que arrancase cerraría la consola de quien esté
+     * trabajando y le movería la vista.
+     *
+     * Va por la misma COLA que la otra puerta aunque no toque `abierto`: la cola es lo que
+     * sostiene «una consola de proyecto a la vez», y colarse por delante de un
+     * `cerrarProyectoAbierto` a medias sería empezar a construir mientras el lazo anterior
+     * todavía vive. El precio, dicho: una tarea que llega mientras se cierra un turno
+     * humano de minutos espera a que acabe. Para trabajo de fondo es el lado correcto.
+     */
+    abrirParaTarea: (raiz) => enCola(() => abrirParaTarea(raiz)),
     proyectoAbierto: () => abierto,
 
     cancelar: () => enCola(async () => {
@@ -1075,6 +1234,9 @@ export function crearVestibulo(opciones: OpcionesDelVestibulo): Vestibulo {
 
     cerrar: () => enCola(async () => {
       await cerrarProyectoAbierto();
+      // Y las de las tareas: cada una tiene su `correrConsola` vivo, y dejarlo corriendo
+      // deja el proceso sin terminar. Ver `deTareas`.
+      await cerrarLasDeTareas();
       consolaDelVestibulo.cerrar();
     }),
   };

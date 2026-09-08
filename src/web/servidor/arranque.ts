@@ -96,6 +96,7 @@ import {
   conexionDeVestibulo,
   crearVestibulo,
   escribirProyectoEnDisco,
+  esProyectoEnDisco,
   type OpcionDeEntorno,
   type PasoDelVestibulo,
   type OpcionesDelVestibulo,
@@ -852,12 +853,19 @@ export function montarRutas(
     }
   };
 
-  /** ¿Existe ya la copia local de ese proyecto? Es `.xonecode/config.json` en su raíz: lo
-   *  que `completarProyecto` escribe ENTERO antes de bajar nada. */
+  /**
+   * ¿Existe ya la copia local de ese proyecto? Es `.xonecode/config.json` en su raíz: lo
+   * que `completarProyecto` escribe ENTERO antes de bajar nada.
+   *
+   * El predicado es el del vestíbulo (`esProyectoEnDisco`) y no una copia: `abrirParaTarea`
+   * decide con él si una tarea puede abrir esa raíz, y dos versiones de «esto es un
+   * proyecto» divergen el día que una se afine — con el alta diciendo que hay copia local
+   * y la puerta de tareas diciendo que no.
+   */
   const hayCopiaLocal = (nombre: string): boolean => {
     if (entornoElegido === undefined) return false;
     try {
-      return existsSync(join(vestibulo.raizDeProyecto(entornoElegido, nombre), ".xonecode", "config.json"));
+      return esProyectoEnDisco(vestibulo.raizDeProyecto(entornoElegido, nombre));
     } catch {
       return false;
     }
@@ -952,7 +960,9 @@ export function montarRutas(
       const identidad = proyectos.find((p) => p.id === peticion.proyecto);
       const nombre = identidad?.nombre ?? peticion.proyecto;
       const raiz = vestibulo.raizDeProyecto(entornoElegido, nombre);
-      if (!existsSync(join(raiz, ".xonecode", "config.json"))) {
+      // El MISMO predicado que `hayCopiaLocal` y que la puerta de tareas: era la tercera
+      // copia del literal, y la que decide si aquí se abre o se pregunta la rama.
+      if (!esProyectoEnDisco(raiz)) {
         // Todavía no está bajado: el alta es quien sabe hacerlo, y necesita la rama.
         proyectoElegido = peticion.proyecto;
         // La identidad ENTERA, no el id: el servidor abre por nombre. `identidad` ya está

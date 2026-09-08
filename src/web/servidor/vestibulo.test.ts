@@ -11,7 +11,7 @@
  * el workspace de verdad del usuario que corre los tests.
  */
 import { describe, it, expect } from "vitest";
-import { mkdtempSync, readFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { crearVestibulo, ENTORNOS_OFICIALES, escribirProyectoEnDisco } from "./vestibulo.js";
@@ -20,6 +20,7 @@ import type { Acto } from "../../core/actos.js";
 import type { DispositivoElegido } from "./sesiones.js";
 import type { Entorno } from "../../core/settings.js";
 import { validar } from "../../core/config.js";
+import type { Consola, EjecutorDeTurno } from "../../cli/consola.js";
 
 function dobles() {
   const escrituras: string[] = [];
@@ -805,5 +806,370 @@ describe("el config.json que escribe el alta", () => {
     expect(config.modo).toBe("cloud");
     // Y «entorno» no es un campo desconocido: si lo fuera, /config lo cantaría en cada arranque.
     expect(avisos).toEqual([]);
+  });
+});
+
+/**
+ * La SEGUNDA puerta: abrir un proyecto para una tarea de fondo.
+ *
+ * El punto de riesgo declarado del plan es que esta apertura divergiera de la normal: una
+ * tarea correría entonces con menos barreras que una persona. De ahí que estos tests no
+ * comprueben «devuelve algo» sino DOS propiedades: que el cable no se mueve (ni el
+ * proyecto abierto, ni el aviso de turno, ni el de modelo) y que las dos puertas pasan por
+ * las MISMAS costuras —la del ejecutor real incluida, que es de donde cuelga el backend con
+ * las vistas aplanadas retiradas y la guarda de artefactos.
+ */
+describe("abrirParaTarea — la segunda puerta", () => {
+  /** Un proyecto de verdad en disco: la puerta de tareas exige `.xonecode/config.json`. */
+  function proyectoEnDisco(base: string, nombre: string): string {
+    const raiz = join(base, "webstudio", nombre);
+    mkdirSync(join(raiz, ".xonecode"), { recursive: true });
+    writeFileSync(join(raiz, ".xonecode", "config.json"), JSON.stringify({ modo: "offline" }));
+    return raiz;
+  }
+
+  /** Un temporal que se borra al terminar el test que lo pidió. */
+  function baseTemporal(): string {
+    return mkdtempSync(join(tmpdir(), "xonecode-tareas-vest-"));
+  }
+
+  /**
+   * Una `Consola` AJENA a la consola de proyecto: es la forma que tendrá la del corredor
+   * (`consolaDeTarea`, tarea 4). Lo mínimo del contrato y nada más.
+   */
+  function consolaAjena(): Consola {
+    return {
+      lineas: (async function* () {})(),
+      escribir: () => {},
+      preguntar: async () => "",
+      interactivo: false,
+      leerSecreto: async () => "",
+      catalogoModelos: new CatalogoModelosEnMemoria(),
+      guardarModeloGlobal: (_papel, id) => ({ ruta: "/casa/.xonecode/config.json", id }),
+    };
+  }
+
+  it("NO mueve el proyecto abierto del cable, y no cierra el que estaba", async () => {
+    // Si el corredor reusara `abrirProyecto`, cada tarea que arrancara le movería la vista
+    // al navegador de quien esté trabajando: `abrirDeVerdad` CIERRA lo abierto y se pone en
+    // su sitio, y `arranque.ts#adjuntar` muda el sumidero a la consola que devuelve
+    // `proyectoAbierto()`.
+    const base = baseTemporal();
+    const s = sesionesEnMemoria();
+    const v = crearVestibulo({
+      ...dobles(),
+      origenDeTrabajo: "global",
+      sesiones: s.puerto,
+      baseDeWorkspace: base,
+    });
+    const raizA = proyectoEnDisco(base, "A");
+    const raizB = proyectoEnDisco(base, "B");
+
+    const abierta = await v.abrirProyecto({ raiz: raizA });
+    expect(v.proyectoAbierto()).toBe(abierta);
+
+    const deTarea = await v.abrirParaTarea(raizB);
+    expect(deTarea.raiz).toBe(raizB);
+    // Lo que importa: el cable sigue donde estaba, y sigue VIVO.
+    expect(v.proyectoAbierto()).toBe(abierta);
+    expect(abierta.cerrada).toBe(false);
+
+    await deTarea.cerrar();
+    await v.cerrar();
+    rmSync(base, { recursive: true, force: true });
+  });
+
+  it("un turno de tarea no toca el cable: ni el aviso de turno ni el de modelo", async () => {
+    // Es la razón de que el envoltorio esté PARTIDO en dos. `escuchaDeTurno` es lo que
+    // apaga el compositor del navegador y saca el botón de parar (`arranque.ts`), y
+    // `escuchaDeEstado` reemite el estado de modelos: una tarea de fondo no puede encender
+    // ni apagar nada en la pantalla de nadie.
+    const base = baseTemporal();
+    const s = sesionesEnMemoria();
+    const turnos: boolean[] = [];
+    let estados = 0;
+    const v = crearVestibulo({
+      ...dobles(),
+      origenDeTrabajo: "global",
+      sesiones: s.puerto,
+      baseDeWorkspace: base,
+      crearEjecutor: () => async (_peticion, _estado, consola) => {
+        consola.escribir("hecho\n");
+      },
+      correr: async () => 0,
+    });
+    v.alCambiarTurno((activo) => turnos.push(activo));
+    v.alCambiarEstadoDeSesion(() => estados++);
+
+    const deTarea = await v.abrirParaTarea(proyectoEnDisco(base, "A"));
+    await deTarea.ejecutarTurno("arregla el login", deTarea.estadoDeSesion, consolaAjena());
+    expect(turnos).toEqual([]);
+    deTarea.consola.consola.alEstado?.({ ...deTarea.estadoDeSesion, hilo: "otro" });
+    expect(estados).toBe(0);
+
+    // Y por la puerta de siempre SÍ se avisa: si no, este test pasaría con las dos mudas.
+    const humana = await v.abrirProyecto({ raiz: proyectoEnDisco(base, "B") });
+    await humana.ejecutarTurno("arregla el login", humana.estadoDeSesion, consolaAjena());
+    expect(turnos).toEqual([true, false]);
+    humana.consola.consola.alEstado?.({ ...humana.estadoDeSesion, hilo: "otro" });
+    expect(estados).toBe(1);
+
+    await deTarea.cerrar();
+    await v.cerrar();
+    rmSync(base, { recursive: true, force: true });
+  });
+
+  it("dos tareas de proyectos distintos pueden estar abiertas a la vez", async () => {
+    const base = baseTemporal();
+    const s = sesionesEnMemoria();
+    const v = crearVestibulo({
+      ...dobles(),
+      origenDeTrabajo: "global",
+      sesiones: s.puerto,
+      baseDeWorkspace: base,
+    });
+    const raices = ["A", "B"].map((n) => proyectoEnDisco(base, n));
+    const consolas = await Promise.all(raices.map((r) => v.abrirParaTarea(r)));
+    expect(consolas.map((c) => c.raiz)).toEqual(raices);
+    // Cada una con su hilo: son sesiones distintas.
+    expect(consolas[0]!.idDeHilo).not.toBe(consolas[1]!.idDeHilo);
+    // Y las dos vivas: la segunda no se llevó por delante a la primera.
+    expect(consolas.map((c) => c.cerrada)).toEqual([false, false]);
+    // Ninguna es «el proyecto abierto»: nadie las está mirando.
+    expect(v.proyectoAbierto()).toBeUndefined();
+    for (const c of consolas) await c.cerrar();
+    await v.cerrar();
+    rmSync(base, { recursive: true, force: true });
+  });
+
+  it("el `ejecutarTurno` que se expone es el MISMO que corre el lazo, en las dos puertas", async () => {
+    // Sin este aserto, el campo podría ser un segundo envoltorio: el lazo correría uno y
+    // quien abre por la segunda puerta otro, y las dos versiones divergirían en la primera
+    // corrección que solo tocara una.
+    const base = baseTemporal();
+    const s = sesionesEnMemoria();
+    const recibidos = new Map<string, EjecutorDeTurno | undefined>();
+    const v = crearVestibulo({
+      ...dobles(),
+      origenDeTrabajo: "global",
+      sesiones: s.puerto,
+      baseDeWorkspace: base,
+      correr: async (_consola, estado, ejecutar) => {
+        recibidos.set(estado.raiz, ejecutar);
+        return 0;
+      },
+    });
+    const raizA = proyectoEnDisco(base, "A");
+    const raizB = proyectoEnDisco(base, "B");
+    const humana = await v.abrirProyecto({ raiz: raizA });
+    const deTarea = await v.abrirParaTarea(raizB);
+
+    expect(recibidos.get(raizA)).toBe(humana.ejecutarTurno);
+    expect(recibidos.get(raizB)).toBe(deTarea.ejecutarTurno);
+
+    await deTarea.cerrar();
+    await v.cerrar();
+    rmSync(base, { recursive: true, force: true });
+  });
+
+  it("las dos puertas pasan por las MISMAS costuras: una construcción, no dos", async () => {
+    // El criterio de aceptación es «el backend de las dos puertas monta las mismas
+    // barreras», y esto es lo que lo prueba sin tautología: el backend con las vistas
+    // aplanadas retiradas, la guarda de artefactos y `/skills/` lo compone
+    // `backendDeAgente` DENTRO del ejecutor real, que entra por `crearEjecutor` — una sola
+    // fábrica. Comparar dos `backendDeAgente` entre sí no puede fallar nunca; comprobar
+    // que las dos puertas llaman a las mismas costuras, con su raíz, sí falla el día que
+    // alguien le dé a la puerta de tareas una fábrica propia o se salte un gancho.
+    const base = baseTemporal();
+    const s = sesionesEnMemoria();
+    const llamadas: string[] = [];
+    const v = crearVestibulo({
+      ...dobles(),
+      origenDeTrabajo: "global",
+      sesiones: s.puerto,
+      baseDeWorkspace: base,
+      crearEjecutor: () => {
+        llamadas.push("crearEjecutor");
+        return async () => {};
+      },
+      dependenciasDeProyecto: (raiz) => {
+        llamadas.push(`dependencias:${raiz}`);
+        return {};
+      },
+      marcarSesion: async (raiz) => {
+        llamadas.push(`marcar:${raiz}`);
+        return async () => true;
+      },
+      correr: async (_consola, estado) => {
+        llamadas.push(`correr:${estado.raiz}`);
+        return 0;
+      },
+    });
+    const raizA = proyectoEnDisco(base, "A");
+    const raizB = proyectoEnDisco(base, "B");
+
+    await v.abrirProyecto({ raiz: raizA });
+    const porLaHumana = [...llamadas];
+    llamadas.length = 0;
+    const deTarea = await v.abrirParaTarea(raizB);
+    const porLaDeTarea = [...llamadas];
+
+    // La misma secuencia de costuras, en el mismo orden, con la raíz de cada una.
+    expect(porLaDeTarea).toEqual(porLaHumana.map((c) => c.replace(raizA, raizB)));
+    // Y no está vacía: un test que compare dos listas vacías no prueba nada.
+    expect(porLaHumana).toContain("crearEjecutor");
+    expect(porLaHumana).toContain(`dependencias:${raizA}`);
+    expect(porLaHumana).toContain(`marcar:${raizA}`);
+
+    await deTarea.cerrar();
+    await v.cerrar();
+    rmSync(base, { recursive: true, force: true });
+  });
+
+  it("una raíz que no es un proyecto se rechaza con motivo, sin crear nada", async () => {
+    const base = baseTemporal();
+    const s = sesionesEnMemoria();
+    let construidas = 0;
+    let lazos = 0;
+    const v = crearVestibulo({
+      ...dobles(),
+      origenDeTrabajo: "global",
+      sesiones: s.puerto,
+      baseDeWorkspace: base,
+      crearEjecutor: () => {
+        construidas++;
+        return async () => {};
+      },
+      correr: async () => {
+        lazos++;
+        return 0;
+      },
+    });
+    const abierta = await v.abrirProyecto({ raiz: proyectoEnDisco(base, "A") });
+    const antes = readdirSync(base).sort();
+
+    // Una carpeta que no existe, y una que existe pero no es un proyecto: las dos.
+    const vacia = join(base, "vacia");
+    mkdirSync(vacia);
+    await expect(v.abrirParaTarea(join(base, "no", "existe"))).rejects.toThrow(/no es un proyecto/i);
+    await expect(v.abrirParaTarea(vacia)).rejects.toThrow(/no es un proyecto/i);
+
+    // Nada construido, ningún lazo nuevo, y el cable donde estaba.
+    expect(construidas).toBe(1);
+    expect(lazos).toBe(1);
+    expect(v.proyectoAbierto()).toBe(abierta);
+    // Y en disco solo la carpeta que este test creó a mano.
+    expect(readdirSync(base).sort()).toEqual([...antes, "vacia"].sort());
+    // El motivo NO lleva la ruta: puede ser la del home del usuario, y de aquí el error
+    // sube al registro de la tarea, que sí se lee desde el navegador.
+    await expect(v.abrirParaTarea(vacia)).rejects.toThrow(
+      expect.objectContaining({ message: expect.not.stringContaining(base) }) as Error
+    );
+
+    await v.cerrar();
+    rmSync(base, { recursive: true, force: true });
+  });
+
+  it("cerrar el vestíbulo se lleva también las consolas de tarea", async () => {
+    // Sin esto, cerrar la consola web deja vivo un `correrConsola` por tarea abierta y el
+    // proceso no termina. `cerrar()` promete «el proyecto abierto y el propio vestíbulo», y
+    // una consola de tarea no es ninguno de los dos: había que nombrarla.
+    const base = baseTemporal();
+    const s = sesionesEnMemoria();
+    const v = crearVestibulo({
+      ...dobles(),
+      origenDeTrabajo: "global",
+      sesiones: s.puerto,
+      baseDeWorkspace: base,
+    });
+    const deTarea = await v.abrirParaTarea(proyectoEnDisco(base, "A"));
+    expect(deTarea.cerrada).toBe(false);
+    await v.cerrar();
+    expect(deTarea.cerrada).toBe(true);
+    rmSync(base, { recursive: true, force: true });
+  });
+
+  /**
+   * El agujero que abre exponer el ejecutor, y por qué se cierra AQUÍ.
+   *
+   * `EjecutorDeTurno` recibe el `EstadoDeSesion` por parámetro, y de su `raiz` sale el
+   * backend del agente (`crearEjecutorReal` → `abrirSesionReal` → `backendDeAgente`). Por
+   * la puerta de las personas eso es inofensivo: el estado lo lleva `correrConsola` y
+   * ningún comando cambia `raiz` (medido: `/modelo`, `/modelos` y `/nuevo` tocan `fuentes`,
+   * `seleccionesDeCatalogo` y `hilo`, nada más). Por la de las tareas el estado lo construye
+   * quien llama, así que una raíz equivocada haría que el agente trabajara —y escribiera—
+   * en OTRO proyecto, sin que nadie lo aprobara y sin síntoma. Se para en el mismo
+   * envoltorio, para las dos puertas.
+   */
+  it("un turno con la raíz de OTRO proyecto se rechaza, no se corre en el sitio equivocado", async () => {
+    const base = baseTemporal();
+    const s = sesionesEnMemoria();
+    let corridos = 0;
+    const v = crearVestibulo({
+      ...dobles(),
+      origenDeTrabajo: "global",
+      sesiones: s.puerto,
+      baseDeWorkspace: base,
+      crearEjecutor: () => async () => {
+        corridos++;
+      },
+      correr: async () => 0,
+    });
+    const raizA = proyectoEnDisco(base, "A");
+    const otra = proyectoEnDisco(base, "B");
+    const deTarea = await v.abrirParaTarea(raizA);
+
+    await expect(
+      deTarea.ejecutarTurno("escribe algo", { ...deTarea.estadoDeSesion, raiz: otra }, consolaAjena())
+    ).rejects.toThrow(/ra[ií]z/i);
+    expect(corridos).toBe(0);
+    // Y con la suya corre: la guarda no es un «no» a todo.
+    await deTarea.ejecutarTurno("escribe algo", deTarea.estadoDeSesion, consolaAjena());
+    expect(corridos).toBe(1);
+
+    await deTarea.cerrar();
+    await v.cerrar();
+    rmSync(base, { recursive: true, force: true });
+  });
+
+  /**
+   * Lo que esta puerta NO resuelve, MEDIDO aquí para que no se descubra en producción.
+   *
+   * `volcar()` lee `consolaWeb.actos()`, o sea la piel de ESTA consola de proyecto. Un
+   * turno corrido con una `Consola` ajena —que es exactamente lo que va a pasar: el
+   * corredor le pasará la suya— escribe sus eventos en esa otra piel, así que el `.jsonl`
+   * de la sesión se queda vacío y `sesion` no llega a existir nunca. No se arregla aquí: la
+   * tarea 4 es la que decide qué piel usa el corredor, y con esa decisión delante se sabrá
+   * si la sesión de una tarea tiene que quedar guardada o no.
+   */
+  it("MEDIDO: un turno con una Consola ajena no vuelca nada en el índice de la sesión", async () => {
+    const base = baseTemporal();
+    const s = sesionesEnMemoria();
+    const v = crearVestibulo({
+      ...dobles(),
+      origenDeTrabajo: "global",
+      sesiones: s.puerto,
+      baseDeWorkspace: base,
+      // Un ejecutor que NO es doble: si lo fuera, `volcar` saldría antes por `esDoble` y
+      // este test no mediría lo que dice medir.
+      crearEjecutor: () => async (_peticion, _estado, consola) => {
+        consola.escribir("hecho\n");
+      },
+      correr: async () => 0,
+    });
+    const raiz = proyectoEnDisco(base, "A");
+    const deTarea = await v.abrirParaTarea(raiz);
+
+    await deTarea.ejecutarTurno("arregla el login", deTarea.estadoDeSesion, consolaAjena());
+    expect(deTarea.sesion).toBeUndefined();
+    expect(v.sesionesDe(raiz)).toEqual([]);
+
+    // Con la piel de la propia consola sí se vuelca: el agujero es la piel, no la puerta.
+    await deTarea.ejecutarTurno("y ahora sí", deTarea.estadoDeSesion, deTarea.consola.consola);
+    expect(deTarea.sesion).toBe(deTarea.idDeHilo);
+
+    await deTarea.cerrar();
+    await v.cerrar();
+    rmSync(base, { recursive: true, force: true });
   });
 });
