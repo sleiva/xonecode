@@ -2503,35 +2503,29 @@ Un fallo del entorno no se reporta como un proyecto roto: `agent/verificador.ts`
 
 ## Trampas verificadas
 
-- **`DENEGADO_SIEMPRE` no alcanza al ORQUESTADOR: sus tools de fichero se montan sin
-  `permissions`.** Medido contra deepagents 1.13.2 construyendo el agente de verdad y
-  buscándole su `write_file`: contesta «Successfully wrote» a `/adjuntos/pwn.txt`, a
-  `/skills/pwn.txt` **y a `/.env`**, y los tres ficheros quedan en disco — el de `/skills/`
-  **en la carpeta `skills/` de ESTE repo**, no en el temporal del proyecto de la medida, que
-  es lo que hace la trampa: la raíz montada es `RAIZ_SKILLS`, o sea las instrucciones del
-  propio harness. La causa está a la vista en `xoneAgent.ts`: el `createFilesystemMiddleware` del orquestador lleva `backend`,
-  descripciones y opciones de búsqueda, y **no lleva `permisosDe`** — eso solo lo reciben los
-  subagentes. Tres cosas que hay que tener claras antes de tocarlo:
-  - **Es anterior a los adjuntos y no es de ellos.** Le pasa igual a `.env`, `.git`,
-    `.xonecode` y las skills, o sea a las tres filas de la lista. Lo que la fila de
-    `/adjuntos/**` sí evita —y está medido— es que un `write_file` de un ESPECIALISTA se
-    convierta en un fichero del proyecto cuando la carpeta no está montada.
-  - **Pero su ALCANCE creció con las tareas, y hay que decirlo.** Con `/adjuntos/` montada
-    —o sea en el turno de una tarea que trae adjuntos—, ese `write_file` del orquestador
-    aterriza en `~/.xonecode/tareas/<id>/adjuntos/`, o sea **fuera del proyecto**: no solo
-    escribe donde no debe, escribe donde una persona guarda sus documentos de entrada y
-    donde la interfaz presenta lo que hay como «lo que te adjuntaron». La causa no cambia y
-    el arreglo tampoco (o permisos, o quitarle las tools de fichero); lo que cambia es el
-    daño posible, y un hueco declarado tiene que declarar hasta dónde llega.
-  - **Lo que hoy lo tapa es el prompt, que es exactamente lo que este repo no acepta como
-    barrera**: el orquestador tiene instrucciones de no escribir y de delegar todo, y por eso
-    no se ha visto nunca. Las guardas del BACKEND sí le aplican (vistas aplanadas, artefactos
-    fuera de sitio), porque están en el backend y no en los permisos.
-  - **Y el HITL tampoco**: `hitlDe` se monta por subagente, así que una escritura del
-    orquestador no pasaría por ninguna aprobación. Arreglarlo es una decisión de producto —o
-    se le pasan los permisos, o se le quitan las tools de fichero, que es lo que su propio
-    prompt afirma— y toca todo el agente, no los adjuntos; por eso se deja declarado aquí en
-    vez de cambiarse de lado.
+- **El orquestador va de SOLO LECTURA, y hasta el 9-09-2026 no lo era** (`PERFIL_DEL_ORQUESTADOR`,
+  `xoneAgent.ts`). Su `createFilesystemMiddleware` se montaba SIN `permissions` —eso solo lo
+  recibían los subagentes—, así que las tres filas de `DENEGADO_SIEMPRE` eran decorativas para
+  él. Medido entonces contra deepagents 1.13.2, y vuelto a medir ahora como test que exige lo
+  contrario (`xoneAgent.orquestador.test.ts`): contestaba «Successfully wrote» a `/.env`, a
+  `/skills/pwn.txt` —que aterrizaba en la carpeta `skills/` de ESTE repo, o sea en las
+  instrucciones del propio harness, porque la raíz montada ahí es `RAIZ_SKILLS`— y a cualquier
+  fichero del proyecto; y con `/adjuntos/` montada llegó a escribir en
+  `~/.xonecode/tareas/<id>/adjuntos/`, fuera del proyecto y donde la interfaz presenta lo que
+  hay como «lo que te adjuntaron». Leer `/.env` entero también podía. Cuatro cosas que hay que
+  saber del arreglo:
+  - **Lo único que lo tapaba era el prompt** —«NO tienes herramientas», que además era falso—,
+    que es exactamente lo que este repo no acepta como barrera. Ahora dice lo que puede: «NO
+    tienes herramientas para MODIFICAR nada».
+  - **Se le ponen PERMISOS en vez de quitarle las tools**, que era la otra opción declarada. El
+    motivo es el comentario que ya estaba al lado: ese middleware sustituye al de por omisión
+    de deepagents porque comparte nombre, así que quitarlo podría reinstalar el suyo —sin
+    permisos— y reabrir el agujero por accidente. Ponerle `permissions` no puede.
+  - **Conserva la lectura del proyecto**: `soloLectura` añade `deny write /**`, así que le
+    quedan `read`/`ls`/`glob`/`grep` para orientarse. Solo lectura no es a ciegas.
+  - **El HITL tampoco le alcanzaba** (`hitlDe` se monta por subagente), y con esto deja de
+    importar: `hitlDe` devuelve `{}` para un perfil de solo lectura, porque no hay nada que
+    aprobar. Se le pasa igualmente, para que las dos ramas del fichero se lean iguales.
 
 - **La caché implícita de Gemini no entra a los tamaños de contexto de estos agentes, y el
   adaptador la sobrecuenta en streaming.** Medido con un gancho de hashes sobre el cuerpo de

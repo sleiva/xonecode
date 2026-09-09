@@ -40,7 +40,10 @@ describe("promptOrquestador", () => {
   });
 
   it("dice que NO tiene herramientas y que solo delega", () => {
-    expect(PROMPT_ORQUESTADOR).toMatch(/NO tienes herramientas/);
+    // «NO tienes herramientas» era falso: tiene las seis de fichero, y hasta que se le
+    // pusieron permisos podía escribir con ellas. Ahora son de solo lectura y la frase lo
+    // dice — ver `xoneAgent.orquestador.test.ts`.
+    expect(PROMPT_ORQUESTADOR).toMatch(/NO tienes herramientas para MODIFICAR nada/);
     expect(PROMPT_ORQUESTADOR).toMatch(/delegar/);
   });
 

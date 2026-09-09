@@ -7,7 +7,7 @@ import { MemorySaver } from "@langchain/langgraph";
 import type { BaseCheckpointSaver } from "@langchain/langgraph-checkpoint";
 import { backendDeAgente } from "./proyecto.js";
 import type { Artefacto } from "../core/artefactos.js";
-import { permisosDe, hitlDe } from "./perfiles.js";
+import { permisosDe, hitlDe, type QuienDecidePermisos } from "./perfiles.js";
 import { crearBusquedaRegex } from "./busquedaRegex.js";
 import type { DiagnosticoDeTools } from "./diagnosticoDeTools.js";
 import { middlewareTextoDeTool } from "./textoDeTool.js";
@@ -76,11 +76,23 @@ export interface OpcionesDelAgente {
  * del encadenado para diagramas solo se escribe si existen los dos agentes de los que
  * habla: una instrucción sobre un especialista que no está no la puede seguir nadie.
  */
+/**
+ * Quién es el orquestador a efectos de permisos: SOLO LECTURA.
+ *
+ * Es un `QuienDecidePermisos` y no un `Agente` porque el orquestador no es un especialista
+ * —no se puede dar de alta, ni borrar, ni editar desde Ajustes—, pero sus tools de fichero
+ * son las mismas y tienen que pasar por la misma función. Ver dónde se usa, en
+ * `construirAgente`, para el agujero que esto cierra.
+ */
+export const PERFIL_DEL_ORQUESTADOR: QuienDecidePermisos = { nombre: "orquestador", soloLectura: true };
+
 export function promptOrquestador(agentes: readonly Agente[]): string {
   const hay = (n: string): boolean => agentes.some((a) => a.nombre === n);
   return [
     "Eres el orquestador de un harness de desarrollo para la plataforma XOne.",
-    "NO tienes herramientas: tu único trabajo es entender la petición y delegar.",
+    // Decía «NO tienes herramientas», y era falso: tiene las seis de fichero. Ahora son de
+    // SOLO LECTURA (`PERFIL_DEL_ORQUESTADOR`), así que la frase dice lo que de verdad puede.
+    "NO tienes herramientas para MODIFICAR nada: tu único trabajo es entender la petición y delegar.",
     agentes.length === 0
       ? "AVISO: ahora mismo no hay ningún especialista dado de alta, así que no puedes delegar en nadie. Dilo en vez de intentar resolverlo tú."
       : `Los especialistas disponibles son: ${agentes.map((a) => a.nombre).join(", ")}. Elige por su descripción.`,
@@ -285,6 +297,7 @@ export async function construirAgente(opciones: OpcionesDelAgente): Promise<unkn
     model: opciones.modelos.paraPapel("rapido"),
     systemPrompt: promptOrquestador(opciones.agentes),
     backend,
+    interruptOn: hitlDe(PERFIL_DEL_ORQUESTADOR),
     checkpointer: opciones.checkpointer ?? new MemorySaver(),
     // El contenido de los `ToolMessage` va como TEXTO al modelo. Sin esto, un turno real
     // revienta tras 8-10 tools con «Non string tool message content is not supported» —
@@ -293,6 +306,32 @@ export async function construirAgente(opciones: OpcionesDelAgente): Promise<unkn
     middleware: [
       createFilesystemMiddleware({
         backend,
+        /**
+         * EL ORQUESTADOR VA DE SOLO LECTURA, que es lo que su propio prompt afirma.
+         *
+         * Esto faltaba, y fue un agujero declarado durante toda una tanda: `permissions`
+         * solo lo recibían los subagentes, así que las seis tools de fichero de aquí
+         * corrían sin ninguna de las denegaciones estructurales. Medido: contestaba
+         * «Successfully wrote» a `/.env`, a `/skills/pwn.txt` —que aterrizaba en la
+         * carpeta `skills/` de ESTE repo, o sea en las instrucciones del propio harness—
+         * y, desde los adjuntos, en `~/.xonecode/tareas/<id>/adjuntos/`, fuera del
+         * proyecto. Lo único que lo tapaba era el prompt, que es exactamente lo que este
+         * repo no acepta como barrera. Y el HITL tampoco alcanzaba: `hitlDe` se monta por
+         * subagente, así que una escritura de aquí no pasaba por ninguna aprobación.
+         *
+         * **Se le ponen permisos en vez de quitarle las tools**, que era la otra opción
+         * sobre la mesa, y el motivo es el comentario de abajo: este middleware SUSTITUYE
+         * al de por omisión de deepagents porque comparte nombre. Quitarlo podría
+         * reinstalar el suyo —sin permisos— y reabrir el agujero por accidente; ponerle
+         * `permissions` no puede.
+         *
+         * `soloLectura: true` añade `deny write /**`, así que el orquestador conserva
+         * `read`/`ls`/`glob`/`grep` para orientarse y no puede tocar el disco por ninguna
+         * ruta. `interruptOn` va por espejo con la rama de los subagentes: `hitlDe`
+         * devuelve `{}` para un perfil de solo lectura —no hay nada que aprobar—, y
+         * escribirlo aquí es lo que hace que las dos ramas se lean iguales.
+         */
+        permissions: permisosDe(PERFIL_DEL_ORQUESTADOR),
         customToolDescriptions: DESCRIPCIONES_FICHEROS,
         ...OPCIONES_BUSQUEDA_FICHEROS,
       }),
