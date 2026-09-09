@@ -255,6 +255,10 @@ export type MensajeAlCliente =
        * que saberlo ANTES de pedir nada, no después con los ficheros ya cambiados.
        */
       sinAprobacion?: boolean;
+      /** Lo que YA estaba sin commitear cuando se abrió esta consola. Ausente = nada que
+       *  decir: limpio, sin git con qué mirar, o no se pudo medir. `ficheros` viene
+       *  acotada y `total` es la cifra entera. */
+      trabajoAlAbrir?: { ficheros: string[]; total: number };
       proyectos: {
         id: string;
         nombre: string;

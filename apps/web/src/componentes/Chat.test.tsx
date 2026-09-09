@@ -220,6 +220,34 @@ describe("Chat: el proyecto que escribe sin preguntar", () => {
   });
 });
 
+describe("Chat: el trabajo que ya había sin commitear", () => {
+  it("lo dice arriba y NOMBRA los ficheros", () => {
+    // Un contador a secas no deja saber si eso es tuyo, de otra sesión o de una tarea, que
+    // es lo único que hace accionable el aviso.
+    render(<Chat actos={[]} trabajoAlAbrir={{ ficheros: ["app.xml", "js/Clientes.js"], total: 2 }} />);
+    expect(screen.getByText("app.xml")).toBeTruthy();
+    expect(screen.getByText("js/Clientes.js")).toBeTruthy();
+  });
+
+  it("habla en PASADO: es una foto del instante en que se abrió", () => {
+    // La medida no se repite en los reanuncios, a propósito — así no puede contar como
+    // ajeno lo que esta sesión acabe de escribir. Un presente («hay cambios») sería falso
+    // en cuanto alguien commitea, y el aviso seguiría ahí.
+    render(<Chat actos={[]} trabajoAlAbrir={{ ficheros: ["app.xml"], total: 1 }} />);
+    expect(screen.getByText(/cuando abriste/i)).toBeTruthy();
+  });
+
+  it("cuando hay más de los que caben, lo DICE en vez de dar la lista por entera", () => {
+    render(<Chat actos={[]} trabajoAlAbrir={{ ficheros: ["a.xne", "b.xne"], total: 30 }} />);
+    expect(screen.getByText(/28 más/)).toBeTruthy();
+  });
+
+  it("y no dice nada cuando no hay nada que decir", () => {
+    render(<Chat actos={[]} />);
+    expect(screen.queryByText(/cuando abriste/i)).toBeNull();
+  });
+});
+
 describe("Chat: lo que dice la consola", () => {
   it("un acto de sistema se VE, y no se pliega con el trabajo del agente", () => {
     // Vivía solo en Trazas. Por ahí pasan la respuesta a un comando que el usuario acaba de

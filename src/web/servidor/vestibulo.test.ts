@@ -1030,6 +1030,83 @@ describe("abrirParaTarea — la segunda puerta", () => {
     rmSync(base, { recursive: true, force: true });
   });
 
+  it("las dos puertas MIDEN el trabajo sin commitear al abrir, cada una con su raíz", async () => {
+    // La medida va en el instante de ABRIR y no en cada anuncio, y eso es lo que la hace
+    // honesta por construcción: nada de lo que escriba esta sesión —o esta tarea— puede
+    // aparecer en ella. Una tarea que escribe deja el árbol sucio POR DEFINICIÓN (es la
+    // razón de que `revisable` no sea «árbol limpio»), así que una medida tomada más tarde
+    // acabaría acusando a la propia tarea de lo que la tarea acaba de hacer.
+    const base = baseTemporal();
+    const s = sesionesEnMemoria();
+    const medidas: string[] = [];
+    const v = crearVestibulo({
+      ...dobles(),
+      origenDeTrabajo: "global",
+      sesiones: s.puerto,
+      baseDeWorkspace: base,
+      crearEjecutor: () => async () => {},
+      sinCommitear: async (raiz) => {
+        medidas.push(raiz);
+        return { via: "git", ficheros: ["app.xml"] };
+      },
+      correr: async () => 0,
+    });
+    const raizA = proyectoEnDisco(base, "A");
+    const raizB = proyectoEnDisco(base, "B");
+
+    const humana = await v.abrirProyecto({ raiz: raizA });
+    const deTarea = await v.abrirParaTarea(raizB);
+
+    expect(medidas).toEqual([raizA, raizB]);
+    expect(await humana.trabajoAlAbrir).toEqual({ via: "git", ficheros: ["app.xml"] });
+    expect(await deTarea.trabajoAlAbrir).toEqual({ via: "git", ficheros: ["app.xml"] });
+    await v.cerrar();
+    rmSync(base, { recursive: true, force: true });
+  });
+
+  it("si la medida REVIENTA, la consola se abre igual y no afirma nada", async () => {
+    // Es un dato accesorio: abrir un proyecto no puede depender de que git conteste. Y
+    // `undefined` es «no se sabe», que arriba no pinta ningún aviso.
+    const base = baseTemporal();
+    const s = sesionesEnMemoria();
+    const v = crearVestibulo({
+      ...dobles(),
+      origenDeTrabajo: "global",
+      sesiones: s.puerto,
+      baseDeWorkspace: base,
+      crearEjecutor: () => async () => {},
+      sinCommitear: async () => {
+        throw new Error("git no está");
+      },
+      correr: async () => 0,
+    });
+
+    const abierta = await v.abrirProyecto({ raiz: proyectoEnDisco(base, "A") });
+
+    expect(await abierta.trabajoAlAbrir).toBeUndefined();
+    await v.cerrar();
+    rmSync(base, { recursive: true, force: true });
+  });
+
+  it("sin medida inyectada no se inventa ninguna", async () => {
+    const base = baseTemporal();
+    const s = sesionesEnMemoria();
+    const v = crearVestibulo({
+      ...dobles(),
+      origenDeTrabajo: "global",
+      sesiones: s.puerto,
+      baseDeWorkspace: base,
+      crearEjecutor: () => async () => {},
+      correr: async () => 0,
+    });
+
+    const abierta = await v.abrirProyecto({ raiz: proyectoEnDisco(base, "A") });
+
+    expect(await abierta.trabajoAlAbrir).toBeUndefined();
+    await v.cerrar();
+    rmSync(base, { recursive: true, force: true });
+  });
+
   it("las dos puertas pasan por las MISMAS costuras: una construcción, no dos", async () => {
     // El criterio de aceptación es «el backend de las dos puertas monta las mismas
     // barreras», y esto es lo que lo prueba sin tautología: el backend con las vistas

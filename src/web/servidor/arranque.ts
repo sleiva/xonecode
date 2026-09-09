@@ -87,6 +87,7 @@ import { cloudstudioDelProyecto } from "../../agent/configEnDisco.js";
 import { abrirEnSistema } from "../../agent/cloudstudioMcp.js";
 import { nombreDePersona } from "../../agent/persona.js";
 import { cambiosDeSesion, fotoDeApertura, olvidarSesion, parcheDeSesion } from "../../agent/sesionGit.js";
+import { trabajoSinCommitear } from "../../agent/gitSync.js";
 import { RUTA_ARTEFACTOS, esRutaDeArtefacto } from "../../core/artefactos.js";
 import { arbolDeProyecto, leerFicheroDeProyecto } from "../../agent/arbolDeProyecto.js";
 import {
@@ -569,6 +570,11 @@ export function montarRutas(
             }
           })?.id;
     const pendientes = proyectoAbierto ? [] : await vestibulo.pasosPendientes();
+    // Lo que ya había sin commitear al ABRIR. `abierto` se capturó arriba, antes de este
+    // `await`: `anunciarAlta` no va en la cola del vestíbulo, así que entre medias puede
+    // haberse abierto otro proyecto y el dato tiene que ser del que se anuncia. La promesa
+    // está cacheada en la consola y no rechaza nunca.
+    const trabajo = abierto === undefined ? undefined : await abierto.trabajoAlAbrir;
     const pasos: PasoDelVestibulo[] = pendientes.includes("entorno") ? ["entorno"] : [];
     emitir({
       clase: "alta",
@@ -623,6 +629,17 @@ export function montarRutas(
         interactivo: true,
       })
         ? { sinAprobacion: true }
+        : {}),
+      // Solo si SE MIRÓ y había algo. Las otras tres respuestas —limpio, sin git, no se
+      // pudo— se callan: un mensaje en cada apertura limpia es ruido en casi todas, y el
+      // aviso dejaría de leerse justo el día que importa.
+      ...(trabajo?.via === "git" && trabajo.ficheros !== undefined && trabajo.ficheros.length > 0
+        ? {
+            trabajoAlAbrir: {
+              ficheros: trabajo.ficheros.slice(0, FICHEROS_DEL_AVISO),
+              total: trabajo.ficheros.length,
+            },
+          }
         : {}),
       ...(vestibulo.nombre === undefined ? {} : { nombre: vestibulo.nombre }),
       ...(aviso === undefined ? {} : { aviso }),
@@ -2942,6 +2959,14 @@ export interface OpcionesDeArranque {
  * significa «sin gastar ni conectar». Sin `--guion` esto NO se abre solo —sería magia, no
  * un modo declarado—, y el aviso de abajo sigue mandando a `--cli`.
  */
+/**
+ * Cuántos nombres de fichero se mandan en el aviso de trabajo sin commitear. El alta se
+ * reemite en los DOS flancos de cada turno, así que la lista viaja muchas veces; y la frase
+ * que la pinta no puede llevar trescientos nombres de todas formas. Lo que no cabe se
+ * cuenta: `total` va siempre entero.
+ */
+export const FICHEROS_DEL_AVISO = 20;
+
 export async function arrancarConsolaWeb(opciones: OpcionesDeArranque): Promise<number> {
   const escribir = opciones.escribir ?? ((texto: string) => void process.stdout.write(texto));
   const raizDelCliente = opciones.raizDelCliente ?? raizDelClientePorOmision();
@@ -3254,6 +3279,12 @@ function vestibuloReal(
     // El «antes» de cada sesión: se fotografía al abrir el proyecto y se nombra cuando la
     // sesión tiene id. Ver `agent/sesionGit.ts` para por qué es una ref y no un tag.
     marcarSesion: fotoDeApertura,
+    // Lo que ya había sin commitear al abrir, para poder decirlo. Comparte el hueco
+    // declarado de `marcarSesion`: esta composición vive en un cierre que `vestibuloReal`
+    // no expone y que ningún test construye —lee el `settings.json` REAL del usuario—, así
+    // que lo que está probado es que el vestíbulo la usa por las dos puertas, no que aquí
+    // siga puesta.
+    sinCommitear: trabajoSinCommitear,
     olvidarMarcaDeSesion: olvidarSesion,
     // La memoria del agente por hilo. `historica` deja de ser «se reabrió» para ser «no hay
     // checkpoint que cargar», y borrar una sesión se lleva también su checkpoint.

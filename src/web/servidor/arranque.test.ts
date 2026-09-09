@@ -25,6 +25,7 @@ import {
   augmentacionCableada,
   contextoDelProyecto,
   TOPE_DE_MEMORIA,
+  FICHEROS_DEL_AVISO,
 } from "./arranque.js";
 import { ErrorDelAumentador } from "../../agent/aumentador.js";
 import type { PeticionDeTarea } from "../../core/ports.js";
@@ -1334,6 +1335,108 @@ describe("montarRutas — el cable, por fin conectado", () => {
       >;
       expect(alta.proyectoAbierto).toBe(true);
       expect(alta.proyectoActivo).toBe("p1");
+      await vestibulo.cerrar();
+      rmSync(base, { recursive: true, force: true });
+    });
+
+    it("el trabajo que YA HABÍA al abrir viaja en el alta, con sus nombres", async () => {
+      // Un contador a secas es el aviso que enseña a ignorar los avisos: quien lo lee
+      // tiene que poder saber si eso es suyo, de otra sesión o de una tarea.
+      const base = mkdtempSync(join(tmpdir(), "xonecode-base-"));
+      const servidor = servidorDeMentira();
+      const vestibulo = vestibuloDePrueba({
+        baseDeWorkspace: base,
+        sinCommitear: async () => ({ via: "git", ficheros: ["app.xml", "js/Clientes.js"] }),
+      });
+      montarRutas(servidor, vestibulo);
+      const cliente = clienteDeMentira();
+      await servidor.rutas.get(`GET ${RUTA_EVENTOS}`)!(cliente.peticion, cliente.respuesta);
+      await asentar();
+
+      await vestibulo.abrirProyecto({ raiz: vestibulo.raizDeProyecto("webstudio", "Tienda") });
+      await servidor.rutas.get(`GET ${RUTA_EVENTOS}`)!(cliente.peticion, cliente.respuesta);
+      await asentar();
+
+      const alta = cliente.recibidos.filter((m) => m.clase === "alta").at(-1) as Extract<
+        MensajeAlCliente,
+        { clase: "alta" }
+      >;
+      expect(alta.trabajoAlAbrir).toEqual({ ficheros: ["app.xml", "js/Clientes.js"], total: 2 });
+      await vestibulo.cerrar();
+      rmSync(base, { recursive: true, force: true });
+    });
+
+    it("un árbol limpio no manda nada: el alta no da la enhorabuena", async () => {
+      // Ausente es «no hay nada que decir». Un mensaje por cada apertura limpia sería
+      // ruido en el 90% de las aperturas, y el aviso dejaría de leerse el día que importe.
+      const base = mkdtempSync(join(tmpdir(), "xonecode-base-"));
+      const servidor = servidorDeMentira();
+      const vestibulo = vestibuloDePrueba({
+        baseDeWorkspace: base,
+        sinCommitear: async () => ({ via: "git", ficheros: [] }),
+      });
+      montarRutas(servidor, vestibulo);
+      const cliente = clienteDeMentira();
+      await vestibulo.abrirProyecto({ raiz: vestibulo.raizDeProyecto("webstudio", "Tienda") });
+      await servidor.rutas.get(`GET ${RUTA_EVENTOS}`)!(cliente.peticion, cliente.respuesta);
+      await asentar();
+
+      const alta = cliente.recibidos.filter((m) => m.clase === "alta").at(-1) as Extract<
+        MensajeAlCliente,
+        { clase: "alta" }
+      >;
+      expect(alta.trabajoAlAbrir).toBeUndefined();
+      await vestibulo.cerrar();
+      rmSync(base, { recursive: true, force: true });
+    });
+
+    it("sin git tampoco se manda nada: no se sabe no es no hay", async () => {
+      // Todo proyecto OFFLINE es una carpeta sin git, así que ésta es la respuesta normal
+      // en la mitad de los proyectos: afirmar algo aquí sería inventárselo.
+      const base = mkdtempSync(join(tmpdir(), "xonecode-base-"));
+      const servidor = servidorDeMentira();
+      const vestibulo = vestibuloDePrueba({
+        baseDeWorkspace: base,
+        sinCommitear: async () => ({ via: "sin-git" }),
+      });
+      montarRutas(servidor, vestibulo);
+      const cliente = clienteDeMentira();
+      await vestibulo.abrirProyecto({ raiz: vestibulo.raizDeProyecto("webstudio", "Tienda") });
+      await servidor.rutas.get(`GET ${RUTA_EVENTOS}`)!(cliente.peticion, cliente.respuesta);
+      await asentar();
+
+      const alta = cliente.recibidos.filter((m) => m.clase === "alta").at(-1) as Extract<
+        MensajeAlCliente,
+        { clase: "alta" }
+      >;
+      expect(alta.trabajoAlAbrir).toBeUndefined();
+      await vestibulo.cerrar();
+      rmSync(base, { recursive: true, force: true });
+    });
+
+    it("solo viaja lo que se pinta: los nombres se acotan y el TOTAL se dice entero", async () => {
+      // El alta se reemite en los dos flancos de cada turno, y el aviso no puede listar
+      // trescientos nombres de todas formas. Se manda lo que cabe en la frase y la cifra
+      // de verdad al lado, que es lo que impide leer «12» como «solo 12».
+      const base = mkdtempSync(join(tmpdir(), "xonecode-base-"));
+      const servidor = servidorDeMentira();
+      const muchos = Array.from({ length: 30 }, (_, i) => `f${String(i).padStart(2, "0")}.xne`);
+      const vestibulo = vestibuloDePrueba({
+        baseDeWorkspace: base,
+        sinCommitear: async () => ({ via: "git", ficheros: muchos }),
+      });
+      montarRutas(servidor, vestibulo);
+      const cliente = clienteDeMentira();
+      await vestibulo.abrirProyecto({ raiz: vestibulo.raizDeProyecto("webstudio", "Tienda") });
+      await servidor.rutas.get(`GET ${RUTA_EVENTOS}`)!(cliente.peticion, cliente.respuesta);
+      await asentar();
+
+      const alta = cliente.recibidos.filter((m) => m.clase === "alta").at(-1) as Extract<
+        MensajeAlCliente,
+        { clase: "alta" }
+      >;
+      expect(alta.trabajoAlAbrir?.ficheros).toEqual(muchos.slice(0, FICHEROS_DEL_AVISO));
+      expect(alta.trabajoAlAbrir?.total).toBe(30);
       await vestibulo.cerrar();
       rmSync(base, { recursive: true, force: true });
     });

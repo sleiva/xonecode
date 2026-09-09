@@ -266,6 +266,42 @@ turno y nadie volvía a anunciar; y `historica` deja de serlo al EMPEZAR el prim
 nuevo. Diferido a una microtarea porque `vestibulo.ts` llama a la escucha ANTES de
 `volcar()` en el mismo `finally` síncrono: anunciar en el acto leería la sesión sin id.
 
+**Y el proyecto DICE con qué te encuentras: lo que ya había sin commitear al abrir**
+(`agent/gitSync.ts#trabajoSinCommitear`, `alta.trabajoAlAbrir`). Todas las sesiones de un
+proyecto escriben en la MISMA copia local, y desde que hay tareas de fondo que escriben solas
+eso pasó de molesto a destructivo: «gana la persona» (una tarea no arranca con la consola
+humana abierta) es una mitigación, no aislamiento. Esto es lo barato que faltaba — decirlo en
+vez de dejar que dos sesiones se pisen calladas. Cinco reglas:
+- **La medida es del instante de ABRIR**, en el mismo sitio y por el mismo motivo que la foto
+  del antes de `sesionGit.ts`: medida más tarde incluiría lo que esta sesión acaba de
+  escribir. Con eso el aviso es honesto POR CONSTRUCCIÓN —nada de lo que escriba esta sesión
+  puede aparecer en él— y por eso está cacheada y no se vuelve a medir en los reanuncios del
+  alta, que son dos por turno. La frase va en PASADO: un «hay cambios» sería falso en cuanto
+  alguien commitee, con el aviso todavía puesto.
+- **Avisa, no FRENA.** Una tarea que escribe deja el árbol sucio por definición —es la razón de
+  que `revisable` no sea «árbol limpio»—, así que una guarda de árbol limpio delante de la cola
+  la atascaría después de la primera tarea. El precio se dice, no se cobra.
+- **`sinCommitear` y `trabajoSinCommitear` son la MISMA medida con dos políticas ante lo que no
+  se puede mirar, y las dos son correctas.** La vieja sostiene la guarda de `/sync`: sin repo
+  no hay nada que recuperar tras sobrescribir, así que declara la carpeta sucia y bloquea, y un
+  git roto LANZA para que `/sync` pare. La nueva sostiene un aviso, y un aviso que no se puede
+  sostener no se da: sin repo o con git roto responde `sin-git` y no se pinta nada. La
+  diferencia no es cosmética — **todo proyecto OFFLINE es una carpeta sin git** (`prepararRepo`
+  solo corre al descargar), así que la política de la otra pondría un aviso en cada apertura de
+  cada proyecto offline. Por eso el `git status` está extraído en una sola función privada: una
+  medida, dos políticas, y ningún segundo criterio de «limpio».
+- **Se callan las tres respuestas que no son un aviso** —limpio, sin git, y no se pudo medir— y
+  el campo viaja solo cuando hay algo. Y viaja la LISTA, no un contador: quien lo lee tiene que
+  poder reconocer si eso es suyo, de otra sesión o de una tarea. Los nombres van acotados
+  (`FICHEROS_DEL_AVISO`) porque el alta se reemite en los dos flancos de cada turno, con el
+  `total` entero al lado — que es lo que impide leer los que caben como si fueran todos.
+- **Se mide por las DOS puertas**, porque la medida vive en el cuerpo compartido de
+  `abrirProyecto` y `abrirParaTarea`. Hoy solo la lee el chat: por la puerta de las tareas el
+  dato está y no lo pinta nadie todavía. Y el cableado de `arranque.ts` comparte el hueco
+  declarado de `marcarSesion` — `vestibuloReal` lee el `settings.json` real del usuario, así que
+  ningún test lo construye: lo que está probado es que el vestíbulo usa la medida por las dos
+  puertas, no que ahí siga puesta.
+
 **El turno en vuelo tiene cronómetro, y sin cable la interfaz se apaga.** El pie decía el
 tiempo del turno ANTERIOR mientras corría el actual (116 s con «10,7 s» delante), y sin
 servidor lo único que cambiaba era un «sin conexión» pequeño con los 18 «Nueva sesión»

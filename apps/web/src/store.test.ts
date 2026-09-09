@@ -327,6 +327,44 @@ describe("el dispositivo de la sesión, en el alta", () => {
   });
 });
 
+describe("el trabajo sin commitear que ya había al abrir", () => {
+  const alta = (extra: Record<string, unknown> = {}) => ({
+    clase: "alta" as const,
+    pasos: [],
+    proveedores: [],
+    entornos: [],
+    registrados: [],
+    proyectos: [],
+    ramas: [],
+    proyectoAbierto: true,
+    ...extra,
+  });
+
+  it("sobrevive al store: la lista y el total llegan enteros", () => {
+    // La lista blanca de este `case` ya se ha comido un campo del cable en silencio
+    // (`mime` y `base64` de un fichero, y NINGUNA imagen se enseñaba mientras los tests de
+    // jsdom seguían en verde). Esto es rojo si uno de los dos se cae.
+    const s = crearStoreDelCliente();
+    s.aplicar(alta({ trabajoAlAbrir: { ficheros: ["app.xml"], total: 4 } }));
+    expect(s.leer().alta?.trabajoAlAbrir).toEqual({ ficheros: ["app.xml"], total: 4 });
+  });
+
+  it("una forma a medias se descarta: sin lista no hay aviso que pintar", () => {
+    const s = crearStoreDelCliente();
+    s.aplicar(alta({ trabajoAlAbrir: { total: 4 } }));
+    expect(s.leer().alta?.trabajoAlAbrir).toBeUndefined();
+  });
+
+  it("una lista vacía no es un aviso, y no se guarda como si lo fuera", () => {
+    // El servidor no la manda —se calla las tres respuestas que no son un aviso—, pero el
+    // store no puede depender de eso: aquí llegaría un aviso que dice «ya había cambios» y
+    // no nombra ninguno, que es peor que no decir nada.
+    const s = crearStoreDelCliente();
+    s.aplicar(alta({ trabajoAlAbrir: { ficheros: [], total: 0 } }));
+    expect(s.leer().alta?.trabajoAlAbrir).toBeUndefined();
+  });
+});
+
 describe("el alta del wizard", () => {
   it("guarda pasos, entornos y listas tal cual llegan", () => {
     const store = crearStoreDelCliente();

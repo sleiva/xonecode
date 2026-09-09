@@ -316,6 +316,25 @@ export type MensajeAlCliente =
        */
       sinAprobacion?: boolean;
       /**
+       * Lo que YA estaba sin commitear en el proyecto cuando se abrió esta consola
+       * (`agent/gitSync.ts#trabajoSinCommitear`, medido en el instante de abrir).
+       *
+       * Ausente = no hay nada que decir, y son las tres respuestas que se callan a
+       * propósito: el árbol estaba limpio, no hay git con qué mirar (todo proyecto
+       * OFFLINE), o la medida falló. Ninguna de las tres es un aviso.
+       *
+       * Va la lista y no un número: quien lo lee tiene que poder reconocer si eso es suyo,
+       * de otra sesión o de una tarea, y un contador a secas es el aviso que enseña a
+       * ignorar los avisos. `ficheros` viene ACOTADA —el alta se reemite en los dos flancos
+       * de cada turno y la frase no puede llevar trescientos nombres— y `total` es la cifra
+       * entera, que es lo que impide leer los que caben como si fueran todos.
+       *
+       * La medida es del instante de ABRIR y no cambia con los reanuncios, a propósito: así
+       * no puede contar como «de otro» lo que esta misma sesión —o esta tarea— acabe de
+       * escribir.
+       */
+      trabajoAlAbrir?: { ficheros: string[]; total: number };
+      /**
        * De qué entorno son los `proyectos` de este mensaje. Ausente = todavía de ninguno
        * (nadie ha elegido y no había ninguno registrado que poblar). El cliente lo NECESITA
        * para no tener que asumir «el primero de la lista», que es lo que hacía y era una

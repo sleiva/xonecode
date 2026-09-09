@@ -342,6 +342,15 @@ export async function sinCommitear(raiz: string): Promise<string[]> {
       .filter((entrada) => entrada !== NOMBRE_CARPETA && entrada !== ".git" && !esBasuraDelSO(entrada))
       .sort();
   }
+  return sinCommitearEnRepo(raiz);
+}
+
+/**
+ * El `git status` de un repo, ya sabiendo que lo es. Un fallo aquí SUBE: quien pregunta
+ * por esta rama es la guarda de `/sync`, y ahí «no pude mirar» no puede leerse como
+ * «adelante» — bajar sobrescribe el disco.
+ */
+async function sinCommitearEnRepo(raiz: string): Promise<string[]> {
   const prefijo = await prefijoDelProyecto(raiz);
   const { stdout } = await git(raiz, [
     // Mismo motivo que en `cambiosPendientes`: un nombre en castellano saldría citado en
@@ -355,4 +364,39 @@ export async function sinCommitear(raiz: string): Promise<string[]> {
     // `XY ruta`: dos caracteres de estado y un espacio.
     .map((linea) => recortar(prefijo, linea.slice(3).trim()))
     .sort();
+}
+
+/** Cómo se ha respondido, para que nadie afirme lo que no se ha podido mirar. */
+export interface TrabajoSinCommitear {
+  /** `git` = se ha preguntado a git y la lista es la respuesta (vacía = limpio, y eso SE
+   *  SABE). `sin-git` = no hay con qué mirar, y entonces no viene lista: ni sucio ni
+   *  limpio. Es el mismo reparto de `CambiosDeSesion.via` y por el mismo motivo. */
+  via: "git" | "sin-git";
+  ficheros?: string[];
+}
+
+/**
+ * ¿Había trabajo de alguien sin commitear cuando llegaste? La misma medida que
+ * `sinCommitear` —mismo `git status`, misma exclusión de `.xonecode/`, mismo
+ * `core.quotePath`— con OTRA política ante lo que no se puede mirar, porque la pregunta
+ * es otra.
+ *
+ * `sinCommitear` sostiene una guarda: sin git no hay nada que recuperar tras sobrescribir,
+ * así que declara la carpeta sucia y bloquea, y un git roto LANZA para que `/sync` pare.
+ * Esto sostiene un AVISO, y un aviso que no se puede sostener no se da: sin repo, o con un
+ * git que revienta, se responde `sin-git` y arriba no se pinta nada. Todo proyecto OFFLINE
+ * es una carpeta sin git —`prepararRepo` solo corre al descargar—, así que la política de
+ * la otra pondría un aviso en cada apertura de cada proyecto offline: el aviso que enseña
+ * a ignorar los avisos.
+ *
+ * No lanza NUNCA: de esto cuelga el mensaje de alta de la consola web, que se emite en los
+ * dos flancos de cada turno.
+ */
+export async function trabajoSinCommitear(raiz: string): Promise<TrabajoSinCommitear> {
+  try {
+    if (!(await esRepo(raiz))) return { via: "sin-git" };
+    return { via: "git", ficheros: await sinCommitearEnRepo(raiz) };
+  } catch {
+    return { via: "sin-git" };
+  }
 }

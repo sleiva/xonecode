@@ -21,6 +21,7 @@ export function Transcript({
   turnoEnVuelo,
   historica,
   sinAprobacion,
+  trabajoAlAbrir,
   segundosEnVuelo,
   proyecto,
   modelo,
@@ -38,6 +39,8 @@ export function Transcript({
   historica?: boolean;
   /** El proyecto escribe sin pedir aprobación. Va al Chat, que lo dice con palabras. */
   sinAprobacion?: boolean;
+  /** Lo que ya estaba sin commitear al abrir. Ver `Chat`. */
+  trabajoAlAbrir?: { ficheros: string[]; total: number };
   segundosEnVuelo?: number;
   proyecto?: string;
   modelo?: string;
@@ -74,6 +77,7 @@ export function Transcript({
             turnoEnVuelo={turnoEnVuelo === true}
             historica={historica === true}
             sinAprobacion={sinAprobacion === true}
+            {...(trabajoAlAbrir === undefined ? {} : { trabajoAlAbrir })}
             {...(segundosEnVuelo === undefined ? {} : { segundosEnVuelo })}
             {...(proyecto === undefined ? {} : { proyecto })}
             {...(modelo === undefined ? {} : { modelo })}

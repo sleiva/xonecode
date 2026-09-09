@@ -43,6 +43,7 @@ import {
   sesionCloudStudio,
   urlDeMcpAceptable,
 } from "../../agent/cloudstudioMcp.js";
+import type { TrabajoSinCommitear } from "../../agent/gitSync.js";
 import type { ProyectoRemoto } from "../../agent/cloudstudioMcp.js";
 import { clienteCloudStudio } from "../../agent/cloudstudioClient.js";
 import {
@@ -213,6 +214,16 @@ export interface OpcionesDelVestibulo {
    */
   marcarSesion?: (raiz: string) => Promise<(id: string) => Promise<boolean>>;
   /**
+   * ¿Había trabajo sin commitear en ese proyecto cuando se abrió?
+   * (`agent/gitSync.ts#trabajoSinCommitear`). Entra por opción como todo lo que toca el
+   * sistema; ausente = esta ejecución no lo mira y arriba no se afirma nada.
+   *
+   * Se pregunta AL ABRIR, en el mismo instante que la foto del antes, y por el mismo
+   * motivo: más tarde la respuesta incluiría lo que esta sesión acabe de escribir. Es lo
+   * que permite decir «ya había esto cuando llegaste» sin acusar a nadie de nada.
+   */
+  sinCommitear?: (raiz: string) => Promise<TrabajoSinCommitear>;
+  /**
    * ¿Queda memoria del agente para ese hilo? El `thread_id` ES el id de la sesión
    * (`agent/checkpointer.ts`), así que preguntarlo es lo que convierte `historica` en un
    * hecho comprobado en vez de en «se reabrió»: una sesión con checkpoint CONTINÚA, y una
@@ -355,6 +366,17 @@ export interface ConsolaDeProyecto {
    * recuerda.
    */
   readonly historica: boolean;
+  /**
+   * Qué había sin commitear en el proyecto en el INSTANTE de abrir esta consola, para
+   * poder decirlo. `undefined` = no se ha podido mirar (sin `sinCommitear` inyectado, o la
+   * medida falló), y entonces no se afirma nada.
+   *
+   * Es una promesa y no un valor porque abrir no espera a git —igual que la foto del
+   * antes—, y está CACHEADA: el alta se emite en los dos flancos de cada turno y la
+   * respuesta es de un instante que ya pasó, así que volver a medir daría otra foto y
+   * contaría como «tuyo» lo que esta sesión escribió. No rechaza nunca.
+   */
+  readonly trabajoAlAbrir: Promise<TrabajoSinCommitear | undefined>;
   /**
    * Con qué dispositivo trabaja esta sesión. Ausente = ninguno elegido.
    *
@@ -796,6 +818,11 @@ export function crearVestibulo(opciones: OpcionesDelVestibulo): Vestibulo {
     // cuando el id existe. Se lanza sin esperar —abrir no puede quedarse esperando a git— y
     // el rechazo se traga: sin marca, la vista lo dice.
     const foto = opciones.marcarSesion?.(raiz).catch(() => undefined);
+    // La misma regla que la foto de arriba, en el mismo instante y por el mismo motivo:
+    // medido después, el «ya había trabajo de alguien» incluiría el de esta sesión. Se
+    // lanza sin esperar y el rechazo se traga: es un dato accesorio y abrir un proyecto no
+    // puede depender de que git conteste.
+    const trabajoAlAbrir = Promise.resolve(opciones.sinCommitear?.(raiz)).catch(() => undefined);
     /**
      * La ref ya APUNTADA, para poder esperarla al cerrar.
      *
@@ -999,6 +1026,7 @@ export function crearVestibulo(opciones: OpcionesDelVestibulo): Vestibulo {
       get historica() {
         return historica;
       },
+      trabajoAlAbrir,
       get dispositivo() {
         return dispositivo;
       },

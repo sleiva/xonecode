@@ -221,6 +221,9 @@ export interface EstadoDelCliente {
     historica?: boolean;
     /** Este proyecto aplica las escrituras sin pedir aprobación. Ausente = las pide. */
     sinAprobacion?: boolean;
+    /** Lo que ya estaba sin commitear al abrir esta consola. Ausente = nada que decir
+     *  (limpio, sin git, o no se pudo medir): el chat no pinta ningún aviso. */
+    trabajoAlAbrir?: { ficheros: string[]; total: number };
     /** El saludo de la bienvenida. Ausente = sin nombre que saludar (`Bienvenida.tsx`). */
     nombre?: string;
     /** Si hay un proyecto abierto en esta conexión — `App.tsx` lo usa para decidir entre
@@ -259,6 +262,24 @@ function esDispositivoElegido(v: unknown): v is DispositivoElegido {
     typeof d.nombre === "string" &&
     (d.plataforma === "android" || d.plataforma === "ios") &&
     (d.clase === "emulador" || d.clase === "simulador" || d.clase === "fisico")
+  );
+}
+
+/**
+ * ¿Es un aviso de trabajo sin commitear que se pueda PINTAR?
+ *
+ * Exige la lista y el total, y además que la lista traiga algo: sin nombres, el aviso
+ * afirmaría que ya había cambios y no podría decir cuáles — que es exactamente el contador
+ * a secas que este repo no admite como aviso.
+ */
+function esTrabajoAlAbrir(v: unknown): v is { ficheros: string[]; total: number } {
+  if (typeof v !== "object" || v === null) return false;
+  const t = v as Record<string, unknown>;
+  return (
+    Array.isArray(t.ficheros) &&
+    t.ficheros.length > 0 &&
+    t.ficheros.every((f) => typeof f === "string") &&
+    typeof t.total === "number"
   );
 }
 
@@ -944,6 +965,7 @@ export function crearStoreDelCliente(): {
             dispositivoActivo?: unknown;
             historica?: unknown;
             sinAprobacion?: unknown;
+            trabajoAlAbrir?: unknown;
             proyectos?: unknown;
             ramas?: unknown;
             aviso?: unknown;
@@ -1038,6 +1060,11 @@ export function crearStoreDelCliente(): {
               // cadena «true» incluida— se lee como «sí pide aprobación», que es el lado
               // en el que un fallo no cuesta nada.
               ...(m.sinAprobacion === true ? { sinAprobacion: true } : {}),
+              // Campo a campo, como la foto del dispositivo: media forma no vale. Y una
+              // lista VACÍA se descarta aunque venga bien formada — sería un aviso que
+              // dice «ya había cambios» sin nombrar ninguno, o sea peor que callarse. El
+              // servidor tampoco la manda, pero eso no puede sostenerlo el cliente.
+              ...(esTrabajoAlAbrir(m.trabajoAlAbrir) ? { trabajoAlAbrir: m.trabajoAlAbrir } : {}),
               // Solo los dos valores que el tipo admite: cualquier otra cosa (un modo
               // nuevo del servidor, o basura) se descarta y la cabecera no pinta
               // pastilla, que es lo mismo que hace cuando el campo no viene. Aceptar la

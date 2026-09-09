@@ -184,6 +184,29 @@
   line-height: 1.5;
 }
 
+/* Lo que ya había sin commitear al abrir. Del par `warn`, como `.relectura` y no como
+   `.sinAprobacion`: no es una capacidad concedida ni un error, es un dato del proyecto que
+   quien se sienta necesita saber — puede haberlo dejado otra sesión, una tarea de fondo o
+   él mismo ayer. La lista de nombres va en mono porque son rutas, dato de máquina. */
+.trabajoAlAbrir {
+  margin: 12px 0 0;
+  padding: 8px 12px;
+  border-radius: 8px;
+  background: var(--dsw-alias-state-warn-tertiary);
+  color: var(--dsw-alias-state-warn-label);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.trabajoAlAbrir ul {
+  margin: 6px 0 0;
+  padding-left: 18px;
+}
+
+.trabajoAlAbrir li {
+  font-family: var(--dsw-font-family-mono, monospace);
+}
+
 /* Un acto de SISTEMA: la respuesta a un comando, una pausa, un aviso de honestidad. Sin
    globo y en el color secundario —no es un mensaje de nadie, es la consola hablando— pero
    con el tamaño del texto normal y no el del pulso: esto se lee, no se ojea. `pre-wrap`

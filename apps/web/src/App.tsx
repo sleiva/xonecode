@@ -973,6 +973,9 @@ export function App({
               // Lo dice el servidor tras comprobar las tres condiciones
               // (`core/settings.ts#seAplicaSinAprobacion`); el cliente no lo deduce.
               sinAprobacion={estado.alta?.sinAprobacion === true}
+              {...(estado.alta?.trabajoAlAbrir === undefined
+                ? {}
+                : { trabajoAlAbrir: estado.alta.trabajoAlAbrir })}
               {...(segundosEnVuelo === undefined ? {} : { segundosEnVuelo })}
               // Para el estado vacío de una sesión nueva: en qué proyecto estás y con qué
               // modelo va a trabajar. Los dos ya estaban en el estado.
