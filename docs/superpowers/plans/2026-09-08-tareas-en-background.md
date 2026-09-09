@@ -2908,3 +2908,41 @@ en `Kanban.tsx`/`TareasDelProyecto.tsx` + tests de todo.
 ```json:metadata
 {"files": ["src/web/servidor/arranque.ts", "src/web/servidor/transporte.ts", "apps/web/src/store.ts", "apps/web/src/componentes/Kanban.tsx"], "acceptanceCriteria": ["ver en vivo los actos de una tarea en proceso", "mirar no mueve el cable de nadie", "los actos de una tarea nunca salen en el chat de una persona", "dos personas pueden mirar la misma", "la vista en vivo y el transcript son lo mismo", "dejar de mirar desengancha solo ese sumidero", "ninguna ruta de máquina en esos actos"], "modelTier": "frontier", "userGate": false}
 ```
+
+---
+
+## Task 17: la consola de la tarea vive en SU detalle, no en el escritorio
+
+**Goal:** Que lo que hace una tarea se lea desplegando la tarea, y que el escritorio no cargue con una consola.
+
+> **De dónde sale.** El usuario lo vio funcionando y lo corrigió: «la consola de lo que está
+> haciendo se debe mostrar en el detalle de la tarea o desplegando la tarea, pero no en el
+> dashboard principal». La Task 16 la puso como una sección hermana DEBAJO del kanban
+> (`Escritorio.tsx`), con un argumento que era defendible —«se lee mientras se ve el resto de la
+> cola, y un turno tarda minutos»— pero que resuelve el problema equivocado: el escritorio es la
+> vista de conjunto de la máquina, y una consola de una sola tarea ahí compite con todo lo demás.
+> **Desplegar en la propia fila consigue las dos cosas**: sigue sin ser un modal, sigue leyéndose
+> junto a la cola, y deja de ser un bloque del escritorio.
+
+**Files:**
+- Modify: `apps/web/src/componentes/MirarTarea.tsx` (+CSS) — pasa a ser el cuerpo de un detalle
+- Modify: `Escritorio.tsx` (deja de pintarla como hermana del kanban), `Kanban.tsx` y
+  `TareasDelProyecto.tsx` (el despliegue), y sus tests
+
+**Acceptance Criteria:**
+- [ ] La consola se lee **desplegando la tarea**, dentro de su fila/tarjeta, y el escritorio no la pinta como bloque suelto
+- [ ] Es **la misma pieza** en el kanban y en la lista del proyecto — no dos despliegues que puedan divergir (el precedente es `AccionesDeTarea`, y antes `Arbol.tsx`)
+- [ ] Desplegada, sigue diciendo lo que ya decía: que es SU conversación y no un registro aparte, y que es de solo lectura
+- [ ] Plegar deja de mirar (desengancha ese sumidero) y no afecta a los demás mirones
+- [ ] El detalle sirve para lo que la fila no puede: el motivo entero, lo que autorizó, y el veredicto cuando lo haya
+- [ ] El control de despliegue es un botón de verdad (`aria-expanded`), enfocable, y nada se oculta con `display:none` que deba ser tabulable
+
+**Verify:** `npx vitest run --maxWorkers=2 apps/web/src` → en verde
+
+**Steps:** TDD en las tres superficies con el rojo comprobado antes. Mutaciones obligatorias:
+volver a pintarla en el escritorio; que plegar no desenganche; que el despliegue sea un `div` sin
+`aria-expanded`; y duplicar la pieza en una de las dos vistas.
+
+```json:metadata
+{"files": ["apps/web/src/componentes/MirarTarea.tsx", "apps/web/src/componentes/Escritorio.tsx", "apps/web/src/componentes/Kanban.tsx", "apps/web/src/componentes/TareasDelProyecto.tsx"], "acceptanceCriteria": ["se lee desplegando la tarea y no como bloque del escritorio", "la misma pieza en las dos vistas", "sigue diciendo que es su conversación y de solo lectura", "plegar desengancha solo ese mirón", "el detalle lleva motivo, autorizadas y veredicto", "el despliegue es un botón con aria-expanded"], "modelTier": "standard", "userGate": false}
+```
