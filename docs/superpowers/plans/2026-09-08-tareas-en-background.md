@@ -2946,3 +2946,46 @@ volver a pintarla en el escritorio; que plegar no desenganche; que el despliegue
 ```json:metadata
 {"files": ["apps/web/src/componentes/MirarTarea.tsx", "apps/web/src/componentes/Escritorio.tsx", "apps/web/src/componentes/Kanban.tsx", "apps/web/src/componentes/TareasDelProyecto.tsx"], "acceptanceCriteria": ["se lee desplegando la tarea y no como bloque del escritorio", "la misma pieza en las dos vistas", "sigue diciendo que es su conversación y de solo lectura", "plegar desengancha solo ese mirón", "el detalle lleva motivo, autorizadas y veredicto", "el despliegue es un botón con aria-expanded"], "modelTier": "standard", "userGate": false}
 ```
+
+---
+
+## Task 18: el juez no atribuye autoría a partir de hallazgos
+
+**Goal:** Que el juez de QA deje de producir rojos falsos leyendo los hallazgos del verificador como si probaran quién escribió qué.
+
+> **Medido en la PRIMERA ejecución real del juez, con el modelo de verdad y un proyecto del
+> usuario.** La tarea era «documenta las colecciones en DOCUMENTACION.md». Lo que pasó:
+> escribió `DOCUMENTACION.md` (62 KB) y `MEMORIA_PROYECTO.md`, y **el verificador dijo VERDE**
+> con dos avisos `△ REF_JS_COLL_MISSING` («un script referencia una colección no encontrada») y
+> la nota «y 22 hallazgo(s) más en ficheros que este turno no tocó». El juez dictó **rojo** con
+> estos dos hallazgos:
+> 1. «Se modificaron ficheros de lógica JavaScript durante el turno según los hallazgos del
+> verificador (REF_JS_COLL_MISSING), violando los criterios de aceptación.» **Falso dos veces**:
+> un `REF_JS_COLL_MISSING` no dice que nada se haya modificado —dice que un script apunta a una
+> colección que no existe, una inconsistencia preexistente— y el verificador ya había dicho que
+> el resto no era de este turno.
+> 2. «No se puede comprobar la existencia ni el contenido de DOCUMENTACION.md con los datos
+> facilitados.» **Falso**: `CasoDeJuez.autorizadas` llegaba con
+> `["DOCUMENTACION.md","MEMORIA_PROYECTO.md"]`.
+>
+> **Por qué importa más que un veredicto suelto:** la puerta de entrega funcionó —la tarea NO
+> dice «Terminada», dice «Esperando feedback»—, pero su motivo **acusa al agente de algo que no
+> hizo**. Un juez que grita lobo hace que «Esperando feedback» deje de significar nada y que la
+> gente lo despache sin leerlo, que es exactamente lo que este repo trata como grave en los
+> avisos. Y es la primera vez que el prompt del juez se mide contra un caso real.
+
+**Files:** `src/agent/juezDeTarea.ts` (`promptDelJuez` y lo que se le pasa) + su test.
+
+**Acceptance Criteria:**
+- [ ] El prompt dice que **los hallazgos son observaciones sobre el PROYECTO, no atribuciones de autoría**: nada en ellos prueba que el turno escribiera un fichero
+- [ ] Los **avisos** llegan marcados como avisos y distinguibles de los **errores** (la huella de reparación del verificador ya usa solo errores por esta razón: «un aviso que va y viene no dice nada»). No se le esconde información: se le etiqueta
+- [ ] Con `verificador: "verde"` el prompt dice explícitamente que **no hay nada que reprochar por parte del verificador**
+- [ ] El prompt dice qué es `autorizadas`: **las rutas que el turno escribió**, así que «no puedo comprobar si existe X» con X en esa lista es una respuesta inválida
+- [ ] Un test con **este caso exacto** —verde, dos avisos `REF_JS_COLL_MISSING`, 22 preexistentes, `autorizadas` con el fichero pedido— comprueba que el prompt contiene lo que hace falta para no concluir autoría
+- [ ] Sigue siendo cierto que una respuesta que no se entiende **no es un verde** (`indeterminado`)
+
+**Verify:** `npx vitest run --maxWorkers=2 src/agent/juezDeTarea.test.ts` → en verde
+
+```json:metadata
+{"files": ["src/agent/juezDeTarea.ts"], "acceptanceCriteria": ["los hallazgos no son atribuciones de autoría", "los avisos llegan etiquetados y distintos de los errores", "con verificador verde se dice que no hay nada que reprochar", "el prompt dice que `autorizadas` es lo que se escribió", "test con el caso real medido", "una respuesta ininteligible sigue sin ser verde"], "modelTier": "frontier", "userGate": false}
+```
