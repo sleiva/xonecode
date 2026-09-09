@@ -290,6 +290,15 @@ vez de dejar que dos sesiones se pisen calladas. Cinco reglas:
   solo corre al descargar), así que la política de la otra pondría un aviso en cada apertura de
   cada proyecto offline. Por eso el `git status` está extraído en una sola función privada: una
   medida, dos políticas, y ningún segundo criterio de «limpio».
+- **La basura del SO se quita también DENTRO de un repo, y eso salió de MEDIRLO.** El filtro
+  de `.DS_Store`/`Thumbs.db`/`desktop.ini` solo cubría la rama sin repo; medido contra los
+  proyectos reales, uno tenía exactamente UN fichero sin commitear y era un `.DS_Store`, o sea
+  que el aviso habría saltado entero para decir que alguien abrió la carpeta en el Finder
+  (`prepararRepo` solo excluye `.xonecode/`). Con eso vino la única diferencia de FORMA entre
+  las dos preguntas: el aviso pide `--untracked-files=all` y la guarda no. Git colapsa por
+  omisión una carpeta sin rastrear en una línea («doc/»), y así ni se puede reconocer que
+  dentro solo hay basura ni se le dice a nadie qué fichero es — «doc/» dice mucho menos que
+  «doc/NOTA-DEMO.md». El volumen lo sujetan el tope y el total.
 - **Se callan las tres respuestas que no son un aviso** —limpio, sin git, y no se pudo medir— y
   el campo viaja solo cuando hay algo. Y viaja la LISTA, no un contador: quien lo lee tiene que
   poder reconocer si eso es suyo, de otra sesión o de una tarea. Los nombres van acotados

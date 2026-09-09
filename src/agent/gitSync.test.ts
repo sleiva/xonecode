@@ -313,6 +313,33 @@ describe("trabajoSinCommitear", () => {
     expect(await sinCommitear(raiz)).toEqual(["app.xml"]);
   });
 
+  it("la basura del SO no cuenta DENTRO de un repo, y sola no es aviso ninguno", async () => {
+    // Medido contra los proyectos reales del usuario: `PlaemerWebTestAsync` tenía UN
+    // fichero sin commitear y era un `.DS_Store` — o sea que el aviso habría saltado, con
+    // su lista y todo, para decir que el Finder abrió la carpeta. `prepararRepo` solo
+    // excluye `.xonecode/`, así que en un repo `git status` sí los nombra: el filtro que
+    // la rama sin repo ya tenía hace falta igual aquí, y por el mismo argumento (lista
+    // CERRADA de metadatos del sistema, no «los ocultos»: un `.env` es trabajo del
+    // usuario). `sinCommitear` NO cambia — sostiene la guarda de `/sync`, y ahí el
+    // criterio es otro y lleva sus propios tests.
+    const raiz = proyecto();
+    await prepararRepo(raiz, "master");
+    writeFileSync(join(raiz, ".DS_Store"), "basura del Finder");
+    mkdirSync(join(raiz, "doc"), { recursive: true });
+    writeFileSync(join(raiz, "doc", ".DS_Store"), "y en una subcarpeta");
+
+    expect(await trabajoSinCommitear(raiz)).toEqual({ via: "git", ficheros: [] });
+  });
+
+  it("pero la basura no TAPA lo real: se quita ella y se queda el resto", async () => {
+    const raiz = proyecto();
+    await prepararRepo(raiz, "master");
+    writeFileSync(join(raiz, ".DS_Store"), "basura del Finder");
+    writeFileSync(join(raiz, "DOCUMENTACION.md"), "# doc");
+
+    expect(await trabajoSinCommitear(raiz)).toEqual({ via: "git", ficheros: ["DOCUMENTACION.md"] });
+  });
+
   it("si git REVIENTA en un repo de verdad, tampoco afirma nada (y no lanza)", async () => {
     // De esto cuelga el alta de la consola web, que se emite en los dos flancos de cada
     // turno: una excepción aquí dejaría al navegador sin su mensaje de alta entero por no
