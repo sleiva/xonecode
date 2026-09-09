@@ -1,43 +1,42 @@
-/* Alias comprobados contra `apps/web/estilos/design-platform.css`: bg-layer-1, border-l2,
-   label-primary/secondary/tertiary, state-error-primary. `--xonecode-cian` es de
-   `estilos/marca.css` y `--ds-font-family-code` de `estilos/tipografia.css`. Ningún color
-   literal (`transparent` también lo es: `background: none`, como en `Kanban.module.css`). */
+/* Alias comprobados contra `apps/web/estilos/design-platform.css`: bg-layer-1, bg-layer-2,
+   border-l2, interactive-bg-hover, label-primary/secondary/tertiary, state-error-primary.
+   `--xonecode-cian` es de `estilos/marca.css` y `--ds-font-family-code` de
+   `estilos/tipografia.css`. Ningún color literal (`transparent` también lo es: `background:
+   none`, como en `Kanban.module.css`). */
 
-.panel {
-  margin: 12px 0 0;
-  padding: 12px 14px;
-  border: 0.5px solid var(--dsw-alias-border-l2);
-  border-left: 2px solid var(--xonecode-cian);
-  border-radius: 12px;
-  background: var(--dsw-alias-bg-layer-1);
-}
-
-.cabecera {
+.envoltura {
   display: flex;
-  align-items: baseline;
-  gap: 10px;
-  margin: 0 0 4px;
+  flex-direction: column;
+  gap: 0;
 }
 
-.titulo {
-  margin: 0;
-  flex: 1 1 auto;
-  min-width: 0;
-  color: var(--dsw-alias-label-primary);
-  font-size: 13px;
-  font-weight: 600;
-}
-
-.cerrar {
-  flex: 0 0 auto;
-  padding: 2px 8px;
+/* El control de despliegue: un botón DE VERDAD (`aria-expanded` en el marcado, no aquí),
+   enfocable y con el mismo aspecto que `Kanban.module.css#.enlaceRevision`, del que sale —
+   ahí vivía suelto por tarjeta; aquí es la MISMA pieza para las dos vistas. */
+.boton {
+  align-self: flex-start;
+  margin-top: 4px;
+  padding: 4px 8px;
   border: 0.5px solid var(--dsw-alias-border-l2);
-  border-radius: 6px;
-  background: none;
-  color: var(--dsw-alias-label-secondary);
+  border-radius: 8px;
+  background: var(--dsw-alias-bg-layer-2);
+  color: var(--dsw-alias-label-primary);
   font: inherit;
   font-size: 11px;
   cursor: pointer;
+}
+
+.boton:hover {
+  background: var(--dsw-alias-interactive-bg-hover);
+}
+
+.panel {
+  margin: 8px 0 0;
+  padding: 10px 12px;
+  border: 0.5px solid var(--dsw-alias-border-l2);
+  border-left: 2px solid var(--xonecode-cian);
+  border-radius: 10px;
+  background: var(--dsw-alias-bg-layer-1);
 }
 
 .nota {
@@ -47,8 +46,36 @@
   line-height: 1.5;
 }
 
-/* El transcript lleva scroll PROPIO y tope de alto: un turno largo empujaría el resto del
-   kanban fuera de la pantalla, que es donde está lo accionable — la misma regla que la
+.motivo {
+  margin: 0 0 6px;
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 11px;
+}
+
+.ficheros {
+  margin: 0 0 6px;
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 11px;
+}
+
+.ficheros p {
+  margin: 0 0 2px;
+}
+
+.listaDeFicheros {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.listaDeFicheros code {
+  color: var(--dsw-alias-label-secondary);
+  font-family: var(--ds-font-family-code);
+  font-size: 11px;
+}
+
+/* El transcript lleva scroll PROPIO y tope de alto: un turno largo empujaría el resto de la
+   columna fuera de la pantalla, que es donde está lo accionable — la misma regla que la
    lista de simuladores de «Tu equipo». */
 .transcript {
   max-height: 340px;

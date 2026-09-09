@@ -1044,6 +1044,12 @@ export function App({
                   {...(proyectoActivoId === undefined
                     ? {}
                     : { alNuevaTarea: () => abrirVentanaDeTarea(proyectoActivoId) })}
+                  // Ver lo que hace, en vivo (Task 17): la MISMA pieza (`MirarTarea.tsx`,
+                  // vía `Kanban.tsx`/`TareasDelProyecto.tsx`) que monta el escritorio — antes
+                  // esta pestaña no la ofrecía en absoluto.
+                  {...(mirar === undefined ? {} : { alMirar: alMirarTarea, alDejarDeMirar: alDejarDeMirarTarea })}
+                  {...(mirandoTarea === undefined ? {} : { mirando: mirandoTarea })}
+                  {...(estado.mirada === undefined ? {} : { mirada: estado.mirada })}
                 />
               }
               // La tarjeta del chat abre el artefacto: cambia de pestaña y lo elige.

@@ -1,6 +1,7 @@
-import type { TareaDelCable } from "../tipos.js";
+import type { Acto, TareaDelCable } from "../tipos.js";
 import { AccionesDeTarea } from "./AccionesDeTarea.js";
 import { EntregaDeTarea } from "./EntregaDeTarea.js";
+import { MirarTarea } from "./MirarTarea.js";
 import { QuienEjecutaTareas } from "./QuienEjecutaTareas.js";
 import estilos from "./TareasDelProyecto.module.css";
 
@@ -53,6 +54,10 @@ export function TareasDelProyecto({
   alDescartar,
   alTerminar,
   alEnviarFeedback,
+  alMirar,
+  alDejarDeMirar,
+  mirando,
+  mirada,
   conectado,
 }: {
   /** Ausente = la cola todavía no ha llegado del servidor. `[]` = llegó, y este proyecto no
@@ -100,6 +105,17 @@ export function TareasDelProyecto({
    * Ver `QuienEjecutaTareas`.
    */
   ejecutaOtroProceso?: boolean;
+  /**
+   * Ver, y dejar de ver, EN VIVO lo que hace el turno de una tarea, desplegando su fila
+   * (Task 17). La MISMA pieza (`MirarTarea.tsx`) que monta `Kanban.tsx`: las condiciones de
+   * quién puede mirar y cuándo viven ahí, no aquí. Ausentes = no se ofrece.
+   */
+  alMirar?: (id: string) => void;
+  alDejarDeMirar?: (id: string) => void;
+  /** Cuál se está mirando ahora, si alguna. */
+  mirando?: string;
+  /** El transcript que el servidor está mandando de la tarea mirada. */
+  mirada?: { tarea: string; actos: readonly Acto[] };
 }) {
   const apagado = conectado === false;
   return (
@@ -148,10 +164,15 @@ export function TareasDelProyecto({
               key={t.id}
               tarea={t}
               conectado={conectado}
+              corriendoAqui={corriendoAqui}
               {...(alReintentar === undefined ? {} : { alReintentar })}
               {...(alDescartar === undefined ? {} : { alDescartar })}
               {...(alTerminar === undefined ? {} : { alTerminar })}
               {...(alEnviarFeedback === undefined ? {} : { alEnviarFeedback })}
+              {...(alMirar === undefined ? {} : { alMirar })}
+              {...(alDejarDeMirar === undefined ? {} : { alDejarDeMirar })}
+              {...(mirando === undefined ? {} : { mirando })}
+              {...(mirada === undefined ? {} : { mirada })}
             />
           ))}
         </ul>
@@ -167,6 +188,11 @@ function Fila({
   alTerminar,
   alEnviarFeedback,
   conectado,
+  corriendoAqui,
+  alMirar,
+  alDejarDeMirar,
+  mirando,
+  mirada,
 }: {
   tarea: TareaDelCable;
   alReintentar?: (id: string) => void;
@@ -174,6 +200,13 @@ function Fila({
   alTerminar?: (id: string) => void;
   alEnviarFeedback?: (id: string, texto: string) => void;
   conectado?: boolean;
+  /** Si ESTE proceso ejecuta las tareas: de la pestaña entera, no de la fila —se le pasa
+   *  tal cual a `MirarTarea`, que es quien decide con esto si ofrece el despliegue. */
+  corriendoAqui?: boolean;
+  alMirar?: (id: string) => void;
+  alDejarDeMirar?: (id: string) => void;
+  mirando?: string;
+  mirada?: { tarea: string; actos: readonly Acto[] };
 }) {
   return (
     <li className={estilos.fila} data-estado={t.estado}>
@@ -183,12 +216,30 @@ function Fila({
           <span className={estilos.titulo}>{t.titulo}</span>
           <span className={estilos.etiquetaEstado}>{ETIQUETA_DE_ESTADO[t.estado]}</span>
         </div>
-        {/* Ausente = no consta ningún motivo; nunca se inventa uno para rellenar la fila. */}
-        {t.motivo === undefined ? null : <p className={estilos.motivo}>{t.motivo}</p>}
-        {/* Y cómo llegó a «Terminada», que es donde el motivo ya no existe: la MISMA pieza
-            que monta `Kanban.tsx`, para que las dos vistas no puedan afirmar cosas
-            distintas de la misma tarea. */}
-        <EntregaDeTarea tarea={t} />
+        {/* Motivo y veredicto van aquí solo si la fila NO está desplegada: expandida,
+            `MirarTarea` ya los enseña dentro del detalle (Task 17), y pintarlos dos veces
+            sería la misma información repetida. */}
+        {mirando === t.id ? null : (
+          <>
+            {/* Ausente = no consta ningún motivo; nunca se inventa uno para rellenar la fila. */}
+            {t.motivo === undefined ? null : <p className={estilos.motivo}>{t.motivo}</p>}
+            {/* Y cómo llegó a «Terminada», que es donde el motivo ya no existe: la MISMA
+                pieza que monta `Kanban.tsx`, para que las dos vistas no puedan afirmar cosas
+                distintas de la misma tarea. */}
+            <EntregaDeTarea tarea={t} />
+          </>
+        )}
+        {/* Ver lo que hace, en vivo, desplegando ESTA fila (Task 17): la MISMA pieza que
+            monta `Kanban.tsx`, con sus condiciones dentro y no aquí. */}
+        <MirarTarea
+          tarea={t}
+          conectado={conectado}
+          corriendoAqui={corriendoAqui}
+          {...(alMirar === undefined ? {} : { alMirar })}
+          {...(alDejarDeMirar === undefined ? {} : { alDejarDeMirar })}
+          {...(mirando === undefined ? {} : { mirando })}
+          {...(mirada === undefined ? {} : { mirada })}
+        />
       </div>
       <div className={estilos.acciones}>
         <AccionesDeTarea

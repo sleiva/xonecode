@@ -435,14 +435,14 @@ describe("Escritorio: el kanban de tareas", () => {
 });
 
 /**
- * **El panel de «lo que hace una tarea» y la frase de su hueco** (Task 16).
- *
- * Lo que se comprueba aquí y no en `MirarTarea.test.tsx` es la COSTURA: `corre` se compone de
- * la cola —el estado de esa tarea y `corriendoAqui`—, y ese cálculo vive en este componente.
- * Una mutación que lo pusiera a fuego dejaría el panel diciendo «todavía no ha pintado nada»
- * de un turno terminado con los tests de la pieza en verde (medido: sobrevivía).
+ * **«Ver lo que hace» ya no es un bloque hermano del kanban** (Task 17): el escritorio solo
+ * reenvía `alMirarTarea`/`alDejarDeMirarTarea`/`mirandoTarea`/`mirada` a `Kanban`, con los
+ * nombres de `Kanban`, y el despliegue vive DENTRO de la tarjeta de la cola. Lo que se
+ * comprueba aquí y no en `Kanban.test.tsx` ni en `MirarTarea.test.tsx` es la COSTURA: que
+ * el escritorio de verdad reenvía `mirada` (antes NO lo hacía: solo se la pasaba al panel
+ * hermano) y que ya no queda ningún bloque suelto debajo del kanban.
  */
-describe("Escritorio: mirar lo que hace una tarea", () => {
+describe("Escritorio: mirar lo que hace una tarea, dentro del kanban", () => {
   afterEach(cleanup);
 
   const TAREA = {
@@ -462,52 +462,8 @@ describe("Escritorio: mirar lo que hace una tarea", () => {
     corriendoAqui,
   });
 
-  it("con la tarea en proceso aquí y sin actos: todavía no ha pintado nada", () => {
+  it("el transcript que llega se lee DENTRO de la sección del kanban, no en un bloque aparte", () => {
     render(
-      <Escritorio
-        {...MANEJADORES}
-        proyectos={[]}
-        tareas={cola("en-proceso")}
-        alMirarTarea={() => {}}
-        alDejarDeMirarTarea={() => {}}
-        mirandoTarea="t1"
-      />
-    );
-    expect(screen.getByText(/todavía no ha pintado nada/i)).toBeTruthy();
-  });
-
-  it("con la tarea ya terminada, el panel abierto y vacío DICE que ya no corre", () => {
-    render(
-      <Escritorio
-        {...MANEJADORES}
-        proyectos={[]}
-        tareas={cola("terminada")}
-        alMirarTarea={() => {}}
-        alDejarDeMirarTarea={() => {}}
-        mirandoTarea="t1"
-      />
-    );
-    // El camino real: el panel se queda abierto al acabar la tarea, y el primer hipo del
-    // cable tira el transcript y la repetición no trae nada porque ya no está en `enVuelo`.
-    expect(screen.getByText(/ya no corre aquí/i)).toBeTruthy();
-  });
-
-  it("si la ejecuta el otro proceso, tampoco va a llegar nada: se dice igual", () => {
-    render(
-      <Escritorio
-        {...MANEJADORES}
-        proyectos={[]}
-        tareas={cola("en-proceso", false)}
-        alMirarTarea={() => {}}
-        alDejarDeMirarTarea={() => {}}
-        mirandoTarea="t1"
-      />
-    );
-    expect(screen.getByText(/ya no corre aquí/i)).toBeTruthy();
-  });
-
-  it("el transcript que llega se pinta, y solo el de la tarea que se mira", () => {
-    const { rerender } = render(
       <Escritorio
         {...MANEJADORES}
         proyectos={[]}
@@ -518,10 +474,15 @@ describe("Escritorio: mirar lo que hace una tarea", () => {
         mirada={{ tarea: "t1", actos: [{ tipo: "asistente", texto: "voy con el campo" }] }}
       />
     );
-    expect(screen.getByText("voy con el campo")).toBeTruthy();
-    // Y el de OTRA tarea no: el store ya lo separa, pero pintar el que no toca sería contar
-    // lo que hizo otro agente bajo este título.
-    rerender(
+    const linea = screen.getByText("voy con el campo");
+    // El aria-label de la sección del kanban («Tareas en background»): si el transcript
+    // volviera a vivir en un bloque hermano por fuera, este `closest` no lo encontraría, y
+    // ES la mutación «volver a pintarla en el escritorio».
+    expect(linea.closest('section[aria-label="Tareas en background"]')).not.toBeNull();
+  });
+
+  it("y el de OTRA tarea no se pinta: el store ya lo separa por id", () => {
+    render(
       <Escritorio
         {...MANEJADORES}
         proyectos={[]}
@@ -535,7 +496,25 @@ describe("Escritorio: mirar lo que hace una tarea", () => {
     expect(screen.queryByText("de otra")).toBeNull();
   });
 
-  it("sin tarea elegida no hay panel", () => {
+  it("plegar (el mismo botón) desengancha, y sin más panel que el de la tarjeta", () => {
+    const alDejarDeMirarTarea = vi.fn();
+    render(
+      <Escritorio
+        {...MANEJADORES}
+        proyectos={[]}
+        tareas={cola("en-proceso")}
+        alMirarTarea={() => {}}
+        alDejarDeMirarTarea={alDejarDeMirarTarea}
+        mirandoTarea="t1"
+      />
+    );
+    const boton = screen.getByRole("button", { name: /dejar de ver|ocultar/i });
+    expect(boton.getAttribute("aria-expanded")).toBe("true");
+    fireEvent.click(boton);
+    expect(alDejarDeMirarTarea).toHaveBeenCalledWith("t1");
+  });
+
+  it("sin tarea elegida no hay ningún despliegue abierto", () => {
     render(
       <Escritorio
         {...MANEJADORES}
@@ -545,6 +524,6 @@ describe("Escritorio: mirar lo que hace una tarea", () => {
         alDejarDeMirarTarea={() => {}}
       />
     );
-    expect(screen.queryByText(/lo que hace:/i)).toBeNull();
+    expect(screen.queryByRole("button", { name: /dejar de ver|ocultar/i })).toBeNull();
   });
 });

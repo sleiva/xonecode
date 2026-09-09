@@ -207,3 +207,93 @@ describe("TareasDelProyecto", () => {
     expect(boton.getAttribute("title")).toBeNull();
   });
 });
+
+/**
+ * **«Ver lo que hace», en la lista del proyecto** (Task 17): la MISMA pieza que monta
+ * `Kanban.tsx` — `MirarTarea` decide las tres condiciones (en-proceso, `corriendoAqui`,
+ * cable vivo), así que estos tests son en gran parte un ESPEJO de los de `Kanban.test.tsx`:
+ * si esta vista tuviera una segunda implementación en vez de importar la misma pieza,
+ * cualquier divergencia se notaría aquí.
+ */
+describe("TareasDelProyecto: ver lo que hace una tarea en proceso", () => {
+  const enProceso = tarea({ estado: "en-proceso", empezada: "2026-09-08T10:01:00.000Z" });
+
+  it("se ofrece en una «en proceso» de este proceso, como un botón DE VERDAD, y avisa al pulsar", () => {
+    const alMirar = vi.fn();
+    render(
+      <TareasDelProyecto
+        tareas={[enProceso]}
+        corriendoAqui
+        alMirar={alMirar}
+        alDejarDeMirar={() => {}}
+      />
+    );
+    const boton = screen.getByRole("button", { name: /ver lo que hace/i });
+    expect(boton.getAttribute("aria-expanded")).toBe("false");
+    fireEvent.click(boton);
+    expect(alMirar).toHaveBeenCalledWith("t1");
+  });
+
+  it("no se ofrece si el turno lo ejecuta otro proceso, ni sin cable", () => {
+    const { rerender } = render(
+      <TareasDelProyecto
+        tareas={[enProceso]}
+        corriendoAqui={false}
+        alMirar={() => {}}
+        alDejarDeMirar={() => {}}
+      />
+    );
+    expect(screen.queryByRole("button", { name: /ver lo que hace/i })).toBeNull();
+    rerender(
+      <TareasDelProyecto
+        tareas={[enProceso]}
+        corriendoAqui
+        conectado={false}
+        alMirar={() => {}}
+        alDejarDeMirar={() => {}}
+      />
+    );
+    expect(screen.queryByRole("button", { name: /ver lo que hace/i })).toBeNull();
+  });
+
+  it("expandida, el transcript se lee DENTRO de la fila, con `aria-expanded`, y plegar desengancha", () => {
+    const alDejarDeMirar = vi.fn();
+    render(
+      <TareasDelProyecto
+        tareas={[enProceso]}
+        corriendoAqui
+        alMirar={() => {}}
+        alDejarDeMirar={alDejarDeMirar}
+        mirando="t1"
+        mirada={{ tarea: "t1", actos: [{ tipo: "asistente", texto: "voy con el campo" }] }}
+      />
+    );
+    const linea = screen.getByText("voy con el campo");
+    expect(linea.closest("li")).not.toBeNull();
+    const boton = screen.getByRole("button", { name: /dejar de ver|ocultar/i });
+    expect(boton.getAttribute("aria-expanded")).toBe("true");
+    fireEvent.click(boton);
+    expect(alDejarDeMirar).toHaveBeenCalledWith("t1");
+  });
+
+  it("expandida, se leen también el motivo, lo autorizado y el veredicto de ESA tarea", () => {
+    render(
+      <TareasDelProyecto
+        tareas={[
+          tarea({
+            estado: "en-proceso",
+            motivo: "el juez de QA dijo «rojo»: falta el manejador de error",
+            autorizadas: ["app.xne"],
+            veredicto: { veredicto: "rojo", resumen: "falta el manejador de error" },
+          }),
+        ]}
+        corriendoAqui
+        alMirar={() => {}}
+        alDejarDeMirar={() => {}}
+        mirando="t1"
+      />
+    );
+    expect(screen.getByText(/falta el manejador de error/)).toBeTruthy();
+    expect(screen.getByText("app.xne")).toBeTruthy();
+  });
+});

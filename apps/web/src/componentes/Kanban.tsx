@@ -1,6 +1,7 @@
-import type { TareaDelCable } from "../tipos.js";
+import type { Acto, TareaDelCable } from "../tipos.js";
 import { AccionesDeTarea } from "./AccionesDeTarea.js";
 import { EntregaDeTarea } from "./EntregaDeTarea.js";
+import { MirarTarea } from "./MirarTarea.js";
 import { QuienEjecutaTareas } from "./QuienEjecutaTareas.js";
 import estilos from "./Kanban.module.css";
 
@@ -72,6 +73,7 @@ export function Kanban({
   alMirar,
   alDejarDeMirar,
   mirando,
+  mirada,
   proyectoActivo,
   conectado,
 }: {
@@ -102,19 +104,25 @@ export function Kanban({
    */
   alEnviarFeedback?: (id: string, texto: string) => void;
   /**
-   * Ver EN VIVO lo que hace el turno de una tarea. Ausente = no se ofrece.
+   * Ver EN VIVO lo que hace el turno de una tarea, desplegando su tarjeta (Task 17: ya no
+   * es un bloque hermano del kanban). Ausente = no se ofrece.
    *
    * Solo se pinta en una `en-proceso`, y solo si la ejecuta ESTE proceso: sin su consola
    * aquí no hay transcript que enseñar, y un botón que no puede cumplir lo que dice es el
    * botón muerto de siempre. Para una terminada, lo que hay es su transcript GUARDADO — se
-   * abre pulsando el título, y es el MISMO (no hay un segundo registro).
+   * abre pulsando el título, y es el MISMO (no hay un segundo registro). Las condiciones
+   * viven en `MirarTarea.tsx`, no aquí: esta pieza solo reenvía lo que la cola sabe.
    */
   alMirar?: (id: string) => void;
-  /** Cerrar esa vista. Ausente = no se ofrece cerrarla desde aquí. */
+  /** Cerrar esa vista, desenganchando SOLO ese mirón. Ausente = no se ofrece cerrarla desde
+   *  aquí. */
   alDejarDeMirar?: (id: string) => void;
   /** Cuál se está mirando ahora, si alguna: su tarjeta lo dice y su botón cierra en vez de
    *  abrir. Sin esto, con el panel abierto no se sabría de qué tarjeta es lo que se lee. */
   mirando?: string;
+  /** El transcript que el servidor está mandando de la tarea que se mira. Ausente o de otra
+   *  tarea = todavía no ha pintado nada de la que se mira aquí. */
+  mirada?: { tarea: string; actos: readonly Acto[] };
   /**
    * El proyecto cuya consola HUMANA está abierta ahora mismo (`estado.alta.proyectoActivo`,
    * la misma raíz que `bloqueados()` mira en `arranque.ts#construirCorredorDeTareasCableado`
@@ -167,6 +175,11 @@ export function Kanban({
                       alTerminar={alTerminar}
                       alEnviarFeedback={alEnviarFeedback}
                       conectado={conectado}
+                      corriendoAqui={cola.corriendoAqui}
+                      {...(alMirar === undefined ? {} : { alMirar })}
+                      {...(alDejarDeMirar === undefined ? {} : { alDejarDeMirar })}
+                      {...(mirando === undefined ? {} : { mirando })}
+                      {...(mirada === undefined ? {} : { mirada })}
                     />
                   ) : (
                     <TarjetaSimple
@@ -175,14 +188,15 @@ export function Kanban({
                       alAbrirSesion={alAbrirSesion}
                       alDescartar={alDescartar}
                       conectado={conectado}
-                      // Las tres condiciones de «Ver lo que hace» se resuelven AQUÍ y no en
-                      // la tarjeta: `corriendoAqui` es de la cola, no de la tarea, así que
-                      // la tarjeta no lo puede saber sin que se le pase.
-                      {...(alMirar !== undefined && t.estado === "en-proceso" && cola.corriendoAqui && conectado !== false
-                        ? { alMirar }
-                        : {})}
+                      // `MirarTarea` decide las tres condiciones de «Ver lo que hace»: aquí
+                      // solo se reenvía lo que la cola sabe (`corriendoAqui` es de la cola,
+                      // no de la tarea, así que la tarjeta no lo puede saber sin que se le
+                      // pase).
+                      corriendoAqui={cola.corriendoAqui}
+                      {...(alMirar === undefined ? {} : { alMirar })}
                       {...(alDejarDeMirar === undefined ? {} : { alDejarDeMirar })}
                       {...(mirando === undefined ? {} : { mirando })}
+                      {...(mirada === undefined ? {} : { mirada })}
                       // Solo tiene sentido decirlo de una `nuevo` —«en-proceso» ya corre y
                       // «terminada» ya acabó— y solo si ESTE kanban es el que ejecuta: en el
                       // segundo proceso el aviso global de arriba ya cubre por qué nada
@@ -216,23 +230,26 @@ function TarjetaSimple({
   alAbrirSesion,
   alDescartar,
   conectado,
+  corriendoAqui,
   alMirar,
   alDejarDeMirar,
   mirando,
+  mirada,
   bloqueadaPorProyectoAbierto,
 }: {
   tarea: TareaDelCable;
   alAbrirSesion?: (proyecto: string, sesion: string) => void;
   alDescartar?: (id: string) => void;
   conectado?: boolean;
-  /** Presente = esta tarjeta puede ofrecer la vista en vivo. Las condiciones las decide
-   *  `Kanban`, que es quien conoce la cola. */
+  /** Si ESTE proceso ejecuta las tareas: es de la cola, no de la tarea, así que la tarjeta
+   *  no lo puede saber sin que se le pase. */
+  corriendoAqui?: boolean;
   alMirar?: (id: string) => void;
   alDejarDeMirar?: (id: string) => void;
   mirando?: string;
+  mirada?: { tarea: string; actos: readonly Acto[] };
   bloqueadaPorProyectoAbierto?: boolean;
 }) {
-  const seMira = mirando === t.id;
   return (
     <li>
       <div className={estilos.tarjeta}>
@@ -249,26 +266,26 @@ function TarjetaSimple({
         <span className={estilos.cuando}>{cuando(t)}</span>
         {/* Cómo llegó a «Terminada»: el juez, una condición de menos, o una persona. La
             misma pieza que monta `TareasDelProyecto.tsx`, y no pinta nada en los otros
-            estados (ver su docblock). */}
-        <EntregaDeTarea tarea={t} />
+            estados (ver su docblock). Solo AQUÍ si la tarjeta no está desplegada: expandida
+            (una `terminada` que se estaba mirando cuando acabó), `MirarTarea` ya lo enseña
+            dentro del detalle, y pintarlo dos veces sería la misma información repetida. */}
+        {mirando === t.id ? null : <EntregaDeTarea tarea={t} />}
         {bloqueadaPorProyectoAbierto === true ? (
           <span className={estilos.bloqueada}>
             Esperando a que se cierre el proyecto: mientras alguien lo tenga abierto, gana la persona.
           </span>
         ) : null}
-        {/* Ver lo que hace, en vivo. El MISMO control abre y cierra: dos botones para una
-            cosa dejarían al lector adivinando cuál de las dos tarjetas está pintando el
-            panel. Lo que se abre es el transcript de su sesión —no un log paralelo—, así
-            que cuando la tarea acabe, lo que se lee pulsando el título es esto mismo. */}
-        {seMira && alDejarDeMirar !== undefined ? (
-          <button type="button" className={estilos.enlaceRevision} onClick={() => alDejarDeMirar(t.id)}>
-            Dejar de ver lo que hace
-          </button>
-        ) : alMirar !== undefined ? (
-          <button type="button" className={estilos.enlaceRevision} onClick={() => alMirar(t.id)}>
-            Ver lo que hace
-          </button>
-        ) : null}
+        {/* Ver lo que hace, en vivo, desplegando ESTA tarjeta (Task 17): la MISMA pieza que
+            monta `TareasDelProyecto.tsx`, con sus condiciones dentro y no aquí. */}
+        <MirarTarea
+          tarea={t}
+          conectado={conectado}
+          corriendoAqui={corriendoAqui}
+          {...(alMirar === undefined ? {} : { alMirar })}
+          {...(alDejarDeMirar === undefined ? {} : { alDejarDeMirar })}
+          {...(mirando === undefined ? {} : { mirando })}
+          {...(mirada === undefined ? {} : { mirada })}
+        />
         <AccionesDeTarea tarea={t} conectado={conectado} alDescartar={alDescartar} />
       </div>
     </li>
@@ -293,6 +310,11 @@ function TarjetaDeAtencion({
   alTerminar,
   alEnviarFeedback,
   conectado,
+  corriendoAqui,
+  alMirar,
+  alDejarDeMirar,
+  mirando,
+  mirada,
 }: {
   tarea: TareaDelCable;
   alAbrirSesion?: (proyecto: string, sesion: string) => void;
@@ -302,6 +324,13 @@ function TarjetaDeAtencion({
   alTerminar?: (id: string) => void;
   alEnviarFeedback?: (id: string, texto: string) => void;
   conectado?: boolean;
+  /** Solo importa si esta tarea llegó aquí ya siendo MIRADA en `en-proceso`: el despliegue
+   *  se queda abierto para poder plegarlo, aunque esta columna ya no ofrezca abrirlo. */
+  corriendoAqui?: boolean;
+  alMirar?: (id: string) => void;
+  alDejarDeMirar?: (id: string) => void;
+  mirando?: string;
+  mirada?: { tarea: string; actos: readonly Acto[] };
 }) {
   return (
     <li>
@@ -316,6 +345,13 @@ function TarjetaDeAtencion({
         )}
         <span className={estilos.cuando}>{cuando(t)}</span>
 
+        {/* Motivo, veredicto y autorizadas van AQUÍ solo si esta tarjeta NO está desplegada:
+            expandida, `MirarTarea` ya los enseña dentro del detalle (Task 17), y pintarlos
+            dos veces sería la misma información repetida — el mismo argumento por el que
+            `EntregaDeTarea` ya evita repetir su propio resumen si el motivo lo lleva
+            dentro. */}
+        {mirando === t.id ? null : (
+          <>
         {/* El motivo: es lo que dice QUÉ hay que decidir, y por tanto lo que hay que leer
             antes de tocar el feedback o el reintento que `AccionesDeTarea` ofrece justo
             debajo. Sin abrir nada. */}
@@ -344,6 +380,8 @@ function TarjetaDeAtencion({
             </ul>
           </div>
         )}
+          </>
+        )}
 
         <AccionesDeTarea
           tarea={t}
@@ -352,6 +390,19 @@ function TarjetaDeAtencion({
           alDescartar={alDescartar}
           alTerminar={alTerminar}
           alEnviarFeedback={alEnviarFeedback}
+        />
+
+        {/* Normalmente esta columna no ofrece ABRIR el despliegue (no es «en-proceso»), pero
+            si la tarea llegó aquí siendo MIRADA se queda expandida para poder plegarla —
+            `MirarTarea` decide, esta pieza solo reenvía. */}
+        <MirarTarea
+          tarea={t}
+          conectado={conectado}
+          corriendoAqui={corriendoAqui}
+          {...(alMirar === undefined ? {} : { alMirar })}
+          {...(alDejarDeMirar === undefined ? {} : { alDejarDeMirar })}
+          {...(mirando === undefined ? {} : { mirando })}
+          {...(mirada === undefined ? {} : { mirada })}
         />
 
         {t.sesion !== undefined && alAbrirRevision !== undefined ? (

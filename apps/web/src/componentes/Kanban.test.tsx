@@ -431,7 +431,10 @@ describe("Kanban", () => {
 });
 
 /**
- * **«Ver lo que hace»** (Task 16): la puerta a la vista en vivo del turno de una tarea.
+ * **«Ver lo que hace»** (Task 16, y Task 17: el despliegue vive DENTRO de la tarjeta —
+ * `MirarTarea.tsx` es la única pieza que decide las condiciones, y esta describe existe
+ * para comprobar que Kanban la MONTA con los datos que solo la cola conoce, no para
+ * repetir sus reglas).
  *
  * Solo aparece donde puede cumplir lo que promete, y son tres condiciones a la vez:
  *  - **`en-proceso`**: una `nuevo` no ha arrancado y una `terminada` ya acabó; para esa, lo
@@ -443,17 +446,31 @@ describe("Kanban", () => {
 describe("Kanban: ver lo que hace una tarea en proceso", () => {
   const enProceso = tarea({ estado: "en-proceso", empezada: "2026-09-08T10:01:00.000Z" });
 
-  it("se ofrece en una tarea «en proceso» de este proceso, y avisa al pulsar", () => {
+  it("se ofrece en una tarea «en proceso» de este proceso, como un botón DE VERDAD, y avisa al pulsar", () => {
     const alMirar = vi.fn();
-    render(<Kanban cola={{ lista: [enProceso], concurrencia: 2, corriendoAqui: true }} alMirar={alMirar} />);
-    fireEvent.click(screen.getByRole("button", { name: /ver lo que hace/i }));
+    render(
+      <Kanban
+        cola={{ lista: [enProceso], concurrencia: 2, corriendoAqui: true }}
+        alMirar={alMirar}
+        alDejarDeMirar={() => {}}
+      />
+    );
+    const boton = screen.getByRole("button", { name: /ver lo que hace/i });
+    expect(boton.getAttribute("aria-expanded")).toBe("false");
+    fireEvent.click(boton);
     expect(alMirar).toHaveBeenCalledWith("t1");
   });
 
   it("no se ofrece en «nuevo», «esperando feedback» ni «terminada»", () => {
     for (const estado of ["nuevo", "requiere-atencion", "terminada"] as const) {
       cleanup();
-      render(<Kanban cola={{ lista: [tarea({ estado })], concurrencia: 2, corriendoAqui: true }} alMirar={() => {}} />);
+      render(
+        <Kanban
+          cola={{ lista: [tarea({ estado })], concurrencia: 2, corriendoAqui: true }}
+          alMirar={() => {}}
+          alDejarDeMirar={() => {}}
+        />
+      );
       expect(screen.queryByRole("button", { name: /ver lo que hace/i })).toBeNull();
     }
   });
@@ -463,6 +480,7 @@ describe("Kanban: ver lo que hace una tarea en proceso", () => {
       <Kanban
         cola={{ lista: [enProceso], concurrencia: 2, corriendoAqui: false, ejecutaOtroProceso: true }}
         alMirar={() => {}}
+        alDejarDeMirar={() => {}}
       />
     );
     expect(screen.queryByRole("button", { name: /ver lo que hace/i })).toBeNull();
@@ -470,7 +488,12 @@ describe("Kanban: ver lo que hace una tarea en proceso", () => {
 
   it("sin cable no se ofrece", () => {
     render(
-      <Kanban cola={{ lista: [enProceso], concurrencia: 2, corriendoAqui: true }} alMirar={() => {}} conectado={false} />
+      <Kanban
+        cola={{ lista: [enProceso], concurrencia: 2, corriendoAqui: true }}
+        alMirar={() => {}}
+        alDejarDeMirar={() => {}}
+        conectado={false}
+      />
     );
     expect(screen.queryByRole("button", { name: /ver lo que hace/i })).toBeNull();
   });
@@ -480,7 +503,7 @@ describe("Kanban: ver lo que hace una tarea en proceso", () => {
     expect(screen.queryByRole("button", { name: /ver lo que hace/i })).toBeNull();
   });
 
-  it("la que se está mirando lo DICE, y deja de mirarla es el mismo control", () => {
+  it("la que se está mirando lo DICE con `aria-expanded`, y deja de mirarla es el mismo control", () => {
     const alDejarDeMirar = vi.fn();
     render(
       <Kanban
@@ -492,7 +515,82 @@ describe("Kanban: ver lo que hace una tarea en proceso", () => {
     );
     // Sin esto, con el panel abierto el botón seguiría diciendo «ver» y no habría forma de
     // saber de qué tarjeta es el transcript que se está leyendo.
-    fireEvent.click(screen.getByRole("button", { name: /dejar de ver/i }));
+    const boton = screen.getByRole("button", { name: /dejar de ver/i });
+    expect(boton.getAttribute("aria-expanded")).toBe("true");
+    fireEvent.click(boton);
     expect(alDejarDeMirar).toHaveBeenCalledWith("t1");
+  });
+
+  /**
+   * Task 17: el detalle se lee DENTRO de la propia tarjeta —`<li>`—, no en un bloque
+   * aparte debajo del kanban. Esto es lo que la mutación «volver a pintarla en el
+   * escritorio» tumbaría: si el transcript volviera a vivir en un bloque hermano, este
+   * `closest("li")` no lo encontraría.
+   */
+  it("expandida, el transcript se lee DENTRO de la tarjeta de la cola", () => {
+    render(
+      <Kanban
+        cola={{ lista: [enProceso], concurrencia: 2, corriendoAqui: true }}
+        alMirar={() => {}}
+        alDejarDeMirar={() => {}}
+        mirando="t1"
+        mirada={{ tarea: "t1", actos: [{ tipo: "asistente", texto: "voy con el campo" }] }}
+      />
+    );
+    const linea = screen.getByText("voy con el campo");
+    expect(linea.closest("li")).not.toBeNull();
+  });
+
+  /**
+   * F17 de la revisión: el detalle es el sitio para lo que la fila de una `en-proceso` no
+   * puede enseñar — antes solo la tarjeta de «esperando feedback» pintaba motivo,
+   * autorizadas y veredicto.
+   */
+  it("expandida, se leen también el motivo, lo autorizado y el veredicto de ESA tarea", () => {
+    render(
+      <Kanban
+        cola={{
+          lista: [
+            tarea({
+              estado: "en-proceso",
+              motivo: "el juez de QA dijo «rojo»: falta el manejador de error",
+              autorizadas: ["app.xne"],
+              veredicto: { veredicto: "rojo", resumen: "falta el manejador de error" },
+            }),
+          ],
+          concurrencia: 2,
+          corriendoAqui: true,
+        }}
+        alMirar={() => {}}
+        alDejarDeMirar={() => {}}
+        mirando="t1"
+      />
+    );
+    expect(screen.getByText(/falta el manejador de error/)).toBeTruthy();
+    expect(screen.getByText("app.xne")).toBeTruthy();
+  });
+
+  /**
+   * Medido con un chequeo aparte, y era real: `TarjetaSimple` pinta `EntregaDeTarea` SIEMPRE
+   * (es como se lee «Terminada» sin desplegar nada), así que una tarea que se estaba mirando
+   * cuando acabó —«terminada» y todavía expandida— la mostraba DOS veces: una en la
+   * cabecera de la tarjeta, otra dentro del detalle de `MirarTarea`. Con un motivo que no
+   * incluye el resumen del veredicto, `EntregaDeTarea` no tiene forma de evitarlo por su
+   * cuenta (ese truco solo vale para el resumen dentro del MOTIVO de una aparcada).
+   */
+  it("terminada y todavía expandida: el veredicto no se repite dos veces", () => {
+    render(
+      <Kanban
+        cola={{
+          lista: [tarea({ estado: "terminada", veredicto: { veredicto: "verde", resumen: "hace lo que se pedía" } })],
+          concurrencia: 2,
+          corriendoAqui: true,
+        }}
+        alMirar={() => {}}
+        alDejarDeMirar={() => {}}
+        mirando="t1"
+      />
+    );
+    expect(screen.getAllByText(/El juez de QA la aprobó/)).toHaveLength(1);
   });
 });

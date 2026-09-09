@@ -3,7 +3,6 @@ import { IconoDeEntorno } from "./IconoDeEntorno.js";
 import estilos from "./Escritorio.module.css";
 import { Equipo } from "./Equipo.js";
 import { Kanban } from "./Kanban.js";
-import { MirarTarea } from "./MirarTarea.js";
 import type { Acto, InformeDeDispositivos, TareaDelCable } from "../tipos.js";
 
 /**
@@ -316,31 +315,14 @@ export function Escritorio({
             {...(alDescartarTarea === undefined ? {} : { alDescartar: alDescartarTarea })}
             {...(alTerminarTarea === undefined ? {} : { alTerminar: alTerminarTarea })}
             {...(alEnviarFeedback === undefined ? {} : { alEnviarFeedback })}
+            // «Ver lo que hace»: Task 17 lo movió DENTRO de la tarjeta de la cola —
+            // `MirarTarea` lo monta `Kanban`, aquí solo se reenvía con sus nombres.
             {...(alMirarTarea === undefined ? {} : { alMirar: alMirarTarea })}
             {...(alDejarDeMirarTarea === undefined ? {} : { alDejarDeMirar: alDejarDeMirarTarea })}
             {...(mirandoTarea === undefined ? {} : { mirando: mirandoTarea })}
+            {...(mirada === undefined ? {} : { mirada })}
             {...(proyectoActivo === undefined ? {} : { proyectoActivo })}
             conectado={conectado}
-          />
-        )}
-
-        {/* Lo que hace la tarea que se está mirando, DEBAJO del kanban y no en un modal: se
-            lee mientras se ve el resto de la cola, y un turno tarda minutos. Solo se pinta
-            con una elegida y con el canal puesto; el transcript puede no haber llegado
-            todavía, y `MirarTarea` lo dice en vez de afirmar un turno vacío. */}
-        {mirandoTarea === undefined || alDejarDeMirarTarea === undefined ? null : (
-          <MirarTarea
-            titulo={tareas?.lista.find((t) => t.id === mirandoTarea)?.titulo ?? mirandoTarea}
-            actos={mirada?.tarea === mirandoTarea ? mirada.actos : []}
-            // Con qué frase se lee un panel vacío. Las MISMAS dos condiciones que ofrecen el
-            // botón: si la tarea ya no está `en-proceso`, o la ejecuta el otro proceso, este
-            // servidor no tiene su consola y no va a llegar nada más — decir «todavía no ha
-            // pintado nada» de un turno terminado sería la mentira de siempre.
-            corre={
-              tareas?.lista.find((t) => t.id === mirandoTarea)?.estado === "en-proceso" &&
-              tareas.corriendoAqui
-            }
-            alCerrar={() => alDejarDeMirarTarea(mirandoTarea)}
           />
         )}
 
