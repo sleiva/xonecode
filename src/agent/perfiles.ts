@@ -48,15 +48,12 @@ export const DENEGADO_SIEMPRE = [
    * nombre que la interfaz presenta como «lo que te adjuntaron». Con la fila puesta, las dos
    * situaciones contestan «permission denied» y el disco no se toca (también medido).
    *
-   * **Lo que esta lista NO alcanza es el ORQUESTADOR**, y no es de esta fila: su
-   * `createFilesystemMiddleware` (`xoneAgent.ts`) se monta SIN `permissions` —solo los
-   * subagentes reciben `permisosDe`—, así que las tres denegaciones de aquí son decorativas
-   * para él. Medido, no deducido: el `write_file` del orquestador contesta «Successfully
-   * wrote» a `/adjuntos/pwn.txt`, a `/skills/pwn.txt` y a `/.env`, y los tres ficheros
-   * aparecen en disco. Es anterior a los adjuntos y les pasa igual a `.env`, `.git`,
-   * `.xonecode` y las skills, así que no se arregla desde aquí — pero la afirmación de que
-   * esto es «de solo lectura» vale para quien escribe (los especialistas), no para el
-   * orquestador. Ver la trampa correspondiente en `CLAUDE.md`.
+   * Esta lista alcanza también al ORQUESTADOR desde el 9-09-2026, y antes no: su
+   * `createFilesystemMiddleware` se montaba sin `permissions`, así que las tres denegaciones
+   * de aquí eran decorativas para él y su `write_file` contestaba «Successfully wrote» a
+   * `/adjuntos/pwn.txt`, a `/skills/pwn.txt` y a `/.env`. Hoy recibe
+   * `permisosDe(PERFIL_DEL_ORQUESTADOR)`, que es de solo lectura; lo mide
+   * `xoneAgent.orquestador.test.ts`.
    */
   { operations: ["write"] as const, paths: ["/adjuntos", "/adjuntos/**"], mode: "deny" as const },
 ];
