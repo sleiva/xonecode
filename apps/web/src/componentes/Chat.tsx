@@ -217,7 +217,13 @@ export function Chat({
             // no se repite en los reanuncios del alta, precisamente para que no pueda
             // contar como ajeno lo que esta sesión escriba después. Un «hay cambios» sería
             // falso en cuanto alguien commitee, con el aviso todavía puesto.
-            <p role="note" className={`${vista.flowItem} ${estilos.trabajoAlAbrir}`}>
+            // `div` y no `p` como los otros dos avisos: éste lleva una LISTA dentro, y un
+            // `<ul>` no es contenido válido de un `<p>`. React lo monta por API del DOM y
+            // no por el parser, así que no se ve romperse — pero un navegador que parsee
+            // ese marcado cierra el párrafo antes de la lista, y entonces el fondo del
+            // aviso se acabaría en la primera línea. El estilo va por CLASE, no por
+            // etiqueta, así que no cambia nada más.
+            <div role="note" className={`${vista.flowItem} ${estilos.trabajoAlAbrir}`}>
               Cuando abriste esta sesión, el proyecto ya tenía{" "}
               <strong>
                 {trabajoAlAbrir.total} {trabajoAlAbrir.total === 1 ? "fichero" : "ficheros"} sin commitear
@@ -232,7 +238,7 @@ export function Chat({
               {trabajoAlAbrir.total > trabajoAlAbrir.ficheros.length ? (
                 <>y {trabajoAlAbrir.total - trabajoAlAbrir.ficheros.length} más</>
               ) : null}
-            </p>
+            </div>
           )}
           {historica ? (
             // `role="note"`: es información de contexto, no una alerta. Y va DENTRO de la
