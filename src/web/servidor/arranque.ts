@@ -82,12 +82,12 @@ import {
   guardarDispositivos,
   guardarEntorno as guardarEntornoEnDisco,
 } from "../../agent/settingsEnDisco.js";
-import { seAplicaSinAprobacion } from "../../core/settings.js";
+import { dentroDelWorkspace, seAplicaSinAprobacion } from "../../core/settings.js";
 import { cloudstudioDelProyecto } from "../../agent/configEnDisco.js";
 import { abrirEnSistema } from "../../agent/cloudstudioMcp.js";
 import { nombreDePersona } from "../../agent/persona.js";
 import { cambiosDeSesion, fotoDeApertura, olvidarSesion, parcheDeSesion } from "../../agent/sesionGit.js";
-import { trabajoSinCommitear } from "../../agent/gitSync.js";
+import { commitDeTurno, trabajoSinCommitear } from "../../agent/gitSync.js";
 import { marcarTareaDeSesion } from "./sesiones.js";
 import { RUTA_ARTEFACTOS, esRutaDeArtefacto } from "../../core/artefactos.js";
 import { arbolDeProyecto, leerFicheroDeProyecto } from "../../agent/arbolDeProyecto.js";
@@ -123,6 +123,7 @@ import { nombreDeAdjuntoAceptable } from "../../core/adjuntos.js";
 import { rutaMemoriaDeProyecto } from "../../agent/memoriaDeProyecto.js";
 import { crearAumentador, invocarParaAumentar } from "../../agent/aumentador.js";
 import {
+  baseDeWorkspacePorOmision,
   conexionDeVestibulo,
   crearVestibulo,
   escribirProyectoEnDisco,
@@ -3304,6 +3305,22 @@ function vestibuloReal(
     // que lo que está probado es que el vestíbulo la usa por las dos puertas, no que aquí
     // siga puesta.
     sinCommitear: trabajoSinCommitear,
+    /**
+     * El commit del turno, y **la decisión de DÓNDE se commitea vive aquí**, no en el
+     * vestíbulo: en la copia que creó xonecode (`<base>/<entorno>/workspace/<proyecto>`) es
+     * suya y commitear cada turno es razonable; en la carpeta que abrió una persona sería
+     * ensuciarle el historial cada vez que habla con el agente, así que ahí no se commitea y
+     * lo que queda es el aviso de árbol sucio al abrir.
+     *
+     * Solo se DICE el fallo. Que no haya nada que commitear, que la carpeta no sea un repo
+     * (todo proyecto offline) o que no sea del workspace no son avisos: son el caso normal, y
+     * uno por turno enseñaría a ignorarlos.
+     */
+    commitearTurno: async (raiz, mensaje) => {
+      if (!dentroDelWorkspace(raiz, settings.workspace ?? baseDeWorkspacePorOmision())) return undefined;
+      const hecho = await commitDeTurno(raiz, mensaje);
+      return hecho.via === "fallo" ? `no se pudo commitear el turno: ${hecho.motivo}` : undefined;
+    },
     olvidarMarcaDeSesion: olvidarSesion,
     // La memoria del agente por hilo. `historica` deja de ser «se reabrió» para ser «no hay
     // checkpoint que cargar», y borrar una sesión se lleva también su checkpoint.

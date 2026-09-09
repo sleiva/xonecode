@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import {
   validarSettings,
   rutaDeWorkspace,
+  dentroDelWorkspace,
   seMira,
   seAplicaSinAprobacion,
   PLATAFORMAS_DE_DISPOSITIVO,
@@ -171,5 +172,30 @@ describe("el tope de concurrencia de tareas en settings.json", () => {
     ).toBeUndefined();
     expect(validarSettings({ entornos: [], concurrenciaDeTareas: 2.5 }).settings.concurrenciaDeTareas).toBeUndefined();
     expect(validarSettings({ entornos: [], concurrenciaDeTareas: "2" }).settings.concurrenciaDeTareas).toBeUndefined();
+  });
+});
+
+describe("dentroDelWorkspace: dónde puede xonecode commitear solo", () => {
+  it("una copia del workspace sí, y la carpeta que abrió el usuario no", () => {
+    // La carpeta del workspace la creó xonecode y es suya: ahí un commit por turno es
+    // razonable. En la que abrió el usuario —offline, o `./bin/xonecode` dentro de su
+    // repo— sería ensuciarle el historial cada vez que habla con el agente.
+    expect(dentroDelWorkspace("/casa/.xonecode/webstudio/workspace/AppDemo", "/casa/.xonecode")).toBe(true);
+    expect(dentroDelWorkspace("/proyectos/mi-app", "/casa/.xonecode")).toBe(false);
+  });
+
+  it("un vecino con el mismo prefijo NO cuela", () => {
+    // La trampa de comparar cadenas: `/casa/.xonecodeX` empieza por `/casa/.xonecode`.
+    expect(dentroDelWorkspace("/casa/.xonecodeX/webstudio/workspace/A", "/casa/.xonecode")).toBe(false);
+  });
+
+  it("la base a secas no es una copia: ahí no hay ningún proyecto", () => {
+    expect(dentroDelWorkspace("/casa/.xonecode", "/casa/.xonecode")).toBe(false);
+  });
+
+  it("las rutas se normalizan antes de comparar", () => {
+    // Una raíz con `..` o con barra final compara mal como texto plano.
+    expect(dentroDelWorkspace("/casa/.xonecode/webstudio/workspace/A/", "/casa/.xonecode")).toBe(true);
+    expect(dentroDelWorkspace("/casa/.xonecode/webstudio/../../fuera", "/casa/.xonecode")).toBe(false);
   });
 });

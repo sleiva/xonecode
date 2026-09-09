@@ -311,6 +311,26 @@ export function segmentoSeguro(valor: string, que: string): string {
  * La BASE es configurable (`settings.workspace`); la disposición de dentro NO, porque es
  * lo que hace predecible encontrar una copia sin consultar un índice.
  */
+/**
+ * ¿Esa raíz es una copia que creó xonecode, o una carpeta del usuario?
+ *
+ * De esto depende si el harness puede COMMITEAR solo al cerrar cada turno. En
+ * `<base>/<entorno>/workspace/<proyecto>` la carpeta la creó él y es suya; en la que abrió
+ * una persona —un proyecto offline, o `./bin/xonecode` dentro de su propio repo— un commit
+ * por turno sería ensuciarle el historial cada vez que habla con el agente.
+ *
+ * Compara por SEGMENTOS y no por prefijo de texto: `/casa/.xonecodeX` empieza por
+ * `/casa/.xonecode` y no tiene nada que ver. Y normaliza antes, porque una barra final o un
+ * `..` por medio hacen que dos rutas equivalentes no se parezcan como cadenas. La base a
+ * secas devuelve `false`: ahí no hay ningún proyecto, solo la carpeta que los contiene.
+ */
+export function dentroDelWorkspace(raiz: string, base: string): boolean {
+  const normal = (r: string): string[] => posix.normalize(r).replace(/\/+$/, "").split("/");
+  const dentro = normal(raiz);
+  const fuera = normal(base);
+  return dentro.length > fuera.length && fuera.every((seg, i) => dentro[i] === seg);
+}
+
 export function rutaDeWorkspace(base: string, entorno: string, proyecto: string): string {
   return posix.join(
     base,
