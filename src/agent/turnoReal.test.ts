@@ -1041,6 +1041,50 @@ describe("el tope de rondas es de quien monta la consola, y el turno lo CUENTA",
     expect(r.verificador).toBe("verde");
     expect(r.pendientes).toBe(0);
     expect(r.hallazgos).toBeUndefined();
+    // El verificador CORRIÓ, así que cuántos hallazgos quedaron fuera del reparto se SABE, y
+    // cero se dice cero: ausente es «no se midió» (ver `ResultadoDeTurno.preexistentes`).
+    expect(r.preexistentes).toBe(0);
+  });
+
+  /**
+   * El reparto también VIAJA, no solo se pinta.
+   *
+   * De aquí sale lo que se le cuenta al juez de QA, y sin este número el juez recibe una
+   * lista de hallazgos sin saber que ya está filtrada — que es exactamente el dato que le
+   * faltaba en la primera ejecución real, donde concluyó que el turno había modificado los
+   * ficheros de los que hablaban los hallazgos.
+   */
+  it("cuántos hallazgos quedaron FUERA del reparto viaja en el retorno, no solo en la consola", async () => {
+    const sesion = await abrir({
+      escribe: true,
+      pedir: aprobarTodo(),
+      cambios: [XNE],
+      raiz: RAIZ,
+      verifier: {
+        verificar: async () => ({
+          verde: true,
+          hallazgos: [
+            // Sin fichero: inatribuible, y por eso va del lado del turno (el conservador).
+            { code: "REF_JS_COLL_MISSING", severidad: "warning" as const, mensaje: "un script referencia una colección no encontrada" },
+            // En un fichero que este turno no tocó: no es del agente.
+            { code: "XONE009", severidad: "warning" as const, mensaje: "ya estaba", fichero: `${RAIZ}/Otro.xne`, linea: 3 },
+          ],
+        }),
+      },
+    });
+    const r = await sesion.turno("escribe", pielFalsa());
+    expect(r.verificador).toBe("verde");
+    expect(r.hallazgos).toEqual([
+      { code: "REF_JS_COLL_MISSING", severidad: "warning", mensaje: "un script referencia una colección no encontrada" },
+    ]);
+    expect(r.preexistentes).toBe(1);
+  });
+
+  it("sin verificador que corra no se afirma ningún reparto: el campo se queda ausente", async () => {
+    const sesion = await abrir({ escribe: true, pedir: aprobarTodo(), cambios: [XNE] });
+    const r = await sesion.turno("escribe", pielFalsa());
+    expect(r.verificador).toBe("no-corrio");
+    expect(r.preexistentes).toBeUndefined();
   });
 
   it("un veredicto rojo viaja con sus hallazgos, con fichero RELATIVO y sin contenido", async () => {

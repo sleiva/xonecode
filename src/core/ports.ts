@@ -258,7 +258,19 @@ export interface CasoDeJuez {
   /** Cómo acabó el verificador, si se sabe. `no-corrio` se le DICE: un juez que no sabe
    *  que nadie midió juzgaría sobre un hecho que no existe. */
   verificador?: EstadoDeVerificador;
+  /** Los del REPARTO: los que caen en ficheros que este turno tocó, más los que no dicen en
+   *  qué fichero (inatribuibles, y ese es el lado conservador). Ver `preexistentes`. */
   hallazgos?: readonly HallazgoDelTurno[];
+  /** Cuántos quedaron FUERA del reparto, o sea en ficheros que este turno no tocó. Sin este
+   *  número, `hallazgos` se lee como si fuera todo lo que el simulador vio y como si todo
+   *  fuera del turno — medido: el juez concluyó de dos avisos que el agente había modificado
+   *  ficheros JavaScript. Ausente es «no se midió»; `0` es «no había ningún otro». */
+  preexistentes?: number;
+  /** Lo que dice GIT de si la sesión cambió algún fichero, cuando hay marca con que
+   *  comparar (`corredorDeTareas.ts#revisionConGit`). Es el único HECHO sobre el disco que
+   *  llega hasta aquí: `autorizadas` es la intención del agente. Ausente = no se sabe, y
+   *  entonces no se afirma nada — colapsarlo en «no escribió» inventaría un cargo. */
+  escribio?: boolean;
 }
 
 /**

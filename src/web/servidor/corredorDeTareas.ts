@@ -762,6 +762,18 @@ export function crearCorredorDeTareas(opciones: {
         autorizadas: conAutorizadas(tarea, entrada.autorizadas ?? []).autorizadas ?? [],
         verificador: medida.verificador,
         ...(medida.hallazgos === undefined ? {} : { hallazgos: medida.hallazgos }),
+        /**
+         * Y el otro lado del REPARTO, más lo que dice git. Las dos cosas son datos que ya
+         * estaban medidos y se tiraban, y sin ellas el prompt del juez no puede decir la
+         * verdad sobre lo que le está dando: `hallazgos` es una lista ya filtrada (sin el
+         * número no se sabe que lo está) y `autorizadas` es la intención del agente (sin
+         * `escribio` no hay ningún hecho sobre el disco). Medido en la primera ejecución
+         * real: el juez dictó rojo acusando al turno de modificar ficheros de los que solo
+         * hablaban los hallazgos, y diciendo que no podía comprobar un fichero que estaba
+         * en `autorizadas`.
+         */
+        ...(medida.preexistentes === undefined ? {} : { preexistentes: medida.preexistentes }),
+        ...(medida.escribio === undefined ? {} : { escribio: medida.escribio }),
       })
       .then((v) => void (veredicto = v))
       .catch((error: unknown) => {

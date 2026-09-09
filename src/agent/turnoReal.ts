@@ -497,6 +497,13 @@ export async function abrirSesionReal(opciones: {
      */
     let veredicto: EstadoDeVerificador = "no-corrio";
     let hallazgosDelTurno: HallazgoDelTurno[] = [];
+    /**
+     * Cuántos hallazgos quedaron FUERA del reparto. `undefined` mientras el verificador no
+     * haya corrido: ausente es «no se midió» y `0` es «no había ningún otro»
+     * (`core/entrega.ts#ResultadoDeTurno.preexistentes`). De aquí sale lo que le permite al
+     * juez de QA leer `hallazgos` por lo que es: una lista YA filtrada.
+     */
+    let preexistentesDelTurno: number | undefined;
     /** Si esta pasada cierra el turno. `false` = detrás viene otra ronda o un intento. */
     let cerrarRonda = true;
     /** Si tras esta pasada hay que lanzar un intento de reparación. */
@@ -603,6 +610,10 @@ export async function abrirSesionReal(opciones: {
       // re-parsea de la bitácora, que es cómo dos copias de una cuenta acaban discrepando.
       veredicto = errores === 0 ? "verde" : "rojo";
       hallazgosDelTurno = hallazgos;
+      // El reparto entero, no solo su mitad. Aquí sí se apunta el cero: el evento lo omite
+      // porque una línea de consola que dice «y 0 más» no dice nada, pero quien recibe
+      // `hallazgos` necesita saber que la lista está filtrada — y con cero también.
+      preexistentesDelTurno = preexistentes;
       yield {
         tipo: "verificacion",
         verde: errores === 0,
@@ -689,6 +700,7 @@ export async function abrirSesionReal(opciones: {
       motivoSinVerificar = undefined;
       veredicto = "no-corrio";
       hallazgosDelTurno = [];
+      preexistentesDelTurno = undefined;
       cerrarRonda = true;
       const aborto = new AbortController();
       cancelarEnCurso = () => aborto.abort(new Error("turno cancelado por el usuario"));
@@ -862,6 +874,7 @@ export async function abrirSesionReal(opciones: {
       // Ausente y vacío: sin hallazgos el campo no se pone, para que quien lo lea no
       // confunda «no hubo» con «no se sabe».
       ...(hallazgosDelTurno.length === 0 ? {} : { hallazgos: hallazgosDelTurno }),
+      ...(preexistentesDelTurno === undefined ? {} : { preexistentes: preexistentesDelTurno }),
       ...(motivoSinVerificar === undefined ? {} : { motivoSinVerificar }),
     };
   };

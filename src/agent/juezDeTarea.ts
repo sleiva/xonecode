@@ -110,11 +110,46 @@ export function invocarConModelos(modelos: ModelosPort): InvocarModelo {
   };
 }
 
-/** Un hallazgo del verificador, dicho en una línea. Fichero RELATIVO y línea, nunca contenido. */
+/**
+ * Un hallazgo del verificador, dicho en una línea. Fichero RELATIVO y línea, nunca contenido.
+ *
+ * **La severidad se dice en castellano y por su nombre**, y no era cosmético: `h.severidad`
+ * se pintaba en crudo, así que un aviso llegaba como «warning» —el enum, en inglés, al lado
+ * de un «ERROR» que sí estaba traducido y en mayúsculas—. La huella de reparación del
+ * verificador (`agent/turnoReal.ts`) usa solo los ERRORES porque «un aviso que va y viene no
+ * dice nada de si el error se arregla», y la puerta de entrega (`core/entrega.ts`) cuenta
+ * solo errores: si esa distinción manda en el código, no puede llegarle borrosa al juez.
+ *
+ * **Y un hallazgo SIN fichero se dice sin fichero.** Es el caso que produjo el rojo falso
+ * medido: el reparto admite del lado del turno los hallazgos que no dicen dónde —el lado
+ * conservador—, así que callarlo los dejaba pareciendo hallazgos sobre un fichero escrito.
+ */
 const lineaDeHallazgo = (h: HallazgoDelTurno): string =>
-  `- ${h.severidad === "error" ? "ERROR" : h.severidad} ${h.code}${
-    h.fichero === undefined ? "" : ` en ${h.fichero}${h.linea === undefined ? "" : `:${h.linea}`}`
+  `- ${h.severidad === "error" ? "ERROR" : h.severidad === "warning" ? "AVISO" : "INFO"} ${h.code}${
+    h.fichero === undefined
+      ? " (el simulador no dijo en qué fichero, así que no se puede atribuir a ninguno)"
+      : ` en ${h.fichero}${h.linea === undefined ? "" : `:${h.linea}`}`
   }: ${h.mensaje}`;
+
+/**
+ * Cómo se lee un hallazgo, dicho antes de enseñar ninguno.
+ *
+ * **Esto es la corrección medida.** El encabezado era «Sus hallazgos sobre lo que este turno
+ * tocó», que es FALSO justo para los hallazgos sin fichero, y de ahí salió el primer
+ * hallazgo del rojo falso: «se modificaron ficheros de lógica JavaScript durante el turno
+ * según los hallazgos del verificador». Un hallazgo no dice quién escribió nada — dice que
+ * el proyecto tiene una inconsistencia, y el simulador mira el proyecto ENTERO porque es su
+ * API. Es la misma regla que gobierna el reparto en `agent/turnoReal.ts#conVerificacion`:
+ * «un error que ya estaba en un fichero que el agente no abrió no es del agente:
+ * atribuírselo sería falso». Aquí se la dice también al juez.
+ */
+const COMO_SE_LEEN_LOS_HALLAZGOS = [
+  "Cómo se leen esos hallazgos: el simulador mira el PROYECTO ENTERO, no lo que este turno",
+  "escribió. Son OBSERVACIONES sobre el estado del proyecto y no atribuyen autoría:",
+  "ninguno dice quién escribió qué, ni que este turno tocara el fichero del que habla.",
+  "Lo único que dice qué escribió el turno es la lista de arriba.",
+  "",
+];
 
 /** Cómo se le cuenta al juez lo que hizo el verificador. `no-corrio` se DICE. */
 const parrafoDelVerificador = (caso: CasoDeJuez): string[] => {
@@ -126,9 +161,84 @@ const parrafoDelVerificador = (caso: CasoDeJuez): string[] => {
     ];
   }
   const hallazgos = caso.hallazgos ?? [];
+  const errores = hallazgos.filter((h) => h.severidad === "error");
+  const avisos = hallazgos.filter((h) => h.severidad !== "error");
   return [
-    `El verificador de XOne acabó en ${caso.verificador.toUpperCase()}.`,
-    ...(hallazgos.length === 0 ? [] : ["Sus hallazgos sobre lo que este turno tocó:", ...hallazgos.map(lineaDeHallazgo)]),
+    caso.verificador === "verde"
+      ? [
+          "El verificador de XOne (xone-simulator) acabó en VERDE, así que",
+          "no hay nada que reprochar por parte del verificador: no dejó ni un error.",
+          "Los avisos no lo cambian — los errores son lo único que la puerta de entrega cuenta.",
+        ].join("\n")
+      : `El verificador de XOne (xone-simulator) acabó en ROJO: dejó ${errores.length} error(es) sin corregir.`,
+    "",
+    ...(hallazgos.length === 0 && caso.preexistentes === undefined ? [] : COMO_SE_LEEN_LOS_HALLAZGOS),
+    ...(errores.length === 0
+      ? []
+      : [
+          `Errores que caen en algo que este turno escribió, o que no dicen en qué fichero (${errores.length}):`,
+          ...errores.map(lineaDeHallazgo),
+        ]),
+    ...(avisos.length === 0
+      ? []
+      : [
+          `Avisos que caen en algo que este turno escribió, o que no dicen en qué fichero (${avisos.length}):`,
+          ...avisos.map(lineaDeHallazgo),
+        ]),
+    /**
+     * El otro lado del reparto, CONTADO. Ausente es «no se midió» y cero es «no había
+     * ninguno más»: las dos cosas se dicen, porque callar el cero dejaría al juez sin saber
+     * si la lista de arriba es todo lo que el simulador vio.
+     */
+    ...(caso.preexistentes === undefined
+      ? []
+      : caso.preexistentes === 0
+        ? ["El simulador no encontró ningún otro hallazgo en el resto del proyecto."]
+        : [
+            `Y ${caso.preexistentes} hallazgo(s) más en ficheros que este turno no tocó, que quedan FUERA`,
+            "de las listas de arriba: son del proyecto y no de este trabajo, y no hay que juzgarlos.",
+          ]),
+  ];
+};
+
+/**
+ * Qué es la lista de rutas, y qué dice git. El segundo hallazgo del rojo falso medido salió
+ * de aquí: «no se puede comprobar la existencia ni el contenido de DOCUMENTACION.md con los
+ * datos facilitados», con `DOCUMENTACION.md` en la lista.
+ *
+ * El encabezado decía «Ficheros que se autorizó escribir», que se lee como un PERMISO —lo
+ * que se podría haber escrito— y no como el registro de lo que se escribió. No se arregla
+ * prometiendo más de lo que el dato aguanta: `Tarea.autorizadas` se apunta al autorizar cada
+ * escritura, así que una ruta que una guarda rechazara aparecería igual, y «la verdad sobre
+ * lo que cambió la tiene Revisión». Por eso se dice lo que es Y se pone al lado el único
+ * hecho sobre el disco que llega hasta aquí, que es lo que dice git.
+ */
+const parrafoDeLoEscrito = (caso: CasoDeJuez): string[] => {
+  if (caso.autorizadas.length === 0) {
+    return [
+      "El turno NO escribió ningún fichero: no consta ninguna ruta.",
+      ...(caso.escribio === true
+        ? ["Pero git confirma que la sesión cambió ficheros, así que algo se tocó sin quedar apuntado."]
+        : caso.escribio === false
+          ? ["Y git dice que la sesión no cambió ningún fichero, así que fue un trabajo de solo lectura."]
+          : ["Y no hay marca de git con la que comprobarlo, así que sobre el disco no se afirma nada."]),
+    ];
+  }
+  return [
+    `LO QUE EL TURNO ESCRIBIÓ (${caso.autorizadas.length} ruta(s)):`,
+    ...caso.autorizadas.map((f) => `- ${f}`),
+    "Son las rutas que el turno escribió sin que ninguna persona las aprobara, apuntadas al",
+    "autorizar cada escritura: es el registro de lo que se tocó en este trabajo.",
+    ...(caso.escribio === true
+      ? ["git confirma que la sesión cambió ficheros."]
+      : caso.escribio === false
+        ? [
+            "Ojo: git dice que la sesión no cambió ningún fichero. O una guarda rechazó esas",
+            "escrituras, o se deshicieron — y eso SÍ es algo que reprochar a este trabajo.",
+          ]
+        : ["No hay marca de git con la que comprobar si la sesión cambió algo, así que eso no se afirma."]),
+    "Por eso «no puedo comprobar si existe X» sobre una ruta de esa lista",
+    "no es una respuesta válida: que el turno la escribió es exactamente lo que dice la lista.",
   ];
 };
 
@@ -151,21 +261,31 @@ function promptDelJuez(caso: CasoDeJuez): string {
     "EL ENCARGO ERA:",
     caso.encargo,
     "",
-    caso.autorizadas.length === 0
-      ? "NO se autorizó escribir ningún fichero en este turno."
-      : `Ficheros que se autorizó escribir (${caso.autorizadas.length}):\n${caso.autorizadas
-          .map((f) => `- ${f}`)
-          .join("\n")}`,
+    ...parrafoDeLoEscrito(caso),
     "",
     ...parrafoDelVerificador(caso),
     "",
-    "No tienes el contenido de los ficheros, y no lo pidas: juzga con el encargo y con los",
-    "hechos de arriba. Si con eso no se puede saber, dilo — no te inventes nada para poder",
-    "dar un veredicto, que es justo el fallo que este paso existe para atrapar.",
+    /**
+     * Los dos límites, y la frontera entre ellos DICHA.
+     *
+     * «Si con eso no se puede saber, dilo» y «no puedo comprobar si existe X no vale» se
+     * contradicen si no se separa qué es cada cosa: no tener el contenido es un dato de
+     * partida —lo mismo para todos los casos— y no un hallazgo sobre este trabajo. Lo que
+     * de verdad no se puede juzgar sin contenido es la CALIDAD; qué se escribió sí se sabe.
+     */
+    "No tienes el contenido de los ficheros y no lo vas a tener: eso es un dato de partida de",
+    "este paso, no es un hallazgo sobre este trabajo, y no lo pidas. Lo que no puedes juzgar",
+    "así es la CALIDAD de lo escrito —si la documentación está bien redactada, si el XML es el",
+    "que hacía falta—; qué se escribió sí lo sabes, y es la lista de arriba. Si el encargo",
+    "no se puede juzgar por los nombres y los hechos de arriba, dilo en el resumen:",
+    "no te inventes nada para poder dar un veredicto, que es justo el fallo que este paso",
+    "existe para atrapar.",
     "",
     "Contesta SOLO con este JSON y nada más:",
     '{"veredicto":"verde"|"rojo","resumen":"una o dos frases","hallazgos":["lo que falta, uno por entrada"]}',
     "«verde» = el encargo está cubierto. «rojo» = falta algo, o lo hecho no es lo que se pedía.",
+    "Un aviso del verificador, o un defecto que ya estaba en el proyecto, no es motivo de «rojo»:",
+    "lo que se juzga es ESTE encargo y ESTE trabajo, no el estado general del proyecto.",
   ].join("\n");
 }
 

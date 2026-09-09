@@ -75,6 +75,23 @@ export interface ResultadoDeTurno {
    */
   hallazgos?: HallazgoDelTurno[];
   /**
+   * Cuántos hallazgos del simulador quedaron FUERA del reparto: los que caen en ficheros
+   * que este turno no tocó. El otro lado de `hallazgos`, y hasta ahora solo se pintaba en
+   * la consola (evento `verificacion`) y se tiraba.
+   *
+   * **Viaja porque el juez de QA lo necesita para no acusar al agente de lo que no hizo.**
+   * `hallazgos` ya está filtrada por el reparto de `agent/turnoReal.ts#conVerificacion`,
+   * pero quien la recibe no puede saber que lo está: en la primera ejecución real del juez
+   * eso acabó en un rojo que decía que el turno había modificado los ficheros de los que
+   * hablaban los hallazgos. Con este número, la lista se lee por lo que es.
+   *
+   * **Ausente y CERO no son lo mismo**, como siempre por aquí: `0` es «el verificador
+   * corrió y no había ningún otro», y ausente es «no se midió» — el turno que no escribió,
+   * el que no tiene simulador, el que se cortó antes. El evento lo omite en cero porque
+   * ahí es una línea de consola que no diría nada; esto es un dato, y cero es un dato.
+   */
+  preexistentes?: number;
+  /**
    * Por qué NO corrió, cuando se sabe: el binario que falta, o que esta ejecución no
    * tiene verificador. Ausente con `no-corrio` significa que el turno no llegó a
    * intentarlo — casi siempre porque no escribió nada, o porque se cortó antes.

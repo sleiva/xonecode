@@ -2377,6 +2377,7 @@ describe("una tarea se entrega por condiciones MEDIDAS más el juez", () => {
       verificador: "verde",
       pendientes: 0,
       hallazgos: [{ code: "ATTR_UNKNOWN", severidad: "warning", mensaje: "atributo raro", fichero: "Clientes.xne" }],
+      preexistentes: 22,
     });
     await corredor.asentar();
 
@@ -2394,6 +2395,16 @@ describe("una tarea se entrega por condiciones MEDIDAS más el juez", () => {
       autorizadas: ["Clientes.xne", "src/lista.js"],
       verificador: "verde",
       hallazgos: [{ code: "ATTR_UNKNOWN", severidad: "warning", mensaje: "atributo raro", fichero: "Clientes.xne" }],
+      /**
+       * Y las DOS cosas que el juez necesita para no atribuirle al turno lo que no es suyo:
+       * cuántos hallazgos quedaron FUERA del reparto —la lista de arriba ya está filtrada, y
+       * sin este número el juez no sabe que lo está— y lo que dice GIT de si la sesión
+       * cambió algo, que es el único hecho sobre el disco que hay aquí (`autorizadas` es una
+       * pista de lo que el agente quiso escribir). Medido: sin ellos, el juez dictó rojo
+       * acusando al turno de modificar ficheros de los que solo hablaban los hallazgos.
+       */
+      preexistentes: 22,
+      escribio: true,
     });
   });
 

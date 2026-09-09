@@ -768,6 +768,52 @@ avisa. Cinco reglas que sostienen esto:
     intento anterior guardado) el motivo no habla del juez y entonces el resumen sí hace falta.
     Lo que NO se dice ahí es la salvedad: eso es «se entregó», y todavía no se ha entregado.
 
+**Un hallazgo del verificador NO dice quién escribió nada, y el prompt del juez lo dice ahora
+porque decía lo contrario** (`juezDeTarea.ts#promptDelJuez`). Medido en la PRIMERA ejecución
+real del juez, con el modelo de verdad y un proyecto del usuario: encargo «documenta las
+colecciones en DOCUMENTACION.md», el turno escribió ese fichero y `MEMORIA_PROYECTO.md`, el
+verificador acabó en VERDE con dos avisos `REF_JS_COLL_MISSING` y 22 hallazgos más en ficheros
+que no tocó — y el juez dictó ROJO con dos hallazgos, los dos falsos: «se modificaron ficheros
+de lógica JavaScript durante el turno según los hallazgos del verificador» y «no se puede
+comprobar la existencia ni el contenido de DOCUMENTACION.md», con ese fichero en
+`autorizadas`. **Lo que falló no fue el modelo: fue lo que se le pasaba**, así que lo que se
+puede arreglar con datos se arregla con datos y solo lo que es una instrucción va como
+instrucción. Seis reglas:
+- **La cabecera mentía, y era la que invitaba la conclusión.** Decía «Sus hallazgos sobre lo
+  que este turno tocó», y el reparto de `turnoReal.ts#conVerificacion` admite del lado del
+  turno los hallazgos **sin fichero** — el lado conservador. O sea que de un aviso que no dice
+  dónde se afirmaba que era sobre un fichero escrito. Ahora se dice lo que es: el simulador
+  mira el PROYECTO ENTERO, sus hallazgos son observaciones sobre el estado del proyecto y **no
+  atribuyen autoría**; lo único que dice qué escribió el turno es la lista de rutas.
+- **Un hallazgo sin fichero se dice sin fichero**, en su propia línea y no en un párrafo
+  aparte: es el dato exacto que hace imposible atribuirlo.
+- **El otro lado del reparto VIAJA** (`ResultadoDeTurno.preexistentes` → `CasoDeJuez`), que se
+  medía para pintar una línea de consola y se tiraba. `hallazgos` ya llega filtrada y **quien
+  la recibe no puede saber que lo está**: con el número, la lista se lee por lo que es. Ausente
+  es «no se midió» y `0` es «no había ningún otro» — el evento omite el cero porque ahí es una
+  línea que no dice nada; aquí es un dato, y se dice.
+- **Los avisos llegan etiquetados, no escondidos.** `h.severidad` se pintaba en crudo, así que
+  un aviso era «warning» —el enum, en inglés— junto a un «ERROR» traducido; ahora van AVISO e
+  INFO y en grupos separados. Quitárselos habría sido la salida fácil: un juez con menos
+  contexto juzga peor. Y con el verificador en VERDE se dice que **no hay nada que reprochar
+  por su parte** y que los avisos no lo cambian, que es exactamente lo que el código hace
+  (`condicionesDeEntrega` cuenta ERRORES) — la misma razón por la que la huella de reparación
+  son solo los errores: «un aviso que va y viene no dice nada de si el error se arregla».
+- **`autorizadas` se explica, y no se le promete más de lo que aguanta.** El encabezado
+  «Ficheros que se autorizó escribir» se lee como un permiso —lo que se PODRÍA haber
+  escrito—, de ahí el segundo hallazgo falso. Se dice que son las rutas que el turno escribió
+  sin que nadie las aprobara, apuntadas al autorizar cada escritura, y al lado va el único
+  hecho sobre el disco que llega hasta aquí: **lo que dice git** (`escribio`, de
+  `revisionConGit`). Con eso, «no puedo comprobar si existe X» sobre una ruta de esa lista se
+  declara respuesta inválida. Y el caso contrario también se dice: git afirmando que no cambió
+  nada con rutas autorizadas es un rojo LEGÍTIMO —las guardas las rechazaron—, no una
+  incoherencia que tapar.
+- **Nada de esto relaja el fail-closed.** El juez sigue pudiendo decir rojo, y lo que no se
+  entiende sigue siendo `indeterminado`; las condiciones las comprueba el código igual. Lo que
+  cambia es que ya no puede decir rojo por lo que no es. Y las dos cláusulas que se rozan van
+  separadas a propósito: no tener el contenido es un DATO de partida y no un hallazgo, lo que
+  no se puede juzgar sin él es la CALIDAD de lo escrito — nunca si se escribió.
+
 **Un solo corredor por máquina, y el cerrojo NO lo garantiza solo** (`tareasEnDisco.ts#tomarCerrojo`).
 La toma directa es atómica (`wx`), pero **recoger un cerrojo cuyo dueño parece muerto no se puede
 hacer atómico con primitivas de ficheros**: decidir «está muerto» es una observación de un instante

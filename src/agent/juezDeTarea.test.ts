@@ -6,7 +6,7 @@ import {
   crearJuezDeTarea,
   invocarConModelos,
 } from "./juezDeTarea.js";
-import type { Papel } from "../core/ports.js";
+import type { JuezDeTareaPort, Papel } from "../core/ports.js";
 
 /** Una raíz cualquiera: `CasoDeJuez.raiz` existe para que el papel `afilado` se resuelva con
  *  el `config.json` del PROYECTO además del global, y aquí el `invocar` está doblado y no
@@ -106,6 +106,160 @@ describe("el prompt lleva los HECHOS y nunca contenido de ficheros", () => {
     // de lo esperable: que no aparece nada que el juez no le haya dado.
     expect(prompt).not.toContain("<coll");
     expect(prompt).toContain("/Users/quien-sea/p/app.xne");
+  });
+
+  /**
+   * EL CASO MEDIDO. Primera ejecución real del juez, con el modelo de verdad y un proyecto
+   * del usuario: encargo «documenta las colecciones en DOCUMENTACION.md», el turno escribió
+   * `DOCUMENTACION.md` (62 KB) y `MEMORIA_PROYECTO.md`, el verificador acabó en VERDE con
+   * dos avisos `REF_JS_COLL_MISSING` —sin fichero, así que el reparto los deja del lado
+   * conservador— y 22 hallazgos más en ficheros que el turno no tocó. El juez dictó ROJO con
+   * dos hallazgos, los dos falsos:
+   *  1. «Se modificaron ficheros de lógica JavaScript durante el turno según los hallazgos
+   *     del verificador (REF_JS_COLL_MISSING)». Un hallazgo NO dice quién escribió nada.
+   *  2. «No se puede comprobar la existencia ni el contenido de DOCUMENTACION.md con los
+   *     datos facilitados», con `autorizadas` llevando ese fichero.
+   *
+   * Lo que se comprueba aquí es que el prompt ya no admite ninguna de las dos: no que
+   * contenga frases nuevas, sino que cada dato que las sostenía esté dicho por lo que es.
+   */
+  const CASO_MEDIDO = {
+    encargo: "documenta las colecciones en DOCUMENTACION.md",
+    raiz: RAIZ,
+    autorizadas: ["DOCUMENTACION.md", "MEMORIA_PROYECTO.md"],
+    verificador: "verde" as const,
+    hallazgos: [
+      { code: "REF_JS_COLL_MISSING", severidad: "warning" as const, mensaje: "un script referencia una colección no encontrada" },
+      { code: "REF_JS_COLL_MISSING", severidad: "warning" as const, mensaje: "un script referencia una colección no encontrada" },
+    ],
+    preexistentes: 22,
+    escribio: true,
+  };
+
+  /** Corre el juez y devuelve el prompt que se le mandó. */
+  async function promptDe(caso: Parameters<JuezDeTareaPort["juzgar"]>[0]): Promise<string> {
+    let prompt = "";
+    const juez = crearJuezDeTarea({
+      invocar: async (_papel, p) => {
+        prompt = p;
+        return JSON.stringify({ veredicto: "verde", resumen: "ok" });
+      },
+    });
+    await juez.juzgar(caso);
+    return prompt;
+  }
+
+  describe("el caso MEDIDO: verde, dos avisos sin fichero y 22 preexistentes", () => {
+    it("los hallazgos se dicen OBSERVACIONES del proyecto, y que no atribuyen autoría", async () => {
+      const prompt = await promptDe(CASO_MEDIDO);
+      expect(prompt).toContain("no atribuyen autoría");
+      expect(prompt).toContain("no dice quién escribió");
+      /**
+       * Y la frase que INVITABA la conclusión se fue. «Sus hallazgos sobre lo que este turno
+       * tocó» era falsa justo para estos dos: el reparto (`agent/turnoReal.ts`) admite del
+       * lado del turno los hallazgos SIN fichero, que es el lado conservador, así que la
+       * cabecera afirmaba de un aviso sin fichero que era sobre un fichero tocado.
+       */
+      expect(prompt).not.toContain("sobre lo que este turno tocó");
+    });
+
+    it("un hallazgo SIN fichero se dice sin fichero, que es lo que lo hace inatribuible", async () => {
+      const prompt = await promptDe(CASO_MEDIDO);
+      const lineas = prompt.split("\n").filter((l) => l.includes("REF_JS_COLL_MISSING"));
+      expect(lineas).toHaveLength(2);
+      // Las DOS, no una: el marcador es por línea y no un párrafo suelto al final.
+      for (const l of lineas) expect(l).toContain("el simulador no dijo en qué fichero");
+    });
+
+    it("los avisos llegan como AVISOS, distinguibles de los errores, y sin el enum en crudo", async () => {
+      const prompt = await promptDe(CASO_MEDIDO);
+      expect(prompt).toContain("AVISO");
+      // La huella de reparación del verificador usa solo errores por esta razón: un aviso
+      // que va y viene no dice nada. Aquí lo mismo: no se le esconde, se le etiqueta.
+      expect(prompt).toContain("Avisos");
+      expect(prompt).not.toContain("warning");
+      // Y con el verificador en verde no hay errores que listar: el encabezado no aparece.
+      expect(prompt).not.toContain("Errores");
+    });
+
+    it("con el verificador en VERDE se dice que no hay nada que reprochar", async () => {
+      const prompt = await promptDe(CASO_MEDIDO);
+      expect(prompt).toContain("no hay nada que reprochar");
+    });
+
+    it("los 22 de fuera se CUENTAN, diciendo que no son de este turno", async () => {
+      const prompt = await promptDe(CASO_MEDIDO);
+      expect(prompt).toMatch(/22 hallazgo\(s\) más[^\n]*no tocó/);
+    });
+
+    it("`autorizadas` se explica: lo que el turno escribió, y git lo confirma", async () => {
+      const prompt = await promptDe(CASO_MEDIDO);
+      expect(prompt).toContain("DOCUMENTACION.md");
+      expect(prompt).toContain("MEMORIA_PROYECTO.md");
+      // Lo que son de verdad: el registro de las escrituras que la tarea aplicó sin que
+      // nadie las aprobara. No se promete más (`core/tareas.ts#Tarea.autorizadas`: es una
+      // PISTA, la verdad sobre el disco la tiene git) — y por eso va el hecho de git al lado.
+      expect(prompt).toContain("escribió sin que ninguna persona las aprobara");
+      expect(prompt).toContain("git confirma");
+      // Y la respuesta que el juez dio de verdad queda declarada inválida.
+      expect(prompt).toContain("no es una respuesta válida");
+    });
+
+    it("sigue diciendo que no se invente nada, y que sin contenido no se puede juzgar la CALIDAD", async () => {
+      const prompt = await promptDe(CASO_MEDIDO);
+      // Las dos cláusulas conviven y hay que separarlas: no tener el contenido es un DATO
+      // de partida, no un hallazgo. Lo que no se puede juzgar es si lo escrito está bien,
+      // nunca si se escribió.
+      expect(prompt).toContain("no te inventes nada");
+      expect(prompt).toContain("no es un hallazgo");
+    });
+
+    it("un aviso, o un defecto que ya estaba, NO son motivo de rojo — y lo dice", async () => {
+      const prompt = await promptDe(CASO_MEDIDO);
+      expect(prompt).toContain("Un aviso del verificador, o un defecto que ya estaba en el proyecto, no es motivo de «rojo»");
+    });
+  });
+
+  it("en ROJO los errores y los avisos van en grupos distintos, y no hay párrafo de verde", async () => {
+    const prompt = await promptDe({
+      encargo: "crea la colección Clientes",
+      raiz: RAIZ,
+      autorizadas: ["Clientes.xne"],
+      verificador: "rojo",
+      hallazgos: [
+        { code: "COLL_MISSING_PROGID", severidad: "error", mensaje: "falta progid", fichero: "Clientes.xne", linea: 4 },
+        { code: "ATTR_UNKNOWN", severidad: "warning", mensaje: "atributo raro", fichero: "Clientes.xne", linea: 9 },
+      ],
+      preexistentes: 0,
+      escribio: true,
+    });
+    const errores = prompt.indexOf("Errores");
+    const avisos = prompt.indexOf("Avisos");
+    expect(errores).toBeGreaterThan(-1);
+    expect(avisos).toBeGreaterThan(errores);
+    // Cada uno bajo el suyo: un error contado como aviso relajaría la única condición que
+    // el código sí tumba (`core/entrega.ts#condicionesDeEntrega` cuenta ERRORES).
+    expect(prompt.slice(errores, avisos)).toContain("COLL_MISSING_PROGID");
+    expect(prompt.slice(errores, avisos)).not.toContain("ATTR_UNKNOWN");
+    expect(prompt.slice(avisos)).toContain("ATTR_UNKNOWN");
+    expect(prompt).not.toContain("no hay nada que reprochar");
+    // Con cero preexistentes se dice cero y no se calla: «ninguno más» es un dato.
+    expect(prompt).toContain("ningún otro");
+  });
+
+  it("sin marca de git no se afirma que escribiera: se dice que no se puede comprobar", async () => {
+    // `escribio` ausente es «no se sabe» (`revisionConGit`: sin marca no se afirma nada), y
+    // colapsarlo en «no escribió» sería inventar un hecho contra el agente.
+    const prompt = await promptDe({ encargo: "x", raiz: RAIZ, autorizadas: ["a.xne"] });
+    expect(prompt).not.toContain("git confirma");
+    expect(prompt).toMatch(/[Nn]o hay marca de git/);
+  });
+
+  it("git diciendo que NO cambió nada con rutas autorizadas se declara, porque es un rojo legítimo", async () => {
+    // Todas las escrituras las rechazó una guarda: `autorizadas` se apunta al DECIDIR la
+    // escritura, no al aplicarla. Eso sí es algo que reprochar, y el juez tiene que verlo.
+    const prompt = await promptDe({ encargo: "x", raiz: RAIZ, autorizadas: ["a.xne"], escribio: false });
+    expect(prompt).toContain("git dice que la sesión no cambió ningún fichero");
   });
 
   it("un turno sin verificador se le DICE, en vez de callarlo", async () => {
