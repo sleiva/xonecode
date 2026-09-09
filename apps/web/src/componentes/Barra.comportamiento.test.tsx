@@ -8,10 +8,10 @@ afterEach(cleanup);
  * El comportamiento de `Barra` en sí —`Barra.test.tsx` es la disciplina de estilos
  * compartida por TODOS los `.module.css` del directorio, no un test de este componente—.
  *
- * Los tres niveles pueden llegar vacíos (`entornos`/`proyectos` SÍ llegan poblados desde
- * `App.tsx` cuando hay algo que contar — `sesiones` de cada proyecto sigue vacía siempre,
- * ver el comentario de cabecera de `Barra.tsx`), y cada nivel tiene que decir por qué en
- * vez de no pintar nada — que es indistinguible de una barra rota.
+ * Los tres niveles pueden llegar vacíos, y cada uno tiene que decir por qué en vez de no
+ * pintar nada — que es indistinguible de una barra rota. (Decía aquí que «`sesiones` de cada
+ * proyecto sigue vacía siempre»: es falso desde que viajan en el alta, y ahora además llevan
+ * de quién es cada una y cuándo se tocó.)
  */
 describe("Barra: los tres niveles vacíos se explican solos", () => {
   function montar(

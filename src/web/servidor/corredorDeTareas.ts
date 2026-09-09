@@ -401,6 +401,15 @@ export function crearCorredorDeTareas(opciones: {
   /** Se lee en cada pasada: cambiar el tope en Ajustes tiene que notarse sin reiniciar. */
   concurrencia: () => number;
   /**
+   * SIEMBRA la marca de tarea en el índice de sesiones de un proyecto
+   * (`sesiones.ts#marcarTareaDeSesion`). Se llama al arrancar, una vez por tarea que ya
+   * tenga sesión, y existe solo por las sesiones anteriores a esa marca: sin ella, la
+   * primera sesión de tarea de cada proyecto se queda pintada como una conversación para
+   * siempre. Ausente = esta ejecución no siembra nada, y las viejas se quedan sin marcar,
+   * que es el lado conservador.
+   */
+  marcarSesionDeTarea?: (raiz: string, sesion: string, tarea: string) => void;
+  /**
    * Las raíces donde NO se puede arrancar nada ahora mismo: hoy, la del proyecto que tiene
    * abierto una persona. Se lee en cada pasada por lo mismo que la concurrencia — abrir y
    * cerrar un proyecto no reinicia nada. Ver `siguientesAEjecutar#bloqueados` para el por
@@ -1266,6 +1275,30 @@ export function crearCorredorDeTareas(opciones: {
     if (reconciliada.some((t, i) => t !== lista[i])) {
       opciones.disco.guardar(reconciliada);
       opciones.alCambiar?.(reconciliada);
+    }
+    /**
+     * SIEMBRA de la marca de tarea en las sesiones que ya existían. Va con la lista
+     * RECONCILIADA porque una `en-proceso` puede haber perdido su `sesion` justo arriba (el
+     * hilo que no se puede abrir se olvida), y sembrar la que se acaba de olvidar dejaría
+     * marcada una fila que ya no existe.
+     *
+     * Aquí el cruce con la cola es correcto y en el cable sería un fallo abierto, y la
+     * diferencia es cuál es la pregunta: allí es «¿es esto de una tarea?», y sin cola la
+     * respuesta sería «no» en silencio; aquí es «marca estas, que sé que lo son», leyendo
+     * la autoridad. Y solo AÑADE: `marcarTareaDeSesion` no pisa ninguna marca ni la quita.
+     *
+     * Un fallo sembrando no puede tumbar el arranque: la marca es cosmética al lado de
+     * ejecutar la cola. Se traga por tarea, así que una entrada rara no se lleva las demás.
+     */
+    if (opciones.marcarSesionDeTarea !== undefined) {
+      for (const t of reconciliada) {
+        if (t.sesion === undefined) continue;
+        try {
+          opciones.marcarSesionDeTarea(t.proyecto.raiz, t.sesion, t.id);
+        } catch {
+          // Un índice roto o ilegible: la fila se queda sin marcar, que es lo de antes.
+        }
+      }
     }
     revisar();
   };

@@ -11,6 +11,7 @@ import { tituloDesde,
   renombrarSesion,
   elegirDispositivo,
   IndiceDeSesionesRoto,
+  marcarTareaDeSesion,
 } from "./sesiones.js";
 
 const proyecto = () => mkdtempSync(join(tmpdir(), "xonecode-proyecto-"));
@@ -94,6 +95,34 @@ describe("de quién es la sesión: persona o tarea", () => {
     const raiz = proyecto();
     crearSesion(raiz, "s-humana");
     expect(listarSesiones(raiz)[0].tarea).toBeUndefined();
+  });
+});
+
+describe("marcarTareaDeSesion: la siembra de las sesiones de tarea que ya existían", () => {
+  it("marca la entrada que no lo estaba y dice que la tocó", () => {
+    const raiz = proyecto();
+    crearSesion(raiz, "s9");
+    expect(marcarTareaDeSesion(raiz, "s9", "669c9b79")).toBe(true);
+    expect(listarSesiones(raiz)[0].tarea).toBe("669c9b79");
+  });
+
+  it("es MONOTÓNICA: no pisa una marca puesta ni la quita", () => {
+    // La siembra corre en cada arranque del corredor. Solo puede AÑADIR: así no hay forma
+    // de que convierta una sesión de tarea en una conversación, que es el único fallo
+    // abierto posible por aquí.
+    const raiz = proyecto();
+    crearSesion(raiz, "s9", "la-de-verdad");
+    expect(marcarTareaDeSesion(raiz, "s9", "otra")).toBe(false);
+    expect(listarSesiones(raiz)[0].tarea).toBe("la-de-verdad");
+  });
+
+  it("una sesión que no está no se inventa", () => {
+    // La cola de tareas vive en `~/.xonecode/tareas` y el índice en el proyecto: una tarea
+    // puede nombrar una sesión que alguien borró, y crear la entrada la resucitaría en la
+    // barra apuntando a un `.jsonl` que ya no existe.
+    const raiz = proyecto();
+    expect(marcarTareaDeSesion(raiz, "fantasma", "t1")).toBe(false);
+    expect(listarSesiones(raiz)).toEqual([]);
   });
 });
 

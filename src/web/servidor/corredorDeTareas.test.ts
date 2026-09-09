@@ -191,6 +191,31 @@ describe("los adjuntos de una tarea llegan a su turno", () => {
     };
   }
 
+  it("al ARRANCAR siembra la marca en las sesiones de tarea que ya existían", async () => {
+    // La marca es nueva, así que la primera sesión de tarea de cada proyecto se quedaría
+    // para siempre pintada como una conversación. Aquí la cola SÍ está —es la propia cola
+    // del corredor—, así que el cruce que en el cable sería un fallo abierto aquí es leer
+    // la autoridad. Y solo AÑADE: `marcarTareaDeSesion` no pisa ni quita.
+    const { disco } = discoDeMentira([
+      TAREA({ id: "t1", sesion: "s9", estado: "terminada" }),
+      // Una sin sesión todavía: no hay nada que sembrar y no se llama por llamar.
+      TAREA({ id: "t2", estado: "nuevo" }),
+    ]);
+    const marcadas: { raiz: string; sesion: string; tarea: string }[] = [];
+    const corredor = crearCorredorDeTareas({
+      ...ENTREGA_VERDE,
+      disco,
+      abrirParaTarea: proyectoDeMentira().abrir,
+      pid: 1,
+      concurrencia: () => 1,
+      marcarSesionDeTarea: (raiz, sesion, tarea) => marcadas.push({ raiz, sesion, tarea }),
+    });
+    await corredor.arrancar();
+    await corredor.asentar();
+
+    expect(marcadas).toEqual([{ raiz: "/w/A", sesion: "s9", tarea: "t1" }]);
+  });
+
   it("la apertura lleva el ID DE LA TAREA: es lo que marca su sesión en el índice", async () => {
     // Sin él, la sesión de la tarea entra en el índice como una conversación más —y con el
     // título vacío, porque el título sale del primer acto de `usuario` y una tarea no manda

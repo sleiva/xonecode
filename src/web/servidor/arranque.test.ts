@@ -30,6 +30,7 @@ import {
 import { ErrorDelAumentador } from "../../agent/aumentador.js";
 import type { PeticionDeTarea } from "../../core/ports.js";
 import { crearVestibulo, type Vestibulo } from "./vestibulo.js";
+import { crearSesion, listarSesiones } from "./sesiones.js";
 import { COMANDOS } from "../../cli/consola.js";
 import { CatalogoModelosEnMemoria } from "../../core/ports.js";
 import type { Entorno } from "../../core/settings.js";
@@ -3974,6 +3975,66 @@ describe("las tareas en background, el cableado del corredor con el cable — no
     await corredor!.asentar();
     expect(aperturas).toEqual(["/no-usado-en-estos-tests/adjuntos"]);
     await corredor!.parar();
+  });
+
+  /**
+   * El CUARTO argumento, y es el mismo fallo que el tercero con otro nombre: la costura es
+   * una lambda que reenvía a mano, así que un parámetro que no se nombre se cae en silencio
+   * —TypeScript no se queja de una función que ignora argumentos— y la sesión de la tarea
+   * entra en el índice del proyecto como una conversación más. Sin síntoma: la tarea corre
+   * igual, solo que su fila miente para siempre.
+   */
+  it("la costura reenvía también el ID DE LA TAREA, que es lo que marca su sesión", async () => {
+    const tareas: (string | undefined)[] = [];
+    const cola = colaDeMentira([{ ...tareaEnProceso("t1"), estado: "nuevo" }]);
+    const { corredor, arrancarConectado } = construirCorredorDeTareasCableado({
+      vestibulo: {
+        abrirParaTarea: async (_raiz, _sesion, _adjuntos, tarea) => {
+          tareas.push(tarea);
+          throw new Error("no hay proyecto de verdad en este test");
+        },
+        proyectoAbierto: () => undefined,
+        sesionesDe: () => [],
+      },
+      tareasFabrica: () => cola,
+      informar: () => {},
+      olvidarHiloDeSesion: async () => {},
+      ...ENTREGA_DE_TAREAS,
+    });
+    await arrancarConectado({ emitirTareas: () => {} });
+    await corredor!.asentar();
+    expect(tareas).toEqual(["t1"]);
+    await corredor!.parar();
+  });
+
+  /**
+   * Y la SIEMBRA: la marca es nueva, así que la primera sesión de tarea de cada proyecto se
+   * quedaría pintada como una conversación para siempre. La costura tiene que darle al
+   * corredor con qué sembrarla — sin ella no hay ningún síntoma tampoco, solo una fila que
+   * miente.
+   */
+  it("la costura le da al corredor con qué SEMBRAR la marca en las sesiones viejas", async () => {
+    // Contra un índice de sesiones DE VERDAD, que es lo único que prueba que la costura usa
+    // el escritor real y no una lambda vacía: se monta un proyecto en un temporal, con una
+    // sesión sin marcar, y una tarea terminada que la nombra.
+    const raiz = mkdtempSync(join(tmpdir(), "xonecode-siembra-"));
+    crearSesion(raiz, "s9");
+    const cola = colaDeMentira([
+      { ...tareaEnProceso("t1"), proyecto: { id: "p1", raiz, nombre: "AppDemo" }, estado: "terminada", sesion: "s9" },
+    ]);
+    const { corredor, arrancarConectado } = construirCorredorDeTareasCableado({
+      vestibulo: vestibuloSinAbrir,
+      tareasFabrica: () => cola,
+      informar: () => {},
+      olvidarHiloDeSesion: async () => {},
+      ...ENTREGA_DE_TAREAS,
+    });
+    await arrancarConectado({ emitirTareas: () => {} });
+    await corredor!.asentar();
+
+    expect(listarSesiones(raiz)[0]?.tarea).toBe("t1");
+    await corredor!.parar();
+    rmSync(raiz, { recursive: true, force: true });
   });
 
   /**

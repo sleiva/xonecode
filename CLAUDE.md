@@ -279,10 +279,24 @@ en el proyecto real del usuario, **con el título en blanco**: el título sale d
   `tareas`), así que en un proceso que no corre tareas el cruce pintaría TODAS las sesiones de
   tarea como conversaciones, en silencio. Es el camino que ya recorrió `historica`: de
   suposición a hecho comprobado.
-- **Ausente es «no consta», no «es un chat»**, y aquí eso tiene dueño: las sesiones de tarea
-  ANTERIORES a la marca no la llevan y se pintan lisas — porque liso es lo conservador, no
-  porque conste que sean de una persona. No hay relleno retroactivo, por lo mismo que no hay
-  poda de borradores huérfanos ni del checkpointer: en este repo no se barre nada todavía.
+- **Ausente es «no consta», no «es un chat»**: se pinta liso porque liso es lo conservador, no
+  porque conste que sea de una persona. Y como la marca es nueva, hay una **SIEMBRA al arrancar
+  el corredor** (`sesiones.ts#marcarTareaDeSesion`) que recorre su propia cola y marca las
+  sesiones que ya existían — si no, la primera sesión de tarea de cada proyecto se quedaba
+  mintiendo para siempre (medido: en AppDemo, la única que hay). No es el cruce prohibido de
+  arriba y la diferencia es cuál es la pregunta: en el cable es «¿esto es de una tarea?», y sin
+  cola la respuesta sería «no» en silencio; aquí es «marca estas, que sé que lo son», leyendo la
+  autoridad que escribió el dato. Es **monotónica**: solo AÑADE —no pisa una marca puesta ni la
+  quita, así que no puede convertir una sesión de tarea en una conversación— y **no da de alta
+  la entrada que falte**, porque la cola vive en `~/.xonecode/tareas` y el índice en el proyecto:
+  una tarea puede nombrar una sesión que alguien borró, y crearla la resucitaría en la barra
+  apuntando a un `.jsonl` que ya no está.
+- **Y la costura del corredor se dejaba el argumento, con todo en verde.** `abrirParaTarea` se
+  reenvía con una lambda escrita a mano (`arranque.ts#construirCorredorDeTareasCableado`), y
+  TypeScript no se queja de una función que ignora parámetros: el id de la tarea se caía ahí
+  igual que se cayó `tarea.sesion` en su día. Es la MISMA función y el MISMO fallo por tercera
+  vez —tercer argumento, cuarto argumento—, y lo caza un test por argumento contra esa
+  composición exportada, que es para lo que se extrajo.
 - **Por el cable viaja un BOOLEANO, no el id de la tarea.** La fila lleva una marca y no el
   nombre de la tarea —en 280 px comparte hueco con el título y con el «…»—, así que el id se
   queda en el host, la misma regla que la ruta de una herramienta o el pid del corredor.

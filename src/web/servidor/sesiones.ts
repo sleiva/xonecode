@@ -285,6 +285,32 @@ export function anotarActo(raiz: string, id: string, acto: Acto): void {
 }
 
 /**
+ * SIEMBRA la marca de tarea en una sesión que ya estaba en el índice. Devuelve si la tocó.
+ *
+ * Existe por las sesiones de tarea anteriores a `EntradaIndice.tarea`: sin esto, la primera
+ * que hubo en cada proyecto se queda para siempre pintada como una conversación. La corre el
+ * corredor al arrancar, recorriendo su propia cola — o sea leyendo la autoridad sobre de
+ * quién es cada sesión, la misma que escribió el dato.
+ *
+ * **Es MONOTÓNICA, y de ahí sale que sea segura**: solo añade. No pisa una marca puesta —la
+ * del disco es la que escribió quien abrió la sesión— y no quita ninguna, así que no hay
+ * forma de que convierta una sesión de tarea en una conversación, que es el único fallo
+ * abierto posible por aquí. Correrla dos veces no hace nada la segunda.
+ *
+ * Y **no da de alta la entrada que falte**: la cola vive en `~/.xonecode/tareas` y el índice
+ * en el proyecto, así que una tarea puede nombrar una sesión que alguien borró; crearla la
+ * resucitaría en la barra apuntando a un `.jsonl` que ya no está.
+ */
+export function marcarTareaDeSesion(raiz: string, id: string, tarea: string): boolean {
+  const entradas = leerIndiceOAbortar(raiz);
+  const entrada = entradas.find((e) => e.id === id);
+  if (entrada === undefined || entrada.tarea !== undefined) return false;
+  entrada.tarea = tarea;
+  escribirIndice(raiz, entradas);
+  return true;
+}
+
+/**
  * Borra una sesión: su `.jsonl` y su entrada del índice. Devuelve si había algo que borrar.
  *
  * El fichero va PRIMERO y el índice después, al revés que en `anotarActo` y por el mismo

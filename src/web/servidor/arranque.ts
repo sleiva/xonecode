@@ -88,6 +88,7 @@ import { abrirEnSistema } from "../../agent/cloudstudioMcp.js";
 import { nombreDePersona } from "../../agent/persona.js";
 import { cambiosDeSesion, fotoDeApertura, olvidarSesion, parcheDeSesion } from "../../agent/sesionGit.js";
 import { trabajoSinCommitear } from "../../agent/gitSync.js";
+import { marcarTareaDeSesion } from "./sesiones.js";
 import { RUTA_ARTEFACTOS, esRutaDeArtefacto } from "../../core/artefactos.js";
 import { arbolDeProyecto, leerFicheroDeProyecto } from "../../agent/arbolDeProyecto.js";
 import {
@@ -2776,13 +2777,20 @@ export function construirCorredorDeTareasCableado(opciones: {
           // siempre con las mismas barreras que el de una persona.
           // `sesion` reenviada: es lo que hace que reanudar (un reintento, o un feedback)
           // reabra el MISMO hilo en vez de uno en blanco. Ver `corredorDeTareas.ts`.
-          // `sesion` y `adjuntos` reenviadas TAL CUAL, y las dos por el mismo motivo: quien
-          // sabe de qué tarea es esta apertura es el corredor. La primera hace que reanudar
-          // siga la MISMA conversación; la segunda es lo que monta `/adjuntos/` en el
-          // backend del agente (`core/adjuntos.ts`). Dejarse cualquiera de las dos no da
-          // ningún síntoma: un hilo en blanco, o unos adjuntos que el agente no puede abrir.
-          abrirParaTarea: async (raiz, sesion, adjuntos) =>
-            consolaParaTarea(await opciones.vestibulo.abrirParaTarea(raiz, sesion, adjuntos)),
+          // `sesion`, `adjuntos` y `tarea` reenviadas TAL CUAL, y las tres por el mismo
+          // motivo: quien sabe de qué tarea es esta apertura es el corredor. La primera hace
+          // que reanudar siga la MISMA conversación; la segunda es lo que monta `/adjuntos/`
+          // en el backend del agente (`core/adjuntos.ts`); la tercera es lo que marca su
+          // sesión en el índice del proyecto (`EntradaIndice.tarea`). Dejarse cualquiera no
+          // da ningún síntoma —esto es una lambda que reenvía a mano, y TypeScript no se
+          // queja de una función que ignora argumentos—: un hilo en blanco, unos adjuntos
+          // que el agente no puede abrir, o una fila de la barra que miente para siempre.
+          abrirParaTarea: async (raiz, sesion, adjuntos, tarea) =>
+            consolaParaTarea(await opciones.vestibulo.abrirParaTarea(raiz, sesion, adjuntos, tarea)),
+          // La SIEMBRA de la marca en las sesiones que ya existían. Ver
+          // `sesiones.ts#marcarTareaDeSesion`: solo añade, así que correrla en cada arranque
+          // no puede convertir una sesión de tarea en una conversación.
+          marcarSesionDeTarea: (raiz, sesion, tarea) => void marcarTareaDeSesion(raiz, sesion, tarea),
           // Se lee de disco en cada pasada: cambiar el tope en Ajustes se nota sin
           // reiniciar nada, en la siguiente ronda de planificación.
           concurrencia: concurrenciaDeTareas,
