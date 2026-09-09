@@ -31,6 +31,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { randomUUID } from "node:crypto";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { homedir } from "node:os";
 import type { Acto } from "../../core/actos.js";
@@ -75,12 +76,19 @@ import {
 import {
   crearCheckpointerDeProyecto, hayCheckpoint, olvidarHilo,
 } from "../../agent/checkpointer.js";
-import { cargarSettings, guardarDispositivos, guardarEntorno as guardarEntornoEnDisco } from "../../agent/settingsEnDisco.js";
+import {
+  cargarSettings,
+  guardarConcurrenciaDeTareas,
+  guardarDispositivos,
+  guardarEntorno as guardarEntornoEnDisco,
+} from "../../agent/settingsEnDisco.js";
 import { seAplicaSinAprobacion } from "../../core/settings.js";
 import { cloudstudioDelProyecto } from "../../agent/configEnDisco.js";
 import { abrirEnSistema } from "../../agent/cloudstudioMcp.js";
 import { nombreDePersona } from "../../agent/persona.js";
 import { cambiosDeSesion, fotoDeApertura, olvidarSesion, parcheDeSesion } from "../../agent/sesionGit.js";
+import { trabajoSinCommitear } from "../../agent/gitSync.js";
+import { marcarTareaDeSesion } from "./sesiones.js";
 import { RUTA_ARTEFACTOS, esRutaDeArtefacto } from "../../core/artefactos.js";
 import { arbolDeProyecto, leerFicheroDeProyecto } from "../../agent/arbolDeProyecto.js";
 import {
@@ -90,12 +98,35 @@ import {
 } from "../../agent/artefactosEnDisco.js";
 import type { ProyectoRemoto } from "../../agent/cloudstudioMcp.js";
 import { CatalogoModelos } from "../../agent/catalogoModelos.js";
+import { Modelos } from "../../agent/modelos.js";
+import { crearJuezDeTarea, invocarConModelos } from "../../agent/juezDeTarea.js";
+import type { AumentadorPort, JuezDeTareaPort } from "../../core/ports.js";
+import { AumentadorGuionizado } from "../../core/ports.js";
 import type { Entorno } from "../../core/settings.js";
 import { arrancarServidor, type ServidorWeb } from "./servidor.js";
+import {
+  consolaParaTarea,
+  crearCorredorDeTareas,
+  type Corredor,
+  revisionConGit,
+  type RevisionDeSesion,
+} from "./corredorDeTareas.js";
+import {
+  CONCURRENCIA_POR_OMISION,
+  conEstado,
+  darPorBuenaAMano,
+  tituloDeTarea,
+  type Tarea,
+} from "../../core/tareas.js";
+import { aplicarFeedback, TOPE_DE_ADJUNTO, type TareasEnDisco } from "../../agent/tareasEnDisco.js";
+import { nombreDeAdjuntoAceptable } from "../../core/adjuntos.js";
+import { rutaMemoriaDeProyecto } from "../../agent/memoriaDeProyecto.js";
+import { crearAumentador, invocarParaAumentar } from "../../agent/aumentador.js";
 import {
   conexionDeVestibulo,
   crearVestibulo,
   escribirProyectoEnDisco,
+  esProyectoEnDisco,
   type OpcionDeEntorno,
   type PasoDelVestibulo,
   type OpcionesDelVestibulo,
@@ -110,6 +141,12 @@ import type {
   Sumidero,
   InformeDeDispositivosDelCable,
 } from "./transporte.js";
+// Valor y no tipo: la traducción de una `Tarea` a lo que viaja vive JUNTO al tipo que
+// produce y no aquí. Estuvo en este cierre, y ahí se cayó `veredicto` sin que nada se
+// pusiera rojo (F1 de la revisión final) — el patrón de fallo que este repo ya tiene
+// documentado cinco veces: una composición de producción dentro de algo que los tests
+// doblan.
+import { filaDeTarea } from "./transporte.js";
 
 /** Las dos rutas del cable. El cliente las tiene escritas en `apps/web/src/conexion.ts`. */
 export const RUTA_EVENTOS = "/eventos";
@@ -124,6 +161,14 @@ export const RUTA_ACCION = "/accion";
  * el contrato de las skills que los escriben es «autocontenido».
  */
 export const RUTA_ARTEFACTO = "/artefacto";
+/**
+ * `POST /adjunto?tarea=<id>&nombre=<fichero>` — los BYTES de un adjunto.
+ *
+ * Por HTTP y no por el cable: el SSE lleva JSON y esto son bytes. El nombre va en la QUERY
+ * y no en la ruta por lo mismo que el del artefacto: `registrarRuta` casa por coincidencia
+ * EXACTA, así que `/adjunto/<nombre>` no encontraría manejador.
+ */
+export const RUTA_ADJUNTO = "/adjunto";
 
 /** Cuántas líneas del log de una instalación viajan: la COLA, lo último. */
 export const LINEAS_DE_LOG = 12;
@@ -281,6 +326,73 @@ export interface OpcionesDeMontaje {
     paso: number,
     alSalirLinea: (linea: string) => void
   ) => { titulo: string; cancelar: () => void; terminado: Promise<{ estado: string; motivo?: string; ms: number }> };
+  /**
+   * «Vuelve a mirar la cola de tareas» (`corredorDeTareas.ts#revisar`). Ausente = esta
+   * ejecución no ejecuta tareas.
+   *
+   * Hace falta AQUÍ porque abrir un proyecto es lo que BLOQUEA su raíz —gana la persona— y
+   * cerrarlo lo que la libera, y el corredor no tiene forma de enterarse: no hay
+   * temporizador, se revisa por evento. Sin esta llamada, una tarea que esperaba a que
+   * alguien cerrara un proyecto se quedaría esperando hasta el siguiente evento que no
+   * tiene nada que ver, y en la pantalla eso se lee como un cuelgue.
+   */
+  revisarTareas?: () => void;
+  /**
+   * La cola de tareas: el PUERTO de disco y el corredor, no operaciones sueltas.
+   *
+   * `crearTarea` no es una opción propia por lo mismo que `registrarEntorno` devuelve el
+   * entorno REGISTRADO en vez de que el llamante deduzca el id: **quien tiene el estado
+   * hace la resolución.** El cliente manda un id de proyecto y `Tarea.proyecto` necesita
+   * `{id, raiz, nombre}` — y esa raíz solo se puede calcular con `proyectos`,
+   * `entornoElegido` y `vestibulo.raizDeProyecto`, que son estado de este CIERRE (la misma
+   * resolución que ya hace `atenderSesion` para abrir por id). Un `crearTarea` recibido
+   * como función de fuera no tendría con qué resolverla — es justo el agujero que un
+   * primer intento de este cable dejó pasar. Por eso `montarRutas` construye los
+   * manejadores de crear/reintentar/descartar/terminar aquí dentro, con este `colaDeTareas`
+   * como único puerto de escritura. **No lo saques a una opción suelta**: quien lo intente
+   * se va a topar con la misma resolución que esto ya resuelve.
+   *
+   * Ausente = esta ejecución no ejecuta tareas, y no se manda ningún `tareas`: el kanban
+   * se queda diciendo que no ha llegado, en vez de afirmar que no hay tareas.
+   */
+  colaDeTareas?: Pick<
+    TareasEnDisco,
+    "listar" | "guardar" | "borrarTarea" | "guardarAdjunto" | "listarAdjuntos"
+  >;
+  /**
+   * Lo mínimo del corredor que este cable toca: `corriendoAqui` para LEER (el campo del
+   * mensaje `tareas`), y `cortar` para escribir — pero acotado a UNA tarea, nunca
+   * `arrancar`/`parar` el proceso entero. Task 14: `atenderAccionDeTarea` lo llama ANTES de
+   * `borrarTarea` para que descartar una `en-proceso` no deje su turno huérfano escribiendo
+   * en el proyecto sin que ninguna pantalla lo diga.
+   */
+  /**
+   * `ejecutaOtroProceso` va en un `Partial` a propósito: es la respuesta a «¿hay dueño?» y
+   * un corredor que no la sepa dar deja el campo AUSENTE en el cable, que es «no se sabe» —
+   * distinto de «nadie». Los dobles de test que no la implementan ejercitan justo ese caso.
+   */
+  corredorDeTareas?: Pick<Corredor, "corriendoAqui" | "cortar"> &
+    Partial<Pick<Corredor, "ejecutaOtroProceso" | "mirar" | "dejarDeMirar">>;
+  /** El tope de concurrencia vigente, para el mensaje `tareas`. Ausente = `CONCURRENCIA_POR_OMISION`. */
+  concurrenciaDeTareas?: () => number;
+  /** Cambia el tope de concurrencia del corredor. Ausente = Ajustes no puede tocarlo. */
+  guardarConcurrencia?: (concurrencia: number) => void;
+  /**
+   * Augmenta una petición en un encargo revisado (`agent/aumentador.ts`, Task 9). Ausente =
+   * el botón «Preparar el encargo» no está disponible.
+   */
+  augmentar?: (peticion: {
+    texto: string;
+    /**
+     * El proyecto RESUELTO, con su raíz. La resuelve este cierre —igual que al crear una
+     * tarea— porque el cliente solo manda el id: nunca ha visto una ruta de la máquina. Y la
+     * raíz hace falta para que el papel `trabajo` se resuelva con el `config.json` del
+     * proyecto, la misma trampa que `CasoDeJuez.raiz` documenta.
+     */
+    proyecto: { id: string; raiz: string; nombre: string };
+    /** Nombres y tipos, nunca contenido: salen del DISCO, de la carpeta del borrador. */
+    adjuntos: readonly { nombre: string; mime?: string }[];
+  }) => Promise<string>;
 }
 
 /** El `Content-Type` con el que se sirve un artefacto inline: al texto se le pone el juego
@@ -298,12 +410,19 @@ function tipoServido(mime: string): string {
  * Separada de `arrancarConsolaWeb` para poder probar el cable entero —conexión, registro
  * de comandos, alta, cambio de proyecto— sin puerto, sin disco y sin navegador: los
  * manejadores se invocan con dobles de petición y respuesta.
+ *
+ * Devuelve `emitirTareas`: el corredor de tareas NACE antes que este cable (lo necesita
+ * `arrancarConsolaWeb` para pasarle `corredorDeTareas`), así que su `alCambiar` —un cambio
+ * de estado que nace DENTRO del lazo, no de una petición del cliente— no tiene manera de
+ * alcanzar el `emitir` de aquí salvo que se lo devuelva. Es la misma costura que
+ * `vestibulo.alCambiarEstadoDeSesion`, solo que el emisor nace después que quien lo
+ * necesita en vez de antes.
  */
 export function montarRutas(
   servidor: Pick<ServidorWeb, "registrarRuta">,
   vestibulo: Vestibulo,
   opciones: OpcionesDeMontaje = {}
-): void {
+): { emitirTareas: () => void } {
   const informar = opciones.informar ?? (() => {});
   const hayCredencialDe = opciones.hayCredencial ?? (() => false);
 
@@ -335,6 +454,24 @@ export function montarRutas(
    * Emitir es escribirle a todos; el transporte hace lo mismo por su lado.
    */
   const clientes = new Set<Sumidero>();
+  /**
+   * Los clientes por su IDENTIFICADOR, y qué tareas está mirando cada uno.
+   *
+   * **Existe porque el SSE y el `POST /accion` son dos peticiones distintas.** El único
+   * sitio con un sumidero en la mano es la ruta del SSE, así que sin un identificador que
+   * el cliente repita en su `{clase:"mirar"}` el servidor no sabría a qué pestaña
+   * engancharle la mirada — y tendría que emitirle el transcript de una tarea de fondo a
+   * TODO el mundo, que es justo lo que no puede pasar (los actos de una tarea no aparecen
+   * en el chat de nadie). Lo elige el cliente, una vez por conexión, igual que elige el id
+   * de una tarea al subirle un adjunto por `POST /adjunto`.
+   *
+   * El id **nunca es una ruta ni un nombre de fichero**: es solo la clave de este mapa, y
+   * las entradas nacen y mueren con la conexión del SSE — no crece con los mensajes.
+   *
+   * `mirando` guarda el ENVOLTORIO que se enganchó al corredor (no el sumidero pelado),
+   * porque es el que hay que pasarle a `dejarDeMirar` para quitar ESE y no los demás.
+   */
+  const porIdDeCliente = new Map<string, { enviar: Sumidero; mirando: Map<string, Sumidero> }>();
   /**
    * La consola a la que está ENGANCHADO el cable ahora mismo. No se recalcula al cerrar:
    * hay que desconectar la que se conectó, no la que sea la actual en ese momento — entre
@@ -434,6 +571,11 @@ export function montarRutas(
             }
           })?.id;
     const pendientes = proyectoAbierto ? [] : await vestibulo.pasosPendientes();
+    // Lo que ya había sin commitear al ABRIR. `abierto` se capturó arriba, antes de este
+    // `await`: `anunciarAlta` no va en la cola del vestíbulo, así que entre medias puede
+    // haberse abierto otro proyecto y el dato tiene que ser del que se anuncia. La promesa
+    // está cacheada en la consola y no rechaza nunca.
+    const trabajo = abierto === undefined ? undefined : await abierto.trabajoAlAbrir;
     const pasos: PasoDelVestibulo[] = pendientes.includes("entorno") ? ["entorno"] : [];
     emitir({
       clase: "alta",
@@ -488,6 +630,17 @@ export function montarRutas(
         interactivo: true,
       })
         ? { sinAprobacion: true }
+        : {}),
+      // Solo si SE MIRÓ y había algo. Las otras tres respuestas —limpio, sin git, no se
+      // pudo— se callan: un mensaje en cada apertura limpia es ruido en casi todas, y el
+      // aviso dejaría de leerse justo el día que importa.
+      ...(trabajo?.via === "git" && trabajo.ficheros !== undefined && trabajo.ficheros.length > 0
+        ? {
+            trabajoAlAbrir: {
+              ficheros: trabajo.ficheros.slice(0, FICHEROS_DEL_AVISO),
+              total: trabajo.ficheros.length,
+            },
+          }
         : {}),
       ...(vestibulo.nombre === undefined ? {} : { nombre: vestibulo.nombre }),
       ...(aviso === undefined ? {} : { aviso }),
@@ -649,6 +802,9 @@ export function montarRutas(
     // se puede abrir en cuanto conecta, y sin esto enseñaría una lista vacía hasta que algo
     // los cambiara — que es indistinguible de «no tienes ninguno».
     const agentes = mensajeDeAgentes();
+    // La cola de tareas, si esta ejecución las tiene: la misma regla que `agentes`, sin
+    // esto la pestaña de tareas se quedaría vacía hasta el primer cambio de la cola.
+    const tareas = mensajeDeTareas();
     for (const cliente of destinatarios) {
       // El orden importa: primero el transcript, luego lo que el compositor necesita para
       // sugerir, y al final el estado de modelos que pinta su disparador. Al reconectar se
@@ -658,6 +814,7 @@ export function montarRutas(
       cliente({ clase: "comandos", comandos: comandosDelRegistro() });
       cliente(modelos);
       cliente(agentes);
+      if (tareas !== undefined) cliente(tareas);
       // La foto de la máquina, si ya se tomó. Si no, se dispara abajo UNA vez y llega a
       // todos por el SSE cuando termine: no se espera aquí, que son varios procesos.
       if (informeDeDispositivos !== undefined) {
@@ -766,6 +923,315 @@ export function montarRutas(
   const esNombreDeHerramienta = (v: string): v is NombreDeHerramienta =>
     v === "adb" || v === "emulator" || v === "xcrun" || v === "devicectl";
 
+  const mensajeDeTareas = (): MensajeAlCliente | undefined => {
+    if (opciones.colaDeTareas === undefined) return undefined;
+    const otro = opciones.corredorDeTareas?.ejecutaOtroProceso?.();
+    return {
+      clase: "tareas",
+      lista: opciones.colaDeTareas.listar().map(filaDeTarea),
+      concurrencia: opciones.concurrenciaDeTareas?.() ?? CONCURRENCIA_POR_OMISION,
+      corriendoAqui: opciones.corredorDeTareas?.corriendoAqui() ?? false,
+      // Ausente = no se sabe, y no se sintetiza: con `false` a la mínima, la pantalla diría
+      // «nadie las ejecuta» de una máquina donde sí las ejecuta otro proceso.
+      ...(otro === undefined ? {} : { ejecutaOtroProceso: otro }),
+    };
+  };
+  const emitirTareas = (): void => {
+    const m = mensajeDeTareas();
+    if (m !== undefined) emitir(m);
+  };
+
+  /**
+   * Un id de proyecto a su tripleta completa, o nada si no se puede resolver.
+   *
+   * La MISMA resolución que `atenderSesion` ya hace para abrir un proyecto por id
+   * (`proyectos.find` + `vestibulo.raizDeProyecto`): crear una tarea necesita la raíz para
+   * poder ejecutarla algún día, y esa raíz es una ruta de la máquina que el cliente nunca
+   * ha mandado — solo manda el id. Sin entorno elegido, o con un id que no está en la
+   * lista vigente de `proyectos`, no hay tripleta que resolver: falla CERRADO, nunca se
+   * inventa una raíz.
+   */
+  const proyectoParaTarea = (id: string): { id: string; raiz: string; nombre: string } | undefined => {
+    if (entornoElegido === undefined) return undefined;
+    const identidad = proyectos.find((p) => p.id === id);
+    if (identidad === undefined) return undefined;
+    try {
+      return { id: identidad.id, raiz: vestibulo.raizDeProyecto(entornoElegido, identidad.nombre), nombre: identidad.nombre };
+    } catch {
+      // `entornoElegido` dejó de estar registrado entre medias: no se sabe la raíz.
+      return undefined;
+    }
+  };
+
+  /**
+   * Crea una tarea `nueva`. Vive aquí y no en una opción de fuera por lo que documenta
+   * `OpcionesDeMontaje.colaDeTareas`: la resolución de `proyecto` necesita el estado de
+   * este cierre. Sin proyecto resoluble no se escribe nada, y se DICE — la misma regla que
+   * una transición imposible: no se falla en silencio.
+   */
+  const atenderCrearTarea = (
+    proyectoId: string,
+    peticion: string,
+    encargo: string,
+    /**
+     * El id del BORRADOR bajo el que el navegador subió los adjuntos, si subió alguno.
+     *
+     * Los bytes viajan por `POST /adjunto` ANTES de que la tarea exista —hay que tenerlos en
+     * disco antes de encolarla, porque crear dispara `revisarTareas()` y el corredor puede
+     * arrancarla en el acto—, así que el cliente elige un id y este es el momento de
+     * ADOPTARLO. Lo que hace que eso sea seguro son las dos guardas de abajo, y las mismas
+     * que la propia ruta de subida aplica: forma de segmento llano, y que no sea ya una
+     * tarea.
+     */
+    borrador?: string
+  ): { id: string } | undefined => {
+    if (opciones.colaDeTareas === undefined) return undefined;
+    const proyecto = proyectoParaTarea(proyectoId);
+    if (proyecto === undefined) {
+      informar(`no se pudo crear la tarea: el proyecto «${proyectoId}» no se pudo resolver`);
+      return undefined;
+    }
+    const lista = opciones.colaDeTareas.listar();
+    if (borrador !== undefined && !esBorradorLibre(borrador, lista)) {
+      // **No se cae a un id nuevo en silencio**, y esa es la decisión: seguir con un uuid
+      // dejaría los adjuntos que la persona acaba de subir colgando de una carpeta que
+      // ninguna tarea nombra — encolaría el trabajo sin ellos y sin decirlo.
+      informar("no se pudo crear la tarea: ese borrador de adjuntos no vale (o ya es una tarea)");
+      return undefined;
+    }
+    const id = borrador ?? randomUUID();
+    const nueva: Tarea = {
+      id,
+      proyecto,
+      titulo: tituloDeTarea(peticion),
+      peticion,
+      encargo,
+      // Del DISCO y no de lo que diga el cliente: es la única fuente que sabe qué llegó de
+      // verdad y cuánto pesa. Ver `TareasEnDisco.listarAdjuntos`.
+      adjuntos: opciones.colaDeTareas.listarAdjuntos(id),
+      estado: "nuevo",
+      creada: new Date().toISOString(),
+    };
+    opciones.colaDeTareas.guardar([...lista, nueva]);
+    return { id: nueva.id };
+  };
+
+  /**
+   * ¿Se puede adoptar ese id de borrador? Segmento llano Y que no sea ya una tarea.
+   *
+   * Las dos mitades son la misma regla que la ruta de subida: el id lo elige el CLIENTE, así
+   * que la forma es lo que evita que se salga de la carpeta de la cola, y la segunda evita
+   * que un borrador aterrice sobre una tarea viva — una que el corredor puede estar
+   * ejecutando ahora mismo con su `/adjuntos/` montada.
+   */
+  const esBorradorLibre = (id: string, lista: readonly Tarea[]): boolean =>
+    nombreDeAdjuntoAceptable(id) && !lista.some((t) => t.id === id);
+
+  /**
+   * La augmentación: una llamada al modelo, bajo demanda, con el proyecto RESUELTO.
+   *
+   * Vive aquí y no en el despachador de mensajes por lo mismo que `atenderCrearTarea`: la
+   * resolución de `{id, raiz, nombre}` necesita el estado de este cierre, y el cliente solo
+   * manda el id. Sin proyecto resoluble no se pregunta a nadie: se contesta el error, que es
+   * lo que la ventana pinta — nunca se inventa una raíz.
+   */
+  const atenderAugmentar = async (
+    augmentar: NonNullable<OpcionesDeMontaje["augmentar"]>,
+    proyectoId: string,
+    texto: string,
+    borrador?: string
+  ): Promise<void> => {
+    const proyecto = proyectoParaTarea(proyectoId);
+    if (proyecto === undefined) {
+      emitir({
+        clase: "tarea",
+        accion: "augmentado",
+        error: `el proyecto «${proyectoId}» no se pudo resolver`,
+      });
+      return;
+    }
+    // Los adjuntos ya subidos, por NOMBRE y tipo. Del disco, igual que al crear.
+    const adjuntos =
+      borrador === undefined || opciones.colaDeTareas === undefined || !nombreDeAdjuntoAceptable(borrador)
+        ? []
+        : opciones.colaDeTareas
+            .listarAdjuntos(borrador)
+            .map((a) => ({ nombre: a.nombre, ...(a.mime === undefined ? {} : { mime: a.mime }) }));
+    try {
+      const encargo = await augmentar({ texto, proyecto, adjuntos });
+      emitir({ clase: "tarea", accion: "augmentado", encargo });
+    } catch (error) {
+      // **El MENSAJE si lo escribimos nosotros, el CÓDIGO si lo escribió el sistema**, que
+      // es la regla de `corredorDeTareas.ts#sinRutas`. Esto era `codigoDe(error)` a secas, y
+      // para un `ErrorDelAumentador` eso devuelve su `name`: la ventana enseñaba «No se pudo
+      // preparar el encargo (ErrorDelAumentador)», que no dice nada de lo que hay que
+      // arreglar. El mensaje de los nuestros está escrito para leerse y no lleva rutas; el de
+      // un error de Node sí las lleva, y de ese solo sale el `code`.
+      emitir({ clase: "tarea", accion: "augmentado", error: motivoLegible(error) });
+    }
+  };
+
+  /**
+   * Reintentar, descartar o terminar una tarea existente.
+   *
+   * **Descartar BORRA** y no comprueba el estado —no hay «cancelada» en `core/tareas.ts`—,
+   * ni siquiera si está `en-proceso`. Reintentar y terminar pasan por `conEstado`, que LANZA
+   * ante una transición imposible; aquí se atrapa y se DICE con `informar` — nunca se
+   * propaga al cliente, y nunca se escribe nada a medias.
+   *
+   * **Descartar CORTA el turno en vuelo ANTES de borrar (Task 14).** Antes de esto, el
+   * comentario de aquí decía que «el corredor ya cuenta con que una tarea corriendo se
+   * descarte por debajo» — y era cierto que CONTABA con ello (`corredorDeTareas.ts#revisar`
+   * no se rompía), pero contarlo no es lo mismo que MANEJARLO: el turno seguía corriendo de
+   * verdad, escribiendo en el proyecto de alguien sin que ninguna pantalla lo dijera, y su
+   * carpeta de adjuntos —montada viva como `/adjuntos/` para ese turno— se borraba en el
+   * acto por debajo suyo. `Corredor.cortar(id)` (medido y cableado en `corredorDeTareas.ts`,
+   * reusando `entrada.cortar`, lo mismo que ya usa `parar()`) se espera ANTES de
+   * `borrarTarea`, así que la carpeta de adjuntos solo se toca DESPUÉS de que la consola
+   * haya soltado su montaje — nunca antes: quitarle el suelo a un turno vivo es un fallo por
+   * sí solo, con independencia de todo lo demás.
+   *
+   * **Y si no se puede cortar a tiempo, NO se borra.** `Corredor.cortar` devuelve `false`
+   * cuando la tarea SÍ corría aquí y no soltó el proyecto dentro del plazo — la misma
+   * situación que `parar()` ya sabe contar sin mentir. Borrar de todos modos dejaría el
+   * turno huérfano exactamente igual que antes de este arreglo, solo que con menos excusa:
+   * se prefiere el aviso honesto («sigue en marcha, reinténtalo») a un corte que promete
+   * haber parado algo que no paró.
+   *
+   * **Y si corre en OTRO proceso, tampoco.** `corredorDeTareas?.corriendoAqui() === false`
+   * con la tarea `en-proceso` en disco solo puede significar eso —ESTE proceso solo sirve el
+   * dashboard, y el que de verdad la ejecuta no está aquí para preguntarle—; `Corredor.cortar`
+   * no tiene con qué alcanzarlo (el límite lo pone el sistema operativo, no esta función), así
+   * que forzar el borrado sería la misma orfandad de antes, disfrazada de arreglada. Es la
+   * MISMA regla que ya sigue `Vestibulo.borrarSesion` con la sesión de una tarea en curso:
+   * declinar con el motivo, no matar un turno ajeno porque alguien limpió una fila.
+   */
+  /**
+   * El transcript de una tarea, etiquetado con SU id.
+   *
+   * La etiqueta no es decoración: por este mismo cable llega el transcript de la sesión
+   * propia (`acto`, `sustitucion`, `reemision`), así que sin ella los actos de una tarea de
+   * fondo se mezclarían con la conversación de quien mira. Con `mirada` delante, el cliente
+   * los pinta en su panel y en ningún otro sitio.
+   *
+   * Y es una lista BLANCA por segunda vez: el transporte solo le manda a un mirón el
+   * transcript (`Transporte.mirar`), y aquí solo se traduce ese transcript. Una clase nueva
+   * del cable no llega a esta pantalla hasta que alguien la nombre en los dos sitios.
+   */
+  const etiquetarComoMirada = (tarea: string, enviar: Sumidero): Sumidero => (mensaje) => {
+    if (mensaje.clase === "acto") {
+      enviar({ clase: "mirada", tarea, via: "alta", actos: [mensaje.acto] });
+      return;
+    }
+    if (mensaje.clase === "sustitucion") {
+      enviar({ clase: "mirada", tarea, via: "sustitucion", actos: [mensaje.acto] });
+      return;
+    }
+    if (mensaje.clase === "reemision") {
+      enviar({ clase: "mirada", tarea, via: "todos", actos: mensaje.actos });
+    }
+  };
+
+  /**
+   * Empezar o dejar de mirar en vivo lo que hace una tarea.
+   *
+   * **Es OPT-IN y de SOLO lectura, y las dos cosas son estructurales aquí.** No se abre
+   * ningún proyecto, no se muda el cable y no se le pasa NADA a la consola de la tarea: lo
+   * único que ocurre es que un sumidero se engancha a su transporte para recibir el
+   * transcript que ya se estaba guardando. El mensaje se ataja en `POST /accion` antes del
+   * `recibir` de la consola precisamente por eso — si cayera ahí, `correrConsola` podría
+   * acabar corriendo un turno sobre la consola de una tarea, y con un mirón enganchado su
+   * `eof()` diría que hay alguien a quien preguntar. Medido: `conectar` volvía ese `eof()`
+   * falso; `mirar` (`transporte.ts`) es el conjunto aparte que lo evita.
+   *
+   * Tres silencios a propósito, y ninguno es un error que contar:
+   *  - **Un `cliente` que no consta**: es una pestaña que ya se fue, o un id viejo tras una
+   *    reconexión. Un fallo de lookup.
+   *  - **Una tarea que no corre AQUÍ** (`mirar` devuelve `undefined`): ya terminó, o la
+   *    ejecuta el otro proceso. No se emite `{actos: []}`, que diría «corre y no ha hecho
+   *    nada»; lo que esa tarea sí es ya lo cuenta el mensaje de la cola.
+   *  - **Mirar dos veces lo mismo**: idempotente. Un doble clic o un efecto que se dispare
+   *    dos veces no puede dejar dos sumideros del mismo cliente en el mismo turno.
+   */
+  const atenderMirar = (mensaje: { tarea: string; ver: boolean; cliente: string }): void => {
+    const cliente = porIdDeCliente.get(mensaje.cliente);
+    if (cliente === undefined) return;
+    const yaEnganchado = cliente.mirando.get(mensaje.tarea);
+    if (!mensaje.ver) {
+      if (yaEnganchado === undefined) return;
+      cliente.mirando.delete(mensaje.tarea);
+      // ESE envoltorio y no otro: la otra persona que mire la misma tarea sigue mirándola.
+      opciones.corredorDeTareas?.dejarDeMirar?.(mensaje.tarea, yaEnganchado);
+      return;
+    }
+    if (yaEnganchado !== undefined) return;
+    const envoltorio = etiquetarComoMirada(mensaje.tarea, cliente.enviar);
+    const actos = opciones.corredorDeTareas?.mirar?.(mensaje.tarea, envoltorio);
+    if (actos === undefined) return;
+    cliente.mirando.set(mensaje.tarea, envoltorio);
+    // El transcript de ese instante, SOLO al que lo pidió — el corredor lo devuelve en vez
+    // de emitirlo, igual que `conectar`, para no mandárselo a quien ya lo tenga.
+    cliente.enviar({ clase: "mirada", tarea: mensaje.tarea, via: "todos", actos: [...actos] });
+  };
+
+  const atenderAccionDeTarea = async (accion: "reintentar" | "descartar" | "terminar", id: string): Promise<void> => {
+    if (opciones.colaDeTareas === undefined) return;
+    if (accion === "descartar") {
+      const actual = opciones.colaDeTareas.listar().find((t) => t.id === id);
+      if (actual?.estado === "en-proceso" && opciones.corredorDeTareas?.corriendoAqui() === false) {
+        informar(`no se pudo descartar «${actual.titulo}»: su turno lo ejecuta otro proceso, y no se puede cortar desde aquí`);
+        return;
+      }
+      // Ausente = no hay corredor cableado en esta ejecución, y entonces no hay ningún
+      // turno que pueda estar corriendo: seguro proceder, la misma lectura que «no había
+      // nada en vuelo» dentro del propio corredor.
+      const cortada = (await opciones.corredorDeTareas?.cortar(id)) ?? true;
+      if (!cortada) {
+        informar(`no se pudo descartar «${actual?.titulo ?? id}»: su turno no soltó el proyecto a tiempo — sigue en marcha, reinténtalo`);
+        return;
+      }
+      opciones.colaDeTareas.borrarTarea(id);
+      return;
+    }
+    const lista = opciones.colaDeTareas.listar();
+    const actual = lista.find((t) => t.id === id);
+    if (actual === undefined) {
+      informar(`no se pudo ${accion}: la tarea ya no está en la cola`);
+      return;
+    }
+    try {
+      // **Terminar a mano pasa por `darPorBuenaAMano` y no por `conEstado` a secas**, y no
+      // es cosmético: es la CUARTA forma de llegar a «Terminada» —sin verificador y sin
+      // juez—, `conEstado` borra el `motivo`, y sin la marca la tarjeta resultante es
+      // indistinguible de una entrega por la puerta completa. Ver `Tarea.terminadaAMano`.
+      const siguiente =
+        accion === "reintentar" ? conEstado(actual, "nuevo") : darPorBuenaAMano(actual);
+      opciones.colaDeTareas.guardar(lista.map((t) => (t.id === id ? siguiente : t)));
+    } catch (error) {
+      // Una transición imposible SE IGNORA Y SE DICE: nunca se lanza hacia el cliente, y
+      // nunca se escribe un estado a medias.
+      informar(`no se pudo ${accion} la tarea «${actual.titulo}»: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  };
+
+  /**
+   * «Se edita la tarea y se agrega el feedback del usuario» (§0 del diseño, textual):
+   * añadir un feedback a una tarea «esperando feedback» la devuelve al lazo. Vive detrás de
+   * `aplicarFeedback` (`agent/tareasEnDisco.ts`) y no repite su lógica aquí, por el mismo
+   * motivo que `atenderCrearTarea`/`atenderAccionDeTarea` no reimplementan `conEstado`: la
+   * regla de qué feedback vale y qué transición es legal está en una sola función, probada
+   * sola y sin necesitar un servidor de mentira alrededor.
+   */
+  const atenderFeedbackDeTarea = (id: string, texto: string): void => {
+    if (opciones.colaDeTareas === undefined) return;
+    const resultado = aplicarFeedback(opciones.colaDeTareas, id, texto);
+    if (!resultado.hecho) {
+      // Nunca se propaga al cliente, igual que una transición imposible: se DICE, y no se
+      // escribe nada a medias.
+      informar(`no se pudo añadir el feedback: ${resultado.motivo ?? "motivo desconocido"}`);
+    }
+  };
+
   /** Los ajustes de destino, o `{}` —que es «se miran todos»— si esta ejecución no los lee. */
   const ajustesDeDispositivos = (): AjustesDeDispositivos => opciones.ajustesDeDispositivos?.() ?? {};
   let deteccionEnVuelo: Promise<void> | undefined;
@@ -843,21 +1309,39 @@ export function montarRutas(
    * Las sesiones guardadas de un proyecto de este entorno. Sin entorno elegido no hay raíz
    * que calcular, y sin copia local la lista es vacía — que es la verdad, no un fallo.
    */
-  const sesionesDelProyecto = (nombre: string): { id: string; titulo: string }[] => {
+  const sesionesDelProyecto = (
+    nombre: string
+  ): { id: string; titulo: string; ultimoTurno?: string; deTarea?: true }[] => {
     if (entornoElegido === undefined) return [];
     try {
-      return vestibulo.sesionesDe(vestibulo.raizDeProyecto(entornoElegido, nombre));
+      // Viaja un BOOLEANO y no el id de la tarea: la fila lleva una marca, no el nombre de
+      // la tarea —en 280 px no cabe—, así que el id se queda en el host por la misma regla
+      // que la ruta de una herramienta o el pid del corredor. `deTarea` ausente es «no
+      // consta» y no «es una conversación»: no la lleva ninguna sesión anterior a la marca.
+      return vestibulo.sesionesDe(vestibulo.raizDeProyecto(entornoElegido, nombre)).map((s) => ({
+        id: s.id,
+        titulo: s.titulo,
+        ...(s.ultimoTurno === undefined ? {} : { ultimoTurno: s.ultimoTurno }),
+        ...(s.tarea === undefined ? {} : { deTarea: true as const }),
+      }));
     } catch {
       return [];
     }
   };
 
-  /** ¿Existe ya la copia local de ese proyecto? Es `.xonecode/config.json` en su raíz: lo
-   *  que `completarProyecto` escribe ENTERO antes de bajar nada. */
+  /**
+   * ¿Existe ya la copia local de ese proyecto? Es `.xonecode/config.json` en su raíz: lo
+   * que `completarProyecto` escribe ENTERO antes de bajar nada.
+   *
+   * El predicado es el del vestíbulo (`esProyectoEnDisco`) y no una copia: `abrirParaTarea`
+   * decide con él si una tarea puede abrir esa raíz, y dos versiones de «esto es un
+   * proyecto» divergen el día que una se afine — con el alta diciendo que hay copia local
+   * y la puerta de tareas diciendo que no.
+   */
   const hayCopiaLocal = (nombre: string): boolean => {
     if (entornoElegido === undefined) return false;
     try {
-      return existsSync(join(vestibulo.raizDeProyecto(entornoElegido, nombre), ".xonecode", "config.json"));
+      return esProyectoEnDisco(vestibulo.raizDeProyecto(entornoElegido, nombre));
     } catch {
       return false;
     }
@@ -914,7 +1398,16 @@ export function montarRutas(
       const identidad = proyectos.find((p) => p.id === peticion.proyecto);
       const raiz = vestibulo.raizDeProyecto(entornoElegido, identidad?.nombre ?? peticion.proyecto);
       if (peticion.accion === "borrar") {
-        const { borrada, cerroLaAbierta } = await vestibulo.borrarSesion(raiz, peticion.sesion);
+        const { borrada, cerroLaAbierta, motivo } = await vestibulo.borrarSesion(raiz, peticion.sesion);
+        // Un `motivo` es que el vestíbulo DECLINÓ, y entonces se dice ese motivo y no el
+        // «ya no estaba» de siempre: la sesión sigue ahí, y contar lo contrario dejaría al
+        // usuario creyendo que la fila se va a ir del listado. Va además a `aviso`, como
+        // los demás rechazos de este camino.
+        if (motivo !== undefined) {
+          aviso = motivo;
+          informar(motivo);
+          return;
+        }
         // Se dice lo que pasó, incluido el «no había nada»: un menú que borra y calla deja
         // dudando de si la fila se fue porque se borró o porque falló el listado.
         informar(
@@ -926,7 +1419,14 @@ export function montarRutas(
         );
         // Al cerrar la abierta, el cable se queda enganchado a una consola muerta: se muda
         // de vuelta al vestíbulo, que es lo que el cliente va a pintar (el escritorio).
-        if (cerroLaAbierta) adjuntar();
+        // Y es el TERCER sitio donde cambia qué raíz está bloqueada para las tareas: aquí no
+        // se abre nada, así que la raíz queda LIBRE, y sin revisar la cola una tarea que
+        // esperaba a esa persona se quedaría esperando al siguiente evento que no tiene nada
+        // que ver — que en pantalla se lee como un cuelgue.
+        if (cerroLaAbierta) {
+          adjuntar();
+          opciones.revisarTareas?.();
+        }
         return;
       }
       if (!vestibulo.renombrarSesion(raiz, peticion.sesion, peticion.titulo)) {
@@ -952,7 +1452,9 @@ export function montarRutas(
       const identidad = proyectos.find((p) => p.id === peticion.proyecto);
       const nombre = identidad?.nombre ?? peticion.proyecto;
       const raiz = vestibulo.raizDeProyecto(entornoElegido, nombre);
-      if (!existsSync(join(raiz, ".xonecode", "config.json"))) {
+      // El MISMO predicado que `hayCopiaLocal` y que la puerta de tareas: era la tercera
+      // copia del literal, y la que decide si aquí se abre o se pregunta la rama.
+      if (!esProyectoEnDisco(raiz)) {
         // Todavía no está bajado: el alta es quien sabe hacerlo, y necesita la rama.
         proyectoElegido = peticion.proyecto;
         // La identidad ENTERA, no el id: el servidor abre por nombre. `identidad` ya está
@@ -964,6 +1466,9 @@ export function montarRutas(
       // El cable se muda a la consola del proyecto, como en el alta: sin esto el usuario
       // mira un transcript vivo cuyas aprobaciones se rechazan solas al otro lado.
       adjuntar();
+      // Y la cola se vuelve a mirar: este proyecto queda bloqueado para las tareas —gana la
+      // persona— y el que estuviera abierto antes acaba de quedar libre.
+      opciones.revisarTareas?.();
     } catch (error) {
       aviso = error instanceof Error ? error.message : String(error);
       contar(error);
@@ -1209,6 +1714,20 @@ export function montarRutas(
     if (typeof error === "object" && error !== null && "code" in error && typeof error.code === "string") return error.code;
     return error instanceof Error ? error.name : "error";
   };
+
+  /**
+   * El MENSAJE si lo escribimos nosotros, y el CÓDIGO si lo escribió el sistema.
+   *
+   * La misma función que `corredorDeTareas.ts#sinRutas`, y por el mismo motivo: un error de
+   * Node trae `code` y su mensaje lleva la ruta absoluta, mientras que uno escrito a mano en
+   * este repo no trae `code` y su mensaje es justo lo que hay que leer. `codigoDe` a secas
+   * convierte «falta la credencial para openai; usa /provider openai» en
+   * «ErrorDelAumentador», que es un nombre de clase enseñado a una persona.
+   */
+  const motivoLegible = (error: unknown): string =>
+    typeof error === "object" && error !== null && "code" in error
+      ? codigoDe(error)
+      : (error instanceof Error ? error.message : String(error)).split(/\r?\n/)[0]!.slice(0, 200);
 
   /**
    * El árbol del proyecto abierto. Sin proyecto no hay pestaña que lo pida, así que no se
@@ -1491,6 +2010,9 @@ export function montarRutas(
       // el estado de modelos, que hasta ahora no tenía `actual` que dar: sin sesión abierta
       // no hay modelo en vigor.
       adjuntar();
+      // Como en `atenderSesion`: abrir bloquea esta raíz para las tareas y libera la que
+      // estuviera abierta antes.
+      opciones.revisarTareas?.();
     } catch (error) {
       // El aviso se fija ANTES de anunciar: el `finally` de abajo es quien lo lleva al paso.
       aviso = error instanceof Error ? error.message : String(error);
@@ -1539,6 +2061,38 @@ export function montarRutas(
       }
     };
     clientes.add(sumidero);
+    /**
+     * El identificador que el navegador eligió para ESTA conexión, si lo mandó. Es lo que
+     * después le permite decir «engánchame a la tarea t1» por `POST /accion`, que es otra
+     * petición y no trae sumidero ninguno. Ausente = un cliente que no va a mirar nada, y
+     * entonces no se apunta: nada que limpiar al cerrarse.
+     *
+     * Se lee de la query a mano y no con `new URL()` por la misma razón que
+     * `servidor.ts#manejarPeticion`, aunque aquí no haya segmentos que preservar: es el
+     * patrón del fichero. Y no es una ruta ni un nombre de fichero: solo la clave de
+     * `porIdDeCliente`.
+     */
+    const idDeCliente = new URLSearchParams((peticion.url ?? "").split("?")[1] ?? "").get("cliente") ?? undefined;
+    if (idDeCliente !== undefined && idDeCliente !== "") {
+      /**
+       * Si el id ya estaba, es la MISMA pestaña reconectando, y sus envoltorios viejos hay
+       * que desengancharlos AQUÍ: el `close` de la conexión anterior puede llegar después
+       * —es la carrera que documenta el `close` de abajo— y entonces se salta la limpieza por
+       * la guarda de `enviar === sumidero`, que está bien puesta porque si no se llevaría por
+       * delante las miradas del recién llegado. Sin esto, esos envoltorios se quedaban en el
+       * `mirones` del transporte de la tarea hasta que su consola cerrara, escribiendo en un
+       * socket que ya no está (el `try/catch` del sumidero se lo traga: ni se veía). Reclamar
+       * el id es el único momento en que consta que la conexión anterior murió, y el cliente
+       * vuelve a pedir lo que mirara al reconectar.
+       */
+      const anterior = porIdDeCliente.get(idDeCliente);
+      if (anterior !== undefined) {
+        for (const [tarea, envoltorio] of anterior.mirando) {
+          opciones.corredorDeTareas?.dejarDeMirar?.(tarea, envoltorio);
+        }
+      }
+      porIdDeCliente.set(idDeCliente, { enviar: sumidero, mirando: new Map() });
+    }
     // Un comentario SSE abre el stream de verdad: sin nada escrito, algunos navegadores no
     // disparan `onopen` hasta el primer dato.
     respuesta.write(": xonecode\n\n");
@@ -1561,6 +2115,23 @@ export function montarRutas(
       // SSE nuevo se enganche, y con una sola ranura eso desconectaba al recién llegado;
       // con un conjunto, quitar el suyo es exacto y esa carrera desaparece.
       clientes.delete(sumidero);
+      /**
+       * Y se desenganchan sus MIRADAS. Sin esto, el envoltorio de una pestaña cerrada se
+       * queda enganchado al turno de la tarea para siempre, escribiendo en un socket que ya
+       * no está. La guarda de `enviar === sumidero` es la misma carrera que documenta el
+       * `close` de aquí arriba: una pestaña recargada puede cerrar DESPUÉS de que su
+       * reconexión haya reclamado el mismo id, y sin comparar el sumidero el cierre viejo se
+       * llevaría por delante las miradas del recién llegado.
+       */
+      if (idDeCliente !== undefined) {
+        const entrada = porIdDeCliente.get(idDeCliente);
+        if (entrada !== undefined && entrada.enviar === sumidero) {
+          for (const [tarea, envoltorio] of entrada.mirando) {
+            opciones.corredorDeTareas?.dejarDeMirar?.(tarea, envoltorio);
+          }
+          porIdDeCliente.delete(idDeCliente);
+        }
+      }
       // Y la consola solo se da por sola cuando se va el ÚLTIMO: el transporte lo decide
       // mirando sus sumideros. Cortar a la primera baja rechazaría la aprobación que otra
       // pestaña todavía tiene delante.
@@ -1665,6 +2236,74 @@ export function montarRutas(
     respuesta.end(leido.datos);
   });
 
+  /**
+   * `POST /adjunto?tarea=<id>&nombre=<fichero>` — los BYTES de un adjunto de tarea.
+   *
+   * Por HTTP y no por el cable, que lleva JSON. Las comprobaciones de `Host`, `Origin` y
+   * token las hace `servidor.ts` antes de llegar aquí, igual que a todas las rutas. Lo
+   * propio de esta son cuatro cosas:
+   *
+   * - **El nombre pasa la MISMA barrera de segmento llano que un artefacto**
+   *   (`nombreDeAdjuntoAceptable`, `core/adjuntos.ts`), y el id de la tarea también: de ellos
+   *   se compone una ruta de disco. `searchParams` decodifica una vez, así que un `%2e%2e`
+   *   llega ya como `..` y lo caza la lista blanca; un `%252e%252e` llega con el `%` dentro,
+   *   que tampoco es texto llano. La barrera se aplica además OTRA vez dentro del puerto
+   *   —sobre el texto y sobre el camino real—, que es donde se caza un enlace simbólico.
+   * - **Una subida no puede caer en la carpeta de una tarea que ya existe** (409). El id lo
+   *   elige el cliente, porque los bytes tienen que estar en disco ANTES de crear la tarea
+   *   (crear dispara `revisarTareas()` y el corredor puede arrancarla en el acto). Sin esta
+   *   guarda, un adjunto podría aterrizar en la carpeta de una tarea viva que el agente está
+   *   leyendo por `/adjuntos/` ahora mismo.
+   * - **El cuerpo se lee con el tope del ADJUNTO, no con el del cable** (1 MB): 413 en
+   *   cuanto se pasa, y se corta ahí — no se acumulan 20 MB para después rechazarlos.
+   * - **Ninguna respuesta lleva una ruta de la máquina** ni nada de lo recibido, que es la
+   *   regla de `POST /accion`.
+   */
+  servidor.registrarRuta("POST", RUTA_ADJUNTO, async (peticion, respuesta) => {
+    const responder = (codigo: number, texto: string): void => {
+      respuesta.writeHead(codigo, { "Content-Type": "text/plain; charset=utf-8" });
+      respuesta.end(texto);
+    };
+    const query = new URLSearchParams((peticion.url ?? "").split("?")[1] ?? "");
+    const tarea = query.get("tarea");
+    const nombre = query.get("nombre");
+    if (tarea === null || tarea === "" || nombre === null || nombre === "") {
+      responder(400, "faltan «tarea» o «nombre»");
+      return;
+    }
+    if (!nombreDeAdjuntoAceptable(tarea) || !nombreDeAdjuntoAceptable(nombre)) {
+      responder(403, "ese nombre no vale para un adjunto");
+      return;
+    }
+    if (opciones.colaDeTareas === undefined) {
+      responder(404, "esta consola no ejecuta tareas");
+      return;
+    }
+    if (opciones.colaDeTareas.listar().some((t) => t.id === tarea)) {
+      responder(409, "ese identificador ya es de una tarea: los adjuntos se suben antes de crearla");
+      return;
+    }
+    let datos: Buffer;
+    try {
+      datos = await leerCuerpoCrudo(peticion, TOPE_DE_ADJUNTO);
+    } catch {
+      // Se pasó del tope, o el flujo se cortó. NO se devuelve nada de lo recibido: es la
+      // misma regla que `POST /accion`, y aquí lo recibido son los bytes de un documento
+      // de una persona.
+      responder(413, "el adjunto es demasiado grande");
+      return;
+    }
+    const guardado = opciones.colaDeTareas.guardarAdjunto(tarea, nombre, datos);
+    if (!guardado.ok) {
+      // El motivo lo escribe el puerto y no lleva ninguna ruta (su test lo vigila). 413 para
+      // los dos topes —por fichero y por tarea— porque los dos son «no cabe».
+      responder(413, guardado.motivo ?? "no se pudo guardar el adjunto");
+      return;
+    }
+    respuesta.writeHead(204);
+    respuesta.end();
+  });
+
   servidor.registrarRuta("POST", RUTA_ACCION, async (peticion, respuesta) => {
     let mensaje: MensajeDelCliente;
     try {
@@ -1734,6 +2373,74 @@ export function montarRutas(
       (mensaje.accion === "ejecutar" || mensaje.accion === "cancelar")
     ) {
       atenderReceta(mensaje);
+      respuesta.writeHead(204);
+      respuesta.end();
+      return;
+    }
+    /**
+     * ANTES del `recibir` de la consola, y también antes que las demás clases de tarea: por
+     * aquí no entra nada hacia ningún turno. Ver `atenderMirar`.
+     */
+    if (
+      typeof mensaje === "object" &&
+      mensaje !== null &&
+      mensaje.clase === "mirar" &&
+      typeof mensaje.tarea === "string" &&
+      typeof mensaje.cliente === "string" &&
+      typeof mensaje.ver === "boolean"
+    ) {
+      atenderMirar(mensaje);
+      respuesta.writeHead(204);
+      respuesta.end();
+      return;
+    }
+    if (typeof mensaje === "object" && mensaje !== null && mensaje.clase === "tarea") {
+      if (mensaje.accion === "crear" && opciones.colaDeTareas !== undefined) {
+        const creada = atenderCrearTarea(mensaje.proyecto, mensaje.peticion, mensaje.encargo, mensaje.borrador);
+        if (creada !== undefined) {
+          opciones.revisarTareas?.();
+          emitirTareas();
+        }
+      } else if (mensaje.accion === "augmentar" && opciones.augmentar !== undefined) {
+        void atenderAugmentar(opciones.augmentar, mensaje.proyecto, mensaje.peticion, mensaje.borrador);
+      } else if (mensaje.accion === "feedback" && opciones.colaDeTareas !== undefined) {
+        atenderFeedbackDeTarea(mensaje.id, mensaje.texto);
+        opciones.revisarTareas?.();
+        emitirTareas();
+      } else if (
+        mensaje.accion !== "crear" &&
+        mensaje.accion !== "augmentar" &&
+        mensaje.accion !== "feedback" &&
+        opciones.colaDeTareas !== undefined
+      ) {
+        /**
+         * Ya no es `void x(); revisarTareas(); emitirTareas();` seguidas — reintentar y
+         * terminar siguen siendo instantáneos, pero descartar puede esperar a que el
+         * corredor corte un turno en vuelo (Task 14), y emitir la cola ANTES de que eso
+         * termine enseñaría la tarea todavía «en proceso» un instante antes de que
+         * `borrarTarea` la quite de verdad. Se secuencia con `.then()`, el mismo patrón que
+         * el resto de acciones asíncronas de este manejador (`atenderRevision`,
+         * `atenderArbol`…), y el fallo se cuenta y no se propaga: la respuesta HTTP ya se
+         * mandó en el acto.
+         */
+        void atenderAccionDeTarea(mensaje.accion, mensaje.id)
+          .then(() => {
+            opciones.revisarTareas?.();
+            emitirTareas();
+          })
+          .catch(contar);
+      }
+      respuesta.writeHead(204);
+      respuesta.end();
+      return;
+    }
+    if (typeof mensaje === "object" && mensaje !== null && mensaje.clase === "tareas" && typeof mensaje.concurrencia === "number") {
+      // Cambiar el tope no vale nada sin volver a revisar: con la cola llena y hueco nuevo,
+      // sin este empujón se quedaría esperando al siguiente evento que no tiene nada que
+      // ver — la misma razón por la que crear y accionar revisan tras escribir.
+      opciones.guardarConcurrencia?.(mensaje.concurrencia);
+      opciones.revisarTareas?.();
+      emitirTareas();
       respuesta.writeHead(204);
       respuesta.end();
       return;
@@ -1884,6 +2591,306 @@ export function montarRutas(
     respuesta.writeHead(204);
     respuesta.end();
   });
+
+  return { emitirTareas };
+}
+
+export interface CorredorDeTareasCableado {
+  /** `undefined` si esta ejecución no tiene cola (`tareasFabrica` ausente): entonces no
+   *  hay nada que revisar. Sin `arrancar`: la única forma de arrancar el corredor devuelto
+   *  aquí fuera es `arrancarConectado`, que ata el orden puente-antes-que-arranque. Exponer
+   *  `arrancar` en este tipo dejaría `corredor?.arrancar()` compilando fuera de esa función
+   *  — el mismo fallo que esta extracción existe para hacer imposible. */
+  corredor: Omit<Corredor, "arrancar"> | undefined;
+  /** Lo que hay que fundir en las opciones de `montarRutas`. */
+  opcionesDeMontaje: Pick<
+    OpcionesDeMontaje,
+    "colaDeTareas" | "corredorDeTareas" | "concurrenciaDeTareas" | "guardarConcurrencia"
+  >;
+  /**
+   * Arranca el corredor YA conectado al cable. Es UNA función y no dos —«conecta el
+   * puente» y luego «arranca»— porque separarlas es exactamente el fallo que este
+   * cableado puede volver a cometer: un test que las llame en el orden que no toca no
+   * falla nunca si nada comprueba el orden, y en producción el corredor puede reconciliar
+   * y disparar `alCambiar` antes de que el puente esté puesto. Horneando el orden aquí
+   * dentro, quien llame no tiene manera de equivocarse.
+   */
+  arrancarConectado: (cable: { emitirTareas: () => void }) => Promise<void>;
+}
+
+/**
+ * Construye el corredor de tareas y la costura que lo conecta al cable.
+ *
+ * Extraído de `arrancarConsolaWeb` a su propia función por la MISMA razón que
+ * `backendDeAgente` (`agent/proyecto.ts`): la composición vivía inline dentro de una
+ * función que todos sus tests DOBLAN —`vestibulo`, `crearServidor`, `crearEjecutor`—, así
+ * que esta costura concreta podía dejar de estar montada con el resto en verde. Aquí
+ * tiene su propio test que la compone de VERDAD: construye un corredor real
+ * (`crearCorredorDeTareas`) y comprueba que un cambio que el corredor mueve por su
+ * cuenta —nace DENTRO del lazo, no de una petición del cliente— llega a
+ * `emitirTareas`, y que si `emitirTareas` revienta el lazo de tareas no se entera.
+ */
+/**
+ * Las fuentes con que se resuelve el papel del JUEZ para una tarea, por la raíz de SU
+ * proyecto.
+ *
+ * Está extraída y exportada por el mismo motivo que `revisionConGit` y que `backendDeAgente`:
+ * vivía dentro del cierre de `arrancarConsolaWeb`, que todos sus tests doblan, así que
+ * quitarle la capa de proyecto no ponía ni un test en rojo — comprobado por mutación. Es la
+ * cuarta vez en esta tanda que una composición de producción escondida en un cierre deja una
+ * regla sin montar con todo en verde.
+ *
+ * Las dos capas salen de `cargar(raiz)`, que trae el `config.json` del proyecto y el global:
+ * en la consola web `FuentesDeEleccion.proyecto` no se rellena nunca —el vestíbulo sirve
+ * muchos proyectos y las fuentes se construyen una vez al arrancar—, así que sin preguntarle
+ * al disco por la raíz de la tarea, un proyecto que apuntara `afilado` a otro modelo se
+ * ignoraba en silencio. La misma trampa que `cloudstudioDelProyecto` ya resolvió así.
+ *
+ * `proyecto` se omite en vez de ponerse a `undefined`: ausente es «este proyecto no dice
+ * nada», y la precedencia de `core/modelos.ts` cuenta con eso.
+ */
+export function fuentesDelJuez(raiz: string): FuentesDeEleccion {
+  const { config } = cargar(raiz);
+  return {
+    ...(config.proyecto === undefined ? {} : { proyecto: config.proyecto }),
+    global: config.global,
+    entorno: { XONECODE_MODELO: process.env.XONECODE_MODELO },
+  };
+}
+
+/**
+ * Cuánta memoria de proyecto se le da al aumentador.
+ *
+ * Es CONTEXTO de una llamada, no un fichero que servir: `.xonecode/memoria.md` lo escribe el
+ * agente turno tras turno y puede crecer sin tope. Y el árbol del proyecto ya se descartó por
+ * lo mismo (§7 del diseño: «el árbol entero sería contexto por gastar»); dejar la memoria sin
+ * acotar reintroduciría el problema por la puerta de al lado.
+ */
+export const TOPE_DE_MEMORIA = 4_000;
+
+/**
+ * Lo que se le añade a la petición del aumentador leyendo el DISCO por la raíz: la rama del
+ * proyecto y su memoria.
+ *
+ * **Por la raíz y no por las fuentes**, la trampa que `cloudstudioDelProyecto` ya resolvió:
+ * en la consola web `FuentesDeEleccion.proyecto` no se rellena nunca. Y lo que el disco no
+ * dice NO se pone —ausente es «no hay»—: un `rama: undefined` o un `memoria: ""` en el prompt
+ * harían que el modelo hablara de una rama sin nombre como si fuera un dato.
+ *
+ * Nada de esto lanza. Que no haya memoria, o que el `config.json` no se pueda leer, no puede
+ * impedir redactar un encargo.
+ */
+export function contextoDelProyecto(raiz: string): { rama?: string; memoria?: string } {
+  const rama = cloudstudioDelProyecto(raiz)?.rama;
+  let memoria: string | undefined;
+  try {
+    const leido = readFileSync(rutaMemoriaDeProyecto(raiz), "utf8").trim();
+    if (leido !== "") memoria = leido.slice(0, TOPE_DE_MEMORIA);
+  } catch {
+    // No hay memoria, o no se puede leer: no se afirma ninguna.
+  }
+  return {
+    ...(rama === undefined || rama === "" ? {} : { rama }),
+    ...(memoria === undefined ? {} : { memoria }),
+  };
+}
+
+/**
+ * La costura entre el cable y el aumentador: convierte lo que `montarRutas` resuelve
+ * —proyecto y adjuntos— en la `PeticionDeTarea` del puerto, añadiéndole lo que solo se sabe
+ * mirando el disco.
+ *
+ * **Extraída y exportada, no inline en `arrancarConsolaWeb`**, por la misma razón que
+ * `revisionConGit` y `fuentesDelJuez`: en esta tanda cuatro veces una composición de
+ * producción vivía en un cierre que todos sus tests doblan, y una regla se quedó sin montar
+ * con todo en verde. Lo que aquí se caería sin dar ni un síntoma es la mitad del contexto: un
+ * encargo redactado sin la rama ni la memoria del proyecto se ve perfectamente normal.
+ *
+ * El error se PROPAGA: quien lo convierte en palabras para la ventana es `atenderAugmentar`,
+ * que aplica la regla del mensaje-o-código. Tragárselo aquí dejaría a la ventana con un
+ * encargo vacío y sin motivo.
+ */
+export function augmentacionCableada(opciones: {
+  aumentador: AumentadorPort;
+  /** Por parámetro para poder probar esta composición sin tocar disco. Por omisión,
+   *  `contextoDelProyecto`; ausente del todo = sin rama ni memoria. */
+  contexto?: (raiz: string) => { rama?: string; memoria?: string };
+}): NonNullable<OpcionesDeMontaje["augmentar"]> {
+  return async ({ texto, proyecto, adjuntos }) => {
+    const extra = opciones.contexto?.(proyecto.raiz) ?? {};
+    return opciones.aumentador.augmentar({
+      texto,
+      // El `id` del proyecto NO viaja al modelo: es un identificador de CloudStudio y para
+      // redactar no aporta nada. Sí la raíz, que es con lo que se resuelve el papel.
+      proyecto: { nombre: proyecto.nombre, raiz: proyecto.raiz, ...(extra.rama === undefined ? {} : { rama: extra.rama }) },
+      adjuntos,
+      ...(extra.memoria === undefined ? {} : { memoria: extra.memoria }),
+    });
+  };
+}
+
+export function construirCorredorDeTareasCableado(opciones: {
+  vestibulo: Pick<Vestibulo, "abrirParaTarea" | "proyectoAbierto" | "sesionesDe">;
+  /** La fábrica de `OpcionesDeArranque.tareas`. Ausente = esta ejecución no ejecuta tareas. */
+  tareasFabrica?: (informar: (texto: string) => void) => TareasEnDisco;
+  informar: (texto: string) => void;
+  olvidarHiloDeSesion: (raiz: string, hilo: string) => Promise<void>;
+  /**
+   * Las DOS piezas de la puerta de la entrega, obligatorias porque el corredor las exige por
+   * TIPO (ver `crearCorredorDeTareas`): un juez que decida si el trabajo hace lo que se
+   * pedía, y con qué se comprueba que lo escrito se puede revisar. Suben hasta aquí para que
+   * el test de esta costura las componga de verdad, que es el motivo de que esta función
+   * exista.
+   */
+  juez: JuezDeTareaPort;
+  revisable: (raiz: string, sesion: string) => Promise<RevisionDeSesion>;
+}): CorredorDeTareasCableado {
+  const disco = opciones.tareasFabrica === undefined ? undefined : opciones.tareasFabrica(opciones.informar);
+
+  /**
+   * El tope de concurrencia se LEE de `settings.json` en cada llamada, nunca se cachea —la
+   * misma disciplina que `ajustesDeDispositivos` (más abajo) y que `sinAprobacion`: la
+   * sección «Tareas» de Ajustes escribe con `guardarConcurrenciaDeTareas` mientras el
+   * proceso vive, y una copia capturada al construir este corredor no la vería. Ausente en
+   * disco = `CONCURRENCIA_POR_OMISION` (2), la misma omisión que ya usaba la variable en
+   * memoria que esto sustituye.
+   */
+  const concurrenciaDeTareas = (): number => cargarSettings().settings.concurrenciaDeTareas ?? CONCURRENCIA_POR_OMISION;
+
+  /**
+   * El puente hacia `emitirTareas`. El corredor nace ANTES que el cable —`montarRutas`
+   * necesita poder pedirle `revisar()` y `corriendoAqui()`—, pero su `alCambiar` (una
+   * tarea que el CORREDOR mueve por su cuenta: empieza, aparca, termina) solo puede
+   * alcanzar el cable una vez que existe. `arrancarConectado` es quien la rellena, antes
+   * de arrancar. Sin este puente, el kanban solo se movería cuando alguien tocara algo
+   * desde el navegador — la peor forma de estar roto: parece que funciona.
+   */
+  let emitirCambioDeTareas: (() => void) | undefined;
+
+  const corredor =
+    disco === undefined
+      ? undefined
+      : crearCorredorDeTareas({
+          disco,
+          // La costura de las tres piezas: la segunda puerta del vestíbulo (que no mueve el
+          // cable), la consola que APARCA en vez de contestar por nadie, y el ejecutor de
+          // siempre con las mismas barreras que el de una persona.
+          // `sesion` reenviada: es lo que hace que reanudar (un reintento, o un feedback)
+          // reabra el MISMO hilo en vez de uno en blanco. Ver `corredorDeTareas.ts`.
+          // `sesion`, `adjuntos` y `tarea` reenviadas TAL CUAL, y las tres por el mismo
+          // motivo: quien sabe de qué tarea es esta apertura es el corredor. La primera hace
+          // que reanudar siga la MISMA conversación; la segunda es lo que monta `/adjuntos/`
+          // en el backend del agente (`core/adjuntos.ts`); la tercera es lo que marca su
+          // sesión en el índice del proyecto (`EntradaIndice.tarea`). Dejarse cualquiera no
+          // da ningún síntoma —esto es una lambda que reenvía a mano, y TypeScript no se
+          // queja de una función que ignora argumentos—: un hilo en blanco, unos adjuntos
+          // que el agente no puede abrir, o una fila de la barra que miente para siempre.
+          abrirParaTarea: async (raiz, sesion, adjuntos, tarea) =>
+            consolaParaTarea(await opciones.vestibulo.abrirParaTarea(raiz, sesion, adjuntos, tarea)),
+          // La SIEMBRA de la marca en las sesiones que ya existían. Ver
+          // `sesiones.ts#marcarTareaDeSesion`: solo añade, así que correrla en cada arranque
+          // no puede convertir una sesión de tarea en una conversación.
+          marcarSesionDeTarea: (raiz, sesion, tarea) => void marcarTareaDeSesion(raiz, sesion, tarea),
+          // Se lee de disco en cada pasada: cambiar el tope en Ajustes se nota sin
+          // reiniciar nada, en la siguiente ronda de planificación.
+          concurrencia: concurrenciaDeTareas,
+          /**
+           * GANA LA PERSONA: en el proyecto que alguien tiene abierto no arranca ninguna
+           * tarea. Una tarea y una persona sobre el mismo árbol no tienen aislamiento de
+           * ninguna clase, y el cerrojo del corredor no protege de eso — protege de dos
+           * corredores. Se pregunta en cada pasada, no al arrancar: abrir un proyecto no
+           * reinicia nada.
+           */
+          bloqueados: () => {
+            const abierto = opciones.vestibulo.proyectoAbierto();
+            return abierto === undefined ? [] : [abierto.raiz];
+          },
+          /**
+           * `sesion` sobrevive si y solo si hay algo que una persona pueda ABRIR, y esto es
+           * lo que lo decide: la sesión está en el índice del proyecto —o sea que su
+           * transcript se volcó y se lee desde la barra lateral— o no está. Es exactamente
+           * la lista que la barra pinta, no una segunda fuente que pueda contradecirla.
+           */
+          sesionAbrible: (raiz, sesion) => opciones.vestibulo.sesionesDe(raiz).some((s) => s.id === sesion),
+          // Y el hilo del agente de una sesión que no nombra nada abrible se olvida, igual
+          // que al borrar una conversación: un checkpoint es la lista de mensajes entera y
+          // crece, y ahí seguiría vivo e invisible desde la interfaz para siempre.
+          olvidarHilo: opciones.olvidarHiloDeSesion,
+          /**
+           * La puerta de la ENTREGA: «terminada» ya no significa «el turno acabó». Las tres
+           * condiciones las comprueba el código (`core/entrega.ts`) y el juez de QA opina, y
+           * hacen falta las dos — es la regla que este repo ya tenía escrita para la subida
+           * autónoma, y el mismo motivo por el que los avisos de honestidad son código y no
+           * prompt.
+           */
+          juez: opciones.juez,
+          revisable: opciones.revisable,
+          /**
+           * El puente hacia el cable, y NUNCA puede tumbar el lazo de tareas: un sumidero
+           * muerto —o cualquier otra cosa que `emitirTareas` haga mal— es un problema del
+           * cable, no de la tarea que el corredor acaba de escribir.
+           * `escribirSiSigueSiendoNuestra` llama a este `alCambiar` SIN su propio `try`,
+           * así que una excepción de aquí subiría hasta `aparcar`/`correr` y podría hacer
+           * que una escritura que SÍ funcionó se cuente como fallida. Se atrapa aquí, en
+           * el único sitio que sabe que lo que sigue es «avisar», no «guardar».
+           *
+           * El mensaje usa `error.message` y no `codigoDe` (la regla de `montarRutas` y de
+           * `corredorDeTareas.ts`): esa función existe para tapar la ruta absoluta de un
+           * fallo de FICHERO, y lo que puede fallar aquí es `emitirTareas()` — un recorrido
+           * de sumideros SSE que ya se protege cada uno por su cuenta (`sumidero` en la
+           * ruta `/eventos`), así que en producción esto no lanza nada con un disco detrás.
+           * Lo único que llega hasta aquí es un sumidero de mentira que revienta a propósito.
+           */
+          alCambiar: () => {
+            try {
+              emitirCambioDeTareas?.();
+            } catch (error) {
+              opciones.informar(
+                `no se pudo avisar del cambio en la cola de tareas (${error instanceof Error ? error.message : String(error)})`
+              );
+            }
+          },
+          informar: opciones.informar,
+        });
+
+  return {
+    corredor,
+    opcionesDeMontaje: {
+      ...(disco === undefined ? {} : { colaDeTareas: disco }),
+      ...(corredor === undefined ? {} : { corredorDeTareas: corredor }),
+      concurrenciaDeTareas,
+      // Persiste en `settings.json` — `guardarConcurrenciaDeTareas` acota a
+      // `0..TOPE_DE_CONCURRENCIA_DE_TAREAS` por su cuenta, así que un valor fuera de rango
+      // que llegara por el cable no deja basura en el fichero.
+      guardarConcurrencia: (c) => {
+        guardarConcurrenciaDeTareas(undefined, c);
+      },
+    },
+    arrancarConectado: async (cable) => {
+      emitirCambioDeTareas = cable.emitirTareas;
+      await corredor?.arrancar();
+    },
+  };
+}
+
+/**
+ * El cuerpo en BYTES, con su propio tope.
+ *
+ * No se reutiliza `leerCuerpo`: ese acota a `TOPE_DE_CUERPO` (1 MB) y devuelve `utf8`, o sea
+ * las dos cosas equivocadas para un adjunto — un PNG de 3 MB se rechazaría, y pasarlo por
+ * utf8 lo destrozaría. El tope se corta EN CUANTO se pasa y no al final: acumular 20 MB para
+ * después decir que no caben sería pagar la memoria del rechazo.
+ */
+async function leerCuerpoCrudo(peticion: IncomingMessage, tope: number): Promise<Buffer> {
+  const trozos: Buffer[] = [];
+  let total = 0;
+  for await (const trozo of peticion) {
+    const buffer = Buffer.from(trozo as Buffer);
+    total += buffer.length;
+    if (total > tope) throw new Error("cuerpo demasiado grande");
+    trozos.push(buffer);
+  }
+  return Buffer.concat(trozos);
 }
 
 async function leerCuerpo(peticion: IncomingMessage): Promise<string> {
@@ -1919,9 +2926,30 @@ export interface OpcionesDeArranque {
    * no se importa: `cli/main.ts` ya carga este módulo, e importarlo de vuelta sería un
    * ciclo entre el despachador y la piel que monta.
    */
-  crearEjecutor?: (alAbrirSesion: (sesion: SesionCerrable) => void) => EjecutorDeTurno;
+  crearEjecutor?: (
+    alAbrirSesion: (sesion: SesionCerrable) => void,
+    /** Lo que depende de la CONSOLA y no de su raíz: hoy la carpeta de adjuntos de una
+     *  tarea. La misma forma que `OpcionesDelVestibulo.crearEjecutor`, porque esto se le
+     *  pasa tal cual. */
+    opciones?: { adjuntos?: string }
+  ) => EjecutorDeTurno;
   /** Lo que la consola de proyecto necesita y depende de la raíz (`/sync`, los escritores). */
   dependenciasDeProyecto?: (raiz: string) => Partial<Consola>;
+  /**
+   * La cola de TAREAS de fondo (`agent/tareasEnDisco.ts`), y con ella el corredor.
+   *
+   * **Ausente = esta ejecución no ejecuta tareas y no toma ningún cerrojo**, que es la
+   * omisión obligada y no una comodidad: el cerrojo y el índice viven en el
+   * `~/.xonecode/tareas` de la MÁQUINA, así que una omisión que construyera la cola de
+   * verdad haría que los tests de este fichero —que llaman a `arrancarConsolaWeb` entero—
+   * reconciliaran la cola real de quien los corre y le quitaran el cerrojo a su consola
+   * abierta. Es la misma razón por la que `detectarDispositivos` entra por opción.
+   *
+   * Es una FÁBRICA y no el puerto ya construido para poder darle el `informar` de aquí: el
+   * de un índice que no se puede leer tiene que llegar al navegador —es donde se está
+   * mirando el kanban—, y ese `informar` no existe hasta que existe el vestíbulo.
+   */
+  tareas?: (informar: (texto: string) => void) => TareasEnDisco;
   /** Costuras de test: nada de esto toca disco, red ni navegador cuando se inyecta. */
   raizDelCliente?: string;
   escribir?: (texto: string) => void;
@@ -1950,6 +2978,14 @@ export interface OpcionesDeArranque {
  * significa «sin gastar ni conectar». Sin `--guion` esto NO se abre solo —sería magia, no
  * un modo declarado—, y el aviso de abajo sigue mandando a `--cli`.
  */
+/**
+ * Cuántos nombres de fichero se mandan en el aviso de trabajo sin commitear. El alta se
+ * reemite en los DOS flancos de cada turno, así que la lista viaja muchas veces; y la frase
+ * que la pinta no puede llevar trescientos nombres de todas formas. Lo que no cabe se
+ * cuenta: `total` va siempre entero.
+ */
+export const FICHEROS_DEL_AVISO = 20;
+
 export async function arrancarConsolaWeb(opciones: OpcionesDeArranque): Promise<number> {
   const escribir = opciones.escribir ?? ((texto: string) => void process.stdout.write(texto));
   const raizDelCliente = opciones.raizDelCliente ?? raizDelClientePorOmision();
@@ -1991,6 +3027,64 @@ export async function arrancarConsolaWeb(opciones: OpcionesDeArranque): Promise<
   };
 
   vestibulo = opciones.vestibulo ?? vestibuloReal(opciones, servidor, escribir, informar);
+  const conVestibulo = vestibulo;
+
+  /**
+   * El corredor de tareas y su costura con el cable — `construirCorredorDeTareasCableado`
+   * y no inline: es lo que la hace comprobable de verdad (ver su comentario). Se construye
+   * ANTES de `montarRutas` porque las rutas necesitan poder pedirle una revisión —abrir o
+   * cerrar un proyecto cambia qué se puede arrancar— y solo necesita el vestíbulo, que ya
+   * está. Y ejecutar solo se ejecuta si hay cola: ver `OpcionesDeArranque.tareas`.
+   */
+  const {
+    corredor,
+    opcionesDeMontaje: opcionesDeTareas,
+    arrancarConectado: arrancarCorredorConectado,
+  } = construirCorredorDeTareasCableado({
+    vestibulo: conVestibulo,
+    tareasFabrica: opciones.tareas,
+    informar,
+    olvidarHiloDeSesion: async (raiz, hilo) => olvidarHilo(crearCheckpointerDeProyecto(raiz), hilo),
+    /**
+     * El juez de QA de las tareas, con el papel `afilado` — el que `core/modelos.ts` le
+     * reserva.
+     *
+     * **Los `Modelos` se construyen en CADA consulta**, no una vez al arrancar, y es la
+     * misma razón por la que `sinAprobacion` relee los settings en cada ronda: el asistente
+     * de cuenta y `/provider` escriben la credencial y la elección de modelo mientras el
+     * proceso vive, y un `Modelos` capturado al arrancar dejaría al juez con el reparto de
+     * antes. Una consulta por tarea, así que leer el `config.json` ahí no cuesta nada.
+     *
+     * **Y se lee el del PROYECTO además del global, por la raíz de la tarea.** En la consola
+     * web `FuentesDeEleccion.proyecto` no se rellena nunca —el vestíbulo sirve muchos
+     * proyectos y las fuentes se construyen una vez al arrancar—, así que sin preguntarle al
+     * disco por la raíz, un `config.json` de proyecto que apuntara el papel `afilado` a otro
+     * modelo se ignoraba en silencio. Es la misma trampa que `cloudstudioDelProyecto` ya
+     * resolvió así, y el mismo motivo: un ajuste escrito que no hace nada es peor que no
+     * poder ponerlo, porque quien lo puso se cree servido.
+     */
+    juez: crearJuezDeTarea({
+      invocar: (papel, prompt, raiz) =>
+        invocarConModelos(new Modelos(fuentesDelJuez(raiz), proveedoresPersonalizados))(papel, prompt, raiz),
+    }),
+    /**
+     * Que lo escrito se pueda REVISAR es `cambiosDeSesion(...).via === "git"`: la MISMA
+     * función que pinta la pestaña Revisión, no una parecida, así que la condición significa
+     * literalmente «Revisión lo enseña». Sin aprobación previa ese diff es el único momento
+     * en que una persona puede mirar lo que hizo una tarea, y entregar trabajo que nadie
+     * puede ver sería dejar vacío el sitio del modal.
+     *
+     * Y NO es «el árbol de git está limpio»: eso está medido y sería falso siempre — una
+     * tarea que escribe un fichero deja el árbol sucio por definición.
+     *
+     * De la MISMA respuesta sale si la sesión cambió algo, y solo se afirma cuando hay
+     * marca: sin ella no es que no escribiera, es que no hay con qué mirarlo. Eso es lo que
+     * permite entregar una tarea de solo lectura sin abrir un camino para entregar sin
+     * verificar, y lo que impide decidirlo con `autorizadas` — que es la intención del
+     * agente y no el hecho.
+     */
+    revisable: revisionConGit(cambiosDeSesion),
+  });
 
   if (offline && opciones.guion === true) {
     const abierto = await vestibulo.abrirProyecto({ raiz: opciones.cwd });
@@ -2008,8 +3102,15 @@ export async function arrancarConsolaWeb(opciones: OpcionesDeArranque): Promise<
     abierto.consola.consola.escribir(`${aviso}\n`);
   }
 
-  montarRutas(servidor, vestibulo, {
+  const cable = montarRutas(servidor, vestibulo, {
     informar,
+    ...(corredor === undefined ? {} : { revisarTareas: () => corredor.revisar() }),
+    // El PUERTO de disco y el corredor, no operaciones sueltas: `montarRutas` resuelve
+    // `crearTarea`/`accionDeTarea` con SU propio estado (`proyectos`, `entornoElegido`,
+    // `vestibulo.raizDeProyecto`), que es la única forma de convertir un id de proyecto en
+    // la raíz que la tarea necesita para poder correr. Ver el comentario de
+    // `OpcionesDeMontaje.colaDeTareas`.
+    ...opcionesDeTareas,
     // Los dos puertos del selector de modelos, con las piezas reales: quién tiene
     // credencial (`auth.json` o el entorno, leído desde el cwd) y el catálogo VIVO.
     hayCredencial: (proveedor) => hayCredencial(proveedor, opciones.cwd),
@@ -2045,7 +3146,40 @@ export async function arrancarConsolaWeb(opciones: OpcionesDeArranque): Promise<
     proveedoresPersonalizados: proveedoresPersonalizados,
     guardarProveedor: (declarado) => guardarProveedorPersonalizado(declarado),
     borrarProveedor: (slug) => borrarProveedorPersonalizado(slug),
+    /**
+     * El AUMENTADOR de la ventana de crear una tarea (`agent/aumentador.ts`), con el papel
+     * `trabajo` — es una tarea de redacción, no una clasificación.
+     *
+     * Tres cosas que se deciden aquí:
+     * - **La composición vive en `augmentacionCableada` y no inline**, por lo mismo que
+     *   `revisionConGit` y `fuentesDelJuez`: es la quinta vez en esta tanda que hace falta
+     *   decirlo, y lo que se caería sin síntoma es la mitad del contexto del encargo.
+     * - **Los `Modelos` se construyen en CADA llamada**, igual que los del juez: el
+     *   asistente de cuenta y `/provider` escriben la credencial mientras el proceso vive, y
+     *   uno capturado al arrancar se quedaría con el reparto de antes. Y con
+     *   `fuentesDelJuez(raiz)`, que es «las fuentes de ESE proyecto»: sin la capa de
+     *   proyecto, un `config.json` que apunte `trabajo` a otro modelo se ignoraría.
+     * - **Con `--guion` se monta el DOBLE**, no el real: esa bandera significa «sin gastar
+     *   ni conectar», y el doble dice en el propio encargo que es de pega (`[DOBLE]`).
+     */
+    augmentar: augmentacionCableada({
+      aumentador:
+        opciones.guion === true
+          ? new AumentadorGuionizado()
+          : crearAumentador({
+              invocar: (papel, prompt, raiz) =>
+                invocarParaAumentar(new Modelos(fuentesDelJuez(raiz), proveedoresPersonalizados))(papel, prompt, raiz),
+            }),
+      contexto: contextoDelProyecto,
+    }),
   });
+
+  // Con las rutas ya montadas: la reconciliación y el primer despacho cambian la cola, y
+  // quien conecte después la recibe entera en su ráfaga de bienvenida.
+  // `arrancarConectado` es la ÚNICA forma de arrancar el corredor: conecta el puente hacia
+  // `cable.emitirTareas` y arranca en el orden correcto, así que no hay manera de llamarlo
+  // mal desde aquí.
+  await arrancarCorredorConectado(cable);
 
   escribir(`consola web en ${servidor.url}\n`);
   if (opciones.anfitrion !== undefined) {
@@ -2068,6 +3202,15 @@ export async function arrancarConsolaWeb(opciones: OpcionesDeArranque): Promise<
   }
 
   await (opciones.esperarCierre ?? esperarInterrupcion)();
+  /**
+   * El corredor PRIMERO, y el orden es load-bearing: `parar()` corta los turnos en vuelo y
+   * los deja aparcados diciendo que la consola se cerró a mitad. Al revés, el
+   * `cerrarLasDeTareas` del vestíbulo abortaría esos mismos turnos por debajo del corredor,
+   * que lo contaría como un fallo del turno —«el turno falló (AbortError)»— cuando lo que
+   * pasó es que alguien paró el proceso. El motivo se lee en el kanban, así que la
+   * diferencia no es interna.
+   */
+  await corredor?.parar();
   await vestibulo.cerrar();
   await servidor.cerrar();
   return 0;
@@ -2155,6 +3298,12 @@ function vestibuloReal(
     // El «antes» de cada sesión: se fotografía al abrir el proyecto y se nombra cuando la
     // sesión tiene id. Ver `agent/sesionGit.ts` para por qué es una ref y no un tag.
     marcarSesion: fotoDeApertura,
+    // Lo que ya había sin commitear al abrir, para poder decirlo. Comparte el hueco
+    // declarado de `marcarSesion`: esta composición vive en un cierre que `vestibuloReal`
+    // no expone y que ningún test construye —lee el `settings.json` REAL del usuario—, así
+    // que lo que está probado es que el vestíbulo la usa por las dos puertas, no que aquí
+    // siga puesta.
+    sinCommitear: trabajoSinCommitear,
     olvidarMarcaDeSesion: olvidarSesion,
     // La memoria del agente por hilo. `historica` deja de ser «se reabrió» para ser «no hay
     // checkpoint que cargar», y borrar una sesión se lleva también su checkpoint.

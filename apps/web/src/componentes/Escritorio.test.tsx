@@ -205,3 +205,325 @@ describe("Escritorio: solo los proyectos elegidos, y el resto contado", () => {
     expect(screen.queryByText(/del entorno/)).toBeNull();
   });
 });
+
+describe("Escritorio: el kanban de tareas", () => {
+  afterEach(cleanup);
+
+  it("sin `tareas` no se afirma que no hay ninguna: se dice que no ha llegado", () => {
+    render(<Escritorio {...MANEJADORES} proyectos={[]} />);
+    expect(screen.getByText(/todavía no ha llegado la cola de tareas/i)).toBeTruthy();
+    expect(screen.queryByRole("heading", { name: /^Nuevo/ })).toBeNull();
+  });
+
+  it("con `tareas`, el kanban se pinta con sus cuatro columnas", () => {
+    render(
+      <Escritorio
+        {...MANEJADORES}
+        proyectos={[]}
+        tareas={{
+          concurrencia: 2,
+          corriendoAqui: true,
+          lista: [
+            {
+              id: "t1",
+              proyecto: "p1",
+              proyectoNombre: "AppDemo",
+              titulo: "Arregla el login",
+              peticion: "Arregla el login",
+              encargo: "Arregla el login",
+              adjuntos: [],
+              estado: "nuevo",
+              creada: "2026-09-08T10:00:00.000Z",
+            },
+          ],
+        }}
+      />
+    );
+    expect(screen.getByRole("heading", { name: /^Nuevo/ })).toBeTruthy();
+    expect(screen.getByText("Arregla el login")).toBeTruthy();
+  });
+
+  it("pulsar una tarea con sesión llama a `alAbrirSesionDeTarea`", () => {
+    const alAbrirSesionDeTarea = vi.fn();
+    render(
+      <Escritorio
+        {...MANEJADORES}
+        proyectos={[]}
+        alAbrirSesionDeTarea={alAbrirSesionDeTarea}
+        tareas={{
+          concurrencia: 2,
+          corriendoAqui: true,
+          lista: [
+            {
+              id: "t1",
+              proyecto: "p1",
+              proyectoNombre: "AppDemo",
+              titulo: "Arregla el login",
+              peticion: "Arregla el login",
+              encargo: "Arregla el login",
+              adjuntos: [],
+              estado: "nuevo",
+              sesion: "s1",
+              creada: "2026-09-08T10:00:00.000Z",
+            },
+          ],
+        }}
+      />
+    );
+    fireEvent.click(screen.getByRole("button", { name: /Arregla el login/ }));
+    expect(alAbrirSesionDeTarea).toHaveBeenCalledWith("p1", "s1");
+  });
+
+  it("reenvía `alEnviarFeedback` al kanban tal cual: es el mismo campo, no una copia", () => {
+    const alEnviarFeedback = vi.fn();
+    render(
+      <Escritorio
+        {...MANEJADORES}
+        proyectos={[]}
+        alEnviarFeedback={alEnviarFeedback}
+        tareas={{
+          concurrencia: 2,
+          corriendoAqui: true,
+          lista: [
+            {
+              id: "t1",
+              proyecto: "p1",
+              proyectoNombre: "AppDemo",
+              titulo: "Arregla el login",
+              peticion: "Arregla el login",
+              encargo: "Arregla el login",
+              adjuntos: [],
+              estado: "requiere-atencion",
+              motivo: "el juez marcó el trabajo en rojo",
+              sesion: "s1",
+              creada: "2026-09-08T10:00:00.000Z",
+            },
+          ],
+        }}
+      />
+    );
+    fireEvent.change(screen.getByRole("textbox", { name: /tu feedback/i }), { target: { value: "sí, con histórico" } });
+    fireEvent.click(screen.getByRole("button", { name: /enviar feedback/i }));
+    expect(alEnviarFeedback).toHaveBeenCalledWith("t1", "sí, con histórico");
+  });
+
+  /**
+   * Task 13: antes el escritorio solo sabía reenviar `alEnviarFeedback` al kanban —
+   * reintentar, descartar y terminar eran solo de `TareasDelProyecto.tsx`, así que una
+   * tarea aparcada no se podía desbloquear desde aquí. Ahora las tres se reenvían tal cual.
+   */
+  it("reenvía alReintentarTarea/alDescartarTarea/alTerminarTarea al kanban tal cual", () => {
+    const alReintentarTarea = vi.fn();
+    const alDescartarTarea = vi.fn();
+    const alTerminarTarea = vi.fn();
+    render(
+      <Escritorio
+        {...MANEJADORES}
+        proyectos={[]}
+        alReintentarTarea={alReintentarTarea}
+        alDescartarTarea={alDescartarTarea}
+        alTerminarTarea={alTerminarTarea}
+        tareas={{
+          concurrencia: 2,
+          corriendoAqui: true,
+          lista: [
+            {
+              id: "t1",
+              proyecto: "p1",
+              proyectoNombre: "AppDemo",
+              titulo: "Arregla el login",
+              peticion: "Arregla el login",
+              encargo: "Arregla el login",
+              adjuntos: [],
+              estado: "requiere-atencion",
+              motivo: "el juez marcó el trabajo en rojo",
+              creada: "2026-09-08T10:00:00.000Z",
+            },
+          ],
+        }}
+      />
+    );
+    fireEvent.click(screen.getByRole("button", { name: /^reintentar$/i }));
+    expect(alReintentarTarea).toHaveBeenCalledWith("t1");
+    fireEvent.click(screen.getByRole("button", { name: /dar por bueno/i }));
+    expect(alTerminarTarea).toHaveBeenCalledWith("t1");
+    fireEvent.click(screen.getByRole("button", { name: /^descartar$/i }));
+    fireEvent.click(screen.getByRole("button", { name: /sí, descartar/i }));
+    expect(alDescartarTarea).toHaveBeenCalledWith("t1");
+  });
+
+  it("sin cable, las acciones del kanban se apagan: `conectado` llega hasta AccionesDeTarea", () => {
+    render(
+      <Escritorio
+        {...MANEJADORES}
+        proyectos={[]}
+        conectado={false}
+        alReintentarTarea={vi.fn()}
+        tareas={{
+          concurrencia: 2,
+          corriendoAqui: true,
+          lista: [
+            {
+              id: "t1",
+              proyecto: "p1",
+              proyectoNombre: "AppDemo",
+              titulo: "Arregla el login",
+              peticion: "Arregla el login",
+              encargo: "Arregla el login",
+              adjuntos: [],
+              estado: "requiere-atencion",
+              motivo: "el juez marcó el trabajo en rojo",
+              creada: "2026-09-08T10:00:00.000Z",
+            },
+          ],
+        }}
+      />
+    );
+    expect(screen.getByRole("button", { name: /^reintentar$/i })).toHaveProperty("disabled", true);
+    expect(screen.getByText(/sin conexión/i)).toBeTruthy();
+  });
+
+  /**
+   * «Nueva tarea» vive en la tarjeta del proyecto, junto a «Nueva sesión», porque son la
+   * misma clase de decisión sobre el mismo objeto: qué hacer con ESTE proyecto. El kanban de
+   * abajo dice «se crean desde un proyecto» y esto es lo que lo hace verdad. Desde Task 15
+   * ya no es la ÚNICA puerta —con el proyecto abierto, su propia pestaña Tareas ofrece el
+   * mismo botón (`TareasDelProyecto.tsx`)—, pero sigue siendo la única para quien todavía no
+   * ha abierto ese proyecto: sin ella, no habría forma de crear la primera tarea sin abrirlo
+   * antes.
+   */
+  it("cada proyecto ofrece «Nueva tarea», y dice de cuál", () => {
+    const alNuevaTarea = vi.fn();
+    render(
+      <Escritorio
+        proyectos={[{ id: "p1", nombre: "AppDemo", local: true }]}
+        alAbrirSesion={() => {}}
+        alNuevaSesion={() => {}}
+        alNuevaTarea={alNuevaTarea}
+        alAbrirAjustes={() => {}}
+      />
+    );
+    fireEvent.click(screen.getByRole("button", { name: /nueva tarea/i }));
+    expect(alNuevaTarea).toHaveBeenCalledWith("p1");
+  });
+
+  it("sin manejador no se pinta: un control sin nada detrás no se ofrece", () => {
+    render(
+      <Escritorio
+        proyectos={[{ id: "p1", nombre: "AppDemo", local: true }]}
+        alAbrirSesion={() => {}}
+        alNuevaSesion={() => {}}
+        alAbrirAjustes={() => {}}
+      />
+    );
+    expect(screen.queryByRole("button", { name: /nueva tarea/i })).toBeNull();
+  });
+
+  it("y sin cable se apaga, como «Nueva sesión»: crear una tarea manda algo al servidor", () => {
+    render(
+      <Escritorio
+        proyectos={[{ id: "p1", nombre: "AppDemo", local: true }]}
+        alAbrirSesion={() => {}}
+        alNuevaSesion={() => {}}
+        alNuevaTarea={() => {}}
+        alAbrirAjustes={() => {}}
+        conectado={false}
+      />
+    );
+    expect((screen.getByRole("button", { name: /nueva tarea/i }) as HTMLButtonElement).disabled).toBe(true);
+  });
+});
+
+/**
+ * **«Ver lo que hace» ya no es un bloque hermano del kanban** (Task 17): el escritorio solo
+ * reenvía `alMirarTarea`/`alDejarDeMirarTarea`/`mirandoTarea`/`mirada` a `Kanban`, con los
+ * nombres de `Kanban`, y el despliegue vive DENTRO de la tarjeta de la cola. Lo que se
+ * comprueba aquí y no en `Kanban.test.tsx` ni en `MirarTarea.test.tsx` es la COSTURA: que
+ * el escritorio de verdad reenvía `mirada` (antes NO lo hacía: solo se la pasaba al panel
+ * hermano) y que ya no queda ningún bloque suelto debajo del kanban.
+ */
+describe("Escritorio: mirar lo que hace una tarea, dentro del kanban", () => {
+  afterEach(cleanup);
+
+  const TAREA = {
+    id: "t1",
+    proyecto: "p1",
+    proyectoNombre: "AppDemo",
+    titulo: "Arregla el login",
+    peticion: "Arregla el login",
+    encargo: "Arregla el login",
+    adjuntos: [],
+    creada: "2026-09-08T10:00:00.000Z",
+  };
+
+  const cola = (estado: "en-proceso" | "terminada", corriendoAqui = true) => ({
+    lista: [{ ...TAREA, estado }],
+    concurrencia: 2,
+    corriendoAqui,
+  });
+
+  it("el transcript que llega se lee DENTRO de la sección del kanban, no en un bloque aparte", () => {
+    render(
+      <Escritorio
+        {...MANEJADORES}
+        proyectos={[]}
+        tareas={cola("en-proceso")}
+        alMirarTarea={() => {}}
+        alDejarDeMirarTarea={() => {}}
+        mirandoTarea="t1"
+        mirada={{ tarea: "t1", actos: [{ tipo: "asistente", texto: "voy con el campo" }] }}
+      />
+    );
+    const linea = screen.getByText("voy con el campo");
+    // El aria-label de la sección del kanban («Tareas en background»): si el transcript
+    // volviera a vivir en un bloque hermano por fuera, este `closest` no lo encontraría, y
+    // ES la mutación «volver a pintarla en el escritorio».
+    expect(linea.closest('section[aria-label="Tareas en background"]')).not.toBeNull();
+  });
+
+  it("y el de OTRA tarea no se pinta: el store ya lo separa por id", () => {
+    render(
+      <Escritorio
+        {...MANEJADORES}
+        proyectos={[]}
+        tareas={cola("en-proceso")}
+        alMirarTarea={() => {}}
+        alDejarDeMirarTarea={() => {}}
+        mirandoTarea="t1"
+        mirada={{ tarea: "t2", actos: [{ tipo: "asistente", texto: "de otra" }] }}
+      />
+    );
+    expect(screen.queryByText("de otra")).toBeNull();
+  });
+
+  it("plegar (el mismo botón) desengancha, y sin más panel que el de la tarjeta", () => {
+    const alDejarDeMirarTarea = vi.fn();
+    render(
+      <Escritorio
+        {...MANEJADORES}
+        proyectos={[]}
+        tareas={cola("en-proceso")}
+        alMirarTarea={() => {}}
+        alDejarDeMirarTarea={alDejarDeMirarTarea}
+        mirandoTarea="t1"
+      />
+    );
+    const boton = screen.getByRole("button", { name: /dejar de ver|ocultar/i });
+    expect(boton.getAttribute("aria-expanded")).toBe("true");
+    fireEvent.click(boton);
+    expect(alDejarDeMirarTarea).toHaveBeenCalledWith("t1");
+  });
+
+  it("sin tarea elegida no hay ningún despliegue abierto", () => {
+    render(
+      <Escritorio
+        {...MANEJADORES}
+        proyectos={[]}
+        tareas={cola("en-proceso")}
+        alMirarTarea={() => {}}
+        alDejarDeMirarTarea={() => {}}
+      />
+    );
+    expect(screen.queryByRole("button", { name: /dejar de ver|ocultar/i })).toBeNull();
+  });
+});

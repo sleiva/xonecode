@@ -9,7 +9,7 @@
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { appendFileSync, existsSync, mkdirSync, readFileSync, readdirSync } from "node:fs";
-import { dirname, resolve } from "node:path";
+import { basename, dirname, resolve } from "node:path";
 import type { CambioLocal } from "../core/planDeSubida.js";
 import { indicePrivado, claseDeCambio } from "./git.js";
 import { NOMBRE_CARPETA } from "./configEnDisco.js";
@@ -342,12 +342,29 @@ export async function sinCommitear(raiz: string): Promise<string[]> {
       .filter((entrada) => entrada !== NOMBRE_CARPETA && entrada !== ".git" && !esBasuraDelSO(entrada))
       .sort();
   }
+  return sinCommitearEnRepo(raiz);
+}
+
+/**
+ * El `git status` de un repo, ya sabiendo que lo es. Un fallo aquí SUBE: quien pregunta
+ * por esta rama es la guarda de `/sync`, y ahí «no pude mirar» no puede leerse como
+ * «adelante» — bajar sobrescribe el disco.
+ *
+ * `unoAUno` es la única diferencia entre las dos preguntas que pasan por aquí. Por omisión
+ * git COLAPSA una carpeta entera sin rastrear en una sola línea («doc/»), que para una
+ * guarda es suficiente —lo que decide es si hay algo—, pero para el AVISO no: con la
+ * carpeta colapsada, un `doc/` que dentro solo tiene un `.DS_Store` no se puede reconocer
+ * como basura, y además «doc/» le dice a quien lo lee mucho menos que «doc/NOTA-DEMO.md».
+ * El volumen lo sujetan el tope de nombres y el total, que van al lado.
+ */
+async function sinCommitearEnRepo(raiz: string, unoAUno = false): Promise<string[]> {
   const prefijo = await prefijoDelProyecto(raiz);
   const { stdout } = await git(raiz, [
     // Mismo motivo que en `cambiosPendientes`: un nombre en castellano saldría citado en
     // octal y el mensaje al usuario sería ilegible.
     "-c", "core.quotePath=false",
-    "status", "--porcelain", "--", ".", `:(exclude)${NOMBRE_CARPETA}`,
+    "status", "--porcelain", ...(unoAUno ? ["--untracked-files=all"] : []),
+    "--", ".", `:(exclude)${NOMBRE_CARPETA}`,
   ]);
   return stdout
     .split("\n")
@@ -355,4 +372,46 @@ export async function sinCommitear(raiz: string): Promise<string[]> {
     // `XY ruta`: dos caracteres de estado y un espacio.
     .map((linea) => recortar(prefijo, linea.slice(3).trim()))
     .sort();
+}
+
+/** Cómo se ha respondido, para que nadie afirme lo que no se ha podido mirar. */
+export interface TrabajoSinCommitear {
+  /** `git` = se ha preguntado a git y la lista es la respuesta (vacía = limpio, y eso SE
+   *  SABE). `sin-git` = no hay con qué mirar, y entonces no viene lista: ni sucio ni
+   *  limpio. Es el mismo reparto de `CambiosDeSesion.via` y por el mismo motivo. */
+  via: "git" | "sin-git";
+  ficheros?: string[];
+}
+
+/**
+ * ¿Había trabajo de alguien sin commitear cuando llegaste? La misma medida que
+ * `sinCommitear` —mismo `git status`, misma exclusión de `.xonecode/`, mismo
+ * `core.quotePath`— con OTRA política ante lo que no se puede mirar, porque la pregunta
+ * es otra.
+ *
+ * `sinCommitear` sostiene una guarda: sin git no hay nada que recuperar tras sobrescribir,
+ * así que declara la carpeta sucia y bloquea, y un git roto LANZA para que `/sync` pare.
+ * Esto sostiene un AVISO, y un aviso que no se puede sostener no se da: sin repo, o con un
+ * git que revienta, se responde `sin-git` y arriba no se pinta nada. Todo proyecto OFFLINE
+ * es una carpeta sin git —`prepararRepo` solo corre al descargar—, así que la política de
+ * la otra pondría un aviso en cada apertura de cada proyecto offline: el aviso que enseña
+ * a ignorar los avisos.
+ *
+ * No lanza NUNCA: de esto cuelga el mensaje de alta de la consola web, que se emite en los
+ * dos flancos de cada turno.
+ */
+export async function trabajoSinCommitear(raiz: string): Promise<TrabajoSinCommitear> {
+  try {
+    if (!(await esRepo(raiz))) return { via: "sin-git" };
+    const ficheros = await sinCommitearEnRepo(raiz, true);
+    // La basura del SO se quita también DENTRO de un repo, y aquí solo aquí: medido contra
+    // los proyectos reales del usuario, uno tenía exactamente UN fichero sin commitear y
+    // era un `.DS_Store`, o sea que el aviso habría saltado para decir que alguien abrió
+    // la carpeta en el Finder. `prepararRepo` solo excluye `.xonecode/`, así que en un repo
+    // `git status` los nombra. Es el mismo argumento —y la misma lista CERRADA— que la
+    // rama sin repo ya usaba; `sinCommitear` no lo hereda porque sostiene otra cosa.
+    return { via: "git", ficheros: ficheros.filter((f) => !esBasuraDelSO(basename(f))) };
+  } catch {
+    return { via: "sin-git" };
+  }
 }

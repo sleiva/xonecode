@@ -48,6 +48,26 @@ describe("permisosDe", () => {
       expect(rutas, perfil.nombre).toContain("/.xonecode");
       expect(rutas, perfil.nombre).toContain("/.xonecode/**");
       expect(rutas, perfil.nombre).toContain("/skills/**");
+      // Los ADJUNTOS de una tarea son documentos de la PERSONA que la creó: material de
+      // entrada, no ficheros que reescribir. Misma denegación que las skills y por lo
+      // mismo. Y es INCONDICIONAL a propósito: la carpeta solo se monta cuando la tarea
+      // trae adjuntos, así que sin esta regla un `write_file` a `/adjuntos/x` con la
+      // carpeta sin montar escribiría un fichero del PROYECTO (medido).
+      expect(rutas, perfil.nombre).toContain("/adjuntos/**");
+    }
+  });
+
+  it("la denegación de los adjuntos es de ESCRITURA, no de lectura: leerlos es su razón de ser", () => {
+    // Si esto se colara como `["read","write"]` —copiando la fila de `/.env`— el agente no
+    // podría abrir la captura que le adjuntaron, y el montaje de `/adjuntos/` se quedaría
+    // siendo una carpeta que existe y no se puede mirar.
+    for (const perfil of TODOS) {
+      const deAdjuntos = permisosDe(perfil).filter((p) => p.paths.includes("/adjuntos/**"));
+      expect(deAdjuntos.length, perfil.nombre).toBeGreaterThan(0);
+      for (const regla of deAdjuntos) {
+        expect(regla.operations, perfil.nombre).toContain("write");
+        expect(regla.operations, perfil.nombre).not.toContain("read");
+      }
     }
   });
 

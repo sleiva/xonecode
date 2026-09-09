@@ -146,6 +146,31 @@ export type MensajeAlCliente =
    */
   | { clase: "agentes"; agentes: AgenteDelCable[]; problemas: string[] }
   /**
+   * La cola de tareas entera. Va a TODOS los clientes, como la foto de la máquina y por lo
+   * mismo: la cola es de la máquina. `corriendoAqui` es falso en el segundo proceso, y es
+   * lo que deja decir que este kanban no avanza.
+   */
+  | { clase: "tareas"; lista: TareaDelCable[]; concurrencia: number; corriendoAqui: boolean }
+  /**
+   * Cómo fue la última augmentación pedida (`{clase:"tarea", accion:"augmentar"}`): el
+   * encargo que propone el modelo, o por qué no se pudo. Nunca los dos a la vez.
+   */
+  | { clase: "tarea"; accion: "augmentado"; encargo: string }
+  | { clase: "tarea"; accion: "augmentado"; error: string }
+  /**
+   * Un trozo del transcript de la sesión de una TAREA que se está mirando en vivo.
+   *
+   * No es un segundo registro: son los MISMOS actos que se guardan en el `.jsonl` de esa
+   * sesión, los mismos que se leen al abrirla cuando la tarea acabe. Y llega etiquetado con
+   * el id de la tarea porque por este mismo cable llega el transcript de la sesión PROPIA:
+   * sin la etiqueta, los actos de una tarea de fondo se mezclarían con la conversación.
+   *
+   * `todos` es la reemisión entera (al empezar a mirar), `alta` un acto nuevo al final y
+   * `sustitucion` el último que cambió. `actos` es siempre una lista: con las dos últimas,
+   * de un solo elemento. Redeclarado de `web/servidor/transporte.ts`.
+   */
+  | { clase: "mirada"; tarea: string; via: "todos" | "alta" | "sustitucion"; actos: Acto[] }
+  /**
    * Qué hay en la máquina para probar la app: sistema, herramientas de Android e iOS con su
    * estado, y los dispositivos y simuladores a los que se llega. Es una foto con hora
    * (`medido`), no un estado en vivo. Redeclarado de `core/dispositivos.ts`.
@@ -230,6 +255,10 @@ export type MensajeAlCliente =
        * que saberlo ANTES de pedir nada, no después con los ficheros ya cambiados.
        */
       sinAprobacion?: boolean;
+      /** Lo que YA estaba sin commitear cuando se abrió esta consola. Ausente = nada que
+       *  decir: limpio, sin git con qué mirar, o no se pudo medir. `ficheros` viene
+       *  acotada y `total` es la cifra entera. */
+      trabajoAlAbrir?: { ficheros: string[]; total: number };
       proyectos: {
         id: string;
         nombre: string;
@@ -237,7 +266,17 @@ export type MensajeAlCliente =
          *  lo mismo que «es tuyo»: entonces no se pinta etiqueta. Booleano y no el correo
          *  del propietario, que el host descarta a propósito. */
         compartido?: boolean;
-        sesiones?: { id: string; titulo: string }[];
+        sesiones?: {
+          id: string;
+          titulo: string;
+          /** Cuándo se tocó por última vez, ISO. Ordena la lista y se pinta a la derecha.
+           *  Ausente = el índice no lo dice; sin sello y la última. */
+          ultimoTurno?: string;
+          /** La abrió una TAREA de fondo, no una persona. **Ausente es «no consta»**: no la
+           *  llevan las sesiones anteriores a la marca, y se pintan lisas porque liso es lo
+           *  conservador, no porque conste que sean de alguien. */
+          deTarea?: true;
+        }[];
         /** La copia local ya existe: abrirlo no baja nada ni pregunta rama. */
         local?: boolean;
       }[];
@@ -301,6 +340,81 @@ export interface FicheroDelProyecto {
   base64?: string;
   error?: string;
 }
+
+/**
+ * Una tarea tal como viaja. **Sin la raíz del proyecto**: viajan su id y su nombre, que es
+ * lo que la interfaz necesita — la ruta se queda en el host. Redeclarado de
+ * `web/servidor/transporte.ts`.
+ */
+export interface TareaDelCable {
+  id: string;
+  proyecto: string;
+  proyectoNombre: string;
+  titulo: string;
+  peticion: string;
+  encargo: string;
+  adjuntos: { nombre: string; bytes: number; mime?: string }[];
+  estado: "nuevo" | "en-proceso" | "requiere-atencion" | "terminada";
+  motivo?: string;
+  sesion?: string;
+  creada: string;
+  empezada?: string;
+  acabada?: string;
+  /**
+   * Lo que la tarea AUTORIZÓ escribir sin que nadie lo aprobara, con ruta relativa al
+   * proyecto. **No es lo mismo que lo que cambió en el disco** —una ruta que las guardas de
+   * sitio rechazan sale aquí sin haberse escrito—: la verdad sobre el disco la tiene la
+   * pestaña Revisión, con la ref de esta `sesion`. Ausente = no consta; `[]` = corrió y no
+   * autorizó ninguna.
+   */
+  autorizadas?: string[];
+  /**
+   * El historial de lo que el desarrollador contestó mientras la tarea esperaba feedback.
+   * Ausente = nunca se le pidió nada. `consumido` dice si ya se le mandó al agente.
+   */
+  feedback?: { texto: string; creado: string; consumido: boolean }[];
+  /**
+   * El veredicto del juez de QA, y con él la SALVEDAD: con qué condición de menos se
+   * entregó. Redeclarado de `core/entrega.ts#VeredictoDeTarea`.
+   *
+   * **Es lo que hace que «Terminada» no signifique tres cosas a la vez**: el juez la aprobó
+   * con el verificador en verde, se entregó sin NADA que verificar (una tarea de solo
+   * lectura: eso es la salvedad), o —con `terminadaAMano`— la dio por buena una persona.
+   * Ausente = a esta tarea no se le ha preguntado nunca al juez.
+   *
+   * Solo texto para leer: el juez no ve el contenido de ningún fichero (solo el encargo, las
+   * rutas relativas de lo autorizado y los hallazgos del verificador), así que su prosa no
+   * puede citarlo. `indeterminado` = no se entendió lo que contestó; no es verde.
+   */
+  veredicto?: {
+    veredicto: "verde" | "rojo" | "indeterminado";
+    resumen: string;
+    hallazgos?: string[];
+    salvedad?: string;
+  };
+  /**
+   * La dio por buena una PERSONA con «Dar por bueno», no la puerta de entrega. Ausente = no
+   * consta — que no es lo mismo que `false`.
+   */
+  terminadaAMano?: boolean;
+}
+
+/**
+ * A dónde se puede ir desde cada estado de una tarea. Redeclarado de
+ * `src/core/tareas.ts#TRANSICIONES` — la frontera del cliente (`src/web/frontera.test.ts`)
+ * no deja importar de `src/`, así que esto se compara por TEXTO contra el host
+ * (`tipos.test.ts`), igual que los literales `tipo:`/`clase:` de más abajo.
+ *
+ * Es lo que `AccionesDeTarea.tsx` usa para decidir qué botón ofrecer: sin esto, esa pieza
+ * tendría que adivinar la regla o copiarla a mano, que es exactamente la clase de
+ * divergencia que esta tarea existe para cerrar.
+ */
+export const TRANSICIONES: Readonly<Record<TareaDelCable["estado"], readonly TareaDelCable["estado"][]>> = {
+  nuevo: ["en-proceso", "requiere-atencion"],
+  "en-proceso": ["terminada", "requiere-atencion"],
+  "requiere-atencion": ["nuevo", "terminada"],
+  terminada: [],
+};
 
 export interface ProveedorDeModelos {
   id: string;
@@ -414,6 +528,34 @@ export type MensajeDelCliente =
   | { clase: "receta"; id: string; paso: number; accion: "ejecutar" | "cancelar" }
   /** Los modelos de un motor externo, bajo demanda: el de Codex arranca un proceso. */
   | { clase: "modelosDeMotor"; motor: string }
+  /**
+   * Las acciones sobre una tarea. Viaja el ID del proyecto y su nombre, NUNCA su raíz: es
+   * una ruta de la máquina, y el cable puede ir por un túnel.
+   */
+  /**
+   * `borrador` es el identificador bajo el que ya se subieron los adjuntos por
+   * `POST /adjunto` — los bytes tienen que estar en disco ANTES de crear la tarea, porque
+   * crear la encola y el corredor puede arrancarla en el acto. El servidor lo ADOPTA como
+   * id de la tarea si es un segmento llano y no es ya una tarea; los adjuntos los lee del
+   * disco, nunca de lo que diga el cliente.
+   */
+  | { clase: "tarea"; accion: "crear"; proyecto: string; peticion: string; encargo: string; borrador?: string }
+  | { clase: "tarea"; accion: "augmentar"; proyecto: string; peticion: string; borrador?: string }
+  /** «Se edita la tarea y se agrega el feedback del usuario»: la respuesta a una tarea
+   *  «esperando feedback», que la devuelve al lazo en su MISMO hilo. */
+  | { clase: "tarea"; accion: "feedback"; id: string; texto: string }
+  | { clase: "tarea"; accion: "reintentar" | "descartar" | "terminar"; id: string }
+  /** Cambia el tope de concurrencia de la cola de tareas. */
+  | { clase: "tareas"; concurrencia: number }
+  /**
+   * Empezar (`ver: true`) o dejar de mirar en vivo lo que hace una tarea.
+   *
+   * `cliente` es el identificador de ESTA conexión del SSE, y lo pone `conexion.ts` y no
+   * quien pulsa el botón: el SSE y el `POST /accion` son dos peticiones distintas, así que
+   * sin él el servidor no sabría a qué pestaña engancharle la mirada — y tendría que
+   * emitirle el transcript de la tarea a todo el mundo.
+   */
+  | { clase: "mirar"; tarea: string; ver: boolean; cliente: string }
   | { clase: "decision"; decisiones: Record<string, string> };
 
 /**

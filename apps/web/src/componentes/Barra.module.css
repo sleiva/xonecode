@@ -236,3 +236,39 @@
 .iconoDeEntorno {
   flex-shrink: 0;
 }
+
+/* La marca de una sesión de TAREA y su sello de fecha, los dos a la derecha del título.
+   `margin-left: auto` en el primero de los dos empuja el par al borde y deja que el título
+   se coma el resto; el título ya trunca con la elipsis de `Rows.module.css`.
+
+   Van con `flex-shrink: 0` porque en 280 px el que cede tiene que ser el título: un sello a
+   medias («9 sep 0…») no dice la hora, y media palabra «Tar…» no dice nada. */
+.marcaDeTarea,
+.selloDeFecha {
+  flex-shrink: 0;
+  font-size: 10px;
+  line-height: 1;
+  white-space: nowrap;
+  color: var(--dsw-alias-label-secondary);
+}
+
+.marcaDeTarea {
+  margin-left: auto;
+  padding: 2px 5px;
+  border-radius: 4px;
+  /* El mismo par `warn` del aviso de árbol sucio del chat: no es un error ni un estado
+     concedido, es de quién es la fila. */
+  background: var(--dsw-alias-state-warn-tertiary);
+  color: var(--dsw-alias-state-warn-label);
+  font-family: var(--dsw-font-family-mono, monospace);
+}
+
+/* Si no hay marca, el que empuja al borde es el sello. Dos reglas y no un envoltorio más:
+   el hueco es el del botón de la fila, que ya es flex por la hoja copiada. */
+.marcaDeTarea + .selloDeFecha {
+  margin-left: 6px;
+}
+
+.cuerpoDeFila > .selloDeFecha:not(.marcaDeTarea + .selloDeFecha) {
+  margin-left: auto;
+}

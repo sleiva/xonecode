@@ -19,11 +19,13 @@ import { TarjetaDeAlta } from "./componentes/TarjetaDeAlta.js";
 import type { PasoDeAlta } from "./componentes/PasosDelAlta.js";
 import { Escritorio } from "./componentes/Escritorio.js";
 import { NuevaSesion } from "./componentes/NuevaSesion.js";
+import { NuevaTarea } from "./componentes/NuevaTarea.js";
 import { AccionDeSesion, type AccionPendiente } from "./componentes/AccionDeSesion.js";
 import { Ajustes } from "./componentes/Ajustes.js";
 import { DESPLEGADOS_AL_ABRIR, Revision } from "./componentes/Revision.js";
 import { Ficheros } from "./componentes/Ficheros.js";
 import { Artefactos, type ArtefactoEnLista } from "./componentes/Artefactos.js";
+import { TareasDelProyecto } from "./componentes/TareasDelProyecto.js";
 import { aplicarApariencia, guardarApariencia, leerApariencia, type Apariencia } from "./apariencia.js";
 import { guardarBarraContraida, leerBarraContraida } from "./preferencias.js";
 
@@ -37,7 +39,28 @@ type Store = ReturnType<typeof crearStoreDelCliente>;
  * que un `new EventSource` a nivel de módulo de este fichero mataría cualquier test que
  * algún día monte `App`.
  */
-export function App({ store, enviar }: { store: Store; enviar: Conexion["enviar"] }) {
+export function App({
+  store,
+  enviar,
+  subirAdjunto,
+  mirar,
+}: {
+  store: Store;
+  enviar: Conexion["enviar"];
+  /**
+   * Los BYTES de un adjunto de tarea, por HTTP (`POST /adjunto`). Entra inyectado igual que
+   * `enviar` y por el mismo motivo: el `fetch` vive en `conexion.ts`, así que aquí no hay
+   * ninguno y los tests no tienen que parchear el global.
+   */
+  subirAdjunto: Conexion["subirAdjunto"];
+  /**
+   * Empezar o dejar de mirar en vivo lo que hace una tarea. Tiene canal propio y no va por
+   * `enviar` porque lleva el id de ESTA conexión del SSE, que es un dato del transporte y no
+   * de esta pantalla (ver `Conexion.mirar`). Ausente = esta ventana no lo ofrece, que es lo
+   * que necesitan los tests que montan `App` sin cable.
+   */
+  mirar?: Conexion["mirar"];
+}) {
   const estado = useSyncExternalStore(store.suscribir, store.leer);
 
   /**
@@ -146,12 +169,68 @@ export function App({ store, enviar }: { store: Store; enviar: Conexion["enviar"
    * escritorio no cambiaba nada de lo que se veía.
    */
   const abrirSesion = useCallback(
-    (proyecto: string, sesion?: string) => {
+    (proyecto: string, sesion?: string, pestanaAlAbrir?: Pestana) => {
       setEnEscritorio(false);
+      // Solo si el llamador la nombra: por omisión no toca `pestana`, que es el
+      // comportamiento de siempre para la barra y el escritorio. Quien abre desde una
+      // tarjeta de tarea «esperando feedback» sí la nombra —«revision»—, porque ahí la
+      // verdad sobre lo que cambió está en esa pestaña y no en el chat.
+      if (pestanaAlAbrir !== undefined) setPestana(pestanaAlAbrir);
       void enviar(sesion === undefined ? { clase: "sesion", proyecto } : { clase: "sesion", proyecto, sesion });
     },
     [enviar]
   );
+
+  /**
+   * Las cuatro acciones de una tarea, hoisted una sola vez: el kanban del escritorio
+   * (`Escritorio`→`Kanban`) y la lista del proyecto (`TareasDelProyecto`) montan la MISMA
+   * `AccionesDeTarea` (Task 13), así que necesitan los mismos cuatro manejadores en los dos
+   * sitios. Definirlos aquí y no inline en cada JSX es lo que impide que las dos copias
+   * del `enviar({clase:"tarea", …})` diverjan otra vez.
+   */
+  const alReintentarTarea = useCallback((id: string) => void enviar({ clase: "tarea", accion: "reintentar", id }), [enviar]);
+  const alDescartarTarea = useCallback((id: string) => void enviar({ clase: "tarea", accion: "descartar", id }), [enviar]);
+  const alTerminarTarea = useCallback((id: string) => void enviar({ clase: "tarea", accion: "terminar", id }), [enviar]);
+  const alEnviarFeedbackTarea = useCallback(
+    (id: string, texto: string) => void enviar({ clase: "tarea", accion: "feedback", id, texto }),
+    [enviar]
+  );
+
+  /**
+   * Qué tarea se está mirando en vivo. Vive AQUÍ y no en el store por lo mismo que
+   * `pestana`: es la elección de esta ventana. El transcript sí es del servidor y vive en
+   * `estado.mirada`.
+   */
+  const [mirandoTarea, setMirandoTarea] = useState<string | undefined>(undefined);
+  const alMirarTarea = useCallback(
+    (id: string) => {
+      setMirandoTarea(id);
+      void mirar?.(id, true);
+    },
+    [mirar]
+  );
+  const alDejarDeMirarTarea = useCallback(
+    (id: string) => {
+      setMirandoTarea(undefined);
+      // El panel se cierra al pulsar y no cuando el servidor conteste: el servidor no manda
+      // ningún «ya no miras» al desengancharse, así que nadie lo retiraría.
+      store.dejarDeMirar();
+      void mirar?.(id, false);
+    },
+    [mirar, store]
+  );
+  /**
+   * Al caerse el cable el enganche se va con el SSE (`arranque.ts`, el `close`) y el store
+   * tira el transcript: la reconexión lo vuelve a pedir. Es la misma forma que Ficheros y
+   * Revisión —«se pide cuando NO se tiene, no al montar»—, y por eso depende de si hay dato
+   * y de `conectado`: sin las dos, o no se recupera al reconectar, o se pide a un servidor
+   * que no está.
+   */
+  useEffect(() => {
+    if (mirandoTarea === undefined || !estado.conectado) return;
+    if (estado.mirada?.tarea === mirandoTarea) return;
+    void mirar?.(mirandoTarea, true);
+  }, [mirandoTarea, estado.conectado, estado.mirada?.tarea, mirar]);
 
   /**
    * Los ARTEFACTOS de la sesión, sacados de los actos.
@@ -189,6 +268,39 @@ export function App({ store, enviar }: { store: Store; enviar: Conexion["enviar"
   useEffect(() => {
     if (artefactos.length === 0) setPestana((actual) => (actual === "artefactos" ? "chat" : actual));
   }, [artefactos.length]);
+
+  /**
+   * Las tareas en background del proyecto ABIERTO, y solo de él: la cola entera viaja en
+   * `{clase:"tareas"}` y ya está en el store —el kanban del escritorio la enseña sin
+   * filtrar—, así que aquí no se pide nada nuevo al servidor. El filtro es por el ID del
+   * proyecto (`estado.alta.proyectoActivo`), que es lo que cada tarea trae en `proyecto`.
+   *
+   * **Ausente y vacío no son lo mismo, y Task 15 lo lleva hasta la pestaña.** Antes esto
+   * colapsaba los dos en un `?? []`: valía mientras la pestaña solo aparecía CON tareas
+   * (nunca se veía el caso vacío), pero desde que es una pestaña de ACCIÓN que existe
+   * siempre, su estado vacío AFIRMA que no hay ninguna — y afirmarlo sin que la cola haya
+   * llegado del servidor sería la misma mentira que `Revision` evita con `via`. `undefined`
+   * se propaga tal cual hasta `TareasDelProyecto`, que es quien decide qué decir.
+   */
+  const tareasDelProyecto = useMemo(
+    () =>
+      estado.tareas === undefined
+        ? undefined
+        : estado.tareas.lista.filter((t) => t.proyecto === estado.alta?.proyectoActivo),
+    [estado.tareas, estado.alta?.proyectoActivo]
+  );
+
+  /**
+   * El id del proyecto ABIERTO, para la única puerta de creación que hace falta desde
+   * DENTRO de él: a diferencia del escritorio (`alNuevaTarea(proyecto)`, una tarjeta por
+   * proyecto), aquí no hay nada que elegir.
+   *
+   * Ausente = no se ofrece el botón: `proyectoActivo` se DEDUCE comparando raíces
+   * (`web/servidor/arranque.ts`, ver CLAUDE.md) y puede no cuadrar. Abrir la ventana sin
+   * este id resuelto es justo la mutación que Task 15 prohíbe: `proyectoDeLaTarea` no
+   * encontraría con qué pintarla y la ventana se quedaría sin montar.
+   */
+  const proyectoActivoId = estado.alta?.proyectoActivo;
 
   const pedirArtefacto = useCallback(
     (nombre: string) => {
@@ -299,6 +411,19 @@ export function App({ store, enviar }: { store: Store; enviar: Conexion["enviar"
    * enseñárselo.
    */
   const [sesionNueva, setSesionNueva] = useState<string | undefined>(undefined);
+  /**
+   * La ventana de tarea nueva: para qué proyecto, y bajo qué BORRADOR se suben sus adjuntos.
+   *
+   * El borrador se decide al ABRIR y no al primer adjunto, porque tiene que ser el mismo
+   * para las tres cosas que lo usan: cada subida (`POST /adjunto?tarea=…`), la augmentación
+   * —que lista esa carpeta para saber qué hay— y el `crear`, que lo ADOPTA como id de la
+   * tarea. Es un `uuid` del navegador y el servidor no se lo cree a ciegas: comprueba su
+   * forma y rechaza el que ya sea una tarea (409 en la subida, y nada creado en el `crear`).
+   */
+  const [tareaNueva, setTareaNueva] = useState<{ proyecto: string; borrador: string } | undefined>(undefined);
+  /** ¿Se subió algún adjunto bajo este borrador? Sin ninguno, el `crear` no lo menciona: no
+   *  se nombra una carpeta que no existe. */
+  const [conAdjuntos, setConAdjuntos] = useState(false);
 
   // El alta es lo ÚNICO que se enseña mientras falte cuenta o entorno — nada de armazón
   // vacío alrededor esperando datos que todavía no llegan (la barra sin entornos, las
@@ -563,6 +688,93 @@ export function App({ store, enviar }: { store: Store; enviar: Conexion["enviar"
       />
     ) : null;
 
+  /** El proyecto de la ventana de tarea nueva, con lo que el servidor sabe de él. */
+  const proyectoDeLaTarea = estado.alta?.proyectos.find((p) => p.id === tareaNueva?.proyecto);
+
+  /**
+   * La ventana de TAREA nueva.
+   *
+   * Al abrirla se TIRA el encargo propuesto que hubiera: `{clase:"tarea",
+   * accion:"augmentado"}` va a todos los clientes —el cable habla con todos, no con el
+   * último—, así que uno pedido desde otra pestaña habría prerrellenado este campo.
+   */
+  const abrirVentanaDeTarea = (proyecto: string): void => {
+    store.limpiarEncargoPropuesto();
+    setConAdjuntos(false);
+    setTareaNueva({ proyecto, borrador: crypto.randomUUID() });
+  };
+
+  /**
+   * Cerrar la ventana de tarea, por las DOS salidas que tiene (Cancelar y «Abrir el
+   * proyecto»).
+   *
+   * **Cancelar con adjuntos ya subidos BORRA su carpeta.** Los bytes se suben antes de que
+   * la tarea exista (crear la encola, y el corredor puede arrancarla en el acto), así que
+   * cerrar sin encolar dejaría en `~/.xonecode/tareas/<borrador>/` documentos de una persona
+   * que ninguna tarea nombra y que nadie va a volver a ver. `descartar` sobre un id que no
+   * está en el índice hace exactamente eso: borra la carpeta y deja el índice intacto.
+   *
+   * Es una función y no dos manejadores iguales porque la segunda salida llegó después: dos
+   * copias de esta limpieza es como una de las dos se queda sin ella.
+   */
+  const cerrarVentanaDeTarea = (): void => {
+    if (tareaNueva !== undefined && conAdjuntos) {
+      void enviar({ clase: "tarea", accion: "descartar", id: tareaNueva.borrador });
+    }
+    setTareaNueva(undefined);
+  };
+
+  const ventanaDeTarea =
+    tareaNueva !== undefined && proyectoDeLaTarea !== undefined ? (
+      <NuevaTarea
+        proyecto={{ id: proyectoDeLaTarea.id, nombre: proyectoDeLaTarea.nombre }}
+        local={proyectoDeLaTarea.local === true}
+        {...(estado.encargoPropuesto === undefined ? {} : { encargoPropuesto: estado.encargoPropuesto })}
+        // El borrador viaja con la augmentación para que el servidor pueda LISTAR los
+        // adjuntos ya subidos y decirle al modelo para qué sirve cada uno.
+        alAugmentar={(peticion) =>
+          void enviar({
+            clase: "tarea",
+            accion: "augmentar",
+            proyecto: tareaNueva.proyecto,
+            peticion,
+            borrador: tareaNueva.borrador,
+          })
+        }
+        alSubirAdjunto={async (fichero, nombre) => {
+          const r = await subirAdjunto(tareaNueva.borrador, nombre, fichero);
+          // Solo si alguno LLEGÓ: el `crear` menciona el borrador para que el servidor
+          // adopte esa carpeta, y mencionarla vacía sería adoptar una carpeta que no existe.
+          if (r.ok) setConAdjuntos(true);
+          return r;
+        }}
+        alEncolar={({ peticion, encargo }) => {
+          const { proyecto, borrador } = tareaNueva;
+          setTareaNueva(undefined);
+          void enviar({
+            clase: "tarea",
+            accion: "crear",
+            proyecto,
+            peticion,
+            encargo,
+            ...(conAdjuntos ? { borrador } : {}),
+          });
+        }}
+        // Sin copia local la ventana RECHAZA crear la tarea —se aparcaría y ahí se
+        // quedaría— y ofrece el camino que sí funciona: abrir el proyecto, que es donde se
+        // descarga. Se cede a `NuevaSesion` en vez de encolar y bajar de rebote, porque esa
+        // ventana existe justamente para que una descarga entera no sea un efecto
+        // secundario de otra cosa. Se cierra por el camino normal para que el borrador se
+        // limpie igual.
+        alAbrirProyecto={() => {
+          const { proyecto } = tareaNueva;
+          cerrarVentanaDeTarea();
+          abrirVentanaDeSesion(proyecto);
+        }}
+        alCerrar={cerrarVentanaDeTarea}
+      />
+    ) : null;
+
   /**
    * La ventana que confirma lo elegido en el «…» de una sesión.
    *
@@ -633,6 +845,10 @@ export function App({ store, enviar }: { store: Store; enviar: Conexion["enviar"
       // servidor con su tabla cerrada. Y detrás vuelve a medir, así que la foto nueva es
       // la que dice si la herramienta apareció.
       alInstalarHerramienta={(herramienta) => void enviar({ clase: "dispositivos", instalar: herramienta })}
+      // El tope de concurrencia de la cola de tareas: mismo mensaje que manda el kanban al
+      // pedirlo la primera vez, con el número que puso quien lo cambia.
+      {...(estado.tareas === undefined ? {} : { tareas: { concurrencia: estado.tareas.concurrencia } })}
+      alCambiarConcurrencia={(concurrencia) => void enviar({ clase: "tareas", concurrencia })}
       // Los modelos de un motor externo, para el desplegable de un subagente.
       {...(estado.modelosDeMotor === undefined ? {} : { modelosDeMotor: estado.modelosDeMotor })}
       alPedirModelosDeMotor={(motor) => void enviar({ clase: "modelosDeMotor", motor })}
@@ -757,6 +973,9 @@ export function App({ store, enviar }: { store: Store; enviar: Conexion["enviar"
               // Lo dice el servidor tras comprobar las tres condiciones
               // (`core/settings.ts#seAplicaSinAprobacion`); el cliente no lo deduce.
               sinAprobacion={estado.alta?.sinAprobacion === true}
+              {...(estado.alta?.trabajoAlAbrir === undefined
+                ? {}
+                : { trabajoAlAbrir: estado.alta.trabajoAlAbrir })}
               {...(segundosEnVuelo === undefined ? {} : { segundosEnVuelo })}
               // Para el estado vacío de una sesión nueva: en qué proyecto estás y con qué
               // modelo va a trabajar. Los dos ya estaban en el estado.
@@ -797,6 +1016,43 @@ export function App({ store, enviar }: { store: Store; enviar: Conexion["enviar"
                   alElegir={setArtefactoElegido}
                   alPedir={pedirArtefacto}
                   conectado={estado.conectado}
+                />
+              }
+              tareas={
+                <TareasDelProyecto
+                  tareas={tareasDelProyecto}
+                  alReintentar={alReintentarTarea}
+                  alDescartar={alDescartarTarea}
+                  alTerminar={alTerminarTarea}
+                  // Antes esta lista no tenía forma de mandar feedback — eso era solo del
+                  // kanban del escritorio, así que una tarea aparcada solo se podía atender
+                  // desde ahí (Task 13). `AccionesDeTarea` ya la ofrece en las dos vistas.
+                  alEnviarFeedback={alEnviarFeedbackTarea}
+                  conectado={estado.conectado}
+                  // Si las ejecuta OTRO proceso, esta pestaña lo dice — y aquí importa más
+                  // que en el kanban, porque aquí vive «Nueva tarea»: la que se cree se
+                  // queda quieta hasta que ese proceso mire la cola por su cuenta (F4 de la
+                  // revisión final). Ausente mientras la cola no ha llegado: no se afirma.
+                  {...(estado.tareas === undefined ? {} : { corriendoAqui: estado.tareas.corriendoAqui })}
+                  // Y si las ejecuta OTRO, que no es lo mismo que que no las ejecute nadie:
+                  // el primero manda a esperar y el segundo dice que no va a pasar nada.
+                  // Ausente se propaga como ausente, que es «no se sabe».
+                  {...(estado.tareas?.ejecutaOtroProceso === undefined
+                    ? {}
+                    : { ejecutaOtroProceso: estado.tareas.ejecutaOtroProceso })}
+                  // Task 15: crear una tarea PARA este proyecto sin salir de la pestaña ni
+                  // volver al escritorio, con el proyecto ya resuelto — es el mismo id que
+                  // abre esta ventana desde una tarjeta del escritorio, solo que aquí no hay
+                  // nada que elegir.
+                  {...(proyectoActivoId === undefined
+                    ? {}
+                    : { alNuevaTarea: () => abrirVentanaDeTarea(proyectoActivoId) })}
+                  // Ver lo que hace, en vivo (Task 17): la MISMA pieza (`MirarTarea.tsx`,
+                  // vía `Kanban.tsx`/`TareasDelProyecto.tsx`) que monta el escritorio — antes
+                  // esta pestaña no la ofrecía en absoluto.
+                  {...(mirar === undefined ? {} : { alMirar: alMirarTarea, alDejarDeMirar: alDejarDeMirarTarea })}
+                  {...(mirandoTarea === undefined ? {} : { mirando: mirandoTarea })}
+                  {...(estado.mirada === undefined ? {} : { mirada: estado.mirada })}
                 />
               }
               // La tarjeta del chat abre el artefacto: cambia de pestaña y lo elige.
@@ -929,10 +1185,32 @@ export function App({ store, enviar }: { store: Store; enviar: Conexion["enviar"
             proyectos={estado.alta?.proyectos ?? []}
             {...(estado.modelos?.actual === undefined ? {} : { modelo: estado.modelos.actual })}
             alNuevaSesion={(proyecto) => abrirVentanaDeSesion(proyecto)}
+            alNuevaTarea={(proyecto) => abrirVentanaDeTarea(proyecto)}
             alAbrirSesion={(proyecto, sesion) => abrirSesion(proyecto, sesion)}
               alAbrirAjustes={() => setAjustesAbiertos(true)}
               {...(estado.dispositivos === undefined ? {} : { dispositivos: estado.dispositivos })}
               alActualizarDispositivos={() => void enviar({ clase: "dispositivos" })}
+              {...(estado.tareas === undefined ? {} : { tareas: estado.tareas })}
+              alAbrirSesionDeTarea={(proyecto, sesion) => abrirSesion(proyecto, sesion)}
+              // La verdad sobre lo que la tarea escribió vive en Revisión, no en el chat:
+              // sin aprobación previa, esa pestaña es la única forma de mirar.
+              alAbrirRevisionDeTarea={(proyecto, sesion) => abrirSesion(proyecto, sesion, "revision")}
+              // Antes el escritorio solo reenviaba feedback — reintentar, descartar y
+              // terminar eran solo de `TareasDelProyecto.tsx`, así que una tarea bloqueada
+              // solo se desbloqueaba desde la pestaña del proyecto (Task 13).
+              alReintentarTarea={alReintentarTarea}
+              alDescartarTarea={alDescartarTarea}
+              alTerminarTarea={alTerminarTarea}
+              // Ver en vivo lo que hace una tarea. Solo se ofrece si esta ventana tiene el
+              // canal: sin `mirar` inyectado el botón no llevaría a ninguna parte.
+              {...(mirar === undefined ? {} : { alMirarTarea, alDejarDeMirarTarea })}
+              {...(mirandoTarea === undefined ? {} : { mirandoTarea })}
+              {...(estado.mirada === undefined ? {} : { mirada: estado.mirada })}
+              // «Se edita la tarea y se agrega el feedback del usuario»: el servidor decide
+              // cómo se aplica (`{clase:"tarea", accion:"feedback"}`, el mismo patrón que
+              // `/modelo` desde la pastilla) — el cliente no manda comandos, manda intención.
+              alEnviarFeedback={alEnviarFeedbackTarea}
+              {...(estado.alta?.proyectoActivo === undefined ? {} : { proyectoActivo: estado.alta.proyectoActivo })}
             />
           </>
         )
@@ -1000,6 +1278,7 @@ export function App({ store, enviar }: { store: Store; enviar: Conexion["enviar"
     />
     {ventanaDeAjustes}
     {ventanaDeSesion}
+    {ventanaDeTarea}
     {ventanaDeAccionDeSesion}
     </>
   );

@@ -27,7 +27,7 @@ afterEach(cleanup);
  */
 function montar(enviar = vi.fn(() => Promise.resolve(undefined as unknown))) {
   const store = crearStoreDelCliente();
-  const vista = render(<App store={store} enviar={enviar} />);
+  const vista = render(<App store={store} enviar={enviar} subirAdjunto={subirAdjuntoDeMentira} />);
   act(() => store.marcarConectado());
   act(() =>
     store.aplicar({
@@ -42,6 +42,9 @@ function montar(enviar = vi.fn(() => Promise.resolve(undefined as unknown))) {
   );
   return { store, enviar, vista };
 }
+
+/** La subida de adjuntos, concedida y sin red: `App` la recibe inyectada igual que `enviar`. */
+const subirAdjuntoDeMentira = async (): Promise<{ ok: boolean; motivo?: string }> => ({ ok: true });
 
 /** Un `enviar` que revienta, como un `fetch` sin red. */
 const enviarQueFalla = () => vi.fn(() => Promise.reject(new Error("sin red")) as Promise<unknown>);
@@ -230,7 +233,7 @@ describe("App: la pantalla de arranque no enseña nada más", () => {
   function montarSinAbrir() {
     const store = crearStoreDelCliente();
     const enviar = vi.fn(() => Promise.resolve(undefined as unknown));
-    const vista = render(<App store={store} enviar={enviar} />);
+    const vista = render(<App store={store} enviar={enviar} subirAdjunto={subirAdjuntoDeMentira} />);
     act(() => store.marcarConectado());
     return { store, enviar, vista };
   }
@@ -267,7 +270,7 @@ describe("App: la pantalla de arranque no enseña nada más", () => {
    */
   it("desconectado y sin nada del alta todavía, lo dice — no un splash mudo", () => {
     const store = crearStoreDelCliente();
-    render(<App store={store} enviar={vi.fn()} />);
+    render(<App store={store} enviar={vi.fn()} subirAdjunto={subirAdjuntoDeMentira} />);
     // Sin `marcarConectado()`: `ESTADO_INICIAL` (`store.ts`) ya nace `conectado: false`.
     expect(screen.getByText(/sin conexión con xonecode/i)).toBeTruthy();
   });
@@ -469,7 +472,7 @@ describe("App: abrir un proyecto desde la barra (Layer C)", () => {
   function montarConProyectos(proyectos: { id: string; nombre: string }[]) {
     const store = crearStoreDelCliente();
     const enviar = vi.fn(() => Promise.resolve(undefined as unknown));
-    const vista = render(<App store={store} enviar={enviar} />);
+    const vista = render(<App store={store} enviar={enviar} subirAdjunto={subirAdjuntoDeMentira} />);
     act(() => store.marcarConectado());
     act(() =>
       store.aplicar({
@@ -664,6 +667,102 @@ describe("App: abrir un proyecto desde la barra (Layer C)", () => {
   });
 });
 
+/**
+ * El enlace a Revisión de una tarjeta «esperando feedback»: sin aprobación previa, esa
+ * pestaña es la ÚNICA forma de mirar lo que la tarea autorizó a escribir. `abrirSesion`
+ * gana un tercer parámetro para esto —solo lo usa este camino— y el resto de quien la abre
+ * (la barra, el «+», una fila del escritorio) sigue cayendo en «chat», sin tocar.
+ */
+describe("App: la tarjeta de tarea «esperando feedback» abre Revisión", () => {
+  function montarConTareas() {
+    const store = crearStoreDelCliente();
+    const enviar = vi.fn(() => Promise.resolve(undefined as unknown));
+    render(<App store={store} enviar={enviar} subirAdjunto={subirAdjuntoDeMentira} />);
+    act(() => store.marcarConectado());
+    act(() =>
+      store.aplicar({
+        clase: "alta",
+        pasos: [],
+        proveedores: [],
+        entornos: [{ id: "webstudio", nombre: "XOne WebStudio", url: "https://mcp.example/mcp" }],
+        proyectos: [{ id: "p1", nombre: "Tienda" }],
+        ramas: [],
+        proyectoAbierto: false,
+      })
+    );
+    act(() =>
+      store.aplicar({
+        clase: "tareas",
+        concurrencia: 2,
+        corriendoAqui: true,
+        lista: [
+          {
+            id: "t1",
+            proyecto: "p1",
+            proyectoNombre: "Tienda",
+            titulo: "Arregla el login",
+            peticion: "Arregla el login",
+            encargo: "Arregla el login",
+            adjuntos: [],
+            estado: "requiere-atencion",
+            motivo: "el juez marcó el trabajo en rojo",
+            sesion: "s1",
+            creada: "2026-09-08T10:00:00.000Z",
+          },
+        ],
+      })
+    );
+    return { store, enviar };
+  }
+
+  it("pulsar «Ver Revisión» abre la sesión de la tarea Y dice al servidor que se abre en Revisión", () => {
+    const { store, enviar } = montarConTareas();
+    fireEvent.click(screen.getByRole("button", { name: /revisión/i }));
+    expect(enviar).toHaveBeenCalledWith({ clase: "sesion", proyecto: "p1", sesion: "s1" });
+
+    // El servidor contesta abriendo esa sesión: la pestaña Revisión ya estaba elegida
+    // ANTES de que la respuesta llegara —es estado de vista, no algo que el cable decida—,
+    // así que en cuanto la maqueta de sesión aparece, se ve activa.
+    enviar.mockClear();
+    act(() =>
+      store.aplicar({
+        clase: "alta",
+        pasos: [],
+        proveedores: [],
+        entornos: [{ id: "webstudio", nombre: "XOne WebStudio", url: "https://mcp.example/mcp" }],
+        proyectos: [{ id: "p1", nombre: "Tienda" }],
+        ramas: [],
+        proyectoAbierto: true,
+        proyectoActivo: "p1",
+        sesionActiva: "s1",
+      })
+    );
+    expect(screen.getByRole("tab", { name: "Revisión", selected: true })).toBeTruthy();
+    // Y Revisión pide su foto sola, sin que nadie más la pulse.
+    expect(enviar).toHaveBeenCalledWith({ clase: "revision" });
+  });
+
+  it("pulsar el TÍTULO de la tarjeta abre la conversación, en Chat — es una acción distinta", () => {
+    const { enviar } = montarConTareas();
+    fireEvent.click(screen.getByRole("button", { name: "Arregla el login" }));
+    expect(enviar).toHaveBeenCalledWith({ clase: "sesion", proyecto: "p1", sesion: "s1" });
+  });
+
+  /**
+   * Task 12: «se edita la tarea y se agrega el feedback del usuario» (§0 del diseño). El
+   * cliente no manda comandos — manda la intención (`{clase:"tarea", accion:"feedback"}`)
+   * y el servidor decide cómo se aplica, el mismo patrón que la pastilla de modelo.
+   */
+  it("escribir feedback y enviarlo manda `{clase:\"tarea\", accion:\"feedback\"}` con el id y el texto", () => {
+    const { enviar } = montarConTareas();
+    fireEvent.change(screen.getByRole("textbox", { name: /tu feedback/i }), {
+      target: { value: "sí, con histórico" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /enviar feedback/i }));
+    expect(enviar).toHaveBeenCalledWith({ clase: "tarea", accion: "feedback", id: "t1", texto: "sí, con histórico" });
+  });
+});
+
 describe("App: Revisión despliega solos los primeros", () => {
   const diez = () => Array.from({ length: 10 }, (_, i) => ({ ruta: `src/f${i}.xne`, clase: "modificado" as const, mas: 1, menos: 0 }));
   const parchesPedidos = (enviar: ReturnType<typeof vi.fn>) =>
@@ -758,5 +857,303 @@ describe("App: la pestaña Ficheros", () => {
     act(() => store.aplicar({ clase: "turno", activo: true }));
     act(() => store.aplicar({ clase: "turno", activo: false }));
     expect(arboles(enviar)).toHaveLength(0);
+  });
+});
+
+describe("App: la pestaña Tareas", () => {
+  const TAREA = (extra: Record<string, unknown> = {}) => ({
+    id: "t1",
+    proyecto: "p1",
+    proyectoNombre: "Tienda",
+    titulo: "Arregla el login",
+    peticion: "Arregla el login",
+    encargo: "Arregla el login",
+    adjuntos: [],
+    estado: "nuevo" as const,
+    creada: "2026-09-08T10:00:00.000Z",
+    ...extra,
+  });
+
+  /** Con proyecto ABIERTO y ACTIVO, que es lo que la pestaña filtra por (`t.proyecto`). */
+  function montarConProyectoActivo() {
+    const store = crearStoreDelCliente();
+    const enviar = vi.fn(() => Promise.resolve(undefined as unknown));
+    render(<App store={store} enviar={enviar} subirAdjunto={subirAdjuntoDeMentira} />);
+    act(() => store.marcarConectado());
+    act(() =>
+      store.aplicar({
+        clase: "alta",
+        pasos: [],
+        proveedores: [],
+        entornos: [],
+        // `local: true`: un proyecto ABIERTO tiene por fuerza copia local — es de donde se
+        // abrió—, y `NuevaTarea` rechaza crear sin ella (`local` deducido de `proyectos[]`).
+        proyectos: [{ id: "p1", nombre: "Tienda", local: true }],
+        ramas: [],
+        proyectoAbierto: true,
+        proyectoActivo: "p1",
+      })
+    );
+    return { store, enviar };
+  }
+
+  /**
+   * Task 15: la pestaña ya NO se condiciona a que haya tareas — es de ACCIÓN, no de
+   * registro (`Pestanas.tsx`) — pero el FILTRO por proyecto sigue siendo el mismo: lo que
+   * se pinta DENTRO de ella es solo lo de `proyectoActivo`, nunca lo de otro.
+   */
+  it("la pestaña está desde el principio, y lo que filtra por proyecto ACTIVO es lo que hay DENTRO", () => {
+    const { store } = montarConProyectoActivo();
+    expect(screen.getByRole("tab", { name: "Tareas" })).toBeTruthy();
+    fireEvent.click(screen.getByRole("tab", { name: "Tareas" }));
+    // Antes de que llegue ningún mensaje `tareas`, no se afirma que no haya ninguna.
+    expect(screen.getByText(/consultando/i)).toBeTruthy();
+
+    act(() =>
+      store.aplicar({
+        clase: "tareas",
+        concurrencia: 2,
+        corriendoAqui: true,
+        lista: [TAREA({ id: "otro", proyecto: "p2", proyectoNombre: "Otra" })],
+      })
+    );
+    // Llegó la cola, pero ninguna es de p1: el estado vacío, no «consultando».
+    expect(screen.getByText(/todavía no tiene ninguna/i)).toBeTruthy();
+
+    act(() =>
+      store.aplicar({
+        clase: "tareas",
+        concurrencia: 2,
+        corriendoAqui: true,
+        lista: [TAREA({ id: "otro", proyecto: "p2", proyectoNombre: "Otra" }), TAREA()],
+      })
+    );
+    expect(screen.getByText("Arregla el login")).toBeTruthy();
+    expect(screen.queryByText(/otro|Otra/)).toBeNull();
+  });
+
+  it("pinta el estado y el motivo, y reintentar/dar-por-bueno/descartar mandan la acción sobre el cable", () => {
+    const { store, enviar } = montarConProyectoActivo();
+    act(() =>
+      store.aplicar({
+        clase: "tareas",
+        concurrencia: 2,
+        corriendoAqui: true,
+        lista: [TAREA({ estado: "requiere-atencion", motivo: "el juez marcó el trabajo en rojo" })],
+      })
+    );
+    fireEvent.click(screen.getByRole("tab", { name: "Tareas" }));
+    expect(screen.getByText(/el juez marcó el trabajo en rojo/)).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: /reintentar/i }));
+    expect(enviar).toHaveBeenCalledWith({ clase: "tarea", accion: "reintentar", id: "t1" });
+
+    fireEvent.click(screen.getByRole("button", { name: /dar por bueno/i }));
+    expect(enviar).toHaveBeenCalledWith({ clase: "tarea", accion: "terminar", id: "t1" });
+
+    fireEvent.click(screen.getByRole("button", { name: /^descartar$/i }));
+    fireEvent.click(screen.getByRole("button", { name: /sí, descartar/i }));
+    expect(enviar).toHaveBeenCalledWith({ clase: "tarea", accion: "descartar", id: "t1" });
+  });
+
+  it("al quedarse el proyecto activo sin tareas, la pestaña se QUEDA — a diferencia de Artefactos, a propósito", () => {
+    // Es justo lo que Task 15 cambia: Artefactos SÍ vuelve al Chat al vaciarse (es registro),
+    // pero Tareas es acción y su estado vacío es la respuesta, no un hueco que hay que evitar
+    // enseñando otra pestaña.
+    const { store } = montarConProyectoActivo();
+    act(() =>
+      store.aplicar({ clase: "tareas", concurrencia: 2, corriendoAqui: true, lista: [TAREA()] })
+    );
+    fireEvent.click(screen.getByRole("tab", { name: "Tareas" }));
+    expect(screen.getByRole("tab", { name: "Tareas" }).getAttribute("aria-selected")).toBe("true");
+    act(() => store.aplicar({ clase: "tareas", concurrencia: 2, corriendoAqui: true, lista: [] }));
+    expect(screen.getByRole("tab", { name: "Tareas" })).toBeTruthy();
+    expect(screen.getByRole("tab", { name: "Tareas" }).getAttribute("aria-selected")).toBe("true");
+    expect(screen.getByText(/todavía no tiene ninguna/i)).toBeTruthy();
+  });
+
+  /**
+   * El acceptance criterion central: crear una tarea PARA el proyecto abierto sin volver al
+   * escritorio, y con el proyecto ya resuelto — no un selector que haya que rellenar.
+   */
+  it("crear una tarea desde AQUÍ, sin volver al escritorio, y con el proyecto ya resuelto", async () => {
+    const { store, enviar } = montarConProyectoActivo();
+    act(() => store.aplicar({ clase: "tareas", concurrencia: 2, corriendoAqui: true, lista: [] }));
+    fireEvent.click(screen.getByRole("tab", { name: "Tareas" }));
+    fireEvent.click(screen.getByRole("button", { name: /nueva tarea/i }));
+    // Si el punto de entrada abriera la ventana SIN proyecto resuelto —la mutación que el
+    // brief pide vigilar—, `App` no encontraría con qué pintarla (`proyectoDeLaTarea` no
+    // resolvería) y este campo no aparecería: no hay ningún paso más que dar aquí.
+    fireEvent.change(screen.getByLabelText(/qué hay que hacer/i), { target: { value: "Arregla el login" } });
+    fireEvent.click(screen.getByRole("button", { name: /encolar/i }));
+    await waitFor(() =>
+      expect(enviar).toHaveBeenCalledWith({
+        clase: "tarea",
+        accion: "crear",
+        proyecto: "p1",
+        peticion: "Arregla el login",
+        encargo: "Arregla el login",
+      })
+    );
+  });
+});
+
+/**
+ * Crear una TAREA de fondo: lo que ningún test de componente ve — que `App` monta la
+ * ventana desde el escritorio, que los ADJUNTOS se suben antes de encolar y bajo un
+ * identificador de BORRADOR que después se manda en el `crear`, y que el encargo propuesto
+ * se limpia al abrir (ese mensaje va a todas las pestañas).
+ */
+describe("App: crear una tarea en background", () => {
+  /** El escritorio, con un proyecto y sin sesión abierta. */
+  function conEscritorio(enviar = vi.fn(() => Promise.resolve(undefined as unknown)), subir = subirAdjuntoDeMentira) {
+    const store = crearStoreDelCliente();
+    const vista = render(<App store={store} enviar={enviar} subirAdjunto={subir} />);
+    act(() => store.marcarConectado());
+    act(() =>
+      store.aplicar({
+        clase: "alta",
+        pasos: [],
+        proveedores: [],
+        entornos: [],
+        registrados: [{ id: "webstudio", nombre: "WebStudio", url: "https://x/mcp" }],
+        entornoActivo: "webstudio",
+        proyectos: [{ id: "p1", nombre: "AppDemo", local: true }],
+        ramas: [],
+        proyectoAbierto: false,
+      })
+    );
+    return { store, enviar, vista };
+  }
+
+  it("desde el escritorio se abre la ventana y encolar manda `crear` con petición y encargo", async () => {
+    const { enviar } = conEscritorio();
+    fireEvent.click(screen.getByRole("button", { name: /nueva tarea/i }));
+    fireEvent.change(screen.getByLabelText(/qué hay que hacer/i), { target: { value: "Arregla el login" } });
+    fireEvent.click(screen.getByRole("button", { name: /encolar/i }));
+    await waitFor(() =>
+      expect(enviar).toHaveBeenCalledWith({
+        clase: "tarea",
+        accion: "crear",
+        proyecto: "p1",
+        peticion: "Arregla el login",
+        encargo: "Arregla el login",
+      })
+    );
+  });
+
+  it("«Preparar el encargo» manda `augmentar` con el MISMO borrador que después lleva `crear`", async () => {
+    // Las dos mitades: el aumentador tiene que ver los adjuntos ya subidos (por eso lleva el
+    // borrador) y el `crear` tiene que adoptar esa misma carpeta (por eso lleva el mismo).
+    const subidas: { tarea: string; nombre: string }[] = [];
+    const { enviar } = conEscritorio(undefined, async (tarea: string, nombre: string) => {
+      subidas.push({ tarea, nombre });
+      return { ok: true };
+    });
+    fireEvent.click(screen.getByRole("button", { name: /nueva tarea/i }));
+    fireEvent.change(screen.getByLabelText(/adjuntar/i), {
+      target: { files: [new File(["x"], "mockup.png", { type: "image/png" })] },
+    });
+    await waitFor(() => expect(subidas).toHaveLength(1));
+    fireEvent.change(screen.getByLabelText(/qué hay que hacer/i), { target: { value: "Arregla" } });
+    fireEvent.click(screen.getByRole("button", { name: /preparar el encargo/i }));
+    const augmentar = enviar.mock.calls.map((c) => c[0]).find((m) => (m as { accion?: string }).accion === "augmentar");
+    expect(augmentar).toMatchObject({ clase: "tarea", accion: "augmentar", proyecto: "p1", peticion: "Arregla" });
+    const borrador = (augmentar as { borrador?: string }).borrador;
+    // El borrador es el mismo bajo el que se subieron los bytes: si no, el servidor listaría
+    // una carpeta vacía y la tarea nacería sin sus adjuntos.
+    expect(borrador).toBe(subidas[0]!.tarea);
+
+    fireEvent.click(screen.getByRole("button", { name: /encolar/i }));
+    await waitFor(() =>
+      expect(enviar).toHaveBeenCalledWith(expect.objectContaining({ accion: "crear", borrador }))
+    );
+  });
+
+  it("sin ningún adjunto, `crear` NO lleva borrador: no se nombra una carpeta que no existe", async () => {
+    const { enviar } = conEscritorio();
+    fireEvent.click(screen.getByRole("button", { name: /nueva tarea/i }));
+    fireEvent.change(screen.getByLabelText(/qué hay que hacer/i), { target: { value: "Arregla" } });
+    fireEvent.click(screen.getByRole("button", { name: /encolar/i }));
+    await waitFor(() => expect(enviar).toHaveBeenCalled());
+    const crear = enviar.mock.calls.map((c) => c[0]).find((m) => (m as { accion?: string }).accion === "crear");
+    expect(crear).not.toHaveProperty("borrador");
+  });
+
+  it("al abrir la ventana se TIRA el encargo propuesto de antes: ese mensaje va a todas las pestañas", () => {
+    const { store } = conEscritorio();
+    act(() => store.aplicar({ clase: "tarea", accion: "augmentado", encargo: "DE OTRA PESTAÑA" }));
+    fireEvent.click(screen.getByRole("button", { name: /nueva tarea/i }));
+    expect((screen.getByLabelText(/encargo/i) as HTMLTextAreaElement).value).toBe("");
+  });
+
+  it("cerrar con adjuntos ya subidos DESCARTA el borrador: si no, la carpeta queda de basura", async () => {
+    // Los bytes se suben antes de que la tarea exista, así que cancelar después deja una
+    // carpeta en `~/.xonecode/tareas/<borrador>/` que ninguna tarea nombra y que nadie va a
+    // volver a ver — con documentos de una persona dentro. `descartar` sobre un id que no
+    // está en el índice hace exactamente esto: borra la carpeta y deja el índice igual.
+    const { enviar } = conEscritorio();
+    fireEvent.click(screen.getByRole("button", { name: /nueva tarea/i }));
+    fireEvent.change(screen.getByLabelText(/adjuntar/i), { target: { files: [new File(["x"], "a.png")] } });
+    await waitFor(() => expect(screen.getByText(/a\.png/)).toBeTruthy());
+    fireEvent.click(screen.getByRole("button", { name: /cancelar/i }));
+    const descartes = enviar.mock.calls
+      .map((c) => c[0] as { accion?: string; id?: string })
+      .filter((m) => m.accion === "descartar");
+    expect(descartes).toHaveLength(1);
+    expect(descartes[0]!.id).toBeDefined();
+    expect(enviar.mock.calls.map((c) => (c[0] as { accion?: string }).accion)).not.toContain("crear");
+  });
+
+  it("y cerrar SIN adjuntos no descarta nada: no hay carpeta que borrar", async () => {
+    const { enviar } = conEscritorio();
+    fireEvent.click(screen.getByRole("button", { name: /nueva tarea/i }));
+    fireEvent.click(screen.getByRole("button", { name: /cancelar/i }));
+    expect(enviar.mock.calls.map((c) => (c[0] as { accion?: string }).accion)).not.toContain("descartar");
+  });
+
+  it("y cerrar no encola nada", async () => {
+    const { enviar } = conEscritorio();
+    fireEvent.click(screen.getByRole("button", { name: /nueva tarea/i }));
+    fireEvent.change(screen.getByLabelText(/qué hay que hacer/i), { target: { value: "Arregla" } });
+    fireEvent.click(screen.getByRole("button", { name: /cancelar/i }));
+    expect(screen.queryByLabelText(/qué hay que hacer/i)).toBeNull();
+    expect(enviar.mock.calls.map((c) => (c[0] as { accion?: string }).accion)).not.toContain("crear");
+  });
+
+  it("y en un proyecto SIN copia local, «Abrir el proyecto» cede a la ventana que descarga", async () => {
+    /**
+     * El rechazo tiene que llevar a algún sitio, y el sitio existe ya: `NuevaSesion`, que es
+     * quien pide la rama y AVISA de que se descarga el proyecto entero. Este test comprueba
+     * la costura que ningún test de componente ve —que `App` cambia una ventana por la otra
+     * para el MISMO proyecto—, y que crear la tarea no se cuela por el camino.
+     */
+    const enviar = vi.fn(() => Promise.resolve(undefined as unknown));
+    const store = crearStoreDelCliente();
+    render(<App store={store} enviar={enviar} subirAdjunto={subirAdjuntoDeMentira} />);
+    act(() => store.marcarConectado());
+    act(() =>
+      store.aplicar({
+        clase: "alta",
+        pasos: [],
+        proveedores: [],
+        entornos: [],
+        registrados: [{ id: "webstudio", nombre: "WebStudio", url: "https://x/mcp" }],
+        entornoActivo: "webstudio",
+        // `local` AUSENTE: el proyecto está en el entorno y no en el equipo.
+        proyectos: [{ id: "p1", nombre: "AppDemo" }],
+        ramas: [],
+        proyectoAbierto: false,
+      })
+    );
+    fireEvent.click(screen.getByRole("button", { name: /nueva tarea/i }));
+    expect(document.body.textContent).toMatch(/no se puede crear/i);
+    fireEvent.click(screen.getByRole("button", { name: /abrir el proyecto/i }));
+    // La ventana de tarea se fue y está la de sesión, que es la que dice que va a descargar.
+    expect(screen.queryByRole("button", { name: /abrir el proyecto/i })).toBeNull();
+    await waitFor(() =>
+      expect(enviar).toHaveBeenCalledWith({ clase: "alta", paso: "proyecto", proyecto: "p1" })
+    );
+    expect(enviar.mock.calls.map((c) => (c[0] as { accion?: string }).accion)).not.toContain("crear");
   });
 });

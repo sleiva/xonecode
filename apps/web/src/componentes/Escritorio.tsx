@@ -2,7 +2,8 @@ import { PROYECTOS_POR_OMISION } from "./Barra.js";
 import { IconoDeEntorno } from "./IconoDeEntorno.js";
 import estilos from "./Escritorio.module.css";
 import { Equipo } from "./Equipo.js";
-import type { InformeDeDispositivos } from "../tipos.js";
+import { Kanban } from "./Kanban.js";
+import type { Acto, InformeDeDispositivos, TareaDelCable } from "../tipos.js";
 
 /**
  * El centro cuando no hay sesión abierta: el escritorio.
@@ -43,6 +44,19 @@ export function Escritorio({
   visibles,
   dispositivos,
   alActualizarDispositivos,
+  alNuevaTarea,
+  tareas,
+  alAbrirSesionDeTarea,
+  alAbrirRevisionDeTarea,
+  alReintentarTarea,
+  alDescartarTarea,
+  alTerminarTarea,
+  alEnviarFeedback,
+  alMirarTarea,
+  alDejarDeMirarTarea,
+  mirandoTarea,
+  mirada,
+  proyectoActivo,
 }: {
   /** El saludo (`agent/persona.ts`). Ausente = se saluda igual, sin inventarse un nombre. */
   nombre?: string;
@@ -80,6 +94,74 @@ export function Escritorio({
   /** La foto de la máquina (`Equipo.tsx`). Ausente = aún no llegó. */
   dispositivos?: InformeDeDispositivos;
   alActualizarDispositivos?: () => void;
+  /**
+   * Crear una TAREA en background para ese proyecto. Ausente = no se ofrece.
+   *
+   * Vive en la tarjeta del proyecto, al lado de «Nueva sesión», porque son la misma clase de
+   * decisión sobre el mismo objeto. **Hasta Task 15 era además la ÚNICA puerta** —la pestaña
+   * de tareas de un proyecto solo existía si ya tenía alguna—, así que con un proyecto
+   * abierto no había forma de crear la primera sin volver aquí. Esa pestaña
+   * (`TareasDelProyecto.tsx`) vive ahora SIEMPRE dentro del proyecto abierto y ofrece el
+   * mismo botón; esta tarjeta se queda porque sigue siendo la única puerta para quien
+   * TODAVÍA no ha abierto ningún proyecto.
+   */
+  alNuevaTarea?: (proyecto: string) => void;
+  /**
+   * La cola de tareas en background (`Kanban.tsx`). Ausente = el servidor no ha mandado
+   * `tareas` todavía — ni una vez, ni esta ejecución no las ejecuta—, y eso NO es lo mismo
+   * que «no hay ninguna»: el panel lo dice en vez de afirmar una cola vacía que nadie ha
+   * medido, la misma regla que `dispositivos` ausente en «Tu equipo».
+   */
+  tareas?: {
+    lista: readonly TareaDelCable[];
+    concurrencia: number;
+    corriendoAqui: boolean;
+    /** Si las ejecuta OTRO proceso. Ausente = no se sabe, que no es «nadie»: se propaga tal
+     *  cual hasta `QuienEjecutaTareas`, que es quien decide qué decir de cada caso. */
+    ejecutaOtroProceso?: boolean;
+  };
+  /** Abrir la conversación de una tarea, desde su tarjeta del kanban. */
+  alAbrirSesionDeTarea?: (proyecto: string, sesion: string) => void;
+  /** Abrir la pestaña Revisión de una tarea «esperando feedback»: la verdad sobre lo que
+   *  cambió en el disco, sin aprobación previa de por medio. */
+  alAbrirRevisionDeTarea?: (proyecto: string, sesion: string) => void;
+  /**
+   * Reintentar, descartar y terminar una tarea del kanban: las tres reenviadas tal cual a
+   * `AccionesDeTarea` a través de `Kanban`. Antes solo `TareasDelProyecto.tsx` las
+   * ofrecía, así que una tarea bloqueada solo se desbloqueaba desde la pestaña del
+   * proyecto y no desde aquí (Task 13). Ausentes = no se ofrecen.
+   */
+  alReintentarTarea?: (id: string) => void;
+  alDescartarTarea?: (id: string) => void;
+  alTerminarTarea?: (id: string) => void;
+  /**
+   * «Se edita la tarea y se agrega el feedback del usuario» (§0 del diseño): añadir
+   * feedback a una tarea «esperando feedback», que la devuelve al lazo en su mismo hilo.
+   * Reenviada tal cual a `Kanban`; ausente = no se ofrece el campo.
+   */
+  alEnviarFeedback?: (id: string, texto: string) => void;
+  /**
+   * Ver, y dejar de ver, EN VIVO lo que hace el turno de una tarea. Ausentes = no se ofrece
+   * (esta ventana no tiene el canal del transporte).
+   */
+  alMirarTarea?: (id: string) => void;
+  alDejarDeMirarTarea?: (id: string) => void;
+  /** Cuál se está mirando: lo elige esta ventana, y es lo que hace que su tarjeta lo diga. */
+  mirandoTarea?: string;
+  /**
+   * El transcript que el servidor está mandando de esa tarea. Ausente = todavía no ha
+   * llegado —o el cable se cayó y se pidió otra vez—, y entonces el panel dice que aún no ha
+   * pintado nada en vez de afirmar un turno vacío.
+   */
+  mirada?: { tarea: string; actos: readonly Acto[] };
+  /**
+   * El proyecto cuya consola HUMANA está abierta ahora (`estado.alta.proyectoActivo`). El
+   * escritorio se puede ver con una sesión de otro proyecto ya abierta detrás —volver a él
+   * es solo estado de vista, no cierra nada—, así que esto puede estar definido aquí; se le
+   * pasa al kanban para que una tarea `nuevo` de ESE proyecto diga que espera, en vez de
+   * quedarse quieta sin explicación.
+   */
+  proyectoActivo?: string;
 }) {
   const apagado = conectado === false;
   const destacados =
@@ -164,14 +246,28 @@ export function Escritorio({
                       ))}
                     </ul>
                   )}
-                  <button
-                    type="button"
-                    className={estilos.empezar}
-                    disabled={apagado}
-                    onClick={() => alNuevaSesion(p.id)}
-                  >
-                    Nueva sesión
-                  </button>
+                  <div className={estilos.accionesDeTarjeta}>
+                    <button
+                      type="button"
+                      className={estilos.empezar}
+                      disabled={apagado}
+                      onClick={() => alNuevaSesion(p.id)}
+                    >
+                      Nueva sesión
+                    </button>
+                    {/* Crear una tarea manda algo al servidor, así que se apaga sin cable —
+                        igual que «Nueva sesión»—, y no se pinta si nadie la atiende. */}
+                    {alNuevaTarea === undefined ? null : (
+                      <button
+                        type="button"
+                        className={estilos.empezarTarea}
+                        disabled={apagado}
+                        onClick={() => alNuevaTarea(p.id)}
+                      >
+                        Nueva tarea
+                      </button>
+                    )}
+                  </div>
                 </li>
               );
             })}
@@ -200,6 +296,34 @@ export function Escritorio({
             </p>
           )}
           </>
+        )}
+
+        {/*
+          Las tareas en background, entre lo elegido y «Tu equipo»: son de la aplicación,
+          igual que el resto de este panel. Ausente no es «no hay ninguna» —es «no ha
+          llegado la cola»—, la misma regla que la foto de la máquina de más abajo, así que
+          se dice en vez de afirmar un kanban vacío que nadie ha medido.
+        */}
+        {tareas === undefined ? (
+          <p className={estilos.vacio}>Todavía no ha llegado la cola de tareas en background.</p>
+        ) : (
+          <Kanban
+            cola={tareas}
+            {...(alAbrirSesionDeTarea === undefined ? {} : { alAbrirSesion: alAbrirSesionDeTarea })}
+            {...(alAbrirRevisionDeTarea === undefined ? {} : { alAbrirRevision: alAbrirRevisionDeTarea })}
+            {...(alReintentarTarea === undefined ? {} : { alReintentar: alReintentarTarea })}
+            {...(alDescartarTarea === undefined ? {} : { alDescartar: alDescartarTarea })}
+            {...(alTerminarTarea === undefined ? {} : { alTerminar: alTerminarTarea })}
+            {...(alEnviarFeedback === undefined ? {} : { alEnviarFeedback })}
+            // «Ver lo que hace»: Task 17 lo movió DENTRO de la tarjeta de la cola —
+            // `MirarTarea` lo monta `Kanban`, aquí solo se reenvía con sus nombres.
+            {...(alMirarTarea === undefined ? {} : { alMirar: alMirarTarea })}
+            {...(alDejarDeMirarTarea === undefined ? {} : { alDejarDeMirar: alDejarDeMirarTarea })}
+            {...(mirandoTarea === undefined ? {} : { mirando: mirandoTarea })}
+            {...(mirada === undefined ? {} : { mirada })}
+            {...(proyectoActivo === undefined ? {} : { proyectoActivo })}
+            conectado={conectado}
+          />
         )}
 
         <Equipo

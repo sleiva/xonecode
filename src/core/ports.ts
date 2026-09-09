@@ -10,6 +10,8 @@
  */
 
 import type { Proveedor } from "./modelos.js";
+import type { EstadoDeVerificador, VeredictoDeTarea } from "./entrega.js";
+import type { HallazgoDelTurno } from "./events.js";
 import type {
   ContextoRemoto, EntradaRemota, EstructuraRemota, ManifiestoRemoto,
 } from "./cloudstudio.js";
@@ -231,6 +233,110 @@ export interface VerifierPort {
   verificar(rutaProyecto: string): Promise<InformeVerificacion>;
 }
 
+/**
+ * Lo que se le cuenta al juez de QA de una tarea, y **nada más que esto**.
+ *
+ * El encargo es el brief, y el resto son HECHOS que ya midió alguien: qué ficheros se
+ * autorizó escribir (nombres relativos) y cómo acabó el verificador con sus hallazgos —
+ * que es lo que `InformeVerificacion` ya declara que viaja «al juez como hecho». Ni un
+ * byte de contenido de ningún fichero: el juez decide si el trabajo hace lo que se pedía,
+ * y para eso no hace falta abrir nada. Es la misma regla que gobierna los eventos de
+ * dominio, aplicada al único sitio nuevo por donde podría escaparse.
+ */
+export interface CasoDeJuez {
+  encargo: string;
+  /** La raíz del proyecto de la tarea. Está aquí para que el papel `afilado` se resuelva con
+   *  la MISMA precedencia que en cualquier otro sitio —proyecto sobre global—: en la consola
+   *  web `FuentesDeEleccion.proyecto` no se rellena nunca (el vestíbulo sirve muchos
+   *  proyectos y las fuentes se construyen una vez al arrancar), así que hay que preguntarle
+   *  al disco POR LA RAÍZ, igual que `cloudstudioDelProyecto`. Se queda en el host: no viaja
+   *  por el cable. */
+  raiz: string;
+  /** Lo que la tarea AUTORIZÓ escribir, relativo a la raíz. Ver `Tarea.autorizadas`: es
+   *  una PISTA de lo que tocó, no la verdad sobre el disco (esa la tiene git). */
+  autorizadas: readonly string[];
+  /** Cómo acabó el verificador, si se sabe. `no-corrio` se le DICE: un juez que no sabe
+   *  que nadie midió juzgaría sobre un hecho que no existe. */
+  verificador?: EstadoDeVerificador;
+  /** Los del REPARTO: los que caen en ficheros que este turno tocó, más los que no dicen en
+   *  qué fichero (inatribuibles, y ese es el lado conservador). Ver `preexistentes`. */
+  hallazgos?: readonly HallazgoDelTurno[];
+  /** Cuántos quedaron FUERA del reparto, o sea en ficheros que este turno no tocó. Sin este
+   *  número, `hallazgos` se lee como si fuera todo lo que el simulador vio y como si todo
+   *  fuera del turno — medido: el juez concluyó de dos avisos que el agente había modificado
+   *  ficheros JavaScript. Ausente es «no se midió»; `0` es «no había ningún otro». */
+  preexistentes?: number;
+  /** QUÉ cambió en el proyecto, según GIT: las rutas RELATIVAS del diff de la sesión contra
+   *  su «antes» (`corredorDeTareas.ts#revisionConGit`). Es el único HECHO sobre el disco que
+   *  llega hasta aquí — `autorizadas` es la intención del agente—, y va como lista y no como
+   *  booleano a propósito: todo el modo de fallo medido del juez era «no puedo comprobar la
+   *  existencia ni el contenido de X», y el hecho fichero a fichero lo quita de raíz.
+   *  **Ausente y vacía no son lo mismo**: ausente es «no se pudo preguntar a git» y `[]` es
+   *  «git dice que no cambió nada». Colapsarlas inventaría un cargo o lo taparía. */
+  cambiados?: readonly string[];
+}
+
+/**
+ * El juez de QA: una de las DOS piezas que ocupan el sitio que dejó el modal de aprobación
+ * cuando las tareas pasaron a aplicar sus escrituras (§0 del diseño). La otra es el
+ * verificador, que ya corre dentro del turno.
+ *
+ * Es un PUERTO por la razón de siempre —`npm test` no puede necesitar una clave ni una
+ * conexión— y usa el papel `afilado`, que en `core/modelos.ts` está RESERVADO al juez.
+ *
+ * **No tiene doble, y es a propósito.** El modo offline lo cubre el propio papel: por
+ * omisión `afilado` resuelve a Ollama local, que es una consola usable sin red externa. Un
+ * doble aquí solo podría contestar «verde» o «rojo» sin haber juzgado nada, y de este
+ * veredicto depende que una tarea se dé por terminada: exactamente lo que `ES_DOBLE`
+ * existe para impedir. Que no se pueda usar es fallo del ENTORNO y se dice como tal.
+ */
+export interface JuezDeTareaPort {
+  juzgar(caso: CasoDeJuez): Promise<VeredictoDeTarea>;
+}
+
+/**
+ * Lo que se le da al aumentador para redactar el encargo, y nada más.
+ *
+ * **El árbol del proyecto NO está aquí, a propósito**: sería contexto por gastar en una
+ * llamada cuyo trabajo es redactar, no analizar. Lo que hay es lo que una persona necesitaría
+ * para escribir el encargo por su cuenta.
+ */
+export interface PeticionDeTarea {
+  /** Lo que escribió la persona, tal cual. */
+  texto: string;
+  /**
+   * El proyecto para el que es la tarea. La `raiz` está aquí por lo MISMO que en
+   * `CasoDeJuez`: el papel `trabajo` se resuelve con la precedencia de siempre —proyecto
+   * sobre global— y en la consola web `FuentesDeEleccion.proyecto` no se rellena nunca, así
+   * que hay que preguntarle al disco POR LA RAÍZ. Se queda en el host: no viaja por el cable.
+   */
+  proyecto: { nombre: string; raiz: string; rama?: string };
+  /** Nombres y tipos de los adjuntos, NUNCA su contenido: la redacción tiene que poder decir
+   *  para qué sirve cada uno, y para eso basta el nombre. */
+  adjuntos: readonly { nombre: string; mime?: string }[];
+  /** La memoria del proyecto, si existe (`.xonecode/memoria.md`). El árbol entero sería
+   *  contexto por gastar; esto son las decisiones que ya se tomaron. */
+  memoria?: string;
+}
+
+/**
+ * Convierte la petición de un humano en un ENCARGO que una tarea autónoma pueda ejecutar.
+ *
+ * Existe como puerto por las dos razones de siempre, y aquí la segunda es la que manda:
+ * `npm test` sigue sin red ni clave, y **el fallo tiene que ser recuperable**. Si no hay
+ * modelo, la tarea se encola con el texto original y se DICE — perder lo que una persona
+ * acaba de escribir porque un modelo no contestó sería lo peor que puede hacer esa ventana.
+ *
+ * A diferencia del juez (`JuezDeTareaPort`, que no tiene doble a propósito), este SÍ lo
+ * tiene: de un veredicto del juez depende que una tarea se dé por terminada, y un doble que
+ * conteste «verde» sin juzgar es exactamente lo que `ES_DOBLE` existe para impedir; de un
+ * encargo augmentado no depende ninguna afirmación — lo lee una persona y lo edita antes de
+ * encolar.
+ */
+export interface AumentadorPort {
+  augmentar(peticion: PeticionDeTarea): Promise<string>;
+}
+
 // ─────────────────────────── LOS DOBLES ───────────────────────────
 // Viven aquí, junto a los puertos, y NO en una carpeta de tests. El motivo: el modo
 // offline es un modo de USO de primera clase (`xonecode describe` lo enseña al usuario),
@@ -283,6 +389,29 @@ export class ModeloGuionizado implements ModelosPort {
       trabajo: "[DOBLE] guionizado",
       afilado: "[DOBLE] guionizado",
     };
+  }
+}
+
+/**
+ * El doble del aumentador: devuelve el texto original, DICIENDO que no lo redactó nadie.
+ *
+ * La marca `[DOBLE]` no es adorno y es la misma disciplina que `McpVacio` y
+ * `SkillsEnMemoria`: este texto se le enseña a una persona en la ventana de crear —para que
+ * lo edite— y después se le manda al agente, así que sin la marca pasaría por una redacción
+ * de verdad. Con `--guion` es lo que se monta, que es exactamente el caso que la marca
+ * describe.
+ *
+ * La plantilla entra por parámetro para que un test pueda afirmar sobre el paso de datos sin
+ * la marca de por medio.
+ */
+export class AumentadorGuionizado implements AumentadorPort {
+  readonly [ES_DOBLE] = true;
+  constructor(
+    private readonly plantilla = (t: string) =>
+      `[DOBLE] no hay aumentador real en esta consola, así que este encargo es la petición tal cual:\n\n${t}`
+  ) {}
+  async augmentar(peticion: PeticionDeTarea): Promise<string> {
+    return this.plantilla(peticion.texto);
   }
 }
 

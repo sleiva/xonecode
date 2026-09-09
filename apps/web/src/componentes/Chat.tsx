@@ -74,6 +74,7 @@ export function Chat({
   turnoEnVuelo = false,
   historica = false,
   sinAprobacion = false,
+  trabajoAlAbrir,
   segundosEnVuelo,
   proyecto,
   modelo,
@@ -95,6 +96,13 @@ export function Chat({
    * ANTES de pedir nada, no después con los ficheros ya cambiados.
    */
   sinAprobacion?: boolean;
+  /**
+   * Lo que YA estaba sin commitear en el proyecto cuando se abrió esta sesión
+   * (`alta.trabajoAlAbrir`). Ausente = nada que decir: el árbol estaba limpio, no hay git
+   * con qué mirar —todo proyecto offline— o no se pudo medir. Ninguna de las tres es un
+   * aviso, y darlo igualmente sería el aviso que enseña a ignorar los avisos.
+   */
+  trabajoAlAbrir?: { ficheros: string[]; total: number };
   /** Cuántos segundos lleva el turno en vuelo (`useCronometro`). Ausente = no hay turno. */
   segundosEnVuelo?: number;
   /** Para el estado vacío: dónde estás y con qué modelo. Ausentes = no se afirman. */
@@ -200,6 +208,38 @@ export function Chat({
               <code>/aprobacion humana</code> para volver a decidir tú.
             </p>
           ) : null}
+          {trabajoAlAbrir === undefined ? null : (
+            // Va detrás de `sinAprobacion` y delante de la relectura: los dos primeros son
+            // sobre el proyecto y el disco —con qué te encuentras—, y el tercero es sobre
+            // esta conversación. `role="note"`: no ha fallado nada.
+            //
+            // En PASADO, y no es un matiz de estilo: la medida es del instante de abrir y
+            // no se repite en los reanuncios del alta, precisamente para que no pueda
+            // contar como ajeno lo que esta sesión escriba después. Un «hay cambios» sería
+            // falso en cuanto alguien commitee, con el aviso todavía puesto.
+            // `div` y no `p` como los otros dos avisos: éste lleva una LISTA dentro, y un
+            // `<ul>` no es contenido válido de un `<p>`. React lo monta por API del DOM y
+            // no por el parser, así que no se ve romperse — pero un navegador que parsee
+            // ese marcado cierra el párrafo antes de la lista, y entonces el fondo del
+            // aviso se acabaría en la primera línea. El estilo va por CLASE, no por
+            // etiqueta, así que no cambia nada más.
+            <div role="note" className={`${vista.flowItem} ${estilos.trabajoAlAbrir}`}>
+              Cuando abriste esta sesión, el proyecto ya tenía{" "}
+              <strong>
+                {trabajoAlAbrir.total} {trabajoAlAbrir.total === 1 ? "fichero" : "ficheros"} sin commitear
+              </strong>
+              . No los ha escrito esta conversación: pueden ser de otra sesión, de una tarea de
+              fondo o tuyos de antes.
+              <ul>
+                {trabajoAlAbrir.ficheros.map((f) => (
+                  <li key={f}>{f}</li>
+                ))}
+              </ul>
+              {trabajoAlAbrir.total > trabajoAlAbrir.ficheros.length ? (
+                <>y {trabajoAlAbrir.total - trabajoAlAbrir.ficheros.length} más</>
+              ) : null}
+            </div>
+          )}
           {historica ? (
             // `role="note"`: es información de contexto, no una alerta. Y va DENTRO de la
             // columna, encabezando la conversación a la que se refiere.

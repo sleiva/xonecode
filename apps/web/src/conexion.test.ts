@@ -58,8 +58,12 @@ describe("conexión SSE", () => {
     const fuentes: FuenteFalsa[] = [];
     const store = crearStoreDelCliente();
     crearConexion(store, {
+      idDeCliente: "c1",
       fabricaDeEventos: (url) => {
-        expect(url).toBe("/eventos");
+        // El id de cliente va en la QUERY del SSE: es la única petición con un sumidero al
+        // otro lado, así que es por donde el servidor se entera de a quién enganchar la
+        // mirada de una tarea (`arranque.ts`). Ver `Conexion.mirar`.
+        expect(url).toBe("/eventos?cliente=c1");
         const f = new FuenteFalsa();
         fuentes.push(f);
         return f;
@@ -181,5 +185,130 @@ describe("conexión SSE", () => {
     expect(opciones.credentials).toBe("same-origin");
     expect(opciones.headers).toEqual({ "content-type": "application/json" });
     expect(opciones.body).toBe(JSON.stringify({ clase: "prosa", texto: "hola" }));
+  });
+
+  /**
+   * La subida de un adjunto va por HTTP y no por el cable: el SSE lleva JSON y esto son
+   * bytes. Vive aquí y no en `App.tsx` por lo mismo que `enviar`: el `fetch` entra inyectado,
+   * así que se puede afirmar sobre la petición sin abrir un socket ni parchear el global.
+   */
+  it("subirAdjunto() hace POST /adjunto con el nombre en la QUERY y los bytes como cuerpo", async () => {
+    const store = crearStoreDelCliente();
+    const llamadas: [string, RequestInit][] = [];
+    const conexion = crearConexion(store, {
+      fabricaDeEventos: () => new FuenteFalsa(),
+      fetch: async (url, opciones) => {
+        llamadas.push([url, opciones]);
+        return { ok: true, status: 204, text: async () => "" };
+      },
+    });
+
+    const fichero = new File(["0123456789"], "mockup.png", { type: "image/png" });
+    expect(await conexion.subirAdjunto("b1", "mockup.png", fichero)).toEqual({ ok: true });
+
+    const [url, opciones] = llamadas[0]!;
+    // El nombre CODIFICADO en la query: `registrarRuta` casa por coincidencia exacta, así
+    // que no puede ir en el camino de la ruta.
+    expect(url).toBe("/adjunto?tarea=b1&nombre=mockup.png");
+    expect(opciones.method).toBe("POST");
+    expect(opciones.credentials).toBe("same-origin");
+    expect(opciones.body).toBe(fichero);
+    // Sin `content-type` propio: lo pone el navegador con el del fichero, y el servidor no
+    // lo mira — lee bytes.
+    expect(opciones.headers).toBeUndefined();
+  });
+
+  it("y devuelve el MOTIVO que contesta el servidor, que es lo que la fila del fichero pinta", async () => {
+    const store = crearStoreDelCliente();
+    const conexion = crearConexion(store, {
+      fabricaDeEventos: () => new FuenteFalsa(),
+      fetch: async () => ({ ok: false, status: 413, text: async () => "el adjunto es demasiado grande" }),
+    });
+    expect(await conexion.subirAdjunto("b1", "g.bin", new File(["x"], "g.bin"))).toEqual({
+      ok: false,
+      motivo: "el adjunto es demasiado grande",
+    });
+  });
+
+  it("un fallo de red no revienta la ventana: se dice como motivo", async () => {
+    const store = crearStoreDelCliente();
+    const conexion = crearConexion(store, {
+      fabricaDeEventos: () => new FuenteFalsa(),
+      fetch: async () => {
+        throw new Error("fetch failed");
+      },
+    });
+    const r = await conexion.subirAdjunto("b1", "a.png", new File(["x"], "a.png"));
+    expect(r.ok).toBe(false);
+    expect(r.motivo).toBeDefined();
+  });
+});
+
+/**
+ * **Mirar en vivo una tarea de fondo** (Task 16).
+ *
+ * El `POST /accion` y el SSE son dos peticiones distintas, así que el servidor no puede
+ * saber por sí solo qué pestaña pidió mirar: el identificador lo pone esta capa —una vez por
+ * conexión— y viaja en los dos sitios. Vive aquí y no en `App.tsx` porque es un dato del
+ * TRANSPORTE: quien pulsa el botón no tiene por qué conocerlo, y pasarlo a mano por los
+ * componentes sería una copia más que mantener de acuerdo.
+ */
+describe("mirar una tarea", () => {
+  it("el id de cliente viaja en la query del SSE y en el mensaje, y es el MISMO", async () => {
+    const store = crearStoreDelCliente();
+    const urls: string[] = [];
+    const cuerpos: string[] = [];
+    const conexion = crearConexion(store, {
+      idDeCliente: "c1",
+      fabricaDeEventos: (url) => {
+        urls.push(url);
+        return new FuenteFalsa();
+      },
+      fetch: async (_url, opciones) => {
+        cuerpos.push(String(opciones.body));
+        return undefined;
+      },
+    });
+    await conexion.mirar("t1", true);
+    await conexion.mirar("t1", false);
+    expect(urls).toEqual(["/eventos?cliente=c1"]);
+    expect(cuerpos).toEqual([
+      JSON.stringify({ clase: "mirar", tarea: "t1", ver: true, cliente: "c1" }),
+      JSON.stringify({ clase: "mirar", tarea: "t1", ver: false, cliente: "c1" }),
+    ]);
+  });
+
+  it("el id se conserva entre reconexiones: la reconexión reclama la misma entrada", () => {
+    const store = crearStoreDelCliente();
+    const urls: string[] = [];
+    const reloj = crearRelojFalso();
+    crearConexion(store, {
+      idDeCliente: "c1",
+      fabricaDeEventos: (url) => {
+        urls.push(url);
+        return new FuenteFalsa();
+      },
+      temporizador: reloj.temporizador,
+      cancelarTemporizador: reloj.cancelarTemporizador,
+    });
+    // Un id nuevo por reconexión dejaría en el servidor una entrada muerta por cada caída,
+    // y el `close` de la vieja no podría distinguirse del de la nueva.
+    expect(urls).toEqual(["/eventos?cliente=c1"]);
+  });
+
+  it("sin id inyectado se genera uno, distinto por conexión y sin caracteres raros", () => {
+    const store = crearStoreDelCliente();
+    const urls: string[] = [];
+    const fabrica = (url: string): FuenteFalsa => {
+      urls.push(url);
+      return new FuenteFalsa();
+    };
+    crearConexion(store, { fabricaDeEventos: fabrica });
+    crearConexion(store, { fabricaDeEventos: fabrica });
+    expect(urls).toHaveLength(2);
+    expect(urls[0]).not.toBe(urls[1]);
+    // Va en una query y es la clave de un mapa del servidor, nunca una ruta: aun así se
+    // mantiene en texto llano para que no haya nada que escapar en ninguna capa.
+    for (const url of urls) expect(url).toMatch(/^\/eventos\?cliente=[A-Za-z0-9_-]+$/);
   });
 });

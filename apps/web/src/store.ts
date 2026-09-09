@@ -24,6 +24,7 @@ import type {
   FicheroTocado,
   FicheroDelProyecto,
   AgenteDelCable,
+  TareaDelCable,
   ProveedorDeModelos,
   SelectorDeConsola,
   Dispositivo,
@@ -56,6 +57,38 @@ export interface EstadoDelCliente {
    *  mensaje, que NO es lo mismo que «no hay ninguno»: la ventana lo distingue. */
   agentes?: { lista: AgenteDelCable[]; problemas: string[] };
   /**
+   * La cola de tareas en background. Ausente = todavía no ha llegado el mensaje: el kanban
+   * dice que no ha llegado en vez de afirmar que no hay tareas. NO se tira al caerse el
+   * cable (`marcarDesconectado`), por la misma regla que la foto de la máquina y el paso
+   * de instalación en marcha: las tareas siguen corriendo en la máquina aunque este
+   * navegador se desconecte.
+   */
+  /**
+   * `corriendoAqui` es si las ejecuta ESTE proceso; `ejecutaOtroProceso` es si las ejecuta
+   * otro, con **ausente = no se sabe**. Los dos, porque «no soy yo» manda a esperar y «no
+   * hay nadie» dice que no va a pasar nada: colapsarlos hacía que el aviso mandara a esperar
+   * a un proceso que puede no existir.
+   */
+  tareas?: {
+    lista: TareaDelCable[];
+    concurrencia: number;
+    corriendoAqui: boolean;
+    ejecutaOtroProceso?: boolean;
+  };
+  /**
+   * El ENCARGO que el aumentador propuso para la tarea que se está creando, o el motivo por
+   * el que no pudo.
+   *
+   * Ausente = nadie ha pedido ninguno todavía. **Nunca las dos cosas a la vez**: un encargo
+   * y un fallo del mismo intento se contradicen, y el mensaje del servidor ya llega con uno
+   * o con otro.
+   *
+   * **Se puede LIMPIAR, y hace falta**: este mensaje va a TODOS los clientes (el cable habla
+   * con todos, no con el último), así que un encargo que pidió otra pestaña se quedaría aquí
+   * y prerrellenaría el campo de la ventana de esta. La ventana lo limpia al abrirse.
+   */
+  encargoPropuesto?: { encargo?: string; error?: string };
+  /**
    * Qué hay en la máquina para probar la app (`core/dispositivos.ts`), tal como lo midió el
    * servidor. Ausente = todavía no llegó: el escritorio dice «consultando…». NO se tira al
    * caerse el cable como `modelos`: es una foto con hora de la máquina, no un estado que el
@@ -69,6 +102,21 @@ export interface EstadoDelCliente {
    * vuelo.
    */
   ajustesDeDispositivos?: AjustesDeDispositivos;
+  /**
+   * El transcript EN VIVO de la tarea de fondo que se está mirando, y de cuál.
+   *
+   * Ausente = no se está mirando ninguna. Nunca se mezcla con `actos`: los actos de una
+   * tarea de fondo no pueden aparecer en el chat de nadie, que es la regla que sostiene todo
+   * esto — y por eso van etiquetados con el id de la tarea por el cable.
+   *
+   * **No es un segundo registro**: son los MISMOS actos que se guardan en el `.jsonl` de esa
+   * sesión, así que cuando la tarea acabe, abrir su conversación enseña esto mismo.
+   *
+   * **Se tira al caerse el cable** (`marcarDesconectado`), como `modelos` y al contrario que
+   * `tareas`: el enganche vive en el SERVIDOR y se va con el SSE, así que guardarla dejaría
+   * un transcript congelado presentado como si siguiera en vivo.
+   */
+  mirada?: { tarea: string; actos: Acto[] };
   /** Hay un turno corriendo AHORA. Lo dice el servidor; el cliente no lo deduce. */
   turnoEnVuelo?: boolean;
   /**
@@ -152,7 +200,7 @@ export interface EstadoDelCliente {
     proyectos: {
       id: string;
       nombre: string;
-      sesiones?: { id: string; titulo: string }[];
+      sesiones?: { id: string; titulo: string; ultimoTurno?: string; deTarea?: true }[];
       local?: boolean;
       /** Compartido CONTIGO. Ausente = el servidor no lo dijo, que no es «es tuyo». */
       compartido?: boolean;
@@ -173,6 +221,9 @@ export interface EstadoDelCliente {
     historica?: boolean;
     /** Este proyecto aplica las escrituras sin pedir aprobación. Ausente = las pide. */
     sinAprobacion?: boolean;
+    /** Lo que ya estaba sin commitear al abrir esta consola. Ausente = nada que decir
+     *  (limpio, sin git, o no se pudo medir): el chat no pinta ningún aviso. */
+    trabajoAlAbrir?: { ficheros: string[]; total: number };
     /** El saludo de la bienvenida. Ausente = sin nombre que saludar (`Bienvenida.tsx`). */
     nombre?: string;
     /** Si hay un proyecto abierto en esta conexión — `App.tsx` lo usa para decidir entre
@@ -211,6 +262,24 @@ function esDispositivoElegido(v: unknown): v is DispositivoElegido {
     typeof d.nombre === "string" &&
     (d.plataforma === "android" || d.plataforma === "ios") &&
     (d.clase === "emulador" || d.clase === "simulador" || d.clase === "fisico")
+  );
+}
+
+/**
+ * ¿Es un aviso de trabajo sin commitear que se pueda PINTAR?
+ *
+ * Exige la lista y el total, y además que la lista traiga algo: sin nombres, el aviso
+ * afirmaría que ya había cambios y no podría decir cuáles — que es exactamente el contador
+ * a secas que este repo no admite como aviso.
+ */
+function esTrabajoAlAbrir(v: unknown): v is { ficheros: string[]; total: number } {
+  if (typeof v !== "object" || v === null) return false;
+  const t = v as Record<string, unknown>;
+  return (
+    Array.isArray(t.ficheros) &&
+    t.ficheros.length > 0 &&
+    t.ficheros.every((f) => typeof f === "string") &&
+    typeof t.total === "number"
   );
 }
 
@@ -315,9 +384,40 @@ function esFicheroTocado(valor: unknown): valor is FicheroTocado {
   return true;
 }
 
+/**
+ * El veredicto del juez de una tarea, campo a campo, o `{}` si no vino uno usable.
+ *
+ * Devuelve el TROZO a esparcir y no el objeto, para que «no vino» siga siendo AUSENTE: un
+ * `veredicto: undefined` en el estado se leería igual al pintar, pero rompería la
+ * comparación de campos que vigila esta lista blanca (F1 de la revisión final) y, sobre
+ * todo, un `{veredicto: "verde"}` sintetizado a la mínima afirmaría que el juez aprobó
+ * algo que nunca vio.
+ *
+ * Un veredicto que no es ninguno de los tres se descarta ENTERO: dejar el resumen sin el
+ * veredicto pintaría las palabras del juez sin decir si aprobó o no.
+ */
+function veredictoDeTarea(valor: unknown): { veredicto?: TareaDelCable["veredicto"] } {
+  if (typeof valor !== "object" || valor === null) return {};
+  const v = valor as Record<string, unknown>;
+  if (v["veredicto"] !== "verde" && v["veredicto"] !== "rojo" && v["veredicto"] !== "indeterminado") return {};
+  if (typeof v["resumen"] !== "string") return {};
+  return {
+    veredicto: {
+      veredicto: v["veredicto"],
+      resumen: v["resumen"],
+      ...(Array.isArray(v["hallazgos"])
+        ? { hallazgos: (v["hallazgos"] as unknown[]).filter((h): h is string => typeof h === "string") }
+        : {}),
+      ...(typeof v["salvedad"] === "string" ? { salvedad: v["salvedad"] } : {}),
+    },
+  };
+}
+
 /** `{id, titulo}`: una sesión guardada. NO vale `sonIdentidades` —una sesión no tiene
  *  `nombre`, tiene título— y usarla dejaba la lista siempre vacía sin decir por qué. */
-function sonSesiones(valor: unknown): valor is { id: string; titulo: string }[] {
+function sonSesiones(
+  valor: unknown
+): valor is { id: string; titulo: string; ultimoTurno?: unknown; deTarea?: unknown }[] {
   return (
     Array.isArray(valor) &&
     valor.every(
@@ -372,6 +472,16 @@ export function crearStoreDelCliente(): {
    *  cuenta encadena selectores sin viaje de red entre ellos). Sin él, retira lo que haya. */
   contestarSelector: (contestado?: EstadoDelCliente["selector"]) => void;
   cerrarAprobacion: () => void;
+  /** Tira el encargo propuesto. Ver `EstadoDelCliente.encargoPropuesto`. */
+  limpiarEncargoPropuesto: () => void;
+  /**
+   * Cierra el panel de la mirada sin esperar al servidor.
+   *
+   * Hace falta por lo mismo que `contestarPregunta`: el servidor no manda ningún «ya no
+   * mira» al desengancharse, así que nadie retiraría el transcript y el panel se quedaría
+   * pintado y quieto — indistinguible de una tarea que se ha colgado.
+   */
+  dejarDeMirar: () => void;
   suscribir: (escucha: () => void) => () => void;
 } {
   let estado: EstadoDelCliente = ESTADO_INICIAL;
@@ -412,6 +522,43 @@ export function crearStoreDelCliente(): {
           const actos = (mensaje as Partial<Extract<MensajeAlCliente, { clase: "reemision" }>>).actos;
           if (!Array.isArray(actos) || !actos.every(esActo)) return;
           mutar({ actos: [...actos] });
+          return;
+        }
+        /**
+         * El transcript en vivo de una tarea de fondo, campo a campo como todo lo que entra
+         * aquí. Los tres `via` son los tres mensajes del transcript de siempre con otro
+         * nombre, y se aplican igual (`reemision`, `acto`, `sustitucion`) — pero sobre
+         * `mirada` y nunca sobre `actos`.
+         *
+         * **Un trozo de OTRA tarea no se anexa.** El servidor solo manda lo que este cliente
+         * pidió, pero mezclar dos transcripts sería la peor forma de fallar aquí: una
+         * conversación contando lo que hizo otro agente. Un `todos` de otra tarea sí cambia
+         * de tarea, porque eso es exactamente lo que hace «mirar esta otra».
+         */
+        case "mirada": {
+          const m = mensaje as Partial<Extract<MensajeAlCliente, { clase: "mirada" }>>;
+          const tarea = m.tarea;
+          const via = m.via;
+          const actos = m.actos;
+          if (typeof tarea !== "string" || tarea === "") return;
+          if (!Array.isArray(actos) || !actos.every(esActo)) return;
+          if (via === "todos") {
+            mutar({ mirada: { tarea, actos: [...actos] } });
+            return;
+          }
+          const actual = estado.mirada;
+          if (actual === undefined || actual.tarea !== tarea) return;
+          if (via === "alta") {
+            mutar({ mirada: { tarea, actos: [...actual.actos, ...actos] } });
+            return;
+          }
+          if (via !== "sustitucion") return;
+          // Transcript vacío: el servidor no manda `sustitucion` sin un último acto que
+          // sustituir, así que esto solo es la red bajo un cable del que no se fía nada —
+          // cae a anexar en vez de perder el mensaje, igual que el `sustitucion` de arriba.
+          mutar({
+            mirada: { tarea, actos: actual.actos.length === 0 ? [...actos] : [...actual.actos.slice(0, -1), ...actos] },
+          });
           return;
         }
         case "bienvenida": {
@@ -583,6 +730,98 @@ export function crearStoreDelCliente(): {
           });
           return;
         }
+        case "tarea": {
+          // La única variante que el cliente recibe por esta clase es la respuesta a
+          // `augmentar` (las demás son cliente → servidor). Campo a campo y uno de los dos:
+          // un mensaje sin ninguno de ellos no cambia nada, en vez de borrar lo que había.
+          const m = mensaje as { encargo?: unknown; error?: unknown };
+          if (typeof m.encargo === "string") mutar({ encargoPropuesto: { encargo: m.encargo } });
+          else if (typeof m.error === "string") mutar({ encargoPropuesto: { error: m.error } });
+          return;
+        }
+        case "tareas": {
+          // Campo a campo, como todo lo de aquí: esta lista blanca ya se comió `mime`,
+          // `recetas` y `ejecutable`, y el síntoma siempre es una interfaz vacía con los
+          // tests en verde.
+          const m = mensaje as Record<string, unknown>;
+          if (!Array.isArray(m["lista"])) return;
+          const estados = ["nuevo", "en-proceso", "requiere-atencion", "terminada"] as const;
+          mutar({
+            tareas: {
+              concurrencia: typeof m["concurrencia"] === "number" ? m["concurrencia"] : 2,
+              corriendoAqui: m["corriendoAqui"] === true,
+              // Los TRES valores se conservan: solo un booleano de verdad se copia, y
+              // cualquier otra cosa (ausente, o un `"false"` de cadena) queda como «no se
+              // sabe». Sintetizar `false` aquí afirmaría que NADIE las ejecuta.
+              ...(typeof m["ejecutaOtroProceso"] === "boolean"
+                ? { ejecutaOtroProceso: m["ejecutaOtroProceso"] }
+                : {}),
+              lista: (m["lista"] as unknown[])
+                .filter((t): t is Record<string, unknown> => typeof t === "object" && t !== null)
+                .map((t) => ({
+                  id: String(t["id"] ?? ""),
+                  proyecto: String(t["proyecto"] ?? ""),
+                  proyectoNombre: String(t["proyectoNombre"] ?? ""),
+                  titulo: String(t["titulo"] ?? ""),
+                  peticion: String(t["peticion"] ?? ""),
+                  encargo: String(t["encargo"] ?? ""),
+                  estado: estados.find((e) => e === t["estado"]) ?? "nuevo",
+                  creada: String(t["creada"] ?? ""),
+                  adjuntos: Array.isArray(t["adjuntos"])
+                    ? (t["adjuntos"] as unknown[])
+                        .filter((a): a is { nombre: string; bytes: number } => typeof a === "object" && a !== null)
+                        .map((a) => ({
+                          nombre: String((a as Record<string, unknown>)["nombre"] ?? ""),
+                          bytes: Number((a as Record<string, unknown>)["bytes"] ?? 0),
+                          ...(typeof (a as Record<string, unknown>)["mime"] === "string"
+                            ? { mime: (a as Record<string, unknown>)["mime"] as string }
+                            : {}),
+                        }))
+                    : [],
+                  ...(typeof t["motivo"] === "string" ? { motivo: t["motivo"] } : {}),
+                  ...(typeof t["sesion"] === "string" ? { sesion: t["sesion"] } : {}),
+                  ...(typeof t["empezada"] === "string" ? { empezada: t["empezada"] } : {}),
+                  ...(typeof t["acabada"] === "string" ? { acabada: t["acabada"] } : {}),
+                  // Ausente = no consta (no llegó a correr); `[]` = corrió y no autorizó
+                  // ninguna. Las dos cosas son distintas, así que solo se copia si LLEGÓ
+                  // como array de verdad, nunca se sintetiza `[]`.
+                  ...(Array.isArray(t["autorizadas"])
+                    ? {
+                        autorizadas: (t["autorizadas"] as unknown[]).filter(
+                          (x): x is string => typeof x === "string"
+                        ),
+                      }
+                    : {}),
+                  // Ausente = nunca se le pidió nada a esta tarea; distinto de una lista
+                  // vacía, que aquí no llega nunca (`conFeedback` solo AÑADE). Campo a
+                  // campo, como el resto de esta lista blanca.
+                  ...(Array.isArray(t["feedback"])
+                    ? {
+                        feedback: (t["feedback"] as unknown[])
+                          .filter((f): f is Record<string, unknown> => typeof f === "object" && f !== null)
+                          .map((f) => ({
+                            texto: String(f["texto"] ?? ""),
+                            creado: String(f["creado"] ?? ""),
+                            consumido: f["consumido"] === true,
+                          })),
+                      }
+                    : {}),
+                  // El veredicto del juez y su SALVEDAD. Ausente = nunca se le preguntó al
+                  // juez, y eso NO es «lo aprobó»: de esa distinción depende que «Terminada»
+                  // no signifique tres cosas a la vez. Campo a campo también aquí dentro, y
+                  // un veredicto que no es ninguno de los tres se descarta entero en vez de
+                  // caer en «verde» por omisión — la dirección de siempre.
+                  ...veredictoDeTarea(t["veredicto"]),
+                  // Solo el booleano `true`: un `"false"` de cadena es verdadero en
+                  // JavaScript y marcaría como dada por buena a mano una entrega del
+                  // corredor. La trampa de siempre.
+                  ...(t["terminadaAMano"] === true ? { terminadaAMano: true } : {}),
+                }))
+                .filter((t) => t.id !== ""),
+            },
+          });
+          return;
+        }
         case "revision": {
           const m = mensaje as { via?: unknown; ficheros?: unknown };
           if (m.via !== "git" && m.via !== "sin-marca" && m.via !== "sin-empezar") return;
@@ -728,6 +967,7 @@ export function crearStoreDelCliente(): {
             dispositivoActivo?: unknown;
             historica?: unknown;
             sinAprobacion?: unknown;
+            trabajoAlAbrir?: unknown;
             proyectos?: unknown;
             ramas?: unknown;
             aviso?: unknown;
@@ -745,7 +985,19 @@ export function crearStoreDelCliente(): {
             return {
               id: p.id,
               nombre: p.nombre,
-              ...(sonSesiones(sesiones) ? { sesiones: sesiones.map((s) => ({ id: s.id, titulo: s.titulo })) } : {}),
+              ...(sonSesiones(sesiones)
+                ? {
+                    sesiones: sesiones.map((s) => ({
+                      id: s.id,
+                      titulo: s.titulo,
+                      ...(typeof s.ultimoTurno === "string" ? { ultimoTurno: s.ultimoTurno } : {}),
+                      // `=== true` y no un truthy: la trampa del `"false"` de CloudStudio en
+                      // la dirección de aquí sería marcar la conversación de una persona
+                      // como sesión de una tarea de fondo.
+                      ...(s.deTarea === true ? { deTarea: true as const } : {}),
+                    })),
+                  }
+                : {}),
               ...((p as { local?: unknown }).local === true ? { local: true } : {}),
               // La MISMA regla que el servidor: solo un booleano de verdad. Ausente se
               // queda ausente, y la interfaz no pinta etiqueta — «no lo dijo» no es
@@ -822,6 +1074,11 @@ export function crearStoreDelCliente(): {
               // cadena «true» incluida— se lee como «sí pide aprobación», que es el lado
               // en el que un fallo no cuesta nada.
               ...(m.sinAprobacion === true ? { sinAprobacion: true } : {}),
+              // Campo a campo, como la foto del dispositivo: media forma no vale. Y una
+              // lista VACÍA se descarta aunque venga bien formada — sería un aviso que
+              // dice «ya había cambios» sin nombrar ninguno, o sea peor que callarse. El
+              // servidor tampoco la manda, pero eso no puede sostenerlo el cliente.
+              ...(esTrabajoAlAbrir(m.trabajoAlAbrir) ? { trabajoAlAbrir: m.trabajoAlAbrir } : {}),
               // Solo los dos valores que el tipo admite: cualquier otra cosa (un modo
               // nuevo del servidor, o basura) se descarta y la cabecera no pinta
               // pastilla, que es lo mismo que hace cuando el campo no viene. Aceptar la
@@ -852,6 +1109,10 @@ export function crearStoreDelCliente(): {
 
     marcarConectado(): void {
       mutar({ conectado: true });
+    },
+
+    limpiarEncargoPropuesto(): void {
+      mutar({ encargoPropuesto: undefined });
     },
 
     marcarDesconectado(): void {
@@ -890,6 +1151,10 @@ export function crearStoreDelCliente(): {
         // editado a mano, y la ventana de ajustes enseñaría una lista que ya no es. La
         // reconexión los trae enteros en la misma ráfaga que los modelos.
         agentes: undefined,
+        // La mirada a una tarea la sostiene el SERVIDOR: su enganche se va con el SSE
+        // (`arranque.ts`, el `close`), así que guardarla dejaría un transcript congelado
+        // presentado como si siguiera llegando. La reconexión la vuelve a pedir.
+        mirada: undefined,
       });
     },
 
@@ -914,6 +1179,10 @@ export function crearStoreDelCliente(): {
 
     contestarSecreto(): void {
       mutar({ secreto: undefined });
+    },
+
+    dejarDeMirar(): void {
+      mutar({ mirada: undefined });
     },
 
     /**

@@ -423,3 +423,65 @@ describe("consolaWeb: los actos de la piel no son solo altas", () => {
     expect(c.eventosEmitidos().map((m) => m.clase)).toEqual(["acto", "acto", "reemision"]);
   });
 });
+
+/**
+ * **Mirar una consola de tarea NO la convierte en una consola con humano delante.**
+ *
+ * Task 16, y es la comprobación que el brief pedía antes que nada. Medido con la consola de
+ * proyecto de una tarea de fondo: `conectar(sumidero)` le pone `eof()` a `false` —«hay
+ * alguien al que preguntar»— y el turno de esa tarea no puede permitirse eso, porque esa
+ * vista es de SOLO lectura y no hay nadie que pueda contestar. `mirar` es el conjunto
+ * aparte que lo evita: quien mira recibe el transcript y no cuenta como cliente.
+ */
+describe("consolaWeb: mirar no es conectar", () => {
+  it("`eof()` sigue diciendo que no hay nadie con un mirón enganchado", () => {
+    const c = crearConsolaWeb();
+    expect(c.consola.eof!()).toBe(true);
+    c.mirar(() => {});
+    // Si esto fuera `false`, `preguntar` esperaría diez minutos a una respuesta que nadie
+    // va a dar y `aprobacionesTui` dejaría de nacer rechazada por transporte.
+    expect(c.consola.eof!()).toBe(true);
+  });
+
+  it("con un mirón enganchado, preguntar sigue contestando lo que un rl cerrado", async () => {
+    const c = crearConsolaWeb();
+    c.mirar(() => {});
+    expect(await c.consola.preguntar("¿Aprobar? ")).toBe("");
+    expect(await c.consola.leerSecreto("clave: ")).toBe("");
+    expect(await c.consola.seleccionar!({ titulo: "modo", opciones: [] })).toBe(undefined);
+  });
+
+  it("al mirón le llega el transcript en vivo, y no el `turno` ni la aprobación", () => {
+    const c = crearConsolaWeb();
+    const visto: { clase: string }[] = [];
+    c.mirar((m) => visto.push(m));
+    c.consola.escribir("trabajando\n");
+    c.turno(true);
+    void c.consola.aprobacionesTui!([], new Map(), new Map());
+    expect(visto.map((m) => m.clase)).toEqual(["acto"]);
+  });
+
+  it("`mirar` devuelve el transcript de ese instante", () => {
+    const c = crearConsolaWeb();
+    c.consola.escribir("hola\n");
+    expect(c.mirar(() => {})).toEqual([{ tipo: "sistema", texto: "hola" }]);
+  });
+
+  it("dejar de mirar corta ESE sumidero y no el de la otra persona", () => {
+    const c = crearConsolaWeb();
+    const uno: unknown[] = [];
+    const otro: unknown[] = [];
+    const sumideroUno = (m: unknown): void => {
+      uno.push(m);
+    };
+    c.mirar(sumideroUno);
+    c.mirar((m) => {
+      otro.push(m);
+    });
+    c.consola.escribir("uno\n");
+    c.dejarDeMirar(sumideroUno);
+    c.consola.escribir("dos\n");
+    expect(uno).toHaveLength(1);
+    expect(otro).toHaveLength(2);
+  });
+});

@@ -58,36 +58,20 @@ import { dirname, join } from "node:path";
 import type { Acto } from "../../core/actos.js";
 import { carpetaDeArtefactosDeSesion } from "../../core/artefactos.js";
 import { segmentoSeguro } from "../../core/settings.js";
+import { tituloDesde } from "../../core/textos.js";
 
 /** Cuántos caracteres de la primera prosa del usuario se guardan como título. */
 const LARGO_TITULO = 80;
 
-/** Hasta dónde llega un título AUTOMÁTICO antes de cortarse en una palabra entera. */
-const LARGO_TITULO_AUTOMATICO = 60;
-
 /**
  * El título automático de una sesión, a partir de su primera petición.
  *
- * Era `texto.slice(0, 80)` a secas, y medido en pantalla daba «Escribe literalmente esta
- * frase, sin cambiar nada: «en XOne se usa $http para pe» — media frase con una comilla sin
- * cerrar. Sin llamar a ningún modelo (un título no vale una petición), lo que sí se puede
- * hacer es quedarse con la PRIMERA frase o línea, quitar la comilla de apertura si la
- * petición empieza citando, y cortar en una palabra entera con puntos suspensivos. Sigue
- * siendo lo que el usuario escribió, no un resumen: renombrar sigue estando en el «…».
+ * Se movió a `core/textos.ts` cuando las TAREAS necesitaron el mismo título: `core/` no
+ * puede importar de `web/`, y una segunda copia habría divergido. Se reexporta con su
+ * nombre de siempre porque `anotarActo`, en este mismo fichero, y sus tests lo usan desde
+ * aquí.
  */
-export function tituloDesde(texto: string): string {
-  const primera = texto
-    .trim()
-    .split(/\r?\n/)[0]!
-    .split(/(?<=[.!?:;])\s/)[0]!
-    .replace(/[.!?:;]+$/u, "")
-    .replace(/^[«"“'‘¿¡\s]+/u, "")
-    .trim();
-  if (primera.length <= LARGO_TITULO_AUTOMATICO) return primera.slice(0, LARGO_TITULO);
-  const corte = primera.slice(0, LARGO_TITULO_AUTOMATICO);
-  const enPalabra = corte.lastIndexOf(" ");
-  return `${(enPalabra > 20 ? corte.slice(0, enPalabra) : corte).replace(/[\s,;:]+$/u, "")}…`;
-}
+export { tituloDesde };
 
 /**
  * El dispositivo preferido de una sesión: con cuál trabaja el agente.
@@ -115,6 +99,21 @@ export interface EntradaIndice {
   ultimoTurno: string;
   /** Con cuál trabaja el agente. Ausente = ninguno elegido. */
   dispositivo?: DispositivoElegido;
+  /**
+   * El id de la TAREA de fondo que abrió esta sesión, si la abrió una.
+   *
+   * Ausente es **«no consta»** y no «es una conversación»: no la lleva ninguna sesión
+   * anterior a esta marca, ni la que se dé de alta por el camino defensivo de
+   * `anotarActo` (índice perdido a mitad). Quien lo pinte tiene que tratarlo como el lado
+   * conservador —liso—, no como una afirmación.
+   *
+   * Se guarda AQUÍ y no se deduce cruzando con la cola de tareas, que es lo que parecía
+   * gratis: la cola es opcional en las dos capas —`OpcionesDeMontaje.colaDeTareas` y el
+   * mensaje `tareas` del cable— y en un proceso que no las corre el cruce pintaría TODAS
+   * las sesiones de tarea como conversaciones, en silencio y en la dirección equivocada.
+   * Es el mismo camino que recorrió `historica`: de suposición a hecho comprobado.
+   */
+  tarea?: string;
 }
 
 export interface SesionReabierta {
@@ -239,10 +238,14 @@ function escribirIndice(raiz: string, entradas: EntradaIndice[]): void {
  * que existir antes del primer turno, y esto solo escribe la entrada. Sin id se genera uno,
  * que es lo que hacía siempre y lo que sigue valiendo para quien no tenga hilo.
  */
-export function crearSesion(raiz: string, id: string = randomUUID()): string {
+export function crearSesion(raiz: string, id: string = randomUUID(), tarea?: string): string {
   const ahora = new Date().toISOString();
   const entradas = leerIndiceOAbortar(raiz);
-  entradas.push({ id, titulo: "", creada: ahora, ultimoTurno: ahora });
+  // La marca se escribe SOLO aquí, que es el único sitio donde se da de alta la entrada por
+  // el camino normal (`vestibulo.ts#volcar`, una vez por sesión) y donde se sabe por qué
+  // puerta se abrió. Ponerla en `anotarActo` la haría viajar en cada acto para decidir
+  // «solo si falta» en todos.
+  entradas.push({ id, titulo: "", creada: ahora, ultimoTurno: ahora, ...(tarea === undefined ? {} : { tarea }) });
   escribirIndice(raiz, entradas);
   return id;
 }
@@ -279,6 +282,32 @@ export function anotarActo(raiz: string, id: string, acto: Acto): void {
     entrada.ultimoTurno = ahora;
   }
   escribirIndice(raiz, entradas);
+}
+
+/**
+ * SIEMBRA la marca de tarea en una sesión que ya estaba en el índice. Devuelve si la tocó.
+ *
+ * Existe por las sesiones de tarea anteriores a `EntradaIndice.tarea`: sin esto, la primera
+ * que hubo en cada proyecto se queda para siempre pintada como una conversación. La corre el
+ * corredor al arrancar, recorriendo su propia cola — o sea leyendo la autoridad sobre de
+ * quién es cada sesión, la misma que escribió el dato.
+ *
+ * **Es MONOTÓNICA, y de ahí sale que sea segura**: solo añade. No pisa una marca puesta —la
+ * del disco es la que escribió quien abrió la sesión— y no quita ninguna, así que no hay
+ * forma de que convierta una sesión de tarea en una conversación, que es el único fallo
+ * abierto posible por aquí. Correrla dos veces no hace nada la segunda.
+ *
+ * Y **no da de alta la entrada que falte**: la cola vive en `~/.xonecode/tareas` y el índice
+ * en el proyecto, así que una tarea puede nombrar una sesión que alguien borró; crearla la
+ * resucitaría en la barra apuntando a un `.jsonl` que ya no está.
+ */
+export function marcarTareaDeSesion(raiz: string, id: string, tarea: string): boolean {
+  const entradas = leerIndiceOAbortar(raiz);
+  const entrada = entradas.find((e) => e.id === id);
+  if (entrada === undefined || entrada.tarea !== undefined) return false;
+  entrada.tarea = tarea;
+  escribirIndice(raiz, entradas);
+  return true;
 }
 
 /**

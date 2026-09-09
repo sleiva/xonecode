@@ -21,6 +21,7 @@ export function Transcript({
   turnoEnVuelo,
   historica,
   sinAprobacion,
+  trabajoAlAbrir,
   segundosEnVuelo,
   proyecto,
   modelo,
@@ -28,6 +29,7 @@ export function Transcript({
   ficheros,
   revision,
   artefactos,
+  tareas,
   alAbrirArtefacto,
 }: {
   actos: readonly Acto[];
@@ -37,6 +39,8 @@ export function Transcript({
   historica?: boolean;
   /** El proyecto escribe sin pedir aprobación. Va al Chat, que lo dice con palabras. */
   sinAprobacion?: boolean;
+  /** Lo que ya estaba sin commitear al abrir. Ver `Chat`. */
+  trabajoAlAbrir?: { ficheros: string[]; total: number };
   segundosEnVuelo?: number;
   proyecto?: string;
   modelo?: string;
@@ -53,6 +57,10 @@ export function Transcript({
   /** Lo que el agente DIBUJÓ en esta sesión. Su pestaña solo existe si hay alguno, y de eso
    *  se encarga `Pestanas`: aquí es una ranura más. */
   artefactos?: ReactNode;
+  /** Las tareas en background del proyecto ABIERTO. Desde Task 15 su pestaña existe SIEMPRE
+   *  —es de acción, no de registro como `artefactos` (`Pestanas.tsx`)—; aquí sigue siendo
+   *  solo una ranura más. */
+  tareas?: ReactNode;
   /** Abrir un artefacto desde su tarjeta del Chat. Lo resuelve `App`, que es quien recuerda
    *  la pestaña y el elegido. */
   alAbrirArtefacto?: (ruta: string) => void;
@@ -69,6 +77,7 @@ export function Transcript({
             turnoEnVuelo={turnoEnVuelo === true}
             historica={historica === true}
             sinAprobacion={sinAprobacion === true}
+            {...(trabajoAlAbrir === undefined ? {} : { trabajoAlAbrir })}
             {...(segundosEnVuelo === undefined ? {} : { segundosEnVuelo })}
             {...(proyecto === undefined ? {} : { proyecto })}
             {...(modelo === undefined ? {} : { modelo })}
@@ -81,6 +90,8 @@ export function Transcript({
           revision
         ) : pestana === "artefactos" ? (
           artefactos
+        ) : pestana === "tareas" ? (
+          tareas
         ) : (
           ficheros
         )}

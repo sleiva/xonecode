@@ -195,6 +195,8 @@ export function Ajustes({
   resultadoDeProveedor,
   alElegirProyectos,
   alResponderSecreto,
+  tareas,
+  alCambiarConcurrencia,
   alCerrar,
 }: {
   /** Los del mensaje «modelos». Vacío = todavía no ha llegado, y se dice. */
@@ -274,6 +276,11 @@ export function Ajustes({
   /** Qué proyectos de ese entorno se enseñan en la barra. Vacío = ninguno, y es elección. */
   alElegirProyectos: (entorno: string, proyectos: string[]) => void;
   alResponderSecreto: (valor: string) => void | Promise<unknown>;
+  /** El tope de concurrencia vigente. Ausente = todavía no ha llegado; el selector enseña
+   *  la misma omisión que el store del cliente (2) mientras tanto. */
+  tareas?: { concurrencia: number };
+  /** Cambia el tope. Ausente = esta ejecución no puede, y el selector se apaga. */
+  alCambiarConcurrencia?: (concurrencia: number) => void;
   alCerrar: () => void;
 }) {
   const [seccion, setSeccion] = useState<SeccionDeAjustes>("modelos");
@@ -782,6 +789,33 @@ export function Ajustes({
                 sesión, no de esta ventana; conectar por red, arrancar un emulador o instalar la app tampoco
                 está cableado todavía.
               </p>
+
+              {/*
+                El tope de concurrencia de la cola de tareas en background: es un ajuste de
+                la MÁQUINA —cuántas tareas soporta correr a la vez este equipo—, igual que
+                los cuatro interruptores de arriba, y por eso vive en la misma sección y no
+                en una pestaña propia.
+              */}
+              <h3 className={estilos.subencabezado}>Tareas</h3>
+              <label className={estilos.filaDeConcurrencia}>
+                Tareas a la vez
+                <input
+                  type="number"
+                  min={0}
+                  max={8}
+                  value={tareas?.concurrencia ?? 2}
+                  disabled={!conectado || alCambiarConcurrencia === undefined}
+                  onChange={(e) => alCambiarConcurrencia?.(Math.max(0, Math.min(8, Math.trunc(Number(e.target.value)))))}
+                />
+                <span className={estilos.pistaEnLinea}>— las del mismo proyecto van siempre en serie</span>
+              </label>
+              {(tareas?.concurrencia ?? 2) === 0 ? (
+                // Cero es una elección válida —es cómo se pausa la cola— pero callarlo
+                // dejaría un kanban donde nada avanza y nadie sabe por qué.
+                <p className={estilos.nota} role="alert">
+                  Con 0 la cola queda PAUSADA: nada nuevo arranca.
+                </p>
+              ) : null}
             </>
           ) : null}
 

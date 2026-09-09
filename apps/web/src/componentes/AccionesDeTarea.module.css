@@ -1,0 +1,115 @@
+/* Alias comprobados contra `apps/web/estilos/design-platform.css` (los mismos que
+   `Kanban.module.css` y `TareasDelProyecto.module.css`, que se quedaron SIN estas reglas
+   duplicadas desde que viven aquí: border-l2, label-primary/secondary/tertiary,
+   state-warn-label, bg-layer-2, interactive-bg-hover, state-error-primary,
+   label-primary-inverted (esta última compartida con `AccionDeSesion.module.css`, que ya la
+   comprobó para el mismo botón destructivo). Ningún color literal (`Barra.test.tsx`).
+   La coraza del modal de descartar —capa, velo, ventana, título, nota, acciones, el botón
+   primario— vive en `NuevaSesion.module.css` y no aquí: es la misma que ya usa
+   `AccionDeSesion.tsx`, y copiarla sería la tercera versión del mismo velo. */
+
+.acciones {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+/* La regla de `Barra`/`Escritorio`: se apaga lo que manda algo al servidor, y se DICE por
+   qué — un botón deshabilitado y mudo deja adivinando si falló el botón o el servidor.
+   `flex-basis: 100%` para que ocupe su propia línea y no se lea pegado al primer botón. */
+.avisoConexion {
+  flex-basis: 100%;
+  margin: 0;
+  color: var(--dsw-alias-state-warn-label);
+  font-size: 11px;
+}
+
+.boton {
+  padding: 4px 8px;
+  border: 0.5px solid var(--dsw-alias-border-l2);
+  border-radius: 8px;
+  background: var(--dsw-alias-bg-layer-2);
+  color: var(--dsw-alias-label-primary);
+  font: inherit;
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.boton:hover {
+  background: var(--dsw-alias-interactive-bg-hover);
+}
+
+.boton:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+/* El botón que confirma descartar, dentro del modal (`ConfirmarDescarte`, coraza de
+   `NuevaSesion.module.css`). MISMA regla que `AccionDeSesion.module.css#destructiva`, y el
+   mismo selector doblado por el mismo motivo: ganarle a `.principal.principal` de
+   `NuevaSesion.module.css`, que también pisa el botón "primario" con dos clases. Relleno
+   rojo lleno y no un tinte suave: es una acción irreversible y sin papelera. */
+.destructiva.destructiva {
+  border-color: var(--dsw-alias-state-error-primary);
+  background: var(--dsw-alias-state-error-primary);
+  color: var(--dsw-alias-label-primary-inverted);
+}
+
+/* Una frase, no una decisión con diff: sin modal. `flex-basis: 100%` para que el campo no
+   se apriete al lado de los botones de reintentar/descartar/terminar. */
+.feedback {
+  display: flex;
+  flex-direction: column;
+  flex-basis: 100%;
+  gap: 4px;
+}
+
+.etiquetaFeedback {
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 11px;
+}
+
+.campoFeedback {
+  padding: 6px 8px;
+  border: 0.5px solid var(--dsw-alias-border-l2);
+  border-radius: 8px;
+  background: var(--dsw-alias-bg-layer-2);
+  color: var(--dsw-alias-label-primary);
+  font: inherit;
+  font-size: 12px;
+  resize: vertical;
+}
+
+.campoFeedback:disabled {
+  opacity: 0.5;
+}
+
+.botonFeedback {
+  align-self: flex-start;
+  padding: 4px 8px;
+  border: 0.5px solid var(--dsw-alias-border-l2);
+  border-radius: 8px;
+  background: var(--dsw-alias-bg-layer-2);
+  color: var(--dsw-alias-label-primary);
+  font: inherit;
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.botonFeedback:hover {
+  background: var(--dsw-alias-interactive-bg-hover);
+}
+
+.botonFeedback:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.pista {
+  flex-basis: 100%;
+  margin: 0;
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 11px;
+  font-style: italic;
+}

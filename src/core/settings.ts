@@ -83,6 +83,13 @@ export function seMira(ajustes: AjustesDeDispositivos | undefined, plataforma: P
  */
 export type AprobacionPorProyecto = Record<string, boolean>;
 
+/**
+ * Tope máximo del selector de concurrencia de tareas en Ajustes. La omisión (sin nada
+ * guardado) es `CONCURRENCIA_POR_OMISION` de `core/tareas.ts` — 2 — y vive ahí y no aquí
+ * porque ese fichero es el dueño de la planificación; este solo guarda la ELECCIÓN.
+ */
+export const TOPE_DE_CONCURRENCIA_DE_TAREAS = 8;
+
 export interface Settings {
   entornos: Entorno[];
   /** La BASE del workspace. La disposición de dentro la fija `rutaDeWorkspace`. */
@@ -91,6 +98,18 @@ export interface Settings {
   dispositivos?: AjustesDeDispositivos;
   /** En qué proyectos las escrituras se aplican sin preguntar. Ausente = en ninguno. */
   sinAprobacion?: AprobacionPorProyecto;
+  /**
+   * El tope de concurrencia de la cola de tareas en background: cuántas corren a la vez EN
+   * ESTA MÁQUINA. Vive aquí y no en el índice de tareas (`~/.xonecode/tareas/indice.json`)
+   * por el mismo motivo que `dispositivos`: describe el EQUIPO, no una tarea concreta, y el
+   * mismo Mac soporta la misma concurrencia para cualquier cola que corra en él.
+   *
+   * **Ausente no es «cero»: es «no lo he dicho»**, y entonces manda
+   * `core/tareas.ts#CONCURRENCIA_POR_OMISION` (2) — la misma distinción que
+   * `AjustesDeDispositivos` y que `Entorno.proyectos`. Cero SÍ se guarda: es una elección
+   * legítima (pausar la cola) y no se puede confundir con «no lo he dicho».
+   */
+  concurrenciaDeTareas?: number;
 }
 
 /**
@@ -210,12 +229,14 @@ export function validarSettings(bruto: unknown): { settings: Settings; avisos: A
   const workspace = typeof objeto.workspace === "string" ? objeto.workspace : undefined;
   const dispositivos = validarDispositivos(objeto.dispositivos);
   const sinAprobacion = validarSinAprobacion(objeto.sinAprobacion);
+  const concurrenciaDeTareas = validarConcurrenciaDeTareas(objeto.concurrenciaDeTareas);
   return {
     settings: {
       entornos,
       ...(workspace === undefined ? {} : { workspace }),
       ...(dispositivos === undefined ? {} : { dispositivos }),
       ...(sinAprobacion === undefined ? {} : { sinAprobacion }),
+      ...(concurrenciaDeTareas === undefined ? {} : { concurrenciaDeTareas }),
     },
     avisos,
   };
@@ -256,6 +277,18 @@ function validarDispositivos(candidato: unknown): AjustesDeDispositivos | undefi
     if (typeof c[plataforma] === "boolean") salida[plataforma] = c[plataforma] as boolean;
   }
   return Object.keys(salida).length === 0 ? undefined : salida;
+}
+
+/**
+ * Solo un entero entre 0 y `TOPE_DE_CONCURRENCIA_DE_TAREAS`. Cero SÍ vale —es cómo se
+ * pausa la cola, una elección tan legítima como cualquier otra— así que lo que se descarta
+ * no es «cero», es lo que no tiene forma de entero en rango: una cadena, un decimal, un
+ * negativo o un número por encima del tope.
+ */
+function validarConcurrenciaDeTareas(candidato: unknown): number | undefined {
+  if (typeof candidato !== "number" || !Number.isInteger(candidato)) return undefined;
+  if (candidato < 0 || candidato > TOPE_DE_CONCURRENCIA_DE_TAREAS) return undefined;
+  return candidato;
 }
 
 /**

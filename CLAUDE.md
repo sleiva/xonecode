@@ -266,6 +266,95 @@ turno y nadie volvía a anunciar; y `historica` deja de serlo al EMPEZAR el prim
 nuevo. Diferido a una microtarea porque `vestibulo.ts` llama a la escucha ANTES de
 `volcar()` en el mismo `finally` síncrono: anunciar en el acto leería la sesión sin id.
 
+**Las sesiones de la barra son UNA lista, y se distingue qué es cada una y cuándo se tocó**
+(`EntradaIndice.tarea`, `alta.proyectos[].sesiones[].deTarea`/`.ultimoTurno`,
+`apps/web/src/selloDeFecha.ts`). Una tarea de fondo abre su PROPIA sesión y entra en el mismo
+índice del proyecto, así que ya salía en la barra — mezclada con las conversaciones y, medido
+en el proyecto real del usuario, **con el título en blanco**: el título sale del primer acto de
+`usuario` y una tarea no manda ninguno. Cinco reglas:
+- **De quién es una sesión se GUARDA, no se deduce.** `crearSesion` escribe el id de la tarea
+  cuando la abre la puerta de las tareas —`abrirParaTarea` lo baja hasta el cuerpo compartido—,
+  y es el único sitio que lo sabe. Cruzarlo después con la cola parecía gratis y es un fallo
+  abierto: la cola es OPCIONAL en las dos capas (`OpcionesDeMontaje.colaDeTareas` y el mensaje
+  `tareas`), así que en un proceso que no corre tareas el cruce pintaría TODAS las sesiones de
+  tarea como conversaciones, en silencio. Es el camino que ya recorrió `historica`: de
+  suposición a hecho comprobado.
+- **Ausente es «no consta», no «es un chat»**: se pinta liso porque liso es lo conservador, no
+  porque conste que sea de una persona. Y como la marca es nueva, hay una **SIEMBRA al arrancar
+  el corredor** (`sesiones.ts#marcarTareaDeSesion`) que recorre su propia cola y marca las
+  sesiones que ya existían — si no, la primera sesión de tarea de cada proyecto se quedaba
+  mintiendo para siempre (medido: en AppDemo, la única que hay). No es el cruce prohibido de
+  arriba y la diferencia es cuál es la pregunta: en el cable es «¿esto es de una tarea?», y sin
+  cola la respuesta sería «no» en silencio; aquí es «marca estas, que sé que lo son», leyendo la
+  autoridad que escribió el dato. Es **monotónica**: solo AÑADE —no pisa una marca puesta ni la
+  quita, así que no puede convertir una sesión de tarea en una conversación— y **no da de alta
+  la entrada que falte**, porque la cola vive en `~/.xonecode/tareas` y el índice en el proyecto:
+  una tarea puede nombrar una sesión que alguien borró, y crearla la resucitaría en la barra
+  apuntando a un `.jsonl` que ya no está.
+- **Y la costura del corredor se dejaba el argumento, con todo en verde.** `abrirParaTarea` se
+  reenvía con una lambda escrita a mano (`arranque.ts#construirCorredorDeTareasCableado`), y
+  TypeScript no se queja de una función que ignora parámetros: el id de la tarea se caía ahí
+  igual que se cayó `tarea.sesion` en su día. Es la MISMA función y el MISMO fallo por tercera
+  vez —tercer argumento, cuarto argumento—, y lo caza un test por argumento contra esa
+  composición exportada, que es para lo que se extrajo.
+- **Por el cable viaja un BOOLEANO, no el id de la tarea.** La fila lleva una marca y no el
+  nombre de la tarea —en 280 px comparte hueco con el título y con el «…»—, así que el id se
+  queda en el host, la misma regla que la ruta de una herramienta o el pid del corredor.
+- **El orden es por `ultimoTurno`**, que también estaba en el índice desde siempre y tampoco
+  viajaba. Era `[...sesiones].reverse()`, o sea el orden de alta al revés: una conversación
+  vieja reabierta hoy se quedaba abajo del todo. Las entradas sin hora van al final y entre
+  ellas se conserva el criterio de siempre (invertido), que es lo único que se sabe de ellas.
+- **Y lo que falta se ROTULA, no se inventa.** Una fila sin título dice «Tarea de fondo» si
+  consta que lo es y «Sin título» si no; el sello de fecha no se pinta si la hora no se puede
+  leer, en vez de un «Invalid Date». El año solo sale cuando no es el actual: repetido en todas
+  las filas no distingue ninguna, y omitido siempre haría que un «7 sept» del año pasado se
+  leyera como de anteayer.
+
+**Y el proyecto DICE con qué te encuentras: lo que ya había sin commitear al abrir**
+(`agent/gitSync.ts#trabajoSinCommitear`, `alta.trabajoAlAbrir`). Todas las sesiones de un
+proyecto escriben en la MISMA copia local, y desde que hay tareas de fondo que escriben solas
+eso pasó de molesto a destructivo: «gana la persona» (una tarea no arranca con la consola
+humana abierta) es una mitigación, no aislamiento. Esto es lo barato que faltaba — decirlo en
+vez de dejar que dos sesiones se pisen calladas. Cinco reglas:
+- **La medida es del instante de ABRIR**, en el mismo sitio y por el mismo motivo que la foto
+  del antes de `sesionGit.ts`: medida más tarde incluiría lo que esta sesión acaba de
+  escribir. Con eso el aviso es honesto POR CONSTRUCCIÓN —nada de lo que escriba esta sesión
+  puede aparecer en él— y por eso está cacheada y no se vuelve a medir en los reanuncios del
+  alta, que son dos por turno. La frase va en PASADO: un «hay cambios» sería falso en cuanto
+  alguien commitee, con el aviso todavía puesto.
+- **Avisa, no FRENA.** Una tarea que escribe deja el árbol sucio por definición —es la razón de
+  que `revisable` no sea «árbol limpio»—, así que una guarda de árbol limpio delante de la cola
+  la atascaría después de la primera tarea. El precio se dice, no se cobra.
+- **`sinCommitear` y `trabajoSinCommitear` son la MISMA medida con dos políticas ante lo que no
+  se puede mirar, y las dos son correctas.** La vieja sostiene la guarda de `/sync`: sin repo
+  no hay nada que recuperar tras sobrescribir, así que declara la carpeta sucia y bloquea, y un
+  git roto LANZA para que `/sync` pare. La nueva sostiene un aviso, y un aviso que no se puede
+  sostener no se da: sin repo o con git roto responde `sin-git` y no se pinta nada. La
+  diferencia no es cosmética — **todo proyecto OFFLINE es una carpeta sin git** (`prepararRepo`
+  solo corre al descargar), así que la política de la otra pondría un aviso en cada apertura de
+  cada proyecto offline. Por eso el `git status` está extraído en una sola función privada: una
+  medida, dos políticas, y ningún segundo criterio de «limpio».
+- **La basura del SO se quita también DENTRO de un repo, y eso salió de MEDIRLO.** El filtro
+  de `.DS_Store`/`Thumbs.db`/`desktop.ini` solo cubría la rama sin repo; medido contra los
+  proyectos reales, uno tenía exactamente UN fichero sin commitear y era un `.DS_Store`, o sea
+  que el aviso habría saltado entero para decir que alguien abrió la carpeta en el Finder
+  (`prepararRepo` solo excluye `.xonecode/`). Con eso vino la única diferencia de FORMA entre
+  las dos preguntas: el aviso pide `--untracked-files=all` y la guarda no. Git colapsa por
+  omisión una carpeta sin rastrear en una línea («doc/»), y así ni se puede reconocer que
+  dentro solo hay basura ni se le dice a nadie qué fichero es — «doc/» dice mucho menos que
+  «doc/NOTA-DEMO.md». El volumen lo sujetan el tope y el total.
+- **Se callan las tres respuestas que no son un aviso** —limpio, sin git, y no se pudo medir— y
+  el campo viaja solo cuando hay algo. Y viaja la LISTA, no un contador: quien lo lee tiene que
+  poder reconocer si eso es suyo, de otra sesión o de una tarea. Los nombres van acotados
+  (`FICHEROS_DEL_AVISO`) porque el alta se reemite en los dos flancos de cada turno, con el
+  `total` entero al lado — que es lo que impide leer los que caben como si fueran todos.
+- **Se mide por las DOS puertas**, porque la medida vive en el cuerpo compartido de
+  `abrirProyecto` y `abrirParaTarea`. Hoy solo la lee el chat: por la puerta de las tareas el
+  dato está y no lo pinta nadie todavía. Y el cableado de `arranque.ts` comparte el hueco
+  declarado de `marcarSesion` — `vestibuloReal` lee el `settings.json` real del usuario, así que
+  ningún test lo construye: lo que está probado es que el vestíbulo usa la medida por las dos
+  puertas, no que ahí siga puesta.
+
 **El turno en vuelo tiene cronómetro, y sin cable la interfaz se apaga.** El pie decía el
 tiempo del turno ANTERIOR mientras corría el actual (116 s con «10,7 s» delante), y sin
 servidor lo único que cambiaba era un «sin conexión» pequeño con los 18 «Nueva sesión»
@@ -688,6 +777,423 @@ sesiones llegaban a fuego como `[]`:
   `[]` es «ninguno» y se respeta. Esa distinción se conserva en las cuatro capas (disco,
   cable, store y componente); colapsarla haría que elegir ninguno se leyera como no haber
   elegido. El ORDEN lo pone el listado del servidor, no el orden en que se marcaron.
+
+**Las tareas en BACKGROUND** (`core/tareas.ts`, `agent/tareasEnDisco.ts`, `web/servidor/corredorDeTareas.ts`,
+`consolaDeTarea.ts`, `core/entrega.ts`, `agent/juezDeTarea.ts`). Un encargo por proyecto que se
+ejecuta **solo**: se encola, corre cuando le toca, escribe en el proyecto sin pedir aprobación, y
+se entrega si pasa unas condiciones más el veredicto de un juez. Cuatro estados —`nuevo`,
+`en-proceso`, `requiere-atencion`, `terminada`— y `requiere-atencion` significa **esperando
+feedback del desarrollador**: no es terminal, se resuelve editando la tarea.
+
+**Que una tarea escriba sin aprobación es una decisión de producto, y el sitio del diff NO se
+queda vacío.** La aprobación no estaba por la propiedad del repo: estaba porque XOne ignora en
+silencio lo desconocido, así que un atributo inventado no da error sino un bug mudo, y el diff era
+el único momento en que alguien lo veía antes de que existiera. Quitando al humano, ese papel lo
+ocupan DOS piezas y las dos hacen falta: el **verificador**, que ya corre en el turno (medido: sí
+corre por el camino de una tarea), y el **juez** de QA. Y el juez **no basta solo** —la regla que
+`core/cloudstudio.ts#PoliticaDeAprobacion` ya tenía escrita para la subida autónoma—: las
+condiciones las comprueba el CÓDIGO, porque a un modelo se le puede pedir que avise y a veces no
+avisa. Cinco reglas que sostienen esto:
+- **La autorización es el ACTO DE CREAR LA TAREA**, no un interruptor. Elegir un proyecto y
+  escribir un encargo es decir «trabaja en esto sin preguntarme», y sin tarea creada no hay
+  escritura autónoma posible — un ajuste aparte sería algo que armar y recordar. Y **no se
+  reutiliza `seAplicaSinAprobacion`**: su significado es «el humano que está aquí ha decidido no
+  pulsar», rechaza los proyectos conectados, y su marca vive en el `settings.json` de un proyecto.
+- **Las guardas de RUTA siguen enteras**, y eso está probado montando el backend real más
+  `permisosDe`: `/artifacts/`, las vistas aplanadas, `/.env`, `/.git` y `/.xonecode` se rechazan
+  igual. Quitar el modal no abre ninguna de esas puertas. Y no son la misma guarda ni contestan
+  igual —las tres últimas las corta `permissions` con un `ToolMessage` de error, no el backend con
+  una cadena—, así que un test que exigiera una sola forma daría por roto el otro camino.
+- **`Tarea.autorizadas` guarda lo AUTORIZADO, no lo escrito.** Una ruta que las guardas rechazan
+  sale ahí sin tocar el disco. Es una pista y su nombre no puede prometer más: la verdad sobre lo
+  que cambió la tiene la ref de git de la sesión, o sea la pestaña Revisión.
+- **«Terminada» ya no significa «el turno acabó».** `condicionesDeEntrega` (`core/entrega.ts`,
+  pura) exige verificador en VERDE, nada pendiente de aprobar y `revisable`. Esa tercera **no es
+  «árbol limpio»**, y está medido: una tarea que escribe deja `git status` sucio por definición, así
+  que esa condición habría impedido entregar cualquier tarea — es `cambiosDeSesion().via === "git"`,
+  «alguien puede revisar esto», con la misma función que pinta Revisión para que no puedan
+  divergir. El verificador que **NO CORRIÓ no es verde**: «no se sabe» no es «está bien».
+- **Una tarea de SOLO LECTURA sí se entrega**, y no es relajar lo anterior: el dominio del
+  verificador son las escrituras, así que sin cambios la condición **no aplica**. Con tres
+  candados: que no escribió lo dice GIT y no `autorizadas`; `escribio` solo se afirma **con marca**
+  (sin `via: "git"` queda ausente y el verificador se exige como siempre — es la mutación que más
+  tests tumba); y la salvedad viaja pegada al **veredicto** y no al `motivo`, porque el motivo de
+  una tarea terminada no existe: `conEstado` lo borra a propósito.
+- **Y a «Terminada» se llega por CUATRO caminos, así que la tarjeta dice por cuál**
+  (`EntregaDeTarea.tsx`, una pieza para el kanban y para la lista, como `AccionesDeTarea`). Los
+  cuatro: el juez la aprobó con las tres condiciones en verde; se entregó con una condición de
+  MENOS (la salvedad: no había nada que verificar); la dio por buena una PERSONA con «Dar por
+  bueno»; y «no consta», que son las de antes de que la puerta existiera. Se pintaban las cuatro
+  igual —proyecto, título y hora— porque `Tarea.veredicto` **no salía del host**: ni `filaDeTarea`
+  lo copiaba, ni `TareaDelCable` lo declaraba, ni la lista blanca del store, y `grep veredicto
+  apps/web/src/` daba cero. O sea la mitad del contrato en `core/` y en disco, y la mitad que una
+  persona lee sin cablear — con `core/entrega.ts` afirmando que una entrega con una condición
+  menos no puede parecer normal, cosa que en la pantalla era falsa. Tres reglas:
+  - **La marca de la persona es un campo propio** (`Tarea.terminadaAMano`, que solo pone
+    `darPorBuenaAMano`) y no se deduce del veredicto: una tarea puede llegar a ese botón con un
+    VERDE ya guardado —la puerta la aprobó y la escritura del estado final reventó, así que se
+    aparcó «el corredor no pudo cerrarla»—, y entonces «tiene verde» significaría dos cosas. La
+    marca GANA al veredicto al pintar, y el veredicto se conserva y se lee al lado: es lo único
+    que dice qué se decidió ignorar.
+  - **El veredicto viaja ENTERO y solo lleva texto para leer.** Medido en
+    `juezDeTarea.ts#promptDelJuez`: el juez recibe el encargo, las rutas RELATIVAS de lo
+    autorizado y los hallazgos del verificador, y no hay un solo `readFile` en ese módulo — no
+    puede citar el contenido de un fichero ni una ruta de la máquina. El `resumen` ya cruzaba el
+    cable de todos modos, dentro del `motivo` de una tarea aparcada por el juez.
+  - **`filaDeTarea` salió del cierre de `montarRutas`** a `transporte.ts`, junto al tipo que
+    traduce, con un test que recorre los campos de `Tarea` y exige decisión explícita por cada
+    uno (viaja / no viaja y por qué) — es la SEXTA instancia del patrón de fallo de abajo, y el
+    mismo remedio: `raiz` y `pid` se quedan declarados como «no viaja» en vez de olvidados. Y las
+    otras dos capas tienen su red: `tipos.test.ts` compara los CAMPOS de `TareaDelCable` entre
+    cliente y host (los literales `clase:` no lo veían: el mensaje seguía llamándose `tareas`), y
+    la lista blanca del store se prueba mandando una fila con todos los campos declarados y
+    exigiendo que sobrevivan todos — rojo si uno se CAE, no solo si sobra.
+  - **Y en una tarea APARCADA lo que se enseña son los HALLAZGOS**, con la misma pieza: el
+    `motivo` da el qué —el corredor lo compone como «el juez de QA dijo «rojo»: <resumen>»— y
+    los hallazgos son la lista de lo que falta, o sea lo que hace falta para contestar el
+    feedback. El resumen se pinta UNA vez, y no escondiendo el bloque: se comprueba si el
+    `motivo` ya lo lleva dentro —los dos salen del mismo dato del servidor, así que la
+    comparación es exacta— porque si la aparcó otra cosa (un corte a mitad con el veredicto del
+    intento anterior guardado) el motivo no habla del juez y entonces el resumen sí hace falta.
+    Lo que NO se dice ahí es la salvedad: eso es «se entregó», y todavía no se ha entregado.
+
+**Un hallazgo del verificador NO dice quién escribió nada, y el prompt del juez lo dice ahora
+porque decía lo contrario** (`juezDeTarea.ts#promptDelJuez`). Medido en la PRIMERA ejecución
+real del juez, con el modelo de verdad y un proyecto del usuario: encargo «documenta las
+colecciones en DOCUMENTACION.md», el turno escribió ese fichero y `MEMORIA_PROYECTO.md`, el
+verificador acabó en VERDE con dos avisos `REF_JS_COLL_MISSING` y 22 hallazgos más en ficheros
+que no tocó — y el juez dictó ROJO con dos hallazgos, los dos falsos: «se modificaron ficheros
+de lógica JavaScript durante el turno según los hallazgos del verificador» y «no se puede
+comprobar la existencia ni el contenido de DOCUMENTACION.md», con ese fichero en
+`autorizadas`. **Lo que falló no fue el modelo: fue lo que se le pasaba**, así que lo que se
+puede arreglar con datos se arregla con datos y solo lo que es una instrucción va como
+instrucción. Seis reglas:
+- **La cabecera mentía, y era la que invitaba la conclusión.** Decía «Sus hallazgos sobre lo
+  que este turno tocó», y el reparto de `turnoReal.ts#conVerificacion` admite del lado del
+  turno los hallazgos **sin fichero** — el lado conservador. O sea que de un aviso que no dice
+  dónde se afirmaba que era sobre un fichero escrito. Ahora se dice lo que es: el simulador
+  mira el PROYECTO ENTERO, sus hallazgos son observaciones sobre el estado del proyecto y **no
+  atribuyen autoría**; lo único que dice qué escribió el turno es la lista de rutas.
+- **Un hallazgo sin fichero se dice sin fichero**, en su propia línea y no en un párrafo
+  aparte: es el dato exacto que hace imposible atribuirlo.
+- **El otro lado del reparto VIAJA** (`ResultadoDeTurno.preexistentes` → `CasoDeJuez`), que se
+  medía para pintar una línea de consola y se tiraba. `hallazgos` ya llega filtrada y **quien
+  la recibe no puede saber que lo está**: con el número, la lista se lee por lo que es. Ausente
+  es «no se midió» y `0` es «no había ningún otro» — el evento omite el cero porque ahí es una
+  línea que no dice nada; aquí es un dato, y se dice.
+- **Los avisos llegan etiquetados, no escondidos.** `h.severidad` se pintaba en crudo, así que
+  un aviso era «warning» —el enum, en inglés— junto a un «ERROR» traducido; ahora van AVISO e
+  INFO y en grupos separados. Quitárselos habría sido la salida fácil: un juez con menos
+  contexto juzga peor. Y con el verificador en VERDE se dice que **no hay nada que reprochar
+  por su parte** y que los avisos no lo cambian, que es exactamente lo que el código hace
+  (`condicionesDeEntrega` cuenta ERRORES) — la misma razón por la que la huella de reparación
+  son solo los errores: «un aviso que va y viene no dice nada de si el error se arregla».
+- **La INTENCIÓN y el HECHO van en dos listas, y no se confunden.** El encabezado «Ficheros
+  que se autorizó escribir» se lee como un permiso —lo que se PODRÍA haber escrito—, de ahí el
+  segundo hallazgo falso. Y no se arregla prometiendo más de lo que `autorizadas` aguanta (se
+  apunta al AUTORIZAR, así que una ruta que una guarda rechace sale igual): se arregla
+  DÁNDOLE la verdad. `RevisionDeSesion.cambiados` lleva ahora las rutas RELATIVAS del diff de
+  git de la sesión contra su «antes» —la misma medida de la que sale `escribio`, derivadas en
+  la misma expresión para que no puedan discrepar— y llegan al juez como `CasoDeJuez.cambiados`.
+  Con el hecho fichero a fichero, «no puedo comprobar si existe X» deja de tener de dónde
+  agarrarse, y de propina el juez puede juzgar la cobertura del encargo ruta por ruta. Las tres
+  respuestas de git se dicen distintas: lista con ficheros, lista VACÍA («no cambió nada», una
+  afirmación) y AUSENTE («no se pudo preguntar a git», que no es lo mismo y no puede leerse
+  como un proyecto intacto). Y lo autorizado que git no ve cambiado se NOMBRA, porque callarlo
+  dejaría al juez creyendo que aterrizó algo que no aterrizó.
+- **Nada de esto relaja el fail-closed.** El juez sigue pudiendo decir rojo, y lo que no se
+  entiende sigue siendo `indeterminado`; las condiciones las comprueba el código igual. Lo que
+  cambia es que ya no puede decir rojo por lo que no es. Y las dos cláusulas que se rozan van
+  separadas a propósito: no tener el contenido es un DATO de partida y no un hallazgo, lo que
+  no se puede juzgar sin él es la CALIDAD de lo escrito — nunca si se escribió.
+
+**Y hay una CUARTA condición del código: autorizó escrituras y git no ve ningún cambio**
+(`core/entrega.ts#condicionesDeEntrega`, `MedidaDeEntrega.autorizadas`). Significa que TODAS
+las escrituras se quedaron por el camino —las guardas de ruta las rechazaron, o escribieron lo
+que ya estaba—, o sea que la tarea se cree que trabajó y no cambió el proyecto. Es un hecho
+comprobable, así que se MIDE en vez de contárselo al juez, por lo mismo que su veredicto no
+basta solo. Tres reglas:
+- **Manda sobre la salvedad de la tarea de solo lectura.** `SALVEDAD_SIN_ESCRITURAS` dice «el
+  dominio del verificador son las escrituras y no hubo ninguna», y aquí sí las hubo: solo que
+  no llegaron. Tratarlo como solo lectura entregaría el caso justo al revés.
+- **El motivo nombra las DOS**, la de aquí y el verificador que no corrió: son cara y cruz de
+  lo mismo —no aterrizó nada, así que no había nada que verificar— y juntas cuentan la
+  historia entera. Es la regla de siempre de esta función.
+- **Ausente no acusa a nadie.** `autorizadas` es un número que entra por su propio parámetro y
+  ausente es «no consta» (una tarea de antes de que esto existiera, un ejecutor que no lo
+  informa); y sin marca de git tampoco se afirma nada, porque «no se sabe qué cambió» no es
+  «no cambió nada».
+
+**Un solo corredor por máquina, y el cerrojo NO lo garantiza solo** (`tareasEnDisco.ts#tomarCerrojo`).
+La toma directa es atómica (`wx`), pero **recoger un cerrojo cuyo dueño parece muerto no se puede
+hacer atómico con primitivas de ficheros**: decidir «está muerto» es una observación de un instante
+y no existe un «renombra solo si sigue siendo este inodo». Cinco vueltas de arreglos midieron tres
+órdenes distintos y cerraron dos; el tercero queda **declarado** en el código, con su secuencia. Lo
+que hace verdad «un solo corredor» es `sigoSiendoDueño()`, que el corredor pregunta **antes de
+despachar cada tarea** — no una marca en memoria, y no solo al arrancar. Un `flock` del núcleo no
+tendría el problema (el sistema lo suelta al morir el proceso) pero Node no lo expone sin módulo
+nativo. Y la cuarentena del cerrojo lleva el **pid** en el nombre: con una ruta compartida, la
+limpieza de un proceso se llevaba por delante el cerrojo vivo de otro.
+
+**Gana la persona.** Una tarea NO arranca en un proyecto cuya consola humana está abierta. La
+condición es «abierta» y no «hay turno en vuelo» porque solo la primera es estable en el instante de
+despachar: con la segunda, una tarea arrancaría y chocaría después. El precio se dice en la pantalla
+—una tarea puede esperar a que alguien cierre un proyecto— en vez de corromper un diff en silencio;
+sin decirlo, una tarea parada se lee como un cuelgue.
+
+**La tarea abre el proyecto por su PROPIA puerta** (`vestibulo.ts#abrirParaTarea`), que no registra
+el proyecto abierto ni muda el sumidero del cable: si reusara `abrirProyecto`, cada tarea que
+arrancara le movería la vista al navegador de quien esté trabajando. Las dos puertas montan las
+mismas barreras porque **comparten un solo cuerpo de función**, no porque un test las enumere.
+
+**Su consola APARCA en vez de contestar por nadie** (`consolaDeTarea.ts`). El hallazgo que gobernó
+el diseño: `consolaWeb.eof()` es `!transporte.conectado()`, así que una consola sin cliente
+enganchado rechaza toda aprobación y contesta cadena vacía a todo `preguntar` **sin decir por qué**.
+`preguntar` y `leerSecreto` no devuelven `""` —16 de sus 18 llamadores lo leen como «usa el valor por
+omisión»—: aparcan y **cortan**. Y el rechazo que sí se usa lleva mensaje propio, sin el «por el
+usuario» del `REJECT_MESSAGE` de la librería, que aquí afirmaría un rechazo que nadie hizo; sin
+`message`, medido en su propia documentación, el modelo remata el turno como si hubiera escrito.
+
+**La sesión de una tarea se PERSISTE, y su `sesion` sobrevive si y solo si hay algo que una persona
+pueda abrir.** Con transcript volcado la conversación se lee desde la barra lateral; sin transcript
+—el corte a mitad de turno: checkpoint sí, transcript no— ese id no nombra nada abrible, así que se
+olvida el hilo y se limpia el campo. Un id que no lleva a ninguna parte miente igual que un control
+sin dato detrás, y además deja 30 MB de checkpoint inalcanzable. Sin aprobación previa, la revisión
+POSTERIOR es la única forma de mirar, así que la ref `refs/xonecode/sesion/<id>` deja de ser una
+comodidad: es la condición `revisable`.
+
+**Y borrar una sesión que una tarea está usando DECLINA con motivo**, no borra ni resucita. El daño
+no era la fila del índice: `olvidarMarcaDeSesion` y `olvidarMemoriaDeHilo` no son condicionales en
+ese camino, así que borrar se llevaba la ref de git y el checkpoint de un hilo que el agente sigue
+escribiendo.
+
+**El cable de las tareas, y el CABLEADO que se probó aparte.** La cola entera viaja en
+`{clase:"tareas"}` —a todos los clientes, y la ráfaga de bienvenida solo al recién llegado— y
+las intenciones vuelven en `{clase:"tarea"}`. Dos cosas que no son obvias:
+- **`crearTarea` no es una opción suelta**, y no por purismo: resolver el id de proyecto a
+  `{id, raiz, nombre}` necesita `proyectos`, `entornoElegido` y `vestibulo.raizDeProyecto`, que
+  solo existen dentro del cierre de `montarRutas`. Entran el PUERTO de la cola y el corredor, y
+  `montarRutas` construye los manejadores con su propio estado — la misma razón por la que
+  `registrarEntorno` devuelve el entorno REGISTRADO en vez de que el llamante deduzca el id.
+- **`arrancarConectado` es UNA función con el orden dentro**: conectar el puente al cable y
+  LUEGO arrancar el corredor. Como dos llamadas, el orden sería una convención que nada
+  comprueba, y en producción el corredor puede reconciliar y disparar `alCambiar` antes de que
+  el puente esté puesto. Medido: invertirlo pone tres tests en rojo.
+- **Y el `try` alrededor de `alCambiar` no es higiene.** Medido: sin él, una excepción al emitir
+  sube al `catch` de `arrancar()`, que llama a `soltarCerrojo()` y **para el corredor entero** —
+  todas las tareas de la máquina, no una notificación perdida.
+
+**El patrón de fallo de esta arquitectura, medido CINCO veces en una sola tanda: una
+composición de producción viviendo en un cierre que todos los tests doblan.** Los cinco:
+`backendDeAgente` (el que dejó la lección escrita), el corredor sin cablear en
+`arrancarConsolaWeb`, el `escribio` a fuego en la derivación de `revisionConGit`, la capa de
+proyecto de `fuentesDelJuez`, y el montaje de `/adjuntos/` con sus ocho saltos. En los cinco la
+regla podía dejar de estar montada **con todo en verde**, y en los cinco el remedio fue el mismo:
+extraer la composición a una función exportada y probarla contra lo real. Regla práctica: **si
+una regla de producción se compone dentro de algo que los tests simulan, esa regla no está
+probada — está escrita.**
+
+**El kanban vive en el escritorio** (`componentes/Kanban.tsx`), con una columna por estado y la de
+`requiere-atencion` rotulada **«Esperando feedback»**, que es lo que significa. Cuatro reglas:
+- **La tarjeta de esperando feedback no lleva diff ni botón de aprobar.** No es una aprobación
+  pendiente: es una pregunta al desarrollador, y se contesta escribiendo. Un modal con un diff
+  ahí prometería una decisión que ya se tomó al crear la tarea.
+- **Dice lo que la tarea AUTORIZÓ escribir, nunca «escribió»**, y enlaza a Revisión. Sin
+  aprobación previa, la revisión posterior es la única forma de mirar, así que el enlace es la
+  pieza y no un adorno.
+- **Una tarea que no arranca porque su proyecto tiene la consola humana abierta lo DICE.** Sin
+  eso se lee como un cuelgue, que es el peor final de una cola.
+- **«No ha llegado» no es «no hay tareas»**: si esta ejecución no ejecuta tareas, el servidor no
+  manda `tareas` y el panel lo dice en vez de afirmar una cola vacía.
+- **Y una tarea creada desde el proceso que NO manda se queda quieta, así que se DICE antes de
+  crearla — con TRES frases y no una** (`QuienEjecutaTareas.tsx`, una pieza para las dos vistas,
+  la tercera vez que se aplica esa regla). `corriendoAqui` decía ya que este kanban no avanza,
+  pero el aviso remataba con «ábrelo desde el proceso que las corre para verlas moverse», y eso
+  promete de más por dos motivos:
+  - **Crear una tarea aquí no dispara nada allí**: `revisar()` sale en `!miCerrojo` y no hay
+    temporizador ni IPC, así que se queda `nuevo` hasta que ESE proceso mire la cola por su
+    cuenta (al acabar otra tarea, o al reiniciarlo).
+  - **Y «no soy yo» no es «no hay nadie»**, que es la diferencia entre esperar y que no vaya a
+    pasar nada: mandar a esperar a un proceso que no existe es peor que un aviso mudo. El
+    corredor ya sabe cuál es —`tomarCerrojo` distingue las dos— y lo dice por el cable con
+    `ejecutaOtroProceso`, **sin el pid**: es un dato de la máquina y no le dice nada a quien lee.
+    Los tres valores salen de lo MEDIDO: `true` si el cerrojo lo tenía otro o si se perdió en
+    marcha, `false` si lo tomamos nosotros —y por ahí «nadie» es alcanzable de verdad: el
+    arranque de las tareas revienta tras tomarlo y se suelta— y **ausente = no se pudo mirar**,
+    donde no se afirma ninguna de las dos. Es la distinción de siempre, sostenida en las cuatro
+    capas.
+  Lo dicen las dos vistas, y en la del proyecto importa más: ahí vive «Nueva tarea», o sea que
+  el aviso llega ANTES de crear la que se va a quedar parada.
+
+**El feedback vuelve al agente como mensaje de USUARIO en el mismo hilo**, que es el camino que
+el lazo de reparación del verificador ya recorría — un encargo nuevo perdería todo lo que la
+tarea sabe. Cuatro reglas: el feedback es una LISTA y no un campo (varias vueltas, y la segunda
+no puede borrar la primera); se marca CONSUMIDO o la vuelta siguiente lo repetiría; un feedback
+vacío se rechaza (devolvería la tarea al lazo sin nada nuevo que decirle, el mismo argumento por
+el que un título vacío se rechaza en `sesiones.ts`); y **si el hilo ya no se puede reanudar se
+DICE** —se manda el encargo entero, el feedback y un aviso explícito— en vez de aparentar una
+continuidad que no existe.
+
+**Y una trampa que costó una tarea entera: `abrirParaTarea` tiene que REENVIAR `tarea.sesion`.**
+No lo hacía en ninguna de sus tres capas, así que todo reintento abría un hilo en blanco y
+«sigue en su hilo» era falso en producción aunque el test superficial pasara. Lo que lo destapó
+fue medir que el `.jsonl` de la sesión CRECE con las dos vueltas del turno, en vez de comprobar
+que el `thread_id` coincidía.
+
+**Lo que hace una tarea se puede MIRAR en vivo, y `mirar` no es `conectar`** (`transporte.ts`,
+`Transporte.mirar`). Los actos de un turno de tarea ya se guardaban en el transcript de SU
+sesión —`consolaParaTarea` le pasa la piel de su consola de proyecto, la misma que usa una
+persona— y no se filtraban al chat de nadie, porque cada `crearConsolaWeb` tiene su PROPIO
+transporte y el de una consola de tarea no tiene sumideros: `abrirParaTarea` no mueve el cable a
+propósito. Lo que faltaba era el enganche. Tres decisiones y dos trampas medidas:
+- **Es opt-in, de solo lectura, y la vista en vivo ES el transcript.** Nunca se muda el cable
+  solo: una tarea que arranca no puede cambiarle la pantalla a quien está trabajando. No hay
+  compositor, porque esa consola es de la tarea y una caja de texto ahí prometería una
+  conversación que el turno no va a leer —para intervenir está aparcar con feedback—. Y no hay
+  log paralelo: se mira el transcript de esa sesión, en vivo mientras corre y guardado cuando
+  acaba. Un segundo registro sería otra fuente que puede contradecir a la conversación, la misma
+  regla por la que la lista de artefactos «sale de los actos, no del disco».
+- **Un mirón no es alguien a quien preguntar**, y por eso `mirar` es un conjunto aparte que no
+  toca `hayCliente`. Medido: `conectar` en la consola de una tarea SÍ hace que su `eof()` pase de
+  `true` a `false` —y de `eof()` depende que una consola de tarea aparque en vez de esperar—,
+  pero resulta inerte porque `crearConsolaDeTarea` declara `interactivo: false` y `eof: () =>
+  true` a fuego. Depender de esa inercia sería depender de que otro fichero no se «simplifique»:
+  con el conjunto aparte, la propiedad es cierta por construcción y no por coincidencia.
+- **Y la trampa de verdad estaba en el otro extremo**: el transporte de una consola de tarea
+  emite el `{clase:"turno"}` de los flancos **sin mirar `alCable`** (`vestibulo.ts`), además de
+  los actos crudos. Enchufarle el sumidero SSE pelado le habría metido los actos de la tarea en
+  el chat de quien trabaja **y le habría apagado el compositor** — justo lo que las tres
+  decisiones de arriba existen para evitar, por un camino que no era el que se vigilaba. Se
+  cierra con dos listas BLANCAS (una en el transporte y otra en `arranque.ts`): lo que no se
+  nombra, no sale.
+- **El cable gana identidad de cliente** (`?cliente=` en el SSE y el campo en el mensaje), porque
+  el `POST /accion` y el SSE son dos peticiones y solo la segunda tiene sumidero: sin eso no se
+  puede desenganchar a UN mirón ni dejar que dos personas miren la misma tarea. Lo genera el
+  cliente, es tiempo más azar en texto llano, y **no lleva nada del navegador ni del equipo**; no
+  autoriza nada —eso es el token— y en el servidor solo es la clave de un `Map` que nace y muere
+  con el SSE. `crypto.randomUUID` se descartó a propósito: exige origen seguro y esto se sirve
+  por `http://127.0.0.1`.
+
+**Y abrir la sesión de una tarea EN CURSO se declina**, con el mismo predicado que usa
+`borrarSesion` (`esDeUnaTareaEnCurso`): dos consolas sobre el mismo `thread_id` del checkpointer
+son dos escritores del mismo hilo. Tres detalles que sostienen la guarda: va **antes** de
+`cerrarProyectoAbierto()` —tarde habría cerrado la sesión de la persona para luego negarse a
+abrir la otra, dos daños en vez de ninguno—, compara `sesion` **y** `idDeHilo`, que son dos
+momentos de la misma conversación y el segundo cubre la ventana anterior al primer volcado, y el
+motivo dice **qué sí se puede hacer**: mirarla ahora y abrirla cuando termine. Límite declarado,
+el mismo que `borrarSesion`: la guarda solo ve las consolas de ESTE proceso, así que una tarea
+que ejecute otro corredor no está en el conjunto — lo pone el sistema operativo, no nosotros.
+
+**Crear una TAREA es la autorización, y la ventana de crear es el único sitio donde eso se
+puede decir antes de que ocurra** (`apps/web/src/componentes/NuevaTarea.tsx`,
+`agent/aumentador.ts`, `core/adjuntos.ts`). Una tarea de fondo aplica sus escrituras sin
+pedir permiso —§0 del diseño: «la autorización no es un interruptor nuevo, es el acto de
+crear la tarea»—, así que aquí no hay un diff que mirar después: hay una frase que hay que
+leer ahora, con palabras y arriba. Lo que la sostiene:
+- **El encargo se AUGMENTA y se enseña EDITABLE antes de encolar**, y ese paso es lo que
+  ocupa el sitio del diff: ejecutar sin nadie delante algo que nadie ha leído es justo lo
+  que la aprobación existía para evitar. Entra por puerto (`AumentadorPort`) con papel
+  `trabajo` —es redacción, no clasificación— y **su fallo es recuperable por diseño**: si
+  no hay modelo, la tarea se encola con el texto original y se DICE. Perder lo que una
+  persona acaba de escribir porque un modelo no contestó sería lo peor que puede hacer esa
+  ventana. El prompt describe además un trabajo que se hace ENTERO sin volver a preguntar
+  y prohíbe redactar un paso de aprobación humana: ese paso ya no existe, y el agente se
+  quedaría esperando a alguien que no está. Medido con `gemini-flash` en la consola real:
+  el encargo salió con los cuatro apartados y con «si hay ambigüedad, PARAR y preguntar»,
+  nunca con un «cuando lo apruebes».
+- **El aumentador SÍ tiene doble** (`AumentadorGuionizado`), al revés que el juez: de un
+  veredicto del juez depende que una tarea se dé por terminada, y de un encargo no depende
+  ninguna afirmación — lo lee una persona y lo edita. Con `--guion` se monta ese doble, y
+  su texto lleva `[DOBLE]` porque se enseña para editarlo y después se le manda al agente.
+- **El motivo de un fallo se dice con palabras, no con el nombre de la clase.** Era
+  `codigoDe(error)`, que para un error escrito a mano devuelve su `name`: la ventana
+  enseñaba «No se pudo preparar el encargo (ErrorDelAumentador)». La regla es la de
+  `corredorDeTareas.ts#sinRutas` — el MENSAJE si lo escribimos nosotros, el CÓDIGO si lo
+  escribió el sistema, porque el de Node lleva la ruta absoluta dentro.
+- **Y para un proyecto que no está en el equipo no se crea NADA**, ni se encola: la ventana
+  se cambia por el motivo y por la salida a `NuevaSesion`, que es quien descarga y quien
+  avisa de que baja el proyecto entero. Encolarla sería ofrecer un camino que no puede
+  funcionar —`abrirParaTarea` lanza si la raíz no es un proyecto, así que el corredor la coge,
+  la aparca, y `renunciarSiSigueNueva` impide que este proceso la vuelva a coger—, o sea el
+  botón muerto de siempre. Pero lo que obligó a quitar el formulario ENTERO y no solo el botón
+  es peor que un botón muerto: un formulario usable deja **subir adjuntos**, y eso escribe los
+  documentos de una persona en la carpeta de un borrador que ninguna tarea va a nombrar nunca.
+  Se ata por AUSENCIA —ni campo de petición, ni «Adjuntar ficheros», ni «Encolar»—, porque un
+  test que solo comprobara que el motivo aparece pasaría igual con el formulario debajo. Por lo
+  mismo `alAbrirProyecto` es OBLIGATORIO en el tipo: un rechazo sin nada que pulsar es el mismo
+  fallo que el rechazo viene a quitar, y pedirlo en el tipo lo hace imposible por construcción
+  en vez de recordable. Y la frase de la autorización se pinta solo en la rama donde se
+  CONCEDE: no es falsa en la otra, pero compite con lo único que esa pantalla tiene que
+  conseguir.
+- **Los ADJUNTOS son la misma pieza que `/skills/` y `/artefactos/`**: otra raíz del
+  `CompositeBackend`, con la barra final obligatoria y sin crear la carpeta al montar.
+  Viven en `~/.xonecode/tareas/<id>/adjuntos/`, o sea fuera del proyecto: no entran en git
+  y no suben a CloudStudio sin depender de ninguna exclusión, y una tarea puede crearse
+  para un proyecto que nadie ha abierto nunca. Solo se monta si la tarea TRAE adjuntos:
+  una raíz vacía sería mandar al agente a mirar donde no hay nada.
+- **De solo lectura, y lo deniega `permisosDe` INCONDICIONALMENTE.** Son documentos de una
+  persona, material de entrada, no ficheros que reescribir — el mismo argumento que las
+  skills. Y la fila no puede ser condicional: medido contra deepagents 1.13.2, sin ella un
+  `write_file` a `/adjuntos/x.txt` con la carpeta SIN montar escribe
+  `<raiz>/adjuntos/x.txt`, o sea un fichero del proyecto con el nombre de algo que la
+  interfaz presenta como «lo que te adjuntaron». Con la fila puesta las dos situaciones
+  contestan «permission denied» y el disco no se toca (medido con el backend real y el
+  middleware de la librería, no con dobles: la lectura la da el montaje y la denegación el
+  middleware, así que probar cada mitad por separado dejaría en verde el día que una deje
+  de estar puesta).
+- **Montar esa carpeta cruza OCHO saltos, y hay un test por salto.** `abrirParaTarea` →
+  `construirConsolaDeProyecto` → `crearEjecutor` → `crearEjecutorReal` → `abrirSesionReal`
+  → `construirAgente` → `backendDeAgente`, más la costura de `arranque.ts` que le da al
+  vestíbulo lo que el corredor resolvió. Es la clase de cableado que en este plan ha
+  dejado CINCO veces una regla sin montar con todo en verde, y por eso
+  `augmentacionCableada` y `contextoDelProyecto` también están extraídas y exportadas en
+  vez de vivir en el cierre de `arrancarConsolaWeb`.
+- **Montar no basta: hay que DECIR que están** (`core/adjuntos.ts#conAdjuntos`).
+  `/adjuntos/` es una raíz virtual que ninguna instrucción del agente nombra, y el encargo
+  no sirve para decírselo: lo redacta el aumentador —que puede haber fallado— o lo edita
+  quien crea la tarea, y las dos cosas pueden borrar la única mención. Así que el
+  inventario se añade al MANDAR el turno, junto a `peticionDeFeedback`, que es el único
+  momento en que se sabe qué hay en disco.
+- **Y se dice que el agente los LEE y no los VE.** Que mire una imagen de verdad es
+  multimodal y está fuera de alcance (§2); prometerlo es la peor clase de mentira aquí,
+  porque quien se la cree es el modelo y contestará que ha mirado la captura. Lo dice la
+  ventana y lo dice también el aviso que va con el turno.
+- **Los bytes suben por `POST /adjunto`**, no por el cable: el SSE lleva JSON. Con su
+  propio lector de cuerpo (`leerCuerpoCrudo`), porque el del cable acota a 1 MB y devuelve
+  utf8 — las dos cosas equivocadas para un PNG— y porque el tope se corta al LEER y no
+  después de acumular. El nombre pasa la misma lista blanca de forma que un artefacto
+  (`nombreDeAdjuntoAceptable`), dos veces: en la ruta y dentro del puerto de disco.
+- **El cliente CONVIERTE el nombre, no lo valida** (`apps/web/src/nombreDeAdjunto.ts`), y
+  esa distinción es lo que hace que no sea una copia peligrosa de la regla: si divergiera,
+  la subida falla a la vista con su motivo en la fila del fichero. Y hace falta de verdad
+  — medido: una captura de macOS se llama «Screenshot 2026-09-08 at 17.03.12.png», con
+  espacios, así que sin conversión el caso más común daría 403.
+- **Los bytes llegan a disco ANTES de que la tarea exista**, porque crear la encola y el
+  corredor puede arrancarla en el acto. De ahí el id de BORRADOR: lo elige el navegador,
+  se sube bajo él, y `crear` lo ADOPTA como id de la tarea. Lo que hace eso seguro son dos
+  guardas, la misma pareja en los dos sitios: forma de segmento llano, y **que no sea ya
+  una tarea** (409 en la subida; y en `crear` no se crea nada y se DICE — caerse a un id
+  nuevo dejaría los adjuntos que la persona acaba de subir colgando de una carpeta que
+  ninguna tarea nombra). El `Tarea.adjuntos` se lee del DISCO (`listarAdjuntos`), nunca de
+  lo que diga el cliente.
+- **Y cancelar con adjuntos ya subidos borra su carpeta**: si no, quedan documentos de una
+  persona en `~/.xonecode/tareas/<borrador>/` que nadie va a volver a ver. Es un
+  `descartar` sobre un id que no está en el índice, que hace exactamente eso. **Lo que NO
+  hay es poda de HUÉRFANOS**, y se declara: un navegador que se cierre entre la subida y el
+  «Encolar» —o un «Cancelar» que no llegue— deja hasta el tope de la subida (50 MB) bajo un
+  id de borrador que ninguna tarea nombra, y nada lo barre. El camino normal lo limpia; los
+  accidentes, no. Es la misma deuda que el checkpointer, que tampoco tiene poda: en este
+  repo no hay barrido de nada todavía, así que inventarlo aquí sería empezar por la esquina
+  menos costosa.
+- **Un enlace simbólico en la cola era un agujero real, y está MEDIDO.** Con
+  `~/.xonecode/tareas/<id>` apuntando a otra carpeta, `mkdirSync(…, {recursive:true})` lo
+  SIGUE y `guardarAdjunto` escribía fuera de la cola («escribió FUERA? true»). No es
+  alcanzable desde el cable —hay que plantar el enlace en un directorio a 0700 del home—
+  pero de esa carpeta cuelga además el `/adjuntos/` que ve el agente, así que un enlace
+  ahí le daría lectura fuera. La barrera se aplica ahora dos veces, sobre el TEXTO del id
+  y sobre el camino REAL, que es la misma regla que `arbolDeProyecto.ts`: lo que falla no
+  es el sitio, es el destino. `carpetaDeAdjuntos` devuelve `string | undefined` para que
+  quien la monte tenga que decidir por tipo qué hacer con «no se puede».
 
 **Un proyecto puede escribir SIN aprobación, y es la única grieta del fail-closed**
 (`core/settings.ts#seAplicaSinAprobacion`, comando `/aprobacion`). El caso es real —en un
@@ -1996,6 +2502,36 @@ Un fallo del entorno no se reporta como un proyecto roto: `agent/verificador.ts`
 `ErrorDelSimulador` en vez de devolver un informe en rojo.
 
 ## Trampas verificadas
+
+- **`DENEGADO_SIEMPRE` no alcanza al ORQUESTADOR: sus tools de fichero se montan sin
+  `permissions`.** Medido contra deepagents 1.13.2 construyendo el agente de verdad y
+  buscándole su `write_file`: contesta «Successfully wrote» a `/adjuntos/pwn.txt`, a
+  `/skills/pwn.txt` **y a `/.env`**, y los tres ficheros quedan en disco — el de `/skills/`
+  **en la carpeta `skills/` de ESTE repo**, no en el temporal del proyecto de la medida, que
+  es lo que hace la trampa: la raíz montada es `RAIZ_SKILLS`, o sea las instrucciones del
+  propio harness. La causa está a la vista en `xoneAgent.ts`: el `createFilesystemMiddleware` del orquestador lleva `backend`,
+  descripciones y opciones de búsqueda, y **no lleva `permisosDe`** — eso solo lo reciben los
+  subagentes. Tres cosas que hay que tener claras antes de tocarlo:
+  - **Es anterior a los adjuntos y no es de ellos.** Le pasa igual a `.env`, `.git`,
+    `.xonecode` y las skills, o sea a las tres filas de la lista. Lo que la fila de
+    `/adjuntos/**` sí evita —y está medido— es que un `write_file` de un ESPECIALISTA se
+    convierta en un fichero del proyecto cuando la carpeta no está montada.
+  - **Pero su ALCANCE creció con las tareas, y hay que decirlo.** Con `/adjuntos/` montada
+    —o sea en el turno de una tarea que trae adjuntos—, ese `write_file` del orquestador
+    aterriza en `~/.xonecode/tareas/<id>/adjuntos/`, o sea **fuera del proyecto**: no solo
+    escribe donde no debe, escribe donde una persona guarda sus documentos de entrada y
+    donde la interfaz presenta lo que hay como «lo que te adjuntaron». La causa no cambia y
+    el arreglo tampoco (o permisos, o quitarle las tools de fichero); lo que cambia es el
+    daño posible, y un hueco declarado tiene que declarar hasta dónde llega.
+  - **Lo que hoy lo tapa es el prompt, que es exactamente lo que este repo no acepta como
+    barrera**: el orquestador tiene instrucciones de no escribir y de delegar todo, y por eso
+    no se ha visto nunca. Las guardas del BACKEND sí le aplican (vistas aplanadas, artefactos
+    fuera de sitio), porque están en el backend y no en los permisos.
+  - **Y el HITL tampoco**: `hitlDe` se monta por subagente, así que una escritura del
+    orquestador no pasaría por ninguna aprobación. Arreglarlo es una decisión de producto —o
+    se le pasan los permisos, o se le quitan las tools de fichero, que es lo que su propio
+    prompt afirma— y toca todo el agente, no los adjuntos; por eso se deja declarado aquí en
+    vez de cambiarse de lado.
 
 - **La caché implícita de Gemini no entra a los tamaños de contexto de estos agentes, y el
   adaptador la sobrecuenta en streaming.** Medido con un gancho de hashes sobre el cuerpo de

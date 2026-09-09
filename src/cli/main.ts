@@ -31,6 +31,7 @@ import {
   guardarTemaDeProyecto,
 } from "../agent/configEnDisco.js";
 import { crearCheckpointerDeProyecto } from "../agent/checkpointer.js";
+import { crearTareasEnDisco } from "../agent/tareasEnDisco.js";
 import { carpetaDeArtefactosDeSesion } from "../core/artefactos.js";
 import { seAplicaSinAprobacion } from "../core/settings.js";
 import { conectarCloudStudio, sesionCloudStudio, PUERTO_CALLBACK } from "../agent/cloudstudioMcp.js";
@@ -432,6 +433,17 @@ export function crearEjecutorReal(
   alAbrirSesion: (sesion: SesionReal) => void,
   checkpointerDeProyecto?: (raiz: string) => BaseCheckpointSaver | undefined,
   carpetaDeArtefactos?: (raiz: string, hilo: string) => string,
+  /**
+   * La carpeta de los ADJUNTOS de una tarea — `/adjuntos/` para el agente, de solo lectura.
+   *
+   * Es un valor y no una función de `(raiz, hilo)` como las dos de arriba, y esa diferencia
+   * es el dato: los artefactos se derivan de la sesión, pero los adjuntos son de la TAREA, y
+   * la tarea solo la conoce quien abrió esta consola (el corredor). Por eso llega a la
+   * FÁBRICA: es una propiedad de la consola, igual que su checkpointer.
+   *
+   * Ausente en toda consola de persona y en toda tarea sin adjuntos.
+   */
+  carpetaDeAdjuntos?: string,
 ): EjecutorDeTurno {
   let sesion: SesionReal | undefined;
   let fuentesVistas: FuentesDeEleccion | undefined;
@@ -478,11 +490,20 @@ export function crearEjecutorReal(
         ...(carpetaDeArtefactos === undefined
           ? {}
           : { artefactos: carpetaDeArtefactos(estado.raiz, estado.hilo) }),
+        // Los adjuntos de la tarea, si esta consola es de una tarea con alguno. Ausente es
+        // «no hay», y el campo NO se pone: una cadena vacía montaría el cwd del proceso.
+        ...(carpetaDeAdjuntos === undefined ? {} : { adjuntos: carpetaDeAdjuntos }),
         // Si las escrituras de ESTE proyecto se aplican sin preguntar. Se pregunta en cada
         // ronda —de ahí la función— porque `/aprobacion` lo cambia sin cerrar la sesión, y
         // porque `interactivo` es de la consola que esté delante. Los settings se releen
         // cada vez por lo mismo: la alternativa es que el cambio no surta efecto hasta
         // reabrir, y la mitad de las veces eso sería en la dirección peligrosa.
+        // Cuántas rondas de aprobación admite un turno de ESTA consola. La pone quien la
+        // monta porque es quien sabe quién está detrás (ver `Consola.topeDeAprobaciones`);
+        // ausente y `abrirSesionReal` usa el `MAX_APPROVAL_ROUNDS` de siempre.
+        ...(consolaReal.topeDeAprobaciones === undefined
+          ? {}
+          : { topeDeRondas: consolaReal.topeDeAprobaciones }),
         sinAprobacion: () =>
           seAplicaSinAprobacion({
             raiz: estado.raiz,
@@ -544,7 +565,32 @@ export function crearEjecutorReal(
 
     // La piel del turno: la de la consola si la aporta (la TUI), y el render stdio de
     // siempre si no — mismo reparto que `ejecutarTurnoGuionizado`.
-    await sesion.turno(peticion, consolaReal.piel?.() ?? crearPielStdio(consolaReal.escribir));
+    const resultado = await sesion.turno(
+      peticion,
+      consolaReal.piel?.() ?? crearPielStdio(consolaReal.escribir)
+    );
+    /**
+     * **Y se DEVUELVE lo que el turno sabe de sí mismo**, que antes se tiraba aquí.
+     *
+     * Era una deuda medida: `EjecutorDeTurno` devolvía `void`, así que el `cortadoPorTope`
+     * —y con él el hecho de que quedaron escrituras sin aplicar y el veredicto del
+     * verificador— morían en esta línea. Con las tareas de fondo aplicando escrituras
+     * solas, eso se veía en el kanban: cuatro ficheros escritos, una escritura abandonada,
+     * el verificador sin correr ni una vez, y la tarea diciendo «terminada». Quien decide
+     * si eso es entregable es `core/entrega.ts`; aquí solo se abre el canal.
+     *
+     * Se reenvían los campos de `ResultadoDeTurno` y NO el objeto entero: la bitácora y
+     * los `Cambio` son piezas de `agent/` que no tienen por qué cruzar hasta el corredor
+     * de tareas, y `cambios` lleva rutas del proyecto que nadie de ahí necesita.
+     */
+    return {
+      verificador: resultado.verificador,
+      pendientes: resultado.pendientes,
+      ...(resultado.hallazgos === undefined ? {} : { hallazgos: resultado.hallazgos }),
+      ...(resultado.motivoSinVerificar === undefined
+        ? {}
+        : { motivoSinVerificar: resultado.motivoSinVerificar }),
+    };
   };
 }
 
@@ -1207,8 +1253,21 @@ export async function main(argv: string[]): Promise<number> {
           // Con checkpointer PERSISTENTE, al revés que la consola de terminal: aquí cada
           // conversación tiene id en el índice, así que su hilo se puede reanudar — y esa
           // es la diferencia entre reabrir y releer.
-          crearEjecutor: (alAbrir) =>
-            crearEjecutorReal(alAbrir, crearCheckpointerDeProyecto, carpetaDeArtefactosDeSesion),
+          // Y la carpeta de ADJUNTOS cuando la apertura es de una tarea con alguno: el
+          // vestíbulo la reenvía desde `abrirParaTarea`, que es quien la recibe del
+          // corredor — el único que sabe de qué tarea se trata.
+          crearEjecutor: (alAbrir, opcionesDeConsola) =>
+            crearEjecutorReal(
+              alAbrir,
+              crearCheckpointerDeProyecto,
+              carpetaDeArtefactosDeSesion,
+              opcionesDeConsola?.adjuntos
+            ),
+          // La cola de tareas de la MÁQUINA, y con ella el corredor. Se pasa desde aquí y
+          // no se construye allí por la misma razón que las dos de arriba, más una: la
+          // omisión de `arrancarConsolaWeb` tiene que ser NO ejecutar tareas, porque sus
+          // propios tests lo llaman entero y tomarían el cerrojo de quien los corre.
+          tareas: (informar) => crearTareasEnDisco({ informar }),
           dependenciasDeProyecto: (raiz) => ({
             ...adaptadoresDeProyecto(raiz),
             catalogoModelos: new CatalogoModelos(undefined, undefined, proveedoresPersonalizados),

@@ -1,5 +1,12 @@
 import { describe, it, expect } from "vitest";
-import { validarSettings, rutaDeWorkspace, seMira, seAplicaSinAprobacion, PLATAFORMAS_DE_DISPOSITIVO } from "./settings.js";
+import {
+  validarSettings,
+  rutaDeWorkspace,
+  seMira,
+  seAplicaSinAprobacion,
+  PLATAFORMAS_DE_DISPOSITIVO,
+  TOPE_DE_CONCURRENCIA_DE_TAREAS,
+} from "./settings.js";
 
 describe("validarSettings", () => {
   it("conserva los entornos bien formados, sin avisos", () => {
@@ -139,5 +146,30 @@ describe("las escrituras sin aprobación", () => {
       sinAprobacion: { [RAIZ]: true, "/otro": false, "relativa/x": true },
     });
     expect(settings.sinAprobacion).toEqual({ [RAIZ]: true });
+  });
+});
+
+describe("el tope de concurrencia de tareas en settings.json", () => {
+  it("un entero en rango se conserva, CERO incluido: es cómo se pausa la cola", () => {
+    expect(validarSettings({ entornos: [], concurrenciaDeTareas: 0 }).settings.concurrenciaDeTareas).toBe(0);
+    expect(validarSettings({ entornos: [], concurrenciaDeTareas: 5 }).settings.concurrenciaDeTareas).toBe(5);
+    expect(
+      validarSettings({ entornos: [], concurrenciaDeTareas: TOPE_DE_CONCURRENCIA_DE_TAREAS }).settings
+        .concurrenciaDeTareas
+    ).toBe(TOPE_DE_CONCURRENCIA_DE_TAREAS);
+  });
+
+  it("ausente no es cero: es «no lo he dicho», y no se afirma nada", () => {
+    expect(validarSettings({ entornos: [] }).settings.concurrenciaDeTareas).toBeUndefined();
+  });
+
+  it("lo que no tiene forma de entero en rango se descarta, no se acota", () => {
+    expect(validarSettings({ entornos: [], concurrenciaDeTareas: -1 }).settings.concurrenciaDeTareas).toBeUndefined();
+    expect(
+      validarSettings({ entornos: [], concurrenciaDeTareas: TOPE_DE_CONCURRENCIA_DE_TAREAS + 1 }).settings
+        .concurrenciaDeTareas
+    ).toBeUndefined();
+    expect(validarSettings({ entornos: [], concurrenciaDeTareas: 2.5 }).settings.concurrenciaDeTareas).toBeUndefined();
+    expect(validarSettings({ entornos: [], concurrenciaDeTareas: "2" }).settings.concurrenciaDeTareas).toBeUndefined();
   });
 });

@@ -1058,9 +1058,11 @@ describe("los adaptadores de proyecto son los MISMOS en las dos pieles", () => {
     // checkpointer PERSISTENTE —ahí cada conversación tiene id en el índice y su hilo se
     // puede reanudar, y eso es lo que separa reabrir de releer— y la carpeta de artefactos
     // de ESA sesión, que es lo que evita que un diagrama acabe dentro de la app XOne.
-    expect(fuenteDeMain()).toMatch(
-      /crearEjecutorReal\(alAbrir, crearCheckpointerDeProyecto, carpetaDeArtefactosDeSesion\)/
-    );
+    // Y desde los adjuntos de una tarea, un cuarto: la carpeta que el corredor le pasa a
+    // `abrirParaTarea` y el vestíbulo reenvía aquí. Sin ese reenvío, una tarea con adjuntos
+    // correría sin `/adjuntos/` montada y con todos los tests de las piezas en verde.
+    expect(fuenteDeMain()).toMatch(/crearEjecutorReal\(\s*alAbrir,\s*crearCheckpointerDeProyecto,/);
+    expect(fuenteDeMain()).toMatch(/carpetaDeArtefactosDeSesion,\s*opcionesDeConsola\?\.adjuntos\s*\)/);
   });
 
   it("y le pasa también las dependencias de proyecto: sin ellas el alta no bajaría nada", () => {

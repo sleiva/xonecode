@@ -3,7 +3,7 @@ import { execFileSync } from "node:child_process";
 import { mkdtempSync, writeFileSync, mkdirSync, readFileSync, existsSync, unlinkSync, symlinkSync, statSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
-import { prepararRepo, cambiosPendientes, marcarSubido, arbolLimpio, sinCommitear, REMOTO } from "./gitSync.js";
+import { prepararRepo, cambiosPendientes, marcarSubido, arbolLimpio, sinCommitear, trabajoSinCommitear, REMOTO } from "./gitSync.js";
 
 const git = (raiz: string, ...args: string[]) =>
   execFileSync("git", args, { cwd: raiz, encoding: "utf8" }).trim();
@@ -276,6 +276,82 @@ describe("arbolLimpio y sinCommitear", () => {
     // Solo lo real, y por su nombre: el mensaje al usuario tiene que decirle qué se juega.
     expect(await sinCommitear(raiz)).toEqual([".env", "app.xml"]);
     expect(await arbolLimpio(raiz)).toBe(false);
+  });
+});
+
+describe("trabajoSinCommitear", () => {
+  it("en un repo con trabajo suelto: lo MIDE y lo dice fichero a fichero", async () => {
+    const raiz = proyecto();
+    await prepararRepo(raiz, "master");
+    writeFileSync(join(raiz, "app.xml"), "<app cambiada/>");
+    writeFileSync(join(raiz, "ñu.xne"), "x");
+
+    expect(await trabajoSinCommitear(raiz)).toEqual({ via: "git", ficheros: ["app.xml", "ñu.xne"] });
+  });
+
+  it("en un repo limpio AFIRMA que está limpio: `via: git` con la lista vacía", async () => {
+    // Ausente y vacío no son lo mismo, la regla de siempre: aquí se ha mirado y no había
+    // nada. Quien lo lee puede decir «limpio» sin inventarse nada.
+    const raiz = proyecto();
+    await prepararRepo(raiz, "master");
+
+    expect(await trabajoSinCommitear(raiz)).toEqual({ via: "git", ficheros: [] });
+  });
+
+  it("SIN repo no afirma nada — al revés que `sinCommitear`, que lo da por sucio", async () => {
+    // Las dos preguntas son distintas y por eso las respuestas divergen a propósito.
+    // `sinCommitear` sostiene la guarda de `/sync`, donde no tener git es justo el caso
+    // sin red de seguridad: se declara sucio y se bloquea. Aquí la pregunta es «¿había
+    // trabajo de alguien cuando llegaste?», y de una carpeta sin git no se sabe. Todo
+    // proyecto OFFLINE es una carpeta sin git (`prepararRepo` solo corre al descargar),
+    // así que responder «sucio» ahí sería un aviso en cada apertura de cada proyecto
+    // offline: exactamente el aviso que enseña a ignorar los avisos.
+    const raiz = proyecto();
+
+    expect(await trabajoSinCommitear(raiz)).toEqual({ via: "sin-git" });
+    // Y la otra sigue igual: mismo proyecto, otra respuesta.
+    expect(await sinCommitear(raiz)).toEqual(["app.xml"]);
+  });
+
+  it("la basura del SO no cuenta DENTRO de un repo, y sola no es aviso ninguno", async () => {
+    // Medido contra los proyectos reales del usuario: `PlaemerWebTestAsync` tenía UN
+    // fichero sin commitear y era un `.DS_Store` — o sea que el aviso habría saltado, con
+    // su lista y todo, para decir que el Finder abrió la carpeta. `prepararRepo` solo
+    // excluye `.xonecode/`, así que en un repo `git status` sí los nombra: el filtro que
+    // la rama sin repo ya tenía hace falta igual aquí, y por el mismo argumento (lista
+    // CERRADA de metadatos del sistema, no «los ocultos»: un `.env` es trabajo del
+    // usuario). `sinCommitear` NO cambia — sostiene la guarda de `/sync`, y ahí el
+    // criterio es otro y lleva sus propios tests.
+    const raiz = proyecto();
+    await prepararRepo(raiz, "master");
+    writeFileSync(join(raiz, ".DS_Store"), "basura del Finder");
+    mkdirSync(join(raiz, "doc"), { recursive: true });
+    writeFileSync(join(raiz, "doc", ".DS_Store"), "y en una subcarpeta");
+
+    expect(await trabajoSinCommitear(raiz)).toEqual({ via: "git", ficheros: [] });
+  });
+
+  it("pero la basura no TAPA lo real: se quita ella y se queda el resto", async () => {
+    const raiz = proyecto();
+    await prepararRepo(raiz, "master");
+    writeFileSync(join(raiz, ".DS_Store"), "basura del Finder");
+    writeFileSync(join(raiz, "DOCUMENTACION.md"), "# doc");
+
+    expect(await trabajoSinCommitear(raiz)).toEqual({ via: "git", ficheros: ["DOCUMENTACION.md"] });
+  });
+
+  it("si git REVIENTA en un repo de verdad, tampoco afirma nada (y no lanza)", async () => {
+    // De esto cuelga el alta de la consola web, que se emite en los dos flancos de cada
+    // turno: una excepción aquí dejaría al navegador sin su mensaje de alta entero por no
+    // poder contestar a una pregunta accesoria.
+    const raiz = proyecto();
+    await prepararRepo(raiz, "master");
+    // `rev-parse --is-inside-work-tree` no lee el índice, así que sigue diciendo que esto
+    // es un repo; `git status` sí lo lee y muere con «unable to map index file».
+    rmSync(join(raiz, ".git", "index"));
+    mkdirSync(join(raiz, ".git", "index"));
+
+    expect(await trabajoSinCommitear(raiz)).toEqual({ via: "sin-git" });
   });
 });
 

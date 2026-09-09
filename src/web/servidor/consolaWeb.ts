@@ -76,6 +76,21 @@ export interface ConsolaWeb {
   recibir(mensaje: MensajeDelCliente): void;
   /** El cliente abre el SSE; devuelve los actos con los que hay que reemitirle el transcript. */
   conectar(enviar?: Sumidero): readonly Acto[];
+  /**
+   * Alguien MIRA lo que esta consola pinta sin ser su cliente: la vista en vivo de una tarea
+   * de fondo. Devuelve el transcript de ese instante, como `conectar`.
+   *
+   * **No es `conectar`, y esa es toda la razón de que exista.** `eof()` es
+   * `!transporte.conectado()`, así que un `conectar` de más le diría a esta consola que hay
+   * un humano al que preguntar — y en la consola de una tarea eso es falso por
+   * construcción: la vista es de solo lectura, no tiene compositor, y nadie puede contestar
+   * una pregunta ni aprobar una escritura desde ahí. Medido antes de escribirlo: con
+   * `conectar`, el `eof()` de la consola de una tarea pasaba de `true` a `false`. Ver
+   * `Transporte.mirar` para lo que un mirón recibe (solo el transcript) y lo que no.
+   */
+  mirar(enviar: Sumidero): readonly Acto[];
+  /** Se va UN mirón, y los demás siguen. */
+  dejarDeMirar(enviar: Sumidero): void;
   /** Se va UN cliente (el sumidero que se pasa) o todos (sin argumento). Ver `Transporte`. */
   desconectar(enviar?: Sumidero): void;
   /** Agota `lineas` (EOF) para que el lazo de `correrConsola` RETORNE, y corta el cliente. */
@@ -392,6 +407,8 @@ export function crearConsolaWeb(opciones: OpcionesDeConsolaWeb = {}): ConsolaWeb
       else cola.push(linea);
     },
     conectar: (enviar) => transporte.conectar(enviar),
+    mirar: (enviar) => transporte.mirar(enviar),
+    dejarDeMirar: (enviar) => transporte.dejarDeMirar(enviar),
     desconectar: (enviar) => transporte.desconectar(enviar),
     cerrar: () => {
       // Primero el corte —despierta a quien esperaba respuesta— y luego el EOF de la

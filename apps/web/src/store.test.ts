@@ -327,6 +327,81 @@ describe("el dispositivo de la sesión, en el alta", () => {
   });
 });
 
+describe("las sesiones de la barra: de quién es cada una y cuándo se tocó", () => {
+  const alta = (sesiones: unknown) => ({
+    clase: "alta" as const,
+    pasos: [],
+    proveedores: [],
+    entornos: [],
+    registrados: [],
+    proyectos: [{ id: "p1", nombre: "Tienda", sesiones }],
+    ramas: [],
+    proyectoAbierto: true,
+  });
+
+  it("`ultimoTurno` y `deTarea` sobreviven a la lista blanca", () => {
+    // Esta lista blanca ya se comió `mime` y `base64` en silencio y ninguna imagen se veía
+    // con los tests en verde. Rojo si uno de los dos se cae.
+    const s = crearStoreDelCliente();
+    s.aplicar(alta([{ id: "s9", titulo: "", ultimoTurno: "2026-09-09T06:23:12.784Z", deTarea: true }]));
+    expect(s.leer().alta?.proyectos[0]?.sesiones).toEqual([
+      { id: "s9", titulo: "", ultimoTurno: "2026-09-09T06:23:12.784Z", deTarea: true },
+    ]);
+  });
+
+  it("ausente se queda ausente: «no consta» no se convierte en «es un chat»", () => {
+    const s = crearStoreDelCliente();
+    s.aplicar(alta([{ id: "s7", titulo: "arreglar el alta" }]));
+    expect(s.leer().alta?.proyectos[0]?.sesiones).toEqual([{ id: "s7", titulo: "arreglar el alta" }]);
+  });
+
+  it("un `deTarea` que no es el booleano se descarta, no se toma por verdadero", () => {
+    // La trampa del `"false"` de CloudStudio, en la dirección de aquí: marcar una
+    // conversación de una persona como sesión de una tarea de fondo.
+    const s = crearStoreDelCliente();
+    s.aplicar(alta([{ id: "s7", titulo: "x", deTarea: "true" }]));
+    expect(s.leer().alta?.proyectos[0]?.sesiones?.[0]).toEqual({ id: "s7", titulo: "x" });
+  });
+});
+
+describe("el trabajo sin commitear que ya había al abrir", () => {
+  const alta = (extra: Record<string, unknown> = {}) => ({
+    clase: "alta" as const,
+    pasos: [],
+    proveedores: [],
+    entornos: [],
+    registrados: [],
+    proyectos: [],
+    ramas: [],
+    proyectoAbierto: true,
+    ...extra,
+  });
+
+  it("sobrevive al store: la lista y el total llegan enteros", () => {
+    // La lista blanca de este `case` ya se ha comido un campo del cable en silencio
+    // (`mime` y `base64` de un fichero, y NINGUNA imagen se enseñaba mientras los tests de
+    // jsdom seguían en verde). Esto es rojo si uno de los dos se cae.
+    const s = crearStoreDelCliente();
+    s.aplicar(alta({ trabajoAlAbrir: { ficheros: ["app.xml"], total: 4 } }));
+    expect(s.leer().alta?.trabajoAlAbrir).toEqual({ ficheros: ["app.xml"], total: 4 });
+  });
+
+  it("una forma a medias se descarta: sin lista no hay aviso que pintar", () => {
+    const s = crearStoreDelCliente();
+    s.aplicar(alta({ trabajoAlAbrir: { total: 4 } }));
+    expect(s.leer().alta?.trabajoAlAbrir).toBeUndefined();
+  });
+
+  it("una lista vacía no es un aviso, y no se guarda como si lo fuera", () => {
+    // El servidor no la manda —se calla las tres respuestas que no son un aviso—, pero el
+    // store no puede depender de eso: aquí llegaría un aviso que dice «ya había cambios» y
+    // no nombra ninguno, que es peor que no decir nada.
+    const s = crearStoreDelCliente();
+    s.aplicar(alta({ trabajoAlAbrir: { ficheros: [], total: 0 } }));
+    expect(s.leer().alta?.trabajoAlAbrir).toBeUndefined();
+  });
+});
+
 describe("el alta del wizard", () => {
   it("guarda pasos, entornos y listas tal cual llegan", () => {
     const store = crearStoreDelCliente();
@@ -651,5 +726,376 @@ describe("el paso de receta que se está ejecutando", () => {
     const s = crearStoreDelCliente();
     s.aplicar(progreso({ estado: "fallo", motivo: "Warning: Failed to find package" }));
     expect(s.leer().instalacion).toMatchObject({ estado: "fallo", motivo: "Warning: Failed to find package" });
+  });
+});
+
+describe("la cola de tareas", () => {
+  it("se guarda campo a campo, y un estado inventado cae en «nuevo»", () => {
+    const s = crearStoreDelCliente();
+    s.aplicar({
+      clase: "tareas",
+      concurrencia: 3,
+      corriendoAqui: false,
+      lista: [
+        {
+          id: "t1",
+          proyecto: "p1",
+          proyectoNombre: "AppDemo",
+          titulo: "T",
+          peticion: "p",
+          encargo: "e",
+          adjuntos: [{ nombre: "a.png", bytes: 10, mime: "image/png" }],
+          estado: "requiere-atencion",
+          motivo: "una escritura sin aprobar",
+          creada: "2026-09-08T10:00:00.000Z",
+        },
+        { id: "", proyecto: "p1", estado: "nuevo" },
+      ],
+    });
+    const cola = s.leer().tareas!;
+    expect(cola.concurrencia).toBe(3);
+    expect(cola.corriendoAqui).toBe(false);
+    // La fila sin id se descarta: no hay nada que hacer con ella y la tarjeta no tendría clave.
+    expect(cola.lista).toHaveLength(1);
+    expect(cola.lista[0]).toMatchObject({ estado: "requiere-atencion", motivo: "una escritura sin aprobar" });
+    expect(cola.lista[0]!.adjuntos).toEqual([{ nombre: "a.png", bytes: 10, mime: "image/png" }]);
+  });
+
+  it("«lo ejecuta otro proceso» pasa con sus TRES valores: sí, no, y no se sabe", () => {
+    // «No soy yo» manda a esperar; «no hay nadie» dice que no va a pasar nada. Colapsar el
+    // tercero (ausente) en `false` haría que la interfaz prometiera lo segundo sin saberlo.
+    const s = crearStoreDelCliente();
+    s.aplicar({ clase: "tareas", concurrencia: 2, corriendoAqui: false, lista: [], ejecutaOtroProceso: true });
+    expect(s.leer().tareas!.ejecutaOtroProceso).toBe(true);
+    s.aplicar({ clase: "tareas", concurrencia: 2, corriendoAqui: false, lista: [], ejecutaOtroProceso: false });
+    expect(s.leer().tareas!.ejecutaOtroProceso).toBe(false);
+    s.aplicar({ clase: "tareas", concurrencia: 2, corriendoAqui: false, lista: [] });
+    expect(s.leer().tareas!.ejecutaOtroProceso).toBeUndefined();
+    // Y un valor que no es booleano no se toma por verdadero: la trampa del `"false"`.
+    s.aplicar({ clase: "tareas", concurrencia: 2, corriendoAqui: false, lista: [], ejecutaOtroProceso: "false" });
+    expect(s.leer().tareas!.ejecutaOtroProceso).toBeUndefined();
+  });
+
+  it("NO se tira al caerse el cable: las tareas siguen corriendo en la máquina", () => {
+    // Misma regla que la foto de la máquina y que el paso de instalación en marcha.
+    const s = crearStoreDelCliente();
+    s.aplicar({ clase: "tareas", concurrencia: 2, corriendoAqui: true, lista: [] });
+    s.marcarDesconectado();
+    expect(s.leer().tareas).toBeDefined();
+  });
+
+  it("un campo del mensaje que la lista blanca no nombra no llega al estado", () => {
+    // La lista blanca ya se comió `mime`, `recetas` y `ejecutable` en versiones anteriores
+    // del cable; este test es el que caza que un campo nuevo se nombre aquí antes de fiarse
+    // de él en un componente.
+    const s = crearStoreDelCliente();
+    s.aplicar({
+      clase: "tareas",
+      concurrencia: 2,
+      corriendoAqui: true,
+      lista: [
+        {
+          id: "t1",
+          proyecto: "p1",
+          proyectoNombre: "AppDemo",
+          titulo: "T",
+          peticion: "p",
+          encargo: "e",
+          adjuntos: [],
+          estado: "nuevo",
+          creada: "2026-09-08T10:00:00.000Z",
+          pid: 12345,
+        },
+      ],
+    });
+    const fila = s.leer().tareas!.lista[0]!;
+    expect((fila as Record<string, unknown>)["pid"]).toBeUndefined();
+  });
+
+  it("sin lista (mensaje malformado) no se guarda nada", () => {
+    const s = crearStoreDelCliente();
+    s.aplicar({ clase: "tareas", concurrencia: 2, corriendoAqui: true });
+    expect(s.leer().tareas).toBeUndefined();
+  });
+
+  it("«autorizadas» pasa campo a campo; ausente y vacío no son lo mismo", () => {
+    const s = crearStoreDelCliente();
+    s.aplicar({
+      clase: "tareas",
+      concurrencia: 2,
+      corriendoAqui: true,
+      lista: [
+        {
+          id: "t1",
+          proyecto: "p1",
+          proyectoNombre: "AppDemo",
+          titulo: "T",
+          peticion: "p",
+          encargo: "e",
+          adjuntos: [],
+          estado: "requiere-atencion",
+          creada: "2026-09-08T10:00:00.000Z",
+          autorizadas: ["src/app.xne", 7, "src/Login.xne"],
+        },
+        {
+          id: "t2",
+          proyecto: "p1",
+          proyectoNombre: "AppDemo",
+          titulo: "T2",
+          peticion: "p",
+          encargo: "e",
+          adjuntos: [],
+          estado: "nuevo",
+          creada: "2026-09-08T10:00:00.000Z",
+        },
+      ],
+    });
+    const [t1, t2] = s.leer().tareas!.lista;
+    // Lo que no es cadena se descarta, como en cualquier otra lista blanca de aquí.
+    expect(t1!.autorizadas).toEqual(["src/app.xne", "src/Login.xne"]);
+    // La que nunca corrió no consta: no se sintetiza un `[]`.
+    expect(t2!.autorizadas).toBeUndefined();
+  });
+
+  /**
+   * Medido tres veces en este repo con `mime`, `recetas` y `ejecutable`: una lista blanca
+   * que se olvida un campo es una interfaz vacía con todos los tests en verde — porque el
+   * mensaje de fuera cambia sin que el store se entere. `feedback` es el campo que Task 12
+   * añade a `TareaDelCable`, y este test es la comprobación de que se copió.
+   */
+  it("«feedback» pasa campo a campo; ausente cuando nunca se le pidió nada a la tarea", () => {
+    const s = crearStoreDelCliente();
+    s.aplicar({
+      clase: "tareas",
+      concurrencia: 2,
+      corriendoAqui: true,
+      lista: [
+        {
+          id: "t1",
+          proyecto: "p1",
+          proyectoNombre: "AppDemo",
+          titulo: "T",
+          peticion: "p",
+          encargo: "e",
+          adjuntos: [],
+          estado: "nuevo",
+          creada: "2026-09-08T10:00:00.000Z",
+          feedback: [
+            { texto: "primero", creado: "2026-09-08T10:00:00.000Z", consumido: true },
+            // Cada campo se convierte por separado — el mismo trato que ya recibe
+            // `adjuntos` (`nombre`/`bytes`) —, y no una entrada entera que se descarta.
+            { texto: 7, creado: "2026-09-08T11:00:00.000Z", consumido: "sí" },
+          ],
+        },
+        {
+          id: "t2",
+          proyecto: "p1",
+          proyectoNombre: "AppDemo",
+          titulo: "T2",
+          peticion: "p",
+          encargo: "e",
+          adjuntos: [],
+          estado: "nuevo",
+          creada: "2026-09-08T10:00:00.000Z",
+        },
+      ],
+    });
+    const [t1, t2] = s.leer().tareas!.lista;
+    expect(t1!.feedback).toEqual([
+      { texto: "primero", creado: "2026-09-08T10:00:00.000Z", consumido: true },
+      // `String(7)` y la trampa de siempre: un `"sí"` no es el booleano `true`, y solo
+      // ese exacto cuenta como consumido.
+      { texto: "7", creado: "2026-09-08T11:00:00.000Z", consumido: false },
+    ]);
+    // La que nunca ha pedido feedback no lleva el campo: ausente, no `[]`.
+    expect(t2!.feedback).toBeUndefined();
+  });
+
+  /**
+   * F1 de la revisión final: el veredicto del juez es lo que separa las tres formas de estar
+   * «Terminada», así que la lista blanca no puede fiarse de lo que llegue. Que el campo
+   * SOBREVIVE lo prueba `tipos.test.ts` contra los campos declarados del tipo; esto prueba
+   * las dos trampas de siempre.
+   */
+  it("un veredicto que no es ninguno de los tres se descarta ENTERO, no cae en verde", () => {
+    const s = crearStoreDelCliente();
+    const base = {
+      proyecto: "p1",
+      proyectoNombre: "AppDemo",
+      titulo: "T",
+      peticion: "p",
+      encargo: "e",
+      adjuntos: [],
+      estado: "terminada",
+      creada: "2026-09-08T10:00:00.000Z",
+    };
+    s.aplicar({
+      clase: "tareas",
+      concurrencia: 2,
+      corriendoAqui: true,
+      lista: [
+        { ...base, id: "t1", veredicto: { veredicto: "casi", resumen: "algo" } },
+        // Sin resumen no hay nada que leer, y un veredicto sin palabras en la tarjeta sería
+        // una etiqueta sin dato detrás.
+        { ...base, id: "t2", veredicto: { veredicto: "verde" } },
+        { ...base, id: "t3", veredicto: "verde" },
+        {
+          ...base,
+          id: "t4",
+          veredicto: { veredicto: "verde", resumen: "vale", hallazgos: ["uno", 7], salvedad: 3 },
+        },
+      ],
+    });
+    const [t1, t2, t3, t4] = s.leer().tareas!.lista;
+    expect(t1!.veredicto).toBeUndefined();
+    expect(t2!.veredicto).toBeUndefined();
+    expect(t3!.veredicto).toBeUndefined();
+    // Lo que no es cadena se descarta dentro de los hallazgos, y una salvedad que no es
+    // texto no se pinta: el resto del veredicto sigue valiendo.
+    expect(t4!.veredicto).toEqual({ veredicto: "verde", resumen: "vale", hallazgos: ["uno"] });
+  });
+
+  it("«terminadaAMano» solo con el booleano true: un «false» de cadena no marca nada", () => {
+    const s = crearStoreDelCliente();
+    const base = {
+      proyecto: "p1",
+      proyectoNombre: "AppDemo",
+      titulo: "T",
+      peticion: "p",
+      encargo: "e",
+      adjuntos: [],
+      estado: "terminada",
+      creada: "2026-09-08T10:00:00.000Z",
+    };
+    s.aplicar({
+      clase: "tareas",
+      concurrencia: 2,
+      corriendoAqui: true,
+      lista: [
+        { ...base, id: "t1", terminadaAMano: "false" },
+        { ...base, id: "t2", terminadaAMano: true },
+        { ...base, id: "t3" },
+      ],
+    });
+    const [t1, t2, t3] = s.leer().tareas!.lista;
+    // La trampa de siempre: `"false"` es verdadero en JavaScript, y aquí marcaría como dada
+    // por buena a mano una entrega del corredor.
+    expect(t1!.terminadaAMano).toBeUndefined();
+    expect(t2!.terminadaAMano).toBe(true);
+    // Ausente = no consta, que no es `false`.
+    expect("terminadaAMano" in t3!).toBe(false);
+  });
+
+  /**
+   * El ENCARGO propuesto por el aumentador, y la mitad que hay que contar: **el mensaje va a
+   * TODOS los clientes** (el cable habla con todos, no con el último), así que el store
+   * guarda el último y quien abre la ventana de crear lo LIMPIA — si no, un encargo que pidió
+   * otra pestaña prerrellenaría el campo de esta.
+   */
+  describe("el encargo augmentado", () => {
+    it("un encargo llega y se guarda; el fallo llega como motivo, nunca los dos", () => {
+      const s = crearStoreDelCliente();
+      s.aplicar({ clase: "tarea", accion: "augmentado", encargo: "## Objetivo\nBuscar por NIF" });
+      expect(s.leer().encargoPropuesto).toEqual({ encargo: "## Objetivo\nBuscar por NIF" });
+      s.aplicar({ clase: "tarea", accion: "augmentado", error: "falta la credencial para openai" });
+      expect(s.leer().encargoPropuesto).toEqual({ error: "falta la credencial para openai" });
+    });
+
+    it("se puede LIMPIAR: la ventana lo hace al abrirse, porque este mensaje va a todas las pestañas", () => {
+      const s = crearStoreDelCliente();
+      s.aplicar({ clase: "tarea", accion: "augmentado", encargo: "E" });
+      s.limpiarEncargoPropuesto();
+      expect(s.leer().encargoPropuesto).toBeUndefined();
+    });
+
+    it("lo que no trae ni encargo ni error no cambia nada: campo a campo, como todo lo de aquí", () => {
+      const s = crearStoreDelCliente();
+      s.aplicar({ clase: "tarea", accion: "augmentado", encargo: "E" });
+      s.aplicar({ clase: "tarea", accion: "augmentado" } as never);
+      expect(s.leer().encargoPropuesto).toEqual({ encargo: "E" });
+    });
+  });
+});
+
+/**
+ * **Mirar en vivo lo que hace una tarea** (Task 16).
+ *
+ * Lo que llega es el transcript de la sesión de ESA tarea, etiquetado con su id porque por
+ * el mismo cable llega el de la sesión propia. Dos reglas que este bloque fija:
+ *  - **Nunca se mezcla con `actos`**: los actos de una tarea de fondo no pueden aparecer en
+ *    el chat de quien la mira, que es el aserto que hay que conservar de todo esto.
+ *  - **Se tira al caerse el cable**, como `modelos` y al contrario que la cola de tareas: la
+ *    mirada es un enganche que vive en el servidor, y al caerse el SSE ese enganche se va con
+ *    él (`arranque.ts`, el `close`). Guardarla haría que la pantalla siguiera enseñando un
+ *    transcript congelado como si estuviera en vivo.
+ */
+describe("mirar en vivo una tarea", () => {
+  const ACTOS = [
+    { tipo: "usuario" as const, texto: "arregla el login" },
+    { tipo: "razonamiento" as const, texto: "mirando app.xne" },
+  ];
+
+  it("`todos` deja el transcript de esa tarea, y no toca los actos de la sesión propia", () => {
+    const s = crearStoreDelCliente();
+    s.aplicar({ clase: "acto", acto: { tipo: "usuario", texto: "lo mío" } });
+    s.aplicar({ clase: "mirada", tarea: "t1", via: "todos", actos: ACTOS });
+    expect(s.leer().mirada).toEqual({ tarea: "t1", actos: ACTOS });
+    // La regla que no se puede romper: el transcript de una tarea de fondo no entra en la
+    // conversación de nadie.
+    expect(s.leer().actos).toEqual([{ tipo: "usuario", texto: "lo mío" }]);
+  });
+
+  it("`alta` anexa y `sustitucion` reemplaza el último", () => {
+    const s = crearStoreDelCliente();
+    s.aplicar({ clase: "mirada", tarea: "t1", via: "todos", actos: [ACTOS[0]!] });
+    s.aplicar({ clase: "mirada", tarea: "t1", via: "alta", actos: [{ tipo: "herramientas", lineas: ["→ lee"], detalles: [{}] }] });
+    expect(s.leer().mirada!.actos).toHaveLength(2);
+    s.aplicar({ clase: "mirada", tarea: "t1", via: "sustitucion", actos: [{ tipo: "herramientas", lineas: ["→ lee ×3"], detalles: [{}] }] });
+    expect(s.leer().mirada!.actos).toEqual([
+      ACTOS[0],
+      { tipo: "herramientas", lineas: ["→ lee ×3"], detalles: [{}] },
+    ]);
+  });
+
+  it("un trozo de OTRA tarea no se anexa al transcript de la que se mira", () => {
+    const s = crearStoreDelCliente();
+    s.aplicar({ clase: "mirada", tarea: "t1", via: "todos", actos: [ACTOS[0]!] });
+    // El servidor solo manda lo que este cliente pidió, pero el store no puede fiarse de
+    // eso: mezclar dos transcripts sería la peor forma de fallar aquí — una conversación
+    // que cuenta lo que hizo otro agente.
+    s.aplicar({ clase: "mirada", tarea: "t2", via: "alta", actos: [{ tipo: "asistente", texto: "de otra" }] });
+    expect(s.leer().mirada).toEqual({ tarea: "t1", actos: [ACTOS[0]] });
+  });
+
+  it("un `todos` de otra tarea SÍ cambia de tarea: es lo que hace «mirar esta otra»", () => {
+    const s = crearStoreDelCliente();
+    s.aplicar({ clase: "mirada", tarea: "t1", via: "todos", actos: [ACTOS[0]!] });
+    s.aplicar({ clase: "mirada", tarea: "t2", via: "todos", actos: [{ tipo: "asistente", texto: "de otra" }] });
+    expect(s.leer().mirada).toEqual({ tarea: "t2", actos: [{ tipo: "asistente", texto: "de otra" }] });
+  });
+
+  it("un mensaje sin `via` conocida o con actos que no lo son se ignora", () => {
+    const s = crearStoreDelCliente();
+    s.aplicar({ clase: "mirada", tarea: "t1", via: "todos", actos: ACTOS });
+    s.aplicar({ clase: "mirada", tarea: "t1", via: "fantasma", actos: ACTOS } as never);
+    s.aplicar({ clase: "mirada", tarea: "t1", via: "alta", actos: [{ tipo: "inventado" }] } as never);
+    s.aplicar({ clase: "mirada", tarea: "t1", via: "alta" } as never);
+    expect(s.leer().mirada).toEqual({ tarea: "t1", actos: ACTOS });
+  });
+
+  it("se tira al caerse el cable: la mirada la sostiene el servidor, no este navegador", () => {
+    const s = crearStoreDelCliente();
+    s.aplicar({ clase: "mirada", tarea: "t1", via: "todos", actos: ACTOS });
+    s.marcarDesconectado();
+    // Y la cola de tareas NO se tira, que es la otra mitad: las tareas siguen corriendo en
+    // la máquina, pero el enganche a esta pantalla no.
+    expect(s.leer().mirada).toBeUndefined();
+  });
+
+  it("`dejarDeMirar` la borra sin esperar al servidor: el panel se cierra al pulsar", () => {
+    const s = crearStoreDelCliente();
+    s.aplicar({ clase: "mirada", tarea: "t1", via: "todos", actos: ACTOS });
+    s.dejarDeMirar();
+    expect(s.leer().mirada).toBeUndefined();
   });
 });

@@ -5,7 +5,7 @@
  * invocan con una petición y una respuesta de mentira — que es lo que permite afirmar
  * sobre el CABLE (qué se emite, en qué orden, a qué consola) sin abrir un socket.
  */
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
@@ -15,17 +15,30 @@ import {
   arrancarConsolaWeb,
   comandosDelRegistro, descripcionParaLaWeb,
   montarRutas,
+  construirCorredorDeTareasCableado,
   FALTA_EL_BUILD,
   RUTA_ACCION,
+  RUTA_ADJUNTO,
   RUTA_ARTEFACTO,
   RUTA_EVENTOS,
+  fuentesDelJuez,
+  augmentacionCableada,
+  contextoDelProyecto,
+  TOPE_DE_MEMORIA,
+  FICHEROS_DEL_AVISO,
 } from "./arranque.js";
+import { ErrorDelAumentador } from "../../agent/aumentador.js";
+import type { PeticionDeTarea } from "../../core/ports.js";
 import { crearVestibulo, type Vestibulo } from "./vestibulo.js";
+import { crearSesion, listarSesiones } from "./sesiones.js";
 import { COMANDOS } from "../../cli/consola.js";
 import { CatalogoModelosEnMemoria } from "../../core/ports.js";
 import type { Entorno } from "../../core/settings.js";
+import type { AdjuntoDeTarea, Tarea } from "../../core/tareas.js";
+import { TOPE_DE_ADJUNTO } from "../../agent/tareasEnDisco.js";
 import type { ManejadorRuta } from "./servidor.js";
-import type { MensajeAlCliente, MensajeDelCliente } from "./transporte.js";
+import type { MensajeAlCliente, MensajeDelCliente, Sumidero } from "./transporte.js";
+import type { Acto } from "../../core/actos.js";
 
 /** El servidor visto por `montarRutas`: solo apunta lo que se le registra. */
 function servidorDeMentira() {
@@ -38,11 +51,20 @@ function servidorDeMentira() {
   };
 }
 
-/** El SSE del navegador: apunta cada mensaje ya parseado y sabe avisar del cierre. */
-function clienteDeMentira() {
+/**
+ * El SSE del navegador: apunta cada mensaje ya parseado y sabe avisar del cierre.
+ *
+ * `id` es el identificador de cliente que el navegador manda en la query (`/eventos?cliente=`)
+ * y que después repite en un `{clase:"mirar"}`: sin él el servidor no podría saber a qué
+ * pestaña engancharle la mirada de una tarea, porque el SSE y el `POST /accion` son dos
+ * peticiones distintas. Ausente = un cliente que no pide mirar nada, que es el caso de casi
+ * todos estos tests.
+ */
+function clienteDeMentira(id?: string) {
   const recibidos: MensajeAlCliente[] = [];
   let alCerrar: (() => void) | undefined;
   const peticion = {
+    url: id === undefined ? "/eventos" : `/eventos?cliente=${id}`,
     on: (evento: string, escucha: () => void) => {
       if (evento === "close") alCerrar = escucha;
     },
@@ -139,6 +161,8 @@ describe("montarRutas — el cable, por fin conectado", () => {
       `GET ${RUTA_ARTEFACTO}`,
       `GET ${RUTA_EVENTOS}`,
       `POST ${RUTA_ACCION}`,
+      // Y la cuarta son los BYTES de un adjunto de tarea, por lo mismo: el cable lleva JSON.
+      `POST ${RUTA_ADJUNTO}`,
     ]);
   });
 
@@ -1316,6 +1340,108 @@ describe("montarRutas — el cable, por fin conectado", () => {
       rmSync(base, { recursive: true, force: true });
     });
 
+    it("el trabajo que YA HABÍA al abrir viaja en el alta, con sus nombres", async () => {
+      // Un contador a secas es el aviso que enseña a ignorar los avisos: quien lo lee
+      // tiene que poder saber si eso es suyo, de otra sesión o de una tarea.
+      const base = mkdtempSync(join(tmpdir(), "xonecode-base-"));
+      const servidor = servidorDeMentira();
+      const vestibulo = vestibuloDePrueba({
+        baseDeWorkspace: base,
+        sinCommitear: async () => ({ via: "git", ficheros: ["app.xml", "js/Clientes.js"] }),
+      });
+      montarRutas(servidor, vestibulo);
+      const cliente = clienteDeMentira();
+      await servidor.rutas.get(`GET ${RUTA_EVENTOS}`)!(cliente.peticion, cliente.respuesta);
+      await asentar();
+
+      await vestibulo.abrirProyecto({ raiz: vestibulo.raizDeProyecto("webstudio", "Tienda") });
+      await servidor.rutas.get(`GET ${RUTA_EVENTOS}`)!(cliente.peticion, cliente.respuesta);
+      await asentar();
+
+      const alta = cliente.recibidos.filter((m) => m.clase === "alta").at(-1) as Extract<
+        MensajeAlCliente,
+        { clase: "alta" }
+      >;
+      expect(alta.trabajoAlAbrir).toEqual({ ficheros: ["app.xml", "js/Clientes.js"], total: 2 });
+      await vestibulo.cerrar();
+      rmSync(base, { recursive: true, force: true });
+    });
+
+    it("un árbol limpio no manda nada: el alta no da la enhorabuena", async () => {
+      // Ausente es «no hay nada que decir». Un mensaje por cada apertura limpia sería
+      // ruido en el 90% de las aperturas, y el aviso dejaría de leerse el día que importe.
+      const base = mkdtempSync(join(tmpdir(), "xonecode-base-"));
+      const servidor = servidorDeMentira();
+      const vestibulo = vestibuloDePrueba({
+        baseDeWorkspace: base,
+        sinCommitear: async () => ({ via: "git", ficheros: [] }),
+      });
+      montarRutas(servidor, vestibulo);
+      const cliente = clienteDeMentira();
+      await vestibulo.abrirProyecto({ raiz: vestibulo.raizDeProyecto("webstudio", "Tienda") });
+      await servidor.rutas.get(`GET ${RUTA_EVENTOS}`)!(cliente.peticion, cliente.respuesta);
+      await asentar();
+
+      const alta = cliente.recibidos.filter((m) => m.clase === "alta").at(-1) as Extract<
+        MensajeAlCliente,
+        { clase: "alta" }
+      >;
+      expect(alta.trabajoAlAbrir).toBeUndefined();
+      await vestibulo.cerrar();
+      rmSync(base, { recursive: true, force: true });
+    });
+
+    it("sin git tampoco se manda nada: no se sabe no es no hay", async () => {
+      // Todo proyecto OFFLINE es una carpeta sin git, así que ésta es la respuesta normal
+      // en la mitad de los proyectos: afirmar algo aquí sería inventárselo.
+      const base = mkdtempSync(join(tmpdir(), "xonecode-base-"));
+      const servidor = servidorDeMentira();
+      const vestibulo = vestibuloDePrueba({
+        baseDeWorkspace: base,
+        sinCommitear: async () => ({ via: "sin-git" }),
+      });
+      montarRutas(servidor, vestibulo);
+      const cliente = clienteDeMentira();
+      await vestibulo.abrirProyecto({ raiz: vestibulo.raizDeProyecto("webstudio", "Tienda") });
+      await servidor.rutas.get(`GET ${RUTA_EVENTOS}`)!(cliente.peticion, cliente.respuesta);
+      await asentar();
+
+      const alta = cliente.recibidos.filter((m) => m.clase === "alta").at(-1) as Extract<
+        MensajeAlCliente,
+        { clase: "alta" }
+      >;
+      expect(alta.trabajoAlAbrir).toBeUndefined();
+      await vestibulo.cerrar();
+      rmSync(base, { recursive: true, force: true });
+    });
+
+    it("solo viaja lo que se pinta: los nombres se acotan y el TOTAL se dice entero", async () => {
+      // El alta se reemite en los dos flancos de cada turno, y el aviso no puede listar
+      // trescientos nombres de todas formas. Se manda lo que cabe en la frase y la cifra
+      // de verdad al lado, que es lo que impide leer «12» como «solo 12».
+      const base = mkdtempSync(join(tmpdir(), "xonecode-base-"));
+      const servidor = servidorDeMentira();
+      const muchos = Array.from({ length: 30 }, (_, i) => `f${String(i).padStart(2, "0")}.xne`);
+      const vestibulo = vestibuloDePrueba({
+        baseDeWorkspace: base,
+        sinCommitear: async () => ({ via: "git", ficheros: muchos }),
+      });
+      montarRutas(servidor, vestibulo);
+      const cliente = clienteDeMentira();
+      await vestibulo.abrirProyecto({ raiz: vestibulo.raizDeProyecto("webstudio", "Tienda") });
+      await servidor.rutas.get(`GET ${RUTA_EVENTOS}`)!(cliente.peticion, cliente.respuesta);
+      await asentar();
+
+      const alta = cliente.recibidos.filter((m) => m.clase === "alta").at(-1) as Extract<
+        MensajeAlCliente,
+        { clase: "alta" }
+      >;
+      expect(alta.trabajoAlAbrir?.ficheros).toEqual(muchos.slice(0, FICHEROS_DEL_AVISO));
+      expect(alta.trabajoAlAbrir?.total).toBe(30);
+      await vestibulo.cerrar();
+      rmSync(base, { recursive: true, force: true });
+    });
+
     it("sin proyecto abierto no se dice ninguno: la barra no marca nada", async () => {
       const servidor = servidorDeMentira();
       montarRutas(servidor, vestibuloDePrueba());
@@ -1350,6 +1476,57 @@ describe("montarRutas — el cable, por fin conectado", () => {
         { clase: "alta" }
       >;
       expect(alta.proyectos[0]?.sesiones).toEqual([{ id: "s7", titulo: "arreglar el alta" }]);
+    });
+
+    it("una sesión de TAREA viaja marcada, y con la hora de su último turno", async () => {
+      // Las dos cosas que la barra necesita para distinguir las filas: qué es cada una y
+      // cuándo se tocó. La marca viene del ÍNDICE y no de cruzar con la cola de tareas, que
+      // es opcional en las dos capas — ver `EntradaIndice.tarea`.
+      const servidor = servidorDeMentira();
+      const vestibulo = vestibuloDePrueba({
+        sesiones: {
+          crear: () => "s1",
+          listar: () => [
+            { id: "s7", titulo: "arreglar el alta", creada: "2026-09-07T08:00:00.000Z", ultimoTurno: "2026-09-07T10:08:23.790Z" },
+            { id: "s9", titulo: "", creada: "2026-09-09T05:34:13.915Z", ultimoTurno: "2026-09-09T06:23:12.784Z", tarea: "669c9b79" },
+          ],
+          anotar: () => {},
+          reabrir: (_r, id) => ({ id, actos: [], historica: true }),
+        },
+      });
+      montarRutas(servidor, vestibulo);
+      const cliente = clienteDeMentira();
+      await servidor.rutas.get(`GET ${RUTA_EVENTOS}`)!(cliente.peticion, cliente.respuesta);
+      await asentar();
+
+      const alta = cliente.recibidos.filter((m) => m.clase === "alta").at(-1) as Extract<
+        MensajeAlCliente,
+        { clase: "alta" }
+      >;
+      expect(alta.proyectos[0]?.sesiones).toEqual([
+        { id: "s7", titulo: "arreglar el alta", ultimoTurno: "2026-09-07T10:08:23.790Z" },
+        { id: "s9", titulo: "", ultimoTurno: "2026-09-09T06:23:12.784Z", deTarea: true },
+      ]);
+    });
+
+    it("viaja un booleano y no el id de la tarea: solo cruza el cable lo que se pinta", async () => {
+      // La fila lleva una marca, no el nombre de la tarea —en 280 px no cabe— así que el
+      // id se queda en el host, como la ruta de una herramienta o el pid del corredor.
+      const servidor = servidorDeMentira();
+      const vestibulo = vestibuloDePrueba({
+        sesiones: {
+          crear: () => "s1",
+          listar: () => [{ id: "s9", titulo: "", creada: "x", ultimoTurno: "y", tarea: "669c9b79" }],
+          anotar: () => {},
+          reabrir: (_r, id) => ({ id, actos: [], historica: true }),
+        },
+      });
+      montarRutas(servidor, vestibulo);
+      const cliente = clienteDeMentira();
+      await servidor.rutas.get(`GET ${RUTA_EVENTOS}`)!(cliente.peticion, cliente.respuesta);
+      await asentar();
+
+      expect(JSON.stringify(cliente.recibidos)).not.toContain("669c9b79");
     });
   });
 
@@ -1748,6 +1925,95 @@ describe("montarRutas — el cable, por fin conectado", () => {
       expect(dos.recibidos.filter((m) => m.clase === "selector")).toHaveLength(0);
     });
   });
+
+  /**
+   * Un borrado DECLINADO no se cuenta como «ya no estaba».
+   *
+   * `borrarSesion` declina cuando la conversación es la de una tarea en curso (ver
+   * `vestibulo.ts`), y el mensaje de siempre para `borrada: false` es «esa sesión ya no
+   * estaba» — que ahí sería falso en la dirección peor: la fila sigue en la barra, y al
+   * usuario le habríamos dicho que se fue. Se dice el motivo del vestíbulo y nada más.
+   */
+  it("un borrado declinado dice el MOTIVO, no «esa sesión ya no estaba»", async () => {
+    const servidor = servidorDeMentira();
+    const dichos: string[] = [];
+    const motivo = "esa conversación es la de una tarea en curso: se podrá borrar cuando termine";
+    montarRutas(
+      servidor,
+      {
+        ...vestibuloDePrueba(),
+        borrarSesion: async () => ({ borrada: false, cerroLaAbierta: false, motivo }),
+      },
+      { informar: (texto) => dichos.push(texto) }
+    );
+    const cliente = clienteDeMentira();
+    await servidor.rutas.get(`GET ${RUTA_EVENTOS}`)!(cliente.peticion, cliente.respuesta);
+    await asentar();
+
+    await postear(
+      servidor.rutas.get(`POST ${RUTA_ACCION}`)!,
+      JSON.stringify({ clase: "sesionAccion", accion: "borrar", proyecto: "p1", sesion: "s1" })
+    );
+    await asentar();
+
+    expect(dichos).toContain(motivo);
+    expect(dichos).not.toContain("esa sesión ya no estaba");
+    expect(dichos).not.toContain("sesión borrada");
+    // Y viaja en el alta como los demás rechazos de este camino, que es lo que la barra
+    // pinta sin tener que leer el transcript.
+    const altas = cliente.recibidos.filter((m) => m.clase === "alta");
+    expect((altas.at(-1) as { aviso?: string }).aviso).toBe(motivo);
+  });
+
+  /**
+   * Borrar la sesión ABIERTA libera su proyecto, y hay que decírselo a la cola.
+   *
+   * En un proyecto con la consola de una persona abierta no arranca ninguna tarea (gana la
+   * persona, `core/tareas.ts#siguientesAEjecutar`), y el corredor no tiene temporizador: se
+   * revisa por evento. Este es el ÚNICO camino en el que la consola humana se cierra sin
+   * que se abra otra, así que sin esta llamada una tarea que esperaba a esa persona se
+   * quedaría esperando al siguiente evento que no tiene nada que ver — en pantalla, un
+   * cuelgue.
+   */
+  it("borrar la sesión abierta hace REVISAR la cola de tareas", async () => {
+    const servidor = servidorDeMentira();
+    let revisado = 0;
+    montarRutas(
+      servidor,
+      { ...vestibuloDePrueba(), borrarSesion: async () => ({ borrada: true, cerroLaAbierta: true }) },
+      { revisarTareas: () => void (revisado += 1) }
+    );
+    const cliente = clienteDeMentira();
+    await servidor.rutas.get(`GET ${RUTA_EVENTOS}`)!(cliente.peticion, cliente.respuesta);
+    await asentar();
+
+    await postear(
+      servidor.rutas.get(`POST ${RUTA_ACCION}`)!,
+      JSON.stringify({ clase: "sesionAccion", accion: "borrar", proyecto: "p1", sesion: "s1" })
+    );
+    await asentar();
+    expect(revisado).toBe(1);
+  });
+
+  it("y borrar una que NO era la abierta no revisa nada: no se ha liberado ningún proyecto", async () => {
+    const servidor = servidorDeMentira();
+    let revisado = 0;
+    montarRutas(
+      servidor,
+      { ...vestibuloDePrueba(), borrarSesion: async () => ({ borrada: true, cerroLaAbierta: false }) },
+      { revisarTareas: () => void (revisado += 1) }
+    );
+    const cliente = clienteDeMentira();
+    await servidor.rutas.get(`GET ${RUTA_EVENTOS}`)!(cliente.peticion, cliente.respuesta);
+    await asentar();
+
+    await postear(
+      servidor.rutas.get(`POST ${RUTA_ACCION}`)!,
+      JSON.stringify({ clase: "sesionAccion", accion: "borrar", proyecto: "p1", sesion: "s1" })
+    );
+    await asentar();
+    expect(revisado).toBe(0);
+  });
 });
 
 describe("arrancarConsolaWeb — las comprobaciones, en orden", () => {
@@ -1894,6 +2160,65 @@ describe("arrancarConsolaWeb — las comprobaciones, en orden", () => {
 });
 
 /** Un `ServidorWeb` que no ata ningún puerto. */
+/**
+ * Que el AUMENTADOR está montado en producción — no solo que `augmentacionCableada`
+ * funciona.
+ *
+ * El hueco que esto cierra es el de siempre en esta tanda: `arrancarConsolaWeb` compone las
+ * opciones de `montarRutas` dentro de su cierre, y todos sus tests doblan el servidor y el
+ * vestíbulo, así que `augmentar` podía dejar de pasarse y nada chistaría — el botón
+ * «Preparar el encargo» simplemente no aparecería.
+ *
+ * Se mide desde DENTRO, por `esperarCierre`: cuando esa función corre, las rutas están
+ * montadas y el cable vivo. Y el proyecto se deja SIN resolver a propósito: entonces el
+ * servidor contesta un `augmentado` con su motivo, que es lo que demuestra que el manejador
+ * está ahí — sin `augmentar` no se emite ningún mensaje de clase `tarea` (hay un test suyo
+ * justo arriba). Con `guion: true` no se le pregunta a ningún modelo.
+ */
+describe("arrancarConsolaWeb monta el aumentador", () => {
+  it("un `augmentar` por el cable recibe respuesta: el puerto está pasado", async () => {
+    const raizDelCliente = mkdtempSync(join(tmpdir(), "xonecode-web-aum-"));
+    writeFileSync(join(raizDelCliente, "index.html"), "<!doctype html>");
+    const rutas = new Map<string, ManejadorRuta>();
+    const cliente = clienteDeMentira();
+    await arrancarConsolaWeb({
+      puerto: 0,
+      abrir: false,
+      guion: true,
+      cwd: mkdtempSync(join(tmpdir(), "xonecode-cwd-aum-")),
+      raizDelCliente,
+      crearServidor: async () => ({
+        puerto: 4173,
+        direccion: "127.0.0.1",
+        token: "t0k3n",
+        url: "http://127.0.0.1:4173/?t=t0k3n",
+        registrarRuta: (metodo: string, ruta: string, manejador: ManejadorRuta) => {
+          rutas.set(`${metodo} ${ruta}`, manejador);
+        },
+        cerrar: async () => {},
+      }),
+      vestibulo: vestibuloDePrueba(),
+      escribir: () => {},
+      // Aquí dentro todo está montado y el cable vivo: es el único momento en que se puede
+      // hablar con las rutas de PRODUCCIÓN de esta función.
+      esperarCierre: async () => {
+        await rutas.get(`GET ${RUTA_EVENTOS}`)!(cliente.peticion, cliente.respuesta);
+        await asentar();
+        await enviarMensaje(rutas.get(`POST ${RUTA_ACCION}`)!, {
+          clase: "tarea",
+          accion: "augmentar",
+          proyecto: "no-resoluble",
+          peticion: "Arregla el login",
+        });
+        await asentar();
+      },
+    });
+    const respuestas = cliente.recibidos.filter((m) => m.clase === "tarea");
+    expect(respuestas).toHaveLength(1);
+    expect(respuestas[0]).toMatchObject({ accion: "augmentado" });
+  });
+});
+
 function servidorLevantado() {
   const rutas = new Map<string, ManejadorRuta>();
   return {
@@ -2515,5 +2840,1774 @@ describe("los modelos de un motor externo, por el cable", () => {
     await enviarMensaje(accion, { clase: "modelosDeMotor", motor: "claude-code" });
     await asentar();
     expect(ultimo(cliente)).toMatchObject({ modelos: [], error: expect.stringContaining("no puede") });
+  });
+});
+
+/**
+ * Una `TareasEnDisco` de mentira COMPLETA — la interfaz entera, no solo lo que
+ * `montarRutas` toca (`Pick<…, "listar" | "guardar" | "borrarTarea">`), porque este mismo
+ * doble se le pasa también al corredor de VERDAD (`crearCorredorDeTareas`) en el describe
+ * de más abajo, y ese sí necesita el cerrojo. El índice se guarda en un array del cierre,
+ * no en disco — es la misma disciplina que el resto de los dobles de este fichero.
+ */
+function colaDeMentira(iniciales: Tarea[] = []) {
+  let tareas: Tarea[] = iniciales;
+  return {
+    listar: (): Tarea[] => tareas,
+    guardar: (nuevas: readonly Tarea[]): void => void (tareas = [...nuevas]),
+    borrarTarea: (id: string): void => void (tareas = tareas.filter((t) => t.id !== id)),
+    // El cerrojo: un solo dueño de mentira, siempre concedido.
+    tomarCerrojo: (): { tomado: true } => ({ tomado: true }),
+    sigoSiendoDueño: (): boolean => true,
+    soltarCerrojo: (): void => {},
+    guardarAdjunto: (): { ok: boolean } => ({ ok: true }),
+    listarAdjuntos: (): AdjuntoDeTarea[] => [],
+    carpetaDeAdjuntos: (): string => "/no-usado-en-estos-tests/adjuntos",
+    // Para leer el estado en el test sin pasar por el cable.
+    verTareas: (): Tarea[] => tareas,
+  };
+}
+
+describe("las tareas en background, por el cable", () => {
+  const ultimo = (cliente: ReturnType<typeof clienteDeMentira>) =>
+    cliente.recibidos.filter((m) => m.clase === "tareas").at(-1) as Extract<MensajeAlCliente, { clase: "tareas" }>;
+
+  it("la cola va en la ráfaga de bienvenida, y sin la raíz del proyecto", async () => {
+    const servidor = servidorDeMentira();
+    const cola = colaDeMentira([
+      {
+        id: "t1",
+        proyecto: { id: "p1", raiz: "/w/AppDemo", nombre: "AppDemo" },
+        titulo: "Arregla el login",
+        peticion: "Arregla el login",
+        encargo: "Arregla el login",
+        adjuntos: [],
+        estado: "nuevo" as const,
+        creada: "2026-09-08T10:00:00.000Z",
+      },
+    ]);
+    montarRutas(servidor, vestibuloDePrueba(), {
+      colaDeTareas: cola,
+      corredorDeTareas: { corriendoAqui: () => true, ejecutaOtroProceso: () => false, cortar: async () => true },
+      concurrenciaDeTareas: () => 2,
+    });
+    const cliente = clienteDeMentira();
+    await servidor.rutas.get(`GET ${RUTA_EVENTOS}`)!(cliente.peticion, cliente.respuesta);
+    await asentar();
+    const mensaje = ultimo(cliente);
+    expect(mensaje.lista[0]).toMatchObject({ id: "t1", proyectoNombre: "AppDemo", estado: "nuevo" });
+    expect(mensaje.concurrencia).toBe(2);
+    expect(mensaje.corriendoAqui).toBe(true);
+    // «No soy yo» y «no hay nadie» son la diferencia entre esperar y que no pase nada nunca,
+    // así que la respuesta del corredor viaja tal cual — y sin el pid, que es un dato de la
+    // máquina.
+    expect(mensaje.ejecutaOtroProceso).toBe(false);
+    // La ruta de la máquina NO viaja.
+    expect(JSON.stringify(mensaje)).not.toContain("/w/AppDemo");
+  });
+
+  it("lo que la tarea AUTORIZÓ viaja, con ruta relativa; ausente cuando no consta", async () => {
+    const servidor = servidorDeMentira();
+    const cola = colaDeMentira([
+      {
+        id: "t1",
+        proyecto: { id: "p1", raiz: "/w/AppDemo", nombre: "AppDemo" },
+        titulo: "Arregla el login",
+        peticion: "Arregla el login",
+        encargo: "Arregla el login",
+        adjuntos: [],
+        estado: "requiere-atencion" as const,
+        motivo: "el juez marcó el trabajo en rojo",
+        sesion: "s1",
+        creada: "2026-09-08T10:00:00.000Z",
+        autorizadas: ["src/app.xne", "src/Login.xne"],
+      },
+      {
+        id: "t2",
+        proyecto: { id: "p1", raiz: "/w/AppDemo", nombre: "AppDemo" },
+        titulo: "Sin correr todavía",
+        peticion: "Sin correr todavía",
+        encargo: "Sin correr todavía",
+        adjuntos: [],
+        estado: "nuevo" as const,
+        creada: "2026-09-08T10:00:00.000Z",
+      },
+    ]);
+    montarRutas(servidor, vestibuloDePrueba(), {
+      colaDeTareas: cola,
+      corredorDeTareas: { corriendoAqui: () => true, cortar: async () => true },
+      concurrenciaDeTareas: () => 2,
+    });
+    const cliente = clienteDeMentira();
+    await servidor.rutas.get(`GET ${RUTA_EVENTOS}`)!(cliente.peticion, cliente.respuesta);
+    await asentar();
+    const mensaje = ultimo(cliente);
+    expect(mensaje.lista.find((t) => t.id === "t1")?.autorizadas).toEqual(["src/app.xne", "src/Login.xne"]);
+    // La que nunca corrió no lleva el campo: no consta, y no es lo mismo que «ninguna».
+    expect(mensaje.lista.find((t) => t.id === "t2")?.autorizadas).toBeUndefined();
+  });
+
+  it("el historial de feedback viaja; ausente cuando nunca se le pidió nada", async () => {
+    const servidor = servidorDeMentira();
+    const cola = colaDeMentira([
+      {
+        id: "t1",
+        proyecto: { id: "p1", raiz: "/w/AppDemo", nombre: "AppDemo" },
+        titulo: "Arregla el login",
+        peticion: "Arregla el login",
+        encargo: "Arregla el login",
+        adjuntos: [],
+        estado: "nuevo" as const,
+        creada: "2026-09-08T10:00:00.000Z",
+        feedback: [
+          { texto: "primero", creado: "2026-09-08T10:00:00.000Z", consumido: true },
+          { texto: "segundo", creado: "2026-09-08T11:00:00.000Z", consumido: false },
+        ],
+      },
+      {
+        id: "t2",
+        proyecto: { id: "p1", raiz: "/w/AppDemo", nombre: "AppDemo" },
+        titulo: "Sin feedback nunca",
+        peticion: "x",
+        encargo: "x",
+        adjuntos: [],
+        estado: "nuevo" as const,
+        creada: "2026-09-08T10:00:00.000Z",
+      },
+    ]);
+    montarRutas(servidor, vestibuloDePrueba(), { colaDeTareas: cola });
+    const cliente = clienteDeMentira();
+    await servidor.rutas.get(`GET ${RUTA_EVENTOS}`)!(cliente.peticion, cliente.respuesta);
+    await asentar();
+    const mensaje = ultimo(cliente);
+    expect(mensaje.lista.find((t) => t.id === "t1")?.feedback).toEqual([
+      { texto: "primero", creado: "2026-09-08T10:00:00.000Z", consumido: true },
+      { texto: "segundo", creado: "2026-09-08T11:00:00.000Z", consumido: false },
+    ]);
+    expect(mensaje.lista.find((t) => t.id === "t2")?.feedback).toBeUndefined();
+  });
+
+  it("crear una tarea RESUELVE el proyecto con el estado del propio cierre, la encola y hace revisar", async () => {
+    let revisado = 0;
+    const servidor = servidorDeMentira();
+    const cola = colaDeMentira();
+    montarRutas(servidor, vestibuloDePrueba(), {
+      colaDeTareas: cola,
+      revisarTareas: () => void (revisado += 1),
+    });
+    const cliente = clienteDeMentira();
+    await servidor.rutas.get(`GET ${RUTA_EVENTOS}`)!(cliente.peticion, cliente.respuesta);
+    const accion = servidor.rutas.get(`POST ${RUTA_ACCION}`)!;
+    // Sin ningún «entorno activo» a mano: conectar por SSE ya deja `proyectos`/
+    // `entornoElegido` resueltos por su cuenta (`poblarProyectosSiProcede`, el mismo
+    // auto-select de quien entra directo al Dashboard con un solo entorno registrado —
+    // aquí «webstudio», con «p1» → «Tienda» de fábrica en `vestibuloDePrueba`). Es la
+    // resolución REAL que usa `atenderCrearTarea`, no una preparación aparte del test.
+    await asentar();
+    expect(
+      await enviarMensaje(accion, { clase: "tarea", accion: "crear", proyecto: "p1", peticion: "Arregla", encargo: "Arregla bien" })
+    ).toBe(204);
+    await asentar();
+    const creadas = cola.verTareas();
+    expect(creadas).toHaveLength(1);
+    expect(creadas[0]).toMatchObject({
+      proyecto: { id: "p1", nombre: "Tienda" },
+      peticion: "Arregla",
+      encargo: "Arregla bien",
+      estado: "nuevo",
+    });
+    // La raíz SÍ se resolvió (es lo que hace falta para poder correrla algún día), pero
+    // nunca sale por el cable — en ESTE mensaje, el que la propia creación dispara
+    // (`emitirTareas()` tras `atenderCrearTarea`), no solo en el de la bienvenida de otro
+    // test con otra tarea.
+    expect(creadas[0]!.proyecto.raiz).toMatch(/Tienda$/);
+    expect(JSON.stringify(ultimo(cliente))).not.toContain(creadas[0]!.proyecto.raiz);
+    expect(revisado).toBe(1);
+  });
+
+  it("crear con un proyecto que no se puede resolver no escribe nada, y se DICE", async () => {
+    // Sin entorno elegido: `atenderCrearTarea` no tiene con qué resolver la raíz.
+    const servidor = servidorDeMentira();
+    const cola = colaDeMentira();
+    const avisos: string[] = [];
+    montarRutas(servidor, vestibuloDePrueba(), {
+      colaDeTareas: cola,
+      informar: (texto) => avisos.push(texto),
+    });
+    const cliente = clienteDeMentira();
+    await servidor.rutas.get(`GET ${RUTA_EVENTOS}`)!(cliente.peticion, cliente.respuesta);
+    const accion = servidor.rutas.get(`POST ${RUTA_ACCION}`)!;
+    await asentar();
+    await enviarMensaje(accion, { clase: "tarea", accion: "crear", proyecto: "fantasma", peticion: "x", encargo: "y" });
+    await asentar();
+    expect(cola.verTareas()).toEqual([]);
+    expect(avisos.some((a) => a.includes("fantasma"))).toBe(true);
+  });
+
+  it("reintentar y terminar transicionan la tarea; descartar la BORRA sin mirar el estado", async () => {
+    const servidor = servidorDeMentira();
+    const base = {
+      proyecto: { id: "p1", raiz: "/w/AppDemo", nombre: "AppDemo" },
+      titulo: "T",
+      peticion: "p",
+      encargo: "e",
+      adjuntos: [],
+      creada: "2026-09-08T10:00:00.000Z",
+    };
+    const cola = colaDeMentira([
+      { ...base, id: "t-park", estado: "requiere-atencion", motivo: "algo" },
+      { ...base, id: "t-en-curso", estado: "en-proceso" },
+    ]);
+    let revisado = 0;
+    montarRutas(servidor, vestibuloDePrueba(), {
+      colaDeTareas: cola,
+      revisarTareas: () => void (revisado += 1),
+    });
+    const cliente = clienteDeMentira();
+    await servidor.rutas.get(`GET ${RUTA_EVENTOS}`)!(cliente.peticion, cliente.respuesta);
+    const accion = servidor.rutas.get(`POST ${RUTA_ACCION}`)!;
+    await asentar();
+    await enviarMensaje(accion, { clase: "tarea", accion: "reintentar", id: "t-park" });
+    await asentar();
+    expect(cola.verTareas().find((t) => t.id === "t-park")?.estado).toBe("nuevo");
+    expect(cola.verTareas().find((t) => t.id === "t-park")?.motivo).toBeUndefined();
+
+    // Descartar borra aunque esté «en-proceso»: SIN corredor cableado no hay turno que
+    // cortar (ver la batería de Task 14 más abajo para el caso CON corredor).
+    await enviarMensaje(accion, { clase: "tarea", accion: "descartar", id: "t-en-curso" });
+    await asentar();
+    expect(cola.verTareas().find((t) => t.id === "t-en-curso")).toBeUndefined();
+
+    expect(revisado).toBeGreaterThan(0);
+  });
+
+  /**
+   * F1 de la revisión final: «Dar por bueno» es la CUARTA forma de llegar a «Terminada»
+   * —sin verificador y sin juez—, y `conEstado` borra el `motivo`, así que sin una marca la
+   * tarea resultante es indistinguible de una entregada por la puerta completa. La marca la
+   * pone `core/tareas.ts#darPorBuenaAMano`, y esto comprueba que este camino pasa por ahí.
+   */
+  it("«no lo ejecuta nadie» y «no se sabe» viajan distintos, y ninguno se sintetiza", async () => {
+    const base = {
+      proyecto: { id: "p1", raiz: "/w/AppDemo", nombre: "AppDemo" },
+      titulo: "T",
+      peticion: "p",
+      encargo: "e",
+      adjuntos: [],
+      creada: "2026-09-08T10:00:00.000Z",
+      estado: "nuevo" as const,
+    };
+    // Nadie lo ejecuta: el corredor lo AFIRMA (tomó el cerrojo y lo soltó).
+    const s1 = servidorDeMentira();
+    montarRutas(s1, vestibuloDePrueba(), {
+      colaDeTareas: colaDeMentira([{ ...base, id: "t1" }]),
+      corredorDeTareas: { corriendoAqui: () => false, ejecutaOtroProceso: () => false, cortar: async () => true },
+    });
+    const c1 = clienteDeMentira();
+    await s1.rutas.get(`GET ${RUTA_EVENTOS}`)!(c1.peticion, c1.respuesta);
+    await asentar();
+    expect(ultimo(c1).ejecutaOtroProceso).toBe(false);
+
+    // Y un corredor que no sabe contestarlo no manda el campo: ausente es «no se sabe», que
+    // no es «nadie» — la interfaz no puede prometer una espera que quizá no acabe nunca.
+    const s2 = servidorDeMentira();
+    montarRutas(s2, vestibuloDePrueba(), {
+      colaDeTareas: colaDeMentira([{ ...base, id: "t1" }]),
+      corredorDeTareas: { corriendoAqui: () => false, cortar: async () => true },
+    });
+    const c2 = clienteDeMentira();
+    await s2.rutas.get(`GET ${RUTA_EVENTOS}`)!(c2.peticion, c2.respuesta);
+    await asentar();
+    expect("ejecutaOtroProceso" in ultimo(c2)).toBe(false);
+  });
+
+  it("terminar a mano DEJA LA MARCA, y no toca el veredicto que hubiera", async () => {
+    const servidor = servidorDeMentira();
+    const cola = colaDeMentira([
+      {
+        id: "t-park",
+        proyecto: { id: "p1", raiz: "/w/AppDemo", nombre: "AppDemo" },
+        titulo: "T",
+        peticion: "p",
+        encargo: "e",
+        adjuntos: [],
+        creada: "2026-09-08T10:00:00.000Z",
+        estado: "requiere-atencion",
+        motivo: "el juez de QA dijo «rojo»: falta el campo",
+        veredicto: { veredicto: "rojo", resumen: "falta el campo" },
+      },
+    ]);
+    montarRutas(servidor, vestibuloDePrueba(), { colaDeTareas: cola });
+    const cliente = clienteDeMentira();
+    await servidor.rutas.get(`GET ${RUTA_EVENTOS}`)!(cliente.peticion, cliente.respuesta);
+    const accion = servidor.rutas.get(`POST ${RUTA_ACCION}`)!;
+    await asentar();
+    await enviarMensaje(accion, { clase: "tarea", accion: "terminar", id: "t-park" });
+    await asentar();
+    const terminada = cola.verTareas().find((t) => t.id === "t-park")!;
+    expect(terminada.estado).toBe("terminada");
+    expect(terminada.terminadaAMano).toBe(true);
+    expect(terminada.veredicto).toEqual({ veredicto: "rojo", resumen: "falta el campo" });
+  });
+
+
+  /**
+   * Task 14: antes de esto, descartar una tarea `en-proceso` la borraba en el ACTO — el
+   * turno seguía corriendo por debajo, escribiendo en el proyecto, sin que ninguna pantalla
+   * lo dijera. `atenderAccionDeTarea` ahora espera a `corredorDeTareas.cortar(id)` ANTES de
+   * `borrarTarea`: esta batería prueba el CABLEADO (que se llama, en qué orden, qué hace con
+   * cada resultado), no el corte de verdad —eso ya lo prueba `corredorDeTareas.test.ts`
+   * contra un corredor real—.
+   */
+  describe("descartar corta el turno en vuelo ANTES de borrar (Task 14)", () => {
+    const tareaEnCurso = {
+      id: "t-en-curso",
+      proyecto: { id: "p1", raiz: "/w/AppDemo", nombre: "AppDemo" },
+      titulo: "Arregla el login",
+      peticion: "p",
+      encargo: "e",
+      adjuntos: [],
+      estado: "en-proceso" as const,
+      creada: "2026-09-08T10:00:00.000Z",
+    };
+
+    it("el orden es load-bearing: cortar() se resuelve ANTES de que borrarTarea() se llame", async () => {
+      const orden: string[] = [];
+      const servidor = servidorDeMentira();
+      const cola = colaDeMentira([tareaEnCurso]);
+      const colaConOrden = {
+        ...cola,
+        borrarTarea: (id: string) => {
+          orden.push("borrar");
+          cola.borrarTarea(id);
+        },
+      };
+      montarRutas(servidor, vestibuloDePrueba(), {
+        colaDeTareas: colaConOrden,
+        corredorDeTareas: {
+          corriendoAqui: () => true,
+          cortar: async () => {
+            orden.push("cortar");
+            return true;
+          },
+        },
+      });
+      const cliente = clienteDeMentira();
+      await servidor.rutas.get(`GET ${RUTA_EVENTOS}`)!(cliente.peticion, cliente.respuesta);
+      const accion = servidor.rutas.get(`POST ${RUTA_ACCION}`)!;
+      await asentar();
+      await enviarMensaje(accion, { clase: "tarea", accion: "descartar", id: "t-en-curso" });
+      await asentar();
+      expect(orden).toEqual(["cortar", "borrar"]);
+      expect(colaConOrden.listar().find((t) => t.id === "t-en-curso")).toBeUndefined();
+    });
+
+    it("si el corte no llega a tiempo (`cortar` resuelve `false`), NO se borra, y se avisa", async () => {
+      const servidor = servidorDeMentira();
+      const cola = colaDeMentira([tareaEnCurso]);
+      const avisos: string[] = [];
+      montarRutas(servidor, vestibuloDePrueba(), {
+        colaDeTareas: cola,
+        corredorDeTareas: { corriendoAqui: () => true, cortar: async () => false },
+        informar: (texto) => avisos.push(texto),
+      });
+      const cliente = clienteDeMentira();
+      await servidor.rutas.get(`GET ${RUTA_EVENTOS}`)!(cliente.peticion, cliente.respuesta);
+      const accion = servidor.rutas.get(`POST ${RUTA_ACCION}`)!;
+      await asentar();
+      await enviarMensaje(accion, { clase: "tarea", accion: "descartar", id: "t-en-curso" });
+      await asentar();
+      // Sigue ahí: no se le quitó la carpeta de adjuntos a un turno que sigue de verdad
+      // corriendo.
+      expect(cola.verTareas().find((t) => t.id === "t-en-curso")).toBeDefined();
+      expect(avisos.some((a) => a.includes("sigue en marcha"))).toBe(true);
+    });
+
+    it("si la ejecuta OTRO proceso (`corriendoAqui` falso), tampoco se borra: no hay forma de cortarla desde aquí", async () => {
+      const servidor = servidorDeMentira();
+      const cola = colaDeMentira([tareaEnCurso]);
+      const avisos: string[] = [];
+      let cortarLlamado = 0;
+      montarRutas(servidor, vestibuloDePrueba(), {
+        colaDeTareas: cola,
+        corredorDeTareas: {
+          corriendoAqui: () => false,
+          cortar: async () => {
+            cortarLlamado += 1;
+            return true;
+          },
+        },
+        informar: (texto) => avisos.push(texto),
+      });
+      const cliente = clienteDeMentira();
+      await servidor.rutas.get(`GET ${RUTA_EVENTOS}`)!(cliente.peticion, cliente.respuesta);
+      const accion = servidor.rutas.get(`POST ${RUTA_ACCION}`)!;
+      await asentar();
+      await enviarMensaje(accion, { clase: "tarea", accion: "descartar", id: "t-en-curso" });
+      await asentar();
+      expect(cola.verTareas().find((t) => t.id === "t-en-curso")).toBeDefined();
+      expect(avisos.some((a) => a.includes("otro proceso"))).toBe(true);
+      // Ni se intenta: `cortar` no tiene con qué alcanzar un turno de OTRO proceso.
+      expect(cortarLlamado).toBe(0);
+    });
+
+    it("descartar una que NO está en proceso también pasa por `cortar` —sin efecto, pero por el mismo camino— y borra igual", async () => {
+      const servidor = servidorDeMentira();
+      const cola = colaDeMentira([{ ...tareaEnCurso, id: "t-nueva", estado: "nuevo" as const }]);
+      let cortarLlamadoCon: string | undefined;
+      montarRutas(servidor, vestibuloDePrueba(), {
+        colaDeTareas: cola,
+        corredorDeTareas: {
+          corriendoAqui: () => true,
+          cortar: async (id) => {
+            cortarLlamadoCon = id;
+            return true; // nada en vuelo con ese id: seguro seguir
+          },
+        },
+      });
+      const cliente = clienteDeMentira();
+      await servidor.rutas.get(`GET ${RUTA_EVENTOS}`)!(cliente.peticion, cliente.respuesta);
+      const accion = servidor.rutas.get(`POST ${RUTA_ACCION}`)!;
+      await asentar();
+      await enviarMensaje(accion, { clase: "tarea", accion: "descartar", id: "t-nueva" });
+      await asentar();
+      expect(cortarLlamadoCon).toBe("t-nueva");
+      expect(cola.verTareas().find((t) => t.id === "t-nueva")).toBeUndefined();
+    });
+
+    it("sin `corredorDeTareas` cableado, descartar borra directo: no hay ningún turno que pueda estar corriendo", async () => {
+      const servidor = servidorDeMentira();
+      const cola = colaDeMentira([tareaEnCurso]);
+      montarRutas(servidor, vestibuloDePrueba(), { colaDeTareas: cola });
+      const cliente = clienteDeMentira();
+      await servidor.rutas.get(`GET ${RUTA_EVENTOS}`)!(cliente.peticion, cliente.respuesta);
+      const accion = servidor.rutas.get(`POST ${RUTA_ACCION}`)!;
+      await asentar();
+      await enviarMensaje(accion, { clase: "tarea", accion: "descartar", id: "t-en-curso" });
+      await asentar();
+      expect(cola.verTareas().find((t) => t.id === "t-en-curso")).toBeUndefined();
+    });
+  });
+
+  /**
+   * Task 12: «se edita la tarea y se agrega el feedback del usuario» (§0 del diseño). Es su
+   * propia acción del cable (`{clase:"tarea", accion:"feedback", id, texto}`) y no un
+   * tercer campo en `reintentar`: lleva `texto`, que las otras tres no llevan.
+   */
+  it("un feedback devuelve la tarea a `nuevo`, con el texto guardado, y hace revisar", async () => {
+    const servidor = servidorDeMentira();
+    const cola = colaDeMentira([
+      {
+        id: "t1",
+        proyecto: { id: "p1", raiz: "/w/AppDemo", nombre: "AppDemo" },
+        titulo: "T",
+        peticion: "p",
+        encargo: "e",
+        adjuntos: [],
+        estado: "requiere-atencion",
+        motivo: "¿lleva histórico?",
+        sesion: "s1",
+        creada: "2026-09-08T10:00:00.000Z",
+      },
+    ]);
+    let revisado = 0;
+    montarRutas(servidor, vestibuloDePrueba(), {
+      colaDeTareas: cola,
+      revisarTareas: () => void (revisado += 1),
+    });
+    const cliente = clienteDeMentira();
+    await servidor.rutas.get(`GET ${RUTA_EVENTOS}`)!(cliente.peticion, cliente.respuesta);
+    const accion = servidor.rutas.get(`POST ${RUTA_ACCION}`)!;
+    await asentar();
+    expect(
+      await enviarMensaje(accion, { clase: "tarea", accion: "feedback", id: "t1", texto: "sí, con histórico" })
+    ).toBe(204);
+    await asentar();
+    const tarea = cola.verTareas().find((t) => t.id === "t1")!;
+    expect(tarea.estado).toBe("nuevo");
+    // El motivo de AYER no puede seguir enseñándose: es la misma regla de siempre al salir
+    // de `requiere-atencion`.
+    expect(tarea.motivo).toBeUndefined();
+    // Y el hilo NO se toca aquí: solo lo hace el corredor, al reanudar de verdad.
+    expect(tarea.sesion).toBe("s1");
+    expect(tarea.feedback).toEqual([
+      { texto: "sí, con histórico", creado: expect.any(String), consumido: false },
+    ]);
+    expect(revisado).toBeGreaterThan(0);
+  });
+
+  it("un feedback en blanco se rechaza y se DICE, sin escribir nada", async () => {
+    const servidor = servidorDeMentira();
+    const cola = colaDeMentira([
+      {
+        id: "t1",
+        proyecto: { id: "p1", raiz: "/w/AppDemo", nombre: "AppDemo" },
+        titulo: "T",
+        peticion: "p",
+        encargo: "e",
+        adjuntos: [],
+        estado: "requiere-atencion",
+        motivo: "¿lleva histórico?",
+        creada: "2026-09-08T10:00:00.000Z",
+      },
+    ]);
+    const avisos: string[] = [];
+    montarRutas(servidor, vestibuloDePrueba(), {
+      colaDeTareas: cola,
+      informar: (texto) => avisos.push(texto),
+    });
+    const cliente = clienteDeMentira();
+    await servidor.rutas.get(`GET ${RUTA_EVENTOS}`)!(cliente.peticion, cliente.respuesta);
+    const accion = servidor.rutas.get(`POST ${RUTA_ACCION}`)!;
+    await asentar();
+    expect(await enviarMensaje(accion, { clase: "tarea", accion: "feedback", id: "t1", texto: "   " })).toBe(204);
+    await asentar();
+    expect(cola.verTareas()[0]!.estado).toBe("requiere-atencion");
+    expect(cola.verTareas()[0]!.feedback).toBeUndefined();
+    expect(avisos.some((a) => a.includes("feedback"))).toBe(true);
+  });
+
+  it("sin puerto de tareas, un feedback tampoco hace nada", async () => {
+    const servidor = servidorDeMentira();
+    montarRutas(servidor, vestibuloDePrueba(), {});
+    const cliente = clienteDeMentira();
+    await servidor.rutas.get(`GET ${RUTA_EVENTOS}`)!(cliente.peticion, cliente.respuesta);
+    const accion = servidor.rutas.get(`POST ${RUTA_ACCION}`)!;
+    await asentar();
+    expect(await enviarMensaje(accion, { clase: "tarea", accion: "feedback", id: "t1", texto: "algo" })).toBe(204);
+    await asentar();
+    expect(cliente.recibidos.some((m) => m.clase === "tareas")).toBe(false);
+  });
+
+  it("una transición imposible se IGNORA y se DICE: nunca se lanza y nunca se escribe", async () => {
+    const servidor = servidorDeMentira();
+    const cola = colaDeMentira([
+      {
+        id: "t1",
+        proyecto: { id: "p1", raiz: "/w/AppDemo", nombre: "AppDemo" },
+        titulo: "T",
+        peticion: "p",
+        encargo: "e",
+        adjuntos: [],
+        estado: "nuevo",
+        creada: "2026-09-08T10:00:00.000Z",
+      },
+    ]);
+    const avisos: string[] = [];
+    montarRutas(servidor, vestibuloDePrueba(), {
+      colaDeTareas: cola,
+      informar: (texto) => avisos.push(texto),
+    });
+    const cliente = clienteDeMentira();
+    await servidor.rutas.get(`GET ${RUTA_EVENTOS}`)!(cliente.peticion, cliente.respuesta);
+    const accion = servidor.rutas.get(`POST ${RUTA_ACCION}`)!;
+    await asentar();
+    // «nuevo» → «terminada» no está en TRANSICIONES: conEstado lanzaría.
+    expect(await enviarMensaje(accion, { clase: "tarea", accion: "terminar", id: "t1" })).toBe(204);
+    await asentar();
+    expect(cola.verTareas()[0]!.estado).toBe("nuevo");
+    expect(avisos.some((a) => a.includes("terminar"))).toBe(true);
+  });
+
+  it("sin puerto de tareas no se manda ninguna cola, y crear/accionar no hacen nada: no se afirma que no haya", async () => {
+    const servidor = servidorDeMentira();
+    montarRutas(servidor, vestibuloDePrueba(), {});
+    const cliente = clienteDeMentira();
+    await servidor.rutas.get(`GET ${RUTA_EVENTOS}`)!(cliente.peticion, cliente.respuesta);
+    const accion = servidor.rutas.get(`POST ${RUTA_ACCION}`)!;
+    await asentar();
+    expect(cliente.recibidos.some((m) => m.clase === "tareas")).toBe(false);
+    await enviarMensaje(accion, { clase: "tarea", accion: "crear", proyecto: "p1", peticion: "x", encargo: "y" });
+    await enviarMensaje(accion, { clase: "tarea", accion: "reintentar", id: "t1" });
+    await asentar();
+    expect(cliente.recibidos.some((m) => m.clase === "tareas")).toBe(false);
+  });
+
+  it("cambiar el tope de concurrencia lo guarda y hace revisar", async () => {
+    const concurrencias: number[] = [];
+    let revisado = 0;
+    const servidor = servidorDeMentira();
+    montarRutas(servidor, vestibuloDePrueba(), {
+      colaDeTareas: colaDeMentira(),
+      guardarConcurrencia: (c) => void concurrencias.push(c),
+      revisarTareas: () => void (revisado += 1),
+    });
+    const cliente = clienteDeMentira();
+    await servidor.rutas.get(`GET ${RUTA_EVENTOS}`)!(cliente.peticion, cliente.respuesta);
+    const accion = servidor.rutas.get(`POST ${RUTA_ACCION}`)!;
+    await asentar();
+    expect(await enviarMensaje(accion, { clase: "tareas", concurrencia: 4 })).toBe(204);
+    await asentar();
+    expect(concurrencias).toEqual([4]);
+    expect(revisado).toBe(1);
+  });
+
+  it("sin puerto de augmentar no manda ningún «augmentado»", async () => {
+    const servidor = servidorDeMentira();
+    montarRutas(servidor, vestibuloDePrueba(), {
+      colaDeTareas: colaDeMentira(),
+    });
+    const cliente = clienteDeMentira();
+    await servidor.rutas.get(`GET ${RUTA_EVENTOS}`)!(cliente.peticion, cliente.respuesta);
+    const accion = servidor.rutas.get(`POST ${RUTA_ACCION}`)!;
+    await asentar();
+    expect(
+      await enviarMensaje(accion, { clase: "tarea", accion: "augmentar", proyecto: "p1", peticion: "Arregla" })
+    ).toBe(204);
+    await asentar();
+    expect(cliente.recibidos.some((m) => m.clase === "tarea")).toBe(false);
+  });
+
+  it("con puerto de augmentar manda el encargo, o el error si revienta — nunca los dos", async () => {
+    const servidor = servidorDeMentira();
+    montarRutas(servidor, vestibuloDePrueba(), {
+      colaDeTareas: colaDeMentira(),
+      augmentar: async ({ texto }) =>
+        texto === "revienta" ? Promise.reject(new Error("boom")) : `encargo: ${texto}`,
+    });
+    const cliente = clienteDeMentira();
+    await servidor.rutas.get(`GET ${RUTA_EVENTOS}`)!(cliente.peticion, cliente.respuesta);
+    const accion = servidor.rutas.get(`POST ${RUTA_ACCION}`)!;
+    await asentar();
+    await enviarMensaje(accion, { clase: "tarea", accion: "augmentar", proyecto: "p1", peticion: "Arregla" });
+    await asentar();
+    const augmentados = cliente.recibidos.filter(
+      (m): m is Extract<MensajeAlCliente, { clase: "tarea" }> => m.clase === "tarea"
+    );
+    expect(augmentados.at(-1)).toEqual({ clase: "tarea", accion: "augmentado", encargo: "encargo: Arregla" });
+
+    await enviarMensaje(accion, { clase: "tarea", accion: "augmentar", proyecto: "p1", peticion: "revienta" });
+    await asentar();
+    const ultimoAugmentado = cliente.recibidos.filter(
+      (m): m is Extract<MensajeAlCliente, { clase: "tarea" }> => m.clase === "tarea"
+    ).at(-1);
+    expect(ultimoAugmentado).toMatchObject({ clase: "tarea", accion: "augmentado" });
+    expect((ultimoAugmentado as { encargo?: string }).encargo).toBeUndefined();
+    expect((ultimoAugmentado as { error?: string }).error).toBeDefined();
+  });
+});
+
+/**
+ * `POST /adjunto`: los BYTES de un adjunto, por HTTP y no por el cable (el SSE lleva JSON).
+ *
+ * Las comprobaciones de `Host`, `Origin` y token las hace `servidor.ts` antes de llegar
+ * aquí, igual que a todas las rutas. Lo que se prueba aquí es lo propio: que el nombre pasa
+ * la MISMA barrera de segmento llano que un artefacto —de ella depende que esto no escriba
+ * fuera de la carpeta de la tarea—, que los topes se respetan, y que **una subida no puede
+ * caer nunca en la carpeta de una tarea que ya existe**.
+ */
+describe("POST /adjunto", () => {
+  /** El manejador y lo que la cola vio. `colaDeMentira` aquí guarda los adjuntos en memoria. */
+  function conRutaDeAdjunto(iniciales: Tarea[] = [], topeDeAdjunto = 1_000) {
+    const guardados: { tarea: string; nombre: string; bytes: number }[] = [];
+    const cola = {
+      ...colaDeMentira(iniciales),
+      guardarAdjunto: (tarea: string, nombre: string, datos: Buffer) => {
+        if (datos.length > topeDeAdjunto) return { ok: false, motivo: "el fichero es demasiado grande (tope 1 MB)" };
+        guardados.push({ tarea, nombre, bytes: datos.length });
+        return { ok: true };
+      },
+    };
+    const servidor = servidorDeMentira();
+    montarRutas(servidor, vestibuloDePrueba(), { colaDeTareas: cola });
+    return { guardados, cola, manejador: servidor.rutas.get(`POST ${RUTA_ADJUNTO}`)! };
+  }
+
+  /** Un POST con su query y su cuerpo binario. Devuelve el estado y el texto contestado. */
+  async function subir(
+    manejador: ManejadorRuta,
+    query: string,
+    cuerpo: Buffer | string = "unos bytes"
+  ): Promise<{ estado: number; texto: string }> {
+    const peticion = Readable.from([Buffer.from(cuerpo)]) as unknown as IncomingMessage;
+    (peticion as { url?: string }).url = `${RUTA_ADJUNTO}?${query}`;
+    let estado = 0;
+    let texto = "";
+    const respuesta = {
+      writeHead: (codigo: number) => {
+        estado = codigo;
+        return respuesta;
+      },
+      end: (cuerpoDeSalida?: string) => {
+        texto = cuerpoDeSalida ?? "";
+        return respuesta;
+      },
+    } as unknown as ServerResponse;
+    await manejador(peticion, respuesta);
+    return { estado, texto };
+  }
+
+  it("guarda el cuerpo con el nombre dado", async () => {
+    const { manejador, guardados } = conRutaDeAdjunto();
+    expect((await subir(manejador, "tarea=b1&nombre=mockup.png", "PNGPNGPNG")).estado).toBe(204);
+    expect(guardados).toEqual([{ tarea: "b1", nombre: "mockup.png", bytes: 9 }]);
+  });
+
+  it("sin `tarea` o sin `nombre`, 400", async () => {
+    const { manejador, guardados } = conRutaDeAdjunto();
+    expect((await subir(manejador, "nombre=x.png")).estado).toBe(400);
+    expect((await subir(manejador, "tarea=b1")).estado).toBe(400);
+    expect(guardados).toEqual([]);
+  });
+
+  it("un nombre que podría salir de su carpeta, 403 — sobre el TEXTO y ya decodificado", async () => {
+    // `URLSearchParams` decodifica una vez, así que un `%2e%2e` llega ya como `..` y lo caza
+    // la lista blanca; un `%252e%252e` llega con el `%` dentro, que tampoco es texto llano.
+    const { manejador, guardados } = conRutaDeAdjunto();
+    for (const nombre of ["..", "%2e%2e", "%252e%252e", "a%2Fb.png", "a%5Cb.png", "con%20espacio.png", "%2e%2e%2Ffuera.png"]) {
+      expect((await subir(manejador, `tarea=b1&nombre=${nombre}`)).estado, nombre).toBe(403);
+    }
+    // Y el id de la tarea pasa la misma barrera: por ahí se compone la carpeta.
+    for (const tarea of ["..", "%2e%2e", "a%2Fb"]) {
+      expect((await subir(manejador, `tarea=${tarea}&nombre=x.png`)).estado, tarea).toBe(403);
+    }
+    expect(guardados).toEqual([]);
+  });
+
+  it("una subida NUNCA cae en la carpeta de una tarea que ya existe: 409", async () => {
+    // Es la regla que hace segura la subida antes de crear: el cliente elige el id del
+    // BORRADOR, así que sin esto podría escribir en la carpeta de una tarea viva —una que
+    // el corredor puede estar ejecutando ahora mismo, con `/adjuntos/` montada—.
+    const ya: Tarea = {
+      id: "t1",
+      proyecto: { id: "p1", raiz: "/w/AppDemo", nombre: "AppDemo" },
+      titulo: "t", peticion: "p", encargo: "e", adjuntos: [],
+      estado: "en-proceso", creada: "2026-09-08T10:00:00.000Z",
+    };
+    const { manejador, guardados } = conRutaDeAdjunto([ya]);
+    expect((await subir(manejador, "tarea=t1&nombre=x.png")).estado).toBe(409);
+    expect(guardados).toEqual([]);
+  });
+
+  it("por encima del tope del PUERTO, 413 con su motivo", async () => {
+    const { manejador, guardados } = conRutaDeAdjunto([], 10);
+    const r = await subir(manejador, "tarea=b1&nombre=grande.bin", Buffer.alloc(50));
+    expect(r.estado).toBe(413);
+    expect(guardados).toEqual([]);
+  });
+
+  it("y por encima del tope del CUERPO también, con un puerto que lo aceptaría", async () => {
+    // Son dos topes distintos y este es el que importa para la MEMORIA de este proceso: el
+    // cuerpo se corta al leerlo, no después de acumularlo. Con el tope del puerto puesto muy
+    // alto, lo único que puede contestar 413 es el lector.
+    const { manejador, guardados } = conRutaDeAdjunto([], Number.MAX_SAFE_INTEGER);
+    const r = await subir(manejador, "tarea=b1&nombre=g.bin", Buffer.alloc(TOPE_DE_ADJUNTO + 1));
+    expect(r.estado).toBe(413);
+    expect(guardados).toEqual([]);
+  });
+
+  it("ninguna respuesta lleva una ruta de la máquina", async () => {
+    const { manejador } = conRutaDeAdjunto([], 10);
+    const respuestas = [
+      await subir(manejador, "tarea=b1&nombre=..%2Fx.png"),
+      await subir(manejador, "tarea=b1&nombre=g.bin", Buffer.alloc(50)),
+      await subir(manejador, "nombre=x.png"),
+    ];
+    for (const r of respuestas) expect(r.texto).not.toMatch(/[/\\](Users|home|var|tmp|casa)[/\\]/);
+  });
+
+  it("sin cola de tareas la ruta contesta 404, no revienta", async () => {
+    const servidor = servidorDeMentira();
+    montarRutas(servidor, vestibuloDePrueba(), {});
+    const manejador = servidor.rutas.get(`POST ${RUTA_ADJUNTO}`)!;
+    expect(manejador).toBeDefined();
+    expect((await subir(manejador, "tarea=b1&nombre=x.png")).estado).toBe(404);
+  });
+});
+
+describe("crear una tarea con adjuntos", () => {
+  /** Una cola que sabe listar adjuntos por id de borrador. */
+  function colaConAdjuntos(porTarea: Record<string, AdjuntoDeTarea[]>, iniciales: Tarea[] = []) {
+    return { ...colaDeMentira(iniciales), listarAdjuntos: (id: string): AdjuntoDeTarea[] => porTarea[id] ?? [] };
+  }
+
+  it("el `borrador` se adopta como id, y los adjuntos salen del DISCO", async () => {
+    // Nunca de lo que diga el cliente: el navegador sube los bytes por `POST /adjunto` y
+    // después manda «crear», así que la única fuente de qué llegó de verdad es la carpeta.
+    const cola = colaConAdjuntos({ b1: [{ nombre: "mockup.png", bytes: 2048, mime: "image/png" }] });
+    const servidor = servidorDeMentira();
+    montarRutas(servidor, vestibuloDePrueba(), { colaDeTareas: cola });
+    const cliente = clienteDeMentira();
+    await servidor.rutas.get(`GET ${RUTA_EVENTOS}`)!(cliente.peticion, cliente.respuesta);
+    const accion = servidor.rutas.get(`POST ${RUTA_ACCION}`)!;
+    await asentar();
+    await enviarMensaje(accion, {
+      clase: "tarea", accion: "crear", proyecto: "p1", peticion: "Arregla", encargo: "ENCARGO", borrador: "b1",
+    });
+    await asentar();
+    expect(cola.verTareas()[0]).toMatchObject({
+      id: "b1",
+      adjuntos: [{ nombre: "mockup.png", bytes: 2048, mime: "image/png" }],
+    });
+  });
+
+  it("sin `borrador` la tarea nace con id propio y sin adjuntos", async () => {
+    const cola = colaConAdjuntos({});
+    const servidor = servidorDeMentira();
+    montarRutas(servidor, vestibuloDePrueba(), { colaDeTareas: cola });
+    const cliente = clienteDeMentira();
+    await servidor.rutas.get(`GET ${RUTA_EVENTOS}`)!(cliente.peticion, cliente.respuesta);
+    const accion = servidor.rutas.get(`POST ${RUTA_ACCION}`)!;
+    await asentar();
+    await enviarMensaje(accion, { clase: "tarea", accion: "crear", proyecto: "p1", peticion: "Arregla", encargo: "E" });
+    await asentar();
+    expect(cola.verTareas()[0]!.id).not.toBe("");
+    expect(cola.verTareas()[0]!.adjuntos).toEqual([]);
+  });
+
+  it("un `borrador` que ya es una tarea NO se pisa: no se crea nada y se DICE", async () => {
+    // Fail-closed, y con el mismo argumento que el 409 de la subida: el borrador es un id
+    // que elige el cliente. Y no se cae a un id nuevo en silencio — eso perdería los
+    // adjuntos que la persona acaba de subir sin decírselo.
+    const ya: Tarea = {
+      id: "t1", proyecto: { id: "p1", raiz: "/w/AppDemo", nombre: "AppDemo" },
+      titulo: "t", peticion: "p", encargo: "e", adjuntos: [], estado: "nuevo",
+      creada: "2026-09-08T10:00:00.000Z",
+    };
+    const dichos: string[] = [];
+    const cola = colaConAdjuntos({}, [ya]);
+    const servidor = servidorDeMentira();
+    montarRutas(servidor, vestibuloDePrueba(), { colaDeTareas: cola, informar: (t) => dichos.push(t) });
+    const cliente = clienteDeMentira();
+    await servidor.rutas.get(`GET ${RUTA_EVENTOS}`)!(cliente.peticion, cliente.respuesta);
+    const accion = servidor.rutas.get(`POST ${RUTA_ACCION}`)!;
+    await asentar();
+    await enviarMensaje(accion, {
+      clase: "tarea", accion: "crear", proyecto: "p1", peticion: "Arregla", encargo: "E", borrador: "t1",
+    });
+    await asentar();
+    expect(cola.verTareas()).toHaveLength(1);
+    expect(dichos.join(" ")).toMatch(/borrador/i);
+  });
+
+  it("un `borrador` que no es segmento llano tampoco crea nada", async () => {
+    const dichos: string[] = [];
+    const cola = colaConAdjuntos({});
+    const servidor = servidorDeMentira();
+    montarRutas(servidor, vestibuloDePrueba(), { colaDeTareas: cola, informar: (t) => dichos.push(t) });
+    const cliente = clienteDeMentira();
+    await servidor.rutas.get(`GET ${RUTA_EVENTOS}`)!(cliente.peticion, cliente.respuesta);
+    const accion = servidor.rutas.get(`POST ${RUTA_ACCION}`)!;
+    await asentar();
+    await enviarMensaje(accion, {
+      clase: "tarea", accion: "crear", proyecto: "p1", peticion: "Arregla", encargo: "E", borrador: "../fuera",
+    });
+    await asentar();
+    expect(cola.verTareas()).toEqual([]);
+    expect(dichos.join(" ")).toMatch(/borrador/i);
+  });
+});
+
+describe("augmentar: lo que se le da y cómo se dice que falló", () => {
+  function conAumentador(
+    augmentar: NonNullable<NonNullable<Parameters<typeof montarRutas>[2]>["augmentar"]>,
+    porTarea: Record<string, AdjuntoDeTarea[]> = {}
+  ) {
+    const servidor = servidorDeMentira();
+    montarRutas(servidor, vestibuloDePrueba(), {
+      colaDeTareas: { ...colaDeMentira(), listarAdjuntos: (id: string) => porTarea[id] ?? [] },
+      augmentar,
+    });
+    return servidor;
+  }
+
+  async function pedir(servidor: ReturnType<typeof servidorDeMentira>, mensaje: MensajeDelCliente) {
+    const cliente = clienteDeMentira();
+    await servidor.rutas.get(`GET ${RUTA_EVENTOS}`)!(cliente.peticion, cliente.respuesta);
+    await asentar();
+    await enviarMensaje(servidor.rutas.get(`POST ${RUTA_ACCION}`)!, mensaje);
+    await asentar();
+    return cliente.recibidos.filter(
+      (m): m is Extract<MensajeAlCliente, { clase: "tarea" }> => m.clase === "tarea"
+    );
+  }
+
+  it("recibe el proyecto RESUELTO —nombre y raíz— y los adjuntos del borrador", async () => {
+    // La raíz no la manda el cliente (nunca la ha visto): la resuelve el servidor, igual que
+    // al crear. Está para resolver el papel `trabajo` con el `config.json` del proyecto.
+    const vistas: unknown[] = [];
+    const servidor = conAumentador(
+      async (p) => {
+        vistas.push(p);
+        return "ENCARGO";
+      },
+      { b1: [{ nombre: "notas.md", bytes: 4, mime: "text/markdown" }] }
+    );
+    await pedir(servidor, { clase: "tarea", accion: "augmentar", proyecto: "p1", peticion: "Arregla", borrador: "b1" });
+    expect(vistas).toEqual([
+      {
+        texto: "Arregla",
+        proyecto: { id: "p1", raiz: "/w/webstudio/workspace/Tienda", nombre: "Tienda" },
+        adjuntos: [{ nombre: "notas.md", mime: "text/markdown" }],
+      },
+    ]);
+  });
+
+  it("un proyecto que no se puede resolver NO se augmenta: se contesta el error", async () => {
+    // Falla cerrado, igual que al crear: sin proyecto resoluble no hay raíz con la que
+    // resolver el modelo, y no se inventa ninguna.
+    const servidor = conAumentador(async () => "ENCARGO");
+    const mensajes = await pedir(servidor, { clase: "tarea", accion: "augmentar", proyecto: "no-existe", peticion: "x" });
+    expect(mensajes.at(-1)).toMatchObject({ accion: "augmentado" });
+    expect((mensajes.at(-1) as { error?: string }).error).toBeDefined();
+    expect((mensajes.at(-1) as { encargo?: string }).encargo).toBeUndefined();
+  });
+
+  it("el MOTIVO de un fallo nuestro se dice con palabras, no con el nombre de la clase", async () => {
+    // Era `codigoDe(error)`, que para un error escrito a mano devuelve su `name`: la ventana
+    // habría enseñado «No se pudo preparar el encargo (ErrorDelAumentador)», que no dice
+    // nada de lo que hay que arreglar. La regla es la del corredor: el MENSAJE si lo
+    // escribimos nosotros, el CÓDIGO si lo escribió el sistema.
+    const servidor = conAumentador(async () => {
+      const error = new Error("no se pudo preparar el encargo (papel «trabajo»): falta la credencial para openai");
+      error.name = "ErrorDelAumentador";
+      throw error;
+    });
+    const mensajes = await pedir(servidor, { clase: "tarea", accion: "augmentar", proyecto: "p1", peticion: "x" });
+    expect((mensajes.at(-1) as { error?: string }).error).toContain("falta la credencial");
+  });
+
+  it("y un fallo del SISTEMA sigue diciendo solo su código: ahí el mensaje lleva la ruta", async () => {
+    const servidor = conAumentador(async () => {
+      throw Object.assign(new Error("ENOENT: no such file or directory, open '/Users/quien-sea/.xonecode/auth.json'"), {
+        code: "ENOENT",
+      });
+    });
+    const mensajes = await pedir(servidor, { clase: "tarea", accion: "augmentar", proyecto: "p1", peticion: "x" });
+    expect((mensajes.at(-1) as { error?: string }).error).toBe("ENOENT");
+  });
+});
+
+/**
+ * El CABLEADO de la augmentación: `augmentacionCableada`.
+ *
+ * Extraída de `arrancarConsolaWeb` y exportada por el MISMO motivo que `revisionConGit` y
+ * `fuentesDelJuez`: en esta tanda, CUATRO veces una composición de producción vivía en un
+ * cierre que todos sus tests doblan, y una regla podía dejar de estar montada con todo en
+ * verde. Aquí lo que se caería sin síntoma es la mitad del contexto del aumentador: sin la
+ * rama y sin la memoria del proyecto, el encargo se redacta a ciegas y nada falla.
+ */
+describe("augmentacionCableada", () => {
+  it("le da al aumentador el texto, el proyecto RESUELTO con su rama, los adjuntos y la memoria", async () => {
+    const vistas: PeticionDeTarea[] = [];
+    const augmentar = augmentacionCableada({
+      aumentador: {
+        augmentar: async (p) => {
+          vistas.push(p);
+          return "ENCARGO";
+        },
+      },
+      contexto: (raiz) => ({ rama: `rama-de-${raiz}`, memoria: `memoria-de-${raiz}` }),
+    });
+    const encargo = await augmentar({
+      texto: "Arregla el login",
+      proyecto: { id: "p1", raiz: "/w/AppDemo", nombre: "AppDemo" },
+      adjuntos: [{ nombre: "mockup.png", mime: "image/png" }],
+    });
+    expect(encargo).toBe("ENCARGO");
+    expect(vistas).toEqual([
+      {
+        texto: "Arregla el login",
+        // La RAÍZ va dentro: es lo que deja resolver el papel `trabajo` con el `config.json`
+        // del proyecto, la misma trampa que `CasoDeJuez.raiz`.
+        proyecto: { nombre: "AppDemo", raiz: "/w/AppDemo", rama: "rama-de-/w/AppDemo" },
+        adjuntos: [{ nombre: "mockup.png", mime: "image/png" }],
+        memoria: "memoria-de-/w/AppDemo",
+      },
+    ]);
+  });
+
+  it("lo que el disco no dice no se pone: ausente es «no hay», no una cadena vacía", async () => {
+    // Un `rama: undefined` o un `memoria: ""` en el prompt harían que el modelo hablara de
+    // una rama sin nombre y de una memoria en blanco como si fueran datos.
+    const vistas: PeticionDeTarea[] = [];
+    const augmentar = augmentacionCableada({
+      aumentador: {
+        augmentar: async (p) => {
+          vistas.push(p);
+          return "E";
+        },
+      },
+      contexto: () => ({}),
+    });
+    await augmentar({ texto: "x", proyecto: { id: "p1", raiz: "/w/A", nombre: "A" }, adjuntos: [] });
+    // `toEqual` trata `{rama: undefined}` igual que `{}`, así que se miran las CLAVES: un
+    // `rama: undefined` que llegue al prompt es lo que hay que cazar aquí.
+    expect(Object.keys(vistas[0]!).sort()).toEqual(["adjuntos", "proyecto", "texto"]);
+    expect(Object.keys(vistas[0]!.proyecto).sort()).toEqual(["nombre", "raiz"]);
+  });
+
+  it("sin `contexto` no se lee el disco: la composición sigue funcionando sin él", async () => {
+    const augmentar = augmentacionCableada({ aumentador: { augmentar: async () => "E" } });
+    expect(await augmentar({ texto: "x", proyecto: { id: "p", raiz: "/w/A", nombre: "A" }, adjuntos: [] })).toBe("E");
+  });
+
+  it("el error del aumentador se PROPAGA: quien lo convierte en palabras es el cable", async () => {
+    // `atenderAugmentar` aplica la regla del mensaje-o-código; tragárselo aquí dejaría a la
+    // ventana con un encargo vacío y sin motivo.
+    const augmentar = augmentacionCableada({
+      aumentador: {
+        augmentar: () => Promise.reject(new ErrorDelAumentador("falta la credencial para openai")),
+      },
+    });
+    await expect(
+      augmentar({ texto: "x", proyecto: { id: "p", raiz: "/w/A", nombre: "A" }, adjuntos: [] })
+    ).rejects.toThrow(/falta la credencial/);
+  });
+});
+
+describe("contextoDelProyecto", () => {
+  it("lee la rama de CloudStudio y la memoria del proyecto, del disco y por la raíz", () => {
+    const raiz = mkdtempSync(join(tmpdir(), "xonecode-ctx-"));
+    mkdirSync(join(raiz, ".xonecode"), { recursive: true });
+    writeFileSync(
+      join(raiz, ".xonecode", "config.json"),
+      JSON.stringify({ modo: "cloud", cloudstudio: { url: "https://x/mcp", proyecto: "AppDemo", rama: "master" } })
+    );
+    writeFileSync(join(raiz, ".xonecode", "memoria.md"), "# Memoria\nEl login usa $http");
+    const ctx = contextoDelProyecto(raiz);
+    expect(ctx.rama).toBe("master");
+    expect(ctx.memoria).toContain("El login usa $http");
+    rmSync(raiz, { recursive: true, force: true });
+  });
+
+  it("un proyecto offline y sin memoria no afirma ninguna de las dos", () => {
+    const raiz = mkdtempSync(join(tmpdir(), "xonecode-ctx2-"));
+    mkdirSync(join(raiz, ".xonecode"), { recursive: true });
+    writeFileSync(join(raiz, ".xonecode", "config.json"), JSON.stringify({ modo: "offline" }));
+    expect(contextoDelProyecto(raiz)).toEqual({});
+    rmSync(raiz, { recursive: true, force: true });
+  });
+
+  it("una raíz que no existe no lanza: se queda sin contexto y se redacta igual", () => {
+    expect(contextoDelProyecto(join(tmpdir(), "no-existe-xonecode-ctx"))).toEqual({});
+  });
+
+  it("una memoria enorme se acota: es contexto de una llamada, no un fichero que servir", () => {
+    const raiz = mkdtempSync(join(tmpdir(), "xonecode-ctx3-"));
+    mkdirSync(join(raiz, ".xonecode"), { recursive: true });
+    writeFileSync(join(raiz, ".xonecode", "memoria.md"), "a".repeat(TOPE_DE_MEMORIA + 5_000));
+    expect(contextoDelProyecto(raiz).memoria!.length).toBeLessThanOrEqual(TOPE_DE_MEMORIA);
+    rmSync(raiz, { recursive: true, force: true });
+  });
+});
+
+/**
+ * El CABLEADO real, no solo sus piezas — lo que `montarRutas` en solitario no puede
+ * vigilar. Aquí se compone `construirCorredorDeTareasCableado` (`arranque.ts`) de VERDAD:
+ * la misma función que usa `arrancarConsolaWeb`, con un corredor real
+ * (`crearCorredorDeTareas` por debajo) y sin reimplementar su cableado en el test — es la
+ * MISMA lección que dejó `backendDeAgente` en `agent/proyecto.ts`: la composición vivía
+ * inline en una función que todos sus tests doblan, así que la costura concreta —aquí, que
+ * el puente hacia `emitirTareas` quede armado ANTES de que el corredor pueda disparar
+ * `alCambiar`— podía dejar de estar montada con el resto en verde.
+ *
+ * La RECONCILIACIÓN (`corredorDeTareas.ts#arrancarDeVerdad`) es el disparador: aparca TODA
+ * tarea que estuviera «en-proceso» al arrancar, sin mirar el pid ni tocar `abrirParaTarea`
+ * —no hay ninguna «nueva» que despachar—, así que sirve para probar el puente sin tener
+ * que fabricar un `ConsolaDeProyecto` entero.
+ */
+describe("las tareas en background, el cableado del corredor con el cable — no solo las piezas", () => {
+  /** Un vestíbulo que nunca debería necesitar abrir nada: no hay ninguna tarea «nueva». */
+  const vestibuloSinAbrir: Parameters<typeof construirCorredorDeTareasCableado>[0]["vestibulo"] = {
+    abrirParaTarea: async () => {
+      throw new Error("no debería llamarse: la reconciliación no abre consolas");
+    },
+    proyectoAbierto: () => undefined,
+    sesionesDe: () => [],
+  };
+
+  /**
+   * Las dos piezas de la puerta de la ENTREGA, que el corredor exige por tipo. Estos tests
+   * son sobre la costura con el CABLE —una reconciliación que llega al SSE—, no sobre la
+   * puerta, que tiene su batería en `corredorDeTareas.test.ts`; aquí basta con que estén
+   * montadas. `npm test` no le pregunta a ningún modelo: el juez es este doble.
+   */
+  const ENTREGA_DE_TAREAS = {
+    juez: { juzgar: async () => ({ veredicto: "verde" as const, resumen: "bien" }) },
+    revisable: async () => ({ revisable: true, escribio: true }),
+  };
+
+  const tareaEnProceso = (id: string): Tarea => ({
+    id,
+    proyecto: { id: "p1", raiz: "/w/AppDemo", nombre: "AppDemo" },
+    titulo: "Arregla el login",
+    peticion: "Arregla el login",
+    encargo: "Arregla el login",
+    adjuntos: [],
+    estado: "en-proceso",
+    creada: "2026-09-08T10:00:00.000Z",
+  });
+
+  /**
+   * El ÚLTIMO salto de la cadena de los adjuntos: la costura que le da al vestíbulo lo que
+   * el corredor calculó. Vivía inline en `arrancarConsolaWeb` —el sitio donde este plan ha
+   * perdido cuatro veces una regla con todo en verde—, así que se comprueba aquí, sobre la
+   * MISMA función que usa producción: si el tercer argumento se cae, una tarea con adjuntos
+   * corre sin `/adjuntos/` montada y ningún test de las piezas se enteraría.
+   */
+  it("la costura reenvía al vestíbulo la carpeta de adjuntos que el corredor resolvió", async () => {
+    const aperturas: (string | undefined)[] = [];
+    const cola = colaDeMentira([
+      {
+        ...tareaEnProceso("t1"),
+        estado: "nuevo",
+        adjuntos: [{ nombre: "mockup.png", bytes: 10 }],
+      },
+    ]);
+    const { corredor, arrancarConectado } = construirCorredorDeTareasCableado({
+      vestibulo: {
+        abrirParaTarea: async (_raiz, _sesion, adjuntos) => {
+          aperturas.push(adjuntos);
+          // No hace falta una consola de verdad: con que la apertura reviente, la tarea se
+          // aparca y el test ya tiene lo único que venía a medir — qué se le pasó.
+          throw new Error("no hay proyecto de verdad en este test");
+        },
+        proyectoAbierto: () => undefined,
+        sesionesDe: () => [],
+      },
+      tareasFabrica: () => cola,
+      informar: () => {},
+      olvidarHiloDeSesion: async () => {},
+      ...ENTREGA_DE_TAREAS,
+    });
+    await arrancarConectado({ emitirTareas: () => {} });
+    await corredor!.asentar();
+    expect(aperturas).toEqual(["/no-usado-en-estos-tests/adjuntos"]);
+    await corredor!.parar();
+  });
+
+  /**
+   * El CUARTO argumento, y es el mismo fallo que el tercero con otro nombre: la costura es
+   * una lambda que reenvía a mano, así que un parámetro que no se nombre se cae en silencio
+   * —TypeScript no se queja de una función que ignora argumentos— y la sesión de la tarea
+   * entra en el índice del proyecto como una conversación más. Sin síntoma: la tarea corre
+   * igual, solo que su fila miente para siempre.
+   */
+  it("la costura reenvía también el ID DE LA TAREA, que es lo que marca su sesión", async () => {
+    const tareas: (string | undefined)[] = [];
+    const cola = colaDeMentira([{ ...tareaEnProceso("t1"), estado: "nuevo" }]);
+    const { corredor, arrancarConectado } = construirCorredorDeTareasCableado({
+      vestibulo: {
+        abrirParaTarea: async (_raiz, _sesion, _adjuntos, tarea) => {
+          tareas.push(tarea);
+          throw new Error("no hay proyecto de verdad en este test");
+        },
+        proyectoAbierto: () => undefined,
+        sesionesDe: () => [],
+      },
+      tareasFabrica: () => cola,
+      informar: () => {},
+      olvidarHiloDeSesion: async () => {},
+      ...ENTREGA_DE_TAREAS,
+    });
+    await arrancarConectado({ emitirTareas: () => {} });
+    await corredor!.asentar();
+    expect(tareas).toEqual(["t1"]);
+    await corredor!.parar();
+  });
+
+  /**
+   * Y la SIEMBRA: la marca es nueva, así que la primera sesión de tarea de cada proyecto se
+   * quedaría pintada como una conversación para siempre. La costura tiene que darle al
+   * corredor con qué sembrarla — sin ella no hay ningún síntoma tampoco, solo una fila que
+   * miente.
+   */
+  it("la costura le da al corredor con qué SEMBRAR la marca en las sesiones viejas", async () => {
+    // Contra un índice de sesiones DE VERDAD, que es lo único que prueba que la costura usa
+    // el escritor real y no una lambda vacía: se monta un proyecto en un temporal, con una
+    // sesión sin marcar, y una tarea terminada que la nombra.
+    const raiz = mkdtempSync(join(tmpdir(), "xonecode-siembra-"));
+    crearSesion(raiz, "s9");
+    const cola = colaDeMentira([
+      { ...tareaEnProceso("t1"), proyecto: { id: "p1", raiz, nombre: "AppDemo" }, estado: "terminada", sesion: "s9" },
+    ]);
+    const { corredor, arrancarConectado } = construirCorredorDeTareasCableado({
+      vestibulo: vestibuloSinAbrir,
+      tareasFabrica: () => cola,
+      informar: () => {},
+      olvidarHiloDeSesion: async () => {},
+      ...ENTREGA_DE_TAREAS,
+    });
+    await arrancarConectado({ emitirTareas: () => {} });
+    await corredor!.asentar();
+
+    expect(listarSesiones(raiz)[0]?.tarea).toBe("t1");
+    await corredor!.parar();
+    rmSync(raiz, { recursive: true, force: true });
+  });
+
+  /**
+   * El corredor llega a `montarRutas` ENTERO y no recortado, así que `mirar`/`dejarDeMirar`
+   * están montados en producción. Un `Pick` de más en el camino dejaría el botón «Ver lo que
+   * hace» sin nada detrás con todos los tests de las piezas en verde — es la misma lección
+   * que este `describe` entero recoge.
+   */
+  it("el cableado real le pasa al cable un corredor que sabe de mirones", () => {
+    const cola = colaDeMentira([]);
+    const { opcionesDeMontaje } = construirCorredorDeTareasCableado({
+      vestibulo: vestibuloSinAbrir,
+      tareasFabrica: () => cola,
+      informar: () => {},
+      olvidarHiloDeSesion: async () => {},
+      ...ENTREGA_DE_TAREAS,
+    });
+    expect(typeof opcionesDeMontaje.corredorDeTareas?.mirar).toBe("function");
+    expect(typeof opcionesDeMontaje.corredorDeTareas?.dejarDeMirar).toBe("function");
+  });
+
+  it("arrancarConectado conecta el puente ANTES de arrancar: una reconciliación que aparca por su cuenta llega al `emitirTareas` recibido", async () => {
+    const cola = colaDeMentira([tareaEnProceso("t1")]);
+    const { corredor, arrancarConectado } = construirCorredorDeTareasCableado({
+      vestibulo: vestibuloSinAbrir,
+      tareasFabrica: () => cola,
+      informar: () => {},
+      olvidarHiloDeSesion: async () => {},
+      ...ENTREGA_DE_TAREAS,
+    });
+    expect(corredor).toBeDefined();
+    let llamado = 0;
+    // NADA de cable ni de servidor de por medio: solo lo que `arrancarConsolaWeb` le pasa
+    // a `arrancarConectado`, el `{emitirTareas}` que devuelve `montarRutas`.
+    await arrancarConectado({ emitirTareas: () => void (llamado += 1) });
+    await corredor!.asentar();
+
+    // La escritura ocurrió (la reconciliación aparca SIEMPRE una «en-proceso» huérfana)...
+    expect(cola.verTareas()[0]).toMatchObject({ estado: "requiere-atencion" });
+    // ...Y el cambio llegó al `emitirTareas` que se le pasó — es lo que demuestra que el
+    // puente estaba armado ANTES de que el corredor arrancara, no después.
+    expect(llamado).toBeGreaterThan(0);
+  });
+
+  /**
+   * El tope de concurrencia PERSISTE en `settings.json` (Task 7) y ya no en una variable
+   * del cierre — la composición exacta que este describe existe para vigilar: una regla
+   * puede dejar de estar montada con todo lo demás en verde. `cargarSettings`/
+   * `guardarConcurrenciaDeTareas` leen `homedir()`, así que aquí se apunta `HOME` a un
+   * temporal — el mismo recurso que `cli/main.test.ts` documenta para no depender del
+   * disco de quien corre la suite.
+   */
+  describe("el tope de concurrencia persiste en settings.json, no en memoria", () => {
+    const homeOriginal = process.env.HOME;
+
+    beforeEach(() => {
+      process.env.HOME = mkdtempSync(join(tmpdir(), "xonecode-home-tareas-"));
+    });
+
+    afterEach(() => {
+      if (homeOriginal === undefined) delete process.env.HOME;
+      else process.env.HOME = homeOriginal;
+    });
+
+    it("sin nada guardado, la omisión es CONCURRENCIA_POR_OMISION (2)", () => {
+      const { opcionesDeMontaje } = construirCorredorDeTareasCableado({
+        vestibulo: vestibuloSinAbrir,
+        informar: () => {},
+        olvidarHiloDeSesion: async () => {},
+        ...ENTREGA_DE_TAREAS,
+      });
+      expect(opcionesDeMontaje.concurrenciaDeTareas?.()).toBe(2);
+    });
+
+    it("guardarConcurrencia escribe en disco, y se relee — no queda solo en un cierre", () => {
+      const { opcionesDeMontaje } = construirCorredorDeTareasCableado({
+        vestibulo: vestibuloSinAbrir,
+        informar: () => {},
+        olvidarHiloDeSesion: async () => {},
+        ...ENTREGA_DE_TAREAS,
+      });
+      opcionesDeMontaje.guardarConcurrencia?.(5);
+      expect(opcionesDeMontaje.concurrenciaDeTareas?.()).toBe(5);
+      // Y la prueba de que es de VERDAD disco y no una variable: una instancia SEGUNDA,
+      // construida después de escribir, ve el mismo valor sin que nadie se lo pasara.
+      const { opcionesDeMontaje: otraVez } = construirCorredorDeTareasCableado({
+        vestibulo: vestibuloSinAbrir,
+        informar: () => {},
+        olvidarHiloDeSesion: async () => {},
+        ...ENTREGA_DE_TAREAS,
+      });
+      expect(otraVez.concurrenciaDeTareas?.()).toBe(5);
+    });
+  });
+
+  it("si `emitirTareas` revienta, el corredor NO se tumba: la escritura se queda igual, y se avisa por `informar`", async () => {
+    const cola = colaDeMentira([tareaEnProceso("t2")]);
+    const avisos: string[] = [];
+    const { corredor, arrancarConectado } = construirCorredorDeTareasCableado({
+      vestibulo: vestibuloSinAbrir,
+      tareasFabrica: () => cola,
+      informar: (texto) => avisos.push(texto),
+      olvidarHiloDeSesion: async () => {},
+      ...ENTREGA_DE_TAREAS,
+    });
+
+    await expect(
+      arrancarConectado({
+        emitirTareas: () => {
+          throw new Error("sumidero muerto");
+        },
+      })
+    ).resolves.toBeUndefined();
+    await corredor!.asentar();
+
+    // La escritura no se pierde por culpa de un sumidero roto...
+    expect(cola.verTareas()[0]).toMatchObject({ estado: "requiere-atencion" });
+    // ...y el fallo se dice por el canal del PROCESO, nunca lanzado hacia quien llamó.
+    expect(avisos.some((a) => a.includes("sumidero muerto"))).toBe(true);
+  });
+
+  it("sin `tareasFabrica`, no hay corredor y `arrancarConectado` no revienta", async () => {
+    const { corredor, arrancarConectado, opcionesDeMontaje } = construirCorredorDeTareasCableado({
+      vestibulo: vestibuloSinAbrir,
+      informar: () => {},
+      olvidarHiloDeSesion: async () => {},
+      ...ENTREGA_DE_TAREAS,
+    });
+    expect(corredor).toBeUndefined();
+    expect(opcionesDeMontaje.colaDeTareas).toBeUndefined();
+    expect(opcionesDeMontaje.corredorDeTareas).toBeUndefined();
+    await expect(arrancarConectado({ emitirTareas: () => {} })).resolves.toBeUndefined();
+  });
+
+  /**
+   * Y el camino ENTERO, cable incluido: `construirCorredorDeTareasCableado` +
+   * `montarRutas`, con la misma composición que `arrancarConsolaWeb` hace — el mensaje
+   * `tareas` que nace de la reconciliación llega de verdad a un cliente SSE, sin que el
+   * cliente haya mandado nada.
+   */
+  it("de punta a punta: la reconciliación del corredor llega al cliente SSE sin que el cliente toque el cable", async () => {
+    const cola = colaDeMentira([tareaEnProceso("t3")]);
+    const { corredor, opcionesDeMontaje, arrancarConectado } = construirCorredorDeTareasCableado({
+      vestibulo: vestibuloSinAbrir,
+      tareasFabrica: () => cola,
+      informar: () => {},
+      olvidarHiloDeSesion: async () => {},
+      ...ENTREGA_DE_TAREAS,
+    });
+    const servidor = servidorDeMentira();
+    const cable = montarRutas(servidor, vestibuloDePrueba(), opcionesDeMontaje);
+    const cliente = clienteDeMentira();
+    await servidor.rutas.get(`GET ${RUTA_EVENTOS}`)!(cliente.peticion, cliente.respuesta);
+    // Una SEGUNDA pestaña, conectada ANTES de que el corredor arranque: «el cable habla con
+    // TODOS los clientes, no con el último» (`transporte.ts`, el `Set` de sumideros) es
+    // justo lo que este `alCambiar` tiene que respetar — nace del corredor, no de una
+    // petición de ESTE cliente, así que no hay ninguna razón para que solo le llegue a uno.
+    const segundo = clienteDeMentira();
+    await servidor.rutas.get(`GET ${RUTA_EVENTOS}`)!(segundo.peticion, segundo.respuesta);
+    await asentar();
+    const mensajesDeTareas = (de: typeof cliente) =>
+      de.recibidos.filter((m): m is Extract<MensajeAlCliente, { clase: "tareas" }> => m.clase === "tareas");
+    // La bienvenida trajo la cola tal cual estaba: «en-proceso», el punto de partida.
+    expect(mensajesDeTareas(cliente).at(-1)?.lista[0]?.estado).toBe("en-proceso");
+    expect(mensajesDeTareas(segundo).at(-1)?.lista[0]?.estado).toBe("en-proceso");
+
+    // Igual que `arrancarConsolaWeb`: se arranca CONECTADO al cable recién montado.
+    await arrancarConectado(cable);
+    await corredor!.asentar();
+
+    expect(cola.verTareas()[0]!.estado).toBe("requiere-atencion");
+    expect(mensajesDeTareas(cliente).at(-1)?.lista[0]).toMatchObject({ id: "t3", estado: "requiere-atencion" });
+    expect(mensajesDeTareas(segundo).at(-1)?.lista[0]).toMatchObject({ id: "t3", estado: "requiere-atencion" });
+  });
+});
+
+describe("`fuentesDelJuez` — el papel del juez se resuelve con el `config.json` del PROYECTO", () => {
+  /**
+   * Esta función está extraída porque vivía dentro del cierre de `arrancarConsolaWeb`, que
+   * todos sus tests doblan: quitarle la capa de proyecto no ponía ni un test en rojo, medido
+   * por mutación. Es la cuarta vez en esta tanda que una composición de producción escondida
+   * en un cierre deja una regla sin montar con todo en verde — la misma lección de
+   * `backendDeAgente` y de `revisionConGit`.
+   *
+   * Y lo que la regla protege: en la consola web `FuentesDeEleccion.proyecto` no se rellena
+   * nunca, así que sin preguntarle al disco por la raíz de la tarea, un proyecto que apunte
+   * `afilado` a otro modelo se ignora EN SILENCIO. Un ajuste escrito que no hace nada es
+   * peor que no poder ponerlo, porque quien lo puso se cree servido.
+   */
+  it("el `afilado` del proyecto llega a las fuentes, y por eso gana al global", () => {
+    const raiz = mkdtempSync(join(tmpdir(), "xonecode-juez-"));
+    mkdirSync(join(raiz, ".xonecode"), { recursive: true });
+    writeFileSync(
+      join(raiz, ".xonecode", "config.json"),
+      JSON.stringify({ modelos: { afilado: "anthropic/claude-opus-4-5" } })
+    );
+
+    expect(fuentesDelJuez(raiz).proyecto?.modelos?.afilado).toBe("anthropic/claude-opus-4-5");
+    rmSync(raiz, { recursive: true, force: true });
+  });
+
+  it("un proyecto que no dice nada deja `proyecto` AUSENTE, no un objeto vacío", () => {
+    // Ausente es «este proyecto no opina» y con eso cuenta la precedencia de
+    // `core/modelos.ts`; un objeto vacío sería una capa que existe y no dice nada, que es
+    // otra cosa. La misma distinción que `Entorno.proyectos`.
+    const raiz = mkdtempSync(join(tmpdir(), "xonecode-juez-vacio-"));
+    expect("proyecto" in fuentesDelJuez(raiz)).toBe(false);
+    rmSync(raiz, { recursive: true, force: true });
+  });
+
+  it("la variable de entorno viaja, porque manda sobre los ficheros", () => {
+    const raiz = mkdtempSync(join(tmpdir(), "xonecode-juez-env-"));
+    const antes = process.env.XONECODE_MODELO;
+    process.env.XONECODE_MODELO = "ollama/qwen3";
+    try {
+      expect(fuentesDelJuez(raiz).entorno?.XONECODE_MODELO).toBe("ollama/qwen3");
+    } finally {
+      if (antes === undefined) delete process.env.XONECODE_MODELO;
+      else process.env.XONECODE_MODELO = antes;
+      rmSync(raiz, { recursive: true, force: true });
+    }
+  });
+});
+
+/**
+ * **Ver en vivo lo que hace una tarea** (Task 16).
+ *
+ * Los actos de un turno de tarea ya se guardaban en el transcript de su sesión —medido:
+ * `consolaParaTarea` le pasa la piel de su propia consola de proyecto— y ya NO se filtraban
+ * al chat de nadie, porque el transporte de una consola de tarea no tiene sumideros
+ * enganchados. Lo que faltaba era exactamente el enganche, y es lo que estos tests fijan.
+ *
+ * Las tres decisiones del diseño, y dónde se ven aquí:
+ *  1. **Opt-in**: nada de esto pasa hasta que llega un `{clase:"mirar", ver:true}`. No se
+ *     muda el cable ni se abre ningún proyecto.
+ *  2. **Solo lectura**: por este camino no entra NADA hacia el turno. El mensaje `mirar` se
+ *     ataja antes del `recibir` de la consola, y hay aserto.
+ *  3. **La vista en vivo y el transcript son lo MISMO**: lo que viaja son los actos de esa
+ *     consola, no un registro paralelo.
+ */
+describe("mirar en vivo lo que hace una tarea — el cable", () => {
+  /** Un corredor de mentira con `mirar`/`dejarDeMirar`, y una tarea en vuelo. */
+  function corredorConMirones(actosIniciales: Acto[] = []) {
+    const mirones = new Map<string, Set<Sumidero>>();
+    return {
+      mirones,
+      /** El turno de esa tarea pinta un acto: le llega a quien la esté mirando. */
+      pintar: (tarea: string, mensaje: MensajeAlCliente) => {
+        for (const m of mirones.get(tarea) ?? []) m(mensaje);
+      },
+      corredor: {
+        corriendoAqui: () => true,
+        cortar: async () => true,
+        mirar: (id: string, enviar: Sumidero) => {
+          if (id !== "t1") return undefined;
+          const suyos = mirones.get(id) ?? new Set<Sumidero>();
+          suyos.add(enviar);
+          mirones.set(id, suyos);
+          return actosIniciales;
+        },
+        dejarDeMirar: (id: string, enviar: Sumidero) => void mirones.get(id)?.delete(enviar),
+      },
+    };
+  }
+
+  function montarConCorredor(actosIniciales: Acto[] = []) {
+    const servidor = servidorDeMentira();
+    const vestibulo = vestibuloDePrueba();
+    const c = corredorConMirones(actosIniciales);
+    montarRutas(servidor, vestibulo, { corredorDeTareas: c.corredor });
+    return {
+      ...c,
+      vestibulo,
+      eventos: servidor.rutas.get("GET /eventos")!,
+      accion: servidor.rutas.get("POST /accion")!,
+    };
+  }
+
+  it("«ver» trae el transcript de la tarea, etiquetado, y SOLO al cliente que lo pidió", async () => {
+    const actos: Acto[] = [
+      { tipo: "usuario", texto: "arregla el login" },
+      { tipo: "razonamiento", texto: "mirando app.xne" },
+    ];
+    const m = montarConCorredor(actos);
+    const mira = clienteDeMentira("c1");
+    const otra = clienteDeMentira("c2");
+    m.eventos(mira.peticion, mira.respuesta);
+    m.eventos(otra.peticion, otra.respuesta);
+    await asentar();
+    mira.recibidos.length = 0;
+    otra.recibidos.length = 0;
+
+    await enviarMensaje(m.accion, { clase: "mirar", tarea: "t1", ver: true, cliente: "c1" });
+    expect(mira.recibidos).toEqual([{ clase: "mirada", tarea: "t1", via: "todos", actos }]);
+    // La pestaña de al lado está trabajando en otra cosa: los actos de una tarea de fondo no
+    // pueden aparecer en su chat. Es el aserto que hay que conservar.
+    expect(otra.recibidos).toEqual([]);
+  });
+
+  it("lo que el turno pinta después llega en vivo, con `alta` y `sustitucion`", async () => {
+    const m = montarConCorredor();
+    const mira = clienteDeMentira("c1");
+    m.eventos(mira.peticion, mira.respuesta);
+    await asentar();
+    await enviarMensaje(m.accion, { clase: "mirar", tarea: "t1", ver: true, cliente: "c1" });
+    mira.recibidos.length = 0;
+
+    m.pintar("t1", { clase: "acto", acto: { tipo: "herramientas", lineas: ["→ lee"], detalles: [{ nombre: "read_file" }] } });
+    m.pintar("t1", { clase: "sustitucion", acto: { tipo: "herramientas", lineas: ["→ lee ×3"], detalles: [{ nombre: "read_file" }] } });
+    m.pintar("t1", { clase: "reemision", actos: [{ tipo: "asistente", texto: "listo" }] });
+    expect(mira.recibidos).toEqual([
+      {
+        clase: "mirada",
+        tarea: "t1",
+        via: "alta",
+        actos: [{ tipo: "herramientas", lineas: ["→ lee"], detalles: [{ nombre: "read_file" }] }],
+      },
+      {
+        clase: "mirada",
+        tarea: "t1",
+        via: "sustitucion",
+        actos: [{ tipo: "herramientas", lineas: ["→ lee ×3"], detalles: [{ nombre: "read_file" }] }],
+      },
+      { clase: "mirada", tarea: "t1", via: "todos", actos: [{ tipo: "asistente", texto: "listo" }] },
+    ]);
+  });
+
+  it("mirar no abre ningún proyecto ni mueve el cable de nadie", async () => {
+    const m = montarConCorredor();
+    const mira = clienteDeMentira("c1");
+    m.eventos(mira.peticion, mira.respuesta);
+    await asentar();
+    expect(m.vestibulo.proyectoAbierto()).toBeUndefined();
+    await enviarMensaje(m.accion, { clase: "mirar", tarea: "t1", ver: true, cliente: "c1" });
+    // La razón de ser de `abrirParaTarea` («no le cambies la pantalla a quien trabaja») no
+    // la puede deshacer esta pantalla.
+    expect(m.vestibulo.proyectoAbierto()).toBeUndefined();
+  });
+
+  it("el mensaje `mirar` NO llega a la consola: por aquí no entra nada hacia el turno", async () => {
+    const servidor = servidorDeMentira();
+    const vestibulo = vestibuloDePrueba();
+    const c = corredorConMirones();
+    const recibidos: MensajeDelCliente[] = [];
+    // La consola del vestíbulo es el destino del cable mientras no hay proyecto abierto:
+    // si `mirar` cayera en el `recibir` de abajo, `correrConsola` podría acabar corriendo
+    // un turno de verdad sobre esa consola — y con un mirón enganchado su `eof()` diría
+    // que hay alguien a quien preguntar. Fail-closed: el mensaje se ataja antes.
+    const original = vestibulo.consola.recibir.bind(vestibulo.consola);
+    vestibulo.consola.recibir = (mensaje) => {
+      recibidos.push(mensaje);
+      original(mensaje);
+    };
+    montarRutas(servidor, vestibulo, { corredorDeTareas: c.corredor });
+    const mira = clienteDeMentira("c1");
+    servidor.rutas.get("GET /eventos")!(mira.peticion, mira.respuesta);
+    await asentar();
+    await enviarMensaje(servidor.rutas.get("POST /accion")!, { clase: "mirar", tarea: "t1", ver: true, cliente: "c1" });
+    await enviarMensaje(servidor.rutas.get("POST /accion")!, { clase: "mirar", tarea: "t1", ver: false, cliente: "c1" });
+    expect(recibidos).toEqual([]);
+  });
+
+  it("dos personas pueden mirar la misma tarea, y dejar de mirar corta solo la suya", async () => {
+    const m = montarConCorredor();
+    const una = clienteDeMentira("c1");
+    const otra = clienteDeMentira("c2");
+    m.eventos(una.peticion, una.respuesta);
+    m.eventos(otra.peticion, otra.respuesta);
+    await asentar();
+    await enviarMensaje(m.accion, { clase: "mirar", tarea: "t1", ver: true, cliente: "c1" });
+    await enviarMensaje(m.accion, { clase: "mirar", tarea: "t1", ver: true, cliente: "c2" });
+    una.recibidos.length = 0;
+    otra.recibidos.length = 0;
+
+    m.pintar("t1", { clase: "acto", acto: { tipo: "asistente", texto: "voy" } });
+    expect(una.recibidos).toHaveLength(1);
+    expect(otra.recibidos).toHaveLength(1);
+
+    await enviarMensaje(m.accion, { clase: "mirar", tarea: "t1", ver: false, cliente: "c1" });
+    m.pintar("t1", { clase: "acto", acto: { tipo: "asistente", texto: "listo" } });
+    // Que una cierre la vista no puede dejar muda a la otra.
+    expect(una.recibidos).toHaveLength(1);
+    expect(otra.recibidos).toHaveLength(2);
+  });
+
+  it("cerrar la pestaña desengancha sus miradas, y no las de la otra", async () => {
+    const m = montarConCorredor();
+    const una = clienteDeMentira("c1");
+    const otra = clienteDeMentira("c2");
+    m.eventos(una.peticion, una.respuesta);
+    m.eventos(otra.peticion, otra.respuesta);
+    await asentar();
+    await enviarMensaje(m.accion, { clase: "mirar", tarea: "t1", ver: true, cliente: "c1" });
+    await enviarMensaje(m.accion, { clase: "mirar", tarea: "t1", ver: true, cliente: "c2" });
+    expect(m.mirones.get("t1")!.size).toBe(2);
+    // Sin esto, un sumidero de una pestaña cerrada se queda enganchado al turno para
+    // siempre: escribiría en un socket que ya no está.
+    una.cerrar();
+    expect(m.mirones.get("t1")!.size).toBe(1);
+    otra.recibidos.length = 0;
+    m.pintar("t1", { clase: "acto", acto: { tipo: "asistente", texto: "listo" } });
+    expect(otra.recibidos).toHaveLength(1);
+  });
+
+  it("una tarea que no corre aquí no emite nada: no se finge un transcript vacío", async () => {
+    const m = montarConCorredor();
+    const mira = clienteDeMentira("c1");
+    m.eventos(mira.peticion, mira.respuesta);
+    await asentar();
+    mira.recibidos.length = 0;
+    await enviarMensaje(m.accion, { clase: "mirar", tarea: "otra", ver: true, cliente: "c1" });
+    // `{via:"todos", actos:[]}` diría «corre y no ha hecho nada», que es otra cosa. Lo que
+    // esa tarea SÍ es —terminada, o de otro proceso— ya lo dice el mensaje de la cola.
+    expect(mira.recibidos).toEqual([]);
+  });
+
+  it("un `cliente` desconocido no engancha nada y no lanza", async () => {
+    const m = montarConCorredor();
+    const mira = clienteDeMentira("c1");
+    m.eventos(mira.peticion, mira.respuesta);
+    await asentar();
+    mira.recibidos.length = 0;
+    expect(await enviarMensaje(m.accion, { clase: "mirar", tarea: "t1", ver: true, cliente: "fantasma" })).toBe(204);
+    expect(m.mirones.get("t1") ?? new Set()).toHaveLength(0);
+    expect(mira.recibidos).toEqual([]);
+  });
+
+  it("mirar dos veces la misma tarea no duplica el enganche ni reemite dos veces", async () => {
+    const m = montarConCorredor([{ tipo: "usuario", texto: "x" }]);
+    const mira = clienteDeMentira("c1");
+    m.eventos(mira.peticion, mira.respuesta);
+    await asentar();
+    await enviarMensaje(m.accion, { clase: "mirar", tarea: "t1", ver: true, cliente: "c1" });
+    mira.recibidos.length = 0;
+    // Idempotente: un doble clic, o un efecto de React que se dispare dos veces, no puede
+    // dejar dos sumideros del mismo cliente enganchados al mismo turno.
+    await enviarMensaje(m.accion, { clase: "mirar", tarea: "t1", ver: true, cliente: "c1" });
+    expect(mira.recibidos).toEqual([]);
+    m.pintar("t1", { clase: "acto", acto: { tipo: "asistente", texto: "listo" } });
+    expect(mira.recibidos).toHaveLength(1);
+  });
+
+  it("ninguna ruta de la máquina viaja en esos mensajes", async () => {
+    // El acto de una tool lleva ruta RELATIVA por construcción (`agent/resumenDeTool.ts`),
+    // y el mensaje que envuelve no añade ninguna: ni la raíz del proyecto, ni la carpeta de
+    // la sesión, ni el fichero del checkpointer. El cable puede ir por un túnel.
+    const m = montarConCorredor([{ tipo: "usuario", texto: "arregla el login" }]);
+    const mira = clienteDeMentira("c1");
+    m.eventos(mira.peticion, mira.respuesta);
+    await asentar();
+    await enviarMensaje(m.accion, { clase: "mirar", tarea: "t1", ver: true, cliente: "c1" });
+    m.pintar("t1", { clase: "acto", acto: { tipo: "herramientas", lineas: ["← edita app.xne"], detalles: [{ nombre: "edit_file" }] } });
+    const texto = JSON.stringify(mira.recibidos);
+    for (const sospechosa of ["/w/", "/Users/", ".xonecode", "/tmp/", "C:\\"]) {
+      expect(texto).not.toContain(sospechosa);
+    }
+  });
+});
+
+/**
+ * **Una reconexión que reclama el mismo id desengancha lo que la conexión vieja miraba.**
+ *
+ * F2 de la revisión, y la carrera es la que el propio `close` documenta: una pestaña
+ * recargada puede cerrar su SSE DESPUÉS de que su reconexión haya reclamado el id, y el
+ * `close` viejo se salta la limpieza por la guarda de `enviar === sumidero` — que está bien
+ * puesta, porque si no se llevaría por delante las miradas del recién llegado. La
+ * consecuencia era que los envoltorios de la conexión vieja se quedaban en el `mirones` del
+ * transporte de la tarea hasta que su consola cerrara, escribiendo en un socket que ya no
+ * está (el `try/catch` del sumidero se lo traga, así que ni se veía). Se limpia al RECLAMAR
+ * el id, que es el único momento en que se sabe con certeza que la conexión anterior murió.
+ */
+describe("mirar: la reconexión no deja envoltorios huérfanos", () => {
+  it("reclamar el mismo id de cliente desengancha las miradas de la conexión anterior", async () => {
+    const servidor = servidorDeMentira();
+    const mirones = new Map<string, Set<Sumidero>>();
+    montarRutas(servidor, vestibuloDePrueba(), {
+      corredorDeTareas: {
+        corriendoAqui: () => true,
+        cortar: async () => true,
+        mirar: (id: string, enviar: Sumidero) => {
+          const suyos = mirones.get(id) ?? new Set<Sumidero>();
+          suyos.add(enviar);
+          mirones.set(id, suyos);
+          return [];
+        },
+        dejarDeMirar: (id: string, enviar: Sumidero) => void mirones.get(id)?.delete(enviar),
+      },
+    });
+    const eventos = servidor.rutas.get("GET /eventos")!;
+    const accion = servidor.rutas.get("POST /accion")!;
+
+    const vieja = clienteDeMentira("c1");
+    eventos(vieja.peticion, vieja.respuesta);
+    // Y OTRA persona mirando la misma tarea desde otra pestaña: lo que se limpia es lo del
+    // id que se reclama y no «todo», o una recarga dejaría muda a la de al lado.
+    const ajena = clienteDeMentira("c2");
+    eventos(ajena.peticion, ajena.respuesta);
+    await asentar();
+    await enviarMensaje(accion, { clase: "mirar", tarea: "t1", ver: true, cliente: "c1" });
+    await enviarMensaje(accion, { clase: "mirar", tarea: "t1", ver: true, cliente: "c2" });
+    expect(mirones.get("t1")!.size).toBe(2);
+
+    // La pestaña se recarga: el SSE nuevo llega ANTES de que el `close` de la vieja se
+    // dispare, que es el orden que la guarda del `close` existe para sobrevivir.
+    const nueva = clienteDeMentira("c1");
+    eventos(nueva.peticion, nueva.respuesta);
+    await asentar();
+    // Solo se fue el de «c1»: el de «c2» sigue enganchado.
+    expect(mirones.get("t1")!.size).toBe(1);
+
+    // Y el `close` tardío de la vieja no puede llevarse por delante lo del recién llegado.
+    await enviarMensaje(accion, { clase: "mirar", tarea: "t1", ver: true, cliente: "c1" });
+    expect(mirones.get("t1")!.size).toBe(2);
+    vieja.cerrar();
+    expect(mirones.get("t1")!.size).toBe(2);
+  });
+});
+
+/**
+ * **Abrir la sesión de una tarea en curso se DECLINA por el cable, y con el motivo delante.**
+ *
+ * Task 16, y el arreglo de la duda que la vista en vivo hizo visible: el título de una
+ * tarjeta «en proceso» manda `{clase:"sesion", proyecto, sesion}`, y eso ponía dos consolas
+ * sobre el mismo `thread_id` del checkpointer. La guarda vive en el vestíbulo
+ * (`MOTIVO_SESION_DE_TAREA_EN_CURSO`) porque es quien sabe qué consolas de tarea están vivas;
+ * lo que se comprueba aquí es que el cable no se lo come: el motivo llega y NADA se mueve.
+ */
+describe("abrir la sesión de una tarea en curso, por el cable", () => {
+  it("dice el motivo y no muda el cable: el transcript de quien mira no cambia", async () => {
+    const servidor = servidorDeMentira();
+    const dichos: string[] = [];
+    let aperturas = 0;
+    const motivo = "esa conversación es la de una tarea en curso: pulsa «Ver lo que hace»";
+    // Con copia local DE VERDAD: `atenderSesion` usa `esProyectoEnDisco` del módulo (no un
+    // predicado inyectado), y sin la carpeta se iría por la rama de «todavía no está bajado»
+    // — el test se quedaría verde sin haber llamado a `abrirProyecto` ni una vez.
+    const base = mkdtempSync(join(tmpdir(), "xonecode-abrir-tarea-"));
+    mkdirSync(join(base, ".xonecode"), { recursive: true });
+    writeFileSync(join(base, ".xonecode", "config.json"), JSON.stringify({ modo: "offline" }));
+    montarRutas(
+      servidor,
+      {
+        ...vestibuloDePrueba(),
+        raizDeProyecto: () => base,
+        abrirProyecto: async () => {
+          aperturas += 1;
+          throw new Error(motivo);
+        },
+      },
+      { informar: (texto) => dichos.push(texto) }
+    );
+    const cliente = clienteDeMentira();
+    await servidor.rutas.get(`GET ${RUTA_EVENTOS}`)!(cliente.peticion, cliente.respuesta);
+    await asentar();
+
+    expect(
+      await enviarMensaje(servidor.rutas.get(`POST ${RUTA_ACCION}`)!, {
+        clase: "sesion",
+        proyecto: "p1",
+        sesion: "s1",
+      })
+    ).toBe(204);
+    await asentar();
+
+    // Se intentó UNA vez y se negó ahí: la guarda es del vestíbulo, no de este manejador.
+    expect(aperturas).toBe(1);
+    // El motivo se DICE, por los dos canales que este camino ya usa: el transcript y el
+    // alta —que es lo que la barra pinta sin tener que leer el transcript—.
+    expect(dichos).toContain(motivo);
+    const altas = cliente.recibidos.filter((m) => m.clase === "alta");
+    expect((altas.at(-1) as { aviso?: string }).aviso).toBe(motivo);
+    // Y el cable sigue donde estaba: sin proyecto abierto, el alta lo dice.
+    expect((altas.at(-1) as { proyectoAbierto?: boolean }).proyectoAbierto).toBe(false);
+    rmSync(base, { recursive: true, force: true });
   });
 });

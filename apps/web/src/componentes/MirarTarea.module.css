@@ -1,0 +1,153 @@
+/* Alias comprobados contra `apps/web/estilos/design-platform.css`: bg-layer-1, bg-layer-2,
+   border-l2, interactive-bg-hover, label-primary/secondary/tertiary, state-error-primary.
+   `--xonecode-cian` es de `estilos/marca.css` y `--ds-font-family-code` de
+   `estilos/tipografia.css`. Ningún color literal (`transparent` también lo es: `background:
+   none`, como en `Kanban.module.css`). */
+
+.envoltura {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+/* El control de despliegue: un botón DE VERDAD (`aria-expanded` en el marcado, no aquí),
+   enfocable y con el mismo aspecto que `Kanban.module.css#.enlaceRevision`, del que sale —
+   ahí vivía suelto por tarjeta; aquí es la MISMA pieza para las dos vistas. */
+.boton {
+  align-self: flex-start;
+  margin-top: 4px;
+  padding: 4px 8px;
+  border: 0.5px solid var(--dsw-alias-border-l2);
+  border-radius: 8px;
+  background: var(--dsw-alias-bg-layer-2);
+  color: var(--dsw-alias-label-primary);
+  font: inherit;
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.boton:hover {
+  background: var(--dsw-alias-interactive-bg-hover);
+}
+
+.panel {
+  margin: 8px 0 0;
+  padding: 10px 12px;
+  border: 0.5px solid var(--dsw-alias-border-l2);
+  border-left: 2px solid var(--xonecode-cian);
+  border-radius: 10px;
+  background: var(--dsw-alias-bg-layer-1);
+}
+
+.nota {
+  margin: 0 0 8px;
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.motivo {
+  margin: 0 0 6px;
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 11px;
+}
+
+.ficheros {
+  margin: 0 0 6px;
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 11px;
+}
+
+.ficheros p {
+  margin: 0 0 2px;
+}
+
+.listaDeFicheros {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.listaDeFicheros code {
+  color: var(--dsw-alias-label-secondary);
+  font-family: var(--ds-font-family-code);
+  font-size: 11px;
+}
+
+/* El transcript lleva scroll PROPIO y tope de alto: un turno largo empujaría el resto de la
+   columna fuera de la pantalla, que es donde está lo accionable — la misma regla que la
+   lista de simuladores de «Tu equipo». */
+.transcript {
+  max-height: 340px;
+  overflow-y: auto;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.usuario,
+.asistente {
+  margin: 0;
+  color: var(--dsw-alias-label-primary);
+  font-size: 12px;
+  line-height: 1.55;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.usuario {
+  font-weight: 600;
+}
+
+/* Paisaje, no conversación: el pulso del agente en gris y en una línea, igual que en el
+   chat. */
+.pulso,
+.sistema {
+  margin: 0;
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 11px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.pulso {
+  font-family: var(--ds-font-family-code);
+}
+
+.razonamiento {
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 11px;
+}
+
+.razonamiento > summary {
+  cursor: pointer;
+}
+
+.razonamientoTexto {
+  margin: 4px 0 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.error {
+  margin: 0;
+  color: var(--dsw-alias-state-error-primary);
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+.artefacto {
+  margin: 0;
+  color: var(--dsw-alias-label-secondary);
+  font-size: 11px;
+}
+
+.vacio {
+  margin: 0;
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 12px;
+}

@@ -1,4 +1,4 @@
-import { readdirSync, lstatSync, statSync, existsSync, readFileSync } from "node:fs";
+import { readdirSync, lstatSync, statSync, existsSync, readFileSync, realpathSync } from "node:fs";
 import { join, sep, resolve } from "node:path";
 import { randomUUID } from "node:crypto";
 import { HumanMessage, ToolMessage, type AIMessage, type BaseMessage } from "@langchain/core/messages";
@@ -20,10 +20,12 @@ import { cargarAgentes } from "./agentesEnDisco.js";
 import { crearSubagenteExterno } from "./subagenteExterno.js";
 import type { PendienteDeAprobacion } from "../core/events.js";
 import type { LineaDeDiff } from "../core/diff.js";
+import { rutaRealDeVirtual } from "../core/rutaVirtual.js";
 import type { Piel } from "../core/turno.js";
 import { Bitacora } from "../core/bitacora.js";
 import { correrTurno } from "../core/turno.js";
 import type { ModelosPort, SkillsPort, VerifierPort } from "../core/ports.js";
+import type { EstadoDeVerificador, ResultadoDeTurno } from "../core/entrega.js";
 import type { DomainEvent, HallazgoDelTurno } from "../core/events.js";
 import { relative, resolve as resolverRuta } from "node:path";
 import type { Entorno } from "./entorno.js";
@@ -44,16 +46,28 @@ import { crearDiagnosticoDeTools } from "./diagnosticoDeTools.js";
  * el turno 3 reportaría también lo que escribió el turno 1.
  */
 export interface SesionReal {
-  /** Un turno. Devuelve la bitácora y los cambios que dejó en el proyecto. */
+  /**
+   * Un turno. Devuelve la bitácora, los cambios que dejó en el proyecto y **lo que hay que
+   * saber para decidir si el trabajo se puede dar por bueno** (`ResultadoDeTurno`).
+   *
+   * Esas tres últimas cosas —cómo acabó el verificador, cuántas escrituras quedaron sin
+   * aplicar y los hallazgos— no estaban, y su ausencia era una deuda MEDIDA: con las
+   * tareas de fondo aplicando escrituras solas, un turno se cortó por el tope de rondas
+   * con cuatro ficheros escritos, una escritura abandonada, el verificador sin correr ni
+   * una vez… y el kanban diciendo «terminada». La bitácora no sirve para esto: `corrio`
+   * responde si un nodo pasó, no con qué veredicto.
+   */
   turno(
     peticion: string,
     piel: Piel
-  ): Promise<{
-    bitacora: Bitacora;
-    cambios: Cambio[];
-    /** Se agotó `MAX_APPROVAL_ROUNDS` con aprobaciones sin resolver. */
-    cortadoPorTope: boolean;
-  }>;
+  ): Promise<
+    ResultadoDeTurno & {
+      bitacora: Bitacora;
+      cambios: Cambio[];
+      /** Se agotó el tope de rondas con aprobaciones sin resolver. */
+      cortadoPorTope: boolean;
+    }
+  >;
   /** Rehace el agente con modelos nuevos, CONSERVANDO el hilo. Para `/modelo`. */
   cambiarModelos(modelos: ModelosPort): Promise<void>;
   /** Abre un hilo nuevo. Para `/nuevo`. */
@@ -257,6 +271,17 @@ export async function abrirSesionReal(opciones: {
    */
   artefactos?: string;
   /**
+   * La carpeta de los ADJUNTOS de la tarea — lo que el agente ve como `/adjuntos/`, de solo
+   * lectura (`core/adjuntos.ts`).
+   *
+   * Entra por parámetro y no se deduce, por lo mismo que `artefactos`: quien sabe si hay
+   * adjuntos es quien abrió la consola, y aquí solo hay una raíz de proyecto. Ausente en
+   * toda sesión de persona y en toda tarea sin adjuntos — y entonces **el campo no se pone**,
+   * porque una cadena vacía montaría el cwd del proceso como si fueran los adjuntos de
+   * alguien.
+   */
+  adjuntos?: string;
+  /**
    * ¿Las escrituras de ESTE proyecto se aplican sin pedir aprobación?
    *
    * Es una FUNCIÓN y no un booleano porque se pregunta en cada ronda: el ajuste se cambia
@@ -268,12 +293,39 @@ export async function abrirSesionReal(opciones: {
    * está conectado a CloudStudio, y hay alguien delante) y ninguna se puede comprobar aquí.
    */
   sinAprobacion?: () => boolean;
+  /**
+   * Cuántas RONDAS de aprobación admite un turno. Ausente = `MAX_APPROVAL_ROUNDS`, el de
+   * siempre.
+   *
+   * Existe porque el de la persona no vale para una tarea de fondo, y las dos mitades del
+   * argumento importan. `MAX_APPROVAL_ROUNDS` se dimensionó para alguien pulsando —«te lo
+   * he preguntado cinco veces, para»—; en una tarea autónoma una ronda no es una pregunta,
+   * es una TANDA de escrituras que se autorizan solas, y cinco tandas se agotan en un
+   * encargo mediano: medido, un turno se cortó con cuatro ficheros escritos y una escritura
+   * abandonada. Y quitarlo no vale, por el mismo argumento que el tope propio de los
+   * artefactos: cada pasada es una llamada al modelo y aquí no hay humano que frene el
+   * bucle.
+   *
+   * Gobierna los TRES sitios que miraban esa constante —el corte por rondas, el corte por
+   * tandas automáticas y la PREDICCIÓN de si la pasada cierra el turno—, y tiene que
+   * gobernar los tres: si la predicción divergiera del corte, un turno se quedaría sin
+   * `fin` o cerraría dos veces.
+   */
+  topeDeRondas?: number;
 }): Promise<SesionReal> {
   const { raiz, entorno } = opciones;
 
   // Persiste fuera del checkpointer (que es solo de la sesión), pero no sobrescribe nunca
   // una memoria ya creada por el usuario o por otra sesión.
   asegurarMemoriaDeProyecto(raiz);
+
+  /**
+   * El tope de rondas de ESTA sesión, resuelto una vez. Ver `OpcionesDeSesion.topeDeRondas`:
+   * gobierna los tres sitios que antes miraban `MAX_APPROVAL_ROUNDS` a pelo, y ninguno de
+   * los tres puede quedarse fuera — la predicción de cierre tiene que usar exactamente el
+   * mismo número que el corte, o un turno se queda sin `fin` o cierra dos veces.
+   */
+  const topeDeRondas = opciones.topeDeRondas ?? MAX_APPROVAL_ROUNDS;
 
   const checkpointer = opciones.checkpointer ?? new MemorySaver();
   const tracker = createTokenTracker();
@@ -311,6 +363,8 @@ export async function abrirSesionReal(opciones: {
         carpeta: carpetaDeArtefactos,
         alEscribir: (a) => artefactosDeLaPasada.push(a),
       },
+      // Ausente es «no hay», no una carpeta vacía: ver `OpcionesDeSesion.adjuntos`.
+      ...(opciones.adjuntos === undefined ? {} : { adjuntos: opciones.adjuntos }),
     });
 
   let agente = await construir();
@@ -324,6 +378,27 @@ export async function abrirSesionReal(opciones: {
    * —`write_file` lleva el contenido entero—, pero aprobar a ciegas es peor que no aprobar,
    * así que la ruta sí. Una sola llamada a `getState` para las dos cosas.
    */
+  /**
+   * El ANTES del diff de una aprobación, leído del disco con las dos barreras: la lexical de
+   * `rutaRealDeVirtual` y la recomprobación sobre el camino REAL. Un fichero que no existe
+   * —el caso normal de un fichero nuevo— y uno cuyo destino se sale del proyecto dan lo
+   * mismo: cadena vacía, que es el lado conservador. No se distinguen a propósito: por aquí
+   * no se informa de nada, y decir «ese enlace apunta fuera» exigiría un canal que este
+   * lector no tiene.
+   */
+  const leerElAntes = (ruta: string): string => {
+    const real = rutaRealDeVirtual(raiz, ruta);
+    if (real === undefined) return "";
+    try {
+      const raizReal = realpathSync(raiz);
+      const destino = realpathSync(real);
+      if (destino !== raizReal && !destino.startsWith(raizReal + sep)) return "";
+      return readFileSync(destino, "utf8");
+    } catch {
+      return "";
+    }
+  };
+
   const leerPendientes = async (): Promise<{
     lista: PendienteDeAprobacion[];
     ficheros: Map<string, string>;
@@ -338,16 +413,26 @@ export async function abrirSesionReal(opciones: {
     for (const c of crudos) {
       const f = ficheroDe(c);
       if (f) ficheros.set(c.id, f);
-      // El ANTES es el disco: el interrupt pausa ANTES de escribir. La ruta viene del
-      // backend, que es relativo a la raíz del proyecto — y si no está en el disco, el
-      // fichero es nuevo y su «antes» es la cadena vacía, no un error.
-      const vista = cambioDe(c, (ruta) => {
-        try {
-          return readFileSync(resolve(raiz, ruta), "utf8");
-        } catch {
-          return "";
-        }
-      });
+      // El ANTES es el disco: el interrupt pausa ANTES de escribir. Y si no está en el
+      // disco, el fichero es nuevo y su «antes» es la cadena vacía, no un error.
+      //
+      // La ruta viene del backend del agente, que va con `virtualMode: true`, así que llega
+      // ROOTEADA en el proyecto (`/app.xne`) — y esto decía «es relativa a la raíz» y
+      // resolvía con `resolve(raiz, ruta)`, que con una absoluta DESCARTA la base. Medido:
+      // con la forma rooteada el ANTES salía siempre vacío, así que un fichero EXISTENTE se
+      // enseñaba como nuevo y sus líneas quitadas no se veían — en el único momento en que
+      // una persona ve lo que el agente va a escribir antes de que exista. Pasó desapercibido
+      // porque el test que lo cubría usaba `"app.xne"` sin barra, que es la otra forma que
+      // también puede llegar. `rutaRealDeVirtual` acepta las dos y además contiene el `..`,
+      // que por aquí traía al diff el contenido de un fichero de FUERA del proyecto.
+      //
+      // Y la contención lexical NO basta sola: un enlace simbólico DENTRO del proyecto que
+      // apunte fuera la pasa —su sitio sí está dentro— y `readFileSync` lo sigue, así que el
+      // contenido de fuera acabaría igual en la pantalla de la aprobación. Lo que falla no es
+      // el sitio, es el DESTINO: la misma lección que `arbolDeProyecto.ts` ya pagó, y por eso
+      // se recomprueba sobre el camino REAL. `realpath` canonicaliza además las mayúsculas,
+      // que en APFS y en NTFS es la otra mitad del mismo agujero.
+      const vista = cambioDe(c, (ruta) => leerElAntes(ruta));
       if (vista) diffs.set(c.id, vista.lineas);
     }
     return { lista: crudos.map(aPendiente), ficheros, diffs };
@@ -362,7 +447,9 @@ export async function abrirSesionReal(opciones: {
   const turno = async (
     peticion: string,
     piel: Piel
-  ): Promise<{ bitacora: Bitacora; cambios: Cambio[]; cortadoPorTope: boolean }> => {
+  ): Promise<
+    ResultadoDeTurno & { bitacora: Bitacora; cambios: Cambio[]; cortadoPorTope: boolean }
+  > => {
     // Un turno sobre una sesión ya cerrada reviviría un hilo que su dueño soltó al cambiar
     // de proyecto. Falla en vez de trabajar en silencio sobre la raíz equivocada.
     if (cerrada) throw new Error("la sesión ya está cerrada");
@@ -400,6 +487,23 @@ export async function abrirSesionReal(opciones: {
      */
     let rondaEscribio = false;
     let motivoSinVerificar: string | undefined;
+    /**
+     * Cómo acabó el verificador en la pasada, y sus hallazgos.
+     *
+     * Viven aquí y no en la bitácora porque la bitácora responde a otra pregunta: `corrio`
+     * dice si un nodo pasó, no con qué veredicto —y de esto depende que una tarea se dé
+     * por terminada—. Se reinician en CADA ronda, como `rondaEscribio`: lo que vale es lo
+     * que dijo la última pasada, que es la que dejó el proyecto como está.
+     */
+    let veredicto: EstadoDeVerificador = "no-corrio";
+    let hallazgosDelTurno: HallazgoDelTurno[] = [];
+    /**
+     * Cuántos hallazgos quedaron FUERA del reparto. `undefined` mientras el verificador no
+     * haya corrido: ausente es «no se midió» y `0` es «no había ningún otro»
+     * (`core/entrega.ts#ResultadoDeTurno.preexistentes`). De aquí sale lo que le permite al
+     * juez de QA leer `hallazgos` por lo que es: una lista YA filtrada.
+     */
+    let preexistentesDelTurno: number | undefined;
     /** Si esta pasada cierra el turno. `false` = detrás viene otra ronda o un intento. */
     let cerrarRonda = true;
     /** Si tras esta pasada hay que lanzar un intento de reparación. */
@@ -449,7 +553,7 @@ export async function abrirSesionReal(opciones: {
         // ha agotado el tope de rondas— esta pasada NO es el final del turno y no cierra.
         // Son las mismas dos condiciones del `break` del bucle, y tienen que serlo: si
         // divergen, un turno se queda sin `fin` o cierra dos veces.
-        cerrarRonda = !(ronda < MAX_APPROVAL_ROUNDS && opciones.pedirAprobacion !== undefined);
+        cerrarRonda = !(ronda < topeDeRondas && opciones.pedirAprobacion !== undefined);
         return;
       }
       cerrarRonda = true;
@@ -458,7 +562,13 @@ export async function abrirSesionReal(opciones: {
         (c) => c.clase !== "borrado" && !c.ruta.startsWith(".xonecode/") && c.ruta !== ".xonecode"
       );
       rondaEscribio = cambios.length > 0;
-      if (!rondaEscribio) return;
+      if (!rondaEscribio) {
+        // No hay nada que verificar, y eso NO es un verde. Se DICE, porque este motivo
+        // acaba en la tarjeta de una tarea aparcada y «no se sabe» tiene que distinguirse
+        // de «el simulador no está» y de «el turno se cortó antes de llegar».
+        motivoSinVerificar = "el turno no escribió ningún fichero del proyecto";
+        return;
+      }
 
       if (opciones.verifier === undefined) {
         motivoSinVerificar = "esta ejecución no tiene verificador";
@@ -496,6 +606,14 @@ export async function abrirSesionReal(opciones: {
         ...(h.linea === undefined ? {} : { linea: h.linea }),
       }));
 
+      // Lo mismo que va al evento, apuntado para el retorno: NO se recalcula ni se
+      // re-parsea de la bitácora, que es cómo dos copias de una cuenta acaban discrepando.
+      veredicto = errores === 0 ? "verde" : "rojo";
+      hallazgosDelTurno = hallazgos;
+      // El reparto entero, no solo su mitad. Aquí sí se apunta el cero: el evento lo omite
+      // porque una línea de consola que dice «y 0 más» no dice nada, pero quien recibe
+      // `hallazgos` necesita saber que la lista está filtrada — y con cero también.
+      preexistentesDelTurno = preexistentes;
       yield {
         tipo: "verificacion",
         verde: errores === 0,
@@ -580,6 +698,9 @@ export async function abrirSesionReal(opciones: {
       ronda += 1;
       rondaEscribio = false;
       motivoSinVerificar = undefined;
+      veredicto = "no-corrio";
+      hallazgosDelTurno = [];
+      preexistentesDelTurno = undefined;
       cerrarRonda = true;
       const aborto = new AbortController();
       cancelarEnCurso = () => aborto.abort(new Error("turno cancelado por el usuario"));
@@ -677,12 +798,12 @@ export async function abrirSesionReal(opciones: {
         // al otro—. Al agotarse se para y se dice, con `cortadoPorTope` puesto: quedaron
         // escrituras sin aplicar, que es lo que ese código de salida significa.
         tandasAutomaticas += 1;
-        if (tandasAutomaticas > MAX_APPROVAL_ROUNDS) {
+        if (tandasAutomaticas > topeDeRondas) {
           // El texto dice de QUÉ tandas habla: con «sin aprobación» puesto, por aquí pasan
           // también las escrituras del proyecto, y llamarlas «artefactos» sería mentir en
           // el único mensaje que explica por qué el turno se cortó.
           const que = todoAutomatico ? "escrituras sin aprobación" : "artefactos";
-          piel.linea(`\n⚠ tope de ${MAX_APPROVAL_ROUNDS} tandas de ${que} agotado en este turno.`);
+          piel.linea(`\n⚠ tope de ${topeDeRondas} tandas de ${que} agotado en este turno.`);
           piel.linea(`  quedaban ${lista.length} sin escribir, y NO se han aplicado.`);
           cortadoPorTope = true;
           break;
@@ -695,8 +816,8 @@ export async function abrirSesionReal(opciones: {
       // El tope existe porque un modelo que insiste tras cada rechazo convierte esto en un
       // ciclo automático de ~200k tokens por ronda (medido en da04). Sin resumir: nada se
       // aplica, pero el interrupt queda en el estado.
-      if (ronda >= MAX_APPROVAL_ROUNDS) {
-        piel.linea(`\n⚠ tope de ${MAX_APPROVAL_ROUNDS} rondas de aprobación agotado.`);
+      if (ronda >= topeDeRondas) {
+        piel.linea(`\n⚠ tope de ${topeDeRondas} rondas de aprobación agotado.`);
         piel.linea(`  quedaban ${humanos.length} sin resolver, y NO se han aplicado.`);
         cortadoPorTope = true;
         break;
@@ -729,10 +850,33 @@ export async function abrirSesionReal(opciones: {
 
     // El diff contra la foto de ESTE turno. Un turno que no tocó nada TIENE que verse igual.
     const cambios = await instantanea.cambios();
+    /**
+     * Las escrituras que quedaron esperando aprobación, MEDIDAS y no recordadas.
+     *
+     * Se le pregunta al estado del grafo una vez, aquí, en vez de apuntarlas en cada
+     * `break`: hay CUATRO salidas del bucle y tres de ellas usan variables distintas
+     * (`lista.length` en el tope de tandas, `humanos.length` en el de rondas y en el «no
+     * hay quién apruebe»), así que una contabilidad repartida es una contabilidad que
+     * deriva. Y no se deduce de `cortadoPorTope`: por «no hay quién apruebe» se sale sin
+     * ponerlo y también quedan escrituras colgando.
+     */
+    const pendientes = (await leerPendientes()).lista.length;
     // `cortadoPorTope` viaja en el retorno y no en la bitácora porque es lo que decide el
     // CÓDIGO DE SALIDA de quien invoca: un turno que se quedó con escrituras sin resolver
-    // no es un éxito, y CI no puede leerlo como tal.
-    return { bitacora: bitacora!, cambios, cortadoPorTope };
+    // no es un éxito, y CI no puede leerlo como tal. Y con él viaja ahora lo que decide si
+    // una TAREA se puede dar por terminada (`core/entrega.ts`), que hasta ahora se tiraba.
+    return {
+      bitacora: bitacora!,
+      cambios,
+      cortadoPorTope,
+      verificador: veredicto,
+      pendientes,
+      // Ausente y vacío: sin hallazgos el campo no se pone, para que quien lo lea no
+      // confunda «no hubo» con «no se sabe».
+      ...(hallazgosDelTurno.length === 0 ? {} : { hallazgos: hallazgosDelTurno }),
+      ...(preexistentesDelTurno === undefined ? {} : { preexistentes: preexistentesDelTurno }),
+      ...(motivoSinVerificar === undefined ? {} : { motivoSinVerificar }),
+    };
   };
 
   return {

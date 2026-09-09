@@ -7,6 +7,7 @@ import {
   StubVerifier,
   VerifierGuionizado,
   CatalogoModelosEnMemoria,
+  AumentadorGuionizado,
   type McpPort,
   type VerifierPort,
 } from "./ports.js";
@@ -18,6 +19,7 @@ describe("la marca de doble", () => {
     expect(esDoble(new ModeloGuionizado())).toBe(true);
     expect(esDoble(new StubVerifier())).toBe(true);
     expect(esDoble(new VerifierGuionizado([]))).toBe(true);
+    expect(esDoble(new AumentadorGuionizado())).toBe(true);
   });
 
   it("una implementación real NO la lleva, y no puede fingirla con un campo", () => {
@@ -78,5 +80,28 @@ describe("VerifierGuionizado", () => {
     expect((await v.verificar()).verde).toBe(false);
     expect((await v.verificar()).verde).toBe(true);
     expect((await v.verificar()).verde).toBe(true);
+  });
+});
+
+describe("AumentadorGuionizado", () => {
+  const PETICION = {
+    texto: "Arregla el login",
+    proyecto: { nombre: "AppDemo", raiz: "/w/AppDemo" },
+    adjuntos: [],
+  };
+
+  it("se DICE que es de pega en el propio encargo", async () => {
+    // La misma disciplina que `McpVacio` y `SkillsEnMemoria`: un doble que produce texto que
+    // una persona va a leer —y que además se le manda al agente— tiene que decir que no lo
+    // escribió ningún modelo. Aquí el precio de callarlo es alto: el encargo se enseña en la
+    // ventana para editarlo, así que sin la marca parecería una redacción de verdad.
+    const encargo = await new AumentadorGuionizado().augmentar(PETICION);
+    expect(encargo).toContain("[DOBLE]");
+    expect(encargo).toContain("Arregla el login");
+  });
+
+  it("la plantilla entra por parámetro: un test no necesita la marca de por medio", async () => {
+    const a = new AumentadorGuionizado((t) => `ENCARGO: ${t}`);
+    expect(await a.augmentar(PETICION)).toBe("ENCARGO: Arregla el login");
   });
 });

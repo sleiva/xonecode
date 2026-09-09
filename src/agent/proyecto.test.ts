@@ -4,6 +4,7 @@ import { mkdtempSync, existsSync, readdirSync, readFileSync, writeFileSync } fro
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createFilesystemMiddleware } from "deepagents";
+import { permisosDe } from "./perfiles.js";
 import type { Artefacto } from "../core/artefactos.js";
 import { RUTA_MEMORIA_VIRTUAL } from "./memoriaDeProyecto.js";
 
@@ -357,5 +358,93 @@ describe("la costura con deepagents: el rechazo llega como RESULTADO, no como ex
     const write = tools(raiz, ficheros).find((x) => x.name === "write_file")!;
     await write.invoke({ file_path: "/Clientes.xne", content: "<coll nuevo/>" });
     expect(readFileSync(join(raiz, "Clientes.xne"), "utf8")).toBe("<coll nuevo/>");
+  });
+});
+
+/**
+ * `/adjuntos/`: montada de verdad, y de SOLO lectura de verdad.
+ *
+ * Se mide con el backend REAL compuesto y con el `createFilesystemMiddleware` de la
+ * librería, no con dobles, y por el mismo motivo que el describe de arriba: la promesa
+ * («el agente puede leer los adjuntos y no puede tocarlos») no la cumple ninguna de las dos
+ * piezas por separado — la lectura la da el montaje del `CompositeBackend` y la denegación
+ * la aplica el middleware sobre `permisosDe`. Comprobar cada mitad con un doble dejaría en
+ * verde el día en que una de las dos deje de estar puesta.
+ */
+describe("`/adjuntos/`: se lee, no se escribe, y con las piezas de verdad", () => {
+  function montado(conAdjuntos = true) {
+    const raiz = mkdtempSync(join(tmpdir(), "xonecode-adj-proy-"));
+    writeFileSync(join(raiz, "app.xml"), "<app/>");
+    const carpeta = mkdtempSync(join(tmpdir(), "xonecode-adj-"));
+    writeFileSync(join(carpeta, "captura.txt"), "esto lo adjuntó una persona");
+    const backend = backendDeAgente({
+      raiz,
+      ficheros: new Set(["/app.xml"]),
+      ...(conAdjuntos ? { adjuntos: carpeta } : {}),
+    });
+    // `permisosDe` de un perfil que ESCRIBE: el caso peligroso. Uno de solo lectura lo
+    // deniega todo por `/**` y no probaría nada de esta regla.
+    const middleware = createFilesystemMiddleware({
+      backend,
+      permissions: permisosDe({ nombre: "dev", soloLectura: false }),
+    } as never) as unknown as { tools: { name: string; invoke: (e: unknown) => Promise<unknown> }[] };
+    const tool = (nombre: string) => middleware.tools.find((t) => t.name === nombre)!;
+    return { raiz, carpeta, tool };
+  }
+
+  /** El texto de lo que contesta una tool, venga como cadena o como `ToolMessage`. La
+   *  forma cambia según quién rechace —la guarda del backend devuelve `{error}` y el
+   *  middleware de permisos devuelve un mensaje con `status: "error"`—, y lo que se afirma
+   *  aquí es qué se le dice al modelo, no en qué envoltorio. */
+  const texto = (r: unknown): string =>
+    typeof r === "string" ? r : JSON.stringify((r as { content?: unknown }).content ?? r);
+
+  it("un adjunto se LEE por su ruta virtual", async () => {
+    const { tool } = montado();
+    const leido = texto(await tool("read_file").invoke({ file_path: "/adjuntos/captura.txt", offset: 0, limit: 50 }));
+    expect(leido).toContain("esto lo adjuntó una persona");
+  });
+
+  it("y se listan: sin `ls` el agente no sabe qué le adjuntaron", async () => {
+    const { tool } = montado();
+    expect(texto(await tool("ls").invoke({ path: "/adjuntos/" }))).toContain("captura.txt");
+  });
+
+  it("escribir ahí se RECHAZA, y el fichero no aparece", async () => {
+    const { carpeta, tool } = montado();
+    const r = texto(await tool("write_file").invoke({ file_path: "/adjuntos/pwn.txt", content: "hola" }));
+    expect(r).toMatch(/permission denied|denied|no se puede/i);
+    expect(existsSync(join(carpeta, "pwn.txt"))).toBe(false);
+  });
+
+  it("y editar uno también: son de la persona que los adjuntó", async () => {
+    const { carpeta, tool } = montado();
+    const r = texto(
+      await tool("edit_file").invoke({
+        file_path: "/adjuntos/captura.txt",
+        old_string: "una persona",
+        new_string: "el agente",
+      })
+    );
+    expect(r).toMatch(/permission denied|denied|no se puede/i);
+    expect(readFileSync(join(carpeta, "captura.txt"), "utf8")).toBe("esto lo adjuntó una persona");
+  });
+
+  it("sin carpeta montada, `/adjuntos/x` NO se convierte en un fichero del proyecto", async () => {
+    // El caso que hace que la denegación de `permisosDe` tenga que ser incondicional:
+    // medido, sin ella esta escritura creaba `<raiz>/adjuntos/x.txt`.
+    const { raiz, tool } = montado(false);
+    const r = texto(await tool("write_file").invoke({ file_path: "/adjuntos/x.txt", content: "hola" }));
+    expect(r).toMatch(/permission denied|denied|no se puede/i);
+    expect(existsSync(join(raiz, "adjuntos"))).toBe(false);
+  });
+
+  it("sin `adjuntos` no se monta nada: la carpeta no se inventa", () => {
+    const raiz = mkdtempSync(join(tmpdir(), "xonecode-adj-sin-"));
+    backendDeAgente({ raiz, ficheros: new Set() });
+    // La misma regla que `/artefactos/`: `FilesystemBackend` no exige que su raíz exista y
+    // el `write` la crea, así que crearla al montar dejaría un `adjuntos/` vacío en cada
+    // tarea que no adjunta nada — que son casi todas.
+    expect(existsSync(join(raiz, "adjuntos"))).toBe(false);
   });
 });

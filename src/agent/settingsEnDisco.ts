@@ -24,7 +24,13 @@ import { randomUUID } from "node:crypto";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import type { Aviso } from "../core/config.js";
-import { AjustesDeDispositivos, Entorno, Settings, validarSettings } from "../core/settings.js";
+import {
+  AjustesDeDispositivos,
+  Entorno,
+  Settings,
+  TOPE_DE_CONCURRENCIA_DE_TAREAS,
+  validarSettings,
+} from "../core/settings.js";
 
 const NOMBRE_CARPETA = ".xonecode";
 
@@ -181,6 +187,26 @@ export function guardarSinAprobacion(
     Object.keys(siguiente).length === 0
       ? Object.fromEntries(Object.entries(crudo).filter(([k]) => k !== "sinAprobacion"))
       : { ...crudo, sinAprobacion: siguiente };
+  escribirAtomico(ruta, JSON.stringify(fusionado, null, 2) + "\n");
+  return { ruta };
+}
+
+/**
+ * Guarda el tope de concurrencia de la cola de tareas, sin tocar nada más del fichero.
+ *
+ * Se acota a `0..TOPE_DE_CONCURRENCIA_DE_TAREAS` aquí y no solo en el cliente: el selector
+ * de Ajustes ya lo acota antes de mandarlo, pero `settings.json` no se fía de quien
+ * escribe — es el mismo criterio que `validarConcurrenciaDeTareas` aplica al LEER, aplicado
+ * ahora al escribir. Trunca en vez de rechazar: un decimal o un valor fuera de rango es un
+ * fallo de quien llama y no una razón para dejar el fichero como estaba, al contrario que
+ * `guardarSinAprobacion` (ahí una clave mal formada se descarta entera porque hay más de
+ * una y una escribe sola no puede aplastar a las demás; aquí solo hay un valor).
+ */
+export function guardarConcurrenciaDeTareas(casa: string | undefined, concurrencia: number): { ruta: string } {
+  const ruta = rutaSettings(casa ?? homedir());
+  const crudo = leerCrudoOAbortar(ruta);
+  const acotado = Math.max(0, Math.min(TOPE_DE_CONCURRENCIA_DE_TAREAS, Math.trunc(concurrencia)));
+  const fusionado = { ...crudo, concurrenciaDeTareas: acotado };
   escribirAtomico(ruta, JSON.stringify(fusionado, null, 2) + "\n");
   return { ruta };
 }

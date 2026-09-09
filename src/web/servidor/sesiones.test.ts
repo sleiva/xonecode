@@ -11,6 +11,7 @@ import { tituloDesde,
   renombrarSesion,
   elegirDispositivo,
   IndiceDeSesionesRoto,
+  marcarTareaDeSesion,
 } from "./sesiones.js";
 
 const proyecto = () => mkdtempSync(join(tmpdir(), "xonecode-proyecto-"));
@@ -70,6 +71,58 @@ describe("sesiones por proyecto", () => {
     expect(reabrirSesion(raiz, id).actos).toEqual([{ tipo: "usuario", texto: "uno" }]);
     // Y el indice.json roto se queda EXACTAMENTE como estaba: nadie lo sobrescribió con [].
     expect(readFileSync(rutaIndice, "utf8")).toBe(indiceRoto);
+  });
+});
+
+describe("de quién es la sesión: persona o tarea", () => {
+  it("la de una tarea queda MARCADA con su id, y sobrevive al índice", () => {
+    // Medido en el proyecto real del usuario: la sesión de la tarea de ayer está en el
+    // índice como una más y con el título VACÍO —una tarea no manda ningún acto de
+    // `usuario`, que es de donde sale el título—, así que en la barra es una fila en
+    // blanco indistinguible de una conversación. Sin esta marca no hay forma de saberlo:
+    // cruzarla con la cola no vale, porque la cola es OPCIONAL en las dos capas
+    // (`OpcionesDeMontaje.colaDeTareas` y el mensaje `tareas`) y un proceso que no corre
+    // tareas pintaría todas las sesiones de tarea como conversaciones, en silencio.
+    const raiz = proyecto();
+    crearSesion(raiz, "s-tarea", "669c9b79");
+    expect(listarSesiones(raiz)[0].tarea).toBe("669c9b79");
+  });
+
+  it("la de una persona no lleva marca: ausente es «no consta», no «es un chat»", () => {
+    // La distinción importa por las sesiones de ANTES de que la marca existiera: se leen
+    // igual que una conversación porque pintar liso es lo conservador, no porque conste
+    // que lo sean. Misma forma que `compartido` ausente en un proyecto.
+    const raiz = proyecto();
+    crearSesion(raiz, "s-humana");
+    expect(listarSesiones(raiz)[0].tarea).toBeUndefined();
+  });
+});
+
+describe("marcarTareaDeSesion: la siembra de las sesiones de tarea que ya existían", () => {
+  it("marca la entrada que no lo estaba y dice que la tocó", () => {
+    const raiz = proyecto();
+    crearSesion(raiz, "s9");
+    expect(marcarTareaDeSesion(raiz, "s9", "669c9b79")).toBe(true);
+    expect(listarSesiones(raiz)[0].tarea).toBe("669c9b79");
+  });
+
+  it("es MONOTÓNICA: no pisa una marca puesta ni la quita", () => {
+    // La siembra corre en cada arranque del corredor. Solo puede AÑADIR: así no hay forma
+    // de que convierta una sesión de tarea en una conversación, que es el único fallo
+    // abierto posible por aquí.
+    const raiz = proyecto();
+    crearSesion(raiz, "s9", "la-de-verdad");
+    expect(marcarTareaDeSesion(raiz, "s9", "otra")).toBe(false);
+    expect(listarSesiones(raiz)[0].tarea).toBe("la-de-verdad");
+  });
+
+  it("una sesión que no está no se inventa", () => {
+    // La cola de tareas vive en `~/.xonecode/tareas` y el índice en el proyecto: una tarea
+    // puede nombrar una sesión que alguien borró, y crear la entrada la resucitaría en la
+    // barra apuntando a un `.jsonl` que ya no existe.
+    const raiz = proyecto();
+    expect(marcarTareaDeSesion(raiz, "fantasma", "t1")).toBe(false);
+    expect(listarSesiones(raiz)).toEqual([]);
   });
 });
 

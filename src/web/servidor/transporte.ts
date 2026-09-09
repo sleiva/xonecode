@@ -14,6 +14,7 @@
 import type { Herramienta, InformeDeDispositivos, NombreDeHerramienta } from "../../core/dispositivos.js";
 import type { AjustesDeDispositivos } from "../../core/settings.js";
 import type { Acto } from "../../core/actos.js";
+import type { Tarea } from "../../core/tareas.js";
 import type { PendienteDeAprobacion } from "../../core/events.js";
 import type { LineaDeDiff } from "../../core/diff.js";
 import type { SelectorDeConsola } from "../../cli/consola.js";
@@ -111,6 +112,52 @@ export type MensajeAlCliente =
    * un agente que no aparece y nadie dice por qué se lee como que la aplicación lo perdió.
    */
   | { clase: "agentes"; agentes: AgenteDelCable[]; problemas: string[] }
+  /**
+   * La cola de tareas entera. Va a TODOS los clientes, como la foto de la máquina y por lo
+   * mismo: la cola es de la máquina. `corriendoAqui` es falso en el segundo proceso, y es lo
+   * que deja decir que este kanban no avanza.
+   *
+   * **Y `ejecutaOtroProceso` es la otra mitad, porque «no soy yo» y «no hay nadie»
+   * significan lo contrario**: el primero manda a esperar —una tarea creada aquí arrancará
+   * cuando ese proceso mire la cola— y el segundo dice que no va a pasar nada hasta que
+   * alguna consola tome el relevo. Con un solo booleano, el aviso mandaba a esperar a un
+   * proceso que puede no existir. **Ausente = no se sabe** (el cerrojo ni se pudo mirar, o
+   * esta ejecución no tiene corredor), y entonces no se afirma ninguna de las dos.
+   * **El pid no viaja**: es un dato de la máquina y no le dice nada a quien lo lee.
+   */
+  | {
+      clase: "tareas";
+      lista: TareaDelCable[];
+      concurrencia: number;
+      corriendoAqui: boolean;
+      ejecutaOtroProceso?: boolean;
+    }
+  /**
+   * Cómo fue la última augmentación pedida (`{clase:"tarea", accion:"augmentar"}`): el
+   * encargo que propone el modelo, o por qué no se pudo. Nunca los dos a la vez.
+   */
+  | { clase: "tarea"; accion: "augmentado"; encargo: string }
+  | { clase: "tarea"; accion: "augmentado"; error: string }
+  /**
+   * Un trozo del transcript de la sesión de una TAREA que alguien está mirando en vivo.
+   *
+   * **No es un segundo registro** (decisión 3 del diseño): son los MISMOS actos que se
+   * guardan en el `.jsonl` de esa sesión, los mismos que se leen al abrirla después. La
+   * lista sale de los actos y nunca del disco, igual que la de artefactos.
+   *
+   * Va SOLO al cliente que lo pidió y no a todos: el transcript de una tarea no puede
+   * aparecer en el chat de quien está trabajando en otra cosa. Y lleva el `tarea` delante
+   * porque por el mismo cable puede llegar el transcript de la sesión propia: sin la
+   * etiqueta, los actos de una tarea de fondo se mezclarían con la conversación.
+   *
+   * Los tres `via` son los tres mensajes del transcript de siempre, con otro nombre:
+   * `todos` es la reemisión entera (al empezar a mirar y cuando el servidor reemite),
+   * `alta` un acto nuevo al final, y `sustitucion` el último que cambió (el cierre de una
+   * racha de tools sustituye a su apertura). `actos` es SIEMPRE una lista: con `alta` y
+   * `sustitucion`, de un solo elemento — un campo opcional por cada forma habría sido un
+   * «ausente no es vacío» de más en la lista blanca del store.
+   */
+  | { clase: "mirada"; tarea: string; via: "todos" | "alta" | "sustitucion"; actos: Acto[] }
   /**
    * Qué hay en la MÁQUINA para probar la app: el sistema, las herramientas de Android e
    * iOS (adb, emulator, xcrun/simctl, devicectl) con su estado, y a qué dispositivos y
@@ -269,6 +316,25 @@ export type MensajeAlCliente =
        */
       sinAprobacion?: boolean;
       /**
+       * Lo que YA estaba sin commitear en el proyecto cuando se abrió esta consola
+       * (`agent/gitSync.ts#trabajoSinCommitear`, medido en el instante de abrir).
+       *
+       * Ausente = no hay nada que decir, y son las tres respuestas que se callan a
+       * propósito: el árbol estaba limpio, no hay git con qué mirar (todo proyecto
+       * OFFLINE), o la medida falló. Ninguna de las tres es un aviso.
+       *
+       * Va la lista y no un número: quien lo lee tiene que poder reconocer si eso es suyo,
+       * de otra sesión o de una tarea, y un contador a secas es el aviso que enseña a
+       * ignorar los avisos. `ficheros` viene ACOTADA —el alta se reemite en los dos flancos
+       * de cada turno y la frase no puede llevar trescientos nombres— y `total` es la cifra
+       * entera, que es lo que impide leer los que caben como si fueran todos.
+       *
+       * La medida es del instante de ABRIR y no cambia con los reanuncios, a propósito: así
+       * no puede contar como «de otro» lo que esta misma sesión —o esta tarea— acabe de
+       * escribir.
+       */
+      trabajoAlAbrir?: { ficheros: string[]; total: number };
+      /**
        * De qué entorno son los `proyectos` de este mensaje. Ausente = todavía de ninguno
        * (nadie ha elegido y no había ninguno registrado que poblar). El cliente lo NECESITA
        * para no tener que asumir «el primero de la lista», que es lo que hacía y era una
@@ -294,7 +360,26 @@ export type MensajeAlCliente =
          * compartió es un dato de una persona que esta pantalla no necesita.
          */
         compartido?: boolean;
-        sesiones?: { id: string; titulo: string }[];
+        sesiones?: {
+          id: string;
+          titulo: string;
+          /**
+           * Cuándo se tocó por última vez, en ISO. Es lo que ordena la lista y lo que la
+           * barra pinta a la derecha de cada fila. Ausente = el índice no lo dice (una
+           * entrada corrupta): la fila se pinta sin sello y se ordena la última.
+           */
+          ultimoTurno?: string;
+          /**
+           * Esta conversación la abrió una TAREA de fondo, no una persona
+           * (`EntradaIndice.tarea`). Viaja un booleano y no el id: la fila lleva una marca
+           * y no el nombre de la tarea, así que el id se queda en el host.
+           *
+           * **Ausente es «no consta», no «es un chat»**: no la lleva ninguna sesión
+           * anterior a esta marca. Se pinta liso porque liso es lo conservador, no porque
+           * conste que sea de una persona — igual que `compartido` en un proyecto.
+           */
+          deTarea?: true;
+        }[];
         /** La copia local YA existe: se puede abrir sin bajar nada ni preguntar rama. */
         local?: boolean;
       }[];
@@ -388,6 +473,118 @@ export interface FicheroDelProyecto {
   /** La imagen entera, si cupo en el tope. Nunca recortada: media imagen no se abre. */
   base64?: string;
   error?: string;
+}
+
+/**
+ * Una tarea tal como viaja. **Sin la raíz del proyecto**: viajan su id y su nombre, que es
+ * lo que la interfaz necesita — la ruta se queda en el host, igual que `Herramienta.ruta`.
+ * Redeclarada en `apps/web/src/tipos.ts`.
+ */
+export interface TareaDelCable {
+  id: string;
+  proyecto: string;
+  proyectoNombre: string;
+  titulo: string;
+  peticion: string;
+  encargo: string;
+  adjuntos: { nombre: string; bytes: number; mime?: string }[];
+  estado: "nuevo" | "en-proceso" | "requiere-atencion" | "terminada";
+  motivo?: string;
+  sesion?: string;
+  creada: string;
+  empezada?: string;
+  acabada?: string;
+  /**
+   * Lo que la tarea AUTORIZÓ escribir sin que nadie lo aprobara, con ruta relativa al
+   * proyecto (`core/tareas.ts#Tarea.autorizadas`). **No es lo mismo que lo que cambió en el
+   * disco** —una ruta que las guardas de sitio rechazan sale aquí sin haberse escrito—: la
+   * verdad sobre el disco la tiene la pestaña Revisión, con la ref de esta `sesion`. Ausente
+   * = no consta (la tarea no llegó a correr un turno); `[]` = corrió y no autorizó ninguna.
+   */
+  autorizadas?: string[];
+  /**
+   * El historial de lo que el desarrollador contestó mientras la tarea esperaba feedback
+   * (`core/tareas.ts#Tarea.feedback`). Ausente = nunca se le pidió nada. `consumido` dice
+   * si ya se le mandó al agente en un turno.
+   */
+  feedback?: { texto: string; creado: string; consumido: boolean }[];
+  /**
+   * El veredicto del juez de QA (`core/entrega.ts#VeredictoDeTarea`), y con él la
+   * SALVEDAD: con qué condición de menos se entregó.
+   *
+   * **Sin esto, «Terminada» no distingue tres cosas distintas** —F1 de la revisión final—:
+   * que el juez la aprobó con el verificador en verde, que se entregó SIN NADA que
+   * verificar (una tarea de solo lectura: la salvedad), y —con `terminadaAMano`— que la dio
+   * por buena una persona. El campo se guardaba en el índice de tareas desde que existe la
+   * puerta de entrega y se quedaba en el host: la mitad del contrato en `core/` y en disco,
+   * y la mitad que una persona lee sin cablear.
+   *
+   * **Y viaja completo porque no puede llevar nada más que texto para leer.** Medido en
+   * `agent/juezDeTarea.ts#promptDelJuez`: el juez recibe el encargo, las rutas RELATIVAS de
+   * lo autorizado y los hallazgos del verificador (código, fichero relativo, línea,
+   * mensaje) — no hay un solo `readFile` en ese módulo, así que su prosa no puede citar el
+   * contenido de un fichero ni una ruta de la máquina. El `resumen` ya cruzaba el cable de
+   * todos modos: para un veredicto rojo va dentro del `motivo`.
+   */
+  veredicto?: {
+    veredicto: "verde" | "rojo" | "indeterminado";
+    resumen: string;
+    hallazgos?: string[];
+    salvedad?: string;
+  };
+  /**
+   * La dio por buena una PERSONA («Dar por bueno»), no la puerta de entrega
+   * (`core/tareas.ts#Tarea.terminadaAMano`). Ausente = no consta.
+   */
+  terminadaAMano?: boolean;
+}
+
+/**
+ * Una `Tarea` del índice traducida a lo que viaja. **La raíz del proyecto se queda aquí.**
+ *
+ * **Vive en este fichero, exportada, y eso es el arreglo de F1.** Era una copia de campos a
+ * mano enterrada en el cierre de `montarRutas` (`arranque.ts`), a mil líneas del tipo que
+ * traduce y dentro de algo que todos sus tests doblan — o sea el patrón de fallo que
+ * `CLAUDE.md` documenta cinco veces en esta misma tanda: «si una regla de producción se
+ * compone dentro de algo que los tests simulan, esa regla no está probada: está escrita».
+ * `veredicto` se cayó aquí y en el store del cliente sin que nada se pusiera rojo. Ahora
+ * `transporte.test.ts` recorre los campos de `Tarea` y exige decisión explícita por cada
+ * uno.
+ *
+ * Campo a campo, y también DENTRO del veredicto: un `...tarea.veredicto` dejaría pasar sin
+ * nombrar el campo que alguien le añada mañana a `VeredictoDeTarea`.
+ */
+export function filaDeTarea(t: Tarea): TareaDelCable {
+  return {
+    id: t.id,
+    // El ID, que es con lo que la interfaz filtra; el nombre va aparte, para leer. La RAÍZ
+    // no viaja: es una ruta de la máquina.
+    proyecto: t.proyecto.id,
+    proyectoNombre: t.proyecto.nombre,
+    titulo: t.titulo,
+    peticion: t.peticion,
+    encargo: t.encargo,
+    adjuntos: t.adjuntos,
+    estado: t.estado,
+    creada: t.creada,
+    ...(t.motivo === undefined ? {} : { motivo: t.motivo }),
+    ...(t.sesion === undefined ? {} : { sesion: t.sesion }),
+    ...(t.empezada === undefined ? {} : { empezada: t.empezada }),
+    ...(t.acabada === undefined ? {} : { acabada: t.acabada }),
+    ...(t.autorizadas === undefined ? {} : { autorizadas: t.autorizadas }),
+    ...(t.feedback === undefined ? {} : { feedback: t.feedback }),
+    ...(t.veredicto === undefined
+      ? {}
+      : {
+          veredicto: {
+            veredicto: t.veredicto.veredicto,
+            resumen: t.veredicto.resumen,
+            ...(t.veredicto.hallazgos === undefined ? {} : { hallazgos: t.veredicto.hallazgos }),
+            ...(t.veredicto.salvedad === undefined ? {} : { salvedad: t.veredicto.salvedad }),
+          },
+        }),
+    ...(t.terminadaAMano === undefined ? {} : { terminadaAMano: t.terminadaAMano }),
+  };
 }
 
 export interface ProveedorDeModelos {
@@ -596,6 +793,45 @@ export type MensajeDelCliente =
   /** Los modelos que ofrece un MOTOR externo, para el desplegable de un subagente. Se pide
    *  bajo demanda: el de Codex se le pregunta a él, y eso arranca un proceso. */
   | { clase: "modelosDeMotor"; motor: string }
+  /**
+   * Las acciones sobre una tarea. Viaja el ID del proyecto y su nombre, NUNCA su raíz: es
+   * una ruta de la máquina, y el cable puede ir por un túnel.
+   */
+  /**
+   * `borrador` es el identificador bajo el que ya se subieron los adjuntos por
+   * `POST /adjunto` — los bytes tienen que estar en disco ANTES de crear la tarea, porque
+   * crear la encola y el corredor puede arrancarla en el acto. El servidor lo ADOPTA como
+   * id de la tarea si es un segmento llano y no es ya una tarea; los adjuntos los lee del
+   * disco, nunca de lo que diga el cliente.
+   */
+  | { clase: "tarea"; accion: "crear"; proyecto: string; peticion: string; encargo: string; borrador?: string }
+  | { clase: "tarea"; accion: "augmentar"; proyecto: string; peticion: string; borrador?: string }
+  /**
+   * «Se edita la tarea y se agrega el feedback del usuario» (§0 del diseño): la respuesta a
+   * una tarea «esperando feedback», que la devuelve al lazo en su MISMO hilo. Es su propia
+   * variante y no un tercer campo opcional en `reintentar` porque lleva `texto` y las otras
+   * tres no llevan nada — un campo que solo tiene sentido en una de cuatro acciones es la
+   * misma mentira por omisión que una lista vacía rellenada.
+   */
+  | { clase: "tarea"; accion: "feedback"; id: string; texto: string }
+  | { clase: "tarea"; accion: "reintentar" | "descartar" | "terminar"; id: string }
+  /** Cambia el tope de concurrencia de la cola de tareas. */
+  | { clase: "tareas"; concurrencia: number }
+  /**
+   * Empezar (`ver: true`) o dejar de mirar en vivo lo que hace una tarea.
+   *
+   * **`cliente` es lo que hace que esto sea por CLIENTE y no una emisión a todos.** El SSE
+   * y el `POST /accion` son dos peticiones distintas, así que el único sitio con un sumidero
+   * en la mano es la ruta del SSE: sin un identificador, el servidor no podría saber a qué
+   * pestaña engancharle la mirada, y tendría que mandarle el transcript de la tarea a todo
+   * el mundo. Lo elige el cliente —una vez por conexión— igual que elige el id de una tarea
+   * al subirle un adjunto por `POST /adjunto`, y se valida como un segmento llano; uno que
+   * no conste es un fallo de lookup y no un error que contar.
+   *
+   * `ver` es explícito y no «ausente = dejar de mirar»: son dos intenciones opuestas y
+   * confundirlas dejaría un sumidero enganchado a un turno que nadie mira.
+   */
+  | { clase: "mirar"; tarea: string; ver: boolean; cliente: string }
   | { clase: "decision"; decisiones: Record<string, string> };
 
 /**
@@ -646,6 +882,29 @@ export interface Transporte {
   /** ¿Queda alguien al otro lado? Es lo que `consolaWeb.eof()` usa para saber si hay humano. */
   conectado(): boolean;
   /**
+   * Alguien MIRA lo que esta consola pinta, sin ser su cliente. Devuelve el transcript de
+   * ese instante, igual que `conectar` y por lo mismo: emitirlo aquí se lo mandaría también
+   * a los demás, que ya lo tienen.
+   *
+   * Es un conjunto APARTE del de los clientes, y las dos diferencias son el motivo de que
+   * exista en vez de reusar `conectar`:
+   *  - **No cuenta como cliente**, así que `conectado()` —y con él `consolaWeb.eof()`— sigue
+   *    diciendo la verdad. Medido antes de escribir esto: con un `conectar` de más, el
+   *    `eof()` de la consola de una tarea de fondo pasaba de `true` a `false`, o sea «hay un
+   *    humano al que preguntar». Y no lo hay: esta vista es de SOLO lectura, no tiene
+   *    compositor y nadie puede contestar una pregunta ni aprobar una escritura desde ahí.
+   *    Irse el último mirón tampoco dispara `alDesconectar`: no ha dejado a nadie sin
+   *    contestar.
+   *  - **Recibe SOLO el transcript** (`acto`, `sustitucion`, `reemision`). Por el transporte
+   *    de una consola de tarea viaja además el mensaje `turno` de los flancos —lo emite el
+   *    envoltorio del ejecutor sin mirar `alCable`, medido—, y ese mensaje apagaría el
+   *    compositor de quien mira por un turno que no es suyo. La lista es BLANCA a propósito:
+   *    una clase nueva no llega a un mirón hasta que alguien la nombre aquí.
+   */
+  mirar(enviar: Sumidero): readonly Acto[];
+  /** Se va UN mirón. Los demás siguen: dos personas pueden mirar la misma tarea. */
+  dejarDeMirar(enviar: Sumidero): void;
+  /**
    * Produce un mensaje: lo anota en la traza y, si hay cliente, lo escribe. Anota aunque
    * no haya nadie porque la traza cuenta lo que el servidor PRODUJO — que es lo que los
    * tests de «esto no viaja» tienen que poder mirar.
@@ -661,12 +920,27 @@ export interface Transporte {
   alDesconectar(escucha: () => void): void;
 }
 
+/**
+ * Las clases de mensaje que SON el transcript, y las únicas que llegan a un mirón.
+ *
+ * Lista blanca y no negra: con una negra, la clase que alguien añada mañana al cable
+ * llegaría permitida a quien mira una tarea de fondo — y por ahí ya pasan hoy el
+ * mensaje `turno` que apagaría su compositor y el `aprobacion` que es el único mensaje con
+ * contenido de fichero dentro.
+ */
+const ES_DE_TRANSCRIPT: ReadonlySet<MensajeAlCliente["clase"]> = new Set(["acto", "sustitucion", "reemision"]);
+
 export function crearTransporte(actos: () => readonly Acto[]): Transporte {
   const traza: MensajeAlCliente[] = [];
   const escuchasDeCorte: (() => void)[] = [];
   /** Todos los clientes vivos. `Set` y no lista: conectar dos veces el MISMO sumidero
    *  —una reconexión que se solapa con su propio cierre— no puede duplicar sus mensajes. */
   const sumideros = new Set<Sumidero>();
+  /**
+   * Quien MIRA sin ser cliente. Ver `Transporte.mirar`: aparte del otro conjunto porque no
+   * cuenta como humano y porque no recibe todo lo que se emite.
+   */
+  const mirones = new Set<Sumidero>();
   /**
    * Hubo cliente alguna vez y todavía no se ha ido el último. Se lleva aparte del `Set`
    * porque `conectar()` sin sumidero (los tests que no miran lo emitido) también cuenta
@@ -688,16 +962,29 @@ export function crearTransporte(actos: () => readonly Acto[]): Transporte {
         if (sumideros.size > 0) return;
       } else {
         sumideros.clear();
+        // Sin sumidero es «se van todos»: lo hace `cerrar()` y lo hace mudarse de consola.
+        // Un mirón de una consola que se abandona escribe en un socket que ya no está.
+        mirones.clear();
       }
       hayCliente = false;
       for (const escucha of escuchasDeCorte) escucha();
     },
     conectado: () => hayCliente,
+    mirar(enviar) {
+      mirones.add(enviar);
+      return [...actos()];
+    },
+    dejarDeMirar(enviar) {
+      mirones.delete(enviar);
+    },
     emitir(mensaje) {
       if (mensaje.clase !== "aprobacion") traza.push(mensaje);
       // A TODOS los clientes vivos. Con una sola ranura, el último en conectar dejaba mudos
       // a los anteriores sin decírselo.
       for (const sumidero of sumideros) sumidero(mensaje);
+      // Y a los mirones, solo el TRANSCRIPT. Ver `Transporte.mirar`.
+      if (!ES_DE_TRANSCRIPT.has(mensaje.clase)) return;
+      for (const miron of mirones) miron(mensaje);
     },
     emitidos: () => traza,
     alDesconectar(escucha) {

@@ -25,6 +25,7 @@ import { motivoDeClaveInaceptable, type Aviso } from "../core/config.js";
 import type { Papel } from "../core/ports.js";
 import { ES_DOBLE, esDoble } from "../core/ports.js";
 import type { PendienteDeAprobacion } from "../core/events.js";
+import type { ResultadoDeTurno } from "../core/entrega.js";
 import type { LineaDeDiff } from "../core/diff.js";
 import { interpretAnswer, type Decision } from "../vendor/hitl.js";
 import type { PoliticaDeAprobacion } from "../core/cloudstudio.js";
@@ -84,6 +85,18 @@ export interface Consola {
     ficheros: Map<string, string>,
     diffs: Map<string, LineaDeDiff[]>
   ) => Promise<Map<string, Decision>>;
+  /**
+   * Cuántas RONDAS de aprobación admite un turno de esta consola. Ausente = el de siempre
+   * (`MAX_APPROVAL_ROUNDS`).
+   *
+   * Lo pone quien monta la consola porque es quien sabe QUIÉN está detrás: el tope de
+   * cinco se dimensionó para una persona pulsando —«te lo he preguntado cinco veces,
+   * para»—, y en una tarea de fondo una ronda no es una pregunta, es una tanda de
+   * escrituras que se autorizan solas. Lo reenvía `crearEjecutorReal` a `abrirSesionReal`,
+   * que es donde vive el bucle; ver `TOPE_DE_RONDAS_DE_TAREA` (`core/tareas.ts`) para el
+   * valor y el porqué de que no sea infinito.
+   */
+  topeDeAprobaciones?: number;
   /**
    * El estado de sesión ACABA de cambiar (un comando devolvió uno nuevo).
    *
@@ -410,12 +423,26 @@ export type ManejadorDeBarra = (
   consola: Consola
 ) => Promise<{ seguir: boolean; estado?: EstadoDeSesion }>;
 
-/** Cómo se corre una línea de prosa. El valor por omisión usa el agente guionizado. */
+/**
+ * Cómo se corre una línea de prosa. El valor por omisión usa el agente guionizado.
+ *
+ * **Devuelve lo que el turno sabe de sí mismo**, y ese retorno es una deuda que se paga
+ * aquí. Devolvía `Promise<void>`, así que `crearEjecutorReal` (`cli/main.ts`) tiraba el
+ * retorno de `sesion.turno` y con él el `cortadoPorTope` que sabe que quedaron escrituras
+ * sin aplicar. Medido con las tareas de fondo: cuatro ficheros escritos, una escritura
+ * abandonada, el verificador sin correr ni una vez, y el kanban diciendo «terminada».
+ *
+ * `void` sigue siendo válido a propósito: la mayoría de los caminos —el guionizado, las
+ * pieles que solo pintan— no tienen nada que informar, y **ausente no es vacío**: quien lo
+ * consume trata «no informó» como «no se sabe» y no como «todo bien»
+ * (`core/entrega.ts#medidaDeEntrega`). Con eso ninguna piel cambia y la tubería sigue
+ * siendo byte-idéntica.
+ */
 export type EjecutorDeTurno = (
   peticion: string,
   estado: EstadoDeSesion,
   consola: Consola
-) => Promise<void>;
+) => Promise<ResultadoDeTurno | void>;
 
 
 /**
