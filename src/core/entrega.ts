@@ -125,6 +125,31 @@ export interface MedidaDeEntrega extends ResultadoDeTurno {
    * sabe», y aquí colapsarla sería un camino para entregar sin verificar.
    */
   escribio?: boolean;
+  /**
+   * QUÉ cambió, según git: las rutas RELATIVAS del mismo diff del que sale `escribio`
+   * (`corredorDeTareas.ts#revisionConGit`, una sola medida para las dos cosas, así que no
+   * pueden discrepar). De aquí sale el HECHO que se le cuenta al juez de QA.
+   *
+   * **Existe porque `autorizadas` no puede hacer este trabajo.** Aquello se apunta al
+   * autorizar la escritura y es la intención del agente; esto es un diff contra el «antes»
+   * de la sesión. Todo el modo de fallo medido del juez era «no puedo comprobar la
+   * existencia ni el contenido de X»: darle el hecho fichero a fichero lo quita de raíz, y
+   * de paso le deja juzgar la cobertura del encargo ruta por ruta.
+   *
+   * **Ausente y VACÍA no son lo mismo**: ausente es «no se pudo preguntar a git» —sin marca
+   * no hay con qué comparar— y `[]` es «git dice que no cambió nada». Colapsarlas haría que
+   * un proyecto sin marca pareciera un proyecto intacto.
+   */
+  cambiados?: readonly string[];
+  /**
+   * Cuántas escrituras AUTORIZÓ el turno (`Tarea.autorizadas`), si consta.
+   *
+   * No es del turno ni de git: es de la tarea, y entra por su propio parámetro. Está aquí
+   * para una sola condición —autorizó escrituras y git no ve ni un cambio—, y **ausente es
+   * «no consta»**: una tarea de antes de que esto existiera, o un ejecutor que no lo informa.
+   * Acusar con un dato que no se tiene es exactamente lo que estas condiciones no hacen.
+   */
+  autorizadas?: number;
 }
 
 /** El veredicto de un juez de QA. Texto para leer y hallazgos, nunca contenido de ficheros. */
@@ -174,12 +199,17 @@ export interface Entrega {
  */
 export function medidaDeEntrega(
   resultado: ResultadoDeTurno | undefined,
-  /** Lo que dice git de la sesión. `escribio` solo se afirma con marca: ver el campo. */
-  revision: { revisable: boolean; escribio?: boolean }
+  /** Lo que dice git de la sesión. `escribio` y `cambiados` solo se afirman con marca: ver
+   *  los campos. Ausente no se rellena con nada, en las dos. */
+  revision: { revisable: boolean; escribio?: boolean; cambiados?: readonly string[] },
+  /** Cuántas escrituras autorizó el turno, si consta. Ver `MedidaDeEntrega.autorizadas`. */
+  autorizadas?: number
 ): MedidaDeEntrega {
   const deGit = {
     revisable: revision.revisable,
     ...(revision.escribio === undefined ? {} : { escribio: revision.escribio }),
+    ...(revision.cambiados === undefined ? {} : { cambiados: revision.cambiados }),
+    ...(autorizadas === undefined ? {} : { autorizadas }),
   };
   if (resultado === undefined) {
     return {
@@ -228,7 +258,28 @@ export function condicionesDeEntrega(medida: MedidaDeEntrega): Entrega {
    * Se compara con `=== false` y no con un `!`: `undefined` es «no se sabe» y entonces la
    * condición se exige como siempre.
    */
-  const nadaQueVerificar = medida.escribio === false;
+  /**
+   * **Autorizó escrituras y git no ve ni un cambio: nada aterrizó.**
+   *
+   * `Tarea.autorizadas` se apunta al AUTORIZAR, o sea antes de que el backend escriba, así
+   * que una ruta que las guardas rechazan —`/artifacts/`, una vista aplanada, `/.env`— sale
+   * ahí sin tocar el disco. Si git no ve ningún cambio y el turno autorizó escrituras,
+   * TODAS se quedaron por el camino (o escribieron lo que ya estaba): la tarea se cree que
+   * trabajó y no cambió el proyecto. Es un hecho comprobable, así que se mide aquí en vez de
+   * contárselo al juez — la misma razón por la que su veredicto no basta solo.
+   *
+   * Y **manda sobre la salvedad de la tarea de solo lectura**: eso significa «el dominio del
+   * verificador son las escrituras y no hubo ninguna», y aquí sí las hubo, solo que no
+   * llegaron. Tratarlo como solo lectura entregaría el caso al revés.
+   */
+  const nadaAterrizo = medida.escribio === false && (medida.autorizadas ?? 0) > 0;
+  if (nadaAterrizo) {
+    fallos.push(
+      `el turno autorizó ${medida.autorizadas} escritura(s) y git no ve ningún cambio en el ` +
+        "proyecto: o las rechazó una guarda de ruta, o escribieron lo que ya estaba"
+    );
+  }
+  const nadaQueVerificar = medida.escribio === false && !nadaAterrizo;
   if (nadaQueVerificar) {
     // Nada. Las otras dos condiciones siguen enteras: unas escrituras que quedaron
     // esperando aprobación son escrituras que el turno quiso hacer y no hizo, y sin marca de

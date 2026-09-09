@@ -266,11 +266,14 @@ export interface CasoDeJuez {
    *  fuera del turno — medido: el juez concluyó de dos avisos que el agente había modificado
    *  ficheros JavaScript. Ausente es «no se midió»; `0` es «no había ningún otro». */
   preexistentes?: number;
-  /** Lo que dice GIT de si la sesión cambió algún fichero, cuando hay marca con que
-   *  comparar (`corredorDeTareas.ts#revisionConGit`). Es el único HECHO sobre el disco que
-   *  llega hasta aquí: `autorizadas` es la intención del agente. Ausente = no se sabe, y
-   *  entonces no se afirma nada — colapsarlo en «no escribió» inventaría un cargo. */
-  escribio?: boolean;
+  /** QUÉ cambió en el proyecto, según GIT: las rutas RELATIVAS del diff de la sesión contra
+   *  su «antes» (`corredorDeTareas.ts#revisionConGit`). Es el único HECHO sobre el disco que
+   *  llega hasta aquí — `autorizadas` es la intención del agente—, y va como lista y no como
+   *  booleano a propósito: todo el modo de fallo medido del juez era «no puedo comprobar la
+   *  existencia ni el contenido de X», y el hecho fichero a fichero lo quita de raíz.
+   *  **Ausente y vacía no son lo mismo**: ausente es «no se pudo preguntar a git» y `[]` es
+   *  «git dice que no cambió nada». Colapsarlas inventaría un cargo o lo taparía. */
+  cambiados?: readonly string[];
 }
 
 /**

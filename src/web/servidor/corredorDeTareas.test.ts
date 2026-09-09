@@ -2007,16 +2007,25 @@ describe("el volcado de la sesión de una tarea", () => {
     expect(await revision(raiz, "sesion-sin-ref")).toEqual({ revisable: false });
 
     // 2) Con marca y sin cambios: la sesión no escribió nada, y eso SÍ se puede afirmar.
+    //    La lista viaja VACÍA y no ausente: es una afirmación, no un hueco.
     writeFileSync(join(raiz, "app.xml"), "<app/>");
     execFileSync("git", ["add", "-A"], { cwd: raiz });
     execFileSync("git", ["commit", "-qm", "base"], { cwd: raiz });
     const apuntar = await fotoDeApertura(raiz);
     expect(await apuntar("s1")).toBe(true);
-    expect(await revision(raiz, "s1")).toEqual({ revisable: true, escribio: false });
+    expect(await revision(raiz, "s1")).toEqual({ revisable: true, escribio: false, cambiados: [] });
 
-    // 3) Con marca y con cambios: escribió, y el verificador se exige.
+    // 3) Con marca y con cambios: escribió, y el verificador se exige. Y ahora se sabe QUÉ
+    //    cambió, con la ruta RELATIVA que git da con `--relative` — de aquí sale el hecho
+    //    con el que el juez ya no puede decir «no puedo comprobar si existe».
     writeFileSync(join(raiz, "Clientes.xne"), '<collection name="Clientes"/>');
-    expect(await revision(raiz, "s1")).toEqual({ revisable: true, escribio: true });
+    expect(await revision(raiz, "s1")).toEqual({
+      revisable: true,
+      escribio: true,
+      cambiados: ["Clientes.xne"],
+    });
+    // Ni una ruta de la máquina: es la regla de siempre, y este caso está MEDIDO contra git.
+    expect(JSON.stringify(await revision(raiz, "s1"))).not.toContain(raiz);
 
     rmSync(base, { recursive: true, force: true });
   });
@@ -2369,7 +2378,11 @@ describe("una tarea se entrega por condiciones MEDIDAS más el juez", () => {
 
   it("al juez se le cuentan los HECHOS: encargo, ficheros autorizados y el verificador", async () => {
     const juez = juezQueDice({ veredicto: "verde", resumen: "bien" });
-    const { corredor, p } = conEntrega([TAREA({ encargo: "crea la colección Clientes" })], { juez });
+    const { corredor, p } = conEntrega([TAREA({ encargo: "crea la colección Clientes" })], {
+      juez,
+      // Lo que en producción devuelve `revisionConGit`: las dos cosas de la misma medida.
+      revisable: async () => ({ revisable: true, escribio: true, cambiados: ["Clientes.xne", "src/lista.js"] }),
+    });
     await corredor.arrancar();
     await corredor.asentar();
     p.autorizar(["/Clientes.xne", "/src/lista.js"]);
@@ -2404,8 +2417,47 @@ describe("una tarea se entrega por condiciones MEDIDAS más el juez", () => {
        * acusando al turno de modificar ficheros de los que solo hablaban los hallazgos.
        */
       preexistentes: 22,
-      escribio: true,
+      /**
+       * Y lo que cambió DE VERDAD, con nombre y todo: es un diff de git contra el «antes» de
+       * la sesión, o sea un hecho sobre el disco, mientras `autorizadas` es lo que el agente
+       * quiso escribir. Va como LISTA y no como el booleano que llevaba: todo el modo de
+       * fallo medido del juez era «no puedo comprobar si existe X», y con el hecho fichero a
+       * fichero eso deja de poder decirse. Ausente seguiría siendo «no se pudo preguntar a
+       * git», que no es «no cambió nada».
+       */
+      cambiados: ["Clientes.xne", "src/lista.js"],
     });
+  });
+
+  /**
+   * La condición nueva del CÓDIGO: autorizó escrituras y git no ve ni un cambio.
+   *
+   * Significa que TODAS las escrituras se quedaron por el camino —las guardas de ruta las
+   * rechazaron, o escribieron lo que ya estaba—, así que la tarea se cree que trabajó y no
+   * aterrizó nada. Es un hecho comprobable, y por eso lo mide el código en vez de contárselo
+   * al juez: es la misma regla por la que su veredicto no basta solo.
+   */
+  it("autorizó escrituras y git dice que nada cambió: se aparca, y al juez no se le pregunta", async () => {
+    const juez = juezQueDice({ veredicto: "verde", resumen: "por mí bien" });
+    const { corredor, estado, p } = conEntrega([TAREA()], {
+      juez,
+      revisable: async () => ({ revisable: true, escribio: false, cambiados: [] }),
+    });
+    await corredor.arrancar();
+    await corredor.asentar();
+    // Una escritura autorizada que no aterrizó: la guarda de `/artifacts/` la rechazó.
+    p.autorizar(["/artifacts/diagrama.html"]);
+    p.acabar({ verificador: "no-corrio", pendientes: 0, motivoSinVerificar: "el turno no escribió ningún fichero del proyecto" });
+    await corredor.asentar();
+
+    const tarea = estado()[0]!;
+    expect(tarea.estado).toBe("requiere-atencion");
+    expect(tarea.motivo).toContain("1 escritura(s)");
+    expect(tarea.motivo).toContain("ningún cambio");
+    // Las dos condiciones, no una: no aterrizó nada Y por eso no se verificó nada.
+    expect(tarea.motivo).toContain("verificador");
+    // Y no se gasta una llamada del modelo más caro en tapar un hecho que ya se sabe.
+    expect(juez.casos).toHaveLength(0);
   });
 
   /**

@@ -56,6 +56,11 @@ import type { TareasEnDisco } from "../../agent/tareasEnDisco.js";
 export interface RevisionDeSesion {
   revisable: boolean;
   escribio?: boolean;
+  /** QUÉ cambió, con la ruta RELATIVA que da git. Sale de la MISMA medida que `escribio`
+   *  —una sola llamada, las dos derivadas en la misma expresión, así que no pueden
+   *  discrepar—, y de aquí sale el hecho que se le cuenta al juez. Ausente cuando no hay
+   *  marca; `[]` cuando git dice que no cambió nada. */
+  cambiados?: readonly string[];
 }
 
 /**
@@ -75,12 +80,23 @@ export interface RevisionDeSesion {
  *    el campo se queda ausente y la condición del verificador se exige como siempre.
  */
 export function revisionConGit(
-  cambiosDeSesion: (raiz: string, sesion: string) => Promise<{ via: string; ficheros: readonly unknown[] }>
+  cambiosDeSesion: (
+    raiz: string,
+    sesion: string
+  ) => Promise<{ via: string; ficheros: readonly { ruta: string }[] }>
 ): (raiz: string, sesion: string) => Promise<RevisionDeSesion> {
   return async (raiz, sesion) => {
     const cambios = await cambiosDeSesion(raiz, sesion);
     if (cambios.via !== "git") return { revisable: false };
-    return { revisable: true, escribio: cambios.ficheros.length > 0 };
+    /**
+     * Las DOS de la misma medida y en la misma expresión, para que `escribio` no pueda
+     * decir una cosa y la lista otra. Las rutas ya vienen RELATIVAS de `cambiosDeSesion`
+     * (usa `--relative` a propósito, porque el proyecto no tiene por qué ser la raíz del
+     * repo), así que por aquí no sale ninguna ruta de la máquina — y eso está MEDIDO contra
+     * git de verdad en el test de esta función, no deducido.
+     */
+    const cambiados = cambios.ficheros.map((f) => f.ruta);
+    return { revisable: true, escribio: cambiados.length > 0, cambiados };
   };
 }
 
@@ -723,7 +739,14 @@ export function crearCorredorDeTareas(opciones: {
       // entrega: la única dirección posible aquí, y la misma que toma el resto del fichero.
       revision = { revisable: false };
     }
-    const medida = medidaDeEntrega(resultado, revision);
+    /**
+     * Las rutas autorizadas se normalizan UNA vez y sirven para las dos cosas: la cuenta que
+     * mide la condición de «nada aterrizó» y la lista que ve el juez. Normalizadas por el
+     * MISMO sitio que las guarda en el índice, así que son exactamente las que verá la
+     * persona — relativas, sin repetidos y sin la barra del backend virtual.
+     */
+    const autorizadas = conAutorizadas(tarea, entrada.autorizadas ?? []).autorizadas ?? [];
+    const medida = medidaDeEntrega(resultado, revision, autorizadas.length);
     const condiciones = condicionesDeEntrega(medida);
     if (!condiciones.entregable) return condiciones;
     /**
@@ -756,10 +779,7 @@ export function crearCorredorDeTareas(opciones: {
       .juzgar({
         encargo: tarea.encargo,
         raiz: tarea.proyecto.raiz,
-        // Normalizadas por el MISMO sitio que las guarda en el índice, así que el juez ve
-        // exactamente las rutas que verá la persona — relativas, sin repetidos y sin la
-        // barra del backend virtual.
-        autorizadas: conAutorizadas(tarea, entrada.autorizadas ?? []).autorizadas ?? [],
+        autorizadas,
         verificador: medida.verificador,
         ...(medida.hallazgos === undefined ? {} : { hallazgos: medida.hallazgos }),
         /**
@@ -773,7 +793,7 @@ export function crearCorredorDeTareas(opciones: {
          * en `autorizadas`.
          */
         ...(medida.preexistentes === undefined ? {} : { preexistentes: medida.preexistentes }),
-        ...(medida.escribio === undefined ? {} : { escribio: medida.escribio }),
+        ...(medida.cambiados === undefined ? {} : { cambiados: medida.cambiados }),
       })
       .then((v) => void (veredicto = v))
       .catch((error: unknown) => {

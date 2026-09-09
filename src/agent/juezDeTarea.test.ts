@@ -133,7 +133,7 @@ describe("el prompt lleva los HECHOS y nunca contenido de ficheros", () => {
       { code: "REF_JS_COLL_MISSING", severidad: "warning" as const, mensaje: "un script referencia una colección no encontrada" },
     ],
     preexistentes: 22,
-    escribio: true,
+    cambiados: ["DOCUMENTACION.md", "MEMORIA_PROYECTO.md"],
   };
 
   /** Corre el juez y devuelve el prompt que se le mandó. */
@@ -192,17 +192,39 @@ describe("el prompt lleva los HECHOS y nunca contenido de ficheros", () => {
       expect(prompt).toMatch(/22 hallazgo\(s\) más[^\n]*no tocó/);
     });
 
-    it("`autorizadas` se explica: lo que el turno escribió, y git lo confirma", async () => {
+    it("`autorizadas` se explica, y al lado va el HECHO de git fichero a fichero", async () => {
       const prompt = await promptDe(CASO_MEDIDO);
       expect(prompt).toContain("DOCUMENTACION.md");
       expect(prompt).toContain("MEMORIA_PROYECTO.md");
-      // Lo que son de verdad: el registro de las escrituras que la tarea aplicó sin que
-      // nadie las aprobara. No se promete más (`core/tareas.ts#Tarea.autorizadas`: es una
-      // PISTA, la verdad sobre el disco la tiene git) — y por eso va el hecho de git al lado.
+      // Lo que `autorizadas` es de verdad: el registro de las escrituras que la tarea aplicó
+      // sin que nadie las aprobara. No se promete más (`core/tareas.ts#Tarea.autorizadas`:
+      // es una PISTA, la verdad sobre el disco la tiene git).
       expect(prompt).toContain("escribió sin que ninguna persona las aprobara");
-      expect(prompt).toContain("git confirma");
-      // Y la respuesta que el juez dio de verdad queda declarada inválida.
+      // Y el HECHO, que es lo que quita de raíz el «no puedo comprobar si existe»: la lista
+      // de lo que cambió según git, con su nombre y presentada como diff contra el «antes».
+      expect(prompt).toContain("según git");
+      expect(prompt).toContain("un HECHO sobre el disco");
       expect(prompt).toContain("no es una respuesta válida");
+    });
+
+    it("las dos listas no se confunden: una es intención y la otra es lo medido", async () => {
+      const prompt = await promptDe(CASO_MEDIDO);
+      const autorizadas = prompt.indexOf("LO QUE EL TURNO AUTORIZÓ ESCRIBIR");
+      const git = prompt.indexOf("LO QUE CAMBIÓ EN EL PROYECTO");
+      expect(autorizadas).toBeGreaterThan(-1);
+      expect(git).toBeGreaterThan(autorizadas);
+    });
+
+    it("una ruta autorizada que git no ve cambiada se DICE, con su nombre", async () => {
+      // Es el otro lado de la misma medida: `autorizadas` se apunta al autorizar, así que
+      // una ruta que una guarda rechazó sale ahí y no en git. Callarlo dejaría al juez
+      // creyendo que se escribió algo que no aterrizó.
+      const prompt = await promptDe({
+        ...CASO_MEDIDO,
+        autorizadas: ["DOCUMENTACION.md", "artifacts/diagrama.html"],
+        cambiados: ["DOCUMENTACION.md"],
+      });
+      expect(prompt).toContain("git no ve cambio en: artifacts/diagrama.html");
     });
 
     it("sigue diciendo que no se invente nada, y que sin contenido no se puede juzgar la CALIDAD", async () => {
@@ -231,7 +253,7 @@ describe("el prompt lleva los HECHOS y nunca contenido de ficheros", () => {
         { code: "ATTR_UNKNOWN", severidad: "warning", mensaje: "atributo raro", fichero: "Clientes.xne", linea: 9 },
       ],
       preexistentes: 0,
-      escribio: true,
+      cambiados: ["Clientes.xne"],
     });
     const errores = prompt.indexOf("Errores");
     const avisos = prompt.indexOf("Avisos");
@@ -247,19 +269,22 @@ describe("el prompt lleva los HECHOS y nunca contenido de ficheros", () => {
     expect(prompt).toContain("ningún otro");
   });
 
-  it("sin marca de git no se afirma que escribiera: se dice que no se puede comprobar", async () => {
-    // `escribio` ausente es «no se sabe» (`revisionConGit`: sin marca no se afirma nada), y
-    // colapsarlo en «no escribió» sería inventar un hecho contra el agente.
+  it("sin marca de git no se afirma qué cambió: AUSENTE no es vacío", async () => {
+    // `cambiados` ausente es «no se pudo preguntar a git» (`revisionConGit`: sin marca no se
+    // afirma nada), y colapsarlo en «no cambió nada» sería inventar un hecho contra el
+    // agente — la misma distinción que `escribio` guarda en `core/entrega.ts`.
     const prompt = await promptDe({ encargo: "x", raiz: RAIZ, autorizadas: ["a.xne"] });
-    expect(prompt).not.toContain("git confirma");
+    expect(prompt).not.toContain("LO QUE CAMBIÓ EN EL PROYECTO");
     expect(prompt).toMatch(/[Nn]o hay marca de git/);
   });
 
-  it("git diciendo que NO cambió nada con rutas autorizadas se declara, porque es un rojo legítimo", async () => {
-    // Todas las escrituras las rechazó una guarda: `autorizadas` se apunta al DECIDIR la
-    // escritura, no al aplicarla. Eso sí es algo que reprochar, y el juez tiene que verlo.
-    const prompt = await promptDe({ encargo: "x", raiz: RAIZ, autorizadas: ["a.xne"], escribio: false });
+  it("una lista VACÍA de git es una afirmación: no cambió nada, y se dice", async () => {
+    // Todas las escrituras se quedaron por el camino. El juez tiene que verlo — y además el
+    // CÓDIGO ya no entrega en ese caso (`core/entrega.ts#condicionesDeEntrega`), así que
+    // esto es para que su valoración no contradiga la medida.
+    const prompt = await promptDe({ encargo: "x", raiz: RAIZ, autorizadas: ["a.xne"], cambiados: [] });
     expect(prompt).toContain("git dice que la sesión no cambió ningún fichero");
+    expect(prompt).toContain("git no ve cambio en: a.xne");
   });
 
   it("un turno sin verificador se le DICE, en vez de callarlo", async () => {

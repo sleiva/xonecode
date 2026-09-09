@@ -147,7 +147,7 @@ const COMO_SE_LEEN_LOS_HALLAZGOS = [
   "Cómo se leen esos hallazgos: el simulador mira el PROYECTO ENTERO, no lo que este turno",
   "escribió. Son OBSERVACIONES sobre el estado del proyecto y no atribuyen autoría:",
   "ninguno dice quién escribió qué, ni que este turno tocara el fichero del que habla.",
-  "Lo único que dice qué escribió el turno es la lista de arriba.",
+  "Lo único que dice qué tocó este turno son las listas de arriba, y el HECHO es la de git.",
   "",
 ];
 
@@ -202,43 +202,62 @@ const parrafoDelVerificador = (caso: CasoDeJuez): string[] => {
 };
 
 /**
- * Qué es la lista de rutas, y qué dice git. El segundo hallazgo del rojo falso medido salió
- * de aquí: «no se puede comprobar la existencia ni el contenido de DOCUMENTACION.md con los
- * datos facilitados», con `DOCUMENTACION.md` en la lista.
+ * Qué se escribió: la INTENCIÓN y el HECHO, por separado y sin confundirlos.
  *
- * El encabezado decía «Ficheros que se autorizó escribir», que se lee como un PERMISO —lo
- * que se podría haber escrito— y no como el registro de lo que se escribió. No se arregla
- * prometiendo más de lo que el dato aguanta: `Tarea.autorizadas` se apunta al autorizar cada
- * escritura, así que una ruta que una guarda rechazara aparecería igual, y «la verdad sobre
- * lo que cambió la tiene Revisión». Por eso se dice lo que es Y se pone al lado el único
- * hecho sobre el disco que llega hasta aquí, que es lo que dice git.
+ * El segundo hallazgo del rojo falso medido salió de aquí: «no se puede comprobar la
+ * existencia ni el contenido de DOCUMENTACION.md con los datos facilitados», con
+ * `DOCUMENTACION.md` en la lista. El encabezado decía «Ficheros que se autorizó escribir»,
+ * que se lee como un PERMISO —lo que se podría haber escrito— y no como un registro.
+ *
+ * **Y no se arregla prometiendo más de lo que `autorizadas` aguanta.** Ese campo se apunta
+ * al autorizar cada escritura, así que una ruta que una guarda rechace sale igual, y «la
+ * verdad sobre lo que cambió la tiene Revisión». Lo que se hace es DARLE la verdad:
+ * `cambiados` es el diff de git de la sesión contra su «antes», o sea un hecho sobre el
+ * disco, con la ruta relativa. Con eso «no puedo comprobar si existe X» deja de tener de
+ * dónde agarrarse — y de propina el juez puede juzgar la cobertura del encargo ruta por ruta.
+ *
+ * Las tres respuestas de git se dicen distintas, que es la regla de siempre: lista con
+ * ficheros, lista VACÍA («no cambió nada», una afirmación) y AUSENTE («no se pudo preguntar»,
+ * que no es lo mismo y no puede leerse como un proyecto intacto).
  */
 const parrafoDeLoEscrito = (caso: CasoDeJuez): string[] => {
-  if (caso.autorizadas.length === 0) {
-    return [
-      "El turno NO escribió ningún fichero: no consta ninguna ruta.",
-      ...(caso.escribio === true
-        ? ["Pero git confirma que la sesión cambió ficheros, así que algo se tocó sin quedar apuntado."]
-        : caso.escribio === false
-          ? ["Y git dice que la sesión no cambió ningún fichero, así que fue un trabajo de solo lectura."]
-          : ["Y no hay marca de git con la que comprobarlo, así que sobre el disco no se afirma nada."]),
-    ];
-  }
+  const cambiados = caso.cambiados;
+  /** Autorizadas que git no ve cambiadas: o las rechazó una guarda, o escribieron lo que ya
+   *  estaba. Callarlo dejaría al juez creyendo que aterrizó algo que no aterrizó. */
+  const sinAterrizar = cambiados === undefined ? [] : caso.autorizadas.filter((r) => !cambiados.includes(r));
   return [
-    `LO QUE EL TURNO ESCRIBIÓ (${caso.autorizadas.length} ruta(s)):`,
-    ...caso.autorizadas.map((f) => `- ${f}`),
-    "Son las rutas que el turno escribió sin que ninguna persona las aprobara, apuntadas al",
-    "autorizar cada escritura: es el registro de lo que se tocó en este trabajo.",
-    ...(caso.escribio === true
-      ? ["git confirma que la sesión cambió ficheros."]
-      : caso.escribio === false
+    ...(caso.autorizadas.length === 0
+      ? ["El turno no autorizó escribir ningún fichero: no consta ninguna ruta."]
+      : [
+          `LO QUE EL TURNO AUTORIZÓ ESCRIBIR (${caso.autorizadas.length} ruta(s)):`,
+          ...caso.autorizadas.map((f) => `- ${f}`),
+          "Son las rutas que el turno escribió sin que ninguna persona las aprobara, apuntadas",
+          "al autorizar cada escritura: es su registro de lo que quiso tocar.",
+        ]),
+    "",
+    ...(cambiados === undefined
+      ? [
+          "No hay marca de git con la que comprobar qué cambió en el proyecto, así que sobre el",
+          "disco no se afirma nada: eso es «no se pudo mirar», no «no cambió nada».",
+        ]
+      : cambiados.length === 0
         ? [
-            "Ojo: git dice que la sesión no cambió ningún fichero. O una guarda rechazó esas",
-            "escrituras, o se deshicieron — y eso SÍ es algo que reprochar a este trabajo.",
+            "Y git dice que la sesión no cambió ningún fichero del proyecto. Es una medida, no",
+            "una suposición: el diff de la sesión contra su «antes» sale vacío.",
           ]
-        : ["No hay marca de git con la que comprobar si la sesión cambió algo, así que eso no se afirma."]),
-    "Por eso «no puedo comprobar si existe X» sobre una ruta de esa lista",
-    "no es una respuesta válida: que el turno la escribió es exactamente lo que dice la lista.",
+        : [
+            `LO QUE CAMBIÓ EN EL PROYECTO, según git (${cambiados.length} fichero(s)):`,
+            ...cambiados.map((f) => `- ${f}`),
+            "Es el diff de la sesión contra su «antes», o sea un HECHO sobre el disco y no una",
+            "intención. Por eso «no puedo comprobar si existe X» sobre un fichero de esta lista",
+            "no es una respuesta válida: git dice que está y que cambió en este trabajo.",
+          ]),
+    ...(sinAterrizar.length === 0
+      ? []
+      : [
+          `Ojo: de lo autorizado, git no ve cambio en: ${sinAterrizar.join(", ")}. O lo rechazó`,
+          "una guarda de ruta, o escribió lo que ya estaba — no des por hecho que aterrizó.",
+        ]),
   ];
 };
 
@@ -276,7 +295,7 @@ function promptDelJuez(caso: CasoDeJuez): string {
     "No tienes el contenido de los ficheros y no lo vas a tener: eso es un dato de partida de",
     "este paso, no es un hallazgo sobre este trabajo, y no lo pidas. Lo que no puedes juzgar",
     "así es la CALIDAD de lo escrito —si la documentación está bien redactada, si el XML es el",
-    "que hacía falta—; qué se escribió sí lo sabes, y es la lista de arriba. Si el encargo",
+    "que hacía falta—; qué se escribió sí lo sabes, y son las listas de arriba. Si el encargo",
     "no se puede juzgar por los nombres y los hechos de arriba, dilo en el resumen:",
     "no te inventes nada para poder dar un veredicto, que es justo el fallo que este paso",
     "existe para atrapar.",

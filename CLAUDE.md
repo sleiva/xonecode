@@ -799,20 +799,41 @@ instrucción. Seis reglas:
   por su parte** y que los avisos no lo cambian, que es exactamente lo que el código hace
   (`condicionesDeEntrega` cuenta ERRORES) — la misma razón por la que la huella de reparación
   son solo los errores: «un aviso que va y viene no dice nada de si el error se arregla».
-- **`autorizadas` se explica, y no se le promete más de lo que aguanta.** El encabezado
-  «Ficheros que se autorizó escribir» se lee como un permiso —lo que se PODRÍA haber
-  escrito—, de ahí el segundo hallazgo falso. Se dice que son las rutas que el turno escribió
-  sin que nadie las aprobara, apuntadas al autorizar cada escritura, y al lado va el único
-  hecho sobre el disco que llega hasta aquí: **lo que dice git** (`escribio`, de
-  `revisionConGit`). Con eso, «no puedo comprobar si existe X» sobre una ruta de esa lista se
-  declara respuesta inválida. Y el caso contrario también se dice: git afirmando que no cambió
-  nada con rutas autorizadas es un rojo LEGÍTIMO —las guardas las rechazaron—, no una
-  incoherencia que tapar.
+- **La INTENCIÓN y el HECHO van en dos listas, y no se confunden.** El encabezado «Ficheros
+  que se autorizó escribir» se lee como un permiso —lo que se PODRÍA haber escrito—, de ahí el
+  segundo hallazgo falso. Y no se arregla prometiendo más de lo que `autorizadas` aguanta (se
+  apunta al AUTORIZAR, así que una ruta que una guarda rechace sale igual): se arregla
+  DÁNDOLE la verdad. `RevisionDeSesion.cambiados` lleva ahora las rutas RELATIVAS del diff de
+  git de la sesión contra su «antes» —la misma medida de la que sale `escribio`, derivadas en
+  la misma expresión para que no puedan discrepar— y llegan al juez como `CasoDeJuez.cambiados`.
+  Con el hecho fichero a fichero, «no puedo comprobar si existe X» deja de tener de dónde
+  agarrarse, y de propina el juez puede juzgar la cobertura del encargo ruta por ruta. Las tres
+  respuestas de git se dicen distintas: lista con ficheros, lista VACÍA («no cambió nada», una
+  afirmación) y AUSENTE («no se pudo preguntar a git», que no es lo mismo y no puede leerse
+  como un proyecto intacto). Y lo autorizado que git no ve cambiado se NOMBRA, porque callarlo
+  dejaría al juez creyendo que aterrizó algo que no aterrizó.
 - **Nada de esto relaja el fail-closed.** El juez sigue pudiendo decir rojo, y lo que no se
   entiende sigue siendo `indeterminado`; las condiciones las comprueba el código igual. Lo que
   cambia es que ya no puede decir rojo por lo que no es. Y las dos cláusulas que se rozan van
   separadas a propósito: no tener el contenido es un DATO de partida y no un hallazgo, lo que
   no se puede juzgar sin él es la CALIDAD de lo escrito — nunca si se escribió.
+
+**Y hay una CUARTA condición del código: autorizó escrituras y git no ve ningún cambio**
+(`core/entrega.ts#condicionesDeEntrega`, `MedidaDeEntrega.autorizadas`). Significa que TODAS
+las escrituras se quedaron por el camino —las guardas de ruta las rechazaron, o escribieron lo
+que ya estaba—, o sea que la tarea se cree que trabajó y no cambió el proyecto. Es un hecho
+comprobable, así que se MIDE en vez de contárselo al juez, por lo mismo que su veredicto no
+basta solo. Tres reglas:
+- **Manda sobre la salvedad de la tarea de solo lectura.** `SALVEDAD_SIN_ESCRITURAS` dice «el
+  dominio del verificador son las escrituras y no hubo ninguna», y aquí sí las hubo: solo que
+  no llegaron. Tratarlo como solo lectura entregaría el caso justo al revés.
+- **El motivo nombra las DOS**, la de aquí y el verificador que no corrió: son cara y cruz de
+  lo mismo —no aterrizó nada, así que no había nada que verificar— y juntas cuentan la
+  historia entera. Es la regla de siempre de esta función.
+- **Ausente no acusa a nadie.** `autorizadas` es un número que entra por su propio parámetro y
+  ausente es «no consta» (una tarea de antes de que esto existiera, un ejecutor que no lo
+  informa); y sin marca de git tampoco se afirma nada, porque «no se sabe qué cambió» no es
+  «no cambió nada».
 
 **Un solo corredor por máquina, y el cerrojo NO lo garantiza solo** (`tareasEnDisco.ts#tomarCerrojo`).
 La toma directa es atómica (`wx`), pero **recoger un cerrojo cuyo dueño parece muerto no se puede

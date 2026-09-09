@@ -219,6 +219,74 @@ describe("cuando el turno no escribió nada, el verificador no APLICA", () => {
     ).toBe(false);
   });
 
+  /**
+   * **Autorizó escrituras y git dice que NADA cambió: eso no es una tarea de solo lectura.**
+   *
+   * `Tarea.autorizadas` se apunta al AUTORIZAR cada escritura, o sea ANTES de que el backend
+   * escriba, así que una ruta que las guardas rechazan —`/artifacts/`, una vista aplanada,
+   * `/.env`— sale ahí sin tocar el disco. Si git no ve ni un cambio y el turno autorizó
+   * escrituras, TODAS se quedaron por el camino: la tarea se cree que trabajó y no aterrizó
+   * nada. Es un hecho comprobable, así que es una condición del CÓDIGO y no una frase en el
+   * prompt del juez — por lo mismo que el veredicto del juez no basta solo.
+   */
+  it("autorizó escrituras y git no ve ningún cambio: NO se entrega, y el motivo lo dice", () => {
+    const medida: MedidaDeEntrega = {
+      verificador: "no-corrio",
+      pendientes: 0,
+      revisable: true,
+      escribio: false,
+      autorizadas: 2,
+      motivoSinVerificar: "el turno no escribió ningún fichero del proyecto",
+    };
+    const entrega = condicionesDeEntrega(medida);
+    expect(entrega.entregable).toBe(false);
+    expect(entrega.motivo).toContain("2 escritura(s)");
+    expect(entrega.motivo).toContain("ningún cambio");
+    /**
+     * Y el motivo nombra TAMBIÉN que el verificador no corrió, que es la regla de esta
+     * función: «nombra TODAS las que fallaron y no la primera». Aquí las dos son cara y
+     * cruz de lo mismo —no aterrizó nada, así que no había nada que verificar— y leerlas
+     * juntas es lo que cuenta la historia entera; quedarse con una manda a adivinar la otra.
+     */
+    expect(entrega.motivo).toContain("verificador");
+    // Y NO se cuela por la puerta de la tarea de solo lectura: la salvedad diría que no
+    // había nada que verificar, cuando lo que pasa es que no llegó nada al disco.
+    expect(entrega.salvedad).toBeUndefined();
+  });
+
+  it("no autorizó ninguna y git dice que nada cambió: eso SÍ es una tarea de solo lectura", () => {
+    const entrega = condicionesDeEntrega({
+      verificador: "no-corrio",
+      pendientes: 0,
+      revisable: true,
+      escribio: false,
+      autorizadas: 0,
+    });
+    expect(entrega.entregable).toBe(true);
+    expect(entrega.salvedad).toBe(SALVEDAD_SIN_ESCRITURAS);
+  });
+
+  it("cuántas autorizó AUSENTE no acusa a nadie: sin ese dato no se puede afirmar", () => {
+    // Ausente es «no consta» —una tarea de antes de que esto existiera, o un ejecutor que no
+    // lo informa—, y acusar con un dato que no se tiene es justo lo que este arreglo quita.
+    const entrega = condicionesDeEntrega({
+      verificador: "no-corrio",
+      pendientes: 0,
+      revisable: true,
+      escribio: false,
+    });
+    expect(entrega.entregable).toBe(true);
+    expect(entrega.salvedad).toBe(SALVEDAD_SIN_ESCRITURAS);
+  });
+
+  it("y con marca ausente tampoco: «no se sabe» qué cambió no es «no cambió nada»", () => {
+    // Sin `escribio` no hay nada que contradiga a `autorizadas`, así que la condición no
+    // aplica y el verificador se exige como siempre.
+    const entrega = condicionesDeEntrega({ verificador: "verde", pendientes: 0, revisable: true, autorizadas: 3 });
+    expect(entrega.entregable).toBe(true);
+    expect(entrega.motivo).toBeUndefined();
+  });
+
   it("un verificador que sí corrió y salió ROJO no se tapa con esto", () => {
     // No puede pasar por construcción (si escribió, `escribio` es cierto), pero si pasara,
     // la dirección tiene que ser la conservadora: la salvedad no es una amnistía.
@@ -245,5 +313,33 @@ describe("medidaDeEntrega conserva lo que git supo, y solo eso", () => {
       revisable: true,
       escribio: false,
     });
+  });
+
+  /**
+   * La LISTA de lo que cambió, que es el hecho del que sale «no puedo comprobar si existe X»
+   * en el juez. **Ausente y vacía no son lo mismo**: ausente es «no se pudo preguntar a git»
+   * y `[]` es «git dice que no cambió nada» — la misma distinción que `escribio`, y aquí
+   * colapsarla haría que un proyecto sin marca pareciera un proyecto intacto.
+   */
+  it("la lista de lo que cambió viaja, y ausente NO es vacía", () => {
+    expect(
+      medidaDeEntrega({ verificador: "verde", pendientes: 0 }, { revisable: true, escribio: true, cambiados: ["a.xne"] })
+    ).toMatchObject({ cambiados: ["a.xne"] });
+    // Vacía se conserva vacía: es una afirmación, no un hueco.
+    const vacia = medidaDeEntrega({ verificador: "verde", pendientes: 0 }, { revisable: true, escribio: false, cambiados: [] });
+    expect(vacia.cambiados).toEqual([]);
+    // Y ausente no se rellena con nada.
+    expect("cambiados" in medidaDeEntrega({ verificador: "verde", pendientes: 0 }, { revisable: false })).toBe(false);
+  });
+
+  it("cuántas escrituras autorizó el turno entra por su parámetro, y ausente sigue ausente", () => {
+    expect(medidaDeEntrega({ verificador: "verde", pendientes: 0 }, { revisable: true }, 2)).toMatchObject({
+      autorizadas: 2,
+    });
+    // Cero es un dato («corrió y no autorizó ninguna»), y se conserva.
+    expect(medidaDeEntrega({ verificador: "verde", pendientes: 0 }, { revisable: true }, 0)).toMatchObject({
+      autorizadas: 0,
+    });
+    expect("autorizadas" in medidaDeEntrega({ verificador: "verde", pendientes: 0 }, { revisable: true })).toBe(false);
   });
 });
