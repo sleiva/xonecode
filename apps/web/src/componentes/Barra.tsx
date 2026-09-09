@@ -10,12 +10,47 @@ import filas from "../../estilos/Rows.module.css";
 import ajustes from "../../estilos/SettingsRoot.module.css";
 import { MenuDeSesion } from "./MenuDeSesion.js";
 import { IconoDeEntorno } from "./IconoDeEntorno.js";
+import { selloDeFecha } from "../selloDeFecha.js";
 import estilos from "./Barra.module.css";
+
+/** El sello de una fila, o nada si no hay hora que pintar. Envuelve a `selloDeFecha` solo
+ *  para que la fila no tenga que repetir la comprobación de ausencia. */
+const selloDeSesion = (iso: string | undefined): string | undefined =>
+  iso === undefined ? undefined : selloDeFecha(iso);
+
+/**
+ * Las sesiones ordenadas por su ÚLTIMO turno, las recientes arriba.
+ *
+ * Las que no traen hora van al final —no se les inventa una fecha ni se las mete por
+ * medio— y entre ellas se mantiene el criterio de SIEMPRE: al revés del índice, que las
+ * guarda en orden de alta, así que invertirlo es «las más recientes arriba». Es lo único
+ * que se sabe de ellas, y es el mismo orden que enseña el escritorio.
+ */
+export function ordenarPorUltimoTurno<T extends { ultimoTurno?: string }>(sesiones: readonly T[]): T[] {
+  const conHora = sesiones.filter((s) => s.ultimoTurno !== undefined);
+  const sinHora = sesiones.filter((s) => s.ultimoTurno === undefined).reverse();
+  // Los ISO se comparan como texto a propósito: con la misma zona (`Z`, que es lo que
+  // escribe `toISOString`) el orden lexicográfico ES el cronológico, y no hay que
+  // construir dos `Date` por comparación.
+  conHora.sort((a, b) => (b.ultimoTurno ?? "").localeCompare(a.ultimoTurno ?? ""));
+  return [...conHora, ...sinHora];
+}
 
 export interface Proyecto {
   id: string;
   nombre: string;
-  sesiones: { id: string; titulo: string; historica: boolean }[];
+  sesiones: {
+    id: string;
+    titulo: string;
+    historica?: boolean;
+    /** Cuándo se tocó por última vez, ISO. Ordena la lista y se pinta a la derecha.
+     *  Ausente = el índice no lo dice: sin sello, y esa fila va la última. */
+    ultimoTurno?: string;
+    /** La abrió una TAREA de fondo. **Ausente es «no consta»**, no «es una conversación»:
+     *  no la llevan las sesiones anteriores a la marca, y se pintan lisas porque liso es
+     *  lo conservador. */
+    deTarea?: true;
+  }[];
   /**
    * Compartido CONTIGO por otra persona (`shared` de CloudStudio). **Ausente no es «es
    * tuyo»**: es que el servidor no lo dijo, y entonces no se pinta NADA — ni «propio» ni
@@ -252,9 +287,13 @@ export function Barra({ entornos, entornoActivo, proyectos, visibles, proyectoAc
                       {p.sesiones.length === 0 ? (
                         <p className={clsx(navegador.empty, estilos.sinSesiones)}>Sin sesiones todavía.</p>
                       ) : (
-                        // Las más recientes ARRIBA, como en el escritorio: el índice las
-                        // guarda en orden de creación, y las dos listas se contradecían.
-                        [...p.sesiones].reverse().map((s) => (
+                        // Las más recientes ARRIBA, por el ÚLTIMO TURNO y no por el orden
+                        // de alta del índice: era `[...].reverse()`, así que una
+                        // conversación vieja reabierta hoy se quedaba abajo del todo. Las
+                        // que no traen hora van al final —no se les inventa una— y entre
+                        // ellas se conserva el orden que traían, que es lo único que se
+                        // sabe de ellas.
+                        ordenarPorUltimoTurno(p.sesiones).map((s) => (
                           /*
                             Un `<div>` con un botón dentro y el menú al lado, no un botón
                             suelto: el «…» es interactivo y anidarlo dentro del botón de la
@@ -286,7 +325,29 @@ export function Barra({ entornos, entornoActivo, proyectos, visibles, proyectoAc
                               onClick={() => alAbrirSesion(p.id, s.id)}
                             >
                               <span className={filas.slot} aria-hidden="true" />
-                              <span className={filas.title}>{s.titulo}</span>
+                              <span className={filas.title}>
+                                {/*
+                                  Una sesión de tarea llega SIN título: el título sale del
+                                  primer acto de `usuario` y una tarea no manda ninguno. Se
+                                  ROTULA lo que falta —no se inventa un título—, porque una
+                                  fila en blanco no se puede ni leer ni reconocer.
+
+                                  Y sin marca se rotula igual pero sin decir de quién es: es
+                                  el caso de las sesiones de tarea anteriores a la marca, y
+                                  ahí «no consta» no puede convertirse en «es una tarea».
+                                */}
+                                {s.titulo !== "" ? s.titulo : s.deTarea ? "Tarea de fondo" : "Sin título"}
+                              </span>
+                              {s.deTarea ? (
+                                // Con PALABRAS y no solo con un color: es lo que distingue
+                                // una conversación tuya de lo que escribió una tarea sola, y
+                                // un color no lo dice ni a quien no lo ve ni a un lector de
+                                // pantalla.
+                                <span className={estilos.marcaDeTarea}>Tarea</span>
+                              ) : null}
+                              {selloDeSesion(s.ultimoTurno) === undefined ? null : (
+                                <span className={estilos.selloDeFecha}>{selloDeSesion(s.ultimoTurno)}</span>
+                              )}
                             </button>
                             {apagado ? null : (
                             <MenuDeSesion

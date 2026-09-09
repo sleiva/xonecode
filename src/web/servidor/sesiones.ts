@@ -99,6 +99,21 @@ export interface EntradaIndice {
   ultimoTurno: string;
   /** Con cuál trabaja el agente. Ausente = ninguno elegido. */
   dispositivo?: DispositivoElegido;
+  /**
+   * El id de la TAREA de fondo que abrió esta sesión, si la abrió una.
+   *
+   * Ausente es **«no consta»** y no «es una conversación»: no la lleva ninguna sesión
+   * anterior a esta marca, ni la que se dé de alta por el camino defensivo de
+   * `anotarActo` (índice perdido a mitad). Quien lo pinte tiene que tratarlo como el lado
+   * conservador —liso—, no como una afirmación.
+   *
+   * Se guarda AQUÍ y no se deduce cruzando con la cola de tareas, que es lo que parecía
+   * gratis: la cola es opcional en las dos capas —`OpcionesDeMontaje.colaDeTareas` y el
+   * mensaje `tareas` del cable— y en un proceso que no las corre el cruce pintaría TODAS
+   * las sesiones de tarea como conversaciones, en silencio y en la dirección equivocada.
+   * Es el mismo camino que recorrió `historica`: de suposición a hecho comprobado.
+   */
+  tarea?: string;
 }
 
 export interface SesionReabierta {
@@ -223,10 +238,14 @@ function escribirIndice(raiz: string, entradas: EntradaIndice[]): void {
  * que existir antes del primer turno, y esto solo escribe la entrada. Sin id se genera uno,
  * que es lo que hacía siempre y lo que sigue valiendo para quien no tenga hilo.
  */
-export function crearSesion(raiz: string, id: string = randomUUID()): string {
+export function crearSesion(raiz: string, id: string = randomUUID(), tarea?: string): string {
   const ahora = new Date().toISOString();
   const entradas = leerIndiceOAbortar(raiz);
-  entradas.push({ id, titulo: "", creada: ahora, ultimoTurno: ahora });
+  // La marca se escribe SOLO aquí, que es el único sitio donde se da de alta la entrada por
+  // el camino normal (`vestibulo.ts#volcar`, una vez por sesión) y donde se sabe por qué
+  // puerta se abrió. Ponerla en `anotarActo` la haría viajar en cada acto para decidir
+  // «solo si falta» en todos.
+  entradas.push({ id, titulo: "", creada: ahora, ultimoTurno: ahora, ...(tarea === undefined ? {} : { tarea }) });
   escribirIndice(raiz, entradas);
   return id;
 }

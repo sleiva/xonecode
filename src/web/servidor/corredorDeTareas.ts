@@ -392,7 +392,12 @@ export function crearCorredorDeTareas(opciones: {
    * que REENVIAR lo que la tarea ya sepa. `undefined` en la primera ejecución sigue dando
    * una sesión nueva, igual que siempre.
    */
-  abrirParaTarea: (raiz: string, sesion?: string, adjuntos?: string) => Promise<ConsolaParaTarea>;
+  abrirParaTarea: (
+    raiz: string,
+    sesion?: string,
+    adjuntos?: string,
+    tarea?: string
+  ) => Promise<ConsolaParaTarea>;
   /** Se lee en cada pasada: cambiar el tope en Ajustes tiene que notarse sin reiniciar. */
   concurrencia: () => number;
   /**
@@ -865,7 +870,16 @@ export function crearCorredorDeTareas(opciones: {
     try {
       // `tarea.sesion`, si la hay, es lo que hace que reanudar siga la MISMA conversación:
       // ver el comentario de `abrirParaTarea` más arriba.
-      consola = await opciones.abrirParaTarea(tarea.proyecto.raiz, tarea.sesion, carpetaDeAdjuntos(tarea));
+      // Y el id de la TAREA, que es lo que marca su sesión en el índice del proyecto: sin
+      // él la conversación de una tarea entra en la barra como una más —y con el título
+      // vacío, porque el título sale del primer acto de `usuario` y una tarea no manda
+      // ninguno—. Ver `EntradaIndice.tarea` para por qué no se deduce cruzando con la cola.
+      consola = await opciones.abrirParaTarea(
+        tarea.proyecto.raiz,
+        tarea.sesion,
+        carpetaDeAdjuntos(tarea),
+        tarea.id
+      );
     } catch (error) {
       /**
        * El proyecto ya no está donde la tarea dice. Se aparca: la dirección de fallo aquí es

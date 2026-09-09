@@ -139,7 +139,10 @@ export interface PuertoDeSesiones {
   crear(raiz: string, id?: string): string;
   /** El índice de sesiones de un proyecto ya bajado. Una carpeta que no existe es una
    *  lista vacía, no un error: el proyecto todavía no se ha abierto nunca. */
-  listar(raiz: string): { id: string; titulo: string }[];
+  listar(raiz: string): { id: string; titulo: string; ultimoTurno?: string; tarea?: string }[];
+  /** Da de alta la entrada del índice. `tarea` es el id de la TAREA que abrió la sesión, y
+   *  solo lo trae la puerta de las tareas: ausente es «no consta». */
+  crear(raiz: string, id?: string, tarea?: string): string;
   anotar(raiz: string, id: string, acto: Acto): void;
   reabrir(raiz: string, id: string): { id: string; actos: Acto[]; historica: boolean; dispositivo?: DispositivoElegido };
   /** Borra una sesión. Devuelve si había algo que borrar; un id desconocido no es un error
@@ -481,7 +484,7 @@ export interface Vestibulo {
    */
   raizDeProyecto(entorno: string, proyecto: string): string;
   /** Las sesiones guardadas de una copia local. Sin copia, lista vacía. */
-  sesionesDe(raiz: string): { id: string; titulo: string }[];
+  sesionesDe(raiz: string): { id: string; titulo: string; ultimoTurno?: string; tarea?: string }[];
   /**
    * Borra una sesión guardada, con su marca de git.
    *
@@ -519,7 +522,7 @@ export interface Vestibulo {
    * reanudar una tarea (un reintento, o un feedback) siga la MISMA conversación: el
    * checkpointer trae su memoria porque el `thread_id` es el mismo id.
    */
-  abrirParaTarea(raiz: string, sesion?: string, adjuntos?: string): Promise<ConsolaDeProyecto>;
+  abrirParaTarea(raiz: string, sesion?: string, adjuntos?: string, tarea?: string): Promise<ConsolaDeProyecto>;
   proyectoAbierto(): ConsolaDeProyecto | undefined;
   /** El usuario se va sin terminar. No escribe nada; DICE lo que ya quedó escrito. */
   cancelar(): Promise<void>;
@@ -781,6 +784,7 @@ export function crearVestibulo(opciones: OpcionesDelVestibulo): Vestibulo {
     raiz,
     sesion,
     adjuntos,
+    tarea,
     alCable,
   }: {
     raiz: string;
@@ -793,6 +797,13 @@ export function crearVestibulo(opciones: OpcionesDelVestibulo): Vestibulo {
      * vista un fichero de otra conversación.
      */
     adjuntos?: string;
+    /**
+     * El id de la TAREA que abre esta consola, si la abre una. Va al índice de sesiones al
+     * darla de alta y es lo único que después distingue su fila de una conversación: por la
+     * puerta de las personas nunca llega, y por eso ausente significa «no consta» y no «es
+     * un chat». Ver `EntradaIndice.tarea`.
+     */
+    tarea?: string;
     /**
      * ¿Se le cuentan al cable los flancos del turno y los cambios de modelo?
      *
@@ -915,7 +926,7 @@ export function crearVestibulo(opciones: OpcionesDelVestibulo): Vestibulo {
       const todos = consolaWeb.actos();
       if (todos.length <= volcados) return;
       if (!anotada) {
-        sesiones.crear(raiz, idSesion);
+        sesiones.crear(raiz, idSesion, tarea);
         anotada = true;
         // Ahora sí hay una sesión en el índice a la que apuntar la foto de la apertura.
         // Se guarda la promesa en vez de tirarla: `cerrar()` la espera. Ver `marcado`.
@@ -1137,7 +1148,12 @@ export function crearVestibulo(opciones: OpcionesDelVestibulo): Vestibulo {
       (consola) => consola.raiz === raiz && !consola.cerrada && (consola.sesion === sesion || consola.idDeHilo === sesion)
     );
 
-  const abrirParaTarea = async (raiz: string, sesion?: string, adjuntos?: string): Promise<ConsolaDeProyecto> => {
+  const abrirParaTarea = async (
+    raiz: string,
+    sesion?: string,
+    adjuntos?: string,
+    tarea?: string
+  ): Promise<ConsolaDeProyecto> => {
     // ANTES de construir nada: sin esto, una raíz equivocada dejaba un `correrConsola`
     // vivo, una foto de git lanzada y un id de hilo gastado. Y el motivo no lleva la ruta
     // —puede ser la del home— porque de aquí el error sube al registro de la tarea.
@@ -1150,7 +1166,9 @@ export function crearVestibulo(opciones: OpcionesDelVestibulo): Vestibulo {
     // en la primera ejecución de la tarea sigue dando una sesión nueva, como siempre.
     // `adjuntos` reenviada igual que `sesion`, y por el mismo motivo: quien la conoce es el
     // corredor, que es el único que sabe de qué tarea es esta apertura.
-    const consolaDeProyecto = await construirConsolaDeProyecto({ raiz, sesion, adjuntos, alCable: false });
+    // `tarea` viaja por lo mismo que las otras dos: quien sabe de qué tarea es esta
+    // apertura es el corredor. Es lo que marca su fila en el índice como sesión de tarea.
+    const consolaDeProyecto = await construirConsolaDeProyecto({ raiz, sesion, adjuntos, tarea, alCable: false });
     deTareas.add(consolaDeProyecto);
     return consolaDeProyecto;
   };
@@ -1284,7 +1302,15 @@ export function crearVestibulo(opciones: OpcionesDelVestibulo): Vestibulo {
       // Una carpeta que no existe no es un fallo: es un proyecto que nunca se abrió. El
       // puerto se lo traga y devuelve vacío, que es la verdad.
       try {
-        return sesiones.listar(raiz).map((s) => ({ id: s.id, titulo: s.titulo }));
+        // Campo a campo y no la entrada entera: del índice cuelgan además `creada` y el
+        // `dispositivo`, que la barra no pinta. Los dos que sí salen son los que distinguen
+        // una fila de otra: CUÁNDO se tocó y de QUIÉN es.
+        return sesiones.listar(raiz).map((s) => ({
+          id: s.id,
+          titulo: s.titulo,
+          ...(s.ultimoTurno === undefined ? {} : { ultimoTurno: s.ultimoTurno }),
+          ...(s.tarea === undefined ? {} : { tarea: s.tarea }),
+        }));
       } catch {
         return [];
       }
@@ -1389,7 +1415,7 @@ export function crearVestibulo(opciones: OpcionesDelVestibulo): Vestibulo {
      * todavía vive. El precio, dicho: una tarea que llega mientras se cierra un turno
      * humano de minutos espera a que acabe. Para trabajo de fondo es el lado correcto.
      */
-    abrirParaTarea: (raiz, sesion, adjuntos) => enCola(() => abrirParaTarea(raiz, sesion, adjuntos)),
+    abrirParaTarea: (raiz, sesion, adjuntos, tarea) => enCola(() => abrirParaTarea(raiz, sesion, adjuntos, tarea)),
     proyectoAbierto: () => abierto,
 
     cancelar: () => enCola(async () => {

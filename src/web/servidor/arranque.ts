@@ -1308,10 +1308,21 @@ export function montarRutas(
    * Las sesiones guardadas de un proyecto de este entorno. Sin entorno elegido no hay raíz
    * que calcular, y sin copia local la lista es vacía — que es la verdad, no un fallo.
    */
-  const sesionesDelProyecto = (nombre: string): { id: string; titulo: string }[] => {
+  const sesionesDelProyecto = (
+    nombre: string
+  ): { id: string; titulo: string; ultimoTurno?: string; deTarea?: true }[] => {
     if (entornoElegido === undefined) return [];
     try {
-      return vestibulo.sesionesDe(vestibulo.raizDeProyecto(entornoElegido, nombre));
+      // Viaja un BOOLEANO y no el id de la tarea: la fila lleva una marca, no el nombre de
+      // la tarea —en 280 px no cabe—, así que el id se queda en el host por la misma regla
+      // que la ruta de una herramienta o el pid del corredor. `deTarea` ausente es «no
+      // consta» y no «es una conversación»: no la lleva ninguna sesión anterior a la marca.
+      return vestibulo.sesionesDe(vestibulo.raizDeProyecto(entornoElegido, nombre)).map((s) => ({
+        id: s.id,
+        titulo: s.titulo,
+        ...(s.ultimoTurno === undefined ? {} : { ultimoTurno: s.ultimoTurno }),
+        ...(s.tarea === undefined ? {} : { deTarea: true as const }),
+      }));
     } catch {
       return [];
     }

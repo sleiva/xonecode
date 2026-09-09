@@ -172,19 +172,36 @@ function proyectoDeMentira() {
  * virtual que ninguna instrucción suya nombra.
  */
 describe("los adjuntos de una tarea llegan a su turno", () => {
-  /** Como `proyectoDeMentira`, pero apuntando además los TRES argumentos de la apertura. */
+  /** Como `proyectoDeMentira`, pero apuntando además los CUATRO argumentos de la apertura. */
   function conAperturas() {
     const p = proyectoDeMentira();
-    const aperturas: { raiz: string; sesion?: string; adjuntos?: string }[] = [];
+    const aperturas: { raiz: string; sesion?: string; adjuntos?: string; tarea?: string }[] = [];
     return {
       ...p,
       aperturas,
-      abrir: async (raiz: string, sesion?: string, adjuntos?: string) => {
-        aperturas.push({ raiz, ...(sesion === undefined ? {} : { sesion }), ...(adjuntos === undefined ? {} : { adjuntos }) });
+      abrir: async (raiz: string, sesion?: string, adjuntos?: string, tarea?: string) => {
+        aperturas.push({
+          raiz,
+          ...(sesion === undefined ? {} : { sesion }),
+          ...(adjuntos === undefined ? {} : { adjuntos }),
+          ...(tarea === undefined ? {} : { tarea }),
+        });
         return p.abrir(raiz);
       },
     };
   }
+
+  it("la apertura lleva el ID DE LA TAREA: es lo que marca su sesión en el índice", async () => {
+    // Sin él, la sesión de la tarea entra en el índice como una conversación más —y con el
+    // título vacío, porque el título sale del primer acto de `usuario` y una tarea no manda
+    // ninguno—. Cruzarlo después con la cola no vale: es opcional en las dos capas.
+    const { disco } = discoDeMentira([TAREA({})]);
+    const p = conAperturas();
+    const corredor = crearCorredorDeTareas({ ...ENTREGA_VERDE, disco, abrirParaTarea: p.abrir, pid: 1, concurrencia: () => 1 });
+    await corredor.arrancar();
+    await corredor.asentar();
+    expect(p.aperturas).toEqual([{ raiz: "/w/A", tarea: "t1" }]);
+  });
 
   it("con adjuntos: se monta su carpeta y el encargo dice qué hay y dónde", async () => {
     const { disco } = discoDeMentira([TAREA({ adjuntos: [{ nombre: "mockup.png", bytes: 2048, mime: "image/png" }] })]);
@@ -192,7 +209,7 @@ describe("los adjuntos de una tarea llegan a su turno", () => {
     const corredor = crearCorredorDeTareas({ ...ENTREGA_VERDE, disco, abrirParaTarea: p.abrir, pid: 1, concurrencia: () => 1 });
     await corredor.arrancar();
     await corredor.asentar();
-    expect(p.aperturas).toEqual([{ raiz: "/w/A", adjuntos: "/tmp/t1/adjuntos" }]);
+    expect(p.aperturas).toEqual([{ raiz: "/w/A", adjuntos: "/tmp/t1/adjuntos", tarea: "t1" }]);
     expect(p.encargos[0]).toContain("e");
     expect(p.encargos[0]).toContain("/adjuntos/mockup.png");
     // Y la limitación declarada: se leen, no se ven.
@@ -210,7 +227,7 @@ describe("los adjuntos de una tarea llegan a su turno", () => {
     const corredor = crearCorredorDeTareas({ ...ENTREGA_VERDE, disco, abrirParaTarea: p.abrir, pid: 1, concurrencia: () => 1 });
     await corredor.arrancar();
     await corredor.asentar();
-    expect(p.aperturas).toEqual([{ raiz: "/w/A" }]);
+    expect(p.aperturas).toEqual([{ raiz: "/w/A", tarea: "t1" }]);
     expect(p.encargos).toEqual(["e"]);
     p.acabar();
     await corredor.asentar();
@@ -257,7 +274,7 @@ describe("los adjuntos de una tarea llegan a su turno", () => {
     });
     await corredor.arrancar();
     await corredor.asentar();
-    expect(p.aperturas).toEqual([{ raiz: "/w/A" }]);
+    expect(p.aperturas).toEqual([{ raiz: "/w/A", tarea: "t1" }]);
     p.acabar();
     await corredor.asentar();
     await corredor.parar();

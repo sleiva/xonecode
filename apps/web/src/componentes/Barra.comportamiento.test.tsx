@@ -435,3 +435,83 @@ describe("Barra: el orden de las sesiones", () => {
     expect(botones.indexOf("la última")).toBeLessThan(botones.indexOf("la primera"));
   });
 });
+
+/**
+ * Una tarea de fondo abre su PROPIA sesión, y esa sesión entra en el mismo índice del
+ * proyecto: medido en el proyecto real del usuario, la conversación de la tarea de ayer
+ * está en la barra como una fila más y encima EN BLANCO —el título sale del primer acto de
+ * `usuario` y una tarea no manda ninguno—. Una sola lista, con los ítems distinguidos.
+ */
+describe("Barra: chats y tareas en la misma lista, distinguidos", () => {
+  const SESIONES = [
+    { id: "s7", titulo: "arreglar el alta", ultimoTurno: "2026-09-07T10:08:23.790Z" },
+    { id: "s9", titulo: "", ultimoTurno: "2026-09-09T06:23:12.784Z", deTarea: true as const },
+  ];
+
+  function montar(sesiones: Parameters<typeof Barra>[0]["proyectos"][number]["sesiones"] = SESIONES) {
+    return render(
+      <Barra
+        entornos={[]}
+        entornoActivo=""
+        proyectos={[{ id: "p1", nombre: "AppDemo", sesiones }]}
+        alElegirEntorno={() => {}}
+        alAbrirSesion={() => {}}
+        alAbrirProyecto={() => {}}
+        alNuevaSesion={() => {}}
+        alAccionDeSesion={() => {}}
+        alAbrirAjustes={() => {}}
+      />
+    );
+  }
+
+  it("ordena por `ultimoTurno`, no por orden de creación", () => {
+    // Antes era `[...sesiones].reverse()`, o sea el orden de alta del índice al revés: una
+    // conversación vieja que reabriste hoy se quedaba abajo del todo.
+    montar();
+    // Solo los botones con texto: el «…» de cada fila también es un botón, y su nombre
+    // accesible lleva el título de la sesión dentro.
+    const titulos = screen.getAllByRole("button").map((b) => b.textContent ?? "").filter((t) => t !== "");
+    expect(titulos.findIndex((t) => t.includes("Tarea de fondo"))).toBeLessThan(
+      titulos.findIndex((t) => t.includes("arreglar el alta"))
+    );
+  });
+
+  it("la de una tarea lo dice con PALABRAS, no solo con un color", () => {
+    montar();
+    expect(screen.getByText("Tarea")).toBeTruthy();
+  });
+
+  it("y si no tiene título dice qué es, en vez de dejar la fila en blanco", () => {
+    // No se inventa un título: se rotula lo que falta, que es distinto.
+    montar();
+    expect(screen.getByText("Tarea de fondo")).toBeTruthy();
+  });
+
+  it("una fila SIN título tampoco se queda en blanco cuando no consta de quién es", () => {
+    // Es el caso de las sesiones de tarea de antes de la marca: no llevan `deTarea`, así
+    // que se pintan lisas —lo conservador—, pero una fila vacía no se puede ni leer ni
+    // pulsar con criterio. Se rotula lo que falta sin decir de quién es.
+    montar([{ id: "vieja", titulo: "", ultimoTurno: "2026-09-09T06:23:12.784Z" }]);
+    expect(screen.getByText("Sin título")).toBeTruthy();
+    expect(screen.queryByText("Tarea")).toBeNull();
+  });
+
+  it("cada fila lleva su fecha y su hora", () => {
+    montar();
+    expect(screen.getByText("7 sept 12:08")).toBeTruthy();
+    expect(screen.getByText("9 sept 08:23")).toBeTruthy();
+  });
+
+  it("sin `ultimoTurno` no se inventa una fecha, y esa fila va la última", () => {
+    montar([
+      { id: "sin", titulo: "de antes" },
+      { id: "s7", titulo: "arreglar el alta", ultimoTurno: "2026-09-07T10:08:23.790Z" },
+    ]);
+    const titulos = screen.getAllByRole("button").map((b) => b.textContent ?? "").filter((t) => t !== "");
+    const sinFecha = titulos.find((t) => t.includes("de antes")) ?? "";
+    expect(titulos.findIndex((t) => t.includes("arreglar el alta"))).toBeLessThan(
+      titulos.findIndex((t) => t.includes("de antes"))
+    );
+    expect(sinFecha).not.toMatch(/\d{2}:\d{2}/);
+  });
+});

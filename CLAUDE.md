@@ -266,6 +266,36 @@ turno y nadie volvía a anunciar; y `historica` deja de serlo al EMPEZAR el prim
 nuevo. Diferido a una microtarea porque `vestibulo.ts` llama a la escucha ANTES de
 `volcar()` en el mismo `finally` síncrono: anunciar en el acto leería la sesión sin id.
 
+**Las sesiones de la barra son UNA lista, y se distingue qué es cada una y cuándo se tocó**
+(`EntradaIndice.tarea`, `alta.proyectos[].sesiones[].deTarea`/`.ultimoTurno`,
+`apps/web/src/selloDeFecha.ts`). Una tarea de fondo abre su PROPIA sesión y entra en el mismo
+índice del proyecto, así que ya salía en la barra — mezclada con las conversaciones y, medido
+en el proyecto real del usuario, **con el título en blanco**: el título sale del primer acto de
+`usuario` y una tarea no manda ninguno. Cinco reglas:
+- **De quién es una sesión se GUARDA, no se deduce.** `crearSesion` escribe el id de la tarea
+  cuando la abre la puerta de las tareas —`abrirParaTarea` lo baja hasta el cuerpo compartido—,
+  y es el único sitio que lo sabe. Cruzarlo después con la cola parecía gratis y es un fallo
+  abierto: la cola es OPCIONAL en las dos capas (`OpcionesDeMontaje.colaDeTareas` y el mensaje
+  `tareas`), así que en un proceso que no corre tareas el cruce pintaría TODAS las sesiones de
+  tarea como conversaciones, en silencio. Es el camino que ya recorrió `historica`: de
+  suposición a hecho comprobado.
+- **Ausente es «no consta», no «es un chat»**, y aquí eso tiene dueño: las sesiones de tarea
+  ANTERIORES a la marca no la llevan y se pintan lisas — porque liso es lo conservador, no
+  porque conste que sean de una persona. No hay relleno retroactivo, por lo mismo que no hay
+  poda de borradores huérfanos ni del checkpointer: en este repo no se barre nada todavía.
+- **Por el cable viaja un BOOLEANO, no el id de la tarea.** La fila lleva una marca y no el
+  nombre de la tarea —en 280 px comparte hueco con el título y con el «…»—, así que el id se
+  queda en el host, la misma regla que la ruta de una herramienta o el pid del corredor.
+- **El orden es por `ultimoTurno`**, que también estaba en el índice desde siempre y tampoco
+  viajaba. Era `[...sesiones].reverse()`, o sea el orden de alta al revés: una conversación
+  vieja reabierta hoy se quedaba abajo del todo. Las entradas sin hora van al final y entre
+  ellas se conserva el criterio de siempre (invertido), que es lo único que se sabe de ellas.
+- **Y lo que falta se ROTULA, no se inventa.** Una fila sin título dice «Tarea de fondo» si
+  consta que lo es y «Sin título» si no; el sello de fecha no se pinta si la hora no se puede
+  leer, en vez de un «Invalid Date». El año solo sale cuando no es el actual: repetido en todas
+  las filas no distingue ninguna, y omitido siempre haría que un «7 sept» del año pasado se
+  leyera como de anteayer.
+
 **Y el proyecto DICE con qué te encuentras: lo que ya había sin commitear al abrir**
 (`agent/gitSync.ts#trabajoSinCommitear`, `alta.trabajoAlAbrir`). Todas las sesiones de un
 proyecto escriben en la MISMA copia local, y desde que hay tareas de fondo que escriben solas

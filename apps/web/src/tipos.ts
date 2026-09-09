@@ -266,7 +266,17 @@ export type MensajeAlCliente =
          *  lo mismo que «es tuyo»: entonces no se pinta etiqueta. Booleano y no el correo
          *  del propietario, que el host descarta a propósito. */
         compartido?: boolean;
-        sesiones?: { id: string; titulo: string }[];
+        sesiones?: {
+          id: string;
+          titulo: string;
+          /** Cuándo se tocó por última vez, ISO. Ordena la lista y se pinta a la derecha.
+           *  Ausente = el índice no lo dice; sin sello y la última. */
+          ultimoTurno?: string;
+          /** La abrió una TAREA de fondo, no una persona. **Ausente es «no consta»**: no la
+           *  llevan las sesiones anteriores a la marca, y se pintan lisas porque liso es lo
+           *  conservador, no porque conste que sean de alguien. */
+          deTarea?: true;
+        }[];
         /** La copia local ya existe: abrirlo no baja nada ni pregunta rama. */
         local?: boolean;
       }[];

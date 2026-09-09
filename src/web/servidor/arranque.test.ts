@@ -1476,6 +1476,57 @@ describe("montarRutas — el cable, por fin conectado", () => {
       >;
       expect(alta.proyectos[0]?.sesiones).toEqual([{ id: "s7", titulo: "arreglar el alta" }]);
     });
+
+    it("una sesión de TAREA viaja marcada, y con la hora de su último turno", async () => {
+      // Las dos cosas que la barra necesita para distinguir las filas: qué es cada una y
+      // cuándo se tocó. La marca viene del ÍNDICE y no de cruzar con la cola de tareas, que
+      // es opcional en las dos capas — ver `EntradaIndice.tarea`.
+      const servidor = servidorDeMentira();
+      const vestibulo = vestibuloDePrueba({
+        sesiones: {
+          crear: () => "s1",
+          listar: () => [
+            { id: "s7", titulo: "arreglar el alta", creada: "2026-09-07T08:00:00.000Z", ultimoTurno: "2026-09-07T10:08:23.790Z" },
+            { id: "s9", titulo: "", creada: "2026-09-09T05:34:13.915Z", ultimoTurno: "2026-09-09T06:23:12.784Z", tarea: "669c9b79" },
+          ],
+          anotar: () => {},
+          reabrir: (_r, id) => ({ id, actos: [], historica: true }),
+        },
+      });
+      montarRutas(servidor, vestibulo);
+      const cliente = clienteDeMentira();
+      await servidor.rutas.get(`GET ${RUTA_EVENTOS}`)!(cliente.peticion, cliente.respuesta);
+      await asentar();
+
+      const alta = cliente.recibidos.filter((m) => m.clase === "alta").at(-1) as Extract<
+        MensajeAlCliente,
+        { clase: "alta" }
+      >;
+      expect(alta.proyectos[0]?.sesiones).toEqual([
+        { id: "s7", titulo: "arreglar el alta", ultimoTurno: "2026-09-07T10:08:23.790Z" },
+        { id: "s9", titulo: "", ultimoTurno: "2026-09-09T06:23:12.784Z", deTarea: true },
+      ]);
+    });
+
+    it("viaja un booleano y no el id de la tarea: solo cruza el cable lo que se pinta", async () => {
+      // La fila lleva una marca, no el nombre de la tarea —en 280 px no cabe— así que el
+      // id se queda en el host, como la ruta de una herramienta o el pid del corredor.
+      const servidor = servidorDeMentira();
+      const vestibulo = vestibuloDePrueba({
+        sesiones: {
+          crear: () => "s1",
+          listar: () => [{ id: "s9", titulo: "", creada: "x", ultimoTurno: "y", tarea: "669c9b79" }],
+          anotar: () => {},
+          reabrir: (_r, id) => ({ id, actos: [], historica: true }),
+        },
+      });
+      montarRutas(servidor, vestibulo);
+      const cliente = clienteDeMentira();
+      await servidor.rutas.get(`GET ${RUTA_EVENTOS}`)!(cliente.peticion, cliente.respuesta);
+      await asentar();
+
+      expect(JSON.stringify(cliente.recibidos)).not.toContain("669c9b79");
+    });
   });
 
   /**

@@ -64,9 +64,12 @@ function sesionesEnMemoria() {
   const jsonl = new Map<string, Acto[]>();
   /** El dispositivo preferido, por clave `raiz|id` — como lo guarda el índice de verdad. */
   const dispositivos = new Map<string, DispositivoElegido | undefined>();
+  /** Con qué tarea se dio de alta cada sesión, como lo guarda el índice de verdad. */
+  const tareas = new Map<string, string | undefined>();
   return {
     jsonl,
     dispositivos,
+    tareas,
     puerto: {
       listar: (raiz: string) =>
         [...jsonl.keys()]
@@ -75,8 +78,9 @@ function sesionesEnMemoria() {
       // El id ENTRA, desde que es también el `thread_id` del grafo: quien abre la consola
       // lo decide al abrir. Sin id se genera uno corto, que es lo que usan los tests que
       // solo necesitan una sesión guardada.
-      crear: (raiz: string, id: string = `s${jsonl.size + 1}`) => {
+      crear: (raiz: string, id: string = `s${jsonl.size + 1}`, tarea?: string) => {
         jsonl.set(`${raiz}|${id}`, []);
+        tareas.set(`${raiz}|${id}`, tarea);
         return id;
       },
       anotar: (raiz: string, id: string, acto: Acto) => {
@@ -1027,6 +1031,43 @@ describe("abrirParaTarea — la segunda puerta", () => {
     await v.abrirProyecto({ raiz: proyectoEnDisco(base, "A") });
     expect(extras).toEqual([undefined]);
     await v.cerrar();
+    rmSync(base, { recursive: true, force: true });
+  });
+
+  it("la sesión de una TAREA queda marcada con su id; la de una persona, no", async () => {
+    // Sin esto, la sesión de una tarea entra en el índice como una más — y encima con el
+    // título VACÍO, porque el título sale del primer acto de `usuario` y una tarea no
+    // manda ninguno. Medido en el proyecto real del usuario: en la barra es una fila en
+    // blanco indistinguible de una conversación.
+    const base = baseTemporal();
+    const s = sesionesEnMemoria();
+    const v = crearVestibulo({
+      ...dobles(),
+      origenDeTrabajo: "global",
+      sesiones: s.puerto,
+      baseDeWorkspace: base,
+      // Sin `correr` inyectado corre el `correrConsola` de verdad, que es lo que hace que
+      // la prosa se convierta en un turno y el turno vuelque. Con un `correr` que devuelve
+      // en el acto, el lazo se acaba antes de que haya nada que anotar.
+      crearEjecutor: () => async () => {},
+    });
+    const raizA = proyectoEnDisco(base, "A");
+    const raizB = proyectoEnDisco(base, "B");
+
+    // SIN id de sesión: es la primera ejecución de la tarea, que es cuando nace la entrada
+    // del índice. En un reintento el id ya viene y la entrada existe (con su marca puesta).
+    const humana = await v.abrirProyecto({ raiz: raizA });
+    humana.recibir({ clase: "prosa", texto: "hola" });
+    const deTarea = await v.abrirParaTarea(raizB, undefined, undefined, "669c9b79");
+    deTarea.recibir({ clase: "prosa", texto: "el encargo" });
+    await new Promise((r) => setTimeout(r, 0));
+    await humana.cerrar();
+    await deTarea.cerrar();
+
+    expect(s.tareas.get(`${raizB}|${deTarea.idDeHilo}`)).toBe("669c9b79");
+    expect(s.tareas.get(`${raizA}|${humana.idDeHilo}`)).toBeUndefined();
+    // Y la humana SÍ se dio de alta: la marca ausente es una decisión, no que no pasara nada.
+    expect(s.tareas.has(`${raizA}|${humana.idDeHilo}`)).toBe(true);
     rmSync(base, { recursive: true, force: true });
   });
 

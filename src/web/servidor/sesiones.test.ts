@@ -73,6 +73,30 @@ describe("sesiones por proyecto", () => {
   });
 });
 
+describe("de quién es la sesión: persona o tarea", () => {
+  it("la de una tarea queda MARCADA con su id, y sobrevive al índice", () => {
+    // Medido en el proyecto real del usuario: la sesión de la tarea de ayer está en el
+    // índice como una más y con el título VACÍO —una tarea no manda ningún acto de
+    // `usuario`, que es de donde sale el título—, así que en la barra es una fila en
+    // blanco indistinguible de una conversación. Sin esta marca no hay forma de saberlo:
+    // cruzarla con la cola no vale, porque la cola es OPCIONAL en las dos capas
+    // (`OpcionesDeMontaje.colaDeTareas` y el mensaje `tareas`) y un proceso que no corre
+    // tareas pintaría todas las sesiones de tarea como conversaciones, en silencio.
+    const raiz = proyecto();
+    crearSesion(raiz, "s-tarea", "669c9b79");
+    expect(listarSesiones(raiz)[0].tarea).toBe("669c9b79");
+  });
+
+  it("la de una persona no lleva marca: ausente es «no consta», no «es un chat»", () => {
+    // La distinción importa por las sesiones de ANTES de que la marca existiera: se leen
+    // igual que una conversación porque pintar liso es lo conservador, no porque conste
+    // que lo sean. Misma forma que `compartido` ausente en un proyecto.
+    const raiz = proyecto();
+    crearSesion(raiz, "s-humana");
+    expect(listarSesiones(raiz)[0].tarea).toBeUndefined();
+  });
+});
+
 describe("borrar y renombrar una sesión", () => {
   it("borrar se lleva la entrada del índice Y el fichero", () => {
     const raiz = proyecto();

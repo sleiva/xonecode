@@ -327,6 +327,43 @@ describe("el dispositivo de la sesión, en el alta", () => {
   });
 });
 
+describe("las sesiones de la barra: de quién es cada una y cuándo se tocó", () => {
+  const alta = (sesiones: unknown) => ({
+    clase: "alta" as const,
+    pasos: [],
+    proveedores: [],
+    entornos: [],
+    registrados: [],
+    proyectos: [{ id: "p1", nombre: "Tienda", sesiones }],
+    ramas: [],
+    proyectoAbierto: true,
+  });
+
+  it("`ultimoTurno` y `deTarea` sobreviven a la lista blanca", () => {
+    // Esta lista blanca ya se comió `mime` y `base64` en silencio y ninguna imagen se veía
+    // con los tests en verde. Rojo si uno de los dos se cae.
+    const s = crearStoreDelCliente();
+    s.aplicar(alta([{ id: "s9", titulo: "", ultimoTurno: "2026-09-09T06:23:12.784Z", deTarea: true }]));
+    expect(s.leer().alta?.proyectos[0]?.sesiones).toEqual([
+      { id: "s9", titulo: "", ultimoTurno: "2026-09-09T06:23:12.784Z", deTarea: true },
+    ]);
+  });
+
+  it("ausente se queda ausente: «no consta» no se convierte en «es un chat»", () => {
+    const s = crearStoreDelCliente();
+    s.aplicar(alta([{ id: "s7", titulo: "arreglar el alta" }]));
+    expect(s.leer().alta?.proyectos[0]?.sesiones).toEqual([{ id: "s7", titulo: "arreglar el alta" }]);
+  });
+
+  it("un `deTarea` que no es el booleano se descarta, no se toma por verdadero", () => {
+    // La trampa del `"false"` de CloudStudio, en la dirección de aquí: marcar una
+    // conversación de una persona como sesión de una tarea de fondo.
+    const s = crearStoreDelCliente();
+    s.aplicar(alta([{ id: "s7", titulo: "x", deTarea: "true" }]));
+    expect(s.leer().alta?.proyectos[0]?.sesiones?.[0]).toEqual({ id: "s7", titulo: "x" });
+  });
+});
+
 describe("el trabajo sin commitear que ya había al abrir", () => {
   const alta = (extra: Record<string, unknown> = {}) => ({
     clase: "alta" as const,

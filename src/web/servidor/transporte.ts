@@ -360,7 +360,26 @@ export type MensajeAlCliente =
          * compartió es un dato de una persona que esta pantalla no necesita.
          */
         compartido?: boolean;
-        sesiones?: { id: string; titulo: string }[];
+        sesiones?: {
+          id: string;
+          titulo: string;
+          /**
+           * Cuándo se tocó por última vez, en ISO. Es lo que ordena la lista y lo que la
+           * barra pinta a la derecha de cada fila. Ausente = el índice no lo dice (una
+           * entrada corrupta): la fila se pinta sin sello y se ordena la última.
+           */
+          ultimoTurno?: string;
+          /**
+           * Esta conversación la abrió una TAREA de fondo, no una persona
+           * (`EntradaIndice.tarea`). Viaja un booleano y no el id: la fila lleva una marca
+           * y no el nombre de la tarea, así que el id se queda en el host.
+           *
+           * **Ausente es «no consta», no «es un chat»**: no la lleva ninguna sesión
+           * anterior a esta marca. Se pinta liso porque liso es lo conservador, no porque
+           * conste que sea de una persona — igual que `compartido` en un proyecto.
+           */
+          deTarea?: true;
+        }[];
         /** La copia local YA existe: se puede abrir sin bajar nada ni preguntar rama. */
         local?: boolean;
       }[];

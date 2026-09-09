@@ -200,7 +200,7 @@ export interface EstadoDelCliente {
     proyectos: {
       id: string;
       nombre: string;
-      sesiones?: { id: string; titulo: string }[];
+      sesiones?: { id: string; titulo: string; ultimoTurno?: string; deTarea?: true }[];
       local?: boolean;
       /** Compartido CONTIGO. Ausente = el servidor no lo dijo, que no es «es tuyo». */
       compartido?: boolean;
@@ -415,7 +415,9 @@ function veredictoDeTarea(valor: unknown): { veredicto?: TareaDelCable["veredict
 
 /** `{id, titulo}`: una sesión guardada. NO vale `sonIdentidades` —una sesión no tiene
  *  `nombre`, tiene título— y usarla dejaba la lista siempre vacía sin decir por qué. */
-function sonSesiones(valor: unknown): valor is { id: string; titulo: string }[] {
+function sonSesiones(
+  valor: unknown
+): valor is { id: string; titulo: string; ultimoTurno?: unknown; deTarea?: unknown }[] {
   return (
     Array.isArray(valor) &&
     valor.every(
@@ -983,7 +985,19 @@ export function crearStoreDelCliente(): {
             return {
               id: p.id,
               nombre: p.nombre,
-              ...(sonSesiones(sesiones) ? { sesiones: sesiones.map((s) => ({ id: s.id, titulo: s.titulo })) } : {}),
+              ...(sonSesiones(sesiones)
+                ? {
+                    sesiones: sesiones.map((s) => ({
+                      id: s.id,
+                      titulo: s.titulo,
+                      ...(typeof s.ultimoTurno === "string" ? { ultimoTurno: s.ultimoTurno } : {}),
+                      // `=== true` y no un truthy: la trampa del `"false"` de CloudStudio en
+                      // la dirección de aquí sería marcar la conversación de una persona
+                      // como sesión de una tarea de fondo.
+                      ...(s.deTarea === true ? { deTarea: true as const } : {}),
+                    })),
+                  }
+                : {}),
               ...((p as { local?: unknown }).local === true ? { local: true } : {}),
               // La MISMA regla que el servidor: solo un booleano de verdad. Ausente se
               // queda ausente, y la interfaz no pinta etiqueta — «no lo dijo» no es
