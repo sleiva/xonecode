@@ -6,12 +6,15 @@ import estilos from "./Receta.module.css";
 /**
  * Cómo conseguir lo que a esta máquina le falta: los pasos, para PEGARLOS en un terminal.
  *
- * **Por qué se copia y no se pulsa.** La regla de esta casa es que solo se ofrece ejecutar
- * lo que se puede cumplir, y `brew` puede pedir la contraseña de administrador: un hijo sin
- * terminal detrás se quedaría esperándola para siempre, y un botón que se cuelga es peor que
- * no tener botón. Lo que sí se puede lanzar sin pedir entrada —`sdkmanager` y `avdmanager`,
- * que son los pasos largos— es la fase siguiente, y necesita un canal de progreso: son 2-3 GB
- * y un botón mudo durante diez minutos se lee como que se ha colgado.
+ * **Qué lleva botón y qué no.** La regla de esta casa es que solo se ofrece ejecutar lo que
+ * se puede cumplir, y el criterio es «no puede quedarse esperando a nadie»: `sdkmanager`,
+ * `avdmanager` y `brew` cumplen —los dos primeros porque sus preguntas se contestan por
+ * `stdin`, y `brew` porque en modo no interactivo no pregunta y porque un `sudo` sin terminal
+ * de control falla en el acto en vez de colgarse (medido)—. Lo que se queda en copiar es lo
+ * que fallaría SIEMPRE o lo que no falla rápido: escribir en el `~/.zshrc` de alguien, un
+ * `sudo` escrito dentro del comando y una autorización que el sistema pide en una VENTANA.
+ * Y los que se lanzan necesitan canal de progreso: son 2-3 GB, y un botón mudo durante diez
+ * minutos se lee como que se ha colgado.
  *
  * **Cada paso se marca por lo MEDIDO**, nunca por recordar que alguien pulsó: una marca
  * guardada seguiría diciendo «hecho» después de desinstalar el SDK, que es justo cuando hay
@@ -115,7 +118,14 @@ export function Receta({
                           // Sin botón cuando no puede cumplirse, y con el motivo: un botón
                           // apagado sin explicación se lee como que la ventana está rota.
                           paso.porQueNo === undefined ? null : (
-                            <p className={estilos.nota}>No se puede lanzar todavía: {paso.porQueNo}.</p>
+                            // «Todavía» solo cuando lo es —falta otro paso—; hay motivos que
+                            // no cambian nunca (un `sudo` en el comando, una ventana del
+                            // sistema) y ahí «todavía» prometería un botón que no va a venir.
+                            <p className={estilos.nota}>
+                              {/^hace falta|^hazlo/i.test(paso.porQueNo)
+                                ? `No se puede lanzar todavía: ${paso.porQueNo}.`
+                                : `No se lanza desde aquí: ${paso.porQueNo}.`}
+                            </p>
                           )
                         ) : alEjecutar === undefined ? null : (
                           <>

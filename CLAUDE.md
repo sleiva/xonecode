@@ -2163,7 +2163,11 @@ lanza ni un proceso. Reglas:
     después de cancelar. Ahora se lanza con `detached: true`, que hace al hijo líder de su
     grupo, y se cancela con `kill(-pid)`; sin pid se cae a matar al hijo, que es lo que hacía
     siempre. `matarGrupo` entra por parámetro porque el real mataría el grupo de quien corre
-    `npm test`.
+    `npm test`. **Coste declarado**: el hijo sale del grupo de procesos del servidor, así que
+    un Ctrl-C en la consola ya no se lleva la descarga por delante — antes moría con el padre.
+    Nadie cancela el trabajo en curso al apagar el servidor, y eso es lo que falta; el otro
+    lado sería peor, porque sin `detached` «Cancelar» dejaba 3 GB descargándose sin forma de
+    pararlos desde la ventana.
 - **La receta del SIMULADOR de iOS** (`core/dispositivos.ts#recetaDeSimuladorIos`), macOS y
   nada más: los simuladores los da Xcode, que no existe en otro sistema — ahí no hay «otra
   receta», hay ninguna. Tres pasos y **ninguno ejecutable, cada uno diciendo por qué**: Xcode

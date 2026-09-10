@@ -6,9 +6,11 @@
  * ENTRADA», y **se afinó midiendo**: lo que descalifica un paso no es que pueda pedir una
  * contraseña, es que pueda quedarse COLGADO pidiéndola.
  *
- * Medido el 10-09-2026: `sudo` lee la contraseña de `/dev/tty` y no de `stdin`, así que un
- * hijo lanzado con `stdio[0] = "ignore"` y sin terminal de control **falla en 57 ms** con «a
- * terminal is required to read the password». O sea que el modo de fallo de un `brew` que
+ * Medido el 10-09-2026, y con la forma EXACTA con que este módulo lanza (`detached: true` y
+ * los tres `stdio` en `pipe`): `sudo` lee la contraseña de `/dev/tty` y no de `stdin`, así que
+ * un hijo sin terminal de control **falla en 26 ms** con «a terminal is required to read the
+ * password». Lo que lo salva no es cerrar `stdin` —hace falta abierto para `sdkmanager`— sino
+ * no tener terminal de control, y con `detached` no lo hereda. O sea que el modo de fallo de un `brew` que
  * pidiera contraseña no es un botón colgado —el miedo que dejó los pasos 1 y 2 sin botón—:
  * es un botón que en dos segundos dice qué hace falta. Con eso:
  *
@@ -37,6 +39,14 @@
  * `curl`, `sdkmanager` → `java`) sobrevive a `child.kill()` — el nieto seguía descargando
  * después de cancelar. Con `detached: true` el hijo es líder de su grupo y `kill(-pid)` se
  * lo lleva entero.
+ *
+ * **El coste de `detached`, declarado**: el hijo sale del grupo de procesos del servidor, así
+ * que un Ctrl-C en la consola web ya NO se lleva la descarga por delante — antes moría con el
+ * padre y ahora sigue. No se arregla aquí porque no es un fallo de este módulo: es que nadie
+ * cancela el trabajo en curso al apagar el servidor. Y el otro lado sería peor: sin
+ * `detached`, «Cancelar» dejaba el nieto descargando 3 GB sin forma de pararlo desde la
+ * ventana. Mientras eso no se cablee, la salida es `brew`/`sdkmanager` acabando solos, que es
+ * lo que harían en un terminal.
  */
 import { spawn } from "node:child_process";
 import { join } from "node:path";

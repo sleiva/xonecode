@@ -436,10 +436,14 @@ export async function detectarDispositivos(
  * su cuenta —abre el diálogo de Apple y devuelve en el acto—, no necesita contraseña de
  * administrador en el proceso hijo, y se resuelve por el PATH del sistema.
  *
- * Lo demás NO se lanza desde aquí y se ofrece para copiar (`instalar.automatico: false`):
- * `brew install --cask` tarda minutos y puede pedir la contraseña de administrador, y un
- * hijo sin terminal detrás se quedaría esperando esa contraseña para siempre. Un botón que
- * se cuelga es peor que no tener botón.
+ * Lo demás NO se lanza desde aquí y se ofrece para copiar (`instalar.automatico: false`), y
+ * **el motivo dejó de ser la contraseña de administrador**: está desmentido —medido, `sudo`
+ * sin terminal de control falla en 26 ms en vez de colgarse, y por eso los `brew` de la
+ * receta SÍ se lanzan (`agent/instalacionEnMaquina.ts`)—. El motivo es que aquí no hay canal
+ * de progreso: se lanza con `execFile` y un tope de un minuto, sin log en vivo. `brew
+ * install --cask` tarda minutos, así que por este camino sería un botón mudo que se lee como
+ * un cuelgue y encima moriría en el tope. Instalar con log es lo que hace la fase de la
+ * receta, y ahí es donde está ese botón.
  */
 const INSTALADORES: Partial<Record<NombreDeHerramienta, { binario: string; args: string[]; plataforma: string }>> = {
   xcrun: { binario: "xcode-select", args: ["--install"], plataforma: "darwin" },
@@ -560,17 +564,29 @@ export async function verificarDispositivo(
   const borrar = deps.borrar ?? ((ruta: string) => rm(ruta, { force: true }).catch(() => undefined));
   const ficheroTemporal =
     deps.ficheroTemporal ?? (() => join(tmpdir(), `xonecode-devicectl-${process.pid}-${Date.now()}.json`));
+  // El borrado va en un `finally` que ENVUELVE a los dos pasos: leer después de borrar era
+  // el orden equivocado, y el temporal tiene que irse pase lo que pase.
   const fichero = ficheroTemporal();
   try {
-    await ejecutar("xcrun", ["devicectl", "device", "info", "details", "--device", dispositivo.id, "--json-output", fichero], {
-      timeout: TOPES_MS.xcrun,
-    });
-    // Se LEE el fichero para no afirmar sobre lo que no se ha visto: `devicectl` no imprime
-    // el JSON por stdout, así que un código 0 sin fichero legible no es una respuesta.
-    await leer(fichero);
+    try {
+      await ejecutar("xcrun", ["devicectl", "device", "info", "details", "--device", dispositivo.id, "--json-output", fichero], {
+        timeout: TOPES_MS.xcrun,
+      });
+    } catch (error) {
+      return { ok: false, detalle: motivoDeFalloDeSimctl(error, TOPES_MS.xcrun) };
+    }
+    try {
+      // Se LEE el fichero para no afirmar sobre lo que no se ha visto: `devicectl` no
+      // imprime el JSON por stdout, así que un código 0 sin fichero legible no es una
+      // respuesta.
+      await leer(fichero);
+    } catch {
+      // Y este fallo tiene su propia frase: pasarlo por `describirFallo` decía «el
+      // ejecutable no existe» ante un `ENOENT` que es del FICHERO y no del binario, que
+      // acaba de ejecutarse bien. Un motivo falso es peor que uno vago.
+      return { ok: false, detalle: "devicectl no dejó su respuesta donde se le pidió" };
+    }
     return { ok: true, detalle: "responde a devicectl" };
-  } catch (error) {
-    return { ok: false, detalle: motivoDeFalloDeSimctl(error, TOPES_MS.xcrun) };
   } finally {
     await borrar(fichero);
   }

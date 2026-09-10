@@ -40,10 +40,14 @@ export interface Herramienta {
    * Por eso solo se propone lo que se resuelve por el PATH.
    *
    * `automatico` es si xonecode puede lanzarlo ÉL. Hoy solo `xcode-select --install`, que
-   * devuelve en el acto y abre el diálogo de Apple. Lo demás se ofrece para copiar y
-   * pegarlo en un terminal: `brew install --cask` puede tardar minutos y pedir la
-   * contraseña de administrador, y un proceso sin terminal detrás se quedaría esperando esa
-   * contraseña para siempre — un botón que se cuelga es peor que no tener botón.
+   * devuelve en el acto y abre el diálogo de Apple. Lo demás se ofrece para copiar, y **el
+   * motivo NO es la contraseña de administrador**: eso está desmentido —medido, `sudo` sin
+   * terminal de control falla en el acto en vez de colgarse, y por eso los `brew` de la
+   * RECETA sí se lanzan—. Es que este camino
+   * (`agent/dispositivosEnMaquina.ts#instalarHerramientaDeDispositivos`) no tiene canal de
+   * progreso: un `execFile` con su tope, sin log en vivo. `brew install --cask` tarda
+   * minutos, y un botón mudo durante diez se lee como que se ha colgado — que es justo lo
+   * que la fase de la receta existe para evitar.
    */
   instalar?: { comando: string; automatico: boolean };
   /** El motivo del fallo, o por qué no aplica. Nunca la salida cruda entera. */
@@ -208,9 +212,9 @@ export function recetaDeEmuladorAndroid(plataforma: string, estado: EstadoDeAndr
         "brew install --cask android-commandlinetools android-platform-tools",
       ],
       nota:
-        "Son unos 700 MB. Ni la fórmula ni el cask piden la contraseña de administrador " +
-        "—instalan dentro del prefijo de Homebrew, que es tuyo—, así que puedes pegarlo en " +
-        "un terminal o dejar que lo haga xonecode.",
+        "Son unos cientos de MB. Ni la fórmula ni el cask piden la contraseña de " +
+        "administrador —instalan dentro del prefijo de Homebrew, que es tuyo—, así que " +
+        "puedes pegarlo en un terminal o dejar que lo haga xonecode.",
       // `sdkmanager` es lo que instala el cask: si está, el paso está hecho.
       hecho: estado.sdkmanager,
       // **Este es el paso del que colgaban los otros dos.** Sin él, en una máquina nueva la

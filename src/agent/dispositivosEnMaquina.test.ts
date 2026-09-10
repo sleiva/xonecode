@@ -557,19 +557,25 @@ describe("verificarDispositivo", () => {
     expect(borrados).toEqual(["/tmp/dc.json"]);
   });
 
-  it("si el fichero de devicectl no se puede leer, no se afirma que respondió", async () => {
+  it("si el fichero de devicectl no se puede leer, se dice ESO y no «el ejecutable no existe»", async () => {
+    // El binario acaba de ejecutarse bien: el `ENOENT` es del FICHERO. Pasado por
+    // `describirFallo` salía «el ejecutable no existe», que es un motivo falso — peor que
+    // uno vago, porque manda a mirar donde no hay nada.
     const { ejecutar } = ejecutorDe({ xcrun: salida("") });
+    const borrados: string[] = [];
     const fisico: Dispositivo = { id: "00008120-ABC", nombre: "iPhone", plataforma: "ios", clase: "fisico", estado: "conectado" };
     const v = await verificarDispositivo(fisico, {
       plataforma: "darwin",
       ejecutar,
       leer: async () => {
-        throw new Error("ENOENT");
+        throw Object.assign(new Error("no such file"), { code: "ENOENT" });
       },
-      borrar: async () => undefined,
+      borrar: async (r) => void borrados.push(r),
       ficheroTemporal: () => "/tmp/dc.json",
     });
-    expect(v.ok).toBe(false);
+    expect(v).toEqual({ ok: false, detalle: "devicectl no dejó su respuesta donde se le pidió" });
+    // Y el temporal se va pase lo que pase.
+    expect(borrados).toEqual(["/tmp/dc.json"]);
   });
 
   it("fuera de macOS un dispositivo iOS no se verifica: la máquina no puede", async () => {
