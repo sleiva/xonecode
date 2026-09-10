@@ -608,17 +608,23 @@ describe("Barra: el proyecto activo y la sesión activa no se marcan igual", () 
     expect(hoja).not.toMatch(/\.filaAbierta::before\s*\{/);
   });
 
+  it("las acciones de una fila llevan aire: el «…» no arranca donde acaba la fecha", () => {
+    // Medido en pantalla: el «…» empezaba en el píxel EXACTO donde terminaba la fecha (cero
+    // de separación) y en la fila de proyecto quedaba a 6 px de la pastilla de
+    // propio/compartido. Dos controles y un dato sin hueco se leen como una sola cosa.
+    expect(regla("accionesDeFila")).toMatch(/margin-left:\s*12px/);
+  });
+
   it("los dos fondos son COLORES distintos, no dos intensidades del mismo", () => {
     // Lo señaló dos veces: con el mismo relleno gris, un filo de 2 px no separa las dos
     // marcas. El proyecto se queda con el gris neutro de la hoja copiada —el mismo que usa
     // para «tocado por el ratón»— y la fila que estás leyendo va con el acento del producto.
     expect(regla("filaAbierta")).toMatch(/background:\s*var\(--dsw-alias-interactive-bg-hover\)/);
-    expect(regla("sesionAbierta")).toMatch(/background:\s*color-mix\(in srgb, var\(--xonecode-cian\)/);
-    // Con respaldo delante: donde no haya `color-mix`, la fila se queda con un fondo y no
-    // sin ninguno.
-    expect(regla("sesionAbierta")).toMatch(
-      /background:\s*var\(--dsw-alias-interactive-bg-hover\)[\s\S]*background:\s*color-mix/
-    );
+    expect(regla("sesionAbierta")).toMatch(/background:\s*var\(--xonecode-fila-elegida\)/);
+    // Y el tono se compone en la PALETA, no aquí: `Barra.test.tsx` prohíbe un color literal
+    // en la hoja de un componente, y `marca.css` es la excepción declarada.
+    const paleta = readFileSync(join(AQUI_CSS, "..", "..", "estilos", "marca.css"), "utf8");
+    expect(paleta).toMatch(/--xonecode-fila-elegida:\s*color-mix\(in srgb, var\(--xonecode-cian\)/);
   });
 
   it("y el proyecto se sigue distinguiendo del `:hover` de al lado, por el nombre", () => {

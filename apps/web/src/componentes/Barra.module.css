@@ -113,15 +113,12 @@
    del mismo: el proyecto se queda con el gris neutro (es el contenedor, y ese gris es el que
    la hoja copiada usa para «tocado por el ratón») y la fila que estás leyendo va con el
    acento del producto, el mismo cian de la pestaña activa y del filo.
-   El `color-mix` va DETRÁS de un color de respaldo, no solo: donde no exista, la fila se
-   queda con el gris de siempre en vez de quedarse sin fondo. Y es un 14%, no más: encima de
-   ese relleno va texto casi negro (`label-primary`), y el cian a plena carga nunca llegó a
-   tener contraste para letra — es la razón por la que en el rediseño pasó de RELLENO a
-   ACENTO. */
+   El tono sale de `--xonecode-fila-elegida` (`estilos/marca.css`) y no se compone aquí: la
+   paleta vive en un sitio y un componente solo consume alias — es además donde está su
+   variante para el tema oscuro y el porqué de que el cian vaya tan bajo. */
 .sesionAbierta {
   position: relative;
-  background: var(--dsw-alias-interactive-bg-hover);
-  background: color-mix(in srgb, var(--xonecode-cian) 14%, transparent);
+  background: var(--xonecode-fila-elegida);
   border-radius: 8px;
 }
 
@@ -171,8 +168,14 @@
    se escondiera al salir el ratón, el menú se quedaría colgando de la nada—. La doble
    clase es para ganarle en especificidad al `display: none` de la hoja copiada sin tocarla
    ni recurrir a `!important`. */
+/* Las acciones de una fila («+» en la de proyecto, «…» en la de sesión) llevan AIRE a su
+   izquierda. Medido en pantalla: el «…» arrancaba en el píxel exacto donde acababa la fecha
+   —cero de separación— y en la fila de proyecto quedaba a 6 px de la pastilla de
+   propio/compartido, que es lo mismo que pegado. Dos controles y un dato sin hueco entre
+   ellos se leen como una sola cosa, y encima invita a pulsar el que no querías. */
 .accionesDeFila.accionesDeFila {
   display: inline-flex;
+  margin-left: 12px;
   opacity: 0;
 }
 

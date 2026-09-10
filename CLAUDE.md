@@ -1811,9 +1811,18 @@ gris neutro (es el contenedor, y ese gris es el que la hoja copiada usa para «t
 ratón») más el nombre en NEGRITA, y la fila que estás leyendo va con el acento del producto
 —un cian al 14% más su filo—, el mismo de la pestaña activa. El 14% no es timidez: encima va
 texto casi negro, y el cian a plena carga nunca tuvo contraste para letra (es la razón por la
-que el rediseño lo movió de relleno a acento), y el `color-mix` va detrás de un color de
-respaldo para que donde no exista quede un fondo y no ninguno. El `aria-current` sigue
-diciéndolo sin depender de ningún color.
+que el rediseño lo movió de relleno a acento). El tono vive en la PALETA
+(`--xonecode-fila-elegida`, `estilos/marca.css`, con su variante al 26% para el tema oscuro)
+y no en la hoja del componente: `Barra.test.tsx` prohíbe un color literal ahí —`transparent`
+incluido, y por eso salta con un `color-mix` compuesto en el componente— y `marca.css` es la
+excepción declarada. Se deriva del cian con `color-mix` en vez de escribir el rgba a mano, que
+es como se acaba con dos cianes distintos. El `aria-current` sigue diciéndolo sin depender de
+ningún color.
+
+**Y las acciones de una fila llevan AIRE** (`.accionesDeFila`, 12 px a la izquierda): medido,
+el «…» de una sesión arrancaba en el píxel EXACTO donde acababa su fecha y el «+» de un
+proyecto quedaba a 6 px de la pastilla de propio/compartido. Un dato y un control sin hueco
+entre ellos se leen como una sola cosa, y encima invitan a pulsar el que no querías.
 
 **Y abrir algo DICE que está abriendo, con dos señales que no son la misma** (`clase:
 "abriendo"` en el cable, `App.tsx#pedidoDeApertura`). Un clic que no cambia nada se lee como
