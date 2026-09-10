@@ -135,6 +135,9 @@ export type MensajeAlCliente =
   /** Hay un turno EN VUELO, o dejó de haberlo: apaga el compositor y saca el botón de
    *  parar. No se deduce de los actos — un turno que revienta no siempre deja `fin`. */
   | { clase: "turno"; activo: boolean }
+  /** Se está abriendo una sesión —o descargando un proyecto—, dicho por el servidor: es el
+   *  único que sabe cuándo empieza y cuándo acaba. */
+  | { clase: "abriendo"; activo: boolean; proyecto?: string; sesion?: string; descargando?: true }
   /**
    * Los subagentes dados de alta, para la ventana de ajustes. La lista va ENTERA cada vez
    * que cambia —son pocos y pequeños— en vez de mandar diferencias: un delta perdido
@@ -183,7 +186,15 @@ export type MensajeAlCliente =
    * abierta antes de que esto existiera—. Ninguna de las dos últimas es una lista vacía a
    * secas: «no has hecho nada» y «no se puede saber» no se pueden leer igual.
    */
-  | { clase: "revision"; via: "git" | "sin-marca" | "sin-empezar"; ficheros: FicheroTocado[] }
+  | {
+      clase: "revision";
+      /** `git` = atribuido por COMMIT (lo que hizo esta sesión). `desde-apertura` = todo lo
+       *  que ha cambiado en la copia desde que se abrió, de quien sea: es lo único medible
+       *  en una sesión sin sello, y NO es atribución. */
+      via: "git" | "desde-apertura" | "sin-marca" | "sin-empezar";
+      ficheros: FicheroTocado[];
+      mezclados?: number;
+    }
   | { clase: "parche"; ruta: string; texto: string; recortado: boolean }
   /** El árbol del proyecto abierto y el contenido de uno de sus ficheros (pestaña Ficheros). */
   | { clase: "arbol"; rutas: string[]; recortado: boolean; error?: string }
@@ -276,9 +287,15 @@ export type MensajeAlCliente =
            *  llevan las sesiones anteriores a la marca, y se pintan lisas porque liso es lo
            *  conservador, no porque conste que sean de alguien. */
           deTarea?: true;
+          /** Turno en marcha en esa conversación ahora mismo, esté o no delante. Ausente =
+           *  no consta. Ver `transporte.ts`. */
+          trabajando?: true;
         }[];
         /** La copia local ya existe: abrirlo no baja nada ni pregunta rama. */
         local?: boolean;
+        /** Alguna sesión de este proyecto trabaja AHORA. No se deriva de las filas: una
+         *  sesión nueva no tiene fila hasta su primer volcado. Ver `transporte.ts`. */
+        trabajando?: true;
       }[];
       ramas: string[];
       /** Qué falló en el paso anterior; ausente si no falló nada. Lo pinta el propio paso:
@@ -321,6 +338,8 @@ export interface FicheroTocado {
   clase: "nuevo" | "modificado" | "borrado";
   mas?: number;
   menos?: number;
+  /** Nadie ha commiteado esto todavía, así que no consta de quién es. */
+  sinCommitear?: true;
 }
 
 /** Un fichero del proyecto tal como viaja. Redeclarado de `web/servidor/transporte.ts`. */

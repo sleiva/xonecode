@@ -50,6 +50,13 @@ export interface Proyecto {
      *  no la llevan las sesiones anteriores a la marca, y se pintan lisas porque liso es
      *  lo conservador. */
     deTarea?: true;
+    /**
+     * Tiene un turno EN MARCHA ahora mismo, esté o no delante. Es lo que hace visible que
+     * cambiar de sesión ya no interrumpe al agente: la conversación que dejaste atrás sigue
+     * trabajando y la barra lo dice. **Ausente es «no consta que trabaje»**, igual que las
+     * otras dos marcas de esta fila.
+     */
+    trabajando?: true;
   }[];
   /**
    * Compartido CONTIGO por otra persona (`shared` de CloudStudio). **Ausente no es «es
@@ -57,6 +64,17 @@ export interface Proyecto {
    * «compartido»—, que es lo único honesto cuando el dato no ha llegado.
    */
   compartido?: boolean;
+  /**
+   * Alguna sesión de este proyecto tiene un turno EN MARCHA. No se deduce de `sesiones`: una
+   * sesión nueva no tiene fila en el índice hasta que vuelca su primer acto, así que el caso
+   * más común —abrir, pedir algo, irse a otro proyecto— no habría marcado nada.
+   *
+   * De aquí cuelgan dos cosas: la marca del proyecto, y que las OTRAS sesiones de ese
+   * proyecto no se puedan pulsar mientras dure — una copia de trabajo no aguanta dos
+   * conversaciones y el servidor lo declina, así que decirlo ANTES del clic es lo que evita
+   * el botón muerto.
+   */
+  trabajando?: true;
 }
 
 /**
@@ -105,7 +123,7 @@ export interface Proyecto {
  */
 export const PROYECTOS_POR_OMISION = 4;
 
-export function Barra({ entornos, entornoActivo, proyectos, visibles, proyectoActivo, sesionActiva, alElegirEntorno, alAbrirSesion, alAbrirProyecto, alNuevaSesion, alAccionDeSesion, alAbrirAjustes, conectado }: {
+export function Barra({ entornos, entornoActivo, proyectos, visibles, proyectoActivo, sesionActiva, abriendo, alElegirEntorno, alAbrirSesion, alAbrirProyecto, alNuevaSesion, alAccionDeSesion, alAbrirAjustes, conectado }: {
   entornos: { id: string; nombre: string }[];
   entornoActivo: string;
   proyectos: Proyecto[];
@@ -122,6 +140,13 @@ export function Barra({ entornos, entornoActivo, proyectos, visibles, proyectoAc
    */
   proyectoActivo?: string;
   sesionActiva?: string;
+  /**
+   * Qué se está abriendo AHORA, dicho por el servidor. Entre el clic y la sesión abierta
+   * pasan de unos cientos de milisegundos a los minutos de una descarga, y sin señal la
+   * barra se queda igual que estaba: el clic se lee como que no ha hecho nada. Ausente =
+   * no se está abriendo nada.
+   */
+  abriendo?: { proyecto?: string; sesion?: string; descargando?: true };
   alElegirEntorno: (id: string) => void;
   alAbrirSesion: (proyecto: string, sesion: string) => void;
   /** El nombre del proyecto es un botón: pide su rama y lo abre (o lo enseña, si ya
@@ -157,6 +182,18 @@ export function Barra({ entornos, entornoActivo, proyectos, visibles, proyectoAc
   conectado?: boolean;
 }) {
   const apagado = conectado === false;
+
+  /**
+   * Abrir algo tarda, y la señal va donde estaba el clic: en la fila. Se distingue el
+   * proyecto de la sesión porque son dos filas distintas —una sesión guardada se abre desde
+   * la suya— y porque una sesión NUEVA no tiene fila todavía: en ese caso el indicador se
+   * queda en la del proyecto, que es donde está su «+».
+   */
+  const abriendoProyecto = (id: string): boolean =>
+    abriendo !== undefined && abriendo.proyecto === id && abriendo.sesion === undefined;
+  const abriendoSesion = (id: string): boolean => abriendo !== undefined && abriendo.sesion === id;
+  /** Mientras se abre algo no se pide otra cosa: el segundo clic no cancela el primero. */
+  const abriendoAlgo = abriendo !== undefined;
   // El orden de `visibles` NO manda: manda el del listado, que es el del servidor. Elegir
   // qué se ve es una cosa; reordenar el listado remoto sería otra, y nadie la ha pedido.
   const alaVista =
@@ -230,11 +267,12 @@ export function Barra({ entornos, entornoActivo, proyectos, visibles, proyectoAc
                         // quien no distingue bien los tonos, y el `aria-current` es lo que
                         // se lo dice a un lector de pantalla.
                         {...(p.id === proyectoActivo ? { "aria-current": "true" as const } : {})}
+                        {...(abriendoProyecto(p.id) ? { "aria-busy": "true" as const } : {})}
                       >
                         <button
                           type="button"
                           className={clsx(estilos.reseteoDeBoton, estilos.cuerpoDeFila)}
-                          disabled={apagado}
+                          disabled={apagado || abriendoAlgo}
                           onClick={() => alAbrirProyecto(p.id)}
                         >
                           {/*
@@ -250,8 +288,33 @@ export function Barra({ entornos, entornoActivo, proyectos, visibles, proyectoAc
                             <IconFolderClose16 size={16} />
                           </span>
                           <span className={filas.projectText}>
-                            <span className={filas.title}>{p.nombre}</span>
+                            {/* El proyecto activo se marca con el fondo y con el NOMBRE, no
+                                con el filo de cian: ese se quedó para la fila que estás
+                                leyendo (ver `Barra.module.css`). */}
+                            <span className={clsx(filas.title, p.id === proyectoActivo && estilos.tituloActivo)}>
+                              {p.nombre}
+                            </span>
                           </span>
+                          {abriendoProyecto(p.id) ? (
+                            <span
+                              className={estilos.actividad}
+                              // Con PALABRAS y no solo con el giro: una descarga son minutos
+                              // y un punto que gira no distingue eso de medio segundo.
+                              title={abriendo?.descargando === true ? "Descargando el proyecto…" : "Abriendo…"}
+                            >
+                              {abriendo?.descargando === true ? "descargando…" : "abriendo…"}
+                            </span>
+                          ) : p.trabajando ? (
+                            /*
+                              Y en el proyecto, porque la lista de sesiones se puede plegar:
+                              sin esto, un turno corriendo en una conversación de otro
+                              proyecto no se vería en ninguna parte. Dice «trabajando» y no
+                              cuántas: una basta para que haya que volver.
+                            */
+                            <span className={estilos.actividad} title="El agente está trabajando en este proyecto…">
+                              trabajando…
+                            </span>
+                          ) : null}
                           {/*
                             De quién es. Tres cosas de esta etiqueta:
 
@@ -276,7 +339,12 @@ export function Barra({ entornos, entornoActivo, proyectos, visibles, proyectoAc
                           <button
                             type="button"
                             className={filas.iconButton}
-                            disabled={apagado}
+                            // Y una sesión NUEVA aquí tampoco: sería la segunda sobre la
+                            // misma copia de trabajo, o sea el mismo rechazo.
+                            disabled={apagado || abriendoAlgo || p.trabajando === true}
+                            {...(p.trabajando === true
+                              ? { title: "este proyecto está trabajando: espera a que termine" }
+                              : {})}
                             onClick={() => alNuevaSesion(p.id)}
                             aria-label={`nueva sesión en ${p.nombre}`}
                           >
@@ -317,11 +385,29 @@ export function Barra({ entornos, entornoActivo, proyectos, visibles, proyectoAc
                               s.historica && estilos.historica
                             )}
                             {...(s.id === sesionActiva ? { "aria-current": "true" as const } : {})}
+                            {...(abriendoSesion(s.id) ? { "aria-busy": "true" as const } : {})}
                           >
                             <button
                               type="button"
                               className={clsx(estilos.reseteoDeBoton, estilos.cuerpoDeFila)}
-                              disabled={apagado}
+                              /*
+                                Con este proyecto trabajando, solo se puede pulsar LA que
+                                trabaja: volver a ella es el buen caso —es lo que uno hace
+                                para ver cómo va— y las demás las declina el servidor, porque
+                                dos conversaciones sobre la misma copia de trabajo se
+                                pisarían los ficheros. Decirlo antes del clic es lo que evita
+                                el botón muerto; la guarda del servidor sigue estando, que es
+                                quien manda si esta lista llega vieja.
+
+                                Si el turno corre en una sesión que aún no tiene fila (una
+                                nueva, antes de su primer volcado) no hay ninguna marcada y
+                                se apagan todas — que es exactamente lo que el servidor
+                                contestaría.
+                              */
+                              disabled={apagado || abriendoAlgo || (p.trabajando === true && s.trabajando !== true)}
+                              {...(p.trabajando === true && s.trabajando !== true
+                                ? { title: "este proyecto está trabajando en otra conversación" }
+                                : {})}
                               onClick={() => alAbrirSesion(p.id, s.id)}
                             >
                               <span className={filas.slot} aria-hidden="true" />
@@ -345,7 +431,30 @@ export function Barra({ entornos, entornoActivo, proyectos, visibles, proyectoAc
                                 // pantalla.
                                 <span className={estilos.marcaDeTarea}>Tarea</span>
                               ) : null}
-                              {selloDeSesion(s.ultimoTurno) === undefined ? null : (
+                              {/* Mientras se abre, en el hueco de la fecha va la actividad:
+                                  es el sitio donde ya se mira, y la fecha de la sesión que
+                                  estás abriendo no aporta nada en ese segundo. */}
+                              {abriendoSesion(s.id) ? (
+                                <span className={estilos.actividad} title="Abriendo…">
+                                  abriendo…
+                                </span>
+                              ) : s.trabajando ? (
+                                /*
+                                  El agente está trabajando en esa conversación AHORA. Va en
+                                  el hueco de la fecha y con la misma pieza que «abriendo…»,
+                                  por dos razones: es el sitio donde ya se mira, y mientras un
+                                  turno corre la fecha del último no aporta nada — es
+                                  justamente el dato que está a punto de cambiar.
+
+                                  Con PALABRAS, como las otras dos marcas de esta fila: un
+                                  punto animado no lo lee quien no distingue el movimiento ni
+                                  un lector de pantalla, y `aria-busy` habla de lo que la
+                                  interfaz está esperando, no de lo que hace el agente.
+                                */
+                                <span className={estilos.actividad} title="El agente está trabajando…">
+                                  trabajando…
+                                </span>
+                              ) : selloDeSesion(s.ultimoTurno) === undefined ? null : (
                                 <span className={estilos.selloDeFecha}>{selloDeSesion(s.ultimoTurno)}</span>
                               )}
                             </button>

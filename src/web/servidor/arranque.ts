@@ -221,8 +221,13 @@ export function descripcionParaLaWeb(descripcion: string): string {
 interface DestinoDelCable {
   recibir(mensaje: MensajeDelCliente): void;
   conectar(enviar?: Sumidero): readonly Acto[];
-  /** Con sumidero se va ESE cliente; sin él, todos (es lo que hace mudarse de consola). */
+  /** Con sumidero se va ESE cliente; sin él, todos. Lo llama el `close` del SSE. */
   desconectar(enviar?: Sumidero): void;
+  /** Mudarse de consola: se sueltan los sumideros SIN dar por ido al humano. Ver
+   *  `Transporte.soltar`. */
+  soltar(enviar?: Sumidero): void;
+  /** La aprobación EN VUELO, si la hay, para reemitirla a quien vuelve. */
+  mensajesDeAprobacion(): readonly MensajeAlCliente[];
 }
 
 export interface OpcionesDeMontaje {
@@ -269,7 +274,14 @@ export interface OpcionesDeMontaje {
   catalogoDeModelos?: (proveedor: Proveedor) => Promise<{ id: string; nombre?: string }[]>;
   /** Qué ha tocado la sesión, y el parche de un fichero (`agent/sesionGit.ts`). Ausentes =
    *  esta ejecución no lo puede saber, y la pestaña lo dice. */
-  cambiosDeSesion?: (raiz: string, sesion: string) => Promise<{ via: "git" | "sin-marca"; ficheros: FicheroTocado[] }>;
+  cambiosDeSesion?: (
+    raiz: string,
+    sesion: string
+  ) => Promise<{
+    via: "git" | "desde-apertura" | "sin-marca";
+    ficheros: FicheroTocado[];
+    mezclados?: number;
+  }>;
   parcheDeSesion?: (raiz: string, sesion: string, ruta: string) => Promise<{ texto: string; recortado: boolean } | undefined>;
   /**
    * El árbol del proyecto y el contenido de un fichero (`agent/arbolDeProyecto.ts`). Entran
@@ -496,10 +508,17 @@ export function montarRutas(
    * ofrecer, y el usuario se quedaba con el modelo por omisión sin que nada se lo dijera.
    */
   /**
-   * Si hay turno en vuelo AHORA. Se lleva aquí, además de emitirse, porque quien conecta a
-   * mitad de turno tiene que enterarse: el mensaje que lo anunció ya pasó.
+   * Si hay turno en vuelo AHORA en la sesión que se está mirando. Hace falta porque quien
+   * conecta a mitad de turno tiene que enterarse: el mensaje que lo anunció ya pasó.
+   *
+   * Se DERIVA de la consola en foco, no se cachea en una variable que un flanco actualiza.
+   * Era lo segundo, y desde que cambiar de sesión no mata el turno anterior una copia se
+   * queda vieja en el caso que más importa: volver a una sesión que está trabajando no es un
+   * flanco de turno —el turno no empezó ni acabó—, así que la variable habría dicho «no hay
+   * nada corriendo» y `adjuntar` habría encendido el compositor delante de un agente que
+   * escribe.
    */
-  let turnoEnVuelo = false;
+  const turnoEnVuelo = (): boolean => vestibulo.proyectoAbierto()?.turnoEnVuelo === true;
   let cuentaHecha = false;
   /**
    * El propio `pasoDeCuenta()` en vuelo, compartido entre conexiones. Sin esto, dos
@@ -578,6 +597,19 @@ export function montarRutas(
     // está cacheada en la consola y no rechaza nunca.
     const trabajo = abierto === undefined ? undefined : await abierto.trabajoAlAbrir;
     const pasos: PasoDelVestibulo[] = pendientes.includes("entorno") ? ["entorno"] : [];
+    // Las raíces que trabajan, UNA vez para todos los proyectos del anuncio.
+    const trabajandoAqui = raicesTrabajando();
+    /** La raíz que le tocaría a ese proyecto, o nada si no se puede calcular (sin entorno
+     *  elegido, o un nombre que `rutaDeWorkspace` rechaza). No se afirma sobre lo que no se
+     *  puede nombrar. */
+    const raizDeProyectoOSilencio = (nombre: string): string | undefined => {
+      if (entorno === undefined) return undefined;
+      try {
+        return vestibulo.raizDeProyecto(entorno, nombre);
+      } catch {
+        return undefined;
+      }
+    };
     emitir({
       clase: "alta",
       pasos,
@@ -600,6 +632,12 @@ export function montarRutas(
         return {
           ...p,
           ...(sesiones.length === 0 ? {} : { sesiones }),
+          // La misma deducción por raíz que `activo`, con la misma función que la creó: un
+          // id guardado aparte se queda viejo el día que alguien abra por otro camino.
+          ...(raizDeProyectoOSilencio(p.nombre) !== undefined &&
+          trabajandoAqui.has(raizDeProyectoOSilencio(p.nombre)!)
+            ? { trabajando: true as const }
+            : {}),
           // Si ya está bajado, abrirlo no necesita ni rama ni descarga: es lo que decide
           // qué enseña la ventana de sesión nueva, y decidirlo en el cliente exigiría
           // que supiera dónde vive la copia local.
@@ -789,7 +827,14 @@ export function montarRutas(
     if (recien !== undefined) comprobarLosSinClave();
     const destino = destinoActual();
     const cambiaDeConsola = adjunto !== destino;
-    if (adjunto !== undefined && cambiaDeConsola) adjunto.desconectar();
+    /**
+     * `soltar` y NO `desconectar`, y es la pieza que hace que cambiar de sesión no rompa la
+     * que se deja atrás. `desconectar()` significa «se ha ido el humano»: rechaza la
+     * aprobación que hubiera delante y contesta cadena vacía a todo el que esperara. Aquí
+     * el humano no se ha ido — está mirando otra sesión, y la de antes puede tener un turno
+     * corriendo. Ver `Transporte.soltar`.
+     */
+    if (adjunto !== undefined && cambiaDeConsola) adjunto.soltar();
     adjunto = destino;
 
     // A quién hay que registrar y a quién hay que darle la ráfaga: al recién llegado, o a
@@ -824,7 +869,15 @@ export function montarRutas(
       // Y si hay turno corriendo, se dice: quien conecta a mitad no vio el mensaje que lo
       // anunció, y sin esto vería el compositor encendido y sin borde —«no pasa nada»—
       // mientras lo que escribiera se quedaba en la cola.
-      cliente({ clase: "turno", activo: turnoEnVuelo });
+      cliente({ clase: "turno", activo: turnoEnVuelo() });
+      /**
+       * Y la aprobación que esta consola tenga EN VUELO. Hace falta desde que volver a una
+       * sesión de segundo plano es posible: su turno pudo pararse en un modal mientras
+       * nadie miraba, y ese mensaje se emitió una vez —no está en la traza, es el único que
+       * lleva contenido de fichero— así que sin reemitirlo el compositor se quedaría
+       * apagado delante de un turno que espera una decisión que no se puede dar.
+       */
+      for (const pendiente of destino.mensajesDeAprobacion()) cliente(pendiente);
     }
   };
 
@@ -1310,20 +1363,49 @@ export function montarRutas(
    * Las sesiones guardadas de un proyecto de este entorno. Sin entorno elegido no hay raíz
    * que calcular, y sin copia local la lista es vacía — que es la verdad, no un fallo.
    */
+  /**
+   * Qué sesiones tienen un turno en marcha AHORA, por su id.
+   *
+   * Se pregunta a las consolas vivas y no se guarda en ninguna parte: es un estado de este
+   * instante, y una copia se quedaría diciendo que una sesión trabaja después de que su
+   * turno acabara. Solo entran las que tienen `sesion` —o sea entrada en el índice—, porque
+   * una fila que la barra no pinta no se puede marcar; la de un primer turno que aún no ha
+   * volcado nada aparecerá en cuanto exista, que es el mismo retraso que ya tiene su fila.
+   */
+  const sesionesTrabajando = (): Set<string> => {
+    const trabajando = new Set<string>();
+    for (const consola of vestibulo.proyectosAbiertos()) {
+      if (consola.turnoEnVuelo && consola.sesion !== undefined) trabajando.add(consola.sesion);
+    }
+    return trabajando;
+  };
+
+  /**
+   * Y las RAÍCES con un turno en marcha, que no es la misma pregunta.
+   *
+   * Una sesión nueva no tiene fila en el índice hasta que vuelca su primer acto, así que el
+   * caso más común —abrir, pedir algo, irse a otro proyecto— no tiene ninguna sesión que
+   * marcar y la barra no enseñaría nada. La raíz sí se sabe desde el primer instante.
+   */
+  const raicesTrabajando = (): Set<string> =>
+    new Set(vestibulo.proyectosAbiertos().filter((c) => c.turnoEnVuelo).map((c) => c.raiz));
+
   const sesionesDelProyecto = (
     nombre: string
-  ): { id: string; titulo: string; ultimoTurno?: string; deTarea?: true }[] => {
+  ): { id: string; titulo: string; ultimoTurno?: string; deTarea?: true; trabajando?: true }[] => {
     if (entornoElegido === undefined) return [];
     try {
       // Viaja un BOOLEANO y no el id de la tarea: la fila lleva una marca, no el nombre de
       // la tarea —en 280 px no cabe—, así que el id se queda en el host por la misma regla
       // que la ruta de una herramienta o el pid del corredor. `deTarea` ausente es «no
       // consta» y no «es una conversación»: no la lleva ninguna sesión anterior a la marca.
+      const trabajando = sesionesTrabajando();
       return vestibulo.sesionesDe(vestibulo.raizDeProyecto(entornoElegido, nombre)).map((s) => ({
         id: s.id,
         titulo: s.titulo,
         ...(s.ultimoTurno === undefined ? {} : { ultimoTurno: s.ultimoTurno }),
         ...(s.tarea === undefined ? {} : { deTarea: true as const }),
+        ...(trabajando.has(s.id) ? { trabajando: true as const } : {}),
       }));
     } catch {
       return [];
@@ -1442,8 +1524,22 @@ export function montarRutas(
     }
   };
 
+  /**
+   * Los dos flancos de «se está abriendo algo», emitidos como los del turno y por lo mismo:
+   * el cliente no puede saber cuánto tarda esto —de unos cientos de milisegundos a los
+   * minutos de una descarga— y sin señal la interfaz se queda quieta después de un clic.
+   */
+  const anunciarAbriendo = (que?: { proyecto?: string; sesion?: string; descargando?: true }): void => {
+    emitir(que === undefined ? { clase: "abriendo", activo: false } : { clase: "abriendo", activo: true, ...que });
+  };
+
   const atenderSesion = async (peticion: Extract<MensajeDelCliente, { clase: "sesion" }>): Promise<void> => {
     aviso = undefined;
+    // Antes de la primera espera, no después: entre el clic y aquí no hay nada que pintar.
+    anunciarAbriendo({
+      proyecto: peticion.proyecto,
+      ...(peticion.sesion === undefined ? {} : { sesion: peticion.sesion }),
+    });
     try {
       if (entornoElegido === undefined) {
         aviso = "elige antes el entorno del que sale el proyecto";
@@ -1472,9 +1568,26 @@ export function montarRutas(
       opciones.revisarTareas?.();
     } catch (error) {
       aviso = error instanceof Error ? error.message : String(error);
+      /**
+       * Y se DICE en la conversación que se está mirando, porque `alta.aviso` por este
+       * camino no lo pinta nadie: lo leen el wizard y la ventana de sesión nueva, y un clic
+       * en una fila de la barra no abre ninguna de las dos. Medido leyendo `App.tsx`, y
+       * alcanzable de verdad desde que un proyecto puede declinar por estar trabajando —el
+       * rechazo de una sesión de tarea en curso ya recorría este mismo camino mudo.
+       *
+       * Se escribe como acto de SISTEMA, que es el canal por el que el chat ya enseña la
+       * respuesta a un comando y los avisos de honestidad. Sin ninguna consola en foco no se
+       * pinta en ninguna parte: para llegar ahí hace falta haber borrado la sesión que se
+       * miraba mientras otro proyecto trabajaba, y ese hueco se queda declarado.
+       */
+      vestibulo.proyectoAbierto()?.consola.consola.escribir(`${aviso}\n`);
       contar(error);
     } finally {
+      // El alta PRIMERO y el flanco de bajada después: al revés hay un hueco en el que ya
+      // no hay indicador y todavía no ha llegado el estado nuevo. Y en el `finally`, así
+      // que un fallo al abrir también lo apaga.
       await anunciarAlta().catch(contar);
+      anunciarAbriendo();
     }
   };
 
@@ -1702,8 +1815,8 @@ export function montarRutas(
       });
       return;
     }
-    const { via, ficheros } = await opciones.cambiosDeSesion(abierto.raiz, sesion);
-    emitir({ clase: "revision", via, ficheros });
+    const { via, ficheros, mezclados } = await opciones.cambiosDeSesion(abierto.raiz, sesion);
+    emitir({ clase: "revision", via, ficheros, ...(mezclados === undefined ? {} : { mezclados }) });
   };
 
   /**
@@ -2000,6 +2113,9 @@ export function montarRutas(
       // El proyecto que viene en ESTE mensaje, no el cacheado: lo enviado es la verdad y
       // `proyectoElegido` puede haberse quedado atrás.
       const identidad = proyectos.find((p) => p.id === proyecto) ?? proyecto;
+      // La espera LARGA: aquí se baja el proyecto entero. Se dice como tal (`descargando`)
+      // porque un indicador que solo gire no distingue medio segundo de tres minutos.
+      anunciarAbriendo({ proyecto, descargando: true });
       const { raiz } = await vestibulo.completarProyecto({
         entorno: entornoElegido,
         proyecto: identidad,
@@ -2020,6 +2136,9 @@ export function montarRutas(
       contar(error);
     } finally {
       await anunciarAlta().catch(contar);
+      // Solo este paso del alta enciende el indicador, pero apagarlo aquí es correcto para
+      // todos: apagar lo que ya está apagado no se ve.
+      anunciarAbriendo();
     }
   };
 
@@ -2030,8 +2149,12 @@ export function montarRutas(
   vestibulo.alCambiarEstadoDeSesion(() => emitirModelos());
   // El turno se emite solo (`consolaWeb.turno`), pero además hay que RECORDARLO: una pestaña
   // que conecta a mitad no vio ese mensaje, y necesita saberlo para apagar su compositor.
-  vestibulo.alCambiarTurno((activo) => {
-    turnoEnVuelo = activo;
+  vestibulo.alCambiarTurno(() => {
+    // La cola se vuelve a mirar: por aquí pasa también el CIERRE de una consola de segundo
+    // plano cuyo turno acabó, y eso libera su raíz para las tareas («gana la persona» deja
+    // de aplicar ahí). Sin este empujón la tarea que esperaba ese proyecto se quedaría
+    // quieta hasta que alguien tocara la cola por su cuenta: no hay temporizador.
+    opciones.revisarTareas?.();
     // El alta se reanuncia en los DOS flancos, y DIFERIDO. Medido: una sesión nueva no
     // aparecía en la barra hasta recargar la página, porque su id nace en `volcar()` —al
     // final del turno— y nadie volvía a anunciar. Y `historica` deja de ser cierto al
@@ -2137,7 +2260,20 @@ export function montarRutas(
       // mirando sus sumideros. Cortar a la primera baja rechazaría la aprobación que otra
       // pestaña todavía tiene delante.
       adjunto?.desconectar(sumidero);
-      if (clientes.size === 0) adjunto = undefined;
+      if (clientes.size === 0) {
+        /**
+         * Y las de SEGUNDO PLANO también, que es lo que `soltar` deja pendiente a
+         * propósito: mudarse de consola no da por ido al humano, pero cerrarse el último
+         * SSE sí. Sin esto, una consola que se quedó detrás con un turno en marcha seguiría
+         * creyendo que hay alguien a quien preguntar y su aprobación esperaría el plazo
+         * entero antes de rechazarse. Se les dice a todas menos a la que ya se acaba de
+         * cortar arriba.
+         */
+        for (const consola of vestibulo.proyectosAbiertos()) {
+          if (consola !== adjunto) consola.desconectar();
+        }
+        adjunto = undefined;
+      }
     });
   });
 
@@ -2730,8 +2866,37 @@ export function augmentacionCableada(opciones: {
   };
 }
 
+/**
+ * El commit de cada turno, cableado — y extraído por el motivo documentado en CLAUDE.md:
+ * esta composición vivía en un cierre de `arrancarConsolaWeb` que todos sus tests doblan, y
+ * es LA MISMA forma de fallo que ya se ha medido tres veces en `abrirParaTarea` (una lambda
+ * escrita a mano que se deja un argumento, con TypeScript callado porque una función que
+ * ignora parámetros es asignable). Aquí el argumento que se puede caer es el que sostiene la
+ * atribución entera: sin `sesion`, el commit sale sin sello y la pestaña Revisión se cae al
+ * respaldo para siempre, sin un solo síntoma.
+ *
+ * Dos decisiones que se quedan aquí y no en el vestíbulo:
+ * - **DÓNDE se commitea**: solo en la copia que creó xonecode. En la carpeta que abrió una
+ *   persona —offline, o `./bin/xonecode` dentro de su repo— un commit por turno sería
+ *   ensuciarle el historial cada vez que habla con el agente.
+ * - **Qué se DICE**: solo el fallo. Que no haya nada que commitear, que la carpeta no sea un
+ *   repo (todo proyecto offline) o que no sea del workspace no son avisos: son el caso
+ *   normal, y uno por turno enseñaría a ignorarlos.
+ */
+export function commitDeTurnoCableado(opciones: {
+  base: string;
+  commitear?: (raiz: string, mensaje: string, sesion?: string) => Promise<{ via: string; motivo?: string }>;
+}): (raiz: string, mensaje: string, sesion: string) => Promise<string | undefined> {
+  const commitear = opciones.commitear ?? commitDeTurno;
+  return async (raiz, mensaje, sesion) => {
+    if (!dentroDelWorkspace(raiz, opciones.base)) return undefined;
+    const hecho = await commitear(raiz, mensaje, sesion);
+    return hecho.via === "fallo" ? `no se pudo commitear el turno: ${hecho.motivo}` : undefined;
+  };
+}
+
 export function construirCorredorDeTareasCableado(opciones: {
-  vestibulo: Pick<Vestibulo, "abrirParaTarea" | "proyectoAbierto" | "sesionesDe">;
+  vestibulo: Pick<Vestibulo, "abrirParaTarea" | "proyectosAbiertos" | "sesionesDe">;
   /** La fábrica de `OpcionesDeArranque.tareas`. Ausente = esta ejecución no ejecuta tareas. */
   tareasFabrica?: (informar: (texto: string) => void) => TareasEnDisco;
   informar: (texto: string) => void;
@@ -2801,11 +2966,15 @@ export function construirCorredorDeTareasCableado(opciones: {
            * ninguna clase, y el cerrojo del corredor no protege de eso — protege de dos
            * corredores. Se pregunta en cada pasada, no al arrancar: abrir un proyecto no
            * reinicia nada.
+           *
+           * **TODAS las abiertas, no la que está en foco.** Desde que cambiar de sesión no
+           * mata el turno anterior, una consola humana puede seguir viva en segundo plano
+           * —con el agente escribiendo— mientras el navegador mira otro proyecto. Con
+           * `proyectoAbierto()` esa raíz se habría contado como libre y una tarea habría
+           * arrancado a escribir en la misma copia: el fallo ABIERTO de ese cambio, y el
+           * síntoma no es un error sino un diff corrompido que nadie atribuye.
            */
-          bloqueados: () => {
-            const abierto = opciones.vestibulo.proyectoAbierto();
-            return abierto === undefined ? [] : [abierto.raiz];
-          },
+          bloqueados: () => opciones.vestibulo.proyectosAbiertos().map((c) => c.raiz),
           /**
            * `sesion` sobrevive si y solo si hay algo que una persona pueda ABRIR, y esto es
            * lo que lo decide: la sesión está en el índice del proyecto —o sea que su
@@ -3305,22 +3474,10 @@ function vestibuloReal(
     // que lo que está probado es que el vestíbulo la usa por las dos puertas, no que aquí
     // siga puesta.
     sinCommitear: trabajoSinCommitear,
-    /**
-     * El commit del turno, y **la decisión de DÓNDE se commitea vive aquí**, no en el
-     * vestíbulo: en la copia que creó xonecode (`<base>/<entorno>/workspace/<proyecto>`) es
-     * suya y commitear cada turno es razonable; en la carpeta que abrió una persona sería
-     * ensuciarle el historial cada vez que habla con el agente, así que ahí no se commitea y
-     * lo que queda es el aviso de árbol sucio al abrir.
-     *
-     * Solo se DICE el fallo. Que no haya nada que commitear, que la carpeta no sea un repo
-     * (todo proyecto offline) o que no sea del workspace no son avisos: son el caso normal, y
-     * uno por turno enseñaría a ignorarlos.
-     */
-    commitearTurno: async (raiz, mensaje) => {
-      if (!dentroDelWorkspace(raiz, settings.workspace ?? baseDeWorkspacePorOmision())) return undefined;
-      const hecho = await commitDeTurno(raiz, mensaje);
-      return hecho.via === "fallo" ? `no se pudo commitear el turno: ${hecho.motivo}` : undefined;
-    },
+    // El commit del turno, con el sello de la sesión. La composición está EXTRAÍDA y probada
+    // (`commitDeTurnoCableado`): el argumento que se cae en una lambda escrita a mano es
+    // justo el que sostiene la atribución de Revisión.
+    commitearTurno: commitDeTurnoCableado({ base: settings.workspace ?? baseDeWorkspacePorOmision() }),
     olvidarMarcaDeSesion: olvidarSesion,
     // La memoria del agente por hilo. `historica` deja de ser «se reabrió» para ser «no hay
     // checkpoint que cargar», y borrar una sesión se lleva también su checkpoint.

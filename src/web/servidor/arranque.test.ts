@@ -15,6 +15,7 @@ import {
   arrancarConsolaWeb,
   comandosDelRegistro, descripcionParaLaWeb,
   montarRutas,
+  commitDeTurnoCableado,
   construirCorredorDeTareasCableado,
   FALTA_EL_BUILD,
   RUTA_ACCION,
@@ -78,6 +79,16 @@ function clienteDeMentira(id?: string) {
     end: () => respuesta,
   } as unknown as ServerResponse;
   return { peticion, respuesta, recibidos, cerrar: () => alCerrar?.() };
+}
+
+/**
+ * El último mensaje de ALTA, que no es lo mismo que el último mensaje: desde que abrir una
+ * sesión anuncia sus dos flancos (`clase: "abriendo"`), detrás del alta va el de bajada. Los
+ * tests que miraban `recibidos.at(-1)` estaban leyendo «el último» y queriendo decir «el
+ * alta» — se pusieron rojos todos a la vez, que es como se ve que la afirmación era otra.
+ */
+function ultimaAlta(cliente: { recibidos: MensajeAlCliente[] }): MensajeAlCliente | undefined {
+  return cliente.recibidos.filter((m) => m.clase === "alta").at(-1);
 }
 
 /** Un `POST /accion` con su cuerpo. Devuelve el estado con el que se contestó. */
@@ -240,7 +251,7 @@ describe("montarRutas — el cable, por fin conectado", () => {
     const eventos = servidor.rutas.get(`GET ${RUTA_EVENTOS}`);
     await eventos!(cliente.peticion, cliente.respuesta);
     await asentar();
-    const alta = cliente.recibidos.at(-1) as Extract<MensajeAlCliente, { clase: "alta" }>;
+    const alta = ultimaAlta(cliente) as Extract<MensajeAlCliente, { clase: "alta" }>;
     expect(alta.pasos).toEqual([]);
     // Sin proyecto abierto: nadie ha elegido ninguno todavía en ESTA conexión, aunque el
     // entorno ya estuviera registrado de antes.
@@ -258,7 +269,7 @@ describe("montarRutas — el cable, por fin conectado", () => {
     const eventos = servidor.rutas.get(`GET ${RUTA_EVENTOS}`);
     await eventos!(cliente.peticion, cliente.respuesta);
     await asentar();
-    const alta = cliente.recibidos.at(-1) as Extract<MensajeAlCliente, { clase: "alta" }>;
+    const alta = ultimaAlta(cliente) as Extract<MensajeAlCliente, { clase: "alta" }>;
     expect(alta.pasos).toEqual(["entorno"]);
     expect(alta.proyectos).toEqual([]);
   });
@@ -304,7 +315,7 @@ describe("montarRutas — el cable, por fin conectado", () => {
     await eventos!(cliente.peticion, cliente.respuesta);
     await asentar();
 
-    const alta = cliente.recibidos.at(-1) as Extract<MensajeAlCliente, { clase: "alta" }>;
+    const alta = ultimaAlta(cliente) as Extract<MensajeAlCliente, { clase: "alta" }>;
     expect(alta.pasos).toEqual([]);
     expect(alta.proyectoAbierto).toBe(true);
   });
@@ -324,7 +335,7 @@ describe("montarRutas — el cable, por fin conectado", () => {
     await servidor.rutas.get(`GET ${RUTA_EVENTOS}`)!(cliente.peticion, cliente.respuesta);
     await asentar();
 
-    const alta = cliente.recibidos.at(-1) as Extract<MensajeAlCliente, { clase: "alta" }>;
+    const alta = ultimaAlta(cliente) as Extract<MensajeAlCliente, { clase: "alta" }>;
     expect(alta.modo).toBe("cloud");
   });
 
@@ -341,7 +352,7 @@ describe("montarRutas — el cable, por fin conectado", () => {
     await servidor.rutas.get(`GET ${RUTA_EVENTOS}`)!(cliente.peticion, cliente.respuesta);
     await asentar();
 
-    const alta = cliente.recibidos.at(-1) as Extract<MensajeAlCliente, { clase: "alta" }>;
+    const alta = ultimaAlta(cliente) as Extract<MensajeAlCliente, { clase: "alta" }>;
     expect(alta.proyectoAbierto).toBe(true);
     expect("modo" in alta).toBe(false);
   });
@@ -388,12 +399,12 @@ describe("montarRutas — el cable, por fin conectado", () => {
       entorno: { id: "webstudio", nombre: "XOne WebStudio", url: "https://mcp.xonewebstudio.com/mcp" },
     });
     await asentar();
-    let alta = cliente.recibidos.at(-1) as Extract<MensajeAlCliente, { clase: "alta" }>;
+    let alta = ultimaAlta(cliente) as Extract<MensajeAlCliente, { clase: "alta" }>;
     expect(alta.proyectos).toEqual([{ id: "p1", nombre: "Tienda" }]);
 
     await enviarMensaje(accion, { clase: "alta", paso: "proyecto", proyecto: "p1" });
     await asentar();
-    alta = cliente.recibidos.at(-1) as Extract<MensajeAlCliente, { clase: "alta" }>;
+    alta = ultimaAlta(cliente) as Extract<MensajeAlCliente, { clase: "alta" }>;
     expect(alta.ramas).toEqual(["master", "pruebas"]);
     expect(vestibulo.proyectoAbierto()).toBeUndefined();
   });
@@ -427,7 +438,7 @@ describe("montarRutas — el cable, por fin conectado", () => {
     });
     await asentar();
     expect(registrados).toEqual(["webstudio"]);
-    const alta = cliente.recibidos.at(-1) as Extract<MensajeAlCliente, { clase: "alta" }>;
+    const alta = ultimaAlta(cliente) as Extract<MensajeAlCliente, { clase: "alta" }>;
     expect(alta.proyectos).toEqual([{ id: "p1", nombre: "Tienda" }]);
   });
 
@@ -466,7 +477,7 @@ describe("montarRutas — el cable, por fin conectado", () => {
 
     expect(registrados).toEqual(["mcp.casa.local"]);
     expect(pedidos).toEqual(["mcp.casa.local"]);
-    const alta = cliente.recibidos.at(-1) as Extract<MensajeAlCliente, { clase: "alta" }>;
+    const alta = ultimaAlta(cliente) as Extract<MensajeAlCliente, { clase: "alta" }>;
     expect(alta.aviso).toBeUndefined();
     expect(alta.proyectos).toEqual([{ id: "p9", nombre: "On-premise" }]);
   });
@@ -952,6 +963,166 @@ describe("montarRutas — el cable, por fin conectado", () => {
       rmSync(base, { recursive: true, force: true });
     });
 
+    /**
+     * Cambiar de sesión SUELTA el cable de la anterior; no la desconecta. Y la aprobación
+     * que dejó pendiente se le REEMITE al volver.
+     *
+     * Las dos mitades hacen falta y las dos son de este cambio. Con `desconectar` —lo que
+     * hacía `adjuntar` cuando solo podía haber una consola— la escritura de un turno de
+     * segundo plano se habría RECHAZADO sola por mirar otra cosa, sin que nadie decidiera
+     * nada: `alDesconectar` da por rechazada la aprobación en vuelo. Y sin reemitirla, al
+     * volver se vería el compositor apagado delante de un turno parado esperando una
+     * decisión que no hay forma de dar — ese mensaje es el ÚNICO que no está en la traza
+     * (lleva contenido de fichero), así que la reemisión de `adjuntar` no lo alcanzaba.
+     */
+    it("cambiar de sesión no rechaza la aprobación de la que dejas atrás, y al volver se reemite", async () => {
+      const base = mkdtempSync(join(tmpdir(), "xonecode-dos-"));
+      const servidor = servidorDeMentira();
+      let decididas: Map<string, { type: string }> | undefined;
+      const vestibulo = vestibuloDePrueba({
+        baseDeWorkspace: base,
+        proyectosDeEntorno: async () => ({
+          proyectos: [
+            { id: "p1", nombre: "Tienda" },
+            { id: "p2", nombre: "Almacen" },
+          ],
+        }),
+        sesiones: {
+          crear: () => "s1",
+          listar: () => [{ id: "s1", titulo: "una" }],
+          anotar: () => {},
+          reabrir: (_r, id) => ({ id, actos: [], historica: true }),
+        },
+        // Un turno que se para en una aprobación, que es el único sitio donde esto ocurre:
+        // una aprobación en vuelo sin turno en vuelo no existe.
+        crearEjecutor: () => async (_peticion, _estado, consola) => {
+          decididas = (await consola.aprobacionesTui!(
+            [{ id: "a1", origen: "dev", descripcion: "escribir /app.xne", decisionesPermitidas: ["approve"] }],
+            new Map([["/app.xne", "hola"]]),
+            new Map()
+          )) as unknown as Map<string, { type: string }>;
+        },
+        correr: async (consola) => {
+          for await (const _linea of consola.lineas) {
+            // Hasta el EOF.
+          }
+          return 0;
+        },
+      });
+      for (const nombre of ["Tienda", "Almacen"]) {
+        const raiz = vestibulo.raizDeProyecto("webstudio", nombre);
+        mkdirSync(join(raiz, ".xonecode"), { recursive: true });
+        writeFileSync(join(raiz, ".xonecode", "config.json"), JSON.stringify({ modo: "offline" }));
+      }
+      montarRutas(servidor, vestibulo);
+      const cliente = clienteDeMentira();
+      await servidor.rutas.get(`GET ${RUTA_EVENTOS}`)!(cliente.peticion, cliente.respuesta);
+      const accion = servidor.rutas.get(`POST ${RUTA_ACCION}`)!;
+      await asentar();
+
+      await enviarMensaje(accion, { clase: "sesion", proyecto: "p1", sesion: "s1" });
+      await asentar();
+      const deP1 = vestibulo.proyectoAbierto()!;
+      const turno = deP1.ejecutarTurno("escribe el login", deP1.estadoDeSesion, deP1.consola.consola);
+      await asentar();
+      const cuantasAprobaciones = (): number => cliente.recibidos.filter((m) => m.clase === "aprobacion").length;
+      expect(cuantasAprobaciones()).toBe(1);
+
+      // Se cambia a la OTRA sesión: la de antes se queda trabajando, con su modal pendiente.
+      await enviarMensaje(accion, { clase: "sesion", proyecto: "p2" });
+      // Varias vueltas de microtareas: abrir dispara el alta y el flanco del turno, que van
+      // sueltos a propósito (el `POST` no se queda abierto esperándolos).
+      for (let i = 0; i < 5; i++) await asentar();
+      expect(deP1.cerrada).toBe(false);
+      expect(deP1.turnoEnVuelo).toBe(true);
+      // Y no se le ha reemitido a nadie: el modal de otra sesión no puede aparecer aquí.
+      expect(cuantasAprobaciones()).toBe(1);
+
+      // Y al volver, sí: es la única forma de contestarla.
+      await enviarMensaje(accion, { clase: "sesion", proyecto: "p1", sesion: "s1" });
+      for (let i = 0; i < 5; i++) await asentar();
+      // La MISMA consola, no una reabierta: el turno sigue dentro.
+      expect(vestibulo.proyectoAbierto()).toBe(deP1);
+      expect(cuantasAprobaciones()).toBe(2);
+
+      await enviarMensaje(accion, { clase: "decision", decisiones: { a1: "approve" } });
+      await turno;
+      // Aprobada de verdad: si `adjuntar` la hubiera desconectado, aquí habría un rechazo
+      // que nadie pidió.
+      expect(decididas?.get("a1")?.type).toBe("approve");
+      await vestibulo.cerrar();
+      rmSync(base, { recursive: true, force: true });
+    });
+
+    /**
+     * Y el rechazo se DICE en la conversación que se está mirando.
+     *
+     * `alta.aviso` por este camino no lo pinta nadie —lo leen el wizard y la ventana de
+     * sesión nueva, y pulsar una fila de la barra no abre ninguna—, así que sin esto un
+     * proyecto que declina por estar trabajando sería un clic que enseña «abriendo…» y
+     * después nada: el botón muerto de siempre.
+     */
+    it("el rechazo al abrir aterriza como acto de SISTEMA en el chat que se está mirando", async () => {
+      const base = mkdtempSync(join(tmpdir(), "xonecode-rech-"));
+      const servidor = servidorDeMentira();
+      let soltarElTurno: (() => void) | undefined;
+      const vestibulo = vestibuloDePrueba({
+        baseDeWorkspace: base,
+        sesiones: {
+          crear: () => "s1",
+          listar: () => [
+            { id: "s1", titulo: "la que trabaja" },
+            { id: "s2", titulo: "la otra" },
+          ],
+          anotar: () => {},
+          reabrir: (_r, id) => ({ id, actos: [], historica: true }),
+        },
+        crearEjecutor: () => async () => {
+          await new Promise<void>((resuelto) => {
+            soltarElTurno = resuelto;
+          });
+        },
+        correr: async (consola) => {
+          for await (const _linea of consola.lineas) {
+            // Hasta el EOF.
+          }
+          return 0;
+        },
+      });
+      const raiz = vestibulo.raizDeProyecto("webstudio", "Tienda");
+      mkdirSync(join(raiz, ".xonecode"), { recursive: true });
+      writeFileSync(join(raiz, ".xonecode", "config.json"), JSON.stringify({ modo: "offline" }));
+      montarRutas(servidor, vestibulo);
+      const cliente = clienteDeMentira();
+      await servidor.rutas.get(`GET ${RUTA_EVENTOS}`)!(cliente.peticion, cliente.respuesta);
+      const accion = servidor.rutas.get(`POST ${RUTA_ACCION}`)!;
+      await asentar();
+
+      await enviarMensaje(accion, { clase: "sesion", proyecto: "p1", sesion: "s1" });
+      await asentar();
+      const abierta = vestibulo.proyectoAbierto()!;
+      const turno = abierta.ejecutarTurno("arregla el login", abierta.estadoDeSesion, abierta.consola.consola);
+      await asentar();
+
+      // La OTRA sesión del MISMO proyecto, con esa trabajando: se declina.
+      await enviarMensaje(accion, { clase: "sesion", proyecto: "p1", sesion: "s2" });
+      for (let i = 0; i < 5; i++) await asentar();
+      const dichos = cliente.recibidos
+        .filter((m) => m.clase === "acto")
+        .map((m) => (m as Extract<MensajeAlCliente, { clase: "acto" }>).acto)
+        .filter((a) => a.tipo === "sistema")
+        .map((a) => (a as { texto: string }).texto);
+      expect(dichos.some((t) => t.includes("turno en marcha"))).toBe(true);
+      // Y no se ha cerrado la que trabajaba para negarse después: dos daños en vez de uno.
+      expect(abierta.cerrada).toBe(false);
+      expect(vestibulo.proyectoAbierto()).toBe(abierta);
+
+      soltarElTurno!();
+      await turno;
+      await vestibulo.cerrar();
+      rmSync(base, { recursive: true, force: true });
+    });
+
     it("con proyecto y sesión, la lista sale del puerto y el parche se pide POR RUTA", async () => {
       const base = mkdtempSync(join(tmpdir(), "xonecode-proy-"));
       const servidor = servidorDeMentira();
@@ -1207,6 +1378,66 @@ describe("montarRutas — el cable, por fin conectado", () => {
       expect(alta.ramas).toEqual([]);
       await vestibulo.cerrar();
       rmSync(raiz, { recursive: true, force: true });
+    });
+
+    /**
+     * Abrir tarda: de unos cientos de milisegundos (una copia local: foto de git,
+     * checkpointer, índice de sesiones) a los MINUTOS de una descarga. Entre el clic y el
+     * estado nuevo el cliente no tiene nada que pintar, y el usuario lo dijo mirando la
+     * pantalla: parecía que el clic no hacía nada. Lo anuncia el SERVIDOR y no lo deduce el
+     * cliente, por el mismo motivo que el turno en vuelo: solo este lado sabe cuándo acaba,
+     * y un `alta` nuevo llega también cuando abrir FALLA.
+     */
+    it("abrir una sesión anuncia los DOS flancos, y el de bajada va después del alta", async () => {
+      const raiz = mkdtempSync(join(tmpdir(), "xonecode-abriendo-"));
+      const servidor = servidorDeMentira();
+      const vestibulo = vestibuloDePrueba({ baseDeWorkspace: raiz });
+      const raizDeVerdad = vestibulo.raizDeProyecto("webstudio", "Tienda");
+      mkdirSync(join(raizDeVerdad, ".xonecode"), { recursive: true });
+      writeFileSync(join(raizDeVerdad, ".xonecode", "config.json"), JSON.stringify({ modo: "offline" }));
+
+      montarRutas(servidor, vestibulo);
+      const cliente = clienteDeMentira();
+      await servidor.rutas.get(`GET ${RUTA_EVENTOS}`)!(cliente.peticion, cliente.respuesta);
+      const accion = servidor.rutas.get(`POST ${RUTA_ACCION}`)!;
+      await asentar();
+      cliente.recibidos.length = 0;
+
+      await enviarMensaje(accion, { clase: "sesion", proyecto: "p1", sesion: "s-7" });
+      await asentar();
+
+      const flancos = cliente.recibidos.filter((m) => m.clase === "abriendo");
+      expect(flancos).toEqual([
+        { clase: "abriendo", activo: true, proyecto: "p1", sesion: "s-7" },
+        { clase: "abriendo", activo: false },
+      ]);
+      // El orden importa: el alta va ENTRE los dos flancos. Al revés hay un hueco en el que
+      // ya no hay indicador y todavía no ha llegado el estado nuevo.
+      const clases = cliente.recibidos.map((m) => m.clase);
+      expect(clases.indexOf("alta")).toBeGreaterThan(clases.indexOf("abriendo"));
+      expect(clases.lastIndexOf("abriendo")).toBeGreaterThan(clases.indexOf("alta"));
+
+      await vestibulo.cerrar();
+      rmSync(raiz, { recursive: true, force: true });
+    });
+
+    it("un fallo al abrir también APAGA el indicador: va en el `finally`", async () => {
+      const servidor = servidorDeMentira();
+      // Sin entorno elegido no se puede abrir nada, que es el camino de salida temprana.
+      const vestibulo = vestibuloDePrueba({ baseDeWorkspace: mkdtempSync(join(tmpdir(), "xonecode-vacio-")) });
+      montarRutas(servidor, vestibulo);
+      const cliente = clienteDeMentira();
+      await servidor.rutas.get(`GET ${RUTA_EVENTOS}`)!(cliente.peticion, cliente.respuesta);
+      const accion = servidor.rutas.get(`POST ${RUTA_ACCION}`)!;
+      await asentar();
+      cliente.recibidos.length = 0;
+
+      // Un proyecto que no está en la lista: se cae al camino del alta y no abre nada.
+      await enviarMensaje(accion, { clase: "sesion", proyecto: "no-existe" });
+      await asentar();
+
+      const flancos = cliente.recibidos.filter((m) => m.clase === "abriendo");
+      expect(flancos.at(-1)).toEqual({ clase: "abriendo", activo: false });
     });
 
     it("las ramas se piden con el NOMBRE del proyecto, no con el id que trae el cable", async () => {
@@ -1478,6 +1709,117 @@ describe("montarRutas — el cable, por fin conectado", () => {
       expect(alta.proyectos[0]?.sesiones).toEqual([{ id: "s7", titulo: "arreglar el alta" }]);
     });
 
+    /**
+     * Y qué sesión está TRABAJANDO, que es lo que hace visible que cambiar de sesión ya no
+     * interrumpe al agente: la conversación que dejaste atrás sigue corriendo su turno y la
+     * barra lo dice. Va en el alta porque el alta se reemite en los dos flancos de CUALQUIERA
+     * de las consolas vivas, que es exactamente cuando esto cambia.
+     *
+     * Se mide con el turno EN VUELO —sin esperarlo— porque no hay otra forma de que el caso
+     * exista: con un ejecutor que devuelve en el acto no hay ningún instante en que medir.
+     */
+    it("la sesión con un turno en vuelo viaja MARCADA, esté o no en foco", async () => {
+      const servidor = servidorDeMentira();
+      let soltarElTurno: (() => void) | undefined;
+      const vestibulo = vestibuloDePrueba({
+        sesiones: {
+          crear: () => "s7",
+          listar: () => [{ id: "s7", titulo: "arreglar el alta" }],
+          anotar: () => {},
+          reabrir: (_r, id) => ({ id, actos: [], historica: true }),
+        },
+        crearEjecutor: () => async () => {
+          await new Promise<void>((resuelto) => {
+            soltarElTurno = resuelto;
+          });
+        },
+        // El lazo se queda VIVO consumiendo líneas, como el de verdad: con el
+        // `async () => 0` de `vestibuloDePrueba` la consola se da por cerrada en el acto y
+        // `proyectosAbiertos()` —que descarta las cerradas— no la vería.
+        correr: async (consola) => {
+          for await (const _linea of consola.lineas) {
+            // Hasta el EOF, que es lo que pone `cerrar()`.
+          }
+          return 0;
+        },
+      });
+      montarRutas(servidor, vestibulo);
+      const cliente = clienteDeMentira();
+      await servidor.rutas.get(`GET ${RUTA_EVENTOS}`)!(cliente.peticion, cliente.respuesta);
+      await asentar();
+      const sinTurno = ultimaAlta(cliente) as Extract<MensajeAlCliente, { clase: "alta" }>;
+      // Ausente mientras no trabaja: la marca no se pinta «por si acaso».
+      expect(sinTurno.proyectos[0]?.sesiones?.[0]?.trabajando).toBeUndefined();
+
+      const abierta = await vestibulo.abrirProyecto({
+        raiz: vestibulo.raizDeProyecto("webstudio", "Tienda"),
+        sesion: "s7",
+      });
+      const turno = abierta.ejecutarTurno("arregla el login", abierta.estadoDeSesion, abierta.consola.consola);
+      await asentar();
+      const trabajando = ultimaAlta(cliente) as Extract<MensajeAlCliente, { clase: "alta" }>;
+      expect(trabajando.proyectos[0]?.sesiones?.[0]?.trabajando).toBe(true);
+
+      soltarElTurno!();
+      await turno;
+      await asentar();
+      const yaNo = ultimaAlta(cliente) as Extract<MensajeAlCliente, { clase: "alta" }>;
+      expect(yaNo.proyectos[0]?.sesiones?.[0]?.trabajando).toBeUndefined();
+      expect(yaNo.proyectos[0]?.trabajando).toBeUndefined();
+      await vestibulo.cerrar();
+    });
+
+    /**
+     * Y el PROYECTO se marca aunque su sesión no tenga fila todavía, que es el caso más
+     * común de todos: abrir, pedir algo e irse a otro proyecto. El id de la sesión nace al
+     * volcar el primer acto —o sea al FINAL del turno—, así que marcar solo por sesión
+     * dejaba la barra sin decir nada justo en el primer minuto de uso. La raíz, en cambio, se
+     * sabe desde el primer instante.
+     */
+    it("el proyecto se marca trabajando aunque su sesión no tenga fila en el índice todavía", async () => {
+      const servidor = servidorDeMentira();
+      let soltarElTurno: (() => void) | undefined;
+      const vestibulo = vestibuloDePrueba({
+        // Sin ninguna sesión guardada: es una conversación nueva y su fila no existe.
+        sesiones: {
+          crear: () => "nueva",
+          listar: () => [],
+          anotar: () => {},
+          reabrir: (_r, id) => ({ id, actos: [], historica: true }),
+        },
+        crearEjecutor: () => async () => {
+          await new Promise<void>((resuelto) => {
+            soltarElTurno = resuelto;
+          });
+        },
+        correr: async (consola) => {
+          for await (const _linea of consola.lineas) {
+            // Hasta el EOF.
+          }
+          return 0;
+        },
+      });
+      montarRutas(servidor, vestibulo);
+      const cliente = clienteDeMentira();
+      await servidor.rutas.get(`GET ${RUTA_EVENTOS}`)!(cliente.peticion, cliente.respuesta);
+      await asentar();
+
+      const abierta = await vestibulo.abrirProyecto({ raiz: vestibulo.raizDeProyecto("webstudio", "Tienda") });
+      expect(abierta.sesion).toBeUndefined();
+      const turno = abierta.ejecutarTurno("arregla el login", abierta.estadoDeSesion, abierta.consola.consola);
+      await asentar();
+      const alta = ultimaAlta(cliente) as Extract<MensajeAlCliente, { clase: "alta" }>;
+      expect(alta.proyectos[0]?.trabajando).toBe(true);
+      // Y no hay ninguna fila que marcar: es justo por eso que el proyecto lleva la suya.
+      expect(alta.proyectos[0]?.sesiones).toBeUndefined();
+
+      soltarElTurno!();
+      await turno;
+      await asentar();
+      expect((ultimaAlta(cliente) as Extract<MensajeAlCliente, { clase: "alta" }>).proyectos[0]?.trabajando).toBeUndefined();
+      await vestibulo.cerrar();
+    });
+
     it("una sesión de TAREA viaja marcada, y con la hora de su último turno", async () => {
       // Las dos cosas que la barra necesita para distinguir las filas: qué es cada una y
       // cuándo se tocó. La marca viene del ÍNDICE y no de cruzar con la cola de tareas, que
@@ -1680,7 +2022,7 @@ describe("montarRutas — el cable, por fin conectado", () => {
     // sale rechazada y todo `preguntar` responde cadena vacía, sin decir por qué.
     expect(abierto!.consola.consola.eof!()).toBe(false);
     // Y el alta ya no pide nada.
-    const alta = cliente.recibidos.at(-1) as Extract<MensajeAlCliente, { clase: "alta" }>;
+    const alta = ultimaAlta(cliente) as Extract<MensajeAlCliente, { clase: "alta" }>;
     expect(alta.clase).toBe("alta");
     expect(alta.pasos).toEqual([]);
   });
@@ -1743,7 +2085,7 @@ describe("montarRutas — el cable, por fin conectado", () => {
     expect(alTerminal).toContain("fetch failed");
     // Y en el propio paso del alta, que es donde el usuario está mirando: el acto de
     // sistema se ve en la Trayectoria, la OTRA pestaña.
-    const alta = cliente.recibidos.at(-1) as Extract<MensajeAlCliente, { clase: "alta" }>;
+    const alta = ultimaAlta(cliente) as Extract<MensajeAlCliente, { clase: "alta" }>;
     expect(alta.aviso).toBe("fetch failed");
     const actos = cliente.recibidos
       .filter((m): m is Extract<MensajeAlCliente, { clase: "acto" }> => m.clase === "acto")
@@ -1773,13 +2115,13 @@ describe("montarRutas — el cable, por fin conectado", () => {
     };
     await enviarMensaje(accion, entorno);
     await asentar();
-    expect((cliente.recibidos.at(-1) as Extract<MensajeAlCliente, { clase: "alta" }>).aviso).toBe("fetch failed");
+    expect((ultimaAlta(cliente) as Extract<MensajeAlCliente, { clase: "alta" }>).aviso).toBe("fetch failed");
 
     falla = false;
     await enviarMensaje(accion, entorno);
     await asentar();
     // Un aviso viejo pegado a un paso que ya salió bien sería una mentira con forma de error.
-    expect((cliente.recibidos.at(-1) as Extract<MensajeAlCliente, { clase: "alta" }>).aviso).toBeUndefined();
+    expect((ultimaAlta(cliente) as Extract<MensajeAlCliente, { clase: "alta" }>).aviso).toBeUndefined();
   });
 
   it("un cuerpo ilegible es 400 y no devuelve NADA de lo recibido: por ahí pasa la clave", async () => {
@@ -3913,9 +4255,48 @@ describe("las tareas en background, el cableado del corredor con el cable — no
     abrirParaTarea: async () => {
       throw new Error("no debería llamarse: la reconciliación no abre consolas");
     },
-    proyectoAbierto: () => undefined,
+    proyectosAbiertos: () => [],
     sesionesDe: () => [],
   };
+
+  /**
+   * GANA LA PERSONA, y ahora hay más de una consola humana viva: `bloqueados` tiene que
+   * nombrar TODAS las raíces abiertas, no solo la que está en foco.
+   *
+   * Es el fallo ABIERTO de este cambio, y por eso el test va primero: con
+   * `proyectoAbierto()` —una sola— una sesión humana que se quedó en segundo plano dejaría
+   * de bloquear su proyecto, y una tarea arrancaría a escribir en la misma copia de trabajo
+   * en la que alguien está trabajando. No hay aislamiento de ninguna clase entre las dos, y
+   * el síntoma no es un error: es un diff corrompido que nadie atribuye.
+   *
+   * Se mide por el ÚNICO camino observable desde fuera: si la raíz está bloqueada, el
+   * corredor no despacha, así que `abrirParaTarea` no se llama.
+   */
+  it("una consola humana en SEGUNDO PLANO también bloquea su proyecto para las tareas", async () => {
+    const aperturas: string[] = [];
+    const cola = colaDeMentira([{ ...tareaEnProceso("t1"), estado: "nuevo" }]);
+    const { corredor, arrancarConectado } = construirCorredorDeTareasCableado({
+      vestibulo: {
+        abrirParaTarea: async (raiz) => {
+          aperturas.push(raiz);
+          throw new Error("no debería llegar aquí: esa raíz la tiene abierta una persona");
+        },
+        // En FOCO hay otro proyecto —o ninguno—; el de la tarea sigue abierto detrás con su
+        // turno corriendo. Es exactamente el caso que este cambio introduce.
+        proyectosAbiertos: () =>
+          [{ raiz: "/w/AppDemo" }] as unknown as ReturnType<Vestibulo["proyectosAbiertos"]>,
+        sesionesDe: () => [],
+      },
+      tareasFabrica: () => cola,
+      informar: () => {},
+      olvidarHiloDeSesion: async () => {},
+      ...ENTREGA_DE_TAREAS,
+    });
+    await arrancarConectado({ emitirTareas: () => {} });
+    await corredor!.asentar();
+    expect(aperturas).toEqual([]);
+    await corredor!.parar();
+  });
 
   /**
    * Las dos piezas de la puerta de la ENTREGA, que el corredor exige por tipo. Estos tests
@@ -3963,7 +4344,7 @@ describe("las tareas en background, el cableado del corredor con el cable — no
           // aparca y el test ya tiene lo único que venía a medir — qué se le pasó.
           throw new Error("no hay proyecto de verdad en este test");
         },
-        proyectoAbierto: () => undefined,
+        proyectosAbiertos: () => [],
         sesionesDe: () => [],
       },
       tareasFabrica: () => cola,
@@ -3993,7 +4374,7 @@ describe("las tareas en background, el cableado del corredor con el cable — no
           tareas.push(tarea);
           throw new Error("no hay proyecto de verdad en este test");
         },
-        proyectoAbierto: () => undefined,
+        proyectosAbiertos: () => [],
         sesionesDe: () => [],
       },
       tareasFabrica: () => cola,
@@ -4609,5 +4990,53 @@ describe("abrir la sesión de una tarea en curso, por el cable", () => {
     // Y el cable sigue donde estaba: sin proyecto abierto, el alta lo dice.
     expect((altas.at(-1) as { proyectoAbierto?: boolean }).proyectoAbierto).toBe(false);
     rmSync(base, { recursive: true, force: true });
+  });
+});
+
+/**
+ * El commit de cada turno, cableado. Está extraído y probado por la lección que este repo ya
+ * ha pagado TRES veces en `abrirParaTarea`: una lambda escrita a mano dentro de un cierre
+ * que todos los tests doblan se deja un argumento y TypeScript no dice nada, porque una
+ * función que ignora parámetros es asignable. Aquí el argumento que se puede caer es el que
+ * sostiene la atribución entera de la pestaña Revisión: sin `sesion` el commit sale sin
+ * sello y la pestaña se cae al respaldo «desde-apertura» para siempre, sin un solo síntoma.
+ */
+describe("el commit del turno, cableado", () => {
+  it("reenvía la raíz, el mensaje Y LA SESIÓN: el sello sale de ese tercer argumento", async () => {
+    const vistos: unknown[][] = [];
+    const commitear = commitDeTurnoCableado({
+      base: "/w",
+      commitear: async (...args) => {
+        vistos.push(args);
+        return { via: "commit" };
+      },
+    });
+    expect(await commitear("/w/entorno/workspace/AppDemo", "xonecode: Hola", "s-1")).toBeUndefined();
+    expect(vistos).toEqual([["/w/entorno/workspace/AppDemo", "xonecode: Hola", "s-1"]]);
+  });
+
+  it("fuera del workspace no commitea NADA: ahí el historial es de una persona", async () => {
+    let llamado = false;
+    const commitear = commitDeTurnoCableado({
+      base: "/w",
+      commitear: async () => {
+        llamado = true;
+        return { via: "commit" };
+      },
+    });
+    expect(await commitear("/Users/alguien/su-proyecto", "xonecode: Hola", "s-1")).toBeUndefined();
+    expect(llamado).toBe(false);
+  });
+
+  it("solo el FALLO se dice; no haber nada que commitear no es un aviso", async () => {
+    const conVia = async (via: string, motivo?: string): Promise<string | undefined> =>
+      commitDeTurnoCableado({
+        base: "/w",
+        commitear: async () => ({ via, ...(motivo === undefined ? {} : { motivo }) }),
+      })("/w/e/workspace/A", "m", "s");
+    expect(await conVia("sin-cambios")).toBeUndefined();
+    expect(await conVia("sin-git")).toBeUndefined();
+    expect(await conVia("commit")).toBeUndefined();
+    expect(await conVia("fallo", "hook rechazado")).toBe("no se pudo commitear el turno: hook rechazado");
   });
 });

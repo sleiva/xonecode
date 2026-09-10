@@ -27,7 +27,7 @@ import { Ficheros } from "./componentes/Ficheros.js";
 import { Artefactos, type ArtefactoEnLista } from "./componentes/Artefactos.js";
 import { TareasDelProyecto } from "./componentes/TareasDelProyecto.js";
 import { aplicarApariencia, guardarApariencia, leerApariencia, type Apariencia } from "./apariencia.js";
-import { guardarBarraContraida, leerBarraContraida } from "./preferencias.js";
+import { guardarAnchoBarra, guardarBarraContraida, leerAnchoBarra, leerBarraContraida } from "./preferencias.js";
 
 type Store = ReturnType<typeof crearStoreDelCliente>;
 
@@ -112,6 +112,12 @@ export function App({
    * recarga. `leerBarraContraida` se llama una vez, al montar.
    */
   const [barraContraida, setBarraContraida] = useState(() => leerBarraContraida());
+  /**
+   * Y su ANCHO, por lo mismo: es de esta ventana. `undefined` = nadie lo ha movido, y
+   * entonces manda la omisión de `Maqueta` — la cifra vive allí, que es donde está el
+   * resto de la geometría, y no repetida aquí.
+   */
+  const [anchoBarra, setAnchoBarra] = useState(() => leerAnchoBarra());
 
   /**
    * Pedir la lista de ficheros de la sesión. Va en `useCallback` porque `Revision` la
@@ -168,9 +174,30 @@ export function App({
    * además de mandar el mensaje, saca del escritorio. Sin eso, pulsar un proyecto desde el
    * escritorio no cambiaba nada de lo que se veía.
    */
+  /**
+   * Lo que ESTA ventana acaba de pedir abrir, para que el clic cambie algo en el acto.
+   *
+   * No contradice la regla de «lo dice el servidor»: el servidor sigue siendo el único que
+   * afirma que se está abriendo algo y cuándo acaba (`clase: "abriendo"`), y en cuanto lo
+   * dice manda él. Esto es otra cosa —«he pulsado y estoy esperando respuesta»—, y hace
+   * falta porque MEDIDO en el navegador ese ida y vuelta son 40 ms: con solo la señal del
+   * servidor, el primer cuadro después del clic sigue igual que antes, que es exactamente
+   * lo que se lee como «no ha hecho nada».
+   *
+   * Se suelta en cuanto el servidor contesta CUALQUIER cosa —el alta nueva llega siempre,
+   * también si abrir falla— o si se cae el cable. Nunca se queda pegado esperando un
+   * mensaje concreto.
+   */
+  const [pedidoDeApertura, setPedidoDeApertura] = useState<{ proyecto: string; sesion?: string } | undefined>(
+    undefined
+  );
+  const altaAlPedir = useRef<unknown>(undefined);
+
   const abrirSesion = useCallback(
     (proyecto: string, sesion?: string, pestanaAlAbrir?: Pestana) => {
       setEnEscritorio(false);
+      altaAlPedir.current = estado.alta;
+      setPedidoDeApertura({ proyecto, ...(sesion === undefined ? {} : { sesion }) });
       // Solo si el llamador la nombra: por omisión no toca `pestana`, que es el
       // comportamiento de siempre para la barra y el escritorio. Quien abre desde una
       // tarjeta de tarea «esperando feedback» sí la nombra —«revision»—, porque ahí la
@@ -178,8 +205,22 @@ export function App({
       if (pestanaAlAbrir !== undefined) setPestana(pestanaAlAbrir);
       void enviar(sesion === undefined ? { clase: "sesion", proyecto } : { clase: "sesion", proyecto, sesion });
     },
-    [enviar]
+    [enviar, estado.alta]
   );
+
+  useEffect(() => {
+    if (pedidoDeApertura === undefined) return;
+    // Cualquier respuesta del servidor lo releva: el alta se anuncia SIEMPRE al terminar de
+    // abrir (y también al fallar), así que basta con que cambie.
+    if (estado.alta !== altaAlPedir.current || estado.conectado === false) setPedidoDeApertura(undefined);
+  }, [pedidoDeApertura, estado.alta, estado.conectado]);
+
+  /**
+   * Qué se está abriendo, con el servidor por delante: lo que él diga manda —él sabe si
+   * además hay que DESCARGAR, que es la espera de minutos— y el pedido de esta ventana solo
+   * cubre los milisegundos de antes de su primera palabra.
+   */
+  const abriendo = estado.abriendo ?? pedidoDeApertura;
 
   /**
    * Las cuatro acciones de una tarea, hoisted una sola vez: el kanban del escritorio
@@ -654,6 +695,16 @@ export function App({
     });
   };
 
+  /**
+   * Redimensionar la barra. Se guarda solo al TERMINAR el gesto: el arrastre pide un ancho
+   * en cada `pointermove` y `localStorage` no es sitio para escribir sesenta veces por
+   * segundo. Cada pulsación de tecla llega ya terminada.
+   */
+  const alRedimensionarBarra = (ancho: number, terminado: boolean): void => {
+    setAnchoBarra(ancho);
+    if (terminado) guardarAnchoBarra(ancho);
+  };
+
   /** El entorno activo con su nombre y su URL, para la portada del escritorio. `undefined`
    *  si no hay ninguno registrado — que es distinto de haberlo y no tener proyectos. */
   const entornoDelEscritorio = estado.alta?.registrados.find((e) => e.id === entornoActivo);
@@ -947,6 +998,8 @@ export function App({
     <>
     <Maqueta
       barraContraida={barraContraida}
+      {...(anchoBarra === undefined ? {} : { anchoBarra })}
+      alRedimensionarBarra={alRedimensionarBarra}
       cabecera={cabecera}
       centro={
         // La rama ya NO se elige aquí: la pregunta de «qué proyecto abro y desde qué rama»
@@ -989,6 +1042,7 @@ export function App({
                 <Revision
                   historica={estado.alta?.historica === true}
                   {...(estado.revision === undefined ? {} : { via: estado.revision.via })}
+                  {...(estado.revision?.mezclados === undefined ? {} : { mezclados: estado.revision.mezclados })}
                   ficheros={estado.revision?.lista ?? []}
                   parches={estado.parches ?? {}}
                   desplegados={desplegados ?? new Set()}
@@ -1273,6 +1327,9 @@ export function App({
           // configurar. El volcado sigue estando, dentro de la ventana, para quien quiera
           // verlo entero.
           alAbrirAjustes={() => setAjustesAbiertos(true)}
+          // Qué se está abriendo, para que la fila donde se pulsó lo diga. Lo manda el
+          // servidor: es el único que sabe cuándo acaba (`clase: "abriendo"`).
+          {...(abriendo === undefined ? {} : { abriendo })}
         />
       }
     />

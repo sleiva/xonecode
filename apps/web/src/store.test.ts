@@ -355,6 +355,18 @@ describe("las sesiones de la barra: de quién es cada una y cuándo se tocó", (
     expect(s.leer().alta?.proyectos[0]?.sesiones).toEqual([{ id: "s7", titulo: "arreglar el alta" }]);
   });
 
+  it("`trabajando` sobrevive a la lista blanca", () => {
+    const s = crearStoreDelCliente();
+    s.aplicar(alta([{ id: "s7", titulo: "x", trabajando: true }]));
+    expect(s.leer().alta?.proyectos[0]?.sesiones).toEqual([{ id: "s7", titulo: "x", trabajando: true }]);
+  });
+
+  it("un `trabajando` que no es el booleano se descarta: un indicador que no se apaga nunca", () => {
+    const s = crearStoreDelCliente();
+    s.aplicar(alta([{ id: "s7", titulo: "x", trabajando: "false" }]));
+    expect(s.leer().alta?.proyectos[0]?.sesiones?.[0]).toEqual({ id: "s7", titulo: "x" });
+  });
+
   it("un `deTarea` que no es el booleano se descarta, no se toma por verdadero", () => {
     // La trampa del `"false"` de CloudStudio, en la dirección de aquí: marcar una
     // conversación de una persona como sesión de una tarea de fondo.
@@ -1097,5 +1109,67 @@ describe("mirar en vivo una tarea", () => {
     s.aplicar({ clase: "mirada", tarea: "t1", via: "todos", actos: ACTOS });
     s.dejarDeMirar();
     expect(s.leer().mirada).toBeUndefined();
+  });
+});
+
+describe("la revisión que llega por el cable", () => {
+  const revisionCon = (mensaje: Record<string, unknown>) => {
+    const s = crearStoreDelCliente();
+    s.aplicar({ clase: "revision", ficheros: [], ...mensaje } as never);
+    return s.leer().revision;
+  };
+
+  it("acepta las CUATRO medidas, y `mezclados` solo si es un número mayor que cero", () => {
+    expect(revisionCon({ via: "git" })).toEqual({ via: "git", lista: [] });
+    expect(revisionCon({ via: "desde-apertura" })).toEqual({ via: "desde-apertura", lista: [] });
+    expect(revisionCon({ via: "sin-marca" })).toEqual({ via: "sin-marca", lista: [] });
+    expect(revisionCon({ via: "sin-empezar" })).toEqual({ via: "sin-empezar", lista: [] });
+    // Una medida que este cliente no conoce no se pinta como si fuera otra.
+    expect(revisionCon({ via: "inventada" })).toBeUndefined();
+    expect(revisionCon({ via: "git", mezclados: 3 })?.mezclados).toBe(3);
+    // Cero no es un dato: es la ausencia de mezcla, y una línea que lo diga no dice nada.
+    expect(revisionCon({ via: "git", mezclados: 0 })?.mezclados).toBeUndefined();
+    expect(revisionCon({ via: "git", mezclados: "3" })?.mezclados).toBeUndefined();
+  });
+
+  it("`sinCommitear` sobrevive, y solo con el booleano `true`", () => {
+    // La trampa de siempre: `"false"` es una cadena verdadera en JavaScript, y marcaría
+    // como «no commiteado» —o sea, como no atribuible— algo que sí lo está.
+    const revision = revisionCon({
+      via: "git",
+      ficheros: [
+        { ruta: "a.md", clase: "modificado", sinCommitear: true },
+        { ruta: "b.md", clase: "modificado" },
+        { ruta: "c.md", clase: "modificado", sinCommitear: "false" },
+      ],
+    });
+    expect(revision?.lista).toEqual([
+      { ruta: "a.md", clase: "modificado", sinCommitear: true },
+      { ruta: "b.md", clase: "modificado" },
+    ]);
+  });
+});
+
+describe("«se está abriendo algo», que lo dice el servidor", () => {
+  it("los dos flancos, y `descargando` solo con el booleano `true`", () => {
+    const s = crearStoreDelCliente();
+    s.aplicar({ clase: "abriendo", activo: true, proyecto: "p1", sesion: "s7" } as never);
+    expect(s.leer().abriendo).toEqual({ proyecto: "p1", sesion: "s7" });
+    s.aplicar({ clase: "abriendo", activo: true, proyecto: "p1", descargando: true } as never);
+    expect(s.leer().abriendo).toEqual({ proyecto: "p1", descargando: true });
+    // La cadena «false» es verdadera en JavaScript: prometería una descarga que nadie hace.
+    s.aplicar({ clase: "abriendo", activo: true, proyecto: "p1", descargando: "false" } as never);
+    expect(s.leer().abriendo).toEqual({ proyecto: "p1" });
+    s.aplicar({ clase: "abriendo", activo: false } as never);
+    expect(s.leer().abriendo).toBeUndefined();
+  });
+
+  it("al caerse el cable se tira: sin cable no llega el flanco de bajada", () => {
+    // Un indicador de actividad encendido para siempre es peor que no tenerlo, y es
+    // exactamente lo que pasaría al perder el SSE mientras se abre algo.
+    const s = crearStoreDelCliente();
+    s.aplicar({ clase: "abriendo", activo: true, proyecto: "p1" } as never);
+    s.marcarDesconectado();
+    expect(s.leer().abriendo).toBeUndefined();
   });
 });

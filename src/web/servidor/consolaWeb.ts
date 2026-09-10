@@ -93,6 +93,9 @@ export interface ConsolaWeb {
   dejarDeMirar(enviar: Sumidero): void;
   /** Se va UN cliente (el sumidero que se pasa) o todos (sin argumento). Ver `Transporte`. */
   desconectar(enviar?: Sumidero): void;
+  /** El cable se muda a otra consola: suelta los sumideros sin dar por ido al humano. Ver
+   *  `Transporte.soltar`, que es donde está la diferencia y por qué importa. */
+  soltar(enviar?: Sumidero): void;
   /** Agota `lineas` (EOF) para que el lazo de `correrConsola` RETORNE, y corta el cliente. */
   cerrar(): void;
   actos(): readonly Acto[];
@@ -410,6 +413,7 @@ export function crearConsolaWeb(opciones: OpcionesDeConsolaWeb = {}): ConsolaWeb
     mirar: (enviar) => transporte.mirar(enviar),
     dejarDeMirar: (enviar) => transporte.dejarDeMirar(enviar),
     desconectar: (enviar) => transporte.desconectar(enviar),
+    soltar: (enviar) => transporte.soltar(enviar),
     cerrar: () => {
       // Primero el corte —despierta a quien esperaba respuesta— y luego el EOF de la
       // cola, para que `correrConsola` retorne en vez de quedarse en el `next`.

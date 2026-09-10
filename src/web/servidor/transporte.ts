@@ -101,6 +101,29 @@ export type MensajeAlCliente =
    */
   | { clase: "turno"; activo: boolean }
   /**
+   * Se está ABRIENDO algo: una sesión, o un proyecto que además hay que descargar.
+   *
+   * Lo dice el SERVIDOR y no lo deduce el cliente, por el mismo motivo que `turno`: solo
+   * este lado sabe cuándo empieza y cuándo acaba, y aquí el rango va de «unos cientos de
+   * milisegundos» (abrir una copia local: foto de git, checkpointer, sesiones) a «minutos»
+   * (descargar el proyecto entero). Deducirlo de que llegue un `alta` nuevo fallaría justo
+   * cuando importa: un fallo al abrir también anuncia alta, y una apertura sobre el
+   * proyecto que YA estaba activo no cambia nada en él.
+   *
+   * `activo: false` es el otro flanco y va en un `finally`, así que salir por un error
+   * también lo apaga — un indicador de actividad que se queda encendido para siempre es
+   * peor que no tenerlo.
+   */
+  | {
+      clase: "abriendo";
+      activo: boolean;
+      /** Qué se está abriendo, para poder señalarlo en su fila. Solo con `activo`. */
+      proyecto?: string;
+      sesion?: string;
+      /** Además hay que BAJARLO: es la espera larga, y la que hay que decir con palabras. */
+      descargando?: true;
+    }
+  /**
    * Los subagentes dados de alta, para la ventana de ajustes.
    *
    * Se manda entero cada vez que cambia —son pocos y pequeños— en vez de mandar deltas:
@@ -190,7 +213,22 @@ export type MensajeAlCliente =
    * «todavía no has hecho nada» y «no se puede saber» se leyeran igual, y la segunda haría
    * creer que un turno no escribió cuando lo que pasa es que no hay con qué comparar.
    */
-  | { clase: "revision"; via: "git" | "sin-marca" | "sin-empezar"; ficheros: FicheroTocado[] }
+  /**
+   * Lo que ha tocado la sesión. `via` dice CÓMO se ha medido, y desde el 10-09-2026 son
+   * cuatro y no tres: `git` es atribución por COMMIT (lo que hizo esta sesión) y
+   * `desde-apertura` es la medida vieja —todo lo que ha cambiado en la copia desde que se
+   * abrió, de quien sea—, que es lo único posible en una sesión sin sello. Colapsarlas
+   * dejaría la pestaña rotulada «Sesión» sobre el trabajo de una tarea de fondo, que es el
+   * fallo que se vio en pantalla.
+   */
+  | {
+      clase: "revision";
+      via: "git" | "desde-apertura" | "sin-marca" | "sin-empezar";
+      ficheros: FicheroTocado[];
+      /** Commits de OTRAS sesiones entre los de esta: la lista es exacta, un parche puede
+       *  traer hunks ajenos. Ausente = ninguno, o no se pudo medir. */
+      mezclados?: number;
+    }
   | { clase: "parche"; ruta: string; texto: string; recortado: boolean }
   /**
    * El árbol del proyecto abierto (pestaña Ficheros): rutas relativas, ordenadas y ya
@@ -379,9 +417,38 @@ export type MensajeAlCliente =
            * conste que sea de una persona — igual que `compartido` en un proyecto.
            */
           deTarea?: true;
+          /**
+           * Esa conversación tiene un turno EN MARCHA ahora mismo, sea o no la que se está
+           * mirando. Es lo que hace visible que cambiar de sesión ya no interrumpe nada: el
+           * agente sigue trabajando en la de antes y la barra lo dice.
+           *
+           * Va en el ALTA y no en un mensaje propio porque el alta se reemite en los dos
+           * flancos de cada turno —de cualquiera de las consolas vivas—, que es exactamente
+           * cuando esto cambia.
+           *
+           * **Ausente es «no consta que esté trabajando»**, y eso incluye dos casos que no
+           * se pueden distinguir desde aquí: la sesión no tiene consola viva, o la tiene y
+           * está ociosa. Para lo que la barra pinta da igual; afirmar lo contrario, no.
+           */
+          trabajando?: true;
         }[];
         /** La copia local YA existe: se puede abrir sin bajar nada ni preguntar rama. */
         local?: boolean;
+        /**
+         * Alguna sesión de este proyecto tiene un turno EN MARCHA ahora mismo.
+         *
+         * No se DERIVA de `sesiones[].trabajando`, y ahí está el motivo de que exista: una
+         * sesión nueva no tiene fila en el índice hasta que vuelca su primer acto —o sea al
+         * final del turno—, así que el caso más común (abrir, pedir algo, irse a otro
+         * proyecto) no habría marcado ni la fila ni el proyecto, y en la barra no se vería
+         * nada en ninguna parte.
+         *
+         * De aquí cuelga además que las OTRAS sesiones de ese proyecto no se puedan abrir
+         * mientras dure: una copia de trabajo no aguanta dos conversaciones, y el servidor
+         * lo declina (`motivoDeProyectoTrabajando`). Decirlo antes del clic es lo que evita
+         * el botón muerto.
+         */
+        trabajando?: true;
       }[];
       ramas: string[];
       /**
@@ -454,6 +521,11 @@ export interface FicheroTocado {
   clase: "nuevo" | "modificado" | "borrado";
   mas?: number;
   menos?: number;
+  /** Hay cambios en este fichero que nadie ha commiteado, así que no se pueden atribuir a
+   *  esta sesión ni a otra (`agent/sesionGit.ts#FicheroDeSesion`). Viaja para poder DECIRLO
+   *  en la fila: el turno en vuelo commitea al terminar, y esta es la única marca que
+   *  distingue «lo escribió esta sesión» de «esto está aquí y no consta de quién es». */
+  sinCommitear?: true;
 }
 
 /** Un fichero del proyecto tal como viaja. Redeclarado en `apps/web/src/tipos.ts`. */
@@ -879,6 +951,23 @@ export interface Transporte {
    * rechazaría la aprobación que otra pestaña abierta todavía tiene delante.
    */
   desconectar(enviar?: Sumidero): void;
+  /**
+   * El cable se MUDA a otra consola: se sueltan los sumideros y NADA más.
+   *
+   * La diferencia con `desconectar` es toda la razón de que exista, y es de significado, no
+   * de implementación: `desconectar` afirma «se ha ido el humano» —despierta con la cadena
+   * vacía a todo el que esperaba respuesta y da por rechazada la aprobación que hubiera
+   * delante—, y eso es cierto cuando el SSE se cae y FALSO cuando alguien cambia de sesión
+   * en la barra teniendo esta con un turno corriendo: la persona sigue ahí, mirando otra
+   * cosa. Con `soltar`, `conectado()` sigue diciendo que hay alguien —así que su aprobación
+   * espera su plazo en vez de rechazarse sola— y lo que se emita mientras tanto no llega a
+   * ningún socket, que es exactamente lo que se quiere: los actos de un turno de segundo
+   * plano no pueden aparecer en la conversación que se está mirando.
+   *
+   * Los MIRONES no se sueltan: los quita `dejarDeMirar`, y aquí la consola no se cierra
+   * —su socket sigue vivo—, al contrario que en `desconectar()` sin sumidero.
+   */
+  soltar(enviar?: Sumidero): void;
   /** ¿Queda alguien al otro lado? Es lo que `consolaWeb.eof()` usa para saber si hay humano. */
   conectado(): boolean;
   /**
@@ -968,6 +1057,10 @@ export function crearTransporte(actos: () => readonly Acto[]): Transporte {
       }
       hayCliente = false;
       for (const escucha of escuchasDeCorte) escucha();
+    },
+    soltar(enviar) {
+      if (enviar === undefined) sumideros.clear();
+      else sumideros.delete(enviar);
     },
     conectado: () => hayCliente,
     mirar(enviar) {

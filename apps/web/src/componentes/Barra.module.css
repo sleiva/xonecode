@@ -29,31 +29,51 @@
   padding-right: 4px;
 }
 
-/* El proyecto ABIERTO. Mismo fondo que la sesión seleccionada (`Rows.module.css`), para
-   que «aquí estás» se lea igual en los dos niveles del árbol, más una barra de acento a la
-   izquierda: el fondo solo no basta cuando la fila de al lado está en `:hover`, que usa ese
-   mismo alias. El `aria-current` de la fila dice lo mismo sin depender del color. */
-.filaAbierta {
+/* La fila bajo el ratón, en el mismo azul que la elegida pero a la mitad de carga
+   (`--xonecode-fila-hover`). Tres cosas que sostienen esta regla:
+
+   - **La clase repetida** es para ganar especificidad sin depender del orden en que el
+     empaquetador coloque las hojas: la de ellos pinta el hover con `.projectRow:hover` /
+     `.sessionRow:hover`, que empata con una clase más una pseudoclase. Mismo truco que
+     `Cabecera.module.css` con la barra superior.
+   - **Las filas ACTIVAS quedan fuera** (`:not`), y no es un detalle: sin eso, pasar el ratón
+     por encima de la fila elegida la aclararía —el hover es más flojo que su relleno—, o sea
+     que señalar lo que ya estás mirando lo apagaría.
+   - Y el filo de cian de la elegida sigue siendo suyo, que es la segunda señal: señalar no
+     es estar. */
+.filaConAccion.filaConAccion:hover:not(.filaAbierta):not(.sesionAbierta) {
+  background: var(--xonecode-fila-hover);
+  border-radius: 8px;
+}
+
+/* El proyecto ABIERTO: fondo y el nombre en NEGRITA, y ninguna barra de cian.
+   Las dos filas se pintaban idénticas —mismo fondo y mismo filo de cian— a propósito, «para
+   que aquí estás se lea igual en los dos niveles del árbol», y el usuario lo señaló mirando
+   la pantalla: así no se distingue la sesión abierta del proyecto que la contiene, que es lo
+   que hace falta saber. Ahora el CIAN es de una sola fila —la sesión (o la tarea) que estás
+   leyendo— y el proyecto se marca como lo que es: el contenedor donde estás. El fondo solo
+   no bastaría (la fila de al lado en `:hover` usa ese mismo alias), de ahí la negrita; y el
+   `aria-current` sigue diciéndolo sin depender de ningún color. */
+/* La clase TRIPLE no es un tic: es lo que hace que la marca de «aquí estás» sobreviva al
+   ratón. La hoja copiada pinta `.projectRow:hover, .sessionRow:hover, .sessionRow.selected`
+   con el gris del tema, o sea una clase más una pseudoclase — que gana a una clase sola. Se
+   ve SOLO hoveando la fila elegida, y así se colaron dos versiones de esto: MEDIDO en el
+   navegador, con el puntero encima la fila elegida se volvía gris y perdía su color. Con tres
+   ocurrencias gana esta regla sin depender del orden en que el empaquetador coloque las
+   hojas, que es el mismo truco que `Cabecera.module.css` usa con la barra superior. */
+.filaAbierta.filaAbierta.filaAbierta {
   position: relative;
   background: var(--dsw-alias-interactive-bg-hover);
   border-radius: 8px;
 }
 
-.filaAbierta::before {
-  content: "";
-  position: absolute;
-  top: 6px;
-  bottom: 6px;
-  left: 0;
-  width: 2px;
-  border-radius: 2px;
-  /* El ACENTO, y por su nombre. Antes decía `button-primary-fill` y salía cian de rebote,
-     porque `estilos/marca.css` tenía ese alias secuestrado. Desde el rediseño el relleno
-     primario es el negro del tema y el cian se quedó SOLO de acento, así que un filo que
-     siguiera leyendo el alias del botón se volvía negro — medido en pantalla: la fila
-     activa perdía la única señal de color que la distinguía del `:hover` de al lado. */
-  background: var(--xonecode-cian);
+/* El nombre del proyecto activo. Es la otra mitad de su marca ahora que el filo de cian se
+   quedó solo para la sesión. */
+.tituloActivo {
+  font-weight: 600;
+  color: var(--dsw-alias-label-primary);
 }
+
 
 .cuerpoDeFila {
   flex: 1;
@@ -109,9 +129,20 @@
    mismo que la fila de al lado cuando pasas el ratón por encima. El acento es lo que
    desempata. El recuadro va más ajustado que el de `.filaAbierta` porque la fila de sesión
    es más baja que la de proyecto. */
-.sesionAbierta {
+/* La sesión ABIERTA: fondo de CIAN y el filo de cian, los dos suyos y de nadie más — una
+   por pantalla, la que estás leyendo.
+   El fondo era el mismo gris del proyecto (`interactive-bg-hover`) y él lo señaló DOS veces:
+   con el mismo relleno, un filo de 2 px no separa las dos marcas — a un metro las dos filas
+   se leen igual de «seleccionadas». Ahora son dos COLORES distintos y no dos intensidades
+   del mismo: el proyecto se queda con el gris neutro (es el contenedor, y ese gris es el que
+   la hoja copiada usa para «tocado por el ratón») y la fila que estás leyendo va con el
+   acento del producto, el mismo cian de la pestaña activa y del filo.
+   El tono sale de `--xonecode-fila-elegida` (`estilos/marca.css`) y no se compone aquí: la
+   paleta vive en un sitio y un componente solo consume alias — es además donde está su
+   variante para el tema oscuro y el porqué de que el cian vaya tan bajo. */
+.sesionAbierta.sesionAbierta.sesionAbierta {
   position: relative;
-  background: var(--dsw-alias-interactive-bg-hover);
+  background: var(--xonecode-fila-elegida);
   border-radius: 8px;
 }
 
@@ -161,8 +192,14 @@
    se escondiera al salir el ratón, el menú se quedaría colgando de la nada—. La doble
    clase es para ganarle en especificidad al `display: none` de la hoja copiada sin tocarla
    ni recurrir a `!important`. */
+/* Las acciones de una fila («+» en la de proyecto, «…» en la de sesión) llevan AIRE a su
+   izquierda. Medido en pantalla: el «…» arrancaba en el píxel exacto donde acababa la fecha
+   —cero de separación— y en la fila de proyecto quedaba a 6 px de la pastilla de
+   propio/compartido, que es lo mismo que pegado. Dos controles y un dato sin hueco entre
+   ellos se leen como una sola cosa, y encima invita a pulsar el que no querías. */
 .accionesDeFila.accionesDeFila {
   display: inline-flex;
+  margin-left: 12px;
   opacity: 0;
 }
 
@@ -271,4 +308,35 @@
 
 .cuerpoDeFila > .selloDeFecha:not(.marcaDeTarea + .selloDeFecha) {
   margin-left: auto;
+}
+
+/* «abriendo…» / «descargando…» en la fila donde se pulsó.
+   Va con PALABRAS y en el hueco de la fecha, no con un giro a secas: el rango de esta espera
+   va de unos cientos de milisegundos (abrir una copia local) a los minutos de una descarga, y
+   un punto girando no distingue las dos. El pulso es lento y se apaga con
+   `prefers-reduced-motion` —quien pidió que no hubiera movimiento no puede recibir un
+   parpadeo—, y entonces queda el texto, que es la señal de verdad. */
+.actividad {
+  flex: none;
+  margin-left: 8px;
+  color: var(--xonecode-cian-oscuro);
+  font-size: 11px;
+  font-family: var(--ds-font-family-code);
+  animation: pulso 1.4s ease-in-out infinite;
+}
+
+@keyframes pulso {
+  0%,
+  100% {
+    opacity: 0.45;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .actividad {
+    animation: none;
+  }
 }

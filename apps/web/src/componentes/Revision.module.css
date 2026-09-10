@@ -233,3 +233,27 @@
   color: var(--dsw-alias-label-primary);
   background: color-mix(in srgb, var(--dsw-alias-state-error-secondary) 45%, var(--dsw-alias-bg-layer-1));
 }
+
+/* La nota que explica CÓMO se ha medido lo de abajo: el respaldo sin atribución, y los
+   commits de otras sesiones entremedias. Va debajo de la cabecera y con el cuerpo de un
+   aviso, no con el de una fila: es contexto de la lista entera, no de un fichero. */
+.nota {
+  margin: 0;
+  padding: 8px 12px;
+  border-bottom: 0.5px solid var(--dsw-alias-border-l3);
+  background: var(--dsw-alias-bg-layer-2);
+  color: var(--dsw-alias-label-secondary);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+/* «sin commitear» en la fila de un fichero: es una salvedad sobre la ATRIBUCIÓN, no un
+   estado del fichero, así que va con el peso del texto terciario y no con un color de
+   alarma — no hay nada que arreglar, solo algo que no se puede afirmar. */
+.pendiente {
+  flex: none;
+  margin-left: 8px;
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 11px;
+  font-family: var(--ds-font-family-code);
+}

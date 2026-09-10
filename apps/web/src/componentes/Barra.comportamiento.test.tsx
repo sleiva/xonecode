@@ -1,6 +1,11 @@
+import { readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { render, screen, fireEvent, cleanup } from "@testing-library/react";
 import { describe, it, expect, vi, afterEach } from "vitest";
 import { Barra } from "./Barra.js";
+
+const AQUI_CSS = dirname(fileURLToPath(import.meta.url));
 
 afterEach(cleanup);
 
@@ -513,5 +518,224 @@ describe("Barra: chats y tareas en la misma lista, distinguidos", () => {
       titulos.findIndex((t) => t.includes("de antes"))
     );
     expect(sinFecha).not.toMatch(/\d{2}:\d{2}/);
+  });
+});
+
+/**
+ * Cambiar de sesión ya no interrumpe al agente, así que la barra tiene que DECIR cuál está
+ * trabajando: es lo único que distingue «lo dejé a medias y sigue» de «lo dejé a medias y
+ * se paró». Lo pidió el usuario con esas palabras.
+ */
+describe("Barra: qué sesión está trabajando", () => {
+  const montar = (
+    sesiones: Parameters<typeof Barra>[0]["proyectos"][number]["sesiones"],
+    trabajando?: true
+  ) =>
+    render(
+      <Barra
+        entornos={[]}
+        entornoActivo=""
+        proyectos={[{ id: "p1", nombre: "AppDemo", sesiones, ...(trabajando === undefined ? {} : { trabajando }) }]}
+        alElegirEntorno={() => {}}
+        alAbrirSesion={() => {}}
+        alAbrirProyecto={() => {}}
+        alNuevaSesion={() => {}}
+        alAccionDeSesion={() => {}}
+        alAbrirAjustes={() => {}}
+      />
+    );
+
+  it("la que trabaja lo dice con PALABRAS, en el hueco de la fecha", () => {
+    montar(
+      [
+        { id: "s1", titulo: "la que trabaja", ultimoTurno: "2026-09-07T10:08:23.790Z", trabajando: true },
+        { id: "s2", titulo: "la otra", ultimoTurno: "2026-09-07T09:00:00.000Z" },
+      ],
+      true
+    );
+    // Dos veces: la fila y el proyecto, que es lo que se ve con la lista plegada.
+    expect(screen.getAllByText("trabajando…")).toHaveLength(2);
+    // Y la fecha de la que trabaja NO se pinta: es el dato que está a punto de cambiar, y
+    // el hueco es uno.
+    expect(screen.queryByText("7 sept 12:08")).toBeNull();
+    expect(screen.getByText("7 sept 11:00")).toBeTruthy();
+  });
+
+  it("sin la marca no se pinta nada: ausente es «no consta que trabaje»", () => {
+    montar([{ id: "s1", titulo: "una", ultimoTurno: "2026-09-07T10:08:23.790Z" }]);
+    expect(screen.queryByText("trabajando…")).toBeNull();
+  });
+
+  /**
+   * El PROYECTO lo dice con su propia marca y no derivándola de sus filas, y hace falta: una
+   * sesión nueva no tiene fila en el índice hasta que vuelca su primer acto, así que el caso
+   * más común —abrir, pedir algo, irse a otro proyecto— no habría marcado nada en ninguna
+   * parte. Aquí hay una sesión vieja sin marcar y el proyecto trabajando en otra que no está
+   * en la lista.
+   */
+  it("el proyecto lo dice aunque NINGUNA de sus filas esté marcada: la nueva no tiene fila todavía", () => {
+    montar([{ id: "vieja", titulo: "de ayer", ultimoTurno: "2026-09-06T10:00:00.000Z" }], true);
+    expect(screen.getByTitle("El agente está trabajando en este proyecto…")).toBeTruthy();
+  });
+
+  /**
+   * Y las OTRAS sesiones de ese proyecto no se pueden pulsar: el servidor las declina —dos
+   * conversaciones sobre la misma copia de trabajo se pisarían los ficheros— así que un botón
+   * vivo ahí sería el botón muerto de siempre. La que TRABAJA sí se pulsa: volver a ella es
+   * justo lo que uno hace para ver cómo va.
+   */
+  it("con el proyecto trabajando solo se puede pulsar LA que trabaja, y el «+» se apaga", () => {
+    montar(
+      [
+        { id: "s1", titulo: "la que trabaja", trabajando: true },
+        { id: "s2", titulo: "la otra" },
+      ],
+      true
+    );
+    const fila = (texto: string): HTMLButtonElement =>
+      screen.getAllByRole("button").find((b) => (b.textContent ?? "").includes(texto)) as HTMLButtonElement;
+    expect(fila("la que trabaja").hasAttribute("disabled")).toBe(false);
+    expect(fila("la otra").hasAttribute("disabled")).toBe(true);
+    expect(fila("la otra").getAttribute("title")).toContain("otra conversación");
+    expect(screen.getByLabelText("nueva sesión en AppDemo").hasAttribute("disabled")).toBe(true);
+  });
+
+  it("sin proyecto trabajando no se apaga ninguna fila", () => {
+    montar([{ id: "s1", titulo: "una" }]);
+    const fila = screen.getAllByRole("button").find((b) => (b.textContent ?? "").includes("una"))!;
+    expect(fila.hasAttribute("disabled")).toBe(false);
+    expect(screen.getByLabelText("nueva sesión en AppDemo").hasAttribute("disabled")).toBe(false);
+  });
+});
+
+/**
+ * Abrir tarda —de unos cientos de milisegundos a los minutos de una descarga— y el usuario
+ * lo dijo mirando la pantalla: el clic parecía no hacer nada. La señal va en la FILA donde
+ * se pulsó, y con palabras: un punto girando no distingue medio segundo de tres minutos.
+ */
+describe("Barra: mientras se abre algo", () => {
+  const PROYECTOS = [
+    { id: "p1", nombre: "AppDemo", sesiones: [{ id: "s1", titulo: "una", historica: false }] },
+    { id: "p2", nombre: "AppDeve", sesiones: [] },
+  ];
+
+  const montar = (abriendo?: { proyecto?: string; sesion?: string; descargando?: true }) =>
+    render(
+      <Barra
+        entornos={[]}
+        entornoActivo=""
+        proyectos={PROYECTOS}
+        {...(abriendo === undefined ? {} : { abriendo })}
+        alElegirEntorno={() => {}}
+        alAbrirSesion={() => {}}
+        alAbrirProyecto={() => {}}
+        alNuevaSesion={() => {}}
+        alAccionDeSesion={() => {}}
+        alAbrirAjustes={() => {}}
+      />
+    );
+
+  it("una sesión NUEVA marca la fila de su proyecto, que es donde está su «+»", () => {
+    const { container } = montar({ proyecto: "p1" });
+    expect(screen.getByText("abriendo…")).toBeTruthy();
+    // Y lo dice también sin color: `aria-busy` en la fila.
+    expect(container.querySelectorAll("[aria-busy]")).toHaveLength(1);
+  });
+
+  it("una sesión GUARDADA marca su propia fila y no la del proyecto", () => {
+    const { container } = montar({ proyecto: "p1", sesion: "s1" });
+    const ocupada = container.querySelector("[aria-busy]");
+    expect(ocupada?.textContent).toContain("una");
+    expect(ocupada?.textContent).toContain("abriendo…");
+  });
+
+  it("una descarga se dice con OTRA palabra: son minutos, no un parpadeo", () => {
+    montar({ proyecto: "p2", descargando: true });
+    expect(screen.getByText("descargando…")).toBeTruthy();
+    expect(screen.queryByText("abriendo…")).toBeNull();
+  });
+
+  it("mientras se abre algo no se puede pedir ABRIR otra: el segundo clic no cancela el primero", () => {
+    // Lo que se apaga es lo que ABRE —las dos filas de proyecto, la de sesión y el «+»—, no
+    // la barra entera: Ajustes es de este navegador y el «…» de una sesión abre un diálogo
+    // que confirma, así que apagarlos sería quitar cosas que no compiten con esto.
+    const { container } = montar({ proyecto: "p1" });
+    const abren = [...container.querySelectorAll("button")].filter((b) =>
+      ["AppDemo", "AppDeve", "una"].some((t) => b.textContent?.includes(t) === true)
+    );
+    expect(abren.length).toBeGreaterThanOrEqual(3);
+    // Sin `jest-dom` en este repo: se mira el atributo, que es lo que el navegador lee.
+    for (const boton of abren) expect(boton.hasAttribute("disabled")).toBe(true);
+  });
+
+  it("sin nada abriéndose no hay indicador, y la fecha de la sesión vuelve a su sitio", () => {
+    const { container } = montar();
+    expect(screen.queryByText("abriendo…")).toBeNull();
+    expect(container.querySelector("[aria-busy]")).toBeNull();
+  });
+});
+
+/**
+ * El proyecto activo y la sesión activa se pintaban IGUAL —mismo fondo y mismo filo de
+ * cian—, y el usuario lo señaló: «la selección de la sesión o tarea tiene el mismo color
+ * cuando está seleccionado que el del proyecto». Son dos niveles distintos del árbol y hay
+ * que poder distinguirlos, así que el cian se quedó para UNA fila —la que estás leyendo— y
+ * el proyecto se marca como el contenedor que es. Va contra la HOJA porque jsdom no hace
+ * layout ni cascada: un `::before` que desaparezca no lo ve ningún render.
+ */
+describe("Barra: el proyecto activo y la sesión activa no se marcan igual", () => {
+  const hoja = readFileSync(join(AQUI_CSS, "Barra.module.css"), "utf8");
+  /**
+   * El bloque de una clase, con o sin la clase REPETIDA por especificidad: las dos filas
+   * activas se escriben `.filaAbierta.filaAbierta.filaAbierta` para ganarle al `:hover` de
+   * la hoja copiada, y un buscador que exigiera `.x {` se quedaría sin ver la regla y daría
+   * verde por vacío.
+   */
+  const regla = (nombre: string): string => {
+    const patron = new RegExp(`\\.${nombre}(?:\\.${nombre})*\\s*\\{`);
+    const casa = patron.exec(hoja);
+    if (casa === null) return "";
+    const desde = casa.index;
+    return hoja.slice(desde, hoja.indexOf("}", desde));
+  };
+
+  it("solo la sesión lleva el filo de cian", () => {
+    expect(hoja).toMatch(/\.sesionAbierta::before\s*\{/);
+    expect(hoja).not.toMatch(/\.filaAbierta::before\s*\{/);
+  });
+
+  it("la marca de la fila activa sobrevive al ratón: gana al `:hover` de la hoja copiada", () => {
+    // MEDIDO en el navegador: con el puntero encima, la fila elegida se volvía GRIS. La hoja
+    // copiada pinta `.sessionRow:hover` (una clase + una pseudoclase) y eso gana a una clase
+    // sola, así que la marca de «aquí estás» desaparecía justo al señalarla. Se ve solo
+    // hoveando, que es cómo se colaron dos versiones de este arreglo.
+    expect(hoja).toMatch(/\.sesionAbierta\.sesionAbierta\.sesionAbierta\s*\{/);
+    expect(hoja).toMatch(/\.filaAbierta\.filaAbierta\.filaAbierta\s*\{/);
+  });
+
+  it("las acciones de una fila llevan aire: el «…» no arranca donde acaba la fecha", () => {
+    // Medido en pantalla: el «…» empezaba en el píxel EXACTO donde terminaba la fecha (cero
+    // de separación) y en la fila de proyecto quedaba a 6 px de la pastilla de
+    // propio/compartido. Dos controles y un dato sin hueco se leen como una sola cosa.
+    expect(regla("accionesDeFila")).toMatch(/margin-left:\s*12px/);
+  });
+
+  it("los dos fondos son COLORES distintos, no dos intensidades del mismo", () => {
+    // Lo señaló dos veces: con el mismo relleno gris, un filo de 2 px no separa las dos
+    // marcas. El proyecto se queda con el gris neutro de la hoja copiada —el mismo que usa
+    // para «tocado por el ratón»— y la fila que estás leyendo va con el acento del producto.
+    expect(regla("filaAbierta")).toMatch(/background:\s*var\(--dsw-alias-interactive-bg-hover\)/);
+    expect(regla("sesionAbierta")).toMatch(/background:\s*var\(--xonecode-fila-elegida\)/);
+    // Y el tono se compone en la PALETA, no aquí: `Barra.test.tsx` prohíbe un color literal
+    // en la hoja de un componente, y `marca.css` es la excepción declarada.
+    const paleta = readFileSync(join(AQUI_CSS, "..", "..", "estilos", "marca.css"), "utf8");
+    expect(paleta).toMatch(/--xonecode-fila-elegida:\s*color-mix\(in srgb, var\(--xonecode-cian\)/);
+  });
+
+  it("y el proyecto se sigue distinguiendo del `:hover` de al lado, por el nombre", () => {
+    // Sin esto, quitar el filo dejaría el proyecto activo indistinguible de la fila que
+    // tienes debajo del ratón: las dos usan el MISMO alias de fondo.
+    expect(regla("filaAbierta")).toMatch(/background:/);
+    expect(regla("tituloActivo")).toMatch(/font-weight:\s*600/);
   });
 });

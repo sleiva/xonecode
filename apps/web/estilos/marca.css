@@ -52,6 +52,35 @@
   --xonecode-velo: rgba(5, 38, 58, 0.45);
 
   /**
+   * El relleno de la fila ELEGIDA en la barra: la sesión (o la tarea) que estás leyendo.
+   *
+   * Existe porque el proyecto activo y la sesión activa se pintaban con el MISMO gris
+   * (`--dsw-alias-interactive-bg-hover`) y un filo de 2 px no separa dos marcas — el usuario
+   * lo dijo dos veces mirando la pantalla. Son dos colores y no dos intensidades: el gris
+   * neutro se queda para el contenedor, y la fila que estás leyendo lleva el acento.
+   *
+   * Va aquí y no en `Barra.module.css` por la regla de este fichero: la paleta vive en UN
+   * sitio, y un componente solo consume alias. El 14% se deriva del cian con `color-mix` en
+   * vez de escribir un rgba a mano — dos ficheros con el mismo color escrito a mano es como
+   * se acaba con dos cianes distintos— y es tan bajo a propósito: encima va texto casi negro,
+   * y el cian a plena carga nunca tuvo contraste para letra (por eso el rediseño lo movió de
+   * relleno a acento).
+   */
+  --xonecode-fila-elegida: color-mix(in srgb, var(--xonecode-cian) 14%, transparent);
+
+  /**
+   * Y el mismo azul, MÁS FLOJO, para la fila que tienes debajo del ratón.
+   *
+   * El hover era el gris del tema (`--dsw-alias-interactive-bg-hover`). Pedido en azul, pero
+   * **no en el MISMO azul**: con el mismo tono, la fila elegida y la que estás señalando
+   * volverían a verse idénticas, que es justo el fallo que la fila elegida acaba de arreglar
+   * —y el que su propia hoja copiada ya tenía documentado («`.sessionRow.selected` pinta el
+   * MISMO fondo que `:hover`»)—. La mitad de carga es lo que hace que se lean como dos
+   * cosas: señalar no es estar.
+   */
+  --xonecode-fila-hover: color-mix(in srgb, var(--xonecode-cian) 7%, transparent);
+
+  /**
    * El icono de copiar, como máscara, para el botón que `MarkdownText` pinta con la PALABRA
    * «Copiar» y sin icono (su `CodeBlock` mete la etiqueta como hijo del botón, y desde fuera
    * no se puede sustituir un hijo).
@@ -93,5 +122,9 @@ body[data-ds-dark-theme] {
   /* Sobre fondo oscuro el mismo velo no atenúa nada: hace falta más cuerpo para que la
      ventana se despegue de lo que hay detrás. */
   --xonecode-velo: rgba(2, 15, 24, 0.65);
+  /* Sobre fondo oscuro un 14% de cian no se despega del panel: hace falta más cuerpo, lo
+     mismo que le pasa al velo. */
+  --xonecode-fila-elegida: color-mix(in srgb, var(--xonecode-cian) 26%, transparent);
+  --xonecode-fila-hover: color-mix(in srgb, var(--xonecode-cian) 13%, transparent);
   --dsw-specific-sidebar-nav-item-active-accent: var(--xonecode-cian);
 }

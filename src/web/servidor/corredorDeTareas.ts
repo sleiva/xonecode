@@ -71,11 +71,26 @@ export interface RevisionDeSesion {
  * así que esta derivación podía quedarse mal con todo en verde. Medido: una mutación que
  * hacía `escribio: true` a fuego sobrevivió a las 25 mutaciones de la tanda anterior.
  *
+ * **`revisable` es «alguien puede mirar esto», y eso vale con las DOS medidas**: la
+ * atribución por commit (`via: "git"`) y el respaldo contra la foto de apertura
+ * (`desde-apertura`, el único posible en un proyecto donde no se commitea — offline, o la
+ * carpeta que abrió una persona). Exigir solo la primera habría dejado sin entregar TODA
+ * tarea de un proyecto fuera del workspace, que es donde `commitearTurno` no commitea a
+ * propósito. `sin-marca` sigue siendo la única que no se puede revisar.
+ *
+ * **Lo que sí distingue las dos es `cambiados`**: se quitan los ficheros que nadie ha
+ * commiteado, porque no consta de quién son. Para una tarea eso no esconde nada suyo —
+ * `commitDeTurno` corre en el `finally` del turno y se ESPERA, así que cuando la puerta de
+ * entrega pregunta, lo que la tarea escribió ya está commiteado— y en cambio evita
+ * atribuirle lo que estuviera suelto de antes. En el respaldo no hay ninguna fila marcada,
+ * así que ahí la lista es exactamente la de siempre: todo lo que cambió desde la apertura,
+ * de quien sea.
+ *
  * Las tres respuestas posibles, y la del medio es la que sostiene todo:
- *  - `via: "git"` con ficheros → hay «antes» con que comparar y la sesión cambió algo.
- *  - `via: "git"` sin ficheros → hay «antes» y la sesión NO cambió nada. Es lo único que
- *    permite entregar una tarea de solo lectura, y viene de git y nunca de `autorizadas`,
- *    que es la intención del agente y no el hecho.
+ *  - con ficheros → hay «antes» con que comparar y la sesión cambió algo.
+ *  - sin ficheros → hay «antes» y la sesión NO cambió nada. Es lo único que permite
+ *    entregar una tarea de solo lectura, y viene de git y nunca de `autorizadas`, que es la
+ *    intención del agente y no el hecho.
  *  - `sin-marca` → no hay con qué mirarlo, así que **no se afirma nada** sobre si escribió:
  *    el campo se queda ausente y la condición del verificador se exige como siempre.
  */
@@ -83,11 +98,11 @@ export function revisionConGit(
   cambiosDeSesion: (
     raiz: string,
     sesion: string
-  ) => Promise<{ via: string; ficheros: readonly { ruta: string }[] }>
+  ) => Promise<{ via: string; ficheros: readonly { ruta: string; sinCommitear?: true }[] }>
 ): (raiz: string, sesion: string) => Promise<RevisionDeSesion> {
   return async (raiz, sesion) => {
     const cambios = await cambiosDeSesion(raiz, sesion);
-    if (cambios.via !== "git") return { revisable: false };
+    if (cambios.via !== "git" && cambios.via !== "desde-apertura") return { revisable: false };
     /**
      * Las DOS de la misma medida y en la misma expresión, para que `escribio` no pueda
      * decir una cosa y la lista otra. Las rutas ya vienen RELATIVAS de `cambiosDeSesion`
@@ -95,7 +110,7 @@ export function revisionConGit(
      * repo), así que por aquí no sale ninguna ruta de la máquina — y eso está MEDIDO contra
      * git de verdad en el test de esta función, no deducido.
      */
-    const cambiados = cambios.ficheros.map((f) => f.ruta);
+    const cambiados = cambios.ficheros.filter((f) => f.sinCommitear !== true).map((f) => f.ruta);
     return { revisable: true, escribio: cambiados.length > 0, cambiados };
   };
 }

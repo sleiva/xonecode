@@ -120,12 +120,22 @@ export interface EstadoDelCliente {
   /** Hay un turno corriendo AHORA. Lo dice el servidor; el cliente no lo deduce. */
   turnoEnVuelo?: boolean;
   /**
+   * Qué se está abriendo ahora mismo, si algo. Lo dice el servidor (`clase: "abriendo"`) y
+   * no se deduce: entre el clic y el estado nuevo pasan de cientos de milisegundos a los
+   * minutos de una descarga, y sin esto la interfaz se queda quieta.
+   */
+  abriendo?: { proyecto?: string; sesion?: string; descargando?: true };
+  /**
    * Lo que la sesión ha tocado (pestaña Revisión). Ausente = todavía no se ha pedido. Los
    * TRES `via` se guardan: «sin-empezar» se tiraba y la pestaña se quedaba consultando.
    * Los parches se guardan por ruta según se piden: uno grande no se vuelve a traer por
    * plegar y desplegar la fila.
    */
-  revision?: { via: "git" | "sin-marca" | "sin-empezar"; lista: FicheroTocado[] };
+  revision?: {
+    via: "git" | "desde-apertura" | "sin-marca" | "sin-empezar";
+    lista: FicheroTocado[];
+    mezclados?: number;
+  };
   parches?: Record<string, { texto: string; recortado: boolean }>;
   /**
    * El árbol del proyecto abierto y los contenidos ya traídos, por ruta (pestaña Ficheros).
@@ -200,8 +210,18 @@ export interface EstadoDelCliente {
     proyectos: {
       id: string;
       nombre: string;
-      sesiones?: { id: string; titulo: string; ultimoTurno?: string; deTarea?: true }[];
+      sesiones?: {
+        id: string;
+        titulo: string;
+        ultimoTurno?: string;
+        deTarea?: true;
+        /** Esa conversación tiene un turno en marcha ahora, esté o no delante. Ausente = no
+         *  consta que trabaje. */
+        trabajando?: true;
+      }[];
       local?: boolean;
+      /** Alguna sesión de este proyecto trabaja AHORA. Ausente = no consta. */
+      trabajando?: true;
       /** Compartido CONTIGO. Ausente = el servidor no lo dijo, que no es «es tuyo». */
       compartido?: boolean;
     }[];
@@ -376,11 +396,20 @@ function esProveedorDeModelos(valor: unknown): valor is ProveedorDeModelos {
 /** Un fichero tocado, comprobado campo a campo como todo lo que entra por el cable. */
 function esFicheroTocado(valor: unknown): valor is FicheroTocado {
   if (typeof valor !== "object" || valor === null) return false;
-  const f = valor as { ruta?: unknown; clase?: unknown; mas?: unknown; menos?: unknown };
+  const f = valor as {
+    ruta?: unknown;
+    clase?: unknown;
+    mas?: unknown;
+    menos?: unknown;
+    sinCommitear?: unknown;
+  };
   if (typeof f.ruta !== "string") return false;
   if (f.clase !== "nuevo" && f.clase !== "modificado" && f.clase !== "borrado") return false;
   if (f.mas !== undefined && typeof f.mas !== "number") return false;
   if (f.menos !== undefined && typeof f.menos !== "number") return false;
+  // Solo el booleano `true`, la trampa de siempre: la cadena `"false"` es verdadera en
+  // JavaScript, y aquí marcaría como «no commiteado» algo que sí lo está.
+  if (f.sinCommitear !== undefined && f.sinCommitear !== true) return false;
   return true;
 }
 
@@ -417,7 +446,13 @@ function veredictoDeTarea(valor: unknown): { veredicto?: TareaDelCable["veredict
  *  `nombre`, tiene título— y usarla dejaba la lista siempre vacía sin decir por qué. */
 function sonSesiones(
   valor: unknown
-): valor is { id: string; titulo: string; ultimoTurno?: unknown; deTarea?: unknown }[] {
+): valor is {
+  id: string;
+  titulo: string;
+  ultimoTurno?: unknown;
+  deTarea?: unknown;
+  trabajando?: unknown;
+}[] {
   return (
     Array.isArray(valor) &&
     valor.every(
@@ -823,11 +858,24 @@ export function crearStoreDelCliente(): {
           return;
         }
         case "revision": {
-          const m = mensaje as { via?: unknown; ficheros?: unknown };
-          if (m.via !== "git" && m.via !== "sin-marca" && m.via !== "sin-empezar") return;
+          const m = mensaje as { via?: unknown; ficheros?: unknown; mezclados?: unknown };
+          if (
+            m.via !== "git" &&
+            m.via !== "desde-apertura" &&
+            m.via !== "sin-marca" &&
+            m.via !== "sin-empezar"
+          ) {
+            return;
+          }
           if (!Array.isArray(m.ficheros)) return;
           const lista = m.ficheros.filter(esFicheroTocado).map((f) => ({ ...f }));
-          mutar({ revision: { via: m.via, lista } });
+          mutar({
+            revision: {
+              via: m.via,
+              lista,
+              ...(typeof m.mezclados === "number" && m.mezclados > 0 ? { mezclados: m.mezclados } : {}),
+            },
+          });
           return;
         }
         case "parche": {
@@ -937,6 +985,23 @@ export function crearStoreDelCliente(): {
           });
           return;
         }
+        case "abriendo": {
+          const m = mensaje as { activo?: unknown; proyecto?: unknown; sesion?: unknown; descargando?: unknown };
+          if (m.activo !== true) {
+            mutar({ abriendo: undefined });
+            return;
+          }
+          mutar({
+            abriendo: {
+              ...(typeof m.proyecto === "string" ? { proyecto: m.proyecto } : {}),
+              ...(typeof m.sesion === "string" ? { sesion: m.sesion } : {}),
+              // Solo el booleano `true`: la cadena `"false"` es verdadera en JavaScript y
+              // aquí prometería una descarga que nadie está haciendo.
+              ...(m.descargando === true ? { descargando: true as const } : {}),
+            },
+          });
+          return;
+        }
         case "turno": {
           const activo = (mensaje as { activo?: unknown }).activo;
           if (typeof activo !== "boolean") return;
@@ -995,10 +1060,17 @@ export function crearStoreDelCliente(): {
                       // la dirección de aquí sería marcar la conversación de una persona
                       // como sesión de una tarea de fondo.
                       ...(s.deTarea === true ? { deTarea: true as const } : {}),
+                      // Y la misma regla, por el mismo motivo: una cadena colada aquí
+                      // («trabajando: "false"») pintaría trabajando una sesión que no
+                      // trabaja, y con ella un indicador de actividad que nunca se apaga.
+                      ...(s.trabajando === true ? { trabajando: true as const } : {}),
                     })),
                   }
                 : {}),
               ...((p as { local?: unknown }).local === true ? { local: true } : {}),
+              // La misma regla del booleano de verdad: una cadena colada aquí dejaría el
+              // proyecto «trabajando» para siempre, y con él las sesiones sin poder abrirse.
+              ...((p as { trabajando?: unknown }).trabajando === true ? { trabajando: true as const } : {}),
               // La MISMA regla que el servidor: solo un booleano de verdad. Ausente se
               // queda ausente, y la interfaz no pinta etiqueta — «no lo dijo» no es
               // «es tuyo». Una cadena colada aquí («shared: "false"») marcaría el
@@ -1136,6 +1208,10 @@ export function crearStoreDelCliente(): {
         // El acuse de un alta o una baja de proveedor es de esa operación, no un estado:
         // guardado entre conexiones, al reconectar reaparecería un error ya resuelto.
         proveedor: undefined,
+        // Y lo que se estuviera abriendo, por lo mismo que el turno: sin cable no llega el
+        // flanco de bajada, y un indicador de actividad encendido para siempre es peor que
+        // no tenerlo. La reconexión trae el estado entero.
+        abriendo: undefined,
         // Sin cable no se sabe si el turno sigue: dejarlo en `true` apagaría el compositor
         // para siempre en una pestaña que ya no recibe el «terminó».
         turnoEnVuelo: false,

@@ -518,6 +518,77 @@ enganchado rechaza TODA aprobación y contesta cadena vacía a todo `preguntar`,
 qué. Al cerrarse el SSE se desconecta la consola que se ADJUNTÓ, no la que sea la actual: entre
 medias puede haberse abierto un proyecto.
 
+**Y ya hay VARIAS consolas de persona vivas a la vez: cambiar de sesión no mata el turno que
+estaba corriendo** (`abiertas`/`enFoco` en `vestibulo.ts`, `alta.proyectos[].trabajando`).
+Era UNA variable, así que mirar otra sesión —o otro proyecto— cerraba la consola anterior y con
+ella el turno del agente, sin decir nada. Ahora es un mapa por RAÍZ y un foco. Diez reglas:
+- **La clave es la RAÍZ, y eso es la mitad del diseño.** Nunca hay dos consolas sobre la misma
+  copia de trabajo, así que dos conversaciones no pueden escribirse los mismos ficheros ni
+  pisarse el hilo del checkpointer — el mismo motivo por el que una tarea no arranca donde hay
+  una persona. Lo que se gana es lo otro: dos PROYECTOS distintos pueden trabajar a la vez.
+- **Y por eso abrir otra sesión del MISMO proyecto con la de ahí trabajando se DECLINA**, con
+  el motivo delante (`motivoDeProyectoTrabajando`). Cerrar la que trabaja para abrir la otra
+  sería la interrupción que esto viene a quitar; dejar las dos sería la carrera que la clave
+  por raíz impide. Con la de ese proyecto OCIOSA se cierra y se abre, que es lo de siempre. Y
+  volver a la MISMA sesión que sigue trabajando devuelve la MISMA consola: es justo lo que uno
+  hace para ver cómo va, y reabrirla la habría matado.
+- **`proyectoAbierto()` sigue siendo la del FOCO** —de ella cuelgan las veintitantas lecturas
+  de `arranque.ts`, que hablan todas de «la sesión que se está mirando»— y lo nuevo es
+  `proyectosAbiertos()`. **Ahí está el único fallo ABIERTO que este cambio podía dejar**: la
+  guarda de «gana la persona» (`bloqueados`) miraba la del foco, así que una consola humana en
+  segundo plano habría dejado su proyecto por libre y una tarea habría escrito en la misma
+  copia. El síntoma no es un error: es un diff corrompido que nadie atribuye. Por eso su test
+  se escribió PRIMERO y en rojo.
+- **Una consola de segundo plano vive solo mientras su turno está en vuelo.** Al terminar se
+  cierra ella (`cerrarSiSobra`), y las OCIOSAS se cierran al mudarse el foco
+  (`cerrarLasOciosasSalvo`). Sin eso, visitar diez proyectos dejaría diez `correrConsola`
+  vivos para siempre. No se pierde nada: el hilo lo reanuda el checkpointer al reabrir la
+  sesión, y con las ociosas cerradas antes de construir la siguiente se conserva el orden que
+  ya estaba probado (el lazo anterior TERMINA antes de que arranque el otro).
+- **Mudarse de consola SUELTA los sumideros; no la desconecta** (`Transporte.soltar`, usado por
+  `arranque.ts#adjuntar`). `desconectar` afirma «se ha ido el humano»: despierta con cadena
+  vacía a todo el que esperaba y da por RECHAZADA la aprobación que hubiera delante. Eso es
+  cierto cuando se cae el SSE y falso cuando alguien cambia de sesión, así que con el
+  `desconectar` de antes la escritura de un turno de segundo plano se habría rechazado sola por
+  mirar otra cosa. Con `soltar`, `conectado()` sigue diciendo que hay alguien y lo que se emita
+  no llega a ningún socket — que es la otra mitad: los actos de un turno de fondo no pueden
+  aparecer en la conversación que se está mirando. Al irse el ÚLTIMO cliente sí se desconectan
+  todas, incluidas las de fondo: entonces no hay nadie a quien preguntar.
+- **Y la aprobación en vuelo se REEMITE al volver.** Ese mensaje es el único que no está en la
+  traza —lleva contenido de fichero—, así que la reemisión de `adjuntar` no lo alcanzaba:
+  `mensajesDeAprobacion()` existía sin un solo llamador, y sin él al volver se veía el
+  compositor apagado delante de un turno parado esperando una decisión que no había forma de
+  dar.
+- **El turno en vuelo se DERIVA de la consola en foco, ya no se cachea.** Era una variable que
+  los flancos actualizaban, y se queda vieja en el caso que más importa: volver a una sesión que
+  trabaja no es un flanco —el turno no empezó ni acabó—, así que `adjuntar` habría encendido el
+  compositor delante de un agente escribiendo.
+- **La barra DICE qué sesión trabaja**, y lo pide el usuario con esas palabras: es lo único que
+  distingue «lo dejé a medias y sigue» de «lo dejé a medias y se paró». Va en el ALTA porque el
+  alta se reemite en los dos flancos de CUALQUIERA de las consolas vivas —para eso se ensanchó
+  el disparador de `alCambiarTurno`, cuyo booleano sigue hablando solo de la del foco—, con
+  PALABRAS y en el hueco de la fecha, que es el dato a punto de cambiar.
+- **Y son DOS marcas, no una derivada de la otra**: `sesiones[].trabajando` y
+  `proyectos[].trabajando`. El id de una sesión nace al VOLCAR su primer acto, o sea al final
+  del turno, así que el caso más común de todos —abrir, pedir algo, irse a otro proyecto— no
+  tiene ninguna fila que marcar y la barra no habría dicho nada justo en el primer minuto de
+  uso. La raíz sí se sabe desde el primer instante, y de ella sale la marca del proyecto — que
+  además es la que se ve con la lista de sesiones plegada.
+- **Y de esa marca cuelga que el rechazo no sea un botón muerto**: con el proyecto trabajando,
+  las OTRAS sesiones de su lista y su «+» se apagan, con el motivo en el `title`. La guarda del
+  servidor sigue estando —es quien manda si la lista del cliente llega vieja—, y cuando declina
+  el motivo se escribe como acto de SISTEMA en la conversación que se está mirando: `alta.aviso`
+  por este camino no lo pinta nadie (lo leen el wizard y la ventana de sesión nueva, y pulsar
+  una fila de la barra no abre ninguna de las dos), así que el rechazo de una sesión de tarea en
+  curso llevaba recorriendo ese camino mudo. Sin ninguna consola en foco no se pinta en ninguna
+  parte, y eso queda declarado: para llegar ahí hay que haber borrado la sesión que se miraba
+  mientras otro proyecto trabajaba.
+Lo que queda DECLARADO y no arreglado: un `preguntar` o un `leerSecreto` de un turno de segundo
+plano ahora ESPERA su plazo (diez minutos) en vez de contestar en el acto, y al vencer devuelve
+cadena vacía — que 16 de sus 18 llamadores leen como «usa el valor por omisión». Es el mismo
+agujero que ya declaraba `consolaDeTarea.ts`, pero ahora se puede alcanzar sin que el usuario
+haya cerrado nada.
+
 El alta del navegador son los mismos pasos del alta de terminal y con la misma regla —cada uno
 solo aparece si falta lo que decide, calculado preguntándole al sistema y nunca a una marca de
 «primer arranque»—, con dos precisiones: el paso de ENTORNO se pide siempre que quede el de
@@ -1770,6 +1841,78 @@ llega con el teclado a botones que no se ven. La preferencia se recuerda en `loc
 apariencia, y con el mismo `try` alrededor de cada acceso porque en una ventana privada el
 accesor lanza.
 
+**Y se REDIMENSIONA** (`Maqueta.tsx`, el `separator` del grid). Pedido así: «podría ser un
+splitter o al menos ser más ancha», y son las dos cosas — la omisión sube de 280 a 320,
+porque en 280 el nombre de un proyecto real no cabe («PlaemerWebTe…», medido en su
+pantalla), y a partir de ahí el ancho lo elige quien mira. **La geometría del tirador ya
+estaba en la hoja copiada** —`.handle`, la tira de 8 px a caballo del borde, el cursor, y
+`.frame[data-dragging] { transition: none }`, que es lo que impide que la columna se despegue
+del puntero—, porque el original también redimensiona; lo que no traía es el gesto, la
+accesibilidad y quién recuerda el ancho. Seis reglas:
+- **Es el «window splitter» de ARIA**: un `separator` ENFOCABLE con `aria-valuenow`, o sea el
+  MISMO control para el ratón y para el teclado (flechas ±16, Home/End a los topes, doble
+  clic a la omisión). Sin `tabIndex` sería un asa que solo existe si tienes ratón.
+- **Sin manejador no se pinta el tirador**, y plegada tampoco: un asa que no redimensiona es
+  el control muerto de siempre, y encima tapa 8 px de la columna.
+- **El `terminado` del manejador distingue las dos cadencias del gesto**: el arrastre pide un
+  ancho en cada `pointermove` y `localStorage` se escribe UNA vez, al soltar. Cada tecla
+  llega ya terminada.
+- **El techo del 60% de la ventana lo aplica el CSS** (`min(Xpx, 60vw)` en la pista), no el
+  número guardado: así encoger la ventana estrecha la barra sin sobrescribir los 560 que
+  alguien eligió en su pantalla grande. Al arrastrar sí se acota con la ventana, que es lo
+  que mantiene el tirador pegado al puntero.
+- **Con cabecera va en la SEGUNDA fila del grid**: un absoluto con celda declarada toma esa
+  celda como bloque contenedor, así que la tira deja de cruzar la barra superior — donde solo
+  taparía la miga con un cursor de redimensionar.
+- **El arrastre se abre ANTES de pedir la captura del puntero, y la captura va envuelta**:
+  medido en Chrome, `setPointerCapture` LANZA si el `pointerId` no es de un puntero activo, y
+  capturando primero ese fallo se llevaba el gesto entero. Es una comodidad —con ella los
+  `pointermove` de fuera del asa siguen llegando—, no la condición del gesto; y
+  `lostpointercapture` cierra el arrastre, porque un puntero que sale de la ventana lo dejaba
+  abierto para siempre.
+
+**El proyecto activo y la sesión activa NO se marcan igual, y el cian es de una sola fila.**
+Las dos se pintaban idénticas a propósito —mismo fondo y mismo filo de cian, «para que aquí
+estás se lea igual en los dos niveles»— y el usuario lo señaló mirando la pantalla: así no se
+distingue la sesión abierta del proyecto que la contiene, que es justo lo que hace falta
+saber. **Y no basta con el filo**: lo dijo dos veces, porque con el mismo relleno gris en las
+dos, 2 px de acento no separan nada — a un metro las dos filas se leen igual de
+«seleccionadas». Son dos COLORES y no dos intensidades del mismo: el proyecto se queda con el
+gris neutro (es el contenedor, y ese gris es el que la hoja copiada usa para «tocado por el
+ratón») más el nombre en NEGRITA, y la fila que estás leyendo va con el acento del producto
+—un cian al 14% más su filo—, el mismo de la pestaña activa. El 14% no es timidez: encima va
+texto casi negro, y el cian a plena carga nunca tuvo contraste para letra (es la razón por la
+que el rediseño lo movió de relleno a acento). El tono vive en la PALETA
+(`--xonecode-fila-elegida`, `estilos/marca.css`, con su variante al 26% para el tema oscuro)
+y no en la hoja del componente: `Barra.test.tsx` prohíbe un color literal ahí —`transparent`
+incluido, y por eso salta con un `color-mix` compuesto en el componente— y `marca.css` es la
+excepción declarada. Se deriva del cian con `color-mix` en vez de escribir el rgba a mano, que
+es como se acaba con dos cianes distintos. El `aria-current` sigue diciéndolo sin depender de
+ningún color.
+
+**Y las acciones de una fila llevan AIRE** (`.accionesDeFila`, 12 px a la izquierda): medido,
+el «…» de una sesión arrancaba en el píxel EXACTO donde acababa su fecha y el «+» de un
+proyecto quedaba a 6 px de la pastilla de propio/compartido. Un dato y un control sin hueco
+entre ellos se leen como una sola cosa, y encima invitan a pulsar el que no querías.
+
+**Y abrir algo DICE que está abriendo, con dos señales que no son la misma** (`clase:
+"abriendo"` en el cable, `App.tsx#pedidoDeApertura`). Un clic que no cambia nada se lee como
+que no ha hecho nada, y esta espera va de decenas de milisegundos (una copia local) a los
+MINUTOS de una descarga. Tres reglas:
+- **Lo que se está abriendo lo dice el SERVIDOR**, como el turno en vuelo y por lo mismo:
+  solo él sabe cuándo acaba, y deducirlo de que llegue un alta fallaría justo cuando importa
+  —abrir también anuncia alta cuando FALLA—. Los dos flancos, y el de bajada en un `finally`.
+- **Y el clic pinta al instante, que es otra cosa.** Medido en el navegador: el ida y vuelta
+  del servidor son 40 ms, así que con solo su señal el primer cuadro después del clic sigue
+  igual que antes. `pedidoDeApertura` es «he pulsado y espero respuesta» —estado de esta
+  ventana, no una afirmación sobre el servidor— y lo releva cualquier cosa que el servidor
+  diga; se suelta también si se cae el cable, porque un indicador encendido para siempre es
+  peor que no tenerlo.
+- **La descarga se dice con OTRA palabra** («descargando…», y en la fila del proyecto): son
+  minutos, y un punto que gira no distingue eso de medio segundo. El indicador va en la fila
+  donde se pulsó —la de la sesión si es guardada, la del proyecto si es nueva, que es donde
+  está su «+»— con `aria-busy`, y mientras se abre algo no se puede pedir ABRIR otra cosa.
+
 **Al escritorio se VUELVE, y el enlace es la marca** (`Cabecera.tsx#alIrAlEscritorio`,
 `App.tsx#enEscritorio`). El escritorio se pintaba solo cuando NO había proyecto abierto, así
 que en cuanto abrías uno no había forma de volver a él —ni a los otros proyectos, ni a «Tu
@@ -2109,14 +2252,62 @@ del usuario) y la ref se nombra cuando la sesión recibe su id. Lo que se lista 
 **árbol contra árbol** —un árbol nuevo escrito en un índice privado contra el de la foto—,
 nunca `git diff <arbol> -- .`: eso compara contra el índice REAL del usuario y da por
 borrados ficheros que están ahí. Va con `--no-renames` por lo mismo que `cambiosPendientes`,
-y un binario se queda sin cuenta de líneas en vez de con un cero inventado. El `via` del
-cable tiene **tres** valores y no dos, porque son tres situaciones y una lista vacía las
-haría indistinguibles: `git` (comparado), `sin-empezar` (hay proyecto abierto pero la sesión
-todavía no tiene id —nace al volcar el primer acto, `vestibulo.ts#volcar`—, así que no ha
-tocado nada y eso SE SABE) y `sin-marca` (no hay con qué comparar: sin git usable, o sesión
-abierta antes de que esto existiera). Los dos últimos se separaron porque contestar
-«sin-marca» recién abierto un proyecto mandaba a comprobar si el proyecto es un repo de git
-cuando lo único que pasaba es que acabas de sentarte. `.xonecode/` se excluye —ahí dentro
+y un binario se queda sin cuenta de líneas en vez de con un cero inventado.
+
+**Y lo que se atribuye a una sesión sale de sus COMMITS, no de esa foto.** La foto contra el
+árbol de ahora medía la COPIA del proyecto y la pestaña la rotulaba «Sesión»: era un proxy
+razonable mientras nadie más escribía ahí, y dejó de serlo con las tareas de fondo. MEDIDO
+en el proyecto del usuario el 10-09-2026: una conversación enseñaba «Sesión +1266 −1» sobre
+dos ficheros que había escrito una tarea veinte minutos después. Desde que cada turno
+commitea, hay con qué atribuir de verdad, y son seis reglas:
+- **El sello es un TRAILER con el id de sesión** (`sesionGit.ts#CLAVE_DE_SELLO`, que
+  `commitDeTurno` escribe). No el asunto: ahí va el título, que no identifica nada —dos
+  sesiones se llaman «Hola» en su proyecto ahora mismo— y que cambia al renombrar. El
+  formato vive en el módulo que lo GREPEA y `gitSync.ts` lo importa: en dos sitios, un
+  cambio en uno rompe la atribución del otro en silencio.
+- **El `--grep` no decide: se VERIFICA el trailer** (`%(trailers:key=…,valueonly)`, comparado
+  entero). Un grep casa por subcadena, así que el id `s1` se habría quedado también con los
+  commits de `s10` — la misatribución silenciosa que esto viene a quitar. Hay test.
+- **La LISTA sale de los commits uno a uno; las CUENTAS y el PARCHE, de los dos extremos.**
+  Así una ruta que la sesión no tocó no entra aunque haya cambiado, y la cifra de una fila
+  cuenta lo mismo que su diff. El «antes» es el PADRE del primer commit de la sesión —mejor
+  que la foto: lo que otro commiteara entre que te sentaste y tu primer turno queda fuera por
+  construcción— y el «ahora» es el árbol de ahora y no el último commit, porque el turno en
+  vuelo no ha commiteado todavía y la pestaña se quedaría vacía justo mientras el agente
+  escribe. Un fichero que la sesión creó y borró no deja fila (`claseNeta`, pura y con test):
+  no estaba antes y no está ahora.
+- **Lo que nadie ha commiteado se enseña MARCADO** (`sinCommitear`), no escondido ni
+  atribuido: puede ser el turno en vuelo o algo suelto de antes. Y `revisionConGit` lo QUITA
+  de `cambiados`, que es el hecho que se le cuenta al juez — para una tarea eso no esconde
+  nada suyo (`commitDeTurno` corre en el `finally` del turno y se ESPERA, así que cuando la
+  puerta de entrega pregunta ya está commiteado) y evita cargarle lo que estuviera suelto.
+- **Y el respaldo se DECLARA con otro nombre.** Una sesión sin ningún commit sellado —todas
+  las de antes de esto, y las de un proyecto donde no se commitea— cae en
+  `via: "desde-apertura"`, y la pestaña deja de decir «Sesión»: dice «Desde que abriste» y
+  explica que ahí dentro puede estar lo que escribiera otra sesión o una tarea. Dejarle el
+  nombre `git` habría hecho que `revisionConGit` siguiera afirmando una autoría ya sabida
+  falsa sin tocar una línea. `revisable` acepta las DOS medidas, y eso no es relajarla:
+  `commitearTurno` no commitea fuera del workspace a propósito, así que exigir atribución
+  habría dejado sin entregar TODA tarea de un proyecto offline.
+- **Lo que la atribución por commit no puede prometer, dicho:** `commitDeTurno` hace
+  `add -A`, así que un commit barre lo que estuviera sucio en ese instante, incluido lo de
+  otra sesión — la misma honestidad que separa `Tarea.autorizadas` de «aplicados». Y si entre
+  los commits de una sesión cae alguno ajeno, la lista sigue exacta pero un parche puede
+  traer hunks del otro: se CUENTAN (`mezclados`) y se dice. El aislamiento de verdad es un
+  árbol por sesión, y no está hecho.
+- **Y la costura está EXTRAÍDA y probada** (`arranque.ts#commitDeTurnoCableado`): el id de
+  sesión llega por un tercer argumento a una lambda que vivía en un cierre que todos los
+  tests doblan — es la MISMA forma de fallo que ya se midió tres veces en `abrirParaTarea`, y
+  aquí lo que se cae en silencio es la atribución entera.
+
+El `via` del cable tiene **cuatro** valores, porque son cuatro situaciones y una lista vacía
+las haría indistinguibles: `git` (atribuido por commit), `desde-apertura` (el respaldo de
+arriba), `sin-empezar` (hay proyecto abierto pero la sesión todavía no tiene id —nace al
+volcar el primer acto, `vestibulo.ts#volcar`—, así que no ha tocado nada y eso SE SABE) y
+`sin-marca` (no hay con qué comparar: sin git usable, o sesión abierta antes de que esto
+existiera). Los dos últimos se separaron porque contestar «sin-marca» recién abierto un
+proyecto mandaba a comprobar si el proyecto es un repo de git cuando lo único que pasaba es
+que acabas de sentarte. `.xonecode/` se excluye —ahí dentro
 `volcar()` escribe el `.jsonl` de la propia sesión al final de cada turno, y sin excluirlo la
 primera fila era el transcript de la sesión diciendo que la sesión lo modificó—, pero **en el
 DIFF y nunca en el `git add`**: medido contra un proyecto de verdad, `git add` con un

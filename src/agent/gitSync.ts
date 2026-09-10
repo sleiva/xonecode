@@ -13,6 +13,7 @@ import { basename, dirname, resolve } from "node:path";
 import type { CambioLocal } from "../core/planDeSubida.js";
 import { indicePrivado, claseDeCambio } from "./git.js";
 import { NOMBRE_CARPETA } from "./configEnDisco.js";
+import { selloDeSesion } from "./sesionGit.js";
 
 const ejecutar = promisify(execFile);
 
@@ -434,7 +435,11 @@ export type ResultadoDeCommit =
  * cambiado, incluido lo que tocara una persona a mano en esa carpeta durante el turno. Es la
  * misma honestidad que separa `autorizadas` de «aplicados».
  */
-export async function commitDeTurno(raiz: string, mensaje: string): Promise<ResultadoDeCommit> {
+export async function commitDeTurno(
+  raiz: string,
+  mensaje: string,
+  sesion?: string
+): Promise<ResultadoDeCommit> {
   try {
     if (!(await esRepo(raiz))) return { via: "sin-git" };
     // ANTES de mirar y de añadir: un repo bajado con una versión anterior no tiene en su
@@ -445,9 +450,16 @@ export async function commitDeTurno(raiz: string, mensaje: string): Promise<Resu
     if (cambiados.length === 0) return { via: "sin-cambios" };
     await git(raiz, ["add", "-A", "--", "."]);
     await git(raiz, ["rm", "-r", "--cached", "--ignore-unmatch", "-q", NOMBRE_CARPETA]);
+    // El SELLO va en un trailer, y es lo que permite atribuir un cambio a una sesión
+    // (`sesionGit.ts#cambiosDeSesion`). El formato lo pone `selloDeSesion` y no este
+    // fichero: quien lo escribe y quien lo lee tienen que ser el mismo, o la atribución se
+    // rompe sin que nada avise. Sin id —o con uno que no vale como argumento de git— se
+    // commitea igual: perder el commit del turno sería mucho peor que perder su sello, y
+    // esa sesión se cae al respaldo «desde-apertura», que dice lo que es.
+    const sello = sesion === undefined ? undefined : selloDeSesion(sesion);
     await git(raiz, [
       "-c", "user.email=xonecode@local", "-c", "user.name=xonecode",
-      "commit", "-q", "-m", mensaje,
+      "commit", "-q", "-m", mensaje, ...(sello === undefined ? [] : ["-m", sello]),
     ]);
     return { via: "commit", ficheros: cambiados.length };
   } catch (error) {

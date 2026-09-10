@@ -17,3 +17,54 @@
   grid-column: 1 / -1;
   min-width: 0;
 }
+
+
+/* El tirador de la barra lateral: la geometría (tira de 8 px a caballo del borde, cursor,
+   `touch-action`, la transición que sigue la curva de plegado) es la de `.handle` en
+   `estilos/AppFrame.module.css`. Aquí va lo que esa hoja NO trae para este lado.
+
+   1. **Se VE al pasar por encima.** Su diseño deja la variante `sidebar` invisible —solo
+      la de `details` pinta una pastilla—, y un asa que no se ve no invita a arrastrarla:
+      la misma regla por la que el botón de copiar lleva borde («un control que no se ve
+      como control no invita a pulsarlo»). Es una línea de 2 px con el cian de marca, o sea
+      ACENTO, que es el papel que el cian conserva desde el rediseño.
+   2. **El foco se ve igual de bien.** Es un `separator` enfocable —el «window splitter» de
+      ARIA— y con el teclado no hay puntero que delate dónde está.
+   3. **Y mientras se arrastra no se selecciona texto.** `preventDefault` en el
+      `pointerdown` corta el arranque de la selección, pero un arrastre que empieza sobre
+      la barra y cruza el centro sigue pintando selección en lo que pisa. */
+.tirador::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 50%;
+  width: 2px;
+  transform: translateX(-50%);
+  background: var(--xonecode-cian);
+  opacity: 0;
+  transition: opacity var(--ds-transition-duration-fast) var(--ds-ease-in-out);
+}
+
+.tirador:hover::after,
+.tirador:focus-visible::after,
+.tirador[data-dragging]::after {
+  opacity: 1;
+}
+
+/* El anillo del navegador no sirve aquí: la tira mide 8 px y el anillo se pinta fuera, o
+   sea encima de la barra y del centro. La señal de foco es la línea de arriba. */
+.tirador:focus-visible {
+  outline: none;
+}
+
+/* Con cabecera, el tirador va en la SEGUNDA fila y en la primera columna. Un absoluto con
+   celda declarada toma su ÁREA como bloque contenedor (el marco es `position: relative`),
+   así que `top: 0; bottom: 0` deja de significar «toda la pantalla» y pasa a significar
+   «la fila de las columnas» — sin eso la tira cruza la barra superior y tapa la miga con
+   un cursor de redimensionar. El `left` en línea sigue valiendo: esa área empieza también
+   en el borde izquierdo del marco. */
+.tiradorEnFila {
+  grid-row: 2;
+  grid-column: 1;
+}
