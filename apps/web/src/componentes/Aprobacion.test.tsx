@@ -195,7 +195,7 @@ describe("Aprobacion", () => {
 });
 
 /**
- * Estas cuatro declaraciones no se pueden probar montando el componente: jsdom no hace
+ * Estas declaraciones no se pueden probar montando el componente: jsdom no hace
  * layout, así que un `getBoundingClientRect` devuelve ceros y un modal roto pasa en verde.
  * Se vigila la HOJA, que es el mismo trato que `Pestanas.test.tsx` le da a las reglas que
  * nadie ve fallar.
@@ -215,6 +215,16 @@ describe("la tarjeta cabe en la pantalla, y el que cede es el diff", () => {
     // llevaba puesto desde el principio y no hacía absolutamente nada.
     expect(regla("velo")).toMatch(/grid-template-rows:\s*minmax\(0,\s*1fr\)/);
     expect(regla("tarjeta")).toMatch(/max-height:\s*100%/);
+  });
+
+  it("la COLUMNA del velo también está definida: sin eso la tarjeta se va fuera de la pantalla", () => {
+    // La misma trampa en el otro eje, y peor: la columna implícita es `auto` —max-content—,
+    // y aquí el max-content lo pone la línea más larga del diff. `overflow-x: auto` en
+    // `.diff` la mantiene dentro, pero no reduce su max-content. Medido en Chrome con el
+    // CSS ya construido: viewport 999, línea de 3130 px, y la tarjeta centrada en esa pista
+    // caía en `x: 1179` con los dos botones fuera y `scrollWidth` = 991, o sea sin forma de
+    // alcanzarlos. Con la columna definida: `x: 55`.
+    expect(regla("velo")).toMatch(/grid-template-columns:\s*minmax\(0,\s*1fr\)/);
   });
 
   it("el velo cuenta su padding DENTRO: en este cliente no hay reset de `box-sizing`", () => {

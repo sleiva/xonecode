@@ -25,10 +25,21 @@
      porcentaje resuelve contra el área de la rejilla y la tarjeta ya no puede pasar de ahí.
    - `box-sizing: border-box`: en este cliente NO hay reset global —lo dicen ya
      `Agentes.module.css` y `Pregunta.module.css`—, así que `height: 100%` más `padding: 24px`
-     daba 1001 px dentro de una capa de 953. */
+     daba 1001 px dentro de una capa de 953.
+   - `grid-template-columns: minmax(0, 1fr)`: la MISMA trampa en el otro eje, y esta sacaba
+     la tarjeta ENTERA de la pantalla. Sin columna declarada, la implícita es `auto`, o sea
+     max-content — y el max-content de este modal lo pone la línea más larga del diff, que
+     `overflow-x: auto` mantiene dentro del `.diff` pero NO reduce (un contenedor de scroll
+     baja su min-content a 0, su max-content sigue siendo el del contenido). Medido en
+     Chrome sobre el CSS ya construido, viewport de 999 px y una línea de diff de 3130 px:
+     el velo medía 991, la pista 3130 y la tarjeta —880 px centrados en esa pista— caía en
+     `x: 1179`, o sea 180 px más allá del borde derecho, con «Rechazar» y «Aprobar» fuera y
+     nada que desplazar (`documentElement.scrollWidth` seguía siendo 991). Con la columna
+     definida, la misma medida da `x: 55`. Es el fallo de las capturas del 10-09-2026. */
 .velo {
   display: grid;
   grid-template-rows: minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1fr);
   place-items: center;
   box-sizing: border-box;
   width: 100%;
