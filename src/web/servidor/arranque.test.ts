@@ -81,6 +81,16 @@ function clienteDeMentira(id?: string) {
   return { peticion, respuesta, recibidos, cerrar: () => alCerrar?.() };
 }
 
+/**
+ * El último mensaje de ALTA, que no es lo mismo que el último mensaje: desde que abrir una
+ * sesión anuncia sus dos flancos (`clase: "abriendo"`), detrás del alta va el de bajada. Los
+ * tests que miraban `recibidos.at(-1)` estaban leyendo «el último» y queriendo decir «el
+ * alta» — se pusieron rojos todos a la vez, que es como se ve que la afirmación era otra.
+ */
+function ultimaAlta(cliente: { recibidos: MensajeAlCliente[] }): MensajeAlCliente | undefined {
+  return cliente.recibidos.filter((m) => m.clase === "alta").at(-1);
+}
+
 /** Un `POST /accion` con su cuerpo. Devuelve el estado con el que se contestó. */
 async function postear(manejador: ManejadorRuta, cuerpo: string): Promise<number> {
   const peticion = Readable.from([Buffer.from(cuerpo)]) as unknown as IncomingMessage;
@@ -241,7 +251,7 @@ describe("montarRutas — el cable, por fin conectado", () => {
     const eventos = servidor.rutas.get(`GET ${RUTA_EVENTOS}`);
     await eventos!(cliente.peticion, cliente.respuesta);
     await asentar();
-    const alta = cliente.recibidos.at(-1) as Extract<MensajeAlCliente, { clase: "alta" }>;
+    const alta = ultimaAlta(cliente) as Extract<MensajeAlCliente, { clase: "alta" }>;
     expect(alta.pasos).toEqual([]);
     // Sin proyecto abierto: nadie ha elegido ninguno todavía en ESTA conexión, aunque el
     // entorno ya estuviera registrado de antes.
@@ -259,7 +269,7 @@ describe("montarRutas — el cable, por fin conectado", () => {
     const eventos = servidor.rutas.get(`GET ${RUTA_EVENTOS}`);
     await eventos!(cliente.peticion, cliente.respuesta);
     await asentar();
-    const alta = cliente.recibidos.at(-1) as Extract<MensajeAlCliente, { clase: "alta" }>;
+    const alta = ultimaAlta(cliente) as Extract<MensajeAlCliente, { clase: "alta" }>;
     expect(alta.pasos).toEqual(["entorno"]);
     expect(alta.proyectos).toEqual([]);
   });
@@ -305,7 +315,7 @@ describe("montarRutas — el cable, por fin conectado", () => {
     await eventos!(cliente.peticion, cliente.respuesta);
     await asentar();
 
-    const alta = cliente.recibidos.at(-1) as Extract<MensajeAlCliente, { clase: "alta" }>;
+    const alta = ultimaAlta(cliente) as Extract<MensajeAlCliente, { clase: "alta" }>;
     expect(alta.pasos).toEqual([]);
     expect(alta.proyectoAbierto).toBe(true);
   });
@@ -325,7 +335,7 @@ describe("montarRutas — el cable, por fin conectado", () => {
     await servidor.rutas.get(`GET ${RUTA_EVENTOS}`)!(cliente.peticion, cliente.respuesta);
     await asentar();
 
-    const alta = cliente.recibidos.at(-1) as Extract<MensajeAlCliente, { clase: "alta" }>;
+    const alta = ultimaAlta(cliente) as Extract<MensajeAlCliente, { clase: "alta" }>;
     expect(alta.modo).toBe("cloud");
   });
 
@@ -342,7 +352,7 @@ describe("montarRutas — el cable, por fin conectado", () => {
     await servidor.rutas.get(`GET ${RUTA_EVENTOS}`)!(cliente.peticion, cliente.respuesta);
     await asentar();
 
-    const alta = cliente.recibidos.at(-1) as Extract<MensajeAlCliente, { clase: "alta" }>;
+    const alta = ultimaAlta(cliente) as Extract<MensajeAlCliente, { clase: "alta" }>;
     expect(alta.proyectoAbierto).toBe(true);
     expect("modo" in alta).toBe(false);
   });
@@ -389,12 +399,12 @@ describe("montarRutas — el cable, por fin conectado", () => {
       entorno: { id: "webstudio", nombre: "XOne WebStudio", url: "https://mcp.xonewebstudio.com/mcp" },
     });
     await asentar();
-    let alta = cliente.recibidos.at(-1) as Extract<MensajeAlCliente, { clase: "alta" }>;
+    let alta = ultimaAlta(cliente) as Extract<MensajeAlCliente, { clase: "alta" }>;
     expect(alta.proyectos).toEqual([{ id: "p1", nombre: "Tienda" }]);
 
     await enviarMensaje(accion, { clase: "alta", paso: "proyecto", proyecto: "p1" });
     await asentar();
-    alta = cliente.recibidos.at(-1) as Extract<MensajeAlCliente, { clase: "alta" }>;
+    alta = ultimaAlta(cliente) as Extract<MensajeAlCliente, { clase: "alta" }>;
     expect(alta.ramas).toEqual(["master", "pruebas"]);
     expect(vestibulo.proyectoAbierto()).toBeUndefined();
   });
@@ -428,7 +438,7 @@ describe("montarRutas — el cable, por fin conectado", () => {
     });
     await asentar();
     expect(registrados).toEqual(["webstudio"]);
-    const alta = cliente.recibidos.at(-1) as Extract<MensajeAlCliente, { clase: "alta" }>;
+    const alta = ultimaAlta(cliente) as Extract<MensajeAlCliente, { clase: "alta" }>;
     expect(alta.proyectos).toEqual([{ id: "p1", nombre: "Tienda" }]);
   });
 
@@ -467,7 +477,7 @@ describe("montarRutas — el cable, por fin conectado", () => {
 
     expect(registrados).toEqual(["mcp.casa.local"]);
     expect(pedidos).toEqual(["mcp.casa.local"]);
-    const alta = cliente.recibidos.at(-1) as Extract<MensajeAlCliente, { clase: "alta" }>;
+    const alta = ultimaAlta(cliente) as Extract<MensajeAlCliente, { clase: "alta" }>;
     expect(alta.aviso).toBeUndefined();
     expect(alta.proyectos).toEqual([{ id: "p9", nombre: "On-premise" }]);
   });
@@ -1210,6 +1220,66 @@ describe("montarRutas — el cable, por fin conectado", () => {
       rmSync(raiz, { recursive: true, force: true });
     });
 
+    /**
+     * Abrir tarda: de unos cientos de milisegundos (una copia local: foto de git,
+     * checkpointer, índice de sesiones) a los MINUTOS de una descarga. Entre el clic y el
+     * estado nuevo el cliente no tiene nada que pintar, y el usuario lo dijo mirando la
+     * pantalla: parecía que el clic no hacía nada. Lo anuncia el SERVIDOR y no lo deduce el
+     * cliente, por el mismo motivo que el turno en vuelo: solo este lado sabe cuándo acaba,
+     * y un `alta` nuevo llega también cuando abrir FALLA.
+     */
+    it("abrir una sesión anuncia los DOS flancos, y el de bajada va después del alta", async () => {
+      const raiz = mkdtempSync(join(tmpdir(), "xonecode-abriendo-"));
+      const servidor = servidorDeMentira();
+      const vestibulo = vestibuloDePrueba({ baseDeWorkspace: raiz });
+      const raizDeVerdad = vestibulo.raizDeProyecto("webstudio", "Tienda");
+      mkdirSync(join(raizDeVerdad, ".xonecode"), { recursive: true });
+      writeFileSync(join(raizDeVerdad, ".xonecode", "config.json"), JSON.stringify({ modo: "offline" }));
+
+      montarRutas(servidor, vestibulo);
+      const cliente = clienteDeMentira();
+      await servidor.rutas.get(`GET ${RUTA_EVENTOS}`)!(cliente.peticion, cliente.respuesta);
+      const accion = servidor.rutas.get(`POST ${RUTA_ACCION}`)!;
+      await asentar();
+      cliente.recibidos.length = 0;
+
+      await enviarMensaje(accion, { clase: "sesion", proyecto: "p1", sesion: "s-7" });
+      await asentar();
+
+      const flancos = cliente.recibidos.filter((m) => m.clase === "abriendo");
+      expect(flancos).toEqual([
+        { clase: "abriendo", activo: true, proyecto: "p1", sesion: "s-7" },
+        { clase: "abriendo", activo: false },
+      ]);
+      // El orden importa: el alta va ENTRE los dos flancos. Al revés hay un hueco en el que
+      // ya no hay indicador y todavía no ha llegado el estado nuevo.
+      const clases = cliente.recibidos.map((m) => m.clase);
+      expect(clases.indexOf("alta")).toBeGreaterThan(clases.indexOf("abriendo"));
+      expect(clases.lastIndexOf("abriendo")).toBeGreaterThan(clases.indexOf("alta"));
+
+      await vestibulo.cerrar();
+      rmSync(raiz, { recursive: true, force: true });
+    });
+
+    it("un fallo al abrir también APAGA el indicador: va en el `finally`", async () => {
+      const servidor = servidorDeMentira();
+      // Sin entorno elegido no se puede abrir nada, que es el camino de salida temprana.
+      const vestibulo = vestibuloDePrueba({ baseDeWorkspace: mkdtempSync(join(tmpdir(), "xonecode-vacio-")) });
+      montarRutas(servidor, vestibulo);
+      const cliente = clienteDeMentira();
+      await servidor.rutas.get(`GET ${RUTA_EVENTOS}`)!(cliente.peticion, cliente.respuesta);
+      const accion = servidor.rutas.get(`POST ${RUTA_ACCION}`)!;
+      await asentar();
+      cliente.recibidos.length = 0;
+
+      // Un proyecto que no está en la lista: se cae al camino del alta y no abre nada.
+      await enviarMensaje(accion, { clase: "sesion", proyecto: "no-existe" });
+      await asentar();
+
+      const flancos = cliente.recibidos.filter((m) => m.clase === "abriendo");
+      expect(flancos.at(-1)).toEqual({ clase: "abriendo", activo: false });
+    });
+
     it("las ramas se piden con el NOMBRE del proyecto, no con el id que trae el cable", async () => {
       const pedidos: string[] = [];
       const servidor = servidorDeMentira();
@@ -1681,7 +1751,7 @@ describe("montarRutas — el cable, por fin conectado", () => {
     // sale rechazada y todo `preguntar` responde cadena vacía, sin decir por qué.
     expect(abierto!.consola.consola.eof!()).toBe(false);
     // Y el alta ya no pide nada.
-    const alta = cliente.recibidos.at(-1) as Extract<MensajeAlCliente, { clase: "alta" }>;
+    const alta = ultimaAlta(cliente) as Extract<MensajeAlCliente, { clase: "alta" }>;
     expect(alta.clase).toBe("alta");
     expect(alta.pasos).toEqual([]);
   });
@@ -1744,7 +1814,7 @@ describe("montarRutas — el cable, por fin conectado", () => {
     expect(alTerminal).toContain("fetch failed");
     // Y en el propio paso del alta, que es donde el usuario está mirando: el acto de
     // sistema se ve en la Trayectoria, la OTRA pestaña.
-    const alta = cliente.recibidos.at(-1) as Extract<MensajeAlCliente, { clase: "alta" }>;
+    const alta = ultimaAlta(cliente) as Extract<MensajeAlCliente, { clase: "alta" }>;
     expect(alta.aviso).toBe("fetch failed");
     const actos = cliente.recibidos
       .filter((m): m is Extract<MensajeAlCliente, { clase: "acto" }> => m.clase === "acto")
@@ -1774,13 +1844,13 @@ describe("montarRutas — el cable, por fin conectado", () => {
     };
     await enviarMensaje(accion, entorno);
     await asentar();
-    expect((cliente.recibidos.at(-1) as Extract<MensajeAlCliente, { clase: "alta" }>).aviso).toBe("fetch failed");
+    expect((ultimaAlta(cliente) as Extract<MensajeAlCliente, { clase: "alta" }>).aviso).toBe("fetch failed");
 
     falla = false;
     await enviarMensaje(accion, entorno);
     await asentar();
     // Un aviso viejo pegado a un paso que ya salió bien sería una mentira con forma de error.
-    expect((cliente.recibidos.at(-1) as Extract<MensajeAlCliente, { clase: "alta" }>).aviso).toBeUndefined();
+    expect((ultimaAlta(cliente) as Extract<MensajeAlCliente, { clase: "alta" }>).aviso).toBeUndefined();
   });
 
   it("un cuerpo ilegible es 400 y no devuelve NADA de lo recibido: por ahí pasa la clave", async () => {

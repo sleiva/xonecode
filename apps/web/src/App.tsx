@@ -174,9 +174,30 @@ export function App({
    * además de mandar el mensaje, saca del escritorio. Sin eso, pulsar un proyecto desde el
    * escritorio no cambiaba nada de lo que se veía.
    */
+  /**
+   * Lo que ESTA ventana acaba de pedir abrir, para que el clic cambie algo en el acto.
+   *
+   * No contradice la regla de «lo dice el servidor»: el servidor sigue siendo el único que
+   * afirma que se está abriendo algo y cuándo acaba (`clase: "abriendo"`), y en cuanto lo
+   * dice manda él. Esto es otra cosa —«he pulsado y estoy esperando respuesta»—, y hace
+   * falta porque MEDIDO en el navegador ese ida y vuelta son 40 ms: con solo la señal del
+   * servidor, el primer cuadro después del clic sigue igual que antes, que es exactamente
+   * lo que se lee como «no ha hecho nada».
+   *
+   * Se suelta en cuanto el servidor contesta CUALQUIER cosa —el alta nueva llega siempre,
+   * también si abrir falla— o si se cae el cable. Nunca se queda pegado esperando un
+   * mensaje concreto.
+   */
+  const [pedidoDeApertura, setPedidoDeApertura] = useState<{ proyecto: string; sesion?: string } | undefined>(
+    undefined
+  );
+  const altaAlPedir = useRef<unknown>(undefined);
+
   const abrirSesion = useCallback(
     (proyecto: string, sesion?: string, pestanaAlAbrir?: Pestana) => {
       setEnEscritorio(false);
+      altaAlPedir.current = estado.alta;
+      setPedidoDeApertura({ proyecto, ...(sesion === undefined ? {} : { sesion }) });
       // Solo si el llamador la nombra: por omisión no toca `pestana`, que es el
       // comportamiento de siempre para la barra y el escritorio. Quien abre desde una
       // tarjeta de tarea «esperando feedback» sí la nombra —«revision»—, porque ahí la
@@ -184,8 +205,22 @@ export function App({
       if (pestanaAlAbrir !== undefined) setPestana(pestanaAlAbrir);
       void enviar(sesion === undefined ? { clase: "sesion", proyecto } : { clase: "sesion", proyecto, sesion });
     },
-    [enviar]
+    [enviar, estado.alta]
   );
+
+  useEffect(() => {
+    if (pedidoDeApertura === undefined) return;
+    // Cualquier respuesta del servidor lo releva: el alta se anuncia SIEMPRE al terminar de
+    // abrir (y también al fallar), así que basta con que cambie.
+    if (estado.alta !== altaAlPedir.current || estado.conectado === false) setPedidoDeApertura(undefined);
+  }, [pedidoDeApertura, estado.alta, estado.conectado]);
+
+  /**
+   * Qué se está abriendo, con el servidor por delante: lo que él diga manda —él sabe si
+   * además hay que DESCARGAR, que es la espera de minutos— y el pedido de esta ventana solo
+   * cubre los milisegundos de antes de su primera palabra.
+   */
+  const abriendo = estado.abriendo ?? pedidoDeApertura;
 
   /**
    * Las cuatro acciones de una tarea, hoisted una sola vez: el kanban del escritorio
@@ -1292,6 +1327,9 @@ export function App({
           // configurar. El volcado sigue estando, dentro de la ventana, para quien quiera
           // verlo entero.
           alAbrirAjustes={() => setAjustesAbiertos(true)}
+          // Qué se está abriendo, para que la fila donde se pulsó lo diga. Lo manda el
+          // servidor: es el único que sabe cuándo acaba (`clase: "abriendo"`).
+          {...(abriendo === undefined ? {} : { abriendo })}
         />
       }
     />

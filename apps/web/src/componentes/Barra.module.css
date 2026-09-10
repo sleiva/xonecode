@@ -29,31 +29,27 @@
   padding-right: 4px;
 }
 
-/* El proyecto ABIERTO. Mismo fondo que la sesión seleccionada (`Rows.module.css`), para
-   que «aquí estás» se lea igual en los dos niveles del árbol, más una barra de acento a la
-   izquierda: el fondo solo no basta cuando la fila de al lado está en `:hover`, que usa ese
-   mismo alias. El `aria-current` de la fila dice lo mismo sin depender del color. */
+/* El proyecto ABIERTO: fondo y el nombre en NEGRITA, y ninguna barra de cian.
+   Las dos filas se pintaban idénticas —mismo fondo y mismo filo de cian— a propósito, «para
+   que aquí estás se lea igual en los dos niveles del árbol», y el usuario lo señaló mirando
+   la pantalla: así no se distingue la sesión abierta del proyecto que la contiene, que es lo
+   que hace falta saber. Ahora el CIAN es de una sola fila —la sesión (o la tarea) que estás
+   leyendo— y el proyecto se marca como lo que es: el contenedor donde estás. El fondo solo
+   no bastaría (la fila de al lado en `:hover` usa ese mismo alias), de ahí la negrita; y el
+   `aria-current` sigue diciéndolo sin depender de ningún color. */
 .filaAbierta {
   position: relative;
   background: var(--dsw-alias-interactive-bg-hover);
   border-radius: 8px;
 }
 
-.filaAbierta::before {
-  content: "";
-  position: absolute;
-  top: 6px;
-  bottom: 6px;
-  left: 0;
-  width: 2px;
-  border-radius: 2px;
-  /* El ACENTO, y por su nombre. Antes decía `button-primary-fill` y salía cian de rebote,
-     porque `estilos/marca.css` tenía ese alias secuestrado. Desde el rediseño el relleno
-     primario es el negro del tema y el cian se quedó SOLO de acento, así que un filo que
-     siguiera leyendo el alias del botón se volvía negro — medido en pantalla: la fila
-     activa perdía la única señal de color que la distinguía del `:hover` de al lado. */
-  background: var(--xonecode-cian);
+/* El nombre del proyecto activo. Es la otra mitad de su marca ahora que el filo de cian se
+   quedó solo para la sesión. */
+.tituloActivo {
+  font-weight: 600;
+  color: var(--dsw-alias-label-primary);
 }
+
 
 .cuerpoDeFila {
   flex: 1;
@@ -109,6 +105,8 @@
    mismo que la fila de al lado cuando pasas el ratón por encima. El acento es lo que
    desempata. El recuadro va más ajustado que el de `.filaAbierta` porque la fila de sesión
    es más baja que la de proyecto. */
+/* La sesión ABIERTA: fondo MÁS el filo de cian, que desde ahora es suyo y de nadie más —una
+   por pantalla, la que estás leyendo. */
 .sesionAbierta {
   position: relative;
   background: var(--dsw-alias-interactive-bg-hover);
@@ -271,4 +269,35 @@
 
 .cuerpoDeFila > .selloDeFecha:not(.marcaDeTarea + .selloDeFecha) {
   margin-left: auto;
+}
+
+/* «abriendo…» / «descargando…» en la fila donde se pulsó.
+   Va con PALABRAS y en el hueco de la fecha, no con un giro a secas: el rango de esta espera
+   va de unos cientos de milisegundos (abrir una copia local) a los minutos de una descarga, y
+   un punto girando no distingue las dos. El pulso es lento y se apaga con
+   `prefers-reduced-motion` —quien pidió que no hubiera movimiento no puede recibir un
+   parpadeo—, y entonces queda el texto, que es la señal de verdad. */
+.actividad {
+  flex: none;
+  margin-left: 8px;
+  color: var(--xonecode-cian-oscuro);
+  font-size: 11px;
+  font-family: var(--ds-font-family-code);
+  animation: pulso 1.4s ease-in-out infinite;
+}
+
+@keyframes pulso {
+  0%,
+  100% {
+    opacity: 0.45;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .actividad {
+    animation: none;
+  }
 }

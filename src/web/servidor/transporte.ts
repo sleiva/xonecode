@@ -101,6 +101,29 @@ export type MensajeAlCliente =
    */
   | { clase: "turno"; activo: boolean }
   /**
+   * Se está ABRIENDO algo: una sesión, o un proyecto que además hay que descargar.
+   *
+   * Lo dice el SERVIDOR y no lo deduce el cliente, por el mismo motivo que `turno`: solo
+   * este lado sabe cuándo empieza y cuándo acaba, y aquí el rango va de «unos cientos de
+   * milisegundos» (abrir una copia local: foto de git, checkpointer, sesiones) a «minutos»
+   * (descargar el proyecto entero). Deducirlo de que llegue un `alta` nuevo fallaría justo
+   * cuando importa: un fallo al abrir también anuncia alta, y una apertura sobre el
+   * proyecto que YA estaba activo no cambia nada en él.
+   *
+   * `activo: false` es el otro flanco y va en un `finally`, así que salir por un error
+   * también lo apaga — un indicador de actividad que se queda encendido para siempre es
+   * peor que no tenerlo.
+   */
+  | {
+      clase: "abriendo";
+      activo: boolean;
+      /** Qué se está abriendo, para poder señalarlo en su fila. Solo con `activo`. */
+      proyecto?: string;
+      sesion?: string;
+      /** Además hay que BAJARLO: es la espera larga, y la que hay que decir con palabras. */
+      descargando?: true;
+    }
+  /**
    * Los subagentes dados de alta, para la ventana de ajustes.
    *
    * Se manda entero cada vez que cambia —son pocos y pequeños— en vez de mandar deltas:

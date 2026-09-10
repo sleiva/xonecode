@@ -1449,8 +1449,22 @@ export function montarRutas(
     }
   };
 
+  /**
+   * Los dos flancos de «se está abriendo algo», emitidos como los del turno y por lo mismo:
+   * el cliente no puede saber cuánto tarda esto —de unos cientos de milisegundos a los
+   * minutos de una descarga— y sin señal la interfaz se queda quieta después de un clic.
+   */
+  const anunciarAbriendo = (que?: { proyecto?: string; sesion?: string; descargando?: true }): void => {
+    emitir(que === undefined ? { clase: "abriendo", activo: false } : { clase: "abriendo", activo: true, ...que });
+  };
+
   const atenderSesion = async (peticion: Extract<MensajeDelCliente, { clase: "sesion" }>): Promise<void> => {
     aviso = undefined;
+    // Antes de la primera espera, no después: entre el clic y aquí no hay nada que pintar.
+    anunciarAbriendo({
+      proyecto: peticion.proyecto,
+      ...(peticion.sesion === undefined ? {} : { sesion: peticion.sesion }),
+    });
     try {
       if (entornoElegido === undefined) {
         aviso = "elige antes el entorno del que sale el proyecto";
@@ -1481,7 +1495,11 @@ export function montarRutas(
       aviso = error instanceof Error ? error.message : String(error);
       contar(error);
     } finally {
+      // El alta PRIMERO y el flanco de bajada después: al revés hay un hueco en el que ya
+      // no hay indicador y todavía no ha llegado el estado nuevo. Y en el `finally`, así
+      // que un fallo al abrir también lo apaga.
       await anunciarAlta().catch(contar);
+      anunciarAbriendo();
     }
   };
 
@@ -2007,6 +2025,9 @@ export function montarRutas(
       // El proyecto que viene en ESTE mensaje, no el cacheado: lo enviado es la verdad y
       // `proyectoElegido` puede haberse quedado atrás.
       const identidad = proyectos.find((p) => p.id === proyecto) ?? proyecto;
+      // La espera LARGA: aquí se baja el proyecto entero. Se dice como tal (`descargando`)
+      // porque un indicador que solo gire no distingue medio segundo de tres minutos.
+      anunciarAbriendo({ proyecto, descargando: true });
       const { raiz } = await vestibulo.completarProyecto({
         entorno: entornoElegido,
         proyecto: identidad,
@@ -2027,6 +2048,9 @@ export function montarRutas(
       contar(error);
     } finally {
       await anunciarAlta().catch(contar);
+      // Solo este paso del alta enciende el indicador, pero apagarlo aquí es correcto para
+      // todos: apagar lo que ya está apagado no se ve.
+      anunciarAbriendo();
     }
   };
 

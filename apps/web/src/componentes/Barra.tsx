@@ -105,7 +105,7 @@ export interface Proyecto {
  */
 export const PROYECTOS_POR_OMISION = 4;
 
-export function Barra({ entornos, entornoActivo, proyectos, visibles, proyectoActivo, sesionActiva, alElegirEntorno, alAbrirSesion, alAbrirProyecto, alNuevaSesion, alAccionDeSesion, alAbrirAjustes, conectado }: {
+export function Barra({ entornos, entornoActivo, proyectos, visibles, proyectoActivo, sesionActiva, abriendo, alElegirEntorno, alAbrirSesion, alAbrirProyecto, alNuevaSesion, alAccionDeSesion, alAbrirAjustes, conectado }: {
   entornos: { id: string; nombre: string }[];
   entornoActivo: string;
   proyectos: Proyecto[];
@@ -122,6 +122,13 @@ export function Barra({ entornos, entornoActivo, proyectos, visibles, proyectoAc
    */
   proyectoActivo?: string;
   sesionActiva?: string;
+  /**
+   * Qué se está abriendo AHORA, dicho por el servidor. Entre el clic y la sesión abierta
+   * pasan de unos cientos de milisegundos a los minutos de una descarga, y sin señal la
+   * barra se queda igual que estaba: el clic se lee como que no ha hecho nada. Ausente =
+   * no se está abriendo nada.
+   */
+  abriendo?: { proyecto?: string; sesion?: string; descargando?: true };
   alElegirEntorno: (id: string) => void;
   alAbrirSesion: (proyecto: string, sesion: string) => void;
   /** El nombre del proyecto es un botón: pide su rama y lo abre (o lo enseña, si ya
@@ -157,6 +164,18 @@ export function Barra({ entornos, entornoActivo, proyectos, visibles, proyectoAc
   conectado?: boolean;
 }) {
   const apagado = conectado === false;
+
+  /**
+   * Abrir algo tarda, y la señal va donde estaba el clic: en la fila. Se distingue el
+   * proyecto de la sesión porque son dos filas distintas —una sesión guardada se abre desde
+   * la suya— y porque una sesión NUEVA no tiene fila todavía: en ese caso el indicador se
+   * queda en la del proyecto, que es donde está su «+».
+   */
+  const abriendoProyecto = (id: string): boolean =>
+    abriendo !== undefined && abriendo.proyecto === id && abriendo.sesion === undefined;
+  const abriendoSesion = (id: string): boolean => abriendo !== undefined && abriendo.sesion === id;
+  /** Mientras se abre algo no se pide otra cosa: el segundo clic no cancela el primero. */
+  const abriendoAlgo = abriendo !== undefined;
   // El orden de `visibles` NO manda: manda el del listado, que es el del servidor. Elegir
   // qué se ve es una cosa; reordenar el listado remoto sería otra, y nadie la ha pedido.
   const alaVista =
@@ -230,11 +249,12 @@ export function Barra({ entornos, entornoActivo, proyectos, visibles, proyectoAc
                         // quien no distingue bien los tonos, y el `aria-current` es lo que
                         // se lo dice a un lector de pantalla.
                         {...(p.id === proyectoActivo ? { "aria-current": "true" as const } : {})}
+                        {...(abriendoProyecto(p.id) ? { "aria-busy": "true" as const } : {})}
                       >
                         <button
                           type="button"
                           className={clsx(estilos.reseteoDeBoton, estilos.cuerpoDeFila)}
-                          disabled={apagado}
+                          disabled={apagado || abriendoAlgo}
                           onClick={() => alAbrirProyecto(p.id)}
                         >
                           {/*
@@ -250,8 +270,23 @@ export function Barra({ entornos, entornoActivo, proyectos, visibles, proyectoAc
                             <IconFolderClose16 size={16} />
                           </span>
                           <span className={filas.projectText}>
-                            <span className={filas.title}>{p.nombre}</span>
+                            {/* El proyecto activo se marca con el fondo y con el NOMBRE, no
+                                con el filo de cian: ese se quedó para la fila que estás
+                                leyendo (ver `Barra.module.css`). */}
+                            <span className={clsx(filas.title, p.id === proyectoActivo && estilos.tituloActivo)}>
+                              {p.nombre}
+                            </span>
                           </span>
+                          {abriendoProyecto(p.id) ? (
+                            <span
+                              className={estilos.actividad}
+                              // Con PALABRAS y no solo con el giro: una descarga son minutos
+                              // y un punto que gira no distingue eso de medio segundo.
+                              title={abriendo?.descargando === true ? "Descargando el proyecto…" : "Abriendo…"}
+                            >
+                              {abriendo?.descargando === true ? "descargando…" : "abriendo…"}
+                            </span>
+                          ) : null}
                           {/*
                             De quién es. Tres cosas de esta etiqueta:
 
@@ -276,7 +311,7 @@ export function Barra({ entornos, entornoActivo, proyectos, visibles, proyectoAc
                           <button
                             type="button"
                             className={filas.iconButton}
-                            disabled={apagado}
+                            disabled={apagado || abriendoAlgo}
                             onClick={() => alNuevaSesion(p.id)}
                             aria-label={`nueva sesión en ${p.nombre}`}
                           >
@@ -317,11 +352,12 @@ export function Barra({ entornos, entornoActivo, proyectos, visibles, proyectoAc
                               s.historica && estilos.historica
                             )}
                             {...(s.id === sesionActiva ? { "aria-current": "true" as const } : {})}
+                            {...(abriendoSesion(s.id) ? { "aria-busy": "true" as const } : {})}
                           >
                             <button
                               type="button"
                               className={clsx(estilos.reseteoDeBoton, estilos.cuerpoDeFila)}
-                              disabled={apagado}
+                              disabled={apagado || abriendoAlgo}
                               onClick={() => alAbrirSesion(p.id, s.id)}
                             >
                               <span className={filas.slot} aria-hidden="true" />
@@ -345,7 +381,14 @@ export function Barra({ entornos, entornoActivo, proyectos, visibles, proyectoAc
                                 // pantalla.
                                 <span className={estilos.marcaDeTarea}>Tarea</span>
                               ) : null}
-                              {selloDeSesion(s.ultimoTurno) === undefined ? null : (
+                              {/* Mientras se abre, en el hueco de la fecha va la actividad:
+                                  es el sitio donde ya se mira, y la fecha de la sesión que
+                                  estás abriendo no aporta nada en ese segundo. */}
+                              {abriendoSesion(s.id) ? (
+                                <span className={estilos.actividad} title="Abriendo…">
+                                  abriendo…
+                                </span>
+                              ) : selloDeSesion(s.ultimoTurno) === undefined ? null : (
                                 <span className={estilos.selloDeFecha}>{selloDeSesion(s.ultimoTurno)}</span>
                               )}
                             </button>

@@ -1770,6 +1770,63 @@ llega con el teclado a botones que no se ven. La preferencia se recuerda en `loc
 apariencia, y con el mismo `try` alrededor de cada acceso porque en una ventana privada el
 accesor lanza.
 
+**Y se REDIMENSIONA** (`Maqueta.tsx`, el `separator` del grid). Pedido así: «podría ser un
+splitter o al menos ser más ancha», y son las dos cosas — la omisión sube de 280 a 320,
+porque en 280 el nombre de un proyecto real no cabe («PlaemerWebTe…», medido en su
+pantalla), y a partir de ahí el ancho lo elige quien mira. **La geometría del tirador ya
+estaba en la hoja copiada** —`.handle`, la tira de 8 px a caballo del borde, el cursor, y
+`.frame[data-dragging] { transition: none }`, que es lo que impide que la columna se despegue
+del puntero—, porque el original también redimensiona; lo que no traía es el gesto, la
+accesibilidad y quién recuerda el ancho. Seis reglas:
+- **Es el «window splitter» de ARIA**: un `separator` ENFOCABLE con `aria-valuenow`, o sea el
+  MISMO control para el ratón y para el teclado (flechas ±16, Home/End a los topes, doble
+  clic a la omisión). Sin `tabIndex` sería un asa que solo existe si tienes ratón.
+- **Sin manejador no se pinta el tirador**, y plegada tampoco: un asa que no redimensiona es
+  el control muerto de siempre, y encima tapa 8 px de la columna.
+- **El `terminado` del manejador distingue las dos cadencias del gesto**: el arrastre pide un
+  ancho en cada `pointermove` y `localStorage` se escribe UNA vez, al soltar. Cada tecla
+  llega ya terminada.
+- **El techo del 60% de la ventana lo aplica el CSS** (`min(Xpx, 60vw)` en la pista), no el
+  número guardado: así encoger la ventana estrecha la barra sin sobrescribir los 560 que
+  alguien eligió en su pantalla grande. Al arrastrar sí se acota con la ventana, que es lo
+  que mantiene el tirador pegado al puntero.
+- **Con cabecera va en la SEGUNDA fila del grid**: un absoluto con celda declarada toma esa
+  celda como bloque contenedor, así que la tira deja de cruzar la barra superior — donde solo
+  taparía la miga con un cursor de redimensionar.
+- **El arrastre se abre ANTES de pedir la captura del puntero, y la captura va envuelta**:
+  medido en Chrome, `setPointerCapture` LANZA si el `pointerId` no es de un puntero activo, y
+  capturando primero ese fallo se llevaba el gesto entero. Es una comodidad —con ella los
+  `pointermove` de fuera del asa siguen llegando—, no la condición del gesto; y
+  `lostpointercapture` cierra el arrastre, porque un puntero que sale de la ventana lo dejaba
+  abierto para siempre.
+
+**El proyecto activo y la sesión activa NO se marcan igual, y el cian es de una sola fila.**
+Las dos se pintaban idénticas a propósito —mismo fondo y mismo filo de cian, «para que aquí
+estás se lea igual en los dos niveles»— y el usuario lo señaló mirando la pantalla: así no se
+distingue la sesión abierta del proyecto que la contiene, que es justo lo que hace falta
+saber. Ahora el filo de cian es de la fila que estás LEYENDO (la sesión, o la tarea) y el
+proyecto se marca como el contenedor que es: fondo y nombre en negrita. La negrita no es
+adorno — el fondo solo no basta, porque la fila de al lado en `:hover` usa ese mismo alias —
+y el `aria-current` sigue diciéndolo sin depender de ningún color.
+
+**Y abrir algo DICE que está abriendo, con dos señales que no son la misma** (`clase:
+"abriendo"` en el cable, `App.tsx#pedidoDeApertura`). Un clic que no cambia nada se lee como
+que no ha hecho nada, y esta espera va de decenas de milisegundos (una copia local) a los
+MINUTOS de una descarga. Tres reglas:
+- **Lo que se está abriendo lo dice el SERVIDOR**, como el turno en vuelo y por lo mismo:
+  solo él sabe cuándo acaba, y deducirlo de que llegue un alta fallaría justo cuando importa
+  —abrir también anuncia alta cuando FALLA—. Los dos flancos, y el de bajada en un `finally`.
+- **Y el clic pinta al instante, que es otra cosa.** Medido en el navegador: el ida y vuelta
+  del servidor son 40 ms, así que con solo su señal el primer cuadro después del clic sigue
+  igual que antes. `pedidoDeApertura` es «he pulsado y espero respuesta» —estado de esta
+  ventana, no una afirmación sobre el servidor— y lo releva cualquier cosa que el servidor
+  diga; se suelta también si se cae el cable, porque un indicador encendido para siempre es
+  peor que no tenerlo.
+- **La descarga se dice con OTRA palabra** («descargando…», y en la fila del proyecto): son
+  minutos, y un punto que gira no distingue eso de medio segundo. El indicador va en la fila
+  donde se pulsó —la de la sesión si es guardada, la del proyecto si es nueva, que es donde
+  está su «+»— con `aria-busy`, y mientras se abre algo no se puede pedir ABRIR otra cosa.
+
 **Al escritorio se VUELVE, y el enlace es la marca** (`Cabecera.tsx#alIrAlEscritorio`,
 `App.tsx#enEscritorio`). El escritorio se pintaba solo cuando NO había proyecto abierto, así
 que en cuanto abrías uno no había forma de volver a él —ni a los otros proyectos, ni a «Tu

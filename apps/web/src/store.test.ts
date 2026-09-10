@@ -1137,3 +1137,27 @@ describe("la revisión que llega por el cable", () => {
     ]);
   });
 });
+
+describe("«se está abriendo algo», que lo dice el servidor", () => {
+  it("los dos flancos, y `descargando` solo con el booleano `true`", () => {
+    const s = crearStoreDelCliente();
+    s.aplicar({ clase: "abriendo", activo: true, proyecto: "p1", sesion: "s7" } as never);
+    expect(s.leer().abriendo).toEqual({ proyecto: "p1", sesion: "s7" });
+    s.aplicar({ clase: "abriendo", activo: true, proyecto: "p1", descargando: true } as never);
+    expect(s.leer().abriendo).toEqual({ proyecto: "p1", descargando: true });
+    // La cadena «false» es verdadera en JavaScript: prometería una descarga que nadie hace.
+    s.aplicar({ clase: "abriendo", activo: true, proyecto: "p1", descargando: "false" } as never);
+    expect(s.leer().abriendo).toEqual({ proyecto: "p1" });
+    s.aplicar({ clase: "abriendo", activo: false } as never);
+    expect(s.leer().abriendo).toBeUndefined();
+  });
+
+  it("al caerse el cable se tira: sin cable no llega el flanco de bajada", () => {
+    // Un indicador de actividad encendido para siempre es peor que no tenerlo, y es
+    // exactamente lo que pasaría al perder el SSE mientras se abre algo.
+    const s = crearStoreDelCliente();
+    s.aplicar({ clase: "abriendo", activo: true, proyecto: "p1" } as never);
+    s.marcarDesconectado();
+    expect(s.leer().abriendo).toBeUndefined();
+  });
+});

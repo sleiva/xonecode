@@ -135,6 +135,9 @@ export type MensajeAlCliente =
   /** Hay un turno EN VUELO, o dejó de haberlo: apaga el compositor y saca el botón de
    *  parar. No se deduce de los actos — un turno que revienta no siempre deja `fin`. */
   | { clase: "turno"; activo: boolean }
+  /** Se está abriendo una sesión —o descargando un proyecto—, dicho por el servidor: es el
+   *  único que sabe cuándo empieza y cuándo acaba. */
+  | { clase: "abriendo"; activo: boolean; proyecto?: string; sesion?: string; descargando?: true }
   /**
    * Los subagentes dados de alta, para la ventana de ajustes. La lista va ENTERA cada vez
    * que cambia —son pocos y pequeños— en vez de mandar diferencias: un delta perdido

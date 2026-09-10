@@ -120,6 +120,12 @@ export interface EstadoDelCliente {
   /** Hay un turno corriendo AHORA. Lo dice el servidor; el cliente no lo deduce. */
   turnoEnVuelo?: boolean;
   /**
+   * Qué se está abriendo ahora mismo, si algo. Lo dice el servidor (`clase: "abriendo"`) y
+   * no se deduce: entre el clic y el estado nuevo pasan de cientos de milisegundos a los
+   * minutos de una descarga, y sin esto la interfaz se queda quieta.
+   */
+  abriendo?: { proyecto?: string; sesion?: string; descargando?: true };
+  /**
    * Lo que la sesión ha tocado (pestaña Revisión). Ausente = todavía no se ha pedido. Los
    * TRES `via` se guardan: «sin-empezar» se tiraba y la pestaña se quedaba consultando.
    * Los parches se guardan por ruta según se piden: uno grande no se vuelve a traer por
@@ -963,6 +969,23 @@ export function crearStoreDelCliente(): {
           });
           return;
         }
+        case "abriendo": {
+          const m = mensaje as { activo?: unknown; proyecto?: unknown; sesion?: unknown; descargando?: unknown };
+          if (m.activo !== true) {
+            mutar({ abriendo: undefined });
+            return;
+          }
+          mutar({
+            abriendo: {
+              ...(typeof m.proyecto === "string" ? { proyecto: m.proyecto } : {}),
+              ...(typeof m.sesion === "string" ? { sesion: m.sesion } : {}),
+              // Solo el booleano `true`: la cadena `"false"` es verdadera en JavaScript y
+              // aquí prometería una descarga que nadie está haciendo.
+              ...(m.descargando === true ? { descargando: true as const } : {}),
+            },
+          });
+          return;
+        }
         case "turno": {
           const activo = (mensaje as { activo?: unknown }).activo;
           if (typeof activo !== "boolean") return;
@@ -1162,6 +1185,10 @@ export function crearStoreDelCliente(): {
         // El acuse de un alta o una baja de proveedor es de esa operación, no un estado:
         // guardado entre conexiones, al reconectar reaparecería un error ya resuelto.
         proveedor: undefined,
+        // Y lo que se estuviera abriendo, por lo mismo que el turno: sin cable no llega el
+        // flanco de bajada, y un indicador de actividad encendido para siempre es peor que
+        // no tenerlo. La reconexión trae el estado entero.
+        abriendo: undefined,
         // Sin cable no se sabe si el turno sigue: dejarlo en `true` apagaría el compositor
         // para siempre en una pestaña que ya no recibe el «terminó».
         turnoEnVuelo: false,
