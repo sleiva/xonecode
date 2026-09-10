@@ -105,11 +105,23 @@
    mismo que la fila de al lado cuando pasas el ratón por encima. El acento es lo que
    desempata. El recuadro va más ajustado que el de `.filaAbierta` porque la fila de sesión
    es más baja que la de proyecto. */
-/* La sesión ABIERTA: fondo MÁS el filo de cian, que desde ahora es suyo y de nadie más —una
-   por pantalla, la que estás leyendo. */
+/* La sesión ABIERTA: fondo de CIAN y el filo de cian, los dos suyos y de nadie más — una
+   por pantalla, la que estás leyendo.
+   El fondo era el mismo gris del proyecto (`interactive-bg-hover`) y él lo señaló DOS veces:
+   con el mismo relleno, un filo de 2 px no separa las dos marcas — a un metro las dos filas
+   se leen igual de «seleccionadas». Ahora son dos COLORES distintos y no dos intensidades
+   del mismo: el proyecto se queda con el gris neutro (es el contenedor, y ese gris es el que
+   la hoja copiada usa para «tocado por el ratón») y la fila que estás leyendo va con el
+   acento del producto, el mismo cian de la pestaña activa y del filo.
+   El `color-mix` va DETRÁS de un color de respaldo, no solo: donde no exista, la fila se
+   queda con el gris de siempre en vez de quedarse sin fondo. Y es un 14%, no más: encima de
+   ese relleno va texto casi negro (`label-primary`), y el cian a plena carga nunca llegó a
+   tener contraste para letra — es la razón por la que en el rediseño pasó de RELLENO a
+   ACENTO. */
 .sesionAbierta {
   position: relative;
   background: var(--dsw-alias-interactive-bg-hover);
+  background: color-mix(in srgb, var(--xonecode-cian) 14%, transparent);
   border-radius: 8px;
 }
 

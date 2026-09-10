@@ -608,6 +608,19 @@ describe("Barra: el proyecto activo y la sesión activa no se marcan igual", () 
     expect(hoja).not.toMatch(/\.filaAbierta::before\s*\{/);
   });
 
+  it("los dos fondos son COLORES distintos, no dos intensidades del mismo", () => {
+    // Lo señaló dos veces: con el mismo relleno gris, un filo de 2 px no separa las dos
+    // marcas. El proyecto se queda con el gris neutro de la hoja copiada —el mismo que usa
+    // para «tocado por el ratón»— y la fila que estás leyendo va con el acento del producto.
+    expect(regla("filaAbierta")).toMatch(/background:\s*var\(--dsw-alias-interactive-bg-hover\)/);
+    expect(regla("sesionAbierta")).toMatch(/background:\s*color-mix\(in srgb, var\(--xonecode-cian\)/);
+    // Con respaldo delante: donde no haya `color-mix`, la fila se queda con un fondo y no
+    // sin ninguno.
+    expect(regla("sesionAbierta")).toMatch(
+      /background:\s*var\(--dsw-alias-interactive-bg-hover\)[\s\S]*background:\s*color-mix/
+    );
+  });
+
   it("y el proyecto se sigue distinguiendo del `:hover` de al lado, por el nombre", () => {
     // Sin esto, quitar el filo dejaría el proyecto activo indistinguible de la fila que
     // tienes debajo del ratón: las dos usan el MISMO alias de fondo.

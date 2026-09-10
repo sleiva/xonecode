@@ -1804,10 +1804,16 @@ accesibilidad y quién recuerda el ancho. Seis reglas:
 Las dos se pintaban idénticas a propósito —mismo fondo y mismo filo de cian, «para que aquí
 estás se lea igual en los dos niveles»— y el usuario lo señaló mirando la pantalla: así no se
 distingue la sesión abierta del proyecto que la contiene, que es justo lo que hace falta
-saber. Ahora el filo de cian es de la fila que estás LEYENDO (la sesión, o la tarea) y el
-proyecto se marca como el contenedor que es: fondo y nombre en negrita. La negrita no es
-adorno — el fondo solo no basta, porque la fila de al lado en `:hover` usa ese mismo alias —
-y el `aria-current` sigue diciéndolo sin depender de ningún color.
+saber. **Y no basta con el filo**: lo dijo dos veces, porque con el mismo relleno gris en las
+dos, 2 px de acento no separan nada — a un metro las dos filas se leen igual de
+«seleccionadas». Son dos COLORES y no dos intensidades del mismo: el proyecto se queda con el
+gris neutro (es el contenedor, y ese gris es el que la hoja copiada usa para «tocado por el
+ratón») más el nombre en NEGRITA, y la fila que estás leyendo va con el acento del producto
+—un cian al 14% más su filo—, el mismo de la pestaña activa. El 14% no es timidez: encima va
+texto casi negro, y el cian a plena carga nunca tuvo contraste para letra (es la razón por la
+que el rediseño lo movió de relleno a acento), y el `color-mix` va detrás de un color de
+respaldo para que donde no exista quede un fondo y no ninguno. El `aria-current` sigue
+diciéndolo sin depender de ningún color.
 
 **Y abrir algo DICE que está abriendo, con dos señales que no son la misma** (`clase:
 "abriendo"` en el cable, `App.tsx#pedidoDeApertura`). Un clic que no cambia nada se lee como
