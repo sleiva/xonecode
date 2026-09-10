@@ -75,6 +75,38 @@
 }
 
 
+/*
+ * El plegador de un proyecto: el botón que abre y cierra su lista de sesiones.
+ *
+ * Es un hermano del botón del nombre —anidarlo dentro sería un control dentro de otro— y se
+ * queda con su ancho, que es el de la ranura de 16 px que la hoja copiada define. Lo que
+ * pinta dentro es suyo: la carpeta y el triángulo, que su hoja intercambia en `:hover`.
+ */
+.plegador {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  padding: 0;
+}
+
+/*
+ * Y con el TECLADO también se ve el triángulo.
+ *
+ * La hoja copiada solo lo saca en `:hover` (`.projectRow:hover .chevron`), así que quien
+ * llega con el Tab veía la carpeta y ninguna señal de que ese botón despliega algo. El
+ * intercambio se repite aquí para el foco, y con clases NUESTRAS sobre los mismos glifos:
+ * las de la otra hoja son de otro módulo CSS —nombre hasheado— y desde aquí no se pueden
+ * nombrar. Gana por especificidad (tres clases contra dos), que es lo que hace que esto
+ * funcione sin tocar la copia.
+ */
+.plegador:focus-visible .glifoDeChevron {
+  display: inline-flex;
+}
+
+.plegador:focus-visible .glifoDeCarpeta {
+  display: none;
+}
+
 .cuerpoDeFila {
   flex: 1;
   min-width: 0;

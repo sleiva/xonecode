@@ -1935,6 +1935,38 @@ accesibilidad y quién recuerda el ancho. Seis reglas:
   `lostpointercapture` cierra el arrastre, porque un puntero que sale de la ventana lo dejaba
   abierto para siempre.
 
+**Las sesiones de la barra se PLIEGAN, y solo hay una lista abierta: la del proyecto activo**
+(`desplegado` en `Barra.tsx`). Se enseñaban todas las de todos, y lo pidió el usuario mirando
+su barra: cuatro proyectos con sus conversaciones es una columna que no se puede leer, y lo
+que se busca —la de donde estás— queda enterrado entre las de proyectos que no estás mirando.
+Cinco reglas:
+- **Es un ACORDEÓN, no plegados independientes**, porque lo pedido es «uno solo»: desplegar
+  uno cierra el que hubiera. Un `string | undefined` lo dice todo, y `undefined` es «ninguno
+  abierto» — que es la barra del escritorio recién arrancado: **sin proyecto activo no se
+  despliega ninguno**, porque abrir el primero por no tener el dato sería la misma invención
+  que marcar «aquí estás» sin saberlo.
+- **El proyecto ACTIVO manda cuando cambia** (un efecto sobre `proyectoActivo`): abrir una
+  sesión de otro proyecto se lleva el despliegue con ella, que es donde acabas de mirar. En un
+  efecto y no derivado, para que un despliegue a mano sobreviva a un re-render.
+- **El plegador es un botón APARTE**, hermano del que abre el proyecto y no dentro: un
+  `<button>` anidado en otro es HTML inválido y reparte el clic entre los dos — la misma razón
+  por la que el «…» de una sesión no vive dentro de su fila.
+- **La afordancia ya estaba en la hoja copiada**: `.projectRow:hover .folder { display: none }`
+  y `.chevron` en su sitio, con `.arrow`/`.arrowOpen` girando 90° (el icono es su
+  `IconTriangleRightFill14`, no un parecido). Lo que se añade es que **la carpeta cambia de
+  glifo** (cerrada/abierta), que es lo que dice el estado SIN posar el ratón, y que el
+  intercambio se repite en `:focus-visible` con clases NUESTRAS —las de la otra hoja son de
+  otro módulo y desde aquí no se pueden nombrar—: quien llega con el Tab veía la carpeta y
+  ninguna señal de que ese botón despliega algo. Las filas plegadas se DESMONTAN, que es la
+  regla de siempre: una fila invisible con `visibility` sigue siendo tabulable.
+- **Y con la lista plegada, la marca de «trabajando» la TIENE que dar el proyecto.** El
+  servidor manda `proyectos[].trabajando` solo cuando ninguna fila suya la lleva —para no
+  decirlo dos veces— y eso valía cuando las sesiones se enseñaban todas: lo decía la fila.
+  Plegada esa fila no existe, así que un turno corriendo en un proyecto que no estás mirando
+  no se vería en NINGUNA parte. No es el cruce prohibido de datos de otros párrafos: la lista
+  de sesiones ya está en el cliente, plegada o no, y se le pregunta a ella. Desplegado no se
+  dice: ahí lo dice la fila, que es la que se abre.
+
 **El proyecto activo y la sesión activa NO se marcan igual, y el cian es de una sola fila.**
 Las dos se pintaban idénticas a propósito —mismo fondo y mismo filo de cian, «para que aquí
 estás se lea igual en los dos niveles»— y el usuario lo señaló mirando la pantalla: así no se
