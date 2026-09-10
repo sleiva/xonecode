@@ -4,6 +4,15 @@ import { App } from "./App.js";
 import { crearStoreDelCliente } from "./store.js";
 import { DESPLEGADOS_AL_ABRIR } from "./componentes/Revision.js";
 
+/** El `<input type="file">` de «Nueva tarea» está ESCONDIDO —lo dispara un botón nuestro,
+ *  porque el nativo se pinta como la cromo del navegador—, así que no hay etiqueta que lo
+ *  nombre: se llega por su tipo. */
+const entradaDeFicheros = (): HTMLInputElement => {
+  const e = document.querySelector('input[type="file"]');
+  if (e === null) throw new Error("no hay entrada de ficheros");
+  return e as HTMLInputElement;
+};
+
 afterEach(cleanup);
 
 /**
@@ -1051,7 +1060,7 @@ describe("App: crear una tarea en background", () => {
       return { ok: true };
     });
     fireEvent.click(screen.getByRole("button", { name: /nueva tarea/i }));
-    fireEvent.change(screen.getByLabelText(/adjuntar/i), {
+    fireEvent.change(entradaDeFicheros(), {
       target: { files: [new File(["x"], "mockup.png", { type: "image/png" })] },
     });
     await waitFor(() => expect(subidas).toHaveLength(1));
@@ -1094,7 +1103,7 @@ describe("App: crear una tarea en background", () => {
     // está en el índice hace exactamente esto: borra la carpeta y deja el índice igual.
     const { enviar } = conEscritorio();
     fireEvent.click(screen.getByRole("button", { name: /nueva tarea/i }));
-    fireEvent.change(screen.getByLabelText(/adjuntar/i), { target: { files: [new File(["x"], "a.png")] } });
+    fireEvent.change(entradaDeFicheros(), { target: { files: [new File(["x"], "a.png")] } });
     await waitFor(() => expect(screen.getByText(/a\.png/)).toBeTruthy());
     fireEvent.click(screen.getByRole("button", { name: /cancelar/i }));
     const descartes = enviar.mock.calls

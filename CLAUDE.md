@@ -2029,7 +2029,7 @@ equipo», ni al entorno—: medido en pantalla. Tres decisiones:
 
 **El centro sin sesión es el ESCRITORIO** (`Escritorio.tsx`), no un hueco con una frase
 («elige un proyecto en la barra lateral», que es lo que había). Pinta los proyectos con lo
-que el servidor ya manda —si tienen copia local, sus últimas sesiones—, el entorno activo
+que el servidor ya manda —si tienen copia local—, el entorno activo
 con su URL y el modelo en vigor, y empezar es un clic. Todo lo que enseña ya viajaba por el
 cable: no hay una sola tarjeta de relleno. Y **no pinta nada del mockup que no tenga dato
 detrás** —«Build & Run», el estado del ADB en vivo, los dispositivos del mockup—: eso es un
@@ -2044,6 +2044,17 @@ escritorio enseñaba los dieciocho proyectos del entorno y el grupo elegido se p
 ellos. Se CUENTAN en una línea con el botón a Ajustes, que es la misma regla de la barra:
 elegir cuatro y ver dieciocho es no haber elegido, pero callar los otros catorce sería
 afirmar que el entorno solo tiene cuatro.
+
+**Y la tarjeta de un proyecto NO lista sus sesiones** (`Escritorio.tsx`). Estaban las cuatro
+últimas de cada uno, o sea la misma lista que la barra lateral tiene ENTERA y ordenada por
+último turno: dos sitios para lo mismo, y el de aquí siempre peor —recortado a cuatro y con
+el orden de alta—. Lo pidió el usuario, y la división queda limpia: la tarjeta es para
+EMPEZAR algo en ese proyecto (sus dos botones), y seguir una conversación es de la barra, que
+es donde vive esa lista. Con eso se fueron también el «Sin sesiones todavía» de la tarjeta
+—no es un dato que falte, es una lista que está en otro sitio— y el `alAbrirSesion` del
+componente, que se queda sin llamador: un prop que nadie usa es una promesa que nadie cumple.
+Y va junto con el plegado de la barra: en el escritorio recién abierto no hay ninguna sesión a
+la vista hasta que se despliega un proyecto, que es lo que las dos decisiones piden a la vez.
 
 **Qué hay en la máquina para probar la app** (`core/dispositivos.ts`,
 `agent/dispositivosEnMaquina.ts`, panel «Tu equipo» en `Equipo.tsx`, mensaje
