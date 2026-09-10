@@ -29,6 +29,23 @@
   padding-right: 4px;
 }
 
+/* La fila bajo el ratón, en el mismo azul que la elegida pero a la mitad de carga
+   (`--xonecode-fila-hover`). Tres cosas que sostienen esta regla:
+
+   - **La clase repetida** es para ganar especificidad sin depender del orden en que el
+     empaquetador coloque las hojas: la de ellos pinta el hover con `.projectRow:hover` /
+     `.sessionRow:hover`, que empata con una clase más una pseudoclase. Mismo truco que
+     `Cabecera.module.css` con la barra superior.
+   - **Las filas ACTIVAS quedan fuera** (`:not`), y no es un detalle: sin eso, pasar el ratón
+     por encima de la fila elegida la aclararía —el hover es más flojo que su relleno—, o sea
+     que señalar lo que ya estás mirando lo apagaría.
+   - Y el filo de cian de la elegida sigue siendo suyo, que es la segunda señal: señalar no
+     es estar. */
+.filaConAccion.filaConAccion:hover:not(.filaAbierta):not(.sesionAbierta) {
+  background: var(--xonecode-fila-hover);
+  border-radius: 8px;
+}
+
 /* El proyecto ABIERTO: fondo y el nombre en NEGRITA, y ninguna barra de cian.
    Las dos filas se pintaban idénticas —mismo fondo y mismo filo de cian— a propósito, «para
    que aquí estás se lea igual en los dos niveles del árbol», y el usuario lo señaló mirando
@@ -37,7 +54,14 @@
    leyendo— y el proyecto se marca como lo que es: el contenedor donde estás. El fondo solo
    no bastaría (la fila de al lado en `:hover` usa ese mismo alias), de ahí la negrita; y el
    `aria-current` sigue diciéndolo sin depender de ningún color. */
-.filaAbierta {
+/* La clase TRIPLE no es un tic: es lo que hace que la marca de «aquí estás» sobreviva al
+   ratón. La hoja copiada pinta `.projectRow:hover, .sessionRow:hover, .sessionRow.selected`
+   con el gris del tema, o sea una clase más una pseudoclase — que gana a una clase sola. Se
+   ve SOLO hoveando la fila elegida, y así se colaron dos versiones de esto: MEDIDO en el
+   navegador, con el puntero encima la fila elegida se volvía gris y perdía su color. Con tres
+   ocurrencias gana esta regla sin depender del orden en que el empaquetador coloque las
+   hojas, que es el mismo truco que `Cabecera.module.css` usa con la barra superior. */
+.filaAbierta.filaAbierta.filaAbierta {
   position: relative;
   background: var(--dsw-alias-interactive-bg-hover);
   border-radius: 8px;
@@ -116,7 +140,7 @@
    El tono sale de `--xonecode-fila-elegida` (`estilos/marca.css`) y no se compone aquí: la
    paleta vive en un sitio y un componente solo consume alias — es además donde está su
    variante para el tema oscuro y el porqué de que el cian vaya tan bajo. */
-.sesionAbierta {
+.sesionAbierta.sesionAbierta.sesionAbierta {
   position: relative;
   background: var(--xonecode-fila-elegida);
   border-radius: 8px;

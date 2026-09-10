@@ -598,14 +598,32 @@ describe("Barra: mientras se abre algo", () => {
  */
 describe("Barra: el proyecto activo y la sesión activa no se marcan igual", () => {
   const hoja = readFileSync(join(AQUI_CSS, "Barra.module.css"), "utf8");
+  /**
+   * El bloque de una clase, con o sin la clase REPETIDA por especificidad: las dos filas
+   * activas se escriben `.filaAbierta.filaAbierta.filaAbierta` para ganarle al `:hover` de
+   * la hoja copiada, y un buscador que exigiera `.x {` se quedaría sin ver la regla y daría
+   * verde por vacío.
+   */
   const regla = (nombre: string): string => {
-    const desde = hoja.indexOf(`.${nombre} {`);
-    return desde === -1 ? "" : hoja.slice(desde, hoja.indexOf("}", desde));
+    const patron = new RegExp(`\\.${nombre}(?:\\.${nombre})*\\s*\\{`);
+    const casa = patron.exec(hoja);
+    if (casa === null) return "";
+    const desde = casa.index;
+    return hoja.slice(desde, hoja.indexOf("}", desde));
   };
 
   it("solo la sesión lleva el filo de cian", () => {
     expect(hoja).toMatch(/\.sesionAbierta::before\s*\{/);
     expect(hoja).not.toMatch(/\.filaAbierta::before\s*\{/);
+  });
+
+  it("la marca de la fila activa sobrevive al ratón: gana al `:hover` de la hoja copiada", () => {
+    // MEDIDO en el navegador: con el puntero encima, la fila elegida se volvía GRIS. La hoja
+    // copiada pinta `.sessionRow:hover` (una clase + una pseudoclase) y eso gana a una clase
+    // sola, así que la marca de «aquí estás» desaparecía justo al señalarla. Se ve solo
+    // hoveando, que es cómo se colaron dos versiones de este arreglo.
+    expect(hoja).toMatch(/\.sesionAbierta\.sesionAbierta\.sesionAbierta\s*\{/);
+    expect(hoja).toMatch(/\.filaAbierta\.filaAbierta\.filaAbierta\s*\{/);
   });
 
   it("las acciones de una fila llevan aire: el «…» no arranca donde acaba la fecha", () => {

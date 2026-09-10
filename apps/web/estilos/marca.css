@@ -69,6 +69,18 @@
   --xonecode-fila-elegida: color-mix(in srgb, var(--xonecode-cian) 14%, transparent);
 
   /**
+   * Y el mismo azul, MÁS FLOJO, para la fila que tienes debajo del ratón.
+   *
+   * El hover era el gris del tema (`--dsw-alias-interactive-bg-hover`). Pedido en azul, pero
+   * **no en el MISMO azul**: con el mismo tono, la fila elegida y la que estás señalando
+   * volverían a verse idénticas, que es justo el fallo que la fila elegida acaba de arreglar
+   * —y el que su propia hoja copiada ya tenía documentado («`.sessionRow.selected` pinta el
+   * MISMO fondo que `:hover`»)—. La mitad de carga es lo que hace que se lean como dos
+   * cosas: señalar no es estar.
+   */
+  --xonecode-fila-hover: color-mix(in srgb, var(--xonecode-cian) 7%, transparent);
+
+  /**
    * El icono de copiar, como máscara, para el botón que `MarkdownText` pinta con la PALABRA
    * «Copiar» y sin icono (su `CodeBlock` mete la etiqueta como hijo del botón, y desde fuera
    * no se puede sustituir un hijo).
@@ -113,5 +125,6 @@ body[data-ds-dark-theme] {
   /* Sobre fondo oscuro un 14% de cian no se despega del panel: hace falta más cuerpo, lo
      mismo que le pasa al velo. */
   --xonecode-fila-elegida: color-mix(in srgb, var(--xonecode-cian) 26%, transparent);
+  --xonecode-fila-hover: color-mix(in srgb, var(--xonecode-cian) 13%, transparent);
   --dsw-specific-sidebar-nav-item-active-accent: var(--xonecode-cian);
 }
