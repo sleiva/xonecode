@@ -221,8 +221,13 @@ export function descripcionParaLaWeb(descripcion: string): string {
 interface DestinoDelCable {
   recibir(mensaje: MensajeDelCliente): void;
   conectar(enviar?: Sumidero): readonly Acto[];
-  /** Con sumidero se va ESE cliente; sin él, todos (es lo que hace mudarse de consola). */
+  /** Con sumidero se va ESE cliente; sin él, todos. Lo llama el `close` del SSE. */
   desconectar(enviar?: Sumidero): void;
+  /** Mudarse de consola: se sueltan los sumideros SIN dar por ido al humano. Ver
+   *  `Transporte.soltar`. */
+  soltar(enviar?: Sumidero): void;
+  /** La aprobación EN VUELO, si la hay, para reemitirla a quien vuelve. */
+  mensajesDeAprobacion(): readonly MensajeAlCliente[];
 }
 
 export interface OpcionesDeMontaje {
@@ -503,10 +508,17 @@ export function montarRutas(
    * ofrecer, y el usuario se quedaba con el modelo por omisión sin que nada se lo dijera.
    */
   /**
-   * Si hay turno en vuelo AHORA. Se lleva aquí, además de emitirse, porque quien conecta a
-   * mitad de turno tiene que enterarse: el mensaje que lo anunció ya pasó.
+   * Si hay turno en vuelo AHORA en la sesión que se está mirando. Hace falta porque quien
+   * conecta a mitad de turno tiene que enterarse: el mensaje que lo anunció ya pasó.
+   *
+   * Se DERIVA de la consola en foco, no se cachea en una variable que un flanco actualiza.
+   * Era lo segundo, y desde que cambiar de sesión no mata el turno anterior una copia se
+   * queda vieja en el caso que más importa: volver a una sesión que está trabajando no es un
+   * flanco de turno —el turno no empezó ni acabó—, así que la variable habría dicho «no hay
+   * nada corriendo» y `adjuntar` habría encendido el compositor delante de un agente que
+   * escribe.
    */
-  let turnoEnVuelo = false;
+  const turnoEnVuelo = (): boolean => vestibulo.proyectoAbierto()?.turnoEnVuelo === true;
   let cuentaHecha = false;
   /**
    * El propio `pasoDeCuenta()` en vuelo, compartido entre conexiones. Sin esto, dos
@@ -796,7 +808,14 @@ export function montarRutas(
     if (recien !== undefined) comprobarLosSinClave();
     const destino = destinoActual();
     const cambiaDeConsola = adjunto !== destino;
-    if (adjunto !== undefined && cambiaDeConsola) adjunto.desconectar();
+    /**
+     * `soltar` y NO `desconectar`, y es la pieza que hace que cambiar de sesión no rompa la
+     * que se deja atrás. `desconectar()` significa «se ha ido el humano»: rechaza la
+     * aprobación que hubiera delante y contesta cadena vacía a todo el que esperara. Aquí
+     * el humano no se ha ido — está mirando otra sesión, y la de antes puede tener un turno
+     * corriendo. Ver `Transporte.soltar`.
+     */
+    if (adjunto !== undefined && cambiaDeConsola) adjunto.soltar();
     adjunto = destino;
 
     // A quién hay que registrar y a quién hay que darle la ráfaga: al recién llegado, o a
@@ -831,7 +850,15 @@ export function montarRutas(
       // Y si hay turno corriendo, se dice: quien conecta a mitad no vio el mensaje que lo
       // anunció, y sin esto vería el compositor encendido y sin borde —«no pasa nada»—
       // mientras lo que escribiera se quedaba en la cola.
-      cliente({ clase: "turno", activo: turnoEnVuelo });
+      cliente({ clase: "turno", activo: turnoEnVuelo() });
+      /**
+       * Y la aprobación que esta consola tenga EN VUELO. Hace falta desde que volver a una
+       * sesión de segundo plano es posible: su turno pudo pararse en un modal mientras
+       * nadie miraba, y ese mensaje se emitió una vez —no está en la traza, es el único que
+       * lleva contenido de fichero— así que sin reemitirlo el compositor se quedaría
+       * apagado delante de un turno que espera una decisión que no se puede dar.
+       */
+      for (const pendiente of destino.mensajesDeAprobacion()) cliente(pendiente);
     }
   };
 
@@ -1317,20 +1344,39 @@ export function montarRutas(
    * Las sesiones guardadas de un proyecto de este entorno. Sin entorno elegido no hay raíz
    * que calcular, y sin copia local la lista es vacía — que es la verdad, no un fallo.
    */
+  /**
+   * Qué sesiones tienen un turno en marcha AHORA, por su id.
+   *
+   * Se pregunta a las consolas vivas y no se guarda en ninguna parte: es un estado de este
+   * instante, y una copia se quedaría diciendo que una sesión trabaja después de que su
+   * turno acabara. Solo entran las que tienen `sesion` —o sea entrada en el índice—, porque
+   * una fila que la barra no pinta no se puede marcar; la de un primer turno que aún no ha
+   * volcado nada aparecerá en cuanto exista, que es el mismo retraso que ya tiene su fila.
+   */
+  const sesionesTrabajando = (): Set<string> => {
+    const trabajando = new Set<string>();
+    for (const consola of vestibulo.proyectosAbiertos()) {
+      if (consola.turnoEnVuelo && consola.sesion !== undefined) trabajando.add(consola.sesion);
+    }
+    return trabajando;
+  };
+
   const sesionesDelProyecto = (
     nombre: string
-  ): { id: string; titulo: string; ultimoTurno?: string; deTarea?: true }[] => {
+  ): { id: string; titulo: string; ultimoTurno?: string; deTarea?: true; trabajando?: true }[] => {
     if (entornoElegido === undefined) return [];
     try {
       // Viaja un BOOLEANO y no el id de la tarea: la fila lleva una marca, no el nombre de
       // la tarea —en 280 px no cabe—, así que el id se queda en el host por la misma regla
       // que la ruta de una herramienta o el pid del corredor. `deTarea` ausente es «no
       // consta» y no «es una conversación»: no la lleva ninguna sesión anterior a la marca.
+      const trabajando = sesionesTrabajando();
       return vestibulo.sesionesDe(vestibulo.raizDeProyecto(entornoElegido, nombre)).map((s) => ({
         id: s.id,
         titulo: s.titulo,
         ...(s.ultimoTurno === undefined ? {} : { ultimoTurno: s.ultimoTurno }),
         ...(s.tarea === undefined ? {} : { deTarea: true as const }),
+        ...(trabajando.has(s.id) ? { trabajando: true as const } : {}),
       }));
     } catch {
       return [];
@@ -2061,8 +2107,12 @@ export function montarRutas(
   vestibulo.alCambiarEstadoDeSesion(() => emitirModelos());
   // El turno se emite solo (`consolaWeb.turno`), pero además hay que RECORDARLO: una pestaña
   // que conecta a mitad no vio ese mensaje, y necesita saberlo para apagar su compositor.
-  vestibulo.alCambiarTurno((activo) => {
-    turnoEnVuelo = activo;
+  vestibulo.alCambiarTurno(() => {
+    // La cola se vuelve a mirar: por aquí pasa también el CIERRE de una consola de segundo
+    // plano cuyo turno acabó, y eso libera su raíz para las tareas («gana la persona» deja
+    // de aplicar ahí). Sin este empujón la tarea que esperaba ese proyecto se quedaría
+    // quieta hasta que alguien tocara la cola por su cuenta: no hay temporizador.
+    opciones.revisarTareas?.();
     // El alta se reanuncia en los DOS flancos, y DIFERIDO. Medido: una sesión nueva no
     // aparecía en la barra hasta recargar la página, porque su id nace en `volcar()` —al
     // final del turno— y nadie volvía a anunciar. Y `historica` deja de ser cierto al
@@ -2168,7 +2218,20 @@ export function montarRutas(
       // mirando sus sumideros. Cortar a la primera baja rechazaría la aprobación que otra
       // pestaña todavía tiene delante.
       adjunto?.desconectar(sumidero);
-      if (clientes.size === 0) adjunto = undefined;
+      if (clientes.size === 0) {
+        /**
+         * Y las de SEGUNDO PLANO también, que es lo que `soltar` deja pendiente a
+         * propósito: mudarse de consola no da por ido al humano, pero cerrarse el último
+         * SSE sí. Sin esto, una consola que se quedó detrás con un turno en marcha seguiría
+         * creyendo que hay alguien a quien preguntar y su aprobación esperaría el plazo
+         * entero antes de rechazarse. Se les dice a todas menos a la que ya se acaba de
+         * cortar arriba.
+         */
+        for (const consola of vestibulo.proyectosAbiertos()) {
+          if (consola !== adjunto) consola.desconectar();
+        }
+        adjunto = undefined;
+      }
     });
   });
 
@@ -2791,7 +2854,7 @@ export function commitDeTurnoCableado(opciones: {
 }
 
 export function construirCorredorDeTareasCableado(opciones: {
-  vestibulo: Pick<Vestibulo, "abrirParaTarea" | "proyectoAbierto" | "sesionesDe">;
+  vestibulo: Pick<Vestibulo, "abrirParaTarea" | "proyectosAbiertos" | "sesionesDe">;
   /** La fábrica de `OpcionesDeArranque.tareas`. Ausente = esta ejecución no ejecuta tareas. */
   tareasFabrica?: (informar: (texto: string) => void) => TareasEnDisco;
   informar: (texto: string) => void;
@@ -2861,11 +2924,15 @@ export function construirCorredorDeTareasCableado(opciones: {
            * ninguna clase, y el cerrojo del corredor no protege de eso — protege de dos
            * corredores. Se pregunta en cada pasada, no al arrancar: abrir un proyecto no
            * reinicia nada.
+           *
+           * **TODAS las abiertas, no la que está en foco.** Desde que cambiar de sesión no
+           * mata el turno anterior, una consola humana puede seguir viva en segundo plano
+           * —con el agente escribiendo— mientras el navegador mira otro proyecto. Con
+           * `proyectoAbierto()` esa raíz se habría contado como libre y una tarea habría
+           * arrancado a escribir en la misma copia: el fallo ABIERTO de ese cambio, y el
+           * síntoma no es un error sino un diff corrompido que nadie atribuye.
            */
-          bloqueados: () => {
-            const abierto = opciones.vestibulo.proyectoAbierto();
-            return abierto === undefined ? [] : [abierto.raiz];
-          },
+          bloqueados: () => opciones.vestibulo.proyectosAbiertos().map((c) => c.raiz),
           /**
            * `sesion` sobrevive si y solo si hay algo que una persona pueda ABRIR, y esto es
            * lo que lo decide: la sesión está en el índice del proyecto —o sea que su

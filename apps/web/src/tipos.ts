@@ -287,6 +287,9 @@ export type MensajeAlCliente =
            *  llevan las sesiones anteriores a la marca, y se pintan lisas porque liso es lo
            *  conservador, no porque conste que sean de alguien. */
           deTarea?: true;
+          /** Turno en marcha en esa conversación ahora mismo, esté o no delante. Ausente =
+           *  no consta. Ver `transporte.ts`. */
+          trabajando?: true;
         }[];
         /** La copia local ya existe: abrirlo no baja nada ni pregunta rama. */
         local?: boolean;

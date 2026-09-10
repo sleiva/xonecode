@@ -50,6 +50,13 @@ export interface Proyecto {
      *  no la llevan las sesiones anteriores a la marca, y se pintan lisas porque liso es
      *  lo conservador. */
     deTarea?: true;
+    /**
+     * Tiene un turno EN MARCHA ahora mismo, esté o no delante. Es lo que hace visible que
+     * cambiar de sesión ya no interrumpe al agente: la conversación que dejaste atrás sigue
+     * trabajando y la barra lo dice. **Ausente es «no consta que trabaje»**, igual que las
+     * otras dos marcas de esta fila.
+     */
+    trabajando?: true;
   }[];
   /**
    * Compartido CONTIGO por otra persona (`shared` de CloudStudio). **Ausente no es «es
@@ -286,6 +293,16 @@ export function Barra({ entornos, entornoActivo, proyectos, visibles, proyectoAc
                             >
                               {abriendo?.descargando === true ? "descargando…" : "abriendo…"}
                             </span>
+                          ) : p.sesiones.some((s) => s.trabajando) ? (
+                            /*
+                              Y en el proyecto, porque la lista de sesiones se puede plegar:
+                              sin esto, un turno corriendo en una conversación de otro
+                              proyecto no se vería en ninguna parte. Dice «trabajando» y no
+                              cuántas: una basta para que haya que volver.
+                            */
+                            <span className={estilos.actividad} title="El agente está trabajando en este proyecto…">
+                              trabajando…
+                            </span>
                           ) : null}
                           {/*
                             De quién es. Tres cosas de esta etiqueta:
@@ -387,6 +404,22 @@ export function Barra({ entornos, entornoActivo, proyectos, visibles, proyectoAc
                               {abriendoSesion(s.id) ? (
                                 <span className={estilos.actividad} title="Abriendo…">
                                   abriendo…
+                                </span>
+                              ) : s.trabajando ? (
+                                /*
+                                  El agente está trabajando en esa conversación AHORA. Va en
+                                  el hueco de la fecha y con la misma pieza que «abriendo…»,
+                                  por dos razones: es el sitio donde ya se mira, y mientras un
+                                  turno corre la fecha del último no aporta nada — es
+                                  justamente el dato que está a punto de cambiar.
+
+                                  Con PALABRAS, como las otras dos marcas de esta fila: un
+                                  punto animado no lo lee quien no distingue el movimiento ni
+                                  un lector de pantalla, y `aria-busy` habla de lo que la
+                                  interfaz está esperando, no de lo que hace el agente.
+                                */
+                                <span className={estilos.actividad} title="El agente está trabajando…">
+                                  trabajando…
                                 </span>
                               ) : selloDeSesion(s.ultimoTurno) === undefined ? null : (
                                 <span className={estilos.selloDeFecha}>{selloDeSesion(s.ultimoTurno)}</span>

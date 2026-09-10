@@ -518,6 +518,65 @@ enganchado rechaza TODA aprobación y contesta cadena vacía a todo `preguntar`,
 qué. Al cerrarse el SSE se desconecta la consola que se ADJUNTÓ, no la que sea la actual: entre
 medias puede haberse abierto un proyecto.
 
+**Y ya hay VARIAS consolas de persona vivas a la vez: cambiar de sesión no mata el turno que
+estaba corriendo** (`abiertas`/`enFoco` en `vestibulo.ts`, `alta.proyectos[].sesiones[].trabajando`).
+Era UNA variable, así que mirar otra sesión —o otro proyecto— cerraba la consola anterior y con
+ella el turno del agente, sin decir nada. Ahora es un mapa por RAÍZ y un foco. Ocho reglas:
+- **La clave es la RAÍZ, y eso es la mitad del diseño.** Nunca hay dos consolas sobre la misma
+  copia de trabajo, así que dos conversaciones no pueden escribirse los mismos ficheros ni
+  pisarse el hilo del checkpointer — el mismo motivo por el que una tarea no arranca donde hay
+  una persona. Lo que se gana es lo otro: dos PROYECTOS distintos pueden trabajar a la vez.
+- **Y por eso abrir otra sesión del MISMO proyecto con la de ahí trabajando se DECLINA**, con
+  el motivo delante (`motivoDeProyectoTrabajando`). Cerrar la que trabaja para abrir la otra
+  sería la interrupción que esto viene a quitar; dejar las dos sería la carrera que la clave
+  por raíz impide. Con la de ese proyecto OCIOSA se cierra y se abre, que es lo de siempre. Y
+  volver a la MISMA sesión que sigue trabajando devuelve la MISMA consola: es justo lo que uno
+  hace para ver cómo va, y reabrirla la habría matado.
+- **`proyectoAbierto()` sigue siendo la del FOCO** —de ella cuelgan las veintitantas lecturas
+  de `arranque.ts`, que hablan todas de «la sesión que se está mirando»— y lo nuevo es
+  `proyectosAbiertos()`. **Ahí está el único fallo ABIERTO que este cambio podía dejar**: la
+  guarda de «gana la persona» (`bloqueados`) miraba la del foco, así que una consola humana en
+  segundo plano habría dejado su proyecto por libre y una tarea habría escrito en la misma
+  copia. El síntoma no es un error: es un diff corrompido que nadie atribuye. Por eso su test
+  se escribió PRIMERO y en rojo.
+- **Una consola de segundo plano vive solo mientras su turno está en vuelo.** Al terminar se
+  cierra ella (`cerrarSiSobra`), y las OCIOSAS se cierran al mudarse el foco
+  (`cerrarLasOciosasSalvo`). Sin eso, visitar diez proyectos dejaría diez `correrConsola`
+  vivos para siempre. No se pierde nada: el hilo lo reanuda el checkpointer al reabrir la
+  sesión, y con las ociosas cerradas antes de construir la siguiente se conserva el orden que
+  ya estaba probado (el lazo anterior TERMINA antes de que arranque el otro).
+- **Mudarse de consola SUELTA los sumideros; no la desconecta** (`Transporte.soltar`, usado por
+  `arranque.ts#adjuntar`). `desconectar` afirma «se ha ido el humano»: despierta con cadena
+  vacía a todo el que esperaba y da por RECHAZADA la aprobación que hubiera delante. Eso es
+  cierto cuando se cae el SSE y falso cuando alguien cambia de sesión, así que con el
+  `desconectar` de antes la escritura de un turno de segundo plano se habría rechazado sola por
+  mirar otra cosa. Con `soltar`, `conectado()` sigue diciendo que hay alguien y lo que se emita
+  no llega a ningún socket — que es la otra mitad: los actos de un turno de fondo no pueden
+  aparecer en la conversación que se está mirando. Al irse el ÚLTIMO cliente sí se desconectan
+  todas, incluidas las de fondo: entonces no hay nadie a quien preguntar.
+- **Y la aprobación en vuelo se REEMITE al volver.** Ese mensaje es el único que no está en la
+  traza —lleva contenido de fichero—, así que la reemisión de `adjuntar` no lo alcanzaba:
+  `mensajesDeAprobacion()` existía sin un solo llamador, y sin él al volver se veía el
+  compositor apagado delante de un turno parado esperando una decisión que no había forma de
+  dar.
+- **El turno en vuelo se DERIVA de la consola en foco, ya no se cachea.** Era una variable que
+  los flancos actualizaban, y se queda vieja en el caso que más importa: volver a una sesión que
+  trabaja no es un flanco —el turno no empezó ni acabó—, así que `adjuntar` habría encendido el
+  compositor delante de un agente escribiendo.
+- **La barra DICE qué sesión trabaja**, y lo pide el usuario con esas palabras: es lo único que
+  distingue «lo dejé a medias y sigue» de «lo dejé a medias y se paró». Va en el ALTA porque el
+  alta se reemite en los dos flancos de CUALQUIERA de las consolas vivas —para eso se ensanchó
+  el disparador de `alCambiarTurno`, cuyo booleano sigue hablando solo de la del foco—, con
+  PALABRAS y en el hueco de la fecha (que es el dato a punto de cambiar), y también en la fila
+  del PROYECTO, porque con la lista de sesiones plegada no se vería en ninguna parte. Solo
+  entran las sesiones con entrada en el índice: una fila que la barra no pinta no se puede
+  marcar.
+Lo que queda DECLARADO y no arreglado: un `preguntar` o un `leerSecreto` de un turno de segundo
+plano ahora ESPERA su plazo (diez minutos) en vez de contestar en el acto, y al vencer devuelve
+cadena vacía — que 16 de sus 18 llamadores leen como «usa el valor por omisión». Es el mismo
+agujero que ya declaraba `consolaDeTarea.ts`, pero ahora se puede alcanzar sin que el usuario
+haya cerrado nada.
+
 El alta del navegador son los mismos pasos del alta de terminal y con la misma regla —cada uno
 solo aparece si falta lo que decide, calculado preguntándole al sistema y nunca a una marca de
 «primer arranque»—, con dos precisiones: el paso de ENTORNO se pide siempre que quede el de

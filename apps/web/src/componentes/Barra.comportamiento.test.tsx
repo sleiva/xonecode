@@ -522,6 +522,51 @@ describe("Barra: chats y tareas en la misma lista, distinguidos", () => {
 });
 
 /**
+ * Cambiar de sesión ya no interrumpe al agente, así que la barra tiene que DECIR cuál está
+ * trabajando: es lo único que distingue «lo dejé a medias y sigue» de «lo dejé a medias y
+ * se paró». Lo pidió el usuario con esas palabras.
+ */
+describe("Barra: qué sesión está trabajando", () => {
+  const montar = (sesiones: Parameters<typeof Barra>[0]["proyectos"][number]["sesiones"]) =>
+    render(
+      <Barra
+        entornos={[]}
+        entornoActivo=""
+        proyectos={[{ id: "p1", nombre: "AppDemo", sesiones }]}
+        alElegirEntorno={() => {}}
+        alAbrirSesion={() => {}}
+        alAbrirProyecto={() => {}}
+        alNuevaSesion={() => {}}
+        alAccionDeSesion={() => {}}
+        alAbrirAjustes={() => {}}
+      />
+    );
+
+  it("la que trabaja lo dice con PALABRAS, en el hueco de la fecha", () => {
+    montar([
+      { id: "s1", titulo: "la que trabaja", ultimoTurno: "2026-09-07T10:08:23.790Z", trabajando: true },
+      { id: "s2", titulo: "la otra", ultimoTurno: "2026-09-07T09:00:00.000Z" },
+    ]);
+    // Dos veces: la fila y el proyecto, que es lo que se ve con la lista plegada.
+    expect(screen.getAllByText("trabajando…")).toHaveLength(2);
+    // Y la fecha de la que trabaja NO se pinta: es el dato que está a punto de cambiar, y
+    // el hueco es uno.
+    expect(screen.queryByText("7 sept 12:08")).toBeNull();
+    expect(screen.getByText("7 sept 11:00")).toBeTruthy();
+  });
+
+  it("sin la marca no se pinta nada: ausente es «no consta que trabaje»", () => {
+    montar([{ id: "s1", titulo: "una", ultimoTurno: "2026-09-07T10:08:23.790Z" }]);
+    expect(screen.queryByText("trabajando…")).toBeNull();
+  });
+
+  it("el PROYECTO lo dice aunque su lista esté plegada: si no, no se vería en ninguna parte", () => {
+    montar([{ id: "s1", titulo: "una", trabajando: true }]);
+    expect(screen.getByTitle("El agente está trabajando en este proyecto…")).toBeTruthy();
+  });
+});
+
+/**
  * Abrir tarda —de unos cientos de milisegundos a los minutos de una descarga— y el usuario
  * lo dijo mirando la pantalla: el clic parecía no hacer nada. La señal va en la FILA donde
  * se pulsó, y con palabras: un punto girando no distingue medio segundo de tres minutos.

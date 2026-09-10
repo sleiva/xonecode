@@ -496,6 +496,175 @@ describe("vestíbulo", () => {
     await v.cerrar();
   });
 
+  /**
+   * VARIAS consolas de persona vivas: cambiar de sesión ya no mata el turno que corría.
+   *
+   * Es el encargo entero de este cambio, y el test lo mide por donde se nota: la consola de
+   * antes sigue sin cerrarse, su turno sigue en vuelo, y las dos raíces salen en
+   * `proyectosAbiertos()` — que es la lista de la que cuelgan la guarda de «gana la persona»
+   * y la marca de la barra.
+   *
+   * La costura es un turno que se queda esperando: sin eso no hay «turno en vuelo» que
+   * medir, y con un ejecutor que devuelve en el acto el caso no existe.
+   */
+  it("cambiar de proyecto NO mata el turno que estaba corriendo en el anterior", async () => {
+    const s = sesionesEnMemoria();
+    let soltarElTurno: (() => void) | undefined;
+    const v = crearVestibulo({
+      ...dobles(),
+      origenDeTrabajo: "global",
+      sesiones: s.puerto,
+      crearEjecutor: () => async () => {
+        await new Promise<void>((resuelto) => {
+          soltarElTurno = resuelto;
+        });
+      },
+    });
+    const a = await v.abrirProyecto({ raiz: "/w/a" });
+    // Sin esperarlo: es lo que deja el turno EN VUELO mientras se abre el otro proyecto.
+    const turno = a.ejecutarTurno("arregla el login", a.estadoDeSesion, a.consola.consola);
+    expect(a.turnoEnVuelo).toBe(true);
+    const b = await v.abrirProyecto({ raiz: "/w/b" });
+    expect(a.cerrada).toBe(false);
+    expect(a.turnoEnVuelo).toBe(true);
+    expect(v.proyectoAbierto()).toBe(b);
+    expect(v.proyectosAbiertos().map((c) => c.raiz).sort()).toEqual(["/w/a", "/w/b"]);
+    soltarElTurno!();
+    await turno;
+    await v.cerrar();
+  });
+
+  /**
+   * Y la contrapartida, que es lo que hace que esto sea acotado en vez de una fuga: la
+   * consola de segundo plano se cierra ELLA cuando su turno acaba. Nada se pierde —el hilo
+   * lo reanuda el checkpointer al reabrir la sesión— y lo que se evita es un `correrConsola`
+   * por proyecto visitado, vivo para siempre.
+   */
+  it("la consola de segundo plano se cierra cuando su turno acaba", async () => {
+    const s = sesionesEnMemoria();
+    let soltarElTurno: (() => void) | undefined;
+    const v = crearVestibulo({
+      ...dobles(),
+      origenDeTrabajo: "global",
+      sesiones: s.puerto,
+      crearEjecutor: () => async () => {
+        await new Promise<void>((resuelto) => {
+          soltarElTurno = resuelto;
+        });
+      },
+    });
+    const a = await v.abrirProyecto({ raiz: "/w/a" });
+    const turno = a.ejecutarTurno("arregla el login", a.estadoDeSesion, a.consola.consola);
+    await v.abrirProyecto({ raiz: "/w/b" });
+    soltarElTurno!();
+    await turno;
+    // El cierre va por la COLA del vestíbulo, así que se espera por ella: cualquier
+    // operación encolada detrás resuelve después.
+    await v.abrirProyecto({ raiz: "/w/b" });
+    expect(a.cerrada).toBe(true);
+    expect(v.proyectosAbiertos().map((c) => c.raiz)).toEqual(["/w/b"]);
+    await v.cerrar();
+  });
+
+  /**
+   * DOS sesiones del MISMO proyecto no pueden convivir, y con una trabajando no se cambia:
+   * se DECLINA con motivo.
+   *
+   * No es una limitación del mapa: es la copia de trabajo. Dos conversaciones escribiendo
+   * los mismos ficheros no tienen aislamiento de ninguna clase —el mismo motivo por el que
+   * una tarea no arranca donde hay una persona— y cerrar la que trabaja para abrir la otra
+   * sería la interrupción que este cambio viene a quitar.
+   */
+  it("otra sesión del MISMO proyecto, con la que hay trabajando, se declina con motivo", async () => {
+    const s = sesionesEnMemoria();
+    s.puerto.crear("/w/a", "vieja");
+    let soltarElTurno: (() => void) | undefined;
+    const v = crearVestibulo({
+      ...dobles(),
+      origenDeTrabajo: "global",
+      sesiones: s.puerto,
+      crearEjecutor: () => async () => {
+        await new Promise<void>((resuelto) => {
+          soltarElTurno = resuelto;
+        });
+      },
+    });
+    const a = await v.abrirProyecto({ raiz: "/w/a" });
+    const turno = a.ejecutarTurno("arregla el login", a.estadoDeSesion, a.consola.consola);
+    await expect(v.abrirProyecto({ raiz: "/w/a", sesion: "vieja" })).rejects.toThrow(/turno en marcha/u);
+    expect(a.cerrada).toBe(false);
+    soltarElTurno!();
+    await turno;
+    await v.cerrar();
+  });
+
+  /** Y con la de ese proyecto OCIOSA sí se cambia de sesión: es lo de siempre. */
+  it("otra sesión del mismo proyecto, con la de ahí ociosa, cierra y abre", async () => {
+    const s = sesionesEnMemoria();
+    s.puerto.crear("/w/a", "vieja");
+    const v = crearVestibulo({ ...dobles(), origenDeTrabajo: "global", sesiones: s.puerto });
+    const a = await v.abrirProyecto({ raiz: "/w/a" });
+    const b = await v.abrirProyecto({ raiz: "/w/a", sesion: "vieja" });
+    expect(a.cerrada).toBe(true);
+    expect(b.idDeHilo).toBe("vieja");
+    expect(v.proyectosAbiertos()).toEqual([b]);
+    await v.cerrar();
+  });
+
+  /**
+   * Volver a la MISMA sesión que ya está abierta solo muda el foco: no se cierra ni se
+   * reabre nada. Sin esto, volver a mirar la conversación que está trabajando la habría
+   * matado — el peor caso posible, porque es justo lo que uno hace cuando quiere ver cómo va.
+   */
+  it("volver a la sesión que sigue trabajando devuelve LA MISMA consola, sin reabrir nada", async () => {
+    const s = sesionesEnMemoria();
+    s.puerto.crear("/w/a", "esa");
+    let soltarElTurno: (() => void) | undefined;
+    const v = crearVestibulo({
+      ...dobles(),
+      origenDeTrabajo: "global",
+      sesiones: s.puerto,
+      crearEjecutor: () => async () => {
+        await new Promise<void>((resuelto) => {
+          soltarElTurno = resuelto;
+        });
+      },
+    });
+    const a = await v.abrirProyecto({ raiz: "/w/a", sesion: "esa" });
+    const turno = a.ejecutarTurno("arregla el login", a.estadoDeSesion, a.consola.consola);
+    await v.abrirProyecto({ raiz: "/w/b" });
+    const otraVez = await v.abrirProyecto({ raiz: "/w/a", sesion: "esa" });
+    expect(otraVez).toBe(a);
+    expect(a.cerrada).toBe(false);
+    expect(a.turnoEnVuelo).toBe(true);
+    expect(v.proyectoAbierto()).toBe(a);
+    soltarElTurno!();
+    await turno;
+    await v.cerrar();
+  });
+
+  /**
+   * Mudarse de consola SUELTA sus sumideros, no la desconecta.
+   *
+   * `desconectar` significa «se ha ido el humano»: despierta con cadena vacía a quien
+   * esperara y da por rechazada la aprobación que hubiera delante. Al cambiar de sesión eso
+   * es falso —la persona sigue ahí, mirando otra cosa— y aplicarlo habría rechazado la
+   * escritura de un turno de segundo plano sin que nadie decidiera nada. Se mide por
+   * `eof()`, que es de donde cuelgan las cuatro esperas de `consolaWeb.ts`.
+   */
+  it("soltar el cable de una consola no la deja sin humano", async () => {
+    const s = sesionesEnMemoria();
+    const v = crearVestibulo({ ...dobles(), origenDeTrabajo: "global", sesiones: s.puerto });
+    const a = await v.abrirProyecto({ raiz: "/w/a" });
+    a.conectar(() => {});
+    expect(a.consola.consola.eof?.()).toBe(false);
+    a.soltar();
+    expect(a.consola.consola.eof?.()).toBe(false);
+    a.desconectar();
+    expect(a.consola.consola.eof?.()).toBe(true);
+    await v.cerrar();
+  });
+
   it("abrir un proyecto con otro abierto cierra el primero", async () => {
     const s = sesionesEnMemoria();
     const v = crearVestibulo({ ...dobles(), origenDeTrabajo: "global", sesiones: s.puerto });

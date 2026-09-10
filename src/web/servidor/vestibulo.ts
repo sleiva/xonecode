@@ -73,7 +73,7 @@ import {
   renombrarSesion,
   type DispositivoElegido,
 } from "./sesiones.js";
-import type { MensajeDelCliente, Sumidero } from "./transporte.js";
+import type { MensajeAlCliente, MensajeDelCliente, Sumidero } from "./transporte.js";
 
 /**
  * Un paso del alta — o, para «proyecto», una ACCIÓN que ya no es un paso del alta:
@@ -349,6 +349,14 @@ export interface OpcionesDelVestibulo {
  * que un «no puedes» a secas es lo que hace que alguien insista o dé el botón por roto. Y no
  * lleva ninguna ruta de la máquina: sale por el cable, que puede ir por un túnel.
  */
+export function motivoDeProyectoTrabajando(): string {
+  return (
+    "ese proyecto tiene una sesión con un turno en marcha: dos conversaciones sobre la misma " +
+    "copia de trabajo se pisarían los ficheros. Vuelve a ella para verla, o párala, y abre la " +
+    "otra cuando termine."
+  );
+}
+
 export const MOTIVO_SESION_DE_TAREA_EN_CURSO =
   "esa conversación es la de una tarea en curso: el agente está escribiendo en ella ahora " +
   "mismo. Pulsa «Ver lo que hace» en su tarjeta para mirarla, y ábrela cuando termine.";
@@ -407,6 +415,16 @@ export interface ConsolaDeProyecto {
   /** Elige —o quita, con `undefined`— el dispositivo preferido de esta sesión. */
   elegirDispositivo(dispositivo: DispositivoElegido | undefined): void;
   readonly cerrada: boolean;
+  /**
+   * Si esta consola tiene un turno EN VUELO ahora mismo.
+   *
+   * Existe porque desde que hay más de una consola humana viva a la vez hay dos decisiones
+   * que dependen de ello y no se pueden tomar desde fuera: no se cierra una consola de
+   * segundo plano mientras su agente trabaja, y no se abre otra sesión del MISMO proyecto
+   * mientras la que hay está escribiendo en esa copia de trabajo. Lo sabe el envoltorio del
+   * ejecutor, que es el único sitio que ve los dos flancos.
+   */
+  readonly turnoEnVuelo: boolean;
   readonly consola: ConsolaWeb;
   /**
    * Para el turno en vuelo sin cerrar la sesión (`SesionReal.cancelar`). Devuelve si había
@@ -422,6 +440,22 @@ export interface ConsolaDeProyecto {
   /** Se va UN cliente (el suyo) o todos. Ver `Transporte`: la consola solo da por perdido
    *  al humano cuando se va el ÚLTIMO. */
   desconectar(enviar?: Sumidero): void;
+  /**
+   * El cable se MUDA a otra consola: esta suelta sus sumideros y nada más.
+   *
+   * No es `desconectar()`, y la diferencia es toda la razón de que exista. `desconectar`
+   * significa «se ha ido el humano»: despierta a todo el que esperaba respuesta con la
+   * cadena vacía y da por rechazada la aprobación que hubiera delante. Eso es cierto cuando
+   * el SSE se cae, y es FALSO cuando alguien cambia de sesión en la barra teniendo esta con
+   * un turno corriendo — la persona sigue ahí, solo que mirando otra cosa. Con `soltar`,
+   * esta consola sigue ATENDIDA (`eof()` sigue diciendo que hay alguien), así que su
+   * aprobación espera su plazo en vez de rechazarse sola, y al volver el foco se le reemite
+   * (`mensajesDeAprobacion`).
+   */
+  soltar(enviar?: Sumidero): void;
+  /** Las aprobaciones EN VUELO de esta consola, para reemitirlas a quien vuelve. Ver
+   *  `ConsolaWeb.mensajesDeAprobacion`. */
+  mensajesDeAprobacion(): readonly MensajeAlCliente[];
   actos(): readonly Acto[];
   cerrar(): Promise<void>;
   /**
@@ -538,7 +572,24 @@ export interface Vestibulo {
    * checkpointer trae su memoria porque el `thread_id` es el mismo id.
    */
   abrirParaTarea(raiz: string, sesion?: string, adjuntos?: string, tarea?: string): Promise<ConsolaDeProyecto>;
+  /**
+   * La consola EN FOCO: la que el cable está pintando. Sigue siendo una, y por eso este
+   * método no cambia de forma — de él cuelgan las veintitantas lecturas de `arranque.ts`,
+   * que hablan todas de «la sesión que se está mirando».
+   */
   proyectoAbierto(): ConsolaDeProyecto | undefined;
+  /**
+   * TODAS las consolas de persona vivas, la del foco incluida.
+   *
+   * Desde que cambiar de sesión no mata el turno que estaba corriendo, «abierto» y «en
+   * foco» dejaron de ser lo mismo, y hay dos preguntas que solo esta lista contesta: qué
+   * raíces están ocupadas por una persona (la guarda de «gana la persona», que con una sola
+   * consola se quedaría abierta en silencio) y qué sesiones están trabajando, que es lo que
+   * la barra pinta.
+   *
+   * Una consola por RAÍZ: nunca dos sobre la misma copia de trabajo. Ver `abrirDeVerdad`.
+   */
+  proyectosAbiertos(): readonly ConsolaDeProyecto[];
   /** El usuario se va sin terminar. No escribe nada; DICE lo que ya quedó escrito. */
   cancelar(): Promise<void>;
   /**
@@ -707,11 +758,52 @@ export function crearVestibulo(opciones: OpcionesDelVestibulo): Vestibulo {
   let credencialEscrita: { proveedor: Proveedor; ruta: string } | undefined;
   let proyectoEscrito: { raiz: string; ruta: string } | undefined;
 
-  let abierto: ConsolaDeProyecto | undefined;
+  /**
+   * Las consolas de PERSONA vivas, por raíz. Antes era una sola variable, y cambiar de
+   * sesión mataba el turno que estuviera corriendo.
+   *
+   * **La clave es la raíz, y eso es la mitad del diseño**: nunca hay dos consolas sobre la
+   * misma copia de trabajo, así que dos conversaciones no pueden escribir el mismo fichero
+   * ni pisarse el hilo del checkpointer. Lo que se gana es lo otro: dos proyectos distintos
+   * pueden estar trabajando a la vez, y mirar uno no interrumpe al otro.
+   *
+   * No crece sin freno: una consola de segundo plano se cierra ella sola en cuanto su turno
+   * acaba (`cerrarSiSobra`). El hilo no se pierde —el checkpointer lo reanuda al reabrir la
+   * sesión—, así que cerrarla no cuesta nada y dejarla viva costaría un `correrConsola` por
+   * proyecto visitado.
+   */
+  const abiertas = new Map<string, ConsolaDeProyecto>();
+  /** La raíz de la consola que el cable está pintando. `undefined` = el vestíbulo. */
+  let enFoco: string | undefined;
+  const consolaEnFoco = (): ConsolaDeProyecto | undefined =>
+    enFoco === undefined ? undefined : abiertas.get(enFoco);
   /** Quien quiera enterarse de que el modelo en vigor cambió. UNA sola: el cable es uno. */
   let escuchaDeEstado: ((estado: EstadoDeSesion) => void) | undefined;
   /** Y de que hay (o deja de haber) un turno corriendo. */
   let escuchaDeTurno: ((activo: boolean) => void) | undefined;
+  /**
+   * Avisa de que algo cambió en las consolas de persona: un turno empieza o acaba —en
+   * CUALQUIERA de ellas— o una de segundo plano se cierra.
+   *
+   * El booleano sigue siendo el de siempre: «¿hay turno en vuelo en la que se está
+   * mirando?». Lo que se ensanchó es el DISPARADOR, y hacía falta: sin eso, un turno de
+   * segundo plano que arranca o termina no repintaría la barra, que es donde se ve qué
+   * sesión está trabajando.
+   *
+   * `deLaDeAhora` existe por una trampa de orden: el primer flanco de un turno puede
+   * ocurrir ANTES de que la consola esté en el mapa —`construirConsolaDeProyecto` arranca
+   * su lazo dentro, y un `correr` que ejecute un turno en el acto (los tests, y cualquier
+   * ejecutor que no espere una línea) lo dispara desde ahí—. Preguntándole al mapa se
+   * habría contestado «no hay turno» justo en el flanco que lo anuncia. Quien llama sí sabe
+   * de qué consola habla, así que lo dice.
+   */
+  const avisarDeLasAbiertas = (deLaDeAhora?: { raiz: string; turnoEnVuelo: boolean }): void => {
+    const enfocada =
+      deLaDeAhora !== undefined && deLaDeAhora.raiz === enFoco
+        ? deLaDeAhora.turnoEnVuelo
+        : consolaEnFoco()?.turnoEnVuelo === true;
+    escuchaDeTurno?.(enfocada);
+  };
 
   const entornoPorId = (id: string): Entorno => {
     const encontrado = registrados.find((e) => e.id === id);
@@ -756,21 +848,83 @@ export function crearVestibulo(opciones: OpcionesDelVestibulo): Vestibulo {
     informar(`entorno «${entorno.id}»: el servidor dice llamarse «${nombreDelServidor}»`);
   };
 
-  const cerrarProyectoAbierto = async (): Promise<void> => {
-    if (abierto === undefined) return;
-    // Se ESPERA a que el lazo retorne. Dos `correrConsola` vivos sobre el mismo proceso
-    // comparten el ejecutor real y se pisarían el hilo.
-    await abierto.cerrar();
-    abierto = undefined;
+  /**
+   * Cierra la consola de ESA raíz, si hay alguna.
+   *
+   * Se ESPERA a que el lazo retorne. Dos `correrConsola` vivos sobre la misma copia de
+   * trabajo comparten el ejecutor real y se pisarían el hilo — que es exactamente lo que la
+   * clave por raíz del mapa impide, y esto es la otra mitad: se saca del mapa DESPUÉS de
+   * que su lazo haya terminado, así que entre medias nadie la puede reclamar como libre.
+   */
+  const cerrarConsolaDeProyecto = async (raiz: string): Promise<void> => {
+    const consola = abiertas.get(raiz);
+    if (consola === undefined) return;
+    await consola.cerrar();
+    abiertas.delete(raiz);
+    if (enFoco === raiz) enFoco = undefined;
+  };
+
+  /** Todas: lo que hacen `cancelar()` y `cerrar()`. Un fallo al cerrar una no puede dejar a
+   *  las demás vivas — es la misma regla que `cerrarLasDeTareas`. */
+  const cerrarLasDeProyecto = async (): Promise<void> => {
+    for (const raiz of [...abiertas.keys()]) {
+      await cerrarConsolaDeProyecto(raiz).catch(() => abiertas.delete(raiz));
+    }
+    enFoco = undefined;
   };
 
   /**
-   * La cola de las operaciones que tocan `abierto`.
+   * Cierra las consolas de segundo plano que NO están trabajando, menos la de esa raíz.
    *
-   * «Una consola de proyecto a la vez» no se sostiene sin serializar: dos `POST` que
-   * lleguen a la vez se entrelazan en el `await` de `cerrarProyectoAbierto`, los dos ven
-   * `abierto === undefined`, los dos arrancan un `correrConsola` y el primero se queda vivo
-   * y sin nadie que lo pueda cerrar nunca. La cola se traga los rechazos —si no, un fallo
+   * Es la otra mitad del acotado, y va ANTES de construir la nueva: lo que se queda vivo en
+   * segundo plano es solo lo que tiene un turno en marcha. Sin esto, visitar diez proyectos
+   * dejaría diez `correrConsola` corriendo para siempre — y de paso se conserva el orden
+   * que ya estaba probado: el lazo anterior TERMINA antes de que arranque el siguiente, que
+   * es lo normal porque lo normal es cambiar de sesión sin nada en vuelo.
+   */
+  const cerrarLasOciosasSalvo = async (raizQueSigue: string): Promise<void> => {
+    for (const [raiz, consola] of [...abiertas]) {
+      if (raiz === raizQueSigue) continue;
+      if (consola.turnoEnVuelo && !consola.cerrada) continue;
+      await cerrarConsolaDeProyecto(raiz).catch(() => abiertas.delete(raiz));
+    }
+  };
+
+  /**
+   * Una consola de segundo plano que acaba de terminar su turno ya no hace falta: se cierra.
+   *
+   * Es lo que hace que «varias consolas vivas» sea acotado en vez de una fuga: sin esto,
+   * cada proyecto que alguien visitara dejaría un `correrConsola` corriendo para siempre.
+   * Y no se pierde nada al cerrarla — el hilo del agente lo reanuda el checkpointer cuando
+   * esa sesión se vuelva a abrir; lo único que se paga es el arranque.
+   *
+   * Va POR LA COLA y no en el acto: quien llama es el `finally` del propio turno, y
+   * `cerrar()` aguarda `terminada`, o sea el lazo que todavía está dentro de ese turno.
+   * Encolarlo lo deja para cuando la pasada haya devuelto. Las tres condiciones se vuelven a
+   * mirar ahí dentro, porque entre medias el foco puede haber vuelto a este proyecto o
+   * puede haber empezado otro turno.
+   */
+  const cerrarSiSobra = (raiz: string): void => {
+    void enCola(async () => {
+      if (enFoco === raiz) return;
+      const consola = abiertas.get(raiz);
+      if (consola === undefined || consola.turnoEnVuelo) return;
+      if (!consola.cerrada) await cerrarConsolaDeProyecto(raiz);
+      else abiertas.delete(raiz);
+      // Se vuelve a avisar: esta raíz acaba de quedar LIBRE, y de eso cuelgan la barra y la
+      // cola de tareas («gana la persona» deja de aplicar aquí). Avisar solo en el flanco
+      // del turno habría contado la raíz como ocupada, porque este cierre viene después.
+      avisarDeLasAbiertas();
+    }).catch(() => undefined);
+  };
+
+  /**
+   * La cola de las operaciones que tocan `abiertas`.
+   *
+   * «Una consola por raíz» no se sostiene sin serializar: dos `POST` que lleguen a la vez se
+   * entrelazan en el `await` del cierre, los dos ven la raíz libre, los dos arrancan un
+   * `correrConsola` y el primero se queda vivo y sin nadie que lo pueda cerrar nunca. La
+   * cola se traga los rechazos —si no, un fallo
    * dejaría la cadena rota para todo lo que venga detrás— y el rechazo de verdad se
    * devuelve sin tragar a quien llamó.
    */
@@ -800,7 +954,8 @@ export function crearVestibulo(opciones: OpcionesDelVestibulo): Vestibulo {
     sesion,
     adjuntos,
     tarea,
-    alCable,
+    enElCable,
+    alFlancoDeTurno,
   }: {
     raiz: string;
     sesion?: string;
@@ -826,8 +981,24 @@ export function crearVestibulo(opciones: OpcionesDelVestibulo): Vestibulo {
      * parar y reemite el estado de modelos. Por la de las tareas, NO — el mismo aviso
      * apagaría el compositor en el navegador de quien esté trabajando en otra cosa, y le
      * pintaría un turno en vuelo que no es suyo.
+     *
+     * Es una FUNCIÓN y no un booleano desde que hay varias consolas de persona vivas: el
+     * cable pinta la que está EN FOCO, y el foco se muda mientras esta consola vive. Con un
+     * booleano capturado al construir, un turno de segundo plano habría apagado el
+     * compositor de la sesión que se está mirando — el mismo fallo que `alCable: false`
+     * evita para las tareas, por el camino que no se vigilaba. Se pregunta en cada flanco,
+     * igual que `sinAprobacion` se pregunta en cada ronda y por lo mismo.
      */
-    alCable: boolean;
+    enElCable: () => boolean;
+    /**
+     * Los dos flancos del turno de ESTA consola, para quien lleva la contabilidad de fuera.
+     *
+     * Solo la puerta de las personas lo pasa, y ahí está la línea: de aquí cuelgan repintar
+     * la barra —que es donde se ve qué sesión está trabajando, esté o no en foco— y cerrar
+     * la consola cuando su turno acaba y ya no la mira nadie. Por la puerta de las tareas
+     * NO se pasa: un turno de tarea no puede emitir nada al cable.
+     */
+    alFlancoDeTurno?: (activo: boolean) => void;
   }): Promise<ConsolaDeProyecto> => {
     const reabierta = sesion === undefined ? undefined : sesiones.reabrir(raiz, sesion);
     const consolaWeb = crearConsola({
@@ -889,6 +1060,9 @@ export function crearVestibulo(opciones: OpcionesDelVestibulo): Vestibulo {
     if (historica && (await opciones.hayMemoriaDeHilo?.(raiz, sesion!)) === true) historica = false;
     let dispositivo: DispositivoElegido | undefined = reabierta?.dispositivo;
     let cerrada = false;
+    /** Ver `ConsolaDeProyecto.turnoEnVuelo`: lo pone y lo quita el envoltorio de abajo, que
+     *  es el único sitio que ve los dos flancos. */
+    let turnoEnVuelo = false;
     let volcados = 0;
     let sesionReal: SesionCerrable | undefined;
     /**
@@ -1000,8 +1174,9 @@ export function crearVestibulo(opciones: OpcionesDelVestibulo): Vestibulo {
       // Este envoltorio es el ÚNICO sitio que sabe cuándo empieza y cuándo acaba un turno:
       // `correrConsola` solo lo espera y la piel solo ve eventos. De aquí sale lo que apaga
       // el compositor, saca el botón de parar y enciende el borde vivo.
+      turnoEnVuelo = true;
       consolaWeb.turno(true);
-      if (alCable) escuchaDeTurno?.(true);
+      alFlancoDeTurno?.(true);
       try {
         // Se DEVUELVE lo que el turno informe. Sin este `return`, el canal que
         // `crearEjecutorReal` acaba de abrir moría en este envoltorio: el corredor de
@@ -1011,8 +1186,9 @@ export function crearVestibulo(opciones: OpcionesDelVestibulo): Vestibulo {
       } finally {
         // En el `finally`: un turno que revienta o que se cancela también TERMINA, y dejar
         // el compositor apagado para siempre sería peor que no haberlo apagado nunca.
+        turnoEnVuelo = false;
         consolaWeb.turno(false);
-        if (alCable) escuchaDeTurno?.(false);
+        alFlancoDeTurno?.(false);
         volcar();
         // Y el commit, DESPUÉS de volcar: así la entrada del índice ya existe y su título
         // —que es lo que da nombre al commit— es el de verdad.
@@ -1059,7 +1235,7 @@ export function crearVestibulo(opciones: OpcionesDelVestibulo): Vestibulo {
       // modelos a los navegadores conectados, y el modelo de una tarea no es el que está
       // en vigor para quien mira. El estado LOCAL se actualiza igual — `/modelo` dentro de
       // la tarea tiene que surtir efecto en la tarea.
-      if (alCable) escuchaDeEstado?.(nuevo);
+      if (enElCable()) escuchaDeEstado?.(nuevo);
     };
 
     const terminada = correr(
@@ -1106,6 +1282,9 @@ export function crearVestibulo(opciones: OpcionesDelVestibulo): Vestibulo {
       get cerrada() {
         return cerrada;
       },
+      get turnoEnVuelo() {
+        return turnoEnVuelo;
+      },
       consola: consolaWeb,
       cancelarTurno: () => {
         if (sesionReal?.cancelar === undefined) return false;
@@ -1117,6 +1296,8 @@ export function crearVestibulo(opciones: OpcionesDelVestibulo): Vestibulo {
       // Lo releído no vuelve a pasar por `volcar`: ya está en el `.jsonl`.
       conectar: (enviar) => [...(reabierta?.actos ?? []), ...consolaWeb.conectar(enviar)],
       desconectar: (enviar) => consolaWeb.desconectar(enviar),
+      soltar: (enviar) => consolaWeb.soltar(enviar),
+      mensajesDeAprobacion: () => consolaWeb.mensajesDeAprobacion(),
       actos: () => [...(reabierta?.actos ?? []), ...consolaWeb.actos()],
       cerrar: async () => {
         // El orden es el que evita que cerrar cuelgue: `consolaWeb.cerrar()` pone el EOF,
@@ -1160,9 +1341,9 @@ export function crearVestibulo(opciones: OpcionesDelVestibulo): Vestibulo {
      * la tarjeta del kanban), y con «Ver lo que hace» a su lado un botón correcto pegado a uno
      * peligroso enseña que los dos son igual de seguros.
      *
-     * **El orden es la mitad del arreglo**: `cerrarProyectoAbierto()` es la primera línea de
-     * abajo, así que una guarda puesta después habría cerrado la sesión de la persona para
-     * después negarse a abrir la otra — dos daños en vez de ninguno.
+     * **El orden es la mitad del arreglo**: abajo se cierra la consola que ocupe esa raíz,
+     * así que una guarda puesta después habría cerrado la sesión de la persona para después
+     * negarse a abrir la otra — dos daños en vez de ninguno.
      *
      * Se compara con `sesion` Y con `idDeHilo` porque son dos momentos de la misma
      * conversación: `sesion` no existe hasta que se vuelca el primer acto, y `idDeHilo` desde
@@ -1172,9 +1353,65 @@ export function crearVestibulo(opciones: OpcionesDelVestibulo): Vestibulo {
     if (apertura.sesion !== undefined && esDeUnaTareaEnCurso(apertura.raiz, apertura.sesion)) {
       throw new Error(MOTIVO_SESION_DE_TAREA_EN_CURSO);
     }
-    await cerrarProyectoAbierto();
-    const consolaDeProyecto = await construirConsolaDeProyecto({ ...apertura, alCable: true });
-    abierto = consolaDeProyecto;
+    // Poda: una consola cuyo lazo ya terminó por su cuenta (un `/salir`, un fallo del lazo)
+    // no puede seguir ocupando su raíz. Es la misma poda perezosa que `deTareas`, y aquí es
+    // lo que impide que un proyecto quede inabrible para siempre.
+    for (const [raiz, vieja] of [...abiertas]) if (vieja.cerrada) abiertas.delete(raiz);
+    const yaAbierta = abiertas.get(apertura.raiz);
+    if (yaAbierta !== undefined) {
+      /**
+       * La MISMA sesión de un proyecto que ya está abierto: solo se muda el foco.
+       *
+       * Es el caso corriente de volver a ella desde la barra, y cerrarla para reabrirla
+       * sería tirar el turno que quizá está corriendo — justo lo que este cambio existe para
+       * evitar. Se compara con `sesion` Y con `idDeHilo` por lo mismo que la guarda de las
+       * tareas: son dos momentos de la misma conversación, y el segundo cubre la ventana
+       * anterior al primer volcado.
+       */
+      const laMisma =
+        apertura.sesion !== undefined &&
+        (yaAbierta.sesion === apertura.sesion || yaAbierta.idDeHilo === apertura.sesion);
+      if (laMisma) {
+        enFoco = apertura.raiz;
+        await cerrarLasOciosasSalvo(apertura.raiz);
+        return yaAbierta;
+      }
+      /**
+       * OTRA sesión del MISMO proyecto, con la que hay trabajando: se DECLINA.
+       *
+       * Una consola por raíz no es una limitación de este mapa: es la copia de trabajo. Dos
+       * conversaciones escribiendo los mismos ficheros no tienen aislamiento de ninguna
+       * clase —es el mismo motivo por el que una tarea no arranca donde hay una persona— y
+       * cerrar la que trabaja para abrir la otra sería la interrupción que se acaba de
+       * quitar. Si está OCIOSA sí se cierra y se abre la nueva, que es lo de siempre.
+       */
+      if (yaAbierta.turnoEnVuelo) throw new Error(motivoDeProyectoTrabajando());
+      await cerrarConsolaDeProyecto(apertura.raiz);
+    }
+    const raiz = apertura.raiz;
+    await cerrarLasOciosasSalvo(raiz);
+    /**
+     * El foco se muda ANTES de construir, y no después.
+     *
+     * No es orden por gusto: el lazo arranca DENTRO de `construirConsolaDeProyecto`, así que
+     * su primer flanco de turno puede salir de ahí —lo hace con cualquier `correr` que no
+     * espere una línea—, y con el foco puesto después ese flanco habría hablado de la
+     * consola anterior. Que quede apuntando a una raíz sin consola si la construcción
+     * revienta es inocuo: `consolaEnFoco()` pregunta al mapa, y ahí no habrá nada.
+     */
+    enFoco = raiz;
+    const consolaDeProyecto = await construirConsolaDeProyecto({
+      ...apertura,
+      enElCable: () => enFoco === raiz,
+      alFlancoDeTurno: (activo) => {
+        // La barra se repinta en los DOS flancos y esté o no en foco: de aquí sale que una
+        // sesión de segundo plano está trabajando.
+        avisarDeLasAbiertas({ raiz, turnoEnVuelo: activo });
+        // Y al terminar, si ya no la mira nadie, se cierra. Ver `cerrarSiSobra`.
+        if (!activo) cerrarSiSobra(raiz);
+      },
+    });
+    abiertas.set(raiz, consolaDeProyecto);
     return consolaDeProyecto;
   };
 
@@ -1223,7 +1460,15 @@ export function crearVestibulo(opciones: OpcionesDelVestibulo): Vestibulo {
     // corredor, que es el único que sabe de qué tarea es esta apertura.
     // `tarea` viaja por lo mismo que las otras dos: quien sabe de qué tarea es esta
     // apertura es el corredor. Es lo que marca su fila en el índice como sesión de tarea.
-    const consolaDeProyecto = await construirConsolaDeProyecto({ raiz, sesion, adjuntos, tarea, alCable: false });
+    const consolaDeProyecto = await construirConsolaDeProyecto({
+      raiz,
+      sesion,
+      adjuntos,
+      tarea,
+      // Nunca. Una consola de tarea no está en el cable ni puede llegar a estarlo: el foco
+      // es de las de persona, y su raíz podría coincidir con una de ellas.
+      enElCable: () => false,
+    });
     deTareas.add(consolaDeProyecto);
     return consolaDeProyecto;
   };
@@ -1390,8 +1635,14 @@ export function crearVestibulo(opciones: OpcionesDelVestibulo): Vestibulo {
       // Cerrar ANTES de borrar: ver el comentario del contrato. Y solo si es ESA sesión —
       // cerrar el proyecto entero porque se borró una conversación vieja de la lista sería
       // llevarse por delante el trabajo en curso.
-      const cerroLaAbierta = abierto?.raiz === raiz && abierto.sesion === id;
-      if (cerroLaAbierta) await cerrarProyectoAbierto();
+      // La consola de ESA sesión, si hay alguna abierta: puede no ser la que está en foco
+      // desde que cambiar de sesión no mata la anterior. `cerroLaAbierta` sigue queriendo
+      // decir «la que estabas mirando», que es lo que el cliente usa para volver al
+      // escritorio: cerrar una de segundo plano no le cambia la vista a nadie.
+      const suya = abiertas.get(raiz);
+      const laDeEsaSesion = suya !== undefined && suya.sesion === id;
+      const cerroLaAbierta = laDeEsaSesion && enFoco === raiz;
+      if (laDeEsaSesion) await cerrarConsolaDeProyecto(raiz);
       const borrada = sesiones.borrar?.(raiz, id) ?? false;
       // La ref de git de la sesión se va con ella: apunta a un árbol que solo esa vista
       // usaba, y dejarla mantendría ese árbol vivo para siempre (`agent/sesionGit.ts`).
@@ -1466,15 +1717,18 @@ export function crearVestibulo(opciones: OpcionesDelVestibulo): Vestibulo {
      *
      * Va por la misma COLA que la otra puerta aunque no toque `abierto`: la cola es lo que
      * sostiene «una consola de proyecto a la vez», y colarse por delante de un
-     * `cerrarProyectoAbierto` a medias sería empezar a construir mientras el lazo anterior
+     * un cierre a medias sería empezar a construir mientras el lazo anterior
      * todavía vive. El precio, dicho: una tarea que llega mientras se cierra un turno
      * humano de minutos espera a que acabe. Para trabajo de fondo es el lado correcto.
      */
     abrirParaTarea: (raiz, sesion, adjuntos, tarea) => enCola(() => abrirParaTarea(raiz, sesion, adjuntos, tarea)),
-    proyectoAbierto: () => abierto,
+    proyectoAbierto: () => consolaEnFoco(),
+    // La del foco INCLUIDA, y las cerradas fuera: una consola cuyo lazo ya terminó no ocupa
+    // su raíz, y de esta lista cuelga la guarda de «gana la persona».
+    proyectosAbiertos: () => [...abiertas.values()].filter((c) => !c.cerrada),
 
     cancelar: () => enCola(async () => {
-      await cerrarProyectoAbierto();
+      await cerrarLasDeProyecto();
       informar("alta cancelada");
       // Negar lo que ya está en disco sería mentir. Cancelar no BORRA nada: dice qué quedó.
       if (credencialEscrita !== undefined) {
@@ -1486,7 +1740,7 @@ export function crearVestibulo(opciones: OpcionesDelVestibulo): Vestibulo {
     }),
 
     cerrar: () => enCola(async () => {
-      await cerrarProyectoAbierto();
+      await cerrarLasDeProyecto();
       // Y las de las tareas: cada una tiene su `correrConsola` vivo, y dejarlo corriendo
       // deja el proceso sin terminar. Ver `deTareas`.
       await cerrarLasDeTareas();

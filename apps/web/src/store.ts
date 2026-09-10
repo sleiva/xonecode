@@ -210,7 +210,15 @@ export interface EstadoDelCliente {
     proyectos: {
       id: string;
       nombre: string;
-      sesiones?: { id: string; titulo: string; ultimoTurno?: string; deTarea?: true }[];
+      sesiones?: {
+        id: string;
+        titulo: string;
+        ultimoTurno?: string;
+        deTarea?: true;
+        /** Esa conversación tiene un turno en marcha ahora, esté o no delante. Ausente = no
+         *  consta que trabaje. */
+        trabajando?: true;
+      }[];
       local?: boolean;
       /** Compartido CONTIGO. Ausente = el servidor no lo dijo, que no es «es tuyo». */
       compartido?: boolean;
@@ -436,7 +444,13 @@ function veredictoDeTarea(valor: unknown): { veredicto?: TareaDelCable["veredict
  *  `nombre`, tiene título— y usarla dejaba la lista siempre vacía sin decir por qué. */
 function sonSesiones(
   valor: unknown
-): valor is { id: string; titulo: string; ultimoTurno?: unknown; deTarea?: unknown }[] {
+): valor is {
+  id: string;
+  titulo: string;
+  ultimoTurno?: unknown;
+  deTarea?: unknown;
+  trabajando?: unknown;
+}[] {
   return (
     Array.isArray(valor) &&
     valor.every(
@@ -1044,6 +1058,10 @@ export function crearStoreDelCliente(): {
                       // la dirección de aquí sería marcar la conversación de una persona
                       // como sesión de una tarea de fondo.
                       ...(s.deTarea === true ? { deTarea: true as const } : {}),
+                      // Y la misma regla, por el mismo motivo: una cadena colada aquí
+                      // («trabajando: "false"») pintaría trabajando una sesión que no
+                      // trabaja, y con ella un indicador de actividad que nunca se apaga.
+                      ...(s.trabajando === true ? { trabajando: true as const } : {}),
                     })),
                   }
                 : {}),

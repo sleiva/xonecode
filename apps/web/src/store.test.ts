@@ -355,6 +355,18 @@ describe("las sesiones de la barra: de quién es cada una y cuándo se tocó", (
     expect(s.leer().alta?.proyectos[0]?.sesiones).toEqual([{ id: "s7", titulo: "arreglar el alta" }]);
   });
 
+  it("`trabajando` sobrevive a la lista blanca", () => {
+    const s = crearStoreDelCliente();
+    s.aplicar(alta([{ id: "s7", titulo: "x", trabajando: true }]));
+    expect(s.leer().alta?.proyectos[0]?.sesiones).toEqual([{ id: "s7", titulo: "x", trabajando: true }]);
+  });
+
+  it("un `trabajando` que no es el booleano se descarta: un indicador que no se apaga nunca", () => {
+    const s = crearStoreDelCliente();
+    s.aplicar(alta([{ id: "s7", titulo: "x", trabajando: "false" }]));
+    expect(s.leer().alta?.proyectos[0]?.sesiones?.[0]).toEqual({ id: "s7", titulo: "x" });
+  });
+
   it("un `deTarea` que no es el booleano se descarta, no se toma por verdadero", () => {
     // La trampa del `"false"` de CloudStudio, en la dirección de aquí: marcar una
     // conversación de una persona como sesión de una tarea de fondo.
