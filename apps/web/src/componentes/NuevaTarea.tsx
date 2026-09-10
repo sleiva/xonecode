@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { Modal, Button } from "@deepseek-ai/dsh-client-ui-primitives";
 import { nombreDeAdjuntoSeguro } from "../nombreDeAdjunto.js";
 import estilos from "./NuevaTarea.module.css";
@@ -97,6 +97,20 @@ export function NuevaTarea({
    * lo que esta persona está escribiendo.
    */
   const [editado, setEditado] = useState<string | undefined>(undefined);
+  /**
+   * El `<input type="file">` está ESCONDIDO y lo dispara un botón nuestro.
+   *
+   * Medido en pantalla: un input de fichero nativo se pinta como la cromo del navegador
+   * —«Elegir archivos · Ningún archivo seleccionado»— dentro de una ventana donde todo lo
+   * demás son controles de esta casa, y era el único control de la interfaz que no seguía
+   * el estilo de sus vecinos. No se puede estilar: el botón lo dibuja el navegador.
+   *
+   * Escondido y no quitado, porque el selector de ficheros del sistema **solo lo puede abrir
+   * un input de fichero**: se le llama `click()` desde el botón. Va con `hidden` y sin
+   * `htmlFor` hacia él —una etiqueta apuntando a un control escondido no nombra nada—: el
+   * nombre accesible del control lo pone el TEXTO del botón, que es el que se enfoca.
+   */
+  const entradaDeFicheros = useRef<HTMLInputElement>(null);
   const [adjuntos, setAdjuntos] = useState<
     { nombre: string; bytes: number; estado: "subiendo" | "listo" | "falló"; motivo?: string }[]
   >([]);
@@ -266,12 +280,19 @@ export function NuevaTarea({
             placeholder="Se rellena con «Preparar el encargo», y se puede editar. Vacío, se manda tu texto tal cual."
           />
 
-          <label className={estilos.etiqueta} htmlFor="nueva-tarea-adjuntos">
-            Adjuntar ficheros
-          </label>
+          <div className={estilos.filaDeEncargo}>
+            <span className={estilos.etiqueta}>Adjuntar ficheros</span>
+            <Button
+              variant="outline"
+              className={estilos.accion}
+              onClick={() => entradaDeFicheros.current?.click()}
+            >
+              Elegir ficheros…
+            </Button>
+          </div>
           <input
-            id="nueva-tarea-adjuntos"
-            className={estilos.campo}
+            ref={entradaDeFicheros}
+            hidden
             type="file"
             multiple
             onChange={(e) => {
