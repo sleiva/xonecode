@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent } fr
 import { Modal, Button } from "@deepseek-ai/dsh-client-ui-primitives";
 import clsx from "clsx";
 import estilos from "./Aprobacion.module.css";
+import { plegarIguales } from "../plegarIguales.js";
 
 /**
  * El modal de aprobación: fail-closed, igual que el de la TUI lo es por TECLA.
@@ -16,6 +17,14 @@ import estilos from "./Aprobacion.module.css";
  * y es correcto que así sea: es el paso donde se DECIDE sobre él. Por eso tampoco hay
  * techo de líneas — la TUI recorta a 25 (`cli/tui/aprobarTui.tsx`) porque un terminal no
  * hace scroll y aquí sí.
+ *
+ * **Pero «entero» no es «de golpe», y confundirlo escondía justo lo que hay que mirar.**
+ * Medido en la pantalla del usuario con un `.xne` de sesenta campos: la tarjeta se llenaba
+ * de líneas iguales y el cambio había que buscarlo a ojo. Las rachas sin cambios se pliegan
+ * ahora en una línea que dice cuántas son y se abren con un clic (`plegarIguales`), que es
+ * el MISMO trato que el chat le da al trabajo del agente: no se borra, sigue a una
+ * pulsación. Lo que cambió no se pliega nunca, ni hay techo: el techo es lo que las pieles
+ * de terminal tienen que aceptar porque ahí el recorte se pierde.
  *
  * **Qué se adoptó de `@deepseek-ai/dsh-client-ui-primitives` y qué no.** `Modal` sí: pone
  * el portal sobre `document.body`, el `role="dialog"`/`aria-modal` y el manejador de
@@ -77,6 +86,61 @@ function esLineaDeDiff(valor: unknown): valor is LineaDeDiff {
 
 /** El prefijo que un diff lleva desde siempre; va en su propio nodo para no ensuciar el texto. */
 const SIGNO = { anadido: "+", quitado: "-", igual: " " };
+
+/** Una línea del diff, con su signo en su propio nodo para no ensuciar el texto. */
+function Linea({ linea }: { linea: LineaDeDiff }) {
+  return (
+    <div className={clsx(estilos.linea, estilos[linea.tipo])}>
+      <span className={estilos.signo} aria-hidden="true">
+        {SIGNO[linea.tipo]}
+      </span>
+      <span>{linea.texto}</span>
+    </div>
+  );
+}
+
+/**
+ * El diff de UNA escritura, con las rachas sin cambios plegadas.
+ *
+ * El estado de qué se ha abierto vive AQUÍ y no en `Aprobacion`: es de este diff y de esta
+ * racha, y subirlo obligaría a una clave compuesta (pendiente + tramo) para decir lo mismo.
+ * Se guarda por ÍNDICE de tramo porque el reparto en tramos es una función pura de las
+ * líneas: mientras el diff no cambie, el índice nombra siempre la misma racha; y si cambia,
+ * es otra aprobación y lo abierto no significaba nada.
+ */
+function Diff({ lineas }: { lineas: readonly LineaDeDiff[] }) {
+  const tramos = useMemo(() => plegarIguales(lineas), [lineas]);
+  const [abiertos, setAbiertos] = useState<readonly number[]>([]);
+  return (
+    <>
+      {tramos.map((tramo, indice) => {
+        if (tramo.clase === "lineas") {
+          return tramo.lineas.map((l, i) => <Linea key={`${indice}-${i}`} linea={l} />);
+        }
+        if (abiertos.includes(indice)) {
+          return tramo.lineas.map((l, i) => <Linea key={`${indice}-${i}`} linea={l} />);
+        }
+        return (
+          <button
+            key={indice}
+            type="button"
+            className={estilos.plegado}
+            /*
+              Dice cuántas son y que NO cambiaron: es lo que permite decidir sin abrirlo. Un
+              «…» a secas obligaría a abrir cada racha para saber si te importa, que es
+              volver al volcado de antes con un clic de más.
+            */
+            onClick={() => setAbiertos((previos) => [...previos, indice])}
+          >
+            {tramo.lineas.length === 1
+              ? "… 1 línea sin cambios"
+              : `… ${tramo.lineas.length} líneas sin cambios`}
+          </button>
+        );
+      })}
+    </>
+  );
+}
 
 export function Aprobacion({
   pendientes,
@@ -192,14 +256,7 @@ export function Aprobacion({
                 {typeof ruta === "string" && ruta !== "" ? <p className={estilos.ruta}>{ruta}</p> : null}
                 <p className={estilos.origen}>quién: {p.origen}</p>
                 <div className={estilos.diff}>
-                  {lineas.map((l, i) => (
-                    <div key={i} className={clsx(estilos.linea, estilos[l.tipo])}>
-                      <span className={estilos.signo} aria-hidden="true">
-                        {SIGNO[l.tipo]}
-                      </span>
-                      <span>{l.texto}</span>
-                    </div>
-                  ))}
+                  <Diff lineas={lineas} />
                 </div>
               </section>
             );

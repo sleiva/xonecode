@@ -122,6 +122,53 @@ describe("Aprobacion", () => {
     expect(screen.getByText("linea-39")).toBeTruthy();
   });
 
+  /**
+   * «Entero» no es «de golpe», y confundirlo escondía justo lo que hay que mirar: medido en
+   * la pantalla del usuario con un `.xne` de sesenta campos, la tarjeta se llenaba de líneas
+   * iguales y el cambio había que buscarlo a ojo. La racha se dobla en una línea que dice
+   * cuántas son, y lo que cambió se ve sin abrir nada.
+   */
+  it("las líneas SIN CAMBIOS se pliegan y el cambio queda a la vista", () => {
+    const largo = [
+      { tipo: "anadido", texto: "lo que cambió" },
+      ...Array.from({ length: 40 }, (_, i) => ({ tipo: "igual", texto: `igual-${i}` })),
+    ];
+    render(<Aprobacion pendientes={PENDIENTES} ficheros={{}} diffs={{ "1": largo }} alDecidir={() => {}} />);
+    expect(screen.getByText("lo que cambió")).toBeTruthy();
+    // El contexto de al lado del cambio, sí; el fondo de la racha, no.
+    expect(screen.getByText("igual-0")).toBeTruthy();
+    expect(screen.queryByText("igual-20")).toBeNull();
+    expect(screen.getByText("… 37 líneas sin cambios")).toBeTruthy();
+  });
+
+  /**
+   * Y NO SE PIERDEN: se abren con un clic, que es lo que mantiene cierta la regla del modal
+   * —el contenido está entero donde se decide sobre él— sin volcarlo de golpe. Es el mismo
+   * trato que el chat le da al trabajo del agente.
+   */
+  it("la racha plegada se ABRE al pulsarla: nada se pierde", () => {
+    const largo = [
+      { tipo: "anadido", texto: "lo que cambió" },
+      ...Array.from({ length: 40 }, (_, i) => ({ tipo: "igual", texto: `igual-${i}` })),
+    ];
+    render(<Aprobacion pendientes={PENDIENTES} ficheros={{}} diffs={{ "1": largo }} alDecidir={() => {}} />);
+    fireEvent.click(screen.getByText("… 37 líneas sin cambios"));
+    expect(screen.getByText("igual-20")).toBeTruthy();
+    expect(screen.queryByText("… 37 líneas sin cambios")).toBeNull();
+  });
+
+  /** Abrir una racha NO es decidir: el modal sigue esperando, y ni aprueba ni rechaza. */
+  it("abrir una racha no manda ninguna decisión", () => {
+    const alDecidir = vi.fn();
+    const largo = [
+      { tipo: "anadido", texto: "lo que cambió" },
+      ...Array.from({ length: 40 }, (_, i) => ({ tipo: "igual", texto: `igual-${i}` })),
+    ];
+    render(<Aprobacion pendientes={PENDIENTES} ficheros={{}} diffs={{ "1": largo }} alDecidir={alDecidir} />);
+    fireEvent.click(screen.getByText("… 37 líneas sin cambios"));
+    expect(alDecidir).not.toHaveBeenCalled();
+  });
+
   it("decidir dos veces manda UNA decisión: el desmontaje posterior ya no rechaza nada", () => {
     const alDecidir = vi.fn();
     const { unmount } = render(

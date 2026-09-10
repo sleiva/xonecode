@@ -128,6 +128,35 @@
   user-select: none;
 }
 
+/* La racha sin cambios, doblada en una línea que se pulsa.
+   Se pinta como el resto del diff —misma familia mono, mismo interlineado— y no como un
+   botón al uso: es una FILA del diff que además se puede abrir, y con relleno y borde de
+   control rompería la columna de líneas por la que se está leyendo. Lo que la marca es el
+   fondo tenue y el subrayado al pasar por encima, que es lo que dice «esto se pulsa» sin
+   sacarla de la columna.
+
+   `width: 100%` y no `stretch`: dentro de un `.diff` con `overflow-x: auto` el ancho lo pone
+   el contenido más ancho, y un botón que solo ocupe su texto deja la fila partida en medio
+   de la pila. Y `text-align: left`, porque un `button` centra por omisión y el «…» quedaba
+   a metros del margen por el que se lee todo lo demás. */
+.plegado {
+  display: block;
+  width: 100%;
+  box-sizing: border-box;
+  padding: 1px 12px;
+  border: 0;
+  background: var(--dsw-alias-bg-layer-3);
+  color: var(--dsw-alias-label-tertiary);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.plegado:hover {
+  color: var(--dsw-alias-label-secondary);
+  text-decoration: underline;
+}
+
 /* `label-primary` en las dos, no el «primary» de su propio par
    (`state-success-primary`/`state-error-primary` sobre su «secondary» a juego) ni
    `label-primary-foreground`. La aprobación solo vive en la consola, que ahora es

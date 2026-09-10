@@ -2574,6 +2574,39 @@ con motivo accionable, y se dicen por consola Y en `sync.log` —que sobrevive a
 mientras el resto sube y la ref avanza. Si no hay ningún «resto», la ref no se mueve: se
 vuelven a declarar en cada `/sync`, que es la verdad.
 
+**En el modal de la web, «entero» no es «de golpe»** (`apps/web/src/plegarIguales.ts`). La
+regla de esa pantalla es que el contenido se vea —es el paso donde se DECIDE sobre él— y por
+eso no tiene el techo de 25 líneas de las pieles de terminal, que ahí es obligatorio porque el
+recorte se pierde. Pero volcar el fichero de golpe escondía lo único que hay que mirar: medido
+con un `login.js` de 35 líneas y un comentario añadido, la tarjeta enseñaba 40 filas y el
+cambio había que buscarlo a ojo. Ahora las rachas SIN CAMBIOS se doblan en una línea que dice
+cuántas son y se abren con un clic —el mismo trato que el chat le da al trabajo del agente: no
+se borra, sigue a una pulsación—, y el diff del ejemplo pasó a 19 filas con el `+` arriba.
+Cinco reglas:
+- **Lo que cambió no se pliega nunca, y no hay techo.** Solo las rachas de `igual`, así que un
+  fichero NUEVO —todo `anadido`— se sigue enseñando entero sin tocar nada.
+- **Los extremos no son una excepción, son el caso corriente.** Una racha al PRINCIPIO no
+  envuelve ningún cambio por arriba, así que solo conserva sus últimas líneas de contexto (y la
+  del final, solo las primeras). Sin eso, un fichero con el único cambio en la línea 300 seguía
+  abriendo con 300 líneas de cabecera a la vista.
+- **Las líneas plegadas viajan DENTRO del tramo**, no su número: el diff ya está en memoria y
+  pedirle al servidor otra vez lo que ya se tiene sería inventarse un viaje.
+- **Una racha corta no se pliega** (`MINIMO_PLEGABLE`): cambiar dos líneas de contenido por un
+  control que dice «… 2 líneas sin cambios» sale peor. El mínimo se mide sobre lo que se
+  plegaría, no sobre la racha entera.
+- **El contexto es 3 y no 2**: las dos de terminal compiten con un techo de 25 en una pantalla
+  que no hace scroll; aquí la tarjeta sí, y tres es lo que deja ver la etiqueta que envuelve a
+  un cambio en un `.xne`.
+
+**Y el origen deja de decirse dos veces** (`agent/interrupts.ts#aPendiente`). `hitlDe()` mete el
+nombre del perfil en la `description` por necesidad —el interrupt no dice de qué subagente
+viene, y `dev` y `mockup` comparten `write_file`—, pero las TRES pieles pintan además el campo
+`origen` justo debajo: «[dev] quiere modificar un fichero del proyecto» y una línea después
+«quién: dev». Una vez extraído, el prefijo se quita de la descripción, y se quita AHÍ y no en
+cada piel porque el dato es uno y su sitio es `origen` — tres recortes a mano son tres sitios
+donde divergir. Sin corchete no se toca nada: es el `Ejecutar <tool>` de reserva de
+`collectPending`, que no pasó por `hitlDe`.
+
 **La aprobación humana es fail-closed** (`cli/aprobar.ts`, `vendor/hitl.ts`). Aprobar ejecuta;
 rechazar no toca nada, así que lo que no se entiende es **rechazo**. El Enter a secas solo
 aprueba con un TTY de verdad detrás, y un rl ya cerrado (el EOF de un pipe que se agota durante

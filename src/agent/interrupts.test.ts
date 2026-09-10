@@ -14,21 +14,29 @@ function pendiente(sobre: Partial<PendingInterrupt> = {}): PendingInterrupt {
 }
 
 describe("aPendiente", () => {
-  it("saca el origen de los corchetes de la description", () => {
-    // `hitlDe()` mete el nombre del perfil ahí porque el interrupt NO dice de qué
-    // subagente viene, y `dev` y `mockup` comparten `write_file`.
+  /**
+   * El origen sale de los corchetes —`hitlDe()` mete ahí el nombre del perfil porque el
+   * interrupt NO dice de qué subagente viene, y `dev` y `mockup` comparten `write_file`— y
+   * una vez extraído se QUITA de la descripción: las tres pieles pintan los dos campos uno
+   * debajo del otro, así que dejarlo decía lo mismo dos veces pegado («[dev] quiere
+   * modificar un fichero del proyecto» y debajo «quién: dev»). Medido en la pantalla.
+   */
+  it("saca el origen de los corchetes y lo QUITA de la descripción: no se dice dos veces", () => {
     const p = aPendiente(pendiente({ description: "[dev] quiere escribir un fichero" }));
     expect(p).toEqual({
       id: "i1",
       origen: "dev",
-      descripcion: "[dev] quiere escribir un fichero",
+      descripcion: "quiere escribir un fichero",
       decisionesPermitidas: ["approve", "reject"],
     });
   });
 
-  it("sin corchetes en la description, cae al nombre de la tool", () => {
+  it("sin corchetes en la description, cae al nombre de la tool y la descripción se queda tal cual", () => {
+    // Es el `Ejecutar <tool>` de reserva de `collectPending`: no pasó por `hitlDe`, así que
+    // no hay prefijo que quitar y quitar algo sería recortarle el texto a un caso distinto.
     const p = aPendiente(pendiente({ tool: "write_file", description: "Ejecutar write_file" }));
     expect(p.origen).toBe("write_file");
+    expect(p.descripcion).toBe("Ejecutar write_file");
   });
 });
 

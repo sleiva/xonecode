@@ -23,13 +23,22 @@ export async function pendientesDe(agente: unknown, config: unknown): Promise<Pe
  * El `origen` sale de la `description`, que es donde `hitlDe()` metió el nombre del perfil
  * —`[dev] quiere escribir un fichero del proyecto`—: **el interrupt no dice de qué
  * subagente viene**, y `dev` y `mockup` comparten `write_file`.
+ *
+ * **Y una vez extraído, el prefijo se QUITA de la descripción.** Las tres pieles pintan los
+ * dos campos, uno debajo del otro (`cli/aprobar.ts`, `cli/tui/aprobarTui.tsx`,
+ * `componentes/Aprobacion.tsx`), así que dejarlo decía lo mismo dos veces pegado: «[dev]
+ * quiere modificar un fichero del proyecto» y justo debajo «quién: dev». Se quita aquí y no
+ * en cada piel porque el dato es uno y el sitio donde vive es `origen` — tres recortes a
+ * mano son tres sitios donde divergir. Sin corchete no hay nada que quitar y la descripción
+ * se queda tal cual: es la de un interrupt que no pasó por `hitlDe` (el `Ejecutar <tool>`
+ * de reserva de `collectPending`), y ahí `origen` es el nombre de la tool.
  */
 export function aPendiente(p: PendingInterrupt): PendienteDeAprobacion {
-  const m = /^\[([^\]]+)\]/.exec(p.description);
+  const m = /^\[([^\]]+)\]\s*/.exec(p.description);
   return {
     id: p.id,
     origen: m?.[1] ?? p.tool,
-    descripcion: p.description,
+    descripcion: m === null ? p.description : p.description.slice(m[0].length),
     decisionesPermitidas: p.allowedDecisions,
   };
 }
