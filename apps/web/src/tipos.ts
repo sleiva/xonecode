@@ -502,6 +502,13 @@ export type MensajeDelCliente =
   | { clase: "dispositivos"; ajustes?: AjustesDeDispositivos; instalar?: NombreDeHerramienta }
   /** Con qué dispositivo trabaja la sesión. Viaja el ID; sin él, se quita la elección. */
   | { clase: "dispositivo"; id?: string }
+  /**
+   * «Habla con este dispositivo y dime si contesta.» Viaja el ID y nada más; el servidor lo
+   * resuelve contra su última medida y decide qué comando lanzar. NO vuelve a medir: la
+   * verificación vive dentro de la foto, y una medida nueva se llevaría la que se acaba de
+   * hacer. La respuesta llega como un `dispositivos` con ese dispositivo ya verificado.
+   */
+  | { clase: "conexion"; id: string }
   /** Borrar la credencial de `auth.json`. Guardar no pasa por aquí: la clave viaja por
    *  «secreto», contestando al `leerSecreto` que abre `/provider`. */
   | { clase: "credencial"; accion: "pedir" | "borrar"; proveedor: string }
@@ -623,6 +630,11 @@ export interface Dispositivo {
   clase: "emulador" | "simulador" | "fisico";
   estado: "conectado" | "arrancado" | "apagado" | "sin-autorizar" | "offline" | "no-disponible";
   detalle?: string;
+  /**
+   * Lo que contestó al VERIFICAR la conexión. Ausente = nadie lo ha verificado en esta foto,
+   * nunca «no responde». Vive con el informe, así que una medida nueva se lo lleva.
+   */
+  verificado?: { ok: boolean; detalle: string; medido: string };
 }
 
 /** Un paso de una receta, redeclarado como todo lo de este fichero. */
@@ -640,7 +652,7 @@ export interface PasoDeReceta {
 }
 
 export interface Receta {
-  id: "android-emulador";
+  id: "android-emulador" | "ios-simulador";
   titulo: string;
   descripcion: string;
   pasos: PasoDeReceta[];

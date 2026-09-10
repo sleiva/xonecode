@@ -94,6 +94,25 @@ describe("Receta", () => {
       />
     );
     expect(screen.getByText(/hace falta el paso 1/i)).toBeTruthy();
+    // Y ahí «todavía» es cierto: el paso 1 lo desbloquea.
+    expect(screen.getByText(/no se puede lanzar todavía/i)).toBeTruthy();
+  });
+
+  it("un motivo que NO cambia nunca no dice «todavía»: prometería un botón que no va a venir", () => {
+    // La receta de iOS tiene tres: Xcode se instala del App Store, la licencia lleva `sudo`
+    // escrito y `-downloadPlatform` pide autorización en una ventana del sistema. Ninguno de
+    // los tres se arregla haciendo otro paso.
+    render(
+      <Receta
+        receta={{
+          ...RECETA,
+          pasos: [{ ...PASO_EJECUTABLE, ejecutable: false, porQueNo: "lleva `sudo`, y la contraseña solo se puede teclear en un terminal" }],
+        }}
+        alEjecutar={vi.fn()}
+      />
+    );
+    expect(screen.getByText(/no se lanza desde aquí/i)).toBeTruthy();
+    expect(screen.queryByText(/todavía/i)).toBeNull();
   });
 
   it("mientras corre enseña el log, el tiempo y CANCELAR, no el botón de ejecutar", () => {

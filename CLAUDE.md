@@ -2069,21 +2069,26 @@ lanza ni un proceso. Reglas:
     nadie apagó.
   - **Configurar y volver a medir son el MISMO mensaje** (`{clase: "dispositivos", ajustes?}`)
     y en ese orden: se guarda y luego se mide, porque el detector lee los ajustes de disco en
-    cada medida y al revés daría la foto de la configuración anterior. La ventana **dice que
-    hoy solo se DESCUBREN**: conectar por red, arrancar un emulador o instalar la app no está
-    cableado, y un botón que lo prometiera sería el botón muerto de siempre.
+    cada medida y al revés daría la foto de la configuración anterior. La ventana **dice qué se
+    puede hacer y qué no**: se descubren, se instala lo que falta y se VERIFICA la conexión
+    con uno; conectar por red, arrancar un emulador o instalar la app no está cableado, y un
+    botón que lo prometiera sería el botón muerto de siempre.
 - **Y lo que FALTA se explica con una RECETA** (`core/dispositivos.ts#recetaDeEmuladorAndroid`,
   `componentes/Receta.tsx`), que es otra cosa que un requisito: un requisito está o no está,
   y esto es un procedimiento con orden — cuatro pasos, una vez por máquina, para tener el
   emulador de Android. Cinco reglas:
   - **Qué se copia y qué se EJECUTA, por comando y no por herramienta.** La regla era «se
     ofrece ejecutar lo que se puede cumplir» aplicada por herramienta; aquí se afina por
-    COMANDO. `brew` puede pedir la contraseña de administrador y un hijo sin terminal detrás
-    se quedaría esperándola para siempre: los pasos 1 y 2 se copian. `sdkmanager` y
-    `avdmanager` no piden contraseña —solo las licencias y el perfil de hardware, que se
-    contestan por `stdin` de forma determinista— y esos SÍ los lanza xonecode
-    (`agent/instalacionEnMaquina.ts`, tabla cerrada por `receta:paso`), que además son los
-    largos: 2-3 GB.
+    COMANDO, y **el criterio cambió al medirlo**: no es «puede pedir la contraseña» sino
+    «puede COLGARSE pidiéndola», que es lo que un botón no se puede permitir. Con eso los dos
+    `brew` del paso 1 pasaron a ejecutables y solo el del `~/.zshrc` se sigue copiando (la
+    medida, en su párrafo más abajo). `sdkmanager` y `avdmanager` no piden contraseña —solo
+    las licencias y el perfil de hardware, que se contestan por `stdin` de forma
+    determinista— y son además los largos: 2-3 GB. Los lanza
+    `agent/instalacionEnMaquina.ts`, tabla cerrada por `receta:paso`, y un test compara esa
+    tabla con lo que la receta marca `ejecutable` en las DOS direcciones: un paso con botón
+    que no esté en la tabla es un botón muerto, y uno lanzable sin botón es una capacidad que
+    nadie puede usar.
   - **Ejecutar un paso emite su LOG en vivo**, y eso es lo que lo hace usable: un botón mudo
     durante diez minutos se lee como que se ha colgado. Por el cable van la COLA del log
     (`LINEAS_DE_LOG`), el estado y los milisegundos, a ritmo (`MS_ENTRE_PROGRESOS`) porque
@@ -2128,6 +2133,107 @@ lanza ni un proceso. Reglas:
     dos rutas de Homebrew entran ahora en `RAICES_DE_SDK_POR_OMISION`, y por eso el paso de
     las variables DICE que xonecode no lo necesita y para qué sí: para el terminal de quien
     lo lee.
+- **Y lo que se INSTALA se puede pulsar, porque el miedo que lo impedía era falso**
+  (`agent/instalacionEnMaquina.ts`). El criterio era «no se lanza lo que puede pedir la
+  contraseña de administrador, porque un hijo sin terminal se quedaría esperándola para
+  siempre», y con él los dos pasos de `brew` se copiaban — o sea que en una máquina nueva la
+  receta **no tenía un solo botón vivo**, porque los pasos 3 y 4 exigen el `sdkmanager` que
+  instala el 1. Medido el 10-09-2026: `sudo` lee la contraseña de `/dev/tty` y no de `stdin`,
+  así que un hijo con `stdio[0] = "ignore"` y sin terminal de control **sale con código 1 en
+  57 ms** diciendo «a terminal is required to read the password». El modo de fallo no es un
+  botón colgado: es un botón que en dos segundos dice qué hace falta. Cinco reglas:
+  - **El criterio pasa a ser «puede COLGARSE esperando», no «puede pedir»**, y con eso `brew`
+    entra en la tabla: además, medido, `openjdk@17` es una fórmula y `android-commandlinetools`
+    un Generic Artifact, así que ninguno instala fuera del prefijo de Homebrew. Se le pasan
+    `NONINTERACTIVE` y `HOMEBREW_NO_AUTO_UPDATE` para que no pregunte ni gaste minutos
+    actualizándose.
+  - **Lo que sigue copiándose es lo que fallaría SIEMPRE o no falla rápido**: el paso del
+    `~/.zshrc` —lo único de la receta que no sabríamos deshacer—, un `sudo` escrito dentro del
+    comando (la licencia de Xcode) y `xcodebuild -downloadPlatform`, que pide autorización en
+    una VENTANA del sistema. Un botón que falla siempre es la otra forma del botón muerto.
+  - **Un paso lleva ahora VARIAS invocaciones** (`Invocacion`), porque el paso 1 son dos `brew`
+    seguidos y la aceptación de licencias era ya una llamada previa metida a mano. Y una
+    `opcional` es la que no corta el paso al fallar: solo las licencias, que pueden salir con
+    error si ya estaban aceptadas.
+  - **El paso que INSTALA el SDK no puede exigirlo** (`PasoEjecutable.conSdk`): la guarda de
+    «falta el SDK o el JDK» era incondicional, o sea el círculo exacto que dejaba al paso 1 sin
+    poder existir. Sin SDK el binario se busca en el PATH y se lanza a secas.
+  - **Y se mata el GRUPO, no el hijo.** Medido: un padre que deja un nieto vivo (`brew` →
+    `curl`, `sdkmanager` → `java`) sobrevive a `child.kill()` — el nieto seguía descargando
+    después de cancelar. Ahora se lanza con `detached: true`, que hace al hijo líder de su
+    grupo, y se cancela con `kill(-pid)`; sin pid se cae a matar al hijo, que es lo que hacía
+    siempre. `matarGrupo` entra por parámetro porque el real mataría el grupo de quien corre
+    `npm test`. **Coste declarado**: el hijo sale del grupo de procesos del servidor, así que
+    un Ctrl-C en la consola ya no se lleva la descarga por delante — antes moría con el padre.
+    Nadie cancela el trabajo en curso al apagar el servidor, y eso es lo que falta; el otro
+    lado sería peor, porque sin `detached` «Cancelar» dejaba 3 GB descargándose sin forma de
+    pararlos desde la ventana.
+- **La receta del SIMULADOR de iOS** (`core/dispositivos.ts#recetaDeSimuladorIos`), macOS y
+  nada más: los simuladores los da Xcode, que no existe en otro sistema — ahí no hay «otra
+  receta», hay ninguna. Tres pasos y **ninguno ejecutable, cada uno diciendo por qué**: Xcode
+  se instala del App Store y no hay comando que lo haga (lo que se da es el que abre su ficha),
+  la licencia lleva `sudo` escrito, y `-downloadPlatform` pide autorización en una ventana.
+  Cuatro cosas más:
+  - **Xcode COMPLETO no es las Command Line Tools**, y esa distinción es la mitad de la
+    receta: las CLT traen `xcrun` y `simctl` —así que la detección contesta— y **no traen ni
+    un simulador**. Se separan por dónde apunta `xcode-select -p`: dentro de un `Xcode.app` o
+    en `CommandLineTools`. Sin decirlo, quien solo las tenga vería «Xcode: ok» y una lista
+    vacía sin nada que le dijera qué le falta.
+  - **Los runtime salen del MISMO `simctl` que trae los dispositivos**: se le añade el dominio
+    `runtimes` (`xcrun simctl list -j runtimes devices available`, medido) y con eso saber si
+    falta el runtime no cuesta ni un proceso más — la regla de esta pantalla. La licencia sí
+    es un proceso propio (`xcodebuild -version`, que es quien falla si no está aceptada) y
+    solo se lanza con Xcode completo delante, la misma economía que `xcode-select -p` antes de
+    cualquier `xcrun`.
+  - **Con el destino de simuladores apagado no hay receta de iOS**, y no es simetría con la de
+    Android: aquella se compone de lo que ya se sabía —mirar el PATH no lanza nada— y esta
+    necesita haber medido. Sin medir, sus tres pasos saldrían «pendientes» en una máquina que
+    los tiene hechos, que es peor que ninguna receta.
+  - **Crear un simulador no es un paso**: Xcode deja una lista hecha con cada runtime que
+    instalas. Se dice en el `despues`, porque si no se busca un botón que no debe existir. Y en
+    esta máquina la receta sale **completa** (Xcode 26.6, licencia aceptada, tres runtime), o
+    sea que el panel dice «ya está» en vez de tres pasos que sobran.
+- **Verificar la conexión con un dispositivo** (`agent/dispositivosEnMaquina.ts#verificarDispositivo`,
+  mensaje `conexion`, `Dispositivo.verificado`, `componentes/VerificarDispositivo.tsx`). Es
+  otra pregunta que la del inventario y por eso es otro campo y otro botón: **listar dice lo
+  que el intermediario CREE** —`adb devices` contesta «device» de un teléfono cuyo `adb shell`
+  se ha quedado colgado, y medido, `simctl getenv` contesta la ruta de datos de un simulador
+  APAGADO, así que no vale como comprobación de nada—, y esto **ejecuta algo al otro lado**:
+  `adb -s <serial> shell getprop ro.product.model`, `xcrun simctl spawn <udid>` (medido contra
+  uno arrancado y uno apagado) y `xcrun devicectl device info details` para un iPhone físico,
+  que es el único de los tres **sin medir**, como su parser. Ocho reglas:
+  - **Viaja el ID y nada más**, y el host lo resuelve contra su última MEDIDA: de ahí salen la
+    plataforma y la clase, que son las que deciden qué comando se lanza. Una cadena del
+    navegador dentro de los argumentos de un proceso es la puerta que esto no abre. Un id que
+    no esté se ignora en silencio: es una foto vieja del cliente, no un error.
+  - **Es un mensaje PROPIO y no un campo de `dispositivos`**, aunque las dos cosas acaben
+    emitiendo el informe: `dispositivos` significa «vuelve a MEDIR», y una medida nueva se
+    lleva por construcción todas las verificaciones —viven con la foto—, o sea que meterlo ahí
+    habría borrado la que se acaba de hacer.
+  - **Y que vivan con la foto es la regla, no un efecto**: una verificación de hace media hora
+    pegada a una foto de ahora afirmaría algo que nadie ha comprobado. Ausente es «nadie lo ha
+    verificado», nunca «no responde».
+  - **La respuesta es una línea**, nunca la salida entera, y de `simctl` se elige la línea que
+    EXPLICA algo (`core/dispositivos.ts#motivoDeSimctl`): `describirFallo` se queda con la
+    primera de stderr, que ahí es papeleo —«An error was encountered … code=405»—, así que sin
+    esto verificar un simulador apagado contestaba un código de error en vez de «no está
+    arrancado».
+  - **`devicectl` se LEE**: no imprime el JSON por stdout, así que un código 0 sin fichero
+    legible no es una respuesta. Y el temporal se borra siempre.
+  - **Contestar sin decir el modelo sigue siendo contestar** («responde a la shell»): la
+    pregunta era si hay una shell viva, e inventar un modelo vacío sería afirmar de más.
+  - **Se ofrece también en una fila APAGADA**, y a propósito: la fila es la foto —puede tener
+    diez minutos— y esto es ahora. Arrancar un simulador a mano entre medias es justo el caso
+    en que la foto miente sin que nadie pueda saberlo.
+  - **Y cuando la verificación CONTRADICE a la fila se dice cuál es más vieja.** Medido en
+    pantalla: arrancado un simulador a mano y verificado, la fila quedaba leyéndose «apagado ·
+    ✓ responde», que parece un fallo de la ventana cuando es exactamente lo que esto viene a
+    distinguir. Solo cuando discrepan y solo si la verificación es POSTERIOR: escribirlo en las
+    35 filas sería ruido, y decirlo de una verificación anterior a la foto sería falso.
+  Una pieza para las dos vistas —el panel del escritorio y la lista de Ajustes—, que es el
+  patrón de `QuienEjecutaTareas`. Lo que NO es: arrancar un emulador o un simulador sigue sin
+  estar cableado, y el interlocutor de la app (el servidor hotswap de XOneStudio, puerto 8443)
+  tampoco — esto comprueba que se llega al APARATO, no que la app conteste.
 - **REQUISITOS e INVENTARIO son dos bloques, no una lista.** Un requisito está o no está —y
   si no está, se instala—; un dispositivo es algo que HAY. Juntos, «Android Sim · emulator no
   está instalada» se leía como un ajuste que el botón de al lado podía arreglar. El punto va

@@ -9,6 +9,9 @@ import {
   sistemaDe,
   type InformeDeDispositivos,
   recetaDeEmuladorAndroid,
+  recetaDeSimuladorIos,
+  parsearRuntimesDeIos,
+  motivoDeSimctl,
 } from "./dispositivos.js";
 
 describe("sistemaDe", () => {
@@ -276,16 +279,34 @@ describe("recetaDeEmuladorAndroid", () => {
     expect(receta.despues).toContain("emulator -avd");
   });
 
-  it("solo los pasos 3 y 4 son ejecutables, y solo cuando pueden cumplirse", () => {
-    // `brew` puede pedir la contraseña de administrador, así que los pasos 1 y 2 nunca se
-    // lanzan desde aquí. Los otros dos, solo con las herramientas del paso 1 puestas: un
-    // botón que no puede cumplir es el botón muerto de siempre, y se dice por qué no.
+  /**
+   * **El paso 1 es ejecutable, y eso cambió midiendo.** Antes no lo era por si `brew` pedía
+   * la contraseña de administrador y el hijo se quedaba esperándola; medido, `sudo` sin
+   * terminal de control falla en 57 ms en vez de colgarse. Y era el paso del que colgaba
+   * todo: los pasos 3 y 4 exigen `sdkmanager`, que es justo lo que instala el 1, así que en
+   * una máquina nueva la receta no tenía ningún botón vivo.
+   */
+  it("con Homebrew, el paso 1 ya se puede lanzar: es el que desbloquea los demás", () => {
     const deCero = recetaDeEmuladorAndroid("darwin", nada)!;
+    // Sin `brew` no hay nada que lanzar, y se dice por qué: un botón que no puede cumplir es
+    // el botón muerto de siempre.
     expect(deCero.pasos.map((p) => p.ejecutable)).toEqual([false, false, false, false]);
+    expect(deCero.pasos[0]!.porQueNo).toMatch(/homebrew/i);
     expect(deCero.pasos[2]!.porQueNo).toMatch(/paso 1/i);
 
+    const conBrew = recetaDeEmuladorAndroid("darwin", { ...nada, brew: true })!;
+    expect(conBrew.pasos.map((p) => p.ejecutable)).toEqual([true, false, false, false]);
+  });
+
+  it("el paso de la shell NUNCA es ejecutable: es lo único que no sabríamos deshacer", () => {
+    for (const estado of [nada, { ...nada, brew: true, sdkmanager: true, jdk: true, emulator: true }]) {
+      expect(recetaDeEmuladorAndroid("darwin", estado)!.pasos[1]!.ejecutable).toBe(false);
+    }
+  });
+
+  it("los pasos 3 y 4 se ofrecen solo cuando pueden cumplirse, y se dice qué falta", () => {
     const conHerramientas = recetaDeEmuladorAndroid("darwin", { ...nada, brew: true, sdkmanager: true, jdk: true })!;
-    expect(conHerramientas.pasos.map((p) => p.ejecutable)).toEqual([false, false, true, false]);
+    expect(conHerramientas.pasos.map((p) => p.ejecutable)).toEqual([true, false, true, false]);
     // El 4 necesita la imagen del sistema, que la trae el 3.
     expect(conHerramientas.pasos[3]!.porQueNo).toMatch(/paso 3/i);
 
@@ -299,5 +320,133 @@ describe("recetaDeEmuladorAndroid", () => {
     const receta = recetaDeEmuladorAndroid("darwin", nada)!;
     expect(receta.pasos[2]!.acepta).toMatch(/licencias del SDK de Android/i);
     expect(receta.pasos[0]!.acepta).toBeUndefined();
+  });
+});
+
+describe("recetaDeSimuladorIos", () => {
+  const nada = { xcode: false, licencia: false, runtimes: [] as string[] };
+
+  it("solo en macOS: fuera no hay receta, y no se finge una", () => {
+    // Y aquí no es una decisión de alcance: los simuladores de iOS los da Xcode, que no
+    // existe en ningún otro sistema. Fuera de macOS la respuesta no es otra receta.
+    expect(recetaDeSimuladorIos("win32", nada)).toBeUndefined();
+    expect(recetaDeSimuladorIos("linux", nada)).toBeUndefined();
+  });
+
+  it("de cero, los tres pasos y ninguno hecho", () => {
+    const receta = recetaDeSimuladorIos("darwin", nada)!;
+    expect(receta.id).toBe("ios-simulador");
+    expect(receta.pasos.map((p) => p.hecho)).toEqual([false, false, false]);
+    expect(receta.completa).toBe(false);
+  });
+
+  /**
+   * **NINGUNO se lanza desde aquí, y los tres dicen por qué.** No es que falte cablearlos:
+   * Xcode se instala del App Store (no hay comando que lo haga), la licencia lleva `sudo`
+   * escrito —y sin terminal de control `sudo` falla siempre, medido— y `-downloadPlatform`
+   * pide autorización en una ventana del sistema, que no se contesta por `stdin`. Un botón
+   * que falla siempre es la otra forma del botón muerto.
+   */
+  it("ningún paso es ejecutable, y cada uno dice por qué no", () => {
+    const receta = recetaDeSimuladorIos("darwin", { xcode: true, licencia: true, runtimes: [] })!;
+    expect(receta.pasos.map((p) => p.ejecutable)).toEqual([false, false, false]);
+    expect(receta.pasos[0]!.porQueNo).toMatch(/App Store/i);
+    expect(receta.pasos[1]!.porQueNo).toMatch(/sudo/i);
+    expect(receta.pasos[2]!.porQueNo).toMatch(/ventana/i);
+  });
+
+  it("cada paso sale de lo MEDIDO, y con todo puesto la receta está completa", () => {
+    const soloXcode = recetaDeSimuladorIos("darwin", { ...nada, xcode: true })!;
+    expect(soloXcode.pasos.map((p) => p.hecho)).toEqual([true, false, false]);
+
+    const todo = recetaDeSimuladorIos("darwin", { xcode: true, licencia: true, runtimes: ["iOS 26.0"] })!;
+    expect(todo.pasos.map((p) => p.hecho)).toEqual([true, true, true]);
+    expect(todo.completa).toBe(true);
+  });
+
+  /**
+   * La distinción que sostiene el paso 1: las Command Line Tools traen `xcrun` y `simctl`
+   * —así que la detección contesta— y no traen NI UN simulador. Sin decirlo, quien solo las
+   * tenga vería «Xcode: ok» y una lista vacía sin nada que le dijera qué le falta.
+   */
+  it("el paso 1 dice que las Command Line Tools no bastan", () => {
+    const receta = recetaDeSimuladorIos("darwin", nada)!;
+    expect(receta.pasos[0]!.titulo).toMatch(/no solo las herramientas de línea de comandos/i);
+    expect(receta.pasos[0]!.nota).toMatch(/no traen ning[úu]n simulador/i);
+  });
+
+  it("ningún comando lleva el home de nadie", () => {
+    // La misma regla que la receta de Android: esto viaja por el cable, que puede ir por un
+    // túnel. `/Applications/Xcode.app` sí aparece, y no es la excepción: es una constante de
+    // macOS —igual en todas— y no una ruta MEDIDA de esta máquina.
+    const todo = recetaDeSimuladorIos("darwin", { xcode: true, licencia: true, runtimes: ["iOS 26.0"] })!;
+    const comandos = todo.pasos.flatMap((p) => p.comandos).join("\n");
+    expect(comandos).not.toContain("/Users/");
+    expect(comandos).toContain("/Applications/Xcode.app");
+  });
+
+  it("los runtime que hay se NOMBRAN, y sin ninguno se dice qué pasará al instalarlo", () => {
+    // Crear un simulador no es un paso: Xcode deja una lista hecha con cada runtime que
+    // instalas. Decirlo evita que se busque un botón de «crear» que no tiene que existir.
+    expect(recetaDeSimuladorIos("darwin", { xcode: true, licencia: true, runtimes: ["iOS 26.0", "iOS 18.2"] })!.despues).toContain(
+      "iOS 26.0, iOS 18.2"
+    );
+    expect(recetaDeSimuladorIos("darwin", nada)!.despues).toMatch(/lista de simuladores hecha/i);
+  });
+});
+
+describe("parsearRuntimesDeIos", () => {
+  /** La forma MEDIDA de `xcrun simctl list -j runtimes devices` en esta máquina. */
+  const medido = JSON.stringify({
+    runtimes: [
+      { name: "iOS 18.2", version: "18.2", isAvailable: true, platform: "iOS", identifier: "…iOS-18-2" },
+      { name: "iOS 26.0", version: "26.0.1", isAvailable: true, platform: "iOS", identifier: "…iOS-26-0" },
+      { name: "watchOS 26.0", version: "26.0", isAvailable: true, platform: "watchOS", identifier: "…watchOS" },
+    ],
+    devices: {},
+  });
+
+  it("lee los de iOS del mismo listado que trae los dispositivos", () => {
+    expect(parsearRuntimesDeIos(medido)).toEqual(["iOS 18.2", "iOS 26.0"]);
+  });
+
+  it("uno a medio descargar no cuenta: no arranca nada", () => {
+    const json = JSON.stringify({ runtimes: [{ name: "iOS 26.0", isAvailable: false, platform: "iOS" }] });
+    expect(parsearRuntimesDeIos(json)).toEqual([]);
+  });
+
+  /** Ausente cuenta como disponible: este listado ya se pide con `available`, así que quien
+   *  no lo esté no llega — y descartarlo diría que no hay runtime teniéndolos. */
+  it("sin `isAvailable` se cuenta igual, que es el lado que no esconde nada", () => {
+    const json = JSON.stringify({ runtimes: [{ version: "26.0", platform: "iOS" }] });
+    expect(parsearRuntimesDeIos(json)).toEqual(["iOS 26.0"]);
+  });
+
+  it("un JSON roto o sin runtimes es una lista vacía, no un fallo", () => {
+    expect(parsearRuntimesDeIos("<html>")).toEqual([]);
+    expect(parsearRuntimesDeIos(JSON.stringify({ devices: {} }))).toEqual([]);
+  });
+});
+
+describe("motivoDeSimctl", () => {
+  /**
+   * El texto MEDIDO al hacer `xcrun simctl spawn` sobre un simulador apagado. La primera
+   * línea es papeleo —un dominio y un número— y `describirFallo` se queda justo con esa: sin
+   * esta función, verificar un simulador apagado contestaba un código de error en vez de
+   * «no está arrancado».
+   */
+  const real = [
+    "An error was encountered processing the command (domain=com.apple.CoreSimulator.SimError, code=405):",
+    "Process spawn via launchd failed because device is not booted.",
+    "Underlying error (domain=com.apple.SimLaunchHostService.RequestError, code=3):",
+  ].join("\n");
+
+  it("se queda con la línea que explica algo, no con la del dominio y el código", () => {
+    expect(motivoDeSimctl(real)).toBe("Process spawn via launchd failed because device is not booted.");
+  });
+
+  it("sin ninguna línea útil no se inventa una", () => {
+    expect(motivoDeSimctl("")).toBeUndefined();
+    expect(motivoDeSimctl("An error was encountered processing the command (code=1):")).toBeUndefined();
   });
 });

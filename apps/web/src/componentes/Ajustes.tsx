@@ -27,6 +27,7 @@ import { seMira } from "../tipos.js";
 import { ETIQUETA_DE_ESTADO, inventario } from "../inventarioDeDispositivos.js";
 import { Agentes } from "./Agentes.js";
 import { Receta } from "./Receta.js";
+import { VerificarDispositivo } from "./VerificarDispositivo.js";
 import { Pregunta } from "./Pregunta.js";
 import { urlDeEntornoAceptable, AVISO_DE_URL } from "./Wizard.js";
 import { PROYECTOS_POR_OMISION } from "./Barra.js";
@@ -176,6 +177,7 @@ export function Ajustes({
   alCambiarDispositivos,
   alActualizarDispositivos,
   alInstalarHerramienta,
+  alVerificarDispositivo,
   modelosDeMotor,
   alPedirModelosDeMotor,
   alPedirCatalogo,
@@ -245,6 +247,11 @@ export function Ajustes({
    * decide el servidor. Ausente = no se ofrece el botón.
    */
   alInstalarHerramienta?: (herramienta: NombreDeHerramienta) => void;
+  /**
+   * Verificar la conexión con un dispositivo: hablarle y esperar respuesta. Viaja el ID; el
+   * servidor lo resuelve contra su medida y decide qué lanzar. Ausente = no se pinta botón.
+   */
+  alVerificarDispositivo?: (id: string) => void;
   /** Lo que ofrece cada motor externo, por motor, para el desplegable de un subagente. */
   modelosDeMotor?: Record<string, { modelos: { id: string; nombre: string }[]; error?: string }>;
   /** Pide los de un motor. Bajo demanda: el de Codex arranca un proceso. */
@@ -710,6 +717,12 @@ export function Ajustes({
                                 {d.plataforma === "ios" ? "iOS" : "Android"} · {ETIQUETA_DE_ESTADO[d.estado]}
                                 {d.detalle === undefined ? "" : ` · ${d.detalle}`}
                               </span>
+                              <VerificarDispositivo
+                                dispositivo={d}
+                                conectado={conectado}
+                                medidoDeLaFoto={dispositivos.medido}
+                                {...(alVerificarDispositivo === undefined ? {} : { alVerificar: alVerificarDispositivo })}
+                              />
                             </li>
                           ))}
                         </ul>
@@ -735,6 +748,12 @@ export function Ajustes({
                               <span className={estilos.detalle}>
                                 {d.plataforma === "ios" ? "iOS" : "Android"} · {ETIQUETA_DE_ESTADO[d.estado]}
                               </span>
+                              <VerificarDispositivo
+                                dispositivo={d}
+                                conectado={conectado}
+                                medidoDeLaFoto={dispositivos.medido}
+                                {...(alVerificarDispositivo === undefined ? {} : { alVerificar: alVerificarDispositivo })}
+                              />
                             </li>
                           ))}
                         </ul>
@@ -785,9 +804,9 @@ export function Ajustes({
                 )}
               </p>
               <p className={estilos.nota}>
-                Por ahora xonecode solo los DESCUBRE. Elegir con cuál trabaja el agente es una decisión de la
-                sesión, no de esta ventana; conectar por red, arrancar un emulador o instalar la app tampoco
-                está cableado todavía.
+                xonecode los DESCUBRE, instala lo que falta y verifica la conexión con uno. Elegir con cuál
+                trabaja el agente es una decisión de la sesión, no de esta ventana; conectar por red, arrancar
+                un emulador o instalar la app tampoco está cableado todavía.
               </p>
 
               {/*

@@ -44,6 +44,7 @@ export function Escritorio({
   visibles,
   dispositivos,
   alActualizarDispositivos,
+  alVerificarDispositivo,
   alNuevaTarea,
   tareas,
   alAbrirSesionDeTarea,
@@ -94,6 +95,8 @@ export function Escritorio({
   /** La foto de la máquina (`Equipo.tsx`). Ausente = aún no llegó. */
   dispositivos?: InformeDeDispositivos;
   alActualizarDispositivos?: () => void;
+  /** Habla con un dispositivo y espera respuesta. Ausente = no se pinta ningún botón. */
+  alVerificarDispositivo?: (id: string) => void;
   /**
    * Crear una TAREA en background para ese proyecto. Ausente = no se ofrece.
    *
@@ -330,6 +333,7 @@ export function Escritorio({
           {...(dispositivos === undefined ? {} : { informe: dispositivos })}
           conectado={!apagado}
           {...(alActualizarDispositivos === undefined ? {} : { alActualizar: alActualizarDispositivos })}
+          {...(alVerificarDispositivo === undefined ? {} : { alVerificar: alVerificarDispositivo })}
         />
 
         {/* El modelo, dicho una vez y donde se va a usar. Ausente = no hay sesión abierta y

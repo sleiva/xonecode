@@ -2694,6 +2694,114 @@ describe("qué hay en la máquina: el mensaje «dispositivos»", () => {
     expect(JSON.stringify(foto)).not.toContain("/Users/alguien");
   });
 
+  /**
+   * VERIFICAR la conexión con un dispositivo. Tres reglas que este mensaje sostiene y que
+   * `dispositivos` no podía: no vuelve a medir —la verificación vive dentro de la foto, así
+   * que una medida nueva se llevaría la que se acaba de hacer—, el id se resuelve contra la
+   * última medida, y solo se toca ESE dispositivo.
+   */
+  describe("verificar la conexión: el mensaje «conexion»", () => {
+    const conDispositivos = {
+      ...informe,
+      dispositivos: [
+        { id: "ABC", nombre: "Pixel 8", plataforma: "android" as const, clase: "fisico" as const, estado: "conectado" as const },
+        { id: "UDID", nombre: "iPhone 17", plataforma: "ios" as const, clase: "simulador" as const, estado: "apagado" as const },
+      ],
+    };
+
+    const montar = (verificar: (d: { id: string }) => Promise<{ ok: boolean; detalle: string }>) => {
+      let medidas = 0;
+      const servidor = servidorDeMentira();
+      montarRutas(servidor, vestibuloDePrueba(), {
+        detectarDispositivos: async () => {
+          medidas++;
+          return conDispositivos;
+        },
+        verificarDispositivo: verificar,
+      });
+      return { servidor, medidas: () => medidas };
+    };
+
+    const fotos = (cliente: ReturnType<typeof clienteDeMentira>) =>
+      cliente.recibidos.filter((m) => m.clase === "dispositivos") as Extract<MensajeAlCliente, { clase: "dispositivos" }>[];
+
+    it("verifica el dispositivo de la MEDIDA y lo emite, sin volver a medir", async () => {
+      const vistos: string[] = [];
+      const { servidor, medidas } = montar(async (d) => {
+        vistos.push(d.id);
+        return { ok: true, detalle: "responde: Pixel 8" };
+      });
+      const cliente = clienteDeMentira();
+      await servidor.rutas.get(`GET ${RUTA_EVENTOS}`)!(cliente.peticion, cliente.respuesta);
+      await asentar();
+      expect(await enviarMensaje(servidor.rutas.get(`POST ${RUTA_ACCION}`)!, { clase: "conexion", id: "ABC" })).toBe(204);
+      await asentar();
+      // Lo que se le pasa al verificador es el dispositivo del host: de él salen la
+      // plataforma y la clase, que deciden qué comando se lanza.
+      expect(vistos).toEqual(["ABC"]);
+      // UNA sola medida: la de conectar. Remedir habría borrado esta verificación.
+      expect(medidas()).toBe(1);
+      const ultima = fotos(cliente).at(-1)!;
+      expect(ultima.informe.dispositivos[0]!.verificado).toMatchObject({ ok: true, detalle: "responde: Pixel 8" });
+      // Y solo ese: el otro sigue sin verificar, que no es «no responde».
+      expect(ultima.informe.dispositivos[1]!.verificado).toBeUndefined();
+    });
+
+    it("un id que no está en la medida no verifica nada: es una foto vieja del cliente", async () => {
+      let llamadas = 0;
+      const { servidor } = montar(async () => {
+        llamadas++;
+        return { ok: true, detalle: "responde" };
+      });
+      const cliente = clienteDeMentira();
+      await servidor.rutas.get(`GET ${RUTA_EVENTOS}`)!(cliente.peticion, cliente.respuesta);
+      await asentar();
+      expect(await enviarMensaje(servidor.rutas.get(`POST ${RUTA_ACCION}`)!, { clase: "conexion", id: "DESENCHUFADO" })).toBe(204);
+      await asentar();
+      expect(llamadas).toBe(0);
+      expect(fotos(cliente)).toHaveLength(1);
+    });
+
+    it("una medida NUEVA se lleva las verificaciones: viven con la foto", async () => {
+      // No es limpieza: una verificación de hace media hora pegada a una foto de ahora
+      // afirmaría algo que nadie ha comprobado.
+      const { servidor } = montar(async () => ({ ok: true, detalle: "responde" }));
+      const cliente = clienteDeMentira();
+      await servidor.rutas.get(`GET ${RUTA_EVENTOS}`)!(cliente.peticion, cliente.respuesta);
+      await asentar();
+      await enviarMensaje(servidor.rutas.get(`POST ${RUTA_ACCION}`)!, { clase: "conexion", id: "ABC" });
+      await asentar();
+      await enviarMensaje(servidor.rutas.get(`POST ${RUTA_ACCION}`)!, { clase: "dispositivos" });
+      await asentar();
+      expect(fotos(cliente).at(-1)!.informe.dispositivos[0]!.verificado).toBeUndefined();
+    });
+
+    it("un verificador que revienta contesta como respuesta, sin la ruta de nada", async () => {
+      const { servidor } = montar(async () => {
+        throw Object.assign(new Error("ENOENT: no such file or directory, open '/Users/alguien/x'"), { code: "ENOENT" });
+      });
+      const cliente = clienteDeMentira();
+      await servidor.rutas.get(`GET ${RUTA_EVENTOS}`)!(cliente.peticion, cliente.respuesta);
+      await asentar();
+      await enviarMensaje(servidor.rutas.get(`POST ${RUTA_ACCION}`)!, { clase: "conexion", id: "ABC" });
+      await asentar();
+      const v = fotos(cliente).at(-1)!.informe.dispositivos[0]!.verificado!;
+      expect(v.ok).toBe(false);
+      expect(JSON.stringify(v)).not.toContain("/Users/alguien");
+    });
+
+    it("sin la opción no se verifica nada: 204 y silencio", async () => {
+      const servidor = servidorDeMentira();
+      montarRutas(servidor, vestibuloDePrueba(), { detectarDispositivos: async () => conDispositivos });
+      const cliente = clienteDeMentira();
+      await servidor.rutas.get(`GET ${RUTA_EVENTOS}`)!(cliente.peticion, cliente.respuesta);
+      await asentar();
+      expect(await enviarMensaje(servidor.rutas.get(`POST ${RUTA_ACCION}`)!, { clase: "conexion", id: "ABC" })).toBe(204);
+      await asentar();
+      expect(fotos(cliente)).toHaveLength(1);
+    });
+  });
+
   it("sin la opción no se manda ningún «dispositivos»: no se afirma una máquina vacía", async () => {
     const servidor = servidorDeMentira();
     montarRutas(servidor, vestibuloDePrueba());

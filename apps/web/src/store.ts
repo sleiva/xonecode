@@ -730,6 +730,23 @@ export function crearStoreDelCliente(): {
                   clase: d.clase,
                   estado: d.estado,
                   ...(d.detalle === undefined ? {} : { detalle: d.detalle }),
+                  // La verificación, campo a campo como todo lo de aquí — y esta lista
+                  // blanca ya se ha pagado una vez: `mime` y `base64` se caían en el `case`
+                  // de un fichero, así que NINGUNA imagen se enseñaba con los tests en
+                  // verde. `ok` solo con el booleano de verdad (la trampa del `"false"` de
+                  // cadena, que aquí diría que un dispositivo responde cuando no).
+                  ...(typeof d.verificado === "object" &&
+                  d.verificado !== null &&
+                  typeof d.verificado.detalle === "string" &&
+                  typeof d.verificado.medido === "string"
+                    ? {
+                        verificado: {
+                          ok: d.verificado.ok === true,
+                          detalle: d.verificado.detalle,
+                          medido: d.verificado.medido,
+                        },
+                      }
+                    : {}),
                 })),
             },
             // Los cuatro interruptores, campo a campo y solo booleanos: un `"false"` de

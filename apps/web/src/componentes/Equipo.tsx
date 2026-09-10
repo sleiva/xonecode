@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import type { Dispositivo, Herramienta, InformeDeDispositivos } from "../tipos.js";
+import { VerificarDispositivo } from "./VerificarDispositivo.js";
 import estilos from "./Equipo.module.css";
 
 /**
@@ -25,11 +26,17 @@ export function Equipo({
   informe,
   conectado,
   alActualizar,
+  alVerificar,
 }: {
   /** Ausente = todavía no ha llegado la primera medida. */
   informe?: InformeDeDispositivos;
   conectado: boolean;
   alActualizar?: () => void;
+  /**
+   * Habla con un dispositivo y espera respuesta. Ausente = esta ejecución no verifica y no
+   * se pinta ningún botón — la foto sigue siendo lo único que se puede afirmar.
+   */
+  alVerificar?: (id: string) => void;
 }) {
   // «Mirando…» desde que se pulsa hasta que llega una foto NUEVA (cambia `medido`). Sin
   // esto el botón se pulsaba y no pasaba nada visible durante los segundos de adb y xcrun.
@@ -68,8 +75,20 @@ export function Equipo({
       ) : (
         <>
           <div className={estilos.bloques}>
-            <Bloque titulo="Android" {...android!} />
-            <Bloque titulo="iOS" {...ios!} />
+            <Bloque
+              titulo="Android"
+              {...android!}
+              conectado={conectado}
+              medido={informe.medido}
+              {...(alVerificar === undefined ? {} : { alVerificar })}
+            />
+            <Bloque
+              titulo="iOS"
+              {...ios!}
+              conectado={conectado}
+              medido={informe.medido}
+              {...(alVerificar === undefined ? {} : { alVerificar })}
+            />
           </div>
           <p className={estilos.nota}>
             Medido a las {horaDe(informe.medido)}.
@@ -116,7 +135,16 @@ interface DatosDeBloque {
   fallos: string[];
 }
 
-function Bloque({ titulo, resumen, filas, cuentas, fallos }: DatosDeBloque & { titulo: string }) {
+function Bloque({
+  titulo,
+  resumen,
+  filas,
+  cuentas,
+  fallos,
+  conectado,
+  medido,
+  alVerificar,
+}: DatosDeBloque & { titulo: string; conectado: boolean; medido: string; alVerificar?: (id: string) => void }) {
   return (
     <div className={estilos.bloque}>
       <h3 className={estilos.plataforma}>{titulo}</h3>
@@ -131,6 +159,12 @@ function Bloque({ titulo, resumen, filas, cuentas, fallos }: DatosDeBloque & { t
                 {ETIQUETA_DE_CLASE[d.clase]} · {ETIQUETA_DE_ESTADO[d.estado]}
               </span>
               {d.detalle === undefined ? null : <span className={estilos.detalle}>{d.detalle}</span>}
+              <VerificarDispositivo
+                dispositivo={d}
+                conectado={conectado}
+                medidoDeLaFoto={medido}
+                {...(alVerificar === undefined ? {} : { alVerificar })}
+              />
             </li>
           ))}
         </ul>
