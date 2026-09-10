@@ -1112,7 +1112,18 @@ describe("montarRutas — el cable, por fin conectado", () => {
         .map((m) => (m as Extract<MensajeAlCliente, { clase: "acto" }>).acto)
         .filter((a) => a.tipo === "sistema")
         .map((a) => (a as { texto: string }).texto);
-      expect(dichos.some((t) => t.includes("turno en marcha"))).toBe(true);
+      expect(dichos.filter((t) => t.includes("turno en marcha"))).toHaveLength(1);
+
+      // Y otra vez: un botón que rechaza invita a insistir, y cinco clics dejaban CINCO
+      // copias del mismo párrafo en el chat (medido en la pantalla del usuario). Una pared de
+      // texto repetido dice menos que una línea.
+      await enviarMensaje(accion, { clase: "sesion", proyecto: "p1", sesion: "s2" });
+      for (let i = 0; i < 5; i++) await asentar();
+      const otraVez = cliente.recibidos
+        .filter((m) => m.clase === "acto")
+        .map((m) => (m as Extract<MensajeAlCliente, { clase: "acto" }>).acto)
+        .filter((a) => a.tipo === "sistema" && (a as { texto: string }).texto.includes("turno en marcha"));
+      expect(otraVez).toHaveLength(1);
       // Y no se ha cerrado la que trabajaba para negarse después: dos daños en vez de uno.
       expect(abierta.cerrada).toBe(false);
       expect(vestibulo.proyectoAbierto()).toBe(abierta);

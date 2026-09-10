@@ -149,9 +149,15 @@ export function Barra({ entornos, entornoActivo, proyectos, visibles, proyectoAc
   abriendo?: { proyecto?: string; sesion?: string; descargando?: true };
   alElegirEntorno: (id: string) => void;
   alAbrirSesion: (proyecto: string, sesion: string) => void;
-  /** El nombre del proyecto es un botón: pide su rama y lo abre (o lo enseña, si ya
-   *  estaba abierto — el servidor no distingue, `completarProyecto`/`abrirProyecto` corren
-   *  igual). */
+  /**
+   * El nombre del proyecto es un botón: pide su rama y lo abre (o lo enseña, si ya estaba
+   * abierto — el servidor no distingue, `completarProyecto`/`abrirProyecto` corren igual).
+   *
+   * Con el proyecto TRABAJANDO sigue vivo a propósito, al contrario que el «+»: el servidor
+   * lo lleva a la conversación que está en marcha, y es la única forma de llegar a ella
+   * mientras no tenga fila propia —su id nace al volcar el primer acto—. Apagarlo aquí
+   * dejaría un proyecto trabajando al que no se puede ni mirar.
+   */
   alAbrirProyecto: (proyecto: string) => void;
   /** Ver el comentario de cabecera: la acción existe, el mensaje del cable todavía no. */
   alNuevaSesion: (proyecto: string) => void;
@@ -343,7 +349,10 @@ export function Barra({ entornos, entornoActivo, proyectos, visibles, proyectoAc
                             // misma copia de trabajo, o sea el mismo rechazo.
                             disabled={apagado || abriendoAlgo || p.trabajando === true}
                             {...(p.trabajando === true
-                              ? { title: "este proyecto está trabajando: espera a que termine" }
+                              ? {
+                                  title:
+                                    "este proyecto está trabajando: pulsa su nombre para ver qué hace, y abre otra cuando termine",
+                                }
                               : {})}
                             onClick={() => alNuevaSesion(p.id)}
                             aria-label={`nueva sesión en ${p.nombre}`}
@@ -406,7 +415,10 @@ export function Barra({ entornos, entornoActivo, proyectos, visibles, proyectoAc
                               */
                               disabled={apagado || abriendoAlgo || (p.trabajando === true && s.trabajando !== true)}
                               {...(p.trabajando === true && s.trabajando !== true
-                                ? { title: "este proyecto está trabajando en otra conversación" }
+                                ? {
+                                    title:
+                                      "este proyecto está trabajando en otra conversación: pulsa su nombre para verla",
+                                  }
                                 : {})}
                               onClick={() => alAbrirSesion(p.id, s.id)}
                             >

@@ -600,6 +600,26 @@ describe("Barra: qué sesión está trabajando", () => {
     expect(screen.getByLabelText("nueva sesión en AppDemo").hasAttribute("disabled")).toBe(true);
   });
 
+  /**
+   * Y el NOMBRE del proyecto sigue vivo, al contrario que el «+».
+   *
+   * Es la única forma de llegar a la conversación que está en marcha mientras no tenga fila
+   * propia —su id nace al volcar el primer acto, o sea al final del turno—, y el servidor
+   * lleva ese gesto a la consola que trabaja en vez de declinar. Medido en la pantalla del
+   * usuario: arrancó una sesión, se fue, pulsó el nombre del proyecto para ver qué hacía y se
+   * llevó el rechazo cinco veces. Apagarlo habría dejado un proyecto trabajando al que no se
+   * puede ni mirar.
+   */
+  it("el NOMBRE del proyecto sigue pulsable mientras trabaja: es la única forma de ver qué hace", () => {
+    montar([], true);
+    const nombre = screen.getAllByRole("button").find((b) => (b.textContent ?? "").includes("AppDemo"))!;
+    expect(nombre.hasAttribute("disabled")).toBe(false);
+    // Y el «+» sí está apagado, diciendo qué se puede hacer en su lugar.
+    const mas = screen.getByLabelText("nueva sesión en AppDemo");
+    expect(mas.hasAttribute("disabled")).toBe(true);
+    expect(mas.getAttribute("title")).toContain("pulsa su nombre");
+  });
+
   it("sin proyecto trabajando no se apaga ninguna fila", () => {
     montar([{ id: "s1", titulo: "una" }]);
     const fila = screen.getAllByRole("button").find((b) => (b.textContent ?? "").includes("una"))!;

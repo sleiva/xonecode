@@ -598,6 +598,42 @@ describe("vestíbulo", () => {
     await v.cerrar();
   });
 
+  /**
+   * Abrir el PROYECTO —sin nombrar sesión— que está trabajando lleva a la consola que
+   * trabaja, no a una nueva y no a un rechazo.
+   *
+   * Es la única forma de llegar a esa conversación mientras no tenga fila en la barra: su id
+   * nace al volcar el primer acto, o sea al final del turno. Medido en la pantalla del
+   * usuario: arrancó una sesión, se fue a otra cosa, pulsó el nombre del proyecto para ver
+   * qué hacía y se llevó el rechazo cinco veces seguidas.
+   */
+  it("abrir el proyecto que trabaja lleva a SU consola, aunque su sesión no tenga fila", async () => {
+    const s = sesionesEnMemoria();
+    let soltarElTurno: (() => void) | undefined;
+    const v = crearVestibulo({
+      ...dobles(),
+      origenDeTrabajo: "global",
+      sesiones: s.puerto,
+      crearEjecutor: () => async () => {
+        await new Promise<void>((resuelto) => {
+          soltarElTurno = resuelto;
+        });
+      },
+    });
+    // Sin `sesion`: una conversación nueva, que todavía no está en el índice.
+    const a = await v.abrirProyecto({ raiz: "/w/a" });
+    expect(a.sesion).toBeUndefined();
+    const turno = a.ejecutarTurno("arregla el login", a.estadoDeSesion, a.consola.consola);
+    await v.abrirProyecto({ raiz: "/w/b" });
+    const otraVez = await v.abrirProyecto({ raiz: "/w/a" });
+    expect(otraVez).toBe(a);
+    expect(a.cerrada).toBe(false);
+    expect(v.proyectoAbierto()).toBe(a);
+    soltarElTurno!();
+    await turno;
+    await v.cerrar();
+  });
+
   /** Y con la de ese proyecto OCIOSA sí se cambia de sesión: es lo de siempre. */
   it("otra sesión del mismo proyecto, con la de ahí ociosa, cierra y abre", async () => {
     const s = sesionesEnMemoria();

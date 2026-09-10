@@ -1371,7 +1371,23 @@ export function crearVestibulo(opciones: OpcionesDelVestibulo): Vestibulo {
       const laMisma =
         apertura.sesion !== undefined &&
         (yaAbierta.sesion === apertura.sesion || yaAbierta.idDeHilo === apertura.sesion);
-      if (laMisma) {
+      /**
+       * Abrir el PROYECTO —sin nombrar sesión— que está trabajando es VOLVER a lo que está
+       * pasando, no pedir una conversación nueva.
+       *
+       * Y es la única forma de llegar: el id de una sesión nace al volcar su primer acto, o
+       * sea al final del turno, así que la conversación que acabas de arrancar no tiene fila
+       * en la barra todavía. Medido en la pantalla del usuario: arrancó una sesión, se fue,
+       * pulsó el nombre del proyecto para ver qué hacía y se llevó el rechazo cinco veces —
+       * el botón muerto de siempre, y sin ninguna otra puerta detrás.
+       *
+       * La distinción con «nueva sesión» no la hace esto, la hace el cliente: el «+» se
+       * apaga mientras el proyecto trabaja, porque una segunda conversación sobre la misma
+       * copia de trabajo sigue siendo imposible. Lo que queda aquí es que el gesto de
+       * «llévame a este proyecto» lleve a alguna parte.
+       */
+      const volverALoQueTrabaja = apertura.sesion === undefined && yaAbierta.turnoEnVuelo;
+      if (laMisma || volverALoQueTrabaja) {
         enFoco = apertura.raiz;
         await cerrarLasOciosasSalvo(apertura.raiz);
         return yaAbierta;

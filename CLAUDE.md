@@ -521,7 +521,7 @@ medias puede haberse abierto un proyecto.
 **Y ya hay VARIAS consolas de persona vivas a la vez: cambiar de sesión no mata el turno que
 estaba corriendo** (`abiertas`/`enFoco` en `vestibulo.ts`, `alta.proyectos[].trabajando`).
 Era UNA variable, así que mirar otra sesión —o otro proyecto— cerraba la consola anterior y con
-ella el turno del agente, sin decir nada. Ahora es un mapa por RAÍZ y un foco. Diez reglas:
+ella el turno del agente, sin decir nada. Ahora es un mapa por RAÍZ y un foco. Doce reglas:
 - **La clave es la RAÍZ, y eso es la mitad del diseño.** Nunca hay dos consolas sobre la misma
   copia de trabajo, así que dos conversaciones no pueden escribirse los mismos ficheros ni
   pisarse el hilo del checkpointer — el mismo motivo por el que una tarea no arranca donde hay
@@ -532,6 +532,20 @@ ella el turno del agente, sin decir nada. Ahora es un mapa por RAÍZ y un foco. 
   por raíz impide. Con la de ese proyecto OCIOSA se cierra y se abre, que es lo de siempre. Y
   volver a la MISMA sesión que sigue trabajando devuelve la MISMA consola: es justo lo que uno
   hace para ver cómo va, y reabrirla la habría matado.
+- **Pero abrir el PROYECTO que trabaja —sin nombrar sesión— es VOLVER a lo que está pasando**,
+  no pedir una conversación nueva ni llevarse un rechazo. Es la única forma de llegar ahí:
+  el id de una sesión nace al volcar su primer acto, así que la conversación que acabas de
+  arrancar no tiene fila en la barra hasta que su turno acabe. Medido en la pantalla del
+  usuario, y es el fallo que este párrafo tenía al escribirse: arrancó una sesión, se fue,
+  pulsó el nombre del proyecto para ver qué hacía, y se llevó el mismo párrafo de rechazo
+  CINCO veces seguidas — el botón muerto de siempre y sin ninguna otra puerta detrás. La
+  distinción con «nueva sesión» la hace el cliente, no el servidor: el «+» se apaga mientras
+  el proyecto trabaja (una segunda conversación sobre la misma copia sigue siendo imposible) y
+  el NOMBRE se queda vivo, con el «+» diciendo en su `title` qué se puede hacer en su lugar.
+- **Y un aviso no se repite si es lo último que ya se dijo** (`decirEnLaConversacion`). Un
+  control que rechaza invita a insistir, y cinco clics dejaban cinco copias del mismo párrafo
+  en el chat: una pared de texto repetido dice menos que una línea. Se compara con el ÚLTIMO
+  acto y nada más — dos avisos distintos, o el mismo más tarde, sí se dicen.
 - **`proyectoAbierto()` sigue siendo la del FOCO** —de ella cuelgan las veintitantas lecturas
   de `arranque.ts`, que hablan todas de «la sesión que se está mirando»— y lo nuevo es
   `proyectosAbiertos()`. **Ahí está el único fallo ABIERTO que este cambio podía dejar**: la

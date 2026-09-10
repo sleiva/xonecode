@@ -1529,6 +1529,27 @@ export function montarRutas(
    * el cliente no puede saber cuánto tarda esto —de unos cientos de milisegundos a los
    * minutos de una descarga— y sin señal la interfaz se queda quieta después de un clic.
    */
+  /**
+   * Un aviso en la CONVERSACIÓN que se está mirando, como acto de sistema — y solo si no es
+   * lo último que ya se dijo.
+   *
+   * Las dos mitades vienen de la pantalla del usuario. La primera, porque `alta.aviso` por
+   * este camino no lo pinta nadie (lo leen el wizard y la ventana de sesión nueva, y pulsar
+   * una fila de la barra no abre ninguna de las dos), así que un rechazo sería un clic mudo.
+   * La segunda, porque un botón que rechaza invita a insistir: medido, cinco clics dejaron
+   * CINCO copias del mismo párrafo en el chat, y una pared de texto repetido dice menos que
+   * una línea. Se compara con el último acto y nada más: dos avisos distintos, o el mismo
+   * más tarde en la conversación, sí se dicen — es el mismo criterio que la bitácora de
+   * turno, donde un aviso que salta cuando no ha pasado nada enseña a ignorarlos.
+   */
+  const decirEnLaConversacion = (texto: string): void => {
+    const abierta = vestibulo.proyectoAbierto();
+    if (abierta === undefined) return;
+    const ultimo = abierta.actos().at(-1);
+    if (ultimo?.tipo === "sistema" && ultimo.texto === texto) return;
+    abierta.consola.consola.escribir(`${texto}\n`);
+  };
+
   const anunciarAbriendo = (que?: { proyecto?: string; sesion?: string; descargando?: true }): void => {
     emitir(que === undefined ? { clase: "abriendo", activo: false } : { clase: "abriendo", activo: true, ...que });
   };
@@ -1580,7 +1601,7 @@ export function montarRutas(
        * pinta en ninguna parte: para llegar ahí hace falta haber borrado la sesión que se
        * miraba mientras otro proyecto trabajaba, y ese hueco se queda declarado.
        */
-      vestibulo.proyectoAbierto()?.consola.consola.escribir(`${aviso}\n`);
+      decirEnLaConversacion(aviso);
       contar(error);
     } finally {
       // El alta PRIMERO y el flanco de bajada después: al revés hay un hueco en el que ya
