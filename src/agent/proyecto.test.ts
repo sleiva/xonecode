@@ -303,6 +303,62 @@ describe("backendDeAgente — las reglas están MONTADAS, no solo escritas", () 
     const { backend } = proyecto();
     expect(await backend.read("/skills/xone-development/SKILL.md")).toBeDefined();
   });
+
+  /**
+   * Las DESCARGAS de deepagents, que es lo que este cableado no montaba: medido el
+   * 10-09-2026 en el AppDemo real, `large_tool_results/call_866999.txt` (26 KB) estaba dentro
+   * del proyecto XOne y commiteado. Las escribe la librería llamando al backend DIRECTAMENTE
+   * —ni tool, ni HITL, ni `permissions`—, así que esta es la única capa que puede pararlo.
+   */
+  it("una descarga del agente cae en la carpeta de la SESIÓN, no en el proyecto", async () => {
+    const { raiz, carpeta, backend } = proyecto();
+    await backend.write("/large_tool_results/call_123.txt", "salida enorme");
+    const alLado = join(carpeta, "..", "large_tool_results", "call_123.txt");
+    expect(readFileSync(alLado, "utf8")).toBe("salida enorme");
+    expect(existsSync(join(raiz, "large_tool_results"))).toBe(false);
+  });
+
+  it("y el historial de mensajes desalojado, igual", async () => {
+    const { raiz, carpeta, backend } = proyecto();
+    await backend.write("/conversation_history/abc123", "un mensaje larguísimo");
+    expect(readFileSync(join(carpeta, "..", "conversation_history", "abc123"), "utf8")).toBe(
+      "un mensaje larguísimo"
+    );
+    expect(existsSync(join(raiz, "conversation_history"))).toBe(false);
+  });
+
+  /**
+   * Y se LEEN de vuelta, que es la mitad del sentido de que existan: el mensaje que la
+   * librería deja en el contexto le dice al modelo que grepee esa carpeta, así que un
+   * montaje que solo escribiera dejaría al agente creyendo que su salida se perdió.
+   * `CompositeBackend` enruta TODAS las operaciones por prefijo (medido en su código), y esto
+   * lo ata.
+   */
+  it("una descarga se puede volver a leer por la misma ruta", async () => {
+    const { backend } = proyecto();
+    await backend.write("/large_tool_results/call_123.txt", "salida enorme");
+    expect(await backend.read("/large_tool_results/call_123.txt")).toEqual(
+      expect.objectContaining({ content: expect.stringContaining("salida enorme") })
+    );
+  });
+
+  /**
+   * Y el FAIL-CLOSED: sin carpeta de sesión no hay dónde montarlas, y entonces la guarda del
+   * backend del proyecto es lo único que queda. Rechaza en vez de aterrizar en la app del
+   * cliente — la misma lección que la fila incondicional de `/adjuntos/` en `permisosDe`,
+   * medida por el mismo camino.
+   */
+  it("sin carpeta de sesión la descarga se RECHAZA, no cae en el proyecto", async () => {
+    const raiz = mkdtempSync(join(tmpdir(), "xonecode-sin-sesion-"));
+    writeFileSync(join(raiz, "app.xml"), "<app/>");
+    const backend = backendDeAgente({ raiz, ficheros: new Set(["/app.xml"]) }) as unknown as {
+      write(ruta: string, contenido: string): Promise<unknown>;
+    };
+    expect(await backend.write("/large_tool_results/call_123.txt", "salida enorme")).toEqual({
+      error: expect.stringContaining("/large_tool_results/"),
+    });
+    expect(existsSync(join(raiz, "large_tool_results"))).toBe(false);
+  });
 });
 
 /**

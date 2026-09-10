@@ -161,6 +161,13 @@ export const DESCRIPCIONES_FICHEROS = {
  * A partir de 6k tokens la salida se conserva bajo `/large_tool_results/` y se
  * sustituye por una referencia paginable. Así una lectura o búsqueda accidental
  * no consume toda la ventana antes de que actúe el resumen de conversación.
+ *
+ * **Esa carpeta se monta FUERA del proyecto** (`core/descargas.ts`,
+ * `agent/proyecto.ts#backendConDescargas`), y hasta el 10-09-2026 no: la escribe la librería
+ * llamando al backend directamente, esa ruta no estaba montada en ninguna parte y caía en el
+ * `FilesystemBackend` de la raíz. Medido en el AppDemo real del usuario, 26 KB de salida
+ * cruda de una tool dentro de la app XOne y commiteados. Bajar este tope no era el arreglo:
+ * el desalojo es la función, el fallo era el sitio.
  */
 export const OPCIONES_BUSQUEDA_FICHEROS = {
   grepMaxCount: 100,

@@ -1530,6 +1530,44 @@ MEDIDO de punta a punta con el agente real: el `mockup` escribe en
     eso el centro seguía enseñando ese panel sin ninguna pestaña marcada. Y un tipo que no
     sabemos enseñar se DICE y se descarga, en vez de adivinarlo.
 
+**Y lo que deepagents DESCARGA fuera del contexto tampoco es del proyecto**
+(`core/descargas.ts`, `agent/proyecto.ts#backendConDescargas`). Cuando la salida de una tool
+pasa del tope (`toolTokenLimitBeforeEvict`, 6k aquí) el `FilesystemMiddleware` no la mete en
+el hilo: la escribe en `/large_tool_results/<tool_call_id>.txt` y deja en su sitio una
+referencia. Lo mismo con un mensaje de usuario enorme, a `/conversation_history/<id>`. Las dos
+rutas están **a fuego** en la librería —comprobado en 1.13.2: no hay opción para cambiarlas— y
+las escribe llamando al backend DIRECTAMENTE, así que no pasan por ninguna tool: ni HITL, ni
+`permissions`. Ninguna estaba montada, así que caían en el `FilesystemBackend` de la raíz:
+medido el 10-09-2026 en el AppDemo real del usuario, `large_tool_results/call_866999.txt`
+—26 KB, el informe de un subagente— DENTRO de la app XOne y commiteado, y el diff contra la
+ref de CloudStudio lo incluía, o sea que el siguiente `/sync subir` se lo llevaba al cliente.
+Es la misma forma del problema de `/artifacts/`, y el arreglo es el mismo patrón. Seis reglas:
+- **La carpeta se DERIVA de la de artefactos**, al lado, en vez de recibir su propio
+  parámetro. Esa carpeta ya lleva dentro la única decisión que hace falta —¿hay sesión con
+  IDENTIDAD?—, que `turnoReal.ts` resuelve con `.xonecode/sesiones/<id>/artefactos` en la web
+  y `.xonecode/artefactos` en el terminal. Dos parámetros serían dos sitios donde contestar la
+  misma pregunta, y el segundo es justo el que se cae en un cableado de ocho saltos.
+- **Y de vivir ahí cuelga gratis el borrado**: `borrarSesion` ya borra la carpeta `<id>`
+  entera, así que borrar una conversación se lleva sus descargas — lo correcto, por el mismo
+  motivo que se lleva su checkpoint: ahí dentro está la salida entera de sus tools.
+- **No se anuncia nada de lo que se escriba**, al contrario que `/artefactos/`. Un artefacto
+  es una salida para una persona; esto es el andamio del agente, y un evento por cada una
+  sería ruido sobre algo que nadie pidió.
+- **Y hay guarda en el backend del PROYECTO** (`sinDescargasEnElProyecto`), que con el montaje
+  puesto no salta nunca —`CompositeBackend` enruta por prefijo de TEXTO, sin mirar si la
+  carpeta destino existe— y ahí está su sentido: el día que el montaje falte, la escritura
+  falla CERRADO en vez de acabar en la app del cliente. Misma lección que la fila
+  incondicional de `/adjuntos/` en `permisosDe`, medida por el mismo camino. Solo `write` y
+  `edit`, y devuelve `{error}` en vez de lanzar.
+- **Bajar el tope NO era el arreglo**: el desalojo es la función —evita que una lectura
+  accidental se coma la ventana—, el fallo era el sitio.
+- **Y en el terminal la carpeta es del PROYECTO, no de un hilo**, así que esos ficheros se
+  acumulan entre arranques y nada los poda. Es la misma deuda declarada del checkpointer: en
+  este repo no hay barrido de nada todavía.
+Comprobado de punta a punta con el agente real sobre un proyecto de pega: dos informes del
+`planner` de ~36 KB desalojados, los dos en `.xonecode/large_tool_results/`, y la raíz del
+proyecto con solo sus dos ficheros.
+
 **El estilo de un artefacto sale de `artifacts-builder/reference/estilo.md`, y NO de
 `theme-factory`** (la skill de Anthropic). Leídos sus diez temas, cada uno son cuatro
 hexadecimales, una pareja de fuentes y una frase — y las dos mitades se caen aquí: la

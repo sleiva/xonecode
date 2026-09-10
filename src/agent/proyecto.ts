@@ -11,6 +11,12 @@ import {
   type Artefacto,
 } from "../core/artefactos.js";
 import { RUTA_ADJUNTOS } from "../core/adjuntos.js";
+import {
+  RUTAS_DE_DESCARGA,
+  carpetaDeDescargas,
+  descargaFueraDeSitio,
+  porQueNoEsDelProyecto,
+} from "../core/descargas.js";
 
 /**
  * El backend del proyecto: confinado, y sin las vistas aplanadas.
@@ -128,6 +134,79 @@ export function backendConArtefactos<T extends object>(
 }
 
 /**
+ * Cuelga `/large_tool_results/` y `/conversation_history/` al lado de los artefactos de la
+ * sesión — o sea, FUERA del proyecto.
+ *
+ * Son las dos carpetas donde deepagents descarga lo que no cabe en el contexto, y hasta
+ * ahora no estaban montadas: medido, `large_tool_results/call_866999.txt` (26 KB) acabó
+ * dentro del AppDemo del usuario y commiteado. El porqué entero, y por qué la carpeta se
+ * deriva de la de artefactos en vez de recibir su propio parámetro, está en
+ * `core/descargas.ts`.
+ *
+ * La misma pieza que `/skills/`, `/artefactos/` y `/adjuntos/`: otra raíz del
+ * `CompositeBackend`, con la barra final obligatoria y sin crear la carpeta al montar
+ * —`FilesystemBackend` no exige que su `rootDir` exista y el `write` la crea—. Aquí eso
+ * importa más que en las otras: la mayoría de las sesiones no descargan nada, y crearlas al
+ * montar dejaría dos carpetas vacías en cada una.
+ *
+ * **Y no se apunta nada de lo que se escriba, al contrario que `/artefactos/`.** Un
+ * artefacto es una salida para una persona y por eso se anuncia; esto es el andamio del
+ * agente —la salida cruda de una tool que él mismo va a volver a leer— y un evento por cada
+ * una sería ruido en la conversación sobre algo que nadie pidió.
+ */
+export function backendConDescargas<T extends object>(backend: T, carpetaDeArtefactos: string): T {
+  const montajes: Record<string, unknown> = {};
+  for (const ruta of RUTAS_DE_DESCARGA) {
+    montajes[ruta] = new FilesystemBackend({
+      rootDir: carpetaDeDescargas(carpetaDeArtefactos, ruta),
+      virtualMode: true,
+    });
+  }
+  return new CompositeBackend(backend as never, montajes as never) as T;
+}
+
+/**
+ * Envuelve el backend del PROYECTO para que una descarga del agente no pueda aterrizar
+ * dentro.
+ *
+ * Con las dos raíces montadas esto no salta nunca —`CompositeBackend` enruta por prefijo de
+ * TEXTO, sin mirar si la carpeta destino existe (leído en deepagents 1.13.2)—, y ahí está el
+ * sentido: el día que el montaje falte, la escritura falla CERRADO en vez de acabar en la
+ * app del cliente. Es la misma lección que la fila incondicional de `/adjuntos/` en
+ * `permisosDe`, medida por el mismo camino.
+ *
+ * Y como `sinArtefactosEnElProyecto`: **solo `write` y `edit`** —leer o borrar una descarga
+ * mal puesta de antes tiene que seguir funcionando— y el rechazo se DEVUELVE como `{error}`,
+ * nunca se lanza. Leído en deepagents 1.13.2: los tools de fichero hacen
+ * `if (result.error) return result.error`, así que un error devuelto vuelve al modelo y una
+ * excepción se lleva el turno por delante. Aquí quien escribe es la librería y no una tool,
+ * y su hueco en el contexto ya sabe decir «no se pudo guardar»: lanzar reventaría el turno
+ * por una descarga que solo es andamio.
+ */
+export function sinDescargasEnElProyecto<T extends object>(backend: T): T {
+  const motivo = (ruta: unknown): string | undefined => {
+    if (typeof ruta !== "string") return undefined;
+    const destino = descargaFueraDeSitio(ruta);
+    return destino === undefined ? undefined : porQueNoEsDelProyecto(ruta, destino);
+  };
+
+  return new Proxy(backend, {
+    get(destino, prop, receptor) {
+      const valor = Reflect.get(destino, prop, receptor);
+      if (typeof valor !== "function") return valor;
+      if (prop !== "write" && prop !== "edit") {
+        return (valor as (...a: unknown[]) => unknown).bind(destino);
+      }
+      return async (...args: unknown[]) => {
+        const porQue = motivo(args[0]);
+        if (porQue !== undefined) return { error: porQue };
+        return (valor as (...a: unknown[]) => unknown).apply(destino, args);
+      };
+    },
+  }) as T;
+}
+
+/**
  * El backend con el que el agente ve el proyecto, compuesto entero.
  *
  * Vivía dentro de `construirAgente`, y eso dejaba sin probar justo la parte que decide si
@@ -144,6 +223,9 @@ export function backendConArtefactos<T extends object>(
  * 3. `/skills/` colgada, de solo lectura por `permisosDe`.
  * 4. Y `/artefactos/` colgada por FUERA, que es lo que hace que escribir ahí no pase por la
  *    guarda de (2) — son dos raíces distintas del mismo compuesto.
+ * 4b. Y las dos carpetas donde deepagents DESCARGA lo que no cabe en el contexto
+ *    (`/large_tool_results/`, `/conversation_history/`), al lado de los artefactos. Sin
+ *    ellas caían en el proyecto: medido, commiteadas dentro de la app del usuario.
  * 5. Y `/adjuntos/`, cuando la tarea trae alguno: la misma pieza, de solo lectura por
  *    `permisosDe`.
  */
@@ -159,15 +241,23 @@ export function backendDeAgente(opciones: {
    */
   adjuntos?: string;
 }): FilesystemBackend {
-  const delProyecto = sinArtefactosEnElProyecto(
-    sinVistasAplanadas(exponerMemoriaDeProyecto(backendDelProyecto(opciones.raiz)), opciones.ficheros)
+  const delProyecto = sinDescargasEnElProyecto(
+    sinArtefactosEnElProyecto(
+      sinVistasAplanadas(exponerMemoriaDeProyecto(backendDelProyecto(opciones.raiz)), opciones.ficheros)
+    )
   );
   const conSkills = backendConSkills(delProyecto);
   const conArtefactos =
     opciones.artefactos === undefined
       ? conSkills
       : backendConArtefactos(conSkills, opciones.artefactos.carpeta, opciones.artefactos.alEscribir);
-  return opciones.adjuntos === undefined ? conArtefactos : backendConAdjuntos(conArtefactos, opciones.adjuntos);
+  // Las descargas cuelgan de la MISMA carpeta de sesión que los artefactos, así que sin
+  // ella no hay dónde montarlas — y entonces la guarda de (2) es lo que las para.
+  const conDescargas =
+    opciones.artefactos === undefined
+      ? conArtefactos
+      : backendConDescargas(conArtefactos, opciones.artefactos.carpeta);
+  return opciones.adjuntos === undefined ? conDescargas : backendConAdjuntos(conDescargas, opciones.adjuntos);
 }
 
 /**
