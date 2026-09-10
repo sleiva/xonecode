@@ -1034,6 +1034,93 @@ describe("abrirParaTarea — la segunda puerta", () => {
     rmSync(base, { recursive: true, force: true });
   });
 
+  it("al terminar el turno se COMMITEA, por las dos puertas y con quién lo hizo en el mensaje", async () => {
+    // Sin esto no se commitea nunca: `prepararRepo` hace UN commit de baseline al descargar
+    // y ahí se acaba. Dos consecuencias, y la segunda es la que aprieta: las sesiones se
+    // mezclan sin que nada pueda atribuir ni revertir lo de cada una, y `/sync subir` se
+    // vuelve inalcanzable — su guarda exige árbol limpio.
+    const base = baseTemporal();
+    const s = sesionesEnMemoria();
+    const commits: { raiz: string; mensaje: string }[] = [];
+    const v = crearVestibulo({
+      ...dobles(),
+      origenDeTrabajo: "global",
+      sesiones: s.puerto,
+      baseDeWorkspace: base,
+      crearEjecutor: () => async () => {},
+      commitearTurno: async (raiz, mensaje) => {
+        commits.push({ raiz, mensaje });
+        return undefined;
+      },
+    });
+    const raizA = proyectoEnDisco(base, "A");
+    const raizB = proyectoEnDisco(base, "B");
+
+    const humana = await v.abrirProyecto({ raiz: raizA });
+    humana.recibir({ clase: "prosa", texto: "arregla el login" });
+    const deTarea = await v.abrirParaTarea(raizB, undefined, undefined, "669c9b79");
+    deTarea.recibir({ clase: "prosa", texto: "documenta las colecciones" });
+    await new Promise((r) => setTimeout(r, 0));
+    await humana.cerrar();
+    await deTarea.cerrar();
+
+    expect(commits).toEqual([
+      { raiz: raizA, mensaje: "xonecode: sesión" },
+      // La de una tarea lo dice: es lo que permite leer el historial y saber qué escribió
+      // algo que corría solo.
+      { raiz: raizB, mensaje: "xonecode: sesión [tarea 669c9b79]" },
+    ]);
+    rmSync(base, { recursive: true, force: true });
+  });
+
+  it("si el commit falla se DICE, y el turno cierra igual", async () => {
+    // Va en el `finally` del turno: una excepción ahí se llevaría por delante el cierre —el
+    // compositor apagado para siempre— y un fallo mudo dejaría el árbol sucio sin que nadie
+    // se enterase hasta que `/sync subir` se negara.
+    const base = baseTemporal();
+    const s = sesionesEnMemoria();
+    const dichos: string[] = [];
+    const v = crearVestibulo({
+      ...dobles(),
+      origenDeTrabajo: "global",
+      sesiones: s.puerto,
+      baseDeWorkspace: base,
+      informar: (texto) => dichos.push(texto),
+      crearEjecutor: () => async () => {},
+      commitearTurno: async () => "no se pudo commitear el turno: git no está",
+    });
+    const abierta = await v.abrirProyecto({ raiz: proyectoEnDisco(base, "A") });
+    abierta.recibir({ clase: "prosa", texto: "hola" });
+    await new Promise((r) => setTimeout(r, 0));
+    await abierta.cerrar();
+
+    expect(dichos.some((t) => t.includes("no se pudo commitear"))).toBe(true);
+    expect(abierta.cerrada).toBe(true);
+    rmSync(base, { recursive: true, force: true });
+  });
+
+  it("y una excepción del commit tampoco se lleva el turno por delante", async () => {
+    const base = baseTemporal();
+    const s = sesionesEnMemoria();
+    const v = crearVestibulo({
+      ...dobles(),
+      origenDeTrabajo: "global",
+      sesiones: s.puerto,
+      baseDeWorkspace: base,
+      crearEjecutor: () => async () => {},
+      commitearTurno: async () => {
+        throw new Error("git reventó");
+      },
+    });
+    const abierta = await v.abrirProyecto({ raiz: proyectoEnDisco(base, "A") });
+    abierta.recibir({ clase: "prosa", texto: "hola" });
+    await new Promise((r) => setTimeout(r, 0));
+    await abierta.cerrar();
+
+    expect(abierta.cerrada).toBe(true);
+    rmSync(base, { recursive: true, force: true });
+  });
+
   it("la sesión de una TAREA queda marcada con su id; la de una persona, no", async () => {
     // Sin esto, la sesión de una tarea entra en el índice como una más — y encima con el
     // título VACÍO, porque el título sale del primer acto de `usuario` y una tarea no

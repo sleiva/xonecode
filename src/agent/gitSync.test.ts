@@ -3,7 +3,7 @@ import { execFileSync } from "node:child_process";
 import { mkdtempSync, writeFileSync, mkdirSync, readFileSync, existsSync, unlinkSync, symlinkSync, statSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
-import { prepararRepo, cambiosPendientes, marcarSubido, arbolLimpio, sinCommitear, trabajoSinCommitear, REMOTO } from "./gitSync.js";
+import { prepararRepo, cambiosPendientes, marcarSubido, arbolLimpio, sinCommitear, trabajoSinCommitear, commitDeTurno, asegurarExclusiones, REMOTO } from "./gitSync.js";
 
 const git = (raiz: string, ...args: string[]) =>
   execFileSync("git", args, { cwd: raiz, encoding: "utf8" }).trim();
@@ -352,6 +352,142 @@ describe("trabajoSinCommitear", () => {
     mkdirSync(join(raiz, ".git", "index"));
 
     expect(await trabajoSinCommitear(raiz)).toEqual({ via: "sin-git" });
+  });
+});
+
+describe("asegurarExclusiones", () => {
+  it("la basura del SO va a `info/exclude` y NUNCA a `.gitignore`", async () => {
+    // `.gitignore` es un fichero del PROYECTO: el plan de subida lo vería como una alta y
+    // acabaría dentro de la app XOne del cliente. `info/exclude` es local del repo.
+    const raiz = proyecto();
+    await prepararRepo(raiz, "master");
+    const exclude = readFileSync(join(raiz, ".git", "info", "exclude"), "utf8");
+    expect(exclude).toContain(".DS_Store");
+    expect(exclude).toContain("Thumbs.db");
+    expect(exclude).toContain("/.xonecode/");
+    expect(existsSync(join(raiz, ".gitignore"))).toBe(false);
+  });
+
+  it("solo añade lo que falta, y no toca lo que ya hubiera", async () => {
+    // El fichero puede traer patrones del usuario y de una versión anterior de esto.
+    const raiz = proyecto();
+    await prepararRepo(raiz, "master");
+    const ruta = join(raiz, ".git", "info", "exclude");
+    writeFileSync(ruta, readFileSync(ruta, "utf8") + "lo-mio/\n");
+    await asegurarExclusiones(raiz);
+    const exclude = readFileSync(ruta, "utf8");
+    expect(exclude).toContain("lo-mio/");
+    expect(exclude.match(/\.DS_Store/g)).toHaveLength(1);
+  });
+
+  it("un repo bajado ANTES de esto las recibe al commitear", async () => {
+    // El camino que de verdad importa: los proyectos que ya están en disco no volverán a
+    // pasar por `prepararRepo` hasta el siguiente `/sync bajar`.
+    const raiz = proyecto();
+    await prepararRepo(raiz, "master");
+    const ruta = join(raiz, ".git", "info", "exclude");
+    // Se simula el exclude de la versión vieja: solo `.xonecode/`.
+    writeFileSync(ruta, "/.xonecode/\n");
+    writeFileSync(join(raiz, ".DS_Store"), "basura");
+    writeFileSync(join(raiz, "app.xml"), "<app cambiada/>");
+
+    await commitDeTurno(raiz, "xonecode: x");
+
+    expect(readFileSync(ruta, "utf8")).toContain(".DS_Store");
+    expect(git(raiz, "ls-tree", "-r", "--name-only", "HEAD")).not.toContain(".DS_Store");
+  });
+});
+
+describe("commitDeTurno", () => {
+  it("commitea lo que cambió y deja el árbol LIMPIO", () => {
+    // Lo segundo es lo que de verdad se prueba aquí. Si el índice del repo no queda
+    // igualado con el commit, `git status` enseña reversiones fantasma y
+    // `trabajoSinCommitear` reporta suciedad que no existe — por eso esto usa el índice de
+    // verdad y no el privado de `arbolDeAhora`, que existe para una foto de solo lectura.
+    return (async () => {
+      const raiz = proyecto();
+      await prepararRepo(raiz, "master");
+      writeFileSync(join(raiz, "app.xml"), "<app cambiada/>");
+      writeFileSync(join(raiz, "ñu.xne"), "x");
+
+      expect(await commitDeTurno(raiz, "xonecode: arreglar el login")).toEqual({ via: "commit", ficheros: 2 });
+      expect(await sinCommitear(raiz)).toEqual([]);
+      expect(git(raiz, "log", "-1", "--format=%s")).toBe("xonecode: arreglar el login");
+    })();
+  });
+
+  it("la identidad es NUESTRA: el commit no lo firma el usuario", async () => {
+    // El harness hizo este commit, no la persona. Va por `-c` en la invocación, así que no
+    // se le escribe nada al `config` del repo — la misma disciplina de `prepararRepo`, que
+    // en un repo preexistente respeta lo que ya tenga valor.
+    const raiz = proyecto();
+    await prepararRepo(raiz, "master");
+    writeFileSync(join(raiz, "app.xml"), "<app cambiada/>");
+    await commitDeTurno(raiz, "xonecode: x");
+    expect(git(raiz, "log", "-1", "--format=%an <%ae>")).toBe("xonecode <xonecode@local>");
+  });
+
+  it("`.xonecode/` no entra: ahí escribe el propio harness", async () => {
+    const raiz = proyecto();
+    await prepararRepo(raiz, "master");
+    writeFileSync(join(raiz, ".xonecode", "memoria.md"), "# lo de siempre");
+    writeFileSync(join(raiz, "app.xml"), "<app cambiada/>");
+    await commitDeTurno(raiz, "xonecode: x");
+    expect(git(raiz, "ls-tree", "-r", "--name-only", "HEAD")).not.toContain(".xonecode");
+  });
+
+  it("la basura del SO NO entra en el commit: de ahí acabaría subida a la app XOne", async () => {
+    // Encontrado midiendo sobre una copia del proyecto real: el `add -A` se tragaba el
+    // `.DS_Store`, y `cambiosPendientes` compara la ref remota contra el árbol — o sea que
+    // el fichero del Finder habría salido en el plan de `/sync subir` como una alta más, y
+    // `subida.ts` lo habría escrito en la app del cliente. `.gitignore` no vale para esto:
+    // es un fichero del PROYECTO y acabaría subido él también.
+    const raiz = proyecto();
+    await prepararRepo(raiz, "master");
+    writeFileSync(join(raiz, "app.xml"), "<app cambiada/>");
+    writeFileSync(join(raiz, ".DS_Store"), "basura del Finder");
+    mkdirSync(join(raiz, "doc"), { recursive: true });
+    writeFileSync(join(raiz, "doc", ".DS_Store"), "y en una subcarpeta");
+    writeFileSync(join(raiz, "doc", "NOTA.md"), "# nota");
+
+    await commitDeTurno(raiz, "xonecode: x");
+    const enElArbol = git(raiz, "ls-tree", "-r", "--name-only", "HEAD");
+    expect(enElArbol).not.toContain(".DS_Store");
+    // Y no se lleva por delante lo que había al lado.
+    expect(enElArbol).toContain("doc/NOTA.md");
+  });
+
+  it("sin nada que commitear NO hace un commit vacío", async () => {
+    // Un turno de conversación («cuéntame un chiste») no cambia un fichero. `git commit`
+    // sin nada en el índice sale con error, así que sin esta guarda el camino MÁS común
+    // sería un fallo tragado.
+    const raiz = proyecto();
+    await prepararRepo(raiz, "master");
+    const antes = git(raiz, "rev-parse", "HEAD");
+    expect(await commitDeTurno(raiz, "xonecode: un chiste")).toEqual({ via: "sin-cambios" });
+    expect(git(raiz, "rev-parse", "HEAD")).toBe(antes);
+  });
+
+  it("sin repo no lanza: dice que no hay git y se acabó", async () => {
+    // Un proyecto offline no es un repo (`prepararRepo` solo corre al descargar), así que
+    // ésta es la respuesta normal en la mitad de los proyectos. Y esto lo llama el
+    // `finally` del turno: una excepción aquí se llevaría el cierre del turno por delante.
+    const raiz = proyecto();
+    expect(await commitDeTurno(raiz, "xonecode: x")).toEqual({ via: "sin-git" });
+  });
+
+  it("un fallo de git se DEVUELVE con su motivo, tampoco se lanza", async () => {
+    const raiz = proyecto();
+    await prepararRepo(raiz, "master");
+    writeFileSync(join(raiz, "app.xml"), "<app cambiada/>");
+    // El mismo índice-directorio que usa el test de `trabajoSinCommitear`: `git status`
+    // sigue contestando (lo lee `commitDeTurno` para decidir si hay algo), pero `git add`
+    // muere al escribirlo.
+    rmSync(join(raiz, ".git", "index"));
+    mkdirSync(join(raiz, ".git", "index"));
+
+    const dicho = await commitDeTurno(raiz, "xonecode: x");
+    expect(dicho.via).toBe("fallo");
   });
 });
 

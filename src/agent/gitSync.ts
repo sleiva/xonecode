@@ -111,6 +111,40 @@ async function valorDeConfig(raiz: string, clave: string): Promise<string | unde
  * `git push` dejaba de funcionar. Las claves que ya tienen valor se respetan y se DICE
  * cuáles se omitieron: un aviso que no se da es un cambio invisible en el repo de otro.
  */
+/**
+ * Lo que este repo no tiene que ver: la carpeta del harness y la basura del sistema.
+ *
+ * **Va en `info/exclude` y NUNCA en `.gitignore`**, y no es una preferencia: `.gitignore` es
+ * un fichero del PROYECTO, así que el plan de subida lo vería como una alta y acabaría
+ * dentro de la app XOne del cliente. `info/exclude` es local del repo y no viaja a ninguna
+ * parte.
+ *
+ * Dos grupos:
+ * - **`.xonecode/`**, donde escribe el propio harness. La exclusión se ancla al PROYECTO: en
+ *   un repo mayor, `.xonecode/` a secas excluiría también el de cualquier otro subdirectorio
+ *   del usuario. La `/` inicial es relativa a la raíz del repo, que es donde git lo lee.
+ * - **La basura del SO**, que sí va sin anclar —un `.DS_Store` es basura esté donde esté— y
+ *   que entró aquí midiendo: sin ella, el `git add -A` de `commitDeTurno` se la tragaba, y
+ *   como `cambiosPendientes` compara la ref remota contra el árbol, el fichero del Finder
+ *   salía en el plan de `/sync subir` como una alta y `subida.ts` lo habría escrito en la app
+ *   del cliente. De paso arregla la otra mitad: hasta ahora un `.DS_Store` suelto bastaba
+ *   para que la guarda de árbol limpio se negara a subir.
+ *
+ * Es idempotente y **solo AÑADE lo que falte**, línea a línea: el fichero puede tener
+ * patrones del usuario y de una versión anterior de esto.
+ */
+export async function asegurarExclusiones(raiz: string): Promise<void> {
+  const exclude = await rutaDeExclusion(raiz);
+  const prefijo = await prefijoDelProyecto(raiz);
+  mkdirSync(dirname(exclude), { recursive: true });
+  const actual = existsSync(exclude) ? readFileSync(exclude, "utf8") : "";
+  const patrones = [`/${prefijo}${EXCLUSION}`, ...BASURA_DEL_SO];
+  const lineas = new Set(actual.split("\n").map((l) => l.trim()));
+  const faltan = patrones.filter((p) => !lineas.has(p));
+  if (faltan.length === 0) return;
+  appendFileSync(exclude, `${actual.endsWith("\n") || actual === "" ? "" : "\n"}${faltan.join("\n")}\n`);
+}
+
 export async function prepararRepo(
   raiz: string,
   ramaOrigen: string,
@@ -122,19 +156,7 @@ export async function prepararRepo(
     await git(raiz, ["init", "-q", "-b", ramaOrigen]);
   }
 
-  // `.gitignore` es un fichero del PROYECTO y acabaría subido a CloudStudio; `info/exclude`
-  // es local del repo y no viaja a ninguna parte.
-  const exclude = await rutaDeExclusion(raiz);
-  const prefijo = await prefijoDelProyecto(raiz);
-  mkdirSync(dirname(exclude), { recursive: true });
-  const actual = existsSync(exclude) ? readFileSync(exclude, "utf8") : "";
-  // La exclusión se ancla al PROYECTO: en un repo mayor, `.xonecode/` a secas excluiría
-  // también un `.xonecode/` de cualquier otro subdirectorio del usuario. `/` inicial =
-  // relativo a la raíz del repo, que es donde git lee este fichero.
-  const patron = `/${prefijo}${EXCLUSION}`;
-  if (!actual.includes(patron)) {
-    appendFileSync(exclude, `${actual.endsWith("\n") || actual === "" ? "" : "\n"}${patron}\n`);
-  }
+  await asegurarExclusiones(raiz);
 
   // `remote.cloudstudio.*` es nuestro propio espacio de nombres: ahí sí se escribe
   // siempre, porque la ref de seguimiento (`refs/remotes/cloudstudio/…`) es el libro de
@@ -327,8 +349,10 @@ export async function arbolLimpio(raiz: string): Promise<boolean> {
  * guarda existe para impedir. Estos tres no son contenido de ningún proyecto y aparecen
  * solo por abrir la carpeta.
  */
+export const BASURA_DEL_SO = [".DS_Store", "Thumbs.db", "desktop.ini"] as const;
+
 const esBasuraDelSO = (entrada: string): boolean =>
-  entrada === ".DS_Store" || entrada === "Thumbs.db" || entrada === "desktop.ini";
+  (BASURA_DEL_SO as readonly string[]).includes(entrada);
 
 /**
  * QUÉ está sin commitear, para poder decirlo. Es la misma pregunta que `arbolLimpio`
@@ -372,6 +396,64 @@ async function sinCommitearEnRepo(raiz: string, unoAUno = false): Promise<string
     // `XY ruta`: dos caracteres de estado y un espacio.
     .map((linea) => recortar(prefijo, linea.slice(3).trim()))
     .sort();
+}
+
+/** Qué pasó al intentar commitear el turno. No hay excepción: esto lo llama el `finally`
+ *  del turno, y una excepción ahí se llevaría el cierre del turno por delante. */
+export type ResultadoDeCommit =
+  | { via: "commit"; ficheros: number }
+  /** No había nada que commitear: un turno de conversación no toca el disco. */
+  | { via: "sin-cambios" }
+  /** La carpeta no es un repo. Es la respuesta NORMAL en un proyecto offline. */
+  | { via: "sin-git" }
+  | { via: "fallo"; motivo: string };
+
+/**
+ * El trabajo de un turno, commiteado en la rama.
+ *
+ * Existe porque sin él nada se commitea nunca: `prepararRepo` hace UN commit de baseline al
+ * descargar y ahí se acaba, así que el árbol se ensucia y no se limpia jamás. Dos
+ * consecuencias, y la segunda es la que aprieta: las sesiones se mezclan sin que nada pueda
+ * atribuir ni revertir lo de cada una, y **`/sync subir` se vuelve inalcanzable** — su guarda
+ * exige árbol limpio, así que después de cualquier trabajo del agente se niega para siempre.
+ *
+ * Cuatro decisiones:
+ * - **Con el índice DE VERDAD, no con el privado de `arbolDeAhora`.** Aquél existe para una
+ *   foto de solo lectura que no puede tocar el staging del usuario; esto es lo contrario. Si
+ *   el índice no queda igualado con el commit, `git status` enseña reversiones fantasma y
+ *   `trabajoSinCommitear` reporta suciedad que no existe.
+ * - **`.xonecode/` fuera**, con el `rm --cached` de siempre y no con un pathspec de
+ *   exclusión: `git add` con `:(exclude).xonecode` en un repo donde ya está ignorado avisa y
+ *   **sale con código 1** (medido, ver `arbolDeAhora`).
+ * - **Sin cambios no se commitea**, y no es higiene: `git commit` con el índice vacío sale
+ *   con error, así que el camino MÁS común —un turno de conversación— sería un fallo tragado.
+ * - **La identidad es NUESTRA y va por `-c`**, como la del baseline: el commit lo hizo el
+ *   harness, no la persona, y por `-c` no se le escribe nada al `config` de su repo.
+ *
+ * Lo que el mensaje NO puede decir es «lo escribió el agente»: esto barre todo lo que haya
+ * cambiado, incluido lo que tocara una persona a mano en esa carpeta durante el turno. Es la
+ * misma honestidad que separa `autorizadas` de «aplicados».
+ */
+export async function commitDeTurno(raiz: string, mensaje: string): Promise<ResultadoDeCommit> {
+  try {
+    if (!(await esRepo(raiz))) return { via: "sin-git" };
+    // ANTES de mirar y de añadir: un repo bajado con una versión anterior no tiene en su
+    // `info/exclude` la basura del SO, y sin ella el `add -A` se la traga y acaba SUBIDA a
+    // la app del cliente (medido sobre una copia del proyecto real). Es idempotente.
+    await asegurarExclusiones(raiz);
+    const cambiados = await sinCommitearEnRepo(raiz);
+    if (cambiados.length === 0) return { via: "sin-cambios" };
+    await git(raiz, ["add", "-A", "--", "."]);
+    await git(raiz, ["rm", "-r", "--cached", "--ignore-unmatch", "-q", NOMBRE_CARPETA]);
+    await git(raiz, [
+      "-c", "user.email=xonecode@local", "-c", "user.name=xonecode",
+      "commit", "-q", "-m", mensaje,
+    ]);
+    return { via: "commit", ficheros: cambiados.length };
+  } catch (error) {
+    // El mensaje de git, acotado: de aquí sale un aviso que se lee en el transcript.
+    return { via: "fallo", motivo: (error as Error).message.split("\n")[0] ?? "git falló" };
+  }
 }
 
 /** Cómo se ha respondido, para que nadie afirme lo que no se ha podido mirar. */

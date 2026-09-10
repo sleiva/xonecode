@@ -310,6 +310,52 @@ en el proyecto real del usuario, **con el título en blanco**: el título sale d
   las filas no distingue ninguna, y omitido siempre haría que un «7 sept» del año pasado se
   leyera como de anteayer.
 
+**Cada turno COMMITEA lo que dejó** (`agent/gitSync.ts#commitDeTurno`, la opción
+`commitearTurno` del vestíbulo). Hasta ahora no se commiteaba NUNCA: `prepararRepo` hace un
+commit de baseline al descargar y ahí se acababa. De eso colgaban dos cosas, y la segunda es
+la que apretaba: las sesiones se mezclaban sin que nada pudiera atribuir ni revertir lo de
+cada una, y **`/sync subir` era inalcanzable** — su guarda exige árbol limpio, así que después
+de cualquier trabajo del agente se negaba para siempre (medido: AppDemo, con 4 ficheros
+sueltos, no podía subir). Siete reglas:
+- **Con el índice DE VERDAD, no con el privado de `arbolDeAhora`.** Aquél existe para una foto
+  de solo lectura que no puede tocar el staging del usuario; esto es lo contrario, y si el
+  índice no queda igualado con el commit, `git status` enseña reversiones fantasma y
+  `trabajoSinCommitear` reporta suciedad que no existe. Hay test de que el árbol queda LIMPIO.
+- **Sin cambios no se commitea**, y no es higiene: `git commit` con el índice vacío sale con
+  error, así que el camino más común —un turno de conversación— sería un fallo tragado.
+- **La identidad es NUESTRA y va por `-c`**, como la del baseline: el commit lo hizo el
+  harness, no la persona, y así no se le escribe nada al `config` de su repo.
+- **Se ESPERA, al contrario que la ref de la foto.** Medido sobre una copia del proyecto real
+  (165 MB, 41 colecciones): `add -A` + `commit` tardan **74 ms**, y quien llama acaba de
+  esperar un turno entero. Y hace falta esperarlo: la puerta de entrega del corredor corre en
+  cuanto el turno devuelve y le pregunta a git.
+- **Va en el `finally` del turno y envuelto entero**: una excepción ahí se llevaría el cierre
+  por delante —el compositor apagado para siempre—. Un fallo se DICE; que no haya nada que
+  commitear, que no haya repo o que no sea del workspace, no, porque son el caso normal.
+- **DÓNDE se commitea lo decide el cableado, no el vestíbulo** (`dentroDelWorkspace`, puro y
+  con test): solo en la copia que creó xonecode. En la carpeta que abrió una persona —offline,
+  o `./bin/xonecode` dentro de su repo— un commit por turno sería ensuciarle el historial, así
+  que ahí lo único que hay es el aviso de árbol sucio al abrir.
+- **El mensaje NO dice «lo escribió el agente»**: lleva el título de la sesión y el id de la
+  tarea cuando la escribió una, pero el commit barre todo lo que haya cambiado, incluido lo
+  que tocara una persona a mano en esa carpeta. La misma honestidad que separa
+  `Tarea.autorizadas` de «aplicados».
+Y **la subida sigue siendo controlada**: esto no la dispara. El único camino es `/sync subir`
+con `politicaInteractiva` y el plan delante, y `main.ts` es fail-closed si alguien llamara sin
+política. Lo que cambia es que la guarda de árbol limpio deja de hacer de freno de rebote —
+nunca fue una autorización, y la política sigue siendo la única puerta.
+
+**Y la basura del SO va a `info/exclude`, NUNCA a `.gitignore`** (`asegurarExclusiones`, que
+`prepararRepo` y `commitDeTurno` comparten). `.gitignore` es un fichero del PROYECTO: subiría
+él mismo. La regla entró midiendo: sin ella el `add -A` del commit se tragaba el `.DS_Store`,
+y como el plan de subida son los ficheros CAMBIADOS, ese fichero acababa en la app XOne del
+cliente **como binario** — comprobado en `planDeSubida`: `esRutaProhibida` solo cubre
+`.xonecode`, `.git` y `.env`, y `extensionDe(".DS_Store")` devuelve `""` (el punto está en la
+posición 0), así que no es texto y cae en la rama de base64. Se aplica también al COMMITEAR y
+no solo al preparar el repo, porque un proyecto bajado con la versión anterior no volvería a
+pasar por `prepararRepo` hasta el siguiente `/sync bajar`. Y de paso arregla la otra mitad:
+hasta ahora un `.DS_Store` suelto bastaba para que la guarda de árbol limpio se negara a subir.
+
 **Y el proyecto DICE con qué te encuentras: lo que ya había sin commitear al abrir**
 (`agent/gitSync.ts#trabajoSinCommitear`, `alta.trabajoAlAbrir`). Todas las sesiones de un
 proyecto escriben en la MISMA copia local, y desde que hay tareas de fondo que escriben solas

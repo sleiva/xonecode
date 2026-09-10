@@ -227,6 +227,21 @@ export interface OpcionesDelVestibulo {
    */
   sinCommitear?: (raiz: string) => Promise<TrabajoSinCommitear>;
   /**
+   * COMMITEA lo que el turno dejó, al cerrarlo. Devuelve un aviso que decir, o `undefined`
+   * si no hay nada que contar (se commiteó, o no había nada que commitear, o esa carpeta no
+   * es un repo).
+   *
+   * Existe porque sin él no se commitea nunca —`prepararRepo` hace UN commit de baseline al
+   * descargar y ahí se acaba—, y de eso cuelgan dos cosas: que las sesiones se mezclan sin
+   * que nada pueda atribuir ni revertir lo de cada una, y que **`/sync subir` es
+   * inalcanzable**, porque su guarda exige árbol limpio.
+   *
+   * **Quién decide DÓNDE se commitea no es esto**: lo decide quien la cablea, mirando si la
+   * raíz cuelga del workspace que creó xonecode. Commitear cada turno dentro de la carpeta
+   * que abrió el usuario le ensuciaría su historial. Ausente = esta ejecución no commitea.
+   */
+  commitearTurno?: (raiz: string, mensaje: string) => Promise<string | undefined>;
+  /**
    * ¿Queda memoria del agente para ese hilo? El `thread_id` ES el id de la sesión
    * (`agent/checkpointer.ts`), así que preguntarlo es lo que convierte `historica` en un
    * hecho comprobado en vez de en «se reabrió»: una sesión con checkpoint CONTINÚA, y una
@@ -940,6 +955,24 @@ export function crearVestibulo(opciones: OpcionesDelVestibulo): Vestibulo {
       if (dispositivo !== undefined) sesiones.elegirDispositivo?.(raiz, idSesion, dispositivo);
     };
 
+    /**
+     * El mensaje del commit del turno.
+     *
+     * Lleva el TÍTULO de la sesión, que es el asidero con el que una persona la reconoce en
+     * la barra, y el id de la tarea cuando la escribió una: es lo que permite leer el
+     * historial y saber qué salió de algo que corría solo.
+     *
+     * Lo que NO dice es «lo escribió el agente». El commit barre todo lo que haya cambiado,
+     * incluido lo que tocara una persona a mano en esa carpeta durante el turno — la misma
+     * honestidad que separa `Tarea.autorizadas` de «aplicados».
+     */
+    const mensajeDeCommit = (): string => {
+      const titulo = sesiones.listar(raiz).find((e) => e.id === idSesion)?.titulo;
+      return `xonecode: ${titulo === undefined || titulo === "" ? "sesión sin título" : titulo}${
+        tarea === undefined ? "" : ` [tarea ${tarea}]`
+      }`;
+    };
+
     const ejecutarTurno: EjecutorDeTurno = async (peticion, estado, consola) => {
       /**
        * La raíz del estado tiene que ser la de ESTA consola, y aquí se comprueba.
@@ -981,6 +1014,25 @@ export function crearVestibulo(opciones: OpcionesDelVestibulo): Vestibulo {
         consolaWeb.turno(false);
         if (alCable) escuchaDeTurno?.(false);
         volcar();
+        // Y el commit, DESPUÉS de volcar: así la entrada del índice ya existe y su título
+        // —que es lo que da nombre al commit— es el de verdad.
+        //
+        // Se ESPERA, al contrario que la ref de la foto: medido sobre una copia del
+        // proyecto real del usuario (165 MB, 41 colecciones), `add -A` + `commit` tardan
+        // 74 ms, y quien llama acaba de esperar un turno entero. Y hace falta esperarlo: la
+        // puerta de entrega del corredor corre en cuanto el turno devuelve y le pregunta a
+        // git, así que un commit suelto correría contra ella.
+        //
+        // Envuelto entero: esto va en el `finally` del turno, y una excepción aquí se
+        // llevaría por delante el cierre —el compositor apagado para siempre—. Un fallo se
+        // DICE, que es lo contrario de dejar el árbol sucio en silencio hasta que
+        // `/sync subir` se niegue.
+        try {
+          const aviso = await opciones.commitearTurno?.(raiz, mensajeDeCommit());
+          if (aviso !== undefined) informar(aviso);
+        } catch (error) {
+          informar(`no se pudo commitear el turno: ${(error as Error).message}`);
+        }
       }
     };
 
