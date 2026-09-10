@@ -1,9 +1,9 @@
 import { readFileSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
-import { render, cleanup } from "@testing-library/react";
-import { afterEach, describe, it, expect } from "vitest";
-import { Maqueta } from "./Maqueta.js";
+import { render, cleanup, screen, fireEvent } from "@testing-library/react";
+import { afterEach, describe, it, expect, vi } from "vitest";
+import { Maqueta, acotarAnchoDeBarra, ANCHO_BARRA_POR_OMISION } from "./Maqueta.js";
 
 afterEach(cleanup);
 
@@ -57,7 +57,9 @@ describe("Maqueta", () => {
     // exactamente el tipo de fallo mudo que este repo persigue: nada da error.
     const { container } = render(<Maqueta centro={<div />} barra={<div />} />);
     const raiz = container.firstElementChild as HTMLElement;
-    expect(raiz.style.gridTemplateColumns).toBe("280px minmax(0, 1fr)");
+    // El techo va en la PISTA y no en el número: `min(320px, 60vw)` lo aplica el CSS en
+    // vivo, así que encoger la ventana estrecha la barra sin tocar el ancho recordado.
+    expect(raiz.style.gridTemplateColumns).toBe("min(320px, 60vw) minmax(0, 1fr)");
   });
 
   it("NO pone `data-phase`: con él, ni el chat ni las trazas pueden scrollear", () => {
@@ -91,5 +93,165 @@ describe("Maqueta", () => {
     const css = readFileSync(join(ESTILOS, "ConversationRoot.module.css"), "utf8");
     expect(css).toMatch(/--dsh-chat-content-width:/);
     expect(css).toMatch(/--dsh-composer-card-max-width:/);
+  });
+});
+
+describe("el tirador de la barra", () => {
+  const tirador = (): HTMLElement => screen.getByRole("separator", { name: "Ancho de la barra lateral" });
+
+  /**
+   * **jsdom no implementa `PointerEvent`** (comprobado en jsdom 25.0.1), y el `Event`
+   * pelado con el que `fireEvent.pointerMove` cae de vuelta no lleva `clientX` ni `button`
+   * — con él el componente recibía un `NaN` y devolvía la omisión, o sea un test que pasaba
+   * sin mover nada. Se dispara un `MouseEvent` con el NOMBRE del evento de puntero, que es
+   * lo que React escucha, y así la geometría del gesto es de verdad.
+   */
+  const deRaton = (tipo: string, clientX = 0): MouseEvent =>
+    new MouseEvent(tipo, { bubbles: true, cancelable: true, button: 0, clientX });
+
+  it("sin manejador no se pinta: un asa que no redimensiona es un control muerto", () => {
+    // Y encima tapa 8 px de la columna. Por eso la condición es tener a quién pedírselo,
+    // no una bandera aparte que alguien pueda poner sin cablear nada.
+    render(<Maqueta centro={<div />} barra={<div />} />);
+    expect(screen.queryByRole("separator")).toBeNull();
+  });
+
+  it("plegada tampoco: no hay ancho que mover", () => {
+    render(<Maqueta centro={<div />} barra={<div />} barraContraida alRedimensionarBarra={vi.fn()} />);
+    expect(screen.queryByRole("separator")).toBeNull();
+  });
+
+  it("es el «window splitter» de ARIA: un separator ENFOCABLE que dice su valor", () => {
+    // Sin `tabIndex` sería un asa que solo existe si tienes ratón, y el `aria-valuenow` es
+    // lo único que le dice a un lector de pantalla dónde está.
+    render(<Maqueta centro={<div />} barra={<div />} alRedimensionarBarra={vi.fn()} />);
+    const asa = tirador();
+    expect(asa.getAttribute("aria-orientation")).toBe("vertical");
+    expect(asa.getAttribute("tabindex")).toBe("0");
+    expect(asa.getAttribute("aria-valuenow")).toBe(String(ANCHO_BARRA_POR_OMISION));
+    expect(asa.getAttribute("aria-valuemin")).toBe("220");
+    expect(asa.getAttribute("aria-valuemax")).toBe("560");
+  });
+
+  it("las flechas mueven el ancho, y cada tecla es un gesto TERMINADO: se guarda", () => {
+    const alRedimensionarBarra = vi.fn();
+    render(<Maqueta centro={<div />} barra={<div />} alRedimensionarBarra={alRedimensionarBarra} />);
+    fireEvent.keyDown(tirador(), { key: "ArrowRight" });
+    expect(alRedimensionarBarra).toHaveBeenLastCalledWith(ANCHO_BARRA_POR_OMISION + 16, true);
+    fireEvent.keyDown(tirador(), { key: "ArrowLeft" });
+    expect(alRedimensionarBarra).toHaveBeenLastCalledWith(ANCHO_BARRA_POR_OMISION - 16, true);
+    fireEvent.keyDown(tirador(), { key: "Home" });
+    expect(alRedimensionarBarra).toHaveBeenLastCalledWith(220, true);
+    fireEvent.keyDown(tirador(), { key: "End" });
+    expect(alRedimensionarBarra).toHaveBeenLastCalledWith(560, true);
+  });
+
+  it("una tecla que no es suya no pide nada", () => {
+    const alRedimensionarBarra = vi.fn();
+    render(<Maqueta centro={<div />} barra={<div />} alRedimensionarBarra={alRedimensionarBarra} />);
+    fireEvent.keyDown(tirador(), { key: "a" });
+    expect(alRedimensionarBarra).not.toHaveBeenCalled();
+  });
+
+  it("arrastrar pide EN VIVO sin terminar, y al soltar termina UNA vez", () => {
+    // Las dos cadencias del gesto son la razón de que `terminado` exista: el arrastre pide
+    // sesenta veces por segundo y `localStorage` se escribe al soltar. En jsdom el rect del
+    // marco es todo ceros, así que el `clientX` ES el ancho.
+    const alRedimensionarBarra = vi.fn();
+    render(<Maqueta centro={<div />} barra={<div />} alRedimensionarBarra={alRedimensionarBarra} />);
+    fireEvent(tirador(), deRaton("pointerdown"));
+    fireEvent(tirador(), deRaton("pointermove", 400));
+    expect(alRedimensionarBarra).toHaveBeenLastCalledWith(400, false);
+    fireEvent(tirador(), deRaton("pointerup", 420));
+    expect(alRedimensionarBarra).toHaveBeenLastCalledWith(420, true);
+    expect(alRedimensionarBarra.mock.calls.filter(([, terminado]) => terminado === true)).toHaveLength(1);
+  });
+
+  it("sin arrastre en marcha, mover el puntero por encima no pide nada", () => {
+    const alRedimensionarBarra = vi.fn();
+    render(<Maqueta centro={<div />} barra={<div />} alRedimensionarBarra={alRedimensionarBarra} />);
+    fireEvent(tirador(), deRaton("pointermove", 400));
+    expect(alRedimensionarBarra).not.toHaveBeenCalled();
+  });
+
+  it("mientras se arrastra, el marco lleva `data-dragging` — que es lo que apaga la transición", () => {
+    // La regla es de la hoja copiada (`.frame[data-dragging] { transition: none }`): sin el
+    // atributo, la pista se movería por la curva de plegado y la columna se despegaría del
+    // tirador. Nada daría error; solo se vería.
+    const { container } = render(
+      <Maqueta centro={<div />} barra={<div />} alRedimensionarBarra={vi.fn()} />
+    );
+    const marco = container.firstElementChild as HTMLElement;
+    expect(marco.getAttribute("data-dragging")).toBeNull();
+    fireEvent(tirador(), deRaton("pointerdown"));
+    expect(marco.getAttribute("data-dragging")).toBe("true");
+    fireEvent(tirador(), deRaton("pointerup", 400));
+    expect(marco.getAttribute("data-dragging")).toBeNull();
+  });
+
+  it("doble clic vuelve a la omisión", () => {
+    const alRedimensionarBarra = vi.fn();
+    render(
+      <Maqueta centro={<div />} barra={<div />} anchoBarra={540} alRedimensionarBarra={alRedimensionarBarra} />
+    );
+    fireEvent.doubleClick(tirador());
+    expect(alRedimensionarBarra).toHaveBeenCalledWith(ANCHO_BARRA_POR_OMISION, true);
+  });
+
+  it("un ancho recordado imposible se ACOTA al pintar, no se pinta tal cual", () => {
+    // Un valor de una pantalla grande, de una versión anterior o escrito a mano en
+    // `localStorage` no puede dejar sin centro a un portátil.
+    const { container } = render(
+      <Maqueta centro={<div />} barra={<div />} anchoBarra={5000} alRedimensionarBarra={vi.fn()} />
+    );
+    expect((container.firstElementChild as HTMLElement).style.gridTemplateColumns).toBe(
+      "min(560px, 60vw) minmax(0, 1fr)"
+    );
+    expect(tirador().getAttribute("aria-valuenow")).toBe("560");
+  });
+
+  it("con cabecera se coloca en la fila de las columnas: no cruza la barra superior", () => {
+    // Un absoluto con celda declarada toma su ÁREA como bloque contenedor. Sin eso la tira
+    // de 8 px con cursor de redimensionar pasa por delante de la miga.
+    const { container: conCabecera } = render(
+      <Maqueta cabecera={<div />} centro={<div />} barra={<div />} alRedimensionarBarra={vi.fn()} />
+    );
+    expect(conCabecera.querySelector("[role='separator']")?.className).toMatch(/tiradorEnFila/);
+    cleanup();
+    const { container: sinCabecera } = render(
+      <Maqueta centro={<div />} barra={<div />} alRedimensionarBarra={vi.fn()} />
+    );
+    expect(sinCabecera.querySelector("[role='separator']")?.className).not.toMatch(/tiradorEnFila/);
+  });
+
+  it("la celda del tirador y el apagado de la transición viven en las HOJAS, y jsdom no las ve", () => {
+    const nuestra = readFileSync(join(AQUI, "Maqueta.module.css"), "utf8");
+    expect(nuestra).toMatch(/\.tiradorEnFila\s*\{[^}]*grid-row:\s*2/);
+    // La pista de color al pasar por encima es nuestra a propósito: la variante `sidebar`
+    // de la hoja copiada es invisible, y un asa que no se ve no invita a arrastrarla.
+    expect(nuestra).toMatch(/\.tirador:hover::after/);
+    const copiada = readFileSync(join(ESTILOS, "AppFrame.module.css"), "utf8");
+    expect(copiada).toMatch(/\.frame\[data-dragging\]\s*\{[^}]*transition:\s*none/);
+    expect(copiada).toMatch(/\.handle\s*\{[^}]*cursor:\s*col-resize/);
+  });
+});
+
+describe("acotarAnchoDeBarra", () => {
+  it("sin ventana solo aplica el suelo y el techo fijos: el 60% lo pone el CSS en vivo", () => {
+    // Aplicarlo aquí sobrescribiría los 560 que alguien eligió en su pantalla grande la
+    // primera vez que abriera el portátil, y eso no lo ha deshecho nadie.
+    expect(acotarAnchoDeBarra(320)).toBe(320);
+    expect(acotarAnchoDeBarra(10)).toBe(220);
+    expect(acotarAnchoDeBarra(5000)).toBe(560);
+  });
+
+  it("con ventana añade el 60%, que es lo que mantiene el tirador pegado al puntero", () => {
+    expect(acotarAnchoDeBarra(560, 700)).toBe(420);
+    // En una ventana estrechísima manda el suelo: para no tener barra está el plegado.
+    expect(acotarAnchoDeBarra(400, 300)).toBe(220);
+  });
+
+  it("lo que no es un número cae en la omisión, nunca en un `NaN` dentro del grid", () => {
+    expect(acotarAnchoDeBarra(Number.NaN)).toBe(ANCHO_BARRA_POR_OMISION);
   });
 });

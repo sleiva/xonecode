@@ -27,7 +27,7 @@ import { Ficheros } from "./componentes/Ficheros.js";
 import { Artefactos, type ArtefactoEnLista } from "./componentes/Artefactos.js";
 import { TareasDelProyecto } from "./componentes/TareasDelProyecto.js";
 import { aplicarApariencia, guardarApariencia, leerApariencia, type Apariencia } from "./apariencia.js";
-import { guardarBarraContraida, leerBarraContraida } from "./preferencias.js";
+import { guardarAnchoBarra, guardarBarraContraida, leerAnchoBarra, leerBarraContraida } from "./preferencias.js";
 
 type Store = ReturnType<typeof crearStoreDelCliente>;
 
@@ -112,6 +112,12 @@ export function App({
    * recarga. `leerBarraContraida` se llama una vez, al montar.
    */
   const [barraContraida, setBarraContraida] = useState(() => leerBarraContraida());
+  /**
+   * Y su ANCHO, por lo mismo: es de esta ventana. `undefined` = nadie lo ha movido, y
+   * entonces manda la omisión de `Maqueta` — la cifra vive allí, que es donde está el
+   * resto de la geometría, y no repetida aquí.
+   */
+  const [anchoBarra, setAnchoBarra] = useState(() => leerAnchoBarra());
 
   /**
    * Pedir la lista de ficheros de la sesión. Va en `useCallback` porque `Revision` la
@@ -654,6 +660,16 @@ export function App({
     });
   };
 
+  /**
+   * Redimensionar la barra. Se guarda solo al TERMINAR el gesto: el arrastre pide un ancho
+   * en cada `pointermove` y `localStorage` no es sitio para escribir sesenta veces por
+   * segundo. Cada pulsación de tecla llega ya terminada.
+   */
+  const alRedimensionarBarra = (ancho: number, terminado: boolean): void => {
+    setAnchoBarra(ancho);
+    if (terminado) guardarAnchoBarra(ancho);
+  };
+
   /** El entorno activo con su nombre y su URL, para la portada del escritorio. `undefined`
    *  si no hay ninguno registrado — que es distinto de haberlo y no tener proyectos. */
   const entornoDelEscritorio = estado.alta?.registrados.find((e) => e.id === entornoActivo);
@@ -947,6 +963,8 @@ export function App({
     <>
     <Maqueta
       barraContraida={barraContraida}
+      {...(anchoBarra === undefined ? {} : { anchoBarra })}
+      alRedimensionarBarra={alRedimensionarBarra}
       cabecera={cabecera}
       centro={
         // La rama ya NO se elige aquí: la pregunta de «qué proyecto abro y desde qué rama»
