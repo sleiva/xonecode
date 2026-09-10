@@ -1770,6 +1770,8 @@ describe("montarRutas — el cable, por fin conectado", () => {
       await asentar();
       const trabajando = ultimaAlta(cliente) as Extract<MensajeAlCliente, { clase: "alta" }>;
       expect(trabajando.proyectos[0]?.sesiones?.[0]?.trabajando).toBe(true);
+      // Y el proyecto NO lo repite: lo dice la fila, que es la que se abre.
+      expect(trabajando.proyectos[0]?.trabajando).toBeUndefined();
 
       soltarElTurno!();
       await turno;
@@ -1781,13 +1783,12 @@ describe("montarRutas — el cable, por fin conectado", () => {
     });
 
     /**
-     * Y el PROYECTO se marca aunque su sesión no tenga fila todavía, que es el caso más
-     * común de todos: abrir, pedir algo e irse a otro proyecto. El id de la sesión nace al
-     * volcar el primer acto —o sea al FINAL del turno—, así que marcar solo por sesión
-     * dejaba la barra sin decir nada justo en el primer minuto de uso. La raíz, en cambio, se
-     * sabe desde el primer instante.
+     * El PROYECTO se marca solo cuando NO hay fila que marcar, que desde que la prosa del
+     * usuario da de alta la sesión en el acto es el caso de una TAREA de fondo antes de su
+     * primer volcado. Decirlo en los dos niveles a la vez era la duplicación que el usuario
+     * señaló: la marca que importa es la de la fila, que es la que se abre.
      */
-    it("el proyecto se marca trabajando aunque su sesión no tenga fila en el índice todavía", async () => {
+    it("el proyecto se marca trabajando solo mientras su sesión no tenga fila en el índice", async () => {
       const servidor = servidorDeMentira();
       let soltarElTurno: (() => void) | undefined;
       const vestibulo = vestibuloDePrueba({

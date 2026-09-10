@@ -582,12 +582,24 @@ ella el turno del agente, sin decir nada. Ahora es un mapa por RAÍZ y un foco. 
   alta se reemite en los dos flancos de CUALQUIERA de las consolas vivas —para eso se ensanchó
   el disparador de `alCambiarTurno`, cuyo booleano sigue hablando solo de la del foco—, con
   PALABRAS y en el hueco de la fecha, que es el dato a punto de cambiar.
-- **Y son DOS marcas, no una derivada de la otra**: `sesiones[].trabajando` y
-  `proyectos[].trabajando`. El id de una sesión nace al VOLCAR su primer acto, o sea al final
-  del turno, así que el caso más común de todos —abrir, pedir algo, irse a otro proyecto— no
-  tiene ninguna fila que marcar y la barra no habría dicho nada justo en el primer minuto de
-  uso. La raíz sí se sabe desde el primer instante, y de ella sale la marca del proyecto — que
-  además es la que se ve con la lista de sesiones plegada.
+- **La sesión entra en el índice con el MENSAJE, no cuando el asistente contesta**
+  (`ConsolaDeProyecto.recibir`). La entrada la creaba `volcar()`, que corre en la frontera del
+  turno: así que la conversación no aparecía en la barra hasta que el turno acababa —minutos—
+  y hasta entonces no había fila que marcar, ni que abrir, ni que enseñar trabajando. Lo dijo
+  el usuario mirando la pantalla. No contradice la pereza que esa entrada tenía —existía para
+  que «alguien mira un proyecto y se va sin decir nada» no dejara una sesión vacía, y mandar
+  un mensaje es decir algo—: abrir sigue sin escribir nada. Tres detalles: se vuelca **solo
+  con el turno parado** (a mitad de turno el último acto de la piel todavía muta y el `.jsonl`
+  solo sabe anexar; y no hace falta, porque la entrada la creó la prosa que arrancó ese turno),
+  el acto de usuario **no muta nunca**, que es lo que hace seguro volcarlo suelto, y el alta se
+  reanuncia también tras una prosa porque un `/comando` no corre turno y no tendría flanco que
+  lo dijera.
+- **Y son DOS marcas, pero NO se dicen a la vez**: `sesiones[].trabajando` es la que importa
+  —es la fila que se abre— y `proyectos[].trabajando` solo sale cuando ninguna fila de ese
+  proyecto la lleva. Decirlo en los dos niveles era una duplicación, y el usuario la señaló.
+  Lo que queda para el proyecto es lo que la fila NO puede decir: una sesión que todavía no
+  está en el índice, o sea la de una TAREA de fondo antes de su primer volcado — las de
+  persona entran ya con el mensaje.
 - **Y de esa marca cuelga que el rechazo no sea un botón muerto**: con el proyecto trabajando,
   las OTRAS sesiones de su lista y su «+» se apagan, con el motivo en el `title`. La guarda del
   servidor sigue estando —es quien manda si la lista del cliente llega vieja—, y cuando declina

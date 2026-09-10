@@ -1291,7 +1291,31 @@ export function crearVestibulo(opciones: OpcionesDelVestibulo): Vestibulo {
         sesionReal.cancelar();
         return true;
       },
-      recibir: (mensaje) => consolaWeb.recibir(mensaje),
+      recibir: (mensaje) => {
+        consolaWeb.recibir(mensaje);
+        /**
+         * Una PROSA del usuario da de alta la sesión en el índice AHORA, no al acabar el
+         * turno.
+         *
+         * `volcar()` era lo único que creaba la entrada, y corre en la frontera del turno:
+         * así que la conversación no aparecía en la barra hasta que el asistente terminaba
+         * de contestar —minutos— y hasta entonces no había fila que marcar, ni que enseñar
+         * trabajando, ni que volver a abrir. Lo dijo el usuario mirando la pantalla.
+         *
+         * No contradice la pereza que la entrada tenía: esa existía para que «alguien mira
+         * un proyecto y se va sin decir nada» no dejara una sesión vacía en la barra, y
+         * mandar un mensaje es exactamente decir algo. Lo que sigue siendo perezoso es lo
+         * mismo de antes: abrir no escribe nada.
+         *
+         * **Solo con el turno parado**, y eso es la otra mitad. `volcar` no puede correr a
+         * mitad de turno: el último acto de la piel todavía muta —el cierre de una racha de
+         * tools SUSTITUYE a su apertura dentro del mismo acto— y el `.jsonl` solo sabe
+         * anexar, así que guardaría las dos líneas. Con el turno en vuelo no hace falta:
+         * la entrada ya la creó la prosa que lo arrancó. Y el acto de usuario en sí no muta
+         * nunca, que es lo que hace seguro volcarlo suelto.
+         */
+        if (mensaje.clase === "prosa" && !turnoEnVuelo) volcar();
+      },
       // El transcript del cliente lleva PRIMERO lo releído y después lo de esta ejecución.
       // Lo releído no vuelve a pasar por `volcar`: ya está en el `.jsonl`.
       conectar: (enviar) => [...(reabierta?.actos ?? []), ...consolaWeb.conectar(enviar)],

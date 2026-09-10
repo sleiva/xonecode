@@ -632,10 +632,20 @@ export function montarRutas(
         return {
           ...p,
           ...(sesiones.length === 0 ? {} : { sesiones }),
-          // La misma deducción por raíz que `activo`, con la misma función que la creó: un
-          // id guardado aparte se queda viejo el día que alguien abra por otro camino.
+          /**
+           * Y la marca del PROYECTO solo cuando no hay fila que marcar.
+           *
+           * La deducción es la misma por raíz que `activo`, con la misma función que la creó
+           * —un id guardado aparte se queda viejo el día que alguien abra por otro camino—,
+           * pero se calla si alguna de sus sesiones ya lleva la marca: decirlo en los dos
+           * niveles a la vez es la duplicación que el usuario señaló, y la que importa es la
+           * fila, que es la que se abre. Queda para lo que la fila NO puede decir: una
+           * sesión que todavía no está en el índice, o sea la de una TAREA de fondo antes de
+           * su primer volcado — las de persona entran ya con el mensaje.
+           */
           ...(raizDeProyectoOSilencio(p.nombre) !== undefined &&
-          trabajandoAqui.has(raizDeProyectoOSilencio(p.nombre)!)
+          trabajandoAqui.has(raizDeProyectoOSilencio(p.nombre)!) &&
+          !sesiones.some((se) => se.trabajando === true)
             ? { trabajando: true as const }
             : {}),
           // Si ya está bajado, abrirlo no necesita ni rama ni descarga: es lo que decide
@@ -2745,6 +2755,21 @@ export function montarRutas(
       void atenderAlta(mensaje);
     } else {
       destinoActual().recibir(mensaje);
+      /**
+       * Y si fue una PROSA, se reanuncia el alta: la sesión acaba de darse de alta en el
+       * índice (`ConsolaDeProyecto.recibir`), así que hay una fila nueva que la barra tiene
+       * que enseñar YA — con su título y marcada como la activa.
+       *
+       * Diferido por lo mismo que el reanuncio de los flancos: el lazo coge la línea en una
+       * microtarea, y anunciar en el acto contaría el turno como no empezado. No sustituye a
+       * los flancos —de ellos sale la marca de «trabajando»—, cubre el caso en que no hay
+       * flanco ninguno: un `/comando`, que no corre turno.
+       */
+      if (mensaje.clase === "prosa") {
+        void Promise.resolve()
+          .then(() => anunciarAlta())
+          .catch(contar);
+      }
     }
     respuesta.writeHead(204);
     respuesta.end();

@@ -701,6 +701,75 @@ describe("vestíbulo", () => {
     await v.cerrar();
   });
 
+  /**
+   * La sesión entra en el índice con el MENSAJE del usuario, no cuando el asistente
+   * termina de contestar.
+   *
+   * Lo dijo el usuario mirando la pantalla: la conversación no aparecía en la barra hasta
+   * que el turno acababa —minutos— y hasta entonces no había fila que marcar, ni que
+   * enseñar trabajando, ni que reabrir. La entrada la creaba `volcar()`, que corre en la
+   * frontera del turno.
+   */
+  it("una prosa del usuario da de alta la sesión en el ACTO, con su título", async () => {
+    const s = sesionesEnMemoria();
+    const v = crearVestibulo({
+      ...dobles(),
+      origenDeTrabajo: "global",
+      sesiones: s.puerto,
+      // Un ejecutor REAL (no el doble): `volcar` no persiste nada de un agente de pega, así
+      // que con el guionizado este test pasaría por vacío.
+      crearEjecutor: () => async () => {},
+    });
+    const a = await v.abrirProyecto({ raiz: "/w/a" });
+    // Abrir NO da de alta nada: esa pereza sigue igual, y es la que evita una sesión vacía
+    // en la barra cada vez que alguien mira un proyecto y se va.
+    expect(a.sesion).toBeUndefined();
+    expect(v.sesionesDe("/w/a")).toEqual([]);
+
+    a.recibir({ clase: "prosa", texto: "arregla el login" });
+    // En el acto, sin esperar al turno: hay fila, y con el id de la sesión.
+    expect(a.sesion).toBe(a.idDeHilo);
+    expect(v.sesionesDe("/w/a").map((x) => x.id)).toEqual([a.idDeHilo]);
+    // Y el acto del usuario ya está en su `.jsonl`: es de donde sale el título de la fila,
+    // y nunca muta, que es lo que hace seguro volcarlo suelto.
+    expect(s.jsonl.get(`/w/a|${a.idDeHilo}`)).toEqual([{ tipo: "usuario", texto: "arregla el login" }]);
+
+    await v.cerrar();
+  });
+
+  /**
+   * Y a mitad de turno NO se vuelca: el último acto de la piel todavía muta (el cierre de
+   * una racha de tools sustituye a su apertura dentro del mismo acto) y el `.jsonl` solo
+   * sabe anexar, así que guardaría las dos líneas. No hace falta: la entrada ya la creó la
+   * prosa que arrancó ese turno.
+   */
+  it("una prosa que llega a MITAD de turno no vuelca nada", async () => {
+    const s = sesionesEnMemoria();
+    /** Todos los turnos esperan, y se sueltan todos: el segundo lo arranca el lazo con la
+     *  prosa que este test manda, y sin soltarlo `cerrar()` se quedaría esperándolo. */
+    const esperando: (() => void)[] = [];
+    const v = crearVestibulo({
+      ...dobles(),
+      origenDeTrabajo: "global",
+      sesiones: s.puerto,
+      crearEjecutor: () => async () => {
+        await new Promise<void>((resuelto) => esperando.push(resuelto));
+      },
+    });
+    const a = await v.abrirProyecto({ raiz: "/w/a" });
+    const turno = a.ejecutarTurno("el primero", a.estadoDeSesion, a.consola.consola);
+    expect(a.turnoEnVuelo).toBe(true);
+    const antes = s.jsonl.get(`/w/a|${a.idDeHilo}`)?.length ?? 0;
+    a.recibir({ clase: "prosa", texto: "y esto también" });
+    expect(s.jsonl.get(`/w/a|${a.idDeHilo}`)?.length ?? 0).toBe(antes);
+    for (const soltar of esperando) soltar();
+    await turno;
+    // El lazo arranca el turno de la prosa en cuanto este devuelve: se suelta también.
+    await Promise.resolve();
+    for (const soltar of esperando) soltar();
+    await v.cerrar();
+  });
+
   it("abrir un proyecto con otro abierto cierra el primero", async () => {
     const s = sesionesEnMemoria();
     const v = crearVestibulo({ ...dobles(), origenDeTrabajo: "global", sesiones: s.puerto });
