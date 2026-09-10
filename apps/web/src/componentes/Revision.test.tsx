@@ -192,3 +192,85 @@ describe("Revision: la pila", () => {
     expect(alDesplegar).toHaveBeenCalledWith("src/a.xne");
   });
 });
+
+/**
+ * El rótulo de la cabecera es lo ÚNICO que separa dos afirmaciones distintas, y por eso va
+ * con test: «Sesión» dice que lo de abajo lo hizo esta sesión, y eso solo se puede sostener
+ * con atribución por commit. MEDIDO en el proyecto del usuario el 10-09-2026: una
+ * conversación enseñaba «Sesión +1266 −1» sobre dos ficheros que había escrito una tarea de
+ * fondo veinte minutos después.
+ */
+describe("Revision: qué se AFIRMA según cómo se haya medido", () => {
+  afterEach(cleanup);
+
+  const uno = (extra: Partial<FicheroTocado> = {}): FicheroTocado[] => [
+    { ruta: "doc/README.md", clase: "modificado", mas: 3, menos: 1, ...extra },
+  ];
+
+  it("con atribución por commit dice «Sesión» y no explica nada más", () => {
+    render(
+      <Revision via="git" ficheros={uno()} parches={{}} desplegados={VACIO} alDesplegar={NADA} alPlegar={NADA} alRecargar={NADA} />
+    );
+    expect(screen.getByText("Sesión")).toBeTruthy();
+    expect(screen.queryByText(/desde que se abrió/i)).toBeNull();
+  });
+
+  it("sin sello NO dice «Sesión»: dice desde cuándo, y que puede ser de otro", () => {
+    render(
+      <Revision
+        via="desde-apertura"
+        ficheros={uno()}
+        parches={{}}
+        desplegados={VACIO}
+        alDesplegar={NADA}
+        alPlegar={NADA}
+        alRecargar={NADA}
+      />
+    );
+    expect(screen.queryByText("Sesión")).toBeNull();
+    expect(screen.getByText("Desde que abriste")).toBeTruthy();
+    expect(screen.getByText(/otras sesiones o una tarea de fondo/i)).toBeTruthy();
+  });
+
+  it("y con lista vacía tampoco afirma lo mismo por los dos caminos", () => {
+    render(
+      <Revision via="desde-apertura" ficheros={[]} parches={{}} desplegados={VACIO} alDesplegar={NADA} alPlegar={NADA} alRecargar={NADA} />
+    );
+    expect(screen.getByText(/no ha cambiado ningún fichero del proyecto/i)).toBeTruthy();
+    expect(screen.queryByText(/esta sesión todavía no ha tocado/i)).toBeNull();
+  });
+
+  it("los commits de otra sesión entremedias se DICEN, con el alcance exacto de la duda", () => {
+    // La lista sigue siendo de esta sesión (se construye commit a commit); lo que puede
+    // traer hunks ajenos es un parche. Decir menos sería fingir aislamiento, y decir más
+    // —«esta lista no es fiable»— sería falso.
+    render(
+      <Revision
+        via="git"
+        mezclados={2}
+        ficheros={uno()}
+        parches={{}}
+        desplegados={VACIO}
+        alDesplegar={NADA}
+        alPlegar={NADA}
+        alRecargar={NADA}
+      />
+    );
+    expect(screen.getByText(/2 commits de otras sesiones/i)).toBeTruthy();
+  });
+
+  it("un fichero que nadie ha commiteado lo dice en su fila", () => {
+    render(
+      <Revision
+        via="git"
+        ficheros={uno({ sinCommitear: true })}
+        parches={{}}
+        desplegados={VACIO}
+        alDesplegar={NADA}
+        alPlegar={NADA}
+        alRecargar={NADA}
+      />
+    );
+    expect(screen.getByText("sin commitear")).toBeTruthy();
+  });
+});

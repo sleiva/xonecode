@@ -183,7 +183,15 @@ export type MensajeAlCliente =
    * abierta antes de que esto existiera—. Ninguna de las dos últimas es una lista vacía a
    * secas: «no has hecho nada» y «no se puede saber» no se pueden leer igual.
    */
-  | { clase: "revision"; via: "git" | "sin-marca" | "sin-empezar"; ficheros: FicheroTocado[] }
+  | {
+      clase: "revision";
+      /** `git` = atribuido por COMMIT (lo que hizo esta sesión). `desde-apertura` = todo lo
+       *  que ha cambiado en la copia desde que se abrió, de quien sea: es lo único medible
+       *  en una sesión sin sello, y NO es atribución. */
+      via: "git" | "desde-apertura" | "sin-marca" | "sin-empezar";
+      ficheros: FicheroTocado[];
+      mezclados?: number;
+    }
   | { clase: "parche"; ruta: string; texto: string; recortado: boolean }
   /** El árbol del proyecto abierto y el contenido de uno de sus ficheros (pestaña Ficheros). */
   | { clase: "arbol"; rutas: string[]; recortado: boolean; error?: string }
@@ -321,6 +329,8 @@ export interface FicheroTocado {
   clase: "nuevo" | "modificado" | "borrado";
   mas?: number;
   menos?: number;
+  /** Nadie ha commiteado esto todavía, así que no consta de quién es. */
+  sinCommitear?: true;
 }
 
 /** Un fichero del proyecto tal como viaja. Redeclarado de `web/servidor/transporte.ts`. */

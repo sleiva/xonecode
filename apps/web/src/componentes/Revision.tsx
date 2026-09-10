@@ -37,6 +37,7 @@ export const DESPLEGADOS_AL_ABRIR = 8;
 
 export function Revision({
   via,
+  mezclados,
   ficheros,
   parches,
   desplegados,
@@ -46,8 +47,15 @@ export function Revision({
   historica,
   conectado,
 }: {
-  /** Ausente = todavía no ha llegado la respuesta; se dice, en vez de enseñar vacío. */
-  via?: "git" | "sin-marca" | "sin-empezar";
+  /**
+   * CÓMO se ha medido lo que se enseña, y de eso depende lo que la pestaña puede AFIRMAR:
+   * `git` es atribución por commit —lo que hizo esta sesión— y `desde-apertura` es todo lo
+   * que ha cambiado en la copia desde que se abrió, de quien sea. Ausente = todavía no ha
+   * llegado la respuesta; se dice, en vez de enseñar vacío.
+   */
+  via?: "git" | "desde-apertura" | "sin-marca" | "sin-empezar";
+  /** Commits de otras sesiones entre los de esta. Solo se pinta si hay alguno. */
+  mezclados?: number;
   /**
    * La sesión es una relectura (`alta.historica`). Con «sin-marca» cambia lo que se dice:
    * el texto general ofrecía dos causas posibles cuando aquí se sabe cuál es.
@@ -108,7 +116,13 @@ export function Revision({
     );
   }
   if (ficheros.length === 0) {
-    return <p className={estilos.aviso}>Esta sesión todavía no ha tocado ningún fichero.</p>;
+    return (
+      <p className={estilos.aviso}>
+        {via === "git"
+          ? "Esta sesión todavía no ha tocado ningún fichero."
+          : "No ha cambiado ningún fichero del proyecto desde que se abrió esta sesión."}
+      </p>
+    );
   }
 
   const conCuenta = ficheros.filter((f) => f.mas !== undefined || f.menos !== undefined);
@@ -129,10 +143,17 @@ export function Revision({
   return (
     <div className={estilos.revision}>
       <div className={estilos.pila}>
-        {/* «Sesión» es el hueco del selector de turno que vendrá: la foto de git es de la
-            sesión entera (`agent/sesionGit.ts`), y afirmar «último turno» aquí sería falso. */}
+        {/* «Sesión» es el hueco del selector de turno que vendrá: la medida es de la sesión
+            entera (`agent/sesionGit.ts`), y afirmar «último turno» aquí sería falso.
+
+            Y solo dice «Sesión» cuando lo que hay debajo es SUYO. Con el respaldo
+            —`desde-apertura`, una sesión sin commits sellados— lo que se mide es la copia
+            del proyecto y no la sesión: ahí dentro puede estar el trabajo de una tarea de
+            fondo, y eso pasó en pantalla (una conversación enseñando +1266 líneas que
+            escribió una tarea veinte minutos después). El rótulo es lo único que separa las
+            dos afirmaciones, así que cambia con la medida. */}
         <div className={estilos.cabecera}>
-          <span className={estilos.alcance}>Sesión</span>
+          <span className={estilos.alcance}>{via === "git" ? "Sesión" : "Desde que abriste"}</span>
           <span className={estilos.total}>
             {/* Sin ningún fichero con cuenta —todo binario— no se inventa un «+0 −0»: es la
                 misma regla que ya evita esa mentira por fila, aplicada a la suma. */}
@@ -152,6 +173,23 @@ export function Revision({
             Volver a mirar
           </button>
         </div>
+
+        {via === "desde-apertura" ? (
+          <p className={estilos.nota}>
+            Esta sesión no tiene ningún commit suyo con el que atribuir sus cambios (es de antes
+            de que xonecode los sellara), así que esto es todo lo que ha cambiado en la copia del
+            proyecto desde que se abrió — incluido lo que hayan escrito otras sesiones o una tarea
+            de fondo.
+          </p>
+        ) : null}
+
+        {mezclados !== undefined && mezclados > 0 ? (
+          <p className={estilos.nota}>
+            {mezclados === 1
+              ? "Hay 1 commit de otra sesión entremedias: la lista de ficheros es de esta sesión, pero un diff puede traer cambios de la otra."
+              : `Hay ${mezclados} commits de otras sesiones entremedias: la lista de ficheros es de esta sesión, pero un diff puede traer cambios de las otras.`}
+          </p>
+        ) : null}
 
         {ficheros.map((f) => {
           const abierto = desplegados.has(f.ruta);
@@ -180,6 +218,10 @@ export function Revision({
                   {carpeta(f.ruta) === "" ? null : <span className={estilos.carpeta}>{carpeta(f.ruta)}</span>}
                   <span className={estilos.hoja}>{hoja(f.ruta)}</span>
                 </span>
+                {/* Lo que nadie ha commiteado se dice EN la fila: puede ser el turno en vuelo
+                    (se commitea al terminar) o algo que estaba suelto de antes, y en ninguno
+                    de los dos casos consta de quién es. */}
+                {f.sinCommitear === true ? <span className={estilos.pendiente}>sin commitear</span> : null}
                 {f.mas === undefined && f.menos === undefined ? (
                   <span className={estilos.binario}>binario</span>
                 ) : (

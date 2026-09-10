@@ -2072,6 +2072,47 @@ describe("el volcado de la sesión de una tarea", () => {
     rmSync(base, { recursive: true, force: true });
   });
 
+  it("lo que nadie ha commiteado NO se le atribuye a la tarea", async () => {
+    /**
+     * `cambiados` es el HECHO que se le cuenta al juez, y de él sale `escribio`. Un fichero
+     * sin commitear no consta de quién es: para una tarea eso no esconde nada suyo —
+     * `commitDeTurno` corre en el `finally` del turno y se ESPERA, así que cuando la puerta
+     * de entrega pregunta, lo que la tarea escribió ya está commiteado— y evita cargarle lo
+     * que estuviera suelto de antes. Con solo eso suelto, `escribio` es `false`: es lo que
+     * permite entregar una tarea de solo lectura sin exigirle el verificador.
+     */
+    const revision = revisionConGit(async () => ({
+      via: "git",
+      ficheros: [{ ruta: "suyo.xne" }, { ruta: "de-nadie.md", sinCommitear: true as const }],
+    }));
+    expect(await revision("/r", "s1")).toEqual({
+      revisable: true,
+      escribio: true,
+      cambiados: ["suyo.xne"],
+    });
+
+    const soloSuelto = revisionConGit(async () => ({
+      via: "git",
+      ficheros: [{ ruta: "de-nadie.md", sinCommitear: true as const }],
+    }));
+    expect(await soloSuelto("/r", "s1")).toEqual({ revisable: true, escribio: false, cambiados: [] });
+  });
+
+  it("el respaldo sin atribución SÍ es revisable: hay proyectos donde no se commitea", async () => {
+    // `commitearTurno` no commitea fuera del workspace a propósito (offline, o la carpeta
+    // que abrió una persona). Exigir atribución por commit habría dejado sin entregar TODA
+    // tarea de esos proyectos, que es un fallo peor que el que esto arregla.
+    const revision = revisionConGit(async () => ({
+      via: "desde-apertura",
+      ficheros: [{ ruta: "algo.xne" }],
+    }));
+    expect(await revision("/r", "s1")).toEqual({
+      revisable: true,
+      escribio: true,
+      cambiados: ["algo.xne"],
+    });
+  });
+
   it("MEDIDO: la condición de revisable, con `cambiosDeSesion` de verdad y sin doble de git", async () => {
     const { base, raiz } = proyectoConGit();
     const marcada = asidero<Promise<boolean>>();
@@ -2096,11 +2137,14 @@ describe("el volcado de la sesión de una tarea", () => {
       pid: 1,
       concurrencia: () => 1,
       juez: juezQueDice({ veredicto: "verde", resumen: "la colección está creada" }),
+      // La regla de PRODUCCIÓN, no una copia escrita a mano: `revisionConGit` es quien
+      // decide qué medidas valen para revisar, y una copia aquí divergía el día que la
+      // atribución pasó a ser por commit (pasó: este test se puso rojo diciendo que un
+      // proyecto revisable no lo era).
       revisable: async (r, sesion) => {
-        const cambios = await cambiosDeSesion(r, sesion);
-        medidas.push(cambios.via === "git");
-        if (cambios.via !== "git") return { revisable: false };
-        return { revisable: true, escribio: cambios.ficheros.length > 0 };
+        const rev = await revisionConGit(cambiosDeSesion)(r, sesion);
+        medidas.push(rev.revisable);
+        return rev;
       },
     });
     await corredor.arrancar();
@@ -2121,7 +2165,11 @@ describe("el volcado de la sesión de una tarea", () => {
     // lista es cosa de `cambiosDeSesion`, que tiene sus propios tests: aquí el turno de
     // mentira escribe en el mismo tick en que se toma la foto de apertura, así que exigir
     // la lista sería medir esa carrera del doble y no la condición.
-    expect((await cambiosDeSesion(raiz, estado()[0]!.sesion!)).via).toBe("git");
+    // `desde-apertura` y no `git`: el ejecutor de mentira de este test escribe pero no
+    // commitea, así que no hay sello con el que atribuir — y esa medida sirve igual para
+    // revisar, que es lo que la condición promete. La atribución por commit tiene sus
+    // propios tests en `agent/sesionGit.test.ts`, con `commitDeTurno` de verdad.
+    expect((await cambiosDeSesion(raiz, estado()[0]!.sesion!)).via).toBe("desde-apertura");
 
     await corredor.parar();
     await v.cerrar();

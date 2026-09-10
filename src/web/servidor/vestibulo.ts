@@ -240,7 +240,7 @@ export interface OpcionesDelVestibulo {
    * raíz cuelga del workspace que creó xonecode. Commitear cada turno dentro de la carpeta
    * que abrió el usuario le ensuciaría su historial. Ausente = esta ejecución no commitea.
    */
-  commitearTurno?: (raiz: string, mensaje: string) => Promise<string | undefined>;
+  commitearTurno?: (raiz: string, mensaje: string, sesion: string) => Promise<string | undefined>;
   /**
    * ¿Queda memoria del agente para ese hilo? El `thread_id` ES el id de la sesión
    * (`agent/checkpointer.ts`), así que preguntarlo es lo que convierte `historica` en un
@@ -1028,7 +1028,10 @@ export function crearVestibulo(opciones: OpcionesDelVestibulo): Vestibulo {
         // DICE, que es lo contrario de dejar el árbol sucio en silencio hasta que
         // `/sync subir` se niegue.
         try {
-          const aviso = await opciones.commitearTurno?.(raiz, mensajeDeCommit());
+          // El id de sesión va APARTE del mensaje: de él sale el sello con el que después
+          // se atribuye el cambio (`agent/sesionGit.ts`), y el título que va en el asunto no
+          // identifica nada — dos sesiones se pueden llamar igual, y renombrar una lo cambia.
+          const aviso = await opciones.commitearTurno?.(raiz, mensajeDeCommit(), idSesion);
           if (aviso !== undefined) informar(aviso);
         } catch (error) {
           informar(`no se pudo commitear el turno: ${(error as Error).message}`);

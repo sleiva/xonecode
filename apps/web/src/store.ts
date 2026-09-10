@@ -125,7 +125,11 @@ export interface EstadoDelCliente {
    * Los parches se guardan por ruta según se piden: uno grande no se vuelve a traer por
    * plegar y desplegar la fila.
    */
-  revision?: { via: "git" | "sin-marca" | "sin-empezar"; lista: FicheroTocado[] };
+  revision?: {
+    via: "git" | "desde-apertura" | "sin-marca" | "sin-empezar";
+    lista: FicheroTocado[];
+    mezclados?: number;
+  };
   parches?: Record<string, { texto: string; recortado: boolean }>;
   /**
    * El árbol del proyecto abierto y los contenidos ya traídos, por ruta (pestaña Ficheros).
@@ -376,11 +380,20 @@ function esProveedorDeModelos(valor: unknown): valor is ProveedorDeModelos {
 /** Un fichero tocado, comprobado campo a campo como todo lo que entra por el cable. */
 function esFicheroTocado(valor: unknown): valor is FicheroTocado {
   if (typeof valor !== "object" || valor === null) return false;
-  const f = valor as { ruta?: unknown; clase?: unknown; mas?: unknown; menos?: unknown };
+  const f = valor as {
+    ruta?: unknown;
+    clase?: unknown;
+    mas?: unknown;
+    menos?: unknown;
+    sinCommitear?: unknown;
+  };
   if (typeof f.ruta !== "string") return false;
   if (f.clase !== "nuevo" && f.clase !== "modificado" && f.clase !== "borrado") return false;
   if (f.mas !== undefined && typeof f.mas !== "number") return false;
   if (f.menos !== undefined && typeof f.menos !== "number") return false;
+  // Solo el booleano `true`, la trampa de siempre: la cadena `"false"` es verdadera en
+  // JavaScript, y aquí marcaría como «no commiteado» algo que sí lo está.
+  if (f.sinCommitear !== undefined && f.sinCommitear !== true) return false;
   return true;
 }
 
@@ -823,11 +836,24 @@ export function crearStoreDelCliente(): {
           return;
         }
         case "revision": {
-          const m = mensaje as { via?: unknown; ficheros?: unknown };
-          if (m.via !== "git" && m.via !== "sin-marca" && m.via !== "sin-empezar") return;
+          const m = mensaje as { via?: unknown; ficheros?: unknown; mezclados?: unknown };
+          if (
+            m.via !== "git" &&
+            m.via !== "desde-apertura" &&
+            m.via !== "sin-marca" &&
+            m.via !== "sin-empezar"
+          ) {
+            return;
+          }
           if (!Array.isArray(m.ficheros)) return;
           const lista = m.ficheros.filter(esFicheroTocado).map((f) => ({ ...f }));
-          mutar({ revision: { via: m.via, lista } });
+          mutar({
+            revision: {
+              via: m.via,
+              lista,
+              ...(typeof m.mezclados === "number" && m.mezclados > 0 ? { mezclados: m.mezclados } : {}),
+            },
+          });
           return;
         }
         case "parche": {

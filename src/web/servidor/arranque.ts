@@ -269,7 +269,14 @@ export interface OpcionesDeMontaje {
   catalogoDeModelos?: (proveedor: Proveedor) => Promise<{ id: string; nombre?: string }[]>;
   /** Qué ha tocado la sesión, y el parche de un fichero (`agent/sesionGit.ts`). Ausentes =
    *  esta ejecución no lo puede saber, y la pestaña lo dice. */
-  cambiosDeSesion?: (raiz: string, sesion: string) => Promise<{ via: "git" | "sin-marca"; ficheros: FicheroTocado[] }>;
+  cambiosDeSesion?: (
+    raiz: string,
+    sesion: string
+  ) => Promise<{
+    via: "git" | "desde-apertura" | "sin-marca";
+    ficheros: FicheroTocado[];
+    mezclados?: number;
+  }>;
   parcheDeSesion?: (raiz: string, sesion: string, ruta: string) => Promise<{ texto: string; recortado: boolean } | undefined>;
   /**
    * El árbol del proyecto y el contenido de un fichero (`agent/arbolDeProyecto.ts`). Entran
@@ -1702,8 +1709,8 @@ export function montarRutas(
       });
       return;
     }
-    const { via, ficheros } = await opciones.cambiosDeSesion(abierto.raiz, sesion);
-    emitir({ clase: "revision", via, ficheros });
+    const { via, ficheros, mezclados } = await opciones.cambiosDeSesion(abierto.raiz, sesion);
+    emitir({ clase: "revision", via, ficheros, ...(mezclados === undefined ? {} : { mezclados }) });
   };
 
   /**
@@ -2730,6 +2737,35 @@ export function augmentacionCableada(opciones: {
   };
 }
 
+/**
+ * El commit de cada turno, cableado — y extraído por el motivo documentado en CLAUDE.md:
+ * esta composición vivía en un cierre de `arrancarConsolaWeb` que todos sus tests doblan, y
+ * es LA MISMA forma de fallo que ya se ha medido tres veces en `abrirParaTarea` (una lambda
+ * escrita a mano que se deja un argumento, con TypeScript callado porque una función que
+ * ignora parámetros es asignable). Aquí el argumento que se puede caer es el que sostiene la
+ * atribución entera: sin `sesion`, el commit sale sin sello y la pestaña Revisión se cae al
+ * respaldo para siempre, sin un solo síntoma.
+ *
+ * Dos decisiones que se quedan aquí y no en el vestíbulo:
+ * - **DÓNDE se commitea**: solo en la copia que creó xonecode. En la carpeta que abrió una
+ *   persona —offline, o `./bin/xonecode` dentro de su repo— un commit por turno sería
+ *   ensuciarle el historial cada vez que habla con el agente.
+ * - **Qué se DICE**: solo el fallo. Que no haya nada que commitear, que la carpeta no sea un
+ *   repo (todo proyecto offline) o que no sea del workspace no son avisos: son el caso
+ *   normal, y uno por turno enseñaría a ignorarlos.
+ */
+export function commitDeTurnoCableado(opciones: {
+  base: string;
+  commitear?: (raiz: string, mensaje: string, sesion?: string) => Promise<{ via: string; motivo?: string }>;
+}): (raiz: string, mensaje: string, sesion: string) => Promise<string | undefined> {
+  const commitear = opciones.commitear ?? commitDeTurno;
+  return async (raiz, mensaje, sesion) => {
+    if (!dentroDelWorkspace(raiz, opciones.base)) return undefined;
+    const hecho = await commitear(raiz, mensaje, sesion);
+    return hecho.via === "fallo" ? `no se pudo commitear el turno: ${hecho.motivo}` : undefined;
+  };
+}
+
 export function construirCorredorDeTareasCableado(opciones: {
   vestibulo: Pick<Vestibulo, "abrirParaTarea" | "proyectoAbierto" | "sesionesDe">;
   /** La fábrica de `OpcionesDeArranque.tareas`. Ausente = esta ejecución no ejecuta tareas. */
@@ -3305,22 +3341,10 @@ function vestibuloReal(
     // que lo que está probado es que el vestíbulo la usa por las dos puertas, no que aquí
     // siga puesta.
     sinCommitear: trabajoSinCommitear,
-    /**
-     * El commit del turno, y **la decisión de DÓNDE se commitea vive aquí**, no en el
-     * vestíbulo: en la copia que creó xonecode (`<base>/<entorno>/workspace/<proyecto>`) es
-     * suya y commitear cada turno es razonable; en la carpeta que abrió una persona sería
-     * ensuciarle el historial cada vez que habla con el agente, así que ahí no se commitea y
-     * lo que queda es el aviso de árbol sucio al abrir.
-     *
-     * Solo se DICE el fallo. Que no haya nada que commitear, que la carpeta no sea un repo
-     * (todo proyecto offline) o que no sea del workspace no son avisos: son el caso normal, y
-     * uno por turno enseñaría a ignorarlos.
-     */
-    commitearTurno: async (raiz, mensaje) => {
-      if (!dentroDelWorkspace(raiz, settings.workspace ?? baseDeWorkspacePorOmision())) return undefined;
-      const hecho = await commitDeTurno(raiz, mensaje);
-      return hecho.via === "fallo" ? `no se pudo commitear el turno: ${hecho.motivo}` : undefined;
-    },
+    // El commit del turno, con el sello de la sesión. La composición está EXTRAÍDA y probada
+    // (`commitDeTurnoCableado`): el argumento que se cae en una lambda escrita a mano es
+    // justo el que sostiene la atribución de Revisión.
+    commitearTurno: commitDeTurnoCableado({ base: settings.workspace ?? baseDeWorkspacePorOmision() }),
     olvidarMarcaDeSesion: olvidarSesion,
     // La memoria del agente por hilo. `historica` deja de ser «se reabrió» para ser «no hay
     // checkpoint que cargar», y borrar una sesión se lleva también su checkpoint.

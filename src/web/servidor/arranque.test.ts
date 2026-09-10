@@ -15,6 +15,7 @@ import {
   arrancarConsolaWeb,
   comandosDelRegistro, descripcionParaLaWeb,
   montarRutas,
+  commitDeTurnoCableado,
   construirCorredorDeTareasCableado,
   FALTA_EL_BUILD,
   RUTA_ACCION,
@@ -4609,5 +4610,53 @@ describe("abrir la sesión de una tarea en curso, por el cable", () => {
     // Y el cable sigue donde estaba: sin proyecto abierto, el alta lo dice.
     expect((altas.at(-1) as { proyectoAbierto?: boolean }).proyectoAbierto).toBe(false);
     rmSync(base, { recursive: true, force: true });
+  });
+});
+
+/**
+ * El commit de cada turno, cableado. Está extraído y probado por la lección que este repo ya
+ * ha pagado TRES veces en `abrirParaTarea`: una lambda escrita a mano dentro de un cierre
+ * que todos los tests doblan se deja un argumento y TypeScript no dice nada, porque una
+ * función que ignora parámetros es asignable. Aquí el argumento que se puede caer es el que
+ * sostiene la atribución entera de la pestaña Revisión: sin `sesion` el commit sale sin
+ * sello y la pestaña se cae al respaldo «desde-apertura» para siempre, sin un solo síntoma.
+ */
+describe("el commit del turno, cableado", () => {
+  it("reenvía la raíz, el mensaje Y LA SESIÓN: el sello sale de ese tercer argumento", async () => {
+    const vistos: unknown[][] = [];
+    const commitear = commitDeTurnoCableado({
+      base: "/w",
+      commitear: async (...args) => {
+        vistos.push(args);
+        return { via: "commit" };
+      },
+    });
+    expect(await commitear("/w/entorno/workspace/AppDemo", "xonecode: Hola", "s-1")).toBeUndefined();
+    expect(vistos).toEqual([["/w/entorno/workspace/AppDemo", "xonecode: Hola", "s-1"]]);
+  });
+
+  it("fuera del workspace no commitea NADA: ahí el historial es de una persona", async () => {
+    let llamado = false;
+    const commitear = commitDeTurnoCableado({
+      base: "/w",
+      commitear: async () => {
+        llamado = true;
+        return { via: "commit" };
+      },
+    });
+    expect(await commitear("/Users/alguien/su-proyecto", "xonecode: Hola", "s-1")).toBeUndefined();
+    expect(llamado).toBe(false);
+  });
+
+  it("solo el FALLO se dice; no haber nada que commitear no es un aviso", async () => {
+    const conVia = async (via: string, motivo?: string): Promise<string | undefined> =>
+      commitDeTurnoCableado({
+        base: "/w",
+        commitear: async () => ({ via, ...(motivo === undefined ? {} : { motivo }) }),
+      })("/w/e/workspace/A", "m", "s");
+    expect(await conVia("sin-cambios")).toBeUndefined();
+    expect(await conVia("sin-git")).toBeUndefined();
+    expect(await conVia("commit")).toBeUndefined();
+    expect(await conVia("fallo", "hook rechazado")).toBe("no se pudo commitear el turno: hook rechazado");
   });
 });

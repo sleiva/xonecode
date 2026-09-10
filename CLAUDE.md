@@ -2109,14 +2109,62 @@ del usuario) y la ref se nombra cuando la sesión recibe su id. Lo que se lista 
 **árbol contra árbol** —un árbol nuevo escrito en un índice privado contra el de la foto—,
 nunca `git diff <arbol> -- .`: eso compara contra el índice REAL del usuario y da por
 borrados ficheros que están ahí. Va con `--no-renames` por lo mismo que `cambiosPendientes`,
-y un binario se queda sin cuenta de líneas en vez de con un cero inventado. El `via` del
-cable tiene **tres** valores y no dos, porque son tres situaciones y una lista vacía las
-haría indistinguibles: `git` (comparado), `sin-empezar` (hay proyecto abierto pero la sesión
-todavía no tiene id —nace al volcar el primer acto, `vestibulo.ts#volcar`—, así que no ha
-tocado nada y eso SE SABE) y `sin-marca` (no hay con qué comparar: sin git usable, o sesión
-abierta antes de que esto existiera). Los dos últimos se separaron porque contestar
-«sin-marca» recién abierto un proyecto mandaba a comprobar si el proyecto es un repo de git
-cuando lo único que pasaba es que acabas de sentarte. `.xonecode/` se excluye —ahí dentro
+y un binario se queda sin cuenta de líneas en vez de con un cero inventado.
+
+**Y lo que se atribuye a una sesión sale de sus COMMITS, no de esa foto.** La foto contra el
+árbol de ahora medía la COPIA del proyecto y la pestaña la rotulaba «Sesión»: era un proxy
+razonable mientras nadie más escribía ahí, y dejó de serlo con las tareas de fondo. MEDIDO
+en el proyecto del usuario el 10-09-2026: una conversación enseñaba «Sesión +1266 −1» sobre
+dos ficheros que había escrito una tarea veinte minutos después. Desde que cada turno
+commitea, hay con qué atribuir de verdad, y son seis reglas:
+- **El sello es un TRAILER con el id de sesión** (`sesionGit.ts#CLAVE_DE_SELLO`, que
+  `commitDeTurno` escribe). No el asunto: ahí va el título, que no identifica nada —dos
+  sesiones se llaman «Hola» en su proyecto ahora mismo— y que cambia al renombrar. El
+  formato vive en el módulo que lo GREPEA y `gitSync.ts` lo importa: en dos sitios, un
+  cambio en uno rompe la atribución del otro en silencio.
+- **El `--grep` no decide: se VERIFICA el trailer** (`%(trailers:key=…,valueonly)`, comparado
+  entero). Un grep casa por subcadena, así que el id `s1` se habría quedado también con los
+  commits de `s10` — la misatribución silenciosa que esto viene a quitar. Hay test.
+- **La LISTA sale de los commits uno a uno; las CUENTAS y el PARCHE, de los dos extremos.**
+  Así una ruta que la sesión no tocó no entra aunque haya cambiado, y la cifra de una fila
+  cuenta lo mismo que su diff. El «antes» es el PADRE del primer commit de la sesión —mejor
+  que la foto: lo que otro commiteara entre que te sentaste y tu primer turno queda fuera por
+  construcción— y el «ahora» es el árbol de ahora y no el último commit, porque el turno en
+  vuelo no ha commiteado todavía y la pestaña se quedaría vacía justo mientras el agente
+  escribe. Un fichero que la sesión creó y borró no deja fila (`claseNeta`, pura y con test):
+  no estaba antes y no está ahora.
+- **Lo que nadie ha commiteado se enseña MARCADO** (`sinCommitear`), no escondido ni
+  atribuido: puede ser el turno en vuelo o algo suelto de antes. Y `revisionConGit` lo QUITA
+  de `cambiados`, que es el hecho que se le cuenta al juez — para una tarea eso no esconde
+  nada suyo (`commitDeTurno` corre en el `finally` del turno y se ESPERA, así que cuando la
+  puerta de entrega pregunta ya está commiteado) y evita cargarle lo que estuviera suelto.
+- **Y el respaldo se DECLARA con otro nombre.** Una sesión sin ningún commit sellado —todas
+  las de antes de esto, y las de un proyecto donde no se commitea— cae en
+  `via: "desde-apertura"`, y la pestaña deja de decir «Sesión»: dice «Desde que abriste» y
+  explica que ahí dentro puede estar lo que escribiera otra sesión o una tarea. Dejarle el
+  nombre `git` habría hecho que `revisionConGit` siguiera afirmando una autoría ya sabida
+  falsa sin tocar una línea. `revisable` acepta las DOS medidas, y eso no es relajarla:
+  `commitearTurno` no commitea fuera del workspace a propósito, así que exigir atribución
+  habría dejado sin entregar TODA tarea de un proyecto offline.
+- **Lo que la atribución por commit no puede prometer, dicho:** `commitDeTurno` hace
+  `add -A`, así que un commit barre lo que estuviera sucio en ese instante, incluido lo de
+  otra sesión — la misma honestidad que separa `Tarea.autorizadas` de «aplicados». Y si entre
+  los commits de una sesión cae alguno ajeno, la lista sigue exacta pero un parche puede
+  traer hunks del otro: se CUENTAN (`mezclados`) y se dice. El aislamiento de verdad es un
+  árbol por sesión, y no está hecho.
+- **Y la costura está EXTRAÍDA y probada** (`arranque.ts#commitDeTurnoCableado`): el id de
+  sesión llega por un tercer argumento a una lambda que vivía en un cierre que todos los
+  tests doblan — es la MISMA forma de fallo que ya se midió tres veces en `abrirParaTarea`, y
+  aquí lo que se cae en silencio es la atribución entera.
+
+El `via` del cable tiene **cuatro** valores, porque son cuatro situaciones y una lista vacía
+las haría indistinguibles: `git` (atribuido por commit), `desde-apertura` (el respaldo de
+arriba), `sin-empezar` (hay proyecto abierto pero la sesión todavía no tiene id —nace al
+volcar el primer acto, `vestibulo.ts#volcar`—, así que no ha tocado nada y eso SE SABE) y
+`sin-marca` (no hay con qué comparar: sin git usable, o sesión abierta antes de que esto
+existiera). Los dos últimos se separaron porque contestar «sin-marca» recién abierto un
+proyecto mandaba a comprobar si el proyecto es un repo de git cuando lo único que pasaba es
+que acabas de sentarte. `.xonecode/` se excluye —ahí dentro
 `volcar()` escribe el `.jsonl` de la propia sesión al final de cada turno, y sin excluirlo la
 primera fila era el transcript de la sesión diciendo que la sesión lo modificó—, pero **en el
 DIFF y nunca en el `git add`**: medido contra un proyecto de verdad, `git add` con un

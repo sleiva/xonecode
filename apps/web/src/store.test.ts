@@ -1099,3 +1099,41 @@ describe("mirar en vivo una tarea", () => {
     expect(s.leer().mirada).toBeUndefined();
   });
 });
+
+describe("la revisión que llega por el cable", () => {
+  const revisionCon = (mensaje: Record<string, unknown>) => {
+    const s = crearStoreDelCliente();
+    s.aplicar({ clase: "revision", ficheros: [], ...mensaje } as never);
+    return s.leer().revision;
+  };
+
+  it("acepta las CUATRO medidas, y `mezclados` solo si es un número mayor que cero", () => {
+    expect(revisionCon({ via: "git" })).toEqual({ via: "git", lista: [] });
+    expect(revisionCon({ via: "desde-apertura" })).toEqual({ via: "desde-apertura", lista: [] });
+    expect(revisionCon({ via: "sin-marca" })).toEqual({ via: "sin-marca", lista: [] });
+    expect(revisionCon({ via: "sin-empezar" })).toEqual({ via: "sin-empezar", lista: [] });
+    // Una medida que este cliente no conoce no se pinta como si fuera otra.
+    expect(revisionCon({ via: "inventada" })).toBeUndefined();
+    expect(revisionCon({ via: "git", mezclados: 3 })?.mezclados).toBe(3);
+    // Cero no es un dato: es la ausencia de mezcla, y una línea que lo diga no dice nada.
+    expect(revisionCon({ via: "git", mezclados: 0 })?.mezclados).toBeUndefined();
+    expect(revisionCon({ via: "git", mezclados: "3" })?.mezclados).toBeUndefined();
+  });
+
+  it("`sinCommitear` sobrevive, y solo con el booleano `true`", () => {
+    // La trampa de siempre: `"false"` es una cadena verdadera en JavaScript, y marcaría
+    // como «no commiteado» —o sea, como no atribuible— algo que sí lo está.
+    const revision = revisionCon({
+      via: "git",
+      ficheros: [
+        { ruta: "a.md", clase: "modificado", sinCommitear: true },
+        { ruta: "b.md", clase: "modificado" },
+        { ruta: "c.md", clase: "modificado", sinCommitear: "false" },
+      ],
+    });
+    expect(revision?.lista).toEqual([
+      { ruta: "a.md", clase: "modificado", sinCommitear: true },
+      { ruta: "b.md", clase: "modificado" },
+    ]);
+  });
+});

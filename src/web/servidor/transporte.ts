@@ -190,7 +190,22 @@ export type MensajeAlCliente =
    * «todavía no has hecho nada» y «no se puede saber» se leyeran igual, y la segunda haría
    * creer que un turno no escribió cuando lo que pasa es que no hay con qué comparar.
    */
-  | { clase: "revision"; via: "git" | "sin-marca" | "sin-empezar"; ficheros: FicheroTocado[] }
+  /**
+   * Lo que ha tocado la sesión. `via` dice CÓMO se ha medido, y desde el 10-09-2026 son
+   * cuatro y no tres: `git` es atribución por COMMIT (lo que hizo esta sesión) y
+   * `desde-apertura` es la medida vieja —todo lo que ha cambiado en la copia desde que se
+   * abrió, de quien sea—, que es lo único posible en una sesión sin sello. Colapsarlas
+   * dejaría la pestaña rotulada «Sesión» sobre el trabajo de una tarea de fondo, que es el
+   * fallo que se vio en pantalla.
+   */
+  | {
+      clase: "revision";
+      via: "git" | "desde-apertura" | "sin-marca" | "sin-empezar";
+      ficheros: FicheroTocado[];
+      /** Commits de OTRAS sesiones entre los de esta: la lista es exacta, un parche puede
+       *  traer hunks ajenos. Ausente = ninguno, o no se pudo medir. */
+      mezclados?: number;
+    }
   | { clase: "parche"; ruta: string; texto: string; recortado: boolean }
   /**
    * El árbol del proyecto abierto (pestaña Ficheros): rutas relativas, ordenadas y ya
@@ -454,6 +469,11 @@ export interface FicheroTocado {
   clase: "nuevo" | "modificado" | "borrado";
   mas?: number;
   menos?: number;
+  /** Hay cambios en este fichero que nadie ha commiteado, así que no se pueden atribuir a
+   *  esta sesión ni a otra (`agent/sesionGit.ts#FicheroDeSesion`). Viaja para poder DECIRLO
+   *  en la fila: el turno en vuelo commitea al terminar, y esta es la única marca que
+   *  distingue «lo escribió esta sesión» de «esto está aquí y no consta de quién es». */
+  sinCommitear?: true;
 }
 
 /** Un fichero del proyecto tal como viaja. Redeclarado en `apps/web/src/tipos.ts`. */

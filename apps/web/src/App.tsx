@@ -1007,6 +1007,7 @@ export function App({
                 <Revision
                   historica={estado.alta?.historica === true}
                   {...(estado.revision === undefined ? {} : { via: estado.revision.via })}
+                  {...(estado.revision?.mezclados === undefined ? {} : { mezclados: estado.revision.mezclados })}
                   ficheros={estado.revision?.lista ?? []}
                   parches={estado.parches ?? {}}
                   desplegados={desplegados ?? new Set()}
