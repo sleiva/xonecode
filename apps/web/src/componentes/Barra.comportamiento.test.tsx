@@ -568,7 +568,9 @@ describe("Barra: qué sesión está trabajando", () => {
       ],
       true
     );
-    // Dos veces: la fila y el proyecto, que es lo que se ve con la lista plegada.
+    // Dos veces, y el caso lo fabrica el test: el servidor manda la marca del proyecto solo
+    // cuando ninguna fila suya la lleva. Lo que se comprueba aquí es que la que LLEGA se
+    // pinta tal cual —no se deduce ni se descarta— y que la fila dice lo suyo aparte.
     expect(screen.getAllByText("trabajando…")).toHaveLength(2);
     // Y la fecha de la que trabaja NO se pinta: es el dato que está a punto de cambiar, y
     // el hueco es uno.

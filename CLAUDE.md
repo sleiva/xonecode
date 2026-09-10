@@ -599,7 +599,12 @@ ella el turno del agente, sin decir nada. Ahora es un mapa por RAÍZ y un foco. 
   proyecto la lleva. Decirlo en los dos niveles era una duplicación, y el usuario la señaló.
   Lo que queda para el proyecto es lo que la fila NO puede decir: una sesión que todavía no
   está en el índice, o sea la de una TAREA de fondo antes de su primer volcado — las de
-  persona entran ya con el mensaje.
+  persona entran ya con el mensaje. **Y desde que las listas se PLIEGAN hay un segundo caso
+  que la fila no puede decir, y ese lo pone el CLIENTE**: plegada, la fila no existe. El
+  servidor sigue mandando su marca con el mismo criterio de siempre —y cuando la manda se
+  respeta tal cual llega—; el cliente añade la del proyecto cuya lista está cerrada. Con la
+  lista abierta se dice UNA vez, y la dice la fila, que es la que se abre (el párrafo de la
+  barra que se pliega, más abajo).
 - **Y de esa marca cuelga que el rechazo no sea un botón muerto**: con el proyecto trabajando,
   las OTRAS sesiones de su lista y su «+» se apagan, con el motivo en el `title`. La guarda del
   servidor sigue estando —es quien manda si la lista del cliente llega vieja—, y cuando declina
@@ -1964,8 +1969,9 @@ Cinco reglas:
   decirlo dos veces— y eso valía cuando las sesiones se enseñaban todas: lo decía la fila.
   Plegada esa fila no existe, así que un turno corriendo en un proyecto que no estás mirando
   no se vería en NINGUNA parte. No es el cruce prohibido de datos de otros párrafos: la lista
-  de sesiones ya está en el cliente, plegada o no, y se le pregunta a ella. Desplegado no se
-  dice: ahí lo dice la fila, que es la que se abre.
+  de sesiones ya está en el cliente, plegada o no, y se le pregunta a ella. Desplegado el
+  cliente no añade nada —ahí lo dice la fila, que es la que se abre—, y la marca que mande el
+  servidor se respeta igual: es él quien sabe de la sesión que aún no tiene fila.
 
 **El proyecto activo y la sesión activa NO se marcan igual, y el cian es de una sola fila.**
 Las dos se pintaban idénticas a propósito —mismo fondo y mismo filo de cian, «para que aquí
