@@ -39,10 +39,10 @@ import { escribirAgente, leerAgente, type Agente } from "../../core/agentes.js";
 import { borrarAgente, cargarAgentes, guardarAgente } from "../../agent/agentesEnDisco.js";
 import { detectarDispositivos } from "../../agent/dispositivosEnMaquina.js";
 
-import type { InformeDeDispositivos } from "../../core/dispositivos.js";
+import type { Dispositivo, InformeDeDispositivos } from "../../core/dispositivos.js";
 import { PLATAFORMAS_DE_DISPOSITIVO, type AjustesDeDispositivos } from "../../core/settings.js";
 import type { NombreDeHerramienta } from "../../core/dispositivos.js";
-import { instalarHerramientaDeDispositivos } from "../../agent/dispositivosEnMaquina.js";
+import { instalarHerramientaDeDispositivos, verificarDispositivo } from "../../agent/dispositivosEnMaquina.js";
 import { correrPasoDeReceta } from "../../agent/instalacionEnMaquina.js";
 import { modelosDeMotor } from "../../agent/modelosDeMotor.js";
 import {
@@ -324,6 +324,15 @@ export interface OpcionesDeMontaje {
    * máquina del usuario. Ausente = esta ejecución no instala nada.
    */
   instalarHerramienta?: (herramienta: NombreDeHerramienta) => Promise<void>;
+  /**
+   * VERIFICA la conexión con un dispositivo (`agent/dispositivosEnMaquina.ts`).
+   *
+   * Recibe el `Dispositivo` de la última medida y no un id del cliente: de él salen la
+   * plataforma y la clase, que son las que deciden qué comando se lanza — una cadena del
+   * navegador dentro de los argumentos de un proceso es la puerta que esto no abre. Ausente
+   * = esta ejecución no verifica nada y el botón no se pinta.
+   */
+  verificarDispositivo?: (dispositivo: Dispositivo) => Promise<{ ok: boolean; detalle: string }>;
   /**
    * Los modelos que ofrece un motor EXTERNO (`agent/modelosDeMotor.ts`). Ausente = esta
    * ejecución no los sabe, y el desplegable lo dice en vez de quedarse vacío.
@@ -1318,6 +1327,42 @@ export function montarRutas(
       }
     })();
     return deteccionEnVuelo;
+  };
+
+  /**
+   * Verificar la conexión con UN dispositivo, y volver a emitir la foto con lo que contestó.
+   *
+   * Cuatro reglas:
+   * - **El id se resuelve contra la última MEDIDA**, igual que al elegir dispositivo de la
+   *   sesión: lo que se le pasa al verificador es el `Dispositivo` que el host midió, no la
+   *   cadena que llegó. Un id que no está se ignora en silencio — es una foto vieja del
+   *   cliente (desenchufaron el teléfono entre medias), no un error que contar.
+   * - **NO se vuelve a medir.** La verificación vive dentro del informe, así que una medida
+   *   nueva se la llevaría — justo la que se acaba de hacer.
+   * - **Solo se toca ESE dispositivo**: las verificaciones de los demás siguen donde
+   *   estaban. Se emite el informe entero porque es el mensaje que hay.
+   * - **Y viaja a todos los clientes**, como la foto: la máquina es la misma para todos.
+   */
+  const atenderConexion = async (id: string): Promise<void> => {
+    const verificar = opciones.verificarDispositivo;
+    if (verificar === undefined || informeDeDispositivos === undefined) return;
+    const dispositivo = informeDeDispositivos.dispositivos.find((d) => d.id === id);
+    if (dispositivo === undefined) return;
+    let resultado: { ok: boolean; detalle: string };
+    try {
+      resultado = await verificar(dispositivo);
+    } catch (error) {
+      // El verificador no lanza por diseño; que lo haga es un bug suyo, y aun así la
+      // respuesta tiene que ser una respuesta: se dice que no se pudo, sin la ruta de nada.
+      resultado = { ok: false, detalle: `no se pudo verificar (${codigoDe(error)})` };
+    }
+    const verificado = { ...resultado, medido: new Date().toISOString() };
+    if (informeDeDispositivos === undefined) return;
+    informeDeDispositivos = {
+      ...informeDeDispositivos,
+      dispositivos: informeDeDispositivos.dispositivos.map((d) => (d.id === id ? { ...d, verificado } : d)),
+    };
+    emitir({ clase: "dispositivos", informe: informeDeDispositivos, ajustes: ajustesDeDispositivos() });
   };
 
   const atenderCatalogo = async (proveedor: string): Promise<void> => {
@@ -2692,6 +2737,15 @@ export function montarRutas(
       respuesta.end();
       return;
     }
+    if (typeof mensaje === "object" && mensaje !== null && mensaje.clase === "conexion") {
+      // Suelto: hablarle a un dispositivo tarda segundos (adb en frío arranca su demonio) y
+      // la respuesta va por el SSE, como la foto.
+      const id = (mensaje as { id?: unknown }).id;
+      if (typeof id === "string") void atenderConexion(id).catch(contar);
+      respuesta.writeHead(204);
+      respuesta.end();
+      return;
+    }
     if (typeof mensaje === "object" && mensaje !== null && mensaje.clase === "dispositivos") {
       // Suelto, como el catálogo: lanza procesos que tardan segundos y la respuesta va por
       // el SSE. Es la ÚNICA forma de volver a medir: no hay sondeo.
@@ -3352,6 +3406,7 @@ export async function arrancarConsolaWeb(opciones: OpcionesDeArranque): Promise<
     ajustesDeDispositivos: () => cargarSettings().settings.dispositivos ?? {},
     guardarAjustesDeDispositivos: (ajustes) => void guardarDispositivos(undefined, ajustes),
     instalarHerramienta: instalarHerramientaDeDispositivos,
+    verificarDispositivo,
     catalogoDeModelos: async (proveedor) => {
       const modelos = await new CatalogoModelos(undefined, undefined, proveedoresPersonalizados).listar(proveedor);
       return modelos.map((m) => ({ id: m.id, ...(m.nombre === undefined ? {} : { nombre: m.nombre }) }));

@@ -1,0 +1,59 @@
+/* El botón de verificar y su resultado, en la misma fila del dispositivo. Con `auto` a la
+   izquierda para que quede pegado al borde derecho de la fila y no bailando detrás de un
+   nombre que puede medir cualquier cosa. */
+.envoltura {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
+}
+
+.boton {
+  flex: 0 0 auto;
+  padding: 2px 9px;
+  border: 0.5px solid var(--dsw-alias-border-l2);
+  border-radius: 8px;
+  background: var(--dsw-alias-bg-layer-1);
+  color: var(--dsw-alias-label-primary);
+  font: inherit;
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.boton:hover:enabled {
+  background: var(--dsw-alias-interactive-bg-hover);
+}
+
+.boton:disabled {
+  color: var(--dsw-alias-label-tertiary);
+  cursor: default;
+}
+
+/* El resultado. Rojo cuando no contesta —ahí sí es un error: se ha pedido hablar con algo y
+   no ha contestado—, y en el color del texto normal cuando sí, porque un verde que grita no
+   hace falta para decir «va bien». */
+.resultado {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+  min-width: 0;
+  color: var(--dsw-alias-state-error-primary);
+  font-size: 11px;
+}
+
+.resultado[data-ok] {
+  color: var(--dsw-alias-state-success-primary);
+}
+
+.hora {
+  color: var(--dsw-alias-label-tertiary);
+  font-family: var(--ds-font-family-code);
+  font-size: 10px;
+}
+
+/* Cuando la verificación contradice a la fila: cuál de las dos es más vieja. En el gris de
+   lo secundario, porque es una nota sobre el dato de al lado y no el dato. */
+.desfase {
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 10px;
+}

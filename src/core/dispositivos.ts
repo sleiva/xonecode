@@ -62,17 +62,48 @@ export interface Dispositivo {
    */
   estado: "conectado" | "arrancado" | "apagado" | "sin-autorizar" | "offline" | "no-disponible";
   detalle?: string;
+  /**
+   * Lo que contestó el dispositivo cuando alguien pidió VERIFICAR la conexión.
+   *
+   * Es otra pregunta que `estado`, y por eso es otro campo: `estado` sale de LISTAR
+   * (`adb devices`, `simctl list`), o sea de lo que el intermediario cree; esto sale de
+   * hablar CON el dispositivo y esperar respuesta. Un `adb devices` que dice «device» y un
+   * `adb shell` que se queda colgado son la situación que esto distingue.
+   *
+   * **Ausente es «nadie lo ha verificado», nunca «no responde».** Y vive con el informe, así
+   * que una medida nueva se lo lleva por construcción: una verificación de hace media hora
+   * pegada a una foto de ahora afirmaría algo que nadie ha comprobado.
+   */
+  verificado?: {
+    ok: boolean;
+    /** Una línea: lo que contestó, o por qué no. Nunca la salida entera. */
+    detalle: string;
+    /** Cuándo se verificó (ISO). Se dice al lado: la foto y la verificación son dos horas. */
+    medido: string;
+  };
 }
 
 /**
  * Un paso de una RECETA: lo que hay que hacer una vez para que una capacidad exista.
  *
- * Los comandos se pintan para COPIAR, no se ejecutan: `brew` puede pedir la contraseña de
- * administrador y un hijo sin terminal detrás se quedaría esperándola para siempre. La
- * regla de esta casa era «se ofrece ejecutar lo que se puede cumplir», aplicada por
- * herramienta; aquí se aplica más fina, por COMANDO — y los dos de `brew` caen del lado
- * que se copia. (Lo que sí se puede ejecutar sin pedir entrada, `sdkmanager` y
- * `avdmanager`, es la fase siguiente: necesita un canal de progreso, porque son 2-3 GB.)
+ * Todos se pueden COPIAR; los que además se pueden LANZAR llevan `ejecutable`. La regla es
+ * «se ofrece ejecutar lo que se puede cumplir», aplicada por COMANDO y no por herramienta.
+ *
+ * **Y el criterio dejó de ser «puede pedir la contraseña» para ser «puede COLGARSE
+ * pidiéndola», que está medido.** Aquí decía que `brew` no se lanzaba porque un hijo sin
+ * terminal detrás se quedaría esperando la contraseña de administrador para siempre. Es
+ * falso con la forma en que este harness lanza: `sudo` lee la contraseña de `/dev/tty`, no
+ * de `stdin`, así que sin terminal de control **falla en el acto** — medido el 10-09-2026,
+ * `sudo -k true` con `stdio[0] = "ignore"` sale con código 1 en 57 ms diciendo «a terminal
+ * is required to read the password». O sea que el modo de fallo no es un botón colgado: es
+ * un botón que dice en dos segundos qué hace falta. Con eso, los pasos de `brew` pasan a
+ * ejecutables — y son justo los que faltaban para que la receta de Android tuviera algún
+ * botón vivo en una máquina nueva, porque los otros dos dependen de este.
+ *
+ * Lo que sigue siendo copiable es lo que pide entrada por un camino que NO falla rápido: un
+ * `sudo` escrito a mano en el comando (la licencia de Xcode) y una autorización que el
+ * sistema pide en una VENTANA (`xcodebuild -downloadPlatform`). Ahí un botón fallaría
+ * siempre, que es la otra forma del botón muerto.
  *
  * **Ningún comando puede llevar una ruta de la máquina.** Se pinta en la ventana y viaja por
  * el cable, que puede ir por un túnel: es la misma regla por la que `Herramienta.ruta` se
@@ -95,13 +126,21 @@ export interface PasoDeReceta {
   /**
    * ¿Lo puede lanzar xonecode él, con log en vivo?
    *
-   * Solo lo que no puede pedir ENTRADA: `sdkmanager` y `avdmanager` preguntan las licencias
-   * y el perfil de hardware, y las dos respuestas se alimentan de forma determinista. `brew`
-   * no está aquí porque puede pedir la contraseña de administrador, y un hijo sin terminal
-   * detrás se quedaría esperándola para siempre.
+   * Solo lo que no puede quedarse ESPERANDO a nadie. `sdkmanager` y `avdmanager` preguntan
+   * las licencias y el perfil de hardware, y las dos respuestas se alimentan por `stdin` de
+   * forma determinista; `brew` no pregunta nada en modo no interactivo y, si algo suyo
+   * pidiera la contraseña, sin terminal de control falla en el acto (medido, arriba).
+   *
+   * Un paso ejecutable lo es SI Y SOLO SI está en la tabla cerrada de
+   * `agent/instalacionEnMaquina.ts#PASOS_EJECUTABLES`: este campo dice que se ofrezca el
+   * botón, y esa tabla es la que decide qué se lanza. Que las dos coincidan lo ata un test.
    */
   ejecutable: boolean;
-  /** Por qué no se puede lanzar TODAVÍA, cuando el motivo es otro paso. */
+  /**
+   * Por qué no se puede lanzar. Dos formas, y las dos se dicen: que falte otro paso —«hace
+   * falta el paso 1»— o que ese comando no se lance nunca desde aquí, como el `sudo` de la
+   * licencia de Xcode. Sin el motivo, un paso sin botón se lee como que la ventana está rota.
+   */
   porQueNo?: string;
   /**
    * Lo que se acepta al pulsar, si al pulsar se acepta algo. Va aparte del `nota` porque
@@ -111,9 +150,16 @@ export interface PasoDeReceta {
   acepta?: string;
 }
 
-/** Cómo conseguir una capacidad que esta máquina no tiene. Hoy hay una. */
+/**
+ * Cómo conseguir una capacidad que esta máquina no tiene. Hoy hay dos, las dos de macOS.
+ *
+ * El `id` es una UNIÓN y no una cadena: viaja por el cable y es la clave con que
+ * `agent/instalacionEnMaquina.ts` busca en su tabla cerrada de pasos ejecutables, así que un
+ * id nuevo tiene que aparecer aquí para que el compilador obligue a decidir qué se lanza y
+ * qué se copia.
+ */
 export interface Receta {
-  id: "android-emulador";
+  id: "android-emulador" | "ios-simulador";
   titulo: string;
   descripcion: string;
   pasos: PasoDeReceta[];
@@ -161,10 +207,17 @@ export function recetaDeEmuladorAndroid(plataforma: string, estado: EstadoDeAndr
         "brew install openjdk@17",
         "brew install --cask android-commandlinetools android-platform-tools",
       ],
-      nota: "Puede pedirte la contraseña de administrador, así que se pega en un terminal y no se lanza desde aquí.",
+      nota:
+        "Son unos 700 MB. Ni la fórmula ni el cask piden la contraseña de administrador " +
+        "—instalan dentro del prefijo de Homebrew, que es tuyo—, así que puedes pegarlo en " +
+        "un terminal o dejar que lo haga xonecode.",
       // `sdkmanager` es lo que instala el cask: si está, el paso está hecho.
       hecho: estado.sdkmanager,
-      ejecutable: false,
+      // **Este es el paso del que colgaban los otros dos.** Sin él, en una máquina nueva la
+      // receta entera no tenía un solo botón vivo: los pasos 3 y 4 exigen `sdkmanager`, que
+      // es justo lo que instala este. Se ofrece si hay `brew`, que es lo único que necesita.
+      ejecutable: estado.brew,
+      ...(estado.brew ? {} : { porQueNo: "hace falta Homebrew (brew.sh)" }),
     },
     {
       titulo: "Declarar las variables en tu shell",
@@ -217,6 +270,107 @@ export function recetaDeEmuladorAndroid(plataforma: string, estado: EstadoDeAndr
     despues:
       "Para arrancarlo: `emulator -avd pixel8`. Con él abierto, `adb devices` lista " +
       "`emulator-5554` y aparecerá aquí. Arrancarlo desde esta ventana todavía no está cableado.",
+  };
+}
+
+/** Lo medido que decide los pasos de la receta de iOS. Entra ya resuelto: esto es `core/`. */
+export interface EstadoDeIos {
+  /**
+   * Xcode COMPLETO, no las Command Line Tools: `xcode-select -p` apunta dentro de un
+   * `Xcode.app`. La distinción es la mitad de esta receta — las CLT traen `xcrun` y
+   * `simctl`, así que `xcode-select -p` contesta y `xcrun simctl list` no falla, pero **no
+   * traen ni un simulador**. Sin separarlas, alguien con solo las CLT vería «Xcode: ok» y
+   * una lista de simuladores vacía sin nada que le dijera qué le falta.
+   */
+  xcode: boolean;
+  /** La licencia aceptada y la ruta activa puesta: `xcodebuild -version` contesta. */
+  licencia: boolean;
+  /** Los runtime de iOS instalados, por versión (`xcrun simctl runtime list -j`). */
+  runtimes: readonly string[];
+}
+
+/**
+ * La receta del simulador de iOS en macOS.
+ *
+ * **Solo macOS, y no por elección**: los simuladores de iOS los da Xcode, que no existe en
+ * ningún otro sistema. Fuera de macOS la respuesta no es otra receta, es que no hay ninguna.
+ *
+ * Los tres pasos son COPIABLES y ninguno se lanza desde aquí, al contrario que la de
+ * Android. Es la regla de siempre —se ofrece ejecutar lo que se puede cumplir— aplicada a lo
+ * que cada comando necesita de verdad:
+ * - **Xcode se instala del App Store.** No hay comando que lo haga; lo que se da es el que
+ *   abre su ficha. Un botón «Ejecutar este paso» que solo abriera una ventana del App Store
+ *   diría que ha hecho el paso, y no lo ha hecho.
+ * - **La licencia lleva `sudo` escrito en el comando.** Sin terminal de control `sudo` falla
+ *   en el acto (medido), así que el botón no se colgaría — fallaría SIEMPRE, que es la otra
+ *   forma del botón muerto.
+ * - **El runtime pide autorización de administrador en una VENTANA del sistema.** Eso no se
+ *   puede contestar por `stdin` ni fallar rápido: se queda esperando a alguien que está
+ *   mirando el navegador, no el escritorio.
+ *
+ * Y hay que decir lo que se mide de esta máquina: aquí, el 10-09-2026, los tres pasos están
+ * hechos (Xcode 26.6, licencia aceptada, tres runtime de iOS), así que la receta sale
+ * `completa` y el panel dice «ya está» en vez de cuatro pasos que sobran.
+ */
+export function recetaDeSimuladorIos(plataforma: string, estado: EstadoDeIos): Receta | undefined {
+  if (plataforma !== "darwin") return undefined;
+
+  const pasos: PasoDeReceta[] = [
+    {
+      titulo: "Instalar Xcode completo (no solo las herramientas de línea de comandos)",
+      // `open` con el esquema del App Store: es lo máximo que un comando puede hacer aquí.
+      comandos: ['open "macappstore://apps.apple.com/app/id497799835"'],
+      nota:
+        "Son unos 10 GB del App Store y no hay comando que lo instale: esto solo abre su " +
+        "ficha. Las Command Line Tools por sí solas no traen ningún simulador.",
+      hecho: estado.xcode,
+      ejecutable: false,
+      porQueNo: "Xcode se instala desde el App Store, no con un comando",
+    },
+    {
+      titulo: "Aceptar la licencia y apuntar a Xcode",
+      // `/Applications/Xcode.app` es una constante de macOS —igual en todas—, no una ruta
+      // MEDIDA de esta máquina: no es la excepción a la regla de arriba, que existe para que
+      // no viaje el home de nadie ni un prefijo que cambia entre Intel y Apple Silicon.
+      comandos: [
+        "sudo xcode-select -s /Applications/Xcode.app/Contents/Developer",
+        "sudo xcodebuild -license accept",
+      ],
+      nota:
+        "Pide la contraseña de administrador, y eso solo se teclea en un terminal: un " +
+        "proceso lanzado desde aquí no tiene dónde leerla y falla en el acto. Por eso este " +
+        "paso no lleva botón.",
+      hecho: estado.licencia,
+      ejecutable: false,
+      porQueNo: "lleva `sudo`, y la contraseña solo se puede teclear en un terminal",
+    },
+    {
+      titulo: "Descargar el runtime de iOS del simulador",
+      comandos: ["xcodebuild -downloadPlatform iOS"],
+      nota:
+        "Son varios GB y puede pedirte autorización de administrador en una ventana del " +
+        "sistema, así que se pega en un terminal. Con `-downloadAllPlatforms` se traen " +
+        "también watchOS, tvOS y visionOS, que aquí no hacen falta.",
+      hecho: estado.runtimes.length > 0,
+      ejecutable: false,
+      porQueNo: "pide autorización en una ventana del sistema, que un proceso de aquí no puede contestar",
+    },
+  ];
+
+  return {
+    id: "ios-simulador",
+    titulo: "Instalar el simulador de iOS",
+    descripcion:
+      "Tres pasos, una vez por máquina. Los comandos se pegan en un terminal; cada paso se " +
+      "marca solo cuando la medida lo encuentra, no cuando lo pulsas.",
+    pasos,
+    completa: pasos.every((p) => p.hecho),
+    // Xcode crea un simulador por modelo con cada runtime que instalas, así que «crear» no
+    // es un paso: con el runtime puesto ya hay lista. Arrancar uno todavía no está cableado.
+    despues:
+      estado.runtimes.length === 0
+        ? "Con el runtime instalado, Xcode ya deja una lista de simuladores hecha: aparecerán aquí. Para arrancar uno, `xcrun simctl boot <UDID>`; arrancarlo desde esta ventana todavía no está cableado."
+        : `Runtime de iOS instalados: ${estado.runtimes.join(", ")}. Para arrancar un simulador, \`xcrun simctl boot <UDID>\`; arrancarlo desde esta ventana todavía no está cableado.`,
   };
 }
 
@@ -346,6 +500,49 @@ export function parsearSimctl(json: string): Dispositivo[] {
 }
 
 /**
+ * Los runtime de iOS del simulador, del MISMO `xcrun simctl list -j` que ya trae los
+ * dispositivos: se le añade el dominio `runtimes` y con eso viene en la misma respuesta.
+ *
+ * Eso es lo que hace que saber si falta el runtime no cueste NI UN proceso más, que es la
+ * regla de esta pantalla: medir cuesta procesos en el equipo del usuario. La otra forma,
+ * `xcrun simctl runtime list -j`, existe y contesta lo mismo —medido: un objeto indexado por
+ * uuid con `platformIdentifier` y `state: "Ready"`— pero es una llamada aparte.
+ *
+ * Forma MEDIDA aquí (Xcode 26.6):
+ *
+ *     { "runtimes": [ { "name": "iOS 26.0", "version": "26.0.1", "isAvailable": true,
+ *                       "platform": "iOS", "identifier": "…SimRuntime.iOS-26-0" } ],
+ *       "devices": { … } }
+ *
+ * Solo los de **iOS** y solo los `isAvailable`: uno a medio descargar no arranca nada, y con
+ * watchOS o tvOS instalados la cifra diría que hay iOS cuando no lo hay. `isAvailable` se
+ * mira como booleano de verdad —la trampa del `"false"` de cadena— y **ausente cuenta como
+ * disponible**: este listado ya se pide con `available`, así que quien no lo esté no llega
+ * hasta aquí, y descartar lo que no lo declara diría que no hay runtime teniéndolos.
+ */
+export function parsearRuntimesDeIos(json: string): string[] {
+  let datos: unknown;
+  try {
+    datos = JSON.parse(json);
+  } catch {
+    return [];
+  }
+  const lista = (datos as { runtimes?: unknown } | null)?.runtimes;
+  if (!Array.isArray(lista)) return [];
+  const salida: string[] = [];
+  for (const entrada of lista as Array<Record<string, unknown>>) {
+    if (entrada === null || typeof entrada !== "object") continue;
+    if (entrada.platform !== "iOS") continue;
+    if (entrada.isAvailable === false) continue;
+    const version = typeof entrada.version === "string" ? entrada.version : undefined;
+    const nombre = typeof entrada.name === "string" ? entrada.name : undefined;
+    if (version === undefined && nombre === undefined) continue;
+    salida.push(nombre ?? `iOS ${version!}`);
+  }
+  return salida;
+}
+
+/**
  * `xcrun devicectl list devices --json-output <fichero>`. Forma DOCUMENTADA (Xcode 15+),
  * no medida: en esta máquina no hay ningún dispositivo iOS físico, y el fichero real
  * trae `result.devices: []`. Campos: `identifier`, `deviceProperties.name`,
@@ -382,6 +579,32 @@ export function parsearDevicectl(json: string): Dispositivo[] {
     });
   }
   return salida;
+}
+
+/**
+ * La línea que EXPLICA un fallo de `simctl`, de entre las que escribe.
+ *
+ * Medido el 10-09-2026 con `xcrun simctl spawn <udid>` sobre un simulador apagado: la
+ * primera línea es papeleo y la segunda es lo que hay que leer.
+ *
+ *     An error was encountered processing the command (domain=com.apple.CoreSimulator.SimError, code=405):
+ *     Process spawn via launchd failed because device is not booted.
+ *     Underlying error (domain=com.apple.SimLaunchHostService.RequestError, code=3):
+ *
+ * `describirFallo` se queda con la PRIMERA línea de stderr, que aquí es justo la que no dice
+ * nada —un dominio y un número—, así que esta elige la primera que no sea de papeleo. Sin
+ * esto, verificar un simulador apagado contestaba con un código de error en vez de con
+ * «no está arrancado».
+ */
+export function motivoDeSimctl(texto: string): string | undefined {
+  for (const linea of texto.split(/\r?\n/)) {
+    const l = linea.trim();
+    if (l === "") continue;
+    if (/^An error was encountered/i.test(l)) continue;
+    if (/^Underlying error/i.test(l)) continue;
+    return l;
+  }
+  return undefined;
 }
 
 /** Con qué dispositivos SE LLEGA ahora mismo: es lo que el escritorio lista por nombre. */

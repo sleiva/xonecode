@@ -647,6 +647,40 @@ describe("la foto de la máquina («dispositivos»)", () => {
     ]);
   });
 
+  it("la VERIFICACIÓN de un dispositivo llega al store, y `ok` solo con el booleano", () => {
+    // Tercera vez que se escribe un test por esta lista blanca, y por lo mismo: `mime` y
+    // `base64` se cayeron aquí y ninguna imagen se enseñaba con todo en verde. Un `"false"`
+    // de CADENA es verdadero en JavaScript, y aquí diría que un dispositivo responde.
+    const s = crearStoreDelCliente();
+    s.aplicar({
+      clase: "dispositivos",
+      informe: {
+        ...informe,
+        dispositivos: [
+          { ...informe.dispositivos[0]!, verificado: { ok: true, detalle: "responde", medido: "2026-09-10T18:31:00.000Z" } },
+          {
+            id: "V",
+            nombre: "Pixel",
+            plataforma: "android" as const,
+            clase: "fisico" as const,
+            estado: "conectado" as const,
+            verificado: { ok: "false", detalle: "no contesta", medido: "2026-09-10T18:31:00.000Z" },
+          },
+        ],
+      } as unknown as typeof informe,
+      ajustes: {},
+    });
+    const lista = s.leer().dispositivos!.dispositivos;
+    expect(lista[0]!.verificado).toEqual({ ok: true, detalle: "responde", medido: "2026-09-10T18:31:00.000Z" });
+    expect(lista[1]!.verificado!.ok).toBe(false);
+  });
+
+  it("sin verificación el campo queda AUSENTE: no es «no responde»", () => {
+    const s = crearStoreDelCliente();
+    s.aplicar({ clase: "dispositivos", informe, ajustes: {} });
+    expect(s.leer().dispositivos!.dispositivos[0]!.verificado).toBeUndefined();
+  });
+
   it("un informe SIN recetas no revienta: llega la lista vacía", () => {
     // Windows y Linux no tienen receta todavía, y una versión anterior del servidor tampoco
     // manda el campo. Ausente no puede tumbar la foto entera de la máquina.

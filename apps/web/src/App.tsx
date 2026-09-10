@@ -896,6 +896,9 @@ export function App({
       // servidor con su tabla cerrada. Y detrás vuelve a medir, así que la foto nueva es
       // la que dice si la herramienta apareció.
       alInstalarHerramienta={(herramienta) => void enviar({ clase: "dispositivos", instalar: herramienta })}
+      // Verificar es su propio mensaje y NO vuelve a medir: la verificación vive dentro de
+      // la foto, así que una medida nueva se llevaría la que se acaba de hacer.
+      alVerificarDispositivo={(id) => void enviar({ clase: "conexion", id })}
       // El tope de concurrencia de la cola de tareas: mismo mensaje que manda el kanban al
       // pedirlo la primera vez, con el número que puso quien lo cambia.
       {...(estado.tareas === undefined ? {} : { tareas: { concurrencia: estado.tareas.concurrencia } })}
@@ -1244,6 +1247,7 @@ export function App({
               alAbrirAjustes={() => setAjustesAbiertos(true)}
               {...(estado.dispositivos === undefined ? {} : { dispositivos: estado.dispositivos })}
               alActualizarDispositivos={() => void enviar({ clase: "dispositivos" })}
+              alVerificarDispositivo={(id) => void enviar({ clase: "conexion", id })}
               {...(estado.tareas === undefined ? {} : { tareas: estado.tareas })}
               alAbrirSesionDeTarea={(proyecto, sesion) => abrirSesion(proyecto, sesion)}
               // La verdad sobre lo que la tarea escribió vive en Revisión, no en el chat:

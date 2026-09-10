@@ -36,15 +36,19 @@ import { promisify } from "node:util";
 import { seMira, type AjustesDeDispositivos } from "../core/settings.js";
 import {
   recetaDeEmuladorAndroid,
+  recetaDeSimuladorIos,
+  parsearRuntimesDeIos,
   parsearAdbDevices,
   parsearAvds,
   parsearDevicectl,
   parsearSimctl,
+  motivoDeSimctl,
   sistemaDe,
   type Dispositivo,
   type Herramienta,
   type NombreDeHerramienta,
   type InformeDeDispositivos,
+  type Receta,
 } from "../core/dispositivos.js";
 
 const ejecutarReal = promisify(execFile);
@@ -193,6 +197,13 @@ export async function detectarDispositivos(
   const herramientas: Herramienta[] = [];
   const dispositivos: Dispositivo[] = [];
   let avds: string[] = [];
+  /**
+   * Lo que la receta del simulador de iOS necesita saber, rellenado por la rama de macOS de
+   * abajo. Vive aquí y no ahí porque la receta se compone al final, con todo medido.
+   */
+  let xcodeCompleto = false;
+  let licenciaDeXcode = false;
+  let runtimesDeIos: string[] = [];
 
   const miraAndroid = seMira(ajustes, "android");
   const miraAndroidEmulador = seMira(ajustes, "androidEmulador");
@@ -298,12 +309,39 @@ export async function detectarDispositivos(
         { nombre: "devicectl", estado: "no-encontrada", detalle, ...(instalar === undefined ? {} : { instalar }) }
       );
     } else {
+      /**
+       * **Xcode COMPLETO no es lo mismo que las herramientas de línea de comandos**, y esa
+       * distinción es la mitad de la receta de iOS: las CLT traen `xcrun` y `simctl` —así que
+       * todo lo de arriba contesta— y **no traen ni un simulador**. Se distinguen por dónde
+       * apunta `xcode-select -p`: dentro de un `Xcode.app` o en `CommandLineTools`.
+       *
+       * La licencia se pregunta con `xcodebuild -version`, que es quien falla si no está
+       * aceptada, y SOLO con Xcode completo delante: sin él no hay nada que aceptar y sería
+       * un proceso gastado en cada medida. Es la misma economía que `xcode-select -p` antes
+       * de cualquier `xcrun`.
+       */
+      xcodeCompleto = /Xcode[^/]*\.app\//.test(`${xcode}/`);
+      if (xcodeCompleto && miraIosSimulador) {
+        try {
+          await ejecutar("xcodebuild", ["-version"], { timeout: TOPES_MS.xcrun });
+          licenciaDeXcode = true;
+        } catch {
+          // No se distingue «licencia sin aceptar» de «xcodebuild roto»: para la receta las
+          // dos son el mismo paso pendiente, y su comando arregla las dos.
+          licenciaDeXcode = false;
+        }
+      }
       if (!miraIosSimulador) {
         herramientas.push({ nombre: "xcrun", estado: "desactivada", detalle: APAGADO });
       } else {
         try {
-          const { stdout } = await ejecutar("xcrun", ["simctl", "list", "-j", "devices", "available"], { timeout: TOPES_MS.xcrun });
+          // `runtimes` además de `devices`: la misma llamada trae las dos cosas (medido), y
+          // así saber si falta el runtime del simulador no cuesta ni un proceso más.
+          const { stdout } = await ejecutar("xcrun", ["simctl", "list", "-j", "runtimes", "devices", "available"], {
+            timeout: TOPES_MS.xcrun,
+          });
           dispositivos.push(...parsearSimctl(stdout));
+          runtimesDeIos = parsearRuntimesDeIos(stdout);
           herramientas.push({ nombre: "xcrun", estado: "ok", ruta: xcode });
         } catch (error) {
           herramientas.push({ nombre: "xcrun", estado: "fallo", ruta: xcode, detalle: describirFallo(error, TOPES_MS.xcrun) });
@@ -348,7 +386,7 @@ export async function detectarDispositivos(
    * `bin`, pero un xonecode lanzado con un PATH escueto no lo vería, y el paso saldría
    * pendiente teniendo el SDK instalado delante.
    */
-  const receta = recetaDeEmuladorAndroid(plataforma, {
+  const recetaAndroid = recetaDeEmuladorAndroid(plataforma, {
     brew: enPath("brew") !== undefined,
     sdkmanager:
       enPath("sdkmanager") !== undefined ||
@@ -360,12 +398,33 @@ export async function detectarDispositivos(
     avds,
   });
 
+  /**
+   * Y la del SIMULADOR de iOS, solo si ese destino está encendido.
+   *
+   * No es simetría con la de Android: la de Android se compone de lo que ya se sabía (mirar
+   * el PATH no lanza nada), y esta necesita haber medido con `xcrun`. Con el destino apagado
+   * no se ha medido, así que no hay con qué marcar ningún paso — y una receta con los tres
+   * pasos «pendientes» en una máquina que los tiene hechos es peor que ninguna. Lo que el
+   * panel dice entonces es lo que es: «iOS no se mira: está desactivado en Ajustes».
+   */
+  const recetaIos = miraIosSimulador
+    ? recetaDeSimuladorIos(plataforma, {
+        xcode: xcodeCompleto,
+        licencia: licenciaDeXcode,
+        runtimes: runtimesDeIos,
+      })
+    : undefined;
+
+  const recetas: Receta[] = [];
+  if (recetaAndroid !== undefined) recetas.push(recetaAndroid);
+  if (recetaIos !== undefined) recetas.push(recetaIos);
+
   return {
     sistema: sistemaDe(plataforma),
     herramientas,
     dispositivos: visibles,
     avds: miraAndroidEmulador ? avds : [],
-    recetas: receta === undefined ? [] : [receta],
+    recetas,
     medido: ahora().toISOString(),
   };
 }
@@ -416,6 +475,127 @@ export async function instalarHerramientaDeDispositivos(
     if (e !== null && typeof e === "object" && typeof e.code === "number" && e.killed !== true) return;
     throw error;
   }
+}
+
+/**
+ * VERIFICAR la conexión con un dispositivo: hablarle y esperar respuesta.
+ *
+ * Es otra pregunta que la de `detectarDispositivos`, y por eso es otra función. Listar
+ * (`adb devices`, `simctl list`) dice lo que el intermediario CREE: adb contesta «device»
+ * de un teléfono cuyo `adb shell` se ha quedado colgado, y `simctl list` describe carpetas
+ * en disco —medido: `simctl getenv` contesta la ruta de datos de un simulador APAGADO, así
+ * que no vale como comprobación de nada—. Esto ejecuta algo AL OTRO LADO:
+ *
+ * - **Android** (físico o emulador): `adb -s <serial> shell getprop ro.product.model`. Si
+ *   contesta, hay una shell viva dentro y de paso se sabe qué aparato es. Un teléfono sin
+ *   autorizar falla aquí con su propio motivo, que es lo que hay que leer.
+ * - **Simulador iOS**: `xcrun simctl spawn <udid> /usr/bin/uname -r`, medido contra un
+ *   simulador arrancado (contesta) y uno apagado (código 149 y «device is not booted»). Se
+ *   eligió `spawn` justamente porque exige que el simulador esté vivo.
+ * - **iPhone o iPad físico**: `xcrun devicectl device info details --device <id>`, la misma
+ *   herramienta que los lista. **No está medido**: en esta máquina no hay ninguno conectado,
+ *   igual que `parsearDevicectl`, y la forma sale de su documentación.
+ *
+ * **El identificador NO viene del cliente.** Quien llama pasa el `Dispositivo` de la última
+ * medida, que es la única fuente sobre la máquina: un id que llegara del navegador sería una
+ * cadena de fuera dentro de los argumentos de un proceso.
+ *
+ * Nunca lanza: todo vuelve como `{ok, detalle}` de UNA línea. Quien la llama está atendiendo
+ * una petición del navegador, y esto es una respuesta, no una excepción.
+ */
+export interface VerificacionDeDispositivo {
+  ok: boolean;
+  /** Una línea: lo que contestó, o por qué no. Nunca la salida entera. */
+  detalle: string;
+}
+
+export async function verificarDispositivo(
+  dispositivo: Dispositivo,
+  deps: Pick<
+    DependenciasDeDeteccion,
+    "plataforma" | "entorno" | "home" | "existe" | "ejecutar" | "leer" | "borrar" | "ficheroTemporal"
+  > = {}
+): Promise<VerificacionDeDispositivo> {
+  const plataforma = deps.plataforma ?? process.platform;
+  const entorno = deps.entorno ?? process.env;
+  const home = deps.home ?? homedir();
+  const existe = deps.existe ?? existsSync;
+  const ejecutar = deps.ejecutar ?? ejecutarConTexto;
+
+  if (dispositivo.plataforma === "android") {
+    const { enSdk } = localizadorDeAndroid({ plataforma, entorno, home, existe });
+    const adb = enSdk("adb", "platform-tools");
+    if (adb === undefined) {
+      return { ok: false, detalle: "no está adb: sin él no se puede hablar con un dispositivo Android" };
+    }
+    try {
+      const { stdout } = await ejecutar(adb, ["-s", dispositivo.id, "shell", "getprop", "ro.product.model"], {
+        timeout: TOPES_MS.adb,
+      });
+      const modelo = stdout.trim().split(/\r?\n/)[0]?.trim() ?? "";
+      // Contestar sin decir el modelo sigue siendo contestar: la shell está viva, que es lo
+      // que se preguntaba. Afirmar un modelo vacío sería inventarlo.
+      return { ok: true, detalle: modelo === "" ? "responde a la shell" : `responde: ${recortar(modelo)}` };
+    } catch (error) {
+      return { ok: false, detalle: describirFallo(error, TOPES_MS.adb) };
+    }
+  }
+
+  if (plataforma !== "darwin") {
+    return { ok: false, detalle: "los dispositivos iOS solo se verifican en macOS" };
+  }
+
+  if (dispositivo.clase === "simulador") {
+    try {
+      await ejecutar("xcrun", ["simctl", "spawn", dispositivo.id, "/usr/bin/uname", "-r"], {
+        timeout: TOPES_MS.xcrun,
+      });
+      return { ok: true, detalle: "responde: ejecuta procesos dentro" };
+    } catch (error) {
+      return { ok: false, detalle: motivoDeFalloDeSimctl(error, TOPES_MS.xcrun) };
+    }
+  }
+
+  const leer = deps.leer ?? ((ruta: string) => readFile(ruta, "utf8"));
+  const borrar = deps.borrar ?? ((ruta: string) => rm(ruta, { force: true }).catch(() => undefined));
+  const ficheroTemporal =
+    deps.ficheroTemporal ?? (() => join(tmpdir(), `xonecode-devicectl-${process.pid}-${Date.now()}.json`));
+  const fichero = ficheroTemporal();
+  try {
+    await ejecutar("xcrun", ["devicectl", "device", "info", "details", "--device", dispositivo.id, "--json-output", fichero], {
+      timeout: TOPES_MS.xcrun,
+    });
+    // Se LEE el fichero para no afirmar sobre lo que no se ha visto: `devicectl` no imprime
+    // el JSON por stdout, así que un código 0 sin fichero legible no es una respuesta.
+    await leer(fichero);
+    return { ok: true, detalle: "responde a devicectl" };
+  } catch (error) {
+    return { ok: false, detalle: motivoDeFalloDeSimctl(error, TOPES_MS.xcrun) };
+  } finally {
+    await borrar(fichero);
+  }
+}
+
+/**
+ * El motivo de un fallo de `xcrun`, con la línea de `simctl` que sí explica algo.
+ *
+ * `describirFallo` se queda con la primera línea de stderr, y en `simctl` esa es papeleo
+ * (`An error was encountered … code=405`). Se prueba primero la que `motivoDeSimctl`
+ * encuentra y se cae a la de siempre: un cuelgue o un binario que no existe los describe
+ * mejor ella.
+ */
+function motivoDeFalloDeSimctl(error: unknown, topeMs: number): string {
+  const e = error as { stderr?: unknown; killed?: boolean } | null;
+  if (e !== null && typeof e === "object" && e.killed !== true && typeof e.stderr === "string") {
+    const linea = motivoDeSimctl(e.stderr);
+    if (linea !== undefined) return recortar(linea);
+  }
+  return describirFallo(error, topeMs);
+}
+
+/** Una línea acotada: por el cable no viaja la salida de una herramienta. */
+function recortar(texto: string): string {
+  return texto.length > 160 ? `${texto.slice(0, 159)}…` : texto;
 }
 
 async function ejecutarConTexto(binario: string, args: string[], opciones: { timeout: number }): Promise<Ejecucion> {

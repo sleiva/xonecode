@@ -800,6 +800,20 @@ export type MensajeDelCliente =
    */
   | { clase: "dispositivo"; id?: string }
   /**
+   * VERIFICAR la conexión con un dispositivo: hablarle y esperar respuesta.
+   *
+   * Viaja el ID y nada más, la misma regla que `dispositivo`: el servidor lo resuelve contra
+   * la última MEDIDA y de ahí saca la plataforma y la clase, que son las que deciden qué
+   * comando se lanza. Un id que no esté en la medida se ignora — es una foto vieja del
+   * cliente, no un error.
+   *
+   * **Es un mensaje propio y no un campo de `dispositivos`**, aunque las dos cosas acaben
+   * emitiendo el informe: `dispositivos` significa «vuelve a MEDIR», y una medida nueva se
+   * lleva por construcción todas las verificaciones —viven con la foto—. O sea que meterlo
+   * ahí habría borrado la verificación que se acaba de hacer.
+   */
+  | { clase: "conexion"; id: string }
+  /**
    * La credencial de un proveedor, desde la ventana de ajustes.
    *
    * «pedir» hace que el servidor PREGUNTE por ella (`leerSecreto`), así que la clave sigue
