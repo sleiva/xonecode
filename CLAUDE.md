@@ -519,9 +519,9 @@ qué. Al cerrarse el SSE se desconecta la consola que se ADJUNTÓ, no la que sea
 medias puede haberse abierto un proyecto.
 
 **Y ya hay VARIAS consolas de persona vivas a la vez: cambiar de sesión no mata el turno que
-estaba corriendo** (`abiertas`/`enFoco` en `vestibulo.ts`, `alta.proyectos[].sesiones[].trabajando`).
+estaba corriendo** (`abiertas`/`enFoco` en `vestibulo.ts`, `alta.proyectos[].trabajando`).
 Era UNA variable, así que mirar otra sesión —o otro proyecto— cerraba la consola anterior y con
-ella el turno del agente, sin decir nada. Ahora es un mapa por RAÍZ y un foco. Ocho reglas:
+ella el turno del agente, sin decir nada. Ahora es un mapa por RAÍZ y un foco. Diez reglas:
 - **La clave es la RAÍZ, y eso es la mitad del diseño.** Nunca hay dos consolas sobre la misma
   copia de trabajo, así que dos conversaciones no pueden escribirse los mismos ficheros ni
   pisarse el hilo del checkpointer — el mismo motivo por el que una tarea no arranca donde hay
@@ -567,10 +567,22 @@ ella el turno del agente, sin decir nada. Ahora es un mapa por RAÍZ y un foco. 
   distingue «lo dejé a medias y sigue» de «lo dejé a medias y se paró». Va en el ALTA porque el
   alta se reemite en los dos flancos de CUALQUIERA de las consolas vivas —para eso se ensanchó
   el disparador de `alCambiarTurno`, cuyo booleano sigue hablando solo de la del foco—, con
-  PALABRAS y en el hueco de la fecha (que es el dato a punto de cambiar), y también en la fila
-  del PROYECTO, porque con la lista de sesiones plegada no se vería en ninguna parte. Solo
-  entran las sesiones con entrada en el índice: una fila que la barra no pinta no se puede
-  marcar.
+  PALABRAS y en el hueco de la fecha, que es el dato a punto de cambiar.
+- **Y son DOS marcas, no una derivada de la otra**: `sesiones[].trabajando` y
+  `proyectos[].trabajando`. El id de una sesión nace al VOLCAR su primer acto, o sea al final
+  del turno, así que el caso más común de todos —abrir, pedir algo, irse a otro proyecto— no
+  tiene ninguna fila que marcar y la barra no habría dicho nada justo en el primer minuto de
+  uso. La raíz sí se sabe desde el primer instante, y de ella sale la marca del proyecto — que
+  además es la que se ve con la lista de sesiones plegada.
+- **Y de esa marca cuelga que el rechazo no sea un botón muerto**: con el proyecto trabajando,
+  las OTRAS sesiones de su lista y su «+» se apagan, con el motivo en el `title`. La guarda del
+  servidor sigue estando —es quien manda si la lista del cliente llega vieja—, y cuando declina
+  el motivo se escribe como acto de SISTEMA en la conversación que se está mirando: `alta.aviso`
+  por este camino no lo pinta nadie (lo leen el wizard y la ventana de sesión nueva, y pulsar
+  una fila de la barra no abre ninguna de las dos), así que el rechazo de una sesión de tarea en
+  curso llevaba recorriendo ese camino mudo. Sin ninguna consola en foco no se pinta en ninguna
+  parte, y eso queda declarado: para llegar ahí hay que haber borrado la sesión que se miraba
+  mientras otro proyecto trabajaba.
 Lo que queda DECLARADO y no arreglado: un `preguntar` o un `leerSecreto` de un turno de segundo
 plano ahora ESPERA su plazo (diez minutos) en vez de contestar en el acto, y al vencer devuelve
 cadena vacía — que 16 de sus 18 llamadores leen como «usa el valor por omisión». Es el mismo

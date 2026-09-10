@@ -220,6 +220,8 @@ export interface EstadoDelCliente {
         trabajando?: true;
       }[];
       local?: boolean;
+      /** Alguna sesión de este proyecto trabaja AHORA. Ausente = no consta. */
+      trabajando?: true;
       /** Compartido CONTIGO. Ausente = el servidor no lo dijo, que no es «es tuyo». */
       compartido?: boolean;
     }[];
@@ -1066,6 +1068,9 @@ export function crearStoreDelCliente(): {
                   }
                 : {}),
               ...((p as { local?: unknown }).local === true ? { local: true } : {}),
+              // La misma regla del booleano de verdad: una cadena colada aquí dejaría el
+              // proyecto «trabajando» para siempre, y con él las sesiones sin poder abrirse.
+              ...((p as { trabajando?: unknown }).trabajando === true ? { trabajando: true as const } : {}),
               // La MISMA regla que el servidor: solo un booleano de verdad. Ausente se
               // queda ausente, y la interfaz no pinta etiqueta — «no lo dijo» no es
               // «es tuyo». Una cadena colada aquí («shared: "false"») marcaría el

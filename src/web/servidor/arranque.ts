@@ -597,6 +597,19 @@ export function montarRutas(
     // está cacheada en la consola y no rechaza nunca.
     const trabajo = abierto === undefined ? undefined : await abierto.trabajoAlAbrir;
     const pasos: PasoDelVestibulo[] = pendientes.includes("entorno") ? ["entorno"] : [];
+    // Las raíces que trabajan, UNA vez para todos los proyectos del anuncio.
+    const trabajandoAqui = raicesTrabajando();
+    /** La raíz que le tocaría a ese proyecto, o nada si no se puede calcular (sin entorno
+     *  elegido, o un nombre que `rutaDeWorkspace` rechaza). No se afirma sobre lo que no se
+     *  puede nombrar. */
+    const raizDeProyectoOSilencio = (nombre: string): string | undefined => {
+      if (entorno === undefined) return undefined;
+      try {
+        return vestibulo.raizDeProyecto(entorno, nombre);
+      } catch {
+        return undefined;
+      }
+    };
     emitir({
       clase: "alta",
       pasos,
@@ -619,6 +632,12 @@ export function montarRutas(
         return {
           ...p,
           ...(sesiones.length === 0 ? {} : { sesiones }),
+          // La misma deducción por raíz que `activo`, con la misma función que la creó: un
+          // id guardado aparte se queda viejo el día que alguien abra por otro camino.
+          ...(raizDeProyectoOSilencio(p.nombre) !== undefined &&
+          trabajandoAqui.has(raizDeProyectoOSilencio(p.nombre)!)
+            ? { trabajando: true as const }
+            : {}),
           // Si ya está bajado, abrirlo no necesita ni rama ni descarga: es lo que decide
           // qué enseña la ventana de sesión nueva, y decidirlo en el cliente exigiría
           // que supiera dónde vive la copia local.
@@ -1361,6 +1380,16 @@ export function montarRutas(
     return trabajando;
   };
 
+  /**
+   * Y las RAÍCES con un turno en marcha, que no es la misma pregunta.
+   *
+   * Una sesión nueva no tiene fila en el índice hasta que vuelca su primer acto, así que el
+   * caso más común —abrir, pedir algo, irse a otro proyecto— no tiene ninguna sesión que
+   * marcar y la barra no enseñaría nada. La raíz sí se sabe desde el primer instante.
+   */
+  const raicesTrabajando = (): Set<string> =>
+    new Set(vestibulo.proyectosAbiertos().filter((c) => c.turnoEnVuelo).map((c) => c.raiz));
+
   const sesionesDelProyecto = (
     nombre: string
   ): { id: string; titulo: string; ultimoTurno?: string; deTarea?: true; trabajando?: true }[] => {
@@ -1539,6 +1568,19 @@ export function montarRutas(
       opciones.revisarTareas?.();
     } catch (error) {
       aviso = error instanceof Error ? error.message : String(error);
+      /**
+       * Y se DICE en la conversación que se está mirando, porque `alta.aviso` por este
+       * camino no lo pinta nadie: lo leen el wizard y la ventana de sesión nueva, y un clic
+       * en una fila de la barra no abre ninguna de las dos. Medido leyendo `App.tsx`, y
+       * alcanzable de verdad desde que un proyecto puede declinar por estar trabajando —el
+       * rechazo de una sesión de tarea en curso ya recorría este mismo camino mudo.
+       *
+       * Se escribe como acto de SISTEMA, que es el canal por el que el chat ya enseña la
+       * respuesta a un comando y los avisos de honestidad. Sin ninguna consola en foco no se
+       * pinta en ninguna parte: para llegar ahí hace falta haber borrado la sesión que se
+       * miraba mientras otro proyecto trabajaba, y ese hueco se queda declarado.
+       */
+      vestibulo.proyectoAbierto()?.consola.consola.escribir(`${aviso}\n`);
       contar(error);
     } finally {
       // El alta PRIMERO y el flanco de bajada después: al revés hay un hueco en el que ya

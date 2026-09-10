@@ -1054,6 +1054,75 @@ describe("montarRutas — el cable, por fin conectado", () => {
       rmSync(base, { recursive: true, force: true });
     });
 
+    /**
+     * Y el rechazo se DICE en la conversación que se está mirando.
+     *
+     * `alta.aviso` por este camino no lo pinta nadie —lo leen el wizard y la ventana de
+     * sesión nueva, y pulsar una fila de la barra no abre ninguna—, así que sin esto un
+     * proyecto que declina por estar trabajando sería un clic que enseña «abriendo…» y
+     * después nada: el botón muerto de siempre.
+     */
+    it("el rechazo al abrir aterriza como acto de SISTEMA en el chat que se está mirando", async () => {
+      const base = mkdtempSync(join(tmpdir(), "xonecode-rech-"));
+      const servidor = servidorDeMentira();
+      let soltarElTurno: (() => void) | undefined;
+      const vestibulo = vestibuloDePrueba({
+        baseDeWorkspace: base,
+        sesiones: {
+          crear: () => "s1",
+          listar: () => [
+            { id: "s1", titulo: "la que trabaja" },
+            { id: "s2", titulo: "la otra" },
+          ],
+          anotar: () => {},
+          reabrir: (_r, id) => ({ id, actos: [], historica: true }),
+        },
+        crearEjecutor: () => async () => {
+          await new Promise<void>((resuelto) => {
+            soltarElTurno = resuelto;
+          });
+        },
+        correr: async (consola) => {
+          for await (const _linea of consola.lineas) {
+            // Hasta el EOF.
+          }
+          return 0;
+        },
+      });
+      const raiz = vestibulo.raizDeProyecto("webstudio", "Tienda");
+      mkdirSync(join(raiz, ".xonecode"), { recursive: true });
+      writeFileSync(join(raiz, ".xonecode", "config.json"), JSON.stringify({ modo: "offline" }));
+      montarRutas(servidor, vestibulo);
+      const cliente = clienteDeMentira();
+      await servidor.rutas.get(`GET ${RUTA_EVENTOS}`)!(cliente.peticion, cliente.respuesta);
+      const accion = servidor.rutas.get(`POST ${RUTA_ACCION}`)!;
+      await asentar();
+
+      await enviarMensaje(accion, { clase: "sesion", proyecto: "p1", sesion: "s1" });
+      await asentar();
+      const abierta = vestibulo.proyectoAbierto()!;
+      const turno = abierta.ejecutarTurno("arregla el login", abierta.estadoDeSesion, abierta.consola.consola);
+      await asentar();
+
+      // La OTRA sesión del MISMO proyecto, con esa trabajando: se declina.
+      await enviarMensaje(accion, { clase: "sesion", proyecto: "p1", sesion: "s2" });
+      for (let i = 0; i < 5; i++) await asentar();
+      const dichos = cliente.recibidos
+        .filter((m) => m.clase === "acto")
+        .map((m) => (m as Extract<MensajeAlCliente, { clase: "acto" }>).acto)
+        .filter((a) => a.tipo === "sistema")
+        .map((a) => (a as { texto: string }).texto);
+      expect(dichos.some((t) => t.includes("turno en marcha"))).toBe(true);
+      // Y no se ha cerrado la que trabajaba para negarse después: dos daños en vez de uno.
+      expect(abierta.cerrada).toBe(false);
+      expect(vestibulo.proyectoAbierto()).toBe(abierta);
+
+      soltarElTurno!();
+      await turno;
+      await vestibulo.cerrar();
+      rmSync(base, { recursive: true, force: true });
+    });
+
     it("con proyecto y sesión, la lista sale del puerto y el parche se pide POR RUTA", async () => {
       const base = mkdtempSync(join(tmpdir(), "xonecode-proy-"));
       const servidor = servidorDeMentira();
@@ -1696,6 +1765,58 @@ describe("montarRutas — el cable, por fin conectado", () => {
       await asentar();
       const yaNo = ultimaAlta(cliente) as Extract<MensajeAlCliente, { clase: "alta" }>;
       expect(yaNo.proyectos[0]?.sesiones?.[0]?.trabajando).toBeUndefined();
+      expect(yaNo.proyectos[0]?.trabajando).toBeUndefined();
+      await vestibulo.cerrar();
+    });
+
+    /**
+     * Y el PROYECTO se marca aunque su sesión no tenga fila todavía, que es el caso más
+     * común de todos: abrir, pedir algo e irse a otro proyecto. El id de la sesión nace al
+     * volcar el primer acto —o sea al FINAL del turno—, así que marcar solo por sesión
+     * dejaba la barra sin decir nada justo en el primer minuto de uso. La raíz, en cambio, se
+     * sabe desde el primer instante.
+     */
+    it("el proyecto se marca trabajando aunque su sesión no tenga fila en el índice todavía", async () => {
+      const servidor = servidorDeMentira();
+      let soltarElTurno: (() => void) | undefined;
+      const vestibulo = vestibuloDePrueba({
+        // Sin ninguna sesión guardada: es una conversación nueva y su fila no existe.
+        sesiones: {
+          crear: () => "nueva",
+          listar: () => [],
+          anotar: () => {},
+          reabrir: (_r, id) => ({ id, actos: [], historica: true }),
+        },
+        crearEjecutor: () => async () => {
+          await new Promise<void>((resuelto) => {
+            soltarElTurno = resuelto;
+          });
+        },
+        correr: async (consola) => {
+          for await (const _linea of consola.lineas) {
+            // Hasta el EOF.
+          }
+          return 0;
+        },
+      });
+      montarRutas(servidor, vestibulo);
+      const cliente = clienteDeMentira();
+      await servidor.rutas.get(`GET ${RUTA_EVENTOS}`)!(cliente.peticion, cliente.respuesta);
+      await asentar();
+
+      const abierta = await vestibulo.abrirProyecto({ raiz: vestibulo.raizDeProyecto("webstudio", "Tienda") });
+      expect(abierta.sesion).toBeUndefined();
+      const turno = abierta.ejecutarTurno("arregla el login", abierta.estadoDeSesion, abierta.consola.consola);
+      await asentar();
+      const alta = ultimaAlta(cliente) as Extract<MensajeAlCliente, { clase: "alta" }>;
+      expect(alta.proyectos[0]?.trabajando).toBe(true);
+      // Y no hay ninguna fila que marcar: es justo por eso que el proyecto lleva la suya.
+      expect(alta.proyectos[0]?.sesiones).toBeUndefined();
+
+      soltarElTurno!();
+      await turno;
+      await asentar();
+      expect((ultimaAlta(cliente) as Extract<MensajeAlCliente, { clase: "alta" }>).proyectos[0]?.trabajando).toBeUndefined();
       await vestibulo.cerrar();
     });
 

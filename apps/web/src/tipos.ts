@@ -293,6 +293,9 @@ export type MensajeAlCliente =
         }[];
         /** La copia local ya existe: abrirlo no baja nada ni pregunta rama. */
         local?: boolean;
+        /** Alguna sesión de este proyecto trabaja AHORA. No se deriva de las filas: una
+         *  sesión nueva no tiene fila hasta su primer volcado. Ver `transporte.ts`. */
+        trabajando?: true;
       }[];
       ramas: string[];
       /** Qué falló en el paso anterior; ausente si no falló nada. Lo pinta el propio paso:

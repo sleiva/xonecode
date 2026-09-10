@@ -527,12 +527,15 @@ describe("Barra: chats y tareas en la misma lista, distinguidos", () => {
  * se paró». Lo pidió el usuario con esas palabras.
  */
 describe("Barra: qué sesión está trabajando", () => {
-  const montar = (sesiones: Parameters<typeof Barra>[0]["proyectos"][number]["sesiones"]) =>
+  const montar = (
+    sesiones: Parameters<typeof Barra>[0]["proyectos"][number]["sesiones"],
+    trabajando?: true
+  ) =>
     render(
       <Barra
         entornos={[]}
         entornoActivo=""
-        proyectos={[{ id: "p1", nombre: "AppDemo", sesiones }]}
+        proyectos={[{ id: "p1", nombre: "AppDemo", sesiones, ...(trabajando === undefined ? {} : { trabajando }) }]}
         alElegirEntorno={() => {}}
         alAbrirSesion={() => {}}
         alAbrirProyecto={() => {}}
@@ -543,10 +546,13 @@ describe("Barra: qué sesión está trabajando", () => {
     );
 
   it("la que trabaja lo dice con PALABRAS, en el hueco de la fecha", () => {
-    montar([
-      { id: "s1", titulo: "la que trabaja", ultimoTurno: "2026-09-07T10:08:23.790Z", trabajando: true },
-      { id: "s2", titulo: "la otra", ultimoTurno: "2026-09-07T09:00:00.000Z" },
-    ]);
+    montar(
+      [
+        { id: "s1", titulo: "la que trabaja", ultimoTurno: "2026-09-07T10:08:23.790Z", trabajando: true },
+        { id: "s2", titulo: "la otra", ultimoTurno: "2026-09-07T09:00:00.000Z" },
+      ],
+      true
+    );
     // Dos veces: la fila y el proyecto, que es lo que se ve con la lista plegada.
     expect(screen.getAllByText("trabajando…")).toHaveLength(2);
     // Y la fecha de la que trabaja NO se pinta: es el dato que está a punto de cambiar, y
@@ -560,9 +566,45 @@ describe("Barra: qué sesión está trabajando", () => {
     expect(screen.queryByText("trabajando…")).toBeNull();
   });
 
-  it("el PROYECTO lo dice aunque su lista esté plegada: si no, no se vería en ninguna parte", () => {
-    montar([{ id: "s1", titulo: "una", trabajando: true }]);
+  /**
+   * El PROYECTO lo dice con su propia marca y no derivándola de sus filas, y hace falta: una
+   * sesión nueva no tiene fila en el índice hasta que vuelca su primer acto, así que el caso
+   * más común —abrir, pedir algo, irse a otro proyecto— no habría marcado nada en ninguna
+   * parte. Aquí hay una sesión vieja sin marcar y el proyecto trabajando en otra que no está
+   * en la lista.
+   */
+  it("el proyecto lo dice aunque NINGUNA de sus filas esté marcada: la nueva no tiene fila todavía", () => {
+    montar([{ id: "vieja", titulo: "de ayer", ultimoTurno: "2026-09-06T10:00:00.000Z" }], true);
     expect(screen.getByTitle("El agente está trabajando en este proyecto…")).toBeTruthy();
+  });
+
+  /**
+   * Y las OTRAS sesiones de ese proyecto no se pueden pulsar: el servidor las declina —dos
+   * conversaciones sobre la misma copia de trabajo se pisarían los ficheros— así que un botón
+   * vivo ahí sería el botón muerto de siempre. La que TRABAJA sí se pulsa: volver a ella es
+   * justo lo que uno hace para ver cómo va.
+   */
+  it("con el proyecto trabajando solo se puede pulsar LA que trabaja, y el «+» se apaga", () => {
+    montar(
+      [
+        { id: "s1", titulo: "la que trabaja", trabajando: true },
+        { id: "s2", titulo: "la otra" },
+      ],
+      true
+    );
+    const fila = (texto: string): HTMLButtonElement =>
+      screen.getAllByRole("button").find((b) => (b.textContent ?? "").includes(texto)) as HTMLButtonElement;
+    expect(fila("la que trabaja").hasAttribute("disabled")).toBe(false);
+    expect(fila("la otra").hasAttribute("disabled")).toBe(true);
+    expect(fila("la otra").getAttribute("title")).toContain("otra conversación");
+    expect(screen.getByLabelText("nueva sesión en AppDemo").hasAttribute("disabled")).toBe(true);
+  });
+
+  it("sin proyecto trabajando no se apaga ninguna fila", () => {
+    montar([{ id: "s1", titulo: "una" }]);
+    const fila = screen.getAllByRole("button").find((b) => (b.textContent ?? "").includes("una"))!;
+    expect(fila.hasAttribute("disabled")).toBe(false);
+    expect(screen.getByLabelText("nueva sesión en AppDemo").hasAttribute("disabled")).toBe(false);
   });
 });
 

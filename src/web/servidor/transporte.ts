@@ -434,6 +434,21 @@ export type MensajeAlCliente =
         }[];
         /** La copia local YA existe: se puede abrir sin bajar nada ni preguntar rama. */
         local?: boolean;
+        /**
+         * Alguna sesión de este proyecto tiene un turno EN MARCHA ahora mismo.
+         *
+         * No se DERIVA de `sesiones[].trabajando`, y ahí está el motivo de que exista: una
+         * sesión nueva no tiene fila en el índice hasta que vuelca su primer acto —o sea al
+         * final del turno—, así que el caso más común (abrir, pedir algo, irse a otro
+         * proyecto) no habría marcado ni la fila ni el proyecto, y en la barra no se vería
+         * nada en ninguna parte.
+         *
+         * De aquí cuelga además que las OTRAS sesiones de ese proyecto no se puedan abrir
+         * mientras dure: una copia de trabajo no aguanta dos conversaciones, y el servidor
+         * lo declina (`motivoDeProyectoTrabajando`). Decirlo antes del clic es lo que evita
+         * el botón muerto.
+         */
+        trabajando?: true;
       }[];
       ramas: string[];
       /**
