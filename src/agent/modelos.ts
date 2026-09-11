@@ -4,8 +4,10 @@ import { ChatOllama } from "@langchain/ollama";
 import type { ModelosPort, Papel } from "../core/ports.js";
 import {
   COMPATIBLES_OPENAI, compatibleConOpenAi, esProveedorPersonalizado, parsear, resolver,
+  pideThinkingAdaptativo,
   type Eleccion, type FuentesDeEleccion, type Proveedor, type ProveedorDeclarado,
 } from "../core/modelos.js";
+import { topeDeSalida } from "../core/contextos.js";
 import { baseUrlDeOllama, baseUrlDeOllamaCloud } from "./catalogoModelos.js";
 import { ChatGoogleGenerativeAICompatible } from "./gemini.js";
 
@@ -113,7 +115,25 @@ function construirModelo(
       case "openai":
         return new ChatOpenAI({ model: modelo, apiKey: process.env.OPENAI_API_KEY });
       case "anthropic":
-        return new ChatAnthropic({ model: modelo, apiKey: process.env.ANTHROPIC_API_KEY });
+        // El tope de salida se fija A MANO y el razonamiento se pide cuando hace falta;
+        // las dos decisiones son datos de `core/` (`topeDeSalida`,
+        // `pideThinkingAdaptativo`) y están ahí documentadas con lo que se midió.
+        //
+        // En corto: el `max_tokens` por omisión de la dependencia sale de una tabla por
+        // prefijo y un id que no conoce cae en 4096 SIN DECIRLO —medido con
+        // `claude-sonnet-5`—, que en un harness que escribe ficheros corta a media
+        // escritura; y omitir `thinking` corre sin pensar en la generación 4.6-4.8,
+        // mientras que pedirlo a Haiku o a lo anterior a 4.6 sería un 400.
+        return new ChatAnthropic({
+          model: modelo,
+          apiKey: process.env.ANTHROPIC_API_KEY,
+          ...(topeDeSalida("anthropic", modelo) === undefined
+            ? {}
+            : { maxTokens: topeDeSalida("anthropic", modelo) }),
+          ...(pideThinkingAdaptativo("anthropic", modelo)
+            ? { thinking: { type: "adaptive" as const } }
+            : {}),
+        });
       case "ollama":
         return new ChatOllama({
           model: modelo,

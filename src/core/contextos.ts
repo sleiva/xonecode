@@ -20,7 +20,29 @@ import type { Proveedor } from "./modelos.js";
 
 /** Familias conocidas por proveedor, emparejadas por prefijo del id del modelo. */
 const TOPES: Partial<Record<Proveedor, Array<[prefijo: string, tope: number]>>> = {
-  anthropic: [["claude", 200_000]],
+  // Claude va por VERSIÓN y no por familia, porque dentro de la misma familia la ventana
+  // cambió: la generación 4.6 y posteriores lleva 1M, y lo anterior (más Haiku 4.5, que
+  // sigue en 200k) se queda en 200.000. Fue una sola fila «claude → 200.000», y al
+  // emparejar por prefijo le daba 200k a `claude-opus-5`: la barra calculaba el porcentaje
+  // sobre una quinta parte de la ventana real. El orden importa —`find` se queda con el
+  // PRIMER prefijo que casa—, así que lo específico va antes que el `claude` de reserva,
+  // igual que `gpt-4.1` va antes que `gpt-4` aquí abajo.
+  //
+  // La tabla sigue siendo el último recurso: el catálogo vivo de Anthropic ya devuelve
+  // `max_input_tokens` (`agent/catalogoModelos.ts`), que es la verdad para el modelo
+  // concreto; lo que todavía no está es ese valor llegando a la barra, que hoy resuelve
+  // por aquí.
+  anthropic: [
+    ["claude-fable", 1_000_000],
+    ["claude-mythos", 1_000_000],
+    ["claude-opus-5", 1_000_000],
+    ["claude-opus-4-8", 1_000_000],
+    ["claude-opus-4-7", 1_000_000],
+    ["claude-opus-4-6", 1_000_000],
+    ["claude-sonnet-5", 1_000_000],
+    ["claude-sonnet-4-6", 1_000_000],
+    ["claude", 200_000],
+  ],
   gemini: [["gemini", 1_000_000]],
   openai: [
     ["gpt-4.1", 1_000_000],
@@ -63,4 +85,35 @@ export function topeResuelto(
   if (configs.global?.[id] !== undefined) return { tope: configs.global[id]!, origen: "global" };
   const deTabla = topeDeContexto(proveedor, modelo);
   return deTabla !== undefined ? { tope: deTabla, origen: "tabla" } : undefined;
+}
+/**
+ * El tope de SALIDA que le fijamos a un modelo, o `undefined` para dejarlo en manos del
+ * cliente.
+ *
+ * Existe por un fallo MEDIDO de la dependencia, no por gusto de configurar:
+ * `@langchain/anthropic` 1.5.2 resuelve su propio `max_tokens` por omisión con una tabla
+ * emparejada por prefijo, y un id que su tabla no conoce cae en su
+ * `FALLBACK_MAX_OUTPUT_TOKENS = 4096` **en silencio**. Comprobado reproduciendo su función
+ * con sus datos: `claude-sonnet-5` no casa con ninguna de sus claves —`claude-sonnet-4` no
+ * es prefijo de `claude-sonnet-5`— y sale con 4096, mientras `claude-opus-5`,
+ * `claude-opus-4-8` y `claude-fable-5-1` salen con 16384. En un harness que escribe
+ * ficheros, un tope de 4096 no da error: corta la respuesta a media escritura.
+ *
+ * **16.384 y no más, y el motivo es de qué camino lo usa.** El modelo construido se
+ * comparte entre el turno (que STREAMEA: su `_streamResponseChunks` mete `stream: true` en
+ * el payload sea cual sea la bandera del constructor) y las llamadas sueltas con `.invoke()`
+ * —el juez, el aumentador—, que no streamean y donde un tope grande se lleva por delante el
+ * plazo HTTP del SDK. 16.384 es además el valor que la propia dependencia da a la familia
+ * actual, así que para los modelos que SÍ conoce esto no cambia nada: solo tapa el 4096.
+ *
+ * Solo `anthropic` tiene fila, como `ollama` no tiene fila en la tabla de contexto: los
+ * demás clientes no tienen este fallo, y fijarles un tope a ciegas sería recortarles la
+ * salida por una razón que no existe.
+ */
+const TOPES_DE_SALIDA: Partial<Record<Proveedor, Array<[prefijo: string, tope: number]>>> = {
+  anthropic: [["claude", 16_384]],
+};
+
+export function topeDeSalida(proveedor: Proveedor, modelo: string): number | undefined {
+  return TOPES_DE_SALIDA[proveedor]?.find(([prefijo]) => modelo.startsWith(prefijo))?.[1];
 }
