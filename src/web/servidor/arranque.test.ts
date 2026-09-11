@@ -5,13 +5,13 @@
  * invocan con una petición y una respuesta de mentira — que es lo que permite afirmar
  * sobre el CABLE (qué se emite, en qué orden, a qué consola) sin abrir un socket.
  */
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { vi, describe, it, expect, beforeEach, afterEach } from "vitest";
 import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { Readable } from "node:stream";
 import type { IncomingMessage, ServerResponse } from "node:http";
-import {
+import { MS_DE_TRABAJO_AL_ABRIR,
   arrancarConsolaWeb,
   comandosDelRegistro, descripcionParaLaWeb,
   montarRutas,
@@ -982,6 +982,51 @@ describe("montarRutas — el cable, por fin conectado", () => {
      * componente— y aun así el contador no se pintó nunca, porque el que faltaba era este
      * y el de antes. Cubrirlo aquí es lo que impide que vuelva a caerse en silencio.
      */
+    /**
+     * Medido en la pantalla del usuario: pulsó una conversación y la barra se quedó en
+     * «abriendo…» para siempre, sin poder abrir nada más. El `finally` que apaga ese
+     * indicador espera a `anunciarAlta()`, y ésa esperaba SIN PLAZO al aviso de trabajo sin
+     * commitear — detrás del cual hay un `git status --untracked-files=all` sobre el
+     * proyecto del usuario. Un aviso que «avisa, no frena» no puede ser lo que frena.
+     */
+    it("un aviso de git que no llega NO deja la apertura colgada", async () => {
+      const base = mkdtempSync(join(tmpdir(), "xonecode-plazo-"));
+      const servidor = servidorDeMentira();
+      const vestibulo = vestibuloDePrueba({
+        baseDeWorkspace: base,
+        proyectosDeEntorno: async () => ({ proyectos: [{ id: "p1", nombre: "Tienda" }] }),
+        sesiones: {
+          crear: () => "s1",
+          listar: () => [{ id: "s1", titulo: "una" }],
+          anotar: () => {},
+          reabrir: (_r, id) => ({ id, actos: [], historica: true }),
+        },
+        // El `git status` que no vuelve nunca.
+        sinCommitear: () => new Promise(() => {}),
+      });
+      const raiz = vestibulo.raizDeProyecto("webstudio", "Tienda");
+      mkdirSync(join(raiz, ".xonecode"), { recursive: true });
+      writeFileSync(join(raiz, ".xonecode", "config.json"), JSON.stringify({ modo: "offline" }));
+      montarRutas(servidor, vestibulo);
+      const cliente = clienteDeMentira();
+      await servidor.rutas.get(`GET ${RUTA_EVENTOS}`)!(cliente.peticion, cliente.respuesta);
+      const accion = servidor.rutas.get(`POST ${RUTA_ACCION}`)!;
+      await asentar();
+
+      vi.useFakeTimers();
+      try {
+        const abriendo = enviarMensaje(accion, { clase: "sesion", proyecto: "p1", sesion: "s1" });
+        // El plazo vence y el anuncio sale sin ese campo, en vez de no salir nunca.
+        await vi.advanceTimersByTimeAsync(MS_DE_TRABAJO_AL_ABRIR + 10);
+        await abriendo;
+      } finally {
+        vi.useRealTimers();
+      }
+      const ultimos = cliente.recibidos.filter((m) => m.clase === "abriendo");
+      // Lo que importa: el flanco de BAJADA llegó. Sin plazo, este mensaje no existía.
+      expect(ultimos.at(-1)).toEqual({ clase: "abriendo", activo: false });
+    });
+
     it("lo consumido por la sesión sale por el cable, y en la ráfaga de quien conecta después", async () => {
       const base = mkdtempSync(join(tmpdir(), "xonecode-tokens-"));
       const servidor = servidorDeMentira();

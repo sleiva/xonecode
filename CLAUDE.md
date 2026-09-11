@@ -444,6 +444,15 @@ feedback del desarrollador** y no es terminal.
   van FUERA del tramo plegable. `razonamiento` es su propio evento y su propio acto —`textoDe` lo
   EXCLUYE del texto—. El texto del asistente se enseña mientras llega, a `MS_ENTRE_PARCIALES`
   (80 ms) con el reloj por parámetro, porque cada emisión manda el acto entero.
+- **Abrir una sesión NO espera al aviso de git** (`MS_DE_TRABAJO_AL_ABRIR`, 2 s). El `finally`
+  que apaga el indicador «abriendo…» espera a `anunciarAlta()`, y ésta esperaba SIN PLAZO a
+  `trabajoAlAbrir` — detrás del cual hay un `git status --untracked-files=all` sobre la copia
+  del usuario. Medido en su pantalla: con ese git sin volver, la barra se quedaba en
+  «abriendo…» para siempre y la consola no dejaba abrir nada más. Un aviso cuya regla es
+  «avisa, no FRENA» no puede ser lo que frena. Lo que se acota es la ESPERA y no el trabajo:
+  la promesa sigue viva y su valor sale en el siguiente anuncio, que llega en los dos flancos
+  de cada turno; ausente ya significaba «no consta» en las cuatro capas. Hay test, y muere
+  con el mutante — sin plazo, se cuelga igual que la pantalla.
 - **Una sesión reabierta lo DICE, y lo dice el servidor** (`alta.historica`, preguntando al
   checkpointer). El alta se reanuncia en los DOS flancos del turno y **diferido** a una
   microtarea, porque `vestibulo.ts` llama a la escucha ANTES de `volcar()`.

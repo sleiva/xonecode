@@ -151,6 +151,16 @@ import type {
 import { filaDeTarea } from "./transporte.js";
 
 /** Las dos rutas del cable. El cliente las tiene escritas en `apps/web/src/conexion.ts`. */
+/**
+ * Cuánto se espera al aviso de «lo que ya había sin commitear» antes de anunciar sin él.
+ *
+ * Dos segundos porque esto va en el camino de ABRIR una sesión y ahí lo que se nota es el
+ * indicador: un anuncio sin ese campo es «no consta» —lo que ya significaba ausente— y el
+ * siguiente flanco de turno lo trae. Bloquear la apertura por un `git status` lento es la
+ * definición de que el aviso frena, que es justo lo que su propia regla prohíbe.
+ */
+export const MS_DE_TRABAJO_AL_ABRIR = 2000;
+
 export const RUTA_EVENTOS = "/eventos";
 export const RUTA_ACCION = "/accion";
 /**
@@ -560,6 +570,26 @@ export function montarRutas(
   };
 
   /**
+   * Lo que valga esa promesa, o nada si tarda demasiado. **No la cancela**: sigue viva y su
+   * valor se usará en el siguiente anuncio — lo que se acota es la ESPERA, no el trabajo.
+   */
+  const conPlazo = async <T>(promesa: Promise<T>, ms: number): Promise<T | undefined> => {
+    let reloj: ReturnType<typeof setTimeout> | undefined;
+    try {
+      return await Promise.race([
+        promesa,
+        new Promise<undefined>((resuelto) => {
+          reloj = setTimeout(() => resuelto(undefined), ms);
+        }),
+      ]);
+    } finally {
+      // Sin esto el temporizador mantiene vivo el proceso hasta que vence, y son segundos
+      // en cada anuncio: el alta se emite dos veces por turno.
+      if (reloj !== undefined) clearTimeout(reloj);
+    }
+  };
+
+  /**
    * El mensaje de alta: qué falta, y con qué elegirlo.
    *
    * Con proyecto YA abierto no falta nada, y se dice con `pasos` vacío SIN mirar
@@ -611,7 +641,21 @@ export function montarRutas(
     // `await`: `anunciarAlta` no va en la cola del vestíbulo, así que entre medias puede
     // haberse abierto otro proyecto y el dato tiene que ser del que se anuncia. La promesa
     // está cacheada en la consola y no rechaza nunca.
-    const trabajo = abierto === undefined ? undefined : await abierto.trabajoAlAbrir;
+    /**
+     * **Ese aviso AVISA, no FRENA — y esperarlo sin plazo lo convertía en un freno.**
+     * Detrás hay un `git status --untracked-files=all` sobre el proyecto del usuario, que en
+     * una copia grande con muchos ficheros sin rastrear puede tardar lo que quiera. Y este
+     * `await` está en el `finally` de abrir una sesión, justo antes de apagar el indicador:
+     * mientras no resolviera, la barra se quedaba en «abriendo…» PARA SIEMPRE y la consola
+     * no dejaba abrir nada más (medido en la pantalla del usuario).
+     *
+     * Con plazo, lo que se pierde es el aviso de esta pasada y nada más: el alta se reanuncia
+     * en los DOS flancos de cada turno, así que en cuanto la promesa esté lista el dato sale
+     * en el siguiente anuncio. Ausente ya significaba «no consta» en las cuatro capas, que es
+     * exactamente lo que hay que decir mientras no se sabe.
+     */
+    const trabajo =
+      abierto === undefined ? undefined : await conPlazo(abierto.trabajoAlAbrir, MS_DE_TRABAJO_AL_ABRIR);
     const pasos: PasoDelVestibulo[] = pendientes.includes("entorno") ? ["entorno"] : [];
     // Las raíces que trabajan, UNA vez para todos los proyectos del anuncio.
     const trabajandoAqui = raicesTrabajando();
