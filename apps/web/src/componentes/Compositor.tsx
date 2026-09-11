@@ -145,26 +145,6 @@ export function Compositor({
             ))}
           </ul>
         )}
-        {/*
-          Los CHIPS: lo que acota este turno sin ser una acción sobre él. Hoy solo el
-          dispositivo de la sesión, que es el único de la maqueta con dato detrás — no hay
-          chip de «Contexto» porque ese concepto no existe aquí, y lo más parecido (el
-          proyecto) ya se lee en la miga de la cabecera: pintarlo dos veces es la duplicación
-          que ya se quitó de las marcas de «trabajando».
-
-          La fila no se pinta si está vacía: un renglón en blanco sobre el campo sería alto
-          gastado en nada, que es lo mismo que un control sin dato detrás.
-        */}
-        {alElegirDispositivo !== undefined && (
-          <div className={estilos.chips}>
-            <PastillaDeDispositivo
-              {...(dispositivo === undefined ? {} : { elegido: dispositivo })}
-              {...(dispositivos === undefined ? {} : { informe: dispositivos })}
-              conectado={conectado}
-              alElegir={alElegirDispositivo}
-            />
-          </div>
-        )}
         <textarea
           ref={campo}
           className={estilos.entrada}
@@ -217,6 +197,20 @@ export function Compositor({
               {...(alAbrirAjustes === undefined ? {} : { alAbrirAjustes })}
             />
           ) : null}
+          {/*
+            El dispositivo, AL LADO del modelo: son la misma clase de elección —de la sesión,
+            la decide el servidor y el cliente la pinta— y se miran juntas. Estuvo arriba en
+            su propia fila un rato, siguiendo la maqueta, y el usuario lo devolvió aquí
+            mirando la pantalla: un chip solo arriba no era una fila, era un renglón.
+          */}
+          {alElegirDispositivo === undefined ? null : (
+            <PastillaDeDispositivo
+              {...(dispositivo === undefined ? {} : { elegido: dispositivo })}
+              {...(dispositivos === undefined ? {} : { informe: dispositivos })}
+              conectado={conectado}
+              alElegir={alElegirDispositivo}
+            />
+          )}
           {/*
             Lo consumido por la sesión, al lado del modelo: es del mismo tipo que él —un
             dato de la sesión que dice el servidor y el cliente pinta— y por eso comparte

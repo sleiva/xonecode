@@ -187,32 +187,10 @@ describe("la ayuda de teclas", () => {
   });
 });
 
-describe("los chips de arriba", () => {
-  /** Lo que acota el turno va ARRIBA; lo que actúa sobre él, abajo. */
-  it("el dispositivo va en su fila, ANTES del campo", () => {
-    render(
-      <Compositor
-        conectado
-        alEnviar={() => undefined}
-        alElegirDispositivo={() => undefined}
-      />
-    );
-    const campo = screen.getByRole("textbox");
-    const chip = screen.getByText(/dispositivo/i);
-    // `DOCUMENT_POSITION_FOLLOWING` = el campo viene DESPUÉS del chip en el DOM, que es
-    // además el orden del Tab: primero se acota y luego se escribe.
-    expect(chip.compareDocumentPosition(campo) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-  });
-
-  it("sin manejador no hay chip NI fila: un renglón en blanco es alto gastado en nada", () => {
-    // La misma regla que la pastilla del modelo: sin quien sepa elegir, no se pinta.
-    const { container } = render(<Compositor conectado alEnviar={() => undefined} />);
-    expect(container.querySelector("[class*='chips']")).toBeNull();
-  });
-
-  it("y el MODELO se queda abajo, con el contador y el botón", () => {
-    // Es lo que la maqueta pone abajo, y tiene sentido: el modelo se cambia mientras se
-    // escribe, y el dispositivo acota la sesión entera.
+describe("el dispositivo y el modelo, en la MISMA fila", () => {
+  it("los dos van DESPUÉS del campo: son elecciones de la sesión, no chips que lo acoten", () => {
+    // Estuvieron arriba en su propia fila siguiendo la maqueta, y el usuario los devolvió
+    // aquí mirando la pantalla: un chip solo arriba no era una fila, era un renglón.
     render(
       <Compositor
         conectado
@@ -222,7 +200,16 @@ describe("los chips de arriba", () => {
       />
     );
     const campo = screen.getByRole("textbox");
-    const modelo = screen.getByText("gemini/gemini-flash-latest");
-    expect(modelo.compareDocumentPosition(campo) & Node.DOCUMENT_POSITION_PRECEDING).toBeTruthy();
+    for (const texto of [/dispositivo/i, "gemini/gemini-flash-latest"]) {
+      const control = screen.getByText(texto);
+      expect(control.compareDocumentPosition(campo) & Node.DOCUMENT_POSITION_PRECEDING).toBeTruthy();
+    }
+  });
+
+  it("sin manejador no hay pastilla de dispositivo", () => {
+    // La misma regla que la de modelos: sin quien sepa elegir, no se pinta.
+    render(<Compositor conectado alEnviar={() => undefined} />);
+    expect(screen.queryByText(/dispositivo/i)).toBeNull();
   });
 });
+

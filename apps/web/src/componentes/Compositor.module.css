@@ -27,10 +27,9 @@
 }
 
 /*
- * En COLUMNA desde que hay chips: lo que acota el turno arriba, el texto en medio a todo el
- * ancho, y las acciones abajo. Antes el campo compartía fila con las pastillas y el
- * contador, y con la ventana estrecha se quedaba en un canal de dos líneas — medido en
- * pantalla. Es además la forma de la maqueta.
+ * En COLUMNA: el texto arriba a todo el ancho y las acciones debajo. Antes el campo
+ * compartía FILA con las pastillas y el contador, y con la ventana estrecha se quedaba en un
+ * canal de dos líneas — visto en el navegador. La columna es lo que le devuelve el ancho.
  */
 .compositor {
   position: relative;
@@ -42,14 +41,6 @@
   border: 0.5px solid var(--dsw-alias-border-l2);
   border-radius: 20px;
   background: var(--dsw-alias-bg-layer-1);
-}
-
-/* La fila de los chips: lo que acota este turno, arriba y a la izquierda. */
-.chips {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex-wrap: wrap;
 }
 
 .entrada {
@@ -95,10 +86,17 @@
 /* `justify-content: space-between` desde que la fila tiene DOS cosas: la pastilla del
    modelo a la izquierda —es un dato, se lee— y el botón de enviar a la derecha, que es
    donde la referencia lo pone y donde va el pulgar. */
+/*
+ * Las pastillas AGRUPADAS a la izquierda y el botón a la derecha. Era `space-between`, que
+ * funcionaba cuando esta fila compartía renglón con el campo —él absorbía el hueco—; en
+ * columna repartía el aire ENTRE las pastillas y las dejaba desperdigadas (visto en el
+ * navegador). El hueco lo come el primer margen `auto` que encuentre: el del contador si
+ * está, y el del botón si no, así que en los dos casos las pastillas se quedan juntas.
+ */
 .controles {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: flex-start;
   gap: 8px;
   padding-bottom: 2px;
 }
@@ -106,6 +104,7 @@
 /* Redondo, como en la referencia — `button-primary-fill` es el único azul de acento que
  * ya usábamos en otro sitio (`Wizard`), así que no es un color nuevo por esto. */
 .enviar {
+  margin-left: auto;
   width: 32px;
   height: 32px;
   border-radius: 50%;
