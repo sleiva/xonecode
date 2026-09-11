@@ -103,19 +103,31 @@
 
 /* Redondo, como en la referencia — `button-primary-fill` es el único azul de acento que
  * ya usábamos en otro sitio (`Wizard`), así que no es un color nuevo por esto. */
+/*
+ * El AZUL de XOne, no el casi negro del tema copiado. Es el mismo par que la barra superior
+ * —`--xonecode-azul` con `--xonecode-sobre-azul`—, o sea el que ya estaba medido para
+ * sostener texto blanco; el cian se queda para el hover, que es donde puede brillar sin
+ * tener que sostener nada. La regla de siempre: el cian es ACENTO y no lleva letra encima.
+ */
 .enviar {
   margin-left: auto;
   width: 32px;
   height: 32px;
   border-radius: 50%;
   border: none;
-  background: var(--dsw-alias-button-primary-fill);
-  color: var(--dsw-alias-label-primary-inverted);
+  background: var(--xonecode-azul);
+  color: var(--xonecode-sobre-azul);
+  transition: background 120ms ease;
   font-size: 16px;
   line-height: 1;
   cursor: pointer;
 }
 
+.enviar:hover:not(:disabled) {
+  background: var(--xonecode-cian);
+}
+
+/* Apagado NO lleva color de marca: un botón inerte pintado de azul invita a pulsarlo. */
 .enviar:disabled {
   background: var(--dsw-alias-bg-layer-2);
   color: var(--dsw-alias-label-dimmed);
@@ -163,7 +175,12 @@
 /* Parar tiene el mismo asiento que enviar —es la misma ranura, otra acción— pero no el
    mismo color: el azul de marca es «adelante», y esto no lo es. Rojo de estado, que es el
    alias que ya significa «esto interrumpe algo». */
-.parar {
+/*
+ * Parar se queda ROJO: es un estado, no la marca. Y hace falta repetir el hover, o el de
+ * `.enviar` lo pintaría de cian — el mismo botón lleva las dos clases.
+ */
+.parar,
+.parar:hover:not(:disabled) {
   background: var(--dsw-alias-state-error-primary);
 }
 

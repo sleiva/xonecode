@@ -9,9 +9,19 @@
 /* La pastilla vive en la fila de controles del compositor, así que es pequeña y sin peso:
    es un dato con el que se puede interactuar, no una acción primaria — el único botón
    primario de esa fila sigue siendo enviar. */
+/*
+ * El filo de la marca. La pastilla enseña un DATO (el modelo en vigor, el dispositivo) y
+ * además se pulsa, así que necesita verse como control sin gritar: el borde lleva un toque
+ * de cian y el fondo del hover es el mismo mix que ya usan las filas de la barra
+ * (`--xonecode-fila-hover`), en vez de un gris del tema copiado.
+ *
+ * Lo que NO se toca es el color del TEXTO: `--xonecode-azul` sobre el fondo oscuro del tema
+ * en modo noche sería ilegible, y los tokens de marca no se redefinen por tema — los de
+ * `--dsw-alias-*` sí. La misma razón por la que el cian nunca sostiene letra.
+ */
 .pastilla {
   padding: 4px 8px;
-  border: 0.5px solid var(--dsw-alias-border-l2);
+  border: 0.5px solid color-mix(in srgb, var(--xonecode-cian) 40%, var(--dsw-alias-border-l2));
   border-radius: 8px;
   background: var(--dsw-alias-bg-layer-2);
   color: var(--dsw-alias-label-secondary);
@@ -21,7 +31,8 @@
 }
 
 .pastilla:hover {
-  background: var(--dsw-alias-interactive-bg-hover);
+  background: var(--xonecode-fila-hover);
+  border-color: var(--xonecode-cian);
 }
 
 /* El menú sube DESDE la pastilla (`bottom: 100%`) y no baja: el compositor vive pegado al
