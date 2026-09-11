@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
-import { DESPLEGADOS_AL_ABRIR, Revision } from "./Revision.js";
+import { Revision } from "./Revision.js";
 import type { FicheroTocado } from "../tipos.js";
 
 const NADA = () => {};
@@ -121,10 +121,10 @@ describe("Revision: la pila", () => {
   });
 
   it("los desplegados llevan aria-expanded=true y el resto false", () => {
-    const abiertos = new Set(diez().slice(0, DESPLEGADOS_AL_ABRIR).map((f) => f.ruta));
+    const abiertos = new Set(diez().slice(0, 8).map((f) => f.ruta));
     render(<Revision via="git" ficheros={diez()} parches={{}} desplegados={abiertos} alDesplegar={NADA} alPlegar={NADA} alRecargar={NADA} />);
     const cabeceras = screen.getAllByRole("button", { expanded: true });
-    expect(cabeceras).toHaveLength(DESPLEGADOS_AL_ABRIR);
+    expect(cabeceras).toHaveLength(8);
     expect(screen.getAllByRole("button", { expanded: false })).toHaveLength(2);
   });
 

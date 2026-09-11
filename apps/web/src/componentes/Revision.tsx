@@ -25,15 +25,12 @@ import estilos from "./Revision.module.css";
  * creer que un turno que escribió tres ficheros no escribió ninguno.
  *
  * El parche se pide al DESPLEGAR un bloque, no al abrir la pestaña: un diff por fichero de un
- * turno largo son megas, y la mayoría no se miran.
+ * turno largo son megas, y la mayoría no se miran. Y **no se despliega ninguno solo**: la
+ * pestaña abre enseñando la lista de lo que tocó el agente, que es la pregunta que contesta.
+ * Hubo una omisión de ocho bloques abiertos, y se cayó con los tamaños de verdad: dos
+ * ficheros y +582 líneas volcaban un diff de 483 que nadie había pedido y dejaban la lista
+ * fuera de la vista.
  */
-
-/**
- * Cuántos bloques se despliegan SOLOS al abrir la pestaña. Conserva la petición del parche
- * bajo demanda —un turno largo son megas— y aun así la pestaña se abre enseñando diffs y
- * no una lista de cabeceras. Lo aplica `App`, que es quien pide los parches.
- */
-export const DESPLEGADOS_AL_ABRIR = 8;
 
 export function Revision({
   via,

@@ -22,7 +22,7 @@ import { NuevaSesion } from "./componentes/NuevaSesion.js";
 import { NuevaTarea } from "./componentes/NuevaTarea.js";
 import { AccionDeSesion, type AccionPendiente } from "./componentes/AccionDeSesion.js";
 import { Ajustes } from "./componentes/Ajustes.js";
-import { DESPLEGADOS_AL_ABRIR, Revision } from "./componentes/Revision.js";
+import { Revision } from "./componentes/Revision.js";
 import { Ficheros } from "./componentes/Ficheros.js";
 import { Artefactos, type ArtefactoEnLista } from "./componentes/Artefactos.js";
 import { TareasDelProyecto } from "./componentes/TareasDelProyecto.js";
@@ -81,11 +81,12 @@ export function App({
    * (`store.ts#marcarDesconectado` borra lo pendiente en ese momento).
    */
   const [pestana, setPestana] = useState<Pestana>("chat");
-  /**
-   * Las rutas con el diff desplegado en Revisión. `undefined` = la lista todavía no ha
-   * llegado (o la sesión cambió y se reinicia): al llegar, se despliegan solas las
-   * `DESPLEGADOS_AL_ABRIR` primeras y se pide su parche. Vive aquí y no en el store por lo
-   * mismo que `pestana`: es de esta ventana, no del servidor.
+   /**
+   * Las rutas con el diff desplegado en Revisión. **Arranca sin ninguna**: la pestaña se
+   * abre enseñando la LISTA de lo que tocó el agente, y cada diff se despliega al pulsarlo
+   * —que es cuando se pide su parche—. `undefined` = la foto no ha llegado, o la sesión
+   * cambió y se olvida lo que hubiera abierto. Vive aquí y no en el store por lo mismo que
+   * `pestana`: es de esta ventana, no del servidor.
    */
   const [desplegados, setDesplegados] = useState<ReadonlySet<string> | undefined>(undefined);
   /** El fichero abierto en la pestaña Ficheros. De esta ventana, como `pestana`. */
@@ -375,22 +376,14 @@ export function App({
     [enviar]
   );
 
-  // El despliegue inicial: solo la PRIMERA vez que llega una lista CON ficheros de esta
-  // sesión. Si el store la tira (otra sesión, cable caído), `revision` vuelve a
-  // `undefined` y esto se reinicia con ella. Y una lista vacía no inicializa nada: una
-  // sesión nueva contesta «sin-empezar» con lista vacía, y si eso fijara el conjunto en
-  // vacío la lista de después del primer turno ya no desplegaría ninguno.
+  // Revisión arranca PLEGADA: al llegar la lista no se despliega ningún bloque ni se pide
+  // ningún parche. Lo único que hace este efecto es OLVIDAR lo desplegado cuando el store
+  // tira la foto (otra sesión, cable caído), para que las filas abiertas de la sesión
+  // anterior no sigan abiertas sobre los ficheros de otra.
   const listaDeRevision = estado.revision?.lista;
   useEffect(() => {
-    if (listaDeRevision === undefined) {
-      setDesplegados(undefined);
-      return;
-    }
-    if (desplegados !== undefined || listaDeRevision.length === 0) return;
-    const primeros = listaDeRevision.slice(0, DESPLEGADOS_AL_ABRIR).map((f) => f.ruta);
-    setDesplegados(new Set(primeros));
-    for (const ruta of primeros) pedirParche(ruta);
-  }, [listaDeRevision, desplegados, pedirParche]);
+    if (listaDeRevision === undefined) setDesplegados(undefined);
+  }, [listaDeRevision]);
 
   /**
    * Al TERMINAR un turno, si la pestaña de Revisión está delante, se refresca sola.
