@@ -1243,7 +1243,6 @@ export function App({
             {...(estado.modelos?.actual === undefined ? {} : { modelo: estado.modelos.actual })}
             alNuevaSesion={(proyecto) => abrirVentanaDeSesion(proyecto)}
             alNuevaTarea={(proyecto) => abrirVentanaDeTarea(proyecto)}
-            alAbrirSesion={(proyecto, sesion) => abrirSesion(proyecto, sesion)}
               alAbrirAjustes={() => setAjustesAbiertos(true)}
               {...(estado.dispositivos === undefined ? {} : { dispositivos: estado.dispositivos })}
               alActualizarDispositivos={() => void enviar({ clase: "dispositivos" })}

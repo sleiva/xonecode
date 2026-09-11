@@ -251,45 +251,9 @@
   background: var(--dsw-alias-state-success-primary);
 }
 
-.sesiones {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  margin: 10px 0 0;
-  padding: 0;
-  list-style: none;
-}
-
-.sesion {
-  display: block;
-  width: 100%;
-  padding: 4px 6px;
-  border: none;
-  border-radius: 6px;
-  background: none;
-  color: var(--dsw-alias-label-secondary);
-  font: inherit;
-  font-size: 12px;
-  text-align: left;
-  cursor: pointer;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.sesion:hover {
-  background: var(--dsw-alias-interactive-bg-hover);
-  color: var(--dsw-alias-label-primary);
-}
-
-.sinSesiones {
-  margin: 10px 0 0;
-  color: var(--dsw-alias-label-tertiary);
-  font-size: 12px;
-}
-
-/* `margin-top: auto` pega las acciones al fondo de la tarjeta: con sesiones o sin ellas,
-   quedan a la misma altura en toda la fila. */
+/* `margin-top: auto` pega las acciones al fondo de la tarjeta: sea la tarjeta más alta o
+   más baja —el nombre puede envolver a dos líneas—, quedan a la misma altura en toda la
+   fila. (Antes lo que variaba era la lista de sesiones, que ya no está aquí.) */
 .accionesDeTarjeta {
   display: flex;
   gap: 6px;

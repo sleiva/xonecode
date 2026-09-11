@@ -1,6 +1,9 @@
+import { useEffect, useState } from "react";
 import clsx from "clsx";
 import {
   IconFolderClose16,
+  IconFolderOpen16,
+  IconTriangleRightFill14,
   IconNewChatOutline16,
   IconSettingsOutline16,
 } from "@deepseek-ai/dsh-client-ui-primitives";
@@ -208,6 +211,25 @@ export function Barra({ entornos, entornoActivo, proyectos, visibles, proyectoAc
       : proyectos.filter((p) => visibles.includes(p.id));
   const ocultos = proyectos.length - alaVista.length;
 
+  /**
+   * **Las sesiones se pliegan, y solo hay UNA lista abierta: la del proyecto activo.**
+   *
+   * Antes se enseñaban todas las de todos, y con cuatro proyectos de doce conversaciones eso
+   * es una columna que no se puede leer: lo que se busca —la conversación de donde estás—
+   * queda enterrado entre las de proyectos que no estás mirando.
+   *
+   * Es un acordeón y no un conjunto de plegados independientes, porque lo pedido es «uno
+   * solo»: desplegar uno cierra el que hubiera. Un solo `string | undefined` lo dice todo, y
+   * `undefined` es «ninguno abierto» — que es lo que hay sin proyecto activo (el escritorio
+   * recién arrancado).
+   *
+   * El PROYECTO ACTIVO manda cuando cambia: abrir una sesión de otro proyecto lleva el
+   * despliegue con ella, porque es donde acabas de mirar. Se hace en un efecto y no
+   * derivándolo, para que un despliegue a mano sobreviva a un re-render.
+   */
+  const [desplegado, setDesplegado] = useState<string | undefined>(proyectoActivo);
+  useEffect(() => setDesplegado(proyectoActivo), [proyectoActivo]);
+
   return (
     <nav className={barra.root}>
       {/* La marca ya NO va aquí: vive en la barra superior (`Cabecera.tsx`) desde que esa
@@ -275,24 +297,47 @@ export function Barra({ entornos, entornoActivo, proyectos, visibles, proyectoAc
                         {...(p.id === proyectoActivo ? { "aria-current": "true" as const } : {})}
                         {...(abriendoProyecto(p.id) ? { "aria-busy": "true" as const } : {})}
                       >
+                        {/*
+                          **El plegador es un botón APARTE, y tiene que serlo.** Va como
+                          hermano del botón del nombre y no dentro: un `<button>` anidado en
+                          otro es HTML inválido y reparte el clic entre los dos — la misma
+                          razón por la que el «…» de una sesión no vive dentro de su fila.
+
+                          Y **`.folder` + `.chevron` son de la hoja copiada**, que ya traía
+                          esta afordancia hecha: la carpeta se va al posar el ratón
+                          (`.projectRow:hover .folder { display: none }`) y deja sitio al
+                          triángulo, que gira 90° al abrirse (`.arrowOpen`). Aquí antes se
+                          usaba `.slot` a secas —y estaba bien— porque las sesiones se
+                          enseñaban siempre y no había nada que desplegar; ahora sí lo hay.
+
+                          La carpeta cambia además de glifo (cerrada/abierta), que es lo que
+                          dice el estado SIN posar el ratón: el chevron solo aparece en
+                          `:hover` y en `:focus-visible`, y con el ratón lejos la única
+                          señal de la fila sería el hueco.
+                        */}
+                        <button
+                          type="button"
+                          className={clsx(estilos.reseteoDeBoton, estilos.plegador)}
+                          aria-expanded={p.id === desplegado}
+                          aria-label={`${p.id === desplegado ? "plegar" : "desplegar"} las sesiones de ${p.nombre}`}
+                          onClick={() => setDesplegado(p.id === desplegado ? undefined : p.id)}
+                        >
+                          <span className={clsx(filas.slot, filas.folder, estilos.glifoDeCarpeta)} aria-hidden="true">
+                            {p.id === desplegado ? <IconFolderOpen16 size={16} /> : <IconFolderClose16 size={16} />}
+                          </span>
+                          <span className={clsx(filas.slot, filas.chevron, estilos.glifoDeChevron)} aria-hidden="true">
+                            <IconTriangleRightFill14
+                              size={14}
+                              className={clsx(filas.arrow, p.id === desplegado && filas.arrowOpen)}
+                            />
+                          </span>
+                        </button>
                         <button
                           type="button"
                           className={clsx(estilos.reseteoDeBoton, estilos.cuerpoDeFila)}
                           disabled={apagado || abriendoAlgo}
                           onClick={() => alAbrirProyecto(p.id)}
                         >
-                          {/*
-                            `.slot` sí, `.folder` NO. Esa clase solo existe en su hoja
-                            para que la carpeta DESAPAREZCA al posar el ratón
-                            (`.projectRow:hover .folder { display: none }`) y deje sitio a
-                            un chevron que despliega la fila. Aquí las sesiones se enseñan
-                            siempre —no hay nada que desplegar— y no hay chevron que
-                            ponga, así que con `.folder` la fila se quedaba con el hueco
-                            en blanco al pasar por encima: medido en pantalla.
-                          */}
-                          <span className={filas.slot} aria-hidden="true">
-                            <IconFolderClose16 size={16} />
-                          </span>
                           <span className={filas.projectText}>
                             {/* El proyecto activo se marca con el fondo y con el NOMBRE, no
                                 con el filo de cian: ese se quedó para la fila que estás
@@ -310,12 +355,19 @@ export function Barra({ entornos, entornoActivo, proyectos, visibles, proyectoAc
                             >
                               {abriendo?.descargando === true ? "descargando…" : "abriendo…"}
                             </span>
-                          ) : p.trabajando ? (
+                          ) : p.trabajando === true || (p.id !== desplegado && p.sesiones.some((se) => se.trabajando === true)) ? (
                             /*
-                              Y en el proyecto, porque la lista de sesiones se puede plegar:
-                              sin esto, un turno corriendo en una conversación de otro
-                              proyecto no se vería en ninguna parte. Dice «trabajando» y no
-                              cuántas: una basta para que haya que volver.
+                              **Aquí, y con la lista PLEGADA es obligatorio.** El servidor
+                              manda `proyectos[].trabajando` solo cuando ninguna fila suya la
+                              lleva —para no decirlo dos veces—, y eso valía cuando las
+                              sesiones se enseñaban todas: la fila lo decía. Con la lista
+                              plegada esa fila no existe, así que un turno corriendo en un
+                              proyecto que no estás mirando no se vería en NINGUNA parte.
+
+                              No es el cruce prohibido de datos que este repo evita: la
+                              lista de sesiones ya está aquí, plegada o no, y se le pregunta
+                              a ella. Y desplegado NO se dice: ahí lo dice la fila, que es
+                              la que se abre — la regla de no decirlo dos veces sigue.
                             */
                             <span className={estilos.actividad} title="El agente está trabajando en este proyecto…">
                               trabajando…
@@ -361,7 +413,11 @@ export function Barra({ entornos, entornoActivo, proyectos, visibles, proyectoAc
                           </button>
                         </span>
                       </div>
-                      {p.sesiones.length === 0 ? (
+                      {/* Plegado: las filas se DESMONTAN, no se esconden. Una fila
+                          invisible con `visibility` sigue siendo tabulable, y se llega con
+                          el teclado a botones que no se ven — el mismo cuidado que la barra
+                          entera al plegarse. */}
+                      {p.id !== desplegado ? null : p.sesiones.length === 0 ? (
                         <p className={clsx(navegador.empty, estilos.sinSesiones)}>Sin sesiones todavía.</p>
                       ) : (
                         // Las más recientes ARRIBA, por el ÚLTIMO TURNO y no por el orden

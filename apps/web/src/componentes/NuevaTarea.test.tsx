@@ -17,6 +17,18 @@ const base = {
   alCerrar: () => {},
 };
 
+/**
+ * El `<input type="file">` está ESCONDIDO a propósito —se pinta como la cromo del navegador
+ * y lo dispara un botón nuestro—, así que no tiene etiqueta que lo nombre: quien nombra el
+ * control es el TEXTO del botón. Los tests llegan al input por su tipo, que es lo único que
+ * queda, y hay un test aparte de que el botón lo dispara.
+ */
+const entradaDeFicheros = (): HTMLInputElement => {
+  const e = document.querySelector('input[type="file"]');
+  if (e === null) throw new Error("no hay entrada de ficheros");
+  return e as HTMLInputElement;
+};
+
 describe("NuevaTarea", () => {
   it("DICE que la tarea va a escribir en el proyecto sin pedir permiso", () => {
     // Es el único sitio del producto donde eso se puede decir ANTES de que ocurra: crear la
@@ -118,6 +130,23 @@ describe("NuevaTarea", () => {
     expect(document.body.textContent).toMatch(/no hay|no se puede/i);
   });
 
+  /**
+   * El input nativo se pintaba como la cromo del navegador —«Elegir archivos · Ningún
+   * archivo seleccionado»— dentro de una ventana donde todo lo demás es de esta casa, y era
+   * el único control de la interfaz que no seguía el estilo de sus vecinos. El selector del
+   * sistema solo lo puede abrir un input de fichero, así que se esconde y se le llama.
+   */
+  it("el selector de ficheros lo abre un botón NUESTRO, no la cromo del navegador", () => {
+    render(<NuevaTarea {...base} />);
+    const entrada = entradaDeFicheros();
+    // Escondido: no se pinta, y por eso no cuenta como control visible de la ventana.
+    expect(entrada.hasAttribute("hidden")).toBe(true);
+    let abierto = 0;
+    entrada.click = () => void abierto++;
+    fireEvent.click(screen.getByRole("button", { name: /elegir ficheros/i }));
+    expect(abierto).toBe(1);
+  });
+
   it("un adjunto se sube y aparece con su peso; el nombre se convierte en segmento llano", async () => {
     const subidos: { nombre: string }[] = [];
     render(
@@ -130,7 +159,7 @@ describe("NuevaTarea", () => {
       />
     );
     const fichero = new File(["0123456789"], "Screenshot 2026-09-08 at 17.03.png", { type: "image/png" });
-    fireEvent.change(screen.getByLabelText(/adjuntar/i), { target: { files: [fichero] } });
+    fireEvent.change(entradaDeFicheros(), { target: { files: [fichero] } });
     await waitFor(() => expect(subidos).toHaveLength(1));
     expect(subidos[0]!.nombre).toBe("Screenshot_2026-09-08_at_17.03.png");
     expect(screen.getByText(/Screenshot_2026-09-08_at_17\.03\.png/)).toBeTruthy();
@@ -140,7 +169,7 @@ describe("NuevaTarea", () => {
     // Encolar con un adjunto a medias mandaría al agente a leer un fichero que no está.
     render(<NuevaTarea {...base} alSubirAdjunto={async () => ({ ok: false, motivo: "es demasiado grande" })} />);
     fireEvent.change(screen.getByLabelText(/qué hay que hacer/i), { target: { value: "Arregla" } });
-    fireEvent.change(screen.getByLabelText(/adjuntar/i), {
+    fireEvent.change(entradaDeFicheros(), {
       target: { files: [new File(["x"], "grande.bin")] },
     });
     await waitFor(() => expect(screen.getByText(/es demasiado grande/)).toBeTruthy());
@@ -157,7 +186,7 @@ describe("NuevaTarea", () => {
       />
     );
     fireEvent.change(screen.getByLabelText(/qué hay que hacer/i), { target: { value: "Arregla" } });
-    fireEvent.change(screen.getByLabelText(/adjuntar/i), { target: { files: [new File(["x"], "a.png")] } });
+    fireEvent.change(entradaDeFicheros(), { target: { files: [new File(["x"], "a.png")] } });
     await waitFor(() =>
       expect((screen.getByRole("button", { name: /encolar/i }) as HTMLButtonElement).disabled).toBe(true)
     );
@@ -178,14 +207,14 @@ describe("NuevaTarea", () => {
         }}
       />
     );
-    fireEvent.change(screen.getByLabelText(/adjuntar/i), { target: { files: [new File(["x"], "..")] } });
+    fireEvent.change(entradaDeFicheros(), { target: { files: [new File(["x"], "..")] } });
     await waitFor(() => expect(screen.getByText(/no se puede usar ese nombre/i)).toBeTruthy());
     expect(subidos).toEqual([]);
   });
 
   it("dos ficheros con el mismo nombre no se pisan: el segundo se rechaza y se dice", async () => {
     render(<NuevaTarea {...base} />);
-    const entrada = screen.getByLabelText(/adjuntar/i);
+    const entrada = entradaDeFicheros();
     fireEvent.change(entrada, { target: { files: [new File(["x"], "a.png")] } });
     await waitFor(() => expect(screen.getByText(/a\.png/)).toBeTruthy());
     fireEvent.change(entrada, { target: { files: [new File(["y"], "a.png")] } });
@@ -212,7 +241,7 @@ describe("NuevaTarea", () => {
         }}
       />
     );
-    fireEvent.change(screen.getByLabelText(/adjuntar/i), {
+    fireEvent.change(entradaDeFicheros(), {
       target: { files: [new File(["x"], "captura.png"), new File(["y"], "captura.png")] },
     });
     await waitFor(() => expect(screen.getByText(/ya hay un adjunto con ese nombre/i)).toBeTruthy());

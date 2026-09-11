@@ -21,7 +21,10 @@ afterEach(cleanup);
 describe("Barra: los tres niveles vacíos se explican solos", () => {
   function montar(
     proyectos: Parameters<typeof Barra>[0]["proyectos"] = [],
-    visibles?: readonly string[]
+    visibles?: readonly string[],
+    // La lista de sesiones se PLIEGA y solo la enseña el proyecto activo, así que un test
+    // que mire filas de sesión tiene que decir cuál lo está.
+    proyectoActivo?: string
   ) {
     return render(
       <Barra
@@ -29,6 +32,7 @@ describe("Barra: los tres niveles vacíos se explican solos", () => {
         entornoActivo=""
         proyectos={proyectos}
         {...(visibles === undefined ? {} : { visibles })}
+        {...(proyectoActivo === undefined ? {} : { proyectoActivo })}
         alElegirEntorno={() => {}}
         alAbrirSesion={() => {}}
         alAbrirProyecto={() => {}}
@@ -51,7 +55,7 @@ describe("Barra: los tres niveles vacíos se explican solos", () => {
   });
 
   it("un proyecto sin sesiones lo dice EN su propia fila, no calla", () => {
-    montar([{ id: "p1", nombre: "harnees", sesiones: [] }]);
+    montar([{ id: "p1", nombre: "harnees", sesiones: [] }], undefined, "p1");
     expect(screen.getByText("harnees")).toBeTruthy();
     expect(screen.getByText(/sin sesiones todavía/i)).toBeTruthy();
   });
@@ -203,6 +207,7 @@ describe("Barra: los tres niveles vacíos se explican solos", () => {
         entornos={[{ id: "e1", nombre: "XOne WebStudio" }]}
         entornoActivo="e1"
         proyectos={[{ id: "p1", nombre: "harnees", sesiones: [{ id: "s1", titulo: "Hola", historica: false }] }]}
+        proyectoActivo="p1"
         sesionActiva="s1"
         alElegirEntorno={() => {}}
         alAbrirSesion={() => {}}
@@ -228,6 +233,7 @@ describe("el «…» de una sesión", () => {
         entornos={[]}
         entornoActivo=""
         proyectos={PROYECTO}
+        proyectoActivo="p1"
         alElegirEntorno={() => {}}
         alAbrirSesion={() => {}}
         alAbrirProyecto={() => {}}
@@ -358,6 +364,7 @@ describe("la sesión abierta se distingue de la que tienes bajo el ratón", () =
         entornos={[]}
         entornoActivo=""
         proyectos={PROYECTOS}
+        proyectoActivo="p1"
         {...(sesionActiva === undefined ? {} : { sesionActiva })}
         alElegirEntorno={() => {}}
         alAbrirSesion={() => {}}
@@ -387,9 +394,13 @@ describe("la sesión abierta se distingue de la que tienes bajo el ratón", () =
    * Sin el dato del servidor no se marca NADA: marcar la primera por no tenerlo afirmaría
    * «aquí estás» sin saberlo. Misma postura que con el proyecto activo.
    */
-  it("sin `sesionActiva` no se marca ninguna", () => {
+  it("sin `sesionActiva` no se marca ninguna SESIÓN", () => {
+    // El proyecto activo lleva su propio `aria-current` —y aquí lo está, porque es lo que
+    // despliega su lista—, así que la pregunta se acota a las filas de sesión: son las que
+    // este test vigila.
     const { container } = montar();
-    expect(container.querySelector("[aria-current]")).toBeNull();
+    const marcadas = [...container.querySelectorAll("[aria-current]")].map((n) => n.textContent);
+    expect(marcadas.some((t) => t?.includes("la abierta") || t?.includes("otra"))).toBe(false);
   });
 });
 
@@ -401,6 +412,7 @@ describe("Barra: sin conexión", () => {
         entornos={[{ id: "e1", nombre: "E", url: "https://e" }]}
         entornoActivo="e1"
         proyectos={[{ id: "p1", nombre: "Tienda", sesiones: [{ id: "s1", titulo: "Hola", historica: true }] }]}
+        proyectoActivo="p1"
         alElegirEntorno={() => {}}
         alAbrirSesion={() => {}}
         alAbrirProyecto={() => {}}
@@ -428,6 +440,7 @@ describe("Barra: el orden de las sesiones", () => {
           { id: "s1", titulo: "la primera", historica: true },
           { id: "s2", titulo: "la última", historica: true },
         ] }]}
+        proyectoActivo="p1"
         alElegirEntorno={() => {}}
         alAbrirSesion={() => {}}
         alAbrirProyecto={() => {}}
@@ -459,6 +472,7 @@ describe("Barra: chats y tareas en la misma lista, distinguidos", () => {
         entornos={[]}
         entornoActivo=""
         proyectos={[{ id: "p1", nombre: "AppDemo", sesiones }]}
+        proyectoActivo="p1"
         alElegirEntorno={() => {}}
         alAbrirSesion={() => {}}
         alAbrirProyecto={() => {}}
@@ -536,6 +550,7 @@ describe("Barra: qué sesión está trabajando", () => {
         entornos={[]}
         entornoActivo=""
         proyectos={[{ id: "p1", nombre: "AppDemo", sesiones, ...(trabajando === undefined ? {} : { trabajando }) }]}
+        proyectoActivo="p1"
         alElegirEntorno={() => {}}
         alAbrirSesion={() => {}}
         alAbrirProyecto={() => {}}
@@ -553,7 +568,9 @@ describe("Barra: qué sesión está trabajando", () => {
       ],
       true
     );
-    // Dos veces: la fila y el proyecto, que es lo que se ve con la lista plegada.
+    // Dos veces, y el caso lo fabrica el test: el servidor manda la marca del proyecto solo
+    // cuando ninguna fila suya la lleva. Lo que se comprueba aquí es que la que LLEGA se
+    // pinta tal cual —no se deduce ni se descarta— y que la fila dice lo suyo aparte.
     expect(screen.getAllByText("trabajando…")).toHaveLength(2);
     // Y la fecha de la que trabaja NO se pinta: es el dato que está a punto de cambiar, y
     // el hueco es uno.
@@ -645,6 +662,7 @@ describe("Barra: mientras se abre algo", () => {
         entornos={[]}
         entornoActivo=""
         proyectos={PROYECTOS}
+        proyectoActivo="p1"
         {...(abriendo === undefined ? {} : { abriendo })}
         alElegirEntorno={() => {}}
         alAbrirSesion={() => {}}
@@ -757,5 +775,133 @@ describe("Barra: el proyecto activo y la sesión activa no se marcan igual", () 
     // tienes debajo del ratón: las dos usan el MISMO alias de fondo.
     expect(regla("filaAbierta")).toMatch(/background:/);
     expect(regla("tituloActivo")).toMatch(/font-weight:\s*600/);
+  });
+});
+
+/**
+ * **Las sesiones se PLIEGAN, y solo hay una lista abierta: la del proyecto activo.**
+ *
+ * Lo pidió el usuario mirando su barra: cuatro proyectos con sus conversaciones cada uno es
+ * una columna que no se puede leer, y lo que se busca —la de donde estás— queda enterrado
+ * entre las de proyectos que no estás mirando.
+ */
+describe("Barra: la lista de sesiones se pliega", () => {
+  const PROYECTOS = [
+    { id: "p1", nombre: "AppDemo", sesiones: [{ id: "s1", titulo: "la de AppDemo", historica: true }] },
+    { id: "p2", nombre: "AppDeve", sesiones: [{ id: "s2", titulo: "la de AppDeve", historica: true }] },
+  ];
+
+  const montar = (proyectoActivo?: string) =>
+    render(
+      <Barra
+        entornos={[]}
+        entornoActivo=""
+        proyectos={PROYECTOS}
+        {...(proyectoActivo === undefined ? {} : { proyectoActivo })}
+        alElegirEntorno={() => {}}
+        alAbrirSesion={() => {}}
+        alAbrirProyecto={() => {}}
+        alNuevaSesion={() => {}}
+        alAccionDeSesion={() => {}}
+        alAbrirAjustes={() => {}}
+      />
+    );
+
+  it("solo el proyecto ACTIVO enseña sus sesiones", () => {
+    montar("p1");
+    expect(screen.getByText("la de AppDemo")).toBeTruthy();
+    expect(screen.queryByText("la de AppDeve")).toBeNull();
+  });
+
+  /**
+   * Y sin proyecto activo no se despliega ninguno: marcar el primero por no tener el dato
+   * sería la misma invención que marcar «aquí estás» sin saberlo. Es la barra del escritorio
+   * recién arrancado.
+   */
+  it("sin proyecto activo no hay ninguna lista abierta", () => {
+    montar();
+    expect(screen.queryByText("la de AppDemo")).toBeNull();
+    expect(screen.queryByText("la de AppDeve")).toBeNull();
+  });
+
+  it("el plegador es un botón de verdad, con `aria-expanded`, y abre la lista", () => {
+    montar("p1");
+    const plegador = screen.getByRole("button", { name: /desplegar las sesiones de AppDeve/i });
+    expect(plegador.getAttribute("aria-expanded")).toBe("false");
+    fireEvent.click(plegador);
+    expect(screen.getByText("la de AppDeve")).toBeTruthy();
+  });
+
+  /**
+   * Es un ACORDEÓN y no plegados independientes: lo pedido es «uno solo». Desplegar otro
+   * cierra el que hubiera.
+   */
+  it("desplegar uno cierra el otro: solo hay una lista abierta", () => {
+    montar("p1");
+    fireEvent.click(screen.getByRole("button", { name: /desplegar las sesiones de AppDeve/i }));
+    expect(screen.getByText("la de AppDeve")).toBeTruthy();
+    expect(screen.queryByText("la de AppDemo")).toBeNull();
+  });
+
+  it("y el mismo botón lo cierra: queda ninguno abierto", () => {
+    montar("p1");
+    fireEvent.click(screen.getByRole("button", { name: /plegar las sesiones de AppDemo/i }));
+    expect(screen.queryByText("la de AppDemo")).toBeNull();
+  });
+
+  /** El botón NO puede vivir dentro del que abre el proyecto: un control dentro de otro es
+   *  HTML inválido y reparte el clic entre los dos. */
+  it("el plegador es HERMANO del botón del nombre, no un botón dentro de otro", () => {
+    const { container } = montar("p1");
+    const plegador = screen.getByRole("button", { name: /plegar las sesiones de AppDemo/i });
+    expect(plegador.closest("button")).toBe(plegador);
+    // Y el del nombre sigue abriendo el proyecto, en su propio botón.
+    expect(container.querySelectorAll("button").length).toBeGreaterThan(2);
+  });
+
+  /**
+   * **Con la lista plegada, el proyecto TIENE que decir que trabaja.** El servidor manda
+   * `proyectos[].trabajando` solo cuando ninguna fila suya la lleva —para no decirlo dos
+   * veces—, y eso valía cuando las sesiones se enseñaban todas. Plegada esa fila no existe,
+   * así que un turno corriendo en un proyecto que no estás mirando no se vería en NINGUNA
+   * parte.
+   */
+  it("plegado, un turno en marcha se dice en la fila del PROYECTO", () => {
+    render(
+      <Barra
+        entornos={[]}
+        entornoActivo=""
+        proyectos={[
+          { id: "p1", nombre: "AppDemo", sesiones: [] },
+          { id: "p2", nombre: "AppDeve", sesiones: [{ id: "s2", titulo: "la que trabaja", trabajando: true }] },
+        ]}
+        proyectoActivo="p1"
+        alElegirEntorno={() => {}}
+        alAbrirSesion={() => {}}
+        alAbrirProyecto={() => {}}
+        alNuevaSesion={() => {}}
+        alAccionDeSesion={() => {}}
+        alAbrirAjustes={() => {}}
+      />
+    );
+    expect(screen.getByText("trabajando…")).toBeTruthy();
+  });
+
+  it("desplegado NO se dice dos veces: lo dice la fila, que es la que se abre", () => {
+    render(
+      <Barra
+        entornos={[]}
+        entornoActivo=""
+        proyectos={[{ id: "p1", nombre: "AppDemo", sesiones: [{ id: "s1", titulo: "la que trabaja", trabajando: true }] }]}
+        proyectoActivo="p1"
+        alElegirEntorno={() => {}}
+        alAbrirSesion={() => {}}
+        alAbrirProyecto={() => {}}
+        alNuevaSesion={() => {}}
+        alAccionDeSesion={() => {}}
+        alAbrirAjustes={() => {}}
+      />
+    );
+    expect(screen.getAllByText("trabajando…")).toHaveLength(1);
   });
 });

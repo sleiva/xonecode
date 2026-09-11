@@ -14,7 +14,7 @@ import type { Acto, InformeDeDispositivos, TareaDelCable } from "../tipos.js";
  * clic sobre el que quieras.
  *
  * **Todo lo que se pinta viene del servidor y ya viajaba por el cable**: los proyectos con
- * sus sesiones y si tienen copia local (`alta.proyectos`), el entorno activo
+ * y si tienen copia local (`alta.proyectos`), el entorno activo
  * (`alta.entornoActivo` sobre `alta.registrados`) y el modelo en vigor (`modelos.actual`).
  * No hay ni una tarjeta de relleno: cuando falta algo se dice qué falta y dónde se arregla,
  * que es lo que esta pantalla hacía mal — no decía nada.
@@ -38,7 +38,6 @@ export function Escritorio({
   proyectos,
   modelo,
   alNuevaSesion,
-  alAbrirSesion,
   alAbrirAjustes,
   conectado,
   visibles,
@@ -71,7 +70,6 @@ export function Escritorio({
     /** Compartido CONTIGO por otra persona. Ausente = el servidor no lo dijo, que no es lo
      *  mismo que «es tuyo»: entonces no se pinta ninguna de las dos etiquetas. */
     compartido?: boolean;
-    sesiones?: readonly { id: string; titulo: string }[];
   }[];
   /** «proveedor/modelo» en vigor. Ausente = no hay sesión y por tanto no se afirma ninguno. */
   modelo?: string;
@@ -83,7 +81,6 @@ export function Escritorio({
    */
   visibles?: readonly string[];
   alNuevaSesion: (proyecto: string) => void;
-  alAbrirSesion: (proyecto: string, sesion: string) => void;
   alAbrirAjustes: () => void;
   /**
    * Si el cable está vivo. Medido sin servidor: lo único que cambiaba era un «sin conexión»
@@ -206,7 +203,6 @@ export function Escritorio({
           <section aria-label="proyectos elegidos">
           <ul className={estilos.rejilla}>
             {destacados.map((p) => {
-              const sesiones = p.sesiones ?? [];
               return (
                 <li key={p.id} className={estilos.tarjeta} data-local={p.local === true ? "" : undefined}>
                   <div className={estilos.cabeceraDeTarjeta}>
@@ -229,26 +225,14 @@ export function Escritorio({
                       {p.local === true ? "en tu equipo" : "sin descargar"}
                     </span>
                   </div>
-                  {sesiones.length === 0 ? (
-                    <p className={estilos.sinSesiones}>Sin sesiones todavía.</p>
-                  ) : (
-                    <ul className={estilos.sesiones}>
-                      {/* Las últimas cuatro: una tarjeta no es un archivo histórico, y el
-                          resto sigue entero en la barra lateral. */}
-                      {sesiones.slice(-4).reverse().map((s) => (
-                        <li key={s.id}>
-                          <button
-                            type="button"
-                            className={estilos.sesion}
-                            disabled={apagado}
-                            onClick={() => alAbrirSesion(p.id, s.id)}
-                          >
-                            {s.titulo}
-                          </button>
-                        </li>
-                      ))}
-                    </ul>
-                  )}
+                  {/*
+                    **Las sesiones NO se pintan aquí**, y eso lo pidió el usuario. Estaban
+                    las cuatro últimas de cada proyecto, o sea la misma lista que la barra
+                    lateral tiene entera y ordenada por último turno — dos sitios para lo
+                    mismo, y el de aquí siempre peor: recortado a cuatro y con el orden de
+                    alta. La tarjeta es para EMPEZAR algo en ese proyecto (sus dos botones);
+                    seguir una conversación es de la barra, que es donde vive esa lista.
+                  */}
                   <div className={estilos.accionesDeTarjeta}>
                     <button
                       type="button"

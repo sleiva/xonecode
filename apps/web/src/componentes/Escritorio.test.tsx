@@ -4,7 +4,6 @@ import { Escritorio } from "./Escritorio.js";
 
 const MANEJADORES = {
   alNuevaSesion: () => {},
-  alAbrirSesion: () => {},
   alAbrirAjustes: () => {},
 };
 
@@ -53,33 +52,41 @@ describe("Escritorio", () => {
     expect(alNuevaSesion).toHaveBeenCalledWith("p2");
   });
 
-  it("las sesiones se pueden seguir desde aquí, las últimas primero", () => {
-    const alAbrirSesion = vi.fn();
+  /**
+   * **La tarjeta ya NO lista las sesiones**, y lo pidió el usuario. Estaban las cuatro
+   * últimas de cada proyecto, o sea la misma lista que la barra lateral tiene entera y
+   * ordenada por último turno: dos sitios para lo mismo, y el de aquí siempre peor
+   * —recortado a cuatro y con el orden de alta—. La tarjeta es para EMPEZAR algo en ese
+   * proyecto; seguir una conversación es de la barra.
+   *
+   * Se afirma por AUSENCIA y con los títulos: un test que solo mirase una clase pasaría
+   * igual con las filas debajo.
+   */
+  it("la tarjeta NO lista las sesiones: eso es de la barra lateral", () => {
     render(
       <Escritorio
         {...MANEJADORES}
-        alAbrirSesion={alAbrirSesion}
         proyectos={[
           {
             id: "p1",
             nombre: "Tienda",
+            // El campo ya no está en el tipo; se manda igual para comprobar que aunque
+            // llegue no se pinta.
             sesiones: [
               { id: "s1", titulo: "la primera" },
               { id: "s2", titulo: "la última" },
             ],
-          },
+          } as unknown as { id: string; nombre: string },
         ]}
       />
     );
-    const botones = screen.getAllByRole("button").map((b) => b.textContent);
-    expect(botones.indexOf("la última")).toBeLessThan(botones.indexOf("la primera"));
-    fireEvent.click(screen.getByRole("button", { name: "la última" }));
-    expect(alAbrirSesion).toHaveBeenCalledWith("p1", "s2");
-  });
-
-  it("una tarjeta sin sesiones lo dice en vez de callar", () => {
-    render(<Escritorio {...MANEJADORES} proyectos={[{ id: "p1", nombre: "Tienda" }]} />);
-    expect(screen.getByText(/sin sesiones todavía/i)).toBeTruthy();
+    expect(screen.queryByText("la última")).toBeNull();
+    expect(screen.queryByText("la primera")).toBeNull();
+    // Y tampoco el hueco que decía que no había: no es un dato que falte, es una lista que
+    // se ha ido a otro sitio.
+    expect(screen.queryByText(/sin sesiones todavía/i)).toBeNull();
+    // Lo que la tarjeta sí conserva es con qué empezar.
+    expect(screen.getByRole("button", { name: /nueva sesión/i })).toBeTruthy();
   });
 
   /**
@@ -145,18 +152,17 @@ describe("Escritorio: propios y compartidos", () => {
 describe("Escritorio: sin conexión", () => {
   afterEach(cleanup);
 
-  it("apaga lo que manda algo al servidor: empezar y seguir una sesión", () => {
+  it("apaga lo que manda algo al servidor: empezar en un proyecto", () => {
     // Medido sin servidor: los 18 «Nueva sesión» seguían negros y pulsables.
     render(
       <Escritorio
         {...MANEJADORES}
         conectado={false}
         entorno={{ nombre: "E", url: "https://e" }}
-        proyectos={[{ id: "p1", nombre: "Tienda", local: true, sesiones: [{ id: "s1", titulo: "Hola" }] }]}
+        proyectos={[{ id: "p1", nombre: "Tienda", local: true }]}
       />
     );
     expect(screen.getByRole("button", { name: /nueva sesión/i })).toHaveProperty("disabled", true);
-    expect(screen.getByRole("button", { name: "Hola" })).toHaveProperty("disabled", true);
     expect(document.querySelector("[data-sin-conexion]")).not.toBeNull();
   });
 

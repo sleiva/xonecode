@@ -599,7 +599,12 @@ ella el turno del agente, sin decir nada. Ahora es un mapa por RAÍZ y un foco. 
   proyecto la lleva. Decirlo en los dos niveles era una duplicación, y el usuario la señaló.
   Lo que queda para el proyecto es lo que la fila NO puede decir: una sesión que todavía no
   está en el índice, o sea la de una TAREA de fondo antes de su primer volcado — las de
-  persona entran ya con el mensaje.
+  persona entran ya con el mensaje. **Y desde que las listas se PLIEGAN hay un segundo caso
+  que la fila no puede decir, y ese lo pone el CLIENTE**: plegada, la fila no existe. El
+  servidor sigue mandando su marca con el mismo criterio de siempre —y cuando la manda se
+  respeta tal cual llega—; el cliente añade la del proyecto cuya lista está cerrada. Con la
+  lista abierta se dice UNA vez, y la dice la fila, que es la que se abre (el párrafo de la
+  barra que se pliega, más abajo).
 - **Y de esa marca cuelga que el rechazo no sea un botón muerto**: con el proyecto trabajando,
   las OTRAS sesiones de su lista y su «+» se apagan, con el motivo en el `title`. La guarda del
   servidor sigue estando —es quien manda si la lista del cliente llega vieja—, y cuando declina
@@ -1935,6 +1940,39 @@ accesibilidad y quién recuerda el ancho. Seis reglas:
   `lostpointercapture` cierra el arrastre, porque un puntero que sale de la ventana lo dejaba
   abierto para siempre.
 
+**Las sesiones de la barra se PLIEGAN, y solo hay una lista abierta: la del proyecto activo**
+(`desplegado` en `Barra.tsx`). Se enseñaban todas las de todos, y lo pidió el usuario mirando
+su barra: cuatro proyectos con sus conversaciones es una columna que no se puede leer, y lo
+que se busca —la de donde estás— queda enterrado entre las de proyectos que no estás mirando.
+Cinco reglas:
+- **Es un ACORDEÓN, no plegados independientes**, porque lo pedido es «uno solo»: desplegar
+  uno cierra el que hubiera. Un `string | undefined` lo dice todo, y `undefined` es «ninguno
+  abierto» — que es la barra del escritorio recién arrancado: **sin proyecto activo no se
+  despliega ninguno**, porque abrir el primero por no tener el dato sería la misma invención
+  que marcar «aquí estás» sin saberlo.
+- **El proyecto ACTIVO manda cuando cambia** (un efecto sobre `proyectoActivo`): abrir una
+  sesión de otro proyecto se lleva el despliegue con ella, que es donde acabas de mirar. En un
+  efecto y no derivado, para que un despliegue a mano sobreviva a un re-render.
+- **El plegador es un botón APARTE**, hermano del que abre el proyecto y no dentro: un
+  `<button>` anidado en otro es HTML inválido y reparte el clic entre los dos — la misma razón
+  por la que el «…» de una sesión no vive dentro de su fila.
+- **La afordancia ya estaba en la hoja copiada**: `.projectRow:hover .folder { display: none }`
+  y `.chevron` en su sitio, con `.arrow`/`.arrowOpen` girando 90° (el icono es su
+  `IconTriangleRightFill14`, no un parecido). Lo que se añade es que **la carpeta cambia de
+  glifo** (cerrada/abierta), que es lo que dice el estado SIN posar el ratón, y que el
+  intercambio se repite en `:focus-visible` con clases NUESTRAS —las de la otra hoja son de
+  otro módulo y desde aquí no se pueden nombrar—: quien llega con el Tab veía la carpeta y
+  ninguna señal de que ese botón despliega algo. Las filas plegadas se DESMONTAN, que es la
+  regla de siempre: una fila invisible con `visibility` sigue siendo tabulable.
+- **Y con la lista plegada, la marca de «trabajando» la TIENE que dar el proyecto.** El
+  servidor manda `proyectos[].trabajando` solo cuando ninguna fila suya la lleva —para no
+  decirlo dos veces— y eso valía cuando las sesiones se enseñaban todas: lo decía la fila.
+  Plegada esa fila no existe, así que un turno corriendo en un proyecto que no estás mirando
+  no se vería en NINGUNA parte. No es el cruce prohibido de datos de otros párrafos: la lista
+  de sesiones ya está en el cliente, plegada o no, y se le pregunta a ella. Desplegado el
+  cliente no añade nada —ahí lo dice la fila, que es la que se abre—, y la marca que mande el
+  servidor se respeta igual: es él quien sabe de la sesión que aún no tiene fila.
+
 **El proyecto activo y la sesión activa NO se marcan igual, y el cian es de una sola fila.**
 Las dos se pintaban idénticas a propósito —mismo fondo y mismo filo de cian, «para que aquí
 estás se lea igual en los dos niveles»— y el usuario lo señaló mirando la pantalla: así no se
@@ -1997,7 +2035,7 @@ equipo», ni al entorno—: medido en pantalla. Tres decisiones:
 
 **El centro sin sesión es el ESCRITORIO** (`Escritorio.tsx`), no un hueco con una frase
 («elige un proyecto en la barra lateral», que es lo que había). Pinta los proyectos con lo
-que el servidor ya manda —si tienen copia local, sus últimas sesiones—, el entorno activo
+que el servidor ya manda —si tienen copia local—, el entorno activo
 con su URL y el modelo en vigor, y empezar es un clic. Todo lo que enseña ya viajaba por el
 cable: no hay una sola tarjeta de relleno. Y **no pinta nada del mockup que no tenga dato
 detrás** —«Build & Run», el estado del ADB en vivo, los dispositivos del mockup—: eso es un
@@ -2012,6 +2050,17 @@ escritorio enseñaba los dieciocho proyectos del entorno y el grupo elegido se p
 ellos. Se CUENTAN en una línea con el botón a Ajustes, que es la misma regla de la barra:
 elegir cuatro y ver dieciocho es no haber elegido, pero callar los otros catorce sería
 afirmar que el entorno solo tiene cuatro.
+
+**Y la tarjeta de un proyecto NO lista sus sesiones** (`Escritorio.tsx`). Estaban las cuatro
+últimas de cada uno, o sea la misma lista que la barra lateral tiene ENTERA y ordenada por
+último turno: dos sitios para lo mismo, y el de aquí siempre peor —recortado a cuatro y con
+el orden de alta—. Lo pidió el usuario, y la división queda limpia: la tarjeta es para
+EMPEZAR algo en ese proyecto (sus dos botones), y seguir una conversación es de la barra, que
+es donde vive esa lista. Con eso se fueron también el «Sin sesiones todavía» de la tarjeta
+—no es un dato que falte, es una lista que está en otro sitio— y el `alAbrirSesion` del
+componente, que se queda sin llamador: un prop que nadie usa es una promesa que nadie cumple.
+Y va junto con el plegado de la barra: en el escritorio recién abierto no hay ninguna sesión a
+la vista hasta que se despliega un proyecto, que es lo que las dos decisiones piden a la vez.
 
 **Qué hay en la máquina para probar la app** (`core/dispositivos.ts`,
 `agent/dispositivosEnMaquina.ts`, panel «Tu equipo» en `Equipo.tsx`, mensaje
