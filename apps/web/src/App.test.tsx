@@ -2,7 +2,6 @@ import { render, screen, fireEvent, cleanup, act, waitFor, within } from "@testi
 import { describe, it, expect, vi, afterEach } from "vitest";
 import { App } from "./App.js";
 import { crearStoreDelCliente } from "./store.js";
-import { DESPLEGADOS_AL_ABRIR } from "./componentes/Revision.js";
 
 /** El `<input type="file">` de «Nueva tarea» está ESCONDIDO —lo dispara un botón nuestro,
  *  porque el nativo se pinta como la cromo del navegador—, así que no hay etiqueta que lo
@@ -919,29 +918,58 @@ describe("App: la tarjeta de tarea «esperando feedback» abre Revisión", () =>
   });
 });
 
-describe("App: Revisión despliega solos los primeros", () => {
+describe("App: Revisión arranca PLEGADA", () => {
   const diez = () => Array.from({ length: 10 }, (_, i) => ({ ruta: `src/f${i}.xne`, clase: "modificado" as const, mas: 1, menos: 0 }));
   const parchesPedidos = (enviar: ReturnType<typeof vi.fn>) =>
     enviar.mock.calls.filter(([m]) => (m as { clase: string; ruta?: string }).clase === "revision" && (m as { ruta?: string }).ruta !== undefined);
 
-  it("una lista vacía no fija nada; la primera con ficheros despliega los 8 primeros y pide su parche", () => {
+  /**
+   * Pedido mirando la pantalla: «la vista está bien pero debiera estar collapsada». Antes
+   * se desplegaban solos los ocho primeros bloques y se pedían sus parches, con el
+   * argumento de que la pestaña se abriera enseñando diffs y no una lista de cabeceras. El
+   * argumento se cae con los tamaños de verdad: en esa sesión eran dos ficheros y +582
+   * líneas —483 en uno solo—, así que abrir la pestaña era volcar un diff de 483 líneas que
+   * nadie había pedido y perder de vista la LISTA, que es lo que contesta «¿qué tocó el
+   * agente?». Cada bloque se abre al pulsarlo, que es cuando se pide su parche.
+   *
+   * Es además la regla que ya gobierna el árbol de Ficheros por el mismo motivo: nace todo
+   * plegado porque con el primer nivel abierto no se ve la FORMA de lo que hay.
+   */
+  it("al llegar la lista no se despliega ningún bloque ni se pide ningún parche", () => {
     const { store, enviar } = montar();
     fireEvent.click(screen.getByRole("tab", { name: "Revisión" }));
-    // La sesión acaba de abrirse: «sin-empezar», lista vacía. Si esto inicializara el
-    // conjunto en vacío, la lista de después del primer turno ya no desplegaría ninguno.
     act(() => store.aplicar({ clase: "revision", via: "sin-empezar", ficheros: [] }));
-    expect(parchesPedidos(enviar)).toHaveLength(0);
-
     act(() => store.aplicar({ clase: "revision", via: "git", ficheros: diez() }));
-    const pedidos = parchesPedidos(enviar).map(([m]) => (m as { ruta: string }).ruta);
-    expect(pedidos).toEqual(diez().slice(0, DESPLEGADOS_AL_ABRIR).map((f) => f.ruta));
+
+    // Ni un solo parche: un diff por fichero de un turno largo son megas, y ahora no se
+    // pide ninguno hasta que alguien abra su bloque.
+    expect(parchesPedidos(enviar)).toHaveLength(0);
     // Acotado al panel de Revisión: la barra superior lleva su PROPIO botón con
     // aria-expanded (el de plegar la barra lateral), y contar sobre toda la pantalla lo
     // sumaría de más.
     const indice = screen.getByRole("complementary", { name: "Ficheros cambiados" });
-    expect(within(indice.parentElement as HTMLElement).getAllByRole("button", { expanded: true })).toHaveLength(
-      DESPLEGADOS_AL_ABRIR
-    );
+    expect(
+      within(indice.parentElement as HTMLElement).queryAllByRole("button", { expanded: true })
+    ).toHaveLength(0);
+    // Y las diez cabeceras SÍ están: plegada no es vacía.
+    expect(
+      within(indice.parentElement as HTMLElement).getAllByRole("button", { expanded: false }).length
+    ).toBeGreaterThanOrEqual(10);
+  });
+
+  it("pulsar una cabecera despliega ESE bloque y pide SU parche", () => {
+    const { store, enviar } = montar();
+    fireEvent.click(screen.getByRole("tab", { name: "Revisión" }));
+    act(() => store.aplicar({ clase: "revision", via: "git", ficheros: diez() }));
+
+    const indice = screen.getByRole("complementary", { name: "Ficheros cambiados" });
+    const cabeceras = within(indice.parentElement as HTMLElement).getAllByRole("button", {
+      expanded: false,
+    });
+    fireEvent.click(cabeceras[0]!);
+
+    const pedidos = parchesPedidos(enviar).map(([m]) => (m as { ruta: string }).ruta);
+    expect(pedidos).toEqual(["src/f0.xne"]);
   });
 });
 
