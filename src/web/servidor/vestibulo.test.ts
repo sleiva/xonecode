@@ -1916,3 +1916,67 @@ describe("abrirParaTarea — la segunda puerta", () => {
     rmSync(base, { recursive: true, force: true });
   });
 });
+
+describe("el consumo de tokens de la sesión llega al vestíbulo", () => {
+  /**
+   * **Este test existe porque el cableado se cayó, y en verde.** `ConsolaDeProyecto.consumo`
+   * es OPCIONAL, así que se declaró en el tipo y no se implementó en el objeto: los dos
+   * `tsc` limpios, 2953 tests pasando, y `consumoDeSesion()` devolviendo `undefined` para
+   * siempre — o sea el contador de la web sin pintarse nunca, medido en la pantalla del
+   * usuario. Es la NOVENA vez que este repo se encuentra la misma forma: una regla de
+   * producción viviendo en un cierre que todos los tests doblan.
+   */
+  it("lo pregunta a la SESIÓN, y por eso hay que implementarlo y no solo declararlo", async () => {
+    let consumo = { modelo: { entrada: 10, salida: 2, cache: 1 }, externo: { entrada: 0, salida: 0, cache: 0 } };
+    const v = crearVestibulo({
+      ...dobles(),
+      origenDeTrabajo: "global",
+      sesiones: sesionesEnMemoria().puerto,
+      crearEjecutor: (alAbrirSesion) => async (_peticion, _estado, consola) => {
+        // Como el ejecutor real: la sesión se anuncia DENTRO del primer turno.
+        alAbrirSesion({ cerrar: () => undefined, consumo: () => consumo });
+        consola.escribir("hecho");
+      },
+      correr: async (consola, estado, ejecutar) => {
+        await ejecutar!("una petición", estado, consola);
+        return 0;
+      },
+    });
+    const abierto = await v.abrirProyecto({ raiz: "/w/a" });
+    await abierto.terminada;
+    expect(v.consumoDeSesion()).toEqual(consumo);
+    // Y se PREGUNTA cada vez, no se cachea: el acumulador vive en la sesión y una copia
+    // aquí se quedaría vieja entre avisos.
+    consumo = { modelo: { entrada: 99, salida: 9, cache: 0 }, externo: { entrada: 5, salida: 1, cache: 0 } };
+    expect(v.consumoDeSesion()?.modelo.entrada).toBe(99);
+    await v.cerrar();
+  });
+
+  it("sin sesión abierta es «no consta», que NO es cero", async () => {
+    // Ausente hace que el cliente no pinte nada; un cero sería una cifra que nadie midió.
+    const v = crearVestibulo({ ...dobles(), origenDeTrabajo: "global" });
+    expect(v.consumoDeSesion()).toBeUndefined();
+    await v.cerrar();
+  });
+
+  it("y un ejecutor que no lleva la cuenta tampoco inventa un cero", async () => {
+    // El guionizado no consume nada: `consumo` ausente en la sesión es «no se sabe».
+    const v = crearVestibulo({
+      ...dobles(),
+      origenDeTrabajo: "global",
+      sesiones: sesionesEnMemoria().puerto,
+      crearEjecutor: (alAbrirSesion) => async (_p, _e, consola) => {
+        alAbrirSesion({ cerrar: () => undefined });
+        consola.escribir("hecho");
+      },
+      correr: async (consola, estado, ejecutar) => {
+        await ejecutar!("una petición", estado, consola);
+        return 0;
+      },
+    });
+    const abierto = await v.abrirProyecto({ raiz: "/w/a" });
+    await abierto.terminada;
+    expect(v.consumoDeSesion()).toBeUndefined();
+    await v.cerrar();
+  });
+});

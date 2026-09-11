@@ -762,11 +762,16 @@ diff de «cambios en el proyecto», que es la medida.
 Con su medida entera en [`docs/DECISIONES.md`](docs/DECISIONES.md); aquí lo que hay que
 recordar antes de tocar el código:
 
-- **El patrón de fallo de esta arquitectura, medido SEIS veces: una composición de producción
+- **El patrón de fallo de esta arquitectura, medido NUEVE veces: una composición de producción
   viviendo en un cierre que todos los tests doblan.** `backendDeAgente`, el corredor sin cablear
   en `arrancarConsolaWeb`, el `escribio` a fuego en `revisionConGit`, la capa de proyecto de
-  `fuentesDelJuez`, el montaje de `/adjuntos/` con sus ocho saltos y `filaDeTarea`. En los seis la
-  regla podía dejar de estar montada **con todo en verde**, y en los seis el remedio fue el mismo.
+  `fuentesDelJuez`, el montaje de `/adjuntos/` con sus ocho saltos, `filaDeTarea`, el prop de las
+  pestañas por entorno, `opcionesDeSubagenteExterno` y —la más clara de todas—
+  `ConsolaDeProyecto.consumo`, **declarada en el tipo y nunca implementada en el objeto**: como
+  el campo es OPCIONAL, los dos `tsc` quedaron limpios, 2953 tests en verde, y el contador de
+  tokens no se pintó NUNCA (visto en la pantalla del usuario, no en un test). Un campo opcional
+  es donde este fallo se esconde mejor: no hay error que leer. En las nueve la regla podía dejar
+  de estar montada **con todo en verde**, y en las nueve el remedio fue el mismo.
   Regla práctica: **si una regla de producción se compone dentro de algo que los tests simulan,
   esa regla no está probada — está escrita.**
 - **La caché implícita de Gemini no entra a estos tamaños de contexto** (a ~11k, 0 aciertos en 36

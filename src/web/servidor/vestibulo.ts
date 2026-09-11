@@ -1291,6 +1291,16 @@ export function crearVestibulo(opciones: OpcionesDelVestibulo): Vestibulo {
 
     const consolaDeProyecto: ConsolaDeProyecto = {
       raiz,
+      /**
+       * Lo que lleva consumido su sesión. **Se PREGUNTA a la sesión, no se cachea**: el
+       * acumulador vive en el cierre de `abrirSesionReal` y es la única fuente; una copia
+       * aquí se quedaría vieja entre avisos.
+       *
+       * `sesionReal` llega TARDE —`crearEjecutorReal` la anuncia dentro del primer turno—,
+       * así que antes de eso esto contesta `undefined`, que es «no consta» y hace que no se
+       * pinte nada. Es lo correcto: todavía no se ha consumido nada que medir.
+       */
+      consumo: () => sesionReal?.consumo?.(),
       get estadoDeSesion() {
         return estadoDeSesion;
       },
