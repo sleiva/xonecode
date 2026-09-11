@@ -1341,3 +1341,31 @@ describe("App: crear una tarea en background", () => {
     expect(enviar.mock.calls.map((c) => (c[0] as { accion?: string }).accion)).not.toContain("crear");
   });
 });
+
+describe("el contador de tokens, montado por App", () => {
+  /**
+   * El último eslabón que faltaba por atar, y el que más veces se ha caído en esta cadena:
+   * que `App` MONTE el contador con lo que el store guarda. El mensaje de aquí es el que el
+   * servidor produce de verdad — capturado de una ejecución con el ejecutor real y un turno
+   * de Gemini, no inventado para el test.
+   */
+  const DEL_SERVIDOR = {
+    clase: "consumo",
+    modelo: { entrada: 2154, salida: 1, cache: 0 },
+    externo: { entrada: 0, salida: 0, cache: 0 },
+    ventana: { usado: 2154, tope: 1_000_000 },
+  } as const;
+
+  it("con el mensaje del servidor, el contador aparece en el compositor", () => {
+    const { store } = montar();
+    act(() => store.aplicar(DEL_SERVIDOR));
+    expect(screen.getByText("2,2k")).toBeTruthy();
+    expect(screen.getByText("2,2k/1,0M")).toBeTruthy();
+  });
+
+  it("y antes de que llegue, no hay contador", () => {
+    // Ausente es «no consta»: sin sesión que haya consumido, el hueco se queda vacío.
+    montar();
+    expect(screen.queryByTitle(/Tokens de esta sesión/)).toBeNull();
+  });
+});
