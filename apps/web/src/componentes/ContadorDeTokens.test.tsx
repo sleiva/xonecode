@@ -52,6 +52,14 @@ describe("el contador de tokens de la sesión", () => {
     render(<ContadorDeTokens consumo={{ modelo: cuenta(100, 10), externo: cuenta(0, 0) }} />);
     expect(screen.getByTitle(/Tokens de esta sesión/).getAttribute("title")).not.toContain("externos");
   });
+
+  it("las dos mitades van separadas por un punto, no pegadas", () => {
+    // Sin él, «2,1k entrada ↓ 152» se lee como una sola cifra con dos partes.
+    const { container } = render(
+      <ContadorDeTokens consumo={{ modelo: cuenta(2100, 152), externo: cuenta(0, 0) }} />
+    );
+    expect(container.textContent).toBe("↑2,1kentrada·↓152salida");
+  });
 });
 
 describe("abreviar", () => {

@@ -58,6 +58,12 @@ export function ContadorDeTokens({ consumo }: { consumo?: ConsumoPintable }): Re
       <span aria-hidden="true">↑</span>
       <span className={estilos.cifra}>{abreviar(entrada)}</span>
       <span className={estilos.rotulo}>entrada</span>
+      {/* El punto separa las dos mitades: sin él, «2,1k entrada ↓ 152» se lee como una sola
+          cifra con dos partes. Va `aria-hidden` porque para un lector de pantalla los dos
+          rótulos ya las separan, y un «punto medio» leído en voz alta es ruido. */}
+      <span aria-hidden="true" className={estilos.separador}>
+        ·
+      </span>
       <span aria-hidden="true">↓</span>
       <span className={estilos.cifra}>{abreviar(salida)}</span>
       <span className={estilos.rotulo}>salida</span>

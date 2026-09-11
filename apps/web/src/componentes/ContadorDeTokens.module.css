@@ -14,6 +14,19 @@
   white-space: nowrap;
   /* Sin fondo ni borde: no es un botón. La fila ya lo separa con su propio `gap`. */
   padding: 0 2px;
+  /*
+   * A la DERECHA, pegado al botón de enviar. Un margen `auto` se come todo el hueco libre
+   * ANTES de que `justify-content` reparta, así que las pastillas se quedan a la izquierda
+   * y esto cae junto al botón — y cuando el contador no se pinta, la fila vuelve sola a su
+   * `space-between` de siempre sin tocar nada.
+   */
+  margin-left: auto;
+}
+
+/* El punto entre las dos mitades, más tenue que las cifras: separa sin pesar. */
+.separador {
+  color: var(--dsw-alias-text-tertiary);
+  padding: 0 1px;
 }
 
 .cifra {
