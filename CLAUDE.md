@@ -681,12 +681,20 @@ esqueleto no pasaba el simulador (`COLL_MISSING_PROGID`): la línea base se comp
 |---|---|
 | 0 | bien |
 | 1 | el proyecto tiene errores, o no es un proyecto XOne |
-| 2 | había escrituras esperando aprobación y **nada se aplicó** |
+| 2 | quedaron escrituras **sin resolver** (nadie las aprobó, o se agotó el tope) |
 | 64 | error de uso (bandera o modelo mal escritos) |
 | 70 | fallo del **entorno**, no del proyecto |
 
 Un fallo del entorno no se reporta como un proyecto roto: `agent/verificador.ts` lanza
 `ErrorDelSimulador` en vez de devolver un informe en rojo.
+
+**El 2 ya no promete «nada se aplicó», y eso se midió.** Prometía eso cuando las únicas
+escrituras eran las del HITL del grafo; un agente EXTERNO pide su autorización por escritura y
+antes de escribir, así que puede haber dejado algo en el disco cuando el turno se corta después
+—medido: un `run --real` imprimió el fichero nuevo en su diff y, una línea más abajo, «nada se
+aplicó»—. El código se queda en 2 (hubo escrituras sin resolver: no es un éxito, y esa es la
+dirección segura para CI) y lo que se corrigió fue la frase. Lo que está en el disco lo dice el
+diff de «cambios en el proyecto», que es la medida.
 
 ## Trampas verificadas
 

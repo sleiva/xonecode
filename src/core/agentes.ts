@@ -106,6 +106,26 @@ export function promptDeAgente(agente: Agente, skills?: EstadoDeSkills): string 
     agente.soloLectura
       ? "No modificas nada."
       : "Tus escrituras requieren aprobación humana. Si te la rechazan, no insistas: explica qué pretendías y por qué.",
+    /**
+     * **Un agente EXTERNO no ve el backend virtual: ve el disco.** Y eso cambia lo que
+     * significa una ruta, que es el detalle que más fácil se cuela — un `.md` que diga
+     * «guarda en /doc» describe la carpeta `doc` del PROYECTO si el motor es `modelo` (ahí
+     * `/` es la raíz montada) y la carpeta `/doc` del SISTEMA si es Claude Code, que es
+     * fuera del proyecto y se deniega. El usuario que lo escribe no tiene por qué saber de
+     * qué lado cae, así que se dice desde código en vez de esperar a que lo aprenda por un
+     * rechazo: es la misma disciplina que la línea de las escrituras y la de las skills.
+     *
+     * Va con `relativas` y no reescribiendo la ruta: adivinar que un `/doc` «quería decir»
+     * `doc/` sería inventar la intención de una escritura, que es justo lo que ninguna
+     * guarda de este repo hace.
+     */
+    ...(agente.motor === "modelo"
+      ? []
+      : [
+          "RUTAS: trabajas sobre la carpeta del proyecto directamente, así que una ruta que " +
+            "empiece por «/» es la raíz del SISTEMA y está fuera del proyecto. Escribe las rutas " +
+            "relativas a la carpeta del proyecto («doc/GUIA.md»), nunca «/doc/GUIA.md».",
+        ]),
   ]
     .join("\n")
     // Los huecos que dejan las partes ausentes (sin instrucciones, sin skills) se colapsan

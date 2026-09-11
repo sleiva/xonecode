@@ -191,7 +191,27 @@ async function correrReal(opciones: OpcionesRun, escribir: Escribir): Promise<nu
   }
 
   if (sinHumano) {
-    escribir("\n(sin humano en modo `run`: nada se aprobó y nada se aplicó)\n");
+    /**
+     * **«Nada se aplicó» dejó de ser cierto siempre, y se midió.** Esa frase hablaba de las
+     * escrituras que piden aprobación por el HITL del grafo, y mientras fueran las únicas
+     * que existían era exacta. Desde que un agente EXTERNO escribe —su autorización se pide
+     * por `PoliticaDeEscrituraExterna` antes de cada escritura, no por un `interrupt()`—
+     * puede haber quedado algo en el disco cuando el turno se corta después. Medido el
+     * 11-09-2026 con un `xonecode run --real` y un `s` por la tubería: `app/COLECCIONES.md`
+     * (3000 bytes) en el disco, el diff listándolo una línea más arriba, y esta frase
+     * diciendo que no se aplicó nada. Un informe que contradice al disco en la línea
+     * siguiente es peor que no dar informe.
+     *
+     * El código de salida se queda en **2** a propósito: hubo escrituras que se quedaron sin
+     * resolver, así que esto no es un éxito, y esa es la dirección segura para CI. Lo que se
+     * corrige es la AFIRMACIÓN, que es lo que era falso.
+     */
+    escribir(
+      cambios.length === 0
+        ? "\n(sin humano en modo `run`: nada se aprobó y nada se aplicó)\n"
+        : "\n(sin humano en modo `run`: lo que pidió aprobación se rechazó. Lo de arriba SÍ está\n" +
+          " en el disco: lo escribió un agente externo, que pide su autorización por escritura)\n"
+    );
     return 2;
   }
   // Agotar el tope de rondas es el MISMO desenlace que quedarse sin humano: hay escrituras

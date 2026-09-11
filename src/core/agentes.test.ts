@@ -172,6 +172,19 @@ describe("fusionarAgentes", () => {
 });
 
 describe("escribirAgente", () => {
+  it("a un agente EXTERNO se le dice que sus rutas son del DISCO, no del backend virtual", () => {
+    // El detalle que más fácil se cuela: un `.md` que diga «guarda en /doc» describe la
+    // carpeta `doc` del PROYECTO con motor `modelo` —ahí «/» es la raíz montada— y la
+    // carpeta `/doc` del SISTEMA con Claude Code, que está fuera y se deniega. Quien escribe
+    // el `.md` no tiene por qué saber de qué lado cae, así que se dice desde código en vez
+    // de esperar a que lo aprenda por un rechazo.
+    expect(promptDeAgente(agente({ motor: "claude-code", soloLectura: false }))).toMatch(/RUTAS:/);
+    expect(promptDeAgente(agente({ motor: "codex" }))).toMatch(/RUTAS:/);
+    // Y al de motor `modelo` NO se le dice, porque para él sería falso: su «/» sí es la raíz
+    // del proyecto.
+    expect(promptDeAgente(agente({ motor: "modelo" }))).not.toMatch(/RUTAS:/);
+  });
+
   it("un agente de Claude Code YA puede pedir escribir, y el papel se conserva", () => {
     // La guarda que lo rechazaba existía porque sus escrituras se denegaban siempre, así que
     // aceptarlo prometía una capacidad que no iba a tener. Se levantó CON el cableado de
