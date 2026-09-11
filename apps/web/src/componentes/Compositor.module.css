@@ -40,7 +40,13 @@
 .entrada {
   flex: 1 1 auto;
   min-width: 0;
-  min-height: 24px;
+  /*
+   * Dos líneas de alto en reposo, no una. Pedido mirando la pantalla: con 24px la caja se
+   * lee como un campo de búsqueda, y lo que se escribe aquí suele ser un párrafo. El
+   * máximo no se toca —a partir de ahí crece con scroll— y sigue siendo `min-height` y no
+   * `rows`, para que el crecimiento automático siga mandando.
+   */
+  min-height: 48px;
   max-height: 220px;
   resize: none;
   padding: 8px 0;

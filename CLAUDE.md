@@ -651,6 +651,16 @@ feedback del desarrollador** y no es terminal.
     no hay número — un contador a cero que nadie ha medido es la cifra inventada de siempre.
     Se tira al caerse el cable, como los modelos. Y los tokens de un turno de SEGUNDO PLANO no
     mueven el contador de quien mira otra sesión: solo avisa la consola en foco.
+  - **Y con ellos viaja la VENTANA, que es otra pregunta**: `contexto` es la entrada de la
+    ÚLTIMA llamada —cuánto ocupa el historial AHORA, la cifra que avisa de que toca resumir—
+    y los acumulados dicen lo que la sesión ha costado. La barra del terminal ya las pinta
+    como dos cosas. El TOPE se resuelve con **la misma función** que esa barra
+    (`cli/main.ts#crearTopeDelModelo`), que entra por la opción `topeDeContexto` para no
+    importar `cli/` desde `web/` — el motivo de `crearEjecutor`—: dos resoluciones serían dos
+    porcentajes distintos para el mismo modelo. Se re-resuelve en cada emisión porque
+    `/modelo` cambia en caliente. **Sin tope no se pinta denominador ni porcentaje**: con
+    Ollama no hay a propósito, y un porcentaje sobre un número inventado es una mentira con
+    forma de cifra.
   Lo que NO hay todavía: métricas globales (por proyecto, histórico, coste).
 - **El modelo en vigor lo dice el SERVIDOR** (`resolver(estadoDeSesion.fuentes).trabajo` de la
   consola ABIERTA), por la costura `Consola.alEstado`: `/modelo` cambia en caliente sin tocar

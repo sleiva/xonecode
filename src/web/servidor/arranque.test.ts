@@ -986,7 +986,7 @@ describe("montarRutas — el cable, por fin conectado", () => {
       const base = mkdtempSync(join(tmpdir(), "xonecode-tokens-"));
       const servidor = servidorDeMentira();
       let avisar: (() => void) | undefined;
-      const consumo = { modelo: { entrada: 0, salida: 0, cache: 0 }, externo: { entrada: 0, salida: 0, cache: 0 } };
+      const consumo = { modelo: { entrada: 0, salida: 0, cache: 0 }, externo: { entrada: 0, salida: 0, cache: 0 }, contexto: 0 };
       const vestibulo = vestibuloDePrueba({
         baseDeWorkspace: base,
         proyectosDeEntorno: async () => ({ proyectos: [{ id: "p1", nombre: "Tienda" }] }),
@@ -1036,6 +1036,21 @@ describe("montarRutas — el cable, por fin conectado", () => {
         clase: "consumo",
         modelo: { entrada: 2100, salida: 152, cache: 0 },
         externo: { entrada: 0, salida: 0, cache: 0 },
+        // Sin `topeDeContexto` inyectado no hay denominador, que es lo correcto: el tope se
+        // resuelve con la MISMA función que la barra del terminal, y aquí no se le da.
+        ventana: { usado: 0 },
+      });
+
+      // Y con el tope inyectado viaja el denominador. Es la MISMA función que la barra del
+      // terminal (`crearTopeDelModelo`), y entra por opción para no importar `cli/` aquí:
+      // dos resoluciones del tope serían dos porcentajes distintos para el mismo modelo.
+      const conTope = servidorDeMentira();
+      montarRutas(conTope, vestibulo, { topeDeContexto: () => 1_000_000 });
+      const tercero = clienteDeMentira();
+      await conTope.rutas.get(`GET ${RUTA_EVENTOS}`)!(tercero.peticion, tercero.respuesta);
+      await asentar();
+      expect(tercero.recibidos.filter((m) => m.clase === "consumo").at(-1)).toMatchObject({
+        ventana: { tope: 1_000_000 },
       });
 
       // Y quien conecta DESPUÉS lo recibe en su ráfaga: no vio los avisos anteriores, y sin

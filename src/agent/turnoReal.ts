@@ -988,6 +988,8 @@ export async function abrirSesionReal(opciones: {
     consumo: (): ConsumoDeSesionPorCuenta => ({
       modelo: { entrada: tracker.input, salida: tracker.output, cache: tracker.cache },
       externo: consumoExterno,
+      // La entrada de la ÚLTIMA llamada, que es otra pregunta: ver el campo en su tipo.
+      contexto: tracker.contexto,
     }),
     /** Avisa cuando cualquiera de las dos cuentas cambia. Devuelve cómo dejar de escuchar. */
     alCambiarConsumo: (oyente: () => void): (() => void) => {

@@ -234,6 +234,12 @@ export interface OpcionesDeMontaje {
   /** A dónde van los avisos que no caben en el transcript. Por omisión, a ningún sitio. */
   informar?: (texto: string) => void;
   /**
+   * El tope de la ventana del modelo, para el contador de contexto. Ver la opción del mismo
+   * nombre en `OpcionesDeArranque`: es la MISMA función que la barra del terminal, y entra
+   * por parámetro para no importar `cli/` desde aquí.
+   */
+  topeDeContexto?: (raiz: string, modelo: string) => number | undefined;
+  /**
    * ¿Está confirmada la credencial de ese proveedor? Por omisión NADIE la tiene, que es la
    * dirección honesta: decir «puesta» sin haberlo comprobado es pintar un punto verde que
    * no significa nada. Los que no necesitan credencial (`SIN_CREDENCIAL`) no pasan por
@@ -888,7 +894,12 @@ export function montarRutas(
       cliente(agentes);
       if (tareas !== undefined) cliente(tareas);
       if (consumoDeLaSesion !== undefined) {
-        cliente({ clase: "consumo", modelo: consumoDeLaSesion.modelo, externo: consumoDeLaSesion.externo });
+        cliente({
+          clase: "consumo",
+          modelo: consumoDeLaSesion.modelo,
+          externo: consumoDeLaSesion.externo,
+          ventana: ventanaDeAhora(consumoDeLaSesion.contexto),
+        });
       }
       // La foto de la máquina, si ya se tomó. Si no, se dispara abajo UNA vez y llega a
       // todos por el SSE cuando termine: no se espera aquí, que son varios procesos.
@@ -2286,7 +2297,29 @@ export function montarRutas(
     // Ausente es «no consta», y entonces no se manda nada: el cliente prefiere no pintar el
     // contador a pintar un cero que nadie ha medido.
     if (c === undefined) return;
-    emitir({ clase: "consumo", modelo: c.modelo, externo: c.externo });
+    emitir({ clase: "consumo", modelo: c.modelo, externo: c.externo, ventana: ventanaDeAhora(c.contexto) });
+  };
+
+  /**
+   * Cuánto ocupa la ventana y cuál es su tope, si se sabe.
+   *
+   * El tope se resuelve con **la misma función que la barra del terminal**
+   * (`cli/main.ts#crearTopeDelModelo`, que entra por OPCIÓN para no importar `cli/` desde
+   * aquí — el mismo motivo por el que `crearEjecutor` entra así). Dos resoluciones serían
+   * dos topes que divergen, y de ahí sale un porcentaje que miente en una de las dos
+   * pieles. Esa función ya respeta la precedencia de `/config`: lo del proyecto gana a lo
+   * global y la tabla es el último recurso.
+   *
+   * Se re-resuelve en cada emisión y no se cachea, por lo mismo que en el terminal:
+   * `/modelo` cambia el modelo en caliente, y el tope del modelo equivocado es la misma
+   * mentira. Sin tope no se manda el campo: con Ollama no hay A PROPÓSITO.
+   */
+  const ventanaDeAhora = (usado: number): { usado: number; tope?: number } => {
+    const abierto = vestibulo.proyectoAbierto();
+    if (abierto === undefined) return { usado };
+    const trabajo = resolver(abierto.estadoDeSesion.fuentes).trabajo;
+    const tope = opciones.topeDeContexto?.(abierto.raiz, `${trabajo.proveedor}/${trabajo.modelo}`);
+    return tope === undefined ? { usado } : { usado, tope };
   };
   vestibulo.alCambiarConsumo(() => emitirConsumo());
 
@@ -3282,6 +3315,16 @@ export interface OpcionesDeArranque {
   /** Lo que la consola de proyecto necesita y depende de la raíz (`/sync`, los escritores). */
   dependenciasDeProyecto?: (raiz: string) => Partial<Consola>;
   /**
+   * El tope de la ventana del modelo, para el contador de contexto.
+   *
+   * Entra por parámetro y no se importa por lo mismo que `crearEjecutor`: quien la tiene es
+   * `cli/main.ts#crearTopeDelModelo`, que ya carga este módulo. Y es la MISMA que usan la
+   * barra de stdio y la de la TUI a propósito — dos resoluciones del tope son dos
+   * porcentajes que divergen entre pieles. Ausente = no se pinta denominador, que es lo
+   * correcto para Ollama (sin tope a propósito) y para un modelo que la tabla no conoce.
+   */
+  topeDeContexto?: (raiz: string, modelo: string) => number | undefined;
+  /**
    * La cola de TAREAS de fondo (`agent/tareasEnDisco.ts`), y con ella el corredor.
    *
    * **Ausente = esta ejecución no ejecuta tareas y no toma ningún cerrojo**, que es la
@@ -3450,6 +3493,9 @@ export async function arrancarConsolaWeb(opciones: OpcionesDeArranque): Promise<
 
   const cable = montarRutas(servidor, vestibulo, {
     informar,
+    // El tope de ventana, tal cual llega: es la misma función que la barra del terminal, y
+    // dos resoluciones serían dos porcentajes distintos para el mismo modelo.
+    ...(opciones.topeDeContexto === undefined ? {} : { topeDeContexto: opciones.topeDeContexto }),
     ...(corredor === undefined ? {} : { revisarTareas: () => corredor.revisar() }),
     // El PUERTO de disco y el corredor, no operaciones sueltas: `montarRutas` resuelve
     // `crearTarea`/`accionDeTarea` con SU propio estado (`proyectos`, `entornoElegido`,

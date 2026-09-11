@@ -138,6 +138,15 @@ export type MensajeAlCliente =
       clase: "consumo";
       modelo: { entrada: number; salida: number; cache: number };
       externo: { entrada: number; salida: number; cache: number };
+      /**
+       * Cuánto ocupa la VENTANA ahora, y su tope si se sabe. Otra pregunta que los
+       * acumulados: aquéllos dicen lo que la sesión ha costado y esto cuánto margen queda.
+       *
+       * `tope` ausente es «no se sabe», y entonces no se pinta denominador ni porcentaje —
+       * con Ollama no hay tope A PROPÓSITO (cada modelo local trae el suyo), y un
+       * porcentaje sobre un número inventado es una mentira con forma de cifra.
+       */
+      ventana: { usado: number; tope?: number };
     }
   /**
    * Se está ABRIENDO algo: una sesión, o un proyecto que además hay que descargar.

@@ -151,6 +151,16 @@ export interface ConsumoDeSesion {
 export interface ConsumoDeSesionPorCuenta {
   modelo: ConsumoDeSesion;
   externo: ConsumoDeSesion;
+  /**
+   * Cuánto ocupa la ventana AHORA: la entrada de la ÚLTIMA llamada, no la suma.
+   *
+   * Va aquí porque viaja con lo demás y cambia en los mismos instantes, pero contesta otra
+   * pregunta: los acumulados dicen lo que la sesión HA costado y esto dice cuánto margen
+   * queda antes de que el historial desborde — la cifra que avisa de que toca resumir. Es
+   * la misma separación que `vendor/tokenTracking.ts` hace entre sus acumulados y
+   * `contexto`, y la que la barra del terminal ya pinta como dos cosas.
+   */
+  contexto: number;
 }
 
 export interface PeticionExterna {

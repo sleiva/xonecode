@@ -190,7 +190,11 @@ export interface SesionCerrable {
    * qué contar. Ausente significa «no se sabe», que es distinto de cero — y por eso el
    * contador no se pinta en vez de enseñar un 0 inventado.
    */
-  consumo?(): { modelo: { entrada: number; salida: number; cache: number }; externo: { entrada: number; salida: number; cache: number } };
+  consumo?(): {
+    modelo: { entrada: number; salida: number; cache: number };
+    externo: { entrada: number; salida: number; cache: number };
+    contexto: number;
+  };
   alCambiarConsumo?(oyente: () => void): () => void;
   /** Aborta el `stream` del grafo y deja la sesión viva. Opcional: el ejecutor guionizado
    *  no tiene nada que abortar. */

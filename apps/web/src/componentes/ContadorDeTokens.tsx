@@ -17,6 +17,8 @@ import estilos from "./ContadorDeTokens.module.css";
 export interface ConsumoPintable {
   modelo: { entrada: number; salida: number; cache: number };
   externo: { entrada: number; salida: number; cache: number };
+  /** Cuánto ocupa la VENTANA ahora, y su tope si se sabe. */
+  ventana: { usado: number; tope?: number };
 }
 
 /**
@@ -41,6 +43,18 @@ export function ContadorDeTokens({ consumo }: { consumo?: ConsumoPintable }): Re
   if (entrada === 0 && salida === 0) return null;
 
   const hayExterno = consumo.externo.entrada > 0 || consumo.externo.salida > 0;
+  /**
+   * La ventana: cuánto ocupa AHORA el historial, que es otra pregunta que los acumulados —
+   * aquéllos dicen lo que la sesión ha costado y esto cuánto margen queda antes de que haya
+   * que resumir. Va detrás y más tenue: se consulta menos, pero cuando importa, importa.
+   *
+   * **Sin tope no se pinta denominador ni porcentaje.** Con Ollama no hay tope a propósito
+   * (cada modelo local trae el suyo) y la tabla no conoce todas las familias; un porcentaje
+   * sobre un número inventado es una mentira con forma de cifra. Es la misma regla con la
+   * que la barra del terminal calcula su `ctx`, y con la MISMA función detrás.
+   */
+  const { usado, tope } = consumo.ventana;
+  const porcentaje = tope === undefined || tope <= 0 ? undefined : Math.round((usado / tope) * 100);
   const detalle = [
     `Tokens de esta sesión`,
     `· modelo: ${consumo.modelo.entrada} entrada / ${consumo.modelo.salida} salida`,
@@ -48,6 +62,13 @@ export function ContadorDeTokens({ consumo }: { consumo?: ConsumoPintable }): Re
       ? [`· agentes externos: ${consumo.externo.entrada} entrada / ${consumo.externo.salida} salida`]
       : []),
     ...(cache > 0 ? [`· caché leída: ${cache} (no va sumada a la entrada)`] : []),
+    ...(usado > 0
+      ? [
+          tope === undefined
+            ? `Ventana: ${usado} tokens ocupados (de este modelo no consta el tope, así que no hay porcentaje)`
+            : `Ventana: ${usado} de ${tope} tokens (${porcentaje}%) — es lo que ocupa el historial AHORA, no lo gastado`,
+        ]
+      : []),
     ...(hayExterno ? ["Las dos cuentas son de proveedores distintos: se suman TOKENS, no coste."] : []),
   ].join("\n");
 
@@ -67,6 +88,18 @@ export function ContadorDeTokens({ consumo }: { consumo?: ConsumoPintable }): Re
       <span aria-hidden="true">↓</span>
       <span className={estilos.cifra}>{abreviar(salida)}</span>
       <span className={estilos.rotulo}>salida</span>
+      {usado > 0 && (
+        <>
+          <span aria-hidden="true" className={estilos.separador}>
+            ·
+          </span>
+          <span className={estilos.rotulo}>ctx</span>
+          <span className={estilos.cifra}>
+            {abreviar(usado)}
+            {tope === undefined ? "" : `/${abreviar(tope)}`}
+          </span>
+        </>
+      )}
     </span>
   );
 }

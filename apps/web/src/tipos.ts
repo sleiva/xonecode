@@ -147,6 +147,7 @@ export type MensajeAlCliente =
       clase: "consumo";
       modelo: { entrada: number; salida: number; cache: number };
       externo: { entrada: number; salida: number; cache: number };
+      ventana: { usado: number; tope?: number };
     }
   /** Se está abriendo una sesión —o descargando un proyecto—, dicho por el servidor: es el
    *  único que sabe cuándo empieza y cuándo acaba. */

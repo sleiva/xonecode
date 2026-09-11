@@ -1215,10 +1215,12 @@ describe("el consumo de la sesión entra por lista BLANCA", () => {
       clase: "consumo",
       modelo: { entrada: 100, salida: 20, cache: 5 },
       externo: { entrada: 7, salida: 1, cache: 0 },
+      ventana: { usado: 2100, tope: 1_000_000 },
     } as never);
     expect(s.leer().consumo).toEqual({
       modelo: { entrada: 100, salida: 20, cache: 5 },
       externo: { entrada: 7, salida: 1, cache: 0 },
+      ventana: { usado: 2100, tope: 1_000_000 },
     });
   });
 
@@ -1226,10 +1228,12 @@ describe("el consumo de la sesión entra por lista BLANCA", () => {
     // Viene de un `JSON.parse` de la red: un NaN o una cadena dejarían el contador ilegible
     // en vez de dar un error que alguien pueda ver.
     const s = crearStoreDelCliente();
-    s.aplicar({ clase: "consumo", modelo: { entrada: "1000" }, externo: null } as never);
+    s.aplicar({ clase: "consumo", modelo: { entrada: "1000" }, externo: null, ventana: { tope: "1M" } } as never);
     expect(s.leer().consumo).toEqual({
       modelo: { entrada: 0, salida: 0, cache: 0 },
       externo: { entrada: 0, salida: 0, cache: 0 },
+      // Un tope que no es un número es «no se sabe», no un denominador inventado.
+      ventana: { usado: 0 },
     });
   });
 
@@ -1240,6 +1244,7 @@ describe("el consumo de la sesión entra por lista BLANCA", () => {
       clase: "consumo",
       modelo: { entrada: 1, salida: 1, cache: 0 },
       externo: { entrada: 0, salida: 0, cache: 0 },
+      ventana: { usado: 1 },
     } as never);
     s.marcarDesconectado();
     expect(s.leer().consumo).toBeUndefined();

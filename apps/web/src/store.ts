@@ -140,6 +140,8 @@ export interface EstadoDelCliente {
   consumo?: {
     modelo: { entrada: number; salida: number; cache: number };
     externo: { entrada: number; salida: number; cache: number };
+    /** Cuánto ocupa la ventana ahora, y su tope si se sabe. Otra pregunta que los acumulados. */
+    ventana: { usado: number; tope?: number };
   };
   /**
    * Qué se está abriendo ahora mismo, si algo. Lo dice el servidor (`clase: "abriendo"`) y
@@ -1088,8 +1090,19 @@ export function crearStoreDelCliente(): {
             const o = (typeof v === "object" && v !== null ? v : {}) as Record<string, unknown>;
             return { entrada: numero(o["entrada"]), salida: numero(o["salida"]), cache: numero(o["cache"]) };
           };
-          const m = mensaje as { modelo?: unknown; externo?: unknown };
-          mutar({ consumo: { modelo: cuenta(m.modelo), externo: cuenta(m.externo) } });
+          const m = mensaje as { modelo?: unknown; externo?: unknown; ventana?: unknown };
+          const v = (typeof m.ventana === "object" && m.ventana !== null ? m.ventana : {}) as Record<string, unknown>;
+          // `tope` ausente es «no se sabe» y se propaga ausente hasta el componente: con
+          // Ollama no hay tope A PROPÓSITO, y un denominador inventado es la misma mentira
+          // que un porcentaje sobre un número que nadie midió.
+          const tope = typeof v["tope"] === "number" && Number.isFinite(v["tope"]) && v["tope"] > 0 ? v["tope"] : undefined;
+          mutar({
+            consumo: {
+              modelo: cuenta(m.modelo),
+              externo: cuenta(m.externo),
+              ventana: { usado: numero(v["usado"]), ...(tope === undefined ? {} : { tope }) },
+            },
+          });
           return;
         }
         case "turno": {

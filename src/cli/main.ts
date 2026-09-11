@@ -1263,6 +1263,11 @@ export async function main(argv: string[]): Promise<number> {
               carpetaDeArtefactosDeSesion,
               opcionesDeConsola?.adjuntos
             ),
+          // El tope de la ventana para el contador de contexto de la web, con LA MISMA
+          // función que la barra de stdio y la de la TUI. Dos resoluciones del tope serían
+          // dos porcentajes distintos para el mismo modelo, y esa función ya respeta la
+          // precedencia que `/config` declara (proyecto > global > tabla).
+          topeDeContexto: (raiz, modelo) => crearTopeDelModelo(raiz)(modelo),
           // La cola de tareas de la MÁQUINA, y con ella el corredor. Se pasa desde aquí y
           // no se construye allí por la misma razón que las dos de arriba, más una: la
           // omisión de `arrancarConsolaWeb` tiene que ser NO ejecutar tareas, porque sus

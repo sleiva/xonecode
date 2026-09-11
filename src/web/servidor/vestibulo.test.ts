@@ -1927,7 +1927,7 @@ describe("el consumo de tokens de la sesión llega al vestíbulo", () => {
    * producción viviendo en un cierre que todos los tests doblan.
    */
   it("lo pregunta a la SESIÓN, y por eso hay que implementarlo y no solo declararlo", async () => {
-    let consumo = { modelo: { entrada: 10, salida: 2, cache: 1 }, externo: { entrada: 0, salida: 0, cache: 0 } };
+    let consumo = { modelo: { entrada: 10, salida: 2, cache: 1 }, externo: { entrada: 0, salida: 0, cache: 0 }, contexto: 10 };
     const v = crearVestibulo({
       ...dobles(),
       origenDeTrabajo: "global",
@@ -1947,7 +1947,7 @@ describe("el consumo de tokens de la sesión llega al vestíbulo", () => {
     expect(v.consumoDeSesion()).toEqual(consumo);
     // Y se PREGUNTA cada vez, no se cachea: el acumulador vive en la sesión y una copia
     // aquí se quedaría vieja entre avisos.
-    consumo = { modelo: { entrada: 99, salida: 9, cache: 0 }, externo: { entrada: 5, salida: 1, cache: 0 } };
+    consumo = { modelo: { entrada: 99, salida: 9, cache: 0 }, externo: { entrada: 5, salida: 1, cache: 0 }, contexto: 99 };
     expect(v.consumoDeSesion()?.modelo.entrada).toBe(99);
     await v.cerrar();
   });
