@@ -62,6 +62,7 @@ import { crearTema, esTema, seleccionarTema } from "./tema.js";
 import { pedirDecisiones } from "./aprobar.js";
 import { modeloDeAcuse } from "./acuseDeModelo.js";
 import { inspeccionar } from "../agent/entorno.js";
+import { versionEnMarcha } from "../agent/versionEnDisco.js";
 import { SkillsEnDisco } from "../agent/skills.js";
 import { Modelos } from "../agent/modelos.js";
 import { CatalogoModelos } from "../agent/catalogoModelos.js";
@@ -1268,6 +1269,9 @@ export async function main(argv: string[]): Promise<number> {
           // dos porcentajes distintos para el mismo modelo, y esa función ya respeta la
           // precedencia que `/config` declara (proyecto > global > tabla).
           topeDeContexto: (raiz, modelo) => crearTopeDelModelo(raiz)(modelo),
+          // Con qué código corre este proceso. Se lee aquí y no allí porque toca disco y
+          // lanza `git`, y los tests de `arranque.ts` llaman a esa función entera.
+          version: versionEnMarcha,
           // La cola de tareas de la MÁQUINA, y con ella el corredor. Se pasa desde aquí y
           // no se construye allí por la misma razón que las dos de arriba, más una: la
           // omisión de `arrancarConsolaWeb` tiene que ser NO ejecutar tareas, porque sus

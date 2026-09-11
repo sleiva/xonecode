@@ -2596,6 +2596,50 @@ describe("arrancarConsolaWeb — las comprobaciones, en orden", () => {
   });
 
   /**
+   * Existe por tres rondas perdidas el 11-09-2026: un cambio del SERVIDOR no se ve hasta
+   * parar y arrancar el proceso, mientras que el cliente se lee del disco en cada petición
+   * y se actualiza con recargar. Una consola puede enseñar a la vez lo nuevo del cliente y
+   * lo viejo del servidor, y nadie tenía forma de saber qué había vivo dentro.
+   */
+  it("dice con qué código corre, ANTES que la URL", async () => {
+    const salida: string[] = [];
+    await arrancarConsolaWeb({
+      puerto: 0,
+      abrir: false,
+      cwd: mkdtempSync(join(tmpdir(), "xonecode-cwd-")),
+      raizDelCliente: conBuild(),
+      crearServidor: async () => servidorLevantado(),
+      vestibulo: vestibuloDePrueba(),
+      escribir: (t) => salida.push(t),
+      esperarCierre: async () => {},
+      // Entra por parámetro porque leerlo toca disco y lanza `git`: este test no puede
+      // depender de que exista un repo donde corra.
+      version: () => ({ version: "9.9.9", commit: "abc1234", sucio: true }),
+    });
+    const texto = salida.join("");
+    expect(texto).toContain("xonecode 9.9.9 · abc1234 + cambios sin commitear");
+    // Antes que la URL: es lo que se lee primero cuando uno viene a comprobar qué hay vivo.
+    expect(texto.indexOf("xonecode 9.9.9")).toBeLessThan(texto.indexOf("consola web en"));
+  });
+
+  it("y sin saber la versión no se inventa ninguna línea", async () => {
+    // Ausente es «no consta», que es lo que hacía siempre: un «versión desconocida» en el
+    // arranque sería ruido en el sitio donde menos ruido cabe.
+    const salida: string[] = [];
+    await arrancarConsolaWeb({
+      puerto: 0,
+      abrir: false,
+      cwd: mkdtempSync(join(tmpdir(), "xonecode-cwd-")),
+      raizDelCliente: conBuild(),
+      crearServidor: async () => servidorLevantado(),
+      vestibulo: vestibuloDePrueba(),
+      escribir: (t) => salida.push(t),
+      esperarCierre: async () => {},
+    });
+    expect(salida.join("")).not.toContain("xonecode 0.");
+  });
+
+  /**
    * La vía legítima para ver la maqueta completa sin CloudStudio: el alta de la web solo
    * sabe de entornos y proyectos remotos (`vestibulo.ts`), así que un proyecto offline
    * nunca llega a `proyectoAbierto()` por ESE camino — con o sin `--guion`. Lo que

@@ -380,6 +380,17 @@ feedback del desarrollador** y no es terminal.
   llevaría el e2e de tubería byte-idéntica. El TTY entra por parámetro para probar los dos lados.
   `decidirTui` igual: `--no-tui` gana, `--tui` fuerza (sin TTY es error de USO, 64), por omisión
   TUI solo con stdin Y stdout TTY.
+- **La consola web DICE con qué código corre** (`core/version.ts` + `agent/versionEnDisco.ts`,
+  opción `version`), antes que la URL: `xonecode 0.5.0 · 85219d4 + cambios sin commitear`.
+  Existe por tres rondas perdidas el 11-09-2026 y por una asimetría que hay que tener presente:
+  **el cliente se lee del DISCO en cada petición** (`servidor.ts`, `readFileSync`), así que
+  reconstruirlo se ve recargando la página, mientras que el SERVIDOR es el proceso y sus
+  cambios solo entran parándolo y arrancándolo. Una consola puede enseñar a la vez lo nuevo
+  del cliente y lo viejo del servidor, y sin esta línea nadie —ni mirando la pantalla ni
+  leyendo el código— podía saber qué había vivo dentro. El árbol SUCIO se dice, porque
+  entonces el commit solo no describe lo que corre; y no poder mirarlo no es «limpio». La
+  lectura entra por parámetro: toca disco y lanza `git`, y los tests llaman a esa función
+  entera.
 - **`arrancarConsolaWeb`** (`web/servidor/arranque.ts`) comprueba en orden: que existe
   `apps/web/dist/index.html` —si no, salida **70**, fallo del entorno—, avisa si el cwd es
   offline y **sigue**, y levanta. `abrirEnSistema` escucha el `error` del `spawn`: un `xdg-open`

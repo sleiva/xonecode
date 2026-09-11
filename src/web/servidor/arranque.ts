@@ -29,6 +29,7 @@
  */
 
 import { existsSync, readFileSync } from "node:fs";
+import { lineaDeVersion, type VersionEnMarcha } from "../../core/version.js";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { randomUUID } from "node:crypto";
@@ -3315,6 +3316,12 @@ export interface OpcionesDeArranque {
   /** Lo que la consola de proyecto necesita y depende de la raíz (`/sync`, los escritores). */
   dependenciasDeProyecto?: (raiz: string) => Partial<Consola>;
   /**
+   * Con qué código corre este proceso, para decirlo al arrancar. Entra por parámetro —y no
+   * se lee aquí— porque toca disco y lanza `git`: los tests de este fichero llaman a
+   * `arrancarConsolaWeb` entero, y no pueden depender de que exista un repo.
+   */
+  version?: () => VersionEnMarcha;
+  /**
    * El tope de la ventana del modelo, para el contador de contexto.
    *
    * Entra por parámetro y no se importa por lo mismo que `crearEjecutor`: quien la tiene es
@@ -3574,6 +3581,17 @@ export async function arrancarConsolaWeb(opciones: OpcionesDeArranque): Promise<
   // mal desde aquí.
   await arrancarCorredorConectado(cable);
 
+  /**
+   * Con qué código corre ESTE proceso, antes que la URL.
+   *
+   * Existe por tres rondas perdidas: un cambio del servidor no se ve hasta parar y arrancar
+   * el proceso, mientras que el cliente se lee del DISCO en cada petición, así que una
+   * consola puede enseñar a la vez lo nuevo del cliente y lo viejo del servidor — y nadie
+   * tenía forma de saber qué había vivo dentro. Va por opción para no atarlo a git en los
+   * tests; ausente = no se dice nada, que es lo que hacía siempre.
+   */
+  const version = opciones.version?.();
+  if (version !== undefined) escribir(`${lineaDeVersion(version)}\n`);
   escribir(`consola web en ${servidor.url}\n`);
   if (opciones.anfitrion !== undefined) {
     // Se dice SIEMPRE y con lo que hay detrás nombrado. Una puerta abierta que solo consta
