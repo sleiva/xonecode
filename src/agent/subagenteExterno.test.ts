@@ -247,9 +247,9 @@ describe("decisionDeTool — la regla de seguridad de los agentes externos", () 
   });
 });
 
-describe("los dos motores externos", () => {
-  it("los dos están cableados: Claude Code por su SDK, Codex por su app-server", () => {
-    expect([...MOTORES_CABLEADOS].sort()).toEqual(["claude-code", "codex"]);
+describe("los tres motores externos", () => {
+  it("los tres están cableados: Claude Code por su SDK, Codex por su app-server, OpenCode por ACP", () => {
+    expect([...MOTORES_CABLEADOS].sort()).toEqual(["claude-code", "codex", "opencode"]);
   });
 
   it("`CODEX_BIN` manda sobre el `codex` del PATH", () => {

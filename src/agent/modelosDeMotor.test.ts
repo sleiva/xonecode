@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { ALIAS_DE_CLAUDE_CODE, modelosDeMotor, modelosDeRespuestaDeCodex } from "./modelosDeMotor.js";
+import {
+  ALIAS_DE_CLAUDE_CODE,
+  modelosDeMotor,
+  modelosDeRespuestaDeCodex,
+  modelosDeSalidaDeOpencode,
+} from "./modelosDeMotor.js";
 
 describe("los modelos de un motor EXTERNO", () => {
   it("los de Claude Code son sus ALIAS, y salen de una tabla, no de un proceso", async () => {
@@ -77,5 +82,31 @@ describe("modelosDeRespuestaDeCodex", () => {
 
   it("sin `displayName` se usa el id: un nombre inventado sería peor", () => {
     expect(modelosDeRespuestaDeCodex({ data: [{ id: "gpt-x" }] })).toEqual([{ id: "gpt-x", nombre: "gpt-x" }]);
+  });
+});
+
+describe("los modelos de OpenCode", () => {
+  it("son las líneas `proveedor/id` de `opencode models`, y solo ésas", () => {
+    // Medido: el comando imprime una por línea con esa forma exacta, que es además lo que su
+    // campo `model` de configuración espera. Lo que no la tenga no es un modelo elegible.
+    const r = modelosDeSalidaDeOpencode("opencode/big-pickle\nopencode-go/glm-5.1\n\nCredenciales:\nopencode/big-pickle\n");
+    expect(r).toEqual([
+      { id: "opencode/big-pickle", nombre: "opencode/big-pickle" },
+      { id: "opencode-go/glm-5.1", nombre: "opencode-go/glm-5.1" },
+    ]);
+  });
+
+  it("y se le pregunta a él, no a una tabla escrita a mano", async () => {
+    const r = await modelosDeMotor("opencode", { preguntarAOpencode: async () => [{ id: "a/b", nombre: "a/b" }] });
+    expect(r.modelos).toEqual([{ id: "a/b", nombre: "a/b" }]);
+  });
+
+  it("si no contesta, se DICE: un desplegable vacío sin motivo se lee como una ventana rota", async () => {
+    const r = await modelosDeMotor("opencode", {
+      preguntarAOpencode: async () => {
+        throw new Error("opencode no está instalado");
+      },
+    });
+    expect(r.error).toMatch(/opencode/i);
   });
 });

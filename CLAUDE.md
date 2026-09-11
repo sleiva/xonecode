@@ -310,6 +310,59 @@ Un subagente es un `.md` con frontmatter en `.xonecode/agentes/<nombre>.md`
 - El resto del protocolo: `codex app-server --stdio` con JSON por línea; la respuesta final es el
   `item/completed` cuyo item es un `agentMessage` de fase `final_answer`. El hijo es el Codex DEL
   USUARIO, con sus MCP y sus hooks: xonecode no los filtra.
+- **OpenCode es el TERCER motor, y habla por ACP** (`agent/subagenteOpencode.ts`,
+  `agent/escrituraDeOpencode.ts`). De sus tres superficies —`run --format json`, el servidor
+  HTTP de `serve` y `acp`— se usa ACP: es JSON-RPC 2.0 por línea sobre stdio, el mismo molde
+  que Codex, y la única de las tres con portón de permiso por stdio.
+- **Su petición trae TODO en un solo mensaje**, que es lo que lo hace el más sencillo de los
+  tres: `session/request_permission` lleva `toolCall.locations[].path` y
+  `content:[{type:"diff", path, oldText, newText}]`. **`oldText`/`newText` entran directos en
+  `core/diff.ts#diffDeLineas`** — ni registro de items (Codex manda solo un `itemId`) ni parser
+  de hunks. Se contesta `once` o `reject`, y **`always` no se manda nunca**: es la
+  pre-aprobación de sesión, como `acceptForSession` y `grantRoot` en Codex.
+- **El bucle de guardas y política es UNO y lo comparten los dos motores de petición**
+  (`escrituraExterna.ts#veredictoDeEscriturasExternas` y `#decisionDeEscrituraExterna`). Cada
+  uno solo traduce SU forma. Escribirlo una vez por motor sería un segundo y un tercer sitio
+  donde el fail-closed puede dejar de estarlo, que es la única forma en la que estas guardas se
+  han roto nunca.
+- **Y hay TRES puertas por las que el proyecto podía mandar sobre opencode. Las tres medidas,
+  con un proyecto que las llevaba a la vez:**
+  1. un `opencode.json` **del proyecto** pisa nuestra configuración —leyó el `.env` y soltó el
+     secreto, corrió shell y escribió con CERO permisos—, y ese fichero puede venir de
+     CloudStudio;
+  2. un **plugin del proyecto** (`.opencode/plugin/*.ts`) **ejecuta código arbitrario** dentro
+     del proceso de opencode (medido con su control: sin la variable corre, con ella no);
+  3. la configuración **global del usuario** también nos pisa, así que `OPENCODE_CONFIG` es el
+     eslabón DÉBIL y no se puede sostener nada encima.
+  Las tres se cierran con **`OPENCODE_CONFIG_DIR` apuntando a una carpeta NUESTRA**
+  (`~/.xonecode/opencode`, que pasa a ser «la global» y por eso gana) **más
+  `OPENCODE_DISABLE_PROJECT_CONFIG=1`**. Las credenciales siguen resolviendo: su `auth.json`
+  vive en el directorio de DATOS. La configuración se REESCRIBE en cada arranque para que no
+  quede una más permisiva de una versión anterior.
+- **En OpenCode la LECTURA se guarda por PATRÓN, no por código**, y el motivo está medido: su
+  permiso de `kind: "read"` llega con `locations: []` y `rawInput: {}` —sin ruta—, así que no
+  hay nada que pasarle a una guarda; la ruta solo aparece en el `tool_call_update` posterior,
+  cuando el permiso ya se concedió. Con `edit` sí viene. Queda entre los otros dos: mejor que
+  Codex (que no puede guardarla de ninguna forma) y peor que Claude Code (donde la decide
+  `veredictoDeLectura`). **Las vistas aplanadas se enumeran UNA A UNA** en esa lista, porque «un
+  `.xml` con un `.xne` al lado» no se puede escribir como patrón.
+- **`bash` no se deniega: se le QUITA la tool** («No tengo un tool de shell en este entorno»).
+  Con `webfetch`, `websearch`, `external_directory`, `task` y `question` denegados.
+- **`fs/write_text_file` NO es la escritura**, y creerlo habría dejado una guarda que no guarda:
+  medido, rechazándolo con un error el fichero apareció igual. Es un aviso. El único portón es
+  el permiso.
+- **Una tool que acaba en `failed` no se anuncia**: se apunta en `in_progress` (el `completed`
+  trae `locations: null` y la ruta dentro del `title`) y la línea sale al cerrarse bien. Medido:
+  con la lectura de `.env` denegada salía «lee /.env», y no se leyó.
+- **Una respuesta vacía tras un rechazo no es un fallo ni silencio**: medido, el turno acaba bien
+  (`stopReason: end_turn`) y a veces sin una palabra. Se dice lo que pasó con voz del harness y
+  con cuántas escrituras se rechazaron, en vez de devolver `""` —que pasaría por «no tenía nada
+  que decir»— o de tumbar un turno correcto.
+- **Medido vivo por el camino entero, seis ejecuciones y con el proyecto HOSTIL delante**:
+  aprobar escribe, rechazar no deja fichero, `.env` y una vista aplanada no se pueden ni leer,
+  escribir fuera se corta, y al pedirle shell contesta que no tiene y cae en la tool de fichero
+  —que sí pasa por la aprobación—. ACP además tiene `session/cancel`, que se manda antes de
+  matarlo: es la cancelación que Codex no tiene.
 - **Límite declarado, y es el que queda abierto: LEER no tiene costura en Codex.** Lee por la
   shell del sandbox, que en `read-only` no pide permiso a nadie, así que `.env` y `.xonecode` se
   le pueden leer — justo el agujero que en Claude Code cierra `veredictoDeLectura`. No lo abre

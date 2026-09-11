@@ -17,9 +17,9 @@
  */
 
 /** De qué está hecho un subagente. Los tres van al MISMO sitio: la lista de deepagents. */
-export type Motor = "modelo" | "claude-code" | "codex";
+export type Motor = "modelo" | "claude-code" | "codex" | "opencode";
 
-export const MOTORES: readonly Motor[] = ["modelo", "claude-code", "codex"] as const;
+export const MOTORES: readonly Motor[] = ["modelo", "claude-code", "codex", "opencode"] as const;
 
 export interface Agente {
   /**

@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { consumoDeClaude, consumoDeCodex, sumarConsumo, SIN_CONSUMO } from "./consumoExterno.js";
+import { consumoDeOpencode, consumoDeClaude, consumoDeCodex, sumarConsumo, SIN_CONSUMO } from "./consumoExterno.js";
 
 describe("lo que consumió Claude Code, de su `modelUsage`", () => {
   it("suma TODOS sus modelos: el hijo usa más de uno en la misma ejecución", () => {
@@ -74,5 +74,23 @@ describe("acumular entre ejecuciones", () => {
       salida: 3,
       cache: 1,
     });
+  });
+});
+
+describe("el consumo de OpenCode", () => {
+  it("la caché va APARTE, y la aritmética de la medida real lo confirma", () => {
+    // 8756 + 141 + 1792 = 10689, que es el `totalTokens` que vino: o sea que `inputTokens`
+    // EXCLUYE la caché y se copia tal cual. Si estuvieran sumados, enseñarlo como entrada
+    // inflaría la cifra.
+    expect(consumoDeOpencode({ inputTokens: 8756, outputTokens: 141, totalTokens: 10689, cachedReadTokens: 1792 })).toEqual({
+      entrada: 8756,
+      salida: 141,
+      cache: 1792,
+    });
+  });
+
+  it("ausente es «no consta» y no un cero: un cero que nadie ha medido es una cifra inventada", () => {
+    expect(consumoDeOpencode(undefined)).toBeUndefined();
+    expect(consumoDeOpencode(null)).toBeUndefined();
   });
 });

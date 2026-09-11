@@ -116,7 +116,7 @@ export interface SubagenteExternoPort {
   correr(peticion: PeticionExterna): Promise<string>;
 }
 
-export type MotorExterno = "claude-code" | "codex";
+export type MotorExterno = "claude-code" | "codex" | "opencode";
 
 /**
  * Lo que un agente EXTERNO consumió en una ejecución, tal y como ÉL lo reporta.

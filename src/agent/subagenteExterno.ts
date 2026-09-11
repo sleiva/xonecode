@@ -33,6 +33,7 @@ import type {
   SubagenteExternoPort,
 } from "../core/ports.js";
 import { codexDisponible, correrCodex } from "./subagenteCodex.js";
+import { correrOpencode, opencodeDisponible } from "./subagenteOpencode.js";
 import { consumoDeClaude } from "./consumoExterno.js";
 import {
   claseDeToolExterna,
@@ -209,6 +210,7 @@ export type PermisoDeTool =
 /** Si el motor se puede usar de verdad. Sin cachear: el que cachea es quien lo llama. */
 async function medirDisponible(motor: MotorExterno): Promise<boolean> {
   if (motor === "codex") return codexDisponible();
+  if (motor === "opencode") return opencodeDisponible();
   try {
     await import("@anthropic-ai/claude-agent-sdk");
     return true;
@@ -304,6 +306,23 @@ export function crearSubagenteExterno(opciones: {
           // `realpathSync`, que es el de producción. Quien lo dobla es el test de
           // `decisionDeEscrituraDeCodex`, que es donde vive la guarda.
           ficheros: () => opciones.ficherosDelProyecto?.() ?? new Set<string>(),
+        });
+      }
+      if (peticion.motor === "opencode") {
+        /**
+         * Las mismas costuras que Codex, y el mismo motivo para que estén aquí y probadas una
+         * por una: son opcionales, así que olvidar una deja los dos `tsc` limpios. La de
+         * `vistasAplanadas` es la peligrosa — sin ella el hijo puede LEER un `.xml` generado y
+         * editar el fichero equivocado.
+         */
+        return correrOpencode(peticion, {
+          ...(opciones.alConsumir === undefined
+            ? {}
+            : { alConsumir: (c) => opciones.alConsumir?.({ motor: "opencode", ...c }) }),
+          ...(opciones.aprobarEscritura === undefined ? {} : { aprobar: opciones.aprobarEscritura }),
+          ficheros: () => opciones.ficherosDelProyecto?.() ?? new Set<string>(),
+          vistasAplanadas: () => vistasAplanadasDe(opciones.ficherosDelProyecto?.() ?? new Set<string>()),
+          ...(opciones.alUsarTool === undefined ? {} : { alUsarTool: opciones.alUsarTool }),
         });
       }
       const { query } = await import("@anthropic-ai/claude-agent-sdk");
@@ -476,8 +495,24 @@ export function crearSubagenteExterno(opciones: {
   };
 }
 
-/** Los que están cableados de verdad. Los dos, desde que Codex habla por su app-server. */
+/** Los que están cableados de verdad. Los tres, desde que OpenCode habla por ACP. */
 export const MOTORES_CABLEADOS: ReadonlySet<MotorExterno> = new Set<MotorExterno>([
   "claude-code",
   "codex",
+  "opencode",
 ]);
+
+/**
+ * Las vistas aplanadas del proyecto: cada `X.xml` que tiene un `X.xne` al lado.
+ *
+ * Existe porque OpenCode guarda la LECTURA por PATRÓN y no por código —su permiso de lectura
+ * llega sin ruta—, y «un `.xml` con un `.xne` al lado» no es un patrón que se pueda escribir:
+ * hay que enumerarlas. En los otros dos motores esto lo decide `esVistaAplanada` en el momento.
+ */
+export function vistasAplanadasDe(ficheros: ReadonlySet<string>): string[] {
+  const salida: string[] = [];
+  for (const ruta of ficheros) {
+    if (ruta.endsWith(".xml") && ficheros.has(`${ruta.slice(0, -4)}.xne`)) salida.push(ruta);
+  }
+  return salida.sort();
+}

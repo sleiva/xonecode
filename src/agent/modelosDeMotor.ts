@@ -1,14 +1,14 @@
 /**
  * Qué modelos ofrece cada MOTOR de subagente.
  *
- * Un subagente corre de tres formas —dentro de xonecode, en Claude Code o en Codex— y el
- * modelo se elige distinto en cada una. Este módulo contesta la pregunta «¿entre qué puedo
- * elegir?» para las dos externas; la del motor `modelo` ya la contesta el catálogo de
+ * Un subagente corre de cuatro formas —dentro de xonecode, en Claude Code, en Codex o en
+ * OpenCode— y el modelo se elige distinto en cada una. Este módulo contesta la pregunta «¿entre
+ * qué puedo elegir?» para las tres externas; la del motor `modelo` ya la contesta el catálogo de
  * proveedores de siempre (`agent/catalogoModelos.ts`), y duplicarla aquí sería una segunda
  * lista que diverge.
  *
- * **Ninguna de las dos listas está inventada, y esa es la regla del fichero.** La de Claude
- * Code son los ALIAS que documenta su propio SDK; la de Codex se le pregunta a él. Un
+ * **Ninguna de las listas está inventada, y esa es la regla del fichero.** La de Claude Code
+ * son los ALIAS que documenta su propio SDK; las de Codex y OpenCode se les preguntan a ellos. Un
  * desplegable con cinco nombres escritos a mano se queda viejo en la siguiente versión del
  * producto, y el síntoma sería un modelo que el usuario elige y el hijo rechaza.
  */
@@ -37,6 +37,8 @@ export const TOPE_DE_MODELOS_MS = 15_000;
 export interface DependenciasDeModelos {
   /** Se le pregunta a Codex. Entra por parámetro: `npm test` no lanza procesos. */
   preguntarACodex?: () => Promise<ModeloDeMotor[]>;
+  /** Y a OpenCode, por lo mismo. */
+  preguntarAOpencode?: () => Promise<ModeloDeMotor[]>;
 }
 
 export async function modelosDeMotor(
@@ -48,8 +50,11 @@ export async function modelosDeMotor(
     // para leer algo que sus propios tipos declaran.
     return { modelos: ALIAS_DE_CLAUDE_CODE.map((id) => ({ id, nombre: id })) };
   }
-  if (motor !== "codex") return { modelos: [] };
-  const preguntar = deps.preguntarACodex ?? preguntarACodexDeVerdad;
+  if (motor !== "codex" && motor !== "opencode") return { modelos: [] };
+  const preguntar =
+    motor === "opencode"
+      ? (deps.preguntarAOpencode ?? preguntarAOpencodeDeVerdad)
+      : (deps.preguntarACodex ?? preguntarACodexDeVerdad);
   try {
     return { modelos: await preguntar() };
   } catch (error) {
@@ -149,5 +154,72 @@ async function preguntarACodexDeVerdad(): Promise<ModeloDeMotor[]> {
         capabilities: { experimentalApi: false, requestAttestation: false },
       },
     });
+  });
+}
+
+/**
+ * Los modelos de OpenCode: se los pregunta a él con `opencode models`.
+ *
+ * Una línea por modelo, con la forma `proveedor/id` — que es exactamente lo que su campo
+ * `model` de configuración espera, así que no hay que componer nada. Se le pregunta en vez de
+ * escribir una tabla por el mismo motivo que a Codex: su catálogo cambia con cada versión y
+ * con las credenciales que el usuario tenga, y una lista a mano produciría un modelo que el
+ * usuario elige y el hijo rechaza.
+ *
+ * No hace falta ni servidor ni sesión: es un comando que imprime y termina.
+ */
+export function modelosDeSalidaDeOpencode(salida: string): ModeloDeMotor[] {
+  const vistos = new Set<string>();
+  const modelos: ModeloDeMotor[] = [];
+  for (const cruda of salida.split("\n")) {
+    const linea = cruda.trim();
+    // Solo `proveedor/id`: el comando puede imprimir cabeceras o avisos, y una línea que no
+    // tenga esa forma no es un modelo que se pueda poner en la configuración.
+    if (!/^[A-Za-z0-9._-]+\/[A-Za-z0-9._:-]+$/.test(linea)) continue;
+    if (vistos.has(linea)) continue;
+    vistos.add(linea);
+    modelos.push({ id: linea, nombre: linea });
+  }
+  return modelos;
+}
+
+async function preguntarAOpencodeDeVerdad(): Promise<ModeloDeMotor[]> {
+  const binario = process.env.OPENCODE_BIN ?? "opencode";
+  return new Promise<ModeloDeMotor[]>((resolver, rechazar) => {
+    let hijo: ReturnType<typeof spawn>;
+    try {
+      hijo = spawn(binario, ["models"], { stdio: ["ignore", "pipe", "pipe"] });
+    } catch {
+      rechazar(new Error("opencode no está instalado"));
+      return;
+    }
+    let salida = "";
+    let cerrado = false;
+    const acabar = (que: () => void): void => {
+      if (cerrado) return;
+      cerrado = true;
+      clearTimeout(tope);
+      hijo.kill();
+      que();
+    };
+    const tope = setTimeout(
+      () => acabar(() => rechazar(new Error("opencode no contestó su lista de modelos"))),
+      TOPE_DE_MODELOS_MS
+    );
+    hijo.on("error", (error: NodeJS.ErrnoException) =>
+      acabar(() => rechazar(new Error(error.code === "ENOENT" ? "opencode no está instalado" : error.message)))
+    );
+    hijo.stdout?.on("data", (t: Buffer) => {
+      salida += t.toString();
+    });
+    hijo.on("close", () =>
+      acabar(() => {
+        const modelos = modelosDeSalidaDeOpencode(salida);
+        // Una lista vacía se dice, no se devuelve como éxito: un desplegable vacío sin motivo
+        // se lee como que la ventana está rota.
+        if (modelos.length === 0) rechazar(new Error("opencode no dio ninguna lista de modelos"));
+        else resolver(modelos);
+      })
+    );
   });
 }

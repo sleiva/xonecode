@@ -37,8 +37,13 @@
  */
 
 import type { LineaDeDiff } from "../core/diff.js";
-import type { EscrituraExternaPedida, PoliticaDeEscrituraExterna } from "../core/ports.js";
-import { veredictoDeRuta } from "./escrituraExterna.js";
+import type { PoliticaDeEscrituraExterna } from "../core/ports.js";
+import {
+  decisionDeEscrituraExterna,
+  veredictoDeEscriturasExternas,
+  type EscrituraPropuesta,
+  type VeredictoDeEscrituras,
+} from "./escrituraExterna.js";
 
 /** Un `FileUpdateChange` tal y como llega. Se tipa flojo a propósito: viene de fuera. */
 export interface CambioDeCodex {
@@ -46,10 +51,6 @@ export interface CambioDeCodex {
   kind?: { type?: unknown; move_path?: unknown } | undefined;
   diff?: unknown;
 }
-
-export type VeredictoDeCambios =
-  | { admitidos: true; escrituras: EscrituraExternaPedida[] }
-  | { admitidos: false; motivo: string };
 
 /**
  * El diff de un cambio, traducido a lo que pintan las pieles.
@@ -86,18 +87,18 @@ export function lineasDeCambioDeCodex(kind: string, diff: unknown): LineaDeDiff[
   return salida;
 }
 
+
 /**
- * Los cambios de un item, comprobados uno a uno contra las guardas del proyecto.
+ * Los cambios de un item, traducidos a escrituras propuestas y comprobados contra las guardas.
  *
- * **Una sola negativa tumba el item entero**, y no es una elección de estilo: Codex lo
- * aplica todo o nada y se contesta con un único `decision`, así que admitir «los que pasen»
- * sería prometer algo que el protocolo no sabe hacer.
+ * Lo propio de Codex es solo esto: reconocer el `kind` y componer las líneas. Las guardas de
+ * ruta y la política son `escrituraExterna.ts`, compartidas con el otro motor que escribe por
+ * petición.
  *
  * **`delete` y `move_path` se deniegan, y está declarado.** En Claude Code esa escritura no
- * existe —no hay tool de borrar ni de renombrar, así que las listas de `escrituraExterna.ts`
- * ni la nombran—, `cambioDe` no sabe componer su diff, y un renombrado son DOS destinos que
- * habría que guardar por separado. Es la paridad conservadora entre los dos motores, y se
- * afloja el día que se mida, no antes.
+ * existe —no hay tool de borrar ni de renombrar, así que las listas ni la nombran—, `cambioDe`
+ * no sabe componer su diff, y un renombrado son DOS destinos que habría que guardar por
+ * separado. Es la paridad conservadora entre motores, y se afloja el día que se mida.
  */
 export function veredictoDeCambiosDeCodex(opciones: {
   cwd: string;
@@ -105,17 +106,22 @@ export function veredictoDeCambiosDeCodex(opciones: {
   cambios: unknown;
   ficheros: ReadonlySet<string>;
   real?: (ruta: string) => string;
-}): VeredictoDeCambios {
-  const { cambios } = opciones;
+}): VeredictoDeEscrituras {
+  const traducidas = propuestasDeCambios(opciones.cambios);
+  if ("motivo" in traducidas) return { admitidas: false, motivo: traducidas.motivo };
+  return veredictoDeEscriturasExternas({ ...opciones, propuestas: traducidas.propuestas });
+}
+
+/** Traduce los `changes` de Codex, o dice por qué no se puede. */
+function propuestasDeCambios(cambios: unknown): { propuestas: EscrituraPropuesta[] } | { motivo: string } {
   if (!Array.isArray(cambios) || cambios.length === 0) {
-    return { admitidos: false, motivo: "no dijiste qué ficheros cambiabas, y sin eso no hay nada que autorizar" };
+    return { motivo: "no dijiste qué ficheros cambiabas, y sin eso no hay nada que autorizar" };
   }
-  const escrituras: EscrituraExternaPedida[] = [];
+  const propuestas: EscrituraPropuesta[] = [];
   for (const crudo of cambios as CambioDeCodex[]) {
     const tipo = crudo?.kind?.type;
     if (tipo === "delete") {
       return {
-        admitidos: false,
         motivo:
           "xonecode no autoriza que un agente externo BORRE ficheros del proyecto: solo crear y modificar. " +
           "Di qué habría que borrar y por qué.",
@@ -123,66 +129,33 @@ export function veredictoDeCambiosDeCodex(opciones: {
     }
     if (crudo?.kind?.move_path !== undefined && crudo.kind.move_path !== null) {
       return {
-        admitidos: false,
         motivo:
           "xonecode no autoriza que un agente externo RENOMBRE ni mueva ficheros del proyecto: solo crear y modificar.",
       };
     }
     if (tipo !== "add" && tipo !== "update") {
       // Lo que no se reconoce se deniega: es la misma regla que las tres listas de tools.
-      return { admitidos: false, motivo: `xonecode no reconoce este tipo de cambio y no lo autoriza: ${String(tipo)}` };
+      return { motivo: `xonecode no reconoce este tipo de cambio y no lo autoriza: ${String(tipo)}` };
     }
-    const veredicto = veredictoDeRuta({
-      cwd: opciones.cwd,
-      ruta: crudo?.path,
-      ficheros: opciones.ficheros,
-      ...(opciones.real === undefined ? {} : { real: opciones.real }),
-    });
-    if (!veredicto.admitida) return { admitidos: false, motivo: veredicto.motivo };
-    escrituras.push({
-      agente: opciones.agente,
-      ruta: veredicto.ruta,
-      lineas: lineasDeCambioDeCodex(tipo, crudo?.diff),
-    });
+    propuestas.push({ ruta: crudo?.path, lineas: lineasDeCambioDeCodex(tipo, crudo?.diff) });
   }
-  return { admitidos: true, escrituras };
+  return { propuestas };
 }
 
-/**
- * La decisión entera: guardas de ruta y DESPUÉS la política.
- *
- * **Vive aquí y no en el cierre del adaptador a propósito.** El patrón de fallo de esta
- * arquitectura está medido nueve veces y siempre es el mismo: una composición de producción
- * viviendo dentro de algo que todos los tests doblan. Con el adaptador de Codex sería literal
- * —los tests no lanzan el binario—, así que la composición sale fuera, entera y pura salvo
- * por la política que entra por parámetro.
- *
- * Fail-closed en los cuatro caminos: sin política, con una ruta rechazada, si la política
- * revienta, o si contesta que no.
- */
+/** La decisión entera para Codex: traducir, y de ahí en adelante el camino compartido. */
 export async function decisionDeEscrituraDeCodex(opciones: {
   cwd: string;
   agente: string;
   cambios: unknown;
   ficheros: ReadonlySet<string>;
   real?: (ruta: string) => string;
-  /** Ausente = nadie autoriza en esta sesión, y «nadie a quien preguntar» nunca es «sí». */
   aprobar?: PoliticaDeEscrituraExterna;
 }): Promise<{ concedida: boolean; motivo?: string }> {
-  if (opciones.aprobar === undefined) {
-    return {
-      concedida: false,
-      motivo:
-        "xonecode no tiene a quién pedir la autorización de esta escritura en esta sesión, así que no se concede.",
-    };
+  const traducidas = propuestasDeCambios(opciones.cambios);
+  if ("motivo" in traducidas) {
+    // La traducción falla ANTES de la política: preguntar por un borrado que se va a denegar
+    // igual sería sacar un modal cuyo único final posible es un rechazo.
+    return { concedida: false, motivo: traducidas.motivo };
   }
-  const veredicto = veredictoDeCambiosDeCodex(opciones);
-  if (!veredicto.admitidos) return { concedida: false, motivo: veredicto.motivo };
-  try {
-    return { concedida: await opciones.aprobar(veredicto.escrituras) };
-  } catch {
-    // El «sin humano» de `cli/run.ts` corta LANZANDO desde `pedirAprobacion`. Eso es una
-    // respuesta, no un fallo: nadie ha autorizado nada.
-    return { concedida: false };
-  }
+  return decisionDeEscrituraExterna({ ...opciones, propuestas: traducidas.propuestas });
 }

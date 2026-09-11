@@ -55,6 +55,11 @@ const MOTORES: readonly { id: string; etiqueta: string; detalle: string }[] = [
     etiqueta: "Codex",
     detalle: "lanza el `codex` que tengas instalado; si escribe, apruebas cada cambio",
   },
+  {
+    id: "opencode",
+    etiqueta: "OpenCode",
+    detalle: "lanza el `opencode` que tengas instalado; si escribe, apruebas cada cambio",
+  },
 ];
 
 /**
@@ -82,11 +87,12 @@ function enBlanco(): AgenteDelCable {
   };
 }
 
-/** Qué significa dejar el modelo sin elegir, que no es lo mismo en los tres motores. */
+/** Qué significa dejar el modelo sin elegir, que no es lo mismo en los cuatro motores. */
 const VACIO_DE_MODELO: Record<string, string> = {
   modelo: "El del papel que le toque",
   "claude-code": "El que use Claude Code",
   codex: "El que use Codex",
+  opencode: "El que use OpenCode",
 };
 
 /** La pista del rótulo: de dónde sale la lista de cada uno. */
@@ -94,9 +100,11 @@ const PISTA_DE_MODELO: Record<string, string> = {
   modelo: "— de tus proveedores comprobados",
   "claude-code": "— los alias de Claude Code",
   codex: "— los que ofrece tu Codex",
+  opencode: "— los que ofrece tu OpenCode",
 };
 
-const motorExterno = (motor: string): boolean => motor === "claude-code" || motor === "codex";
+const motorExterno = (motor: string): boolean =>
+  motor === "claude-code" || motor === "codex" || motor === "opencode";
 
 export function Agentes({
   agentes,

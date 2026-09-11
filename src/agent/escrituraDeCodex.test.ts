@@ -66,10 +66,10 @@ describe("las guardas de ruta, reaplicadas a los cambios de Codex", () => {
         { path: "/proyecto/app/y.js", kind: { type: "update", move_path: null }, diff: "@@ -1 +1 @@\n-a\n+b\n" },
       ],
     });
-    expect(v.admitidos).toBe(true);
+    expect(v.admitidas).toBe(true);
     // La ruta que viaja es la del proyecto, nunca la de la máquina: puede ir por un túnel.
-    expect(v.admitidos && v.escrituras.map((e) => e.ruta)).toEqual(["/app/x.js", "/app/y.js"]);
-    expect(v.admitidos && v.escrituras[0]!.agente).toBe("dev");
+    expect(v.admitidas && v.escrituras.map((e) => e.ruta)).toEqual(["/app/x.js", "/app/y.js"]);
+    expect(v.admitidas && v.escrituras[0]!.agente).toBe("dev");
   });
 
   it("BORRAR se deniega: en Claude Code esa escritura no existe, y no hay diff que mirar", () => {
@@ -77,8 +77,8 @@ describe("las guardas de ruta, reaplicadas a los cambios de Codex", () => {
       ...BASE,
       cambios: [{ path: "/proyecto/app/x.js", kind: { type: "delete" } }],
     });
-    expect(v.admitidos).toBe(false);
-    expect(!v.admitidos && v.motivo).toMatch(/BORRE/);
+    expect(v.admitidas).toBe(false);
+    expect(!v.admitidas && v.motivo).toMatch(/BORRE/);
   });
 
   it("y RENOMBRAR también: un `move_path` son dos destinos que habría que guardar", () => {
@@ -86,23 +86,23 @@ describe("las guardas de ruta, reaplicadas a los cambios de Codex", () => {
       ...BASE,
       cambios: [{ path: "/proyecto/a.js", kind: { type: "update", move_path: "/proyecto/b.js" }, diff: "" }],
     });
-    expect(v.admitidos).toBe(false);
-    expect(!v.admitidos && v.motivo).toMatch(/RENOMBRE/);
+    expect(v.admitidas).toBe(false);
+    expect(!v.admitidas && v.motivo).toMatch(/RENOMBRE/);
   });
 
   it("un tipo de cambio que no se reconoce se deniega, como las tools que no están en la lista", () => {
     const v = veredictoDeCambiosDeCodex({ ...BASE, cambios: [{ path: "/proyecto/a.js", kind: { type: "wat" } }] });
-    expect(v.admitidos).toBe(false);
+    expect(v.admitidas).toBe(false);
   });
 
   it("`.env` se deniega, y es la MISMA función que guarda al otro motor", () => {
     const v = veredictoDeCambiosDeCodex({ ...BASE, cambios: [{ path: "/proyecto/.env", kind: { type: "add" }, diff: "K=1\n" }] });
-    expect(v.admitidos).toBe(false);
+    expect(v.admitidas).toBe(false);
   });
 
   it("fuera del proyecto, también", () => {
     const v = veredictoDeCambiosDeCodex({ ...BASE, cambios: [{ path: "/otro/x.js", kind: { type: "add" }, diff: "x\n" }] });
-    expect(v.admitidos).toBe(false);
+    expect(v.admitidas).toBe(false);
   });
 
   it("una vista aplanada se deniega: editarla sería tocar el fichero equivocado", () => {
@@ -112,7 +112,7 @@ describe("las guardas de ruta, reaplicadas a los cambios de Codex", () => {
       ficheros: new Set(["/app/Cosa.xml", "/app/Cosa.xne"]),
       cambios: [{ path: "/proyecto/app/Cosa.xml", kind: { type: "update" }, diff: "@@ -1 +1 @@\n-a\n+b\n" }],
     });
-    expect(v.admitidos).toBe(false);
+    expect(v.admitidas).toBe(false);
   });
 
   it("UNA ruta mala tumba el item ENTERO: Codex lo aplica todo o nada", () => {
@@ -123,12 +123,12 @@ describe("las guardas de ruta, reaplicadas a los cambios de Codex", () => {
         { path: "/proyecto/.git/config", kind: { type: "add" }, diff: "malo\n" },
       ],
     });
-    expect(v.admitidos).toBe(false);
+    expect(v.admitidas).toBe(false);
   });
 
   it("sin cambios no hay nada que autorizar, y eso es un NO", () => {
-    expect(veredictoDeCambiosDeCodex({ ...BASE, cambios: [] }).admitidos).toBe(false);
-    expect(veredictoDeCambiosDeCodex({ ...BASE, cambios: undefined }).admitidos).toBe(false);
+    expect(veredictoDeCambiosDeCodex({ ...BASE, cambios: [] }).admitidas).toBe(false);
+    expect(veredictoDeCambiosDeCodex({ ...BASE, cambios: undefined }).admitidas).toBe(false);
   });
 });
 

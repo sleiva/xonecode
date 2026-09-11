@@ -908,6 +908,64 @@ especialistas de siempre —`docs`, `planner`, `dev`, `mockup`— dejaron de est
       Y hay un test POR ARGUMENTO del cableado de `crearSubagenteExterno`, porque los dos son
       opcionales: sin el de `ficherosDelProyecto`, una vista aplanada se escribiría con los
       dos `tsc` limpios.
+  - **OpenCode es el TERCER motor** (`agent/subagenteOpencode.ts`), y el que menos código
+    propio necesita. De sus tres superficies —`opencode run --format json`, el servidor HTTP
+    de `serve` y `opencode acp`— se usa **ACP** (Agent Client Protocol): JSON-RPC 2.0 por línea
+    sobre stdio, el mismo molde que el app-server de Codex, y la única de las tres con portón
+    de permiso por stdio. `run` no lo tiene y `serve` es otro transporte entero.
+    - **Su petición de permiso trae TODO en un mensaje**: `toolCall.locations[].path` y
+      `content:[{type:"diff", path, oldText, newText}]`. Eso hace que **`oldText`/`newText`
+      entren directos en `core/diff.ts#diffDeLineas`** —la misma función que compone el diff de
+      una aprobación del grafo— y que aquí no haga falta ni registro de items (la de Codex solo
+      trae un `itemId`) ni parser de hunks. Se contesta `once` o `reject`; **`always` nunca**.
+    - **El bucle de guardas y política se EXTRAJO y lo comparten los dos motores de petición**
+      (`escrituraExterna.ts#veredictoDeEscriturasExternas` y `#decisionDeEscrituraExterna`).
+      Cada motor solo traduce su forma. Un bucle por motor sería un segundo y un tercer sitio
+      donde el fail-closed puede dejar de estarlo.
+    - **Las TRES puertas por las que el proyecto podía mandar, medidas con un proyecto que las
+      llevaba a la vez.** (1) Un `opencode.json` DEL PROYECTO pisa nuestra configuración: leyó
+      el `.env` y soltó el secreto, corrió shell y escribió con CERO peticiones de permiso —y
+      ese fichero puede venir de CloudStudio, la misma amenaza que `settingSources: ["user"]`
+      cierra para Claude Code—. (2) Un PLUGIN del proyecto (`.opencode/plugin/*.ts`) **ejecuta
+      código arbitrario** dentro del proceso de opencode; comprobado con su control: sin la
+      variable corre, con ella no. (3) La configuración GLOBAL del usuario también nos pisa, así
+      que `OPENCODE_CONFIG` es el eslabón DÉBIL —alguien con `edit: "allow"` en su `~/.config`
+      mataría la aprobación en silencio— y **no se usa**. Las tres se cierran con
+      `OPENCODE_CONFIG_DIR` apuntando a `~/.xonecode/opencode` (que pasa a ser «la global», y
+      por eso gana) más `OPENCODE_DISABLE_PROJECT_CONFIG=1`. Las credenciales del usuario siguen
+      resolviendo porque su `auth.json` vive en el directorio de DATOS y no en el de
+      configuración. La configuración se REESCRIBE en cada arranque: así no puede quedarse una
+      más permisiva de una versión anterior de xonecode.
+    - **La LECTURA se guarda por PATRÓN y no por código, y eso es más flojo que en Claude
+      Code.** El motivo está medido: el permiso de un `kind: "read"` llega con `locations: []` y
+      `rawInput: {}`, sin ruta, así que no hay nada que pasarle a una guarda; la ruta solo
+      aparece en el `tool_call_update` posterior, cuando el permiso ya se concedió. Con `edit`
+      no pasa. Queda entre los otros dos motores: mejor que Codex, que no puede guardar la
+      lectura de ninguna forma, y peor que Claude Code. **Las vistas aplanadas se enumeran una a
+      una** en esa lista porque «un `.xml` con un `.xne` al lado» no es un patrón que se pueda
+      escribir, y si el agente las ve edita el fichero equivocado.
+    - **`bash` no se deniega: se le quita la tool** —medido, contesta «No tengo un tool de shell
+      en este entorno»—, junto con `webfetch`, `websearch`, `external_directory`, `task` y
+      `question`.
+    - **`fs/write_text_file` NO es la escritura.** Declarando la capacidad de cliente, el agente
+      pide al cliente que escriba, y parecía el asidero más fuerte de todos —la guarda no
+      vetando sino ESCRIBIENDO—. Es falso: rechazándolo con un error, **el fichero apareció
+      igual**. Es un aviso, no un portón. Creerse lo contrario habría dejado una guarda que no
+      guarda nada.
+    - **Una tool que acaba en `failed` no se anuncia**, que es el invariante de
+      `core/entrelazar.ts`: se apunta por `toolCallId` en `in_progress` —el `completed` trae
+      `locations: null` y la ruta metida en el `title`— y la línea sale al cerrarse bien.
+      Medido en vivo: con la lectura de `.env` denegada por patrón salía «lee /.env».
+    - **Una respuesta vacía tras un rechazo no es un fallo ni es silencio**: medido, el turno
+      acaba bien y a veces sin una palabra. Devolver `""` la haría pasar por «el especialista no
+      tenía nada que decir» y lanzar tumbaría un turno correcto, así que se dice lo que pasó con
+      voz del harness —y con cuántas escrituras se rechazaron— sin ponerle palabras al agente.
+    - **Medido vivo por el camino entero del harness, seis ejecuciones y con el proyecto hostil
+      delante**: aprobar escribe (con la ruta virtual y su diff), rechazar no deja fichero,
+      `.env` y una vista aplanada no se pueden ni leer, escribir fuera se corta, y al pedirle un
+      comando de shell contesta que no tiene y cae en la tool de fichero, que sí pasa por la
+      aprobación. ACP además tiene `session/cancel`, que se manda antes de matarlo: es la
+      cancelación que Codex no tiene y que allí quedó declarada como deuda.
 - Un `.md` roto NO tumba nada: se salta, y su motivo viaja por el cable hasta la ventana.
   Quien lo tiene que arreglar está mirando ahí, y un agente que no aparece sin explicación
   se lee como que la aplicación lo perdió.

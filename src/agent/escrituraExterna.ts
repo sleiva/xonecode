@@ -566,6 +566,98 @@ export function politicaDeAprobacionExterna(
 }
 
 /**
+ * Una escritura que un motor externo PROPONE, antes de pasar por ninguna guarda.
+ *
+ * La ruta llega `unknown` a propósito: viene de fuera, y quien decide si es una ruta es
+ * `veredictoDeRuta` y no quien la lee.
+ */
+export interface EscrituraPropuesta {
+  ruta: unknown;
+  lineas: LineaDeDiff[];
+}
+
+export type VeredictoDeEscrituras =
+  | { admitidas: true; escrituras: EscrituraExternaPedida[] }
+  | { admitidas: false; motivo: string };
+
+/**
+ * Las guardas de ruta sobre una tanda de escrituras propuestas, sea cual sea el motor.
+ *
+ * **Vive aquí, en UN sitio, y los dos motores externos que escriben por petición la llaman.**
+ * Cada uno traduce lo suyo —Codex sus `changes` con `kind` y `diff`, OpenCode el `toolCall`
+ * de ACP con su `oldText`/`newText`— y a partir de ahí el camino es el mismo. Escribir este
+ * bucle una vez por motor sería un segundo (y un tercer) sitio donde el fail-closed puede
+ * dejar de estarlo, que es la única forma en la que estas guardas se han roto nunca.
+ *
+ * **Una sola ruta mala tumba la tanda entera.** Es la dirección conservadora, y además la
+ * única que los dos protocolos saben expresar: los dos contestan una petición con UNA
+ * decisión, así que «las que pasen sí» no se puede decir.
+ */
+export function veredictoDeEscriturasExternas(opciones: {
+  cwd: string;
+  agente: string;
+  propuestas: readonly EscrituraPropuesta[];
+  ficheros: ReadonlySet<string>;
+  real?: (ruta: string) => string;
+}): VeredictoDeEscrituras {
+  if (opciones.propuestas.length === 0) {
+    return { admitidas: false, motivo: "no dijiste qué ficheros cambiabas, y sin eso no hay nada que autorizar" };
+  }
+  const escrituras: EscrituraExternaPedida[] = [];
+  for (const propuesta of opciones.propuestas) {
+    const veredicto = veredictoDeRuta({
+      cwd: opciones.cwd,
+      ruta: propuesta.ruta,
+      ficheros: opciones.ficheros,
+      ...(opciones.real === undefined ? {} : { real: opciones.real }),
+    });
+    if (!veredicto.admitida) return { admitidas: false, motivo: veredicto.motivo };
+    escrituras.push({ agente: opciones.agente, ruta: veredicto.ruta, lineas: propuesta.lineas });
+  }
+  return { admitidas: true, escrituras };
+}
+
+/**
+ * La decisión entera de una tanda: guardas de ruta y DESPUÉS la política.
+ *
+ * **Vive extraída y no en el cierre de cada adaptador**, que es donde este repo ha visto
+ * fallar esta arquitectura nueve veces: una composición de producción dentro de algo que
+ * todos los tests doblan. Con los adaptadores externos sería literal, porque los tests no
+ * lanzan sus binarios.
+ *
+ * Fail-closed en los cuatro caminos: sin política, con una ruta rechazada, si la política
+ * revienta, o si contesta que no. Y el orden importa: preguntar por algo cuyo único final
+ * posible es un rechazo es sacar un modal inútil — la misma regla que el `when` de
+ * `seDetieneEn` en `agent/perfiles.ts`.
+ */
+export async function decisionDeEscrituraExterna(opciones: {
+  cwd: string;
+  agente: string;
+  propuestas: readonly EscrituraPropuesta[];
+  ficheros: ReadonlySet<string>;
+  real?: (ruta: string) => string;
+  /** Ausente = nadie autoriza en esta sesión, y «nadie a quien preguntar» nunca es «sí». */
+  aprobar?: PoliticaDeEscrituraExterna;
+}): Promise<{ concedida: boolean; motivo?: string }> {
+  if (opciones.aprobar === undefined) {
+    return {
+      concedida: false,
+      motivo:
+        "xonecode no tiene a quién pedir la autorización de esta escritura en esta sesión, así que no se concede.",
+    };
+  }
+  const veredicto = veredictoDeEscriturasExternas(opciones);
+  if (!veredicto.admitidas) return { concedida: false, motivo: veredicto.motivo };
+  try {
+    return { concedida: await opciones.aprobar(veredicto.escrituras) };
+  } catch {
+    // El «sin humano» de `cli/run.ts` corta LANZANDO desde `pedirAprobacion`. Eso es una
+    // respuesta, no un fallo: nadie ha autorizado nada.
+    return { concedida: false };
+  }
+}
+
+/**
  * El diff de una escritura del hijo, con la MISMA función que compone el de una aprobación
  * del grafo (`interrupts.ts#cambioDe`).
  *

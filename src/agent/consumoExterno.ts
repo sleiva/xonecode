@@ -1,7 +1,7 @@
 /**
  * Qué ha consumido un agente EXTERNO, leído de lo que él mismo reporta.
  *
- * Los dos motores lo dicen, y las dos formas están MEDIDAS contra sus contratos reales y no
+ * Los tres motores lo dicen, y las tres formas están MEDIDAS contra sus contratos reales y no
  * deducidas:
  * - **Claude Code**: el mensaje `result` trae `modelUsage`, un mapa por modelo. Su propia
  *   documentación dice que es «the correct field for token/cost accounting», por encima de
@@ -10,7 +10,10 @@
  *   de RUIDO de `subagenteCodex.ts`, o sea que el dato llevaba llegando desde el principio y
  *   se tiraba.
  *
- * **Los dos son ACUMULADOS, así que se lee el último y no se suman.** Lo dicen los dos
+ * - **OpenCode**: el resultado de `session/prompt` de ACP trae `usage` con `inputTokens`,
+ *   `outputTokens`, `totalTokens` y `cachedReadTokens`. Llega UNA vez, al final del turno.
+ *
+ * **Los dos primeros son ACUMULADOS, así que se lee el último y no se suman.** Lo dicen los dos
  * contratos con esas palabras («each result carries the running total so far, so read the
  * latest result rather than summing») y es la diferencia entre contar bien y contar el doble.
  * Entre ejecuciones distintas sí se suma: cada `correr` es otra sesión del producto.
@@ -77,3 +80,25 @@ export function sumarConsumo(a: ConsumoDeSesion, b: { entrada: number; salida: n
 export const SIN_CONSUMO: ConsumoDeSesion = { entrada: 0, salida: 0, cache: 0 };
 
 export type { ConsumoDeSesion, ConsumoExterno };
+
+/**
+ * Lo que consumió un turno de OpenCode, del `usage` que devuelve `session/prompt`.
+ *
+ * **La caché NO está dentro de la entrada, y eso se comprobó con la aritmética de una medida
+ * real**: `inputTokens: 8756`, `outputTokens: 141`, `cachedReadTokens: 1792` y
+ * `totalTokens: 10689` — y 8756 + 141 + 1792 = 10689. O sea que `inputTokens` excluye la
+ * caché, así que se copia tal cual en vez de restarla. Si estuvieran sumados, enseñar
+ * `inputTokens` como entrada inflaría la cifra.
+ *
+ * Ausente devuelve `undefined` y no un cero: un contador a cero que nadie ha medido es la
+ * cifra inventada de siempre, y quien llama ya sabe no pintar lo que no consta.
+ */
+export function consumoDeOpencode(uso: unknown): { entrada: number; salida: number; cache: number } | undefined {
+  if (typeof uso !== "object" || uso === null) return undefined;
+  const u = uso as Record<string, unknown>;
+  return {
+    entrada: entero(u["inputTokens"]),
+    salida: entero(u["outputTokens"]),
+    cache: entero(u["cachedReadTokens"]),
+  };
+}
