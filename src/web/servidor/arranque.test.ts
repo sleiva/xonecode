@@ -975,6 +975,82 @@ describe("montarRutas — el cable, por fin conectado", () => {
      * decisión que no hay forma de dar — ese mensaje es el ÚNICO que no está en la traza
      * (lleva contenido de fichero), así que la reemisión de `adjuntar` no lo alcanzaba.
      */
+    /**
+     * El último tramo del contador de tokens: que el número SALGA por el cable.
+     *
+     * Los tres saltos anteriores ya tienen test —los extractores, el vestíbulo y el
+     * componente— y aun así el contador no se pintó nunca, porque el que faltaba era este
+     * y el de antes. Cubrirlo aquí es lo que impide que vuelva a caerse en silencio.
+     */
+    it("lo consumido por la sesión sale por el cable, y en la ráfaga de quien conecta después", async () => {
+      const base = mkdtempSync(join(tmpdir(), "xonecode-tokens-"));
+      const servidor = servidorDeMentira();
+      let avisar: (() => void) | undefined;
+      const consumo = { modelo: { entrada: 0, salida: 0, cache: 0 }, externo: { entrada: 0, salida: 0, cache: 0 } };
+      const vestibulo = vestibuloDePrueba({
+        baseDeWorkspace: base,
+        proyectosDeEntorno: async () => ({ proyectos: [{ id: "p1", nombre: "Tienda" }] }),
+        sesiones: {
+          crear: () => "s1",
+          listar: () => [{ id: "s1", titulo: "una" }],
+          anotar: () => {},
+          reabrir: (_r, id) => ({ id, actos: [], historica: true }),
+        },
+        crearEjecutor: (alAbrirSesion) => async (_peticion, _estado, consola) => {
+          alAbrirSesion({
+            cerrar: () => undefined,
+            consumo: () => consumo,
+            alCambiarConsumo: (oyente) => {
+              avisar = oyente;
+              return () => undefined;
+            },
+          });
+          consola.escribir("hecho");
+        },
+        correr: async (consola, estado, ejecutar) => {
+          await ejecutar!("una petición", estado, consola);
+          for await (const _linea of consola.lineas) {
+            // Hasta el EOF.
+          }
+          return 0;
+        },
+      });
+      const raiz = vestibulo.raizDeProyecto("webstudio", "Tienda");
+      mkdirSync(join(raiz, ".xonecode"), { recursive: true });
+      writeFileSync(join(raiz, ".xonecode", "config.json"), JSON.stringify({ modo: "offline" }));
+      montarRutas(servidor, vestibulo);
+      const cliente = clienteDeMentira();
+      await servidor.rutas.get(`GET ${RUTA_EVENTOS}`)!(cliente.peticion, cliente.respuesta);
+      const accion = servidor.rutas.get(`POST ${RUTA_ACCION}`)!;
+      await asentar();
+      await enviarMensaje(accion, { clase: "sesion", proyecto: "p1", sesion: "s1" });
+      for (let i = 0; i < 5; i++) await asentar();
+
+      // Cada llamada al modelo mueve el tracker y avisa: el número tiene que MOVERSE
+      // mientras el turno corre, no solo al acabar — un turno largo son minutos.
+      consumo.modelo = { entrada: 2100, salida: 152, cache: 0 };
+      avisar?.();
+      await asentar();
+      const consumos = cliente.recibidos.filter((m) => m.clase === "consumo");
+      expect(consumos.at(-1)).toEqual({
+        clase: "consumo",
+        modelo: { entrada: 2100, salida: 152, cache: 0 },
+        externo: { entrada: 0, salida: 0, cache: 0 },
+      });
+
+      // Y quien conecta DESPUÉS lo recibe en su ráfaga: no vio los avisos anteriores, y sin
+      // esto su contador se quedaría a cero hasta el siguiente token — minutos en un turno
+      // largo.
+      const segundo = clienteDeMentira();
+      await servidor.rutas.get(`GET ${RUTA_EVENTOS}`)!(segundo.peticion, segundo.respuesta);
+      await asentar();
+      expect(segundo.recibidos.filter((m) => m.clase === "consumo").at(-1)).toMatchObject({
+        modelo: { entrada: 2100, salida: 152, cache: 0 },
+      });
+      await vestibulo.cerrar();
+      rmSync(base, { recursive: true, force: true });
+    });
+
     it("cambiar de sesión no rechaza la aprobación de la que dejas atrás, y al volver se reemite", async () => {
       const base = mkdtempSync(join(tmpdir(), "xonecode-dos-"));
       const servidor = servidorDeMentira();

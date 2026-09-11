@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import {
+import { alContarDelTracker,
   DESCRIPCIONES_FICHEROS,
   OPCIONES_BUSQUEDA_FICHEROS,
   promptOrquestador,
@@ -171,5 +171,31 @@ describe("el prompt de un especialista sembrado", () => {
       "/skills/archify/",
       "/skills/artifacts-builder/",
     ]);
+  });
+});
+
+describe("el aviso de que el tracker ha contado", () => {
+  /**
+   * Existe porque uno de los dos avisos se cayó, y en verde: el callback nació llamando solo
+   * al diagnóstico, así que el aviso de consumo tenía un ÚNICO disparador —el de un agente
+   * externo— y una sesión normal subía sus tokens en silencio. Medido en la pantalla del
+   * usuario: el contador de la web no apareció nunca. Dentro de `construirAgente`, que todos
+   * sus tests doblan, no había dónde cazarlo.
+   */
+  it("avisa a los DOS: al diagnóstico y a quien lleva la cuenta de la sesión", () => {
+    const vistos: string[] = [];
+    const contar = alContarDelTracker(
+      "trabajo",
+      { modelo: (origen: string) => vistos.push(`diagnostico:${origen}`) } as never,
+      () => vistos.push("consumo")
+    );
+    contar({ input: 10, output: 2, cache: 0, llamadas: 1, contexto: 10 });
+    expect(vistos).toEqual(["diagnostico:trabajo", "consumo"]);
+  });
+
+  it("y funciona con cualquiera de los dos ausente", () => {
+    // Los dos son opcionales: el diagnóstico solo existe con `--diagnostico`, y la cuenta de
+    // sesión solo cuando quien montó la sesión la lleva.
+    expect(() => alContarDelTracker("trabajo")({ input: 1, output: 1, cache: 0, llamadas: 1, contexto: 1 })).not.toThrow();
   });
 });

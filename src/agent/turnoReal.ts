@@ -400,6 +400,10 @@ export async function abrirSesionReal(opciones: {
       // usuario puede tocar un `.md` —o guardarlo desde Ajustes— con la consola abierta, y
       // una lista congelada al arrancar le haría creer que su cambio no se aplicó.
       agentes: cargarAgentes(raiz).agentes,
+      // Cada llamada al modelo mueve el tracker, y hay que DECIRLO: sin esto el único aviso
+      // lo daba el consumo de un agente externo, así que una sesión normal subía sus tokens
+      // en silencio y el contador de la web no aparecía nunca.
+      alContarTokens: avisarDeConsumo,
       /**
        * El adaptador real. Su import del SDK es dinámico, así que traerlo aquí no carga
        * nada hasta que un agente externo esté dado de alta Y disponible.

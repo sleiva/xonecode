@@ -13,13 +13,24 @@ import { inventarioDelProyecto } from "./escrituraExterna.js";
 import type { DiagnosticoDeTools } from "./diagnosticoDeTools.js";
 import { middlewareTextoDeTool } from "./textoDeTool.js";
 import { resumenDeContexto } from "./resumenDeContexto.js";
-import { createTokenTrackingMiddleware, type TokenTracker } from "../vendor/tokenTracking.js";
+import {
+  createTokenTrackingMiddleware,
+  type AlContarTokens,
+  type TokenTracker,
+} from "../vendor/tokenTracking.js";
 import type { SkillsPort, ModelosPort } from "../core/ports.js";
 
 export interface OpcionesDelAgente {
   raiz: string;
   /** Todas las rutas del proyecto, para saber cuáles son vistas aplanadas. */
   ficheros: ReadonlySet<string>;
+  /**
+   * Se avisa en cada llamada al modelo, DESPUÉS de que el tracker se actualice.
+   *
+   * No lleva el uso dentro a propósito: quien escucha tiene el tracker —es él quien lo
+   * pasó— y dos fuentes para el mismo número son dos números que divergen.
+   */
+  alContarTokens?: () => void;
   /**
    * Los subagentes, ya leídos de disco (`agent/agentesEnDisco.ts`). Entran por parámetro y
    * no se leen aquí por la misma razón que todo lo demás: quien construye el agente no
@@ -204,7 +215,12 @@ export async function construirAgente(opciones: OpcionesDelAgente): Promise<unkn
   // Si no hay tracker, no se añade el middleware: es opcional a propósito arriba.
   const middlewareTracker = (origen: string) =>
     opciones.tracker
-      ? [createTokenTrackingMiddleware(opciones.tracker, (uso) => opciones.diagnostico?.modelo(origen, uso))]
+      ? [
+          createTokenTrackingMiddleware(
+            opciones.tracker,
+            alContarDelTracker(origen, opciones.diagnostico, opciones.alContarTokens)
+          ),
+        ]
       : [];
 
   // El catálogo, una vez por construcción y no una por agente: `catalogo()` es un puerto y
@@ -388,4 +404,27 @@ export async function construirAgente(opciones: OpcionesDelAgente): Promise<unkn
  */
 export function rutasDeSkills(agente: Agente, disponibles: ReadonlySet<string>): string[] {
   return agente.skills.filter((skill) => disponibles.has(skill)).map((skill) => `/skills/${skill}/`);
+}
+
+/**
+ * Lo que se hace cada vez que el tracker cuenta: avisar a los DOS que lo esperan.
+ *
+ * **Extraída y exportada porque uno de los dos se cayó**, y en verde: el callback nació
+ * llamando solo al diagnóstico, así que el aviso de consumo tenía un único disparador —el
+ * de un agente EXTERNO— y una sesión normal subía sus tokens en silencio. Medido en la
+ * pantalla del usuario: el contador de la web no apareció nunca. Con la composición dentro
+ * de `construirAgente`, que todos sus tests doblan, no había dónde cazarlo.
+ *
+ * `alContarTokens` no lleva el uso dentro a propósito: quien escucha tiene el tracker —es
+ * él quien lo pasó— y dos fuentes para el mismo número son dos números que divergen.
+ */
+export function alContarDelTracker(
+  origen: string,
+  diagnostico?: DiagnosticoDeTools,
+  alContarTokens?: () => void
+): AlContarTokens {
+  return (uso) => {
+    diagnostico?.modelo(origen, uso);
+    alContarTokens?.();
+  };
 }
