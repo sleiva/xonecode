@@ -195,13 +195,15 @@ describe("escribirAgente", () => {
     expect("agente" in r && r.agente.motor).toBe("claude-code");
   });
 
-  it("pero uno de CODEX con escritura se sigue rechazando, y por otro motivo", () => {
-    // Ahí la escritura la bloquea el SANDBOX del sistema operativo (`sandbox: "read-only"`),
-    // que es más fuerte que un callback porque no depende de que el modelo colabore — pero
-    // también significa que sus escrituras no pasarían por las guardas de ruta de xonecode.
-    // Concederlas es otra decisión, y mientras no se tome esto no puede prometerla.
+  it("y uno de CODEX también, desde que su escritura pasa por la misma aprobación", () => {
+    // Su guarda se levantó igual: CON el cableado. Estuvo cerrada mientras fue cierto que
+    // abrirla exigía `sandbox: "workspace-write"` —y entonces las guardas de ruta de
+    // xonecode no verían ni una escritura—. La medida contra el binario real enseñó que la
+    // palanca es el `approvalPolicy` y no el sandbox: con `read-only` + `on-request` la
+    // denegación la sigue poniendo el sistema operativo y cada escritura se pregunta.
     const r = leerAgente("x", "---\ndescripcion: d\nmotor: codex\nsoloLectura: false\n---\n", "proyecto");
-    expect("error" in r && r.error).toMatch(/sandbox del sistema operativo/);
+    expect("agente" in r && r.agente.soloLectura).toBe(false);
+    expect("agente" in r && r.agente.motor).toBe("codex");
   });
 
   it("lo que escribe se vuelve a leer igual: es el ciclo que usa la ventana de ajustes", () => {

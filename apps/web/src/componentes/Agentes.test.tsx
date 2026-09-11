@@ -151,16 +151,22 @@ describe("Agentes", () => {
     expect((screen.getByLabelText(/^Modelo/) as HTMLSelectElement).value).toBe("");
   });
 
-  it("elegir un motor externo fuerza solo lectura y DICE por qué", () => {
-    // El servidor rechaza el fichero de un agente externo que pida escribir, así que dejar
-    // la casilla suelta solo serviría para que guardar fallara con un error que el
-    // formulario podía haber evitado. Forzarla sin explicar sería igual de malo.
+  it("un motor externo YA puede escribir: la casilla se deja suelta, y se dice qué implica", () => {
+    // Estuvo forzada y deshabilitada mientras el servidor rechazaba el fichero de un agente
+    // externo que pidiera escribir: dejarla suelta solo habría servido para que guardar
+    // fallara con un error que el formulario podía evitar. Los dos motores escriben ya —cada
+    // escritura con su diff delante—, así que seguir forzándola escondería la capacidad, que
+    // es el otro modo de mentirle a quien rellena el formulario.
     render(<Agentes {...manejadores} agentes={[]} />);
     fireEvent.click(screen.getByRole("button", { name: "Nuevo subagente" }));
-    fireEvent.change(screen.getByDisplayValue(/Un modelo/), { target: { value: "claude-code" } });
-    expect(screen.getByRole("checkbox")).toHaveProperty("disabled", true);
-    expect(screen.getByRole("checkbox")).toHaveProperty("checked", true);
-    expect(screen.getByText(/solo puede LEER/)).not.toBeNull();
+    fireEvent.change(screen.getByDisplayValue(/Un modelo/), { target: { value: "codex" } });
+    const casilla = screen.getByRole("checkbox");
+    expect(casilla).toHaveProperty("disabled", false);
+    fireEvent.click(casilla);
+    expect(casilla).toHaveProperty("checked", false);
+    // Y el aviso dice lo que de verdad pasa, que no es «no puede»: es «lo apruebas tú, y las
+    // guardas del proyecto siguen puestas».
+    expect(screen.getByText(/apruebes/)).not.toBeNull();
   });
 
   it("cada motor externo dice QUÉ hace falta para que funcione", () => {
@@ -171,7 +177,7 @@ describe("Agentes", () => {
     render(<Agentes {...manejadores} agentes={[]} />);
     fireEvent.click(screen.getByRole("button", { name: "Nuevo subagente" }));
     expect(screen.getByRole("option", { name: /Codex/ }).textContent).toMatch(/tengas instalado/);
-    expect(screen.getByRole("option", { name: /Claude Code/ }).textContent).toMatch(/solo lectura/);
+    expect(screen.getByRole("option", { name: /Claude Code/ }).textContent).toMatch(/apruebas cada cambio/);
   });
 
   it("guardar exige nombre y descripción: el servidor los exige, y decir que no después es peor", () => {

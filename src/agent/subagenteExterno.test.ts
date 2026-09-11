@@ -185,14 +185,14 @@ describe("decisionDeTool — la regla de seguridad de los agentes externos", () 
   });
 
   it("y la política recibe la ruta VIRTUAL y el diff, nunca la ruta de la máquina", async () => {
-    let visto: { agente: string; ruta: string; lineas: unknown[] } | undefined;
+    let visto: { agente: string; ruta: string; lineas: readonly unknown[] } | undefined;
     await decisionDeTool({
       nombre: "Write",
       entrada: { file_path: "/proyecto/app/x.js", content: "antes\ndespues\n" },
       peticion: { ...PETICION, permitirEscritura: true },
       ...SIN_DISCO,
       politica: async (e) => {
-        visto = e;
+        visto = e[0];
         return true;
       },
     });

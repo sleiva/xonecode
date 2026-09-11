@@ -48,12 +48,12 @@ const MOTORES: readonly { id: string; etiqueta: string; detalle: string }[] = [
   {
     id: "claude-code",
     etiqueta: "Claude Code",
-    detalle: "lanza un Claude Code sobre el proyecto — solo lectura",
+    detalle: "lanza un Claude Code sobre el proyecto; si escribe, apruebas cada cambio",
   },
   {
     id: "codex",
     etiqueta: "Codex",
-    detalle: "lanza el `codex` que tengas instalado — solo lectura",
+    detalle: "lanza el `codex` que tengas instalado; si escribe, apruebas cada cambio",
   },
 ];
 
@@ -65,10 +65,10 @@ const MOTORES: readonly { id: string; etiqueta: string; detalle: string }[] = [
  * —y forzar la casilla— convierte un error en una explicación.
  */
 const AVISO_EXTERNO =
-  "Un agente externo solo puede LEER el proyecto: la aprobación humana de xonecode todavía " +
-  "no está conectada a ellos, así que sus escrituras se deniegan — a Claude Code tool a " +
-  "tool, y a Codex con el sandbox de solo lectura del sistema. Usa su propia cuenta y su " +
-  "propia configuración, no las de xonecode.";
+  "Un agente externo corre fuera de xonecode, con su propia cuenta y su propia " +
+  "configuración. Si le dejas escribir, cada escritura te llega con su diff para que la " +
+  "apruebes, y las guardas del proyecto siguen puestas: nunca toca .env, .git, .xonecode, " +
+  "una vista aplanada ni nada de fuera de la carpeta. Borrar y renombrar no se le conceden.";
 
 /** Un agente vacío, para el formulario de alta. */
 function enBlanco(): AgenteDelCable {
@@ -344,10 +344,11 @@ export function Agentes({
                   // motor de modelo ni un `gemini/…` para Claude Code, y conservarlo
                   // guardaría un valor que el otro producto rechaza.
                   modelo: undefined,
-                  // Un agente externo va a solo lectura y no se puede desmarcar: el
-                  // servidor rechaza el fichero que pida escribir, así que dejar la casilla
-                  // suelta solo serviría para que guardar fallara.
-                  ...(e.target.value === "modelo" ? {} : { soloLectura: true }),
+                  // La casilla ya NO se fuerza. Se forzaba porque el servidor rechazaba el
+                  // fichero de un agente externo que pidiera escribir, y dejarla suelta solo
+                  // servía para que guardar fallara. Los dos motores escriben ya, cada
+                  // escritura con su aprobación delante, así que forzarla ahora escondería
+                  // una capacidad que existe.
                 })
               }
             >
@@ -426,7 +427,6 @@ export function Agentes({
             <input
               type="checkbox"
               checked={editando.soloLectura}
-              disabled={editando.motor !== "modelo"}
               onChange={(e) => setEditando({ ...editando, soloLectura: e.target.checked })}
             />
             <span>

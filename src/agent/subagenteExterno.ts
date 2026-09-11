@@ -153,14 +153,14 @@ export async function decisionDeTool(opciones: {
   let abortada = false;
   try {
     concedida = await (signal === undefined
-      ? politica({ agente: peticion.agente, ruta: veredicto.ruta, lineas })
+      ? politica([{ agente: peticion.agente, ruta: veredicto.ruta, lineas }])
       : // Se corre contra el `signal`, y gana el primero. `pedirAprobacion` no tiene
         // cancelación, así que lo que NO se puede hacer todavía es cerrar el modal que se
         // queda huérfano: sigue delante hasta que alguien lo conteste o venza su plazo, y
         // su respuesta no autoriza nada. Deuda declarada; cerrarlo exige un canal nuevo
         // hacia las tres pieles.
         Promise.race([
-          politica({ agente: peticion.agente, ruta: veredicto.ruta, lineas }),
+          politica([{ agente: peticion.agente, ruta: veredicto.ruta, lineas }]),
           new Promise<boolean>((resuelto) => {
             // Se relee AQUÍ, y no es redundante con la guarda de arriba: medido con un test
             // que se colgaba cinco segundos, un `signal` que aborta entre las dos líneas
@@ -286,12 +286,25 @@ export function crearSubagenteExterno(opciones: {
 
     async correr(peticion: PeticionExterna): Promise<string> {
       if (peticion.motor === "codex") {
-        return correrCodex(
-          peticion,
-          opciones.alConsumir === undefined
-            ? undefined
-            : (c) => opciones.alConsumir?.({ motor: "codex", ...c })
-        );
+        /**
+         * **Las cuatro costuras van aquí, y este es exactamente el sitio donde este repo ha
+         * fallado nueve veces**: una regla de producción compuesta dentro de algo que todos
+         * los tests doblan. `aprobar` y `ficheros` son opcionales, así que olvidarlos deja
+         * los dos `tsc` limpios y el agente sin poder escribir NADA —o, peor, escribiendo
+         * sin que las guardas de ruta lo vean—. Por eso la decisión entera vive extraída en
+         * `escrituraDeCodex.ts#decisionDeEscrituraDeCodex` y aquí solo queda el cableado,
+         * que tiene un test por argumento.
+         */
+        return correrCodex(peticion, {
+          ...(opciones.alConsumir === undefined
+            ? {}
+            : { alConsumir: (c) => opciones.alConsumir?.({ motor: "codex", ...c }) }),
+          ...(opciones.aprobarEscritura === undefined ? {} : { aprobar: opciones.aprobarEscritura }),
+          // `real` no se pasa: aquí no hay ninguno que inyectar y el de omisión es
+          // `realpathSync`, que es el de producción. Quien lo dobla es el test de
+          // `decisionDeEscrituraDeCodex`, que es donde vive la guarda.
+          ficheros: () => opciones.ficherosDelProyecto?.() ?? new Set<string>(),
+        });
       }
       const { query } = await import("@anthropic-ai/claude-agent-sdk");
 

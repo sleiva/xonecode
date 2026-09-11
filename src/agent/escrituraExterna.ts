@@ -502,8 +502,9 @@ export const MOTIVO_DE_ESCRITURA_RECHAZADA =
  * Escribir un segundo tipo de política habría sido escribir una segunda forma de decidir
  * sobre lo mismo, con dos sitios donde el fail-closed puede dejar de estarlo.
  *
- * Lo que esto añade es la TRADUCCIÓN, y nada más: un `PendienteDeAprobacion` sintético con
- * la ruta virtual y su diff, por los mismos dos mapas que ya viajan (`ficheros`, `diffs`).
+ * Lo que esto añade es la TRADUCCIÓN, y nada más: un `PendienteDeAprobacion` sintético por
+ * escritura, con su ruta virtual y su diff, por los mismos dos mapas que ya viajan
+ * (`ficheros`, `diffs`).
  * El id lleva el prefijo `externo:` para que no pueda colisionar con el de un interrupt del
  * grafo — de esas claves se construye el `resume`, y una colisión resolvería el interrupt
  * equivocado.
@@ -520,26 +521,42 @@ export function politicaDeAprobacionExterna(
   ) => Promise<Map<string, Decision>>
 ): PoliticaDeEscrituraExterna {
   let contador = 0;
-  return async (peticion: EscrituraExternaPedida): Promise<boolean> => {
-    contador += 1;
-    const id = `externo:${contador}`;
-    const pendiente: PendienteDeAprobacion = {
-      id,
-      // `origen` es el nombre del agente, igual que el `[dev]` que `hitlDe` mete en la
-      // descripción y que `aPendiente` extrae: las tres pieles pintan este campo.
-      origen: peticion.agente,
-      descripcion: "quiere escribir un fichero del proyecto (agente externo)",
-      // Las dos, y en este orden: es lo que las pieles leen para saber si hay botón de
-      // aprobar. `consolaDeTarea` además solo concede lo que declara `approve`.
-      decisionesPermitidas: ["approve", "reject"],
-    };
+  return async (escrituras: readonly EscrituraExternaPedida[]): Promise<boolean> => {
+    /**
+     * **Una lista vacía es un NO, y no un «sí» por vacuidad.** Es la trampa de `every`: sin
+     * esta línea, un item sin cambios —o uno cuyo `changes` no se pudo leer— se concedería
+     * porque «todas las escrituras vinieron aprobadas», sin haber enseñado nada a nadie.
+     */
+    if (escrituras.length === 0) return false;
+    const pendientes: PendienteDeAprobacion[] = [];
+    const ficheros = new Map<string, string>();
+    const diffs = new Map<string, LineaDeDiff[]>();
+    for (const escritura of escrituras) {
+      contador += 1;
+      const id = `externo:${contador}`;
+      pendientes.push({
+        id,
+        // `origen` es el nombre del agente, igual que el `[dev]` que `hitlDe` mete en la
+        // descripción y que `aPendiente` extrae: las tres pieles pintan este campo.
+        origen: escritura.agente,
+        // Cuando son varias se DICE, porque el precio de decidir cambia: son de un mismo
+        // item que se aplica entero o nada, así que rechazar una las tumba todas.
+        descripcion:
+          escrituras.length === 1
+            ? "quiere escribir un fichero del proyecto (agente externo)"
+            : `quiere escribir ${escrituras.length} ficheros del proyecto, todos o ninguno (agente externo)`,
+        // Las dos, y en este orden: es lo que las pieles leen para saber si hay botón de
+        // aprobar. `consolaDeTarea` además solo concede lo que declara `approve`.
+        decisionesPermitidas: ["approve", "reject"],
+      });
+      ficheros.set(id, escritura.ruta);
+      diffs.set(id, escritura.lineas);
+    }
     try {
-      const decisiones = await pedirAprobacion(
-        [pendiente],
-        new Map([[id, peticion.ruta]]),
-        new Map([[id, peticion.lineas]])
-      );
-      return decisiones.get(id)?.type === "approve";
+      const decisiones = await pedirAprobacion(pendientes, ficheros, diffs);
+      // TODAS, o ninguna: una sola negativa tumba el conjunto. Es la dirección segura y la
+      // única que el `decision` único de Codex sabe expresar.
+      return pendientes.every((p) => decisiones.get(p.id)?.type === "approve");
     } catch {
       // El «sin humano» de `run.ts` corta LANZANDO desde `pedirAprobacion`. Aquí eso es una
       // respuesta y no un fallo: nadie ha autorizado nada.

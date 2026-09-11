@@ -821,20 +821,93 @@ especialistas de siempre —`docs`, `planner`, `dev`, `mockup`— dejaron de est
   - **Se comprueba `disponible()` antes de montarlo.** Un especialista que el orquestador
     puede elegir y que revienta al elegirlo es un botón muerto dentro del grafo — peor que uno
     de interfaz, porque quien lo pulsa es el modelo y se cree el resultado.
-  - **Codex va por otro camino** (`agent/subagenteCodex.ts`) y es el que tiene la denegación
-    más fuerte: se habla con `codex app-server --stdio` por JSON POR LÍNEA, y la escritura la
-    bloquea el SANDBOX del sistema operativo (`sandbox: "read-only"`), no un callback — o sea
-    que no depende de que el modelo colabore. **Todo el protocolo está medido contra el
+  - **Codex va por otro camino** (`agent/subagenteCodex.ts`): se habla con
+    `codex app-server --stdio` por JSON POR LÍNEA. **Todo el protocolo está medido contra el
     binario real, no deducido**: los tres valores de sandbox los enumeró el propio servidor
     al rechazar uno mal escrito, y la respuesta final es el `item/completed` cuyo item es un
     `agentMessage` de fase `final_answer` — quedarse con el último item devolvería el
-    razonamiento o la lectura. Comprobado de punta a punta: lee la carpeta y contesta, y al
-    pedirle que escriba un fichero contesta que no pudo y el directorio queda intacto.
+    razonamiento o la lectura.
     Se usa el `codex` del PATH (o `CODEX_BIN`) y no el paquete npm: son ~100 MB de binario
     por plataforma para una capacidad opcional, y el usuario ya tiene el suyo autenticado.
     Un `TOPE_MS` de 10 minutos evita que un hijo colgado cuelgue el turno para siempre. Y una
     consecuencia que hay que saber: el hijo es el Codex DEL USUARIO, con sus MCP, sus plugins
     y sus hooks — medido, arrancan al abrir el hilo. xonecode no los filtra.
+  - **Y Codex ESCRIBE ya. La palanca es el `approvalPolicy`, y descubrirlo tumbó el argumento
+    con el que su guarda estuvo cerrada** (medido contra codex-cli 0.152.1, 11-09-2026).
+    El argumento era: conceder escritura exige `sandbox: "workspace-write"`, y entonces las
+    escrituras de dentro del cwd ocurren solas —sin petición, sin diff— o sea que ninguna de
+    las guardas de ruta de xonecode las vería. Cierto lo segundo; falso lo primero. Con
+    `sandbox: "read-only"` + `approvalPolicy: "on-request"` el sandbox del sistema operativo
+    **sigue siendo la denegación** y cada escritura llega como una PETICIÓN que contestamos
+    nosotros; medido: al contestar `accept` el fichero se escribe igual, y al contestar
+    `decline` no queda fichero, el item queda `declined` y el turno SIGUE, así que el agente
+    lo puede contar. Por eso el sandbox se queda en `read-only` **siempre**, también con la
+    escritura concedida: no existe ningún modo en el que Codex escriba sin pasar por aquí.
+    Es el mismo papel que juega el `ask` del hook `PreToolUse` en Claude Code.
+    - **La petición no dice sobre QUÉ se decide**: `item/fileChange/requestApproval` trae
+      `{threadId, turnId, itemId, startedAtMs, reason, grantRoot}` y nada más. Los ficheros
+      vinieron ANTES, en el `item/started` cuyo `item.id` es ese `itemId` —con `path`
+      ABSOLUTO, `kind` y `diff`—, de ahí el registro de items del adaptador. Un `itemId` del
+      que no consta item es un `decline`: sin diff no hay decisión que tomar.
+    - **Su `id` empieza en 0 y comparte espacio con los nuestros.** Las peticiones del
+      servidor (llevan `id` **y** `method`) se atienden ANTES que nuestras respuestas, o una
+      petición con `id: 1` caería en la rama del `initialize`.
+    - **`add` y `update` no traen lo mismo en `diff`**: en `add` es el contenido entero
+      (`"medido.\n"`), en `update` un hunk unificado
+      (`"@@ -1,3 +1,3 @@\n uno\n-dos\n+DOS\n tres\n"`). Por eso `cambioDe()` no sirve
+      —espera los argumentos de un `Write`/`Edit`— y hay una traducción propia a
+      `LineaDeDiff[]` (`agent/escrituraDeCodex.ts`). Límite declarado: con varios hunks las
+      líneas salen seguidas, sin decir que en medio hay fichero que no cambia; marcarlo
+      exigiría inventar una línea que no está en el fichero.
+    - **Un item puede traer VARIOS ficheros y se contesta con UNA decisión** (medido: «añade
+      una línea a uno.txt y a dos.txt» llegó como un solo item con dos `changes`). Por eso
+      `PoliticaDeEscrituraExterna` pasó a tomar una LISTA y a conceder solo si TODAS vienen
+      aprobadas — Claude Code pasa la suya de un elemento. Con una escritura por llamada solo
+      quedaban dos salidas y las dos mienten: preguntar N veces por algo que no se puede
+      conceder a medias, o enseñar un fichero y escribir dos.
+    - **Las guardas de ruta son las MISMAS**, `veredictoDeRuta` reaplicada sobre el `path`
+      absoluto: no hay una segunda copia, porque un segundo sitio donde decidir sobre una
+      ruta es un segundo sitio donde el fail-closed puede dejar de estarlo. **`delete` y
+      `move_path` se deniegan**: en Claude Code esa escritura no existe, `cambioDe` no sabe
+      componer su diff y un renombrado son dos destinos que guardar. Se afloja el día que se
+      mida, no antes.
+    - **Los otros huecos, y cómo se cierra cada uno.** `item/commandExecution/requestApproval`
+      se deniega SIEMPRE: es el análogo de `Bash`, y un `cat > fichero` escribe el proyecto
+      entero sin diff que mirar. Una elicitación de MCP se declina por su campo `action`. Y
+      **lo que no se sabe decir que no se ABORTA**: `item/tool/requestUserInput` no tiene «no»
+      en su esquema (su respuesta es `{answers:{…}}`) ni `item/permissions/requestApproval`
+      (`{permissions, scope, strictAutoReview}`), así que contestarles exigiría inventarse una
+      forma que nadie ha medido. Nunca `acceptForSession` ni `grantRoot`: son pre-aprobaciones
+      de sesión, y lo que aquí se autoriza es una escritura concreta con su diff delante. Lo
+      que NUNCA se puede hacer es dejar una petición sin contestar: eso deja a codex bloqueado
+      hasta que el tope lo mate.
+    - **El `TOPE_MS` se PARA mientras una aprobación está delante de alguien.** Mide «codex no
+      contesta», y el rato que una persona tarda en mirar un diff no es eso: sin esto, quien
+      se levanta a por un café vuelve a un «codex no terminó en 10 minutos» y a un modal
+      huérfano cuyo turno ya está muerto.
+    - **Medido por el camino ENTERO del harness, seis ejecuciones**: aprobar escribe (la
+      política recibe la ruta VIRTUAL y su diff), rechazar no deja fichero, y `.env`, una
+      vista aplanada y una ruta de fuera del proyecto se cortan **sin llegar a preguntarle a
+      nadie** —preguntar por algo cuyo único final posible es un rechazo es sacar un modal
+      inútil, la misma regla que el `when` de `seDetieneEn`—. Pedirle que escriba por shell
+      acaba en «la autorización para ejecutar el comando fue rechazada».
+    - **En una tarea de FONDO no se le pregunta a nadie, y sin tocar nada de esto**: la
+      política es la misma, y la que monta una tarea es la AUTÓNOMA de
+      `consolaDeTarea.aprobacionesTui`, que concede porque la autorización fue crear la tarea,
+      lo anuncia con los nombres y lo apunta en `Tarea.autorizadas`. Ésta es la razón de no
+      haber resuelto la escritura de fondo con `workspace-write`: así las guardas de ruta
+      siguen enteras, que es lo que `core/tareas.ts` exige.
+    - **Límite declarado, y es el que queda abierto: LEER no tiene costura en Codex.** Lee por
+      la shell del sandbox, que en `read-only` no pide permiso a nadie, así que `.env` y
+      `.xonecode` se le pueden leer — el mismo agujero que en Claude Code cerró
+      `veredictoDeLectura`. No lo abre la escritura: ya estaba desde el primer día y sigue
+      igual. El único asidero medido sería `approvalPolicy: "untrusted"`, que pregunta por
+      cada comando y es otro diseño.
+    - **Se prueba sin el binario por `CODEX_BIN`**, con un `app-server` de pega que reproduce
+      el volcado de la ejecución real (`agent/subagenteCodex.test.ts`) — incluido el `id: 0`.
+      Y hay un test POR ARGUMENTO del cableado de `crearSubagenteExterno`, porque los dos son
+      opcionales: sin el de `ficherosDelProyecto`, una vista aplanada se escribiría con los
+      dos `tsc` limpios.
 - Un `.md` roto NO tumba nada: se salta, y su motivo viaja por el cable hasta la ventana.
   Quien lo tiene que arreglar está mirando ahí, y un agente que no aparece sin explicación
   se lee como que la aplicación lo perdió.

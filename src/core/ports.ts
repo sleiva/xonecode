@@ -222,8 +222,22 @@ export interface EscrituraExternaPedida {
  * espera —con plazo, y naciendo rechazada—, y la autónoma de una tarea de fondo concede
  * porque la autorización fue crear la tarea, lo anuncia con los nombres y lo apunta en
  * `Tarea.autorizadas`.
+ *
+ * **Toma una LISTA y contesta UNA vez, porque hay un motor que decide así.** Medido contra
+ * `codex app-server` (0.152.1): un `item/fileChange/requestApproval` puede traer varios
+ * ficheros —«añade una línea a uno.txt y a dos.txt» llegó como un solo item con dos
+ * `changes`— y se contesta con un único `decision`, o sea que Codex los aplica todos o
+ * ninguno. Con una escritura por llamada solo quedaban dos salidas, y las dos mienten:
+ * preguntar N veces por algo que no se puede conceder a medias (el humano aprueba el
+ * primero, rechaza el segundo, y el primero tampoco se escribe), o enseñar un fichero y
+ * escribir dos. `pedirAprobacion` ya era una lista de pendientes con sus dos mapas: la que
+ * se quedaba corta era esta. Claude Code pasa la suya de un elemento, que es exactamente lo
+ * que su `canUseTool` decide cada vez.
+ *
+ * **Se concede solo si TODAS vienen aprobadas**: una sola negativa es un NO al conjunto, que
+ * es la dirección segura y además la única que el protocolo de Codex sabe expresar.
  */
-export type PoliticaDeEscrituraExterna = (escritura: EscrituraExternaPedida) => Promise<boolean>;
+export type PoliticaDeEscrituraExterna = (escrituras: readonly EscrituraExternaPedida[]) => Promise<boolean>;
 
 export type Papel = "rapido" | "trabajo" | "afilado";
 

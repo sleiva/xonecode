@@ -258,7 +258,7 @@ describe("la política: el `pedirAprobacion` que ya existe, traducido", () => {
       visto = { pendientes, ficheros, diffs };
       return new Map(pendientes.map((p) => [p.id, { type: "approve" } as Decision]));
     });
-    await expect(politica({ ...pedida, lineas: [{ tipo: "anadido", texto: "hola" }] })).resolves.toBe(true);
+    await expect(politica([{ ...pedida, lineas: [{ tipo: "anadido", texto: "hola" }] }])).resolves.toBe(true);
     const p = visto!.pendientes[0]!;
     // El id lleva prefijo para que NO pueda colisionar con el de un interrupt del grafo: de
     // esas claves se construye el `resume`, y una colisión resolvería el interrupt equivocado.
@@ -274,13 +274,13 @@ describe("la política: el `pedirAprobacion` que ya existe, traducido", () => {
     // El mapa de la piel interactiva nace rechazado entero, así que este es el caso normal
     // de «la persona dijo que no», de «venció el plazo» y de «no había nadie conectado».
     const politica = politicaDeAprobacionExterna(async () => new Map());
-    await expect(politica(pedida)).resolves.toBe(false);
+    await expect(politica([pedida])).resolves.toBe(false);
     const otro = politicaDeAprobacionExterna(async () => new Map([["otro-id", { type: "approve" } as Decision]]));
-    await expect(otro(pedida)).resolves.toBe(false);
+    await expect(otro([pedida])).resolves.toBe(false);
     const rechaza = politicaDeAprobacionExterna(async (ps) =>
       new Map(ps.map((p) => [p.id, { type: "reject" } as Decision]))
     );
-    await expect(rechaza(pedida)).resolves.toBe(false);
+    await expect(rechaza([pedida])).resolves.toBe(false);
   });
 
   it("y si `pedirAprobacion` LANZA, tampoco autoriza", async () => {
@@ -289,7 +289,7 @@ describe("la política: el `pedirAprobacion` que ya existe, traducido", () => {
     const politica = politicaDeAprobacionExterna(async () => {
       throw new Error("sin humano");
     });
-    await expect(politica(pedida)).resolves.toBe(false);
+    await expect(politica([pedida])).resolves.toBe(false);
   });
 
   it("dos escrituras del mismo turno no comparten id", async () => {
@@ -298,8 +298,8 @@ describe("la política: el `pedirAprobacion` que ya existe, traducido", () => {
       ids.push(ps[0]!.id);
       return new Map();
     });
-    await politica(pedida);
-    await politica(pedida);
+    await politica([pedida]);
+    await politica([pedida]);
     expect(ids[0]).not.toBe(ids[1]);
   });
 });
@@ -368,7 +368,7 @@ describe("el CABLEADO de la política (el sitio donde este repo lleva siete regl
       return new Map(pendientes.map((p) => [p.id, { type: "approve" } as Decision]));
     });
     expect(politica).toBeDefined();
-    await expect(politica!({ agente: "dev", ruta: "/app/x.js", lineas: [] })).resolves.toBe(true);
+    await expect(politica!([{ agente: "dev", ruta: "/app/x.js", lineas: [] }])).resolves.toBe(true);
     expect(llamadas).toBe(1);
   });
 });
@@ -481,7 +481,7 @@ describe("las opciones del subagente externo, extraídas del cierre y probadas",
       ficherosDelProyecto: ficheros,
       eventos: new ColaDeEventos(),
     });
-    await expect(o.aprobarEscritura!({ agente: "d", ruta: "/a", lineas: [] })).resolves.toBe(true);
+    await expect(o.aprobarEscritura!([{ agente: "d", ruta: "/a", lineas: [] }])).resolves.toBe(true);
   });
 
   it("y lo que hace el hijo acaba en la COLA de eventos, que es lo que se cae en un cierre", () => {

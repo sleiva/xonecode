@@ -241,19 +241,18 @@ export function leerAgente(
    * promesa se cumple.
    *
    * Lo que NO cambia: `soloLectura` sigue siendo cierto solo con exactamente «true» (la
-   * trampa del `"false"` de CloudStudio), y **Codex es distinto**: ahí la escritura la
-   * bloquea el sandbox del sistema operativo (`sandbox: "read-only"`), que es más fuerte que
-   * un callback y no depende de que el modelo colabore. Conceder escritura por su `.md`
-   * exigiría mover ese sandbox a `workspace-write`, y eso es otra decisión: entonces las
-   * guardas de ruta de xonecode no verían ni una de sus escrituras.
+   * trampa del `"false"` de CloudStudio).
+   *
+   * **Codex también escribe ya, y su guarda se levantó igual: CON el cableado, no antes.**
+   * Estuvo cerrada mientras el argumento fue cierto —que su escritura la bloqueaba el
+   * sandbox del sistema operativo, y que abrirla exigía `sandbox: "workspace-write"`, con lo
+   * que las guardas de ruta de xonecode no verían ni una—. Lo que la medida contra el
+   * binario real (0.152.1, 11-09-2026) enseñó es que esa disyuntiva era falsa: la palanca no
+   * es el sandbox, es el `approvalPolicy`. Con `read-only` + `on-request` el sandbox sigue
+   * siendo la denegación del sistema operativo y cada escritura llega como una petición que
+   * xonecode contesta, con las mismas guardas de ruta y la misma
+   * `PoliticaDeEscrituraExterna` que el otro motor (`agent/escrituraDeCodex.ts`).
    */
-  if (!soloLectura && motorCrudo === "codex") {
-    return {
-      error:
-        "un agente con «motor: codex» tiene que ir con «soloLectura: true»: su escritura la bloquea el sandbox del sistema operativo, no una política de xonecode, así que no pasaría por las guardas del proyecto",
-    };
-  }
-
   return {
     agente: {
       nombre,

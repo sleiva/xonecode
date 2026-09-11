@@ -265,13 +265,62 @@ Un subagente es un `.md` con frontmatter en `.xonecode/agentes/<nombre>.md`
   (`/tmp` → `/private/tmp` en macOS hacía imposible escribir), la carpeta padre que todavía no
   existe (`Write` las crea, y se denegaba con «no se pudo comprobar»), y el `allow` del hook
   saltándose la guarda de lectura.
-- Un `.md` de `claude-code` con `soloLectura: false` ya se acepta —la guarda se levantó **con** el
-  cableado, no antes—, y el de `codex` se sigue rechazando: ahí la escritura la bloquea el
-  SANDBOX del SO, o sea que no pasaría por ninguna guarda de ruta nuestra. Se comprueba
-  `disponible()` antes de montarlo. `codex` (`agent/subagenteCodex.ts`) va por
-  `codex app-server --stdio` con JSON por línea y `sandbox: "read-only"`; la respuesta final es el
+- Un `.md` con `soloLectura: false` se acepta ya en los DOS motores, y las dos guardas se
+  levantaron **con** su cableado, no antes. Se comprueba `disponible()` antes de montarlo.
+- **En Codex la palanca de la escritura es el `approvalPolicy`, no el `sandbox`**
+  (`agent/subagenteCodex.ts`, `agent/escrituraDeCodex.ts`). La guarda estuvo cerrada mientras
+  fue cierto que abrirla exigía `sandbox: "workspace-write"` —y entonces las escrituras de
+  dentro del cwd ocurren solas, sin petición ni diff, o sea sin pasar por ninguna guarda de
+  ruta nuestra—. Medido contra el binario (0.152.1): esa disyuntiva era falsa. El sandbox se
+  queda en **`read-only` SIEMPRE**, también con la escritura concedida, y lo que abre
+  `permitirEscritura` es `approvalPolicy: never → on-request`: la denegación la sigue poniendo
+  la caja del SO y cada escritura llega como una petición que contestamos. Es el mismo papel
+  que el `ask` del hook `PreToolUse` en Claude Code.
+- **Lo que se pregunta y lo que se decide llegan en mensajes distintos.**
+  `item/fileChange/requestApproval` trae solo un `itemId` —sin rutas y sin diff—; los cambios
+  vinieron antes en el `item/started` de ese id, de ahí el registro de items. Su `id` empieza en
+  **0** y vive en el mismo espacio que los nuestros, así que las peticiones del servidor (id
+  **y** method) se atienden ANTES que nuestras respuestas o una con `id: 1` caería en la rama
+  del `initialize`. Un `itemId` del que no consta item es `decline`: sin diff no hay decisión.
+- **Un item puede traer VARIOS ficheros y se contesta con UNA decisión**, así que
+  `PoliticaDeEscrituraExterna` toma una LISTA y concede solo si **todas** vienen aprobadas.
+  Claude Code pasa la suya de un elemento. Preguntar N veces por algo que no se puede conceder
+  a medias sería mentir, y enseñar un fichero escribiendo dos, también.
+- **Las guardas de ruta son las MISMAS** (`veredictoDeRuta`, reaplicada sobre el `path`
+  absoluto): no hay una segunda copia, porque un segundo sitio donde decidir sobre una ruta es
+  un segundo sitio donde el fail-closed puede dejar de estarlo. **`delete` y `move_path` se
+  deniegan** y está declarado: en Claude Code esa escritura no existe, `cambioDe` no sabe
+  componer su diff, y un renombrado son dos destinos que guardar.
+- **Los otros huecos**: un `item/commandExecution/requestApproval` se deniega SIEMPRE (es el
+  análogo de `Bash`: un `cat > fichero` escribe el proyecto entero y no hay diff que mirar), una
+  elicitación de MCP se declina por su campo `action`, y **lo que no se sabe decir que no se
+  ABORTA** — `item/tool/requestUserInput` no tiene «no» en su esquema (`{answers:{…}}`) ni
+  `item/permissions/requestApproval` (`{permissions, scope, strictAutoReview}`). Nunca
+  `acceptForSession` ni `grantRoot`, que son pre-aprobaciones de sesión. Y una petición sin
+  contestar sería lo peor de todo: deja a codex bloqueado hasta que el tope lo mate.
+- **El tope de 10 minutos se PARA mientras una aprobación está delante de alguien.** Mide «codex
+  no contesta», y el rato que tarda una persona en mirar un diff no es eso: sin esto, quien se
+  levanta a por un café vuelve a un «codex no terminó» y a un modal huérfano.
+- **Medido contra el binario de verdad, seis ejecuciones** (11-09-2026), por el camino entero
+  del harness: aprobar escribe (con la ruta VIRTUAL y su diff delante), rechazar no deja
+  fichero, y `.env`, una vista aplanada y una ruta de fuera del proyecto se cortan **sin llegar
+  a preguntarle a nadie** —preguntar por algo cuyo único final es un rechazo es sacar un modal
+  inútil, la misma regla que el `when` de `seDetieneEn`—. Pedirle que escriba por shell acaba en
+  «la autorización para ejecutar el comando fue rechazada».
+- El resto del protocolo: `codex app-server --stdio` con JSON por línea; la respuesta final es el
   `item/completed` cuyo item es un `agentMessage` de fase `final_answer`. El hijo es el Codex DEL
   USUARIO, con sus MCP y sus hooks: xonecode no los filtra.
+- **Límite declarado, y es el que queda abierto: LEER no tiene costura en Codex.** Lee por la
+  shell del sandbox, que en `read-only` no pide permiso a nadie, así que `.env` y `.xonecode` se
+  le pueden leer — justo el agujero que en Claude Code cierra `veredictoDeLectura`. No lo abre
+  la escritura: ya estaba, y sigue igual. El único asidero medido sería `approvalPolicy:
+  "untrusted"`, que pregunta por cada comando y es otro diseño.
+- **Y en una tarea de FONDO no se le pregunta a nadie, sin tocar nada de esto**: la política es
+  la misma (`PoliticaDeEscrituraExterna`), y la que monta una tarea es la AUTÓNOMA de
+  `consolaDeTarea.aprobacionesTui`, que concede porque la autorización fue crear la tarea, lo
+  anuncia con los nombres y lo apunta en `Tarea.autorizadas`. Por eso la escritura de fondo NO
+  se hizo con `workspace-write`: así las guardas de ruta siguen enteras, que es justo lo que
+  `core/tareas.ts` exige.
 
 ### La aprobación
 
