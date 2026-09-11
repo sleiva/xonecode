@@ -9,6 +9,7 @@ import {
   MENSAJE_DE_RECHAZO_DE_TAREA,
 } from "./consolaDeTarea.js";
 import { backendDeAgente } from "../../agent/proyecto.js";
+import { politicaDeAprobacionExterna } from "../../agent/escrituraExterna.js";
 import { permisosDe } from "../../agent/perfiles.js";
 import { CatalogoModelosEnMemoria } from "../../core/ports.js";
 import type { PendienteDeAprobacion } from "../../core/events.js";
@@ -421,5 +422,54 @@ describe("una tarea aplica, y aun así estas rutas NO se escriben", () => {
     const { raiz, write } = proyecto();
     await write.invoke({ file_path: "/Clientes.xne", content: "<coll nuevo/>" });
     expect(readFileSync(join(raiz, "Clientes.xne"), "utf8")).toBe("<coll nuevo/>");
+  });
+});
+
+/**
+ * La otra punta de la costura: lo que de verdad monta una tarea de fondo cuando el que
+ * escribe es un agente EXTERNO.
+ *
+ * Existe porque `PoliticaDeEscrituraExterna` pasó a tomar una LISTA —un item de Codex puede
+ * traer varios ficheros y se contesta con una sola decisión—, y esa política concede solo si
+ * TODAS vienen aprobadas. Si `aprobacionesTui` resolviera únicamente la primera, una tarea de
+ * fondo declinaría en silencio cualquier escritura de dos ficheros, con los dos `tsc` limpios
+ * y los 3000 tests en verde: exactamente el patrón que este repo lleva medido nueve veces.
+ * La documentación lo afirmaba «por construcción»; esto lo MIDE.
+ */
+describe("una tarea de fondo y un agente externo que escribe VARIOS ficheros", () => {
+  it("concede las dos, y las dos quedan apuntadas con su nombre", async () => {
+    const { consola, autorizado, escrito } = montar();
+    const politica = politicaDeAprobacionExterna(consola.aprobacionesTui!);
+    await expect(
+      politica([
+        { agente: "dev", ruta: "/app/uno.xne", lineas: [] },
+        { agente: "dev", ruta: "/app/dos.xne", lineas: [] },
+      ])
+    ).resolves.toBe(true);
+    // `Tarea.autorizadas` guarda lo AUTORIZADO, y con los dos nombres: una tarea que escribe
+    // dos ficheros y solo apunta uno deja al juez leyendo una cuenta que no es.
+    expect(autorizado[0]).toHaveLength(2);
+    expect(escrito.join("")).toMatch(/uno\.xne/);
+    expect(escrito.join("")).toMatch(/dos\.xne/);
+  });
+
+  it("y una que no admite aprobación tumba el conjunto, que es lo que Codex sabe expresar", async () => {
+    // Fail-closed: `aprobacionesTui` rechaza y APARCA la que no declara `approve`, y la
+    // política externa concede solo con todas aprobadas. Conceder «las que se pueda» sería
+    // prometer algo que el protocolo no puede hacer: el item se aplica entero o nada.
+    const { consola, aparcado } = montar();
+    const politica = politicaDeAprobacionExterna(async (pendientes, ficheros, diffs) => {
+      const recortadas = pendientes.map((p, i) =>
+        i === 0 ? p : { ...p, decisionesPermitidas: ["reject" as const] }
+      );
+      return consola.aprobacionesTui!(recortadas, ficheros, diffs);
+    });
+    await expect(
+      politica([
+        { agente: "dev", ruta: "/app/uno.xne", lineas: [] },
+        { agente: "dev", ruta: "/app/dos.xne", lineas: [] },
+      ])
+    ).resolves.toBe(false);
+    expect(aparcado).not.toHaveLength(0);
   });
 });
