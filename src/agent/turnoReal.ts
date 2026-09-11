@@ -18,6 +18,7 @@ export const TOPE_REPARACIONES = 2;
 import { aPendiente, ficheroDe, cambioDe, buildResume } from "./interrupts.js";
 import { cargarAgentes } from "./agentesEnDisco.js";
 import { crearSubagenteExterno } from "./subagenteExterno.js";
+import { politicaExternaDeSesion } from "./escrituraExterna.js";
 import type { PendienteDeAprobacion } from "../core/events.js";
 import type { LineaDeDiff } from "../core/diff.js";
 import { rutaRealDeVirtual } from "../core/rutaVirtual.js";
@@ -327,6 +328,13 @@ export async function abrirSesionReal(opciones: {
    */
   const topeDeRondas = opciones.topeDeRondas ?? MAX_APPROVAL_ROUNDS;
 
+  /**
+   * Quién autoriza las escrituras de un agente EXTERNO en esta sesión. Se resuelve una vez
+   * porque `pedirAprobacion` no cambia dentro de una sesión; la composición vive extraída
+   * (`escrituraExterna.ts#politicaExternaDeSesion`) y con test propio.
+   */
+  const politicaExterna = politicaExternaDeSesion(opciones.pedirAprobacion);
+
   const checkpointer = opciones.checkpointer ?? new MemorySaver();
   const tracker = createTokenTracker();
   const diagnostico = crearDiagnosticoDeTools(raiz);
@@ -351,9 +359,26 @@ export async function abrirSesionReal(opciones: {
       // usuario puede tocar un `.md` —o guardarlo desde Ajustes— con la consola abierta, y
       // una lista congelada al arrancar le haría creer que su cambio no se aplicó.
       agentes: cargarAgentes(raiz).agentes,
-      // El adaptador real. Su import del SDK es dinámico, así que traerlo aquí no carga
-      // nada hasta que un agente externo esté dado de alta Y disponible.
-      subagenteExterno: crearSubagenteExterno(),
+      /**
+       * El adaptador real. Su import del SDK es dinámico, así que traerlo aquí no carga
+       * nada hasta que un agente externo esté dado de alta Y disponible.
+       *
+       * **La política de escritura sale del MISMO `pedirAprobacion` del HITL del grafo**, y
+       * eso es la mitad del diseño: sus implementaciones ya son las dos que hacen falta —la
+       * interactiva de las tres pieles, que enseña el diff y espera con plazo naciendo
+       * rechazada, y la autónoma de una tarea de fondo, que concede porque la autorización
+       * fue crear la tarea, lo ANUNCIA con los nombres y lo apunta en `Tarea.autorizadas`—.
+       * Un segundo hueco de política habría sido un segundo sitio donde el fail-closed
+       * puede dejar de estarlo. Sin `pedirAprobacion` no hay política, y sin política el
+       * hijo no escribe.
+       */
+      subagenteExterno: crearSubagenteExterno({
+        ...(politicaExterna === undefined ? {} : { aprobarEscritura: politicaExterna }),
+        // Una FUNCIÓN y no la lista: el hijo escribe durante el turno, así que una lista
+        // congelada al abrir la sesión no vería el `.xne` que se acaba de crear — y su
+        // `.xml` aplanado dejaría de reconocerse como tal.
+        ficherosDelProyecto: () => ficherosDelProyecto(raiz),
+      }),
       modelos,
       skills: opciones.skills,
       checkpointer: checkpointer,

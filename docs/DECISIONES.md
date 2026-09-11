@@ -4,6 +4,9 @@ Esto es el razonamiento que vivía en `CLAUDE.md` hasta el 11-09-2026, sacado aq
 fichero vuelva a ser lo que su cabecera prometía: el mapa y los invariantes. **Nada se ha
 reescrito**: los párrafos están tal cual, con sus cifras medidas y sus fechas. `CLAUDE.md`
 guarda la regla en una línea; aquí está por qué es esa y no otra, y qué se midió para saberlo.
+Cuando una decisión se SUPERA, el párrafo no se reescribe ni se borra: se le pone delante una
+entrada fechada que dice qué cambió y por qué. Borrarlo perdería el razonamiento que llevó
+hasta aquí, y dejarlo solo dejaría una afirmación falsa sin fecha.
 
 Ante una discrepancia entre este documento y el código, el código manda.
 
@@ -783,6 +786,17 @@ especialistas de siempre —`docs`, `planner`, `dev`, `mockup`— dejaron de est
   el mismo fichero se edita a mano, así que la autoridad sobre si vale es el cargador y no
   el formulario — si no, un agente podría desaparecer al siguiente arranque sin que nadie
   hubiera hecho nada raro.
+- **SUPERADO el 11-09-2026: un agente externo de Claude Code ESCRIBE, y cada escritura pasa
+  por una autorización.** El párrafo de abajo se queda tal cual porque cuenta el razonamiento
+  que llevó hasta aquí, y de él dos cosas siguen siendo verdad —la lista blanca, y que Codex
+  tiene la denegación más fuerte porque la pone el sistema operativo—; lo que era falso era el
+  obstáculo: `canUseTool` es asíncrono y corre en NUESTRO proceso, así que se puede esperar ahí
+  a que alguien decida con el hijo vivo, sin `interrupt()` y sin reejecutar el nodo. Lo que
+  cambia, en `CLAUDE.md` con su detalle: TRES listas de tools en vez de dos (conceder escritura
+  concedía `Bash`), las guardas de ruta del proyecto REAPLICADAS sobre la ruta absoluta del hijo
+  y dos veces (texto y `realpath`), la política que es el `pedirAprobacion` que ya existía, y
+  `settingSources: ["user"]` — porque una regla `allow` de un `settings.json` **del proyecto**
+  hacía que el callback no se invocara, y ese fichero viene de CloudStudio.
 - **Un agente EXTERNO (Claude Code) corre, pero solo LEE** (`core/ports.ts#SubagenteExternoPort`,
   `agent/subagenteExterno.ts`). Entra como `CompiledSubAgent` de deepagents
   —`{name, description, runnable}`, que acepta junto a los normales—, así que los tres
@@ -2359,8 +2373,8 @@ prosa y la despacha `correrConsola` del lado servidor.
 mensaje `revision` del cable — se llamaba `ficheros` hasta que hubo una pestaña con ese
 nombre): los ficheros APILADOS con cabecera pegajosa y su diff dentro, numerado con las dos
 columnas del formato unificado por `apps/web/src/numerarParche.ts` (pura; es también quien
-corta la cabecera de git), los `DESPLEGADOS_AL_ABRIR` primeros abiertos solos y el resto al
-pulsar, y a la derecha el árbol de cambiados. La cabecera dice «Sesión» porque la foto es de
+corta la cabecera de git), **todos los bloques PLEGADOS al abrir** y cada uno desplegándose
+al pulsar su cabecera, y a la derecha el árbol de cambiados. La cabecera dice «Sesión» porque la foto es de
 la sesión: es el hueco del selector de turno que no existe. **Ficheros** es el árbol del
 proyecto con un visor de SOLO lectura (`agent/arbolDeProyecto.ts`, mensajes `arbol` y
 `fichero`): lista con la misma función del completado del Tab (`ficherosDelProyecto`, con el
@@ -2525,10 +2539,17 @@ que no dicen nada que el nombre de la fila no diga ya, y empujan el primer cambi
 fuera de la vista; se corta en el primer `@@`, salvo que no haya ninguno —un binario, un
 cambio de modo—, porque entonces eso ES todo lo que git tiene que decir. El diff se pide a
 git con `--diff-filter=AMD`: `claseDeCambio` devuelve «modificado» para cualquier letra que
-no sea `A` ni `D`, así que un cambio de TIPO se colaría con una etiqueta falsa. Los `DESPLEGADOS_AL_ABRIR`
-(8) primeros parches se piden cuando la lista llega por primera vez con algo dentro (el efecto
-de `App.tsx`, que es quien recuerda lo desplegado), y el resto al pulsar su cabecera: la
-pestaña se abre enseñando diffs sin traerse los megas de un turno largo. Cada parche se
+no sea `A` ni `D`, así que un cambio de TIPO se colaría con una etiqueta falsa. **Al abrir la pestaña no se
+despliega ningún bloque ni se pide ningún parche**: cada uno se pide al pulsar su cabecera
+(el efecto de `App.tsx` solo OLVIDA lo desplegado cuando el store tira la foto, para que las
+filas abiertas de una sesión no sigan abiertas sobre los ficheros de otra). Hubo una omisión
+de ocho bloques abiertos —«que la pestaña se abra enseñando diffs y no una lista de
+cabeceras»— y se cayó con los tamaños de verdad, dicho mirando la pantalla: «la vista está
+bien pero debiera estar collapsada». Eran dos ficheros y +582 líneas, 483 en uno solo, así
+que abrir la pestaña volcaba un diff de 483 líneas que nadie había pedido y dejaba fuera de
+la vista la LISTA, que es lo que contesta la pregunta de esta pestaña — «¿qué tocó el
+agente?». Es la misma regla que ya gobierna el árbol de Ficheros y por el mismo motivo: con
+lo primero abierto no se ve la FORMA de lo que hay. Cada parche se
 recorta a `TOPE_DE_PARCHE` diciéndolo. La foto es de UNA sesión:
 `store.ts` la tira en cuanto el `alta` trae otra `sesionActiva`.
 
@@ -3009,6 +3030,65 @@ entorno activo en la barra, que es mudarse y no mirar. Nueve reglas:
   que el filo de la pestaña elegida se pinta con `box-shadow` inset y no con un
   `border-bottom` que exigiera el `transparent` de reserva; de paso, una sombra no ocupa
   sitio, así que la fila no se mueve al cambiar de pestaña.
+
+**Claude como modelo de trabajo: el tope de salida y el razonamiento se fijan a mano, y los
+dos salieron de MEDIR la dependencia** (`core/contextos.ts#topeDeSalida`,
+`core/modelos.ts#pideThinkingAdaptativo`, cableados en `agent/modelos.ts` y con prueba de
+costura en `agent/modelos.test.ts`). `ChatAnthropic` se construía con `{model, apiKey}` y
+nada más. Cinco cosas:
+- **La ventana de contexto de Claude estaba 5 veces por debajo.** La tabla decía una sola
+  fila, «claude → 200.000», y empareja por PREFIJO, así que `claude-opus-5` resolvía a 200k
+  cuando su ventana es 1M: la barra de estado calculaba el `ctx%` sobre una quinta parte de
+  la ventana real y reportaba ~5 veces más ocupación de la que había. Es exactamente la
+  «mentira con forma de cifra» contra la que avisa la cabecera de ese propio fichero. Ahora
+  va por VERSIÓN —la generación 4.6 y posteriores llevan 1M; Haiku 4.5 y lo anterior se
+  quedan en 200k—, con lo específico antes del `claude` de reserva porque `find` se queda
+  con el primer prefijo que casa, igual que `gpt-4.1` va antes que `gpt-4`.
+- **El `max_tokens` heredado falla a 4096 EN SILENCIO.** Medido en
+  `@langchain/anthropic` 1.5.2: resuelve su omisión con una tabla por prefijo
+  (`MODEL_DEFAULT_MAX_OUTPUT_TOKENS`) y lo que no casa cae en
+  `FALLBACK_MAX_OUTPUT_TOKENS = 4096`. `claude-sonnet-5` es el caso — `claude-sonnet-4` no
+  es prefijo de `claude-sonnet-5` — mientras `claude-opus-5`, `claude-opus-4-8` y
+  `claude-fable-5-1` sí casan y salen con 16384. En un harness cuyo trabajo es escribir
+  ficheros, 4096 no da error: corta el fichero a medias. Y no es una lista que baste con
+  actualizar: el id lo elige el usuario del catálogo VIVO, así que cualquier modelo nuevo
+  vuelve a caer en el fallback hasta que la dependencia se entere.
+- **16.384 y no más, y el motivo es por qué camino se usa.** El objeto construido se
+  comparte entre el turno —que STREAMEA: su `_streamResponseChunks` mete `stream: true` en
+  el payload sea cual sea la bandera del constructor, comprobado— y las llamadas sueltas con
+  `.invoke()` (el juez, el aumentador), que no streamean y donde un tope grande se lleva por
+  delante el plazo HTTP del SDK. 16.384 es además el valor que la propia dependencia da a la
+  familia actual, así que para los modelos que sí conoce esto no cambia NADA: solo tapa el
+  4096. Y solo `anthropic` tiene fila, igual que `ollama` no tiene fila en la tabla de
+  contexto: los demás clientes no tienen este fallo, y fijarles un tope a ciegas sería
+  recortarles la salida por una razón que no existe.
+- **Omitir `thinking` significa tres cosas distintas, así que es una TABLA y no un campo
+  fijo.** La dependencia manda `thinking: undefined` si no se le fija, o sea que omite el
+  parámetro. Y omitirlo: en **Opus 5 y Sonnet 5** ya corre adaptativo (no hace falta pedir
+  nada, y mandar lo que no se necesita es superficie que mantener); en **Opus 4.8, 4.7, 4.6
+  y Sonnet 4.6** corre **sin pensar**, que es el caso que esto arregla —esos cuatro iban sin
+  razonamiento en un harness de código, donde es justo donde más rinde—; y **Haiku 4.5 y
+  todo lo anterior a 4.6** no aceptan `adaptive` (lo suyo es `{type:"enabled",
+  budget_tokens:N}`), así que un `thinking` adaptativo a ciegas para «anthropic» los
+  rompería con un 400. Lo desconocido devuelve `false`, que es el lado conservador: se omite
+  y el modelo hace lo suyo, en vez de mandarle algo que puede rechazar.
+- **`effort` NO se manda, a propósito**: omitirlo ya es `high`, que es el valor que se
+  querría. Añadirlo sería superficie de configuración sin ganancia medida.
+- **Y la prueba es de COSTURA, contra `invocationParams()` del cliente real.** Las dos
+  tablas de `core/` no valen de nada si no llegan al payload, y eso no lo ve ningún test de
+  la tabla. Se construye el `ChatAnthropic` de verdad y se le preguntan sus parámetros —sin
+  red: construir y preguntar no llama a nadie—. Comprobado que MUERDE quitando el cableado:
+  el fallo que da es `expected 4096 to be 16384`, o sea el fallback de la dependencia medido
+  de punta a punta y no en un guion aparte. El día que cambie de sitio su `max_tokens`, o
+  deje de omitir `thinking` cuando no se fija, esto cae — y el otro camino sería un 400 en
+  producción o una respuesta cortada en silencio.
+- **Lo que NO se hizo, y queda dicho**: llevar el `max_input_tokens` que el catálogo vivo ya
+  devuelve (`agent/catalogoModelos.ts`) hasta la barra, para que la tabla deje de ser la
+  fuente. Es la dirección honesta —la verdad sobre un modelo concreto la tiene el servidor—,
+  pero el catálogo se pide por proveedor y bajo demanda mientras `topeResuelto` es síncrono y
+  corre en cada barra: son dos cadencias distintas y es otra tarea. Y **nada de esto pasa por
+  el SDK crudo de Anthropic**: este repo enruta todos los proveedores por LangChain a
+  propósito, y romper la simetría por uno solo sería peor que el problema.
 
 ## Trampas verificadas
 

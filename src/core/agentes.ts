@@ -208,16 +208,29 @@ export function leerAgente(
 
   // Cualquier cosa que no sea exactamente «true» es false — ver abajo.
   const soloLectura = (campos["soloLectura"] ?? "").trim() === "true";
-  // Un agente EXTERNO que pida escribir se rechaza al cargar, y no se degrada a solo
-  // lectura por su cuenta. Hoy sus escrituras se deniegan siempre (`SubagenteExternoPort`
-  // explica por qué: nuestra aprobación son interrupts de LangGraph y el gancho del SDK es
-  // un callback), así que dejarlo pasar con `soloLectura: false` le prometería a quien lo
-  // escribió una capacidad que no va a tener — y lo descubriría cuando el agente le
-  // contestara que no ha podido tocar nada. Decirlo aquí es decirlo en el sitio donde se
-  // puede arreglar.
-  if (!soloLectura && motorCrudo !== "modelo") {
+  /**
+   * **Un agente EXTERNO ya puede pedir escribir, y esta guarda se levantó CON el cableado y
+   * no antes.** Existía porque sus escrituras se denegaban siempre, así que dejar pasar un
+   * `soloLectura: false` le prometía a quien escribió el `.md` una capacidad que no iba a
+   * tener — y lo habría descubierto cuando el agente le contestara que no pudo tocar nada.
+   *
+   * El orden importaba en la otra dirección también: levantarla antes de que
+   * `PoliticaDeEscrituraExterna` estuviera montada de punta a punta habría creado justo el
+   * caso que la guarda existía para evitar. Hoy las dos puertas están puestas —el papel del
+   * `.md` y la autorización por escritura, con las guardas de ruta delante— así que la
+   * promesa se cumple.
+   *
+   * Lo que NO cambia: `soloLectura` sigue siendo cierto solo con exactamente «true» (la
+   * trampa del `"false"` de CloudStudio), y **Codex es distinto**: ahí la escritura la
+   * bloquea el sandbox del sistema operativo (`sandbox: "read-only"`), que es más fuerte que
+   * un callback y no depende de que el modelo colabore. Conceder escritura por su `.md`
+   * exigiría mover ese sandbox a `workspace-write`, y eso es otra decisión: entonces las
+   * guardas de ruta de xonecode no verían ni una de sus escrituras.
+   */
+  if (!soloLectura && motorCrudo === "codex") {
     return {
-      error: `un agente con «motor: ${motorCrudo}» tiene que ir con «soloLectura: true»: sus escrituras todavía no pasan por la aprobación de xonecode, así que se le denegarían`,
+      error:
+        "un agente con «motor: codex» tiene que ir con «soloLectura: true»: su escritura la bloquea el sandbox del sistema operativo, no una política de xonecode, así que no pasaría por las guardas del proyecto",
     };
   }
 
