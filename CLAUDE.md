@@ -171,15 +171,73 @@ Un subagente es un `.md` con frontmatter en `.xonecode/agentes/<nombre>.md`
   agentes de serie dentro se ADOPTA sin escribir nada; vacía se siembra entera.
 - **El prompt del orquestador se GENERA** de la lista (`xoneAgent.ts#promptOrquestador`).
 - Un `.md` roto se salta y su motivo viaja por el cable hasta la ventana de Ajustes.
-- **Motores externos**: `claude-code` (`agent/subagenteExterno.ts`) corre pero solo LEE, y la
-  escritura se deniega por **lista blanca** (`decisionDeTool`, pura y exportada) — con lista negra
-  la tool que añadan mañana entraría permitida, y `Bash` sola basta para escribir el proyecto.
-  `WebFetch`/`WebSearch` también se deniegan: sacan el proyecto de la máquina. Un `.md` externo
-  con `soloLectura: false` se RECHAZA al cargar, no se degrada. Se comprueba `disponible()` antes
-  de montarlo. `codex` (`agent/subagenteCodex.ts`) va por `codex app-server --stdio` con JSON por
-  línea y la escritura la bloquea el SANDBOX del SO (`sandbox: "read-only"`), no un callback; la
-  respuesta final es el `item/completed` cuyo item es un `agentMessage` de fase `final_answer`.
-  El hijo es el Codex DEL USUARIO, con sus MCP y sus hooks: xonecode no los filtra.
+- **Motores externos**: `claude-code` (`agent/subagenteExterno.ts`) **escribe, y cada escritura
+  pasa por una autorización** — `canUseTool` es asíncrono y corre en nuestro proceso, así que se
+  espera ahí sin `interrupt()` y sin reejecutar el nodo. `decisionDeTool` en este orden: **TRES
+  listas** de tools (lectura / escritura / denegadas, y lo desconocido denegado también), el papel
+  del `.md`, las **guardas de RUTA reaplicadas** y, al final, la política. Dos listas no bastaban:
+  era `permitirEscritura || esDeLectura`, o sea que conceder escritura concedía `Bash` —que basta
+  para escribir el proyecto entero— y `WebFetch`/`WebSearch`, que lo sacan de la máquina.
+  Escribir son **solo `Write` y `Edit`**: las únicas cuyos argumentos encajan en `cambioDe()`, o
+  sea de las que se puede componer el diff que hay que mirar.
+- **Las guardas de ruta hay que REAPLICARLAS, y ahí estaba el agujero** (`agent/escrituraExterna.ts`).
+  Su `file_path` es ABSOLUTO y va al disco directo: `permisosDe`, el `virtualMode`, las vistas
+  aplanadas y las guardas de artefactos y descargas no lo alcanzan. Se aplican las MISMAS
+  funciones sobre la ruta virtual, y **dos veces** —texto y `realpath`— como en
+  `arbolDeProyecto.ts`: medido, un enlace dentro de la raíz apuntando a `.env` pasa la primera.
+  Del destino se canonicaliza él si existe y su PADRE si no (si no, no se podría crear ningún
+  fichero). Lo que no se puede comprobar se deniega.
+- **La política es el `pedirAprobacion` que YA existía**, traducido
+  (`escrituraExterna.ts#politicaDeAprobacionExterna`, tipo `PoliticaDeEscrituraExterna` en
+  `core/ports.ts`, fail-closed por TIPO como `core/cloudstudio.ts#PoliticaDeAprobacion`). Sus dos
+  implementaciones son las que hacían falta: la INTERACTIVA de las tres pieles (diff delante,
+  plazo, mapa que nace rechazado, rechazo sin cliente enganchado) y la AUTÓNOMA de una tarea de
+  fondo, que concede porque la autorización fue crear la tarea, lo **anuncia** con los nombres y
+  lo apunta en `Tarea.autorizadas`. Un segundo hueco habría sido un segundo sitio donde el
+  fail-closed puede dejar de estarlo. Sin `pedirAprobacion` no hay política y no se escribe; una
+  política que lanza es un NO, y el `catch` va en `decisionDeTool` y no solo en el envoltorio de
+  `correr`, que vive en un cierre que ningún test alcanza.
+- **La denegación de verdad vive en un hook `PreToolUse`, no en `canUseTool`.** Tres frases
+  textuales del SDK: «Allow rules from settings files can also shadow the callback» (o sea que
+  `canUseTool` puede no invocarse nunca), «PreToolUse hook denies … resolve before canUseTool
+  runs» y «the 'ask' path surfaces via a can_use_tool control_request». De ahí el reparto: el
+  hook contesta las TRES clases —`allow` para leer (con la ruta ya comprobada), `deny` para lo
+  que no está en las listas, `ask` para escribir, que es cómo se llega al callback donde se
+  puede ESPERAR a una persona— y no deja ninguna sin decidir. Dejar una la decidiría el
+  `permissionMode`, y ninguno de sus valores es seguro por suposición: `dontAsk` («deny if not
+  pre-approved») podría denegar la escritura antes del callback y dejar la función muerta con
+  todo en verde, y `default` («prompts for dangerous operations») podría aprobar `WebSearch` sin
+  consultarnos. Se usa `default`, que es el modo donde el `ask` del hook sí llega al callback.
+  `canUseTool` conserva las MISMAS comprobaciones como segunda llave.
+- **`settingSources: ["user"]`.** Por la primera cita: por omisión se cargan las tres fuentes,
+  incluida `.claude/settings.json` **de dentro del proyecto**, que viene de CloudStudio — el
+  mismo argumento por el que `seAplicaSinAprobacion` no vive en el `config.json` del proyecto.
+  Se quedan los ajustes del dueño de la máquina (la misma confianza que ya se declara para
+  Codex); el coste es que el hijo no carga el `CLAUDE.md` del proyecto.
+- **LEER también lleva guarda de ruta, y ese agujero ya estaba vivo.** Medido corriéndolo, dicho
+  por el propio hijo: «`.env` — sí pude leerlo». La lista blanca permitía `Read` a secas sin
+  mirar la ruta, desde el primer día: se podían leer `.env`, `.git`, `.xonecode` —donde vive el
+  `checkpoint.sqlite`, con la lista de mensajes ENTERA de cada conversación— y cualquier fichero
+  de FUERA del proyecto. Se deniegan esas y las vistas aplanadas (el backend se las retira al
+  agente entero: si las ve, edita el fichero equivocado); `/skills/`, `/adjuntos/` y un artefacto
+  mal puesto de antes SÍ se leen, porque leerlos es su razón de ser. `Glob`/`Grep` llevan `path`
+  opcional y ausente es la raíz. **Límite declarado**: un `Grep` sobre la raíz puede devolver
+  líneas de un fichero denegado — `canUseTool` decide sobre la LLAMADA y no filtra su salida;
+  cerrarlo pide un `PostToolUse`, que no está puesto.
+- **Y todo esto está MEDIDO contra un hijo de verdad** (11-09-2026, tres ejecuciones): aprobar
+  escribe, rechazar no deja fichero, `.env` y las vistas aplanadas se cortan, `Bash` se deniega,
+  y un artefacto dentro del proyecto se rechaza diciendo dónde iba. Las tres ejecuciones
+  encontraron tres fallos que ningún test con dobles habría visto: la raíz no canónica
+  (`/tmp` → `/private/tmp` en macOS hacía imposible escribir), la carpeta padre que todavía no
+  existe (`Write` las crea, y se denegaba con «no se pudo comprobar»), y el `allow` del hook
+  saltándose la guarda de lectura.
+- Un `.md` de `claude-code` con `soloLectura: false` ya se acepta —la guarda se levantó **con** el
+  cableado, no antes—, y el de `codex` se sigue rechazando: ahí la escritura la bloquea el
+  SANDBOX del SO, o sea que no pasaría por ninguna guarda de ruta nuestra. Se comprueba
+  `disponible()` antes de montarlo. `codex` (`agent/subagenteCodex.ts`) va por
+  `codex app-server --stdio` con JSON por línea y `sandbox: "read-only"`; la respuesta final es el
+  `item/completed` cuyo item es un `agentMessage` de fase `final_answer`. El hijo es el Codex DEL
+  USUARIO, con sus MCP y sus hooks: xonecode no los filtra.
 
 ### La aprobación
 
@@ -381,6 +439,13 @@ feedback del desarrollador** y no es terminal.
   puede traer `<script>`). El `case "fichero"` del store es una lista BLANCA: un campo nuevo no
   llega hasta que se nombra ahí. Las dos pestañas piden su foto cuando NO la tienen y con
   `conectado`, no al montar.
+- **Revisión arranca PLEGADA**: al abrir no se despliega ningún bloque ni se pide ningún
+  parche, y cada diff se pide al pulsar su cabecera. Hubo una omisión de ocho abiertos y se
+  cayó con los tamaños de verdad (dos ficheros, +582 líneas, 483 en uno solo): volcaba un
+  diff que nadie había pedido y dejaba fuera de la vista la LISTA, que es lo que la pestaña
+  contesta. Misma regla que el árbol de Ficheros, y por el mismo motivo. El efecto de
+  `App.tsx` solo OLVIDA lo desplegado cuando el store tira la foto, para que las filas
+  abiertas de una sesión no sigan abiertas sobre los ficheros de otra.
 
 ### Sesiones, hilos y git
 
@@ -521,6 +586,17 @@ feedback del desarrollador** y no es terminal.
 - **El modelo en vigor lo dice el SERVIDOR** (`resolver(estadoDeSesion.fuentes).trabajo` de la
   consola ABIERTA), por la costura `Consola.alEstado`: `/modelo` cambia en caliente sin tocar
   disco, así que releer la configuración contaría lo de antes para siempre.
+- **Claude se construye con tope de salida y razonamiento a mano, y las dos son datos de
+  `core/`** (`topeDeSalida` en `core/contextos.ts`, `pideThinkingAdaptativo` en
+  `core/modelos.ts`), con prueba de COSTURA contra `invocationParams()` del cliente real
+  (`agent/modelos.test.ts`, sin red). **El `max_tokens` por omisión de
+  `@langchain/anthropic` sale de una tabla por PREFIJO y un id que no conoce cae en su
+  `FALLBACK_MAX_OUTPUT_TOKENS` de 4096 SIN decirlo** — medido con `claude-sonnet-5`, que no
+  casa con ninguna de sus claves; en un harness que escribe ficheros eso no da error, corta
+  la escritura a media respuesta. Y **omitir `thinking` no significa lo mismo en todos**:
+  Opus 5 y Sonnet 5 ya corren adaptativo, la generación 4.6-4.8 corre **sin pensar**, y
+  Haiku 4.5 y lo anterior a 4.6 lo RECHAZAN (usan `budget_tokens`), así que pedirlo a ciegas
+  sería un 400. `effort` no se manda: omitirlo ya es `high`.
 - **Los topes de contexto solo si se saben** (`core/contextos.ts`, por familias; **ollama no tiene
   tope a propósito**). El porcentaje solo se calcula con tope: uno sobre un número inventado es
   una mentira con forma de cifra. La barra y `/config` usan la misma `topeResuelto`.

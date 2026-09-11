@@ -244,9 +244,18 @@ export async function construirAgente(opciones: OpcionesDelAgente): Promise<unkn
           // El modelo del producto que pida su `.md`, si pide alguno. Ausente = el que el
           // agente externo use por su cuenta, que es lo de siempre.
           ...(agente.modelo === undefined ? {} : { modelo: agente.modelo }),
-          // Hoy siempre falso, y `core/ports.ts` explica por qué con detalle: el gancho del
-          // SDK es un callback y nuestra aprobación son interrupts de LangGraph.
-          permitirEscritura: false,
+          /**
+           * Lo que diga su `.md`, y nada más. Es la PRIMERA de dos puertas: con esto en
+           * cierto, cada escritura pasa además por la política de la sesión y por las
+           * guardas de ruta (`agent/escrituraExterna.ts`). Un agente de solo lectura no
+           * llega a preguntar.
+           */
+          permitirEscritura: !agente.soloLectura,
+          // Para poder decir QUIÉN pide la escritura en la petición de aprobación: la tool
+          // es la misma para todos los especialistas, así que sin esto el diff diría
+          // «alguien quiere escribir». Es el papel del `[dev]` que `hitlDe` mete en la
+          // descripción de un interrupt del grafo.
+          agente: agente.nombre,
         });
         return { messages: [new AIMessage(texto)] };
       }),

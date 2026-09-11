@@ -12,6 +12,7 @@
 import type { Proveedor } from "./modelos.js";
 import type { EstadoDeVerificador, VeredictoDeTarea } from "./entrega.js";
 import type { HallazgoDelTurno } from "./events.js";
+import type { LineaDeDiff } from "./diff.js";
 import type {
   ContextoRemoto, EntradaRemota, EstructuraRemota, ManifiestoRemoto,
 } from "./cloudstudio.js";
@@ -88,16 +89,21 @@ export interface SkillsPort {
  * existe CloudStudio — las tools remotas no se inyectan en el agente, las ejecuta quien
  * está fuera.
  *
- * **Lo que este puerto NO hace, y es deliberado: escribir.** El hijo es un producto ajeno
- * con su propia política de permisos (`permissionMode`), y ninguno de sus valores es la
- * aprobación de xonecode — aquí nada se escribe sin que un humano vea el diff. El SDK sí
- * ofrece el gancho para arreglarlo (`canUseTool`, que recibe la tool y su entrada entera y
- * contesta permitir o denegar), pero conectarlo a nuestro HITL no es un callback: nuestra
- * aprobación son `interrupt()` de LangGraph recogidos por `collectPending`, y reanudar uno
- * reejecutaría el nodo desde el principio — o sea, relanzaría el proceso hijo. Mientras eso
- * no esté resuelto, `permitirEscritura` es `false` siempre y las escrituras del hijo se
- * DENIEGAN con un motivo que él lee. Un agente externo que pidiera escribir y se le
- * concediera en silencio sería el agujero más grande que este repo puede tener.
+ * **El hijo SÍ puede escribir, y cada escritura pasa por una autorización.** El gancho es
+ * `canUseTool` del SDK: recibe la tool con su entrada entera y contesta permitir o denegar,
+ * y es **asíncrono y en NUESTRO proceso**, así que se puede esperar ahí a que alguien decida
+ * sin que el hijo se entere — que es lo que durante meses pareció imposible. El obstáculo
+ * que se declaraba aquí era real pero de otra pieza: el HITL de xonecode son `interrupt()`
+ * de LangGraph, y reanudar uno reejecuta el nodo desde el principio, o sea relanzaría el
+ * proceso hijo. La salida es no usar `interrupt()` para esto: la decisión se pide por
+ * `PoliticaDeEscrituraExterna`, el proceso hijo sigue vivo esperando, y el nodo del grafo
+ * no se reejecuta nunca.
+ *
+ * Lo que NO cambia es la dirección del fallo. Sin política no hay escritura
+ * (`agent/subagenteExterno.ts` deniega), lo que no se entiende se deniega, y las guardas de
+ * ruta del proyecto se vuelven a aplicar sobre la ruta absoluta del hijo
+ * (`agent/escrituraExterna.ts`): sus `Write`/`Edit` van al disco directos, así que
+ * `permisosDe`, el `virtualMode` y las vistas aplanadas no los alcanzan.
  */
 export interface SubagenteExternoPort {
   /**
@@ -130,12 +136,49 @@ export interface PeticionExterna {
    */
   modelo?: string;
   /**
-   * Hoy siempre `false`, y el campo existe para que el día que se conecte la aprobación no
-   * haya que cambiar la forma del puerto — y para que quien lea esto vea que la decisión
-   * está tomada a propósito y no olvidada.
+   * Si el papel de este agente escribe: sale de `soloLectura` de su `.md` y nada más.
+   *
+   * Es la primera de dos puertas y no la única: con esto en `true`, cada escritura pasa
+   * además por la `PoliticaDeEscrituraExterna` de la sesión y por las guardas de ruta. En
+   * `false` no se le pregunta a nadie — un agente de solo lectura no propone escrituras.
    */
   permitirEscritura: boolean;
+  /**
+   * El nombre del agente, para poder decir QUIÉN pide la escritura.
+   *
+   * Viaja porque la petición de aprobación lo pinta en su campo `origen`, igual que el
+   * `[dev]` que `hitlDe` mete en la descripción de un interrupt: la tool es la misma para
+   * todos los especialistas, así que sin esto el diff diría «alguien quiere escribir».
+   */
+  agente: string;
 }
+
+/**
+ * Una escritura que un agente EXTERNO quiere hacer, tal y como se le enseña a quien decide.
+ *
+ * La ruta es la VIRTUAL —desde la raíz del proyecto— y no la de la máquina: es la que una
+ * persona reconoce y la única que puede viajar por el cable, que puede ir por un túnel.
+ */
+export interface EscrituraExternaPedida {
+  agente: string;
+  ruta: string;
+  /** El antes y el después, ya en líneas. Vacío si no se pudo componer: se pregunta igual. */
+  lineas: LineaDeDiff[];
+}
+
+/**
+ * Quién autoriza una escritura de un agente externo. **Fail-closed por TIPO**, el mismo
+ * patrón que `core/cloudstudio.ts#PoliticaDeAprobacion` para la subida: no se puede montar
+ * un agente externo que escriba sin decir quién decide, y quien la rellena es una decisión
+ * de PIEL y no del motor.
+ *
+ * Las dos implementaciones existen ya y son las de `pedirAprobacion`, traducidas por
+ * `agent/escrituraExterna.ts#politicaDeAprobacionExterna`: la interactiva enseña el diff y
+ * espera —con plazo, y naciendo rechazada—, y la autónoma de una tarea de fondo concede
+ * porque la autorización fue crear la tarea, lo anuncia con los nombres y lo apunta en
+ * `Tarea.autorizadas`.
+ */
+export type PoliticaDeEscrituraExterna = (escritura: EscrituraExternaPedida) => Promise<boolean>;
 
 export type Papel = "rapido" | "trabajo" | "afilado";
 

@@ -90,6 +90,12 @@ export function puedeLeerRuta(ruta: string): boolean {
   return !(
     ruta === "/.env" ||
     ruta.startsWith("/.env.") ||
+    // También `.env` como CARPETA (`/.env/algo`), que no es lo mismo que `/.env.algo` y se
+    // caía por el hueco entre los dos: el punto y la barra son caracteres distintos. Salió de
+    // atar esta función con `DENEGADO_SIEMPRE` en `escrituraExterna.test.ts`. Raro, sí — pero
+    // de esta función depende también que `busquedaRegex` no lea ahí dentro, y denegar una
+    // carpeta que nadie tiene no cuesta nada.
+    ruta.startsWith("/.env/") ||
     ruta === "/.git" ||
     ruta.startsWith("/.git/") ||
     ruta === "/.xonecode" ||

@@ -172,6 +172,25 @@ describe("fusionarAgentes", () => {
 });
 
 describe("escribirAgente", () => {
+  it("un agente de Claude Code YA puede pedir escribir, y el papel se conserva", () => {
+    // La guarda que lo rechazaba existía porque sus escrituras se denegaban siempre, así que
+    // aceptarlo prometía una capacidad que no iba a tener. Se levantó CON el cableado de
+    // `PoliticaDeEscrituraExterna`, no antes — al revés habría creado el caso que la guarda
+    // existía para evitar. Y no tenía ningún test: estaba escrita y nada más.
+    const r = leerAgente("dev-externo", "---\ndescripcion: d\nmotor: claude-code\nsoloLectura: false\n---\ncuerpo\n", "proyecto");
+    expect("agente" in r && r.agente.soloLectura).toBe(false);
+    expect("agente" in r && r.agente.motor).toBe("claude-code");
+  });
+
+  it("pero uno de CODEX con escritura se sigue rechazando, y por otro motivo", () => {
+    // Ahí la escritura la bloquea el SANDBOX del sistema operativo (`sandbox: "read-only"`),
+    // que es más fuerte que un callback porque no depende de que el modelo colabore — pero
+    // también significa que sus escrituras no pasarían por las guardas de ruta de xonecode.
+    // Concederlas es otra decisión, y mientras no se tome esto no puede prometerla.
+    const r = leerAgente("x", "---\ndescripcion: d\nmotor: codex\nsoloLectura: false\n---\n", "proyecto");
+    expect("error" in r && r.error).toMatch(/sandbox del sistema operativo/);
+  });
+
   it("lo que escribe se vuelve a leer igual: es el ciclo que usa la ventana de ajustes", () => {
     // Sin esta ida y vuelta, guardar desde la interfaz podría producir un fichero que el
     // cargador rechaza — y el agente desaparecería al siguiente arranque sin que nadie

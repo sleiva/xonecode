@@ -9,14 +9,16 @@
  * En los dos casos entra una tarea autocontenida y sale la respuesta final, y el hijo es una
  * sesión del producto de verdad: su autenticación, sus ajustes y su modelo.
  *
- * **La escritura está DENEGADA, y no por precaución vaga.** El SDK trae `canUseTool`, un
- * callback que recibe cada tool con su entrada entera y contesta permitir o denegar; es
- * exactamente el contrato de nuestra aprobación. Lo que no encaja todavía es el otro lado:
- * el HITL de xonecode son `interrupt()` de LangGraph recogidos por `collectPending`, y
- * reanudar uno reejecuta el nodo desde el principio — o sea, relanzaría el proceso hijo.
- * Hasta que eso esté resuelto, aquí se deniega por LISTA BLANCA: se permiten las tools de
- * lectura conocidas y se deniega todo lo demás, incluido lo que no se reconoce. Una lista
- * negra habría dejado pasar la tool que Claude Code añada mañana.
+ * **La escritura se CONCEDE por escritura, una por una.** El SDK trae `canUseTool`, un
+ * callback que recibe cada tool con su entrada entera y contesta permitir o denegar. Es
+ * asíncrono y corre en NUESTRO proceso, así que se puede esperar ahí a que alguien decida
+ * mientras el hijo sigue vivo — y eso es lo que hace innecesario el `interrupt()` de
+ * LangGraph, cuyo reanudado reejecuta el nodo y relanzaría el proceso hijo.
+ *
+ * Tres listas y no dos (`escrituraExterna.ts`): lectura, escritura y denegadas, con lo que
+ * no se reconoce denegado igual. Antes era `permitirEscritura || esDeLectura(nombre)`, o sea
+ * que el día que se concediera la escritura se concedía TODO — y `Bash` sola basta para
+ * escribir el proyecto entero saltándose la política, el diff y las guardas de ruta.
  *
  * El import del SDK es DINÁMICO a propósito: así `npm test` no lo carga nunca —los tests
  * usan el doble del puerto— y una instalación sin el paquete sigue arrancando, con
@@ -26,54 +28,180 @@
 import type {
   MotorExterno,
   PeticionExterna,
+  PoliticaDeEscrituraExterna,
   SubagenteExternoPort,
 } from "../core/ports.js";
 import { codexDisponible, correrCodex } from "./subagenteCodex.js";
+import {
+  claseDeToolExterna,
+  decisionDePreToolUse,
+  diffDeEscrituraExterna,
+  veredictoDeLectura,
+  motivoDeToolDenegada,
+  veredictoDeRuta,
+  MOTIVO_DE_ESCRITURA_RECHAZADA,
+  MOTIVO_DE_ESCRITURA_ABORTADA,
+} from "./escrituraExterna.js";
 
 /**
- * Las tools del hijo que SÍ puede usar: leer y buscar, y nada más.
+ * La decisión sobre una tool del hijo. **Exportada para poder probarla**: es la regla de
+ * seguridad de toda esta integración, y probarla llamando al SDK exigiría lanzar un Claude
+ * Code de verdad en `npm test` — que es justo lo que este repo no consiente. Lo único que no
+ * es puro son el `realpath` y la lectura del disco, y los dos entran por parámetro.
  *
- * Lista blanca y no negra. Con una negra, cada tool nueva de Claude Code entraría permitida
- * por omisión —y `Bash` sola ya basta para escribir el proyecto entero—; con esta, lo que
- * no se reconoce se deniega y como mucho el hijo se queda corto y lo dice.
+ * El orden importa y es el conservador:
+ * 1. **La clase de la tool** (`claseDeToolExterna`). Lo que no está en las dos listas
+ *    blancas se deniega, `Bash` y `WebFetch` incluidos y con escritura concedida.
+ * 2. **El papel.** Un agente de solo lectura no llega a la política: no hay nada que
+ *    preguntar sobre una escritura que su `.md` no autoriza.
+ * 3. **Las guardas de RUTA del proyecto** (`veredictoDeRuta`), y van ANTES de preguntar:
+ *    un modal cuyo único final posible es un rechazo enseña a aprobar sin mirar, que es la
+ *    misma razón por la que `seDetieneEn` no pregunta por un artefacto mal puesto.
+ * 4. **La política**, con el diff delante. Y sin política no hay escritura: fail-closed por
+ *    tipo, el patrón de `core/cloudstudio.ts#PoliticaDeAprobacion`.
  *
- * `TodoWrite` está dentro pese al nombre: es la lista de tareas del propio hijo, vive en su
- * memoria y no toca el disco del proyecto. `WebFetch` y `WebSearch` NO están: no es que
- * escriban, es que sacan el contenido del proyecto fuera de la máquina, y eso no lo decide
- * un especialista.
+ * **Nada de aquí puede lanzar hacia el SDK.** El envoltorio de `correr` atrapa lo que
+ * escape y deniega: el comportamiento del SDK ante un `canUseTool` que revienta no está
+ * medido, y «no medido» no es una barrera.
  */
-const TOOLS_DE_LECTURA: ReadonlySet<string> = new Set([
-  "Read",
-  "Glob",
-  "Grep",
-  "LS",
-  "NotebookRead",
-  "TodoWrite",
-  "Task",
-]);
-
-const MOTIVO_DE_DENEGACION =
-  "xonecode solo te deja leer: sus escrituras pasan por una aprobación humana que todavía no " +
-  "está conectada a los agentes externos. Explica qué harías en vez de intentar hacerlo.";
-
-/**
- * La decisión sobre una tool del hijo. **Pura y exportada para poder probarla**: es la
- * regla de seguridad de toda esta integración, y probarla llamando al SDK exigiría lanzar
- * un Claude Code de verdad en `npm test` — que es justo lo que este repo no consiente.
- *
- * Deniega por omisión: lo que no está en la lista blanca, no pasa. Incluye lo que no se
- * reconoce, que es el caso que importa — la tool que Claude Code añada en la próxima
- * versión llegará aquí sin que nadie haya tocado este fichero.
- */
-export function decisionDeTool(
-  nombre: string,
-  permitirEscritura: boolean
-): { behavior: "allow"; updatedInput: Record<string, unknown> } | { behavior: "deny"; message: string } {
-  if (permitirEscritura || TOOLS_DE_LECTURA.has(nombre)) {
-    return { behavior: "allow", updatedInput: {} };
+export async function decisionDeTool(opciones: {
+  nombre: string;
+  entrada: Record<string, unknown>;
+  peticion: PeticionExterna;
+  /** Las del proyecto, para reconocer una vista aplanada. Vacío = ninguna conocida. */
+  ficheros: ReadonlySet<string>;
+  politica?: PoliticaDeEscrituraExterna;
+  /**
+   * El del SDK. Si aborta mientras se espera una decisión —el hijo se muere, su propio
+   * tope— la respuesta es DENEGAR en el acto en vez de seguir esperando el plazo entero.
+   *
+   * Sin esto había un «aprobé y no pasó nada»: el hijo ya no está, `pedirAprobacion` sigue
+   * esperando hasta diez minutos con el modal delante, la persona aprueba, y lo que resuelve
+   * es una promesa que ya nadie lee. Peor que un rechazo, porque se cree que se escribió.
+   */
+  signal?: AbortSignal;
+  real?: (ruta: string) => string;
+  leer?: (ruta: string) => string;
+}): Promise<PermisoDeTool> {
+  const { nombre, entrada, peticion, ficheros, politica, signal } = opciones;
+  // Abortado antes de empezar: no se pregunta a nadie por una escritura que ya no va a
+  // ocurrir. Sacar un modal para eso enseña a aprobar sin mirar.
+  if (signal?.aborted === true) return { behavior: "deny", message: MOTIVO_DE_ESCRITURA_ABORTADA };
+  const clase = claseDeToolExterna(nombre);
+  if (clase === "lectura") {
+    /**
+     * Leer también lleva guarda de ruta. Medido corriéndolo, y dicho por el propio hijo:
+     * «`.env` — sí pude leerlo». La lista blanca permitía `Read` a secas, sin mirar dónde —
+     * desde el primer día, o sea que este agujero no lo abrió la escritura: ya estaba.
+     */
+    const v = veredictoDeLectura({
+      cwd: peticion.cwd,
+      nombre,
+      entrada,
+      ficheros,
+      ...(opciones.real === undefined ? {} : { real: opciones.real }),
+    });
+    return v.admitida ? { behavior: "allow" } : { behavior: "deny", message: v.motivo };
   }
-  return { behavior: "deny", message: MOTIVO_DE_DENEGACION };
+  if (clase !== "escritura") {
+    return { behavior: "deny", message: motivoDeToolDenegada(nombre, clase) };
+  }
+  if (!peticion.permitirEscritura) {
+    return { behavior: "deny", message: motivoDeToolDenegada(nombre, clase) };
+  }
+  if (politica === undefined) {
+    // Sin política no hay a quién preguntar, y «no hay a quién preguntar» nunca es «sí».
+    // Se dice con palabras porque el modo de fallo es que el hijo no pueda escribir: quien
+    // lo lea tiene que poder distinguirlo de un rechazo.
+    return {
+      behavior: "deny",
+      message:
+        "xonecode no tiene a quién pedir la autorización de esta escritura en esta sesión, así que no se concede. " +
+        "Explica qué querías cambiar.",
+    };
+  }
+
+  const veredicto = veredictoDeRuta({
+    cwd: peticion.cwd,
+    ruta: entrada["file_path"],
+    ficheros,
+    ...(opciones.real === undefined ? {} : { real: opciones.real }),
+  });
+  if (!veredicto.admitida) return { behavior: "deny", message: veredicto.motivo };
+
+  const lineas = diffDeEscrituraExterna(
+    nombre,
+    entrada,
+    veredicto.ruta,
+    ...(opciones.leer === undefined ? [] : ([opciones.leer] as const))
+  );
+  /**
+   * **El `catch` va AQUÍ y no solo en el envoltorio de `correr`.** El de allá vive en un
+   * cierre que ningún test puede alcanzar sin lanzar un Claude Code de verdad, o sea que
+   * sería la regla escrita y no probada — el patrón de fallo que este repo lleva medido
+   * siete veces. Aquí sí se prueba: una política que revienta es un NO.
+   *
+   * Y reventar es alcanzable de verdad, no hipotético: el «sin humano» de `cli/run.ts`
+   * corta LANZANDO desde `pedirAprobacion`.
+   */
+  let concedida = false;
+  // Se apunta aparte: después de la guarda de arriba TypeScript ya sabe que `aborted` era
+  // falso, así que releerlo al final no distingue «me dijeron que no» de «se canceló».
+  let abortada = false;
+  try {
+    concedida = await (signal === undefined
+      ? politica({ agente: peticion.agente, ruta: veredicto.ruta, lineas })
+      : // Se corre contra el `signal`, y gana el primero. `pedirAprobacion` no tiene
+        // cancelación, así que lo que NO se puede hacer todavía es cerrar el modal que se
+        // queda huérfano: sigue delante hasta que alguien lo conteste o venza su plazo, y
+        // su respuesta no autoriza nada. Deuda declarada; cerrarlo exige un canal nuevo
+        // hacia las tres pieles.
+        Promise.race([
+          politica({ agente: peticion.agente, ruta: veredicto.ruta, lineas }),
+          new Promise<boolean>((resuelto) => {
+            // Se relee AQUÍ, y no es redundante con la guarda de arriba: medido con un test
+            // que se colgaba cinco segundos, un `signal` que aborta entre las dos líneas
+            // —o durante el propio `politica(...)`, que corre ANTES de que esta promesa se
+            // construya— nunca dispara su evento, porque `addEventListener("abort")` sobre
+            // uno ya abortado no llama a nadie. Sin esta línea la carrera no resolvía nunca
+            // y el turno se quedaba colgado esperando a un hijo muerto.
+            if (signal.aborted) {
+              abortada = true;
+              resuelto(false);
+              return;
+            }
+            signal.addEventListener(
+              "abort",
+              () => {
+                abortada = true;
+                resuelto(false);
+              },
+              { once: true }
+            );
+          }),
+        ]));
+  } catch {
+    concedida = false;
+  }
+  if (!concedida) {
+    return {
+      behavior: "deny",
+      message: abortada ? MOTIVO_DE_ESCRITURA_ABORTADA : MOTIVO_DE_ESCRITURA_RECHAZADA,
+    };
+  }
+  // `updatedInput` se OMITE a propósito: por el TIPO del SDK es opcional y ausente
+  // significa «no toco la entrada», que es exactamente lo que queremos. Antes se mandaba
+  // `{}`, que por ese mismo tipo se lee como «la entrada es este objeto vacío». Qué hacía
+  // el SDK con aquello **no está medido** —nunca se ha lanzado un hijo de Claude Code desde
+  // este repo—, así que no se afirma que lo ignorara: se manda la forma que su contrato
+  // declara para «sin cambios».
+  return { behavior: "allow" };
 }
+
+/** Lo que `canUseTool` puede contestar. La forma la pone el SDK; se redeclara para no importarlo. */
+export type PermisoDeTool =
+  | { behavior: "allow"; updatedInput?: Record<string, unknown> }
+  | { behavior: "deny"; message: string };
 
 /** Si el motor se puede usar de verdad. Sin cachear: el que cachea es quien lo llama. */
 async function medirDisponible(motor: MotorExterno): Promise<boolean> {
@@ -89,7 +217,34 @@ async function medirDisponible(motor: MotorExterno): Promise<boolean> {
   }
 }
 
-export function crearSubagenteExterno(): SubagenteExternoPort {
+/**
+ * El adaptador real, con quien autoriza dentro.
+ *
+ * **Las opciones son obligatorias aunque sus campos no lo sean**, y eso es deliberado: pedir
+ * el objeto obliga a pasar por cada llamador el día que esto cambie, y un campo ausente
+ * falla CERRADO —sin política no se escribe— en vez de abrir una puerta en silencio. Es la
+ * única dirección aceptable para el patrón de fallo que este repo ya ha medido siete veces:
+ * una composición que vive en un cierre que los tests doblan.
+ */
+export function crearSubagenteExterno(opciones: {
+  /**
+   * Quién autoriza cada escritura del hijo. Ausente = ninguna escritura, con su motivo.
+   *
+   * Lo pone quien monta la sesión porque es quien sabe QUIÉN está detrás: una consola de
+   * persona pasa su `pedirAprobacion` (el diff y la espera) y una tarea de fondo pasa el
+   * suyo, que concede porque la autorización fue crear la tarea. La traducción de uno al
+   * otro es `escrituraExterna.ts#politicaDeAprobacionExterna`.
+   */
+  aprobarEscritura?: PoliticaDeEscrituraExterna;
+  /**
+   * Los ficheros del proyecto, para reconocer una vista aplanada (`X.xml` con su `X.xne`).
+   *
+   * Es una FUNCIÓN y no una lista: el hijo escribe durante el turno, así que una lista
+   * congelada al construir la sesión no vería el `.xne` que se acaba de crear — y entonces
+   * su `.xml` aplanado dejaría de reconocerse como tal.
+   */
+  ficherosDelProyecto?: () => ReadonlySet<string>;
+}): SubagenteExternoPort {
   const cache = new Map<MotorExterno, boolean>();
   return {
     async disponible(motor: MotorExterno): Promise<boolean> {
@@ -122,13 +277,127 @@ export function crearSubagenteExterno(): SubagenteExternoPort {
           // Doble llave. `permissionMode` es la política del propio hijo y `canUseTool` es
           // la nuestra: la primera puede cambiar de significado con una versión del SDK, la
           // segunda la decidimos aquí y es la que manda.
-          permissionMode: "dontAsk",
+          /**
+           * **`"default"` y no `"dontAsk"`, y el motivo es que ninguno de los dos es seguro
+           * por suposición.** Leídas sus descripciones en el SDK: `dontAsk` es «deny if not
+           * pre-approved», así que podría denegar la escritura ANTES de consultar nuestro
+           * callback y dejar toda esta función muerta con los tests en verde; `default` es
+           * «prompts for dangerous operations», así que podría aprobar una tool «no
+           * peligrosa» —`WebSearch`, que saca el proyecto de la máquina— sin consultarnos.
+           * El primero falla cerrado y el segundo abierto.
+           *
+           * Lo que resuelve la elección es que ya no depende del modo: el hook `PreToolUse`
+           * de abajo contesta las tres clases explícitamente, así que no queda ninguna tool
+           * para que la decida el modo. Con eso se elige `default`, que es el modo donde la
+           * decisión `ask` del hook SÍ llega a `canUseTool` («the 'ask' path surfaces via a
+           * can_use_tool control_request»), que es donde se puede esperar a una persona.
+           */
+          permissionMode: "default",
+          /**
+           * **La denegación de verdad vive aquí**, no en `canUseTool`: una regla `allow` de
+           * un `settings.json` puede ensombrecer el callback, y un deny del hook «resuelve
+           * antes de que `canUseTool` corra». Las dos citas son del propio SDK.
+           *
+           * Y las dos llaves siguen puestas, que es lo que hace que esto sea robusto en vez
+           * de listo: si el hook no llegara a correr, `canUseTool` aplica las MISMAS tres
+           * listas (es la misma función); si `canUseTool` se ensombreciera, el hook ya negó
+           * lo que no toca y una escritura quedaría en `ask` sin nadie que la conceda.
+           */
+          hooks: {
+            PreToolUse: [
+              {
+                hooks: [
+                  // El tipo del callback es la unión de TODOS los eventos de hook, así que
+                  // el nombre de la tool se lee con cuidado en vez de afirmarlo: por aquí
+                  // solo llegan `PreToolUse`, pero una entrada sin `tool_name` no puede
+                  // decidir nada — y ante la duda, denegar (cadena vacía no está en ninguna
+                  // lista blanca, así que `decisionDePreToolUse` contesta «deny»).
+                  async (entrada) => {
+                    const nombre = "tool_name" in entrada ? entrada.tool_name : "";
+                    const cruda = "tool_input" in entrada ? entrada.tool_input : undefined;
+                    return {
+                      hookSpecificOutput: decisionDePreToolUse({
+                        nombre,
+                        // `tool_input` es `unknown` por su tipo: se acepta solo si es un
+                        // objeto, y si no se pasa vacío — que para una lectura significa
+                        // «sin ruta que comprobar» y para el resto da igual, porque la
+                        // clase de la tool ya decide.
+                        entrada:
+                          typeof cruda === "object" && cruda !== null
+                            ? (cruda as Record<string, unknown>)
+                            : {},
+                        cwd: peticion.cwd,
+                        ficheros: opciones.ficherosDelProyecto?.() ?? new Set<string>(),
+                      }),
+                    };
+                  },
+                ],
+              },
+            ],
+          },
+          /**
+           * **Los ajustes del PROYECTO no se cargan, y esto cierra un agujero que ya estaba
+           * abierto.** Medido en el propio SDK (`sdk.mjs`, el aviso
+           * `CLAUDE_SDK_CAN_USE_TOOL_SHADOWED`): «Allow rules from settings files can also
+           * shadow the callback». O sea que una regla `allow` en un `settings.json` hace que
+           * `canUseTool` **no se invoque** — y por omisión el SDK carga las tres fuentes,
+           * incluida `.claude/settings.json` de dentro del `cwd`. Ese fichero viene de
+           * CloudStudio con el proyecto, o sea de fuera: es exactamente el argumento por el
+           * que `seAplicaSinAprobacion` vive en `settings.json` y no en el `config.json` del
+           * proyecto. Con las tres fuentes cargadas, quien te pasa un proyecto decidía si
+           * tus barreras se aplican.
+           *
+           * Se queda `"user"`: son los ajustes del dueño de la máquina —su autenticación,
+           * sus MCP, su modelo—, que es la misma confianza que ya se declara para Codex («el
+           * hijo es el Codex DEL USUARIO, con sus MCP, sus plugins y sus hooks»). Lo que se
+           * va es lo que puede venir en un zip.
+           *
+           * Coste dicho: sin `"project"` el hijo tampoco carga el `CLAUDE.md` del proyecto
+           * (lo dice su propia documentación de esta opción). No se pierde el papel: sus
+           * instrucciones y las reglas de XOne van por `systemPrompt.append`, que es de
+           * donde salen de verdad.
+           *
+           * Y queda DECLARADO lo que esto no cierra: un `allow` en los ajustes GLOBALES del
+           * usuario sigue pudiendo ensombrecer el callback. El cierre robusto que el propio
+           * SDK nombra es un hook `PreToolUse`, que no se ensombrece; no está puesto todavía.
+           */
+          settingSources: ["user"],
           // El modelo del PRODUCTO, si el `.md` lo pide. Ausente = el que Claude Code use
           // por su cuenta, que es lo que hacía siempre. Los alias (`opus`, `sonnet`…) son
           // los que su propio SDK documenta, y se prefieren a un id pinchado: sobreviven a
           // la siguiente versión, que es justo para lo que el producto los ofrece.
           ...(peticion.modelo === undefined ? {} : { model: peticion.modelo }),
-          canUseTool: async (nombre: string) => decisionDeTool(nombre, peticion.permitirEscritura),
+          /**
+           * El envoltorio es el fail-closed llevado al final: **nada de aquí dentro puede
+           * lanzar hacia el SDK**. Si la política revienta, si el disco contesta un EACCES
+           * al canonicalizar o si alguien introduce un fallo en las guardas, la respuesta es
+           * DENEGAR — nunca una excepción, cuyo tratamiento en la máquina de permisos del
+           * SDK no está medido, y nunca un permiso.
+           */
+          canUseTool: async (
+            nombre: string,
+            entrada: Record<string, unknown>,
+            contexto: { signal: AbortSignal }
+          ) => {
+            try {
+              return await decisionDeTool({
+                nombre,
+                entrada,
+                peticion,
+                signal: contexto.signal,
+                ficheros: opciones.ficherosDelProyecto?.() ?? new Set<string>(),
+                ...(opciones.aprobarEscritura === undefined
+                  ? {}
+                  : { politica: opciones.aprobarEscritura }),
+              });
+            } catch {
+              return {
+                behavior: "deny" as const,
+                message:
+                  "xonecode no pudo decidir sobre esa llamada, así que no se concede. Explica qué querías hacer.",
+              };
+            }
+          },
         },
       });
 
