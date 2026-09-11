@@ -1207,3 +1207,41 @@ describe("«se está abriendo algo», que lo dice el servidor", () => {
     expect(s.leer().abriendo).toBeUndefined();
   });
 });
+
+describe("el consumo de la sesión entra por lista BLANCA", () => {
+  it("los dos bloques llegan campo a campo", () => {
+    const s = crearStoreDelCliente();
+    s.aplicar({
+      clase: "consumo",
+      modelo: { entrada: 100, salida: 20, cache: 5 },
+      externo: { entrada: 7, salida: 1, cache: 0 },
+    } as never);
+    expect(s.leer().consumo).toEqual({
+      modelo: { entrada: 100, salida: 20, cache: 5 },
+      externo: { entrada: 7, salida: 1, cache: 0 },
+    });
+  });
+
+  it("lo que llega mal se lee como CERO, no como NaN", () => {
+    // Viene de un `JSON.parse` de la red: un NaN o una cadena dejarían el contador ilegible
+    // en vez de dar un error que alguien pueda ver.
+    const s = crearStoreDelCliente();
+    s.aplicar({ clase: "consumo", modelo: { entrada: "1000" }, externo: null } as never);
+    expect(s.leer().consumo).toEqual({
+      modelo: { entrada: 0, salida: 0, cache: 0 },
+      externo: { entrada: 0, salida: 0, cache: 0 },
+    });
+  });
+
+  it("y se TIRA al caerse el cable, como los modelos", () => {
+    // Es del servidor: mientras no hay cable no se puede afirmar. La reconexión lo trae.
+    const s = crearStoreDelCliente();
+    s.aplicar({
+      clase: "consumo",
+      modelo: { entrada: 1, salida: 1, cache: 0 },
+      externo: { entrada: 0, salida: 0, cache: 0 },
+    } as never);
+    s.marcarDesconectado();
+    expect(s.leer().consumo).toBeUndefined();
+  });
+});

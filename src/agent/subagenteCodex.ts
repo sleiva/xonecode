@@ -30,6 +30,7 @@
 
 import { spawn } from "node:child_process";
 import type { PeticionExterna } from "../core/ports.js";
+import { consumoDeCodex } from "./consumoExterno.js";
 
 /** El binario. `CODEX_BIN` gana, para poder apuntar a una versión concreta o a un envoltorio. */
 export function binarioDeCodex(): string {
@@ -50,7 +51,6 @@ const TOPE_MS = 10 * 60 * 1000;
 const RUIDO = new Set([
   "remoteControl/status/changed",
   "mcpServer/startupStatus/updated",
-  "thread/tokenUsage/updated",
   "account/rateLimits/updated",
   "hook/started",
   "hook/completed",
@@ -85,7 +85,11 @@ export async function codexDisponible(): Promise<boolean> {
   });
 }
 
-export async function correrCodex(peticion: PeticionExterna): Promise<string> {
+export async function correrCodex(
+  peticion: PeticionExterna,
+  /** Lo que el hilo lleva consumido. Se avisa al terminar, con el último total visto. */
+  alConsumir?: (consumo: { entrada: number; salida: number; cache: number }) => void
+): Promise<string> {
   const hijo = spawn(binarioDeCodex(), ["app-server", "--stdio"], {
     stdio: ["pipe", "pipe", "pipe"],
     cwd: peticion.cwd,
@@ -96,12 +100,18 @@ export async function correrCodex(peticion: PeticionExterna): Promise<string> {
     let hilo: string | undefined;
     let respuesta: string | undefined;
     let terminado = false;
+    /** El último `tokenUsage.total` visto: es acumulado, así que el último es el bueno. */
+    let consumo: { entrada: number; salida: number; cache: number } | undefined;
 
     const acabar = (error?: Error, texto?: string): void => {
       if (terminado) return;
       terminado = true;
       clearTimeout(reloj);
       hijo.kill();
+      // El consumo se dice SIEMPRE que se sepa, también cuando el turno acaba en error o se
+      // agota el tope: esos tokens se gastaron igual, y contar solo los éxitos haría que la
+      // cifra bajara justo en los turnos que más cuestan.
+      if (consumo !== undefined) alConsumir?.(consumo);
       if (error !== undefined) fallar(error);
       else cumplir(texto ?? "");
     };
@@ -192,6 +202,16 @@ export async function correrCodex(peticion: PeticionExterna): Promise<string> {
             ],
           },
         });
+        return;
+      }
+      /**
+       * El consumo del hilo. **Estaba en la lista de RUIDO**, o sea que este dato llevaba
+       * llegando desde el primer día y se tiraba. Se guarda el ÚLTIMO y no se suman: por el
+       * esquema del propio binario, `tokenUsage.total` es acumulado del hilo.
+       */
+      if (m.method === "thread/tokenUsage/updated") {
+        const c = consumoDeCodex(m.params);
+        if (c !== undefined) consumo = c;
         return;
       }
       if (m.method === undefined || RUIDO.has(m.method)) return;

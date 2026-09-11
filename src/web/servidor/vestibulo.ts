@@ -29,7 +29,7 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 import type { Acto } from "../../core/actos.js";
 import type { Eleccion, FuentesDeEleccion, Proveedor } from "../../core/modelos.js";
-import type { CatalogoModelosPort } from "../../core/ports.js";
+import type { ConsumoDeSesionPorCuenta, CatalogoModelosPort } from "../../core/ports.js";
 import { esDoble } from "../../core/ports.js";
 import type { Entorno } from "../../core/settings.js";
 import { rutaDeWorkspace } from "../../core/settings.js";
@@ -183,6 +183,15 @@ export function esProyectoEnDisco(raiz: string): boolean {
 /** Lo mínimo que el vestíbulo necesita de una `SesionReal` para cambiar de proyecto. */
 export interface SesionCerrable {
   cerrar(): void;
+  /**
+   * Lo que lleva consumido la sesión, en sus dos cuentas, y el aviso de cuando cambia.
+   *
+   * OPCIONALES los dos, como `cancelar`: el ejecutor guionizado no consume nada y no tiene
+   * qué contar. Ausente significa «no se sabe», que es distinto de cero — y por eso el
+   * contador no se pinta en vez de enseñar un 0 inventado.
+   */
+  consumo?(): { modelo: { entrada: number; salida: number; cache: number }; externo: { entrada: number; salida: number; cache: number } };
+  alCambiarConsumo?(oyente: () => void): () => void;
   /** Aborta el `stream` del grafo y deja la sesión viva. Opcional: el ejecutor guionizado
    *  no tiene nada que abortar. */
   cancelar?(): void;
@@ -364,6 +373,8 @@ export const MOTIVO_SESION_DE_TAREA_EN_CURSO =
 /** Una consola de proyecto viva. Solo hay una a la vez. */
 export interface ConsolaDeProyecto {
   readonly raiz: string;
+  /** Lo que lleva consumido su sesión, si consta. Ver `Vestibulo.consumoDeSesion`. */
+  consumo?(): ConsumoDeSesionPorCuenta | undefined;
   /**
    * El estado de sesión de ESTA consola, ahora mismo. Es de dónde sale el modelo en vigor:
    * `/modelo` lo cambia en caliente dentro del lazo y no toca disco, así que releer la
@@ -605,6 +616,18 @@ export interface Vestibulo {
    * de turno no lo vio.
    */
   alCambiarTurno(escucha: (activo: boolean) => void): void;
+  /**
+   * Se avisa cuando cambia lo consumido por la sesión EN FOCO. Una sola escucha, como las
+   * otras dos, y por lo mismo: quien monta las rutas la instala para poder recordarlo y
+   * decírselo también a quien conecte después.
+   */
+  alCambiarConsumo(escucha: () => void): void;
+  /**
+   * Lo que lleva consumido la sesión en foco, en sus dos cuentas. `undefined` es «no se
+   * sabe» —no hay sesión abierta, o es el ejecutor de pega— y NO es cero: un contador a 0
+   * donde no consta nada es la cifra inventada de siempre.
+   */
+  consumoDeSesion(): ConsumoDeSesionPorCuenta | undefined;
   /** Cierra el proyecto abierto y el propio vestíbulo. */
   cerrar(): Promise<void>;
 }
@@ -781,6 +804,8 @@ export function crearVestibulo(opciones: OpcionesDelVestibulo): Vestibulo {
   let escuchaDeEstado: ((estado: EstadoDeSesion) => void) | undefined;
   /** Y de que hay (o deja de haber) un turno corriendo. */
   let escuchaDeTurno: ((activo: boolean) => void) | undefined;
+  /** Y de que la sesión en foco ha consumido más tokens. */
+  let escuchaDeConsumo: (() => void) | undefined;
   /**
    * Avisa de que algo cambió en las consolas de persona: un turno empieza o acaba —en
    * CUALQUIERA de ellas— o una de segundo plano se cierra.
@@ -1078,6 +1103,19 @@ export function crearVestibulo(opciones: OpcionesDelVestibulo): Vestibulo {
       (s) => {
         sesionReal = s;
         if (cerrando) s.cerrar();
+        /**
+         * La cuenta de tokens se escucha AQUÍ y no al construir la consola porque la sesión
+         * se anuncia tarde: `crearEjecutorReal` avisa después de `inspeccionar` y
+         * `abrirSesionReal`, o sea segundos dentro del primer turno. Suscribirse antes sería
+         * suscribirse a algo que no existe.
+         *
+         * Solo se avisa si esta consola es la que el cable está pintando: los tokens de un
+         * turno de segundo plano no pueden cambiar el contador que alguien está mirando en
+         * otra sesión — la misma regla que hace que sus actos no se cuelen en ese chat.
+         */
+        s.alCambiarConsumo?.(() => {
+          if (enFoco === raiz) escuchaDeConsumo?.();
+        });
       },
       // Solo si la hay: `undefined` es lo que reciben las aperturas de persona, y de ahí
       // sale que su agente no tenga `/adjuntos/` montada.
@@ -1548,6 +1586,13 @@ export function crearVestibulo(opciones: OpcionesDelVestibulo): Vestibulo {
     alCambiarTurno(escucha) {
       escuchaDeTurno = escucha;
     },
+
+    alCambiarConsumo(escucha) {
+      escuchaDeConsumo = escucha;
+    },
+
+    // La del FOCO, igual que `proyectoAbierto()`: es la sesión que se está mirando.
+    consumoDeSesion: () => consolaEnFoco()?.consumo?.(),
 
     opcionesDeEntorno: () => [...ENTORNOS_OFICIALES, ENTORNO_OTRO],
     entornosRegistrados: () => [...registrados],

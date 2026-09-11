@@ -20,6 +20,10 @@ import { cargarAgentes } from "./agentesEnDisco.js";
 import { crearSubagenteExterno } from "./subagenteExterno.js";
 import { opcionesDeSubagenteExterno } from "./escrituraExterna.js";
 import { ColaDeEventos, entrelazar } from "../core/entrelazar.js";
+import { sumarConsumo, SIN_CONSUMO } from "./consumoExterno.js";
+import type { ConsumoDeSesion, ConsumoDeSesionPorCuenta } from "../core/ports.js";
+
+
 import type { PendienteDeAprobacion } from "../core/events.js";
 import type { LineaDeDiff } from "../core/diff.js";
 import { rutaRealDeVirtual } from "../core/rutaVirtual.js";
@@ -83,6 +87,10 @@ export interface SesionReal {
   nuevoHilo(id?: string): void;
   /** Aborta de inmediato la llamada al modelo que está en curso, si la hay. */
   cancelar(): void;
+  /** Lo que lleva consumido la sesión, en sus DOS cuentas (ver `ConsumoDeSesionPorCuenta`). */
+  consumo(): ConsumoDeSesionPorCuenta;
+  /** Se avisa en cada cambio de cualquiera de las dos. Devuelve cómo dejar de escuchar. */
+  alCambiarConsumo(oyente: () => void): () => void;
   /**
    * Termina la sesión: aborta lo que esté en curso y la deja inservible.
    *
@@ -344,6 +352,30 @@ export async function abrirSesionReal(opciones: {
    */
   const eventosExternos = new ColaDeEventos();
 
+  /**
+   * Lo que lleva consumido ESTA sesión, en dos cuentas que no se mezclan.
+   *
+   * No se mezclan porque no son el mismo dinero: los del grafo van contra la clave de API
+   * del usuario y los del hijo externo contra su suscripción del producto. Sumar TOKENS es
+   * legítimo —un token es un token— y sumar el COSTE sería la cifra que miente, así que
+   * aquí solo se cuentan tokens y las dos cuentas viajan separadas para que quien las pinte
+   * pueda decir la verdad sin tener que elegir una.
+   */
+  let consumoExterno: ConsumoDeSesion = SIN_CONSUMO;
+  const oyentesDeConsumo: Array<() => void> = [];
+  const avisarDeConsumo = (): void => {
+    for (const o of oyentesDeConsumo) {
+      // Envuelto: un oyente que reviente no puede llevarse por delante un turno. Es la
+      // misma razón que el `try` alrededor de `alCambiar` del corredor de tareas, que sin
+      // él paraba el corredor entero.
+      try {
+        o();
+      } catch {
+        // Un contador que no se pinta no es motivo para tumbar nada.
+      }
+    }
+  };
+
   const checkpointer = opciones.checkpointer ?? new MemorySaver();
   const tracker = createTokenTracker();
   const diagnostico = crearDiagnosticoDeTools(raiz);
@@ -391,6 +423,10 @@ export async function abrirSesionReal(opciones: {
           // `.xml` aplanado dejaría de reconocerse como tal.
           ficherosDelProyecto: () => ficherosDelProyecto(raiz),
           eventos: eventosExternos,
+          alConsumir: (c) => {
+            consumoExterno = sumarConsumo(consumoExterno, c);
+            avisarDeConsumo();
+          },
         })
       ),
       modelos,
@@ -941,6 +977,22 @@ export async function abrirSesionReal(opciones: {
       hilo = id ?? `xonecode-${randomUUID()}`;
     },
     tracker,
+    /**
+     * Lo consumido por la SESIÓN, en sus dos cuentas. Se lee, no se guarda: el tracker y el
+     * acumulador viven en este cierre y son la única fuente.
+     */
+    consumo: (): ConsumoDeSesionPorCuenta => ({
+      modelo: { entrada: tracker.input, salida: tracker.output, cache: tracker.cache },
+      externo: consumoExterno,
+    }),
+    /** Avisa cuando cualquiera de las dos cuentas cambia. Devuelve cómo dejar de escuchar. */
+    alCambiarConsumo: (oyente: () => void): (() => void) => {
+      oyentesDeConsumo.push(oyente);
+      return () => {
+        const i = oyentesDeConsumo.indexOf(oyente);
+        if (i >= 0) oyentesDeConsumo.splice(i, 1);
+      };
+    },
     get hilo(): string {
       return hilo;
     },

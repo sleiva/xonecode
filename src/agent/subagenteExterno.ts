@@ -26,12 +26,14 @@
  */
 
 import type {
+  ConsumoExterno,
   MotorExterno,
   PeticionExterna,
   PoliticaDeEscrituraExterna,
   SubagenteExternoPort,
 } from "../core/ports.js";
 import { codexDisponible, correrCodex } from "./subagenteCodex.js";
+import { consumoDeClaude } from "./consumoExterno.js";
 import {
   claseDeToolExterna,
   decisionDePreToolUse,
@@ -259,6 +261,14 @@ export function crearSubagenteExterno(opciones: {
    * el callback ya no se consulta (medido).
    */
   alUsarTool?: (tool: { nombre: string; detalle?: string }) => void;
+  /**
+   * Lo que el hijo consumió, al terminar. Los dos motores lo reportan y hasta ahora se
+   * tiraba entero (`agent/consumoExterno.ts` explica de dónde sale cada uno).
+   *
+   * Va por su propio callback y no dentro de la respuesta porque son dos cosas distintas:
+   * la respuesta es lo que el especialista contesta, y esto es contabilidad.
+   */
+  alConsumir?: (consumo: ConsumoExterno) => void;
 }): SubagenteExternoPort {
   const cache = new Map<MotorExterno, boolean>();
   return {
@@ -275,7 +285,14 @@ export function crearSubagenteExterno(opciones: {
     },
 
     async correr(peticion: PeticionExterna): Promise<string> {
-      if (peticion.motor === "codex") return correrCodex(peticion);
+      if (peticion.motor === "codex") {
+        return correrCodex(
+          peticion,
+          opciones.alConsumir === undefined
+            ? undefined
+            : (c) => opciones.alConsumir?.({ motor: "codex", ...c })
+        );
+      }
       const { query } = await import("@anthropic-ai/claude-agent-sdk");
 
       const respuesta = query({
@@ -428,11 +445,16 @@ export function crearSubagenteExterno(opciones: {
       for await (const mensaje of respuesta) {
         if (mensaje.type !== "result") continue;
         if (mensaje.subtype !== "success") {
+          opciones.alConsumir?.({ motor: "claude-code", ...consumoDeClaude(mensaje) });
           throw new Error(`${peticion.motor} terminó sin respuesta (${mensaje.subtype})`);
         }
         // `is_error` con subtype «success» significa que el turno acabó en un error de API y
         // el texto ES el error. Devolverlo como si fuera la respuesta del especialista
         // haría que el orquestador se lo creyera.
+        // El consumo se apunta ANTES de contestar, y también cuando el turno acabó en
+        // error: esos tokens se gastaron igual. Contar solo los éxitos haría que la cifra
+        // bajara justo en los turnos que más cuestan.
+        opciones.alConsumir?.({ motor: "claude-code", ...consumoDeClaude(mensaje) });
         if (mensaje.is_error) throw new Error(`${peticion.motor}: ${mensaje.result}`);
         return mensaje.result;
       }

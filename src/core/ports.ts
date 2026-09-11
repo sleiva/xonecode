@@ -118,6 +118,41 @@ export interface SubagenteExternoPort {
 
 export type MotorExterno = "claude-code" | "codex";
 
+/**
+ * Lo que un agente EXTERNO consumió en una ejecución, tal y como ÉL lo reporta.
+ *
+ * Viaja por su propio callback y no dentro de la respuesta porque son dos cosas distintas:
+ * la respuesta es lo que el especialista contesta, y esto es contabilidad — la misma razón
+ * por la que un artefacto se anuncia por un evento y no dentro del texto.
+ *
+ * La CACHÉ va aparte de la entrada, igual que en `vendor/tokenTracking.ts`: meterla dentro
+ * inflaría la cifra que se enseña, y tenerlas separadas es lo que permite decir la verdad
+ * sin tener que elegir una de las dos.
+ */
+export interface ConsumoExterno extends ConsumoDeSesion {
+  motor: MotorExterno;
+}
+
+/** Tokens de entrada, de salida y de caché. La caché aparte, por lo de arriba. */
+export interface ConsumoDeSesion {
+  entrada: number;
+  salida: number;
+  cache: number;
+}
+
+/**
+ * Lo consumido por una sesión, en DOS cuentas que no se suman entre ellas.
+ *
+ * `modelo` son los tokens del grafo —contra la clave de API del usuario— y `externo` los de
+ * un agente de otro producto —contra su suscripción—. Sumar TOKENS de las dos es defendible
+ * (un token es un token); sumar su COSTE no lo es, y tenerlas separadas deja que quien las
+ * pinte decida sin tener que mentir en ninguna dirección.
+ */
+export interface ConsumoDeSesionPorCuenta {
+  modelo: ConsumoDeSesion;
+  externo: ConsumoDeSesion;
+}
+
 export interface PeticionExterna {
   motor: MotorExterno;
   /** La carpeta del proyecto: el hijo trabaja ahí y en ningún otro sitio. */

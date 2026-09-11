@@ -26,7 +26,7 @@ import { dirname, basename, resolve, relative, sep } from "node:path";
 import type { LineaDeDiff } from "../core/diff.js";
 import type { PendienteDeAprobacion } from "../core/events.js";
 import type { ColaDeEventos } from "../core/entrelazar.js";
-import type { EscrituraExternaPedida, PoliticaDeEscrituraExterna } from "../core/ports.js";
+import type { ConsumoExterno, EscrituraExternaPedida, PoliticaDeEscrituraExterna } from "../core/ports.js";
 import { artefactoFueraDeSitio } from "../core/artefactos.js";
 import { descargaFueraDeSitio } from "../core/descargas.js";
 import type { Decision } from "../vendor/hitl.js";
@@ -699,10 +699,13 @@ export function opcionesDeSubagenteExterno(opciones: {
   ) => Promise<Map<string, Decision>>;
   ficherosDelProyecto: () => ReadonlySet<string>;
   eventos: ColaDeEventos;
+  /** Lo que el hijo consumió, para la cuenta de la sesión. Ausente = no se lleva la cuenta. */
+  alConsumir?: (consumo: ConsumoExterno) => void;
 }): {
   aprobarEscritura?: PoliticaDeEscrituraExterna;
   ficherosDelProyecto: () => ReadonlySet<string>;
   alUsarTool: (tool: { nombre: string; detalle?: string }) => void;
+  alConsumir?: (consumo: ConsumoExterno) => void;
 } {
   const politica = politicaExternaDeSesion(opciones.pedirAprobacion);
   return {
@@ -712,6 +715,7 @@ export function opcionesDeSubagenteExterno(opciones: {
     // bitácora lo cuenta y ninguna piel se entera de que hay dos orígenes.
     alUsarTool: ({ nombre, detalle }) =>
       opciones.eventos.empujar({ tipo: "tool", nombre, ...(detalle === undefined ? {} : { detalle }) }),
+    ...(opciones.alConsumir === undefined ? {} : { alConsumir: opciones.alConsumir }),
   };
 }
 

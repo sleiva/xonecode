@@ -1,0 +1,36 @@
+/*
+ * Dato de MÁQUINA, así que va en mono (`estilos/tipografia.css` marca esa distinción: el
+ * mono es para URLs, rutas y cifras, nunca para prosa). Y en el tono tenue de la fila, no en
+ * el acento: esto se consulta, no se pulsa — pintarlo con el cian del producto lo haría
+ * competir con la pastilla del modelo, que sí es un control.
+ */
+.contador {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-family: var(--dsw-font-mono);
+  font-size: 11px;
+  color: var(--dsw-alias-text-tertiary);
+  white-space: nowrap;
+  /* Sin fondo ni borde: no es un botón. La fila ya lo separa con su propio `gap`. */
+  padding: 0 2px;
+}
+
+.cifra {
+  color: var(--dsw-alias-text-secondary);
+}
+
+/*
+ * El rótulo desaparece cuando la fila se estrecha, y las cifras con sus flechas se quedan:
+ * en un móvil el contador compite con la pastilla del modelo y con la del dispositivo, y de
+ * las tres cosas esta es la que se consulta de reojo. El `title` sigue diciéndolo entero.
+ */
+.rotulo {
+  color: var(--dsw-alias-text-tertiary);
+}
+
+@media (max-width: 720px) {
+  .rotulo {
+    display: none;
+  }
+}

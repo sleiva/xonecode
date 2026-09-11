@@ -498,6 +498,25 @@ describe("las opciones del subagente externo, extraídas del cierre y probadas",
     ]);
   });
 
+  it("y el consumo del hijo se reenvía: sin eso, los tokens del agente externo no se cuentan", () => {
+    // El callback es OPCIONAL, así que quitando su línea los dos `tsc` siguen limpios y el
+    // contador de la sesión se queda corto sin que nada chiste — el patrón de siempre.
+    const vistos: unknown[] = [];
+    const o = opcionesDeSubagenteExterno({
+      ficherosDelProyecto: () => new Set<string>(),
+      eventos: new ColaDeEventos(),
+      alConsumir: (c) => vistos.push(c),
+    });
+    o.alConsumir!({ motor: "claude-code", entrada: 10, salida: 2, cache: 1 });
+    expect(vistos).toEqual([{ motor: "claude-code", entrada: 10, salida: 2, cache: 1 }]);
+  });
+
+  it("sin quien lo cuente, el callback NO se inventa", () => {
+    // Ausente es «no se lleva la cuenta», y el adaptador lo distingue: no llama a nadie.
+    const o = opcionesDeSubagenteExterno({ ficherosDelProyecto: () => new Set<string>(), eventos: new ColaDeEventos() });
+    expect(o.alConsumir).toBeUndefined();
+  });
+
   it("la lista de ficheros es una FUNCIÓN, no una foto del momento de abrir la sesión", () => {
     // El hijo escribe DURANTE el turno: con una lista congelada, el `.xne` que se acaba de
     // crear no estaría y su `.xml` aplanado dejaría de reconocerse como tal.

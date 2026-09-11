@@ -617,6 +617,33 @@ feedback del desarrollador** y no es terminal.
   CONECTAR, una vez por proceso, y solo ellos—. El que está EN VIGOR se enseña siempre. Los que
   quedan fuera se CUENTAN. `SIN_CREDENCIAL` tiene TRES estados (verde / hueco / nada);
   `hayCredencial` no sirve para esto, contesta otra pregunta.
+- **Los tokens de una SESIÓN se cuentan y se enseñan, en DOS cuentas que no se suman**
+  (`core/ports.ts#ConsumoDeSesionPorCuenta`, `agent/consumoExterno.ts`, mensaje `consumo`,
+  `componentes/ContadorDeTokens.tsx`). La web no tenía NINGÚN contador: `tracker` no aparecía
+  ni una vez en `src/web/`, así que la piel por omisión era la única sin ver un token —
+  `formatearBarra` es de terminal y la TUI lo pinta en su sidebar. Y del agente EXTERNO se
+  tiraba entero, teniéndolo los dos motores: Claude Code lo da en `result.modelUsage` (que su
+  propia doc marca como «the correct field for token/cost accounting», por encima de `usage`,
+  que es solo del bucle principal) y Codex en `thread/tokenUsage/updated` — que **estaba en la
+  lista de RUIDO** de su adaptador, o sea que llevaba llegando desde el primer día. Reglas:
+  - **Los dos son ACUMULADOS: se lee el último, no se suman.** Lo dicen sus dos contratos con
+    esas palabras, y es la diferencia entre contar y contar el doble. Entre ejecuciones sí se
+    suma: cada `correr` es otra sesión del producto.
+  - **Se suman TOKENS, nunca COSTE.** Los del grafo van contra la clave de API del usuario y
+    los del hijo contra su suscripción: un token es un token, pero su precio no. Por eso las
+    dos cuentas viajan separadas hasta el componente, que suma las cifras y pone el desglose
+    en el `title`.
+  - **La caché va aparte de la entrada**, como en `vendor/tokenTracking.ts`: meterla dentro
+    inflaría la cifra que se enseña.
+  - **De Codex se lee `total` y no `last`** —`last` es lo que ocupa la ventana— y
+    `reasoningOutputTokens` **no** se suma a la salida: por su esquema ya va dentro.
+  - **Se cuenta también cuando el turno acaba en ERROR**: esos tokens se gastaron igual, y
+    contar solo los éxitos haría bajar la cifra justo en los turnos que más cuestan.
+  - **Ausente es «no consta» y entonces no se pinta.** Sin sesión, o con el ejecutor de pega,
+    no hay número — un contador a cero que nadie ha medido es la cifra inventada de siempre.
+    Se tira al caerse el cable, como los modelos. Y los tokens de un turno de SEGUNDO PLANO no
+    mueven el contador de quien mira otra sesión: solo avisa la consola en foco.
+  Lo que NO hay todavía: métricas globales (por proyecto, histórico, coste).
 - **El modelo en vigor lo dice el SERVIDOR** (`resolver(estadoDeSesion.fuentes).trabajo` de la
   consola ABIERTA), por la costura `Consola.alEstado`: `/modelo` cambia en caliente sin tocar
   disco, así que releer la configuración contaría lo de antes para siempre.

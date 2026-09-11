@@ -132,6 +132,16 @@ export interface EstadoDelCliente {
   /** Hay un turno corriendo AHORA. Lo dice el servidor; el cliente no lo deduce. */
   turnoEnVuelo?: boolean;
   /**
+   * Lo que lleva consumido la SESIÓN, en sus dos cuentas. Lo dice el servidor.
+   *
+   * Ausente es «no consta» —no hay sesión abierta, o el ejecutor es el de pega— y entonces
+   * el contador no se pinta: un cero que nadie ha medido es la cifra inventada de siempre.
+   */
+  consumo?: {
+    modelo: { entrada: number; salida: number; cache: number };
+    externo: { entrada: number; salida: number; cache: number };
+  };
+  /**
    * Qué se está abriendo ahora mismo, si algo. Lo dice el servidor (`clase: "abriendo"`) y
    * no se deduce: entre el clic y el estado nuevo pasan de cientos de milisegundos a los
    * minutos de una descarga, y sin esto la interfaz se queda quieta.
@@ -1066,6 +1076,22 @@ export function crearStoreDelCliente(): {
           });
           return;
         }
+        case "consumo": {
+          /**
+           * Campo a campo, que es la lista blanca de siempre: un campo nuevo del cable no
+           * llega hasta que se nombra aquí. Y con guarda de tipo, porque esto viene de un
+           * `JSON.parse` de la red: un `NaN` o una cadena en el contador lo dejarían
+           * ilegible en vez de dar un error que alguien pueda ver.
+           */
+          const numero = (v: unknown): number => (typeof v === "number" && Number.isFinite(v) ? v : 0);
+          const cuenta = (v: unknown): { entrada: number; salida: number; cache: number } => {
+            const o = (typeof v === "object" && v !== null ? v : {}) as Record<string, unknown>;
+            return { entrada: numero(o["entrada"]), salida: numero(o["salida"]), cache: numero(o["cache"]) };
+          };
+          const m = mensaje as { modelo?: unknown; externo?: unknown };
+          mutar({ consumo: { modelo: cuenta(m.modelo), externo: cuenta(m.externo) } });
+          return;
+        }
         case "turno": {
           const activo = (mensaje as { activo?: unknown }).activo;
           if (typeof activo !== "boolean") return;
@@ -1284,6 +1310,10 @@ export function crearStoreDelCliente(): {
         // Sin cable no se sabe si el turno sigue: dejarlo en `true` apagaría el compositor
         // para siempre en una pestaña que ya no recibe el «terminó».
         turnoEnVuelo: false,
+        // El consumo se TIRA al caerse el cable, como los modelos y por lo mismo: es del
+        // servidor, y mientras no hay cable no se puede afirmar. La reconexión lo trae
+        // entero en la ráfaga.
+        consumo: undefined,
         // Los ficheros y sus parches son una FOTO: mientras no hay cable pueden haber
         // cambiado, y enseñarlos como si siguieran siendo verdad es peor que pedirlos otra
         // vez al volver.

@@ -870,6 +870,13 @@ export function montarRutas(
     // La cola de tareas, si esta ejecución las tiene: la misma regla que `agentes`, sin
     // esto la pestaña de tareas se quedaría vacía hasta el primer cambio de la cola.
     const tareas = mensajeDeTareas();
+    /**
+     * Lo consumido por la sesión que se va a pintar. Va en la ráfaga por lo mismo que los
+     * modelos: una pestaña que conecta a mitad de sesión no vio los cambios anteriores, y
+     * sin esto su contador se quedaría a cero hasta el siguiente token — que en un turno
+     * largo son minutos. `undefined` es «no consta» y entonces no se manda nada.
+     */
+    const consumoDeLaSesion = vestibulo.consumoDeSesion();
     for (const cliente of destinatarios) {
       // El orden importa: primero el transcript, luego lo que el compositor necesita para
       // sugerir, y al final el estado de modelos que pinta su disparador. Al reconectar se
@@ -880,6 +887,9 @@ export function montarRutas(
       cliente(modelos);
       cliente(agentes);
       if (tareas !== undefined) cliente(tareas);
+      if (consumoDeLaSesion !== undefined) {
+        cliente({ clase: "consumo", modelo: consumoDeLaSesion.modelo, externo: consumoDeLaSesion.externo });
+      }
       // La foto de la máquina, si ya se tomó. Si no, se dispara abajo UNA vez y llega a
       // todos por el SSE cuando termine: no se espera aquí, que son varios procesos.
       if (informeDeDispositivos !== undefined) {
@@ -2266,6 +2276,20 @@ export function montarRutas(
   vestibulo.alCambiarEstadoDeSesion(() => emitirModelos());
   // El turno se emite solo (`consolaWeb.turno`), pero además hay que RECORDARLO: una pestaña
   // que conecta a mitad no vio ese mensaje, y necesita saberlo para apagar su compositor.
+  /**
+   * Lo consumido por la sesión en foco. Se emite en cada cambio y también al conectar: una
+   * pestaña que llega a mitad de sesión no vio los anteriores, y sin esto su contador se
+   * quedaría a cero hasta el siguiente token — que en un turno largo son minutos.
+   */
+  const emitirConsumo = (): void => {
+    const c = vestibulo.consumoDeSesion();
+    // Ausente es «no consta», y entonces no se manda nada: el cliente prefiere no pintar el
+    // contador a pintar un cero que nadie ha medido.
+    if (c === undefined) return;
+    emitir({ clase: "consumo", modelo: c.modelo, externo: c.externo });
+  };
+  vestibulo.alCambiarConsumo(() => emitirConsumo());
+
   vestibulo.alCambiarTurno(() => {
     // La cola se vuelve a mirar: por aquí pasa también el CIERRE de una consola de segundo
     // plano cuyo turno acabó, y eso libera su raíz para las tareas («gana la persona» deja

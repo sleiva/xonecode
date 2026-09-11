@@ -143,6 +143,11 @@ export type MensajeAlCliente =
   /** Hay un turno EN VUELO, o dejó de haberlo: apaga el compositor y saca el botón de
    *  parar. No se deduce de los actos — un turno que revienta no siempre deja `fin`. */
   | { clase: "turno"; activo: boolean }
+  | {
+      clase: "consumo";
+      modelo: { entrada: number; salida: number; cache: number };
+      externo: { entrada: number; salida: number; cache: number };
+    }
   /** Se está abriendo una sesión —o descargando un proyecto—, dicho por el servidor: es el
    *  único que sabe cuándo empieza y cuándo acaba. */
   | { clase: "abriendo"; activo: boolean; proyecto?: string; sesion?: string; descargando?: true }

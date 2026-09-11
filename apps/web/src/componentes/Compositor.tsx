@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type KeyboardEvent } from "react";
 import type { DispositivoElegido, InformeDeDispositivos, ProveedorDeModelos } from "../tipos.js";
 import { PastillaDeModelo } from "./PastillaDeModelo.js";
 import { PastillaDeDispositivo } from "./PastillaDeDispositivo.js";
+import { ContadorDeTokens, type ConsumoPintable } from "./ContadorDeTokens.js";
 import estilos from "./Compositor.module.css";
 
 /** Un candidato de `/ayuda`: lo manda el servidor recorriendo `COMANDOS`, no una copia. */
@@ -24,6 +25,7 @@ export function Compositor({
   comandos = [],
   conectado,
   turnoEnVuelo = false,
+  consumo,
   oculto = false,
   alParar,
   modelos,
@@ -46,6 +48,8 @@ export function Compositor({
    * ve su texto desaparecer del campo y no pasar nada durante minutos.
    */
   turnoEnVuelo?: boolean;
+  /** Lo consumido por la sesión. Ausente = no consta, y entonces no se pinta el contador. */
+  consumo?: ConsumoPintable;
   /**
    * Fuera de la vista: se pone en las pestañas que no son el chat.
    *
@@ -199,6 +203,12 @@ export function Compositor({
               alElegir={alElegirDispositivo}
             />
           )}
+          {/*
+            Lo consumido por la sesión, al lado del modelo: es del mismo tipo que él —un
+            dato de la sesión que dice el servidor y el cliente pinta— y por eso comparte
+            fila. Sin dato no se pinta: ausente es «no consta», no cero.
+          */}
+          <ContadorDeTokens {...(consumo === undefined ? {} : { consumo })} />
           {/*
             La MISMA ranura, dos acciones: con turno en vuelo es parar, y si no, enviar.
             Dos botones a la vez —uno inerte al lado del otro— dejaría al usuario eligiendo

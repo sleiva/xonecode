@@ -1181,6 +1181,9 @@ export function App({
               // El estado de modelos, tal cual lo manda el servidor: la pastilla lo pinta
               // y no lo deduce. Ausente mientras no ha llegado el mensaje.
               {...(estado.modelos === undefined ? {} : { modelos: estado.modelos })}
+              // Lo consumido por la sesión. Ausente = no consta (sin sesión, o el ejecutor
+              // de pega), y entonces el contador no se pinta en vez de enseñar un cero.
+              {...(estado.consumo === undefined ? {} : { consumo: estado.consumo })}
               // El catálogo es una llamada de red por proveedor: se pide al desplegarlo,
               // no al conectar.
               alPedirCatalogo={(proveedor) => void enviar({ clase: "catalogo", proveedor })}

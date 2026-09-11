@@ -124,6 +124,22 @@ export type MensajeAlCliente =
    */
   | { clase: "turno"; activo: boolean }
   /**
+   * Lo que lleva consumido la sesión, en sus DOS cuentas.
+   *
+   * Separadas y no sumadas: los del grafo van contra la clave de API del usuario y los del
+   * agente externo contra su suscripción del producto. Sumar tokens es defendible; sumar su
+   * coste sería la cifra que miente, así que aquí solo viajan tokens y viajan aparte.
+   *
+   * Se emite en cada cambio y también al conectar, porque una pestaña que llega a mitad de
+   * sesión no vio los anteriores. Ausente = no consta (no hay sesión, o es el de pega) y
+   * entonces el cliente NO pinta un cero.
+   */
+  | {
+      clase: "consumo";
+      modelo: { entrada: number; salida: number; cache: number };
+      externo: { entrada: number; salida: number; cache: number };
+    }
+  /**
    * Se está ABRIENDO algo: una sesión, o un proyecto que además hay que descargar.
    *
    * Lo dice el SERVIDOR y no lo deduce el cliente, por el mismo motivo que `turno`: solo
