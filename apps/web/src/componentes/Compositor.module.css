@@ -26,15 +26,30 @@
   box-sizing: border-box;
 }
 
+/*
+ * En COLUMNA desde que hay chips: lo que acota el turno arriba, el texto en medio a todo el
+ * ancho, y las acciones abajo. Antes el campo compartía fila con las pastillas y el
+ * contador, y con la ventana estrecha se quedaba en un canal de dos líneas — medido en
+ * pantalla. Es además la forma de la maqueta.
+ */
 .compositor {
   position: relative;
   display: flex;
-  align-items: flex-end;
-  gap: 8px;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 6px;
   padding: 10px 10px 10px 16px;
   border: 0.5px solid var(--dsw-alias-border-l2);
   border-radius: 20px;
   background: var(--dsw-alias-bg-layer-1);
+}
+
+/* La fila de los chips: lo que acota este turno, arriba y a la izquierda. */
+.chips {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
 }
 
 .entrada {
@@ -49,7 +64,13 @@
   min-height: 48px;
   max-height: 220px;
   resize: none;
-  padding: 8px 0;
+  /*
+   * Sin padding vertical propio: lo tenía cuando el campo compartía FILA con las pastillas y
+   * le hacía falta para alinearse con ellas. En columna, el que manda es el de la caja, y
+   * aquél se sumaba al `min-height` dejando 16px de aire muerto debajo del texto — visto en
+   * el navegador, no deducido.
+   */
+  padding: 0;
   background: none;
   color: var(--dsw-alias-label-primary);
   border: none;

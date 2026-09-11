@@ -186,3 +186,43 @@ describe("la ayuda de teclas", () => {
     expect(screen.getByPlaceholderText(/Pregunta sobre XOne/)).toBeTruthy();
   });
 });
+
+describe("los chips de arriba", () => {
+  /** Lo que acota el turno va ARRIBA; lo que actúa sobre él, abajo. */
+  it("el dispositivo va en su fila, ANTES del campo", () => {
+    render(
+      <Compositor
+        conectado
+        alEnviar={() => undefined}
+        alElegirDispositivo={() => undefined}
+      />
+    );
+    const campo = screen.getByRole("textbox");
+    const chip = screen.getByText(/dispositivo/i);
+    // `DOCUMENT_POSITION_FOLLOWING` = el campo viene DESPUÉS del chip en el DOM, que es
+    // además el orden del Tab: primero se acota y luego se escribe.
+    expect(chip.compareDocumentPosition(campo) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it("sin manejador no hay chip NI fila: un renglón en blanco es alto gastado en nada", () => {
+    // La misma regla que la pastilla del modelo: sin quien sepa elegir, no se pinta.
+    const { container } = render(<Compositor conectado alEnviar={() => undefined} />);
+    expect(container.querySelector("[class*='chips']")).toBeNull();
+  });
+
+  it("y el MODELO se queda abajo, con el contador y el botón", () => {
+    // Es lo que la maqueta pone abajo, y tiene sentido: el modelo se cambia mientras se
+    // escribe, y el dispositivo acota la sesión entera.
+    render(
+      <Compositor
+        conectado
+        alEnviar={() => undefined}
+        alElegirDispositivo={() => undefined}
+        modelos={{ actual: "gemini/gemini-flash-latest", proveedores: [] }}
+      />
+    );
+    const campo = screen.getByRole("textbox");
+    const modelo = screen.getByText("gemini/gemini-flash-latest");
+    expect(modelo.compareDocumentPosition(campo) & Node.DOCUMENT_POSITION_PRECEDING).toBeTruthy();
+  });
+});

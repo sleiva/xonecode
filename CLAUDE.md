@@ -460,6 +460,14 @@ feedback del desarrollador** y no es terminal.
   paleta redefine solo los alias con acento; el cian es ACENTO y no sostiene texto. **De una
   maqueta ajena se toma la FORMA, nunca el color** — la lección de los ocho mockups de Stitch,
   cuyas paletas se contradecían entre ellas y solo una declaraba el cian de XOne.
+- **La caja del compositor va en COLUMNA**: los CHIPS arriba (lo que acota el turno: hoy solo
+  el dispositivo de la sesión), el texto en medio a todo el ancho, y abajo el modelo con el
+  contador y el botón. Antes el campo compartía fila con las pastillas y con la ventana
+  estrecha se quedaba en un canal de dos líneas — **visto en el navegador**, que es como se
+  comprueba esto (`capturas/` está en el `.gitignore` para eso). No hay chip de «Contexto»
+  aunque la maqueta lo pinte: ese concepto no existe aquí y lo más parecido —el proyecto— ya
+  se lee en la miga; pintarlo dos veces es la duplicación que ya se quitó de las marcas de
+  «trabajando». La fila de chips no se pinta si está vacía.
 - **El compositor DICE sus tres teclas** (`Enter` envía, `Shift+Enter` salta de línea, `/` abre
   las sugerencias), y las tres se comprueban en el mismo test que las escribe: una ayuda que
   se queda vieja es peor que no tenerla. Va fuera de la caja —no compite con lo que se
