@@ -159,12 +159,16 @@ export function Compositor({
               ? "sin conexión con xonecode"
               : turnoEnVuelo
                 ? "el agente está trabajando…"
-                : // Nombra lo que este harness sabe hacer de verdad —preguntar por XOne,
-                  // cambiar una colección o un script— en vez de un «escribe algo» que no
-                  // dice nada. Y solo eso: prometer aquí lo que no está cableado sería el
-                  // mismo botón muerto de siempre, con la petición de una persona detrás.
-                  "Pregunta sobre XOne, pide un cambio en una colección o en un script, o /comando…"
+                : // Corto a propósito: con la ventana estrecha el largo partía en DOS líneas
+                  // y dejaba la caja apretada contra las pastillas (medido en pantalla). Lo
+                  // que sigue nombrando es lo que el harness sabe hacer —no un «escribe
+                  // algo»—, y los ejemplos largos se van al `title`, que es donde caben sin
+                  // empujar nada.
+                  "Pregunta sobre XOne, o /comando…"
           }
+          /* Los ejemplos, donde caben: el placeholder se lee en cada turno y tiene que
+             caber en una línea; esto se consulta una vez. */
+          title="Pregunta sobre la plataforma, pide un cambio en una colección o en un script, o escribe /comando"
           onChange={(evento) => setValor(evento.target.value)}
           onKeyDown={alPulsarTecla}
         />
