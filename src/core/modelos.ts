@@ -382,3 +382,36 @@ export function resolver(fuentes: FuentesDeEleccion = {}): Record<Papel, Eleccio
   }
   return salida;
 }
+
+/**
+ * ¿Hay que pedirle a ESTE modelo de Claude el razonamiento adaptativo, a mano?
+ *
+ * Tres comportamientos distintos detrás de un mismo campo, y de ahí que esto sea una tabla
+ * y no un booleano fijo. Medido en `@langchain/anthropic` 1.5.2: si no se le fija
+ * `thinking`, manda `thinking: undefined`, o sea que **omite el parámetro**. Y omitirlo no
+ * significa lo mismo según el modelo:
+ *
+ * - **Opus 5 y Sonnet 5**: omitirlo ya corre adaptativo —el razonamiento está puesto por
+ *   omisión—, así que no hace falta pedir nada. Mandar lo que no se necesita es superficie
+ *   que hay que mantener.
+ * - **Opus 4.8, 4.7, 4.6 y Sonnet 4.6**: omitirlo corre **sin pensar**. Aquí sí hay que
+ *   pedirlo, y es lo que este predicado existe para arreglar: hoy esos cuatro van sin
+ *   razonamiento en un harness de código, que es justo donde más rinde.
+ * - **Haiku 4.5 y todo lo anterior a 4.6**: NO aceptan `adaptive` —lo suyo es
+ *   `{type:"enabled", budget_tokens:N}`—, así que pedírselo sería un 400. Un `thinking`
+ *   adaptativo a ciegas para «anthropic» rompería todos esos modelos.
+ *
+ * Lo que no se reconoce devuelve `false`, que es el lado conservador: se omite el parámetro
+ * y el modelo hace lo que haga por omisión, en vez de mandarle algo que puede rechazar.
+ */
+const FAMILIAS_CON_ADAPTATIVO_A_MANO: readonly string[] = [
+  "claude-opus-4-6",
+  "claude-opus-4-7",
+  "claude-opus-4-8",
+  "claude-sonnet-4-6",
+];
+
+export function pideThinkingAdaptativo(proveedor: Proveedor, modelo: string): boolean {
+  if (proveedor !== "anthropic") return false;
+  return FAMILIAS_CON_ADAPTATIVO_A_MANO.some((prefijo) => modelo.startsWith(prefijo));
+}

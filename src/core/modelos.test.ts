@@ -3,8 +3,7 @@ import {
   parsear, resolver, ModeloMalEscrito, POR_OMISION,
   COMPATIBLES_OPENAI, compatibleConOpenAi, PROVEEDORES, SIN_CREDENCIAL, VARIABLES_POR_PROVEEDOR,
   motivoDeEndpointInaceptable, motivoDeSlugInaceptable, nombreDeProveedor, slugDesdeNombre,
-  variableDeProveedor,
-} from "./modelos.js";
+  variableDeProveedor, pideThinkingAdaptativo } from "./modelos.js";
 
 describe("parsear", () => {
   it("separa proveedor y modelo", () => {
@@ -239,5 +238,38 @@ describe("los proveedores personalizados", () => {
     expect(motivoDeEndpointInaceptable("no es una url")).toBeDefined();
     // Y un host que solo PARECE local es de otra máquina.
     expect(motivoDeEndpointInaceptable("http://localhost.ejemplo.com/v1")).toBeDefined();
+  });
+});
+
+describe("pideThinkingAdaptativo", () => {
+  /**
+   * Medido en `@langchain/anthropic` 1.5.2: sin fijar `thinking`, omite el parámetro. Y
+   * omitirlo significa tres cosas distintas según el modelo, de ahí la tabla.
+   */
+  it("los que sin pedirlo correrían SIN pensar: se les pide", () => {
+    expect(pideThinkingAdaptativo("anthropic", "claude-opus-4-8")).toBe(true);
+    expect(pideThinkingAdaptativo("anthropic", "claude-opus-4-7")).toBe(true);
+    expect(pideThinkingAdaptativo("anthropic", "claude-opus-4-6")).toBe(true);
+    expect(pideThinkingAdaptativo("anthropic", "claude-sonnet-4-6")).toBe(true);
+  });
+
+  it("los que ya corren adaptativo por omisión: no se les manda nada", () => {
+    // Mandar lo que no se necesita es superficie que hay que mantener.
+    expect(pideThinkingAdaptativo("anthropic", "claude-opus-5")).toBe(false);
+    expect(pideThinkingAdaptativo("anthropic", "claude-sonnet-5")).toBe(false);
+  });
+
+  it("y a los que NO aceptan «adaptive» no se les pide: sería un 400", () => {
+    // Haiku 4.5 y todo lo anterior a 4.6 usan `{type:"enabled", budget_tokens:N}`.
+    expect(pideThinkingAdaptativo("anthropic", "claude-haiku-4-5")).toBe(false);
+    expect(pideThinkingAdaptativo("anthropic", "claude-sonnet-4-5-20250929")).toBe(false);
+    expect(pideThinkingAdaptativo("anthropic", "claude-3-5-sonnet")).toBe(false);
+    // Lo desconocido cae al lado conservador: se omite.
+    expect(pideThinkingAdaptativo("anthropic", "claude-loquesea-9")).toBe(false);
+  });
+
+  it("y no es de anthropic: ningún otro proveedor tiene este campo", () => {
+    expect(pideThinkingAdaptativo("openai", "gpt-4o")).toBe(false);
+    expect(pideThinkingAdaptativo("gemini", "gemini-2.5-flash")).toBe(false);
   });
 });
