@@ -159,7 +159,11 @@ export function Compositor({
               ? "sin conexión con xonecode"
               : turnoEnVuelo
                 ? "el agente está trabajando…"
-                : "Escribe una petición, o /comando…"
+                : // Nombra lo que este harness sabe hacer de verdad —preguntar por XOne,
+                  // cambiar una colección o un script— en vez de un «escribe algo» que no
+                  // dice nada. Y solo eso: prometer aquí lo que no está cableado sería el
+                  // mismo botón muerto de siempre, con la petición de una persona detrás.
+                  "Pregunta sobre XOne, pide un cambio en una colección o en un script, o /comando…"
           }
           onChange={(evento) => setValor(evento.target.value)}
           onKeyDown={alPulsarTecla}
@@ -238,6 +242,19 @@ export function Compositor({
           )}
         </div>
       </div>
+      {/*
+        Las tres teclas que hay que saber, y las TRES son ciertas hoy: `Enter` envía
+        (`alPulsarTecla`), `Shift+Enter` salta de línea y `/` abre las sugerencias que el
+        servidor manda. Escribirlas aquí no promete nada nuevo — es la diferencia entre esto
+        y un icono de micrófono.
+
+        Va FUERA de la caja y dentro de la envoltura: fuera porque no compite con lo que se
+        escribe, y dentro porque así se oculta con ella en Trazas y en Ficheros, donde no hay
+        a quién escribirle.
+      */}
+      <p className={estilos.ayudaDeTeclas}>
+        Enter para enviar · Shift + Enter para salto de línea · / para comandos
+      </p>
     </div>
   );
 }

@@ -149,3 +149,40 @@ describe("Compositor", () => {
     expect(container.querySelector("[data-trabajando]")).toBeNull();
   });
 });
+
+describe("la ayuda de teclas", () => {
+  it("dice las tres, y las tres son ciertas: se comprueban aquí mismo", () => {
+    // No es una decoración: cada frase se corresponde con un comportamiento de este
+    // componente, y el test las ata a los tres para que no se queden mintiendo.
+    const alEnviar = vi.fn();
+    render(<Compositor conectado alEnviar={alEnviar} comandos={[{ nombre: "/ayuda", descripcion: "…" }]} />);
+    expect(screen.getByText(/Enter para enviar · Shift \+ Enter para salto de línea · \/ para comandos/)).toBeTruthy();
+
+    const campo = screen.getByRole("textbox");
+    // `Enter` envía…
+    fireEvent.change(campo, { target: { value: "hola" } });
+    fireEvent.keyDown(campo, { key: "Enter" });
+    expect(alEnviar).toHaveBeenCalledWith("hola");
+    // …`Shift+Enter` no…
+    fireEvent.change(campo, { target: { value: "otra" } });
+    fireEvent.keyDown(campo, { key: "Enter", shiftKey: true });
+    expect(alEnviar).toHaveBeenCalledTimes(1);
+    // …y `/` abre las sugerencias.
+    fireEvent.change(campo, { target: { value: "/ay" } });
+    expect(screen.getByRole("listbox")).toBeTruthy();
+  });
+
+  it("se oculta CON la caja, no por su cuenta", () => {
+    // En Trazas y en Ficheros no hay a quién escribirle, así que la caja se esconde; una
+    // ayuda de teclado suelta debajo de un diff sería una nota al pie sin nota.
+    const { container } = render(<Compositor conectado alEnviar={() => undefined} oculto />);
+    expect(container.querySelector("[hidden]")?.textContent).toContain("Enter para enviar");
+  });
+
+  it("el placeholder nombra lo que este harness sabe hacer", () => {
+    // «Escribe una petición» no dice nada; y lo que se nombre tiene que estar cableado —
+    // prometer aquí lo que no existe es el botón muerto de siempre con una persona detrás.
+    render(<Compositor conectado alEnviar={() => undefined} />);
+    expect(screen.getByPlaceholderText(/Pregunta sobre XOne/)).toBeTruthy();
+  });
+});

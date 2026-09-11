@@ -79,8 +79,8 @@ describe("App: la pregunta de texto libre", () => {
 
   it("lo que escribe el compositor sigue yendo como prosa: es la petición del usuario, no una respuesta", () => {
     const { enviar } = montar();
-    fireEvent.change(screen.getByPlaceholderText(/escribe una petición/i), { target: { value: "haz un listado" } });
-    fireEvent.keyDown(screen.getByPlaceholderText(/escribe una petición/i), { key: "Enter" });
+    fireEvent.change(screen.getByPlaceholderText(/pregunta sobre xone/i), { target: { value: "haz un listado" } });
+    fireEvent.keyDown(screen.getByPlaceholderText(/pregunta sobre xone/i), { key: "Enter" });
     expect(enviar).toHaveBeenCalledWith({ clase: "prosa", texto: "haz un listado" });
   });
 });
@@ -402,7 +402,7 @@ describe("App: la pantalla de arranque no enseña nada más", () => {
       })
     );
     expect(screen.getByRole("group", { name: /proveedor de modelos/i })).toBeTruthy();
-    expect(screen.queryByPlaceholderText(/escribe una petición/i)).toBeNull();
+    expect(screen.queryByPlaceholderText(/pregunta sobre xone/i)).toBeNull();
     expect(screen.queryByRole("tablist")).toBeNull();
     // Y no «sin `<select>`»: con `entornos=[]` `Barra` tampoco pinta uno aunque SÍ esté
     // montada (`Barra.tsx`), así que esa comprobación no distinguiría nada. Su pie
@@ -448,7 +448,7 @@ describe("App: la pantalla de arranque no enseña nada más", () => {
     // más arriba en el mismo `TarjetaDeAlta`. El campo del formulario es la prueba de
     // que el wizard sigue ahí.
     expect(screen.getByLabelText(/url del mcp/i)).toBeTruthy();
-    expect(screen.queryByPlaceholderText(/escribe una petición/i)).toBeNull();
+    expect(screen.queryByPlaceholderText(/pregunta sobre xone/i)).toBeNull();
     expect(screen.queryByRole("tablist")).toBeNull();
   });
 
@@ -527,7 +527,7 @@ describe("App: la pantalla de arranque no enseña nada más", () => {
     );
     // Ni transcript, ni compositor, ni pestañas: el proyecto salió del alta pero
     // TODAVÍA no se ha elegido ninguno, así que el centro no tiene sesión que enseñar.
-    expect(screen.queryByPlaceholderText(/escribe una petición/i)).toBeNull();
+    expect(screen.queryByPlaceholderText(/pregunta sobre xone/i)).toBeNull();
     expect(screen.queryByRole("tablist")).toBeNull();
     // El centro ya no es un hueco con una frase: es el ESCRITORIO, con los proyectos que
     // el servidor manda y un clic para empezar en cada uno.
@@ -558,7 +558,7 @@ describe("App: la pantalla de arranque no enseña nada más", () => {
         proyectoAbierto: true,
       })
     );
-    expect(screen.getByPlaceholderText(/escribe una petición/i)).toBeTruthy();
+    expect(screen.getByPlaceholderText(/pregunta sobre xone/i)).toBeTruthy();
     expect(screen.getByRole("tablist")).toBeTruthy();
     // La barra lateral, con su pie: sin entorno/proyecto en ESTE mensaje, sus niveles
     // siguen vacíos — es la prueba de que la barra está montada, no de un `<select>` que

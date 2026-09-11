@@ -241,3 +241,17 @@
     opacity: 0.18;
   }
 }
+
+/*
+ * Las tres teclas, debajo de la caja. Tenue y centrada: es una ayuda que se lee una vez y
+ * después se ignora, así que no puede competir ni con lo que se escribe ni con la pastilla
+ * del modelo. Color por ALIAS, nunca literal —`Barra.test.tsx` recorre todos los
+ * `.module.css` de esta carpeta—, y el cian de la marca no entra aquí: es el ACENTO del
+ * producto y esto no es un control, es una nota al pie.
+ */
+.ayudaDeTeclas {
+  margin: 6px 0 0;
+  text-align: center;
+  font-size: 11px;
+  color: var(--dsw-alias-text-tertiary);
+}

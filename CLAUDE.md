@@ -445,8 +445,16 @@ feedback del desarrollador** y no es terminal.
 - **`localStorage` es de ESTE navegador** (apariencia, barra plegada, ancho): todo acceso envuelto
   en `try`, porque en una ventana privada el accesor lanza.
 - **Ningún color literal fuera de `estilos/marca.css` y `splash.css`** (`Barra.test.tsx` lo
-  vigila), `transparent` incluido. La paleta redefine solo los alias con acento; el cian es
-  ACENTO y no sostiene texto.
+  vigila recorriendo TODOS los `.module.css` de `componentes/`), `transparent` incluido. La
+  paleta redefine solo los alias con acento; el cian es ACENTO y no sostiene texto. **De una
+  maqueta ajena se toma la FORMA, nunca el color** — la lección de los ocho mockups de Stitch,
+  cuyas paletas se contradecían entre ellas y solo una declaraba el cian de XOne.
+- **El compositor DICE sus tres teclas** (`Enter` envía, `Shift+Enter` salta de línea, `/` abre
+  las sugerencias), y las tres se comprueban en el mismo test que las escribe: una ayuda que
+  se queda vieja es peor que no tenerla. Va fuera de la caja —no compite con lo que se
+  escribe— y dentro de la envoltura, para ocultarse CON ella en Trazas y Ficheros. El
+  placeholder nombra lo que el harness sabe hacer, y solo eso: prometer ahí lo que no está
+  cableado es el botón muerto de siempre con la petición de una persona detrás.
 - **Nada se trae de un CDN** (tipografías empaquetadas, iconos copiados): esta consola escucha en
   loopback y declara un modo offline de primera clase.
 - **Un control sin dato detrás no se pinta.** Ausente ≠ vacío en las cuatro capas (disco, cable,
