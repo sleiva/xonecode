@@ -47,6 +47,18 @@ export interface EstadoDelCliente {
    */
   modelos?: { actual?: string; proveedores: ProveedorDeModelos[] };
   /**
+   * Los proyectos de cada entorno registrado que alguien ha consultado, por su id: las
+   * casillas de su pestaña en Ajustes. Solo están los PEDIDOS —el activo no hace falta,
+   * su lista viene en el `alta`—, y las tres respuestas se distinguen: entrada ausente es
+   * «no se ha preguntado», `proyectos` es la lista y `error` es «no se pudo preguntar».
+   *
+   * **Se tira al caerse el cable** (`marcarDesconectado`), como `modelos`.
+   */
+  proyectosPorEntorno?: Record<
+    string,
+    { proyectos?: { id: string; nombre: string; compartido?: boolean }[]; error?: string }
+  >;
+  /**
    * Cómo fue el último alta o baja de proveedor personalizado. El motivo llega por el cable
    * y no como acto de sistema porque la ventana de ajustes no pinta el transcript — mismo
    * motivo que el `aviso` del selector durante el alta. Se tira al caerse el cable: es un
@@ -624,6 +636,41 @@ export function crearStoreDelCliente(): {
               opciones: [...selector.opciones],
               // Solo si es texto: lo demás se descarta entero, como el resto del store.
               ...(typeof selector.aviso === "string" ? { aviso: selector.aviso } : {}),
+            },
+          });
+          return;
+        }
+        case "proyectosDeEntorno": {
+          // Los proyectos de UN entorno, guardados por su id: son las casillas de su
+          // pestaña en Ajustes. Campo a campo, que es una lista BLANCA — lo que no se
+          // nombre aquí no llega al componente aunque venga por el cable.
+          //
+          // `proyectos` ausente con `error` puesto se guarda ASÍ, sin lista: «no se pudo
+          // preguntar» no es «no tiene proyectos», y el componente pinta cosas distintas.
+          const m = mensaje as { entorno?: unknown; proyectos?: unknown; error?: unknown };
+          if (typeof m.entorno !== "string") return;
+          const suyos = Array.isArray(m.proyectos)
+            ? m.proyectos
+                .filter(
+                  (p): p is { id: string; nombre: string; compartido?: boolean } =>
+                    typeof p === "object" &&
+                    p !== null &&
+                    typeof (p as { id?: unknown }).id === "string" &&
+                    typeof (p as { nombre?: unknown }).nombre === "string"
+                )
+                .map((p) => ({
+                  id: p.id,
+                  nombre: p.nombre,
+                  ...(typeof p.compartido === "boolean" ? { compartido: p.compartido } : {}),
+                }))
+            : undefined;
+          mutar({
+            proyectosPorEntorno: {
+              ...(estado.proyectosPorEntorno ?? {}),
+              [m.entorno]: {
+                ...(suyos === undefined ? {} : { proyectos: suyos }),
+                ...(typeof m.error === "string" ? { error: m.error } : {}),
+              },
             },
           });
           return;
@@ -1222,6 +1269,11 @@ export function crearStoreDelCliente(): {
         secreto: undefined,
         aprobacion: undefined,
         modelos: undefined,
+        // Y las listas de proyectos por entorno: cada una es una conexión con CloudStudio
+        // que este proceso pudo no llegar a hacer, y al reconectar la pestaña las vuelve a
+        // pedir si le faltan. Guardarlas entre conexiones dejaría casillas de una consulta
+        // que quizá ya no vale.
+        proyectosPorEntorno: undefined,
         // El acuse de un alta o una baja de proveedor es de esa operación, no un estado:
         // guardado entre conexiones, al reconectar reaparecería un error ya resuelto.
         proveedor: undefined,

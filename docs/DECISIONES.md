@@ -2942,6 +2942,74 @@ los trae readline en stdio; la TUI solo implementa las flechas (`upArrow`/`downA
 `cli/tui/entrada.tsx`, con el mismo completer) y descarta ctrl-p/ctrl-n — no es la misma
 tecla en las dos pieles. No hay código propio de historial fuera de la piel.
 
+**Ajustes tiene una pestaña por ENTORNO, y abrir una no cambia el entorno activo**
+(`apps/web/src/componentes/Ajustes.tsx`, `arranque.ts#atenderProyectosDeEntorno`). Pedido
+mirando la pantalla con un segundo entorno recién registrado: «sale todos los proyectos y es
+intrabajable». Era una lista plana de entornos —icono, nombre y URL, sin nada que pulsar— con
+UN bloque de casillas debajo, el del activo, así que los dieciocho proyectos de uno caían en
+una sola columna y a los del otro **no se llegaba de ninguna forma** salvo cambiando el
+entorno activo en la barra, que es mudarse y no mirar. Nueve reglas:
+- **Pedir los proyectos de un entorno no lo hace ACTIVO**, y esa es la mitad del diseño.
+  `atenderProyectosDeEntorno` es el hermano de `atenderEntornoActivo` y lo que los separa es
+  todo lo que el nuevo NO hace: no toca `entornoElegido`, ni `proyectos`, ni `ramas`, ni
+  `proyectoElegido`, ni pone `aviso`. Abrir Ajustes a marcar una casilla no puede cambiarle la
+  barra lateral —ni los proyectos de los que se habla— a quien está trabajando en otro
+  servidor. Por eso la aserción que sostiene el diseño en `arranque.test.ts` es que
+  `alta.entornoActivo` **no cambia**, y se escribió antes que el handler.
+- **Se pide al abrir la pestaña y solo si falta el dato**, que es la regla que ya tenían
+  Ficheros y Revisión. El entorno ACTIVO no gasta ninguna conexión: su lista viene en el
+  `alta`. Y el efecto depende de la sección abierta, porque preguntarle a CloudStudio por un
+  entorno mientras alguien mira Apariencia sería gastar una conexión que nadie pidió.
+- **Sin caché, a propósito**, al contrario que el catálogo de modelos. Aquél se cachea porque
+  la pastilla se abre constantemente y cada consulta es una API de pago; una pestaña de
+  Ajustes se abre poco, y con caché podría contradecir a la barra en cuanto alguien cree un
+  proyecto en Studio. Una sola fuente. Por lo mismo no va en el `alta`: ese mensaje se reemite
+  en los dos flancos de cada turno, y meter las listas dentro obligaría a cachearlas.
+- **Las tres respuestas se dicen distintas**: entrada ausente es «no se ha preguntado» (y la
+  pestaña pregunta), `proyectos` es la lista, y `error` es «no se pudo preguntar» — con el
+  motivo y **sin ninguna casilla**, porque no se sabe qué proyectos hay. Una lista vacía
+  afirmaría un entorno sin proyectos, que es otra cosa y también se dice. El fallo es de ESE
+  entorno y no se pinta un aviso global: la regla del catálogo, «un desvío, no un callejón».
+  Y no se reintenta solo tras un error: sería un lazo contra un servidor que no contesta.
+- **Lo marcado se guarda POR ENTORNO** (`elegidosPorEntorno`), y aquí estaba el fallo de
+  verdad que las pestañas destapan. Era un `useState` único sembrado del entorno activo, así
+  que al abrir la pestaña de otro entorno las casillas arrancaban marcadas con los ids del
+  primero y **el primer clic guardaba la elección de aquél bajo éste** por `visibles`. Hay
+  test: abrir la pestaña de B, marcar una casilla, y `alElegirProyectos` recibe `(B, …)` con
+  ids de B y nada de A. La persistencia ya era por entorno en el cable y en disco
+  (`Entorno.proyectos`); lo que faltaba era que el componente no lo aplanara.
+- **Pestañas SIEMPRE, también con un solo entorno registrado.** La etiqueta contesta «¿de
+  quién son estos proyectos?», que hasta ahora se daba por supuesto porque solo se podían ver
+  los del activo. Y la tira sustituye a la lista plana en vez de sentarse a su lado: dos
+  sitios para lo mismo, y el de arriba no era pulsable.
+- **El efecto depende de los DOS CAMPOS de la pestaña, no del record de listas, y eso salió
+  de MEDIRLO.** Con el record, mientras se espera la respuesta salían **cinco** peticiones
+  donde tenía que haber una —y cada una es una conexión con CloudStudio (OAuth +
+  `initialize` + `studio_list_projects`)—. El motivo: el valor por omisión
+  `proyectosPorEntorno = {}` es un objeto NUEVO en cada render, y el prop solo viaja cuando
+  hay algo, o sea que justo en el estado de espera el efecto veía una dependencia distinta
+  cada vez y se volvía a disparar con cada mutación del store; con un turno en vuelo, eso es
+  varias veces por segundo. Los dos campos de esa pestaña valen establemente `undefined`
+  mientras se espera. El manejador se queda FUERA de las dependencias por lo mismo: `App`
+  pasa una lambda escrita en el JSX, cuya identidad cambia en cada render. **Los tests no lo
+  veían** porque los dos afirmaban `toHaveBeenCalledWith` y ninguno contaba llamadas — un
+  `toHaveLength(1)` es lo que lo destapó.
+- **Y el CABLEADO de los dos sentidos tiene test propio, porque el tipo no lo caza.**
+  `alPedirProyectosDeEntorno` es OPCIONAL, así que quitando su línea de `App.tsx` los dos
+  `tsc` siguen LIMPIOS y las pestañas simplemente no piden nada nunca; y el camino de vuelta
+  —`store.ts` → el spread de `App` → las casillas— es la forma exacta del incidente de
+  `mime`/`base64`, donde tres capas probadas por separado dejaron al navegador sin enseñar
+  una sola imagen con todo en verde. Los dos tests se comprobaron QUITANDO la línea y viendo
+  que muerden, que es la única forma de saber que un test que pasa a la primera sirve de algo.
+  Séptima instancia del patrón de fallo de este repo.
+- **Y una trampa del detector de literales**, medida dos veces en esta tanda: `tipos.test.ts`
+  casa `clase:\s*"…"`, así que un `{clase:"entorno"}` escrito dentro de un COMENTARIO cuenta
+  como un literal del cable y el test da divergencia entre cliente y host sin que nada haya
+  divergido. Y `Barra.test.tsx` prohíbe `transparent` con razón —es un literal de color—, así
+  que el filo de la pestaña elegida se pinta con `box-shadow` inset y no con un
+  `border-bottom` que exigiera el `transparent` de reserva; de paso, una sombra no ocupa
+  sitio, así que la fila no se mueve al cambiar de pestaña.
+
 ## Trampas verificadas
 
 - **El orquestador va de SOLO LECTURA, y hasta el 9-09-2026 no lo era** (`PERFIL_DEL_ORQUESTADOR`,

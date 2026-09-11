@@ -168,6 +168,8 @@ export function Ajustes({
   proveedores = [],
   entornos = [],
   proyectos = [],
+  proyectosPorEntorno = {},
+  alPedirProyectosDeEntorno,
   entornoActivo,
   apariencia,
   secreto,
@@ -207,11 +209,29 @@ export function Ajustes({
    *  es la elección de cuáles se enseñan; ausente = no se ha dicho. */
   entornos?: readonly { id: string; nombre: string; url: string; proyectos?: readonly string[] }[];
   /**
-   * Los proyectos del entorno ACTIVO, tal cual los devolvió CloudStudio. Solo hay listado
-   * del activo: pedir el de todos serían tantas conexiones como entornos, y hoy nada del
-   * cable dice cuál está activo más allá del primero.
+   * Los proyectos del entorno ACTIVO, tal cual los devolvió CloudStudio y tal como vienen
+   * en el `alta`. Los de los DEMÁS entornos llegan por `proyectosPorEntorno`, que se pide
+   * pestaña a pestaña: cada uno es una conexión con CloudStudio.
    */
   proyectos?: readonly { id: string; nombre: string }[];
+  /**
+   * Los proyectos de cada entorno NO activo, indexados por su id, tal como los contesta
+   * `{clase:"proyectosDeEntorno"}`.
+   *
+   * Las tres respuestas se distinguen y ninguna se puede confundir con otra: la entrada
+   * **ausente** es «no se ha preguntado» (y la pestaña pregunta al abrirse), `proyectos`
+   * puesto es la lista, y `error` puesto es «no se pudo preguntar» — que NO es un entorno
+   * sin proyectos, así que ahí no se pinta ninguna casilla.
+   */
+  proyectosPorEntorno?: Readonly<
+    Record<string, { proyectos?: readonly { id: string; nombre: string }[]; error?: string }>
+  >;
+  /**
+   * «Dime los proyectos de este entorno.» Lo llama la pestaña al abrirse y solo si no
+   * tiene ya su lista —la misma regla que Ficheros y Revisión: se pide cuando falta el
+   * dato, no al montar—, y NUNCA muda el entorno activo.
+   */
+  alPedirProyectosDeEntorno?: (entorno: string) => void;
   entornoActivo?: string;
   apariencia: Apariencia;
   /** Los subagentes y los `.md` ilegibles. Ausente = todavía no llegó el mensaje, que NO es
@@ -333,10 +353,80 @@ export function Ajustes({
    * al servidor: esperar a que vuelva el mensaje para pintar la casilla la dejaría dando
    * saltos.
    */
-  const guardados = entornos.find((e) => e.id === entornoActivo)?.proyectos;
-  const [elegidos, setElegidos] = useState<string[]>(() => [
-    ...(guardados ?? proyectos.slice(0, PROYECTOS_POR_OMISION).map((p) => p.id)),
-  ]);
+  /**
+   * Qué pestaña de entorno está abierta. Arranca en el ACTIVO —es donde estás trabajando,
+   * y tenerlo que buscar sería el trabajo que esta pantalla viene a quitar—; si no consta
+   * cuál es, en el primero registrado, que es lo único que se puede afirmar.
+   */
+  const [entornoAbierto, setEntornoAbierto] = useState<string | undefined>(
+    () => entornoActivo ?? entornos[0]?.id
+  );
+  const entornoEnPestana =
+    entornos.find((e) => e.id === entornoAbierto)?.id ?? entornoActivo ?? entornos[0]?.id;
+
+  /**
+   * La lista de UN entorno, con la misma forma para todos aunque vengan por dos caminos:
+   * el activo la trae el `alta` y los demás se piden. Una sola función para que el render
+   * no tenga dos ramas —que es donde se cuelan las divergencias— y para poder decir los
+   * tres estados: lista, error, o todavía no se sabe.
+   */
+  const listaDe = (
+    entorno: string | undefined
+  ): { proyectos?: readonly { id: string; nombre: string }[]; error?: string } => {
+    if (entorno === undefined) return {};
+    if (entorno === entornoActivo && proyectos.length > 0) return { proyectos };
+    return proyectosPorEntorno[entorno] ?? {};
+  };
+
+  /**
+   * Lo marcado ahora mismo, **por entorno**. Arranca en la elección guardada de ESE entorno
+   * y, si no hay ninguna, en lo que la barra enseña por omisión de SU lista — así la ventana
+   * refleja la pantalla en vez de contradecirla. Es estado LOCAL porque cada clic viaja al
+   * servidor: esperar a que vuelva el mensaje para pintar la casilla la dejaría dando saltos.
+   *
+   * Indexado por entorno y no una variable suelta, que es el fallo que las pestañas
+   * destapan: con una sola, abrir la pestaña de otro entorno enseñaría marcados los ids del
+   * primero y el primer clic guardaría la elección de aquél BAJO éste.
+   */
+  const [elegidosPorEntorno, setElegidosPorEntorno] = useState<Record<string, string[]>>({});
+  const elegidosDe = (entorno: string | undefined): readonly string[] => {
+    if (entorno === undefined) return [];
+    const tocado = elegidosPorEntorno[entorno];
+    if (tocado !== undefined) return tocado;
+    const guardados = entornos.find((e) => e.id === entorno)?.proyectos;
+    if (guardados !== undefined) return guardados;
+    return (listaDe(entorno).proyectos ?? []).slice(0, PROYECTOS_POR_OMISION).map((p) => p.id);
+  };
+  /**
+   * Al abrir una pestaña, pedir sus proyectos SI no se tienen ya — la misma regla que
+   * Ficheros y Revisión: se pide cuando falta el dato, no al montar. Así el entorno activo
+   * no gasta una conexión (su lista viene en el `alta`) y el que ya se consultó tampoco.
+   *
+   * Depende de `seccion` porque la pestaña solo está a la vista en Entornos: preguntarle a
+   * CloudStudio por un entorno mientras alguien mira Apariencia sería gastar una conexión
+   * que nadie pidió.
+   */
+  const { proyectos: suyosEnPestana, error: errorEnPestana } = listaDe(entornoEnPestana);
+  useEffect(() => {
+    if (seccion !== "entornos" || registrando) return;
+    if (entornoEnPestana === undefined || alPedirProyectosDeEntorno === undefined) return;
+    // Con `error` NO se reintenta solo: sería un lazo contra un servidor que no contesta.
+    if (suyosEnPestana !== undefined || errorEnPestana !== undefined) return;
+    alPedirProyectosDeEntorno(entornoEnPestana);
+    // Se depende de los DOS CAMPOS de esta pestaña y no del record de listas, y no es
+    // cosmético: MEDIDO, con el record salían 5 peticiones donde tenía que haber 1. El
+    // valor por omisión `proyectosPorEntorno = {}` es un objeto nuevo en cada render —y
+    // justo mientras se espera la respuesta, que es cuando el prop no viaja—, así que el
+    // efecto se volvía a disparar con cada mutación del store; con un turno en vuelo, eso
+    // es una conexión con CloudStudio (OAuth + `initialize` + `studio_list_projects`) varias
+    // veces por segundo. Estos dos campos valen establemente `undefined` mientras se espera.
+    //
+    // `alPedirProyectosDeEntorno` se queda FUERA a propósito: `App` pasa una lambda escrita
+    // en el JSX, así que su identidad cambia en cada render y volvería a montar la misma
+    // tormenta por otro camino.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [seccion, registrando, entornoEnPestana, suyosEnPestana, errorEnPestana]);
+
   const [avisoDeUrl, setAvisoDeUrl] = useState<string | undefined>(undefined);
 
   const registrar = (evento: FormEvent): void => {
@@ -999,53 +1089,101 @@ export function Ajustes({
               {registrando ? null : entornos.length === 0 ? (
                 <p className={estilos.vacio}>No hay ninguno registrado todavía.</p>
               ) : (
-                <ul className={estilos.filas}>
+                /*
+                  UNA pestaña por entorno registrado, y dentro de cada una lo suyo: su URL y
+                  sus proyectos. Fue una lista plana de entornos con UN bloque de casillas
+                  debajo —las del activo—, y con dos entornos registrados eso es intrabajable
+                  (dicho mirando la pantalla): los dieciocho proyectos de uno en una sola
+                  columna, y los del otro sin ninguna puerta para llegar a ellos salvo cambiar
+                  el entorno activo en la barra, que es mudarse y no mirar.
+
+                  Pestañas SIEMPRE, también con un solo entorno: la etiqueta contesta «¿de
+                  quién son estos proyectos?», que hoy se daba por supuesto.
+                */
+                <div className={estilos.pestanasDeEntorno} role="tablist" aria-label="Entornos registrados">
                   {entornos.map((e) => (
-                    <li key={e.id} className={estilos.fila}>
+                    <button
+                      key={e.id}
+                      type="button"
+                      role="tab"
+                      className={estilos.pestanaDeEntorno}
+                      aria-selected={e.id === entornoEnPestana}
+                      data-actual={e.id === entornoEnPestana ? "" : undefined}
+                      onClick={() => setEntornoAbierto(e.id)}
+                    >
                       {/* La marca del producto, cuando consta cuál es: el id del entorno lo
                           decide `identidadDeEntorno` a partir de la URL. Un on-premise lleva
                           la marca XOne sin glifo — es lo único que se sabe de él. */}
-                      <IconoDeEntorno entorno={e.id} size={22} className={estilos.logo} />
-                      <span className={estilos.nombre}>{e.nombre}</span>
-                      <span className={estilos.url}>{e.url}</span>
-                    </li>
+                      <IconoDeEntorno entorno={e.id} size={18} className={estilos.logo} />
+                      {e.nombre}
+                    </button>
                   ))}
-                </ul>
+                </div>
               )}
               {/*
-                Qué proyectos se enseñan, del entorno activo. La casilla marcada es lo que
-                se ve en la barra; sin ninguna elección hecha se marcan los que la barra
-                está enseñando por omisión, para que la primera vez la ventana refleje la
-                pantalla en vez de contradecirla.
+                El panel de la pestaña: la URL de ESE entorno y qué proyectos suyos se
+                enseñan en la barra. La casilla marcada es lo que se ve; sin ninguna elección
+                hecha se marcan los que la barra está enseñando por omisión, para que la
+                primera vez la ventana refleje la pantalla en vez de contradecirla.
+
+                Los tres estados de la lista se dicen distintos, que es la regla de esta
+                consola: lista, «no se pudo preguntar» (con el motivo, y sin casillas: no se
+                sabe qué proyectos hay) y «todavía no ha llegado». Una lista vacía afirmaría
+                un entorno sin proyectos.
               */}
-              {!registrando && entornoActivo !== undefined && proyectos.length > 0 ? (
-                <>
+              {!registrando && entornoEnPestana !== undefined ? (
+                <div role="tabpanel" className={estilos.panelDeEntorno}>
+                  <p className={estilos.url}>{entornos.find((e) => e.id === entornoEnPestana)?.url}</p>
                   <h3 className={estilos.subencabezado}>Proyectos en la barra</h3>
-                  <p className={estilos.nota}>
-                    Sin elegir ninguno se enseñan los {PROYECTOS_POR_OMISION} primeros. Lo que marques
-                    aquí manda sobre ese tope.
-                  </p>
-                  <ul className={estilos.filas}>
-                    {proyectos.map((p) => (
-                      <li key={p.id} className={estilos.fila}>
-                        <label className={estilos.casilla}>
-                          <input
-                            type="checkbox"
-                            checked={elegidos.includes(p.id)}
-                            onChange={(e) => {
-                              const siguiente = e.target.checked
-                                ? [...elegidos, p.id]
-                                : elegidos.filter((id) => id !== p.id);
-                              setElegidos(siguiente);
-                              alElegirProyectos(entornoActivo, siguiente);
-                            }}
-                          />
-                          <span className={estilos.nombre}>{p.nombre}</span>
-                        </label>
-                      </li>
-                    ))}
-                  </ul>
-                </>
+                  {(() => {
+                    const { proyectos: suyos, error } = listaDe(entornoEnPestana);
+                    if (error !== undefined) {
+                      return (
+                        <p className={estilos.aviso} role="alert">
+                          No se pudieron consultar sus proyectos: {error}
+                        </p>
+                      );
+                    }
+                    if (suyos === undefined) {
+                      return <p className={estilos.nota}>Consultando sus proyectos…</p>;
+                    }
+                    if (suyos.length === 0) {
+                      return <p className={estilos.vacio}>Este entorno no devolvió ningún proyecto.</p>;
+                    }
+                    const marcados = elegidosDe(entornoEnPestana);
+                    return (
+                      <>
+                        <p className={estilos.nota}>
+                          Sin elegir ninguno se enseñan los {PROYECTOS_POR_OMISION} primeros. Lo que
+                          marques aquí manda sobre ese tope.
+                        </p>
+                        <ul className={estilos.filas}>
+                          {suyos.map((p) => (
+                            <li key={p.id} className={estilos.fila}>
+                              <label className={estilos.casilla}>
+                                <input
+                                  type="checkbox"
+                                  checked={marcados.includes(p.id)}
+                                  onChange={(e) => {
+                                    const siguiente = e.target.checked
+                                      ? [...marcados, p.id]
+                                      : marcados.filter((id) => id !== p.id);
+                                    setElegidosPorEntorno((previo) => ({
+                                      ...previo,
+                                      [entornoEnPestana]: siguiente,
+                                    }));
+                                    alElegirProyectos(entornoEnPestana, siguiente);
+                                  }}
+                                />
+                                <span className={estilos.nombre}>{p.nombre}</span>
+                              </label>
+                            </li>
+                          ))}
+                        </ul>
+                      </>
+                    );
+                  })()}
+                </div>
               ) : null}
 
             </>

@@ -126,6 +126,14 @@ export type MensajeAlCliente =
    * hay modelo que afirmar — se enseña «Elige modelo», nunca una fila inventada.
    */
   | { clase: "modelos"; actual?: string; proveedores: ProveedorDeModelos[] }
+  /** Los proyectos de UN entorno registrado, pedidos por su pestaña en Ajustes. `proyectos`
+   *  ausente con `error` puesto es «no se pudo preguntar», que no es una lista vacía. */
+  | {
+      clase: "proyectosDeEntorno";
+      entorno: string;
+      proyectos?: { id: string; nombre: string; compartido?: boolean }[];
+      error?: string;
+    }
   /**
    * Cómo fue el último alta o baja de proveedor personalizado. El motivo viaja EN un
    * mensaje propio y no como acto de sistema: la ventana de ajustes no pinta el
@@ -469,6 +477,9 @@ export type MensajeDelCliente =
   | { clase: "entorno"; accion: "visibles"; entorno: string; proyectos: string[] }
   /** Cambiar de entorno activo: el de cuyos proyectos se habla. */
   | { clase: "entorno"; accion: "activo"; entorno: string }
+  /** «Dime los proyectos de este entorno», sin hacerlo activo: las casillas de su pestaña
+   *  en Ajustes. Mudar el activo le cambiaría la barra a quien trabaja en otro servidor. */
+  | { clase: "entorno"; accion: "proyectos"; entorno: string }
   | { clase: "respuesta"; texto: string }
   /**
    * La respuesta a `seleccionar`. **Sin `id` (o con `id: null`) es CANCELAR** — la misma

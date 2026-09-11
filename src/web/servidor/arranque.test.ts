@@ -1558,6 +1558,94 @@ describe("montarRutas — el cable, por fin conectado", () => {
       expect(alta.aviso).toBe("fetch failed");
     });
 
+    it("pedir los proyectos de un entorno NO cambia el entorno activo", async () => {
+      // La pestaña de un entorno en Ajustes necesita SU lista de proyectos, y pedirla no
+      // puede mover la barra lateral a otro servidor: abrir Ajustes a marcar una casilla es
+      // mirar, no mudarse. Es la diferencia con `accion: "activo"`, que sí muda —y de ahí
+      // que la aserción que importa de este test sea la ÚLTIMA.
+      const servidor = servidorDeMentira();
+      const pedidos: string[] = [];
+      const vestibulo = vestibuloDePrueba({
+        entornos: [
+          { id: "webstudio", nombre: "XOne WebStudio", url: "https://mcp.xonewebstudio.com/mcp" },
+          { id: "casa", nombre: "On-premise", url: "https://mcp.casa.local/mcp" },
+        ],
+        proyectosDeEntorno: async (entorno) => {
+          pedidos.push(entorno.id);
+          return {
+            proyectos:
+              entorno.id === "casa" ? [{ id: "c1", nombre: "De casa" }] : [{ id: "p1", nombre: "Tienda" }],
+          };
+        },
+      });
+      montarRutas(servidor, vestibulo);
+      const cliente = clienteDeMentira();
+      await servidor.rutas.get(`GET ${RUTA_EVENTOS}`)!(cliente.peticion, cliente.respuesta);
+      const accion = servidor.rutas.get(`POST ${RUTA_ACCION}`)!;
+      await asentar();
+
+      await enviarMensaje(accion, { clase: "entorno", accion: "proyectos", entorno: "casa" });
+      await asentar();
+
+      // Se le preguntó a CloudStudio por ese entorno...
+      expect(pedidos).toContain("casa");
+      // ...y la respuesta dice de QUIÉN es la lista, porque el cliente la guarda por entorno.
+      const respuesta = cliente.recibidos
+        .filter((m) => m.clase === "proyectosDeEntorno")
+        .at(-1) as Extract<MensajeAlCliente, { clase: "proyectosDeEntorno" }>;
+      expect(respuesta.entorno).toBe("casa");
+      expect(respuesta.proyectos?.map((p) => p.id)).toEqual(["c1"]);
+
+      // Y lo que sostiene todo el diseño: el activo sigue siendo el de antes, con SUS
+      // proyectos. Sin esto, mirar la pestaña del on-premise le cambiaría la barra a quien
+      // está trabajando en WebStudio.
+      const alta = cliente.recibidos.filter((m) => m.clase === "alta").at(-1) as Extract<
+        MensajeAlCliente,
+        { clase: "alta" }
+      >;
+      expect(alta.entornoActivo).toBe("webstudio");
+      expect(alta.proyectos.map((p) => p.id)).toEqual(["p1"]);
+    });
+
+    it("el entorno que no contesta lleva su error, y los demás siguen usables", async () => {
+      // La regla del catálogo de modelos: «el que falla se lista con su error mientras los
+      // demás siguen elegibles — un desvío, no un callejón». Aquí igual, y además no se
+      // toca el activo ni se pinta un aviso global: el fallo es de ESA pestaña.
+      const servidor = servidorDeMentira();
+      const vestibulo = vestibuloDePrueba({
+        entornos: [
+          { id: "webstudio", nombre: "XOne WebStudio", url: "https://mcp.xonewebstudio.com/mcp" },
+          { id: "casa", nombre: "On-premise", url: "https://mcp.casa.local/mcp" },
+        ],
+        proyectosDeEntorno: async (entorno) => {
+          if (entorno.id === "casa") throw new Error("fetch failed");
+          return { proyectos: [{ id: "p1", nombre: "Tienda" }] };
+        },
+      });
+      montarRutas(servidor, vestibulo);
+      const cliente = clienteDeMentira();
+      await servidor.rutas.get(`GET ${RUTA_EVENTOS}`)!(cliente.peticion, cliente.respuesta);
+      const accion = servidor.rutas.get(`POST ${RUTA_ACCION}`)!;
+      await asentar();
+
+      await enviarMensaje(accion, { clase: "entorno", accion: "proyectos", entorno: "casa" });
+      await asentar();
+
+      const respuesta = cliente.recibidos
+        .filter((m) => m.clase === "proyectosDeEntorno")
+        .at(-1) as Extract<MensajeAlCliente, { clase: "proyectosDeEntorno" }>;
+      expect(respuesta.entorno).toBe("casa");
+      expect(respuesta.error).toBe("fetch failed");
+      // Ausente, no una lista vacía: «no se pudo preguntar» no es «no tiene proyectos».
+      expect(respuesta.proyectos).toBeUndefined();
+
+      const alta = cliente.recibidos.filter((m) => m.clase === "alta").at(-1) as Extract<
+        MensajeAlCliente,
+        { clase: "alta" }
+      >;
+      expect(alta.entornoActivo).toBe("webstudio");
+    });
+
     it("con proyecto abierto se dice CUÁL, deducido de su raíz y no de un id guardado aparte", async () => {
       const base = mkdtempSync(join(tmpdir(), "xonecode-base-"));
       const servidor = servidorDeMentira();

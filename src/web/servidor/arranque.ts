@@ -1509,6 +1509,47 @@ export function montarRutas(
   };
 
   /**
+   * Los proyectos de UN entorno, SIN hacerlo activo.
+   *
+   * El hermano de `atenderEntornoActivo`, y lo que los separa es todo lo que este NO hace:
+   * no toca `entornoElegido`, ni `proyectos`, ni `ramas`, ni `proyectoElegido`, ni pone
+   * `aviso`. Es una pregunta para las casillas de una pestaña de Ajustes, y mudar el entorno
+   * activo desde ahí le cambiaría la barra —y los proyectos de los que se habla— a quien
+   * esté trabajando en otro servidor. Por eso la aserción que sostiene el diseño en
+   * `arranque.test.ts` es que `alta.entornoActivo` no cambia.
+   *
+   * No se cachea, a propósito: cada apertura de pestaña pregunta. Con caché, la pestaña
+   * podría contradecir a la barra en cuanto alguien cree un proyecto en Studio, y aquí hay
+   * una sola fuente. Es la diferencia con el catálogo de modelos, que sí se cachea porque
+   * la pastilla se abre constantemente y cada consulta es una API de pago.
+   *
+   * El fallo va EN la respuesta y no en el `aviso` global: es de ese entorno, y los demás
+   * siguen usables.
+   */
+  const atenderProyectosDeEntorno = async (entorno: string): Promise<void> => {
+    try {
+      const suyos = await vestibulo.proyectosDe(entorno);
+      emitir({
+        clase: "proyectosDeEntorno",
+        entorno,
+        proyectos: suyos.map((p) => ({
+          id: p.id,
+          nombre: p.nombre,
+          ...(p.compartido === undefined ? {} : { compartido: p.compartido }),
+        })),
+      });
+    } catch (error) {
+      contar(error);
+      emitir({
+        clase: "proyectosDeEntorno",
+        entorno,
+        // Sin `proyectos`: ausente es «no se pudo preguntar», que no es una lista vacía.
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  };
+
+  /**
    * Abrir una sesión: la nombrada, o una nueva.
    *
    * Con copia local ya bajada no hay nada que dar de alta —ni rama que preguntar—, así que
@@ -2535,6 +2576,17 @@ export function montarRutas(
       mensaje.accion === "activo"
     ) {
       void atenderEntornoActivo(mensaje.entorno);
+      respuesta.writeHead(204);
+      respuesta.end();
+      return;
+    }
+    if (
+      typeof mensaje === "object" &&
+      mensaje !== null &&
+      mensaje.clase === "entorno" &&
+      mensaje.accion === "proyectos"
+    ) {
+      void atenderProyectosDeEntorno(mensaje.entorno);
       respuesta.writeHead(204);
       respuesta.end();
       return;

@@ -328,6 +328,116 @@ describe("Ajustes", () => {
     expect(alElegirProyectos).toHaveBeenCalledWith("webstudio", []);
   });
 
+  /**
+   * Las pestañas por entorno. Pedido mirando la pantalla con dos entornos registrados:
+   * «sale todos los proyectos y es intrabajable».
+   */
+  it("hay una pestaña por entorno registrado, y la del activo sale elegida", () => {
+    render(
+      <Ajustes
+        {...MANEJADORES}
+        entornos={[
+          { id: "webstudio", nombre: "XOne WebStudio", url: "https://mcp.example/mcp" },
+          { id: "casa", nombre: "On-premise", url: "https://mcp.casa.local/mcp" },
+        ]}
+        entornoActivo="casa"
+        proyectos={[{ id: "c1", nombre: "De casa" }]}
+      />
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Entornos" }));
+    const pestanas = screen.getAllByRole("tab");
+    expect(pestanas.map((t) => t.textContent)).toEqual(["XOne WebStudio", "On-premise"]);
+    // Se abre por donde estás trabajando, que es lo que no hay que ir a buscar.
+    expect(pestanas.find((t) => t.getAttribute("aria-selected") === "true")?.textContent).toBe(
+      "On-premise"
+    );
+  });
+
+  it("abrir la pestaña de otro entorno pide SUS proyectos, y no cambia el activo", () => {
+    // La lista de un entorno que no es el activo no viaja en el alta: hay que pedirla, y
+    // pedirla no puede mudar el entorno activo (eso es `accion: "activo"`, otro mensaje).
+    const alPedirProyectosDeEntorno = vi.fn();
+    render(
+      <Ajustes
+        {...MANEJADORES}
+        entornos={[
+          { id: "webstudio", nombre: "XOne WebStudio", url: "https://mcp.example/mcp" },
+          { id: "casa", nombre: "On-premise", url: "https://mcp.casa.local/mcp" },
+        ]}
+        entornoActivo="webstudio"
+        proyectos={[{ id: "p1", nombre: "Tienda" }]}
+        alPedirProyectosDeEntorno={alPedirProyectosDeEntorno}
+      />
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Entornos" }));
+    // El activo ya tiene su lista en el alta: no se gasta una conexión en volver a pedirla.
+    expect(alPedirProyectosDeEntorno).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole("tab", { name: "On-premise" }));
+    expect(alPedirProyectosDeEntorno).toHaveBeenCalledWith("casa");
+    // Mientras llega se DICE, en vez de afirmar un entorno sin proyectos.
+    expect(screen.getByText(/consultando/i)).toBeTruthy();
+  });
+
+  it("las casillas de un entorno NO heredan lo marcado en el otro", () => {
+    // El fallo que esto evita: con un solo estado de «lo marcado», abrir la pestaña de
+    // `casa` enseñaría marcados los ids de `webstudio` y el primer clic guardaría la
+    // elección de webstudio BAJO casa.
+    const alElegirProyectos = vi.fn();
+    render(
+      <Ajustes
+        {...MANEJADORES}
+        entornos={[
+          { id: "webstudio", nombre: "XOne WebStudio", url: "https://mcp.example/mcp", proyectos: ["p1"] },
+          { id: "casa", nombre: "On-premise", url: "https://mcp.casa.local/mcp", proyectos: ["c2"] },
+        ]}
+        entornoActivo="webstudio"
+        proyectos={[{ id: "p1", nombre: "Tienda" }, { id: "p2", nombre: "Almacén" }]}
+        proyectosPorEntorno={{
+          casa: { proyectos: [{ id: "c1", nombre: "De casa" }, { id: "c2", nombre: "Taller" }] },
+        }}
+        alElegirProyectos={alElegirProyectos}
+      />
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Entornos" }));
+    expect((screen.getAllByRole("checkbox") as HTMLInputElement[]).map((c) => c.checked)).toEqual([
+      true,
+      false,
+    ]);
+
+    fireEvent.click(screen.getByRole("tab", { name: "On-premise" }));
+    // Los proyectos son los de casa, y lo marcado es la elección guardada de CASA.
+    expect(screen.getByText("Taller")).toBeTruthy();
+    expect((screen.getAllByRole("checkbox") as HTMLInputElement[]).map((c) => c.checked)).toEqual([
+      false,
+      true,
+    ]);
+
+    fireEvent.click((screen.getAllByRole("checkbox") as HTMLInputElement[])[0]!);
+    // Y la elección se guarda bajo CASA, con ids de casa y nada de webstudio.
+    expect(alElegirProyectos).toHaveBeenCalledWith("casa", ["c2", "c1"]);
+  });
+
+  it("el entorno que no contestó dice su error, no una lista vacía", () => {
+    render(
+      <Ajustes
+        {...MANEJADORES}
+        entornos={[
+          { id: "webstudio", nombre: "XOne WebStudio", url: "https://mcp.example/mcp" },
+          { id: "casa", nombre: "On-premise", url: "https://mcp.casa.local/mcp" },
+        ]}
+        entornoActivo="webstudio"
+        proyectos={[{ id: "p1", nombre: "Tienda" }]}
+        proyectosPorEntorno={{ casa: { error: "fetch failed" } }}
+      />
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Entornos" }));
+    fireEvent.click(screen.getByRole("tab", { name: "On-premise" }));
+    expect(screen.getByText(/fetch failed/i)).toBeTruthy();
+    // Y no se pinta ninguna casilla: no se sabe qué proyectos tiene.
+    expect(screen.queryAllByRole("checkbox")).toHaveLength(0);
+  });
+
   it("la apariencia marca la que está en uso y avisa de que es solo de esta ventana", () => {
     const alCambiarApariencia = vi.fn();
     render(<Ajustes {...MANEJADORES} apariencia="oscuro" alCambiarApariencia={alCambiarApariencia} />);

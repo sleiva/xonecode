@@ -186,6 +186,153 @@ describe("App: el secreto y el selector, que también colgaban", () => {
     await waitFor(() => expect(screen.queryByLabelText(/clave de anthropic/i)).toBeNull());
   });
 
+  it("abrir la pestaña de otro entorno pide SUS proyectos por el cable", async () => {
+    /*
+      El CABLEADO, que es lo que ningún test de componente ve: `Ajustes.tsx` ya está probado
+      con su manejador inyectado, pero `alPedirProyectosDeEntorno` es OPCIONAL en el tipo,
+      así que si `App` no lo pasara todo compilaría y las pestañas no pedirían nada nunca —
+      la sexta vez que este repo pierde una regla por una composición que los tests doblan.
+      Aquí se monta la `App` de verdad con el `enviar` espía y se comprueba el mensaje.
+    */
+    const { store, enviar } = montar();
+    act(() =>
+      store.aplicar({
+        clase: "alta",
+        pasos: [],
+        proveedores: [],
+        entornos: [],
+        registrados: [
+          { id: "webstudio", nombre: "XOne WebStudio", url: "https://mcp.xonewebstudio.com/mcp" },
+          { id: "casa", nombre: "On-premise", url: "https://mcp.casa.local/mcp" },
+        ],
+        entornoActivo: "webstudio",
+        proyectos: [{ id: "p1", nombre: "Tienda" }],
+        ramas: [],
+        proyectoAbierto: true,
+      })
+    );
+    fireEvent.click(screen.getAllByRole("button", { name: "Ajustes" })[0]!);
+    fireEvent.click(screen.getByRole("button", { name: "Entornos" }));
+    // El activo NO se pide: su lista ya vino en el alta.
+    expect(enviar).not.toHaveBeenCalledWith({
+      clase: "entorno",
+      accion: "proyectos",
+      entorno: "webstudio",
+    });
+
+    fireEvent.click(screen.getByRole("tab", { name: "On-premise" }));
+    await waitFor(() =>
+      expect(enviar).toHaveBeenCalledWith({
+        clase: "entorno",
+        accion: "proyectos",
+        entorno: "casa",
+      })
+    );
+    // Y no se manda «hazlo activo», que es el otro mensaje y le movería la barra a quien
+    // esté trabajando en WebStudio.
+    expect(enviar).not.toHaveBeenCalledWith({
+      clase: "entorno",
+      accion: "activo",
+      entorno: "casa",
+    });
+  });
+
+  it("la lista que contesta el servidor llega hasta las casillas, y el error hasta el aviso", async () => {
+    /*
+      El camino de VUELTA entero: `store.ts#case "proyectosDeEntorno"` → el spread de `App`
+      → las casillas del componente. Los tests del componente reciben
+      `proyectosPorEntorno` como prop y el de arriba solo comprueba el ENVÍO, así que sin
+      esto las tres capas están probadas por separado y ninguna prueba que se toquen — que
+      es exactamente cómo `mime` y `base64` se cayeron en el `case "fichero"` del store con
+      todo en verde y ninguna imagen apareciendo en el navegador.
+    */
+    const { store } = montar();
+    act(() =>
+      store.aplicar({
+        clase: "alta",
+        pasos: [],
+        proveedores: [],
+        entornos: [],
+        registrados: [
+          { id: "webstudio", nombre: "XOne WebStudio", url: "https://mcp.xonewebstudio.com/mcp" },
+          { id: "casa", nombre: "On-premise", url: "https://mcp.casa.local/mcp" },
+        ],
+        entornoActivo: "webstudio",
+        proyectos: [{ id: "p1", nombre: "Tienda" }],
+        ramas: [],
+        proyectoAbierto: true,
+      })
+    );
+    fireEvent.click(screen.getAllByRole("button", { name: "Ajustes" })[0]!);
+    fireEvent.click(screen.getByRole("button", { name: "Entornos" }));
+    fireEvent.click(screen.getByRole("tab", { name: "On-premise" }));
+    expect(screen.getByText(/consultando/i)).toBeTruthy();
+
+    act(() =>
+      store.aplicar({
+        clase: "proyectosDeEntorno",
+        entorno: "casa",
+        proyectos: [{ id: "c1", nombre: "De casa" }],
+      })
+    );
+    await waitFor(() => expect(screen.getByText("De casa")).toBeTruthy());
+    expect(screen.getAllByRole("checkbox")).toHaveLength(1);
+
+    // Y la otra respuesta: el motivo se pinta y NO se inventa ninguna casilla.
+    act(() =>
+      store.aplicar({ clase: "proyectosDeEntorno", entorno: "casa", error: "fetch failed" })
+    );
+    await waitFor(() => expect(screen.getByRole("alert").textContent).toMatch(/fetch failed/));
+    expect(screen.queryAllByRole("checkbox")).toHaveLength(0);
+  });
+
+  it("mientras se espera la lista NO se vuelve a pedir en cada render", async () => {
+    /*
+      Cada petición es una conexión con CloudStudio (OAuth + `initialize` +
+      `studio_list_projects`), y `App` se re-renderiza con cada mutación del store —con un
+      turno en vuelo, varias veces por segundo—. Si la dependencia del efecto es el RECORD
+      de listas, mientras se espera vale `undefined` y el valor por omisión `{}` es un objeto
+      nuevo en cada render: el efecto se vuelve a disparar y sale una petición por render.
+      Se depende de los dos campos de ESA pestaña, que son establemente `undefined`.
+    */
+    const { store, enviar } = montar();
+    act(() =>
+      store.aplicar({
+        clase: "alta",
+        pasos: [],
+        proveedores: [],
+        entornos: [],
+        registrados: [
+          { id: "webstudio", nombre: "XOne WebStudio", url: "https://mcp.xonewebstudio.com/mcp" },
+          { id: "casa", nombre: "On-premise", url: "https://mcp.casa.local/mcp" },
+        ],
+        entornoActivo: "webstudio",
+        proyectos: [{ id: "p1", nombre: "Tienda" }],
+        ramas: [],
+        proyectoAbierto: true,
+      })
+    );
+    fireEvent.click(screen.getAllByRole("button", { name: "Ajustes" })[0]!);
+    fireEvent.click(screen.getByRole("button", { name: "Entornos" }));
+    fireEvent.click(screen.getByRole("tab", { name: "On-premise" }));
+
+    const peticiones = (): unknown[] =>
+      enviar.mock.calls.filter(
+        (c) =>
+          typeof c[0] === "object" &&
+          c[0] !== null &&
+          (c[0] as { clase?: unknown }).clase === "entorno" &&
+          (c[0] as { accion?: unknown }).accion === "proyectos"
+      );
+    await waitFor(() => expect(peticiones()).toHaveLength(1));
+
+    // Dos mutaciones del store cualesquiera, que es lo que pasa sin parar con un turno en
+    // vuelo. La respuesta de `casa` todavía NO ha llegado.
+    act(() => store.aplicar({ clase: "turno", activo: true }));
+    act(() => store.aplicar({ clase: "turno", activo: false }));
+    expect(peticiones()).toHaveLength(1);
+  });
+
   it("cerrar Ajustes CANCELA la clave pendiente, en vez de mudarla al chat", async () => {
     // Visto en pantalla. El servidor sigue esperando por `leerSecreto`, y el centro solo
     // deja de pintar la pregunta MIENTRAS la ventana está abierta — así que al cerrarla

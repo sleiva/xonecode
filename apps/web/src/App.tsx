@@ -931,6 +931,19 @@ export function App({
       alElegirProyectos={(entorno, proyectos) =>
         void enviar({ clase: "entorno", accion: "visibles", entorno, proyectos })
       }
+      // Las listas de los entornos NO activos, que la pestaña de cada uno pide al abrirse.
+      // Ausente = no se ha consultado; el componente distingue eso de un error y de una
+      // lista vacía.
+
+      // Pedir los proyectos de un entorno NO lo hace activo: es una conexión con
+      // CloudStudio para pintar unas casillas, y mudar el entorno activo desde Ajustes le
+      // cambiaría la barra lateral a quien esté trabajando en otro servidor.
+      {...(estado.proyectosPorEntorno === undefined
+        ? {}
+        : { proyectosPorEntorno: estado.proyectosPorEntorno })}
+      alPedirProyectosDeEntorno={(entorno) =>
+        void enviar({ clase: "entorno", accion: "proyectos", entorno })
+      }
       alResponderSecreto={async (valor) => {
         await enviar({ clase: "secreto", valor });
         store.contestarSecreto();

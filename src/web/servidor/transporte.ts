@@ -82,6 +82,29 @@ export type MensajeAlCliente =
    */
   | { clase: "modelos"; actual?: string; proveedores: ProveedorDeModelos[] }
   /**
+   * Los proyectos de UN entorno registrado, en respuesta a la acción «proyectos» de un
+   * mensaje de entorno. Lleva el `entorno` dentro porque el cliente los guarda por
+   * entorno: son las casillas de una pestaña concreta de Ajustes, y una lista sin dueño se
+   * acabaría pintando bajo el nombre de otro servidor.
+   *
+   * **`proyectos` ausente y `error` puesto no es una lista vacía**: «no se pudo preguntar»
+   * no es «este entorno no tiene proyectos», y la pestaña tiene que poder decir lo primero
+   * en vez de afirmar lo segundo. El fallo es de ESE entorno y no tumba a los demás —la
+   * regla del catálogo de modelos: un desvío, no un callejón—, así que tampoco se pinta un
+   * aviso global ni se toca el entorno activo.
+   *
+   * No va en el `alta` a propósito, aunque `registrados` viaje ahí: el alta se reemite en
+   * los dos flancos de cada turno, y meter estas listas dentro obligaría a cachearlas en el
+   * proceso. Sin caché hay UNA sola fuente, así que la pestaña no puede contradecir a la
+   * barra cuando alguien cree un proyecto en Studio.
+   */
+  | {
+      clase: "proyectosDeEntorno";
+      entorno: string;
+      proyectos?: ProyectoDeEntorno[];
+      error?: string;
+    }
+  /**
    * Cómo fue el último alta o baja de proveedor personalizado.
    *
    * El motivo viaja EN un mensaje propio y no por `informar`, por lo mismo que el aviso
@@ -514,6 +537,18 @@ export interface EntornoRegistrado extends OpcionDeEntorno {
   proyectos?: string[];
 }
 
+/**
+ * Un proyecto de un entorno, para elegir si se enseña. Es menos de lo que lleva un proyecto
+ * del `alta`: sin `sesiones`, porque una sesión es de la COPIA LOCAL y aquí solo se decide
+ * qué aparece en la barra. Lo que no hace falta, no viaja.
+ */
+export interface ProyectoDeEntorno {
+  id: string;
+  nombre: string;
+  /** Compartido contigo por otra persona. Ausente no es «es tuyo»: es que no se dijo. */
+  compartido?: boolean;
+}
+
 /** Un fichero de la sesión. `mas`/`menos` faltan en un binario: git no cuenta líneas ahí, y
  *  poner cero diría que no cambió nada. */
 export interface FicheroTocado {
@@ -725,6 +760,20 @@ export type MensajeDelCliente =
   | { clase: "entorno"; accion: "visibles"; entorno: string; proyectos: string[] }
   /** Cambiar de entorno ACTIVO: el de cuyos proyectos se habla. Trae su listado consigo. */
   | { clase: "entorno"; accion: "activo"; entorno: string }
+  /**
+   * «Dime qué proyectos tiene ESTE entorno», sin hacerlo activo. Es lo que necesita la
+   * pestaña de un entorno en Ajustes para poder marcar sus casillas, y la diferencia con
+   * `activo` es justo lo que la hace usable: abrir Ajustes a elegir proyectos es MIRAR, y
+   * mudar el entorno activo le cambiaría la barra lateral —y los proyectos de los que se
+   * habla— a quien esté trabajando en otro servidor.
+   *
+   * Se pide al abrir esa pestaña y no antes, por lo mismo que el catálogo de un proveedor
+   * (`clase: "catalogo"`): cada uno es una conexión con CloudStudio (OAuth + `initialize` +
+   * `studio_list_projects`), y consultarlos todos al conectar sería gastar una petición por
+   * entorno para pintar unas casillas que quizá nadie abra. La respuesta es
+   * `proyectosDeEntorno`, con su lista o con su `error`.
+   */
+  | { clase: "entorno"; accion: "proyectos"; entorno: string }
   | { clase: "respuesta"; texto: string }
   /**
    * La respuesta a `seleccionar`. **Sin `id` (o con `id: null`) es CANCELAR**, que es

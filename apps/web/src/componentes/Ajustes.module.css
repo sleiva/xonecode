@@ -524,3 +524,57 @@
   font-size: 12px;
   font-weight: 400;
 }
+
+/* ─── Las pestañas de entorno ─────────────────────────────────────────────────────────
+   Una por entorno registrado, dentro de la sección Entornos. Sustituyen a la lista plana
+   que había: con dos entornos, la lista de arriba no decía de quién eran las casillas de
+   abajo, y a los proyectos del entorno no activo no se llegaba de ninguna forma.
+
+   El acento es el MISMO de `.seccion[data-actual]` y de la pestaña activa del centro —cian
+   por alias, nunca un literal (`Barra.test.tsx` lo prohíbe)—, porque es el mismo gesto:
+   «esto es lo que estás mirando». El borde inferior es lo que las hace leerse como pestañas
+   y no como otra fila de botones redondos, que es lo que ya es la navegación de la
+   izquierda: dos niveles distintos tienen que verse distintos. */
+.pestanasDeEntorno {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  border-bottom: 1px solid var(--dsw-alias-border-secondary);
+  margin-bottom: 14px;
+}
+
+.pestanaDeEntorno {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border: none;
+  /* El filo de la elegida se pinta con `box-shadow` inset y no con `border-bottom`, por dos
+     razones: un borde exige el `transparent` de reserva en las no elegidas —y `transparent`
+     es un literal de color, que `Barra.test.tsx` prohíbe con razón: la disciplina es que el
+     color se nombra por alias o no se nombra— y, además, una sombra no ocupa sitio, así que
+     la fila no se mueve medio píxel al cambiar de pestaña. El `-1px` sube el filo a tapar
+     la línea del contenedor: es lo que une la pestaña con su panel. */
+  margin-bottom: -1px;
+  background: none;
+  color: var(--dsw-alias-label-secondary);
+  font: inherit;
+  cursor: pointer;
+}
+
+.pestanaDeEntorno:hover {
+  color: var(--dsw-alias-label-primary);
+}
+
+.pestanaDeEntorno[data-actual] {
+  box-shadow: inset 0 -2px 0 var(--xonecode-cian);
+  color: var(--xonecode-cian);
+}
+
+/* El panel de la pestaña. Sin borde ni fondo: el filo de la pestaña ya dice dónde empieza,
+   y una caja más dentro de una ventana que ya es una caja solo estrecha el contenido. */
+.panelDeEntorno {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}

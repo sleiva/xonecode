@@ -317,6 +317,17 @@ feedback del desarrollador** y no es terminal.
   encolando en el lazo con `consolaWeb.encolar` —sin acto de usuario falso—. **La función se
   comparte; la sintaxis no se exporta.** El registro que el compositor sugiere se **genera**
   recorriendo `COMANDOS` (`comandosDelRegistro`).
+- **Ajustes tiene UNA pestaña por entorno registrado, y abrir una NO cambia el entorno
+  activo** (`Ajustes.tsx`, `accion: "proyectos"` → `atenderProyectosDeEntorno`). Elegir
+  proyectos es MIRAR; mudar el activo (`accion: "activo"`) le cambiaría la barra a quien
+  trabaja en otro servidor. La lista de cada entorno se pide al abrir su pestaña y solo si
+  falta —el activo ya la trae en el `alta`—, **sin caché**, y el que falla lleva su `error`
+  sin tumbar a los demás. Lo marcado se guarda **por entorno** (`elegidosPorEntorno`): con
+  una sola variable, la pestaña de B arrancaba con los ids de A y el primer clic guardaba la
+  elección de A bajo B. El efecto depende de los DOS CAMPOS de esa pestaña y **no del record**
+  (que con su omisión `{}` es un objeto nuevo por render: medido, 5 peticiones donde iba 1), y
+  el cableado de los dos sentidos tiene test propio porque el prop es opcional y `tsc` no lo
+  caza.
 - **La clave de API viaja por el ÚNICO mensaje del cable que la lleva** (`leerSecreto`), y se
   PRUEBA antes de escribirse: `motivoDeClaveInaceptable` (`core/config.ts`) criba de balde, y
   luego el catálogo con `aplicarCredencialAlProceso` — **solo si el proveedor contesta** se
