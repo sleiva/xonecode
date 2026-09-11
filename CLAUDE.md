@@ -171,6 +171,16 @@ Un subagente es un `.md` con frontmatter en `.xonecode/agentes/<nombre>.md`
   agentes de serie dentro se ADOPTA sin escribir nada; vacía se siembra entera.
 - **El prompt del orquestador se GENERA** de la lista (`xoneAgent.ts#promptOrquestador`).
 - Un `.md` roto se salta y su motivo viaja por el cable hasta la ventana de Ajustes.
+- **La línea de una delegación dice a QUIÉN** (`task` → `subagent_type` en la lista blanca de
+  `resumenDeTool.ts`, más icono y verbo en `core/notify.ts`). Medido en la pantalla del usuario:
+  decía «⚙ task» a secas, y con un motor externo eso deja la interfaz MUDA — el hijo corre en
+  otro proceso y no cruza ni una tool, así que son minutos sin nada que mirar. Sale el NOMBRE y
+  nunca la `description`, que es el encargo entero y puede llevar contenido del proyecto. Y la
+  rama genérica de `frase()` dejó de TIRAR el detalle: no filtra nada nuevo, porque un `detalle`
+  solo existe si la lista blanca lo eligió a mano.
+  **Lo que sigue sin haber**: un agente externo no emite ni un evento mientras trabaja —el
+  `CompiledSubAgent` no tiene piel—, así que entre la línea de delegación y su respuesta no hay
+  progreso ninguno. Es la misma clase de silencio que el borde vivo del compositor vino a cubrir.
 - **Motores externos**: `claude-code` (`agent/subagenteExterno.ts`) **escribe, y cada escritura
   pasa por una autorización** — `canUseTool` es asíncrono y corre en nuestro proceso, así que se
   espera ahí sin `interrupt()` y sin reejecutar el nodo. `decisionDeTool` en este orden: **TRES

@@ -37,6 +37,7 @@ const ICONO: Record<string, string> = {
   glob: "✱",
   grep: "✱",
   regex_search: "✱",
+  task: "⊙",
 };
 
 /** El verbo de cada tool conocida, en español. */
@@ -48,6 +49,7 @@ const VERBO: Record<string, string> = {
   glob: "busca",
   grep: "busca",
   regex_search: "regex",
+  task: "delega en",
 };
 
 /**
@@ -73,7 +75,13 @@ export interface LineaDeTool {
 /** `→ lee app.xne` para una conocida; `⚙ studio_edit_file` para el resto. */
 function frase(nombre: string, detalle?: string): string {
   const icono = ICONO[nombre];
-  if (icono === undefined) return `⚙ ${nombre}`;
+  // La genérica también enseña su detalle cuando lo hay. Antes lo TIRABA, y eso dejaba
+  // mudo justo lo que más falta hace: con `task` fuera de la tabla, la línea decía
+  // «⚙ task» y no a quién se delegaba. No filtra nada nuevo — un `detalle` solo existe si
+  // `resumenDeTool.ts` lo eligió a mano de su lista blanca.
+  if (icono === undefined) {
+    return detalle === undefined || detalle === "" ? `⚙ ${nombre}` : `⚙ ${nombre} ${detalle}`;
+  }
   const verbo = VERBO[nombre]!;
   return detalle === undefined || detalle === "" ? `${icono} ${verbo}` : `${icono} ${verbo} ${detalle}`;
 }

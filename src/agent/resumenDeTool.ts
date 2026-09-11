@@ -29,6 +29,18 @@ const CAMPOS_SEGUROS: Record<string, readonly string[]> = {
   glob: ["pattern", "path"],
   grep: ["pattern", "path", "glob", "max_count", "output_mode"],
   regex_search: ["pattern", "path", "glob", "flags", "max_count"],
+  /**
+   * De `task` sale el NOMBRE del especialista y nada más — nunca su `description`, que es
+   * el encargo entero y puede llevar contenido del proyecto dentro (por eso la cabecera de
+   * este fichero ya la nombraba como el ejemplo de lo que NO sale).
+   *
+   * El nombre sí puede: es el de un fichero que escribió el usuario, ya se pinta en Ajustes
+   * y ya viaja como `origen` en cada petición de aprobación. Y hace falta: medido en la
+   * pantalla del usuario, la línea decía «⚙ task» a secas, así que con un motor externo no
+   * había NADA en la interfaz que dijera a quién se delegó — y un hijo de Claude Code son
+   * minutos en otro proceso, sin una sola tool que cruce.
+   */
+  task: ["subagent_type"],
 };
 
 function objetoDeArgs(args: unknown): Record<string, unknown> | undefined {
@@ -75,7 +87,9 @@ export function detalleDe(nombre: string, args: unknown): string | undefined {
       ? "path"
       : nombre === "glob" || nombre === "grep" || nombre === "regex_search"
         ? "pattern"
-        : undefined;
+        : nombre === "task"
+          ? "subagent_type"
+          : undefined;
   if (campo === undefined || parametros === undefined) return undefined;
   const valor = parametros[campo];
   // Una cadena vacía no describe nada, y un tipo raro (`file_path: 42`) tampoco:

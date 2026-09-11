@@ -10,7 +10,7 @@
  */
 
 import { describe, it, expect } from "vitest";
-import { detalleDe } from "./resumenDeTool.js";
+import { parametrosDe, detalleDe } from "./resumenDeTool.js";
 
 describe("detalleDe", () => {
   it("las tools de fichero declaran su campo seguro, y solo ese sale", () => {
@@ -54,5 +54,28 @@ describe("detalleDe", () => {
 
   it("el detalle vacío no sirve para nada: undefined", () => {
     expect(detalleDe("read_file", { file_path: "" })).toBeUndefined();
+  });
+});
+
+describe("`task`: sale QUIÉN, nunca el encargo", () => {
+  const args = {
+    subagent_type: "Documentador",
+    description: "documenta la colección Clientes; su .xne dice fieldsize=80 y la clave va en /bd",
+  };
+
+  it("el detalle es el NOMBRE del especialista", () => {
+    // Medido en la pantalla del usuario: la línea decía «⚙ task» a secas, así que con un
+    // motor externo no había NADA en la interfaz que dijera a quién se delegó — y un hijo de
+    // Claude Code son minutos en otro proceso, sin una sola tool que cruce.
+    expect(detalleDe("task", args)).toBe("Documentador");
+  });
+
+  it("y la `description` NO sale: es el encargo entero, con contenido del proyecto dentro", () => {
+    // La cabecera de este fichero ya la nombraba como el ejemplo de lo que no sale. El
+    // nombre sí puede: es el de un fichero que escribió el usuario, y ya viaja como `origen`
+    // en cada petición de aprobación.
+    const p = parametrosDe("task", args);
+    expect(p).toEqual({ subagent_type: "Documentador" });
+    expect(JSON.stringify(p)).not.toContain("fieldsize");
   });
 });

@@ -116,3 +116,19 @@ describe("Colapsador", () => {
     expect(textos(c.lineas({ nombre: "x", error: "b" }))).toEqual(["✗ x: b"]);
   });
 });
+
+describe("la línea de una delegación dice a QUIÉN", () => {
+  it("`task` con su especialista se lee entero", () => {
+    const c = new Colapsador();
+    const lineas = [...c.lineas({ nombre: "task", detalle: "Documentador" }), c.cierre()];
+    expect(lineas.filter((l) => l !== null).map((l) => l!.texto).join(" | ")).toContain("delega en Documentador");
+  });
+
+  it("y una tool DESCONOCIDA ya no tira su detalle", () => {
+    // La rama genérica lo descartaba, y eso dejaba mudo justo lo que más falta hace. No
+    // filtra nada nuevo: un `detalle` solo existe si `resumenDeTool.ts` lo eligió a mano.
+    const c = new Colapsador();
+    const lineas = [...c.lineas({ nombre: "studio_edit_file", detalle: "app/Clientes.xne" }), c.cierre()];
+    expect(lineas.filter((l) => l !== null).map((l) => l!.texto).join(" | ")).toContain("studio_edit_file app/Clientes.xne");
+  });
+});
