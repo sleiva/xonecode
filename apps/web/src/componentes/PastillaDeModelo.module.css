@@ -21,9 +21,15 @@
  */
 .pastilla {
   padding: 4px 8px;
-  border: 0.5px solid color-mix(in srgb, var(--xonecode-cian) 40%, var(--dsw-alias-border-l2));
+  border: 1px solid color-mix(in srgb, var(--xonecode-cian) 70%, var(--dsw-alias-border-l2));
   border-radius: 8px;
-  background: var(--dsw-alias-bg-layer-2);
+  /*
+   * El baño de cian de las filas de la barra, que ya viene AJUSTADO por tema (7% en claro,
+   * 13% en oscuro): reusarlo es lo que evita inventar un segundo cian translúcido que en
+   * modo noche quedaría invisible o gritón. Suave a propósito: esto se lee, el que se pulsa
+   * es el botón de enviar.
+   */
+  background: var(--xonecode-fila-hover);
   color: var(--dsw-alias-label-secondary);
   font: inherit;
   font-size: 12px;
@@ -31,7 +37,7 @@
 }
 
 .pastilla:hover {
-  background: var(--xonecode-fila-hover);
+  background: var(--xonecode-fila-elegida);
   border-color: var(--xonecode-cian);
 }
 
