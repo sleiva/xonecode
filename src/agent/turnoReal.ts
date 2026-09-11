@@ -18,7 +18,8 @@ export const TOPE_REPARACIONES = 2;
 import { aPendiente, ficheroDe, cambioDe, buildResume } from "./interrupts.js";
 import { cargarAgentes } from "./agentesEnDisco.js";
 import { crearSubagenteExterno } from "./subagenteExterno.js";
-import { politicaExternaDeSesion } from "./escrituraExterna.js";
+import { opcionesDeSubagenteExterno } from "./escrituraExterna.js";
+import { ColaDeEventos, entrelazar } from "../core/entrelazar.js";
 import type { PendienteDeAprobacion } from "../core/events.js";
 import type { LineaDeDiff } from "../core/diff.js";
 import { rutaRealDeVirtual } from "../core/rutaVirtual.js";
@@ -333,7 +334,15 @@ export async function abrirSesionReal(opciones: {
    * porque `pedirAprobacion` no cambia dentro de una sesión; la composición vive extraída
    * (`escrituraExterna.ts#politicaExternaDeSesion`) y con test propio.
    */
-  const politicaExterna = politicaExternaDeSesion(opciones.pedirAprobacion);
+  /**
+   * El buzón por el que la actividad de un agente EXTERNO entra al flujo de eventos.
+   *
+   * Vive en el cierre de la SESIÓN y no del turno porque el puerto se construye con el
+   * agente, que también es de la sesión. No hay riesgo de mezclar turnos: un agente externo
+   * solo corre dentro de uno, y lo que quedara encolado al agotarse un flujo se dice antes
+   * de cerrarlo (`entrelazar`).
+   */
+  const eventosExternos = new ColaDeEventos();
 
   const checkpointer = opciones.checkpointer ?? new MemorySaver();
   const tracker = createTokenTracker();
@@ -372,13 +381,18 @@ export async function abrirSesionReal(opciones: {
        * puede dejar de estarlo. Sin `pedirAprobacion` no hay política, y sin política el
        * hijo no escribe.
        */
-      subagenteExterno: crearSubagenteExterno({
-        ...(politicaExterna === undefined ? {} : { aprobarEscritura: politicaExterna }),
-        // Una FUNCIÓN y no la lista: el hijo escribe durante el turno, así que una lista
-        // congelada al abrir la sesión no vería el `.xne` que se acaba de crear — y su
-        // `.xml` aplanado dejaría de reconocerse como tal.
-        ficherosDelProyecto: () => ficherosDelProyecto(raiz),
-      }),
+      subagenteExterno: crearSubagenteExterno(
+        opcionesDeSubagenteExterno({
+          ...(opciones.pedirAprobacion === undefined
+            ? {}
+            : { pedirAprobacion: opciones.pedirAprobacion }),
+          // Una FUNCIÓN y no la lista: el hijo escribe durante el turno, así que una foto
+          // congelada al abrir la sesión no vería el `.xne` que se acaba de crear — y su
+          // `.xml` aplanado dejaría de reconocerse como tal.
+          ficherosDelProyecto: () => ficherosDelProyecto(raiz),
+          eventos: eventosExternos,
+        })
+      ),
       modelos,
       skills: opciones.skills,
       checkpointer: checkpointer,
@@ -740,10 +754,16 @@ export async function abrirSesionReal(opciones: {
 
         bitacora = await correrTurno(
           conVerificacion(
-            aEventos(
-              stream,
-              async () => (await leerPendientes()).lista,
-              ({ nombre, detalle, parametros }) => diagnostico?.herramienta(nombre, detalle, parametros, tracker)
+            // El flujo del grafo MÁS lo que el agente externo vaya haciendo en su propio
+            // proceso: sin esto, ni una de sus tools cruza y son minutos de pantalla quieta.
+            entrelazar(
+              aEventos(
+                stream,
+                async () => (await leerPendientes()).lista,
+                ({ nombre, detalle, parametros }) =>
+                  diagnostico?.herramienta(nombre, detalle, parametros, tracker)
+              ),
+              eventosExternos
             )
           ),
           piel,

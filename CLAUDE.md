@@ -178,9 +178,33 @@ Un subagente es un `.md` con frontmatter en `.xonecode/agentes/<nombre>.md`
   nunca la `description`, que es el encargo entero y puede llevar contenido del proyecto. Y la
   rama genérica de `frase()` dejó de TIRAR el detalle: no filtra nada nuevo, porque un `detalle`
   solo existe si la lista blanca lo eligió a mano.
-  **Lo que sigue sin haber**: un agente externo no emite ni un evento mientras trabaja —el
-  `CompiledSubAgent` no tiene piel—, así que entre la línea de delegación y su respuesta no hay
-  progreso ninguno. Es la misma clase de silencio que el borde vivo del compositor vino a cubrir.
+- **Y lo que hace un agente EXTERNO se ve MIENTRAS lo hace** (`core/entrelazar.ts`). Su hijo
+  corre en otro proceso: ni una de sus tools cruza el stream del grafo, así que entre la línea de
+  delegación y su respuesta había minutos de pantalla quieta, que es como se lee un cuelgue. El
+  punto de observación es el hook `PreToolUse` —por `canUseTool` no pasan las lecturas, porque un
+  `allow` del hook es pre-aprobación—, y de ahí sale un evento `tool` NORMAL: nombre traducido al
+  canónico (`Read` → `read_file`) y ruta VIRTUAL, así que el colapsador lo agrupa con los demás y
+  ninguna piel se entera de que hay dos orígenes. `entrelazar` es la misma forma que
+  `conVerificacion` —un generador que envuelve a `aEventos`— salvo que intercala MIENTRAS en vez
+  de añadir al final; su trampa es que `it.next()` se pide UNA vez y se guarda, porque dos `next()`
+  vivos se comen un valor (hay test, y muere con la mutación). **Solo se cuenta lo que va a
+  ocurrir**: una tool denegada no se anuncia, porque la línea diría que el hijo hizo algo que no
+  hizo.
+- **Un hijo de Claude Code NO puede enumerar la carpeta, así que se le DICE**
+  (`escrituraExterna.ts#inventarioDelProyecto`). Medido espiando el hook en vivo: intentó
+  `Bash ls`, `Bash find` —denegadas—, pidió `ToolSearch select:Glob,Grep` y **no las encontró**;
+  probó las tools MCP del usuario y acabó leyendo a ciegas nombres inventados —`README.md`,
+  `CLAUDE.md`, `app.ini`…, ninguno existía: **65 lecturas**— para concluir que «el proyecto está
+  prácticamente vacío para mí, porque no puedo listarlo». Conceder `Bash` era la salida fácil y la
+  prohibida. La buena es que el harness YA tiene esa lista —la misma con la que reconoce una vista
+  aplanada—, así que va en sus instrucciones: rutas virtuales, acotada y con el total al lado. Es
+  el patrón de `core/adjuntos.ts`: montar no basta, hay que decir que están. Medido después: de 65
+  lecturas a ciegas a **3 exactas**, y el documento salió correcto.
+- Dos cosas más que salieron de esa misma medida: **`ToolSearch` es de LECTURA** (devuelve
+  esquemas, no ejecuta nada, y lo que consiga vuelve a pasar por el hook — sin ella el mensaje de
+  denegación le ofrecía buscar con unas tools que no podía alcanzar), y **listar la RAÍZ se
+  permite**: `rutaVirtualDeEscritura` la descarta a propósito porque no es un fichero que
+  escribir, y eso es cierto para escribir y falso para mirar.
 - **Motores externos**: `claude-code` (`agent/subagenteExterno.ts`) **escribe, y cada escritura
   pasa por una autorización** — `canUseTool` es asíncrono y corre en nuestro proceso, así que se
   espera ahí sin `interrupt()` y sin reejecutar el nodo. `decisionDeTool` en este orden: **TRES

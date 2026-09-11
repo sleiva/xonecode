@@ -36,6 +36,7 @@ import {
   claseDeToolExterna,
   decisionDePreToolUse,
   diffDeEscrituraExterna,
+  eventoDeToolExterna,
   veredictoDeLectura,
   motivoDeToolDenegada,
   veredictoDeRuta,
@@ -244,6 +245,20 @@ export function crearSubagenteExterno(opciones: {
    * su `.xml` aplanado dejaría de reconocerse como tal.
    */
   ficherosDelProyecto?: () => ReadonlySet<string>;
+  /**
+   * Qué está haciendo el hijo, MIENTRAS lo hace.
+   *
+   * Existe por un silencio medido en la pantalla del usuario: el hijo corre en otro proceso
+   * y ni una de sus tools cruza el stream del grafo, así que entre la línea de delegación y
+   * su respuesta final hay minutos sin nada que mirar — y una pantalla quieta se lee como
+   * que se ha colgado. Quien lo recibe lo mete en el MISMO flujo de eventos
+   * (`core/entrelazar.ts`), para que el colapsador lo agrupe como cualquier otra tool.
+   *
+   * Se llama desde el hook `PreToolUse`, que es el único punto por el que pasan TODAS: a
+   * `canUseTool` no llegan las lecturas, porque un `allow` del hook es una pre-aprobación y
+   * el callback ya no se consulta (medido).
+   */
+  alUsarTool?: (tool: { nombre: string; detalle?: string }) => void;
 }): SubagenteExternoPort {
   const cache = new Map<MotorExterno, boolean>();
   return {
@@ -315,21 +330,27 @@ export function crearSubagenteExterno(opciones: {
                   async (entrada) => {
                     const nombre = "tool_name" in entrada ? entrada.tool_name : "";
                     const cruda = "tool_input" in entrada ? entrada.tool_input : undefined;
-                    return {
-                      hookSpecificOutput: decisionDePreToolUse({
-                        nombre,
-                        // `tool_input` es `unknown` por su tipo: se acepta solo si es un
-                        // objeto, y si no se pasa vacío — que para una lectura significa
-                        // «sin ruta que comprobar» y para el resto da igual, porque la
-                        // clase de la tool ya decide.
-                        entrada:
-                          typeof cruda === "object" && cruda !== null
-                            ? (cruda as Record<string, unknown>)
-                            : {},
-                        cwd: peticion.cwd,
-                        ficheros: opciones.ficherosDelProyecto?.() ?? new Set<string>(),
-                      }),
-                    };
+                    const args =
+                      typeof cruda === "object" && cruda !== null
+                        ? (cruda as Record<string, unknown>)
+                        : {};
+                    const decision = decisionDePreToolUse({
+                      nombre,
+                      entrada: args,
+                      cwd: peticion.cwd,
+                      ficheros: opciones.ficherosDelProyecto?.() ?? new Set<string>(),
+                    });
+                    /**
+                     * **Solo se cuenta lo que va a ocurrir.** Una tool DENEGADA no se
+                     * anuncia: la línea diría que el hijo hizo algo que no hizo, y este
+                     * repo no tiene ningún sitio donde eso sea aceptable. `ask` sí se
+                     * cuenta —es una escritura propuesta—, que es exactamente lo que el
+                     * flujo del grafo ya hace con un `write_file` antes de su aprobación.
+                     */
+                    if (decision.permissionDecision !== "deny") {
+                      opciones.alUsarTool?.(eventoDeToolExterna(nombre, args, peticion.cwd));
+                    }
+                    return { hookSpecificOutput: decision };
                   },
                 ],
               },

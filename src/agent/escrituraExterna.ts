@@ -25,6 +25,7 @@ import { realpathSync, readFileSync } from "node:fs";
 import { dirname, basename, resolve, relative, sep } from "node:path";
 import type { LineaDeDiff } from "../core/diff.js";
 import type { PendienteDeAprobacion } from "../core/events.js";
+import type { ColaDeEventos } from "../core/entrelazar.js";
 import type { EscrituraExternaPedida, PoliticaDeEscrituraExterna } from "../core/ports.js";
 import { artefactoFueraDeSitio } from "../core/artefactos.js";
 import { descargaFueraDeSitio } from "../core/descargas.js";
@@ -52,6 +53,21 @@ export const TOOLS_EXTERNAS_DE_LECTURA: ReadonlySet<string> = new Set([
   "Grep",
   "NotebookRead",
   "TodoWrite",
+  /**
+   * **`ToolSearch` está aquí porque `Glob` y `Grep` vienen DIFERIDAS, y sin ella el agente
+   * trabaja a ciegas.** Medido espiando el hook en una ejecución real: el hijo intentó
+   * `Bash ls`, luego `Bash find`, y después `ToolSearch {"query":"select:Glob,Grep"}` — o
+   * sea que esas dos no las tiene cargadas y hay que pedírselas. Denegándola, el mensaje de
+   * denegación le ofrecía literalmente «puedes buscar con Glob, Grep» unas tools que no
+   * podía alcanzar, y acababa probando nombres de fichero uno a uno: SESENTA Y CINCO
+   * lecturas de ficheros que no existían (`README.md`, `CLAUDE.md`, `app.ini`…) para
+   * concluir que «el proyecto está prácticamente vacío para mí, porque no puedo listarlo».
+   *
+   * Y no abre nada: devuelve ESQUEMAS de tools, no ejecuta ninguna. Lo que consiga con ella
+   * vuelve a pasar por este mismo hook, que es el punto por el que pasan todas — así que la
+   * lista blanca sigue siendo la barrera, y ahora además es cierta.
+   */
+  "ToolSearch",
 ]);
 
 /**
@@ -219,6 +235,19 @@ export function veredictoDeRuta(opciones: {
       motivo: "no se pudo comprobar dónde cae esa ruta de verdad (¿falta la carpeta?), así que no se autoriza",
     };
   }
+
+  /**
+   * **La RAÍZ del proyecto es un destino válido para LEER, y rechazarla dejaba al agente
+   * ciego.** `rutaVirtualDeEscritura` la descarta a propósito —no es un fichero que
+   * escribir—, y eso es correcto para una escritura y falso para un listado: `Glob` y `Grep`
+   * apuntan a la carpeta del proyecto, que es exactamente la raíz.
+   *
+   * Medido en vivo antes de esto, y lo dijo el propio hijo: «el proyecto está prácticamente
+   * vacío para mí, porque no puedo listarlo» — y a cambio hizo SESENTA Y CINCO lecturas a
+   * ciegas probando nombres de fichero (`README.md`, `CLAUDE.md`, `app.ini`…), ninguno de los
+   * cuales existía. Una guarda que no deja mirar no protege: empuja a adivinar.
+   */
+  if (soloLeer && destino === raizReal) return { admitida: true, ruta: "/" };
 
   const virtual = rutaVirtualDeEscritura(raizReal, destino);
   if (virtual === undefined) {
@@ -589,4 +618,144 @@ export function politicaExternaDeSesion(
     | undefined
 ): PoliticaDeEscrituraExterna | undefined {
   return pedirAprobacion === undefined ? undefined : politicaDeAprobacionExterna(pedirAprobacion);
+}
+
+/**
+ * Cómo se cuenta una tool del hijo en el flujo de eventos: con el nombre CANÓNICO del
+ * harness y el mismo campo que la lista blanca de `resumenDeTool.ts` elegiría.
+ *
+ * El nombre se traduce (`Read` → `read_file`) en vez de inventarse una familia nueva: así
+ * el colapsador de `core/notify.ts` las agrupa con las demás —«→ lee ×5 — a, b y 3 más»—,
+ * la bitácora las cuenta igual y ninguna piel se entera de que hay dos orígenes. Añadir
+ * `Read` a las tablas de icono y verbo habría sido la otra opción, y es la que deja dos
+ * nombres para lo mismo en el registro y en las Trazas.
+ *
+ * Y el detalle es exactamente lo que ya sale de una tool del grafo: una RUTA (virtual, la
+ * del proyecto) o un PATRÓN. Nunca contenido, nunca la ruta de la máquina — la misma regla,
+ * aplicada en el otro lado de la frontera.
+ */
+const NOMBRE_CANONICO: Record<string, string> = {
+  Read: "read_file",
+  NotebookRead: "read_file",
+  Glob: "glob",
+  Grep: "grep",
+  Write: "write_file",
+  Edit: "edit_file",
+};
+
+export function eventoDeToolExterna(
+  nombre: string,
+  entrada: Record<string, unknown>,
+  cwd: string,
+  real: (ruta: string) => string = realpathSync
+): { nombre: string; detalle?: string } {
+  const canonico = NOMBRE_CANONICO[nombre] ?? nombre;
+  // Un patrón para las de búsqueda, una ruta para las de fichero. Igual que `detalleDe`.
+  if (canonico === "glob" || canonico === "grep") {
+    const patron = entrada["pattern"];
+    return typeof patron === "string" && patron !== ""
+      ? { nombre: canonico, detalle: patron }
+      : { nombre: canonico };
+  }
+  const ruta = entrada["file_path"];
+  if (typeof ruta !== "string" || ruta === "") return { nombre: canonico };
+  /**
+   * La VIRTUAL: la de la máquina no sale de aquí ni al registro ni al cable. Si la ruta cae
+   * fuera del proyecto no se dice cuál era —sería decir dónde miró fuera—, solo la tool.
+   *
+   * Y contra las DOS formas de la raíz, que es el mismo tropiezo que ya costó una medida en
+   * `veredictoDeRuta`: el hijo canonicaliza, así que con el proyecto en `/tmp/x` pide
+   * `/private/tmp/x/...` y los textos no casan. Medido en vivo antes de esto: el pulso decía
+   * «→ lee ×65» sin UN SOLO nombre de fichero, que es la mitad de lo que esta línea existe
+   * para contar.
+   */
+  const suyo = rutaVirtualDeEscritura(cwd, ruta);
+  if (suyo !== undefined) return { nombre: canonico, detalle: suyo };
+  try {
+    const porLaCanonica = rutaVirtualDeEscritura(real(resolve(cwd)), ruta);
+    if (porLaCanonica !== undefined) return { nombre: canonico, detalle: porLaCanonica };
+  } catch {
+    // Sin poder canonicalizar no se afirma ninguna ruta: se cuenta la tool y ya.
+  }
+  return { nombre: canonico };
+}
+
+/**
+ * Todo lo que un agente externo necesita de la SESIÓN, en un solo sitio y exportado.
+ *
+ * **Está extraída del cierre de `abrirSesionReal` a propósito**, y no por gusto: son cuatro
+ * campos opcionales que se componen dentro de algo que todos sus tests doblan, o sea el
+ * patrón de fallo que este repo lleva medido siete veces — una regla que deja de estar
+ * montada CON TODO EN VERDE. Aquí los tres que importan se pueden comprobar contra lo real:
+ * que sin `pedirAprobacion` no hay política (y por tanto no hay escritura), que la actividad
+ * del hijo acaba en la cola de eventos, y que la lista de ficheros es una FUNCIÓN y no una
+ * foto congelada al abrir la sesión.
+ */
+export function opcionesDeSubagenteExterno(opciones: {
+  pedirAprobacion?: (
+    pendientes: PendienteDeAprobacion[],
+    ficheros: Map<string, string>,
+    diffs: Map<string, LineaDeDiff[]>
+  ) => Promise<Map<string, Decision>>;
+  ficherosDelProyecto: () => ReadonlySet<string>;
+  eventos: ColaDeEventos;
+}): {
+  aprobarEscritura?: PoliticaDeEscrituraExterna;
+  ficherosDelProyecto: () => ReadonlySet<string>;
+  alUsarTool: (tool: { nombre: string; detalle?: string }) => void;
+} {
+  const politica = politicaExternaDeSesion(opciones.pedirAprobacion);
+  return {
+    ...(politica === undefined ? {} : { aprobarEscritura: politica }),
+    ficherosDelProyecto: opciones.ficherosDelProyecto,
+    // Un evento `tool` normal y corriente: el colapsador lo agrupa con los demás, la
+    // bitácora lo cuenta y ninguna piel se entera de que hay dos orígenes.
+    alUsarTool: ({ nombre, detalle }) =>
+      opciones.eventos.empujar({ tipo: "tool", nombre, ...(detalle === undefined ? {} : { detalle }) }),
+  };
+}
+
+/** Cuántos ficheros se le enumeran. Por encima, se dice cuántos quedan fuera. */
+export const TOPE_DE_INVENTARIO = 400;
+
+/**
+ * El inventario del proyecto, para un agente EXTERNO.
+ *
+ * **Existe porque un hijo de Claude Code no puede enumerar la carpeta, y eso está medido**
+ * (11-09-2026, espiando el hook en una ejecución real). Intentó `Bash ls`, `Bash find` —
+ * denegadas—, pidió `ToolSearch {"query":"select:Glob,Grep"}` y **no las encontró**: ese
+ * hijo no trae ninguna herramienta de listado. Después probó las tools MCP del usuario
+ * (denegadas también) y acabó leyendo a ciegas nombres inventados —`README.md`,
+ * `CLAUDE.md`, `app.ini`, `main.xml`…, ninguno existía— para concluir que «el proyecto está
+ * prácticamente vacío para mí, porque no puedo listarlo».
+ *
+ * La salida fácil habría sido concederle `Bash`, y es justo la que no se puede tomar: con
+ * `Bash` escribe el proyecto entero saltándose la política, el diff y las guardas de ruta.
+ * La buena es que el harness YA sabe qué ficheros hay —es la misma lista con la que
+ * reconoce una vista aplanada— así que se le DICE. Es el patrón de `core/adjuntos.ts`:
+ * montar no basta, hay que decir que están.
+ *
+ * Dos cosas que hereda de las reglas de siempre: las rutas van VIRTUALES (desde la raíz del
+ * proyecto, nunca las de la máquina) y la lista va ACOTADA con el total al lado, que es lo
+ * que impide leer los que caben como si fueran todos.
+ */
+export function inventarioDelProyecto(
+  ficheros: ReadonlySet<string>,
+  tope: number = TOPE_DE_INVENTARIO
+): string {
+  const todos = [...ficheros].sort();
+  if (todos.length === 0) {
+    // Vacío es una afirmación, y aquí es cierta: la lista sale del disco. Decirlo evita que
+    // se ponga a adivinar nombres, que es exactamente lo que hacía sin inventario.
+    return "INVENTARIO DEL PROYECTO: está vacío (no hay ningún fichero que leer).";
+  }
+  const listados = todos.slice(0, tope);
+  const resto = todos.length - listados.length;
+  return [
+    `INVENTARIO DEL PROYECTO (${todos.length} fichero(s)). No tienes ninguna herramienta para`,
+    "listar carpetas, así que esta es la lista: no adivines nombres, lee de aquí. Las rutas van",
+    "desde la raíz del proyecto; para leerlas, quítales la barra inicial.",
+    ...listados.map((f) => `- ${f}`),
+    ...(resto === 0 ? [] : [`- … y ${resto} fichero(s) más que no caben en esta lista.`]),
+  ].join("\n");
 }

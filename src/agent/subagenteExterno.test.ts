@@ -97,6 +97,22 @@ describe("decisionDeTool — la regla de seguridad de los agentes externos", () 
     expect(d.behavior).toBe("deny");
   });
 
+  it("LISTAR la raíz del proyecto se permite: rechazarla dejaba al agente CIEGO", async () => {
+    // Medido en vivo, y lo dijo el propio hijo: «el proyecto está prácticamente vacío para
+    // mí, porque no puedo listarlo» — y a cambio hizo SESENTA Y CINCO lecturas a ciegas
+    // probando nombres que no existían. `rutaVirtualDeEscritura` descarta la raíz a propósito
+    // (no es un fichero que escribir), y eso es cierto para escribir y falso para listar.
+    expect((await decidir("Glob", { entrada: { pattern: "**/*", path: "/proyecto" } })).behavior).toBe("allow");
+    expect((await decidir("Grep", { entrada: { pattern: "self", path: "/proyecto/" } })).behavior).toBe("allow");
+    // Y escribir SOBRE la raíz sigue sin tener sentido, así que se sigue denegando.
+    const d = await decidir("Write", {
+      peticion: { ...PETICION, permitirEscritura: true },
+      entrada: { file_path: "/proyecto", content: "x" },
+      politica: async () => true,
+    });
+    expect(d.behavior).toBe("deny");
+  });
+
   it("`Glob` y `Grep` llevan `path` OPCIONAL: ausente es la raíz y no hay nada que comprobar", async () => {
     expect((await decidir("Grep", { entrada: { pattern: "self\\." } })).behavior).toBe("allow");
     expect((await decidir("Glob", { entrada: { pattern: "**/*.xne", path: "/proyecto/app" } })).behavior).toBe("allow");

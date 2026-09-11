@@ -9,6 +9,9 @@ import {
   decisionDePreToolUse,
   politicaDeAprobacionExterna,
   politicaExternaDeSesion,
+  opcionesDeSubagenteExterno,
+  eventoDeToolExterna,
+  inventarioDelProyecto,
   diffDeEscrituraExterna,
   TOOLS_EXTERNAS_DE_LECTURA,
   TOOLS_EXTERNAS_DE_ESCRITURA,
@@ -17,6 +20,7 @@ import {
 import { DENEGADO_SIEMPRE } from "./perfiles.js";
 import type { PendienteDeAprobacion } from "../core/events.js";
 import type { Decision } from "../vendor/hitl.js";
+import { ColaDeEventos } from "../core/entrelazar.js";
 
 describe("las TRES listas de tools", () => {
   it("una tool no puede estar en dos listas", () => {
@@ -30,6 +34,15 @@ describe("las TRES listas de tools", () => {
     for (const tool of ["Read", "Glob", "Grep", "NotebookRead", "TodoWrite"]) {
       expect(claseDeToolExterna(tool), tool).toBe("lectura");
     }
+  });
+
+  it("`ToolSearch` es de lectura, porque `Glob` y `Grep` vienen DIFERIDAS", () => {
+    // Medido espiando el hook en vivo: el hijo intentó `Bash ls`, luego `Bash find`, y
+    // después `ToolSearch {"query":"select:Glob,Grep"}` — no las tiene cargadas. Sin esto, el
+    // mensaje de denegación le ofrecía buscar con unas tools que no podía alcanzar, y acababa
+    // probando nombres de fichero a ciegas: 65 lecturas de ficheros que no existían.
+    // No abre nada: devuelve ESQUEMAS, y lo que consiga vuelve a pasar por este mismo hook.
+    expect(claseDeToolExterna("ToolSearch")).toBe("lectura");
   });
 
   it("escribir son DOS tools y ninguna más: las que se pueden enseñar en un diff", () => {
@@ -411,5 +424,119 @@ describe("el hook `PreToolUse`, que es la denegación que NO se puede ensombrece
     for (const tool of [...TOOLS_EXTERNAS_DE_LECTURA, ...TOOLS_EXTERNAS_DE_ESCRITURA, ...TOOLS_EXTERNAS_DENEGADAS]) {
       expect(["allow", "deny", "ask"], tool).toContain(hook(tool, { file_path: "/proyecto/x" }).permissionDecision);
     }
+  });
+});
+
+describe("lo que el hijo hace, contado como un evento del harness", () => {
+  it("el nombre se TRADUCE al canónico y la ruta va VIRTUAL", () => {
+    // Se traduce en vez de inventar una familia nueva: así el colapsador de `core/notify.ts`
+    // las agrupa con las demás («→ lee ×5 — a, b y 3 más») y no hay dos nombres para lo
+    // mismo en las Trazas.
+    expect(eventoDeToolExterna("Read", { file_path: "/proyecto/app/x.js" }, "/proyecto")).toEqual({
+      nombre: "read_file",
+      detalle: "/app/x.js",
+    });
+    expect(eventoDeToolExterna("Write", { file_path: "/proyecto/doc/G.md" }, "/proyecto")).toEqual({
+      nombre: "write_file",
+      detalle: "/doc/G.md",
+    });
+    expect(eventoDeToolExterna("Grep", { pattern: "self\\." }, "/proyecto")).toEqual({
+      nombre: "grep",
+      detalle: "self\\.",
+    });
+  });
+
+  it("y tolera una raíz NO canónica, que fue lo que la dejó muda al medirla", () => {
+    // Medido en vivo: con el proyecto en `/tmp/x` el hijo pide `/private/tmp/x/...` —
+    // canonicaliza él—, los textos no casaban y el pulso decía «→ lee ×65» sin UN SOLO
+    // nombre de fichero. Es el mismo tropiezo que ya costó una medida en `veredictoDeRuta`.
+    expect(
+      eventoDeToolExterna("Read", { file_path: "/real/p/app/x.js" }, "/enlace/p", (r) =>
+        r === "/enlace/p" ? "/real/p" : r
+      )
+    ).toEqual({ nombre: "read_file", detalle: "/app/x.js" });
+  });
+
+  it("la ruta de la MÁQUINA no sale, ni siquiera cuando cae fuera del proyecto", () => {
+    // La misma regla que `sinRutas`: el cable puede ir por un túnel. Y decir cuál era la
+    // ruta de fuera sería decir dónde miró fuera; se dice la tool y nada más.
+    expect(eventoDeToolExterna("Read", { file_path: "/etc/hosts" }, "/proyecto", (r) => r)).toEqual({
+      nombre: "read_file",
+    });
+    expect(eventoDeToolExterna("Read", {}, "/proyecto", (r) => r)).toEqual({ nombre: "read_file" });
+  });
+});
+
+describe("las opciones del subagente externo, extraídas del cierre y probadas", () => {
+  const ficheros = () => new Set<string>();
+
+  it("sin `pedirAprobacion` no hay política, o sea que el hijo no escribe", () => {
+    const o = opcionesDeSubagenteExterno({ ficherosDelProyecto: ficheros, eventos: new ColaDeEventos() });
+    expect(o.aprobarEscritura).toBeUndefined();
+  });
+
+  it("con él, la política entra montada", async () => {
+    const o = opcionesDeSubagenteExterno({
+      pedirAprobacion: async (ps) => new Map(ps.map((p) => [p.id, { type: "approve" } as Decision])),
+      ficherosDelProyecto: ficheros,
+      eventos: new ColaDeEventos(),
+    });
+    await expect(o.aprobarEscritura!({ agente: "d", ruta: "/a", lineas: [] })).resolves.toBe(true);
+  });
+
+  it("y lo que hace el hijo acaba en la COLA de eventos, que es lo que se cae en un cierre", () => {
+    // Es la octava vez que este repo se encuentra el mismo patrón: una composición de
+    // producción viviendo en un cierre que todos los tests doblan. Quitando esta línea de
+    // `abrirSesionReal`, los dos `tsc` siguen limpios y el agente externo vuelve a ser mudo.
+    const eventos = new ColaDeEventos();
+    const o = opcionesDeSubagenteExterno({ ficherosDelProyecto: ficheros, eventos });
+    o.alUsarTool({ nombre: "read_file", detalle: "/app/x.js" });
+    o.alUsarTool({ nombre: "grep" });
+    expect(eventos.vaciar()).toEqual([
+      { tipo: "tool", nombre: "read_file", detalle: "/app/x.js" },
+      { tipo: "tool", nombre: "grep" },
+    ]);
+  });
+
+  it("la lista de ficheros es una FUNCIÓN, no una foto del momento de abrir la sesión", () => {
+    // El hijo escribe DURANTE el turno: con una lista congelada, el `.xne` que se acaba de
+    // crear no estaría y su `.xml` aplanado dejaría de reconocerse como tal.
+    let actual = new Set<string>();
+    const o = opcionesDeSubagenteExterno({ ficherosDelProyecto: () => actual, eventos: new ColaDeEventos() });
+    actual = new Set(["/app/Nuevo.xne"]);
+    expect([...o.ficherosDelProyecto()]).toEqual(["/app/Nuevo.xne"]);
+  });
+});
+
+describe("el inventario: lo que el hijo no puede listar, se le DICE", () => {
+  it("enumera con rutas VIRTUALES y dice que no adivine", () => {
+    /**
+     * Medido espiando el hook en vivo: el hijo intentó `Bash ls`, `Bash find`, pidió
+     * `ToolSearch select:Glob,Grep` y NO las encontró —no trae ninguna herramienta de
+     * listado—, probó las tools MCP del usuario y acabó leyendo nombres inventados
+     * (`README.md`, `CLAUDE.md`, `app.ini`, `main.xml`: ninguno existía) para concluir que
+     * «el proyecto está prácticamente vacío para mí, porque no puedo listarlo».
+     */
+    const t = inventarioDelProyecto(new Set(["/app/Clientes.xne", "/app.xml"]));
+    expect(t).toContain("- /app.xml");
+    expect(t).toContain("- /app/Clientes.xne");
+    expect(t).toMatch(/no adivines/);
+    expect(t).toContain("2 fichero(s)");
+  });
+
+  it("va ACOTADO y con el total al lado", () => {
+    // La misma regla que los nombres del aviso de trabajo sin commitear: lo que cabe se
+    // enumera, y el total es lo que impide leerlos como si fueran todos.
+    const muchos = new Set(Array.from({ length: 50 }, (_, i) => `/f${String(i).padStart(3, "0")}.js`));
+    const t = inventarioDelProyecto(muchos, 10);
+    expect(t).toContain("50 fichero(s)");
+    expect(t).toContain("y 40 fichero(s) más");
+    expect(t.split("\n").filter((l) => l.startsWith("- /"))).toHaveLength(10);
+  });
+
+  it("vacío es una AFIRMACIÓN, y aquí es cierta", () => {
+    // Sale del disco, así que se puede decir — y decirlo es lo que evita que se ponga a
+    // adivinar nombres, que es exactamente lo que hacía sin inventario.
+    expect(inventarioDelProyecto(new Set())).toMatch(/está vacío/);
   });
 });

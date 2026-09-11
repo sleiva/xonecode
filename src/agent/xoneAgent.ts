@@ -9,6 +9,7 @@ import { backendDeAgente } from "./proyecto.js";
 import type { Artefacto } from "../core/artefactos.js";
 import { permisosDe, hitlDe, type QuienDecidePermisos } from "./perfiles.js";
 import { crearBusquedaRegex } from "./busquedaRegex.js";
+import { inventarioDelProyecto } from "./escrituraExterna.js";
 import type { DiagnosticoDeTools } from "./diagnosticoDeTools.js";
 import { middlewareTextoDeTool } from "./textoDeTool.js";
 import { resumenDeContexto } from "./resumenDeContexto.js";
@@ -239,7 +240,13 @@ export async function construirAgente(opciones: OpcionesDelAgente): Promise<unkn
         const texto = await opciones.subagenteExterno.correr({
           motor,
           cwd: opciones.raiz,
-          instrucciones: promptDeAgente(agente, repartirSkills(agente, catalogoDeSkills)),
+          /**
+           * Sus instrucciones MÁS el inventario del proyecto. Ese añadido no es un lujo: un
+           * hijo de Claude Code no tiene ninguna herramienta para listar carpetas —medido—,
+           * así que sin él lee a ciegas nombres inventados y concluye que el proyecto está
+           * vacío. Se le dice lo que el harness ya sabe, que es el patrón de `/adjuntos/`.
+           */
+          instrucciones: `${promptDeAgente(agente, repartirSkills(agente, catalogoDeSkills))}\n\n${inventarioDelProyecto(opciones.ficheros)}`,
           tarea,
           // El modelo del producto que pida su `.md`, si pide alguno. Ausente = el que el
           // agente externo use por su cuenta, que es lo de siempre.
