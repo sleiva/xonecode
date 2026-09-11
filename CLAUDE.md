@@ -472,8 +472,11 @@ feedback del desarrollador** y no es terminal.
 - **El botón de enviar lleva el AZUL de la marca** (`--xonecode-azul` con
   `--xonecode-sobre-azul`: el mismo par que la barra superior, donde ya estaba medido que
   sostiene texto blanco), y el cian se queda para su hover — ahí puede brillar sin sostener
-  nada. Las pastillas llevan el filo cian y el hover de las filas de la barra, pero **su
-  texto NO**: los tokens de marca no se redefinen por tema y `--xonecode-azul` sobre el fondo
+  nada. Las pastillas llevan filo cian y el BAÑO de las filas de la barra
+  (`--xonecode-fila-hover` en reposo, `--xonecode-fila-elegida` al pasar por encima): esos
+  dos tokens ya vienen AJUSTADOS POR TEMA —7%/13% y 14%/26%—, así que reusarlos evita
+  inventar un cian translúcido con un porcentaje fijo que quedaría invisible en un tema y
+  gritón en el otro. Suaves a propósito: el que se pulsa es el botón. Pero **su texto NO**: los tokens de marca no se redefinen por tema y `--xonecode-azul` sobre el fondo
   de noche sería ilegible; los `--dsw-alias-*` sí cambian, y de ahí sigue saliendo la letra.
   PARAR se queda ROJO —es un estado, no la marca— y hay que repetir su hover porque el mismo
   botón lleva las dos clases; y apagado no lleva color de marca, que un botón inerte pintado
