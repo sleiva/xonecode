@@ -185,6 +185,8 @@ copiaron en vez de publicarse aparte porque son 290 líneas y no merecen un paqu
 
 ## Más
 
+- [`docs/DECISIONES.md`](docs/DECISIONES.md) — el porqué medido de cada decisión, párrafo
+  por párrafo: lo que vivía en `CLAUDE.md` hasta que ese fichero volvió a ser solo el mapa
 - [`docs/COMO-PROBARLO.md`](docs/COMO-PROBARLO.md) — la guía de pruebas, paso a paso
 - [`docs/PROBLEMA.md`](docs/PROBLEMA.md) — el enunciado del que salió el diseño
 - [`docs/SEGUNDA-OPINION-K3.md`](docs/SEGUNDA-OPINION-K3.md) — una segunda opinión
