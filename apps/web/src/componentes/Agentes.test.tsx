@@ -169,6 +169,22 @@ describe("Agentes", () => {
     expect(screen.getByText(/apruebes/)).not.toBeNull();
   });
 
+  it("y lo que cada motor puede LEER se dice por separado, porque no es lo mismo en los tres", () => {
+    // El aviso era uno solo y decía «nunca toca .env»: cierto para escribir, y FALSO para leer
+    // en Codex, que lee por la shell de su sandbox. Visto en la pantalla, no en un test.
+    render(<Agentes {...manejadores} agentes={[]} />);
+    fireEvent.click(screen.getByRole("button", { name: "Nuevo subagente" }));
+    // El desplegable se coge UNA vez: al cambiar de motor, «Codex» también aparece en el de
+    // modelos, y buscarlo por lo que enseña encontraría dos.
+    const motor = screen.getByDisplayValue(/Un modelo/);
+    fireEvent.change(motor, { target: { value: "codex" } });
+    expect(screen.getByText(/leer NO está guardado/)).not.toBeNull();
+    fireEvent.change(motor, { target: { value: "opencode" } });
+    expect(screen.getByText(/Leer está guardado/)).not.toBeNull();
+    fireEvent.change(motor, { target: { value: "claude-code" } });
+    expect(screen.getByText(/Leer también está guardado/)).not.toBeNull();
+  });
+
   it("cada motor externo dice QUÉ hace falta para que funcione", () => {
     // No es el mismo requisito y el fallo se parece: Claude Code va por su SDK y Codex por
     // el binario que el usuario tenga instalado. Un especialista al que le falte lo suyo no

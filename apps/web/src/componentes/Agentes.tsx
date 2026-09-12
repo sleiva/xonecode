@@ -72,8 +72,29 @@ const MOTORES: readonly { id: string; etiqueta: string; detalle: string }[] = [
 const AVISO_EXTERNO =
   "Un agente externo corre fuera de xonecode, con su propia cuenta y su propia " +
   "configuración. Si le dejas escribir, cada escritura te llega con su diff para que la " +
-  "apruebes, y las guardas del proyecto siguen puestas: nunca toca .env, .git, .xonecode, " +
-  "una vista aplanada ni nada de fuera de la carpeta. Borrar y renombrar no se le conceden.";
+  "apruebes, y las guardas del proyecto siguen puestas: no ESCRIBE en .env, .git, .xonecode, " +
+  "una vista aplanada ni fuera de la carpeta. Borrar y renombrar no se le conceden.";
+
+/**
+ * Lo que cada motor externo puede LEER, que no es lo mismo en los tres — y decirlo importa.
+ *
+ * El aviso de arriba era uno solo y decía «nunca toca .env»: cierto para escribir en los tres,
+ * y **falso para leer en Codex**, donde lee por la shell de su sandbox y ahí no hay guarda que
+ * valga (está declarado en CLAUDE.md). Visto en la pantalla, no en un test: la frase prometía
+ * una protección que uno de los tres no da, y quien elige el motor lo hace mirando esto.
+ */
+const AVISO_DE_LECTURA: Record<string, string> = {
+  "claude-code":
+    "Leer también está guardado: no puede leer .env, .git, .xonecode, una vista aplanada ni " +
+    "nada de fuera del proyecto.",
+  codex:
+    "OJO: leer NO está guardado. Su sandbox solo le impide ESCRIBIR, así que puede leer .env, " +
+    ".git, .xonecode y ficheros de fuera del proyecto. No lo uses en un proyecto cuyos " +
+    "secretos no quieras que salgan de tu máquina.",
+  opencode:
+    "Leer está guardado por reglas de su configuración: no puede leer .env, .git, .xonecode, " +
+    "una vista aplanada ni nada de fuera del proyecto.",
+};
 
 /** Un agente vacío, para el formulario de alta. */
 function enBlanco(): AgenteDelCable {
@@ -442,7 +463,11 @@ export function Agentes({
             </span>
           </label>
 
-          {editando.motor === "modelo" ? null : <p className={estilos.aviso}>{AVISO_EXTERNO}</p>}
+          {editando.motor === "modelo" ? null : (
+            <p className={estilos.aviso}>
+              {AVISO_EXTERNO} {AVISO_DE_LECTURA[editando.motor] ?? ""}
+            </p>
+          )}
 
           <label className={estilos.campo}>
             <span className={estilos.rotulo}>
