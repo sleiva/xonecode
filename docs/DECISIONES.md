@@ -792,16 +792,20 @@ especialistas de siempre —`docs`, `planner`, `dev`, `mockup`— dejaron de est
   tiene la denegación más fuerte porque la pone el sistema operativo—; lo que era falso era el
   obstáculo: `canUseTool` es asíncrono y corre en NUESTRO proceso, así que se puede esperar ahí
   a que alguien decida con el hijo vivo, sin `interrupt()` y sin reejecutar el nodo. Lo que
-  cambia, en `CLAUDE.md` con su detalle: TRES listas de tools en vez de dos (conceder escritura
-  concedía `Bash`), las guardas de ruta del proyecto REAPLICADAS sobre la ruta absoluta del hijo
-  y dos veces (texto y `realpath`), la política que es el `pedirAprobacion` que ya existía, y
-  `settingSources: ["user"]` — porque una regla `allow` de un `settings.json` **del proyecto**
-  hacía que el callback no se invocara, y ese fichero viene de CloudStudio.
-- **Un agente EXTERNO (Claude Code) corre, pero solo LEE** (`core/ports.ts#SubagenteExternoPort`,
-  `agent/subagenteExterno.ts`). Entra como `CompiledSubAgent` de deepagents
-  —`{name, description, runnable}`, que acepta junto a los normales—, así que los tres
-  motores llegan al orquestador por el MISMO `task` y él no sabe de qué está hecho cada
-  especialista. Cuatro cosas que sostienen esto:
+  cambia está en el bloque ESTADO ACTUAL que va debajo de este párrafo histórico: TRES listas de
+  tools en vez de dos (conceder escritura concedía `Bash`), las guardas de ruta del proyecto
+  REAPLICADAS sobre la ruta absoluta del hijo y dos veces (texto y `realpath`), la política que
+  es el `pedirAprobacion` que ya existía, y `settingSources: ["user"]` — porque una regla
+  `allow` de un `settings.json` **del proyecto** hacía que el callback no se invocara, y ese
+  fichero viene de CloudStudio. Ese detalle vivió en `CLAUDE.md` del 11 al 14-09-2026 y volvió
+  aquí: el porqué de un invariante no puede tener su descripción viva en el mapa.
+- **PÁRRAFO HISTÓRICO — un agente EXTERNO (Claude Code) corría, pero solo LEÍA**
+  (`core/ports.ts#SubagenteExternoPort`, `agent/subagenteExterno.ts`). Entra como
+  `CompiledSubAgent` de deepagents —`{name, description, runnable}`, que acepta junto a los
+  normales—, así que los tres motores llegan al orquestador por el MISMO `task` y él no sabe de
+  qué está hecho cada especialista. Se conserva porque el bloque SUPERADO de arriba lo cita y
+  porque cuenta el razonamiento que llevó al diseño actual; **lo que hoy es verdad está en el
+  bloque ESTADO ACTUAL de aquí abajo, no en estas cuatro.** Cuatro cosas que sostenían esto:
   - **La escritura se deniega por LISTA BLANCA**, no por lista negra. El SDK trae
     `canUseTool` —recibe la tool y su entrada entera, contesta permitir o denegar— y es
     exactamente el contrato de nuestra aprobación; lo que no encaja todavía es el otro lado:
@@ -821,7 +825,98 @@ especialistas de siempre —`docs`, `planner`, `dev`, `mockup`— dejaron de est
   - **Se comprueba `disponible()` antes de montarlo.** Un especialista que el orquestador
     puede elegir y que revienta al elegirlo es un botón muerto dentro del grafo — peor que uno
     de interfaz, porque quien lo pulsa es el modelo y se cree el resultado.
-  - **Codex va por otro camino** (`agent/subagenteCodex.ts`): se habla con
+  - **ESTADO ACTUAL (14-09-2026): un agente externo de Claude Code ESCRIBE, y cada escritura pasa
+  por una autorización.** `canUseTool` es asíncrono y corre en NUESTRO proceso, así que se
+  espera ahí a que alguien decida con el hijo vivo — sin `interrupt()` y sin reejecutar el nodo,
+  que era justo el obstáculo que el párrafo histórico creía insalvable. `decisionDeTool` decide
+  en este ORDEN, y los tres primeros escalones son guardas; la política va al final:
+  - **TRES listas de tools**, no dos: lectura / escritura / denegadas, y lo DESCONOCIDO denegado
+    también — con una lista negra, la tool que Claude Code añada mañana entraría permitida.
+    Dos listas no bastaban porque el predicado era `permitirEscritura || esDeLectura(nombre)`, o
+    sea que conceder escritura concedía `Bash` —que basta para escribir el proyecto entero— y
+    `WebFetch`/`WebSearch`, que lo sacan de la máquina. Escribir son **solo `Write` y `Edit`**:
+    las únicas cuyos argumentos encajan en `cambioDe()`, o sea de las que se puede componer el
+    diff que hay que mirar. `decisionDeTool` es pura y exportada para poder probarla sin lanzar
+    un Claude Code en `npm test`.
+  - **Las guardas de RUTA se REAPLICAN, y ahí estaba el agujero**
+    (`agent/escrituraExterna.ts`). El `file_path` del hijo es ABSOLUTO y va al disco directo, así
+    que `permisosDe`, el `virtualMode`, las vistas aplanadas y las guardas de artefactos y
+    descargas NO lo alcanzan. Se aplican las MISMAS funciones sobre la ruta virtual, y **dos
+    veces** —texto y `realpath`— como en `arbolDeProyecto.ts`: medido, un enlace dentro de la
+    raíz apuntando a `.env` pasa la primera. Del destino se canonicaliza él si existe y su PADRE
+    si no (si no, no se podría crear ningún fichero). Lo que no se puede comprobar se deniega.
+  - **La política es el `pedirAprobacion` que YA existía**, traducido
+    (`escrituraExterna.ts#politicaDeAprobacionExterna`, tipo `PoliticaDeEscrituraExterna` en
+    `core/ports.ts`, fail-closed por TIPO como `core/cloudstudio.ts#PoliticaDeAprobacion`). Sus
+    dos implementaciones son las que hacían falta y ninguna es nueva: la INTERACTIVA de las tres
+    pieles (diff delante, plazo, mapa que nace rechazado, rechazo sin cliente enganchado) y la
+    AUTÓNOMA de una tarea de fondo, que concede porque la autorización fue crear la tarea, lo
+    anuncia con los nombres y lo apunta en `Tarea.autorizadas`. Un segundo hueco habría sido un
+    segundo sitio donde el fail-closed puede dejar de estarlo. Sin `pedirAprobacion` no hay
+    política y no se escribe; una política que lanza es un NO, y el `catch` va en
+    `decisionDeTool` y no solo en el envoltorio de `correr`, que vive en un cierre que ningún
+    test alcanza.
+  - **La denegación de verdad vive en un hook `PreToolUse`, no en `canUseTool`.** Tres frases
+    textuales del SDK: «Allow rules from settings files can also shadow the callback» (o sea que
+    `canUseTool` puede no invocarse nunca), «PreToolUse hook denies … resolve before canUseTool
+    runs» y «the 'ask' path surfaces via a can_use_tool control_request». De ahí el reparto: el
+    hook contesta las TRES clases —`allow` para leer (con la ruta ya comprobada), `deny` para lo
+    que no está en las listas, `ask` para escribir, que es cómo se llega al callback donde se
+    puede ESPERAR a una persona— y no deja ninguna sin decidir. Dejar una la decidiría el
+    `permissionMode`, y ninguno de sus valores es seguro por suposición: `dontAsk` («deny if not
+    pre-approved») podría denegar la escritura antes del callback y dejar la función muerta con
+    todo en verde, y `default` («prompts for dangerous operations») podría aprobar `WebSearch`
+    sin consultarnos. Se usa `default`, que es el modo donde el `ask` del hook sí llega al
+    callback. `canUseTool` conserva las MISMAS comprobaciones como segunda llave.
+  - **`settingSources: ["user"]`.** Por la primera cita: por omisión se cargan las tres fuentes,
+    incluida `.claude/settings.json` **de dentro del proyecto**, que viene de CloudStudio — el
+    mismo argumento por el que `seAplicaSinAprobacion` no vive en el `config.json` del proyecto.
+    Se quedan los ajustes del dueño de la máquina (la misma confianza que ya se declara para
+    Codex); el coste es que el hijo no carga el `CLAUDE.md` del proyecto.
+  - **LEER también lleva guarda de ruta, y ese agujero ya estaba vivo.** Medido corriéndolo,
+    dicho por el propio hijo: «`.env` — sí pude leerlo». La lista blanca permitía `Read` a secas
+    sin mirar la ruta, desde el primer día: se podían leer `.env`, `.git`, `.xonecode` —donde
+    vive el `checkpoint.sqlite`, con la lista de mensajes ENTERA de cada conversación— y
+    cualquier fichero de FUERA del proyecto. Se deniegan esas y las vistas aplanadas (el backend
+    se las retira al agente entero: si las ve, edita el fichero equivocado); `/skills/`,
+    `/adjuntos/` y un artefacto mal puesto de antes SÍ se leen, porque leerlos es su razón de
+    ser. `Glob`/`Grep` llevan `path` opcional y ausente es la raíz. **Límite declarado**: un
+    `Grep` sobre la raíz puede devolver líneas de un fichero denegado — `canUseTool` decide
+    sobre la LLAMADA y no filtra su salida; cerrarlo pide un `PostToolUse`, que no está puesto.
+  - **Un hijo de Claude Code NO puede enumerar la carpeta, así que se le DICE**
+    (`escrituraExterna.ts#inventarioDelProyecto`). Medido espiando el hook en vivo: intentó
+    `Bash ls`, `Bash find` —denegadas—, pidió `ToolSearch select:Glob,Grep` y **no las
+    encontró**; probó las tools MCP del usuario y acabó leyendo a ciegas nombres inventados
+    —`README.md`, `CLAUDE.md`, `app.ini`…, ninguno existía: **65 lecturas**— para concluir que
+    «el proyecto está prácticamente vacío para mí, porque no puedo listarlo». Conceder `Bash`
+    era la salida fácil y la prohibida. La buena es que el harness YA tiene esa lista —la misma
+    con la que reconoce una vista aplanada—, así que va en sus instrucciones: rutas virtuales,
+    acotada y con el total al lado. Es el patrón de `core/adjuntos.ts`: montar no basta, hay que
+    decir que están. Medido después: de 65 lecturas a ciegas a **3 exactas**, y el documento
+    salió correcto.
+  - Dos cosas más que salieron de esa misma medida: **`ToolSearch` es de LECTURA** (devuelve
+    esquemas, no ejecuta nada, y lo que consiga vuelve a pasar por el hook — sin ella el mensaje
+    de denegación le ofrecía buscar con unas tools que no podía alcanzar), y **listar la RAÍZ se
+    permite**: `rutaVirtualDeEscritura` la descarta a propósito porque no es un fichero que
+    escribir, y eso es cierto para escribir y falso para mirar.
+  - **Y todo esto está MEDIDO contra un hijo de verdad** (11-09-2026, tres ejecuciones): aprobar
+    escribe, rechazar no deja fichero, `.env` y las vistas aplanadas se cortan, `Bash` se
+    deniega, y un artefacto dentro del proyecto se rechaza diciendo dónde iba. Las tres
+    ejecuciones encontraron tres fallos que ningún test con dobles habría visto: la raíz no
+    canónica (`/tmp` → `/private/tmp` en macOS hacía imposible escribir), la carpeta padre que
+    todavía no existe (`Write` las crea, y se denegaba con «no se pudo comprobar»), y el `allow`
+    del hook saltándose la guarda de lectura.
+  - **Un `.md` con `soloLectura: false` se ACEPTA ya, en los TRES motores**, y la guarda se
+    levantó **con** su cableado, no antes. Medido: `permitirEscritura: !agente.soloLectura`
+    (`xoneAgent.ts`) vale para los tres y ninguno lo rechaza — el sub-bullet del párrafo
+    histórico que dice que se RECHAZA describe el estado anterior a la escritura.
+  - **Sus instrucciones se AÑADEN al preset de Claude Code**, no lo sustituyen: lo que sabe
+    hacer como producto es la razón de llamarlo. Lo que se le añade son las reglas de XOne y su
+    papel, que es lo que no puede saber.
+  - **Se comprueba `disponible()` antes de montarlo.** Un especialista que el orquestador puede
+    elegir y que revienta al elegirlo es un botón muerto dentro del grafo — peor que uno de
+    interfaz, porque quien lo pulsa es el modelo y se cree el resultado.
+- **Codex va por otro camino** (`agent/subagenteCodex.ts`): se habla con
     `codex app-server --stdio` por JSON POR LÍNEA. **Todo el protocolo está medido contra el
     binario real, no deducido**: los tres valores de sandbox los enumeró el propio servidor
     al rechazar uno mal escrito, y la respuesta final es el `item/completed` cuyo item es un
@@ -3300,6 +3395,15 @@ nada más. Cinco cosas:
   solo se monta con más de 120 columnas) se queda como estaba hasta el siguiente acto. `App`
   (`cli/tui/app.tsx`) se suscribe al `resize` y fuerza un re-render; `app.test.tsx` lo prueba
   en los dos sentidos.
+
+- **El código 2 prometía «nada se aplicó», y eso dejó de ser verdad el día que un agente
+  externo pudo escribir.** La promesa valía cuando las únicas escrituras eran las del HITL del
+  grafo; un agente EXTERNO pide su autorización por escritura y **antes** de escribir, así que
+  puede haber dejado algo en el disco cuando el turno se corta después. Medido: un `run --real`
+  imprimió el fichero nuevo en su diff y, una línea más abajo, «nada se aplicó». El código se
+  queda en 2 —hubo escrituras sin resolver, que no es un éxito, y ésa es la dirección segura
+  para CI— y lo que se corrigió fue la FRASE. Lo que está en el disco lo dice el diff de
+  «cambios en el proyecto», que es la medida.
 
 (Antes había una segunda trampa: `docs/COMO-PROBARLO.md` decía que la consola no hablaba con el
 agente real. El doc ya está corregido — `cli/main.ts` monta `crearEjecutorReal` por omisión y
