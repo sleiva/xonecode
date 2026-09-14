@@ -11,6 +11,12 @@ y el relato de conjunto en `README.md` («Cómo está construido, y por qué»).
 aquí parezca arbitraria, la de allí dice qué se midió para llegar a ella — y ante una
 discrepancia entre doc y código, **el código manda**.
 
+**El reparto se COMPRUEBA, no se recuerda** (`src/documentacion.test.ts`): este fichero no cita una
+fecha, ni un censo de medidas, ni un recuento de llamadas o un porcentaje, ni una duración suelta en
+la prosa —una duración va entre paréntesis y con el nombre de su constante (`TOPE_SIN_SALIDA_MS`,
+5 min)—. Si una regla de aquí necesita su medida para entenderse, le falta sitio en
+[`docs/DECISIONES.md`](docs/DECISIONES.md), no aquí.
+
 **XOne no es desarrollo web.** Es una plataforma propietaria de apps móviles nativas: XML en
 ficheros `.xne`, JavaScript ES5 y un CSS propio. No existe el DOM, ni `async/await` en el
 runtime, ni React. La fuente de una colección es su `.xne`; los `.xml` los genera XOne Studio
@@ -253,8 +259,9 @@ Un subagente es un `.md` con frontmatter en `.xonecode/agentes/<nombre>.md`
   `item/permissions/requestApproval`. Nunca `acceptForSession` ni `grantRoot`, que son
   pre-aprobaciones de sesión. Y una petición sin contestar deja a codex bloqueado hasta que el
   tope lo mate.
-- **El tope de 10 minutos se PARA mientras una aprobación está delante de alguien**: mide «codex
-  no contesta», y el rato que tarda una persona en mirar un diff no es eso.
+- **El tope del motor externo (`TOPE_MS` en Codex y en OpenCode, 10 min) se PARA mientras una
+  aprobación está delante de alguien**: mide «codex no contesta», y el rato que tarda una persona
+  en mirar un diff no es eso.
 - El resto del protocolo: `codex app-server --stdio` con JSON por línea; la respuesta final es el
   `item/completed` cuyo item es un `agentMessage` de fase `final_answer`. El hijo es el Codex DEL
   USUARIO, con sus MCP y sus hooks: xonecode no los filtra.
@@ -759,10 +766,10 @@ feedback del desarrollador** y no es terminal.
   otro lado, viaja el ID y nada más (el host lo resuelve contra su última MEDIDA), es un mensaje
   PROPIO, y las verificaciones viven con la foto.
 - **«Terminó bien» y «ya está» son dos cosas**: la MEDIDA manda sobre el código de salida.
-- **Se ejecuta lo que puede fallar RÁPIDO, no lo que no pide contraseña**: `sudo` sin TTY sale con
-  código 1 en 57 ms. Se copia lo que fallaría siempre o no falla rápido (el `~/.zshrc`, un `sudo`
-  escrito dentro, `xcodebuild -downloadPlatform`). Un test compara la tabla de lanzables con lo
-  que la receta marca `ejecutable` **en las dos direcciones**.
+- **Se ejecuta lo que puede fallar RÁPIDO, no lo que no pide contraseña**: `sudo` sin TTY no tiene
+  dónde pedir la contraseña y falla con código 1. Se copia lo que fallaría siempre o no falla
+  rápido (el `~/.zshrc`, un `sudo` escrito dentro, `xcodebuild -downloadPlatform`). Un test compara
+  la tabla de lanzables con lo que la receta marca `ejecutable` **en las dos direcciones**.
 - **Se mata el GRUPO, no el hijo** (`detached: true` + `kill(-pid)`): un nieto (`brew` → `curl`)
   sobrevive a `child.kill()`. Coste declarado: un Ctrl-C ya no se lleva la descarga.
 - **Ningún comando lleva una ruta de la máquina** (`$(brew --prefix)`), y cada paso se marca por
@@ -827,7 +834,7 @@ está en el disco lo dice el diff de «cambios en el proyecto», que es la medid
 Con su medida entera en [`docs/DECISIONES.md`](docs/DECISIONES.md); aquí lo que hay que
 recordar antes de tocar el código:
 
-- **El patrón de fallo de esta arquitectura, medido NUEVE veces: una composición de producción
+- **El patrón de fallo de esta arquitectura, NUEVE veces: una composición de producción
   viviendo en un cierre que todos los tests doblan.** `backendDeAgente`, el corredor sin cablear
   en `arrancarConsolaWeb`, el `escribio` a fuego en `revisionConGit`, la capa de proyecto de
   `fuentesDelJuez`, el montaje de `/adjuntos/` con sus ocho saltos, `filaDeTarea`, el prop de las
@@ -837,8 +844,8 @@ recordar antes de tocar el código:
   todo en verde**, y en las nueve el remedio fue el mismo.
   Regla práctica: **si una regla de producción se compone dentro de algo que los tests simulan,
   esa regla no está probada — está escrita.**
-- **La caché implícita de Gemini no entra a estos tamaños de contexto** (a ~11k, 0 aciertos en 36
-  llamadas; a ~40k, ~91%), y `@langchain/google-genai` 2.3.0 suma `cache_read` dos veces en
+- **La caché implícita de Gemini no entra a los tamaños de contexto de este harness** —los umbrales
+  están en `DECISIONES.md`—, y `@langchain/google-genai` 2.3.0 suma `cache_read` dos veces en
   streaming: `vendor/tokenTracking.ts` acota la caché a la entrada.
 - **`SkillsPort.cargar()` no tiene un solo llamador y las skills SÍ llegan al modelo**: las carga
   `SkillsMiddleware` de deepagents desde `/skills/` montada en el backend. El puerto solo aporta

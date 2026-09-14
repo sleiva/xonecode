@@ -10,6 +10,22 @@ hasta aquí, y dejarlo solo dejaría una afirmación falsa sin fecha.
 
 Ante una discrepancia entre este documento y el código, el código manda.
 
+**El reparto entre este documento y el mapa también se prueba** (`src/documentacion.test.ts`), y no
+por gusto de un test más: el reparto se deshizo una vez y nadie lo vio. `CLAUDE.md` volvió a ser el
+mapa el 11-09-2026 con 628 líneas; **ese mismo día**, en 17 commits, se le fueron 328 netas (+52 %)
+hasta las 956, casi todas narrativa de medidas. El mecanismo no fue un descuido: quedó un bloque
+`SUPERADO` que, para «el detalle vivo», señalaba HACIA `CLAUDE.md` — la inversión exacta del
+reparto, y una invitación permanente a reabsorberlo. Ese bloque ya apunta aquí.
+
+Lo que se comprueba es la PROSA del mapa: ni una fecha, ni un censo de medidas («medido N veces»),
+ni un recuento de llamadas o un porcentaje, ni una duración suelta. La duración es la única de las
+cuatro con una forma legítima, y es la que se queda: entre paréntesis y con el nombre de su
+constante (`MS_DE_TRABAJO_AL_ABRIR`, 2 s), porque entonces la cifra es parte de la REGLA y no el
+acta de haberla medido. Los paréntesis se siguen con la profundidad abierta de una línea a la
+siguiente —el mapa parte constantes entre líneas—, y se cuentan las dos orillas: un paréntesis sin
+cerrar dejaría la comprobación muda para el resto del fichero, y un test que no puede fallar no es
+un test.
+
 ## Los comandos y los tests
 
 **`vitest.config.ts` existe por dos razones, no una.** Hasta que el cliente web lo exigió, los
