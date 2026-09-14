@@ -3233,6 +3233,76 @@ Siete reglas:
 
 Lo que NO hay todavía: métricas globales (por proyecto, histórico, coste).
 
+**Los totales de una CONVERSACIÓN sobreviven a cerrarla** (`core/actos.ts#ConsumoDeTurno`,
+`#sumarConsumo`, `#consumoDeLosActos`, `core/ports.ts#consumoPersistible` / `#consumoDeLaSesion`,
+`pielWeb.ts#deltaDelTurno`, `vestibulo.ts#consumoHistorico`). El contador del compositor enseñaba
+lo que llevaba el PROCESO, no la conversación: el acumulador vive en el cierre de
+`abrirSesionReal` y arranca de cero en cada arranque, así que cerrar la consola y volver a abrir
+la sesión ponía la cifra a cero hasta el primer turno nuevo. Medido en la piel: con la sesión
+`20e2ed00` reabierta tras reiniciar el servidor, ningún `fin` del `.jsonl` traía consumo y el
+compositor no pintaba nada. Cuatro decisiones:
+
+- **Lo que se estampa en el `fin` es el DELTA del turno, no el acumulado.** Un acumulado de este
+  proceso es un absoluto de una escala que cada arranque reinicia — sumar dos de esos no da nada,
+  y reabrir tres veces triplicaría el total. Los deltas, en cambio, suman lo mismo dentro de un
+  proceso que repartidos en tres. El precio es que la piel tiene que recordar lo que ELLA estampó
+  (`estampado`) y restarlo: por eso el primer `fin` de un proceso estampa el acumulado entero
+  —hasta ahí no había ningún `fin` al que restarle— y no una resta contra ceros.
+- **La base histórica se lee UNA vez, al abrir** (`consumoDeLosActos(reabierta.actos)`), y el
+  `.jsonl` no se vuelve a mirar. El fichero CRECE por debajo mientras el proceso vive —`volcar()`
+  anota cada turno—, así que releerlo a mitad de sesión contaría dos veces los turnos que ya
+  están en el tracker vivo. Y la resta del delta es contra lo estampado y **nunca contra la
+  base**: si la base entrara ahí, el primer `fin` de una sesión reabierta estamparía lo de antes
+  como si se hubiera gastado otra vez. Por eso `vestibulo.ts` mantiene las DOS lecturas separadas
+  (`consumoVivo` para la piel, la suma para la pantalla) y **quien suma es el servidor**: el
+  cliente no suma nada. Verificado de punta a punta: `2168 + 8786 = 10954` de entrada con la
+  sesión reabierta en un proceso nuevo, y el compositor enseñando `↑ 11k entrada · ↓ 29 salida`
+  antes de que corriera ningún turno.
+- **Un `contexto` de cero sale SIN `ventana`** (`core/ports.ts#consumoPersistible`). El ejecutor
+  declara `contexto: number`, así que un turno que no pudo medir la ventana llega con un cero; y
+  `consumoDeLosActos` se queda con la última ventana que CONSTA, así que ese cero falso borraría
+  el nivel que sí midió el turno anterior — justo lo que su propia regla dice que no puede pasar.
+  Cero no es un nivel: un historial con turnos dentro nunca ocupa nada. Lo encontró el test de
+  ida y vuelta `consumoPersistible`/`consumoDeLaSesion`, que compara las dos formas; la vuelta sí
+  traduce ausencia a `contexto: 0`, porque el `> 0` de quien pinta ya distingue los dos casos.
+- **Ausente es «no consta» en las cuatro capas**: un `fin` sin `consumo` (sesión anterior a
+  esto, o una piel que no mide) no se pinta, un `{0,0}` tampoco (`hayCosteQueEnsenar`), y
+  `consumoDeLosActos` devuelve `undefined` cuando NINGÚN `fin` lo trae. Distinguir «anterior» de
+  «gastó cero» es lo único que impide pintar el cero que nadie midió.
+
+**Y mirar la pantalla encontró dos defectos que ningún test veía**, los dos en `Chat.tsx`, con el
+contador ya funcionando:
+
+- **El `fin` cerraba el último tramo de pulso de la LISTA ENTERA**, no el de su turno: un turno
+  sin herramientas le robaba a la línea del turno anterior su duración y su coste. Se ve en
+  pantalla —la línea del turno con `read_file` pasó de `2.6s · ↑ 8,8k ↓ 24` a `5.9s · ↑ 3,4k ↓ 4`
+  en cuanto corrió un turno de una sola palabra—. El remedio es que el bucle lleve su propia
+  lista de tramos del turno en curso (`delTurno`) y los cierre al llegar el `usuario` o el `fin`;
+  y un turno sin trabajo pinta su propia línea (`CierreDelTurno.tsx`) en vez de no pintar nada.
+  Los cuatro tests del `describe` «lo que costó cada turno» mueren con el mutante: volver a
+  `ultimo` deja dos de ellos en rojo.
+- **Las flechas no significaban nada al oído.** `↑ 8,8k ↓ 24` es claro mirándolo, pero quien lo
+  oye recibe `8,8k 24` sin saber cuál es cuál, y el `title` no se anuncia de forma fiable: cada
+  signo va `aria-hidden` y el significado entero va en el `aria-label` de la caja. Un control sin
+  dato detrás no se pinta; un dato sin significado detrás tampoco.
+
+**Un formato para la misma cifra** (`apps/web/src/cifras.ts`). El abreviador vivía dentro de
+`ContadorDeTokens.tsx` y de ahí salían DOS formatos para el mismo dato en la misma pantalla: el
+contador escribía `3,3k` y la barra de estado `3269/1000000`, porque `formatearContexto` no lo
+conocía. Sube a su propio módulo y lo importan el contador, la barra y el cierre del turno — dos
+formatos para un dato es cómo el usuario aprende a desconfiar de los dos. Y la regla del decimal
+se afinó al moverlo: se formatea y se tira el `,0` final, porque entre `1,2k` y `1,9k` la
+diferencia importa y entre `1,0M` y `1M` no hay ninguna —el `,0` era lo que hacía ilegible el
+tope de contexto, que se enseña en cada turno—.
+
+**La ventana se mudó de sitio, y no por estética** (`componentes/BarraDeEstado.tsx`). En el
+compositor compartía fila con los acumulados y se leía como una tercera cuenta de lo gastado,
+cuando contesta la pregunta contraria: cuánto margen queda antes de que toque resumir. El
+compositor se queda con los dos totales de la conversación —lo que se mira mientras se escribe—
+y la barra con el `ctx` y su tope. `PiezasDeLaBarraDeEstado` existía desde el principio con el
+`contexto`/`tope` declarados y MUERTA, porque ningún mensaje del cable traía el dato; ahora lo
+trae `ventana {usado, tope?}` del mensaje `consumo`.
+
 **Los proveedores compatibles con OpenAI son una TABLA, no tres ramas más**
 (`core/modelos.ts#COMPATIBLES_OPENAI`). NVIDIA (`integrate.api.nvidia.com/v1`,
 `NVIDIA_API_KEY`), Groq (`api.groq.com/openai/v1`, `GROQ_API_KEY`) y xAI —los modelos

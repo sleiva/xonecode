@@ -718,7 +718,29 @@ feedback del desarrollador** y no es terminal.
     `crearEjecutor`—: dos resoluciones serían dos porcentajes distintos para el mismo modelo.
     Se re-resuelve en cada emisión porque `/modelo` cambia en caliente. **Sin tope no se pinta
     denominador ni porcentaje**: con Ollama no hay a propósito, y un porcentaje sobre un número
-    inventado es una mentira con forma de cifra.
+    inventado es una mentira con forma de cifra. **La ventana se consulta en la BARRA**
+    (`componentes/BarraDeEstado.tsx`), no al lado de los acumulados: son dos preguntas —cuánto
+    margen queda, cuánto se ha gastado— y juntas en una frase se leen como una cifra
+    contradictoria. Vive en el mismo mensaje porque cambia en los mismos instantes.
+  - **Los totales de una conversación SOBREVIVEN a cerrarla, y por eso el `fin` lleva el DELTA
+    del turno** (`core/actos.ts#ConsumoDeTurno`, `#sumarConsumo`, `#consumoDeLosActos`). El
+    tracker arranca de cero en cada proceso, así que un acumulado estampado en el `.jsonl`
+    sería un absoluto de una escala que cada arranque reinicia — y sumar dos no da nada. Los
+    deltas suman lo mismo dentro de un proceso que repartidos en tres.
+  - **La base histórica se lee UNA vez, al abrir, y no se vuelve a mirar.** El `.jsonl` crece
+    por debajo mientras el proceso vive (`volcar()`), así que releerlo a mitad de sesión
+    contaría dos veces los turnos que ya están en el tracker vivo. La piel resta contra lo que
+    ELLA estampó, no contra la base — si no, el primer `fin` de una sesión reabierta contaría
+    otra vez todo lo de antes—, y quien SUMA es el vestíbulo: el cliente no suma nada.
+  - **Un `contexto` de cero sale SIN `ventana`** (`core/ports.ts#consumoPersistible`). El
+    ejecutor declara `contexto: number`, así que «no se pudo medir» llega como cero; estamparlo
+    escribiría una medición que nadie hizo y borraría la del turno anterior, porque
+    `consumoDeLosActos` se queda con la última ventana que CONSTA.
+  - **La cifra de un turno se pinta donde el turno se resume** (`componentes/CierreDelTurno.tsx`),
+    y un turno SIN trabajo lleva línea propia en vez de colgarse del último tramo: el `fin`
+    cierra el tramo de SU turno, no el último de la lista. Un `{0,0}` no se pinta
+    (`hayCosteQueEnsenar`), y **el mismo `abreviar`** (`cifras.ts`) sirve al contador, a la barra
+    y al cierre: dos formatos para el mismo dato enseñan a desconfiar de los dos.
   Lo que NO hay todavía: métricas globales (por proyecto, histórico, coste).
 - **El modelo en vigor lo dice el SERVIDOR** (`resolver(estadoDeSesion.fuentes).trabajo` de la
   consola ABIERTA), por la costura `Consola.alEstado`: `/modelo` cambia en caliente sin tocar
