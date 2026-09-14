@@ -107,7 +107,7 @@ Cinco cosas no son negociables:
 - **El orquestador va de SOLO LECTURA por PERMISOS, no por falta de tools**
   (`PERFIL_DEL_ORQUESTADOR`). Quitarle el middleware podría reinstalar el de deepagents —sin
   permisos— y reabrir el agujero; `xoneAgent.orquestador.test.ts` exige lo contrario.
-- **`FilesystemBackend` con `virtualMode: true`.** Con el default, medido, leyó una ruta absoluta
+- **`FilesystemBackend` con `virtualMode: true`.** Con el default leyó una ruta absoluta
   de fuera de la raíz. Nada de backends con shell.
 - **Los permisos se construyen con `permisosDe(perfil)`, NUNCA a mano**: `SubAgent.permissions`
   reemplaza los del padre en vez de fusionarlos, así que un perfil que los escriba a mano pierde
@@ -171,209 +171,137 @@ Un subagente es un `.md` con frontmatter en `.xonecode/agentes/<nombre>.md`
   agentes de serie dentro se ADOPTA sin escribir nada; vacía se siembra entera.
 - **El prompt del orquestador se GENERA** de la lista (`xoneAgent.ts#promptOrquestador`).
 - Un `.md` roto se salta y su motivo viaja por el cable hasta la ventana de Ajustes.
-- **La línea de una delegación dice a QUIÉN** (`task` → `subagent_type` en la lista blanca de
-  `resumenDeTool.ts`, más icono y verbo en `core/notify.ts`). Medido en la pantalla del usuario:
-  decía «⚙ task» a secas, y con un motor externo eso deja la interfaz MUDA — el hijo corre en
-  otro proceso y no cruza ni una tool, así que son minutos sin nada que mirar. Sale el NOMBRE y
-  nunca la `description`, que es el encargo entero y puede llevar contenido del proyecto. Y la
-  rama genérica de `frase()` dejó de TIRAR el detalle: no filtra nada nuevo, porque un `detalle`
-  solo existe si la lista blanca lo eligió a mano.
-- **Y lo que hace un agente EXTERNO se ve MIENTRAS lo hace** (`core/entrelazar.ts`). Su hijo
-  corre en otro proceso: ni una de sus tools cruza el stream del grafo, así que entre la línea de
-  delegación y su respuesta había minutos de pantalla quieta, que es como se lee un cuelgue. El
-  punto de observación es el hook `PreToolUse` —por `canUseTool` no pasan las lecturas, porque un
-  `allow` del hook es pre-aprobación—, y de ahí sale un evento `tool` NORMAL: nombre traducido al
-  canónico (`Read` → `read_file`) y ruta VIRTUAL, así que el colapsador lo agrupa con los demás y
-  ninguna piel se entera de que hay dos orígenes. `entrelazar` es la misma forma que
-  `conVerificacion` —un generador que envuelve a `aEventos`— salvo que intercala MIENTRAS en vez
-  de añadir al final; su trampa es que `it.next()` se pide UNA vez y se guarda, porque dos `next()`
-  vivos se comen un valor (hay test, y muere con la mutación). **Solo se cuenta lo que va a
-  ocurrir**: una tool denegada no se anuncia, porque la línea diría que el hijo hizo algo que no
-  hizo.
+- **La línea de una delegación dice a QUIÉN** (`task` → `subagent_type`, en la lista blanca de
+  `resumenDeTool.ts` + icono y verbo en `core/notify.ts`), y **nunca la `description`**, que es el
+  encargo entero. La rama genérica de `frase()` no tira el `detalle`: no filtra nada nuevo,
+  porque un `detalle` solo existe si la lista blanca lo eligió a mano.
+- **Y lo que hace un agente EXTERNO se ve MIENTRAS lo hace** (`core/entrelazar.ts`): sale un
+  evento `tool` NORMAL, con nombre canónico (`Read` → `read_file`) y ruta VIRTUAL, así que el
+  colapsador lo agrupa con los demás y ninguna piel sabe que hay dos orígenes. Es un generador
+  que intercala MIENTRAS, no al final, y **solo cuenta lo que va a ocurrir**: una tool denegada
+  no se anuncia. Trampa: `it.next()` se pide UNA vez y se guarda — dos `next()` vivos se comen un
+  valor.
 - **Un hijo de Claude Code NO puede enumerar la carpeta, así que se le DICE**
-  (`escrituraExterna.ts#inventarioDelProyecto`). Medido espiando el hook en vivo: intentó
-  `Bash ls`, `Bash find` —denegadas—, pidió `ToolSearch select:Glob,Grep` y **no las encontró**;
-  probó las tools MCP del usuario y acabó leyendo a ciegas nombres inventados —`README.md`,
-  `CLAUDE.md`, `app.ini`…, ninguno existía: **65 lecturas**— para concluir que «el proyecto está
-  prácticamente vacío para mí, porque no puedo listarlo». Conceder `Bash` era la salida fácil y la
-  prohibida. La buena es que el harness YA tiene esa lista —la misma con la que reconoce una vista
-  aplanada—, así que va en sus instrucciones: rutas virtuales, acotada y con el total al lado. Es
-  el patrón de `core/adjuntos.ts`: montar no basta, hay que decir que están. Medido después: de 65
-  lecturas a ciegas a **3 exactas**, y el documento salió correcto.
-- Dos cosas más que salieron de esa misma medida: **`ToolSearch` es de LECTURA** (devuelve
-  esquemas, no ejecuta nada, y lo que consiga vuelve a pasar por el hook — sin ella el mensaje de
-  denegación le ofrecía buscar con unas tools que no podía alcanzar), y **listar la RAÍZ se
-  permite**: `rutaVirtualDeEscritura` la descarta a propósito porque no es un fichero que
-  escribir, y eso es cierto para escribir y falso para mirar.
+  (`escrituraExterna.ts#inventarioDelProyecto`): van sus rutas virtuales en las instrucciones,
+  acotadas y con el total al lado — montar no basta, hay que decir que están (el patrón de
+  `core/adjuntos.ts`).
+- Dos cosas más de esa medida: **`ToolSearch` es de LECTURA** (devuelve esquemas; sin ella el
+  mensaje de denegación le ofrecía unas tools que no podía alcanzar), y **listar la RAÍZ se
+  permite**: `rutaVirtualDeEscritura` la descarta porque no es un fichero que escribir, y eso es
+  cierto para escribir y falso para mirar.
 - **Motores externos**: `claude-code` (`agent/subagenteExterno.ts`) **escribe, y cada escritura
   pasa por una autorización** — `canUseTool` es asíncrono y corre en nuestro proceso, así que se
-  espera ahí sin `interrupt()` y sin reejecutar el nodo. `decisionDeTool` en este orden: **TRES
-  listas** de tools (lectura / escritura / denegadas, y lo desconocido denegado también), el papel
-  del `.md`, las **guardas de RUTA reaplicadas** y, al final, la política. Dos listas no bastaban:
-  era `permitirEscritura || esDeLectura`, o sea que conceder escritura concedía `Bash` —que basta
-  para escribir el proyecto entero— y `WebFetch`/`WebSearch`, que lo sacan de la máquina.
-  Escribir son **solo `Write` y `Edit`**: las únicas cuyos argumentos encajan en `cambioDe()`, o
-  sea de las que se puede componer el diff que hay que mirar.
-- **Las guardas de ruta hay que REAPLICARLAS, y ahí estaba el agujero** (`agent/escrituraExterna.ts`).
-  Su `file_path` es ABSOLUTO y va al disco directo: `permisosDe`, el `virtualMode`, las vistas
-  aplanadas y las guardas de artefactos y descargas no lo alcanzan. Se aplican las MISMAS
-  funciones sobre la ruta virtual, y **dos veces** —texto y `realpath`— como en
-  `arbolDeProyecto.ts`: medido, un enlace dentro de la raíz apuntando a `.env` pasa la primera.
-  Del destino se canonicaliza él si existe y su PADRE si no (si no, no se podría crear ningún
-  fichero). Lo que no se puede comprobar se deniega.
+  espera ahí, **sin `interrupt()` y sin reejecutar el nodo**. `decisionDeTool`, en este orden:
+  **TRES listas** de tools (lectura / escritura / denegadas, y lo desconocido denegado), el papel
+  del `.md`, las **guardas de RUTA reaplicadas** y la política. Dos listas no bastaban: era
+  `permitirEscritura || esDeLectura`, o sea que conceder escritura concedía `Bash`. Escribir son
+  **solo `Write` y `Edit`**: las únicas cuyos argumentos encajan en `cambioDe()`, o sea de las que
+  se puede componer el diff que hay que mirar. `Bash`, `WebFetch` y `WebSearch` se deniegan: los
+  dos últimos no escriben, pero sacan el proyecto de la máquina.
+- **Las guardas de ruta hay que REAPLICARLAS** (`agent/escrituraExterna.ts`): el `file_path` del
+  hijo es ABSOLUTO y va al disco directo, así que `permisosDe`, el `virtualMode`, las vistas
+  aplanadas y las guardas de artefactos y descargas no lo alcanzan. Las MISMAS funciones sobre la
+  ruta virtual, y **dos veces** —texto y `realpath`— como en `arbolDeProyecto.ts`. Del destino se
+  canonicaliza él si existe y su PADRE si no. Lo que no se puede comprobar se deniega.
 - **La política es el `pedirAprobacion` que YA existía**, traducido
-  (`escrituraExterna.ts#politicaDeAprobacionExterna`, tipo `PoliticaDeEscrituraExterna` en
-  `core/ports.ts`, fail-closed por TIPO como `core/cloudstudio.ts#PoliticaDeAprobacion`). Sus dos
-  implementaciones son las que hacían falta: la INTERACTIVA de las tres pieles (diff delante,
-  plazo, mapa que nace rechazado, rechazo sin cliente enganchado) y la AUTÓNOMA de una tarea de
-  fondo, que concede porque la autorización fue crear la tarea, lo **anuncia** con los nombres y
-  lo apunta en `Tarea.autorizadas`. Un segundo hueco habría sido un segundo sitio donde el
-  fail-closed puede dejar de estarlo. Sin `pedirAprobacion` no hay política y no se escribe; una
-  política que lanza es un NO, y el `catch` va en `decisionDeTool` y no solo en el envoltorio de
-  `correr`, que vive en un cierre que ningún test alcanza.
-- **La denegación de verdad vive en un hook `PreToolUse`, no en `canUseTool`.** Tres frases
-  textuales del SDK: «Allow rules from settings files can also shadow the callback» (o sea que
-  `canUseTool` puede no invocarse nunca), «PreToolUse hook denies … resolve before canUseTool
-  runs» y «the 'ask' path surfaces via a can_use_tool control_request». De ahí el reparto: el
-  hook contesta las TRES clases —`allow` para leer (con la ruta ya comprobada), `deny` para lo
-  que no está en las listas, `ask` para escribir, que es cómo se llega al callback donde se
-  puede ESPERAR a una persona— y no deja ninguna sin decidir. Dejar una la decidiría el
-  `permissionMode`, y ninguno de sus valores es seguro por suposición: `dontAsk` («deny if not
-  pre-approved») podría denegar la escritura antes del callback y dejar la función muerta con
-  todo en verde, y `default` («prompts for dangerous operations») podría aprobar `WebSearch` sin
-  consultarnos. Se usa `default`, que es el modo donde el `ask` del hook sí llega al callback.
-  `canUseTool` conserva las MISMAS comprobaciones como segunda llave.
-- **`settingSources: ["user"]`.** Por la primera cita: por omisión se cargan las tres fuentes,
-  incluida `.claude/settings.json` **de dentro del proyecto**, que viene de CloudStudio — el
-  mismo argumento por el que `seAplicaSinAprobacion` no vive en el `config.json` del proyecto.
-  Se quedan los ajustes del dueño de la máquina (la misma confianza que ya se declara para
-  Codex); el coste es que el hijo no carga el `CLAUDE.md` del proyecto.
-- **LEER también lleva guarda de ruta, y ese agujero ya estaba vivo.** Medido corriéndolo, dicho
-  por el propio hijo: «`.env` — sí pude leerlo». La lista blanca permitía `Read` a secas sin
-  mirar la ruta, desde el primer día: se podían leer `.env`, `.git`, `.xonecode` —donde vive el
-  `checkpoint.sqlite`, con la lista de mensajes ENTERA de cada conversación— y cualquier fichero
-  de FUERA del proyecto. Se deniegan esas y las vistas aplanadas (el backend se las retira al
-  agente entero: si las ve, edita el fichero equivocado); `/skills/`, `/adjuntos/` y un artefacto
-  mal puesto de antes SÍ se leen, porque leerlos es su razón de ser. `Glob`/`Grep` llevan `path`
-  opcional y ausente es la raíz. **Límite declarado**: un `Grep` sobre la raíz puede devolver
-  líneas de un fichero denegado — `canUseTool` decide sobre la LLAMADA y no filtra su salida;
-  cerrarlo pide un `PostToolUse`, que no está puesto.
-- **Y todo esto está MEDIDO contra un hijo de verdad** (11-09-2026, tres ejecuciones): aprobar
-  escribe, rechazar no deja fichero, `.env` y las vistas aplanadas se cortan, `Bash` se deniega,
-  y un artefacto dentro del proyecto se rechaza diciendo dónde iba. Las tres ejecuciones
-  encontraron tres fallos que ningún test con dobles habría visto: la raíz no canónica
-  (`/tmp` → `/private/tmp` en macOS hacía imposible escribir), la carpeta padre que todavía no
-  existe (`Write` las crea, y se denegaba con «no se pudo comprobar»), y el `allow` del hook
-  saltándose la guarda de lectura.
-- Un `.md` con `soloLectura: false` se acepta ya en los DOS motores, y las dos guardas se
-  levantaron **con** su cableado, no antes. Se comprueba `disponible()` antes de montarlo.
+  (`escrituraExterna.ts#politicaDeAprobacionExterna`, `PoliticaDeEscrituraExterna` en
+  `core/ports.ts`, fail-closed por TIPO como `core/cloudstudio.ts#PoliticaDeAprobacion`): la
+  INTERACTIVA de las tres pieles y la AUTÓNOMA de una tarea de fondo. Sin `pedirAprobacion` no
+  hay política y no se escribe; una política que lanza es un NO, y el `catch` va en
+  `decisionDeTool` y no en el envoltorio de `correr`, que ningún test alcanza.
+- **La denegación de verdad vive en un hook `PreToolUse`, no en `canUseTool`**: el hook contesta
+  las TRES clases —`allow` para leer (ruta ya comprobada), `deny` para lo que no está en las
+  listas, `ask` para escribir— y no deja ninguna sin decidir. Ningún valor del `permissionMode` es
+  seguro por suposición: `dontAsk` podría denegar la escritura antes del callback y dejar la
+  función muerta con todo en verde. Se usa `default`, el único donde el `ask` del hook llega al
+  callback. `canUseTool` conserva las MISMAS comprobaciones como segunda llave.
+- **`settingSources: ["user"]`**: por omisión se carga el `.claude/settings.json` **del
+  proyecto**, que viene de CloudStudio. El coste es que el hijo no carga el `CLAUDE.md` del
+  proyecto.
+- **LEER también lleva guarda de ruta, y ese agujero ya estaba vivo**: la lista blanca permitía
+  `Read` a secas sin mirar la ruta — `.env`, `.git`, `.xonecode` (con el `checkpoint.sqlite`) y
+  cualquier fichero de FUERA del proyecto. Se deniegan esas y las vistas aplanadas; `/skills/`,
+  `/adjuntos/` y un artefacto mal puesto SÍ se leen, porque leerlos es su razón de ser.
+  **`Glob` y `Grep` llevan `path` OPCIONAL, y ausente es la raíz.** **Límite declarado**: un
+  `Grep` sobre la raíz puede devolver líneas de un fichero denegado — `canUseTool` no filtra su
+  salida; cerrarlo pide un `PostToolUse`, que no está puesto.
+- Un `.md` con `soloLectura: false` se acepta ya en los TRES motores, y las guardas se levantaron
+  **con** su cableado, no antes. Se comprueba `disponible()` antes de montarlo.
 - **En Codex la palanca de la escritura es el `approvalPolicy`, no el `sandbox`**
-  (`agent/subagenteCodex.ts`, `agent/escrituraDeCodex.ts`). La guarda estuvo cerrada mientras
-  fue cierto que abrirla exigía `sandbox: "workspace-write"` —y entonces las escrituras de
-  dentro del cwd ocurren solas, sin petición ni diff, o sea sin pasar por ninguna guarda de
-  ruta nuestra—. Medido contra el binario (0.152.1): esa disyuntiva era falsa. El sandbox se
-  queda en **`read-only` SIEMPRE**, también con la escritura concedida, y lo que abre
-  `permitirEscritura` es `approvalPolicy: never → on-request`: la denegación la sigue poniendo
-  la caja del SO y cada escritura llega como una petición que contestamos. Es el mismo papel
-  que el `ask` del hook `PreToolUse` en Claude Code.
+  (`agent/subagenteCodex.ts`, `agent/escrituraDeCodex.ts`). El sandbox se queda en **`read-only`
+  SIEMPRE** —también con la escritura concedida— y lo que abre `permitirEscritura` es
+  `approvalPolicy: never → on-request`: la denegación la sigue poniendo la caja del SO y cada
+  escritura llega como una petición que contestamos. Es el mismo papel que el `ask` del hook
+  `PreToolUse`.
 - **Lo que se pregunta y lo que se decide llegan en mensajes distintos.**
-  `item/fileChange/requestApproval` trae solo un `itemId` —sin rutas y sin diff—; los cambios
-  vinieron antes en el `item/started` de ese id, de ahí el registro de items. Su `id` empieza en
-  **0** y vive en el mismo espacio que los nuestros, así que las peticiones del servidor (id
-  **y** method) se atienden ANTES que nuestras respuestas o una con `id: 1` caería en la rama
-  del `initialize`. Un `itemId` del que no consta item es `decline`: sin diff no hay decisión.
+  `item/fileChange/requestApproval` trae solo un `itemId`; los cambios vinieron antes en el
+  `item/started` de ese id, de ahí el registro de items. Su `id` empieza en **0** y comparte
+  espacio con los nuestros, así que las peticiones del servidor (id **y** method) se atienden
+  ANTES que nuestras respuestas. Un `itemId` del que no consta item es `decline`: sin diff no hay
+  decisión.
 - **Un item puede traer VARIOS ficheros y se contesta con UNA decisión**, así que
   `PoliticaDeEscrituraExterna` toma una LISTA y concede solo si **todas** vienen aprobadas.
-  Claude Code pasa la suya de un elemento. Preguntar N veces por algo que no se puede conceder
-  a medias sería mentir, y enseñar un fichero escribiendo dos, también.
+  Claude Code pasa la suya de un elemento.
 - **Las guardas de ruta son las MISMAS** (`veredictoDeRuta`, reaplicada sobre el `path`
-  absoluto): no hay una segunda copia, porque un segundo sitio donde decidir sobre una ruta es
-  un segundo sitio donde el fail-closed puede dejar de estarlo. **`delete` y `move_path` se
-  deniegan** y está declarado: en Claude Code esa escritura no existe, `cambioDe` no sabe
-  componer su diff, y un renombrado son dos destinos que guardar.
+  absoluto): no hay una segunda copia, porque un segundo sitio donde decidir sobre una ruta es un
+  segundo sitio donde el fail-closed puede dejar de estarlo. **`delete` y `move_path` se
+  deniegan**: `cambioDe` no sabe componer su diff, y un renombrado son dos destinos que guardar.
 - **Los otros huecos**: un `item/commandExecution/requestApproval` se deniega SIEMPRE (es el
   análogo de `Bash`: un `cat > fichero` escribe el proyecto entero y no hay diff que mirar), una
   elicitación de MCP se declina por su campo `action`, y **lo que no se sabe decir que no se
-  ABORTA** — `item/tool/requestUserInput` no tiene «no» en su esquema (`{answers:{…}}`) ni
-  `item/permissions/requestApproval` (`{permissions, scope, strictAutoReview}`). Nunca
-  `acceptForSession` ni `grantRoot`, que son pre-aprobaciones de sesión. Y una petición sin
-  contestar sería lo peor de todo: deja a codex bloqueado hasta que el tope lo mate.
-- **El tope de 10 minutos se PARA mientras una aprobación está delante de alguien.** Mide «codex
-  no contesta», y el rato que tarda una persona en mirar un diff no es eso: sin esto, quien se
-  levanta a por un café vuelve a un «codex no terminó» y a un modal huérfano.
-- **Medido contra el binario de verdad, seis ejecuciones** (11-09-2026), por el camino entero
-  del harness: aprobar escribe (con la ruta VIRTUAL y su diff delante), rechazar no deja
-  fichero, y `.env`, una vista aplanada y una ruta de fuera del proyecto se cortan **sin llegar
-  a preguntarle a nadie** —preguntar por algo cuyo único final es un rechazo es sacar un modal
-  inútil, la misma regla que el `when` de `seDetieneEn`—. Pedirle que escriba por shell acaba en
-  «la autorización para ejecutar el comando fue rechazada».
+  ABORTA** — `item/tool/requestUserInput` no tiene «no» en su esquema, ni
+  `item/permissions/requestApproval`. Nunca `acceptForSession` ni `grantRoot`, que son
+  pre-aprobaciones de sesión. Y una petición sin contestar deja a codex bloqueado hasta que el
+  tope lo mate.
+- **El tope de 10 minutos se PARA mientras una aprobación está delante de alguien**: mide «codex
+  no contesta», y el rato que tarda una persona en mirar un diff no es eso.
 - El resto del protocolo: `codex app-server --stdio` con JSON por línea; la respuesta final es el
   `item/completed` cuyo item es un `agentMessage` de fase `final_answer`. El hijo es el Codex DEL
   USUARIO, con sus MCP y sus hooks: xonecode no los filtra.
 - **OpenCode es el TERCER motor, y habla por ACP** (`agent/subagenteOpencode.ts`,
-  `agent/escrituraDeOpencode.ts`). De sus tres superficies —`run --format json`, el servidor
-  HTTP de `serve` y `acp`— se usa ACP: es JSON-RPC 2.0 por línea sobre stdio, el mismo molde
-  que Codex, y la única de las tres con portón de permiso por stdio.
-- **Su petición trae TODO en un solo mensaje**, que es lo que lo hace el más sencillo de los
-  tres: `session/request_permission` lleva `toolCall.locations[].path` y
-  `content:[{type:"diff", path, oldText, newText}]`. **`oldText`/`newText` entran directos en
-  `core/diff.ts#diffDeLineas`** — ni registro de items (Codex manda solo un `itemId`) ni parser
-  de hunks. Se contesta `once` o `reject`, y **`always` no se manda nunca**: es la
+  `agent/escrituraDeOpencode.ts`). De sus tres superficies —`run --format json`, `serve` y
+  `acp`— se usa ACP: JSON-RPC 2.0 por línea sobre stdio, el mismo molde que Codex, y la única
+  con portón de permiso por stdio.
+- **Su petición trae TODO en un solo mensaje**: `session/request_permission` lleva
+  `toolCall.locations[].path` y `content:[{type:"diff", path, oldText, newText}]`, así que
+  **`oldText`/`newText` entran directos en `core/diff.ts#diffDeLineas`** — ni registro de items
+  ni parser de hunks. Se contesta `once` o `reject`, y **`always` no se manda nunca**: es la
   pre-aprobación de sesión, como `acceptForSession` y `grantRoot` en Codex.
 - **El bucle de guardas y política es UNO y lo comparten los dos motores de petición**
-  (`escrituraExterna.ts#veredictoDeEscriturasExternas` y `#decisionDeEscrituraExterna`). Cada
-  uno solo traduce SU forma. Escribirlo una vez por motor sería un segundo y un tercer sitio
-  donde el fail-closed puede dejar de estarlo, que es la única forma en la que estas guardas se
-  han roto nunca.
-- **Y hay TRES puertas por las que el proyecto podía mandar sobre opencode. Las tres medidas,
-  con un proyecto que las llevaba a la vez:**
-  1. un `opencode.json` **del proyecto** pisa nuestra configuración —leyó el `.env` y soltó el
-     secreto, corrió shell y escribió con CERO permisos—, y ese fichero puede venir de
-     CloudStudio;
-  2. un **plugin del proyecto** (`.opencode/plugin/*.ts`) **ejecuta código arbitrario** dentro
-     del proceso de opencode (medido con su control: sin la variable corre, con ella no);
-  3. la configuración **global del usuario** también nos pisa, así que `OPENCODE_CONFIG` es el
-     eslabón DÉBIL y no se puede sostener nada encima.
-  Las tres se cierran con **`OPENCODE_CONFIG_DIR` apuntando a una carpeta NUESTRA**
-  (`~/.xonecode/opencode`, que pasa a ser «la global» y por eso gana) **más
-  `OPENCODE_DISABLE_PROJECT_CONFIG=1`**. Las credenciales siguen resolviendo: su `auth.json`
-  vive en el directorio de DATOS. La configuración se REESCRIBE en cada arranque para que no
-  quede una más permisiva de una versión anterior.
-- **En OpenCode la LECTURA se guarda por PATRÓN, no por código**, y el motivo está medido: su
-  permiso de `kind: "read"` llega con `locations: []` y `rawInput: {}` —sin ruta—, así que no
-  hay nada que pasarle a una guarda; la ruta solo aparece en el `tool_call_update` posterior,
-  cuando el permiso ya se concedió. Con `edit` sí viene. Queda entre los otros dos: mejor que
-  Codex (que no puede guardarla de ninguna forma) y peor que Claude Code (donde la decide
-  `veredictoDeLectura`). **Las vistas aplanadas se enumeran UNA A UNA** en esa lista, porque «un
-  `.xml` con un `.xne` al lado» no se puede escribir como patrón.
+  (`escrituraExterna.ts#veredictoDeEscriturasExternas` y `#decisionDeEscrituraExterna`). Escribirlo
+  una vez por motor sería un segundo y un tercer sitio donde el fail-closed puede dejar de
+  estarlo, que es la única forma en la que estas guardas se han roto nunca.
+- **TRES puertas por las que el proyecto podía mandar sobre opencode** —un `opencode.json` del
+  proyecto, un plugin del proyecto (`.opencode/plugin/*.ts`, que ejecuta código arbitrario) y la
+  configuración global del usuario— **se cierran con `OPENCODE_CONFIG_DIR` apuntando a una
+  carpeta NUESTRA** (`~/.xonecode/opencode`, que pasa a ser «la global» y por eso gana) **más
+  `OPENCODE_DISABLE_PROJECT_CONFIG=1`**. Las credenciales siguen resolviendo (su `auth.json` vive
+  en el directorio de DATOS) y la configuración se REESCRIBE en cada arranque.
+- **En OpenCode la LECTURA se guarda por PATRÓN, no por código**: su permiso de `kind: "read"`
+  llega sin ruta (`locations: []`, `rawInput: {}`), y la ruta solo aparece después, cuando ya se
+  concedió. Queda entre los otros dos: mejor que Codex y peor que Claude Code. **Las vistas
+  aplanadas se enumeran UNA A UNA** en esa lista, porque «un `.xml` con un `.xne` al lado» no se
+  puede escribir como patrón.
 - **`bash` no se deniega: se le QUITA la tool** («No tengo un tool de shell en este entorno»).
   Con `webfetch`, `websearch`, `external_directory`, `task` y `question` denegados.
-- **`fs/write_text_file` NO es la escritura**, y creerlo habría dejado una guarda que no guarda:
-  medido, rechazándolo con un error el fichero apareció igual. Es un aviso. El único portón es
-  el permiso.
+- **`fs/write_text_file` NO es la escritura**: es un aviso, no un portón. El único portón es el
+  permiso.
 - **Una tool que acaba en `failed` no se anuncia**: se apunta en `in_progress` (el `completed`
-  trae `locations: null` y la ruta dentro del `title`) y la línea sale al cerrarse bien. Medido:
-  con la lectura de `.env` denegada salía «lee /.env», y no se leyó.
-- **Una respuesta vacía tras un rechazo no es un fallo ni silencio**: medido, el turno acaba bien
-  (`stopReason: end_turn`) y a veces sin una palabra. Se dice lo que pasó con voz del harness y
-  con cuántas escrituras se rechazaron, en vez de devolver `""` —que pasaría por «no tenía nada
-  que decir»— o de tumbar un turno correcto.
-- **Medido vivo por el camino entero, seis ejecuciones y con el proyecto HOSTIL delante**:
-  aprobar escribe, rechazar no deja fichero, `.env` y una vista aplanada no se pueden ni leer,
-  escribir fuera se corta, y al pedirle shell contesta que no tiene y cae en la tool de fichero
-  —que sí pasa por la aprobación—. ACP además tiene `session/cancel`, que se manda antes de
-  matarlo: es la cancelación que Codex no tiene.
+  trae `locations: null` y la ruta dentro del `title`) y la línea sale al cerrarse bien.
+- **Una respuesta vacía tras un rechazo no es un fallo ni silencio**: se dice lo que pasó con voz
+  del harness y con cuántas escrituras se rechazaron, en vez de devolver `""` —que pasaría por
+  «no tenía nada que decir»— o de tumbar un turno correcto.
+- ACP tiene **`session/cancel`**, que se manda antes de matar al hijo: es la cancelación que
+  Codex no tiene.
 - **Límite declarado, y es el que queda abierto: LEER no tiene costura en Codex.** Lee por la
   shell del sandbox, que en `read-only` no pide permiso a nadie, así que `.env` y `.xonecode` se
-  le pueden leer — justo el agujero que en Claude Code cierra `veredictoDeLectura`. No lo abre
-  la escritura: ya estaba, y sigue igual. El único asidero medido sería `approvalPolicy:
-  "untrusted"`, que pregunta por cada comando y es otro diseño.
-- **Y en una tarea de FONDO no se le pregunta a nadie, sin tocar nada de esto**: la política es
-  la misma (`PoliticaDeEscrituraExterna`), y la que monta una tarea es la AUTÓNOMA de
-  `consolaDeTarea.aprobacionesTui`, que concede porque la autorización fue crear la tarea, lo
-  anuncia con los nombres y lo apunta en `Tarea.autorizadas`. Por eso la escritura de fondo NO
-  se hizo con `workspace-write`: así las guardas de ruta siguen enteras, que es justo lo que
-  `core/tareas.ts` exige.
+  le pueden leer — el agujero que en Claude Code cierra `veredictoDeLectura`. El único asidero
+  medido sería `approvalPolicy: "untrusted"`, que pregunta por cada comando y es otro diseño.
+- **Y en una tarea de FONDO no se le pregunta a nadie, sin tocar nada de esto**: la política es la
+  misma (`PoliticaDeEscrituraExterna`), y la que monta una tarea es la AUTÓNOMA de
+  `consolaDeTarea.aprobacionesTui`. Por eso la escritura de fondo NO se hizo con
+  `workspace-write`: así las guardas de ruta siguen enteras, que es justo lo que `core/tareas.ts`
+  exige.
 
 ### La aprobación
 
@@ -484,15 +412,11 @@ feedback del desarrollador** y no es terminal.
   TUI solo con stdin Y stdout TTY.
 - **La consola web DICE con qué código corre** (`core/version.ts` + `agent/versionEnDisco.ts`,
   opción `version`), antes que la URL: `xonecode 0.5.0 · 85219d4 + cambios sin commitear`.
-  Existe por tres rondas perdidas el 11-09-2026 y por una asimetría que hay que tener presente:
-  **el cliente se lee del DISCO en cada petición** (`servidor.ts`, `readFileSync`), así que
-  reconstruirlo se ve recargando la página, mientras que el SERVIDOR es el proceso y sus
-  cambios solo entran parándolo y arrancándolo. Una consola puede enseñar a la vez lo nuevo
-  del cliente y lo viejo del servidor, y sin esta línea nadie —ni mirando la pantalla ni
-  leyendo el código— podía saber qué había vivo dentro. El árbol SUCIO se dice, porque
-  entonces el commit solo no describe lo que corre; y no poder mirarlo no es «limpio». La
-  lectura entra por parámetro: toca disco y lanza `git`, y los tests llaman a esa función
-  entera.
+  Existe por una asimetría que hay que tener presente: **el cliente se lee del DISCO en cada
+  petición** (`servidor.ts`, `readFileSync`), así que reconstruirlo se ve recargando la página,
+  mientras que el SERVIDOR es el proceso y sus cambios solo entran parándolo y arrancándolo. El
+  árbol SUCIO se dice; y no poder mirarlo no es «limpio». La lectura entra por parámetro: toca
+  disco y lanza `git`, y los tests llaman a esa función entera.
 - **`arrancarConsolaWeb`** (`web/servidor/arranque.ts`) comprueba en orden: que existe
   `apps/web/dist/index.html` —si no, salida **70**, fallo del entorno—, avisa si el cwd es
   offline y **sigue**, y levanta. `abrirEnSistema` escucha el `error` del `spawn`: un `xdg-open`
@@ -527,12 +451,10 @@ feedback del desarrollador** y no es terminal.
   proyectos es MIRAR; mudar el activo (`accion: "activo"`) le cambiaría la barra a quien
   trabaja en otro servidor. La lista de cada entorno se pide al abrir su pestaña y solo si
   falta —el activo ya la trae en el `alta`—, **sin caché**, y el que falla lleva su `error`
-  sin tumbar a los demás. Lo marcado se guarda **por entorno** (`elegidosPorEntorno`): con
-  una sola variable, la pestaña de B arrancaba con los ids de A y el primer clic guardaba la
-  elección de A bajo B. El efecto depende de los DOS CAMPOS de esa pestaña y **no del record**
-  (que con su omisión `{}` es un objeto nuevo por render: medido, 5 peticiones donde iba 1), y
-  el cableado de los dos sentidos tiene test propio porque el prop es opcional y `tsc` no lo
-  caza.
+  sin tumbar a los demás. Lo marcado se guarda **por entorno** (`elegidosPorEntorno`). El
+  efecto depende de los DOS CAMPOS de esa pestaña y **no del record** (que con su omisión `{}`
+  es un objeto nuevo por render), y el cableado de los dos sentidos tiene test propio porque
+  el prop es opcional y `tsc` no lo caza.
 - **La clave de API viaja por el ÚNICO mensaje del cable que la lleva** (`leerSecreto`), y se
   PRUEBA antes de escribirse: `motivoDeClaveInaceptable` (`core/config.ts`) criba de balde, y
   luego el catálogo con `aplicarCredencialAlProceso` — **solo si el proveedor contesta** se
@@ -548,13 +470,11 @@ feedback del desarrollador** y no es terminal.
   (80 ms) con el reloj por parámetro, porque cada emisión manda el acto entero.
 - **Abrir una sesión NO espera al aviso de git** (`MS_DE_TRABAJO_AL_ABRIR`, 2 s). El `finally`
   que apaga el indicador «abriendo…» espera a `anunciarAlta()`, y ésta esperaba SIN PLAZO a
-  `trabajoAlAbrir` — detrás del cual hay un `git status --untracked-files=all` sobre la copia
-  del usuario. Medido en su pantalla: con ese git sin volver, la barra se quedaba en
-  «abriendo…» para siempre y la consola no dejaba abrir nada más. Un aviso cuya regla es
-  «avisa, no FRENA» no puede ser lo que frena. Lo que se acota es la ESPERA y no el trabajo:
-  la promesa sigue viva y su valor sale en el siguiente anuncio, que llega en los dos flancos
-  de cada turno; ausente ya significaba «no consta» en las cuatro capas. Hay test, y muere
-  con el mutante — sin plazo, se cuelga igual que la pantalla.
+  `trabajoAlAbrir`, detrás del cual hay un `git status --untracked-files=all`. Un aviso cuya
+  regla es «avisa, no FRENA» no puede ser lo que frena. Lo que se acota es la ESPERA y no el
+  trabajo: la promesa sigue viva y su valor sale en el siguiente anuncio, que llega en los dos
+  flancos de cada turno; ausente ya significaba «no consta» en las cuatro capas. Hay test, y
+  muere con el mutante — sin plazo, se cuelga igual que la pantalla.
 - **Una sesión reabierta lo DICE, y lo dice el servidor** (`alta.historica`, preguntando al
   checkpointer). El alta se reanuncia en los DOS flancos del turno y **diferido** a una
   microtarea, porque `vestibulo.ts` llama a la escucha ANTES de `volcar()`.
@@ -569,35 +489,27 @@ feedback del desarrollador** y no es terminal.
 - **Ningún color literal fuera de `estilos/marca.css` y `splash.css`** (`Barra.test.tsx` lo
   vigila recorriendo TODOS los `.module.css` de `componentes/`), `transparent` incluido. La
   paleta redefine solo los alias con acento; el cian es ACENTO y no sostiene texto. **De una
-  maqueta ajena se toma la FORMA, nunca el color** — la lección de los ocho mockups de Stitch,
-  cuyas paletas se contradecían entre ellas y solo una declaraba el cian de XOne.
+  maqueta ajena se toma la FORMA, nunca el color** (los ocho mockups de Stitch).
 - **El botón de enviar lleva el AZUL de la marca** (`--xonecode-azul` con
-  `--xonecode-sobre-azul`: el mismo par que la barra superior, donde ya estaba medido que
-  sostiene texto blanco), y el cian se queda para su hover — ahí puede brillar sin sostener
-  nada. Las pastillas llevan filo cian y el BAÑO de las filas de la barra
-  (`--xonecode-fila-hover` en reposo, `--xonecode-fila-elegida` al pasar por encima): esos
-  dos tokens ya vienen AJUSTADOS POR TEMA —7%/13% y 14%/26%—, así que reusarlos evita
-  inventar un cian translúcido con un porcentaje fijo que quedaría invisible en un tema y
-  gritón en el otro. Suaves a propósito: el que se pulsa es el botón. Pero **su texto NO**: los tokens de marca no se redefinen por tema y `--xonecode-azul` sobre el fondo
-  de noche sería ilegible; los `--dsw-alias-*` sí cambian, y de ahí sigue saliendo la letra.
+  `--xonecode-sobre-azul`: el mismo par que la barra superior), y el cian se queda para su
+  hover — ahí puede brillar sin sostener nada. Las pastillas llevan filo cian y el BAÑO de las
+  filas de la barra (`--xonecode-fila-hover` en reposo, `--xonecode-fila-elegida` al pasar por
+  encima): esos dos tokens ya vienen AJUSTADOS POR TEMA, así que reusarlos evita inventar un
+  cian translúcido con un porcentaje fijo. Suaves a propósito: el que se pulsa es el botón.
+  Pero **su texto NO**: los tokens de marca no se redefinen por tema y `--xonecode-azul` sobre
+  el fondo de noche sería ilegible; los `--dsw-alias-*` sí cambian, y de ahí sale la letra.
   PARAR se queda ROJO —es un estado, no la marca— y hay que repetir su hover porque el mismo
   botón lleva las dos clases; y apagado no lleva color de marca, que un botón inerte pintado
   de azul invita a pulsarlo.
 - **La caja del compositor va en COLUMNA**: el texto arriba a todo el ancho, y debajo el
-  modelo y el dispositivo JUNTOS a la izquierda con el contador y el botón a la derecha.
-  Antes el campo compartía fila con las pastillas y con la ventana estrecha se quedaba en un
-  canal de dos líneas. **Esto se comprueba en el NAVEGADOR** —`capturas/` está en el
-  `.gitignore` para eso— y no con tests: los dos arreglos de esa tanda los vio el ojo y no el
-  suite. El `padding` vertical del campo (tenía sentido compartiendo fila; en columna dejaba
-  16px de aire muerto) y el `justify-content: space-between` de los controles, que
-  desperdigaba las pastillas en cuanto dejaron de compartir renglón con el campo — ahora el
-  hueco se lo come el primer `margin-left: auto` (el del contador si está, el del botón si
-  no), así que las pastillas quedan juntas en los dos casos.
-  El dispositivo estuvo ARRIBA en una fila de chips, siguiendo la maqueta, y volvió abajo
-  mirando la pantalla: un chip solo no era una fila, era un renglón. Y no hay chip de
-  «Contexto» aunque la maqueta lo pinte — ese concepto no existe aquí, y lo más parecido (el
-  proyecto) ya se lee en la miga: pintarlo dos veces es la duplicación que ya se quitó de las
-  marcas de «trabajando».
+  modelo y el dispositivo JUNTOS a la izquierda con el contador y el botón a la derecha. **Esto
+  se comprueba en el NAVEGADOR** —`capturas/` está en el `.gitignore` para eso— y no con tests.
+  El hueco de los controles se lo come el primer `margin-left: auto` (el del contador si está,
+  el del botón si no), así que las pastillas quedan juntas en los dos casos. El dispositivo
+  estuvo ARRIBA en una fila de chips, siguiendo la maqueta, y volvió abajo mirando la pantalla:
+  un chip solo no era una fila, era un renglón. Y no hay chip de «Contexto» aunque la maqueta
+  lo pinte — ese concepto no existe aquí, y lo más parecido (el proyecto) ya se lee en la miga:
+  pintarlo dos veces es la duplicación que ya se quitó de las marcas de «trabajando».
 - **El compositor DICE sus tres teclas** (`Enter` envía, `Shift+Enter` salta de línea, `/` abre
   las sugerencias), y las tres se comprueban en el mismo test que las escribe: una ayuda que
   se queda vieja es peor que no tenerla. Va fuera de la caja —no compite con lo que se
@@ -631,12 +543,10 @@ feedback del desarrollador** y no es terminal.
   llega hasta que se nombra ahí. Las dos pestañas piden su foto cuando NO la tienen y con
   `conectado`, no al montar.
 - **Revisión arranca PLEGADA**: al abrir no se despliega ningún bloque ni se pide ningún
-  parche, y cada diff se pide al pulsar su cabecera. Hubo una omisión de ocho abiertos y se
-  cayó con los tamaños de verdad (dos ficheros, +582 líneas, 483 en uno solo): volcaba un
-  diff que nadie había pedido y dejaba fuera de la vista la LISTA, que es lo que la pestaña
-  contesta. Misma regla que el árbol de Ficheros, y por el mismo motivo. El efecto de
-  `App.tsx` solo OLVIDA lo desplegado cuando el store tira la foto, para que las filas
-  abiertas de una sesión no sigan abiertas sobre los ficheros de otra.
+  parche, y cada diff se pide al pulsar su cabecera. Misma regla que el árbol de Ficheros, y por
+  el mismo motivo: un diff volcado sin pedirlo deja fuera de la vista la LISTA, que es lo que la
+  pestaña contesta. El efecto de `App.tsx` solo OLVIDA lo desplegado cuando el store tira la
+  foto, para que las filas abiertas de una sesión no sigan abiertas sobre los ficheros de otra.
 
 ### Sesiones, hilos y git
 
@@ -651,20 +561,19 @@ feedback del desarrollador** y no es terminal.
   las llamadas colgadas (`saldarAprobacionesHuerfanas`) con una respuesta sintética que dice la
   verdad, porque al modelo le llegaría un `AIMessage` con tool_calls sin `ToolMessage` detrás y
   Gemini y OpenAI contestan 400.
-- **Esto CRECE y no hay poda**: 370 checkpoints y 30 MB en cinco turnos. Por eso `.xonecode` se
+- **Esto CRECE y no hay poda**. Por eso `.xonecode` se
   saca del índice privado de `instantanea.ts` y `sesionGit.ts` (`sacarXonecodeDelIndice`): en un
   proyecto OFFLINE nadie escribió el `info/exclude` y las refs `refs/xonecode/sesion/*`
   mantendrían esos objetos vivos para siempre. `/nuevo` en la web abre un hilo huérfano y lo DICE.
 - **Cada turno COMMITEA lo que dejó** (`agent/gitSync.ts#commitDeTurno`): con el índice DE VERDAD
   (hay test de que el árbol queda LIMPIO), sin cambios no se commitea (`git commit` con índice
-  vacío sale con error), identidad NUESTRA por `-c`, se ESPERA (74 ms medidos), va en el `finally`
+  vacío sale con error), identidad NUESTRA por `-c`, se ESPERA, va en el `finally`
   **envuelto entero**, y solo `dentroDelWorkspace` (puro, con test) — en la carpeta que abrió una
   persona sería ensuciarle el historial. El mensaje no dice «lo escribió el agente»: `add -A`
   barre todo lo que hubiera cambiado.
 - **La basura del SO va a `info/exclude`, NUNCA a `.gitignore`** (`asegurarExclusiones`, que
   `prepararRepo` y `commitDeTurno` comparten): `.gitignore` es un fichero del PROYECTO y subiría
-  él mismo, y sin esto un `.DS_Store` acababa en la app del cliente **como binario**
-  (`extensionDe(".DS_Store")` es `""`, así que cae en la rama base64).
+  él mismo, y sin esto un `.DS_Store` acaba en la app del cliente **como binario**.
 - **La atribución sale de los COMMITS, no de la foto** (`agent/sesionGit.ts`): un TRAILER con el
   id de sesión (`CLAVE_DE_SELLO`, que `commitDeTurno` escribe y `sesionGit.ts` grepea — el formato
   vive en el módulo que lo lee). El `--grep` no decide: se **VERIFICA** el trailer entero, o `s1`
@@ -748,7 +657,7 @@ feedback del desarrollador** y no es terminal.
   destruye lo que había**: la base de la fusión es el objeto CRUDO (no el de `validarAuth`, que
   descarta entradas raras en silencio) y ante un JSON roto **para sin escribir**.
 - **La variable de entorno de cada proveedor vive en UN sitio**
-  (`core/modelos.ts#VARIABLES_POR_PROVEEDOR`). Hubo cuatro copias y ya habían divergido.
+  (`core/modelos.ts#VARIABLES_POR_PROVEEDOR`). Hubo cuatro copias y ya habían divergido;
   `aplicarAuth` recorre lo que HAY en `auth.json`, no `PROVEEDORES`.
 - **Los compatibles con OpenAI son una TABLA** (`COMPATIBLES_OPENAI`: NVIDIA, Groq, xAI), no
   ramas. La clave se **EXIGE al construir** (`construirCompatibleOpenAi`): `ChatOpenAI` sin
@@ -776,16 +685,10 @@ feedback del desarrollador** y no es terminal.
   `hayCredencial` no sirve para esto, contesta otra pregunta.
 - **Los tokens de una SESIÓN se cuentan y se enseñan, en DOS cuentas que no se suman**
   (`core/ports.ts#ConsumoDeSesionPorCuenta`, `agent/consumoExterno.ts`, mensaje `consumo`,
-  `componentes/ContadorDeTokens.tsx`). La web no tenía NINGÚN contador: `tracker` no aparecía
-  ni una vez en `src/web/`, así que la piel por omisión era la única sin ver un token —
-  `formatearBarra` es de terminal y la TUI lo pinta en su sidebar. Y del agente EXTERNO se
-  tiraba entero, teniéndolo los dos motores: Claude Code lo da en `result.modelUsage` (que su
-  propia doc marca como «the correct field for token/cost accounting», por encima de `usage`,
-  que es solo del bucle principal) y Codex en `thread/tokenUsage/updated` — que **estaba en la
-  lista de RUIDO** de su adaptador, o sea que llevaba llegando desde el primer día. Reglas:
-  - **Los dos son ACUMULADOS: se lee el último, no se suman.** Lo dicen sus dos contratos con
-    esas palabras, y es la diferencia entre contar y contar el doble. Entre ejecuciones sí se
-    suma: cada `correr` es otra sesión del producto.
+  `componentes/ContadorDeTokens.tsx`). El del agente EXTERNO lo dan `result.modelUsage` (Claude
+  Code) y `thread/tokenUsage/updated` (Codex). Reglas:
+  - **Los dos son ACUMULADOS: se lee el último, no se suman.** Entre ejecuciones sí se suma:
+    cada `correr` es otra sesión del producto.
   - **Se suman TOKENS, nunca COSTE.** Los del grafo van contra la clave de API del usuario y
     los del hijo contra su suscripción: un token es un token, pero su precio no. Por eso las
     dos cuentas viajan separadas hasta el componente, que suma las cifras y pone el desglose
@@ -802,14 +705,13 @@ feedback del desarrollador** y no es terminal.
     mueven el contador de quien mira otra sesión: solo avisa la consola en foco.
   - **Y con ellos viaja la VENTANA, que es otra pregunta**: `contexto` es la entrada de la
     ÚLTIMA llamada —cuánto ocupa el historial AHORA, la cifra que avisa de que toca resumir—
-    y los acumulados dicen lo que la sesión ha costado. La barra del terminal ya las pinta
-    como dos cosas. El TOPE se resuelve con **la misma función** que esa barra
-    (`cli/main.ts#crearTopeDelModelo`), que entra por la opción `topeDeContexto` para no
-    importar `cli/` desde `web/` — el motivo de `crearEjecutor`—: dos resoluciones serían dos
-    porcentajes distintos para el mismo modelo. Se re-resuelve en cada emisión porque
-    `/modelo` cambia en caliente. **Sin tope no se pinta denominador ni porcentaje**: con
-    Ollama no hay a propósito, y un porcentaje sobre un número inventado es una mentira con
-    forma de cifra.
+    y los acumulados dicen lo que la sesión ha costado. El TOPE se resuelve con **la misma
+    función** que la barra del terminal (`cli/main.ts#crearTopeDelModelo`), que entra por la
+    opción `topeDeContexto` para no importar `cli/` desde `web/` — el motivo de
+    `crearEjecutor`—: dos resoluciones serían dos porcentajes distintos para el mismo modelo.
+    Se re-resuelve en cada emisión porque `/modelo` cambia en caliente. **Sin tope no se pinta
+    denominador ni porcentaje**: con Ollama no hay a propósito, y un porcentaje sobre un número
+    inventado es una mentira con forma de cifra.
   Lo que NO hay todavía: métricas globales (por proyecto, histórico, coste).
 - **El modelo en vigor lo dice el SERVIDOR** (`resolver(estadoDeSesion.fuentes).trabajo` de la
   consola ABIERTA), por la costura `Consola.alEstado`: `/modelo` cambia en caliente sin tocar
@@ -819,9 +721,8 @@ feedback del desarrollador** y no es terminal.
   `core/modelos.ts`), con prueba de COSTURA contra `invocationParams()` del cliente real
   (`agent/modelos.test.ts`, sin red). **El `max_tokens` por omisión de
   `@langchain/anthropic` sale de una tabla por PREFIJO y un id que no conoce cae en su
-  `FALLBACK_MAX_OUTPUT_TOKENS` de 4096 SIN decirlo** — medido con `claude-sonnet-5`, que no
-  casa con ninguna de sus claves; en un harness que escribe ficheros eso no da error, corta
-  la escritura a media respuesta. Y **omitir `thinking` no significa lo mismo en todos**:
+  `FALLBACK_MAX_OUTPUT_TOKENS` de 4096 SIN decirlo**; en un harness que escribe ficheros eso no
+  da error, corta la escritura a media respuesta. Y **omitir `thinking` no significa lo mismo en todos**:
   Opus 5 y Sonnet 5 ya corren adaptativo, la generación 4.6-4.8 corre **sin pensar**, y
   Haiku 4.5 y lo anterior a 4.6 lo RECHAZAN (usan `budget_tokens`), así que pedirlo a ciegas
   sería un 400. `effort` no se manda: omitirlo ya es `high`.
@@ -900,8 +801,7 @@ parte, que es lo que se evalúa. Los JUECES (`tareas.ts`) son código puro y SÍ
 `npm test`: un juez que juzgue mal invalida el eval entero sin que nadie lo note. El corredor
 vive en `src/` para tipearse, `tsconfig.build.json` lo excluye, y su nombre no acaba en
 `.test.ts` — así `npm test` sigue sin red, sin clave y sin simulador. `docs/EVALS.md` tiene
-las tareas y cómo leer un resultado. La primera comprobación de la línea base destapó que el
-esqueleto no pasaba el simulador (`COLL_MISSING_PROGID`): la línea base se comprueba por eso.
+las tareas, cómo leer un resultado y por qué la línea base se comprueba.
 
 ## Códigos de salida (contrato, CI los lee)
 
@@ -916,13 +816,11 @@ esqueleto no pasaba el simulador (`COLL_MISSING_PROGID`): la línea base se comp
 Un fallo del entorno no se reporta como un proyecto roto: `agent/verificador.ts` lanza
 `ErrorDelSimulador` en vez de devolver un informe en rojo.
 
-**El 2 ya no promete «nada se aplicó», y eso se midió.** Prometía eso cuando las únicas
-escrituras eran las del HITL del grafo; un agente EXTERNO pide su autorización por escritura y
-antes de escribir, así que puede haber dejado algo en el disco cuando el turno se corta después
-—medido: un `run --real` imprimió el fichero nuevo en su diff y, una línea más abajo, «nada se
-aplicó»—. El código se queda en 2 (hubo escrituras sin resolver: no es un éxito, y esa es la
-dirección segura para CI) y lo que se corrigió fue la frase. Lo que está en el disco lo dice el
-diff de «cambios en el proyecto», que es la medida.
+**El 2 NO promete «nada se aplicó».** Prometía eso cuando las únicas escrituras eran las del HITL
+del grafo; un agente EXTERNO pide su autorización por escritura y ANTES de escribir, así que
+puede haber dejado algo en el disco cuando el turno se corta después. El código se queda en 2
+(hubo escrituras sin resolver: no es un éxito, y esa es la dirección segura para CI) y lo que
+está en el disco lo dice el diff de «cambios en el proyecto», que es la medida.
 
 ## Trampas verificadas
 
@@ -934,11 +832,9 @@ recordar antes de tocar el código:
   en `arrancarConsolaWeb`, el `escribio` a fuego en `revisionConGit`, la capa de proyecto de
   `fuentesDelJuez`, el montaje de `/adjuntos/` con sus ocho saltos, `filaDeTarea`, el prop de las
   pestañas por entorno, `opcionesDeSubagenteExterno` y —la más clara de todas—
-  `ConsolaDeProyecto.consumo`, **declarada en el tipo y nunca implementada en el objeto**: como
-  el campo es OPCIONAL, los dos `tsc` quedaron limpios, 2953 tests en verde, y el contador de
-  tokens no se pintó NUNCA (visto en la pantalla del usuario, no en un test). Un campo opcional
-  es donde este fallo se esconde mejor: no hay error que leer. En las nueve la regla podía dejar
-  de estar montada **con todo en verde**, y en las nueve el remedio fue el mismo.
+  `ConsolaDeProyecto.consumo`, declarada en el tipo y nunca implementada en el objeto: con el
+  campo OPCIONAL no hay error que leer. En las nueve la regla podía dejar de estar montada **con
+  todo en verde**, y en las nueve el remedio fue el mismo.
   Regla práctica: **si una regla de producción se compone dentro de algo que los tests simulan,
   esa regla no está probada — está escrita.**
 - **La caché implícita de Gemini no entra a estos tamaños de contexto** (a ~11k, 0 aciertos en 36
