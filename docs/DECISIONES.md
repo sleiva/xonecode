@@ -215,6 +215,25 @@ de tocar disco. `arranque.ts` es quien monta las dos rutas del cable: `GET /even
 `POST /accion`. Un cuerpo ilegible responde 400 **sin devolver nada de lo recibido**: por ahí
 pasa la clave de API.
 
+**Y la consola web DICE con qué código corre** (`core/version.ts` + `agent/versionEnDisco.ts`,
+opción `version`), antes que la URL: `xonecode 0.5.0 · 85219d4 + cambios sin commitear`. Existe
+por tres rondas perdidas el 11-09-2026 y por la asimetría que hay que tener presente:
+**el cliente se lee del DISCO en cada petición** (`servidor.ts`, `readFileSync`), así que
+reconstruirlo se ve recargando la página, mientras que el SERVIDOR es el proceso y sus cambios
+solo entran parándolo y arrancándolo. Una consola puede enseñar a la vez lo nuevo del cliente y
+lo viejo del servidor, y sin esta línea nadie —ni mirando la pantalla ni leyendo el código—
+podía saber qué había vivo dentro: se depuraba un cambio que no estaba corriendo, o se daba por
+bueno uno que sí. Cuatro reglas más:
+- **El árbol SUCIO se dice**, porque entonces el commit solo no describe lo que corre:
+  `85219d4 + cambios sin commitear`.
+- **Y no poder mirarlo no es «limpio»**: sin git o con git roto la línea declara que no se pudo
+  comprobar, en vez de afirmar un estado que nadie ha medido.
+- **La lectura entra por PARÁMETRO**, porque toca disco y lanza `git`: los tests llaman a la
+  función entera sin doblar el sistema de ficheros, que es lo que hace comprobable que la frase
+  dice la verdad.
+- **Va ANTES de la URL** y no después: es la primera cosa que hay que saber al mirar el
+  terminal, y debajo de la URL un mensaje de arranque se pierde entre las líneas del alta.
+
 **El pulso se pliega al terminar el turno.** Mientras el agente trabaja, el tramo de
 razonamiento/tools/fases se enseña ABIERTO —es lo único que hay que mirar—; en cuanto llega
 el `fin`, se dobla en una línea («Trabajo del agente · N pasos · Xs») y la conversación se lee
@@ -382,6 +401,26 @@ vez de dejar que dos sesiones se pisen calladas. Cinco reglas:
   ningún test lo construye: lo que está probado es que el vestíbulo usa la medida por las dos
   puertas, no que ahí siga puesta.
 
+**Y un aviso que dice «no FRENA» no puede ser lo que frena: abrir una sesión NO espera a la
+medida de git** (`MS_DE_TRABAJO_AL_ABRIR`, 2 s). Medido en la pantalla del usuario, y es la
+prueba de que la regla de arriba estaba escrita y no montada: el `finally` que apaga el
+indicador «abriendo…» esperaba a `anunciarAlta()`, y ésta esperaba **SIN PLAZO** a
+`trabajoAlAbrir` — detrás del cual hay un `git status --untracked-files=all` sobre la copia de
+trabajo del usuario. Con ese git sin volver, la barra se quedaba en «abriendo…» para siempre y
+la consola no dejaba abrir nada más. Cuatro decisiones:
+- **Lo que se acota es la ESPERA, no el trabajo.** La promesa sigue viva y su valor sale en el
+  siguiente anuncio, que llega en los dos flancos de cada turno; matar la medida habría dejado
+  sin aviso a quien sí lo merecía.
+- **Y no se pierde nada por no esperarla**, porque `ausente` YA significaba «no consta» en las
+  cuatro capas (disco, cable, store, componente): el indicador se apaga con el dato de camino en
+  vez de con el dato en la mano, y la ventana lo pinta cuando llega, igual que si hubiera
+  tardado un segundo más.
+- **Hay test, y muere con el mutante**: sin el plazo el test se cuelga exactamente igual que se
+  colgaba la pantalla — que es la forma correcta de probar un plazo, porque un test que pasara
+  con y sin él no estaría probando nada.
+- **El plazo es de 2 s y no de 0**: un `git status` normal contesta en decenas de milisegundos, y
+  renunciar a esperarlo cuando va rápido sería cambiar un cuelgue por un parpadeo.
+
 **El turno en vuelo tiene cronómetro, y sin cable la interfaz se apaga.** El pie decía el
 tiempo del turno ANTERIOR mientras corría el actual (116 s con «10,7 s» delante), y sin
 servidor lo único que cambiaba era un «sin conexión» pequeño con los 18 «Nueva sesión»
@@ -456,6 +495,27 @@ honestidad (`core/bitacora.ts`), que en la pestaña de depurar el harness son ex
 aviso que nadie lee. Van FUERA del tramo plegable: el pulso se dobla al terminar el turno y
 esto no puede irse con él. `fin` sí sigue siendo solo de Trazas: es el cierre con su
 duración, un dato del registro.
+
+**Y lo que hace un agente EXTERNO se ve MIENTRAS lo hace, no solo al terminar**
+(`core/entrelazar.ts`, `core/notify.ts#frase`, `agent/resumenDeTool.ts`). Dos huecos medidos
+mirando la pantalla, y los dos son el mismo problema: el hijo corre en OTRO proceso, así que ni
+una de sus tools cruza el stream del grafo.
+- **La línea de una delegación dice a QUIÉN.** Decía «⚙ task» a secas —medido en la pantalla del
+  usuario—, y con un motor externo eso deja la interfaz MUDA: entre esa línea y su respuesta hay
+  minutos sin nada que mirar, que es exactamente como se lee un cuelgue. Sale el NOMBRE (de
+  `task` a `subagent_type`, en la lista blanca de `resumenDeTool.ts`, con icono y verbo en
+  `core/notify.ts`) y **nunca la `description`**, que es el encargo entero y puede llevar
+  contenido del proyecto. Y la rama genérica de `frase()` dejó de TIRAR el detalle: no filtra
+  nada nuevo, porque un `detalle` solo existe si la lista blanca lo eligió a mano.
+- **Lo que el hijo va HACIENDO se intercala mientras corre.** El punto de observación es el hook
+  `PreToolUse` —por `canUseTool` NO pasan las lecturas, porque un `allow` del hook es
+  pre-aprobación—, y de ahí sale un evento `tool` NORMAL: nombre traducido al canónico
+  (`Read` → `read_file`) y ruta VIRTUAL, así que el colapsador lo agrupa con los demás y ninguna
+  piel se entera de que hay dos orígenes. `entrelazar` es la misma forma que `conVerificacion`
+  —un generador que envuelve a `aEventos`— salvo que intercala MIENTRAS en vez de añadir al
+  final; su trampa es que `it.next()` se pide UNA vez y se guarda, porque dos `next()` vivos se
+  comen un valor (hay test, y muere con la mutación). **Solo se cuenta lo que va a ocurrir**: una
+  tool denegada no se anuncia, porque la línea diría que el hijo hizo algo que no hizo.
 
 **El razonamiento del modelo es su propio evento y su propio acto** (`razonamiento`), nunca
 parte de la respuesta. Gemini lo manda como bloques `{type:"thinking"}` dentro de `content`
@@ -1349,15 +1409,25 @@ las intenciones vuelven en `{clase:"tarea"}`. Dos cosas que no son obvias:
   sube al `catch` de `arrancar()`, que llama a `soltarCerrojo()` y **para el corredor entero** —
   todas las tareas de la máquina, no una notificación perdida.
 
-**El patrón de fallo de esta arquitectura, medido CINCO veces en una sola tanda: una
-composición de producción viviendo en un cierre que todos los tests doblan.** Los cinco:
-`backendDeAgente` (el que dejó la lección escrita), el corredor sin cablear en
-`arrancarConsolaWeb`, el `escribio` a fuego en la derivación de `revisionConGit`, la capa de
-proyecto de `fuentesDelJuez`, y el montaje de `/adjuntos/` con sus ocho saltos. En los cinco la
-regla podía dejar de estar montada **con todo en verde**, y en los cinco el remedio fue el mismo:
-extraer la composición a una función exportada y probarla contra lo real. Regla práctica: **si
-una regla de producción se compone dentro de algo que los tests simulan, esa regla no está
-probada — está escrita.**
+**El patrón de fallo de esta arquitectura, medido NUEVE veces: una composición de producción
+viviendo en un cierre que todos los tests doblan.** Los nueve: `backendDeAgente` (el que dejó la
+lección escrita), el corredor sin cablear en `arrancarConsolaWeb`, el `escribio` a fuego en la
+derivación de `revisionConGit`, la capa de proyecto de `fuentesDelJuez`, el montaje de
+`/adjuntos/` con sus ocho saltos, `filaDeTarea` (que salió del cierre de `montarRutas`), el prop
+de las pestañas por entorno de Ajustes, `opcionesDeSubagenteExterno`, y —la más clara de todas—
+`ConsolaDeProyecto.consumo`. En los nueve la regla podía dejar de estar montada **con todo en
+verde**, y en los nueve el remedio fue el mismo: extraer la composición a una función exportada y
+probarla contra lo real.
+
+**El campo OPCIONAL es donde este fallo se esconde mejor, y `ConsolaDeProyecto.consumo` lo
+enseñó.** Estaba **declarada en el tipo y nunca implementada en el objeto**: como el campo era
+opcional, los dos `tsc` quedaron limpios y 2953 tests en verde, y el contador de tokens no se
+pintó NUNCA — se vio en la pantalla del usuario, no en un test. Con un campo obligatorio el
+compilador habría dicho dónde faltaba; con uno opcional no hay error que leer, y la ausencia
+(«no consta») es además un valor legítimo en este dominio, así que el fallo se disfraza de
+decisión. Regla práctica: **si una regla de producción se compone dentro de algo que los tests
+simulan, esa regla no está probada — está escrita**; y si el cableado de esa regla viaja por un
+prop OPCIONAL, hace falta un test propio del cableado, porque `tsc` no lo caza.
 
 **El kanban vive en el escritorio** (`componentes/Kanban.tsx`), con una columna por estado y la de
 `requiere-atencion` rotulada **«Esperando feedback»**, que es lo que significa. Cuatro reglas:
@@ -1511,7 +1581,7 @@ leer ahora, con palabras y arriba. Lo que la sostiene:
   `construirConsolaDeProyecto` → `crearEjecutor` → `crearEjecutorReal` → `abrirSesionReal`
   → `construirAgente` → `backendDeAgente`, más la costura de `arranque.ts` que le da al
   vestíbulo lo que el corredor resolvió. Es la clase de cableado que en este plan ha
-  dejado CINCO veces una regla sin montar con todo en verde, y por eso
+  dejado NUEVE veces una regla sin montar con todo en verde, y por eso
   `augmentacionCableada` y `contextoDelProyecto` también están extraídas y exportadas en
   vez de vivir en el cierre de `arrancarConsolaWeb`.
 - **Montar no basta: hay que DECIR que están** (`core/adjuntos.ts#conAdjuntos`).
@@ -1936,6 +2006,48 @@ sería «desaparecer», o sea borrar sin decirlo. Cuatro cosas que no son negoci
   Es el mismo cuidado que `Maqueta.tsx` documenta al plegar la barra, en el otro sentido.
   El lazo de «pinchar fuera cierra» está en `apps/web/src/cerrarAlPulsarFuera.ts` desde que
   hubo un segundo menú; copiarlo habría sido la tercera versión del mismo `mousedown`.
+
+**La caja del compositor va en COLUMNA, y el sitio del dispositivo se decidió mirando la
+pantalla** (`componentes/Compositor.module.css`, `componentes/Compositor.tsx`). Tres decisiones,
+y las tres salieron del NAVEGADOR y no del suite —`capturas/` está en el `.gitignore`
+precisamente para eso—:
+- **El texto arriba a todo el ancho y los controles debajo.** Antes el campo compartía fila con
+  las pastillas, y con la ventana estrecha se quedaba en un canal de dos líneas: el sitio donde
+  se escribe era lo primero que se quedaba sin sitio. El `padding` vertical del campo tenía
+  sentido en esa fila compartida; en columna dejaba 16 px de aire muerto. Y el
+  `justify-content: space-between` de los controles desperdigaba las pastillas en cuanto
+  dejaron de compartir renglón con el campo: ahora el hueco se lo come el primer
+  `margin-left: auto` —el del contador si está, el del botón si no—, así que las pastillas
+  quedan juntas en los dos casos.
+- **El dispositivo estuvo ARRIBA en una fila de chips y volvió abajo.** Seguía la maqueta, y la
+  maqueta se equivocaba: un chip solo no era una fila, era un renglón —una fila de un elemento
+  no se lee como agrupación, se lee como un control suelto—. Los dos arreglos de esa tanda los
+  vio el ojo y no el suite, que es el motivo de que la comprobación esté declarada como visual.
+- **Y no hay chip de «Contexto» aunque la maqueta lo pinte.** Ese concepto no existe en
+  xonecode, y lo más parecido —el proyecto— ya se lee en la miga: pintarlo dos veces es la
+  misma duplicación que ya se quitó de las marcas de «trabajando».
+
+**El botón de enviar lleva el azul de la marca y no el cian, y la razón es que el cian no
+sostiene texto** (`--xonecode-azul` con `--xonecode-sobre-azul`; el cian queda para su `hover`,
+donde puede brillar sin sostener nada). El par azul/sobre-azul es el MISMO que ya usa la barra
+superior, donde estaba medido que sostiene texto blanco; el cian de XOne es un color de ACENTO
+y no una superficie para letra. Las pastillas llevan filo cian y el baño de las filas de la
+barra (`--xonecode-fila-hover` en reposo, `--xonecode-fila-elegida` al pasar por encima), y la
+razón de reusar esos dos tokens es que **ya vienen ajustados por tema** —7 %/13 % y 14 %/26 %—:
+inventar un cian translúcido con un porcentaje fijo daría algo invisible en un tema y gritón en
+el otro, que es la forma en la que un color escrito a mano se rompe en el tema que nadie probó.
+Suaves a propósito: el que se pulsa es el botón. Pero **su texto NO** sale de tokens de marca:
+los de marca no se redefinen por tema y `--xonecode-azul` sobre el fondo de noche sería
+ilegible, así que la letra sigue saliendo de los `--dsw-alias-*`, que sí cambian. PARAR se queda
+ROJO —es un estado, no la marca— y hay que repetir su `hover` porque el mismo botón lleva las
+dos clases; y apagado no lleva color de marca, porque un botón inerte pintado de azul invita a
+pulsarlo.
+
+**Y de una maqueta ajena se toma la FORMA, nunca el color.** Es la lección de los ocho mockups
+de Stitch de la consola web: sus paletas se contradecían entre ellas y solo una declaraba el
+cian de XOne, así que copiar colores de la que estuviera abierta habría metido un segundo
+criterio de marca en el mismo producto. La forma —dónde va cada pieza y qué agrupa a qué— sí se
+copia, y es de donde salieron la columna del compositor y la vuelta del dispositivo abajo.
 
 **El entorno ACTIVO lo dice el servidor** (`alta.entornoActivo`), y el desplegable de la
 barra lo cambia de verdad (`clase: "entorno"`, `accion: "activo"`): traer los proyectos del
@@ -3064,6 +3176,46 @@ recuerda su `origen` para que `config`/`describe` lo digan.
 guarda la elección en la config global. `ErrorCatalogoModelos` es un error publicable: nunca
 lleva la clave ni el cuerpo remoto. Ollama local (`OLLAMA_BASE_URL`) y Ollama Cloud
 (`https://ollama.com`) son dos hosts distintos y no se mezclan.
+
+**Los tokens de una sesión se cuentan y se enseñan en DOS cuentas que no se suman**
+(`core/ports.ts#ConsumoDeSesionPorCuenta`, `agent/consumoExterno.ts`, mensaje `consumo`,
+`componentes/ContadorDeTokens.tsx`). La web no tenía NINGÚN contador —`tracker` no aparecía ni
+una vez en `src/web/`—, así que la piel por OMISIÓN era la única sin ver un token:
+`formatearBarra` es de terminal y la TUI lo pinta en su sidebar. Y del agente EXTERNO se tiraba
+entero, teniéndolo los dos motores: Claude Code lo da en `result.modelUsage` —que su propia doc
+marca como «the correct field for token/cost accounting», por encima de `usage`, que es solo del
+bucle principal— y Codex en `thread/tokenUsage/updated`, que **estaba en la lista de RUIDO** de
+su adaptador, o sea que llevaba llegando desde el primer día y se descartaba a propósito.
+Siete reglas:
+- **Los dos son ACUMULADOS: se lee el último, no se suman.** Lo dicen sus dos contratos con esas
+  palabras, y es la diferencia entre contar y contar el doble. Entre ejecuciones SÍ se suma:
+  cada `correr` es otra sesión del producto.
+- **Se suman TOKENS, nunca COSTE.** Los del grafo van contra la clave de API del usuario y los
+  del hijo contra su suscripción: un token es un token, pero su precio no es comparable. Por eso
+  las dos cuentas viajan SEPARADAS hasta el componente, que suma las cifras y pone el desglose
+  en el `title` — el día que se quiera coste, ese es el sitio donde no se puede hacer, y se ve.
+- **La caché va aparte de la entrada**, como en `vendor/tokenTracking.ts`: meterla dentro
+  inflaría la cifra que se enseña.
+- **De Codex se lee `total` y no `last`** —`last` es lo que ocupa la ventana en ese momento— y
+  `reasoningOutputTokens` **no** se suma a la salida: por su esquema ya va dentro.
+- **Se cuenta también cuando el turno acaba en ERROR.** Esos tokens se gastaron igual, y contar
+  solo los éxitos haría bajar la cifra justo en los turnos que más cuestan, que es cuando más
+  interesa mirarla.
+- **Ausente es «no consta» y entonces NO SE PINTA.** Sin sesión, o con el ejecutor de pega, no
+  hay número: un contador a cero que nadie ha medido es la cifra inventada de siempre. Se tira
+  al caerse el cable, como los modelos. Y los tokens de un turno de SEGUNDO PLANO no mueven el
+  contador de quien mira otra sesión: solo avisa la consola en foco.
+- **Y con ellos viaja la VENTANA, que es OTRA pregunta**: `contexto` es la entrada de la ÚLTIMA
+  llamada —cuánto ocupa el historial AHORA, la cifra que avisa de que toca resumir— y los
+  acumulados dicen lo que la sesión ha costado. La barra del terminal ya las pinta como dos
+  cosas. El TOPE se resuelve con **la misma función** que esa barra
+  (`cli/main.ts#crearTopeDelModelo`), que entra por la opción `topeDeContexto` para no importar
+  `cli/` desde `web/` —el motivo de `crearEjecutor`—: dos resoluciones serían dos porcentajes
+  distintos para el mismo modelo. Se re-resuelve en cada emisión porque `/modelo` cambia en
+  caliente. **Sin tope no se pinta denominador ni porcentaje**: con Ollama no hay a propósito, y
+  un porcentaje sobre un número inventado es una mentira con forma de cifra.
+
+Lo que NO hay todavía: métricas globales (por proyecto, histórico, coste).
 
 **Los proveedores compatibles con OpenAI son una TABLA, no tres ramas más**
 (`core/modelos.ts#COMPATIBLES_OPENAI`). NVIDIA (`integrate.api.nvidia.com/v1`,
