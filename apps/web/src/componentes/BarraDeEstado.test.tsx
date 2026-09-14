@@ -16,13 +16,21 @@ describe("BarraDeEstado", () => {
 
   it("con contexto pero SIN tope (ollama, a propósito): la cifra va pelada, sin %", () => {
     render(<BarraDeEstado turnos={1} pasos={3} contexto={4200} />);
-    expect(screen.getByText("ctx 4200")).toBeTruthy();
+    expect(screen.getByText("ctx 4,2k")).toBeTruthy();
     expect(screen.queryByText(/%/)).toBeNull();
   });
 
   it("con contexto Y tope: la cifra lleva el tope y el porcentaje", () => {
     render(<BarraDeEstado turnos={1} pasos={3} contexto={4200} tope={200000} />);
-    expect(screen.getByText("ctx 4200/200000 (2%)")).toBeTruthy();
+    expect(screen.getByText("ctx 4,2k/200k (2%)")).toBeTruthy();
+  });
+
+  it("el tope y las cifras se abrevian como en el contador, no con el número pelado", () => {
+    // Medido en pantalla: aquí se leía `3269/1000000` mientras el compositor escribía `3,3k`
+    // para el mismo tipo de dato — y el `1,0M` del tope era el que se veía en cada turno.
+    // Un solo abreviador para los dos (`cifras.ts`), o se aprende a desconfiar de ambos.
+    render(<BarraDeEstado turnos={1} pasos={3} contexto={3269} tope={1_000_000} />);
+    expect(screen.getByText("ctx 3,3k/1M (0%)")).toBeTruthy();
   });
 
   it("turnos, pasos y tiempo se pintan siempre que llegan", () => {

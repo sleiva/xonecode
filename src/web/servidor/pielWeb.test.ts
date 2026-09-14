@@ -1,4 +1,5 @@
 import { describe, it, expect } from "vitest";
+import type { ConsumoDeTurno } from "../../core/actos.js";
 import { crearPielWeb } from "./pielWeb.js";
 
 describe("pielWeb", () => {
@@ -197,5 +198,105 @@ describe("pielWeb", () => {
     piel.cerrarLinea();
     // El store de la TUI daría tres actos aquí (uno por línea); la web da uno.
     expect(actos()).toEqual([{ tipo: "asistente", texto: "- uno\n- dos\n" }]);
+  });
+});
+
+/**
+ * El coste del turno, que es lo que hace que los totales de una conversación sobrevivan a
+ * cerrarla y reabrirla.
+ *
+ * La aritmética es una RESTA y por eso tiene sus propios casos: contra qué se resta, qué
+ * pasa en el primer `fin` de un proceso, y qué NO se estampa cuando no hay nada que decir.
+ * Una resta mal llevada aquí no rompe nada visible —el número vivo de la pantalla lo pone
+ * otro camino— y solo se nota al reabrir, que es dentro de tres días.
+ */
+describe("pielWeb: el coste del turno en el `fin`", () => {
+  const cuenta = (entrada: number, salida: number, cache = 0) => ({ entrada, salida, cache });
+  /** Un lector de acumulados que se mueve a mano, como se mueve el tracker de verdad. */
+  const lector = () => {
+    let actual: ConsumoDeTurno | undefined;
+    return {
+      pon: (c: ConsumoDeTurno | undefined) => {
+        actual = c;
+      },
+      lee: () => actual,
+    };
+  };
+  const acumulado = (entrada: number, salida: number, cache = 0): ConsumoDeTurno => ({
+    modelo: cuenta(entrada, salida, cache),
+    externo: cuenta(0, 0),
+  });
+
+  it("estampa el DELTA, no el acumulado: es lo único que suma bien entre procesos", () => {
+    // El acumulado de cada arranque empieza en cero. Guardarlo tal cual haría que reabrir
+    // tres veces contara tres veces lo mismo; los deltas suman igual cerrada que abierta.
+    const l = lector();
+    const { piel, actos } = crearPielWeb(() => 0, l.lee);
+    l.pon(acumulado(100, 10));
+    piel.fin(5);
+    l.pon(acumulado(150, 12, 40));
+    piel.fin(5);
+    expect(actos()).toEqual([
+      { tipo: "fin", ms: 5, consumo: { modelo: cuenta(100, 10), externo: cuenta(0, 0) } },
+      { tipo: "fin", ms: 5, consumo: { modelo: cuenta(50, 2, 40), externo: cuenta(0, 0) } },
+    ]);
+  });
+
+  it("el primer `fin` de un proceso estampa lo acumulado ENTERO", () => {
+    // No se resta contra ceros por comodidad: hasta aquí no había ningún `fin` en este
+    // proceso, así que todo lo acumulado es de este turno. Es exactamente el caso de una
+    // sesión reabierta en la que el tracker empieza de nuevo.
+    const l = lector();
+    const { piel, actos } = crearPielWeb(() => 0, l.lee);
+    l.pon(acumulado(700, 30));
+    piel.fin(5);
+    expect(actos()).toEqual([{ tipo: "fin", ms: 5, consumo: { modelo: cuenta(700, 30), externo: cuenta(0, 0) } }]);
+  });
+
+  it("un turno que no gastó nada NO estampa: ausente es «no consta»", () => {
+    // Un `{0,0,0}` ocuparía sitio en el `.jsonl` y afirmaría una medida que nadie hizo.
+    // Y el cero no se estampa pero SÍ se recuerda, que es lo que evita que el turno
+    // siguiente se lleve por delante lo que ya se contó.
+    const l = lector();
+    const { piel, actos } = crearPielWeb(() => 0, l.lee);
+    l.pon(acumulado(0, 0));
+    piel.fin(5);
+    expect(actos()).toEqual([{ tipo: "fin", ms: 5 }]);
+    l.pon(acumulado(100, 10));
+    piel.fin(5);
+    expect(actos()[1]).toEqual({ tipo: "fin", ms: 5, consumo: { modelo: cuenta(100, 10), externo: cuenta(0, 0) } });
+  });
+
+  it("la ventana se estampa tal cual, y no se le resta nada", () => {
+    // Es un nivel: cuánto ocupaba el historial al cerrar. Restarle el anterior sería
+    // convertir en «cuánto creció la ventana», que es otra pregunta que nadie ha hecho.
+    const l = lector();
+    const { piel, actos } = crearPielWeb(() => 0, l.lee);
+    l.pon({ modelo: cuenta(10, 1), externo: cuenta(0, 0), ventana: 3000 });
+    piel.fin(5);
+    l.pon({ modelo: cuenta(20, 2), externo: cuenta(0, 0), ventana: 9000 });
+    piel.fin(5);
+    expect(actos()[0]).toMatchObject({ consumo: { ventana: 3000 } });
+    expect(actos()[1]).toMatchObject({ consumo: { ventana: 9000 } });
+  });
+
+  it("SIN lector, el `fin` sale sin `consumo`: es lo que deja intactas las otras dos pieles", () => {
+    // `Piel.fin(ms)` no cambia de firma justo por esto: stdio y la TUI no reciben lector,
+    // así que su `fin` es el de siempre, byte a byte.
+    const { piel, actos } = crearPielWeb();
+    piel.fin(1234);
+    expect(actos()).toEqual([{ tipo: "fin", ms: 1234 }]);
+  });
+
+  it("un acumulado que BAJA no produce un gasto negativo", () => {
+    // Los acumulados del tracker son monótonos mientras el proceso vive. Si bajaran sería
+    // que la fuente cambió de escala, y un negativo pintado como gasto es peor que un cero.
+    const l = lector();
+    const { piel, actos } = crearPielWeb(() => 0, l.lee);
+    l.pon(acumulado(100, 10));
+    piel.fin(5);
+    l.pon(acumulado(4, 1));
+    piel.fin(5);
+    expect(actos()[1]).toEqual({ tipo: "fin", ms: 5 });
   });
 });

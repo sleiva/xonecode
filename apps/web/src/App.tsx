@@ -633,15 +633,16 @@ export function App({
     (p) => p.id === estado.alta?.proyectoActivo
   )?.nombre;
 
-  // Las piezas de `BarraDeEstado`, derivadas del transcript a falta de un mensaje propio
-  // del cable: ni `sistema` ni `EstadoDelCliente` llevan hoy `contexto`/`tope`
-  // (`tipos.ts`, `store.ts`), así que esos dos quedan `undefined` — la misma postura de
-  // «lista vacía, no dato inventado» que ya usa la `<Barra>` de abajo cuando el cable
-  // todavía no tiene sesiones que contar.
-  // «Turnos» cuenta actos `usuario`; «pasos» suma las líneas de los actos `herramientas`
-  // —una racha COLAPSADA cuenta como una línea (`core/notify.ts`), así que esto cuenta
-  // rachas visibles, no llamadas reales a tool—; el tiempo es el del ÚLTIMO turno
-  // cerrado, no un acumulado de sesión.
+  // Las piezas de `BarraDeEstado`. «Turnos» cuenta actos `usuario`; «pasos» suma las líneas
+  // de los actos `herramientas` —una racha COLAPSADA cuenta como una línea (`core/notify.ts`),
+  // así que esto cuenta rachas visibles, no llamadas reales a tool—; el tiempo es el del
+  // ÚLTIMO turno cerrado, no un acumulado de sesión.
+  //
+  // Y `contexto`/`tope` SÍ tienen mensaje detrás desde que `ctx` se mudó aquí: el mensaje
+  // `consumo` trae `ventana {usado, tope?}`, y es la única cifra de la pantalla que dice
+  // cuánto margen queda antes de que toque resumir. Antes vivía en el compositor, junto a
+  // los acumulados, y ahí se leía como si fuera otra cuenta de lo gastado. Sin tope no se
+  // inventa denominador ni porcentaje: `formatearContexto` no los pinta.
   const turnos = estado.actos.filter((a) => a.tipo === "usuario").length;
   const pasos = estado.actos
     .filter((a) => a.tipo === "herramientas")
@@ -650,6 +651,7 @@ export function App({
     .slice()
     .reverse()
     .find((a) => a.tipo === "fin");
+  const ventana = estado.consumo?.ventana;
 
   /**
    * Cuál es el entorno activo lo DICE el servidor, y solo si no lo dice se cae al primero
@@ -1213,6 +1215,8 @@ export function App({
               turnos={turnos}
               pasos={pasos}
               ms={ultimoFin?.ms}
+              {...(ventana === undefined || ventana.usado === 0 ? {} : { contexto: ventana.usado })}
+              {...(ventana?.tope === undefined ? {} : { tope: ventana.tope })}
               {...(segundosEnVuelo === undefined ? {} : { segundosEnVuelo })}
             />
             {estado.aprobacion !== undefined ? (

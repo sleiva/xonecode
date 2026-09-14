@@ -1,8 +1,10 @@
-import type { Acto } from "../tipos.js";
+import type { Acto, ConsumoDeTurno } from "../tipos.js";
 import { usarPegadoAbajo } from "../pegadoAbajo.js";
 import { protegerDolares } from "../protegerDolares.js";
 import { ETIQUETAS_DE_CODIGO } from "../etiquetasDeCodigo.js";
 import { BotonDeCopiar } from "./BotonDeCopiar.js";
+import { CierreDelTurno } from "./CierreDelTurno.js";
+import { hayCosteQueEnsenar } from "./CosteDelTurno.js";
 import { MarkdownText } from "@deepseek-ai/dsh-client-ui-primitives";
 import vista from "../../estilos/ChatView.module.css";
 import estilos from "./Chat.module.css";
@@ -67,6 +69,12 @@ interface TramoDePulso {
   terminado: boolean;
   /** La duración del turno que lo cerró, si lo hay. */
   ms?: number;
+  /**
+   * Lo que costó el turno que lo cerró. Ausente = no consta: una sesión escrita antes de que
+   * esto existiera, o un ejecutor de pega que no mide. Entonces no se pinta el coste — un
+   * `↑0 ↓0` afirmaría una medida que nadie hizo.
+   */
+  consumo?: ConsumoDeTurno;
 }
 
 export function Chat({
@@ -133,31 +141,62 @@ export function Chat({
    * saber qué viene DESPUÉS —si hay un `fin`, su turno acabó—, y eso no se ve mirando un
    * acto solo.
    */
-  const piezas: Array<{ tipo: "acto"; acto: Acto; indice: number } | { tipo: "pulso"; tramo: TramoDePulso }> = [];
+  const piezas: Array<
+    | { tipo: "acto"; acto: Acto; indice: number }
+    | { tipo: "pulso"; tramo: TramoDePulso }
+    | { tipo: "cierre"; desde: number; ms: number; consumo: ConsumoDeTurno }
+  > = [];
   let tramo: TramoDePulso | undefined;
+  /**
+   * Los tramos del turno EN CURSO, y solo esos.
+   *
+   * Es lo que impide el fallo que se midió en pantalla: un `fin` cerraba el último tramo de
+   * la lista ENTERA, así que un turno que no tuvo trabajo —una pregunta contestada a pelo—
+   * le robaba la duración y el coste al turno anterior, que quedaba en pantalla con las
+   * cifras de otro. El contador de la conversación seguía cuadrando; la cifra del mensaje,
+   * que es la que se mira para saber qué costó lo último, era la de otro turno.
+   *
+   * Un turno abre con el mensaje del humano —`usuario` solo lo emite el compositor— y cierra
+   * con su `fin`. Lo que quedara abierto al llegar un mensaje nuevo se cierra SIN cifras: el
+   * turno que no llegó a cerrar no midió nada, e inventarle una duración sería peor que
+   * dejarlo sin ella.
+   */
+  let delTurno: TramoDePulso[] = [];
   for (const [indice, acto] of actos.entries()) {
     if (ES_PULSO.has(acto.tipo)) {
       if (tramo === undefined) {
         tramo = { desde: indice, actos: [], terminado: false };
         piezas.push({ tipo: "pulso", tramo });
+        delTurno.push(tramo);
       }
       tramo.actos.push(acto);
       continue;
     }
+    if (acto.tipo === "usuario") {
+      for (const abierto of delTurno) abierto.terminado = true;
+      delTurno = [];
+    }
     // Cualquier acto de conversación CIERRA el tramo abierto —lo que venga después es otro
     // tramo—, pero no lo da por terminado: el turno puede seguir (más tools tras la
-    // respuesta). Lo que lo termina es el `fin`, y entonces termina TODOS los de ese turno.
+    // respuesta). Lo que lo termina es el `fin`.
     tramo = undefined;
     if (acto.tipo === "fin") {
-      let ultimo: TramoDePulso | undefined;
-      for (const pieza of piezas) {
-        if (pieza.tipo !== "pulso") continue;
-        pieza.tramo.terminado = true;
-        ultimo = pieza.tramo;
+      // La duración del turno se la queda el ÚLTIMO tramo suyo: es el que cierra el trabajo,
+      // y repartirla entre todos sería inventarse cuánto duró cada trozo. Y el COSTE del turno
+      // por el mismo camino y por el mismo motivo: es de quien terminó, no de cada trozo.
+      const ultimo = delTurno[delTurno.length - 1];
+      for (const suyo of delTurno) suyo.terminado = true;
+      delTurno = [];
+      if (ultimo !== undefined) {
+        ultimo.ms = acto.ms;
+        if (acto.consumo !== undefined) ultimo.consumo = acto.consumo;
+      } else if (acto.consumo !== undefined && hayCosteQueEnsenar(acto.consumo)) {
+        // Un turno sin un solo acto de trabajo no tiene dónde colgar la cifra, y hasta ahora
+        // se perdía: la respuesta salía sin decir lo que costó, que es justo la pregunta del
+        // nivel «mensaje». Va en su propio cierre —sin plegado, porque no hay nada dentro—,
+        // y solo si hay algo que enseñar: un turno sin consumo no añade una línea vacía.
+        piezas.push({ tipo: "cierre", desde: indice, ms: acto.ms, consumo: acto.consumo });
       }
-      // La duración del turno se la queda el ÚLTIMO tramo: es el que cierra el trabajo, y
-      // repartirla entre todos sería inventarse cuánto duró cada trozo.
-      if (ultimo !== undefined) ultimo.ms = acto.ms;
       continue;
     }
     piezas.push({ tipo: "acto", acto, indice });
@@ -249,6 +288,15 @@ export function Chat({
             </p>
           ) : null}
           {piezas.map((pieza) => {
+            if (pieza.tipo === "cierre") {
+              return (
+                // Sin `<details>`: un turno sin actos de trabajo no tiene nada que desplegar,
+                // y un control que al pulsarlo no enseña nada es el botón muerto de siempre.
+                <p key={`cierre-${pieza.desde}`} className={`${vista.flowItem} ${estilos.pensando} ${estilos.cierre}`}>
+                  <CierreDelTurno ms={pieza.ms} consumo={pieza.consumo} />
+                </p>
+              );
+            }
             if (pieza.tipo === "pulso") {
               const { tramo: t } = pieza;
               const pasos = t.actos.reduce(
@@ -261,13 +309,29 @@ export function Chat({
                 // andamio sigue estando a un clic. No se BORRA: lo que pasó, pasó.
                 <details key={`pulso-${t.desde}`} className={`${vista.flowItem} ${estilos.pensando}`} open={!t.terminado}>
                   <summary className={estilos.resumen}>
-                    {t.terminado
-                      ? `Trabajo del agente · ${pasos} ${pasos === 1 ? "paso" : "pasos"}${
-                          t.ms === undefined ? "" : ` · ${Math.round(t.ms / 100) / 10}s`
-                        }`
-                      : segundosEnVuelo === undefined
-                        ? "Trabajando…"
-                        : `Trabajando… · ${segundosEnVuelo} s`}
+                    {t.terminado ? (
+                      <>
+                        {`Trabajo del agente · ${pasos} ${pasos === 1 ? "paso" : "pasos"}`}
+                        {/*
+                          La duración y el coste del turno, en la línea que ya lo cierra. Es el
+                          nivel «mensaje» que faltaba: el contador del compositor dice lo que
+                          lleva la conversación, y de un acumulado no se saca lo que costó lo
+                          último. Se compone en `CierreDelTurno` y no aquí, porque el mismo par
+                          lo pinta el cierre de un turno sin trabajo: dos copias serían dos
+                          sitios donde la duración y el coste pueden dejar de ir juntos.
+                        */}
+                        {t.ms === undefined && t.consumo === undefined ? null : (
+                          <>
+                            {" · "}
+                            <CierreDelTurno ms={t.ms} consumo={t.consumo} />
+                          </>
+                        )}
+                      </>
+                    ) : segundosEnVuelo === undefined ? (
+                      "Trabajando…"
+                    ) : (
+                      `Trabajando… · ${segundosEnVuelo} s`
+                    )}
                   </summary>
                   <div className={estilos.detalleDePulso}>
                     {t.actos.map((a, i) => {

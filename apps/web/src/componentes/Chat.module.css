@@ -125,6 +125,17 @@
   cursor: pointer;
 }
 
+/*
+ * El cierre de un turno que no tuvo trabajo: la MISMA línea que el `summary` de un tramo —es
+ * el mismo dato, y tiene que leerse igual— sin el `cursor: pointer`, porque no hay nada
+ * dentro que desplegar. Un puntero ahí promete un clic que no hace nada.
+ */
+.cierre {
+  margin: 0;
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 12px;
+}
+
 .pensando[open] .resumen {
   margin-bottom: 4px;
 }

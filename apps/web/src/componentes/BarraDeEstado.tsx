@@ -1,3 +1,4 @@
+import { abreviar } from "../cifras.js";
 import { formatearMs } from "../tiempo.js";
 import estilos from "./BarraDeEstado.module.css";
 
@@ -13,10 +14,12 @@ import estilos from "./BarraDeEstado.module.css";
  * `contexto`/`tope` llegan sueltos y no como un único número: **el porcentaje solo se
  * pinta si hay tope** (`core/contextos.ts#topeResuelto`) — ollama no tiene tope a
  * propósito, cada modelo local trae el suyo, y un porcentaje sobre un número inventado
- * es una mentira con forma de cifra. Hoy ningún mensaje del cable trae `contexto`/`tope`
- * (`tipos.ts#Acto` no los declara todavía en `sistema` ni en `fin`); quien llame a este
- * componente pasa `undefined` mientras tanto — listas y campos vacíos en vez de un dato
- * inventado, la misma postura que ya toma `App.tsx` con `<Barra proyectos={[]}>`.
+ * es una mentira con forma de cifra. Los dos salen hoy del mensaje `consumo`
+ * (`ventana {usado, tope?}`), que es lo que hace que esta pieza exista: vivía aquí desde
+ * el principio pero estaba MUERTA, porque nadie le pasaba el dato. Se mudó aquí desde el
+ * contador del compositor por una razón que no es de sitio: allí compartía fila con los
+ * acumulados de la conversación y se leía como una tercera cuenta de lo gastado, cuando
+ * contesta la pregunta contraria —cuánto margen queda antes de que toque resumir—.
  */
 export interface PiezasDeLaBarraDeEstado {
   turnos: number;
@@ -38,9 +41,13 @@ export interface PiezasDeLaBarraDeEstado {
 /** El texto de `ctx`: cifra pelada sin tope, con `%` solo si hay tope. Cadena vacía sin contexto que medir. */
 function formatearContexto(contexto: number | undefined, tope: number | undefined): string {
   if (contexto === undefined || contexto <= 0) return "";
+  // Las DOS cifras con el MISMO abreviador que el contador del compositor
+  // (`cifras.ts#abreviar`): el mismo dato escrito de dos formas es como se aprende a
+  // desconfiar de las dos, y aquí se juntaban `3269/1000000` con `3,3k` en la misma
+  // pantalla. El porcentaje no se abrevia —es un porcentaje, no una cuenta—.
   const porcentaje = tope !== undefined ? ` (${Math.round((contexto / tope) * 100)}%)` : "";
-  const sobreTope = tope !== undefined ? `/${tope}` : "";
-  return `ctx ${contexto}${sobreTope}${porcentaje}`;
+  const sobreTope = tope !== undefined ? `/${abreviar(tope)}` : "";
+  return `ctx ${abreviar(contexto)}${sobreTope}${porcentaje}`;
 }
 
 export function BarraDeEstado({ turnos, pasos, ms, contexto, tope, segundosEnVuelo }: PiezasDeLaBarraDeEstado) {

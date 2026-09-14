@@ -270,3 +270,90 @@ describe("Chat: lo que dice la consola", () => {
     expect(screen.getByText(/SIN aprobación: \/Clientes.xne/)).toBeTruthy();
   });
 });
+
+/**
+ * El coste por MENSAJE, que es el nivel que faltaba entre el contador de la conversación y lo
+ * que gasta la sesión.
+ *
+ * Estos tres casos se midieron en pantalla, y el segundo es un fallo de verdad: la cifra que
+ * se veía junto a un turno era la de OTRO turno. El contador del compositor cuadraba —el total
+ * siempre estuvo bien—, así que nada avisaba; lo que mentía era la atribución.
+ */
+describe("Chat: lo que costó cada turno", () => {
+  const fin = (ms: number, entrada?: number, salida?: number, cache = 0): Acto => ({
+    tipo: "fin",
+    ms,
+    ...(entrada === undefined
+      ? {}
+      : {
+          consumo: {
+            modelo: { entrada, salida: salida ?? 0, cache },
+            externo: { entrada: 0, salida: 0, cache: 0 },
+          },
+        }),
+  });
+  const herramientas = (linea: string): Acto => ({ tipo: "herramientas", lineas: [linea] });
+  /** El texto visible de la línea de cierre, sin los espacios que separan los trozos. */
+  const cierres = (container: HTMLElement) =>
+    [...container.querySelectorAll("summary, p")].map((n) => n.textContent ?? "").filter((t) => /[↑↓]/.test(t));
+
+  it("un turno sin ningún acto de trabajo cuelga su coste de su propio cierre", () => {
+    // Sin tramo no había dónde ponerlo, y el gasto de una pregunta contestada a pelo se
+    // perdía: la respuesta salía sin decir lo que costó, que es justo lo que se pregunta.
+    const { container } = render(
+      <Chat actos={[{ tipo: "usuario", texto: "¿qué es XOne?" }, asistente("Una plataforma."), fin(2600, 2200, 5)]} />
+    );
+    expect(cierres(container).join(" ")).toContain("2.6s");
+    expect(cierres(container).join(" ")).toContain("2,2k");
+    expect(cierres(container).join(" ")).toContain("5");
+  });
+
+  it("y el turno siguiente, si tampoco tiene trabajo, NO le roba la cifra al anterior", () => {
+    // El fallo medido: un `fin` cerraba el último tramo de la lista ENTERA, así que la línea
+    // del turno con herramientas acabó enseñando la duración y el coste del turno siguiente.
+    const { container } = render(
+      <Chat
+        actos={[
+          { tipo: "usuario", texto: "lee el README" },
+          herramientas("→ lista /"),
+          asistente("README.md"),
+          fin(2575, 8786, 24),
+          { tipo: "usuario", texto: "di adiós" },
+          asistente("Adiós."),
+          fin(5854, 3388, 4),
+        ]}
+      />
+    );
+    const linea = container.querySelector("summary")?.textContent ?? "";
+    // El turno del `read_file` conserva LO SUYO…
+    expect(linea).toContain("2.6s");
+    expect(linea).toContain("8,8k");
+    // …y el de después lleva lo suyo, en su propia línea.
+    expect(cierres(container).join(" ")).toContain("5.9s");
+    expect(cierres(container).join(" ")).toContain("3,4k");
+  });
+
+  it("un turno sin consumo no añade una línea: ausente es «no consta»", () => {
+    // Los `fin` de las sesiones escritas antes de esto, y los turnos de un comando, que no
+    // llaman a ningún modelo. Una cifra de cero ahí sería la medida que nadie hizo.
+    const { container } = render(
+      <Chat actos={[{ tipo: "usuario", texto: "/ayuda" }, { tipo: "sistema", texto: "los comandos" }, fin(40)]} />
+    );
+    expect(cierres(container)).toEqual([]);
+  });
+
+  it("lo que quedó abierto cuando llega un mensaje nuevo se cierra, pero SIN cifras", () => {
+    // Un turno que nunca cerró —el proceso murió a media respuesta— no midió su duración ni su
+    // gasto. Heredar los del turno siguiente es lo que se arregló; heredarlos del anterior
+    // sería el mismo error al revés, así que se queda sin ellos y se dice lo que sí consta.
+    const { container } = render(
+      <Chat
+        actos={[herramientas("→ lista /"), { tipo: "usuario", texto: "otra cosa" }, asistente("Vale."), fin(100, 10, 1)]}
+      />
+    );
+    const linea = container.querySelector("summary")?.textContent ?? "";
+    expect(linea).toContain("1 paso");
+    expect(linea).not.toContain("0.1s");
+    expect(linea).not.toContain("↑");
+  });
+});

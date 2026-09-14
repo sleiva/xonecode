@@ -28,7 +28,7 @@
  */
 import { crearPielWeb } from "./pielWeb.js";
 import { crearTransporte, type MensajeAlCliente, type MensajeDelCliente, type Sumidero } from "./transporte.js";
-import type { Acto } from "../../core/actos.js";
+import type { Acto, ConsumoDeTurno } from "../../core/actos.js";
 import type { PendienteDeAprobacion } from "../../core/events.js";
 import type { LineaDeDiff } from "../../core/diff.js";
 import type { Piel } from "../../core/turno.js";
@@ -55,6 +55,16 @@ export interface OpcionesDeConsolaWeb {
   msDeEspera?: number;
   catalogoModelos?: CatalogoModelosPort;
   guardarModeloGlobal?: Consola["guardarModeloGlobal"];
+  /**
+   * Lo consumido ACUMULADO por la sesión, si consta. Entra por opción y no se lee de ningún
+   * cierre de aquí por el mismo motivo que los modelos: quien conoce la sesión es el
+   * vestíbulo, y este módulo no sabe de ninguna.
+   *
+   * La piel lo consulta al cerrar cada turno para estampar su DELTA en el acto `fin`, que es
+   * de donde una sesión reabierta saca sus totales. Ausente = no se persiste consumo y los
+   * `fin` salen sin él, que es «no consta».
+   */
+  consumoAcumulado?: () => ConsumoDeTurno | undefined;
 }
 
 export interface ConsolaWeb {
@@ -157,7 +167,7 @@ export function crearConsolaWeb(opciones: OpcionesDeConsolaWeb = {}): ConsolaWeb
   // comandos de barra, en el orden en que ocurrió. La piel lleva su propia lista; aquí se
   // guarda dónde cayó su último acto para poder sustituirlo cuando se ACTUALIZA.
   const actos: Acto[] = [];
-  const pielWeb = crearPielWeb();
+  const pielWeb = crearPielWeb(undefined, opciones.consumoAcumulado);
   const transporte = crearTransporte(() => actos);
 
   let actosDePiel = 0;

@@ -43,6 +43,26 @@ export interface AgenteDelCable {
   origen?: string;
 }
 
+/**
+ * Lo que costó UN turno, tal como viaja y se persiste en su `fin`.
+ *
+ * Las dos cuentas por SEPARADO y no sumadas: sumarlas aquí perdería el desglose para
+ * siempre, y una sesión reabierta ya no podría decir cuánto fue de un agente externo porque
+ * de un total no se vuelve a las partes. Es la misma disciplina del mensaje `consumo`.
+ *
+ * `ventana` es lo que ocupaba el historial al cerrar el turno: un NIVEL, no un flujo, y por
+ * eso no se suma al ir acumulando turnos — vale el último que conste. Ausente = no consta.
+ *
+ * Es el DELTA del turno y no el acumulado de la sesión, y eso es lo que le permite
+ * sobrevivir a un cierre: el acumulado de cada proceso arranca de cero, así que sumar
+ * deltas da el mismo total se haya cerrado la sesión o no.
+ */
+export interface ConsumoDeTurno {
+  modelo: { entrada: number; salida: number; cache: number };
+  externo: { entrada: number; salida: number; cache: number };
+  ventana?: number;
+}
+
 export type Acto =
   | { tipo: "usuario"; texto: string }
   | { tipo: "asistente"; texto: string }
@@ -73,7 +93,7 @@ export type Acto =
    *  filtrar por la prosa se rompería el día que alguien la reescriba. Opcional por lo
    *  mismo que `detalles` — las sesiones viejas no lo traen. */
   | { tipo: "fase"; texto: string; ms: number; fase?: string }
-  | { tipo: "fin"; ms: number; modelo?: string }
+  | { tipo: "fin"; ms: number; modelo?: string; consumo?: ConsumoDeTurno }
   | { tipo: "error"; texto: string };
 
 /**

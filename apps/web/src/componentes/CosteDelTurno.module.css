@@ -1,0 +1,29 @@
+/*
+ * El coste de un turno vive DENTRO del `summary` que ya lo resume, así que no puede llevar
+ * márgenes propios ni fondo: la línea de resumen es del `<details>` y reparte lo suyo. Solo
+ * el color y el mono, que es la distinción que `estilos/tipografia.css` marca para las
+ * cifras.
+ *
+ * Más tenue que el resumen que lo precede a propósito: «Trabajo del agente · 3 pasos · 15,8s»
+ * es lo que se lee, y esto se consulta. Un dato de máquina al mismo peso que su frase deja
+ * las dos sin jerarquía.
+ */
+.coste {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-family: var(--dsw-font-mono);
+  font-size: 11px;
+  color: var(--dsw-alias-text-tertiary);
+  white-space: nowrap;
+}
+
+.cifra {
+  color: var(--dsw-alias-text-secondary);
+}
+
+/* La caché, todavía más tenue: es la lectura que NO se suma a la entrada, y pintarla igual
+   que las otras dos invitaría a sumarla de cabeza. */
+.cache {
+  color: var(--dsw-alias-text-tertiary);
+}

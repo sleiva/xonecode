@@ -1980,3 +1980,96 @@ describe("el consumo de tokens de la sesión llega al vestíbulo", () => {
     await v.cerrar();
   });
 });
+
+describe("los totales de una conversación SOBREVIVEN a cerrarla", () => {
+  /**
+   * El agujero que se midió en pantalla: el acumulador vive en el cierre de la sesión real,
+   * así que al reabrir una sesión el contador desaparecía entero — se cerraba la pestaña,
+   * se volvía, y no había ni una cifra. Lo que los hace sobrevivir es que el gasto de cada
+   * turno va estampado en su acto `fin` (`pielWeb.ts`), y que al abrir se suman los que el
+   * `.jsonl` ya tenía.
+   */
+  const fin = (entrada: number, salida: number, ventana?: number): Acto => ({
+    tipo: "fin",
+    ms: 10,
+    consumo: {
+      modelo: { entrada, salida, cache: 0 },
+      externo: { entrada: 0, salida: 0, cache: 0 },
+      ...(ventana === undefined ? {} : { ventana }),
+    },
+  });
+
+  /** Una sesión guardada con dos turnos ya cerrados, sin ninguna sesión viva detrás. */
+  const conDosTurnos = () => {
+    const s = sesionesEnMemoria();
+    s.jsonl.set("/w/a|vieja", [
+      { tipo: "usuario", texto: "lo de ayer" },
+      fin(100, 10, 3000),
+      { tipo: "usuario", texto: "y lo de anteayer" },
+      fin(50, 5, 9000),
+    ]);
+    return s;
+  };
+
+  it("al reabrir, el vestíbulo ya sabe lo que se gastó antes de este proceso", async () => {
+    const s = conDosTurnos();
+    const v = crearVestibulo({ ...dobles(), origenDeTrabajo: "global", sesiones: s.puerto });
+    const proyecto = await v.abrirProyecto({ raiz: "/w/a", sesion: "vieja" });
+    // Sin sesión viva todavía —nace dentro del primer turno— y sin embargo hay cifra:
+    // sumada de los `fin` del disco.
+    expect(proyecto.consumo?.()).toEqual({
+      modelo: { entrada: 150, salida: 15, cache: 0 },
+      externo: { entrada: 0, salida: 0, cache: 0 },
+      // La ventana es un NIVEL: vale la última, no la suma de las dos.
+      contexto: 9000,
+    });
+    await proyecto.cerrar();
+  });
+
+  it("y la base se SUMA a lo nuevo, sin contarla dos veces", async () => {
+    // La trampa, y la razón de que la base se lea UNA sola vez al abrir: el `.jsonl` CRECE
+    // por debajo mientras el proceso vive —`volcar()` anota los `fin` nuevos—. Releerlo a
+    // mitad de sesión contaría otra vez lo que ya está en el acumulador vivo, y el total se
+    // iría duplicando solo con trabajar.
+    const s = conDosTurnos();
+    let consumo = {
+      modelo: { entrada: 7, salida: 1, cache: 0 },
+      externo: { entrada: 0, salida: 0, cache: 0 },
+      contexto: 12_000,
+    };
+    const v = crearVestibulo({
+      ...dobles(),
+      origenDeTrabajo: "global",
+      sesiones: s.puerto,
+      crearEjecutor: (alAbrirSesion) => async (_p, _e, consola) => {
+        alAbrirSesion({ cerrar: () => undefined, consumo: () => consumo });
+        consola.escribir("hecho");
+      },
+      correr: async (consola, estado, ejecutar) => {
+        await ejecutar!("una petición", estado, consola);
+        return 0;
+      },
+    });
+    const proyecto = await v.abrirProyecto({ raiz: "/w/a", sesion: "vieja" });
+    await proyecto.terminada;
+    expect(proyecto.consumo?.()?.modelo.entrada).toBe(157);
+    // Y el fichero ha crecido con el `fin` de este turno, como crecería de verdad.
+    expect(s.jsonl.get("/w/a|vieja")?.some((a) => a.tipo === "fin" && a.consumo !== undefined)).toBe(true);
+    // La prueba de que no se releyó: el mismo proceso pregunta otra vez y sigue en 157.
+    consumo = { ...consumo, modelo: { entrada: 11, salida: 2, cache: 0 }, contexto: 13_000 };
+    expect(proyecto.consumo?.()?.modelo.entrada).toBe(161);
+    await v.cerrar();
+  });
+
+  it("una sesión anterior a esto NO estampa un cero: es «no consta»", async () => {
+    // Los `fin` sin `consumo` son los de las sesiones escritas antes de que esto existiera.
+    // Pintar un cero ahí sería afirmar que no se gastó nada, que es lo que no sabemos, y
+    // es justo el caso en el que nadie mira el número porque parece razonable.
+    const s = sesionesEnMemoria();
+    s.jsonl.set("/w/a|vieja", [{ tipo: "usuario", texto: "lo de ayer" }, { tipo: "fin", ms: 10 }]);
+    const v = crearVestibulo({ ...dobles(), origenDeTrabajo: "global", sesiones: s.puerto });
+    const proyecto = await v.abrirProyecto({ raiz: "/w/a", sesion: "vieja" });
+    expect(proyecto.consumo?.()).toBeUndefined();
+    await proyecto.cerrar();
+  });
+});

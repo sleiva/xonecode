@@ -27,10 +27,11 @@ import { randomUUID } from "node:crypto";
 import { existsSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
-import type { Acto } from "../../core/actos.js";
+import type { Acto, ConsumoDeTurno } from "../../core/actos.js";
+import { consumoDeLosActos, sumarConsumo } from "../../core/actos.js";
 import type { Eleccion, FuentesDeEleccion, Proveedor } from "../../core/modelos.js";
 import type { ConsumoDeSesionPorCuenta, CatalogoModelosPort } from "../../core/ports.js";
-import { esDoble } from "../../core/ports.js";
+import { consumoDeLaSesion, consumoPersistible, esDoble } from "../../core/ports.js";
 import type { Entorno } from "../../core/settings.js";
 import { rutaDeWorkspace } from "../../core/settings.js";
 import {
@@ -1030,10 +1031,46 @@ export function crearVestibulo(opciones: OpcionesDelVestibulo): Vestibulo {
     alFlancoDeTurno?: (activo: boolean) => void;
   }): Promise<ConsolaDeProyecto> => {
     const reabierta = sesion === undefined ? undefined : sesiones.reabrir(raiz, sesion);
+    /**
+     * Lo que costó esta conversación ANTES de este proceso, leído de los `fin` que el
+     * `.jsonl` ya tenía.
+     *
+     * **Se lee UNA vez, aquí, y no se vuelve a mirar.** El fichero CRECE por debajo mientras
+     * este proceso vive —`volcar()` anota cada turno—, así que releerlo a mitad de sesión
+     * contaría dos veces los turnos que ya están en el tracker vivo. Esa es la regla que se
+     * puede romper en silencio dentro de un año, y por eso la base solo se fija en este
+     * punto: a partir de aquí, lo que crezca lo aporta la sesión viva.
+     *
+     * `undefined` cuando ningún `fin` lo trae, que es una sesión escrita antes de que esto
+     * existiera. No se rellena con ceros: un cero que nadie ha medido es la cifra inventada
+     * de siempre, y aquí se distinguen «anterior» y «gastó cero».
+     */
+    const consumoHistorico = reabierta === undefined ? undefined : consumoDeLosActos(reabierta.actos);
+    /**
+     * La sesión real, que nace DENTRO del primer turno —`crearEjecutorReal` avisa después de
+     * `inspeccionar` y de `abrirSesionReal`—. Se declara aquí arriba, antes de construir la
+     * consola, porque quien pregunta por el consumo se construye ANTES que ella.
+     */
+    let sesionReal: SesionCerrable | undefined;
+    /**
+     * Lo consumido por la sesión VIVA, sin la base histórica.
+     *
+     * **Es la fuente de la piel, y no la de la pantalla.** Son dos lecturas distintas a
+     * propósito: la piel resta este valor contra el que estampó en el `fin` anterior para
+     * sacar el gasto del turno, y si aquí entrara la base histórica el PRIMER `fin` de una
+     * sesión reabierta estamparía la base entera como si se hubiera gastado otra vez — y
+     * reabrir tres veces triplicaría el total. Lo que se pinta es la suma, y esa se compone
+     * abajo.
+     */
+    const consumoVivo = (): ConsumoDeTurno | undefined => {
+      const vivo = sesionReal?.consumo?.();
+      return vivo === undefined ? undefined : consumoPersistible(vivo);
+    };
     const consolaWeb = crearConsola({
       catalogoModelos: opciones.catalogoModelos,
       guardarModeloGlobal,
       ...(opciones.msDeEspera === undefined ? {} : { msDeEspera: opciones.msDeEspera }),
+      consumoAcumulado: consumoVivo,
     });
     // `Partial<Consola>` sobre el objeto recién creado: lo que depende de la raíz (`/sync`,
     // los escritores del proyecto) no lo puede saber `consolaWeb`, que no conoce ninguna.
@@ -1093,7 +1130,6 @@ export function crearVestibulo(opciones: OpcionesDelVestibulo): Vestibulo {
      *  es el único sitio que ve los dos flancos. */
     let turnoEnVuelo = false;
     let volcados = 0;
-    let sesionReal: SesionCerrable | undefined;
     /**
      * Marcado desde que empieza el cierre. Hace falta porque `crearEjecutorReal` avisa de
      * la sesión DESPUÉS de `inspeccionar` y `abrirSesionReal` —segundos en el primer
@@ -1296,15 +1332,26 @@ export function crearVestibulo(opciones: OpcionesDelVestibulo): Vestibulo {
     const consolaDeProyecto: ConsolaDeProyecto = {
       raiz,
       /**
-       * Lo que lleva consumido su sesión. **Se PREGUNTA a la sesión, no se cachea**: el
-       * acumulador vive en el cierre de `abrirSesionReal` y es la única fuente; una copia
-       * aquí se quedaría vieja entre avisos.
+       * Lo que lleva consumido su sesión, contando lo de ANTES de este proceso.
+       *
+       * **Se PREGUNTA a la sesión, no se cachea**: el acumulador vive en el cierre de
+       * `abrirSesionReal` y es la única fuente; una copia aquí se quedaría vieja entre
+       * avisos. Y se le SUMA la base histórica leída al abrir, que es lo que hace que
+       * reabrir una conversación no ponga el contador a cero: sin esto, una sesión volvía
+       * sin ninguna cifra hasta su primer turno nuevo.
        *
        * `sesionReal` llega TARDE —`crearEjecutorReal` la anuncia dentro del primer turno—,
-       * así que antes de eso esto contesta `undefined`, que es «no consta» y hace que no se
-       * pinte nada. Es lo correcto: todavía no se ha consumido nada que medir.
+       * así que antes de eso solo hay base, y si tampoco la hay se contesta `undefined`, que
+       * es «no consta» y hace que no se pinte nada.
        */
-      consumo: () => sesionReal?.consumo?.(),
+      consumo: () => {
+        const vivo = consumoVivo();
+        if (vivo === undefined) {
+          return consumoHistorico === undefined ? undefined : consumoDeLaSesion(consumoHistorico);
+        }
+        if (consumoHistorico === undefined) return consumoDeLaSesion(vivo);
+        return consumoDeLaSesion(sumarConsumo(consumoHistorico, vivo));
+      },
       get estadoDeSesion() {
         return estadoDeSesion;
       },

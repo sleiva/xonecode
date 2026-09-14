@@ -1359,13 +1359,24 @@ describe("el contador de tokens, montado por App", () => {
   it("con el mensaje del servidor, el contador aparece en el compositor", () => {
     const { store } = montar();
     act(() => store.aplicar(DEL_SERVIDOR));
+    // El compositor enseña los DOS totales de la conversación, y nada más.
     expect(screen.getByText("2,2k")).toBeTruthy();
-    expect(screen.getByText("2,2k/1,0M")).toBeTruthy();
+    expect(screen.getByText("entrada")).toBeTruthy();
+  });
+
+  it("y la ventana del MISMO mensaje la pinta la barra de estado, no el compositor", () => {
+    // Es la mitad del arreglo que se prueba en el sitio donde importa: un solo mensaje del
+    // cable alimenta los dos sitios, y cada pregunta va al suyo. Aquí se ve que `App` cablea
+    // las dos — el eslabón que se cae solo, porque un prop opcional no lo caza `tsc`.
+    const { store } = montar();
+    act(() => store.aplicar(DEL_SERVIDOR));
+    expect(screen.getByText("ctx 2,2k/1M (0%)")).toBeTruthy();
+    expect(screen.queryByText("2,2k/1M")).toBeNull();
   });
 
   it("y antes de que llegue, no hay contador", () => {
     // Ausente es «no consta»: sin sesión que haya consumido, el hueco se queda vacío.
     montar();
-    expect(screen.queryByTitle(/Tokens de esta sesión/)).toBeNull();
+    expect(screen.queryByTitle(/Tokens de esta conversación/)).toBeNull();
   });
 });

@@ -1,6 +1,6 @@
 import { describe, it, expect, afterEach } from "vitest";
 import { render, screen, cleanup } from "@testing-library/react";
-import { ContadorDeTokens, abreviar } from "./ContadorDeTokens.js";
+import { ContadorDeTokens } from "./ContadorDeTokens.js";
 
 const cuenta = (entrada: number, salida: number, cache = 0) => ({ entrada, salida, cache });
 const sinVentana = { usado: 0 };
@@ -41,17 +41,19 @@ describe("el contador de tokens de la sesión", () => {
 
   it("el desglose va en el `title`, que es donde cabe sin competir con nada", () => {
     render(<ContadorDeTokens consumo={{ modelo: cuenta(100, 10, 7), externo: cuenta(50, 5) , ventana: sinVentana }} />);
-    const t = screen.getByTitle(/Tokens de esta sesión/);
+    const t = screen.getByTitle(/Tokens de esta conversación/);
     expect(t.getAttribute("title")).toContain("agentes externos: 50 entrada / 5 salida");
     expect(t.getAttribute("title")).toContain("caché leída: 7");
     // Y se DICE que no se suman costes, porque son dos proveedores distintos.
     expect(t.getAttribute("title")).toMatch(/TOKENS, no coste/);
+    // Y que esto NO es lo de este turno: cuenta lo anterior, porque sobrevive al cierre.
+    expect(t.getAttribute("title")).toMatch(/sobreviven a cerrar y reabrir/);
   });
 
   it("sin consumo externo, el desglose no lo menciona", () => {
     // Nombrar una cuenta vacía haría pensar que hay un agente externo trabajando.
     render(<ContadorDeTokens consumo={{ modelo: cuenta(100, 10), externo: cuenta(0, 0) , ventana: sinVentana }} />);
-    expect(screen.getByTitle(/Tokens de esta sesión/).getAttribute("title")).not.toContain("externos");
+    expect(screen.getByTitle(/Tokens de esta conversación/).getAttribute("title")).not.toContain("externos");
   });
 
   it("las dos mitades van separadas por un punto, no pegadas", () => {
@@ -63,55 +65,25 @@ describe("el contador de tokens de la sesión", () => {
   });
 });
 
-describe("la ventana del modelo, que es OTRA pregunta", () => {
+describe("la ventana NO se pinta aquí, y eso es la mitad del arreglo", () => {
   const base = { modelo: cuenta(100, 10), externo: cuenta(0, 0) };
 
-  it("con tope, se pinta «ctx usado/tope»", () => {
-    // Los acumulados dicen lo que la sesión ha costado; esto, cuánto margen queda antes de
-    // que el historial desborde — la cifra que avisa de que toca resumir.
-    render(<ContadorDeTokens consumo={{ ...base, ventana: { usado: 2100, tope: 1_000_000 } }} />);
-    expect(screen.getByText("2,1k/1,0M")).toBeTruthy();
+  /**
+   * Aquí vivían `ctx usado/tope` y su porcentaje, y no se fueron por el formato: eran dos
+   * PREGUNTAS distintas en la misma frase —lo que la conversación ha costado (un acumulado,
+   * que solo crece) y cuánto ocupa el historial AHORA (un nivel, que sube y baja)—, y con
+   * dos escalas en una fila se leían como una sola cifra contradictoria. Lo pinta la barra
+   * de estado, que es donde se consulta el margen antes de resumir.
+   */
+  it("con el dato delante, el compositor NO enseña `ctx` ni denominador", () => {
+    const { container } = render(
+      <ContadorDeTokens consumo={{ ...base, ventana: { usado: 2100, tope: 1_000_000 } }} />
+    );
+    expect(container.textContent).toBe("↑100entrada·↓10salida");
   });
 
-  it("SIN tope se pinta lo ocupado y NINGÚN denominador", () => {
-    // Con Ollama no hay tope a propósito: cada modelo local trae el suyo. Un denominador
-    // inventado sería la misma mentira que un porcentaje sobre un número que nadie midió.
-    render(<ContadorDeTokens consumo={{ ...base, ventana: { usado: 2100 } }} />);
-    expect(screen.getByText("2,1k")).toBeTruthy();
-    expect(screen.queryByText(/\//)).toBeNull();
-  });
-
-  it("y el porcentaje solo existe con tope, en el `title`", () => {
-    render(<ContadorDeTokens consumo={{ ...base, ventana: { usado: 500_000, tope: 1_000_000 } }} />);
-    expect(screen.getByTitle(/Tokens de esta sesión/).getAttribute("title")).toContain("(50%)");
-    cleanup();
-    render(<ContadorDeTokens consumo={{ ...base, ventana: { usado: 500_000 } }} />);
-    const t = screen.getByTitle(/Tokens de esta sesión/).getAttribute("title")!;
-    expect(t).toContain("no consta el tope");
-    expect(t).not.toContain("%");
-  });
-
-  it("sin nada ocupado no se pinta: la sesión recién abierta no tiene ventana que enseñar", () => {
-    render(<ContadorDeTokens consumo={{ ...base, ventana: { usado: 0, tope: 1_000_000 } }} />);
-    expect(screen.queryByText("ctx")).toBeNull();
-  });
-});
-
-describe("abreviar", () => {
-  it("por debajo de mil, el número entero: ahí cada token se ve", () => {
-    expect(abreviar(0)).toBe("0");
-    expect(abreviar(999)).toBe("999");
-  });
-
-  it("de mil en adelante, una cifra decimal: 1,2k y 1,9k se distinguen y 1.234 de 1.235 no", () => {
-    expect(abreviar(1000)).toBe("1,0k");
-    expect(abreviar(12_345)).toBe("12,3k");
-    expect(abreviar(2_500_000)).toBe("2,5M");
-  });
-
-  it("lo que no es un número no rompe la fila", () => {
-    // Viene de un `JSON.parse` de la red: un NaN dejaría el contador ilegible.
-    expect(abreviar(Number.NaN)).toBe("0");
-    expect(abreviar(-5)).toBe("0");
+  it("y sin tope tampoco: el campo sigue viajando, pero lo pinta otro", () => {
+    const { container } = render(<ContadorDeTokens consumo={{ ...base, ventana: { usado: 2100 } }} />);
+    expect(container.textContent).toBe("↑100entrada·↓10salida");
   });
 });

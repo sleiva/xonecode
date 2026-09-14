@@ -10,6 +10,7 @@
  */
 
 import type { Proveedor } from "./modelos.js";
+import type { ConsumoDeTurno } from "./actos.js";
 import type { EstadoDeVerificador, VeredictoDeTarea } from "./entrega.js";
 import type { HallazgoDelTurno } from "./events.js";
 import type { LineaDeDiff } from "./diff.js";
@@ -161,6 +162,50 @@ export interface ConsumoDeSesionPorCuenta {
    * `contexto`, y la que la barra del terminal ya pinta como dos cosas.
    */
   contexto: number;
+}
+
+/**
+ * El consumo vivo de una sesión, en la forma que se PERSISTE (`ConsumoDeTurno`).
+ *
+ * Son las mismas cifras con otro nombre en la ventana: lo que aquí se llama `contexto` es un
+ * nivel que se mide al cerrar el turno, y allí se llama `ventana` porque es lo que ocupaba
+ * el historial. Se traduce en una función CON NOMBRE, y no con un literal donde se use, por
+ * la razón de siempre en este repo: una regla de producción compuesta dentro de un cierre
+ * que los tests doblan deja de estar probada y pasa a estar solo escrita.
+ *
+ * Copia las cuentas en vez de reenviarlas: lo que se guarda en el `.jsonl` no puede
+ * compartir objeto con el tracker vivo, o el siguiente turno lo movería por debajo.
+ *
+ * **Un `contexto` de cero sale SIN `ventana`**, y no es una comodidad: es la diferencia entre
+ * «no se midió» y «midió cero». El ejecutor declara `contexto: number`, así que un turno que no
+ * pudo leer la ventana llega con un cero, y estamparlo escribiría en el `.jsonl` una medición
+ * que nadie hizo — con una consecuencia concreta: `consumoDeLosActos` se queda con la última
+ * ventana que CONSTA, así que ese cero falso borraría el nivel que sí midió el turno anterior,
+ * que es justo lo que su regla dice que no puede pasar. Cero no es un nivel: un historial con
+ * turnos dentro nunca ocupa nada.
+ */
+export function consumoPersistible(c: ConsumoDeSesionPorCuenta): ConsumoDeTurno {
+  return {
+    modelo: { ...c.modelo },
+    externo: { ...c.externo },
+    ...(c.contexto === 0 ? {} : { ventana: c.contexto }),
+  };
+}
+
+/**
+ * La vuelta: lo que se guardó en un `fin`, en la forma que el cable ya manda.
+ *
+ * `ventana` ausente —una sesión sin ninguna medición de contexto, o escrita por una versión
+ * anterior— vuelve como `contexto: 0`, que es «no consta» y no «cero tokens»: quien pinta ya
+ * distingue los dos casos por el `> 0` de siempre, y por eso el cero es la traducción
+ * honesta de una ausencia.
+ */
+export function consumoDeLaSesion(c: ConsumoDeTurno): ConsumoDeSesionPorCuenta {
+  return {
+    modelo: { ...c.modelo },
+    externo: { ...c.externo },
+    contexto: c.ventana ?? 0,
+  };
 }
 
 export interface PeticionExterna {

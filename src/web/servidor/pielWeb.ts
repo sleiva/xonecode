@@ -20,7 +20,7 @@
 import type { Piel } from "../../core/turno.js";
 import type { Acto } from "../../core/actos.js";
 import { conLlamadaDeTool } from "../../core/actos.js";
-import type { DetalleDeLinea } from "../../core/actos.js";
+import type { ConsumoDeTurno, ConsumoDeUnaCuenta, DetalleDeLinea } from "../../core/actos.js";
 import type { Fase, PendienteDeAprobacion } from "../../core/events.js";
 
 export interface PielWeb {
@@ -51,7 +51,38 @@ export interface PielWeb {
  */
 const MS_ENTRE_PARCIALES = 80;
 
-export function crearPielWeb(ahora: () => number = Date.now): PielWeb {
+/**
+ * `ahora - antes`, cuenta por cuenta. Los acumulados del tracker son monótonos mientras el
+ * proceso vive —cada llamada al modelo suma—, así que la resta nunca baja de cero; si
+ * bajara sería que la fuente cambió de escala, y un negativo pintado como gasto es peor que
+ * un cero. Por eso se acota, no se confía.
+ */
+function restar(ahora: ConsumoDeUnaCuenta, antes: ConsumoDeUnaCuenta): ConsumoDeUnaCuenta {
+  const d = (a: number, b: number): number => Math.max(0, a - b);
+  return {
+    entrada: d(ahora.entrada, antes.entrada),
+    salida: d(ahora.salida, antes.salida),
+    cache: d(ahora.cache, antes.cache),
+  };
+}
+
+export function crearPielWeb(
+  ahora: () => number = Date.now,
+  /**
+   * Lo consumido ACUMULADO por la sesión, si consta. Es el mismo cierre que la consola ya
+   * tiene (`ConsolaDeProyecto.consumo`, que pregunta a la sesión real), y entra aquí para
+   * que el `fin` pueda llevar el DELTA del turno sin que `core/turno.ts` sepa nada de
+   * consumo: la piel lo consulta al cerrar, no el motor al llamarla.
+   *
+   * Va inyectado y no leído de un cierre propio porque la sesión real llega TARDE —nace
+   * dentro del primer turno—, así que lo que se guarda es la PREGUNTA, no la respuesta.
+   *
+   * Ausente = esta piel no persiste consumo, y entonces el `fin` sale sin `consumo`, que es
+   * «no consta». Las otras dos pieles ni lo reciben: por eso `Piel.fin(ms)` no cambia de
+   * firma y stdio y la TUI siguen byte-idénticas.
+   */
+  consumoAcumulado?: () => ConsumoDeTurno | undefined
+): PielWeb {
   const lista: Acto[] = [];
   let colchon = "";
   let faseActiva: { texto: string; t0: number; fase?: Fase } | undefined;
@@ -65,6 +96,12 @@ export function crearPielWeb(ahora: () => number = Date.now): PielWeb {
   let parcialPensado = false;
   let ultimoPensado = 0;
   const escuchas: ((acto: Acto) => void)[] = [];
+  /**
+   * El acumulado en el ÚLTIMO `fin` estampado, para restarle el de ahora y quedarnos con el
+   * delta. Empieza en ceros porque el tracker de la sesión también: son la misma escala
+   * mientras el proceso viva, y por eso la resta da el gasto del turno.
+   */
+  let estampado: ConsumoDeTurno | undefined;
 
   const notificar = (acto: Acto): void => {
     for (const escucha of escuchas) escucha(acto);
@@ -111,6 +148,38 @@ export function crearPielWeb(ahora: () => number = Date.now): PielWeb {
       ms: Math.max(0, Date.now() - t0),
       ...(fase === undefined ? {} : { fase }),
     });
+  };
+
+  /**
+   * Lo que hay que estampar en el `fin`: el DELTA de este turno, o nada.
+   *
+   * La resta es contra el último acumulado estampado, y por eso `estampado` empieza
+   * `undefined` y no en ceros: sin lector no hay nada que estampar, y una vez hay lector el
+   * primer delta es el acumulado entero —que es lo correcto, porque hasta ahí no había
+   * ningún `fin` en este proceso al que restarle—.
+   *
+   * Un turno que no gastó nada no estampa: `{0,0,0}` ocuparía sitio en el `.jsonl` y
+   * afirmaría una medida que nadie hizo. Ausente ya significa «no consta», y quien lea
+   * tiene que poder distinguirlo (es lo que hace `consumoDeLosActos`).
+   */
+  const deltaDelTurno = (): { consumo?: ConsumoDeTurno } => {
+    const ahora = consumoAcumulado?.();
+    if (ahora === undefined) return {};
+    const antes = estampado;
+    estampado = ahora;
+    // Sin `antes` el delta es el acumulado ENTERO, no una resta contra ceros: hasta aquí no
+    // había ningún `fin` en este proceso, así que todo lo acumulado es de este turno.
+    const delta: ConsumoDeTurno =
+      antes === undefined
+        ? ahora
+        : {
+            modelo: restar(ahora.modelo, antes.modelo),
+            externo: restar(ahora.externo, antes.externo),
+            ...(ahora.ventana === undefined ? {} : { ventana: ahora.ventana }),
+          };
+    const gastado =
+      delta.modelo.entrada + delta.modelo.salida + delta.externo.entrada + delta.externo.salida > 0;
+    return gastado ? { consumo: delta } : {};
   };
 
   const piel: Piel = {
@@ -228,7 +297,7 @@ export function crearPielWeb(ahora: () => number = Date.now): PielWeb {
 
     fin(ms) {
       cerrarFase();
-      empujar({ tipo: "fin", ms });
+      empujar({ tipo: "fin", ms, ...deltaDelTurno() });
     },
 
     fase(texto, fase) {

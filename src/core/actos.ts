@@ -71,9 +71,97 @@ export type Acto =
    * rompería el filtro sin que nada avisara.
    */
   | { tipo: "fase"; texto: string; ms: number; fase?: string }
-  /** El cierre del turno: duración y, si la piel lo sabe, el modelo que lo corrió. */
-  | { tipo: "fin"; ms: number; modelo?: string }
+  /**
+   * El cierre del turno: duración, el modelo que lo corrió y lo que COSTÓ.
+   *
+   * `consumo` es el gasto de ESTE turno y va como **delta**, no como el acumulado de la
+   * sesión. Es la diferencia que hace que sobreviva a un cierre: el tracker vive en el
+   * cierre de `abrirSesionReal` y arranca de cero en cada proceso, así que un acumulado
+   * estampado aquí sería un absoluto de una escala que cada arranque reinicia — y sumar
+   * dos de esos no da nada. Los deltas, en cambio, suman lo mismo dentro de un proceso que
+   * repartidos en tres: reabrir y seguir trabajando da el mismo total que no haber cerrado.
+   *
+   * Se suman los TOKENS de las dos cuentas y nunca su coste, igual que en la pantalla
+   * (`componentes/ContadorDeTokens.tsx`): los del grafo van contra la clave de API del
+   * usuario y los del agente externo contra su suscripción del producto.
+   *
+   * `ventana` es lo que ocupaba el historial al cerrar el turno. Es un NIVEL y no un flujo
+   * —por eso no se suma—, y va aquí para que una sesión reabierta pueda decir cuánto
+   * margen quedaba antes de resumir, que es la única cifra de la que no hay otra fuente.
+   *
+   * Opcional por lo mismo que `detalles` y `fase`: las sesiones guardadas antes de que
+   * existiera no lo traen, y ausente significa «anterior» o «esta piel no lo sabe» —nunca
+   * cero—. Quien lo lea tiene que poder distinguirlo, que es lo que hace `consumoDeLosActos`.
+   */
+  | { tipo: "fin"; ms: number; modelo?: string; consumo?: ConsumoDeTurno }
   | { tipo: "error"; texto: string };
+
+/** Los tokens de UNA cuenta. La forma que ya usa `ConsumoDeSesionPorCuenta` (`core/ports.ts`). */
+export interface ConsumoDeUnaCuenta {
+  entrada: number;
+  salida: number;
+  /** Tokens leídos de caché. Va APARTE de la entrada, como en `vendor/tokenTracking.ts`:
+   *  meterlo dentro inflaría la cifra que se enseña. */
+  cache: number;
+}
+
+/**
+ * Lo que costó un turno: las DOS cuentas por SEPARADO, más lo que ocupaba la ventana al
+ * cerrarlo.
+ *
+ * Las dos cuentas viajan sin sumar hasta la pantalla, que es la regla que ya rige el
+ * mensaje `consumo` (`web/servidor/transporte.ts`): los del grafo van contra la clave de
+ * API del usuario y los del agente externo contra su suscripción del producto, así que
+ * sumarlos aquí perdería el desglose para siempre — una sesión reabierta ya no podría decir
+ * cuánto fue de un agente externo, porque de un total no se vuelve a las partes.
+ *
+ * `ventana` es lo que ocupaba el historial al cerrar el turno. Es un NIVEL y no un flujo
+ * —por eso no se suma—, y va aquí para que una sesión reabierta pueda decir cuánto margen
+ * quedaba antes de resumir, que es la única cifra de la que no hay otra fuente.
+ */
+export interface ConsumoDeTurno {
+  modelo: ConsumoDeUnaCuenta;
+  externo: ConsumoDeUnaCuenta;
+  /** Ocupación del historial al cerrar el turno. Ausente = no consta. */
+  ventana?: number;
+}
+
+/** Suma dos consumos, cuenta por cuenta. La ventana gana la del SEGUNDO: es la más reciente. */
+export function sumarConsumo(a: ConsumoDeTurno, b: ConsumoDeTurno): ConsumoDeTurno {
+  const suma = (x: ConsumoDeUnaCuenta, y: ConsumoDeUnaCuenta): ConsumoDeUnaCuenta => ({
+    entrada: x.entrada + y.entrada,
+    salida: x.salida + y.salida,
+    cache: x.cache + y.cache,
+  });
+  const ventana = b.ventana ?? a.ventana;
+  return {
+    modelo: suma(a.modelo, b.modelo),
+    externo: suma(a.externo, b.externo),
+    ...(ventana === undefined ? {} : { ventana }),
+  };
+}
+
+/**
+ * Lo que costó una CONVERSACIÓN, leída de sus actos.
+ *
+ * Suma los deltas de los `fin` y se queda con la última ventana que CONSTA —la más
+ * reciente que se midió, que es la mejor respuesta a «cuánto ocupa el historial ahora»
+ * cuando el último turno no la midió—. Devuelve `undefined` cuando NINGÚN `fin` lo trae,
+ * que es lo que distingue una sesión anterior a esto de una que gastó cero: pintar un cero
+ * que nadie ha medido es la cifra inventada de siempre (`ContadorDeTokens`), y aquí se
+ * puede caer en ella con una sesión vieja delante.
+ *
+ * Vive en `core/` y no en el servidor porque es una lectura de actos, no de disco: los
+ * actos que le llegan pueden venir del `.jsonl` recién releído o de cualquier otra fuente.
+ */
+export function consumoDeLosActos(actos: readonly Acto[]): ConsumoDeTurno | undefined {
+  let total: ConsumoDeTurno | undefined;
+  for (const acto of actos) {
+    if (acto.tipo !== "fin" || acto.consumo === undefined) continue;
+    total = total === undefined ? { ...acto.consumo } : sumarConsumo(total, acto.consumo);
+  }
+  return total;
+}
 
 /**
  * Una línea de cierre de racha del colapsador del motor (`core/notify.ts`): «→ lee ×3 — …».
