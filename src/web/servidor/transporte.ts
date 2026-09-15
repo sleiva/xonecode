@@ -13,7 +13,7 @@
  */
 import type { Herramienta, InformeDeDispositivos, NombreDeHerramienta } from "../../core/dispositivos.js";
 import type { AjustesDeDispositivos } from "../../core/settings.js";
-import type { Acto } from "../../core/actos.js";
+import type { Acto, ConsumoDeTurno } from "../../core/actos.js";
 import type { Tarea } from "../../core/tareas.js";
 import type { PendienteDeAprobacion } from "../../core/events.js";
 import type { LineaDeDiff } from "../../core/diff.js";
@@ -32,6 +32,61 @@ import type { OpcionDeEntorno, PasoDelVestibulo } from "./vestibulo.js";
 export type InformeDeDispositivosDelCable = Omit<InformeDeDispositivos, "herramientas"> & {
   herramientas: Omit<Herramienta, "ruta">[];
 };
+
+/**
+ * Una sesión tal como viaja dentro del alta de un proyecto. **Sin la raíz**: la fila de la
+ * barra no la pinta, y una ruta de la máquina no cruza este cable (`sinRutas`).
+ * Redeclarada en `apps/web/src/tipos.ts`, como `TareaDelCable`.
+ *
+ * Tiene nombre propio, y no es cosmético: `tipos.test.ts` comprueba que los campos de los dos
+ * lados son los MISMOS, y una fila escrita dentro de otra interfaz no se puede comparar —
+ * el test la ve como parte del alta y no como un tipo. Nombrarla es lo que hace posible que
+ * un campo que se añada en el host y no en el cliente salga rojo en vez de quedarse mudo.
+ */
+export interface SesionDelCable {
+  id: string;
+  titulo: string;
+  /**
+   * Cuándo se tocó por última vez, en ISO. Es lo que ordena la lista y lo que la barra pinta
+   * a la derecha de cada fila. Ausente = el índice no lo dice (una entrada corrupta): la fila
+   * se pinta sin sello y se ordena la última.
+   */
+  ultimoTurno?: string;
+  /**
+   * Esta conversación la abrió una TAREA de fondo, no una persona (`EntradaIndice.tarea`).
+   * Viaja un booleano y no el id: la fila lleva una marca y no el nombre de la tarea, así que
+   * el id se queda en el host.
+   *
+   * **Ausente es «no consta», no «es un chat»**: no la lleva ninguna sesión anterior a esta
+   * marca. Se pinta liso porque liso es lo conservador, no porque conste que sea de una
+   * persona — igual que `compartido` en un proyecto.
+   */
+  deTarea?: true;
+  /**
+   * Esa conversación tiene un turno EN MARCHA ahora mismo, sea o no la que se está mirando.
+   * Es lo que hace visible que cambiar de sesión ya no interrumpe nada: el agente sigue
+   * trabajando en la de antes y la barra lo dice.
+   *
+   * Va en el ALTA y no en un mensaje propio porque el alta se reemite en los dos flancos de
+   * cada turno —de cualquiera de las consolas vivas—, que es exactamente cuando esto cambia.
+   *
+   * **Ausente es «no consta que esté trabajando»**, y eso incluye dos casos que no se pueden
+   * distinguir desde aquí: la sesión no tiene consola viva, o la tiene y está ociosa. Para lo
+   * que la barra pinta da igual; afirmar lo contrario, no.
+   */
+  trabajando?: true;
+  /**
+   * Lo que ha gastado la sesión ENTERA: los deltas de sus turnos, sumados. Es un ACUMULADO,
+   * así que solo crece, y no lleva `ventana` —«cuánto ocupa el historial ahora» es una
+   * pregunta de la sesión ABIERTA, y congelada en una cerrada sería un «ahora» de hace días
+   * (lo quita `core/actos.ts#acumularTotales`)—.
+   *
+   * **Ausente es «no consta», nunca cero**: no lo trae ninguna sesión anterior a esto que la
+   * siembra no haya alcanzado. Un `{0,0}` afirmaría que la sesión salió gratis, y con él la
+   * barra pintaría un `↑0 ↓0` que nadie ha medido.
+   */
+  consumo?: ConsumoDeTurno;
+}
 
 export type MensajeAlCliente =
   | { clase: "acto"; acto: Acto }
@@ -446,40 +501,7 @@ export type MensajeAlCliente =
          * compartió es un dato de una persona que esta pantalla no necesita.
          */
         compartido?: boolean;
-        sesiones?: {
-          id: string;
-          titulo: string;
-          /**
-           * Cuándo se tocó por última vez, en ISO. Es lo que ordena la lista y lo que la
-           * barra pinta a la derecha de cada fila. Ausente = el índice no lo dice (una
-           * entrada corrupta): la fila se pinta sin sello y se ordena la última.
-           */
-          ultimoTurno?: string;
-          /**
-           * Esta conversación la abrió una TAREA de fondo, no una persona
-           * (`EntradaIndice.tarea`). Viaja un booleano y no el id: la fila lleva una marca
-           * y no el nombre de la tarea, así que el id se queda en el host.
-           *
-           * **Ausente es «no consta», no «es un chat»**: no la lleva ninguna sesión
-           * anterior a esta marca. Se pinta liso porque liso es lo conservador, no porque
-           * conste que sea de una persona — igual que `compartido` en un proyecto.
-           */
-          deTarea?: true;
-          /**
-           * Esa conversación tiene un turno EN MARCHA ahora mismo, sea o no la que se está
-           * mirando. Es lo que hace visible que cambiar de sesión ya no interrumpe nada: el
-           * agente sigue trabajando en la de antes y la barra lo dice.
-           *
-           * Va en el ALTA y no en un mensaje propio porque el alta se reemite en los dos
-           * flancos de cada turno —de cualquiera de las consolas vivas—, que es exactamente
-           * cuando esto cambia.
-           *
-           * **Ausente es «no consta que esté trabajando»**, y eso incluye dos casos que no
-           * se pueden distinguir desde aquí: la sesión no tiene consola viva, o la tiene y
-           * está ociosa. Para lo que la barra pinta da igual; afirmar lo contrario, no.
-           */
-          trabajando?: true;
-        }[];
+        sesiones?: SesionDelCable[];
         /** La copia local YA existe: se puede abrir sin bajar nada ni preguntar rama. */
         local?: boolean;
         /**

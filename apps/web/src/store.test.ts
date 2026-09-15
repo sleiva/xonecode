@@ -374,6 +374,57 @@ describe("las sesiones de la barra: de quién es cada una y cuándo se tocó", (
     s.aplicar(alta([{ id: "s7", titulo: "x", deTarea: "true" }]));
     expect(s.leer().alta?.proyectos[0]?.sesiones?.[0]).toEqual({ id: "s7", titulo: "x" });
   });
+
+  it("el gasto de la sesión sobrevive a la lista blanca, y sin la ventana", () => {
+    // `ventana` es «cuánto ocupa el historial AHORA»: una pregunta de la sesión abierta, y
+    // congelada en una cerrada sería un «ahora» de hace días. El host lo quita al acumular
+    // (`acumularTotales`), y el store lo tira igual — dos llaves de la misma puerta, porque
+    // una sola es la que se ha olvidado.
+    const s = crearStoreDelCliente();
+    s.aplicar(
+      alta([
+        {
+          id: "s9",
+          titulo: "arreglar el alta",
+          consumo: { modelo: { entrada: 11_000, salida: 200, cache: 9_000 }, externo: { entrada: 0, salida: 0 }, ventana: 5_000 },
+        },
+      ])
+    );
+    expect(s.leer().alta?.proyectos[0]?.sesiones?.[0]).toEqual({
+      id: "s9",
+      titulo: "arreglar el alta",
+      // Y cada cuenta sale con sus tres llaves: `cuenta()` normaliza la FORMA, que es lo que
+      // hace que el componente no tenga que preguntarse si `cache` existe.
+      consumo: { modelo: { entrada: 11_000, salida: 200, cache: 9_000 }, externo: { entrada: 0, salida: 0, cache: 0 } },
+    });
+  });
+
+  it("un consumo a CERO se conserva: es una medida, no una ausencia", () => {
+    // La sesión que salió gratis existe, y su cifra es un cero MEDIDO. Lo que no se pinta es
+    // el `{0,0}` que nadie midió, y de eso decide el componente (`hayCosteQueEnsenar`), no
+    // el store: aquí se guarda lo que vino.
+    const s = crearStoreDelCliente();
+    s.aplicar(alta([{ id: "s9", titulo: "x", consumo: { modelo: { entrada: 0, salida: 0, cache: 0 }, externo: { entrada: 0, salida: 0, cache: 0 } } }]));
+    expect(s.leer().alta?.proyectos[0]?.sesiones?.[0]).toEqual({
+      id: "s9",
+      titulo: "x",
+      consumo: { modelo: { entrada: 0, salida: 0, cache: 0 }, externo: { entrada: 0, salida: 0, cache: 0 } },
+    });
+  });
+
+  it("un consumo que no es un objeto se descarta: ausente, nunca ceros", () => {
+    // Unos ceros AFIRMAN una medida. Si lo que llegó no es un objeto —una cadena, un número,
+    // un `null`—, lo honesto es «no consta», que es justo lo que no se pinta.
+    //
+    // Lo de DENTRO de las dos cuentas lo resuelve `cuenta()`, la guarda del módulo que usa
+    // TAMBIÉN el mensaje vivo del turno: una regla y no dos, porque dos copias de una guarda
+    // es como divergen, y la que se queda vieja es la que deja pasar la cifra inventada.
+    const s = crearStoreDelCliente();
+    for (const basura of ["11k", 11000, null, undefined, [], true]) {
+      s.aplicar(alta([{ id: "s9", titulo: "x", consumo: basura }]));
+      expect(s.leer().alta?.proyectos[0]?.sesiones?.[0]).toEqual({ id: "s9", titulo: "x" });
+    }
+  });
 });
 
 describe("el trabajo sin commitear que ya había al abrir", () => {

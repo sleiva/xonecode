@@ -1,7 +1,8 @@
-import { mkdtempSync, writeFileSync, mkdirSync, readFileSync, existsSync } from "node:fs";
+import { mkdtempSync, writeFileSync, readFileSync, existsSync, appendFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, it, expect } from "vitest";
+import type { Acto } from "../../core/actos.js";
 import { tituloDesde,
   crearSesion,
   anotarActo,
@@ -12,9 +13,21 @@ import { tituloDesde,
   elegirDispositivo,
   IndiceDeSesionesRoto,
   marcarTareaDeSesion,
+  sembrarConsumosPendientes,
+  SESIONES_A_SEMBRAR,
+  TOPE_DE_BYTES_DE_SIEMBRA,
 } from "./sesiones.js";
 
 const proyecto = () => mkdtempSync(join(tmpdir(), "xonecode-proyecto-"));
+
+/** Quita el acumulado del índice a mano: es el estado de una sesión anterior a que se
+ *  estampara, que es justo cuando la siembra tiene algo que hacer. */
+const quitarConsumo = (raiz: string): void => {
+  const ruta = join(raiz, ".xonecode", "sesiones", "indice.json");
+  const entradas = JSON.parse(readFileSync(ruta, "utf8"));
+  for (const e of entradas) delete e.consumo;
+  writeFileSync(ruta, JSON.stringify(entradas));
+};
 
 describe("sesiones por proyecto", () => {
   it("el título sale de la primera prosa del usuario", () => {
@@ -123,6 +136,254 @@ describe("marcarTareaDeSesion: la siembra de las sesiones de tarea que ya exist�
     const raiz = proyecto();
     expect(marcarTareaDeSesion(raiz, "fantasma", "t1")).toBe(false);
     expect(listarSesiones(raiz)).toEqual([]);
+  });
+});
+
+describe("lo que ha gastado la sesión, estampado en el índice", () => {
+  const cuenta = (entrada: number, salida: number, cache = 0) => ({ entrada, salida, cache });
+  const fin = (entrada: number, salida: number, ventana?: number): Acto => ({
+    tipo: "fin",
+    ms: 10,
+    consumo: {
+      modelo: cuenta(entrada, salida),
+      externo: cuenta(0, 0),
+      ...(ventana === undefined ? {} : { ventana }),
+    },
+  });
+
+  it("un `fin` con consumo lo estampa, sin la ventana", () => {
+    // La ventana NO viaja: es «cuánto ocupa el historial AHORA» y en una sesión cerrada
+    // sería un «ahora» de hace días que alguien leería como el de hoy. Sigue en el `.jsonl`.
+    const raiz = proyecto();
+    const id = crearSesion(raiz);
+    anotarActo(raiz, id, fin(100, 10, 5000));
+    expect(listarSesiones(raiz)[0].consumo).toEqual({ modelo: cuenta(100, 10), externo: cuenta(0, 0) });
+  });
+
+  it("dos `fin` SUMAN: el acumulado es la sesión, no el último turno", () => {
+    const raiz = proyecto();
+    const id = crearSesion(raiz);
+    anotarActo(raiz, id, fin(100, 10));
+    anotarActo(raiz, id, fin(50, 5));
+    expect(listarSesiones(raiz)[0].consumo?.modelo).toEqual(cuenta(150, 15));
+  });
+
+  it("un consumo a CERO se estampa: es una medida, no una ausencia", () => {
+    // `{0,0}` es lo que devuelve un turno que se midió y no gastó —o que gastó tan poco que
+    // redondea a cero—, y es un dato. Lo que no se estampa es «no consta», que es no tener
+    // el acto o no tener el campo.
+    const raiz = proyecto();
+    const id = crearSesion(raiz);
+    anotarActo(raiz, id, fin(0, 0));
+    expect(listarSesiones(raiz)[0].consumo).toEqual({ modelo: cuenta(0, 0), externo: cuenta(0, 0) });
+  });
+
+  it("sin `fin` con consumo no se escribe el campo: ausente es «no consta»", () => {
+    // Ni con actos de otra clase, ni con un `fin` de una sesión anterior a que se midiera.
+    // Un `{0,0}` aquí afirmaría que la sesión salió gratis, y con él la barra pintaría un
+    // `↑0 ↓0` que nadie ha medido.
+    const raiz = proyecto();
+    const id = crearSesion(raiz);
+    anotarActo(raiz, id, { tipo: "usuario", texto: "hola" });
+    anotarActo(raiz, id, { tipo: "fin", ms: 5 });
+    expect(listarSesiones(raiz)[0].consumo).toBeUndefined();
+    expect("consumo" in JSON.parse(readFileSync(join(raiz, ".xonecode", "sesiones", "indice.json"), "utf8"))[0]).toBe(
+      false
+    );
+  });
+
+  it("un acto de otra clase después NO borra el acumulado", () => {
+    const raiz = proyecto();
+    const id = crearSesion(raiz);
+    anotarActo(raiz, id, fin(100, 10));
+    anotarActo(raiz, id, { tipo: "usuario", texto: "y ahora otra cosa" });
+    expect(listarSesiones(raiz)[0].consumo?.modelo).toEqual(cuenta(100, 10));
+  });
+
+  it("una sesión anterior a esto que recibe un turno suma la SESIÓN ENTERA, no solo ese turno", () => {
+    // La trampa que decide el diseño: la entrada existe pero NO trae acumulado —es de antes
+    // de que esto se estampara—, y sumarle el delta de este turno dejaría en el índice el
+    // gasto del ÚLTIMO turno con la forma de un total. Una sesión de 11k que hace un turno
+    // de 3k quedaría en 3k, y nadie lo notaría porque el número es plausible. Por eso ahí se
+    // relee el `.jsonl` —que ya lleva este acto dentro— y se suma entero.
+    const raiz = proyecto();
+    const id = crearSesion(raiz);
+    // Una sesión "vieja": sus actos están en el `.jsonl` y su entrada no tiene el acumulado.
+    anotarActo(raiz, id, fin(7000, 4000));
+    const indice = join(raiz, ".xonecode", "sesiones", "indice.json");
+    const entradas = JSON.parse(readFileSync(indice, "utf8"));
+    delete entradas[0].consumo;
+    writeFileSync(indice, JSON.stringify(entradas));
+    // Y ahora un turno nuevo, con su delta.
+    anotarActo(raiz, id, fin(3000, 200));
+    expect(listarSesiones(raiz)[0].consumo?.modelo).toEqual(cuenta(10_000, 4_200));
+  });
+
+  it("anotar sin entrada previa también estampa la sesión entera, no solo el acto suelto", () => {
+    // El camino defensivo (índice perdido a mitad): la entrada se crea aquí, así que no hay
+    // acumulado del que partir y vale la misma regla.
+    const raiz = proyecto();
+    anotarActo(raiz, "s-suelta", fin(400, 40));
+    expect(listarSesiones(raiz)[0].consumo?.modelo).toEqual(cuenta(400, 40));
+  });
+});
+
+describe("sembrarConsumosPendientes: el acumulado de las sesiones que ya existían", () => {
+  const cuenta = (entrada: number, salida: number, cache = 0) => ({ entrada, salida, cache });
+  const fin = (entrada: number, salida: number, ventana?: number): Acto => ({
+    tipo: "fin",
+    ms: 10,
+    consumo: {
+      modelo: cuenta(entrada, salida),
+      externo: cuenta(0, 0),
+      ...(ventana === undefined ? {} : { ventana }),
+    },
+  });
+
+  it("rellena lo que falta y dice cuántas tocó", () => {
+    const raiz = proyecto();
+    const id = crearSesion(raiz);
+    anotarActo(raiz, id, fin(100, 10));
+    quitarConsumo(raiz);
+    expect(sembrarConsumosPendientes(raiz)).toBe(1);
+    expect(listarSesiones(raiz)[0].consumo?.modelo).toEqual(cuenta(100, 10));
+  });
+
+  /**
+   * El mismo invariante que el estampado, y el que se escapó: los dos caminos que escriben
+   * `EntradaIndice.consumo` tienen que normalizar igual, porque `consumoDeLosActos` —que es de
+   * quien tira la siembra— se queda a propósito con la ventana del último `fin` que la traiga.
+   * La siembra la escribía tal cual, y como hoy NADIE pinta ese campo (la ventana va en su
+   * propio mensaje, `contexto`), el índice se quedaba con un «cuánto ocupa el historial ahora»
+   * de un turno de anteayer sin que nada se pusiera rojo. Se vio leyendo un `indice.json` real.
+   */
+  it("la ventana del `.jsonl` NO se cuela en el acumulado sembrado", () => {
+    const raiz = proyecto();
+    const id = crearSesion(raiz);
+    anotarActo(raiz, id, fin(100, 10, 5000));
+    anotarActo(raiz, id, fin(20, 2, 4482));
+    quitarConsumo(raiz);
+    expect(sembrarConsumosPendientes(raiz)).toBe(1);
+    expect(listarSesiones(raiz)[0].consumo).toEqual({ modelo: cuenta(120, 12), externo: cuenta(0, 0) });
+  });
+
+  it("es MONOTÓNICA: la segunda pasada no toca nada y devuelve 0", () => {
+    // Corre en la primera lista de cada raíz, y podría volver a correr. Solo puede AÑADIR:
+    // no pisa un acumulado puesto —el que escribió `anotarActo` es el que consta— y por eso
+    // correrla de más no puede estropear nada.
+    const raiz = proyecto();
+    const id = crearSesion(raiz);
+    anotarActo(raiz, id, fin(100, 10));
+    quitarConsumo(raiz);
+    expect(sembrarConsumosPendientes(raiz)).toBe(1);
+    expect(sembrarConsumosPendientes(raiz)).toBe(0);
+    expect(listarSesiones(raiz)[0].consumo?.modelo).toEqual(cuenta(100, 10));
+  });
+
+  it("no pisa el acumulado que ya consta, aunque el `.jsonl` diga otra cosa", () => {
+    // El del índice es el que escribió quien cerró el turno; el `.jsonl` podría estar
+    // incompleto (una línea truncada por un crash). Gana el que consta, y no se recalcula.
+    const raiz = proyecto();
+    const id = crearSesion(raiz);
+    anotarActo(raiz, id, fin(100, 10));
+    anotarActo(raiz, id, fin(50, 5));
+    expect(sembrarConsumosPendientes(raiz)).toBe(0);
+    expect(listarSesiones(raiz)[0].consumo?.modelo).toEqual(cuenta(150, 15));
+  });
+
+  it("una sesión sin ningún `fin` con consumo se queda sin el campo: no se estampa un cero", () => {
+    const raiz = proyecto();
+    const id = crearSesion(raiz);
+    anotarActo(raiz, id, { tipo: "usuario", texto: "hola" });
+    expect(sembrarConsumosPendientes(raiz)).toBe(0);
+    expect(listarSesiones(raiz)[0].consumo).toBeUndefined();
+  });
+
+  it("no da de alta la entrada que falte: un `.jsonl` suelto no resucita en la barra", () => {
+    // Igual que `marcarTareaDeSesion`: un `.jsonl` sin entrada en el índice es una sesión
+    // que alguien borró —o una a medio borrar—, y devolverla a la barra la dejaría apuntando
+    // a un fichero que puede no estar.
+    const raiz = proyecto();
+    const id = crearSesion(raiz);
+    anotarActo(raiz, id, fin(100, 10));
+    writeFileSync(
+      join(raiz, ".xonecode", "sesiones", "s-fantasma.jsonl"),
+      JSON.stringify(fin(9999, 9999)) + "\n"
+    );
+    quitarConsumo(raiz);
+    expect(sembrarConsumosPendientes(raiz)).toBe(1);
+    expect(listarSesiones(raiz).map((e) => e.id)).toEqual([id]);
+  });
+
+  it("un `.jsonl` que no está se salta sin tumbar la siembra de los demás", () => {
+    // El índice nombra sesiones cuyo fichero puede haberse ido por debajo (borrado a mano).
+    const raiz = proyecto();
+    const viva = crearSesion(raiz, "s-viva");
+    anotarActo(raiz, viva, fin(100, 10));
+    const perdida = crearSesion(raiz, "s-perdida");
+    anotarActo(raiz, perdida, fin(7, 7));
+    quitarConsumo(raiz);
+    rmSync(join(raiz, ".xonecode", "sesiones", `${perdida}.jsonl`));
+    expect(sembrarConsumosPendientes(raiz)).toBe(1);
+    const porId = new Map(listarSesiones(raiz).map((e) => [e.id, e]));
+    expect(porId.get(viva)?.consumo?.modelo).toEqual(cuenta(100, 10));
+    expect(porId.get(perdida)?.consumo).toBeUndefined();
+  });
+
+  it("va de las MÁS RECIENTES hacia atrás: el tope de número se queda con lo último", () => {
+    // El tope tiene que ELEGIR, y lo que se mira en la barra es lo último que se hizo. Se
+    // fijan los `ultimoTurno` a mano y no con el reloj: `new Date()` con resolución de
+    // milisegundo empata entre iteraciones de un bucle, y entonces el orden sería el de
+    // inserción y el test diría otra cosa que la que cree.
+    const raiz = proyecto();
+    for (let i = 0; i < 14; i++) {
+      const id = crearSesion(raiz, `s-${i}`);
+      anotarActo(raiz, id, fin(i + 1, 0));
+    }
+    const indice = join(raiz, ".xonecode", "sesiones", "indice.json");
+    const entradas = JSON.parse(readFileSync(indice, "utf8"));
+    for (const e of entradas) {
+      delete e.consumo;
+      e.ultimoTurno = `2026-09-01T00:${String(59 - Number(String(e.id).slice(2))).padStart(2, "0")}:00.000Z`;
+    }
+    writeFileSync(indice, JSON.stringify(entradas));
+
+    expect(sembrarConsumosPendientes(raiz)).toBe(SESIONES_A_SEMBRAR);
+    // `s-0` es la más reciente; `s-12` y `s-13` las dos más viejas, y son las que se quedan
+    // sin sembrar.
+    const sinConsumo = listarSesiones(raiz)
+      .filter((e) => e.consumo === undefined)
+      .map((e) => e.id);
+    expect(sinConsumo.sort()).toEqual(["s-12", "s-13"]);
+  });
+
+  it("un `.jsonl` por encima del tope de bytes no se lee, y no se estampa un parcial", () => {
+    // La siembra es SÍNCRONA y corre en el bucle de eventos: sin este tope, un fichero
+    // enorme congelaría el servidor mientras lo lee. Lo que se pierde es una cifra en la
+    // barra hasta que esa sesión se use — y entonces la pondrá `anotarActo`, entera—, así
+    // que no se estampa a medias ni se inventa nada: el campo se queda ausente.
+    const raiz = proyecto();
+    const id = crearSesion(raiz);
+    anotarActo(raiz, id, fin(100, 10));
+    appendFileSync(
+      join(raiz, ".xonecode", "sesiones", `${id}.jsonl`),
+      JSON.stringify({ tipo: "usuario", texto: "x".repeat(TOPE_DE_BYTES_DE_SIEMBRA) }) + "\n"
+    );
+    quitarConsumo(raiz);
+    expect(sembrarConsumosPendientes(raiz)).toBe(0);
+    expect(listarSesiones(raiz)[0].consumo).toBeUndefined();
+  });
+
+  it("con el índice roto no escribe nada, en vez de recuperarlo por su cuenta", () => {
+    // La lectura que alimenta una escritura PARA ante un JSON roto (`leerIndiceOAbortar`):
+    // recuperarlo aquí borraría del disco todas las sesiones que el índice todavía nombraba.
+    const raiz = proyecto();
+    const id = crearSesion(raiz);
+    anotarActo(raiz, id, fin(100, 10));
+    const indice = join(raiz, ".xonecode", "sesiones", "indice.json");
+    writeFileSync(indice, "{roto");
+    expect(() => sembrarConsumosPendientes(raiz)).toThrow(IndiceDeSesionesRoto);
+    expect(readFileSync(indice, "utf8")).toBe("{roto");
   });
 });
 

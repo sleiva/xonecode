@@ -106,7 +106,52 @@ describe("tipos del cliente", () => {
     // la misma mentira con más pasos.
     expect(fila).toEqual(FILA_COMPLETA);
   });
+
+  /**
+   * Y lo mismo para `SesionDelCable`, que es la fila de la que cuelga el gasto de cada sesión
+   * en la barra. Nació con nombre propio por esto mismo: su tipo vivía ESCRITO DENTRO del alta
+   * de `transporte.ts`, y una fila embebida en otra interfaz no se puede comparar.
+   */
+  it("los campos de SesionDelCable del cliente y del host no divergen", () => {
+    expect(camposDeInterfaz(RUTA_TIPOS, "SesionDelCable")).toEqual(
+      camposDeInterfaz(RUTA_TRANSPORTE, "SesionDelCable")
+    );
+  });
+
+  it("la lista blanca del store no se come ningún campo declarado de SesionDelCable", async () => {
+    const { crearStoreDelCliente } = await import("./store.js");
+    const s = crearStoreDelCliente();
+    s.aplicar({
+      clase: "alta",
+      pasos: [],
+      proveedores: [],
+      entornos: [],
+      registrados: [],
+      ramas: [],
+      // El alta entera se descarta si esto no es un booleano de verdad: es el campo que
+      // distingue la maqueta completa del hueco de «elige un proyecto».
+      proyectoAbierto: true,
+      proyectos: [{ id: "p1", nombre: "Tienda", sesiones: [FILA_COMPLETA_DE_SESION] }],
+    });
+    const fila = s.leer().alta!.proyectos[0]!.sesiones![0]!;
+    expect(Object.keys(fila).sort()).toEqual(camposDeInterfaz(RUTA_TIPOS, "SesionDelCable"));
+    expect(fila).toEqual(FILA_COMPLETA_DE_SESION);
+  });
 });
+
+/**
+ * Una fila de sesión con TODOS los campos que `SesionDelCable` declara, por el mismo motivo que
+ * `FILA_COMPLETA`: quien la vigila es el test de arriba, no un `tsc` —los `.test.ts` del cliente
+ * no entran en ningún proyecto de `tsc`, y el del host solo cubre `src/`—.
+ */
+const FILA_COMPLETA_DE_SESION = {
+  id: "s1",
+  titulo: "Arregla el alta",
+  ultimoTurno: "2026-09-12T09:14:02.000Z",
+  deTarea: true as const,
+  trabajando: true as const,
+  consumo: { modelo: { entrada: 11_000, salida: 200, cache: 9_000 }, externo: { entrada: 7, salida: 3, cache: 0 } },
+};
 
 /**
  * Una fila con TODOS los campos que `TareaDelCable` declara. `Required<…>` no la vigila

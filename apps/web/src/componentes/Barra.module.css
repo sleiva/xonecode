@@ -115,6 +115,12 @@
   gap: 6px;
   padding: 0;
   overflow: hidden;
+  /* Este botón es el CONTENEDOR del que cuelga la consulta de abajo: él sabe de qué ancho
+     dispone la fila. Se declara aquí y no en el viewport porque el ancho de la barra lo pone
+     JS (`Maqueta.tsx`, el tirador) — ver la regla de la cifra, al final del fichero.
+
+     Y es seguro porque su tamaño no depende de lo que lleve dentro: `flex: 1` ya lo fija. */
+  container-type: inline-size;
 }
 
 /* El `<select>` del entorno: el nivel que su barra no tiene (ella va de workspace a
@@ -306,13 +312,17 @@
   flex-shrink: 0;
 }
 
-/* La marca de una sesión de TAREA y su sello de fecha, los dos a la derecha del título.
-   `margin-left: auto` en el primero de los dos empuja el par al borde y deja que el título
-   se coma el resto; el título ya trunca con la elipsis de `Rows.module.css`.
+/* La marca de una sesión de TAREA, la ficha (gasto + sello de fecha) y su sello, a la derecha
+   del título. El empuje al borde lo hace el PRIMERO de los dos que haya: la marca si está, y si
+   no la ficha —un envoltorio y no tres piezas sueltas, porque con las piezas sueltas un
+   `margin-left: auto` repartido deja huecos absurdos—. El título se come el resto y ya trunca
+   con la elipsis de `Rows.module.css`.
 
    Van con `flex-shrink: 0` porque en 280 px el que cede tiene que ser el título: un sello a
-   medias («9 sep 0…») no dice la hora, y media palabra «Tar…» no dice nada. */
+   medias («9 sep 0…») no dice la hora, media palabra «Tar…» no dice nada, y una cifra a medias
+   miente. */
 .marcaDeTarea,
+.fichaDeSesion,
 .selloDeFecha {
   flex-shrink: 0;
   font-size: 10px;
@@ -332,14 +342,53 @@
   font-family: var(--dsw-font-family-mono, monospace);
 }
 
-/* Si no hay marca, el que empuja al borde es el sello. Dos reglas y no un envoltorio más:
-   el hueco es el del botón de la fila, que ya es flex por la hoja copiada. */
-.marcaDeTarea + .selloDeFecha {
+/* El gasto de la sesión y su fecha, pegados. La CIFRA va delante del sello a propósito: la
+   lista se ordena por fecha y esa columna es lo que se lee de un vistazo, así que tiene que
+   quedarse quieta cuando la cifra aparece o desaparece. */
+.fichaDeSesion {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: auto;
+}
+
+.marcaDeTarea + .fichaDeSesion {
   margin-left: 6px;
 }
 
-.cuerpoDeFila > .selloDeFecha:not(.marcaDeTarea + .selloDeFecha) {
-  margin-left: auto;
+/* El gasto, con su propio envoltorio para poder retirarlo ENTERO cuando el hueco es estrecho:
+   es una pieza entera —la Σ y su cifra—, y a medias no se puede leer. */
+.cifraDeLaFicha {
+  display: inline-flex;
+  align-items: center;
+}
+
+/* Y la cifra se retira cuando la fila es estrecha. Es una CONSULTA DE CONTENEDOR y no un
+   `@media`: con la misma ventana y la barra encogida, un `@media` no dispararía y la cifra se
+   comería el título igual. El contenedor lo declara `.cuerpoDeFila`, arriba.
+
+   El criterio: el título no baja de lo que YA tiene a la barra más estrecha. Medido en
+   pantalla —seis filas de sesión, barra a 220 (el mínimo): fila 155 y 55 px de título—, ese
+   suelo son 55. La cifra cuesta 46 px de título (40 de cifra más el hueco de 6), así que el
+   título llega justo a 55 cuando la fila mide 200,5: de ahí el 200.
+
+   Y el cruce se comprobó arrastrando el tirador, no restando: fila 200 → escondida (título
+   100,3), fila 201 → pintada (título 55,5).
+
+   El número no es el mismo que cuando la cifra eran dos: `↑77,7k ↓20,5k` ocupaba 86 px y su
+   umbral era 260, o sea que la cifra NO salía a la omisión (fila 255, barra 320) y había que
+   arrastrar la barra a 326 para verla. Con una sola cifra el mismo criterio baja el umbral a
+   200 y a la omisión sale: el título pierde esos 46 px y conserva 109,5 —los 103 que mide el
+   rótulo más largo que escribe la aplicación, «Tarea de fondo», más seis de aire—.
+
+   Y el sello de la fecha no se mueve cuando la cifra aparece: medido a 220 y a 320, su borde
+   derecho cae en `barra − 45` en todas las filas y en los dos casos. Por eso la cifra va
+   DELANTE del sello y no detrás: la columna que se lee de un vistazo —la lista se ordena por
+   fecha— se queda quieta. */
+@container (max-width: 200px) {
+  .cifraDeLaFicha {
+    display: none;
+  }
 }
 
 /* «abriendo…» / «descargando…» en la fila donde se pulsó.

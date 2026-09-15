@@ -63,6 +63,34 @@ export interface ConsumoDeTurno {
   ventana?: number;
 }
 
+/**
+ * Una sesión tal como viaja dentro del alta de un proyecto. Espejo de `SesionDelCable`
+ * (`web/servidor/transporte.ts`), y con nombre propio por el mismo motivo que
+ * `TareaDelCable`: `tipos.test.ts` compara los campos de los dos lados, y una fila escrita
+ * dentro de otra interfaz no se puede comparar — un campo que se añada allí y no aquí saldría
+ * mudo en vez de rojo.
+ */
+export interface SesionDelCable {
+  id: string;
+  titulo: string;
+  /** Cuándo se tocó por última vez, ISO. Ordena la lista y se pinta a la derecha.
+   *  Ausente = el índice no lo dice; sin sello y la última. */
+  ultimoTurno?: string;
+  /** La abrió una TAREA de fondo, no una persona. **Ausente es «no consta»**: no la
+   *  llevan las sesiones anteriores a la marca, y se pintan lisas porque liso es lo
+   *  conservador, no porque conste que sean de alguien. */
+  deTarea?: true;
+  /** Turno en marcha en esa conversación ahora mismo, esté o no delante. Ausente =
+   *  no consta. Ver `transporte.ts`. */
+  trabajando?: true;
+  /** Lo que ha gastado la sesión ENTERA, sumando los deltas de sus turnos: un acumulado que
+   *  solo crece. NO lleva `ventana`, que es «cuánto ocupa el historial ahora» —una pregunta
+   *  de la sesión abierta, y congelada en una cerrada sería un «ahora» de hace días—.
+   *  **Ausente es «no consta», nunca cero**: un `{0,0}` afirmaría que la sesión salió gratis,
+   *  y sobre él se pintaría un `↑0 ↓0` que nadie ha medido. */
+  consumo?: ConsumoDeTurno;
+}
+
 export type Acto =
   | { tipo: "usuario"; texto: string }
   | { tipo: "asistente"; texto: string }
@@ -311,20 +339,7 @@ export type MensajeAlCliente =
          *  lo mismo que «es tuyo»: entonces no se pinta etiqueta. Booleano y no el correo
          *  del propietario, que el host descarta a propósito. */
         compartido?: boolean;
-        sesiones?: {
-          id: string;
-          titulo: string;
-          /** Cuándo se tocó por última vez, ISO. Ordena la lista y se pinta a la derecha.
-           *  Ausente = el índice no lo dice; sin sello y la última. */
-          ultimoTurno?: string;
-          /** La abrió una TAREA de fondo, no una persona. **Ausente es «no consta»**: no la
-           *  llevan las sesiones anteriores a la marca, y se pintan lisas porque liso es lo
-           *  conservador, no porque conste que sean de alguien. */
-          deTarea?: true;
-          /** Turno en marcha en esa conversación ahora mismo, esté o no delante. Ausente =
-           *  no consta. Ver `transporte.ts`. */
-          trabajando?: true;
-        }[];
+        sesiones?: SesionDelCable[];
         /** La copia local ya existe: abrirlo no baja nada ni pregunta rama. */
         local?: boolean;
         /** Alguna sesión de este proyecto trabaja AHORA. No se deriva de las filas: una

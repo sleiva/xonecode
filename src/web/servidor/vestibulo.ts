@@ -139,8 +139,9 @@ export interface PuertoDeSesiones {
   /** El id lo decide quien abre: es también el `thread_id` del grafo. */
   crear(raiz: string, id?: string): string;
   /** El índice de sesiones de un proyecto ya bajado. Una carpeta que no existe es una
-   *  lista vacía, no un error: el proyecto todavía no se ha abierto nunca. */
-  listar(raiz: string): { id: string; titulo: string; ultimoTurno?: string; tarea?: string }[];
+   *  lista vacía, no un error: el proyecto todavía no se ha abierto nunca. `consumo` es el
+   *  acumulado de la sesión entera, y ausente es «no consta» — nunca cero. */
+  listar(raiz: string): { id: string; titulo: string; ultimoTurno?: string; tarea?: string; consumo?: ConsumoDeTurno }[];
   /** Da de alta la entrada del índice. `tarea` es el id de la TAREA que abrió la sesión, y
    *  solo lo trae la puerta de las tareas: ausente es «no consta». */
   crear(raiz: string, id?: string, tarea?: string): string;
@@ -548,8 +549,11 @@ export interface Vestibulo {
    * vale igual para un proyecto ya bajado que para uno que no.
    */
   raizDeProyecto(entorno: string, proyecto: string): string;
-  /** Las sesiones guardadas de una copia local. Sin copia, lista vacía. */
-  sesionesDe(raiz: string): { id: string; titulo: string; ultimoTurno?: string; tarea?: string }[];
+  /** Las sesiones guardadas de una copia local. Sin copia, lista vacía. `consumo` es el
+   *  acumulado de la sesión entera, y ausente es «no consta» — nunca cero. */
+  sesionesDe(
+    raiz: string
+  ): { id: string; titulo: string; ultimoTurno?: string; tarea?: string; consumo?: ConsumoDeTurno }[];
   /**
    * Borra una sesión guardada, con su marca de git.
    *
@@ -1749,13 +1753,14 @@ export function crearVestibulo(opciones: OpcionesDelVestibulo): Vestibulo {
       // puerto se lo traga y devuelve vacío, que es la verdad.
       try {
         // Campo a campo y no la entrada entera: del índice cuelgan además `creada` y el
-        // `dispositivo`, que la barra no pinta. Los dos que sí salen son los que distinguen
-        // una fila de otra: CUÁNDO se tocó y de QUIÉN es.
+        // `dispositivo`, que la barra no pinta. Los tres que sí salen son los que distinguen
+        // una fila de otra: CUÁNDO se tocó, de QUIÉN es y CUÁNTO costó.
         return sesiones.listar(raiz).map((s) => ({
           id: s.id,
           titulo: s.titulo,
           ...(s.ultimoTurno === undefined ? {} : { ultimoTurno: s.ultimoTurno }),
           ...(s.tarea === undefined ? {} : { tarea: s.tarea }),
+          ...(s.consumo === undefined ? {} : { consumo: s.consumo }),
         }));
       } catch {
         return [];

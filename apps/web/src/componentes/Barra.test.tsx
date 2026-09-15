@@ -145,4 +145,27 @@ describe("disciplina de estilos (heredada de deepseek)", () => {
   it("el detector no confunde un alias con la palabra que lleva dentro: ningún --dsw-alias-* real contiene una keyword de color como palabra suelta", () => {
     expect(tieneColorLiteral(".x { color: var(--dsw-alias-label-primary); }")).toBe(false);
   });
+
+  /**
+   * Una **consulta de contenedor** (`@container`) sin un ancestro que declare `container-type`
+   * no dispara JAMÁS, y no avisa: la regla se queda escrita y muerta. Es el modo de fallo de
+   * este repo —una composición que no está montada con todo en verde— en versión de CSS, y
+   * jsdom no lo puede ver: no hace layout ni cascada.
+   *
+   * Por eso la consulta y su contenedor viven en la MISMA hoja: así lo que se rompe si alguien
+   * borra el `container-type` está a un `grep` de distancia. Hoy es la cifra de una sesión
+   * —`.cifraDeLaFicha` dentro de `.cuerpoDeFila`—, que se retira cuando el hueco es estrecho.
+   */
+  it("una consulta de contenedor declara su contenedor en la misma hoja: si no, no dispara nunca", () => {
+    for (const m of modulos) {
+      const css = readFileSync(join(AQUI, m), "utf8");
+      if (!/@container/.test(css)) continue;
+      expect(css, `${m} consulta un contenedor que no declara`).toMatch(/container-type\s*:/);
+    }
+  });
+
+  it("el detector de la consulta de contenedor SÍ dispara: si no cazara, el test de arriba no probaría nada", () => {
+    expect(/@container/.test(".x { color: red; }")).toBe(false);
+    expect(/@container/.test("@container (max-width: 260px) { .x { display: none; } }")).toBe(true);
+  });
 });

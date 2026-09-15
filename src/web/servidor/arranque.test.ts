@@ -6,7 +6,7 @@
  * sobre el CABLE (qué se emite, en qué orden, a qué consola) sin abrir un socket.
  */
 import { vi, describe, it, expect, beforeEach, afterEach } from "vitest";
-import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { Readable } from "node:stream";
@@ -2105,6 +2105,148 @@ describe("montarRutas — el cable, por fin conectado", () => {
       await asentar();
 
       expect(JSON.stringify(cliente.recibidos)).not.toContain("669c9b79");
+    });
+
+    it("el acumulado de la sesión viaja con su fila, y una que no lo trae no manda un cero", async () => {
+      // Es lo que la barra pinta al lado de la fecha. Si el campo se quedara en el host —el
+      // fallo número diez de este repo: declarado en el tipo y nunca copiado al objeto—, la
+      // barra enseñaría filas sin cifra para siempre y nada se pondría rojo.
+      const servidor = servidorDeMentira();
+      const vestibulo = vestibuloDePrueba({
+        sesiones: {
+          crear: () => "s1",
+          listar: () => [
+            {
+              id: "s7",
+              titulo: "con gasto",
+              creada: "2026-09-07T08:00:00.000Z",
+              ultimoTurno: "2026-09-07T10:08:23.790Z",
+              consumo: { modelo: { entrada: 11_000, salida: 300, cache: 900 }, externo: { entrada: 0, salida: 0, cache: 0 } },
+            },
+            { id: "s8", titulo: "anterior a esto", creada: "2026-09-08T08:00:00.000Z", ultimoTurno: "2026-09-08T10:00:00.000Z" },
+          ],
+          anotar: () => {},
+          reabrir: (_r, id) => ({ id, actos: [], historica: true }),
+        },
+      });
+      montarRutas(servidor, vestibulo);
+      const cliente = clienteDeMentira();
+      await servidor.rutas.get(`GET ${RUTA_EVENTOS}`)!(cliente.peticion, cliente.respuesta);
+      await asentar();
+
+      const alta = cliente.recibidos.filter((m) => m.clase === "alta").at(-1) as Extract<
+        MensajeAlCliente,
+        { clase: "alta" }
+      >;
+      expect(alta.proyectos[0]?.sesiones?.[0]?.consumo).toEqual({
+        modelo: { entrada: 11_000, salida: 300, cache: 900 },
+        externo: { entrada: 0, salida: 0, cache: 0 },
+      });
+      // La que no lo trae NO lleva la clave: `{consumo: undefined}` afirmaría que hay una
+      // medida, y un JSON con la clave a `null` o a cero es como se cuela un `↑0 ↓0` que
+      // nadie ha medido.
+      expect("consumo" in (alta.proyectos[0]?.sesiones?.[1] ?? {})).toBe(false);
+    });
+
+    it("la siembra corre ANTES de leer la lista: el alta que la dispara ya trae las cifras", async () => {
+      // Contra un índice DE VERDAD, y no contra el doble: la siembra es una función real que
+      // toca disco y NO pasa por el puerto, así que un doble de sesiones no la ejercita. Es
+      // la forma exacta del fallo número diez de este repo —una composición de producción
+      // viviendo en un cierre que todos los tests doblan— y por eso se monta aquí un
+      // proyecto en un temporal y se lee su `indice.json`.
+      //
+      // Y lo que se fija no es solo que corra, sino el ORDEN: si sembrara después de leer la
+      // lista, este mismo alta no llevaría la cifra y haría falta un reanuncio — una segunda
+      // pasada por el cable solo para enseñar un número que ya se tenía.
+      const base = mkdtempSync(join(tmpdir(), "xonecode-ws-"));
+      const raiz = join(base, "webstudio", "workspace", "Tienda");
+      crearSesion(raiz, "s-vieja");
+      // Una sesión anterior a esto: su `.jsonl` tiene el `fin` con su consumo y su entrada
+      // del índice no lo trae.
+      writeFileSync(
+        join(raiz, ".xonecode", "sesiones", "s-vieja.jsonl"),
+        JSON.stringify({
+          tipo: "fin",
+          ms: 10,
+          consumo: { modelo: { entrada: 11_000, salida: 300, cache: 0 }, externo: { entrada: 0, salida: 0, cache: 0 } },
+        }) + "\n"
+      );
+      const servidor = servidorDeMentira();
+      const vestibulo = vestibuloDePrueba({
+        baseDeWorkspace: base,
+        sesiones: {
+          crear: () => "s1",
+          listar: (r: string) => listarSesiones(r),
+          anotar: () => {},
+          reabrir: (_r, id) => ({ id, actos: [], historica: true }),
+        },
+      });
+      montarRutas(servidor, vestibulo);
+      const cliente = clienteDeMentira();
+      await servidor.rutas.get(`GET ${RUTA_EVENTOS}`)!(cliente.peticion, cliente.respuesta);
+      await asentar();
+
+      const alta = cliente.recibidos.filter((m) => m.clase === "alta").at(-1) as Extract<
+        MensajeAlCliente,
+        { clase: "alta" }
+      >;
+      expect(alta.proyectos[0]?.sesiones?.[0]?.consumo?.modelo).toEqual({ entrada: 11_000, salida: 300, cache: 0 });
+      // Y quedó ESCRITO, no solo pintado: la próxima vez que se liste ya está, sin releer.
+      expect(listarSesiones(raiz)[0]?.consumo?.modelo.entrada).toBe(11_000);
+      await vestibulo.cerrar();
+      rmSync(base, { recursive: true, force: true });
+    });
+
+    it("y se intenta UNA vez por raíz: el siguiente anuncio no vuelve a medir los `.jsonl`", async () => {
+      // El alta se anuncia dos veces por turno y recorre todos los proyectos, así que sin la
+      // marca cada anuncio releería el índice de cada raíz y mediría sus ficheros — trabajo
+      // síncrono en el bucle de eventos, multiplicado. Lo que se pierde por intentarlo una
+      // sola vez no es una cifra: es que salga en la barra un poco antes, porque en cuanto
+      // esa sesión se use la pondrá `anotarActo`, entera.
+      const base = mkdtempSync(join(tmpdir(), "xonecode-ws-"));
+      const raiz = join(base, "webstudio", "workspace", "Tienda");
+      crearSesion(raiz, "s-vieja");
+      const jsonl = join(raiz, ".xonecode", "sesiones", "s-vieja.jsonl");
+      writeFileSync(
+        jsonl,
+        JSON.stringify({
+          tipo: "fin",
+          ms: 10,
+          consumo: { modelo: { entrada: 500, salida: 50, cache: 0 }, externo: { entrada: 0, salida: 0, cache: 0 } },
+        }) + "\n"
+      );
+      const servidor = servidorDeMentira();
+      const vestibulo = vestibuloDePrueba({
+        baseDeWorkspace: base,
+        sesiones: {
+          crear: () => "s1",
+          listar: (r: string) => listarSesiones(r),
+          anotar: () => {},
+          reabrir: (_r, id) => ({ id, actos: [], historica: true }),
+        },
+      });
+      montarRutas(servidor, vestibulo);
+      const primera = clienteDeMentira();
+      await servidor.rutas.get(`GET ${RUTA_EVENTOS}`)!(primera.peticion, primera.respuesta);
+      await asentar();
+
+      // Se le quita el acumulado al índice por debajo: si la siembra volviera a correr, lo
+      // repondría. Que no vuelva es lo que se afirma.
+      const indice = join(raiz, ".xonecode", "sesiones", "indice.json");
+      const entradas = JSON.parse(readFileSync(indice, "utf8"));
+      for (const e of entradas) delete e.consumo;
+      writeFileSync(indice, JSON.stringify(entradas));
+
+      const segunda = clienteDeMentira();
+      await servidor.rutas.get(`GET ${RUTA_EVENTOS}`)!(segunda.peticion, segunda.respuesta);
+      await asentar();
+      const alta = segunda.recibidos.filter((m) => m.clase === "alta").at(-1) as Extract<
+        MensajeAlCliente,
+        { clase: "alta" }
+      >;
+      expect("consumo" in (alta.proyectos[0]?.sesiones?.[0] ?? {})).toBe(false);
+      await vestibulo.cerrar();
+      rmSync(base, { recursive: true, force: true });
     });
   });
 

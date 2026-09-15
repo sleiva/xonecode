@@ -13,8 +13,10 @@ import filas from "../../estilos/Rows.module.css";
 import ajustes from "../../estilos/SettingsRoot.module.css";
 import { MenuDeSesion } from "./MenuDeSesion.js";
 import { IconoDeEntorno } from "./IconoDeEntorno.js";
+import { CosteDelTurno, hayCosteQueEnsenar } from "./CosteDelTurno.js";
 import { selloDeFecha } from "../selloDeFecha.js";
 import estilos from "./Barra.module.css";
+import type { SesionDelCable } from "../tipos.js";
 
 /** El sello de una fila, o nada si no hay hora que pintar. Envuelve a `selloDeFecha` solo
  *  para que la fila no tenga que repetir la comprobación de ausencia. */
@@ -39,28 +41,81 @@ export function ordenarPorUltimoTurno<T extends { ultimoTurno?: string }>(sesion
   return [...conHora, ...sinHora];
 }
 
+/**
+ * Una fila de sesión de la barra: la del CABLE, sin una tercera copia escrita aquí. Era la
+ * tercera declaración del mismo dato (host, `tipos.ts`, esta), y una fila redeclarada a mano es
+ * como un campo nuevo se queda mudo en la barra sin que nada se ponga rojo.
+ *
+ * Lo único que se le AÑADE es `historica`, que no viaja por el cable: la marca `App.tsx` al
+ * armar la lista, porque toda sesión de la barra es una relectura de un índice.
+ */
+export type FilaDeSesion = SesionDelCable & { historica?: boolean };
+
+/**
+ * Lo que va a la derecha del título de una fila, que es UNA de dos cosas y nunca las dos.
+ *
+ * Mientras la fila está ocupada —se está abriendo, o el agente trabaja en ella AHORA— va la
+ * actividad, en el hueco donde ya se mira: ni la fecha ni el gasto de un turno en vuelo aportan
+ * nada en ese segundo, y el gasto menos que nada, que es justo el dato a punto de cambiar. Con
+ * PALABRAS y no un punto animado, como las otras marcas de la fila: un giro no lo lee quien no
+ * distingue el movimiento ni un lector de pantalla, y `aria-busy` habla de lo que espera la
+ * interfaz, no de lo que hace el agente.
+ *
+ * Y cuando no lo está, la FICHA: el gasto de la sesión entera y su sello de fecha, en ese orden.
+ * Los dos NO se excluyen —una sesión tiene fecha Y gasto—, y el envoltorio no es cosmético: el
+ * empuje al borde tiene que ser de UN elemento, y con las piezas sueltas un `margin-left: auto`
+ * repartido deja huecos absurdos. La cifra va DELANTE del sello para que la columna de fechas no
+ * se mueva cuando aparece o desaparece: la lista se ordena por fecha, y esa columna es lo que se
+ * lee de un vistazo.
+ *
+ * Está extraído con nombre, y no dentro del `map` de la barra, porque ahí es donde este repo ya
+ * ha escondido nueve composiciones que todos los tests doblaban.
+ */
+function FichaDeSesion({
+  sesion,
+  abriendo,
+}: {
+  sesion: FilaDeSesion;
+  abriendo: boolean;
+}): React.ReactElement | null {
+  if (abriendo) {
+    return (
+      <span className={estilos.actividad} title="Abriendo…">
+        abriendo…
+      </span>
+    );
+  }
+  if (sesion.trabajando === true) {
+    return (
+      <span className={estilos.actividad} title="El agente está trabajando…">
+        trabajando…
+      </span>
+    );
+  }
+  const sello = selloDeSesion(sesion.ultimoTurno);
+  const consumo = sesion.consumo;
+  // La regla de si hay gasto que enseñar es la MISMA del componente (`hayCosteQueEnsenar`), no
+  // una copia: un `{0,0}` no es una cifra, es una medida que nadie hizo.
+  const gasto =
+    consumo !== undefined && hayCosteQueEnsenar(consumo) ? (
+      <CosteDelTurno consumo={consumo} ambito="sesion" />
+    ) : undefined;
+  // Sin nada que enseñar no se pinta NI el envoltorio: vacío seguiría llevándose el
+  // `margin-left: auto`, y el hueco que le sobra al título —que es `flex: 1`— se lo comería
+  // un hueco sin nada dentro.
+  if (gasto === undefined && sello === undefined) return null;
+  return (
+    <span className={estilos.fichaDeSesion}>
+      {gasto === undefined ? null : <span className={estilos.cifraDeLaFicha}>{gasto}</span>}
+      {sello === undefined ? null : <span className={estilos.selloDeFecha}>{sello}</span>}
+    </span>
+  );
+}
+
 export interface Proyecto {
   id: string;
   nombre: string;
-  sesiones: {
-    id: string;
-    titulo: string;
-    historica?: boolean;
-    /** Cuándo se tocó por última vez, ISO. Ordena la lista y se pinta a la derecha.
-     *  Ausente = el índice no lo dice: sin sello, y esa fila va la última. */
-    ultimoTurno?: string;
-    /** La abrió una TAREA de fondo. **Ausente es «no consta»**, no «es una conversación»:
-     *  no la llevan las sesiones anteriores a la marca, y se pintan lisas porque liso es
-     *  lo conservador. */
-    deTarea?: true;
-    /**
-     * Tiene un turno EN MARCHA ahora mismo, esté o no delante. Es lo que hace visible que
-     * cambiar de sesión ya no interrumpe al agente: la conversación que dejaste atrás sigue
-     * trabajando y la barra lo dice. **Ausente es «no consta que trabaje»**, igual que las
-     * otras dos marcas de esta fila.
-     */
-    trabajando?: true;
-  }[];
+  sesiones: FilaDeSesion[];
   /**
    * Compartido CONTIGO por otra persona (`shared` de CloudStudio). **Ausente no es «es
    * tuyo»**: es que el servidor no lo dijo, y entonces no se pinta NADA — ni «propio» ni
@@ -499,32 +554,13 @@ export function Barra({ entornos, entornoActivo, proyectos, visibles, proyectoAc
                                 // pantalla.
                                 <span className={estilos.marcaDeTarea}>Tarea</span>
                               ) : null}
-                              {/* Mientras se abre, en el hueco de la fecha va la actividad:
-                                  es el sitio donde ya se mira, y la fecha de la sesión que
-                                  estás abriendo no aporta nada en ese segundo. */}
-                              {abriendoSesion(s.id) ? (
-                                <span className={estilos.actividad} title="Abriendo…">
-                                  abriendo…
-                                </span>
-                              ) : s.trabajando ? (
-                                /*
-                                  El agente está trabajando en esa conversación AHORA. Va en
-                                  el hueco de la fecha y con la misma pieza que «abriendo…»,
-                                  por dos razones: es el sitio donde ya se mira, y mientras un
-                                  turno corre la fecha del último no aporta nada — es
-                                  justamente el dato que está a punto de cambiar.
-
-                                  Con PALABRAS, como las otras dos marcas de esta fila: un
-                                  punto animado no lo lee quien no distingue el movimiento ni
-                                  un lector de pantalla, y `aria-busy` habla de lo que la
-                                  interfaz está esperando, no de lo que hace el agente.
-                                */
-                                <span className={estilos.actividad} title="El agente está trabajando…">
-                                  trabajando…
-                                </span>
-                              ) : selloDeSesion(s.ultimoTurno) === undefined ? null : (
-                                <span className={estilos.selloDeFecha}>{selloDeSesion(s.ultimoTurno)}</span>
-                              )}
+                              {/*
+                                A la derecha del título van dos cosas que NO se excluyen —una
+                                sesión tiene fecha Y gasto—, y mientras hay actividad manda la
+                                actividad: es el hueco donde ya se mira, y ni la fecha ni el
+                                gasto de un turno en vuelo aportan nada en ese segundo.
+                              */}
+                              <FichaDeSesion sesion={s} abriendo={abriendoSesion(s.id)} />
                             </button>
                             {apagado ? null : (
                             <MenuDeSesion

@@ -50,12 +50,14 @@ import {
   readFileSync,
   renameSync,
   rmSync,
+  statSync,
   unlinkSync,
   writeFileSync,
 } from "node:fs";
 import { randomUUID } from "node:crypto";
 import { dirname, join } from "node:path";
-import type { Acto } from "../../core/actos.js";
+import type { Acto, ConsumoDeTurno } from "../../core/actos.js";
+import { acumularTotales, consumoDeLosActos } from "../../core/actos.js";
 import { carpetaDeArtefactosDeSesion } from "../../core/artefactos.js";
 import { segmentoSeguro } from "../../core/settings.js";
 import { tituloDesde } from "../../core/textos.js";
@@ -114,6 +116,20 @@ export interface EntradaIndice {
    * Es el mismo camino que recorrió `historica`: de suposición a hecho comprobado.
    */
   tarea?: string;
+  /**
+   * Lo que ha gastado la sesión ENTERA, sumando los deltas de sus turnos.
+   *
+   * Ausente es **«no consta»** y no «gastó cero»: no lo lleva ninguna sesión escrita antes de
+   * esto —hasta que la siembra la alcance—, y tampoco una cuyo `.jsonl` no quepa en el tope de
+   * la siembra. Un cero aquí afirmaría una medida que nadie hizo, que es la cifra inventada de
+   * siempre. Y por eso **nunca es un acumulado parcial**: o es la sesión entera, o no está (ver
+   * `anotarConsumoDeActo`, que es donde se decide eso).
+   *
+   * NO lleva `ventana`, aunque el tipo la admita: la ventana es «cuánto ocupa el historial
+   * AHORA», y dentro de una sesión cerrada hace días sería un «ahora» congelado. Sigue en cada
+   * `fin` del `.jsonl`, que es donde se mide. `acumularTotales` es quien la quita.
+   */
+  consumo?: ConsumoDeTurno;
 }
 
 export interface SesionReabierta {
@@ -266,22 +282,57 @@ export function anotarActo(raiz: string, id: string, acto: Acto): void {
 
   const ahora = new Date().toISOString();
   const entradas = leerIndiceOAbortar(raiz);
-  const entrada = entradas.find((e) => e.id === id);
+  let entrada = entradas.find((e) => e.id === id);
   if (entrada === undefined) {
     // Anotar sin haber pasado por `crearSesion` (no debería pasar por el flujo normal,
     // pero un índice perdido o corrupto no puede tumbar la escritura del acto, que ya
     // ocurrió arriba): se da de alta la entrada con lo que se sabe en este momento.
-    entradas.push({
+    entrada = {
       id,
       titulo: acto.tipo === "usuario" ? tituloDesde(acto.texto) : "",
       creada: ahora,
       ultimoTurno: ahora,
-    });
+    };
+    entradas.push(entrada);
   } else {
     if (entrada.titulo === "" && acto.tipo === "usuario") entrada.titulo = tituloDesde(acto.texto);
     entrada.ultimoTurno = ahora;
   }
+  anotarConsumoDeActo(raiz, id, entrada, acto);
   escribirIndice(raiz, entradas);
+}
+
+/**
+ * Suma al acumulado de una entrada lo que aporta este acto. Monótono: solo suma, nunca resta,
+ * y un acto que no trae consumo —o un `fin` de una sesión anterior a que se midiera— deja la
+ * entrada como estaba. **Un cero no se estampa**: ausente es «no consta», y escribir ceros ahí
+ * convertiría «no sé lo que gastó» en «no gastó nada».
+ *
+ * La regla que importa es qué hacer cuando la entrada TODAVÍA no trae acumulado, y no es sumar
+ * el delta: eso dejaría en el índice el gasto del ÚLTIMO turno con la forma de un total de la
+ * sesión —una sesión de 11k que hace un turno de 3k quedaría en 3k, y nadie lo notaría porque
+ * el número es plausible—. Ahí se relee el `.jsonl` —que ya lleva este acto dentro, porque el
+ * anexado va primero— y se suma la sesión entera. Es como mucho UNA lectura por sesión: en
+ * cuanto el acumulado consta, esto pasa a ser una suma de dos objetos.
+ *
+ * Se apoya en `reabrirSesion` y no en un lector propio: es el ÚNICO que sabe leer un `.jsonl`
+ * —saltando la línea trunca en vez de tumbar la lectura—, y un segundo lector sería un segundo
+ * sitio donde esa tolerancia puede dejar de estar.
+ */
+function anotarConsumoDeActo(raiz: string, id: string, entrada: EntradaIndice, acto: Acto): void {
+  if (acto.tipo !== "fin" || acto.consumo === undefined) return;
+  const bruto =
+    entrada.consumo === undefined
+      ? consumoDeLosActos(reabrirSesion(raiz, id).actos)
+      : acumularTotales(entrada.consumo, acto.consumo);
+  // `consumoDeLosActos` contesta «no consta» si el `.jsonl` no tiene ningún `fin` con consumo
+  // —una sesión entera anterior a esto—, y entonces no hay nada que estampar.
+  //
+  // Y se NORMALIZA con `acumularTotales`, pase por donde pase, para que la ventana no entre:
+  // la que trae `consumoDeLosActos` es la del último turno que midió, y dentro de un acumulado
+  // sería un «ahora» congelado que alguien leería como el de hoy. El `.jsonl` la sigue
+  // teniendo, que es donde se mide.
+  if (bruto !== undefined) entrada.consumo = acumularTotales(undefined, bruto);
 }
 
 /**
@@ -308,6 +359,68 @@ export function marcarTareaDeSesion(raiz: string, id: string, tarea: string): bo
   entrada.tarea = tarea;
   escribirIndice(raiz, entradas);
   return true;
+}
+
+/** Cuántas sesiones rellena UNA pasada de `sembrarConsumosPendientes`. */
+export const SESIONES_A_SEMBRAR = 12;
+
+/** Y por encima de este tamaño no se siembra: la siembra es SÍNCRONA y corre en el bucle de
+ *  eventos, así que un `.jsonl` enorme congelaría el servidor mientras lo lee. */
+export const TOPE_DE_BYTES_DE_SIEMBRA = 4 * 1024 * 1024;
+
+/**
+ * Rellena el acumulado de las sesiones que ya existían antes de que se estampara. Devuelve
+ * cuántas tocó, que es lo que decide si merece la pena reanunciar el alta.
+ *
+ * Existe porque sin ella la función nace VACÍA en todas las sesiones anteriores: el índice solo
+ * aprende el gasto de una sesión cuando alguien la usa, y las que nadie vuelve a abrir se
+ * quedarían sin cifra para siempre. Esto es una siembra de PRESENTACIÓN, y no sostiene ninguna
+ * corrección: si no llega a una sesión —por el tope de número, por el de bytes o porque su
+ * `.jsonl` se fue— lo peor que pasa es que no enseñe cifra hasta su próximo turno, y entonces
+ * enseñará la BUENA (`anotarConsumoDeActo` relee cuando no hay acumulado del que partir).
+ *
+ * **Es MONOTÓNICA, como `marcarTareaDeSesion` y por el mismo motivo**: solo mira las entradas
+ * que NO traen acumulado, así que no puede pisar el de ninguna, y correrla dos veces no hace
+ * nada la segunda. Devuelve 0 la segunda vez.
+ *
+ * **Y no da de alta la entrada que falte**, tampoco como la otra: un `.jsonl` sin entrada en el
+ * índice es una sesión que alguien borró, y resucitarla la devolvería a la barra apuntando a un
+ * fichero que ya no está.
+ *
+ * Va de las MÁS RECIENTES hacia atrás porque el tope de número tiene que elegir, y lo que se
+ * mira en la barra es lo último que se hizo. **UNA sola escritura** al final y no una por
+ * entrada: el índice se reescribe entero cada vez.
+ */
+export function sembrarConsumosPendientes(raiz: string): number {
+  const entradas = leerIndiceOAbortar(raiz);
+  const pendientes = entradas
+    .filter((e) => e.consumo === undefined)
+    // `String(...)` porque `esEntrada` solo comprueba el `id`: un índice tocado a mano puede
+    // traer aquí lo que sea, y esto no es sitio para reventar por un campo mal escrito.
+    .sort((a, b) => String(b.ultimoTurno).localeCompare(String(a.ultimoTurno)))
+    .slice(0, SESIONES_A_SEMBRAR);
+
+  let sembradas = 0;
+  for (const entrada of pendientes) {
+    const ruta = rutaJsonl(raiz, entrada.id);
+    try {
+      if (!existsSync(ruta) || statSync(ruta).size > TOPE_DE_BYTES_DE_SIEMBRA) continue;
+    } catch {
+      continue; // Un `.jsonl` que no se puede ni medir no se siembra; no es un error.
+    }
+    const total = consumoDeLosActos(reabrirSesion(raiz, entrada.id).actos);
+    if (total === undefined) continue;
+    // Y se NORMALIZA con `acumularTotales` igual que el estampado, por la MISMA razón y con la
+    // misma función: `consumoDeLosActos` se queda con la ventana del último `fin` que la traiga
+    // —es su contrato, y hace falta en la piel—, así que sin esto la siembra escribía en el
+    // índice un «cuánto ocupa el historial ahora» de un turno de anteayer. Nadie lo pinta hoy
+    // (la ventana va en su propio mensaje), que es justo por lo que no se notó: una cifra muerta
+    // en disco es una cifra que alguien leerá mañana creyendo que es la de hoy.
+    entrada.consumo = acumularTotales(undefined, total);
+    sembradas++;
+  }
+  if (sembradas > 0) escribirIndice(raiz, entradas);
+  return sembradas;
 }
 
 /**

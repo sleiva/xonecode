@@ -16,7 +16,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { crearVestibulo, ENTORNOS_OFICIALES, escribirProyectoEnDisco } from "./vestibulo.js";
 import { CatalogoModelosEnMemoria } from "../../core/ports.js";
-import type { Acto } from "../../core/actos.js";
+import type { Acto, ConsumoDeTurno } from "../../core/actos.js";
 import type { DispositivoElegido } from "./sesiones.js";
 import type { Entorno } from "../../core/settings.js";
 import { validar } from "../../core/config.js";
@@ -66,15 +66,25 @@ function sesionesEnMemoria() {
   const dispositivos = new Map<string, DispositivoElegido | undefined>();
   /** Con qué tarea se dio de alta cada sesión, como lo guarda el índice de verdad. */
   const tareas = new Map<string, string | undefined>();
+  /** El acumulado de cada sesión, como lo guarda el índice de verdad. */
+  const consumos = new Map<string, ConsumoDeTurno | undefined>();
   return {
     jsonl,
     dispositivos,
     tareas,
+    consumos,
     puerto: {
       listar: (raiz: string) =>
         [...jsonl.keys()]
           .filter((clave) => clave.startsWith(`${raiz}|`))
-          .map((clave) => ({ id: clave.slice(raiz.length + 1), titulo: "sesión" })),
+          .map((clave) => {
+            const consumo = consumos.get(clave);
+            return {
+              id: clave.slice(raiz.length + 1),
+              titulo: "sesión",
+              ...(consumo === undefined ? {} : { consumo }),
+            };
+          }),
       // El id ENTRA, desde que es también el `thread_id` del grafo: quien abre la consola
       // lo decide al abrir. Sin id se genera uno corto, que es lo que usan los tests que
       // solo necesitan una sesión guardada.
@@ -2071,5 +2081,31 @@ describe("los totales de una conversación SOBREVIVEN a cerrarla", () => {
     const proyecto = await v.abrirProyecto({ raiz: "/w/a", sesion: "vieja" });
     expect(proyecto.consumo?.()).toBeUndefined();
     await proyecto.cerrar();
+  });
+});
+
+describe("el acumulado de cada sesión sale del índice hacia la barra", () => {
+  const acumulado: ConsumoDeTurno = {
+    modelo: { entrada: 11_000, salida: 300, cache: 0 },
+    externo: { entrada: 0, salida: 0, cache: 0 },
+  };
+
+  it("`sesionesDe` COPIA el campo, que es lo que lo hace llegar a la barra", async () => {
+    // Y por eso tiene test propio: `sesionesDe` copia campo a campo en vez de reenviar la
+    // entrada del índice, así que un campo que se añada allí y no aquí se queda en el host
+    // EN SILENCIO — el objeto que sale no lo tiene, nadie se queja, y la barra pinta filas
+    // sin cifra para siempre. Es la forma exacta del fallo número diez de este repo.
+    const s = sesionesEnMemoria();
+    s.puerto.crear("/w/a", "s1");
+    s.puerto.crear("/w/a", "s2");
+    s.consumos.set("/w/a|s1", acumulado);
+    const v = crearVestibulo({ ...dobles(), origenDeTrabajo: "global", sesiones: s.puerto });
+
+    const porId = new Map(v.sesionesDe("/w/a").map((x) => [x.id, x]));
+    expect(porId.get("s1")?.consumo).toEqual(acumulado);
+    // Y la que no lo trae NO sale con un campo a `undefined`: ausente es «no consta», y un
+    // `{consumo: undefined}` en el objeto es la forma en la que un `JSON.stringify` deja de
+    // distinguir los dos casos… o peor, en la que alguien lo lee como un cero.
+    expect("consumo" in (porId.get("s2") ?? {})).toBe(false);
   });
 });

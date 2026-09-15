@@ -89,7 +89,7 @@ import { abrirEnSistema } from "../../agent/cloudstudioMcp.js";
 import { nombreDePersona } from "../../agent/persona.js";
 import { cambiosDeSesion, fotoDeApertura, olvidarSesion, parcheDeSesion } from "../../agent/sesionGit.js";
 import { commitDeTurno, trabajoSinCommitear } from "../../agent/gitSync.js";
-import { marcarTareaDeSesion } from "./sesiones.js";
+import { marcarTareaDeSesion, sembrarConsumosPendientes } from "./sesiones.js";
 import { RUTA_ARTEFACTOS, esRutaDeArtefacto } from "../../core/artefactos.js";
 import { arbolDeProyecto, leerFicheroDeProyecto } from "../../agent/arbolDeProyecto.js";
 import {
@@ -142,6 +142,7 @@ import type {
   MensajeDelCliente,
   Sumidero,
   InformeDeDispositivosDelCable,
+  SesionDelCable,
 } from "./transporte.js";
 // Valor y no tipo: la traducción de una `Tarea` a lo que viaja vive JUNTO al tipo que
 // produce y no aquí. Estuvo en este cierre, y ahí se cayó `veredicto` sin que nada se
@@ -1511,22 +1512,46 @@ export function montarRutas(
   const raicesTrabajando = (): Set<string> =>
     new Set(vestibulo.proyectosAbiertos().filter((c) => c.turnoEnVuelo).map((c) => c.raiz));
 
-  const sesionesDelProyecto = (
-    nombre: string
-  ): { id: string; titulo: string; ultimoTurno?: string; deTarea?: true; trabajando?: true }[] => {
+  /**
+   * Las raíces cuya siembra de consumos ya se intentó, para no repetirla en cada alta.
+   *
+   * El alta se anuncia DOS veces por turno y recorre todos los proyectos, así que sin esto
+   * cada anuncio releería el índice de cada proyecto y mediría sus `.jsonl` — un trabajo
+   * síncrono en el bucle de eventos, multiplicado por el número de proyectos, dos veces por
+   * turno. Una raíz se intenta UNA vez por proceso, que es lo que basta: lo que la siembra
+   * deja sin rellenar lo rellena `anotarActo` en cuanto esa sesión se usa.
+   */
+  const raicesSembradas = new Set<string>();
+
+  const sesionesDelProyecto = (nombre: string): SesionDelCable[] => {
     if (entornoElegido === undefined) return [];
     try {
+      const raiz = vestibulo.raizDeProyecto(entornoElegido, nombre);
+      // ANTES de leer la lista, para que este mismo alta ya lleve las cifras de las sesiones
+      // viejas: la siembra escribe el índice y `sesionesDe` lo relee, así que no hace falta
+      // ningún reanuncio — el anuncio que la dispara es el que las enseña.
+      if (!raicesSembradas.has(raiz)) {
+        raicesSembradas.add(raiz);
+        try {
+          sembrarConsumosPendientes(raiz);
+        } catch {
+          // Sembrar es PRESENTACIÓN: lo peor que puede pasar es que una sesión vieja no
+          // enseñe cifra hasta su próximo turno. Blankear la barra entera por un índice roto
+          // sería convertir un adorno que falta en una lista que no está.
+        }
+      }
       // Viaja un BOOLEANO y no el id de la tarea: la fila lleva una marca, no el nombre de
       // la tarea —en 280 px no cabe—, así que el id se queda en el host por la misma regla
       // que la ruta de una herramienta o el pid del corredor. `deTarea` ausente es «no
       // consta» y no «es una conversación»: no la lleva ninguna sesión anterior a la marca.
       const trabajando = sesionesTrabajando();
-      return vestibulo.sesionesDe(vestibulo.raizDeProyecto(entornoElegido, nombre)).map((s) => ({
+      return vestibulo.sesionesDe(raiz).map((s) => ({
         id: s.id,
         titulo: s.titulo,
         ...(s.ultimoTurno === undefined ? {} : { ultimoTurno: s.ultimoTurno }),
         ...(s.tarea === undefined ? {} : { deTarea: true as const }),
         ...(trabajando.has(s.id) ? { trabajando: true as const } : {}),
+        ...(s.consumo === undefined ? {} : { consumo: s.consumo }),
       }));
     } catch {
       return [];

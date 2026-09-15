@@ -164,6 +164,28 @@ export function consumoDeLosActos(actos: readonly Acto[]): ConsumoDeTurno | unde
 }
 
 /**
+ * El ACUMULADO de una sesión: se suma un turno detrás de otro, y **la ventana NO viaja**.
+ *
+ * Es la diferencia con `sumarConsumo`, y es la razón de que esto exista con nombre propio en
+ * vez de ser un `sumarConsumo` más en la llamada. `consumoDeLosActos` compone los actos de UNA
+ * conversación que se está mirando AHORA, y ahí la ventana tiene sentido: «cuánto ocupa el
+ * historial» es una pregunta del momento, y la del último turno que midió es la respuesta.
+ * Un acumulado estampado en el índice es otra cosa —el gasto de una sesión ya cerrada—, y una
+ * ventana dentro sería un «ahora» congelado hace tres días que alguien leería como el de hoy.
+ * El dato no se pierde: sigue en cada `fin` del `.jsonl`, que es donde se mide.
+ *
+ * `a` ausente es el primer `fin` de la sesión: devuelve una copia del delta, no el delta —quien
+ * lo llame lo va a guardar en el índice, y los actos del lazo no son de nadie para mutarlos.
+ */
+export function acumularTotales(a: ConsumoDeTurno | undefined, delta: ConsumoDeTurno): ConsumoDeTurno {
+  const total = a === undefined ? delta : sumarConsumo(a, delta);
+  return {
+    modelo: { ...total.modelo },
+    externo: { ...total.externo },
+  };
+}
+
+/**
  * Una línea de cierre de racha del colapsador del motor (`core/notify.ts`): «→ lee ×3 — …».
  * Devuelve su prefijo icono+verbo («→ lee»), o undefined si no es un cierre.
  */

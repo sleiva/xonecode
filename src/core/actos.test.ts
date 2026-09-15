@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { describe, it, expect } from "vitest";
 import type { Acto } from "./actos.js";
-import { conLineaDeTool, consumoDeLosActos, sumarConsumo } from "./actos.js";
+import { conLineaDeTool, acumularTotales, consumoDeLosActos, sumarConsumo } from "./actos.js";
 
 describe("core/actos", () => {
   it("no importa nada de cli/: el acto es de dominio, no de una piel", () => {
@@ -94,5 +94,44 @@ describe("lo que costó la conversación, leído de sus actos", () => {
     expect(suma.modelo).toEqual(cuenta(3, 3));
     expect(a.modelo).toEqual(cuenta(1, 1));
     expect(b.modelo).toEqual(cuenta(2, 2));
+  });
+});
+
+describe("el acumulado de una sesión, que es lo que se estampa en el índice", () => {
+  const cuenta = (entrada: number, salida: number, cache = 0) => ({ entrada, salida, cache });
+  const consumo = (entrada: number, salida: number, ventana?: number) => ({
+    modelo: cuenta(entrada, salida),
+    externo: cuenta(0, 0),
+    ...(ventana === undefined ? {} : { ventana }),
+  });
+
+  it("sin acumulado previo vale el delta, y es una COPIA suya", () => {
+    // Quien lo llama lo va a estampar en el índice; el delta es del acto que el lazo acaba de
+    // cerrar, y un objeto compartido con el tracker vivo movería por debajo un acto ya escrito.
+    const delta = consumo(100, 10);
+    const total = acumularTotales(undefined, delta);
+    expect(total.modelo).toEqual(cuenta(100, 10));
+    expect(total).not.toBe(delta);
+    expect(total.modelo).not.toBe(delta.modelo);
+  });
+
+  it("con acumulado previo SUMA: el acumulado es la sesión, no el último turno", () => {
+    expect(acumularTotales(consumo(1000, 100), consumo(50, 5)).modelo).toEqual(cuenta(1050, 105));
+  });
+
+  it("la ventana NO viaja dentro del acumulado — ni la del previo ni la del delta", () => {
+    // Es lo que justifica que esto tenga nombre propio. `sumarConsumo` propaga la ventana, y
+    // hace bien: compone lo que ocupa el historial AHORA. Pero un acumulado estampado en el
+    // índice se lee días después, y una ventana dentro sería un «ahora» congelado que alguien
+    // leería como el de hoy. El dato no se pierde: sigue en cada `fin` del `.jsonl`.
+    expect("ventana" in acumularTotales(undefined, consumo(1, 1, 9000))).toBe(false);
+    expect("ventana" in acumularTotales(consumo(1, 1, 3000), consumo(1, 1, 9000))).toBe(false);
+  });
+
+  it("no MUTA el acumulado que recibe", () => {
+    const previo = consumo(1000, 100, 4000);
+    acumularTotales(previo, consumo(50, 5, 7000));
+    expect(previo.modelo).toEqual(cuenta(1000, 100));
+    expect(previo.ventana).toBe(4000);
   });
 });

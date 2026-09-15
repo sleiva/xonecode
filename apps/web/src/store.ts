@@ -32,6 +32,8 @@ import type {
   InformeDeDispositivos,
   AjustesDeDispositivos,
   DispositivoElegido,
+  ConsumoDeTurno,
+  SesionDelCable,
 } from "./tipos.js";
 import { PLATAFORMAS_DE_DISPOSITIVO } from "./tipos.js";
 
@@ -234,15 +236,10 @@ export interface EstadoDelCliente {
     proyectos: {
       id: string;
       nombre: string;
-      sesiones?: {
-        id: string;
-        titulo: string;
-        ultimoTurno?: string;
-        deTarea?: true;
-        /** Esa conversación tiene un turno en marcha ahora, esté o no delante. Ausente = no
-         *  consta que trabaje. */
-        trabajando?: true;
-      }[];
+      /** La fila de la barra, tal cual viaja en el alta (`SesionDelCable`). Se declara una vez
+       *  y se usa aquí y en el prop de `Barra`: una segunda copia de la misma fila es un campo
+       *  que un día se añade en un sitio y no en el otro, y el de la barra sale mudo. */
+      sesiones?: SesionDelCable[];
       local?: boolean;
       /** Alguna sesión de este proyecto trabaja AHORA. Ausente = no consta. */
       trabajando?: true;
@@ -466,6 +463,40 @@ function veredictoDeTarea(valor: unknown): { veredicto?: TareaDelCable["veredict
   };
 }
 
+/** Un número del cable, o 0. Un `NaN` o un `Infinity` vienen de un `JSON.parse` de la red y
+ *  dejarían la cifra ilegible en pantalla en vez de dar un error que alguien pueda ver. */
+function numero(v: unknown): number {
+  return typeof v === "number" && Number.isFinite(v) ? v : 0;
+}
+
+/** Una cuenta de tokens `{entrada, salida, cache}` de lo que venga por el cable. */
+function cuenta(v: unknown): { entrada: number; salida: number; cache: number } {
+  const o = (typeof v === "object" && v !== null ? v : {}) as Record<string, unknown>;
+  return { entrada: numero(o["entrada"]), salida: numero(o["salida"]), cache: numero(o["cache"]) };
+}
+
+/**
+ * El acumulado de una SESIÓN, tal como llega dentro de la fila del alta. `undefined` = «no
+ * consta», que es lo que hay que distinguir de un `{0,0}`.
+ *
+ * Dos reglas, y las dos por el mismo motivo: esto viene de la red y de un `JSON.parse`.
+ *
+ * - Lo que no es un objeto se DESCARTA entero, y no se convierte en ceros. Unos ceros
+ *   AFIRMAN una medida —`{0,0}` es lo que `hayCosteQueEnsenar` filtra—, y una cadena o un
+ *   `null` colados aquí no son una sesión que no gastó: son un dato que no llegó. Una LISTA
+ *   tampoco es un objeto de estos, y `typeof` la deja pasar; por eso se mira con
+ *   `Array.isArray`, o un `[]` se convertiría en un `{0,0}` con toda la cara.
+ * - Y la `ventana` se TIRA aunque venga. Es «cuánto ocupa el historial AHORA», y dentro del
+ *   acumulado de una sesión cerrada sería un «ahora» congelado que alguien leería como el de
+ *   hoy. El host ya no la escribe (`core/actos.ts#acumularTotales`); esto es la segunda
+ *   aplicación de la misma regla, y la que decide qué se pinta es la que se queda corta.
+ */
+function consumoDeSesion(v: unknown): ConsumoDeTurno | undefined {
+  if (typeof v !== "object" || v === null || Array.isArray(v)) return undefined;
+  const o = v as Record<string, unknown>;
+  return { modelo: cuenta(o["modelo"]), externo: cuenta(o["externo"]) };
+}
+
 /** `{id, titulo}`: una sesión guardada. NO vale `sonIdentidades` —una sesión no tiene
  *  `nombre`, tiene título— y usarla dejaba la lista siempre vacía sin decir por qué. */
 function sonSesiones(
@@ -476,6 +507,7 @@ function sonSesiones(
   ultimoTurno?: unknown;
   deTarea?: unknown;
   trabajando?: unknown;
+  consumo?: unknown;
 }[] {
   return (
     Array.isArray(valor) &&
@@ -1081,15 +1113,10 @@ export function crearStoreDelCliente(): {
         case "consumo": {
           /**
            * Campo a campo, que es la lista blanca de siempre: un campo nuevo del cable no
-           * llega hasta que se nombra aquí. Y con guarda de tipo, porque esto viene de un
-           * `JSON.parse` de la red: un `NaN` o una cadena en el contador lo dejarían
-           * ilegible en vez de dar un error que alguien pueda ver.
+           * llega hasta que se nombra aquí. Las guardas de número y de cuenta son las del
+           * módulo, compartidas con la fila de sesión: dos copias de una guarda es como
+           * divergen, y la que se queda vieja es la que deja pasar la cifra inventada.
            */
-          const numero = (v: unknown): number => (typeof v === "number" && Number.isFinite(v) ? v : 0);
-          const cuenta = (v: unknown): { entrada: number; salida: number; cache: number } => {
-            const o = (typeof v === "object" && v !== null ? v : {}) as Record<string, unknown>;
-            return { entrada: numero(o["entrada"]), salida: numero(o["salida"]), cache: numero(o["cache"]) };
-          };
           const m = mensaje as { modelo?: unknown; externo?: unknown; ventana?: unknown };
           const v = (typeof m.ventana === "object" && m.ventana !== null ? m.ventana : {}) as Record<string, unknown>;
           // `tope` ausente es «no se sabe» y se propaga ausente hasta el componente: con
@@ -1155,19 +1182,27 @@ export function crearStoreDelCliente(): {
               nombre: p.nombre,
               ...(sonSesiones(sesiones)
                 ? {
-                    sesiones: sesiones.map((s) => ({
-                      id: s.id,
-                      titulo: s.titulo,
-                      ...(typeof s.ultimoTurno === "string" ? { ultimoTurno: s.ultimoTurno } : {}),
-                      // `=== true` y no un truthy: la trampa del `"false"` de CloudStudio en
-                      // la dirección de aquí sería marcar la conversación de una persona
-                      // como sesión de una tarea de fondo.
-                      ...(s.deTarea === true ? { deTarea: true as const } : {}),
-                      // Y la misma regla, por el mismo motivo: una cadena colada aquí
-                      // («trabajando: "false"») pintaría trabajando una sesión que no
-                      // trabaja, y con ella un indicador de actividad que nunca se apaga.
-                      ...(s.trabajando === true ? { trabajando: true as const } : {}),
-                    })),
+                    sesiones: sesiones.map((s) => {
+                      // Lo que gastó la sesión entera. `consumoDeSesion` contesta «no consta»
+                      // con `undefined`, y entonces el campo NO se escribe: ausente y `{0,0}`
+                      // son dos cosas distintas —una sesión anterior a esto y una que salió
+                      // gratis— y solo la segunda se pinta.
+                      const consumo = consumoDeSesion(s.consumo);
+                      return {
+                        id: s.id,
+                        titulo: s.titulo,
+                        ...(typeof s.ultimoTurno === "string" ? { ultimoTurno: s.ultimoTurno } : {}),
+                        // `=== true` y no un truthy: la trampa del `"false"` de CloudStudio en
+                        // la dirección de aquí sería marcar la conversación de una persona
+                        // como sesión de una tarea de fondo.
+                        ...(s.deTarea === true ? { deTarea: true as const } : {}),
+                        // Y la misma regla, por el mismo motivo: una cadena colada aquí
+                        // («trabajando: "false"») pintaría trabajando una sesión que no
+                        // trabaja, y con ella un indicador de actividad que nunca se apaga.
+                        ...(s.trabajando === true ? { trabajando: true as const } : {}),
+                        ...(consumo === undefined ? {} : { consumo }),
+                      };
+                    }),
                   }
                 : {}),
               ...((p as { local?: unknown }).local === true ? { local: true } : {}),
