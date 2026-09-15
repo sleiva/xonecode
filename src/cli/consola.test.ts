@@ -13,6 +13,7 @@ import {
   type Consola,
   type EstadoDeSesion,
   type EjecutorDeTurno,
+  type LineaDeConsola,
 } from "./consola.js";
 import type { Piel } from "../core/turno.js";
 import type { Escribir } from "./stdio.js";
@@ -612,6 +613,79 @@ describe("correrConsola — turnos de prosa", () => {
     expect(salida).not.toContain("Listo.");
     // Y el aviso de agente de pega sí sale por la consola: no es un acto de piel.
     expect(salida).toContain("AGENTE DE PEGA");
+  });
+});
+
+describe("correrConsola — la procedencia de la línea decide si «/» es comando", () => {
+  /**
+   * Lo que esto vigila, medido en la pantalla del usuario: la consola WEB no tiene comandos
+   * de barra —cada acción tiene su BOTÓN—, así que teclear «/» para hablar de una ruta del
+   * proyecto tiene que MANDARLA al modelo y no ejecutar una orden. El lazo no puede
+   * adivinarlo mirando la cadena, porque por la MISMA cola sube lo que pide un control de
+   * la interfaz (`consolaWeb.encolar` aplica `/modelo …` sin que nadie lo teclee): de ahí
+   * que la línea diga de dónde viene. Ver `LineaDeConsola`.
+   */
+  function consolaQueDice(...lineas: LineaDeConsola[]): { consola: Consola; salida: () => string } {
+    const base = consolaDe();
+    let salida = "";
+    return {
+      consola: {
+        ...base.consola,
+        escribir: (t) => {
+          salida += t;
+        },
+        lineas: (async function* () {
+          for (const linea of lineas) yield linea;
+        })(),
+      },
+      salida: () => salida,
+    };
+  }
+
+  it("marcada como prosa, un «/» va al MODELO con su barra delante", async () => {
+    const { consola, salida } = consolaQueDice(
+      { texto: "/ayuda", comoComando: false },
+      { texto: "/artefactos/informe.html es el que falla", comoComando: false }
+    );
+    const turnos: Array<{ peticion: string; estado: EstadoDeSesion }> = [];
+
+    const codigo = await correrConsola(consola, estadoDe(), ejecutorFalsoDe(turnos));
+
+    expect(codigo).toBe(0);
+    // Dos TURNOS, y el texto llega ENTERO: ni se recorta la barra ni se parte en trozos.
+    expect(turnos.map((t) => t.peticion)).toEqual([
+      "/ayuda",
+      "/artefactos/informe.html es el que falla",
+    ]);
+    // El registro de comandos no se ha tocado por ninguna de las dos: ni la lista de
+    // `/ayuda`, ni un «desconocido» por el segundo.
+    expect(salida()).not.toContain("comandos:");
+    expect(salida()).not.toContain("comando desconocido");
+  });
+
+  it("marcada como comando, sigue ejecutando el comando: es la vía de `encolar`", async () => {
+    // La otra mitad, y es la que se rompería en silencio si alguien «simplificara» la
+    // marca: el servidor sigue aplicando los controles de la interfaz por aquí.
+    const { consola, salida } = consolaQueDice({ texto: "/ayuda", comoComando: true });
+    const turnos: Array<{ peticion: string; estado: EstadoDeSesion }> = [];
+
+    await correrConsola(consola, estadoDe(), ejecutorFalsoDe(turnos));
+
+    expect(turnos).toHaveLength(0);
+    expect(salida()).toContain("comandos:");
+    expect(salida()).toContain("/config");
+  });
+
+  it("una `string` a secas se lee como siempre: comando", async () => {
+    // El contrato viejo no se mueve —stdio, la TUI, la consola de una tarea y los dobles
+    // de los tests siguen mandando cadenas peladas.
+    const { consola, salida } = consolaQueDice("/ayuda");
+    const turnos: Array<{ peticion: string; estado: EstadoDeSesion }> = [];
+
+    await correrConsola(consola, estadoDe(), ejecutorFalsoDe(turnos));
+
+    expect(turnos).toHaveLength(0);
+    expect(salida()).toContain("comandos:");
   });
 });
 

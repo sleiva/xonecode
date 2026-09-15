@@ -144,6 +144,24 @@ describe("Chat: la sesión nueva no es un vacío", () => {
     expect(bloque.textContent).toMatch(/gemini\/gemini-flash-latest/);
   });
 
+  it("NO manda a teclear «/»: en el navegador no hay comandos que abrir", () => {
+    // Aquí decía «Escribe `/` para ver los comandos». Dejó de ser cierto cuando los comandos
+    // se fueron de esta piel —una prosa que empezara por «/» ejecutaba una orden—, y una
+    // bienvenida que manda a pulsar una tecla muerta es peor que una que no la nombra.
+    render(<Chat actos={[]} proyecto="AppDemo" modelo="gemini/gemini-flash-latest" />);
+    expect(screen.getByRole("region", { name: /sesión nueva/ }).textContent).not.toMatch(/comandos/i);
+  });
+
+  it("sin modelo consta, la frase que lo nombra se va con él y no deja un hueco", () => {
+    // El párrafo existía para SOSTENER esa frase; sin modelo no queda nada que decir, y un
+    // `<p>` vacío es una línea en blanco que se lee como algo que no cargó.
+    const { container } = render(<Chat actos={[]} proyecto="AppDemo" />);
+    const bloque = container.querySelector('[aria-label="sesión nueva"]');
+    expect(bloque?.textContent).toMatch(/aprobación antes de escribir/);
+    expect(bloque?.textContent).not.toMatch(/Trabajará con/);
+    expect(bloque?.querySelectorAll("p") ?? []).toHaveLength(1);
+  });
+
   it("con el primer acto se va, y en una relectura no aparece", () => {
     render(<Chat actos={[asistente("hola")]} proyecto="AppDemo" />);
     expect(screen.queryByRole("region", { name: /sesión nueva/ })).toBeNull();

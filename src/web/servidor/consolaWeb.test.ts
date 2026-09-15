@@ -15,11 +15,33 @@ const aprobado = (d: Decision | undefined) => d?.type === "approve";
 const rechazado = (d: Decision | undefined) => d?.type === "reject";
 
 describe("consolaWeb: la entrada", () => {
-  it("la prosa que llega por accion sale por el iterador de líneas", async () => {
+  it("la prosa que llega por accion sale por el iterador de líneas, marcada como PROSA", async () => {
     const c = crearConsolaWeb();
     c.recibir({ clase: "prosa", texto: "haz un listado" });
     const it = c.consola.lineas[Symbol.asyncIterator]();
-    expect((await it.next()).value).toBe("haz un listado");
+    // La marca no es adorno: es lo que hace que una prosa que empiece por «/» llegue al
+    // modelo en vez de ejecutar un comando. Ver `cli/consola.ts#LineaDeConsola`.
+    expect((await it.next()).value).toEqual({ texto: "haz un listado", comoComando: false });
+  });
+
+  it("una prosa que empieza por «/» sigue siendo PROSA: en el navegador no hay comandos", async () => {
+    // Lo medido en la pantalla del usuario: escribir «/» para hablar de una ruta del
+    // proyecto ejecutaba una orden. Aquí se vigila la mitad que le toca a esta piel —el
+    // lazo hace la otra, y su test está en `cli/consola.test.ts`—.
+    const c = crearConsolaWeb();
+    c.recibir({ clase: "prosa", texto: "/artefactos/informe.html es el que falla" });
+    const it = c.consola.lineas[Symbol.asyncIterator]();
+    expect((await it.next()).value).toEqual({
+      texto: "/artefactos/informe.html es el que falla",
+      comoComando: false,
+    });
+  });
+
+  it("lo que encola un CONTROL sí es comando: es la vía por la que el servidor aplica `/modelo`", async () => {
+    const c = crearConsolaWeb();
+    c.encolar("/modelo ollama/uno");
+    const it = c.consola.lineas[Symbol.asyncIterator]();
+    expect((await it.next()).value).toEqual({ texto: "/modelo ollama/uno", comoComando: true });
   });
 
   it("cerrar agota las líneas: es EOF, y el lazo de correrConsola retorna", async () => {
@@ -264,7 +286,7 @@ describe("consolaWeb: nada que espere a un humano cuelga ni se queda sin respues
     expect(await promesa).toBe("s");
     // Y la prosa sigue siendo una línea del lazo, no una respuesta consumida.
     const linea = await c.consola.lineas[Symbol.asyncIterator]().next();
-    expect(linea.value).toBe("s");
+    expect(linea.value).toEqual({ texto: "s", comoComando: false });
   });
 
   it("si expira el plazo responde cadena vacía: el turno vuelve al usuario en vez de colgarse", async () => {

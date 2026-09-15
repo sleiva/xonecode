@@ -209,12 +209,6 @@ export interface EstadoDelCliente {
   secreto?: { pregunta: string };
   aprobacion?: { pendientes: unknown[]; ficheros: Record<string, string>; diffs: Record<string, unknown[]> };
   /**
-   * El registro de comandos de barra que manda el servidor al conectar (`COMANDOS` de
-   * `cli/consola.ts`, recorrido — nunca una copia escrita a mano). Vacío hasta que llega
-   * el mensaje: el compositor no tiene nada que sugerir antes de conectar, ni lo finge.
-   */
-  comandos: { nombre: string; descripcion: string }[];
-  /**
    * El saludo, de la clase «bienvenida» — llega ANTES que `alta`, porque el nombre no
    * depende de ninguna cuenta (ver `tipos.ts`). `Bienvenida.tsx` prefiere este campo y
    * cae a `alta?.nombre` si por lo que sea no ha llegado (`App.tsx`): los dos mensajes
@@ -324,7 +318,7 @@ function esTrabajoAlAbrir(v: unknown): v is { ficheros: string[]; total: number 
   );
 }
 
-const ESTADO_INICIAL: EstadoDelCliente = { actos: [], conectado: false, comandos: [] };
+const ESTADO_INICIAL: EstadoDelCliente = { actos: [], conectado: false };
 
 const PASOS: ReadonlySet<string> = new Set<PasoDelWizard>(["cuenta", "entorno", "proyecto"]);
 
@@ -537,19 +531,6 @@ function sonIdentidades(valor: unknown): valor is { id: string; nombre: string }
 
 function esRegistro(valor: unknown): valor is Record<string, unknown> {
   return typeof valor === "object" && valor !== null && !Array.isArray(valor);
-}
-
-function esComandos(valor: unknown): valor is { nombre: string; descripcion: string }[] {
-  return (
-    Array.isArray(valor) &&
-    valor.every(
-      (c) =>
-        typeof c === "object" &&
-        c !== null &&
-        typeof (c as { nombre?: unknown }).nombre === "string" &&
-        typeof (c as { descripcion?: unknown }).descripcion === "string"
-    )
-  );
 }
 
 export function crearStoreDelCliente(): {
@@ -1147,12 +1128,6 @@ export function crearStoreDelCliente(): {
           const pregunta = (mensaje as { pregunta?: unknown }).pregunta;
           if (typeof pregunta !== "string") return;
           mutar({ secreto: { pregunta } });
-          return;
-        }
-        case "comandos": {
-          const comandos = (mensaje as { comandos?: unknown }).comandos;
-          if (!esComandos(comandos)) return;
-          mutar({ comandos });
           return;
         }
         case "alta": {

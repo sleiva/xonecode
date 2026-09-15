@@ -451,8 +451,14 @@ feedback del desarrollador** y no es terminal.
 - **El cliente no manda comandos**: por el cable viaja la intención (`clase` `modelo`, `sesion`,
   `credencial`, `entorno`, `dispositivo`, `tarea`…) y cómo se aplica lo decide el servidor,
   encolando en el lazo con `consolaWeb.encolar` —sin acto de usuario falso—. **La función se
-  comparte; la sintaxis no se exporta.** El registro que el compositor sugiere se **genera**
-  recorriendo `COMANDOS` (`comandosDelRegistro`).
+  comparte; la sintaxis no se exporta.**
+- **Y en el navegador «/» es PROSA, no un comando** (`cli/consola.ts#LineaDeConsola`). Aquí cada
+  acción tiene su botón, así que un «/» tecleado no abre nada: una prosa que empiece por «/» —una
+  ruta del proyecto, `/artefactos/informe.html`— va al modelo tal cual. No se puede adivinar
+  mirando la cadena, porque por la MISMA cola circulan lo que teclea una persona y lo que pide un
+  control de la interfaz, y esa mezcla ERA el bug: teclear «/» ejecutaba una orden. Por eso la
+  línea lo DICE (`comoComando`), y una `string` a secas se lee como siempre — comando—, que es lo
+  que siguen haciendo stdio, la TUI, la consola de una tarea y los dobles de los tests.
 - **Ajustes tiene UNA pestaña por entorno registrado, y abrir una NO cambia el entorno
   activo** (`Ajustes.tsx`, `accion: "proyectos"` → `atenderProyectosDeEntorno`). Elegir
   proyectos es MIRAR; mudar el activo (`accion: "activo"`) le cambiaría la barra a quien
@@ -523,9 +529,10 @@ feedback del desarrollador** y no es terminal.
   un chip solo no era una fila, era un renglón. Y no hay chip de «Contexto» aunque la maqueta
   lo pinte — ese concepto no existe aquí, y lo más parecido (el proyecto) ya se lee en la miga:
   pintarlo dos veces es la duplicación que ya se quitó de las marcas de «trabajando».
-- **El compositor DICE sus tres teclas** (`Enter` envía, `Shift+Enter` salta de línea, `/` abre
-  las sugerencias), y las tres se comprueban en el mismo test que las escribe: una ayuda que
-  se queda vieja es peor que no tenerla. Va fuera de la caja —no compite con lo que se
+- **El compositor DICE sus teclas, y solo las que son ciertas** (`Enter` envía, `Shift+Enter`
+  salta de línea), y se comprueban en el mismo test que las escribe: una ayuda que
+  se queda vieja es peor que no tenerla. Eran TRES hasta que los comandos se fueron del
+  navegador, y una ayuda que nombra una tecla muerta es peor que no tenerla. Va fuera de la caja —no compite con lo que se
   escribe— y dentro de la envoltura, para ocultarse CON ella en Trazas y Ficheros. El
   placeholder nombra lo que el harness sabe hacer, y solo eso: prometer ahí lo que no está
   cableado es el botón muerto de siempre con la petición de una persona detrás.

@@ -2892,14 +2892,25 @@ Por el cable viaja la intención (`clase: "modelo"`, `clase: "sesion"`, `clase: 
 línea en el lazo con `consolaWeb.encolar` —sin acto de usuario— porque el manejador de
 `/modelo` es donde vive la precedencia entre banderas, ficheros y elecciones en caliente, y
 una segunda implementación divergiría el primer día. **La función se comparte; la sintaxis
-no se exporta.** Lo que sigue existiendo es teclear `/loquesea` en el compositor: eso lo
-decide quien escribe, no un botón.
+no se exporta.**
 
-El registro de comandos que el compositor sugiere se **genera recorriendo `COMANDOS`**
-(`comandosDelRegistro`, `web/servidor/arranque.ts`), igual que `/ayuda`, la cabecera de stdio y
-el completador de Tab: una lista escrita a mano se queda vieja en cuanto alguien añade un
-comando. Por eso una línea que empieza por «/» no tiene camino propio en la web — viaja como
-prosa y la despacha `correrConsola` del lado servidor.
+**Y con la sintaxis se fue el despacho.** Hubo un desplegable de sugerencias generado
+recorriendo `COMANDOS` (`comandosDelRegistro`, `web/servidor/arranque.ts`) —igual que `/ayuda`,
+la cabecera de stdio y el completador de Tab—, y se fue con una razón medida, no por limpieza:
+por la MISMA cola del lazo circulan lo que teclea una persona y lo que pide un control de la
+interfaz, así que teclear `/` para hablar de una ruta del proyecto —`/artefactos/informe.html`—
+EJECUTABA una orden en vez de mandarla al modelo. En el navegador no hay comandos que despachar:
+cada acción tiene su botón (el modelo en la pastilla, el tema en Apariencia, la sincronización
+en su pestaña), y el teclado es la única puerta solo en las pieles de TERMINAL.
+
+La distinción no se puede adivinar mirando la cadena, porque las dos cosas van por la misma
+cola, así que **la dice la línea** (`cli/consola.ts#LineaDeConsola`): `comoComando: false` es
+prosa —lo que teclea una persona en una piel sin comandos— y viaja al modelo con su «/» delante;
+`comoComando: true` es un comando, y lo usan un control de la interfaz (`consolaWeb.encolar`,
+que es como el servidor sigue aplicando `/modelo …` al elegir modelo en Ajustes) y las pieles
+donde el teclado manda. Una `string` a secas se lee como siempre —comando si empieza por «/»—,
+que es lo que siguen haciendo stdio, la TUI, la consola de una tarea y los dobles de los tests:
+el contrato viejo no se movió y ninguna de esas pieles cambió de comportamiento.
 
 **Ficheros y Revisión, las dos pestañas del proyecto** (`docs/superpowers/specs/2026-09-07-ficheros-y-revision-design.md`).
 **Revisión** es lo que ha tocado una sesión (`agent/sesionGit.ts`, `componentes/Revision.tsx`,

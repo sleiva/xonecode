@@ -1186,7 +1186,6 @@ export function App({
               dos se queda mintiendo el día que el otro cambie.
             */}
             <Compositor
-              comandos={estado.comandos}
               conectado={estado.conectado}
               // El estado de modelos, tal cual lo manda el servidor: la pastilla lo pinta
               // y no lo deduce. Ausente mientras no ha llegado el mensaje.

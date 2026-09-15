@@ -63,7 +63,7 @@ import {
   type FuentesDeEleccion,
   type Proveedor,
 } from "../../core/modelos.js";
-import { COMANDOS, hayCredencial, type Consola, type EjecutorDeTurno } from "../../cli/consola.js";
+import { hayCredencial, type Consola, type EjecutorDeTurno } from "../../cli/consola.js";
 import { motivoDeClaveInaceptable } from "../../core/config.js";
 import {
   aplicarAuth,
@@ -200,35 +200,6 @@ export const FALTA_EL_BUILD = "falta el build del cliente: ejecuta «npm run bui
 /** Tope del cuerpo de `POST /accion`. Generoso para una prosa larga, finito porque el
  *  cuerpo se acumula en memoria y un cliente roto no puede llenarla. */
 const TOPE_DE_CUERPO = 1_000_000;
-
-/**
- * El registro de comandos de barra, para el compositor del navegador.
- *
- * Se GENERA recorriendo `COMANDOS` (`cli/consola.ts`), igual que `/ayuda`, la cabecera de
- * stdio y el completador de Tab: una lista escrita a mano se queda vieja en cuanto alguien
- * añade un comando, y el compositor lo sugeriría todo menos el nuevo.
- */
-export function comandosDelRegistro(): { nombre: string; descripcion: string }[] {
-  return Object.entries(COMANDOS).map(([nombre, c]) => ({
-    nombre: `/${nombre}`,
-    descripcion: descripcionParaLaWeb(c.descripcion),
-  }));
-}
-
-/**
- * La descripción de un comando, para el navegador.
- *
- * `COMANDOS` está escrito para la terminal: «config y credenciales, sin claves — como
- * `xonecode config`» remite a la shell y lleva acentos graves que el compositor pinta tal
- * cual. Medido en pantalla. Se quita el «— como `xonecode …`» y las comillas de código; el
- * registro sigue siendo UNO (`cli/consola.ts`), esto es solo cómo se lee aquí.
- */
-export function descripcionParaLaWeb(descripcion: string): string {
-  return descripcion
-    .replace(/\s+—\s+como `xonecode[^`]*`/u, "")
-    .replace(/`/g, "")
-    .replace(/comandos de barra/u, "comandos");
-}
 
 /** Lo mínimo que el cable necesita de una consola, la del vestíbulo o la del proyecto. */
 interface DestinoDelCable {
@@ -962,12 +933,10 @@ export function montarRutas(
      */
     const consumoDeLaSesion = vestibulo.consumoDeSesion();
     for (const cliente of destinatarios) {
-      // El orden importa: primero el transcript, luego lo que el compositor necesita para
-      // sugerir, y al final el estado de modelos que pinta su disparador. Al reconectar se
-      // manda entero: el cliente tira sus proyecciones al caerse el SSE
-      // (`store.ts#marcarDesconectado`), así que hay que repoblarlas.
+      // El orden importa: primero el transcript y luego el estado que pinta cada
+      // disparador. Al reconectar se manda entero: el cliente tira sus proyecciones al
+      // caerse el SSE (`store.ts#marcarDesconectado`), así que hay que repoblarlas.
       cliente({ clase: "reemision", actos: [...actos] });
-      cliente({ clase: "comandos", comandos: comandosDelRegistro() });
       cliente(modelos);
       cliente(agentes);
       if (tareas !== undefined) cliente(tareas);

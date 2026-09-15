@@ -13,7 +13,6 @@ import { Readable } from "node:stream";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { MS_DE_TRABAJO_AL_ABRIR,
   arrancarConsolaWeb,
-  comandosDelRegistro, descripcionParaLaWeb,
   montarRutas,
   commitDeTurnoCableado,
   construirCorredorDeTareasCableado,
@@ -145,26 +144,6 @@ function vestibuloDePrueba(extra: Partial<Parameters<typeof crearVestibulo>[0]> 
   });
 }
 
-describe("comandosDelRegistro", () => {
-  it("sale de COMANDOS recorrido, no de una lista escrita a mano", () => {
-    const comandos = comandosDelRegistro();
-    expect(comandos.map((c) => c.nombre)).toEqual(Object.keys(COMANDOS).map((n) => `/${n}`));
-    // La descripción SALE de la que enseña /ayuda —una sola fuente— pasada por
-    // `descripcionParaLaWeb`, que solo le quita el vocabulario de terminal («como
-    // `xonecode config`», las comillas de código). Dos textos escritos a mano para el mismo
-    // comando es cómo divergen; un texto derivado del otro no puede.
-    for (const [nombre, entrada] of Object.entries(COMANDOS)) {
-      expect(comandos.find((c) => c.nombre === `/${nombre}`)?.descripcion).toBe(
-        descripcionParaLaWeb(entrada.descripcion)
-      );
-    }
-  });
-
-  it("un comando nuevo aparece solo: no hay copia que actualizar", () => {
-    expect(comandosDelRegistro()).toHaveLength(Object.keys(COMANDOS).length);
-  });
-});
-
 describe("montarRutas — el cable, por fin conectado", () => {
   it("registra el SSE y la acción: hasta ahora `registrarRuta` no la llamaba nadie", () => {
     const servidor = servidorDeMentira();
@@ -179,7 +158,7 @@ describe("montarRutas — el cable, por fin conectado", () => {
     ]);
   });
 
-  it("al conectar manda el transcript, los comandos, el estado de modelos, el saludo y el alta", async () => {
+  it("al conectar manda el transcript, el estado de modelos, el saludo y el alta", async () => {
     const servidor = servidorDeMentira();
     montarRutas(servidor, vestibuloDePrueba());
     const cliente = clienteDeMentira();
@@ -187,12 +166,11 @@ describe("montarRutas — el cable, por fin conectado", () => {
     await eventos!(cliente.peticion, cliente.respuesta);
     await asentar();
 
-    // «modelos» va con los comandos y por el mismo motivo: es lo que el compositor
-    // necesita para pintarse, y al reconectar hay que repoblarlo entero — el cliente tira
-    // sus proyecciones al caerse el SSE en vez de recordar un modelo que pudo cambiar.
+    // «modelos» va primero por lo mismo que lo demás: es lo que el compositor necesita
+    // para pintarse, y al reconectar hay que repoblarlo entero — el cliente tira sus
+    // proyecciones al caerse el SSE en vez de recordar un modelo que pudo cambiar.
     expect(cliente.recibidos.map((m) => m.clase)).toEqual([
       "reemision",
-      "comandos",
       "modelos",
       // Los subagentes van aquí por lo mismo que los modelos: la ventana de ajustes se
       // puede abrir en cuanto conecta, y sin esto enseñaría una lista vacía hasta que algo
@@ -204,8 +182,6 @@ describe("montarRutas — el cable, por fin conectado", () => {
       "bienvenida",
       "alta",
     ]);
-    const comandos = cliente.recibidos[1] as Extract<MensajeAlCliente, { clase: "comandos" }>;
-    expect(comandos.comandos).toEqual(comandosDelRegistro());
   });
 
   /**
@@ -3149,18 +3125,6 @@ function servidorLevantado() {
     cerrar: async () => {},
   };
 }
-
-describe("descripcionParaLaWeb", () => {
-  it("quita el «— como `xonecode …`» y las comillas de código: es vocabulario de terminal", () => {
-    expect(descripcionParaLaWeb("config y credenciales, sin claves — como `xonecode config`")).toBe(
-      "config y credenciales, sin claves"
-    );
-    expect(descripcionParaLaWeb("cambia los TRES papeles en caliente: /modelo <proveedor>/<modelo>")).toBe(
-      "cambia los TRES papeles en caliente: /modelo <proveedor>/<modelo>"
-    );
-    expect(descripcionParaLaWeb("lista los comandos de barra")).toBe("lista los comandos");
-  });
-});
 
 describe("qué hay en la máquina: el mensaje «dispositivos»", () => {
   const informe = {

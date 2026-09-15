@@ -283,12 +283,6 @@ export type MensajeAlCliente =
   | { clase: "modelosDeMotor"; motor: string; modelos: { id: string; nombre: string }[]; error?: string }
   | { clase: "secreto"; pregunta: string }
   /**
-   * El registro de comandos de barra (`COMANDOS` en `cli/consola.ts`), para que el
-   * compositor sugiera sin llevar una copia — `nombre` con la «/» delante, tal cual se
-   * teclea.
-   */
-  | { clase: "comandos"; comandos: { nombre: string; descripcion: string }[] }
-  /**
    * El alta que falta, para el wizard (`vestibulo.ts#pasosPendientes` del lado servidor).
    * `pasos` vacío = no hay wizard que pintar — pero puede seguir sin haber proyecto
    * abierto (`proyectoAbierto`, más abajo): el paso de proyecto salió del alta, y con él

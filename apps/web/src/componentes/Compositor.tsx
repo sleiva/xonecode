@@ -5,24 +5,21 @@ import { PastillaDeDispositivo } from "./PastillaDeDispositivo.js";
 import { ContadorDeTokens, type ConsumoPintable } from "./ContadorDeTokens.js";
 import estilos from "./Compositor.module.css";
 
-/** Un candidato de `/ayuda`: lo manda el servidor recorriendo `COMANDOS`, no una copia. */
-export interface ComandoSugerido {
-  nombre: string;
-  descripcion: string;
-}
-
 /**
- * El compositor: envía prosa Y comandos de barra por el MISMO cauce.
+ * El compositor: manda PROSA.
  *
- * Una línea que empieza por «/» no tiene código propio aquí: `alEnviar` la manda tal cual,
- * y del otro lado `correrConsola` la despacha contra el registro `COMANDOS`
- * (`cli/consola.ts:819`) exactamente como despacharía la de stdio o la TUI — por eso
- * `/ayuda`, `/modelo`, `/config`, `/sync` y `/hilo` funcionan en la web sin una sola línea
- * nueva de servidor: la única pieza que SÍ hace falta es la lista de sugerencias, y esa
- * viene del mensaje `comandos` (`tipos.ts`), leída aquí por prop y no reescrita a mano.
+ * Aquí no hay comandos de barra, y no es que falten: en el navegador no existen. Una línea
+ * que empiece por «/» —una ruta del proyecto, `/artefactos/informe.html`— viaja al modelo
+ * tal cual, porque lo que hay al otro lado de cada acción es un BOTÓN: el modelo en la
+ * pastilla, el tema en Apariencia, la sincronización en su pestaña. Mientras esto despachó
+ * comandos, escribir «/» para hablar de una ruta ejecutaba una orden.
+ *
+ * La sintaxis se queda en las pieles de TERMINAL, donde el teclado es la única puerta.
+ * Dentro del servidor sigue viva igual —`consolaWeb.encolar` aplica `/modelo …` cuando
+ * alguien elige modelo en Ajustes—, porque lo que se comparte es la FUNCIÓN y no la
+ * sintaxis. Ver `cli/consola.ts#LineaDeConsola`.
  */
 export function Compositor({
-  comandos = [],
   conectado,
   turnoEnVuelo = false,
   consumo,
@@ -37,8 +34,6 @@ export function Compositor({
   alElegirDispositivo,
   alEnviar,
 }: {
-  /** Ausente antes de que llegue el mensaje `comandos` del servidor: sin sugerencias, no un fallo. */
-  comandos?: readonly ComandoSugerido[];
   conectado: boolean;
   /**
    * Hay un turno EN VUELO. Apaga la entrada y convierte la flecha en un botón de parar.
@@ -105,9 +100,6 @@ export function Compositor({
     if (acabaDeTerminar && !oculto && conectado) campo.current?.focus();
   }, [turnoEnVuelo, oculto, conectado]);
 
-  const sugerencias =
-    valor.startsWith("/") ? comandos.filter((c) => c.nombre.startsWith(valor)) : [];
-
   const enviar = (): void => {
     // Con un turno en vuelo no se manda: el campo está apagado, pero el Enter llega igual
     // si el navegador tenía el foco puesto antes de apagarse.
@@ -135,16 +127,6 @@ export function Compositor({
         única señal de «está pasando algo» mientras el agente no habla.
       */}
       <div className={estilos.compositor} data-trabajando={turnoEnVuelo ? "" : undefined}>
-        {sugerencias.length > 0 && (
-          <ul className={estilos.sugerencias} role="listbox">
-            {sugerencias.map((c) => (
-              <li key={c.nombre} role="option" className={estilos.sugerencia}>
-                <span className={estilos.nombreComando}>{c.nombre}</span>
-                <span className={estilos.descripcionComando}>{c.descripcion}</span>
-              </li>
-            ))}
-          </ul>
-        )}
         <textarea
           ref={campo}
           className={estilos.entrada}
@@ -259,17 +241,18 @@ export function Compositor({
         </div>
       </div>
       {/*
-        Las tres teclas que hay que saber, y las TRES son ciertas hoy: `Enter` envía
-        (`alPulsarTecla`), `Shift+Enter` salta de línea y `/` abre las sugerencias que el
-        servidor manda. Escribirlas aquí no promete nada nuevo — es la diferencia entre esto
-        y un icono de micrófono.
+        Las DOS teclas que hay que saber, y las dos son ciertas hoy: `Enter` envía
+        (`alPulsarTecla`) y `Shift+Enter` salta de línea. Escribirlas aquí no promete nada
+        nuevo — es la diferencia entre esto y un icono de micrófono. La tercera que hubo
+        —«/ para comandos»— se fue con los comandos: en el navegador no hay ninguno, y una
+        ayuda que nombra una tecla muerta es peor que no tenerla.
 
         Va FUERA de la caja y dentro de la envoltura: fuera porque no compite con lo que se
         escribe, y dentro porque así se oculta con ella en Trazas y en Ficheros, donde no hay
         a quién escribirle.
       */}
       <p className={estilos.ayudaDeTeclas}>
-        Enter para enviar · Shift + Enter para salto de línea · / para comandos
+        Enter para enviar · Shift + Enter para salto de línea
       </p>
     </div>
   );

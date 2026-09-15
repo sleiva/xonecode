@@ -8,9 +8,6 @@ import { Compositor } from "./Compositor.js";
 // React, es que nadie desmonta entre tests sin el auto-cleanup de `@testing-library/react`.
 afterEach(cleanup);
 
-// SIN `comandos` a propósito: el test de la primera sugerencia manda el suyo explícito
-// y {...manejadores} va DESPUÉS en el JSX — si `comandos` viviera aquí, lo pisaría. El
-// resto de tests no lo necesita: `Compositor` lo trata como `[]` por omisión.
 const manejadores = { conectado: true, alEnviar: () => {} };
 
 describe("Compositor", () => {
@@ -54,10 +51,13 @@ describe("Compositor", () => {
     expect(document.activeElement).toBe(document.body);
   });
 
-  it("las sugerencias salen del registro que manda el servidor, no de una lista escrita a mano", () => {
-    render(<Compositor comandos={[{ nombre: "/sync", descripcion: "sincroniza" }]} {...manejadores} />);
-    fireEvent.change(screen.getByRole("textbox"), { target: { value: "/sy" } });
-    expect(screen.getByRole("listbox").textContent).toContain("/sync");
+  it("escribir «/» NO abre ninguna lista: en el navegador no hay comandos que sugerir", () => {
+    // Lo medido en la pantalla del usuario: aquí «/» era el disparador de un desplegable
+    // de comandos, y una prosa que empezara por «/» —una ruta del proyecto— ejecutaba una
+    // orden en vez de mandarse. La lista se fue con ellos.
+    render(<Compositor {...manejadores} />);
+    fireEvent.change(screen.getByRole("textbox"), { target: { value: "/modelo" } });
+    expect(screen.queryByRole("listbox")).toBeNull();
   });
 
   it("sin conexión el campo se deshabilita y dice por qué", () => {
@@ -93,12 +93,6 @@ describe("Compositor", () => {
     fireEvent.change(campo, { target: { value: "   " } });
     fireEvent.keyDown(campo, { key: "Enter" });
     expect(alEnviar).not.toHaveBeenCalled();
-  });
-
-  it("sin prefijo «/» no hay sugerencias, aunque el texto coincida con un nombre de comando", () => {
-    render(<Compositor comandos={[{ nombre: "/sync", descripcion: "sincroniza" }]} {...manejadores} />);
-    fireEvent.change(screen.getByRole("textbox"), { target: { value: "sync" } });
-    expect(screen.queryByRole("listbox")).toBeNull();
   });
 
   /**
@@ -151,12 +145,14 @@ describe("Compositor", () => {
 });
 
 describe("la ayuda de teclas", () => {
-  it("dice las tres, y las tres son ciertas: se comprueban aquí mismo", () => {
+  it("dice las dos, y las dos son ciertas: se comprueban aquí mismo", () => {
     // No es una decoración: cada frase se corresponde con un comportamiento de este
-    // componente, y el test las ata a los tres para que no se queden mintiendo.
+    // componente, y el test las ata para que no se queden mintiendo. Eran TRES hasta que
+    // los comandos se fueron del navegador: una ayuda que nombra una tecla muerta es peor
+    // que no tenerla.
     const alEnviar = vi.fn();
-    render(<Compositor conectado alEnviar={alEnviar} comandos={[{ nombre: "/ayuda", descripcion: "…" }]} />);
-    expect(screen.getByText(/Enter para enviar · Shift \+ Enter para salto de línea · \/ para comandos/)).toBeTruthy();
+    render(<Compositor conectado alEnviar={alEnviar} />);
+    expect(screen.getByText(/Enter para enviar · Shift \+ Enter para salto de línea$/)).toBeTruthy();
 
     const campo = screen.getByRole("textbox");
     // `Enter` envía…
@@ -167,9 +163,6 @@ describe("la ayuda de teclas", () => {
     fireEvent.change(campo, { target: { value: "otra" } });
     fireEvent.keyDown(campo, { key: "Enter", shiftKey: true });
     expect(alEnviar).toHaveBeenCalledTimes(1);
-    // …y `/` abre las sugerencias.
-    fireEvent.change(campo, { target: { value: "/ay" } });
-    expect(screen.getByRole("listbox")).toBeTruthy();
   });
 
   it("se oculta CON la caja, no por su cuenta", () => {

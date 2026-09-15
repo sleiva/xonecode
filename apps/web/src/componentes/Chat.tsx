@@ -226,15 +226,19 @@ export function Chat({
                 una duda de XOne. El agente lee el proyecto, propone los cambios y{" "}
                 <strong>te pide aprobación antes de escribir</strong> ningún fichero.
               </p>
-              <p>
-                Escribe <code>/</code> para ver los comandos.
-                {modelo === undefined ? null : (
-                  <>
-                    {" "}
-                    Trabajará con <code>{modelo}</code>; se cambia en la pastilla de la caja.
-                  </>
-                )}
-              </p>
+              {/*
+                Aquí decía «Escribe `/` para ver los comandos», y esa frase ya no es cierta en
+                esta piel: en el navegador no hay ninguno, y una ayuda que nombra una tecla
+                muerta es peor que no tenerla (ver `Compositor.tsx`). Lo que sí hay que decir
+                —con qué modelo va a trabajar esta sesión— se dice, y cuando no consta se calla
+                entero: un párrafo que solo existía para sostener la frase de los comandos se
+                iría con ella y dejaría un hueco en blanco.
+              */}
+              {modelo === undefined ? null : (
+                <p>
+                  Trabajará con <code>{modelo}</code>; se cambia en la pastilla de la caja.
+                </p>
+              )}
             </section>
           ) : null}
           {sinAprobacion ? (

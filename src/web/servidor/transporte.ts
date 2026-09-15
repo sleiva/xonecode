@@ -381,14 +381,6 @@ export type MensajeAlCliente =
   | { clase: "modelosDeMotor"; motor: string; modelos: { id: string; nombre: string }[]; error?: string }
   | { clase: "secreto"; pregunta: string }
   /**
-   * El registro de comandos de barra, para que el compositor sugiera sin llevar una
-   * copia: `nombre` va con la «/» delante (lo que el usuario teclea), `descripcion` es
-   * la misma que `COMANDOS[nombre].descripcion` en `cli/consola.ts`. Quien registre la
-   * ruta de conexión lo arma recorriendo ese registro — no hay lista escrita a mano en
-   * ningún punto de este cable.
-   */
-  | { clase: "comandos"; comandos: { nombre: string; descripcion: string }[] }
-  /**
    * El alta que FALTA, para el wizard del navegador. `pasos` sale de
    * `vestibulo.ts#pasosPendientes`, que los calcula preguntándole al sistema y nunca a una
    * marca de «primer arranque»; vacío significa que no hay alta que hacer y el cliente no

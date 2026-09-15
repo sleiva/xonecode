@@ -41,9 +41,34 @@ import { cargar, cloudstudioDelProyecto, NOMBRE_CARPETA } from "../agent/configE
 import { rutaMemoriaDeProyecto } from "../agent/memoriaDeProyecto.js";
 import type { CatalogoModelosPort, ModeloDisponible } from "../core/ports.js";
 
+/**
+ * Una línea del lazo, con su procedencia DICHA cuando hace falta decirla.
+ *
+ * El lazo mira si la línea empieza por «/» para decidir si es un comando. En las pieles de
+ * TERMINAL eso es exactamente lo que se quiere: el teclado es la única puerta que hay y «/»
+ * es la sintaxis que la abre. En la web no — allí **cada acción tiene su botón** (el modelo
+ * en la pastilla, el tema en Apariencia, la sincronización en su pestaña), así que «/» no
+ * abre nada. Y mientras estuvo abriendo comandos, teclear «/» para hablar de una ruta del
+ * proyecto EJECUTABA una orden en vez de mandarla al modelo.
+ *
+ * La distinción no se puede adivinar mirando la cadena, porque por la MISMA cola circulan
+ * las dos cosas: lo que teclea una persona y lo que pide un control de la interfaz
+ * (`consolaWeb.encolar`, que es como el servidor aplica `/modelo …` sin que nadie lo
+ * teclee). Por eso la línea lo dice:
+ *  - `comoComando: false` — la tecleó una persona en una piel sin comandos. Es PROSA, y va
+ *    al modelo tal cual, con su «/» delante.
+ *  - `comoComando: true` — la pidió un control de la interfaz, o es una piel donde el
+ *    teclado manda. La FUNCIÓN se comparte aunque la sintaxis no se exporte.
+ *
+ * Una `string` a secas se lee como siempre —comando si empieza por «/»—, que es lo que
+ * siguen haciendo stdio, la TUI, la consola de una tarea y los dobles de los tests: el
+ * contrato viejo no se mueve y ninguna de esas pieles cambia de comportamiento.
+ */
+export type LineaDeConsola = string | { texto: string; comoComando: boolean };
+
 export interface Consola {
   /** De dónde vienen las líneas del usuario. Agotarlo termina la sesión: es EOF, no cuelgue. */
-  lineas: AsyncIterable<string>;
+  lineas: AsyncIterable<LineaDeConsola>;
   escribir: Escribir;
   /** Para las aprobaciones dentro de un turno. */
   preguntar: Preguntar;
@@ -1208,11 +1233,15 @@ export async function correrConsola(
   ejecutarTurno: EjecutorDeTurno = ejecutarTurnoGuionizado
 ): Promise<number> {
   for await (const cruda of consola.lineas) {
-    const linea = cruda.trim();
+    // Una `string` a secas es una piel donde el teclado manda (stdio, la TUI, una consola de
+    // tarea, los dobles): se lee como siempre. Ver `LineaDeConsola`.
+    const { texto, comoComando } =
+      typeof cruda === "string" ? { texto: cruda, comoComando: true } : cruda;
+    const linea = texto.trim();
     // Un Enter de más no gasta ni una llamada al modelo ni un error: no hay nada que hacer.
     if (linea === "") continue;
 
-    if (linea.startsWith("/")) {
+    if (comoComando && linea.startsWith("/")) {
       // El comando se compara en minúsculas; los args respetan lo tecleado (p.ej. un id
       // de Ollama con mayúsculas tiene que llegar entero a `parsear`).
       const trozos = linea.split(/\s+/);

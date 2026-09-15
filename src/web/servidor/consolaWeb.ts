@@ -32,7 +32,7 @@ import type { Acto, ConsumoDeTurno } from "../../core/actos.js";
 import type { PendienteDeAprobacion } from "../../core/events.js";
 import type { LineaDeDiff } from "../../core/diff.js";
 import type { Piel } from "../../core/turno.js";
-import type { Consola, SelectorDeConsola } from "../../cli/consola.js";
+import { type Consola, type LineaDeConsola, type SelectorDeConsola } from "../../cli/consola.js";
 import { CatalogoModelosEnMemoria, type CatalogoModelosPort, type Papel } from "../../core/ports.js";
 import { REJECT_MESSAGE, type Decision } from "../../vendor/hitl.js";
 
@@ -202,8 +202,8 @@ export function crearConsolaWeb(opciones: OpcionesDeConsolaWeb = {}): ConsolaWeb
 
   // La cola de `lineas`. Si nadie espera todavía, la línea aguarda en `cola`; si hay un
   // `next` colgado, se despierta. `cerrada` es EOF: agota el iterador en vez de colgarlo.
-  const cola: string[] = [];
-  const esperandoLinea: ((r: IteratorResult<string>) => void)[] = [];
+  const cola: LineaDeConsola[] = [];
+  const esperandoLinea: ((r: IteratorResult<LineaDeConsola>) => void)[] = [];
   let cerrada = false;
 
   // Colas FIFO de quien espera respuesta. Son colas y no una ranura única porque dos
@@ -230,10 +230,10 @@ export function crearConsolaWeb(opciones: OpcionesDeConsolaWeb = {}): ConsolaWeb
     lineas: {
       [Symbol.asyncIterator]() {
         return {
-          next: (): Promise<IteratorResult<string>> => {
+          next: (): Promise<IteratorResult<LineaDeConsola>> => {
             if (cola.length > 0) return Promise.resolve({ value: cola.shift()!, done: false });
             if (cerrada) return Promise.resolve({ value: undefined, done: true });
-            return new Promise<IteratorResult<string>>((resuelto) => esperandoLinea.push(resuelto));
+            return new Promise<IteratorResult<LineaDeConsola>>((resuelto) => esperandoLinea.push(resuelto));
           },
         };
       },
@@ -350,8 +350,14 @@ export function crearConsolaWeb(opciones: OpcionesDeConsolaWeb = {}): ConsolaWeb
       // debe a quien escribió la petición, y de ahí sale el título de la sesión.
       anotar({ tipo: "usuario", texto: mensaje.texto });
       const despertar = esperandoLinea.shift();
-      if (despertar !== undefined) despertar({ value: mensaje.texto, done: false });
-      else cola.push(mensaje.texto);
+      // `comoComando: false` y no una cadena pelada, y esta es TODA la diferencia: aquí
+      // escribe una persona, y en el navegador «/» no abre comandos — no hay ninguno al
+      // que apunte, porque cada acción tiene su botón. Una prosa que empiece por «/» (una
+      // ruta del proyecto, un `/artefactos/…`) viaja al modelo tal cual. Ver
+      // `cli/consola.ts#LineaDeConsola`.
+      const linea: LineaDeConsola = { texto: mensaje.texto, comoComando: false };
+      if (despertar !== undefined) despertar({ value: linea, done: false });
+      else cola.push(linea);
       return;
     }
     if (mensaje.clase === "respuesta") {
@@ -415,9 +421,13 @@ export function crearConsolaWeb(opciones: OpcionesDeConsolaWeb = {}): ConsolaWeb
     turno: (activo) => transporte.emitir({ clase: "turno", activo }),
     encolar: (linea) => {
       if (cerrada) return;
+      // `comoComando: true`: esto lo pide un CONTROL, no una persona, y es la vía por la
+      // que el servidor sigue aplicando `/modelo …` — o `/sync …` — sin que nadie teclee
+      // la sintaxis. Es justo la mitad que «/» perdió en el compositor.
+      const encolada: LineaDeConsola = { texto: linea, comoComando: true };
       const despertar = esperandoLinea.shift();
-      if (despertar !== undefined) despertar({ value: linea, done: false });
-      else cola.push(linea);
+      if (despertar !== undefined) despertar({ value: encolada, done: false });
+      else cola.push(encolada);
     },
     conectar: (enviar) => transporte.conectar(enviar),
     mirar: (enviar) => transporte.mirar(enviar),

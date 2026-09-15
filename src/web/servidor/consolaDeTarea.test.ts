@@ -14,6 +14,7 @@ import { permisosDe } from "../../agent/perfiles.js";
 import { CatalogoModelosEnMemoria } from "../../core/ports.js";
 import type { PendienteDeAprobacion } from "../../core/events.js";
 import type { Piel } from "../../core/turno.js";
+import type { LineaDeConsola } from "../../cli/consola.js";
 
 const PENDIENTE: PendienteDeAprobacion = {
   id: "1",
@@ -321,7 +322,7 @@ describe("crearConsolaDeTarea", () => {
 
   it("las líneas se agotan en cuanto se pide una: una tarea es UN turno, no una conversación", async () => {
     const { consola } = montar();
-    const leidas: string[] = [];
+    const leidas: LineaDeConsola[] = [];
     for await (const linea of consola.lineas) leidas.push(linea);
     expect(leidas).toEqual([]);
   });

@@ -1,7 +1,7 @@
 import { describe, it, expect, vi } from "vitest";
 import { abreviarHome, crearConsolaTui, envolverConOcupacion } from "./correrTui.js";
 import { acuseDeModelo } from "../acuseDeModelo.js";
-import { correrConsola, type EjecutorDeTurno } from "../consola.js";
+import { correrConsola, type EjecutorDeTurno, type LineaDeConsola } from "../consola.js";
 import type { SesionReal } from "../../agent/turnoReal.js";
 import { CatalogoModelosEnMemoria, type CatalogoModelosPort } from "../../core/ports.js";
 import { aplicarTemaInk, temaInk } from "./temaInk.js";
@@ -41,7 +41,7 @@ async function esperarSelector(
 describe("la consola TUI", () => {
   it("implementa Consola: lineas es la cola de lo enviado, escribir y piel comparten store", async () => {
     const { consola, enviar, actos } = crearMontajeTui({ raiz: "/tmp/proyecto" });
-    const leidas: string[] = [];
+    const leidas: LineaDeConsola[] = [];
     const lector = (async () => {
       for await (const linea of consola.lineas) {
         leidas.push(linea);
