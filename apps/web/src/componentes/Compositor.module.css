@@ -283,16 +283,33 @@
 }
 
 /* El resplandor: el marco solo se ve de cerca, y esto es lo que hace que se note desde el
-   otro lado de la mesa. Va por DEBAJO (`::before`, sin `z-index` que mantener) y desenfocado,
-   así que no compite con el texto que se escribe encima. */
+   otro lado de la mesa. Se pinta ANTES que el marco (`::before`, sin `z-index` que mantener)
+   y desenfocado, así que no compite con el texto que se escribe encima.
+
+   Y es un HALO POR FUERA, no un baño: el relleno de esta caja es el fondo de la tarjeta
+   (`bg-layer-1`, blanco en el tema claro), y esto va ENCIMA de él porque un pseudo-elemento
+   es un hijo —visto en el navegador, la caja entera salía teñida de azul mientras el agente
+   trabajaba—. La máscara en XOR se queda con el anillo que va de `-6px` a `0`, o sea el que
+   cae FUERA del borde de la tarjeta: el desenfoque sigue suavizando hacia afuera, y el corte
+   de la máscara cae justo encima del marco, donde el ojo ya tiene una línea que mirar. Cero
+   tinte dentro, con el mismo resplandor fuera. */
 .compositor[data-trabajando]::before {
   content: "";
   position: absolute;
-  inset: -3px;
+  inset: -6px;
   border-radius: inherit;
+  padding: 6px;
   background: var(--xonecode-cian);
   opacity: 0.18;
   filter: blur(10px);
+  mask:
+    linear-gradient(var(--dsw-alias-label-primary) 0 0) content-box,
+    linear-gradient(var(--dsw-alias-label-primary) 0 0);
+  mask-composite: exclude;
+  -webkit-mask:
+    linear-gradient(var(--dsw-alias-label-primary) 0 0) content-box,
+    linear-gradient(var(--dsw-alias-label-primary) 0 0);
+  -webkit-mask-composite: xor;
   animation: xonecode-latir 2.4s ease-in-out infinite;
   pointer-events: none;
 }
