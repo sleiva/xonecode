@@ -3129,6 +3129,27 @@ export function fuentesDelJuez(raiz: string): FuentesDeEleccion {
 }
 
 /**
+ * Las fuentes del modelo con que arranca CADA consola de proyecto del vestíbulo.
+ *
+ * Es una función y no una constante por lo mismo que `fuentesDelJuez` está extraída: vivía
+ * dentro del cierre de `vestibuloReal` y se construía UNA vez, al arrancar. El global es del
+ * usuario —esta misma consola lo reescribe desde Ajustes—, así que la instantánea dejaba a
+ * las sesiones NUEVAS resolviendo contra el valor viejo mientras Ajustes enseñaba ya el
+ * elegido. El síntoma, medido: el proceso arrancó con `gemini` en el fichero, el fichero pasó
+ * a `ollama`, y una sesión nueva seguía diciendo `gemini`.
+ *
+ * La capa de PROYECTO no se rellena —el vestíbulo sirve muchos proyectos a la vez y aquí no
+ * hay uno del que hablar—, así que se llama a `cargar` por el cwd SOLO para llegar al fichero
+ * global, que es el único que este lector tiene que ver. Mismo camino que `modeloPorDefecto`.
+ */
+export function fuentesDeLaConsolaWeb(cwd: string): FuentesDeEleccion {
+  return {
+    global: cargar(cwd).config.global,
+    entorno: { XONECODE_MODELO: process.env.XONECODE_MODELO },
+  };
+}
+
+/**
  * Cuánta memoria de proyecto se le da al aumentador.
  *
  * Es CONTEXTO de una llamada, no un fichero que servir: `.xonecode/memoria.md` lo escribe el
@@ -3828,15 +3849,15 @@ function vestibuloReal(
   const ejecutor = banderaDeEjecutor(opciones);
   const cargado = cargar(opciones.cwd);
   aplicarAuth(cargado.auth);
-  const fuentes: FuentesDeEleccion = {
-    global: cargado.config.global,
-    entorno: { XONECODE_MODELO: process.env.XONECODE_MODELO },
-  };
+  // La lectura NO se hace aquí: se hace al abrir cada consola, que es lo que hace que una
+  // sesión nueva vea el `config.json` de ahora y no el del arranque. Ver
+  // `fuentesDeLaConsolaWeb`.
+  const fuentes = (): FuentesDeEleccion => fuentesDeLaConsolaWeb(opciones.cwd);
   const settings = cargarSettings().settings;
   const dependenciasDeProyecto = opciones.dependenciasDeProyecto;
   return crearVestibulo({
     informar,
-    origenDeTrabajo: resolver(fuentes).trabajo.origen,
+    origenDeTrabajo: resolver(fuentes()).trabajo.origen,
     fuentes,
     // Se resuelve UNA vez, aquí, y no en cada `anunciarAlta`: `git config`/`os.userInfo`
     // no cambian a media conexión, y repetir el subproceso en cada anuncio del alta sería

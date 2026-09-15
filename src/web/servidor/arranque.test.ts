@@ -22,6 +22,7 @@ import { MS_DE_TRABAJO_AL_ABRIR,
   RUTA_ARTEFACTO,
   RUTA_EVENTOS,
   fuentesDelJuez,
+  fuentesDeLaConsolaWeb,
   augmentacionCableada,
   contextoDelProyecto,
   TOPE_DE_MEMORIA,
@@ -493,7 +494,7 @@ describe("montarRutas — el cable, por fin conectado", () => {
     it("con proyecto abierto, `actual` sale del estado de sesión, no de un fichero", async () => {
       const servidor = servidorDeMentira();
       const vestibulo = vestibuloDePrueba({
-        fuentes: { bandera: "anthropic/claude-x" },
+        fuentes: () => ({ bandera: "anthropic/claude-x" }),
         correr: async () => 0,
       });
       montarRutas(servidor, vestibulo);
@@ -510,6 +511,47 @@ describe("montarRutas — el cable, por fin conectado", () => {
         .slice(antes)
         .find((m) => m.clase === "modelos") as Extract<MensajeAlCliente, { clase: "modelos" }>;
       expect(modelos.actual).toBe("anthropic/claude-x");
+    });
+
+    it("una sesión NUEVA resuelve con el modelo de AHORA, no con el del arranque", async () => {
+      /**
+       * El fallo que esto vigila, medido en la pantalla del usuario: las fuentes se
+       * construían UNA vez al construir el vestíbulo, así que elegir modelo en Ajustes y
+       * pulsar «nueva sesión» seguía dando el de antes — con Ajustes enseñando ya el
+       * elegido. Dos lecturas del mismo dato en instantes distintos, y decide la que se
+       * quedó atrás.
+       *
+       * Aquí el `config.json` global lo hace `enDisco`: lo que se prueba no es que el
+       * fichero se lea (eso es de `cargar`), sino que se vuelva a llamar a las fuentes al
+       * ABRIR la consola, que es donde estaba la instantánea.
+       */
+      const servidor = servidorDeMentira();
+      let enDisco = "anthropic/claude-x";
+      const vestibulo = vestibuloDePrueba({
+        fuentes: () => ({ bandera: enDisco }),
+        correr: async () => 0,
+      });
+      montarRutas(servidor, vestibulo);
+      const cliente = clienteDeMentira();
+      await servidor.rutas.get(`GET ${RUTA_EVENTOS}`)!(cliente.peticion, cliente.respuesta);
+      await vestibulo.abrirProyecto({ raiz: "/w/a" });
+      await asentar();
+
+      // Alguien elige otro modelo en Ajustes: el global cambia mientras el proceso vive.
+      enDisco = "ollama/deepseek-v4.1-flash:cloud";
+      // «Nueva sesión» es abrir el proyecto sin nombrar sesión: el vestíbulo cierra la
+      // consola ociosa y construye otra, que es donde se releen las fuentes.
+      await vestibulo.abrirProyecto({ raiz: "/w/a" });
+      await asentar();
+
+      const antes = cliente.recibidos.length;
+      await servidor.rutas.get(`GET ${RUTA_EVENTOS}`)!(cliente.peticion, cliente.respuesta);
+      await asentar();
+
+      const modelos = cliente.recibidos
+        .slice(antes)
+        .find((m) => m.clase === "modelos") as Extract<MensajeAlCliente, { clase: "modelos" }>;
+      expect(modelos.actual).toBe("ollama/deepseek-v4.1-flash:cloud");
     });
 
     it("cambiar el modelo EN CALIENTE se reemite: `/modelo` no toca disco", async () => {
@@ -5350,6 +5392,66 @@ describe("`fuentesDelJuez` — el papel del juez se resuelve con el `config.json
     } finally {
       if (antes === undefined) delete process.env.XONECODE_MODELO;
       else process.env.XONECODE_MODELO = antes;
+      rmSync(raiz, { recursive: true, force: true });
+    }
+  });
+});
+
+describe("`fuentesDeLaConsolaWeb` — el global se RELEE, porque esta misma consola lo escribe", () => {
+  /**
+   * Extraída por la misma razón que `fuentesDelJuez`: vivía dentro del cierre de
+   * `vestibuloReal`, que todos sus tests doblan, así que dejara de releerse lo que dejara de
+   * releerse no ponía ni un test en rojo.
+   *
+   * Y la regla que protege se midió en la pantalla: el proceso arrancó con `gemini` en el
+   * `config.json` global, el fichero pasó a `ollama` desde Ajustes, y una sesión NUEVA
+   * seguía diciendo `gemini` — mientras Ajustes, que sí relee, enseñaba ya el elegido. Dos
+   * lecturas del mismo dato en instantes distintos, y decide la que se quedó atrás.
+   */
+  it("dos llamadas con el fichero cambiado en medio dan valores distintos", () => {
+    const casa = mkdtempSync(join(tmpdir(), "xonecode-fuentes-web-"));
+    const raiz = mkdtempSync(join(tmpdir(), "xonecode-fuentes-web-raiz-"));
+    const homeOriginal = process.env.HOME;
+    try {
+      process.env.HOME = casa;
+      mkdirSync(join(casa, ".xonecode"), { recursive: true });
+      const global = join(casa, ".xonecode", "config.json");
+      writeFileSync(global, JSON.stringify({ modelos: { trabajo: "ollama/uno" } }));
+      expect(fuentesDeLaConsolaWeb(raiz).global?.modelos?.trabajo).toBe("ollama/uno");
+
+      // Lo que hace Ajustes: reescribe el MISMO fichero y no reinicia nada.
+      writeFileSync(global, JSON.stringify({ modelos: { trabajo: "ollama/dos" } }));
+      expect(fuentesDeLaConsolaWeb(raiz).global?.modelos?.trabajo).toBe("ollama/dos");
+    } finally {
+      if (homeOriginal === undefined) delete process.env.HOME;
+      else process.env.HOME = homeOriginal;
+      rmSync(casa, { recursive: true, force: true });
+      rmSync(raiz, { recursive: true, force: true });
+    }
+  });
+
+  it("la capa de PROYECTO no se rellena, ni siquiera teniendo uno delante", () => {
+    // El vestíbulo sirve muchos proyectos a la vez y aquí no hay uno del que hablar: meter
+    // la capa del cwd sería dejar que UN proyecto mandara sobre el modelo de todos. El
+    // `cargar` se llama por el cwd solo para llegar al global. Misma distinción que
+    // `fuentesDelJuez` con un proyecto que no opina: ausente, no un objeto vacío.
+    const casa = mkdtempSync(join(tmpdir(), "xonecode-fuentes-web-casa-"));
+    const raiz = mkdtempSync(join(tmpdir(), "xonecode-fuentes-web-proy-"));
+    const homeOriginal = process.env.HOME;
+    try {
+      process.env.HOME = casa;
+      mkdirSync(join(raiz, ".xonecode"), { recursive: true });
+      writeFileSync(
+        join(raiz, ".xonecode", "config.json"),
+        JSON.stringify({ modelos: { trabajo: "ollama/del-proyecto" } })
+      );
+
+      const fuentes = fuentesDeLaConsolaWeb(raiz);
+      expect("proyecto" in fuentes).toBe(false);
+    } finally {
+      if (homeOriginal === undefined) delete process.env.HOME;
+      else process.env.HOME = homeOriginal;
+      rmSync(casa, { recursive: true, force: true });
       rmSync(raiz, { recursive: true, force: true });
     }
   });

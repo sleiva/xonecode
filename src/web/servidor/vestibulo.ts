@@ -336,8 +336,21 @@ export interface OpcionesDelVestibulo {
      */
     opciones?: { adjuntos?: string }
   ) => EjecutorDeTurno;
-  /** Fuentes del modelo con las que arranca cada consola de proyecto. */
-  fuentes?: FuentesDeEleccion;
+  /**
+   * Fuentes del modelo con las que arranca cada consola de proyecto. Como
+   * `dependenciasDeProyecto`, entra por FUNCIÓN y no por objeto, y aquí por una razón que
+   * no es la raíz sino el RELOJ: se llama al ABRIR cada consola, no al construir el
+   * vestíbulo.
+   *
+   * El `config.json` global es del usuario y esta misma consola lo reescribe cuando alguien
+   * elige modelo en Ajustes, así que una instantánea atada al arranque resolvía las sesiones
+   * NUEVAS contra el valor viejo — mientras Ajustes, que sí relee, enseñaba ya el nuevo. El
+   * síntoma es el de siempre en esta casa: dos lecturas del mismo dato que no se hacen en el
+   * mismo instante, y la que se quedó atrás es la que decide. Medido: el proceso arrancó con
+   * `gemini` en el fichero, el fichero pasó a `ollama`, y una sesión nueva seguía diciendo
+   * `gemini`.
+   */
+  fuentes?: () => FuentesDeEleccion;
   /**
    * Lo que la consola de PROYECTO necesita y `consolaWeb` no puede saber: `/sync`, los
    * escritores de config del proyecto, el tema. Depende de la RAÍZ, que no existe hasta
@@ -1307,7 +1320,9 @@ export function crearVestibulo(opciones: OpcionesDelVestibulo): Vestibulo {
       // dentro de la misma sesión, y eso es exactamente lo que dice que hace.
       hilo: idSesion,
       raiz,
-      fuentes: opciones.fuentes ?? {},
+      // Se LEE aquí, una vez por consola y no una por proceso: es lo que hace que una
+      // sesión nueva vea el `config.json` de ahora. Ver `OpcionesDelVestibulo.fuentes`.
+      fuentes: opciones.fuentes?.() ?? {},
     };
     // `/modelo` y `/modelos` cambian el modelo EN CALIENTE y no tocan disco, así que esta
     // es la única forma de enterarse. Ver `Consola.alEstado`.
