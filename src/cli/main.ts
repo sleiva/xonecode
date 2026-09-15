@@ -39,7 +39,7 @@ import { clienteCloudStudio } from "../agent/cloudstudioClient.js";
 import { cargarSettings } from "../agent/settingsEnDisco.js";
 import type { Entorno } from "../core/settings.js";
 import { descargarProyecto } from "../agent/descarga.js";
-import { arbolLimpio, cambiosPendientes, prepararRepo, ramaDeTrabajo, sinCommitear } from "../agent/gitSync.js";
+import { arbolLimpio, cambiosPendientes, prepararRepo, sinCommitear } from "../agent/gitSync.js";
 import { subir } from "../agent/subida.js";
 import { guardarCredencial } from "../agent/authEnDisco.js";
 import { asistenteDeModelo } from "./wizardInicial.js";
@@ -895,8 +895,9 @@ export function crearSincronizador(
         const informe = await piezas.subirProyecto({
           puerto,
           raiz,
+          // La MISMA rama de la que se bajó: lo que se pide es aplicar cambios y subirlos a
+          // la rama del proyecto, no a una rama de trabajo aparte que nadie mira en Studio.
           ramaOrigen: config.rama,
-          ramaTrabajo: ramaDeTrabajo(config.rama),
           proyecto: config.proyecto,
           // Fail-closed si alguien llamara a `sincronizar("subir", ...)` sin política (el
           // comando `/sync` siempre construye una): sin ella, no autoriza NADA en vez de

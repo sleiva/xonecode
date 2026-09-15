@@ -41,135 +41,109 @@ function conEscrituraDeTextoQueFalla(base: CloudStudioEnMemoria): CloudStudioEnM
 }
 
 /**
- * Falla justo al posicionar la rama de TRABAJO (`cambiarRama(ramaTrabajo)`), no al
- * restaurar la de origen — por eso comprueba el NOMBRE y solo intercepta esa llamada,
- * delegando la del `finally` (con la rama de origen) en el método original.
+ * Falla al posicionar la rama a la que hay que mudarse (`cambiarRama(rama)`), no al
+ * restaurar la que estaba — por eso comprueba el NOMBRE y solo intercepta esa llamada,
+ * delegando la del `finally` (con la otra rama) en el método original.
  *
- * El punto fino: el doble ya mueve `ramaActual` a `ramaTrabajo` dentro de `crearRama`
- * (que no se toca aquí y corre antes, sin fallar), así que en el momento del throw la
- * rama activa YA es la de trabajo. Si el `finally` de `subir()` desapareciera, esta
- * función se quedaría con `ramaActual` en `ramaTrabajo` — que es justo lo que el test
- * comprueba que NO pasa.
+ * Las dos ramas tienen que ser DISTINTAS para que el test diga algo: si el puerto ya
+ * estuviera en `rama`, el `finally` llamaría al mismo nombre que falla y la restauración
+ * quedaría sin comprobar. Por eso el doble arranca en otra rama.
  */
-function conCambioARamaDeTrabajoQueFalla(
-  base: CloudStudioEnMemoria, ramaTrabajo: string
+function conCambioARamaQueFalla(
+  base: CloudStudioEnMemoria, rama: string
 ): CloudStudioEnMemoria {
   const prototipo = Object.getPrototypeOf(base) as CloudStudioEnMemoria;
   const puerto: CloudStudioEnMemoria = Object.assign(Object.create(prototipo), base);
   const original = prototipo.cambiarRama.bind(puerto);
   puerto.cambiarRama = async (nombre: string) => {
-    if (nombre === ramaTrabajo) throw new Error("no se pudo posicionar la rama de trabajo");
+    if (nombre === rama) throw new Error("no se pudo posicionar la rama del proyecto");
     return original(nombre);
   };
   return puerto;
 }
 
 /**
- * Mismo patrón (`Object.create`) para instrumentar `escribirTexto` y `crearRama` sin
- * perder el resto de la clase: registra en QUÉ rama estaba el puerto al escribir cada
- * fichero, y con qué argumentos se llamó a `crearRama`, delegando siempre en el método
- * ORIGINAL ligado al envoltorio (`prototipo.x.bind(puerto)`, no a `base`) para que el
- * estado (`ramaActual`, `escrituras`) quede donde `subir()` lo puede leer después.
+ * Mismo patrón (`Object.create`) para instrumentar `escribirTexto` sin perder el resto de
+ * la clase: registra en QUÉ rama estaba el puerto al escribir cada fichero, delegando
+ * siempre en el método ORIGINAL ligado al envoltorio (`prototipo.x.bind(puerto)`, no a
+ * `base`) para que el estado (`ramaActual`, `escrituras`) quede donde `subir()` lo puede
+ * leer después.
  */
 function conRamaInstrumentada(base: CloudStudioEnMemoria) {
-  // Tipado como `CloudStudioPort` (la interfaz, con `crearRama(nombre, desde)` de DOS
-  // argumentos) y no como `CloudStudioEnMemoria`: la clase implementa `crearRama` con un
-  // solo parámetro formal (le basta con el nombre), y TS no deja asignarle luego una
-  // función de dos.
   const prototipo = Object.getPrototypeOf(base) as CloudStudioPort;
   const puerto = Object.assign(Object.create(prototipo), base) as CloudStudioPort;
   const ramasAlEscribir: string[] = [];
-  const llamadasCrearRama: Array<[string, string]> = [];
   const escribirOriginal = prototipo.escribirTexto.bind(puerto);
-  const crearRamaOriginal = prototipo.crearRama.bind(puerto);
   puerto.escribirTexto = async (ruta: string, contenido: string) => {
     ramasAlEscribir.push((await puerto.contexto()).rama);
     return escribirOriginal(ruta, contenido);
   };
-  puerto.crearRama = async (nombre: string, desde: string) => {
-    llamadasCrearRama.push([nombre, desde]);
-    return crearRamaOriginal(nombre, desde);
-  };
-  return { puerto, ramasAlEscribir, llamadasCrearRama };
+  return { puerto, ramasAlEscribir };
 }
 
 describe("subir", () => {
-  it("posiciona la rama de trabajo y devuelve la que estaba", async () => {
+  it("se muda a la rama del proyecto, escribe ahí, y devuelve la que estaba", async () => {
+    // El puerto arranca en OTRA rama a propósito: si ya estuviera en `master`, «se mudó y
+    // volvió» sería indistinguible de «no tocó nada», y lo que hay que demostrar es que
+    // las escrituras caen en la rama del proyecto y que el suelo se devuelve como estaba
+    // —`switch` se lo mueve a quien tenga Studio abierto en el navegador—.
     const raiz = await proyectoConCambios();
-    const base = new CloudStudioEnMemoria({ rama: "master", textos: { "app.xml": "<app/>" } });
+    const base = new CloudStudioEnMemoria({ rama: "otra", textos: { "app.xml": "<app/>" } });
     await base.abrir("AppForTest");
-    const { puerto, ramasAlEscribir, llamadasCrearRama } = conRamaInstrumentada(base);
+    const { puerto, ramasAlEscribir } = conRamaInstrumentada(base);
 
     const informe = await subir({
-      puerto, raiz, ramaOrigen: "master", ramaTrabajo: "xonecode/sergio",
+      puerto, raiz, ramaOrigen: "master",
       proyecto: { id: "96fe", nombre: "AppForTest" }, politicaDeAprobacion: autorizaSiempre
     });
 
     expect(informe.ok).toEqual(["app.xml"]);
-    // AC1: get_context → cambiarRama(trabajo) → operar → cambiarRama(la que estaba).
-    expect(ramasAlEscribir).toEqual(["xonecode/sergio"]);
-    expect((await puerto.contexto()).rama).toBe("master");
-    // AC2: la rama de trabajo se crea, y con la rama origen como base.
-    expect(llamadasCrearRama).toEqual([["xonecode/sergio", "master"]]);
-  });
-
-  it("no crea la rama de trabajo si el servidor ya la tiene", async () => {
-    const raiz = await proyectoConCambios();
-    const base = new CloudStudioEnMemoria({ rama: "master", textos: { "app.xml": "<app/>" } });
-    await base.abrir("AppForTest");
-    const { puerto, llamadasCrearRama } = conRamaInstrumentada(base);
-    // El doble solo recuerda UNA rama activa (`ramaActual`); para simular que el
-    // servidor ya tiene "t" (sin haberla creado en esta sesión) hace falta forzar la
-    // respuesta de `ramas()` — si no, no hay forma de distinguir "ya existe" de "recién
-    // creada" y la creación perezosa quedaría sin cubrir.
-    puerto.ramas = async () => ["master", "t"];
-
-    await subir({ puerto, raiz, ramaOrigen: "master", ramaTrabajo: "t", proyecto: { id: "1", nombre: "AppForTest" }, politicaDeAprobacion: autorizaSiempre});
-
-    expect(llamadasCrearRama).toEqual([]);
+    // AC1: get_context → cambiarRama(proyecto) → operar → cambiarRama(la que estaba).
+    expect(ramasAlEscribir).toEqual(["master"]);
+    expect((await puerto.contexto()).rama).toBe("otra");
   });
 
   it("con todo bien, la ref se mueve y no queda nada pendiente", async () => {
     const raiz = await proyectoConCambios();
     const puerto = new CloudStudioEnMemoria({ rama: "master", textos: { "app.xml": "<app/>" } });
     await puerto.abrir("AppForTest");
-    await subir({ puerto, raiz, ramaOrigen: "master", ramaTrabajo: "t", proyecto: { id: "1", nombre: "AppForTest" }, politicaDeAprobacion: autorizaSiempre});
+    await subir({ puerto, raiz, ramaOrigen: "master", proyecto: { id: "1", nombre: "AppForTest" }, politicaDeAprobacion: autorizaSiempre});
 
-    // La ref lleva el nombre de la rama a la que se ESCRIBIÓ («t»), no el de la origen:
-    // en Studio `master` no tiene nada de esto. Y el diff pendiente se calcula contra esa
-    // misma ref, así que después de subir no queda nada.
-    expect(await cambiosPendientes(raiz, "master", "t")).toEqual([]);
-    expect(git(raiz, "reflog", "show", `${REMOTO}/t`)).toContain("sync:");
+    // La ref es la de la MISMA rama de la que se bajó, así que el diff pendiente se
+    // calcula contra ella y después de subir no queda nada.
+    expect(await cambiosPendientes(raiz, "master")).toEqual([]);
+    expect(git(raiz, "reflog", "show", `${REMOTO}/master`)).toContain("sync:");
   });
 
-  it("la ref se llama como la rama a la que se ESCRIBIÓ, no como la origen", async () => {
-    // El libro de cuentas mentía: se escribía en `xonecode/master` y se movía la ref de
-    // `master`. Después de subir, `git status` decía que ibas al día con `master`, pero
-    // en Studio `master` no tenía nada de eso; y un `/sync bajar` posterior reintroducía
-    // todo como si el trabajo se hubiera revertido.
+  it("sube a la rama de la que se bajó: una sola ref, y ninguna rama de trabajo", async () => {
+    // Lo que se pide es aplicar cambios y subirlos a la rama del proyecto. Hubo una rama
+    // de trabajo (`xonecode/<origen>`, con su propia ref y su `crearRama` en el servidor)
+    // para no escribir en la rama que el cliente tuviera abierta en Studio; el precio era
+    // que lo subido vivía en un sitio que nadie mira mientras la rama del proyecto se
+    // quedaba quieta. Este test es la guarda de esa decisión: la ref que se mueve es la de
+    // `master`, y `refs/remotes/cloudstudio/xonecode/master` no existe.
     const raiz = await proyectoConCambios();
     const puerto = new CloudStudioEnMemoria({ rama: "master", textos: { "app.xml": "<app/>" } });
     await puerto.abrir("AppForTest");
 
-    const baseAntes = git(raiz, "rev-parse", `refs/remotes/${REMOTO}/master`);
     await subir({
-      puerto, raiz, ramaOrigen: "master", ramaTrabajo: "xonecode/master",
+      puerto, raiz, ramaOrigen: "master",
       proyecto: { id: "1", nombre: "AppForTest" }, politicaDeAprobacion: autorizaSiempre,
     });
 
-    // La ref de la rama ORIGEN sigue exactamente donde estaba: en Studio `master` no ha
-    // cambiado, y afirmar lo contrario es lo que hacía irrecuperable el siguiente bajar.
-    expect(git(raiz, "rev-parse", `refs/remotes/${REMOTO}/master`)).toBe(baseAntes);
-    // Y la de la rama de trabajo, que es donde se escribió, apunta a HEAD.
-    expect(git(raiz, "rev-parse", `refs/remotes/${REMOTO}/xonecode/master`)).toBe(git(raiz, "rev-parse", "HEAD"));
-    // Con esa ref ya existiendo, «lo que falta por subir» se mide contra ELLA: nada.
+    // La ref de la rama del proyecto apunta a HEAD: es lo que se acaba de subir.
+    expect(git(raiz, "rev-parse", `refs/remotes/${REMOTO}/master`)).toBe(git(raiz, "rev-parse", "HEAD"));
+    // Y no hay ninguna ref de rama de trabajo: ni la del envío de antes, ni una nueva.
+    const refs = git(raiz, "for-each-ref", "--format=%(refname)", `refs/remotes/${REMOTO}/`);
+    expect(refs.split("\n").filter((r) => r.includes("xonecode/"))).toEqual([]);
     expect(await cambiosPendientes(raiz, "master")).toEqual([]);
   });
 
-  it("antes de la primera subida, lo pendiente se mide contra la rama ORIGEN", async () => {
-    // La otra mitad: sin ref de trabajo todavía, la referencia buena es la origen —de la
-    // que parte la rama de trabajo—. Si `cambiosPendientes` solo mirara la de trabajo, la
-    // primera subida no encontraría nada que subir.
+  it("lo pendiente se mide contra la ref que dejó la descarga, y solo contra esa", async () => {
+    // `prepararRepo` escribe `refs/remotes/cloudstudio/<rama>` con el estado bajado, así
+    // que la referencia de «qué falta por subir» existe desde la primera bajada. Si esto
+    // se calculara contra otra ref —la de una rama de trabajo— o contra nada, la primera
+    // subida no encontraría qué subir o subiría de más.
     const raiz = await proyectoConCambios();
     expect(await cambiosPendientes(raiz, "master")).toEqual([{ clase: "modificado", ruta: "app.xml" }]);
   });
@@ -181,7 +155,7 @@ describe("subir", () => {
     const puerto = conEscrituraDeTextoQueFalla(base);
 
     const informe = await subir({
-      puerto, raiz, ramaOrigen: "master", ramaTrabajo: "t",
+      puerto, raiz, ramaOrigen: "master",
       proyecto: { id: "1", nombre: "AppForTest" }, politicaDeAprobacion: autorizaSiempre
     });
 
@@ -199,32 +173,32 @@ describe("subir", () => {
     // `finally` que restaura la rama. Un mutante que lo quite pasa el resto de tests de
     // este fichero sin problema — solo este lo detecta.
     const raiz = await proyectoConCambios();
-    const base = new CloudStudioEnMemoria({ rama: "master", textos: { "app.xml": "<app/>" } });
+    const base = new CloudStudioEnMemoria({ rama: "otra", textos: { "app.xml": "<app/>" } });
     await base.abrir("AppForTest");
-    const puerto = conCambioARamaDeTrabajoQueFalla(base, "t");
+    const puerto = conCambioARamaQueFalla(base, "master");
 
     await expect(subir({
-      puerto, raiz, ramaOrigen: "master", ramaTrabajo: "t",
+      puerto, raiz, ramaOrigen: "master",
       proyecto: { id: "1", nombre: "AppForTest" }, politicaDeAprobacion: autorizaSiempre
-    })).rejects.toThrow("no se pudo posicionar la rama de trabajo");
+    })).rejects.toThrow("no se pudo posicionar la rama del proyecto");
 
     // (a) subir() rechaza — comprobado arriba.
     // (b) la rama activa del servidor sigue siendo la que estaba.
-    expect((await puerto.contexto()).rama).toBe("master");
+    expect((await puerto.contexto()).rama).toBe("otra");
     // (c) el intento queda registrado en sync.log: un fallo de red o de servidor —la
     // clase para la que existe el log— no puede dejar el JSONL sin rastro.
     const lineas = readFileSync(rutaSyncLog(raiz), "utf8").trim().split("\n");
     const ultima = JSON.parse(lineas[lineas.length - 1]!);
     expect(ultima.dir).toBe("subida");
-    expect(ultima.error).toContain("no se pudo posicionar la rama de trabajo");
+    expect(ultima.error).toContain("no se pudo posicionar la rama del proyecto");
   });
 
   it("deja el registro en JSONL, añadiendo", async () => {
     const raiz = await proyectoConCambios();
     const puerto = new CloudStudioEnMemoria({ rama: "master", textos: { "app.xml": "<app/>" } });
     await puerto.abrir("AppForTest");
-    await subir({ puerto, raiz, ramaOrigen: "master", ramaTrabajo: "t", proyecto: { id: "1", nombre: "AppForTest" }, politicaDeAprobacion: autorizaSiempre});
-    await subir({ puerto, raiz, ramaOrigen: "master", ramaTrabajo: "t", proyecto: { id: "1", nombre: "AppForTest" }, politicaDeAprobacion: autorizaSiempre});
+    await subir({ puerto, raiz, ramaOrigen: "master", proyecto: { id: "1", nombre: "AppForTest" }, politicaDeAprobacion: autorizaSiempre});
+    await subir({ puerto, raiz, ramaOrigen: "master", proyecto: { id: "1", nombre: "AppForTest" }, politicaDeAprobacion: autorizaSiempre});
 
     const lineas = readFileSync(rutaSyncLog(raiz), "utf8").trim().split("\n");
     expect(lineas).toHaveLength(2);
@@ -241,7 +215,7 @@ describe("subir", () => {
 
     const puerto = new CloudStudioEnMemoria({ rama: "master", textos: { "app.xml": "<app/>" } });
     await puerto.abrir("AppForTest");
-    await subir({ puerto, raiz, ramaOrigen: "master", ramaTrabajo: "t", proyecto: { id: "1", nombre: "AppForTest" }, politicaDeAprobacion: autorizaSiempre});
+    await subir({ puerto, raiz, ramaOrigen: "master", proyecto: { id: "1", nombre: "AppForTest" }, politicaDeAprobacion: autorizaSiempre});
 
     expect(puerto.escrituras.some((e) => e.ruta.startsWith(".xonecode"))).toBe(false);
     expect(existsSync(rutaSyncLog(raiz))).toBe(true);
@@ -281,7 +255,7 @@ describe("subir", () => {
     const puerto = new CloudStudioEnMemoria({ rama: "master", textos: { "app.xml": "<app/>" } });
     await puerto.abrir("AppForTest");
 
-    const informe = await subir({ puerto, raiz, ramaOrigen: "master", ramaTrabajo: "t", proyecto: { id: "1", nombre: "AppForTest" }, politicaDeAprobacion: autorizaSiempre});
+    const informe = await subir({ puerto, raiz, ramaOrigen: "master", proyecto: { id: "1", nombre: "AppForTest" }, politicaDeAprobacion: autorizaSiempre});
 
     expect(informe.ok.slice().sort()).toEqual(["app.xml", "viejo.js"]);
     expect(puerto.escrituras).toContainEqual({ tipo: "borrado", ruta: "viejo.js" });
@@ -292,7 +266,7 @@ describe("subir", () => {
     const puerto = new CloudStudioEnMemoria({ rama: "master", textos: { "app.xml": "<app/>" } });
     await puerto.abrir("AppForTest");
 
-    const informe = await subir({ puerto, raiz, ramaOrigen: "master", ramaTrabajo: "t", proyecto: { id: "1", nombre: "AppForTest" }, politicaDeAprobacion: autorizaSiempre});
+    const informe = await subir({ puerto, raiz, ramaOrigen: "master", proyecto: { id: "1", nombre: "AppForTest" }, politicaDeAprobacion: autorizaSiempre});
 
     // `app.xml` sí sube (no lo protege el candado); `viejo.js` no se toca en absoluto,
     // ni en el informe ni en el servidor: la copia era incompleta y no se puede afirmar
@@ -330,7 +304,7 @@ describe("subir", () => {
     await puerto.abrir("AppForTest");
     const avisos: string[] = [];
     const informe = await subir({
-      puerto, raiz, ramaOrigen: "master", ramaTrabajo: "t",
+      puerto, raiz, ramaOrigen: "master",
       proyecto: { id: "1", nombre: "AppForTest" }, politicaDeAprobacion: autorizaSiempre,
       informar: (t) => avisos.push(t),
     });
@@ -352,7 +326,7 @@ describe("subir", () => {
     ]);
     // 5. LA PRUEBA DURA: la ref avanzó, así que el siguiente `/sync` no reintenta lo
     //    imposible. Antes se quedaba clavada y el atasco era permanente.
-    expect(await cambiosPendientes(raiz, "master", "t")).toEqual([]);
+    expect(await cambiosPendientes(raiz, "master")).toEqual([]);
   });
 
   it("un sync.json de OTRO proyecto no vale como candado: no se borra nada", async () => {
@@ -372,7 +346,7 @@ describe("subir", () => {
     await puerto.abrir("AppForTest");
     const avisos: string[] = [];
     const informe = await subir({
-      puerto, raiz, ramaOrigen: "master", ramaTrabajo: "t",
+      puerto, raiz, ramaOrigen: "master",
       proyecto: { id: "1", nombre: "AppForTest" }, politicaDeAprobacion: autorizaSiempre,
       informar: (t) => avisos.push(t),
     });
@@ -393,7 +367,7 @@ describe("subir", () => {
     const puerto = new CloudStudioEnMemoria({ rama: "master", textos: { "app.xml": "<app/>" } });
     await puerto.abrir("AppForTest");
     await subir({
-      puerto, raiz, ramaOrigen: "master", ramaTrabajo: "t",
+      puerto, raiz, ramaOrigen: "master",
       proyecto: { id: "1", nombre: "AppForTest" }, politicaDeAprobacion: autorizaSiempre,
     });
 
@@ -412,15 +386,15 @@ describe("subir", () => {
       };
 
       const informe = await subir({
-        puerto, raiz, ramaOrigen: "master", ramaTrabajo: "t",
+        puerto, raiz, ramaOrigen: "master",
         proyecto: { id: "1", nombre: "AppForTest" }, politicaDeAprobacion: politica,
       });
 
       // Ve EXACTAMENTE lo que se va a escribir, ni más ni menos.
       expect(planRecibido).toEqual([{ tipo: "texto", ruta: "app.xml" }]);
       expect(informe.ok).toEqual(["app.xml"]);
-      expect(await cambiosPendientes(raiz, "master", "t")).toEqual([]);
-      expect(git(raiz, "reflog", "show", `${REMOTO}/t`)).toContain("sync:");
+      expect(await cambiosPendientes(raiz, "master")).toEqual([]);
+      expect(git(raiz, "reflog", "show", `${REMOTO}/master`)).toContain("sync:");
     });
 
     it("si NO autoriza, no escribe nada en el puerto, la ref no se mueve, y lo dice", async () => {
@@ -433,7 +407,7 @@ describe("subir", () => {
       const avisos: string[] = [];
 
       const informe = await subir({
-        puerto, raiz, ramaOrigen: "master", ramaTrabajo: "t",
+        puerto, raiz, ramaOrigen: "master",
         proyecto: { id: "1", nombre: "AppForTest" },
         politicaDeAprobacion: async () => false,
         informar: (t) => avisos.push(t),

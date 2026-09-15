@@ -663,9 +663,13 @@ feedback del desarrollador** y no es terminal.
   `skipFetchAll` o el `git fetch --all` del usuario muere.
 - **Lo que no se pudo bajar, no se puede borrar** (`core/planDeSubida.ts`): el manifiesto de
   `sync.json` impide que las imágenes que git ve «borradas» vacíen el proyecto en Studio.
-- **La ref se mueve solo si la subida terminó entera**, y la que se mueve es la de la rama de
-  TRABAJO (`xonecode/<origen>`), no la origen. El reintento reenvía el plan ENTERO, lo que asume
-  idempotencia del servidor sin comprobarla.
+- **Se sube a la MISMA rama de la que se bajó** (`config.rama`): una sola rama y una sola ref.
+  Hubo una rama de trabajo (`xonecode/<origen>`, creada perezosamente por `subida.ts`) para no
+  escribir en la rama que el cliente tuviera abierta en Studio; el precio era que lo subido vivía
+  en un sitio que nadie mira mientras la del proyecto se quedaba quieta. Con ella se fue
+  `crearRama` del puerto: sin rama que crear, no quedaba llamador.
+- **La ref se mueve solo si la subida terminó entera.** El reintento reenvía el plan ENTERO, lo que
+  asume idempotencia del servidor sin comprobarla.
 - **`.xonecode` no sube nunca**, con filtro propio además del exclude de git. La rama activa del
   servidor se restaura tras cada operación.
 - **Orden al descargar: extraer → borrar vistas aplanadas → commit de baseline.** Al revés, git

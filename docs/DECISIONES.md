@@ -3254,14 +3254,19 @@ remoto no era una opción. Las tres claves de `remote.cloudstudio.*` se escriben
 `core.autocrlf` y `branch.<rama>.remote`/`.merge` son del USUARIO y en un repo preexistente
 solo se escriben si no valen ya nada (y se dice cuáles se omiten).
 
-Studio tiene rama origen (de la que se baja, `cloudstudio.rama`) y rama de trabajo (a la
-que se sube, `ramaDeTrabajo(origen)` = `xonecode/<origen>`, creada perezosamente en la
-primera subida para no ensuciar Studio a quien no sube nada). **La ref que se mueve al
-subir es la de la rama de TRABAJO**, que es a la que se escribió: con la de la origen,
-`git status` decía «al día con master» mientras en Studio `master` no tenía nada de eso, y
-un `bajar` posterior reintroducía todo como si el trabajo se hubiera revertido. Por eso
-`cambiosPendientes` compara contra la ref de trabajo en cuanto existe, y contra la de la
-origen antes de la primera subida — de ahí parte la de trabajo. **El servidor no fusiona** —`manage_branches("merge")` da una LISTA de
+Studio tiene UNA rama para los dos sentidos: se baja de `cloudstudio.rama` y se sube a
+`cloudstudio.rama`. Hubo una rama de trabajo (`ramaDeTrabajo(origen)` = `xonecode/<origen>`,
+creada perezosamente en la primera subida por `subida.ts`) para no escribir en la rama que
+el cliente tuviera abierta en Studio, y el precio se vio al usarla: lo subido vivía en un
+sitio que nadie mira —hay que ir a `xonecode/master` en Studio para verlo— mientras la rama
+del proyecto se quedaba quieta, y una rama de trabajo que se abre en el navegador no es la
+rama del proyecto. Se quitó entera: `ramaDeTrabajo`, el parámetro `ramaTrabajo` de
+`subida.ts` y de `cambiosPendientes`, y **`crearRama` del puerto** —sin rama que crear, no
+quedaba un solo llamador, y crear una rama a partir de sí misma no arreglaría el único caso
+que quedaba (una `config.rama` que alguien borró en Studio: ahí el `switch` falla, queda en
+`sync.log` y se relanza). Queda una ref, `refs/remotes/cloudstudio/<rama>`, y la escribe
+`prepararRepo` en cada bajada, así que «lo que falta por subir» se mide siempre contra lo
+último que consta arriba. **El servidor no fusiona** —`manage_branches("merge")` da una LISTA de
 ficheros a fusionar, no un resultado— así que quien integra en la rama origen es el
 usuario, en Studio. En local fusionaría git, que sí tiene el ancestro común (el commit de
 la descarga), pero **eso todavía no está implementado**: `bajar` SOBRESCRIBE el disco y no

@@ -640,7 +640,6 @@ export interface CloudStudioPort {
   borrarTexto(ruta: string): Promise<void>;
   subirBinario(ruta: string, datos: Uint8Array): Promise<void>;
   ramas(): Promise<string[]>;
-  crearRama(nombre: string, desde: string): Promise<void>;
   cambiarRama(nombre: string): Promise<void>;
 }
 
@@ -732,11 +731,6 @@ export class CloudStudioEnMemoria implements CloudStudioPort {
   async ramas(): Promise<string[]> {
     this.exigirAbierto();
     return [this.ramaActual];
-  }
-
-  async crearRama(nombre: string): Promise<void> {
-    this.exigirAbierto();
-    this.ramaActual = nombre;
   }
 
   async cambiarRama(nombre: string): Promise<void> {

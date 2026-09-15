@@ -1,6 +1,13 @@
 /**
  * La subida: del plan a las llamadas MCP, y de ahí a la ref y al registro.
  *
+ * **Una sola rama**: se sube a la MISMA rama de la que se bajó el proyecto (`config.rama`).
+ * Hubo una rama de trabajo (`xonecode/<origen>`) para no escribir en la rama que el cliente
+ * tuviera abierta en Studio, y el precio era que lo subido vivía en un sitio que nadie mira
+ * mientras la rama del proyecto se quedaba quieta. Se sigue creando la rama si no existe
+ * —un proyecto cuyo `config.rama` nombra una rama que aún no está en el servidor—, pero con
+ * su propio nombre.
+ *
  * Dos propiedades que no son negociables:
  * - La ref se mueve SOLO si todo terminó. Con fallos parciales se queda donde estaba, así
  *   que el siguiente `/sync` vuelve a calcular el plan ENTERO contra esa misma ref sin
@@ -10,8 +17,8 @@
  *   observable la segunda vez. Esta función no lo garantiza ni lo comprueba, solo lo
  *   asume del servidor.
  * - La rama activa del servidor se restaura al terminar (incluso si falló al posicionar
- *   la rama de trabajo, antes de tocar un solo fichero): `switch` le mueve el suelo a
- *   quien tenga Studio abierto en el navegador.
+ *   la rama, antes de tocar un solo fichero): `switch` le mueve el suelo a quien tenga
+ *   Studio abierto en el navegador.
  */
 import { appendFileSync, mkdirSync, readFileSync, statSync, existsSync, readdirSync } from "node:fs";
 import { dirname, join } from "node:path";
@@ -25,8 +32,13 @@ import { rutaSyncJson } from "./descarga.js";
 export interface OpcionesDeSubida {
   puerto: CloudStudioPort;
   raiz: string;
+  /**
+   * La rama del proyecto: de la que se bajó y a la que se sube. El nombre sigue diciendo
+   * «origen» porque es el origen de la descarga, y es el término que usan `descargar` y
+   * `planDeSubida` para la misma rama — renombrarlo en un solo sitio dejaría dos nombres
+   * para una cosa.
+   */
   ramaOrigen: string;
-  ramaTrabajo: string;
   proyecto: { id: string; nombre: string };
   /**
    * El hueco de política (`core/cloudstudio.ts#PoliticaDeAprobacion`), OBLIGATORIO —
@@ -110,9 +122,9 @@ function descargadosDe(
 }
 
 export async function subir(opciones: OpcionesDeSubida): Promise<InformeDeSubida> {
-  const { puerto, raiz, ramaOrigen, ramaTrabajo, proyecto, politicaDeAprobacion, informar = () => {} } = opciones;
+  const { puerto, raiz, ramaOrigen, proyecto, politicaDeAprobacion, informar = () => {} } = opciones;
 
-  const cambios = await cambiosPendientes(raiz, ramaOrigen, ramaTrabajo);
+  const cambios = await cambiosPendientes(raiz, ramaOrigen);
   const tamanos = new Map<string, number>();
   for (const cambio of cambios) {
     const ruta = join(raiz, cambio.ruta);
@@ -139,7 +151,7 @@ export async function subir(opciones: OpcionesDeSubida): Promise<InformeDeSubida
       fecha: new Date().toISOString(),
       dir: "subida",
       proyecto: proyecto.nombre,
-      rama: ramaTrabajo,
+      rama: ramaOrigen,
       ok: informe.ok,
       fallos: informe.fallos,
       // Lo IMPOSIBLE queda por escrito igual que lo fallido: el usuario tiene que poder
@@ -182,11 +194,13 @@ export async function subir(opciones: OpcionesDeSubida): Promise<InformeDeSubida
   const antes = await puerto.contexto();
   try {
     try {
-      if (!(await puerto.ramas()).includes(ramaTrabajo)) {
-        // Perezosa: crear la rama en el alta le ensucia el Studio a quien no sube nada.
-        await puerto.crearRama(ramaTrabajo, ramaOrigen);
-      }
-      await puerto.cambiarRama(ramaTrabajo);
+      // Posicionarse en la rama del PROYECTO. Aquí hubo un `crearRama` perezoso para la
+      // rama de trabajo —que no existía hasta la primera subida—, y sin rama de trabajo no
+      // tiene qué crear: `config.rama` salió de la lista de ramas del servidor en el alta,
+      // así que existir existe. Si alguien la borró en Studio desde entonces, el `switch`
+      // falla, queda en `sync.log` y se relanza: inventarse una rama desde sí misma no
+      // arreglaría nada y firmaría un linaje falso.
+      await puerto.cambiarRama(ramaOrigen);
 
       for (const operacion of plan) {
         try {
@@ -203,7 +217,7 @@ export async function subir(opciones: OpcionesDeSubida): Promise<InformeDeSubida
       }
     } finally {
       // La rama que estaba de VERDAD, no la que suponíamos: por eso se lee `contexto`
-      // antes. Este `finally` corre TAMBIÉN si `crearRama`/`cambiarRama` revientan antes
+      // antes. Este `finally` corre TAMBIÉN si `cambiarRama` revienta antes
       // de llegar al plan — es precisamente el camino para el que existe: un fallo
       // posicionando la rama no puede dejar el suelo movido bajo quien tenga Studio
       // abierto en el navegador.
@@ -219,9 +233,7 @@ export async function subir(opciones: OpcionesDeSubida): Promise<InformeDeSubida
   }
 
   if (informe.fallos.length === 0) {
-    // La ref se llama como la rama a la que se ESCRIBIÓ, no como la origen (ver
-    // `gitSync.ts#marcarSubido`): en Studio la origen no tiene nada de esto.
-    await marcarSubido(raiz, ramaTrabajo, `sync: ${informe.ok.length} ficheros a ${ramaTrabajo}`);
+    await marcarSubido(raiz, ramaOrigen, `sync: ${informe.ok.length} ficheros a ${ramaOrigen}`);
   } else {
     // La ref no se mueve: el siguiente `/sync` recalcula el plan entero desde ahí y lo
     // reenvía completo, incluido lo que sí subió esta vez (ver la nota de cabecera).

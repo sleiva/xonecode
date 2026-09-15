@@ -197,9 +197,6 @@ export function clienteCloudStudio(invocar: Invocar, nombreDeProyecto: string): 
             ? [(r as { Key: string }).Key] : [])
         : [];
     },
-    async crearRama(nombre, desde) {
-      await conSesion("studio_manage_branches", { operation: "create", branchName: nombre, targetBranch: desde });
-    },
     async cambiarRama(nombre) {
       await conSesion("studio_manage_branches", { operation: "switch", branchName: nombre });
     },

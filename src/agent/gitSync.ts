@@ -19,14 +19,6 @@ const ejecutar = promisify(execFile);
 
 export const REMOTO = "cloudstudio";
 
-/**
- * Cómo se llama la rama de TRABAJO (a la que se sube) de una rama origen dada.
- *
- * Vive aquí y se exporta para que no haya dos sitios que la compongan: `cli/main.ts` la
- * usaba en una plantilla suelta, y basta con que una de las dos cambie para que la ref de
- * seguimiento y la rama del servidor dejen de referirse a lo mismo, en silencio.
- */
-export const ramaDeTrabajo = (ramaOrigen: string): string => `xonecode/${ramaOrigen}`;
 const EXCLUSION = `${NOMBRE_CARPETA}/`;
 
 const git = (raiz: string, args: string[], env?: NodeJS.ProcessEnv) =>
@@ -244,32 +236,19 @@ export async function prepararRepo(
   }
 }
 
-/** ¿Existe esa ref? `rev-parse --verify` sale con error si no, y `execFile` lo lanza. */
-async function existeRef(raiz: string, ref: string): Promise<boolean> {
-  try {
-    await git(raiz, ["rev-parse", "--verify", "--quiet", `${ref}^{commit}`]);
-    return true;
-  } catch {
-    return false;
-  }
-}
-
 /**
- * Lo que hay en local y no está subido: el diff contra la ref de seguimiento.
+ * Lo que hay en local y no está subido: el diff contra la ref de seguimiento de LA rama,
+ * `refs/remotes/cloudstudio/<rama>`.
  *
- * **Contra CUÁL** es la parte fina. Se sube a la rama de TRABAJO, así que en cuanto esa
- * rama existe, «lo que falta por subir» es el diff contra SU ref — no contra la de la
- * rama origen, que se quedó en el momento de la descarga y nadie vuelve a mover. Antes de
- * la primera subida esa ref no existe todavía y la referencia buena es la origen, que es
- * justo de donde parte la rama de trabajo.
+ * Una sola rama, en los dos sentidos: se baja de `config.rama` y se sube a `config.rama`.
+ * Hubo una rama de trabajo (`xonecode/<origen>`, con su propia ref y su `crearRama` en el
+ * servidor) para no escribir en la rama que el cliente tiene abierta en Studio; el precio
+ * era que lo que se subía vivía en un sitio que nadie mira, y la rama del proyecto se
+ * quedaba quieta. Lo que se pide es aplicar cambios y subirlos a la rama de la que se bajó
+ * el proyecto, así que la ref es UNA — y `prepararRepo` la escribe en cada bajada (y en el
+ * alta), que es justo el estado con el que se compara esto.
  */
-export async function cambiosPendientes(
-  raiz: string,
-  ramaOrigen: string,
-  ramaTrabajo: string = ramaDeTrabajo(ramaOrigen)
-): Promise<CambioLocal[]> {
-  const refTrabajo = `refs/remotes/${REMOTO}/${ramaTrabajo}`;
-  const rama = (await existeRef(raiz, refTrabajo)) ? ramaTrabajo : ramaOrigen;
+export async function cambiosPendientes(raiz: string, rama: string): Promise<CambioLocal[]> {
   // Las rutas del diff vienen relativas a la RAÍZ DEL REPO. Si el proyecto es un
   // subdirectorio, hay que recortar el prefijo o `subida.ts` compone `raiz/app/app.xml`
   // (ENOENT) y ninguna ruta casa con `descargados`, que son relativas al proyecto.
@@ -304,11 +283,10 @@ export async function cambiosPendientes(
 /**
  * «Simular el push»: mover la ref. Solo se llama cuando la subida terminó ENTERA.
  *
- * `rama` es la rama a la que se ESCRIBIÓ de verdad —la de trabajo—, no la origen. Con la
- * origen, después de subir `git status` decía que ibas al día con `master` mientras en
- * Studio `master` no tenía nada de eso; y un `bajar` posterior reintroducía todo el
- * trabajo como si se hubiera revertido. El libro de cuentas tiene que llamar a las cosas
- * por el nombre que tienen en el servidor.
+ * Se mueve la ref de la rama a la que se escribió, que ahora es la MISMA de la que se
+ * bajó (`refs/remotes/cloudstudio/<rama>`), así que «lo que falta por subir» se mide
+ * siempre contra lo último que consta arriba y el libro de cuentas llama a las cosas por
+ * el nombre que tienen en el servidor.
  */
 export async function marcarSubido(raiz: string, rama: string, mensaje: string): Promise<void> {
   const { stdout } = await git(raiz, ["rev-parse", "HEAD"]);
