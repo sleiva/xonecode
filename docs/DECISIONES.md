@@ -326,6 +326,102 @@ en el proyecto real del usuario, **con el título en blanco**: el título sale d
   las filas no distingue ninguna, y omitido siempre haría que un «7 sept» del año pasado se
   leyera como de anteayer.
 
+**El gasto de una sesión vive en el ÍNDICE y su cifra en la barra es UNA**
+(`EntradaIndice.consumo`, `core/actos.ts#acumularTotales`, `sesiones.ts#anotarConsumoDeActo` /
+`#sembrarConsumosPendientes`, `transporte.ts#SesionDelCable`, `componentes/CosteDelTurno.tsx` con
+`ambito: "sesion"`, `componentes/Barra.tsx#FichaDeSesion`). El contador del compositor dice lo que
+lleva la conversación ABIERTA; esto es lo que costó una conversación CERRADA, que es la única
+forma de que la lista conteste «¿cuál de estas me está costando más?». Ocho reglas:
+
+- **El acumulado es de la sesión, y la VENTANA no viaja dentro.** `consumoDeLosActos` se queda
+  con la ventana del último `fin` que la traiga —su contrato, y en la piel hace falta—, así que
+  meter su resultado tal cual en el índice escribiría en disco un «cuánto ocupa el historial
+  AHORA» de un turno de anteayer. `acumularTotales` es la función que la quita, y existe con
+  nombre propio por eso: un acumulado estampado solo lleva los dos pares de cifras. El dato no
+  se pierde —sigue en cada `fin` del `.jsonl`, que es donde se mide— y **hoy no lo pinta nadie
+  desde ahí**, que es justo por lo que el defecto no se notaba: una cifra muerta en disco es una
+  cifra que alguien leerá mañana creyendo que es la de hoy. Lo cazó la siembra, no el estampado.
+- **Se estampa en `anotarActo`, que es el único sitio por el que pasan TODOS los actos.** El
+  índice se relee-reescribe entero en cada anotación, así que el acumulado se suma ahí, en el
+  mismo viaje: sin una escritura de más y sin un segundo lector del índice que pudiera divergir
+  del primero (`leerIndiceOAbortar` es el único que lo lee para escribir).
+- **Y cuando la entrada todavía NO trae acumulado, NO se suma el delta.** Es la regla que más
+  importa y la que parece un detalle: sumar el delta dejaría en el índice el gasto del ÚLTIMO
+  turno con la FORMA de un total de la sesión —una sesión de 11k que hace un turno de 3k quedaría
+  en 3k—, y nadie lo notaría, porque el número es plausible y la fila no dice de qué habla. Ahí
+  se relee el `.jsonl` y se suma la sesión ENTERA. Es como mucho una lectura por sesión: en
+  cuanto el acumulado consta, esto vuelve a ser una suma de dos objetos. Se relee con
+  `reabrirSesion` y no con un lector propio porque es el ÚNICO que sabe leer un `.jsonl`
+  saltando la línea trunca; un segundo lector sería un segundo sitio donde esa tolerancia puede
+  dejar de estar.
+- **Un cero no se estampa.** Un `fin` sin consumo —sesión anterior a que se midiera, o una piel
+  que no mide— deja la entrada como estaba, y un `consumoDeLosActos` que contesta «no consta»
+  tampoco escribe nada. Ausente es «no consta» también aquí: escribir ceros convertiría «no sé
+  lo que gastó» en «no gastó nada», que es la cifra inventada de siempre.
+- **La siembra es de PRESENTACIÓN y es MONOTÓNICA** (`sembrarConsumosPendientes`). Sin ella, el
+  acumulado nace VACÍO en todas las sesiones anteriores: el índice solo aprende el gasto de una
+  sesión cuando alguien la usa, así que las que nadie vuelve a abrir se quedarían sin cifra para
+  siempre — y la barra, que existe para mirarlas, sería justo lo que no las ve. Rellena solo las
+  entradas que NO traen acumulado (correrla dos veces devuelve 0 la segunda), va de las MÁS
+  RECIENTES hacia atrás porque el tope de número tiene que elegir y lo que se mira es lo último,
+  **no da de alta la entrada que falte** —un `.jsonl` sin entrada es una sesión que alguien
+  borró, y resucitarla la devolvería a la barra apuntando a un fichero que ya no está—, y escribe
+  UNA vez al final. Sus dos topes son (`SESIONES_A_SEMBRAR`, 12) y (`TOPE_DE_BYTES_DE_SIEMBRA`,
+  4 MB): es SÍNCRONA y corre en el bucle de eventos, así que un `.jsonl` enorme congelaría el
+  servidor mientras lo lee.
+- **Y su disparo está donde tiene que estar: ANTES de leer la lista, y una vez por raíz y
+  proceso** (`arranque.ts#sesionesDelProyecto`). Antes, porque la siembra escribe el índice y
+  `sesionesDe` lo relee, así que el anuncio que la dispara es el que ya enseña las cifras —no
+  hace falta ningún reanuncio—. Una vez por raíz, porque el alta se anuncia DOS veces por turno
+  y recorre todos los proyectos: sin la marca, cada anuncio releería el índice de cada proyecto y
+  mediría sus `.jsonl`, dos veces por turno y multiplicado por el número de proyectos. Y su fallo
+  se TRAGA: sembrar es presentación, y lo peor que puede pasar es que una sesión vieja no enseñe
+  cifra hasta su próximo turno —donde enseñará la buena, porque `anotarConsumoDeActo` relee
+  cuando no hay acumulado—; blankear la barra entera por un índice roto sería convertir un adorno
+  que falta en una lista que no está.
+- **La fila enseña UN número, y el par se queda en el `title`.** La fila de la barra no tiene el
+  sitio de la línea que cierra un turno: compite con el nombre de la sesión, que es lo ÚNICO
+  elástico de una barra cuyo ancho elige el usuario. Y la cifra que se compara de un vistazo
+  entre sesiones es el total —un par no se compara, se lee—, así que ahí va la suma con una **Σ**
+  delante: `98,2k` pelado al lado de una fecha se lee como otra fecha, y `↑`/`↓` dirían que es UNA
+  de las dos mitades. El desglose por cuenta va en el `title`, y el `aria-label` dice la frase
+  entera («Esta sesión: N tokens en total…») porque el `title` no se anuncia de forma fiable. La
+  CACHÉ se calla en la fila por lo mismo que el par: en el turno son unos 60 px y aquí son los
+  que le faltan al título. El ámbito entra como unión CERRADA (`ambito?: "turno" | "sesion"`) y no
+  como texto libre, porque un prop de texto libre es como nacen dos dialectos de la misma frase.
+- **Y la cifra se RETIRA cuando la fila es estrecha, con una consulta de CONTENEDOR**
+  (`Barra.module.css`, `.cifraDeLaFicha` dentro de `.cuerpoDeFila`). No es un `@media`: el ancho
+  de la barra lo pone JS —el tirador de `Maqueta.tsx`—, así que una ventana ancha con la barra
+  arrastrada a tope deja la fila estrecha sin que el viewport lo sepa. El criterio es que **el
+  título no baje de lo que YA tiene a la barra más estrecha**, y eso está medido: con la barra a
+  220 —su mínimo— la fila mide 155 y el título 55, así que el suelo son 55. La cifra cuesta 46 px
+  de título (40 de cifra más los 6 de hueco), luego el título llega justo a 55 cuando la fila mide
+  200,5: de ahí el umbral en 200. **El cruce se comprobó arrastrando el tirador, no restando**:
+  fila 200 → escondida (título 100,3), fila 201 → pintada (título 55,5). Y con el par de antes
+  —`↑77,7k ↓20,5k`, 86 px— el mismo criterio daba 260, o sea que la cifra NO salía a la barra por
+  omisión (fila 255, barra 320) y había que arrastrarla a 326 para verla; con una sola cifra, a la
+  omisión el título pierde esos 46 px y conserva 109,5, contra los 103 que mide el rótulo más
+  largo que escribe la aplicación («Tarea de fondo»). El sello de la fecha no se mueve cuando la
+  cifra aparece —medido a 220 y a 320, su borde derecho cae en `barra − 45` en todas las filas y
+  en los dos casos—, y por eso la cifra va DELANTE del sello y no detrás: la columna que se lee de
+  un vistazo, la que ordena la lista, se queda quieta.
+- **Trampa, y es del repo: la hoja que consulta un contenedor tiene que DECLARARLO en el mismo
+  fichero** (`Barra.test.tsx` lo exige recorriendo los `.module.css`). Una consulta sin un
+  ancestro con `container-type` no dispara JAMÁS y no avisa: la regla se queda escrita y muerta,
+  que es el patrón de fallo de esta arquitectura en versión de CSS —una composición que no está
+  montada con todo en verde—, y jsdom no lo puede ver porque no hace layout ni cascada. De ahí que
+  la consulta y su contenedor vivan en la misma hoja. Y como el nombre de un módulo CSS va
+  HASHEADO, no se puede retirar desde un fichero el elemento de otro: cuando el retirado vive en
+  otro componente se le pone un envoltorio con clase propia del módulo que consulta —`.gasto` en
+  el compositor es exactamente eso—. Declarar el contenedor en `.cuerpoDeFila` es seguro porque su
+  tamaño no depende de lo que lleve dentro: `flex: 1` ya lo fija.
+- **Y la muestra con la que se juzgó era FINA, lo que conviene saber para la próxima.** De las
+  seis sesiones de AppDemo solo una tiene cifra, y su título («Hola») mide 30 px; la fila que de
+  verdad aprieta —«Tarea de fondo»— no tenía datos, porque sus `.jsonl` son anteriores al campo
+  `consumo`. O sea que el ancho se juzgó con una fila que no pincha, y por eso el umbral se
+  comprobó además arrastrando el tirador y midiendo los dos lados del cruce, en vez de fiarse de
+  la fila que había.
+
 **Cada turno COMMITEA lo que dejó** (`agent/gitSync.ts#commitDeTurno`, la opción
 `commitearTurno` del vestíbulo). Hasta ahora no se commiteaba NUNCA: `prepararRepo` hace un
 commit de baseline al descargar y ahí se acababa. De eso colgaban dos cosas, y la segunda es
@@ -2032,9 +2128,37 @@ precisamente para eso—:
   se escribe era lo primero que se quedaba sin sitio. El `padding` vertical del campo tenía
   sentido en esa fila compartida; en columna dejaba 16 px de aire muerto. Y el
   `justify-content: space-between` de los controles desperdigaba las pastillas en cuanto
-  dejaron de compartir renglón con el campo: ahora el hueco se lo come el primer
-  `margin-left: auto` —el del contador si está, el del botón si no—, así que las pastillas
-  quedan juntas en los dos casos.
+  dejaron de compartir renglón con el campo: ahora el hueco lo come UN `margin-left: auto`, el
+  del bloque que agrupa el gasto y el botón, así que las pastillas quedan juntas en los dos
+  casos.
+- **Y «uno» es la parte que importa, porque aquí el fichero decía una cosa que flexbox no
+  hace.** Decía que el hueco «se lo come el primer `margin-left: auto` que encuentre, el del
+  contador si está y el del botón si no». No es así: **los márgenes automáticos se REPARTEN el
+  hueco libre**, así que con los dos puestos —el contador llevaba el suyo y el botón también—
+  el contador se quedaba flotando en mitad de la fila en vez de junto al botón. MEDIDO en
+  pantalla, con la ventana a 1512: **194 px de vacío a su izquierda y otros 194 a su derecha**.
+  La causa era mecánica y el síntoma se leía como un problema de color, que es lo que el ojo
+  dijo primero («no tienen color, no destacan»); el color se arregló después, y era el segundo
+  problema. Lo cazó mirar la pantalla, no el suite: jsdom no hace layout, así que las dos
+  posiciones dan el mismo `textContent` y el mismo DOM.
+- **Y el botón de enviar lo protege ENVOLVER, no un umbral.** La fila no envolvía, así que con
+  la ventana estrecha el contador y el botón se salían de la tarjeta: medido a 700 de ventana,
+  **31 px de desborde y el botón de enviar CORTADO** —la acción de la fila, invisible—.
+  `flex-wrap: wrap` en `.controles` (arregla 700 y 560) y también en `.acciones` (arregla por
+  debajo de 480); comprobado a 1512, 900, 700, 620, 560, 480, 420 y 380, el botón queda dentro
+  en todos. La consulta de contenedor del gasto solo decide a partir de qué ancho la pastilla
+  no vale el renglón que se lleva —medido: a 560 la fila mide 180 y sí cabe; a 480 mide 132 y
+  se retira; las dos piezas ocupan 113 + 8 + 32 = 153, y el 170 del umbral deja 17 px de aire
+  para una cifra algo más larga—. Es la diferencia entre una red de seguridad, que no puede
+  fallar, y un umbral, que mide una cosa y decide sobre otra.
+- **El gasto es una pastilla con color propio, y no el gris del sitio.** El par del chip es
+  `state-business-tertiary` de fondo con `state-business-primary` de letra —el MISMO que ya
+  usaba la pastilla de «compartido»—, con las cifras en negrita: un par ya establecido en esta
+  interfaz para «dato que no es un control», que es exactamente lo que esto es. Un chip gris se
+  midió invisible, y `bg-layer-2` no sirve de fondo aquí porque en el tema claro es blanco
+  sobre blanco —el mismo defecto que ya se había documentado para la burbuja del usuario—. El
+  cian no entra: es ACENTO y no sostiene texto, y el azul de marca ya es del botón que está a 8
+  px, así que usarlo aquí sería competir con la acción de la fila.
 - **El dispositivo estuvo ARRIBA en una fila de chips y volvió abajo.** Seguía la maqueta, y la
   maqueta se equivocaba: un chip solo no era una fila, era un renglón —una fila de un elemento
   no se lee como agrupación, se lee como un control suelto—. Los dos arreglos de esa tanda los
@@ -3231,7 +3355,10 @@ Siete reglas:
   caliente. **Sin tope no se pinta denominador ni porcentaje**: con Ollama no hay a propósito, y
   un porcentaje sobre un número inventado es una mentira con forma de cifra.
 
-Lo que NO hay todavía: métricas globales (por proyecto, histórico, coste).
+Lo que NO hay todavía es la vista AGREGADA: por proyecto y por histórico. El total de UNA sesión
+ya vive en su índice (ver «El gasto de una sesión vive en el ÍNDICE»), así que lo que falta no es
+un `reduce` sino una pantalla — y el COSTE no se puede sumar entre cuentas, así que una métrica
+global de dinero no es una cifra que falte: es una pregunta que hoy no tiene respuesta honesta.
 
 **Los totales de una CONVERSACIÓN sobreviven a cerrarla** (`core/actos.ts#ConsumoDeTurno`,
 `#sumarConsumo`, `#consumoDeLosActos`, `core/ports.ts#consumoPersistible` / `#consumoDeLaSesion`,

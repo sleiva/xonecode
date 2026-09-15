@@ -511,8 +511,14 @@ feedback del desarrollador** y no es terminal.
 - **La caja del compositor va en COLUMNA**: el texto arriba a todo el ancho, y debajo el
   modelo y el dispositivo JUNTOS a la izquierda con el contador y el botón a la derecha. **Esto
   se comprueba en el NAVEGADOR** —`capturas/` está en el `.gitignore` para eso— y no con tests.
-  El hueco de los controles se lo come el primer `margin-left: auto` (el del contador si está,
-  el del botón si no), así que las pastillas quedan juntas en los dos casos. El dispositivo
+  El hueco de los controles se lo come UN `margin-left: auto`, el del bloque que agrupa el
+  gasto y el botón, así que las pastillas quedan juntas y el gasto cae junto al botón. Uno y
+  no uno por pieza porque **los márgenes automáticos se REPARTEN el hueco libre**, no lo come
+  el primero: con dos, el contador se quedaba flotando a mitad de fila. Y ese bloque envuelve
+  y el gasto se retira cuando la fila no da para los dos, que el botón no puede quedarse
+  fuera de la tarjeta: la acción es lo único que no se calla. El gasto es una pastilla del par
+  `state-business-*` —el MISMO de la pastilla de «compartido»—, con las cifras en negrita:
+  `bg-layer-2` no sirve de fondo aquí, que en el tema claro es blanco sobre blanco. El dispositivo
   estuvo ARRIBA en una fila de chips, siguiendo la maqueta, y volvió abajo mirando la pantalla:
   un chip solo no era una fila, era un renglón. Y no hay chip de «Contexto» aunque la maqueta
   lo pinte — ese concepto no existe aquí, y lo más parecido (el proyecto) ya se lee en la miga:
@@ -525,6 +531,14 @@ feedback del desarrollador** y no es terminal.
   cableado es el botón muerto de siempre con la petición de una persona detrás.
 - **Nada se trae de un CDN** (tipografías empaquetadas, iconos copiados): esta consola escucha en
   loopback y declara un modo offline de primera clase.
+- **Una consulta de contenedor declara su contenedor en la MISMA hoja** (`Barra.test.tsx` lo exige
+  recorriendo los `.module.css`). Sin un ancestro con `container-type` no dispara JAMÁS y no
+  avisa: la regla se queda escrita y muerta, que es el patrón de fallo de esta arquitectura en
+  versión de CSS, y jsdom no lo ve porque no hace layout ni cascada. Y como el nombre de un módulo
+  CSS va HASHEADO, no se puede retirar desde un fichero el elemento de otro: al que vive en otro
+  componente se le pone un envoltorio con clase propia del módulo que consulta. El ancho que se
+  consulta suele ser el de un panel que pone JS —la barra lateral, el renglón del compositor—, y
+  por eso esto es contenedor y no `@media`.
 - **Un control sin dato detrás no se pinta.** Ausente ≠ vacío en las cuatro capas (disco, cable,
   store, componente): `Entorno.proyectos`, `AjustesDeDispositivos`, `compartido`, `detalles`.
   Lo que falta se ROTULA; lo que queda fuera se CUENTA con el camino para arreglarlo.
@@ -741,7 +755,32 @@ feedback del desarrollador** y no es terminal.
     cierra el tramo de SU turno, no el último de la lista. Un `{0,0}` no se pinta
     (`hayCosteQueEnsenar`), y **el mismo `abreviar`** (`cifras.ts`) sirve al contador, a la barra
     y al cierre: dos formatos para el mismo dato enseñan a desconfiar de los dos.
-  Lo que NO hay todavía: métricas globales (por proyecto, histórico, coste).
+  - **El total de una sesión vive en el ÍNDICE, y su cifra en la barra es UNA**
+    (`EntradaIndice.consumo`, `core/actos.ts#acumularTotales`, `sesiones.ts#anotarConsumoDeActo` /
+    `#sembrarConsumosPendientes`, `SesionDelCable`, `componentes/Barra.tsx#FichaDeSesion`). La
+    fila de la barra no tiene el sitio de la línea de un turno —compite con el nombre de la
+    sesión, que es lo único elástico de una barra cuyo ancho elige el usuario—, así que ahí va
+    **un solo número con una Σ delante** y el desglose por cuenta en el `title`: `98,2k` pelado
+    junto a una fecha se lee como otra fecha, y `↑`/`↓` dirían que es UNA de las dos mitades. La
+    caché se calla ahí por lo mismo. Y la cifra se RETIRA cuando la fila es estrecha, con una
+    consulta de CONTENEDOR y nunca un `@media`: el ancho de la barra lo pone JS, así que con la
+    misma ventana y la barra encogida un `@media` no dispararía.
+    - **La ventana NO entra en un acumulado.** `acumularTotales` la quita: «cuánto ocupa el
+      historial ahora» es una pregunta de la sesión ABIERTA, y congelada en una cerrada sería un
+      «ahora» de hace días que alguien leería como el de hoy. El `.jsonl` la sigue teniendo.
+    - **Un cero no se estampa, y cuando la entrada aún no trae acumulado NO se suma el delta.**
+      Sumarlo dejaría el gasto del ÚLTIMO turno con la forma de un total de la sesión, y el
+      número es plausible: no se notaría. Ahí se relee el `.jsonl` —con `reabrirSesion`, el único
+      lector tolerante a la línea trunca— y se suma la sesión entera.
+    - **La siembra es de PRESENTACIÓN y MONOTÓNICA** (`sembrarConsumosPendientes`): rellena solo
+      lo que no trae acumulado, va de lo más reciente hacia atrás, no da de alta la entrada que
+      falte —eso resucitaría una sesión borrada— y su fallo se TRAGA, porque una sesión vieja sin
+      cifra es un adorno que falta y no una lista que no está. Corre ANTES de leer la lista y una
+      vez por raíz y proceso: el alta se anuncia dos veces por turno y recorre todos los
+      proyectos.
+  Lo que NO hay todavía es la vista AGREGADA (por proyecto, por histórico): el total de UNA sesión
+  ya está, y el COSTE no se puede sumar entre cuentas, así que no es una cifra que falte sino una
+  pregunta sin respuesta honesta.
 - **El modelo en vigor lo dice el SERVIDOR** (`resolver(estadoDeSesion.fuentes).trabajo` de la
   consola ABIERTA), por la costura `Consola.alEstado`: `/modelo` cambia en caliente sin tocar
   disco, así que releer la configuración contaría lo de antes para siempre.
