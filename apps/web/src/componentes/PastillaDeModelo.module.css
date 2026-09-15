@@ -58,6 +58,23 @@
   overflow-y: auto;
 }
 
+/* En LÍNEA (Ajustes): la lista no flota, empuja lo de abajo. El mismo control sirve para
+   dos sitios con necesidades opuestas —una pastilla en una fila, un ajuste en un panel que
+   ya se desplaza— y lo único que cambia es esto.
+   - `position: static`: dentro del panel, un absoluto lo recorta el borde del panel (tiene
+     `overflow-y: auto`) y el menú, que sube, taparía la cabecera de la ventana.
+   - sin `max-height` propio: la altura la pone la lista de modelos de dentro
+     (`.modelos`, 200px), que es la que tiene que desplazarse. Con las dos, el proveedor de
+     abajo se salía de la caja sin que nada lo dijera.
+   - `min-width: 0`: los 260px son el ancho de un menú flotante sobre el transcript; aquí
+     manda el del panel. */
+.menu[data-en-linea] {
+  position: static;
+  min-width: 0;
+  max-height: none;
+  margin: 6px 0 0;
+}
+
 .grupo {
   display: flex;
   flex-direction: column;
@@ -197,11 +214,20 @@
 }
 
 /* La línea de los que no se enseñan, y la de cuando no hay ninguno. Discretas y al final:
-   son el pie del menú, no una opción más — de ahí que no lleven el aspecto de fila. */
+   son el pie del menú, no una opción más — de ahí que no lleven el aspecto de fila.
+
+   `box-sizing: border-box` porque aquí NO hay reset global y este elemento es `width: 100%`
+   más `padding` horizontal: en el content-box eso es un 100% + 20px, y el menú —cuyo
+   `overflow-y: auto` obliga a `overflow-x: auto`, porque `visible` no es un valor posible
+   cuando el otro eje no lo es— sacaba una barra de desplazamiento horizontal en su pie.
+   Medido en Ajustes, donde el menú va en línea y ocupa el ancho del panel: 561 de
+   `scrollWidth` contra 541 de `clientWidth`, que son los 20px del relleno. Es la misma
+   línea que ya llevan `Pregunta.module.css` y `Aprobacion.module.css` por lo mismo. */
 .fuera,
 .vacio {
   display: block;
   width: 100%;
+  box-sizing: border-box;
   margin: 4px 0 0;
   padding: 6px 10px;
   border: none;

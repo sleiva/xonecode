@@ -2,6 +2,7 @@
 // `menuitemradio`: las flechas del teclado no navegaban una lista de botones.
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import type { ProveedorDeModelos } from "../tipos.js";
 import { PastillaDeModelo } from "./PastillaDeModelo.js";
 
 const PROVEEDORES = [
@@ -153,6 +154,9 @@ describe("el punto de un proveedor SIN credencial habla de la conexión", () => 
 
   const ollama = (extra: Record<string, unknown>) => ({
     id: "ollama",
+    // El NOMBRE, no solo el id: la fila del menú se rotula con él («el id se teclea, el
+    // nombre se lee») y sin esto el proveedor salía sin texto que leer ni que consultar.
+    nombre: "Ollama",
     credencial: "nativa" as const,
     ...extra,
   });
@@ -168,7 +172,7 @@ describe("el punto de un proveedor SIN credencial habla de la conexión", () => 
         actual="ollama/qwen3:8b"
         proveedores={[p]}
         alPedirCatalogo={() => {}}
-        alElegirModelo={() => {}}
+        alElegir={() => {}}
       />
     );
     fireEvent.click(screen.getByRole("button", { name: /ollama/i }));
@@ -207,7 +211,7 @@ describe("el punto de un proveedor SIN credencial habla de la conexión", () => 
       <PastillaDeModelo
         proveedores={[{ id: "anthropic", nombre: "Anthropic", credencial: "puesta", modelos: [{ id: "claude-x" }] }]}
         alPedirCatalogo={() => {}}
-        alElegirModelo={() => {}}
+        alElegir={() => {}}
       />
     );
     fireEvent.click(screen.getByRole("button", { name: /elige modelo|anthropic/i }));
@@ -231,7 +235,7 @@ describe("el punto no se cuela en el nombre del proveedor", () => {
           { id: "anthropic", nombre: "Anthropic", credencial: "puesta", modelos: [{ id: "claude-x" }] },
         ]}
         alPedirCatalogo={() => {}}
-        alElegirModelo={() => {}}
+        alElegir={() => {}}
       />
     );
     fireEvent.click(screen.getByRole("button", { name: /elige modelo|ollama/i }));
@@ -292,7 +296,7 @@ describe("solo se listan los proveedores comprobados", () => {
     { id: "gemini", nombre: "Gemini", credencial: "falta" as const },
     { id: "custom:lm", nombre: "LM Studio", credencial: "falta" as const, personalizado: true as const, error: "no responde" },
   ];
-  const abrir = (proveedores: typeof CON_TODO, alAbrirAjustes?: () => void) => {
+  const abrir = (proveedores: readonly ProveedorDeModelos[], alAbrirAjustes?: () => void) => {
     render(
       <PastillaDeModelo
         proveedores={proveedores}
@@ -361,5 +365,72 @@ describe("solo se listan los proveedores comprobados", () => {
     );
     fireEvent.click(screen.getByRole("button", { name: /openai/i }));
     expect(screen.getByRole("menuitem", { name: /OpenAI/ })).toBeTruthy();
+  });
+
+  /**
+   * El MISMO control sirve a dos preguntas —el modelo de esta sesión, en el compositor, y
+   * el que quedará por defecto, en Ajustes—, así que dos de sus textos se parametrizan.
+   */
+  describe("el título y la variante en línea", () => {
+    function abrirAjustes() {
+      render(
+        <PastillaDeModelo
+          actual="ollama/qwen3"
+          proveedores={PROVEEDORES}
+          alPedirCatalogo={() => {}}
+          alElegir={() => {}}
+          titulo="Modelo por defecto"
+          enLinea
+        />
+      );
+      fireEvent.click(screen.getByRole("button", { name: "ollama/qwen3" }));
+    }
+
+    it("el título es el del sitio donde vive, no una constante", () => {
+      // Dejarlo fijo haría que Ajustes dijera «Modelo de trabajo» sobre un ajuste que es de
+      // todas las sesiones futuras — que es una pregunta distinta.
+      abrirAjustes();
+      expect(screen.getByRole("menu", { name: "Modelo por defecto" })).toBeTruthy();
+      expect(screen.getByText("Modelo por defecto")).toBeTruthy();
+      expect(screen.queryByText("Modelo de trabajo")).toBeNull();
+    });
+
+    it("sin `titulo` sigue diciendo el del compositor, que es donde vive por omisión", () => {
+      render(
+        <PastillaDeModelo
+          actual="ollama/qwen3"
+          proveedores={PROVEEDORES}
+          alPedirCatalogo={() => {}}
+          alElegir={() => {}}
+        />
+      );
+      fireEvent.click(screen.getByRole("button", { name: "ollama/qwen3" }));
+      expect(screen.getByRole("menu", { name: "Modelo de trabajo" })).toBeTruthy();
+    });
+
+    it("`enLinea` es un ATRIBUTO del mismo menú, no un segundo componente", () => {
+      // La lista, sus reglas y sus estados son los mismos; lo único que cambia es que en
+      // Ajustes el menú empuja en vez de flotar (si no, el panel —que se desplaza— lo
+      // recortaría). Se afirma el atributo porque es lo que el CSS Mira para decidirlo.
+      abrirAjustes();
+      expect(screen.getByRole("menu", { name: "Modelo por defecto" }).hasAttribute("data-en-linea")).toBe(true);
+      // Y la lista sigue siendo la de siempre: la variante no pierde ninguna regla.
+      expect(screen.getByRole("menuitem", { name: /Anthropic/ })).toBeTruthy();
+    });
+
+    it("sin `enLinea` el menú no lleva el atributo: el compositor no cambia", () => {
+      render(
+        <PastillaDeModelo
+          actual="ollama/qwen3"
+          proveedores={PROVEEDORES}
+          alPedirCatalogo={() => {}}
+          alElegir={() => {}}
+        />
+      );
+      fireEvent.click(screen.getByRole("button", { name: "ollama/qwen3" }));
+      expect(screen.getByRole("menu", { name: "Modelo de trabajo" }).hasAttribute("data-en-linea")).toBe(
+        false
+      );
+    });
   });
 });

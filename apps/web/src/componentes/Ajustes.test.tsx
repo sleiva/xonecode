@@ -12,6 +12,14 @@ const MANEJADORES = {
   alResponderSecreto: () => {},
   alVerConfig: () => {},
   alCerrar: () => {},
+  // Los tres que faltaban aquí. `apps/web/tsconfig.json` EXCLUYE los `.test.tsx` —con un
+  // motivo escrito: traerían los globals de Node a todo el bundle del cliente—, así que
+  // `tsc` no mira este fichero y estas ausencias no daban error en ninguna parte: se
+  // acumularon sin que nada las dijera. Se añaden porque un conjunto de manejadores al que
+  // le faltan tres props hace que el resto de la lista no signifique nada.
+  hayProyecto: false,
+  alGuardarAgente: () => {},
+  alBorrarAgente: () => {},
 };
 
 const PROVEEDORES = [
@@ -468,6 +476,10 @@ const INFORME = {
   ],
   avds: [],
   medido: "2026-09-07T10:00:00.000Z",
+  // Vacío a propósito: es la foto de una máquina donde no se ha medido ninguna receta, que
+  // es el caso de la mayoría de estos tests. El campo es obligatorio en `InformeDeDispositivos`
+  // —ausente ≠ vacío— así que omitirlo no es «no consta», es un informe que no existe.
+  recetas: [],
 };
 
 describe("Ajustes: la sección de Dispositivos", () => {
@@ -622,5 +634,99 @@ describe("Ajustes: el tope de concurrencia de tareas", () => {
   it("sin cable el selector también se apaga, aunque haya manejador", () => {
     const panel = abrir({ alCambiarConcurrencia: () => {}, conectado: false });
     expect(within(panel).getByRole("spinbutton")).toHaveProperty("disabled", true);
+  });
+});
+
+/**
+ * El modelo por defecto, que es la pregunta que esta ventana no podía contestar.
+ *
+ * El `actual` del compositor es el de la SESIÓN abierta —y sin sesión no existe—, así que
+ * Ajustes solo podía gestionar credenciales y su propia nota remitía a la pastilla del
+ * compositor. Ahora la sección fija el defecto, que es lo que usarán las sesiones nuevas.
+ */
+describe("Ajustes: el modelo por defecto", () => {
+  afterEach(cleanup);
+
+  /** Con catálogo ya llegado, que es lo que hace falta para que un proveedor sea elegible. */
+  const CON_CATALOGO = [
+    { id: "ollama", nombre: "Ollama", credencial: "nativa" as const },
+    {
+      id: "anthropic",
+      nombre: "Anthropic",
+      credencial: "puesta" as const,
+      modelos: [
+        { id: "claude-x", nombre: "Claude X" },
+        { id: "claude-y", nombre: "Claude Y" },
+      ],
+    },
+  ];
+
+  function abrir(extra: Partial<Parameters<typeof Ajustes>[0]> = {}) {
+    // Se consulta por `screen` y no por el contenedor de `render`: la ventana es un `Modal`
+    // y su contenido no vive dentro del div que `render` devuelve.
+    render(
+      <Ajustes
+        {...MANEJADORES}
+        proveedores={CON_CATALOGO}
+        alPedirCatalogo={() => {}}
+        alElegirModelo={() => {}}
+        {...extra}
+      />
+    );
+  }
+
+  it("enseña el defecto que CONSTA, y no lo deduce de ningún sitio", () => {
+    // Es el dato que la ventana necesitaba: sin él diría «Elige modelo» sobre una máquina
+    // que sí tiene un defecto escrito. Lo dice el servidor (`porDefecto`), no el cliente.
+    abrir({ modeloPorDefecto: "anthropic/claude-x" });
+    expect(screen.getByText("Modelo por defecto")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "anthropic/claude-x" })).toBeTruthy();
+    // Y la sección se llama «Modelos» porque dejó de ser solo credenciales: su texto
+    // remitía al compositor precisamente porque no había dónde fijar el defecto.
+    expect(screen.getByRole("button", { name: "Modelos" })).toBeTruthy();
+  });
+
+  it("elegir manda la INTENCIÓN con el id, nunca una línea de comando", () => {
+    // La sintaxis no se exporta: el cliente no habla en el idioma de otra piel, y quien
+    // decide cómo aplicarlo es el servidor. Aquí se afirma la mitad que se ve.
+    const alElegirModelo = vi.fn();
+    abrir({ modeloPorDefecto: "anthropic/claude-x", alElegirModelo });
+    fireEvent.click(screen.getByRole("button", { name: "anthropic/claude-x" }));
+    // Los modelos de un proveedor salen al desplegarlo, no al abrir el menú: es una lista
+    // por proveedor, y pintarlas todas abiertas dejaría los cinco fuera de la vista.
+    fireEvent.click(screen.getByRole("menuitem", { name: /Anthropic/i }));
+    fireEvent.click(screen.getByRole("menuitemradio", { name: "Claude Y" }));
+    expect(alElegirModelo).toHaveBeenCalledWith("anthropic/claude-y");
+    expect(alElegirModelo).toHaveBeenCalledTimes(1);
+  });
+
+  it("pide el catálogo bajo demanda, igual que en el compositor: es la misma pastilla", () => {
+    // Con el catálogo YA llegado no se pide —lo tiene el servidor cacheado—, así que este
+    // caso usa el estado de una credencial puesta sin lista: el del primer despliegue.
+    const alPedirCatalogo = vi.fn();
+    abrir({ proveedores: PROVEEDORES, alPedirCatalogo });
+    fireEvent.click(screen.getByRole("button", { name: /elige modelo/i }));
+    expect(alPedirCatalogo).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("menuitem", { name: /Anthropic/i }));
+    expect(alPedirCatalogo).toHaveBeenCalledWith("anthropic");
+  });
+
+  it("sin manejadores se DICE que no se puede, en vez de un control muerto", () => {
+    // Hacen falta los DOS: sin el catálogo no hay lista que ofrecer, y sin el envío no hay
+    // forma de fijar nada. Pintar la pastilla con uno solo la dejaría en «sin consultar»
+    // para siempre, que es el botón muerto de siempre con la petición de una persona detrás.
+    abrir({ alElegirModelo: undefined, alPedirCatalogo: undefined });
+    expect(screen.getByText(/no puede fijar el modelo por defecto/i)).toBeTruthy();
+    expect(screen.queryByRole("button", { name: /elige modelo/i })).toBeNull();
+    // Y con UNO solo tampoco: los dos o ninguno.
+    cleanup();
+    abrir({ alPedirCatalogo: undefined });
+    expect(screen.getByText(/no puede fijar el modelo por defecto/i)).toBeTruthy();
+  });
+
+  it("sin defecto conocido no lo inventa: dice que hay que elegirlo", () => {
+    // Ausente ≠ «ninguno». Es la misma regla de las cuatro capas: lo que falta se ROTULA.
+    abrir();
+    expect(screen.getByRole("button", { name: /elige modelo/i })).toBeTruthy();
   });
 });

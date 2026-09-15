@@ -577,6 +577,20 @@ Y con `prefers-reduced-motion` el giro se apaga a propósito y se deja el acento
 pidió que no hubiera movimiento no puede recibir un borde girando, pero tampoco quedarse sin
 saber que hay algo en marcha.
 
+**Ese borde NO lleva baño azul por dentro, y el que se coló era un pseudo-elemento.**
+Medido en pantalla: al enviar, la caja entera se teñía de azul en vez de quedarse un resplandor
+por fuera. El resplandor era un `::before` con `inset: -3px`, color cian y `blur(10px)` — la
+forma obvia, y equivocada por una razón que no se ve leyendo el CSS: **un pseudo-elemento es un
+HIJO**, así que su relleno se pinta ENCIMA del fondo del padre. El interior de la tarjeta
+(`bg-layer-1`, blanco en el tema claro) quedaba por debajo del tinte. El arreglo es una máscara
+en XOR —dos gradientes opacos, uno acotado al `content-box` y otro al `border-box`— sobre una
+caja crecida a `-6px` con `padding: 6px`: lo que sobrevive es el anillo que cae de `-6px` a
+`0`, o sea **solo lo que está fuera del borde**. Cero tinte dentro, el mismo resplandor fuera,
+y como `filter` se aplica ANTES que `mask`, el desenfoque sigue suavizando hacia afuera y el
+corte cae justo sobre el marco, donde el ojo ya tiene una línea que mirar. Regla para esta
+hoja: un pseudo-elemento nunca es «el fondo de detrás», siempre es un hijo; y lo que tenga que
+quedar fuera del borde se recorta con máscara, no se confía al orden de pintado.
+
 **El turno en vuelo lo DICE el servidor** (`clase: "turno"`, emitido por el envoltorio del
 ejecutor en `vestibulo.ts`, que es el único sitio que sabe cuándo empieza y cuándo acaba).
 Con eso el compositor se apaga mientras el agente trabaja —mandar una segunda petición la
@@ -872,6 +886,47 @@ mensaje `modelos` en `transporte.ts`). Las reglas no son nuestras: salen de leer
   para un proveedor sin variable de entorno, que responde a otra pregunta.
 - Al caerse el SSE el cliente **tira** el estado de modelos (`marcarDesconectado`) y la
   reconexión lo trae entero: mientras no hay cable, el modelo en vigor no se puede afirmar.
+
+**El modelo por DEFECTO se fija en Ajustes, y es una pregunta distinta de la del compositor.**
+Medido antes de escribirlo: `/modelo <id>` escribe `fuentes.bandera` del estado de sesión
+—cambia en caliente y **no toca disco**, que es justo lo que lo hace inmediato—, así que
+elegir en la pastilla, reiniciar y encontrarse el modelo de antes era el comportamiento
+correcto del código y el equivocado para quien lo usó. Y el manejador del cable rechazaba
+sin más cuando no había proyecto abierto («no hay ninguna sesión abierta a la que cambiarle
+el modelo»), o sea justo en la pantalla desde la que se configura: Ajustes se abre desde la
+barra del Escritorio, la miga y la barra lateral, sin sesión ninguna.
+- **Dos preguntas, dos campos**, que es el patrón que este repo ya usa en el contador
+  (`contexto` vs los acumulados): `actual` es el modelo de la sesión ABIERTA y `porDefecto`
+  es el que usarán las NUEVAS. Fundirlos en uno haría que Ajustes enseñara el de la sesión
+  como si fuera el defecto —o, sin sesión, «sin elegir» sobre una máquina que sí tiene uno
+  escrito—. `porDefecto` viaja **sin sesión abierta**, porque es la pregunta de las sesiones
+  que aún no existen; `actual` no, porque sin sesión no hay nada que afirmar.
+- **El escritor es el que sobrevive**: `guardarModeloGlobal(papel, id)`
+  (`agent/configEnDisco.ts`) escribe `modelos.<papel>` en el `config.json` GLOBAL
+  (`~/.xonecode/config.json`) de forma atómica y sin destruir lo que hubiera. Se escriben
+  **los tres papeles** —`rapido`, `trabajo`, `afilado`— porque quien elige en Ajustes no está
+  eligiendo «el del papel trabajo»: el `config.json` tiene una entrada por papel desde antes,
+  y dejar dos apuntando a otro sitio es una trampa puesta a mano.
+- **Elegir es UNA frase, así que hace lo mismo desde los dos sitios**: el manejador del cable
+  guarda el defecto y, **si hay sesión**, además encola `/modelo <id>` en el lazo para
+  aplicarlo en caliente. Encadenar solo lo segundo dejaba la elección muriendo con el
+  proceso; solo lo primero dejaría la sesión abierta en el modelo de antes, que es el que el
+  usuario acaba de cambiar. **Cambio de comportamiento declarado: elegir en la pastilla del
+  compositor ahora también fija el defecto.**
+- **Todo lo que toca disco entra por una opción** (`OpcionesDeMontaje.guardarModeloGlobal` y
+  `modeloPorDefecto`, en `arranque.ts`), que es la regla que este repo paga una y otra vez:
+  el escritor se tipa como `Consola["guardarModeloGlobal"]` —no como una firma copiada— para
+  que no haya una segunda copia de la firma donde las dos diverjan, y el lector se re-resuelve
+  en cada emisión porque el defecto acaba de cambiar y lo que el cliente pinta se quedaría
+  viejo hasta el siguiente cambio de estado.
+- **El control es la MISMA pastilla** (`PastillaDeModelo`, con `titulo` y `enLinea`), no una
+  segunda lista: la regla de qué proveedores se ofrecen (los COMPROBADOS), el catálogo bajo
+  demanda y los tres estados del punto de credencial son los mismos, y una copia es el sitio
+  donde divergen. `enLinea` es un ATRIBUTO del mismo menú: en el compositor flota hacia
+  arriba porque la caja vive pegada al borde inferior, y dentro del panel de Ajustes —que ya
+  se desplaza— un absoluto lo recortaría el borde del panel. La sección pasó a llamarse
+  **«Modelos»** y no «Proveedores»: su propia nota confesaba que el modelo en uso se elegía
+  en otra parte, precisamente porque no había dónde fijar el defecto.
 
 **La clave de API se PRUEBA antes de escribirse** (`cli/wizardInicial.ts`). Dos cribas, y la
 primera es de balde: `motivoDeClaveInaceptable` (`core/config.ts`) rechaza lo que el propio

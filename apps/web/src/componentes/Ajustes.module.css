@@ -378,6 +378,16 @@
   font-size: 13px;
 }
 
+/* El control del modelo por defecto: la pastilla del compositor, en línea. Se alinea a la
+   IZQUIERDA y no se estira — es un disparador, no un campo, y una pastilla de 700 px de
+   ancho se leería como un desplegable del navegador. Y lleva un margen inferior propio
+   porque debajo viene el subencabezado de Proveedores, que trae el suyo de 18: sin esto,
+   la lista desplegada quedaba pegada a él. */
+.elegirModelo {
+  align-self: flex-start;
+  margin-bottom: 4px;
+}
+
 /* La fila entera es la etiqueta: pulsar el nombre marca la casilla, que es lo que espera
    cualquiera que haya usado una lista de casillas. */
 .casilla {

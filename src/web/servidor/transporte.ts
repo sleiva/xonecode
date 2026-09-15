@@ -120,14 +120,21 @@ export type MensajeAlCliente =
   | { clase: "pregunta"; texto: string }
   | { clase: "selector"; selector: SelectorDeConsola }
   /**
-   * Los modelos: cuál está en vigor y qué se puede elegir.
+   * Los modelos: cuál está en vigor, cuál queda por defecto, y qué se puede elegir.
    *
-   * `actual` es lo que resuelve el papel `trabajo` con las fuentes de la sesión ABIERTA, no
-   * lo que diga un fichero: `/modelo` cambia el modelo en caliente y no escribe nada, así
-   * que releer la configuración contaría lo de antes. Ausente = no hay sesión de proyecto
-   * y por tanto no hay modelo en vigor que afirmar — el cliente enseña «Elige modelo» en
-   * vez de inventarse una fila, que es la regla del harness de DeepSeek: «no stale row is
-   * synthesized».
+   * **Son DOS preguntas y por eso son dos campos.** `actual` es lo que resuelve el papel
+   * `trabajo` con las fuentes de la sesión ABIERTA, no lo que diga un fichero: `/modelo`
+   * cambia el modelo en caliente sin escribir nada, así que releer la configuración
+   * contaría lo de antes. Ausente = no hay sesión de proyecto y por tanto no hay modelo en
+   * vigor que afirmar — el cliente enseña «Elige modelo» en vez de inventarse una fila, que
+   * es la regla del harness de DeepSeek: «no stale row is synthesized».
+   *
+   * `porDefecto` es otra cosa: el que usarán las sesiones NUEVAS, resuelto contra el
+   * `config.json` global. Existe porque el compositor y Ajustes no preguntan lo mismo —una
+   * sesión puede llevar encima un `/modelo` en caliente y el defecto seguir siendo otro—, y
+   * meterlos en un campo solo enseñaría una de las dos como si fuera la otra. Y se manda
+   * TAMBIÉN sin sesión abierta, que es justo donde se configura: sin él, Ajustes diría «sin
+   * elegir» sobre una máquina que sí tiene un defecto escrito.
    *
    * `modelos` de un proveedor viaja SOLO cuando alguien lo ha pedido (`clase: "catalogo"`):
    * el catálogo es una llamada de red por proveedor y consultarlos todos al conectar sería
@@ -135,7 +142,7 @@ export type MensajeAlCliente =
    * de ESE proveedor y no tumba a los demás — se lista inservible y el resto sigue
    * elegible.
    */
-  | { clase: "modelos"; actual?: string; proveedores: ProveedorDeModelos[] }
+  | { clase: "modelos"; actual?: string; porDefecto?: string; proveedores: ProveedorDeModelos[] }
   /**
    * Los proyectos de UN entorno registrado, en respuesta a la acción «proyectos» de un
    * mensaje de entorno. Lleva el `entorno` dentro porque el cliente los guarda por

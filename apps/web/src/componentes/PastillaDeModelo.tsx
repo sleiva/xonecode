@@ -45,6 +45,8 @@ export function PastillaDeModelo({
   alPedirCatalogo,
   alElegir,
   alAbrirAjustes,
+  titulo = "Modelo de trabajo",
+  enLinea = false,
 }: {
   /** «proveedor/modelo» en vigor. Ausente = no se sabe, y entonces no se afirma. */
   actual?: string;
@@ -57,6 +59,21 @@ export function PastillaDeModelo({
    *  = la línea se dice igual pero no es pulsable: un botón que no lleva a ninguna parte es
    *  el botón muerto de siempre. */
   alAbrirAjustes?: () => void;
+  /**
+   * El encabezado del menú, que también es su nombre accesible. Se parametriza porque el
+   * mismo control sirve para dos preguntas distintas: el modelo de ESTA sesión (el
+   * compositor) y el que quedará por DEFECTO (Ajustes). Dejarlo fijo haría que Ajustes
+   * dijera «Modelo de trabajo» sobre un ajuste que es de todas las sesiones futuras.
+   */
+  titulo?: string;
+  /**
+   * En línea y no flotando. En el compositor el menú sube desde la pastilla porque la caja
+   * vive pegada al borde inferior de la ventana; dentro del panel de Ajustes —que ya se
+   * desplaza— un menú posicionado en absoluto lo recorta el borde del panel, y hacia
+   * arriba taparía la cabecera. Es un atributo y no dos componentes: la lista, sus reglas
+   * y sus estados son los MISMOS, y una segunda copia es donde divergen.
+   */
+  enLinea?: boolean;
 }) {
   const [abierta, setAbierta] = useState(false);
   const envoltura = useRef<HTMLDivElement>(null);
@@ -122,9 +139,14 @@ export function PastillaDeModelo({
         {actual ?? "Elige modelo"}
       </button>
       {abierta ? (
-        <div className={estilos.menu} role="menu" aria-label="modelo de trabajo">
+        <div
+          className={estilos.menu}
+          data-en-linea={enLinea ? "" : undefined}
+          role="menu"
+          aria-label={titulo}
+        >
           <div className={estilos.titulo} role="presentation">
-            Modelo de trabajo
+            {titulo}
           </div>
           {comprobados.map((p) => {
             const enVigor = actual !== undefined && actual.startsWith(`${p.id}/`);

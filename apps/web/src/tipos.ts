@@ -168,12 +168,16 @@ export type MensajeAlCliente =
   | { clase: "pregunta"; texto: string }
   | { clase: "selector"; selector: SelectorDeConsola }
   /**
-   * Los modelos: cuál está en vigor (`actual`, «proveedor/modelo») y qué se puede elegir.
-   * Redeclarado como todo lo demás de este fichero; el original es
-   * `web/servidor/transporte.ts`. `actual` ausente = no hay sesión abierta y por tanto no
-   * hay modelo que afirmar — se enseña «Elige modelo», nunca una fila inventada.
+   * Los modelos: cuál está en vigor (`actual`, «proveedor/modelo»), cuál queda por DEFECTO
+   * (`porDefecto`) y qué se puede elegir. Redeclarado como todo lo demás de este fichero;
+   * el original es `web/servidor/transporte.ts`.
+   *
+   * Son dos preguntas y por eso son dos campos: `actual` ausente = no hay sesión abierta y
+   * por tanto no hay modelo en vigor que afirmar — se enseña «Elige modelo», nunca una fila
+   * inventada—, mientras que `porDefecto` es el que usarán las sesiones nuevas y se manda
+   * también sin sesión, que es justo donde se configura.
    */
-  | { clase: "modelos"; actual?: string; proveedores: ProveedorDeModelos[] }
+  | { clase: "modelos"; actual?: string; porDefecto?: string; proveedores: ProveedorDeModelos[] }
   /** Los proyectos de UN entorno registrado, pedidos por su pestaña en Ajustes. `proyectos`
    *  ausente con `error` puesto es «no se pudo preguntar», que no es una lista vacía. */
   | {

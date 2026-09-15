@@ -31,6 +31,8 @@ import { MS_DE_TRABAJO_AL_ABRIR,
 import { ErrorDelAumentador } from "../../agent/aumentador.js";
 import type { PeticionDeTarea } from "../../core/ports.js";
 import { crearVestibulo, type Vestibulo } from "./vestibulo.js";
+import { crearConsolaWeb, type ConsolaWeb, type OpcionesDeConsolaWeb } from "./consolaWeb.js";
+import { PAPELES } from "../../core/modelos.js";
 import { crearSesion, listarSesiones } from "./sesiones.js";
 import { COMANDOS } from "../../cli/consola.js";
 import { CatalogoModelosEnMemoria } from "../../core/ports.js";
@@ -593,6 +595,157 @@ describe("montarRutas — el cable, por fin conectado", () => {
       expect(porId.get("openai")!.modelos).toBeUndefined();
       expect(porId.get("anthropic")!.modelos).toBeUndefined();
       expect(porId.get("anthropic")!.error).toBeUndefined();
+    });
+
+    /**
+     * La ventana de Ajustes y el lazo con un proyecto abierto.
+     *
+     * Aquí se prueba una mitad que no se ve en el navegador: `/modelo` escribe la bandera
+     * del estado de la SESIÓN, que cambia en caliente y no toca disco. Elegir desde la
+     * interfaz y nada más dejaba la elección muriendo con el proceso — se elegía,
+     * se reiniciaba, y el modelo era el de antes.
+     */
+    describe("elegir el modelo por defecto", () => {
+      /** Un `montarRutas` con el escritor a la vista, que es lo que se afirma. */
+      function conEscritor(extra: Parameters<typeof montarRutas>[2] = {}) {
+        const escritos: { papel: string; id: string }[] = [];
+        const dichos: string[] = [];
+        const encoladas: string[] = [];
+        const servidor = servidorDeMentira();
+        const vestibulo = vestibuloDePrueba({
+          // El `encolar` de la consola no se puede mirar desde fuera —la cola la lee el
+          // lazo, y aquí el lazo es un doble que retorna enseguida—, así que se envuelve el
+          // de verdad por la costura que el vestíbulo ya tiene. Es la ÚNICA forma de
+          // afirmar «y además se aplica en caliente» sin abrir un socket.
+          crearConsola: (o: OpcionesDeConsolaWeb): ConsolaWeb => {
+            const real = crearConsolaWeb(o);
+            return {
+              ...real,
+              encolar: (linea: string) => {
+                encoladas.push(linea);
+                real.encolar(linea);
+              },
+            };
+          },
+        });
+        montarRutas(servidor, vestibulo, {
+          informar: (t) => dichos.push(t),
+          guardarModeloGlobal: (papel, id) => {
+            escritos.push({ papel, id });
+            return { ruta: "/casa/.xonecode/config.json", id };
+          },
+          ...extra,
+        });
+        return { servidor, vestibulo, escritos, dichos, encoladas };
+      }
+
+      /** Conecta el cable y devuelve la ruta de acción, que es por donde entra la elección. */
+      async function conectar(servidor: ReturnType<typeof servidorDeMentira>) {
+        const cliente = clienteDeMentira();
+        await servidor.rutas.get(`GET ${RUTA_EVENTOS}`)!(cliente.peticion, cliente.respuesta);
+        await asentar();
+        const accion = servidor.rutas.get(`POST ${RUTA_ACCION}`)!;
+        return { cliente, accion };
+      }
+
+      it("sin sesión se escribe el DEFECTO de los tres papeles, y se dice", async () => {
+        const { servidor, escritos, dichos } = conEscritor();
+        const { accion } = await conectar(servidor);
+
+        await enviarMensaje(accion, { clase: "modelo", id: "anthropic/claude-x" });
+        await asentar();
+
+        // Uno por PAPEL y el mismo id en los tres: el defecto no es «el del papel trabajo».
+        // Se recorre PAPELES en vez de contar tres: un papel nuevo tiene que entrar aquí
+        // solo, o este test se pondría verde sobre un defecto que solo cubre la mitad.
+        expect(escritos).toEqual(PAPELES.map((papel) => ({ papel, id: "anthropic/claude-x" })));
+        // Y se DICE, porque esto funciona con la ventana de Ajustes abierta y sin sesión:
+        // un ajuste que parece puesto y no lo está es peor que uno que falta.
+        expect(dichos.at(-1)).toContain("anthropic/claude-x");
+      });
+
+      it("con sesión abierta, además se aplica EN CALIENTE: es una sola elección, no dos", async () => {
+        const { servidor, vestibulo, escritos, encoladas } = conEscritor();
+        const { accion } = await conectar(servidor);
+        await vestibulo.abrirProyecto({ raiz: "/w/a" });
+        await asentar();
+
+        await enviarMensaje(accion, { clase: "modelo", id: "openai/gpt-5" });
+        await asentar();
+
+        // La misma línea que teclea `/modelo`, encolada en el lazo: aplicarla REUSA el
+        // manejador de COMANDOS en vez de tener una segunda implementación de la
+        // precedencia, que divergiría el primer día.
+        expect(encoladas).toEqual(["/modelo openai/gpt-5"]);
+        // Y las dos cosas a la vez: guardar sin aplicar dejaría la sesión abierta en el
+        // modelo de antes, que es justo lo que el usuario acaba de cambiar.
+        expect(escritos).toHaveLength(PAPELES.length);
+      });
+
+      it("un modelo mal escrito no escribe nada: el fallo se dice y no llega al disco", async () => {
+        const { servidor, escritos, dichos } = conEscritor();
+        const { accion } = await conectar(servidor);
+
+        // Sin barra: `parsear` lo rechaza por su FORMA, y el motivo nombra los proveedores.
+        await enviarMensaje(accion, { clase: "modelo", id: "anthropic" });
+        await asentar();
+
+        expect(escritos).toEqual([]);
+        expect(dichos).toHaveLength(1);
+        expect(dichos[0]).toMatch(/proveedor\/modelo/);
+      });
+
+      it("sin escritor se DICE que no se ha guardado, en vez de callarlo", async () => {
+        // Es la dirección segura: la elección se aplica a la sesión si la hay, y el usuario
+        // lee que el defecto no se ha tocado. Callarlo dejaría un ajuste que parece puesto.
+        const { servidor, vestibulo, encoladas, dichos } = conEscritor({ guardarModeloGlobal: undefined });
+        const { accion } = await conectar(servidor);
+        await vestibulo.abrirProyecto({ raiz: "/w/a" });
+        await asentar();
+
+        await enviarMensaje(accion, { clase: "modelo", id: "ollama/qwen3" });
+        await asentar();
+
+        expect(encoladas).toEqual(["/modelo ollama/qwen3"]);
+        expect(dichos.at(-1)).toMatch(/no lo guarda como defecto/);
+      });
+    });
+
+    describe("el modelo por defecto en el cable", () => {
+      const ultimoModelos = (cliente: ReturnType<typeof clienteDeMentira>) =>
+        [...cliente.recibidos].reverse().find((m) => m.clase === "modelos") as Extract<
+          MensajeAlCliente,
+          { clase: "modelos" }
+        >;
+
+      async function conectar(servidor: ReturnType<typeof servidorDeMentira>) {
+        const cliente = clienteDeMentira();
+        await servidor.rutas.get(`GET ${RUTA_EVENTOS}`)!(cliente.peticion, cliente.respuesta);
+        await asentar();
+        return cliente;
+      }
+
+      it("viaja SIN sesión abierta: es la pregunta de las sesiones que aún no existen", async () => {
+        // Sin este campo, Ajustes enseñaría «sin elegir» sobre una máquina que sí tiene un
+        // defecto escrito, y justo en la pantalla donde se configura.
+        const servidor = servidorDeMentira();
+        montarRutas(servidor, vestibuloDePrueba(), { modeloPorDefecto: () => "ollama/qwen3" });
+        const cliente = await conectar(servidor);
+
+        const modelos = ultimoModelos(cliente);
+        expect(modelos.porDefecto).toBe("ollama/qwen3");
+        // Y `actual` sigue sin afirmarse: son DOS preguntas. El defecto no es el modelo en
+        // vigor, y pintarlo como tal diría que hay una sesión que no hay.
+        expect(modelos.actual).toBeUndefined();
+      });
+
+      it("sin lector no se afirma ningún defecto: ausente no es «ninguno»", async () => {
+        const servidor = servidorDeMentira();
+        montarRutas(servidor, vestibuloDePrueba());
+        const cliente = await conectar(servidor);
+
+        expect(ultimoModelos(cliente).porDefecto).toBeUndefined();
+      });
     });
 
     it("«pedir» pregunta la clave y la guarda si pasa la criba; una mala no llega al disco", async () => {

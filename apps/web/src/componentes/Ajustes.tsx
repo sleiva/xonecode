@@ -33,6 +33,7 @@ import { urlDeEntornoAceptable, AVISO_DE_URL } from "./Wizard.js";
 import { PROYECTOS_POR_OMISION } from "./Barra.js";
 import { IconoDeEntorno } from "./IconoDeEntorno.js";
 import { IconoDeProveedor } from "./IconoDeProveedor.js";
+import { PastillaDeModelo } from "./PastillaDeModelo.js";
 import estilos from "./Ajustes.module.css";
 
 /**
@@ -82,9 +83,10 @@ const SECCIONES: readonly {
   etiqueta: string;
   Icono: typeof IconSparkle16;
 }[] = [
-  // «Proveedores» y no «Modelos»: la sección gestiona CREDENCIALES, y su propio texto lo
-  // confesaba («el modelo en uso se elige en la pastilla del compositor»).
-  { id: "modelos", etiqueta: "Proveedores", Icono: IconSparkle16 },
+  // «Modelos» y no «Proveedores»: la sección dejó de ser solo credenciales. Su texto lo
+  // confesaba —«el modelo en uso se elige en la pastilla del compositor»— porque no había
+  // dónde fijar el defecto; ahora sí, y es lo primero que se ve al abrirla.
+  { id: "modelos", etiqueta: "Modelos", Icono: IconSparkle16 },
   { id: "apariencia", etiqueta: "Apariencia", Icono: IconDarkOutline16 },
   { id: "entornos", etiqueta: "Entornos", Icono: IconDataOutline16 },
   { id: "agentes", etiqueta: "Subagentes", Icono: IconUserOutline16 },
@@ -183,6 +185,8 @@ export function Ajustes({
   modelosDeMotor,
   alPedirModelosDeMotor,
   alPedirCatalogo,
+  modeloPorDefecto,
+  alElegirModelo,
   instalacion,
   alEjecutarPaso,
   alCancelarPaso,
@@ -278,6 +282,24 @@ export function Ajustes({
   alPedirModelosDeMotor?: (motor: string) => void;
   /** Pide el catálogo de un proveedor nuestro, para el desplegable de un subagente. */
   alPedirCatalogo?: (proveedor: string) => void;
+  /**
+   * El modelo que usarán las sesiones NUEVAS, tal cual lo resuelve el servidor contra el
+   * config global. Ausente = no consta, y entonces no se afirma ninguno — que NO es lo
+   * mismo que decir que no hay defecto.
+   *
+   * Es el dato que esta ventana necesitaba para poder configurarlo: el `actual` del
+   * compositor es el de la SESIÓN abierta, y sin sesión no existe.
+   */
+  modeloPorDefecto?: string;
+  /**
+   * Fija el modelo por defecto. Viaja la INTENCIÓN —el id «proveedor/modelo»—, nunca una
+   * línea de comando: la sintaxis no se exporta. Es el MISMO mensaje que manda la pastilla
+   * del compositor, así que las dos entradas comparten un solo camino.
+   *
+   * Ausente = esta ejecución no puede guardarlo, y no se pinta el control en vez de pintar
+   * uno que no guarda nada.
+   */
+  alElegirModelo?: (id: string) => void;
   /** El paso de receta que corre ahora, tal como lo dice el servidor. */
   instalacion?: EstadoDelCliente["instalacion"];
   /** Lanzar el paso `numero` de una receta, y cancelar el que corra. Ausentes = no se pinta
@@ -930,10 +952,48 @@ export function Ajustes({
 
           {seccion === "modelos" ? (
             <>
-              <h2 className={estilos.encabezado}>Proveedores</h2>
+              {/*
+                EL MODELO POR DEFECTO, arriba y antes que las credenciales. Es la primera
+                pregunta de esta pantalla —con qué va a trabajar el agente— y hasta ahora no
+                tenía respuesta aquí: el `actual` del compositor es el de la SESIÓN abierta,
+                así que sin proyecto abierto no había nada que elegir, y con él la elección
+                se quedaba en la bandera de esa sesión (moría con el proceso). El defecto sí
+                se escribe, y se escribe aquí.
+
+                El control es la MISMA pastilla del compositor —`enLinea`, sin flotar— y no
+                una segunda lista: la regla de qué proveedores se ofrecen (los COMPROBADOS),
+                el catálogo bajo demanda y el punto de la credencial son los mismos, y una
+                copia es el sitio donde divergen. Lo único distinto es de qué pregunta
+                habla, y eso lo dice su `titulo`.
+              */}
+              <h2 className={estilos.encabezado}>Modelo por defecto</h2>
+              <p className={estilos.nota}>
+                El que usarán las sesiones nuevas. Se guarda para los tres papeles —rápido,
+                trabajo y afilado— en el config global de tu cuenta, no en el proyecto, y
+                cada sesión puede cambiarlo en caliente sin tocar esto.
+              </p>
+              {alElegirModelo === undefined || alPedirCatalogo === undefined ? (
+                // Los dos hacen falta: sin el catálogo no hay lista de modelos que ofrecer, y
+                // sin el envío no hay forma de fijar nada. Se dice en vez de pintar un control
+                // que se queda en «sin consultar» para siempre — el botón muerto de siempre.
+                <p className={estilos.vacio}>Esta ejecución no puede fijar el modelo por defecto.</p>
+              ) : (
+                <div className={estilos.elegirModelo}>
+                  <PastillaDeModelo
+                    {...(modeloPorDefecto === undefined ? {} : { actual: modeloPorDefecto })}
+                    proveedores={proveedores}
+                    alPedirCatalogo={alPedirCatalogo}
+                    alElegir={alElegirModelo}
+                    titulo="Modelo por defecto"
+                    enLinea
+                  />
+                </div>
+              )}
+
+              <h3 className={estilos.subencabezado}>Proveedores</h3>
               <p className={estilos.nota}>
                 La clave se guarda con permisos 0600 en el fichero de credenciales de xonecode,
-                nunca en el navegador. El modelo en uso se elige en la pastilla del compositor.
+                nunca en el navegador.
               </p>
               {proveedores.length === 0 ? (
                 <p className={estilos.vacio}>Todavía no ha llegado el estado de modelos.</p>

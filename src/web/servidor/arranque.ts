@@ -58,6 +58,7 @@ import {
   slugDesdeNombre,
   resolver,
   SIN_CREDENCIAL,
+  PAPELES,
   type ProveedorDeclarado,
   type FuentesDeEleccion,
   type Proveedor,
@@ -260,6 +261,31 @@ export interface OpcionesDeMontaje {
   hayCredencial?: (proveedor: Proveedor) => boolean;
   /** ¿Está esa credencial en `auth.json`? Solo esas se pueden borrar desde la interfaz. */
   credencialEnFichero?: (proveedor: Proveedor) => boolean;
+  /**
+   * Guarda un modelo como DEFECTO de un papel en el `config.json` global
+   * (`agent/configEnDisco.ts#guardarModeloGlobal`). Es el escritor de la elección que
+   * sobrevive al proceso.
+   *
+   * Entra por opción y no se importa dentro por la razón de siempre —un valor por omisión
+   * que escribiera de verdad convertiría cualquier test de este cable en una escritura en
+   * el `~/.xonecode` de quien los corre—, y además por una propia: **ausente NO significa
+   * que no se pueda cambiar de modelo**, significa que no se puede GUARDAR. El mensaje
+   * sigue aplicándose en caliente si hay sesión, y lo que falta se DICE.
+   *
+   * El tipo es el del método de la consola y no una firma escrita otra vez: es el MISMO
+   * escritor (`vestibulo.ts` lo declara igual), y una segunda copia de la firma es el sitio
+   * donde las dos divergen.
+   */
+  guardarModeloGlobal?: Consola["guardarModeloGlobal"];
+  /**
+   * El modelo que usarán las sesiones NUEVAS, ya resuelto («proveedor/modelo»).
+   *
+   * Es la respuesta a `porDefecto` del mensaje de modelos, y entra por opción por lo mismo
+   * que `ajustesDeDispositivos`: leerlo toca el `config.json` global, y un test del cable
+   * no puede estar leyendo el de quien lo corre. Ausente = no se afirma, que NO es lo mismo
+   * que decir que no hay ninguno.
+   */
+  modeloPorDefecto?: () => string | undefined;
   /**
    * Borra la credencial de `auth.json`. Ausente = esta ejecución no puede borrar, y la
    * interfaz no ofrece el botón en vez de ofrecer uno que no hace nada.
@@ -853,9 +879,15 @@ export function montarRutas(
   const mensajeDeModelos = (): MensajeAlCliente => {
     const abierto = vestibulo.proyectoAbierto();
     const trabajo = abierto === undefined ? undefined : resolver(abierto.estadoDeSesion.fuentes).trabajo;
+    // Dos preguntas, dos campos. `actual` es la SESIÓN —y sin sesión no hay nada que
+    // afirmar—, y `porDefecto` es lo que usarán las nuevas, que existe SIEMPRE que se
+    // pueda leer el config global. Sin el segundo, Ajustes enseñaría «sin elegir» sobre una
+    // máquina con un defecto escrito, justo en la pantalla donde se configura.
+    const porDefecto = opciones.modeloPorDefecto?.();
     return {
       clase: "modelos",
       ...(trabajo === undefined ? {} : { actual: `${trabajo.proveedor}/${trabajo.modelo}` }),
+      ...(porDefecto === undefined ? {} : { porDefecto }),
       proveedores: [...PROVEEDORES, ...idsPersonalizados()].map((p) => ({
         id: p,
         nombre: nombreDeProveedor(p, personalizados()),
@@ -1810,9 +1842,21 @@ export function montarRutas(
    * el único que puede adoptar el estado nuevo, y el acuse que escribe el manejador es lo
    * que el usuario ve.
    *
-   * Sin proyecto abierto no hay lazo, y se dice: el disparador vive en el compositor, que
-   * solo existe con sesión, pero un mensaje que llegara igual no puede quedarse en una cola
-   * que nadie lee.
+   * **Y son DOS cosas a la vez, que es lo que este manejador arregla.** `/modelo` escribe la
+   * bandera del estado de la SESIÓN: cambia en caliente y no toca el disco, así que
+   * encolarlo y nada más dejaba la elección muriendo con la consola — se elegía, se
+   * reiniciaba, y el modelo era el de antes. Aquí, además, se GUARDA como defecto de los
+   * tres papeles en el `config.json` global, que es lo que sobrevive. Elegir en el
+   * compositor y elegir en Ajustes son la misma frase, así que tienen que hacer lo mismo.
+   *
+   * Por eso también funciona SIN proyecto abierto, que es donde se configura: en el
+   * vestíbulo no hay lazo al que encolar nada, pero sí hay un defecto que escribir, y la
+   * próxima sesión lo recogerá. Antes esto era un rechazo —«no hay ninguna sesión abierta a
+   * la que cambiarle el modelo»— sobre la única pantalla desde la que se puede fijar el
+   * modelo por defecto.
+   *
+   * Si no hay escritor, se DICE que no se ha guardado en vez de callarlo: un ajuste que
+   * parece puesto y no lo está es peor que uno que falta.
    */
   const atenderModelo = (id: string): void => {
     try {
@@ -1822,11 +1866,31 @@ export function montarRutas(
       return;
     }
     const abierto = vestibulo.proyectoAbierto();
-    if (abierto === undefined) {
-      informar("no hay ninguna sesión abierta a la que cambiarle el modelo");
+    if (opciones.guardarModeloGlobal === undefined) {
+      if (abierto === undefined) {
+        informar("esta ejecución no puede guardar el modelo por defecto");
+        return;
+      }
+      abierto.consola.encolar(`/modelo ${id}`);
+      informar(`modelo de esta sesión: ${id} · esta ejecución no lo guarda como defecto`);
       return;
     }
-    abierto.consola.encolar(`/modelo ${id}`);
+    try {
+      for (const papel of PAPELES) opciones.guardarModeloGlobal(papel, id);
+    } catch (error) {
+      informar(error instanceof Error ? error.message : String(error));
+      return;
+    }
+    if (abierto === undefined) {
+      informar(`modelo por defecto: ${id} · lo usarán las sesiones nuevas`);
+    } else {
+      abierto.consola.encolar(`/modelo ${id}`);
+      informar(`${id} guardado como modelo por defecto, además de aplicarlo a esta sesión`);
+    }
+    // El defecto acaba de cambiar, así que lo que el cliente pinta como «por defecto» se
+    // quedaría viejo hasta el siguiente cambio de estado. Con sesión abierta el `actual`
+    // llega solo —el lazo adopta el modelo y eso vuelve por `alCambiarEstadoDeSesion`—.
+    emitirModelos();
   };
 
   /**
@@ -3587,6 +3651,30 @@ export async function arrancarConsolaWeb(opciones: OpcionesDeArranque): Promise<
     credencialEnFichero: (proveedor) => cargar(opciones.cwd).auth[proveedor] !== undefined,
     borrarCredencial,
     guardarCredencial,
+    /**
+     * El defecto se GUARDA en el `config.json` global (`agent/configEnDisco.ts#guardarModeloGlobal`),
+     * que es el último escalón de la precedencia y el único que sobrevive al proceso. Se
+     * escribe para los TRES papeles porque elegir un modelo en la interfaz es una frase
+     * sobre el producto y no sobre un papel — el mismo criterio que `/modelo`, que fija los
+     * tres en caliente.
+     */
+    guardarModeloGlobal: (papel, id) => guardarModeloGlobal(papel, id),
+    /**
+     * El que usarán las sesiones nuevas, resuelto contra el config GLOBAL (más el entorno,
+     * que es de donde lo tomaría también una sesión).
+     *
+     * Viaja SIEMPRE, también con sesión abierta, porque son dos preguntas distintas: una
+     * sesión puede llevar encima un `/modelo` en caliente —eso es `actual`— y el defecto
+     * seguir siendo otro. Se relee en cada emisión y no se cachea: el fichero es del
+     * usuario, se puede editar por fuera, y esta misma ventana lo acaba de reescribir.
+     */
+    modeloPorDefecto: () => {
+      const { proveedor, modelo } = resolver({
+        global: cargar(opciones.cwd).config.global,
+        entorno: { XONECODE_MODELO: process.env.XONECODE_MODELO },
+      }).trabajo;
+      return `${proveedor}/${modelo}`;
+    },
     cambiosDeSesion,
     parcheDeSesion,
     // El proyecto tal como lo ve el agente, para la pestaña Ficheros: mismo filtro, misma

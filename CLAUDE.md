@@ -784,6 +784,16 @@ feedback del desarrollador** y no es terminal.
 - **El modelo en vigor lo dice el SERVIDOR** (`resolver(estadoDeSesion.fuentes).trabajo` de la
   consola ABIERTA), por la costura `Consola.alEstado`: `/modelo` cambia en caliente sin tocar
   disco, así que releer la configuración contaría lo de antes para siempre.
+- **El modelo por DEFECTO es otra pregunta y otro campo** (`porDefecto` en el mensaje
+  `modelos`): `actual` es el de la sesión ABIERTA y `porDefecto` el que usarán las NUEVAS, que
+  es el ÚNICO que viaja sin sesión. Fundirlos haría que Ajustes enseñara uno como si fuera el
+  otro. **Elegir es una sola frase desde los dos sitios**: el manejador del cable GUARDA el
+  defecto de los TRES papeles (`guardarModeloGlobal`, `config.json` global) y, si hay sesión,
+  además encola `/modelo` para aplicarlo en caliente — porque `/modelo` solo escribe la
+  bandera del estado de sesión y la elección moría con el proceso. El escritor y el lector
+  entran por `OpcionesDeMontaje`; Ajustes **reusa la pastilla del compositor** (`titulo`,
+  `enLinea`) en vez de una segunda lista, que es donde divergirían la regla de qué proveedores
+  se ofrecen y el catálogo bajo demanda.
 - **Claude se construye con tope de salida y razonamiento a mano, y las dos son datos de
   `core/`** (`topeDeSalida` en `core/contextos.ts`, `pideThinkingAdaptativo` en
   `core/modelos.ts`), con prueba de COSTURA contra `invocationParams()` del cliente real

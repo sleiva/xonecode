@@ -47,7 +47,7 @@ export interface EstadoDelCliente {
    * ni se recuerda entre conexiones: al caerse el SSE se tira (`marcarDesconectado`) y la
    * reconexión lo vuelve a traer entero.
    */
-  modelos?: { actual?: string; proveedores: ProveedorDeModelos[] };
+  modelos?: { actual?: string; porDefecto?: string; proveedores: ProveedorDeModelos[] };
   /**
    * Los proyectos de cada entorno registrado que alguien ha consultado, por su id: las
    * casillas de su pestaña en Ajustes. Solo están los PEDIDOS —el activo no hace falta,
@@ -720,7 +720,7 @@ export function crearStoreDelCliente(): {
           return;
         }
         case "modelos": {
-          const m = mensaje as { actual?: unknown; proveedores?: unknown };
+          const m = mensaje as { actual?: unknown; porDefecto?: unknown; proveedores?: unknown };
           if (!Array.isArray(m.proveedores)) return;
           const proveedores = m.proveedores.filter(esProveedorDeModelos).map((p) => ({
             id: p.id,
@@ -741,6 +741,11 @@ export function crearStoreDelCliente(): {
               // disparador dice «Elige modelo», que es la verdad («no se sabe»), y no una
               // fila inventada.
               ...(typeof m.actual === "string" ? { actual: m.actual } : {}),
+              // El defecto, con la misma disciplina y por una razón que se ve en Ajustes:
+              // si se colara un `""` o un número, el control del defecto enseñaría «sin
+              // elegir» sobre una máquina que sí tiene uno escrito — o peor, una cadena que
+              // no es un modelo. Ausente se propaga como ausente.
+              ...(typeof m.porDefecto === "string" ? { porDefecto: m.porDefecto } : {}),
               proveedores,
             },
           });
