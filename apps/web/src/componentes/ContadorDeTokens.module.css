@@ -1,8 +1,22 @@
 /*
  * Dato de MÁQUINA, así que va en mono (`estilos/tipografia.css` marca esa distinción: el
- * mono es para URLs, rutas y cifras, nunca para prosa). Y en el tono tenue de la fila, no en
- * el acento: esto se consulta, no se pulsa — pintarlo con el cian del producto lo haría
- * competir con la pastilla del modelo, que sí es un control.
+ * mono es para URLs, rutas y cifras, nunca para prosa).
+ *
+ * Y con FORMA de dato: una pastilla azul de la escala pastel, con la letra del mismo azul
+ * oscuro. Antes era texto suelto en el gris tenue de la fila, y el usuario lo señaló
+ * mirando la pantalla —«no tienen color, no destacan»—: entre las pastillas de la
+ * izquierda, que llevan fondo y filo, y el botón azul de la derecha, un gris flotando se
+ * leía como un resto. La lección es la misma que el contador ya tenía escrita al revés:
+ * esto se CONSULTA, pero consultar no es desaparecer.
+ *
+ * El par de colores no es nuevo: es `state-business-*`, el mismo de la pastilla de
+ * «compartido» de la barra y el de la burbuja del usuario. El CIAN no entra aquí —es el
+ * acento del producto y no sostiene texto— y el azul de marca tampoco: es el del botón de
+ * enviar, que está a 8 px, y un dato no compite con la acción de la fila.
+ *
+ * No se prueba `bg-layer-2` para el fondo: MEDIDO, en el tema claro es blanco sobre
+ * blanco y la pastilla desaparecía — el mismo hallazgo que dejó escrito la burbuja del
+ * usuario en `Chat.module.css`.
  */
 .contador {
   display: inline-flex;
@@ -10,27 +24,24 @@
   gap: 4px;
   font-family: var(--dsw-font-mono);
   font-size: 11px;
-  color: var(--dsw-alias-text-tertiary);
+  /* Sin `margin-left: auto`: el empuje al borde derecho lo hace la caja de `.acciones` de
+     `Compositor.module.css`, y con dos `auto` el hueco se repartía y esto quedaba suelto. */
+  padding: 3px 8px;
+  border-radius: 999px;
+  background: var(--dsw-alias-state-business-tertiary);
+  color: var(--dsw-alias-state-business-primary);
   white-space: nowrap;
-  /* Sin fondo ni borde: no es un botón. La fila ya lo separa con su propio `gap`. */
-  padding: 0 2px;
-  /*
-   * A la DERECHA, pegado al botón de enviar. Un margen `auto` se come todo el hueco libre
-   * ANTES de que `justify-content` reparta, así que las pastillas se quedan a la izquierda
-   * y esto cae junto al botón — y cuando el contador no se pinta, la fila vuelve sola a su
-   * `space-between` de siempre sin tocar nada.
-   */
-  margin-left: auto;
 }
 
 /* El punto entre las dos mitades, más tenue que las cifras: separa sin pesar. */
 .separador {
-  color: var(--dsw-alias-text-tertiary);
+  color: inherit;
+  opacity: 0.55;
   padding: 0 1px;
 }
 
 .cifra {
-  color: var(--dsw-alias-text-secondary);
+  font-weight: 600;
 }
 
 /*
@@ -39,7 +50,8 @@
  * las tres cosas esta es la que se consulta de reojo. El `title` sigue diciéndolo entero.
  */
 .rotulo {
-  color: var(--dsw-alias-text-tertiary);
+  color: inherit;
+  opacity: 0.85;
 }
 
 @media (max-width: 720px) {
@@ -47,3 +59,9 @@
     display: none;
   }
 }
+
+/* Y cuando la fila es tan estrecha que esta pastilla y el botón no caben en su renglón, se
+   va ENTERA. Su regla vive en `Compositor.module.css`, con el contenedor que la dispara:
+   el nombre de un módulo CSS va hasheado y desde el otro fichero esta clase no se puede
+   nombrar, así que allí la envuelve una caja con nombre propio. Aquí no se declara el
+   contenedor porque el ancho que importa es el del RENGLÓN, no el de la pastilla. */

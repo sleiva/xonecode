@@ -13,7 +13,11 @@ import estilos from "./ContadorDeTokens.module.css";
  *   tokens que se leyeron pero no se pagaron igual, y meterlos dentro inflaría el número.
  *   Se dice aparte, también en el `title`.
  * - **Sin dato no se pinta.** Ausente es «no consta» —no hay sesión, o el ejecutor es el de
- *   pega—, y un `0 ↑ 0 ↓` que nadie ha medido es un control sin dato detrás.
+ *   pega—, y un `0 ↑ 0 ↓` que nadie ha medido es un control sin dato detrás. Y hay una
+ *   SEGUNDA razón para callar, que no es sobre el dato sino sobre el sitio: cuando el renglón
+ *   no da para la pastilla y el botón, se retira la pastilla (`Compositor.module.css`). Ahí el
+ *   dato existe y se calla, que es lo contrario de inventarlo — y con el botón no se hace
+ *   nunca: sin él no hay forma de mandar el mensaje.
  *
  * Cuatro piezas fueron DOS. Aquí vivían también `ctx usado/tope` y el porcentaje, y el
  * problema no era el formato: eran dos PREGUNTAS distintas en la misma frase —lo que la

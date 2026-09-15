@@ -212,38 +212,50 @@ export function Compositor({
             />
           )}
           {/*
-            Lo consumido por la sesión, al lado del modelo: es del mismo tipo que él —un
-            dato de la sesión que dice el servidor y el cliente pinta— y por eso comparte
-            fila. Sin dato no se pinta: ausente es «no consta», no cero.
+            Lo consumido por la sesión, pegado al botón y no «al lado del modelo». Comparte
+            fila con él, pero en el otro extremo: a la izquierda van las pastillas —lo que va
+            a CORRER, que se elige antes de escribir— y a la derecha el gasto y la acción.
+            Estuvo suelto a mitad de fila porque el contador y el botón llevaban cada uno su
+            `margin-left: auto`, y dos márgenes automáticos se REPARTEN el hueco en vez de
+            comerlo el primero: medido en pantalla, 194 px de vacío a cada lado. Ahora el
+            `auto` es uno solo, el de esta caja. Sin dato no se pinta: ausente es «no consta»,
+            no cero.
           */}
-          <ContadorDeTokens {...(consumo === undefined ? {} : { consumo })} />
-          {/*
-            La MISMA ranura, dos acciones: con turno en vuelo es parar, y si no, enviar.
-            Dos botones a la vez —uno inerte al lado del otro— dejaría al usuario eligiendo
-            entre dos cosas cuando solo una tiene sentido en cada momento.
-          */}
-          {turnoEnVuelo ? (
-            <button
-              type="button"
-              className={`${estilos.enviar} ${estilos.parar}`}
-              disabled={!conectado || alParar === undefined}
-              aria-label="Parar"
-              title="Parar el turno"
-              onClick={() => alParar?.()}
-            >
-              ■
-            </button>
-          ) : (
-            <button
-              type="button"
-              className={estilos.enviar}
-              disabled={!conectado}
-              aria-label="Enviar"
-              onClick={enviar}
-            >
-              ↑
-            </button>
-          )}
+          <div className={estilos.acciones}>
+            {/* Con una caja propia, y no por gusto: la regla que la retira cuando no cabe
+                es una consulta de contenedor sobre el renglón, y para nombrarla desde este
+                fichero hace falta una clase de ESTE módulo. */}
+            <div className={estilos.gasto}>
+              <ContadorDeTokens {...(consumo === undefined ? {} : { consumo })} />
+            </div>
+            {/*
+              La MISMA ranura, dos acciones: con turno en vuelo es parar, y si no, enviar.
+              Dos botones a la vez —uno inerte al lado del otro— dejaría al usuario eligiendo
+              entre dos cosas cuando solo una tiene sentido en cada momento.
+            */}
+            {turnoEnVuelo ? (
+              <button
+                type="button"
+                className={`${estilos.enviar} ${estilos.parar}`}
+                disabled={!conectado || alParar === undefined}
+                aria-label="Parar"
+                title="Parar el turno"
+                onClick={() => alParar?.()}
+              >
+                ■
+              </button>
+            ) : (
+              <button
+                type="button"
+                className={estilos.enviar}
+                disabled={!conectado}
+                aria-label="Enviar"
+                onClick={enviar}
+              >
+                ↑
+              </button>
+            )}
+          </div>
         </div>
       </div>
       {/*

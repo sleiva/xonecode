@@ -87,11 +87,18 @@
    modelo a la izquierda —es un dato, se lee— y el botón de enviar a la derecha, que es
    donde la referencia lo pone y donde va el pulgar. */
 /*
- * Las pastillas AGRUPADAS a la izquierda y el botón a la derecha. Era `space-between`, que
- * funcionaba cuando esta fila compartía renglón con el campo —él absorbía el hueco—; en
- * columna repartía el aire ENTRE las pastillas y las dejaba desperdigadas (visto en el
- * navegador). El hueco lo come el primer margen `auto` que encuentre: el del contador si
- * está, y el del botón si no, así que en los dos casos las pastillas se quedan juntas.
+ * Las pastillas AGRUPADAS a la izquierda y el gasto con el botón a la derecha. Era
+ * `space-between`, que funcionaba cuando esta fila compartía renglón con el campo —él
+ * absorbía el hueco—; en columna repartía el aire ENTRE las pastillas y las dejaba
+ * desperdigadas (visto en el navegador). Así que el hueco lo come un margen `auto`.
+ *
+ * Y es UNO —el de `.acciones`—, no uno por pieza. Aquí decía que el hueco «lo come el
+ * primer margen `auto` que encuentre, el del contador si está y el del botón si no», y eso
+ * no es lo que hace flexbox: los márgenes automáticos se REPARTEN el hueco libre, así que
+ * con los dos puestos el contador se quedaba flotando a mitad de fila —medido en pantalla,
+ * 194 px de vacío a su izquierda y otros 194 a su derecha— en vez de junto al botón. Con un
+ * solo `auto` el reparto no existe y las pastillas quedan juntas en los dos casos: con
+ * contador y sin él.
  */
 .controles {
   display: flex;
@@ -99,6 +106,73 @@
   justify-content: flex-start;
   gap: 8px;
   padding-bottom: 2px;
+  /*
+   * Y cuando no cabe, la fila se PARTE en dos: las pastillas arriba y el gasto con el botón
+   * abajo, que el `auto` de `.acciones` sigue pegando al borde derecho. Antes no envolvía y
+   * el botón se salía de la tarjeta —medido con la ventana a 700, el contador y el botón
+   * desbordaban 31 px y el de enviar quedaba CORTADO—. Un dato que no cabe se puede callar
+   * —eso ya lo hace el rótulo bajo 720—, pero la acción de la fila no: sin ella no hay
+   * forma de mandar nada. Envolver cuesta una línea de alto solo cuando hace falta.
+   */
+  flex-wrap: wrap;
+  /* Este renglón es el CONTENEDOR del que cuelga la regla que retira el contador cuando no
+     cabe (su regla vive en `ContadorDeTokens.module.css`, que es quien puede nombrar su
+     propia clase — el nombre de un módulo CSS va hasheado y desde aquí no se alcanza). Se
+     declara aquí porque aquí se sabe el ancho. Y es seguro porque el tamaño de esta fila lo
+     fija su padre —es un hijo de una columna con `align-items: stretch`— y no lo que lleve
+     dentro. */
+  container-type: inline-size;
+}
+
+/* El gasto y la acción, en un solo bloque pegado al borde derecho. El `margin-left: auto`
+   va aquí y no en sus hijos: es lo que hace que el contador caiga junto al botón (y que el
+   botón solo siga cayendo a la derecha cuando el contador no está). `flex: none` porque en
+   esta fila lo que cede es el hueco del medio, nunca un dato a medias.
+
+   Y envuelve TAMBIÉN por dentro: si un día la cifra crece —una sesión de siete dígitos— y
+   no cabe junto al botón, el botón baja a su renglón en vez de salirse de la tarjeta. La
+   red de seguridad es esta, que no depende de ningún umbral; la consulta de contenedor del
+   contador solo decide a partir de qué ancho no vale la pena la pastilla. */
+.acciones {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-left: auto;
+  flex: none;
+}
+
+/* La caja del contador: existe para tener un NOMBRE con el que retirarlo —el nombre de su
+   propia clase lo hashea el otro módulo CSS y desde aquí no se alcanza—, y no pinta nada.
+   El `display: inline-flex` es el que haría la pastilla por su cuenta; aquí vive para que
+   el día que esta regla la esconda desaparezca la caja entera y el `gap` no deje un hueco. */
+.gasto {
+  display: inline-flex;
+  align-items: center;
+}
+
+/*
+ * Y cuando la fila es tan estrecha que el gasto y el botón de enviar no caben JUNTOS en su
+ * renglón, el que cede es el dato: el gasto se consulta, mandar el mensaje es lo único que
+ * no puede faltar. MEDIDO: a 420 de ventana la fila mide 108, la pastilla 113, y el botón
+ * se salía de la tarjeta.
+ *
+ * El umbral sale de lo que ocupan los dos: 113 + 8 de hueco + 32 de botón = 153, y 170 deja
+ * 17 px de aire para una cifra algo más larga que la de hoy. No es la red de seguridad —esa
+ * es el `flex-wrap` de `.acciones`, que impide que el botón se salga pase lo que pase—, sino
+ * lo que decide cuándo la pastilla no vale el renglón que se lleva. MEDIDO a 560 de ventana
+ * la fila mide 180: ahí sí cabe y se pinta; a 480 mide 132 y se va.
+ *
+ * Es CONSULTA DE CONTENEDOR y no `@media` por el mismo motivo que la cifra de la barra
+ * (`Barra.module.css`, su regla del final): el ancho de este renglón lo decide el de la
+ * barra lateral, que pone JS, así que una ventana ancha con la barra arrastrada a tope deja
+ * el compositor mucho más estrecho de lo que la ventana sugiere.
+ */
+@container (max-width: 170px) {
+  .gasto {
+    display: none;
+  }
 }
 
 /* Redondo, como en la referencia — `button-primary-fill` es el único azul de acento que
@@ -110,9 +184,11 @@
  * tener que sostener nada. La regla de siempre: el cian es ACENTO y no lleva letra encima.
  */
 .enviar {
-  margin-left: auto;
   width: 32px;
   height: 32px;
+  /* Sin `margin-left: auto` propio: el empuje al borde lo hace `.acciones`, que es lo que
+     impide que dos `auto` se repartan el hueco y dejen el contador en mitad de la fila. */
+  flex: none;
   border-radius: 50%;
   border: none;
   background: var(--xonecode-azul);
