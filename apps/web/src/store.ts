@@ -149,8 +149,12 @@ export interface EstadoDelCliente {
    * Qué se está abriendo ahora mismo, si algo. Lo dice el servidor (`clase: "abriendo"`) y
    * no se deduce: entre el clic y el estado nuevo pasan de cientos de milisegundos a los
    * minutos de una descarga, y sin esto la interfaz se queda quieta.
+   *
+   * `entorno` es el cuarto caso y no una apertura: mudar el entorno activo tampoco cambia
+   * nada hasta el final, y su `<select>` va controlado por el `alta` — así que sin esto se
+   * queda clavado en el valor viejo toda la espera.
    */
-  abriendo?: { proyecto?: string; sesion?: string; descargando?: true };
+  abriendo?: { proyecto?: string; sesion?: string; entorno?: string; descargando?: true };
   /**
    * Lo que la sesión ha tocado (pestaña Revisión). Ausente = todavía no se ha pedido. Los
    * TRES `via` se guardan: «sin-empezar» se tiraba y la pestaña se quedaba consultando.
@@ -1080,7 +1084,13 @@ export function crearStoreDelCliente(): {
           return;
         }
         case "abriendo": {
-          const m = mensaje as { activo?: unknown; proyecto?: unknown; sesion?: unknown; descargando?: unknown };
+          const m = mensaje as {
+            activo?: unknown;
+            proyecto?: unknown;
+            sesion?: unknown;
+            entorno?: unknown;
+            descargando?: unknown;
+          };
           if (m.activo !== true) {
             mutar({ abriendo: undefined });
             return;
@@ -1089,6 +1099,7 @@ export function crearStoreDelCliente(): {
             abriendo: {
               ...(typeof m.proyecto === "string" ? { proyecto: m.proyecto } : {}),
               ...(typeof m.sesion === "string" ? { sesion: m.sesion } : {}),
+              ...(typeof m.entorno === "string" ? { entorno: m.entorno } : {}),
               // Solo el booleano `true`: la cadena `"false"` es verdadera en JavaScript y
               // aquí prometería una descarga que nadie está haciendo.
               ...(m.descargando === true ? { descargando: true as const } : {}),

@@ -203,8 +203,14 @@ export function Barra({ entornos, entornoActivo, proyectos, visibles, proyectoAc
    * pasan de unos cientos de milisegundos a los minutos de una descarga, y sin señal la
    * barra se queda igual que estaba: el clic se lee como que no ha hecho nada. Ausente =
    * no se está abriendo nada.
+   *
+   * `entorno` es el cuarto caso y el único que NO es una apertura: mudar el entorno activo
+   * vacía la lista y la vuelve a traer del otro servidor, y hasta que llega el `alta` el
+   * `<select>` —que va controlado por él— se quedaba en el valor VIEJO. Medido en el
+   * navegador: 1.480 ms con el valor viejo y ninguna señal. Con esto la fila enseña el que
+   * se ha pedido, que es lo que hace que la elección parezca haber entrado.
    */
-  abriendo?: { proyecto?: string; sesion?: string; descargando?: true };
+  abriendo?: { proyecto?: string; sesion?: string; entorno?: string; descargando?: true };
   alElegirEntorno: (id: string) => void;
   alAbrirSesion: (proyecto: string, sesion: string) => void;
   /**
@@ -258,6 +264,22 @@ export function Barra({ entornos, entornoActivo, proyectos, visibles, proyectoAc
   const abriendoSesion = (id: string): boolean => abriendo !== undefined && abriendo.sesion === id;
   /** Mientras se abre algo no se pide otra cosa: el segundo clic no cancela el primero. */
   const abriendoAlgo = abriendo !== undefined;
+  /**
+   * El entorno que la fila ENSEÑA: el que se ha pedido mientras el cambio viaja, y el de
+   * verdad el resto del tiempo.
+   *
+   * No es cosmético y no se puede deducir de otra cosa. El `<select>` va controlado por
+   * `entornoActivo`, que sale del `alta`, y el `alta` no llega hasta que CloudStudio
+   * contesta —medido: 1.480 ms—, así que sin esto React lo devuelve al valor viejo en
+   * cuanto se suelta y la elección se lee como que no ha entrado. Lo mismo el icono, que es
+   * la marca del entorno activo: el de antes junto al nombre nuevo sería una contradicción
+   * de 20 px.
+   *
+   * Si el cambio FALLA, esto se apaga con el resto del indicador y el valor vuelve solo al
+   * que sigue siendo el activo —que es la verdad, y el aviso dice qué pasó—.
+   */
+  const entornoPendiente = abriendo?.entorno;
+  const entornoQueSeVe = entornoPendiente ?? entornoActivo;
   // El orden de `visibles` NO manda: manda el del listado, que es el del servidor. Elegir
   // qué se ve es una cosa; reordenar el listado remoto sería otra, y nadie la ha pedido.
   const alaVista =
@@ -299,19 +321,39 @@ export function Barra({ entornos, entornoActivo, proyectos, visibles, proyectoAc
           <div className={navegador.sectionHeader}>
             <span className={clsx(navegador.sectionLabel, estilos.rotulo)}>Entorno</span>
             <span className={estilos.rellenoDeSeccion} />
+            {/* La señal de que se está mudando, y va AQUÍ y no en la fila de abajo por una
+                razón medida: ahí el `<select>` declara `calc(100% - 4px)` y cede ancho, así
+                que un texto de 67 px lo encogía de 263 a 188 —un salto de 75 px en el
+                control que se acaba de usar, dos veces, al irse y al volver—. Esta línea
+                solo lleva una palabra y ya tiene su relleno elástico, que es lo que empuja
+                esto al borde. Con las mismas PALABRAS que las otras marcas de la barra y no
+                un giro: un giro no lo lee quien no distingue el movimiento. */}
+            {entornoPendiente === undefined ? null : (
+              <span className={estilos.actividad} title="Cambiando de entorno…">
+                cambiando…
+              </span>
+            )}
           </div>
           {entornos.length === 0 ? (
             <p className={navegador.empty}>Sin entorno que enseñar aquí todavía.</p>
           ) : (
-            <div className={estilos.filaDeEntorno}>
+            <div
+              className={estilos.filaDeEntorno}
+              // Lo que ESPERA la interfaz es esta fila: su valor está a medio camino. El
+              // `aria-busy` va en el elemento que espera y no en el que lo cuenta.
+              {...(entornoPendiente === undefined ? {} : { "aria-busy": "true" as const })}
+            >
             {/* El icono va FUERA del `<select>`: un `<option>` no admite marcado, así que
                 lo que se puede pintar es la marca del entorno ACTIVO — que además es la
                 pregunta que uno se hace mirando esa esquina («¿en qué servidor estoy?»). */}
-            <IconoDeEntorno entorno={entornoActivo} size={20} className={estilos.iconoDeEntorno} />
+            <IconoDeEntorno entorno={entornoQueSeVe} size={20} className={estilos.iconoDeEntorno} />
             <select
               className={estilos.entorno}
-              disabled={apagado}
-              value={entornoActivo}
+              // Mientras algo viaja no se pide otra cosa, la misma regla que las filas del
+              // árbol: un segundo cambio de entorno con el primero en vuelo dejaría a
+              // `proyectos` y `ramas` vaciándose por un camino y llenándose por otro.
+              disabled={apagado || abriendoAlgo}
+              value={entornoQueSeVe}
               onChange={(e) => alElegirEntorno(e.target.value)}
             >
               {entornos.map((e) => (

@@ -1581,9 +1581,24 @@ export function montarRutas(
    * Cambiar de entorno activo: el de cuyos proyectos se habla. Trae su listado consigo
    * —eso es una conexión con CloudStudio— y limpia lo del anterior: dejar los proyectos del
    * entorno viejo bajo el nombre del nuevo sería la peor mentira posible en esta barra.
+   *
+   * Y por eso mismo ANUNCIA, como abrir una sesión: es la misma espera de red sin nada que
+   * pintar en medio, y con un daño de más — el `<select>` de la barra va controlado por el
+   * `alta`, así que durante la espera se quedaba clavado en el entorno VIEJO. Medido en el
+   * navegador: 1.480 ms con el valor viejo y ni una señal. El usuario lo dijo con esas
+   * palabras: «hay un delay pero no mostramos un loading o busy animation en ningún lado».
+   * El campo `entorno` es lo que el cliente necesita para ENSEÑAR el que se ha pedido.
+   *
+   * El anuncio va antes de la primera espera y el apagado en el `finally`, con el alta
+   * DELANTE del flanco de bajada: al revés hay un hueco en el que ya no hay indicador y
+   * todavía no ha llegado el estado nuevo. En el `finally` porque un cambio que falla
+   * —token muerto, red caída— también tiene que apagarlo, y ahí es donde el `select` vuelve
+   * solo al entorno que sigue siendo el de verdad.
    */
   const atenderEntornoActivo = async (entorno: string): Promise<void> => {
     aviso = undefined;
+    // Antes de la primera espera, no después: entre elegir y aquí no hay nada que pintar.
+    anunciarAbriendo({ entorno });
     try {
       const nuevos = await vestibulo.proyectosDe(entorno);
       entornoElegido = entorno;
@@ -1597,6 +1612,7 @@ export function montarRutas(
       contar(error);
     } finally {
       await anunciarAlta().catch(contar);
+      anunciarAbriendo();
     }
   };
 
@@ -1738,7 +1754,12 @@ export function montarRutas(
     abierta.consola.consola.escribir(`${texto}\n`);
   };
 
-  const anunciarAbriendo = (que?: { proyecto?: string; sesion?: string; descargando?: true }): void => {
+  const anunciarAbriendo = (que?: {
+    proyecto?: string;
+    sesion?: string;
+    entorno?: string;
+    descargando?: true;
+  }): void => {
     emitir(que === undefined ? { clase: "abriendo", activo: false } : { clase: "abriendo", activo: true, ...que });
   };
 

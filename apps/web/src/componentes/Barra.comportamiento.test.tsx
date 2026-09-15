@@ -828,6 +828,82 @@ describe("Barra: mientras se abre algo", () => {
 });
 
 /**
+ * Y el cambio de entorno, que era el cuarto caso y el único que NO es una apertura: no abre
+ * nada del árbol, vacía la lista entera y la vuelve a traer del otro servidor.
+ *
+ * Medido en el navegador antes de esto: 1.480 ms entre elegir y ver el entorno nuevo, con el
+ * `<select>` clavado en el VIEJO todo el rato —va controlado por el `alta`, y el `alta` solo
+ * llega al final— y ni una señal en ninguna parte. Se leía como que la elección no había
+ * entrado, y es literalmente lo que dijo el usuario: «hay un delay pero no mostramos un
+ * loading o busy animation en ningún lado».
+ */
+describe("Barra: mientras se cambia de entorno", () => {
+  const ENTORNOS = [
+    { id: "webstudio", nombre: "XOne WebStudio" },
+    { id: "manager", nombre: "XOne Manager" },
+  ];
+
+  const montar = (entornoActivo: string, abriendo?: { entorno?: string }) =>
+    render(
+      <Barra
+        entornos={ENTORNOS}
+        entornoActivo={entornoActivo}
+        proyectos={[]}
+        {...(abriendo === undefined ? {} : { abriendo })}
+        alElegirEntorno={() => {}}
+        alAbrirSesion={() => {}}
+        alAbrirProyecto={() => {}}
+        alNuevaSesion={() => {}}
+        alAccionDeSesion={() => {}}
+        alAbrirAjustes={() => {}}
+      />
+    );
+
+  const selectDe = (container: HTMLElement): HTMLSelectElement =>
+    container.querySelector("select") as HTMLSelectElement;
+
+  it("la fila ENSEÑA el que se ha pedido, en vez de volver al de antes", () => {
+    // `entornoActivo` sigue siendo el viejo: es el servidor el que todavía no ha dicho otra
+    // cosa, y el `alta` con el nuevo no ha llegado.
+    const { container } = montar("webstudio", { entorno: "manager" });
+    expect(selectDe(container).value).toBe("manager");
+  });
+
+  it("se dice con palabras, y con el mismo lenguaje que las otras marcas de la barra", () => {
+    const { container } = montar("webstudio", { entorno: "manager" });
+    expect(screen.getByText("cambiando…")).toBeTruthy();
+    // Sin color también: `aria-busy` en la fila que ESPERA —la del `<select>`, cuyo valor
+    // está a medio camino— y no en la cabecera que lo cuenta.
+    expect(container.querySelector("[aria-busy]")?.querySelector("select")).toBeTruthy();
+  });
+
+  it("mientras viaja no se pide otro cambio: el segundo no cancela el primero", () => {
+    // No es solo cortesía: `atenderEntornoActivo` vacía `proyectos` y `ramas` al llegar, así
+    // que dos en vuelo dejarían la lista vaciándose por un camino y llenándose por otro.
+    const { container } = montar("webstudio", { entorno: "manager" });
+    expect(selectDe(container).hasAttribute("disabled")).toBe(true);
+  });
+
+  it("la marca de la esquina es la del entorno PEDIDO, no la del viejo", () => {
+    // El icono es la marca del entorno activo, o sea la respuesta a «¿en qué servidor
+    // estoy?». El de antes junto al nombre nuevo sería una contradicción de 20 px en la
+    // misma fila. Los dos ids llevan dibujo distinto (`IconoDeEntorno`), así que la
+    // equivalencia dice algo: pintar el pendiente es pintar el que ya es activo.
+    const enVuelo = montar("webstudio", { entorno: "manager" }).container.querySelector("svg")?.outerHTML;
+    const yaEsEse = montar("manager").container.querySelector("svg")?.outerHTML;
+    expect(enVuelo).toBe(yaEsEse);
+  });
+
+  it("sin nada en vuelo no hay indicador, y el `<select>` vuelve a su valor de verdad", () => {
+    const { container } = montar("webstudio");
+    expect(screen.queryByText("cambiando…")).toBeNull();
+    expect(container.querySelector("[aria-busy]")).toBeNull();
+    expect(selectDe(container).value).toBe("webstudio");
+    expect(selectDe(container).hasAttribute("disabled")).toBe(false);
+  });
+});
+
+/**
  * El proyecto activo y la sesión activa se pintaban IGUAL —mismo fondo y mismo filo de
  * cian—, y el usuario lo señaló: «la selección de la sesión o tarea tiene el mismo color
  * cuando está seleccionado que el del proyecto». Son dos niveles distintos del árbol y hay

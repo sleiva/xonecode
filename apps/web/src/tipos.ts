@@ -201,9 +201,18 @@ export type MensajeAlCliente =
       externo: { entrada: number; salida: number; cache: number };
       ventana: { usado: number; tope?: number };
     }
-  /** Se está abriendo una sesión —o descargando un proyecto—, dicho por el servidor: es el
-   *  único que sabe cuándo empieza y cuándo acaba. */
-  | { clase: "abriendo"; activo: boolean; proyecto?: string; sesion?: string; descargando?: true }
+  /** Se está abriendo una sesión —o descargando un proyecto, o mudando el entorno activo—,
+   *  dicho por el servidor: es el único que sabe cuándo empieza y cuándo acaba. */
+  | {
+      clase: "abriendo";
+      activo: boolean;
+      proyecto?: string;
+      sesion?: string;
+      /** El entorno que se está mudando. Va para poder ENSEÑARLO mientras viaja: el
+       *  `<select>` lo controla el `alta`, que no llega hasta el final. */
+      entorno?: string;
+      descargando?: true;
+    }
   /**
    * Los subagentes dados de alta, para la ventana de ajustes. La lista va ENTERA cada vez
    * que cambia —son pocos y pequeños— en vez de mandar diferencias: un delta perdido

@@ -1821,6 +1821,74 @@ describe("montarRutas — el cable, por fin conectado", () => {
       expect(alta.entornoActivo).toBe("webstudio");
       expect(alta.proyectos.map((p) => p.id)).toEqual(["p1"]);
       expect(alta.aviso).toBe("fetch failed");
+      // Y el indicador se APAGA: va en el `finally`, así que un cambio que falla no deja el
+      // «cambiando…» encendido para siempre —y con él el `<select>` apagado— sobre un
+      // entorno que resultó no ser el activo.
+      expect(cliente.recibidos.filter((m) => m.clase === "abriendo").at(-1)).toEqual({
+        clase: "abriendo",
+        activo: false,
+      });
+    });
+
+    /**
+     * Y el cambio de entorno, que es la misma espera con un daño de más.
+     *
+     * Medido en el navegador antes de esto: 1.480 ms entre elegir y ver el entorno nuevo,
+     * con el `<select>` clavado en el VIEJO todo el rato y ni una señal en ninguna parte.
+     * Lo dijo el usuario con esas palabras: «hay un delay pero no mostramos un loading o
+     * busy animation en ningún lado».
+     *
+     * Lo que se mide aquí y no en el cliente es lo que solo el servidor puede prometer: que
+     * el flanco de subida sale ANTES de preguntarle a CloudStudio. El `finally` que lo apaga
+     * espera al alta, así que un anuncio puesto DESPUÉS de la espera no llegaría hasta el
+     * final — que es exactamente el fallo que esto arregla, y con `proyectosDe` contestando
+     * al instante no se vería: hay que dejarlo colgando a propósito.
+     */
+    it("cambiar de entorno anuncia ANTES de preguntar a CloudStudio, y trae el entorno pedido", async () => {
+      const servidor = servidorDeMentira();
+      let contestar: ((v: { proyectos: { id: string; nombre: string }[] }) => void) | undefined;
+      const vestibulo = vestibuloDePrueba({
+        entornos: [
+          { id: "webstudio", nombre: "XOne WebStudio", url: "https://mcp.xonewebstudio.com/mcp" },
+          { id: "casa", nombre: "On-premise", url: "https://mcp.casa.local/mcp" },
+        ],
+        // La conexión que tarda: sin resolver, el cambio se queda en vuelo.
+        proyectosDeEntorno: () =>
+          new Promise((r) => {
+            contestar = r;
+          }),
+      });
+      montarRutas(servidor, vestibulo);
+      const cliente = clienteDeMentira();
+      await servidor.rutas.get(`GET ${RUTA_EVENTOS}`)!(cliente.peticion, cliente.respuesta);
+      const accion = servidor.rutas.get(`POST ${RUTA_ACCION}`)!;
+      await asentar();
+      cliente.recibidos.length = 0;
+
+      const enVuelo = enviarMensaje(accion, { clase: "entorno", accion: "activo", entorno: "casa" });
+      await asentar();
+
+      // Todavía NO ha contestado CloudStudio, y el flanco de subida ya está en el cable —
+      // con el entorno PEDIDO dentro, que es lo que el `<select>` necesita para enseñarlo.
+      expect(cliente.recibidos.filter((m) => m.clase === "abriendo")).toEqual([
+        { clase: "abriendo", activo: true, entorno: "casa" },
+      ]);
+
+      contestar!({ proyectos: [{ id: "c1", nombre: "De casa" }] });
+      await enVuelo;
+      await asentar();
+
+      const flancos = cliente.recibidos.filter((m) => m.clase === "abriendo");
+      expect(flancos).toEqual([
+        { clase: "abriendo", activo: true, entorno: "casa" },
+        { clase: "abriendo", activo: false },
+      ]);
+      // El alta va ENTRE los dos: al revés hay un hueco en el que ya no hay indicador y
+      // todavía no ha llegado el estado nuevo, y el `<select>` volvería al valor viejo por
+      // un cuadro — el mismo parpadeo de 20 px que el icono.
+      const clases = cliente.recibidos.map((m) => m.clase);
+      expect(clases.indexOf("alta")).toBeGreaterThan(clases.indexOf("abriendo"));
+      expect(clases.lastIndexOf("abriendo")).toBeGreaterThan(clases.indexOf("alta"));
     });
 
     it("pedir los proyectos de un entorno NO cambia el entorno activo", async () => {

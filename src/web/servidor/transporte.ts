@@ -230,6 +230,18 @@ export type MensajeAlCliente =
       /** Qué se está abriendo, para poder señalarlo en su fila. Solo con `activo`. */
       proyecto?: string;
       sesion?: string;
+      /**
+       * El entorno que se está MUDANDO, cuando lo que viaja no es una apertura sino un
+       * cambio de entorno activo.
+       *
+       * Va aparte de `proyecto` y no en su lugar porque el cambio de entorno no abre nada
+       * del árbol: vacía la lista entera y la vuelve a traer del otro servidor. Y es un
+       * campo y no un `activo: true` pelado porque el cliente tiene que poder ENSEÑAR el
+       * que se ha pedido: sin eso el `<select>`, que va controlado por el `alta` —y el
+       * `alta` solo llega al final—, se queda clavado en el valor viejo durante toda la
+       * espera, y la elección se lee como que no ha entrado. Medido: 1,5 s.
+       */
+      entorno?: string;
       /** Además hay que BAJARLO: es la espera larga, y la que hay que decir con palabras. */
       descargando?: true;
     }
