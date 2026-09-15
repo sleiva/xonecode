@@ -575,6 +575,16 @@ feedback del desarrollador** y no es terminal.
   el mismo motivo: un diff volcado sin pedirlo deja fuera de la vista la LISTA, que es lo que la
   pestaña contesta. El efecto de `App.tsx` solo OLVIDA lo desplegado cuando el store tira la
   foto, para que las filas abiertas de una sesión no sigan abiertas sobre los ficheros de otra.
+- **La pestaña CloudStudio manda la INTENCIÓN, no la sintaxis** (mensaje `sync`): **`estado` se
+  MIDE en el servidor** contra la ref de la bajada —la MISMA cuenta que da `/sync estado`,
+  `agent/gitSync.ts#cambiosPendientes`— y **sin abrir sesión MCP**, porque el número ya está en
+  local; **`subir` y `bajar` se ENCOLAN** como `/sync <accion>`, así que salen con el MISMO plan,
+  la MISMA guarda de árbol sucio y la MISMA aprobación que el terminal — un segundo camino de
+  subida es donde el hueco de política podría reabrirse—. Una acción que no se entiende NO cae en
+  `estado`. **`proyecto` y `rama` ausentes no son «cero pendientes»**, y el error de medida no
+  lleva la ruta de la raíz (va por el cable). La medida se REHACE al entrar —a diferencia de
+  Ficheros y Revisión, porque `/sync` mueve la ref sin que el servidor sepa cuándo acaba— y en el
+  flanco de fin de turno si la pestaña está delante.
 
 ### Sesiones, hilos y git
 

@@ -2,7 +2,14 @@ import clsx from "clsx";
 import conversacion from "../../estilos/ConversationRoot.module.css";
 import estilos from "./Pestanas.module.css";
 
-export type Pestana = "chat" | "ficheros" | "revision" | "artefactos" | "tareas" | "trazas";
+export type Pestana =
+  | "chat"
+  | "ficheros"
+  | "revision"
+  | "cloudstudio"
+  | "artefactos"
+  | "tareas"
+  | "trazas";
 
 /**
  * La tira de pestañas: Chat, Tareas, Ficheros, Revisión y Trazas — más Artefactos, si la
@@ -42,6 +49,12 @@ export type Pestana = "chat" | "ficheros" | "revision" | "artefactos" | "tareas"
  * que trabaje solo—; Ficheros, Revisión y Artefactos son de REGISTRO —enseñan lo que YA
  * pasó, y por eso siguen agrupadas donde estaban—, y Trazas es de otro destinatario (quien
  * depura el harness, no quien desarrolla la app), así que sigue cerrando la tira.
+ *
+ * **CloudStudio entra por ese mismo criterio, y es la tercera de ACCIÓN**: sus dos botones
+ * mueven la copia del proyecto —subir y bajar—, y por eso existe SIEMPRE y su estado vacío
+ * dice cómo se empieza cuando el proyecto no está dado de alta. Va la última de las tres, no
+ * entre las de registro: no enseña lo que ya pasó, enseña lo que queda por subir y ofrece
+ * hacerlo.
  */
 export function Pestanas({
   pestana,
@@ -65,6 +78,11 @@ export function Pestanas({
     // más arriba). La cola de tareas en background es del proyecto ABIERTO, no de la máquina
     // entera — el kanban global ya vive en el escritorio. SIEMPRE presente, a propósito.
     { id: "tareas", etiqueta: "Tareas" },
+    // La tercera de ACCIÓN, y la última de ellas: mover la copia del proyecto contra
+    // CloudStudio. SIEMPRE presente — un proyecto que no está dado de alta es un estado, y
+    // su pestaña es donde se lee por qué y qué se hace. Va aquí, y no entre las de registro,
+    // porque ofrece hacer algo y no solo mirar lo hecho.
+    { id: "cloudstudio", etiqueta: "CloudStudio" },
     // El árbol del proyecto en el que se trabaja, con visor de solo lectura.
     { id: "ficheros", etiqueta: "Ficheros" },
     // Lo que ESTA sesión ha tocado, con su diff: la única vista que responde a «¿qué me ha

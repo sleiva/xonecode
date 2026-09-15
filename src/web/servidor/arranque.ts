@@ -89,7 +89,7 @@ import { cloudstudioDelProyecto } from "../../agent/configEnDisco.js";
 import { abrirEnSistema } from "../../agent/cloudstudioMcp.js";
 import { nombreDePersona } from "../../agent/persona.js";
 import { cambiosDeSesion, fotoDeApertura, olvidarSesion, parcheDeSesion } from "../../agent/sesionGit.js";
-import { commitDeTurno, trabajoSinCommitear } from "../../agent/gitSync.js";
+import { commitDeTurno, cambiosPendientes, trabajoSinCommitear } from "../../agent/gitSync.js";
 import { marcarTareaDeSesion, sembrarConsumosPendientes } from "./sesiones.js";
 import { RUTA_ARTEFACTOS, esRutaDeArtefacto } from "../../core/artefactos.js";
 import { arbolDeProyecto, leerFicheroDeProyecto } from "../../agent/arbolDeProyecto.js";
@@ -2082,6 +2082,40 @@ export function montarRutas(
   };
 
   /**
+   * La sincronización con CloudStudio del proyecto abierto, pedida desde un control
+   * (pestaña CloudStudio).
+   *
+   * **`estado` se mide aquí; `subir` y `bajar` se ENCOLAN**, y la asimetría es deliberada.
+   * Medir es leer una ref de git que ya está en local (`lecturaDeSync`), así que encolarla
+   * por el lazo sería abrir una sesión MCP —OAuth, red, credenciales— para contar lo que ya
+   * se sabe. Subir y bajar, en cambio, son las MISMAS dos acciones del terminal, y por el
+   * lazo salen con el MISMO plan, la MISMA guarda de árbol sucio y la MISMA aprobación
+   * (`Pregunta.tsx`, que es lo que autoriza la escritura). Escribirlas otra vez aquí sería
+   * un segundo camino de subida, que es justo donde el hueco de política que cierra
+   * `core/cloudstudio.ts#PoliticaDeAprobacion` podría volver a abrirse.
+   *
+   * El lazo además las SERIALIZA: una línea encolada corre DESPUÉS del turno en vuelo, así
+   * que un `/sync subir` no puede subir un fichero que el agente está escribiendo a medias.
+   *
+   * Y lo que NO se hace es volver a emitir la lectura después de encolar: el servidor no
+   * sabe cuándo termina una línea de la cola, y un «3 ficheros por subir» recién emitido
+   * tras pulsar Subir sería una cifra que nadie ha vuelto a medir. La pestaña se refresca
+   * al volver a ella y al pulsar «Volver a mirar», que es cuando de verdad se mira.
+   */
+  const atenderSync = (accion: "estado" | "subir" | "bajar"): void => {
+    const abierto = vestibulo.proyectoAbierto();
+    if (abierto === undefined) {
+      emitir({ clase: "sync", error: "no hay ningún proyecto abierto que sincronizar" });
+      return;
+    }
+    if (accion !== "estado") {
+      abierto.consola.encolar(`/sync ${accion}`);
+      return;
+    }
+    void lecturaDeSync(abierto.raiz).then(emitir).catch(contar);
+  };
+
+  /**
    * Solo el CÓDIGO de un fallo de sistema de ficheros (`EACCES`, `EMFILE`…), nunca su
    * mensaje: el de Node lleva la ruta absoluta del disco, y aquí `informar` acaba en el
    * transcript. Sin código, el nombre del error; sin error, la palabra.
@@ -2798,6 +2832,19 @@ export function montarRutas(
       respuesta.end();
       return;
     }
+    if (
+      typeof mensaje === "object" &&
+      mensaje !== null &&
+      mensaje.clase === "sync" &&
+      (mensaje.accion === "estado" || mensaje.accion === "subir" || mensaje.accion === "bajar")
+    ) {
+      // Una acción que no se entiende NO cae en `estado`: en esta casa lo que no se
+      // entiende se rechaza, y `estado` solo se alcanza nombrándolo.
+      atenderSync(mensaje.accion);
+      respuesta.writeHead(204);
+      respuesta.end();
+      return;
+    }
     if (typeof mensaje === "object" && mensaje !== null && mensaje.clase === "fichero" && typeof mensaje.ruta === "string") {
       void atenderFichero(mensaje.ruta).catch(contar);
       respuesta.writeHead(204);
@@ -3184,6 +3231,48 @@ export function contextoDelProyecto(raiz: string): { rama?: string; memoria?: st
     ...(rama === undefined || rama === "" ? {} : { rama }),
     ...(memoria === undefined ? {} : { memoria }),
   };
+}
+
+/**
+ * Lo que la pestaña CloudStudio enseña: de qué rama es este proyecto y cuántos ficheros
+ * quedan por subir.
+ *
+ * **Extraída y exportada, no inline en el manejador del cable**, por la razón de siempre en
+ * esta casa: una regla de producción compuesta dentro de un cierre que los tests doblan no
+ * está probada, está escrita. Aquí lo que se caería sin síntoma es la MEDIDA —una lectura
+ * que devolviera cero pendientes siempre se vería como un proyecto al día, que es
+ * exactamente lo que nadie iría a comprobar—.
+ *
+ * Se mide contra la ref de seguimiento (`refs/remotes/cloudstudio/<rama>`), que es la MISMA
+ * cuenta que da `/sync estado` y la que decide qué sube el plan, y **sin abrir sesión MCP**:
+ * el número no está arriba, está en esa ref, y abrir OAuth para contar lo que ya se sabe en
+ * local sería pedir red y credenciales para pintar un contador. El comando del terminal sí
+ * la abre —es genérico y no se toca—; la diferencia se declara aquí.
+ *
+ * Un mensaje SIN `proyecto` ni `rama` no es un fallo: es que este proyecto no está dado de
+ * alta en CloudStudio, y quien lo pinta tiene que poder decir eso en vez de un cero.
+ */
+export async function lecturaDeSync(
+  raiz: string
+): Promise<Extract<MensajeAlCliente, { clase: "sync" }>> {
+  const cloudstudio = cloudstudioDelProyecto(raiz);
+  const proyecto = cloudstudio?.proyecto?.nombre;
+  const rama = cloudstudio?.rama;
+  if (proyecto === undefined || rama === undefined || rama === "") return { clase: "sync" };
+  try {
+    const pendientes = await cambiosPendientes(raiz, rama);
+    return { clase: "sync", proyecto, rama, pendientes: pendientes.length };
+  } catch {
+    // Ni el `code` de Node ni el stderr de git: lo que aquí falla es que la copia no se
+    // puede comparar con la rama (no es un repo, o no tiene la ref de la descarga), y eso
+    // se dice con palabras. El mensaje de git trae rutas absolutas del disco.
+    return {
+      clase: "sync",
+      proyecto,
+      rama,
+      error: "no se pudo medir lo que falta por subir: la copia local no se puede comparar con la rama",
+    };
+  }
 }
 
 /**

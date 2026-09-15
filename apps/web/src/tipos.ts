@@ -274,6 +274,9 @@ export type MensajeAlCliente =
   /** El árbol del proyecto abierto y el contenido de uno de sus ficheros (pestaña Ficheros). */
   | { clase: "arbol"; rutas: string[]; recortado: boolean; error?: string }
   | ({ clase: "fichero" } & FicheroDelProyecto)
+  /** El estado de sincronización del proyecto abierto (pestaña CloudStudio). `proyecto` y
+   *  `rama` ausentes = no está dado de alta en CloudStudio, que NO es «cero pendientes». */
+  | ({ clase: "sync" } & EstadoDeSync)
   /** El contenido de un ARTEFACTO de la sesión, con la misma forma que un fichero del
    *  proyecto: así los visores son los mismos. La `ruta` es la VIRTUAL, `/artefactos/<n>`. */
   | ({ clase: "artefacto" } & FicheroDelProyecto)
@@ -413,6 +416,22 @@ export interface FicheroDelProyecto {
   mime?: string;
   /** La imagen entera, si cupo en el tope. Nunca recortada: media imagen no se abre. */
   base64?: string;
+  error?: string;
+}
+
+/**
+ * El estado de sincronización del proyecto abierto (pestaña CloudStudio): de qué rama es y
+ * cuántos ficheros quedan por subir. Redeclarado de `web/servidor/transporte.ts`.
+ *
+ * **`proyecto` y `rama` ausentes NO son «cero pendientes»**: son «este proyecto no está dado
+ * de alta en CloudStudio», que es la frase que la pestaña enseña en su estado vacío. La
+ * distinción es la de siempre en esta casa — ausente es «no consta», y un contador a cero
+ * que nadie ha medido es una cifra inventada con forma de respuesta.
+ */
+export interface EstadoDeSync {
+  proyecto?: string;
+  rama?: string;
+  pendientes?: number;
   error?: string;
 }
 
@@ -606,6 +625,10 @@ export type MensajeDelCliente =
   | { clase: "revision"; ruta?: string }
   | { clase: "arbol" }
   | { clase: "fichero"; ruta: string }
+  /** La sincronización con CloudStudio: `estado` pide la medida, `subir`/`bajar` son las
+   *  dos acciones de `/sync`. Viaja la INTENCIÓN: el servidor las aplica encolando la línea
+   *  en el lazo, con su plan, su guarda de árbol sucio y su aprobación. */
+  | { clase: "sync"; accion: "estado" | "subir" | "bajar" }
   /** El contenido de un artefacto de la sesión abierta, por su NOMBRE: la carpeta la compone
    *  el servidor con el id del hilo, y una ruta del cliente sería negociar la barrera. */
   | { clase: "artefacto"; nombre: string }

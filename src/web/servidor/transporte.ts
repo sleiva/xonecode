@@ -361,6 +361,11 @@ export type MensajeAlCliente =
   | { clase: "arbol"; rutas: string[]; recortado: boolean; error?: string }
   | ({ clase: "fichero" } & FicheroDelProyecto)
   /**
+   * El estado de sincronización del proyecto abierto (pestaña CloudStudio). Los campos van en
+   * `EstadoDeSync`, aquí arriba, para poder compararlos con los del cliente.
+   */
+  | ({ clase: "sync" } & EstadoDeSync)
+  /**
    * El contenido de un ARTEFACTO de la sesión, con la MISMA forma que un fichero del
    * proyecto — a propósito: así los visores del cliente son los de la pestaña Ficheros y no
    * una segunda familia de componentes para lo mismo. La `ruta` que trae es la VIRTUAL
@@ -637,6 +642,32 @@ export interface FicheroDelProyecto {
   mime?: string;
   /** La imagen entera, si cupo en el tope. Nunca recortada: media imagen no se abre. */
   base64?: string;
+  error?: string;
+}
+
+/**
+ * El estado de sincronización del proyecto abierto (pestaña CloudStudio): de qué rama es y
+ * cuántos ficheros quedan por subir. Redeclarado en `apps/web/src/tipos.ts`.
+ *
+ * **`proyecto` y `rama` ausentes no son «cero pendientes»**: son «este proyecto no está dado
+ * de alta en CloudStudio» —o le falta la rama del alta—, que es un estado y no un contador a
+ * cero. Son las dos preguntas que la pestaña tiene que poder contestar por separado, y por
+ * eso no se rellenan con cadenas vacías.
+ *
+ * `pendientes` se mide contra la ref de seguimiento que dejó la última descarga
+ * (`refs/remotes/cloudstudio/<rama>`), que es LA MISMA cuenta que da `/sync estado` —
+ * `agent/gitSync.ts#cambiosPendientes`, el mismo que decide qué sube el plan—. `error` solo
+ * cuando no se pudo medir, y entonces `pendientes` no viene: un cero que nadie ha contado es
+ * la cifra inventada de siempre.
+ *
+ * Es interfaz con nombre y no campos sueltos dentro de la unión por lo de siempre: los
+ * campos de un mensaje EMBEBIDO en otro no se pueden comparar con `camposDeInterfaz`, y ese
+ * es el test que vigila que el cliente no se quede con la mitad del contrato.
+ */
+export interface EstadoDeSync {
+  proyecto?: string;
+  rama?: string;
+  pendientes?: number;
   error?: string;
 }
 
@@ -969,6 +1000,17 @@ export type MensajeDelCliente =
   /** Pide el árbol del proyecto abierto, o el contenido de una ruta relativa a su raíz. */
   | { clase: "arbol" }
   | { clase: "fichero"; ruta: string }
+  /**
+   * La sincronización con CloudStudio del proyecto abierto (pestaña CloudStudio).
+   * `estado` pide la medida; `subir` y `bajar` son las dos acciones de `/sync`.
+   *
+   * Viaja la INTENCIÓN, no la sintaxis: el servidor las aplica encolando `/sync <accion>`
+   * en el lazo (`arranque.ts#atenderSync`), así que el plan, la guarda de árbol sucio y la
+   * aprobación salen por donde ya salían — la aprobación es la pregunta de siempre, que es
+   * la que autoriza la escritura. Un `git push` desde el cliente no existiría ni aunque
+   * quisiéramos: la copia la mueve `agent/subida.ts` llamando a las tools MCP.
+   */
+  | { clase: "sync"; accion: "estado" | "subir" | "bajar" }
   /**
    * El contenido de un artefacto de la sesión abierta. Se pide por NOMBRE y no por ruta: la
    * carpeta la compone el servidor con el id del hilo, y aceptar una ruta del cliente sería

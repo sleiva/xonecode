@@ -24,6 +24,7 @@ import { AccionDeSesion, type AccionPendiente } from "./componentes/AccionDeSesi
 import { Ajustes } from "./componentes/Ajustes.js";
 import { Revision } from "./componentes/Revision.js";
 import { Ficheros } from "./componentes/Ficheros.js";
+import { CloudStudio } from "./componentes/CloudStudio.js";
 import { Artefactos, type ArtefactoEnLista } from "./componentes/Artefactos.js";
 import { TareasDelProyecto } from "./componentes/TareasDelProyecto.js";
 import { aplicarApariencia, guardarApariencia, leerApariencia, type Apariencia } from "./apariencia.js";
@@ -368,6 +369,28 @@ export function App({
     void enviar({ clase: "arbol" });
   }, [enviar]);
 
+  /**
+   * Pedir la medida de lo que queda por subir (pestaña CloudStudio), y las dos acciones.
+   *
+   * En `useCallback` por lo de siempre: la pestaña la llama desde un `useEffect`, y una
+   * función nueva por render volvería a disparar el efecto en bucle.
+   *
+   * **Medir y actuar van por el MISMO mensaje con distinta `accion`**, y el servidor decide
+   * qué hacer con cada una: `estado` lo mide él contra la ref de git —sin abrir sesión MCP—,
+   * y `subir`/`bajar` los ENCOLA para que salgan con el plan, la guarda y la aprobación del
+   * terminal. Aquí no se compone nada de eso: el cliente manda la intención y nada más.
+   */
+  const pedirSync = useCallback(() => {
+    void enviar({ clase: "sync", accion: "estado" });
+  }, [enviar]);
+
+  const sincronizar = useCallback(
+    (accion: "subir" | "bajar") => {
+      void enviar({ clase: "sync", accion });
+    },
+    [enviar]
+  );
+
   const elegirFichero = useCallback(
     (ruta: string | undefined) => {
       setFicheroElegido(ruta);
@@ -417,10 +440,17 @@ export function App({
       pedirArbol();
       if (ficheroElegido !== undefined) void enviar({ clase: "fichero", ruta: ficheroElegido });
     }
+    if (pestana === "cloudstudio") {
+      // El turno acaba de escribir, así que hay MÁS por subir que hace un momento. Es el
+      // único de los dos caminos por los que esta cifra envejece que el servidor sí conoce
+      // (el otro es `/sync`, que mueve la ref sin avisar de cuándo acaba); por eso se mide
+      // aquí, en el flanco de fin, y no se adelanta a ojo.
+      pedirSync();
+    }
     // `desplegados` y `ficheroElegido` NO van en las dependencias a propósito: desplegar y
     // elegir ya piden lo suyo por su cuenta, y tenerlos aquí lo pediría dos veces.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [turnoEnVuelo, pestana, pedirRevision, pedirParche, pedirArbol, enviar]);
+  }, [turnoEnVuelo, pestana, pedirRevision, pedirParche, pedirArbol, pedirSync, enviar]);
   const [apariencia, setApariencia] = useState<Apariencia>(() => leerApariencia());
 
   useEffect(() => {
@@ -1126,6 +1156,14 @@ export function App({
                   {...(mirar === undefined ? {} : { alMirar: alMirarTarea, alDejarDeMirar: alDejarDeMirarTarea })}
                   {...(mirandoTarea === undefined ? {} : { mirando: mirandoTarea })}
                   {...(estado.mirada === undefined ? {} : { mirada: estado.mirada })}
+                />
+              }
+              cloudstudio={
+                <CloudStudio
+                  {...(estado.sync === undefined ? {} : { sync: estado.sync })}
+                  alPedir={sincronizar}
+                  alRecargar={pedirSync}
+                  conectado={estado.conectado}
                 />
               }
               // La tarjeta del chat abre el artefacto: cambia de pestaña y lo elige.

@@ -137,6 +137,36 @@ describe("tipos del cliente", () => {
     expect(Object.keys(fila).sort()).toEqual(camposDeInterfaz(RUTA_TIPOS, "SesionDelCable"));
     expect(fila).toEqual(FILA_COMPLETA_DE_SESION);
   });
+
+  /**
+   * `EstadoDeSync` nació con nombre propio por esta misma razón: sus campos vivían ESCRITOS
+   * DENTRO de la unión (`| { clase: "sync"; … }`), y unos campos embebidos en un mensaje no
+   * se pueden comparar. Es la fila de la que cuelga la pestaña CloudStudio, y lo que se cae
+   * sin síntoma es la MEDIDA: un `pendientes` que no llegue se pinta como «no consta», que
+   * se lee como «no lo he mirado» y no como «el store se lo comió».
+   */
+  it("los campos de EstadoDeSync del cliente y del host no divergen", () => {
+    expect(camposDeInterfaz(RUTA_TIPOS, "EstadoDeSync")).toEqual(
+      camposDeInterfaz(RUTA_TRANSPORTE, "EstadoDeSync")
+    );
+  });
+
+  it("la lista blanca del store no se come ningún campo declarado de EstadoDeSync", async () => {
+    const { crearStoreDelCliente } = await import("./store.js");
+    const s = crearStoreDelCliente();
+    // Con TODOS los campos declarados, sacados del propio tipo: si uno se cae del `case`,
+    // la comparación de claves se pone roja sin que nadie tenga que acordarse de ampliarla.
+    const completa: Record<string, unknown> = {
+      proyecto: "Tienda",
+      rama: "main",
+      pendientes: 3,
+      error: "no se pudo medir",
+    };
+    s.aplicar({ clase: "sync", ...completa });
+    const fila = s.leer().sync!;
+    expect(Object.keys(fila).sort()).toEqual(camposDeInterfaz(RUTA_TIPOS, "EstadoDeSync"));
+    expect(fila).toEqual(completa);
+  });
 });
 
 /**

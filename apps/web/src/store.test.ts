@@ -262,6 +262,41 @@ describe("store del cliente", () => {
     expect(s.leer().contenidos).toBeUndefined();
   });
 
+  /**
+   * La pestaña CloudStudio se nutre de este campo y de nada más, así que la lista blanca se
+   * lleva sus dos trampas juntas: un `pendientes` que llegara como CADENA pintaría «NaN
+   * ficheros por subir» —peor que no pintar ninguno—, y `proyecto`/`rama` ausentes tienen
+   * que quedarse ausentes, porque son «este proyecto no está dado de alta» y rellenarlos con
+   * cadenas vacías convertiría esa frase en un contador a cero que nadie ha medido.
+   */
+  it("«sync» se guarda campo a campo, y un tipo que no es el suyo no cuela", () => {
+    const s = crearStoreDelCliente();
+    s.aplicar({ clase: "sync", proyecto: "Tienda", rama: "main", pendientes: 3 });
+    expect(s.leer().sync).toEqual({ proyecto: "Tienda", rama: "main", pendientes: 3 });
+
+    // Un contador que llega como cadena se cae; los otros tres siguen llegando.
+    s.aplicar({ clase: "sync", proyecto: "Tienda", rama: "main", pendientes: "3" });
+    expect(s.leer().sync).toEqual({ proyecto: "Tienda", rama: "main" });
+
+    // Y `NaN` e `Infinity` tampoco: no son una medida.
+    s.aplicar({ clase: "sync", proyecto: "Tienda", rama: "main", pendientes: Number.NaN });
+    expect(s.leer().sync).toEqual({ proyecto: "Tienda", rama: "main" });
+  });
+
+  it("un proyecto que no es de CloudStudio llega SIN proyecto ni rama, no con cadenas vacías", () => {
+    const s = crearStoreDelCliente();
+    s.aplicar({ clase: "sync" });
+    expect(s.leer().sync).toEqual({});
+    expect(s.leer().sync?.proyecto).toBeUndefined();
+  });
+
+  it("«sync» se tira al cambiar de sesión y al caerse el cable", () => {
+    const s = crearStoreDelCliente();
+    s.aplicar({ clase: "sync", proyecto: "Tienda", rama: "main", pendientes: 1 });
+    s.marcarDesconectado();
+    expect(s.leer().sync).toBeUndefined();
+  });
+
   it("«artefacto» se guarda por su ruta virtual, y se tira con la sesión y sin cable", () => {
     const s = crearStoreDelCliente();
     s.aplicar({ clase: "artefacto", ruta: "/artefactos/d.html", texto: "<p/>", recortado: false, binario: false, bytes: 4 });

@@ -1,0 +1,113 @@
+/* Alias comprobados contra `apps/web/estilos/design-platform.css`, y solo los que esta hoja
+   usa: bg-layer-1/2, border-l2, label-primary/secondary/tertiary e interactive-bg-hover. Más
+   el par de marca del botón, que no es un alias sino `estilos/marca.css` — el MISMO par que
+   la barra superior y el botón de enviar. */
+
+.panel {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 16px 20px;
+  max-width: 72ch;
+}
+
+.aviso {
+  margin: 12px 20px;
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 12px;
+  line-height: 1.6;
+  max-width: 60ch;
+}
+
+/* El nombre del proyecto manda y la rama le sigue: son la misma frase —«dónde estoy»— y por
+   eso comparten renglón, con la rama en monoespaciada porque se copia y se compara letra a
+   letra (`main`, `xonecode/main`). */
+.cabecera {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+}
+
+.proyecto {
+  color: var(--dsw-alias-label-primary);
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.rama {
+  color: var(--dsw-alias-label-secondary);
+  font-family: var(--ds-font-family-code);
+  font-size: 12px;
+}
+
+/* El mismo botón secundario de Revisión y de Ficheros, y a propósito: «volver a mirar» es
+   la MISMA acción en las tres pestañas y no hay motivo para que se vea distinta. */
+.recargar {
+  margin-left: auto;
+  padding: 4px 10px;
+  border: 0.5px solid var(--dsw-alias-border-l2);
+  border-radius: 8px;
+  background: var(--dsw-alias-bg-layer-1);
+  color: var(--dsw-alias-label-secondary);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.recargar:hover {
+  background: var(--dsw-alias-interactive-bg-hover);
+  color: var(--dsw-alias-label-primary);
+}
+
+/* La cifra, en el cuerpo de un dato y no en el de un aviso: «3 ficheros por subir» es la
+   RESPUESTA de la pestaña, y lo que se lee de un vistazo no puede ir en gris terciario. */
+.cuenta {
+  margin: 0;
+  color: var(--dsw-alias-label-primary);
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.botones {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+/* Las dos acciones llevan el AZUL de la marca con su letra encima —el par que ya está
+   medido para sostener texto blanco, el mismo de la barra superior y del botón de enviar—,
+   y el cian se queda para el hover: acento, sin nada que sostener. Y van las dos iguales
+   aunque hagan cosas opuestas y una SOBRESCRIBA: pintar de rojo «Bajar» diría que está
+   prohibido, y no lo está — lo que pide es saber lo que hace, y eso lo dice la nota. */
+.subir,
+.bajar {
+  padding: 6px 14px;
+  border: none;
+  border-radius: 8px;
+  background: var(--xonecode-azul);
+  color: var(--xonecode-sobre-azul);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  transition: background 120ms ease;
+  cursor: pointer;
+}
+
+.subir:hover,
+.bajar:hover {
+  background: var(--xonecode-cian);
+}
+
+/* La nota de lo que hace cada dirección. En `bg-layer-2` con el texto secundario: es
+   contexto de los dos botones, no una alarma — y aquí sí importa que se lea, porque
+   «Bajar» pisa la copia local y eso no se deduce del nombre. */
+.nota {
+  margin: 0;
+  padding: 8px 12px;
+  border-radius: 8px;
+  background: var(--dsw-alias-bg-layer-2);
+  color: var(--dsw-alias-label-secondary);
+  font-size: 12px;
+  line-height: 1.6;
+}

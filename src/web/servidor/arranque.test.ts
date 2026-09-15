@@ -6,6 +6,7 @@
  * sobre el CABLE (qué se emite, en qué orden, a qué consola) sin abrir un socket.
  */
 import { vi, describe, it, expect, beforeEach, afterEach } from "vitest";
+import { execFileSync } from "node:child_process";
 import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
@@ -25,6 +26,7 @@ import { MS_DE_TRABAJO_AL_ABRIR,
   fuentesDeLaConsolaWeb,
   augmentacionCableada,
   contextoDelProyecto,
+  lecturaDeSync,
   TOPE_DE_MEMORIA,
   FICHEROS_DEL_AVISO,
 } from "./arranque.js";
@@ -1659,6 +1661,192 @@ describe("montarRutas — el cable, por fin conectado", () => {
       expect(f.ruta).toBe("x.xne");
       expect(f.error).toBeTypeOf("string");
       expect(f.texto).toBeUndefined();
+      await vestibulo.cerrar();
+      rmSync(base, { recursive: true, force: true });
+    });
+  });
+
+  describe("la sincronización con CloudStudio", () => {
+    /**
+     * Un proyecto abierto de verdad, con repo y con la ref que deja la bajada, más la costura
+     * para mirar lo que se ENCOLA — que es la única forma de afirmar «esto sale por el camino
+     * del terminal» sin abrir un socket: la cola la lee el lazo, y aquí el lazo es un doble.
+     */
+    async function conProyectoDeCloudStudio() {
+      const base = mkdtempSync(join(tmpdir(), "xonecode-sync-cable-"));
+      const encoladas: string[] = [];
+      const servidor = servidorDeMentira();
+      const vestibulo = vestibuloDePrueba({
+        baseDeWorkspace: base,
+        crearConsola: (o: OpcionesDeConsolaWeb): ConsolaWeb => {
+          const real = crearConsolaWeb(o);
+          return {
+            ...real,
+            encolar: (linea: string) => {
+              encoladas.push(linea);
+              real.encolar(linea);
+            },
+          };
+        },
+      });
+      const raiz = vestibulo.raizDeProyecto("webstudio", "Tienda");
+      mkdirSync(join(raiz, ".xonecode"), { recursive: true });
+      writeFileSync(
+        join(raiz, ".xonecode", "config.json"),
+        JSON.stringify({
+          modo: "cloud",
+          cloudstudio: { url: "https://x/mcp", proyecto: { id: "p1", nombre: "Tienda" }, rama: "main" },
+        })
+      );
+      writeFileSync(join(raiz, "app.xml"), "<app/>");
+      execFileSync("git", ["init", "-q", "-b", "main"], { cwd: raiz });
+      execFileSync("git", ["config", "user.email", "t@t"], { cwd: raiz });
+      execFileSync("git", ["config", "user.name", "t"], { cwd: raiz });
+      execFileSync("git", ["add", "-A"], { cwd: raiz });
+      execFileSync("git", ["commit", "-qm", "inicial"], { cwd: raiz });
+      execFileSync("git", ["update-ref", "refs/remotes/cloudstudio/main", "HEAD"], { cwd: raiz });
+
+      montarRutas(servidor, vestibulo);
+      const cliente = clienteDeMentira();
+      await servidor.rutas.get(`GET ${RUTA_EVENTOS}`)!(cliente.peticion, cliente.respuesta);
+      const accion = servidor.rutas.get(`POST ${RUTA_ACCION}`)!;
+      await asentar();
+      await enviarMensaje(accion, { clase: "sesion", proyecto: "p1" });
+      await asentar();
+      return { base, servidor, vestibulo, cliente, accion, encoladas, raiz };
+    }
+
+    const ultimoSync = (cliente: ReturnType<typeof clienteDeMentira>) =>
+      cliente.recibidos.filter((m) => m.clase === "sync").at(-1) as Extract<MensajeAlCliente, { clase: "sync" }>;
+
+    /**
+     * Espera a que hayan llegado `cuantas` lecturas. La medida es un `git diff` DE VERDAD
+     * —spawns y promesas encadenadas—, así que un `asentar()` no basta para verla: hay que
+     * esperar a que esté, y con un tope para que un fallo se lea como fallo y no cuelgue.
+     */
+    async function esperarLecturas(cliente: ReturnType<typeof clienteDeMentira>, cuantas: number): Promise<void> {
+      for (let i = 0; i < 300; i++) {
+        if (cliente.recibidos.filter((m) => m.clase === "sync").length >= cuantas) return;
+        await new Promise((r) => setTimeout(r, 10));
+      }
+      throw new Error(`no llegaron ${cuantas} lecturas de sync`);
+    }
+
+    /**
+     * `estado` se MIDE en el servidor, contra la ref de git, y sin abrir sesión MCP: el
+     * número ya está en local, y abrir OAuth para contar lo que se sabe sería pedir red y
+     * credenciales para pintar un contador. Aquí la cuenta es la de verdad sobre un repo de
+     * verdad — la misma que da `/sync estado` (`agent/gitSync.ts#cambiosPendientes`).
+     */
+    it("«estado» mide lo que falta por subir y contesta con la rama", async () => {
+      const { base, cliente, accion, vestibulo, raiz, encoladas } = await conProyectoDeCloudStudio();
+      expect(await enviarMensaje(accion, { clase: "sync", accion: "estado" })).toBe(204);
+      await esperarLecturas(cliente, 1);
+      expect(ultimoSync(cliente)).toEqual({ clase: "sync", proyecto: "Tienda", rama: "main", pendientes: 0 });
+      // Y NO se encola nada: medir no es una acción del lazo.
+      expect(encoladas).toEqual([]);
+
+      writeFileSync(join(raiz, "app.xml"), "<app cambiada/>");
+      await enviarMensaje(accion, { clase: "sync", accion: "estado" });
+      await esperarLecturas(cliente, 2);
+      expect(ultimoSync(cliente).pendientes).toBe(1);
+      await vestibulo.cerrar();
+      rmSync(base, { recursive: true, force: true });
+    });
+
+    /**
+     * Y las dos acciones van por el LAZO, con la misma línea que teclea el terminal. Es la
+     * decisión de la que depende todo lo demás: el plan, la guarda de árbol sucio y la
+     * aprobación salen por donde ya salían, así que no hay un segundo camino por el que una
+     * subida pueda quedar autorizada.
+     */
+    it("«subir» y «bajar» encolan la MISMA línea que el terminal, y no contestan con una cifra", async () => {
+      const { base, cliente, accion, vestibulo, encoladas } = await conProyectoDeCloudStudio();
+      expect(await enviarMensaje(accion, { clase: "sync", accion: "subir" })).toBe(204);
+      expect(await enviarMensaje(accion, { clase: "sync", accion: "bajar" })).toBe(204);
+      await asentar();
+      expect(encoladas).toEqual(["/sync subir", "/sync bajar"]);
+      // Ni una lectura de más: el servidor no sabe cuándo termina una línea encolada, y una
+      // cifra recién emitida tras pulsar Subir sería una medida que nadie ha vuelto a hacer.
+      expect(cliente.recibidos.filter((m) => m.clase === "sync")).toEqual([]);
+      await vestibulo.cerrar();
+      rmSync(base, { recursive: true, force: true });
+    });
+
+    /**
+     * Una acción que no se entiende NO cae en `estado`: en esta casa lo que no se entiende se
+     * rechaza. Y se distingue de la clase desconocida por lo mismo que `arbol` sin puerto:
+     * el mensaje no sale, y no hay ni cola ni medida.
+     */
+    it("una acción que no existe no cae en «estado» ni encola nada", async () => {
+      const { base, cliente, accion, vestibulo, encoladas } = await conProyectoDeCloudStudio();
+      await enviarMensaje(accion, { clase: "sync", accion: "borrar" } as unknown as MensajeDelCliente);
+      await enviarMensaje(accion, { clase: "sync" } as unknown as MensajeDelCliente);
+      await asentar();
+      expect(cliente.recibidos.filter((m) => m.clase === "sync")).toEqual([]);
+      expect(encoladas).toEqual([]);
+      await vestibulo.cerrar();
+      rmSync(base, { recursive: true, force: true });
+    });
+
+    /**
+     * Sin proyecto abierto no hay nada que sincronizar, y se DICE: la pestaña existe siempre
+     * (`Pestanas.tsx`), así que su estado no puede quedarse en «Consultando…» para siempre.
+     */
+    it("sin proyecto abierto lo dice, en vez de quedarse en silencio", async () => {
+      const servidor = servidorDeMentira();
+      montarRutas(servidor, vestibuloDePrueba());
+      const cliente = clienteDeMentira();
+      await servidor.rutas.get(`GET ${RUTA_EVENTOS}`)!(cliente.peticion, cliente.respuesta);
+      const accion = servidor.rutas.get(`POST ${RUTA_ACCION}`)!;
+      await asentar();
+      await enviarMensaje(accion, { clase: "sync", accion: "estado" });
+      await asentar();
+      expect(ultimoSync(cliente).error).toMatch(/no hay ningún proyecto abierto/);
+      expect(ultimoSync(cliente).pendientes).toBeUndefined();
+    });
+
+    /**
+     * Un fichero del proyecto que no está dado de alta en CloudStudio es un estado, no un
+     * cero: la medida no se puede hacer, y la pestaña tiene que poder decir esa frase en vez
+     * de «0 ficheros por subir».
+     */
+    it("un proyecto offline llega SIN proyecto ni rama, no con un cero", async () => {
+      const base = mkdtempSync(join(tmpdir(), "xonecode-sync-off-"));
+      const servidor = servidorDeMentira();
+      const vestibulo = vestibuloDePrueba({ baseDeWorkspace: base });
+      const raiz = vestibulo.raizDeProyecto("webstudio", "Tienda");
+      mkdirSync(join(raiz, ".xonecode"), { recursive: true });
+      writeFileSync(join(raiz, ".xonecode", "config.json"), JSON.stringify({ modo: "offline" }));
+      montarRutas(servidor, vestibulo);
+      const cliente = clienteDeMentira();
+      await servidor.rutas.get(`GET ${RUTA_EVENTOS}`)!(cliente.peticion, cliente.respuesta);
+      const accion = servidor.rutas.get(`POST ${RUTA_ACCION}`)!;
+      await asentar();
+      await enviarMensaje(accion, { clase: "sesion", proyecto: "p1" });
+      await asentar();
+      await enviarMensaje(accion, { clase: "sync", accion: "estado" });
+      await asentar();
+      expect(ultimoSync(cliente)).toEqual({ clase: "sync" });
+      await vestibulo.cerrar();
+      rmSync(base, { recursive: true, force: true });
+    });
+
+    /**
+     * Y la ruta de la raíz no sale por NINGÚN mensaje del cable: el error de la medida se
+     * redacta con palabras, porque el stderr de git la traería entera y esto puede ir por un
+     * túnel (`sinRutas`).
+     */
+    it("el fallo de medida no lleva la ruta del proyecto por el cable", async () => {
+      const { base, cliente, accion, vestibulo, raiz } = await conProyectoDeCloudStudio();
+      // Sin la ref de la bajada no hay contra qué comparar: `cambiosPendientes` lanza.
+      execFileSync("git", ["update-ref", "-d", "refs/remotes/cloudstudio/main"], { cwd: raiz });
+      await enviarMensaje(accion, { clase: "sync", accion: "estado" });
+      await esperarLecturas(cliente, 1);
+      const m = ultimoSync(cliente);
+      expect(m.error).toMatch(/no se pudo medir/);
+      expect(m.pendientes).toBeUndefined();
+      expect(JSON.stringify(cliente.recibidos)).not.toContain(raiz);
       await vestibulo.cerrar();
       rmSync(base, { recursive: true, force: true });
     });
@@ -4987,6 +5175,117 @@ describe("contextoDelProyecto", () => {
     mkdirSync(join(raiz, ".xonecode"), { recursive: true });
     writeFileSync(join(raiz, ".xonecode", "memoria.md"), "a".repeat(TOPE_DE_MEMORIA + 5_000));
     expect(contextoDelProyecto(raiz).memoria!.length).toBeLessThanOrEqual(TOPE_DE_MEMORIA);
+    rmSync(raiz, { recursive: true, force: true });
+  });
+});
+
+/**
+ * La MEDIDA de lo que falta por subir, con un repo de verdad.
+ *
+ * Es la costura que se extrajo del manejador del cable justo para poder probarla aquí: lo
+ * que se cae sin síntoma es la cuenta —una lectura que devolviera siempre cero se vería
+ * como un proyecto al día, que es exactamente lo que nadie iría a comprobar—. Y el repo real
+ * importa porque la cuenta NO es nuestra: es un `git diff` contra la ref de seguimiento que
+ * dejó la última bajada (`agent/gitSync.ts#cambiosPendientes`, el mismo que decide qué sube
+ * el plan). Con un doble se probaría el doble.
+ */
+describe("lecturaDeSync — lo que la pestaña CloudStudio enseña", () => {
+  const git = (raiz: string, ...args: string[]): string =>
+    execFileSync("git", args, { cwd: raiz, encoding: "utf8" }).trim();
+
+  /** Un proyecto dado de alta en CloudStudio, con repo, un commit y su ref de seguimiento. */
+  function proyectoDeCloudStudio(): string {
+    const raiz = mkdtempSync(join(tmpdir(), "xonecode-sync-"));
+    mkdirSync(join(raiz, ".xonecode"), { recursive: true });
+    writeFileSync(
+      join(raiz, ".xonecode", "config.json"),
+      JSON.stringify({
+        modo: "cloud",
+        cloudstudio: { url: "https://x/mcp", proyecto: { id: "p1", nombre: "Tienda" }, rama: "main" },
+      })
+    );
+    writeFileSync(join(raiz, "app.xml"), "<app/>");
+    execFileSync("git", ["init", "-q", "-b", "main"], { cwd: raiz });
+    git(raiz, "config", "user.email", "t@t");
+    git(raiz, "config", "user.name", "t");
+    git(raiz, "add", "-A");
+    git(raiz, "commit", "-qm", "inicial");
+    // La ref que `prepararRepo` escribe en cada bajada: sin ella no hay contra qué comparar.
+    git(raiz, "update-ref", "refs/remotes/cloudstudio/main", "HEAD");
+    return raiz;
+  }
+
+  it("cuenta los ficheros que no están en la rama, contra la ref de la bajada", async () => {
+    const raiz = proyectoDeCloudStudio();
+    // Al día: el árbol es el mismo que el de la ref.
+    expect(await lecturaDeSync(raiz)).toEqual({ clase: "sync", proyecto: "Tienda", rama: "main", pendientes: 0 });
+
+    writeFileSync(join(raiz, "app.xml"), "<app cambiada/>");
+    writeFileSync(join(raiz, "otra.xne"), "<x/>");
+    git(raiz, "add", "otra.xne");
+    expect(await lecturaDeSync(raiz)).toEqual({ clase: "sync", proyecto: "Tienda", rama: "main", pendientes: 2 });
+
+    // Y con la ref movida al árbol de ahora se vuelve a cero: es «lo que falta respecto a lo
+    // que consta arriba», no un contador acumulado.
+    git(raiz, "update-ref", "refs/remotes/cloudstudio/main", "HEAD");
+    expect(await lecturaDeSync(raiz)).toEqual({ clase: "sync", proyecto: "Tienda", rama: "main", pendientes: 2 });
+    rmSync(raiz, { recursive: true, force: true });
+  });
+
+  /**
+   * Límite DECLARADO de esta cuenta, y es el de `/sync estado` porque es la MISMA: la medida
+   * la da git, y git no ve lo que no está en su índice. Un fichero que nadie ha añadido no
+   * cuenta hasta que se añada.
+   *
+   * No es un agujero en la práctica: el turno commitea lo que deja (`commitDeTurno`, con
+   * `add -A`), así que lo que escribe el agente entra por ahí — y este test lo dice para que
+   * el día que alguien toque `cambiosPendientes` se encuentre con la decisión escrita en vez
+   * de con una pestaña que enseña un número distinto del que da el terminal.
+   */
+  it("un fichero que git no rastrea no entra en la cuenta: la da git, y es la misma que `/sync estado`", async () => {
+    const raiz = proyectoDeCloudStudio();
+    writeFileSync(join(raiz, "recien-creado.xne"), "<x/>");
+    expect((await lecturaDeSync(raiz)).pendientes).toBe(0);
+    rmSync(raiz, { recursive: true, force: true });
+  });
+
+  /**
+   * Un proyecto offline no es un proyecto con cero pendientes: es uno cuya pregunta no tiene
+   * respuesta, y la pestaña tiene que poder decir eso en vez de un contador a cero. Por eso
+   * el mensaje sale SIN `proyecto` ni `rama` en vez de con cadenas vacías.
+   */
+  it("un proyecto que no es de CloudStudio sale sin proyecto ni rama, no con un cero", async () => {
+    const raiz = mkdtempSync(join(tmpdir(), "xonecode-sync-off-"));
+    mkdirSync(join(raiz, ".xonecode"), { recursive: true });
+    writeFileSync(join(raiz, ".xonecode", "config.json"), JSON.stringify({ modo: "offline" }));
+    const leido = await lecturaDeSync(raiz);
+    expect(leido).toEqual({ clase: "sync" });
+    expect(leido.pendientes).toBeUndefined();
+    rmSync(raiz, { recursive: true, force: true });
+  });
+
+  /**
+   * Y cuando la copia existe pero no se puede comparar —no es un repo, o le falta la ref—,
+   * se dice con palabras y SIN `pendientes`: un cero ahí sería la cifra inventada de siempre.
+   * El motivo no lleva el stderr de git, que trae rutas absolutas del disco.
+   */
+  it("si no se puede medir, el error va con palabras y sin cifra", async () => {
+    const raiz = proyectoDeCloudStudio();
+    git(raiz, "update-ref", "-d", "refs/remotes/cloudstudio/main");
+    const leido = await lecturaDeSync(raiz);
+    expect(leido.proyecto).toBe("Tienda");
+    expect(leido.pendientes).toBeUndefined();
+    expect(leido.error).toMatch(/no se pudo medir/);
+    expect(leido.error).not.toContain(raiz);
+    rmSync(raiz, { recursive: true, force: true });
+  });
+
+  it("`error` y `pendientes` no viajan juntos: o hay medida o hay motivo", async () => {
+    const raiz = proyectoDeCloudStudio();
+    writeFileSync(join(raiz, "app.xml"), "<app cambiada/>");
+    const leido = await lecturaDeSync(raiz);
+    expect(leido.error).toBeUndefined();
+    expect(leido.pendientes).toBe(1);
     rmSync(raiz, { recursive: true, force: true });
   });
 });

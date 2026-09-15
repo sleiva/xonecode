@@ -23,6 +23,7 @@ import type {
   PasoDelWizard,
   FicheroTocado,
   FicheroDelProyecto,
+  EstadoDeSync,
   AgenteDelCable,
   TareaDelCable,
   ProveedorDeModelos,
@@ -173,6 +174,16 @@ export interface EstadoDelCliente {
    */
   arbol?: { rutas: string[]; recortado: boolean; error?: string };
   contenidos?: Record<string, FicheroDelProyecto>;
+  /**
+   * El estado de sincronización del proyecto abierto (pestaña CloudStudio). Ausente = no se
+   * ha pedido todavía, y eso se dice: la pestaña arranca en «consultando».
+   *
+   * `proyecto` y `rama` ausentes NO son «cero pendientes»: son «este proyecto no está dado
+   * de alta en CloudStudio», que es otra frase. Es la misma distinción que el resto del
+   * estado hace entre ausente y vacío — rellenarlos con cadenas vacías las confundiría, y
+   * un contador a cero que nadie ha medido es la cifra inventada de siempre.
+   */
+  sync?: EstadoDeSync;
   /**
    * Los modelos que ofrece cada MOTOR externo, por motor. Ausente = no se ha preguntado;
    * con `error`, se preguntó y no se pudo saber — que es distinto de «no tiene ninguno».
@@ -999,6 +1010,29 @@ export function crearStoreDelCliente(): {
           });
           return;
         }
+        case "sync": {
+          // Campo a campo, lista blanca: lo que no se nombra aquí no llega — la trampa que
+          // ya mordió con `mime`/`base64` en `fichero`. Y cada uno solo se copia si es del
+          // tipo que dice ser: un `pendientes` que llegara como cadena pintaría «NaN
+          // ficheros por subir», que es peor que no pintar ninguno.
+          const m = mensaje as {
+            proyecto?: unknown;
+            rama?: unknown;
+            pendientes?: unknown;
+            error?: unknown;
+          };
+          mutar({
+            sync: {
+              ...(typeof m.proyecto === "string" ? { proyecto: m.proyecto } : {}),
+              ...(typeof m.rama === "string" ? { rama: m.rama } : {}),
+              ...(typeof m.pendientes === "number" && Number.isFinite(m.pendientes)
+                ? { pendientes: m.pendientes }
+                : {}),
+              ...(typeof m.error === "string" ? { error: m.error } : {}),
+            },
+          });
+          return;
+        }
         case "fichero": {
           const m = mensaje as Partial<FicheroDelProyecto>;
           if (typeof m.ruta !== "string" || typeof m.bytes !== "number") return;
@@ -1248,7 +1282,7 @@ export function crearStoreDelCliente(): {
           const sesionDeAhora = typeof m.sesionActiva === "string" ? m.sesionActiva : undefined;
           const cambioDeSesion = sesionDeAhora !== estado.alta?.sesionActiva;
           mutar({
-            ...(cambioDeSesion ? { revision: undefined, parches: undefined, arbol: undefined, contenidos: undefined, artefactos: undefined } : {}),
+            ...(cambioDeSesion ? { revision: undefined, parches: undefined, arbol: undefined, contenidos: undefined, artefactos: undefined, sync: undefined } : {}),
             alta: {
               pasos: m.pasos as PasoDelWizard[],
               proveedores: m.proveedores,
@@ -1361,6 +1395,11 @@ export function crearStoreDelCliente(): {
         arbol: undefined,
         contenidos: undefined,
         artefactos: undefined,
+        // Y la medida de lo que falta por subir: la rama la pudo mover el agente, y arriba
+        // —en CloudStudio— pudo cambiar algo desde fuera. Es una foto como las tres de
+        // arriba, y el número que la pestaña enseña en su lugar lo vuelve a medir el
+        // servidor en cuanto se lo pidan (que es al volver a la pestaña).
+        sync: undefined,
         // Los subagentes salen de ficheros en disco: mientras no hay cable pueden haberse
         // editado a mano, y la ventana de ajustes enseñaría una lista que ya no es. La
         // reconexión los trae enteros en la misma ráfaga que los modelos.

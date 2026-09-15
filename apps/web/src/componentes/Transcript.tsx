@@ -30,6 +30,7 @@ export function Transcript({
   revision,
   artefactos,
   tareas,
+  cloudstudio,
   alAbrirArtefacto,
 }: {
   actos: readonly Acto[];
@@ -61,6 +62,9 @@ export function Transcript({
    *  —es de acción, no de registro como `artefactos` (`Pestanas.tsx`)—; aquí sigue siendo
    *  solo una ranura más. */
   tareas?: ReactNode;
+  /** La sincronización con CloudStudio del proyecto abierto. Como `tareas`, su pestaña existe
+   *  SIEMPRE (es de acción: lleva los dos botones), así que aquí es una ranura más. */
+  cloudstudio?: ReactNode;
   /** Abrir un artefacto desde su tarjeta del Chat. Lo resuelve `App`, que es quien recuerda
    *  la pestaña y el elegido. */
   alAbrirArtefacto?: (ruta: string) => void;
@@ -92,6 +96,8 @@ export function Transcript({
           artefactos
         ) : pestana === "tareas" ? (
           tareas
+        ) : pestana === "cloudstudio" ? (
+          cloudstudio
         ) : (
           ficheros
         )}

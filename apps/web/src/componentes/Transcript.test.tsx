@@ -97,4 +97,23 @@ describe("Transcript", () => {
     render(<Transcript actos={[...ACTOS]} pestana="trazas" />);
     expect(screen.getByText(/read_file/)).toBeTruthy();
   });
+
+  /**
+   * **La ranura, no el contenido**: cada panel se monta al elegir su pestaña y solo entonces
+   * —`{pestana === … ? … : …}`—, que es lo que hace que la petición que cada uno lleva dentro
+   * no salga hasta que alguien abre la suya. Si CloudStudio se cayera del despacho, la
+   * pestaña se pintaría VACÍA, y eso es un control sin dato detrás con su botón ya pulsado.
+   */
+  it("la pestaña «cloudstudio» pinta SU panel, y no el de al lado", () => {
+    render(
+      <Transcript
+        actos={[...ACTOS]}
+        pestana="cloudstudio"
+        cloudstudio={<p>lo de cloudstudio</p>}
+        ficheros={<p>lo de ficheros</p>}
+      />
+    );
+    expect(screen.getByText("lo de cloudstudio")).toBeTruthy();
+    expect(screen.queryByText("lo de ficheros")).toBeNull();
+  });
 });
