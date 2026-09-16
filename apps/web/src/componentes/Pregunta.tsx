@@ -1,5 +1,5 @@
-import { Fragment, useEffect, useRef, useState, type FormEvent } from "react";
-import { Input, Button } from "@deepseek-ai/dsh-client-ui-primitives";
+import { Fragment, useEffect, useRef, useState, type FormEvent, type MouseEvent } from "react";
+import { Input, Button, Modal } from "@deepseek-ai/dsh-client-ui-primitives";
 import type { DecisionDeConsola } from "../tipos.js";
 import estilos from "./Pregunta.module.css";
 
@@ -42,6 +42,34 @@ const NO = "n";
  * decisión —o dos botones sobre una pregunta abierta— sin un solo error que lo delate. Por
  * eso el enunciado llega sin la pista: aquí no hay nada que teclear, y enseñar «[s/N]»
  * delante de dos botones manda a escribir donde no hay dónde.
+ *
+ * **Y esa tarjeta es un DIÁLOGO, no un renglón más de la conversación.** Nació como una
+ * tarjeta dentro de la columna del chat —hermana del transcript, entre él y el compositor— y
+ * ahí no se puede centrar: la columna la reparte el transcript, que es lo elástico, así que
+ * la tarjeta caía pegada al compositor, en el fondo de la pantalla, lejos de lo que se está
+ * mirando. Medido en el uso normal: los botones de subida están en la banda de Revisión, o
+ * sea ARRIBA, y la pregunta aparecía abajo. Sale por un portal sobre el `body` con el mismo
+ * velo centrado que las otras ventanas (`Aprobacion`, `NuevaSesion`), que es lo que la pone
+ * delante de quien tiene que contestar.
+ *
+ * La decisión es además lo ÚNICO que se pregunta así porque es lo único que es una PUERTA y
+ * no una mitad de conversación: la pregunta de texto y el secreto se contestan dentro del
+ * hilo —el enunciado, el campo y lo que sigue—, mientras que aquí no hay nada que teclear y
+ * al otro lado hay un turno parado esperando un sí o un no. Por eso `anidado` NO llega a
+ * esta rama: significa «sin borde propio, para no anidar dos cajas iguales», y un diálogo no
+ * tiene ninguna caja alrededor en la que anidarse.
+ *
+ * Fail-closed, igual que el modal de la aprobación: solo «Aceptar» autoriza, y Escape y el
+ * clic fuera RECHAZAN. Lo que se contesta sin querer no escribe nada — lo que se autoriza sin
+ * querer, sí.
+ *
+ * Y no hay una tercera salida, que es la diferencia con el modal de la aprobación: allí
+ * desmontar sin contestar también rechaza, y aquí NO se contesta nada. La razón es de dónde
+ * viene el desmontaje —allí lo provoca quien monta la pregunta, así que desmontar y no haber
+ * contestado son el mismo suceso; aquí lo provoca el store al llegar la pregunta siguiente, y
+ * confundirlos sería inventar una respuesta—. Lo que se quede sin contestar lo salda el
+ * servidor a su plazo (`consolaWeb.ts#MS_DE_ESPERA_POR_OMISION`) devolviendo cadena vacía,
+ * que `interpretAnswer` ya lee como rechazo: el retraso, nunca la dirección.
  *
  * **El secreto no entra en el estado del cliente**: vive en el `useState` de aquí y sale
  * por `alResponder`. `consolaWeb.ts#leerSecreto` solo anota la PREGUNTA en el transcript, y
@@ -134,38 +162,68 @@ export function Pregunta({
     // Se acota su alto con scroll en vez de empujar los botones fuera de la tarjeta: lo
     // único que no puede quedarse sin ver es la acción.
     return (
-      <div className={estilos.pregunta} data-anidado={anidado ? "" : undefined}>
-        <p className={estilos.titulo}>{texto}</p>
-        <pre className={estilos.plan}>
-          {decision.lineas.map((linea, i) => (
-            <Fragment key={i}>
-              {i > 0 ? "\n" : null}
-              <span data-cambio={linea.cambio}>{linea.texto}</span>
-            </Fragment>
-          ))}
-        </pre>
-        <div className={estilos.decisiones}>
-          <Button
-            type="button"
-            variant="primary"
-            className={estilos.accion}
-            disabled={enviando}
-            onClick={() => responder(SI)}
-          >
-            Aceptar
-          </Button>
-          <Button
-            type="button"
-            variant="outline"
-            className={estilos.cancelar}
-            disabled={enviando}
-            onClick={() => responder(NO)}
-          >
-            Cancelar
-          </Button>
+      <Modal
+        open
+        /*
+          Escape y el clic en el velo llegan por aquí: en esta pregunta cerrar es RECHAZAR, no
+          «dejarlo para luego» — al otro lado hay un turno parado esperando la respuesta, y el
+          servidor la convertiría en un rechazo igualmente, pero diez minutos después
+          (`consolaWeb.ts#MS_DE_ESPERA_POR_OMISION`).
+        */
+        onClose={() => responder(NO)}
+        // El nombre accesible del diálogo ES el enunciado: `headless` no pinta cabecera
+        // propia, así que sin esto el `dialog` se anunciaría sin decir de qué es.
+        title={texto}
+        headless
+        className={estilos.capa}
+      >
+        {/*
+          Pinchar FUERA de la tarjeta rechaza, y la comprobación de `target` es lo que
+          distingue «fuera» de «dentro»: un clic en un botón de la tarjeta burbujea hasta
+          aquí, y sin ella cualquier pulsación acabaría rechazando. El velo es NUESTRO y no
+          el `mask` del paquete —ese es un `<div aria-hidden="true">` sin clase, o sea que ni
+          se pinta ni se puede pulsar—.
+        */}
+        <div
+          className={estilos.velo}
+          onClick={(evento: MouseEvent<HTMLDivElement>) => {
+            if (evento.target === evento.currentTarget) responder(NO);
+          }}
+        >
+          <div className={estilos.pregunta}>
+            <p className={estilos.titulo}>{texto}</p>
+            <pre className={estilos.plan}>
+              {decision.lineas.map((linea, i) => (
+                <Fragment key={i}>
+                  {i > 0 ? "\n" : null}
+                  <span data-cambio={linea.cambio}>{linea.texto}</span>
+                </Fragment>
+              ))}
+            </pre>
+            <div className={estilos.decisiones}>
+              <Button
+                type="button"
+                variant="primary"
+                className={estilos.accion}
+                disabled={enviando}
+                onClick={() => responder(SI)}
+              >
+                Aceptar
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                className={estilos.cancelar}
+                disabled={enviando}
+                onClick={() => responder(NO)}
+              >
+                Cancelar
+              </Button>
+            </div>
+            {fallo}
+          </div>
         </div>
-        {fallo}
-      </div>
+      </Modal>
     );
   }
 

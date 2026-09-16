@@ -1,7 +1,8 @@
 /* Alias comprobados contra `apps/web/estilos/design-platform.css`: bg-layer-2, border-l2,
    label-primary, label-secondary, button-primary-fill/hover, label-primary-inverted,
    interactive-bg-hover y los tres de estado —state-success-primary, state-business-primary,
-   state-error-primary— que visten las líneas del plan.
+   state-error-primary— que visten las líneas del plan. El velo de la decisión usa
+   `--xonecode-velo`, el mismo de las otras ventanas (`estilos/marca.css`).
    La mono es `--ds-font-family-code` (`estilos/tipografia.css`), que es la que usa el resto
    del cliente: la pila empaquetada de JetBrains Mono, y no un `monospace` pelado.
    Son los tres de ESTADO y no una paleta propia a propósito: cambian con el tema (el rojo
@@ -10,13 +11,53 @@
    estática para «modificado» sería más bonito y mentiría: no está entre los alias, así que
    no se reajusta por tema y su legibilidad de noche nadie la ha medido. */
 
-/* Misma tarjeta que `Selector.module.css`, y por el mismo motivo doble: mitad de
-   conversación (el `[s/N]` de una subida, `/connect-studio` sin URL) flota sola sobre
-   el transcript y necesita el borde entero; el paso de cuenta del alta contesta la
-   clave de API con ESTE componente (`oculta`), y ahí `anidado` (`Pregunta.tsx`) quita
-   ese borde/fondo propio para no anidarlo dentro del de `TarjetaDeAlta` — dos marcos
-   concéntricos con la costura entre componentes visible, medido en la pantalla
-   unificada. */
+/* La coraza de un DIÁLOGO —capa, velo, tarjeta—, la misma forma que las otras ventanas
+   (`NuevaSesion.module.css`, `Aprobacion.module.css`). Solo la monta la rama de la DECISIÓN:
+   la pregunta de texto y la del secreto son mitades de conversación y van en la columna del
+   chat. El reparto de clases lo dice —`.velo` no aparece en la otra rama— y el porqué está en
+   `Pregunta.tsx`. */
+
+/* El `dialog` del primitivo no trae posición: sus 22 CSS Modules son stubs vacíos en este
+   release candidate, así que sin esto la tarjeta se pinta al final del `body`, DEBAJO de la
+   aplicación. Mismo caso que `Aprobacion` y `NuevaSesion`. */
+.capa {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+}
+
+/* `place-items: center` es lo que la centra en los dos ejes, y es todo el arreglo que se
+   buscaba: sin él la tarjeta quedaba pegada arriba.
+   `box-sizing: border-box` NO es higiene. En este cliente no hay reset global —lo dicen ya
+   `Agentes.module.css` y la tarjeta de arriba—, así que `width`/`height: 100%` más
+   `padding: 24px` dan un 100% + 48 px: el velo desborda la capa 48 px por la derecha y por
+   abajo, y la tarjeta, centrada en ESA caja, sale 24 px a la derecha y 24 px por debajo del
+   centro de la pantalla. Medido en `Aprobacion.module.css`, que es donde se documentó.
+   Las dos pistas de la rejilla se declaran por el mismo motivo que allí: la implícita es
+   `auto` —max-content— y una línea larga del plan la estiraba hasta sacar la tarjeta de la
+   pantalla, aunque el `overflow` del `.plan` la dejara desplazable dentro. */
+.velo {
+  display: grid;
+  grid-template-rows: minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1fr);
+  place-items: center;
+  box-sizing: border-box;
+  width: 100%;
+  height: 100%;
+  padding: 24px;
+  /* NO `--dsw-alias-bg-overlay`: ese alias de la paleta copiada es un gris OPACO —medido,
+     233/236/242 sin canal alfa— y tapaba la pantalla entera, así que la ventana quedaba
+     flotando sobre un fondo liso, sin la aplicación detrás. Ver `estilos/marca.css`. */
+  background: var(--xonecode-velo);
+}
+
+/* Misma tarjeta que `Selector.module.css`, y por el mismo motivo doble: la pregunta de texto
+   (`/connect-studio` sin URL) flota sola sobre el transcript y necesita el borde entero; el
+   paso de cuenta del alta contesta la clave de API con ESTE componente (`oculta`), y ahí
+   `anidado` (`Pregunta.tsx`) quita ese borde/fondo propio para no anidarlo dentro del de
+   `TarjetaDeAlta` — dos marcos concéntricos con la costura entre componentes visible, medido
+   en la pantalla unificada. Y es también la del DIÁLOGO de una decisión, que la monta dentro
+   del velo: es la misma tarjeta en los tres sitios, no una que se le parece. */
 .pregunta {
   display: flex;
   flex-direction: column;

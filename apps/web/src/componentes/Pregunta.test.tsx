@@ -2,6 +2,10 @@ import { render, screen, fireEvent, cleanup, waitFor } from "@testing-library/re
 import { describe, it, expect, vi, afterEach } from "vitest";
 import { Pregunta } from "./Pregunta.js";
 
+// Sin `globals` en `vitest.config.ts` no hay auto-cleanup, y desde que la decisión es un
+// diálogo pesa el doble que antes: `Modal` va a un PORTAL sobre `document.body`, así que un
+// segundo `render()` dejaría DOS diálogos y `getByRole("dialog")` reventaría con «found
+// multiple elements». Mismo motivo y misma línea que `Aprobacion.test.tsx`.
 afterEach(cleanup);
 
 describe("Pregunta", () => {
@@ -91,6 +95,11 @@ describe("Pregunta", () => {
  * se está autorizando —las líneas del plan, enteras— y que las dos respuestas que salen son
  * las que `interpretAnswer` ya sabe leer en el servidor (`"s"` autoriza, lo demás rechaza),
  * sin un vocabulario nuevo que solo existiría en el navegador.
+ *
+ * **Y se comprueba que es un DIÁLOGO**, que es lo que no era. Las consultas se hacen sobre el
+ * `dialog` y no sobre el `container` de `render`, y eso no es una comodidad del test: la
+ * tarjeta sale por un PORTAL sobre `document.body`, precisamente para no ser un renglón más
+ * de la columna del chat, que es donde vivía y de donde salía pegada al compositor.
  */
 describe("Pregunta: la forma de una decisión", () => {
   const DECISION = {
@@ -102,15 +111,32 @@ describe("Pregunta: la forma de una decisión", () => {
     ],
   };
 
-  it("el plan se enseña ENTERO y tal cual: es lo que se está autorizando", () => {
+  /** El diálogo, que es donde vive todo lo que se decide. */
+  const tarjeta = (): HTMLElement => screen.getByRole("dialog");
+
+  it("es un DIÁLOGO sobre la aplicación, no una tarjeta al final de la columna", () => {
     const { container } = render(
       <Pregunta texto="¿Subir a CloudStudio?" decision={DECISION} alResponder={() => {}} />
     );
+    const dialogo = tarjeta();
+    expect(dialogo.getAttribute("aria-modal")).toBe("true");
+    // El nombre accesible es el enunciado: sin él, un `dialog` sin cabecera se anunciaría
+    // sin decir de qué es.
+    expect(screen.getByRole("dialog", { name: "¿Subir a CloudStudio?" })).toBe(dialogo);
+    // Fuera del contenedor que monta el test y dentro del `body`: eso ES el portal, y es la
+    // propiedad que se buscaba. Dentro del contenedor volvería a ser un hijo de la columna,
+    // con el compositor debajo y sin nada que centrar.
+    expect(container.contains(dialogo)).toBe(false);
+    expect(document.body.contains(dialogo)).toBe(true);
+  });
+
+  it("el plan se enseña ENTERO y tal cual: es lo que se está autorizando", () => {
+    render(<Pregunta texto="¿Subir a CloudStudio?" decision={DECISION} alResponder={() => {}} />);
     // El enunciado va como TÍTULO y arriba; el plan debajo. Lo que no se puede probar aquí
     // es el centrado —eso es CSS y en jsdom no hay layout—, así que el orden se comprueba y
     // la alineación se mira en el navegador.
-    const titulo = container.querySelector("p")!;
-    const plan = container.querySelector("pre")!;
+    const titulo = tarjeta().querySelector("p")!;
+    const plan = tarjeta().querySelector("pre")!;
     expect(titulo.textContent).toBe("¿Subir a CloudStudio?");
     expect(titulo.compareDocumentPosition(plan) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     // Los botones van DESPUÉS del plan, nunca antes ni encima.
@@ -127,10 +153,8 @@ describe("Pregunta: la forma de una decisión", () => {
    * la deja en el color neutro.
    */
   it("cada línea dice qué le pasa, y la cabecera no dice nada", () => {
-    const { container } = render(
-      <Pregunta texto="¿Subir a CloudStudio?" decision={DECISION} alResponder={() => {}} />
-    );
-    const lineas = [...container.querySelectorAll("pre > span")];
+    render(<Pregunta texto="¿Subir a CloudStudio?" decision={DECISION} alResponder={() => {}} />);
+    const lineas = [...tarjeta().querySelectorAll("pre > span")];
     expect(lineas.map((l) => l.getAttribute("data-cambio"))).toEqual([null, "nuevo", "modificado", "borrado"]);
     expect(lineas[1]!.textContent).toBe("  + app/Clientes.xne");
   });
@@ -143,22 +167,20 @@ describe("Pregunta: la forma de una decisión", () => {
    * cambie de ancho, o que una ruta empiece por `-`, esto es lo que ya estaba bien.
    */
   it("el color sale de `cambio`, no del signo que lleve el texto", () => {
-    const { container } = render(
+    render(
       <Pregunta
         texto="¿Subir a CloudStudio?"
         decision={{ lineas: [{ texto: "app/SinSigno.xne", cambio: "borrado" }] }}
         alResponder={() => {}}
       />
     );
-    expect(container.querySelector("pre > span")?.getAttribute("data-cambio")).toBe("borrado");
+    expect(tarjeta().querySelector("pre > span")?.getAttribute("data-cambio")).toBe("borrado");
   });
 
   it("no hay campo donde teclear: la respuesta son los dos botones", () => {
-    const { container } = render(
-      <Pregunta texto="¿Subir a CloudStudio?" decision={DECISION} alResponder={() => {}} />
-    );
+    render(<Pregunta texto="¿Subir a CloudStudio?" decision={DECISION} alResponder={() => {}} />);
     expect(screen.queryByRole("textbox")).toBeNull();
-    expect(container.querySelector("input")).toBeNull();
+    expect(tarjeta().querySelector("input")).toBeNull();
     expect(screen.getByRole("button", { name: /aceptar/i })).toBeTruthy();
     expect(screen.getByRole("button", { name: /cancelar/i })).toBeTruthy();
   });
@@ -170,10 +192,8 @@ describe("Pregunta: la forma de una decisión", () => {
    * fácil de romper sin querer: bastaba envolver los botones en el formulario de al lado.
    */
   it("no es un formulario: el Enter no autoriza una subida", () => {
-    const { container } = render(
-      <Pregunta texto="¿Subir a CloudStudio?" decision={DECISION} alResponder={() => {}} />
-    );
-    expect(container.querySelector("form")).toBeNull();
+    render(<Pregunta texto="¿Subir a CloudStudio?" decision={DECISION} alResponder={() => {}} />);
+    expect(tarjeta().querySelector("form")).toBeNull();
   });
 
   it("Aceptar contesta «s», que es lo que autoriza en el servidor", () => {
@@ -190,14 +210,59 @@ describe("Pregunta: la forma de una decisión", () => {
     expect(alResponder).toHaveBeenCalledWith("n");
   });
 
+  /**
+   * Las dos salidas SIN botón, que son las que un diálogo trae consigo: Escape y el clic en el
+   * velo. Las dos RECHAZAN y no cierran en silencio, por el mismo motivo que en la aprobación
+   * —al otro lado hay un turno esperando, y el servidor lo convertiría en un rechazo de todos
+   * modos, diez minutos después (`consolaWeb.ts#MS_DE_ESPERA_POR_OMISION`)—, y la dirección es
+   * la segura: lo que no se contesta no escribe nada.
+   */
+  it("Escape rechaza: la salida sin decidir es la que no sube nada", () => {
+    const alResponder = vi.fn();
+    render(<Pregunta texto="¿Subir a CloudStudio?" decision={DECISION} alResponder={alResponder} />);
+    fireEvent.keyDown(document, { key: "Escape" });
+    expect(alResponder).toHaveBeenCalledWith("n");
+  });
+
+  /**
+   * El `mask` del paquete SÍ llama a `onClose`, pero es un `<div aria-hidden="true">` sin
+   * clase y, como sus CSS Modules son stubs vacíos, no se pinta: nadie puede pulsarlo. El velo
+   * que el usuario ve es el nuestro, y sin su propio manejador pinchar fuera de la tarjeta no
+   * haría nada mientras el comentario prometía lo contrario.
+   */
+  it("pinchar en el velo VISIBLE rechaza; pinchar dentro de la tarjeta no", () => {
+    const alResponder = vi.fn();
+    render(<Pregunta texto="¿Subir a CloudStudio?" decision={DECISION} alResponder={alResponder} />);
+    // El velo es el único hijo del `dialog`; la tarjeta cuelga de él.
+    const velo = tarjeta().firstElementChild as HTMLElement;
+    fireEvent.click(velo.firstElementChild as HTMLElement);
+    expect(alResponder).not.toHaveBeenCalled();
+    fireEvent.click(velo);
+    expect(alResponder).toHaveBeenCalledWith("n");
+  });
+
+  /**
+   * Y la salida que NO contesta: desmontar. Aquí no sale ninguna respuesta, a diferencia del
+   * modal de la aprobación, donde desmontarse sin contestar ES un rechazo. Se fija porque es lo
+   * primero que alguien replicaría de allí «por simetría», y aquí estaría inventando una
+   * decisión que nadie tomó: lo que quede sin contestar lo salda el plazo del servidor, con
+   * cadena vacía, que aguas abajo ya es un rechazo.
+   */
+  it("desmontar la tarjeta NO contesta nada: sin respuesta, decide el plazo del servidor", () => {
+    const alResponder = vi.fn();
+    const { unmount } = render(
+      <Pregunta texto="¿Subir a CloudStudio?" decision={DECISION} alResponder={alResponder} />
+    );
+    unmount();
+    expect(alResponder).not.toHaveBeenCalled();
+  });
+
   it("un plan sin líneas sigue siendo una decisión: no vuelve el campo de texto", () => {
     // `decision` es la FORMA, no el contenido. Si la tarjeta decidiera por el número de
     // líneas, un plan vacío devolvería el editor, que es exactamente lo que no se puede
     // adivinar desde aquí.
-    const { container } = render(
-      <Pregunta texto="¿Subir a CloudStudio?" decision={{ lineas: [] }} alResponder={() => {}} />
-    );
-    expect(container.querySelector("input")).toBeNull();
+    render(<Pregunta texto="¿Subir a CloudStudio?" decision={{ lineas: [] }} alResponder={() => {}} />);
+    expect(tarjeta().querySelector("input")).toBeNull();
     expect(screen.getByRole("button", { name: /cancelar/i })).toBeTruthy();
   });
 

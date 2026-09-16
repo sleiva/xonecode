@@ -1183,6 +1183,13 @@ export function App({
               y no emite ningún «ya está»—, y siempre DESPUÉS de que el envío haya llegado: con
               el `POST` fallido, lo que se queda en pantalla es la pregunta sin contestar, que
               es la verdad.
+
+              El sitio en el árbol solo coloca a DOS de ellas. La de una DECISIÓN se monta
+              aquí igual, pero se pinta en un diálogo por PORTAL (`Pregunta.tsx`), así que no
+              es esta posición lo que la pone delante del compositor: nació aquí y aquí se
+              quedaba pegada al fondo de la columna, que es el defecto que el portal arregla.
+              Se deja en el mismo sitio porque lo que decide quién la monta es el ESTADO
+              —`estado.pregunta`—, no el orden dentro de esta columna.
             */}
             {estado.pregunta !== undefined ? (
               <Pregunta

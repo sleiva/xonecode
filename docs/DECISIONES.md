@@ -3542,6 +3542,54 @@ los alias de ESTADO por tema (`state-success-primary`, `state-error-primary`,
 diseño pedía no existe como alias en la paleta, y un literal no cambiaría con el tema —y el azul
 de la marca no vale aquí, que el cian y el azul son ACENTO y no un estado—.
 
+**Y esa tarjeta es un DIÁLOGO, no un renglón de la columna del chat.** Nació —y así se entregó
+en `5301f34`— como una tarjeta más del hilo: hermana de `Transcript`, montada entre él y
+`Compositor` dentro de `.centerCol` (`AppFrame.module.css`: `display:flex; flex-direction:column;
+overflow:hidden`). Medido en el uso normal, salía en el FONDO de la pantalla: la columna la
+reparte el transcript, que es el único hijo elástico, así que la tarjeta caía justo encima del
+compositor — y los botones que la provocan están ARRIBA, en la banda de la sincronización, dentro
+de Revisión. Es decir que el sitio donde se decide y el sitio donde se pregunta estaban en dos
+extremos de la pantalla. No se arregla centrándola EN su sitio: moverla al medio de una columna
+flex es empujar al transcript, que es quien reparte el alto.
+
+Se levanta a diálogo con el MISMO patrón de puerta que la aprobación (`Aprobacion.tsx`): el
+`Modal` del paquete de primitivas —portal a `document.body`, `role="dialog"`, `aria-modal`,
+`aria-label` con el enunciado, y su escucha de `Escape` en el documento— más un velo propio
+centrado con `place-items: center`. Cuatro cosas se midieron al hacerlo, y las cuatro son
+trampas que no avisan:
+
+- **El `dialog` del primitivo no trae POSICIÓN.** Sus 22 CSS Modules son stubs vacíos en este
+  release candidate, así que sin una capa propia con `position: fixed; inset: 0` la tarjeta se
+  pinta al final del `body`, DEBAJO de la aplicación. Es el mismo caso que `Aprobacion` y
+  `NuevaSesion`, y por eso `.capa` se repite en la tercera.
+- **El velo es NUESTRO, no el del paquete.** Su `mask` es un `<div aria-hidden="true">` sin clase
+  y sin CSS: mide cero y nadie puede pulsarlo, aunque su `onClick` sí llame a `onClose`. El velo
+  que el usuario ve lleva su propio manejador con `evento.target === evento.currentTarget`, que es
+  lo que distingue «fuera» de «dentro» —un clic en un botón burbujea hasta ahí—.
+- **`box-sizing: border-box` en el velo no es higiene.** En este cliente no hay reset global, así
+  que `width`/`height: 100%` con `padding: 24px` dan un 100% + 48 px: el velo desborda la capa por
+  la derecha y por abajo, y la tarjeta, centrada en ESA caja, sale 24 px a la derecha y 24 px por
+  debajo del centro. Ya estaba medido en `Aprobacion.module.css`; `NuevaSesion.module.css` lo
+  tiene pendiente y ahí NO se toca —arreglarlo movería los cinco diálogos que ya lo usan, y eso es
+  otro cambio y otra medida—, ni se reusa su hoja.
+- **Las dos pistas de la rejilla van explícitas** (`minmax(0, 1fr)` en fila y columna): la
+  implícita es `auto`, o sea max-content, y una línea larga del plan estiraba la tarjeta hasta
+  sacarla de la pantalla aunque el `overflow` del `.plan` la dejara desplazable por dentro.
+
+Fail-closed, y aquí con una diferencia DELIBERADA con la aprobación: solo «Aceptar» autoriza;
+`Escape` y el clic en el velo RECHAZAN; y desmontar NO contesta nada, mientras que allí
+desmontarse sin contestar es un rechazo. La razón es de dónde viene el desmontaje —allí lo provoca
+quien monta la pregunta, así que «desmontada» y «sin contestar» son el mismo suceso; aquí lo
+provoca el store al llegar la pregunta siguiente, y confundirlos sería inventar una decisión que
+nadie tomó—. Lo que quede sin contestar lo salda el plazo del servidor
+(`consolaWeb.ts#MS_DE_ESPERA_POR_OMISION`, 10 min) devolviendo cadena vacía, que `interpretAnswer`
+ya lee como rechazo: el retraso, nunca la dirección.
+
+Y el test que impide la vuelta atrás no mira el CSS —en jsdom no hay layout—, mira el PORTAL: el
+diálogo está dentro de `document.body` y FUERA del contenedor que monta el test
+(`container.contains(dialogo) === false`). Es la propiedad que se buscaba; si alguien la devuelve
+a la columna, el test cae aunque el centrado pareciera bien en una captura.
+
 **La foto del ANTES** (`agent/instantanea.ts`) es un árbol de git en un `GIT_INDEX_FILE`
 privado: no necesita commits, no necesita que el proyecto sea la raíz del repo, y no toca el
 índice del usuario. Se toma **por turno**, no por sesión.

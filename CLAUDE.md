@@ -344,6 +344,18 @@ Un subagente es un `.md` con frontmatter en `.xonecode/agentes/<nombre>.md`
   el editor), mientras que un plan sin líneas sigue siendo una decisión: la forma es la FORMA,
   no el contenido. Y el campo pasa por el `case` del store, que es lista blanca — el patrón de
   siempre, y aquí el síntoma es la pantalla de ANTES con todo en verde.
+  **Y esa tarjeta es un DIÁLOGO, no un renglón del hilo** (`Pregunta.tsx`, la MISMA puerta que
+  `Aprobacion`: portal, `role="dialog"`, velo centrado con `place-items: center`). Como línea de
+  la columna del chat caía en el fondo, pegada al compositor —la columna la reparte el
+  transcript, que es lo elástico—, mientras que los botones que la provocan están arriba, en la
+  banda de la sincronización. Centrarla EN su sitio no era una opción: moverla al medio de una
+  columna flex es empujar al transcript. Fail-closed, con una diferencia deliberada con la
+  aprobación: solo «Aceptar» autoriza, `Escape` y el clic en el velo RECHAZAN, y **desmontar no
+  contesta nada** —allí sí es un rechazo, porque allí quien desmonta es quien montó la
+  pregunta—; lo que quede sin contestar lo salda el plazo del servidor
+  (`MS_DE_ESPERA_POR_OMISION`, 10 min) con cadena vacía, que ya es un rechazo. El test que lo
+  fija mira el PORTAL y no el CSS —el diálogo está en `document.body` y fuera del contenedor del
+  test—, porque en jsdom no hay layout que medir.
 - **La única grieta es `seAplicaSinAprobacion`** (`core/settings.ts`, comando `/aprobacion`), con
   seis condiciones: vive en `settings.json` y **no** en el `config.json` del proyecto (que puede
   venir de fuera); offline se comprueba mirando el bloque `cloudstudio` **del disco por la raíz**
