@@ -78,8 +78,14 @@
 /* Las dos acciones llevan el AZUL de la marca con su letra encima —el par que ya está
    medido para sostener texto blanco, el mismo de la barra superior y del botón de enviar—,
    y el cian se queda para el hover: acento, sin nada que sostener. Y van las dos iguales
-   aunque hagan cosas opuestas y una SOBRESCRIBA: pintar de rojo «Bajar» diría que está
-   prohibido, y no lo está — lo que pide es saber lo que hace, y eso lo dice la nota. */
+   aunque hagan cosas opuestas y una SOBRESCRIBA: pintar de rojo la que pisa diría que está
+   prohibido, y no lo está — lo que pide es saber lo que hace, y eso lo dicen la nota y el
+   `title` del botón.
+
+   La clase se sigue llamando `.bajar` y el botón «Actualizar repo local», y no es un
+   descuido: la clase nombra la ACCIÓN del protocolo (`alPedir("bajar")`), que no ha cambiado,
+   y la etiqueta nombra lo que se le enseña a quien pulsa. Igualarlas sería reescribir el
+   cable para arreglar dos palabras de la pantalla. */
 .subir,
 .bajar {
   padding: 6px 14px;
@@ -100,8 +106,9 @@
 }
 
 /* La nota de lo que hace cada dirección. En `bg-layer-2` con el texto secundario: es
-   contexto de los dos botones, no una alarma — y aquí sí importa que se lea, porque
-   «Bajar» pisa la copia local y eso no se deduce del nombre. */
+   contexto de los botones que HAY, no una alarma — y aquí sí importa que se lea, porque la
+   actualización pisa la copia local y eso no se deduce del nombre: el nombre dice la
+   DIRECCIÓN, y se lee como el `git pull` que esta operación no es. */
 .nota {
   margin: 0;
   padding: 8px 12px;

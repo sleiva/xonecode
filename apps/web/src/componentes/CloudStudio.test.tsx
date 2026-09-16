@@ -141,13 +141,18 @@ describe("CloudStudio: la medida", () => {
   });
 });
 
-describe("CloudStudio: los dos botones", () => {
+describe("CloudStudio: los botones", () => {
   afterEach(cleanup);
 
   /**
    * Mandan la INTENCIÓN y con la acción que es cada uno. Que el servidor las aplique
    * encolando `/sync` en el lazo es lo que hace que salgan con el plan, la guarda de árbol
    * sucio y la aprobación de siempre — aquí no se compone nada de eso.
+   *
+   * Y la etiqueta se comprueba por su nombre NUEVO mientras la acción sigue siendo `"bajar"`:
+   * son dos cosas distintas y el test las separa a propósito — la etiqueta es lo que se le
+   * enseña a quien pulsa, la acción es lo que viaja por el cable, y renombrar la una no
+   * renombra la otra.
    */
   it("cada botón manda su acción", () => {
     const pedir = vi.fn();
@@ -156,20 +161,36 @@ describe("CloudStudio: los dos botones", () => {
     );
     fireEvent.click(screen.getByRole("button", { name: "Subir" }));
     expect(pedir).toHaveBeenLastCalledWith("subir");
-    fireEvent.click(screen.getByRole("button", { name: "Bajar" }));
+    fireEvent.click(screen.getByRole("button", { name: "Actualizar repo local" }));
     expect(pedir).toHaveBeenLastCalledWith("bajar");
     expect(pedir).toHaveBeenCalledTimes(2);
   });
 
   /**
-   * Y la nota que evita el malentendido caro: «Bajar» se llama igual que un `git pull`, pero
-   * sobrescribe la copia local. Va SIEMPRE que hay botones, no solo en el estado vacío.
+   * El aviso de que PISA va pegado al control y no solo en la prosa de la nota. No es adorno:
+   * «Actualizar repo local» se lee como un `git pull` —que fusiona y respeta lo que tengas— y
+   * esta operación sobrescribe la copia local. El nombre dice la dirección, no el precio, y
+   * quien lee la nota ya ha decidido.
    */
-  it("la nota dice que bajar sobrescribe la copia local", () => {
+  it("la actualización lleva el aviso de que pisa en su propio `title`", () => {
     render(
       <CloudStudio sync={{ proyecto: "Tienda", rama: "main", pendientes: 1 }} alPedir={NADA} alRecargar={NADA} />
     );
-    expect(screen.getByText(/SOBRESCRIBE esta copia/i)).toBeTruthy();
+    const actualizar = screen.getByRole("button", { name: "Actualizar repo local" });
+    expect(actualizar.getAttribute("title")).toMatch(/sobrescribe esta copia/i);
+  });
+
+  /**
+   * Y la nota que evita el malentendido caro: la actualización se llama igual que un `git pull`,
+   * pero sobrescribe la copia local. Va SIEMPRE que hay botones, no solo en el estado vacío, y
+   * con la subida al día también — lo que cambia es de qué botones habla.
+   */
+  it("la nota dice que la actualización sobrescribe la copia local", () => {
+    render(
+      <CloudStudio sync={{ proyecto: "Tienda", rama: "main", pendientes: 1 }} alPedir={NADA} alRecargar={NADA} />
+    );
+    const nota = screen.getByText(/sobrescribe esta copia/i);
+    expect(nota.textContent).toMatch(/Subir pide el plan/i);
   });
 
   it("«volver a mirar» pide la medida otra vez", () => {
@@ -180,6 +201,75 @@ describe("CloudStudio: los dos botones", () => {
     recargar.mockClear();
     fireEvent.click(screen.getByRole("button", { name: "Volver a mirar" }));
     expect(recargar).toHaveBeenCalledTimes(1);
+  });
+});
+
+/**
+ * **Cuándo NO se ofrece subir.**
+ *
+ * Con la medida en cero el plan sale vacío —`pendientes` sale de la misma cuenta que decide qué
+ * lleva el plan—, así que el botón no llevaría a ninguna parte. Pero la regla es **solo con un
+ * cero MEDIDO**, y por eso los dos casos que la mitad fácil de escribir se lleva por delante
+ * van aquí abajo con su nombre: `undefined` no es cero, y un error de medida tampoco. En los
+ * dos, retirar el botón afirmaría «no hay nada» sobre una pregunta que nadie ha contestado.
+ */
+describe("CloudStudio: cuándo no se ofrece subir", () => {
+  afterEach(cleanup);
+
+  const CON_PROYECTO = { proyecto: "Tienda", rama: "main" };
+
+  it("con cero medido no hay «Subir», y la actualización sigue ahí", () => {
+    render(<CloudStudio sync={{ ...CON_PROYECTO, pendientes: 0 }} alPedir={NADA} alRecargar={NADA} />);
+    expect(screen.queryByRole("button", { name: "Subir" })).toBeNull();
+    expect(screen.getByRole("button", { name: "Actualizar repo local" })).toBeTruthy();
+  });
+
+  it("con uno o más, «Subir» está: es la acción de la banda", () => {
+    const { rerender } = render(
+      <CloudStudio sync={{ ...CON_PROYECTO, pendientes: 1 }} alPedir={NADA} alRecargar={NADA} />
+    );
+    expect(screen.getByRole("button", { name: "Subir" })).toBeTruthy();
+    rerender(<CloudStudio sync={{ ...CON_PROYECTO, pendientes: 0 }} alPedir={NADA} alRecargar={NADA} />);
+    expect(screen.queryByRole("button", { name: "Subir" })).toBeNull();
+    rerender(<CloudStudio sync={{ ...CON_PROYECTO, pendientes: 2 }} alPedir={NADA} alRecargar={NADA} />);
+    expect(screen.getByRole("button", { name: "Subir" })).toBeTruthy();
+  });
+
+  /**
+   * El caso que la regla existe para no confundir: el servidor contestó sin `pendientes`. No es
+   * un cero — es que no lo midió, y aquí no se puede saber si hay algo. Es la misma invariante
+   * de las cuatro capas de esta consola, aplicada a un botón: ausente ≠ vacío ≠ cero. Se
+   * esconde de menos, nunca de más: un botón de más se pulsa y el árbol sucio lo para; uno de
+   * menos no tiene vuelta.
+   */
+  it("sin cifra, «Subir» SE QUEDA: ausente no es cero", () => {
+    render(<CloudStudio sync={CON_PROYECTO} alPedir={NADA} alRecargar={NADA} />);
+    expect(screen.getByText(/no consta cuánto falta por subir/i)).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Subir" })).toBeTruthy();
+  });
+
+  it("con un error de medida, «Subir» SE QUEDA: no poder medir no es no tener nada", () => {
+    render(
+      <CloudStudio
+        sync={{ ...CON_PROYECTO, error: "no se pudo medir lo que falta por subir" }}
+        alPedir={NADA}
+        alRecargar={NADA}
+      />
+    );
+    expect(screen.getByRole("button", { name: "Subir" })).toBeTruthy();
+  });
+
+  /**
+   * Y la nota deja de nombrar «Subir» cuando no está: una ayuda que describe un control ausente
+   * manda a buscar lo que no hay — la misma regla que las teclas del compositor, que nombran
+   * solo las que son ciertas. El aviso de la actualización no se va con él, que es cuando más
+   * falta hace.
+   */
+  it("sin «Subir», la nota no lo nombra, y sigue avisando de que la actualización pisa", () => {
+    render(<CloudStudio sync={{ ...CON_PROYECTO, pendientes: 0 }} alPedir={NADA} alRecargar={NADA} />);
+    const nota = screen.getByText(/sobrescribe esta copia/i);
+    expect(nota.textContent).not.toMatch(/Subir/);
+    expect(nota.textContent).toMatch(/se niega con cambios sin commitear/i);
   });
 });
 

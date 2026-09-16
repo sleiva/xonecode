@@ -3,7 +3,7 @@ import type { EstadoDeSync } from "../tipos.js";
 import estilos from "./CloudStudio.module.css";
 
 /**
- * CloudStudio: de qué rama es este proyecto, cuánto queda por subir, y los dos botones.
+ * CloudStudio: de qué rama es este proyecto, cuánto queda por subir, y las dos direcciones.
  *
  * **Es lo que contesta «¿tengo algo pendiente ahí arriba?» sin salir al terminal.** Hasta
  * ahora eso era `/sync estado` y nada más, y las otras dos acciones —el viaje de ida y el de
@@ -34,6 +34,19 @@ import estilos from "./CloudStudio.module.css";
  *
  * **«No es de CloudStudio» NO es «cero pendientes»**, y por eso son dos frases distintas: un
  * proyecto offline tiene la pregunta sin respuesta, no la respuesta «nada».
+ *
+ * **Y con la subida al día, «Subir» no se pinta.** Con la medida en cero el plan sale vacío
+ * —es la MISMA cuenta la que lo decide—, así que el botón no llevaría a ninguna parte: un
+ * control que no puede hacer nada no es una opción, es una promesa. La mitad que importa de la
+ * regla es la otra: **solo con un cero MEDIDO**. Sin cifra —no consta, o el `catch` de la
+ * medida— el botón se queda, porque retirarlo afirmaría «no hay nada» sobre una pregunta sin
+ * contestar. Y la nota de debajo deja de nombrarlo cuando no está: una ayuda sobre un botón
+ * ausente manda a buscar lo que no hay.
+ *
+ * La otra dirección se llama **«Actualizar repo local»**, y el aviso de que PISA va pegado al
+ * control en su `title` y no solo en la prosa de la nota —por qué, entero, en
+ * `AVISO_DE_ACTUALIZAR`: el nombre nuevo dice la DIRECCIÓN, y se lee como el `git pull` que
+ * esta operación no es.
  *
  * **Y la cifra dice DE QUIÉN son los ficheros**, que es lo que la hace cuadrar con la lista
  * que tiene justo debajo. Las dos se miden contra referencias distintas —aquí la rama, ahí el
@@ -69,6 +82,22 @@ function cuentaDe(sync: EstadoDeSync): string {
   if (deLaSesion >= cuantos) return `${cabeza}, y ${cuantos === 1 ? "lo tocó" : "los tocó"} esta sesión.`;
   return `${cabeza}: ${deLaSesion} de esta sesión y ${cuantos - deLaSesion} de antes.`;
 }
+
+/**
+ * Lo que hay que saber ANTES de pulsar «Actualizar repo local».
+ *
+ * Vive en una constante porque lo dicen dos sitios —la nota de debajo y el `title` del propio
+ * botón— y dos copias de la misma frase divergen: la de la nota se corrige cuando alguien mide
+ * algo, la del `title` nadie la vuelve a leer.
+ *
+ * Y el `title` es lo que de verdad hace falta aquí, por una razón que no es de adorno: el
+ * nombre del botón dice la DIRECCIÓN, no el precio. «Actualizar repo local» se lee como un
+ * `git pull` —que fusiona y respeta lo tuyo— y lo que hace es PISAR la copia. O sea que el
+ * nombre no es solo más suave que «Bajar»: nombra otra operación, la segura. Por eso el aviso
+ * va pegado al control y no solo en la prosa de abajo, que se lee cuando ya se ha decidido.
+ */
+const AVISO_DE_ACTUALIZAR =
+  "SOBRESCRIBE esta copia con lo que hay en la rama: lo que no esté commiteado se pierde.";
 
 export function CloudStudio({
   sync,
@@ -122,6 +151,21 @@ export function CloudStudio({
     );
   }
 
+  /**
+   * ¿Se retira «Subir»?
+   *
+   * **Solo con un CERO MEDIDO**, que es la mitad de la regla. `pendientes` sale de
+   * `cambiosPendientes` contra la ref de seguimiento, que es la MISMA cuenta que decide qué
+   * lleva el plan de subida, así que un cero quiere decir plan vacío: el botón no llevaría a
+   * ninguna parte y ofrecerlo es prometer algo que no hay. Con `undefined` —no consta, o no se
+   * pudo medir— el botón SE QUEDA, porque retirarlo sería afirmar «no hay nada» sobre una
+   * pregunta que nadie ha contestado. Es la invariante de las cuatro capas de esta consola
+   * —ausente ≠ vacío ≠ cero— aplicada a un botón en vez de a una cifra, y la dirección segura
+   * es la que no esconde: un botón de más se pulsa y el árbol sucio lo para, uno de menos no
+   * tiene vuelta.
+   */
+  const nadaQueSubir = sync.pendientes === 0;
+
   return (
     <div className={estilos.panel}>
       <div className={estilos.cabecera}>
@@ -143,19 +187,28 @@ export function CloudStudio({
       )}
 
       <div className={estilos.botones}>
-        <button type="button" className={estilos.subir} onClick={() => alPedir("subir")}>
-          Subir
-        </button>
-        <button type="button" className={estilos.bajar} onClick={() => alPedir("bajar")}>
-          Bajar
+        {nadaQueSubir ? null : (
+          <button type="button" className={estilos.subir} onClick={() => alPedir("subir")}>
+            Subir
+          </button>
+        )}
+        <button
+          type="button"
+          className={estilos.bajar}
+          title={AVISO_DE_ACTUALIZAR}
+          onClick={() => alPedir("bajar")}
+        >
+          Actualizar repo local
         </button>
       </div>
 
+      {/* La nota habla SOLO de los botones que están delante. Con la subida al día, nombrar
+          «Subir» sería la ayuda que describe un control que no existe — la misma regla que las
+          teclas del compositor, que nombran solo las que son ciertas. */}
       <p className={estilos.nota}>
-        Subir pide el plan y lo apruebas en la pregunta de siempre. Bajar SOBRESCRIBE esta
-        copia con lo que hay en la rama: lo que no esté commiteado se pierde. Las dos se
-        niegan con cambios sin commitear, y lo que pasa —lo que sube, lo que no, y por qué—
-        sale en el chat.
+        {nadaQueSubir
+          ? `«Actualizar repo local» ${AVISO_DE_ACTUALIZAR} Se niega con cambios sin commitear, y lo que pasa sale en el chat.`
+          : `Subir pide el plan y lo apruebas en la pregunta de siempre. «Actualizar repo local» ${AVISO_DE_ACTUALIZAR} Las dos se niegan con cambios sin commitear, y lo que pasa —lo que sube, lo que no, y por qué— sale en el chat.`}
       </p>
     </div>
   );

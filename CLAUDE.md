@@ -635,6 +635,15 @@ feedback del desarrollador** y no es terminal.
   con una sin sello, cuya lista es «desde que abriste» y ahí dentro está el trabajo de cualquiera—
   y **cero es un dato medido**: se atribuyó y ninguno de los pendientes es suyo. No se rellena el
   hueco: una sesión sin sello no es una sesión que no hizo nada.
+  **Con la subida al día «Subir» NO se pinta**, y solo con la subida MEDIDA: `pendientes` sale de
+  la misma cuenta que decide qué lleva el plan, así que un cero medido es un plan vacío; con la
+  cifra ausente o con un `error` de medida el botón SE QUEDA, porque retirarlo afirmaría «no hay
+  nada» sobre una pregunta sin contestar —ausente ≠ cero, otra vez, ahora sobre un control—, y la
+  dirección segura es la que no esconde. La nota deja de nombrarlo cuando no está. La otra
+  dirección se llama **«Actualizar repo local»**, y el aviso de que SOBRESCRIBE va en su `title`
+  además de en la nota, en una sola constante: el nombre nuevo dice la DIRECCIÓN y se lee como el
+  `git pull` que esa operación no es. La clase sigue siendo `.bajar`, que nombra la ACCIÓN del
+  cable y no la etiqueta.
 
 ### Sesiones, hilos y git
 

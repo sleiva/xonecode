@@ -3415,6 +3415,33 @@ diría «esta sesión no ha hecho nada» sobre una sesión de la que no se sabe 
 es nuevo en el cable y por eso hay que nombrarlo también en la lista blanca del store: sin
 eso llegaría al mensaje y no al componente, sin un solo síntoma — lo caza el test de `tipos`.
 
+**Con la subida al día, «Subir» no se ofrece — y la mitad que importa de la regla es que solo
+se retira con un cero MEDIDO** (`CloudStudio.tsx`, 16-09-2026). Medido en la pantalla del
+AppDemo: en la banda que dice «No hay nada por subir» seguían los dos botones azules, y uno de
+ellos no llevaba a ninguna parte. `pendientes` sale de `cambiosPendientes` contra la ref de
+seguimiento, que es **la MISMA cuenta que decide qué lleva el plan de subida**, así que un cero
+medido es un plan vacío: ofrecerlo es prometer algo que no hay. Pero la regla hay que escribirla
+por la mitad que **no** se cumple sola — con `pendientes` ausente (no consta) o con `error` (no
+se pudo medir) el botón se QUEDA. Retirarlo ahí afirmaría «no hay nada» sobre una pregunta que
+nadie ha contestado: es la invariante de las cuatro capas —ausente ≠ vacío ≠ cero— aplicada a un
+control en vez de a una cifra, y la dirección segura es la que no esconde, porque un botón de
+más se pulsa y el árbol sucio lo para, mientras que uno de menos no tiene vuelta. Los dos casos
+tienen test propio, que es lo que impide que un `!pendientes` los barra al pasar. Y la nota de
+debajo deja de nombrar «Subir» cuando el botón no está: una ayuda que describe un control
+ausente manda a buscar lo que no hay, la misma regla que las teclas del compositor.
+
+**Y la otra dirección se llama «Actualizar repo local», con el aviso de que PISA pegado al
+control.** «Bajar» era direccional y decía la verdad; el nombre nuevo se entiende mejor sin
+saber de dónde viene el fichero, y a cambio es **más suave que lo que hace**: «actualizar repo
+local» se lee como un `git pull` —que fusiona y respeta lo tuyo— y esta operación SOBRESCRIBE la
+copia local, que es exactamente lo que la guarda de árbol limpio existe para acotar y lo que la
+nota declara. Por eso el aviso vive en el `title` del botón además de en la nota —quien lee la
+nota ya ha decidido— y en **una sola constante** los dos sitios: dos copias de la misma frase
+divergen, porque la de la nota se corrige cuando alguien mide algo y la del `title` nadie la
+vuelve a leer. La clase CSS se queda en `.bajar` a propósito, que nombra la ACCIÓN del cable
+(`alPedir("bajar")`) y no la etiqueta: igualarlas sería reescribir el protocolo para arreglar dos
+palabras de la pantalla.
+
 **En el modal de la web, «entero» no es «de golpe»** (`apps/web/src/plegarIguales.ts`). La
 regla de esa pantalla es que el contenido se vea —es el paso donde se DECIDE sobre él— y por
 eso no tiene el techo de 25 líneas de las pieles de terminal, que ahí es obligatorio porque el
