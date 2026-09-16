@@ -1019,6 +1019,7 @@ export function crearStoreDelCliente(): {
             proyecto?: unknown;
             rama?: unknown;
             pendientes?: unknown;
+            deLaSesion?: unknown;
             error?: unknown;
           };
           mutar({
@@ -1027,6 +1028,11 @@ export function crearStoreDelCliente(): {
               ...(typeof m.rama === "string" ? { rama: m.rama } : {}),
               ...(typeof m.pendientes === "number" && Number.isFinite(m.pendientes)
                 ? { pendientes: m.pendientes }
+                : {}),
+              // Ausente se copia como ausente: cero y «no se pudo atribuir» son dos cosas
+              // distintas, y rellenar el hueco con un 0 es la cifra inventada de siempre.
+              ...(typeof m.deLaSesion === "number" && Number.isFinite(m.deLaSesion)
+                ? { deLaSesion: m.deLaSesion }
                 : {}),
               ...(typeof m.error === "string" ? { error: m.error } : {}),
             },

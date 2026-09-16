@@ -34,7 +34,41 @@ import estilos from "./CloudStudio.module.css";
  *
  * **«No es de CloudStudio» NO es «cero pendientes»**, y por eso son dos frases distintas: un
  * proyecto offline tiene la pregunta sin respuesta, no la respuesta «nada».
+ *
+ * **Y la cifra dice DE QUIÉN son los ficheros**, que es lo que la hace cuadrar con la lista
+ * que tiene justo debajo. Las dos se miden contra referencias distintas —aquí la rama, ahí el
+ * sello de la sesión— así que pueden no tocarse, y sin decirlo parecen contradecirse: medido
+ * en el AppDemo del usuario el 16-09-2026, la banda decía «3 ficheros por subir» encima de
+ * una sesión cuyos cambios no estaban entre esos 3 ni podían estarlo. `deLaSesion` ausente
+ * —sin sesión, o con una sin sello— no se pinta: sería afirmar algo sobre quien escribió lo
+ * de dentro.
  */
+
+/**
+ * La frase de la cuenta, con la procedencia cuando se PUDO atribuir.
+ *
+ * Va aparte del componente porque son cuatro casos y una decisión, no un detalle del render:
+ * lo que se dice de la sesión depende de si se pudo atribuir, y las dos cosas se leen mejor
+ * juntas que repartidas por el JSX.
+ */
+function cuentaDe(sync: EstadoDeSync): string {
+  const cuantos = sync.pendientes;
+  if (cuantos === undefined) return "No consta cuánto falta por subir.";
+  if (cuantos === 0) return "No hay nada por subir: lo que está en esta copia ya está en la rama.";
+
+  const cabeza = `${cuantos} ${cuantos === 1 ? "fichero" : "ficheros"} por subir`;
+  const deLaSesion = sync.deLaSesion;
+  // Ausente = no se pudo atribuir. No se pinta «ninguno»: sobre una sesión sin sello, la
+  // lista de la que saldría ese cero incluye lo que escribiera cualquiera desde que se
+  // abrió, así que el cero sería una afirmación sobre quien lo escribió.
+  if (deLaSesion === undefined) return `${cabeza}.`;
+  // Cero SÍ se pinta, y es el caso que motivó esto: se atribuyó y ninguno es suyo. El `>=`
+  // y no `===` porque la cuenta es una intersección: si algún día llegara de más, «todos»
+  // es la lectura segura y un «−1 de antes» no lo es.
+  if (deLaSesion === 0) return `${cabeza}. Ninguno lo tocó esta sesión.`;
+  if (deLaSesion >= cuantos) return `${cabeza}, y ${cuantos === 1 ? "lo tocó" : "los tocó"} esta sesión.`;
+  return `${cabeza}: ${deLaSesion} de esta sesión y ${cuantos - deLaSesion} de antes.`;
+}
 
 export function CloudStudio({
   sync,
@@ -105,11 +139,7 @@ export function CloudStudio({
       ) : sync.pendientes === undefined ? (
         <p className={estilos.aviso}>No consta cuánto falta por subir.</p>
       ) : (
-        <p className={estilos.cuenta}>
-          {sync.pendientes === 0
-            ? "No hay nada por subir: lo que está en esta copia ya está en la rama."
-            : `${sync.pendientes} ${sync.pendientes === 1 ? "fichero" : "ficheros"} por subir.`}
-        </p>
+        <p className={estilos.cuenta}>{cuentaDe(sync)}</p>
       )}
 
       <div className={estilos.botones}>

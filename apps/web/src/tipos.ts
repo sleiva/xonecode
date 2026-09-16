@@ -427,11 +427,17 @@ export interface FicheroDelProyecto {
  * de alta en CloudStudio», que es la frase que la pestaña enseña en su estado vacío. La
  * distinción es la de siempre en esta casa — ausente es «no consta», y un contador a cero
  * que nadie ha medido es una cifra inventada con forma de respuesta.
+ *
+ * `deLaSesion` va por lo mismo: dice cuántos de los `pendientes` tocó esta sesión, y **va
+ * ausente cuando no se pudo atribuir** (sin sesión, o con una sin sello). La banda entonces
+ * no dice nada de la sesión en vez de decir «ninguno», que sobre una sesión sin sello sería
+ * una afirmación sobre quien escribió lo de dentro.
  */
 export interface EstadoDeSync {
   proyecto?: string;
   rama?: string;
   pendientes?: number;
+  deLaSesion?: number;
   error?: string;
 }
 

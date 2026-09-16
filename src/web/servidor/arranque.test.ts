@@ -31,6 +31,7 @@ import { MS_DE_TRABAJO_AL_ABRIR,
   FICHEROS_DEL_AVISO,
 } from "./arranque.js";
 import { ErrorDelAumentador } from "../../agent/aumentador.js";
+import { CLAVE_DE_SELLO, cambiosDeSesion, fotoDeApertura } from "../../agent/sesionGit.js";
 import type { PeticionDeTarea } from "../../core/ports.js";
 import { crearVestibulo, type Vestibulo } from "./vestibulo.js";
 import { crearConsolaWeb, type ConsolaWeb, type OpcionesDeConsolaWeb } from "./consolaWeb.js";
@@ -5189,7 +5190,7 @@ describe("contextoDelProyecto", () => {
  * dejó la última bajada (`agent/gitSync.ts#cambiosPendientes`, el mismo que decide qué sube
  * el plan). Con un doble se probaría el doble.
  */
-describe("lecturaDeSync — lo que la pestaña CloudStudio enseña", () => {
+describe("lecturaDeSync — lo que la banda de CloudStudio enseña", () => {
   const git = (raiz: string, ...args: string[]): string =>
     execFileSync("git", args, { cwd: raiz, encoding: "utf8" }).trim();
 
@@ -5225,8 +5226,10 @@ describe("lecturaDeSync — lo que la pestaña CloudStudio enseña", () => {
     git(raiz, "add", "otra.xne");
     expect(await lecturaDeSync(raiz)).toEqual({ clase: "sync", proyecto: "Tienda", rama: "main", pendientes: 2 });
 
-    // Y con la ref movida al árbol de ahora se vuelve a cero: es «lo que falta respecto a lo
-    // que consta arriba», no un contador acumulado.
+    // Mover la ref a HEAD NO salda esos dos, y el motivo importa: lo que falta se mide contra
+    // lo que CONSTA en la ref, y en HEAD no hay nada de esto —los cambios no están
+    // commiteados—. Es lo que hace `marcarSubido` al terminar una subida: mover la ref al
+    // commit que se acaba de crear. Nunca es un contador que suba y baje por su cuenta.
     git(raiz, "update-ref", "refs/remotes/cloudstudio/main", "HEAD");
     expect(await lecturaDeSync(raiz)).toEqual({ clase: "sync", proyecto: "Tienda", rama: "main", pendientes: 2 });
     rmSync(raiz, { recursive: true, force: true });
@@ -5286,6 +5289,150 @@ describe("lecturaDeSync — lo que la pestaña CloudStudio enseña", () => {
     const leido = await lecturaDeSync(raiz);
     expect(leido.error).toBeUndefined();
     expect(leido.pendientes).toBe(1);
+    rmSync(raiz, { recursive: true, force: true });
+  });
+
+  /**
+   * Un commit SELLADO con el id de una sesión: es lo que hace atribuible su lista. El nombre
+   * del trailer sale de `CLAVE_DE_SELLO`, que es la constante que lo LEE — `commitDeTurno` lo
+   * escribe desde ahí, y escribirlo a mano en el test dejaría esto verde el día que el
+   * formato cambie de verdad.
+   */
+  function commitSellado(raiz: string, id: string, mensaje: string): void {
+    git(raiz, "add", "-A");
+    git(raiz, "commit", "-qm", mensaje, "-m", `${CLAVE_DE_SELLO}: ${id}`);
+  }
+
+  /** Un commit de nadie: sin sello, o sea de otra sesión, de una tarea de fondo o de antes. */
+  function commitAjeno(raiz: string, mensaje: string): void {
+    git(raiz, "add", "-A");
+    git(raiz, "commit", "-qm", mensaje);
+  }
+
+  /**
+   * `deLaSesion`: de los pendientes, cuántos tocó ESTA sesión. Existe porque las dos cifras de
+   * la pestaña se miden contra referencias distintas —la banda contra la rama de la bajada, la
+   * lista de Revisión contra el sello de la sesión— y sin decirlo parecen contradecirse.
+   */
+  it("dice cuántos de los pendientes tocó esta sesión", async () => {
+    const raiz = proyectoDeCloudStudio();
+    writeFileSync(join(raiz, "mio.xne"), "<x/>");
+    commitSellado(raiz, "s1", "lo mío");
+    expect(await lecturaDeSync(raiz, "s1")).toEqual({
+      clase: "sync",
+      proyecto: "Tienda",
+      rama: "main",
+      pendientes: 1,
+      deLaSesion: 1,
+    });
+    rmSync(raiz, { recursive: true, force: true });
+  });
+
+  it("y separa lo suyo de lo que venía de antes", async () => {
+    const raiz = proyectoDeCloudStudio();
+    writeFileSync(join(raiz, "mio.xne"), "<x/>");
+    commitSellado(raiz, "s1", "lo mío");
+    writeFileSync(join(raiz, "ajeno.xne"), "<x/>");
+    commitAjeno(raiz, "de otra sesión");
+    expect(await lecturaDeSync(raiz, "s1")).toEqual({
+      clase: "sync",
+      proyecto: "Tienda",
+      rama: "main",
+      pendientes: 2,
+      deLaSesion: 1,
+    });
+    rmSync(raiz, { recursive: true, force: true });
+  });
+
+  /**
+   * Y CERO es un hecho medido, no un hueco: la sesión se atribuyó y NINGUNO de los pendientes
+   * es suyo. Es la pantalla que motivó esto, medida el 16-09-2026 en el AppDemo: arriba «3
+   * ficheros por subir» y debajo una sesión de un solo cambio —borrar un fichero que una tarea
+   * de fondo había creado, así que el alta y el borrado se anulaban— que no estaba entre esos 3
+   * ni podía estarlo. Aquí lo pendiente es lo ajeno y lo de la sesión ya consta arriba.
+   */
+  it("cero es un dato, no una ausencia: lo pendiente no es de la sesión", async () => {
+    const raiz = proyectoDeCloudStudio();
+    writeFileSync(join(raiz, "suyo.xne"), "<x/>");
+    commitSellado(raiz, "s1", "lo suyo");
+    // Su trabajo ya consta arriba: es lo que hace `marcarSubido` al terminar una subida.
+    git(raiz, "update-ref", "refs/remotes/cloudstudio/main", "HEAD");
+    // Y después alguien —otra sesión, una tarea de fondo— dejó lo suyo pendiente.
+    writeFileSync(join(raiz, "ajeno.xne"), "<x/>");
+    commitAjeno(raiz, "de otra sesión");
+    expect(await lecturaDeSync(raiz, "s1")).toEqual({
+      clase: "sync",
+      proyecto: "Tienda",
+      rama: "main",
+      pendientes: 1,
+      deLaSesion: 0,
+    });
+    rmSync(raiz, { recursive: true, force: true });
+  });
+
+  /**
+   * Sin sesión abierta no hay a quién atribuir, y el campo NO viaja. Rellenarlo con un cero
+   * diría «esta sesión no ha hecho nada» sobre una sesión que no existe.
+   */
+  it("sin sesión abierta el campo no viaja, y no va un cero", async () => {
+    const raiz = proyectoDeCloudStudio();
+    writeFileSync(join(raiz, "mio.xne"), "<x/>");
+    commitSellado(raiz, "s1", "lo mío");
+    const leido = await lecturaDeSync(raiz);
+    expect(leido.pendientes).toBe(1);
+    expect(leido.deLaSesion).toBeUndefined();
+    // `toEqual` no distingue `undefined` de ausente, y aquí la diferencia ES el dato: la
+    // clave no está, así que en el cable no hay nada que alguien pueda leer como un cero.
+    expect("deLaSesion" in leido).toBe(false);
+    rmSync(raiz, { recursive: true, force: true });
+  });
+
+  /**
+   * **Una sesión SIN sello no se atribuye, aunque su lista «desde que abriste» traiga lo
+   * pendiente.** Es la decisión que este dato no puede saltarse: `desde-apertura` es todo lo
+   * que cambió desde que te sentaste —de quien sea: otra sesión, una tarea de fondo, una
+   * persona—, así que la intersección con lo pendiente saldría, y sería una autoría afirmada
+   * sobre quien escribió lo de dentro.
+   *
+   * El test comprueba las DOS mitades: que la lista existiría (el mutante de tratar
+   * `desde-apertura` como atribución daría 1 aquí) y que el dato sale ausente.
+   */
+  it("una sesión sin sello no atribuye, aunque su lista incluya lo pendiente", async () => {
+    const raiz = proyectoDeCloudStudio();
+    // La foto de apertura, como la toma `abrirSesionReal`: hay «antes», así que la medida cae
+    // en `desde-apertura` en vez de en `sin-marca`.
+    const foto = await fotoDeApertura(raiz);
+    expect(await foto("s2")).toBe(true);
+    writeFileSync(join(raiz, "lo-que-sea.xne"), "<x/>");
+    commitAjeno(raiz, "sin sello");
+    // Lo que la intersección daría si alguien la usara: la lista SÍ lo trae.
+    const { via, ficheros } = await cambiosDeSesion(raiz, "s2");
+    expect(via).toBe("desde-apertura");
+    expect(ficheros.map((fichero) => fichero.ruta)).toEqual(["lo-que-sea.xne"]);
+
+    const leido = await lecturaDeSync(raiz, "s2");
+    expect(leido.pendientes).toBe(1);
+    expect(leido.deLaSesion).toBeUndefined();
+    rmSync(raiz, { recursive: true, force: true });
+  });
+
+  /**
+   * Y una sesión de la que no se sabe NADA —sin sello y sin marca de apertura— tampoco
+   * atribuye, y ahí lo que importa es lo que NO pasa: la cuenta de pendientes se queda igual.
+   * Tirar el mensaje entero convertiría esto en «no se pudo medir lo que falta por subir», que
+   * es una pregunta distinta y ya contestada.
+   */
+  it("de una sesión sin sello ni marca no se atribuye nada, y la cuenta se queda", async () => {
+    const raiz = proyectoDeCloudStudio();
+    writeFileSync(join(raiz, "mio.xne"), "<x/>");
+    commitSellado(raiz, "s1", "lo mío");
+    // Sin commits sellados de `s2` y sin ref de apertura, `cambiosDeSesion` declara `sin-marca`:
+    // una lista vacía que NO es «no tocaste nada», y que por eso no puede restar del pendiente.
+    expect(await cambiosDeSesion(raiz, "s2")).toEqual({ via: "sin-marca", ficheros: [] });
+    const leido = await lecturaDeSync(raiz, "s2");
+    expect(leido.pendientes).toBe(1);
+    expect(leido.deLaSesion).toBeUndefined();
+    expect(leido.error).toBeUndefined();
     rmSync(raiz, { recursive: true, force: true });
   });
 });

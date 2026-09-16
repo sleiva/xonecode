@@ -3387,6 +3387,34 @@ doblan, el patrón de fallo que este repo ya ha medido nueve veces—, y sacarla
 probarla contra un repo de git DE VERDAD, con su ref, y comprobar de paso que un fallo de
 medida no lleva ninguna ruta de la máquina en el mensaje.
 
+**La cifra dice DE QUIÉN son los ficheros, porque son dos referencias y no una**
+(`deLaSesion`, 16-09-2026). Medido mirando la pantalla del AppDemo: la banda decía «3 ficheros
+por subir» justo encima de una sesión cuyo único cambio era borrar un fichero que una tarea de
+fondo había creado —el alta y el borrado se anulan, así que la fila ni salía— y que por tanto
+no estaba entre esos 3 NI PODÍA ESTARLO. Los dos números no discrepaban: eran de dos trabajos
+sin nada en común. `pendientes` se mide contra la rama de la bajada y la lista de Revisión
+contra los commits sellados de la sesión, y eso no se arregla cambiando una de las dos medidas
+—son las dos correctas para su pregunta—, así que lo que faltaba era el CRUCE:
+`cambiosPendientes` ∩ `cambiosDeSesion`, que ya existía entero, con `Subir` sin tocar. La otra
+salida —que `Subir` subiera solo lo de la sesión— se descartó por cara y por peligrosa:
+`marcarSubido` mueve la ref a HEAD, así que subir 1 de 3 y moverla retiraría los otros 2 —una
+ref que afirma «esto ya está arriba» sin haber subido nada—, y esquivarlo pide un árbol
+sintético (`read-tree`/`add`/`write-tree`/`commit-tree`) o un manifiesto en `sync.json`, que es
+la segunda fuente de verdad que la cabecera de `gitSync.ts` prohíbe.
+
+**Y el cruce solo vale con atribución de verdad: `via !== "git"` no atribuye**
+(`arranque.ts#cuantosDeLaSesion`). `desde-apertura` es «todo lo que cambió desde que te
+sentaste», y ahí dentro está el trabajo de otra sesión, de una tarea de fondo o de una persona,
+así que su intersección con lo pendiente saldría igual de bien y sería una autoría afirmada
+sobre quien lo escribió. Con `sin-marca` es peor: la lista viene VACÍA —que significa «no hay
+antes que enseñar», no «no tocaste nada»— y el cruce daría un CERO limpio. **Ausente no es
+cero, y aquí es la distinción entera**: ausente = no se pudo atribuir (sin sesión, o con una
+sin sello); cero = se atribuyó y ninguno de los pendientes es suyo, que es un hecho medido y
+exactamente el que hacía falta para entender la pantalla. Rellenar lo ausente con un cero
+diría «esta sesión no ha hecho nada» sobre una sesión de la que no se sabe qué hizo. El dato
+es nuevo en el cable y por eso hay que nombrarlo también en la lista blanca del store: sin
+eso llegaría al mensaje y no al componente, sin un solo síntoma — lo caza el test de `tipos`.
+
 **En el modal de la web, «entero» no es «de golpe»** (`apps/web/src/plegarIguales.ts`). La
 regla de esa pantalla es que el contenido se vea —es el paso donde se DECIDE sobre él— y por
 eso no tiene el techo de 25 líneas de las pieles de terminal, que ahí es obligatorio porque el

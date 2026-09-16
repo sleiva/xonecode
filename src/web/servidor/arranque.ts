@@ -2083,7 +2083,7 @@ export function montarRutas(
 
   /**
    * La sincronización con CloudStudio del proyecto abierto, pedida desde un control
-   * (pestaña CloudStudio).
+   * (la banda de arriba de Revisión, y «Volver a mirar»).
    *
    * **`estado` se mide aquí; `subir` y `bajar` se ENCOLAN**, y la asimetría es deliberada.
    * Medir es leer una ref de git que ya está en local (`lecturaDeSync`), así que encolarla
@@ -2112,7 +2112,7 @@ export function montarRutas(
       abierto.consola.encolar(`/sync ${accion}`);
       return;
     }
-    void lecturaDeSync(abierto.raiz).then(emitir).catch(contar);
+    void lecturaDeSync(abierto.raiz, abierto.sesion).then(emitir).catch(contar);
   };
 
   /**
@@ -3251,9 +3251,14 @@ export function contextoDelProyecto(raiz: string): { rama?: string; memoria?: st
  *
  * Un mensaje SIN `proyecto` ni `rama` no es un fallo: es que este proyecto no está dado de
  * alta en CloudStudio, y quien lo pinta tiene que poder decir eso en vez de un cero.
+ *
+ * `sesion` entra para poder decir DE QUIÉN son los pendientes (`deLaSesion`), que es lo que
+ * evita que las dos cifras de la pestaña —la de la banda y la de la lista— parezcan
+ * contradecirse cuando en realidad se miden contra referencias distintas.
  */
 export async function lecturaDeSync(
-  raiz: string
+  raiz: string,
+  sesion?: string
 ): Promise<Extract<MensajeAlCliente, { clase: "sync" }>> {
   const cloudstudio = cloudstudioDelProyecto(raiz);
   const proyecto = cloudstudio?.proyecto?.nombre;
@@ -3261,7 +3266,14 @@ export async function lecturaDeSync(
   if (proyecto === undefined || rama === undefined || rama === "") return { clase: "sync" };
   try {
     const pendientes = await cambiosPendientes(raiz, rama);
-    return { clase: "sync", proyecto, rama, pendientes: pendientes.length };
+    const deLaSesion = await cuantosDeLaSesion(raiz, sesion, pendientes);
+    return {
+      clase: "sync",
+      proyecto,
+      rama,
+      pendientes: pendientes.length,
+      ...(deLaSesion === undefined ? {} : { deLaSesion }),
+    };
   } catch {
     // Ni el `code` de Node ni el stderr de git: lo que aquí falla es que la copia no se
     // puede comparar con la rama (no es un repo, o no tiene la ref de la descarga), y eso
@@ -3272,6 +3284,43 @@ export async function lecturaDeSync(
       rama,
       error: "no se pudo medir lo que falta por subir: la copia local no se puede comparar con la rama",
     };
+  }
+}
+
+/**
+ * De los pendientes, cuántos tocó ESTA sesión — o `undefined` cuando no se puede atribuir.
+ *
+ * Existe porque las dos cifras que la pestaña enseña juntas se miden contra referencias
+ * distintas: `pendientes` contra la rama (todo lo que difiere de lo que consta arriba, sea de
+ * quien sea) y la lista de Revisión contra el sello de la sesión. Sin esto, la banda dice
+ * «3 ficheros por subir» encima de una sesión cuyos cambios no están entre esos 3, y las dos
+ * cifras parecen contradecirse cuando lo que pasa es que hablan de trabajos distintos.
+ *
+ * **`via !== "git"` se trata como no atribuible, y es la decisión que importa.** Las otras
+ * dos vías no son atribución: `desde-apertura` es «todo lo que cambió en esta copia desde que
+ * te sentaste», que incluye lo que escribieran una tarea de fondo o el propio usuario, y
+ * `sin-marca` es no saber. Devolver un número con esas dos afirmaría «esta sesión tocó N de
+ * estos» sobre algo que la sesión no tocó — la misma mentira que `Revision` evita rotulando
+ * esas filas «Desde que abriste» en vez de «Sesión».
+ *
+ * Y **un fallo aquí no puede llevarse por delante la medida que sí se hizo**: arriba hay un
+ * `git diff` que ya contestó, y convertir eso en «no se pudo medir lo que falta por subir»
+ * porque la atribución falló sería tirar el dato bueno por el malo. Se devuelve `undefined`,
+ * que es exactamente «no consta» y lo que la banda sabe no pintar.
+ */
+async function cuantosDeLaSesion(
+  raiz: string,
+  sesion: string | undefined,
+  pendientes: readonly { ruta: string }[]
+): Promise<number | undefined> {
+  if (sesion === undefined) return undefined;
+  try {
+    const { via, ficheros } = await cambiosDeSesion(raiz, sesion);
+    if (via !== "git") return undefined;
+    const suyos = new Set(ficheros.map((fichero) => fichero.ruta));
+    return pendientes.filter((cambio) => suyos.has(cambio.ruta)).length;
+  } catch {
+    return undefined;
   }
 }
 

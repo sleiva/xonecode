@@ -77,6 +77,68 @@ describe("CloudStudio: la medida", () => {
     expect(screen.getByText("Tienda")).toBeTruthy();
     expect(screen.getByText("rama xonecode/main")).toBeTruthy();
   });
+
+  /**
+   * La cifra dice DE QUIÉN son los ficheros, que es lo que la hace cuadrar con la lista que
+   * tiene justo debajo. Las dos se miden contra referencias distintas —la banda contra la rama
+   * de la bajada, la lista contra el sello de la sesión—, así que pueden no tocarse: sin decirlo
+   * parecen contradecirse.
+   */
+  it("con `deLaSesion` a cero dice que ninguno es suyo, sin callarse la cifra", () => {
+    render(
+      <CloudStudio
+        sync={{ proyecto: "Tienda", rama: "main", pendientes: 3, deLaSesion: 0 }}
+        alPedir={NADA}
+        alRecargar={NADA}
+      />
+    );
+    expect(screen.getByText("3 ficheros por subir. Ninguno lo tocó esta sesión.")).toBeTruthy();
+  });
+
+  it("con todos suyos lo dice en singular y en plural", () => {
+    const { rerender } = render(
+      <CloudStudio
+        sync={{ proyecto: "Tienda", rama: "main", pendientes: 1, deLaSesion: 1 }}
+        alPedir={NADA}
+        alRecargar={NADA}
+      />
+    );
+    expect(screen.getByText("1 fichero por subir, y lo tocó esta sesión.")).toBeTruthy();
+    rerender(
+      <CloudStudio
+        sync={{ proyecto: "Tienda", rama: "main", pendientes: 3, deLaSesion: 3 }}
+        alPedir={NADA}
+        alRecargar={NADA}
+      />
+    );
+    expect(screen.getByText("3 ficheros por subir, y los tocó esta sesión.")).toBeTruthy();
+  });
+
+  it("con parte suya y parte de antes reparte la cuenta", () => {
+    render(
+      <CloudStudio
+        sync={{ proyecto: "Tienda", rama: "main", pendientes: 3, deLaSesion: 1 }}
+        alPedir={NADA}
+        alRecargar={NADA}
+      />
+    );
+    expect(screen.getByText("3 ficheros por subir: 1 de esta sesión y 2 de antes.")).toBeTruthy();
+  });
+
+  /**
+   * Y AUSENTE no es cero, que es la distinción de toda la consola: sin sesión —o con una sin
+   * sello— no hay atribución que hacer, y ahí la lista de la que saldría ese cero incluye lo
+   * que escribiera cualquiera desde que se abrió. Decir «ninguno lo tocó esta sesión» sería una
+   * afirmación sobre quien lo escribió; la frase se queda en la cifra y nada más.
+   */
+  it("sin `deLaSesion` no se dice nada de la sesión, y menos un «ninguno»", () => {
+    render(
+      <CloudStudio sync={{ proyecto: "Tienda", rama: "main", pendientes: 3 }} alPedir={NADA} alRecargar={NADA} />
+    );
+    expect(screen.getByText("3 ficheros por subir.")).toBeTruthy();
+    expect(screen.queryByText(/de esta sesión/i)).toBeNull();
+    expect(screen.queryByText(/de antes/i)).toBeNull();
+  });
 });
 
 describe("CloudStudio: los dos botones", () => {

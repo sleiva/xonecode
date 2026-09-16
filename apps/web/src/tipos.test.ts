@@ -160,6 +160,7 @@ describe("tipos del cliente", () => {
       proyecto: "Tienda",
       rama: "main",
       pendientes: 3,
+      deLaSesion: 1,
       error: "no se pudo medir",
     };
     s.aplicar({ clase: "sync", ...completa });

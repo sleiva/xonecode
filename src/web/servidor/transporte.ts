@@ -668,6 +668,24 @@ export interface EstadoDeSync {
   proyecto?: string;
   rama?: string;
   pendientes?: number;
+  /**
+   * De los `pendientes`, cuántos tocó ESTA sesión.
+   *
+   * Existe porque `pendientes` se mide contra la rama y la lista de Revisión contra la
+   * sesión: son dos referencias distintas, así que las dos cifras pueden no tocarse. Medido
+   * en el AppDemo del usuario el 16-09-2026, mirando la pantalla: la banda decía «3 ficheros
+   * por subir» y la sesión de delante había hecho UN cambio —borrar un fichero que otra
+   * había creado, así que el alta y el borrado se anulaban— que no entraba en el plan NI
+   * PODÍA ENTRAR. Los dos números no discrepaban: eran de dos trabajos sin nada en común.
+   *
+   * **Ausente no es cero, y la diferencia es la de siempre.** Ausente = no se puede atribuir
+   * (sin sesión abierta, o una sesión sin sello, que es la que solo se puede medir «desde que
+   * abriste» y ahí dentro está el trabajo de cualquiera). Cero = se atribuyó y NINGUNO de los
+   * pendientes es suyo, que es un hecho medido y justo el que hace falta para entender la
+   * pantalla. Rellenar lo ausente con un cero diría «esta sesión no ha hecho nada» sobre una
+   * sesión de la que no se sabe qué hizo.
+   */
+  deLaSesion?: number;
   error?: string;
 }
 

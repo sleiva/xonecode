@@ -590,7 +590,13 @@ feedback del desarrollador** y no es terminal.
   `estado`. **`proyecto` y `rama` ausentes no son «cero pendientes»**, y el error de medida no
   lleva la ruta de la raíz (va por el cable). La medida se REHACE al entrar —a diferencia de
   Ficheros y Revisión, porque `/sync` mueve la ref sin que el servidor sepa cuándo acaba— y en el
-  flanco de fin de turno si Revisión está delante.
+  flanco de fin de turno si Revisión está delante. **Y la cifra dice DE QUIÉN son los ficheros**
+  (`deLaSesion` = `cambiosPendientes` ∩ `cambiosDeSesion`), porque la banda se mide contra la rama
+  y la lista de Revisión contra el sello de la sesión: son dos referencias distintas y sin decirlo
+  los dos números parecen contradecirse. Va **ausente cuando no se pudo atribuir** —sin sesión, o
+  con una sin sello, cuya lista es «desde que abriste» y ahí dentro está el trabajo de cualquiera—
+  y **cero es un dato medido**: se atribuyó y ninguno de los pendientes es suyo. No se rellena el
+  hueco: una sesión sin sello no es una sesión que no hizo nada.
 
 ### Sesiones, hilos y git
 
