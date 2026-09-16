@@ -150,7 +150,7 @@ export function planDeSubida(entrada: EntradaDelPlan): Plan {
     }
 
     if (EXTENSIONES_DE_TEXTO.has(extensionDe(cambio.ruta))) {
-      plan.push({ tipo: "texto", ruta: cambio.ruta });
+      plan.push({ tipo: "texto", ruta: cambio.ruta, clase: cambio.clase });
       continue;
     }
 
@@ -172,7 +172,7 @@ export function planDeSubida(entrada: EntradaDelPlan): Plan {
       });
       continue;
     }
-    plan.push({ tipo: "binario", ruta: cambio.ruta, bytes, modo: "base64" });
+    plan.push({ tipo: "binario", ruta: cambio.ruta, bytes, modo: "base64", clase: cambio.clase });
   }
 
   return { operaciones: plan, omitidas };

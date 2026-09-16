@@ -1,4 +1,5 @@
 import { describe, it, expect } from "vitest";
+import type { MensajeAlCliente } from "./transporte.js";
 import { crearConsolaWeb } from "./consolaWeb.js";
 
 import { REJECT_MESSAGE, type Decision } from "../../vendor/hitl.js";
@@ -402,8 +403,71 @@ describe("consolaWeb: nada que espere a un humano cuelga ni se queda sin respues
   });
 });
 
-describe("consolaWeb: reconexión", () => {
-  it("reconectar reemite todos los actos y no los duplica en el servidor", () => {
+/**
+ * **La FORMA de la pregunta, por el cable.** La consola web es la única piel que puede
+ * ofrecer botones, y saber que la respuesta es sí o no no se puede deducir del enunciado: el
+ * `[s/N]` es sintaxis, y una tarjeta que lo leyera se rompería —con un campo de texto donde
+ * hacía falta decidir, o con dos botones sobre una pregunta abierta— el día que alguien
+ * reescriba el prompt, sin un solo error que lo delate.
+ *
+ * Lo que se comprueba aquí es el contrato entero: que viaja cuando lo hay, que viaja
+ * ENTERO, que NO viaja cuando no lo hay (ausente ≠ `{lineas: []}`) y que la respuesta sigue
+ * entrando por la misma cola de siempre — los botones no abren un camino nuevo.
+ */
+describe("consolaWeb: la forma de una pregunta viaja con ella", () => {
+  function conCable(): { c: ReturnType<typeof crearConsolaWeb>; vistos: MensajeAlCliente[] } {
+    const c = crearConsolaWeb({ msDeEspera: 60_000 });
+    const vistos: MensajeAlCliente[] = [];
+    c.conectar((m) => vistos.push(m));
+    return { c, vistos };
+  }
+
+  it("una pregunta de sí o no lleva su plan: la tarjeta lo enseña sin buscarlo en el transcript", async () => {
+    const { c, vistos } = conCable();
+    const lineas = [
+      { texto: "SUBIDA A CLOUDSTUDIO — 2 operaciones" },
+      { texto: "  + app/Clientes.xne", cambio: "nuevo" as const },
+      { texto: "  - app/Viejo.xne", cambio: "borrado" as const },
+    ];
+
+    const promesa = c.consola.preguntar("¿Subir a CloudStudio?", { lineas });
+
+    expect(vistos.filter((m) => m.clase === "pregunta")).toEqual([
+      { clase: "pregunta", texto: "¿Subir a CloudStudio?", decision: { lineas } },
+    ]);
+    // Y la respuesta de los botones entra por la cola de siempre: `"s"` es lo que autoriza
+    // (`interpretAnswer`), así que esto no es un canal nuevo con su propia política.
+    c.recibir({ clase: "respuesta", texto: "s" });
+    expect(await promesa).toBe("s");
+  });
+
+  it("un plan largo llega ENTERO, sin recortar: es lo que se está autorizando", async () => {
+    const { c, vistos } = conCable();
+    const lineas = Array.from({ length: 120 }, (_, i) => ({ texto: `  + app/Coleccion${i}.xne`, cambio: "nuevo" as const }));
+
+    const promesa = c.consola.preguntar("¿Subir a CloudStudio?", { lineas });
+
+    const pregunta = vistos.find((m) => m.clase === "pregunta");
+    expect(pregunta?.clase === "pregunta" && pregunta.decision?.lineas).toHaveLength(120);
+    c.recibir({ clase: "respuesta", texto: "n" });
+    expect(await promesa).toBe("n");
+  });
+
+  it("una pregunta de texto libre NO lleva forma: el campo tiene que seguir ahí", async () => {
+    const { c, vistos } = conCable();
+
+    const promesa = c.consola.preguntar("URL MCP de CloudStudio [http://127.0.0.1:7634]: ");
+
+    const pregunta = vistos.find((m) => m.clase === "pregunta")!;
+    expect(pregunta).toEqual({ clase: "pregunta", texto: "URL MCP de CloudStudio [http://127.0.0.1:7634]: " });
+    // Ausente, no una lista vacía: una decisión sin plan no es una pregunta abierta.
+    expect("decision" in pregunta).toBe(false);
+    c.recibir({ clase: "respuesta", texto: "http://otra" });
+    expect(await promesa).toBe("http://otra");
+  });
+});
+
+describe("consolaWeb: reconexión", () => {  it("reconectar reemite todos los actos y no los duplica en el servidor", () => {
     const c = crearConsolaWeb();
     c.conectar();
     c.consola.escribir("primera\n");

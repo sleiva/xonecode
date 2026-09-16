@@ -563,6 +563,9 @@ export function App({
           {estado.pregunta !== undefined ? (
             <Pregunta
               texto={estado.pregunta.texto}
+              {...(estado.pregunta.decision === undefined
+                ? {}
+                : { decision: estado.pregunta.decision })}
               anidado
               alResponder={async (respuesta) => {
                 await enviar({ clase: "respuesta", texto: respuesta });
@@ -1184,6 +1187,12 @@ export function App({
             {estado.pregunta !== undefined ? (
               <Pregunta
                 texto={estado.pregunta.texto}
+                // La FORMA, cuando el servidor la manda: la pregunta de sí o no enseña el
+                // plan y contesta con dos botones en vez de con un campo. Ausente, campo
+                // de texto — y se copia AUSENTE, no con una lista vacía.
+                {...(estado.pregunta.decision === undefined
+                  ? {}
+                  : { decision: estado.pregunta.decision })}
                 alResponder={async (respuesta) => {
                   await enviar({ clase: "respuesta", texto: respuesta });
                   store.contestarPregunta();

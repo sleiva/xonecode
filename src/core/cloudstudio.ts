@@ -64,10 +64,18 @@ export interface EstadoDeSync {
  * manda siempre base64. Mientras siga así, un binario que no cabe en base64 no es una
  * operación pendiente sino una operación IMPOSIBLE (`OperacionOmitida`) — dejarla en el
  * plan atascaba la subida entera para siempre, porque la ref solo avanza sin fallos.
+ *
+ * **`clase` viaja porque es lo que se MIRA al decidir, y `tipo` no lo dice.** Un texto que
+ * ya estaba en Studio y se edita y un texto que es nuevo se suben igual —con la misma
+ * tool—, así que mirando `tipo` son la misma operación: quien decide cuál de los dos es ve
+ * «no se modifica» / «se añade», y eso es justo lo que se comprueba antes de publicar algo
+ * en un servidor remoto. Es el dato de `CambioLocal.clase` (`core/planDeSubida.ts`), que
+ * hasta ahora se calculaba y se tiraba en la puerta. El borrado NO la lleva: su `tipo` ya
+ * la dice, y un campo que solo puede valer una cosa es una invitación a contradecirse.
  */
 export type OperacionDeSubida =
-  | { tipo: "texto"; ruta: string }
-  | { tipo: "binario"; ruta: string; bytes: number; modo: "base64" }
+  | { tipo: "texto"; ruta: string; clase: "nuevo" | "modificado" }
+  | { tipo: "binario"; ruta: string; bytes: number; modo: "base64"; clase: "nuevo" | "modificado" }
   | { tipo: "borrado"; ruta: string };
 
 /**

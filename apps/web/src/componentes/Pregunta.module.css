@@ -1,5 +1,14 @@
 /* Alias comprobados contra `apps/web/estilos/design-platform.css`: bg-layer-2, border-l2,
-   label-primary, button-primary-fill/hover y label-primary-inverted. */
+   label-primary, label-secondary, button-primary-fill/hover, label-primary-inverted,
+   interactive-bg-hover y los tres de estado —state-success-primary, state-business-primary,
+   state-error-primary— que visten las líneas del plan.
+   La mono es `--ds-font-family-code` (`estilos/tipografia.css`), que es la que usa el resto
+   del cliente: la pila empaquetada de JetBrains Mono, y no un `monospace` pelado.
+   Son los tres de ESTADO y no una paleta propia a propósito: cambian con el tema (el rojo
+   del claro no es el del oscuro), y el color aquí dice lo mismo que ya dicen `state-*` en
+   el resto de la consola —verde lo que entra, rojo lo que se va—. Un ámbar de la paleta
+   estática para «modificado» sería más bonito y mentiría: no está entre los alias, así que
+   no se reajusta por tema y su legibilidad de noche nadie la ha medido. */
 
 /* Misma tarjeta que `Selector.module.css`, y por el mismo motivo doble: mitad de
    conversación (el `[s/N]` de una subida, `/connect-studio` sin URL) flota sola sobre
@@ -42,10 +51,91 @@
   white-space: pre-wrap;
 }
 
+/* El enunciado de una DECISIÓN es el TÍTULO de la tarjeta, y por eso no reusa `.enunciado`:
+   va centrado y en negrita, y el plan es el cuerpo. Centrado porque la tarjeta se lee como
+   un aviso —la pregunta arriba y lo que se decide debajo—, no como un formulario donde el
+   rótulo se pega a su campo. Es un `<p>` y no un `<label>`: no hay campo que rotular. */
+.titulo {
+  margin: 0;
+  color: var(--dsw-alias-label-primary);
+  font-size: 13px;
+  font-weight: 600;
+  text-align: center;
+}
+
 .fila {
   display: flex;
   align-items: center;
   gap: 8px;
+}
+
+/* El plan de una decisión —lo que se va a subir—, en mono, que es lo que este cliente
+   reserva para dato de máquina (el mismo token que el cuerpo de código del chat). Con
+   scroll propio en los dos ejes a propósito: una subida grande mide cientos de líneas y una
+   ruta larga no cabe en un móvil, así que acotarlo aquí es lo que mantiene los dos botones
+   dentro de la tarjeta — y la acción es lo único que no puede quedarse sin ver. Sin
+   `white-space` propio: `pre` ya no parte las líneas, que es como se lee «signo + ruta».
+
+   El color de omisión es `label-secondary` porque la única línea neutra de un plan es la
+   CABECERA —«SUBIDA A CLOUDSTUDIO — N operaciones»—, que es un recuento y no un fichero: en
+   secundario se lee como el pie de la caja y deja que las rutas, que son lo que se decide,
+   sean las que tienen color. Un plan de verdad siempre trae ficheros, así que la caja nunca
+   se queda muda. */
+.plan {
+  max-height: 240px;
+  margin: 0;
+  padding: 8px 10px;
+  overflow: auto;
+  border: 0.5px solid var(--dsw-alias-border-l2);
+  border-radius: 8px;
+  background: var(--dsw-alias-bg-layer-1);
+  color: var(--dsw-alias-label-secondary);
+  font-family: var(--ds-font-family-code);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+/* Una línea por fichero, y su color por lo que LE PASA —que viaja en `cambio`, no en el
+   signo—: verde el que se añade, rojo el que se borra, y `business` el que se modifica (el
+   mismo par que la pastilla de «compartido», que es el otro sitio donde este cliente marca
+   algo como «ojo con esto»). Los tres alias cambian con el tema; los estáticos no. */
+.plan [data-cambio="nuevo"] {
+  color: var(--dsw-alias-state-success-primary);
+}
+
+.plan [data-cambio="modificado"] {
+  color: var(--dsw-alias-state-business-primary);
+}
+
+.plan [data-cambio="borrado"] {
+  color: var(--dsw-alias-state-error-primary);
+}
+
+/* Los botones de una decisión, juntos y CENTRADOS. `.fila` no sirve: le da el hueco del
+   campo a su primer hijo, y aquí no hay campo. Centrados y no a la derecha porque la
+   tarjeta entera va centrada —título arriba, plan en medio—: pegados al borde derecho
+   dejaban una columna vacía debajo del plan y se leían como algo descolgado. */
+.decisiones {
+  display: flex;
+  justify-content: center;
+  gap: 8px;
+}
+
+/* Cancelar, con el mismo par de alias que el `.accion` anidado de más abajo y que
+   `Ajustes.module.css#accion`: es el mismo botón de contorno, no uno que se le parece. */
+.cancelar {
+  flex: none;
+  padding: 8px 16px;
+  border: 0.5px solid var(--dsw-alias-border-l2);
+  border-radius: 8px;
+  background: var(--dsw-alias-bg-layer-1);
+  color: var(--dsw-alias-label-primary);
+  font: inherit;
+  cursor: pointer;
+}
+
+.cancelar:hover {
+  background: var(--dsw-alias-interactive-bg-hover);
 }
 
 /*

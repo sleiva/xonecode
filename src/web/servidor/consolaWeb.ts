@@ -260,7 +260,7 @@ export function crearConsolaWeb(opciones: OpcionesDeConsolaWeb = {}): ConsolaWeb
       for (const linea of texto.replace(/\n$/, "").split("\n")) anotar({ tipo: "sistema", texto: linea });
     },
 
-    preguntar: async (pregunta) => {
+    preguntar: async (pregunta, decision) => {
       // El enunciado queda en el transcript, como el prompt de stdio; la RESPUESTA no
       // pasa por aquí.
       anotar({ tipo: "sistema", texto: pregunta });
@@ -270,7 +270,15 @@ export function crearConsolaWeb(opciones: OpcionesDeConsolaWeb = {}): ConsolaWeb
       // URL, y sin plazo colgaban la sesión web entera. Cadena vacía al vencer, que es lo
       // que `interpretAnswer` trata como rechazo.
       const espera = esperarAUnHumano(esperandoTexto, "", msDeEspera);
-      transporte.emitir({ clase: "pregunta", texto: pregunta });
+      // La FORMA viaja con la pregunta, o no viaja: `decision` ausente es una pregunta de
+      // texto libre y el cliente le pone su campo. No se manda un `{lineas: []}` — una
+      // decisión sin plan no es una pregunta abierta, y una pregunta abierta con una lista
+      // vacía es la que ofrecería dos botones sobre algo que hay que escribir.
+      transporte.emitir(
+        decision === undefined
+          ? { clase: "pregunta", texto: pregunta }
+          : { clase: "pregunta", texto: pregunta, decision }
+      );
       return espera;
     },
 

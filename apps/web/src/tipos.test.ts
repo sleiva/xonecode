@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import { describe, it, expect } from "vitest";
+import type { DecisionDeConsola } from "./tipos.js";
 
 // `new URL("./tipos.ts", import.meta.url)` —la forma que trae el brief— es EXACTAMENTE
 // el patrón que el plugin `vite:asset-import-meta-url` reescribe para servir un asset:
@@ -15,6 +16,7 @@ const RUTA_TIPOS = join(aqui, "tipos.ts");
 const RUTA_ACTOS = join(aqui, "..", "..", "..", "src", "core", "actos.ts");
 const RUTA_TRANSPORTE = join(aqui, "..", "..", "..", "src", "web", "servidor", "transporte.ts");
 const RUTA_TAREAS = join(aqui, "..", "..", "..", "src", "core", "tareas.ts");
+const RUTA_APROBAR = join(aqui, "..", "..", "..", "src", "cli", "aprobar.ts");
 
 /**
  * `[a-z0-9_-]+` y no `[a-z]+`: la primera versión de este detector (la del brief) no veía
@@ -168,6 +170,101 @@ describe("tipos del cliente", () => {
     expect(Object.keys(fila).sort()).toEqual(camposDeInterfaz(RUTA_TIPOS, "EstadoDeSync"));
     expect(fila).toEqual(completa);
   });
+
+  /**
+   * **La forma de la pregunta, que es lo que separa una tarjeta con botones de un campo de
+   * texto.** `DecisionDeConsola` se compara campo a campo como `TareaDelCable`, y por una
+   * razón que aquí pesa más que en ningún otro sitio: perderla NO da un error, da la
+   * pantalla de siempre —el editor— justo en el paso que sube un proyecto a un servidor
+   * remoto, con todo en verde.
+   */
+  it("los campos de DecisionDeConsola del cliente y del host no divergen", () => {
+    expect(camposDeInterfaz(RUTA_TIPOS, "DecisionDeConsola")).toEqual(
+      camposDeInterfaz(RUTA_APROBAR, "DecisionDeConsola")
+    );
+  });
+
+  /**
+   * Y la línea del plan, que es de donde cuelga el COLOR de lo que se añade y lo que se
+   * borra. Es la misma trampa que `DecisionDeConsola` un nivel más abajo: comparar solo la
+   * interfaz de fuera dejaría al cliente con una `linea` sin `cambio`, que se pinta entera
+   * en gris —con la tarjeta y los botones en su sitio— y no se lee como un fallo.
+   */
+  it("los campos de LineaDelPlan del cliente y del host no divergen", () => {
+    expect(camposDeInterfaz(RUTA_TIPOS, "LineaDelPlan")).toEqual(
+      camposDeInterfaz(RUTA_APROBAR, "LineaDelPlan")
+    );
+  });
+
+  /**
+   * Y la variante del mensaje, que vive DENTRO de la unión: aquí no hay `interface` que
+   * comparar —el mismo motivo por el que `EstadoDeSync` tuvo que nacer con nombre propio—,
+   * así que se comparan los nombres de campo de la línea. Si el cliente dejara de declarar
+   * `decision`, el `case "pregunta"` del store lo seguiría leyendo igual y nada chistaría.
+   */
+  it("los campos de la variante «pregunta» del mensaje no divergen", () => {
+    expect(camposDeLaVariante(RUTA_TIPOS, "pregunta")).toEqual(
+      camposDeLaVariante(RUTA_TRANSPORTE, "pregunta")
+    );
+  });
+
+  it("la lista blanca del store no se come la forma de la pregunta, ni una sola línea", async () => {
+    const { crearStoreDelCliente } = await import("./store.js");
+    const s = crearStoreDelCliente();
+    const decision = {
+      lineas: [
+        { texto: "SUBIDA A CLOUDSTUDIO — 1 operación" },
+        { texto: "  + app/Clientes.xne", cambio: "nuevo" as const },
+      ],
+    };
+
+    s.aplicar({ clase: "pregunta", texto: "¿Subir a CloudStudio?", decision });
+
+    const pregunta = s.leer().pregunta!;
+    expect(Object.keys(pregunta.decision!).sort()).toEqual(camposDeInterfaz(RUTA_TIPOS, "DecisionDeConsola"));
+    expect(pregunta).toEqual({ texto: "¿Subir a CloudStudio?", decision });
+    // Y un nivel más abajo, que es donde se cae el COLOR sin síntoma: cada línea se copia
+    // NOMBRANDO sus campos, así que una que solo copie `texto` deja el plan entero en gris
+    // con la tarjeta, los botones y los textos exactamente donde tienen que estar.
+    expect(Object.keys(pregunta.decision!.lineas[1]!).sort()).toEqual(camposDeInterfaz(RUTA_TIPOS, "LineaDelPlan"));
+    // La cabecera NO hereda el `cambio` de la línea de al lado: ausente es ausente, y
+    // heredarlo pintaría de verde un recuento.
+    expect(pregunta.decision!.lineas[0]).toEqual({ texto: "SUBIDA A CLOUDSTUDIO — 1 operación" });
+  });
+
+  /**
+   * Lo que NO se entiende se cae, pero se cae solo: un `cambio` de otro color deja la línea
+   * SIN color y no tira la decisión. La asimetría importa porque la otra mitad de este
+   * fallo —devolver el campo de texto— es donde teclear «s» autoriza igual, y aquí se está
+   * autorizando una subida a un servidor remoto.
+   */
+  it("una línea con un `cambio` que no se entiende pierde el color, no la decisión", async () => {
+    const { crearStoreDelCliente } = await import("./store.js");
+    const s = crearStoreDelCliente();
+
+    s.aplicar({
+      clase: "pregunta",
+      texto: "¿Subir a CloudStudio?",
+      decision: { lineas: [{ texto: "  + app/Clientes.xne", cambio: "verde" }] } as unknown as DecisionDeConsola,
+    });
+
+    const pregunta = s.leer().pregunta!;
+    expect(pregunta.decision).toEqual({ lineas: [{ texto: "  + app/Clientes.xne" }] });
+    expect("decision" in pregunta).toBe(true);
+  });
+
+  it("y una pregunta de texto libre no hereda la forma de la ANTERIOR", async () => {
+    // El `case` construye el objeto entero, así que no debería poder heredarla — pero esto
+    // es justo el dato que decide si hay campo o botones, y heredarlo dejaría dos botones
+    // sobre una pregunta abierta: la mitad peligrosa del mismo fallo.
+    const { crearStoreDelCliente } = await import("./store.js");
+    const s = crearStoreDelCliente();
+
+    s.aplicar({ clase: "pregunta", texto: "¿Subir?", decision: { lineas: [{ texto: "  + a.xne" }] } });
+    s.aplicar({ clase: "pregunta", texto: "URL MCP de CloudStudio: " });
+
+    expect(s.leer().pregunta).toEqual({ texto: "URL MCP de CloudStudio: " });
+  });
 });
 
 /**
@@ -248,6 +345,19 @@ function camposDeInterfaz(ruta: string, nombre: string): string[] {
     }
   }
   throw new Error(`la interfaz ${nombre} de ${ruta} no cierra`);
+}
+
+/**
+ * Los campos de una VARIANTE de la unión de mensajes, por el nombre de su `clase` y por
+ * TEXTO (misma razón que `camposDeInterfaz`: la frontera del cliente no deja importar de
+ * `src/`). Existe porque hay campos que viven dentro de la unión —la forma de la pregunta,
+ * `decision`— y embebidos en un mensaje no hay `interface` que comparar.
+ */
+function camposDeLaVariante(ruta: string, clase: string): string[] {
+  const fuente = readFileSync(ruta, "utf8");
+  const variante = new RegExp(`\\{\\s*clase:\\s*"${clase}"\\s*;([^}]*)\\}`).exec(fuente);
+  if (variante === null) throw new Error(`no se encontró la variante «${clase}» en ${ruta}`);
+  return [...variante[1].matchAll(/([A-Za-z_][A-Za-z0-9_]*)\??\s*:/g)].map((m) => m[1]).sort();
 }
 
 /**

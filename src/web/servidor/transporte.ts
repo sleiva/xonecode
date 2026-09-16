@@ -18,6 +18,9 @@ import type { Tarea } from "../../core/tareas.js";
 import type { PendienteDeAprobacion } from "../../core/events.js";
 import type { LineaDeDiff } from "../../core/diff.js";
 import type { SelectorDeConsola } from "../../cli/consola.js";
+// La forma de una pregunta de sí o no. Se trae de donde vive `Preguntar` en vez de
+// redeclararla: es el MISMO contrato, y una segunda copia sería la que diverge.
+import type { DecisionDeConsola } from "../../cli/aprobar.js";
 // Solo TIPO, y por eso no es un ciclo: `vestibulo.ts` importa este módulo para ejecutar,
 // y esta importación se borra al compilar. Se traen de allí en vez de redeclararlos aquí
 // porque son los MISMOS pasos y los MISMOS entornos que el vestíbulo calcula; una segunda
@@ -117,7 +120,22 @@ export type MensajeAlCliente =
    * contrato y su test, y eso no es parte de este arreglo.
    */
   | { clase: "bienvenida"; nombre?: string }
-  | { clase: "pregunta"; texto: string }
+  /**
+   * Una pregunta a la que hay que contestar.
+   *
+   * **`decision` es la FORMA, y ausente significa texto libre**, que es lo que ha sido
+   * siempre: el cliente pinta un campo y lo que se teclea vuelve como `respuesta`. Con
+   * `decision` puesta la respuesta es sí o no y no se teclea nada — la tarjeta enseña
+   * `lineas` (el plan de la subida, las mismas líneas que ya fueron por `acto` de sistema)
+   * y dos botones, y contesta por la MISMA puerta de siempre: `"s"` autoriza y el resto
+   * rechaza (`interpretAnswer`).
+   *
+   * No se deduce del enunciado: el `[s/N]` es sintaxis, y una piel rica que lo leyera para
+   * decidir si pone botones se rompería el día que alguien reescriba el prompt — con un
+   * editor donde hacía falta un botón, o con dos botones sobre una pregunta abierta, y sin
+   * ningún error que lo delate.
+   */
+  | { clase: "pregunta"; texto: string; decision?: DecisionDeConsola }
   | { clase: "selector"; selector: SelectorDeConsola }
   /**
    * Los modelos: cuál está en vigor, cuál queda por defecto, y qué se puede elegir.

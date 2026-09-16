@@ -149,6 +149,41 @@ export interface SelectorDeConsola {
   aviso?: string;
 }
 
+/**
+ * Una línea del plan, con lo que le pasa al fichero (`cli/aprobar.ts#LineaDelPlan` es el
+ * original).
+ *
+ * `texto` es la línea entera —signo y ruta, con su sangría—: es la MISMA que ya viajó por un
+ * acto de sistema, así que la tarjeta y el transcript enseñan el mismo texto.
+ *
+ * `cambio` es lo que el signo SIGNIFICA, y por eso viaja aparte: para pintar de verde lo que
+ * se añade hay que saber qué se añade, y leer el `+` de `texto` es leer sintaxis —se rompe el
+ * día que cambie la sangría, coloreando de verde un borrado, sin ningún error—. Ausente = la
+ * línea no habla de un fichero (la cabecera «SUBIDA A CLOUDSTUDIO — N operaciones»), que no
+ * es lo mismo que un añadido.
+ */
+export interface LineaDelPlan {
+  texto: string;
+  cambio?: "nuevo" | "modificado" | "borrado";
+}
+
+/**
+ * Una pregunta de sí o no, con lo que se decide delante (`cli/aprobar.ts#DecisionDeConsola`
+ * es el original). Su presencia en el mensaje `pregunta` es lo que dice que la respuesta no
+ * se teclea: la tarjeta enseña `lineas` —el plan de la subida— y ofrece Aceptar/Cancelar,
+ * que contestan `"s"` y `"n"` por la misma puerta que un `"s"` tecleado.
+ *
+ * **No se deduce del enunciado.** El `[s/N]` es sintaxis: leerlo para decidir si se pinta
+ * un campo o dos botones se rompe el día que alguien reescriba el prompt, y se rompe en las
+ * dos direcciones —un editor donde hacía falta un botón, o dos botones sobre una pregunta
+ * de texto libre— sin dar ningún error. Y por eso el enunciado llega SIN la pista: quien se
+ * contesta tecleando la añade en su piel (`PISTA_DE_DECISION`, `cli/stdio.ts`), que aquí no
+ * hay nada que teclear.
+ */
+export interface DecisionDeConsola {
+  lineas: readonly LineaDelPlan[];
+}
+
 export type MensajeAlCliente =
   | { clase: "acto"; acto: Acto }
   /** Sustituye el ÚLTIMO acto en vez de anexar: ver `store.ts#aplicar` para el porqué. */
@@ -165,7 +200,7 @@ export type MensajeAlCliente =
    * `alta` y su test, que no es parte de este arreglo.
    */
   | { clase: "bienvenida"; nombre?: string }
-  | { clase: "pregunta"; texto: string }
+  | { clase: "pregunta"; texto: string; decision?: DecisionDeConsola }
   | { clase: "selector"; selector: SelectorDeConsola }
   /**
    * Los modelos: cuál está en vigor (`actual`, «proveedor/modelo»), cuál queda por DEFECTO

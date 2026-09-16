@@ -390,8 +390,10 @@ describe("subir", () => {
         proyecto: { id: "1", nombre: "AppForTest" }, politicaDeAprobacion: politica,
       });
 
-      // Ve EXACTAMENTE lo que se va a escribir, ni más ni menos.
-      expect(planRecibido).toEqual([{ tipo: "texto", ruta: "app.xml" }]);
+      // Ve EXACTAMENTE lo que se va a escribir, ni más ni menos — y con la clase del cambio,
+      // que es lo que quien decide mira para saber si un fichero es nuevo o ya estaba (aquí
+      // el commit de baseline ya tenía `app.xml`, así que es una modificación).
+      expect(planRecibido).toEqual([{ tipo: "texto", ruta: "app.xml", clase: "modificado" }]);
       expect(informe.ok).toEqual(["app.xml"]);
       expect(await cambiosPendientes(raiz, "master")).toEqual([]);
       expect(git(raiz, "reflog", "show", `${REMOTO}/master`)).toContain("sync:");

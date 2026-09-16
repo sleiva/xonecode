@@ -195,6 +195,36 @@ describe("preguntar y leerSecreto sobre el rl compartido", () => {
     }
   });
 
+  /**
+   * La pista de tecleo la añade la PIEL, y solo la piel que tiene un teclado delante.
+   * Quien pregunta (`politicaInteractiva`) manda el enunciado a secas, porque no sabe si al
+   * otro lado hay un campo: la tarjeta de la consola web no lo tiene. Y se decide por
+   * `decision` —un dato— y no buscando un `[s/N]` en el texto, que sería leer la sintaxis
+   * que esta misma función acaba de escribir.
+   */
+  it("la pista de tecleo se añade a una decisión, y solo a una decisión", async () => {
+    const conDecision = crearRlDePrueba();
+    try {
+      const promesa = crearPreguntar(conDecision.rl)("¿Subir a CloudStudio?", { lineas: [] });
+      conDecision.input.write("n\n");
+      expect(await promesa).toBe("n");
+      expect(conDecision.salida()).toContain("¿Subir a CloudStudio? [s/N] ");
+    } finally {
+      conDecision.rl.close();
+    }
+
+    const libre = crearRlDePrueba();
+    try {
+      const promesa = crearPreguntar(libre.rl)("URL MCP de CloudStudio: ");
+      libre.input.write("http://127.0.0.1:7634\n");
+      await promesa;
+      expect(libre.salida()).toContain("URL MCP de CloudStudio: ");
+      expect(libre.salida()).not.toContain("[s/N]");
+    } finally {
+      libre.rl.close();
+    }
+  });
+
   it("crearLeerSecreto devuelve la clave tecleada pero no deja constancia en la salida", async () => {
     const { rl, input, salida } = crearRlDePrueba();
     try {

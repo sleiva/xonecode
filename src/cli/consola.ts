@@ -32,7 +32,7 @@ import type { PoliticaDeAprobacion } from "../core/cloudstudio.js";
 import { crearPielStdio, type Escribir } from "./stdio.js";
 import { esTema, seleccionarTema, TEMAS, type IdTema } from "./tema.js";
 import { acuseDeModelo } from "./acuseDeModelo.js";
-import type { Preguntar } from "./aprobar.js";
+import type { LineaDelPlan, Preguntar } from "./aprobar.js";
 import { guardarCredencial, AuthRotoEnDisco } from "../agent/authEnDisco.js";
 import { cargarSettings, guardarSinAprobacion } from "../agent/settingsEnDisco.js";
 import { seAplicaSinAprobacion } from "../core/settings.js";
@@ -898,6 +898,12 @@ function manejadorDeModelo(papel: Papel | undefined): ManejadorDeBarra {
  * se llama sin opciones, contra `APPROVALS_NO_TTY`, y el prompt enseña `[s/N]` siempre:
  * un default visible que no fuera el real sería mentir en el paso que sube.
  *
+ * **Y el plan viaja CON la pregunta, no solo delante de ella** (`DecisionDeConsola`): la
+ * tarjeta de la consola web enseña la lista y ofrece Aceptar/Cancelar, sin campo donde
+ * teclear, y para eso hay que decirle que la respuesta es sí o no. Adivinarlo del `[s/N]`
+ * sería leer la sintaxis, y el día que ese prompt cambie la tarjeta ofrecería un editor
+ * para una decisión —o dos botones sobre una pregunta abierta— sin un solo error.
+ *
  * La política AUTÓNOMA (el papel `afilado` decidiendo sin que nadie mire) todavía no
  * existe — hace falta, además del veredicto del juez, que el código compruebe
  * condiciones deterministas (verificador en verde, árbol limpio, plan sin pendientes):
@@ -905,13 +911,30 @@ function manejadorDeModelo(papel: Papel | undefined): ManejadorDeBarra {
  */
 export function politicaInteractiva(consola: Consola): PoliticaDeAprobacion {
   return async (plan) => {
+    // El plan se compone ANTES de escribirlo, y no es por estilo: las MISMAS líneas que van
+    // al scrollback viajan en la PREGUNTA, para que una piel con tarjeta las enseñe dentro
+    // de ella —el paso donde se decide— en vez de dejarlas en un transcript que puede estar
+    // a varias pantallas de scroll. Se escriben una a una, como siempre: en la web cada
+    // acto de sistema es una línea, y las pieles de terminal no cambian.
+    //
+    // Cada línea lleva ADEMÁS lo que el signo significa (`cambio`), y el signo se deriva de
+    // ahí en vez de al revés: una piel que quiera enseñar qué se añade y qué se borra no
+    // puede leer el `+`/`~`/`-`, que es sintaxis. Y la clase sale de la OPERACIÓN, que es
+    // de donde la sabe `planDeSubida`: un `borrado` no la lleva —su `tipo` ya la dice—, así
+    // que la línea de un borrado la toma del `tipo`.
+    const lineas: LineaDelPlan[] = [
+      { texto: `SUBIDA A CLOUDSTUDIO — ${plan.length} ${plan.length === 1 ? "operación" : "operaciones"}` },
+      ...plan.map((operacion): LineaDelPlan => {
+        const cambio = operacion.tipo === "borrado" ? "borrado" : operacion.clase;
+        const signo = cambio === "borrado" ? "-" : cambio === "nuevo" ? "+" : "~";
+        return { texto: `  ${signo} ${operacion.ruta}`, cambio };
+      }),
+    ];
     consola.escribir(`\n${"─".repeat(60)}\n`);
-    consola.escribir(`SUBIDA A CLOUDSTUDIO — ${plan.length} ${plan.length === 1 ? "operación" : "operaciones"}\n`);
-    for (const operacion of plan) {
-      const signo = operacion.tipo === "borrado" ? "-" : operacion.tipo === "binario" ? "~" : "+";
-      consola.escribir(`  ${signo} ${operacion.ruta}\n`);
-    }
-    const respuesta = await consola.preguntar("¿Subir a CloudStudio? [s/N] ");
+    for (const linea of lineas) consola.escribir(`${linea.texto}\n`);
+    // Sin pista de tecleo en el enunciado: la pone la piel que se contesta escribiendo
+    // (`PISTA_DE_DECISION`), y por eso viaja un `decision` con esta pregunta.
+    const respuesta = await consola.preguntar("¿Subir a CloudStudio?", { lineas });
     const decision = interpretAnswer(respuesta);
     consola.escribir(decision.type === "approve" ? "  → APROBADO\n" : "  → rechazado, no se ha aplicado nada\n");
     return decision.type === "approve";

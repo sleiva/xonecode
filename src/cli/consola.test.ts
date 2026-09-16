@@ -17,7 +17,7 @@ import {
 } from "./consola.js";
 import type { Piel } from "../core/turno.js";
 import type { Escribir } from "./stdio.js";
-import type { Preguntar } from "./aprobar.js";
+import type { Preguntar, DecisionDeConsola } from "./aprobar.js";
 import { rutaAuth, NOMBRE_CARPETA } from "../agent/configEnDisco.js";
 import { CatalogoModelosEnMemoria, type CatalogoModelosPort } from "../core/ports.js";
 import type { OperacionDeSubida, PoliticaDeAprobacion } from "../core/cloudstudio.js";
@@ -385,7 +385,7 @@ describe("/sync", () => {
       return async (accion, _raiz, politica) => {
         expect(accion).toBe("subir");
         expect(politica).toBeDefined();
-        const autorizado = await politica!([{ tipo: "texto", ruta: "app.xml" }]);
+        const autorizado = await politica!([{ tipo: "texto", ruta: "app.xml", clase: "nuevo" }]);
         return {
           tipo: "texto",
           texto: autorizado ? "subidos 1, fallaron 0\n" : "no se ha aplicado nada\n",
@@ -443,27 +443,30 @@ describe("/sync", () => {
      * forma de ver el prompt literal y de mirar la pantalla EN EL INSTANTE de preguntar.
      */
     const PLAN: readonly OperacionDeSubida[] = [
-      { tipo: "texto", ruta: "app/Clientes.xne" },
+      { tipo: "texto", ruta: "app/Clientes.xne", clase: "nuevo" },
       { tipo: "borrado", ruta: "app/Viejo.xne" },
     ];
 
     function politicaSobreDoble(opciones: { respuesta: string; interactivo: boolean }): {
       politica: PoliticaDeAprobacion;
       prompts: string[];
+      formas: (DecisionDeConsola | undefined)[];
       salida: () => string;
       vistoAlPreguntar: () => string;
     } {
       const { consola, salida } = consolaDeConSecreto({ lineas: [], interactivo: opciones.interactivo });
       const prompts: string[] = [];
+      const formas: (DecisionDeConsola | undefined)[] = [];
       let visto = "";
       // Se sustituye el `preguntar` del doble en vez de añadir otro helper: es lo que ya
       // hacen los tests de `configurarModoInicial` con `guardarModoDeProyecto`.
-      consola.preguntar = async (pregunta: string) => {
+      consola.preguntar = async (pregunta: string, decision?: DecisionDeConsola) => {
         prompts.push(pregunta);
+        formas.push(decision);
         visto = salida();
         return opciones.respuesta;
       };
-      return { politica: politicaInteractiva(consola), prompts, salida, vistoAlPreguntar: () => visto };
+      return { politica: politicaInteractiva(consola), prompts, formas, salida, vistoAlPreguntar: () => visto };
     }
 
     it("una respuesta VACÍA rechaza AUNQUE haya TTY: un EOF no puede publicar", async () => {
@@ -495,16 +498,23 @@ describe("/sync", () => {
       expect(salida()).not.toContain("APROBADO");
     });
 
-    it("el prompt enseña [s/N] con TTY y sin él: la mayúscula visible es la de verdad", async () => {
-      // El mismo invariante que vigila `aprobar.test.ts`, con el default al revés: aquí
-      // el Enter NO aprueba, así que enseñar «[S/n]» sería mentir en el paso que publica.
+    it("la pregunta viaja SIN la pista de tecleo: la pone la piel que se contesta escribiendo", async () => {
+      // El `[s/N]` es la pista de un TECLADO, y quien pregunta no sabe si al otro lado hay
+      // uno: la tarjeta de la consola web no tiene campo donde teclear. Antes viajaba dentro
+      // del enunciado, así que el cliente solo podía enseñarla —«escribe s o n» delante de
+      // dos botones— o recortarla a ciegas, que es leer sintaxis por la puerta de atrás.
+      // Quien la añade es `crearPreguntar` (`stdio.ts`), y ahí tiene su test.
+      //
+      // Lo que NO cambia es lo que la pista decía: el Enter a secas sigue sin aprobar esta
+      // pregunta, con TTY y sin él (el caso vacío de más arriba), así que la pista es
+      // `[s/N]` en las dos pieles que la pintan.
       const conTty = politicaSobreDoble({ respuesta: "n", interactivo: true });
       await conTty.politica(PLAN);
-      expect(conTty.prompts[0]).toBe("¿Subir a CloudStudio? [s/N] ");
+      expect(conTty.prompts[0]).toBe("¿Subir a CloudStudio?");
 
       const sinTty = politicaSobreDoble({ respuesta: "n", interactivo: false });
       await sinTty.politica(PLAN);
-      expect(sinTty.prompts[0]).toBe("¿Subir a CloudStudio? [s/N] ");
+      expect(sinTty.prompts[0]).toBe("¿Subir a CloudStudio?");
     });
 
     it("el plan entero ya está en pantalla cuando se pregunta", async () => {
@@ -519,6 +529,57 @@ describe("/sync", () => {
       expect(visto).toContain("SUBIDA A CLOUDSTUDIO — 2 operaciones");
       expect(visto).toContain("+ app/Clientes.xne");
       expect(visto).toContain("- app/Viejo.xne");
+    });
+
+    /**
+     * La FORMA viaja con la pregunta, y este test es el que ata el dato a la INTENCIÓN: una
+     * piel con tarjeta (la consola web) no puede saber que la respuesta es sí o no leyendo
+     * el `[s/N]` del enunciado —eso es sintaxis— ni buscando el plan en el transcript, que
+     * puede estar a varias pantallas de scroll de donde se contesta.
+     */
+    it("la forma dice que la respuesta es sí o no, con el plan dentro —y con lo que le pasa a cada fichero", async () => {
+      const { politica, formas } = politicaSobreDoble({ respuesta: "n", interactivo: true });
+
+      await politica(PLAN);
+
+      expect(formas[0]?.lineas).toEqual([
+        { texto: "SUBIDA A CLOUDSTUDIO — 2 operaciones" },
+        { texto: "  + app/Clientes.xne", cambio: "nuevo" },
+        { texto: "  - app/Viejo.xne", cambio: "borrado" },
+      ]);
+    });
+
+    /**
+     * El color de una línea es `cambio`, y `cambio` NO se lee del signo: es el dato que
+     * `planDeSubida` ya calculaba y se tiraba en la puerta. Sin esto, un `.xne` que ya estaba
+     * en Studio y uno nuevo —que se suben con la misma tool— se pintaban igual, y quien
+     * decide no tenía forma de ver que uno de los dos es nuevo de verdad.
+     */
+    it("un añadido y una modificación se distinguen aunque los dos sean texto", async () => {
+      const { politica, formas, vistoAlPreguntar } = politicaSobreDoble({ respuesta: "n", interactivo: true });
+
+      await politica([
+        { tipo: "texto", ruta: "app/Clientes.xne", clase: "modificado" },
+        { tipo: "texto", ruta: "app/Nueva.xne", clase: "nuevo" },
+      ]);
+
+      expect(formas[0]!.lineas.map((l) => l.cambio)).toEqual([undefined, "modificado", "nuevo"]);
+      expect(vistoAlPreguntar()).toContain("  ~ app/Clientes.xne\n");
+      expect(vistoAlPreguntar()).toContain("  + app/Nueva.xne\n");
+    });
+
+    /**
+     * Y son las MISMAS líneas que están en pantalla, no una segunda composición del plan
+     * que se parezca: la tarjeta y el scrollback enseñan lo mismo porque es el mismo texto,
+     * y el día que alguien cambie el formato de uno tiene que cambiar el del otro.
+     */
+    it("las líneas de la forma son las que ya están en pantalla, una a una", async () => {
+      const { politica, formas, vistoAlPreguntar } = politicaSobreDoble({ respuesta: "n", interactivo: true });
+
+      await politica(PLAN);
+
+      const visto = vistoAlPreguntar();
+      for (const linea of formas[0]!.lineas) expect(visto).toContain(`${linea.texto}\n`);
     });
   });
 });

@@ -28,6 +28,7 @@ import type {
   TareaDelCable,
   ProveedorDeModelos,
   SelectorDeConsola,
+  DecisionDeConsola,
   Dispositivo,
   Herramienta,
   InformeDeDispositivos,
@@ -41,7 +42,12 @@ import { PLATAFORMAS_DE_DISPOSITIVO } from "./tipos.js";
 export interface EstadoDelCliente {
   actos: Acto[];
   conectado: boolean;
-  pregunta?: { texto: string };
+  /**
+   * La espera de humano. `decision` presente = la respuesta es sí o no y la tarjeta no
+   * tiene campo: es la forma que manda el servidor (`DecisionDeConsola`), no algo que se
+   * adivine del enunciado. Ausente = pregunta de texto libre, que es lo de siempre.
+   */
+  pregunta?: { texto: string; decision?: DecisionDeConsola };
   /**
    * Los modelos, tal y como los cuenta el servidor: cuál está en vigor y qué hay.
    * Ausente = todavía no ha llegado el mensaje. NUNCA se deriva de un acto del transcript
@@ -383,8 +389,50 @@ function esSelector(valor: unknown): valor is SelectorDeConsola {
   );
 }
 
-/** Un proveedor del mensaje «modelos», comprobado campo a campo como todo lo que entra. */
-/** Un agente del cable, comprobado campo a campo: lo que llega por HTTP no se cree. */
+/**
+ * La FORMA de una pregunta de sí o no: `lineas` es una lista de cadenas, y lo que no sea
+ * eso la descarta ENTERA. Descartarla deja la pregunta con su campo de texto, que sigue
+ * siendo una salida honesta —lo que se teclee va a `interpretAnswer`, donde `"s"` autoriza
+ * y todo lo demás rechaza—, mientras que pintar los botones sobre una lista a medias sería
+ * decidir sobre un plan que no es el plan.
+ */
+/**
+ * Lo que la comprobación garantiza de verdad: una línea con TEXTO. `cambio` puede ser
+ * cualquier cosa —el tipo dice `unknown` a propósito, para que el guard no prometa más de lo
+ * que ha mirado—, y quien lo convierte es `cambioDeLinea`.
+ */
+type DecisionCruda = { readonly lineas: readonly { texto: string; cambio?: unknown }[] };
+
+function esDecision(valor: unknown): valor is DecisionCruda {
+  if (typeof valor !== "object" || valor === null) return false;
+  const lineas = (valor as { lineas?: unknown }).lineas;
+  return Array.isArray(lineas) && lineas.every(esLineaConTexto);
+}
+
+/**
+ * El TEXTO es lo que decide si una línea se entiende: sin él no se puede enseñar. Y no se
+ * exige nada más — ver `esDecision`, un nivel más arriba, para por qué un `cambio` que no se
+ * entiende NO tira ni la línea ni la decisión.
+ */
+function esLineaConTexto(valor: unknown): valor is { texto: string; cambio?: unknown } {
+  if (typeof valor !== "object" || valor === null) return false;
+  return typeof (valor as { texto?: unknown }).texto === "string";
+}
+
+/**
+ * El `cambio` de una línea, si es uno de los tres; `undefined` si no se entiende o no venía.
+ *
+ * Que un valor raro acabe en `undefined` y no en un rechazo es deliberado: el color es un
+ * adorno sobre un texto que ya se entiende, y tirar la línea entera escondería algo que se
+ * está autorizando. Tirar la DECISIÓN —que es la otra mitad— devolvería el campo de texto,
+ * donde teclear «s» autoriza igual: la mitad peligrosa del mismo fallo, y la que este repo
+ * ya se ha comido otras veces por copiar campos a medias.
+ */
+function cambioDeLinea(valor: unknown): "nuevo" | "modificado" | "borrado" | undefined {
+  return valor === "nuevo" || valor === "modificado" || valor === "borrado" ? valor : undefined;
+}
+
+/** Un proveedor del mensaje «modelos», comprobado campo a campo como todo lo que entra. *//** Un agente del cable, comprobado campo a campo: lo que llega por HTTP no se cree. */
 function esAgenteDelCable(valor: unknown): valor is AgenteDelCable {
   const a = valor as Partial<AgenteDelCable> | null;
   return (
@@ -658,9 +706,31 @@ export function crearStoreDelCliente(): {
           return;
         }
         case "pregunta": {
-          const texto = (mensaje as { texto?: unknown }).texto;
-          if (typeof texto !== "string") return;
-          mutar({ pregunta: { texto } });
+          const m = mensaje as { texto?: unknown; decision?: unknown };
+          if (typeof m.texto !== "string") return;
+          // La forma se copia solo si VIAJA y se entiende: ausente es una pregunta de texto
+          // libre, que no es «una decisión sin líneas». Es la lista blanca de siempre —
+          // `mime`, `recetas`, `ejecutable`, `veredicto`, `deLaSesion`—, y aquí el síntoma
+          // sería el peor de todos: una tarjeta con campo de texto donde hacía falta
+          // decidir, con todo en verde.
+          mutar({
+            pregunta: {
+              texto: m.texto,
+              // Y cada línea se copia NOMBRANDO sus campos —la misma lista blanca, un nivel
+              // más abajo—: `{...linea}` arrastraría a la pantalla lo que venga por HTTP, y
+              // copiar solo `texto` dejaría el plan entero sin colores con todo en verde.
+              ...(esDecision(m.decision)
+                ? {
+                    decision: {
+                      lineas: m.decision.lineas.map((l) => {
+                        const cambio = cambioDeLinea(l.cambio);
+                        return { texto: l.texto, ...(cambio === undefined ? {} : { cambio }) };
+                      }),
+                    },
+                  }
+                : {}),
+            },
+          });
           return;
         }
         case "selector": {

@@ -14,6 +14,7 @@ import { render } from "ink";
 import { createElement } from "react";
 import { createTokenTracker, type TokenTracker } from "../../vendor/tokenTracking.js";
 import { PAPELES, parsear, resolver, type FuentesDeEleccion } from "../../core/modelos.js";
+import { PISTA_DE_DECISION } from "../aprobar.js";
 import type { CatalogoModelosPort, Papel } from "../../core/ports.js";
 import type { Piel } from "../../core/turno.js";
 import { ficherosDelProyecto, type SesionReal } from "../../agent/turnoReal.js";
@@ -296,12 +297,15 @@ export function crearConsolaTui(opciones: OpcionesDeConsolaTui) {
       // cada una es un acto, como lo sería en el scrollback de stdio.
       for (const linea of texto.replace(/\n$/, "").split("\n")) store.linea(linea, "sistema");
     },
-    preguntar: async (pregunta) => {
+    preguntar: async (pregunta, decision) => {
       // El enunciado queda en el transcript (como el prompt de stdio) y la respuesta
-      // entra por la misma TUI: un solo teclado a la vez.
-      store.linea(pregunta, "sistema");
+      // entra por la misma TUI: un solo teclado a la vez. La pista de tecleo la añade
+      // esta piel y no quien pregunta —ver `PISTA_DE_DECISION`—, porque es la pista de
+      // un sitio donde se escribe, y eso solo lo sabe la piel que tiene el teclado.
+      const enunciado = decision === undefined ? pregunta : `${pregunta}${PISTA_DE_DECISION}`;
+      store.linea(enunciado, "sistema");
       return new Promise<string>((resuelto) => {
-        vista.mutar({ pregunta: { texto: pregunta, oculto: false, responder: resuelto } });
+        vista.mutar({ pregunta: { texto: enunciado, oculto: false, responder: resuelto } });
       });
     },
     leerSecreto: async (pregunta) => {

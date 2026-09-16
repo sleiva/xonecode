@@ -1,7 +1,7 @@
 import * as readline from "node:readline";
 import type { Piel } from "../core/turno.js";
 import type { PendienteDeAprobacion } from "../core/events.js";
-import type { Preguntar } from "./aprobar.js";
+import { PISTA_DE_DECISION, type DecisionDeConsola, type Preguntar } from "./aprobar.js";
 import { crearTema, type Tema } from "./tema.js";
 import { RenderizadorDeMarkdown, puntoSeguro } from "./markdown.js";
 import { AnimadorDeFase } from "./spinner.js";
@@ -196,11 +196,18 @@ export function crearDetectorDeEof(rl: readline.Interface): () => boolean {
  * decide sobre una aprobación necesita además `crearDetectorDeEof`: sirve para distinguir
  * las dos cosas que aquí llegan idénticas —un humano que pulsa Enter y un stdin que se
  * acabó—, que es justo lo que la cadena vacía sola no puede contar.
+ * **Y el enunciado de una decisión se enseña CON su pista de tecleo, que la añade aquí.**
+ * `politicaInteractiva` pregunta «¿Subir a CloudStudio?» a secas porque el `[s/N]` es la
+ * pista de una piel con teclado, y esa piel es ésta: la tarjeta de la consola web no tiene
+ * campo donde teclear, así que ahí la pista sobra. Se decide por `decision` —un dato— y no
+ * buscando un `[s/N]` dentro del texto, que sería leer la sintaxis que este mismo fichero
+ * acaba de escribir.
  */
 export function crearPreguntar(rl: readline.Interface): Preguntar {
   const cerrado = crearDetectorDeEof(rl);
-  return (pregunta: string) =>
-    new Promise<string>((resolver) => {
+  return (pregunta: string, decision?: DecisionDeConsola) => {
+    const enunciado = decision === undefined ? pregunta : `${pregunta}${PISTA_DE_DECISION}`;
+    return new Promise<string>((resolver) => {
       const alCerrar = (): void => resolver("");
       rl.once("close", alCerrar);
       if (cerrado()) {
@@ -208,11 +215,12 @@ export function crearPreguntar(rl: readline.Interface): Preguntar {
         resolver("");
         return;
       }
-      rl.question(pregunta, (respuesta: string) => {
+      rl.question(enunciado, (respuesta: string) => {
         rl.off("close", alCerrar);
         resolver(respuesta);
       });
     });
+  };
 }
 
 /**

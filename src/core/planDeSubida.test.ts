@@ -7,7 +7,11 @@ const base = {
 };
 
 describe("planDeSubida", () => {
-  it("traduce el diff a operaciones por tipo", () => {
+  it("traduce el diff a operaciones por tipo, y conserva la CLASE del cambio", () => {
+    // `clase` es lo que se mira antes de publicar en un servidor remoto —«se añade» no es
+    // lo mismo que «se modifica» aunque se suban con la misma tool—, y hasta aquí se
+    // calculaba en el diff y se tiraba en la puerta: mirando solo `tipo`, un `Clientes.xne`
+    // nuevo y uno editado son indistinguibles.
     expect(planDeSubida({
       ...base,
       cambios: [
@@ -17,8 +21,8 @@ describe("planDeSubida", () => {
       tamanos: new Map([["icons/icon_nuevo.png", 1024]]),
     })).toEqual({
       operaciones: [
-        { tipo: "texto", ruta: "BuscarFarmacias.xne" },
-        { tipo: "binario", ruta: "icons/icon_nuevo.png", bytes: 1024, modo: "base64" },
+        { tipo: "texto", ruta: "BuscarFarmacias.xne", clase: "modificado" },
+        { tipo: "binario", ruta: "icons/icon_nuevo.png", bytes: 1024, modo: "base64", clase: "nuevo" },
       ],
       omitidas: [],
     });
@@ -51,7 +55,7 @@ describe("planDeSubida", () => {
       tamanos: new Map([["bd/justo.db", TOPE_BASE64]]),
     });
     expect(plan.operaciones).toEqual([
-      { tipo: "binario", ruta: "bd/justo.db", bytes: TOPE_BASE64, modo: "base64" },
+      { tipo: "binario", ruta: "bd/justo.db", bytes: TOPE_BASE64, modo: "base64", clase: "nuevo" },
     ]);
     expect(plan.omitidas).toEqual([]);
   });
@@ -113,7 +117,7 @@ describe("planDeSubida", () => {
         { clase: "modificado", ruta: "app.xml" },
       ],
       fuentesXne: new Set(["BuscarFarmacias.xne"]),
-    })).toEqual({ operaciones: [{ tipo: "texto", ruta: "app.xml" }], omitidas: [] });
+    })).toEqual({ operaciones: [{ tipo: "texto", ruta: "app.xml", clase: "modificado" }], omitidas: [] });
   });
 
   it("un binario sin tamaño conocido no se inventa: se omite Y SE DECLARA", () => {
@@ -146,7 +150,7 @@ describe("planDeSubida", () => {
       ],
       tamanos: new Map([[".env", 120], [".env.local", 80], ["config/.env", 90], [".git/config", 200]]),
     });
-    expect(plan.operaciones).toEqual([{ tipo: "texto", ruta: "app.xml" }]);
+    expect(plan.operaciones).toEqual([{ tipo: "texto", ruta: "app.xml", clase: "modificado" }]);
     // Y se declaran: son ficheros del usuario que él podría esperar ver subir.
     expect(plan.omitidas.map((o) => o.ruta).sort()).toEqual([".env", ".env.local", ".git/config", "config/.env"]);
   });
@@ -156,7 +160,7 @@ describe("planDeSubida", () => {
       ...base,
       cambios: [{ clase: "nuevo", ruta: "LICENSE" }],
       tamanos: new Map([["LICENSE", 1000]]),
-    }).operaciones).toEqual([{ tipo: "binario", ruta: "LICENSE", bytes: 1000, modo: "base64" }]);
+    }).operaciones).toEqual([{ tipo: "binario", ruta: "LICENSE", bytes: 1000, modo: "base64", clase: "nuevo" }]);
   });
 
   it("reconoce la vista aplanada sin importar la mayúscula de la extensión", () => {

@@ -14,8 +14,89 @@ const TECHO_DEL_DIFF = 25;
 
 export { MAX_APPROVAL_ROUNDS, REJECT_MESSAGE, type Decision };
 
-/** Leer una línea. Entra por parámetro: sin esto, esto no se puede probar. */
-export type Preguntar = (pregunta: string) => Promise<string>;
+/**
+ * Una línea del plan, CON lo que le pasa al fichero.
+ *
+ * `texto` es la línea entera tal como sale por el scrollback —signo y ruta, con sus dos
+ * espacios de sangría—: la tarjeta y el terminal enseñan lo MISMO porque es el mismo texto,
+ * y el día que alguien cambie el formato de uno tiene que cambiar el del otro.
+ *
+ * `cambio` es lo que el signo SIGNIFICA, y viaja aparte por la razón de siempre: `+` es
+ * sintaxis. Una piel que quisiera colorear lo que se añade leería el primer carácter de
+ * `texto`, y eso se rompe el día que la sangría cambie de ancho o que una ruta empiece por
+ * `-` —enseñando en verde un borrado—, sin un solo error. Es el MISMO dato que
+ * `CambioLocal.clase` (`core/planDeSubida.ts`), con los mismos tres valores.
+ *
+ * **Ausente = esta línea no habla de un fichero**: hoy solo pasa con la cabecera («SUBIDA A
+ * CLOUDSTUDIO — N operaciones»), que no es ni un añadido ni un borrado. Distinto de
+ * `"nuevo"`, que sí lo es.
+ */
+export interface LineaDelPlan {
+  texto: string;
+  cambio?: "nuevo" | "modificado" | "borrado";
+}
+
+/**
+ * Una pregunta cuya respuesta es SÍ o NO, con lo que se decide delante.
+ *
+ * Existe porque una piel rica no puede saber si el campo de texto sobra adivinándolo del
+ * enunciado: el `[s/N]` es SINTAXIS, y el día que alguien reescriba el prompt —o lo
+ * traduzca— la tarjeta que ofrece botones se quedaría con un editor, o al revés: dos
+ * botones sobre una pregunta de texto libre, que es el caso que no puede pasar y no daría
+ * ningún error. Aquí viaja la INTENCIÓN, que es lo mismo que ya hace `LineaDeConsola`
+ * diciendo si una línea es prosa.
+ *
+ * `lineas` es lo que se decide, línea a línea, tal como se enseña en el terminal: quien
+ * pregunta ya lo escribe con `escribir`, y una piel con tarjeta lo repite DENTRO de ella
+ * porque es el paso donde se DECIDE — la misma razón que hace viajar el diff entero en la
+ * aprobación de escrituras. No es contenido nuevo por el cable: son las mismas líneas que
+ * ese `escribir` ya manda.
+ *
+ * **Y el enunciado va SIN la pista de tecleo.** `politicaInteractiva` pregunta «¿Subir a
+ * CloudStudio?», no «¿Subir a CloudStudio? [s/N]»: el `[s/N]` es la pista de una piel que
+ * se contesta ESCRIBIENDO, y la pone esa piel (`PISTA_DE_DECISION`, ver abajo). Una tarjeta
+ * con dos botones no tiene nada que teclear, y llevarlo dentro del texto dejaba al cliente
+ * la opción de enseñarlo —donde se lee como «escribe s o n» delante de un botón— o de
+ * recortarlo a ciegas, que es leer sintaxis por la puerta de atrás.
+ *
+ * La respuesta sigue siendo una cadena por la misma puerta de siempre (`interpretAnswer`:
+ * `"s"` autoriza, cualquier otra cosa rechaza), y las dos caras de los botones son esas
+ * dos, no un vocabulario nuevo.
+ */
+export interface DecisionDeConsola {
+  lineas: readonly LineaDelPlan[];
+}
+
+/**
+ * La pista de una pregunta que se contesta TECLEANDO: `[s/N]`, con el defecto en
+ * mayúscula.
+ *
+ * La pone la piel que tiene un teclado delante —stdio y la TUI—, y solo esa: son las dos
+ * únicas que resuelven una pregunta con lo que alguien escriba. La consola web no la pone
+ * porque su tarjeta no tiene campo.
+ *
+ * Es SIEMPRE `[s/N]` y nunca `[S/n]` porque el Enter a secas NO aprueba una decisión: la
+ * asimetría de `CLAUDE.md` —aprobar ESCRIBE— y `politicaInteractiva` llama a
+ * `interpretAnswer` sin `interactive`, así que la cadena vacía rechaza aquí incluso con un
+ * TTY de verdad. La pista de la APROBACIÓN de escrituras sí alterna, y por eso la construye
+ * `pedirDecisiones` en el sitio donde se sabe si hay humano (`hayHumano()`): una pista no
+ * puede viajar con la pregunta cuando su contenido depende de la piel que la va a enseñar.
+ *
+ * **Límite declarado**: una decisión no puede cambiar su pista por pregunta. Hoy solo hay
+ * una que la use —la subida— y su defecto es fijo; el día que una decisión se apruebe con
+ * Enter, esto tiene que bajar al que la formula, como ya hace `aprobar.ts`.
+ */
+export const PISTA_DE_DECISION = " [s/N] ";
+
+/**
+ * Leer una línea. Entra por parámetro: sin esto, esto no se puede probar.
+ *
+ * El segundo parámetro es la FORMA de la respuesta, y es opcional a propósito: la mayoría
+ * de las preguntas —«número (Enter cancela)», una URL, una clave— son texto libre, y una
+ * implementación que no lo declare sigue valiendo (una función con menos parámetros es
+ * asignable), así que stdio, la TUI y los dobles de los tests no cambian de una línea.
+ */
+export type Preguntar = (pregunta: string, decision?: DecisionDeConsola) => Promise<string>;
 
 /**
  * Pregunta por cada pendiente y devuelve las decisiones, en el mapa por id.

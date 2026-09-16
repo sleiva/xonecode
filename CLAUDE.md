@@ -318,6 +318,32 @@ Un subagente es un `.md` con frontmatter en `.xonecode/agentes/<nombre>.md`
   `MAX_APPROVAL_ROUNDS = 5` rondas por turno.
 - **El modal de la TUI es fail-closed POR TECLA** (`cli/tui/aprobarTui.tsx`): solo `s`/`S`
   aprueba; `n`, Enter, Escape, Ctrl-C y desmontar sin responder son rechazo.
+- **La FORMA de una pregunta viaja CON ella, y no se adivina del enunciado**
+  (`DecisionDeConsola`, `cli/aprobar.ts`): `Consola.preguntar` lleva un segundo parámetro
+  OPCIONAL con las LÍNEAS de lo que se decide, y con él puesto la piel pinta el plan y dos
+  botones (Aceptar / Cancelar) en vez de un campo de texto. El `[s/N]` es SINTAXIS: deducir de
+  ahí que la respuesta es sí o no se rompe en las DOS direcciones —un editor donde hacía falta
+  decidir, y dos botones sobre una pregunta abierta— y sin avisar en ninguna. Es opcional a
+  propósito: una implementación con menos parámetros sigue asignándose a `Preguntar`, así que
+  stdio, la TUI, la consola de una tarea y los dobles de los tests no cambian de una línea.
+  **Y el enunciado viaja SIN la pista de tecleo**: `PISTA_DE_DECISION` la añade la piel que
+  tiene teclado —stdio y la TUI—, porque en la tarjeta no hay campo donde escribirla y enseñarla
+  delante de dos botones manda a teclear donde no hay dónde. Se decide por `decision`, que es un
+  dato; buscar un `[s/N]` dentro del texto sería leer la sintaxis que la propia piel acaba de
+  escribir, y esa pista cambia con el entorno (`[S/n]` con TTY, `[s/N]` sin él) mientras la
+  pregunta no. **Cada línea del plan dice qué le PASA, también como dato** (`LineaDelPlan.cambio`):
+  `nuevo`, `modificado` o `borrado`, AUSENTE en la cabecera porque no habla de ningún fichero, y
+  el color de cada una sale de ahí —nunca del `+`/`~`/`-` del texto, que es sintaxis igual que el
+  `[s/N]`—. La clase ya se calculaba en `core/planDeSubida.ts` y se tiraba antes del cable; ahora
+  viaja en `OperacionDeSubida.clase`, y el `tipo: "borrado"` no la repite porque su `tipo` ya lo
+  dice.
+  **En el navegador la tarjeta NO es un `<form>`** —sin campo no hay envío por defecto, así que
+  el Enter no autoriza una subida— y contesta `"s"`/`"n"`, el vocabulario que `interpretAnswer`
+  ya sabe leer: no se inventa uno nuevo que solo existiría ahí. **La AUSENCIA se conserva de
+  punta a punta** (`decision === undefined` no emite el campo, no lo guarda el store y devuelve
+  el editor), mientras que un plan sin líneas sigue siendo una decisión: la forma es la FORMA,
+  no el contenido. Y el campo pasa por el `case` del store, que es lista blanca — el patrón de
+  siempre, y aquí el síntoma es la pantalla de ANTES con todo en verde.
 - **La única grieta es `seAplicaSinAprobacion`** (`core/settings.ts`, comando `/aprobacion`), con
   seis condiciones: vive en `settings.json` y **no** en el `config.json` del proyecto (que puede
   venir de fuera); offline se comprueba mirando el bloque `cloudstudio` **del disco por la raíz**

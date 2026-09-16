@@ -3461,6 +3461,87 @@ rechaza y el prompt enseña `[s/N]` en vez de mentir con `[S/n]`. El Enter sigue
 mientras haya alguien: es deliberado, y quien lo pulsa tiene el diff delante. Tope de
 `MAX_APPROVAL_ROUNDS = 5` rondas por turno.
 
+**La FORMA de una pregunta viaja con ella** (`DecisionDeConsola` en `cli/aprobar.ts`,
+`Consola.preguntar`, `componentes/Pregunta.tsx`). La tarjeta del navegador enseñaba un campo de
+texto y un botón para CUALQUIER pregunta, incluidas las de sí o no; lo que faltaba era ver qué
+se va a subir y poder contestar Aceptar/Cancelar sin teclear nada. La primera versión del
+remedio deducía la forma del enunciado —si acaba en `[s/N]`, dos botones— y se descartó por dos
+medidas. Una: el `[s/N]` es SINTAXIS, y la escribe el mismo sitio que decide su propio defecto.
+`interpretAnswer` aprueba la cadena vacía solo si se le dice que hay un TTY de verdad delante
+(`APPROVALS_TTY` frente a `APPROVALS_NO_TTY`), y `politicaInteractiva` no se lo dice a propósito
+porque el Enter a secas no aprueba una subida: o sea que el enunciado cambia con el ENTORNO
+mientras la pregunta no. Otra: el fallo sería asimétrico, mudo, y su dirección barata es la
+peligrosa — un detector que no reconoce una decisión deja el editor, se teclea «s» y se autoriza
+igual, así que no se nota hasta que alguien escribe una frase donde hacía falta decidir; el
+error contrario manda una respuesta fija a una pregunta que quería texto (la URL del MCP, la
+clave de API). Un detector que se equivoca en las dos direcciones y no avisa en ninguna es peor
+que no tenerlo.
+
+Entonces la INTENCIÓN viaja como dato, que es el mismo movimiento que `LineaDeConsola` («/» es
+prosa o un comando, y lo DICE la línea): la función se comparte, la sintaxis no se exporta.
+Cuatro detalles, cada uno con su coste medido:
+
+- **El segundo parámetro es OPCIONAL, y es lo que deja quieto todo lo demás.** Una
+  implementación con menos parámetros sigue asignándose a `Preguntar`, así que stdio, la TUI, la
+  consola de una tarea de fondo y todos los dobles de los tests no cambian de una línea. Lo único
+  que cambia es `politicaInteractiva`, que ya componía el plan para imprimirlo: ahora lo compone
+  UNA vez y se lo pasa también a la pregunta.
+- **La forma se AÑADE a lo que ya había.** El plan se sigue escribiendo línea a línea, así que el
+  terminal, la tubería y el transcript de la web —un acto de sistema por línea— salen
+  byte-idénticos; lo que viaja de más es el MISMO texto, dentro de la tarjeta, para que el paso
+  donde se decide no dependa de un scrollback que puede estar a varias pantallas.
+- **La tarjeta no es un `<form>`.** Sin campo no hay envío por defecto, así que el Enter no
+  autoriza una subida: es la regla del terminal, y en el cliente era fácil de romper sin querer
+  —bastaba envolver los botones en el formulario de al lado—. Y las dos respuestas que salen son
+  `"s"` y `"n"`, el vocabulario que `interpretAnswer` ya lee: un «aceptar/cancelar» inventado en
+  el navegador sería un segundo sitio donde el fail-closed puede dejar de estarlo.
+- **La AUSENCIA se conserva de punta a punta, y es el dato que decide.** `undefined` no emite el
+  campo, no lo guarda el store y devuelve el editor de siempre; un `{lineas: []}` sí pinta
+  botones, porque la forma es la FORMA y no el contenido del plan — decidir por el número de
+  líneas devolvería el editor justo cuando no hay nada que enseñar. El `case` del store es lista
+  BLANCA (`mime`, `recetas`, `ejecutable`, `veredicto`), así que un campo que no se nombra ahí no
+  llega: con el campo OPCIONAL no hay error que leer, y el síntoma es la pantalla de antes con
+  todo en verde.
+
+**La pista de tecleo se muda a la piel que tiene el teclado.** El `[s/N]` no es parte de la
+pregunta: es la instrucción de CÓMO contestarla sin un control delante, y por eso la escribía
+`politicaInteractiva` al formular el enunciado. En la tarjeta del navegador no hay campo donde
+escribir esa «s», así que la pista sobraba —mandaba a teclear donde no hay dónde— y el enunciado
+se lee como lo que es: la pregunta. Ahora `politicaInteractiva` pregunta «¿Subir a CloudStudio?»
+a secas y la pista la añade cada piel que se contesta con el teclado, por la vía que ya existe
+para saber que hay una decisión delante: `decision === undefined`. Es `PISTA_DE_DECISION`
+(`cli/aprobar.ts`) y vale `" [s/N] "` siempre, también con TTY, porque aquí el ENTER a secas no
+aprueba: la pista dice la verdad de esta pregunta concreta. Lo que `pedirDecisiones` hace con su
+propio `[S/n]`/`[s/N]` es otra cosa —la aprobación de una escritura, donde el Enter sí aprueba
+mientras haya alguien—, y de ahí que una decisión no pueda llevar una pista que varíe por
+pregunta. **Se decide por el DATO y no buscando la pista dentro del texto**: buscar un `[s/N]`
+sería leer la sintaxis que esa misma piel acaba de escribir, y la pista cambia con el entorno
+mientras la pregunta no. Y el invariante no se toca: el Enter sigue sin aprobar una subida,
+porque quien lo rechaza sin TTY es `interpretAnswer` y `politicaInteractiva` no le dice que hay
+uno. Lo que cambió es DÓNDE se ve la pista, no qué hace cada respuesta.
+
+**Y el plan de una subida dice qué le PASA a cada fichero, también como dato.** La tarjeta tenía
+que enseñar de un vistazo lo que se añade, lo que se modifica y lo que se borra, y el primer
+camino era leer el signo del texto —`+`, `~`, `-`—: el mismo error que deducir la forma del
+enunciado, con el mismo síntoma mudo. El signo y la sangría los compone `consola.ts` al armar la
+línea, así que el día que cambien el color saldría del sitio equivocado y nada avisaría; peor
+aún, una ruta que empiece por `-` o un plan con otra indentación colorearían mal sin un solo
+error que lo delate. Lo que hace falta ya estaba calculado: `core/planDeSubida.ts` conoce la
+`clase` de cada `CambioLocal` y la TIRABA justo antes del cable. Ahora viaja entera —
+`OperacionDeSubida.clase` en `core/cloudstudio.ts`, y `LineaDelPlan.cambio` en `cli/aprobar.ts`—,
+y el signo se DERIVA de ella en vez de al revés. Tres consecuencias que son el porqué del
+reparto: el `tipo: "borrado"` no lleva `clase` porque su `tipo` ya lo dice (un dato repetido es
+un dato que puede contradecirse); la cabecera del plan la lleva AUSENTE porque no habla de
+ningún fichero, y esa ausencia es lo que la deja en el color neutro; y un `cambio` que no se
+entiende pierde el COLOR, no la línea ni la decisión —perder la decisión devolvería el campo de
+texto, donde teclear «s» autoriza igual, así que el fallo barato sería el peligroso—. El cambio
+de signo que trae es deliberado y se dice: `~` es una modificación (antes iba con `+`, que
+confundía un fichero que se reescribe con uno que aparece) y `+` un añadido. Los colores salen de
+los alias de ESTADO por tema (`state-success-primary`, `state-error-primary`,
+`state-business-primary`), que es el par que ya usa la pastilla de «compartido»; el ámbar que el
+diseño pedía no existe como alias en la paleta, y un literal no cambiaría con el tema —y el azul
+de la marca no vale aquí, que el cian y el azul son ACENTO y no un estado—.
+
 **La foto del ANTES** (`agent/instantanea.ts`) es un árbol de git en un `GIT_INDEX_FILE`
 privado: no necesita commits, no necesita que el proyecto sea la raíz del repo, y no toca el
 índice del usuario. Se toma **por turno**, no por sesión.
