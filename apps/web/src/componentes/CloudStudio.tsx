@@ -1,5 +1,6 @@
 import { useEffect, useRef } from "react";
-import type { EstadoDeSync } from "../tipos.js";
+import type { ActoDeSincronizacion, EstadoDeSync } from "../tipos.js";
+import { selloDeFecha } from "../selloDeFecha.js";
 import estilos from "./CloudStudio.module.css";
 
 /**
@@ -55,6 +56,15 @@ import estilos from "./CloudStudio.module.css";
  * una sesión cuyos cambios no estaban entre esos 3 ni podían estarlo. `deLaSesion` ausente
  * —sin sesión, o con una sin sello— no se pinta: sería afirmar algo sobre quien escribió lo
  * de dentro.
+ *
+ * **Y el recorrido de lo que pasó se cuenta AQUÍ, en el registro de abajo, no en el hilo.**
+ * Antes cada operación volcaba sus líneas en el chat: el plan con su sangría, el `→ APROBADO`,
+ * el recuento, y hasta los no-sucesos («no hay nada que subir»), nueve renglones de consola
+ * entre dos mensajes de la conversación —medido en la pantalla que él mandó—. El hilo es la
+ * conversación; una operación de git es un suceso del proyecto, y mezclarlos obligaba a buscar
+ * la conversación entre el ruido de una subida. Aquí se lee como lo que es: una operación con
+ * su hora y su nombre, y las líneas que el terminal habría impreso, agrupadas y plegadas. La
+ * fuente es la misma que la del `case` de Trazas, y no se recompone nada.
  */
 
 /**
@@ -99,14 +109,94 @@ function cuentaDe(sync: EstadoDeSync): string {
 const AVISO_DE_ACTUALIZAR =
   "SOBRESCRIBE esta copia con lo que hay en la rama: lo que no esté commiteado se pierde.";
 
+/**
+ * Cómo se llama cada acción del protocolo en el registro.
+ *
+ * **Los mismos nombres que los BOTONES, y ahí está la decisión**: Trazas llama a estas filas
+ * por el nombre del protocolo (`SUBIR` / `BAJAR` / `ESTADO`), que es lo que hace falta en el
+ * registro completo del harness, pero esta banda es donde se pulsa, y un registro que
+ * rebautizara lo que se acaba de pulsar obligaría a traducir mentalmente entre el botón y su
+ * propia historia. La clase CSS de esa dirección sigue llamándose `.bajar` por el mismo
+ * motivo invertido: el cable no se renombra por arreglar dos palabras de la pantalla.
+ *
+ * Es un `Record` sobre la unión entera y no un `switch` con `default`: una cuarta acción
+ * —o un nombre que falte— sale en `tsc`, que es el mismo molde de `TIPOS_DE_ACTO` en el
+ * store. `estado` no tiene hoy productor en la web (la banda MIDE en vez de encolar), y por
+ * eso su nombre no se ve; se escribe igual, porque la unión tiene tres valores y un hueco
+ * aquí es lo que se convertiría en un `undefined` pintado el día que lo tenga.
+ */
+const NOMBRE_DE_LA_ACCION: Record<ActoDeSincronizacion["accion"], string> = {
+  subir: "Subir",
+  bajar: "Actualizar repo local",
+  estado: "Consultar el estado",
+};
+
+/**
+ * El registro de las operaciones de sincronización de esta sesión, de la más reciente a la
+ * más vieja.
+ *
+ * **Sin registro no se pinta NADA**, ni una cabecera vacía: ausente es «en esta sesión no se
+ * ha sincronizado nada» y vacío no es un estado que exista —el acto solo nace cuando una
+ * operación termina—, así que las dos cosas caen en el mismo `null` sin inventar un hueco.
+ *
+ * **La más reciente sale ABIERTA y el resto plegadas**, que es lo que se viene a mirar: se
+ * acaba de pulsar un botón y lo que se quiere es el final de esa operación. Las de antes se
+ * quedan a un clic, que es donde tienen que estar —una sesión larga acumula operaciones, y
+ * todas desplegadas tapan la cifra de arriba, que es la que contesta la pregunta de la
+ * banda—. El `open` va en la de índice 0 y el `key` es la identidad de la operación
+ * —su acción y su instante de empezar—: sin eso React reusa el nodo de la posición 0 y la
+ * operación nueva heredaría el plegado de la anterior, con lo que la de arriba podría
+ * quedarse cerrada justo al llegar.
+ *
+ * Vive fuera del componente porque se pinta en DOS de sus ramas: la banda normal y la del
+ * proyecto sin dar de alta. Un `return` temprano que se llevara por delante el registro
+ * borraría la historia de una operación que sí ocurrió el día que alguien quite el alta.
+ */
+function Registro({ operaciones }: { operaciones?: readonly ActoDeSincronizacion[] }) {
+  if (operaciones === undefined || operaciones.length === 0) return null;
+  return (
+    <section className={estilos.registro} aria-label="Registro de la sincronización">
+      {operaciones.map((operacion, i) => {
+        const sello = selloDeFecha(operacion.cuando);
+        return (
+          <details
+            key={`${operacion.accion}-${operacion.cuando}`}
+            className={estilos.operacion}
+            open={i === 0}
+          >
+            <summary className={estilos.cabeceraDeOperacion}>
+              <span className={estilos.accion}>{NOMBRE_DE_LA_ACCION[operacion.accion]}</span>
+              {/* Sin sello si la fecha no se entiende: un «undefined» en la cabecera es peor
+                  que una operación sin hora, que es lo que se ve si el acto trae algo raro. */}
+              {sello === undefined ? null : (
+                <span className={estilos.sello}>{` · ${sello}`}</span>
+              )}
+            </summary>
+            <pre className={estilos.lineas}>{operacion.lineas.join("\n")}</pre>
+          </details>
+        );
+      })}
+    </section>
+  );
+}
+
 export function CloudStudio({
   sync,
+  registro,
   alPedir,
   alRecargar,
   conectado,
 }: {
   /** Ausente = todavía no ha llegado la lectura; con `error`, se pidió y no se pudo medir. */
   sync?: EstadoDeSync;
+  /**
+   * Las operaciones de sincronización de esta sesión, **de la más reciente a la más vieja**.
+   *
+   * Es OPCIONAL por lo mismo que todo lo de arriba: una sesión sin sincronizar no tiene
+   * registro, y ausente ≠ vacío ≠ cero también aquí. `App.tsx` la deriva de los actos y la
+   * omite entera cuando no hay ninguno, en vez de pasar `[]`.
+   */
+  registro?: readonly ActoDeSincronizacion[];
   alPedir: (accion: "subir" | "bajar") => void;
   alRecargar: () => void;
   /** ¿Hay cable? Sin él no se pide nada: la petición se perdería sin decirlo. */
@@ -147,6 +237,7 @@ export function CloudStudio({
           ahí esta banda enseña lo que hay pendiente.
         </p>
         {sync.error === undefined ? null : <p className={estilos.aviso}>{sync.error}</p>}
+        <Registro operaciones={registro} />
       </div>
     );
   }
@@ -204,12 +295,15 @@ export function CloudStudio({
 
       {/* La nota habla SOLO de los botones que están delante. Con la subida al día, nombrar
           «Subir» sería la ayuda que describe un control que no existe — la misma regla que las
-          teclas del compositor, que nombran solo las que son ciertas. */}
+          teclas del compositor, que nombran solo las que son ciertas. Y lo que promete ya no es
+          el chat: el recorrido de la operación se cuenta en el registro de abajo. */}
       <p className={estilos.nota}>
         {nadaQueSubir
-          ? `«Actualizar repo local» ${AVISO_DE_ACTUALIZAR} Se niega con cambios sin commitear, y lo que pasa sale en el chat.`
-          : `Subir pide el plan y lo apruebas en la pregunta de siempre. «Actualizar repo local» ${AVISO_DE_ACTUALIZAR} Las dos se niegan con cambios sin commitear, y lo que pasa —lo que sube, lo que no, y por qué— sale en el chat.`}
+          ? `«Actualizar repo local» ${AVISO_DE_ACTUALIZAR} Se niega con cambios sin commitear, y lo que pasa queda aquí abajo, en el registro de esta sesión.`
+          : `Subir pide el plan y lo apruebas en la pregunta de siempre. «Actualizar repo local» ${AVISO_DE_ACTUALIZAR} Las dos se niegan con cambios sin commitear, y lo que pasa —lo que sube, lo que no y por qué— queda aquí abajo, en el registro de esta sesión.`}
       </p>
+
+      <Registro operaciones={registro} />
     </div>
   );
 }

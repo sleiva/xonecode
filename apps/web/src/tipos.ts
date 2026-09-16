@@ -122,7 +122,30 @@ export type Acto =
    *  mismo que `detalles` — las sesiones viejas no lo traen. */
   | { tipo: "fase"; texto: string; ms: number; fase?: string }
   | { tipo: "fin"; ms: number; modelo?: string; consumo?: ConsumoDeTurno }
+  /**
+   * Una operación de sincronización con CloudStudio, contada entera: las líneas que el
+   * terminal habría impreso, su hora de EMPEZAR y cuál de las tres acciones fue.
+   *
+   * No es una línea de `sistema` porque no es conversación: es un suceso del proyecto, y
+   * agrupado se lee como lo que es —una operación con su hora— en vez de cómo se leía en el
+   * hilo, nueve renglones de consola cruda entre dos mensajes. Las líneas van TAL CUAL: es
+   * exactamente lo que se habría visto en el terminal, y recomponerlas aquí sería una
+   * segunda versión de algo que ya se cuenta en `agent/` y en `cli/`.
+   */
+  | {
+      tipo: "sincronizacion";
+      accion: "estado" | "bajar" | "subir";
+      cuando: string;
+      lineas: string[];
+    }
   | { tipo: "error"; texto: string };
+
+/**
+ * El acto de UNA operación de sincronización, ya estrechado. Es lo que guarda el registro que
+ * pinta la banda de Revisión: sin el alias, cada sitio que lo recorra tendría que repetir el
+ * `Extract` (o un `filter` con predicado) para poder leer `accion`, `cuando` y `lineas`.
+ */
+export type ActoDeSincronizacion = Extract<Acto, { tipo: "sincronizacion" }>;
 
 /**
  * Los tres valores, redeclarados igual que todo lo demás de este fichero: son los de

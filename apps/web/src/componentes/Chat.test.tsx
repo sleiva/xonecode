@@ -223,6 +223,52 @@ describe("Chat: el artefacto", () => {
   });
 });
 
+describe("Chat: la sincronización", () => {
+  /**
+   * **Ni una línea, y sin romper el tramo del agente.**
+   *
+   * Una operación de CloudStudio volcaba aquí sus nueve renglones de consola —medido en la
+   * pantalla que él mandó—, y el hilo es la conversación: eso se cuenta en el registro de la
+   * banda de Revisión. Lo que este test fija no es solo que no se pinte, sino **por dónde**
+   * deja de pintarse: si el acto cayera en la rama de conversación cerraría el tramo de pulso
+   * abierto y el trabajo de un mismo turno saldría partido en dos bloques desplegables. Por eso
+   * va con `continue` en el recorrido y no con el `return null` del render, y por eso aquí se
+   * cuentan los `<details>`.
+   */
+  it("no pinta nada, y no parte el tramo de trabajo del agente", () => {
+    const { container } = render(
+      <Chat
+        actos={[
+          { tipo: "herramientas", lineas: ["→ lee app/Clientes.xne"] },
+          {
+            tipo: "sincronizacion",
+            accion: "subir",
+            cuando: "2026-09-16T14:32:11.000Z",
+            lineas: [
+              "SUBIDA A CLOUDSTUDIO — 1 operación",
+              "  + app/Clientes.xne",
+              "  → APROBADO",
+              "subidos 1, fallaron 0",
+            ],
+          },
+          { tipo: "herramientas", lineas: ["→ escribe app/Clientes.xne"] },
+          { tipo: "fin", ms: 1200 },
+        ]}
+      />
+    );
+
+    // Ni el plan, ni el veredicto, ni el recuento.
+    expect(screen.queryByText(/SUBIDA A CLOUDSTUDIO/)).toBeNull();
+    expect(screen.queryByText(/APROBADO/)).toBeNull();
+    expect(screen.queryByText(/subidos 1, fallaron 0/)).toBeNull();
+
+    // Y el trabajo sigue siendo UN tramo: las dos líneas de tool dentro del mismo bloque.
+    expect(container.querySelectorAll("details")).toHaveLength(1);
+    expect(screen.getByText("→ lee app/Clientes.xne")).toBeTruthy();
+    expect(screen.getByText("→ escribe app/Clientes.xne")).toBeTruthy();
+  });
+});
+
 describe("Chat: el proyecto que escribe sin preguntar", () => {
   it("lo DICE arriba, y dice cómo deshacerlo", () => {
     // La decisión se tomó una vez en `settings.json`, quizá hace meses. Quien se sienta hoy

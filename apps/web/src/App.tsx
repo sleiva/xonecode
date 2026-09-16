@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import type { crearStoreDelCliente } from "./store.js";
+import type { ActoDeSincronizacion } from "./tipos.js";
 import type { Conexion } from "./conexion.js";
 import { Maqueta } from "./componentes/Maqueta.js";
 import { Barra } from "./componentes/Barra.js";
@@ -300,6 +301,27 @@ export function App({
       });
     }
     return [...porRuta.values()];
+  }, [estado.actos]);
+
+  /**
+   * Las operaciones de sincronización de esta sesión, **la más reciente primero**.
+   *
+   * Es el registro que pide la banda de Revisión: lo que ha pasado con CloudStudio desde que
+   * se abrió la sesión. Se deriva de los actos, que es por donde ya viaja y se persiste —así
+   * sobrevive a recargar la página y a reabrir la sesión, sin fichero ni mensaje nuevos.
+   *
+   * El recorrido con `continue` y no un `.filter` es el mismo molde que `artefactos` y por el
+   * mismo motivo: estrecha la unión sin depender de la versión de TypeScript. Y se INVIERTE
+   * porque los actos llegan en orden y lo que se acaba de hacer es lo que se quiere ver
+   * abierto; el `reverse` es sobre el array nuevo que sale del filtro, no sobre `estado.actos`.
+   */
+  const registroDeSync: ActoDeSincronizacion[] = useMemo(() => {
+    const recientesPrimero: ActoDeSincronizacion[] = [];
+    for (const acto of estado.actos) {
+      if (acto.tipo !== "sincronizacion") continue;
+      recientesPrimero.push(acto);
+    }
+    return recientesPrimero.reverse();
   }, [estado.actos]);
 
   /**
@@ -1109,6 +1131,12 @@ export function App({
                   cloudstudio={
                     <CloudStudio
                       {...(estado.sync === undefined ? {} : { sync: estado.sync })}
+                      // El registro va con el mismo trato que `sync`: AUSENTE cuando esta
+                      // sesión no ha sincronizado nada todavía. Un array vacío diría «hay un
+                      // registro y está vacío», y la banda no tiene nada que enseñar en
+                      // ninguno de los dos casos — pero la distinción se conserva en la capa
+                      // que la sabe, que es donde el repo la exige.
+                      {...(registroDeSync.length === 0 ? {} : { registro: registroDeSync })}
                       alPedir={sincronizar}
                       alRecargar={pedirSync}
                       conectado={estado.conectado}

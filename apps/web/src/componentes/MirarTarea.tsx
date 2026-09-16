@@ -181,6 +181,13 @@ function Linea({ acto }: { acto: Acto }) {
       // el motivo con el que se aparca. Esconderlos en una pestaña de depuración es
       // exactamente el aviso que nadie lee.
       return <p className={estilos.sistema}>{acto.texto}</p>;
+    case "sincronizacion":
+      // **No puede pasar HOY** —`/sync` es un comando y una tarea de fondo corre un turno,
+      // no comandos—, y se pinta igual en vez de callarse: esta vista es la única del cliente
+      // que NO lleva el acto nuevo a una pestaña de depuración, y el día que llegara por
+      // donde no se espera, perderlo en silencio es justo lo que su doctrina prohíbe. Se
+      // pinta como el `sistema` de al lado, que es el canal por el que viajaba antes.
+      return <p className={estilos.sistema}>{acto.lineas.join("\n")}</p>;
     case "error":
       return <p className={estilos.error}>{acto.texto}</p>;
     case "artefacto":
@@ -195,5 +202,13 @@ function Linea({ acto }: { acto: Acto }) {
       // El cierre del registro con su duración: un dato de la Trayectoria, no una línea de
       // conversación. Mismo criterio que el chat.
       return null;
+    default: {
+      // La red que a esta vista le faltaba, y que es la de siempre en este repo: sin ella un
+      // acto nuevo se cae por aquí y devuelve `undefined` —no un error—, así que el síntoma
+      // es una línea que no aparece con todo en verde. El hueco del `sincronizacion` de
+      // arriba se encontró justamente así, contando a mano los casos de la unión.
+      const _exhaustivo: never = acto;
+      return _exhaustivo;
+    }
   }
 }

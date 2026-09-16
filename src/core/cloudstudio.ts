@@ -112,3 +112,13 @@ export interface OperacionOmitida {
  *   para enchufarla el día que exista.
  */
 export type PoliticaDeAprobacion = (plan: readonly OperacionDeSubida[]) => Promise<boolean>;
+
+/**
+ * Las TRES acciones de `/sync`, con nombre propio.
+ *
+ * Existían escritas tres veces —en el puerto `Consola.sincronizar`, en el manejador del comando
+ * y en la ayuda— y una cuarta estaba a punto al aparecer el acto `sincronizacion`, que también
+ * tiene que decir cuál fue. Nombradas aquí, que es donde vive la sincronización, y no en `cli/`:
+ * el acto que las guarda es de `core/`.
+ */
+export type AccionDeSincronizacion = "estado" | "bajar" | "subir";

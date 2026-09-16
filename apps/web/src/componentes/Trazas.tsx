@@ -124,6 +124,22 @@ function filasDe(acto: Acto): FilaCruda[] {
       });
     case "sistema":
       return [cruda("sistema", "SISTEMA", acto.texto)];
+    case "sincronizacion":
+      // Una fila por LÍNEA, como `herramientas`: una operación de sincronización son varias
+      // líneas y todas son del mismo suceso, así que comprimirlas en una sola las cortaría
+      // justo por donde se leen. Sin `ms`: el tiempo de esta operación no se mide, y una
+      // columna de tiempo vacía ya dice «no consta» sin inventar un cero.
+      //
+      // La etiqueta es la ACCIÓN y no «SINCRONIZACIÓN», por dos motivos medidos: el hueco de
+      // la columna son 16ch y catorce letras en versalita se comen el sitio de sobra —saldría
+      // cortada por puntos suspensivos—, y sobre todo la acción es el dato que distingue una
+      // fila de otra. Es el nombre del PROTOCOLO, el mismo de `alPedir("subir")` y del
+      // `{clase:"sync"}`, no el de la etiqueta del botón: Trazas es el registro completo del
+      // harness, y ahí la operación se llama por lo que es (`CloudStudio.tsx` documenta por
+      // qué la pantalla la llama «Actualizar repo local» sin renombrar la acción).
+      return acto.lineas.map((linea) =>
+        cruda("sistema", acto.accion.toUpperCase(), linea)
+      );
     case "artefacto":
       // La etiqueta es propia y no «SISTEMA»: es la única escritura del turno que no pasó
       // por la aprobación, y quien viene aquí a depurar qué hizo el agente necesita verla

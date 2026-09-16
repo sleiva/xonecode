@@ -355,6 +355,7 @@ const TIPOS_DE_ACTO = {
   artefacto: true,
   fase: true,
   fin: true,
+  sincronizacion: true,
   error: true,
 } satisfies Record<Acto["tipo"], true>;
 

@@ -3617,6 +3617,88 @@ diálogo está dentro de `document.body` y FUERA del contenedor que monta el tes
 (`container.contains(dialogo) === false`). Es la propiedad que se buscaba; si alguien la devuelve
 a la columna, el test cae aunque el centrado pareciera bien en una captura.
 
+**El recorrido de una sincronización se cuenta en la BANDA, no en el hilo** (acto
+`sincronizacion` en `core/actos.ts`, `Consola.anotarSincronizacion?`, `componentes/CloudStudio.tsx`,
+16-09-2026). Medido en la pantalla que él mandó: pulsar «Subir» dejaba **nueve renglones de consola
+cruda entre dos mensajes de la conversación** —la raya de sesenta guiones, `SUBIDA A CLOUDSTUDIO — 3
+operaciones`, las líneas `+`/`~`/`-` con su sangría, el `→ APROBADO` y el `subidos 3, fallaron 0`—.
+Son dos problemas y los dos cuentan: **estorba**, porque el hilo es la conversación y una operación
+de git es un suceso del proyecto, y cada subida deja ahí una docena de actos que además se
+persisten en el `.jsonl` y reaparecen al reabrir; y **se ve feo**, porque lo que se pinta son
+líneas de consola sin la forma que el chat le da a lo que sí es suyo. Lo que se pidió fue un
+registro por sesión, leído donde ya vive la banda: en Revisión.
+
+Se hace con un ACTO NUEVO y no con un fichero ni un mensaje nuevo del cable, y eso es lo que
+compra el «registro por sesión» sin inventar nada. El acto entra por el mismo camino que todos
+—`transporte.emitir` → store → `Chat`/`Trazas`—, se persiste por `volcar()` →
+`sesiones.ts#anotarActo`, y **reaparece al reabrir la sesión**, que es literalmente lo pedido. Un
+fichero propio habría que abrirlo, leerlo, reemitirlo y borrarlo al borrar la sesión; un mensaje
+nuevo del cable tendría que pasar por las dos listas blancas —el store y `arranque.ts`— y por un
+`case` más en cada piel, y ninguna de las dos cosas da nada que el acto no dé. Los tres
+guardianes que el repo ya tiene obligan a decidir en los tres sitios donde hay que decidir:
+`TIPOS_DE_ACTO` es `satisfies Record<Acto["tipo"], true>`, el `switch` de `filasDe` cierra con
+`never`, y `tipos.test.ts` compara los literales del cliente contra `src/core/actos.ts`. **Aviso
+sobre el tercero**: `apps/web/**` no lo tipea ningún script de `npm`, así que las dos redes de
+`tsc` solo disparan en el editor; de ahí que la comparación de `tipos.test.ts` exista como TEXTO.
+
+**Dónde se cuenta es una propiedad de la PIEL, y no una bandera de la línea.** El recorrido entero
+de una operación sale hoy por UNA costura que ya existía: el callback `informar` que `/sync` le
+pasa a `consola.sincronizar`, más lo que escribe el propio comando. Al puerto se le añade un
+método **OPCIONAL** (`anotarSincronizacion?`), con la misma asimetría que `fase?`, `razonamiento?`
+y `notificacion?`: **stdio, la TUI, la consola de una tarea y los dobles de los tests no cambian
+una línea**, y la tubería sigue byte-idéntica — lo que se toca es `politicaInteractiva`, que
+recibe el sumidero para que el plan, la raya y el `→ APROBADO` vayan por donde va lo demás;
+dejarlos en `consola.escribir` habría dejado en el chat justo los renglones señalados. La
+alternativa era una bandera en `LineaDeConsola` (`comoComando`), y se descartó porque decidiría
+POR LÍNEA lo que es una propiedad del destino: la misma `/sync subir` en el terminal **debe**
+imprimir su recorrido. Y el invariante que esto compra, que es la razón de no recomponer nada:
+**lo que el registro guarda es exactamente lo que el terminal habría impreso** — ni un resumen, ni
+una versión maquetada—. Solo se le quita el `\n` final, que es del scrollback y no del dato, y las
+líneas vacías; **la raya de sesenta guiones SE QUEDA**, y es deliberado: filtrar una línea por su
+aspecto sería maquetar por la puerta de atrás, y ese filtro es justo el que se lleva por delante
+la siguiente cabecera que alguien añada.
+
+La operación se entrega en un `finally`, y no por higiene: **`crearSincronizador` puede LANZAR**
+—`piezas.limpio`, `descargar`, `subirProyecto` y el `sesion.cerrar()` de su propio `finally` son
+todos `await` de cosas que tocan red y disco—, y con las líneas acumuladas una excepción se
+llevaría por delante todo lo que ya se había contado, que en un scrollback append-only no se
+perdía. **La excepción se deja propagar**: un fallo inesperado lo dice el harness en el hilo, que
+es donde tiene que verse, y esconderlo dentro de un bloque plegado sería lo contrario de lo que
+este cambio busca. Y `cuando` se captura ANTES del `await`: es el instante que se recuerda, y así
+una subida larga no se fecha al final.
+
+**Dos cosas NO entran en el registro**, a propósito: el enunciado de la pregunta («¿Subir a
+CloudStudio?»), que no es una línea de la operación sino el argumento de `preguntar` —la cabecera
+ya dice qué operación fue y el `→ APROBADO` dice cómo acabó—, y los dos errores de USO de `/sync`,
+que no son una operación y son el mismo tipo de mensaje que el de cualquier otro comando mal
+escrito.
+
+**Y en la web el enunciado de una DECISIÓN deja de anotarse** (`consolaWeb.ts#preguntar`). Con
+`decision` puesta el texto ya viaja en el mensaje `pregunta` y `Pregunta.tsx` lo pinta como TÍTULO
+del diálogo, así que anotarlo era duplicarlo — y era **la última línea de sincronización que
+quedaba en el hilo**, justo entre dos mensajes de verdad. La anotación solo se salta cuando la
+pregunta NO lleva forma: las de texto libre y los secretos conservan su copia en el transcript,
+que es donde se contestan, y sin ella quedaría una respuesta sin pregunta. Lo que la tarjeta
+enseña no cambia: la decisión sigue viajando ENTERA, con su plan.
+
+En el cliente, el registro se pinta **debajo de los botones y la nota**, en los SEIS estados de
+Revisión, porque la ranura `cloudstudio` se pinta en los seis y `CloudStudio` mide al MONTARSE —un
+`return` temprano no escondería solo la cifra, ni la pediría—. Cada operación es una cabecera
+`acción · sello` y sus líneas en un `<pre>`, **la más reciente ABIERTA y las demás plegadas** (se
+remonta por `key` en vez de reusar el nodo, que heredaría el plegado de la anterior; y el
+`<summary>` no lleva `display: flex`, o el triángulo de despliegue se pierde en WebKit). La
+etiqueta usa el nombre del BOTÓN —«Subir», «Actualizar repo local»— porque la banda es donde se
+pulsa, mientras que Trazas conserva el nombre del PROTOCOLO (`SUBIR`, `BAJAR`, `ESTADO`) porque
+allí se viene a depurar el harness. Y ausente es «no ha pasado nada»: sin operaciones no se pinta
+ni la cabecera del bloque, otra vez ausente ≠ vacío.
+
+**Límite declarado**: recargar la página con una decisión PENDIENTE pierde la pregunta —la reemite
+la aprobación en vuelo, pero una `pregunta` no—, y es anterior a este cambio. Lo que sí sobrevive
+es el registro: la operación ya entregada está en el transcript del servidor y vuelve en la
+ráfaga de reemisión. Y una consecuencia de cómo Trazas numera los turnos —por el acto de
+`usuario`—: una fila de sincronización cae en el turno ANTERIOR, exactamente igual que las de
+`sistema` desde siempre.
+
 **La foto del ANTES** (`agent/instantanea.ts`) es un árbol de git en un `GIT_INDEX_FILE`
 privado: no necesita commits, no necesita que el proyecto sea la raíz del repo, y no toca el
 índice del usuario. Se toma **por turno**, no por sesión.

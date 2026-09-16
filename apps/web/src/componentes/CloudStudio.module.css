@@ -118,3 +118,61 @@
   font-size: 12px;
   line-height: 1.6;
 }
+
+/* El registro de lo que ha pasado con la sincronización en esta sesión. Va DEBAJO de la nota
+   y no encima: la banda contesta «¿tengo algo pendiente?» y eso son la cifra y los botones;
+   la historia de las operaciones se consulta, no se lee de paso. */
+.registro {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+/* Una operación, plegable. El triángulo del `<summary>` se deja como viene, y eso obliga a no
+   ponerle `display: flex` a la cabecera: con flex, el marcador de desplegado desaparece en
+   los motores WebKit y la fila deja de parecer lo que es —un desplegable—. La acción y el
+   sello son dos `<span>` en línea, que es todo lo que hace falta. */
+.operacion {
+  border: 0.5px solid var(--dsw-alias-border-l2);
+  border-radius: 8px;
+  background: var(--dsw-alias-bg-layer-1);
+}
+
+.cabeceraDeOperacion {
+  padding: 6px 12px;
+  color: var(--dsw-alias-label-secondary);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.accion {
+  color: var(--dsw-alias-label-primary);
+  font-weight: 600;
+}
+
+/* La hora en monoespaciada, como la rama de la cabecera: se compara letra a letra entre una
+   operación y la de al lado. */
+.sello {
+  color: var(--dsw-alias-label-tertiary);
+  font-family: var(--ds-font-family-code);
+  font-size: 11px;
+}
+
+/* Las líneas TAL CUAL, y `pre-wrap` no es adorno: son líneas de consola y su sangría —el
+   plan de la subida la lleva— es parte del dato. `pre-wrap` en vez de `pre` para que una
+   línea larga se parta en vez de sacar una barra de scroll horizontal dentro del panel, y
+   `anywhere` porque una ruta sin espacios larga no tiene dónde partir. */
+.lineas {
+  margin: 0;
+  padding: 8px 12px;
+  border-top: 0.5px solid var(--dsw-alias-border-l2);
+  border-radius: 0 0 8px 8px;
+  background: var(--dsw-alias-bg-layer-2);
+  color: var(--dsw-alias-label-secondary);
+  font-family: var(--ds-font-family-code);
+  font-size: 11px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+

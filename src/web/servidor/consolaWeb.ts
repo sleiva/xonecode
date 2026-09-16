@@ -28,7 +28,7 @@
  */
 import { crearPielWeb } from "./pielWeb.js";
 import { crearTransporte, type MensajeAlCliente, type MensajeDelCliente, type Sumidero } from "./transporte.js";
-import type { Acto, ConsumoDeTurno } from "../../core/actos.js";
+import type { Acto, ConsumoDeTurno, NarracionDeSincronizacion } from "../../core/actos.js";
 import type { PendienteDeAprobacion } from "../../core/events.js";
 import type { LineaDeDiff } from "../../core/diff.js";
 import type { Piel } from "../../core/turno.js";
@@ -260,10 +260,34 @@ export function crearConsolaWeb(opciones: OpcionesDeConsolaWeb = {}): ConsolaWeb
       for (const linea of texto.replace(/\n$/, "").split("\n")) anotar({ tipo: "sistema", texto: linea });
     },
 
+    /**
+     * Una operación de sincronización entera, ya contada por `/sync`, al registro de la sesión.
+     *
+     * Es la ÚNICA piel que la implementa, y por eso `/sync` aquí no escribe ni una línea por
+     * `escribir`: el recorrido de una subida —el plan, el `→ APROBADO`, las cuentas, las
+     * negativas— no es una mitad de conversación, es un suceso del proyecto, y en el hilo eran
+     * nueve renglones de consola cruda entre dos mensajes de verdad. Va como ACTO porque el
+     * acto es lo que ya viaja, se pinta y se persiste en el `.jsonl` de la sesión: el registro
+     * que pide Revisión sale de ahí sin inventar un mensaje nuevo del cable, un fichero nuevo ni
+     * un campo nuevo en el índice.
+     */
+    anotarSincronizacion: (operacion: NarracionDeSincronizacion) => {
+      anotar({ tipo: "sincronizacion", ...operacion });
+    },
+
     preguntar: async (pregunta, decision) => {
       // El enunciado queda en el transcript, como el prompt de stdio; la RESPUESTA no
       // pasa por aquí.
-      anotar({ tipo: "sistema", texto: pregunta });
+      //
+      // **Salvo cuando la pregunta es una DECISIÓN**, y ahí no se anota. El enunciado de una
+      // decisión no es una mitad de conversación: es el título de un diálogo —`Pregunta.tsx`
+      // lo pinta con el plan y dos botones— y viaja entero en el mensaje `pregunta`. Anotarlo
+      // además dejaba en el hilo justo lo que la banda de la sincronización ya no escribe:
+      // medido, el «¿Subir a CloudStudio?» era la última línea de una subida que se colaba
+      // entre dos mensajes de verdad. La pregunta de texto libre y el secreto SÍ se anotan:
+      // ahí el enunciado es el rótulo de un campo que se contesta dentro del hilo, y sin él
+      // quedaría una respuesta sin pregunta.
+      if (decision === undefined) anotar({ tipo: "sistema", texto: pregunta });
       if (!transporte.conectado()) return "";
       // El MISMO plazo que `aprobacionesTui`, que era el único que lo tenía: la pregunta de
       // texto libre la ponen `politicaInteractiva` antes de subir y `/connect-studio` sin

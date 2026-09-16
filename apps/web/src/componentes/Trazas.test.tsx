@@ -131,6 +131,62 @@ describe("Trazas", () => {
     expect(sin[0].etiqueta).toBe("FASE");
   });
 
+  /**
+   * **La sincronización, en el registro completo del harness**: una fila por LÍNEA, sin
+   * recomponer, con la ACCIÓN como etiqueta y sin tiempo.
+   *
+   * La etiqueta es la acción y no «SINCRONIZACIÓN» por dos motivos medidos: el hueco de la
+   * columna son 16ch y catorce letras en versalita no caben, y sobre todo la acción es el dato
+   * que distingue una fila de otra. Y el nombre es el del PROTOCOLO (`SUBIR`), no el de la
+   * etiqueta del botón —«Actualizar repo local»—: aquí se viene a depurar el harness, y una
+   * operación se llama por lo que es.
+   */
+  it("una operación de sincronización da una fila por línea, con la acción de etiqueta", () => {
+    const filas = filasDeTrazas([
+      {
+        tipo: "sincronizacion",
+        accion: "bajar",
+        cuando: "2026-09-16T14:32:11.000Z",
+        lineas: ["BAJADA DE CLOUDSTUDIO — 2 ficheros", "  + app/Clientes.xne", "bajados 2 ficheros (git)"],
+      },
+    ]);
+    expect(filas.map((f) => f.etiqueta)).toEqual(["BAJAR", "BAJAR", "BAJAR"]);
+    expect(filas.map((f) => f.tipo)).toEqual(["sistema", "sistema", "sistema"]);
+    // El texto TAL CUAL, con su sangría: es lo que se lee en el panel de detalle.
+    expect(filas[1].completo).toBe("  + app/Clientes.xne");
+    // Sin tiempo: la operación no lo mide, y un cero aquí sería una cifra inventada.
+    for (const f of filas) expect(f.ms).toBeUndefined();
+  });
+
+  it("y su acción la distingue de las otras dos: SUBIR, BAJAR y ESTADO no se confunden", () => {
+    const etiquetas = (accion: "estado" | "bajar" | "subir") =>
+      filasDeTrazas([
+        { tipo: "sincronizacion", accion, cuando: "2026-09-16T14:32:11.000Z", lineas: ["una línea"] },
+      ])[0].etiqueta;
+    expect([etiquetas("estado"), etiquetas("bajar"), etiquetas("subir")]).toEqual([
+      "ESTADO",
+      "BAJAR",
+      "SUBIR",
+    ]);
+  });
+
+  it("se busca por la acción, que es lo que se teclea para encontrar una operación", () => {
+    render(
+      <Trazas
+        actos={[
+          {
+            tipo: "sincronizacion",
+            accion: "subir",
+            cuando: "2026-09-16T14:32:11.000Z",
+            lineas: ["subidos 3, fallaron 0"],
+          },
+        ]}
+      />
+    );
+    fireEvent.change(screen.getByRole("searchbox"), { target: { value: "subir" } });
+    expect(screen.queryByText(/Ninguna fila contiene/)).toBeNull();
+  });
+
   it("se busca por el nombre de la tool aunque no salga en el texto de la línea", () => {
     // «→ lee app.xne» no contiene `read_file`. Buscar solo en el texto haría que el nombre
     // de la tool —que es justo lo que se teclea al venir aquí— no encontrara nada.

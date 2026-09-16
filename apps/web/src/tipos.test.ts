@@ -17,6 +17,7 @@ const RUTA_ACTOS = join(aqui, "..", "..", "..", "src", "core", "actos.ts");
 const RUTA_TRANSPORTE = join(aqui, "..", "..", "..", "src", "web", "servidor", "transporte.ts");
 const RUTA_TAREAS = join(aqui, "..", "..", "..", "src", "core", "tareas.ts");
 const RUTA_APROBAR = join(aqui, "..", "..", "..", "src", "cli", "aprobar.ts");
+const RUTA_STORE = join(aqui, "store.ts");
 
 /**
  * `[a-z0-9_-]+` y no `[a-z]+`: la primera versión de este detector (la del brief) no veía
@@ -34,6 +35,34 @@ function literalesDe(campo: "tipo" | "clase", ruta: string): string[] {
 describe("tipos del cliente", () => {
   it("los tipos de acto del cliente y del host no divergen", () => {
     expect(literalesDe("tipo", RUTA_TIPOS)).toEqual(literalesDe("tipo", RUTA_ACTOS));
+  });
+
+  /**
+   * **La lista blanca del store, que es donde un tipo nuevo se cae SIN SÍNTOMA.**
+   *
+   * `TIPOS_DE_ACTO` (`store.ts`) es un `satisfies Record<Acto["tipo"], true>`, así que en el
+   * editor un tipo sin su clave sale en rojo — pero **`tsc` no mira `apps/web/`**: ni
+   * `npm run typecheck` (su `include` es `src/**`) ni el `build` de Vite, que transpila sin
+   * comprobar. O sea que la red que existe se dispara solo en la máquina de quien escribe, y
+   * en CI el olvido es un acto que el store filtra en silencio: la operación ocurre, se
+   * persiste, y no se ve en ninguna parte. Este test es esa red, puesta donde sí corre.
+   *
+   * Se compara por TEXTO y no por import —la frontera del cliente no deja tirar de `src/`, y
+   * `store.ts` no exporta la tabla—, y la lista de tipos sale de `tipos.ts`, que a su vez está
+   * atado a `core/actos.ts` por el test de arriba: una cadena de tres eslabones que se rompe
+   * en el eslabón que se toque.
+   *
+   * **Sin duplicados**, y no es un detalle de estilo: `tipos.ts` escribe el literal de un tipo
+   * dos veces —una en la variante de la unión y otra en el `Extract` del alias que estrecha esa
+   * variante (`ActoDeSincronizacion`)—, así que la lista cruda trae repetido el que tenga alias.
+   * La tabla del store, en cambio, tiene una clave por tipo. Se compara contra el conjunto, que
+   * es lo que las dos listas quieren decir; el test de literales de arriba sigue comparando las
+   * listas crudas contra el host, donde el duplicado también existe.
+   */
+  it("la lista blanca de actos del store no se deja ningún tipo del cliente", () => {
+    expect(clavesDeLaListaBlanca(RUTA_STORE)).toEqual([
+      ...new Set(literalesDe("tipo", RUTA_TIPOS)),
+    ]);
   });
 
   /**
@@ -311,6 +340,20 @@ const FILA_COMPLETA = {
   },
   terminadaAMano: true,
 };
+
+/**
+ * Las claves de `TIPOS_DE_ACTO` (`store.ts`), por TEXTO: se queda con el bloque que va del
+ * `= {` al `} satisfies` y con las líneas `clave: true,` de dentro. Cualquier otra forma de
+ * escribir la tabla —una constante aparte, un `new Set`— dejaría este test sin nada que leer,
+ * y por eso el `expect` compara LISTAS enteras y no busca una clave concreta: una tabla que se
+ * reescriba de otra manera pone el test rojo en vez de aprobarlo por vacío.
+ */
+function clavesDeLaListaBlanca(ruta: string): string[] {
+  const fuente = readFileSync(ruta, "utf8");
+  const bloque = /const TIPOS_DE_ACTO = \{([\s\S]*?)\}\s*satisfies/.exec(fuente);
+  if (bloque === null) throw new Error(`no se encontró TIPOS_DE_ACTO en ${ruta}`);
+  return [...bloque[1].matchAll(/^\s*([a-z0-9_-]+):\s*true,\s*$/gm)].map((m) => m[1]).sort();
+}
 
 /**
  * Los campos declarados de una interfaz, por TEXTO y contando llaves para quedarse con el

@@ -21,6 +21,7 @@ import type { Preguntar, DecisionDeConsola } from "./aprobar.js";
 import { rutaAuth, NOMBRE_CARPETA } from "../agent/configEnDisco.js";
 import { CatalogoModelosEnMemoria, type CatalogoModelosPort } from "../core/ports.js";
 import type { OperacionDeSubida, PoliticaDeAprobacion } from "../core/cloudstudio.js";
+import type { NarracionDeSincronizacion } from "../core/actos.js";
 
 /**
  * La costura del diseño: la consola de prueba lee de un generador con las líneas del test
@@ -580,6 +581,183 @@ describe("/sync", () => {
 
       const visto = vistoAlPreguntar();
       for (const linea of formas[0]!.lineas) expect(visto).toContain(`${linea.texto}\n`);
+    });
+  });
+
+  /**
+   * **El registro: lo que la operación cuenta, y por dónde lo cuenta.**
+   *
+   * Los tests de arriba son la mitad de la invariante —sin sumidero, todo sale por `escribir`
+   * al vuelo, byte a byte como siempre—, y estos son la otra: con un doble que SÍ implementa
+   * `anotarSincronizacion`, la operación entera se entrega UNA vez al final y **ni una de sus
+   * líneas pasa por `escribir`**.
+   *
+   * El sumidero es OPCIONAL en el puerto a propósito, y es lo que hace que stdio, la TUI, la
+   * consola de una tarea y los dobles de estos tests no cambien de una línea: quien no lo
+   * implemente sigue recibiendo el recorrido por `escribir`, que es lo que debe hacer una
+   * consola de terminal. Es una propiedad de la PIEL, no una bandera por línea: la misma
+   * `/sync subir` DEBE imprimirse en stdio y NO en el hilo del navegador.
+   */
+  describe("el registro de la operación", () => {
+    /** Un doble con el sumidero puesto, y lo que se acumula en él. */
+    function consolaQueRegistra(...lineas: string[]): {
+      consola: Consola;
+      salida: () => string;
+      operaciones: NarracionDeSincronizacion[];
+    } {
+      const { consola, salida } = consolaDeConSecreto({ lineas, respuestas: ["s"] });
+      const operaciones: NarracionDeSincronizacion[] = [];
+      return {
+        consola: { ...consola, anotarSincronizacion: (operacion) => operaciones.push(operacion) },
+        salida,
+        operaciones,
+      };
+    }
+
+    it("con sumidero, UNA operación con su acción y sus líneas —y ni una por `escribir`", async () => {
+      const { consola, salida, operaciones } = consolaQueRegistra("/sync subir", "/salir");
+      const conSync: Consola = {
+        ...consola,
+        sincronizar: async (accion, _raiz, politica) => {
+          expect(accion).toBe("subir");
+          const autorizado = await politica!([{ tipo: "texto", ruta: "app.xml", clase: "nuevo" }]);
+          return { tipo: "texto", texto: autorizado ? "subidos 1, fallaron 0\n" : "nada\n" };
+        },
+      };
+
+      await correrConsola(conSync, estadoDe());
+
+      expect(operaciones).toHaveLength(1);
+      const operacion = operaciones[0]!;
+      expect(operacion.accion).toBe("subir");
+      // El plan, el veredicto y el recuento: TODO lo que el terminal habría impreso, tal cual
+      // y en orden. Es la invariante que hace que no haya una segunda versión de nada. La
+      // primera línea es la RAYA que `politicaInteractiva` pone encima del plan —y se queda:
+      // quitarla sería empezar a filtrar líneas por su pinta, que es recomponer por la puerta
+      // de atrás, y el registro dice exactamente lo que se dijo.
+      expect(operacion.lineas).toEqual([
+        "─".repeat(60),
+        "SUBIDA A CLOUDSTUDIO — 1 operación",
+        "  + app.xml",
+        "  → APROBADO",
+        "subidos 1, fallaron 0",
+      ]);
+      // Y NADA por el otro camino: si el plan siguiera saliendo por `escribir`, el hilo del
+      // navegador volvería a llenarse de renglones de consola, que es lo que esto arregla.
+      for (const linea of operacion.lineas) expect(salida()).not.toContain(linea);
+    });
+
+    /**
+     * La hora es la de EMPEZAR, y se captura antes del `await` a propósito: una subida larga
+     * fechada al final diría un instante en el que ya no estaba pasando nada, y el registro se
+     * lee para saber CUÁNDO se hizo. El doble duerme para que las dos horas no coincidan: si
+     * la captura se moviera al `finally`, este test se pondría rojo.
+     */
+    it("la hora es la de empezar la operación, no la del final", async () => {
+      const { consola, operaciones } = consolaQueRegistra("/sync subir", "/salir");
+      let alEmpezar = 0;
+      const conSync: Consola = {
+        ...consola,
+        sincronizar: async () => {
+          alEmpezar = Date.now();
+          await new Promise((listo) => setTimeout(listo, 10));
+          return { tipo: "texto", texto: "subidos 1, fallaron 0\n" };
+        },
+      };
+
+      await correrConsola(conSync, estadoDe());
+
+      const cuando = operaciones[0]!.cuando;
+      expect(cuando).toMatch(/^\d{4}-\d{2}-\d{2}T/);
+      expect(Date.parse(cuando)).toBeLessThanOrEqual(alEmpezar);
+    });
+
+    /**
+     * El aviso de `agent/` y el recuento de `cli/main.ts` llegan por el MISMO `informar` y son
+     * la MISMA operación: si cada llamada entregara su propio registro, una bajada parcial
+     * serían dos bloques con la misma hora. Las líneas van tal cual, y una línea vacía no es
+     * una línea —el `\n` es del scrollback, no del dato—.
+     */
+    it("varias llamadas a `informar` son UNA operación, en orden y sin líneas vacías", async () => {
+      const { consola, salida, operaciones } = consolaQueRegistra("/sync bajar", "/salir");
+      const conSync: Consola = {
+        ...consola,
+        sincronizar: async (_accion, _raiz, _politica, informar) => {
+          informar?.("no se pudo bajar «icons/logo.png»: File extension not allowed\n");
+          informar?.("\n");
+          informar?.("no se pudo bajar «icons/logo2.png»: File extension not allowed\n");
+          return { tipo: "texto", texto: "bajados 1 ficheros (parcial)\n" };
+        },
+      };
+
+      await correrConsola(conSync, estadoDe());
+
+      expect(operaciones).toHaveLength(1);
+      expect(operaciones[0]!.accion).toBe("bajar");
+      expect(operaciones[0]!.lineas).toEqual([
+        "no se pudo bajar «icons/logo.png»: File extension not allowed",
+        "no se pudo bajar «icons/logo2.png»: File extension not allowed",
+        "bajados 1 ficheros (parcial)",
+      ]);
+      // Ni el aviso ni el recuento se cuelan por `escribir`: el lazo escribe su despedida al
+      // salir, y por eso se mira que NO estén en vez de que la salida esté vacía.
+      expect(salida()).not.toContain("logo.png");
+      expect(salida()).not.toContain("bajados");
+    });
+
+    /**
+     * **Una negativa también es una operación.** La guarda de árbol sucio es lo que más veces
+     * se va a ver en el registro —una subida con cambios sin commitear no es un no-suceso, es
+     * el motivo por el que no se subió—, así que tiene que quedar con su razón, y con la razón
+     * de SU dirección: al subir se sube un commit; al bajar lo que se pierde es el disco.
+     */
+    it("la negativa por árbol sucio queda registrada, con su motivo", async () => {
+      const { consola, salida, operaciones } = consolaQueRegistra("/sync subir", "/salir");
+      const conSync: Consola = {
+        ...consola,
+        sincronizar: async () => ({
+          tipo: "arbol-sucio",
+          accion: "subir",
+          pendientes: ["app.xml"],
+        }),
+      };
+
+      await correrConsola(conSync, estadoDe());
+
+      expect(operaciones).toHaveLength(1);
+      expect(operaciones[0]!.accion).toBe("subir");
+      expect(operaciones[0]!.lineas.join("\n")).toMatch(
+        /hay cambios sin commitear \(app\.xml\); commitea antes de subir/
+      );
+      expect(salida()).not.toMatch(/commitea/i);
+    });
+
+    /**
+     * Y los dos caminos que NO dejan registro, cada uno por su motivo: un comando mal escrito
+     * («uso: …») es el aviso de cualquier otro comando y no una operación, y sin `sincronizar`
+     * inyectado no hay ni operación que empezar. Ausente no es «una operación vacía»: el
+     * registro no se entrega, y la banda no pinta nada.
+     */
+    it("un error de uso no deja registro: no hubo operación que contar", async () => {
+      const { consola, salida, operaciones } = consolaQueRegistra("/sync borrar", "/salir");
+      // Con `sincronizar` inyectado, que es lo que hace que el comando llegue a mirar la
+      // acción: sin él lo que sale es el aviso de «no está disponible» —el caso de abajo— y
+      // este test no probaría nada.
+      const conSync: Consola = { ...consola, sincronizar: async () => ({ tipo: "texto", texto: "x\n" }) };
+
+      await correrConsola(conSync, estadoDe());
+
+      expect(operaciones).toHaveLength(0);
+      expect(salida()).toMatch(/uso: \/sync/);
+    });
+
+    it("sin sincronización disponible tampoco: no hay operación", async () => {
+      const { consola, salida, operaciones } = consolaQueRegistra("/sync", "/salir");
+
+      await correrConsola(consola, estadoDe());
+
+      expect(operaciones).toHaveLength(0);
+      expect(salida()).toMatch(/sincronización no está disponible/i);
     });
   });
 });

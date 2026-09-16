@@ -1,5 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
+import type { ActoDeSincronizacion } from "../tipos.js";
+import { selloDeFecha } from "../selloDeFecha.js";
 import { CloudStudio } from "./CloudStudio.js";
 
 const NADA = () => {};
@@ -135,9 +137,12 @@ describe("CloudStudio: la medida", () => {
     render(
       <CloudStudio sync={{ proyecto: "Tienda", rama: "main", pendientes: 3 }} alPedir={NADA} alRecargar={NADA} />
     );
-    expect(screen.getByText("3 ficheros por subir.")).toBeTruthy();
-    expect(screen.queryByText(/de esta sesión/i)).toBeNull();
-    expect(screen.queryByText(/de antes/i)).toBeNull();
+    // Se mira el texto de la CUENTA y no la pantalla entera: desde que hay registro, la nota
+    // de abajo dice «en el registro de esta sesión» —otra frase, sobre otra cosa—, y un
+    // `queryByText` sobre el documento entero la cazaría a ella en vez de a la cifra.
+    const cuenta = screen.getByText("3 ficheros por subir.");
+    expect(cuenta.textContent).not.toMatch(/de esta sesión/i);
+    expect(cuenta.textContent).not.toMatch(/de antes/i);
   });
 });
 
@@ -270,6 +275,173 @@ describe("CloudStudio: cuándo no se ofrece subir", () => {
     const nota = screen.getByText(/sobrescribe esta copia/i);
     expect(nota.textContent).not.toMatch(/Subir/);
     expect(nota.textContent).toMatch(/se niega con cambios sin commitear/i);
+  });
+});
+
+/**
+ * **El registro: lo que antes se volcaba en el hilo del chat.**
+ *
+ * Las nueve líneas de consola de una subida —el plan, el `→ APROBADO`, el recuento— salían
+ * entre dos mensajes de la conversación. Ahora son una operación con su hora y su nombre,
+ * agrupada y plegada, debajo de los botones. Es el mismo texto TAL CUAL: lo que se comprueba
+ * aquí abajo es que no se recompone ni se resume por el camino.
+ */
+describe("CloudStudio: el registro de lo que pasó", () => {
+  afterEach(cleanup);
+
+  const CON_PROYECTO = { proyecto: "Tienda", rama: "main", pendientes: 1 };
+
+  /** Una operación como la que deja el acto: acción, instante de EMPEZAR y sus líneas. */
+  const OPERACION = (
+    accion: ActoDeSincronizacion["accion"],
+    cuando: string,
+    lineas: string[]
+  ): ActoDeSincronizacion => ({ tipo: "sincronizacion", accion, cuando, lineas });
+
+  const DE_SUBIDA = OPERACION("subir", "2019-03-05T10:00:00.000Z", [
+    "SUBIDA A CLOUDSTUDIO — 1 operación",
+    "  + app/Clientes.xne",
+    "  → APROBADO",
+    "subidos 1, fallaron 0",
+  ]);
+
+  /**
+   * Ausente = en esta sesión no se ha sincronizado nada, y eso no se pinta: ni una caja vacía
+   * ni una cabecera sin operación. Es la invariante de las cuatro capas de esta consola
+   * —ausente ≠ vacío ≠ cero— aplicada al registro en vez de a una cifra.
+   *
+   * Se comprueba con `[]` y con la prop sin pasar, que son el mismo caso para el componente y
+   * los dos tienen que caer en el `null`.
+   */
+  it("sin operaciones no se pinta el registro", () => {
+    const { container, rerender } = render(
+      <CloudStudio sync={CON_PROYECTO} alPedir={NADA} alRecargar={NADA} />
+    );
+    expect(container.querySelectorAll("details")).toHaveLength(0);
+    expect(screen.queryByLabelText(/registro de la sincronización/i)).toBeNull();
+    rerender(<CloudStudio sync={CON_PROYECTO} registro={[]} alPedir={NADA} alRecargar={NADA} />);
+    expect(container.querySelectorAll("details")).toHaveLength(0);
+  });
+
+  /**
+   * La operación se lee por su ACCIÓN y su hora, con los mismos nombres que los botones: quien
+   * acaba de pulsar «Actualizar repo local» viene a buscar eso, y un registro que lo rebautizara
+   * con el nombre del protocolo obligaría a traducir entre el botón y su historia.
+   *
+   * La hora se compara contra el `selloDeFecha` compartido y no contra una cadena escrita a
+   * mano: lo que se fija aquí es el CABLEADO —que la cabecera lleva el instante de la
+   * operación por la función de siempre—, porque el formato tiene su propio test
+   * (`selloDeFecha.test.ts`), y una cadena a mano ataría este test a la zona horaria de quien
+   * lo corre.
+   */
+  it("cada operación lleva su acción y su hora, por el sello de siempre", () => {
+    const { container } = render(
+      <CloudStudio
+        sync={CON_PROYECTO}
+        registro={[DE_SUBIDA, OPERACION("bajar", "2019-03-05T09:00:00.000Z", ["bajados 2 ficheros (git)"])]}
+        alPedir={NADA}
+        alRecargar={NADA}
+      />
+    );
+
+    const operaciones = container.querySelectorAll("details");
+    expect(operaciones).toHaveLength(2);
+    const cabeceras = [...operaciones].map((op) => op.querySelector("summary")!.textContent);
+    expect(cabeceras[0]).toContain("Subir");
+    expect(cabeceras[0]).toContain(selloDeFecha("2019-03-05T10:00:00.000Z")!);
+    expect(cabeceras[1]).toContain("Actualizar repo local");
+    expect(cabeceras[1]).toContain(selloDeFecha("2019-03-05T09:00:00.000Z")!);
+  });
+
+  /**
+   * **La más reciente ABIERTA y las de antes plegadas**, que es lo que se viene a mirar: se
+   * acaba de pulsar un botón y lo que se quiere es el final de esa operación. El orden lo trae
+   * `App` —de la más nueva a la más vieja—, así que la abierta es siempre la de arriba, y con
+   * varias operaciones lo de antes se queda a un clic sin tapar la cifra de la banda.
+   */
+  it("sale abierta la más reciente y plegadas las demás", () => {
+    const { container } = render(
+      <CloudStudio
+        sync={CON_PROYECTO}
+        registro={[DE_SUBIDA, OPERACION("bajar", "2019-03-05T09:00:00.000Z", ["bajados 2 ficheros (git)"])]}
+        alPedir={NADA}
+        alRecargar={NADA}
+      />
+    );
+    const abiertas = [...container.querySelectorAll("details")].map((op) => op.open);
+    expect(abiertas).toEqual([true, false]);
+  });
+
+  /**
+   * Y las líneas van TAL CUAL, sangría incluida: son las de la consola, y el plan de la subida
+   * se lee por su sangría. Un `<pre>` que las recompusiera —o que las juntara en un párrafo—
+   * sería una segunda versión de algo que ya se cuenta en `agent/` y en `cli/`.
+   */
+  it("las líneas se pintan tal cual, con su sangría y sin recomponer", () => {
+    const { container } = render(
+      <CloudStudio sync={CON_PROYECTO} registro={[DE_SUBIDA]} alPedir={NADA} alRecargar={NADA} />
+    );
+    const lineas = container.querySelector("pre")!.textContent;
+    expect(lineas).toBe(DE_SUBIDA.lineas.join("\n"));
+    expect(lineas).toContain("  + app/Clientes.xne");
+    expect(lineas).toContain("subidos 1, fallaron 0");
+  });
+
+  /**
+   * Lo que no es una fecha no se pinta, y la operación SIGUE: un «undefined» o un «Invalid
+   * Date» en la cabecera es peor que una operación sin hora —que es lo que se ve si el acto
+   * trae algo raro—, pero perder además sus líneas por una fecha mala sería tirar el dato
+   * bueno por el malo. Misma regla que el sello de la barra.
+   */
+  it("con una hora ilegible la operación se pinta sin sello, y no con un «undefined»", () => {
+    const { container } = render(
+      <CloudStudio
+        sync={CON_PROYECTO}
+        registro={[OPERACION("subir", "no-es-una-fecha", ["subidos 1, fallaron 0"])]}
+        alPedir={NADA}
+        alRecargar={NADA}
+      />
+    );
+    const cabecera = container.querySelector("summary")!.textContent!;
+    expect(cabecera).toBe("Subir");
+    expect(cabecera).not.toMatch(/undefined|Invalid/i);
+    expect(container.querySelector("pre")!.textContent).toBe("subidos 1, fallaron 0");
+  });
+
+  /**
+   * **El registro se pinta también sin alta**, y esa es la mitad que un `return` temprano se
+   * lleva por delante: la banda de un proyecto que ya no está dado de alta no ofrece botones
+   * —no se puede sincronizar—, pero la operación que SÍ ocurrió consta, y borrarla al quitar
+   * el alta es perder la historia por un cambio de configuración. Se pinta en las dos ramas
+   * porque el componente vive fuera de las dos.
+   */
+  it("sin alta en CloudStudio, el registro sigue ahí", () => {
+    const { container } = render(
+      <CloudStudio sync={{}} registro={[DE_SUBIDA]} alPedir={NADA} alRecargar={NADA} />
+    );
+    expect(screen.getByText(/no está dado de alta/i)).toBeTruthy();
+    const op = container.querySelector("details")!;
+    expect(within(op).getByText("Subir")).toBeTruthy();
+    expect(op.querySelector("pre")!.textContent).toContain("subidos 1, fallaron 0");
+  });
+
+  /**
+   * Y la nota deja de prometer el chat: decía «lo que pasa … sale en el chat», que con el
+   * registro mudado aquí es sencillamente falso — una ayuda que se queda vieja es peor que no
+   * tenerla, y esta mandaba a buscar la operación donde ya no está.
+   */
+  it("la nota manda al registro, y ya no promete el chat", () => {
+    render(<CloudStudio sync={CON_PROYECTO} alPedir={NADA} alRecargar={NADA} />);
+    const nota = screen.getByText(/sobrescribe esta copia/i).textContent!;
+    expect(nota).toMatch(/queda aquí abajo, en el registro de esta sesión/i);
+    expect(nota).not.toMatch(/en el chat/i);
+    // La otra variante —sin «Subir»— lleva la misma promesa: era la que decía «se niega con
+    // cambios sin commitear, y lo que pasa sale en el chat».
+    cleanup();
+    render(<CloudStudio sync={{ ...CON_PROYECTO, pendientes: 0 }} alPedir={NADA} alRecargar={NADA} />);
+    const sinSubir = screen.getByText(/sobrescribe esta copia/i).textContent!;
+    expect(sinSubir).toMatch(/queda aquí abajo, en el registro de esta sesión/i);
+    expect(sinSubir).not.toMatch(/en el chat/i);
   });
 });
 

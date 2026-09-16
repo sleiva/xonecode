@@ -294,6 +294,21 @@ function ActoVista({
       // el acto existe en el tipo compartido y un `default` que diera por hecho `.texto`
       // sería una excepción en pantalla el día que alguien lo implemente aquí.
       return <Text color={temaInk.mudo}>{`  ${acto.nombre}`}</Text>;
+    case "sincronizacion":
+      // Tampoco llega HOY, y por el mismo camino que el artefacto pero al revés: el acto lo
+      // produce la piel que implementa `Consola.anotarSincronizacion`, y esta no la
+      // implementa —así que `/sync` le escribe el recorrido por `escribir` y aquí se ve como
+      // los actos de `sistema` de siempre, línea a línea, que es lo que debe hacer un
+      // terminal—. Se pintan sus líneas y nada más: en esta pantalla una operación de
+      // sincronización ES un aviso mudo, y un rótulo con la acción sería un adorno que el
+      // terminal nunca enseña.
+      return (
+        <>
+          {acto.lineas.map((linea, i) => (
+            <Text key={i} color={temaInk.mudo} wrap="truncate-end">{`  ${linea}`}</Text>
+          ))}
+        </>
+      );
     default:
       // sistema: mudo e indentado — un aviso, no la conversación.
       return <Text color={temaInk.mudo}>{`  ${acto.texto}`}</Text>;

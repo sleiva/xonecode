@@ -28,7 +28,8 @@ import type { PendienteDeAprobacion } from "../core/events.js";
 import type { ResultadoDeTurno } from "../core/entrega.js";
 import type { LineaDeDiff } from "../core/diff.js";
 import { interpretAnswer, type Decision } from "../vendor/hitl.js";
-import type { PoliticaDeAprobacion } from "../core/cloudstudio.js";
+import type { AccionDeSincronizacion, PoliticaDeAprobacion } from "../core/cloudstudio.js";
+import type { NarracionDeSincronizacion } from "../core/actos.js";
 import { crearPielStdio, type Escribir } from "./stdio.js";
 import { esTema, seleccionarTema, TEMAS, type IdTema } from "./tema.js";
 import { acuseDeModelo } from "./acuseDeModelo.js";
@@ -167,7 +168,7 @@ export interface Consola {
    * `/sync` (ver `politicaInteractiva` más abajo), que sí tiene `preguntar`/`escribir`.
    */
   sincronizar?: (
-    accion: "estado" | "bajar" | "subir",
+    accion: AccionDeSincronizacion,
     raiz: string,
     politicaDeAprobacion?: PoliticaDeAprobacion,
     /**
@@ -185,6 +186,24 @@ export interface Consola {
     // exige porque SOBRESCRIBE el disco y sin commit no hay nada que recuperar.
     | { tipo: "arbol-sucio"; accion: "bajar" | "subir"; pendientes: string[] }
   >;
+  /**
+   * Una operación de sincronización ENTERA, para la piel que tiene un sitio propio donde
+   * contarla.
+   *
+   * **Es OPCIONAL, y por la misma asimetría que `fase?`, `razonamiento?` y `notificacion?` en
+   * `Piel`**: quien no lo implemente —stdio, la TUI, la consola de una tarea, los dobles de los
+   * tests— sigue recibiendo el recorrido por `escribir`, al vuelo y byte a byte como siempre.
+   * Lo que cambia NO es por dónde pasa la sincronización: `/sync subir` y `/sync bajar` siguen
+   * siendo la MISMA línea encolada, con el mismo plan, la misma guarda de árbol sucio y la
+   * misma aprobación. Lo que cambia es DÓNDE SE CUENTA, y eso es una propiedad del destino, no
+   * de la línea: la misma orden en el terminal DEBE imprimir su recorrido y en el navegador no
+   * tiene por qué ensuciar el hilo.
+   *
+   * El nombre es el de la piel web (`anotar*`), y aquí significa «guárdalo en tu registro»: el
+   * comando acumula las líneas y entrega UNA operación al final, ya con su hora y su acción.
+   * Implementado, `/sync` no escribe ni una línea por `escribir`.
+   */
+  anotarSincronizacion?: (operacion: NarracionDeSincronizacion) => void;
 }
 
 /**
@@ -908,8 +927,17 @@ function manejadorDeModelo(papel: Papel | undefined): ManejadorDeBarra {
  * existe — hace falta, además del veredicto del juez, que el código compruebe
  * condiciones deterministas (verificador en verde, árbol limpio, plan sin pendientes):
  * ver el comentario de `PoliticaDeAprobacion`.
+ *
+ * **`decir` es el sumidero de la operación**, y entra por parámetro porque el plan NO siempre
+ * se cuenta en el scrollback: una piel con registro propio (`anotarSincronizacion`) guarda la
+ * operación entera y no quiere ni una línea suelta en el hilo. Por omisión es `consola.escribir`,
+ * así que quien no pase nada —los tests, cualquier otro llamador— tiene el comportamiento de
+ * siempre.
  */
-export function politicaInteractiva(consola: Consola): PoliticaDeAprobacion {
+export function politicaInteractiva(
+  consola: Consola,
+  decir: (texto: string) => void = (texto) => consola.escribir(texto)
+): PoliticaDeAprobacion {
   return async (plan) => {
     // El plan se compone ANTES de escribirlo, y no es por estilo: las MISMAS líneas que van
     // al scrollback viajan en la PREGUNTA, para que una piel con tarjeta las enseñe dentro
@@ -930,13 +958,13 @@ export function politicaInteractiva(consola: Consola): PoliticaDeAprobacion {
         return { texto: `  ${signo} ${operacion.ruta}`, cambio };
       }),
     ];
-    consola.escribir(`\n${"─".repeat(60)}\n`);
-    for (const linea of lineas) consola.escribir(`${linea.texto}\n`);
+    decir(`\n${"─".repeat(60)}\n`);
+    for (const linea of lineas) decir(`${linea.texto}\n`);
     // Sin pista de tecleo en el enunciado: la pone la piel que se contesta escribiendo
     // (`PISTA_DE_DECISION`), y por eso viaja un `decision` con esta pregunta.
     const respuesta = await consola.preguntar("¿Subir a CloudStudio?", { lineas });
     const decision = interpretAnswer(respuesta);
-    consola.escribir(decision.type === "approve" ? "  → APROBADO\n" : "  → rechazado, no se ha aplicado nada\n");
+    decir(decision.type === "approve" ? "  → APROBADO\n" : "  → rechazado, no se ha aplicado nada\n");
     return decision.type === "approve";
   };
 }
@@ -1046,24 +1074,69 @@ export const COMANDOS: Record<string, { descripcion: string; manejador: Manejado
         consola.escribir("uso: /sync [estado|bajar|subir]\n");
         return { seguir: true };
       }
-      // El hueco de política solo se rellena para «subir»: es la única acción que
-      // escribe. `agent/subida.ts#subir` la invoca con el plan YA CONSTRUIDO, así que
-      // esto puede pasarse siempre — si el árbol está sucio o no hay nada que subir, ni
-      // siquiera llega a invocarse.
-      const politicaDeAprobacion = accion === "subir" ? politicaInteractiva(consola) : undefined;
-      const resultado = await consola.sincronizar(accion, estado.raiz, politicaDeAprobacion, consola.escribir);
-      if (resultado.tipo === "arbol-sucio") {
-        // Al subir se sube el estado de un COMMIT, no un borrador: así «lo que está
-        // arriba» es siempre un commit concreto y mover la ref significa algo. Al bajar
-        // el motivo es otro y hay que decirlo: la descarga SOBRESCRIBE el disco.
-        const porque =
-          resultado.accion === "subir"
-            ? "commitea antes de subir"
-            : "la descarga sobrescribe el disco; commitea antes de bajar (o guarda una copia, si no llevas git)";
-        consola.escribir(`hay cambios sin commitear (${resultado.pendientes.join(", ")}); ${porque}\n`);
-        return { seguir: true };
+      // Estas dos salidas de arriba NO son una operación y no van al registro: son el mismo
+      // aviso de uso que da cualquier comando mal escrito, y no hay nada que contarle a nadie
+      // sobre una sincronización que no llegó a empezar.
+
+      /**
+       * **Dónde se cuenta esta operación.** Es la decisión de todo el comando, y por eso está
+       * en una sola variable.
+       *
+       * Sin `anotarSincronizacion` —stdio, la TUI, la consola de una tarea, los dobles— el
+       * sumidero ES `escribir`: al vuelo, en orden, byte a byte como siempre. Con él, las
+       * líneas se acumulan y se entrega UNA operación al final, ya con su acción y su hora:
+       * en el navegador el recorrido de una subida no tiene por qué meterse en el hilo, donde
+       * son nueve renglones de consola cruda entre dos mensajes de verdad (medido).
+       *
+       * Las líneas se guardan TAL CUAL y solo se les quita el `\n` final y las que van vacías:
+       * el salto de línea es del scrollback —donde cada `escribir` es una línea— y no del dato,
+       * y la raya que `politicaInteractiva` dibuja arriba del plan es parte de lo que se dijo.
+       * Recomponer aquí sería una segunda versión de algo que ya está contado en `agent/`, y
+       * la copia que nadie vuelve a leer es la que se queda vieja.
+       */
+      const anotar = consola.anotarSincronizacion;
+      const lineas: string[] = [];
+      const decir: (texto: string) => void =
+        anotar === undefined
+          ? (texto) => consola.escribir(texto)
+          : (texto) => {
+              for (const linea of texto.replace(/\n$/, "").split("\n")) {
+                if (linea.trim() !== "") lineas.push(linea);
+              }
+            };
+      const cuando = new Date().toISOString();
+
+      try {
+        // El hueco de política solo se rellena para «subir»: es la única acción que
+        // escribe. `agent/subida.ts#subir` la invoca con el plan YA CONSTRUIDO, así que
+        // esto puede pasarse siempre — si el árbol está sucio o no hay nada que subir, ni
+        // siquiera llega a invocarse.
+        const politicaDeAprobacion = accion === "subir" ? politicaInteractiva(consola, decir) : undefined;
+        const resultado = await consola.sincronizar(accion, estado.raiz, politicaDeAprobacion, decir);
+        if (resultado.tipo === "arbol-sucio") {
+          // Al subir se sube el estado de un COMMIT, no un borrador: así «lo que está
+          // arriba» es siempre un commit concreto y mover la ref significa algo. Al bajar
+          // el motivo es otro y hay que decirlo: la descarga SOBRESCRIBE el disco.
+          const porque =
+            resultado.accion === "subir"
+              ? "commitea antes de subir"
+              : "la descarga sobrescribe el disco; commitea antes de bajar (o guarda una copia, si no llevas git)";
+          decir(`hay cambios sin commitear (${resultado.pendientes.join(", ")}); ${porque}\n`);
+        } else {
+          decir(resultado.texto);
+        }
+      } finally {
+        // En el `finally` y no al final del `try`, por un motivo medido: `crearSincronizador`
+        // puede LANZAR —`limpio`, `descargar`, `subirProyecto` y hasta el `sesion.cerrar()` de
+        // su propio `finally` son `await` de cosas que tocan la red y el disco—, y con las
+        // líneas acumuladas una excepción se llevaría por delante todo lo que ya se había
+        // contado. En el scrollback de stdio, que es append-only, no se perdía nada.
+        //
+        // La excepción se deja PROPAGAR: un fallo inesperado lo dice el harness en el hilo,
+        // que es donde tiene que verse. Esconderlo en el registro sería lo contrario de lo
+        // que esto busca — el registro es de las operaciones que corrieron, no de las que no.
+        anotar?.({ accion, cuando, lineas });
       }
-      consola.escribir(resultado.texto);
       return { seguir: true };
     },
   },

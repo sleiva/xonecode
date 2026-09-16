@@ -11,6 +11,8 @@
  * el evento ya traía y el acto tiraba al componer la línea.
  */
 
+import type { AccionDeSincronizacion } from "./cloudstudio.js";
+
 /**
  * Lo que se sabe de la línea i-ésima de un acto de herramientas.
  *
@@ -94,7 +96,46 @@ export type Acto =
    * cero—. Quien lo lea tiene que poder distinguirlo, que es lo que hace `consumoDeLosActos`.
    */
   | { tipo: "fin"; ms: number; modelo?: string; consumo?: ConsumoDeTurno }
-  | { tipo: "error"; texto: string };
+  | { tipo: "error"; texto: string }
+  /**
+   * UNA operación de sincronización con CloudStudio —subir o bajar—, contada entera y de una
+   * pieza: las líneas que el terminal habría impreso, su hora y cuál de las tres acciones fue.
+   *
+   * **No es una conversación, y por eso no es una línea de `sistema`.** El hilo es lo que se
+   * habla con el agente; una subida es un suceso del PROYECTO, que pasó porque alguien pulsó un
+   * botón y no porque se preguntara nada. Metido en el chat eran nueve renglones de consola
+   * cruda —el plan con su sangría, el `→ APROBADO`, el recuento— entre dos mensajes, y la
+   * conversación había que buscarla alrededor; y como acto `sistema` suelto, además, cada línea
+   * era un acto MÁS que se persistía y reaparecía al reabrir. Agrupadas aquí, la pestaña
+   * Revisión las lee como lo que son: operaciones, una detrás de otra, cada una con su hora.
+   *
+   * **Las líneas van TAL CUAL las escribió la operación**, sin recomponer ni resumir: es lo
+   * mismo que se habría visto en el terminal, y recomponerlas aquí sería una segunda versión de
+   * algo que ya se cuenta en `agent/subida.ts`, `agent/descarga.ts` y `cli/main.ts` — dos
+   * copias de la misma frase divergen, y la que nadie vuelve a leer es la que se queda vieja.
+   *
+   * `cuando` es ISO y es la hora de EMPEZAR, no la de acabar: es el instante que se recuerda
+   * («subí aquello a las 14:32»), y así una subida larga no se fecha por su último segundo.
+   *
+   * No lleva lo que no es de la operación: ni el enunciado de la pregunta —eso es la tarjeta de
+   * `preguntar`, y el `→ APROBADO` ya dice cómo se resolvió— ni los errores de uso del comando.
+   */
+  | {
+      tipo: "sincronizacion";
+      accion: AccionDeSincronizacion;
+      cuando: string;
+      lineas: string[];
+    };
+
+/**
+ * El acto `sincronizacion` SIN su discriminante: lo que se le entrega a la piel para que lo
+ * guarde.
+ *
+ * Existe para que el `tipo` se escriba UNA vez —donde vive el acto, que es `core/`— y quien lo
+ * construye en `cli/` no tenga que repetirlo: dos sitios escribiendo el mismo literal es el que
+ * se queda atrás el día que se renombre, y este repo ya sabe cómo acaba eso.
+ */
+export type NarracionDeSincronizacion = Omit<Extract<Acto, { tipo: "sincronizacion" }>, "tipo">;
 
 /** Los tokens de UNA cuenta. La forma que ya usa `ConsumoDeSesionPorCuenta` (`core/ports.ts`). */
 export interface ConsumoDeUnaCuenta {

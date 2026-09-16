@@ -644,6 +644,34 @@ feedback del desarrollador** y no es terminal.
   además de en la nota, en una sola constante: el nombre nuevo dice la DIRECCIÓN y se lee como el
   `git pull` que esa operación no es. La clase sigue siendo `.bajar`, que nombra la ACCIÓN del
   cable y no la etiqueta.
+  **Y EL RECORRIDO DE LA OPERACIÓN SE CUENTA EN LA BANDA, NO EN EL HILO** (acto
+  `sincronizacion`: `accion`, `cuando` y `lineas`). En el hilo eran renglones de consola cruda
+  —el plan con su sangría, el `→ APROBADO`, el recuento— entre dos mensajes de la conversación,
+  y encima se PERSISTÍAN en el `.jsonl` y volvían al reabrir: el hilo es la conversación, y una
+  operación de git es un suceso del proyecto. Se cuenta abajo, con la acción y la hora por
+  cabecera, la más reciente abierta. **Dónde se cuenta es propiedad de la PIEL y no de la
+  línea**: el sumidero es un método OPCIONAL del puerto (`anotarSincronizacion?`), con la misma
+  asimetría que `fase?`, `razonamiento?` y `notificacion?` — quien no lo implemente (stdio, la
+  TUI, la consola de una tarea, los dobles) sigue recibiendo el recorrido por `escribir` **al
+  vuelo y byte a byte**, que es lo que debe hacer una consola de terminal, y la tubería sigue
+  idéntica. Una bandera en `LineaDeConsola` decidiría por línea lo que es una propiedad del
+  destino: la misma `/sync subir` en el terminal DEBE imprimir su recorrido. **Y lo que el
+  registro guarda es EXACTAMENTE lo que el terminal habría impreso** —ni un resumen, ni una
+  versión maquetada—: solo se le quita el `\n` final (es del scrollback, no del dato) y las
+  líneas vacías; recomponer o filtrar una línea por su aspecto sería maquetar por la puerta de
+  atrás. La operación se entrega en un `finally` **por un motivo medido**: `crearSincronizador`
+  puede lanzar —toca red y disco, y su propio `finally` cierra sesión—, y con las líneas
+  acumuladas una excepción se llevaría por delante todo lo ya contado, que en un scrollback
+  append-only no se perdía. **El enunciado de una DECISIÓN deja de anotarse** (en la web): con
+  `decision` puesta ya viaja en el mensaje `pregunta` y la tarjeta lo pinta como su título, así
+  que anotarlo era duplicarlo y era la última línea de sincronización que quedaba en el hilo;
+  las preguntas de texto libre y los secretos conservan su copia, que es donde se contestan. El
+  registro se pinta en los SEIS estados de Revisión, porque la ranura `cloudstudio` se pinta en
+  los seis y un `return` temprano no escondería solo la cifra. **Y lo que NO entra en el registro**:
+  el enunciado de la pregunta («¿Subir a CloudStudio?»), que no es una línea de la operación sino
+  el argumento de `preguntar` —la cabecera ya dice qué operación fue y el `→ APROBADO` dice cómo
+  acabó—, y los dos errores de USO de `/sync`, que no son una operación y son el mismo tipo de
+  mensaje que el de cualquier otro comando mal escrito.
 
 ### Sesiones, hilos y git
 

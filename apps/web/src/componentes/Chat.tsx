@@ -163,6 +163,20 @@ export function Chat({
    */
   let delTurno: TramoDePulso[] = [];
   for (const [indice, acto] of actos.entries()) {
+    /**
+     * Una operación de sincronización pasa de largo, y sin tocar el tramo abierto.
+     *
+     * No se pinta aquí —no es conversación: se cuenta en el registro de la banda de
+     * sincronización, en Revisión— y por eso no puede cerrar el tramo de pulso como hace
+     * cualquier otro acto de conversación: partiría en dos el trabajo del agente por una
+     * operación de git que no tiene nada que ver con él. Va con `continue` y NO con el
+     * `return null` del `switch` de abajo, que es lo que haría lo contrario.
+     *
+     * Que hoy no pueda pillarse un tramo vivo no lo convierte en inofensivo: una línea
+     * encolada solo corre entre turnos, pero la garantía barata —no romper nada— cuesta una
+     * línea, y la otra dirección sí tiene un fallo que medir.
+     */
+    if (acto.tipo === "sincronizacion") continue;
     if (ES_PULSO.has(acto.tipo)) {
       if (tramo === undefined) {
         tramo = { desde: indice, actos: [], terminado: false };

@@ -467,6 +467,57 @@ describe("consolaWeb: la forma de una pregunta viaja con ella", () => {
   });
 });
 
+describe("consolaWeb: el registro de la sincronización", () => {
+  /**
+   * El recorrido de una operación de `/sync` —el plan, el `→ APROBADO`, las cuentas— es el
+   * ÚNICO sitio donde esta piel cambia lo que hace con lo que la consola le cuenta: en el
+   * hilo eran nueve renglones de consola cruda entre dos mensajes de verdad (medido), y aquí
+   * son UN acto con su acción, su hora y sus líneas, que es lo que la banda de Revisión pinta
+   * y lo que el `.jsonl` de la sesión guarda.
+   *
+   * Se comprueba el acto entero y no solo que exista: si la piel se quedara con la acción y
+   * tirara las líneas —o al revés— el registro saldría vacío con todo en verde.
+   */
+  it("una operación llega al registro como UN acto, con su acción, su hora y sus líneas", () => {
+    const c = crearConsolaWeb();
+    const lineas = ["SUBIDA A CLOUDSTUDIO — 1 operación", "  + app.xml", "subidos 1, fallaron 0"];
+
+    // El puerto lo declara OPCIONAL, así que un `?.` dejaría este test aprobando por vacío
+    // el día que la piel dejara de implementarlo — que es justo el fallo que hay que cazar.
+    expect(c.consola.anotarSincronizacion).toBeDefined();
+    c.consola.anotarSincronizacion!({
+      accion: "subir",
+      cuando: "2026-09-16T14:32:11.000Z",
+      lineas,
+    });
+
+    expect(c.actos()).toEqual([
+      { tipo: "sincronizacion", accion: "subir", cuando: "2026-09-16T14:32:11.000Z", lineas },
+    ]);
+  });
+
+  /**
+   * **El enunciado de una DECISIÓN no se anota**, y es la última línea de sincronización que
+   * quedaba en el hilo: con `decision` puesta, el texto ya viaja en el mensaje `pregunta` y la
+   * tarjeta lo pinta como título del diálogo —anotarlo además lo dejaba entre dos mensajes
+   * justo después de que la operación dejara de escribirse ahí—. La pregunta de TEXTO LIBRE
+   * conserva su copia en el transcript: ahí el enunciado es el rótulo de un campo que se
+   * contesta dentro del hilo, y sin él quedaría una respuesta sin pregunta.
+   *
+   * Que la decisión siga VIAJANDO entera lo fija el describe de arriba («la forma de una
+   * pregunta viaja con ella»): esto no la esconde, solo deja de duplicarla.
+   */
+  it("una decisión no deja su enunciado en el hilo; una pregunta de texto libre SÍ", async () => {
+    const c = crearConsolaWeb();
+
+    await c.consola.preguntar("¿Subir a CloudStudio?", { lineas: [{ texto: "SUBIDA A CLOUDSTUDIO" }] });
+    expect(c.actos()).toEqual([]);
+
+    await c.consola.preguntar("URL MCP de CloudStudio: ");
+    expect(c.actos()).toEqual([{ tipo: "sistema", texto: "URL MCP de CloudStudio: " }]);
+  });
+});
+
 describe("consolaWeb: reconexión", () => {  it("reconectar reemite todos los actos y no los duplica en el servidor", () => {
     const c = crearConsolaWeb();
     c.conectar();
