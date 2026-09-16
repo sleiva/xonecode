@@ -101,19 +101,22 @@ describe("Transcript", () => {
   /**
    * **La ranura, no el contenido**: cada panel se monta al elegir su pestaña y solo entonces
    * —`{pestana === … ? … : …}`—, que es lo que hace que la petición que cada uno lleva dentro
-   * no salga hasta que alguien abre la suya. Si CloudStudio se cayera del despacho, la
-   * pestaña se pintaría VACÍA, y eso es un control sin dato detrás con su botón ya pulsado.
+   * no salga hasta que alguien abre la suya. Si Revisión se cayera del despacho, la pestaña se
+   * pintaría VACÍA, y eso es un control sin dato detrás con su botón ya pulsado.
+   *
+   * Revisión es además la que lleva DENTRO la banda de CloudStudio, así que este es el test
+   * que vigila que la mudanza no dejara sus dos botones sin montar en ninguna pestaña.
    */
-  it("la pestaña «cloudstudio» pinta SU panel, y no el de al lado", () => {
+  it("la pestaña «revision» pinta SU panel, y no el de al lado", () => {
     render(
       <Transcript
         actos={[...ACTOS]}
-        pestana="cloudstudio"
-        cloudstudio={<p>lo de cloudstudio</p>}
+        pestana="revision"
+        revision={<p>lo de revisión</p>}
         ficheros={<p>lo de ficheros</p>}
       />
     );
-    expect(screen.getByText("lo de cloudstudio")).toBeTruthy();
+    expect(screen.getByText("lo de revisión")).toBeTruthy();
     expect(screen.queryByText("lo de ficheros")).toBeNull();
   });
 });

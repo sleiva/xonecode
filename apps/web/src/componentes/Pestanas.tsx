@@ -2,14 +2,7 @@ import clsx from "clsx";
 import conversacion from "../../estilos/ConversationRoot.module.css";
 import estilos from "./Pestanas.module.css";
 
-export type Pestana =
-  | "chat"
-  | "ficheros"
-  | "revision"
-  | "cloudstudio"
-  | "artefactos"
-  | "tareas"
-  | "trazas";
+export type Pestana = "chat" | "ficheros" | "revision" | "artefactos" | "tareas" | "trazas";
 
 /**
  * La tira de pestañas: Chat, Tareas, Ficheros, Revisión y Trazas — más Artefactos, si la
@@ -50,11 +43,16 @@ export type Pestana =
  * pasó, y por eso siguen agrupadas donde estaban—, y Trazas es de otro destinatario (quien
  * depura el harness, no quien desarrolla la app), así que sigue cerrando la tira.
  *
- * **CloudStudio entra por ese mismo criterio, y es la tercera de ACCIÓN**: sus dos botones
- * mueven la copia del proyecto —subir y bajar—, y por eso existe SIEMPRE y su estado vacío
- * dice cómo se empieza cuando el proyecto no está dado de alta. Va la última de las tres, no
- * entre las de registro: no enseña lo que ya pasó, enseña lo que queda por subir y ofrece
- * hacerlo.
+ * **La sincronización con CloudStudio NO es una pestaña: vive dentro de Revisión**, como una
+ * banda arriba. Tenía la suya —era la tercera de ACCIÓN y existía siempre, con el mismo
+ * criterio que Tareas— y se fue de aquí el día que se miró lo que contesta: «cuánto queda por
+ * subir» es la MISMA pregunta que contesta Revisión —qué ha cambiado— medida contra otra
+ * referencia, la rama de la bajada en vez de la foto de la sesión. Dos pestañas para dos
+ * referencias del mismo diff obligaban a ir y volver para cuadrar los dos números, y el que
+ * se lee primero —«3 ficheros por subir»— no tenía por qué estar a un clic del que explica
+ * de dónde salen. Lo que NO cambia por mudarse: sigue existiendo siempre (Revisión existe
+ * siempre), y sus dos botones siguen mandando la INTENCIÓN por el lazo, con el plan, la
+ * guarda de árbol sucio y la aprobación del terminal.
  */
 export function Pestanas({
   pestana,
@@ -78,15 +76,11 @@ export function Pestanas({
     // más arriba). La cola de tareas en background es del proyecto ABIERTO, no de la máquina
     // entera — el kanban global ya vive en el escritorio. SIEMPRE presente, a propósito.
     { id: "tareas", etiqueta: "Tareas" },
-    // La tercera de ACCIÓN, y la última de ellas: mover la copia del proyecto contra
-    // CloudStudio. SIEMPRE presente — un proyecto que no está dado de alta es un estado, y
-    // su pestaña es donde se lee por qué y qué se hace. Va aquí, y no entre las de registro,
-    // porque ofrece hacer algo y no solo mirar lo hecho.
-    { id: "cloudstudio", etiqueta: "CloudStudio" },
     // El árbol del proyecto en el que se trabaja, con visor de solo lectura.
     { id: "ficheros", etiqueta: "Ficheros" },
     // Lo que ESTA sesión ha tocado, con su diff: la única vista que responde a «¿qué me ha
-    // cambiado el agente?» sin salir a un terminal.
+    // cambiado el agente?» sin salir a un terminal. Y lleva dentro la banda de CloudStudio
+    // —cuánto queda por subir—, que es la misma pregunta contra otra referencia.
     { id: "revision", etiqueta: "Revisión" },
     // Lo que el agente DIBUJÓ, que no es del proyecto y por eso no está en las dos de
     // arriba. Solo si hay alguno.

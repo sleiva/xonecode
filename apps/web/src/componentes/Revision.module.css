@@ -101,6 +101,25 @@
   color: var(--dsw-alias-state-error-primary);
 }
 
+/* La pestaña entera: la banda de CloudStudio arriba y, debajo, la vista de dos columnas. Es
+   una COLUMNA y no una fila porque la banda cruza todo el ancho —también el del índice— y no
+   es una tercera columna ni un bloque de la pila. `min-height: 0` por lo mismo que
+   `.revision`, que es su hijo elástico. */
+.tab {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+/* La banda, con su línea abajo: debajo va OTRA medida —la de esta sesión— y dos cifras sin
+   frontera entre ellas se leen como una sola. No lleva `container-type` propio a propósito:
+   lo que decide si el índice cabe es el ancho de `.revision`, que es quien tiene la consulta. */
+.banda {
+  flex: none;
+  border-bottom: 0.5px solid var(--dsw-alias-border-l2);
+}
+
 /* Dos columnas: la PILA de diffs a la izquierda (cede y scrollea) y el índice a la
    derecha (no cede). `min-height: 0` por lo que documenta `Maqueta.tsx` para `.viewArea`;
    `container-type` porque lo que decide si caben dos columnas es el ancho de ESTA caja,

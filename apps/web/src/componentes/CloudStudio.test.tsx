@@ -9,7 +9,7 @@ describe("CloudStudio: la medida", () => {
 
   /**
    * Sin lectura todavía no se pinta ni un cero ni el estado vacío de «no es de CloudStudio»:
-   * las tres cosas son distintas y confundirlas es la mentira que esta pestaña existe para no
+   * las tres cosas son distintas y confundirlas es la mentira que esta banda existe para no
    * contar. Aquí el servidor puede tardar —la medida es un `git diff`, no un campo del alta—,
    * así que «Consultando» es un estado de verdad con nombre propio.
    */
@@ -20,9 +20,8 @@ describe("CloudStudio: la medida", () => {
   });
 
   /**
-   * El estado vacío de una pestaña de ACCIÓN: dice cómo se empieza. Y dice «no está dado de
-   * alta», no «0 ficheros» — un proyecto offline tiene la pregunta sin respuesta, no la
-   * respuesta «nada».
+   * Su estado vacío dice cómo se empieza. Y dice «no está dado de alta», no «0 ficheros» — un
+   * proyecto offline tiene la pregunta sin respuesta, no la respuesta «nada».
    */
   it("sin proyecto ni rama dice que no está dado de alta, en vez de contar cero", () => {
     render(<CloudStudio sync={{}} alPedir={NADA} alRecargar={NADA} />);
@@ -126,11 +125,12 @@ describe("CloudStudio: cuándo se mide", () => {
   afterEach(cleanup);
 
   /**
-   * Al ENTRAR se mide siempre —esta pestaña se monta al elegirla, así que montar es entrar—,
-   * y después solo si no hay lectura. La cifra envejece por dos caminos que el servidor no
-   * ve igual: el agente escribe (lo sabe, y `App` la refresca al cerrar el turno) y `/sync`
-   * mueve la ref (no lo sabe: una línea encolada no avisa de cuándo acaba). Entrar a mirar ES
-   * la pregunta, así que montar vuelve a medir aunque el store traiga una lectura vieja.
+   * Al ENTRAR se mide siempre —esta banda vive dentro de Revisión, así que se monta al abrir
+   * esa pestaña, y montar es entrar—, y después solo si no hay lectura. La cifra envejece por
+   * dos caminos que el servidor no ve igual: el agente escribe (lo sabe, y `App` la refresca al
+   * cerrar el turno) y `/sync` mueve la ref (no lo sabe: una línea encolada no avisa de cuándo
+   * acaba). Entrar a mirar ES la pregunta, así que montar vuelve a medir aunque el store traiga
+   * una lectura vieja.
    */
   it("pide al montar aunque ya haya una lectura, porque entrar es mirar", () => {
     const recargar = vi.fn();
@@ -152,7 +152,7 @@ describe("CloudStudio: cuándo se mide", () => {
   });
 
   /**
-   * Y el caso que dejaba la pestaña colgada en «Consultando»: el store tira la lectura al
+   * Y el caso que dejaba la banda colgada en «Consultando»: el store tira la lectura al
    * cambiar de sesión o al caerse el cable sin desmontar el componente. Con la petición solo
    * en el montaje, no se recuperaba nunca — el mismo fallo medido en Ficheros y Revisión.
    */

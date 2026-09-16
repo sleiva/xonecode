@@ -370,7 +370,8 @@ export function App({
   }, [enviar]);
 
   /**
-   * Pedir la medida de lo que queda por subir (pestaña CloudStudio), y las dos acciones.
+   * Pedir la medida de lo que queda por subir (la banda de CloudStudio, dentro de Revisión),
+   * y las dos acciones.
    *
    * En `useCallback` por lo de siempre: la pestaña la llama desde un `useEffect`, y una
    * función nueva por render volvería a disparar el efecto en bucle.
@@ -434,18 +435,17 @@ export function App({
       // Los desplegados se vuelven a pedir: si no, seguirían enseñando el diff viejo del
       // fichero que el turno acaba de cambiar.
       for (const ruta of desplegados ?? []) pedirParche(ruta);
+      // Y la banda de CloudStudio, que vive aquí dentro desde que dejó de ser pestaña: el
+      // turno acaba de escribir, así que hay MÁS por subir que hace un momento. Es el único
+      // de los dos caminos por los que esa cifra envejece que el servidor sí conoce (el otro
+      // es `/sync`, que mueve la ref sin avisar de cuándo acaba); por eso se mide aquí, en el
+      // flanco de fin, y no se adelanta a ojo.
+      pedirSync();
     }
     if (pestana === "ficheros") {
       // El agente puede haber creado o cambiado ficheros: el árbol y el abierto se releen.
       pedirArbol();
       if (ficheroElegido !== undefined) void enviar({ clase: "fichero", ruta: ficheroElegido });
-    }
-    if (pestana === "cloudstudio") {
-      // El turno acaba de escribir, así que hay MÁS por subir que hace un momento. Es el
-      // único de los dos caminos por los que esta cifra envejece que el servidor sí conoce
-      // (el otro es `/sync`, que mueve la ref sin avisar de cuándo acaba); por eso se mide
-      // aquí, en el flanco de fin, y no se adelanta a ojo.
-      pedirSync();
     }
     // `desplegados` y `ficheroElegido` NO van en las dependencias a propósito: desplegar y
     // elegir ya piden lo suyo por su cuenta, y tenerlos aquí lo pediría dos veces.
@@ -1099,6 +1099,18 @@ export function App({
                   alPlegar={plegar}
                   alRecargar={pedirRevision}
                   conectado={estado.conectado}
+                  // La banda de la sincronización, que ya no es pestaña propia: «cuánto queda
+                  // por subir» es la misma pregunta que contesta Revisión medida contra otra
+                  // referencia. Se monta CON la pestaña, y montarse es lo que la hace medir
+                  // (`CloudStudio` pide al entrar): abrir Revisión ES entrar a mirarlo.
+                  cloudstudio={
+                    <CloudStudio
+                      {...(estado.sync === undefined ? {} : { sync: estado.sync })}
+                      alPedir={sincronizar}
+                      alRecargar={pedirSync}
+                      conectado={estado.conectado}
+                    />
+                  }
                 />
               }
               ficheros={
@@ -1156,14 +1168,6 @@ export function App({
                   {...(mirar === undefined ? {} : { alMirar: alMirarTarea, alDejarDeMirar: alDejarDeMirarTarea })}
                   {...(mirandoTarea === undefined ? {} : { mirando: mirandoTarea })}
                   {...(estado.mirada === undefined ? {} : { mirada: estado.mirada })}
-                />
-              }
-              cloudstudio={
-                <CloudStudio
-                  {...(estado.sync === undefined ? {} : { sync: estado.sync })}
-                  alPedir={sincronizar}
-                  alRecargar={pedirSync}
-                  conectado={estado.conectado}
                 />
               }
               // La tarjeta del chat abre el artefacto: cambia de pestaña y lo elige.

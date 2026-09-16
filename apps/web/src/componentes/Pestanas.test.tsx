@@ -25,19 +25,20 @@ describe("Pestanas", () => {
     expect(alElegirPestana).toHaveBeenCalledWith("trazas");
   });
 
-  it("son seis por omisión, en este orden: Chat · Tareas · CloudStudio · Ficheros · Revisión · Trazas", () => {
-    // Chat, Tareas y CloudStudio son las TRES pestañas de ACCIÓN —una habla con el agente, la
-    // otra le manda algo para que trabaje solo, y la tercera mueve la copia del proyecto
-    // contra CloudStudio— y van juntas al principio. Ficheros, Revisión (y Artefactos, si lo
-    // hay) son de REGISTRO: enseñan lo que ya pasó, y Trazas —de otro destinatario, quien
-    // depura el harness— cierra la tira. Ninguna de las tres de acción necesita dato para
+  it("son cinco por omisión, en este orden: Chat · Tareas · Ficheros · Revisión · Trazas", () => {
+    // Chat y Tareas son las DOS pestañas de ACCIÓN —una habla con el agente, la otra le manda
+    // algo para que trabaje solo— y van juntas al principio. Ficheros, Revisión (y Artefactos,
+    // si lo hay) son de REGISTRO: enseñan lo que ya pasó, y Trazas —de otro destinatario, quien
+    // depura el harness— cierra la tira. Ninguna de las dos de acción necesita dato para
     // aparecer: su estado vacío dice cómo se empieza.
+    //
+    // CloudStudio ya NO está aquí: su banda vive dentro de Revisión (`Pestanas.tsx` dice por
+    // qué). Si alguien le devolviera su pestaña, esta lista es la que lo tiene que pillar.
     render(<Pestanas pestana="revision" alElegirPestana={vi.fn()} />);
     expect(screen.getByRole("tablist")).not.toBeNull();
     expect(screen.getAllByRole("tab").map((t) => t.textContent)).toEqual([
       "Chat",
       "Tareas",
-      "CloudStudio",
       "Ficheros",
       "Revisión",
       "Trazas",
@@ -47,13 +48,12 @@ describe("Pestanas", () => {
 
   it("«Artefactos» solo está si la sesión dejó alguno: una pestaña vacía es un control sin dato", () => {
     render(<Pestanas pestana="chat" alElegirPestana={vi.fn()} hayArtefactos />);
-    // Delante de Trazas, que sigue siendo la última: es la de otro destinatario. Las tres de
+    // Delante de Trazas, que sigue siendo la última: es la de otro destinatario. Las dos de
     // acción van juntas al principio y Artefactos entre Revisión y Trazas, con el resto de
     // las de registro.
     expect(screen.getAllByRole("tab").map((t) => t.textContent)).toEqual([
       "Chat",
       "Tareas",
-      "CloudStudio",
       "Ficheros",
       "Revisión",
       "Artefactos",
@@ -88,22 +88,13 @@ describe("Pestanas", () => {
     expect(alElegirPestana).toHaveBeenCalledWith("tareas");
   });
 
-  /**
-   * CloudStudio entra por el criterio de las de ACCIÓN, no por el de Artefactos: sus dos
-   * botones mueven la copia del proyecto, así que existe siempre —también en un proyecto que
-   * NO está dado de alta, donde su estado vacío es justo lo que hay que leer—. Igual que
-   * Tareas, este test no le pasa ningún dato: un `haySync` que la condicionara lo pone rojo.
-   */
-  it("«CloudStudio» está SIEMPRE, aunque el proyecto no sea de CloudStudio", () => {
+  it("no hay ninguna pestaña «CloudStudio»: su banda vive dentro de Revisión", () => {
+    // La pregunta que la lista contesta —«¿dónde miro lo que ha cambiado?»— tenía dos
+    // respuestas a un clic de distancia: la foto de la sesión y la rama de CloudStudio. Ahora
+    // es una sola pestaña con las dos referencias dentro, así que aquí no puede quedar una
+    // pestaña suelta que vuelva a partirlas.
     render(<Pestanas pestana="chat" alElegirPestana={vi.fn()} />);
-    expect(screen.getByRole("tab", { name: "CloudStudio" })).toBeTruthy();
-  });
-
-  it("pulsar CloudStudio reporta «cloudstudio»", () => {
-    const alElegirPestana = vi.fn();
-    render(<Pestanas pestana="chat" alElegirPestana={alElegirPestana} />);
-    fireEvent.click(screen.getByRole("tab", { name: "CloudStudio" }));
-    expect(alElegirPestana).toHaveBeenCalledWith("cloudstudio");
+    expect(screen.queryByRole("tab", { name: /cloudstudio/i })).toBeNull();
   });
 
   it("Artefactos y Tareas conviven, cada una en su grupo: las de acción al principio, Artefactos junto a Trazas", () => {
@@ -111,7 +102,6 @@ describe("Pestanas", () => {
     expect(screen.getAllByRole("tab").map((t) => t.textContent)).toEqual([
       "Chat",
       "Tareas",
-      "CloudStudio",
       "Ficheros",
       "Revisión",
       "Artefactos",

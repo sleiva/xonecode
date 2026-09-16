@@ -5,9 +5,17 @@ import estilos from "./CloudStudio.module.css";
 /**
  * CloudStudio: de qué rama es este proyecto, cuánto queda por subir, y los dos botones.
  *
- * **Es la pestaña que contesta «¿tengo algo pendiente ahí arriba?» sin salir al terminal.**
- * Hasta ahora eso era `/sync estado` y nada más, y las otras dos acciones —el viaje de ida y
- * el de vuelta— vivían en un sitio donde hay que escribir la sintaxis.
+ * **Es lo que contesta «¿tengo algo pendiente ahí arriba?» sin salir al terminal.** Hasta
+ * ahora eso era `/sync estado` y nada más, y las otras dos acciones —el viaje de ida y el de
+ * vuelta— vivían en un sitio donde hay que escribir la sintaxis.
+ *
+ * **No es una pestaña: es la BANDA de arriba de Revisión.** Tuvo la suya, y se fue de ahí el
+ * día que se miró lo que contesta: «cuánto queda por subir» es la misma pregunta que contesta
+ * Revisión —qué ha cambiado— medida contra otra referencia, la rama de la bajada en vez de la
+ * foto de la sesión. Dos pestañas obligaban a ir y volver para cuadrar los dos números, y el
+ * que se lee primero no tenía por qué estar a un clic del que explica de dónde sale. El
+ * montaje sigue coincidiendo con lo que importa: se monta al abrir Revisión, y abrir Revisión
+ * es entrar a mirar.
  *
  * **Los botones NO son un segundo camino de subida.** Mandan la intención
  * (`{clase:"sync"}`) y el servidor las aplica encolando `/sync subir` y `/sync bajar` en el
@@ -22,7 +30,7 @@ import estilos from "./CloudStudio.module.css";
  * de los que el servidor solo conoce uno: el agente escribe (hay más que subir) y `/sync`
  * sube (hay menos), y lo segundo no lo sabe nadie — una línea encolada no avisa de cuándo
  * termina, y adelantar la cifra «a ojo» sería una medida que nadie ha hecho. Entrar a mirar
- * ES la pregunta, así que montar (esta pestaña se monta al elegirla) vuelve a medir.
+ * ES la pregunta, así que montar vuelve a medir.
  *
  * **«No es de CloudStudio» NO es «cero pendientes»**, y por eso son dos frases distintas: un
  * proyecto offline tiene la pregunta sin respuesta, no la respuesta «nada».
@@ -42,7 +50,7 @@ export function CloudStudio({
   conectado?: boolean;
 }) {
   /**
-   * El primer efecto conectado de esta pestaña. Existe para que «al entrar» y «si falta» no
+   * El primer efecto conectado de esta banda. Existe para que «al entrar» y «si falta» no
    * sean dos efectos distintos pidiendo a la vez: en el montaje las dos condiciones se
    * cumplen, y dos peticiones iguales por un render es lo que este repo ya se quitó de
    * encima en Revisión.
@@ -54,7 +62,7 @@ export function CloudStudio({
     const alEntrar = primeraMedida.current;
     primeraMedida.current = false;
     // Después del montaje solo se vuelve a pedir si NO hay lectura: el store la tira al
-    // cambiar de sesión y al caerse el cable, y sin esto la pestaña se quedaría en
+    // cambiar de sesión y al caerse el cable, y sin esto la banda se quedaría en
     // «Consultando» para siempre — el mismo fallo que se midió en Ficheros y en Revisión.
     if (!alEntrar && !sinLectura) return;
     alRecargar();
@@ -73,7 +81,7 @@ export function CloudStudio({
         <p className={estilos.aviso}>
           Este proyecto no está dado de alta en CloudStudio, así que no hay nada que subir ni
           que bajar. Se elige al abrir el proyecto —entorno, proyecto y rama—, y a partir de
-          ahí esta pestaña enseña lo que hay pendiente.
+          ahí esta banda enseña lo que hay pendiente.
         </p>
         {sync.error === undefined ? null : <p className={estilos.aviso}>{sync.error}</p>}
       </div>

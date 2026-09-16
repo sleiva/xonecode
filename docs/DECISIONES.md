@@ -3327,7 +3327,7 @@ con motivo accionable, y se dicen por consola Y en `sync.log` —que sobrevive a
 mientras el resto sube y la ref avanza. Si no hay ningún «resto», la ref no se mueve: se
 vuelven a declarar en cada `/sync`, que es la verdad.
 
-**La pestaña CloudStudio manda la INTENCIÓN, no la sintaxis** (mensaje `sync`,
+**La sincronización con CloudStudio manda la INTENCIÓN, no la sintaxis** (mensaje `sync`,
 `apps/web/src/componentes/CloudStudio.tsx`). Contesta una pregunta que hasta ahora solo tenía
 respuesta en el terminal —«¿tengo algo pendiente ahí arriba?»— y sus dos botones **no son un
 segundo camino de subida**: por el cable viaja `{clase:"sync", accion}`, y `estado` se MIDE en
@@ -3342,17 +3342,31 @@ exactamente donde el hueco de política que cierra `core/cloudstudio.ts#Politica
 podría reabrirse. Encolarlas tiene además un efecto que se busca: quedan serializadas detrás
 del turno en vuelo, que es lo que impide subir un árbol que el agente está escribiendo.
 
+**Y es una BANDA de Revisión, no una pestaña.** Nació con la suya —la tercera de ACCIÓN, junto
+a Chat y Tareas, presente siempre para que un proyecto que no está dado de alta tuviera dónde
+leerse— y se mudó al mirar lo que contesta: «cuánto queda por subir» es la MISMA pregunta que
+contesta Revisión —qué ha cambiado— medida contra otra referencia, la rama de la bajada en vez
+de la foto de la sesión. Dos pestañas para dos referencias del mismo diff obligaban a ir y
+volver para cuadrar los dos números, y el que se lee primero —«3 ficheros por subir»— no tenía
+por qué estar a un clic del que explica de dónde sale. La mudanza no cambia nada del fondo:
+sigue existiendo siempre (Revisión existe siempre), sigue mandando la intención por el lazo, y
+sigue sin condicionarse a ningún dato. Lo que sí obligó es a **reescribir los cinco `return`
+tempranos de `Revision.tsx` como una variable `cuerpo`**, y el porqué es de esta casa: la banda
+es una RANURA y `CloudStudio` mide al MONTARSE, así que un estado temprano que se la llevara por
+delante no escondería solo la cifra — **ni la pediría**. Y el estado que más la necesita es el
+de la lista vacía, donde esa cifra es lo único que hay que mirar. Hay un test por estado.
+
 **La medida se REHACE al entrar, y el motivo es un límite declarado.** La rama la puede mover
 un `/sync` encolado, y arriba —en CloudStudio— puede cambiar algo desde fuera, pero el
 servidor **no sabe cuándo termina una línea encolada**, así que tras `subir`/`bajar` no se
-reemite ninguna lectura. La pestaña la vuelve a pedir al ENTRAR —su montaje, que `Transcript`
-solo hace con su pestaña delante— y con «Volver a mirar», y `App` la pide en el flanco de fin
-de turno si la pestaña está delante, porque el turno acaba de escribir y ese sí es un momento
-que el servidor conoce. Es la forma de Ficheros y Revisión —se pide cuando NO hay dato y con
+reemite ninguna lectura. La banda la vuelve a pedir al ENTRAR —su montaje, que ahora ocurre al
+abrir Revisión— y con «Volver a mirar», y `App` la pide en el flanco de fin de turno si
+Revisión está delante, porque el turno acaba de escribir y ese sí es un momento que el
+servidor conoce. Es la forma de Ficheros y Revisión —se pide cuando NO hay dato y con
 `conectado`, no al montar— con una vuelta de tuerca: aquí el dato caduca solo.
 
 **Ausente no es «cero pendientes»**, y vale en las cuatro capas. Un proyecto que no está dado
-de alta llega con `proyecto` y `rama` AUSENTES y la pestaña dice que no lo está en vez de
+de alta llega con `proyecto` y `rama` AUSENTES y la banda dice que no lo está en vez de
 enseñar un `0` que nadie midió. `error` sale solo cuando no se pudo medir, y entonces **no
 viene `pendientes`**: los dos juntos serían una cifra y su negación en el mismo mensaje.
 `EstadoDeSync` nació como interfaz con NOMBRE por lo de siempre —unos campos embebidos dentro
@@ -3366,12 +3380,6 @@ turno no se nota —`commitDeTurno` hace `add -A`—, pero un fichero suelto sin
 la cifra. Es la MISMA cuenta que da `/sync estado` en el terminal, y por eso se declara en vez
 de taparse: un número que no cuadra con el de al lado se lee como un fallo mucho antes que como
 un límite.
-
-**Es la TERCERA pestaña de ACCIÓN**, no una de registro: sus botones mueven la copia del
-proyecto, así que existe SIEMPRE —también en un proyecto que no es de CloudStudio, donde su
-estado vacío es justo lo que hay que leer— y va con Chat y Tareas al principio de la tira. Es
-el criterio que `Pestanas.tsx` ya documenta para Tareas, y hay test que la exige sin pasarle
-ningún dato: un `haySync` que la condicionara lo pone rojo.
 
 **Y la costura está EXTRAÍDA y probada** (`arranque.ts#lecturaDeSync`). La medida vivía dentro
 del manejador del cable —una composición de producción en un cierre que todos los tests

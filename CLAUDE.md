@@ -575,8 +575,14 @@ feedback del desarrollador** y no es terminal.
   el mismo motivo: un diff volcado sin pedirlo deja fuera de la vista la LISTA, que es lo que la
   pestaña contesta. El efecto de `App.tsx` solo OLVIDA lo desplegado cuando el store tira la
   foto, para que las filas abiertas de una sesión no sigan abiertas sobre los ficheros de otra.
-- **La pestaña CloudStudio manda la INTENCIÓN, no la sintaxis** (mensaje `sync`): **`estado` se
-  MIDE en el servidor** contra la ref de la bajada —la MISMA cuenta que da `/sync estado`,
+- **La sincronización con CloudStudio es la BANDA de arriba de Revisión, no una pestaña** — tuvo
+  la suya y se fue de ahí cuando se miró lo que contesta: «cuánto queda por subir» es la misma
+  pregunta que contesta Revisión medida contra otra referencia, la rama de la bajada en vez de la
+  foto de la sesión. Va como **ranura** (`cloudstudio`) y por eso mismo **se pinta en los SEIS
+  estados de Revisión**, incluidos los cinco sin lista: `CloudStudio` mide al MONTARSE, así que un
+  `return` temprano no escondería solo la cifra — ni la pediría. Es la razón de que esos `return`
+  sean hoy una variable `cuerpo`. Y manda la INTENCIÓN, no la sintaxis (mensaje `sync`): **`estado`
+  se MIDE en el servidor** contra la ref de la bajada —la MISMA cuenta que da `/sync estado`,
   `agent/gitSync.ts#cambiosPendientes`— y **sin abrir sesión MCP**, porque el número ya está en
   local; **`subir` y `bajar` se ENCOLAN** como `/sync <accion>`, así que salen con el MISMO plan,
   la MISMA guarda de árbol sucio y la MISMA aprobación que el terminal — un segundo camino de
@@ -584,7 +590,7 @@ feedback del desarrollador** y no es terminal.
   `estado`. **`proyecto` y `rama` ausentes no son «cero pendientes»**, y el error de medida no
   lleva la ruta de la raíz (va por el cable). La medida se REHACE al entrar —a diferencia de
   Ficheros y Revisión, porque `/sync` mueve la ref sin que el servidor sepa cuándo acaba— y en el
-  flanco de fin de turno si la pestaña está delante.
+  flanco de fin de turno si Revisión está delante.
 
 ### Sesiones, hilos y git
 

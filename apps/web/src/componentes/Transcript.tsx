@@ -30,7 +30,6 @@ export function Transcript({
   revision,
   artefactos,
   tareas,
-  cloudstudio,
   alAbrirArtefacto,
 }: {
   actos: readonly Acto[];
@@ -52,6 +51,10 @@ export function Transcript({
    * props sueltas porque lo que aporta este componente es ELEGIR la vista; y como el
    * elemento solo se monta cuando se pinta, la petición al servidor que cada una lleva
    * dentro no sale hasta que alguien abre su pestaña.
+   *
+   * Revisión lleva DENTRO la sincronización con CloudStudio, que ya no tiene pestaña propia
+   * (`Pestanas.tsx` dice por qué): aquí no se nota —es una ranura como las demás— y su
+   * montaje sigue coincidiendo con el momento en que alguien entra a mirar.
    */
   ficheros?: ReactNode;
   revision?: ReactNode;
@@ -62,9 +65,6 @@ export function Transcript({
    *  —es de acción, no de registro como `artefactos` (`Pestanas.tsx`)—; aquí sigue siendo
    *  solo una ranura más. */
   tareas?: ReactNode;
-  /** La sincronización con CloudStudio del proyecto abierto. Como `tareas`, su pestaña existe
-   *  SIEMPRE (es de acción: lleva los dos botones), así que aquí es una ranura más. */
-  cloudstudio?: ReactNode;
   /** Abrir un artefacto desde su tarjeta del Chat. Lo resuelve `App`, que es quien recuerda
    *  la pestaña y el elegido. */
   alAbrirArtefacto?: (ruta: string) => void;
@@ -96,8 +96,6 @@ export function Transcript({
           artefactos
         ) : pestana === "tareas" ? (
           tareas
-        ) : pestana === "cloudstudio" ? (
-          cloudstudio
         ) : (
           ficheros
         )}

@@ -193,6 +193,92 @@ describe("Revision: la pila", () => {
   });
 });
 
+describe("Revision: la banda de CloudStudio", () => {
+  afterEach(cleanup);
+
+  /**
+   * La banda se pinta en los SEIS estados, y por eso los `return` tempranos se volvieron una
+   * variable. El motivo no es cosmético: `CloudStudio` mide al MONTARSE —abrir esta pestaña ES
+   * entrar a mirar—, así que un estado que se la llevara por delante no solo escondería el
+   * número: ni siquiera lo pediría. Y el estado que más la necesita es justo el de la lista
+   * vacía, donde esa cifra es lo ÚNICO que hay que mirar.
+   */
+  it("se ve cuando todavía está consultando, que es cuando más falta hace", () => {
+    render(
+      <Revision
+        ficheros={[]}
+        parches={{}}
+        desplegados={VACIO}
+        alDesplegar={NADA}
+        alPlegar={NADA}
+        alRecargar={NADA}
+        cloudstudio={<p>cuánto queda por subir</p>}
+      />
+    );
+    expect(screen.getByText("cuánto queda por subir")).toBeTruthy();
+    expect(screen.getByText(/consultando/i)).toBeTruthy();
+  });
+
+  it("y en los cuatro estados sin lista: sin-empezar, las dos sin-marca y la lista vacía", () => {
+    const conBanda = (props: Record<string, unknown>) =>
+      render(
+        <Revision
+          ficheros={[]}
+          parches={{}}
+          desplegados={VACIO}
+          alDesplegar={NADA}
+          alPlegar={NADA}
+          alRecargar={NADA}
+          cloudstudio={<p>cuánto queda por subir</p>}
+          {...props}
+        />
+      );
+    for (const props of [
+      { via: "sin-empezar" },
+      { via: "sin-marca" },
+      { via: "sin-marca", historica: true },
+      { via: "git" },
+    ]) {
+      const { unmount } = conBanda(props);
+      expect(screen.getByText("cuánto queda por subir")).toBeTruthy();
+      unmount();
+    }
+  });
+
+  it("y también con ficheros, por encima de la pila y del árbol", () => {
+    const { container } = render(
+      <Revision
+        via="git"
+        ficheros={[{ ruta: "a.xne", clase: "modificado", mas: 1, menos: 1 }]}
+        parches={{}}
+        desplegados={VACIO}
+        alDesplegar={NADA}
+        alPlegar={NADA}
+        alRecargar={NADA}
+        cloudstudio={<p>cuánto queda por subir</p>}
+      />
+    );
+    // La banda va ANTES que la vista de dos columnas en el orden del documento: arriba de
+    // todo, y no como una tercera columna ni un bloque de la pila.
+    const contenedor = container.firstElementChild!;
+    expect(contenedor.textContent).toContain("cuánto queda por subir");
+    expect(contenedor.textContent).toContain("Sesión");
+    const banda = contenedor.firstElementChild!;
+    expect(banda.textContent).toBe("cuánto queda por subir");
+  });
+
+  it("sin banda no se pinta un hueco: la pestaña es lo de siempre", () => {
+    const { container } = render(
+      <Revision via="git" ficheros={[]} parches={{}} desplegados={VACIO} alDesplegar={NADA} alPlegar={NADA} alRecargar={NADA} />
+    );
+    // Un solo hijo y es el aviso: sin ranura no queda un contenedor vacío con su borde
+    // debajo, que sería una línea separando la nada de la nada.
+    const contenedor = container.firstElementChild!;
+    expect(contenedor.children).toHaveLength(1);
+    expect(contenedor.firstElementChild!.textContent).toMatch(/no ha tocado ningún fichero/i);
+  });
+});
+
 /**
  * El rótulo de la cabecera es lo ÚNICO que separa dos afirmaciones distintas, y por eso va
  * con test: «Sesión» dice que lo de abajo lo hizo esta sesión, y eso solo se puede sostener
