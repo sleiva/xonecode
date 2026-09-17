@@ -27,7 +27,7 @@ y el backend (`agent/grafo/proyecto.ts`), y es la razón de ser de la aprobació
 ## Comandos
 
 ```sh
-npm run typecheck                      # tsc --noEmit
+npm run typecheck                      # tsc --noEmit del host Y del cliente (dos proyectos)
 npm test                               # vitest run — todo el suite, sin red ni clave ni simulador
 npm run test:watch
 npx vitest run src/core/turno.test.ts  # un solo fichero
@@ -43,6 +43,14 @@ de `xone-simulator --json`).
 
 **`npm test` no puede necesitar una clave, una conexión ni el simulador.** Es el invariante que
 sostiene todo el diseño de puertos: si un cambio lo rompe, está mal el cambio, no el test.
+
+**`typecheck` son DOS proyectos, encadenados con `&&`, y eso se comprueba** (`src/gate.test.ts`).
+El del cliente no se puede fundir en el `include` de la raíz: su `lib`, su `jsx` y sus `types`
+son otros. Con un solo `tsc --noEmit` el cliente web entero se quedaba sin comprobar —ni él ni
+`vite build`, que transpila sin mirar tipos—, así que un error de tipos suyo pasaba el gate y
+pasaba el build. El `&&` es parte de la regla: con `;` el código de salida sería el del último,
+y CI lee ese código. Los `*.test.ts(x)` del cliente siguen fuera a propósito
+(`apps/web/tsconfig.json` explica por qué).
 
 `vitest.config.ts` parte el suite en dos con `test.projects`: `host` acota `include` a `src/**`
 y corre en `node`; `cliente` acota a `apps/web/**` y corre en `jsdom`. No se vuelva al `include`
