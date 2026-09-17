@@ -70,8 +70,8 @@ export type SeccionDeAjustes = "apariencia" | "modelos" | "entornos" | "agentes"
 
 /**
  * Las secciones, en el orden en que se leen de arriba abajo, cada una con su icono: **General
- * primero**, y detrás lo concreto —con Modelos en segunda porque es la que se ABRE por
- * omisión—.
+ * primero** —y es también la que se ABRE por omisión, así que el orden y el arranque dicen lo
+ * mismo—, y detrás lo concreto, empezando por Modelos.
  *
  * Los iconos son de la librería de primitivas y están comprobados uno a uno contra los
  * exports de `lib/index.js`: `Cabecera.tsx` documenta el día que se montó uno que el
@@ -378,7 +378,16 @@ export function Ajustes({
   alCambiarConcurrencia?: (concurrencia: number) => void;
   alCerrar: () => void;
 }) {
-  const [seccion, setSeccion] = useState<SeccionDeAjustes>("modelos");
+  /**
+   * Se abre en **General**, que es la primera de la lista.
+   *
+   * Abría en Modelos —la segunda—, y eso hacía que la ventana empezara a media lista: quien
+   * entra a Ajustes sin una tarea concreta en la cabeza lee de arriba abajo, y el primer
+   * renglón de la navegación no era lo que tenía delante. Lo pidió el usuario y además
+   * arregla la incoherencia: el orden va de lo general a lo particular, así que arrancar en
+   * lo particular contradecía el propio orden que la lista declara.
+   */
+  const [seccion, setSeccion] = useState<SeccionDeAjustes>("general");
   /** Qué fila está pidiendo clave: es donde se pinta la pregunta del servidor. */
   const [editando, setEditando] = useState<string | undefined>(undefined);
   /** Registrar un entorno es un MODO: mientras dura, la lista no está (ver más abajo). */

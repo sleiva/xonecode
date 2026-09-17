@@ -60,6 +60,11 @@ describe("Ajustes", () => {
     expect(screen.getByText("AppDemo")).toBeTruthy();
   });
 
+  /**
+   * Los tests de esta zona navegan a **Modelos** después de montar, porque Ajustes abre en
+   * **General**: antes abría en Modelos y se podía afirmar sobre las filas de proveedor sin
+   * tocar nada. El clic es parte del escenario, no ruido — el que sobra se retiró.
+   */
   describe("proveedores personalizados", () => {
     const CON_PROPIO = [
       ...PROVEEDORES,
@@ -74,6 +79,7 @@ describe("Ajustes", () => {
 
     it("van en su propio grupo, con la URL a la vista: es a dónde iría la clave", () => {
       render(<Ajustes {...MANEJADORES} proveedores={CON_PROPIO} alAltaDeProveedor={() => {}} />);
+      fireEvent.click(screen.getByRole("button", { name: "Modelos" }));
       expect(screen.getByRole("heading", { name: /personalizados/i })).toBeTruthy();
       const fila = screen.getByText("Mi LM Studio").closest("li")!;
       expect(fila.textContent).toMatch(/custom:mi-lm-studio · http:\/\/localhost:1234\/v1/);
@@ -81,6 +87,7 @@ describe("Ajustes", () => {
 
     it("mientras se añade uno, la sección enseña SOLO el formulario", () => {
       render(<Ajustes {...MANEJADORES} proveedores={CON_PROPIO} alAltaDeProveedor={() => {}} />);
+      fireEvent.click(screen.getByRole("button", { name: "Modelos" }));
       fireEvent.click(screen.getByRole("button", { name: /añadir un proveedor/i }));
       expect(screen.getByLabelText(/^nombre$/i)).toBeTruthy();
       expect(screen.queryByText("Google Gemini")).toBeNull();
@@ -90,6 +97,7 @@ describe("Ajustes", () => {
     it("manda nombre y URL, nunca el identificador: lo deriva el servidor", () => {
       const alAltaDeProveedor = vi.fn();
       render(<Ajustes {...MANEJADORES} proveedores={PROVEEDORES} alAltaDeProveedor={alAltaDeProveedor} />);
+      fireEvent.click(screen.getByRole("button", { name: "Modelos" }));
       fireEvent.click(screen.getByRole("button", { name: /añadir un proveedor/i }));
       fireEvent.change(screen.getByLabelText(/^nombre$/i), { target: { value: "Mi LM Studio" } });
       fireEvent.change(screen.getByLabelText(/url base/i), { target: { value: "http://localhost:1234/v1" } });
@@ -100,6 +108,7 @@ describe("Ajustes", () => {
     it("una URL que la regla no admite no llega a mandarse", () => {
       const alAltaDeProveedor = vi.fn();
       render(<Ajustes {...MANEJADORES} proveedores={PROVEEDORES} alAltaDeProveedor={alAltaDeProveedor} />);
+      fireEvent.click(screen.getByRole("button", { name: "Modelos" }));
       fireEvent.click(screen.getByRole("button", { name: /añadir un proveedor/i }));
       fireEvent.change(screen.getByLabelText(/^nombre$/i), { target: { value: "Ajeno" } });
       // http fuera de loopback: en claro y cruzando la red, con la clave dentro.
@@ -112,6 +121,7 @@ describe("Ajustes", () => {
       const { rerender } = render(
         <Ajustes {...MANEJADORES} proveedores={PROVEEDORES} alAltaDeProveedor={() => {}} />
       );
+      fireEvent.click(screen.getByRole("button", { name: "Modelos" }));
       fireEvent.click(screen.getByRole("button", { name: /añadir un proveedor/i }));
       // Un fallo lo deja abierto, con el motivo DENTRO: esta ventana no pinta el transcript.
       rerender(
@@ -146,6 +156,7 @@ describe("Ajustes", () => {
           alBajaDeProveedor={alBajaDeProveedor}
         />
       );
+      fireEvent.click(screen.getByRole("button", { name: "Modelos" }));
       fireEvent.click(screen.getByRole("button", { name: /^dar de baja$/i }));
       expect(screen.getByRole("alert").textContent).toMatch(/se borra también su clave/i);
       expect(alBajaDeProveedor).not.toHaveBeenCalled();
@@ -155,6 +166,7 @@ describe("Ajustes", () => {
 
     it("sin puerto para darlos de alta no se pinta el botón: se dice que no se puede", () => {
       render(<Ajustes {...MANEJADORES} proveedores={PROVEEDORES} />);
+      fireEvent.click(screen.getByRole("button", { name: "Modelos" }));
       expect(screen.queryByRole("button", { name: /añadir un proveedor/i })).toBeNull();
       expect(screen.getByText(/no puede dar de alta proveedores/i)).toBeTruthy();
     });
@@ -162,6 +174,7 @@ describe("Ajustes", () => {
 
   it("la fila enseña el NOMBRE del proveedor y su id, que son dos cosas distintas", () => {
     render(<Ajustes {...MANEJADORES} proveedores={PROVEEDORES} />);
+    fireEvent.click(screen.getByRole("button", { name: "Modelos" }));
     // El nombre lo manda el servidor (`core/modelos.ts#nombreDeProveedor`): capitalizar el
     // id aquí daría «Ollama-cloud» y «Xai». El id sigue a la vista porque es lo que se
     // teclea en `/modelo <proveedor>/<modelo>`.
@@ -172,9 +185,14 @@ describe("Ajustes", () => {
     expect(logo.getAttribute("aria-hidden")).toBe("true");
   });
 
-  it("abre en Proveedores y las secciones se pueden cambiar", () => {
+  it("abre en General y las secciones se pueden cambiar", () => {
     render(<Ajustes {...MANEJADORES} proveedores={PROVEEDORES} />);
-    expect(screen.getByRole("heading", { name: /proveedores/i })).toBeTruthy();
+    // **Abre por la PRIMERA**, no por la segunda: abría en Modelos, y entonces la ventana
+    // empezaba a media lista mientras su navegación declara un orden de lo general a lo
+    // particular. Se fija aquí porque es un `useState` de una línea: cambiarlo no rompe nada
+    // visible, y el síntoma sería entrar otra vez por el medio.
+    expect(screen.getByRole("heading", { name: "General" })).toBeTruthy();
+    expect(screen.queryByRole("heading", { name: /proveedores/i })).toBeNull();
     // **El ORDEN es una decisión, no un accidente del array**: General la primera —el cajón
     // de lo de la máquina entera, y lo general se lee antes que lo particular— y detrás lo
     // concreto. Se fija aquí para que el próximo rediseño no lo deshaga sin querer.
@@ -201,6 +219,7 @@ describe("Ajustes", () => {
    */
   it("cada proveedor dice lo suyo, y solo la clave del fichero se puede borrar", () => {
     render(<Ajustes {...MANEJADORES} proveedores={PROVEEDORES} />);
+    fireEvent.click(screen.getByRole("button", { name: "Modelos" }));
     // Ollama no necesita clave: ni punto, ni botón de clave.
     const ollama = screen.getByText("ollama").closest("li")!;
     expect(ollama.querySelector("[data-credencial]")).toBeNull();
@@ -222,6 +241,7 @@ describe("Ajustes", () => {
   it("borrar pide confirmación NOMBRANDO al proveedor, y cancelar no borra nada", () => {
     const alBorrarClave = vi.fn();
     render(<Ajustes {...MANEJADORES} proveedores={PROVEEDORES} alBorrarClave={alBorrarClave} />);
+    fireEvent.click(screen.getByRole("button", { name: "Modelos" }));
     fireEvent.click(screen.getByRole("button", { name: /eliminar/i }));
     expect(screen.getByRole("alert").textContent).toMatch(/anthropic/);
     fireEvent.click(screen.getByRole("button", { name: /^cancelar$/i }));
@@ -242,6 +262,7 @@ describe("Ajustes", () => {
     const { rerender } = render(
       <Ajustes {...MANEJADORES} proveedores={PROVEEDORES} alPedirClave={alPedirClave} alResponderSecreto={alResponderSecreto} />
     );
+    fireEvent.click(screen.getByRole("button", { name: "Modelos" }));
     // Dos proveedores tienen clave puesta, así que el botón se busca DENTRO de su fila:
     // pulsar «el primero que aparezca» probaría otra cosa el día que cambie el orden.
     const filaDeAnthropic = screen.getByText("anthropic").closest("li")!;
@@ -826,6 +847,7 @@ describe("Ajustes: el modelo por defecto", () => {
         {...extra}
       />
     );
+    fireEvent.click(screen.getByRole("button", { name: "Modelos" }));
   }
 
   it("enseña el defecto que CONSTA, y no lo deduce de ningún sitio", () => {
