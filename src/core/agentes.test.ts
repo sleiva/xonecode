@@ -3,6 +3,8 @@ import {
   escribirAgente,
   fusionarAgentes,
   leerAgente,
+  motivoDeNombreInaceptable,
+  nombreSugerido,
   promptDeAgente,
   REGLAS_XONE,
   type Agente,
@@ -220,5 +222,61 @@ describe("escribirAgente", () => {
     });
     const releido = leerAgente("revisor", escribirAgente(original), "proyecto");
     expect("agente" in releido && releido.agente).toEqual(original);
+  });
+});
+
+/**
+ * El nombre de un subagente es un slug, y se valida AL GUARDAR.
+ *
+ * Al cargar solo se DICE (`leerCarpetaDeAgentes`): rechazar ahí haría desaparecer un agente
+ * que funciona. Guardar es el único momento con alguien delante que lo puede arreglar, y
+ * desde que el nombre de uno propio se puede cambiar, tiene con qué.
+ */
+describe("motivoDeNombreInaceptable", () => {
+  it("acepta un slug: minúsculas, dígitos y guiones sencillos", () => {
+    for (const bueno of ["docs", "consultant-xone", "tester-xone", "a", "v2", "mi-agente-3"]) {
+      expect(motivoDeNombreInaceptable(bueno)).toBeUndefined();
+    }
+  });
+
+  it("la MAYÚSCULA se dice aparte, porque es el caso que de verdad pasa", () => {
+    // Un `Documentador.md` escrito a mano es lo que hay en las carpetas de verdad, y «solo
+    // vale minúsculas, dígitos y guiones» no señala cuál de las tres reglas ha roto.
+    expect(motivoDeNombreInaceptable("Documentador")).toMatch(/mayúsculas/);
+  });
+
+  it("rechaza lo que rompería una ruta, un `git` o un sistema de ficheros", () => {
+    // Los acentos, por la cita en octal de `core.quotePath` con bytes ≥ 0x80; el guion bajo y
+    // el espacio, por convención; el guion al borde y el doble, porque no son un slug.
+    for (const malo of ["", "  ", "mi_agente", "mi agente", "diseñador", "-x", "x-", "a--b", "."]) {
+      expect(motivoDeNombreInaceptable(malo)).toBeDefined();
+    }
+  });
+});
+
+describe("nombreSugerido", () => {
+  it("propone el que valdría, para que el aviso se pueda obedecer", () => {
+    expect(nombreSugerido("Documentador")).toBe("documentador");
+    expect(nombreSugerido("Mi Agente")).toBe("mi-agente");
+    expect(nombreSugerido("mi_agente")).toBe("mi-agente");
+  });
+
+  it("los acentos se DESCOMPONEN, no se tiran", () => {
+    // `dise-ador` sería una propuesta que el usuario tiene que corregir; `disenador` se
+    // acepta tal cual. Es la diferencia entre ofrecer un arreglo y ofrecer otro problema.
+    expect(nombreSugerido("diseñador")).toBe("disenador");
+    expect(nombreSugerido("revisión")).toBe("revision");
+  });
+
+  it("y si no hay nada que proponer, no propone: una sugerencia inválida es peor que ninguna", () => {
+    expect(nombreSugerido("///")).toBeUndefined();
+    expect(nombreSugerido("")).toBeUndefined();
+  });
+
+  it("lo que propone SIEMPRE vale: se comprueba con la misma función", () => {
+    for (const bruto of ["Documentador", "Mi Agente", "diseñador", "  raro  ", "a__b", "ÑU"]) {
+      const s = nombreSugerido(bruto);
+      if (s !== undefined) expect(motivoDeNombreInaceptable(s)).toBeUndefined();
+    }
   });
 });

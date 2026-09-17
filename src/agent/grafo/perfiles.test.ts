@@ -31,7 +31,7 @@ describe("permisosDe", () => {
   });
 
   it("los especialistas de DESARROLLO sí las llevan las dos", () => {
-    for (const perfil of TODOS.filter((p) => ["docs", "planner", "dev", "mockup"].includes(p.nombre))) {
+    for (const perfil of TODOS.filter((p) => ["consultant-xone", "analyst-xone", "developer-xone", "designer-xone"].includes(p.nombre))) {
       expect(perfil.skills, perfil.nombre).toContain("archify");
       expect(perfil.skills, perfil.nombre).toContain("artifacts-builder");
     }
@@ -72,12 +72,12 @@ describe("permisosDe", () => {
   });
 
   it("un perfil de solo lectura deniega TODA escritura", () => {
-    const deniegos = permisosDe(PERFILES["docs"]!).filter((p) => p.mode === "deny");
+    const deniegos = permisosDe(PERFILES["consultant-xone"]!).filter((p) => p.mode === "deny");
     expect(deniegos.some((p) => p.operations.includes("write") && p.paths.includes("/**"))).toBe(true);
   });
 
   it("un perfil que escribe NO deniega toda escritura, pero sigue sin tocar .env", () => {
-    const permisos = permisosDe(PERFILES["dev"]!);
+    const permisos = permisosDe(PERFILES["developer-xone"]!);
     expect(permisos.some((p) => p.paths.includes("/**"))).toBe(false);
     expect(permisos.flatMap((p) => p.paths)).toContain("/.env");
   });
@@ -91,8 +91,8 @@ describe("toolsDe", () => {
   });
 
   it("los que desarrollan sí, y además conservan las de lectura", () => {
-    expect(toolsDe(PERFILES["dev"]!)).toContain("write_file");
-    expect(toolsDe(PERFILES["dev"]!)).toContain("read_file");
+    expect(toolsDe(PERFILES["developer-xone"]!)).toContain("write_file");
+    expect(toolsDe(PERFILES["developer-xone"]!)).toContain("read_file");
   });
 });
 
@@ -108,18 +108,18 @@ describe("hitlDe", () => {
   });
 
   it("un perfil de solo lectura no tiene nada que aprobar", () => {
-    expect(hitlDe(PERFILES["docs"]!)).toEqual({});
+    expect(hitlDe(PERFILES["consultant-xone"]!)).toEqual({});
   });
 
   it("la descripción dice QUIÉN pide: el interrupt no lo trae", () => {
-    // `dev` y `mockup` comparten `write_file`, así que sin esto el usuario no sabría
+    // `developer-xone` y `designer-xone` comparten `write_file`, así que sin esto el usuario no sabría
     // cuál de los dos le está pidiendo permiso.
-    expect(hitlDe(PERFILES["dev"]!).write_file!.description).toContain("[dev]");
-    expect(hitlDe(PERFILES["mockup"]!).write_file!.description).toContain("[mockup]");
+    expect(hitlDe(PERFILES["developer-xone"]!).write_file!.description).toContain("[developer-xone]");
+    expect(hitlDe(PERFILES["designer-xone"]!).write_file!.description).toContain("[designer-xone]");
   });
 
   it("no se ofrece `edit`: no hay interfaz para editar los argumentos", () => {
-    expect(hitlDe(PERFILES["dev"]!).write_file!.allowedDecisions).toEqual(["approve", "reject"]);
+    expect(hitlDe(PERFILES["developer-xone"]!).write_file!.allowedDecisions).toEqual(["approve", "reject"]);
   });
 });
 
@@ -156,7 +156,7 @@ describe("seDetieneEn — a qué escrituras se para el turno a preguntar", () =>
 
   it("y va PUESTO en las dos tools de escritura de quien escribe", () => {
     for (const tool of TOOLS_ESCRITURA) {
-      expect(typeof hitlDe(PERFILES["dev"]!)[tool]!.when).toBe("function");
+      expect(typeof hitlDe(PERFILES["developer-xone"]!)[tool]!.when).toBe("function");
     }
   });
 
@@ -207,7 +207,7 @@ describe("seDetieneEn — a qué escrituras se para el turno a preguntar", () =>
  */
 describe("la costura con el HITL: el modal sale para el proyecto y NO para /artifacts/", () => {
   const middleware = humanInTheLoopMiddleware({
-    interruptOn: hitlDe({ nombre: "mockup", soloLectura: false }) as never,
+    interruptOn: hitlDe({ nombre: "designer-xone", soloLectura: false }) as never,
   }) as unknown as { afterModel: { hook: (estado: unknown, runtime: unknown) => Promise<unknown> } };
 
   const conEscrituraDe = (file_path: string) => ({

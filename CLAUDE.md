@@ -170,14 +170,23 @@ Y las guardas del proyecto:
 ### Los subagentes
 
 Un subagente es un `.md` con frontmatter en `.xonecode/agentes/<nombre>.md`
-(`core/agentes.ts`, `agent/subagentes/agentesEnDisco.ts`). Los cinco de serie —`docs`, `planner`, `dev`,
-`mockup`, `xone-device-tester`— se siembran al arrancar. Reglas duras:
+(`core/agentes.ts`, `agent/subagentes/agentesEnDisco.ts`). Los cinco de serie —`consultant-xone`,
+`analyst-xone`, `developer-xone`, `designer-xone`, `tester-xone`— se siembran al arrancar. El
+sufijo no es decoración: estos nombres viajan como `subagent_type` a los motores externos, donde
+el hijo tiene sus propios agentes, y es lo que los distingue. Reglas duras:
 
 - **`REGLAS_XONE` se antepone SIEMPRE desde código**, igual que el aviso de las skills que faltan
   y la línea de que las escrituras se aprueban: poder quitarlas editando un `.md` convertiría el
   invariante en una preferencia.
-- **El nombre sale del FICHERO**, no del frontmatter. Sin `descripcion` no se carga (es lo que el
-  orquestador lee para delegar). **`soloLectura` solo es cierto con exactamente `"true"`** — la
+- **El nombre sale del FICHERO**, no del frontmatter, y es un SLUG: minúsculas, dígitos y guiones
+  sencillos (`motivoDeNombreInaceptable`). **Se valida al GUARDAR y solo se DICE al cargar** —con
+  el nombre que sí valdría (`nombreSugerido`, que descompone los acentos)—: rechazarlo al cargar
+  haría desaparecer un subagente que funciona, y guardar es el único momento con alguien delante
+  para arreglarlo. No lo cubre `leerAgente`, porque el nombre no sale del `.md`, ni
+  `segmentoSeguro`, que solo impide salir de la carpeta. El cliente lleva su copia DECLARADA,
+  como la URL de un entorno: la frontera prohíbe compartir módulo, y sin ella el rechazo era mudo
+  —`informar` no llega al navegador desde el vestíbulo—. Sin `descripcion` no se carga (es lo que
+  el orquestador lee para delegar). **`soloLectura` solo es cierto con exactamente `"true"`** — la
   trampa del `"false"` de CloudStudio, que aquí concedería ESCRITURA.
 - **La marca de la siembra es `.semilla.json` con el hash de lo que escribimos**, no «la carpeta
   existe»: así un agente nuevo o una corrección alcanzan a quien ya arrancó, sin resucitar lo que
@@ -186,6 +195,10 @@ Un subagente es un `.md` con frontmatter en `.xonecode/agentes/<nombre>.md`
   tiene caso propio** (`RENOMBRADOS`): la clave vieja de la marca que sigue siendo nuestra semilla
   intacta se RETIRA con su fichero, y si el usuario la afinó se queda y se dice — sin eso, quien
   ya hubiera arrancado se queda con los dos especialistas, uno de ellos sin mantener y en silencio.
+  Se lee de UN SALTO y no como una cadena, así que una entrada vieja se **ACTUALIZA** al nuevo
+  nombre en vez de dejarse: apuntando al de enmedio, el aviso mandaría a buscar un agente que ya
+  no existe. Dos claves pueden apuntar al mismo nombre nuevo, porque cada una se resuelve contra
+  el hash de SU fichero.
 - **De QUIÉN es un `.md` viaja por el cable, y no es su carpeta** (`AgenteCargado.semilla`,
   `marcarSemilla`): tres estados —ausente, `intacta`, `modificada`— en vez de dos booleanos, que
   admitirían la combinación imposible. `origen` es la carpeta, y un subagente propio también vive
@@ -215,7 +228,12 @@ Un subagente es un `.md` con frontmatter en `.xonecode/agentes/<nombre>.md`
   cliente aporta es la frase. Eso cierra también el agujero del ALTA: `guardarAgente` escribe sin
   mirar, así que crear uno llamado `docs` pisaba el sembrado en silencio — hoy se avisa, pero el
   servidor no lo corta, porque un `guardar` no dice si es un alta o una edición.
-- **El prompt del orquestador se GENERA** de la lista (`xoneAgent.ts#promptOrquestador`).
+- **El prompt del orquestador se GENERA** de la lista (`xoneAgent.ts#promptOrquestador`). Lo que
+  NO se genera es la regla del encadenado de diagramas, que nombra a dos especialistas a pelo: al
+  renombrarlos hay que cambiarlos ahí o la regla se queda escrita y muerta. Y **`HANDOFF DE
+  ANÁLISIS` es un TOKEN de protocolo, no una referencia a un agente**: se llamaba `HANDOFF DE
+  PLANNER` y caducó con el nombre de `planner`; ahora no nombra a nadie, así que no vuelve a
+  caducar. Vive literal en cuatro sitios.
 - Un `.md` roto se salta y su motivo viaja por el cable hasta la ventana de Ajustes.
 - **La línea de una delegación dice a QUIÉN** (`task` → `subagent_type`, en la lista blanca de
   `resumenDeTool.ts` + icono y verbo en `core/notify.ts`), y **nunca la `description`**, que es el

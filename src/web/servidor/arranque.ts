@@ -36,7 +36,7 @@ import { randomUUID } from "node:crypto";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { homedir } from "node:os";
 import type { Acto } from "../../core/actos.js";
-import { escribirAgente, leerAgente, type Agente } from "../../core/agentes.js";
+import { escribirAgente, leerAgente, motivoDeNombreInaceptable, type Agente } from "../../core/agentes.js";
 import {
   borrarAgente,
   cargarAgentes,
@@ -996,6 +996,20 @@ export function montarRutas(
         const comprobado = leerAgente(candidato.nombre, escribirAgente(candidato), mensaje.ambito);
         if ("error" in comprobado) {
           informar(`no se guarda «${candidato.nombre}»: ${comprobado.error}`);
+          return;
+        }
+        /**
+         * Y el NOMBRE tiene que ser un slug, aquí y no en el cargador: cargando solo se DICE
+         * (`leerCarpetaDeAgentes`), porque rechazar al cargar haría desaparecer un subagente
+         * que funciona. Guardar es el único momento con alguien delante para arreglarlo.
+         *
+         * No lo cubre `leerAgente`: el nombre no sale del `.md`, sale del FICHERO, así que
+         * escribir y volver a leer no lo mira. Y tampoco `segmentoSeguro`, que impide salir de
+         * la carpeta y nada más — `Documentador` pasa esa y no es un slug.
+         */
+        const malNombre = motivoDeNombreInaceptable(candidato.nombre);
+        if (malNombre !== undefined) {
+          informar(`no se guarda «${candidato.nombre}»: el nombre ${malNombre}`);
           return;
         }
         if (renombrandoDe === undefined) {

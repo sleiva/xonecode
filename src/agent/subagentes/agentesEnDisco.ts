@@ -24,6 +24,8 @@ import {
   escribirAgente,
   fusionarAgentes,
   leerAgente,
+  motivoDeNombreInaceptable,
+  nombreSugerido,
   type Agente,
   type AgenteCargado,
   type Carga,
@@ -66,8 +68,31 @@ export function leerCarpetaDeAgentes(carpeta: string, origen: Agente["origen"]):
       continue;
     }
     const r = leerAgente(nombre, contenido, origen);
-    if ("error" in r) problemas.push(`${fichero}: ${r.error}`);
-    else agentes.push(r.agente);
+    if ("error" in r) {
+      problemas.push(`${fichero}: ${r.error}`);
+      continue;
+    }
+    /**
+     * Un nombre que no es un slug se DICE y el agente se CARGA.
+     *
+     * Rechazarlo aquí haría desaparecer un subagente que funciona, que es lo contrario de lo
+     * que hace todo este módulo — y el usuario no tendría ni el nombre para buscarlo. Quien
+     * lo rechaza es el guardado (`arranque.ts#atenderAgente`), que es el único momento con
+     * alguien delante para arreglarlo. El aviso va por `problemas`, y ahí sí encaja: esto no
+     * es un estado del agente, es trabajo pendiente sobre su fichero.
+     *
+     * Y lleva el nombre que SÍ valdría, porque un aviso que no se puede obedecer no sirve:
+     * «renómbralo a `documentador`» se arregla en el mismo formulario donde se lee.
+     */
+    const malNombre = motivoDeNombreInaceptable(nombre);
+    if (malNombre !== undefined) {
+      const sugerido = nombreSugerido(nombre);
+      problemas.push(
+        `${fichero}: el nombre ${malNombre}` +
+          (sugerido === undefined ? ". Renómbralo." : `. Renómbralo a \`${sugerido}\`.`)
+      );
+    }
+    agentes.push(r.agente);
   }
   return { agentes, problemas };
 }
@@ -331,7 +356,26 @@ export interface Retirado {
  * hoy y sería una trampa mañana: borraría cualquier entrada rara que un fallo dejara en la
  * marca. Aquí solo se retira lo que consta que renombramos.
  */
-const RENOMBRADOS: Readonly<Record<string, string>> = { probador: "xone-device-tester" };
+const RENOMBRADOS: Readonly<Record<string, string>> = {
+  // Los cinco de serie pasaron a `<rol>-xone`, en inglés. El sufijo no es decoración: estos
+  // nombres viajan como `subagent_type` a los motores externos, donde el hijo tiene sus
+  // propios agentes, y ahí es lo que los distingue.
+  docs: "consultant-xone",
+  planner: "analyst-xone",
+  dev: "developer-xone",
+  mockup: "designer-xone",
+  "xone-device-tester": "tester-xone",
+  /**
+   * Y el de antes se ACTUALIZA, no se deja: apuntaba a `xone-device-tester`, que ya no es de
+   * serie, así que a quien conserve un `probador.md` afinado se le habría seguido diciendo
+   * que «ese agente se llama ahora `xone-device-tester`» — un nombre que no existe. Esto se
+   * lee de un solo salto, no como una cadena.
+   *
+   * Dos claves pueden apuntar al mismo nombre nuevo sin chocar: cada entrada se resuelve por
+   * separado contra el hash de SU fichero.
+   */
+  probador: "tester-xone",
+};
 
 /**
  * Siembra los agentes de serie, y ACTUALIZA los que nadie ha tocado.
@@ -543,7 +587,7 @@ const MEMORIA_LEER = [
 ].join(" ");
 
 const MEMORIA_LEER_CON_HANDOFF =
-  "Lee `/MEMORIA_PROYECTO.md` solo si la tarea NO incluye un `HANDOFF DE PLANNER`. Con handoff, no la leas: sus hechos pertinentes ya vienen resumidos.";
+  "Lee `/MEMORIA_PROYECTO.md` solo si la tarea NO incluye un `HANDOFF DE ANÁLISIS`. Con handoff, no la leas: sus hechos pertinentes ya vienen resumidos.";
 
 const MEMORIA_ESCRIBIR = [
   "Al terminar trabajo relevante, actualiza esa memoria solo con hechos comprobados, decisiones aprobadas",
@@ -558,7 +602,7 @@ const RECONOCIMIENTO_PLANNER = [
   "- No repitas una lectura de la misma ruta y rango, ni hagas búsquedas genéricas como `function ` sin una hipótesis.",
   "- Cuando puedas identificar el propósito y los módulos principales con evidencia, deja de llamar tools y responde.",
   "- Solo amplía la exploración si el usuario pide detalle exhaustivo o si las evidencias son insuficientes o contradictorias; explica brevemente qué faltaba.",
-  "- Si el resultado alimenta un diagrama o artefacto, termina con un `HANDOFF DE PLANNER` compacto:",
+  "- Si el resultado alimenta un diagrama o artefacto, termina con un `HANDOFF DE ANÁLISIS` compacto:",
   "  propósito; nodos; aristas `origen → destino`; evidencia `ruta:líneas`; y lagunas. No incluyas transcript ni lecturas crudas.",
 ].join("\n");
 
@@ -590,7 +634,7 @@ const CONSULTA_ACOTADA_DOCS = [
 
 const HANDOFF_MOCKUP = [
   "HANDOFF PARA DIAGRAMAS:",
-  "- Si la descripción de tu tarea incluye `HANDOFF DE PLANNER`, ese bloque es tu evidencia de código real.",
+  "- Si la descripción de tu tarea incluye `HANDOFF DE ANÁLISIS`, ese bloque es tu evidencia de código real.",
   "- Úsalo como fuente para el diagrama y NO vuelvas a leer, buscar ni reconstruir las rutas ya documentadas.",
   "- Solo inspecciona un fichero si el handoff marca una laguna o dos evidencias se contradicen; explica cuál es la laguna.",
 ].join("\n");
@@ -641,7 +685,7 @@ const PROCEDIMIENTO_DE_PRUEBA = [
  */
 export const AGENTES_DE_SERIE: readonly Agente[] = [
   {
-    nombre: "docs",
+    nombre: "consultant-xone",
     descripcion:
       "Responde preguntas técnicas de la plataforma XOne (XML/.xne, JavaScript, CSS, " +
       "eventos, patrones). Puede leer el proyecto para no contradecir el código real. " +
@@ -653,7 +697,7 @@ export const AGENTES_DE_SERIE: readonly Agente[] = [
     origen: "semilla",
   },
   {
-    nombre: "planner",
+    nombre: "analyst-xone",
     descripcion:
       "Inspecciona el proyecto real para anclar planes y diagnósticos: estructura, " +
       "colecciones y búsqueda de código. No modifica nada.",
@@ -664,7 +708,7 @@ export const AGENTES_DE_SERIE: readonly Agente[] = [
     origen: "semilla",
   },
   {
-    nombre: "dev",
+    nombre: "developer-xone",
     descripcion:
       "Desarrolla: crea y modifica colecciones, escribe scripts y edita ficheros. " +
       "Las modificaciones requieren aprobación humana.",
@@ -675,7 +719,7 @@ export const AGENTES_DE_SERIE: readonly Agente[] = [
     origen: "semilla",
   },
   {
-    nombre: "xone-device-tester",
+    nombre: "tester-xone",
     descripcion:
       "Pruebas en un dispositivo o emulador LOCAL —Android o iOS— sobre la app host XOne " +
       "instalada. Hoy NO se conecta al dispositivo: escribe el procedimiento de prueba con " +
@@ -688,7 +732,7 @@ export const AGENTES_DE_SERIE: readonly Agente[] = [
     origen: "semilla",
   },
   {
-    nombre: "mockup",
+    nombre: "designer-xone",
     descripcion:
       "Trabajo visual: layouts, CSS y recursos. Las modificaciones requieren " +
       "aprobación humana.",

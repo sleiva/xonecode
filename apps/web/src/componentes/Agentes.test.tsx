@@ -19,7 +19,7 @@ const manejadores = { alGuardar: vi.fn(), alBorrar: vi.fn(), alRestaurar: vi.fn(
 
 /** Uno de los que trae xonecode, tal como llega del cable: con su `semilla`. */
 const DOCS: AgenteDelCable = {
-  nombre: "docs",
+  nombre: "consultant-xone",
   descripcion: "Responde preguntas técnicas de XOne.",
   motor: "modelo",
   soloLectura: true,
@@ -256,8 +256,8 @@ describe("Agentes", () => {
     // el servidor MUEVE el `.md`. Lo que no cambia es el de un de serie: su nombre es lo que
     // lo ata a la marca de la siembra, que guarda el hash POR NOMBRE.
     render(<Agentes {...manejadores} agentes={[DOCS, REVISOR]} />);
-    fireEvent.click(screen.getByRole("button", { name: "Editar docs" }));
-    expect(screen.getByDisplayValue("docs")).toHaveProperty("disabled", true);
+    fireEvent.click(screen.getByRole("button", { name: "Editar consultant-xone" }));
+    expect(screen.getByDisplayValue("consultant-xone")).toHaveProperty("disabled", true);
     // Y el motivo va en el rótulo: un campo apagado sin explicación se lee como un fallo.
     expect(screen.getByText(/no se cambia: lo trae xonecode/)).not.toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "Cancelar" }));
@@ -301,10 +301,42 @@ describe("Agentes", () => {
     render(<Agentes {...manejadores} agentes={[DOCS, REVISOR]} />);
     irA("Tuyos");
     fireEvent.click(screen.getByRole("button", { name: "Editar revisor" }));
-    fireEvent.change(screen.getByLabelText(/^Nombre/), { target: { value: "docs" } });
+    fireEvent.change(screen.getByLabelText(/^Nombre/), { target: { value: "consultant-xone" } });
 
     expect(screen.getByText(/Ya hay un subagente que se llama/)).not.toBeNull();
     expect(screen.getByRole("button", { name: "Guardar" })).toHaveProperty("disabled", true);
+  });
+
+  /**
+   * El nombre es un slug, y la copia declarada de esa regla vive aquí por la frontera: el
+   * cliente no puede importar de `src/`. Quien manda es el servidor, que la vuelve a aplicar;
+   * esto convierte un rechazo mudo en una frase, porque `informar` no llega al navegador
+   * desde el vestíbulo.
+   */
+  it("un nombre con MAYÚSCULAS apaga «Guardar» y propone el que valdría", () => {
+    const alGuardar = vi.fn();
+    render(<Agentes {...manejadores} alGuardar={alGuardar} agentes={[REVISOR]} />);
+    irA("Tuyos");
+    fireEvent.click(screen.getByRole("button", { name: "Editar revisor" }));
+    fireEvent.change(screen.getByLabelText(/^Nombre/), { target: { value: "Documentador" } });
+
+    expect(screen.getByText(/no puede llevar mayúsculas/)).not.toBeNull();
+    // Y la propuesta, que es lo que hace el aviso obedecible.
+    expect(screen.getByText(/«documentador»/)).not.toBeNull();
+    expect(screen.getByRole("button", { name: "Guardar" })).toHaveProperty("disabled", true);
+  });
+
+  it("y lo demás que no es un slug: espacios, acentos, guion al borde", () => {
+    render(<Agentes {...manejadores} agentes={[REVISOR]} />);
+    irA("Tuyos");
+    fireEvent.click(screen.getByRole("button", { name: "Editar revisor" }));
+    for (const malo of ["mi agente", "diseñador", "-x", "a--b", "mi_agente"]) {
+      fireEvent.change(screen.getByLabelText(/^Nombre/), { target: { value: malo } });
+      expect(screen.getByRole("button", { name: "Guardar" })).toHaveProperty("disabled", true);
+    }
+    // Y uno bueno lo vuelve a encender: el aviso no se queda pegado.
+    fireEvent.change(screen.getByLabelText(/^Nombre/), { target: { value: "mi-agente" } });
+    expect(screen.getByRole("button", { name: "Guardar" })).toHaveProperty("disabled", false);
   });
 
   it("su PROPIO nombre no cuenta como ocupado: editar sin renombrar tiene que poder guardar", () => {
@@ -315,13 +347,13 @@ describe("Agentes", () => {
     expect(screen.queryByText(/Ya hay un subagente/)).toBeNull();
   });
 
-  it("y al CREAR también, que ese agujero ya estaba: un `docs` nuevo pisaba el sembrado", () => {
+  it("y al CREAR también, que ese agujero ya estaba: un `consultant-xone` nuevo pisaba el sembrado", () => {
     // `guardarAgente` escribe sin mirar, así que dar de alta uno llamado igual que un de
     // serie se llevaba su `.md` por delante en silencio.
     render(<Agentes {...manejadores} agentes={[DOCS]} />);
     irA("Tuyos");
     fireEvent.click(screen.getByRole("button", { name: "Nuevo subagente" }));
-    fireEvent.change(screen.getByLabelText(/^Nombre/), { target: { value: "docs" } });
+    fireEvent.change(screen.getByLabelText(/^Nombre/), { target: { value: "consultant-xone" } });
     fireEvent.change(screen.getByLabelText(/^Cuándo usarlo/), { target: { value: "el mío" } });
 
     expect(screen.getByRole("button", { name: "Guardar" })).toHaveProperty("disabled", true);
@@ -411,7 +443,7 @@ describe("Agentes: los que trae xonecode y los tuyos", () => {
     expect(screen.getByRole("tab", { name: /^De xonecode/ }).textContent).toContain("1");
     expect(screen.getByRole("tab", { name: /^Tuyos/ }).textContent).toContain("1");
     // Y solo se pinta la lista de la pestaña abierta, que es la primera.
-    expect(screen.getByText("docs")).not.toBeNull();
+    expect(screen.getByText("consultant-xone")).not.toBeNull();
     expect(screen.queryByText("revisor")).toBeNull();
   });
 
@@ -438,7 +470,7 @@ describe("Agentes: los que trae xonecode y los tuyos", () => {
    */
   it("un de serie no lleva papelera; uno tuyo sí", () => {
     render(<Agentes {...manejadores} agentes={[DOCS, REVISOR]} />);
-    expect(screen.queryByRole("button", { name: "Eliminar docs" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Eliminar consultant-xone" })).toBeNull();
     irA("Tuyos");
     expect(screen.getByRole("button", { name: "Eliminar revisor" })).not.toBeNull();
   });
@@ -472,7 +504,7 @@ describe("Agentes: los que trae xonecode y los tuyos", () => {
     expect(screen.getByText(/Lo que hayas escrito no vuelve/)).not.toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "Restaurar" }));
     // Sin ámbito: la siembra solo escribe en el global, así que no hay dos sitios que elegir.
-    expect(alRestaurar).toHaveBeenCalledWith("docs");
+    expect(alRestaurar).toHaveBeenCalledWith("consultant-xone");
   });
 
   /**
@@ -492,13 +524,13 @@ describe("Agentes: los que trae xonecode y los tuyos", () => {
       />
     );
     // La pestaña de xonecode: editar, y la restauración.
-    fireEvent.click(screen.getByRole("button", { name: "Editar docs" }));
-    expect(screen.getByDisplayValue("docs")).not.toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Editar consultant-xone" }));
+    expect(screen.getByDisplayValue("consultant-xone")).not.toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "Cancelar" }));
 
     fireEvent.click(screen.getByRole("button", { name: "Restaurar el de serie" }));
     fireEvent.click(screen.getByRole("button", { name: "Restaurar" }));
-    expect(alRestaurar).toHaveBeenCalledWith("docs");
+    expect(alRestaurar).toHaveBeenCalledWith("consultant-xone");
 
     // La de los tuyos: editar, y el borrado.
     irA("Tuyos");

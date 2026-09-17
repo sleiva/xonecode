@@ -3325,7 +3325,7 @@ describe("los subagentes, por el cable", () => {
   };
 
   const deSerie = (): AgenteDelCable => ({
-    nombre: "docs",
+    nombre: "consultant-xone",
     descripcion: "da igual: el servidor solo mira el nombre y el ámbito",
     motor: "modelo",
     soloLectura: true,
@@ -3344,7 +3344,7 @@ describe("los subagentes, por el cable", () => {
     const agentes = cliente.recibidos.filter((m) => m.clase === "agentes").at(-1);
     expect(agentes).toBeDefined();
     const lista = (agentes as { agentes: AgenteDelCable[] }).agentes;
-    expect(lista.find((a) => a.nombre === "docs")?.semilla).toBe("intacta");
+    expect(lista.find((a) => a.nombre === "consultant-xone")?.semilla).toBe("intacta");
   });
 
   it("un `borrar` de uno de serie se RECHAZA, y su `.md` sigue ahí", async () => {
@@ -3354,12 +3354,12 @@ describe("los subagentes, por el cable", () => {
     const dir = carpeta();
     if (dir === undefined) return;
     const { accion, dichos } = await conectar();
-    expect(existsSync(join(dir, "docs.md"))).toBe(true);
+    expect(existsSync(join(dir, "consultant-xone.md"))).toBe(true);
 
     await enviarMensaje(accion, { clase: "agente", accion: "borrar", ambito: "global", agente: deSerie() });
     await asentar();
 
-    expect(existsSync(join(dir, "docs.md"))).toBe(true);
+    expect(existsSync(join(dir, "consultant-xone.md"))).toBe(true);
     expect(dichos.join("\n")).toMatch(/no se borra/);
     expect(dichos.join("\n")).toMatch(/restaura/);
   });
@@ -3385,18 +3385,18 @@ describe("los subagentes, por el cable", () => {
     const dir = carpeta();
     if (dir === undefined) return;
     const { accion, cliente, dichos } = await conectar();
-    writeFileSync(join(dir, "docs.md"), "---\ndescripcion: mío\n---\nMÍO", "utf8");
+    writeFileSync(join(dir, "consultant-xone.md"), "---\ndescripcion: mío\n---\nMÍO", "utf8");
 
     await enviarMensaje(accion, { clase: "agente", accion: "restaurar", ambito: "global", agente: deSerie() });
     await asentar();
 
-    expect(readFileSync(join(dir, "docs.md"), "utf8")).not.toContain("MÍO");
+    expect(readFileSync(join(dir, "consultant-xone.md"), "utf8")).not.toContain("MÍO");
     expect(dichos.join("\n")).toMatch(/restaurado/);
     // Y la lista se reemite: el botón desaparece sin recargar, porque ya no hay nada que restaurar.
     const lista = (cliente.recibidos.filter((m) => m.clase === "agentes").at(-1) as {
       agentes: AgenteDelCable[];
     }).agentes;
-    expect(lista.find((a) => a.nombre === "docs")?.semilla).toBe("intacta");
+    expect(lista.find((a) => a.nombre === "consultant-xone")?.semilla).toBe("intacta");
   });
 
   it("un `restaurar` de algo que no es de serie se dice, no se inventa una versión", async () => {
@@ -3471,11 +3471,11 @@ describe("los subagentes, por el cable", () => {
       accion: "guardar",
       ambito: "global",
       agente: { ...deSerie(), nombre: "mis-docs" },
-      renombrandoDe: "docs",
+      renombrandoDe: "consultant-xone",
     });
     await asentar();
 
-    expect(existsSync(join(dir, "docs.md"))).toBe(true);
+    expect(existsSync(join(dir, "consultant-xone.md"))).toBe(true);
     expect(existsSync(join(dir, "mis-docs.md"))).toBe(false);
     expect(dichos.join("\n")).toMatch(/no se cambia/);
   });
@@ -3488,18 +3488,18 @@ describe("los subagentes, por el cable", () => {
     if (dir === undefined) return;
     const { accion, dichos } = await conectar();
     writeFileSync(join(dir, "advisor.md"), "---\ndescripcion: el mío\n---\ncuerpo", "utf8");
-    const docsAntes = readFileSync(join(dir, "docs.md"), "utf8");
+    const docsAntes = readFileSync(join(dir, "consultant-xone.md"), "utf8");
 
     await enviarMensaje(accion, {
       clase: "agente",
       accion: "guardar",
       ambito: "global",
-      agente: { ...deSerie(), nombre: "docs", descripcion: "el mío" },
+      agente: { ...deSerie(), nombre: "consultant-xone", descripcion: "el mío" },
       renombrandoDe: "advisor",
     });
     await asentar();
 
-    expect(readFileSync(join(dir, "docs.md"), "utf8")).toBe(docsAntes);
+    expect(readFileSync(join(dir, "consultant-xone.md"), "utf8")).toBe(docsAntes);
     expect(existsSync(join(dir, "advisor.md"))).toBe(true);
     expect(dichos.join("\n")).toMatch(/ya hay un subagente/);
   });

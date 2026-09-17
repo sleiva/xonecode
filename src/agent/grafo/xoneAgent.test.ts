@@ -23,8 +23,8 @@ describe("promptOrquestador", () => {
   it("nombra a los especialistas que HAY, no a una lista escrita a mano", () => {
     // Era una constante que nombraba a los cuatro a pelo. Desde que son ficheros que el
     // usuario escribe y borra, eso se queda mintiendo el primer día.
-    expect(promptOrquestador([deSerie("docs")])).toContain("docs");
-    expect(promptOrquestador([deSerie("docs")])).not.toContain("mockup");
+    expect(promptOrquestador([deSerie("consultant-xone")])).toContain("consultant-xone");
+    expect(promptOrquestador([deSerie("consultant-xone")])).not.toContain("designer-xone");
   });
 
   it("sin ningún especialista lo DICE, en vez de mandar delegar en nadie", () => {
@@ -36,7 +36,7 @@ describe("promptOrquestador", () => {
   it("la regla del encadenado solo se escribe si existen los DOS de los que habla", () => {
     // Una instrucción sobre un especialista que no está no la puede seguir nadie: es el
     // mismo botón muerto que la interfaz lleva semanas quitando, pero en un prompt.
-    expect(promptOrquestador([deSerie("planner")])).not.toMatch(/delega en `mockup`/);
+    expect(promptOrquestador([deSerie("analyst-xone")])).not.toMatch(/delega en `designer-xone`/);
   });
 
   it("dice que NO tiene herramientas y que solo delega", () => {
@@ -51,10 +51,10 @@ describe("promptOrquestador", () => {
     expect(PROMPT_ORQUESTADOR).toMatch(/EN EL MISMO mensaje/);
   });
 
-  it("reserva los diagramas de la app para mockup y el análisis real para planner", () => {
-    expect(PROMPT_ORQUESTADOR).toMatch(/diagramas o esquemas.*`mockup`/s);
-    expect(PROMPT_ORQUESTADOR).toMatch(/PRIMERO el análisis a `planner`/s);
-    expect(PROMPT_ORQUESTADOR).toContain("HANDOFF DE PLANNER");
+  it("reserva los diagramas de la app para designer-xone y el análisis real para analyst-xone", () => {
+    expect(PROMPT_ORQUESTADOR).toMatch(/diagramas o esquemas.*`designer-xone`/s);
+    expect(PROMPT_ORQUESTADOR).toMatch(/PRIMERO el análisis a `analyst-xone`/s);
+    expect(PROMPT_ORQUESTADOR).toContain("HANDOFF DE ANÁLISIS");
     expect(PROMPT_ORQUESTADOR).toMatch(/no comparten el transcript/i);
   });
 });
@@ -70,28 +70,28 @@ describe("el prompt de un especialista sembrado", () => {
   });
 
   it("un especialista de solo lectura lo dice", () => {
-    expect(promptDeAgente(deSerie("docs"), repartirSkills(deSerie("docs"), disponibles(conSkills)))).toContain("No modificas nada");
+    expect(promptDeAgente(deSerie("consultant-xone"), repartirSkills(deSerie("consultant-xone"), disponibles(conSkills)))).toContain("No modificas nada");
   });
 
   it("uno que escribe avisa de que sus cambios se aprueban", () => {
-    expect(promptDeAgente(deSerie("dev"), repartirSkills(deSerie("dev"), disponibles(conSkills)))).toMatch(/aprobación humana/);
+    expect(promptDeAgente(deSerie("developer-xone"), repartirSkills(deSerie("developer-xone"), disponibles(conSkills)))).toMatch(/aprobación humana/);
   });
 
   it("usa la fachada de memoria para tareas de proyecto sin exponer .xonecode", () => {
-    const p = promptDeAgente(deSerie("dev"), repartirSkills(deSerie("dev"), disponibles(conSkills)));
+    const p = promptDeAgente(deSerie("developer-xone"), repartirSkills(deSerie("developer-xone"), disponibles(conSkills)));
     expect(p).toContain("/MEMORIA_PROYECTO.md");
     expect(p).not.toContain("/.xonecode/memoria.md");
   });
 
   it("lleva las reglas duras de XOne, no solo su papel", () => {
-    const p = promptDeAgente(deSerie("dev"), repartirSkills(deSerie("dev"), disponibles(conSkills)));
+    const p = promptDeAgente(deSerie("developer-xone"), repartirSkills(deSerie("developer-xone"), disponibles(conSkills)));
     expect(p).toMatch(/no existen DOM/);
     expect(p).toMatch(/\.xne/);
     expect(p).toMatch(/bug mudo/);
   });
 
   it("dirige explícitamente los diagramas y esquemas a archify", () => {
-    const p = promptDeAgente(deSerie("planner"), repartirSkills(deSerie("planner"), disponibles(conSkills)));
+    const p = promptDeAgente(deSerie("analyst-xone"), repartirSkills(deSerie("analyst-xone"), disponibles(conSkills)));
     expect(p).toMatch(/diagrama, esquema, arquitectura, flujo, secuencia, datos o estados/i);
     expect(p).toContain("`archify`");
     expect(p).toContain("usa solamente `archify`");
@@ -120,21 +120,21 @@ describe("el prompt de un especialista sembrado", () => {
   });
 
   it("da al planner un criterio explícito para cerrar un reconocimiento rápido", () => {
-    const p = promptDeAgente(deSerie("planner"), repartirSkills(deSerie("planner"), disponibles(conSkills)));
+    const p = promptDeAgente(deSerie("analyst-xone"), repartirSkills(deSerie("analyst-xone"), disponibles(conSkills)));
     expect(p).toContain("RECONOCIMIENTO RÁPIDO DEL PROYECTO");
     expect(p).toContain("como máximo, tres ficheros representativos");
     expect(p).toContain("offset=0` y `limit=50");
     expect(p).toContain("deja de llamar tools y responde");
     expect(p).toContain("No repitas una lectura de la misma ruta y rango");
-    expect(p).toContain("HANDOFF DE PLANNER");
+    expect(p).toContain("HANDOFF DE ANÁLISIS");
     expect(p).toContain("aristas `origen → destino`");
   });
 
   it("hace que mockup reutilice el handoff del planner sin reinspeccionar el proyecto", () => {
-    const p = promptDeAgente(deSerie("mockup"), repartirSkills(deSerie("mockup"), disponibles(conSkills)));
+    const p = promptDeAgente(deSerie("designer-xone"), repartirSkills(deSerie("designer-xone"), disponibles(conSkills)));
     expect(p).toContain("HANDOFF PARA DIAGRAMAS");
     expect(p).toContain("NO vuelvas a leer, buscar ni reconstruir");
-    expect(p).toContain("solo si la tarea NO incluye un `HANDOFF DE PLANNER`");
+    expect(p).toContain("solo si la tarea NO incluye un `HANDOFF DE ANÁLISIS`");
   });
 
   it("hace que grep localice antes de leer y conserva su presupuesto", () => {
@@ -148,24 +148,24 @@ describe("el prompt de un especialista sembrado", () => {
   });
 
   it("nombra las skills que SÍ tiene", () => {
-    expect(promptDeAgente(deSerie("dev"), repartirSkills(deSerie("dev"), disponibles(conSkills)))).toContain("xone-development");
+    expect(promptDeAgente(deSerie("developer-xone"), repartirSkills(deSerie("developer-xone"), disponibles(conSkills)))).toContain("xone-development");
   });
 
   it("y AVISA de las que le faltan en vez de callarlo", () => {
     // Patrón 4: un doble nunca se disfraza. Un especialista sin su skill responde
     // de memoria, y sin este aviso nadie sabría por qué empeoró.
     const sin = new SkillsEnMemoria({});
-    const p = promptDeAgente(deSerie("dev"), repartirSkills(deSerie("dev"), disponibles(sin)));
+    const p = promptDeAgente(deSerie("developer-xone"), repartirSkills(deSerie("developer-xone"), disponibles(sin)));
     expect(p).toMatch(/AVISO/);
     expect(p).toContain("xone-development");
   });
 
   it("sin skills que falten no mete ningún aviso de relleno", () => {
-    expect(promptDeAgente(deSerie("docs"), repartirSkills(deSerie("docs"), disponibles(conSkills)))).not.toMatch(/AVISO/);
+    expect(promptDeAgente(deSerie("consultant-xone"), repartirSkills(deSerie("consultant-xone"), disponibles(conSkills)))).not.toMatch(/AVISO/);
   });
 
   it("expone cada skill disponible como una ruta que carga Deep Agents", () => {
-    expect(rutasDeSkills(deSerie("dev"), disponibles(conSkills))).toEqual([
+    expect(rutasDeSkills(deSerie("developer-xone"), disponibles(conSkills))).toEqual([
       "/skills/xone-development/",
       "/skills/xone-debugging/",
       "/skills/archify/",

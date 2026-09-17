@@ -137,6 +137,38 @@ function BotonDeNuevo({ alPulsar }: { alPulsar: () => void }) {
   );
 }
 
+/**
+ * La regla del nombre, COPIA DECLARADA de la del host (`core/agentes.ts`).
+ *
+ * Declarada y no importada porque la frontera lo prohíbe (`src/web/frontera.test.ts`): el
+ * cliente no puede importar de `src/`. Mismo trato que la URL de un entorno en `Wizard.tsx`.
+ * Aquí es de balde y evita un viaje; **quien manda es el servidor**, que la vuelve a aplicar
+ * al guardar — esto solo convierte un rechazo mudo en una frase, porque `informar` no llega
+ * al navegador desde el vestíbulo.
+ */
+const FORMA_DEL_NOMBRE = /^[a-z0-9]+(-[a-z0-9]+)*$/;
+
+export function motivoDeNombreDeAgente(nombre: string): string | undefined {
+  if (nombre.trim() === "") return undefined; // vacío ya lo cubre el botón: no es un aviso
+  if (nombre !== nombre.trim()) return "no puede empezar ni acabar con espacios";
+  if (nombre !== nombre.toLowerCase()) return "no puede llevar mayúsculas: va todo en minúsculas";
+  if (!FORMA_DEL_NOMBRE.test(nombre)) {
+    return "solo vale minúsculas, dígitos y guiones sencillos (ni espacios, ni acentos, ni guion al principio o al final)";
+  }
+  return undefined;
+}
+
+/** El que SÍ valdría, para poder ofrecerlo. Los acentos se descomponen, no se tiran. */
+export function nombreSugeridoDeAgente(nombre: string): string | undefined {
+  const slug = nombre
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+  return slug !== "" && FORMA_DEL_NOMBRE.test(slug) ? slug : undefined;
+}
+
 type Grupo = "serie" | "propios";
 
 /**
@@ -296,6 +328,26 @@ export function Agentes({
     editando.nombre.trim() !== "" &&
     editando.nombre !== nombreOriginal &&
     (agentes ?? []).some((a) => a.nombre === editando.nombre.trim());
+
+  /**
+   * Lo que impide guardar por el NOMBRE, en una sola frase: ocupado, o mal formado.
+   *
+   * Los dos apagan «Guardar» y los dos se dicen arriba de los botones, porque los dos se
+   * arreglan igual —cambiando el nombre— y son el motivo de que el botón esté apagado. La
+   * forma se comprueba incluso en un `.md` que YA estaba: un `Documentador.md` escrito a mano
+   * carga (el cargador solo lo dice) y es al guardarlo cuando hay alguien delante para
+   * arreglarlo. Un de serie no puede caer aquí: su campo está deshabilitado.
+   */
+  const malNombre = editando === undefined ? undefined : motivoDeNombreDeAgente(editando.nombre);
+  const sugerido = editando === undefined ? undefined : nombreSugeridoDeAgente(editando.nombre);
+  const avisoDelNombre =
+    editando === undefined
+      ? undefined
+      : ocupado
+        ? `Ya hay un subagente que se llama «${editando.nombre.trim()}». Elige otro nombre, o borra ese primero.`
+        : malNombre === undefined
+          ? undefined
+          : `El nombre ${malNombre}.${sugerido === undefined ? "" : ` Prueba con «${sugerido}».`}`;
 
   /** Abrir el formulario en blanco. Uno solo: lo llaman los dos sitios donde sale el botón. */
   const nuevo = (): void => {
@@ -635,12 +687,7 @@ export function Agentes({
 
           {/* Y se dice ARRIBA de los botones, no en un `title`: es el motivo de que «Guardar»
               esté apagado, y un botón apagado sin motivo a la vista se lee como un fallo. */}
-          {ocupado ? (
-            <p className={estilos.aviso}>
-              Ya hay un subagente que se llama «{editando.nombre.trim()}». Elige otro nombre, o
-              borra ese primero.
-            </p>
-          ) : null}
+          {avisoDelNombre === undefined ? null : <p className={estilos.aviso}>{avisoDelNombre}</p>}
 
           <div className={estilos.botones}>
             <Button variant="outline" className={estilos.accion} onClick={cerrar}>
@@ -658,7 +705,11 @@ export function Agentes({
               className={estilos.principal}
               // Sin nombre ni descripción el servidor lo rechazaría: es más honesto no
               // dejar pulsar que aceptar y contestar que no.
-              disabled={ocupado || editando.nombre.trim() === "" || editando.descripcion.trim() === ""}
+              disabled={
+                avisoDelNombre !== undefined ||
+                editando.nombre.trim() === "" ||
+                editando.descripcion.trim() === ""
+              }
               onClick={guardar}
             >
               Guardar

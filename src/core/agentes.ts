@@ -148,6 +148,58 @@ export function repartirSkills(agente: Agente, disponibles: ReadonlySet<string>)
   };
 }
 
+/**
+ * La forma que tiene que tener el nombre de un subagente: un slug.
+ *
+ * Minúsculas, dígitos y guiones sencillos, empezando y acabando en letra o dígito. Es la
+ * convención del `.md` que ya conoce quien viene de Claude Code, y esquiva dos cosas medidas:
+ * un nombre con bytes ≥ 0x80 dispara la cita en octal de `core.quotePath` (la trampa que
+ * `cambiosPendientes` tiene que apagar a mano), y una mayúscula hace que el mismo agente sea
+ * dos ficheros distintos según el sistema de ficheros — en APFS `Docs.md` y `docs.md` son el
+ * mismo, en ext4 no.
+ */
+const FORMA_DEL_NOMBRE = /^[a-z0-9]+(-[a-z0-9]+)*$/;
+
+/**
+ * Por qué ese nombre no vale, o `undefined` si vale. El molde de `motivoDeClaveInaceptable`
+ * y `motivoDeEndpointInaceptable`: una sola función, y el motivo en la voz de quien lo lee.
+ *
+ * **Se aplica al GUARDAR y no al cargar** (`leerCarpetaDeAgentes` solo lo DICE): rechazar al
+ * cargar haría desaparecer un agente que funciona, que es lo contrario de lo que hace el
+ * resto de este módulo. Guardar es el único momento en que hay alguien delante que lo puede
+ * arreglar — y desde que el nombre de un subagente propio se puede cambiar, tiene con qué.
+ */
+export function motivoDeNombreInaceptable(nombre: string): string | undefined {
+  if (nombre.trim() === "") return "no puede estar vacío";
+  if (nombre !== nombre.trim()) return "no puede empezar ni acabar con espacios";
+  if (nombre !== nombre.toLowerCase()) return "no puede llevar mayúsculas: va todo en minúsculas";
+  if (!FORMA_DEL_NOMBRE.test(nombre)) {
+    return "solo vale minúsculas, dígitos y guiones sencillos (ni espacios, ni acentos, ni guion al principio o al final)";
+  }
+  return undefined;
+}
+
+/**
+ * El nombre que SÍ valdría, para poder ofrecerlo. `undefined` si no se puede proponer nada.
+ *
+ * Existe para que el aviso sea accionable: «renómbralo a `documentador`» se arregla, y «el
+ * nombre no vale» hay que adivinarlo. Los acentos se descomponen con NFD y se les quita la
+ * marca —así `diseñador` sale `disenador` y no `dise-ador`—, que es la diferencia entre una
+ * propuesta que el usuario acepta y una que tiene que corregir.
+ *
+ * Y se COMPRUEBA con la misma función antes de devolverlo: una propuesta que no valdría sería
+ * peor que no proponer nada.
+ */
+export function nombreSugerido(nombre: string): string | undefined {
+  const slug = nombre
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+  return slug !== "" && motivoDeNombreInaceptable(slug) === undefined ? slug : undefined;
+}
+
 /** Lo que se pudo leer, y lo que no con su motivo. Nunca se descarta nada en silencio. */
 export interface Lectura {
   agentes: Agente[];

@@ -36,10 +36,10 @@ describe("sembrarAgentes", () => {
     // especialistas desaparecerían al siguiente arranque y el orquestador se quedaría sin
     // nadie a quien delegar — sin que nada diera error.
     const raiz = base();
-    expect(sembrarAgentes(raiz).escritos.sort()).toEqual(["dev", "docs", "mockup", "planner", "xone-device-tester"]);
+    expect(sembrarAgentes(raiz).escritos.sort()).toEqual(["analyst-xone", "consultant-xone", "designer-xone", "developer-xone", "tester-xone"]);
     const { agentes, problemas } = leerCarpetaDeAgentes(rutaDeAgentes(raiz), "global");
     expect(problemas).toEqual([]);
-    expect(agentes.map((a) => a.nombre).sort()).toEqual(["dev", "docs", "mockup", "planner", "xone-device-tester"]);
+    expect(agentes.map((a) => a.nombre).sort()).toEqual(["analyst-xone", "consultant-xone", "designer-xone", "developer-xone", "tester-xone"]);
   });
 
   it("NO pisa uno que ya existe: el usuario ha podido afinar su prompt", () => {
@@ -47,7 +47,7 @@ describe("sembrarAgentes", () => {
     // peor forma de perderlo.
     const raiz = base();
     sembrarAgentes(raiz);
-    const ruta = join(rutaDeAgentes(raiz), "dev.md");
+    const ruta = join(rutaDeAgentes(raiz), "developer-xone.md");
     writeFileSync(ruta, "---\ndescripcion: el mío\n---\nMIS INSTRUCCIONES", "utf8");
     expect(sembrarAgentes(raiz).escritos).toEqual([]);
     expect(readFileSync(ruta, "utf8")).toContain("MIS INSTRUCCIONES");
@@ -70,17 +70,17 @@ describe("sembrarAgentes", () => {
   it("uno que nadie ha tocado se ACTUALIZA cuando cambia la versión de serie", () => {
     const raiz = base();
     sembrarAgentes(raiz);
-    const ruta = join(rutaDeAgentes(raiz), "dev.md");
+    const ruta = join(rutaDeAgentes(raiz), "developer-xone.md");
     // Se simula una versión de serie anterior escribiendo otra cosa Y anotándola en la
     // marca: es exactamente el estado en que queda un fichero que sembramos nosotros.
     const anterior = "---\ndescripcion: el de antes\n---\nLO DE ANTES";
     writeFileSync(ruta, anterior, "utf8");
     const marca = JSON.parse(readFileSync(join(rutaDeAgentes(raiz), FICHERO_DE_SEMILLA), "utf8")) as Record<string, string>;
-    marca["dev"] = createHash("sha256").update(anterior, "utf8").digest("hex").slice(0, 16);
+    marca["developer-xone"] = createHash("sha256").update(anterior, "utf8").digest("hex").slice(0, 16);
     writeFileSync(join(rutaDeAgentes(raiz), FICHERO_DE_SEMILLA), JSON.stringify(marca), "utf8");
 
     const siembra = sembrarAgentes(raiz);
-    expect(siembra.escritos).toEqual(["dev"]);
+    expect(siembra.escritos).toEqual(["developer-xone"]);
     expect(siembra.desactualizados).toEqual([]);
     expect(readFileSync(ruta, "utf8")).not.toContain("LO DE ANTES");
   });
@@ -88,11 +88,11 @@ describe("sembrarAgentes", () => {
   it("uno AFINADO se respeta y se DICE, no se pisa ni se calla", () => {
     const raiz = base();
     sembrarAgentes(raiz);
-    const ruta = join(rutaDeAgentes(raiz), "dev.md");
+    const ruta = join(rutaDeAgentes(raiz), "developer-xone.md");
     writeFileSync(ruta, "---\ndescripcion: el mío\n---\nMIS INSTRUCCIONES", "utf8");
     const siembra = sembrarAgentes(raiz);
     expect(siembra.escritos).toEqual([]);
-    expect(siembra.desactualizados).toEqual(["dev"]);
+    expect(siembra.desactualizados).toEqual(["developer-xone"]);
     expect(readFileSync(ruta, "utf8")).toContain("MIS INSTRUCCIONES");
     // Y no se pregunta dos veces: una vez marcado como ajeno, sigue siéndolo.
     expect(sembrarAgentes(raiz).escritos).toEqual([]);
@@ -105,12 +105,12 @@ describe("sembrarAgentes", () => {
     // Se simula «este agente todavía no existía cuando se sembró» quitándolo de la marca.
     const rutaMarca = join(rutaDeAgentes(raiz), FICHERO_DE_SEMILLA);
     const marca = JSON.parse(readFileSync(rutaMarca, "utf8")) as Record<string, string>;
-    delete marca["planner"];
+    delete marca["analyst-xone"];
     writeFileSync(rutaMarca, JSON.stringify(marca), "utf8");
-    rmSync(join(rutaDeAgentes(raiz), "planner.md"));
+    rmSync(join(rutaDeAgentes(raiz), "analyst-xone.md"));
 
-    expect(sembrarAgentes(raiz).escritos).toEqual(["planner"]);
-    expect(existsSync(join(rutaDeAgentes(raiz), "planner.md"))).toBe(true);
+    expect(sembrarAgentes(raiz).escritos).toEqual(["analyst-xone"]);
+    expect(existsSync(join(rutaDeAgentes(raiz), "analyst-xone.md"))).toBe(true);
   });
 
   /**
@@ -127,10 +127,10 @@ describe("sembrarAgentes", () => {
     const carpeta = rutaDeAgentes(raiz);
     const rutaViejo = join(carpeta, "probador.md");
     writeFileSync(rutaViejo, enDisco, "utf8");
-    rmSync(join(carpeta, "xone-device-tester.md"));
+    rmSync(join(carpeta, "tester-xone.md"));
     const rutaMarca = join(carpeta, FICHERO_DE_SEMILLA);
     const marca = JSON.parse(readFileSync(rutaMarca, "utf8")) as Record<string, string>;
-    delete marca["xone-device-tester"];
+    delete marca["tester-xone"];
     marca["probador"] = createHash("sha256").update(sembrado, "utf8").digest("hex").slice(0, 16);
     writeFileSync(rutaMarca, JSON.stringify(marca), "utf8");
     return rutaViejo;
@@ -147,12 +147,12 @@ describe("sembrarAgentes", () => {
     const rutaViejo = conElNombreViejo(raiz, "---\ndescripcion: el de antes\n---\nLO DE ANTES");
 
     const siembra = sembrarAgentes(raiz);
-    expect(siembra.escritos).toEqual(["xone-device-tester"]);
+    expect(siembra.escritos).toEqual(["tester-xone"]);
     expect(siembra.retirados).toEqual([
-      { nombre: "probador", ahoraSeLlama: "xone-device-tester", borrado: true },
+      { nombre: "probador", ahoraSeLlama: "tester-xone", borrado: true },
     ]);
     expect(existsSync(rutaViejo)).toBe(false);
-    expect(existsSync(join(rutaDeAgentes(raiz), "xone-device-tester.md"))).toBe(true);
+    expect(existsSync(join(rutaDeAgentes(raiz), "tester-xone.md"))).toBe(true);
     // Y no se vuelve a decir: la clave se fue con el fichero.
     expect(sembrarAgentes(raiz).retirados).toEqual([]);
   });
@@ -167,7 +167,7 @@ describe("sembrarAgentes", () => {
 
     const siembra = sembrarAgentes(raiz);
     expect(siembra.retirados).toEqual([
-      { nombre: "probador", ahoraSeLlama: "xone-device-tester", borrado: false },
+      { nombre: "probador", ahoraSeLlama: "tester-xone", borrado: false },
     ]);
     expect(readFileSync(rutaViejo, "utf8")).toContain("MIS INSTRUCCIONES");
     // Sigue diciéndose: aquí queda algo que decidir, que es borrarlo o quedarse con los dos.
@@ -197,16 +197,98 @@ describe("sembrarAgentes", () => {
   it("una carpeta SIN marca se adopta: no se escribe nada, y lo distinto se dice", () => {
     const raiz = base();
     mkdirSync(rutaDeAgentes(raiz), { recursive: true });
-    writeFileSync(join(rutaDeAgentes(raiz), "docs.md"), "---\ndescripcion: el mío\n---\nMÍO", "utf8");
+    writeFileSync(join(rutaDeAgentes(raiz), "consultant-xone.md"), "---\ndescripcion: el mío\n---\nMÍO", "utf8");
 
     const siembra = sembrarAgentes(raiz);
     expect(siembra.escritos).toEqual([]);
-    expect(siembra.desactualizados).toEqual(["docs"]);
+    expect(siembra.desactualizados).toEqual(["consultant-xone"]);
     // Ni se resucita lo que falta ni se pisa lo que hay.
-    expect(existsSync(join(rutaDeAgentes(raiz), "dev.md"))).toBe(false);
-    expect(readFileSync(join(rutaDeAgentes(raiz), "docs.md"), "utf8")).toContain("MÍO");
+    expect(existsSync(join(rutaDeAgentes(raiz), "developer-xone.md"))).toBe(false);
+    expect(readFileSync(join(rutaDeAgentes(raiz), "consultant-xone.md"), "utf8")).toContain("MÍO");
     // Y ya hay marca: a partir de aquí un agente nuevo sí llegaría.
     expect(existsSync(join(rutaDeAgentes(raiz), FICHERO_DE_SEMILLA))).toBe(true);
+  });
+
+  /**
+   * Los CINCO a la vez, que es lo que de verdad pasó: los de serie pasaron a `<rol>-xone`.
+   *
+   * Se construye la carpeta de quien arrancó con los nombres viejos y se comprueba que la
+   * siembra hace las dos cosas de cada caso: retira el que era nuestra semilla intacta y
+   * escribe el nuevo, y respeta el que el usuario afinó diciéndolo. Sin esto, el renombrado de
+   * los cinco era una tabla que nadie prueba, y el síntoma de que faltara una entrada es un
+   * especialista huérfano y sin mantener, en silencio — el fallo que `RENOMBRADOS` existe para
+   * no repetir.
+   */
+  it("los CINCO renombrados alcanzan a quien tenía los nombres viejos", () => {
+    const raiz = base();
+    const carpeta = rutaDeAgentes(raiz);
+    mkdirSync(carpeta, { recursive: true });
+    const marca: Record<string, string> = {};
+    // Cuatro tal como los habríamos escrito nosotros, y `mockup` afinado por el usuario.
+    const viejos: [string, string][] = [
+      ["docs", "consultant-xone"],
+      ["planner", "analyst-xone"],
+      ["dev", "developer-xone"],
+      ["xone-device-tester", "tester-xone"],
+    ];
+    for (const [viejo, nuevo] of viejos) {
+      const contenido = escribirAgente({ ...AGENTES_DE_SERIE.find((a) => a.nombre === nuevo)!, nombre: viejo });
+      writeFileSync(join(carpeta, `${viejo}.md`), contenido, "utf8");
+      marca[viejo] = createHash("sha256").update(contenido, "utf8").digest("hex").slice(0, 16);
+    }
+    const mio = "---\ndescripcion: el mío\n---\nMIS INSTRUCCIONES";
+    writeFileSync(join(carpeta, "mockup.md"), mio, "utf8");
+    marca["mockup"] = createHash("sha256")
+      .update(escribirAgente({ ...AGENTES_DE_SERIE.find((a) => a.nombre === "designer-xone")!, nombre: "mockup" }), "utf8")
+      .digest("hex")
+      .slice(0, 16);
+    writeFileSync(join(carpeta, FICHERO_DE_SEMILLA), JSON.stringify(marca), "utf8");
+
+    const siembra = sembrarAgentes(raiz);
+
+    // Los cinco nuevos están, y los cuatro viejos intactos se han ido con su clave.
+    expect(siembra.escritos.sort()).toEqual([
+      "analyst-xone",
+      "consultant-xone",
+      "designer-xone",
+      "developer-xone",
+      "tester-xone",
+    ]);
+    for (const [viejo] of viejos) expect(existsSync(join(carpeta, `${viejo}.md`))).toBe(false);
+    expect(siembra.retirados.filter((r) => r.borrado).map((r) => r.nombre).sort()).toEqual([
+      "dev",
+      "docs",
+      "planner",
+      "xone-device-tester",
+    ]);
+
+    // Y el afinado se QUEDA y se dice: queda algo que decidir, que es borrarlo o tener los dos.
+    expect(readFileSync(join(carpeta, "mockup.md"), "utf8")).toContain("MIS INSTRUCCIONES");
+    expect(siembra.retirados).toContainEqual({
+      nombre: "mockup",
+      ahoraSeLlama: "designer-xone",
+      borrado: false,
+    });
+  });
+
+  /**
+   * La entrada vieja se ACTUALIZÓ en vez de dejarse: apuntaba a `xone-device-tester`, que ya no
+   * es de serie. Sin esto, a quien conserve un `probador.md` afinado se le seguiría diciendo
+   * que ese agente «se llama ahora `xone-device-tester`» — un nombre que no existe en ninguna
+   * parte, y el usuario iría a buscarlo.
+   */
+  it("un renombrado en DOS pasos se dice de un salto, con el nombre de HOY", () => {
+    const raiz = base();
+    const carpeta = rutaDeAgentes(raiz);
+    mkdirSync(carpeta, { recursive: true });
+    writeFileSync(join(carpeta, "probador.md"), "---\ndescripcion: el mío\n---\nMÍO", "utf8");
+    writeFileSync(join(carpeta, FICHERO_DE_SEMILLA), JSON.stringify({ probador: "ajeno" }), "utf8");
+
+    expect(sembrarAgentes(raiz).retirados).toContainEqual({
+      nombre: "probador",
+      ahoraSeLlama: "tester-xone",
+      borrado: false,
+    });
   });
 
   it("la marca no se lee como un agente: empieza por punto y no acaba en .md", () => {
@@ -222,24 +304,24 @@ describe("sembrarAgentes", () => {
     // eliminar en un botón que no hace nada hasta que reinicias.
     const raiz = base();
     sembrarAgentes(raiz);
-    expect(borrarAgente(raiz, "mockup")).toBe(true);
+    expect(borrarAgente(raiz, "designer-xone")).toBe(true);
     // La siembra vuelve a correr —es lo que pasa en cada arranque— y no lo trae de vuelta.
     // Solo repone los que nunca existieron, que en esta carpeta ya no es ninguno.
     sembrarAgentes(raiz);
     const { agentes } = leerCarpetaDeAgentes(rutaDeAgentes(raiz), "global");
-    expect(agentes.map((a) => a.nombre)).not.toContain("mockup");
+    expect(agentes.map((a) => a.nombre)).not.toContain("designer-xone");
   });
 
   it("los cuatro conservan los textos que tenían en código: es una mudanza, no un rediseño", () => {
-    const dev = AGENTES_DE_SERIE.find((a) => a.nombre === "dev")!;
+    const dev = AGENTES_DE_SERIE.find((a) => a.nombre === "developer-xone")!;
     expect(dev.descripcion).toContain("aprobación humana");
     expect(dev.soloLectura).toBe(false);
-    const docs = AGENTES_DE_SERIE.find((a) => a.nombre === "docs")!;
+    const docs = AGENTES_DE_SERIE.find((a) => a.nombre === "consultant-xone")!;
     expect(docs.soloLectura).toBe(true);
     // Las particularidades que vivían en un `nombre === "planner"` dentro de `promptDe`
     // ahora están en el cuerpo de su fichero, que es donde se pueden leer y ajustar.
-    const planner = AGENTES_DE_SERIE.find((a) => a.nombre === "planner")!;
-    expect(planner.instrucciones).toContain("HANDOFF DE PLANNER");
+    const planner = AGENTES_DE_SERIE.find((a) => a.nombre === "analyst-xone")!;
+    expect(planner.instrucciones).toContain("HANDOFF DE ANÁLISIS");
   });
 });
 
@@ -258,11 +340,11 @@ describe("cargarAgentes", () => {
       // test no puede afirmar nada y se salta en vez de dar un verde falso.
       if (rutaGlobalDeAgentes().startsWith(casa)) {
         expect(cargarAgentes().agentes.map((a) => a.nombre).sort()).toEqual([
-          "dev",
-          "docs",
-          "mockup",
-          "planner",
-          "xone-device-tester",
+          "analyst-xone",
+          "consultant-xone",
+          "designer-xone",
+          "developer-xone",
+          "tester-xone",
         ]);
       }
     } finally {
@@ -287,12 +369,12 @@ describe("cargarAgentes", () => {
     try {
       if (!rutaGlobalDeAgentes().startsWith(casa)) return;
       cargarAgentes();
-      writeFileSync(join(rutaGlobalDeAgentes(), "docs.md"), "---\ndescripcion: mío\n---\nMÍO", "utf8");
+      writeFileSync(join(rutaGlobalDeAgentes(), "consultant-xone.md"), "---\ndescripcion: mío\n---\nMÍO", "utf8");
 
       const { agentes, problemas } = cargarAgentes();
       expect(problemas).toEqual([]);
-      expect(agentes.find((a) => a.nombre === "docs")?.semilla).toBe("modificada");
-      expect(agentes.find((a) => a.nombre === "dev")?.semilla).toBe("intacta");
+      expect(agentes.find((a) => a.nombre === "consultant-xone")?.semilla).toBe("modificada");
+      expect(agentes.find((a) => a.nombre === "developer-xone")?.semilla).toBe("intacta");
     } finally {
       if (previo === undefined) delete process.env["HOME"];
       else process.env["HOME"] = previo;
@@ -321,15 +403,15 @@ describe("marcarSemilla", () => {
   it("un de serie del global lleva su estado; uno del usuario, NINGUNO", () => {
     // Ausente ≠ «intacta»: un subagente del usuario no tiene semilla de la que apartarse, y
     // marcarlo como intacto le pintaría un «Restaurar el de serie» que no existe.
-    const salida = marcarSemilla([como("docs", "global"), como("advisor", "global")], []);
-    expect(salida.find((a) => a.nombre === "docs")?.semilla).toBe("intacta");
+    const salida = marcarSemilla([como("consultant-xone", "global"), como("advisor", "global")], []);
+    expect(salida.find((a) => a.nombre === "consultant-xone")?.semilla).toBe("intacta");
     expect(salida.find((a) => a.nombre === "advisor")?.semilla).toBeUndefined();
   });
 
   it("uno de serie MODIFICADO se dice: es el único con algo que restaurar", () => {
-    const salida = marcarSemilla([como("docs", "global"), como("dev", "global")], ["docs"]);
-    expect(salida.find((a) => a.nombre === "docs")?.semilla).toBe("modificada");
-    expect(salida.find((a) => a.nombre === "dev")?.semilla).toBe("intacta");
+    const salida = marcarSemilla([como("consultant-xone", "global"), como("developer-xone", "global")], ["consultant-xone"]);
+    expect(salida.find((a) => a.nombre === "consultant-xone")?.semilla).toBe("modificada");
+    expect(salida.find((a) => a.nombre === "developer-xone")?.semilla).toBe("intacta");
   });
 
   /**
@@ -341,12 +423,12 @@ describe("marcarSemilla", () => {
    * borrar— y con un «Restaurar el de serie» que le pisaría el suyo con el global.
    */
   it("un `.md` DE PROYECTO que se llama igual que uno de serie es del USUARIO", () => {
-    const salida = marcarSemilla([como("docs", "proyecto")], ["docs"]);
+    const salida = marcarSemilla([como("consultant-xone", "proyecto")], ["consultant-xone"]);
     expect(salida[0]!.semilla).toBeUndefined();
   });
 
   it("no toca nada más del agente: solo añade de quién es", () => {
-    const uno = como("docs", "global");
+    const uno = como("consultant-xone", "global");
     expect(marcarSemilla([uno], [])[0]).toEqual({ ...uno, semilla: "intacta" });
   });
 });
@@ -363,11 +445,11 @@ describe("restaurarAgente", () => {
   it("reescribe el `.md` con el de serie de hoy, pisando lo que hubiera", () => {
     const raiz = base();
     sembrarAgentes(raiz);
-    const ruta = join(rutaDeAgentes(raiz), "docs.md");
+    const ruta = join(rutaDeAgentes(raiz), "consultant-xone.md");
     writeFileSync(ruta, "---\ndescripcion: el mío\n---\nMIS INSTRUCCIONES", "utf8");
 
-    expect(restaurarAgente(raiz, "docs")).toBe(true);
-    const docs = AGENTES_DE_SERIE.find((a) => a.nombre === "docs")!;
+    expect(restaurarAgente(raiz, "consultant-xone")).toBe(true);
+    const docs = AGENTES_DE_SERIE.find((a) => a.nombre === "consultant-xone")!;
     expect(readFileSync(ruta, "utf8")).toBe(escribirAgente(docs));
   });
 
@@ -382,10 +464,10 @@ describe("restaurarAgente", () => {
   it("vuelve al carril: la siembra siguiente lo re-anota y ya no lo da por tocado", () => {
     const raiz = base();
     sembrarAgentes(raiz);
-    writeFileSync(join(rutaDeAgentes(raiz), "docs.md"), "---\ndescripcion: mío\n---\nMÍO", "utf8");
-    expect(sembrarAgentes(raiz).desactualizados).toEqual(["docs"]);
+    writeFileSync(join(rutaDeAgentes(raiz), "consultant-xone.md"), "---\ndescripcion: mío\n---\nMÍO", "utf8");
+    expect(sembrarAgentes(raiz).desactualizados).toEqual(["consultant-xone"]);
 
-    restaurarAgente(raiz, "docs");
+    restaurarAgente(raiz, "consultant-xone");
     const despues = sembrarAgentes(raiz);
     expect(despues.desactualizados).toEqual([]);
     expect(despues.escritos).toEqual([]);
@@ -413,12 +495,12 @@ describe("restaurarAgente", () => {
     // El caso que dejaba el agujero abierto. Borrarlo era irreversible desde la consola.
     const raiz = base();
     sembrarAgentes(raiz);
-    borrarAgente(raiz, "mockup");
+    borrarAgente(raiz, "designer-xone");
     sembrarAgentes(raiz);
-    expect(existsSync(join(rutaDeAgentes(raiz), "mockup.md"))).toBe(false);
+    expect(existsSync(join(rutaDeAgentes(raiz), "designer-xone.md"))).toBe(false);
 
-    expect(restaurarAgente(raiz, "mockup")).toBe(true);
-    expect(existsSync(join(rutaDeAgentes(raiz), "mockup.md"))).toBe(true);
+    expect(restaurarAgente(raiz, "designer-xone")).toBe(true);
+    expect(existsSync(join(rutaDeAgentes(raiz), "designer-xone.md"))).toBe(true);
   });
 });
 
@@ -463,10 +545,10 @@ describe("renombrarAgente", () => {
     const raiz = base();
     sembrarAgentes(raiz);
     guardarAgente(raiz, propio("advisor"));
-    const docsAntes = readFileSync(join(rutaDeAgentes(raiz), "docs.md"), "utf8");
+    const docsAntes = readFileSync(join(rutaDeAgentes(raiz), "consultant-xone.md"), "utf8");
 
-    expect(renombrarAgente(raiz, "advisor", propio("docs"))).toBe("destino-ocupado");
-    expect(readFileSync(join(rutaDeAgentes(raiz), "docs.md"), "utf8")).toBe(docsAntes);
+    expect(renombrarAgente(raiz, "advisor", propio("consultant-xone"))).toBe("destino-ocupado");
+    expect(readFileSync(join(rutaDeAgentes(raiz), "consultant-xone.md"), "utf8")).toBe(docsAntes);
     expect(existsSync(join(rutaDeAgentes(raiz), "advisor.md"))).toBe(true);
   });
 
@@ -493,7 +575,7 @@ describe("renombrarAgente", () => {
     // decidir lo mismo es cómo uno de los dos se queda sin la regla.
     const raiz = base();
     sembrarAgentes(raiz);
-    expect(renombrarAgente(raiz, "docs", propio("mis-docs"))).toBe("hecho");
+    expect(renombrarAgente(raiz, "consultant-xone", propio("mis-docs"))).toBe("hecho");
   });
 });
 
@@ -587,7 +669,7 @@ describe("guardarAgente", () => {
     const raiz = base();
     mkdirSync(rutaDeAgentes(raiz), { recursive: true });
     expect(sembrarAgentes(raiz).escritos).toHaveLength(5);
-    expect(existsSync(join(rutaDeAgentes(raiz), "dev.md"))).toBe(true);
+    expect(existsSync(join(rutaDeAgentes(raiz), "developer-xone.md"))).toBe(true);
   });
 
   it("borrar dice si existía: no se puede decir «borrado» de algo que no estaba", () => {

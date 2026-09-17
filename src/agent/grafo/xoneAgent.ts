@@ -108,11 +108,11 @@ export function promptOrquestador(agentes: readonly Agente[]): string {
     agentes.length === 0
       ? "AVISO: ahora mismo no hay ningún especialista dado de alta, así que no puedes delegar en nadie. Dilo en vez de intentar resolverlo tú."
       : `Los especialistas disponibles son: ${agentes.map((a) => a.nombre).join(", ")}. Elige por su descripción.`,
-    hay("planner") && hay("mockup")
-      ? "Para diagramas o esquemas de la app, delega en `mockup`; si deben reflejar el código real, encarga PRIMERO el análisis a `planner` y usa su resultado antes de dibujar."
+    hay("analyst-xone") && hay("designer-xone")
+      ? "Para diagramas o esquemas de la app, delega en `designer-xone`; si deben reflejar el código real, encarga PRIMERO el análisis a `analyst-xone` y usa su resultado antes de dibujar."
       : "",
     "Los especialistas no comparten el transcript: al encadenarlos, incluye en la descripción",
-    "de la siguiente `task` un bloque `HANDOFF DE PLANNER` compacto con los hechos verificados,",
+    "de la siguiente `task` un bloque `HANDOFF DE ANÁLISIS` compacto con los hechos verificados,",
     "rutas/evidencias y lagunas. No pidas al siguiente especialista redescubrir esos hechos.",
     "Cuando varias tareas sean independientes, delégalas EN EL MISMO mensaje para",
     "que corran a la vez.",
