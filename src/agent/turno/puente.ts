@@ -1,6 +1,7 @@
 import { normalizar } from "./normalizar.js";
 import { Mensajes } from "./mensajes.js";
 import { detalleDe, parametrosDe, type ParametrosSeguros } from "./resumenDeTool.js";
+import { esMensajeDeTool } from "./textoDeTool.js";
 import type { DomainEvent, PendienteDeAprobacion } from "../../core/events.js";
 
 /** El texto de un mensaje, venga como venga. */
@@ -151,6 +152,20 @@ export async function* aEventos(
         if (!esDelPadre(chunk.ns)) continue; // de un especialista: no es la respuesta
         if (!Array.isArray(chunk.dato)) continue;
         const [msg] = chunk.dato as [unknown, unknown];
+        /**
+         * **El RESULTADO de una tool no es la respuesta del asistente**, y por este modo de
+         * stream llega igual que un token. Sin esta línea se pintaba en el chat el fichero
+         * entero que acababa de leer —con sus números de línea y el pie `[Read 12 lines…]`—,
+         * que es justo lo que `core/events.ts` prohíbe: ningún evento lleva contenido de
+         * tool, ni truncado. Lo que el usuario debe ver de una tool es su LÍNEA (`tipo:
+         * "tool"`, con el detalle de la lista blanca), y eso ya se emite en la rama de
+         * `updates`.
+         *
+         * Estuvo mudo hasta que el orquestador dejó de delegarlo todo: mientras su única
+         * tool era `task`, lo que se colaba era la respuesta del especialista, que pasaba por
+         * una respuesta. Desde que lee ficheros, se colaba cada fichero.
+         */
+        if (esMensajeDeTool(msg)) continue;
         const texto = textoDe(msg);
         const id = (msg as Record<string, unknown> | null)?.id;
         const idTexto = typeof id === "string" ? id : undefined;

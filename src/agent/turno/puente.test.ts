@@ -140,6 +140,25 @@ describe("aEventos", () => {
     expect(e).toEqual([]);
   });
 
+  it("el RESULTADO de una tool no se emite como respuesta, por más que venga por `messages`", async () => {
+    /**
+     * El agujero que esto cierra, visto en la consola web del usuario: bajo el tramo de
+     * «Trabajo del agente» aparecía el fichero ENTERO leído, con sus números de línea y el
+     * pie `[Read 12 lines (lines 1-12 of 164 total)…]` — o sea la salida cruda de
+     * `read_file`, pintada como si fuera lo que contesta el asistente.
+     *
+     * Rompía el invariante de `core/events.ts` («ningún evento lleva argumentos de tool, ni
+     * truncados»), y lo destapó el cambio que hace al orquestador leer en vez de delegarlo
+     * todo: antes solo se colaba el resultado de `task`, que casualmente ERA una respuesta.
+     */
+    const contenido = "1  <?xml version=\"1.0\"?>\n2  <coll name=\"EntradaApp\">";
+    expect(await recoger([[["model_request:abc"], "messages", [{ type: "tool", content: contenido, id: "t1", tool_call_id: "c1" }, {}]]])).toEqual(
+      []
+    );
+    // Y por las dos vías con las que se reconoce un `ToolMessage`, no solo por `type`.
+    expect(await recoger([[[], "messages", [{ content: contenido, id: "t2", tool_call_id: "c2" }, {}]]])).toEqual([]);
+  });
+
   it("pero SU trabajo sí se cuenta, por las tools", async () => {
     const dato = { agent: { messages: [{ tool_calls: [{ name: "read_file" }] }] } };
     expect(await recoger([[["dev:abc"], "updates", dato]])).toEqual([{ tipo: "tool", nombre: "read_file" }]);

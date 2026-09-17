@@ -4294,6 +4294,24 @@ criterio después de ver los resultados es exactamente el sesgo que el banco exi
 impedir. Lo que se puede afirmar sin criterio nuevo es lo de la dispersión, que no depende de
 compararla con nada.
 
+**El resultado de una tool se estaba pintando en el chat como si fuera la respuesta**
+(17-09-2026, visto por el usuario en la consola web). Bajo el tramo de «Trabajo del agente»
+aparecía el fichero ENTERO que el agente acababa de leer, con sus números de línea y el pie
+`[Read 12 lines (lines 1-12 of 164 total). 152 lines remaining from offset 12.]` — la salida
+cruda de `read_file` de deepagents, en un bloque de código con su botón de copiar.
+
+Rompía el invariante de `core/events.ts` —ningún evento lleva argumentos ni contenido de tool,
+ni truncados— y venía de `puente.ts`: en el modo de stream `messages`, un `ToolMessage` llega
+igual que un token del modelo, y la rama emitía `textoDe(msg)` sin mirar QUÉ mensaje era. Se
+filtra con `esMensajeDeTool`, que ya existía para otra cosa.
+
+**Estuvo mudo hasta el mismo día en que se arregló, y lo destapó otro cambio nuestro**: mientras
+la única tool del orquestador era `task`, lo que se colaba por ahí era la respuesta del
+especialista —que pasaba por una respuesta y por eso nadie lo vio—. Desde que el orquestador lee
+ficheros en vez de delegarlo todo, lo que se colaba era cada fichero. Es el patrón de siempre en
+otra forma: una regla que solo se ejercita por un camino deja de estar probada cuando el camino
+cambia.
+
 ## Trampas verificadas
 
 - **El orquestador va de SOLO LECTURA, y hasta el 9-09-2026 no lo era** (`PERFIL_DEL_ORQUESTADOR`,
