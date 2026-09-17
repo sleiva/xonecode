@@ -110,6 +110,7 @@ export class CatalogoModelos implements CatalogoModelosPort {
       case "nvidia":
       case "groq":
       case "xai":
+      case "deepseek":
         return this.listarCompatible(proveedor);
       default:
         // Un personalizado va por el mismo camino: es un endpoint compatible con OpenAI y

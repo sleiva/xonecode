@@ -108,6 +108,7 @@ function construirModelo(
       case "nvidia":
       case "groq":
       case "xai":
+      case "deepseek":
         // Enumerados uno a uno, y no un `default`, para que el switch siga siendo
         // exhaustivo: el día que se añada un proveedor, esto tiene que dar un error de
         // compilación y no construir un cliente equivocado en silencio.
@@ -151,4 +152,17 @@ function construirModelo(
           apiKey: process.env.GOOGLE_API_KEY,
         });
     }
+    /**
+     * **La guarda que hacía que el comentario de arriba fuera verdad.**
+     *
+     * Ese comentario promete que añadir un proveedor da un error de compilación aquí, y no
+     * lo daba: sin esto el `switch` sin salida devuelve `undefined`, que encaja en el
+     * `unknown` del retorno. Se vio al añadir `deepseek`: compilaba limpio y el proveedor
+     * nuevo se habría colado devolviendo un modelo `undefined`, para reventar más adelante
+     * lejos de la causa. Con el `never`, el caso que falte no compila — que es lo que el
+     * comentario decía y no cumplía.
+     */
+    return ((nunca: never) => {
+      throw new Error(`proveedor sin construir: ${String(nunca)}`);
+    })(proveedor);
 }

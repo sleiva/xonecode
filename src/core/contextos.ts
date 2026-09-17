@@ -44,6 +44,17 @@ const TOPES: Partial<Record<Proveedor, Array<[prefijo: string, tope: number]>>> 
     ["claude", 200_000],
   ],
   gemini: [["gemini", 1_000_000]],
+  /**
+   * DeepSeek publica 1M de contexto para los dos modelos que ofrece hoy (`deepseek-flash` y
+   * `deepseek-v4-pro`), así que un solo prefijo los cubre y también los alias antiguos que
+   * siguen aceptando (`deepseek-v4-flash`).
+   *
+   * La cifra sale de su tabla de precios, no de la memoria de nadie: el tope de contexto es
+   * lo que decide el porcentaje de la barra, y uno inventado es una mentira con forma de
+   * cifra. Su tope de SALIDA (384K) no entra aquí a propósito: `construirCompatibleOpenAi`
+   * no pasa `maxTokens`, así que una tabla con ese dato no la leería nadie.
+   */
+  deepseek: [["deepseek", 1_000_000]],
   openai: [
     ["gpt-4.1", 1_000_000],
     ["gpt-4o", 128_000],

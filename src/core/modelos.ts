@@ -7,7 +7,7 @@ export const PAPELES: readonly Papel[] = ["rapido", "trabajo", "afilado"] as con
 
 export type ProveedorDeSerie =
   | "gemini" | "openai" | "anthropic" | "ollama" | "ollama-cloud"
-  | "nvidia" | "groq" | "xai";
+  | "nvidia" | "groq" | "xai" | "deepseek";
 
 /**
  * Un endpoint compatible con OpenAI dado de alta por el USUARIO, con la forma
@@ -129,7 +129,7 @@ export function motivoDeEndpointInaceptable(valor: string): string | undefined {
 
 export const PROVEEDORES: readonly ProveedorDeSerie[] = [
   "gemini", "openai", "anthropic", "ollama", "ollama-cloud",
-  "nvidia", "groq", "xai",
+  "nvidia", "groq", "xai", "deepseek",
 ] as const;
 
 /**
@@ -149,7 +149,7 @@ export const PROVEEDORES: readonly ProveedorDeSerie[] = [
  * `componentes/Ajustes.tsx`): lo que cambia con esto es que añadir uno compatible cuesta
  * una fila de datos en vez de una rama por sitio, no que se pueda declarar desde fuera.
  */
-export type ProveedorCompatibleOpenAi = "nvidia" | "groq" | "xai";
+export type ProveedorCompatibleOpenAi = "nvidia" | "groq" | "xai" | "deepseek";
 
 export const COMPATIBLES_OPENAI: Record<
   ProveedorCompatibleOpenAi,
@@ -158,6 +158,18 @@ export const COMPATIBLES_OPENAI: Record<
   nvidia: { baseUrl: "https://integrate.api.nvidia.com/v1", variable: "NVIDIA_API_KEY" },
   groq: { baseUrl: "https://api.groq.com/openai/v1", variable: "GROQ_API_KEY" },
   xai: { baseUrl: "https://api.x.ai/v1", variable: "XAI_API_KEY" },
+  /**
+   * DeepSeek. La base es `https://api.deepseek.com` y el `/v1` es el alias que publican
+   * para compatibilidad con el SDK de OpenAI; se usa el `/v1` porque es lo que esta tabla
+   * significa —la URL contra la que `ChatOpenAI` cuelga `/chat/completions` y el catálogo
+   * cuelga `/models`— y porque así la fila se lee igual que las otras tres.
+   *
+   * MEDIDO y no leído: `GET https://api.deepseek.com/v1/models` contesta **401**
+   * («Authentication Fails»), o sea que la ruta existe y solo falta la clave. Un 404 habría
+   * significado que el catálogo hay que pedirlo sin el `/v1`, y eso no se puede saber de la
+   * documentación, que no dice la ruta completa.
+   */
+  deepseek: { baseUrl: "https://api.deepseek.com/v1", variable: "DEEPSEEK_API_KEY" },
 };
 
 /**
@@ -205,6 +217,7 @@ const NOMBRES: Record<ProveedorDeSerie, string> = {
   nvidia: "NVIDIA",
   groq: "Groq",
   xai: "xAI",
+  deepseek: "DeepSeek",
 };
 
 /**
