@@ -415,6 +415,23 @@ export async function construirAgente(opciones: OpcionesDelAgente): Promise<unkn
     model: opciones.modelos.paraPapel("rapido"),
     systemPrompt: promptOrquestador(opciones.agentes),
     backend,
+    /**
+     * **El orquestador SÍ la lleva, y eso lo decidió una medida que tumbó lo contrario.**
+     *
+     * La primera versión se la dio solo a los especialistas con el argumento de que el
+     * orquestador delega. Medido sobre un proyecto real con la pregunta que motivó la tool
+     * —«¿cuántas colecciones tiene mi proyecto?»—: **no delegó**. La contestó él, con `ls`,
+     * `glob`, `grep` y `read_file`, en once llamadas y ~88k tokens, y la tool no llegó a
+     * estar disponible porque vivía en los subagentes. O sea que el razonamiento era bueno y
+     * el comportamiento otro, que es justo lo que este repo prefiere medir antes que suponer.
+     *
+     * No le abre nada: es de LECTURA y el orquestador ya lee (`permisosDe` le deja
+     * `read`/`ls`/`glob`/`grep` y le deniega el disco entero para escribir). Lo que cambia es
+     * el precio de orientarse. Su esquema viaja en cada llamada suya —y eso no es gratis,
+     * `excluirTools` existe por eso—, pero es una operación enumerada y un nombre frente a
+     * las once llamadas que sustituye.
+     */
+    tools: [crearNavegacionXone(cargarIndice, opciones.ficheros)],
     interruptOn: hitlDe(PERFIL_DEL_ORQUESTADOR),
     checkpointer: opciones.checkpointer ?? new MemorySaver(),
     // El contenido de los `ToolMessage` va como TEXTO al modelo. Sin esto, un turno real

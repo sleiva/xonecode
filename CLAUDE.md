@@ -247,9 +247,13 @@ Y las guardas del proyecto:
   (`agent/navegacion/modeloDeProyecto.ts`): lo que el agente no puede abrir no llega a estar en
   el índice. **Límite declarado: no ve referencias calculadas en JavaScript**, y la descripción de
   la tool lo dice — callarlo haría concluir que un uso no existe.
-- **Va a los CINCO especialistas y no al orquestador** (`xoneAgent.navegacion.test.ts`, que lo mira
-  en lo que recibe `createDeepAgent`): el orquestador no tiene tools propias porque delega. Y a un
-  subagente de motor EXTERNO no puede llegar — corre en otro proceso, con sus propias tools.
+- **Va a los cinco especialistas Y al orquestador, y eso lo decidió una MEDIDA que tumbó lo
+  contrario** (`xoneAgent.navegacion.test.ts`, que lo mira en lo que recibe `createDeepAgent`). La
+  primera versión se la negaba al orquestador, con el argumento de que delega; medido sobre un
+  proyecto real con la pregunta que motivó la tool, **no delegó**: la contestó él con `ls`, `glob`,
+  `grep` y `read_file`, y la tool no llegó a estar disponible. No le abre nada —es de lectura y ya
+  lee—, lo que cambia es el precio de orientarse. A un subagente de motor EXTERNO no puede llegar:
+  corre en otro proceso, con sus propias tools.
 - `.xonecode/memoria.md` se ve por UNA ruta virtual, `/MEMORIA_PROYECTO.md` (Proxy en
   `agent/grafo/memoriaDeProyecto.ts`), así que la carpeta sigue denegada entera y escribir la memoria
   pasa por la aprobación de siempre. El resumen de contexto usa umbrales **fijados a mano** (32k

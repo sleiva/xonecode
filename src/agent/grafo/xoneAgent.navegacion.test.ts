@@ -75,7 +75,7 @@ describe("el cableado de xone_navegacion", () => {
     expect(nombresDeTools(analista!)).toContain("regex_search");
   });
 
-  it("el ORQUESTADOR no la recibe: no tiene tools propias, delega", async () => {
+  it("el ORQUESTADOR también la recibe, y lo decidió una MEDIDA", async () => {
     const raiz = proyecto();
     await construirAgente({
       raiz,
@@ -92,7 +92,11 @@ describe("el cableado de xone_navegacion", () => {
       }),
     });
 
+    // La primera versión se la negaba, con el argumento de que delega. Medido sobre un
+    // proyecto real: NO delegó — contestó él en once llamadas con `ls`, `glob`, `grep` y
+    // `read_file`, y la tool no llegó a estar disponible. El razonamiento era bueno y el
+    // comportamiento otro. Este test guarda la medida, no la suposición.
     const suyas = (capturado.opciones?.["tools"] ?? []) as { name?: string }[];
-    expect(suyas.map((t) => t.name)).not.toContain("xone_navegacion");
+    expect(suyas.map((t) => t.name)).toContain("xone_navegacion");
   });
 });
