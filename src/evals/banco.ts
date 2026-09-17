@@ -92,9 +92,19 @@ async function unaPasada(pregunta: Pregunta, modelos: Modelos, skills: SkillsEnD
     const entorno = await inspeccionar(raiz);
     const sesion = await abrirSesionReal({ raiz, modelos, skills, entorno, pedirAprobacion: rechazarTodo });
     const { piel, texto } = pielQueRecuerda();
-    const reloj = setTimeout(() => sesion.cancelar(), TOPE_MS);
+    // **Quién canceló se APUNTA**, porque el mensaje de la librería dice «cancelado por el
+    // usuario» y aquí no hay ningún usuario: lo cancela este reloj. Medido en la primera base,
+    // donde una pasada de `login` se pasó de los cinco minutos y la tabla acusó a una persona
+    // que no estaba. Un banco que miente en un error es lo único que no puede hacer.
+    let porElTope = false;
+    const reloj = setTimeout(() => {
+      porElTope = true;
+      sesion.cancelar();
+    }, TOPE_MS);
     try {
       await sesion.turno(pregunta.texto, piel);
+    } catch (e) {
+      throw porElTope ? new Error(`se pasó del tope de ${TOPE_MS / 60000} min`) : e;
     } finally {
       clearTimeout(reloj);
       sesion.cerrar();
