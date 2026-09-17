@@ -26,6 +26,7 @@ import type {
 import { seMira } from "../tipos.js";
 import { etiquetaDeEstado, inventario, seLlegaAlDispositivo, type FilaDeInventario } from "../inventarioDeDispositivos.js";
 import { ArrancarEmulador } from "./ArrancarEmulador.js";
+import { useMedirAlVolver } from "../medirAlVolver.js";
 import { Agentes } from "./Agentes.js";
 import { Receta } from "./Receta.js";
 import { VerificarDispositivo } from "./VerificarDispositivo.js";
@@ -512,27 +513,16 @@ export function Ajustes({
   }, [seccion, registrando, entornoEnPestana, suyosEnPestana, errorEnPestana]);
 
   /**
-   * **Al ENTRAR en Dispositivos se vuelve a medir**, aunque ya haya foto.
+   * **Se mide al entrar en Dispositivos y al VOLVER a la ventana con la sección abierta.**
    *
-   * La foto es de cuando se conectó el primer cliente, y entre eso y abrir esta sección puede
-   * haber pasado cualquier cosa: medido en la pantalla del usuario, mató el emulador y la fila
-   * siguió diciendo «arrancado» en verde durante minutos, porque nadie había vuelto a mirar.
+   * El segundo es el que faltaba y el que el usuario encontró: dejas esto abierto, te vas al
+   * terminal a matar el emulador, y vuelves — la sección nunca cambia, así que la foto se
+   * quedaba en la de hace un minuto y la fila en verde. Reproducido en el navegador.
    *
-   * Esto NO es sondear, que es lo que la sección se prohíbe a propósito (un panel que se
-   * refresca solo cada pocos segundos lanza procesos en la máquina de quien mira sin que nadie
-   * los pida). Es UNA medida por navegación explícita — el mismo trato que ya tienen la lista
-   * de proyectos de una pestaña, el árbol de Ficheros y la lista de Revisión.
-   *
-   * Y a diferencia de esas, se pide TAMBIÉN cuando ya hay foto: aquí el dato viejo es
-   * precisamente el problema. Las dependencias son solo `seccion`, así que la foto que llega
-   * no vuelve a disparar el efecto; el manejador queda fuera porque `App` pasa una lambda del
-   * JSX y su identidad cambia en cada render.
+   * El porqué de que esto no sea un sondeo está en `medirAlVolver.ts`, que lo comparte con la
+   * pestaña Ejecutar: dos copias del mismo efecto con su suscripción es como divergen.
    */
-  useEffect(() => {
-    if (seccion !== "dispositivos") return;
-    alActualizarDispositivos?.();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [seccion]);
+  useMedirAlVolver(seccion === "dispositivos", alActualizarDispositivos);
 
   const [avisoDeUrl, setAvisoDeUrl] = useState<string | undefined>(undefined);
 

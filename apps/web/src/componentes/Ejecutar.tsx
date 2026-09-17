@@ -1,5 +1,6 @@
 import { useEffect } from "react";
 import { etiquetaDeEstado, seLlegaAlDispositivo } from "../inventarioDeDispositivos.js";
+import { useMedirAlVolver } from "../medirAlVolver.js";
 import { selloDeFecha } from "../selloDeFecha.js";
 import type { EstadoDelCliente } from "../store.js";
 import { formatearMs } from "../tiempo.js";
@@ -98,19 +99,12 @@ export function Ejecutar({
   }, [conectado, alRevisar, elegido?.id]);
 
   /**
-   * **Y la foto de los dispositivos se rehace al entrar aquí**, por lo mismo que en Ajustes:
-   * la que hay es de cuando se conectó el cliente, y esta pestaña decide con ella qué está «a
-   * mano». Medido en la pantalla del usuario: mató el emulador y siguió saliendo como
-   * arrancado, así que esta lista habría ofrecido lanzar la app en un aparato que no está.
-   *
-   * Una sola vez al montar —`conectado` es la única dependencia— y no un sondeo: cada medida
-   * lanza `adb` y `xcrun` en la máquina de quien mira.
+   * **Y la foto de los dispositivos se rehace al entrar aquí y al volver a la ventana**, por lo
+   * mismo que en Ajustes: la que hay puede ser de hace rato, y esta pestaña decide con ella
+   * qué está «a mano», o sea en qué aparato se lanza la app. El porqué entero, y por qué no es
+   * un sondeo, en `medirAlVolver.ts`.
    */
-  useEffect(() => {
-    if (conectado === false) return;
-    alActualizarDispositivos?.();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [conectado]);
+  useMedirAlVolver(conectado !== false, alActualizarDispositivos);
 
   const enCurso = lanzamiento?.estado === "corriendo";
   const puedeLanzar = conectado === true && veredicto?.listo === true && alLanzar !== undefined && !enCurso;

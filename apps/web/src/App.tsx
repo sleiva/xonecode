@@ -1044,7 +1044,7 @@ export function App({
       // Guardar y volver a medir van en el MISMO mensaje: configurar sin remedir dejaría la
       // pantalla enseñando la foto de la configuración anterior.
       alCambiarDispositivos={(ajustes) => void enviar({ clase: "dispositivos", ajustes })}
-      alActualizarDispositivos={() => void enviar({ clase: "dispositivos" })}
+      alActualizarDispositivos={actualizarDispositivos}
       // Viaja el NOMBRE de la herramienta, nunca un comando: qué se lanza lo decide el
       // servidor con su tabla cerrada. Y detrás vuelve a medir, así que la foto nueva es
       // la que dice si la herramienta apareció.
@@ -1495,7 +1495,7 @@ export function App({
             alNuevaTarea={(proyecto) => abrirVentanaDeTarea(proyecto)}
               alAbrirAjustes={() => setAjustesAbiertos(true)}
               {...(estado.dispositivos === undefined ? {} : { dispositivos: estado.dispositivos })}
-              alActualizarDispositivos={() => void enviar({ clase: "dispositivos" })}
+              alActualizarDispositivos={actualizarDispositivos}
               alVerificarDispositivo={(id) => void enviar({ clase: "conexion", id })}
               {...(estado.tareas === undefined ? {} : { tareas: estado.tareas })}
               alAbrirSesionDeTarea={(proyecto, sesion) => abrirSesion(proyecto, sesion)}
