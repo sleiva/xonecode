@@ -4467,6 +4467,39 @@ Con dos cosas más en el mismo cambio:
   llegar al tope con varias en vuelo es el caso normal. Dos reglas nuestras que vivían sin
   hablarse; el test las ata juntas.
 
+**El bloque de las skills visuales se va del prompt al cuerpo de las skills** (17-09-2026).
+`SKILLS_VISUALES` eran ~1.400 caracteres —cómo elegir entre `archify` y `artifacts-builder`,
+dónde se guarda un artefacto y qué no funciona dentro del iframe— en el prompt de CUATRO
+especialistas, o sea en cada una de sus llamadas, hablaran o no de diagramas.
+
+Nació de una lección buena y la conclusión era la equivocada: un turno leyó `archify/SKILL.md` y
+una referencia, se saltó `estilo.md` —donde estaba la regla— y escribió un artefacto con
+`localStorage` que se mató solo. De ahí salió «ponlo en el prompt de todos, así no depende de
+cargar nada». Lo que ese fallo decía en realidad es **ponlo en el fichero que SÍ se abre**: hoy
+la regla encabeza el cuerpo de `skills/archify/SKILL.md` y de
+`skills/artifacts-builder/SKILL.md`, que es lo primero que lee quien carga cualquiera de las
+dos. Los prompts propios bajaron un tercio: consultant 3.881 → 2.604, analyst 3.959 → 2.682,
+developer 3.280 → 2.003, designer 3.603 → 2.326.
+
+**Y con él cae la regla de que las dos skills viajaban juntas.** Iban emparejadas porque aquel
+bloque hablaba de las dos, así que un perfil con `artifacts-builder` a secas leía instrucciones
+sobre una tool que no tenía. Sin el bloque, se pueden repartir por lo que cada uno hace —y hay
+que repartirlas, porque **cada skill asignada mete su descripción en el prompt de sistema en
+cada llamada**: la de `archify` son ~650 caracteres y la de `xone-development` casi mil. El
+reparto queda: `designer` las dos; `analyst` las dos (dibuja anclado al código); `developer`
+solo `artifacts-builder`, que escribe documentos pero los diagramas son de `designer`;
+`consultant` ninguna, que contesta preguntas; `tester` ninguna, que no dibuja. Para `consultant`
+eso es pasar de 1.911 a 996 caracteres de descripciones por llamada.
+
+Lo que queda vigilado es la razón de fondo: **ningún `SKILL.md` puede ORDENAR desde su cabecera
+usar la otra skill**, porque quien la lea puede no tenerla. Más abajo sí puede nombrarla —su
+cuerpo se ramifica por qué tools existen en cada harness— pero condicionada.
+
+**Y todo esto alcanza a quien ya arrancó, comprobado sobre una copia de la carpeta real del
+usuario**: los cinco `.md` seguían con nuestro hash, así que la siembra los reescribe
+(`consultant-xone.md` pasó de 2.556 a 1.251 caracteres) y sus dos agentes propios no se tocan.
+Es exactamente para lo que existe `.semilla.json`.
+
 ## Trampas verificadas
 
 - **El orquestador va de SOLO LECTURA, y hasta el 9-09-2026 no lo era** (`PERFIL_DEL_ORQUESTADOR`,

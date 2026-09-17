@@ -10,6 +10,28 @@ metadata:
 
 # Archify
 
+## Antes de escribir nada: dónde va y qué no funciona ahí
+
+**Esto se lee aquí porque es donde se lee de verdad.** Vivía en el prompt de cuatro
+especialistas —unos 1.400 caracteres que viajaban en CADA llamada de cada uno, hablaran o no de
+diagramas— y antes de eso vivía en `estilo.md`, que un turno real no llegó a abrir: escribió un
+artefacto con `localStorage`, el script se mató entero y el botón del tema quedó muerto. La
+lección no era «repítelo en todos los prompts», era **ponerlo en el fichero que sí se abre**.
+
+- **DÓNDE se guarda**: `/artefactos/<nombre>.html`, nunca en la raíz del proyecto ni dentro de
+  `/skills`. `/artefactos/` es la carpeta de ESTA sesión: no es del proyecto, no pasa por
+  aprobación, no entra en git y no sube a CloudStudio. Un HTML escrito fuera de ella acaba
+  dentro de la app XOne del usuario.
+- **DÓNDE se VE, y qué NO funciona ahí**: la consola lo pinta en un iframe sin
+  `allow-same-origin`. `localStorage`, `sessionStorage` e `indexedDB` **LANZAN**, y se llevan por
+  delante el resto de tu `<script>`: nada de interruptor de tema ni de recordar nada — el tema se
+  resuelve con `matchMedia`, y ya. Y no se llega al origen de la consola, así que **hornea los
+  datos dentro del HTML**.
+- **Apóyate en el código real** antes de dibujar: no inventes nombres, componentes ni flujos.
+- **Para un diagrama, esquema, arquitectura, flujo, secuencia, datos o estados, esta skill basta.**
+  Si ADEMÁS piden un contenedor interactivo alrededor, eso es otra skill: úsala solo si la
+  tienes y después de decidir el diagrama aquí. **No nombres jamás una skill que no tengas.**
+
 Create a diagram: architecture, workflow, sequence, dataflow, or lifecycle.
 
 ## Aquí no hay terminal
@@ -93,8 +115,9 @@ pide explícitamente una de esas capacidades.
 
 Construye el diagrama tú mismo, como SVG o mermaid inline dentro de tu propio HTML
 autocontenido — no hay JSON de Archify que escribir ni motor que lo consuma, así que no lleva
-theme switching, pan/zoom, búsqueda ni export automático salvo que tú los programes. Sigue la
-skill `artifacts-builder`, en concreto `reference/diagramas.md`. La entrega depende de la tool
+theme switching, pan/zoom, búsqueda ni export automático salvo que tú los programes. **Si tienes** la skill
+`artifacts-builder`, su `reference/diagramas.md` te sirve de guía; si no la tienes, sigue aquí y
+no la nombres. La entrega depende de la tool
 que tengas:
 
 - **Con `publish_artifact`**: `publish_artifact(path=..., title=...)`. **Cuando confirme, HAS

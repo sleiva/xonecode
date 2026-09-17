@@ -2,6 +2,9 @@ import { describe, it, expect } from "vitest";
 import { permisosDe, toolsDe, hitlDe, seDetieneEn, TOOLS_ESCRITURA } from "./perfiles.js";
 import { sinArtefactosEnElProyecto } from "./proyecto.js";
 import { AIMessage } from "@langchain/core/messages";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+import { RAIZ_SKILLS } from "./skills.js";
 import { humanInTheLoopMiddleware } from "langchain";
 import { AGENTES_DE_SERIE } from "../subagentes/agentesEnDisco.js";
 
@@ -24,17 +27,51 @@ describe("permisosDe", () => {
    * va en el cuerpo habla de las dos y manda usar `archify` antes que la otra, así que un
    * perfil con `artifacts-builder` a secas leería instrucciones sobre una tool que no tiene.
    */
-  it("archify y artifacts-builder viajan juntas: ninguna sin la otra", () => {
-    for (const perfil of TODOS) {
-      expect(perfil.skills.includes("archify"), perfil.nombre).toBe(perfil.skills.includes("artifacts-builder"));
+  it("ninguna de las dos skills visuales NOMBRA a la otra, así que se pueden repartir sueltas", () => {
+    /**
+     * Antes tenían que ir juntas, y el motivo era nuestro: el bloque `SKILLS_VISUALES` del
+     * prompt hablaba de las dos y mandaba usar `archify` primero, así que un perfil con
+     * `artifacts-builder` a secas leía instrucciones sobre una tool que no tenía.
+     *
+     * Ese bloque ya no existe —se fue al cuerpo de cada skill, que es donde se lee—, y con él
+     * se va la atadura: `developer-xone` lleva `artifacts-builder` para escribir documentos y
+     * NO `archify`, porque los diagramas son de `designer-xone`. Cada skill que se asigna mete
+     * su descripción en el prompt de sistema en CADA llamada, y la de `archify` son ~650
+     * caracteres.
+     *
+     * Lo que sí hay que sostener es esto: si un fichero nombrara a la otra, volveríamos al
+     * mismo fallo — «no menciones jamás una skill que no tienes».
+     */
+    for (const [skill, otra] of [
+      ["archify", "artifacts-builder"],
+      ["artifacts-builder", "archify"],
+    ]) {
+      const cuerpo = readFileSync(join(RAIZ_SKILLS, skill, "SKILL.md"), "utf8");
+      // La CABECERA es la que da las órdenes, y es la que no puede nombrar a la otra. Más
+      // abajo sí puede aparecer, pero condicionada («si tienes…»): lo que no vale es mandar
+      // usar algo que quizá no está.
+      const cabecera = cuerpo.slice(cuerpo.indexOf("## Antes de escribir nada"), cuerpo.indexOf("\n## ", cuerpo.indexOf("## Antes de escribir nada") + 5));
+      expect(cabecera.length, skill).toBeGreaterThan(200);
+      expect(cabecera, skill).not.toContain(`\`${otra}\``);
+      // El resto del fichero SÍ puede nombrarla: su cuerpo se ramifica por qué tools existen
+      // en cada harness («si tienes `renderizar_diagrama`…», y una rama es «si no tienes
+      // ninguna de las dos (xonecode)»). Lo que no puede es dar la orden desde arriba.
     }
   });
 
-  it("los especialistas de DESARROLLO sí las llevan las dos", () => {
-    for (const perfil of TODOS.filter((p) => ["consultant-xone", "analyst-xone", "developer-xone", "designer-xone"].includes(p.nombre))) {
-      expect(perfil.skills, perfil.nombre).toContain("archify");
-      expect(perfil.skills, perfil.nombre).toContain("artifacts-builder");
-    }
+  it("el reparto de las visuales es el DECIDIDO, y cada una cuesta en cada llamada", () => {
+    const de = (nombre: string) => TODOS.find((p) => p.nombre === nombre)!.skills;
+    expect(de("designer-xone")).toEqual(expect.arrayContaining(["archify", "artifacts-builder"]));
+    // Dibuja: puede necesitar diagramas anclados al código real.
+    expect(de("analyst-xone")).toContain("archify");
+    // Escribe documentos e informes, pero los diagramas los hace `designer-xone`.
+    expect(de("developer-xone")).toContain("artifacts-builder");
+    expect(de("developer-xone")).not.toContain("archify");
+    // Contesta preguntas de la plataforma: ni dibuja ni escribe informes.
+    expect(de("consultant-xone")).not.toContain("archify");
+    expect(de("consultant-xone")).not.toContain("artifacts-builder");
+    // Y el probador no dibuja nada, que es de donde salió toda esta regla.
+    expect(de("tester-xone")).not.toContain("archify");
   });
 
   it("TODO perfil deniega .env y .git — incluido el que se añada mañana", () => {

@@ -5,6 +5,29 @@ description: "Build a self-contained interactive HTML artifact the user can view
 
 # Artifacts Builder
 
+## Antes de escribir nada: dónde va y qué no funciona ahí
+
+**Esto se lee aquí porque es donde se lee de verdad.** Vivía en el prompt de cuatro
+especialistas —unos 1.400 caracteres que viajaban en CADA llamada de cada uno, hablaran o no de
+diagramas— y antes de eso vivía en `estilo.md`, que un turno real no llegó a abrir: escribió un
+artefacto con `localStorage`, el script se mató entero y el botón del tema quedó muerto. La
+lección no era «repítelo en todos los prompts», era **ponerlo en el fichero que sí se abre**.
+
+- **DÓNDE se guarda**: `/artefactos/<nombre>.html`, nunca en la raíz del proyecto ni dentro de
+  `/skills`. `/artefactos/` es la carpeta de ESTA sesión: no es del proyecto, no pasa por
+  aprobación, no entra en git y no sube a CloudStudio. Un HTML escrito fuera de ella acaba
+  dentro de la app XOne del usuario.
+- **DÓNDE se VE, y qué NO funciona ahí**: la consola lo pinta en un iframe sin
+  `allow-same-origin`. `localStorage`, `sessionStorage` e `indexedDB` **LANZAN**, y se llevan por
+  delante el resto de tu `<script>`: nada de interruptor de tema ni de recordar nada — el tema se
+  resuelve con `matchMedia`, y ya. Y no se llega al origen de la consola, así que **hornea los
+  datos dentro del HTML**.
+- **Apóyate en el código real** antes de dibujar: no inventes nombres, componentes ni flujos.
+- **Esta skill es para dashboards, informes, tablas filtrables y piezas interactivas.** Para un
+  diagrama de arquitectura, flujo o secuencia hay otra: úsala si la tienes, y si no la tienes,
+  dilo en vez de dibujarlo aquí — un diagrama hecho a mano sale peor y cuesta más. **No nombres
+  jamás una skill que no tengas.**
+
 You write ONE self-contained HTML file. No build step, no npm, no `execute` anywhere this
 skill is mounted — nothing here runs a script.
 

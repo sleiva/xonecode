@@ -591,23 +591,26 @@ export function sembrarAgentes(base: string = homedir()): Siembra {
  * carpeta `/artefactos/`: lo que tiene que cumplirse va donde el modelo mira SIEMPRE, no en
  * una skill que hay que cargar.
  */
-const SKILLS_VISUALES = [
-  "SKILLS VISUALES:",
-  "- REGLA DE PRIORIDAD: para un diagrama, esquema, arquitectura, flujo, secuencia, datos o estados,",
-  "  usa solamente `archify`. No cargues ni uses `artifacts-builder` como sustituto.",
-  "- Solo si, ADEMÁS del diagrama, el usuario pide un contenedor HTML interactivo, usa `artifacts-builder`",
-  "  después de decidir el diagrama con `archify`. No menciones jamás una tool que no tienes.",
-  "- DÓNDE se guarda: `/artefactos/<nombre>.html`, y nunca en la raíz del proyecto ni dentro de",
-  "  `/skills`. `/artefactos/` es la carpeta de esta sesión: no es del proyecto, no pasa por",
-  "  aprobación, no entra en git y no sube a CloudStudio. Un diagrama escrito fuera de ella acaba",
-  "  dentro de la app XOne del usuario.",
-  "- Si te piden un dashboard, informe, tabla o artefacto HTML interactivo, carga primero `artifacts-builder`.",
-  "- DÓNDE se VE, y qué NO funciona ahí: la consola lo pinta en un iframe sin `allow-same-origin`.",
-  "  `localStorage`, `sessionStorage` e `indexedDB` LANZAN, y se llevan el resto de tu `<script>`:",
-  "  nada de interruptor de tema ni de recordar nada — el tema se resuelve con `matchMedia`, y ya.",
-  "  Y no se llega al origen de la consola, así que hornea los datos dentro del HTML.",
-  "- Apóyate en el código real antes de dibujar: no inventes nombres, componentes ni flujos.",
-].join("\n");
+/**
+ * **Ya no existe, y su hueco se deja escrito a propósito.**
+ *
+ * Era un bloque de ~1.400 caracteres —cómo elegir entre `archify` y `artifacts-builder`, dónde
+ * se guarda un artefacto y qué no funciona dentro del iframe— que iba en el prompt de CUATRO
+ * especialistas y por tanto viajaba en cada una de sus llamadas, hablaran o no de diagramas. Se
+ * midió lo que costaba con `inspectorDePrompt`: en un turno normal, la cabecera es el 87 % de
+ * la petición.
+ *
+ * Nació de una lección buena: un turno leyó `archify/SKILL.md` y una referencia, se saltó
+ * `estilo.md` —donde estaba la regla— y escribió un artefacto con `localStorage` que se mató
+ * solo. Pero la conclusión correcta de eso no era «repítelo en todos los prompts», era
+ * **ponerlo en el fichero que sí se abre**: hoy la regla encabeza el cuerpo de
+ * `skills/archify/SKILL.md` y `skills/artifacts-builder/SKILL.md`.
+ *
+ * Y hay una segunda razón para no nombrar las skills aquí: `SkillsMiddleware` ya las anuncia
+ * con su descripción y su ruta, y nombrarlas otra vez —con instrucciones de uso— es lo que
+ * llevaba al especialista a cargarlas antes de saber si le hacían falta.
+ */
+
 
 /**
  * La memoria del proyecto, y quién la lee y la escribe.
@@ -728,8 +731,17 @@ export const AGENTES_DE_SERIE: readonly Agente[] = [
       "No modifica nada.",
     motor: "modelo",
     soloLectura: true,
-    skills: ["xone-development", "archify", "artifacts-builder"],
-    instrucciones: `${SKILLS_VISUALES}\n\n${CONSULTA_ACOTADA_DOCS}`,
+    /**
+     * **Sin las visuales, y eso es una DECISIÓN de reparto, no un recorte a ciegas.**
+     *
+     * Cada skill asignada mete en su prompt de sistema el nombre, la descripción y la ruta que
+     * pone `SkillsMiddleware`, y la descripción de `archify` sola son ~700 caracteres de inglés
+     * sobre diagramas, ETL y Mermaid — en CADA llamada, dibuje o no. Este contesta preguntas de
+     * la plataforma; la regla del orquestador ya manda los diagramas a `designer-xone`, así que
+     * dárselas era pagar una capacidad que no le toca ejercer.
+     */
+    skills: ["xone-development"],
+    instrucciones: `${CONSULTA_ACOTADA_DOCS}`,
     origen: "semilla",
   },
   {
@@ -740,7 +752,7 @@ export const AGENTES_DE_SERIE: readonly Agente[] = [
     motor: "modelo",
     soloLectura: true,
     skills: ["xone-spec-builder", "xone-plan-builder", "archify", "artifacts-builder"],
-    instrucciones: `${SKILLS_VISUALES}\n\n${RECONOCIMIENTO_PLANNER}\n\n${MEMORIA_LEER}`,
+    instrucciones: `${RECONOCIMIENTO_PLANNER}\n\n${MEMORIA_LEER}`,
     origen: "semilla",
   },
   {
@@ -750,8 +762,10 @@ export const AGENTES_DE_SERIE: readonly Agente[] = [
       "Las modificaciones requieren aprobación humana.",
     motor: "modelo",
     soloLectura: false,
-    skills: ["xone-development", "xone-debugging", "archify", "artifacts-builder"],
-    instrucciones: `${SKILLS_VISUALES}\n\n${MEMORIA_LEER}\n\n${MEMORIA_ESCRIBIR}`,
+    // `artifacts-builder` se queda: escribe documentos e informes. `archify` no, que los
+    // diagramas son de `designer-xone` y su descripción son ~700 caracteres por llamada.
+    skills: ["xone-development", "xone-debugging", "artifacts-builder"],
+    instrucciones: `${MEMORIA_LEER}\n\n${MEMORIA_ESCRIBIR}`,
     origen: "semilla",
   },
   {
@@ -775,7 +789,7 @@ export const AGENTES_DE_SERIE: readonly Agente[] = [
     motor: "modelo",
     soloLectura: false,
     skills: ["xone-development", "archify", "artifacts-builder"],
-    instrucciones: `${SKILLS_VISUALES}\n\n${HANDOFF_MOCKUP}\n\n${MEMORIA_LEER_CON_HANDOFF}\n\n${MEMORIA_ESCRIBIR}`,
+    instrucciones: `${HANDOFF_MOCKUP}\n\n${MEMORIA_LEER_CON_HANDOFF}\n\n${MEMORIA_ESCRIBIR}`,
     origen: "semilla",
   },
 ];

@@ -8,6 +8,9 @@ import { alContarDelTracker,
 import { SkillsEnMemoria, type SkillsPort } from "../../core/ports.js";
 import { promptDeAgente, repartirSkills, type Agente } from "../../core/agentes.js";
 import { AGENTES_DE_SERIE } from "../subagentes/agentesEnDisco.js";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+import { RAIZ_SKILLS } from "./skills.js";
 
 /** Los nombres del catálogo de un puerto de skills. */
 const disponibles = (skills: SkillsPort): ReadonlySet<string> =>
@@ -99,23 +102,33 @@ describe("el prompt de un especialista sembrado", () => {
     expect(p).toMatch(/bug mudo/);
   });
 
-  it("dirige explícitamente los diagramas y esquemas a archify", () => {
+  it("la regla de los artefactos ya NO va en el prompt: va donde se lee de verdad", () => {
+    /**
+     * Iba en el prompt de CUATRO especialistas —~1.400 caracteres en cada una de sus
+     * llamadas, hablaran o no de diagramas— y el inspector midió lo que eso significa: la
+     * cabecera es el 87 % de una petición normal.
+     *
+     * Nació de una lección buena: un turno leyó `archify/SKILL.md` y una referencia, se saltó
+     * `estilo.md` —donde estaba la regla— y escribió un artefacto con `localStorage` que se
+     * mató solo. Pero la conclusión de eso no era «repítelo en todos los prompts», era
+     * ponerlo en el fichero que SÍ se abre. Este test vigila las dos mitades: que salió del
+     * prompt, y que está al principio del cuerpo de las dos skills.
+     */
     const p = promptDeAgente(deSerie("analyst-xone"), repartirSkills(deSerie("analyst-xone"), disponibles(conSkills)));
-    expect(p).toMatch(/diagrama, esquema, arquitectura, flujo, secuencia, datos o estados/i);
-    expect(p).toContain("`archify`");
-    expect(p).toContain("usa solamente `archify`");
-    expect(p).toContain("No cargues ni uses `artifacts-builder` como sustituto");
-    // La carpeta de la sesión, no la raíz del proyecto: un diagrama escrito ahí acabaría
-    // pasando por aprobación, entrando en git y subiendo a CloudStudio.
-    expect(p).toContain("/artefactos/<nombre>.html");
-    expect(p).not.toContain("/artifacts/");
-    // Y lo que NO funciona donde se ve. Va en el prompt y no en la skill porque el modelo no
-    // abre la skill: medido, lee `archify/SKILL.md` y `diagramas.md` y nada más. Sin esto, un
-    // artefacto con interruptor de tema lanza `SecurityError` dentro del iframe y se lleva el
-    // resto de su `<script>` — visto en vivo, con la página perfecta y el botón muerto.
-    expect(p).toContain("sin `allow-same-origin`");
-    expect(p).toContain("`localStorage`, `sessionStorage` e `indexedDB` LANZAN");
-    expect(p).toContain("`matchMedia`");
+    expect(p).not.toContain("`archify`");
+    expect(p).not.toContain("allow-same-origin");
+    expect(p).not.toContain("/artefactos/<nombre>.html");
+
+    for (const skill of ["archify", "artifacts-builder"]) {
+      const cuerpo = readFileSync(join(RAIZ_SKILLS, skill, "SKILL.md"), "utf8");
+      // Sin el «sin» delante: el texto del fichero envuelve justo ahí, y un test que dependa
+      // de dónde cae un salto de línea se rompe al reflowear un párrafo.
+      expect(cuerpo).toContain("`allow-same-origin`");
+      expect(cuerpo).toContain("`localStorage`, `sessionStorage` e `indexedDB` **LANZAN**");
+      expect(cuerpo).toContain("`matchMedia`");
+      expect(cuerpo).toContain("/artefactos/<nombre>.html");
+      expect(cuerpo).not.toContain("/artifacts/");
+    }
   });
 
   it("describe en las tools de escritura el destino y la skill correctos", () => {
@@ -195,7 +208,9 @@ describe("el prompt de un especialista sembrado", () => {
     expect(rutasDeSkills(deSerie("developer-xone"), disponibles(conSkills))).toEqual([
       "/skills/xone-development/",
       "/skills/xone-debugging/",
-      "/skills/archify/",
+      // Sin `archify`: los diagramas son de `designer-xone`, y cada skill asignada mete su
+      // descripción en el prompt de sistema EN CADA llamada (la suya son ~650 caracteres).
+      // Conserva `artifacts-builder` porque sí escribe documentos e informes.
       "/skills/artifacts-builder/",
     ]);
   });
