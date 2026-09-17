@@ -281,9 +281,13 @@ export function esDeSerie(nombre: string): boolean {
  *
  * **No cachea.** La versión anterior sí lo hacía —eran seis ficheros del paquete que no
  * cambian a mitad de turno— y con las del usuario dentro eso dejó de ser cierto: se guarda
- * una skill desde Ajustes con la consola abierta, y una lista congelada al abrir la sesión
- * le haría creer a quien la escribió que su cambio no se aplicó. Es la misma medida, y el
- * mismo porqué, que `cargarAgentes` releyéndose en CADA construcción del agente.
+ * una skill desde Ajustes con la consola abierta, y una lista congelada dentro de este objeto
+ * la dejaría fuera incluso de la siguiente construcción. Es la misma postura que `cargarAgentes`.
+ *
+ * **Lo que esto NO arregla**: construir el agente ocurre al abrir la sesión y en `/modelo`
+ * (`turnoReal.ts#construir`), no en cada turno, así que la skill nueva sigue sin alcanzar a la
+ * sesión que ya está abierta. Quitar la caché es condición necesaria y no suficiente; el
+ * agujero es heredado y está anotado en CLAUDE.md.
  *
  * `raiz` ausente = sin proyecto: solo las de serie y las globales.
  */

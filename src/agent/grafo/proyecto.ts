@@ -275,9 +275,10 @@ export function backendDeAgente(opciones: {
    * Las del usuario se leen AQUÍ y no entran por parámetro, a propósito: compuesto dentro de
    * `construirAgente` —que todos sus tests doblan— el montaje quedaba escrito y no probado,
    * que es el patrón de fallo de esta arquitectura y el motivo de que esta función exista.
-   * Aquí sí hay test (`proyecto.test.ts`). Y se releen en cada construcción del agente, o sea
-   * en cada turno: guardar una skill desde Ajustes con la consola abierta tiene que alcanzar
-   * al turno siguiente, igual que guardar un subagente.
+   * Aquí sí hay test (`proyecto.test.ts`). Y se leen en cada construcción del agente, igual que
+   * `cargarAgentes` — con el mismo límite que aquélla, que conviene no confundir: construir
+   * ocurre al ABRIR la sesión y en `/modelo`, no en cada turno, así que una skill guardada con
+   * la consola abierta no alcanza a la sesión en curso. Está anotado en CLAUDE.md.
    */
   const conSkills = backendConSkills(delProyecto, skillsMontables(opciones.raiz));
   const conArtefactos =

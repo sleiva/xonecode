@@ -178,9 +178,13 @@ Y las guardas del proyecto:
   se supone. **Límite declarado**: un `ls /skills` enseña solo las de serie, porque ese `ls`
   resuelve a UNA ruta y no funde varias; da igual para lo que esto hace, porque
   `SkillsMiddleware` recibe las rutas ya resueltas una a una. **`SkillsEnDisco` no cachea** y
-  `skillsMontables` se relee en cada construcción del agente, o sea en cada turno: la misma
-  medida que `cargarAgentes`, y por lo mismo — guardar una skill desde Ajustes con la consola
-  abierta tiene que alcanzar al turno siguiente.
+  `skillsMontables` se lee en cada construcción del agente, igual que `cargarAgentes`. **Ojo con
+  lo que eso significa hoy**: `construir()` (`agent/turno/turnoReal.ts`) tiene DOS llamadores —al
+  abrir la sesión y en `/modelo`—, así que una skill guardada desde Ajustes con la consola
+  abierta **no alcanza a esa sesión** hasta que se reconstruya. La caché se quitó porque era una
+  segunda razón para lo mismo, pero no basta sola: el comentario de `cargarAgentes` promete ahí
+  algo que el código no cumple, y es un agujero HEREDADO que no tiene test porque no puede
+  tenerlo.
 - **Una skill de serie no se edita ni se borra: se COPIA** (`web/servidor/arranque.ts`
   `#atenderSkill`, `core/skills.ts`). Vive dentro del paquete instalado, así que una edición se
   la llevaría el siguiente `npm install` sin decir nada, y no hay nada que restaurar porque nada
