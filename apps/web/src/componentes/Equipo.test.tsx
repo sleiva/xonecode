@@ -8,13 +8,14 @@ afterEach(cleanup);
 const base: InformeDeDispositivos = {
   sistema: "mac",
   herramientas: [
-    { nombre: "adb", estado: "no-encontrada", detalle: "ni en el PATH ni en platform-tools del SDK de Android" },
-    { nombre: "emulator", estado: "no-encontrada", detalle: "ni en el PATH ni en la carpeta emulator del SDK de Android" },
-    { nombre: "xcrun", estado: "ok" },
-    { nombre: "devicectl", estado: "ok" },
+    { nombre: "adb", plataforma: "android", estado: "no-encontrada", detalle: "ni en el PATH ni en platform-tools del SDK de Android" },
+    { nombre: "emulator", plataforma: "android", estado: "no-encontrada", detalle: "ni en el PATH ni en la carpeta emulator del SDK de Android" },
+    { nombre: "xcrun", plataforma: "ios", estado: "ok" },
+    { nombre: "devicectl", plataforma: "ios", estado: "ok" },
   ],
   dispositivos: [],
   avds: [],
+  recetas: [],
   medido: "2026-09-06T10:00:00.000Z",
 };
 
@@ -57,10 +58,10 @@ describe("Equipo", () => {
       ...base,
       sistema: "windows",
       herramientas: [
-        { nombre: "adb", estado: "ok" },
-        { nombre: "emulator", estado: "ok" },
-        { nombre: "xcrun", estado: "no-aplica", detalle: "solo en macOS" },
-        { nombre: "devicectl", estado: "no-aplica", detalle: "solo en macOS" },
+        { nombre: "adb", plataforma: "android", estado: "ok" },
+        { nombre: "emulator", plataforma: "android", estado: "ok" },
+        { nombre: "xcrun", plataforma: "ios", estado: "no-aplica", detalle: "solo en macOS" },
+        { nombre: "devicectl", plataforma: "ios", estado: "no-aplica", detalle: "solo en macOS" },
       ],
       avds: ["Pixel_8_API_35"],
       dispositivos: [
@@ -83,10 +84,10 @@ describe("Equipo", () => {
     const informe: InformeDeDispositivos = {
       ...base,
       herramientas: [
-        { nombre: "adb", estado: "fallo", detalle: "no respondió en 15 s" },
-        { nombre: "emulator", estado: "no-encontrada" },
-        { nombre: "xcrun", estado: "ok" },
-        { nombre: "devicectl", estado: "fallo", detalle: "unknown subcommand" },
+        { nombre: "adb", plataforma: "android", estado: "fallo", detalle: "no respondió en 15 s" },
+        { nombre: "emulator", plataforma: "android", estado: "no-encontrada" },
+        { nombre: "xcrun", plataforma: "ios", estado: "ok" },
+        { nombre: "devicectl", plataforma: "ios", estado: "fallo", detalle: "unknown subcommand" },
       ],
     };
     render(<Equipo informe={informe} conectado />);

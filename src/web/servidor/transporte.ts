@@ -26,6 +26,12 @@ import type { DecisionDeConsola } from "../../cli/aprobar.js";
 // porque son los MISMOS pasos y los MISMOS entornos que el vestíbulo calcula; una segunda
 // declaración en este fichero sería el tipo de copia que diverge sin que nada chiste.
 import type { OpcionDeEntorno, PasoDelVestibulo } from "./vestibulo.js";
+// La FOTO de un dispositivo elegido, que es el mismo dato que guarda la sesión y el mismo que
+// ya viaja en `alta.dispositivoActivo`. Se trae de donde vive en vez de redeclararlo: es la
+// forma que `ConsolaDeProyecto.elegirDispositivo` guarda, y una segunda copia aquí sería la que
+// se queda corta el día que un dispositivo sepa algo más. Solo TIPO: `sesiones.ts` no importa
+// este módulo, así que no hay ciclo ni siquiera en el grafo de tipos.
+import type { DispositivoElegido } from "./sesiones.js";
 
 /**
  * El informe de `core/dispositivos.ts` SIN la ruta de cada herramienta: es una ruta del
@@ -90,6 +96,39 @@ export interface SesionDelCable {
    */
   consumo?: ConsumoDeTurno;
 }
+
+/**
+ * Las seis fases de un lanzamiento, EN ORDEN, y los cinco estados en que puede estar.
+ *
+ * **Se declaran aquí, en el cable, y no se importan de `agent/lanzamientoEnMaquina.ts`**, que es
+ * quien las recorre. El motivo es el de siempre en este fichero: el cable tiene su vocabulario
+ * CERRADO, y quien lo cierra es esta constante — la lista blanca del store del cliente y la
+ * validación del servidor se escriben contra ESTA lista, así que un valor que no esté aquí no
+ * llega a la pantalla. Importarlas ataría el contrato del cable al módulo que hoy lo cumple, y
+ * el día que ese módulo añada una fase el cable la aceptaría sin que nadie hubiera decidido si
+ * el cliente sabe pintarla.
+ *
+ * **Y por eso mismo hay un test que las ata** (`arranque.test.ts`: «las fases del cable son las
+ * que corre la máquina»): la lista de aquí no puede quedarse corta respecto de la de allí, o el
+ * recorrido se quedaría sin emitir justo la fase que alguien acaba de añadir.
+ *
+ * **`corriendo` no está en `EstadoDeLanzamiento` de la máquina, y aquí sí.** Allí el estado es un
+ * DESENLACE —cuatro formas de acabar—, porque `lanzarEnDispositivo` devuelve un resultado; aquí
+ * hay además un RECORRIDO EN VIVO, que es lo que permite que la pestaña enseñe en qué fase va
+ * en vez de un botón apagado sin explicación.
+ */
+export const FASES_DEL_LANZAMIENTO = [
+  "comprobando",
+  "empaquetando",
+  "subiendo",
+  "reiniciando",
+  "lanzando",
+  "comprobando-arranque",
+] as const;
+export type FaseDelLanzamiento = (typeof FASES_DEL_LANZAMIENTO)[number];
+
+export const ESTADOS_DEL_LANZAMIENTO = ["corriendo", "ok", "fallo", "cancelada", "colgada"] as const;
+export type EstadoDelLanzamiento = (typeof ESTADOS_DEL_LANZAMIENTO)[number];
 
 export type MensajeAlCliente =
   | { clase: "acto"; acto: Acto }
@@ -407,6 +446,69 @@ export type MensajeAlCliente =
       paso: number;
       titulo: string;
       estado: "corriendo" | "ok" | "fallo" | "cancelada" | "colgada";
+      lineas: string[];
+      ms: number;
+      motivo?: string;
+    }
+  /**
+   * El veredicto de «¿se puede lanzar la app del proyecto abierto, en su dispositivo?».
+   *
+   * **Va a la consola que lo PIDIÓ, no a todos los clientes** — la regla contraria a
+   * `dispositivos` e `instalacion`, y no por descuido: la máquina es la misma para todos, pero
+   * el PROYECTO no. Es el reparto de `revision` y `arbol`: se pide, se contesta, y NO entra en
+   * la ráfaga de bienvenida, porque una pestaña que acaba de abrirse no tiene por qué recibir
+   * el veredicto de un proyecto que a lo mejor ya no es el suyo.
+   *
+   * **`faltas` son FRASES ya escritas** (`core/puedeLanzarse.ts#motivoDeBloqueo`), no las causas
+   * crudas: el cliente no es fuente sobre qué se puede lanzar, y componer aquí «falta el
+   * framework en tal dispositivo» sería una segunda redacción de la misma regla, que es donde
+   * las dos divergen. `listo` es `faltas.length === 0` y viaja igualmente porque es lo que
+   * decide si el botón se pinta.
+   */
+  | {
+      clase: "lanzable";
+      /** El nombre del proyecto abierto. Un SEGMENTO, no una ruta: `sinRutas`. */
+      proyecto: string;
+      listo: boolean;
+      /** Vacío cuando `listo`. Una LISTA y no la primera: se arregla lo que falta una a una. */
+      faltas: string[];
+      /**
+       * El nombre de la app, el que dice el `name=` de `app.ini`. Ausente = no consta, y sin
+       * él no hay a qué lanzar: `launchApplication` la pide por nombre.
+       */
+      app?: string;
+      /**
+       * El dispositivo de la sesión tal y como salió de la última MEDIDA —id, nombre,
+       * plataforma y clase, y nada más—, que es la foto que ya viaja en `alta.dispositivoActivo`
+       * y en `sesiones[].dispositivo`. Ausente = ninguno elegido, o uno que ya no está.
+       */
+      dispositivo?: DispositivoElegido;
+      /**
+       * CUÁNDO se midió esto. Un veredicto sin fecha es una promesa sin fecha: el framework se
+       * mide al conectar y al pulsar «volver a mirar», así que un «todo listo» de hace media
+       * hora sobre un aparato que se acaba de desenchufar es exactamente el botón muerto que
+       * esta pestaña existe para no pintar.
+       */
+      medido: string;
+    }
+  /**
+   * Cómo va el lanzamiento de la app, o cómo acabó. Va a la consola que lo pidió, por lo mismo
+   * que `lanzable`.
+   *
+   * **`lineas` es la COLA del recorrido y no todo**: lo que suelta `adb` al subir un ZIP son
+   * miles de líneas, y este cable no es un sitio donde guardarlas. `ms` son los milisegundos
+   * desde que arrancó, y viaja porque un recorrido sin tiempo se lee como un cuelgue.
+   *
+   * `motivo` solo cuando lo hay: en `ok` no hay nada que decir, y un `motivo: ""` invitaría a
+   * pintar una línea vacía al lado del visto bueno.
+   */
+  | {
+      clase: "lanzamiento";
+      /** El nombre del proyecto, si se sabe CUÁL. Ausente = no había ninguno que nombrar. */
+      proyecto?: string;
+      dispositivo?: DispositivoElegido;
+      fase: FaseDelLanzamiento;
+      estado: EstadoDelLanzamiento;
       lineas: string[];
       ms: number;
       motivo?: string;
@@ -1103,6 +1205,34 @@ export type MensajeDelCliente =
    * confundirlas dejaría un sumidero enganchado a un turno que nadie mira.
    */
   | { clase: "mirar"; tarea: string; ver: boolean; cliente: string }
+  /**
+   * Vuelve a MEDIR si se puede lanzar la app del proyecto abierto, y contesta con un `lanzable`.
+   *
+   * Sin datos, y no es una comodidad: el veredicto se compone de la elección de dispositivo de
+   * la SESIÓN, de la última medida de la máquina y de los descriptores del PROYECTO abierto —
+   * tres cosas que el navegador no tiene y sobre las que no es fuente. Que el cliente pudiera
+   * mandar «lanza el proyecto X en el aparato Y» sería abrir a negociación justo lo que decide
+   * si se lanza o no.
+   */
+  | { clase: "revisarLanzamiento" }
+  /**
+   * Lanza la app del proyecto abierto en el dispositivo de la sesión.
+   *
+   * **Sin datos tampoco, y aquí es la regla entera**: ni el dispositivo, ni el nombre de la app,
+   * ni una ruta, ni siquiera el proyecto — los tres primeros son datos sobre la máquina y sobre
+   * el proyecto, y el cuarto lo resuelve el servidor de la consola que atiende. Y el servidor
+   * **revalida antes de empezar**: entre el veredicto y este clic pueden pasar minutos, y un
+   * `lanzarApp` sobre un proyecto que ya no cumple se contesta con un `lanzamiento` en `fallo`,
+   * no lanzando a ciegas.
+   */
+  | { clase: "lanzarApp" }
+  /**
+   * Para el lanzamiento en curso. Es parar ESTO, no cerrar nada — la misma distinción que
+   * `cancelar` con un turno: el recorrido queda en `cancelada` con lo que ya se había contado.
+   *
+   * Un lanzamiento a la vez por consola, así que no lleva id: no hay dos entre los que elegir.
+   */
+  | { clase: "cancelarLanzamiento" }
   | { clase: "decision"; decisiones: Record<string, string> };
 
 /**
@@ -1215,6 +1345,14 @@ export interface Transporte {
  * llegaría permitida a quien mira una tarea de fondo — y por ahí ya pasan hoy el
  * mensaje `turno` que apagaría su compositor y el `aprobacion` que es el único mensaje con
  * contenido de fichero dentro.
+ *
+ * **`lanzable` y `lanzamiento` NO entran aquí, y es una decisión, no un olvido.** El recorrido
+ * de un lanzamiento es un suceso de la MÁQUINA y del proyecto, no un renglón de la
+ * conversación: quien mira una tarea de fondo no tiene por qué ver las fases del lanzamiento de
+ * otra consola, y meterlo en esta lista sería exactamente lo que la lista blanca existe para
+ * impedir — colar por la puerta de atrás un mensaje que nadie decidió que fuera transcript. Se
+ * quedan fuera por la misma razón por la que se quedan fuera `instalacion`, `dispositivos` y
+ * `tareas`, que tampoco son la conversación.
  */
 const ES_DE_TRANSCRIPT: ReadonlySet<MensajeAlCliente["clase"]> = new Set(["acto", "sustitucion", "reemision"]);
 

@@ -947,7 +947,8 @@ se intentaba guardar bajo ollama, que ni pide credencial).
 `modelo`, `soloLectura`, `skills`, y el cuerpo con sus instrucciones. Los cuatro
 especialistas de siempre —`docs`, `planner`, `dev`, `mockup`— dejaron de estar a fuego en
 `perfiles.ts` y son ahora esos mismos ficheros, sembrados en el arranque. El quinto es
-**`probador`**, para Android local (párrafo siguiente). Reglas duras:
+**`xone-device-tester`** —se llamó `probador` hasta que se renombró, y ese renombrado tiene
+caso propio en la siembra, más abajo—, para dispositivos locales (párrafo siguiente). Reglas duras:
 - **Las de XOne no salen del fichero.** `REGLAS_XONE` se antepone SIEMPRE desde código a
   todo subagente. Un agente que no sepa que XOne ignora en silencio lo desconocido escribe
   un atributo inventado y no da error: da un bug mudo. Poder quitarlas editando un `.md`
@@ -988,12 +989,26 @@ especialistas de siempre —`docs`, `planner`, `dev`, `mockup`— dejaron de est
   escribía nada nunca más. Respetaba el prompt afinado por el usuario —que es lo que hay que
   respetar— pero eligió un cuerno del dilema y el otro acabó mordiendo: **ningún agente
   nuevo, y ninguna corrección a uno existente, alcanzaba a quien ya hubiera arrancado una
-  vez**. Medido: un `docs.md` llevaba semanas sin la consulta acotada, y `probador` no habría
-  llegado jamás. El hash distingue los cuatro casos que antes eran uno:
+  vez**. Medido: un `docs.md` llevaba semanas sin la consulta acotada, y el probador de
+  dispositivos no habría llegado jamás. El hash distingue los cuatro casos que antes eran uno:
   no está + no consta = agente NUEVO, se escribe; no está + consta = lo BORRÓ el usuario, no
   se resucita; está y es el nuestro = nadie lo tocó, se actualiza; está y NO es el nuestro =
   es suyo, se deja y se DICE (por `problemas`, el mismo canal que un `.md` roto, porque quien
   lo tiene que arreglar está mirando esa ventana).
+- **El QUINTO caso es el renombrado, y apareció con el primero que hubo** (`RENOMBRADOS`,
+  `probador` → `xone-device-tester`). La marca guarda el hash POR NOMBRE, así que renombrar
+  deja una clave que ya no nombra a ningún agente de serie — y el bucle, que recorre la lista
+  de serie, no la miraba: **quien ya hubiera arrancado se quedaba con los DOS especialistas**,
+  el nuevo mantenido y el viejo huérfano, que además sigue cargando y sigue funcionando, así
+  que nada delata que uno de los dos ya no se actualiza. El desenlace lo decide el mismo dato
+  que todo lo demás: si el fichero sigue siendo exactamente lo que escribimos, es nuestra
+  semilla y se retira; si no, es del usuario y se queda. El retirado se dice UNA vez —la clave
+  se va con el fichero— y el que se respeta cada arranque, porque ahí queda algo que decidir.
+  Se retira solo lo que consta en la tabla, y no «toda clave desconocida cuyo hash sea el
+  nuestro»: eso funcionaría hoy y mañana borraría cualquier entrada rara que un fallo dejara
+  en la marca. **Límite declarado**: la carpeta que se ADOPTA no tiene marca y no hay contra
+  qué comparar, así que ahí el huérfano ni se retira ni se dice. Es el lado que no borra nada
+  ajeno, y se paga una vez, en la misma ronda que ya se paga por lo demás.
 - **Una carpeta sin marca se ADOPTA, no se siembra** — pero solo si tiene alguno de serie
   dentro. Es la de quien viene de la regla vieja, y ahí no se puede saber qué borró a
   propósito: dar por nuevo lo que falta le resucitaría un agente que eliminó. Se anota lo que
@@ -1292,8 +1307,11 @@ especialistas de siempre —`docs`, `planner`, `dev`, `mockup`— dejaron de est
   Quien lo tiene que arreglar está mirando ahí, y un agente que no aparece sin explicación
   se lee como que la aplicación lo perdió.
 
-**El probador de Android** (`probador` en `AGENTES_DE_SERIE`, skill `xone-android-hotswap`).
-El interlocutor es la app **XOneStudio ya instalada** en el móvil o el emulador: no se
+**El probador de dispositivos** (`xone-device-tester` en `AGENTES_DE_SERIE`, que se llamó
+`probador`; skill `xone-hotswap`, que cubre las dos plataformas).
+El interlocutor es la app **XOneStudio ya instalada** en el móvil o el emulador (en iOS el host
+es **XOneStudioSwift** y el canal tiene menos: sin endpoints de fichero, sin logcat y sin SQL —
+lo que cada plataforma tiene, comando a comando, lo dice la skill). No se
 compila ni se instala un APK por iteración. Levanta un servidor **solo en builds
 *debuggable*** y DENTRO del proceso de la app —si la app no está viva, el puerto no
 responde—, que habla WebSocket para los comandos (`launchApplication`, `getAllElements`,
@@ -1305,7 +1323,7 @@ si se olvidan: el **puerto 8443 es el por omisión y cambia** si está ocupado; 
 es **autofirmado** (`curl -k`); **subir no aplica** —hay que reiniciar la app, y medir sin
 reiniciar mide la versión anterior sin dar ningún síntoma—; y la base de datos va **cifrada
 con SQLCipher**, así que subir un `.db` en claro acaba en «database disk image is malformed».
-- **El protocolo NO va en el prompt**: son 1.200 líneas y viven en la skill, que se carga
+- **El protocolo NO va en el prompt**: son 1.100 líneas y viven en la skill, que se carga
   cuando hace falta. En las instrucciones del agente queda solo lo que tiene que saber
   siempre.
 - **Y lo primero que dice es lo que HOY no puede**: no tiene shell ni cliente del servidor
@@ -1895,7 +1913,7 @@ argumento de las vistas aplanadas y de los avisos de honestidad. Cinco reglas:
 
 **Los ARTEFACTOS del agente no son ficheros del proyecto** (`core/artefactos.ts`,
 `agent/proyecto.ts#backendConArtefactos`). Un diagrama de `archify`, un panel de
-`artifacts-builder`, la captura que el `probador` traerá el día que hable con el móvil: son
+`artifacts-builder`, la captura que el `xone-device-tester` traerá el día que hable con el móvil: son
 salidas de la conversación, no código de la app. **Hasta ahora acababan dentro de la app
 XOne**, y no por descuido: las dos skills visuales reparten su entrega entre
 `renderizar_diagrama` y `publish_artifact`, y en xonecode **no existe ninguna de las dos**
@@ -2851,8 +2869,12 @@ pinta— y por eso comparte fila con él. Cinco reglas:
   `sesionActiva`), así que sin esa espera, elegir dispositivo nada más abrir y hablar después
   perdía la elección al reabrir. `elegirDispositivo` del índice devuelve `false` en vez de
   crear una entrada a medias, que la barra enseñaría como una sesión vacía.
-La pastilla **dice que ninguna tool la consume todavía**: las de dispositivo son lo
-siguiente, y hasta entonces la elección se guarda y se enseña, nada más.
+La pastilla **dice que la elección la usa la pestaña Ejecutar**, y calla la otra mitad a
+propósito: el AGENTE sigue sin tools de dispositivo, así que un «lo usará cuando las tenga»
+sería una capacidad que nadie ha decidido construir, dicha como si estuviera en camino. Decía
+«ninguna tool la consume todavía» mientras era verdad —la elección se guardaba y se enseñaba,
+nada más—; dejó de serlo cuando la pestaña empezó a lanzar con ella, y se corrigió entonces:
+un pie que promete lo que ya no pasa enseña a no creerle.
 - **Instalar lo que falta: se ofrece lo que se puede cumplir, y solo eso**
   (`Herramienta.instalar`, `INSTALADORES` en `agent/dispositivosEnMaquina.ts`).
   - **El comando no puede llevar NINGUNA ruta de la máquina**: se pinta en la ventana y
@@ -4166,6 +4188,192 @@ nada más. Cinco cosas:
   queda en 2 —hubo escrituras sin resolver, que no es un éxito, y ésa es la dirección segura
   para CI— y lo que se corrigió fue la FRASE. Lo que está en el disco lo dice el diff de
   «cambios en el proyecto», que es la medida.
+
+- **`result: true` es «ACEPTADO», no «arrancó», y por eso lanzar necesita una LECTURA.** Medido
+  el 16-09-2026 contra `com.xone.android.framework` **5.0.2.2dev** (versionCode 28, emulador
+  Android 15, `adb forward tcp:8443`): un proyecto al que le falta el fichero que declara su
+  `connstring` en `app.xml` recibe `{"result":true}` de `launchApplication` y **muere detrás en un
+  diálogo** «Error opening database / Database not found». El acuse del framework dice que aceptó
+  el encargo, no que haya app delante, y no espera a que cargue. Lo que lo dice es una lectura:
+  `getAllElements` contesta `App is not running` mientras no la haya. Es ««Terminó bien» y «ya
+  está» son dos cosas», ahora sobre un dispositivo — y por eso la pestaña enseña la LECTURA como
+  prueba, nunca el acuse.
+
+- **El verificador no mira la conexión, y ahí estaba el agujero entero.** El mismo proyecto de
+  arriba —el que recibe `true` y muere en el diálogo— pasa `xone-simulator validate` con
+  `success: true`, **0 errores y 0 avisos**. O sea que un turno podía quedar VERDE sobre una app
+  que no arranca, sin un solo síntoma en ninguna parte. Ésa es la razón de ser del pre-vuelo: no
+  es comodidad, es la única comprobación de esa clase que existe.
+
+- **El canal de comandos vive en `/hotswap`, el servidor HABLA PRIMERO, y la grafía es el
+  contrato.** Medido en la misma versión: `/`, `/ws`, `/websocket`, `/command` y `/api` contestan
+  **400**; `POST /command` por HTTP da **404** en el flavor standalone. Al abrir, el servidor manda
+  `{"command":"server_hello","protocol_version":2}` —mandar un comando antes es inventarse un
+  protocolo que no es el que hay, así que el cliente ESPERA el saludo con tope en vez de saludar
+  él—. Y el nombre de un comando es EXACTO: `launchapplication` en minúscula contesta `Unknown
+  command: launchapplication`, sin alias insensible a mayúsculas. Dos comandos que la tabla de la
+  skill daba por disponibles **no existen** en esta versión: `getCurrentScreen` y `status`/`state`.
+  Y la lectura no puede ser `waitForElement`, que pide el nombre de un control que de una app
+  cualquiera no sabemos — inventarse uno es justo lo que la skill prohíbe—; `getAllElements` no
+  necesita saber nada de la app y esa es toda la pregunta.
+
+- **El ZIP no limpia el destino, y un `.db` en claro lo corrompe.** `POST
+  /file_upload?file=debug_app_update.zip&appName=<Nombre>` extrae en `app_<nombre-en-minúsculas>`
+  y **añade y sobrescribe sin borrar nada**: los `-wal`/`-shm` de una base vieja siguen ahí, así
+  que mezclar dos bases deja un estado que la app descubre al arrancar. Y la base del dispositivo
+  va cifrada con SQLCipher, así que subir un `.db` en claro termina en `database disk image is
+  malformed (code 11)`. De las dos cosas sale una decisión de DISEÑO y no de ahorro: **la carpeta
+  `bd/` no viaja — se despliega código, no datos**. La app que se prueba ya tiene su base en el
+  aparato. (Y el orden de las fases no es negociable por esto mismo: subir **no aplica** —el
+  proceso tiene cargado lo de antes—, así que hace falta reiniciar, y el `am start` que vale es
+  `SetupActivity`, **no** `.mainEntry`.)
+
+- **El detector de literales del espejo era CIEGO a `camelCase`.** Comparaba los literales
+  `tipo:`/`clase:` de las dos uniones —host y cliente— con un patrón de solo minúsculas, dígitos,
+  guion y guion bajo, así que un `clase: "algoConMayusculas"` **no lo veía nadie**: la red tenía
+  un agujero. Ensanchado a `[A-Za-z0-9_-]+` **sale VERDE**, y revela exactamente tres literales
+  que nadie estaba comparando —`modelosDeMotor`, `proyectosDeEntorno`, `sesionAccion`— que
+  aparecen **los mismos tres** en el cliente y en el host, así que la comparación sigue cuadrando.
+  O sea que el agujero existía y **no había caído nada por él**, que es lo único que hace que el
+  ensanchado descubra un test y no un bug. Queda un test hermano que fija que `camelCase` ya no
+  es invisible.
+
+- **La base se comprueba por CONVENCIÓN, y el censo es lo que lo decide — al revés de como se
+  leyó la primera vez.** Cinco proyectos reales medidos el 16-09-2026: `MinitsMT` declara **2**
+  conexiones —una de proveedor y una que es `bd/gestion.db`—, `Replanteos_2026` **1**
+  (`Provider=Xone Remote Provider;ProgID=…`), `MyAllXOne` **2** (una remota por http), `AppDemo`
+  **0**, y el esqueleto de `core/esqueleto.ts` **1** (una ruta). De esa tabla se concluyó primero
+  «el pre-vuelo solo dispara sobre `connstring` que son RUTAS», con `esRutaDeFichero` como
+  predicado — y **es un falso negativo, que es el error que el propio módulo llama peligroso**:
+  **tres de esos cuatro proyectos no declaran su base y los cuatro la tienen**, porque XOne usa
+  `bd/gestion.db` **por defecto**, se declare o no. Una regla que dependiera de la declaración
+  dejaría sin mirar el caso más común —el medido, el acuse `{"result":true}` y el diálogo «Error
+  opening database» detrás— justo en los proyectos donde más pasa, y el único donde habría
+  disparado es el esqueleto, que es el que falla *y además la declara*: la coincidencia que hizo
+  parecer buena la regla. La corrección, ya puesta: se comprueba **siempre** `bd/gestion.db`
+  (constante `RUTA_DE_LA_BASE`) y **además** cualquier otra ruta que el `app.xml` declare —una
+  segunda base es otro sitio donde puede faltar un fichero—, con dos causas distintas para poder
+  decir la verdad específica de cada caso (`falta-la-base` / `falta-el-fichero-de-la-conexion`).
+  **Reproducido contra el emulador el 17-09-2026**, sin tocar `app.xml`: con `AppDemoVerificacion`
+  —`app.ini` `name=AppDemo`, la base presente, **cero** `<connection>`— el veredicto por el cable
+  solo traía la falta del dispositivo; apartando `bd/gestion.db` apareció la frase larga, y
+  devolviéndolo desapareció, sin cambiar nada más. Tres cosas más del mismo censo: **un proyecto
+  sin ninguna `<connection>` NO bloquea por eso** (no declarar ninguna no es síntoma de nada, y el
+  dato de lo declarado viaja en `Veredicto.conexiones`); **el `app.ini` real escribe `name=` en
+  MINÚSCULA** (`name=Replanteos_2026`, `name=MyAllXOne`, `name=AppDemo`) mientras el esqueleto lo
+  escribe `Name=` en mayúscula, así que un lector sensible a mayúsculas devolvería `undefined` en
+  TODOS los proyectos reales y funcionaría solo en el esqueleto — el patrón de fallo de esta casa
+  otra vez—; y **este censo se midió primero con `grep`, que en este shell es un shim que devuelve
+  VACÍO**: MinitsMT salió «0 conexiones» y tiene **2**. Para medir con grep en esta máquina:
+  `command grep`.
+
+- **La comprobación mira el PROYECTO y no el APARATO, y por eso tiene un falso positivo que la
+  frase RECONOCE.** El fichero se busca en el proyecto en disco; pero el ZIP del despliegue **no
+  lleva `bd/`** (la base no viaja), así que un dispositivo donde esa app ya se lanzó antes tiene su
+  copia y una segunda subida no necesita nada del proyecto. Es un bloqueo que puede no serlo, y no
+  se puede levantar preguntándole al aparato porque eso no está medido: lo único honesto es que la
+  frase lo diga («Se mira el proyecto, no el aparato: si esta app ya se lanzó antes en ese
+  dispositivo, allí sigue su copia y no hace falta esto.»). Es la única frase del catálogo que
+  admite poder estar equivocada, y lo es a propósito: la alternativa —callarlo— deja a quien la lee
+  sin salida ante un NO que no lo es, que es peor que el NO.
+
+- **`zipSync` de `fflate` estampa `Date.now()` si no se le da fecha, y la marca de tiempo del ZIP
+  tiene resolución de 2 SEGUNDOS.** Medido directamente contra el `fflate` del repo, con un barrido
+  de desplazamientos desde una misma referencia: hasta **1999 ms** de diferencia los bytes salen
+  IDÉNTICOS; a partir de **2000 ms** salen distintos. O sea que «dos ejecuciones del mismo árbol
+  dan los mismos bytes» es una propiedad que hay que **construir**, no que suponer — sin ella,
+  comparar dos paquetes o cachearlos es imposible. Y el otro lado del mismo campo: una `mtime` de
+  **0** —la que dejan algunos ficheros— o anterior a 1980 hace que `fflate` lance `date not in
+  range 1980-2099` **sin decir de qué fichero**, que es un fallo mudo sobre el que se pierde una
+  sesión. El remedio, ya puesto: cada entrada lleva **su `mtime` real** con un suelo de 1980
+  (`FECHA_MINIMA_DEL_ZIP`), nunca `Date.now()`.
+
+- **El `Content-Type` que vale al subir: `application/octet-stream`, medido.** El comando que se
+  había medido funcionando era un `curl --data-binary`, cuyo `Content-Type` por omisión es
+  `application/x-www-form-urlencoded`, así que durante una pasada esto quedó declarado sin
+  afirmarse: no estaba medido si el servidor mira esa cabecera. Ya lo está. Subiendo con
+  `Content-Type: application/octet-stream` —y con `Content-Length`, sin el cual el endpoint
+  contesta `411`— el servidor responde **200** y **los bytes llegan enteros**: la prueba no es el
+  código, es que el `md5` de `LoginColl.xne` y de `app.xml` **en el aparato** coincide con el del
+  proyecto en disco, y que con eso subido la app arranca y contesta su árbol de controles. La otra
+  mitad de la misma medida es que el cuerpo **no se interpreta como formulario** — si lo hiciera,
+  unos bytes binarios no llegarían intactos.
+
+- **El primer `launchApplication` detrás de un reinicio en frío se ACEPTA y no arranca nada: lo que
+  arranca la app es un envío POSTERIOR.** Es la trampa que más ha costado de toda la pestaña. La
+  primera mitad ya estaba escrita —`result: true` es «aceptado», no «arrancó»— y se había
+  interpretado como «hay que LEER para saber si arrancó»; lo que hay además es que **el primer
+  envío no arranca**. Con un solo `launchApplication` y una lectura por segundo salen **doce
+  lecturas muertas a lo largo de los 60 s** del tope, tres veces seguidas, y ninguna app.
+  Reenviándolo cada `INTERVALO_DE_REENVIO_MS` (5 s) el árbol de controles llega **2-3 s después del
+  segundo o tercer envío**, y todas las corridas buenas de la sesión se pusieron vivas justo detrás
+  de un reenvío: ninguna sin él. **Y se ve desde la propia pestaña**, que es una confirmación
+  independiente y no la misma con otro traje: en el log del recorrido salen las lecturas muertas
+  seguidas —siete en la corrida buena, de las que las seis de en medio no se distinguen entre sí— y
+  detrás la línea `el framework aceptó el lanzamiento y la app no arrancó: se le vuelve a pedir`.
+  O sea que el reintento **no es un caso raro que se vio una vez en una sonda**: es el camino normal
+  de este emulador, y la pestaña lo cuenta mientras corre. **Reenviar tiene un precio medido**: sobre una app VIVA el
+  `launchApplication` la tumba (`MainEntry.finishApp()` → `closeApplication` → `Terminating and
+  disposing appData`, un ciclo vivo/muerto visible cada 5 s). Por eso el bucle de sondeo **solo
+  llega al reenvío después de una lectura que diga que no está viva**, y eso no es un `if` de
+  prudencia: es lo que hace cierta la propiedad, que se sostiene por construcción y no por una
+  condición que alguien pueda quitar. Un reenvío que el framework RECHAZA corta ahí con su frase
+  literal, sin insistir.
+
+  **Dos hipótesis que se persiguieron y se descartaron, y por qué.** (1) Una **carrera a mitad de
+  extracción** —el `200` de `/file_upload` volviendo antes de que el framework acabe de extraer y
+  el `am force-stop` de detrás matando el proceso a medias—: se refutó con una pausa de 12 s entre
+  la subida y el force-stop, tras la cual el primer lanzamiento quedó igual de inerte. (2) **El ZIP
+  de la pestaña**: se refutó subiendo sus **bytes exactos** con una sonda que sí reenvía → viva a
+  los 16,2 s. Los mismos bytes, la misma secuencia, lo único que cambiaba era si se volvía a pedir
+  el lanzamiento.
+
+- **El reloj del aparato NO es el del host, y su desfase no es un número redondo.** Medido dos
+  veces en dos sesiones: `adb shell date` dio `Wed Sep 16 23:31:59 CEST 2026` mientras el host, en
+  UTC, estaba en `Wed Sep 16 21:32:22 UTC 2026` — o sea **+2 h − 23 s**, consistente con el
+  `+1 h 59 m 37 s` medido antes y **no** con el «exactamente +2 h» que se venía repitiendo. El
+  desfase no es constante entre arranques del emulador. Consecuencia práctica: correlacionar una
+  línea de `logcat` con un sello del host pide llevar el desfase encima y medirlo, no restarlo de
+  memoria.
+
+- **`adb shell pidof` corre con un proceso que se está muriendo, y un «reinicio» puede no reiniciar
+  nada.** Dos trampas del mismo paso. **(1)** `pidof <paquete>` **sale con código 1 cuando no
+  encuentra nada**, así que hay que envolverlo; y además **compite con el proceso que se está
+  muriendo**, así que preguntado justo detrás del `am force-stop` puede contestar que vive uno que
+  ya no está. Lo fiable es `ps -A` filtrado por el paquete **después de un asentamiento de ~3 s**,
+  que además dice cuántos quedan. **(2)** `am start` sobre una instancia que YA está corriendo
+  imprime `Activity not started, intent has been delivered to currently running top-level
+  instance` y **no arranca nada**: un «reinicio» puede ser un no-op silencioso, y con él se sigue
+  probando el código VIEJO que el proceso tenía cargado. Por eso el reinicio se pide siempre con un
+  `force-stop` delante y **comprobando que murió**.
+
+- **`SetupActivity` tarda 5-6 s en Display, y `mainEntry` aparece ~4 s después.** Medido en
+  `logcat` con una app que arranca de verdad: `ActivityTaskManager: Displayed … for user 0:
+  +5s10ms` y `+5s947ms`. Sirve para dos cosas: para no confundir «tarda» con «no arrancó» cuando se
+  mira el reloj a ojo, y para saber que **el tope de arranque (`TOPE_DE_ARRANQUE_MS`, 60 s) se gasta
+  SONDEANDO y no esperando a que la pantalla del framework aparezca** — cuando el lanzamiento
+  fallaba, el canal se cerraba a los 60 s de sondeo con el framework despierto desde el segundo 10.
+
+- **El puerto 8443 es el de FÁBRICA: esta sesión lo midió puesto, y leer el REAL no está medido.**
+  La mitad medida es que el puerto del aparato era de verdad 8443, y lo confirma algo de fuera del
+  framework: su propio `logcat` dice `adbd: failed to connect to socket 'tcp:8443': Connection
+  refused` **en el instante en que el proceso se muere** — es adbd diciendo que el destino de su
+  túnel ya no está. La otra mitad son **dos caminos que se midieron CERRADOS**: `/proc/net/tcp`
+  **no sirve**, porque el shell no ve los sockets de la app (`run-as … cat /proc/net/tcp` vuelve
+  vacío, y lo que el shell sí ve son los suyos), ni sirve el tag `XOneHotswap` del framework, que
+  cuenta su ciclo de vida —`checkMarketUpdate`, «Stopping periodic hotswap ping check»— y **el
+  puerto no lo dice nunca**. Queda la ruta que el comentario del código da por buena —«el real se
+  ve en la pantalla del framework»—, que viene de la documentación y **sigue sin medirse**: por eso
+  el código implementa contra 8443 y lo declara, en vez de fingir que lo lee.
+
+  **Y de paso, un riesgo medido que no es del puerto sino del túnel: los `adb forward` se
+  ACUMULAN.** `adb forward --list` tenía **dos** —`tcp:8443`, el nuestro, y `tcp:8872`, de una
+  sesión cuyas notas ya no existen: `git log -S` no lo encuentra y la constante ha valido 8443
+  siempre—. El código aplica el suyo y **no lo quita al terminar**, a propósito (un recorrido
+  fallido se sigue pudiendo mirar después), así que lo que hay es un túnel viejo apuntando a un
+  puerto donde puede estar escuchando **otra cosa**, sin que nada compruebe que no se pisen. Hoy no
+  hace daño porque el 8872 no lo usa nadie; el día que sí, el síntoma es hablar con el servidor
+  equivocado y creer que se habla con el framework.
 
 (Antes había una segunda trampa: `docs/COMO-PROBARLO.md` decía que la consola no hablaba con el
 agente real. El doc ya está corregido — `cli/main.ts` monta `crearEjecutorReal` por omisión y

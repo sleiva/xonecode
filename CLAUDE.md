@@ -163,7 +163,7 @@ Y las guardas del proyecto:
 
 Un subagente es un `.md` con frontmatter en `.xonecode/agentes/<nombre>.md`
 (`core/agentes.ts`, `agent/agentesEnDisco.ts`). Los cinco de serie —`docs`, `planner`, `dev`,
-`mockup`, `probador`— se siembran al arrancar. Reglas duras:
+`mockup`, `xone-device-tester`— se siembran al arrancar. Reglas duras:
 
 - **`REGLAS_XONE` se antepone SIEMPRE desde código**, igual que el aviso de las skills que faltan
   y la línea de que las escrituras se aprueban: poder quitarlas editando un `.md` convertiría el
@@ -174,7 +174,10 @@ Un subagente es un `.md` con frontmatter en `.xonecode/agentes/<nombre>.md`
 - **La marca de la siembra es `.semilla.json` con el hash de lo que escribimos**, no «la carpeta
   existe»: así un agente nuevo o una corrección alcanzan a quien ya arrancó, sin resucitar lo que
   el usuario borró ni pisar lo que tocó (eso se DICE por `problemas`). Una carpeta sin marca con
-  agentes de serie dentro se ADOPTA sin escribir nada; vacía se siembra entera.
+  agentes de serie dentro se ADOPTA sin escribir nada; vacía se siembra entera. **Y un renombrado
+  tiene caso propio** (`RENOMBRADOS`): la clave vieja de la marca que sigue siendo nuestra semilla
+  intacta se RETIRA con su fichero, y si el usuario la afinó se queda y se dice — sin eso, quien
+  ya hubiera arrancado se queda con los dos especialistas, uno de ellos sin mantener y en silencio.
 - **El prompt del orquestador se GENERA** de la lista (`xoneAgent.ts#promptOrquestador`).
 - Un `.md` roto se salta y su motivo viaja por el cable hasta la ventana de Ajustes.
 - **La línea de una delegación dice a QUIÉN** (`task` → `subagent_type`, en la lista blanca de
@@ -957,8 +960,8 @@ feedback del desarrollador** y no es terminal.
 - **El silencio es el síntoma, no la lentitud** (`TOPE_SIN_SALIDA_MS`, 5 min). Un trabajo a la vez
   para toda la máquina; un segundo «ejecutar» reenvía el estado.
 - **El dispositivo de la sesión guarda la FOTO, no solo el id** (los ids no son estables), y solo
-  si NO está a mano ahora. El cliente manda el ID y nada más. Ninguna tool lo consume todavía, y
-  la pastilla lo dice.
+  si NO está a mano ahora. El cliente manda el ID y nada más. La consume la pestaña Ejecutar
+  —el agente sigue sin tools de dispositivo—, y la pastilla lo dice.
 
 ### La TUI y el panel (terminal)
 

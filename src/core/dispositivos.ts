@@ -22,6 +22,13 @@ export type NombreDeHerramienta = "adb" | "emulator" | "xcrun" | "devicectl";
 export interface Herramienta {
   nombre: NombreDeHerramienta;
   /**
+   * A qué plataforma sirve. **Es un DATO y no una adivinanza del nombre**: la ventana de
+   * Ajustes tiene una pestaña por plataforma y agrupa por esto. Deducirlo allí de
+   * «`adb` suena a Android» sería una segunda copia de una regla que ya está aquí — y el
+   * día que una herramienta sirviera a las dos, la copia callaría.
+   */
+  plataforma: "android" | "ios";
+  /**
    * Cinco estados, y los cinco dicen algo distinto: «ok», «no-encontrada», «fallo» (con el
    * motivo), «no-aplica» —lo que este sistema no puede saber, iOS en Windows— y
    * **«desactivada»**, que es el destino que la persona ha apagado en Ajustes.
@@ -52,6 +59,26 @@ export interface Herramienta {
   instalar?: { comando: string; automatico: boolean };
   /** El motivo del fallo, o por qué no aplica. Nunca la salida cruda entera. */
   detalle?: string;
+}
+
+/**
+ * A qué plataforma sirve una herramienta, **en un solo sitio y exhaustivo por TIPO**.
+ *
+ * Es lo que rellena `Herramienta.plataforma`, y el `switch` sin `default` es lo que hace que
+ * una herramienta nueva no compile hasta que alguien decida de quién es. Escribir la
+ * plataforma a mano en cada fila de la medida habría sido la misma respuesta catorce veces,
+ * y bastaba con olvidarla en una para que esa fila cayera en la pestaña equivocada —o en
+ * ninguna— sin que nada diera error.
+ */
+export function plataformaDe(nombre: NombreDeHerramienta): "android" | "ios" {
+  switch (nombre) {
+    case "adb":
+    case "emulator":
+      return "android";
+    case "xcrun":
+    case "devicectl":
+      return "ios";
+  }
 }
 
 export interface Dispositivo {
@@ -152,6 +179,38 @@ export interface PasoDeReceta {
    * que dice «Ejecutar»: se enseña al lado, y pulsar ES la aceptación.
    */
   acepta?: string;
+  /**
+   * Con el paso YA HECHO, si volver a lanzarlo sirve para algo, cómo se llama entonces el
+   * botón. **Ausente significa que no se ofrece.**
+   *
+   * Medido en la ventana: un paso marcado como hecho seguía enseñando «Ejecutar este paso»,
+   * o sea que la receta ofrecía instalar lo que su propia marca decía que ya estaba. Eso es
+   * el botón muerto otra vez, y en la dirección que más desgasta: enseña a pulsar sin leer.
+   * Pero quitarlo de todos habría borrado la única vía de ACTUALIZAR: `sdkmanager --install`
+   * sobre un paquete instalado lo sube de versión, así que ahí repetir es una operación
+   * distinta y con otro nombre — y con su `porQue` al lado, porque un botón sobre un paso
+   * hecho, sin motivo, se lee como el mismo error al revés.
+   */
+  repetir?: { etiqueta: string; porQue: string };
+}
+
+/**
+ * Lo que va APARTE de los pasos: consejo que NO se mide, no se lanza desde aquí y **no
+ * decide si la receta está completa**.
+ *
+ * Existe por un paso que había aquí: «declarar las variables en tu shell» era un paso —con
+ * su número, su marca y su peso en `completa`— cuyo `hecho` se medía en el ENTORNO DE ESTE
+ * PROCESO y no en la shell de nadie, y cuya propia nota decía que xonecode no lo necesita.
+ * El resultado, medido en una máquina con el emulador ya instalado: la receta seguía abierta
+ * enseñando pasos hechos, y no podía cerrarse nunca por un consejo que nadie está obligado a
+ * seguir. El consejo se sigue dando —los `export` hacen falta para que `emulator` y `adb`
+ * funcionen en un terminal— pero deja de ser un requisito.
+ */
+export interface Aparte {
+  titulo: string;
+  comandos: string[];
+  /** Lo que hay que saber antes de pegarlo, igual que en un paso. */
+  nota?: string;
 }
 
 /**
@@ -164,11 +223,20 @@ export interface PasoDeReceta {
  */
 export interface Receta {
   id: "android-emulador" | "ios-simulador";
+  /** A qué plataforma sirve. Dato, como en `Herramienta`: de aquí sale su pestaña. */
+  plataforma: "android" | "ios";
   titulo: string;
   descripcion: string;
   pasos: PasoDeReceta[];
   /** Todo hecho: la receta se pliega y se dice que ya está. */
   completa: boolean;
+  /**
+   * Consejo que NO es un paso y no cuenta para `completa`. Ver `Aparte`.
+   *
+   * Solo Android lo tiene hoy: son los `export` de la shell, que hacen falta para que el
+   * comando de `despues` funcione en un terminal pero que xonecode no necesita para nada.
+   */
+  aparte?: Aparte;
   /** Lo que viene DESPUÉS de instalar y que esta consola no hace por ti. */
   despues: string;
 }
@@ -179,9 +247,6 @@ export interface EstadoDeAndroid {
   brew: boolean;
   sdkmanager: boolean;
   emulator: boolean;
-  /** `ANDROID_HOME` puesta en el entorno del proceso, que es lo único que se puede saber
-   *  de la shell del usuario: la que lanzó xonecode. */
-  androidHome: boolean;
   /** Un JDK con el que correr `sdkmanager`, que es un programa Java. */
   jdk: boolean;
   avds: readonly string[];
@@ -224,6 +289,59 @@ export function recetaDeEmuladorAndroid(plataforma: string, estado: EstadoDeAndr
       ...(estado.brew ? {} : { porQueNo: "hace falta Homebrew (brew.sh)" }),
     },
     {
+      titulo: "Descargar el emulador y la imagen del sistema",
+      // **`platform-tools` no es un extra de esta línea: sin ellos el emulador no ARRANCA.**
+      // Se niega a dar por buena la raíz del SDK que no los tenga dentro —«guessed sdk root …
+      // does not seem to be valid» y después `Cannot find AVD system path`, con `ANDROID_HOME`
+      // apuntando a la raíz correcta—, y el cask `android-commandlinetools` no los trae: el
+      // `adb` del PATH viene del cask APARTE `android-platform-tools`, que los deja fuera de
+      // la raíz. Medido el 16-sep-2026 en un Mac con la receta entera hecha: sin esta palabra
+      // los tres pasos salían «hechos» y `emulator -avd pixel8` fallaba. Es la misma cuenta
+      // que ya hace `dispositivosEnMaquina.ts#comoInstalar`, que para un `adb` que falta
+      // propone justo `sdkmanager --install "platform-tools"`.
+      comandos: [
+        'sdkmanager --install "platform-tools" "emulator" "platforms;android-35" "system-images;android-35;google_apis;arm64-v8a"',
+      ],
+      nota: "Son 2-3 GB. Puedes pegarlo en un terminal o dejar que lo haga xonecode.",
+      hecho: estado.emulator,
+      // Se puede lanzar en cuanto están las herramientas del paso 1: no pide contraseña.
+      ejecutable: puedeLanzar,
+      ...(puedeLanzar ? {} : { porQueNo: "hace falta el paso 1" }),
+      // **Este es el único paso que se repite a propósito**, y por eso lleva nombre propio
+      // cuando ya está hecho: aquí «volver a pulsar» no es instalar lo mismo, es subir de
+      // versión. Sin esto, quitarle el botón a los pasos hechos habría borrado la única vía
+      // de actualizar la imagen del sistema.
+      repetir: {
+        etiqueta: "Actualizar",
+        porQue:
+          "volver a pedirlo sube de versión lo que ya está: `sdkmanager --install` sobre un paquete instalado lo actualiza",
+      },
+      acepta: "las licencias del SDK de Android de Google",
+    },
+    {
+      titulo: "Crear el dispositivo virtual",
+      comandos: ['avdmanager create avd -n pixel8 -k "system-images;android-35;google_apis;arm64-v8a" -d pixel_8'],
+      nota: "Si lo pegas en un terminal y pregunta por un perfil de hardware, responde `no`.",
+      hecho: estado.avds.length > 0,
+      // Necesita la imagen del sistema, que la trae el paso 2.
+      ejecutable: puedeLanzar && estado.emulator,
+      ...(puedeLanzar && estado.emulator ? {} : { porQueNo: puedeLanzar ? "hazlo después del paso 2" : "hace falta el paso 1" }),
+    },
+  ];
+
+  return {
+    id: "android-emulador",
+    plataforma: "android",
+    titulo: "Instalar el emulador de Android",
+    descripcion:
+      "Tres pasos, una vez por máquina. Los comandos se pegan en un terminal; cada paso se " +
+      "marca solo cuando la medida lo encuentra, no cuando lo pulsas.",
+    pasos,
+    completa: pasos.every((p) => p.hecho),
+    // El consejo de la shell, fuera de los pasos: ver `Aparte`. Va aquí y no entre ellos
+    // porque no se mide, no se lanza desde esta ventana y no puede dejar la receta a medias
+    // — que es exactamente lo que hacía cuando era el paso 2.
+    aparte: {
       titulo: "Declarar las variables en tu shell",
       comandos: [
         'export ANDROID_HOME="$(brew --prefix)/share/android-commandlinetools"',
@@ -233,42 +351,10 @@ export function recetaDeEmuladorAndroid(plataforma: string, estado: EstadoDeAndr
       nota:
         "Va en `~/.zshrc`, y luego abre un terminal nuevo o haz `source ~/.zshrc`. " +
         "xonecode NO lo necesita —ya mira la carpeta de Homebrew para encontrar el SDK—: " +
-        "esto es para que los comandos de abajo funcionen en tu terminal.",
-      hecho: estado.androidHome,
-      // Escribir en la shell de alguien es lo único de esta receta que no sabríamos deshacer.
-      ejecutable: false,
+        "esto es para que `emulator` y `adb` te funcionen en tu terminal, y sin ello el " +
+        "comando de abajo hay que escribirlo con la ruta entera. No es un paso: no se mide, " +
+        "no se lanza desde aquí y la receta no espera a que lo hagas.",
     },
-    {
-      titulo: "Descargar el emulador y la imagen del sistema",
-      comandos: [
-        'sdkmanager --install "emulator" "platforms;android-35" "system-images;android-35;google_apis;arm64-v8a"',
-      ],
-      nota: "Son 2-3 GB. Puedes pegarlo en un terminal o dejar que lo haga xonecode.",
-      hecho: estado.emulator,
-      // Se puede lanzar en cuanto están las herramientas del paso 1: no pide contraseña.
-      ejecutable: puedeLanzar,
-      ...(puedeLanzar ? {} : { porQueNo: "hace falta el paso 1" }),
-      acepta: "las licencias del SDK de Android de Google",
-    },
-    {
-      titulo: "Crear el dispositivo virtual",
-      comandos: ['avdmanager create avd -n pixel8 -k "system-images;android-35;google_apis;arm64-v8a" -d pixel_8'],
-      nota: "Si lo pegas en un terminal y pregunta por un perfil de hardware, responde `no`.",
-      hecho: estado.avds.length > 0,
-      // Necesita la imagen del sistema, que la trae el paso 3.
-      ejecutable: puedeLanzar && estado.emulator,
-      ...(puedeLanzar && estado.emulator ? {} : { porQueNo: puedeLanzar ? "hazlo después del paso 3" : "hace falta el paso 1" }),
-    },
-  ];
-
-  return {
-    id: "android-emulador",
-    titulo: "Instalar el emulador de Android",
-    descripcion:
-      "Cuatro pasos, una vez por máquina. Los comandos se pegan en un terminal; cada paso se " +
-      "marca solo cuando la medida lo encuentra, no cuando lo pulsas.",
-    pasos,
-    completa: pasos.every((p) => p.hecho),
     // Arrancar un emulador es un proceso de vida larga y otra capacidad; hoy no está
     // cableado, así que se da el comando en vez de prometer un botón.
     despues:
@@ -363,6 +449,7 @@ export function recetaDeSimuladorIos(plataforma: string, estado: EstadoDeIos): R
 
   return {
     id: "ios-simulador",
+    plataforma: "ios",
     titulo: "Instalar el simulador de iOS",
     descripcion:
       "Tres pasos, una vez por máquina. Los comandos se pegan en un terminal; cada paso se " +
@@ -611,7 +698,21 @@ export function motivoDeSimctl(texto: string): string | undefined {
   return undefined;
 }
 
+/**
+ * ¿Este estado es «se puede hablar con él»? El criterio vive AQUÍ y en un solo sitio.
+ *
+ * Estaba escrito a mano dentro de `alcanzables()`, y el veredicto de lanzamiento
+ * (`core/puedeLanzarse.ts`) necesitaba lo mismo: una segunda definición de «alcanzable» es un
+ * segundo sitio donde puede dejar de significar lo mismo —el día que un estado nuevo contara
+ * como llegada, uno de los dos se enteraría y el otro no—, que es como se ha roto este repo
+ * nueve veces. El test que ata las dos respuestas estado a estado es lo que impide que la copia
+ * vuelva.
+ */
+export function esAlcanzable(estado: Dispositivo["estado"]): boolean {
+  return estado === "conectado" || estado === "arrancado";
+}
+
 /** Con qué dispositivos SE LLEGA ahora mismo: es lo que el escritorio lista por nombre. */
 export function alcanzables(informe: InformeDeDispositivos): Dispositivo[] {
-  return informe.dispositivos.filter((d) => d.estado === "conectado" || d.estado === "arrancado");
+  return informe.dispositivos.filter((d) => esAlcanzable(d.estado));
 }

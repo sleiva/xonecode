@@ -26,9 +26,11 @@ import estilos from "./PastillaDeModelo.module.css";
  * - **Elegir manda el ID y nada más.** El servidor resuelve el resto contra su medida: el
  *   navegador no es fuente sobre la máquina.
  *
- * Y lo que NO promete: hoy la elección se guarda con la sesión y se enseña, pero ninguna
- * tool la consume todavía — las de dispositivo son lo siguiente. El menú lo dice en su pie
- * en vez de dejar creer que el agente ya está hablando con ese teléfono.
+ * Y lo que NO promete: **la elección la consume la pestaña Ejecutar**, que es la que lanza la
+ * app en ese aparato. Lo que sigue sin ser verdad —y el pie no lo insinúa— es que el AGENTE
+ * esté hablando con ese teléfono: sus tools de dispositivo no existen. El pie decía antes
+ * «ninguna tool la consume todavía», y esa mitad dejó de ser cierta en cuanto la pestaña
+ * existió; la otra no se ha movido, así que se arregla una y no las dos.
  */
 export function PastillaDeDispositivo({
   elegido,
@@ -129,7 +131,7 @@ export function PastillaDeDispositivo({
             ) : null}
           </div>
           <p className={estilos.espera}>
-            Se guarda con la sesión. El agente lo usará cuando tenga las tools de dispositivo.
+            Se guarda con la sesión. La usa la pestaña Ejecutar para lanzar la app.
           </p>
         </div>
       ) : null}

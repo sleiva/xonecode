@@ -1,0 +1,276 @@
+/* La pestaña Ejecutar. Alias comprobados contra `apps/web/estilos/design-platform.css`, y
+   solo los que esta hoja usa: bg-layer-1/2, border-l2, label-primary/secondary/tertiary,
+   interactive-bg-hover, state-error-primary. Más el par de marca del botón principal
+   (`estilos/marca.css`, el MISMO que la barra superior y el de enviar) y
+   `--ds-font-family-code` para el log, que son de donde salen los de `CloudStudio.module.css`
+   y `VerificarDispositivo.module.css` — el vocabulario de esta hoja es el de esas dos.
+   Ningún color literal (`Barra.test.tsx` recorre TODOS los `.module.css` de aquí). */
+
+.panel {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 16px 20px;
+  max-width: 72ch;
+  overflow-y: auto;
+}
+
+/* El «consultando…» y los estados vacíos. Mismo trazo que `CloudStudio.module.css#.aviso`:
+   es el mismo tipo de frase —decir lo que falta sin ofrecer nada que no se pueda hacer—. */
+.aviso {
+  margin: 0;
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.veredicto {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+/* La app manda y el proyecto le sigue: son la misma frase —«qué se va a lanzar, y de dónde
+   sale»— y por eso comparten renglón. La fecha se va sola a la derecha. */
+.cabecera {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  margin: 0;
+}
+
+.app {
+  color: var(--dsw-alias-label-primary);
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.proyecto {
+  color: var(--dsw-alias-label-secondary);
+  font-size: 12px;
+}
+
+/* La fecha de la medida en monoespaciada, como el sello de una operación de `/sync`: se
+   compara letra a letra con la de al lado, y es lo que dice si esta foto está vieja. */
+.sello {
+  margin-left: auto;
+  color: var(--dsw-alias-label-tertiary);
+  font-family: var(--ds-font-family-code);
+  font-size: 11px;
+}
+
+.listo {
+  margin: 0;
+  color: var(--dsw-alias-state-success-primary);
+  font-size: 12px;
+}
+
+/* Las faltas, una por renglón y con su viñeta: son varias y hay que poder contarlas — el
+   orden es el de la lectura, así que la de arriba es la que hay que arreglar primero. */
+.faltas {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0;
+  padding-left: 18px;
+}
+
+.falta {
+  color: var(--dsw-alias-label-secondary);
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.acciones {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+/* El botón principal lleva el AZUL de la marca con su letra encima —el par medido para
+   sostener texto blanco, el mismo de «Subir» en la banda de CloudStudio—, y el cian se queda
+   para el hover: acento, sin nada que sostener. */
+.ejecutar {
+  padding: 6px 14px;
+  border: none;
+  border-radius: 8px;
+  background: var(--xonecode-azul);
+  color: var(--xonecode-sobre-azul);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  transition: background 120ms ease;
+  cursor: pointer;
+}
+
+.ejecutar:hover {
+  background: var(--xonecode-cian);
+}
+
+/* El recorrido. La misma tarjeta que una operación del registro de `/sync`: es lo que es —
+   algo que pasó, con su hora y sus líneas— y no un mensaje de la conversación. */
+.recorrido {
+  display: flex;
+  flex-direction: column;
+  border: 0.5px solid var(--dsw-alias-border-l2);
+  border-radius: 8px;
+  background: var(--dsw-alias-bg-layer-1);
+  overflow: hidden;
+}
+
+.cabeceraDelRecorrido {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  margin: 0;
+  padding: 6px 12px;
+}
+
+.fase {
+  color: var(--dsw-alias-label-primary);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.tiempo {
+  color: var(--dsw-alias-label-tertiary);
+  font-family: var(--ds-font-family-code);
+  font-size: 11px;
+}
+
+/* Cancelar es el botón secundario de siempre —el mismo trazo que `.recargar` de Revisión y
+   de la banda de CloudStudio— y NO el rojo del compositor: aquél es la parada de emergencia
+   del turno; parar un lanzamiento es una acción corriente de esta pestaña, y el estado del
+   recorrido ya se lee en palabras justo debajo. */
+.cancelar {
+  margin-left: auto;
+  padding: 2px 9px;
+  border: 0.5px solid var(--dsw-alias-border-l2);
+  border-radius: 8px;
+  background: var(--dsw-alias-bg-layer-1);
+  color: var(--dsw-alias-label-secondary);
+  font: inherit;
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.cancelar:hover {
+  background: var(--dsw-alias-interactive-bg-hover);
+  color: var(--dsw-alias-label-primary);
+}
+
+/* Qué pasó. El color sale del ESTADO del recorrido y nunca de buscar palabras dentro del
+   texto: un fallo es un error —y ahí el rojo sí dice algo— y un final feliz se lee en el
+   color del texto normal, porque un verde que grita no hace falta para decir que fue bien. */
+.desenlace {
+  margin: 0;
+  padding: 0 12px 8px;
+  color: var(--dsw-alias-label-secondary);
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.recorrido[data-estado="fallo"] .desenlace,
+.recorrido[data-estado="colgada"] .desenlace {
+  color: var(--dsw-alias-state-error-primary);
+}
+
+.recorrido[data-estado="ok"] .desenlace {
+  color: var(--dsw-alias-state-success-primary);
+}
+
+/* La lectura con la que se comprobó que la app está viva, aparte del desenlace y en
+   monoespaciada: es una línea del framework, y su valor es que se puede copiar y buscar. */
+.lectura {
+  margin: 0;
+  padding: 0 12px 8px;
+  color: var(--dsw-alias-label-tertiary);
+  font-family: var(--ds-font-family-code);
+  font-size: 11px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+/* Las líneas TAL CUAL, como las de una operación de `/sync`: `pre-wrap` para que una línea
+   larga se parta en vez de sacar scroll horizontal dentro de la tarjeta. */
+.lineas {
+  margin: 0;
+  padding: 8px 12px;
+  border-top: 0.5px solid var(--dsw-alias-border-l2);
+  background: var(--dsw-alias-bg-layer-2);
+  color: var(--dsw-alias-label-secondary);
+  font-family: var(--ds-font-family-code);
+  font-size: 11px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.dispositivos {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+/* El rótulo de la sección, con el mismo trazo que el de la cabecera de Tareas del proyecto:
+   mismo sitio en la pestaña, mismo peso. */
+.rotulo {
+  color: var(--dsw-alias-label-primary);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.lista {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.fila {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* Una fila de dispositivo es un botón cuando se puede elegir, y un texto cuando no: el mismo
+   trazo de la fila de `VerificarDispositivo`, para que la misma información se lea igual. */
+.dispositivo {
+  padding: 4px 10px;
+  border: 0.5px solid var(--dsw-alias-border-l2);
+  border-radius: 8px;
+  background: var(--dsw-alias-bg-layer-1);
+  color: var(--dsw-alias-label-secondary);
+  font: inherit;
+  font-size: 12px;
+}
+
+/* Y el cursor y el hover son del BOTÓN, no de la fila. Un `<span>` que se ilumina al pasar
+   por encima es el botón muerto de siempre, disfrazado de control vivo: la fila de un
+   dispositivo que no se puede elegir tiene que leerse como lo que es —un dato—. */
+button.dispositivo {
+  text-align: left;
+  cursor: pointer;
+}
+
+button.dispositivo:hover {
+  background: var(--dsw-alias-interactive-bg-hover);
+  color: var(--dsw-alias-label-primary);
+}
+
+/* El elegido. El filo del token de fila elegida de la barra —que ya viene ajustado por
+   tema— y no un color nuevo: el mismo estado, el mismo par de tokens. */
+.dispositivo[aria-current="true"] {
+  border-color: var(--xonecode-cian);
+  background: var(--xonecode-fila-elegida);
+  color: var(--dsw-alias-label-primary);
+}
+
+.marca {
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 11px;
+}

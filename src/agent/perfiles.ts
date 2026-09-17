@@ -69,7 +69,7 @@ export const DENEGADO_SIEMPRE = [
 export function permisosDe(perfil: QuienDecidePermisos) {
   const base = [...DENEGADO_SIEMPRE];
   if (!perfil.soloLectura) return base;
-  // OJO para cuando el `probador` sepa hablar con el móvil: este `/**` también deniega
+  // OJO para cuando el `xone-device-tester` sepa hablar con el móvil: este `/**` también deniega
   // `/artefactos/**`, así que un agente de SOLO LECTURA no puede dejar una captura. Hoy no
   // hay ningún productor de solo lectura, así que no se abre un hueco por si acaso — pero
   // el día que lo haya, la excepción va aquí y antes hay que medir el orden de reglas de

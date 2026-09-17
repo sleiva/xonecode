@@ -2,7 +2,7 @@ import clsx from "clsx";
 import conversacion from "../../estilos/ConversationRoot.module.css";
 import estilos from "./Pestanas.module.css";
 
-export type Pestana = "chat" | "ficheros" | "revision" | "artefactos" | "tareas" | "trazas";
+export type Pestana = "chat" | "ficheros" | "revision" | "artefactos" | "tareas" | "ejecutar" | "trazas";
 
 /**
  * La tira de pestañas: Chat, Tareas, Ficheros, Revisión y Trazas — más Artefactos, si la
@@ -38,10 +38,19 @@ export type Pestana = "chat" | "ficheros" | "revision" | "artefactos" | "tareas"
  * dice cómo se empieza** (ver `TareasDelProyecto.tsx`, que es quien pinta ese estado vacío).
  *
  * **Y por eso Tareas se sienta junto a Chat, no al final.** Chat y Tareas son las dos
- * pestañas de ACCIÓN —una habla con el agente ahora mismo, la otra le manda un encargo para
- * que trabaje solo—; Ficheros, Revisión y Artefactos son de REGISTRO —enseñan lo que YA
- * pasó, y por eso siguen agrupadas donde estaban—, y Trazas es de otro destinatario (quien
- * depura el harness, no quien desarrolla la app), así que sigue cerrando la tira.
+ * primeras pestañas de ACCIÓN —una habla con el agente ahora mismo, la otra le manda un
+ * encargo para que trabaje solo—; Ficheros, Revisión y Artefactos son de REGISTRO —enseñan
+ * lo que YA pasó, y por eso siguen agrupadas donde estaban—, y Trazas es de otro destinatario
+ * (quien depura el harness, no quien desarrolla la app), así que sigue cerrando la tira.
+ *
+ * **«Ejecutar» es la TERCERA de ACCIÓN, y va justo detrás de Tareas (Task 10).** Cierra el
+ * viaje entero del harness en un aparato —el agente escribe, el verificador mira, y esto
+ * ARRANCA la app—, que hasta ahora era el terminal, la skill y `adb` a mano. Existe siempre
+ * por el mismo criterio que Tareas: es donde se ACTÚA, y su estado vacío dice cómo se
+ * empieza, así que condicionarla a que haya una medida sería volver al defecto que aquel
+ * criterio vino a arreglar. **Y su recorrido —fase, tiempo y la cola del log— vive DENTRO**,
+ * no en una pestaña de historial aparte: un lanzamiento se lee donde se lanzó, que es donde
+ * está el botón que lo provoca y el aparato al que fue.
  *
  * **La sincronización con CloudStudio NO es una pestaña: vive dentro de Revisión**, como una
  * banda arriba. Tenía la suya —era la tercera de ACCIÓN y existía siempre, con el mismo
@@ -76,6 +85,10 @@ export function Pestanas({
     // más arriba). La cola de tareas en background es del proyecto ABIERTO, no de la máquina
     // entera — el kanban global ya vive en el escritorio. SIEMPRE presente, a propósito.
     { id: "tareas", etiqueta: "Tareas" },
+    // La tercera de ACCIÓN, y por eso va aquí y no con las de registro: es el verbo que
+    // cierra el viaje —lanzar la app en un aparato—, no la foto de lo que ya pasó. SIEMPRE
+    // presente, por el mismo criterio que Tareas: su estado vacío dice cómo se empieza.
+    { id: "ejecutar", etiqueta: "Ejecutar" },
     // El árbol del proyecto en el que se trabaja, con visor de solo lectura.
     { id: "ficheros", etiqueta: "Ficheros" },
     // Lo que ESTA sesión ha tocado, con su diff: la única vista que responde a «¿qué me ha

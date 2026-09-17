@@ -55,13 +55,15 @@ const ANDROID = {
 
 describe("PASOS_EJECUTABLES", () => {
   it("es una tabla CERRADA: solo lo que no se puede quedar esperando a nadie", () => {
-    // El paso 2 escribe en el `~/.zshrc` de alguien, que es lo único de esta receta que no
-    // sabríamos deshacer; y la receta de iOS no tiene ninguno —un `sudo` escrito en el
-    // comando fallaría siempre, y `-downloadPlatform` pide autorización en una ventana—.
+    // Los tres pasos de la receta de Android están, y el 1 es el que INSTALA el SDK: exigirlo
+    // en él era el círculo que lo dejaba sin botón. Lo que sigue fuera no es un paso —los
+    // `export` del `.zshrc` se fueron a `Receta.aparte`— y la receta de iOS no tiene ninguno:
+    // un `sudo` escrito en el comando fallaría siempre, y `-downloadPlatform` pide
+    // autorización en una ventana del sistema.
     expect([...PASOS_EJECUTABLES.keys()].sort()).toEqual([
       "android-emulador:1",
+      "android-emulador:2",
       "android-emulador:3",
-      "android-emulador:4",
     ]);
   });
 });
@@ -89,19 +91,20 @@ describe("correrPasoDeReceta", () => {
   };
 
   it("un paso que no está en la tabla no se lanza", async () => {
-    // El 2 escribe en el `~/.zshrc` de alguien: es lo único de esta receta que no sabríamos
-    // deshacer, así que no está en la tabla y se sigue copiando.
+    // Los tres pasos de iOS piden algo que no se contesta desde aquí —el App Store, un `sudo`
+    // del comando, una ventana de autorización—, así que ninguno está en la tabla y todos se
+    // siguen copiando. Un botón que no puede cumplir es el botón muerto de siempre.
     const l = lanzador();
-    const trabajo = correrPasoDeReceta("android-emulador", 2, { ...ANDROID, lanzar: l.lanzar });
+    const trabajo = correrPasoDeReceta("ios-simulador", 1, { ...ANDROID, lanzar: l.lanzar });
     expect(await trabajo.terminado).toMatchObject({ estado: "fallo" });
     expect(l.llamadas).toEqual([]);
   });
 
-  /** El paso 3 son DOS procesos: primero las licencias, después la descarga. */
-  const arrancarPaso3 = (extra: Partial<Parameters<typeof correrPasoDeReceta>[2]> = {}) => {
+  /** El paso 2 son DOS procesos: primero las licencias, después la descarga. */
+  const arrancarPaso2 = (extra: Partial<Parameters<typeof correrPasoDeReceta>[2]> = {}) => {
     const l = lanzador();
     const lineas: string[] = [];
-    const trabajo = correrPasoDeReceta("android-emulador", 3, {
+    const trabajo = correrPasoDeReceta("android-emulador", 2, {
       ...ANDROID,
       lanzar: l.lanzar,
       alSalirLinea: (x) => lineas.push(x),
@@ -112,53 +115,53 @@ describe("correrPasoDeReceta", () => {
 
   it("acepta las licencias ANTES de instalar, y con las respuestas alimentadas", async () => {
     // Sin TTY, el prompt de licencias cuelga el proceso para siempre: se le teclea.
-    const p3 = arrancarPaso3();
-    expect(p3.l.llamadas[0]!.args).toContain("--licenses");
-    expect(p3.licencias().escrito.filter((x) => x === "y\n").length).toBeGreaterThan(0);
+    const p2 = arrancarPaso2();
+    expect(p2.l.llamadas[0]!.args).toContain("--licenses");
+    expect(p2.licencias().escrito.filter((x) => x === "y\n").length).toBeGreaterThan(0);
     // Y se DICE en el log qué se está aceptando y por qué.
-    expect(p3.lineas.join(" ")).toMatch(/licencias/i);
-    p3.licencias().cerrar(0);
+    expect(p2.lineas.join(" ")).toMatch(/licencias/i);
+    p2.licencias().cerrar(0);
     await Promise.resolve();
-    expect(p3.l.llamadas[1]!.args).toContain("--install");
+    expect(p2.l.llamadas[1]!.args).toContain("--install");
   });
 
   it("lanza `sdkmanager` con la RUTA resuelta y el entorno puesto", async () => {
-    const p3 = arrancarPaso3();
-    p3.licencias().cerrar(0);
+    const p2 = arrancarPaso2();
+    p2.licencias().cerrar(0);
     await Promise.resolve();
-    p3.instalar().salida("Loading package information...\nInstalling emulator\n");
-    p3.instalar().cerrar(0);
-    expect(await p3.trabajo.terminado).toMatchObject({ estado: "ok" });
+    p2.instalar().salida("Loading package information...\nInstalling emulator\n");
+    p2.instalar().cerrar(0);
+    expect(await p2.trabajo.terminado).toMatchObject({ estado: "ok" });
 
     // La ruta la resuelve el HOST: ni el cliente manda un comando ni un binario.
-    expect(p3.l.llamadas[1]!.binario).toBe("/opt/homebrew/bin/sdkmanager");
-    expect(p3.l.llamadas[1]!.args.join(" ")).toContain("system-images;android-35;google_apis;arm64-v8a");
+    expect(p2.l.llamadas[1]!.binario).toBe("/opt/homebrew/bin/sdkmanager");
+    expect(p2.l.llamadas[1]!.args.join(" ")).toContain("system-images;android-35;google_apis;arm64-v8a");
     // El hijo necesita el SDK y el JDK, y eso son rutas de la MÁQUINA: van en su entorno,
     // que no viaja a ninguna parte.
-    expect(p3.l.llamadas[1]!.env["ANDROID_HOME"]).toBe("/opt/homebrew/share/android-commandlinetools");
-    expect(p3.l.llamadas[1]!.env["JAVA_HOME"]).toBe("/opt/homebrew/opt/openjdk@17");
-    expect(p3.lineas).toContain("Loading package information...");
-    expect(p3.lineas).toContain("Installing emulator");
+    expect(p2.l.llamadas[1]!.env["ANDROID_HOME"]).toBe("/opt/homebrew/share/android-commandlinetools");
+    expect(p2.l.llamadas[1]!.env["JAVA_HOME"]).toBe("/opt/homebrew/opt/openjdk@17");
+    expect(p2.lineas).toContain("Loading package information...");
+    expect(p2.lineas).toContain("Installing emulator");
   });
 
   it("una línea partida en dos trozos no sale partida", async () => {
     // Un `data` no es una línea: puede traer media, o tres. Emitir trozos dejaría el log
     // cortado por la mitad en la ventana.
-    const p3 = arrancarPaso3();
-    p3.licencias().cerrar(0);
+    const p2 = arrancarPaso2();
+    p2.licencias().cerrar(0);
     await Promise.resolve();
-    p3.instalar().salida("Downloading ");
-    p3.instalar().salida("emulator 58%\nDone\n");
-    p3.instalar().cerrar(0);
-    await p3.trabajo.terminado;
-    expect(p3.lineas).toContain("Downloading emulator 58%");
-    expect(p3.lineas).toContain("Done");
+    p2.instalar().salida("Downloading ");
+    p2.instalar().salida("emulator 58%\nDone\n");
+    p2.instalar().cerrar(0);
+    await p2.trabajo.terminado;
+    expect(p2.lineas).toContain("Downloading emulator 58%");
+    expect(p2.lineas).toContain("Done");
   });
 
   it("stderr también se cuenta: `sdkmanager` avisa por ahí", async () => {
     const l = lanzador();
     const lineas: string[] = [];
-    const trabajo = correrPasoDeReceta("android-emulador", 4, {
+    const trabajo = correrPasoDeReceta("android-emulador", 3, {
       ...ANDROID,
       lanzar: l.lanzar,
       alSalirLinea: (x) => lineas.push(x),
@@ -171,41 +174,41 @@ describe("correrPasoDeReceta", () => {
 
   it("al crear el AVD se contesta `no` al perfil de hardware", async () => {
     const l = lanzador();
-    correrPasoDeReceta("android-emulador", 4, { ...ANDROID, lanzar: l.lanzar });
+    correrPasoDeReceta("android-emulador", 3, { ...ANDROID, lanzar: l.lanzar });
     expect(l.llamadas[0]!.binario).toBe("/opt/homebrew/bin/avdmanager");
     expect(l.hijos[0]!.escrito).toContain("no\n");
   });
 
   it("un código distinto de cero es FALLO, con la última línea como motivo", async () => {
-    const p3 = arrancarPaso3();
-    p3.licencias().cerrar(0);
+    const p2 = arrancarPaso2();
+    p2.licencias().cerrar(0);
     await Promise.resolve();
-    p3.instalar().error("Warning: Failed to find package\n");
-    p3.instalar().cerrar(1);
-    expect(await p3.trabajo.terminado).toMatchObject({ estado: "fallo", motivo: "Warning: Failed to find package" });
+    p2.instalar().error("Warning: Failed to find package\n");
+    p2.instalar().cerrar(1);
+    expect(await p2.trabajo.terminado).toMatchObject({ estado: "fallo", motivo: "Warning: Failed to find package" });
   });
 
   it("un fallo de las LICENCIAS no corta: puede que ya estuvieran aceptadas", async () => {
-    const p3 = arrancarPaso3();
-    p3.licencias().cerrar(1);
+    const p2 = arrancarPaso2();
+    p2.licencias().cerrar(1);
     await Promise.resolve();
-    expect(p3.l.llamadas[1]!.args).toContain("--install");
-    p3.instalar().cerrar(0);
-    expect(await p3.trabajo.terminado).toMatchObject({ estado: "ok" });
+    expect(p2.l.llamadas[1]!.args).toContain("--install");
+    p2.instalar().cerrar(0);
+    expect(await p2.trabajo.terminado).toMatchObject({ estado: "ok" });
   });
 
   it("cancelar mata al hijo y se reporta como cancelada, no como fallo", async () => {
-    const p3 = arrancarPaso3();
-    p3.trabajo.cancelar();
-    expect(p3.licencias().matado).toBeDefined();
-    p3.licencias().cerrar(null);
-    expect(await p3.trabajo.terminado).toMatchObject({ estado: "cancelada" });
+    const p2 = arrancarPaso2();
+    p2.trabajo.cancelar();
+    expect(p2.licencias().matado).toBeDefined();
+    p2.licencias().cerrar(null);
+    expect(await p2.trabajo.terminado).toMatchObject({ estado: "cancelada" });
   });
 
   it("sin salida durante mucho rato se da por COLGADA y se mata", async () => {
     vi.useFakeTimers();
-    const p3 = arrancarPaso3();
-    const hijo = p3.licencias();
+    const p2 = arrancarPaso2();
+    const hijo = p2.licencias();
     // Mientras habla, no se toca: una descarga de 3 GB puede tardar, y matarla por lenta
     // sería peor que esperarla.
     vi.advanceTimersByTime(TOPE_SIN_SALIDA_MS - 1000);
@@ -216,7 +219,7 @@ describe("correrPasoDeReceta", () => {
     vi.advanceTimersByTime(2000);
     expect(hijo.matado).toBeDefined();
     hijo.cerrar(null);
-    expect(await p3.trabajo.terminado).toMatchObject({ estado: "colgada" });
+    expect(await p2.trabajo.terminado).toMatchObject({ estado: "colgada" });
     vi.useRealTimers();
   });
 
@@ -226,16 +229,16 @@ describe("correrPasoDeReceta", () => {
   });
 
   it("si el proceso no arranca, se dice y no se queda esperando", async () => {
-    const p3 = arrancarPaso3();
-    p3.licencias().reventar(Object.assign(new Error("spawn ENOENT"), { code: "ENOENT" }));
+    const p2 = arrancarPaso2();
+    p2.licencias().reventar(Object.assign(new Error("spawn ENOENT"), { code: "ENOENT" }));
     await Promise.resolve();
-    p3.instalar().reventar(Object.assign(new Error("spawn ENOENT"), { code: "ENOENT" }));
-    expect(await p3.trabajo.terminado).toMatchObject({ estado: "fallo", motivo: "el ejecutable no existe" });
+    p2.instalar().reventar(Object.assign(new Error("spawn ENOENT"), { code: "ENOENT" }));
+    expect(await p2.trabajo.terminado).toMatchObject({ estado: "fallo", motivo: "el ejecutable no existe" });
   });
 
   it("sin sdkmanager en la máquina no se lanza nada: se dice qué falta", async () => {
     const l = lanzador();
-    const trabajo = correrPasoDeReceta("android-emulador", 3, { ...ANDROID, existe: () => false, lanzar: l.lanzar });
+    const trabajo = correrPasoDeReceta("android-emulador", 2, { ...ANDROID, existe: () => false, lanzar: l.lanzar });
     const r = await trabajo.terminado;
     expect(r.estado).toBe("fallo");
     expect(r.motivo).toMatch(/paso 1/i);
@@ -256,7 +259,6 @@ describe("la tabla y las recetas dicen lo mismo", () => {
       brew: true,
       sdkmanager: true,
       emulator: true,
-      androidHome: true,
       jdk: true,
       avds: ["pixel8"],
     })!,
@@ -280,6 +282,30 @@ describe("la tabla y las recetas dicen lo mismo", () => {
       expect(receta!.pasos[Number(numero) - 1]?.ejecutable, clave).toBe(true);
     }
   });
+
+  /** Lo que el paso 2 PIDE a `sdkmanager`, leído en frío: sin lanzar ningún proceso. */
+  const paquetesQueSeLanzan = (): string[] =>
+    (PASOS_EJECUTABLES.get("android-emulador:2")!.invocaciones.find((i) => i.args.includes("--install"))?.args ?? [])
+      .filter((a) => a !== "--install");
+
+  it("y los paquetes que la ventana ENSEÑA son los que se LANZAN", () => {
+    // La lista está escrita DOS veces —el comando que se copia, en `core/dispositivos.ts`, y
+    // los `args` que se ejecutan, aquí— y nada la ataba: es la clase de regla que en este repo
+    // se ha caído por vivir en dos sitios. Divergir no da error, da un botón que instala algo
+    // distinto de lo que la ventana dice, que es el peor sitio donde puede mentir.
+    const mostrados = [...conTodo[0]!.pasos[1]!.comandos[0]!.matchAll(/"([^"]+)"/g)].map((m) => m[1]!);
+    expect(new Set(paquetesQueSeLanzan())).toEqual(new Set(mostrados));
+  });
+
+  it("y `platform-tools` está entre ellos: sin ellos el emulador no arranca", () => {
+    // **Medido el 16-sep-2026, y es el motivo de que estén en esa línea.** El emulador se niega
+    // a dar por buena la raíz del SDK que no tenga `<sdk>/platform-tools` dentro —dice
+    // `guessed sdk root … does not seem to be valid` y luego `Cannot find AVD system path` con
+    // `ANDROID_HOME` apuntando a la raíz CORRECTA—, y el cask `android-commandlinetools` no los
+    // trae: el `adb` del PATH viene del cask aparte, que los deja fuera. Sin esta palabra los
+    // tres pasos salían «hechos» y `emulator -avd pixel8` fallaba igual.
+    expect(paquetesQueSeLanzan()).toContain("platform-tools");
+  });
 });
 
 describe("el paso 1: brew", () => {
@@ -301,8 +327,8 @@ describe("el paso 1: brew", () => {
   /**
    * **Y este es el paso del que colgaba todo.** No estaba en la tabla por si `brew` pedía la
    * contraseña de administrador y el hijo se quedaba esperándola; medido, `sudo` lee de
-   * `/dev/tty` y sin terminal de control falla en 57 ms. Sin este botón, en una máquina nueva
-   * la receta entera no tenía ninguno: los pasos 3 y 4 exigen `sdkmanager`, que es justo lo
+   * `/dev/tty` y sin terminal de control falla en 26 ms. Sin este botón, en una máquina nueva
+   * la receta entera no tenía ninguno: los pasos 2 y 3 exigen `sdkmanager`, que es justo lo
    * que instala este.
    */
   it("lanza las dos instalaciones en orden y NO exige el SDK que va a instalar", async () => {

@@ -43,6 +43,7 @@ import {
   parsearDevicectl,
   parsearSimctl,
   motivoDeSimctl,
+  plataformaDe,
   sistemaDe,
   type Dispositivo,
   type Herramienta,
@@ -194,7 +195,10 @@ export async function detectarDispositivos(
     deps.ficheroTemporal ?? (() => join(tmpdir(), `xonecode-devicectl-${process.pid}-${Date.now()}.json`));
   const ahora = deps.ahora ?? (() => new Date());
 
-  const herramientas: Herramienta[] = [];
+  // Sin `plataforma`: se la pone `plataformaDe` al devolver el informe, una vez y por nombre.
+  // Así cada fila de aquí sigue diciendo solo lo que MIDIÓ, y no hay catorce sitios donde
+  // escribir de quién es la herramienta y uno donde olvidarlo.
+  const herramientas: Omit<Herramienta, "plataforma">[] = [];
   const dispositivos: Dispositivo[] = [];
   let avds: string[] = [];
   /**
@@ -392,7 +396,6 @@ export async function detectarDispositivos(
       enPath("sdkmanager") !== undefined ||
       localizar("sdkmanager", join("cmdline-tools", "latest", "bin")) !== undefined,
     emulator: emulator !== undefined,
-    androidHome: (entorno.ANDROID_HOME ?? "") !== "",
     // El JDK con el que corre `sdkmanager`: sin él, el botón de ejecutar no se ofrece.
     jdk: jdkDeLaMaquina(entorno, existe) !== undefined,
     avds,
@@ -421,7 +424,7 @@ export async function detectarDispositivos(
 
   return {
     sistema: sistemaDe(plataforma),
-    herramientas,
+    herramientas: herramientas.map((h) => ({ ...h, plataforma: plataformaDe(h.nombre) })),
     dispositivos: visibles,
     avds: miraAndroidEmulador ? avds : [],
     recetas,
@@ -589,6 +592,98 @@ export async function verificarDispositivo(
     return { ok: true, detalle: "responde a devicectl" };
   } finally {
     await borrar(fichero);
+  }
+}
+
+/**
+ * Los dos nombres que puede tener el framework de XOne en un Android, EN ORDEN DE PREFERENCIA.
+ *
+ * Son dos flavors del MISMO producto: `com.xone.android.framework` es el standalone —el
+ * medido, `5.0.2.2dev`— y `com.xone.android.developer.framework` el que va a Play Store. Con
+ * los dos instalados gana el primero, y por eso esto es una lista y no un `if` de dos ramas:
+ * así el orden ES la regla, y no hay dos sitios donde pueda cambiar.
+ */
+const PAQUETES_DEL_FRAMEWORK = ["com.xone.android.framework", "com.xone.android.developer.framework"] as const;
+
+/**
+ * Si un dispositivo Android tiene instalado el framework de XOne.
+ *
+ * **Se pregunta por el PAQUETE, no por el servidor.** `getLog` contesta con `deviceInfo` y
+ * `isXOneFramework: true`, y es la confirmación buena… **después** de conectar, cuando ya hay
+ * túnel y la app está viva. Antes de eso no hay a quién preguntar: el servidor vive dentro del
+ * proceso de la app, y sin app no hay proceso. Así que son dos momentos y dos medidas: el
+ * paquete decide si se puede EMPEZAR; `isXOneFramework` confirma, al final, que con quien se
+ * habló era el framework.
+ *
+ * Un solo viaje: `adb -s <serial> shell pm list packages com.xone.android`, que filtra por
+ * subcadena y trae de una vez los dos flavors. Y se busca por nombre EXACTO entre lo que
+ * contestó: el filtro es por subcadena, así que la lista puede traer parecidos, y dar por
+ * instalado algo que solo se le parece es afirmar de más.
+ *
+ * **No se lee `versionName` ni `versionCode`**: eso es de la INSTALACIÓN, que es otra pasada.
+ * Aquí la pregunta es de sí o no.
+ *
+ * **El `paquete` viaja en el resultado y no se guarda en ningún módulo**: es lo que necesita
+ * el reinicio posterior, porque el comando depende del flavor que este aparato tenga
+ * (`am start -n <paquete>/com.xone.android.hotswap.activities.SetupActivity`).
+ *
+ * Como `verificarDispositivo`, nunca lanza: todo vuelve como `{instalado, detalle}` de UNA
+ * línea. Y un dispositivo que no sea Android contesta sin lanzar NADA —no hay `adb` que
+ * preguntarle a un iPhone, y buscarlo sería un proceso gastado para nada.
+ */
+export interface FrameworkEnDispositivo {
+  instalado: boolean;
+  /**
+   * El nombre EXACTO del paquete que se encontró. **Ausente es «no se encontró»**, nunca un
+   * paquete por omisión: quien vaya a reiniciar con esto tiene que poder distinguir «no hay
+   * framework» de «hay este».
+   */
+  paquete?: string;
+  /** Una línea: qué se encontró, o por qué no. Nunca la salida entera. */
+  detalle: string;
+}
+
+export async function frameworkEnDispositivo(
+  dispositivo: Dispositivo,
+  deps: Pick<DependenciasDeDeteccion, "plataforma" | "entorno" | "home" | "existe" | "ejecutar"> = {}
+): Promise<FrameworkEnDispositivo> {
+  const plataforma = deps.plataforma ?? process.platform;
+  const entorno = deps.entorno ?? process.env;
+  const home = deps.home ?? homedir();
+  const existe = deps.existe ?? existsSync;
+  const ejecutar = deps.ejecutar ?? ejecutarConTexto;
+
+  // Lo PRIMERO, para que un iPhone no cueste ni una búsqueda en el PATH.
+  if (dispositivo.plataforma !== "android") {
+    return { instalado: false, detalle: "iOS todavía no" };
+  }
+
+  const { enSdk } = localizadorDeAndroid({ plataforma, entorno, home, existe });
+  const adb = enSdk("adb", "platform-tools");
+  if (adb === undefined) {
+    return { instalado: false, detalle: "no está adb: sin él no se puede mirar qué paquetes tiene" };
+  }
+
+  try {
+    const { stdout } = await ejecutar(adb, ["-s", dispositivo.id, "shell", "pm", "list", "packages", "com.xone.android"], {
+      timeout: TOPES_MS.adb,
+    });
+    // El formato de `pm list packages` es una línea por paquete, cada una con su prefijo.
+    // Se compara contra el nombre pelado porque el prefijo es sintaxis de la herramienta.
+    const nombres = new Set(
+      stdout
+        .split(/\r?\n/)
+        .map((linea) => linea.trim())
+        .filter((linea) => linea.startsWith("package:"))
+        .map((linea) => linea.slice("package:".length))
+    );
+    const paquete = PAQUETES_DEL_FRAMEWORK.find((nombre) => nombres.has(nombre));
+    if (paquete === undefined) {
+      return { instalado: false, detalle: "no aparece ni el standalone ni el de Play Store: no está instalado" };
+    }
+    return { instalado: true, paquete, detalle: `framework instalado: ${paquete}` };
+  } catch (error) {
+    return { instalado: false, detalle: describirFallo(error, TOPES_MS.adb) };
   }
 }
 

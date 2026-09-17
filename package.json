@@ -46,11 +46,13 @@
     "ink": "^5.2.1",
     "ink-testing-library": "^4.0.0",
     "langchain": "1.5.10",
-    "react": "^18.3.1"
+    "react": "^18.3.1",
+    "ws": "^8.21.3"
   },
   "devDependencies": {
     "@types/node": "^20.19.43",
     "@types/react": "^18.3.31",
+    "@types/ws": "^8.18.1",
     "jsdom": "^25.0.1",
     "tsx": "^4.23.1",
     "typescript": "^5.9.3",

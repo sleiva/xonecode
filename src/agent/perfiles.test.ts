@@ -18,7 +18,7 @@ describe("permisosDe", () => {
    * llevan».
    *
    * Se afirmaba lo segundo mientras los cuatro especialistas eran de desarrollo y dibujaban
-   * diagramas. `probador` no dibuja ninguno: darle dos skills que no va a usar sería prompt
+   * diagramas. `xone-device-tester` no dibuja ninguno: darle dos skills que no va a usar sería prompt
    * en TODAS sus llamadas, que es justo el coste que este repo mide antes de añadir una
    * línea. Lo que sí se rompe solo es tener una de las dos: el bloque `SKILLS_VISUALES` que
    * va en el cuerpo habla de las dos y manda usar `archify` antes que la otra, así que un

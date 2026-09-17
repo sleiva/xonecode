@@ -119,4 +119,32 @@ describe("Transcript", () => {
     expect(screen.getByText("lo de revisión")).toBeTruthy();
     expect(screen.queryByText("lo de ficheros")).toBeNull();
   });
+
+  /**
+   * **Y este es el test que faltaba, porque aquí el despacho tiene una trampa que las otras
+   * pestañas no tienen: la última rama es un `else` INCONDICIONAL.**
+   *
+   * La cadena acaba en `: pestana === "tareas" ? (tareas) : (ficheros)` — sin condición—, así
+   * que una pestaña que no tenga su rama propia **no se queda vacía: pinta FICHEROS**, que es
+   * el panel de otra. Y no se queda vacía en silencio, además: enseña un contenido plausible y
+   * equivocado, con lo que el síntoma es «la pestaña Ejecutar me muestra el árbol del
+   * proyecto» y no un hueco que alguien vaya a investigar.
+   *
+   * Por eso este caso no comprueba solo que se pinte SU panel —eso lo haría pasar el `else`
+   * por accidente si el panel de al lado no estuviera montado—: monta los dos a la vez y exige
+   * que se vea el suyo **y que el de Ficheros NO**. Con la rama borrada, este test se pone
+   * rojo; sin él, borrarla no rompía nada.
+   */
+  it("«ejecutar» pinta SU panel y no Ficheros: la última rama del ternario es un `else`", () => {
+    render(
+      <Transcript
+        actos={[...ACTOS]}
+        pestana="ejecutar"
+        ejecutar={<p>lo de ejecutar</p>}
+        ficheros={<p>lo de ficheros</p>}
+      />
+    );
+    expect(screen.getByText("lo de ejecutar")).toBeTruthy();
+    expect(screen.queryByText("lo de ficheros")).toBeNull();
+  });
 });

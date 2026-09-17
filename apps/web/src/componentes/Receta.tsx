@@ -11,7 +11,8 @@ import estilos from "./Receta.module.css";
  * `avdmanager` y `brew` cumplen —los dos primeros porque sus preguntas se contestan por
  * `stdin`, y `brew` porque en modo no interactivo no pregunta y porque un `sudo` sin terminal
  * de control falla en el acto en vez de colgarse (medido)—. Lo que se queda en copiar es lo
- * que fallaría SIEMPRE o lo que no falla rápido: escribir en el `~/.zshrc` de alguien, un
+ * que fallaría SIEMPRE o lo que no falla rápido: los `export` del `~/.zshrc` de alguien —que
+ * ni siquiera son un paso, ver `Aparte`—, un
  * `sudo` escrito dentro del comando y una autorización que el sistema pide en una VENTANA.
  * Y los que se lanzan necesitan canal de progreso: son 2-3 GB, y un botón mudo durante diez
  * minutos se lee como que se ha colgado.
@@ -42,6 +43,9 @@ export function Receta({
     instalacion !== undefined && instalacion.receta === receta.id && instalacion.paso === numero
       ? instalacion
       : undefined;
+  /** Ver `hecho` y `repetir` en `PasoDeReceta`: de los dos sale el nombre del botón. */
+  const repetir = (paso: RecetaDelCable["pasos"][number]): { etiqueta: string; porQue: string } | undefined =>
+    paso.hecho ? paso.repetir : undefined;
   return (
     <section className={estilos.receta} aria-label={receta.titulo}>
       <h4 className={estilos.titulo}>{receta.titulo}</h4>
@@ -127,7 +131,14 @@ export function Receta({
                                 : `No se lanza desde aquí: ${paso.porQueNo}.`}
                             </p>
                           )
-                        ) : alEjecutar === undefined ? null : (
+                        ) : alEjecutar === undefined ||
+                          // **Un paso ya hecho no vuelve a ofrecer su instalación.** Medido en
+                          // la ventana: la marca decía «hecho» y debajo estaba «Ejecutar este
+                          // paso», o sea que la receta ofrecía instalar lo que ya estaba — el
+                          // botón muerto, y en la dirección que más desgasta, porque enseña a
+                          // pulsar sin leer. La excepción es el paso que ADEMÁS actualiza
+                          // (`repetir`), que se ofrece con su nombre y su motivo.
+                          (paso.hecho && repetir(paso) === undefined) ? null : (
                           <>
                             <button
                               type="button"
@@ -135,8 +146,13 @@ export function Receta({
                               disabled={instalacion?.estado === "corriendo"}
                               onClick={() => alEjecutar(i + 1)}
                             >
-                              Ejecutar este paso
+                              {repetir(paso)?.etiqueta ?? "Ejecutar este paso"}
                             </button>
+                            {repetir(paso) === undefined ? null : (
+                              // Un botón sobre un paso hecho, sin motivo al lado, se lee como
+                              // el error de antes al revés: se dice que repetir es actualizar.
+                              <span className={estilos.acepta}>{repetir(paso)!.porQue}.</span>
+                            )}
                             {paso.acepta === undefined ? null : (
                               // Pulsar ES la aceptación, así que se dice al lado y no dentro
                               // del botón: aceptar una licencia en nombre de alguien no puede
@@ -153,6 +169,24 @@ export function Receta({
             ))}
           </ol>
         </>
+      )}
+      {/* Y el consejo que NO es un paso, con la misma forma que ellos para poder copiarlo.
+          Se enseña también con la receta completa: dice cómo hacer que el comando de abajo
+          funcione en un terminal, y eso le hace falta igual a quien ya lo tiene todo. Está
+          fuera de la lista porque no se mide y no decide si la receta está completa — era el
+          paso que dejaba la receta abierta para siempre en una máquina ya equipada. */}
+      {receta.aparte === undefined ? null : (
+        <div className={estilos.aparte}>
+          <p className={estilos.aparteTitulo}>{receta.aparte.titulo}</p>
+          {receta.aparte.nota === undefined ? null : <p className={estilos.nota}>{receta.aparte.nota}</p>}
+          <div className={estilos.bloque}>
+            <pre className={estilos.comandos}>{receta.aparte.comandos.join("\n")}</pre>
+            <BotonDeCopiar
+              texto={receta.aparte.comandos.join("\n")}
+              etiqueta={`Copiar «${receta.aparte.titulo}»`}
+            />
+          </div>
+        </div>
       )}
       {/* Lo que viene DESPUÉS se dice siempre, completa o no: arrancar un emulador todavía
           no está cableado aquí, y el comando es lo único honesto que se puede dar. */}

@@ -175,10 +175,24 @@ describe("Ajustes", () => {
   it("abre en Proveedores y las secciones se pueden cambiar", () => {
     render(<Ajustes {...MANEJADORES} proveedores={PROVEEDORES} />);
     expect(screen.getByRole("heading", { name: /proveedores/i })).toBeTruthy();
+    // **El ORDEN es una decisión, no un accidente del array**: General la primera —el cajón
+    // de lo de la máquina entera, y lo general se lee antes que lo particular— y detrás lo
+    // concreto. Se fija aquí para que el próximo rediseño no lo deshaga sin querer.
+    const navegacion = screen.getByRole("navigation", { name: "Secciones de ajustes" });
+    expect(within(navegacion).getAllByRole("button").map((b) => b.textContent)).toEqual([
+      "General",
+      "Modelos",
+      "Apariencia",
+      "Entornos",
+      "Subagentes",
+      "Dispositivos",
+    ]);
     fireEvent.click(screen.getByRole("button", { name: "Apariencia" }));
     expect(screen.getByRole("heading", { name: /apariencia/i })).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Entornos" }));
     expect(screen.getByRole("heading", { name: /entornos/i })).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "General" }));
+    expect(screen.getByRole("heading", { name: "General" })).toBeTruthy();
   });
 
   /**
@@ -465,10 +479,10 @@ describe("Ajustes", () => {
 const INFORME = {
   sistema: "mac" as const,
   herramientas: [
-    { nombre: "adb" as const, estado: "ok" as const },
-    { nombre: "emulator" as const, estado: "no-encontrada" as const, detalle: "ni en el PATH" },
-    { nombre: "xcrun" as const, estado: "ok" as const },
-    { nombre: "devicectl" as const, estado: "desactivada" as const },
+    { nombre: "adb" as const, plataforma: "android" as const, estado: "ok" as const },
+    { nombre: "emulator" as const, plataforma: "android" as const, estado: "no-encontrada" as const, detalle: "ni en el PATH" },
+    { nombre: "xcrun" as const, plataforma: "ios" as const, estado: "ok" as const },
+    { nombre: "devicectl" as const, plataforma: "ios" as const, estado: "desactivada" as const },
   ],
   dispositivos: [
     { id: "R58", nombre: "Galaxy S21", plataforma: "android" as const, clase: "fisico" as const, estado: "conectado" as const },
@@ -491,24 +505,61 @@ describe("Ajustes: la sección de Dispositivos", () => {
     return screen.getByRole("heading", { name: "Dispositivos", level: 2 }).parentElement!;
   };
 
-  it("los REQUISITOS y el INVENTARIO son dos bloques, no una lista", () => {
+  /**
+   * Cambiar de pestaña. La etiqueta de una pestaña lleva PEGADO lo que le falta («iOS, 2 por
+   * instalar»), así que se busca por el principio y nunca por el texto entero: una prueba que
+   * exigiera el nombre a secas se rompería el día que a esa plataforma le faltara algo, que es
+   * justo lo que la pestaña viene a decir.
+   */
+  const abrirPestana = (panel: HTMLElement, nombre: "Android" | "iOS") =>
+    fireEvent.click(within(panel).getByRole("tab", { name: new RegExp(`^${nombre}`) }));
+
+  it("una pestaña por plataforma, y cada una con SUS requisitos", () => {
+    // Antes era una sola columna con las herramientas de las dos plataformas, y con iOS
+    // dentro la lista se hacía larga y sin costuras. Lo que agrupa es `plataforma`, que
+    // viene MEDIDO: aquí no se deduce del nombre de la herramienta.
     const panel = abrir();
-    // Un requisito está o no está —y si no está, se instala—; un dispositivo es algo que
-    // hay. Mezclados, «emulator no está instalada» se leía como un ajuste que el botón de
-    // al lado podía arreglar.
-    expect(within(panel).getByRole("heading", { name: "Requisitos" })).toBeTruthy();
-    expect(within(panel).getByRole("heading", { name: "Dispositivos", level: 3 })).toBeTruthy();
-    for (const nombre of ["adb", "emulator", "Xcode command line tools", "devicectl"]) {
-      expect(within(panel).getByText(nombre)).toBeTruthy();
-    }
+    expect(within(panel).getAllByRole("tab").map((t) => t.getAttribute("aria-selected"))).toEqual([
+      "true",
+      "false",
+    ]);
+    expect(within(panel).getByText("adb")).toBeTruthy();
+    expect(within(panel).getByText("emulator")).toBeTruthy();
+    expect(within(panel).queryByText("devicectl")).toBeNull();
+
+    abrirPestana(panel, "iOS");
+    expect(within(panel).getByText("Xcode command line tools")).toBeTruthy();
+    expect(within(panel).getByText("devicectl")).toBeTruthy();
+    expect(within(panel).queryByText("adb")).toBeNull();
   });
 
-  it("el inventario va en dos grupos: lo que se enchufa y lo que se arranca", () => {
+  it("cada pestaña cuenta lo que le falta, y solo si le falta algo", () => {
+    // Es lo que evita tener que abrirlas para saber dónde está el trabajo. Y un cero no se
+    // pinta: es el control sin dato detrás de siempre, y no diría nada que las filas de
+    // abajo no digan.
+    const panel = abrir();
+    const [android, ios] = within(panel).getAllByRole("tab");
+    // A Android le falta `emulator`. A iOS, nada: `devicectl` está DESACTIVADA, que es una
+    // elección de quien está aquí —apagó ese destino— y no una tarea pendiente.
+    expect(android!.getAttribute("aria-label")).toBe("Android, 1 por instalar");
+    expect(ios!.getAttribute("aria-label")).toBe("iOS");
+    expect(ios!.textContent).toBe("iOS");
+  });
+
+  it("el inventario va en dos grupos, y cada pestaña enseña el suyo", () => {
     const panel = abrir();
     expect(within(panel).getByRole("heading", { name: "Teléfonos y tablets" })).toBeTruthy();
     expect(within(panel).getByRole("heading", { name: "Simuladores y emuladores" })).toBeTruthy();
     expect(within(panel).getByText("Galaxy S21")).toBeTruthy();
+    expect(within(panel).queryByText("iPhone 16")).toBeNull();
+
+    abrirPestana(panel, "iOS");
     expect(within(panel).getByText("iPhone 16")).toBeTruthy();
+    expect(within(panel).queryByText("Galaxy S21")).toBeNull();
+    // Y la fila ya no repite la plataforma: la pestaña abierta la dice, y era una de las
+    // cosas que hacían larga la lista mezclada.
+    expect(within(panel).queryByText(/iOS · /)).toBeNull();
+    expect(within(panel).getByText("arrancado")).toBeTruthy();
   });
 
   it("un AVD definido y sin arrancar TAMBIÉN es un simulador disponible", () => {
@@ -516,15 +567,53 @@ describe("Ajustes: la sección de Dispositivos", () => {
     // arrancan: sin esto, «los simuladores disponibles» dejaba fuera los de Android.
     const panel = abrir({ dispositivos: { ...INFORME, avds: ["Pixel_8_API_34"] } });
     expect(within(panel).getByText("Pixel_8_API_34")).toBeTruthy();
-    expect(within(panel).getByText(/Android · apagado/)).toBeTruthy();
+    expect(within(panel).getByText("apagado")).toBeTruthy();
   });
 
-  it("verde SOLO lo disponible: lo que falta va hueco, y sin medir no se afirma nada", () => {
+  it("los requisitos son los que la MEDIDA nombra: uno que no venga, se CUENTA", () => {
+    // Las filas salen del informe y no de una tabla de la ventana, así que un informe
+    // incompleto no puede hacer desaparecer una herramienta en silencio — que se leería
+    // como una máquina a la que no le falta nada de eso.
+    const panel = abrir({
+      dispositivos: {
+        ...INFORME,
+        herramientas: INFORME.herramientas.filter((h) => h.nombre !== "emulator"),
+      },
+    });
+    expect(within(panel).queryByText("emulator")).toBeNull();
+    expect(within(panel).getByText(/La medida no nombra emulator/)).toBeTruthy();
+  });
+
+  it("la pestaña de iOS está SIEMPRE, aunque allí no aplique", () => {
+    // Esconderla dejaría su receta sin puerta y haría creer que iOS se puede probar en ese
+    // sistema y no se está enseñando. Dentro se dice lo que contestó la medida.
+    const panel = abrir({
+      dispositivos: {
+        ...INFORME,
+        sistema: "linux" as const,
+        herramientas: INFORME.herramientas.map((h) =>
+          h.plataforma === "ios" ? { ...h, estado: "no-aplica" as const } : h
+        ),
+      },
+    });
+    abrirPestana(panel, "iOS");
+    expect(within(panel).getAllByText(/no aplica en este sistema/).length).toBeGreaterThan(0);
+    expect(within(panel).getByRole("tab", { name: "iOS" })).toBeTruthy();
+  });
+
+  it("verde SOLO lo disponible: lo que falta va hueco", () => {
     const panel = abrir();
     const estados = [...panel.querySelectorAll("[data-herramienta]")].map((p) => p.getAttribute("data-herramienta"));
-    // Requisitos: adb ok, emulator falta, xcrun ok, devicectl desactivada. Luego el
-    // inventario: el Galaxy conectado y el iPhone arrancado, los dos a mano.
-    expect(estados).toEqual(["ok", "no-encontrada", "ok", "desactivada", "ok", "ok"]);
+    // En la pestaña de Android: `adb` ok y `emulator` falta; luego el inventario de esa
+    // plataforma, con el Galaxy conectado. El iPhone vive en la otra pestaña.
+    expect(estados).toEqual(["ok", "no-encontrada", "ok"]);
+
+    abrirPestana(panel, "iOS");
+    expect([...panel.querySelectorAll("[data-herramienta]")].map((p) => p.getAttribute("data-herramienta"))).toEqual([
+      "ok",
+      "desactivada",
+      "ok",
+    ]);
   });
 
   it("una herramienta que falta ofrece cómo instalarla, y el comando se ENSEÑA", () => {
@@ -532,36 +621,42 @@ describe("Ajustes: la sección de Dispositivos", () => {
     const conFaltas = {
       ...INFORME,
       herramientas: [
-        { nombre: "adb" as const, estado: "no-encontrada" as const, instalar: { comando: "brew install --cask android-platform-tools", automatico: false } },
-        { nombre: "emulator" as const, estado: "no-encontrada" as const },
-        { nombre: "xcrun" as const, estado: "no-encontrada" as const, instalar: { comando: "xcode-select --install", automatico: true } },
-        { nombre: "devicectl" as const, estado: "no-encontrada" as const, instalar: { comando: "xcode-select --install", automatico: true } },
+        { nombre: "adb" as const, plataforma: "android" as const, estado: "no-encontrada" as const, instalar: { comando: "brew install --cask android-platform-tools", automatico: false } },
+        { nombre: "emulator" as const, plataforma: "android" as const, estado: "no-encontrada" as const },
+        { nombre: "xcrun" as const, plataforma: "ios" as const, estado: "no-encontrada" as const, instalar: { comando: "xcode-select --install", automatico: true } },
+        { nombre: "devicectl" as const, plataforma: "ios" as const, estado: "no-encontrada" as const, instalar: { comando: "xcode-select --install", automatico: true } },
       ],
     };
-    abrir({ dispositivos: conFaltas, alInstalarHerramienta });
-    // El que xonecode puede lanzar él: botón. Viaja el NOMBRE, nunca el comando.
-    fireEvent.click(screen.getAllByRole("button", { name: "Instalar" })[0]!);
+    const panel = abrir({ dispositivos: conFaltas, alInstalarHerramienta });
+    // El que xonecode no puede lanzar: el comando a la vista para copiarlo, sin botón que se
+    // pueda colgar. Y `emulator` no propone nada: no se inventa un instalador que no se
+    // conoce — ni un botón sin comando detrás. (Cero botones «Instalar»: los dos de la tira
+    // de pestañas son otra cosa.)
+    expect(within(panel).queryAllByRole("button", { name: "Instalar" })).toHaveLength(0);
+    expect(within(panel).getByText("brew install --cask android-platform-tools")).toBeTruthy();
+
+    abrirPestana(panel, "iOS");
+    // Los que sí puede lanzar: botón, y viaja el NOMBRE, nunca el comando.
+    fireEvent.click(within(panel).getAllByRole("button", { name: "Instalar" })[0]!);
     expect(alInstalarHerramienta).toHaveBeenCalledWith("xcrun");
-    // El que no: el comando a la vista para copiarlo, sin botón que se pueda colgar.
-    expect(screen.getByText("brew install --cask android-platform-tools")).toBeTruthy();
-    // Y emulator no propone nada: no se inventa un instalador que no se conoce.
-    expect(screen.getAllByRole("button", { name: "Instalar" })).toHaveLength(2);
   });
 
   it("el filtro de medida son CASILLAS, y marcar una manda el objeto entero", () => {
     // Eran cuatro botones «Se mira» al lado de un punto verde, y se leían como si
-    // concedieran la capacidad: el verde ya dice que se puede usar.
+    // concedieran la capacidad: el verde ya dice que se puede usar. Y son las de ESTA
+    // plataforma: apagar «iOS Sim» desde la pestaña de Android no se decide ahí.
     const alCambiarDispositivos = vi.fn();
-    render(
-      <Ajustes {...MANEJADORES} dispositivos={INFORME} ajustesDeDispositivos={{ ios: false }} alCambiarDispositivos={alCambiarDispositivos} />
-    );
-    fireEvent.click(screen.getByRole("button", { name: "Dispositivos" }));
-    const casillas = screen.getAllByRole("checkbox") as HTMLInputElement[];
-    expect(casillas).toHaveLength(4);
-    // Ausente = se busca; solo iOS está desmarcado.
-    expect(casillas.map((c) => c.checked)).toEqual([true, true, false, true]);
+    const panel = abrir({ ajustesDeDispositivos: { ios: false }, alCambiarDispositivos });
+    const casillas = within(panel).getAllByRole("checkbox") as HTMLInputElement[];
+    expect(casillas).toHaveLength(2);
+    expect(casillas.map((c) => c.checked)).toEqual([true, true]);
     fireEvent.click(casillas[0]!);
     expect(alCambiarDispositivos).toHaveBeenCalledWith({ ios: false, android: false });
+
+    abrirPestana(panel, "iOS");
+    const deIos = within(panel).getAllByRole("checkbox") as HTMLInputElement[];
+    // Ausente = se busca; solo iOS está desmarcado, y la de su simulador no.
+    expect(deIos.map((c) => c.checked)).toEqual([false, true]);
   });
 
   it("sin foto no se afirma nada de la máquina", () => {
@@ -592,8 +687,10 @@ describe("Ajustes: el tope de concurrencia de tareas", () => {
   afterEach(cleanup);
 
   const abrir = (extra: Record<string, unknown> = {}) => {
+    // En General, que es donde vive desde que dejó de estar al final de Dispositivos: es un
+    // ajuste de la MÁQUINA, no de dónde se prueba la app.
     render(<Ajustes {...MANEJADORES} {...extra} />);
-    fireEvent.click(screen.getByRole("button", { name: "Dispositivos" }));
+    fireEvent.click(screen.getByRole("button", { name: "General" }));
     return screen.getByRole("heading", { name: "Tareas" }).parentElement!;
   };
 
@@ -634,6 +731,16 @@ describe("Ajustes: el tope de concurrencia de tareas", () => {
   it("sin cable el selector también se apaga, aunque haya manejador", () => {
     const panel = abrir({ alCambiarConcurrencia: () => {}, conectado: false });
     expect(within(panel).getByRole("spinbutton")).toHaveProperty("disabled", true);
+  });
+
+  it("y NO se pinta en Dispositivos: ahí se mira la máquina, no se decide la cola", () => {
+    // Estuvo al final de esa sección, con el argumento —cierto— de que describe el EQUIPO.
+    // Pero el mismo control en dos sitios es el que se queda viejo en uno de los dos, y quien
+    // venía a mirar sus simuladores se encontraba un número que habla de otra cosa.
+    render(<Ajustes {...MANEJADORES} dispositivos={INFORME} ajustesDeDispositivos={{}} alCambiarDispositivos={() => {}} />);
+    fireEvent.click(screen.getByRole("button", { name: "Dispositivos" }));
+    expect(screen.queryByRole("heading", { name: "Tareas" })).toBeNull();
+    expect(screen.queryByRole("spinbutton")).toBeNull();
   });
 });
 

@@ -7,7 +7,7 @@
  */
 import { vi, describe, it, expect, beforeEach, afterEach } from "vitest";
 import { execFileSync } from "node:child_process";
-import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { Readable } from "node:stream";
@@ -27,10 +27,12 @@ import { MS_DE_TRABAJO_AL_ABRIR,
   augmentacionCableada,
   contextoDelProyecto,
   lecturaDeSync,
+  LINEAS_DE_LOG,
   TOPE_DE_MEMORIA,
   FICHEROS_DEL_AVISO,
 } from "./arranque.js";
 import { ErrorDelAumentador } from "../../agent/aumentador.js";
+import { leerFicheroDeProyecto, motivoDeRutaInaceptable } from "../../agent/arbolDeProyecto.js";
 import { CLAVE_DE_SELLO, cambiosDeSesion, fotoDeApertura } from "../../agent/sesionGit.js";
 import type { PeticionDeTarea } from "../../core/ports.js";
 import { crearVestibulo, type Vestibulo } from "./vestibulo.js";
@@ -43,6 +45,13 @@ import type { Entorno } from "../../core/settings.js";
 import type { AdjuntoDeTarea, Tarea } from "../../core/tareas.js";
 import { TOPE_DE_ADJUNTO } from "../../agent/tareasEnDisco.js";
 import type { ManejadorRuta } from "./servidor.js";
+import { ESTADOS_DEL_LANZAMIENTO, FASES_DEL_LANZAMIENTO } from "./transporte.js";
+import {
+  FASES_DE_LANZAMIENTO,
+  type EstadoDeLanzamiento,
+  type FaseDeLanzamiento,
+  type PeticionDeLanzamiento,
+} from "../../agent/lanzamientoEnMaquina.js";
 import type { MensajeAlCliente, MensajeDelCliente, Sumidero } from "./transporte.js";
 import type { Acto } from "../../core/actos.js";
 
@@ -3428,7 +3437,7 @@ function servidorLevantado() {
 describe("qué hay en la máquina: el mensaje «dispositivos»", () => {
   const informe = {
     sistema: "mac" as const,
-    herramientas: [{ nombre: "adb" as const, estado: "no-encontrada" as const }],
+    herramientas: [{ nombre: "adb" as const, plataforma: "android" as const, estado: "no-encontrada" as const }],
     dispositivos: [],
     avds: [], recetas: [],
     medido: "2026-09-06T10:00:00.000Z",
@@ -3509,14 +3518,14 @@ describe("qué hay en la máquina: el mensaje «dispositivos»", () => {
     montarRutas(servidor, vestibuloDePrueba(), {
       detectarDispositivos: async () => ({
         ...informe,
-        herramientas: [{ nombre: "adb", estado: "ok", ruta: "/Users/alguien/Library/Android/sdk/platform-tools/adb" }],
+        herramientas: [{ nombre: "adb", plataforma: "android", estado: "ok", ruta: "/Users/alguien/Library/Android/sdk/platform-tools/adb" }],
       }),
     });
     const cliente = clienteDeMentira();
     await servidor.rutas.get(`GET ${RUTA_EVENTOS}`)!(cliente.peticion, cliente.respuesta);
     await asentar();
     const foto = cliente.recibidos.find((m) => m.clase === "dispositivos") as Extract<MensajeAlCliente, { clase: "dispositivos" }>;
-    expect(foto.informe.herramientas).toEqual([{ nombre: "adb", estado: "ok" }]);
+    expect(foto.informe.herramientas).toEqual([{ nombre: "adb", plataforma: "android", estado: "ok" }]);
     expect(JSON.stringify(foto)).not.toContain("/Users/alguien");
   });
 
@@ -6301,5 +6310,558 @@ describe("el commit del turno, cableado", () => {
     expect(await conVia("sin-git")).toBeUndefined();
     expect(await conVia("commit")).toBeUndefined();
     expect(await conVia("fallo", "hook rechazado")).toBe("no se pudo commitear el turno: hook rechazado");
+  });
+});
+
+/**
+ * El recorrido por el cable: el veredicto («¿se puede lanzar?»), la intención (lanzar,
+ * cancelar) y las fases del lanzamiento.
+ *
+ * Todo con dobles de las cuatro cosas caras —el framework en el dispositivo, la existencia de
+ * un fichero del proyecto, el lanzador y el lector—, que es lo que deja esto sin adb, sin
+ * red y sin disco del usuario. Y con el cable de verdad: los mensajes se afirman tal y como
+ * salen por el SSE, no sobre el valor que devolvió una función.
+ */
+describe("el recorrido por el cable — el veredicto, la intención y las fases", () => {
+  const APP_INI = "name=AppDemo\n";
+  /** El `app.xml` del caso medido: declara una ruta del proyecto que puede faltar. */
+  const APP_XML = '<?xml version="1.0"?>\n<app><connection name="main" connstring="bd/gestion.db" /></app>\n';
+
+  const PIXEL = {
+    id: "ABC",
+    nombre: "Pixel 8",
+    plataforma: "android" as const,
+    clase: "fisico" as const,
+    estado: "conectado" as const,
+  };
+
+  type Opciones = Parameters<typeof montarRutas>[2];
+
+  /**
+   * El andamio: un proyecto de VERDAD en un temporal (con sus descriptores), abierto desde el
+   * cable, un dispositivo medido y elegido por la sesión, y un cliente SSE enganchado.
+   *
+   * `conBase` decide el caso entero: `bd/gestion.db` es el fichero que declara el `app.xml`, y
+   * sin él el veredicto bloquea — que es el caso medido que motivó todo esto.
+   */
+  const montar = async (montaje: {
+    opciones?: Opciones;
+    /** Ausente = el proyecto no tiene `app.xml`. */
+    xml?: string;
+    ini?: string;
+    /** Crea `bd/gestion.db`, el fichero que declara la conexión. */
+    conBase?: boolean;
+    /** El dispositivo guardado por la sesión. Ausente = el de la medida; `null` = ninguno. */
+    elegido?: {
+      id: string;
+      nombre: string;
+      plataforma: "android" | "ios";
+      clase: "emulador" | "simulador" | "fisico";
+    } | null;
+  } = {}) => {
+    const base = mkdtempSync(join(tmpdir(), "xonecode-lanzar-"));
+    const servidor = servidorDeMentira();
+    const vestibulo = vestibuloDePrueba({ baseDeWorkspace: base });
+    const raiz = vestibulo.raizDeProyecto("webstudio", "Tienda");
+    mkdirSync(join(raiz, ".xonecode"), { recursive: true });
+    writeFileSync(join(raiz, ".xonecode", "config.json"), JSON.stringify({ modo: "offline" }));
+    if (montaje.xml !== undefined) writeFileSync(join(raiz, "app.xml"), montaje.xml);
+    writeFileSync(join(raiz, "app.ini"), montaje.ini ?? APP_INI);
+    if (montaje.conBase === true) {
+      mkdirSync(join(raiz, "bd"), { recursive: true });
+      writeFileSync(join(raiz, "bd", "gestion.db"), "");
+    }
+
+    montarRutas(servidor, vestibulo, {
+      // El lector REAL sobre el temporal, con su barrera de rutas y su regla de las vistas
+      // aplanadas, y la misma existencia que compone el cableado. Doblar aquí el lector
+      // probaría el veredicto contra un doble y no contra el proyecto de verdad.
+      leerFichero: leerFicheroDeProyecto,
+      existeEnProyecto: (suRaiz, ruta) =>
+        motivoDeRutaInaceptable(ruta) !== undefined || existsSync(join(suRaiz, ruta)),
+      detectarDispositivos: async () => ({
+        sistema: "mac" as const,
+        herramientas: [],
+        dispositivos: [PIXEL],
+        avds: [],
+        recetas: [],
+        medido: "2026-09-16T10:00:00.000Z",
+      }),
+      ...montaje.opciones,
+    });
+    const cliente = clienteDeMentira();
+    await servidor.rutas.get(`GET ${RUTA_EVENTOS}`)!(cliente.peticion, cliente.respuesta);
+    const accion = servidor.rutas.get(`POST ${RUTA_ACCION}`)!;
+    await asentar();
+    await enviarMensaje(accion, { clase: "sesion", proyecto: "p1" });
+    // La medida: es la ÚNICA forma de que haya informe — no hay sondeo.
+    await enviarMensaje(accion, { clase: "dispositivos" });
+    await asentar();
+
+    // La elección de la sesión: por omisión la del dispositivo medido —el camino del
+    // cliente—, y `null` deja la sesión SIN ninguno elegido.
+    const abierta = vestibulo.proyectoAbierto()!;
+    if (montaje.elegido === null) abierta.elegirDispositivo(undefined);
+    else if (montaje.elegido !== undefined) abierta.elegirDispositivo(montaje.elegido);
+    else await enviarMensaje(accion, { clase: "dispositivo", id: PIXEL.id });
+    await asentar();
+    cliente.recibidos.length = 0;
+
+    return {
+      base,
+      servidor,
+      vestibulo,
+      accion,
+      cliente,
+      raiz,
+      cerrar: async () => {
+        await vestibulo.cerrar();
+        rmSync(base, { recursive: true, force: true });
+      },
+    };
+  };
+
+  /**
+   * Los mensajes del recorrido que llegaron, ya ESTECHADOS a su clase.
+   *
+   * Genérica a propósito: con `clase: "lanzable" | "lanzamiento"` el `Extract` de abajo se queda
+   * con la UNIÓN de las dos —`{clase: "lanzable" | "lanzamiento"}` encaja en las dos— y entonces
+   * ni `faltas` ni `estado` existen para `tsc`: el helper parecería estrechar y no estrecharía
+   * nada, que es el mismo error que un `as` que no comprueba.
+   */
+  const dichos = <C extends "lanzable" | "lanzamiento">(
+    cliente: ReturnType<typeof clienteDeMentira>,
+    clase: C,
+  ) => cliente.recibidos.filter((m) => m.clase === clase) as Extract<MensajeAlCliente, { clase: C }>[];
+
+  /**
+   * Deja correr lo que el cable lanzó suelto hasta que se cumpla `listo`, con tope de vueltas.
+   *
+   * Hace falta porque medir un veredicto NO es un tick: lee `app.xml` y `app.ini` del disco de
+   * verdad, así que resolverlos cuesta varios turnos del bucle de eventos. Un `asentar()` de un
+   * tick dejaba pasar solo las carreras fáciles y el test salía verde o rojo según lo que
+   * tardara el disco — que es la peor clase de verde.
+   */
+  const esperarA = async (listo: () => boolean, vueltas = 200): Promise<void> => {
+    for (let i = 0; i < vueltas && !listo(); i++) await new Promise((r) => setTimeout(r, 0));
+  };
+
+  it("sin nada que mida el framework, el veredicto dice «no se sabe» y NO promete el botón", async () => {
+    // Sin `frameworkEnDispositivo` esta ejecución no sabe si el framework está: la causa es
+    // `framework-no-medido`, cuya frase NO se arregla instalando nada.
+    const m = await montar({ xml: APP_XML, conBase: true });
+    expect(await enviarMensaje(m.accion, { clase: "revisarLanzamiento" })).toBe(204);
+    await esperarA(() => dichos(m.cliente, "lanzable").length > 0);
+
+    const lanzable = dichos(m.cliente, "lanzable").at(-1)!;
+    expect(lanzable).toMatchObject({ clase: "lanzable", proyecto: "Tienda", listo: false, app: "AppDemo" });
+    expect(lanzable.dispositivo).toEqual({ id: "ABC", nombre: "Pixel 8", plataforma: "android", clase: "fisico" });
+    expect(lanzable.medido).toBe("2026-09-16T10:00:00.000Z");
+    expect(lanzable.faltas).toHaveLength(1);
+    expect(lanzable.faltas[0]).toMatch(/no se ha mirado si «Pixel 8» tiene el framework/);
+    // Ni una ruta de la máquina por el cable.
+    expect(JSON.stringify(m.cliente.recibidos)).not.toContain(m.raiz);
+    await m.cerrar();
+  });
+
+  it("con el framework medido y la base en su sitio, el veredicto sale LISTO", async () => {
+    const m = await montar({
+      xml: APP_XML,
+      conBase: true,
+      opciones: { frameworkEnDispositivo: async () => ({ instalado: true }) },
+    });
+    await enviarMensaje(m.accion, { clase: "revisarLanzamiento" });
+    await esperarA(() => dichos(m.cliente, "lanzable").length > 0);
+    expect(dichos(m.cliente, "lanzable").at(-1)).toMatchObject({ listo: true, faltas: [], app: "AppDemo" });
+    await m.cerrar();
+  });
+
+  /**
+   * El caso MEDIDO, y la razón de ser de la frase larga: el `app.xml` declara `bd/gestion.db`,
+   * el fichero no está, y el framework contesta `{"result":true}` igual — la app muere detrás
+   * en un diálogo «Error opening database». Lo que esta pestaña tiene que decir es QUÉ falta.
+   */
+  it("la conexión declarada que no está bloquea, y se dice de DÓNDE sale ese fichero", async () => {
+    const m = await montar({
+      xml: APP_XML,
+      opciones: { frameworkEnDispositivo: async () => ({ instalado: true }) },
+    });
+    await enviarMensaje(m.accion, { clase: "revisarLanzamiento" });
+    await esperarA(() => dichos(m.cliente, "lanzable").length > 0);
+    const lanzable = dichos(m.cliente, "lanzable").at(-1)!;
+    expect(lanzable.listo).toBe(false);
+    expect(lanzable.faltas).toHaveLength(1);
+    expect(lanzable.faltas[0]).toContain("«bd/gestion.db»");
+    expect(lanzable.faltas[0]).toContain("XOne Studio");
+    await m.cerrar();
+  });
+
+  it("sin `app.xml` lo dice, y con `app.xml` ilegible dice OTRA cosa: no se arreglan en el mismo sitio", async () => {
+    const sin = await montar({ opciones: { frameworkEnDispositivo: async () => ({ instalado: true }) } });
+    await enviarMensaje(sin.accion, { clase: "revisarLanzamiento" });
+    await esperarA(() => dichos(sin.cliente, "lanzable").length > 0);
+    expect(dichos(sin.cliente, "lanzable").at(-1)!.faltas[0]).toContain("no tiene app.xml");
+    await sin.cerrar();
+
+    // Sin con qué comprobarlo, la existencia NO se afirma que no: el veredicto se queda con el
+    // motivo del lector, que es la verdad medida, en vez de inventarse un «no está».
+    const roto = await montar({
+      xml: APP_XML,
+      conBase: true,
+      opciones: {
+        frameworkEnDispositivo: async () => ({ instalado: true }),
+        leerFichero: async (_raiz, ruta) => ({
+          ruta,
+          recortado: false,
+          binario: false,
+          bytes: 0,
+          error: "no se pudo leer el fichero",
+        }),
+      },
+    });
+    await enviarMensaje(roto.accion, { clase: "revisarLanzamiento" });
+    await esperarA(() => dichos(roto.cliente, "lanzable").length > 0);
+    expect(dichos(roto.cliente, "lanzable").at(-1)!.faltas[0]).toContain("No se pudo leer app.xml");
+    await roto.cerrar();
+  });
+
+  /**
+   * La costura que hace que `dispositivo-desconocido` tenga EMISOR. Las dos situaciones —«no
+   * has elegido ninguno» y «elegiste uno que ya no está»— llegan al veredicto con el
+   * dispositivo ausente, y lo único que las separa es el `elegido`, que lo sabe la SESIÓN.
+   * Sin este cruce, la segunda se contaría como la primera: decirle a alguien que no eligió
+   * cuando sí eligió.
+   */
+  it("no es lo mismo no haber elegido que haber elegido uno que ya no está", async () => {
+    const ninguno = await montar({ xml: APP_XML, conBase: true, elegido: null });
+    await enviarMensaje(ninguno.accion, { clase: "revisarLanzamiento" });
+    await esperarA(() => dichos(ninguno.cliente, "lanzable").length > 0);
+    const sinNinguno = dichos(ninguno.cliente, "lanzable").at(-1)!;
+    expect(sinNinguno.dispositivo).toBeUndefined();
+    expect(sinNinguno.faltas).toEqual([expect.stringContaining("no tiene ningún dispositivo elegido")]);
+    await ninguno.cerrar();
+
+    // El caso que la rama `dispositivo` del cable tolera en silencio —una foto vieja del
+    // cliente, porque desenchufaron el aparato entre medias— y que aquí se CUENTA, porque es
+    // justo lo que decide la frase que se le enseña a quien va a pulsar.
+    const ido = await montar({
+      xml: APP_XML,
+      conBase: true,
+      opciones: { frameworkEnDispositivo: async () => ({ instalado: true }) },
+      elegido: { id: "YA-NO-ESTA", nombre: "Pixel 6", plataforma: "android", clase: "fisico" },
+    });
+    await enviarMensaje(ido.accion, { clase: "revisarLanzamiento" });
+    await esperarA(() => dichos(ido.cliente, "lanzable").length > 0);
+    expect(dichos(ido.cliente, "lanzable").at(-1)!.faltas).toEqual([
+      expect.stringContaining("ya no aparece en la última medida"),
+    ]);
+    await ido.cerrar();
+  });
+
+  it("sin proyecto abierto no se contesta NADA: no hay proyecto que nombrar", async () => {
+    const servidor = servidorDeMentira();
+    const vestibulo = vestibuloDePrueba();
+    montarRutas(servidor, vestibulo, {
+      frameworkEnDispositivo: async () => ({ instalado: true }),
+      lanzarEnDispositivo: () => {
+        throw new Error("no debería llegar aquí");
+      },
+    });
+    const cliente = clienteDeMentira();
+    await servidor.rutas.get(`GET ${RUTA_EVENTOS}`)!(cliente.peticion, cliente.respuesta);
+    await asentar();
+    cliente.recibidos.length = 0;
+    const accion = servidor.rutas.get(`POST ${RUTA_ACCION}`)!;
+    expect(await enviarMensaje(accion, { clase: "revisarLanzamiento" })).toBe(204);
+    expect(await enviarMensaje(accion, { clase: "lanzarApp" })).toBe(204);
+    await asentar();
+    expect(cliente.recibidos).toEqual([]);
+    await vestibulo.cerrar();
+  });
+
+  /**
+   * La revalidación de antes de empezar: entre el veredicto y el clic puede pasar cualquier
+   * cosa —desenchufar el teléfono, mover el fichero de la conexión, cerrar el proyecto—, así
+   * que lo que se lanza es lo que se acaba de medir. Y el aserto que importa no es el mensaje
+   * sino que el lanzador **no se llama**: un `fallo` con un lanzamiento detrás sería lo peor
+   * de los dos mundos.
+   */
+  it("un «Ejecutar» sobre un proyecto que ya no cumple contesta `fallo` y NO llama al lanzador", async () => {
+    let llamadas = 0;
+    const m = await montar({
+      xml: APP_XML,
+      // Y el fichero de la conexión no está: dejó de cumplir después del veredicto.
+      opciones: {
+        frameworkEnDispositivo: async () => ({ instalado: true }),
+        lanzarEnDispositivo: () => {
+          llamadas++;
+          return { cancelar: () => {}, terminado: new Promise(() => {}) };
+        },
+      },
+    });
+    await enviarMensaje(m.accion, { clase: "lanzarApp" });
+    await esperarA(() => dichos(m.cliente, "lanzamiento").length > 0);
+
+    const lanzamiento = dichos(m.cliente, "lanzamiento").at(-1)!;
+    expect(lanzamiento).toMatchObject({
+      clase: "lanzamiento",
+      proyecto: "Tienda",
+      fase: "comprobando",
+      estado: "fallo",
+      ms: 0,
+      lineas: [],
+    });
+    expect(lanzamiento.motivo).toContain("«bd/gestion.db»");
+    expect(llamadas).toBe(0);
+    await m.cerrar();
+  });
+
+  it("sin `lanzarEnDispositivo`, el recorrido lo dice en vez de quedarse en silencio", async () => {
+    const m = await montar({
+      xml: APP_XML,
+      conBase: true,
+      opciones: { frameworkEnDispositivo: async () => ({ instalado: true }) },
+    });
+    await enviarMensaje(m.accion, { clase: "lanzarApp" });
+    await esperarA(() => dichos(m.cliente, "lanzamiento").length > 0);
+    const lanzamiento = dichos(m.cliente, "lanzamiento").at(-1)!;
+    expect(lanzamiento.estado).toBe("fallo");
+    expect(lanzamiento.motivo).toBeTypeOf("string");
+    await m.cerrar();
+  });
+
+  /** El camino bueno: las seis fases dichas, y el desenlace al final. */
+  it("un lanzamiento bueno dice `corriendo` en las SEIS fases y cierra en `ok`", async () => {
+    let pedido: PeticionDeLanzamiento | undefined;
+    const m = await montar({
+      xml: APP_XML,
+      conBase: true,
+      opciones: {
+        frameworkEnDispositivo: async () => ({ instalado: true }),
+        lanzarEnDispositivo: (peticion, deps) => {
+          pedido = peticion;
+          for (const fase of FASES_DE_LANZAMIENTO) deps.alFase?.(fase, `línea de ${fase}`);
+          return {
+            cancelar: () => {},
+            terminado: Promise.resolve({ estado: "ok", fase: "comprobando-arranque", ms: 1234 }),
+          };
+        },
+      },
+    });
+    await enviarMensaje(m.accion, { clase: "lanzarApp" });
+    await esperarA(() => dichos(m.cliente, "lanzamiento").at(-1)?.estado === "ok");
+
+    // Al lanzador le llega la MEDIDA, no una preferencia del cliente: el aparato medido, la
+    // raíz del proyecto abierto y el nombre que dice su `app.ini`.
+    expect(pedido).toEqual({ dispositivo: PIXEL, raiz: m.raiz, app: "AppDemo" });
+
+    const suyos = dichos(m.cliente, "lanzamiento");
+    // El PRIMERO ya es `corriendo` con fase `comprobando`: el recorrido empieza ahí, así que la
+    // primera `alFase("comprobando", …)` no cambia nada y no gasta un mensaje en repetirlo. Las
+    // cinco que cambian sí se emiten —la fase que cambia SIEMPRE se emite: son seis en todo el
+    // recorrido, no un flujo— y el último es el desenlace, que es el único que dice `ok`.
+    expect(suyos.map((x) => x.estado)).toEqual(["corriendo", "corriendo", "corriendo", "corriendo", "corriendo", "corriendo", "ok"]);
+    const vistas = suyos.map((x) => x.fase).filter((f, i, todas) => todas.indexOf(f) === i);
+    expect(vistas).toEqual([...FASES_DE_LANZAMIENTO]);
+    // `ms` es el reloj del CABLE y no el del resultado de la máquina (1234): lo que la pestaña
+    // enseña es cuánto lleva el recorrido que ella está viendo, y ese empezó en el `corriendo`.
+    expect(suyos.at(-1)).toMatchObject({ estado: "ok", fase: "comprobando-arranque" });
+    expect(suyos.at(-1)!.ms).toBeTypeOf("number");
+    expect(suyos[0]).toMatchObject({
+      proyecto: "Tienda",
+      dispositivo: { id: "ABC", nombre: "Pixel 8", plataforma: "android", clase: "fisico" },
+    });
+    await m.cerrar();
+  });
+
+  it("las líneas del recorrido van como COLA: una subida suelta decenas y no caben todas", async () => {
+    const m = await montar({
+      xml: APP_XML,
+      conBase: true,
+      opciones: {
+        frameworkEnDispositivo: async () => ({ instalado: true }),
+        lanzarEnDispositivo: (_peticion, deps) => {
+          for (let i = 0; i < 40; i++) deps.alFase?.("subiendo", `línea ${i}`);
+          return { cancelar: () => {}, terminado: Promise.resolve({ estado: "ok", fase: "subiendo", ms: 10 }) };
+        },
+      },
+    });
+    await enviarMensaje(m.accion, { clase: "lanzarApp" });
+    await esperarA(() => dichos(m.cliente, "lanzamiento").at(-1)?.estado === "ok");
+    const ultimo = dichos(m.cliente, "lanzamiento").at(-1)!;
+    expect(ultimo.lineas.length).toBeLessThanOrEqual(LINEAS_DE_LOG);
+    expect(ultimo.lineas.at(-1)).toBe("línea 39");
+    await m.cerrar();
+  });
+
+  it("un fallo lleva su motivo; uno que revienta CIERRA el recorrido en vez de dejarlo colgado", async () => {
+    const fallo = await montar({
+      xml: APP_XML,
+      conBase: true,
+      opciones: {
+        frameworkEnDispositivo: async () => ({ instalado: true }),
+        lanzarEnDispositivo: () => ({
+          cancelar: () => {},
+          terminado: Promise.resolve({ estado: "fallo", fase: "subiendo", motivo: "el ZIP pasa de 512 MiB", ms: 900 }),
+        }),
+      },
+    });
+    await enviarMensaje(fallo.accion, { clase: "lanzarApp" });
+    await esperarA(() => dichos(fallo.cliente, "lanzamiento").at(-1)?.estado === "fallo");
+    expect(dichos(fallo.cliente, "lanzamiento").at(-1)).toMatchObject({
+      estado: "fallo",
+      motivo: "el ZIP pasa de 512 MiB",
+    });
+    await fallo.cerrar();
+
+    // El contrato del lanzador es no lanzar nunca, y puede romperse en los dos sitios: al
+    // CONSTRUIR el trabajo —antes del primer `await`— y al terminar. Los dos tienen que cerrar
+    // el recorrido, o la pestaña se queda en `corriendo` para siempre con el botón muerto.
+    const reventado = await montar({
+      xml: APP_XML,
+      conBase: true,
+      opciones: {
+        frameworkEnDispositivo: async () => ({ instalado: true }),
+        lanzarEnDispositivo: () => {
+          throw Object.assign(new Error("EACCES: permission denied, open '/Users/alguien/x'"), { code: "EACCES" });
+        },
+      },
+    });
+    await enviarMensaje(reventado.accion, { clase: "lanzarApp" });
+    await esperarA(() => dichos(reventado.cliente, "lanzamiento").at(-1)?.estado === "fallo");
+    expect(dichos(reventado.cliente, "lanzamiento").at(-1)!.estado).toBe("fallo");
+    // De un error de Node solo el `code`: su mensaje lleva la ruta absoluta, y esto puede ir
+    // por un túnel.
+    expect(dichos(reventado.cliente, "lanzamiento").at(-1)!.motivo).toBe("EACCES");
+    expect(JSON.stringify(reventado.cliente.recibidos)).not.toContain("/Users/alguien");
+    await reventado.cerrar();
+  });
+
+  it("cancelar llama al `cancelar` del trabajo en curso, y sin ninguno no inventa nada", async () => {
+    let cancelados = 0;
+    let soltar: ((r: { estado: "cancelada"; fase: "subiendo"; ms: number }) => void) | undefined;
+    const m = await montar({
+      xml: APP_XML,
+      conBase: true,
+      opciones: {
+        frameworkEnDispositivo: async () => ({ instalado: true }),
+        lanzarEnDispositivo: () => ({
+          cancelar: () => {
+            cancelados++;
+            soltar?.({ estado: "cancelada", fase: "subiendo", ms: 12 });
+          },
+          terminado: new Promise((r) => {
+            soltar = r;
+          }),
+        }),
+      },
+    });
+    expect(await enviarMensaje(m.accion, { clase: "cancelarLanzamiento" })).toBe(204);
+    await asentar();
+    expect(cancelados).toBe(0);
+    expect(dichos(m.cliente, "lanzamiento")).toEqual([]);
+
+    await enviarMensaje(m.accion, { clase: "lanzarApp" });
+    await esperarA(() => dichos(m.cliente, "lanzamiento").length > 0);
+    await enviarMensaje(m.accion, { clase: "cancelarLanzamiento" });
+    await esperarA(() => dichos(m.cliente, "lanzamiento").at(-1)?.estado === "cancelada");
+    expect(cancelados).toBe(1);
+
+    // Y el recorrido queda CERRADO: un segundo «Cancelar» no encuentra nada que cancelar.
+    m.cliente.recibidos.length = 0;
+    await enviarMensaje(m.accion, { clase: "cancelarLanzamiento" });
+    await asentar();
+    expect(cancelados).toBe(1);
+    expect(dichos(m.cliente, "lanzamiento")).toEqual([]);
+    await m.cerrar();
+  });
+
+  /**
+   * Uno a la vez para toda la máquina, y no es prudencia: dos lanzamientos al mismo aparato se
+   * pisarían en el MISMO directorio del dispositivo, y el ZIP de la subida no limpia el
+   * destino —lo que quede de uno se lanzaría como parte del otro—. Un segundo «Ejecutar»
+   * reenvía el estado en curso, que es lo que la otra pestaña necesita para pintarlo.
+   */
+  it("un segundo «Ejecutar» mientras corre no lanza otro: reenvía el estado que ya va", async () => {
+    let llamadas = 0;
+    const m = await montar({
+      xml: APP_XML,
+      conBase: true,
+      opciones: {
+        frameworkEnDispositivo: async () => ({ instalado: true }),
+        lanzarEnDispositivo: () => {
+          llamadas++;
+          return { cancelar: () => {}, terminado: new Promise(() => {}) };
+        },
+      },
+    });
+    await enviarMensaje(m.accion, { clase: "lanzarApp" });
+    await esperarA(() => llamadas === 1);
+    m.cliente.recibidos.length = 0;
+    await enviarMensaje(m.accion, { clase: "lanzarApp" });
+    await esperarA(() => dichos(m.cliente, "lanzamiento").length > 0);
+    expect(llamadas).toBe(1);
+    expect(dichos(m.cliente, "lanzamiento").map((x) => x.estado)).toEqual(["corriendo"]);
+    await m.cerrar();
+  });
+
+  it("lo que no se nombra no sale: ningún mensaje del recorrido lleva una ruta de la máquina", async () => {
+    const m = await montar({
+      xml: APP_XML,
+      conBase: true,
+      opciones: {
+        frameworkEnDispositivo: async () => ({ instalado: true }),
+        lanzarEnDispositivo: (_peticion, deps) => {
+          deps.alFase?.("empaquetando", "empaquetado el proyecto");
+          return { cancelar: () => {}, terminado: Promise.resolve({ estado: "ok", fase: "empaquetando", ms: 5 }) };
+        },
+      },
+    });
+    await enviarMensaje(m.accion, { clase: "revisarLanzamiento" });
+    await enviarMensaje(m.accion, { clase: "lanzarApp" });
+    await esperarA(() => dichos(m.cliente, "lanzamiento").at(-1)?.estado === "ok");
+    expect(dichos(m.cliente, "lanzable").length).toBeGreaterThan(0);
+    expect(JSON.stringify(m.cliente.recibidos)).not.toContain(m.raiz);
+    await m.cerrar();
+  });
+});
+
+/**
+ * Las dos listas del cable, atadas a las de la máquina. El cable NO importa los tipos de
+ * `agent/` a propósito —quien pinta las fases es el cliente, y una fase que la máquina añada
+ * sin que nadie decida cómo se enseña no puede entrar por aquí sin más—, así que la
+ * comprobación de que las dos no divergan es este test y no el compilador.
+ *
+ * Las dos mitades muerden en las dos direcciones: el `Record` obliga a que TODO miembro del
+ * tipo de la máquina esté nombrado —uno nuevo no compila hasta que alguien mire qué se hace
+ * con él— y la igualdad de abajo ata esa lista a la del cable, así que un valor que se añada a
+ * un lado y no al otro sale rojo con nombre y apellidos.
+ */
+describe("las fases y los estados del cable, atados a los de la máquina", () => {
+  it("las seis fases son las mismas, y en el mismo orden", () => {
+    const fasesDeLaMaquina: Record<FaseDeLanzamiento, true> = {
+      comprobando: true,
+      empaquetando: true,
+      subiendo: true,
+      reiniciando: true,
+      lanzando: true,
+      "comprobando-arranque": true,
+    };
+    expect([...FASES_DEL_LANZAMIENTO]).toEqual([...FASES_DE_LANZAMIENTO]);
+    expect([...FASES_DE_LANZAMIENTO]).toEqual(Object.keys(fasesDeLaMaquina));
+  });
+
+  it("los cinco estados del cable son los cuatro desenlaces de la máquina más «corriendo»", () => {
+    // `corriendo` existe en el cable y NO en la máquina, y no es un descuido: allí el estado es
+    // un DESENLACE —el resultado de un trabajo que ya terminó— y aquí hay además un recorrido
+    // en vivo que hay que poder pintar. Sin él, la pestaña no sabría que ha empezado hasta la
+    // primera fase, y con un lanzamiento que se queda mudo, hasta nunca.
+    const desenlacesDeLaMaquina: Record<EstadoDeLanzamiento, true> = {
+      ok: true,
+      fallo: true,
+      cancelada: true,
+      colgada: true,
+    };
+    expect([...ESTADOS_DEL_LANZAMIENTO]).toEqual(["corriendo", ...Object.keys(desenlacesDeLaMaquina)]);
   });
 });

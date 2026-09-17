@@ -207,6 +207,29 @@ export interface DecisionDeConsola {
   lineas: readonly LineaDelPlan[];
 }
 
+/**
+ * Las seis fases de un lanzamiento, EN ORDEN, y los cinco estados en que puede estar.
+ * Redeclarado de `web/servidor/transporte.ts`, que es donde vive el vocabulario del cable — la
+ * frontera prohíbe importar de `src/`, así que la copia es una obligación y `tipos.test.ts` no
+ * compara VALORES de constantes, solo literales de `clase:` y `tipo:`.
+ *
+ * **Son una lista CERRADA y se usan como lista blanca** (`store.ts`): un `fase` o un `estado` que
+ * no esté aquí descarta el mensaje entero, como `instalacion`. Un estado nuevo en el host que no
+ * se añada aquí deja el recorrido sin pintar — y el síntoma sería un botón apagado, no un error.
+ */
+export const FASES_DEL_LANZAMIENTO = [
+  "comprobando",
+  "empaquetando",
+  "subiendo",
+  "reiniciando",
+  "lanzando",
+  "comprobando-arranque",
+] as const;
+export type FaseDelLanzamiento = (typeof FASES_DEL_LANZAMIENTO)[number];
+
+export const ESTADOS_DEL_LANZAMIENTO = ["corriendo", "ok", "fallo", "cancelada", "colgada"] as const;
+export type EstadoDelLanzamiento = (typeof ESTADOS_DEL_LANZAMIENTO)[number];
+
 export type MensajeAlCliente =
   | { clase: "acto"; acto: Acto }
   /** Sustituye el ÚLTIMO acto en vez de anexar: ver `store.ts#aplicar` para el porqué. */
@@ -345,6 +368,39 @@ export type MensajeAlCliente =
       paso: number;
       titulo: string;
       estado: "corriendo" | "ok" | "fallo" | "cancelada" | "colgada";
+      lineas: string[];
+      ms: number;
+      motivo?: string;
+    }
+  /**
+   * El veredicto de «¿se puede lanzar la app del proyecto abierto?», que se PIDE
+   * (`revisarLanzamiento`) y se contesta a quien lo pidió — no a todos los clientes: la máquina
+   * es la misma para todos, pero el proyecto no.
+   *
+   * `faltas` son FRASES ya escritas por el servidor (`core/puedeLanzarse.ts#motivoDeBloqueo`): el
+   * cliente las pinta, no las compone. `medido` es la fecha de la medida, porque un veredicto sin
+   * fecha es una promesa sin fecha.
+   */
+  | {
+      clase: "lanzable";
+      proyecto: string;
+      listo: boolean;
+      faltas: string[];
+      app?: string;
+      dispositivo?: DispositivoElegido;
+      medido: string;
+    }
+  /**
+   * Cómo va el lanzamiento de la app, o cómo acabó. `lineas` es la COLA del recorrido —lo que
+   * suelta `adb` son miles de líneas— y `estado` lleva `corriendo`, que es lo que permite pintar
+   * en qué fase va en vez de un botón apagado sin explicación.
+   */
+  | {
+      clase: "lanzamiento";
+      proyecto?: string;
+      dispositivo?: DispositivoElegido;
+      fase: FaseDelLanzamiento;
+      estado: EstadoDelLanzamiento;
       lineas: string[];
       ms: number;
       motivo?: string;
@@ -728,6 +784,14 @@ export type MensajeDelCliente =
    * emitirle el transcript de la tarea a todo el mundo.
    */
   | { clase: "mirar"; tarea: string; ver: boolean; cliente: string }
+  /**
+   * Volver a medir si se puede lanzar, lanzar, o parar lo que corre. **Las tres sin datos**: el
+   * dispositivo, el nombre de la app y el proyecto los resuelve el servidor de la consola que
+   * atiende, y el navegador no es fuente sobre ninguno de los tres.
+   */
+  | { clase: "revisarLanzamiento" }
+  | { clase: "lanzarApp" }
+  | { clase: "cancelarLanzamiento" }
   | { clase: "decision"; decisiones: Record<string, string> };
 
 /**
@@ -762,6 +826,9 @@ export type NombreDeHerramienta = "adb" | "emulator" | "xcrun" | "devicectl";
 
 export interface Herramienta {
   nombre: NombreDeHerramienta;
+  /** A qué plataforma sirve. Es por donde Ajustes reparte sus pestañas, y es un DATO: la
+   *  ventana no deduce de `adb` que esto sea de Android. */
+  plataforma: "android" | "ios";
   estado: "ok" | "no-encontrada" | "fallo" | "no-aplica" | "desactivada";
   /** Cómo se instala si falta. `automatico` = xonecode puede lanzarlo él. */
   instalar?: { comando: string; automatico: boolean };
@@ -795,14 +862,30 @@ export interface PasoDeReceta {
   porQueNo?: string;
   /** Lo que se acepta al pulsar. Aparte de `nota`: pulsar ES la aceptación. */
   acepta?: string;
+  /**
+   * Con el paso YA HECHO, si repetirlo sirve para algo, cómo se llama el botón entonces.
+   * **Ausente = no se ofrece**: un paso marcado como hecho no vuelve a ofrecer su
+   * instalación, que era ofrecer lo que su propia marca dice que ya está.
+   */
+  repetir?: { etiqueta: string; porQue: string };
+}
+
+/** Consejo que no es un paso: no se mide y no cuenta para `completa`. */
+export interface Aparte {
+  titulo: string;
+  comandos: string[];
+  nota?: string;
 }
 
 export interface Receta {
   id: "android-emulador" | "ios-simulador";
+  /** Su pestaña. Ver `Herramienta.plataforma`. */
+  plataforma: "android" | "ios";
   titulo: string;
   descripcion: string;
   pasos: PasoDeReceta[];
   completa: boolean;
+  aparte?: Aparte;
   despues: string;
 }
 

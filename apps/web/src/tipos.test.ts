@@ -20,15 +20,23 @@ const RUTA_APROBAR = join(aqui, "..", "..", "..", "src", "cli", "aprobar.ts");
 const RUTA_STORE = join(aqui, "store.ts");
 
 /**
- * `[a-z0-9_-]+` y no `[a-z]+`: la primera versión de este detector (la del brief) no veía
- * guion bajo ni guion. Medido en la ronda de revisión: un tipo llamado `"fantasma_review"`
+ * `[A-Za-z0-9_-]+` y no `[a-z0-9_-]+`: la primera versión de este detector (la del brief) no
+ * veía guion bajo ni guion. Medido en la ronda de revisión: un tipo llamado `"fantasma_review"`
  * metido a mano pasaba el test sin que nada chistara, porque el propio detector lo
  * truncaba a la parte anterior al `_` — o directamente no lo capturaba si el `_` iba al
  * principio del resto de la coincidencia. Un tipo real con guion bajo o guion sería
  * invisible a la comprobación de divergencia con la regex vieja.
+ *
+ * **Y la segunda ronda quitó la MINÚSCULA obligatoria, que era el mismo agujero un piso más
+ * arriba.** Medido al ensanchar: el árbol tenía TRES literales `clase:` en `camelCase`
+ * —`modelosDeMotor`, `proyectosDeEntorno` y `sesionAccion`— que la regex vieja no veía en
+ * NINGUNO de los dos ficheros. Salía verde porque el agujero era el mismo en los dos lados de la
+ * comparación, que es exactamente cómo este test se queda quieto sin estar midiendo: no había
+ * caído nada por él, pero la red no cubría la grafía que este repo usa para toda ACCIÓN del
+ * cable. Los tres aparecen en el cliente y en el host, así que el cuadre se mantiene.
  */
 function literalesDe(campo: "tipo" | "clase", ruta: string): string[] {
-  const regex = new RegExp(`\\{\\s*${campo}:\\s*"([a-z0-9_-]+)"`, "g");
+  const regex = new RegExp(`\\{\\s*${campo}:\\s*"([A-Za-z0-9_-]+)"`, "g");
   return [...readFileSync(ruta, "utf8").matchAll(regex)].map((m) => m[1]).sort();
 }
 
@@ -84,6 +92,19 @@ describe("tipos del cliente", () => {
     const conGuionBajo = '| { tipo: "fantasma_review"; texto: string }';
     const regex = /\{\s*tipo:\s*"([a-z0-9_-]+)"/g;
     expect([...conGuionBajo.matchAll(regex)].map((m) => m[1])).toEqual(["fantasma_review"]);
+  });
+
+  /**
+   * El hermano del de arriba, y por el mismo motivo: `camelCase` es la grafía que este repo usa
+   * para TODA acción del cable (`modelosDeMotor`, `sesionAccion`, `revisarLanzamiento`), así que
+   * un detector que exija minúscula es ciego justo en la clase de nombre que más se escribe. Se
+   * fija con un literal que no existe en el repo: si alguien vuelve a estrechar la regex, este
+   * test se pone rojo sin depender de que haya por casualidad un `camelCase` que lo delate.
+   */
+  it("el detector ve camelCase: 'arranqueDeApp' no es invisible", () => {
+    const conMayusculas = '| { clase: "arranqueDeApp"; proyecto: string }';
+    const regex = /\{\s*clase:\s*"([A-Za-z0-9_-]+)"/g;
+    expect([...conMayusculas.matchAll(regex)].map((m) => m[1])).toEqual(["arranqueDeApp"]);
   });
 
   /**

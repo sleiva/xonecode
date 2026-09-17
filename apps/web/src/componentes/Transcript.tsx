@@ -30,6 +30,7 @@ export function Transcript({
   revision,
   artefactos,
   tareas,
+  ejecutar,
   alAbrirArtefacto,
 }: {
   actos: readonly Acto[];
@@ -65,6 +66,16 @@ export function Transcript({
    *  —es de acción, no de registro como `artefactos` (`Pestanas.tsx`)—; aquí sigue siendo
    *  solo una ranura más. */
   tareas?: ReactNode;
+  /**
+   * Ejecutar la app de este proyecto en un aparato. Como `tareas`, su pestaña existe
+   * SIEMPRE —es de ACCIÓN, no de registro— y aquí es una ranura más.
+   *
+   * **Su rama del despacho es EXPLÍCITA y tiene que seguir siéndolo**: la última de abajo es
+   * un `else` INCONDICIONAL que pinta Ficheros, así que una pestaña sin rama propia no deja
+   * un hueco vacío ni da un error — pinta la vista de al lado EN SILENCIO. Toda pestaña nueva
+   * se añade aquí ANTES de ese `else`.
+   */
+  ejecutar?: ReactNode;
   /** Abrir un artefacto desde su tarjeta del Chat. Lo resuelve `App`, que es quien recuerda
    *  la pestaña y el elegido. */
   alAbrirArtefacto?: (ruta: string) => void;
@@ -96,6 +107,8 @@ export function Transcript({
           artefactos
         ) : pestana === "tareas" ? (
           tareas
+        ) : pestana === "ejecutar" ? (
+          ejecutar
         ) : (
           ficheros
         )}

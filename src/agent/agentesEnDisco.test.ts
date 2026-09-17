@@ -15,6 +15,7 @@ import {
   sembrarAgentes,
 } from "./agentesEnDisco.js";
 import { fusionarAgentes } from "../core/agentes.js";
+import { SkillsEnDisco } from "./skills.js";
 
 const base = () => mkdtempSync(join(tmpdir(), "xonecode-agentes-"));
 
@@ -31,10 +32,10 @@ describe("sembrarAgentes", () => {
     // especialistas desaparecerían al siguiente arranque y el orquestador se quedaría sin
     // nadie a quien delegar — sin que nada diera error.
     const raiz = base();
-    expect(sembrarAgentes(raiz).escritos.sort()).toEqual(["dev", "docs", "mockup", "planner", "probador"]);
+    expect(sembrarAgentes(raiz).escritos.sort()).toEqual(["dev", "docs", "mockup", "planner", "xone-device-tester"]);
     const { agentes, problemas } = leerCarpetaDeAgentes(rutaDeAgentes(raiz), "global");
     expect(problemas).toEqual([]);
-    expect(agentes.map((a) => a.nombre).sort()).toEqual(["dev", "docs", "mockup", "planner", "probador"]);
+    expect(agentes.map((a) => a.nombre).sort()).toEqual(["dev", "docs", "mockup", "planner", "xone-device-tester"]);
   });
 
   it("NO pisa uno que ya existe: el usuario ha podido afinar su prompt", () => {
@@ -59,7 +60,7 @@ describe("sembrarAgentes", () => {
   /**
    * El agujero que esto cierra: con «la carpeta es la marca», ningún agente nuevo y ninguna
    * corrección a uno existente alcanzaba a quien ya hubiera arrancado una vez. Medido: un
-   * `docs.md` llevaba semanas sin la consulta acotada, y el probador de Android no habría
+   * `docs.md` llevaba semanas sin la consulta acotada, y el probador de dispositivos no habría
    * llegado jamás.
    */
   it("uno que nadie ha tocado se ACTUALIZA cuando cambia la versión de serie", () => {
@@ -100,11 +101,87 @@ describe("sembrarAgentes", () => {
     // Se simula «este agente todavía no existía cuando se sembró» quitándolo de la marca.
     const rutaMarca = join(rutaDeAgentes(raiz), FICHERO_DE_SEMILLA);
     const marca = JSON.parse(readFileSync(rutaMarca, "utf8")) as Record<string, string>;
-    delete marca["probador"];
+    delete marca["planner"];
     writeFileSync(rutaMarca, JSON.stringify(marca), "utf8");
-    rmSync(join(rutaDeAgentes(raiz), "probador.md"));
+    rmSync(join(rutaDeAgentes(raiz), "planner.md"));
 
-    expect(sembrarAgentes(raiz).escritos).toEqual(["probador"]);
+    expect(sembrarAgentes(raiz).escritos).toEqual(["planner"]);
+    expect(existsSync(join(rutaDeAgentes(raiz), "planner.md"))).toBe(true);
+  });
+
+  /**
+   * Deja la carpeta como la de quien venía de la versión con el nombre viejo: su `probador.md`
+   * y la marca con la clave de entonces. Se reconstruye a mano porque el renombrado ya ocurrió
+   * —en el código no queda ningún `probador`, y la marca guarda un nombre y su hash, nada más—.
+   *
+   * Los dos textos van separados a propósito: `sembrado` es lo que escribimos y lo que la marca
+   * recuerda, `enDisco` lo que hay ahora. Solo se diferencian si el usuario lo tocó, y es justo
+   * lo que la retirada tiene que distinguir.
+   */
+  function conElNombreViejo(raiz: string, sembrado: string, enDisco = sembrado): string {
+    sembrarAgentes(raiz);
+    const carpeta = rutaDeAgentes(raiz);
+    const rutaViejo = join(carpeta, "probador.md");
+    writeFileSync(rutaViejo, enDisco, "utf8");
+    rmSync(join(carpeta, "xone-device-tester.md"));
+    const rutaMarca = join(carpeta, FICHERO_DE_SEMILLA);
+    const marca = JSON.parse(readFileSync(rutaMarca, "utf8")) as Record<string, string>;
+    delete marca["xone-device-tester"];
+    marca["probador"] = createHash("sha256").update(sembrado, "utf8").digest("hex").slice(0, 16);
+    writeFileSync(rutaMarca, JSON.stringify(marca), "utf8");
+    return rutaViejo;
+  }
+
+  /**
+   * El quinto caso, que no existía hasta que un agente de serie se llamó de otra forma. Sin él
+   * la marca se queda con una clave que ya no nombra a nadie y quien ya hubiera arrancado se
+   * encuentra con DOS probadores: el nuevo, mantenido, y el viejo, huérfano y sin actualizar
+   * nunca más — y callado, que es lo que hace que nadie lo note.
+   */
+  it("un RENOMBRADO retira el fichero viejo de quien no lo tocó, y lo DICE", () => {
+    const raiz = base();
+    const rutaViejo = conElNombreViejo(raiz, "---\ndescripcion: el de antes\n---\nLO DE ANTES");
+
+    const siembra = sembrarAgentes(raiz);
+    expect(siembra.escritos).toEqual(["xone-device-tester"]);
+    expect(siembra.retirados).toEqual([
+      { nombre: "probador", ahoraSeLlama: "xone-device-tester", borrado: true },
+    ]);
+    expect(existsSync(rutaViejo)).toBe(false);
+    expect(existsSync(join(rutaDeAgentes(raiz), "xone-device-tester.md"))).toBe(true);
+    // Y no se vuelve a decir: la clave se fue con el fichero.
+    expect(sembrarAgentes(raiz).retirados).toEqual([]);
+  });
+
+  it("un RENOMBRADO que el usuario afinó se QUEDA, y se dice cada arranque", () => {
+    const raiz = base();
+    const rutaViejo = conElNombreViejo(
+      raiz,
+      "---\ndescripcion: el de serie\n---\nLO NUESTRO",
+      "---\ndescripcion: el mío\n---\nMIS INSTRUCCIONES"
+    );
+
+    const siembra = sembrarAgentes(raiz);
+    expect(siembra.retirados).toEqual([
+      { nombre: "probador", ahoraSeLlama: "xone-device-tester", borrado: false },
+    ]);
+    expect(readFileSync(rutaViejo, "utf8")).toContain("MIS INSTRUCCIONES");
+    // Sigue diciéndose: aquí queda algo que decidir, que es borrarlo o quedarse con los dos.
+    expect(sembrarAgentes(raiz).retirados).toHaveLength(1);
+  });
+
+  /**
+   * LÍMITE DECLARADO. La carpeta que se ADOPTA no tiene marca, así que no hay contra qué
+   * comparar el huérfano y no se puede saber si lo escribimos nosotros o su dueño. Se queda,
+   * sin retirar y sin decir: es el lado que no borra nada ajeno. Se paga una vez, en la ronda
+   * de adopción de quien venga de la regla vieja — la misma que ya se paga por lo demás.
+   */
+  it("LIMITE: sin marca, el huérfano de un renombrado ni se retira ni se dice", () => {
+    const raiz = base();
+    mkdirSync(rutaDeAgentes(raiz), { recursive: true });
+    writeFileSync(join(rutaDeAgentes(raiz), "probador.md"), "---\ndescripcion: d\n---\ncuerpo", "utf8");
+
+    expect(sembrarAgentes(raiz).retirados).toEqual([]);
     expect(existsSync(join(rutaDeAgentes(raiz), "probador.md"))).toBe(true);
   });
 
@@ -181,7 +258,7 @@ describe("cargarAgentes", () => {
           "docs",
           "mockup",
           "planner",
-          "probador",
+          "xone-device-tester",
         ]);
       }
     } finally {
@@ -276,5 +353,24 @@ describe("guardarAgente", () => {
   it("borrar dice si existía: no se puede decir «borrado» de algo que no estaba", () => {
     const raiz = base();
     expect(borrarAgente(raiz, "fantasma")).toBe(false);
+  });
+});
+
+describe("las skills que piden los agentes de serie", () => {
+  it("todas EXISTEN en el catálogo del disco", () => {
+    // `rutasDeSkills` (`xoneAgent.ts`) filtra contra el catálogo y **descarta en silencio** el
+    // nombre que no esté: renombrar una skill sin tocar la semilla dejaba al agente sin ella,
+    // sin un solo error y con el suite entero en verde. Pasó al traer `xone-hotswap` —la
+    // semilla decía `xone-android-hotswap`—, y el test que lo habría cazado no existía: los
+    // que tocan `rutasDeSkills` usan `SkillsEnMemoria`, un doble con su propia lista, así que
+    // comparaban el catálogo consigo mismo.
+    //
+    // Esto es lo que lo convierte en rojo, y vale para el próximo renombrado igual.
+    const catalogo = new Set(new SkillsEnDisco().catalogo().map((s) => s.nombre));
+    for (const agente of AGENTES_DE_SERIE) {
+      for (const skill of agente.skills) {
+        expect(catalogo.has(skill), `${agente.nombre} pide «${skill}», que no está en el catálogo`).toBe(true);
+      }
+    }
   });
 });

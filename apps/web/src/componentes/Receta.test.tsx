@@ -16,12 +16,23 @@ const PASO_EJECUTABLE = {
 
 const RECETA: RecetaDelCable = {
   id: "android-emulador",
+  // La pestaña en la que vive su requisito: Ajustes reparte por esto, así que es un DATO del
+  // servidor y no algo que la ventana deduzca de que «esto suena a Android».
+  plataforma: "android",
   titulo: "Instalar el emulador de Android",
-  descripcion: "Cuatro pasos, una vez por máquina.",
+  descripcion: "Tres pasos, una vez por máquina.",
   pasos: [
-    { titulo: "Instalar las herramientas", comandos: ["brew install openjdk@17", "brew install --cask x"], nota: "Puede pedirte la contraseña.", hecho: true, ejecutable: false },
-    { titulo: "Declarar las variables", comandos: ['export ANDROID_HOME="$(brew --prefix)/share/x"'], hecho: false, ejecutable: false },
+    { titulo: "Instalar las herramientas", comandos: ["brew install openjdk@17", "brew install --cask x"], nota: "Puede pedirte la contraseña.", hecho: true, ejecutable: true },
+    { titulo: "Descargar el emulador y la imagen", comandos: ["sdkmanager --install emulator"], hecho: false, ejecutable: true, acepta: "las licencias del SDK de Android de Google" },
   ],
+  // El consejo que NO es un paso: escribía en el `~/.zshrc` de alguien, que es lo único de
+  // esta receta que no sabríamos deshacer, y como paso dejaba la receta abierta para siempre
+  // en una máquina ya equipada.
+  aparte: {
+    titulo: "Declarar las variables en tu shell",
+    comandos: ['export ANDROID_HOME="$(brew --prefix)/share/x"'],
+    nota: "Para que los comandos funcionen en tu terminal. xonecode NO lo necesita.",
+  },
   completa: false,
   despues: "Para arrancarlo: `emulator -avd pixel8`.",
 };
@@ -42,7 +53,9 @@ describe("Receta", () => {
     // Los dos `brew` en el MISMO bloque: son un paso, y copiarlos de uno en uno invita a
     // pegar el primero y olvidar el segundo.
     expect(screen.getByText(/brew install openjdk@17/)).toBeTruthy();
-    expect(screen.getAllByRole("button", { name: /copiar/i })).toHaveLength(2);
+    // Uno por paso y uno más para el bloque de `aparte`, que se copia igual: es lo único que
+    // se puede hacer con él, porque desde aquí no se lanza.
+    expect(screen.getAllByRole("button", { name: /copiar/i })).toHaveLength(3);
   });
 
   it("la nota de un paso se ve: es lo que hay que saber ANTES de pegarlo", () => {
@@ -50,11 +63,37 @@ describe("Receta", () => {
     expect(screen.getByText(/contraseña/i)).toBeTruthy();
   });
 
+  it("el consejo que no es un paso se enseña APARTE, con su comando y su nota", () => {
+    // Fuera de la lista y sin número, que es lo que aquí significa «no es un requisito»: no
+    // se mide, así que no puede decidir si la receta está completa — y era justo eso lo que
+    // dejaba la receta abierta para siempre en una máquina ya equipada.
+    render(<Receta receta={RECETA} />);
+    expect(screen.getByText("Declarar las variables en tu shell")).toBeTruthy();
+    expect(screen.getByText(/export ANDROID_HOME/)).toBeTruthy();
+    expect(screen.getByText(/xonecode NO lo necesita/)).toBeTruthy();
+    // Y no es un paso: la lista sigue teniendo dos.
+    expect(screen.getAllByRole("listitem")).toHaveLength(2);
+  });
+
+  it("una receta sin `aparte` no pinta el bloque: la de iOS no tiene ninguno", () => {
+    const { aparte: _, ...sinAparte } = RECETA;
+    render(<Receta receta={sinAparte} />);
+    expect(screen.queryByText("Declarar las variables en tu shell")).toBeNull();
+    expect(screen.getAllByRole("button", { name: /copiar/i })).toHaveLength(2);
+  });
+
   it("cuando está completa NO enseña los pasos, lo dice y ya", () => {
     // Cuatro pasos marcados es ruido en la ventana de quien ya lo tiene instalado.
     render(<Receta receta={{ ...RECETA, completa: true }} />);
     expect(screen.queryByRole("listitem")).toBeNull();
     expect(screen.getByText(/ya está/i)).toBeTruthy();
+  });
+
+  it("el consejo de `aparte` se sigue dando con la receta completa", () => {
+    // Dice cómo hacer que el comando de `despues` funcione en un terminal, y eso le hace
+    // falta igual a quien ya lo tiene todo.
+    render(<Receta receta={{ ...RECETA, completa: true }} />);
+    expect(screen.getByText(/export ANDROID_HOME/)).toBeTruthy();
   });
 
   it("y lo que viene después se dice siempre, también completa", () => {
@@ -67,8 +106,17 @@ describe("Receta", () => {
   });
 
   it("un paso que NO es ejecutable no ofrece botón: solo se copia", () => {
-    render(<Receta receta={RECETA} />);
+    // El `sudo` escrito dentro del comando fallaría SIEMPRE sin terminal de control, así que
+    // se copia y ya. Con el motivo al lado, que un botón que falta sin decir por qué se lee
+    // como que la ventana está rota.
+    render(
+      <Receta
+        receta={{ ...RECETA, pasos: [{ ...PASO_EJECUTABLE, ejecutable: false, porQueNo: "lleva `sudo` dentro" }] }}
+        alEjecutar={vi.fn()}
+      />
+    );
     expect(screen.queryByRole("button", { name: /ejecutar/i })).toBeNull();
+    expect(screen.getByText(/lleva `sudo` dentro/)).toBeTruthy();
   });
 
   it("uno ejecutable ofrece el botón y DICE qué se acepta al pulsarlo", () => {
@@ -79,6 +127,52 @@ describe("Receta", () => {
     expect(screen.getByText(/licencias del SDK de Android/i)).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: /ejecutar/i }));
     expect(ejecutar).toHaveBeenCalledWith(1);
+  });
+
+  it("un paso YA HECHO no vuelve a ofrecer su instalación", () => {
+    // Medido en la ventana: la marca decía «hecho» y debajo estaba «Ejecutar este paso», o
+    // sea que la receta ofrecía instalar lo que ya estaba — el botón muerto, y en la
+    // dirección que más desgasta, porque enseña a pulsar sin leer.
+    render(<Receta receta={{ ...RECETA, pasos: [{ ...PASO_EJECUTABLE, hecho: true }] }} alEjecutar={vi.fn()} />);
+    expect(screen.queryByRole("button", { name: /ejecutar/i })).toBeNull();
+    // Y sigue copiándose: el comando es el dato, aunque no se lance.
+    expect(screen.getByRole("button", { name: "Copiar los comandos del paso 1" })).toBeTruthy();
+  });
+
+  it("salvo el que ADEMÁS actualiza, que se ofrece con su nombre y su motivo", () => {
+    // Volver a pedir la imagen no es instalar lo mismo: `sdkmanager --install` sobre un
+    // paquete instalado lo sube de versión. Sin esta excepción no quedaría ninguna vía de
+    // actualizar, y el motivo va al lado porque un botón sobre un paso hecho, sin él, se lee
+    // como el error de antes al revés.
+    const ejecutar = vi.fn();
+    render(
+      <Receta
+        receta={{
+          ...RECETA,
+          pasos: [{ ...PASO_EJECUTABLE, hecho: true, repetir: { etiqueta: "Actualizar", porQue: "volver a pedirlo sube de versión lo que ya está" } }],
+        }}
+        alEjecutar={ejecutar}
+      />
+    );
+    expect(screen.getByText(/sube de versión lo que ya está/)).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Actualizar" }));
+    expect(ejecutar).toHaveBeenCalledWith(1);
+  });
+
+  it("y un `repetir` en un paso que AÚN no está hecho no cambia el nombre del botón", () => {
+    // El nombre sale de los DOS campos, no solo de que el paso traiga `repetir`: ofrecer
+    // «Actualizar» sobre algo que no está instalado sería mentir sobre lo que va a pasar.
+    render(
+      <Receta
+        receta={{
+          ...RECETA,
+          pasos: [{ ...PASO_EJECUTABLE, hecho: false, repetir: { etiqueta: "Actualizar", porQue: "sube de versión" } }],
+        }}
+        alEjecutar={vi.fn()}
+      />
+    );
+    expect(screen.queryByRole("button", { name: "Actualizar" })).toBeNull();
+    expect(screen.getByRole("button", { name: /ejecutar/i })).toBeTruthy();
   });
 
   it("sin manejador el botón no se pinta: no hay botón muerto", () => {

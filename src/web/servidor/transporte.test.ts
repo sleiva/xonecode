@@ -214,6 +214,40 @@ describe("mirar — la vista en vivo de una tarea", () => {
     expect(visto.map((m) => m.clase)).toEqual(["acto", "sustitucion", "reemision"]);
   });
 
+  /**
+   * El recorrido de un lanzamiento es un suceso de la MÁQUINA y del proyecto, no un renglón de
+   * la conversación. Quien mira una tarea de fondo no tiene por qué ver las fases del
+   * lanzamiento de otra consola, y si viajara por el hilo se persistiría en el `.jsonl` y
+   * volvería al reabrir la sesión — lo mismo que se quitó de `/sync`.
+   *
+   * Va en la lista blanca y no en una negra, así que lo que hay que fijar es su AUSENCIA: con
+   * una lista negra, la clase que alguien añada mañana al cable llegaría permitida.
+   */
+  it("`lanzable` y `lanzamiento` NO llegan al mirón: no son transcript", () => {
+    const t = crearTransporte(() => []);
+    const visto: MensajeAlCliente[] = [];
+    t.mirar((m) => visto.push(m));
+    t.emitir({ clase: "acto", acto: { tipo: "asistente", texto: "voy" } });
+    t.emitir({
+      clase: "lanzable",
+      proyecto: "Tienda",
+      listo: true,
+      faltas: [],
+      medido: "2026-09-16T10:00:00.000Z",
+    });
+    t.emitir({
+      clase: "lanzamiento",
+      proyecto: "Tienda",
+      fase: "subiendo",
+      estado: "corriendo",
+      lineas: ["subiendo el paquete"],
+      ms: 10,
+    });
+    // El control: el transcript sí llega, así que la ausencia de arriba no es un mirón que no
+    // se hubiera enganchado.
+    expect(visto.map((m) => m.clase)).toEqual(["acto"]);
+  });
+
   it("`mirar` devuelve el transcript de ese instante, y no lo emite a nadie más", () => {
     const actos: Acto[] = [{ tipo: "usuario", texto: "arregla el login" }];
     const t = crearTransporte(() => actos);

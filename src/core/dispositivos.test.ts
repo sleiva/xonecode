@@ -1,6 +1,8 @@
 import { describe, it, expect } from "vitest";
 import {
   alcanzables,
+  esAlcanzable,
+  type Dispositivo,
   nombreDelSistema,
   parsearAdbDevices,
   parsearAvds,
@@ -213,10 +215,43 @@ describe("alcanzables", () => {
     };
     expect(alcanzables(informe).map((d) => d.id)).toEqual(["a", "b"]);
   });
+
+  it("y las dos preguntas dicen lo mismo estado a estado, que es lo que impide la copia", () => {
+    // El criterio vive en `esAlcanzable` y `alcanzables` lo usa. Este test es lo que impide que
+    // vuelva a haber una segunda definición: el día que un estado nuevo cuente como llegada, o
+    // se entera uno de los dos, o esto se pone rojo — que es la única forma en la que esto se
+    // ha roto nunca en este repo.
+    const estados: Dispositivo["estado"][] = [
+      "conectado",
+      "arrancado",
+      "apagado",
+      "sin-autorizar",
+      "offline",
+      "no-disponible",
+    ];
+    const informe: InformeDeDispositivos = {
+      sistema: "mac",
+      herramientas: [],
+      avds: [],
+      recetas: [],
+      medido: "2026-09-16T10:00:00.000Z",
+      dispositivos: estados.map((estado, i) => ({
+        id: `d${i}`,
+        nombre: estado,
+        plataforma: "android",
+        clase: "fisico",
+        estado,
+      })),
+    };
+    const llegados = new Set(alcanzables(informe).map((d) => d.id));
+    estados.forEach((estado, i) => {
+      expect(llegados.has(`d${i}`), estado).toBe(esAlcanzable(estado));
+    });
+  });
 });
 
 describe("recetaDeEmuladorAndroid", () => {
-  const nada = { brew: false, sdkmanager: false, emulator: false, androidHome: false, jdk: false, avds: [] as string[] };
+  const nada = { brew: false, sdkmanager: false, emulator: false, jdk: false, avds: [] as string[] };
 
   it("en un sistema que no es macOS todavía no hay receta, y no se finge una", () => {
     // Windows y Linux son otra receta —otros gestores, otras rutas— y escribir la de macOS
@@ -225,10 +260,10 @@ describe("recetaDeEmuladorAndroid", () => {
     expect(recetaDeEmuladorAndroid("linux", nada)).toBeUndefined();
   });
 
-  it("de cero, los cuatro pasos y ninguno hecho", () => {
+  it("de cero, los tres pasos y ninguno hecho", () => {
     const receta = recetaDeEmuladorAndroid("darwin", nada)!;
     expect(receta.completa).toBe(false);
-    expect(receta.pasos.map((p) => p.hecho)).toEqual([false, false, false, false]);
+    expect(receta.pasos.map((p) => p.hecho)).toEqual([false, false, false]);
   });
 
   it("ningún comando lleva una ruta de la máquina: se derivan con `brew --prefix`", () => {
@@ -236,7 +271,7 @@ describe("recetaDeEmuladorAndroid", () => {
     // viaja por el cable, que puede ir por un túnel. Y de paso vale en Intel y en Apple
     // Silicon, que tienen prefijos distintos.
     const receta = recetaDeEmuladorAndroid("darwin", nada)!;
-    const todo = receta.pasos.flatMap((p) => p.comandos).join("\n");
+    const todo = [...receta.pasos.flatMap((p) => p.comandos), ...(receta.aparte?.comandos ?? [])].join("\n");
     expect(todo).not.toContain("/opt/homebrew");
     expect(todo).not.toContain("/usr/local");
     expect(todo).not.toContain("/Users/");
@@ -246,12 +281,12 @@ describe("recetaDeEmuladorAndroid", () => {
   it("cada paso se da por hecho por lo MEDIDO, no por recordar que se pulsó", () => {
     const conSdk = recetaDeEmuladorAndroid("darwin", { ...nada, brew: true, sdkmanager: true })!;
     expect(conSdk.pasos[0]!.hecho).toBe(true); // sdkmanager está ⇒ las herramientas están
-    expect(conSdk.pasos[1]!.hecho).toBe(false); // pero ANDROID_HOME no
+    expect(conSdk.pasos[1]!.hecho).toBe(false); // pero el emulador todavía no
 
     const conTodo = recetaDeEmuladorAndroid("darwin", {
-      brew: true, sdkmanager: true, emulator: true, androidHome: true, jdk: true, avds: ["pixel8"],
+      brew: true, sdkmanager: true, emulator: true, jdk: true, avds: ["pixel8"],
     })!;
-    expect(conTodo.pasos.map((p) => p.hecho)).toEqual([true, true, true, true]);
+    expect(conTodo.pasos.map((p) => p.hecho)).toEqual([true, true, true]);
     expect(conTodo.completa).toBe(true);
   });
 
@@ -262,64 +297,101 @@ describe("recetaDeEmuladorAndroid", () => {
     expect(receta.pasos.map((p) => p.acepta ?? "").join(" ")).toMatch(/licencia/i);
   });
 
-  it("el paso de las variables dice que xonecode NO lo necesita, y para qué sí", () => {
+  it("el consejo de la shell NO es un paso: va aparte, y se dice que xonecode no lo necesita", () => {
     // Es la única parte que toca la shell del usuario, y desde que la detección mira la
     // carpeta de Homebrew la consola encuentra el SDK sin ella. Decirlo evita que parezca
     // que la consola no funciona hasta tocarse el `.zshrc`.
-    const paso = recetaDeEmuladorAndroid("darwin", nada)!.pasos[1]!;
-    expect(paso.nota).toMatch(/tu terminal/i);
-    expect(paso.nota).toMatch(/xonecode/i);
+    //
+    // Y era un PASO —el 2— hasta que se midió lo que hacía: no se puede medir desde aquí, así
+    // que dejaba la receta abierta para siempre en una máquina ya equipada, y era la única
+    // puerta de `completa`. Fuera de la lista sigue estando el consejo, que es lo que sirve.
+    const receta = recetaDeEmuladorAndroid("darwin", nada)!;
+    expect(receta.aparte!.titulo).toMatch(/variables en tu shell/i);
+    expect(receta.aparte!.nota).toMatch(/tu terminal/i);
+    expect(receta.aparte!.nota).toMatch(/xonecode NO lo necesita/i);
+    expect(receta.pasos.map((p) => p.titulo).join(" ")).not.toMatch(/zshrc|variable/i);
   });
 
   it("arrancar no es un paso de la receta, pero el comando se da", () => {
     // Arrancar un emulador es un proceso de vida larga y otra capacidad; hoy no está
     // cableado y el panel no puede prometerlo. El comando sí se dice.
     const receta = recetaDeEmuladorAndroid("darwin", nada)!;
-    expect(receta.pasos).toHaveLength(4);
+    expect(receta.pasos).toHaveLength(3);
     expect(receta.despues).toContain("emulator -avd");
+  });
+
+  it("dice a qué plataforma sirve: es por donde Ajustes reparte sus pestañas", () => {
+    // Un DATO y no una adivinanza del nombre: la ventana agrupa por esto, así que deducirlo
+    // allí de «`adb` suena a Android» sería una segunda copia de esta regla.
+    expect(recetaDeEmuladorAndroid("darwin", nada)!.plataforma).toBe("android");
+    expect(recetaDeSimuladorIos("darwin", { xcode: true, licencia: true, runtimes: [] })!.plataforma).toBe("ios");
   });
 
   /**
    * **El paso 1 es ejecutable, y eso cambió midiendo.** Antes no lo era por si `brew` pedía
    * la contraseña de administrador y el hijo se quedaba esperándola; medido, `sudo` sin
    * terminal de control falla en 57 ms en vez de colgarse. Y era el paso del que colgaba
-   * todo: los pasos 3 y 4 exigen `sdkmanager`, que es justo lo que instala el 1, así que en
+   * todo: los pasos 2 y 3 exigen `sdkmanager`, que es justo lo que instala el 1, así que en
    * una máquina nueva la receta no tenía ningún botón vivo.
    */
   it("con Homebrew, el paso 1 ya se puede lanzar: es el que desbloquea los demás", () => {
     const deCero = recetaDeEmuladorAndroid("darwin", nada)!;
     // Sin `brew` no hay nada que lanzar, y se dice por qué: un botón que no puede cumplir es
     // el botón muerto de siempre.
-    expect(deCero.pasos.map((p) => p.ejecutable)).toEqual([false, false, false, false]);
+    expect(deCero.pasos.map((p) => p.ejecutable)).toEqual([false, false, false]);
     expect(deCero.pasos[0]!.porQueNo).toMatch(/homebrew/i);
-    expect(deCero.pasos[2]!.porQueNo).toMatch(/paso 1/i);
+    expect(deCero.pasos[1]!.porQueNo).toMatch(/paso 1/i);
 
     const conBrew = recetaDeEmuladorAndroid("darwin", { ...nada, brew: true })!;
-    expect(conBrew.pasos.map((p) => p.ejecutable)).toEqual([true, false, false, false]);
+    expect(conBrew.pasos.map((p) => p.ejecutable)).toEqual([true, false, false]);
   });
 
-  it("el paso de la shell NUNCA es ejecutable: es lo único que no sabríamos deshacer", () => {
+  it("ningún paso de la SHELL existe ya, así que ninguno es el que no sabríamos deshacer", () => {
+    // El único que escribía en la shell de alguien se fue a `aparte` —donde no se lanza—,
+    // y con él se fue la razón por la que este test existía. Lo que queda comprobado es que
+    // no ha vuelto por la puerta de atrás: ningún comando de los pasos toca un fichero.
     for (const estado of [nada, { ...nada, brew: true, sdkmanager: true, jdk: true, emulator: true }]) {
-      expect(recetaDeEmuladorAndroid("darwin", estado)!.pasos[1]!.ejecutable).toBe(false);
+      const receta = recetaDeEmuladorAndroid("darwin", estado)!;
+      expect(receta.pasos.flatMap((p) => p.comandos).join(" ")).not.toMatch(/zshrc|>>|export /);
     }
   });
 
-  it("los pasos 3 y 4 se ofrecen solo cuando pueden cumplirse, y se dice qué falta", () => {
+  it("los pasos 2 y 3 se ofrecen solo cuando pueden cumplirse, y se dice qué falta", () => {
     const conHerramientas = recetaDeEmuladorAndroid("darwin", { ...nada, brew: true, sdkmanager: true, jdk: true })!;
-    expect(conHerramientas.pasos.map((p) => p.ejecutable)).toEqual([true, false, true, false]);
-    // El 4 necesita la imagen del sistema, que la trae el 3.
-    expect(conHerramientas.pasos[3]!.porQueNo).toMatch(/paso 3/i);
+    expect(conHerramientas.pasos.map((p) => p.ejecutable)).toEqual([true, true, false]);
+    // El 3 necesita la imagen del sistema, que la trae el 2.
+    expect(conHerramientas.pasos[2]!.porQueNo).toMatch(/paso 2/i);
 
     const conImagen = recetaDeEmuladorAndroid("darwin", { ...nada, brew: true, sdkmanager: true, jdk: true, emulator: true })!;
-    expect(conImagen.pasos[3]!.ejecutable).toBe(true);
+    expect(conImagen.pasos[2]!.ejecutable).toBe(true);
   });
 
   it("el paso que acepta licencias lo dice APARTE de su nota", () => {
     // Aceptar una licencia en nombre de alguien no puede ser un efecto de rebote de un botón
     // que dice «Ejecutar»: va en su propio campo para poder pintarlo junto al botón.
     const receta = recetaDeEmuladorAndroid("darwin", nada)!;
-    expect(receta.pasos[2]!.acepta).toMatch(/licencias del SDK de Android/i);
+    expect(receta.pasos[1]!.acepta).toMatch(/licencias del SDK de Android/i);
     expect(receta.pasos[0]!.acepta).toBeUndefined();
+  });
+
+  it("un paso YA HECHO no vuelve a ofrecer su instalación, salvo el que además actualiza", () => {
+    // Medido en la ventana: la marca decía «hecho» y debajo estaba «Ejecutar este paso», o
+    // sea que la receta ofrecía instalar lo que ya estaba — el botón muerto de siempre, y en
+    // la dirección que más desgasta, porque enseña a pulsar sin leer.
+    //
+    // La excepción es el paso de la imagen: volver a pedirla no es instalar lo mismo, es
+    // subir de versión, y sin ella no quedaría ninguna vía de actualizar.
+    const todo = recetaDeEmuladorAndroid("darwin", {
+      brew: true, sdkmanager: true, emulator: true, jdk: true, avds: ["pixel8"],
+    })!;
+    expect(todo.pasos[0]!.hecho).toBe(true);
+    expect(todo.pasos[0]!.repetir).toBeUndefined();
+    expect(todo.pasos[1]!.hecho).toBe(true);
+    expect(todo.pasos[1]!.repetir!.etiqueta).toBe("Actualizar");
+    expect(todo.pasos[1]!.repetir!.porQue).toMatch(/sube de versión/i);
+    // Y el motivo acompaña al nombre: un botón sobre un paso hecho, sin él, se lee como el
+    // error de antes al revés.
+    expect(todo.pasos[2]!.repetir).toBeUndefined();
   });
 });
 

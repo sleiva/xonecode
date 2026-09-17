@@ -36,8 +36,10 @@ import type {
   DispositivoElegido,
   ConsumoDeTurno,
   SesionDelCable,
+  FaseDelLanzamiento,
+  EstadoDelLanzamiento,
 } from "./tipos.js";
-import { PLATAFORMAS_DE_DISPOSITIVO } from "./tipos.js";
+import { PLATAFORMAS_DE_DISPOSITIVO, FASES_DEL_LANZAMIENTO, ESTADOS_DEL_LANZAMIENTO } from "./tipos.js";
 
 export interface EstadoDelCliente {
   actos: Acto[];
@@ -208,6 +210,53 @@ export interface EstadoDelCliente {
     paso: number;
     titulo: string;
     estado: "corriendo" | "ok" | "fallo" | "cancelada" | "colgada";
+    lineas: string[];
+    ms: number;
+    motivo?: string;
+  };
+  /**
+   * El veredicto de «¿se puede lanzar la app del proyecto abierto?», que se PIDE
+   * (`revisarLanzamiento`) y contesta el servidor a quien lo pidió. Ausente = todavía no ha
+   * llegado, y eso se dice en pantalla («midiendo»), que NO es lo mismo que un veredicto en
+   * `listo: false`: este último trae sus `faltas`.
+   *
+   * `faltas` son FRASES ya escritas por el servidor (`core/puedeLanzarse.ts#motivoDeBloqueo`):
+   * el cliente las pinta tal cual y no compone ninguna causa a mano — el texto de por qué no
+   * se puede lanzar vive donde vive la regla, y aquí solo se recorre.
+   *
+   * `medido` es la fecha de la medida, y es OBLIGATORIA: un veredicto sin fecha es una
+   * promesa sin fecha, así que un `lanzable` que no la traiga se descarta ENTERO, como
+   * `proyecto`, `listo` y `faltas` — y por el mismo motivo que `case "dispositivos"` descarta
+   * su informe sin `medido`. Rellenarla con una cadena vacía sería estampar una medición que
+   * nadie hizo. Y el tipo importa además para el empalme: así el `lanzable` del store es
+   * asignable al `lanzable` del cable (`tipos.ts`), que la declara `string` sin `?`.
+   */
+  lanzable?: {
+    proyecto: string;
+    listo: boolean;
+    faltas: string[];
+    app?: string;
+    dispositivo?: DispositivoElegido;
+    medido: string;
+  };
+  /**
+   * El recorrido del lanzamiento, o cómo acabó el último.
+   *
+   * Lo dice el SERVIDOR fase a fase, como el paso de receta: la máquina es una y el proceso
+   * corre allí, así que el cliente no deduce nada de haber pulsado. `estado: "corriendo"` es
+   * lo que permite pintar en qué fase va en vez de un botón apagado sin explicación, y
+   * `lineas` es la COLA del recorrido —lo que suelta `adb` son miles de líneas y el
+   * servidor ya la recorta, así que aquí no se recorta otra vez—.
+   *
+   * **Se tira al caerse el cable** (`marcarDesconectado`), y no por simetría con las fotos:
+   * un recorrido en `corriendo` para siempre apagaría el botón de una pestaña que ya no
+   * recibe el «terminó».
+   */
+  lanzamiento?: {
+    proyecto?: string;
+    dispositivo?: DispositivoElegido;
+    fase: FaseDelLanzamiento;
+    estado: EstadoDelLanzamiento;
     lineas: string[];
     ms: number;
     motivo?: string;
@@ -851,9 +900,26 @@ export function crearStoreDelCliente(): {
                 )
                 .map((r) => ({
                   id: r.id,
+                  // Su pestaña. Se copia como `Dispositivo.plataforma`: es un dato del
+                  // servidor y la ventana agrupa por él sin deducirlo del `id`.
+                  plataforma: r.plataforma,
                   titulo: String(r.titulo ?? ""),
                   descripcion: String(r.descripcion ?? ""),
                   completa: r.completa === true,
+                  // El consejo que no es un paso, AUSENTE si no lo hay: la receta de iOS no
+                  // tiene ninguno, y un `aparte` inventado le pintaría una sección vacía.
+                  ...(typeof r.aparte === "object" &&
+                  r.aparte !== null &&
+                  typeof r.aparte.titulo === "string" &&
+                  Array.isArray(r.aparte.comandos)
+                    ? {
+                        aparte: {
+                          titulo: r.aparte.titulo,
+                          comandos: r.aparte.comandos.filter((c): c is string => typeof c === "string"),
+                          ...(typeof r.aparte.nota === "string" ? { nota: r.aparte.nota } : {}),
+                        },
+                      }
+                    : {}),
                   despues: String(r.despues ?? ""),
                   pasos: r.pasos
                     .filter(
@@ -872,14 +938,33 @@ export function crearStoreDelCliente(): {
                       ...(typeof p.nota === "string" ? { nota: p.nota } : {}),
                       ...(typeof p.porQueNo === "string" ? { porQueNo: p.porQueNo } : {}),
                       ...(typeof p.acepta === "string" ? { acepta: p.acepta } : {}),
+                      // Si repetir un paso ya hecho sirve para algo, y con qué nombre. Sin
+                      // esto, el paso se quedaría sin botón cuando ya está — que es lo
+                      // correcto por omisión y falso para el que actualiza.
+                      ...(typeof p.repetir === "object" &&
+                      p.repetir !== null &&
+                      typeof p.repetir.etiqueta === "string" &&
+                      typeof p.repetir.porQue === "string"
+                        ? { repetir: { etiqueta: p.repetir.etiqueta, porQue: p.repetir.porQue } }
+                        : {}),
                     })),
                 })),
               herramientas: informe.herramientas
                 .filter((h): h is Herramienta => typeof h === "object" && h !== null && typeof h.nombre === "string" && typeof h.estado === "string")
                 .map((h) => ({
                   nombre: h.nombre,
+                  plataforma: h.plataforma,
                   estado: h.estado,
                   ...(h.detalle === undefined ? {} : { detalle: h.detalle }),
+                  // `instalar` se copia campo a campo, y solo si viene: es lo que decide
+                  // entre un botón «Instalar» y el comando para copiar. No estaba en esta
+                  // lista, así que la ventana no lo veía y una herramienta que falta se
+                  // quedaba sin decir cómo se instala.
+                  ...(typeof h.instalar === "object" &&
+                  h.instalar !== null &&
+                  typeof h.instalar.comando === "string"
+                    ? { instalar: { comando: h.instalar.comando, automatico: h.instalar.automatico === true } }
+                    : {}),
                 })),
               dispositivos: informe.dispositivos
                 .filter(
@@ -1166,6 +1251,74 @@ export function crearStoreDelCliente(): {
               estado,
               lineas: Array.isArray(m["lineas"]) ? m["lineas"].filter((x): x is string => typeof x === "string") : [],
               ms: typeof m["ms"] === "number" ? m["ms"] : 0,
+              ...(typeof m["motivo"] === "string" ? { motivo: m["motivo"] } : {}),
+            },
+          });
+          return;
+        }
+        case "lanzable": {
+          // La forma del `case "instalacion"`, campo a campo. Las cuatro exigencias son las que
+          // sostienen el veredicto: sin `proyecto` no se sabe de qué app habla, `listo` y
+          // `faltas` son lo que decide si se pinta botón o se pintan las frases, y sin `medido`
+          // el veredicto es una promesa sin fecha — la misma regla por la que `dispositivos`
+          // descarta su informe sin fecha. Un `listo` que no sea el booleano (la trampa del
+          // `"false"` de cadena, que es verdadero en JavaScript), unas `faltas` que no sean
+          // cadenas o un `medido` que no sea texto descartan el mensaje ENTERO: un veredicto a
+          // medias pintaría un botón que no puede cumplir, o una lista de causas vacía sin decir
+          // por qué. Las dos cosas son peores que no tener veredicto.
+          const m = mensaje as Record<string, unknown>;
+          const faltas = m["faltas"];
+          if (typeof m["proyecto"] !== "string" || typeof m["listo"] !== "boolean") return;
+          if (typeof m["medido"] !== "string") return;
+          if (!Array.isArray(faltas) || !faltas.every((f) => typeof f === "string")) return;
+          const d = m["dispositivo"];
+          mutar({
+            lanzable: {
+              proyecto: m["proyecto"],
+              listo: m["listo"],
+              faltas: faltas as string[],
+              medido: m["medido"],
+              ...(typeof m["app"] === "string" ? { app: m["app"] } : {}),
+              // La foto del dispositivo se copia por sus CAMPOS y no entera: lo que llega por
+              // el cable no entra en el estado sin nombre. Una a medias —un id sin nombre—
+              // se queda fuera sola, como en el `alta`: el veredicto sigue siendo cierto sin
+              // ella, y pintar un serial crudo es justo lo que guardar la foto viene a evitar.
+              ...(esDispositivoElegido(d)
+                ? { dispositivo: { id: d.id, nombre: d.nombre, plataforma: d.plataforma, clase: d.clase } }
+                : {}),
+            },
+          });
+          return;
+        }
+        case "lanzamiento": {
+          // Las FASES y los ESTADOS por lista blanca, como el `estado` de `instalacion`: los dos
+          // vienen de una lista CERRADA (`tipos.ts`) y uno que no conozcamos descarta el mensaje
+          // entero. Pintar una fase desconocida sería enseñar un paso que este cliente no sabe
+          // dibujar; y un estado que no se entiende dejaría el recorrido sin saber si sigue o
+          // acabó, que es exactamente el botón apagado sin explicación que `corriendo` existe
+          // para evitar.
+          const m = mensaje as Record<string, unknown>;
+          const fase = FASES_DEL_LANZAMIENTO.find((f) => f === m["fase"]);
+          const estadoDelRecorrido = ESTADOS_DEL_LANZAMIENTO.find((e) => e === m["estado"]);
+          if (fase === undefined || estadoDelRecorrido === undefined) return;
+          if (typeof m["ms"] !== "number") return;
+          const lineas = m["lineas"];
+          if (!Array.isArray(lineas)) return;
+          const d = m["dispositivo"];
+          mutar({
+            lanzamiento: {
+              fase,
+              estado: estadoDelRecorrido,
+              // Las líneas se filtran en vez de tumbar el mensaje —la forma de `instalacion`—:
+              // son la cola de un log, y perder una línea que no es texto no invalida el
+              // recorrido. Al revés que `faltas`, donde una frase que falta sí cambia la
+              // decisión.
+              lineas: lineas.filter((x): x is string => typeof x === "string"),
+              ms: m["ms"],
+              ...(typeof m["proyecto"] === "string" ? { proyecto: m["proyecto"] } : {}),
+              ...(esDispositivoElegido(d)
+                ? { dispositivo: { id: d.id, nombre: d.nombre, plataforma: d.plataforma, clase: d.clase } }
+                : {}),
               ...(typeof m["motivo"] === "string" ? { motivo: m["motivo"] } : {}),
             },
           });
@@ -1485,6 +1638,15 @@ export function crearStoreDelCliente(): {
         // (`arranque.ts`, el `close`), así que guardarla dejaría un transcript congelado
         // presentado como si siguiera llegando. La reconexión la vuelve a pedir.
         mirada: undefined,
+        // El veredicto y el recorrido del lanzamiento se tiran LOS DOS, y no por simetría con
+        // las fotos: sin cable no se puede afirmar en qué estado quedó la operación —el
+        // proceso pudo morir, o pudo seguir y acabar sin que este navegador se entere—, y un
+        // recorrido guardado en `corriendo` para siempre apagaría el botón de una pestaña que
+        // ya no recibe el «terminó». El veredicto es además una medida de hace un rato, y lo
+        // que decide es lo que se mida al reconectar: la pestaña lo vuelve a pedir en cuanto
+        // `conectado` pasa a `true`.
+        lanzable: undefined,
+        lanzamiento: undefined,
       });
     },
 

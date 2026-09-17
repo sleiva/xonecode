@@ -12,6 +12,9 @@ const INFORME = {
     { id: "S1", nombre: "iPhone 16", plataforma: "ios" as const, clase: "simulador" as const, estado: "arrancado" as const },
   ],
   avds: ["Pixel_8_API_34"],
+  // Vacío y explícito: el informe del cable la trae siempre, y omitirla era un fixture que no
+  // se parecía al dato — no daba error porque los tests del cliente no se tipean.
+  recetas: [],
   medido: "2026-09-07T11:00:00.000Z",
 };
 
@@ -67,9 +70,18 @@ describe("PastillaDeDispositivo", () => {
     expect(screen.getByRole("button", { name: /sin dispositivo/i })).toHaveProperty("disabled", true);
   });
 
-  it("dice que la elección todavía no la consume ninguna tool", () => {
+  /**
+   * El pie de la lista, que durante toda la vida de esta pastilla dijo lo que ya no era verdad:
+   * «el agente lo usará cuando tenga las tools de dispositivo» — la elección se guardaba y no la
+   * consumía nadie. Eso dejó de ser cierto en cuanto la pestaña Ejecutar empezó a lanzar con
+   * ella, y el test afirma la mitad nueva **exigiendo además que la vieja no vuelva**: el agente
+   * sigue sin tools de dispositivo, así que un «cuando las tenga» es una capacidad que nadie ha
+   * decidido construir, dicha como si estuviera en camino.
+   */
+  it("dice que la elección la usa la pestaña Ejecutar, y no promete que la use el agente", () => {
     render(<PastillaDeDispositivo informe={INFORME} alElegir={() => {}} />);
     fireEvent.click(screen.getByRole("button", { name: /sin dispositivo/i }));
-    expect(screen.getByText(/cuando tenga las tools de dispositivo/i)).toBeTruthy();
+    expect(screen.getByText(/la usa la pestaña Ejecutar/i)).toBeTruthy();
+    expect(screen.queryByText(/tools de dispositivo/i)).toBeNull();
   });
 });

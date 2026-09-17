@@ -66,11 +66,12 @@ import estilos from "./Ajustes.module.css";
  * pregunta: dentro de la fila que se está editando, para que no aparezca detrás de la
  * ventana.
  */
-export type SeccionDeAjustes = "apariencia" | "modelos" | "entornos" | "agentes" | "dispositivos";
+export type SeccionDeAjustes = "apariencia" | "modelos" | "entornos" | "agentes" | "dispositivos" | "general";
 
 /**
- * Las tres secciones, en el orden del rediseño —Modelos primero, que además es la que se
- * abre por omisión— y cada una con su icono.
+ * Las secciones, en el orden en que se leen de arriba abajo, cada una con su icono: **General
+ * primero**, y detrás lo concreto —con Modelos en segunda porque es la que se ABRE por
+ * omisión—.
  *
  * Los iconos son de la librería de primitivas y están comprobados uno a uno contra los
  * exports de `lib/index.js`: `Cabecera.tsx` documenta el día que se montó uno que el
@@ -83,6 +84,15 @@ const SECCIONES: readonly {
   etiqueta: string;
   Icono: typeof IconSparkle16;
 }[] = [
+  // **General va la primera: es el cajón de lo que es de la MÁQUINA y no es de ninguna de las
+  // otras cinco.** El orden va de lo general a lo particular —por eso lo concreto empieza en
+  // Modelos—, y este es el único que no es de una materia: lo que no se sabe dónde vive se
+  // busca aquí. Nació con el tope de la cola de tareas, que vivía dentro de Dispositivos con
+  // un motivo cierto —describe el equipo— dentro de una sección que habla de otra cosa: de
+  // dónde se prueba la app. El engranaje es el mismo de la placa de la cabecera, que es
+  // `aria-hidden` y no significa nada para nadie: aquí sí es la sección de los ajustes
+  // generales.
+  { id: "general", etiqueta: "General", Icono: IconSettingsOutline16 },
   // «Modelos» y no «Proveedores»: la sección dejó de ser solo credenciales. Su texto lo
   // confesaba —«el modelo en uso se elige en la pastilla del compositor»— porque no había
   // dónde fijar el defecto; ahora sí, y es lo primero que se ve al abrirla.
@@ -118,10 +128,20 @@ const DESTINOS: readonly {
 ];
 
 /**
- * Los REQUISITOS: las herramientas del equipo, que son otra cosa que los destinos. Un
- * destino se elige; un requisito está o no está, y si no está se instala. Mezclarlos en una
- * sola lista era lo que hacía que «Android Sim · emulator no está instalada» pareciera un
- * ajuste que se puede cambiar con el interruptor de al lado.
+ * Cómo se llama cada herramienta y para qué sirve — **una FICHA que se busca por nombre, no
+ * la lista de lo que hay**.
+ *
+ * Los requisitos son otra cosa que los destinos: un destino se elige; un requisito está o no
+ * está, y si no está se instala. Mezclarlos en una sola lista era lo que hacía que «Android
+ * Sim · emulator no está instalada» pareciera un ajuste que se puede cambiar con el
+ * interruptor de al lado.
+ *
+ * **Y desde que la sección tiene una pestaña por plataforma, esta tabla ya no decide nada.**
+ * Ni qué filas se pintan —son las que la MEDIDA nombra, ver `herramientasDe`— ni de qué
+ * plataforma es cada una: eso lo dice `plataforma`, que viene por el cable desde el mismo
+ * `plataformaDe` que lo decidió en el host. Ponerlo aquí sería una segunda copia de esa
+ * regla, y el día que una herramienta sirviera a las dos plataformas la copia callaría.
+ * Aquí solo queda lo que no es una regla sino un rótulo: cómo se llama y qué hace.
  */
 const REQUISITOS: readonly { nombre: Herramienta["nombre"]; etiqueta: string; para: string }[] = [
   { nombre: "adb", etiqueta: "adb", para: "hablar con teléfonos, tablets y emuladores de Android" },
@@ -129,6 +149,24 @@ const REQUISITOS: readonly { nombre: Herramienta["nombre"]; etiqueta: string; pa
   { nombre: "xcrun", etiqueta: "Xcode command line tools", para: "los simuladores de iOS (simctl)" },
   { nombre: "devicectl", etiqueta: "devicectl", para: "los iPhone y iPad conectados (Xcode 15+)" },
 ];
+
+/**
+ * Las dos pestañas de la sección, en el orden en que se leen: Android primero porque es lo
+ * único que funciona fuera de un Mac, y eso hace que en Windows y Linux la primera pestaña
+ * sea útil y la segunda se lea sabiendo lo que es.
+ *
+ * **Las dos existen siempre, también donde no aplican.** Esconder la de iOS en Linux dejaría
+ * su receta sin puerta y, peor, haría creer que iOS se puede probar allí y no se está
+ * enseñando: dentro se dice que sus herramientas «no aplican en este sistema», que es lo que
+ * contestó la medida. Una pestaña de ACCIÓN existe siempre (ver `Pestanas.tsx`).
+ */
+const PLATAFORMAS: readonly Dispositivo["plataforma"][] = ["android", "ios"];
+
+/** Cómo se llama cada plataforma, aquí y en el `aria-label` de su panel. */
+const ETIQUETA_DE_PLATAFORMA: Record<Dispositivo["plataforma"], string> = {
+  android: "Android",
+  ios: "iOS",
+};
 
 /** La hora de la foto. Si el ISO no parsea se enseña tal cual: inventar una hora es peor. */
 function horaDe(iso: string): string {
@@ -636,6 +674,43 @@ export function Ajustes({
                     </li>
   );
 
+  /**
+   * Qué pestaña de dispositivo está abierta.
+   *
+   * Arranca en Android y **no sigue a lo que esté medido**: cuál de las dos se mira es una
+   * elección de quien está aquí, y una pestaña que se mudara sola —porque la otra no aplica,
+   * porque le falta todo— se llevaría por delante lo que estabas leyendo. Lo que sí hace
+   * falta para no tener que abrirlas es que cada una DIGA si le falta algo (`faltanDe`).
+   */
+  const [plataformaAbierta, setPlataformaAbierta] = useState<Dispositivo["plataforma"]>("android");
+
+  /**
+   * Las herramientas de una plataforma, **según la medida y no según una tabla de aquí**.
+   * Vienen todas en el informe —el host las mide siempre, apagadas o no—, y cada una dice de
+   * qué plataforma es. Un informe que no nombre alguna de las que esta ventana conoce se
+   * cuenta al pie, en vez de dejar su fila desaparecida sin decirlo.
+   */
+  const herramientasDe = (p: Dispositivo["plataforma"]): readonly Herramienta[] =>
+    (dispositivos?.herramientas ?? []).filter((h) => h.plataforma === p);
+
+  /**
+   * Cuántas de esas herramientas constan como FALTANTES — es lo que enseña la pestaña sin
+   * abrirla.
+   *
+   * Solo «no está instalada» y «falló»: una **desactivada** es una elección de quien está
+   * aquí (apagó ese destino para no arrancar procesos) y una **no aplica** es un hecho del
+   * sistema —contar cualquiera de las dos como pendiente sería inventar una tarea—. Y sin
+   * medir tampoco: ahí no se sabe si falta, que es distinto de saber que falta.
+   */
+  const faltanDe = (p: Dispositivo["plataforma"]): number =>
+    herramientasDe(p).filter((h) => h.estado === "no-encontrada" || h.estado === "fallo").length;
+
+  /** Lo que el informe NO nombra, de las que esta ventana sabe que existen. Se dice al pie. */
+  const sinMedir =
+    dispositivos === undefined
+      ? []
+      : REQUISITOS.filter((r) => !dispositivos.herramientas.some((h) => h.nombre === r.nombre));
+
   return (
     // `headless` como el modal de aprobación: la cabecera y el pie que trae `Modal` no se
     // usan —la ventana tiene su propia navegación y su propio cierre—, pero `title` sigue
@@ -721,6 +796,49 @@ export function Ajustes({
               </p>
 
               {/*
+                UNA PESTAÑA POR PLATAFORMA, y dentro de cada una lo suyo. Antes esto era una
+                sola columna —requisitos, recetas, y luego los teléfonos y los simuladores de
+                LAS DOS plataformas mezclados—, y con iOS dentro la lista se hacía larga y sin
+                costuras: treinta y cinco simuladores de Xcode entre los teléfonos de Android,
+                sin nada que dijera dónde acaba una cosa y dónde empieza la otra.
+
+                Lo que agrupa es `plataforma`, que llega MEDIDO por el cable —de la misma
+                función que lo decidió en el host—, y no una deducción de aquí: «`adb` suena a
+                Android» sería una segunda copia de esa regla, y el día que una herramienta
+                sirviera a las dos plataformas la copia callaría.
+              */}
+              <div className={estilos.pestanas} role="tablist" aria-label="Plataformas">
+                {PLATAFORMAS.map((p) => {
+                  const faltan = faltanDe(p);
+                  return (
+                    <button
+                      key={p}
+                      type="button"
+                      role="tab"
+                      className={estilos.pestana}
+                      aria-selected={p === plataformaAbierta}
+                      // Lo que le falta, en la etiqueta que lee un lector de pantalla: el
+                      // número de al lado, solo, no se anuncia como nada.
+                      aria-label={faltan === 0 ? ETIQUETA_DE_PLATAFORMA[p] : `${ETIQUETA_DE_PLATAFORMA[p]}, ${faltan} por instalar`}
+                      data-actual={p === plataformaAbierta ? "" : undefined}
+                      onClick={() => setPlataformaAbierta(p)}
+                    >
+                      {ETIQUETA_DE_PLATAFORMA[p]}
+                      {/* Y solo cuando falta algo: un cero es el control sin dato detrás que
+                          esta consola no pinta, y aquí además no diría nada que las filas de
+                          abajo no digan una a una. */}
+                      {faltan === 0 ? null : (
+                        <span className={estilos.cuenta} aria-hidden>
+                          {faltan}
+                        </span>
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+
+              <div role="tabpanel" className={estilos.panelDePestana} aria-label={ETIQUETA_DE_PLATAFORMA[plataformaAbierta]}>
+              {/*
                 DOS bloques y no una lista, porque son dos cosas distintas: un requisito está
                 o no está —y si no está, se instala—, y un destino se elige. Juntos, «Android
                 Sim · emulator no está instalada» se leía como un ajuste que el interruptor de
@@ -729,38 +847,45 @@ export function Ajustes({
               <h3 className={estilos.subencabezado}>Requisitos</h3>
               {dispositivos === undefined ? (
                 <p className={estilos.vacio}>Todavía no ha llegado ninguna medida de este equipo.</p>
+              ) : herramientasDe(plataformaAbierta).length === 0 ? (
+                // Con una medida que no nombra ninguna herramienta de esta plataforma no hay
+                // fila que pintar, y una lista vacía afirmaría «no hace falta ninguna». Lo
+                // que hay es una medida que no las nombra, y eso se dice al pie.
+                <p className={estilos.vacio}>La medida de este equipo no nombra ninguna herramienta de esta plataforma.</p>
               ) : (
                 <ul className={estilos.filas}>
-                  {REQUISITOS.map((r) => {
-                    const h = dispositivos.herramientas.find((x) => x.nombre === r.nombre);
-                    // Verde SOLO con «ok»: es lo único que significa disponible y
-                    // configurado. «Desactivada» no se pinta en verde ni en rojo —no se ha
-                    // mirado, y afirmar cualquiera de las dos sería inventarlo.
-                    const estado = h?.estado;
+                  {herramientasDe(plataformaAbierta).map((h) => {
+                    // La ficha es solo el rótulo; de qué plataforma es lo dice la medida. Una
+                    // herramienta que esta ventana no conozca se enseña con su nombre.
+                    const r = REQUISITOS.find((x) => x.nombre === h.nombre);
                     return (
-                      <li key={r.nombre} className={estilos.fila}>
+                      <li key={h.nombre} className={estilos.fila}>
+                        {/* Verde SOLO con «ok»: es lo único que significa disponible y
+                            configurado. «Desactivada» no se pinta en verde ni en rojo —no se
+                            ha mirado, y afirmar cualquiera de las dos sería inventarlo. */}
                         <span
                           className={estilos.punto}
-                          data-herramienta={estado ?? "sin-medir"}
-                          aria-label={estado === undefined ? "sin medir" : ETIQUETA_DE_HERRAMIENTA[estado]}
+                          data-herramienta={h.estado}
+                          aria-label={ETIQUETA_DE_HERRAMIENTA[h.estado]}
                         />
-                        <span className={estilos.nombre}>{r.etiqueta}</span>
+                        <span className={estilos.nombre}>{r?.etiqueta ?? h.nombre}</span>
                         <span className={estilos.detalle}>
-                          {estado === undefined ? r.para : `${ETIQUETA_DE_HERRAMIENTA[estado]} · ${r.para}`}
-                          {h?.detalle === undefined || estado === "ok" ? null : ` · ${h.detalle}`}
+                          {ETIQUETA_DE_HERRAMIENTA[h.estado]}
+                          {r === undefined ? "" : ` · ${r.para}`}
+                          {h.detalle === undefined || h.estado === "ok" ? null : ` · ${h.detalle}`}
                         </span>
                         {/*
                           Instalar solo se ofrece cuando FALTA y se sabe cómo. Y el comando se
                           enseña siempre: quien pulsa un botón que instala software tiene
                           derecho a saber qué se va a lanzar en su máquina.
                         */}
-                        {h?.instalar === undefined ? null : h.instalar.automatico ? (
+                        {h.instalar === undefined ? null : h.instalar.automatico ? (
                           <Button
                             variant="outline"
                             className={estilos.accion}
                             disabled={!conectado || alInstalarHerramienta === undefined}
                             title={h.instalar.comando}
-                            onClick={() => alInstalarHerramienta?.(r.nombre)}
+                            onClick={() => alInstalarHerramienta?.(h.nombre)}
                           >
                             Instalar
                           </Button>
@@ -778,25 +903,27 @@ export function Ajustes({
               {/*
                 La RECETA de lo que falta, debajo de los requisitos y no mezclada con ellos:
                 un requisito es un punto que está o no está, y esto es un procedimiento con
-                orden. Solo aparece si el servidor manda alguna — en Windows y en Linux no
+                orden. La suya es la de ESTA plataforma —lo dice la receta, no el nombre de
+                su id— y solo aparece si el servidor manda alguna: en Windows y en Linux no
                 hay todavía, y ahí el panel calla en vez de enseñar los pasos de macOS.
               */}
-              {(dispositivos?.recetas ?? []).map((receta) => (
-                <Receta
-                  key={receta.id}
-                  receta={receta}
-                  {...(instalacion === undefined ? {} : { instalacion })}
-                  // Sin cable no se ofrece lanzar nada: la petición se perdería sin decirlo.
-                  {...(conectado && alEjecutarPaso !== undefined
-                    ? { alEjecutar: (numero: number) => alEjecutarPaso(receta.id, numero) }
-                    : {})}
-                  {...(conectado && alCancelarPaso !== undefined
-                    ? { alCancelar: () => alCancelarPaso(receta.id) }
-                    : {})}
-                />
-              ))}
+              {(dispositivos?.recetas ?? [])
+                .filter((receta) => receta.plataforma === plataformaAbierta)
+                .map((receta) => (
+                  <Receta
+                    key={receta.id}
+                    receta={receta}
+                    {...(instalacion === undefined ? {} : { instalacion })}
+                    // Sin cable no se ofrece lanzar nada: la petición se perdería sin decirlo.
+                    {...(conectado && alEjecutarPaso !== undefined
+                      ? { alEjecutar: (numero: number) => alEjecutarPaso(receta.id, numero) }
+                      : {})}
+                    {...(conectado && alCancelarPaso !== undefined
+                      ? { alCancelar: () => alCancelarPaso(receta.id) }
+                      : {})}
+                  />
+                ))}
 
-              <h3 className={estilos.subencabezado}>Dispositivos</h3>
               {/*
                 El INVENTARIO, no cuatro interruptores. El botón de antes decía «Se mira» al
                 lado de un punto verde y se leía como si concediera la capacidad: el verde ya
@@ -804,20 +931,30 @@ export function Ajustes({
                 una persona quiere ver aquí es qué teléfonos y qué simuladores hay — y luego,
                 cuál usa el agente, que es una elección de la SESIÓN y por eso todavía no
                 vive en esta ventana (dice «Configuración global» en la cabecera).
+
+                Y el reparto en dos listas se cruza con el de la pestaña en vez de rehacerse:
+                `inventario` separa lo que se ENCHUFA de lo que se ARRANCA —que es como lo
+                distingue una persona— y la pestaña separa por plataforma. Son dos ejes
+                distintos y los dos son verdad, así que aquí solo se filtra lo que ya venía
+                agrupado.
               */}
               {dispositivos === undefined ? (
                 <p className={estilos.vacio}>Todavía no ha llegado ninguna medida de este equipo.</p>
               ) : (
                 (() => {
                   const { fisicos, virtuales } = inventario(dispositivos);
+                  const deAqui = (ds: readonly Dispositivo[]): Dispositivo[] =>
+                    ds.filter((d) => d.plataforma === plataformaAbierta);
+                  const telefonos = deAqui(fisicos);
+                  const simuladores = deAqui(virtuales);
                   return (
                     <>
                       <h4 className={estilos.subsubencabezado}>Teléfonos y tablets</h4>
-                      {fisicos.length === 0 ? (
+                      {telefonos.length === 0 ? (
                         <p className={estilos.vacio}>Ninguno conectado.</p>
                       ) : (
                         <ul className={estilos.filas}>
-                          {fisicos.map((d) => (
+                          {telefonos.map((d) => (
                             <li key={d.id} className={estilos.fila}>
                               <span
                                 className={estilos.punto}
@@ -825,8 +962,10 @@ export function Ajustes({
                                 aria-label={ETIQUETA_DE_ESTADO[d.estado]}
                               />
                               <span className={estilos.nombre}>{d.nombre}</span>
+                              {/* Sin decir la plataforma: la pestaña abierta ya la dice, y
+                                  repetirla en cada fila era lo que hacía larga la lista. */}
                               <span className={estilos.detalle}>
-                                {d.plataforma === "ios" ? "iOS" : "Android"} · {ETIQUETA_DE_ESTADO[d.estado]}
+                                {ETIQUETA_DE_ESTADO[d.estado]}
                                 {d.detalle === undefined ? "" : ` · ${d.detalle}`}
                               </span>
                               <VerificarDispositivo
@@ -841,7 +980,7 @@ export function Ajustes({
                       )}
 
                       <h4 className={estilos.subsubencabezado}>Simuladores y emuladores</h4>
-                      {virtuales.length === 0 ? (
+                      {simuladores.length === 0 ? (
                         <p className={estilos.vacio}>Ninguno disponible.</p>
                       ) : (
                         // Con scroll: esta máquina tiene 35 simuladores, y el panel «Tu
@@ -849,7 +988,7 @@ export function Ajustes({
                         // se elegirá uno— pero acotados en alto, para que la sección de
                         // requisitos de arriba no se vaya de la pantalla.
                         <ul className={`${estilos.filas} ${estilos.listaLarga}`}>
-                          {virtuales.map((d) => (
+                          {simuladores.map((d) => (
                             <li key={d.id} className={estilos.fila}>
                               <span
                                 className={estilos.punto}
@@ -857,9 +996,7 @@ export function Ajustes({
                                 aria-label={ETIQUETA_DE_ESTADO[d.estado]}
                               />
                               <span className={estilos.nombre}>{d.nombre}</span>
-                              <span className={estilos.detalle}>
-                                {d.plataforma === "ios" ? "iOS" : "Android"} · {ETIQUETA_DE_ESTADO[d.estado]}
-                              </span>
+                              <span className={estilos.detalle}>{ETIQUETA_DE_ESTADO[d.estado]}</span>
                               <VerificarDispositivo
                                 dispositivo={d}
                                 conectado={conectado}
@@ -876,15 +1013,17 @@ export function Ajustes({
               )}
 
               {/*
-                El filtro de MEDIDA, degradado a lo que es: cuatro casillas, no cuatro
-                botones al lado de un punto verde. Sigue existiendo porque apagar uno ahorra
-                procesos de verdad en este equipo —adb arranca un demonio que se queda vivo—,
-                pero ya no compite con el estado de nada.
+                El filtro de MEDIDA, degradado a lo que es: dos casillas por pestaña, no
+                cuatro. Sigue existiendo porque apagar uno ahorra procesos de verdad en este
+                equipo —adb arranca un demonio que se queda vivo—, pero ya no compite con el
+                estado de nada. Y son las de ESTA plataforma: las cuatro juntas eran otra vez
+                la lista mezclada, y apagar «iOS Sim» desde la pestaña de Android es una
+                decisión que no se toma ahí.
               */}
               {alCambiarDispositivos === undefined ? null : (
                 <p className={estilos.nota}>
                   Buscar en:{" "}
-                  {DESTINOS.map((d, i) => (
+                  {DESTINOS.filter((d) => d.plataforma === plataformaAbierta).map((d, i) => (
                     <span key={d.id}>
                       {i === 0 ? null : " · "}
                       <label className={estilos.casillaEnLinea}>
@@ -905,6 +1044,13 @@ export function Ajustes({
                   ))}
                 </p>
               )}
+              </div>
+
+              {/*
+                Lo de TODA la máquina, fuera de las pestañas: la foto y su hora, qué no se
+                midió, y la puerta para volver a mirar. Dentro de una pestaña, «Medido a las
+                12:04» se leería como la hora de esa plataforma, y es la de las dos.
+              */}
               <p className={estilos.nota}>
                 {dispositivos === undefined
                   ? "Todavía no ha llegado ninguna medida de este equipo."
@@ -915,19 +1061,49 @@ export function Ajustes({
                   </button>
                 )}
               </p>
+              {sinMedir.length === 0 ? null : (
+                // Las filas salen de lo que la MEDIDA nombra, así que una herramienta que el
+                // informe no nombre no desaparece en silencio: se cuenta, con la misma regla
+                // del resto de esta casa. Sin esto, un informe incompleto se leería como una
+                // máquina a la que no le falta nada de eso.
+                <p className={estilos.nota}>
+                  La medida no nombra {sinMedir.map((r) => r.etiqueta).join(", ")}: no se puede decir si{" "}
+                  {sinMedir.length === 1 ? "está" : "están"}.
+                </p>
+              )}
               <p className={estilos.nota}>
                 xonecode los DESCUBRE, instala lo que falta y verifica la conexión con uno. Elegir con cuál
                 trabaja el agente es una decisión de la sesión, no de esta ventana; conectar por red, arrancar
                 un emulador o instalar la app tampoco está cableado todavía.
               </p>
+            </>
+          ) : null}
+
+          {seccion === "general" ? (
+            <>
+              <h2 className={estilos.encabezado}>General</h2>
+              <p className={estilos.nota}>
+                Lo que vale para toda la máquina y no para un proyecto. Se guarda con el equipo, como los
+                dispositivos.
+              </p>
 
               {/*
-                El tope de concurrencia de la cola de tareas en background: es un ajuste de
-                la MÁQUINA —cuántas tareas soporta correr a la vez este equipo—, igual que
-                los cuatro interruptores de arriba, y por eso vive en la misma sección y no
-                en una pestaña propia.
+                El tope de concurrencia de la cola de tareas en background, que hasta ahora vivía
+                al final de Dispositivos. El motivo que lo puso ahí era cierto —es un ajuste de la
+                MÁQUINA, y sigue siéndolo— y la sección no: describe el EQUIPO, pero no tiene nada
+                que ver con dónde se prueba la app, y quien venía a mirar sus simuladores se
+                encontraba un número que habla de otra cosa.
+
+                **Y se mueve a una sección con nombre general a propósito**: es un ajuste de la
+                máquina suelto, y el próximo que aparezca —lo que valga para todo el equipo y no
+                para un proyecto— tiene su sitio sin volver a decidir dónde ponerlo.
               */}
               <h3 className={estilos.subencabezado}>Tareas</h3>
+              <p className={estilos.nota}>
+                Las tareas son los encargos que corren solos, sin nadie delante: la pestaña «Tareas» del
+                proyecto abierto y el tablero del escritorio. El número de abajo decide cuántas corren a la
+                vez en este Mac, no en un proyecto.
+              </p>
               <label className={estilos.filaDeConcurrencia}>
                 Tareas a la vez
                 <input
@@ -1160,13 +1336,13 @@ export function Ajustes({
                   Pestañas SIEMPRE, también con un solo entorno: la etiqueta contesta «¿de
                   quién son estos proyectos?», que hoy se daba por supuesto.
                 */
-                <div className={estilos.pestanasDeEntorno} role="tablist" aria-label="Entornos registrados">
+                <div className={estilos.pestanas} role="tablist" aria-label="Entornos registrados">
                   {entornos.map((e) => (
                     <button
                       key={e.id}
                       type="button"
                       role="tab"
-                      className={estilos.pestanaDeEntorno}
+                      className={estilos.pestana}
                       aria-selected={e.id === entornoEnPestana}
                       data-actual={e.id === entornoEnPestana ? "" : undefined}
                       onClick={() => setEntornoAbierto(e.id)}
@@ -1192,7 +1368,7 @@ export function Ajustes({
                 un entorno sin proyectos.
               */}
               {!registrando && entornoEnPestana !== undefined ? (
-                <div role="tabpanel" className={estilos.panelDeEntorno}>
+                <div role="tabpanel" className={estilos.panelDePestana}>
                   <p className={estilos.url}>{entornos.find((e) => e.id === entornoEnPestana)?.url}</p>
                   <h3 className={estilos.subencabezado}>Proyectos en la barra</h3>
                   {(() => {

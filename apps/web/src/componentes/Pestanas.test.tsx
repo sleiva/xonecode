@@ -25,12 +25,13 @@ describe("Pestanas", () => {
     expect(alElegirPestana).toHaveBeenCalledWith("trazas");
   });
 
-  it("son cinco por omisión, en este orden: Chat · Tareas · Ficheros · Revisión · Trazas", () => {
-    // Chat y Tareas son las DOS pestañas de ACCIÓN —una habla con el agente, la otra le manda
-    // algo para que trabaje solo— y van juntas al principio. Ficheros, Revisión (y Artefactos,
-    // si lo hay) son de REGISTRO: enseñan lo que ya pasó, y Trazas —de otro destinatario, quien
-    // depura el harness— cierra la tira. Ninguna de las dos de acción necesita dato para
-    // aparecer: su estado vacío dice cómo se empieza.
+  it("son seis por omisión, en este orden: Chat · Tareas · Ejecutar · Ficheros · Revisión · Trazas", () => {
+    // Chat, Tareas y Ejecutar son las TRES pestañas de ACCIÓN —una habla con el agente, otra
+    // le manda algo para que trabaje solo, la tercera lanza la app en un aparato— y van
+    // juntas al principio. Ficheros, Revisión (y Artefactos, si lo hay) son de REGISTRO:
+    // enseñan lo que ya pasó, y Trazas —de otro destinatario, quien depura el harness— cierra
+    // la tira. Ninguna de las de acción necesita dato para aparecer: su estado vacío dice
+    // cómo se empieza.
     //
     // CloudStudio ya NO está aquí: su banda vive dentro de Revisión (`Pestanas.tsx` dice por
     // qué). Si alguien le devolviera su pestaña, esta lista es la que lo tiene que pillar.
@@ -39,6 +40,7 @@ describe("Pestanas", () => {
     expect(screen.getAllByRole("tab").map((t) => t.textContent)).toEqual([
       "Chat",
       "Tareas",
+      "Ejecutar",
       "Ficheros",
       "Revisión",
       "Trazas",
@@ -48,12 +50,13 @@ describe("Pestanas", () => {
 
   it("«Artefactos» solo está si la sesión dejó alguno: una pestaña vacía es un control sin dato", () => {
     render(<Pestanas pestana="chat" alElegirPestana={vi.fn()} hayArtefactos />);
-    // Delante de Trazas, que sigue siendo la última: es la de otro destinatario. Las dos de
+    // Delante de Trazas, que sigue siendo la última: es la de otro destinatario. Las de
     // acción van juntas al principio y Artefactos entre Revisión y Trazas, con el resto de
     // las de registro.
     expect(screen.getAllByRole("tab").map((t) => t.textContent)).toEqual([
       "Chat",
       "Tareas",
+      "Ejecutar",
       "Ficheros",
       "Revisión",
       "Artefactos",
@@ -102,6 +105,7 @@ describe("Pestanas", () => {
     expect(screen.getAllByRole("tab").map((t) => t.textContent)).toEqual([
       "Chat",
       "Tareas",
+      "Ejecutar",
       "Ficheros",
       "Revisión",
       "Artefactos",

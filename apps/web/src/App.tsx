@@ -28,6 +28,7 @@ import { Ficheros } from "./componentes/Ficheros.js";
 import { CloudStudio } from "./componentes/CloudStudio.js";
 import { Artefactos, type ArtefactoEnLista } from "./componentes/Artefactos.js";
 import { TareasDelProyecto } from "./componentes/TareasDelProyecto.js";
+import { Ejecutar } from "./componentes/Ejecutar.js";
 import { aplicarApariencia, guardarApariencia, leerApariencia, type Apariencia } from "./apariencia.js";
 import { guardarAnchoBarra, guardarBarraContraida, leerAnchoBarra, leerBarraContraida } from "./preferencias.js";
 
@@ -410,6 +411,39 @@ export function App({
   const sincronizar = useCallback(
     (accion: "subir" | "bajar") => {
       void enviar({ clase: "sync", accion });
+    },
+    [enviar]
+  );
+
+  /**
+   * Las acciones de la pestaña «Ejecutar» (Task 10): volver a medir, lanzar, cancelar y
+   * elegir el aparato.
+   *
+   * **Las cuatro en `useCallback`, y no es cosmética**: la pestaña las llama desde un
+   * `useEffect` —montarse ES lo que la hace medir, porque la medida vive en el servidor y
+   * habla con `adb`— así que una identidad nueva por render volvería a disparar ese efecto en
+   * cada render: una petición por tecla, y cada una es un `adb` allí. Es el mismo motivo que
+   * ya llevan escrito `pedirRevision` y `pedirSync`.
+   *
+   * Se manda la INTENCIÓN y nada más, como el resto del cable: contra qué se mide y en qué
+   * aparato se lanza lo resuelve el servidor contra su última medida — el navegador no es
+   * fuente sobre la máquina.
+   */
+  const revisarLanzamiento = useCallback(() => {
+    void enviar({ clase: "revisarLanzamiento" });
+  }, [enviar]);
+
+  const lanzarApp = useCallback(() => {
+    void enviar({ clase: "lanzarApp" });
+  }, [enviar]);
+
+  const cancelarLanzamiento = useCallback(() => {
+    void enviar({ clase: "cancelarLanzamiento" });
+  }, [enviar]);
+
+  const elegirDispositivoDeEjecutar = useCallback(
+    (id: string) => {
+      void enviar({ clase: "dispositivo", id });
     },
     [enviar]
   );
@@ -1199,6 +1233,38 @@ export function App({
                   {...(mirar === undefined ? {} : { alMirar: alMirarTarea, alDejarDeMirar: alDejarDeMirarTarea })}
                   {...(mirandoTarea === undefined ? {} : { mirando: mirandoTarea })}
                   {...(estado.mirada === undefined ? {} : { mirada: estado.mirada })}
+                />
+              }
+              /*
+                Ejecutar la app de este proyecto en un aparato (Task 10): el último tramo del
+                viaje —el agente escribe, el verificador mira, y aquí se ARRANCA—, que hasta
+                ahora era el terminal, la skill y `adb` a mano.
+
+                Va como ranura, igual que las de al lado, y por el mismo motivo: el elemento
+                solo se monta al elegir su pestaña, y MONTARSE es lo que la hace medir — la
+                medida vive en el servidor y habla con `adb`, así que no se hereda de ninguna
+                foto, se PIDE. Abrir la pestaña ES entrar a mirarlo.
+              */
+              ejecutar={
+                <Ejecutar
+                  // El veredicto y el recorrido salen del STORE, no del cable: `estado.lanzable`
+                  // no lleva el discriminante del sobre (`clase: "lanzable"`, que es del mensaje
+                  // y no un dato), así que van directos y sin adaptador — el tipo de la pestaña
+                  // se declara sobre el estado justo para esto.
+                  veredicto={estado.lanzable}
+                  lanzamiento={estado.lanzamiento}
+                  // El inventario TAL CUAL lo manda el servidor, apagados incluidos: distinguir
+                  // «no hay ninguno enchufado» de «hay tres y ninguno arrancado» necesita la
+                  // lista entera, y la pestaña decide qué hacer con ella.
+                  dispositivos={estado.dispositivos?.dispositivos}
+                  // El dispositivo de la sesión: la MISMA fuente que la pastilla del compositor,
+                  // que es donde se elige y donde este botón va a caer.
+                  elegido={estado.alta?.dispositivoActivo}
+                  conectado={estado.conectado}
+                  alRevisar={revisarLanzamiento}
+                  alLanzar={lanzarApp}
+                  alCancelar={cancelarLanzamiento}
+                  alElegirDispositivo={elegirDispositivoDeEjecutar}
                 />
               }
               // La tarjeta del chat abre el artefacto: cambia de pestaña y lo elige.

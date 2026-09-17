@@ -535,17 +535,20 @@
   font-weight: 400;
 }
 
-/* ─── Las pestañas de entorno ─────────────────────────────────────────────────────────
-   Una por entorno registrado, dentro de la sección Entornos. Sustituyen a la lista plana
-   que había: con dos entornos, la lista de arriba no decía de quién eran las casillas de
-   abajo, y a los proyectos del entorno no activo no se llegaba de ninguna forma.
+/* ─── La tira de pestañas de una sección ──────────────────────────────────────────────
+   Dos usos, la misma forma: una pestaña por entorno registrado (Entornos) y una por
+   plataforma (Dispositivos). Las de entorno sustituyeron a la lista plana que había: con dos
+   entornos, la lista de arriba no decía de quién eran las casillas de abajo, y a los
+   proyectos del entorno no activo no se llegaba de ninguna forma. Las de plataforma
+   sustituyeron a una columna única donde los treinta y cinco simuladores de Xcode caían
+   entre los teléfonos de Android.
 
    El acento es el MISMO de `.seccion[data-actual]` y de la pestaña activa del centro —cian
    por alias, nunca un literal (`Barra.test.tsx` lo prohíbe)—, porque es el mismo gesto:
    «esto es lo que estás mirando». El borde inferior es lo que las hace leerse como pestañas
    y no como otra fila de botones redondos, que es lo que ya es la navegación de la
    izquierda: dos niveles distintos tienen que verse distintos. */
-.pestanasDeEntorno {
+.pestanas {
   display: flex;
   flex-wrap: wrap;
   gap: 4px;
@@ -553,7 +556,7 @@
   margin-bottom: 14px;
 }
 
-.pestanaDeEntorno {
+.pestana {
   display: flex;
   align-items: center;
   gap: 8px;
@@ -572,18 +575,33 @@
   cursor: pointer;
 }
 
-.pestanaDeEntorno:hover {
+.pestana:hover {
   color: var(--dsw-alias-label-primary);
 }
 
-.pestanaDeEntorno[data-actual] {
+.pestana[data-actual] {
   box-shadow: inset 0 -2px 0 var(--xonecode-cian);
   color: var(--xonecode-cian);
 }
 
+/* Lo que a esa pestaña le FALTA, para no tener que abrirla para saberlo.
+   Va en la píldora del par `state-business-*` —fondo `tertiary`, letra `primary`—, el MISMO
+   de la pastilla de «compartido» y del gasto del compositor: `bg-layer-2` no sirve de fondo
+   aquí, que en el tema claro es blanco sobre blanco y pegado a la pestaña no se vería, y una
+   píldora es lo que ya significa «un número al lado de un nombre» en esta consola. Se dibuja
+   SOLO cuando hay algo que contar: un cero no se pinta. */
+.cuenta {
+  padding: 0 6px;
+  border-radius: 999px;
+  background: var(--dsw-alias-state-business-tertiary);
+  color: var(--dsw-alias-state-business-primary);
+  font-size: 11px;
+  font-weight: 600;
+}
+
 /* El panel de la pestaña. Sin borde ni fondo: el filo de la pestaña ya dice dónde empieza,
    y una caja más dentro de una ventana que ya es una caja solo estrecha el contenido. */
-.panelDeEntorno {
+.panelDePestana {
   display: flex;
   flex-direction: column;
   gap: 6px;

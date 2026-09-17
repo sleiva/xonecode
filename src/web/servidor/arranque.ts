@@ -30,7 +30,7 @@
 
 import { existsSync, readFileSync } from "node:fs";
 import { lineaDeVersion, type VersionEnMarcha } from "../../core/version.js";
-import { dirname, join } from "node:path";
+import { basename, dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { randomUUID } from "node:crypto";
 import type { IncomingMessage, ServerResponse } from "node:http";
@@ -38,7 +38,29 @@ import { homedir } from "node:os";
 import type { Acto } from "../../core/actos.js";
 import { escribirAgente, leerAgente, type Agente } from "../../core/agentes.js";
 import { borrarAgente, cargarAgentes, guardarAgente } from "../../agent/agentesEnDisco.js";
-import { detectarDispositivos } from "../../agent/dispositivosEnMaquina.js";
+import { detectarDispositivos, frameworkEnDispositivo } from "../../agent/dispositivosEnMaquina.js";
+/**
+ * El veredicto de «¿se puede lanzar?» y el lanzamiento entero.
+ *
+ * `lanzarEnDispositivo` se pasa al cable como FUNCIÓN y no como dependencias: construye las
+ * suyas por dentro —el `https`, el ZIP en memoria, `frameworkEnDispositivo`, `process.kill(-pid)`
+ * y el WebSocket del hotswap—, así que repetir ese montaje en el cableado sería un segundo sitio
+ * donde puede dejar de estar montado, que es el patrón de fallo de esta casa. Lo único que este
+ * lado aporta es `alFase`, que es cómo se cuenta el recorrido.
+ */
+import {
+  lanzarEnDispositivo,
+  type DependenciasDeLanzamiento,
+  type FaseDeLanzamiento,
+  type LanzamientoEnCurso,
+  type PeticionDeLanzamiento,
+} from "../../agent/lanzamientoEnMaquina.js";
+import {
+  motivoDeBloqueo,
+  puedeLanzarse,
+  type FrameworkMedido,
+  type Veredicto,
+} from "../../core/puedeLanzarse.js";
 
 import type { Dispositivo, InformeDeDispositivos } from "../../core/dispositivos.js";
 import { PLATAFORMAS_DE_DISPOSITIVO, type AjustesDeDispositivos } from "../../core/settings.js";
@@ -90,9 +112,13 @@ import { abrirEnSistema } from "../../agent/cloudstudioMcp.js";
 import { nombreDePersona } from "../../agent/persona.js";
 import { cambiosDeSesion, fotoDeApertura, olvidarSesion, parcheDeSesion } from "../../agent/sesionGit.js";
 import { commitDeTurno, cambiosPendientes, trabajoSinCommitear } from "../../agent/gitSync.js";
-import { marcarTareaDeSesion, sembrarConsumosPendientes } from "./sesiones.js";
+import { marcarTareaDeSesion, sembrarConsumosPendientes, type DispositivoElegido } from "./sesiones.js";
 import { RUTA_ARTEFACTOS, esRutaDeArtefacto } from "../../core/artefactos.js";
-import { arbolDeProyecto, leerFicheroDeProyecto } from "../../agent/arbolDeProyecto.js";
+import {
+  arbolDeProyecto,
+  leerFicheroDeProyecto,
+  motivoDeRutaInaceptable,
+} from "../../agent/arbolDeProyecto.js";
 import {
   leerArtefactoCrudo,
   leerArtefactoDeSesion,
@@ -130,6 +156,7 @@ import {
   crearVestibulo,
   escribirProyectoEnDisco,
   esProyectoEnDisco,
+  type ConsolaDeProyecto,
   type OpcionDeEntorno,
   type PasoDelVestibulo,
   type OpcionesDelVestibulo,
@@ -144,6 +171,7 @@ import type {
   Sumidero,
   InformeDeDispositivosDelCable,
   SesionDelCable,
+  EstadoDelLanzamiento,
 } from "./transporte.js";
 // Valor y no tipo: la traducción de una `Tarea` a lo que viaja vive JUNTO al tipo que
 // produce y no aquí. Estuvo en este cierre, y ahí se cayó `veredicto` sin que nada se
@@ -348,6 +376,39 @@ export interface OpcionesDeMontaje {
    * = esta ejecución no verifica nada y el botón no se pinta.
    */
   verificarDispositivo?: (dispositivo: Dispositivo) => Promise<{ ok: boolean; detalle: string }>;
+  /**
+   * Qué se midió del framework de XOne en un dispositivo (`agent/dispositivosEnMaquina.ts`).
+   * Lanza adb, así que entra por opción.
+   *
+   * **Ausente = esta ejecución no lo mide, y el veredicto lo DICE**: la causa es
+   * `framework-no-medido` y su frase es «todavía no se ha mirado…», que es una frase y no un
+   * botón. Esa es la diferencia con no tener framework: las dos dan «no listo», pero una se
+   * arregla instalando y la otra mirando.
+   */
+  frameworkEnDispositivo?: (dispositivo: Dispositivo) => Promise<FrameworkMedido>;
+  /**
+   * ¿Existe esa ruta dentro del proyecto? Toca el disco, así que entra por opción.
+   *
+   * **Ausente = esta ejecución no lo comprueba, y entonces la comprobación de la conexión
+   * declarada se OMITE** — no se contesta «no está», que bloquearía un proyecto que funciona.
+   * Lo que no se puede comprobar no se afirma en ningún sentido, y el error caro aquí es el
+   * falso bloqueo: la frase que lo acompaña manda a buscar un fichero que sí está.
+   */
+  existeEnProyecto?: (raiz: string, rutaRelativa: string) => boolean;
+  /**
+   * Lanza la app en el dispositivo (`agent/lanzamientoEnMaquina.ts`). Ausente = esta ejecución
+   * no lanza nada, y el botón lo dice en vez de quedarse muerto.
+   *
+   * **Se pasa la función ENTERA y no sus dependencias.** `lanzarEnDispositivo` construye las
+   * suyas por dentro —el `https` de la subida, el ZIP en memoria, `frameworkEnDispositivo`, el
+   * `process.kill(-pid)` del grupo y el WebSocket del hotswap—, así que montarlas otra vez aquí
+   * sería un segundo sitio donde esa composición puede dejar de estar montada, con todo en
+   * verde. Lo único que este lado aporta es `alFase`: el recorrido, que es lo que viaja.
+   */
+  lanzarEnDispositivo?: (
+    peticion: PeticionDeLanzamiento,
+    deps: Pick<DependenciasDeLanzamiento, "alFase">
+  ) => LanzamientoEnCurso;
   /**
    * Los modelos que ofrece un motor EXTERNO (`agent/modelosDeMotor.ts`). Ausente = esta
    * ejecución no los sabe, y el desplegable lo dice en vez de quedarse vacío.
@@ -2116,6 +2177,311 @@ export function montarRutas(
   };
 
   /**
+   * El lanzamiento en curso, si lo hay.
+   *
+   * **Uno a la vez, y para toda la máquina**, como `trabajo` con las recetas y por un motivo
+   * más fuerte: dos lanzamientos al mismo aparato se pisarían en el MISMO directorio del
+   * dispositivo, y el ZIP de la subida no limpia el destino —lo que quede de uno se lanzaría
+   * como parte del otro—. Un segundo «Ejecutar» mientras corre no lanza nada: se reenvía el
+   * estado, que es lo que la otra pestaña necesita para pintar el recorrido que ya va.
+   */
+  let lanzamiento:
+    | {
+        /** Ausente cuando no hay proyecto que nombrar. Ver `lanzamiento.proyecto` en el cable. */
+        proyecto?: string;
+        dispositivo?: DispositivoElegido;
+        fase: FaseDeLanzamiento;
+        lineas: string[];
+        cancelar: () => void;
+        t0: number;
+      }
+    | undefined;
+  /** Cuándo se emitió el último progreso del lanzamiento. Ver `alFase`: no es por línea. */
+  let ultimoLanzamiento = 0;
+
+  /**
+   * Emite el recorrido tal y como va. `ms` es el reloj del CABLE —desde que se dijo
+   * `corriendo`— y no el `ResultadoDeLanzamiento.ms` de la máquina, que mide lo mismo pero
+   * desde dentro: lo que la pestaña enseña es cuánto lleva el recorrido que ELLA está viendo, y
+   * ese empezó en el primer mensaje. Los dos números coinciden salvo por el viaje, así que
+   * enseñar uno mientras el otro avanza sería el desajuste más tonto posible.
+   */
+  const emitirLanzamiento = (estado: EstadoDelLanzamiento, motivo?: string): void => {
+    if (lanzamiento === undefined) return;
+    emitir({
+      clase: "lanzamiento",
+      ...(lanzamiento.proyecto === undefined ? {} : { proyecto: lanzamiento.proyecto }),
+      ...(lanzamiento.dispositivo === undefined ? {} : { dispositivo: lanzamiento.dispositivo }),
+      fase: lanzamiento.fase,
+      estado,
+      // La COLA del recorrido y no todo: subir un ZIP suelta decenas de líneas de `adb`, y el
+      // cable no es un sitio donde guardarlas. Lo que hace falta es saber que avanza.
+      lineas: lanzamiento.lineas.slice(-LINEAS_DE_LOG),
+      ms: Date.now() - lanzamiento.t0,
+      ...(motivo === undefined ? {} : { motivo }),
+    });
+    ultimoLanzamiento = Date.now();
+  };
+
+  /**
+   * El framework de XOne en ESE dispositivo, o `undefined` = «no se sabe».
+   *
+   * **Se mide en cada veredicto y no se cachea**, y es una decisión: cachearlo ahorraría un
+   * adb por consulta, pero diría «listo» sobre un framework que alguien acaba de desinstalar —
+   * y el síntoma sería el peor de todos, un lanzamiento que se acepta y una app que no
+   * arranca. Un medidor que reviente es un bug suyo (el real no lanza: contesta
+   * `{instalado: false, detalle}` para lo que no sabe), así que se cuenta y el veredicto sale
+   * como «no se sabe», que es la verdad.
+   */
+  const medirFramework = async (dispositivo: Dispositivo): Promise<FrameworkMedido | undefined> => {
+    const medir = opciones.frameworkEnDispositivo;
+    if (medir === undefined) return undefined;
+    try {
+      return await medir(dispositivo);
+    } catch (error) {
+      informar(`no se pudo mirar si hay framework de XOne en «${dispositivo.nombre}» (${codigoDe(error)})`);
+      return undefined;
+    }
+  };
+
+  /**
+   * El texto de un descriptor del proyecto (`app.xml`, `app.ini`), o el motivo por el que no
+   * se pudo leer.
+   *
+   * Reusa `leerFichero` en vez de abrir un segundo lector, y no es comodidad: ese lector ya
+   * lleva la barrera de rutas y la regla de las VISTAS APLANADAS (`X.xml` con un `X.xne` al
+   * lado), así que un lector propio sería un segundo sitio donde esa regla puede dejar de
+   * estar. El `error` que devuelve se dice tal cual: es una línea escrita por él.
+   */
+  const leerDescriptor = async (raiz: string, ruta: string): Promise<{ texto?: string; motivo?: string }> => {
+    const leer = opciones.leerFichero;
+    if (leer === undefined) return { motivo: "esta ejecución no puede leer ficheros del proyecto" };
+    try {
+      const fichero = await leer(raiz, ruta);
+      if (fichero.texto !== undefined) return { texto: fichero.texto };
+      return { motivo: fichero.error ?? "no es un fichero de texto" };
+    } catch (error) {
+      return { motivo: motivoLegible(error) };
+    }
+  };
+
+  /**
+   * Mide el proyecto abierto y compone el veredicto. `undefined` = no hay proyecto abierto.
+   *
+   * Es la composición que junta las cuatro fuentes: la ELECCIÓN de la sesión cruzada con la
+   * última medida (`dispositivoDeLaSesion`), el framework medido ahora, y los descriptores del
+   * proyecto leídos ahora. Lo caro —adb, el disco— está detrás de opciones, así que un test del
+   * cable la ejercita entera con dobles.
+   */
+  const medirLanzamiento = async (): Promise<
+    | {
+        abierto: ConsolaDeProyecto;
+        proyecto: string;
+        dispositivo: Dispositivo | undefined;
+        app?: string;
+        veredicto: Veredicto;
+      }
+    | undefined
+  > => {
+    const abierto = vestibulo.proyectoAbierto();
+    if (abierto === undefined) return undefined;
+    const raiz = abierto.raiz;
+    const { dispositivo, elegido } = dispositivoDeLaSesion(abierto.dispositivo, informeDeDispositivos);
+    const framework = dispositivo === undefined ? undefined : await medirFramework(dispositivo);
+
+    const [xml, ini] = await Promise.all([leerDescriptor(raiz, "app.xml"), leerDescriptor(raiz, "app.ini")]);
+    // ¿El fichero NO está, o está y no se deja leer? No es la misma cosa ni se arregla en el
+    // mismo sitio (`sin-app-xml` manda a mirar la carpeta, `app-xml-ilegible` a mirar el
+    // fichero), así que la existencia se pregunta aparte. Sin con qué comprobarlo no se
+    // contesta «no está»: se cuenta como ilegible, con el motivo que dio el lector.
+    const falta = opciones.existeEnProyecto?.(raiz, "app.xml") === false;
+
+    const veredicto = puedeLanzarse({
+      dispositivo,
+      ...(elegido === undefined ? {} : { elegido }),
+      framework,
+      xml: xml.texto,
+      ...(xml.texto !== undefined || falta ? {} : { motivoDeLectura: xml.motivo ?? "no se pudo leer" }),
+      ini: ini.texto,
+      // Un `existe` sin con qué comprobarlo CONTESTA QUE SÍ, que es «no se bloquea por esto»:
+      // lo que no se puede comprobar no se afirma, y el falso bloqueo manda a buscar un
+      // fichero que sí está.
+      existe: (rutaRelativa) =>
+        opciones.existeEnProyecto === undefined || opciones.existeEnProyecto(raiz, rutaRelativa),
+    });
+
+    return {
+      abierto,
+      // El nombre del proyecto, que es un SEGMENTO de su carpeta —el mismo que enseña la
+      // barra— y no una ruta: `sinRutas` no deja cruzar una ruta de la máquina por el cable.
+      proyecto: basename(raiz),
+      dispositivo,
+      ...(veredicto.app === undefined ? {} : { app: veredicto.app }),
+      veredicto,
+    };
+  };
+
+  /**
+   * Contesta el veredicto de «¿se puede lanzar?», pedido desde la pestaña.
+   *
+   * **Sin proyecto abierto no se contesta nada**, y es deliberado: el mensaje lleva `proyecto`,
+   * y rellenarlo con una cadena vacía —o con el nombre de un proyecto que ya no está— sería
+   * afirmar un proyecto que no existe. Quien pinta la pestaña ya sabe que no hay ninguno por
+   * `alta.proyectoAbierto`, y esa es la pantalla que le toca («abre un proyecto»).
+   */
+  const atenderRevisarLanzamiento = async (): Promise<void> => {
+    const medida = await medirLanzamiento();
+    if (medida === undefined) return;
+    const foto = medida.dispositivo === undefined ? undefined : fotoDeDispositivo(medida.dispositivo);
+    emitir({
+      clase: "lanzable",
+      proyecto: medida.proyecto,
+      listo: medida.veredicto.listo,
+      // Las FRASES ya escritas, no las causas: quien compone el texto es
+      // `core/puedeLanzarse.ts#motivoDeBloqueo`, que es donde vive la regla y donde se
+      // arregla. Aquí solo se recorren.
+      faltas: medida.veredicto.causas.map(motivoDeBloqueo),
+      ...(medida.app === undefined ? {} : { app: medida.app }),
+      ...(foto === undefined ? {} : { dispositivo: foto }),
+      // La fecha de la FOTO del equipo, no la de ahora: la medida del framework y la elección
+      // de la sesión son de este instante, pero el `estado` del dispositivo —lo que puede
+      // quedarse viejo— sale de esa foto, y es la que se enseña. Un veredicto sin fecha es una
+      // promesa sin fecha.
+      medido: informeDeDispositivos?.medido ?? new Date().toISOString(),
+    });
+  };
+
+  /**
+   * Lanza la app del proyecto abierto en el dispositivo de la sesión.
+   *
+   * **Revalida antes de empezar**, y no es prudencia: entre el veredicto y este clic puede
+   * pasar cualquier cosa —desenchufar el teléfono, mover el fichero de la conexión, cerrar el
+   * proyecto—, así que lo que se lanza es lo que se acaba de medir, no lo que se midió cuando
+   * se pintó el botón. Una revalidación que no pasa se contesta con un `lanzamiento` en `fallo`
+   * y NO se llama al lanzador.
+   */
+  const atenderLanzarApp = async (): Promise<void> => {
+    // Ya hay uno: se reenvía su estado en vez de lanzar otro, como `atenderReceta`.
+    if (lanzamiento !== undefined) {
+      emitirLanzamiento("corriendo");
+      return;
+    }
+    const medida = await medirLanzamiento();
+    if (medida === undefined) {
+      informar("no hay ningún proyecto abierto que lanzar");
+      return;
+    }
+    const foto = medida.dispositivo === undefined ? undefined : fotoDeDispositivo(medida.dispositivo);
+    const fallar = (motivo: string): void => {
+      emitir({
+        clase: "lanzamiento",
+        proyecto: medida.proyecto,
+        ...(foto === undefined ? {} : { dispositivo: foto }),
+        fase: "comprobando",
+        estado: "fallo",
+        lineas: [],
+        ms: 0,
+        motivo,
+      });
+    };
+    const lanzar = opciones.lanzarEnDispositivo;
+    const primeraFalta = medida.veredicto.causas[0];
+    if (primeraFalta !== undefined) {
+      // La PRIMERA, que es la que hay que arreglar antes de que nada más importe: el orden de
+      // `puedeLanzarse` es el de la lectura, no el alfabético.
+      fallar(motivoDeBloqueo(primeraFalta));
+      return;
+    }
+    if (medida.dispositivo === undefined) {
+      // Inalcanzable con el veredicto vacío —sin dispositivo siempre hay causa—, pero el tipo
+      // no lo sabe y lanzar sin dispositivo no se puede ni componer.
+      fallar(SIN_NOMBRE_DE_APP);
+      return;
+    }
+    if (medida.app === undefined) {
+      fallar(SIN_NOMBRE_DE_APP);
+      return;
+    }
+    if (lanzar === undefined) {
+      fallar(SIN_CAMINO_DE_LANZAMIENTO);
+      return;
+    }
+
+    /**
+     * El recorrido, tal y como lo cuenta la máquina.
+     *
+     * **La fase que CAMBIA siempre se emite**, y es una decisión: son SEIS en todo el recorrido
+     * —no un flujo—, y cada una es lo que hace que la pestaña diga en cuál va. Lo que se acota a
+     * `MS_ENTRE_PROGRESOS` son las líneas DENTRO de una misma fase, que es donde está el flujo:
+     * subir un ZIP suelta decenas de líneas de `adb` y cada emisión manda la cola entera.
+     */
+    const alFase = (fase: FaseDeLanzamiento, linea: string): void => {
+      if (lanzamiento === undefined) return;
+      lanzamiento.lineas.push(linea);
+      const cambioDeFase = fase !== lanzamiento.fase;
+      lanzamiento.fase = fase;
+      if (cambioDeFase || Date.now() - ultimoLanzamiento >= MS_ENTRE_PROGRESOS) {
+        emitirLanzamiento("corriendo");
+      }
+    };
+
+    /**
+     * El estado se compone ANTES de llamar, porque `lanzarEnDispositivo` puede llamar a
+     * `alFase` de forma SÍNCRONA —su cuerpo corre hasta el primer `await`— y el primer
+     * `corriendo` tiene que encontrar el trabajo ya puesto.
+     */
+    const trabajo = {
+      proyecto: medida.proyecto,
+      ...(foto === undefined ? {} : { dispositivo: foto }),
+      fase: "comprobando" as FaseDeLanzamiento,
+      lineas: [] as string[],
+      cancelar: () => {},
+      t0: Date.now(),
+    };
+    lanzamiento = trabajo;
+    // El primer mensaje dice `corriendo`, y su fase es `comprobando`: el recorrido EMPIEZA
+    // ahí, así que la primera `alFase("comprobando", …)` no cambia nada y no vuelve a emitir.
+    // Los seis tramos se ven igual —el primero ya viene en este mensaje— y el cliente no
+    // recibe un mensaje de más para decir lo que ya decía.
+    emitirLanzamiento("corriendo");
+    try {
+      // **Dentro del `try` y no fuera**: que el lanzador reviente al CONSTRUIR el trabajo —un
+      // doble mal hecho, o un bug suyo en el camino síncrono— dejaría el recorrido en
+      // `corriendo` para siempre y el botón muerto, que es justo lo que este `try` existe para
+      // evitar. Su contrato es no lanzar nunca; esto es por si deja de cumplirlo.
+      const enCurso: LanzamientoEnCurso = lanzar(
+        { dispositivo: medida.dispositivo, raiz: medida.abierto.raiz, app: medida.app },
+        { alFase }
+      );
+      trabajo.cancelar = enCurso.cancelar;
+      const resultado = await enCurso.terminado;
+      // El último SIEMPRE se emite, aunque no haya pasado el plazo: es el que dice cómo acabó.
+      // Y la fase es la que dice el RESULTADO —no la última que se oyó— por si el trabajo
+      // acabó en una que no llegó a contarse.
+      ultimoLanzamiento = 0;
+      trabajo.fase = resultado.fase;
+      emitirLanzamiento(resultado.estado, resultado.motivo);
+    } catch (error) {
+      // El contrato del lanzador es no lanzar nunca, así que esto es un bug suyo; aun así hay
+      // que CERRAR el recorrido, o la pestaña se queda en `corriendo` para siempre con el botón
+      // muerto y sin una palabra.
+      ultimoLanzamiento = 0;
+      emitirLanzamiento("fallo", motivoLegible(error));
+    } finally {
+      lanzamiento = undefined;
+    }
+  };
+
+  /** Parar el lanzamiento en curso. Un lanzamiento a la vez, así que no lleva id que elegir. */
+  const atenderCancelarLanzamiento = (): void => {
+    if (lanzamiento === undefined) {
+      informar("no hay ningún lanzamiento en curso que cancelar");
+      return;
+    }
+    lanzamiento.cancelar();
+  };
+
+  /**
    * Solo el CÓDIGO de un fallo de sistema de ficheros (`EACCES`, `EMFILE`…), nunca su
    * mensaje: el de Node lleva la ruta absoluta del disco, y aquí `informar` acaba en el
    * transcript. Sin código, el nombre del error; sin error, la palabra.
@@ -3026,6 +3392,29 @@ export function montarRutas(
       respuesta.end();
       return;
     }
+    if (typeof mensaje === "object" && mensaje !== null && mensaje.clase === "revisarLanzamiento") {
+      // Suelto, como `conexion`: medir el framework es un adb, y la respuesta va por el SSE
+      // en forma de `lanzable`.
+      void atenderRevisarLanzamiento().catch(contar);
+      respuesta.writeHead(204);
+      respuesta.end();
+      return;
+    }
+    if (typeof mensaje === "object" && mensaje !== null && mensaje.clase === "lanzarApp") {
+      // Suelto: revalida (otro adb), y el lanzamiento entero tarda minutos. La respuesta va
+      // por el SSE, en forma de `lanzamiento`, y no se espera aquí ni de lejos.
+      void atenderLanzarApp().catch(contar);
+      respuesta.writeHead(204);
+      respuesta.end();
+      return;
+    }
+    if (typeof mensaje === "object" && mensaje !== null && mensaje.clase === "cancelarLanzamiento") {
+      // Este SÍ es síncrono: `cancelar` solo mata el grupo del proceso en curso.
+      atenderCancelarLanzamiento();
+      respuesta.writeHead(204);
+      respuesta.end();
+      return;
+    }
     if (typeof mensaje === "object" && mensaje !== null && mensaje.clase === "dispositivos") {
       // Suelto, como el catálogo: lanza procesos que tardan segundos y la respuesta va por
       // el SSE. Es la ÚNICA forma de volver a medir: no hay sondeo.
@@ -3232,6 +3621,67 @@ export function contextoDelProyecto(raiz: string): { rama?: string; memoria?: st
     ...(memoria === undefined ? {} : { memoria }),
   };
 }
+
+/**
+ * Cruza la elección GUARDADA de la sesión con la última MEDIDA del equipo.
+ *
+ * **Esto es la costura entera de `dispositivo-desconocido`, y sin ella esa causa no tiene
+ * emisor.** Las dos situaciones —«no has elegido ninguno» y «elegiste uno que ya no está»—
+ * llegan a `puedeLanzarse` con `dispositivo: undefined`, porque la diferencia no cabe en el
+ * dato del dispositivo: no hay ninguno. Lo único que las separa es el `elegido`, y quien lo
+ * sabe es la SESIÓN, que guarda la foto (`ConsolaDeProyecto.dispositivo`) mientras el informe
+ * la resuelve.
+ *
+ * **Se resuelve por lo que NO se encontró**: con un id guardado que no está en la medida, la
+ * causa es `dispositivo-desconocido`; sin id guardado no hay nada que buscar y ése es
+ * `sin-dispositivo-elegido`. Y cuando el id SÍ resuelve, `elegido` no se pone — manda
+ * `dispositivo`, que es el dato bueno.
+ *
+ * La rama `dispositivo` del cable (`POST /accion`) ya tolera en silencio un id que no esté en
+ * la medida —es una foto vieja del cliente, no un error que contar—; aquí ese mismo caso se
+ * CUENTA, porque es justo lo que decide la frase que se le enseña a quien va a pulsar.
+ *
+ * Extraída y exportada por la razón de siempre: es una regla de producción, y compuesta dentro
+ * de un cierre que los tests doblan no estaría probada — estaría escrita.
+ */
+export function dispositivoDeLaSesion(
+  elegido: DispositivoElegido | undefined,
+  informe: InformeDeDispositivosDelCable | undefined
+): { dispositivo: Dispositivo | undefined; elegido?: string } {
+  if (elegido === undefined) return { dispositivo: undefined };
+  const fila = informe?.dispositivos.find((d) => d.id === elegido.id);
+  if (fila === undefined) return { dispositivo: undefined, elegido: elegido.id };
+  return { dispositivo: fila };
+}
+
+/**
+ * La foto de un dispositivo tal y como viaja: las CUATRO cosas que la pestaña pinta, y nada
+ * más. `estado` y `detalle` se quedan fuera a propósito — son de la medida, y la medida ya
+ * viaja entera por el mensaje `dispositivos`; repetirla en cada veredicto sería una segunda
+ * copia del mismo dato, que es la que se queda vieja.
+ */
+function fotoDeDispositivo(dispositivo: Dispositivo): DispositivoElegido {
+  return {
+    id: dispositivo.id,
+    nombre: dispositivo.nombre,
+    plataforma: dispositivo.plataforma,
+    clase: dispositivo.clase,
+  };
+}
+
+/**
+ * Por qué no se lanza aunque el veredicto diga que sí, en los dos casos que el veredicto no
+ * cubre a propósito.
+ *
+ * No son causas de `CausaDeBloqueo`: el catálogo de `core/puedeLanzarse.ts` dice qué le falta
+ * al DISPOSITIVO o al PROYECTO, y estos dos dicen qué le falta a ESTA ejecución para poder
+ * hacer el trabajo. Meterlos en la unión del veredicto mezclaría «tu proyecto no está listo»
+ * con «yo no puedo», que se arreglan en sitios distintos.
+ */
+const SIN_NOMBRE_DE_APP =
+  "No se puede lanzar sin saber cómo se llama la app: el nombre sale del `name=` de app.ini, y ese fichero no está o no lo dice. Ábrelo en XOne Studio y vuelve a guardarlo.";
+const SIN_CAMINO_DE_LANZAMIENTO =
+  "Esta ejecución de xonecode no puede lanzar apps —no tiene montado el lanzamiento—, así que el veredicto se puede mirar pero no ejecutar.";
 
 /**
  * Lo que la pestaña CloudStudio enseña: de qué rama es este proyecto y cuántos ficheros
@@ -3842,6 +4292,32 @@ export async function arrancarConsolaWeb(opciones: OpcionesDeArranque): Promise<
     guardarAjustesDeDispositivos: (ajustes) => void guardarDispositivos(undefined, ajustes),
     instalarHerramienta: instalarHerramientaDeDispositivos,
     verificarDispositivo,
+    /**
+     * Las cuatro de «¿se puede lanzar y lánzalo?», compuestas con las funciones REALES.
+     *
+     * Es la trampa que este repo ha pagado nueve veces —`backendDeAgente`, el corredor sin
+     * cablear, el `escribio` a fuego, la capa de proyecto del juez, `/adjuntos/`, `filaDeTarea`,
+     * el prop de las pestañas por entorno, `opcionesDeSubagenteExterno` y
+     * `ConsolaDeProyecto.consumo`—: una regla de producción que vive dentro de un cierre que
+     * los tests doblan **no está probada, está escrita**. Aquí las cuatro van con las de
+     * verdad y junto a `detectarDispositivos`, que es donde se lee qué es real y qué es un
+     * doble en esta ejecución.
+     */
+    frameworkEnDispositivo: (dispositivo) => frameworkEnDispositivo(dispositivo),
+    // La criba de balde primero (relativa, sin `.`/`..`/segmentos vacíos) y el disco después.
+    // Con `join` sobre una ruta ya cribada: sin la criba, un `../../.env` de `app.xml`
+    // preguntaría por un fichero de fuera del proyecto.
+    existeEnProyecto: (raiz, rutaRelativa) =>
+      motivoDeRutaInaceptable(rutaRelativa) !== undefined || existsSync(join(raiz, rutaRelativa)),
+    /**
+     * La de verdad, y **sin construir sus dependencias aquí**: `lanzarEnDispositivo` trae su
+     * propio `DependenciasDeLanzamiento` por omisión —los `spawn` reales, el empaquetado real,
+     * el `hotswap` real— y lo único que se le pasa es `alFase`, que es el gancho por el que el
+     * recorrido llega al cable. Montarlo entero desde aquí sería (a) una segunda lista de
+     * dependencias que se queda vieja en cuanto el módulo añada una, y (b) el modo de fallo de
+     * arriba: una composición de producción que solo existe en el cableado nadie la prueba.
+     */
+    lanzarEnDispositivo,
     catalogoDeModelos: async (proveedor) => {
       const modelos = await new CatalogoModelos(undefined, undefined, proveedoresPersonalizados).listar(proveedor);
       return modelos.map((m) => ({ id: m.id, ...(m.nombre === undefined ? {} : { nombre: m.nombre }) }));

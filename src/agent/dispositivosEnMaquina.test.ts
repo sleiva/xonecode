@@ -4,6 +4,7 @@ import { join } from "node:path";
 import {
   describirFallo,
   detectarDispositivos,
+  frameworkEnDispositivo,
   instalarHerramientaDeDispositivos,
   verificarDispositivo,
   TOPES_MS,
@@ -124,7 +125,7 @@ describe("detectarDispositivos", () => {
       existe: (ruta) => ruta === adb,
       ejecutar,
     });
-    expect(informe.herramientas.find((h) => h.nombre === "adb")).toEqual({ nombre: "adb", estado: "ok", ruta: adb });
+    expect(informe.herramientas.find((h) => h.nombre === "adb")).toEqual({ nombre: "adb", plataforma: "android", estado: "ok", ruta: adb });
     expect(llamadas[0]).toEqual({ binario: adb, args: ["devices", "-l"], timeout: TOPES_MS.adb });
     expect(informe.dispositivos).toEqual([{ id: "ABC", nombre: "Pixel 8", plataforma: "android", clase: "fisico", estado: "conectado" }]);
   });
@@ -218,6 +219,7 @@ describe("detectarDispositivos", () => {
     });
     expect(informe.herramientas.find((h) => h.nombre === "adb")).toEqual({
       nombre: "adb",
+      plataforma: "android",
       estado: "fallo",
       ruta: "/sdk/platform-tools/adb",
       detalle: "no respondió en 15 s",
@@ -230,7 +232,7 @@ describe("detectarDispositivos", () => {
     const adb = join("/home/yo", "Android", "Sdk", "platform-tools", "adb");
     const { ejecutar } = ejecutorDe({ [adb]: salida("List of devices attached\n") });
     const informe = await detectarDispositivos({ plataforma: "linux", entorno: { PATH: "/usr/bin" }, home: "/home/yo", existe: (r) => r === adb, ejecutar });
-    expect(informe.herramientas.find((h) => h.nombre === "adb")).toEqual({ nombre: "adb", estado: "ok", ruta: adb });
+    expect(informe.herramientas.find((h) => h.nombre === "adb")).toEqual({ nombre: "adb", plataforma: "android", estado: "ok", ruta: adb });
   });
 });
 
@@ -589,5 +591,105 @@ describe("verificarDispositivo", () => {
   it("nunca lanza: un fallo raro también vuelve como respuesta", async () => {
     const { ejecutar } = ejecutorDe({ adb: new Error("boom") });
     await expect(verificarDispositivo(android, { ...conAdb, ejecutar })).resolves.toMatchObject({ ok: false });
+  });
+});
+
+describe("frameworkEnDispositivo", () => {
+  const android: Dispositivo = {
+    id: "R58M12ABCDE",
+    nombre: "Pixel 8",
+    plataforma: "android",
+    clase: "fisico",
+    estado: "conectado",
+  };
+  const iphone: Dispositivo = {
+    id: "EF39AE73",
+    nombre: "iPhone 17 Pro · iOS 26.0",
+    plataforma: "ios",
+    clase: "simulador",
+    estado: "apagado",
+  };
+
+  const conAdb = { plataforma: "darwin", entorno: { PATH: "/opt/homebrew/bin" }, home: "/Users/yo", existe: (r: string) => r === "/opt/homebrew/bin/adb" };
+
+  it("se pregunta por el PAQUETE, en un solo viaje, y con el tope de adb", async () => {
+    // El servidor vive dentro del proceso de la app: antes de arrancarla no hay a quién
+    // preguntar por el protocolo, así que lo que decide si se puede empezar es el paquete.
+    const { ejecutar, llamadas } = ejecutorDe({ adb: salida("package:com.xone.android.framework\n") });
+    await frameworkEnDispositivo(android, { ...conAdb, ejecutar });
+    expect(llamadas).toEqual([
+      {
+        binario: "/opt/homebrew/bin/adb",
+        args: ["-s", "R58M12ABCDE", "shell", "pm", "list", "packages", "com.xone.android"],
+        timeout: TOPES_MS.adb,
+      },
+    ]);
+  });
+
+  it("con los dos flavors instalados gana el standalone, que es el medido", async () => {
+    const { ejecutar } = ejecutorDe({
+      adb: salida("package:com.xone.android.framework\npackage:com.xone.android.developer.framework\n"),
+    });
+    expect(await frameworkEnDispositivo(android, { ...conAdb, ejecutar })).toEqual({
+      instalado: true,
+      paquete: "com.xone.android.framework",
+      detalle: "framework instalado: com.xone.android.framework",
+    });
+  });
+
+  it("con solo el de Play Store, ese: el paquete viaja porque el reinicio depende de él", async () => {
+    const { ejecutar } = ejecutorDe({ adb: salida("package:com.xone.android.developer.framework\n") });
+    const r = await frameworkEnDispositivo(android, { ...conAdb, ejecutar });
+    expect(r.paquete).toBe("com.xone.android.developer.framework");
+    expect(r.instalado).toBe(true);
+  });
+
+  it("un paquete que solo se PARECE no cuenta: el filtro de `pm` es por subcadena", async () => {
+    // `pm list packages com.xone.android` filtra por subcadena, así que la lista puede traer
+    // vecinos. Dar por instalado lo que solo se parece a lo que se busca es afirmar de más.
+    const { ejecutar } = ejecutorDe({ adb: salida("package:com.xone.android.frameworkdemo\n") });
+    const r = await frameworkEnDispositivo(android, { ...conAdb, ejecutar });
+    expect(r).toEqual({ instalado: false, detalle: "no aparece ni el standalone ni el de Play Store: no está instalado" });
+    expect(r.paquete).toBeUndefined();
+  });
+
+  it("sin el framework, `instalado: false` con UNA línea de detalle", async () => {
+    const { ejecutar } = ejecutorDe({ adb: salida("") });
+    const r = await frameworkEnDispositivo(android, { ...conAdb, ejecutar });
+    expect(r).toEqual({ instalado: false, detalle: "no aparece ni el standalone ni el de Play Store: no está instalado" });
+    expect(r.detalle).not.toContain("\n");
+  });
+
+  it("un fallo de adb se cuenta con su motivo, UNA línea, y sin paquete", async () => {
+    const error = Object.assign(new Error("Command failed"), { stderr: "error: device unauthorized.\n" });
+    const { ejecutar } = ejecutorDe({ adb: error });
+    const r = await frameworkEnDispositivo(android, { ...conAdb, ejecutar });
+    expect(r).toEqual({ instalado: false, detalle: "error: device unauthorized." });
+    expect(r.paquete).toBeUndefined();
+  });
+
+  it("un adb colgado se dice con el tope de adb, que no es uno nuevo", async () => {
+    const { ejecutar } = ejecutorDe({ adb: Object.assign(new Error("timeout"), { killed: true }) });
+    const r = await frameworkEnDispositivo(android, { ...conAdb, ejecutar });
+    expect(r.detalle).toBe("no respondió en 15 s");
+  });
+
+  it("sin adb en la máquina se dice qué falta, y no se lanza nada", async () => {
+    const { ejecutar, llamadas } = ejecutorDe({});
+    const r = await frameworkEnDispositivo(android, { plataforma: "darwin", entorno: {}, home: "/Users/yo", existe: () => false, ejecutar });
+    expect(r.instalado).toBe(false);
+    expect(r.detalle).toMatch(/no está adb/i);
+    expect(llamadas).toEqual([]);
+  });
+
+  it("un iPhone contesta «iOS todavía no» SIN lanzar ningún proceso", async () => {
+    // No hay `adb` que preguntarle a un iPhone: buscarlo siquiera sería un proceso gastado,
+    // y ahí el doble que cuenta llamadas es lo que lo fija.
+    const { ejecutar, llamadas } = ejecutorDe({});
+    expect(await frameworkEnDispositivo(iphone, { plataforma: "darwin", entorno: { PATH: "/bin" }, home: "/Users/yo", existe: () => true, ejecutar })).toEqual({
+      instalado: false,
+      detalle: "iOS todavía no",
+    });
+    expect(llamadas).toEqual([]);
   });
 });

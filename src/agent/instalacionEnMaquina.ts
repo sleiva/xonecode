@@ -14,7 +14,7 @@
  * pidiera contraseña no es un botón colgado —el miedo que dejó los pasos 1 y 2 sin botón—:
  * es un botón que en dos segundos dice qué hace falta. Con eso:
  *
- * - **`brew` entra en la tabla**, y era el paso que faltaba: los pasos 3 y 4 necesitan
+ * - **`brew` entra en la tabla**, y era el paso que faltaba: los pasos 2 y 3 necesitan
  *   `sdkmanager`, que es justo lo que instala el 1, así que en una máquina nueva la receta
  *   entera no tenía un solo botón vivo. Además, medido: `openjdk@17` es una fórmula y
  *   `android-commandlinetools` un Generic Artifact, así que ninguno instala fuera del
@@ -22,8 +22,9 @@
  *   `HOMEBREW_NO_AUTO_UPDATE` para que tampoco pregunte ni se ponga a actualizarse.
  * - **`sdkmanager` y `avdmanager` siguen**: lo único que preguntan son las licencias y el
  *   perfil de hardware, y las dos respuestas se alimentan por `stdin`.
- * - **Lo que sigue fuera** es el paso del `~/.zshrc` —escribir en la shell de alguien es lo
- *   único de esto que no sabríamos deshacer— y los de la receta de iOS: un `sudo` escrito en
+ * - **Lo que sigue fuera** son los `export` del `~/.zshrc` —escribir en la shell de alguien
+ *   es lo único de esto que no sabríamos deshacer, y desde que dejaron de ser un paso ya no
+ *   se ofrecen ni para copiar desde aquí: van en `Receta.aparte`— y los de la receta de iOS: un `sudo` escrito en
  *   el comando fallaría SIEMPRE, y `xcodebuild -downloadPlatform` pide autorización en una
  *   VENTANA del sistema, que no falla rápido ni se contesta por `stdin`.
  *
@@ -48,11 +49,28 @@
  * ventana. Mientras eso no se cablee, la salida es `brew`/`sdkmanager` acabando solos, que es
  * lo que harían en un terminal.
  */
-import { spawn } from "node:child_process";
 import { join } from "node:path";
 import { existsSync } from "node:fs";
 import { homedir } from "node:os";
 import { jdkDeLaMaquina, localizadorDeAndroid } from "./dispositivosEnMaquina.js";
+import {
+  crearEjecutor,
+  lanzarReal,
+  TOPE_DE_TRABAJO_MS,
+  TOPE_SIN_SALIDA_MS,
+  type FinDeProceso,
+  type Lanzar,
+  type ProcesoHijo,
+} from "./procesosEnMaquina.js";
+
+/**
+ * Y esto se REEXPORTA: lo que este módulo exportaba antes de que existiera el ejecutor
+ * compartido lo sigue exportando, pero ahora hay UNA sola copia —el `spawn` con `detached`, los
+ * dos topes y el hijo—, y la comparten la receta y el lanzamiento en el dispositivo
+ * (`procesosEnMaquina.ts`). Un segundo `spawn` allí era un segundo sitio donde el `detached`
+ * podía dejar de estar.
+ */
+export { lanzarReal, TOPE_DE_TRABAJO_MS, TOPE_SIN_SALIDA_MS, type Lanzar, type ProcesoHijo };
 
 /** El paquete de la imagen del sistema, el mismo que nombra la receta. */
 const IMAGEN = "system-images;android-35;google_apis;arm64-v8a";
@@ -120,7 +138,10 @@ export const PASOS_EJECUTABLES = new Map<string, PasoEjecutable>([
     },
   ],
   [
-    "android-emulador:3",
+    // El 2 desde que los `export` de la shell dejaron de ser un paso: la tabla va por NÚMERO,
+    // así que renumerar la receta es renumerar esto — y el test que compara las dos listas
+    // en las dos direcciones es lo que hace que no se pueda quedar descolgada en silencio.
+    "android-emulador:2",
     {
       binario: "sdkmanager",
       conSdk: true,
@@ -136,13 +157,22 @@ export const PASOS_EJECUTABLES = new Map<string, PasoEjecutable>([
           opcional: true,
           anuncio: "Aceptando las licencias del SDK de Android (lo pediste al pulsar).",
         },
-        { args: ["--install", "emulator", "platforms;android-35", IMAGEN], teclear: [] },
+        {
+          // `platform-tools` va AQUÍ y no es un extra: **el emulador se niega a arrancar si la
+          // raíz del SDK no los tiene dentro**, y el cask `android-commandlinetools` no los
+          // trae. El porqué medido está en `core/dispositivos.ts`, donde el comando se ENSEÑA;
+          // esta es la copia que se LANZA, y por eso hay un test que compara las dos: la lista
+          // de paquetes está escrita dos veces y sin él podrían divergir en silencio, con el
+          // botón instalando una cosa y la ventana enseñando otra.
+          args: ["--install", "platform-tools", "emulator", "platforms;android-35", IMAGEN],
+          teclear: [],
+        },
       ],
       titulo: "Descargando el emulador y la imagen del sistema",
     },
   ],
   [
-    "android-emulador:4",
+    "android-emulador:3",
     {
       binario: "avdmanager",
       conSdk: true,
@@ -157,36 +187,12 @@ export const PASOS_EJECUTABLES = new Map<string, PasoEjecutable>([
 ]);
 
 /**
- * Cuánto se aguanta SIN una sola línea de salida antes de darlo por colgado.
- *
- * No es un tope de duración: `sdkmanager` habla mientras descarga (porcentajes), así que
- * mientras diga algo se le espera lo que haga falta — una descarga de 3 GB por una línea
- * lenta puede tardar media hora, y matarla por eso sería peor que esperarla. Lo que no es
- * normal es el silencio: eso es un prompt esperando a alguien que no está.
+ * Los dos topes —el del silencio, 5 min, y el total, 60— viven con el ejecutor
+ * (`procesosEnMaquina.ts`), que es quien los arma: son la misma regla sobre el mismo tipo de
+ * proceso, y aquí se reexportan. **El silencio es el síntoma, no la lentitud**: mientras el
+ * hijo diga algo se le espera lo que haga falta; lo que no es normal es que se calle, y eso es
+ * un prompt esperando a alguien que no está.
  */
-export const TOPE_SIN_SALIDA_MS = 5 * 60_000;
-/** Y un tope total, para que un proceso que habla sin avanzar no se quede para siempre. */
-export const TOPE_DE_TRABAJO_MS = 60 * 60_000;
-
-/** El hijo, visto por este módulo. Entra por parámetro para poder probarlo sin lanzar nada. */
-export interface ProcesoHijo {
-  stdout: { on: (evento: "data", cb: (dato: unknown) => void) => void };
-  stderr: { on: (evento: "data", cb: (dato: unknown) => void) => void };
-  stdin: { write: (texto: string) => void; end: () => void };
-  on: (evento: "close" | "error", cb: (valor: never) => void) => void;
-  kill: (senal?: string) => boolean;
-  /**
-   * Con `detached` el hijo es LÍDER de su grupo, y su pid es el del grupo. Es lo que
-   * permite matar también a los nietos; ausente, se cae a matar solo al hijo.
-   */
-  pid?: number;
-}
-
-export type Lanzar = (
-  binario: string,
-  args: string[],
-  opciones: { env: Record<string, string | undefined> }
-) => ProcesoHijo;
 
 export interface ResultadoDeTrabajo {
   estado: "ok" | "fallo" | "cancelada" | "colgada";
@@ -234,9 +240,7 @@ export function correrPasoDeReceta(
   const entorno = deps.entorno ?? process.env;
   const home = deps.home ?? homedir();
   const existe = deps.existe ?? existsSync;
-  const lanzar = deps.lanzar ?? lanzarReal;
   const ahora = deps.ahora ?? (() => Date.now());
-  const matarGrupo = deps.matarGrupo ?? ((pid: number, senal: string) => void process.kill(-pid, senal as NodeJS.Signals));
   const t0 = ahora();
   const decir = (linea: string): void => deps.alSalirLinea?.(linea);
 
@@ -285,19 +289,27 @@ export function correrPasoDeReceta(
   }
 
   let cancelado = false;
-  let colgado = false;
-  let ultima = "";
-  // Declarado ANTES del lazo: `unProceso` le asigna en cuanto lanza, y el cuerpo de la
-  // función asíncrona de abajo corre síncrono hasta el primer `await`. Con el `let` después,
-  // esa asignación caía en la zona muerta y el trabajo entero reventaba antes de empezar.
-  let matar: (() => void) | undefined;
+  // El ejecutor es el MISMO de `procesosEnMaquina.ts`, que es el que usa también el lanzamiento
+  // en el dispositivo: los topes, el troceado por líneas y el `kill` del GRUPO viven una sola
+  // vez. `lanzar` y `matarGrupo` siguen siendo PUERTOS de este módulo, y entran por aquí.
+  const ejecutor = crearEjecutor({ lanzar: deps.lanzar, matarGrupo: deps.matarGrupo, entorno });
 
   const terminado = (async (): Promise<ResultadoDeTrabajo> => {
     let ultimo: ResultadoDeTrabajo = { estado: "ok", ms: ahora() - t0 };
     for (const invocacion of paso.invocaciones) {
       if (cancelado) return { estado: "cancelada", ms: ahora() - t0 };
       if (invocacion.anuncio !== undefined) decir(invocacion.anuncio);
-      ultimo = await unProceso(binario!, invocacion, env);
+      // Se espera AQUÍ mismo, sin envolver la llamada en una función `async`: el ejecutor
+      // resuelve en el CIERRE del hijo, y un `await` de más metería un tick entre el proceso de
+      // las licencias y el de la descarga, que son los dos del paso 2 y van encadenados.
+      ultimo = unResultado(
+        await ejecutor.correr(binario!, invocacion.args, {
+          env,
+          teclear: invocacion.teclear,
+          repetir: invocacion.repetir,
+          alSalirLinea: decir,
+        })
+      );
       // Cancelada y colgada cortan siempre: no se sigue instalando lo que nadie espera.
       if (ultimo.estado === "cancelada" || ultimo.estado === "colgada") return ultimo;
       // Un fallo corta el paso salvo que esa llamada sea opcional (las licencias).
@@ -306,140 +318,29 @@ export function correrPasoDeReceta(
     return { estado: "ok", ms: ahora() - t0 };
   })();
 
-  function unProceso(
-    bin: string,
-    invocacion: Invocacion,
-    entornoHijo: Record<string, string | undefined>
-  ): Promise<ResultadoDeTrabajo> {
-    return new Promise<ResultadoDeTrabajo>((resolver) => {
-      let hijo: ProcesoHijo;
-      try {
-        hijo = lanzar(bin, invocacion.args, { env: entornoHijo });
-      } catch (error) {
-        resolver({ estado: "fallo", motivo: unaLinea(error), ms: ahora() - t0 });
-        return;
-      }
-
-      /**
-       * Matar el GRUPO y no solo al hijo. Medido: `brew` lanza `curl` y `sdkmanager` lanza
-       * `java`, y con `child.kill()` el nieto seguía vivo descargando después de cancelar.
-       * Sin pid —los dobles de los tests no lo tienen— se cae a matar al hijo, que es lo que
-       * este módulo hacía siempre.
-       */
-      const matarArbol = (senal: string): void => {
-        const pid = hijo.pid;
-        if (pid !== undefined) {
-          try {
-            matarGrupo(pid, senal);
-            return;
-          } catch {
-            // El grupo ya no está o el sistema no deja: se intenta con el hijo.
-          }
-        }
-        hijo.kill(senal);
-      };
-
-      let sinSalida: ReturnType<typeof setTimeout>;
-      const rearmar = (): void => {
-        clearTimeout(sinSalida);
-        sinSalida = setTimeout(() => {
-          colgado = true;
-          matarArbol("SIGKILL");
-        }, TOPE_SIN_SALIDA_MS);
-      };
-      const total = setTimeout(() => {
-        colgado = true;
-        matarArbol("SIGKILL");
-      }, TOPE_DE_TRABAJO_MS);
-      rearmar();
-
-      matar = () => matarArbol("SIGTERM");
-      if (cancelado) matar();
-
-      // Las líneas se parten aquí: un `data` no es una línea —puede traer media o tres—, y
-      // emitir trozos dejaría el log cortado por la mitad en la ventana.
-      let resto = "";
-      const trocear = (dato: unknown): void => {
-        rearmar();
-        resto += String(dato);
-        const partes = resto.split(/\r?\n/);
-        resto = partes.pop() ?? "";
-        for (const linea of partes) {
-          const limpia = linea.trimEnd();
-          if (limpia === "") continue;
-          ultima = limpia;
-          decir(limpia);
-        }
-      };
-      hijo.stdout.on("data", trocear);
-      hijo.stderr.on("data", trocear);
-
-      // Lo que hay que teclear, de una vez: el prompt puede aparecer antes de que nadie mire.
-      for (let i = 0; i < Math.max(1, invocacion.repetir ?? 1); i++) {
-        for (const t of invocacion.teclear) hijo.stdin.write(t);
-      }
-      hijo.stdin.end();
-
-      hijo.on("error", ((error: Error) => {
-        clearTimeout(sinSalida);
-        clearTimeout(total);
-        resolver({ estado: "fallo", motivo: unaLinea(error), ms: ahora() - t0 });
-      }) as never);
-      hijo.on("close", ((codigo: number | null) => {
-        clearTimeout(sinSalida);
-        clearTimeout(total);
-        if (colgado) {
-          resolver({ estado: "colgada", motivo: `no dijo nada en ${Math.round(TOPE_SIN_SALIDA_MS / 60_000)} min`, ms: ahora() - t0 });
-          return;
-        }
-        if (cancelado) {
-          resolver({ estado: "cancelada", ms: ahora() - t0 });
-          return;
-        }
-        if (codigo === 0) {
-          resolver({ estado: "ok", ms: ahora() - t0 });
-          return;
-        }
-        resolver({ estado: "fallo", motivo: motivoDelCodigo(codigo, ultima), ms: ahora() - t0 });
-      }) as never);
-    });
+  /**
+   * Lo que dijo el ejecutor, en el vocabulario de esta receta. El `ms` se mide desde que empezó
+   * el PASO, no desde que arrancó el proceso: lo que la ventana enseña es lo que lleva el paso.
+   */
+  function unResultado(fin: FinDeProceso): ResultadoDeTrabajo {
+    const ms = ahora() - t0;
+    if (fin.estado !== "colgada") {
+      return { estado: fin.estado, ...(fin.estado === "fallo" ? { motivo: fin.motivo } : {}), ms };
+    }
+    // Los DOS topes salen con la frase del silencio, que es la que este módulo dice desde
+    // siempre: aquí el tope total es la red de seguridad de una descarga que habla, y no hay
+    // una medida que pida dos frases. El lanzamiento SÍ las distingue, y por eso el ejecutor
+    // devuelve la causa y no la frase.
+    return { estado: "colgada", motivo: `no dijo nada en ${Math.round(TOPE_SIN_SALIDA_MS / 60_000)} min`, ms };
   }
 
   return {
     titulo: paso.titulo,
     cancelar: () => {
       cancelado = true;
-      matar?.();
+      ejecutor.cancelar();
     },
     terminado,
   };
 }
 
-/** Una línea, nunca la salida entera ni una traza con rutas. */
-function unaLinea(error: unknown): string {
-  const e = error as { code?: unknown; message?: unknown } | null;
-  if (e !== null && typeof e === "object" && e.code === "ENOENT") return "el ejecutable no existe";
-  const mensaje = e !== null && typeof e === "object" && typeof e.message === "string" ? e.message : String(error);
-  return mensaje.split(/\r?\n/)[0]!.slice(0, 160);
-}
-
-/**
- * El hijo de verdad. Dos decisiones, las dos medidas:
- *
- * - **`detached: true`**, para que sea líder de su grupo y `kill(-pid)` se lleve también a
- *   los nietos: sin ello, cancelar dejaba el `curl` de `brew` descargando.
- * - **`stdio[0]` sigue siendo un `pipe`**, porque `sdkmanager` necesita que se le teclee.
- *   Lo que hace que un `sudo` de dentro no cuelgue no es cerrar `stdin`: es no tener
- *   terminal de CONTROL, que es de donde `sudo` lee la contraseña — y con `detached` no lo
- *   tiene ni por herencia.
- */
-const lanzarReal: Lanzar = (binario, args, opciones) =>
-  spawn(binario, args, { env: opciones.env, stdio: ["pipe", "pipe", "pipe"], detached: true }) as unknown as ProcesoHijo;
-
-/**
- * El motivo de un código distinto de cero. La última línea si dijo algo, y si no el código
- * — que es todo lo que hay.
- */
-function motivoDelCodigo(codigo: number | null, ultima: string): string {
-  return ultima === "" ? `terminó con código ${codigo}` : ultima;
-}

@@ -724,6 +724,88 @@ describe("la foto de la máquina («dispositivos»)", () => {
     ]);
   });
 
+  it("la plataforma de una herramienta, su `instalar`, el `repetir` de un paso y el `aparte` llegan al store", () => {
+    // Cuarta vez por lo mismo, y esta vez con una que SÍ estaba rota: `instalar` se declaró en
+    // `tipos.ts` y la ventana lo usaba para decidir entre un botón y el comando para copiar,
+    // pero no estaba en esta lista blanca — así que una herramienta que faltaba se quedaba sin
+    // decir cómo se instala, y con todo en verde. Lo que se comprueba aquí es que un campo
+    // nuevo no se pueda colar sin nombre, no solo que los de siempre sigan.
+    const s = crearStoreDelCliente();
+    s.aplicar({
+      clase: "dispositivos",
+      informe: {
+        sistema: "mac",
+        medido: "2026-09-07T10:00:00.000Z",
+        herramientas: [
+          {
+            nombre: "adb",
+            plataforma: "android",
+            estado: "no-encontrada",
+            instalar: { comando: "brew install --cask android-platform-tools", automatico: false },
+          },
+          // `automatico` es un booleano o no es nada: un `"false"` de CADENA encendería el
+          // botón, que es verdadero en JavaScript.
+          { nombre: "xcrun", plataforma: "ios", estado: "no-encontrada", instalar: { comando: "xcode-select --install", automatico: "false" } },
+          // Sin comando no hay nada que ofrecer: no se copia medio campo.
+          { nombre: "devicectl", plataforma: "ios", estado: "no-encontrada", instalar: { automatico: true } },
+        ],
+        dispositivos: [],
+        avds: [],
+        recetas: [
+          {
+            id: "android-emulador",
+            plataforma: "android",
+            titulo: "Instalar el emulador",
+            descripcion: "Tres pasos.",
+            pasos: [
+              { titulo: "Descargar", comandos: ["sdkmanager --install x"], hecho: true, ejecutable: true, repetir: { etiqueta: "Actualizar", porQue: "lo sube de versión" } },
+            ],
+            aparte: { titulo: "Declarar las variables", comandos: ["export ANDROID_HOME=x"], nota: "xonecode NO lo necesita." },
+            completa: false,
+            despues: "emulator -avd pixel8",
+          },
+        ],
+      },
+      ajustes: {},
+    });
+    const foto = s.leer().dispositivos!;
+    expect(foto.herramientas[0]).toEqual({
+      nombre: "adb",
+      plataforma: "android",
+      estado: "no-encontrada",
+      instalar: { comando: "brew install --cask android-platform-tools", automatico: false },
+    });
+    expect(foto.herramientas[1]!.instalar).toEqual({ comando: "xcode-select --install", automatico: false });
+    expect(foto.herramientas[2]!.instalar).toBeUndefined();
+    // Y la receta entera: la pestaña de la ventana sale de `plataforma`, el nombre del botón
+    // de los DOS campos del paso, y el consejo de `aparte` no es un paso.
+    expect(foto.recetas[0]).toMatchObject({
+      plataforma: "android",
+      aparte: { titulo: "Declarar las variables", nota: "xonecode NO lo necesita." },
+    });
+    expect(foto.recetas[0]!.pasos[0]!.repetir).toEqual({ etiqueta: "Actualizar", porQue: "lo sube de versión" });
+  });
+
+  it("una receta SIN `aparte` no lo inventa: la de iOS no tiene ninguno", () => {
+    // Ausente ≠ vacío: un `aparte` de mentira le pintaría a iOS una sección en blanco.
+    const s = crearStoreDelCliente();
+    s.aplicar({
+      clase: "dispositivos",
+      informe: {
+        sistema: "mac",
+        medido: "2026-09-07T10:00:00.000Z",
+        herramientas: [],
+        dispositivos: [],
+        avds: [],
+        recetas: [
+          { id: "ios-simulador", plataforma: "ios", titulo: "Instalar Xcode", descripcion: "Tres pasos.", pasos: [], completa: false, despues: "xcrun simctl boot" },
+        ],
+      },
+      ajustes: {},
+    });
+    expect(s.leer().dispositivos!.recetas[0]!.aparte).toBeUndefined();
+  });
+
   it("la VERIFICACIÓN de un dispositivo llega al store, y `ok` solo con el booleano", () => {
     // Tercera vez que se escribe un test por esta lista blanca, y por lo mismo: `mime` y
     // `base64` se cayeron aquí y ninguna imagen se enseñaba con todo en verde. Un `"false"`
@@ -849,6 +931,178 @@ describe("el paso de receta que se está ejecutando", () => {
     const s = crearStoreDelCliente();
     s.aplicar(progreso({ estado: "fallo", motivo: "Warning: Failed to find package" }));
     expect(s.leer().instalacion).toMatchObject({ estado: "fallo", motivo: "Warning: Failed to find package" });
+  });
+});
+
+describe("el veredicto de lanzar y el recorrido del lanzamiento", () => {
+  const foto = { id: "R58", nombre: "Galaxy S21", plataforma: "android", clase: "fisico" };
+
+  const veredicto = (extra: Record<string, unknown> = {}) => ({
+    clase: "lanzable" as const,
+    proyecto: "AppDemo",
+    listo: true,
+    faltas: [],
+    medido: "2026-09-16T10:00:00.000Z",
+    ...extra,
+  });
+
+  const recorrido = (extra: Record<string, unknown> = {}) => ({
+    clase: "lanzamiento" as const,
+    fase: "lanzando" as const,
+    estado: "corriendo" as const,
+    lineas: ["adb shell am start -n com.xone.android.framework/…"],
+    ms: 1200,
+    ...extra,
+  });
+
+  it("`lanzable` llega campo a campo, con la foto del dispositivo copiada por sus campos", () => {
+    const s = crearStoreDelCliente();
+    s.aplicar(veredicto({ app: "Tienda", dispositivo: foto }));
+    // `toEqual` del objeto ENTERO: así un campo que la lista blanca no nombre sale rojo, que
+    // es la trampa que este repo ya ha pagado tres veces (`mime`, `recetas`, `ejecutable`).
+    expect(s.leer().lanzable).toEqual({
+      proyecto: "AppDemo",
+      listo: true,
+      faltas: [],
+      app: "Tienda",
+      dispositivo: foto,
+      medido: "2026-09-16T10:00:00.000Z",
+    });
+  });
+
+  it("sin `app` ni dispositivo, esos dos campos quedan AUSENTES: no se rellenan con nada", () => {
+    // `medido` sí está, y es obligatorio: el mensaje mínimo lleva proyecto, listo, faltas y
+    // fecha. Los opcionales son solo la app y la foto del dispositivo.
+    const s = crearStoreDelCliente();
+    s.aplicar(veredicto());
+    expect(s.leer().lanzable).toEqual({
+      proyecto: "AppDemo",
+      listo: true,
+      faltas: [],
+      medido: "2026-09-16T10:00:00.000Z",
+    });
+  });
+
+  it("un `lanzable` SIN `medido` se descarta entero y no muta nada: un veredicto sin fecha es una promesa sin fecha", () => {
+    // La misma regla que el informe de `dispositivos`: sin fecha medida se descarta el mensaje
+    // ENTERO, en vez de estampar una cadena vacía que parecería una medición. Y el tipo lo
+    // acompaña: `medido` es `string` en el cable (`tipos.ts`), así que dejarlo opcional aquí
+    // rompería en `tsc` el empalme con el prop del componente.
+    const s = crearStoreDelCliente();
+    s.aplicar(veredicto({ app: "Tienda", dispositivo: foto }));
+    const antes = s.leer();
+    // El mensaje con todo lo demás bien y la fecha ausente: proyecto, listo y faltas están.
+    s.aplicar({ clase: "lanzable", proyecto: "AppDemo", listo: true, faltas: [] });
+    expect(s.leer()).toBe(antes);
+    expect(s.leer().lanzable?.medido).toBe("2026-09-16T10:00:00.000Z");
+  });
+
+  it("las faltas llegan tal cual las escribió el servidor: el cliente no compone ninguna", () => {
+    const s = crearStoreDelCliente();
+    const faltas = ["La app no declara conexión en app.xml.", "El dispositivo elegido no responde."];
+    s.aplicar(veredicto({ listo: false, faltas }));
+    expect(s.leer().lanzable?.faltas).toEqual(faltas);
+  });
+
+  it("un `listo` que no es el booleano descarta el mensaje: la trampa del «false» de cadena", () => {
+    // `"false"` es verdadero en JavaScript, y aquí pintaría un botón para lanzar un veredicto
+    // que dice que no se puede.
+    const s = crearStoreDelCliente();
+    s.aplicar(veredicto({ listo: "false" }));
+    expect(s.leer().lanzable).toBeUndefined();
+  });
+
+  it("un dispositivo a medias se queda fuera sin tumbar el veredicto: el veredicto sigue siendo cierto", () => {
+    const s = crearStoreDelCliente();
+    s.aplicar(veredicto({ dispositivo: { id: "R58" } }));
+    expect(s.leer().lanzable?.dispositivo).toBeUndefined();
+    expect(s.leer().lanzable?.proyecto).toBe("AppDemo");
+  });
+
+  it("unas `faltas` que no son lista de cadenas descartan el mensaje ENTERO y no mutan nada", () => {
+    const s = crearStoreDelCliente();
+    const bueno = veredicto({ app: "Tienda", dispositivo: foto });
+    s.aplicar(bueno);
+    const antes = s.leer();
+    // Las dos formas del mismo error: no es lista, y es lista con algo que no es una frase.
+    s.aplicar(veredicto({ faltas: "La app no declara conexión." }));
+    s.aplicar(veredicto({ faltas: ["una frase", 7] }));
+    // Identidad de referencia: el mensaje descartado no muta NI avisa a los suscriptores.
+    expect(s.leer()).toBe(antes);
+    expect(s.leer().lanzable).toEqual({
+      proyecto: "AppDemo",
+      listo: true,
+      faltas: [],
+      app: "Tienda",
+      dispositivo: foto,
+      medido: "2026-09-16T10:00:00.000Z",
+    });
+  });
+
+  it("`lanzamiento` llega campo a campo, con su fase y su estado", () => {
+    const s = crearStoreDelCliente();
+    s.aplicar(recorrido({ proyecto: "AppDemo", dispositivo: foto, ms: 4200 }));
+    expect(s.leer().lanzamiento).toEqual({
+      fase: "lanzando",
+      estado: "corriendo",
+      lineas: ["adb shell am start -n com.xone.android.framework/…"],
+      ms: 4200,
+      proyecto: "AppDemo",
+      dispositivo: foto,
+    });
+  });
+
+  it("una fase que no conocemos descarta el mensaje y no muta NADA", () => {
+    // Una fase desconocida es un paso que este cliente no sabe dibujar: el recorrido que ya
+    // había se queda como estaba, en vez de quedarse a medias con lo de fuera.
+    const s = crearStoreDelCliente();
+    s.aplicar(recorrido({ estado: "ok" }));
+    const antes = s.leer();
+    s.aplicar(recorrido({ fase: "compilando" }));
+    expect(s.leer()).toBe(antes);
+    expect(s.leer().lanzamiento?.estado).toBe("ok");
+  });
+
+  it("un estado que no conocemos también descarta el mensaje: la lista es blanca en los dos", () => {
+    const s = crearStoreDelCliente();
+    s.aplicar(recorrido({ estado: "regular" }));
+    expect(s.leer().lanzamiento).toBeUndefined();
+  });
+
+  it("un `ms` que no es número descarta el mensaje: el tiempo que se enseña es el que se recibe", () => {
+    const s = crearStoreDelCliente();
+    s.aplicar(recorrido({ ms: "1200" }));
+    expect(s.leer().lanzamiento).toBeUndefined();
+    // Y `ms: 0` sí entra: cero es un dato medido (el recorrido acaba de empezar), no una
+    // ausencia — la misma distinción que el resto del estado hace.
+    s.aplicar(recorrido({ ms: 0 }));
+    expect(s.leer().lanzamiento?.ms).toBe(0);
+  });
+
+  it("sin `lineas` no hay mensaje, y una línea que no es texto se filtra sin tumbarlo", () => {
+    const s = crearStoreDelCliente();
+    s.aplicar(recorrido({ lineas: "adb" }));
+    expect(s.leer().lanzamiento).toBeUndefined();
+    s.aplicar(recorrido({ lineas: ["una", 7, "otra"] }));
+    expect(s.leer().lanzamiento?.lineas).toEqual(["una", "otra"]);
+  });
+
+  it("el motivo llega cuando lo hay", () => {
+    const s = crearStoreDelCliente();
+    s.aplicar(recorrido({ estado: "fallo", motivo: "adb: device offline" }));
+    expect(s.leer().lanzamiento).toMatchObject({ estado: "fallo", motivo: "adb: device offline" });
+  });
+
+  it("`marcarDesconectado` tira el veredicto Y el recorrido: sin cable no se puede afirmar ninguno", () => {
+    // Un recorrido guardado en `corriendo` apagaría el botón para siempre en una pestaña que
+    // ya no recibe el «terminó»; y el veredicto es una medida de hace un rato que se vuelve a
+    // pedir al reconectar.
+    const s = crearStoreDelCliente();
+    s.aplicar(veredicto({ dispositivo: foto }));
+    s.aplicar(recorrido());
+    s.marcarDesconectado();
+    expect(s.leer().lanzable).toBeUndefined();
+    expect(s.leer().lanzamiento).toBeUndefined();
   });
 });
 

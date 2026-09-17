@@ -84,7 +84,7 @@ export function cargarAgentes(raizDelProyecto?: string): Lectura {
   // orquestador sin nadie a quien delegar, sin que nada diera error. Colgarlo del cargador
   // lo hace imposible de olvidar: quien necesita agentes los pide por aquí, y por
   // construcción hay algo que leer. Es idempotente y no hace nada si la carpeta existe.
-  const { desactualizados } = sembrarAgentes();
+  const { desactualizados, retirados } = sembrarAgentes();
   const global = leerCarpetaDeAgentes(rutaGlobalDeAgentes(), "global");
   const proyecto =
     raizDelProyecto === undefined
@@ -97,9 +97,18 @@ export function cargarAgentes(raizDelProyecto?: string): Lectura {
   const atrasados = desactualizados.map(
     (n) => `${n}.md: no es el de serie y la versión de serie ha cambiado; se respeta el tuyo. Bórralo si quieres el nuevo.`
   );
+  // Y los renombrados, por el mismo canal y por la misma razón: el especialista cambia de
+  // nombre (o se va con él), y enterarse por la lista sin que nadie lo explique es la clase de
+  // sorpresa silenciosa que este módulo existe para no dar. El que se retiró se dice UNA vez
+  // —la clave se va con el fichero—; el que se respeta, cada arranque, porque queda decidir.
+  const renombrados = retirados.map(({ nombre, ahoraSeLlama, borrado }) =>
+    borrado
+      ? `${nombre}.md: se ha retirado —ese agente se llama ahora \`${ahoraSeLlama}\`— y el nuevo ya está sembrado.`
+      : `${nombre}.md: ese agente se llama ahora \`${ahoraSeLlama}\`, y el tuyo se respeta. Bórralo si quieres quedarte solo con el de serie.`
+  );
   return {
     agentes: fusionarAgentes(global.agentes, proyecto.agentes),
-    problemas: [...atrasados, ...global.problemas, ...proyecto.problemas],
+    problemas: [...renombrados, ...atrasados, ...global.problemas, ...proyecto.problemas],
   };
 }
 
@@ -191,7 +200,41 @@ export interface Siembra {
    * es lo que dejaba a un `docs.md` sin la consulta acotada durante semanas.
    */
   desactualizados: string[];
+  /**
+   * Los que se RETIRARON por un renombrado. Es el quinto caso, y el único que no puede salir
+   * del bucle de serie: habla de una clave de la marca que ya no nombra a ningún agente.
+   */
+  retirados: Retirado[];
 }
+
+/**
+ * Un agente de serie que cambió de nombre.
+ *
+ * Los dos desenlaces no se cuentan igual, y por eso viaja cuál fue: al nuestro intacto se le
+ * retira el fichero —y hay que decirlo, o el especialista desaparece de la lista sin que nada
+ * lo explique—, mientras que al que el usuario afinó se le deja donde está.
+ */
+export interface Retirado {
+  /** El nombre que ya no es de serie. */
+  nombre: string;
+  /** El que tiene ahora. */
+  ahoraSeLlama: string;
+  /** Cierto si era nuestra semilla intacta y se ha borrado del disco. */
+  borrado: boolean;
+}
+
+/**
+ * Los renombrados: nombre viejo → nombre nuevo.
+ *
+ * Hace falta porque la marca guarda el hash **por nombre**: renombrar deja una clave que ya no
+ * es de serie, y `sembrarAgentes` no la miraba — quien ya tuviera `probador.md` se quedaba con
+ * los DOS especialistas, uno de ellos sin mantenimiento.
+ *
+ * La alternativa era retirar toda clave desconocida cuyo hash fuera el nuestro. Funcionaría
+ * hoy y sería una trampa mañana: borraría cualquier entrada rara que un fallo dejara en la
+ * marca. Aquí solo se retira lo que consta que renombramos.
+ */
+const RENOMBRADOS: Readonly<Record<string, string>> = { probador: "xone-device-tester" };
 
 /**
  * Siembra los agentes de serie, y ACTUALIZA los que nadie ha tocado.
@@ -200,8 +243,8 @@ export interface Siembra {
  * Respetaba el prompt afinado por el usuario —que es lo que había que respetar— pero eligió
  * un cuerno del dilema y el otro acabó mordiendo: **ningún agente nuevo, y ninguna
  * corrección a uno existente, alcanzaba a quien ya hubiera arrancado una vez**. Medido: el
- * `docs.md` de un usuario llevaba semanas sin la consulta acotada, y `probador` no le habría
- * llegado jamás.
+ * `docs.md` de un usuario llevaba semanas sin la consulta acotada, y el probador de
+ * dispositivos no le habría llegado jamás.
  *
  * Ahora la marca es un fichero, `.semilla.json`, con el HASH DE LO QUE ESCRIBIMOS NOSOTROS
  * para cada agente. Con eso se distinguen los cuatro casos que antes eran uno solo:
@@ -212,6 +255,9 @@ export interface Siembra {
  * | no está | está | lo BORRÓ el usuario: no se resucita |
  * | está, y su hash es el nuestro | está | nadie lo tocó: se actualiza |
  * | está, y su hash NO es el nuestro | cualquiera | es suyo: se deja, y se DICE |
+ *
+ * Y un quinto, que aparece el día que un agente se RENOMBRA y que no puede salir de ese bucle
+ * porque habla de una clave que ya no nombra a ninguno: ver `RENOMBRADOS` y `Retirado`.
  *
  * **Y una carpeta sin marca se ADOPTA, no se siembra.** Es la de quien ya venía de la regla
  * vieja, y ahí no se puede saber qué borró a propósito: dar por nuevo lo que falta le
@@ -238,7 +284,7 @@ export function sembrarAgentes(base: string = homedir()): Siembra {
       escritos.push(agente.nombre);
     }
     escribirSemilla(carpeta, marca);
-    return { escritos, desactualizados };
+    return { escritos, desactualizados, retirados: [] };
   }
 
   const previa = leerSemilla(carpeta);
@@ -305,8 +351,46 @@ export function sembrarAgentes(base: string = homedir()): Siembra {
     desactualizados.push(agente.nombre);
   }
 
+  /**
+   * El quinto caso: una clave de la marca que ya no nombra a ningún agente de serie.
+   *
+   * Solo la deja un renombrado, y solo se mira la de los nombres que constan en `RENOMBRADOS`.
+   * El desenlace se decide con el mismo dato que todo lo demás: si el fichero sigue siendo
+   * exactamente lo que escribimos, es nuestra semilla y se retira; si no, es del usuario y se
+   * queda. Sin marca no se puede saber —esa es la carpeta que se adopta, y ahí el huérfano se
+   * queda y no se dice: es el límite, y es el lado que no borra nada ajeno.
+   */
+  const retirados: Retirado[] = [];
+  for (const [viejo, ahoraSeLlama] of Object.entries(RENOMBRADOS)) {
+    const anotado = marca[viejo];
+    if (anotado === undefined) continue;
+    const ruta = join(carpeta, `${viejo}.md`);
+    let enDisco: string | undefined;
+    try {
+      enDisco = existsSync(ruta) ? huella(readFileSync(ruta, "utf8")) : undefined;
+    } catch {
+      // Sin comparación no hay borrado: un `.md` ilegible se queda, y el cargador dirá por qué.
+      continue;
+    }
+    if (enDisco === undefined) {
+      // El fichero ya no está: la clave se va con él, y no hay nada que contarle a nadie.
+      delete marca[viejo];
+      continue;
+    }
+    if (enDisco === anotado) {
+      rmSync(ruta);
+      delete marca[viejo];
+      retirados.push({ nombre: viejo, ahoraSeLlama, borrado: true });
+      continue;
+    }
+    // Afinado por el usuario: se queda, y se DICE cada arranque mientras siga ahí — queda algo
+    // que decidir, que es borrarlo o quedarse con los dos.
+    marca[viejo] = AJENO;
+    retirados.push({ nombre: viejo, ahoraSeLlama, borrado: false });
+  }
+
   escribirSemilla(carpeta, marca);
-  return { escritos, desactualizados };
+  return { escritos, desactualizados, retirados };
 }
 
 /**
@@ -415,9 +499,10 @@ const HANDOFF_MOCKUP = [
 ].join("\n");
 
 /**
- * El probador de Android. Su conocimiento del protocolo NO va aquí: va en la skill
- * `xone-android-hotswap`, que son 1.200 líneas de referencia y se cargan solo cuando hacen
- * falta. Aquí queda lo que tiene que saber SIEMPRE, que es qué puede y qué no.
+ * El probador de dispositivos. Su conocimiento del protocolo NO va aquí: va en la skill
+ * `xone-hotswap`, que son 1.100 líneas de referencia sobre las dos plataformas y se cargan
+ * solo cuando hacen falta. Aquí queda lo que tiene que saber SIEMPRE, que es qué puede y qué
+ * no.
  *
  * **Y lo que hoy no puede es hablar con el dispositivo.** Este agente no tiene shell ni
  * cliente del servidor hotswap: las tools que lo harían son el paso siguiente. Decirlo aquí
@@ -425,8 +510,12 @@ const HANDOFF_MOCKUP = [
  * evita el peor botón muerto de todos: uno dentro del grafo, que pulsa el modelo y del que
  * se cree el resultado. Mientras tanto sirve para lo que sí puede: escribir el procedimiento
  * exacto y leer lo que vuelva.
+ *
+ * Los ejemplos del cuerpo son de Android (`adb`, `logcat`, `runSql`) porque es lo que hay
+ * medido; no acotan el agente, que es de las dos plataformas. La que dice cuál tiene qué,
+ * comando a comando, es la skill.
  */
-const PROBADOR_ANDROID = [
+const PROCEDIMIENTO_DE_PRUEBA = [
   "LO QUE PUEDES Y LO QUE NO, HOY:",
   "- NO tienes conexión con el dispositivo: no puedes lanzar adb, ni abrir el WebSocket del",
   "  servidor hotswap, ni subir un fichero, ni capturar una pantalla. No lo intentes ni digas",
@@ -448,9 +537,10 @@ const PROBADOR_ANDROID = [
 
 /**
  * Los cinco. Nacieron como una mudanza de los textos que había en código; desde entonces
- * `docs` lleva además la consulta acotada, y `probador` llegó con la documentación del
- * protocolo hotswap. Cada regla que se añade aquí se mide antes con los evals, porque un
- * prompt más largo es coste en TODAS las llamadas.
+ * `docs` lleva además la consulta acotada, y `xone-device-tester` llegó con la documentación
+ * del protocolo hotswap —con el nombre viejo, `probador`, ver `RENOMBRADOS`—. Cada regla que
+ * se añade aquí se mide antes con los evals, porque un prompt más largo es coste en TODAS las
+ * llamadas.
  */
 export const AGENTES_DE_SERIE: readonly Agente[] = [
   {
@@ -488,16 +578,16 @@ export const AGENTES_DE_SERIE: readonly Agente[] = [
     origen: "semilla",
   },
   {
-    nombre: "probador",
+    nombre: "xone-device-tester",
     descripcion:
-      "Pruebas en un dispositivo ANDROID local, sobre la app XOneStudio del móvil o del " +
-      "emulador. Hoy NO se conecta al dispositivo: escribe el procedimiento de prueba con " +
+      "Pruebas en un dispositivo o emulador LOCAL —Android o iOS— sobre la app host XOne " +
+      "instalada. Hoy NO se conecta al dispositivo: escribe el procedimiento de prueba con " +
       "los comandos y las comprobaciones exactas, y diagnostica los volcados de controles, " +
-      "los logcat y las consultas que se le peguen. No modifica el proyecto.",
+      "los log y las consultas que se le peguen. No modifica el proyecto.",
     motor: "modelo",
     soloLectura: true,
-    skills: ["xone-android-hotswap", "xone-debugging"],
-    instrucciones: PROBADOR_ANDROID,
+    skills: ["xone-hotswap", "xone-debugging"],
+    instrucciones: PROCEDIMIENTO_DE_PRUEBA,
     origen: "semilla",
   },
   {
