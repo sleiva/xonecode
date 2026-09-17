@@ -4330,6 +4330,38 @@ usuario en la caja del compositor). Son DOS mitades, y arreglar solo una deja el
   contador vivo) y un cero si no. Ese cero **sí está medido**: una conversación recién abierta no
   ha gastado nada. El cliente no pinta un cero, así que el contador desaparece.
 
+**El especialista perdía su ENCARGO al cruzar el umbral del resumen** (17-09-2026, medido
+offline). Síntoma real: el orquestador delegó «¿sirve XOne para un CRM?», el especialista dio 57
+pasos y volvió con la respuesta de la pregunta ANTERIOR del usuario. El orquestador lo detectó y
+relanzó dos veces: 1,5M de tokens de entrada para una pregunta.
+
+**La hipótesis del propio modelo era falsa, y se comprobó en vez de creerla.** Dijo «parece que
+su ventana trae una sesión antigua pegada». No: los subagentes van en `handoff`, así que deepagents
+les sustituye los mensajes por `[HumanMessage(description)]` y arrancan con el encargo y nada más.
+Y aunque HEREDAN nuestro checkpointer —`pregel/index.js` lo toma de
+`config.configurable.__pregel_checkpointer` cuando el grafo no trae uno propio—, el namespace de
+cada `task` se construye con `uuid5([ns, step, node, PUSH, index], checkpoint.id)`, o sea con el
+paso y el id del checkpoint dentro: cada invocación escribe en su hueco y ninguna puede reanudar
+la anterior. Lo único que esa herencia sí provoca es que la conversación entera de cada
+especialista acabe en el `checkpoint.sqlite` de la sesión, que ya crece sin poda.
+
+**Lo que pasa de verdad es nuestro.** Al cruzar `UMBRAL_RESUMEN_TOKENS` el middleware sustituye
+los mensajes `[0, corte)` por UN resumen, y el mensaje 0 es el encargo. `keep` solo conserva la
+COLA —no hay opción para el primero, comprobado en la fuente— y el prompt de resumen por omisión
+pide «temas, decisiones y contexto para continuar», no el encargo. A partir de ahí el agente
+trabaja sin la pregunta que le hicieron y contesta a lo que el resumen le deje entender. Hay test
+que lo reproduce con el middleware real y sin red.
+
+El arreglo va por CÓDIGO y no por `summaryPrompt`: pedirlo en el prompt funcionaría a veces, y un
+agente que pierde su encargo no contesta peor, contesta a OTRA COSA — su coste ya está medido en
+millones. `conservarElEncargo` lo devuelve desde el ESTADO, que el resumen no reescribe. Dos
+detalles que no son de forma: es el ÚLTIMO mensaje humano y no el primero —en el orquestador, que
+es multiturno, el primero es la pregunta de hace tres turnos, y reinyectarla sería reintroducir a
+mano el fallo que se arregla—, y la comparación de si ya está es por CONTENIDO además de por
+identidad, porque la lista efectiva se reconstruye y el mismo texto puede venir en otro objeto.
+Los dos middleware viajan juntos en `resumenConEncargo`, en ese orden: el primero de la lista
+envuelve al siguiente, así que puesto delante no vería nada que devolver.
+
 ## Trampas verificadas
 
 - **El orquestador va de SOLO LECTURA, y hasta el 9-09-2026 no lo era** (`PERFIL_DEL_ORQUESTADOR`,

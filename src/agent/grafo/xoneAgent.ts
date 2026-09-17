@@ -12,7 +12,7 @@ import { crearBusquedaRegex } from "./busquedaRegex.js";
 import { inventarioDelProyecto } from "../subagentes/escrituraExterna.js";
 import type { DiagnosticoDeTools } from "../turno/diagnosticoDeTools.js";
 import { middlewareTextoDeTool } from "../turno/textoDeTool.js";
-import { resumenDeContexto } from "../turno/resumenDeContexto.js";
+import { resumenConEncargo } from "../turno/resumenDeContexto.js";
 import {
   createTokenTrackingMiddleware,
   type AlContarTokens,
@@ -344,7 +344,9 @@ export async function construirAgente(opciones: OpcionesDelAgente): Promise<unkn
         customToolDescriptions: DESCRIPCIONES_FICHEROS,
         ...OPCIONES_BUSQUEDA_FICHEROS,
       }),
-      resumenDeContexto(backend),
+      // Los DOS, y en su orden, que es lo que `resumenConEncargo` garantiza: el resumen
+      // se lleva el encargo por delante al cruzar el umbral, y el segundo lo devuelve.
+      ...resumenConEncargo(backend),
       middlewareTextoDeTool(),
       ...middlewareTracker(perfil.nombre),
     ],
@@ -401,7 +403,9 @@ export async function construirAgente(opciones: OpcionesDelAgente): Promise<unkn
         customToolDescriptions: DESCRIPCIONES_FICHEROS,
         ...OPCIONES_BUSQUEDA_FICHEROS,
       }),
-      resumenDeContexto(backend),
+      // Los DOS, y en su orden, que es lo que `resumenConEncargo` garantiza: el resumen
+      // se lleva el encargo por delante al cruzar el umbral, y el segundo lo devuelve.
+      ...resumenConEncargo(backend),
       middlewareTextoDeTool(),
       ...middlewareTracker("orquestador"),
     ],
