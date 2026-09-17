@@ -606,3 +606,47 @@
   flex-direction: column;
   gap: 6px;
 }
+
+/* Los proyectos de un entorno, partidos por dueño (propios / compartidos).
+   `auto-fit` con `minmax` y NO una consulta de contenedor a propósito: la regla que hace
+   falta aquí es «dos columnas si caben, una si no», y eso el grid lo contesta con el ancho
+   disponible sin que nadie declare un contenedor ni acierte un umbral. Una consulta habría
+   necesitado declarar su contenedor en esta misma hoja (lo exige `Barra.test.tsx`) y además
+   un punto de corte inventado; esto no tiene ninguno de los dos.
+
+   Ojo al escribir aquí: ese test busca el nombre de la consulta por TEXTO, comentarios
+   incluidos, así que nombrarla en prosa pone la hoja en rojo — la misma trampa que
+   `CLAUDE.md` avisa para el test de la documentación. Se nombra en palabras, no en sintaxis. */
+.columnasDeProyectos {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 16px;
+  align-items: start;
+}
+
+.columnaDeProyectos {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+
+/* `h4` y no `h3`: el `h3` de arriba es «Proyectos en la barra», y estos son sus dos mitades
+   — saltarse un nivel rompería el esquema para quien navegue por encabezados. */
+.encabezadoDeColumna {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--dsw-alias-label-secondary);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* La cuenta es un dato secundario del encabezado: se lee después del título, no antes. */
+.cuenta {
+  font-weight: 400;
+  color: var(--dsw-alias-label-tertiary);
+}

@@ -327,6 +327,52 @@ describe("Ajustes", () => {
     expect(alElegirProyectos).toHaveBeenCalledWith("webstudio", ["p0", "p1", "p2", "p3", "p4"]);
   });
 
+  /**
+   * **Los proyectos se parten por dueño: propios y compartidos.**
+   *
+   * Con dieciocho proyectos (los que tiene el entorno real del usuario) una sola columna era
+   * un rollo de casillas donde encontrar uno obliga a leerlas todas, y mezclaba dos cosas que
+   * se distinguen de un vistazo.
+   *
+   * El tercer grupo NO es una tercera clase de proyecto —el dominio tiene dos—: es el hueco de
+   * cuando CloudStudio no dice de quién es. Medido en los entornos reales, cero de dieciocho,
+   * así que en la práctica no se pinta; existe para no afirmar «es tuyo» sobre un dato que
+   * nadie dijo, que es la misma regla que ya aplican la barra y el Escritorio al no pintar
+   * etiqueta con el dato ausente. Y lo que se prueba además es que agrupar es PRESENTACIÓN:
+   * elegir sigue mandando la lista entera con el id correcto, no la del grupo.
+   */
+  it("separa propios de compartidos, rotula lo no atribuido, y elegir sigue mandando bien", () => {
+    const alElegirProyectos = vi.fn();
+    render(
+      <Ajustes
+        {...MANEJADORES}
+        entornos={[{ id: "webstudio", nombre: "XOne WebStudio", url: "https://mcp.example/mcp", proyectos: [] }]}
+        entornoActivo="webstudio"
+        proyectos={[
+          { id: "mio", nombre: "AppDemo", compartido: false },
+          { id: "suyo", nombre: "Bequikly", compartido: true },
+          { id: "quiensabe", nombre: "SinDueño" },
+        ]}
+        alElegirProyectos={alElegirProyectos}
+      />
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Entornos" }));
+
+    // Los tres encabezados, con su cuenta al lado.
+    expect(screen.getByRole("heading", { name: /propios/i }).textContent).toContain("1");
+    expect(screen.getByRole("heading", { name: /compartidos contigo/i })).toBeTruthy();
+    expect(screen.getByRole("heading", { name: /sin decir de quién son/i })).toBeTruthy();
+    // Y cada proyecto bajo el suyo: el compartido NO cuelga del grupo de los propios.
+    const grupoDePropios = screen.getByRole("heading", { name: /propios/i }).parentElement as HTMLElement;
+    expect(grupoDePropios.textContent).toContain("AppDemo");
+    expect(grupoDePropios.textContent).not.toContain("Bequikly");
+
+    // Elegir el compartido manda su id, no su posición dentro del grupo.
+    const casillaDelCompartido = screen.getByRole("checkbox", { name: "Bequikly" });
+    fireEvent.click(casillaDelCompartido);
+    expect(alElegirProyectos).toHaveBeenCalledWith("webstudio", ["suyo"]);
+  });
+
   it("una elección guardada manda sobre la omisión, y desmarcar todo se manda como vacío", () => {
     const alElegirProyectos = vi.fn();
     const dos = [

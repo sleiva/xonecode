@@ -255,7 +255,12 @@ export function Ajustes({
    * en el `alta`. Los de los DEMÁS entornos llegan por `proyectosPorEntorno`, que se pide
    * pestaña a pestaña: cada uno es una conexión con CloudStudio.
    */
-  proyectos?: readonly { id: string; nombre: string }[];
+  /**
+   * `compartido` viaja desde el `alta` y desde `proyectosDeEntorno`; el cable y el store ya
+   * lo traían y era este prop el que lo perdía. Se necesita para partir la lista en propios
+   * y compartidos. Ausente NO es «es tuyo»: es que CloudStudio no lo dijo.
+   */
+  proyectos?: readonly { id: string; nombre: string; compartido?: boolean }[];
   /**
    * Los proyectos de cada entorno NO activo, indexados por su id, tal como los contesta
    * `{clase:"proyectosDeEntorno"}`.
@@ -266,7 +271,10 @@ export function Ajustes({
    * sin proyectos, así que ahí no se pinta ninguna casilla.
    */
   proyectosPorEntorno?: Readonly<
-    Record<string, { proyectos?: readonly { id: string; nombre: string }[]; error?: string }>
+    Record<
+      string,
+      { proyectos?: readonly { id: string; nombre: string; compartido?: boolean }[]; error?: string }
+    >
   >;
   /**
    * «Dime los proyectos de este entorno.» Lo llama la pestaña al abrirse y solo si no
@@ -432,7 +440,7 @@ export function Ajustes({
    */
   const listaDe = (
     entorno: string | undefined
-  ): { proyectos?: readonly { id: string; nombre: string }[]; error?: string } => {
+  ): { proyectos?: readonly { id: string; nombre: string; compartido?: boolean }[]; error?: string } => {
     if (entorno === undefined) return {};
     if (entorno === entornoActivo && proyectos.length > 0) return { proyectos };
     return proyectosPorEntorno[entorno] ?? {};
@@ -1387,35 +1395,67 @@ export function Ajustes({
                       return <p className={estilos.vacio}>Este entorno no devolvió ningún proyecto.</p>;
                     }
                     const marcados = elegidosDe(entornoEnPestana);
+                    /**
+                     * **Dos grupos, que son los dos que existen**: los tuyos y los que te han
+                     * compartido. Con dieciocho proyectos una sola columna era un rollo de
+                     * dieciocho casillas donde encontrar uno es leerlas todas, y además
+                     * mezclaba dos cosas que el usuario distingue de un vistazo.
+                     *
+                     * El TERCER grupo no es una tercera clase de proyecto —el dominio tiene
+                     * dos—: es el hueco de cuando CloudStudio no dice de quién es. Medido en
+                     * los entornos reales del usuario, cero de dieciocho, así que en la
+                     * práctica no se pinta nunca. Existe porque meterlos en «Propios» sería
+                     * afirmar una propiedad que nadie midió, y esa es la regla que ya aplican
+                     * la barra y el Escritorio al no pintar etiqueta con el dato ausente.
+                     *
+                     * Agrupar es PRESENTACIÓN: las casillas siguen operando sobre la misma
+                     * lista `marcados` y el mismo `p.id`, así que elegir no cambia de
+                     * comportamiento por partir la lista en dos.
+                     */
+                    const grupos = [
+                      { id: "propios", titulo: "Propios", suyos: suyos.filter((p) => p.compartido === false) },
+                      { id: "compartidos", titulo: "Compartidos contigo", suyos: suyos.filter((p) => p.compartido === true) },
+                      { id: "sinAtribuir", titulo: "Sin decir de quién son", suyos: suyos.filter((p) => p.compartido === undefined) },
+                    ].filter((g) => g.suyos.length > 0);
+                    const casilla = (p: { id: string; nombre: string }) => (
+                      <li key={p.id} className={estilos.fila}>
+                        <label className={estilos.casilla}>
+                          <input
+                            type="checkbox"
+                            checked={marcados.includes(p.id)}
+                            onChange={(e) => {
+                              const siguiente = e.target.checked
+                                ? [...marcados, p.id]
+                                : marcados.filter((id) => id !== p.id);
+                              setElegidosPorEntorno((previo) => ({
+                                ...previo,
+                                [entornoEnPestana]: siguiente,
+                              }));
+                              alElegirProyectos(entornoEnPestana, siguiente);
+                            }}
+                          />
+                          <span className={estilos.nombre}>{p.nombre}</span>
+                        </label>
+                      </li>
+                    );
                     return (
                       <>
                         <p className={estilos.nota}>
                           Sin elegir ninguno se enseñan los {PROYECTOS_POR_OMISION} primeros. Lo que
                           marques aquí manda sobre ese tope.
                         </p>
-                        <ul className={estilos.filas}>
-                          {suyos.map((p) => (
-                            <li key={p.id} className={estilos.fila}>
-                              <label className={estilos.casilla}>
-                                <input
-                                  type="checkbox"
-                                  checked={marcados.includes(p.id)}
-                                  onChange={(e) => {
-                                    const siguiente = e.target.checked
-                                      ? [...marcados, p.id]
-                                      : marcados.filter((id) => id !== p.id);
-                                    setElegidosPorEntorno((previo) => ({
-                                      ...previo,
-                                      [entornoEnPestana]: siguiente,
-                                    }));
-                                    alElegirProyectos(entornoEnPestana, siguiente);
-                                  }}
-                                />
-                                <span className={estilos.nombre}>{p.nombre}</span>
-                              </label>
-                            </li>
+                        <div className={estilos.columnasDeProyectos}>
+                          {grupos.map((g) => (
+                            <section key={g.id} className={estilos.columnaDeProyectos}>
+                              {/* La cuenta va en el encabezado porque con listas largas es
+                                  la mitad de la pregunta: cuántos tengo de cada. */}
+                              <h4 className={estilos.encabezadoDeColumna}>
+                                {g.titulo} <span className={estilos.cuenta}>{g.suyos.length}</span>
+                              </h4>
+                              <ul className={estilos.filas}>{g.suyos.map(casilla)}</ul>
+                            </section>
                           ))}
-                        </ul>
+                        </div>
                       </>
                     );
                   })()}
