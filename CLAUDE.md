@@ -1061,8 +1061,12 @@ una cifra comparable. Cuatro reglas:
   contar solo los turnos que acaban bien bajaría la cifra justo en los que más cuestan.
 - **El reparto lo da la TRAZA, no el total**: `XONECODE_TRACE_TOOLS=1` deja
   `.xonecode/traza-tools.jsonl` y `xonecode traza` lo agrega por ORIGEN (el orquestador y
-  cada especialista) y por TOOL, con lo repetido aparte — una relectura es lo que se viene a
-  buscar. `pintarGasto` va en `agent/` y no dentro de `correrReal` por el patrón de fallo de
+  cada especialista) y por TOOL, con cada BLANCO y cuántos DISTINTOS — «seis lecturas» y
+  «seis ficheros» no son lo mismo. El blanco es **ruta + rango** (`offset+limit`), no la
+  ruta: la instrucción que el agente recibe es «no releas la misma ruta y el mismo rango»,
+  así que otra página del mismo fichero es trabajo nuevo y colapsarla la disfrazaría de
+  desperdicio. Lo que no cabe se CUENTA, que una lista recortada en silencio se lee como la
+  lista entera. `pintarGasto` va en `agent/` y no dentro de `correrReal` por el patrón de fallo de
   siempre: compuesta en un cierre que todos los tests doblan, la regla queda escrita y no
   probada.
 - **Dos trampas del formato, y son las dos primeras pruebas** (`informeDeTraza.test.ts`): en

@@ -4170,6 +4170,23 @@ pintan como una medida — el «contador a cero que nadie ha medido» que este r
 todas partes. Para ver la palanca de la caché hace falta un proveedor que la reporte. Separar
 «no consta» de «cero» pide que el tracker lo lleve, y es otra tarea.
 
+**Y la primera pregunta que se le hizo al informe no la sabía contestar**: «¿las lecturas son
+parciales, y cuántos ficheros se leen?». La traza guarda `offset` y `limit` desde el principio
+—para eso están en la lista blanca de `resumenDeTool.ts`— pero el resumen solo enseñaba lo
+repetido, así que hubo que ir al JSONL a mano. Ahora cada tool lista sus blancos con el rango y
+dice cuántos DISTINTOS. Lo medido con eso, sobre `proyecto_example`:
+
+- **Las once lecturas de las dos medidas fueron `offset=0, limit=50`**, con deepseek y con
+  gemini. No es el default de deepagents —el suyo es `limit=100`—: sale de nuestra propia
+  `DESCRIPCIONES_FICHEROS.read_file`, que pide ese rango para el reconocimiento inicial. El
+  modelo obedece.
+- **Y aun así no recortó nada**: los ficheros leídos tienen entre 11 y 46 líneas, todos por
+  debajo de 50, o sea 181 líneas en total. Las lecturas son del orden de 2-3k tokens de los
+  39.518 del turno. **El contenido de los ficheros no es el gasto**; lo son el prompt de
+  sistema y los esquemas de las tools reenviados en cada una de las nueve llamadas. El
+  `limit=50` está bien puesto, pero su efecto se verá en un `.xne` de mil líneas, no aquí.
+- Ninguna relectura en ninguna de las dos: todas las rutas distintas y ningún rango repetido.
+
 ## Trampas verificadas
 
 - **El orquestador va de SOLO LECTURA, y hasta el 9-09-2026 no lo era** (`PERFIL_DEL_ORQUESTADOR`,

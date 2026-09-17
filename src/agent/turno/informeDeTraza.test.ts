@@ -8,8 +8,13 @@ const linea = (evento: Record<string, unknown>, sesion = "s1"): string =>
 const modelo = (origen: string, input: number, output: number, cache = 0, llamadas = 1, sesion = "s1"): string =>
   linea({ tipo: "modelo", origen, input, output, cache, llamadas, contexto: input }, sesion);
 
-const tool = (nombre: string, detalle?: string, sesion = "s1"): string =>
-  linea({ tipo: "tool", nombre, ...(detalle === undefined ? {} : { detalle }) }, sesion);
+const tool = (nombre: string, detalle?: string, parametros?: Record<string, unknown>, sesion = "s1"): string =>
+  linea(
+    { tipo: "tool", nombre, ...(detalle === undefined ? {} : { detalle }), ...(parametros === undefined ? {} : { parametros }) },
+    sesion
+  );
+
+const leer = (fichero: string, offset = 0, limit = 50): string => tool("read_file", fichero, { file_path: fichero, offset, limit });
 
 describe("informe de traza", () => {
   it("cuenta las llamadas por LÍNEA, nunca sumando el campo `llamadas`", () => {
@@ -43,23 +48,38 @@ describe("informe de traza", () => {
     expect(sesion.contexto).toBe(32000);
   });
 
-  it("agrupa las tools por nombre y saca lo repetido, que es lo que se busca", () => {
-    const [sesion] = resumirTraza([
-      tool("read_file", "/app/app.xml"),
-      tool("read_file", "/app/app.xml"),
-      tool("read_file", "/app/otra.xne"),
-      tool("grep", "function MT"),
-    ]);
+  it("agrupa las tools por nombre y dice sobre QUÉ y cuántos distintos", () => {
+    const [sesion] = resumirTraza([leer("/app/app.xml"), leer("/app/app.xml"), leer("/app/otra.xne"), tool("grep", "function MT")]);
     expect(sesion.tools.map((t) => [t.nombre, t.veces])).toEqual([
       ["read_file", 3],
       ["grep", 1],
     ]);
-    expect(sesion.tools[0].repetidos).toEqual([{ detalle: "/app/app.xml", veces: 2 }]);
+    expect(sesion.tools[0]).toMatchObject({ distintos: 2 });
+    // Lo repetido primero: es lo que se viene a buscar.
+    expect(sesion.tools[0].blancos).toEqual([
+      { detalle: "/app/app.xml", rango: "0+50", veces: 2 },
+      { detalle: "/app/otra.xne", rango: "0+50", veces: 1 },
+    ]);
+  });
+
+  it("el RANGO sale de los parámetros, y otro rango del mismo fichero NO es una relectura", () => {
+    // La instrucción que el agente recibe es «no releas la misma ruta y el mismo rango»: una
+    // página distinta del mismo fichero es trabajo nuevo, y colapsarla la disfrazaría de
+    // desperdicio. Por eso el blanco es ruta + rango, no la ruta.
+    const [sesion] = resumirTraza([leer("/app/largo.xne", 0, 50), leer("/app/largo.xne", 50, 50)]);
+    expect(sesion.tools[0].distintos).toBe(2);
+    expect(sesion.tools[0].blancos.map((b) => b.rango)).toEqual(["0+50", "50+50"]);
+    expect(sesion.tools[0].blancos.every((b) => b.veces === 1)).toBe(true);
+  });
+
+  it("sin `limit` no se inventa un rango", () => {
+    const [sesion] = resumirTraza([tool("grep", "entry-point", { pattern: "entry-point", path: "/" })]);
+    expect(sesion.tools[0].blancos).toEqual([{ detalle: "entry-point", veces: 1 }]);
   });
 
   it("una tool sin detalle no inventa uno", () => {
     const [sesion] = resumirTraza([tool("ls"), tool("ls")]);
-    expect(sesion.tools[0]).toMatchObject({ nombre: "ls", veces: 2, repetidos: [] });
+    expect(sesion.tools[0]).toMatchObject({ nombre: "ls", veces: 2, blancos: [], distintos: 0 });
   });
 
   it("parte el fichero por sesión: dos ejecuciones no se suman en una", () => {
@@ -96,8 +116,24 @@ describe("informe de traza", () => {
     expect(costeEfectivo({ input: 1000, output: 100, cache: 0 })).toBe(1100);
   });
 
+  it("lo pintado enseña cada fichero con su rango, que es la pregunta que se le hace", () => {
+    const [sesion] = resumirTraza([leer("/app/app.xml"), leer("/app/otra.xne", 50, 50)]);
+    const texto = pintarSesion(sesion).join("\n");
+    expect(texto).toContain("/app/app.xml 0+50");
+    expect(texto).toContain("/app/otra.xne 50+50");
+    expect(texto).toContain("2 distintos");
+  });
+
+  it("una lista larga se RECORTA y dice cuántos quedan fuera", () => {
+    const [sesion] = resumirTraza(Array.from({ length: 14 }, (_, i) => leer(`/app/f${i}.xne`)));
+    const texto = pintarSesion(sesion).join("\n");
+    expect(texto).toContain("14 distintos");
+    expect(texto).toContain("4 más");
+    expect(texto).not.toContain("/app/f13.xne");
+  });
+
   it("lo pintado dice los orígenes y los totales, y sin un solo escape ANSI", () => {
-    const [sesion] = resumirTraza([modelo("orquestador", 100, 10, 50), tool("read_file", "/app/app.xml")]);
+    const [sesion] = resumirTraza([modelo("orquestador", 100, 10, 50), leer("/app/app.xml")]);
     const texto = pintarSesion(sesion).join("\n");
     expect(texto).toContain("orquestador");
     expect(texto).toContain("read_file");

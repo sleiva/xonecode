@@ -29,12 +29,29 @@ export interface GastoDeOrigen {
   contexto: number;
 }
 
-/** Una tool, cuántas veces y con qué detalle se repitió. */
+/**
+ * Sobre QUÉ actuó una tool: la ruta o el patrón, y el trozo que pidió.
+ *
+ * **La identidad es ruta + rango, no la ruta.** La instrucción que el agente recibe es «no
+ * releas la misma ruta y el mismo rango» (`DESCRIPCIONES_FICHEROS.read_file`), así que otra
+ * página del mismo fichero es trabajo NUEVO: colapsarla con la primera la disfrazaría de
+ * desperdicio y mandaría a arreglar lo que está bien.
+ */
+export interface BlancoDeTool {
+  detalle: string;
+  /** `offset+limit`, cuando la tool los lleva. Ausente si no los declaró. */
+  rango?: string;
+  veces: number;
+}
+
+/** Una tool, cuántas veces, y sobre qué. */
 export interface UsoDeTool {
   nombre: string;
   veces: number;
-  /** Solo lo que salió MÁS DE UNA VEZ: una relectura es lo que se viene a buscar. */
-  repetidos: Array<{ detalle: string; veces: number }>;
+  /** Ordenados por veces: lo repetido primero, que es lo que se viene a buscar. */
+  blancos: BlancoDeTool[];
+  /** Cuántos blancos DISTINTOS: «seis lecturas» y «seis ficheros» no son lo mismo. */
+  distintos: number;
 }
 
 export interface SesionDeTraza {
@@ -64,7 +81,20 @@ export function costeEfectivo(uso: { input: number; output: number; cache: numbe
 interface EnConstruccion {
   sesion: SesionDeTraza;
   porOrigen: Map<string, GastoDeOrigen>;
-  porTool: Map<string, { uso: UsoDeTool; detalles: Map<string, number> }>;
+  porTool: Map<string, { uso: UsoDeTool; blancos: Map<string, BlancoDeTool> }>;
+}
+
+/**
+ * `offset+limit` de los parámetros, o nada.
+ *
+ * Se piden los DOS: un `offset` suelto no dice cuánto se leyó, y es justo lo que hay que ver
+ * para saber si una lectura fue un fragmento o el fichero entero.
+ */
+function rangoDe(parametros: unknown): string | undefined {
+  if (typeof parametros !== "object" || parametros === null) return undefined;
+  const p = parametros as Record<string, unknown>;
+  if (typeof p.offset !== "number" || typeof p.limit !== "number") return undefined;
+  return `${p.offset}+${p.limit}`;
 }
 
 function numero(valor: unknown): number {
@@ -147,10 +177,19 @@ export function resumirTraza(lineas: Iterable<string>): SesionDeTraza[] {
 
     if (evento.tipo === "tool") {
       const nombre = texto(evento.nombre) ?? "(sin nombre)";
-      const entrada = actual.porTool.get(nombre) ?? { uso: { nombre, veces: 0, repetidos: [] }, detalles: new Map<string, number>() };
+      const entrada = actual.porTool.get(nombre) ?? {
+        uso: { nombre, veces: 0, blancos: [], distintos: 0 },
+        blancos: new Map<string, BlancoDeTool>(),
+      };
       entrada.uso.veces += 1;
       const detalle = texto(evento.detalle);
-      if (detalle !== undefined) entrada.detalles.set(detalle, (entrada.detalles.get(detalle) ?? 0) + 1);
+      if (detalle !== undefined) {
+        const rango = rangoDe(evento.parametros);
+        const clave = `${detalle}\u0000${rango ?? ""}`;
+        const ya = entrada.blancos.get(clave);
+        if (ya === undefined) entrada.blancos.set(clave, { detalle, ...(rango === undefined ? {} : { rango }), veces: 1 });
+        else ya.veces += 1;
+      }
       actual.porTool.set(nombre, entrada);
     }
   }
@@ -162,12 +201,12 @@ export function resumirTraza(lineas: Iterable<string>): SesionDeTraza[] {
   return [...sesiones.values()].map(({ sesion, porOrigen, porTool }) => ({
     ...sesion,
     origenes: [...porOrigen.values()].sort((a, b) => costeEfectivo(b) - costeEfectivo(a)),
-    tools: [...porTool.values()].map(({ uso, detalles }) => ({
+    tools: [...porTool.values()].map(({ uso, blancos }) => ({
       ...uso,
-      repetidos: [...detalles.entries()]
-        .filter(([, veces]) => veces > 1)
-        .map(([detalle, veces]) => ({ detalle, veces }))
-        .sort((a, b) => b.veces - a.veces),
+      // Estable: `sort` conserva el orden de llegada entre iguales, así que dentro de los
+      // que salieron una vez se leen en el orden en que ocurrieron.
+      blancos: [...blancos.values()].sort((a, b) => b.veces - a.veces),
+      distintos: blancos.size,
     })),
   }));
 }
@@ -175,6 +214,9 @@ export function resumirTraza(lineas: Iterable<string>): SesionDeTraza[] {
 function cifra(n: number): string {
   return n.toLocaleString("es-ES");
 }
+
+/** Cuántos blancos se enseñan por tool antes de contar el resto. */
+const TOPE_DE_BLANCOS = 10;
 
 function porcentajeDeCache(uso: { input: number; cache: number }): number {
   return uso.input === 0 ? 0 : Math.round((100 * uso.cache) / uso.input);
@@ -203,8 +245,17 @@ export function pintarSesion(sesion: SesionDeTraza): string[] {
   if (sesion.tools.length > 0) {
     lineas.push("  tools");
     for (const t of sesion.tools) {
-      const repes = t.repetidos.map((r) => `${r.detalle} ×${r.veces}`).join(", ");
-      lineas.push(`    ${t.nombre.padEnd(18)} ×${t.veces}${repes === "" ? "" : `   repetido: ${repes}`}`);
+      // «Seis lecturas» y «seis ficheros» no son lo mismo, así que se dicen los dos: lo
+      // primero es el trabajo y lo segundo el alcance, y solo juntos se ve una relectura.
+      const alcance = t.distintos === 0 ? "" : ` · ${t.distintos} distinto${t.distintos === 1 ? "" : "s"}`;
+      lineas.push(`    ${t.nombre.padEnd(18)} ×${t.veces}${alcance}`);
+      for (const b of t.blancos.slice(0, TOPE_DE_BLANCOS)) {
+        lineas.push(`        ${b.detalle}${b.rango === undefined ? "" : ` ${b.rango}`}${b.veces > 1 ? `   ×${b.veces}` : ""}`);
+      }
+      // Lo que no cabe se CUENTA, nunca se calla: una lista recortada en silencio se lee
+      // como la lista entera, y aquí eso sería «solo tocó estos diez ficheros».
+      const fuera = t.blancos.length - TOPE_DE_BLANCOS;
+      if (fuera > 0) lineas.push(`        … y ${fuera} más`);
     }
   }
 
