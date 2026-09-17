@@ -1,20 +1,23 @@
 import { readdirSync, existsSync, readFileSync, statSync } from "node:fs";
-import { join, dirname, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
+import { join } from "node:path";
 import { parseFrontmatter } from "../vendor/skillLoaders/catalog.js";
+import { raizDelPaquete } from "./raizDelPaquete.js";
 import type { SkillInfo, SkillsPort } from "../core/ports.js";
 
 /**
  * Dónde viven las skills.
  *
- * Dos niveles arriba, y sirve igual desde `src/` (con tsx) que desde `dist/`: los dos
- * cuelgan de la raíz del repo, así que `../../skills` acierta en ambos.
+ * Cuelga de la raíz del PAQUETE, que sirve igual desde `src/` (con tsx) que desde `dist/`.
+ *
+ * La raíz se BUSCA hacia arriba (`agent/raizDelPaquete.ts`) en vez de contarse con `..`:
+ * contarlos ataba este fichero a su profundidad, y moverlo de carpeta dejaba el catálogo
+ * vacío sin un error que leer. El porqué entero está en la cabecera de ese módulo.
  *
  * Se resuelve contra ESTE módulo y no contra el cwd: en la v1 el cwd es el proyecto del
  * cliente, así que un `./skills` relativo apuntaría al proyecto del usuario y el catálogo
  * saldría vacío sin que nadie supiera por qué.
  */
-export const RAIZ_SKILLS = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..", "skills");
+export const RAIZ_SKILLS = join(raizDelPaquete(), "skills");
 
 /** Estimación de coste. 4 caracteres por token es la regla de servilleta de siempre. */
 export const tokensDe = (texto: string): number => Math.ceil(texto.length / 4);

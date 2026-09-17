@@ -8,12 +8,16 @@
 
 import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
-import { fileURLToPath } from "node:url";
-import { dirname, resolve } from "node:path";
+import { resolve } from "node:path";
 import type { VersionEnMarcha } from "../core/version.js";
+import { raizDelPaquete } from "./raizDelPaquete.js";
 
-/** La raíz del PAQUETE, igual que `RAIZ_SKILLS`: desde este módulo, no desde el cwd. */
-const RAIZ = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..");
+/**
+ * La raíz del PAQUETE, igual que `RAIZ_SKILLS`: desde este módulo, no desde el cwd — y
+ * BUSCADA hacia arriba, no contada con `..`, para que este fichero pueda cambiar de carpeta
+ * sin que nadie recuente los puntos (`agent/raizDelPaquete.ts`).
+ */
+const RAIZ = raizDelPaquete();
 
 /**
  * Qué versión está corriendo. **Nunca lanza**: es una línea informativa, y un arranque que
