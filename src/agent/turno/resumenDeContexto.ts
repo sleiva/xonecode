@@ -6,7 +6,7 @@
  * Este umbral es independiente del proveedor: limita el coste sin borrar el trabajo reciente.
  */
 import { createSummarizationMiddleware, type FilesystemBackend } from "deepagents";
-import { createMiddleware } from "langchain";
+import { createMiddleware, modelCallLimitMiddleware } from "langchain";
 import { HumanMessage } from "@langchain/core/messages";
 import { RUTA_HISTORIAL_RESUMIDO } from "../grafo/memoriaDeProyecto.js";
 
@@ -114,4 +114,33 @@ function textoPlano(msg: unknown): string {
  */
 export function resumenConEncargo(backend: FilesystemBackend): ReturnType<typeof createMiddleware>[] {
   return [resumenDeContexto(backend), conservarElEncargo()] as ReturnType<typeof createMiddleware>[];
+}
+
+/**
+ * Cuántas llamadas al modelo puede gastar UN especialista en un encargo.
+ *
+ * Medido el 17-09-2026 con el banco: una pregunta de estructura se resuelve en 3-7 llamadas en
+ * TODO el turno, y la de capacidad —la clase cara— la terminó bien un modelo en 10. El que se
+ * descarriló llevaba 32 y subiendo cuando el reloj lo mató, y 57 en el turno que lo destapó. El
+ * tope deja intacto lo que funciona y corta lo otro.
+ *
+ * **No es un ahorro, es una frontera.** Un especialista hace una tarea específica con un
+ * encargo bien descrito; si necesita treinta llamadas, lo que falla es la delegación, y seguir
+ * dándole cuerda solo hace más cara la misma respuesta mala.
+ */
+export const TOPE_DE_LLAMADAS_DEL_ESPECIALISTA = 15;
+
+/**
+ * El tope, con `exitBehavior: "end"` y no `"error"`.
+ *
+ * Con `"error"` la delegación entera se cae y el orquestador se queda sin nada, que es como
+ * empieza el bucle de reintentos que ya costó 1,5M de tokens. Con `"end"` el especialista
+ * devuelve lo que tenga y quien decide es el orquestador, que para eso lee la respuesta.
+ *
+ * Es de la librería (`langchain`), y deepagents lo contempla: sus claves de conteo están en
+ * `EXCLUDED_STATE_KEYS` a propósito, «each agent counts its own calls, so they never cross the
+ * boundary». O sea que el tope de un especialista no toca el del padre.
+ */
+export function topeDeLlamadas(limite: number = TOPE_DE_LLAMADAS_DEL_ESPECIALISTA) {
+  return modelCallLimitMiddleware({ runLimit: limite, exitBehavior: "end" });
 }

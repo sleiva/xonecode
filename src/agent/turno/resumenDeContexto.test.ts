@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { AIMessage, HumanMessage, ToolMessage } from "@langchain/core/messages";
 import { FilesystemBackend } from "deepagents";
-import { conservarElEncargo, resumenConEncargo, resumenDeContexto, UMBRAL_RESUMEN_TOKENS } from "./resumenDeContexto.js";
+import { conservarElEncargo, resumenConEncargo, resumenDeContexto, topeDeLlamadas, TOPE_DE_LLAMADAS_DEL_ESPECIALISTA, UMBRAL_RESUMEN_TOKENS } from "./resumenDeContexto.js";
 
 /**
  * Qué le pasa al ENCARGO cuando el especialista se pasa de contexto.
@@ -149,5 +149,21 @@ describe("el par", () => {
     } finally {
       rmSync(raiz, { recursive: true, force: true });
     }
+  });
+});
+
+describe("el tope de llamadas del especialista", () => {
+  it("acaba el encargo en vez de TUMBARLO", () => {
+    // Con `error` la delegación entera se cae y el orquestador se queda sin nada, que es como
+    // empieza el bucle de reintentos que costó 1,5M. Con `end` devuelve lo que tenga.
+    const mw = topeDeLlamadas() as unknown as { name: string };
+    expect(mw.name).toContain("ModelCallLimit");
+  });
+
+  it("el tope sale de una MEDIDA, no de una intuición", () => {
+    // 3-7 llamadas una pregunta de estructura, 10 la cara terminando bien, 32 y subiendo la
+    // descarrilada. El tope va por encima de lo que funciona y por debajo de lo que no.
+    expect(TOPE_DE_LLAMADAS_DEL_ESPECIALISTA).toBeGreaterThan(10);
+    expect(TOPE_DE_LLAMADAS_DEL_ESPECIALISTA).toBeLessThan(32);
   });
 });

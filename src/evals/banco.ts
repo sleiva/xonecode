@@ -91,22 +91,33 @@ async function unaPasada(pregunta: Pregunta, modelos: Modelos, skills: SkillsEnD
   // y el proceso es el mismo, así que se restaura al acabar.
   const antes = process.env[VARIABLE_TRAZA_TOOLS];
   process.env[VARIABLE_TRAZA_TOOLS] = "1";
+  /**
+   * La sesión vive FUERA del `try` para poder leer su tracker aunque la pasada reviente.
+   *
+   * Un turno cortado por el tope ha gastado lo que ha gastado, y devolver cero ahí es la cifra
+   * inventada de siempre — la misma regla que ya rige en el contador de la web («se cuenta
+   * también cuando el turno acaba en ERROR»), y que aquí faltaba: la primera medida de la
+   * pregunta cara se cortó a los cinco minutos y el banco dijo «0 tokens», que es justo lo que
+   * no había pasado.
+   */
+  let sesion: Awaited<ReturnType<typeof abrirSesionReal>> | undefined;
   try {
     crearProyecto(raiz, PROYECTO);
     const entorno = await inspeccionar(raiz);
-    const sesion = await abrirSesionReal({ raiz, modelos, skills, entorno, pedirAprobacion: rechazarTodo });
+    sesion = await abrirSesionReal({ raiz, modelos, skills, entorno, pedirAprobacion: rechazarTodo });
     const { piel, texto } = pielQueRecuerda();
     // **Quién canceló se APUNTA**, porque el mensaje de la librería dice «cancelado por el
     // usuario» y aquí no hay ningún usuario: lo cancela este reloj. Medido en la primera base,
     // donde una pasada de `login` se pasó de los cinco minutos y la tabla acusó a una persona
     // que no estaba. Un banco que miente en un error es lo único que no puede hacer.
     let porElTope = false;
+    const viva = sesion;
     const reloj = setTimeout(() => {
       porElTope = true;
-      sesion.cancelar();
+      viva.cancelar();
     }, TOPE_MS);
     try {
-      await sesion.turno(pregunta.texto, piel);
+      await viva.turno(pregunta.texto, piel);
     } catch (e) {
       throw porElTope ? new Error(`se pasó del tope de ${TOPE_MS / 60000} min`) : e;
     } finally {
@@ -139,7 +150,17 @@ async function unaPasada(pregunta: Pregunta, modelos: Modelos, skills: SkillsEnD
       ...(correcta ? {} : { respuesta: respuesta.trim().slice(0, TOPE_DE_RESPUESTA) }),
     };
   } catch (e) {
-    return { ...base, ms: Date.now() - t0, error: e instanceof Error ? e.message : String(e) };
+    return {
+      ...base,
+      ms: Date.now() - t0,
+      // Lo gastado hasta el corte, que es un dato: la pasada no entra en las medias (la
+      // decide `error`), pero lo que costó se dice.
+      llamadas: sesion?.tracker.calls ?? 0,
+      entrada: sesion?.tracker.input ?? 0,
+      salida: sesion?.tracker.output ?? 0,
+      cache: sesion?.tracker.cache ?? 0,
+      error: e instanceof Error ? e.message : String(e),
+    };
   } finally {
     if (antes === undefined) delete process.env[VARIABLE_TRAZA_TOOLS];
     else process.env[VARIABLE_TRAZA_TOOLS] = antes;
