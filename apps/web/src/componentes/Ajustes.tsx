@@ -237,6 +237,7 @@ export function Ajustes({
   hayProyecto,
   alGuardarAgente,
   alBorrarAgente,
+  alRestaurarAgente,
   alPedirClave,
   alBorrarClave,
   alRegistrarEntorno,
@@ -295,6 +296,8 @@ export function Ajustes({
   hayProyecto: boolean;
   alGuardarAgente: (agente: AgenteDelCable, ambito: "global" | "proyecto") => void;
   alBorrarAgente: (nombre: string, ambito: "global" | "proyecto") => void;
+  /** Devuelve un subagente de serie a como lo entrega xonecode. Sin ámbito: solo el global. */
+  alRestaurarAgente: (nombre: string) => void;
   /** La pregunta oculta en vuelo, si la hay: se pinta DENTRO de la fila que se edita. */
   secreto?: string;
   alCambiarApariencia: (apariencia: Apariencia) => void;
@@ -1535,6 +1538,7 @@ export function Ajustes({
                 {...(alPedirCatalogo === undefined ? {} : { alPedirCatalogo })}
                 alGuardar={alGuardarAgente}
                 alBorrar={alBorrarAgente}
+                alRestaurar={alRestaurarAgente}
               />
             </>
           ) : null}

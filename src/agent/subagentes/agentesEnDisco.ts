@@ -25,6 +25,8 @@ import {
   fusionarAgentes,
   leerAgente,
   type Agente,
+  type AgenteCargado,
+  type Carga,
   type Lectura,
 } from "../../core/agentes.js";
 import { segmentoSeguro } from "../../core/settings.js";
@@ -77,7 +79,7 @@ export function leerCarpetaDeAgentes(carpeta: string, origen: Agente["origen"]):
  * abierto (`web/servidor/vestibulo.ts`) y la ventana de ajustes se abre desde ahí: sin
  * raíz se contestan los globales, que es la verdad, en vez de una lista vacía.
  */
-export function cargarAgentes(raizDelProyecto?: string): Lectura {
+export function cargarAgentes(raizDelProyecto?: string): Carga {
   // La siembra se hace AQUÍ, y no en el arranque de cada piel. Medido: estaba en
   // `main.ts#entrarEnConsola` y la rama web devuelve antes de llegar ahí, así que
   // `npm run web` no sembraba nada — la consola arrancaba sin un solo subagente y el
@@ -90,13 +92,15 @@ export function cargarAgentes(raizDelProyecto?: string): Lectura {
     raizDelProyecto === undefined
       ? { agentes: [], problemas: [] }
       : leerCarpetaDeAgentes(rutaDeAgentes(raizDelProyecto), "proyecto");
-  // Los que se quedaron atrás se DICEN por el mismo canal que un `.md` roto, y por la misma
-  // razón: quien lo tiene que arreglar está mirando la ventana de subagentes, y un agente
-  // que se quedó en una versión anterior sin que nadie lo diga es exactamente el fallo que
-  // esta tanda viene a cerrar. No se pisa: el mensaje dice qué hacer si lo quiere nuevo.
-  const atrasados = desactualizados.map(
-    (n) => `${n}.md: no es el de serie y la versión de serie ha cambiado; se respeta el tuyo. Bórralo si quieres el nuevo.`
-  );
+  // Los que se quedaron atrás NO van a `problemas`, y eso es un cambio medido: iban, y por
+  // el mismo canal que un `.md` que no carga, así que la consola pintaba en rojo y arriba del
+  // todo dos agentes que están perfectamente. Y su frase —«bórralo si quieres el nuevo»—
+  // mandaba a usar una escapatoria que no existe: borrar uno de serie no lo resiembra (la
+  // marca recuerda que se entregó), así que dejaba sin ninguno de los dos y para siempre.
+  // Ahora el estado viaja POR AGENTE (`marcarSemilla`) y se dice en su tarjeta, que es donde
+  // está el botón que lo arregla — `restaurarAgente`. `problemas` vuelve a significar solo
+  // «este fichero no se pudo cargar»; comprobado que nadie más lo lee (`turnoReal` y los
+  // evals se quedan con `.agentes`).
   // Y los renombrados, por el mismo canal y por la misma razón: el especialista cambia de
   // nombre (o se va con él), y enterarse por la lista sin que nadie lo explique es la clase de
   // sorpresa silenciosa que este módulo existe para no dar. El que se retiró se dice UNA vez
@@ -107,9 +111,39 @@ export function cargarAgentes(raizDelProyecto?: string): Lectura {
       : `${nombre}.md: ese agente se llama ahora \`${ahoraSeLlama}\`, y el tuyo se respeta. Bórralo si quieres quedarte solo con el de serie.`
   );
   return {
-    agentes: fusionarAgentes(global.agentes, proyecto.agentes),
-    problemas: [...renombrados, ...atrasados, ...global.problemas, ...proyecto.problemas],
+    agentes: marcarSemilla(fusionarAgentes(global.agentes, proyecto.agentes), desactualizados),
+    problemas: [...renombrados, ...global.problemas, ...proyecto.problemas],
   };
+}
+
+/** ¿Es uno de los que trae xonecode? La guarda del `borrar`, y la lista de la pantalla. */
+export function esDeSerie(nombre: string): boolean {
+  return AGENTES_DE_SERIE.some((a) => a.nombre === nombre);
+}
+
+/**
+ * De quién es cada `.md`: ausente si lo escribió el usuario, `intacta`/`modificada` si es
+ * uno de los nuestros. Ver `AgenteCargado` para los tres estados y qué se hace con cada uno.
+ *
+ * Pura y exportada a propósito, no compuesta dentro de `cargarAgentes`: es el patrón de
+ * fallo de esta arquitectura —una regla que vive en un cierre que todos los tests doblan—, y
+ * la trampa de abajo es justo la que se queda sin probar así.
+ *
+ * **La regla es «de serie Y del GLOBAL», y el segundo requisito no es decorativo.** La
+ * siembra solo toca el global, así que un `docs.md` en `.xonecode/agentes/` DEL PROYECTO lo
+ * escribió el usuario aunque se llame igual que uno nuestro. Con `nombre ∈ AGENTES_DE_SERIE`
+ * a secas se quedaría sin botón de borrar —un fichero suyo que no puede borrar— y con un
+ * «Restaurar el de serie» que le pisaría el suyo con el global.
+ */
+export function marcarSemilla<T extends Agente>(
+  agentes: readonly T[],
+  desactualizados: readonly string[]
+): (T & AgenteCargado)[] {
+  return agentes.map((a) =>
+    a.origen === "global" && esDeSerie(a.nombre)
+      ? { ...a, semilla: desactualizados.includes(a.nombre) ? ("modificada" as const) : ("intacta" as const) }
+      : a
+  );
 }
 
 /**
@@ -131,6 +165,32 @@ export function guardarAgente(base: string, agente: Agente): void {
   const carpeta = rutaDeAgentes(base);
   mkdirSync(carpeta, { recursive: true });
   writeFileSync(join(carpeta, `${seguro}.md`), escribirAgente({ ...agente, nombre: seguro }), "utf8");
+}
+
+/**
+ * Devuelve un agente de serie a como lo entregamos, pisando lo que el usuario tuviera.
+ *
+ * Es lo que ocupa el sitio del borrado en un agente sembrado, y existe porque el borrado
+ * NO hacía lo que la consola prometía: la marca recuerda que se entregó, así que
+ * `sembrarAgentes` no lo resiembra (ver «uno BORRADO no se resucita») — o sea que el
+ * «bórralo si quieres el nuevo» dejaba sin ninguno de los dos y para siempre.
+ *
+ * **No escribe la marca, y es deliberado.** La reanota la siembra siguiente, que corre ANTES
+ * de cualquier lectura —`cargarAgentes` la llama primero— y que ya sabe reconocer su propio
+ * hash. Escribirla aquí sería un segundo sitio donde decidir sobre la marca, y el único que
+ * podría resucitar un agente que el usuario borró a propósito: con una marca ilegible, este
+ * camino la reescribiría con una sola clave y las demás pasarían por «nunca entregadas».
+ *
+ * Devuelve si pudo, como `borrarAgente`: de algo que no es de serie no hay versión nuestra
+ * que poner, y la interfaz no puede decir «restaurado» de eso.
+ */
+export function restaurarAgente(base: string, nombre: string): boolean {
+  const agente = AGENTES_DE_SERIE.find((a) => a.nombre === nombre);
+  if (agente === undefined) return false;
+  const carpeta = rutaDeAgentes(base);
+  mkdirSync(carpeta, { recursive: true });
+  writeFileSync(join(carpeta, `${agente.nombre}.md`), escribirAgente(agente), "utf8");
+  return true;
 }
 
 /** Borra uno. Devuelve si existía: la interfaz no puede decir «borrado» de algo que no estaba. */

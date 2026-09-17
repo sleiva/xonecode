@@ -325,3 +325,135 @@
   opacity: 0.45;
   cursor: not-allowed;
 }
+
+/*
+ * El epígrafe de cada grupo: los que trae xonecode y los del usuario.
+ *
+ * Los separa `semilla` y no `origen`: la pastilla `GLOBAL` dice la CARPETA, y un subagente
+ * propio también vive en la global — así que esa pastilla parecía contestar «de quién es
+ * esto» sin contestarlo. Pequeño y en terciario a propósito: es un rótulo de sección dentro
+ * de una ventana que ya tiene su título, no un segundo encabezado que compita con él.
+ */
+.grupo {
+  margin: 0 0 6px;
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+/*
+ * La línea de un de serie que el usuario ha editado, con su botón de restaurar.
+ *
+ * Misma forma que `.confirmar` —separada por un filo, dentro de la fila— y a propósito: es
+ * la misma clase de renglón (una frase y el control que la resuelve) y tenía que leerse
+ * igual. Lo que NO comparte es el color: esto es información, no una decisión destructiva
+ * pendiente. Rojo aquí sería la caja roja otra vez, que es de donde esta frase viene.
+ */
+.restaurar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 10px 0 0;
+  padding-top: 10px;
+  border-top: 0.5px solid var(--dsw-alias-border-l2);
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+/*
+ * El botón que va DENTRO de una fila, con los mismos alias que `.accion` y `.destructiva`
+ * por el mismo motivo que ellos: el `variant="outline"` del paquete llega blanco en tema
+ * oscuro, así que la hoja copiada no cubre ese caso y hay que vestirlo aquí.
+ */
+.accionDeFila.accionDeFila {
+  flex: none;
+  padding: 4px 10px;
+  border: 0.5px solid var(--dsw-alias-border-l2);
+  border-radius: 8px;
+  background: var(--dsw-alias-bg-layer-1);
+  color: var(--dsw-alias-label-primary);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.accionDeFila.accionDeFila:hover {
+  background: var(--dsw-alias-interactive-bg-hover);
+}
+
+/*
+ * Las pestañas «De xonecode» / «Tuyos». Copiadas de `Ajustes.module.css`, no importadas: el
+ * nombre de una clase de módulo va HASHEADO, así que compartir la hoja no es una opción — y
+ * son el mismo control en la misma ventana, tenían que verse igual.
+ *
+ * El filo de la elegida es `box-shadow` inset y no `border-bottom` por dos razones que ya
+ * estaban medidas allí: un borde exige el `transparent` de reserva en las no elegidas, y
+ * `transparent` es un literal de color que `Barra.test.tsx` prohíbe con razón; y una sombra
+ * no ocupa sitio, así que la fila no se mueve medio píxel al cambiar de pestaña.
+ */
+.pestanas {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  border-bottom: 1px solid var(--dsw-alias-border-secondary);
+  margin-bottom: 14px;
+}
+
+.pestana {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border: none;
+  margin-bottom: -1px;
+  background: none;
+  color: var(--dsw-alias-label-secondary);
+  font: inherit;
+  cursor: pointer;
+}
+
+.pestana:hover {
+  color: var(--dsw-alias-label-primary);
+}
+
+.pestana[data-actual] {
+  box-shadow: inset 0 -2px 0 var(--xonecode-cian);
+  color: var(--xonecode-cian);
+}
+
+/* Cuántos hay en la pestaña que NO estás mirando, para no tener que abrirla. Misma píldora
+   del par `state-business-*` que la de Entornos y la del gasto del compositor. Un CERO no se
+   pinta: una pestaña vacía es su rótulo a secas, y su panel lo dice con palabras. */
+.cuenta {
+  padding: 0 6px;
+  border-radius: 999px;
+  background: var(--dsw-alias-state-business-tertiary);
+  color: var(--dsw-alias-state-business-primary);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+/* Sin borde ni fondo: el filo de la pestaña ya dice dónde empieza, y una caja más dentro de
+   una ventana que ya es una caja solo estrecha el contenido. */
+.panelDePestana {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+/*
+ * El botón de alta, que además de `.accion` NO se estira.
+ *
+ * Vive dentro de `.panelDePestana`, que es un flex en COLUMNA, así que el `stretch` por
+ * omisión del eje transversal le daba todo el ancho del panel y se leía como una barra en vez
+ * de un botón. Visto en el navegador: antes de las pestañas no tenía este padre.
+ *
+ * Y va en clase PROPIA en vez de dentro de `.accion`, que es lo que parecía: `.accion` viste
+ * también el «Cancelar» del formulario, y ese vive en una FILA flex —donde `align-self`
+ * gobierna el alto— así que ahí lo habría dejado más bajo que el «Guardar» de al lado.
+ */
+.nuevo.nuevo {
+  align-self: flex-start;
+}

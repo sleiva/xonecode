@@ -1055,6 +1055,11 @@ export function crearStoreDelCliente(): {
                 skills: [...a.skills],
                 instrucciones: a.instrucciones,
                 ...(a.origen === undefined ? {} : { origen: a.origen }),
+                // La lista blanca otra vez, y aquí el síntoma habría sido los dos grupos
+                // fundidos en uno con la papelera puesta en los de serie: todo en verde.
+                // Se comprueba el VALOR y no solo que venga, que es una unión de dos
+                // literales y un tercero desconocido no puede decidir qué botón se pinta.
+                ...(a.semilla === "intacta" || a.semilla === "modificada" ? { semilla: a.semilla } : {}),
               })),
               problemas: Array.isArray(m.problemas)
                 ? m.problemas.filter((x): x is string => typeof x === "string")

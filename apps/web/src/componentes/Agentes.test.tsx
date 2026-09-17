@@ -15,7 +15,24 @@ const REVISOR: AgenteDelCable = {
   origen: "global",
 };
 
-const manejadores = { alGuardar: vi.fn(), alBorrar: vi.fn(), hayProyecto: false };
+const manejadores = { alGuardar: vi.fn(), alBorrar: vi.fn(), alRestaurar: vi.fn(), hayProyecto: false };
+
+/** Uno de los que trae xonecode, tal como llega del cable: con su `semilla`. */
+const DOCS: AgenteDelCable = {
+  nombre: "docs",
+  descripcion: "Responde preguntas técnicas de XOne.",
+  motor: "modelo",
+  soloLectura: true,
+  skills: [],
+  instrucciones: "",
+  origen: "global",
+  semilla: "intacta",
+};
+
+/** Cambia de pestaña. Los tuyos no están a la vista al abrir: la primera es la de xonecode. */
+const irA = (titulo: "De xonecode" | "Tuyos"): void => {
+  fireEvent.click(screen.getByRole("tab", { name: new RegExp(`^${titulo}`) }));
+};
 
 describe("Agentes", () => {
   it("«todavía no ha llegado» y «no hay ninguno» NO se pintan igual", () => {
@@ -222,6 +239,7 @@ describe("Agentes", () => {
   it("eliminar se confirma en la fila: borra un fichero y no hay papelera", () => {
     const alBorrar = vi.fn();
     render(<Agentes {...manejadores} alBorrar={alBorrar} agentes={[REVISOR]} />);
+    irA("Tuyos");
     // El de la fila lleva el NOMBRE del agente en su etiqueta: son botones de icono y sin
     // ella no tendrían nombre ninguno, y «Eliminar» repetido no distingue cuál es cuál.
     fireEvent.click(screen.getByRole("button", { name: "Eliminar revisor" }));
@@ -236,6 +254,7 @@ describe("Agentes", () => {
     // Renombrarlo desde aquí crearía uno nuevo y dejaría el viejo puesto, que es la peor de
     // las dos cosas que el usuario podría querer.
     render(<Agentes {...manejadores} agentes={[REVISOR]} />);
+    irA("Tuyos");
     fireEvent.click(screen.getByRole("button", { name: "Editar revisor" }));
     expect(screen.getByDisplayValue("revisor")).toHaveProperty("disabled", true);
   });
@@ -248,6 +267,7 @@ describe("Agentes", () => {
     render(
       <Agentes {...manejadores} hayProyecto alGuardar={alGuardar} agentes={[{ ...REVISOR, origen: "proyecto" }]} />
     );
+    irA("Tuyos");
     fireEvent.click(screen.getByRole("button", { name: "Editar revisor" }));
     fireEvent.click(screen.getByRole("button", { name: "Guardar" }));
     expect(alGuardar).toHaveBeenCalledWith(expect.objectContaining({ nombre: "revisor" }), "proyecto");
@@ -257,9 +277,162 @@ describe("Agentes", () => {
 describe("Agentes: crear está a la vista", () => {
   it("«Nuevo subagente» va ENCIMA de la lista, no detrás de ella", () => {
     render(<Agentes {...manejadores} agentes={[REVISOR]} />);
+    irA("Tuyos");
     const boton = screen.getByRole("button", { name: "Nuevo subagente" });
     const fila = screen.getByText("revisor");
     // `compareDocumentPosition`: FOLLOWING = 4 significa que `fila` viene después de `boton`.
     expect(boton.compareDocumentPosition(fila) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  /**
+   * Y vive en la pestaña de LOS TUYOS, porque un subagente nuevo siempre lo es: no hay forma
+   * de escribir uno «de xonecode» —eso lo decide la siembra—, así que encima de las dos
+   * pestañas ofrecía una acción sobre un grupo donde no cabe.
+   */
+  it("no está en la pestaña de xonecode: ahí no se puede crear nada", () => {
+    render(<Agentes {...manejadores} agentes={[DOCS, REVISOR]} />);
+    expect(screen.queryByRole("button", { name: "Nuevo subagente" })).toBeNull();
+    irA("Tuyos");
+    expect(screen.getByRole("button", { name: "Nuevo subagente" })).not.toBeNull();
+  });
+
+  it("sin NINGÚN subagente sí está a la vista: es el único sitio donde crear el primero", () => {
+    // Ahí no hay pestañas que pintar, así que el botón va con el aviso de que no hay ninguno.
+    render(<Agentes {...manejadores} agentes={[]} />);
+    expect(screen.queryByRole("tab")).toBeNull();
+    expect(screen.getByRole("button", { name: "Nuevo subagente" })).not.toBeNull();
+  });
+});
+
+/**
+ * Los dos grupos, y la única diferencia real entre ellos: qué se puede hacer con la fila.
+ *
+ * Todo esto se apoya en `semilla`, que es el campo que el servidor calcula
+ * (`agentesEnDisco.ts#marcarSemilla`) y que la lista blanca del store puede tragarse sin dar
+ * error — de ahí que se pruebe por su EFECTO en la pantalla y no por el dato.
+ */
+describe("Agentes: los que trae xonecode y los tuyos", () => {
+  it("se reparten en dos pestañas, y los reparte `semilla` y no la carpeta", () => {
+    // Los dos son `origen: "global"`, que es justo el caso que la pastilla GLOBAL no
+    // distinguía: vivir en la carpeta global no dice de quién es el fichero.
+    render(<Agentes {...manejadores} agentes={[DOCS, REVISOR]} />);
+    // La cuenta va en la pestaña para no tener que abrirla, así que el nombre accesible la
+    // lleva detrás: se busca por el principio.
+    expect(screen.getByRole("tab", { name: /^De xonecode/ }).textContent).toContain("1");
+    expect(screen.getByRole("tab", { name: /^Tuyos/ }).textContent).toContain("1");
+    // Y solo se pinta la lista de la pestaña abierta, que es la primera.
+    expect(screen.getByText("docs")).not.toBeNull();
+    expect(screen.queryByText("revisor")).toBeNull();
+  });
+
+  it("las DOS pestañas están siempre, también la vacía, y la vacía lo dice con palabras", () => {
+    // Esconderla dejaría a quien no ha creado ninguno sin saber dónde van a aparecer los
+    // suyos. Misma regla que las pestañas de Entornos: el rótulo contesta «¿de quién es
+    // esto?». Lo condicional es la CUENTA: un cero no se pinta.
+    render(<Agentes {...manejadores} agentes={[DOCS]} />);
+    const tuyos = screen.getByRole("tab", { name: /^Tuyos/ });
+    expect(tuyos).not.toBeNull();
+    expect(tuyos.textContent).toBe("Tuyos");
+
+    irA("Tuyos");
+    expect(screen.getByText(/No has creado ninguno/)).not.toBeNull();
+  });
+
+  /**
+   * La regla que da sentido a todo lo demás.
+   *
+   * Borrar uno de serie no devolvía el de serie: la marca de la siembra recuerda que se
+   * entregó, así que `sembrarAgentes` no lo resiembra — era perderlo para siempre detrás de
+   * un icono que parece reversible. Y la negativa no vive solo aquí: el servidor rechaza el
+   * mensaje igualmente, porque esconder un icono es presentación.
+   */
+  it("un de serie no lleva papelera; uno tuyo sí", () => {
+    render(<Agentes {...manejadores} agentes={[DOCS, REVISOR]} />);
+    expect(screen.queryByRole("button", { name: "Eliminar docs" })).toBeNull();
+    irA("Tuyos");
+    expect(screen.getByRole("button", { name: "Eliminar revisor" })).not.toBeNull();
+  });
+
+  it("un de serie INTACTO no ofrece restaurar: no hay nada que restaurar", () => {
+    // Un control sin dato detrás no se pinta. Y aquí además mentiría: sugeriría que el
+    // fichero está distinto de como lo entregamos.
+    render(<Agentes {...manejadores} agentes={[DOCS]} />);
+    expect(screen.queryByRole("button", { name: "Restaurar el de serie" })).toBeNull();
+  });
+
+  it("uno EDITADO lo dice con su consecuencia, y ofrece restaurarlo", () => {
+    // La frase es la que estaba en la caja roja de arriba, junto a los `.md` que no cargan:
+    // en rojo y con `role="alert"` sobre un agente que está perfectamente. Y dice lo que se
+    // pierde de verdad —las mejoras que publiquemos ya no llegan—, no «no es el de serie».
+    render(<Agentes {...manejadores} agentes={[{ ...DOCS, semilla: "modificada" }]} />);
+    expect(screen.getByText(/las mejoras que publiquemos/)).not.toBeNull();
+    expect(screen.getByRole("button", { name: "Restaurar el de serie" })).not.toBeNull();
+    // Y no por la caja de problemas: ese canal vuelve a ser solo «este fichero no carga».
+    expect(screen.queryByRole("alert")).toBeNull();
+  });
+
+  it("restaurar se confirma: pisa un prompt afinado a mano y eso no vuelve", () => {
+    const alRestaurar = vi.fn();
+    render(
+      <Agentes {...manejadores} alRestaurar={alRestaurar} agentes={[{ ...DOCS, semilla: "modificada" }]} />
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Restaurar el de serie" }));
+    expect(alRestaurar).not.toHaveBeenCalled();
+
+    expect(screen.getByText(/Lo que hayas escrito no vuelve/)).not.toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Restaurar" }));
+    // Sin ámbito: la siembra solo escribe en el global, así que no hay dos sitios que elegir.
+    expect(alRestaurar).toHaveBeenCalledWith("docs");
+  });
+
+  /**
+   * El patrón de fallo de este repo, en su versión de props: la fila se extrajo para que los
+   * dos grupos pinten la misma, y un manejador sin cablear se queda con todo en verde
+   * (`filaDeTarea`, el prop de las pestañas por entorno). Así que se prueba en LOS DOS.
+   */
+  it("las acciones están cableadas en los dos grupos, no solo en uno", () => {
+    const alBorrar = vi.fn();
+    const alRestaurar = vi.fn();
+    render(
+      <Agentes
+        {...manejadores}
+        alBorrar={alBorrar}
+        alRestaurar={alRestaurar}
+        agentes={[{ ...DOCS, semilla: "modificada" }, REVISOR]}
+      />
+    );
+    // La pestaña de xonecode: editar, y la restauración.
+    fireEvent.click(screen.getByRole("button", { name: "Editar docs" }));
+    expect(screen.getByDisplayValue("docs")).not.toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Cancelar" }));
+
+    fireEvent.click(screen.getByRole("button", { name: "Restaurar el de serie" }));
+    fireEvent.click(screen.getByRole("button", { name: "Restaurar" }));
+    expect(alRestaurar).toHaveBeenCalledWith("docs");
+
+    // La de los tuyos: editar, y el borrado.
+    irA("Tuyos");
+    fireEvent.click(screen.getByRole("button", { name: "Editar revisor" }));
+    expect(screen.getByDisplayValue("revisor")).not.toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Cancelar" }));
+
+    fireEvent.click(screen.getByRole("button", { name: "Eliminar revisor" }));
+    fireEvent.click(screen.getByRole("button", { name: "Eliminar" }));
+    expect(alBorrar).toHaveBeenCalledWith("revisor", "global");
+  });
+
+  it("cambiar de pestaña CIERRA la confirmación abierta", () => {
+    // Si no, volver a la otra pestaña enseñaría un botón rojo armado sobre una fila que el
+    // usuario dejó de mirar hace dos clics — y con el mismo aspecto que el de al lado, que
+    // hace otra cosa.
+    render(<Agentes {...manejadores} agentes={[{ ...DOCS, semilla: "modificada" }, REVISOR]} />);
+    fireEvent.click(screen.getByRole("button", { name: "Restaurar el de serie" }));
+    expect(screen.getByRole("button", { name: "Restaurar" })).not.toBeNull();
+
+    irA("Tuyos");
+    irA("De xonecode");
+    expect(screen.queryByRole("button", { name: "Restaurar" })).toBeNull();
+    // Y sigue ofreciéndose, claro: lo que se cerró es la confirmación, no la acción.
+    expect(screen.getByRole("button", { name: "Restaurar el de serie" })).not.toBeNull();
   });
 });

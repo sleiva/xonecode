@@ -1163,7 +1163,13 @@ export type MensajeDelCliente =
    */
   | {
       clase: "agente";
-      accion: "guardar" | "borrar";
+      /**
+       * `restaurar` devuelve un agente de serie a como lo entregamos, y ocupa el sitio del
+       * `borrar` en esos: borrarlo no lo resiembra —la marca recuerda que se entregó—, así
+       * que era perderlo para siempre. El servidor RECHAZA un `borrar` de uno de serie:
+       * esconderle el icono al cliente es presentación, no una guarda.
+       */
+      accion: "guardar" | "borrar" | "restaurar";
       ambito: "global" | "proyecto";
       agente: AgenteDelCable;
     }
@@ -1288,6 +1294,12 @@ export interface AgenteDelCable {
   skills: string[];
   instrucciones: string;
   origen?: string;
+  /**
+   * De quién es el fichero, que NO es lo mismo que `origen` —esa es la carpeta— y decide qué
+   * botón lleva la tarjeta: ausente, la papelera; `modificada`, «Restaurar el de serie».
+   * Los tres estados y su porqué, en `core/agentes.ts#AgenteCargado`.
+   */
+  semilla?: "intacta" | "modificada";
 }
 
 /** A dónde escribe el SSE. Ausente = no hay nadie al otro lado. */

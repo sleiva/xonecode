@@ -37,6 +37,7 @@ import { leerFicheroDeProyecto, motivoDeRutaInaceptable } from "../../agent/graf
 import { CLAVE_DE_SELLO, cambiosDeSesion, fotoDeApertura } from "../../agent/sesiones/sesionGit.js";
 import type { PeticionDeTarea } from "../../core/ports.js";
 import { crearVestibulo, type Vestibulo } from "./vestibulo.js";
+import { rutaGlobalDeAgentes } from "../../agent/subagentes/agentesEnDisco.js";
 import { crearConsolaWeb, type ConsolaWeb, type OpcionesDeConsolaWeb } from "./consolaWeb.js";
 import { PAPELES } from "../../core/modelos.js";
 import { crearSesion, listarSesiones } from "./sesiones.js";
@@ -53,7 +54,7 @@ import {
   type FaseDeLanzamiento,
   type PeticionDeLanzamiento,
 } from "../../agent/dispositivos/lanzamientoEnMaquina.js";
-import type { MensajeAlCliente, MensajeDelCliente, Sumidero } from "./transporte.js";
+import type { AgenteDelCable, MensajeAlCliente, MensajeDelCliente, Sumidero } from "./transporte.js";
 import type { Acto } from "../../core/actos.js";
 
 /** El servidor visto por `montarRutas`: solo apunta lo que se le registra. */
@@ -3280,6 +3281,135 @@ describe("montarRutas — el cable, por fin conectado", () => {
     );
     await asentar();
     expect(revisado).toBe(0);
+  });
+});
+
+/**
+ * Los subagentes, por el cable: los dos únicos sitios donde la regla de «de serie» se decide.
+ *
+ * Con `HOME` mudado a un temporal, y no es higiene: sin eso un `borrar` que dejara de estar
+ * guardado se llevaría el `docs.md` REAL del usuario al correr los tests. Un test que puede
+ * borrar el trabajo de quien lo corre no prueba la guarda, la usa.
+ */
+describe("los subagentes, por el cable", () => {
+  let casa = "";
+  let previo: string | undefined;
+
+  beforeEach(() => {
+    casa = mkdtempSync(join(tmpdir(), "xonecode-cable-agentes-"));
+    previo = process.env["HOME"];
+    process.env["HOME"] = casa;
+  });
+  afterEach(() => {
+    if (previo === undefined) delete process.env["HOME"];
+    else process.env["HOME"] = previo;
+    rmSync(casa, { recursive: true, force: true });
+  });
+
+  /** `undefined` si esta plataforma no respeta `HOME`: ahí el test no puede afirmar nada. */
+  const carpeta = (): string | undefined =>
+    rutaGlobalDeAgentes().startsWith(casa) ? rutaGlobalDeAgentes() : undefined;
+
+  const conectar = async (): Promise<{
+    accion: ManejadorRuta;
+    cliente: ReturnType<typeof clienteDeMentira>;
+    dichos: string[];
+  }> => {
+    const dichos: string[] = [];
+    const servidor = servidorDeMentira();
+    montarRutas(servidor, vestibuloDePrueba(), { informar: (t) => dichos.push(t) });
+    const cliente = clienteDeMentira();
+    await servidor.rutas.get(`GET ${RUTA_EVENTOS}`)!(cliente.peticion, cliente.respuesta);
+    await asentar();
+    return { accion: servidor.rutas.get(`POST ${RUTA_ACCION}`)!, cliente, dichos };
+  };
+
+  const deSerie = (): AgenteDelCable => ({
+    nombre: "docs",
+    descripcion: "da igual: el servidor solo mira el nombre y el ámbito",
+    motor: "modelo",
+    soloLectura: true,
+    skills: [],
+    instrucciones: "",
+  });
+
+  /**
+   * La regla se decide en `marcarSemilla` y se prueba ahí; aquí solo se comprueba que LLEGA.
+   * Es el patrón de las nueve veces: el campo podía quedarse sin reenviar en el `map` de
+   * `mensajeDeAgentes` con todo lo demás en verde, porque es opcional en el tipo del cable.
+   */
+  it("`semilla` viaja: sin ella el cliente no puede separar los dos grupos", async () => {
+    if (carpeta() === undefined) return;
+    const { cliente } = await conectar();
+    const agentes = cliente.recibidos.filter((m) => m.clase === "agentes").at(-1);
+    expect(agentes).toBeDefined();
+    const lista = (agentes as { agentes: AgenteDelCable[] }).agentes;
+    expect(lista.find((a) => a.nombre === "docs")?.semilla).toBe("intacta");
+  });
+
+  it("un `borrar` de uno de serie se RECHAZA, y su `.md` sigue ahí", async () => {
+    // La guarda vive en el servidor y no solo en el cliente, que le esconde el icono:
+    // esconderlo es presentación, y este mensaje lo puede mandar cualquiera que hable por el
+    // cable. Y el rechazo DICE la alternativa, porque el usuario quería algo y sigue queriéndolo.
+    const dir = carpeta();
+    if (dir === undefined) return;
+    const { accion, dichos } = await conectar();
+    expect(existsSync(join(dir, "docs.md"))).toBe(true);
+
+    await enviarMensaje(accion, { clase: "agente", accion: "borrar", ambito: "global", agente: deSerie() });
+    await asentar();
+
+    expect(existsSync(join(dir, "docs.md"))).toBe(true);
+    expect(dichos.join("\n")).toMatch(/no se borra/);
+    expect(dichos.join("\n")).toMatch(/restaura/);
+  });
+
+  it("uno del USUARIO sí se borra: la guarda es para los de serie, no para todos", async () => {
+    const dir = carpeta();
+    if (dir === undefined) return;
+    const { accion } = await conectar();
+    writeFileSync(join(dir, "mio.md"), "---\ndescripcion: el mío\n---\ncuerpo", "utf8");
+
+    await enviarMensaje(accion, {
+      clase: "agente",
+      accion: "borrar",
+      ambito: "global",
+      agente: { ...deSerie(), nombre: "mio" },
+    });
+    await asentar();
+
+    expect(existsSync(join(dir, "mio.md"))).toBe(false);
+  });
+
+  it("`restaurar` reescribe el `.md` y vuelve a decir `intacta`", async () => {
+    const dir = carpeta();
+    if (dir === undefined) return;
+    const { accion, cliente, dichos } = await conectar();
+    writeFileSync(join(dir, "docs.md"), "---\ndescripcion: mío\n---\nMÍO", "utf8");
+
+    await enviarMensaje(accion, { clase: "agente", accion: "restaurar", ambito: "global", agente: deSerie() });
+    await asentar();
+
+    expect(readFileSync(join(dir, "docs.md"), "utf8")).not.toContain("MÍO");
+    expect(dichos.join("\n")).toMatch(/restaurado/);
+    // Y la lista se reemite: el botón desaparece sin recargar, porque ya no hay nada que restaurar.
+    const lista = (cliente.recibidos.filter((m) => m.clase === "agentes").at(-1) as {
+      agentes: AgenteDelCable[];
+    }).agentes;
+    expect(lista.find((a) => a.nombre === "docs")?.semilla).toBe("intacta");
+  });
+
+  it("un `restaurar` de algo que no es de serie se dice, no se inventa una versión", async () => {
+    if (carpeta() === undefined) return;
+    const { accion, dichos } = await conectar();
+    await enviarMensaje(accion, {
+      clase: "agente",
+      accion: "restaurar",
+      ambito: "global",
+      agente: { ...deSerie(), nombre: "advisor" },
+    });
+    await asentar();
+    expect(dichos.join("\n")).toMatch(/no es uno de los de serie/);
   });
 });
 

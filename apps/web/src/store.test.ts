@@ -1581,3 +1581,47 @@ describe("el consumo de la sesión entra por lista BLANCA", () => {
     expect(s.leer().consumo).toBeUndefined();
   });
 });
+
+/**
+ * La lista blanca de `case "agentes"`, que es donde un campo nuevo se pierde en silencio.
+ *
+ * Esta lista ya se comió `mime`, `recetas` y `ejecutable` en otras clases, y el síntoma
+ * siempre es el mismo: la interfaz de ANTES, con todo en verde. Aquí sería la pantalla de
+ * subagentes con los dos grupos fundidos en uno y la papelera puesta sobre los que trae
+ * xonecode — o sea el botón que perdía el agente para siempre, otra vez.
+ */
+describe("store: `semilla` pasa la lista blanca de los subagentes", () => {
+  const uno = (extra: Record<string, unknown> = {}): Record<string, unknown> => ({
+    nombre: "docs",
+    descripcion: "da igual",
+    motor: "modelo",
+    soloLectura: true,
+    skills: [],
+    instrucciones: "",
+    origen: "global",
+    ...extra,
+  });
+
+  it("los dos valores llegan al estado", () => {
+    const s = crearStoreDelCliente();
+    s.aplicar({ clase: "agentes", agentes: [uno({ semilla: "modificada" })], problemas: [] } as never);
+    expect(s.leer().agentes?.lista[0]?.semilla).toBe("modificada");
+  });
+
+  it("ausente se conserva AUSENTE: es lo que significa «este `.md` es del usuario»", () => {
+    // Ausente ≠ «intacta». Rellenarlo con un valor por omisión le quitaría la papelera a un
+    // subagente propio y le ofrecería restaurar una versión de serie que no existe.
+    const s = crearStoreDelCliente();
+    s.aplicar({ clase: "agentes", agentes: [uno()], problemas: [] } as never);
+    expect(s.leer().agentes?.lista[0]).not.toHaveProperty("semilla");
+  });
+
+  it("un valor que no es ninguno de los dos se DESCARTA, no se propaga", () => {
+    // Es una unión de dos literales, y un tercero no puede decidir qué botón se pinta: sin
+    // esta criba `semilla: "quien-sabe"` entraría, contaría como «de serie» al agrupar y
+    // dejaría la fila sin papelera y sin botón de restaurar — sin ninguna acción.
+    const s = crearStoreDelCliente();
+    s.aplicar({ clase: "agentes", agentes: [uno({ semilla: "quien-sabe" })], problemas: [] } as never);
+    expect(s.leer().agentes?.lista[0]).not.toHaveProperty("semilla");
+  });
+});

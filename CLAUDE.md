@@ -181,11 +181,28 @@ Un subagente es un `.md` con frontmatter en `.xonecode/agentes/<nombre>.md`
   trampa del `"false"` de CloudStudio, que aquí concedería ESCRITURA.
 - **La marca de la siembra es `.semilla.json` con el hash de lo que escribimos**, no «la carpeta
   existe»: así un agente nuevo o una corrección alcanzan a quien ya arrancó, sin resucitar lo que
-  el usuario borró ni pisar lo que tocó (eso se DICE por `problemas`). Una carpeta sin marca con
+  el usuario borró ni pisar lo que tocó. Una carpeta sin marca con
   agentes de serie dentro se ADOPTA sin escribir nada; vacía se siembra entera. **Y un renombrado
   tiene caso propio** (`RENOMBRADOS`): la clave vieja de la marca que sigue siendo nuestra semilla
   intacta se RETIRA con su fichero, y si el usuario la afinó se queda y se dice — sin eso, quien
   ya hubiera arrancado se queda con los dos especialistas, uno de ellos sin mantener y en silencio.
+- **De QUIÉN es un `.md` viaja por el cable, y no es su carpeta** (`AgenteCargado.semilla`,
+  `marcarSemilla`): tres estados —ausente, `intacta`, `modificada`— en vez de dos booleanos, que
+  admitirían la combinación imposible. `origen` es la carpeta, y un subagente propio también vive
+  en la global, así que esa pastilla parecía contestar de quién era el fichero sin contestarlo. La
+  regla es **de serie Y del GLOBAL**: la siembra solo toca el global, así que un `docs.md` DEL
+  PROYECTO es del usuario aunque se llame igual, y con la regla simple se quedaba sin botón de
+  borrar. Se calcula en `agent/` —donde vive la lista— y no en el `map` de `arranque.ts`.
+- **Un de serie no se BORRA: se RESTAURA** (`restaurarAgente`, `accion: "restaurar"`). Borrarlo no
+  devolvía el de serie —la marca recuerda que se entregó, así que no se resiembra—, o sea que el
+  «bórralo si quieres el nuevo» que decía la consola dejaba sin ninguno de los dos y para siempre.
+  `restaurarAgente` **no escribe la marca**: la reanota la siembra siguiente, que corre antes de
+  cualquier lectura y reconoce su propio hash — un segundo sitio donde decidir sobre la marca es
+  el único que podría resucitar lo que el usuario borró. La negativa vive en el SERVIDOR además de
+  en la pantalla, que solo esconde el icono. Y lo de «este de serie está editado» dejó de ir por
+  `problemas`, que pintaba en rojo y con `role="alert"` un agente que está perfectamente: lo dice
+  su tarjeta, con la consecuencia (las mejoras que publiquemos ya no le llegan) y con el botón que
+  lo arregla al lado. `problemas` vuelve a significar solo «este fichero no carga».
 - **El prompt del orquestador se GENERA** de la lista (`xoneAgent.ts#promptOrquestador`).
 - Un `.md` roto se salta y su motivo viaja por el cable hasta la ventana de Ajustes.
 - **La línea de una delegación dice a QUIÉN** (`task` → `subagent_type`, en la lista blanca de

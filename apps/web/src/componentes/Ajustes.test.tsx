@@ -20,6 +20,7 @@ const MANEJADORES = {
   hayProyecto: false,
   alGuardarAgente: () => {},
   alBorrarAgente: () => {},
+  alRestaurarAgente: () => {},
 };
 
 const PROVEEDORES = [

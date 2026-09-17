@@ -155,6 +155,37 @@ export interface Lectura {
   problemas: string[];
 }
 
+/**
+ * Un agente ya cargado: el fichero, más de QUIÉN es.
+ *
+ * `semilla` no sale del `.md` —no hay forma de escribirlo ahí, y está bien: sería un campo
+ * que el usuario podría mentir— sino de comparar lo que hay en disco con lo que sembramos
+ * nosotros (`agentesEnDisco.ts#marcarSemilla`). Por eso vive en un tipo aparte de `Agente`,
+ * que es lo que `leerAgente` devuelve de un fichero.
+ *
+ * TRES estados y no un booleano, porque la pantalla hace tres cosas distintas con ellos y
+ * un `{deSerie, modificado}` admitiría la combinación imposible «no es de serie pero está
+ * modificado»:
+ *
+ * | valor | qué es | qué se puede hacer con él |
+ * |---|---|---|
+ * | ausente | un subagente del usuario | borrarlo |
+ * | `"intacta"` | de serie, tal como lo entregamos | nada: no hay nada que restaurar |
+ * | `"modificada"` | de serie, con el prompt afinado | restaurar el de serie (pisa lo suyo) |
+ *
+ * Y un de serie NO se borra: ver `restaurarAgente`. Borrarlo no devolvía el de serie —la
+ * marca recuerda que se entregó y no se resiembra—, así que era perderlo para siempre.
+ */
+export interface AgenteCargado extends Agente {
+  semilla?: "intacta" | "modificada";
+}
+
+/** Lo que `cargarAgentes` contesta: como `Lectura`, pero sabiendo de quién es cada uno. */
+export interface Carga {
+  agentes: AgenteCargado[];
+  problemas: string[];
+}
+
 function esMotor(v: string): v is Motor {
   return (MOTORES as readonly string[]).includes(v);
 }
@@ -277,8 +308,8 @@ export function leerAgente(
  * XOne» se quiere en todos los proyectos, y un «experto en esta app» solo en uno — y el
  * segundo tiene que poder pisar al primero sin borrarlo.
  */
-export function fusionarAgentes(global: readonly Agente[], proyecto: readonly Agente[]): Agente[] {
-  const porNombre = new Map<string, Agente>();
+export function fusionarAgentes<T extends Agente>(global: readonly T[], proyecto: readonly T[]): T[] {
+  const porNombre = new Map<string, T>();
   for (const a of global) porNombre.set(a.nombre, a);
   for (const a of proyecto) porNombre.set(a.nombre, a);
   return [...porNombre.values()].sort((a, b) => a.nombre.localeCompare(b.nombre));

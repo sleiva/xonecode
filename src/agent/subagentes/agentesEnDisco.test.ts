@@ -9,12 +9,15 @@ import {
   FICHERO_DE_SEMILLA,
   guardarAgente,
   cargarAgentes,
+  esDeSerie,
   leerCarpetaDeAgentes,
+  marcarSemilla,
+  restaurarAgente,
   rutaDeAgentes,
   rutaGlobalDeAgentes,
   sembrarAgentes,
 } from "./agentesEnDisco.js";
-import { fusionarAgentes } from "../../core/agentes.js";
+import { escribirAgente, fusionarAgentes, type Agente } from "../../core/agentes.js";
 import { SkillsEnDisco } from "../grafo/skills.js";
 
 const base = () => mkdtempSync(join(tmpdir(), "xonecode-agentes-"));
@@ -265,6 +268,167 @@ describe("cargarAgentes", () => {
       if (previo === undefined) delete process.env["HOME"];
       else process.env["HOME"] = previo;
     }
+  });
+
+  /**
+   * Un de serie afinado ya NO es un problema: es un estado de su tarjeta.
+   *
+   * Salía por el mismo canal que un `.md` que no carga, así que la consola pintaba en rojo y
+   * arriba del todo dos agentes que están perfectamente, con una escapatoria que además era
+   * falsa («bórralo si quieres el nuevo» dejaba sin ninguno). Ahora lo dice la tarjeta del
+   * agente, que es donde está el botón que lo arregla, y `problemas` vuelve a significar solo
+   * «este fichero no se pudo cargar».
+   */
+  it("un de serie MODIFICADO no va a `problemas`: lo dice su tarjeta", () => {
+    const casa = base();
+    const previo = process.env["HOME"];
+    process.env["HOME"] = casa;
+    try {
+      if (!rutaGlobalDeAgentes().startsWith(casa)) return;
+      cargarAgentes();
+      writeFileSync(join(rutaGlobalDeAgentes(), "docs.md"), "---\ndescripcion: mío\n---\nMÍO", "utf8");
+
+      const { agentes, problemas } = cargarAgentes();
+      expect(problemas).toEqual([]);
+      expect(agentes.find((a) => a.nombre === "docs")?.semilla).toBe("modificada");
+      expect(agentes.find((a) => a.nombre === "dev")?.semilla).toBe("intacta");
+    } finally {
+      if (previo === undefined) delete process.env["HOME"];
+      else process.env["HOME"] = previo;
+    }
+  });
+});
+
+/**
+ * De quién es cada `.md`, que es el dato que decide qué botón lleva su tarjeta.
+ *
+ * Se prueba aquí y no a través de `cargarAgentes` por la regla de las nueve veces: una regla
+ * de producción compuesta dentro de algo que los tests doblan está escrita, no probada. La
+ * función es pura, así que la trampa del proyecto se ata directamente.
+ */
+describe("marcarSemilla", () => {
+  const como = (nombre: string, origen: Agente["origen"]): Agente => ({
+    nombre,
+    descripcion: "da igual",
+    motor: "modelo",
+    soloLectura: true,
+    skills: [],
+    instrucciones: "",
+    origen,
+  });
+
+  it("un de serie del global lleva su estado; uno del usuario, NINGUNO", () => {
+    // Ausente ≠ «intacta»: un subagente del usuario no tiene semilla de la que apartarse, y
+    // marcarlo como intacto le pintaría un «Restaurar el de serie» que no existe.
+    const salida = marcarSemilla([como("docs", "global"), como("advisor", "global")], []);
+    expect(salida.find((a) => a.nombre === "docs")?.semilla).toBe("intacta");
+    expect(salida.find((a) => a.nombre === "advisor")?.semilla).toBeUndefined();
+  });
+
+  it("uno de serie MODIFICADO se dice: es el único con algo que restaurar", () => {
+    const salida = marcarSemilla([como("docs", "global"), como("dev", "global")], ["docs"]);
+    expect(salida.find((a) => a.nombre === "docs")?.semilla).toBe("modificada");
+    expect(salida.find((a) => a.nombre === "dev")?.semilla).toBe("intacta");
+  });
+
+  /**
+   * La trampa, y es la razón de que la regla no sea `nombre ∈ AGENTES_DE_SERIE` a secas.
+   *
+   * La siembra solo toca el GLOBAL. Un `docs.md` en `.xonecode/agentes/` del proyecto lo
+   * escribió el usuario, y da igual que se llame como uno de serie: es suyo. Con la regla
+   * simple se quedaría sin botón de borrar —un fichero del usuario que el usuario no puede
+   * borrar— y con un «Restaurar el de serie» que le pisaría el suyo con el global.
+   */
+  it("un `.md` DE PROYECTO que se llama igual que uno de serie es del USUARIO", () => {
+    const salida = marcarSemilla([como("docs", "proyecto")], ["docs"]);
+    expect(salida[0]!.semilla).toBeUndefined();
+  });
+
+  it("no toca nada más del agente: solo añade de quién es", () => {
+    const uno = como("docs", "global");
+    expect(marcarSemilla([uno], [])[0]).toEqual({ ...uno, semilla: "intacta" });
+  });
+});
+
+/**
+ * Restaurar el de serie: lo que ocupa el sitio del borrado en un agente sembrado.
+ *
+ * Borrar uno de serie NO devolvía el de serie —la marca recuerda que se entregó, así que no
+ * se resiembra (ver «uno BORRADO no se resucita»)—, o sea que el «Bórralo si quieres el
+ * nuevo» que decía la consola dejaba al usuario sin ninguno de los dos y para siempre. Esto
+ * es la operación que sí hace lo que esa frase prometía.
+ */
+describe("restaurarAgente", () => {
+  it("reescribe el `.md` con el de serie de hoy, pisando lo que hubiera", () => {
+    const raiz = base();
+    sembrarAgentes(raiz);
+    const ruta = join(rutaDeAgentes(raiz), "docs.md");
+    writeFileSync(ruta, "---\ndescripcion: el mío\n---\nMIS INSTRUCCIONES", "utf8");
+
+    expect(restaurarAgente(raiz, "docs")).toBe(true);
+    const docs = AGENTES_DE_SERIE.find((a) => a.nombre === "docs")!;
+    expect(readFileSync(ruta, "utf8")).toBe(escribirAgente(docs));
+  });
+
+  /**
+   * Y esto es lo que el borrado no daba: el agente vuelve al carril de las actualizaciones.
+   *
+   * No se escribe la marca aquí a propósito: la reanota la siembra siguiente, que corre
+   * ANTES de cualquier lectura (`cargarAgentes` la llama primero) y que ya sabe reconocer su
+   * propio hash. Escribirla también sería un segundo sitio donde decidir sobre la marca, y
+   * el único que puede resucitar lo que el usuario borró.
+   */
+  it("vuelve al carril: la siembra siguiente lo re-anota y ya no lo da por tocado", () => {
+    const raiz = base();
+    sembrarAgentes(raiz);
+    writeFileSync(join(rutaDeAgentes(raiz), "docs.md"), "---\ndescripcion: mío\n---\nMÍO", "utf8");
+    expect(sembrarAgentes(raiz).desactualizados).toEqual(["docs"]);
+
+    restaurarAgente(raiz, "docs");
+    const despues = sembrarAgentes(raiz);
+    expect(despues.desactualizados).toEqual([]);
+    expect(despues.escritos).toEqual([]);
+  });
+
+  it("de uno que no es de serie no hay nada que restaurar, y se dice", () => {
+    // Devuelve si pudo, como `borrarAgente`: la interfaz no puede decir «restaurado» de algo
+    // de lo que no tenemos ninguna versión.
+    const raiz = base();
+    sembrarAgentes(raiz);
+    guardarAgente(raiz, {
+      nombre: "mio",
+      descripcion: "el mío",
+      motor: "modelo",
+      soloLectura: true,
+      skills: [],
+      instrucciones: "",
+      origen: "global",
+    });
+    expect(restaurarAgente(raiz, "mio")).toBe(false);
+    expect(existsSync(join(rutaDeAgentes(raiz), "mio.md"))).toBe(true);
+  });
+
+  it("restaura uno que el usuario había BORRADO: la siembra ya no lo traía", () => {
+    // El caso que dejaba el agujero abierto. Borrarlo era irreversible desde la consola.
+    const raiz = base();
+    sembrarAgentes(raiz);
+    borrarAgente(raiz, "mockup");
+    sembrarAgentes(raiz);
+    expect(existsSync(join(rutaDeAgentes(raiz), "mockup.md"))).toBe(false);
+
+    expect(restaurarAgente(raiz, "mockup")).toBe(true);
+    expect(existsSync(join(rutaDeAgentes(raiz), "mockup.md"))).toBe(true);
+  });
+});
+
+describe("esDeSerie", () => {
+  it("dice los cinco de serie y ningún otro", () => {
+    // Es la guarda del servidor: un `borrar` de uno de serie se RECHAZA ahí, no solo se le
+    // esconde el icono al cliente. Esconder el botón es presentación.
+    for (const a of AGENTES_DE_SERIE) expect(esDeSerie(a.nombre)).toBe(true);
+    expect(esDeSerie("advisor")).toBe(false);
+    // El renombrado tampoco: dejó de ser de serie, y su `.md` es del usuario y se borra.
+    expect(esDeSerie("probador")).toBe(false);
   });
 });
 

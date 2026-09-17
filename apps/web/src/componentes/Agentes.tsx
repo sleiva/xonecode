@@ -124,6 +124,42 @@ const PISTA_DE_MODELO: Record<string, string> = {
   opencode: "— los que ofrece tu OpenCode",
 };
 
+/**
+ * El botón de alta. Un componente y no dos copias del JSX: sale en dos sitios —la pestaña de
+ * los tuyos y el aviso de que no hay ninguno— y duplicarlo es cómo uno de los dos se queda
+ * sin el `setAmbito` y guarda en la carpeta que no era.
+ */
+function BotonDeNuevo({ alPulsar }: { alPulsar: () => void }) {
+  return (
+    <Button variant="outline" className={clsx(estilos.accion, estilos.nuevo)} onClick={alPulsar}>
+      Nuevo subagente
+    </Button>
+  );
+}
+
+type Grupo = "serie" | "propios";
+
+/**
+ * Las dos pestañas: su rótulo y qué dice la vacía.
+ *
+ * El rótulo de una pestaña vacía no puede quedarse solo: «Tuyos» sin nada debajo se lee como
+ * una lista que no cargó. Y los dos vacíos no dicen lo mismo —uno es «no has creado ninguno»
+ * y el otro «no tienes en disco los que trae xonecode», que solo pasa si los borraste cuando
+ * la papelera todavía estaba ahí—, así que cada uno lleva el suyo.
+ */
+const GRUPOS: readonly { clave: Grupo; titulo: string; vacio: string }[] = [
+  {
+    clave: "serie",
+    titulo: "De xonecode",
+    vacio: "No tienes en disco ninguno de los que trae xonecode.",
+  },
+  {
+    clave: "propios",
+    titulo: "Tuyos",
+    vacio: "No has creado ninguno. «Nuevo subagente» escribe el primero.",
+  },
+];
+
 const motorExterno = (motor: string): boolean =>
   motor === "claude-code" || motor === "codex" || motor === "opencode";
 
@@ -137,6 +173,7 @@ export function Agentes({
   alPedirCatalogo,
   alGuardar,
   alBorrar,
+  alRestaurar,
 }: {
   /** Ausente = todavía no llegó el mensaje, que NO es «no hay ninguno». */
   agentes?: readonly AgenteDelCable[];
@@ -145,6 +182,11 @@ export function Agentes({
   hayProyecto: boolean;
   alGuardar: (agente: AgenteDelCable, ambito: "global" | "proyecto") => void;
   alBorrar: (nombre: string, ambito: "global" | "proyecto") => void;
+  /**
+   * Devuelve un de serie a como lo entrega xonecode. Sin ámbito: la siembra solo escribe en
+   * el global, así que no hay dos sitios entre los que elegir — lo decide el servidor.
+   */
+  alRestaurar: (nombre: string) => void;
   /**
    * Los proveedores del mensaje «modelos», para el desplegable del motor `modelo`. Se
    * ofrecen solo los COMPROBADOS, igual que en la pastilla del compositor: uno sin
@@ -162,7 +204,16 @@ export function Agentes({
   const [editando, setEditando] = useState<AgenteDelCable | undefined>(undefined);
   const [creando, setCreando] = useState(false);
   const [ambito, setAmbito] = useState<"global" | "proyecto">("global");
-  const [borrando, setBorrando] = useState<string | undefined>(undefined);
+  /**
+   * La confirmación abierta, si hay alguna: de QUIÉN y de QUÉ.
+   *
+   * Era un `string` con el nombre, cuando lo único confirmable era borrar. Ahora hay dos
+   * operaciones que pisan un fichero sin papelera y van en la misma fila, así que el nombre
+   * solo no basta: con dos estados sueltos se podrían abrir las dos a la vez sobre la misma
+   * fila, y el usuario tendría delante dos botones rojos que hacen cosas distintas.
+   */
+  const [abierta, setAbierta] = useState<{ nombre: string; que: "borrar" | "restaurar" } | undefined>(undefined);
+  const [pestana, setPestana] = useState<Grupo>("serie");
 
   /**
    * Los proveedores COMPROBADOS, la misma regla que la pastilla del compositor: con clave
@@ -204,6 +255,20 @@ export function Agentes({
     if (motorEditado !== "modelo" || idsSinCatalogo === "") return;
     for (const id of idsSinCatalogo.split(",")) alPedirCatalogo?.(id);
   }, [motorEditado, idsSinCatalogo, alPedirCatalogo]);
+
+  /** Los dos grupos, repartidos por `semilla`. Ver el `tablist` para por qué no por `origen`. */
+  const porGrupo: Record<Grupo, readonly AgenteDelCable[]> = {
+    serie: (agentes ?? []).filter((a) => a.semilla !== undefined),
+    propios: (agentes ?? []).filter((a) => a.semilla === undefined),
+  };
+
+  /** Abrir el formulario en blanco. Uno solo: lo llaman los dos sitios donde sale el botón. */
+  const nuevo = (): void => {
+    setAbierta(undefined);
+    setEditando(enBlanco());
+    setCreando(true);
+    setAmbito(hayProyecto ? "proyecto" : "global");
+  };
 
   const cerrar = (): void => {
     setEditando(undefined);
@@ -248,90 +313,86 @@ export function Agentes({
         </ul>
       ) : null}
 
-      {/* Crear va ENCIMA de la lista: debajo quedaba fuera de la vista al abrir la sección. */}
-      {editando === undefined ? (
-        <Button
-          variant="outline"
-          className={estilos.accion}
-          onClick={() => {
-            setEditando(enBlanco());
-            setCreando(true);
-            setAmbito(hayProyecto ? "proyecto" : "global");
-          }}
-        >
-          Nuevo subagente
-        </Button>
-      ) : null}
+      {/*
+        Crear vive con LOS TUYOS, porque un subagente nuevo siempre lo es: no hay forma de
+        escribir uno «de xonecode» —eso lo decide la siembra— así que el botón encima de las
+        dos pestañas ofrecía una acción sobre un grupo donde no cabe. Y sigue yendo ENCIMA de
+        su lista: debajo quedaba fuera de la vista al abrir la sección.
+
+        Sin NINGÚN subagente no hay pestañas que pintar, y entonces el botón va con el aviso
+        de que no hay ninguno: es el único sitio desde donde se puede crear el primero.
+      */}
       {agentes.length === 0 ? (
-        <p className={estilos.vacio}>
-          No hay ningún subagente. Sin ninguno, el orquestador no tiene en quién delegar.
-        </p>
+        <>
+          <p className={estilos.vacio}>
+            No hay ningún subagente. Sin ninguno, el orquestador no tiene en quién delegar.
+          </p>
+          <BotonDeNuevo alPulsar={nuevo} />
+        </>
       ) : (
-        <ul className={estilos.filas}>
-          {agentes.map((a) => (
-            <li key={a.nombre} className={estilos.fila}>
-              <div className={estilos.cabeceraDeFila}>
-                <span className={estilos.nombre}>{a.nombre}</span>
-                <span className={estilos.motor}>{a.motor}</span>
-                {/* De dónde sale. Es lo que explica por qué editarlo aquí no afecta a los
-                    demás proyectos — o por qué sí. */}
-                {a.origen === undefined ? null : <span className={estilos.origen}>{a.origen}</span>}
-                {a.soloLectura ? <span className={estilos.lectura}>solo lectura</span> : null}
-                <span className={estilos.relleno} />
-                {/*
-                  Iconos y no dos botones de texto: con cinco subagentes eran diez rótulos
-                  repetidos que pesaban más que los nombres. El nombre accesible va en el
-                  `aria-label` y LLEVA EL DEL AGENTE — aquí sí, al revés que en el punto de
-                  la pastilla de modelo: allí el `aria-label` se sumaba al nombre del botón
-                  que lo contenía y lo estropeaba; estos botones no tienen texto, así que sin
-                  `aria-label` no tendrían nombre ninguno, y «Editar» repetido cinco veces no
-                  distingue cuál es cuál para quien navega por voz.
-                */}
-                <button
-                  type="button"
-                  className={estilos.icono}
-                  aria-label={`Editar ${a.nombre}`}
-                  title="Editar"
-                  onClick={() => {
-                    setBorrando(undefined);
-                    setAmbito(a.origen === "proyecto" ? "proyecto" : "global");
-                    setEditando({ ...a });
-                    setCreando(false);
-                  }}
-                >
-                  <IconEditOutline16 size={18} />
-                </button>
-                <button
-                  type="button"
-                  className={clsx(estilos.icono, estilos.iconoDestructivo)}
-                  aria-label={`Eliminar ${a.nombre}`}
-                  title="Eliminar"
-                  onClick={() => setBorrando(borrando === a.nombre ? undefined : a.nombre)}
-                >
-                  <IconTrashOutline16 size={18} />
-                </button>
-              </div>
-              <p className={estilos.descripcion}>{a.descripcion}</p>
-              {/* Eliminar se confirma en la propia fila y no al primer clic: borra un fichero
-                  y no hay papelera, igual que en la barra de sesiones. */}
-              {borrando === a.nombre ? (
-                <p className={estilos.confirmar}>
-                  Se borra el fichero de «{a.nombre}». No hay papelera.{" "}
-                  <Button
-                    variant="outline"
-                    className={estilos.destructiva}
-                    onClick={() => {
-                      alBorrar(a.nombre, a.origen === "proyecto" ? "proyecto" : "global");
-                      setBorrando(undefined);
+        <>
+          {/*
+            Dos pestañas, y SIEMPRE las dos —también con una vacía—, por lo mismo que las de
+            Entornos: la etiqueta contesta «¿de quién es esto?», que es la pregunta que la
+            pantalla no contestaba. Esconder la vacía dejaría a quien no ha creado ninguno sin
+            saber dónde van a aparecer los suyos, y al que borró los de serie sin la puerta
+            donde mirarlo. La CUENTA sí es condicional: un cero no se pinta, así que una
+            pestaña vacía es su rótulo a secas y su panel lo dice con palabras.
+
+            Los separa `semilla` y no `origen`: `origen` es la CARPETA (global o proyecto), y
+            un subagente propio también vive en la global — que es lo que hacía que la
+            pastilla `GLOBAL` pareciera contestar de quién era el fichero sin contestarlo.
+          */}
+          <div className={estilos.pestanas} role="tablist" aria-label="Subagentes por origen">
+            {GRUPOS.map((g) => (
+              <button
+                key={g.clave}
+                type="button"
+                role="tab"
+                className={estilos.pestana}
+                aria-selected={g.clave === pestana}
+                data-actual={g.clave === pestana ? "" : undefined}
+                onClick={() => {
+                  setPestana(g.clave);
+                  // La confirmación abierta se cierra al cambiar de pestaña: si no, volver
+                  // a la otra enseñaría un botón rojo armado sobre una fila que el usuario
+                  // dejó de mirar hace dos clics.
+                  setAbierta(undefined);
+                }}
+              >
+                {g.titulo}
+                {porGrupo[g.clave].length > 0 ? (
+                  <span className={estilos.cuenta}>{porGrupo[g.clave].length}</span>
+                ) : null}
+              </button>
+            ))}
+          </div>
+          <div role="tabpanel" className={estilos.panelDePestana}>
+            {pestana === "propios" ? <BotonDeNuevo alPulsar={nuevo} /> : null}
+            {porGrupo[pestana].length === 0 ? (
+              <p className={estilos.vacio}>{GRUPOS.find((g) => g.clave === pestana)!.vacio}</p>
+            ) : (
+              <ul className={estilos.filas}>
+                {porGrupo[pestana].map((a) => (
+                  <FilaDeAgente
+                    key={a.nombre}
+                    agente={a}
+                    abierta={abierta}
+                    alAbrir={setAbierta}
+                    alEditar={() => {
+                      setAbierta(undefined);
+                      setAmbito(a.origen === "proyecto" ? "proyecto" : "global");
+                      setEditando({ ...a });
+                      setCreando(false);
                     }}
-                  >
-                    Eliminar
-                  </Button>
-                </p>
-              ) : null}
-            </li>
-          ))}
-        </ul>
+                    alBorrar={() => alBorrar(a.nombre, a.origen === "proyecto" ? "proyecto" : "global")}
+                    alRestaurar={() => alRestaurar(a.nombre)}
+                  />
+                ))}
+              </ul>
+            )}
+          </div>
+        </>
       )}
 
         </>
@@ -541,5 +602,142 @@ export function Agentes({
         </div>
       )}
     </>
+  );
+}
+
+/**
+ * Una fila de la lista: quién es, y qué se puede hacer con él.
+ *
+ * Extraída porque los dos grupos pintan la MISMA fila, y duplicarla es cómo uno de los dos
+ * se queda sin el botón nuevo. El precio es el de siempre en este repo —el cableado de una
+ * prop se puede olvidar con todo en verde, que es el patrón de `filaDeTarea`—, así que las
+ * tres acciones tienen su test por separado y en los dos grupos.
+ *
+ * La diferencia entre los dos grupos vive AQUÍ y es una sola: **un de serie no lleva
+ * papelera.** No por delicadeza, sino porque borrarlo no devolvía el de serie: la marca de la
+ * siembra recuerda que se entregó, así que no se resiembra —era perderlo para siempre, con un
+ * icono que parecía reversible—. Lo que ese sitio lleva ahora es «Restaurar el de serie», y
+ * solo si hay algo que restaurar: sobre uno intacto sería un control sin dato detrás.
+ */
+function FilaDeAgente({
+  agente,
+  abierta,
+  alAbrir,
+  alEditar,
+  alBorrar,
+  alRestaurar,
+}: {
+  agente: AgenteDelCable;
+  abierta?: { nombre: string; que: "borrar" | "restaurar" };
+  alAbrir: (a: { nombre: string; que: "borrar" | "restaurar" } | undefined) => void;
+  alEditar: () => void;
+  alBorrar: () => void;
+  alRestaurar: () => void;
+}) {
+  const a = agente;
+  /** Qué se está confirmando en ESTA fila, si algo. */
+  const confirmando = abierta?.nombre === a.nombre ? abierta.que : undefined;
+  const alternar = (que: "borrar" | "restaurar"): void =>
+    alAbrir(confirmando === que ? undefined : { nombre: a.nombre, que });
+
+  return (
+    <li className={estilos.fila}>
+      <div className={estilos.cabeceraDeFila}>
+        <span className={estilos.nombre}>{a.nombre}</span>
+        <span className={estilos.motor}>{a.motor}</span>
+        {/* De dónde sale. Es lo que explica por qué editarlo aquí no afecta a los
+            demás proyectos — o por qué sí. */}
+        {a.origen === undefined ? null : <span className={estilos.origen}>{a.origen}</span>}
+        {a.soloLectura ? <span className={estilos.lectura}>solo lectura</span> : null}
+        <span className={estilos.relleno} />
+        {/*
+          Iconos y no dos botones de texto: con cinco subagentes eran diez rótulos
+          repetidos que pesaban más que los nombres. El nombre accesible va en el
+          `aria-label` y LLEVA EL DEL AGENTE — aquí sí, al revés que en el punto de
+          la pastilla de modelo: allí el `aria-label` se sumaba al nombre del botón
+          que lo contenía y lo estropeaba; estos botones no tienen texto, así que sin
+          `aria-label` no tendrían nombre ninguno, y «Editar» repetido cinco veces no
+          distingue cuál es cuál para quien navega por voz.
+        */}
+        <button
+          type="button"
+          className={estilos.icono}
+          aria-label={`Editar ${a.nombre}`}
+          title="Editar"
+          onClick={() => {
+            alAbrir(undefined);
+            alEditar();
+          }}
+        >
+          <IconEditOutline16 size={18} />
+        </button>
+        {/* Un de serie SE EDITA pero no se borra, así que aquí no hay papelera que esconder:
+            no está. El hueco no queda vacío cuando hay algo que restaurar — ese botón va
+            abajo, con la frase que explica por qué existe. */}
+        {a.semilla === undefined ? (
+          <button
+            type="button"
+            className={clsx(estilos.icono, estilos.iconoDestructivo)}
+            aria-label={`Eliminar ${a.nombre}`}
+            title="Eliminar"
+            onClick={() => alternar("borrar")}
+          >
+            <IconTrashOutline16 size={18} />
+          </button>
+        ) : null}
+      </div>
+      <p className={estilos.descripcion}>{a.descripcion}</p>
+      {/*
+        Que un de serie esté editado se dice AQUÍ, y esto es lo que salía en la caja roja de
+        arriba —junto a los `.md` que no cargan, o sea en rojo y con `role="alert"` sobre dos
+        agentes que están perfectamente—. Y se dice la consecuencia, que es lo único que hace
+        la frase útil: lo que se pierde no es «ser el de serie», es que las correcciones que
+        publiquemos ya no le llegan (`sembrarAgentes` no pisa lo que el usuario tocó).
+
+        La frase de antes mandaba a BORRARLO para tener el nuevo, y eso no funcionaba: la
+        marca recuerda que se entregó, así que borrarlo dejaba sin ninguno de los dos.
+      */}
+      {a.semilla === "modificada" && confirmando !== "restaurar" ? (
+        <p className={estilos.restaurar}>
+          Lo has editado, así que las mejoras que publiquemos en él ya no te llegan.{" "}
+          <Button variant="outline" className={estilos.accionDeFila} onClick={() => alternar("restaurar")}>
+            Restaurar el de serie
+          </Button>
+        </p>
+      ) : null}
+      {/* Las dos confirmaciones viven en la propia fila y no al primer clic: las dos escriben
+          un fichero y no hay papelera, igual que en la barra de sesiones. Restaurar no borra,
+          pero pisa un prompt afinado a mano, que es trabajo que tampoco vuelve. */}
+      {confirmando === "borrar" ? (
+        <p className={estilos.confirmar}>
+          Se borra el fichero de «{a.nombre}». No hay papelera.{" "}
+          <Button
+            variant="outline"
+            className={estilos.destructiva}
+            onClick={() => {
+              alBorrar();
+              alAbrir(undefined);
+            }}
+          >
+            Eliminar
+          </Button>
+        </p>
+      ) : null}
+      {confirmando === "restaurar" ? (
+        <p className={estilos.confirmar}>
+          Se pisa tu versión de «{a.nombre}» con la de xonecode. Lo que hayas escrito no vuelve.{" "}
+          <Button
+            variant="outline"
+            className={estilos.destructiva}
+            onClick={() => {
+              alRestaurar();
+              alAbrir(undefined);
+            }}
+          >
+            Restaurar
+          </Button>
+        </p>
+      ) : null}
+    </li>
   );
 }

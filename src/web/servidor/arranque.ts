@@ -37,7 +37,13 @@ import type { IncomingMessage, ServerResponse } from "node:http";
 import { homedir } from "node:os";
 import type { Acto } from "../../core/actos.js";
 import { escribirAgente, leerAgente, type Agente } from "../../core/agentes.js";
-import { borrarAgente, cargarAgentes, guardarAgente } from "../../agent/subagentes/agentesEnDisco.js";
+import {
+  borrarAgente,
+  cargarAgentes,
+  esDeSerie,
+  guardarAgente,
+  restaurarAgente,
+} from "../../agent/subagentes/agentesEnDisco.js";
 import { detectarDispositivos, frameworkEnDispositivo } from "../../agent/dispositivos/dispositivosEnMaquina.js";
 /**
  * El veredicto de «¿se puede lanzar?» y el lanzamiento entero.
@@ -891,6 +897,9 @@ export function montarRutas(
         skills: a.skills,
         instrucciones: a.instrucciones,
         origen: a.origen,
+        // Ausente cuando el `.md` es del usuario, y eso es el dato: es lo que le pone la
+        // papelera en vez de un «Restaurar el de serie».
+        ...(a.semilla === undefined ? {} : { semilla: a.semilla }),
       })),
       problemas,
     };
@@ -908,6 +917,34 @@ export function montarRutas(
    */
   const atenderAgente = (mensaje: Extract<MensajeDelCliente, { clase: "agente" }>): void => {
     const abierto = vestibulo.proyectoAbierto();
+    /**
+     * `restaurar` va ANTES de la guarda del ámbito porque no tiene ámbito que elegir: la
+     * siembra solo escribe en el global, así que la versión de serie solo puede volver ahí.
+     * Pasarlo por el `ambito` del mensaje sería ofrecer una decisión que no existe, y con un
+     * `ambito: "proyecto"` daría un «no hay ningún proyecto abierto» que no viene a cuento.
+     */
+    if (mensaje.accion === "restaurar") {
+      informar(
+        restaurarAgente(homedir(), mensaje.agente.nombre)
+          ? `subagente «${mensaje.agente.nombre}» restaurado al de serie`
+          : `«${mensaje.agente.nombre}» no es uno de los de serie: no hay ninguna versión nuestra que poner`
+      );
+      emitirAgentes();
+      return;
+    }
+    /**
+     * Y un de serie NO se borra. La negativa vive AQUÍ y no solo en el cliente, que le
+     * esconde el icono: esconderlo es presentación, y este mensaje lo puede mandar cualquier
+     * cosa que hable por el cable. Borrarlo no devolvía el de serie —`sembrarAgentes` no
+     * resiembra lo que consta entregado— así que era perderlo para siempre; lo que sí hace
+     * lo que aquello prometía es `restaurar`, y se dice en el mismo sitio donde se rechaza.
+     */
+    if (mensaje.accion === "borrar" && mensaje.ambito === "global" && esDeSerie(mensaje.agente.nombre)) {
+      informar(
+        `«${mensaje.agente.nombre}» lo trae xonecode y no se borra: edítalo, o restaura el de serie si quieres el original`
+      );
+      return;
+    }
     if (mensaje.ambito === "proyecto" && abierto === undefined) {
       informar("no hay ningún proyecto abierto: ese subagente solo se puede guardar como global");
       return;

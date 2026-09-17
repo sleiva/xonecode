@@ -1019,6 +1019,17 @@ export function App({
       alGuardarAgente={(agente, ambito) =>
         void enviar({ clase: "agente", accion: "guardar", ambito, agente })
       }
+      alRestaurarAgente={(nombre) =>
+        void enviar({
+          clase: "agente",
+          accion: "restaurar",
+          // `global` fijo y no el ámbito de la fila: la siembra solo escribe ahí, así que la
+          // versión de serie solo puede volver a la carpeta global. El servidor tampoco lo
+          // mira en esta acción — va porque el mensaje tiene una forma sola.
+          ambito: "global",
+          agente: { nombre, descripcion: "", motor: "modelo", soloLectura: true, skills: [], instrucciones: "" },
+        })
+      }
       alBorrarAgente={(nombre, ambito) =>
         void enviar({
           clase: "agente",

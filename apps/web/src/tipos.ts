@@ -41,6 +41,12 @@ export interface AgenteDelCable {
   skills: string[];
   instrucciones: string;
   origen?: string;
+  /**
+   * De quién es el fichero, que NO es lo mismo que `origen` —esa es la carpeta— y decide qué
+   * botón lleva la tarjeta: ausente, la papelera; `modificada`, «Restaurar el de serie».
+   * Los tres estados y su porqué, en `core/agentes.ts#AgenteCargado`.
+   */
+  semilla?: "intacta" | "modificada";
 }
 
 /**
@@ -755,7 +761,8 @@ export type MensajeDelCliente =
    */
   | {
       clase: "agente";
-      accion: "guardar" | "borrar";
+      /** `restaurar` es lo que un de serie lleva en vez de `borrar`: ver el host. */
+      accion: "guardar" | "borrar" | "restaurar";
       ambito: "global" | "proyecto";
       agente: AgenteDelCable;
     }
