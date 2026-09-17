@@ -2,5 +2,11 @@
   "extends": "./tsconfig.json",
   "compilerOptions": { "declaration": false, "sourceMap": true },
   "include": ["src/**/*.ts", "src/**/*.tsx"],
-  "exclude": ["src/**/*.test.ts", "src/**/*.test.tsx", "src/**/__oro__/**", "src/evals/**"]
+  "exclude": [
+    "src/**/*.test.ts",
+    "src/**/*.test.tsx",
+    "src/**/__oro__/**",
+    "src/evals/**",
+    "src/casaDePruebas.ts"
+  ]
 }

@@ -8,6 +8,11 @@ import { defineConfig } from "vitest/config";
  *
  * Ahora hace falta de verdad: el cliente web necesita `jsdom` y el host necesita `node`,
  * y eso no se puede expresar sin config.
+ *
+ * Y una tercera cosa: **`setupFiles` muda la casa del usuario a un temporal**, en los DOS
+ * proyectos. Sin eso, correr los tests le reescribía a quien los corre su
+ * `~/.xonecode/agentes/` — el porqué entero está en `src/casaDePruebas.ts`, y `src/gate.test.ts`
+ * comprueba que sigue declarado aquí.
  */
 export default defineConfig({
   test: {
@@ -18,6 +23,7 @@ export default defineConfig({
           include: ["src/**/*.test.ts", "src/**/*.test.tsx"],
           exclude: ["**/node_modules/**", "**/dist/**", "**/.worktrees/**"],
           environment: "node",
+          setupFiles: ["./src/casaDePruebas.ts"],
         },
       },
       {
@@ -26,6 +32,9 @@ export default defineConfig({
           include: ["apps/web/**/*.test.ts", "apps/web/**/*.test.tsx"],
           exclude: ["**/node_modules/**", "**/dist/**"],
           environment: "jsdom",
+          // También aquí: el cliente no lee la casa hoy, pero la regla es del SUITE y no de
+          // una mitad — un proyecto exento es por donde vuelve.
+          setupFiles: ["./src/casaDePruebas.ts"],
           // `MarkdownText` (`@deepseek-ai/dsh-client-ui-primitives`) importa
           // `katex/dist/katex.min.css` como efecto de carga. Externalizado (el trato por
           // omisión para node_modules), Node intenta resolverlo con su loader nativo y

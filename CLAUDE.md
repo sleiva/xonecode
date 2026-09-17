@@ -44,6 +44,16 @@ de `xone-simulator --json`).
 **`npm test` no puede necesitar una clave, una conexión ni el simulador.** Es el invariante que
 sostiene todo el diseño de puertos: si un cambio lo rompe, está mal el cambio, no el test.
 
+**Y tampoco puede TOCAR la casa de quien lo corre**, que es el hermano del anterior y hoy se
+comprueba (`src/gate.test.ts`). No era teórico: `cargarAgentes()` siembra —a propósito, ver los
+subagentes— y la ráfaga de bienvenida del cable lo llama, así que una pasada le reescribía a
+quien la corría su `~/.xonecode/agentes/`. El arreglo NO es quitar la siembra del cargador ni
+mudar el `HOME` en los tests que hoy lo provocan —una lista que hay que acordarse de ampliar es
+el patrón de fallo de este repo—: se muda para TODO el suite en `vitest.config.ts`
+(`setupFiles`, los DOS proyectos, con su porqué en `src/casaDePruebas.ts`), así que ningún test
+futuro puede reintroducirlo. Ese fichero vive en `src/` para que lo tipe el gate y
+`tsconfig.build.json` lo excluye, el mismo trato que `src/evals/`.
+
 **`typecheck` son DOS proyectos, encadenados con `&&`, y eso se comprueba** (`src/gate.test.ts`).
 El del cliente no se puede fundir en el `include` de la raíz: su `lib`, su `jsx` y sus `types`
 son otros. Con un solo `tsc --noEmit` el cliente web entero se quedaba sin comprobar —ni él ni
