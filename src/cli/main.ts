@@ -14,10 +14,10 @@ import { cmdConfig } from "./config.js";
 import { cmdDoctor } from "./doctor.js";
 import { cmdVerify } from "./verify.js";
 import { cmdTraza } from "./traza.js";
+import { hidratarFuentesDeDisco } from "./fuentesDeDisco.js";
 import { type FuentesDeEleccion, ModeloMalEscrito, parsear, resolver } from "../core/modelos.js";
 import { topeResuelto } from "../core/contextos.js";
 import {
-  aplicarAuth,
   cargar,
   cloudstudioDelProyecto,
   aplicarCredencialAlProceso,
@@ -988,8 +988,10 @@ export async function entrarEnConsola(
   // La elección de modelo y las credenciales se hidratan ANTES de decidir la piel:
   // stdio y TUI reciben exactamente las mismas fuentes y el catálogo leerá la clave
   // ya aplicada solo cuando `/modelos` provoque su primera consulta.
-  const cargado = cargar(raiz);
-  aplicarAuth(cargado.auth);
+  // La MISMA función que usa `run --real`: un solo cuerpo, dos puertas. Cuando eran dos
+  // copias, la de `run` se quedó sin las dos mitades —el config del disco y la credencial—
+  // y nadie lo vio hasta medir un turno. Ver `fuentesDeDisco.ts`.
+  const { fuentes: deDisco, cargado } = hidratarFuentesDeDisco(raiz, fuentes);
   // El tema es una preferencia del proyecto: un config global no puede cambiar cómo se
   // presenta otro repositorio. Un valor manual desconocido conserva XOne por omisión.
   seleccionarTema("xone");
@@ -998,11 +1000,7 @@ export async function entrarEnConsola(
   // `let`: el asistente de cuenta y el alta de proyecto (más abajo, ambos solo con TTY)
   // pueden escribir modelo global o de proyecto, y la cabecera no puede quedarse leyendo
   // las fuentes de ANTES de esa escritura.
-  let fuentesHidratadas: FuentesDeEleccion = {
-    ...fuentes,
-    proyecto: cargado.config.proyecto,
-    global: cargado.config.global,
-  };
+  let fuentesHidratadas: FuentesDeEleccion = deDisco;
 
   if (usarTui) {
     // La TUI es la MISMA consola: `entrarEnConsola` no la duplica, le entrega las

@@ -86,7 +86,12 @@ function huellas(raiz: string, base: string, prof = 0): Map<string, string> {
   const m = new Map<string, string>();
   if (prof > 6 || !existsSync(raiz)) return m;
   for (const entrada of readdirSync(raiz)) {
-    if (entrada === "node_modules" || entrada === ".git") continue;
+    // `.xonecode` fuera, igual que en la rama de git (`sacarXonecodeDelIndice`) y por las
+    // MISMAS dos razones: ahí vive el `checkpoint.sqlite` —hashear megas en cada foto— y
+    // ahí escribe el harness su contabilidad, que no es un cambio del proyecto. Sin esta
+    // línea, un `run --real` con la traza encendida listaba `traza-tools.jsonl` bajo
+    // «cambios en el proyecto»: un informe afirmando que el turno tocó lo que no tocó.
+    if (entrada === "node_modules" || entrada === ".git" || entrada === ".xonecode") continue;
     const ruta = join(raiz, entrada);
     try {
       if (statSync(ruta).isDirectory()) for (const [k, v] of huellas(ruta, base, prof + 1)) m.set(k, v);

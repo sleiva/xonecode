@@ -11,6 +11,7 @@ import { proveedoresPersonalizados } from "../agent/config/configEnDisco.js";
 import { abrirSesionReal } from "../agent/turno/turnoReal.js";
 import { SimuladorVerifier } from "../agent/turno/verificador.js";
 import { pintarGasto } from "../agent/turno/informeDeTraza.js";
+import { hidratarFuentesDeDisco } from "./fuentesDeDisco.js";
 import type { FuentesDeEleccion } from "../core/modelos.js";
 import type { Papel } from "../core/ports.js";
 
@@ -22,6 +23,13 @@ export interface OpcionesRun {
   real?: boolean;
   /** Las fuentes de modelo resueltas en `main.ts`, para construir los clientes reales. */
   fuentes?: FuentesDeEleccion;
+  /**
+   * De dónde salen la configuración de disco y las credenciales. Entra por parámetro —con la
+   * de verdad por omisión— porque es la costura que ningún test alcanzaba: compuesta dentro
+   * de `correrReal`, que no se puede correr sin abrir una sesión real, la regla se quedaba
+   * escrita. El mismo trato que `verifier` en `abrirSesionReal`.
+   */
+  hidratar?: typeof hidratarFuentesDeDisco;
 }
 
 /** La cabecera del turno real: qué hay detrás antes de que empiece a gastar. */
@@ -104,6 +112,13 @@ async function correrReal(opciones: OpcionesRun, escribir: Escribir): Promise<nu
   const raiz = process.cwd();
   const piel = crearPielStdio(escribir);
 
+  // 0. El disco, ANTES que nada: es lo que decide QUÉ modelo va a correr y con qué
+  //    credencial, y todo lo que se imprime debajo —empezando por la cabecera— lo nombra.
+  //    Sin esto, `run --real` corría con el modelo por omisión aunque hubiera otro
+  //    configurado, y sin la clave aplicada al proceso no alcanzaba a un proveedor que la
+  //    pidiera. Ver `fuentesDeDisco.ts`.
+  const { fuentes } = (opciones.hidratar ?? hidratarFuentesDeDisco)(raiz, opciones.fuentes ?? {});
+
   // 1. ¿Hay un proyecto aquí? Mismo diagnóstico que `doctor`, misma frase: no construir
   //    NADA sobre un sitio que no es un proyecto XOne.
   const entorno = await inspeccionar(raiz);
@@ -121,7 +136,7 @@ async function correrReal(opciones: OpcionesRun, escribir: Escribir): Promise<nu
   // 3. Lo que la sesión necesita. Los ficheros del proyecto NO se calculan aquí: los
   //    recorre la propia sesión al construir el agente.
   const skills = new SkillsEnDisco();
-  const modelos = new Modelos(opciones.fuentes ?? {}, proveedoresPersonalizados);
+  const modelos = new Modelos(fuentes, proveedoresPersonalizados);
 
   // 4. La cabecera va ANTES del turno: qué modelo, cuántas skills, cómo se tomó la foto.
   cabecera(escribir, modelos, skills, instantanea, entorno);

@@ -117,6 +117,24 @@ describe("instantánea por huellas (sin git)", () => {
     rmSync(d, { recursive: true, force: true });
   });
 
+  it("NO mira dentro de `.xonecode`: eso es contabilidad nuestra, no del proyecto", async () => {
+    // La rama de git la excluye a propósito (`sacarXonecodeDelIndice`) por dos razones que
+    // valen igual aquí: ahí vive el `checkpoint.sqlite`, que son megas de hash por cada
+    // foto, y la traza de diagnóstico — que apareció en «cambios en el proyecto» de un
+    // `run --real`, o sea un informe diciendo que el turno tocó lo que no tocó.
+    const d = mkdtempSync(join(tmpdir(), "xc-h-"));
+    writeFileSync(join(d, "a.xne"), "x");
+    mkdirSync(join(d, ".xonecode"));
+    writeFileSync(join(d, ".xonecode", "traza-tools.jsonl"), "{}");
+    const i = await tomarInstantanea(d, { usable: false, prefijo: "" });
+    writeFileSync(join(d, ".xonecode", "traza-tools.jsonl"), "{}\n{}");
+    writeFileSync(join(d, ".xonecode", "checkpoint.sqlite"), "lo que sea");
+    expect(await i.cambios()).toEqual([]);
+    writeFileSync(join(d, "a.xne"), "y");
+    expect(await i.cambios()).toEqual([{ ruta: "a.xne", clase: "modificado" }]);
+    rmSync(d, { recursive: true, force: true });
+  });
+
   it("declara que no hay diff en vez de devolver algo falso", async () => {
     const d = mkdtempSync(join(tmpdir(), "xc-h-"));
     writeFileSync(join(d, "a.xne"), "x");
