@@ -97,7 +97,7 @@ export interface OpcionDeEntorno {
 /**
  * Los dos CloudStudio oficiales, pre-rellenados.
  *
- * La URL de WebStudio no se repite aquí: se importa de `agent/cloudstudioMcp.ts`, que es
+ * La URL de WebStudio no se repite aquí: se importa de `agent/cloudstudio/cloudstudioMcp.ts`, que es
  * donde vive desde que `adoptarLegadoSiProcede` la necesitó (`cli/consola.ts` la reexporta
  * por compatibilidad). Dos literales de la misma dirección es cómo divergen el día que una
  * se corrige y la otra no — el mismo motivo por el que `segmentoSeguro` no se copió.
@@ -210,10 +210,10 @@ export interface OpcionesDelVestibulo {
    */
   origenDeTrabajo: Eleccion["origen"];
   catalogoModelos: CatalogoModelosPort;
-  /** Escribe en `~/.xonecode/auth.json` y devuelve dónde quedó, como `agent/authEnDisco.ts`. */
+  /** Escribe en `~/.xonecode/auth.json` y devuelve dónde quedó, como `agent/config/authEnDisco.ts`. */
   guardarCredencial: (proveedor: Proveedor, clave: string) => { ruta: string };
   /** Pone la clave en el proceso SIN escribirla, para poder probarla antes de guardarla
-   *  (`agent/configEnDisco.ts#aplicarCredencialAlProceso`). Ausente = no se prueba antes. */
+   *  (`agent/config/configEnDisco.ts#aplicarCredencialAlProceso`). Ausente = no se prueba antes. */
   aplicarCredencial?: (proveedor: Proveedor, clave: string) => void;
   /** Registra el entorno en `~/.xonecode/settings.json`. */
   guardarEntorno: (entorno: Entorno) => { ruta: string };
@@ -226,14 +226,14 @@ export interface OpcionesDelVestibulo {
   informar?: (texto: string) => void;
   /**
    * Toma el «antes» de la sesión al ABRIR el proyecto y devuelve con qué nombrarlo cuando el
-   * id exista (`agent/sesionGit.ts#fotoDeApertura`). Entra por opción como todo lo que toca
+   * id exista (`agent/sesiones/sesionGit.ts#fotoDeApertura`). Entra por opción como todo lo que toca
    * el sistema: sin ella no se marca nada y la vista de ficheros dirá que no lo sabe, que es
    * mejor que una lista vacía.
    */
   marcarSesion?: (raiz: string) => Promise<(id: string) => Promise<boolean>>;
   /**
    * ¿Había trabajo sin commitear en ese proyecto cuando se abrió?
-   * (`agent/gitSync.ts#trabajoSinCommitear`). Entra por opción como todo lo que toca el
+   * (`agent/sesiones/gitSync.ts#trabajoSinCommitear`). Entra por opción como todo lo que toca el
    * sistema; ausente = esta ejecución no lo mira y arriba no se afirma nada.
    *
    * Se pregunta AL ABRIR, en el mismo instante que la foto del antes, y por el mismo
@@ -258,7 +258,7 @@ export interface OpcionesDelVestibulo {
   commitearTurno?: (raiz: string, mensaje: string, sesion: string) => Promise<string | undefined>;
   /**
    * ¿Queda memoria del agente para ese hilo? El `thread_id` ES el id de la sesión
-   * (`agent/checkpointer.ts`), así que preguntarlo es lo que convierte `historica` en un
+   * (`agent/sesiones/checkpointer.ts`), así que preguntarlo es lo que convierte `historica` en un
    * hecho comprobado en vez de en «se reabrió»: una sesión con checkpoint CONTINÚA, y una
    * sin él —las de antes de que esto existiera, o una cuyo turno nunca llegó a correr—
    * sigue siendo una relectura y se dice. Ausente = esta ejecución no persiste memoria, y
@@ -273,13 +273,13 @@ export interface OpcionesDelVestibulo {
   olvidarMemoriaDeHilo?: (raiz: string, hilo: string) => Promise<void>;
 
   /**
-   * Quita la marca de una sesión que se borra (`agent/sesionGit.ts#olvidarSesion`). Va
+   * Quita la marca de una sesión que se borra (`agent/sesiones/sesionGit.ts#olvidarSesion`). Va
    * aparejada a `marcarSesion` y por la misma razón que ella entra por opción: este fichero
    * no ejecuta git. Sin ella la ref se queda apuntando al árbol de una sesión que ya no
    * existe, y ese árbol no se lo lleva nunca `git gc`.
    */
   olvidarMarcaDeSesion?: (raiz: string, id: string) => Promise<void>;
-  /** Los entornos YA registrados, tal cual los lee `agent/settingsEnDisco.ts#cargarSettings`. */
+  /** Los entornos YA registrados, tal cual los lee `agent/config/settingsEnDisco.ts#cargarSettings`. */
   entornos?: readonly Entorno[];
   baseDeWorkspace?: string;
   /**
@@ -360,7 +360,7 @@ export interface OpcionesDelVestibulo {
   /** Plazo de aprobación de las consolas de proyecto; se pasa tal cual a `consolaWeb`. */
   msDeEspera?: number;
   /**
-   * El nombre para el saludo de la bienvenida (`agent/persona.ts#nombreDePersona`, o
+   * El nombre para el saludo de la bienvenida (`agent/config/persona.ts#nombreDePersona`, o
    * `undefined` en los tests que no lo necesitan). Un dato ya resuelto y no una función:
    * se calcula UNA vez, al arrancar, y no depende de nada que el vestíbulo sepa hacer
    * (no es un puerto caro que haga falta invocar por turno).
@@ -714,7 +714,7 @@ export function conexionDeVestibulo(urlDeLaWeb?: string): Pick<
 
 /**
  * La regla de URL de entorno es la MISMA que la de quien conecta de verdad
- * (`agent/cloudstudioMcp.ts#urlDeMcpAceptable`), importada y no copiada: cuando eran dos
+ * (`agent/cloudstudio/cloudstudioMcp.ts#urlDeMcpAceptable`), importada y no copiada: cuando eran dos
  * criterios, el wizard aceptaba un loopback que este fichero rechazaba, con dos mensajes
  * claros que se contradecían. Ver allí por qué se resolvió por el lado permisivo.
  */
@@ -1300,7 +1300,7 @@ export function crearVestibulo(opciones: OpcionesDelVestibulo): Vestibulo {
         // `/sync subir` se niegue.
         try {
           // El id de sesión va APARTE del mensaje: de él sale el sello con el que después
-          // se atribuye el cambio (`agent/sesionGit.ts`), y el título que va en el asunto no
+          // se atribuye el cambio (`agent/sesiones/sesionGit.ts`), y el título que va en el asunto no
           // identifica nada — dos sesiones se pueden llamar igual, y renombrar una lo cambia.
           const aviso = await opciones.commitearTurno?.(raiz, mensajeDeCommit(), idSesion);
           if (aviso !== undefined) informar(aviso);
@@ -1811,7 +1811,7 @@ export function crearVestibulo(opciones: OpcionesDelVestibulo): Vestibulo {
       if (laDeEsaSesion) await cerrarConsolaDeProyecto(raiz);
       const borrada = sesiones.borrar?.(raiz, id) ?? false;
       // La ref de git de la sesión se va con ella: apunta a un árbol que solo esa vista
-      // usaba, y dejarla mantendría ese árbol vivo para siempre (`agent/sesionGit.ts`).
+      // usaba, y dejarla mantendría ese árbol vivo para siempre (`agent/sesiones/sesionGit.ts`).
       // No es condicional al `borrada`: una entrada de índice ya perdida no es motivo para
       // dejar la ref colgada.
       await opciones.olvidarMarcaDeSesion?.(raiz, id);

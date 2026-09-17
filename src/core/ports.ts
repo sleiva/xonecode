@@ -101,9 +101,9 @@ export interface SkillsPort {
  * no se reejecuta nunca.
  *
  * Lo que NO cambia es la dirección del fallo. Sin política no hay escritura
- * (`agent/subagenteExterno.ts` deniega), lo que no se entiende se deniega, y las guardas de
+ * (`agent/subagentes/subagenteExterno.ts` deniega), lo que no se entiende se deniega, y las guardas de
  * ruta del proyecto se vuelven a aplicar sobre la ruta absoluta del hijo
- * (`agent/escrituraExterna.ts`): sus `Write`/`Edit` van al disco directos, así que
+ * (`agent/subagentes/escrituraExterna.ts`): sus `Write`/`Edit` van al disco directos, así que
  * `permisosDe`, el `virtualMode` y las vistas aplanadas no los alcanzan.
  */
 export interface SubagenteExternoPort {
@@ -263,7 +263,7 @@ export interface EscrituraExternaPedida {
  * de PIEL y no del motor.
  *
  * Las dos implementaciones existen ya y son las de `pedirAprobacion`, traducidas por
- * `agent/escrituraExterna.ts#politicaDeAprobacionExterna`: la interactiva enseña el diff y
+ * `agent/subagentes/escrituraExterna.ts#politicaDeAprobacionExterna`: la interactiva enseña el diff y
  * espera —con plazo, y naciendo rechazada—, y la autónoma de una tarea de fondo concede
  * porque la autorización fue crear la tarea, lo anuncia con los nombres y lo apunta en
  * `Tarea.autorizadas`.

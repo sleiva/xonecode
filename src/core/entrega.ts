@@ -20,14 +20,14 @@
  * pregunta.
  *
  * **La tercera condición NO es «árbol de git limpio», y eso está MEDIDO.** El plan la
- * escribía como `arbolSucio: false`, con `arbolLimpio` (`agent/gitSync.ts`) detrás. Medido
+ * escribía como `arbolSucio: false`, con `arbolLimpio` (`agent/sesiones/gitSync.ts`) detrás. Medido
  * sobre un repo de verdad: una tarea que escribe UN fichero deja `git status --porcelain`
  * con `?? Clientes.xne`, o sea `arbolLimpio === false` — el árbol de una tarea que ha
  * trabajado está sucio POR DEFINICIÓN, así que con esa condición NINGUNA tarea se
  * entregaría nunca. Lo que hay que exigir es otra cosa, y es la que el §0 del diseño
  * nombra: «sin aprobación previa, la revisión posterior es la única forma de mirar». O
  * sea, que lo que la tarea escribió se pueda REVISAR — que exista la marca de git de su
- * sesión y el diff salga (`agent/sesionGit.ts#cambiosDeSesion` con `via: "git"`, la misma
+ * sesión y el diff salga (`agent/sesiones/sesionGit.ts#cambiosDeSesion` con `via: "git"`, la misma
  * función que pinta la pestaña Revisión, no una parecida). Un campo llamado `arbolSucio`
  * que midiera eso sería la misma clase de mentira que `aplicados` habría sido para
  * `Tarea.autorizadas`, así que se llama `revisable`.
@@ -80,7 +80,7 @@ export interface ResultadoDeTurno {
    * la consola (evento `verificacion`) y se tiraba.
    *
    * **Viaja porque el juez de QA lo necesita para no acusar al agente de lo que no hizo.**
-   * `hallazgos` ya está filtrada por el reparto de `agent/turnoReal.ts#conVerificacion`,
+   * `hallazgos` ya está filtrada por el reparto de `agent/turno/turnoReal.ts#conVerificacion`,
    * pero quien la recibe no puede saber que lo está: en la primera ejecución real del juez
    * eso acabó en un rojo que decía que el turno había modificado los ficheros de los que
    * hablaban los hallazgos. Con este número, la lista se lee por lo que es.

@@ -94,7 +94,7 @@ export interface ProveedorDeclarado {
 /**
  * Los hosts en los que se admite `http://` sin cifrar.
  *
- * Copiada de `agent/cloudstudioMcp.ts#LOOPBACK`, que es la misma decisión por el mismo
+ * Copiada de `agent/cloudstudio/cloudstudioMcp.ts#LOOPBACK`, que es la misma decisión por el mismo
  * motivo, y puesta aquí porque `core/` no puede importar de `agent/` (sí al revés): la
  * regla canónica vive ahora en datos puros y aquel módulo tira de ésta.
  */
@@ -164,7 +164,7 @@ export const COMPATIBLES_OPENAI: Record<
  * La variable de entorno donde vive la clave de cada proveedor, y el ÚNICO sitio donde
  * se escribe.
  *
- * Hubo cuatro copias de esta tabla —`agent/configEnDisco.ts`, `agent/catalogoModelos.ts`,
+ * Hubo cuatro copias de esta tabla —`agent/config/configEnDisco.ts`, `agent/config/catalogoModelos.ts`,
  * `cli/config.ts` y `cli/consola.ts`—, duplicadas para que `cli/` no tirase de `agent/`
  * por un mapa de cuatro líneas. Ya habían divergido: la de `cli/config.ts` no tenía
  * `OLLAMA_API_KEY`, así que `/config` decía «sin credencial» de Ollama Cloud aunque

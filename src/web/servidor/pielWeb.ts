@@ -12,7 +12,7 @@
  * pieles la importan de ahí.
  *
  * Ningún acto lleva argumentos de tool NI diff: las líneas de `herramientas` llegan ya
- * resumidas por `agent/resumenDeTool.ts` (lista blanca de ruta/patrón por nombre de tool,
+ * resumidas por `agent/turno/resumenDeTool.ts` (lista blanca de ruta/patrón por nombre de tool,
  * nunca contenido), y `pausa` solo copia `origen` y `descripcion` del pendiente — el
  * `PendienteDeAprobacion` no trae más, y el diff en sí viaja únicamente en el mensaje de
  * aprobación (`transporte.ts`, clase `aprobacion`), nunca por este canal de actos.

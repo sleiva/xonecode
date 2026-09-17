@@ -8,7 +8,7 @@
  *
  * Las reglas del filtro, y las que se REUTILIZAN en vez de reescribirse:
  *
- * - **`.xonecode/**` y `.git/**` los corta `puedeLeerRuta`** (`agent/perfiles.ts`), la
+ * - **`.xonecode/**` y `.git/**` los corta `puedeLeerRuta`** (`agent/grafo/perfiles.ts`), la
  *   misma barrera que usan las tools propias y el lector de la pestaña Ficheros. Un
  *   segundo `startsWith` aquí sería el segundo sitio donde esa regla puede dejar de estar.
  * - **La basura del SO también sale, con la misma constante que la de git**
@@ -77,7 +77,7 @@ const BASE_SQLITE = /\.db(-wal|-shm|-journal)?$/i;
  * Los nombres que no viajan aunque estén sueltos, fuera de `bd/`.
  *
  * **La basura del SO es LA MISMA constante que usa la exclusión de git** (`BASURA_DEL_SO`,
- * `agent/gitSync.ts`), no una copia con los tres nombres escritos otra vez: una segunda
+ * `agent/sesiones/gitSync.ts`), no una copia con los tres nombres escritos otra vez: una segunda
  * lista divergiría el día que se añada el cuarto, y ese día el fichero del Finder volvería
  * a colarse —en el repo o en la app del cliente, según cuál de las dos se actualizara—.
  *
@@ -118,7 +118,7 @@ function viaja(virtual: string): boolean {
 }
 
 /**
- * El recorrido, modelado en `ficherosDelProyecto` (`agent/turnoReal.ts`): `readdirSync`
+ * El recorrido, modelado en `ficherosDelProyecto` (`agent/turno/turnoReal.ts`): `readdirSync`
  * por nombres y `lstatSync` por entrada. `lstat` y no `stat` porque **no se sigue ningún
  * enlace simbólico**: el paquete lo lee el disco de verdad (`readFileSync`), así que un
  * enlace que apunte fuera del proyecto metería en el ZIP un fichero que el proyecto no

@@ -551,7 +551,7 @@ describe("cambiosPendientes y marcarSubido", () => {
 
   it("un cambio de TIPO (fichero -> symlink) cuenta como modificado, no se pierde", async () => {
     // Sale como `T` en `--name-status` (comprobado a mano): no es alta ni baja, así que
-    // se sube como si fuera contenido cambiado — ver la regla en `agent/git.ts`.
+    // se sube como si fuera contenido cambiado — ver la regla en `agent/sesiones/git.ts`.
     const raiz = proyecto();
     await prepararRepo(raiz, "master");
     unlinkSync(join(raiz, "app.xml"));

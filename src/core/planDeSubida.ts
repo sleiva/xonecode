@@ -55,7 +55,7 @@ export const extensionDe = (ruta: string): string => {
 /**
  * Lo que no sale de esta máquina NUNCA, mire quien lo mire.
  *
- * Es la misma denegación que `agent/perfiles.ts` le impone al AGENTE
+ * Es la misma denegación que `agent/grafo/perfiles.ts` le impone al AGENTE
  * (`permisosDe`/`puedeLeerRuta` deniegan `/.env` y `/.git`, invariante explícito de
  * `CLAUDE.md`), replicada en la ruta de SUBIDA, que no pasa por aquellos permisos y por
  * tanto no la heredaba. Que el agente no pueda leer `.env` no sirve de nada si el `/sync`

@@ -19,7 +19,7 @@
 export interface EventoTool {
   nombre: string;
   /**
-   * Ruta o patrón, SOLO eso: lo permite la lista blanca de `agent/resumenDeTool.ts`
+   * Ruta o patrón, SOLO eso: lo permite la lista blanca de `agent/turno/resumenDeTool.ts`
    * (file_path/path/pattern según la tool). El contenido del fichero y los tokens de
    * autenticación NO caben aquí por diseño — ver la cabecera de `core/events.ts`.
    */

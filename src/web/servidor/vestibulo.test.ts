@@ -407,7 +407,7 @@ describe("vestíbulo", () => {
     expect(v.proyectoAbierto()).toBeUndefined();
     expect(v.sesionesDe("/w/a")).toEqual([]);
     // La ref de git se va con la sesión: si no, mantiene vivo para siempre un árbol que ya
-    // no mira nadie (`agent/sesionGit.ts#olvidarSesion`).
+    // no mira nadie (`agent/sesiones/sesionGit.ts#olvidarSesion`).
     expect(olvidadas).toEqual([id]);
     await v.cerrar();
   });
@@ -896,7 +896,7 @@ describe("vestíbulo", () => {
   });
 
   it("con memoria del hilo, reabrir NO es histórico: la conversación continúa de verdad", async () => {
-    // El `thread_id` es el id de la sesión (`agent/checkpointer.ts`), así que se puede
+    // El `thread_id` es el id de la sesión (`agent/sesiones/checkpointer.ts`), así que se puede
     // PREGUNTAR si queda checkpoint en vez de dar por hecho que reabrir es releer. Es lo
     // que convierte el aviso en un hecho comprobado.
     const s = sesionesEnMemoria();

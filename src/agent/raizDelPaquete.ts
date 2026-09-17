@@ -1,8 +1,8 @@
 /**
  * La raíz del PAQUETE, buscada hacia arriba en vez de contada con `..`.
  *
- * **Por qué existe, y no es higiene.** `RAIZ_SKILLS` (`agent/skills.ts`) y la raíz de
- * `agent/versionEnDisco.ts` se calculaban con `resolve(dirname(...), "..", "..")`: correcto
+ * **Por qué existe, y no es higiene.** `RAIZ_SKILLS` (`agent/grafo/skills.ts`) y la raíz de
+ * `agent/config/versionEnDisco.ts` se calculaban con `resolve(dirname(...), "..", "..")`: correcto
  * mientras esos dos ficheros vivieran exactamente a dos niveles de la raíz, y **falso en
  * silencio** en cuanto uno se mueve a una subcarpeta. Ese fallo no lo caza `tsc` ni ningún
  * test de tipos: el catálogo de skills sale VACÍO y el modelo se queda sin conocimiento sin

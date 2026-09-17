@@ -156,7 +156,7 @@ describe("el prompt lleva los HECHOS y nunca contenido de ficheros", () => {
       expect(prompt).toContain("no dice quién escribió");
       /**
        * Y la frase que INVITABA la conclusión se fue. «Sus hallazgos sobre lo que este turno
-       * tocó» era falsa justo para estos dos: el reparto (`agent/turnoReal.ts`) admite del
+       * tocó» era falsa justo para estos dos: el reparto (`agent/turno/turnoReal.ts`) admite del
        * lado del turno los hallazgos SIN fichero, que es el lado conservador, así que la
        * cabecera afirmaba de un aviso sin fichero que era sobre un fichero tocado.
        */
@@ -344,7 +344,7 @@ describe("que el juez no se pueda usar es fallo del ENTORNO", () => {
   });
 
   /**
-   * MEDIDO contra `agent/modelos.ts`: construir el modelo del papel sin credencial lanza
+   * MEDIDO contra `agent/config/modelos.ts`: construir el modelo del papel sin credencial lanza
    * ANTES de tocar la red, con un mensaje escrito para leerse («falta la credencial para
    * nvidia (NVIDIA_API_KEY); usa /provider nvidia», o el «Anthropic API key not found» del
    * SDK). Ese mensaje SÍ se conserva: es la única línea que dice qué hacer.

@@ -2,7 +2,7 @@
  * Los PERMISOS de un especialista, con tools de FICHERO (la v1 no usa MCP).
  *
  * Este fichero ya no tiene la lista de especialistas: los cuatro que vivían aquí a fuego
- * son ahora ficheros `.md` (`core/agentes.ts`, `agent/agentesEnDisco.ts`), sembrados la
+ * son ahora ficheros `.md` (`core/agentes.ts`, `agent/subagentes/agentesEnDisco.ts`), sembrados la
  * primera vez y editables por el usuario. Lo que se queda es lo que NO puede salir de un
  * fichero: qué se le deniega a todo el mundo, qué tools le tocan a quien escribe y cómo se
  * monta su aprobación humana. Un `.md` puede cambiar el prompt de un agente; no puede

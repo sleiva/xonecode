@@ -120,7 +120,7 @@ export function crearTareasEnDisco(opciones: {
    * La carpeta de adjuntos de una tarea, **si su camino REAL sigue dentro de la cola**.
    *
    * La barrera se aplica DOS veces, igual que la del lector de ficheros del proyecto
-   * (`agent/arbolDeProyecto.ts`): sobre el TEXTO del id —de balde, antes de tocar el
+   * (`agent/grafo/arbolDeProyecto.ts`): sobre el TEXTO del id —de balde, antes de tocar el
    * disco— y sobre el camino REAL, que es lo único que caza un enlace simbólico. Y hace
    * falta, porque estaba medido: con `<base>/<id>` apuntando a otra carpeta,
    * `mkdirSync(…, {recursive:true})` lo SIGUE y `guardarAdjunto` escribía fuera de la cola.
@@ -487,7 +487,7 @@ export interface ResultadoDeFeedback {
  * encaja ahí sin ensanchar ese tipo.
  *
  * **El rechazo se DEVUELVE, nunca se lanza.** Es la misma regla que `write_file`
- * (`agent/proyecto.ts`): quien llama —el cable, o un test— necesita poder decir por qué sin
+ * (`agent/grafo/proyecto.ts`): quien llama —el cable, o un test— necesita poder decir por qué sin
  * envolver esto en un `try`, y un `{hecho:false}` es más fácil de propagar hasta una persona
  * que una excepción.
  *

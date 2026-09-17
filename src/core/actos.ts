@@ -6,7 +6,7 @@
  * de Ink. Así que baja a `core/`, que es donde vive lo que comparten las pieles.
  *
  * Ningún acto lleva argumentos de tool: `herramientas.lineas` son líneas YA resumidas por
- * `agent/resumenDeTool.ts`, con la lista blanca de campos por nombre de tool. Lo que se
+ * `agent/turno/resumenDeTool.ts`, con la lista blanca de campos por nombre de tool. Lo que se
  * añadió después (`detalles`) tampoco los lleva: es el NOMBRE de la tool y su error, que
  * el evento ya traía y el acto tiraba al componer la línea.
  */
@@ -111,7 +111,7 @@ export type Acto =
    *
    * **Las líneas van TAL CUAL las escribió la operación**, sin recomponer ni resumir: es lo
    * mismo que se habría visto en el terminal, y recomponerlas aquí sería una segunda versión de
-   * algo que ya se cuenta en `agent/subida.ts`, `agent/descarga.ts` y `cli/main.ts` — dos
+   * algo que ya se cuenta en `agent/cloudstudio/subida.ts`, `agent/cloudstudio/descarga.ts` y `cli/main.ts` — dos
    * copias de la misma frase divergen, y la que nadie vuelve a leer es la que se queda vieja.
    *
    * `cuando` es ISO y es la hora de EMPEZAR, no la de acabar: es el instante que se recuerda

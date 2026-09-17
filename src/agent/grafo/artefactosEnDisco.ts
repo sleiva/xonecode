@@ -1,7 +1,7 @@
 /**
  * Leer un ARTEFACTO de la sesión: lo que el agente dibujó y no es del proyecto.
  *
- * Los escribe el backend por la ruta virtual `/artefactos/<nombre>` (`agent/proyecto.ts`) y
+ * Los escribe el backend por la ruta virtual `/artefactos/<nombre>` (`agent/grafo/proyecto.ts`) y
  * caen en `.xonecode/sesiones/<id>/artefactos/`. Esta es la puerta de vuelta, la que deja
  * ENSEÑARLOS en la consola web: un HTML en un iframe, una imagen en su visor, y la
  * descarga.

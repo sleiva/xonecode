@@ -144,7 +144,7 @@ export function borrarAgente(base: string, nombre: string): boolean {
 /**
  * Los especialistas de serie, sembrados en el GLOBAL.
  *
- * Dejan de ser un `Record` a fuego en `agent/perfiles.ts` y pasan a ser los mismos ficheros
+ * Dejan de ser un `Record` a fuego en `agent/grafo/perfiles.ts` y pasan a ser los mismos ficheros
  * que puede escribir el usuario. Lo pidió él, y además arregla algo que estaba señalado
  * como provisional en `xoneAgent.ts#promptDe` desde que se escribió: los prompts de los
  * especialistas vivían en código con un `nombre === "planner"` dentro para las

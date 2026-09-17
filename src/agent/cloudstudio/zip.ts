@@ -14,7 +14,7 @@ import { unzipSync } from "fflate";
  * pasar `a/../../x`. Se aborta entero: un ZIP que intenta esto no es de fiar en ninguna
  * de sus entradas.
  *
- * Se exporta porque la vía degradada (`agent/descarga.ts`) escribe y BORRA con rutas que
+ * Se exporta porque la vía degradada (`agent/cloudstudio/descarga.ts`) escribe y BORRA con rutas que
  * vienen del JSON del servidor exactamente igual de crudas: tener la guarda solo en el
  * camino del ZIP era la asimetría, no una decisión.
  */

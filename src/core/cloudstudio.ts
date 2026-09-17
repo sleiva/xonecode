@@ -57,7 +57,7 @@ export interface EstadoDeSync {
 }
 
 /**
- * Una operación de subida ya decidida. La ejecuta `agent/subida.ts`.
+ * Una operación de subida ya decidida. La ejecuta `agent/cloudstudio/subida.ts`.
  *
  * El binario solo tiene modo `base64`. El modo `chunked` del servidor NO está
  * implementado: `CloudStudioPort.subirBinario` ni siquiera lleva el modo, y el adaptador
@@ -95,7 +95,7 @@ export interface OperacionOmitida {
 
 /**
  * El hueco de política que autoriza una subida — NO «preguntar al humano»: quién lo
- * rellena es una decisión de la piel, no del motor. `agent/subida.ts` solo exige que
+ * rellena es una decisión de la piel, no del motor. `agent/cloudstudio/subida.ts` solo exige que
  * ALGUIEN lo rellene (fail-closed por TIPO: no hay forma de llamar a `subir()` sin decir
  * cómo se autoriza) y no presupone que detrás haya una persona.
  *

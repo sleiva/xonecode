@@ -15,7 +15,7 @@
  * cloud, **subía a CloudStudio**. Un diagrama dentro de la app del cliente.
  *
  * La carpeta virtual `/artefactos/` lo corta de raíz, y es la misma pieza que ya monta
- * `/skills/`: otra raíz colgada del `CompositeBackend` (`agent/proyecto.ts`). Cuatro cosas
+ * `/skills/`: otra raíz colgada del `CompositeBackend` (`agent/grafo/proyecto.ts`). Cuatro cosas
  * salen de ahí sin escribir una línea de más, porque cuelga de `.xonecode/`: no entra en el
  * árbol del proyecto, no sube a CloudStudio, no aparece en Revisión y no engorda
  * `.git/objects` (`sacarXonecodeDelIndice`).
@@ -52,7 +52,7 @@ export const RUTA_ARTEFACTOS = "/artefactos/";
  * ¿Es esta ruta la de un artefacto, sin lugar a dudas?
  *
  * Se usa para DOS cosas y una de ellas es una decisión de seguridad: una escritura aquí no
- * pide aprobación humana (ver `agent/turnoReal.ts`), así que esto no puede ser un
+ * pide aprobación humana (ver `agent/turno/turnoReal.ts`), así que esto no puede ser un
  * `startsWith` a secas. Un `/artefactos/../app.xml` que colara por aquí sería una escritura
  * al proyecto aprobada sola.
  *
@@ -89,7 +89,7 @@ export function esRutaDeArtefacto(ruta: string | undefined): boolean {
  * app del cliente**.
  *
  * Es la misma clase de regla que las vistas aplanadas: se aplica en el BACKEND
- * (`agent/proyecto.ts#sinArtefactosEnElProyecto`) y no en un prompt, porque un permiso solo
+ * (`agent/grafo/proyecto.ts#sinArtefactosEnElProyecto`) y no en un prompt, porque un permiso solo
  * protege a quien lo choca. Aquí vive solo la regla, que es datos puros.
  *
  * **Se mira el PRIMER segmento y nada más**, y eso acota el falso positivo a propósito: un

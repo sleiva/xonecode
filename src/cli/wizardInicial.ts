@@ -52,7 +52,7 @@ export interface ContextoDelAsistente {
   /** Proveedores que ya tienen credencial guardada. */
   hayCredencial?: (proveedor: Proveedor) => boolean;
   /**
-   * Devuelve la ruta donde quedó, igual que `agent/authEnDisco.ts#guardarCredencial`:
+   * Devuelve la ruta donde quedó, igual que `agent/config/authEnDisco.ts#guardarCredencial`:
    * si cancelar más adelante (en el paso de MODELO) deja la clave ya escrita, el aviso
    * de cancelación tiene que poder decir, justo antes, QUÉ se guardó y DÓNDE — como ya
    * hace `/provider` (`consola.ts`, «credencial de … guardada en …») — para que ese
@@ -61,7 +61,7 @@ export interface ContextoDelAsistente {
   guardarCredencial?: (proveedor: Proveedor, clave: string) => { ruta: string };
   /**
    * Pone la clave en el proceso SIN escribirla en disco
-   * (`agent/configEnDisco.ts#aplicarCredencialAlProceso`).
+   * (`agent/config/configEnDisco.ts#aplicarCredencialAlProceso`).
    *
    * Es lo que permite PROBARLA antes de guardarla: el catálogo la lee de `process.env`, así
    * que sin esta costura el único orden posible era escribir y después preguntar — y una

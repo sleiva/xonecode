@@ -85,7 +85,7 @@ describe("instantánea por árbol de git", () => {
 
   it("un cambio de TIPO (fichero -> symlink) cuenta como modificado, igual que en gitSync", async () => {
     // `diff-tree` lo marca como `T`: no es alta ni baja, así que entra por la misma regla
-    // que `gitSync.ts` (`agent/git.ts`, `claseDeCambio`) — antes esto ya salía "modificado"
+    // que `gitSync.ts` (`agent/sesiones/git.ts`, `claseDeCambio`) — antes esto ya salía "modificado"
     // por la omisión `?? "modificado"`, y ahora sigue igual porque el módulo compartido usa
     // la misma regla, no una nueva.
     const d = await repo(false);

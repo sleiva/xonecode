@@ -97,7 +97,7 @@ export async function descargarProyecto(opciones: OpcionesDeDescarga): Promise<E
   const { puerto, raiz, proyecto, ramaOrigen, informar = () => {} } = opciones;
 
   await puerto.abrir(proyecto.nombre);
-  // Mismo patrón que `agent/subida.ts#subir`: leer la rama ACTIVA, posicionarse en la
+  // Mismo patrón que `agent/cloudstudio/subida.ts#subir`: leer la rama ACTIVA, posicionarse en la
   // ORIGEN si hace falta, operar, y restaurar SIEMPRE la que estaba en un `finally`
   // —`switch` le mueve el suelo a quien tenga Studio abierto en el navegador—. Sin este
   // posicionamiento explícito se bajaba lo que estuviera activo en la sesión (no

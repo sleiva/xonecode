@@ -20,7 +20,7 @@
  * fichero que escribió la sesión.
  *
  * Este módulo es `core/`: los nombres, dónde va la carpeta y la barrera. Quién la monta es
- * de `agent/` (`agent/proyecto.ts#backendConDescargas`).
+ * de `agent/` (`agent/grafo/proyecto.ts#backendConDescargas`).
  */
 import { dirname, join } from "node:path";
 

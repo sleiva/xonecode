@@ -78,7 +78,7 @@ export function guardarCredencial(proveedor: Proveedor, clave: string): { ruta: 
   // es lo último que se ha dicho sobre esa credencial.
   //
   // Sin esto, la clave escrita a media sesión no existía para nada de lo que corre después:
-  // `CatalogoModelos` la lee de `process.env` (`agent/catalogoModelos.ts`), así que el
+  // `CatalogoModelos` la lee de `process.env` (`agent/config/catalogoModelos.ts`), así que el
   // asistente de cuenta pedía la clave, la guardaba y a continuación fallaba con «falta la
   // credencial para …; usa /provider …» — medido, y el motivo por el que la validación de
   // la conexión no podía pasar en un arranque nuevo con ningún proveedor de pago.

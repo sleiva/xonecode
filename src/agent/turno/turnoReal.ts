@@ -172,7 +172,7 @@ const NODO_DE_TOOLS = "tools";
 /**
  * Cierra las aprobaciones que se quedaron sin contestar cuando murió el proceso anterior.
  *
- * Solo existe desde que el hilo se guarda en disco (`agent/checkpointer.ts`), y arregla un
+ * Solo existe desde que el hilo se guarda en disco (`agent/sesiones/checkpointer.ts`), y arregla un
  * fallo MEDIDO —y medido dos veces, porque la primera medida estaba mal—. La forma del
  * grafo importa: un grafo de un solo nodo donde `START` va al nodo interrumpido reejecuta
  * ese nodo con el mensaje nuevo y vuelve a preguntar, que es inofensivo. El grafo del

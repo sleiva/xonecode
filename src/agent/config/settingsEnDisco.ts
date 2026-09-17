@@ -5,7 +5,7 @@
  * así que la base de la fusión es el objeto CRUDO tal cual (no el resultado de
  * `validarSettings`, que descarta en silencio entradas raras) y ante un JSON roto se
  * PARA sin escribir, en vez de recuperar el fichero por su cuenta. La mecánica de
- * escritura —temporal + `renameSync`— es la de `agent/cloudstudioMcp.ts#guardarEstado`:
+ * escritura —temporal + `renameSync`— es la de `agent/cloudstudio/cloudstudioMcp.ts#guardarEstado`:
  * un `writeFileSync` a medias dejaría un `settings.json` truncado si el proceso muere a
  * mitad de escritura, y el rename es atómico.
  */

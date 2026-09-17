@@ -8,7 +8,7 @@
  *
  * La excepción aparente es `tool.detalle`, y no es una excepción: es lo ÚNICO que
  * sale de los argumentos, un campo por tool elegido a mano en la lista blanca de
- * `agent/resumenDeTool.ts` — `file_path`, `path` o `pattern`, nunca contenido. Una
+ * `agent/turno/resumenDeTool.ts` — `file_path`, `path` o `pattern`, nunca contenido. Una
  * tool sin entrada en la lista no lleva `detalle`, exista lo que exista en sus
  * argumentos.
  */

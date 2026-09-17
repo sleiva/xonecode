@@ -310,7 +310,7 @@ export function guardarCloudStudioDeProyecto(
  * `crearSincronizador` (`cli/main.ts`) y todo lo que cuelga de él, y conservarla es lo que
  * hace literalmente cierto que la sincronización no se toca. El `entorno` añade la
  * referencia que hacía falta para leer el juego de credenciales correcto
- * (`porEntorno[id]`, `agent/cloudstudioMcp.ts`) en vez de reautenticar bajo `legado`.
+ * (`porEntorno[id]`, `agent/cloudstudio/cloudstudioMcp.ts`) en vez de reautenticar bajo `legado`.
  *
  * Misma mecánica que `guardarCloudStudioDeProyecto`: fusión sobre el objeto CRUDO y
  * escritura atómica, para no borrar lo que ya hubiera en el fichero.
@@ -441,7 +441,7 @@ export function cargar(raiz: string): {
  * Las claves ya presentes en el entorno MANDAN: `auth.json` no las machaca.
  *
  * La tabla vive en `core/modelos.ts` y aquí solo se reexporta, para no romper a quien la
- * importa de este módulo (`agent/authEnDisco.ts`). Hubo cuatro copias —dos de ellas en
+ * importa de este módulo (`agent/config/authEnDisco.ts`). Hubo cuatro copias —dos de ellas en
  * `cli/`, para que `cli/` no tirase de `agent/` por un mapa de cuatro líneas— y habían
  * divergido; en `core/`, que es datos puros, los dos lados pueden tirar del mismo sitio.
  */
@@ -452,7 +452,7 @@ export { VARIABLES_POR_PROVEEDOR } from "../../core/modelos.js";
  *
  * Existe para poder PROBAR una clave antes de escribirla —`CatalogoModelos` la lee de
  * `process.env`, así que sin esto no hay forma de preguntarle al proveedor si sirve— y es
- * la misma operación que `guardarCredencial` (`agent/authEnDisco.ts`) hace al final de su
+ * la misma operación que `guardarCredencial` (`agent/config/authEnDisco.ts`) hace al final de su
  * escritura. Devuelve `false` para un proveedor sin variable (Ollama local): ahí no hay
  * nada que aplicar y decir que sí sería mentir.
  */

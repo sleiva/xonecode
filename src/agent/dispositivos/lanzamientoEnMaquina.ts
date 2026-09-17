@@ -22,7 +22,7 @@
  *    `.mainEntry`**: medido, `.mainEntry` no levanta el servidor.
  * 5. **`lanzando`.** El lanzamiento por el WebSocket, esperando el saludo del servidor. Entra
  *    por `deps.abrirSocket`, que es el CONSTRUCTOR del socket —así se llama en el módulo al que
- *    alimenta—: el cliente de `/hotswap` ya está escrito y medido en `agent/hotswap.ts`, y `ws`
+ *    alimenta—: el cliente de `/hotswap` ya está escrito y medido en `agent/dispositivos/hotswap.ts`, y `ws`
  *    no se importa aquí.
  * 6. **`comprobando-arranque`.** La LECTURA, porque `{"result":true}` de `launchApplication`
  *    significa «aceptado», no «arrancó»: lo que dice si está viva es el árbol de controles.

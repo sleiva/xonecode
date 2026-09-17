@@ -265,7 +265,7 @@ export function crearSubagenteExterno(opciones: {
   alUsarTool?: (tool: { nombre: string; detalle?: string }) => void;
   /**
    * Lo que el hijo consumió, al terminar. Los dos motores lo reportan y hasta ahora se
-   * tiraba entero (`agent/consumoExterno.ts` explica de dónde sale cada uno).
+   * tiraba entero (`agent/subagentes/consumoExterno.ts` explica de dónde sale cada uno).
    *
    * Va por su propio callback y no dentro de la respuesta porque son dos cosas distintas:
    * la respuesta es lo que el especialista contesta, y esto es contabilidad.

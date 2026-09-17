@@ -177,7 +177,7 @@ export function claseNeta(primera: Cambio["clase"], ultima: Cambio["clase"]): Ca
  * escribe al final de CADA turno (`web/servidor/vestibulo.ts`). Sin excluirlo, la primera
  * fila de la lista sería el transcript de la sesión diciendo que la sesión lo modificó —un
  * bucle, y encima el fichero que menos interesa. Es la misma regla que ya aplica
- * `arbolLimpio` (`agent/gitSync.ts`), y por el mismo motivo: `.xonecode` es interno, no
+ * `arbolLimpio` (`agent/sesiones/gitSync.ts`), y por el mismo motivo: `.xonecode` es interno, no
  * trabajo del usuario. Se paga que la memoria del proyecto (`.xonecode/memoria.md`), que
  * el agente sí escribe a veces, tampoco salga aquí; es coherente con el resto del repo, que
  * trata esa carpeta entera como interna, y esa escritura pasa igual por su aprobación.
@@ -193,7 +193,7 @@ const FUERA = ":(exclude).xonecode";
 /**
  * Las TRES clases que esta vista sabe contar: creado, modificado y borrado.
  *
- * No es decoración del listado, es una guarda: `claseDeCambio` (`agent/git.ts`) devuelve
+ * No es decoración del listado, es una guarda: `claseDeCambio` (`agent/sesiones/git.ts`) devuelve
  * «modificado» para cualquier letra que no sea `A` ni `D`, así que un cambio de TIPO (`T`,
  * un fichero que pasa a enlace simbólico) o una entrada sin fusionar (`U`) se colarían
  * etiquetados como una modificación normal — una etiqueta falsa, no una lista incompleta.

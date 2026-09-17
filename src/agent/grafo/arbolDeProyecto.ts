@@ -200,7 +200,7 @@ export async function leerFicheroDeProyecto(raiz: string, ruta: string): Promise
  * tope, su codificación y las dos caras del SVG.
  *
  * Se extrajo de `leerFicheroDeProyecto` cuando los ARTEFACTOS de una sesión necesitaron lo
- * mismo (`agent/artefactosEnDisco.ts`). Lo que NO se extrajo es la barrera: la de un
+ * mismo (`agent/grafo/artefactosEnDisco.ts`). Lo que NO se extrajo es la barrera: la de un
  * fichero del proyecto y la de un artefacto son reglas distintas —una pregunta
  * `puedeLeerRuta` y las vistas aplanadas, la otra que el nombre sea un segmento llano
  * dentro de la carpeta de la sesión—, y fundirlas en un parámetro sería la clase de

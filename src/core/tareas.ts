@@ -53,7 +53,7 @@ export interface AdjuntoDeTarea {
  *
  * §0 del diseño, textual: «esperando por feedback, se edita la tarea y se agrega el
  * feedback del usuario». Es el mismo patrón que los hallazgos del verificador
- * (`agent/turnoReal.ts#conVerificacion`): entra al hilo que ya existe como un mensaje de
+ * (`agent/turno/turnoReal.ts#conVerificacion`): entra al hilo que ya existe como un mensaje de
  * USUARIO, nunca como un encargo nuevo que le haría perder a la tarea todo lo que ya sabe.
  */
 export interface FeedbackDeTarea {

@@ -36,7 +36,7 @@ export const PUERTO_CALLBACK = 7634;
  * es la dirección de un SERVIDOR, no un detalle de la piel de consola, y
  * `adoptarLegadoSiProcede` —de este mismo fichero— la necesita para decidir si el fichero
  * plano de antes de los entornos pertenece al oficial: `agent/` no puede importar de
- * `cli/` (convención documentada en `agent/turnoReal.ts`), así que si esto se hubiera
+ * `cli/` (convención documentada en `agent/turno/turnoReal.ts`), así que si esto se hubiera
  * quedado en `consola.ts` la migración habría tenido que duplicar el literal.
  */
 export const URL_CLOUDSTUDIO_POR_OMISION = "https://mcp.xonewebstudio.com/mcp";
@@ -618,7 +618,7 @@ export class ProviderCloudStudio implements OAuthClientProvider {
   }
 }
 
-/** El `invocar` que consume `clienteCloudStudio` (`agent/cloudstudioClient.ts`).
+/** El `invocar` que consume `clienteCloudStudio` (`agent/cloudstudio/cloudstudioClient.ts`).
  *  Se define aquí por estructura, no por import, para no crear un ciclo entre los dos
  *  módulos: ambos son adaptadores del mismo servidor pero no dependen entre sí. */
 export type InvocarMcp = (nombre: string, argumentos: Record<string, unknown>) => Promise<unknown>;
@@ -631,7 +631,7 @@ export interface SesionCloudStudio {
 
 /**
  * El servidor pierde el proyecto abierto al caducar la sesión; lo dice con este texto
- * (medido). Duplicado a propósito del mismo patrón en `agent/cloudstudioClient.ts`: es
+ * (medido). Duplicado a propósito del mismo patrón en `agent/cloudstudio/cloudstudioClient.ts`: es
  * la señal, no un detalle de transporte, y ninguno de los dos módulos importa del otro.
  */
 const SESION_PERDIDA = /no project is open/i;
@@ -705,7 +705,7 @@ function mensajeDeErrorDeTool(nombre: string, argumentos: Record<string, unknown
  * Envuelve un `callTool` crudo del SDK en la función `invocar` que espera
  * `clienteCloudStudio`. Separada de `sesionCloudStudio` para poder probar la conversión
  * `isError → excepción` con un `callTool` falso, sin tocar OAuth ni el transporte: es la
- * pieza de la que depende toda la reapertura de sesión en `agent/cloudstudioClient.ts`,
+ * pieza de la que depende toda la reapertura de sesión en `agent/cloudstudio/cloudstudioClient.ts`,
  * y una implementación que se limitara a `return callTool(...)` pasaría los tests de
  * `clienteCloudStudio` igual de mal que los de aquí bien, si esto no se probara aparte.
  */
@@ -781,7 +781,7 @@ async function abrirCliente(
 
 /**
  * Sesión MCP viva contra CloudStudio, para `clienteCloudStudio`
- * (`agent/cloudstudioClient.ts`): descarga, escribe y cambia de rama necesitan una
+ * (`agent/cloudstudio/cloudstudioClient.ts`): descarga, escribe y cambia de rama necesitan una
  * conexión que sobreviva a más de una llamada, cosa que `conectarCloudStudio` no ofrece
  * porque cierra el transporte en cuanto termina de mirar el catálogo.
  */

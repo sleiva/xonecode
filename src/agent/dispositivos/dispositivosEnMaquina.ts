@@ -113,7 +113,7 @@ const RAICES_DE_SDK_POR_OMISION: Record<string, (home: string, entorno: Record<s
  * PATH.
  *
  * Se extrajo de `detectarDispositivos` cuando el EJECUTOR de la receta
- * (`agent/instalacionEnMaquina.ts`) necesitó lo mismo: lanzar `sdkmanager` pide saber dónde
+ * (`agent/dispositivos/instalacionEnMaquina.ts`) necesitó lo mismo: lanzar `sdkmanager` pide saber dónde
  * está el SDK y qué JDK usar, y una segunda copia de esta búsqueda habría divergido el
  * primer día — con el síntoma peor posible, que el panel encontrara el SDK y el botón no.
  *
@@ -442,7 +442,7 @@ export async function detectarDispositivos(
  * Lo demás NO se lanza desde aquí y se ofrece para copiar (`instalar.automatico: false`), y
  * **el motivo dejó de ser la contraseña de administrador**: está desmentido —medido, `sudo`
  * sin terminal de control falla en 26 ms en vez de colgarse, y por eso los `brew` de la
- * receta SÍ se lanzan (`agent/instalacionEnMaquina.ts`)—. El motivo es que aquí no hay canal
+ * receta SÍ se lanzan (`agent/dispositivos/instalacionEnMaquina.ts`)—. El motivo es que aquí no hay canal
  * de progreso: se lanza con `execFile` y un tope de un minuto, sin log en vivo. `brew
  * install --cask` tarda minutos, así que por este camino sería un botón mudo que se lee como
  * un cuelgue y encima moriría en el tope. Instalar con log es lo que hace la fase de la

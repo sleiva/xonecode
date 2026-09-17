@@ -8,7 +8,7 @@
  *
  * **Y el cerrojo solo no basta.** Su recogida cuando el dueño parece muerto no se puede
  * hacer atómica con primitivas de sistema de ficheros —«está muerto» es la observación de
- * un instante— y deja un residuo declarado en `agent/tareasEnDisco.ts#recoger` en el que
+ * un instante— y deja un residuo declarado en `agent/tareas/tareasEnDisco.ts#recoger` en el que
  * dos procesos pueden creerse dueños. Lo que hace verdad «un solo corredor» son las DOS
  * comprobaciones de aquí, y hacen falta las dos:
  *  - `sigoSiendoDueño()` **antes de despachar cada tarea**, no solo al arrancar: es lo que
@@ -170,7 +170,7 @@ export const AVISO_SIN_HILO_REANUDABLE =
  * La petición que se le manda al turno cuando la tarea trae un feedback pendiente.
  *
  * **Reanudando, el feedback SOLO** — el mismo patrón que los hallazgos del verificador
- * (`agent/turnoReal.ts#conVerificacion`): entra como un mensaje de USUARIO más en el hilo
+ * (`agent/turno/turnoReal.ts#conVerificacion`): entra como un mensaje de USUARIO más en el hilo
  * que ya sabe el encargo, lo que se intentó y por qué se aparcó. Repetir el encargo ahí
  * sería ruido: el modelo ya lo tiene.
  *
@@ -442,7 +442,7 @@ export function crearCorredorDeTareas(opciones: {
    */
   sesionAbrible?: (raiz: string, sesion: string) => boolean;
   /** Olvida el hilo del agente de una sesión que no nombra nada abrible
-   *  (`agent/checkpointer.ts#olvidarHilo`). Ver `conSesionSoloSiSePuedeAbrir`. */
+   *  (`agent/sesiones/checkpointer.ts#olvidarHilo`). Ver `conSesionSoloSiSePuedeAbrir`. */
   olvidarHilo?: (raiz: string, sesion: string) => Promise<void>;
   /**
    * Cuánto se espera, como MUCHO, a que los turnos cortados devuelvan en `parar()`. Entra

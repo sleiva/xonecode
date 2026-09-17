@@ -137,7 +137,7 @@ export async function pedirDecisiones(
     eof?: () => boolean;
     fichero?: (id: string) => string | undefined;
     /**
-     * Las líneas de diff del pendiente (ver `agent/interrupts.ts` → `cambioDe`). Este es
+     * Las líneas de diff del pendiente (ver `agent/turno/interrupts.ts` → `cambioDe`). Este es
      * el ÚNICO sitio donde el contenido de una escritura se enseña, y es a propósito:
      * aquí se DECIDE sobre ese contenido, y aprobar a ciegas es peor que no aprobar.
      */

@@ -332,8 +332,8 @@ describe("crearConsolaDeTarea", () => {
  * **MEDIDO: aplicar no abre ninguna de las guardas de RUTA.**
  *
  * Estas guardas nunca fueron parte de la aprobación —viven en el backend
- * (`agent/proyecto.ts#backendDeAgente`) y en los permisos del middleware
- * (`agent/perfiles.ts#permisosDe`)—, y una tarea entra por el MISMO backend con los MISMOS
+ * (`agent/grafo/proyecto.ts#backendDeAgente`) y en los permisos del middleware
+ * (`agent/grafo/perfiles.ts#permisosDe`)—, y una tarea entra por el MISMO backend con los MISMOS
  * permisos. Pero eso era una lectura del código, y lo que esta tarea cambia es justo quién
  * decide sobre una escritura: así que se monta la pieza de verdad y se mira el disco.
  *

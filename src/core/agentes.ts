@@ -1,8 +1,8 @@
 /**
  * Los subagentes como DATOS: qué es uno, cómo se lee de un fichero y cómo se compone su
- * prompt. TypeScript puro — leer el disco es cosa de `agent/agentesEnDisco.ts`.
+ * prompt. TypeScript puro — leer el disco es cosa de `agent/subagentes/agentesEnDisco.ts`.
  *
- * Hasta ahora los cuatro especialistas (`agent/perfiles.ts`) vivían a fuego en un
+ * Hasta ahora los cuatro especialistas (`agent/grafo/perfiles.ts`) vivían a fuego en un
  * `Record`, y su prompt lo componía `xoneAgent.ts#promptDe` con un `nombre === "planner"`
  * dentro. Eso ya estaba señalado como provisional ahí mismo («los prompts pasan a ficheros
  * `.md` en la fase 9»); esto es esa fase, y con ella los cuatro dejan de ser un caso
@@ -251,7 +251,7 @@ export function leerAgente(
    * es el sandbox, es el `approvalPolicy`. Con `read-only` + `on-request` el sandbox sigue
    * siendo la denegación del sistema operativo y cada escritura llega como una petición que
    * xonecode contesta, con las mismas guardas de ruta y la misma
-   * `PoliticaDeEscrituraExterna` que el otro motor (`agent/escrituraDeCodex.ts`).
+   * `PoliticaDeEscrituraExterna` que el otro motor (`agent/subagentes/escrituraDeCodex.ts`).
    */
   return {
     agente: {

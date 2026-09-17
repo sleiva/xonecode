@@ -44,7 +44,7 @@ import {
 /**
  * Lo MÍNIMO que el veredicto necesita saber del framework de XOne en el dispositivo.
  *
- * **Se declara aquí y no se importa de `agent/dispositivosEnMaquina.ts`**, que tiene el tipo
+ * **Se declara aquí y no se importa de `agent/dispositivos/dispositivosEnMaquina.ts`**, que tiene el tipo
  * rico (`FrameworkEnDispositivo`, con `paquete` y `detalle`) y que lo satisface por ESTRUCTURA:
  * `core/` declara la forma que consume y no mira hacia `agent/`, que además importa de `core/`
  * y sería un ciclo. Y no lo caza ningún test —`core/imports.test.ts` vigila langchain, ink y

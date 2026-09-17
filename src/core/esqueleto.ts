@@ -7,7 +7,7 @@
  * inventada no da error — da un bug mudo, y un esqueleto recién creado que no
  * arranca sería la peor primera impresión posible.
  *
- * La escritura en disco vive en `agent/crearProyecto.ts`: aquí solo se DECIDE
+ * La escritura en disco vive en `agent/config/crearProyecto.ts`: aquí solo se DECIDE
  * qué ficheros hay y qué llevan dentro, que es exactamente lo que se puede
  * probar sin conexión, sin simulador y sin clave (el invariante de `npm test`).
  */

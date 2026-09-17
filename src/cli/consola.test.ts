@@ -380,7 +380,7 @@ describe("/sync", () => {
   });
 
   describe("subir: rellena el hueco de política con un humano", () => {
-    /** `sincronizar` FALSO que se comporta como haría `agent/subida.ts#subir`: invoca la
+    /** `sincronizar` FALSO que se comporta como haría `agent/cloudstudio/subida.ts#subir`: invoca la
      * política recibida con un plan de muestra y responde según lo que decida. */
     function sincronizarQueMiraLaPolitica(): Consola["sincronizar"] {
       return async (accion, _raiz, politica) => {
@@ -491,7 +491,7 @@ describe("/sync", () => {
 
     it("un «n» rechaza, y ese `false` es lo ÚNICO que frena la subida", async () => {
       // La política no sube: devuelve el permiso. Que sea `false` es la parada entera,
-      // porque `agent/subida.ts` no tiene otra puerta.
+      // porque `agent/cloudstudio/subida.ts` no tiene otra puerta.
       const { politica, salida } = politicaSobreDoble({ respuesta: "n", interactivo: true });
 
       expect(await politica(PLAN)).toBe(false);

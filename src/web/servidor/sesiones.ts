@@ -2,7 +2,7 @@
  * Las sesiones de un proyecto, en su `.xonecode/sesiones/`.
  *
  * Ahí y no en global porque la sesión es del proyecto, ya hay precedente
- * (`conversation_history/` en `agent/memoriaDeProyecto.ts`), la carpeta está denegada
+ * (`conversation_history/` en `agent/grafo/memoriaDeProyecto.ts`), la carpeta está denegada
  * entera al agente (`permisosDe`) y **no sube nunca** a CloudStudio — el mismo trato que
  * `.xonecode/` recibe en todas partes de este repo.
  *
@@ -17,7 +17,7 @@
  * — nunca llega aquí.
  *
  * Reabrir ya NO es releer, y este fichero dejó de ser la única memoria. El hilo del agente
- * vive en el checkpointer de SQLite del proyecto (`agent/checkpointer.ts`), indexado por el
+ * vive en el checkpointer de SQLite del proyecto (`agent/sesiones/checkpointer.ts`), indexado por el
  * mismo id que titula estas entradas, así que una sesión reabierta continúa de verdad. Lo
  * que sigue viviendo aquí es el TRANSCRIPT —lo que se pinta—, y son dos cosas distintas a
  * propósito: un acto no puede llevar contenido de fichero ni argumentos de tool, y un
@@ -33,7 +33,7 @@
  * obligaría a un segundo sitio a mantenerla sincronizada con ese momento.
  *
  * `indice.json` se reescribe entero (es pequeño, una entrada por sesión) con el mismo
- * cuidado atómico que `agent/settingsEnDisco.ts#escribirAtomico` — temporal + `renameSync`,
+ * cuidado atómico que `agent/config/settingsEnDisco.ts#escribirAtomico` — temporal + `renameSync`,
  * porque un `writeFileSync` a medias tras un crash dejaría corrompido el índice de TODAS
  * las sesiones, no solo la que se estaba anotando. El `.jsonl` de una sesión, en cambio, se
  * **anexa** (`appendFileSync`): reescribirlo entero en cada acto lo haría cuadrático en el
@@ -250,7 +250,7 @@ function escribirIndice(raiz: string, entradas: EntradaIndice[]): void {
  * Da de alta una sesión en el índice.
  *
  * El id ENTRA por parámetro desde que es también el `thread_id` del grafo
- * (`agent/checkpointer.ts`): quien abre la consola lo decide al abrir, porque el hilo tiene
+ * (`agent/sesiones/checkpointer.ts`): quien abre la consola lo decide al abrir, porque el hilo tiene
  * que existir antes del primer turno, y esto solo escribe la entrada. Sin id se genera uno,
  * que es lo que hacía siempre y lo que sigue valiendo para quien no tenga hilo.
  */

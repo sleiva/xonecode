@@ -7,12 +7,12 @@
  * dos reglas de este módulo:
  *
  * - **Viven FUERA del proyecto** (`~/.xonecode/tareas/<id>/adjuntos/`, ver
- *   `agent/tareasEnDisco.ts`), y eso trae gratis lo que importaba: no entran en git y no
+ *   `agent/tareas/tareasEnDisco.ts`), y eso trae gratis lo que importaba: no entran en git y no
  *   suben a CloudStudio, sin depender de ninguna exclusión. Una tarea puede crearse para un
  *   proyecto que nadie ha abierto nunca, así que guardarlos en su `.xonecode/` sería
  *   estrenárselo por la puerta de atrás.
  * - **El agente los ve en `/adjuntos/`, de SOLO lectura** — la misma pieza que `/skills/` y
- *   `/artefactos/` (`agent/proyecto.ts#backendConAdjuntos`), y de solo lectura por lo mismo
+ *   `/artefactos/` (`agent/grafo/proyecto.ts#backendConAdjuntos`), y de solo lectura por lo mismo
  *   que las skills: son material de entrada, no ficheros que reescribir. Lo deniega
  *   `permisosDe` y no un prompt.
  *

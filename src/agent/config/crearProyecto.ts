@@ -2,7 +2,7 @@
  * La escritura del esqueleto en el disco del usuario.
  *
  * QUÉ se escribe lo decide `core/esqueleto.ts` (puro, probado sin disco); AQUÍ
- * solo se ejecuta, al estilo de `agent/configEnDisco.ts`. La regla dura es la
+ * solo se ejecuta, al estilo de `agent/config/configEnDisco.ts`. La regla dura es la
  * misma que en todo xonecode: **el disco es del usuario**, así que un fichero
  * que ya exista no se pisa — se salta y se declara en el informe. Un proyecto
  * a medias se completa en la siguiente corrida; un fichero del usuario

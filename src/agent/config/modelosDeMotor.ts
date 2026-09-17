@@ -4,7 +4,7 @@
  * Un subagente corre de cuatro formas —dentro de xonecode, en Claude Code, en Codex o en
  * OpenCode— y el modelo se elige distinto en cada una. Este módulo contesta la pregunta «¿entre
  * qué puedo elegir?» para las tres externas; la del motor `modelo` ya la contesta el catálogo de
- * proveedores de siempre (`agent/catalogoModelos.ts`), y duplicarla aquí sería una segunda
+ * proveedores de siempre (`agent/config/catalogoModelos.ts`), y duplicarla aquí sería una segunda
  * lista que diverge.
  *
  * **Ninguna de las listas está inventada, y esa es la regla del fichero.** La de Claude Code

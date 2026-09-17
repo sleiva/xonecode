@@ -46,7 +46,7 @@ const TOPE_DE_HALLAZGO = 200;
  * No se pudo PREGUNTAR: no hay modelo, no hay clave, no hay red.
  *
  * Es fallo del entorno y no del proyecto, la misma familia que `ErrorDelSimulador`
- * (`agent/verificador.ts`), y por eso es un tipo propio: quien lo recoge tiene que poder
+ * (`agent/turno/verificador.ts`), y por eso es un tipo propio: quien lo recoge tiene que poder
  * distinguirlo de un veredicto para aparcar la tarea con el motivo correcto.
  */
 export class ErrorDelJuezDeTarea extends Error {
@@ -71,7 +71,7 @@ export type InvocarModelo = (papel: Papel, prompt: string, raiz: string) => Prom
  *
  * **Dos sitios de envoltura, y la diferencia entre ellos está medida.** Construir el modelo
  * del papel falla ANTES de tocar la red y con un mensaje escrito para leerse: medido contra
- * `agent/modelos.ts`, un `afilado` apuntado a un proveedor sin clave lanza «falta la
+ * `agent/config/modelos.ts`, un `afilado` apuntado a un proveedor sin clave lanza «falta la
  * credencial para nvidia (NVIDIA_API_KEY); usa /provider nvidia» —el nuestro— o «Anthropic
  * API key not found» —el del SDK—, y ninguno de los dos lleva nada que no se pueda leer. Ese
  * mensaje SÍ se conserva: es la única línea que dice qué hacer.
@@ -116,7 +116,7 @@ export function invocarConModelos(modelos: ModelosPort): InvocarModelo {
  * **La severidad se dice en castellano y por su nombre**, y no era cosmético: `h.severidad`
  * se pintaba en crudo, así que un aviso llegaba como «warning» —el enum, en inglés, al lado
  * de un «ERROR» que sí estaba traducido y en mayúsculas—. La huella de reparación del
- * verificador (`agent/turnoReal.ts`) usa solo los ERRORES porque «un aviso que va y viene no
+ * verificador (`agent/turno/turnoReal.ts`) usa solo los ERRORES porque «un aviso que va y viene no
  * dice nada de si el error se arregla», y la puerta de entrega (`core/entrega.ts`) cuenta
  * solo errores: si esa distinción manda en el código, no puede llegarle borrosa al juez.
  *
@@ -139,7 +139,7 @@ const lineaDeHallazgo = (h: HallazgoDelTurno): string =>
  * hallazgo del rojo falso: «se modificaron ficheros de lógica JavaScript durante el turno
  * según los hallazgos del verificador». Un hallazgo no dice quién escribió nada — dice que
  * el proyecto tiene una inconsistencia, y el simulador mira el proyecto ENTERO porque es su
- * API. Es la misma regla que gobierna el reparto en `agent/turnoReal.ts#conVerificacion`:
+ * API. Es la misma regla que gobierna el reparto en `agent/turno/turnoReal.ts#conVerificacion`:
  * «un error que ya estaba en un fichero que el agente no abrió no es del agente:
  * atribuírselo sería falso». Aquí se la dice también al juez.
  */

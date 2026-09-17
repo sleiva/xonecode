@@ -54,7 +54,7 @@ export function backendConSkills<T extends object>(backend: T): T {
  * **La misma pieza que `/skills/` y `/artefactos/`**: otra raíz del `CompositeBackend`. Y de
  * solo lectura por lo mismo que las skills — son material de ENTRADA, los documentos que
  * anexó la persona que creó la tarea, no ficheros que reescribir. Quien lo deniega es
- * `permisosDe` (`agent/perfiles.ts`), incondicionalmente y por patrón: aquí no hay Proxy que
+ * `permisosDe` (`agent/grafo/perfiles.ts`), incondicionalmente y por patrón: aquí no hay Proxy que
  * rechace, igual que no lo hay para `/skills/`, porque la denegación que el modelo choca es
  * la del middleware de permisos y ese es el sitio donde vive la regla.
  *

@@ -349,7 +349,7 @@ describe("montarRutas — el cable, por fin conectado", () => {
   });
 
   it("el saludo de la bienvenida viaja en el alta cuando el vestíbulo trae uno, y no viaja si no", async () => {
-    // El wire entero de `agent/persona.ts#nombreDePersona`: `arranque.ts` lo resuelve UNA
+    // El wire entero de `agent/config/persona.ts#nombreDePersona`: `arranque.ts` lo resuelve UNA
     // vez y lo pasa como `OpcionesDelVestibulo.nombre`; este test cubre que ese dato SIGUE
     // vivo hasta el mensaje `alta` del cable — lo que `App.test.tsx`/`store.test.ts` prueban
     // por separado es el render y el parseo, no que el vestíbulo lo entregue.
@@ -1746,7 +1746,7 @@ describe("montarRutas — el cable, por fin conectado", () => {
      * `estado` se MIDE en el servidor, contra la ref de git, y sin abrir sesión MCP: el
      * número ya está en local, y abrir OAuth para contar lo que se sabe sería pedir red y
      * credenciales para pintar un contador. Aquí la cuenta es la de verdad sobre un repo de
-     * verdad — la misma que da `/sync estado` (`agent/gitSync.ts#cambiosPendientes`).
+     * verdad — la misma que da `/sync estado` (`agent/sesiones/gitSync.ts#cambiosPendientes`).
      */
     it("«estado» mide lo que falta por subir y contesta con la rama", async () => {
       const { base, cliente, accion, vestibulo, raiz, encoladas } = await conProyectoDeCloudStudio();
@@ -5196,7 +5196,7 @@ describe("contextoDelProyecto", () => {
  * que se cae sin síntoma es la cuenta —una lectura que devolviera siempre cero se vería
  * como un proyecto al día, que es exactamente lo que nadie iría a comprobar—. Y el repo real
  * importa porque la cuenta NO es nuestra: es un `git diff` contra la ref de seguimiento que
- * dejó la última bajada (`agent/gitSync.ts#cambiosPendientes`, el mismo que decide qué sube
+ * dejó la última bajada (`agent/sesiones/gitSync.ts#cambiosPendientes`, el mismo que decide qué sube
  * el plan). Con un doble se probaría el doble.
  */
 describe("lecturaDeSync — lo que la banda de CloudStudio enseña", () => {
@@ -5451,7 +5451,7 @@ describe("lecturaDeSync — lo que la banda de CloudStudio enseña", () => {
  * vigilar. Aquí se compone `construirCorredorDeTareasCableado` (`arranque.ts`) de VERDAD:
  * la misma función que usa `arrancarConsolaWeb`, con un corredor real
  * (`crearCorredorDeTareas` por debajo) y sin reimplementar su cableado en el test — es la
- * MISMA lección que dejó `backendDeAgente` en `agent/proyecto.ts`: la composición vivía
+ * MISMA lección que dejó `backendDeAgente` en `agent/grafo/proyecto.ts`: la composición vivía
  * inline en una función que todos sus tests doblan, así que la costura concreta —aquí, que
  * el puente hacia `emitirTareas` quede armado ANTES de que el corredor pueda disparar
  * `alCambiar`— podía dejar de estar montada con el resto en verde.
@@ -6131,7 +6131,7 @@ describe("mirar en vivo lo que hace una tarea — el cable", () => {
   });
 
   it("ninguna ruta de la máquina viaja en esos mensajes", async () => {
-    // El acto de una tool lleva ruta RELATIVA por construcción (`agent/resumenDeTool.ts`),
+    // El acto de una tool lleva ruta RELATIVA por construcción (`agent/turno/resumenDeTool.ts`),
     // y el mensaje que envuelve no añade ninguna: ni la raíz del proyecto, ni la carpeta de
     // la sesión, ni el fichero del checkpointer. El cable puede ir por un túnel.
     const m = montarConCorredor([{ tipo: "usuario", texto: "arregla el login" }]);

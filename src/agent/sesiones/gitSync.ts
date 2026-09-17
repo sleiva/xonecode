@@ -53,7 +53,7 @@ async function rutaDeExclusion(raiz: string): Promise<string> {
 /**
  * El prefijo del proyecto dentro del repo (`app/`), o `""` si el proyecto ES la raíz.
  *
- * Mismo patrón que `agent/instantanea.ts#porArbol`, que ya resolvía exactamente esto: git
+ * Mismo patrón que `agent/turno/instantanea.ts#porArbol`, que ya resolvía exactamente esto: git
  * habla en rutas relativas a la raíz del REPO y el resto de xonecode (el manifiesto, los
  * `descargados` del ZIP, el `join(raiz, ruta)` de la subida) habla en rutas relativas al
  * PROYECTO. Sin recortar, `subida.ts` compone `outer/app/app/app.xml` y falla en cada
@@ -273,7 +273,7 @@ export async function cambiosPendientes(raiz: string, rama: string): Promise<Cam
     .flatMap((linea) => {
       const [marca, ...resto] = linea.split("\t");
       const ruta = resto[resto.length - 1];
-      // `claseDeCambio` nunca devuelve `undefined` (ver `agent/git.ts`): una marca que no
+      // `claseDeCambio` nunca devuelve `undefined` (ver `agent/sesiones/git.ts`): una marca que no
       // reconocemos también se cuenta, nunca se pierde en silencio del plan de subida.
       return ruta === undefined ? [] : [{ clase: claseDeCambio(marca!), ruta: recortar(prefijo, ruta) }];
     })

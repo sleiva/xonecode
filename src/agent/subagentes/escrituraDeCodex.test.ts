@@ -170,7 +170,7 @@ describe("la decisión entera: guardas y DESPUÉS la política", () => {
     });
     expect(r.concedida).toBe(false);
     // Preguntar por algo cuyo único final posible es un rechazo es sacar un modal inútil —
-    // la misma regla que el `when` de `seDetieneEn` en `agent/perfiles.ts`.
+    // la misma regla que el `when` de `seDetieneEn` en `agent/grafo/perfiles.ts`.
     expect(preguntado).toBe(false);
   });
 

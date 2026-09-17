@@ -1,6 +1,6 @@
 /**
  * La validación PURA de los dos ficheros de configuración: sin tocar disco (eso es cosa
- * de `agent/configEnDisco.ts`) y sin importar nada de langchain — la frontera de `core/`
+ * de `agent/config/configEnDisco.ts`) y sin importar nada de langchain — la frontera de `core/`
  * está probada en `imports.test.ts`.
  *
  * Dos ficheros con dos ciclos de vida distintos, como opencode:
@@ -38,7 +38,7 @@ export interface ConfigDeFichero {
    *
    * Convive con `cloudstudio.url` y no la sustituye: el `entorno` es la referencia (la que
    * dice de qué juego de credenciales OAuth se lee, `porEntorno[id]` en
-   * `agent/cloudstudioMcp.ts`) y la URL es la copia operativa que la sincronización lee
+   * `agent/cloudstudio/cloudstudioMcp.ts`) y la URL es la copia operativa que la sincronización lee
    * exactamente igual que antes de que los entornos existieran. Quitar la URL habría
    * obligado a tocar `crearSincronizador` y todo lo que cuelga de él, que es justo lo que
    * el diseño de la consola web se comprometió a no tocar.

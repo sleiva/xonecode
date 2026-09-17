@@ -28,7 +28,7 @@ export class Modelos implements ModelosPort {
    * dejaba muerto el flujo que el usuario hace primero: dar de alta un proveedor en
    * Ajustes, ponerle la clave, elegir su modelo y hablar — y el turno reventaba con «no
    * está dado de alta; añádelo en Ajustes», que es justo lo que acababa de hacer. Quien
-   * construye pasa `proveedoresPersonalizados` (`agent/configEnDisco.ts`), que relee el
+   * construye pasa `proveedoresPersonalizados` (`agent/config/configEnDisco.ts`), que relee el
    * config global; sin nada, se cae a lo que trajera `fuentes`, que es lo que había.
    *
    * Del `config.json` GLOBAL y de ningún otro: la regla la impone `core/config.ts` al

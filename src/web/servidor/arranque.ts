@@ -262,7 +262,7 @@ export interface OpcionesDeMontaje {
   credencialEnFichero?: (proveedor: Proveedor) => boolean;
   /**
    * Guarda un modelo como DEFECTO de un papel en el `config.json` global
-   * (`agent/configEnDisco.ts#guardarModeloGlobal`). Es el escritor de la elección que
+   * (`agent/config/configEnDisco.ts#guardarModeloGlobal`). Es el escritor de la elección que
    * sobrevive al proceso.
    *
    * Entra por opción y no se importa dentro por la razón de siempre —un valor por omisión
@@ -315,7 +315,7 @@ export interface OpcionesDeMontaje {
    * menú lo dice en vez de quedarse cargando para siempre.
    */
   catalogoDeModelos?: (proveedor: Proveedor) => Promise<{ id: string; nombre?: string }[]>;
-  /** Qué ha tocado la sesión, y el parche de un fichero (`agent/sesionGit.ts`). Ausentes =
+  /** Qué ha tocado la sesión, y el parche de un fichero (`agent/sesiones/sesionGit.ts`). Ausentes =
    *  esta ejecución no lo puede saber, y la pestaña lo dice. */
   cambiosDeSesion?: (
     raiz: string,
@@ -327,13 +327,13 @@ export interface OpcionesDeMontaje {
   }>;
   parcheDeSesion?: (raiz: string, sesion: string, ruta: string) => Promise<{ texto: string; recortado: boolean } | undefined>;
   /**
-   * El árbol del proyecto y el contenido de un fichero (`agent/arbolDeProyecto.ts`). Entran
+   * El árbol del proyecto y el contenido de un fichero (`agent/grafo/arbolDeProyecto.ts`). Entran
    * por opción porque tocan el disco del proyecto: un test del cable usa dobles.
    */
   arbolDelProyecto?: (raiz: string) => Promise<{ rutas: string[]; recortado: boolean }>;
   leerFichero?: (raiz: string, ruta: string) => Promise<FicheroDelProyecto>;
   /**
-   * Los dos lectores de ARTEFACTOS (`agent/artefactosEnDisco.ts`), y son dos porque son dos
+   * Los dos lectores de ARTEFACTOS (`agent/grafo/artefactosEnDisco.ts`), y son dos porque son dos
    * transportes con necesidades opuestas: el del cable devuelve la forma de un fichero
    * —texto al tope, imagen en base64— y el crudo devuelve los bytes tal cual, que es lo que
    * el iframe necesita (un HTML recortado no abre) y lo que se descarga.
@@ -344,7 +344,7 @@ export interface OpcionesDeMontaje {
   leerArtefacto?: (raiz: string, sesion: string, nombre: string) => Promise<FicheroDelProyecto>;
   leerArtefactoCrudo?: (raiz: string, sesion: string, nombre: string) => Promise<LecturaCruda>;
   /**
-   * Qué hay en la máquina para probar la app (`agent/dispositivosEnMaquina.ts`). Ausente =
+   * Qué hay en la máquina para probar la app (`agent/dispositivos/dispositivosEnMaquina.ts`). Ausente =
    * esta ejecución no lo mira, y no se manda ningún `dispositivos`: el escritorio se queda
    * en «consultando…» en vez de afirmar una máquina vacía. Entra por opción porque lanza
    * procesos (adb, xcrun) y un test del cable no puede lanzarlos.
@@ -368,7 +368,7 @@ export interface OpcionesDeMontaje {
    */
   instalarHerramienta?: (herramienta: NombreDeHerramienta) => Promise<void>;
   /**
-   * VERIFICA la conexión con un dispositivo (`agent/dispositivosEnMaquina.ts`).
+   * VERIFICA la conexión con un dispositivo (`agent/dispositivos/dispositivosEnMaquina.ts`).
    *
    * Recibe el `Dispositivo` de la última medida y no un id del cliente: de él salen la
    * plataforma y la clase, que son las que deciden qué comando se lanza — una cadena del
@@ -377,7 +377,7 @@ export interface OpcionesDeMontaje {
    */
   verificarDispositivo?: (dispositivo: Dispositivo) => Promise<{ ok: boolean; detalle: string }>;
   /**
-   * Qué se midió del framework de XOne en un dispositivo (`agent/dispositivosEnMaquina.ts`).
+   * Qué se midió del framework de XOne en un dispositivo (`agent/dispositivos/dispositivosEnMaquina.ts`).
    * Lanza adb, así que entra por opción.
    *
    * **Ausente = esta ejecución no lo mide, y el veredicto lo DICE**: la causa es
@@ -396,7 +396,7 @@ export interface OpcionesDeMontaje {
    */
   existeEnProyecto?: (raiz: string, rutaRelativa: string) => boolean;
   /**
-   * Lanza la app en el dispositivo (`agent/lanzamientoEnMaquina.ts`). Ausente = esta ejecución
+   * Lanza la app en el dispositivo (`agent/dispositivos/lanzamientoEnMaquina.ts`). Ausente = esta ejecución
    * no lanza nada, y el botón lo dice en vez de quedarse muerto.
    *
    * **Se pasa la función ENTERA y no sus dependencias.** `lanzarEnDispositivo` construye las
@@ -410,12 +410,12 @@ export interface OpcionesDeMontaje {
     deps: Pick<DependenciasDeLanzamiento, "alFase">
   ) => LanzamientoEnCurso;
   /**
-   * Los modelos que ofrece un motor EXTERNO (`agent/modelosDeMotor.ts`). Ausente = esta
+   * Los modelos que ofrece un motor EXTERNO (`agent/config/modelosDeMotor.ts`). Ausente = esta
    * ejecución no los sabe, y el desplegable lo dice en vez de quedarse vacío.
    */
   modelosDeMotor?: (motor: string) => Promise<{ modelos: { id: string; nombre: string }[]; error?: string }>;
   /**
-   * Ejecuta un paso de una receta (`agent/instalacionEnMaquina.ts`), con su salida en vivo.
+   * Ejecuta un paso de una receta (`agent/dispositivos/instalacionEnMaquina.ts`), con su salida en vivo.
    * Ausente = esta ejecución no lanza nada y el botón no se ofrece: el paso se copia, que es
    * lo que la receta hace de todas formas.
    */
@@ -476,7 +476,7 @@ export interface OpcionesDeMontaje {
   /** Cambia el tope de concurrencia del corredor. Ausente = Ajustes no puede tocarlo. */
   guardarConcurrencia?: (concurrencia: number) => void;
   /**
-   * Augmenta una petición en un encargo revisado (`agent/aumentador.ts`, Task 9). Ausente =
+   * Augmenta una petición en un encargo revisado (`agent/tareas/aumentador.ts`, Task 9). Ausente =
    * el botón «Preparar el encargo» no está disponible.
    */
   augmentar?: (peticion: {
@@ -1088,7 +1088,7 @@ export function montarRutas(
    * heredar un «ya se intentó» que se quedó en `proyectos: []` para siempre. Esto puede
    * abrir el navegador de verdad si el token necesita reautenticar —`conectarCloudStudio`
    * ya lo hace así—, y es lo correcto: un token vivo no toca el puerto de callback en
-   * absoluto (arreglado en `agent/cloudstudioMcp.ts#abrirCliente`), así que dos conexiones
+   * absoluto (arreglado en `agent/cloudstudio/cloudstudioMcp.ts#abrirCliente`), así que dos conexiones
    * seguidas no chocan por intentarlo cada una.
    */
   const poblarProyectosSiProcede = async (): Promise<void> => {
@@ -1419,7 +1419,7 @@ export function montarRutas(
   /**
    * «Se edita la tarea y se agrega el feedback del usuario» (§0 del diseño, textual):
    * añadir un feedback a una tarea «esperando feedback» la devuelve al lazo. Vive detrás de
-   * `aplicarFeedback` (`agent/tareasEnDisco.ts`) y no repite su lógica aquí, por el mismo
+   * `aplicarFeedback` (`agent/tareas/tareasEnDisco.ts`) y no repite su lógica aquí, por el mismo
    * motivo que `atenderCrearTarea`/`atenderAccionDeTarea` no reimplementan `conEstado`: la
    * regla de qué feedback vale y qué transición es legal está en una sola función, probada
    * sola y sin necesitar un servidor de mentira alrededor.
@@ -1507,7 +1507,7 @@ export function montarRutas(
       catalogos.set(id, { modelos: modelos.map((m) => ({ id: m.id, ...(m.nombre === undefined ? {} : { nombre: m.nombre }) })) });
     } catch (error) {
       // `ErrorCatalogoModelos` es publicable por contrato: nunca lleva la clave ni el
-      // cuerpo remoto (`agent/catalogoModelos.ts`).
+      // cuerpo remoto (`agent/config/catalogoModelos.ts`).
       catalogos.set(id, { error: error instanceof Error ? error.message : String(error) });
     }
     emitirModelos();
@@ -3528,7 +3528,7 @@ export interface CorredorDeTareasCableado {
  * Construye el corredor de tareas y la costura que lo conecta al cable.
  *
  * Extraído de `arrancarConsolaWeb` a su propia función por la MISMA razón que
- * `backendDeAgente` (`agent/proyecto.ts`): la composición vivía inline dentro de una
+ * `backendDeAgente` (`agent/grafo/proyecto.ts`): la composición vivía inline dentro de una
  * función que todos sus tests DOBLAN —`vestibulo`, `crearServidor`, `crearEjecutor`—, así
  * que esta costura concreta podía dejar de estar montada con el resto en verde. Aquí
  * tiene su propio test que la compone de VERDAD: construye un corredor real
@@ -4064,7 +4064,7 @@ export interface OpcionesDeArranque {
    */
   topeDeContexto?: (raiz: string, modelo: string) => number | undefined;
   /**
-   * La cola de TAREAS de fondo (`agent/tareasEnDisco.ts`), y con ella el corredor.
+   * La cola de TAREAS de fondo (`agent/tareas/tareasEnDisco.ts`), y con ella el corredor.
    *
    * **Ausente = esta ejecución no ejecuta tareas y no toma ningún cerrojo**, que es la
    * omisión obligada y no una comodidad: el cerrojo y el índice viven en el
@@ -4251,7 +4251,7 @@ export async function arrancarConsolaWeb(opciones: OpcionesDeArranque): Promise<
     borrarCredencial,
     guardarCredencial,
     /**
-     * El defecto se GUARDA en el `config.json` global (`agent/configEnDisco.ts#guardarModeloGlobal`),
+     * El defecto se GUARDA en el `config.json` global (`agent/config/configEnDisco.ts#guardarModeloGlobal`),
      * que es el último escalón de la precedencia y el único que sobrevive al proceso. Se
      * escribe para los TRES papeles porque elegir un modelo en la interfaz es una frase
      * sobre el producto y no sobre un papel — el mismo criterio que `/modelo`, que fija los
@@ -4277,7 +4277,7 @@ export async function arrancarConsolaWeb(opciones: OpcionesDeArranque): Promise<
     cambiosDeSesion,
     parcheDeSesion,
     // El proyecto tal como lo ve el agente, para la pestaña Ficheros: mismo filtro, misma
-    // barrera de rutas (`agent/arbolDeProyecto.ts`).
+    // barrera de rutas (`agent/grafo/arbolDeProyecto.ts`).
     arbolDelProyecto: async (raiz) => arbolDeProyecto(raiz),
     leerFichero: leerFicheroDeProyecto,
     leerArtefacto: leerArtefactoDeSesion,
@@ -4329,7 +4329,7 @@ export async function arrancarConsolaWeb(opciones: OpcionesDeArranque): Promise<
     guardarProveedor: (declarado) => guardarProveedorPersonalizado(declarado),
     borrarProveedor: (slug) => borrarProveedorPersonalizado(slug),
     /**
-     * El AUMENTADOR de la ventana de crear una tarea (`agent/aumentador.ts`), con el papel
+     * El AUMENTADOR de la ventana de crear una tarea (`agent/tareas/aumentador.ts`), con el papel
      * `trabajo` — es una tarea de redacción, no una clasificación.
      *
      * Tres cosas que se deciden aquí:
@@ -4476,7 +4476,7 @@ function vestibuloReal(
     // Se resuelve UNA vez, aquí, y no en cada `anunciarAlta`: `git config`/`os.userInfo`
     // no cambian a media conexión, y repetir el subproceso en cada anuncio del alta sería
     // gastar sin motivo. Nunca viaja hacia CloudStudio ni hacia ningún acto —
-    // `agent/persona.ts` lo documenta—.
+    // `agent/config/persona.ts` lo documenta—.
     nombre: nombreDePersona(opciones.cwd),
     catalogoModelos: new CatalogoModelos(),
     guardarCredencial,
@@ -4489,7 +4489,7 @@ function vestibuloReal(
     guardarModeloGlobal,
     guardarConfigDeProyecto: escribirProyectoEnDisco,
     // El «antes» de cada sesión: se fotografía al abrir el proyecto y se nombra cuando la
-    // sesión tiene id. Ver `agent/sesionGit.ts` para por qué es una ref y no un tag.
+    // sesión tiene id. Ver `agent/sesiones/sesionGit.ts` para por qué es una ref y no un tag.
     marcarSesion: fotoDeApertura,
     // Lo que ya había sin commitear al abrir, para poder decirlo. Comparte el hueco
     // declarado de `marcarSesion`: esta composición vive en un cierre que `vestibuloReal`

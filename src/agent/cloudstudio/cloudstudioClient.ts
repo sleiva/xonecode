@@ -3,7 +3,7 @@
  *
  * La costura es una función `invocar`, no el `Client` del SDK: así los tests prueban el
  * comportamiento —reapertura, desenvoltura, argumentos— sin red ni SDK. La sesión viva
- * que produce ese `invocar` la construye `sesionCloudStudio` (`agent/cloudstudioMcp.ts`);
+ * que produce ese `invocar` la construye `sesionCloudStudio` (`agent/cloudstudio/cloudstudioMcp.ts`);
  * este módulo no abre nada por su cuenta.
  */
 import type { CloudStudioPort } from "../../core/ports.js";

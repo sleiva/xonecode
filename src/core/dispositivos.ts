@@ -3,7 +3,7 @@
  * de Android e iOS, y los dispositivos y simuladores a los que se llega.
  *
  * Aquí viven los TIPOS y los parsers PUROS —texto de una herramienta → datos—; quien lanza
- * las herramientas es `agent/dispositivosEnMaquina.ts`. Separarlo así es lo que permite
+ * las herramientas es `agent/dispositivos/dispositivosEnMaquina.ts`. Separarlo así es lo que permite
  * probar cada formato contra una salida real sin que `npm test` necesite ni adb ni Xcode.
  *
  * Tres estados por herramienta y no un booleano: «no encontrada», «falló» (con el motivo) y
@@ -51,7 +51,7 @@ export interface Herramienta {
    * motivo NO es la contraseña de administrador**: eso está desmentido —medido, `sudo` sin
    * terminal de control falla en el acto en vez de colgarse, y por eso los `brew` de la
    * RECETA sí se lanzan—. Es que este camino
-   * (`agent/dispositivosEnMaquina.ts#instalarHerramientaDeDispositivos`) no tiene canal de
+   * (`agent/dispositivos/dispositivosEnMaquina.ts#instalarHerramientaDeDispositivos`) no tiene canal de
    * progreso: un `execFile` con su tope, sin log en vivo. `brew install --cask` tarda
    * minutos, y un botón mudo durante diez se lee como que se ha colgado — que es justo lo
    * que la fase de la receta existe para evitar.
@@ -163,7 +163,7 @@ export interface PasoDeReceta {
    * pidiera la contraseña, sin terminal de control falla en el acto (medido, arriba).
    *
    * Un paso ejecutable lo es SI Y SOLO SI está en la tabla cerrada de
-   * `agent/instalacionEnMaquina.ts#PASOS_EJECUTABLES`: este campo dice que se ofrezca el
+   * `agent/dispositivos/instalacionEnMaquina.ts#PASOS_EJECUTABLES`: este campo dice que se ofrezca el
    * botón, y esa tabla es la que decide qué se lanza. Que las dos coincidan lo ata un test.
    */
   ejecutable: boolean;
@@ -217,7 +217,7 @@ export interface Aparte {
  * Cómo conseguir una capacidad que esta máquina no tiene. Hoy hay dos, las dos de macOS.
  *
  * El `id` es una UNIÓN y no una cadena: viaja por el cable y es la clave con que
- * `agent/instalacionEnMaquina.ts` busca en su tabla cerrada de pasos ejecutables, así que un
+ * `agent/dispositivos/instalacionEnMaquina.ts` busca en su tabla cerrada de pasos ejecutables, así que un
  * id nuevo tiene que aparecer aquí para que el compilador obligue a decidir qué se lanza y
  * qué se copia.
  */

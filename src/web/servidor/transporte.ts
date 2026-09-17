@@ -100,7 +100,7 @@ export interface SesionDelCable {
 /**
  * Las seis fases de un lanzamiento, EN ORDEN, y los cinco estados en que puede estar.
  *
- * **Se declaran aquí, en el cable, y no se importan de `agent/lanzamientoEnMaquina.ts`**, que es
+ * **Se declaran aquí, en el cable, y no se importan de `agent/dispositivos/lanzamientoEnMaquina.ts`**, que es
  * quien las recorre. El motivo es el de siempre en este fichero: el cable tiene su vocabulario
  * CERRADO, y quien lo cierra es esta constante — la lista blanca del store del cliente y la
  * validación del servidor se escriben contra ESTA lista, así que un valor que no esté aquí no
@@ -145,7 +145,7 @@ export type MensajeAlCliente =
   /** El transcript completo: lo que recibe quien (re)conecta, y el arreglo de cualquier desajuste. */
   | { clase: "reemision"; actos: Acto[] }
   /**
-   * El saludo, SUELTO del `alta`. `agent/persona.ts#nombreDePersona` no depende de
+   * El saludo, SUELTO del `alta`. `agent/config/persona.ts#nombreDePersona` no depende de
    * ninguna cuenta ni de ningún login —es `git config`/`os.userInfo()`, local y ya
    * resuelto al construir el vestíbulo—, pero el `alta` solo se manda DESPUÉS de que
    * `conducirCuenta()` termina (`arranque.ts#anunciarAlta`), que puede tardar lo que
@@ -411,7 +411,7 @@ export type MensajeAlCliente =
   | { clase: "parche"; ruta: string; texto: string; recortado: boolean }
   /**
    * El árbol del proyecto abierto (pestaña Ficheros): rutas relativas, ordenadas y ya
-   * filtradas por la misma regla que ve el agente (`agent/arbolDeProyecto.ts`). `error`
+   * filtradas por la misma regla que ve el agente (`agent/grafo/arbolDeProyecto.ts`). `error`
    * solo si no se pudo listar, y entonces `rutas` va vacía. Y el contenido de UN fichero,
    * de solo lectura: sin `texto` si es binario o si la ruta se rechazó, con el motivo.
    */
@@ -594,7 +594,7 @@ export type MensajeAlCliente =
       sinAprobacion?: boolean;
       /**
        * Lo que YA estaba sin commitear en el proyecto cuando se abrió esta consola
-       * (`agent/gitSync.ts#trabajoSinCommitear`, medido en el instante de abrir).
+       * (`agent/sesiones/gitSync.ts#trabajoSinCommitear`, medido en el instante de abrir).
        *
        * Ausente = no hay nada que decir, y son las tres respuestas que se callan a
        * propósito: el árbol estaba limpio, no hay git con qué mirar (todo proyecto
@@ -667,7 +667,7 @@ export type MensajeAlCliente =
        */
       aviso?: string;
       /**
-       * El saludo (`agent/persona.ts#nombreDePersona`). Viaja SUELTO en este mensaje, no
+       * El saludo (`agent/config/persona.ts#nombreDePersona`). Viaja SUELTO en este mensaje, no
        * dentro de ningún acto: `Bienvenida.tsx` lo pinta y nada más, así que no entra en
        * el `.jsonl` de una sesión ni en el transcript. Ausente = sin nombre que saludar.
        */
@@ -740,7 +740,7 @@ export interface FicheroTocado {
   mas?: number;
   menos?: number;
   /** Hay cambios en este fichero que nadie ha commiteado, así que no se pueden atribuir a
-   *  esta sesión ni a otra (`agent/sesionGit.ts#FicheroDeSesion`). Viaja para poder DECIRLO
+   *  esta sesión ni a otra (`agent/sesiones/sesionGit.ts#FicheroDeSesion`). Viaja para poder DECIRLO
    *  en la fila: el turno en vuelo commitea al terminar, y esta es la única marca que
    *  distingue «lo escribió esta sesión» de «esto está aquí y no consta de quién es». */
   sinCommitear?: true;
@@ -776,7 +776,7 @@ export interface FicheroDelProyecto {
  *
  * `pendientes` se mide contra la ref de seguimiento que dejó la última descarga
  * (`refs/remotes/cloudstudio/<rama>`), que es LA MISMA cuenta que da `/sync estado` —
- * `agent/gitSync.ts#cambiosPendientes`, el mismo que decide qué sube el plan—. `error` solo
+ * `agent/sesiones/gitSync.ts#cambiosPendientes`, el mismo que decide qué sube el plan—. `error` solo
  * cuando no se pudo medir, y entonces `pendientes` no viene: un cero que nadie ha contado es
  * la cifra inventada de siempre.
  *
@@ -854,7 +854,7 @@ export interface TareaDelCable {
    * y la mitad que una persona lee sin cablear.
    *
    * **Y viaja completo porque no puede llevar nada más que texto para leer.** Medido en
-   * `agent/juezDeTarea.ts#promptDelJuez`: el juez recibe el encargo, las rutas RELATIVAS de
+   * `agent/tareas/juezDeTarea.ts#promptDelJuez`: el juez recibe el encargo, las rutas RELATIVAS de
    * lo autorizado y los hallazgos del verificador (código, fichero relativo, línea,
    * mensaje) — no hay un solo `readFile` en ese módulo, así que su prosa no puede citar el
    * contenido de un fichero ni una ruta de la máquina. El `resumen` ya cruzaba el cable de
@@ -1146,7 +1146,7 @@ export type MensajeDelCliente =
    * en el lazo (`arranque.ts#atenderSync`), así que el plan, la guarda de árbol sucio y la
    * aprobación salen por donde ya salían — la aprobación es la pregunta de siempre, que es
    * la que autoriza la escritura. Un `git push` desde el cliente no existiría ni aunque
-   * quisiéramos: la copia la mueve `agent/subida.ts` llamando a las tools MCP.
+   * quisiéramos: la copia la mueve `agent/cloudstudio/subida.ts` llamando a las tools MCP.
    */
   | { clase: "sync"; accion: "estado" | "subir" | "bajar" }
   /**
@@ -1160,7 +1160,7 @@ export type MensajeDelCliente =
    *
    * Viajan el NOMBRE de la receta y el NÚMERO del paso, nunca un comando ni un binario: un
    * comando que llegue del cliente es una shell abierta en la máquina del usuario. Qué se
-   * lanza lo decide una tabla cerrada del host (`agent/instalacionEnMaquina.ts`).
+   * lanza lo decide una tabla cerrada del host (`agent/dispositivos/instalacionEnMaquina.ts`).
    */
   | { clase: "receta"; id: string; paso: number; accion: "ejecutar" | "cancelar" }
   /** Los modelos que ofrece un MOTOR externo, para el desplegable de un subagente. Se pide

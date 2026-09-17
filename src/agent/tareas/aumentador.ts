@@ -62,7 +62,7 @@ export type InvocarParaAumentar = (papel: Papel, prompt: string, raiz: string) =
 /**
  * El `invocar` de PRODUCCIÓN, sobre `ModelosPort`.
  *
- * Es hermano de `invocarConModelos` (`agent/juezDeTarea.ts`) y **no se reutiliza aquél a
+ * Es hermano de `invocarConModelos` (`agent/tareas/juezDeTarea.ts`) y **no se reutiliza aquél a
  * propósito**: su error dice «no se pudo consultar al juez de QA», que aquí sería falso — y
  * ese mensaje es lo que la ventana de crear le enseña a una persona. Dos frases distintas
  * para dos operaciones distintas; lo que sí es idéntico, porque es la regla del repo, es el

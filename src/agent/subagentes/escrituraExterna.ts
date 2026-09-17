@@ -628,7 +628,7 @@ export function veredictoDeEscriturasExternas(opciones: {
  * Fail-closed en los cuatro caminos: sin política, con una ruta rechazada, si la política
  * revienta, o si contesta que no. Y el orden importa: preguntar por algo cuyo único final
  * posible es un rechazo es sacar un modal inútil — la misma regla que el `when` de
- * `seDetieneEn` en `agent/perfiles.ts`.
+ * `seDetieneEn` en `agent/grafo/perfiles.ts`.
  */
 export async function decisionDeEscrituraExterna(opciones: {
   cwd: string;

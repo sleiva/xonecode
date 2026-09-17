@@ -29,7 +29,7 @@ const TOPES: Partial<Record<Proveedor, Array<[prefijo: string, tope: number]>>> 
   // igual que `gpt-4.1` va antes que `gpt-4` aquí abajo.
   //
   // La tabla sigue siendo el último recurso: el catálogo vivo de Anthropic ya devuelve
-  // `max_input_tokens` (`agent/catalogoModelos.ts`), que es la verdad para el modelo
+  // `max_input_tokens` (`agent/config/catalogoModelos.ts`), que es la verdad para el modelo
   // concreto; lo que todavía no está es ese valor llegando a la barra, que hoy resuelve
   // por aquí.
   anthropic: [

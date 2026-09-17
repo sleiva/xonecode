@@ -7,7 +7,7 @@
  * suelto en el mensaje de alta, no dentro de nada que la sesión guarde.
  *
  * Orden de preferencia: `git config user.name` (el efectivo — repo si lo hay, si no
- * global —, igual que `agent/gitSync.ts#valorDeConfig` resuelve la config de sincronía)
+ * global —, igual que `agent/sesiones/gitSync.ts#valorDeConfig` resuelve la config de sincronía)
  * y, si no hay, el usuario del sistema (`os.userInfo()`). Sin ninguno de los dos,
  * `undefined` — nunca un nombre inventado como «usuario»: un saludo sin nombre es
  * neutro, uno con un nombre que no es el tuyo parece un error.

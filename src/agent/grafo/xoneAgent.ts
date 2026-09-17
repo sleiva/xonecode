@@ -32,7 +32,7 @@ export interface OpcionesDelAgente {
    */
   alContarTokens?: () => void;
   /**
-   * Los subagentes, ya leídos de disco (`agent/agentesEnDisco.ts`). Entran por parámetro y
+   * Los subagentes, ya leídos de disco (`agent/subagentes/agentesEnDisco.ts`). Entran por parámetro y
    * no se leen aquí por la misma razón que todo lo demás: quien construye el agente no
    * toca el disco, y así un test puede montar los que quiera sin escribir ficheros.
    *
@@ -50,7 +50,7 @@ export interface OpcionesDelAgente {
   modelos: ModelosPort;
   skills: SkillsPort;
   /** `BaseCheckpointSaver` y no `MemorySaver`: desde que hay uno persistente
-   *  (`agent/checkpointer.ts`) el tipo tiene que ser el de la interfaz, no el del doble. */
+   *  (`agent/sesiones/checkpointer.ts`) el tipo tiene que ser el de la interfaz, no el del doble. */
   checkpointer?: BaseCheckpointSaver;
   /** Opcional porque no siempre se viene a contar gasto; sin él la barra de estado enseña 0. */
   tracker?: TokenTracker;
@@ -175,7 +175,7 @@ export const DESCRIPCIONES_FICHEROS = {
  * no consume toda la ventana antes de que actúe el resumen de conversación.
  *
  * **Esa carpeta se monta FUERA del proyecto** (`core/descargas.ts`,
- * `agent/proyecto.ts#backendConDescargas`), y hasta el 10-09-2026 no: la escribe la librería
+ * `agent/grafo/proyecto.ts#backendConDescargas`), y hasta el 10-09-2026 no: la escribe la librería
  * llamando al backend directamente, esa ruta no estaba montada en ninguna parte y caía en el
  * `FilesystemBackend` de la raíz. Medido en el AppDemo real del usuario, 26 KB de salida
  * cruda de una tool dentro de la app XOne y commiteados. Bajar este tope no era el arreglo:
@@ -270,7 +270,7 @@ export async function construirAgente(opciones: OpcionesDelAgente): Promise<unkn
           /**
            * Lo que diga su `.md`, y nada más. Es la PRIMERA de dos puertas: con esto en
            * cierto, cada escritura pasa además por la política de la sesión y por las
-           * guardas de ruta (`agent/escrituraExterna.ts`). Un agente de solo lectura no
+           * guardas de ruta (`agent/subagentes/escrituraExterna.ts`). Un agente de solo lectura no
            * llega a preguntar.
            */
           permitirEscritura: !agente.soloLectura,

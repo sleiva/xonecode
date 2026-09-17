@@ -72,7 +72,7 @@ function discoDeMentira(
     tomarCerrojo: () => cerrojo,
     // Lo que hace verdad «un solo corredor»: el cerrojo deja un residuo declarado en el que
     // dos procesos pueden creerse dueños, y esto es lo que hace que el que perdió se entere
-    // ANTES de arrancar una tarea (ver `recoger` en `agent/tareasEnDisco.ts`).
+    // ANTES de arrancar una tarea (ver `recoger` en `agent/tareas/tareasEnDisco.ts`).
     sigoSiendoDueño: () => dueño,
     soltarCerrojo: () => void (soltado += 1),
     guardarAdjunto: () => ({ ok: true }),
@@ -1239,7 +1239,7 @@ describe("crearCorredorDeTareas", () => {
   it("`sigoSiendoDueño` se pregunta antes de CADA tarea, y al perderlo el lazo para", async () => {
     /**
      * La recogida de un cerrojo caduco no se puede hacer atómica con primitivas de
-     * ficheros y deja un residuo declarado (`agent/tareasEnDisco.ts#recoger`): dos procesos
+     * ficheros y deja un residuo declarado (`agent/tareas/tareasEnDisco.ts#recoger`): dos procesos
      * pueden creerse dueños. Lo que hace verdad «un solo corredor» es esta pregunta antes
      * de cada despacho — no la del arranque, que ya pasó.
      */

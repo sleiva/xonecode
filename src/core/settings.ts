@@ -6,8 +6,8 @@
  * de un cliente. Vive en global y no en el proyecto porque un entorno sirve a muchos
  * proyectos; el proyecto solo guarda a cuál pertenece.
  *
- * TypeScript puro: ni disco ni red. El disco lo pone `agent/settingsEnDisco.ts`, igual
- * que `core/config.ts` deja el I/O a `agent/configEnDisco.ts` y `agent/authEnDisco.ts`.
+ * TypeScript puro: ni disco ni red. El disco lo pone `agent/config/settingsEnDisco.ts`, igual
+ * que `core/config.ts` deja el I/O a `agent/config/configEnDisco.ts` y `agent/config/authEnDisco.ts`.
  */
 import { posix } from "node:path";
 import { type Aviso, CLAVES_DENEGADAS } from "./config.js";

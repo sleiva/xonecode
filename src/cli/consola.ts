@@ -163,7 +163,7 @@ export interface Consola {
    * git. Su ausencia (modo guion, tests) es la que hace que `/sync` lo diga sin reventar.
    *
    * `politicaDeAprobacion` solo importa para «subir» (`core/cloudstudio.ts` documenta el
-   * hueco): quien construye el adaptador real la reenvía a `agent/subida.ts#subir`, que
+   * hueco): quien construye el adaptador real la reenvía a `agent/cloudstudio/subida.ts#subir`, que
    * la exige. Esta capa no rellena el hueco por su cuenta — eso es cosa del comando
    * `/sync` (ver `politicaInteractiva` más abajo), que sí tiene `preguntar`/`escribir`.
    */
@@ -233,7 +233,7 @@ export const PETICION_REANUDAR_PROYECTO =
   "en ese caso lee solo sus primeras 50 líneas. Termina preguntando si quieres continuar ese paso.";
 
 export const MENSAJE_REANUDANDO = "Analizando el estado guardado del repositorio…\n";
-// Movida a `agent/cloudstudioMcp.ts`: es la dirección de un servidor, no un detalle de
+// Movida a `agent/cloudstudio/cloudstudioMcp.ts`: es la dirección de un servidor, no un detalle de
 // esta piel, y `adoptarLegadoSiProcede` (Task 4 del plan de la consola web) la necesita
 // desde `agent/`, que no puede importar de `cli/`. Se reexporta para no romper a quien
 // la importaba de aquí.
@@ -902,7 +902,7 @@ function manejadorDeModelo(papel: Papel | undefined): ManejadorDeBarra {
 /**
  * La ÚNICA política de aprobación que existe hoy: rellena el hueco de
  * `core/cloudstudio.ts#PoliticaDeAprobacion` con un humano que ve el plan y responde.
- * Vive aquí, en `cli/`, y no en `agent/subida.ts`: la política es de la piel, el hueco es
+ * Vive aquí, en `cli/`, y no en `agent/cloudstudio/subida.ts`: la política es de la piel, el hueco es
  * del motor.
  *
  * **Es MÁS estricta que `cli/aprobar.ts`, a propósito: aquí el Enter a secas no aprueba
@@ -1108,7 +1108,7 @@ export const COMANDOS: Record<string, { descripcion: string; manejador: Manejado
 
       try {
         // El hueco de política solo se rellena para «subir»: es la única acción que
-        // escribe. `agent/subida.ts#subir` la invoca con el plan YA CONSTRUIDO, así que
+        // escribe. `agent/cloudstudio/subida.ts#subir` la invoca con el plan YA CONSTRUIDO, así que
         // esto puede pasarse siempre — si el árbol está sucio o no hay nada que subir, ni
         // siquiera llega a invocarse.
         const politicaDeAprobacion = accion === "subir" ? politicaInteractiva(consola, decir) : undefined;

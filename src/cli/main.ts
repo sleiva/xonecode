@@ -659,7 +659,7 @@ function esSi(respuesta: string): boolean {
  * ficheros en la carpeta del usuario es opt-in, y quien no ha entendido la
  * pregunta no ha pedido nada. Lo que se escribe es `core/esqueleto.ts` (el
  * «Hola Mundo» de la documentación XOne, nada inventado), a través de
- * `agent/crearProyecto.ts`, que no pisa lo que ya exista.
+ * `agent/config/crearProyecto.ts`, que no pisa lo que ya exista.
  */
 async function ofrecerCrearProyecto(raiz: string, consola: Consola): Promise<boolean> {
   const respuesta = await consola.preguntar("¿Creo un proyecto XOne aquí? (s/N) ");
@@ -729,7 +729,7 @@ export function crearCompleterDelProyecto(raiz: string, escribir: Escribir = esc
  * Las piezas de la sincronización, para poder probar `crearSincronizador` y
  * `crearListaDeRamas` sin red ni MCP: los tests inyectan dobles y el valor por omisión es
  * el adaptador real de `agent/`. `leerConfig` es literalmente `cargar` de
- * `agent/configEnDisco.ts` — no existe (ni hace falta) un `leerCloudStudioDeProyecto`.
+ * `agent/config/configEnDisco.ts` — no existe (ni hace falta) un `leerCloudStudioDeProyecto`.
  */
 export interface PiezasDeSincronizacion {
   leerConfig: typeof cargar;
@@ -828,7 +828,7 @@ function cloudStudioDeProyecto(
   if (cloudstudio === undefined) return undefined;
   if (cloudstudio.proyecto === undefined || cloudstudio.rama === undefined) return undefined;
   // `entorno` viaja junto a la URL porque decide de QUÉ juego de credenciales se lee
-  // (`porEntorno[id]`, `agent/cloudstudioMcp.ts`). Si al `config.json` le falta —todo
+  // (`porEntorno[id]`, `agent/cloudstudio/cloudstudioMcp.ts`). Si al `config.json` le falta —todo
   // proyecto dado de alta desde la terminal— se resuelve casando la URL contra los
   // entornos registrados: ver `entornoDeUrl`. Si tampoco así aparece, `undefined` cae en
   // `legado`, que es donde ese proyecto tiene sus tokens.
