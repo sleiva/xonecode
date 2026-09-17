@@ -9,6 +9,8 @@ import { backendDeAgente } from "./proyecto.js";
 import type { Artefacto } from "../../core/artefactos.js";
 import { permisosDe, hitlDe, type QuienDecidePermisos } from "./perfiles.js";
 import { crearBusquedaRegex } from "./busquedaRegex.js";
+import { crearNavegacionXone } from "./navegacionXone.js";
+import { indiceEnDisco, type CargarIndice } from "../navegacion/indiceEnDisco.js";
 import { inventarioDelProyecto } from "../subagentes/escrituraExterna.js";
 import type { DiagnosticoDeTools } from "../turno/diagnosticoDeTools.js";
 import { middlewareTextoDeTool } from "../turno/textoDeTool.js";
@@ -51,6 +53,11 @@ export interface OpcionesDelAgente {
   subagenteExterno: SubagenteExternoPort;
   modelos: ModelosPort;
   skills: SkillsPort;
+  /**
+   * De dónde sale el índice de navegación XOne. Ausente = el real, leyendo el proyecto con
+   * `xone-linter`. Entra por aquí para que un test pueda doblarlo sin proyecto en disco.
+   */
+  navegacion?: CargarIndice;
   /** `BaseCheckpointSaver` y no `MemorySaver`: desde que hay uno persistente
    *  (`agent/sesiones/checkpointer.ts`) el tipo tiene que ser el de la interfaz, no el del doble. */
   checkpointer?: BaseCheckpointSaver;
@@ -240,6 +247,19 @@ export async function construirAgente(opciones: OpcionesDelAgente): Promise<unkn
   // Las cuatro capas y su orden están en `backendDeAgente`, que vive en `proyecto.ts` para
   // poder PROBARSE: aquí no había forma, porque `construirAgente` se simula en todos los
   // tests que lo tocan y el cableado se quedaba sin nadie mirándolo.
+  /**
+   * El cargador del índice de navegación, con la RAÍZ ya fijada.
+   *
+   * Entra por opción para poder doblarse en un test, y con su omisión real puesta aquí —no en
+   * el llamador— por el patrón de fallo de siempre: compuesto arriba, en un cierre que todos
+   * los tests simulan, el cableado quedaría escrito y sin probar. `xoneAgent.navegacion.test.ts`
+   * lo mira desde fuera.
+   *
+   * La raíz NO entra por parámetro de la tool: si el modelo pudiera decir sobre qué carpeta
+   * pregunta, esto sería una tool que lee cualquier sitio de la máquina.
+   */
+  const cargarIndice: CargarIndice = opciones.navegacion ?? indiceEnDisco(opciones.raiz);
+
   const backend = backendDeAgente({
     raiz: opciones.raiz,
     ficheros: opciones.ficheros,
@@ -332,7 +352,18 @@ export async function construirAgente(opciones: OpcionesDelAgente): Promise<unkn
     // `tools` solo lleva tools PROPIAS. Pasarle los NOMBRES de las de fichero las sustituía
     // por cadenas, dejando al especialista sin ninguna capacidad real. Las de fichero las
     // monta el middleware; regex_search es una tool real y confinada al mismo backend.
-    tools: [crearBusquedaRegex(backend)],
+    /**
+     * Las dos tools propias, y contestan preguntas DISTINTAS: `regex_search` busca TEXTO y
+     * `xone_navegacion` contesta sobre el modelo ya resuelto. Un `mapcol` encuentra su
+     * colección aunque el nombre salga en otros veinte sitios, y el inventario cuesta 141
+     * tokens donde leer los `.xne` cuesta 18.000 (medido sobre un proyecto real).
+     *
+     * A los CINCO especialistas y no a unos pocos: los cinco trabajan sobre un proyecto XOne
+     * y la pregunta que esto abarata —«qué hay aquí»— se la hacen todos. El esquema es de una
+     * operación enumerada y un nombre, que es poco en cada llamada; el orquestador NO la
+     * recibe, porque no tiene tools propias y delega.
+     */
+    tools: [crearBusquedaRegex(backend), crearNavegacionXone(cargarIndice, opciones.ficheros)],
     //
     // Las tools de fichero las monta el `FilesystemMiddleware` a partir del backend, y
     // quien las acota por NOMBRE es su propia opción `tools` (con la restricción de que

@@ -226,9 +226,30 @@ Y las guardas del proyecto:
 - **`/adjuntos/` es de solo lectura y su fila en `permisosDe` es INCONDICIONAL**: sin ella, un
   `write_file` con la carpeta sin montar escribe un fichero DEL PROYECTO con el nombre de algo
   que la interfaz presenta como «lo que te adjuntaron».
-- **La tool propia es la búsqueda regex** (`agent/grafo/busquedaRegex.ts`), acotada (`LIMITES_REGEX`).
-  Re-aplica `puedeLeerRuta` **a mano**: una tool de LangChain añadida por xonecode **no pasa por
-  el middleware de permisos**.
+- **Las tools propias son DOS, y contestan preguntas distintas.** La búsqueda regex
+  (`agent/grafo/busquedaRegex.ts`, acotada por `LIMITES_REGEX`) busca TEXTO; `xone_navegacion`
+  (`agent/grafo/navegacionXone.ts`) contesta sobre el MODELO ya resuelto: qué colecciones hay,
+  dónde se declara una o un campo, quién la referencia (`mapcol`, `mapfld`, `linkedfield`,
+  `contents`, `inherits`) y qué campos tiene. Las dos **re-aplican `puedeLeerRuta` a mano**: una
+  tool de LangChain añadida por xonecode **no pasa por el middleware de permisos**.
+- **`xone_navegacion` existe por una medida, no por completitud**: contestar «¿qué colecciones
+  tiene el proyecto?» leyendo ficheros cuesta dos órdenes de magnitud más que contestarla desde
+  el modelo — lo caro no es abrir un `.xne`, es no saber cuál de todos abrir. Cuatro reglas:
+  **el reparto** —la semántica de XOne la pone `xone-linter` como LIBRERÍA (ya parsea, ya decodifica
+  ISO-8859 y su `CrossReferenceRule` ya define qué significa `mapcol`), y reescribirla aquí sería
+  un segundo sitio donde decidir lo mismo—; **el import es PROFUNDO**
+  (`xone-linter/dist/project/XoneProject.js`) porque el barril arrastra su runtime con un
+  *top-level await* que revienta bajo `tsx`, o sea el lanzador de desarrollo; **la raíz se fija al
+  construir y NO entra por parámetro de la tool**, o sería una tool que lee cualquier carpeta de
+  la máquina; y **no cachea**, porque reconstruir cuesta decenas de milisegundos contra los
+  segundos de una llamada, y un índice viejo que afirma que un campo existe es peor que no tener
+  índice. Las rutas se traducen a VIRTUALES y se filtran **en la fuente**
+  (`agent/navegacion/modeloDeProyecto.ts`): lo que el agente no puede abrir no llega a estar en
+  el índice. **Límite declarado: no ve referencias calculadas en JavaScript**, y la descripción de
+  la tool lo dice — callarlo haría concluir que un uso no existe.
+- **Va a los CINCO especialistas y no al orquestador** (`xoneAgent.navegacion.test.ts`, que lo mira
+  en lo que recibe `createDeepAgent`): el orquestador no tiene tools propias porque delega. Y a un
+  subagente de motor EXTERNO no puede llegar — corre en otro proceso, con sus propias tools.
 - `.xonecode/memoria.md` se ve por UNA ruta virtual, `/MEMORIA_PROYECTO.md` (Proxy en
   `agent/grafo/memoriaDeProyecto.ts`), así que la carpeta sigue denegada entera y escribir la memoria
   pasa por la aprobación de siempre. El resumen de contexto usa umbrales **fijados a mano** (32k
