@@ -4113,6 +4113,63 @@ nada más. Cinco cosas:
   el SDK crudo de Anthropic**: este repo enruta todos los proveedores por LangChain a
   propósito, y romper la simetría por uno solo sería peor que el problema.
 
+## Medir el gasto de un turno sin levantar la web (17-09-2026)
+
+El punto de partida no era que faltara una puerta headless: `run --real` (`cli/run.ts`) ya
+corre el agente de verdad sobre el proyecto del cwd, y `XONECODE_TRACE_TOOLS=1` ya deja
+`.xonecode/traza-tools.jsonl` con una línea por llamada al modelo y su origen. Lo que faltaba
+era la MEDIDA: `run.ts` no tocaba el tracker, así que cada disparo terminaba sin decir lo que
+había costado, y el JSONL **no lo leía nadie** — un fichero que solo se escribe no contesta
+nada.
+
+**La primera medida real**, sobre una copia de `proyecto_example` y con una pregunta de solo
+lectura («qué colecciones tiene y cuál es la de entrada, en tres líneas»): 7 llamadas al
+modelo, 30.865 tokens de entrada y 2.388 de salida, 42 s, con `ollama/glm-5.3-flash:cloud`.
+Treinta mil de entrada para contestar tres líneas es exactamente el orden de magnitud que hacía
+falta ver antes de tocar un solo prompt.
+
+De ahí, cuatro decisiones:
+
+- **Las DOS cuentas no se suman y van en dos filas** (`pintarGasto`): los tokens del grafo van
+  contra la clave de API de quien corre y los de un agente externo contra su suscripción. Un
+  token es un token, pero su precio no. La cuenta externa AUSENTE se calla, porque una fila de
+  ceros afirma que se midió un agente externo que no corrió; y una ventana de cero tampoco se
+  pinta, que es «no se pudo medir» — la misma regla que `consumoPersistible` aplica al
+  persistir.
+- **El gasto se pinta también cuando el turno se cortó sin humano.** Va fuera del `try`, antes
+  del diff: esos tokens se gastaron igual, y contar solo los turnos que acaban bien haría bajar
+  la cifra justo en los que más cuestan. Es la misma regla que ya regía en el contador de la
+  web.
+- **`pintarGasto` vive en `agent/turno/informeDeTraza.ts` y no dentro de `correrReal`.** Es el
+  patrón de fallo de este repo, ahora por décima vez: `correrReal` construye una sesión real y
+  todos sus tests la doblan, así que una regla compuesta ahí dentro queda escrita y sin nadie
+  mirándola. Extraída es una función pura con test por cada regla (las dos cuentas, la externa
+  ausente, la ventana sin medir).
+- **El coste efectivo es UNA cuenta** (`costeEfectivo`: `input − 0,9·cache + output`). Estaba
+  escrita a pelo dentro del `console.log` del corredor de evals; ahora el corredor la importa.
+  Dos fórmulas para el mismo número son dos números que acaban divergiendo, y aquí el síntoma
+  habría sido comparar un eval contra un `run --real` y leer la diferencia como una mejora.
+
+Y dos trampas del formato de la traza, que son las dos primeras pruebas de
+`informeDeTraza.test.ts`:
+
+- **El campo `llamadas` de una línea `modelo` es el acumulado GLOBAL del tracker**, no el de esa
+  llamada ni el de ese origen: va 1, 2, 3… Sumarlo daría seis llamadas donde hubo tres. Se
+  cuentan por línea.
+- **El fichero es append-only y una máquina acumula ejecuciones de días**, así que el informe se
+  parte por `sesion` y por omisión enseña la última, diciendo cuántas hay. Sumarlas todas daría
+  el turno de ayer más el de ahora en una cifra perfectamente plausible, que es la peor clase de
+  error. Que no haya traza sale con **70** y con el comando que la enciende, el mismo trato que
+  `verify` le da a un simulador ausente: un 0 con el informe en blanco se leería como «no
+  gastaste nada».
+
+**Límite declarado, y es el que más estorba al objetivo: con Ollama la caché sale 0 % y ese
+cero NO está medido.** El tracker lee `input_token_details.cache_read`
+(`vendor/tokenTracking.ts`); Ollama no lo emite, la ausencia se vuelve cero y las dos pieles lo
+pintan como una medida — el «contador a cero que nadie ha medido» que este repo persigue en
+todas partes. Para ver la palanca de la caché hace falta un proveedor que la reporte. Separar
+«no consta» de «cero» pide que el tracker lo lleve, y es otra tarea.
+
 ## Trampas verificadas
 
 - **El orquestador va de SOLO LECTURA, y hasta el 9-09-2026 no lo era** (`PERFIL_DEL_ORQUESTADOR`,

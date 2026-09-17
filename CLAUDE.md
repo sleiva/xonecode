@@ -34,6 +34,8 @@ npx vitest run src/core/turno.test.ts  # un solo fichero
 npx vitest run -t "la frontera"        # por nombre de test
 npm run build                          # rm -rf dist && tsc -p tsconfig.build.json
 ./bin/xonecode …                       # lanzador de DESARROLLO: tsx sobre src/, preserva el cwd
+XONECODE_TRACE_TOOLS=1 ./bin/xonecode run --real "…"   # un turno medido, sin web ni TUI
+./bin/xonecode traza [--todas]         # a dónde se fueron los tokens de ese turno
 npm run web -- --puerto 4200           # la consola WEB: construye el cliente y la levanta
 ```
 
@@ -1044,6 +1046,31 @@ feedback del desarrollador** y no es terminal.
   líneas repintado en sitio, borrado EXACTO por número de líneas (debajo vive el spinner), y
   **sin TTY no se instala** — se cae en `Piel.notificacion?` y las líneas estáticas, así que
   pipes y guion salen byte-idénticos.
+
+## Medir el gasto sin levantar nada
+
+La puerta headless es `run --real` (`cli/run.ts`), y **cierra diciendo lo que costó**
+(`agent/turno/informeDeTraza.ts#pintarGasto`): sin esa línea cada disparo se iba sin dejar
+una cifra comparable. Cuatro reglas:
+
+- **Las DOS cuentas no se suman y son dos filas** —la del grafo y la de un agente externo—,
+  la externa AUSENTE se calla (una fila de ceros afirma que se midió lo que no corrió) y una
+  ventana de cero no se pinta, que es «no se pudo medir» y no «cabe todo». Misma regla que
+  `consumoPersistible`.
+- **Se pinta también cuando el turno se corta sin humano**: esos tokens se gastaron igual, y
+  contar solo los turnos que acaban bien bajaría la cifra justo en los que más cuestan.
+- **El reparto lo da la TRAZA, no el total**: `XONECODE_TRACE_TOOLS=1` deja
+  `.xonecode/traza-tools.jsonl` y `xonecode traza` lo agrega por ORIGEN (el orquestador y
+  cada especialista) y por TOOL, con lo repetido aparte — una relectura es lo que se viene a
+  buscar. `pintarGasto` va en `agent/` y no dentro de `correrReal` por el patrón de fallo de
+  siempre: compuesta en un cierre que todos los tests doblan, la regla queda escrita y no
+  probada.
+- **Dos trampas del formato, y son las dos primeras pruebas** (`informeDeTraza.test.ts`): en
+  una línea `modelo`, el campo `llamadas` es el acumulado GLOBAL del tracker, así que las
+  llamadas se cuentan por línea; y el fichero es append-only, así que el informe se parte por
+  `sesion` —sin eso sumaría el turno de ayer al de ahora y la cifra sería plausible—. Que no
+  haya traza sale con **70** y con el comando que la enciende: un cero con el informe en
+  blanco se leería como «no gastaste nada».
 
 ## Los evals (`npm run eval`, nunca en `npm test`)
 

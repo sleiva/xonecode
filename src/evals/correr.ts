@@ -37,6 +37,7 @@ import { SkillsEnDisco } from "../agent/grafo/skills.js";
 import { Modelos } from "../agent/config/modelos.js";
 import { abrirSesionReal } from "../agent/turno/turnoReal.js";
 import { SimuladorVerifier } from "../agent/turno/verificador.js";
+import { costeEfectivo } from "../agent/turno/informeDeTraza.js";
 import { cargar, aplicarAuth } from "../agent/config/configEnDisco.js";
 import { AGENTES_DE_SERIE, cargarAgentes } from "../agent/subagentes/agentesEnDisco.js";
 import { escribirAgente } from "../core/agentes.js";
@@ -231,11 +232,12 @@ async function main(): Promise<number> {
     if (r.ok && r.proyecto !== undefined && !conservarTodo) rmSync(r.proyecto, { recursive: true, force: true });
     console.log(
       // El `input` bruto engaña: lo cacheado cuesta mucho menos. Se dice cuánto hay de caché y
-      // un coste EFECTIVO (input − 0,9·cache + output): tokens equivalentes para comparar dos
+      // un coste EFECTIVO (`costeEfectivo`, que vive en `informeDeTraza.ts` para que sea UNA
+      // cuenta y no dos que divergen): tokens equivalentes para comparar dos
       // ejecuciones del mismo modelo, no una factura — asume la caché a un décimo (la cifra de
       // Anthropic; OpenAI descuenta ~la mitad, Gemini no la publica) y la salida 1:1.
       `${r.ok ? "✓" : "✗"} ${(r.ms / 1000).toFixed(0)}s · ${r.llamadas} llamadas · ${r.tokensEntrada + r.tokensSalida} tokens` +
-        ` (caché ${r.tokensEntrada === 0 ? 0 : Math.round((100 * r.tokensCache) / r.tokensEntrada)}% · efectivo ≈${Math.round(r.tokensEntrada - 0.9 * r.tokensCache + r.tokensSalida)})` +
+        ` (caché ${r.tokensEntrada === 0 ? 0 : Math.round((100 * r.tokensCache) / r.tokensEntrada)}% · efectivo ≈${costeEfectivo({ input: r.tokensEntrada, output: r.tokensSalida, cache: r.tokensCache })})` +
         `${r.reparaciones > 0 ? ` · ${r.reparaciones} reparación(es)` : ""}${r.bloqueado ? " · bloqueado" : ""}` +
         `\n   ${r.error === undefined ? r.motivo : `ERROR: ${r.error}`}` +
         `${(!r.ok || conservarTodo) && r.proyecto !== undefined ? `\n   proyecto conservado en ${r.proyecto}` : ""}`

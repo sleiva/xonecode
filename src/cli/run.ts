@@ -10,6 +10,7 @@ import { Modelos } from "../agent/config/modelos.js";
 import { proveedoresPersonalizados } from "../agent/config/configEnDisco.js";
 import { abrirSesionReal } from "../agent/turno/turnoReal.js";
 import { SimuladorVerifier } from "../agent/turno/verificador.js";
+import { pintarGasto } from "../agent/turno/informeDeTraza.js";
 import type { FuentesDeEleccion } from "../core/modelos.js";
 import type { Papel } from "../core/ports.js";
 
@@ -181,6 +182,18 @@ async function correrReal(opciones: OpcionesRun, escribir: Escribir): Promise<nu
     if (!(e instanceof CorteSinHumano)) throw e;
     cambios = await instantanea.cambios();
   }
+
+  /**
+   * 6-bis. Lo que costó. Va ANTES del diff y FUERA del `try`, o sea también cuando el turno
+   * se cortó sin humano: esos tokens se gastaron igual, y contar solo los turnos que
+   * terminan bien haría bajar la cifra justo en los que más cuestan.
+   *
+   * Es la línea que convierte cada `run --real` en una medida comparable. Lo que reparte ese
+   * gasto entre el orquestador y cada especialista es la traza (`XONECODE_TRACE_TOOLS=1` y
+   * luego `xonecode traza`); aquí va el total, que es lo que se puede decir siempre.
+   */
+  escribir("\n");
+  for (const linea of pintarGasto(sesion.consumo(), sesion.tracker.calls)) escribir(`${linea}\n`);
 
   // 7. El diff contra la foto. Un turno que no tocó nada TIENE que verse igual.
   escribir("\n--- cambios en el proyecto ---\n");

@@ -13,6 +13,7 @@ import { cmdDescribe } from "./describe.js";
 import { cmdConfig } from "./config.js";
 import { cmdDoctor } from "./doctor.js";
 import { cmdVerify } from "./verify.js";
+import { cmdTraza } from "./traza.js";
 import { type FuentesDeEleccion, ModeloMalEscrito, parsear, resolver } from "../core/modelos.js";
 import { topeResuelto } from "../core/contextos.js";
 import {
@@ -141,6 +142,7 @@ const AYUDA = `xonecode — harness de XOne
   xonecode config --json         lo mismo, en JSON parseable
   xonecode doctor                ¿hay un proyecto aquí? ¿responde el simulador?
   xonecode verify [ruta]         valida el proyecto con xone-simulator (por omisión, aquí)
+  xonecode traza [--todas]       a dónde se fueron los tokens (pide XONECODE_TRACE_TOOLS=1)
   xonecode --guion               la consola con el agente de pega, sin gastar
   xonecode --guion --web         lo mismo, y si el cwd es un proyecto offline lo abre
                                   solo: la maqueta completa sin alta ni CloudStudio
@@ -1370,6 +1372,11 @@ export async function main(argv: string[]): Promise<number> {
     if (comando === "verify") {
       const ruta = resto.filter((a) => !a.startsWith("--"))[0] ?? process.cwd();
       return await cmdVerify(ruta);
+    }
+
+    if (comando === "traza") {
+      const ruta = resto.filter((a) => !a.startsWith("--"))[0] ?? process.cwd();
+      return await cmdTraza(ruta, escribirEnStdout, { todas: resto.includes("--todas") });
     }
   } catch (e) {
     // Un modelo mal escrito es un error del USUARIO, no del harness: su mensaje, sin
