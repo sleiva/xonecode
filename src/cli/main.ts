@@ -29,19 +29,19 @@ import {
   guardarProyectoCloudStudioDeProyecto,
   guardarRamaDeProyecto,
   guardarTemaDeProyecto,
-} from "../agent/configEnDisco.js";
-import { crearCheckpointerDeProyecto } from "../agent/checkpointer.js";
-import { crearTareasEnDisco } from "../agent/tareasEnDisco.js";
+} from "../agent/config/configEnDisco.js";
+import { crearCheckpointerDeProyecto } from "../agent/sesiones/checkpointer.js";
+import { crearTareasEnDisco } from "../agent/tareas/tareasEnDisco.js";
 import { carpetaDeArtefactosDeSesion } from "../core/artefactos.js";
 import { seAplicaSinAprobacion } from "../core/settings.js";
-import { conectarCloudStudio, sesionCloudStudio, PUERTO_CALLBACK } from "../agent/cloudstudioMcp.js";
-import { clienteCloudStudio } from "../agent/cloudstudioClient.js";
-import { cargarSettings } from "../agent/settingsEnDisco.js";
+import { conectarCloudStudio, sesionCloudStudio, PUERTO_CALLBACK } from "../agent/cloudstudio/cloudstudioMcp.js";
+import { clienteCloudStudio } from "../agent/cloudstudio/cloudstudioClient.js";
+import { cargarSettings } from "../agent/config/settingsEnDisco.js";
 import type { Entorno } from "../core/settings.js";
-import { descargarProyecto } from "../agent/descarga.js";
-import { arbolLimpio, cambiosPendientes, prepararRepo, sinCommitear } from "../agent/gitSync.js";
-import { subir } from "../agent/subida.js";
-import { guardarCredencial } from "../agent/authEnDisco.js";
+import { descargarProyecto } from "../agent/cloudstudio/descarga.js";
+import { arbolLimpio, cambiosPendientes, prepararRepo, sinCommitear } from "../agent/sesiones/gitSync.js";
+import { subir } from "../agent/cloudstudio/subida.js";
+import { guardarCredencial } from "../agent/config/authEnDisco.js";
 import { asistenteDeModelo } from "./wizardInicial.js";
 import {
   COMANDOS,
@@ -61,14 +61,14 @@ import { crearDetectorDeEof, crearLeerSecreto, crearPreguntar, crearPielStdio, e
 import { crearTema, esTema, seleccionarTema } from "./tema.js";
 import { pedirDecisiones } from "./aprobar.js";
 import { modeloDeAcuse } from "./acuseDeModelo.js";
-import { inspeccionar } from "../agent/entorno.js";
-import { versionEnMarcha } from "../agent/versionEnDisco.js";
-import { SkillsEnDisco } from "../agent/skills.js";
-import { Modelos } from "../agent/modelos.js";
-import { CatalogoModelos } from "../agent/catalogoModelos.js";
-import { abrirSesionReal, ficherosDelProyecto, type SesionReal } from "../agent/turnoReal.js";
-import { SimuladorVerifier } from "../agent/verificador.js";
-import { crearProyecto } from "../agent/crearProyecto.js";
+import { inspeccionar } from "../agent/config/entorno.js";
+import { versionEnMarcha } from "../agent/config/versionEnDisco.js";
+import { SkillsEnDisco } from "../agent/grafo/skills.js";
+import { Modelos } from "../agent/config/modelos.js";
+import { CatalogoModelos } from "../agent/config/catalogoModelos.js";
+import { abrirSesionReal, ficherosDelProyecto, type SesionReal } from "../agent/turno/turnoReal.js";
+import { SimuladorVerifier } from "../agent/turno/verificador.js";
+import { crearProyecto } from "../agent/config/crearProyecto.js";
 import { type DatosDelProyecto } from "../core/esqueleto.js";
 import { createTokenTracker, type TokenTracker } from "../vendor/tokenTracking.js";
 import { compacto, formatearTokens, formatearTope } from "./tokens.js";

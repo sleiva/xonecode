@@ -43,10 +43,10 @@ import {
   rutaAuthPorDefecto,
   sesionCloudStudio,
   urlDeMcpAceptable,
-} from "../../agent/cloudstudioMcp.js";
-import type { TrabajoSinCommitear } from "../../agent/gitSync.js";
-import type { ProyectoRemoto } from "../../agent/cloudstudioMcp.js";
-import { clienteCloudStudio } from "../../agent/cloudstudioClient.js";
+} from "../../agent/cloudstudio/cloudstudioMcp.js";
+import type { TrabajoSinCommitear } from "../../agent/sesiones/gitSync.js";
+import type { ProyectoRemoto } from "../../agent/cloudstudio/cloudstudioMcp.js";
+import { clienteCloudStudio } from "../../agent/cloudstudio/cloudstudioClient.js";
 import {
   guardarCloudStudioDeProyecto,
   guardarEntornoDeProyecto,
@@ -54,7 +54,7 @@ import {
   guardarModoDeProyecto,
   guardarProyectoCloudStudioDeProyecto,
   guardarRamaDeProyecto,
-} from "../../agent/configEnDisco.js";
+} from "../../agent/config/configEnDisco.js";
 import {
   correrConsola,
   ejecutarTurnoGuionizado,

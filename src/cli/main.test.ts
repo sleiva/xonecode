@@ -26,10 +26,10 @@ import {
 import { COMANDOS, MENSAJE_BIENVENIDA } from "./consola.js";
 import type { Escribir } from "./stdio.js";
 import { POR_OMISION, type FuentesDeEleccion } from "../core/modelos.js";
-import { CatalogoModelos } from "../agent/catalogoModelos.js";
+import { CatalogoModelos } from "../agent/config/catalogoModelos.js";
 import { temaActivo } from "./tema.js";
 import type { CloudStudioPort } from "../core/ports.js";
-import { cargar } from "../agent/configEnDisco.js";
+import { cargar } from "../agent/config/configEnDisco.js";
 import type { Entorno } from "../core/settings.js";
 
 /**

@@ -31,9 +31,9 @@ import { MS_DE_TRABAJO_AL_ABRIR,
   TOPE_DE_MEMORIA,
   FICHEROS_DEL_AVISO,
 } from "./arranque.js";
-import { ErrorDelAumentador } from "../../agent/aumentador.js";
-import { leerFicheroDeProyecto, motivoDeRutaInaceptable } from "../../agent/arbolDeProyecto.js";
-import { CLAVE_DE_SELLO, cambiosDeSesion, fotoDeApertura } from "../../agent/sesionGit.js";
+import { ErrorDelAumentador } from "../../agent/tareas/aumentador.js";
+import { leerFicheroDeProyecto, motivoDeRutaInaceptable } from "../../agent/grafo/arbolDeProyecto.js";
+import { CLAVE_DE_SELLO, cambiosDeSesion, fotoDeApertura } from "../../agent/sesiones/sesionGit.js";
 import type { PeticionDeTarea } from "../../core/ports.js";
 import { crearVestibulo, type Vestibulo } from "./vestibulo.js";
 import { crearConsolaWeb, type ConsolaWeb, type OpcionesDeConsolaWeb } from "./consolaWeb.js";
@@ -43,7 +43,7 @@ import { COMANDOS } from "../../cli/consola.js";
 import { CatalogoModelosEnMemoria } from "../../core/ports.js";
 import type { Entorno } from "../../core/settings.js";
 import type { AdjuntoDeTarea, Tarea } from "../../core/tareas.js";
-import { TOPE_DE_ADJUNTO } from "../../agent/tareasEnDisco.js";
+import { TOPE_DE_ADJUNTO } from "../../agent/tareas/tareasEnDisco.js";
 import type { ManejadorRuta } from "./servidor.js";
 import { ESTADOS_DEL_LANZAMIENTO, FASES_DEL_LANZAMIENTO } from "./transporte.js";
 import {
@@ -51,7 +51,7 @@ import {
   type EstadoDeLanzamiento,
   type FaseDeLanzamiento,
   type PeticionDeLanzamiento,
-} from "../../agent/lanzamientoEnMaquina.js";
+} from "../../agent/dispositivos/lanzamientoEnMaquina.js";
 import type { MensajeAlCliente, MensajeDelCliente, Sumidero } from "./transporte.js";
 import type { Acto } from "../../core/actos.js";
 

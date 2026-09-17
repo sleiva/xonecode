@@ -39,12 +39,12 @@ import type { JuezDeTareaPort } from "../../core/ports.js";
 import type { Entrega } from "../../core/entrega.js";
 import { crearConsolaDeTarea } from "./consolaDeTarea.js";
 import { conAdjuntos } from "../../core/adjuntos.js";
-import { ErrorDelJuezDeTarea } from "../../agent/juezDeTarea.js";
+import { ErrorDelJuezDeTarea } from "../../agent/tareas/juezDeTarea.js";
 import type { Consola } from "../../cli/consola.js";
 import type { ConsolaDeProyecto } from "./vestibulo.js";
 import type { Sumidero } from "./transporte.js";
 import type { Acto } from "../../core/actos.js";
-import type { TareasEnDisco } from "../../agent/tareasEnDisco.js";
+import type { TareasEnDisco } from "../../agent/tareas/tareasEnDisco.js";
 
 /**
  * Lo que git sabe de una sesión, y que la puerta de la entrega necesita entero.

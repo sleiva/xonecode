@@ -1,4 +1,4 @@
-import { SimuladorVerifier, ErrorDelSimulador } from "../agent/verificador.js";
+import { SimuladorVerifier, ErrorDelSimulador } from "../agent/turno/verificador.js";
 import { huella, type Hallazgo } from "../core/ports.js";
 import { escribirEnStdout, type Escribir } from "./stdio.js";
 

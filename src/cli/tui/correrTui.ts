@@ -17,8 +17,8 @@ import { PAPELES, parsear, resolver, type FuentesDeEleccion } from "../../core/m
 import { PISTA_DE_DECISION } from "../aprobar.js";
 import type { CatalogoModelosPort, Papel } from "../../core/ports.js";
 import type { Piel } from "../../core/turno.js";
-import { ficherosDelProyecto, type SesionReal } from "../../agent/turnoReal.js";
-import { inspeccionar } from "../../agent/entorno.js";
+import { ficherosDelProyecto, type SesionReal } from "../../agent/turno/turnoReal.js";
+import { inspeccionar } from "../../agent/config/entorno.js";
 import {
   correrConsola,
   configurarModoInicial,
@@ -34,8 +34,8 @@ import {
   type EstadoDeSesion,
 } from "../consola.js";
 import { asistenteDeModelo } from "../wizardInicial.js";
-import { guardarCredencial } from "../../agent/authEnDisco.js";
-import { aplicarCredencialAlProceso, cargar } from "../../agent/configEnDisco.js";
+import { guardarCredencial } from "../../agent/config/authEnDisco.js";
+import { aplicarCredencialAlProceso, cargar } from "../../agent/config/configEnDisco.js";
 import { modeloDeAcuse } from "../acuseDeModelo.js";
 import { crearStore, crearRanura, vistaInicial, type Acto, type VistaDeTui } from "./store.js";
 import { crearPielTui } from "./pielTui.js";

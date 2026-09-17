@@ -1,0 +1,1172 @@
+import { describe, it, expect, vi, beforeEach } from "vitest";
+import { mkdtempSync, mkdirSync, symlinkSync, writeFileSync, rmSync } from "node:fs";
+import { join } from "node:path";
+import { tmpdir } from "node:os";
+import { Command } from "@langchain/langgraph";
+
+// vi.mock se eleva al principio del módulo: las factorías no pueden tocar variables de
+// arriba salvo que pasen por vi.hoisted (mismo patrón que deep-agent-xone/runtime.test.ts).
+const mocks = vi.hoisted(() => ({ construirAgente: vi.fn() }));
+vi.mock("../grafo/xoneAgent.js", () => ({ construirAgente: mocks.construirAgente }));
+
+const mocksInstantanea = vi.hoisted(() => ({ tomarInstantanea: vi.fn() }));
+vi.mock("./instantanea.js", async (importOriginal) => {
+  const orig = await importOriginal<typeof import("./instantanea.js")>();
+  return { ...orig, tomarInstantanea: mocksInstantanea.tomarInstantanea };
+});
+
+import { abrirSesionReal, ficherosDelProyecto, saldarAprobacionesHuerfanas, TOPE_REPARACIONES } from "./turnoReal.js";
+import { ModeloGuionizado, SkillsEnMemoria, type VerifierPort } from "../../core/ports.js";
+import type { Piel } from "../../core/turno.js";
+import type { PendienteDeAprobacion } from "../../core/events.js";
+import type { LineaDeDiff } from "../../core/diff.js";
+import { MAX_APPROVAL_ROUNDS, type Decision } from "../../vendor/hitl.js";
+import type { Entorno } from "../config/entorno.js";
+import type { Cambio } from "./instantanea.js";
+
+/**
+ * El agente falso, con el MÍNIMO que `turnoReal.ts` consume:
+ *  - `stream(payload)`: dos chunks, la forma de `puente.test.ts`. Si el payload trae
+ *    `resume` es la ronda de reanudación: mira las decisiones y marca `ejecuto` solo si
+ *    TODAS son approve (un reject se resuelve pero no ejecuta, igual que en real).
+ *  - `getState()` con la forma que `collectPending` lee ({tasks:[{interrupts:[…]}]}), para
+ *    que `leerPendientes` vea el interrupt pendiente cuando la primera ronda quedó pausada.
+ */
+type AgenteFalso = ReturnType<typeof agenteFalso>;
+
+function agenteFalso(
+  opts: {
+    escribe?: boolean;
+    interruptArgs?: Record<string, unknown>;
+    /** Una SEGUNDA petición en la misma tanda: es lo que hace falta para probar que la
+     *  partición entre artefactos y ficheros del proyecto reparte bien. */
+    interruptArgs2?: Record<string, unknown>;
+    /**
+     * Vuelve a proponer la escritura después de cada resume, apruebes o rechaces.
+     *
+     * No es un caso hipotético: es lo MEDIDO («el modelo que vuelve a proponer tras cada
+     * rechazo hace que esto se llame CUATRO veces en un solo turno»), y es la única forma
+     * de recorrer el tope de rondas — que con las tareas de fondo dejó de ser una guarda
+     * teórica para ser el camino por el que un turno acabó diciendo «terminada» con una
+     * escritura abandonada.
+     */
+    insiste?: boolean;
+  } = {}
+) {
+  let ejecuto = false;
+  let interrumpido = false; // true tras la primera ronda si opts.escribe
+  return {
+    ejecuto: () => ejecuto,
+    stream: vi.fn(async (payload: unknown) => {
+      const resume = (payload as { resume?: Record<string, { decisions: Array<{ type: string }> }> })
+        ?.resume;
+      if (resume !== undefined) {
+        const aprobado = Object.values(resume).every((r) => r.decisions[0]?.type === "approve");
+        if (aprobado) ejecuto = true;
+        interrumpido = opts.insiste === true;
+      } else if (opts.escribe) {
+        interrumpido = true;
+      }
+      async function* flujo() {
+        yield [[], "updates", { agent: { messages: [{ tool_calls: [] }] } }];
+        yield [[], "messages", [{ text: "ok", id: "m1" }, {}]];
+      }
+      return flujo();
+    }),
+    getState: vi.fn(async () => {
+      if (!interrumpido) return { tasks: [] };
+      return {
+        tasks: [
+          {
+            interrupts: [
+              {
+                id: "int-1",
+                value: {
+                  actionRequests: [
+                    {
+                      name: "write_file",
+                      args: opts.interruptArgs ?? { file_path: "/a.xne" },
+                      description: "[dev] quiere escribir un fichero",
+                    },
+                    ...(opts.interruptArgs2 === undefined
+                      ? []
+                      : [
+                          {
+                            name: "write_file",
+                            args: opts.interruptArgs2,
+                            description: "[mockup] quiere escribir un fichero",
+                          },
+                        ]),
+                  ],
+                  reviewConfigs: [
+                    { allowedDecisions: ["approve", "reject"] },
+                    ...(opts.interruptArgs2 === undefined
+                      ? []
+                      : [{ allowedDecisions: ["approve", "reject"] }]),
+                  ],
+                },
+              },
+            ],
+          },
+        ],
+      };
+    }),
+  };
+}
+
+/** El agente con el que `construirAgente` respondió en la llamada i-ésima. */
+function agenteDeLLamada(i: number): AgenteFalso {
+  return mocks.construirAgente.mock.results[i].value as AgenteFalso;
+}
+
+function instantaneaFalsa(cambios: Cambio[] = []) {
+  return { via: "git" as const, cambios: async () => cambios, diff: async () => "" };
+}
+
+const entornoFalso: Entorno = {
+  raiz: "/tmp/x",
+  esProyectoXone: true,
+  colecciones: 0,
+  vistasAplanadas: [],
+  git: { dentro: false, esRaiz: false, tieneCommits: false, prefijo: "", usable: false },
+  simulador: { ruta: "x", responde: false },
+};
+
+function pielFalsa(): Piel {
+  return {
+    token: vi.fn(),
+    cerrarLinea: vi.fn(),
+    linea: vi.fn(),
+    pausa: vi.fn(),
+    fin: vi.fn(),
+  };
+}
+
+/** Dobles de `pedirAprobacion`: deciden igual para todos los pendientes. */
+function aprobarTodo() {
+  return async (pendientes: PendienteDeAprobacion[]): Promise<Map<string, Decision>> =>
+    new Map(pendientes.map((p) => [p.id, { type: "approve" } as Decision]));
+}
+function rechazarTodo() {
+  return async (pendientes: PendienteDeAprobacion[]): Promise<Map<string, Decision>> =>
+    new Map(pendientes.map((p) => [p.id, { type: "reject" } as Decision]));
+}
+
+async function abrir(
+  opts: {
+    escribe?: boolean;
+    interruptArgs?: Record<string, unknown>;
+    interruptArgs2?: Record<string, unknown>;
+    raiz?: string;
+    pedir?: (
+      pendientes: PendienteDeAprobacion[],
+      ficheros: Map<string, string>,
+      diffs: Map<string, LineaDeDiff[]>
+    ) => Promise<Map<string, Decision>>;
+    /** Lo que la instantánea dirá que cambió el turno. */
+    cambios?: Cambio[];
+    verifier?: VerifierPort;
+    sinAprobacion?: () => boolean;
+    insiste?: boolean;
+    topeDeRondas?: number;
+  } = {}
+) {
+  mocks.construirAgente.mockImplementation(() =>
+    agenteFalso({
+      escribe: opts.escribe,
+      interruptArgs: opts.interruptArgs,
+      interruptArgs2: opts.interruptArgs2,
+      ...(opts.insiste === undefined ? {} : { insiste: opts.insiste }),
+    })
+  );
+  if (opts.cambios !== undefined) {
+    const cambios = opts.cambios;
+    mocksInstantanea.tomarInstantanea.mockImplementation(async () => instantaneaFalsa(cambios));
+  }
+  return abrirSesionReal({
+    raiz: opts.raiz ?? "/tmp/turno-real-test", // no existe: `ficherosDelProyecto` devuelve Set vacío
+    modelos: new ModeloGuionizado(),
+    skills: new SkillsEnMemoria(),
+    entorno: entornoFalso,
+    pedirAprobacion: opts.pedir,
+    ...(opts.sinAprobacion === undefined ? {} : { sinAprobacion: opts.sinAprobacion }),
+    ...(opts.verifier === undefined ? {} : { verifier: opts.verifier }),
+    ...(opts.topeDeRondas === undefined ? {} : { topeDeRondas: opts.topeDeRondas }),
+  });
+}
+
+/** Las líneas que la piel falsa recibió, en orden. */
+function lineasDe(piel: Piel): string[] {
+  return (piel.linea as ReturnType<typeof vi.fn>).mock.calls.map((c) => String(c[0]));
+}
+
+const RAIZ = "/tmp/turno-real-test";
+const XNE = { ruta: "Clientes.xne", clase: "modificado" as const };
+
+beforeEach(() => {
+  mocks.construirAgente.mockReset();
+  mocks.construirAgente.mockImplementation(() => agenteFalso());
+  mocksInstantanea.tomarInstantanea.mockReset();
+  mocksInstantanea.tomarInstantanea.mockImplementation(async () => instantaneaFalsa());
+});
+
+describe("abrirSesionReal", () => {
+  it("expone una cancelación de sesión para desatascar un stream sin eventos", async () => {
+    const sesion = await abrirSesionReal({
+      raiz: "/tmp/turno-real-test",
+      modelos: new ModeloGuionizado(),
+      skills: new SkillsEnMemoria(),
+      entorno: entornoFalso,
+    });
+    expect((sesion as unknown as { cancelar?: unknown }).cancelar).toEqual(expect.any(Function));
+  });
+
+  it("cancela el stream real aunque el modelo no emita otro evento", async () => {
+    let senal: AbortSignal | undefined;
+    mocks.construirAgente.mockImplementation(() => ({
+      stream: vi.fn(async (_payload: unknown, config: { signal?: AbortSignal }) => {
+        senal = config.signal;
+        async function* flujo() {
+          await new Promise<void>((_resolver, rechazar) => {
+            if (senal?.aborted) return rechazar(senal.reason);
+            senal?.addEventListener("abort", () => rechazar(senal?.reason), { once: true });
+          });
+        }
+        return flujo();
+      }),
+      getState: vi.fn(async () => ({ tasks: [] })),
+    }));
+    const sesion = await abrirSesionReal({
+      raiz: "/tmp/turno-real-test",
+      modelos: new ModeloGuionizado(),
+      skills: new SkillsEnMemoria(),
+      entorno: entornoFalso,
+    });
+    const enCurso = sesion.turno("analiza", pielFalsa());
+    await vi.waitFor(() => expect(senal).toBeDefined());
+    sesion.cancelar();
+    await expect(enCurso).rejects.toThrow(/turno cancelado por el usuario/);
+  });
+
+  it("cerrar aborta el turno en vuelo: es lo que desatasca un cambio de proyecto", async () => {
+    let senal: AbortSignal | undefined;
+    mocks.construirAgente.mockImplementation(() => ({
+      stream: vi.fn(async (_payload: unknown, config: { signal?: AbortSignal }) => {
+        senal = config.signal;
+        async function* flujo() {
+          await new Promise<void>((_resolver, rechazar) => {
+            if (senal?.aborted) return rechazar(senal.reason);
+            senal?.addEventListener("abort", () => rechazar(senal?.reason), { once: true });
+          });
+        }
+        return flujo();
+      }),
+      getState: vi.fn(async () => ({ tasks: [] })),
+    }));
+    // `abrirSesionReal` directo y no el ayudante `abrir()`: ese reinstala su propio
+    // agente falso y se llevaría por delante el stream que aquí hay que dejar colgado.
+    const sesion = await abrirSesionReal({
+      raiz: "/tmp/turno-real-test",
+      modelos: new ModeloGuionizado(),
+      skills: new SkillsEnMemoria(),
+      entorno: entornoFalso,
+    });
+    const enCurso = sesion.turno("analiza", pielFalsa());
+    await vi.waitFor(() => expect(senal).toBeDefined());
+    sesion.cerrar();
+    await expect(enCurso).rejects.toThrow(/turno cancelado por el usuario/);
+  });
+
+  it("un turno sobre una sesión ya cerrada FALLA en vez de revivir el hilo", async () => {
+    const sesion = await abrir();
+    sesion.cerrar();
+    await expect(sesion.turno("otra cosa", pielFalsa())).rejects.toThrow(/ya está cerrada/);
+  });
+
+  it("dos turnos seguidos reusan el mismo agente", async () => {
+    const sesion = await abrir();
+    await sesion.turno("primera", pielFalsa());
+    await sesion.turno("segunda", pielFalsa());
+    // La construcción de `abrirSesionReal` es la única: los turnos NO reconstruyen.
+    expect(mocks.construirAgente.mock.calls.length).toBe(1);
+  });
+
+  it("cambiarModelos reconstruye el agente y CONSERVA hilo y checkpointer", async () => {
+    const sesion = await abrir();
+    const antes = sesion.hilo;
+    await sesion.cambiarModelos(new ModeloGuionizado());
+
+    expect(mocks.construirAgente.mock.calls.length).toBe(2);
+    expect(sesion.hilo).toBe(antes);
+
+    // Identidad del checkpointer, no igualdad estructural: es lo que garantiza que la
+    // conversación sobrevive a `/modelo`. Con `toEqual` el test pasaría aunque se
+    // recreara un MemorySaver vacío.
+    const cp1 = (mocks.construirAgente.mock.calls[0][0] as { checkpointer: unknown }).checkpointer;
+    const cp2 = (mocks.construirAgente.mock.calls[1][0] as { checkpointer: unknown }).checkpointer;
+    expect(cp2).toBe(cp1);
+  });
+
+  it("nuevoHilo cambia el hilo sin reconstruir el agente", async () => {
+    const sesion = await abrir();
+    const antes = sesion.hilo;
+    sesion.nuevoHilo();
+    expect(sesion.hilo).not.toBe(antes);
+    expect(mocks.construirAgente.mock.calls.length).toBe(1);
+  });
+
+  it("la foto se toma POR TURNO: el segundo turno no arrastra los cambios del primero", async () => {
+    mocksInstantanea.tomarInstantanea
+      .mockImplementationOnce(async () => instantaneaFalsa([{ ruta: "/uno.xne", clase: "nuevo" }]))
+      .mockImplementationOnce(async () => instantaneaFalsa([{ ruta: "/dos.xne", clase: "nuevo" }]));
+    const sesion = await abrir();
+    await sesion.turno("primero", pielFalsa());
+    const segundo = await sesion.turno("segundo", pielFalsa());
+
+    expect(mocksInstantanea.tomarInstantanea).toHaveBeenCalledTimes(2);
+    expect(segundo.cambios).toEqual([{ ruta: "/dos.xne", clase: "nuevo" }]);
+  });
+
+  it("sin pedirAprobacion, una pausa termina el turno y no se aplica nada", async () => {
+    const sesion = await abrir({ escribe: true }); // el doble deja un interrupt pendiente
+    await sesion.turno("escribe algo", pielFalsa());
+
+    const ag = agenteDeLLamada(0);
+    expect(ag.stream).toHaveBeenCalledTimes(1); // nunca hubo ronda de resume
+    expect((ag.stream.mock.calls[0][0] as { resume?: unknown }).resume).toBeUndefined();
+    expect(ag.ejecuto()).toBe(false);
+  });
+
+  describe("con pedirAprobacion", () => {
+    it("aprobando: hay segunda ronda de stream y la escritura SE aplica", async () => {
+      const sesion = await abrir({ escribe: true, pedir: aprobarTodo() });
+      await sesion.turno("escribe algo", pielFalsa());
+
+      const ag = agenteDeLLamada(0);
+      expect(ag.stream).toHaveBeenCalledTimes(2);
+      const reanudacion = ag.stream.mock.calls[1][0] as { resume?: unknown };
+      expect(reanudacion).toBeInstanceOf(Command);
+      expect((reanudacion as { resume: unknown }).resume).toEqual({
+        "int-1": { decisions: [{ type: "approve" }] },
+      });
+      expect(ag.ejecuto()).toBe(true);
+    });
+
+    it("rechazando: TAMBIÉN se reanuda (para que el modelo lo sepa), pero la escritura NO se aplica", async () => {
+      const sesion = await abrir({ escribe: true, pedir: rechazarTodo() });
+      await sesion.turno("escribe algo", pielFalsa());
+
+      const ag = agenteDeLLamada(0);
+      expect(ag.stream).toHaveBeenCalledTimes(2);
+      const reanudacion = ag.stream.mock.calls[1][0] as { resume?: unknown };
+      expect(reanudacion).toBeInstanceOf(Command);
+      expect((reanudacion as { resume: unknown }).resume).toEqual({
+        "int-1": { decisions: [{ type: "reject" }] },
+      });
+      expect(ag.ejecuto()).toBe(false);
+    });
+
+    it("el que aprueba recibe las LÍNEAS DE DIFF de cada pendiente (disco contra contenido)", async () => {
+      // Un raíz REAL con un fichero en el disco: el ANTES del diff tiene que ser lo que
+      // hay en el disco, y eso no se puede doblar — el interrupt pausa ANTES de escribir.
+      const dir = mkdtempSync(join(tmpdir(), "turnoreal-"));
+      writeFileSync(join(dir, "app.xne"), "<coll>\nviejo\n</coll>\n");
+      const vistos: Array<Map<string, LineaDeDiff[]> | undefined> = [];
+
+      const sesion = await abrir({
+        escribe: true,
+        raiz: dir,
+        interruptArgs: { file_path: "app.xne", content: "<coll>\nnuevo\n</coll>\n" },
+        pedir: async (pendientes, _ficheros, diffs) => {
+          vistos.push(diffs);
+          return rechazarTodo()(pendientes);
+        },
+      });
+      await sesion.turno("escribe algo", pielFalsa());
+
+      expect(vistos[0]?.get("int-1")).toEqual([
+        { tipo: "igual", texto: "<coll>" },
+        { tipo: "quitado", texto: "viejo" },
+        { tipo: "anadido", texto: "nuevo" },
+        { tipo: "igual", texto: "</coll>" },
+      ]);
+      rmSync(dir, { recursive: true, force: true });
+    });
+
+    it("y con la ruta ROOTEADA también: es la forma que de verdad manda el backend", async () => {
+      // El test de arriba usaba `"app.xne"` sin barra, y por eso este agujero vivió sin que
+      // nada chistara: el backend del agente va con `virtualMode: true`, así que lo que llega
+      // en los argumentos del interrupt viene rooteado —`/app.xne`, la forma que usan las
+      // descripciones de las tools, las skills y `seDetieneEn`— y `resolve(raiz, "/app.xne")`
+      // devuelve `/app.xne`, porque una absoluta descarta la base. El ANTES salía vacío y un
+      // fichero EXISTENTE se enseñaba como nuevo: sus líneas quitadas, invisibles. En el
+      // único momento en que una persona ve lo que el agente va a escribir antes de que
+      // exista.
+      const dir = mkdtempSync(join(tmpdir(), "turnoreal-rooteada-"));
+      writeFileSync(join(dir, "app.xne"), "<coll>\nviejo\n</coll>\n");
+      const vistos: Array<Map<string, LineaDeDiff[]> | undefined> = [];
+
+      const sesion = await abrir({
+        escribe: true,
+        raiz: dir,
+        interruptArgs: { file_path: "/app.xne", content: "<coll>\nnuevo\n</coll>\n" },
+        pedir: async (pendientes, _ficheros, diffs) => {
+          vistos.push(diffs);
+          return rechazarTodo()(pendientes);
+        },
+      });
+      await sesion.turno("escribe algo", pielFalsa());
+
+      expect(vistos[0]?.get("int-1")).toEqual([
+        { tipo: "igual", texto: "<coll>" },
+        { tipo: "quitado", texto: "viejo" },
+        { tipo: "anadido", texto: "nuevo" },
+        { tipo: "igual", texto: "</coll>" },
+      ]);
+      rmSync(dir, { recursive: true, force: true });
+    });
+
+    it("una ruta que se SALE del proyecto no trae contenido de fuera al diff", async () => {
+      // De ese `readFileSync` sale lo que se pinta en la pantalla de la aprobación, así que
+      // un `..` que escapara enseñaría un fichero ajeno como si fuera del proyecto. Se queda
+      // sin ANTES, que es el lado conservador: el fichero no existe DENTRO.
+      const dir = mkdtempSync(join(tmpdir(), "turnoreal-fuera-"));
+      writeFileSync(join(dir, "secreto.txt"), "no soy del proyecto\n");
+      const raiz = join(dir, "proyecto");
+      mkdirSync(raiz, { recursive: true });
+      const vistos: Array<Map<string, LineaDeDiff[]> | undefined> = [];
+
+      const sesion = await abrir({
+        escribe: true,
+        raiz,
+        interruptArgs: { file_path: "../secreto.txt", content: "pisado\n" },
+        pedir: async (pendientes, _ficheros, diffs) => {
+          vistos.push(diffs);
+          return rechazarTodo()(pendientes);
+        },
+      });
+      await sesion.turno("escribe algo", pielFalsa());
+
+      expect(vistos[0]?.get("int-1")).toEqual([{ tipo: "anadido", texto: "pisado" }]);
+      rmSync(dir, { recursive: true, force: true });
+    });
+
+    it("un enlace simbólico dentro del proyecto que apunta FUERA no trae su contenido", async () => {
+      // La contención lexical no lo caza: el sitio del enlace sí está dentro del proyecto, y
+      // `readFileSync` lo sigue sin enterarse. Lo que falla no es el sitio, es el DESTINO —
+      // la misma lección que `arbolDeProyecto.ts` ya pagó con `enlace-env.txt` → `.env`. Sin
+      // la recomprobación sobre el camino real, el contenido de un fichero de fuera se pinta
+      // en la pantalla donde una persona decide creyendo que mira su proyecto.
+      const dir = mkdtempSync(join(tmpdir(), "turnoreal-enlace-"));
+      writeFileSync(join(dir, "secreto.txt"), "no soy del proyecto\n");
+      const raiz = join(dir, "proyecto");
+      mkdirSync(raiz, { recursive: true });
+      symlinkSync(join(dir, "secreto.txt"), join(raiz, "enlace.txt"));
+      const vistos: Array<Map<string, LineaDeDiff[]> | undefined> = [];
+
+      const sesion = await abrir({
+        escribe: true,
+        raiz,
+        interruptArgs: { file_path: "/enlace.txt", content: "pisado\n" },
+        pedir: async (pendientes, _ficheros, diffs) => {
+          vistos.push(diffs);
+          return rechazarTodo()(pendientes);
+        },
+      });
+      await sesion.turno("escribe algo", pielFalsa());
+
+      // Sin ANTES: para el diff, el destino no está en el proyecto.
+      expect(vistos[0]?.get("int-1")).toEqual([{ tipo: "anadido", texto: "pisado" }]);
+      rmSync(dir, { recursive: true, force: true });
+    });
+
+    it("un pendiente sin vista (tool que no escribe) no aparece en el mapa de diffs", async () => {
+      const vistos: Array<Map<string, LineaDeDiff[]> | undefined> = [];
+      const sesion = await abrir({
+        escribe: true,
+        interruptArgs: { file_path: "/a.xne" }, // write_file sin content: sin vista
+        pedir: async (pendientes, _ficheros, diffs) => {
+          vistos.push(diffs);
+          return rechazarTodo()(pendientes);
+        },
+      });
+      await sesion.turno("escribe algo", pielFalsa());
+
+      expect(vistos[0]?.size).toBe(0);
+    });
+  });
+});
+
+describe("ficherosDelProyecto", () => {
+  it("conserva el SUBDIRECTORIO en las rutas anidadas (espacio virtual del backend)", () => {
+    // Defecto medido al montar el completado de «@ficheros»: la recursión devolvía
+    // rutas relativas al SUBDIRECTORIO y la llamada de arriba las añadía tal cual,
+    // con lo que «app/Clientes.xne» salía como «/Clientes.xne». Eso no solo
+    // despistaba al completer: `sinVistasAplanadas` usa este Set como universo de
+    // ficheros, y sin el prefijo un «app/Clientes.xml» anidado NO era retirado del
+    // backend — justo el fichero que la regla de las vistas existe para proteger.
+    const raiz = mkdtempSync(join(tmpdir(), "xc-ficheros-"));
+    try {
+      writeFileSync(join(raiz, "app.xml"), "<app/>");
+      const dirApp = join(raiz, "app");
+      mkdirSync(dirApp);
+      writeFileSync(join(dirApp, "Clientes.xne"), "<rep/>");
+      writeFileSync(join(dirApp, "Clientes.xml"), "<vistas/>"); // la vista aplanada TAMBIÉN está en el árbol
+
+      expect([...ficherosDelProyecto(raiz)].sort()).toEqual(["/app.xml", "/app/Clientes.xml", "/app/Clientes.xne"]);
+    } finally {
+      rmSync(raiz, { recursive: true, force: true });
+    }
+  });
+
+  it("el tope de profundidad es un parámetro: el Tab para en 4, el árbol de la web pide más", () => {
+    const raiz = mkdtempSync(join(tmpdir(), "xc-prof-"));
+    try {
+      const hondo = join(raiz, "a", "b", "c", "d", "e", "f");
+      mkdirSync(hondo, { recursive: true });
+      writeFileSync(join(hondo, "x.xne"), "<x/>");
+      expect(ficherosDelProyecto(raiz).has("/a/b/c/d/e/f/x.xne")).toBe(false);
+      expect(ficherosDelProyecto(raiz, 0, 32).has("/a/b/c/d/e/f/x.xne")).toBe(true);
+    } finally {
+      rmSync(raiz, { recursive: true, force: true });
+    }
+  });
+
+  it("no recorre una CARPETA detrás de un enlace simbólico", () => {
+    // Medido en la pestaña Ficheros: con `statSync` el enlace se seguía y salían nombres
+    // de ficheros de fuera del proyecto («dir-fuera/id_rsa»), y `.xonecode` se colaba bajo
+    // un alias. Con `lstatSync` el enlace no se recorre ni se lista.
+    const raiz = mkdtempSync(join(tmpdir(), "turno-enlaces-"));
+    const fuera = mkdtempSync(join(tmpdir(), "turno-fuera-"));
+    try {
+      writeFileSync(join(raiz, "app.xml"), "<app/>");
+      writeFileSync(join(fuera, "id_rsa"), "-----BEGIN");
+      symlinkSync(fuera, join(raiz, "dir-fuera"), "dir");
+      const rutas = ficherosDelProyecto(raiz);
+      expect(rutas.has("/app.xml")).toBe(true);
+      expect(rutas.has("/dir-fuera/id_rsa")).toBe(false);
+      expect([...rutas].some((r) => r.startsWith("/dir-fuera"))).toBe(false);
+    } finally {
+      rmSync(raiz, { recursive: true, force: true });
+      rmSync(fuera, { recursive: true, force: true });
+    }
+  });
+});
+
+
+describe("el lazo de verificación", () => {
+  it("un turno que escribió ficheros del proyecto pasa por el verificador, y el aviso calla", async () => {
+    // Es el cable que faltaba: el simulador solo se llamaba desde `xonecode verify`, y el
+    // agente escribía sin que nadie mirara. Con el verificador presente y verde, el turno
+    // termina en verde y el aviso de honestidad no sale — porque ya no es verdad.
+    const sesion = await abrir({
+      cambios: [XNE],
+      verifier: { verificar: async () => ({ verde: true, hallazgos: [] }) },
+    });
+    const piel = pielFalsa();
+    const { bitacora } = await sesion.turno("añade un campo", piel);
+    expect(lineasDe(piel)).toContain("✓  verificación en verde");
+    expect(lineasDe(piel).some((l) => l.includes("no ha corrido"))).toBe(false);
+    expect(bitacora.corrio("verify")).toBe(true);
+  });
+
+  it("los hallazgos del turno se listan con fichero y línea, y los de otros ficheros se cuentan aparte", async () => {
+    // El simulador mira el proyecto entero —es su API—, así que hay que repartir: un error
+    // que ya estaba en un fichero que el agente no abrió no es del agente. Atribuírselo
+    // sería falso; callarlo, fingir un proyecto limpio. Se dice aparte y sin detalle.
+    const sesion = await abrir({
+      cambios: [XNE],
+      verifier: {
+        verificar: async () => ({
+          verde: false,
+          hallazgos: [
+            { code: "XONE001", severidad: "error", mensaje: "atributo desconocido", fichero: join(RAIZ, "Clientes.xne"), linea: 12 },
+            { code: "XONE009", severidad: "error", mensaje: "ya estaba", fichero: join(RAIZ, "Otro.xne"), linea: 3 },
+          ],
+        }),
+      },
+    });
+    const piel = pielFalsa();
+    await sesion.turno("añade un campo", piel);
+    const lineas = lineasDe(piel);
+    expect(lineas).toContain("✗  verificación: 1 error(es), 0 aviso(s)");
+    expect(lineas).toContain("   ✗ XONE001 Clientes.xne:12 — atributo desconocido");
+    expect(lineas.some((l) => l.includes("Otro.xne"))).toBe(false);
+    expect(lineas).toContain("   (y 1 hallazgo(s) más en ficheros que este turno no tocó)");
+  });
+
+  it("sin verificador, un turno que escribió lo AVISA — con el motivo", async () => {
+    const sesion = await abrir({ cambios: [XNE] });
+    const piel = pielFalsa();
+    await sesion.turno("añade un campo", piel);
+    expect(lineasDe(piel)).toContain(
+      "⚠ el verificador no ha corrido en este turno (esta ejecución no tiene verificador)"
+    );
+  });
+
+  it("un turno que NO escribió nada ni verifica ni avisa", async () => {
+    // Antes el aviso saltaba en TODOS los turnos, incluido «cuéntame un chiste». Un aviso
+    // que salta cuando no ha pasado nada enseña a ignorarlo, que es lo contrario de lo que
+    // se compra con él.
+    const verificar = vi.fn(async () => ({ verde: true, hallazgos: [] }));
+    const sesion = await abrir({ cambios: [], verifier: { verificar } });
+    const piel = pielFalsa();
+    await sesion.turno("cuéntame un chiste", piel);
+    expect(verificar).not.toHaveBeenCalled();
+    expect(lineasDe(piel).some((l) => l.includes("verific"))).toBe(false);
+  });
+
+  it("lo que escribe el propio harness en `.xonecode/` no cuenta como escritura del turno", async () => {
+    // Ahí van la memoria y los resúmenes de contexto. Contarlos haría que un turno de pura
+    // conversación pasara por el simulador, y que el aviso saltara por algo que el agente
+    // no hizo sobre la app.
+    const verificar = vi.fn(async () => ({ verde: true, hallazgos: [] }));
+    const sesion = await abrir({
+      cambios: [{ ruta: ".xonecode/conversation_history/1.md", clase: "nuevo" }],
+      verifier: { verificar },
+    });
+    const piel = pielFalsa();
+    await sesion.turno("hola", piel);
+    expect(verificar).not.toHaveBeenCalled();
+    expect(lineasDe(piel).some((l) => l.includes("no ha corrido"))).toBe(false);
+  });
+
+  it("si el simulador no está, se dice como fallo del ENTORNO y el aviso sigue siendo verdad", async () => {
+    // Que no esté el binario no es un fallo del proyecto: se avisa con el motivo y el turno
+    // termina. Y «no ha corrido» sale igualmente, porque no ha corrido.
+    const sesion = await abrir({
+      cambios: [XNE],
+      verifier: {
+        verificar: async () => {
+          throw new Error("spawn xone-simulator ENOENT");
+        },
+      },
+    });
+    const piel = pielFalsa();
+    await sesion.turno("añade un campo", piel);
+    const lineas = lineasDe(piel);
+    expect(lineas).toContain("⚠ no se pudo verificar: spawn xone-simulator ENOENT");
+    expect(lineas.some((l) => l.startsWith("⚠ el verificador no ha corrido"))).toBe(true);
+  });
+
+  it("con aprobaciones por medio, solo verifica la ronda FINAL — la que aplicó las escrituras", async () => {
+    // En la primera ronda las escrituras están pendientes y no aplicadas: no hay nada que
+    // medir. Verificar ahí daría un veredicto sobre un proyecto que aún no ha cambiado.
+    const verificar = vi.fn(async () => ({ verde: true, hallazgos: [] }));
+    const sesion = await abrir({
+      escribe: true,
+      pedir: aprobarTodo(),
+      cambios: [XNE],
+      verifier: { verificar },
+    });
+    const piel = pielFalsa();
+    await sesion.turno("añade un campo", piel);
+    expect(verificar).toHaveBeenCalledTimes(1);
+    expect(lineasDe(piel)).toContain("✓  verificación en verde");
+  });
+});
+
+
+/** Un verificador que contesta, en orden, los informes que se le den; el último se repite. */
+function verificadorConGuion(informes: Array<{ verde: boolean; hallazgos: Parameters<VerifierPort["verificar"]>[0] extends never ? never : { code: string; severidad: "error" | "warning" | "info"; mensaje: string; fichero?: string; linea?: number }[] }>) {
+  let i = 0;
+  const verificar = vi.fn(async () => informes[Math.min(i++, informes.length - 1)]!);
+  return { verificar };
+}
+
+const ERROR_A = { code: "XONE001", severidad: "error" as const, mensaje: "atributo desconocido", fichero: join(RAIZ, "Clientes.xne"), linea: 12 };
+const ERROR_B = { code: "XONE002", severidad: "error" as const, mensaje: "función inexistente", fichero: join(RAIZ, "Clientes.xne"), linea: 40 };
+
+describe("el lazo de reparación", () => {
+  it("un veredicto rojo lanza un intento: se anuncia, se le devuelven los hallazgos, y se vuelve a verificar", async () => {
+    // La segunda mitad del lazo. Sin esto el veredicto se enseñaba y ahí se quedaba; ahora
+    // los hallazgos vuelven al agente como una petición en el MISMO hilo, y el simulador
+    // vuelve a mirar lo que corrigió.
+    const verificador = verificadorConGuion([{ verde: false, hallazgos: [ERROR_A] }, { verde: true, hallazgos: [] }]);
+    const sesion = await abrir({ cambios: [XNE], verifier: verificador });
+    const piel = pielFalsa();
+    await sesion.turno("añade un campo", piel);
+
+    const lineas = lineasDe(piel);
+    expect(lineas).toContain(`🔁 reparando (intento 1 de ${TOPE_REPARACIONES})`);
+    expect(lineas).toContain("✓  verificación en verde");
+    expect(verificador.verificar).toHaveBeenCalledTimes(2);
+
+    // La petición de reparación es un mensaje de usuario con el hallazgo dentro: código,
+    // fichero relativo y línea. Sin contenido de ningún fichero.
+    const agente = agenteDeLLamada(0);
+    expect(agente.stream).toHaveBeenCalledTimes(2);
+    const segundo = agente.stream.mock.calls[1]![0] as { messages: Array<{ content: string }> };
+    expect(segundo.messages[0]!.content).toContain("XONE001 en Clientes.xne:12");
+    expect(segundo.messages[0]!.content).toMatch(/No inventes atributos/);
+  });
+
+  it("el turno cierra UNA sola vez aunque tenga varias pasadas", async () => {
+    // Antes cada pasada por `correrTurno` cerraba: stdio imprimía el tiempo por ronda y el
+    // chat plegaba el tramo por ronda. Con reparaciones eso se multiplicaba.
+    const verificador = verificadorConGuion([{ verde: false, hallazgos: [ERROR_A] }, { verde: true, hallazgos: [] }]);
+    const sesion = await abrir({ cambios: [XNE], verifier: verificador });
+    const piel = pielFalsa();
+    await sesion.turno("añade un campo", piel);
+    expect(piel.fin).toHaveBeenCalledTimes(1);
+  });
+
+  it("y también con rondas de aprobación por medio: un turno, un fin", async () => {
+    const sesion = await abrir({ escribe: true, pedir: aprobarTodo(), cambios: [XNE] });
+    const piel = pielFalsa();
+    await sesion.turno("añade un campo", piel);
+    expect(agenteDeLLamada(0).stream).toHaveBeenCalledTimes(2);
+    expect(piel.fin).toHaveBeenCalledTimes(1);
+  });
+
+  it("si corregir no cambia nada, se BLOQUEA por no-progreso antes de gastar el tope", async () => {
+    // El mismo error en el mismo sitio dos veces seguidas es la señal de que el modelo
+    // repite el mismo cambio. Seguir sería gastar intentos —y aprobaciones humanas— en nada.
+    const verificador = verificadorConGuion([{ verde: false, hallazgos: [ERROR_A] }]);
+    const sesion = await abrir({ cambios: [XNE], verifier: verificador });
+    const piel = pielFalsa();
+    await sesion.turno("añade un campo", piel);
+    const lineas = lineasDe(piel);
+    expect(lineas.some((l) => l.startsWith("⛔ bloqueado (no-progreso)"))).toBe(true);
+    // Un intento, dos veredictos: el original y el que repitió la huella.
+    expect(verificador.verificar).toHaveBeenCalledTimes(2);
+    expect(piel.fin).toHaveBeenCalledTimes(1);
+  });
+
+  it("si cada intento cambia el error pero nunca queda verde, se para en el tope y se dice", async () => {
+    // Errores DISTINTOS cada vez es avance, así que no-progreso no salta; lo que corta es el
+    // tope. Y se dice con la cifra para que quien lo lea sepa que se dejó como está.
+    const verificador = verificadorConGuion([
+      { verde: false, hallazgos: [ERROR_A] },
+      { verde: false, hallazgos: [ERROR_B] },
+      { verde: false, hallazgos: [ERROR_A] },
+    ]);
+    const sesion = await abrir({ cambios: [XNE], verifier: verificador });
+    const piel = pielFalsa();
+    await sesion.turno("añade un campo", piel);
+    const lineas = lineasDe(piel);
+    expect(lineas.some((l) => l.startsWith("⛔ bloqueado (tope-reparaciones)"))).toBe(true);
+    expect(verificador.verificar).toHaveBeenCalledTimes(TOPE_REPARACIONES + 1);
+    expect(piel.fin).toHaveBeenCalledTimes(1);
+  });
+
+  it("un aviso que va y viene NO cuenta como progreso ni como estancamiento: la huella son los errores", async () => {
+    const aviso = { code: "XONE100", severidad: "warning" as const, mensaje: "sin usar", fichero: join(RAIZ, "Clientes.xne") };
+    const verificador = verificadorConGuion([
+      { verde: false, hallazgos: [ERROR_A, aviso] },
+      { verde: false, hallazgos: [ERROR_A] },
+    ]);
+    const sesion = await abrir({ cambios: [XNE], verifier: verificador });
+    const piel = pielFalsa();
+    await sesion.turno("añade un campo", piel);
+    expect(lineasDe(piel).some((l) => l.startsWith("⛔ bloqueado (no-progreso)"))).toBe(true);
+  });
+
+  it("verde a la primera: ni intento ni bloqueo", async () => {
+    const verificador = verificadorConGuion([{ verde: true, hallazgos: [] }]);
+    const sesion = await abrir({ cambios: [XNE], verifier: verificador });
+    const piel = pielFalsa();
+    await sesion.turno("añade un campo", piel);
+    expect(verificador.verificar).toHaveBeenCalledTimes(1);
+    expect(lineasDe(piel).some((l) => l.includes("reparando") || l.includes("bloqueado"))).toBe(false);
+  });
+});
+
+
+describe("el cierre del turno cuando la aprobación revienta", () => {
+  it("si `pedirAprobacion` lanza tras una ronda que no cerró, el turno cierra igual y el error se propaga", async () => {
+    // Es el «sin humano» de `run.ts`, que corta desde DENTRO de la aprobación. La ronda
+    // anterior predijo reanudación y no emitió `fin`; sin este cierre, ese turno se quedaba
+    // sin línea de tiempo en stdio y sin plegar en la web. Y sigue siendo un fallo: se
+    // propaga, no se traga.
+    class Corte extends Error {}
+    const sesion = await abrir({
+      escribe: true,
+      pedir: async () => {
+        throw new Corte("sin humano");
+      },
+    });
+    const piel = pielFalsa();
+    await expect(sesion.turno("añade un campo", piel)).rejects.toBeInstanceOf(Corte);
+    expect(piel.fin).toHaveBeenCalledTimes(1);
+  });
+
+  it("el tiempo del fin es el del turno entero, no el de la última pasada", async () => {
+    // Dos pasadas —ronda con aprobación y reanudación—: el `fin` único cuenta desde que
+    // empezó el turno. Se comprueba que no es menor que lo que duró la primera pasada, que
+    // aquí se alarga a propósito en la aprobación.
+    const sesion = await abrir({
+      escribe: true,
+      pedir: async (pendientes) => {
+        await new Promise((r) => setTimeout(r, 120));
+        return aprobarTodo()(pendientes);
+      },
+    });
+    const piel = pielFalsa();
+    await sesion.turno("añade un campo", piel);
+    const [ms] = (piel.fin as ReturnType<typeof vi.fn>).mock.calls[0] as [number];
+    expect(ms).toBeGreaterThanOrEqual(120);
+  });
+});
+
+describe("las aprobaciones que se quedaron colgadas al morir el proceso", () => {
+  /** Un grafo de mentira con solo lo que esta función usa. */
+  function grafoCon(mensajes: unknown[]) {
+    const actualizaciones: { valores: unknown; nodo?: string }[] = [];
+    return {
+      actualizaciones,
+      getState: async () => ({ values: { messages: mensajes } }),
+      updateState: async (_cfg: unknown, valores: unknown, nodo?: string) => {
+        actualizaciones.push({ valores, nodo });
+      },
+    };
+  }
+  const ai = (llamadas: { id: string; name: string }[]) => ({
+    getType: () => "ai",
+    tool_calls: llamadas.map((l) => ({ ...l, args: {} })),
+  });
+  const tool = (id: string) => ({ getType: () => "tool", tool_call_id: id });
+
+  it("contesta las que nadie contestó, y dice que no se aplicó nada", async () => {
+    // Es el historial que deja cerrar el navegador con la aprobación delante:
+    // `human → ai(tool_calls)` y ningún ToolMessage. Medido: llegar al modelo con eso es un
+    // 400 en Gemini y en OpenAI, así que el primer mensaje tras reabrir se perdía.
+    const g = grafoCon([{ getType: () => "human" }, ai([{ id: "call_1", name: "write_file" }])]);
+    await saldarAprobacionesHuerfanas(g, "s1");
+
+    expect(g.actualizaciones).toHaveLength(1);
+    const { valores, nodo } = g.actualizaciones[0]!;
+    expect(nodo).toBe("tools");
+    const puestos = (valores as { messages: { tool_call_id: string; content: string }[] }).messages;
+    expect(puestos).toHaveLength(1);
+    expect(puestos[0]!.tool_call_id).toBe("call_1");
+    // La verdad, no una excusa: el interrupt pausa ANTES de escribir.
+    expect(puestos[0]!.content).toMatch(/no se aplicó/i);
+  });
+
+  it("no toca un hilo cuyas tools sí se contestaron, ni uno vacío", async () => {
+    const contestado = grafoCon([ai([{ id: "c1", name: "write_file" }]), tool("c1")]);
+    await saldarAprobacionesHuerfanas(contestado, "s1");
+    expect(contestado.actualizaciones).toHaveLength(0);
+
+    const vacio = grafoCon([]);
+    await saldarAprobacionesHuerfanas(vacio, "s1");
+    expect(vacio.actualizaciones).toHaveLength(0);
+  });
+
+  it("contesta SOLO las colgadas cuando en la misma tanda hubo varias", async () => {
+    const g = grafoCon([
+      ai([{ id: "c1", name: "write_file" }, { id: "c2", name: "edit_file" }]),
+      tool("c1"),
+    ]);
+    await saldarAprobacionesHuerfanas(g, "s1");
+    const puestos = (g.actualizaciones[0]!.valores as { messages: { tool_call_id: string }[] }).messages;
+    expect(puestos.map((m) => m.tool_call_id)).toEqual(["c2"]);
+  });
+
+  it("un fallo del grafo no impide abrir la sesión", async () => {
+    // Arreglar el pasado no puede costar el presente.
+    const roto = { getState: async () => { throw new Error("nope"); } };
+    await expect(saldarAprobacionesHuerfanas(roto, "s1")).resolves.toBeUndefined();
+  });
+});
+
+describe("los artefactos no pasan por la aprobación", () => {
+  it("un artefacto se escribe SOLO, sin preguntarle a nadie", async () => {
+    // La aprobación protege el PROYECTO, y un artefacto ya no lo toca: vive en la carpeta
+    // de la sesión. Pedir permiso para dibujar un diagrama enseñaría a aprobar sin mirar.
+    const pedir = vi.fn(aprobarTodo());
+    const sesion = await abrir({
+      escribe: true,
+      interruptArgs: { file_path: "/artefactos/flujo.html" },
+      pedir,
+    });
+    const piel = pielFalsa();
+    await sesion.turno("dibuja el flujo", piel);
+
+    expect(pedir).not.toHaveBeenCalled();
+    expect(agenteDeLLamada(0).ejecuto()).toBe(true);
+  });
+
+  it("en una tanda MIXTA solo se pregunta por el fichero del proyecto", async () => {
+    // Es la mitad que importa de la partición: que el artefacto salga de la lista no puede
+    // llevarse por delante la aprobación del `.xne` que iba en la misma tanda.
+    const vistos: string[][] = [];
+    const sesion = await abrir({
+      escribe: true,
+      interruptArgs: { file_path: "/Clientes.xne" },
+      interruptArgs2: { file_path: "/artefactos/flujo.html" },
+      pedir: async (pendientes, ficheros) => {
+        vistos.push(pendientes.map((p) => ficheros.get(p.id) ?? "?"));
+        return new Map(pendientes.map((p) => [p.id, { type: "approve" } as Decision]));
+      },
+    });
+    await sesion.turno("crea la colección y dibújala", pielFalsa());
+
+    expect(vistos).toEqual([["/Clientes.xne"]]);
+  });
+
+  /**
+   * Una ruta con `..` NO es un artefacto por mucho que empiece por el prefijo: si lo fuera,
+   * escribir en el proyecto sin aprobación sería cuestión de escribir bien la ruta.
+   */
+  it("una ruta con `..` bajo el prefijo sigue pidiendo aprobación", async () => {
+    const pedir = vi.fn(rechazarTodo());
+    const sesion = await abrir({
+      escribe: true,
+      interruptArgs: { file_path: "/artefactos/../app.xml" },
+      pedir,
+    });
+    await sesion.turno("cuela una escritura", pielFalsa());
+
+    expect(pedir).toHaveBeenCalledTimes(1);
+    expect(agenteDeLLamada(0).ejecuto()).toBe(false);
+  });
+});
+
+describe("un proyecto en «sin aprobación»", () => {
+  it("aplica la escritura sin preguntar, y lo DICE con el nombre del fichero", async () => {
+    // La decisión se tomó una vez en `settings.json`, quizá hace meses. El turno que la
+    // ejerce es el único momento en que se puede recordar — y con los nombres, porque un
+    // contador a secas es el aviso que enseña a ignorar los avisos.
+    const pedir = vi.fn(aprobarTodo());
+    const sesion = await abrir({
+      escribe: true,
+      interruptArgs: { file_path: "/Clientes.xne" },
+      pedir,
+      sinAprobacion: () => true,
+    });
+    const piel = pielFalsa();
+    await sesion.turno("añade un campo", piel);
+
+    expect(pedir).not.toHaveBeenCalled();
+    expect(agenteDeLLamada(0).ejecuto()).toBe(true);
+    const aviso = lineasDe(piel).find((l) => l.includes("SIN aprobación"));
+    expect(aviso).toBeDefined();
+    expect(aviso).toContain("/Clientes.xne");
+    expect(aviso).toContain("/aprobacion humana");
+  });
+
+  it("sin la marca, la MISMA escritura sigue pidiendo permiso y no avisa de nada", async () => {
+    const pedir = vi.fn(aprobarTodo());
+    const sesion = await abrir({
+      escribe: true,
+      interruptArgs: { file_path: "/Clientes.xne" },
+      pedir,
+    });
+    const piel = pielFalsa();
+    await sesion.turno("añade un campo", piel);
+
+    expect(pedir).toHaveBeenCalledTimes(1);
+    expect(lineasDe(piel).some((l) => l.includes("SIN aprobación"))).toBe(false);
+  });
+
+  it("un turno que no escribió no saca el aviso", async () => {
+    // La regla de la bitácora: un aviso que salta cuando no ha pasado nada enseña a
+    // ignorarlo. Aquí no hay escritura ninguna, con la marca puesta o sin ella.
+    const sesion = await abrir({ sinAprobacion: () => true });
+    const piel = pielFalsa();
+    await sesion.turno("cuéntame un chiste", piel);
+    expect(lineasDe(piel).some((l) => l.includes("SIN aprobación"))).toBe(false);
+  });
+});
+
+/**
+ * El tope de rondas y lo que el turno DEVUELVE de sí mismo.
+ *
+ * Las dos cosas son la misma deuda, medida por la tanda de tareas autónomas: con todo
+ * aprobándose solo, un turno gastó las cinco rondas de la persona, se cortó con una
+ * escritura abandonada, el verificador no corrió ni una vez — y como `EjecutorDeTurno`
+ * devolvía `void`, nada de eso salía de aquí y el kanban decía «terminada».
+ */
+describe("el tope de rondas es de quien monta la consola, y el turno lo CUENTA", () => {
+  it("por omisión sigue siendo el de la persona: cinco rondas, cuatro preguntas", async () => {
+    let preguntas = 0;
+    const pedir = async (pendientes: PendienteDeAprobacion[]): Promise<Map<string, Decision>> => {
+      preguntas += 1;
+      return new Map(pendientes.map((p) => [p.id, { type: "approve" } as Decision]));
+    };
+    const sesion = await abrir({ escribe: true, insiste: true, pedir });
+    const piel = pielFalsa();
+    const r = await sesion.turno("escribe", piel);
+    // La 5ª ronda es la que corta, así que se pregunta cuatro veces. Es exactamente la
+    // cuenta medida sobre este bucle.
+    expect(preguntas).toBe(MAX_APPROVAL_ROUNDS - 1);
+    expect(r.cortadoPorTope).toBe(true);
+  });
+
+  it("una consola puede pedir más rondas, y entonces se preguntan más", async () => {
+    let preguntas = 0;
+    const pedir = async (pendientes: PendienteDeAprobacion[]): Promise<Map<string, Decision>> => {
+      preguntas += 1;
+      return new Map(pendientes.map((p) => [p.id, { type: "approve" } as Decision]));
+    };
+    const sesion = await abrir({ escribe: true, insiste: true, pedir, topeDeRondas: 9 });
+    const r = await sesion.turno("escribe", pielFalsa());
+    expect(preguntas).toBe(8);
+    expect(r.cortadoPorTope).toBe(true);
+  });
+
+  /**
+   * La PREDICCIÓN de si la pasada cierra el turno usa el mismo número que el corte, y tiene
+   * que usarlo: si divergieran, un turno se quedaría sin `fin` o cerraría dos veces
+   * (CLAUDE.md lo declara así, y es lo que este test ata). Con un tope más alto que el de
+   * la persona, un turno de nueve rondas sigue cerrando UNA vez.
+   */
+  it("con el tope subido, el turno cierra UNA vez: la predicción no divergió del corte", async () => {
+    const pedir = aprobarTodo();
+    const sesion = await abrir({ escribe: true, insiste: true, pedir, topeDeRondas: 9 });
+    const piel = pielFalsa();
+    await sesion.turno("escribe", piel);
+    expect((piel.fin as ReturnType<typeof vi.fn>).mock.calls).toHaveLength(1);
+  });
+
+  it("un turno cortado por el tope DICE cuántas escrituras quedaron, y que no se verificó", async () => {
+    const sesion = await abrir({ escribe: true, insiste: true, pedir: aprobarTodo(), cambios: [XNE] });
+    const r = await sesion.turno("escribe", pielFalsa());
+    // Esto es el `terminada` falso, contado con números: hay escrituras colgando y nadie
+    // midió nada. Quien decide qué hacer con ello es `core/entrega.ts`.
+    expect(r.pendientes).toBeGreaterThan(0);
+    expect(r.verificador).toBe("no-corrio");
+  });
+
+  it("un turno normal que verifica en verde lo devuelve, con cero pendientes", async () => {
+    const sesion = await abrir({
+      escribe: true,
+      pedir: aprobarTodo(),
+      cambios: [XNE],
+      verifier: { verificar: async () => ({ verde: true, hallazgos: [] }) },
+    });
+    const r = await sesion.turno("escribe", pielFalsa());
+    expect(r.verificador).toBe("verde");
+    expect(r.pendientes).toBe(0);
+    expect(r.hallazgos).toBeUndefined();
+    // El verificador CORRIÓ, así que cuántos hallazgos quedaron fuera del reparto se SABE, y
+    // cero se dice cero: ausente es «no se midió» (ver `ResultadoDeTurno.preexistentes`).
+    expect(r.preexistentes).toBe(0);
+  });
+
+  /**
+   * El reparto también VIAJA, no solo se pinta.
+   *
+   * De aquí sale lo que se le cuenta al juez de QA, y sin este número el juez recibe una
+   * lista de hallazgos sin saber que ya está filtrada — que es exactamente el dato que le
+   * faltaba en la primera ejecución real, donde concluyó que el turno había modificado los
+   * ficheros de los que hablaban los hallazgos.
+   */
+  it("cuántos hallazgos quedaron FUERA del reparto viaja en el retorno, no solo en la consola", async () => {
+    const sesion = await abrir({
+      escribe: true,
+      pedir: aprobarTodo(),
+      cambios: [XNE],
+      raiz: RAIZ,
+      verifier: {
+        verificar: async () => ({
+          verde: true,
+          hallazgos: [
+            // Sin fichero: inatribuible, y por eso va del lado del turno (el conservador).
+            { code: "REF_JS_COLL_MISSING", severidad: "warning" as const, mensaje: "un script referencia una colección no encontrada" },
+            // En un fichero que este turno no tocó: no es del agente.
+            { code: "XONE009", severidad: "warning" as const, mensaje: "ya estaba", fichero: `${RAIZ}/Otro.xne`, linea: 3 },
+          ],
+        }),
+      },
+    });
+    const r = await sesion.turno("escribe", pielFalsa());
+    expect(r.verificador).toBe("verde");
+    expect(r.hallazgos).toEqual([
+      { code: "REF_JS_COLL_MISSING", severidad: "warning", mensaje: "un script referencia una colección no encontrada" },
+    ]);
+    expect(r.preexistentes).toBe(1);
+  });
+
+  it("sin verificador que corra no se afirma ningún reparto: el campo se queda ausente", async () => {
+    const sesion = await abrir({ escribe: true, pedir: aprobarTodo(), cambios: [XNE] });
+    const r = await sesion.turno("escribe", pielFalsa());
+    expect(r.verificador).toBe("no-corrio");
+    expect(r.preexistentes).toBeUndefined();
+  });
+
+  it("un veredicto rojo viaja con sus hallazgos, con fichero RELATIVO y sin contenido", async () => {
+    const sesion = await abrir({
+      escribe: true,
+      pedir: aprobarTodo(),
+      cambios: [XNE],
+      raiz: RAIZ,
+      verifier: {
+        verificar: async () => ({
+          verde: false,
+          hallazgos: [
+            {
+              code: "COLL_MISSING_PROGID",
+              severidad: "error" as const,
+              mensaje: "falta progid",
+              fichero: `${RAIZ}/Clientes.xne`,
+              linea: 4,
+            },
+          ],
+        }),
+      },
+    });
+    const r = await sesion.turno("escribe", pielFalsa());
+    expect(r.verificador).toBe("rojo");
+    expect(r.hallazgos).toEqual([
+      { code: "COLL_MISSING_PROGID", severidad: "error", mensaje: "falta progid", fichero: "Clientes.xne", linea: 4 },
+    ]);
+    // Ni una ruta de la máquina: de aquí sale lo que se le cuenta al juez y lo que acaba en
+    // el motivo de una tarea, que viaja por el cable.
+    expect(JSON.stringify(r.hallazgos)).not.toContain(RAIZ);
+  });
+
+  it("un turno que no escribió nada dice que el verificador no corrió, y POR QUÉ", async () => {
+    const sesion = await abrir({ verifier: { verificar: async () => ({ verde: true, hallazgos: [] }) } });
+    const r = await sesion.turno("hola", pielFalsa());
+    expect(r.verificador).toBe("no-corrio");
+    expect(r.motivoSinVerificar).toContain("no escribió");
+  });
+
+  it("sin verificador se dice que esta ejecución no lo tiene, no que esté verde", async () => {
+    const sesion = await abrir({ escribe: false, cambios: [XNE] });
+    const r = await sesion.turno("escribe", pielFalsa());
+    expect(r.verificador).toBe("no-corrio");
+    expect(r.motivoSinVerificar).toContain("no tiene verificador");
+  });
+});
+
+/**
+ * El HOP de los adjuntos: `abrirSesionReal` → `construirAgente`.
+ *
+ * `construirAgente` está simulado en este fichero, así que lo que se afirma aquí es
+ * exactamente lo que le llega: la carpeta que se le pasó, sin inventarse ninguna cuando no
+ * la hay. El otro extremo —que `construirAgente` la MONTE— tiene su propio test
+ * (`xoneAgent.adjuntos.test.ts`), y hacen falta los dos: es la clase de cableado que en este
+ * plan ha dejado cuatro veces una regla sin montar con todos los tests en verde.
+ */
+describe("la carpeta de adjuntos llega al agente", () => {
+  it("se le pasa tal cual la que reciba la sesión", async () => {
+    mocks.construirAgente.mockImplementation(() => agenteFalso());
+    await abrirSesionReal({
+      raiz: "/tmp/turno-real-test",
+      modelos: new ModeloGuionizado(),
+      skills: new SkillsEnMemoria(),
+      entorno: entornoFalso,
+      adjuntos: "/casa/.xonecode/tareas/t1/adjuntos",
+    });
+    expect(mocks.construirAgente).toHaveBeenCalledWith(
+      expect.objectContaining({ adjuntos: "/casa/.xonecode/tareas/t1/adjuntos" })
+    );
+  });
+
+  it("y sin ella, el campo NO va: ausente es «no hay», no una carpeta vacía", async () => {
+    // La diferencia importa: `backendDeAgente` monta `/adjuntos/` si el campo llega, y una
+    // cadena vacía montaría el cwd del proceso como si fueran los adjuntos de alguien.
+    mocks.construirAgente.mockImplementation(() => agenteFalso());
+    await abrirSesionReal({
+      raiz: "/tmp/turno-real-test",
+      modelos: new ModeloGuionizado(),
+      skills: new SkillsEnMemoria(),
+      entorno: entornoFalso,
+    });
+    expect(mocks.construirAgente.mock.calls.at(-1)?.[0]).not.toHaveProperty("adjuntos");
+  });
+});

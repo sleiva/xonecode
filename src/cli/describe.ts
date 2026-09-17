@@ -1,6 +1,6 @@
 import { describir, depsOffline, type Deps } from "../core/deps.js";
-import { Modelos } from "../agent/modelos.js";
-import { cargar } from "../agent/configEnDisco.js";
+import { Modelos } from "../agent/config/modelos.js";
+import { cargar } from "../agent/config/configEnDisco.js";
 import { ModeloMalEscrito, type FuentesDeEleccion } from "../core/modelos.js";
 import { escribirEnStdout, type Escribir } from "./stdio.js";
 

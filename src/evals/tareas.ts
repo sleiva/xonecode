@@ -23,7 +23,7 @@
 
 import { readFileSync, existsSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import type { Cambio } from "../agent/instantanea.js";
+import type { Cambio } from "../agent/turno/instantanea.js";
 import type { InformeVerificacion } from "../core/ports.js";
 
 export interface Contexto {

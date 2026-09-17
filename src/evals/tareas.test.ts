@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, it, expect } from "vitest";
 import { TAREAS, type Contexto } from "./tareas.js";
-import { crearProyecto } from "../agent/crearProyecto.js";
+import { crearProyecto } from "../agent/config/crearProyecto.js";
 
 /**
  * Los JUECES se prueban en `npm test`; el corredor no. Un juez que juzgue mal invalida el

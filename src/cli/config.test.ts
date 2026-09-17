@@ -25,7 +25,7 @@ import {
   rutaConfigDeProyecto,
   rutaConfigGlobal,
   rutaAuth,
-} from "../agent/configEnDisco.js";
+} from "../agent/config/configEnDisco.js";
 import type { FuentesDeEleccion } from "../core/modelos.js";
 
 /** Registra los textos que se le pasan a escribir, igual que en aprobar.test.ts. */

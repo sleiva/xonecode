@@ -2,7 +2,7 @@ import { describe, it, expect, vi } from "vitest";
 import { abreviarHome, crearConsolaTui, envolverConOcupacion } from "./correrTui.js";
 import { acuseDeModelo } from "../acuseDeModelo.js";
 import { correrConsola, type EjecutorDeTurno, type LineaDeConsola } from "../consola.js";
-import type { SesionReal } from "../../agent/turnoReal.js";
+import type { SesionReal } from "../../agent/turno/turnoReal.js";
 import { CatalogoModelosEnMemoria, type CatalogoModelosPort } from "../../core/ports.js";
 import { aplicarTemaInk, temaInk } from "./temaInk.js";
 

@@ -37,8 +37,8 @@ import type { IncomingMessage, ServerResponse } from "node:http";
 import { homedir } from "node:os";
 import type { Acto } from "../../core/actos.js";
 import { escribirAgente, leerAgente, type Agente } from "../../core/agentes.js";
-import { borrarAgente, cargarAgentes, guardarAgente } from "../../agent/agentesEnDisco.js";
-import { detectarDispositivos, frameworkEnDispositivo } from "../../agent/dispositivosEnMaquina.js";
+import { borrarAgente, cargarAgentes, guardarAgente } from "../../agent/subagentes/agentesEnDisco.js";
+import { detectarDispositivos, frameworkEnDispositivo } from "../../agent/dispositivos/dispositivosEnMaquina.js";
 /**
  * El veredicto de «¿se puede lanzar?» y el lanzamiento entero.
  *
@@ -54,7 +54,7 @@ import {
   type FaseDeLanzamiento,
   type LanzamientoEnCurso,
   type PeticionDeLanzamiento,
-} from "../../agent/lanzamientoEnMaquina.js";
+} from "../../agent/dispositivos/lanzamientoEnMaquina.js";
 import {
   motivoDeBloqueo,
   puedeLanzarse,
@@ -65,9 +65,9 @@ import {
 import type { Dispositivo, InformeDeDispositivos } from "../../core/dispositivos.js";
 import { PLATAFORMAS_DE_DISPOSITIVO, type AjustesDeDispositivos } from "../../core/settings.js";
 import type { NombreDeHerramienta } from "../../core/dispositivos.js";
-import { instalarHerramientaDeDispositivos, verificarDispositivo } from "../../agent/dispositivosEnMaquina.js";
-import { correrPasoDeReceta } from "../../agent/instalacionEnMaquina.js";
-import { modelosDeMotor } from "../../agent/modelosDeMotor.js";
+import { instalarHerramientaDeDispositivos, verificarDispositivo } from "../../agent/dispositivos/dispositivosEnMaquina.js";
+import { correrPasoDeReceta } from "../../agent/dispositivos/instalacionEnMaquina.js";
+import { modelosDeMotor } from "../../agent/config/modelosDeMotor.js";
 import {
   parsear,
   compatibleConOpenAi,
@@ -92,42 +92,42 @@ import {
   aplicarCredencialAlProceso,
   cargar,
   guardarModeloGlobal,
-} from "../../agent/configEnDisco.js";
-import { borrarCredencial, guardarCredencial } from "../../agent/authEnDisco.js";
+} from "../../agent/config/configEnDisco.js";
+import { borrarCredencial, guardarCredencial } from "../../agent/config/authEnDisco.js";
 import {
   borrarProveedorPersonalizado, guardarProveedorPersonalizado, proveedoresPersonalizados,
-} from "../../agent/configEnDisco.js";
+} from "../../agent/config/configEnDisco.js";
 import {
   crearCheckpointerDeProyecto, hayCheckpoint, olvidarHilo,
-} from "../../agent/checkpointer.js";
+} from "../../agent/sesiones/checkpointer.js";
 import {
   cargarSettings,
   guardarConcurrenciaDeTareas,
   guardarDispositivos,
   guardarEntorno as guardarEntornoEnDisco,
-} from "../../agent/settingsEnDisco.js";
+} from "../../agent/config/settingsEnDisco.js";
 import { dentroDelWorkspace, seAplicaSinAprobacion } from "../../core/settings.js";
-import { cloudstudioDelProyecto } from "../../agent/configEnDisco.js";
-import { abrirEnSistema } from "../../agent/cloudstudioMcp.js";
-import { nombreDePersona } from "../../agent/persona.js";
-import { cambiosDeSesion, fotoDeApertura, olvidarSesion, parcheDeSesion } from "../../agent/sesionGit.js";
-import { commitDeTurno, cambiosPendientes, trabajoSinCommitear } from "../../agent/gitSync.js";
+import { cloudstudioDelProyecto } from "../../agent/config/configEnDisco.js";
+import { abrirEnSistema } from "../../agent/cloudstudio/cloudstudioMcp.js";
+import { nombreDePersona } from "../../agent/config/persona.js";
+import { cambiosDeSesion, fotoDeApertura, olvidarSesion, parcheDeSesion } from "../../agent/sesiones/sesionGit.js";
+import { commitDeTurno, cambiosPendientes, trabajoSinCommitear } from "../../agent/sesiones/gitSync.js";
 import { marcarTareaDeSesion, sembrarConsumosPendientes, type DispositivoElegido } from "./sesiones.js";
 import { RUTA_ARTEFACTOS, esRutaDeArtefacto } from "../../core/artefactos.js";
 import {
   arbolDeProyecto,
   leerFicheroDeProyecto,
   motivoDeRutaInaceptable,
-} from "../../agent/arbolDeProyecto.js";
+} from "../../agent/grafo/arbolDeProyecto.js";
 import {
   leerArtefactoCrudo,
   leerArtefactoDeSesion,
   type LecturaCruda,
-} from "../../agent/artefactosEnDisco.js";
-import type { ProyectoRemoto } from "../../agent/cloudstudioMcp.js";
-import { CatalogoModelos } from "../../agent/catalogoModelos.js";
-import { Modelos } from "../../agent/modelos.js";
-import { crearJuezDeTarea, invocarConModelos } from "../../agent/juezDeTarea.js";
+} from "../../agent/grafo/artefactosEnDisco.js";
+import type { ProyectoRemoto } from "../../agent/cloudstudio/cloudstudioMcp.js";
+import { CatalogoModelos } from "../../agent/config/catalogoModelos.js";
+import { Modelos } from "../../agent/config/modelos.js";
+import { crearJuezDeTarea, invocarConModelos } from "../../agent/tareas/juezDeTarea.js";
 import type { AumentadorPort, JuezDeTareaPort } from "../../core/ports.js";
 import { AumentadorGuionizado } from "../../core/ports.js";
 import type { Entorno } from "../../core/settings.js";
@@ -146,10 +146,10 @@ import {
   tituloDeTarea,
   type Tarea,
 } from "../../core/tareas.js";
-import { aplicarFeedback, TOPE_DE_ADJUNTO, type TareasEnDisco } from "../../agent/tareasEnDisco.js";
+import { aplicarFeedback, TOPE_DE_ADJUNTO, type TareasEnDisco } from "../../agent/tareas/tareasEnDisco.js";
 import { nombreDeAdjuntoAceptable } from "../../core/adjuntos.js";
-import { rutaMemoriaDeProyecto } from "../../agent/memoriaDeProyecto.js";
-import { crearAumentador, invocarParaAumentar } from "../../agent/aumentador.js";
+import { rutaMemoriaDeProyecto } from "../../agent/grafo/memoriaDeProyecto.js";
+import { crearAumentador, invocarParaAumentar } from "../../agent/tareas/aumentador.js";
 import {
   baseDeWorkspacePorOmision,
   conexionDeVestibulo,

@@ -15,7 +15,7 @@ import { cmdConfig } from "./config.js";
 import { cmdDescribe } from "./describe.js";
 import { cmdDoctor } from "./doctor.js";
 import { cmdVerify } from "./verify.js";
-import { AgenteGuionizado } from "../agent/guionizado.js";
+import { AgenteGuionizado } from "../agent/turno/guionizado.js";
 import { correrTurno, type Piel } from "../core/turno.js";
 import {
   PAPELES, POR_OMISION, ModeloMalEscrito, parsear, PROVEEDORES, VARIABLES_POR_PROVEEDOR, esProveedorPersonalizado, variableDeProveedor,
@@ -34,12 +34,12 @@ import { crearPielStdio, type Escribir } from "./stdio.js";
 import { esTema, seleccionarTema, TEMAS, type IdTema } from "./tema.js";
 import { acuseDeModelo } from "./acuseDeModelo.js";
 import type { LineaDelPlan, Preguntar } from "./aprobar.js";
-import { guardarCredencial, AuthRotoEnDisco } from "../agent/authEnDisco.js";
-import { cargarSettings, guardarSinAprobacion } from "../agent/settingsEnDisco.js";
+import { guardarCredencial, AuthRotoEnDisco } from "../agent/config/authEnDisco.js";
+import { cargarSettings, guardarSinAprobacion } from "../agent/config/settingsEnDisco.js";
 import { seAplicaSinAprobacion } from "../core/settings.js";
-import { URL_CLOUDSTUDIO_POR_OMISION } from "../agent/cloudstudioMcp.js";
-import { cargar, cloudstudioDelProyecto, NOMBRE_CARPETA } from "../agent/configEnDisco.js";
-import { rutaMemoriaDeProyecto } from "../agent/memoriaDeProyecto.js";
+import { URL_CLOUDSTUDIO_POR_OMISION } from "../agent/cloudstudio/cloudstudioMcp.js";
+import { cargar, cloudstudioDelProyecto, NOMBRE_CARPETA } from "../agent/config/configEnDisco.js";
+import { rutaMemoriaDeProyecto } from "../agent/grafo/memoriaDeProyecto.js";
 import type { CatalogoModelosPort, ModeloDisponible } from "../core/ports.js";
 
 /**

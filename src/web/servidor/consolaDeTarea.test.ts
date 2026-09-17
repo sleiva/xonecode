@@ -8,9 +8,9 @@ import {
   ErrorDeTareaSinHumano,
   MENSAJE_DE_RECHAZO_DE_TAREA,
 } from "./consolaDeTarea.js";
-import { backendDeAgente } from "../../agent/proyecto.js";
-import { politicaDeAprobacionExterna } from "../../agent/escrituraExterna.js";
-import { permisosDe } from "../../agent/perfiles.js";
+import { backendDeAgente } from "../../agent/grafo/proyecto.js";
+import { politicaDeAprobacionExterna } from "../../agent/subagentes/escrituraExterna.js";
+import { permisosDe } from "../../agent/grafo/perfiles.js";
 import { CatalogoModelosEnMemoria } from "../../core/ports.js";
 import type { PendienteDeAprobacion } from "../../core/events.js";
 import type { Piel } from "../../core/turno.js";

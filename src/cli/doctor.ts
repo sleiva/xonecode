@@ -1,4 +1,4 @@
-import { inspeccionar } from "../agent/entorno.js";
+import { inspeccionar } from "../agent/config/entorno.js";
 import { escribirEnStdout, type Escribir } from "./stdio.js";
 
 /**

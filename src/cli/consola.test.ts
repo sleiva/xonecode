@@ -18,7 +18,7 @@ import {
 import type { Piel } from "../core/turno.js";
 import type { Escribir } from "./stdio.js";
 import type { Preguntar, DecisionDeConsola } from "./aprobar.js";
-import { rutaAuth, NOMBRE_CARPETA } from "../agent/configEnDisco.js";
+import { rutaAuth, NOMBRE_CARPETA } from "../agent/config/configEnDisco.js";
 import { CatalogoModelosEnMemoria, type CatalogoModelosPort } from "../core/ports.js";
 import type { OperacionDeSubida, PoliticaDeAprobacion } from "../core/cloudstudio.js";
 import type { NarracionDeSincronizacion } from "../core/actos.js";

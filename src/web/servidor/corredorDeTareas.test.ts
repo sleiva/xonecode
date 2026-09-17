@@ -21,7 +21,7 @@ import {
   type RevisionDeSesion,
 } from "./corredorDeTareas.js";
 import { crearVestibulo, type ConsolaDeProyecto } from "./vestibulo.js";
-import { cambiosDeSesion, fotoDeApertura } from "../../agent/sesionGit.js";
+import { cambiosDeSesion, fotoDeApertura } from "../../agent/sesiones/sesionGit.js";
 import { CatalogoModelosEnMemoria } from "../../core/ports.js";
 import type { Consola } from "../../cli/consola.js";
 import type { Acto } from "../../core/actos.js";
@@ -30,8 +30,8 @@ import { TOPE_DE_RONDAS_DE_TAREA, type Tarea } from "../../core/tareas.js";
 import { MAX_APPROVAL_ROUNDS } from "../../vendor/hitl.js";
 import { SALVEDAD_SIN_ESCRITURAS, type ResultadoDeTurno, type VeredictoDeTarea } from "../../core/entrega.js";
 import type { CasoDeJuez, JuezDeTareaPort } from "../../core/ports.js";
-import { ErrorDelJuezDeTarea } from "../../agent/juezDeTarea.js";
-import { aplicarFeedback, type TareasEnDisco } from "../../agent/tareasEnDisco.js";
+import { ErrorDelJuezDeTarea } from "../../agent/tareas/juezDeTarea.js";
+import { aplicarFeedback, type TareasEnDisco } from "../../agent/tareas/tareasEnDisco.js";
 
 /** Un juez de mentira que siempre dice lo mismo, apuntando lo que se le preguntó. */
 function juezQueDice(veredicto: VeredictoDeTarea): JuezDeTareaPort & { casos: CasoDeJuez[] } {

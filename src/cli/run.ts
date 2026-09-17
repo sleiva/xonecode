@@ -1,15 +1,15 @@
 import { correrTurno } from "../core/turno.js";
 import { eofDeStdin, pedirDecisiones, preguntarPorStdin } from "./aprobar.js";
 import { crearPielStdio, escribirEnStdout, type Escribir } from "./stdio.js";
-import { AgenteGuionizado } from "../agent/guionizado.js";
+import { AgenteGuionizado } from "../agent/turno/guionizado.js";
 import { esDoble } from "../core/ports.js";
-import { inspeccionar, type Entorno } from "../agent/entorno.js";
-import { tomarInstantanea, type Instantanea, type Cambio } from "../agent/instantanea.js";
-import { SkillsEnDisco } from "../agent/skills.js";
-import { Modelos } from "../agent/modelos.js";
-import { proveedoresPersonalizados } from "../agent/configEnDisco.js";
-import { abrirSesionReal } from "../agent/turnoReal.js";
-import { SimuladorVerifier } from "../agent/verificador.js";
+import { inspeccionar, type Entorno } from "../agent/config/entorno.js";
+import { tomarInstantanea, type Instantanea, type Cambio } from "../agent/turno/instantanea.js";
+import { SkillsEnDisco } from "../agent/grafo/skills.js";
+import { Modelos } from "../agent/config/modelos.js";
+import { proveedoresPersonalizados } from "../agent/config/configEnDisco.js";
+import { abrirSesionReal } from "../agent/turno/turnoReal.js";
+import { SimuladorVerifier } from "../agent/turno/verificador.js";
 import type { FuentesDeEleccion } from "../core/modelos.js";
 import type { Papel } from "../core/ports.js";
 

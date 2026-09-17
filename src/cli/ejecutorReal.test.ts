@@ -18,13 +18,13 @@ const dobles = vi.hoisted(() => ({
   inspeccionar: vi.fn(),
 }));
 
-vi.mock("../agent/turnoReal.js", () => ({
+vi.mock("../agent/turno/turnoReal.js", () => ({
   abrirSesionReal: dobles.abrirSesionReal,
   // `main.ts` la importa para el completado de «@ficheros» del Tab.
   ficherosDelProyecto: () => new Set<string>(),
   PROFUNDIDAD_DEL_TAB: 4,
 }));
-vi.mock("../agent/entorno.js", () => ({ inspeccionar: dobles.inspeccionar }));
+vi.mock("../agent/config/entorno.js", () => ({ inspeccionar: dobles.inspeccionar }));
 
 const { crearEjecutorReal } = await import("./main.js");
 const { crearConsolaDeTarea } = await import("../web/servidor/consolaDeTarea.js");

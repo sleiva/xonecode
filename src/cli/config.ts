@@ -11,7 +11,7 @@
  * justo el que uno corre cuando la configuración está mal. Por eso siempre devuelve 0.
  */
 
-import { cargar } from "../agent/configEnDisco.js";
+import { cargar } from "../agent/config/configEnDisco.js";
 import type { Aviso } from "../core/config.js";
 import {
   ModeloMalEscrito,
