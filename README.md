@@ -51,14 +51,30 @@ Lo que **todavía no hay**, y conviene saber antes de fiarse:
 
 ## Instalación
 
-Requiere **Node ≥ 20** y, para verificar, [`xone-linter`](https://www.npmjs.com/package/xone-linter)
+Requiere **Node ≥ 22** y, para verificar, [`xone-linter`](https://www.npmjs.com/package/xone-linter)
 (que instala el binario `xone-simulator`).
+
+Para descargar y ejecutar la consola sin instalación global:
+
+```sh
+npx xonecode
+```
+
+`npx` instala el paquete en su caché y lo ejecuta. Para tener el comando disponible
+directamente en la terminal:
+
+```sh
+npm install -g xonecode
+xonecode
+```
+
+Para desarrollar desde el código fuente:
 
 ```sh
 git clone https://github.com/sleiva/xonecode && cd xonecode
 npm install
 npm run build
-npm link          # o: ln -sf "$PWD/dist/bin.js" ~/.local/bin/xonecode
+npm link
 ```
 
 Comprueba que el entorno está listo, sin gastar nada:

@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { mkdtempSync, rmSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { SqliteSaver } from "@langchain/langgraph-checkpoint-sqlite";
+import { SqliteSaver } from "../vendor/sqliteSaver.js";
 import {
   crearCheckpointerDeProyecto,
   hayCheckpoint,

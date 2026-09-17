@@ -1,6 +1,6 @@
 import { closeSync, existsSync, mkdirSync, openSync } from "node:fs";
 import { dirname, join } from "node:path";
-import { SqliteSaver } from "@langchain/langgraph-checkpoint-sqlite";
+import { SqliteSaver } from "../vendor/sqliteSaver.js";
 import type { BaseCheckpointSaver } from "@langchain/langgraph-checkpoint";
 
 /**
@@ -26,7 +26,7 @@ import type { BaseCheckpointSaver } from "@langchain/langgraph-checkpoint";
  *   `write_file`, la respuesta de cada tool remota—, o sea justo lo que el transcript de
  *   `sesiones.ts` no puede llevar por construcción. Este fichero es de la misma clase que
  *   `auth.json` y por eso se crea con modo **0600**.
- * - **WAL viene de serie** (medido contra `better-sqlite3` 12.11.1: `journal_mode` es `wal`
+ * - **WAL viene de serie** (medido contra `better-sqlite3` 13.0.3: `journal_mode` es `wal`
  *   nada más abrir), que es lo que hace que dos procesos sobre el mismo proyecto —una
  *   consola de terminal y la web— no se pisen. Con `MemorySaver` el problema no existía
  *   porque cada proceso tenía el suyo.

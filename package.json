@@ -1,6 +1,6 @@
 {
   "name": "xonecode",
-  "version": "0.5.0",
+  "version": "0.5.1",
   "description": "Consola CLI y harness de agente para desarrollar aplicaciones XOne",
   "type": "module",
   "license": "MIT",
@@ -18,11 +18,12 @@
     "apps/web/dist"
   ],
   "engines": {
-    "node": ">=20"
+    "node": ">=22"
   },
   "scripts": {
     "build": "rm -rf dist && tsc -p tsconfig.build.json && chmod +x dist/bin.js && npm run build:web",
     "build:web": "npm run build --workspace apps/web",
+    "prepack": "npm run build",
     "web": "npm run build:web && tsx src/bin.ts --web",
     "test": "vitest run",
     "test:watch": "vitest",
@@ -36,27 +37,29 @@
     "@langchain/core": "1.2.9",
     "@langchain/google-genai": "2.3.0",
     "@langchain/langgraph": "1.4.10",
-    "@langchain/langgraph-checkpoint-sqlite": "^1.0.4",
+    "@langchain/langgraph-checkpoint": "1.1.5",
     "@langchain/mcp-adapters": "^1.1.4",
     "@langchain/ollama": "1.3.0",
     "@langchain/openai": "1.5.5",
     "@modelcontextprotocol/sdk": "^1.30.0",
+    "better-sqlite3": "13.0.3",
     "deepagents": "1.13.2",
     "fflate": "^0.8.2",
     "ink": "^5.2.1",
     "ink-testing-library": "^4.0.0",
     "langchain": "1.5.10",
     "react": "^18.3.1",
-    "ws": "^8.21.3"
+    "ws": "^8.21.3",
+    "zod": "4.5.4"
   },
   "devDependencies": {
     "@types/node": "^20.19.43",
+    "@types/better-sqlite3": "^7.6.12",
     "@types/react": "^18.3.31",
     "@types/ws": "^8.18.1",
     "jsdom": "^25.0.1",
     "tsx": "^4.23.1",
     "typescript": "^5.9.3",
-    "vitest": "^4.1.10",
-    "zod": "4.5.4"
+    "vitest": "^4.1.10"
   }
 }
