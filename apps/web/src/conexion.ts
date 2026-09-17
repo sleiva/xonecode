@@ -60,6 +60,18 @@ export interface Conexion {
    */
   subirAdjunto(tarea: string, nombre: string, fichero: Blob): Promise<{ ok: boolean; motivo?: string }>;
   /**
+   * Instala una skill desde un `.zip` (`POST /skill`). Los BYTES van por HTTP y no por el
+   * cable, que lleva JSON: el mismo molde, y la misma razón, que `subirAdjunto`.
+   *
+   * `nombre` es el del fichero que eligió la persona y viaja porque el servidor lo usa de
+   * respaldo cuando el zip no trae una carpeta de la que sacar el nombre de la skill.
+   */
+  instalarSkill(
+    nombre: string,
+    ambito: "global" | "proyecto",
+    zip: Blob
+  ): Promise<{ ok: boolean; motivo?: string }>;
+  /**
    * Empieza (`ver: true`) o deja de mirar en vivo lo que hace una tarea de fondo.
    *
    * **Tiene método propio y no se manda con `enviar` porque lleva el id de ESTA conexión**, y
@@ -185,6 +197,25 @@ export function crearConexion(store: Store, opciones: OpcionesDeConexion = {}): 
       // El MOTIVO lo escribe el servidor y no lleva ninguna ruta de la máquina (su test lo
       // vigila): es lo que hace que un tope o un nombre rechazado se lean en su fila en vez
       // de como un número de estado.
+      const motivo = (await r?.text?.().catch(() => "")) ?? "";
+      return { ok: false, motivo: motivo.trim() === "" ? `el servidor contestó ${String(r?.status ?? "?")}` : motivo.trim() };
+    },
+    async instalarSkill(nombre, ambito, zip) {
+      // Misma forma que `subirAdjunto`, y por las mismas razones: nombre CODIFICADO en la
+      // query —`registrarRuta` casa por coincidencia exacta— y sin `content-type` propio,
+      // que el servidor lee bytes y ponerle uno solo podría mentir.
+      const url = `/skill?nombre=${encodeURIComponent(nombre)}&ambito=${encodeURIComponent(ambito)}`;
+      let respuesta: unknown;
+      try {
+        respuesta = await fetchInyectado(url, { method: "POST", credentials: "same-origin", body: zip });
+      } catch (error) {
+        return { ok: false, motivo: error instanceof Error ? error.message : "no se pudo instalar" };
+      }
+      const r = respuesta as { ok?: unknown; status?: unknown; text?: () => Promise<string> } | undefined;
+      if (r?.ok === true) return { ok: true };
+      // El MOTIVO lo escribe el servidor —«no trae SKILL.md», «ya hay una así»— y no lleva
+      // ninguna ruta de la máquina. Es lo que hace que un zip rechazado se lea como una
+      // frase en su sitio y no como un número de estado.
       const motivo = (await r?.text?.().catch(() => "")) ?? "";
       return { ok: false, motivo: motivo.trim() === "" ? `el servidor contestó ${String(r?.status ?? "?")}` : motivo.trim() };
     },

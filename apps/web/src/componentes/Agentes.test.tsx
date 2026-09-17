@@ -1,6 +1,6 @@
 import { render, screen, fireEvent, cleanup } from "@testing-library/react";
 import { afterEach, describe, it, expect, vi } from "vitest";
-import type { AgenteDelCable } from "../tipos.js";
+import type { AgenteDelCable, SkillDelCable } from "../tipos.js";
 import { Agentes } from "./Agentes.js";
 
 afterEach(cleanup);
@@ -556,5 +556,107 @@ describe("Agentes: los que trae xonecode y los tuyos", () => {
     expect(screen.queryByRole("button", { name: "Restaurar" })).toBeNull();
     // Y sigue ofreciéndose, claro: lo que se cerró es la confirmación, no la acción.
     expect(screen.getByRole("button", { name: "Restaurar el de serie" })).not.toBeNull();
+  });
+});
+
+/** El catálogo tal como llega del cable, para la lista de casillas. */
+const CATALOGO: SkillDelCable[] = [
+  { nombre: "archify", descripcion: "Diagramas y arquitecturas.", origen: "serie", tokens: 4000, ficheros: [] },
+  { nombre: "mi-skill", descripcion: "La mía.", origen: "global", tokens: 800, ficheros: [], cuerpo: "x" },
+];
+
+/** Abre el formulario de edición del primer subagente de la pestaña «Tuyos». */
+const editarElPrimero = (): void => {
+  irA("Tuyos");
+  fireEvent.click(screen.getAllByRole("button", { name: /^Editar/ })[0]!);
+};
+
+describe("las skills de un subagente", () => {
+  // Mocks propios y no los del módulo: `manejadores` se comparte entre todos los tests del
+  // fichero y nadie lo limpia, así que un `toHaveBeenCalledWith` de aquí leería las llamadas
+  // de los de arriba. Aquí lo que se afirma es la ÚLTIMA.
+  const propios = () => ({ alGuardar: vi.fn(), alBorrar: vi.fn(), alRestaurar: vi.fn(), hayProyecto: false });
+
+  it("se MARCAN de una lista, no se teclean: lo que se marca EXISTE", () => {
+    // Con el campo de texto, un nombre mal escrito no daba error — `repartirSkills` lo mete
+    // en `faltan` y el subagente trabaja sin lo que creías haberle dado, con la ventana
+    // leyéndose igual de bien.
+    const m = propios();
+    render(<Agentes {...m} agentes={[REVISOR]} catalogoDeSkills={CATALOGO} />);
+    editarElPrimero();
+
+    const archify = screen.getByRole("checkbox", { name: /archify/ }) as HTMLInputElement;
+    const mia = screen.getByRole("checkbox", { name: /mi-skill/ }) as HTMLInputElement;
+    expect(archify.checked).toBe(true);
+    expect(mia.checked).toBe(false);
+
+    fireEvent.click(mia);
+    fireEvent.click(screen.getByRole("button", { name: "Guardar" }));
+    expect(m.alGuardar).toHaveBeenCalledWith(
+      expect.objectContaining({ skills: ["archify", "mi-skill"] }),
+      "global",
+      undefined
+    );
+  });
+
+  it("cada casilla dice su descripción y su COSTE: son los dos datos con los que se elige", () => {
+    render(<Agentes {...manejadores} agentes={[REVISOR]} catalogoDeSkills={CATALOGO} />);
+    editarElPrimero();
+    const fila = screen.getByRole("checkbox", { name: /archify/ }).closest("label")!;
+    expect(fila.textContent).toContain("Diagramas y arquitecturas.");
+    // El coste es lo que se paga cada vez que el modelo la carga. Abreviado con la MISMA
+    // función que el contador y la barra: dos formatos para el mismo dato enseñan a
+    // desconfiar de los dos.
+    expect(fila.textContent).toContain("4k tok");
+  });
+
+  it("una skill que el `.md` declara y ya no está sigue MARCADA, y se dice por qué", () => {
+    // Sin esto, abrir un subagente y guardarlo sin tocar nada le quitaba en silencio una
+    // skill que su fichero declaraba: la carpeta puede volver, y desmarcarla tiene que ser
+    // una decisión y no un efecto de haber abierto el formulario.
+    const m = propios();
+    const conFantasma = { ...REVISOR, skills: ["archify", "la-que-se-fue"] };
+    render(<Agentes {...m} agentes={[conFantasma]} catalogoDeSkills={CATALOGO} />);
+    editarElPrimero();
+
+    const huerfana = screen.getByRole("checkbox", { name: /la-que-se-fue/ }) as HTMLInputElement;
+    expect(huerfana.checked).toBe(true);
+    expect(huerfana.closest("label")!.textContent).toMatch(/no está en el catálogo/);
+
+    fireEvent.click(screen.getByRole("button", { name: "Guardar" }));
+    expect(m.alGuardar).toHaveBeenCalledWith(
+      expect.objectContaining({ skills: ["archify", "la-que-se-fue"] }),
+      "global",
+      undefined
+    );
+  });
+
+  it("y desmarcarla la quita, que es la otra mitad", () => {
+    const m = propios();
+    const conFantasma = { ...REVISOR, skills: ["archify", "la-que-se-fue"] };
+    render(<Agentes {...m} agentes={[conFantasma]} catalogoDeSkills={CATALOGO} />);
+    editarElPrimero();
+    fireEvent.click(screen.getByRole("checkbox", { name: /la-que-se-fue/ }));
+    fireEvent.click(screen.getByRole("button", { name: "Guardar" }));
+    expect(m.alGuardar).toHaveBeenCalledWith(
+      expect.objectContaining({ skills: ["archify"] }),
+      "global",
+      undefined
+    );
+  });
+
+  it("SIN catálogo no se pinta una lista vacía: se cae al campo de texto", () => {
+    // Ausente ≠ vacío. Una lista de cero casillas se leería como «no hay ninguna skill», y
+    // sobre esa lectura se vacía lo que el subagente ya tenía.
+    render(<Agentes {...manejadores} agentes={[REVISOR]} />);
+    editarElPrimero();
+    expect(screen.queryByRole("checkbox", { name: /archify/ })).toBeNull();
+    expect(screen.getByDisplayValue("archify")).not.toBeNull();
+  });
+
+  it("un catálogo VACÍO sí se afirma, y manda a donde se escriben", () => {
+    render(<Agentes {...manejadores} agentes={[{ ...REVISOR, skills: [] }]} catalogoDeSkills={[]} />);
+    editarElPrimero();
+    expect(screen.getByText(/No hay ninguna skill/)).not.toBeNull();
   });
 });

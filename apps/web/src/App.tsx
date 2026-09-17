@@ -47,6 +47,7 @@ export function App({
   store,
   enviar,
   subirAdjunto,
+  instalarSkill,
   mirar,
 }: {
   store: Store;
@@ -57,6 +58,7 @@ export function App({
    * ninguno y los tests no tienen que parchear el global.
    */
   subirAdjunto: Conexion["subirAdjunto"];
+  instalarSkill: Conexion["instalarSkill"];
   /**
    * Empezar o dejar de mirar en vivo lo que hace una tarea. Tiene canal propio y no va por
    * `enviar` porque lleva el id de ESTA conexión del SSE, que es un dato del transporte y no
@@ -1013,6 +1015,8 @@ export function App({
       {...(entornoActivo === "" ? {} : { entornoActivo })}
       apariencia={apariencia}
       {...(estado.agentes === undefined ? {} : { agentes: estado.agentes })}
+      {...(estado.skills === undefined ? {} : { skills: estado.skills })}
+      {...(estado.cuerposDeSkill === undefined ? {} : { cuerposDeSkill: estado.cuerposDeSkill })}
       // Si hay proyecto abierto: decide si la ventana puede ofrecer guardar el subagente
       // «en este proyecto». Sin uno, ese ámbito no existe y no se pregunta.
       hayProyecto={proyectoAbierto}
@@ -1048,6 +1052,35 @@ export function App({
           agente: { nombre, descripcion: "", motor: "modelo", soloLectura: true, skills: [], instrucciones: "" },
         })
       }
+      // El cuerpo de una skill, bajo demanda: las de serie no lo mandan en la ráfaga —son
+      // ficheros de decenas de miles de caracteres que nadie puede editar— así que se pide
+      // al abrir su ficha o al copiarla.
+      alPedirCuerpoDeSkill={(nombre) => void enviar({ clase: "cuerpoDeSkill", nombre })}
+      alGuardarSkill={(skill, ambito, renombrandoDe) =>
+        void enviar({
+          clase: "skill",
+          accion: "guardar",
+          ambito,
+          skill,
+          // Ausente cuando el nombre no ha cambiado: es lo que distingue un guardado de un
+          // renombrado, y el servidor no tiene otra forma de saberlo. La misma regla que en
+          // `agente`, y por el mismo motivo.
+          ...(renombrandoDe === undefined ? {} : { renombrandoDe }),
+        })
+      }
+      alBorrarSkill={(skill, ambito) =>
+        void enviar({
+          clase: "skill",
+          accion: "borrar",
+          ambito,
+          // Borrar solo necesita el nombre, pero el mensaje lleva una skill entera para no
+          // tener dos formas del mismo mensaje: los demás campos los ignora el servidor.
+          skill,
+        })
+      }
+      // Los BYTES del `.zip` van por HTTP y no por el cable, que lleva JSON: el mismo molde
+      // que la subida de un adjunto de tarea.
+      alInstalarSkill={(nombre, ambito, zip) => instalarSkill(nombre, ambito, zip)}
       // La pregunta oculta en vuelo se pinta DENTRO de la fila que se está editando; por
       // eso el centro deja de pintarla mientras la ventana está abierta (más abajo).
       {...(estado.secreto === undefined ? {} : { secreto: estado.secreto.pregunta })}

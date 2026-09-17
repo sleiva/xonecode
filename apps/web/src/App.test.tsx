@@ -35,7 +35,14 @@ afterEach(cleanup);
  */
 function montar(enviar = vi.fn(() => Promise.resolve(undefined as unknown))) {
   const store = crearStoreDelCliente();
-  const vista = render(<App store={store} enviar={enviar} subirAdjunto={subirAdjuntoDeMentira} />);
+  const vista = render(
+    <App
+      store={store}
+      enviar={enviar}
+      subirAdjunto={subirAdjuntoDeMentira}
+      instalarSkill={instalarSkillDeMentira}
+    />
+  );
   act(() => store.marcarConectado());
   act(() =>
     store.aplicar({
@@ -53,6 +60,7 @@ function montar(enviar = vi.fn(() => Promise.resolve(undefined as unknown))) {
 
 /** La subida de adjuntos, concedida y sin red: `App` la recibe inyectada igual que `enviar`. */
 const subirAdjuntoDeMentira = async (): Promise<{ ok: boolean; motivo?: string }> => ({ ok: true });
+const instalarSkillDeMentira = async (): Promise<{ ok: boolean; motivo?: string }> => ({ ok: true });
 
 /** Un `enviar` que revienta, como un `fetch` sin red. */
 const enviarQueFalla = () => vi.fn(() => Promise.reject(new Error("sin red")) as Promise<unknown>);
@@ -424,7 +432,7 @@ describe("App: la pantalla de arranque no enseña nada más", () => {
   function montarSinAbrir() {
     const store = crearStoreDelCliente();
     const enviar = vi.fn(() => Promise.resolve(undefined as unknown));
-    const vista = render(<App store={store} enviar={enviar} subirAdjunto={subirAdjuntoDeMentira} />);
+    const vista = render(<App store={store} enviar={enviar} subirAdjunto={subirAdjuntoDeMentira} instalarSkill={instalarSkillDeMentira} />);
     act(() => store.marcarConectado());
     return { store, enviar, vista };
   }
@@ -618,7 +626,7 @@ describe("App: la pantalla de arranque no enseña nada más", () => {
    */
   it("desconectado y sin nada del alta todavía, lo dice — no un splash mudo", () => {
     const store = crearStoreDelCliente();
-    render(<App store={store} enviar={vi.fn()} subirAdjunto={subirAdjuntoDeMentira} />);
+    render(<App store={store} enviar={vi.fn()} subirAdjunto={subirAdjuntoDeMentira} instalarSkill={instalarSkillDeMentira} />);
     // Sin `marcarConectado()`: `ESTADO_INICIAL` (`store.ts`) ya nace `conectado: false`.
     expect(screen.getByText(/sin conexión con xonecode/i)).toBeTruthy();
   });
@@ -820,7 +828,7 @@ describe("App: abrir un proyecto desde la barra (Layer C)", () => {
   function montarConProyectos(proyectos: { id: string; nombre: string }[]) {
     const store = crearStoreDelCliente();
     const enviar = vi.fn(() => Promise.resolve(undefined as unknown));
-    const vista = render(<App store={store} enviar={enviar} subirAdjunto={subirAdjuntoDeMentira} />);
+    const vista = render(<App store={store} enviar={enviar} subirAdjunto={subirAdjuntoDeMentira} instalarSkill={instalarSkillDeMentira} />);
     act(() => store.marcarConectado());
     act(() =>
       store.aplicar({
@@ -1025,7 +1033,7 @@ describe("App: la tarjeta de tarea «esperando feedback» abre Revisión", () =>
   function montarConTareas() {
     const store = crearStoreDelCliente();
     const enviar = vi.fn(() => Promise.resolve(undefined as unknown));
-    render(<App store={store} enviar={enviar} subirAdjunto={subirAdjuntoDeMentira} />);
+    render(<App store={store} enviar={enviar} subirAdjunto={subirAdjuntoDeMentira} instalarSkill={instalarSkillDeMentira} />);
     act(() => store.marcarConectado());
     act(() =>
       store.aplicar({
@@ -1255,7 +1263,7 @@ describe("App: la pestaña Tareas", () => {
   function montarConProyectoActivo() {
     const store = crearStoreDelCliente();
     const enviar = vi.fn(() => Promise.resolve(undefined as unknown));
-    render(<App store={store} enviar={enviar} subirAdjunto={subirAdjuntoDeMentira} />);
+    render(<App store={store} enviar={enviar} subirAdjunto={subirAdjuntoDeMentira} instalarSkill={instalarSkillDeMentira} />);
     act(() => store.marcarConectado());
     act(() =>
       store.aplicar({
@@ -1385,7 +1393,9 @@ describe("App: crear una tarea en background", () => {
   /** El escritorio, con un proyecto y sin sesión abierta. */
   function conEscritorio(enviar = vi.fn(() => Promise.resolve(undefined as unknown)), subir = subirAdjuntoDeMentira) {
     const store = crearStoreDelCliente();
-    const vista = render(<App store={store} enviar={enviar} subirAdjunto={subir} />);
+    const vista = render(
+      <App store={store} enviar={enviar} subirAdjunto={subir} instalarSkill={instalarSkillDeMentira} />
+    );
     act(() => store.marcarConectado());
     act(() =>
       store.aplicar({
@@ -1507,7 +1517,7 @@ describe("App: crear una tarea en background", () => {
      */
     const enviar = vi.fn(() => Promise.resolve(undefined as unknown));
     const store = crearStoreDelCliente();
-    render(<App store={store} enviar={enviar} subirAdjunto={subirAdjuntoDeMentira} />);
+    render(<App store={store} enviar={enviar} subirAdjunto={subirAdjuntoDeMentira} instalarSkill={instalarSkillDeMentira} />);
     act(() => store.marcarConectado());
     act(() =>
       store.aplicar({

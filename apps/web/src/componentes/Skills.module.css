@@ -1,11 +1,18 @@
-/* La sección de subagentes de la ventana de ajustes. Reusa la forma de las filas de
+/* La sección de skills de la ventana de ajustes, debajo de Subagentes.
+
+   Comparte la hoja con `Agentes.module.css` por COPIA y no por import: el nombre de una
+   clase de módulo va HASHEADO, así que compartir la hoja no es una opción — y son la misma
+   clase de lista en la misma ventana, tenían que leerse igual. Lo propio de aquí va al
+   final.
+
+   (De la sección de subagentes: Reusa la forma de las filas de
    `Ajustes.module.css` (tarjeta con cabecera y acciones a la derecha) porque es la misma
    clase de lista y tenía que leerse igual.
 
    Alias comprobados contra `apps/web/estilos/design-platform.css`: bg-layer-1/2,
    bg-module-platform, border-l2, label-primary/secondary/tertiary, interactive-bg-hover,
    state-error-secondary, state-success-primary/tertiary y
-   state-business-primary/tertiary. */
+   state-business-primary/tertiary.) */
 
 .nota,
 .vacio,
@@ -470,118 +477,128 @@
   align-self: flex-start;
 }
 
-/*
- * Las skills de un subagente, en casillas.
- *
- * Con tope de alto y scroll propio: el catálogo crece con cada skill que el usuario escribe,
- * y una lista sin tope empuja fuera de la vista los campos de abajo —el ámbito y los dos
- * botones—, que es donde se termina de guardar. La misma medida que el cuerpo desplegado en
- * la sección Skills, y por lo mismo.
- */
-.listaDeSkills {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  max-height: 220px;
-  margin: 0;
-  padding: 6px;
-  overflow: auto;
-  border: 0.5px solid var(--dsw-alias-border-l2);
-  border-radius: 8px;
-  background: var(--dsw-alias-bg-layer-1);
-  list-style: none;
-}
-
-/* La casilla arriba y no centrada: la descripción puede ocupar dos líneas, y centrada
-   dejaría el cuadrito flotando a media altura de un párrafo. */
-.casillaDeSkill {
-  display: flex;
-  align-items: flex-start;
-  gap: 8px;
-  padding: 5px 6px;
-  border-radius: 6px;
-  cursor: pointer;
-}
-
-.casillaDeSkill:hover {
-  background: var(--dsw-alias-interactive-bg-hover);
-}
 
 /*
- * El cuadrito, DESHECHO el `.campo input` de arriba.
+ * El coste de cargar la skill, junto al nombre.
  *
- * Esa regla viste el `<input>` de texto de un campo del formulario —`width: 100%`, padding,
- * borde—, y la lista de casillas vive dentro de un `.campo`, así que cada checkbox salía
- * como una caja del ancho de la ventana. Se deshace aquí en vez de acotar allí porque
- * `.campo input` es lo que hace que los campos de texto ocupen la fila, que es su motivo
- * medido (la ventana era una columna de cajas estrechas).
+ * Es la cifra que decide si merece la pena tenerla —se paga entera cada vez que el modelo la
+ * carga—, así que va en la fila y no escondida en un `title`. En mono y en la píldora de
+ * negocio, el mismo par `state-business-*` que el gasto del compositor y la cuenta de una
+ * pestaña: es un dato de máquina, como las otras dos.
  */
-.casillaDeSkill input {
+.tokens {
   flex: none;
-  width: auto;
-  margin: 2px 0 0;
-  padding: 0;
-  border: none;
-  background: none;
-}
-
-/* Rejilla de dos columnas y dos filas: el nombre y su coste arriba —el coste pegado a la
-   derecha del nombre, no al final de la fila, o quedaría a un palmo de lo que mide— y la
-   descripción debajo ocupando las dos. */
-.textoDeSkill {
-  display: grid;
-  grid-template-columns: auto auto 1fr;
-  align-items: baseline;
-  gap: 2px 8px;
-  min-width: 0;
-}
-
-.nombreDeSkill {
-  color: var(--dsw-alias-label-primary);
-  font-size: 12px;
-  font-weight: 600;
-}
-
-.costeDeSkill {
-  color: var(--dsw-alias-label-tertiary);
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: var(--dsw-alias-state-business-tertiary);
+  color: var(--dsw-alias-state-business-primary);
   font-family: var(--ds-font-family-code);
   font-size: 10px;
   white-space: nowrap;
 }
 
-/*
- * La descripción de cada casilla, ACOTADA a dos líneas.
- *
- * Medido en el navegador: la de `archify` ocupa ocho renglones, así que con nueve skills la
- * lista dejaba de ser una lista de casillas y era una pared de párrafos — y el formulario
- * que hay debajo (el ámbito y los dos botones) quedaba fuera de la vista. Dos líneas es lo
- * que hace falta para elegir; la entera está en el `title`, que es donde se mira cuando una
- * de verdad hace dudar.
- */
-.descripcionDeSkill {
-  grid-column: 1 / -1;
-  display: -webkit-box;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
-  line-clamp: 2;
-  overflow: hidden;
+/* Los ficheros que acompañan al SKILL.md. En terciario: es una aclaración del alcance de lo
+   que esta ventana edita, no una advertencia. */
+.anexos {
+  margin: 6px 0 0;
   color: var(--dsw-alias-label-tertiary);
   font-size: 11px;
-  line-height: 1.45;
+  line-height: 1.5;
+}
+
+.listaDeAnexos {
+  font-family: var(--ds-font-family-code);
 }
 
 /*
- * La que el `.md` declara y ya no está en el catálogo.
+ * El cuerpo desplegado de una skill.
  *
- * En el tono de un aviso y no de un error: el fichero no está roto, y la skill puede volver.
- * Lo que dice es que HOY este subagente se queda sin ella — que es un dato, y encima uno que
- * se arregla desmarcando o escribiéndola.
+ * Con tope de alto y scroll propio: un SKILL.md de veinte mil caracteres volcado entero
+ * empuja el resto de la lista fuera de la ventana, y entonces la pestaña deja de contestar
+ * «qué skills hay» —que es su pregunta— para contestar «qué dice esta».
  */
-.skillHuerfana {
-  background: var(--dsw-alias-state-warn-tertiary);
+.cuerpo {
+  margin: 10px 0 0;
+  padding-top: 10px;
+  border-top: 0.5px solid var(--dsw-alias-border-l2);
 }
 
-.skillHuerfana .nombreDeSkill,
-.skillHuerfana .descripcionDeSkill {
-  color: var(--dsw-alias-state-warn-label);
+/* Dentro del desplegable la descripción es lo primero, así que no arrastra el margen que
+   tenía cuando colgaba del nombre en la fila. */
+.cuerpo .descripcion {
+  margin-top: 0;
+}
+
+.texto {
+  max-height: 260px;
+  margin: 0;
+  overflow: auto;
+  color: var(--dsw-alias-label-secondary);
+  font-family: var(--ds-font-family-code);
+  font-size: 11px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+/* La frase de «esta no se edita» y el botón que sí se puede pulsar, en la misma línea: la
+   negativa y su camino van juntos o la negativa se lee como un callejón. */
+.piePropio {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 10px;
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+/* El rótulo de cada bloque del desplegable —Frontmatter, Instrucciones—, para que dos
+   bloques de mono seguidos no se lean como uno solo. Del mismo tamaño y tono que el epígrafe
+   de un grupo: es un rótulo de sección dentro de una ficha, no un encabezado. */
+.rotuloDeBloque {
+  margin: 12px 0 4px;
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+/*
+ * El frontmatter, CRUDO.
+ *
+ * Con su propio fondo y su filo para que se lea como lo que es: un trozo del fichero, no
+ * prosa de la ventana. Tope de alto propio —más bajo que el del cuerpo— porque son cuatro
+ * líneas en el caso normal y no puede comerse la ficha en el raro.
+ */
+.frontmatter {
+  max-height: 160px;
+  margin: 0;
+  padding: 8px 10px;
+  overflow: auto;
+  border: 0.5px solid var(--dsw-alias-border-l2);
+  border-radius: 8px;
+  background: var(--dsw-alias-bg-layer-1);
+  color: var(--dsw-alias-label-secondary);
+  font-family: var(--ds-font-family-code);
+  font-size: 11px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+/* Los dos botones de alta, en fila. `.nuevo` ya les quita el estirón del `stretch` del panel
+   en columna; esto es lo que los pone uno al lado del otro en vez de uno debajo del otro. */
+.acciones {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+/* El `<input type="file">` que dispara el botón de instalar. `display: none` a propósito: no
+   tiene que ser alcanzable por teclado —quien lo es es el botón que lo abre—, así que aquí
+   la regla de «lo que el teclado debe alcanzar se esconde con opacidad» no aplica. */
+.elector {
+  display: none;
 }

@@ -168,6 +168,57 @@ Y las guardas del proyecto:
   que el montaje falte.
 - **`/skills/` con barra final obligatoria** (`CompositeBackend` la retira antes de delegar) y
   `permisosDe` deniega `write` ahí: son instrucciones, no ficheros editables.
+- **Y bajo esa MISMA ruta cuelgan las skills del USUARIO, una a una**
+  (`agent/grafo/proyecto.ts#backendConSkills`, `agent/grafo/skills.ts`). Tres raíces —la del
+  paquete, `~/.xonecode/skills/` y la del proyecto, con la del proyecto ganando—, que el agente
+  ve como una sola: un subagente declara `skills: [mi-skill]` y eso se traduce a
+  `/skills/mi-skill/` sin saber de qué carpeta salió. Una raíz aparte (`/skills-tuyas/`) habría
+  metido de quién es la skill dentro de su ruta. Se apoya en que `CompositeBackend` ordena sus
+  rutas por LONGITUD descendente, y eso se ata contra la librería real (`proyecto.test.ts`) — no
+  se supone. **Límite declarado**: un `ls /skills` enseña solo las de serie, porque ese `ls`
+  resuelve a UNA ruta y no funde varias; da igual para lo que esto hace, porque
+  `SkillsMiddleware` recibe las rutas ya resueltas una a una. **`SkillsEnDisco` no cachea** y
+  `skillsMontables` se relee en cada construcción del agente, o sea en cada turno: la misma
+  medida que `cargarAgentes`, y por lo mismo — guardar una skill desde Ajustes con la consola
+  abierta tiene que alcanzar al turno siguiente.
+- **Una skill de serie no se edita ni se borra: se COPIA** (`web/servidor/arranque.ts`
+  `#atenderSkill`, `core/skills.ts`). Vive dentro del paquete instalado, así que una edición se
+  la llevaría el siguiente `npm install` sin decir nada, y no hay nada que restaurar porque nada
+  nuestro se copia nunca a la casa del usuario — de ahí que aquí NO haya `.semilla.json` ni
+  `restaurar`, a diferencia de los subagentes. La barrera vive en el SERVIDOR; el cliente se
+  limita a no ofrecer el botón, que es presentación. El nombre es un SLUG con la MISMA función
+  que la de un subagente (`motivoDeNombreInaceptable`), se valida al GUARDAR y no al cargar, y un
+  destino que existe es un NO venga de donde venga. Renombrar es `renameSync` y LUEGO escribir.
+  **Y el `cuerpo` de una de serie no viaja en la ráfaga de bienvenida** —son ficheros de decenas
+  de miles de caracteres para un formulario que nadie puede guardar—: se pide a mano
+  (`cuerpoDeSkill`), y lo que no se pudo leer se DICE en vez de abrir la ficha en blanco.
+- **Y se INSTALAN desde un `.zip`** (`core/zipDeSkill.ts`, `agent/grafo/skills.ts#instalarSkillDesdeZip`,
+  `POST /skill`). Un zip y no un `SKILL.md` suelto porque una skill es una CARPETA: subir solo
+  el `.md` deja dentro una que apunta a ficheros que no están. Los BYTES van por HTTP y no por
+  el cable, que lleva JSON — el mismo molde que `POST /adjunto`. La REGLA de qué se acepta es
+  PURA y vive en `core/`, que es lo que deja probarla sin un zip delante: **lista BLANCA de
+  forma para cada ruta del zip** (segmentos llanos separados por `/`, y nada más — el «zip
+  slip» no se para con un `includes("..")`: también hay `\`, absolutas, unidad `C:` y el byte
+  nulo), **tres topes contra un zip BOMBA** (lo DESCOMPRIMIDO, que el tope del cuerpo HTTP no
+  ve; cuántas entradas; y el tamaño de la mayor), y un `SKILL.md` obligatorio. **Se
+  descomprime entero y se decide ANTES de escribir nada**: media skill en disco es peor que un
+  no, y una entrada mala se lleva el zip ENTERO. El nombre se DEDUCE —la carpeta envolvente, o
+  el fichero que subió la persona— y pasa por la regla del slug; el motivo de un rechazo nunca
+  repite el nombre de una entrada del zip, que lo eligió quien lo empaquetó.
+- **Límite declarado: las skills no llegan a un motor EXTERNO.** `/skills/` es una ruta
+  virtual de nuestro backend, y un hijo de Claude Code, Codex u OpenCode lee el disco de
+  verdad, confinado a la carpeta del proyecto (`veredictoDeLectura`). Su `.md` puede
+  declararlas —y entonces `promptDeAgente` se las NOMBRA, que es lo que hay— pero no tiene por
+  dónde abrirlas. Vale igual para las de serie que para las del usuario: no es una regresión
+  de estas, es la misma frontera de siempre hecha más visible.
+- **Las skills de un subagente se MARCAN de una lista, no se teclean**
+  (`componentes/Agentes.tsx#SkillsDelAgente`). Un nombre mal escrito no daba error:
+  `repartirSkills` lo mete en `faltan` y el subagente trabaja sin lo que creías haberle dado, con
+  la ventana leyéndose igual de bien. Dos cosas que no son de forma: **una skill declarada que ya
+  no está en el catálogo se sigue pintando, marcada y señalada** —si no, abrir un subagente y
+  guardarlo sin tocar nada se la quitaba en silencio—, y **sin catálogo NO se pinta una lista
+  vacía**, que se leería como «no hay ninguna»: se cae al campo de texto, que dice la verdad de
+  lo que hay en el `.md`.
 - **`/adjuntos/` es de solo lectura y su fila en `permisosDe` es INCONDICIONAL**: sin ella, un
   `write_file` con la carpeta sin montar escribe un fichero DEL PROYECTO con el nombre de algo
   que la interfaz presenta como «lo que te adjuntaron».
@@ -1145,7 +1196,7 @@ recordar antes de tocar el código:
   streaming: `vendor/tokenTracking.ts` acota la caché a la entrada.
 - **`SkillsPort.cargar()` no tiene un solo llamador y las skills SÍ llegan al modelo**: las carga
   `SkillsMiddleware` de deepagents desde `/skills/` montada en el backend. El puerto solo aporta
-  `catalogo()`.
+  `catalogo()` — que sí importa, porque es de donde sale el aviso de las skills que FALTAN.
 - **ink@5.2.1 no remide un `<Text>` cuando se INSERTA texto delante de un hijo existente**
   (`insertBeforeNode` no marca sucio el padre; append y remove sí). Regla práctica: hijos que
   aparecen y desaparecen van como `Text` HERMANOS dentro de un `Box`, **nunca anidados en un

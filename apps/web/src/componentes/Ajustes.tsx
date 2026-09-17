@@ -10,11 +10,13 @@ import {
   IconFollowsystemOutline16,
   IconDataOutline16,
   IconUserOutline16,
+  IconSkillOutline16,
   IconLinkOutline16,
 } from "@deepseek-ai/dsh-client-ui-primitives";
 import type { EstadoDelCliente } from "../store.js";
 import type {
   AgenteDelCable,
+  SkillDelCable,
   AjustesDeDispositivos,
   Dispositivo,
   Herramienta,
@@ -28,6 +30,7 @@ import { etiquetaDeEstado, inventario, seLlegaAlDispositivo, type FilaDeInventar
 import { ArrancarEmulador } from "./ArrancarEmulador.js";
 import { useMedirAlVolver } from "../medirAlVolver.js";
 import { Agentes } from "./Agentes.js";
+import { Skills } from "./Skills.js";
 import { Receta } from "./Receta.js";
 import { VerificarDispositivo } from "./VerificarDispositivo.js";
 import { Pregunta } from "./Pregunta.js";
@@ -68,7 +71,14 @@ import estilos from "./Ajustes.module.css";
  * pregunta: dentro de la fila que se está editando, para que no aparezca detrás de la
  * ventana.
  */
-export type SeccionDeAjustes = "apariencia" | "modelos" | "entornos" | "agentes" | "dispositivos" | "general";
+export type SeccionDeAjustes =
+  | "apariencia"
+  | "modelos"
+  | "entornos"
+  | "agentes"
+  | "skills"
+  | "dispositivos"
+  | "general";
 
 /**
  * Las secciones, en el orden en que se leen de arriba abajo, cada una con su icono: **General
@@ -102,6 +112,14 @@ const SECCIONES: readonly {
   { id: "apariencia", etiqueta: "Apariencia", Icono: IconDarkOutline16 },
   { id: "entornos", etiqueta: "Entornos", Icono: IconDataOutline16 },
   { id: "agentes", etiqueta: "Subagentes", Icono: IconUserOutline16 },
+  // Skills va JUNTO a Subagentes y debajo, porque contesta la otra mitad de la misma
+  // pregunta: el subagente es QUIÉN hace el trabajo y la skill es QUÉ sabe hacer — y es el
+  // editor de un subagente el que las marca una a una. Separarlas las habría dejado como dos
+  // materias, cuando lo que hay es una que se lee de arriba abajo. `IconSkillOutline16` SÍ
+  // lo exporta el paquete instalado —comprobado sobre `lib/index.js`, que es la lección de
+  // `IconAgentPresetOutline16`, el que no existía y hacía reventar a React con «Element type
+  // is invalid»—, así que el icono es el que SIGNIFICA lo que hay detrás y no uno parecido.
+  { id: "skills", etiqueta: "Skills", Icono: IconSkillOutline16 },
   // `IconLinkOutline16` y no un icono de móvil: en el paquete instalado no hay ninguno
   // —comprobado sobre sus exports, que es la lección de `IconAgentPresetOutline16`, el que
   // no existía y hacía reventar a React—. Y el enlace dice lo que esta sección es: con qué
@@ -238,6 +256,12 @@ export function Ajustes({
   alGuardarAgente,
   alBorrarAgente,
   alRestaurarAgente,
+  skills,
+  cuerposDeSkill,
+  alPedirCuerpoDeSkill,
+  alGuardarSkill,
+  alBorrarSkill,
+  alInstalarSkill,
   alPedirClave,
   alBorrarClave,
   alRegistrarEntorno,
@@ -298,6 +322,19 @@ export function Ajustes({
   alBorrarAgente: (nombre: string, ambito: "global" | "proyecto") => void;
   /** Devuelve un subagente de serie a como lo entrega xonecode. Sin ámbito: solo el global. */
   alRestaurarAgente: (nombre: string) => void;
+  /** Las skills y las carpetas ilegibles. Ausente = todavía no llegó el mensaje. */
+  skills?: { lista: readonly SkillDelCable[]; problemas: readonly string[] };
+  /** Los cuerpos ya pedidos. Una clave con `undefined` es «se pidió y no se pudo leer». */
+  cuerposDeSkill?: Readonly<Record<string, string | undefined>>;
+  alPedirCuerpoDeSkill: (nombre: string) => void;
+  alGuardarSkill: (skill: SkillDelCable, ambito: "global" | "proyecto", renombrandoDe?: string) => void;
+  alBorrarSkill: (skill: SkillDelCable, ambito: "global" | "proyecto") => void;
+  /** Instala una skill desde un `.zip`. Ausente = esta consola no sabe, y el botón no sale. */
+  alInstalarSkill?: (
+    nombre: string,
+    ambito: "global" | "proyecto",
+    zip: File
+  ) => Promise<{ ok: boolean; motivo?: string }>;
   /** La pregunta oculta en vuelo, si la hay: se pinta DENTRO de la fila que se edita. */
   secreto?: string;
   alCambiarApariencia: (apariencia: Apariencia) => void;
@@ -1536,9 +1573,28 @@ export function Ajustes({
                 {...(modelosDeMotor === undefined ? {} : { modelosDeMotor })}
                 {...(alPedirModelosDeMotor === undefined ? {} : { alPedirModelosDeMotor })}
                 {...(alPedirCatalogo === undefined ? {} : { alPedirCatalogo })}
+                // Y las skills que HAY, para marcarlas con casillas en vez de teclear sus
+                // nombres de memoria. Ausente mientras no llegue el mensaje: el editor se cae
+                // al campo de texto, que no miente sobre lo que el `.md` declara.
+                {...(skills === undefined ? {} : { catalogoDeSkills: skills.lista })}
                 alGuardar={alGuardarAgente}
                 alBorrar={alBorrarAgente}
                 alRestaurar={alRestaurarAgente}
+              />
+            </>
+          ) : null}
+
+          {seccion === "skills" ? (
+            <>
+              <h2 className={estilos.encabezado}>Skills</h2>
+              <Skills
+                {...(skills === undefined ? {} : { skills: skills.lista, problemas: skills.problemas })}
+                {...(cuerposDeSkill === undefined ? {} : { cuerpos: cuerposDeSkill })}
+                hayProyecto={hayProyecto}
+                alPedirCuerpo={alPedirCuerpoDeSkill}
+                alGuardar={alGuardarSkill}
+                alBorrar={alBorrarSkill}
+                {...(alInstalarSkill === undefined ? {} : { alInstalar: alInstalarSkill })}
               />
             </>
           ) : null}

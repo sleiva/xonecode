@@ -21,6 +21,7 @@ import { MS_DE_PREPARACION,
   FALTA_EL_BUILD,
   RUTA_ACCION,
   RUTA_ADJUNTO,
+  RUTA_SKILL,
   RUTA_ARTEFACTO,
   RUTA_EVENTOS,
   fuentesDelJuez,
@@ -38,6 +39,8 @@ import { CLAVE_DE_SELLO, cambiosDeSesion, fotoDeApertura } from "../../agent/ses
 import type { PeticionDeTarea } from "../../core/ports.js";
 import { crearVestibulo, type Vestibulo } from "./vestibulo.js";
 import { rutaGlobalDeAgentes } from "../../agent/subagentes/agentesEnDisco.js";
+import { strToU8, zipSync } from "fflate";
+import { rutaGlobalDeSkills } from "../../agent/grafo/skills.js";
 import { crearConsolaWeb, type ConsolaWeb, type OpcionesDeConsolaWeb } from "./consolaWeb.js";
 import { PAPELES } from "../../core/modelos.js";
 import { crearSesion, listarSesiones } from "./sesiones.js";
@@ -170,6 +173,8 @@ describe("montarRutas — el cable, por fin conectado", () => {
       `POST ${RUTA_ACCION}`,
       // Y la cuarta son los BYTES de un adjunto de tarea, por lo mismo: el cable lleva JSON.
       `POST ${RUTA_ADJUNTO}`,
+      // Y la quinta, los de un `.zip` con una skill dentro: la misma razón y el mismo molde.
+      `POST ${RUTA_SKILL}`,
     ]);
   });
 
@@ -191,6 +196,10 @@ describe("montarRutas — el cable, por fin conectado", () => {
       // puede abrir en cuanto conecta, y sin esto enseñaría una lista vacía hasta que algo
       // los cambiara — indistinguible de «no tienes ninguno».
       "agentes",
+      // Y las skills, por lo mismo y con una razón más: el editor de un subagente pinta sus
+      // skills como casillas, así que sin esto ese formulario se abriría sin ninguna que
+      // marcar — indistinguible de «no hay ninguna».
+      "skills",
       // Y si hay turno corriendo, se dice: quien conecta a mitad no vio el mensaje que lo
       // anunció, y su compositor se quedaría encendido mientras lo que escriba se encola.
       "turno",
@@ -7319,5 +7328,390 @@ describe("las fases y los estados del cable, atados a los de la máquina", () =>
       colgada: true,
     };
     expect([...ESTADOS_DEL_LANZAMIENTO]).toEqual(["corriendo", ...Object.keys(desenlacesDeLaMaquina)]);
+  });
+});
+
+/**
+ * El cable de las skills.
+ *
+ * Lo que se mide aquí es lo que NO se puede medir en `agent/grafo/skills.ts`: que el
+ * servidor es quien corta lo que no se puede hacer sobre una de serie, y que la lista viaja
+ * con lo que la ventana necesita y sin lo que no —el cuerpo de una de serie, que son decenas
+ * de miles de caracteres por la ráfaga de bienvenida—.
+ */
+describe("montarRutas — las skills por el cable", () => {
+  let casa: string;
+  let previo: string | undefined;
+
+  beforeEach(() => {
+    casa = mkdtempSync(join(tmpdir(), "xonecode-cable-skills-"));
+    previo = process.env["HOME"];
+    process.env["HOME"] = casa;
+  });
+  afterEach(() => {
+    if (previo === undefined) delete process.env["HOME"];
+    else process.env["HOME"] = previo;
+    rmSync(casa, { recursive: true, force: true });
+  });
+
+  /** `undefined` si esta plataforma no respeta `HOME`: ahí el test no puede afirmar nada. */
+  const carpeta = (): string | undefined =>
+    rutaGlobalDeSkills().startsWith(casa) ? rutaGlobalDeSkills() : undefined;
+
+  const conectar = async (): Promise<{
+    accion: ManejadorRuta;
+    cliente: ReturnType<typeof clienteDeMentira>;
+    dichos: string[];
+  }> => {
+    const dichos: string[] = [];
+    const servidor = servidorDeMentira();
+    montarRutas(servidor, vestibuloDePrueba(), { informar: (t) => dichos.push(t) });
+    const cliente = clienteDeMentira();
+    await servidor.rutas.get(`GET ${RUTA_EVENTOS}`)!(cliente.peticion, cliente.respuesta);
+    await asentar();
+    return { accion: servidor.rutas.get(`POST ${RUTA_ACCION}`)!, cliente, dichos };
+  };
+
+  const ultimoDeSkills = (cliente: ReturnType<typeof clienteDeMentira>) =>
+    [...cliente.recibidos].reverse().find((m) => m.clase === "skills") as
+      | Extract<MensajeAlCliente, { clase: "skills" }>
+      | undefined;
+
+  it("las de serie viajan SIN cuerpo, y las tuyas CON él", async () => {
+    // El cuerpo de las nueve de serie en la ráfaga de bienvenida son cientos de kilobytes
+    // para rellenar un formulario que nadie puede guardar. El suyo se pide a mano.
+    const dir = carpeta();
+    if (dir === undefined) return;
+    mkdirSync(join(dir, "mia"), { recursive: true });
+    writeFileSync(join(dir, "mia", "SKILL.md"), "---\nname: mia\ndescription: la mía\n---\n\nCUERPO\n");
+
+    const { cliente } = await conectar();
+    const mensaje = ultimoDeSkills(cliente)!;
+    expect(mensaje.skills.find((s) => s.nombre === "archify")?.cuerpo).toBeUndefined();
+    // Con su salto final: el cuerpo viaja TAL CUAL está en el fichero. Recortarlo aquí
+    // dejaría que guardar desde la ventana le quitara al `.md` un byte que nadie tocó.
+    expect(mensaje.skills.find((s) => s.nombre === "mia")?.cuerpo).toBe("CUERPO\n");
+    // Y el origen viaja: es lo que separa las dos pestañas y lo que decide si hay papelera.
+    expect(mensaje.skills.find((s) => s.nombre === "archify")?.origen).toBe("serie");
+    expect(mensaje.skills.find((s) => s.nombre === "mia")?.origen).toBe("global");
+  });
+
+  it("`cuerpoDeSkill` da el de una de serie, que es lo que deja verla y copiarla", async () => {
+    const { accion, cliente } = await conectar();
+    await enviarMensaje(accion, { clase: "cuerpoDeSkill", nombre: "archify" });
+    await asentar();
+
+    const respuesta = [...cliente.recibidos].reverse().find((m) => m.clase === "cuerpoDeSkill") as
+      | Extract<MensajeAlCliente, { clase: "cuerpoDeSkill" }>
+      | undefined;
+    expect(respuesta?.nombre).toBe("archify");
+    expect(respuesta?.cuerpo ?? "").toContain("Archify");
+  });
+
+  it("y una que no está contesta con motivo, no con un cuerpo vacío", async () => {
+    // Un cuerpo vacío se leería como que la skill no dice nada, y copiarla daría una copia
+    // vacía. Esto es lo que deja decir «no se pudo leer» en la ficha.
+    const { accion, cliente } = await conectar();
+    await enviarMensaje(accion, { clase: "cuerpoDeSkill", nombre: "no-existe" });
+    await asentar();
+
+    const respuesta = [...cliente.recibidos].reverse().find((m) => m.clase === "cuerpoDeSkill") as
+      | Extract<MensajeAlCliente, { clase: "cuerpoDeSkill" }>
+      | undefined;
+    expect(respuesta?.cuerpo).toBeUndefined();
+    expect(respuesta?.error).toBeDefined();
+  });
+
+  it("guardar escribe la carpeta y reemite la lista", async () => {
+    const dir = carpeta();
+    if (dir === undefined) return;
+    const { accion, cliente, dichos } = await conectar();
+
+    await enviarMensaje(accion, {
+      clase: "skill",
+      accion: "guardar",
+      ambito: "global",
+      skill: { nombre: "mia", descripcion: "la mía", origen: "global", tokens: 0, ficheros: [], cuerpo: "HAZ ESTO" },
+    });
+    await asentar();
+
+    expect(readFileSync(join(dir, "mia", "SKILL.md"), "utf8")).toContain("HAZ ESTO");
+    expect(dichos.join("\n")).toMatch(/guardada/);
+    expect(ultimoDeSkills(cliente)!.skills.map((s) => s.nombre)).toContain("mia");
+  });
+
+  it("un nombre que NO es un slug se rechaza, y se ofrece el que sí valdría", async () => {
+    // Se comprueba al GUARDAR y no al cargar: rechazar al cargar haría desaparecer una skill
+    // que funciona, y guardar es el único momento con alguien delante para arreglarlo.
+    const dir = carpeta();
+    if (dir === undefined) return;
+    const { accion, dichos } = await conectar();
+
+    await enviarMensaje(accion, {
+      clase: "skill",
+      accion: "guardar",
+      ambito: "global",
+      skill: { nombre: "Mi Skill", descripcion: "d", origen: "global", tokens: 0, ficheros: [], cuerpo: "x" },
+    });
+    await asentar();
+
+    expect(existsSync(join(dir, "Mi Skill"))).toBe(false);
+    expect(dichos.join("\n")).toMatch(/mi-skill/);
+  });
+
+  it("sin descripción tampoco: el modelo no sabría cuándo cargarla", async () => {
+    const dir = carpeta();
+    if (dir === undefined) return;
+    const { accion, dichos } = await conectar();
+
+    await enviarMensaje(accion, {
+      clase: "skill",
+      accion: "guardar",
+      ambito: "global",
+      skill: { nombre: "mia", descripcion: "   ", origen: "global", tokens: 0, ficheros: [], cuerpo: "x" },
+    });
+    await asentar();
+
+    expect(existsSync(join(dir, "mia"))).toBe(false);
+    expect(dichos.join("\n")).toMatch(/descripción/);
+  });
+
+  it("el nombre de una de SERIE se rechaza, y el rechazo dice el camino", async () => {
+    // La guarda vive en el SERVIDOR y no solo en el cliente, que se limita a no ofrecer el
+    // botón: este mensaje lo puede mandar cualquiera que hable por el cable. Y el rechazo
+    // DICE la alternativa, porque el usuario quería algo y sigue queriéndolo.
+    const dir = carpeta();
+    if (dir === undefined) return;
+    const { accion, dichos } = await conectar();
+
+    await enviarMensaje(accion, {
+      clase: "skill",
+      accion: "guardar",
+      ambito: "global",
+      skill: { nombre: "archify", descripcion: "la mía", origen: "global", tokens: 0, ficheros: [], cuerpo: "x" },
+    });
+    await asentar();
+
+    expect(existsSync(join(dir, "archify"))).toBe(false);
+    expect(dichos.join("\n")).toMatch(/cópiala/);
+  });
+
+  it("y BORRAR una de serie también, con su motivo", async () => {
+    const { accion, dichos } = await conectar();
+    await enviarMensaje(accion, {
+      clase: "skill",
+      accion: "borrar",
+      ambito: "global",
+      skill: { nombre: "archify", descripcion: "", origen: "serie", tokens: 0, ficheros: [] },
+    });
+    await asentar();
+    expect(dichos.join("\n")).toMatch(/no se borra/);
+  });
+
+  it("una tuya sí se borra: la guarda es para las de serie, no para todas", async () => {
+    const dir = carpeta();
+    if (dir === undefined) return;
+    const { accion, dichos } = await conectar();
+    mkdirSync(join(dir, "mia"), { recursive: true });
+    writeFileSync(join(dir, "mia", "SKILL.md"), "---\nname: mia\ndescription: d\n---\n\nx\n");
+
+    await enviarMensaje(accion, {
+      clase: "skill",
+      accion: "borrar",
+      ambito: "global",
+      skill: { nombre: "mia", descripcion: "", origen: "global", tokens: 0, ficheros: [] },
+    });
+    await asentar();
+
+    expect(existsSync(join(dir, "mia"))).toBe(false);
+    expect(dichos.join("\n")).toMatch(/borrada/);
+  });
+
+  it("guardar en el PROYECTO sin proyecto abierto se dice, no se escribe en cualquier sitio", async () => {
+    const { accion, dichos } = await conectar();
+    await enviarMensaje(accion, {
+      clase: "skill",
+      accion: "guardar",
+      ambito: "proyecto",
+      skill: { nombre: "mia", descripcion: "d", origen: "proyecto", tokens: 0, ficheros: [], cuerpo: "x" },
+    });
+    await asentar();
+    expect(dichos.join("\n")).toMatch(/no hay ningún proyecto abierto/);
+  });
+});
+
+/**
+ * El caso que la guarda por NOMBRE se llevaba por delante: una skill del usuario que se
+ * llama como una de serie.
+ *
+ * Taparla es la forma de afinar una nuestra sin editarla donde el `npm install` la pisaría,
+ * así que tiene que poder deshacerse. Con la guarda mirando el catálogo del PAQUETE en vez
+ * de la carpeta del usuario, esa carpeta no se podía borrar nunca — y el mensaje decía que
+ * era nuestra, que encima es falso.
+ */
+describe("montarRutas — una skill del usuario que TAPA a una de serie", () => {
+  let casa: string;
+  let previo: string | undefined;
+
+  beforeEach(() => {
+    casa = mkdtempSync(join(tmpdir(), "xonecode-cable-skills-tapa-"));
+    previo = process.env["HOME"];
+    process.env["HOME"] = casa;
+  });
+  afterEach(() => {
+    if (previo === undefined) delete process.env["HOME"];
+    else process.env["HOME"] = previo;
+    rmSync(casa, { recursive: true, force: true });
+  });
+
+  it("sí se borra, y lo que se niega es borrar la NUESTRA", async () => {
+    if (!rutaGlobalDeSkills().startsWith(casa)) return;
+    const dir = rutaGlobalDeSkills();
+    mkdirSync(join(dir, "archify"), { recursive: true });
+    writeFileSync(join(dir, "archify", "SKILL.md"), "---\nname: archify\ndescription: la mía\n---\n\nx\n");
+
+    const dichos: string[] = [];
+    const servidor = servidorDeMentira();
+    montarRutas(servidor, vestibuloDePrueba(), { informar: (t) => dichos.push(t) });
+    const cliente = clienteDeMentira();
+    await servidor.rutas.get(`GET ${RUTA_EVENTOS}`)!(cliente.peticion, cliente.respuesta);
+    await asentar();
+    const accion = servidor.rutas.get(`POST ${RUTA_ACCION}`)!;
+
+    await enviarMensaje(accion, {
+      clase: "skill",
+      accion: "borrar",
+      ambito: "global",
+      skill: { nombre: "archify", descripcion: "", origen: "global", tokens: 0, ficheros: [] },
+    });
+    await asentar();
+
+    // La carpeta del usuario se fue…
+    expect(existsSync(join(dir, "archify"))).toBe(false);
+    expect(dichos.join("\n")).toMatch(/borrada/);
+    // …y la de serie sigue en el catálogo, que es lo que hace que borrar la copia sea seguro.
+    const ultimo = [...cliente.recibidos].reverse().find((m) => m.clase === "skills") as
+      | Extract<MensajeAlCliente, { clase: "skills" }>
+      | undefined;
+    expect(ultimo!.skills.find((s) => s.nombre === "archify")?.origen).toBe("serie");
+  });
+});
+
+/**
+ * `POST /skill` — instalar una skill desde un `.zip`.
+ *
+ * Lo que se mide aquí es lo que no se puede medir en `core/zipDeSkill.ts` ni en
+ * `agent/grafo/skills.ts`: que la ruta existe, que contesta con el motivo del módulo en vez
+ * de con un número pelado, y que un rechazo NO deja nada escrito.
+ */
+describe("montarRutas — instalar una skill desde un .zip", () => {
+  let casa: string;
+  let previo: string | undefined;
+
+  beforeEach(() => {
+    casa = mkdtempSync(join(tmpdir(), "xonecode-zip-skill-"));
+    previo = process.env["HOME"];
+    process.env["HOME"] = casa;
+  });
+  afterEach(() => {
+    if (previo === undefined) delete process.env["HOME"];
+    else process.env["HOME"] = previo;
+    rmSync(casa, { recursive: true, force: true });
+  });
+
+  const SKILL_MD = "---\nname: mia\ndescription: la mía\n---\n\nCUERPO\n";
+
+  const subir = async (
+    zip: Uint8Array,
+    nombre: string
+  ): Promise<{ codigo: number; cuerpo: string; dichos: string[] }> => {
+    const dichos: string[] = [];
+    const servidor = servidorDeMentira();
+    montarRutas(servidor, vestibuloDePrueba(), { informar: (t) => dichos.push(t) });
+    const manejador = servidor.rutas.get(`POST ${RUTA_SKILL}`)!;
+    const cliente = clienteDeMentira();
+    // El cuerpo son BYTES: el lector crudo del servidor consume el flujo de la petición.
+    const peticion = Readable.from([Buffer.from(zip)]) as unknown as IncomingMessage;
+    (peticion as unknown as { url: string }).url = `${RUTA_SKILL}?nombre=${encodeURIComponent(nombre)}&ambito=global`;
+    let codigo = 0;
+    let cuerpo = "";
+    const respuesta = {
+      writeHead: (c: number) => {
+        codigo = c;
+      },
+      end: (t?: string) => {
+        cuerpo = t ?? "";
+      },
+    } as unknown as typeof cliente.respuesta;
+    await manejador(peticion, respuesta);
+    return { codigo, cuerpo, dichos };
+  };
+
+  it("instala, lo dice y deja la skill en disco", async () => {
+    if (!rutaGlobalDeSkills().startsWith(casa)) return;
+    const zip = zipSync({ "mi-skill/SKILL.md": strToU8(SKILL_MD) });
+    const { codigo, dichos } = await subir(zip, "descarga(2).zip");
+
+    expect(codigo).toBe(204);
+    expect(existsSync(join(rutaGlobalDeSkills(), "mi-skill", "SKILL.md"))).toBe(true);
+    expect(dichos.join("\n")).toMatch(/instalada/);
+  });
+
+  it("un zip slip se rechaza con el MOTIVO, y no escribe NADA", async () => {
+    if (!rutaGlobalDeSkills().startsWith(casa)) return;
+    const zip = zipSync({
+      "mi-skill/SKILL.md": strToU8(SKILL_MD),
+      "../fuera.md": strToU8("pwn"),
+    });
+    const { codigo, cuerpo } = await subir(zip, "x.zip");
+
+    // 422 y no 400: el zip llegó entero y se entendió — lo que no vale es lo que trae.
+    expect(codigo).toBe(422);
+    expect(cuerpo).toMatch(/se sale/);
+    // Y el motivo NO lleva el nombre de la entrada, que lo eligió quien empaquetó el zip.
+    expect(cuerpo).not.toContain("fuera.md");
+    expect(existsSync(join(rutaGlobalDeSkills(), "mi-skill"))).toBe(false);
+    expect(existsSync(join(casa, "fuera.md"))).toBe(false);
+  });
+
+  it("algo que no es un zip se dice con palabras, no con un número pelado", async () => {
+    const { codigo, cuerpo } = await subir(strToU8("esto no es un zip"), "x.zip");
+    expect(codigo).toBe(422);
+    expect(cuerpo).toMatch(/zip/);
+  });
+
+  it("sin `nombre` no se instala: de él sale el de respaldo", async () => {
+    const dichos: string[] = [];
+    const servidor = servidorDeMentira();
+    montarRutas(servidor, vestibuloDePrueba(), { informar: (t) => dichos.push(t) });
+    const peticion = Readable.from([Buffer.from(strToU8("x"))]) as unknown as IncomingMessage;
+    (peticion as unknown as { url: string }).url = `${RUTA_SKILL}?ambito=global`;
+    let codigo = 0;
+    await servidor.rutas.get(`POST ${RUTA_SKILL}`)!(peticion, {
+      writeHead: (c: number) => {
+        codigo = c;
+      },
+      end: () => {},
+    } as never);
+    expect(codigo).toBe(400);
+  });
+
+  it("el ámbito «proyecto» sin proyecto abierto se dice, no se escribe en cualquier sitio", async () => {
+    const servidor = servidorDeMentira();
+    montarRutas(servidor, vestibuloDePrueba());
+    const peticion = Readable.from([Buffer.from(strToU8("x"))]) as unknown as IncomingMessage;
+    (peticion as unknown as { url: string }).url = `${RUTA_SKILL}?nombre=x.zip&ambito=proyecto`;
+    let codigo = 0;
+    let cuerpo = "";
+    await servidor.rutas.get(`POST ${RUTA_SKILL}`)!(peticion, {
+      writeHead: (c: number) => {
+        codigo = c;
+      },
+      end: (t?: string) => {
+        cuerpo = t ?? "";
+      },
+    } as never);
+    expect(codigo).toBe(409);
+    expect(cuerpo).toMatch(/proyecto/);
   });
 });

@@ -135,7 +135,9 @@ async function correrReal(opciones: OpcionesRun, escribir: Escribir): Promise<nu
 
   // 3. Lo que la sesión necesita. Los ficheros del proyecto NO se calculan aquí: los
   //    recorre la propia sesión al construir el agente.
-  const skills = new SkillsEnDisco();
+  // La raíz va PUESTA: sin ella, las skills de `<raiz>/.xonecode/skills/` no entrarían en el
+  // catálogo y `repartirSkills` avisaría al modelo de que le faltan las que sí tiene.
+  const skills = new SkillsEnDisco(raiz);
   const modelos = new Modelos(fuentes, proveedoresPersonalizados);
 
   // 4. La cabecera va ANTES del turno: qué modelo, cuántas skills, cómo se tomó la foto.

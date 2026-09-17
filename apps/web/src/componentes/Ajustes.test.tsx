@@ -21,6 +21,9 @@ const MANEJADORES = {
   alGuardarAgente: () => {},
   alBorrarAgente: () => {},
   alRestaurarAgente: () => {},
+  alPedirCuerpoDeSkill: () => {},
+  alGuardarSkill: () => {},
+  alBorrarSkill: () => {},
 };
 
 const PROVEEDORES = [
@@ -204,6 +207,9 @@ describe("Ajustes", () => {
       "Apariencia",
       "Entornos",
       "Subagentes",
+      // Skills va JUNTO a Subagentes y debajo: es la otra mitad de la misma pregunta —quién
+      // hace el trabajo, y qué sabe hacer— y es el editor de un subagente el que las marca.
+      "Skills",
       "Dispositivos",
     ]);
     fireEvent.click(screen.getByRole("button", { name: "Apariencia" }));

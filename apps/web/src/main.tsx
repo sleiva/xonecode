@@ -47,6 +47,12 @@ const conexion = crearConexion(store);
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
-    <App store={store} enviar={conexion.enviar} subirAdjunto={conexion.subirAdjunto} mirar={conexion.mirar} />
+    <App
+      store={store}
+      enviar={conexion.enviar}
+      subirAdjunto={conexion.subirAdjunto}
+      instalarSkill={conexion.instalarSkill}
+      mirar={conexion.mirar}
+    />
   </StrictMode>,
 );

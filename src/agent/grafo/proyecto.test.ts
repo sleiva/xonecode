@@ -1,9 +1,9 @@
 import { describe, it, expect } from "vitest";
 import { esVistaAplanada, porQueNo, sinArtefactosEnElProyecto, sinVistasAplanadas, backendConArtefactos, backendConSkills, backendDeAgente, backendDelProyecto, exponerMemoriaDeProyecto } from "./proyecto.js";
-import { mkdtempSync, existsSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, existsSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { createFilesystemMiddleware } from "deepagents";
+import { createFilesystemMiddleware, createSkillsMiddleware } from "deepagents";
 import { permisosDe } from "./perfiles.js";
 import type { Artefacto } from "../../core/artefactos.js";
 import { RUTA_MEMORIA_VIRTUAL } from "./memoriaDeProyecto.js";
@@ -168,14 +168,85 @@ describe("backendDelProyecto", () => {
 });
 
 describe("backendConSkills", () => {
+  interface Compuesto {
+    routePrefixes: string[];
+    read(path: string): Promise<unknown>;
+  }
+
   it("monta el catálogo del harness en /skills para carga progresiva", async () => {
-    const backend = backendConSkills(backendDelProyecto(process.cwd())) as unknown as {
-      routePrefixes: string[];
-      read(path: string): Promise<unknown>;
-    };
+    const backend = backendConSkills(backendDelProyecto(process.cwd())) as unknown as Compuesto;
     expect(backend.routePrefixes).toContain("/skills/");
     const skill = await backend.read("/skills/archify/SKILL.md");
     expect(JSON.stringify(skill)).toContain("Archify");
+  });
+
+  /**
+   * La medida que sostiene todo el montaje de las skills del usuario: que una ruta MÁS LARGA
+   * gana sobre `/skills/`. `CompositeBackend` ordena por longitud descendente y se queda con
+   * la primera que encaja, así que `/skills/mia/` atiende lo suyo y `/skills/` sigue
+   * atendiendo el resto. Se prueba contra la librería REAL —no contra un doble— porque lo
+   * que hay que enterarse es del día que la librería cambie de criterio: con un doble, ese
+   * día el test seguiría verde y las skills del usuario dejarían de llegar en silencio.
+   */
+  it("una skill del usuario gana sobre la raíz de serie, y las de serie siguen llegando", async () => {
+    const casa = mkdtempSync(join(tmpdir(), "skills-"));
+    const dir = join(casa, "mia");
+    mkdirSync(dir, { recursive: true });
+    writeFileSync(join(dir, "SKILL.md"), "---\nname: mia\ndescription: la mía\n---\n\nCUERPO PROPIO\n");
+
+    const backend = backendConSkills(backendDelProyecto(process.cwd()), [
+      { nombre: "mia", dir },
+    ]) as unknown as Compuesto;
+
+    expect(backend.routePrefixes).toContain("/skills/mia/");
+    expect(JSON.stringify(await backend.read("/skills/mia/SKILL.md"))).toContain("CUERPO PROPIO");
+    // Y la de serie no se ha ido: las dos cuelgan de la MISMA ruta virtual.
+    expect(JSON.stringify(await backend.read("/skills/archify/SKILL.md"))).toContain("Archify");
+  });
+
+  /**
+   * **Y por el camino que el agente usa de verdad: `listSkills`, que va por `ls`.**
+   *
+   * `read` y `ls` son dos bucles distintos dentro de `CompositeBackend` —`ls` recorre las
+   * rutas con `isPathWithinRoute` y luego reescribe el prefijo—, así que comprobar solo
+   * `read` dejaba el montaje verificado para un método que nadie llama:
+   * `SkillsMiddleware` LISTA `/skills/<nombre>/` y solo lee el `SKILL.md` si aparece en ese
+   * listado. Se llama a la función EXPORTADA por la librería, no a una imitación.
+   */
+  it("`SkillsMiddleware` la DESCUBRE por su ruta virtual, que es el camino de verdad", async () => {
+    const casa = mkdtempSync(join(tmpdir(), "skills-"));
+    const dir = join(casa, "mia");
+    mkdirSync(dir, { recursive: true });
+    writeFileSync(join(dir, "SKILL.md"), "---\nname: mia\ndescription: la mía\n---\n\nCUERPO PROPIO\n");
+
+    const backend = backendConSkills(backendDelProyecto(process.cwd()), [{ nombre: "mia", dir }]);
+    // El middleware REAL de deepagents, con las mismas `sources` que le pasa `xoneAgent.ts`
+    // (`rutasDeSkills`). Se le arranca su `beforeAgent`, que es donde lista y lee: eso ata el
+    // montaje al camino que el agente usa, y no al `read` que aquí nadie llama a pelo.
+    const middleware = createSkillsMiddleware({ backend: backend as never, sources: ["/skills/mia/"] });
+    const estado = await (middleware as unknown as {
+      beforeAgent(s: unknown): Promise<{ skillsMetadata?: { name: string }[] } | undefined>;
+    }).beforeAgent({});
+    expect((estado?.skillsMetadata ?? []).map((s) => s.name)).toEqual(["mia"]);
+  });
+
+  /**
+   * Una skill del usuario que se llama como una de serie la TAPA, que es la precedencia que
+   * `fusionarSkills` ya decidió (`core/skills.ts`). Se comprueba en el backend además de en
+   * el catálogo porque son dos sitios distintos: un catálogo que dice «la tuya» y un backend
+   * que sirve la nuestra es la divergencia muda de siempre.
+   */
+  it("y si se llama igual que una de serie, la tapa", async () => {
+    const casa = mkdtempSync(join(tmpdir(), "skills-"));
+    const dir = join(casa, "archify");
+    mkdirSync(dir, { recursive: true });
+    writeFileSync(join(dir, "SKILL.md"), "---\nname: archify\ndescription: la mía\n---\n\nLA MIA MANDA\n");
+
+    const backend = backendConSkills(backendDelProyecto(process.cwd()), [
+      { nombre: "archify", dir },
+    ]) as unknown as Compuesto;
+
+    expect(JSON.stringify(await backend.read("/skills/archify/SKILL.md"))).toContain("LA MIA MANDA");
   });
 });
 

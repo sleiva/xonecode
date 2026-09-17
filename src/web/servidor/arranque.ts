@@ -38,6 +38,18 @@ import { homedir } from "node:os";
 import type { Acto } from "../../core/actos.js";
 import { escribirAgente, leerAgente, motivoDeNombreInaceptable, type Agente } from "../../core/agentes.js";
 import {
+  motivoDeNombreDeSkillInaceptable,
+  nombreDeSkillSugerido,
+} from "../../core/skills.js";
+import {
+  borrarSkill,
+  cargarSkills,
+  esDeSerie as esDeSerieLaSkill,
+  guardarSkill,
+  instalarSkillDesdeZip,
+} from "../../agent/grafo/skills.js";
+import { TOPE_DEL_ZIP } from "../../core/zipDeSkill.js";
+import {
   borrarAgente,
   cargarAgentes,
   esDeSerie,
@@ -231,6 +243,14 @@ export const RUTA_ACCION = "/accion";
  * el contrato de las skills que los escriben es «autocontenido».
  */
 export const RUTA_ARTEFACTO = "/artefacto";
+/**
+ * `POST /skill?nombre=<fichero.zip>&ambito=<global|proyecto>` — los BYTES de un `.zip`.
+ *
+ * Por HTTP y no por el cable, que lleva JSON: la misma razón y el mismo molde que
+ * `POST /adjunto`. Una ruta EXACTA, porque el servidor casa por ruta exacta.
+ */
+export const RUTA_SKILL = "/skill";
+
 /**
  * `POST /adjunto?tarea=<id>&nombre=<fichero>` — los BYTES de un adjunto.
  *
@@ -1036,6 +1056,153 @@ export function montarRutas(
     emitirAgentes();
   };
 
+  /**
+   * Las skills en vigor, compuestas pero sin mandar.
+   *
+   * `cargarSkills` cada vez y no una lista cacheada, por lo mismo que `mensajeDeAgentes`:
+   * las carpetas se pueden tocar a mano con la consola abierta, y una lista congelada al
+   * arrancar haría creer que el cambio no se aplicó.
+   *
+   * **El `cuerpo` viaja solo en las del USUARIO.** Las de serie son nueve ficheros que pasan
+   * de veinte mil caracteres cada uno; mandarlos en la ráfaga de bienvenida es pagar cientos
+   * de kilobytes por rellenar un formulario que nadie puede guardar. El suyo se pide a mano
+   * (`cuerpoDeSkill`), que es cuando alguien la está mirando de verdad.
+   */
+  const mensajeDeSkills = (): MensajeAlCliente => {
+    const abierto = vestibulo.proyectoAbierto();
+    const { skills, problemas } = cargarSkills(abierto?.raiz);
+    return {
+      clase: "skills",
+      skills: skills.map((s) => ({
+        nombre: s.nombre,
+        descripcion: s.descripcion,
+        origen: s.origen,
+        tokens: s.tokens,
+        ficheros: s.ficheros,
+        // El frontmatter va SIEMPRE: son cuatro líneas, y es lo que contesta qué declara el
+        // fichero. El CUERPO no, en las de serie: eso sí son decenas de miles de caracteres.
+        ...(s.frontmatter === undefined ? {} : { frontmatter: s.frontmatter }),
+        ...(s.origen === "serie" ? {} : { cuerpo: s.cuerpo }),
+      })),
+      problemas,
+    };
+  };
+
+  const emitirSkills = (): void => emitir(mensajeDeSkills());
+
+  /**
+   * El cuerpo de UNA skill, bajo demanda: al abrir la ficha de una de serie o al copiarla.
+   *
+   * Se contesta SOLO a quien lo pidió no se puede —el transporte habla con todos—, así que
+   * va a todos y el cliente se queda con la que tiene abierta. Es un fichero de texto que ya
+   * está en la lista, no un secreto.
+   *
+   * Lo que no se pudo leer se DICE con un `error`: una ficha que se abre en blanco se lee
+   * como que la skill está vacía, y entonces copiarla produciría una copia vacía.
+   */
+  const atenderCuerpoDeSkill = (mensaje: Extract<MensajeDelCliente, { clase: "cuerpoDeSkill" }>): void => {
+    const abierto = vestibulo.proyectoAbierto();
+    const skill = cargarSkills(abierto?.raiz).skills.find((s) => s.nombre === mensaje.nombre);
+    emitir(
+      skill === undefined
+        ? { clase: "cuerpoDeSkill", nombre: mensaje.nombre, error: "ya no está en el catálogo" }
+        : { clase: "cuerpoDeSkill", nombre: mensaje.nombre, cuerpo: skill.cuerpo }
+    );
+  };
+
+  /**
+   * Alta, cambio y borrado de una skill del usuario. El mismo molde que `atenderAgente`.
+   *
+   * **Las de serie no se tocan, y la barrera está AQUÍ.** Viven dentro del paquete
+   * instalado: una edición se la llevaría el siguiente `npm install` sin decir nada, y un
+   * borrado no se puede reponer porque nada nuestro se copia nunca a la casa del usuario
+   * —no hay marca de siembra que consultar, a diferencia de los subagentes—. Lo que la
+   * consola ofrece sobre una de serie es COPIARLA, que es un `guardar` con otro nombre.
+   *
+   * `guardarSkill` DEVUELVE el motivo en vez de lanzar, así que los tres desenlaces —el
+   * nombre ocupado, el nombre de una de serie y el fallo de escritura— se dicen distintos:
+   * son tres cosas que el usuario arregla de tres formas.
+   */
+  const atenderSkill = (mensaje: Extract<MensajeDelCliente, { clase: "skill" }>): void => {
+    const abierto = vestibulo.proyectoAbierto();
+    const nombre = mensaje.skill.nombre;
+
+    if (mensaje.ambito === "proyecto" && abierto === undefined) {
+      informar("no hay ningún proyecto abierto: esa skill solo se puede guardar como global");
+      return;
+    }
+    const base = mensaje.ambito === "proyecto" ? abierto!.raiz : homedir();
+
+    /**
+     * Borrar se INTENTA y el motivo sale de lo que pasó, no de una guarda previa por NOMBRE.
+     *
+     * La guarda por nombre era demasiado ancha: una skill del usuario que se llame como una
+     * de serie —tapándola, que es la forma de afinarla sin editar donde el `npm install` la
+     * pisaría— no se podía borrar nunca, porque `esDeSerie` mira el catálogo del paquete y no
+     * la carpeta del usuario. Lo que hay en la carpeta del usuario es del usuario y se borra;
+     * lo que no está ahí y ADEMÁS lo traemos nosotros es lo que se niega, con el camino al
+     * lado. Un solo sitio decide, que es `borrarSkill` contestando si había algo.
+     */
+    if (mensaje.accion === "borrar") {
+      informar(
+        borrarSkill(base, nombre)
+          ? `skill «${nombre}» borrada`
+          : esDeSerieLaSkill(nombre)
+            ? `la skill «${nombre}» la trae xonecode y no se borra: cópiala si quieres partir de ella`
+            : `«${nombre}» no existía en ${mensaje.ambito}`
+      );
+      emitirSkills();
+      return;
+    }
+
+    /**
+     * El nombre tiene que ser un slug, y se comprueba al GUARDAR y no al cargar: rechazar al
+     * cargar haría desaparecer una skill que funciona, y guardar es el único momento con
+     * alguien delante para arreglarlo. `segmentoSeguro` —que `guardarSkill` sí aplica— solo
+     * impide salir de la carpeta: `Mi Skill` la pasa y no es un slug, y el nombre de una
+     * skill viaja además dentro del `.md` de un subagente.
+     */
+    const malNombre = motivoDeNombreDeSkillInaceptable(nombre);
+    if (malNombre !== undefined) {
+      const sugerido = nombreDeSkillSugerido(nombre);
+      informar(
+        `no se guarda «${nombre}»: el nombre ${malNombre}` +
+          (sugerido === undefined ? "" : ` (prueba «${sugerido}»)`)
+      );
+      return;
+    }
+    if (mensaje.skill.descripcion.trim() === "") {
+      // Es lo que el modelo lee para decidir si le sirve: sin ella la skill está en el
+      // catálogo y no la usa nadie nunca, que es peor que no estar.
+      informar(`no se guarda «${nombre}»: sin descripción, el orquestador no sabría cuándo usarla`);
+      return;
+    }
+
+    const renombrandoDe =
+      mensaje.renombrandoDe !== undefined && mensaje.renombrandoDe !== nombre
+        ? mensaje.renombrandoDe
+        : undefined;
+    const escrita = guardarSkill(
+      base,
+      {
+        nombre,
+        descripcion: mensaje.skill.descripcion,
+        cuerpo: mensaje.skill.cuerpo ?? "",
+        // El frontmatter de ANTES, para conservar lo que no editamos. Ausente en un alta.
+        ...(mensaje.skill.frontmatter === undefined ? {} : { frontmatter: mensaje.skill.frontmatter }),
+      },
+      mensaje.renombrandoDe
+    );
+    informar(
+      "error" in escrita
+        ? `no se guarda «${nombre}»: ${escrita.error}`
+        : renombrandoDe === undefined
+          ? `skill «${nombre}» guardada en ${mensaje.ambito}`
+          : `skill «${renombrandoDe}» renombrada a «${nombre}»`
+    );
+    emitirSkills();
+  };
+
   /** El mensaje de modelos, compuesto pero sin mandar: `adjuntar` se lo da SOLO al cliente
    *  que acaba de llegar, y el resto de sitios lo emite a todos. */
   const mensajeDeModelos = (): MensajeAlCliente => {
@@ -1113,6 +1280,10 @@ export function montarRutas(
     // se puede abrir en cuanto conecta, y sin esto enseñaría una lista vacía hasta que algo
     // los cambiara — que es indistinguible de «no tienes ninguno».
     const agentes = mensajeDeAgentes();
+    // Y las skills, por lo mismo que los subagentes y con una razón más: el editor de un
+    // subagente pinta sus skills como una lista de casillas, así que sin esto ese formulario
+    // se abriría sin ninguna casilla que marcar — que es indistinguible de «no hay ninguna».
+    const skills = mensajeDeSkills();
     // La cola de tareas, si esta ejecución las tiene: la misma regla que `agentes`, sin
     // esto la pestaña de tareas se quedaría vacía hasta el primer cambio de la cola.
     const tareas = mensajeDeTareas();
@@ -1130,6 +1301,7 @@ export function montarRutas(
       cliente({ clase: "reemision", actos: [...actos] });
       cliente(modelos);
       cliente(agentes);
+      cliente(skills);
       if (tareas !== undefined) cliente(tareas);
       if (consumoDeLaSesion !== undefined) {
         cliente({
@@ -3361,6 +3533,65 @@ export function montarRutas(
    * - **Ninguna respuesta lleva una ruta de la máquina** ni nada de lo recibido, que es la
    *   regla de `POST /accion`.
    */
+  /**
+   * `POST /skill?nombre=<fichero.zip>&ambito=<global|proyecto>` — instalar una skill.
+   *
+   * Por HTTP y no por el cable, con el mismo molde que `POST /adjunto`: esto son bytes y el
+   * cable lleva JSON. `Host`, `Origin` y token los comprueba `servidor.ts` antes de llegar
+   * aquí, igual que a todas las rutas. Lo propio de ésta:
+   *
+   * - **El `nombre` de la query es el del FICHERO que subió la persona, y solo se usa como
+   *   nombre de respaldo** cuando el zip no trae una carpeta de la que sacarlo
+   *   (`core/zipDeSkill.ts`). No se compone ninguna ruta con él sin pasar por la regla del
+   *   slug, que es la misma de un subagente.
+   * - **El cuerpo se lee con el tope del ZIP y se corta ahí** (413), sin acumular. Y el otro
+   *   tope, el de lo DESCOMPRIMIDO, lo pone `planDeInstalacion`: éste no lo ve, que es
+   *   justamente lo que un zip bomba aprovecha.
+   * - **Ninguna respuesta lleva una ruta de la máquina ni nada de lo recibido**, que es la
+   *   regla de `POST /accion` — y aquí lo recibido es un fichero de alguien.
+   */
+  servidor.registrarRuta("POST", RUTA_SKILL, async (peticion, respuesta) => {
+    const responder = (codigo: number, texto: string): void => {
+      respuesta.writeHead(codigo, { "Content-Type": "text/plain; charset=utf-8" });
+      respuesta.end(texto);
+    };
+    const query = new URLSearchParams((peticion.url ?? "").split("?")[1] ?? "");
+    const nombre = query.get("nombre");
+    const ambito = query.get("ambito") === "proyecto" ? "proyecto" : "global";
+    if (nombre === null || nombre === "") {
+      responder(400, "falta «nombre»");
+      return;
+    }
+    const abierto = vestibulo.proyectoAbierto();
+    if (ambito === "proyecto" && abierto === undefined) {
+      responder(409, "no hay ningún proyecto abierto: esa skill solo se puede instalar como global");
+      return;
+    }
+    let datos: Buffer;
+    try {
+      datos = await leerCuerpoCrudo(peticion, TOPE_DEL_ZIP);
+    } catch {
+      responder(413, "el .zip es demasiado grande");
+      return;
+    }
+    const instalada = instalarSkillDesdeZip(
+      ambito === "proyecto" ? abierto!.raiz : homedir(),
+      new Uint8Array(datos),
+      nombre
+    );
+    if ("error" in instalada) {
+      // El motivo lo escribe el módulo y no lleva ninguna ruta de la máquina ni el nombre de
+      // una entrada del zip (sus tests lo vigilan). 422: el zip llegó entero y no vale.
+      informar(`no se instala la skill: ${instalada.error}`);
+      responder(422, instalada.error);
+      return;
+    }
+    informar(`skill «${instalada.nombre}» instalada en ${ambito}`);
+    emitirSkills();
+    respuesta.writeHead(204);
+    respuesta.end();
+  });
+
   servidor.registrarRuta("POST", RUTA_ADJUNTO, async (peticion, respuesta) => {
     const responder = (codigo: number, texto: string): void => {
       respuesta.writeHead(codigo, { "Content-Type": "text/plain; charset=utf-8" });
@@ -3623,6 +3854,18 @@ export function montarRutas(
     }
     if (typeof mensaje === "object" && mensaje !== null && mensaje.clase === "agente") {
       atenderAgente(mensaje);
+      respuesta.writeHead(204);
+      respuesta.end();
+      return;
+    }
+    if (typeof mensaje === "object" && mensaje !== null && mensaje.clase === "skill") {
+      atenderSkill(mensaje);
+      respuesta.writeHead(204);
+      respuesta.end();
+      return;
+    }
+    if (typeof mensaje === "object" && mensaje !== null && mensaje.clase === "cuerpoDeSkill") {
+      atenderCuerpoDeSkill(mensaje);
       respuesta.writeHead(204);
       respuesta.end();
       return;

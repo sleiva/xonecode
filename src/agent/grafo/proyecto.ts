@@ -2,7 +2,7 @@ import { statSync } from "node:fs";
 import { join } from "node:path";
 import { CompositeBackend, FilesystemBackend } from "deepagents";
 import { RUTA_MEMORIA_INTERNA, RUTA_MEMORIA_VIRTUAL } from "./memoriaDeProyecto.js";
-import { RAIZ_SKILLS } from "./skills.js";
+import { RAIZ_SKILLS, skillsMontables, type Montaje } from "./skills.js";
 import {
   artefactoFueraDeSitio,
   mimeDeArtefacto,
@@ -33,18 +33,43 @@ export function backendDelProyecto(raiz: string): FilesystemBackend {
 }
 
 /**
- * Añade las skills del harness como una ruta virtual de solo lectura del agente.
+ * Añade las skills como una ruta virtual de solo lectura del agente.
  *
  * El proyecto del usuario sigue siendo la raíz predeterminada. `/skills` apunta al
  * catálogo que se distribuye con xonecode: así SkillsMiddleware puede descubrir y
  * cargar bajo demanda cada `SKILL.md` sin conceder al modelo acceso al repositorio
  * del harness ni sacarlo de la raíz del proyecto.
+ *
+ * **Y las del USUARIO cuelgan de esa misma ruta, una a una.** Viven en otras dos carpetas
+ * (`~/.xonecode/skills/` y la del proyecto, `agent/grafo/skills.ts`) y tienen que verse como
+ * UNA sola: un subagente declara `skills: [mi-skill]` y eso se traduce a `/skills/mi-skill/`
+ * sin saber de dónde salió el fichero. Una raíz aparte —`/skills-tuyas/`— habría metido de
+ * quién es la skill dentro de su ruta, y entonces cambiarla de carpeta le cambiaría el
+ * nombre al agente.
+ *
+ * Se apoya en que `CompositeBackend` ordena sus rutas **por longitud descendente** y se
+ * queda con la primera que encaja (`sortedRoutes` en deepagents 1.13.2): `/skills/mia/` es
+ * más larga que `/skills/`, así que gana para todo lo que cuelgue de ella. Eso no es una
+ * suposición sobre la librería: lo ata `proyecto.test.ts` contra la librería REAL, que es la
+ * única forma de enterarse el día que cambie.
+ *
+ * **Límite declarado**: un `ls /skills` enseña solo las de serie. `CompositeBackend.ls`
+ * resuelve a UNA ruta y no funde varias, así que las del usuario no salen en ese listado. No
+ * importa para lo que esto hace —`SkillsMiddleware` recibe las rutas una a una, ya
+ * resueltas, y es así como el modelo las descubre— pero un agente que liste esa carpeta a
+ * mano no las verá.
  */
-export function backendConSkills<T extends object>(backend: T): T {
+export function backendConSkills<T extends object>(backend: T, propias: readonly Montaje[] = []): T {
   return new CompositeBackend(backend as never, {
     // La barra final importa: CompositeBackend la retira antes de delegar. Sin ella
     // reconstruye `//archify/...`, que FilesystemBackend interpreta fuera de su raíz.
     "/skills/": new FilesystemBackend({ rootDir: RAIZ_SKILLS, virtualMode: true }),
+    ...Object.fromEntries(
+      propias.map((m) => [
+        `/skills/${m.nombre}/`,
+        new FilesystemBackend({ rootDir: m.dir, virtualMode: true }),
+      ])
+    ),
   }) as T;
 }
 
@@ -246,7 +271,15 @@ export function backendDeAgente(opciones: {
       sinVistasAplanadas(exponerMemoriaDeProyecto(backendDelProyecto(opciones.raiz)), opciones.ficheros)
     )
   );
-  const conSkills = backendConSkills(delProyecto);
+  /**
+   * Las del usuario se leen AQUÍ y no entran por parámetro, a propósito: compuesto dentro de
+   * `construirAgente` —que todos sus tests doblan— el montaje quedaba escrito y no probado,
+   * que es el patrón de fallo de esta arquitectura y el motivo de que esta función exista.
+   * Aquí sí hay test (`proyecto.test.ts`). Y se releen en cada construcción del agente, o sea
+   * en cada turno: guardar una skill desde Ajustes con la consola abierta tiene que alcanzar
+   * al turno siguiente, igual que guardar un subagente.
+   */
+  const conSkills = backendConSkills(delProyecto, skillsMontables(opciones.raiz));
   const conArtefactos =
     opciones.artefactos === undefined
       ? conSkills

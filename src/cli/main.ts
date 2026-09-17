@@ -476,7 +476,11 @@ export function crearEjecutorReal(
       sesion = await abrirSesionReal({
         raiz: estado.raiz,
         modelos: new Modelos(estado.fuentes, proveedoresPersonalizados),
-        skills: new SkillsEnDisco(),
+        // La raíz va PUESTA, y es lo que hace que las skills DEL PROYECTO
+        // (`<raiz>/.xonecode/skills/`) entren en el catálogo. Sin ella el agente recibiría
+        // solo las de serie y las globales, y un subagente que declarase una del proyecto
+        // se llevaría el aviso de «te faltan estas skills» teniéndolas delante.
+        skills: new SkillsEnDisco(estado.raiz),
         entorno,
         // El hilo de la CONSOLA, no uno propio. Había dos ids para lo mismo —el que
         // `/hilo` enseña y el que se generaba dentro— y solo coincidían tras un `/nuevo`.

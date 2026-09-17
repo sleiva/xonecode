@@ -315,6 +315,30 @@ export type MensajeAlCliente =
    */
   | { clase: "agentes"; agentes: AgenteDelCable[]; problemas: string[] }
   /**
+   * Las skills en vigor, para la ventana de ajustes y para el editor de un subagente.
+   *
+   * Se manda entera cada vez que cambia —son pocas y el cuerpo solo viaja de las del
+   * usuario— en vez de mandar deltas, por lo mismo que `agentes`: un delta perdido dejaría
+   * la ventana enseñando una skill que ya no existe, y un subagente marcando una casilla que
+   * no tiene detrás ningún fichero.
+   *
+   * `problemas` son las carpetas que no se pudieron leer, con su motivo, y significa SOLO
+   * eso: que una del usuario tape a una de serie no es un problema, es la forma de afinarla
+   * sin editar donde el `npm install` la pisaría.
+   */
+  | { clase: "skills"; skills: SkillDelCable[]; problemas: string[] }
+  /**
+   * El cuerpo de UNA skill, pedido a mano (`clase: "cuerpoDeSkill"` del cliente).
+   *
+   * Va aparte y no dentro del `skills` por lo que ese tipo explica: las de serie son
+   * ficheros grandes y mandarlas todas en la ráfaga de bienvenida cuesta cientos de
+   * kilobytes para un formulario que nadie puede guardar. Aquí se paga solo la que se abre.
+   *
+   * `cuerpo` ausente = no se pudo leer, y entonces se DICE: una ficha que se abre en blanco
+   * se lee como que la skill está vacía.
+   */
+  | { clase: "cuerpoDeSkill"; nombre: string; cuerpo?: string; error?: string }
+  /**
    * La cola de tareas entera. Va a TODOS los clientes, como la foto de la máquina y por lo
    * mismo: la cola es de la máquina. `corriendoAqui` es falso en el segundo proceso, y es lo
    * que deja decir que este kanban no avanza.
@@ -1183,6 +1207,28 @@ export type MensajeDelCliente =
        */
       renombrandoDe?: string;
     }
+  /**
+   * Dar de alta, cambiar o borrar una skill del USUARIO.
+   *
+   * El mismo molde que `agente`, y las dos diferencias no son de forma:
+   *
+   * - **No hay `restaurar`.** Una skill de serie vive dentro del paquete instalado y nunca
+   *   se copia a la casa del usuario, así que no hay marca que recordar ni nada que
+   *   reponer: lo que la consola ofrece sobre una de serie es COPIARLA, que es un `guardar`
+   *   normal con otro nombre.
+   * - **El servidor RECHAZA guardar o borrar con el nombre de una de serie.** Esconderle el
+   *   botón al cliente es presentación, no una guarda; la barrera está aquí.
+   */
+  | {
+      clase: "skill";
+      accion: "guardar" | "borrar";
+      ambito: "global" | "proyecto";
+      skill: SkillDelCable;
+      /** El nombre de ANTES, solo en un renombrado. Ausente = no cambia. Como en `agente`. */
+      renombrandoDe?: string;
+    }
+  /** El cuerpo de una skill, bajo demanda: al abrir su ficha o al copiar una de serie. */
+  | { clase: "cuerpoDeSkill"; nombre: string }
   /** Parar el turno en vuelo. Aborta el `stream` del grafo (`SesionReal.cancelar`) y deja
    *  la sesión viva: es parar ESTO, no cerrar la conversación. */
   | { clase: "cancelar" }
@@ -1310,6 +1356,40 @@ export interface AgenteDelCable {
    * Los tres estados y su porqué, en `core/agentes.ts#AgenteCargado`.
    */
   semilla?: "intacta" | "modificada";
+}
+
+/**
+ * Una skill tal como viaja: nunca su carpeta, que es una ruta de la máquina (`sinRutas`).
+ *
+ * **`cuerpo` solo lo llevan las del usuario, y su ausencia significa «esta no se edita».**
+ * Las de serie son nueve ficheros que pueden pasar de veinte mil caracteres cada uno: si
+ * viajaran todas en la ráfaga de bienvenida, abrir la consola costaría cientos de kilobytes
+ * para rellenar un formulario que nadie puede guardar. Se piden una a una cuando alguien
+ * quiere verlas o copiarlas (`clase: "cuerpoDeSkill"`), que es cuando el coste se justifica.
+ *
+ * `origen` dice de DÓNDE sale y es de solo lectura: separa las dos pestañas y explica por
+ * qué editar la del proyecto no toca a los demás proyectos. `ficheros` son los anexos por
+ * NOMBRE y sin contenido — una skill puede ser una carpeta entera, y una ventana que solo
+ * enseña el `SKILL.md` haría creer que editarlo es editarla toda.
+ */
+export interface SkillDelCable {
+  nombre: string;
+  descripcion: string;
+  origen: "serie" | "global" | "proyecto";
+  tokens: number;
+  ficheros: string[];
+  /**
+   * El frontmatter del `SKILL.md` tal cual, sin los `---`.
+   *
+   * Viaja SIEMPRE —también en las de serie— y no con el cuerpo, porque son cuatro líneas y
+   * es lo que contesta «qué declara este fichero»: `description` no es lo único que puede
+   * haber ahí (`archify` lleva `license` y un bloque `metadata`), y enseñar solo la
+   * descripción haría creer que eso es todo. Al guardar vuelve, y `escribirSkill` conserva
+   * las claves que no entendemos en vez de borrárselas al usuario en silencio.
+   */
+  frontmatter?: string;
+  /** Ausente en las de serie, y en la que se está creando. Ver arriba. */
+  cuerpo?: string;
 }
 
 /** A dónde escribe el SSE. Ausente = no hay nadie al otro lado. */

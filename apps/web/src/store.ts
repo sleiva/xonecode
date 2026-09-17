@@ -25,6 +25,7 @@ import type {
   FicheroDelProyecto,
   EstadoDeSync,
   AgenteDelCable,
+  SkillDelCable,
   TareaDelCable,
   ProveedorDeModelos,
   SelectorDeConsola,
@@ -85,6 +86,21 @@ export interface EstadoDelCliente {
   /** Los subagentes y los `.md` que no se pudieron leer. Ausente = todavía no ha llegado el
    *  mensaje, que NO es lo mismo que «no hay ninguno»: la ventana lo distingue. */
   agentes?: { lista: AgenteDelCable[]; problemas: string[] };
+  /**
+   * Las skills en vigor y las carpetas que no cargan. Ausente = todavía no ha llegado el
+   * mensaje, que NO es «no hay ninguna»: la ventana lo distingue, y el editor de un
+   * subagente no puede pintar una lista de casillas vacía sobre un catálogo que no consta.
+   */
+  skills?: { lista: SkillDelCable[]; problemas: string[] };
+  /**
+   * El cuerpo de las skills que alguien ha abierto, por nombre.
+   *
+   * Aparte de la lista porque llega aparte: las de serie no mandan su cuerpo en la ráfaga
+   * —son ficheros grandes que nadie puede editar— y se pide uno a uno. Un nombre con
+   * `undefined` es «se pidió y no se pudo leer», que se DICE; un nombre ausente del mapa es
+   * «todavía no se ha pedido».
+   */
+  cuerposDeSkill?: Record<string, string | undefined>;
   /**
    * La cola de tareas en background. Ausente = todavía no ha llegado el mensaje: el kanban
    * dice que no ha llegado en vez de afirmar que no hay tareas. NO se tira al caerse el
@@ -502,6 +518,25 @@ function esAgenteDelCable(valor: unknown): valor is AgenteDelCable {
     typeof a.soloLectura === "boolean" &&
     Array.isArray(a.skills) &&
     typeof a.instrucciones === "string"
+  );
+}
+
+/**
+ * `origen` se comprueba por VALOR y no solo por tipo: es lo que separa las dos pestañas y lo
+ * que decide si una skill lleva botón de borrar. Un tercer literal desconocido no puede
+ * decidir eso, y con un `typeof === "string"` habría caído en «tuya» — todo en verde y una
+ * papelera encima de un fichero del paquete.
+ */
+function esSkillDelCable(valor: unknown): valor is SkillDelCable {
+  const s = valor as Partial<SkillDelCable> | null;
+  return (
+    typeof s === "object" &&
+    s !== null &&
+    typeof s.nombre === "string" &&
+    typeof s.descripcion === "string" &&
+    (s.origen === "serie" || s.origen === "global" || s.origen === "proyecto") &&
+    typeof s.tokens === "number" &&
+    Array.isArray(s.ficheros)
   );
 }
 
@@ -1064,6 +1099,44 @@ export function crearStoreDelCliente(): {
               problemas: Array.isArray(m.problemas)
                 ? m.problemas.filter((x): x is string => typeof x === "string")
                 : [],
+            },
+          });
+          return;
+        }
+        case "skills": {
+          const m = mensaje as { skills?: unknown; problemas?: unknown };
+          if (!Array.isArray(m.skills)) return;
+          // Campo a campo, como `agentes`: un campo que alguien añada mañana al servidor no
+          // entra en el estado del cliente sin que nadie lo haya decidido.
+          mutar({
+            skills: {
+              lista: m.skills.filter(esSkillDelCable).map((s) => ({
+                nombre: s.nombre,
+                descripcion: s.descripcion,
+                origen: s.origen,
+                tokens: s.tokens,
+                ficheros: [...s.ficheros],
+                ...(typeof s.frontmatter === "string" ? { frontmatter: s.frontmatter } : {}),
+                // Ausente es «esta no se edita» (una de serie), no «está vacía».
+                ...(typeof s.cuerpo === "string" ? { cuerpo: s.cuerpo } : {}),
+              })),
+              problemas: Array.isArray(m.problemas)
+                ? m.problemas.filter((x): x is string => typeof x === "string")
+                : [],
+            },
+          });
+          return;
+        }
+        case "cuerpoDeSkill": {
+          const m = mensaje as { nombre?: unknown; cuerpo?: unknown };
+          if (typeof m.nombre !== "string") return;
+          // Se guarda TAMBIÉN cuando no vino cuerpo: la clave presente con `undefined` es
+          // «se pidió y no se pudo leer», y es lo que deja decirlo en vez de quedarse
+          // pidiéndolo en bucle o enseñando una ficha en blanco.
+          mutar({
+            cuerposDeSkill: {
+              ...(estado.cuerposDeSkill ?? {}),
+              [m.nombre]: typeof m.cuerpo === "string" ? m.cuerpo : undefined,
             },
           });
           return;
@@ -1677,6 +1750,11 @@ export function crearStoreDelCliente(): {
         // editado a mano, y la ventana de ajustes enseñaría una lista que ya no es. La
         // reconexión los trae enteros en la misma ráfaga que los modelos.
         agentes: undefined,
+        // Y las skills por lo mismo: son carpetas en disco que pueden haberse tocado a mano
+        // mientras no había cable. Los cuerpos ya pedidos se van con ellas: un cuerpo
+        // guardado de una skill que ya no está es peor que pedirlo otra vez.
+        skills: undefined,
+        cuerposDeSkill: undefined,
         // La mirada a una tarea la sostiene el SERVIDOR: su enganche se va con el SSE
         // (`arranque.ts`, el `close`), así que guardarla dejaría un transcript congelado
         // presentado como si siguiera llegando. La reconexión la vuelve a pedir.

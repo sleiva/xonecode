@@ -7,7 +7,8 @@ import {
   IconTrashOutline16,
 } from "@deepseek-ai/dsh-client-ui-primitives";
 import type {
-  ProveedorDeModelos, AgenteDelCable } from "../tipos.js";
+  ProveedorDeModelos, AgenteDelCable, SkillDelCable } from "../tipos.js";
+import { abreviar } from "../cifras.js";
 import estilos from "./Agentes.module.css";
 
 /**
@@ -203,6 +204,7 @@ export function Agentes({
   modelosDeMotor,
   alPedirModelosDeMotor,
   alPedirCatalogo,
+  catalogoDeSkills,
   alGuardar,
   alBorrar,
   alRestaurar,
@@ -237,6 +239,15 @@ export function Agentes({
   /** Pide el catálogo de un proveedor nuestro. Sin esto el desplegable solo tendría los de
    *  quien ya se hubiera consultado por otro sitio — Ollama, que se prueba al conectar. */
   alPedirCatalogo?: (proveedor: string) => void;
+  /**
+   * Las skills que HAY, para marcarlas con casillas en vez de teclear sus nombres.
+   *
+   * Ausente = todavía no llegó el mensaje, y entonces NO se pinta una lista vacía: sería
+   * indistinguible de «no hay ninguna», y sobre esa lectura el usuario vaciaría sin querer
+   * las skills que su subagente ya declaraba. Se cae al campo de texto, que sigue diciendo
+   * la verdad de lo que hay en el `.md`.
+   */
+  catalogoDeSkills?: readonly SkillDelCable[];
 }) {
   const [editando, setEditando] = useState<AgenteDelCable | undefined>(undefined);
   const [creando, setCreando] = useState(false);
@@ -638,23 +649,11 @@ export function Agentes({
             </p>
           )}
 
-          <label className={estilos.campo}>
-            <span className={estilos.rotulo}>
-              Skills <span className={estilos.pista}>— separadas por comas</span>
-            </span>
-            <Input
-              value={editando.skills.join(", ")}
-              onChange={(e) =>
-                setEditando({
-                  ...editando,
-                  skills: e.target.value
-                    .split(",")
-                    .map((s) => s.trim())
-                    .filter((s) => s !== ""),
-                })
-              }
-            />
-          </label>
+          <SkillsDelAgente
+            elegidas={editando.skills}
+            {...(catalogoDeSkills === undefined ? {} : { catalogo: catalogoDeSkills })}
+            alCambiar={(skills) => setEditando({ ...editando, skills })}
+          />
 
           <label className={estilos.campo}>
             <span className={estilos.rotulo}>Instrucciones</span>
@@ -855,5 +854,117 @@ function FilaDeAgente({
         </p>
       ) : null}
     </li>
+  );
+}
+
+
+/**
+ * Las skills de un subagente: una lista de CASILLAS, no un campo de texto con comas.
+ *
+ * El campo de texto pedía teclear de memoria el nombre exacto de una carpeta. Un nombre mal
+ * escrito no daba error: `repartirSkills` (`core/agentes.ts`) lo mete en `faltan` y lo único
+ * que pasa es que al modelo le llega un «AVISO: te faltan estas skills» —o sea, el subagente
+ * trabaja sin lo que creías haberle dado, y en la ventana se sigue leyendo igual de bien—.
+ * Con casillas, lo que se marca EXISTE.
+ *
+ * Tres cosas que no son de forma:
+ *
+ * - **Una skill declarada que ya no está en el catálogo se sigue pintando, marcada y
+ *   señalada.** Es lo que impide que abrir un subagente y guardarlo sin tocar nada le quite
+ *   en silencio una skill que su `.md` declaraba: la carpeta puede volver (es de otro
+ *   proyecto, o alguien la va a escribir), y desmarcarla tiene que ser una decisión y no un
+ *   efecto de haber abierto el formulario.
+ * - **Sin catálogo NO se pinta una lista vacía.** Ausente ≠ vacío: mientras el mensaje no ha
+ *   llegado se cae al campo de texto de siempre, que dice la verdad de lo que hay en el
+ *   `.md`. Una lista de cero casillas se leería como «no hay ninguna skill», y sobre esa
+ *   lectura se vacía lo que el subagente ya tenía.
+ * - **Cada casilla lleva su descripción y su coste.** La descripción es lo que el modelo lee
+ *   para decidir si la carga, y el coste es lo que se paga cuando lo hace: son los dos datos
+ *   con los que se elige, y sin ellos la lista es un montón de nombres.
+ */
+export function SkillsDelAgente({
+  elegidas,
+  catalogo,
+  alCambiar,
+}: {
+  elegidas: readonly string[];
+  /** Ausente = el mensaje no ha llegado, que NO es «no hay ninguna». */
+  catalogo?: readonly SkillDelCable[];
+  alCambiar: (skills: string[]) => void;
+}) {
+  if (catalogo === undefined) {
+    return (
+      <label className={estilos.campo}>
+        <span className={estilos.rotulo}>
+          Skills <span className={estilos.pista}>— separadas por comas</span>
+        </span>
+        <Input
+          value={elegidas.join(", ")}
+          onChange={(e) =>
+            alCambiar(
+              e.target.value
+                .split(",")
+                .map((s) => s.trim())
+                .filter((s) => s !== "")
+            )
+          }
+        />
+      </label>
+    );
+  }
+
+  const enCatalogo = new Set(catalogo.map((s) => s.nombre));
+  const huerfanas = elegidas.filter((n) => !enCatalogo.has(n));
+
+  const alternar = (nombre: string, puesta: boolean): void => {
+    alCambiar(puesta ? [...elegidas, nombre] : elegidas.filter((n) => n !== nombre));
+  };
+
+  return (
+    <div className={estilos.campo}>
+      <span className={estilos.rotulo}>
+        Skills <span className={estilos.pista}>— las que se le cargan bajo demanda</span>
+      </span>
+      {catalogo.length === 0 && huerfanas.length === 0 ? (
+        <p className={estilos.pista}>No hay ninguna skill. Se escriben en la sección Skills.</p>
+      ) : (
+        <ul className={estilos.listaDeSkills}>
+          {catalogo.map((s) => (
+            <li key={s.nombre}>
+              <label className={estilos.casillaDeSkill}>
+                <input
+                  type="checkbox"
+                  checked={elegidas.includes(s.nombre)}
+                  onChange={(e) => alternar(s.nombre, e.target.checked)}
+                />
+                <span className={estilos.textoDeSkill}>
+                  <span className={estilos.nombreDeSkill}>{s.nombre}</span>
+                  <span className={estilos.costeDeSkill}>{abreviar(s.tokens)} tok</span>
+                  {/* Acotada a dos líneas por CSS; la entera va en el `title`, que es donde
+                      se mira cuando una de verdad hace dudar. */}
+                  <span className={estilos.descripcionDeSkill} title={s.descripcion}>
+                    {s.descripcion}
+                  </span>
+                </span>
+              </label>
+            </li>
+          ))}
+          {huerfanas.map((nombre) => (
+            <li key={nombre}>
+              <label className={clsx(estilos.casillaDeSkill, estilos.skillHuerfana)}>
+                <input type="checkbox" checked onChange={() => alternar(nombre, false)} />
+                <span className={estilos.textoDeSkill}>
+                  <span className={estilos.nombreDeSkill}>{nombre}</span>
+                  <span className={estilos.descripcionDeSkill}>
+                    Su `.md` la declara y no está en el catálogo: hoy este subagente se queda sin
+                    ella. Desmárcala para quitarla, o escríbela en la sección Skills.
+                  </span>
+                </span>
+              </label>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
   );
 }

@@ -50,6 +50,35 @@ export interface AgenteDelCable {
 }
 
 /**
+ * Una skill tal como viaja. La copia DECLARADA del host (`web/servidor/transporte.ts`): la
+ * frontera prohíbe compartir módulo, y `tipos.test.ts` compara los literales `clase:` de los
+ * dos lados, así que divergir da rojo y no un bug mudo.
+ *
+ * **`cuerpo` ausente en las de serie, y eso es el dato**: son ficheros grandes que no se
+ * pueden editar, así que su cuerpo no viaja en la ráfaga de bienvenida — se pide a mano
+ * (`cuerpoDeSkill`) cuando alguien abre su ficha o la copia. Ausente ≠ vacío: una ficha en
+ * blanco se leería como que la skill no dice nada.
+ */
+export interface SkillDelCable {
+  nombre: string;
+  descripcion: string;
+  origen: "serie" | "global" | "proyecto";
+  tokens: number;
+  ficheros: string[];
+  /**
+   * El frontmatter del `SKILL.md` tal cual, sin los `---`.
+   *
+   * Viaja SIEMPRE —también en las de serie— y no con el cuerpo, porque son cuatro líneas y
+   * es lo que contesta «qué declara este fichero»: `description` no es lo único que puede
+   * haber ahí (`archify` lleva `license` y un bloque `metadata`), y enseñar solo la
+   * descripción haría creer que eso es todo. Al guardar vuelve, y `escribirSkill` conserva
+   * las claves que no entendemos en vez de borrárselas al usuario en silencio.
+   */
+  frontmatter?: string;
+  cuerpo?: string;
+}
+
+/**
  * Lo que costó UN turno, tal como viaja y se persiste en su `fin`.
  *
  * Las dos cuentas por SEPARADO y no sumadas: sumarlas aquí perdería el desglose para
@@ -310,6 +339,11 @@ export type MensajeAlCliente =
    * por qué se lee como que la aplicación lo perdió.
    */
   | { clase: "agentes"; agentes: AgenteDelCable[]; problemas: string[] }
+  /** Las skills en vigor. `problemas` son las carpetas que no cargan, y SOLO eso: que una
+   *  tuya tape a una de serie es la forma de afinarla, no un fallo. Ver el host. */
+  | { clase: "skills"; skills: SkillDelCable[]; problemas: string[] }
+  /** El cuerpo de UNA, pedido a mano. `cuerpo` ausente con `error` = no se pudo leer. */
+  | { clase: "cuerpoDeSkill"; nombre: string; cuerpo?: string; error?: string }
   /**
    * La cola de tareas entera. Va a TODOS los clientes, como la foto de la máquina y por lo
    * mismo: la cola es de la máquina. `corriendoAqui` es falso en el segundo proceso, y es
@@ -768,6 +802,23 @@ export type MensajeDelCliente =
       /** El nombre de ANTES, solo en un renombrado. Ausente = no cambia. Ver el host. */
       renombrandoDe?: string;
     }
+  /**
+   * Alta, cambio y borrado de una skill del USUARIO.
+   *
+   * Sin `restaurar`: una de serie nunca se copia a la casa del usuario, así que no hay nada
+   * que reponer — lo que se ofrece sobre ella es COPIARLA, que es un `guardar` con otro
+   * nombre. El servidor RECHAZA guardar o borrar con el nombre de una de serie; el cliente
+   * se limita a no ofrecerlo, que es presentación.
+   */
+  | {
+      clase: "skill";
+      accion: "guardar" | "borrar";
+      ambito: "global" | "proyecto";
+      skill: SkillDelCable;
+      renombrandoDe?: string;
+    }
+  /** El cuerpo de una skill, bajo demanda: al abrir su ficha o al copiar una de serie. */
+  | { clase: "cuerpoDeSkill"; nombre: string }
   /** Parar el turno en vuelo, dejando la sesión viva. */
   | { clase: "cancelar" }
   /** Pide lo que la sesión abierta ha tocado, o el parche de un fichero concreto. */
