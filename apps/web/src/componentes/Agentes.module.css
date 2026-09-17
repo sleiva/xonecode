@@ -4,7 +4,7 @@
 
    Alias comprobados contra `apps/web/estilos/design-platform.css`: bg-layer-1/2,
    bg-module-platform, border-l2, label-primary/secondary/tertiary, interactive-bg-hover,
-   state-error-primary/secondary, state-success-primary/tertiary y
+   state-error-secondary, state-success-primary/tertiary y
    state-business-primary/tertiary. */
 
 .nota,
@@ -21,14 +21,26 @@
   font-weight: 400;
 }
 
-/* Los `.md` que no se pudieron leer. En rojo y con `role="alert"` porque no es información
-   de fondo: es trabajo pendiente de quien está mirando esta ventana. */
+/* Los `.md` que no se pudieron leer, y los nombres que hay que arreglar. En rojo y con
+   `role="alert"` porque no es información de fondo: es trabajo pendiente de quien está
+   mirando esta ventana.
+
+   La letra NO es `state-error-primary`, que es el par «de libro» y el que tenía: visto en
+   pantalla, este cartel «no se ve casi». Está MEDIDO en `AvisoDeConexion.module.css` y el
+   motivo es que `design-platform.css` mapea los dos alias al MISMO `--dsw-static-red-400` en
+   el tema oscuro —no un tono parecido: el mismo, o sea texto invisible sobre su propio
+   fondo— y en el claro deja `red-600` sobre `red-400`, que es rojo oscuro sobre rojo medio.
+
+   Tampoco es blanco, y eso también está medido allí: blanco sobre ese rojo da ~3.3:1, por
+   debajo del 4.5:1 de WCAG AA para texto normal. `label-primary` es el texto normal del tema
+   y contra el mismo rojo da ~5.7:1. Es el tercer sitio que hace este mismo cambio, después
+   de `Chat.module.css#.error` y `Aprobacion.module.css`. */
 .problemas {
   margin: 0 0 14px;
   padding: 10px 12px 10px 28px;
   border-radius: 10px;
   background: var(--dsw-alias-state-error-secondary);
-  color: var(--dsw-alias-state-error-primary);
+  color: var(--dsw-alias-label-primary);
   font-size: 12px;
   line-height: 1.6;
 }

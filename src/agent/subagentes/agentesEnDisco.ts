@@ -17,7 +17,16 @@
  */
 
 import { createHash } from "node:crypto";
-import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  readdirSync,
+  renameSync,
+  rmSync,
+  statSync,
+  writeFileSync,
+} from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import {
@@ -237,6 +246,14 @@ export type Renombrado = "hecho" | "sin-origen" | "destino-ocupado";
  * `advisor` a `docs` se llevaba por delante el `docs.md` sembrado —o el otro subagente— sin
  * decir nada. Un caso especial para los de serie diría un motivo menos cierto.
  *
+ * **Pero «existe» no es «es otro fichero», y eso está MEDIDO en una máquina de verdad.** APFS
+ * es insensible a mayúsculas, así que con un `Documentador.md` en disco el `existsSync` de
+ * `documentador.md` contesta SÍ —es el mismo fichero— y esta guarda rechazaba justo el arreglo
+ * que el aviso del cargador propone, que es el renombrado más común de todos. Se compara por
+ * INODO (`dev` + `ino`): si el destino ES el origen, no hay nada ocupado. En un sistema
+ * sensible a mayúsculas son dos ficheros con dos inodos, así que la comparación sigue diciendo
+ * la verdad ahí — y si el otro existe de verdad, se sigue rechazando.
+ *
  * Que un de serie NO se pueda renombrar no se decide aquí: esto mueve un fichero, y la regla
  * del producto vive donde ya vive la de que no se borra (`arranque.ts#atenderAgente`). Dos
  * sitios donde decidir lo mismo es cómo uno de los dos se queda sin la regla.
@@ -249,10 +266,29 @@ export function renombrarAgente(base: string, viejo: string, agente: Agente): Re
   const origen = join(carpeta, `${segmentoSeguro(viejo, "nombre de agente")}.md`);
   const destino = join(carpeta, `${seguro}.md`);
   if (!existsSync(origen)) return "sin-origen";
-  if (existsSync(destino)) return "destino-ocupado";
+  if (existsSync(destino) && !elMismoFichero(origen, destino)) return "destino-ocupado";
   renameSync(origen, destino);
   writeFileSync(destino, escribirAgente({ ...agente, nombre: seguro }), "utf8");
   return "hecho";
+}
+
+/**
+ * ¿Las dos rutas son el MISMO fichero? Por `dev` + `ino`, no por texto.
+ *
+ * Por texto no se puede: en un sistema insensible a mayúsculas `Documentador.md` y
+ * `documentador.md` son el mismo y sus nombres no se parecen bajo `===`; y comparar en
+ * minúsculas mentiría en un sistema sensible, donde sí son dos. El inodo contesta la pregunta
+ * de verdad en los dos. Lo que no se puede mirar se da por DISTINTO, que es el lado que no
+ * pisa nada.
+ */
+function elMismoFichero(a: string, b: string): boolean {
+  try {
+    const ea = statSync(a);
+    const eb = statSync(b);
+    return ea.dev === eb.dev && ea.ino === eb.ino;
+  } catch {
+    return false;
+  }
 }
 
 /** Borra uno. Devuelve si existía: la interfaz no puede decir «borrado» de algo que no estaba. */

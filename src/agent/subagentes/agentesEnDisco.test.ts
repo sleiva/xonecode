@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { existsSync, mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, it, expect } from "vitest";
@@ -550,6 +550,31 @@ describe("renombrarAgente", () => {
     expect(renombrarAgente(raiz, "advisor", propio("consultant-xone"))).toBe("destino-ocupado");
     expect(readFileSync(join(rutaDeAgentes(raiz), "consultant-xone.md"), "utf8")).toBe(docsAntes);
     expect(existsSync(join(rutaDeAgentes(raiz), "advisor.md"))).toBe(true);
+  });
+
+  /**
+   * El renombrado que SOLO cambia las mayúsculas, que es el caso más común de todos.
+   *
+   * Medido en una máquina de verdad: APFS es INSENSIBLE a mayúsculas, así que con un
+   * `Documentador.md` en disco el `existsSync` de `documentador.md` contesta SÍ —es el mismo
+   * fichero— y la guarda del destino ocupado rechazaba justo el arreglo que el aviso del
+   * cargador propone. Se compara por inodo: si el «destino» ES el origen, no hay nada ocupado.
+   *
+   * Y en un sistema SENSIBLE los dos son ficheros distintos, con inodos distintos, así que la
+   * comparación sigue diciendo la verdad ahí: si el otro existe de verdad, se rechaza.
+   */
+  it("renombrar solo las MAYÚSCULAS vale, aunque el sistema de ficheros no las distinga", () => {
+    const raiz = base();
+    const carpeta = rutaDeAgentes(raiz);
+    mkdirSync(carpeta, { recursive: true });
+    writeFileSync(join(carpeta, "Documentador.md"), "---\ndescripcion: el mío\n---\ncuerpo", "utf8");
+
+    expect(renombrarAgente(raiz, "Documentador", propio("documentador", "el mío"))).toBe("hecho");
+    const { agentes } = leerCarpetaDeAgentes(carpeta, "global");
+    expect(agentes.map((a) => a.nombre)).toEqual(["documentador"]);
+    // Y no quedan dos: en un sistema sensible el viejo se habría movido, y en uno insensible
+    // el nombre del único fichero es el nuevo.
+    expect(readdirSync(carpeta).filter((f) => f.endsWith(".md"))).toEqual(["documentador.md"]);
   });
 
   it("sin origen no se inventa nada: no se escribe el destino", () => {
