@@ -68,6 +68,34 @@ export interface Agente {
  * colores en un solo sitio: cuatro copias de esto es como se acaba con una que se queda
  * vieja. Y un agente que el usuario escriba mañana las hereda sin tener que copiarlas.
  */
+/**
+ * Dónde está cada cosa en un proyecto XOne.
+ *
+ * **No son reglas, es un mapa**, y por eso va aparte de `REGLAS_XONE`: aquello dice lo que no
+ * se puede hacer y esto dice dónde mirar. Existe porque el gasto medido de este harness no son
+ * los ficheros que se leen —181 líneas de XML en una medida real, del orden de 2-3k tokens de
+ * 39k— sino **los viajes que hacen falta para averiguar dónde mirar**: cada uno reenvía el
+ * prompt entero y cuesta miles de tokens. Cuatro líneas que hacen certero el primer `grep`
+ * salen baratas comparadas con una lectura exploratoria de más.
+ *
+ * Lo ve el orquestador **y** cada especialista: desde que el orquestador contesta lo que puede
+ * en vez de delegarlo todo, él es quien más lo necesita, y dejarlo solo en `promptDeAgente`
+ * habría sido escribirlo para quien ya no hace ese trabajo.
+ *
+ * Comprobado contra el esqueleto y contra un proyecto real antes de escribirlo: `app.xml` lleva
+ * `<entry-point>`, `<login-coll>`, `<style url>` e `<include file>`, y las colecciones son
+ * `<coll>` en `.xne`, una por fichero salvo `mappings.xne`, que agrupa varias. Un mapa
+ * inventado sería exactamente el bug mudo que este producto existe para evitar.
+ */
+export const MAPA_DEL_PROYECTO = [
+  "DÓNDE ESTÁ CADA COSA en un proyecto XOne:",
+  "- `app.xml` es el índice: `<entry-point>` nombra la colección de arranque, `<login-coll>` la",
+  "  del login, `<style url=>` la hoja de estilos e `<include file=>` los scripts.",
+  "- Una colección es un `<coll name=...>` dentro de un `.xne`: normalmente uno por colección,",
+  "  y `mappings.xne` puede agrupar varias.",
+  "- `app.ini` es configuración (conexión, versión), no interfaz.",
+].join("\n");
+
 export const REGLAS_XONE = [
   "REGLAS DE XONE, no negociables:",
   "- No es desarrollo web: no existen DOM, React, Vue, ni `async/await` en el runtime.",
@@ -87,6 +115,8 @@ export const REGLAS_XONE = [
 export function promptDeAgente(agente: Agente, skills?: EstadoDeSkills): string {
   return [
     REGLAS_XONE,
+    "",
+    MAPA_DEL_PROYECTO,
     "",
     agente.descripcion,
     ...(agente.instrucciones.trim() === "" ? [] : ["", agente.instrucciones.trim()]),

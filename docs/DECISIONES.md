@@ -4263,6 +4263,37 @@ guarda, la lección de `--conservar` del corredor de evals— decía `mappings.x
 del eval, y suspendía justo al que la encontraba por el camino más barato. Sin guardar la
 respuesta, el experimento habría concluido que el cambio empeora las respuestas.
 
+**El mapa del proyecto (`MAPA_DEL_PROYECTO`): decisivo para un modelo, indiferente para el
+otro** (17-09-2026). Cuatro líneas diciendo dónde está cada cosa —`app.xml` como índice con
+`<entry-point>`, `<login-coll>`, `<style url=>` e `<include file=>`; las colecciones como
+`<coll>` en `.xne`; `app.ini` como configuración—, comprobadas contra el esqueleto y contra un
+proyecto real antes de escribirlas, y puestas donde las ven el orquestador **y** cada
+especialista: desde que el orquestador contesta lo que puede, él es quien más las necesita.
+
+Medido contra la variante A, tres pasadas por celda:
+
+| pregunta · modelo | A | con el mapa | cambio | dispersión |
+| --- | --- | --- | --- | --- |
+| entrypoint · deepseek | 11.212 | 12.455 | +11 % | ±32 % → ±29 % |
+| estilo · deepseek | 11.461 | 11.773 | +3 % | ±39 % → ±48 % |
+| login · deepseek | 35.084 | 37.323 | +6 % | ±61 % → ±60 % |
+| entrypoint · gemini | 10.037 | 8727 | −13 % | ±34 % → **±1 %** |
+| estilo · gemini | 10.846 | 5621 | −48 % | ±91 % → **±0 %** |
+| login · gemini | 29.393 | 16.098 | −45 % | ±142 % → **±1 %** |
+
+**Lo que hay que mirar no es la media, es la dispersión.** Con gemini las tres pasadas de
+`estilo` cayeron en 5.619, 5.621 y 5.624: cinco tokens de diferencia entre ejecuciones de un
+modelo no determinista. El mapa no le abarata el camino, **le quita la exploración**: va directo.
+Con deepseek no cambia el camino y solo paga el mapa —unos 150 tokens por llamada, que con sus
+3-7 llamadas explica el +3/+11 % casi exactamente—, y ese sobrecoste queda dentro de su propio
+ruido.
+
+**Y `comparar()` dice «no concluyente» en las SEIS**, incluidos los −48 % y −45 % de gemini,
+porque los rangos de A eran anchos y los de B caben dentro. Se deja así a propósito: cambiar el
+criterio después de ver los resultados es exactamente el sesgo que el banco existe para
+impedir. Lo que se puede afirmar sin criterio nuevo es lo de la dispersión, que no depende de
+compararla con nada.
+
 ## Trampas verificadas
 
 - **El orquestador va de SOLO LECTURA, y hasta el 9-09-2026 no lo era** (`PERFIL_DEL_ORQUESTADOR`,

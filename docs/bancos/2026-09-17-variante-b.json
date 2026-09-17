@@ -1,0 +1,377 @@
+{
+  "cuando": "2026-09-17T15:23:52.253Z",
+  "celdas": [
+    {
+      "modelo": "ollama/deepseek-v4.1-flash:cloud  (bandera)",
+      "pregunta": "entrypoint",
+      "validas": 3,
+      "errores": 0,
+      "correctas": 3,
+      "delegadas": 0,
+      "entrada": {
+        "media": 12454.666666666666,
+        "min": 10117,
+        "max": 13685,
+        "dispersion": 0.28647896370838244
+      },
+      "salida": {
+        "media": 348,
+        "min": 288,
+        "max": 438,
+        "dispersion": 0.43103448275862066
+      },
+      "llamadas": {
+        "media": 3.6666666666666665,
+        "min": 3,
+        "max": 4,
+        "dispersion": 0.27272727272727276
+      },
+      "ms": {
+        "media": 2629,
+        "min": 1963,
+        "max": 3006,
+        "dispersion": 0.39672879421833396
+      },
+      "mide": "leer una declaración de app.xml",
+      "pasadas": [
+        {
+          "entrada": 13562,
+          "salida": 318,
+          "cache": 0,
+          "llamadas": 4,
+          "ms": 3006,
+          "correcta": true,
+          "delego": false
+        },
+        {
+          "entrada": 10117,
+          "salida": 288,
+          "cache": 0,
+          "llamadas": 3,
+          "ms": 1963,
+          "correcta": true,
+          "delego": false
+        },
+        {
+          "entrada": 13685,
+          "salida": 438,
+          "cache": 0,
+          "llamadas": 4,
+          "ms": 2918,
+          "correcta": true,
+          "delego": false
+        }
+      ]
+    },
+    {
+      "modelo": "ollama/deepseek-v4.1-flash:cloud  (bandera)",
+      "pregunta": "estilo",
+      "validas": 3,
+      "errores": 0,
+      "correctas": 3,
+      "delegadas": 0,
+      "entrada": {
+        "media": 11772.666666666666,
+        "min": 9900,
+        "max": 15518,
+        "dispersion": 0.4772070898691885
+      },
+      "salida": {
+        "media": 283.3333333333333,
+        "min": 176,
+        "max": 476,
+        "dispersion": 1.0588235294117647
+      },
+      "llamadas": {
+        "media": 3.3333333333333335,
+        "min": 3,
+        "max": 4,
+        "dispersion": 0.3
+      },
+      "ms": {
+        "media": 2185.6666666666665,
+        "min": 1630,
+        "max": 2934,
+        "dispersion": 0.5966143053225561
+      },
+      "mide": "seguir una referencia entre ficheros",
+      "pasadas": [
+        {
+          "entrada": 9900,
+          "salida": 176,
+          "cache": 0,
+          "llamadas": 3,
+          "ms": 1630,
+          "correcta": true,
+          "delego": false
+        },
+        {
+          "entrada": 15518,
+          "salida": 476,
+          "cache": 0,
+          "llamadas": 4,
+          "ms": 2934,
+          "correcta": true,
+          "delego": false
+        },
+        {
+          "entrada": 9900,
+          "salida": 198,
+          "cache": 0,
+          "llamadas": 3,
+          "ms": 1993,
+          "correcta": true,
+          "delego": false
+        }
+      ]
+    },
+    {
+      "modelo": "ollama/deepseek-v4.1-flash:cloud  (bandera)",
+      "pregunta": "login",
+      "validas": 3,
+      "errores": 0,
+      "correctas": 3,
+      "delegadas": 0,
+      "entrada": {
+        "media": 37322.666666666664,
+        "min": 24389,
+        "max": 46626,
+        "dispersion": 0.5958041583309518
+      },
+      "salida": {
+        "media": 2084.3333333333335,
+        "min": 1559,
+        "max": 2368,
+        "dispersion": 0.3881336958260035
+      },
+      "llamadas": {
+        "media": 6.666666666666667,
+        "min": 5,
+        "max": 8,
+        "dispersion": 0.44999999999999996
+      },
+      "ms": {
+        "media": 10209,
+        "min": 7501,
+        "max": 11879,
+        "dispersion": 0.428837300421197
+      },
+      "mide": "distinguir dos conceptos parecidos",
+      "pasadas": [
+        {
+          "entrada": 40953,
+          "salida": 2326,
+          "cache": 0,
+          "llamadas": 8,
+          "ms": 11879,
+          "correcta": true,
+          "delego": false
+        },
+        {
+          "entrada": 24389,
+          "salida": 1559,
+          "cache": 0,
+          "llamadas": 5,
+          "ms": 7501,
+          "correcta": true,
+          "delego": false
+        },
+        {
+          "entrada": 46626,
+          "salida": 2368,
+          "cache": 0,
+          "llamadas": 7,
+          "ms": 11247,
+          "correcta": true,
+          "delego": false
+        }
+      ]
+    },
+    {
+      "modelo": "gemini/gemini-3.8-flash  (bandera)",
+      "pregunta": "entrypoint",
+      "validas": 3,
+      "errores": 0,
+      "correctas": 3,
+      "delegadas": 0,
+      "entrada": {
+        "media": 8727,
+        "min": 8675,
+        "max": 8794,
+        "dispersion": 0.013635842786753753
+      },
+      "salida": {
+        "media": 85.66666666666667,
+        "min": 71,
+        "max": 96,
+        "dispersion": 0.29182879377431903
+      },
+      "llamadas": {
+        "media": 3,
+        "min": 3,
+        "max": 3,
+        "dispersion": 0
+      },
+      "ms": {
+        "media": 3771,
+        "min": 3412,
+        "max": 4033,
+        "dispersion": 0.16467780429594273
+      },
+      "mide": "leer una declaración de app.xml",
+      "pasadas": [
+        {
+          "entrada": 8675,
+          "salida": 90,
+          "cache": 0,
+          "llamadas": 3,
+          "ms": 3868,
+          "correcta": true,
+          "delego": false
+        },
+        {
+          "entrada": 8712,
+          "salida": 96,
+          "cache": 0,
+          "llamadas": 3,
+          "ms": 3412,
+          "correcta": true,
+          "delego": false
+        },
+        {
+          "entrada": 8794,
+          "salida": 71,
+          "cache": 0,
+          "llamadas": 3,
+          "ms": 4033,
+          "correcta": true,
+          "delego": false
+        }
+      ]
+    },
+    {
+      "modelo": "gemini/gemini-3.8-flash  (bandera)",
+      "pregunta": "estilo",
+      "validas": 3,
+      "errores": 0,
+      "correctas": 3,
+      "delegadas": 0,
+      "entrada": {
+        "media": 5621,
+        "min": 5619,
+        "max": 5624,
+        "dispersion": 0.000889521437466643
+      },
+      "salida": {
+        "media": 64,
+        "min": 63,
+        "max": 66,
+        "dispersion": 0.046875
+      },
+      "llamadas": {
+        "media": 2,
+        "min": 2,
+        "max": 2,
+        "dispersion": 0
+      },
+      "ms": {
+        "media": 4534,
+        "min": 3073,
+        "max": 5561,
+        "dispersion": 0.5487428319364799
+      },
+      "mide": "seguir una referencia entre ficheros",
+      "pasadas": [
+        {
+          "entrada": 5619,
+          "salida": 63,
+          "cache": 0,
+          "llamadas": 2,
+          "ms": 4968,
+          "correcta": true,
+          "delego": false
+        },
+        {
+          "entrada": 5624,
+          "salida": 66,
+          "cache": 0,
+          "llamadas": 2,
+          "ms": 5561,
+          "correcta": true,
+          "delego": false
+        },
+        {
+          "entrada": 5620,
+          "salida": 63,
+          "cache": 0,
+          "llamadas": 2,
+          "ms": 3073,
+          "correcta": true,
+          "delego": false
+        }
+      ]
+    },
+    {
+      "modelo": "gemini/gemini-3.8-flash  (bandera)",
+      "pregunta": "login",
+      "validas": 3,
+      "errores": 0,
+      "correctas": 3,
+      "delegadas": 0,
+      "entrada": {
+        "media": 16098,
+        "min": 16010,
+        "max": 16206,
+        "dispersion": 0.012175425518697975
+      },
+      "salida": {
+        "media": 226.33333333333334,
+        "min": 204,
+        "max": 243,
+        "dispersion": 0.1723122238586156
+      },
+      "llamadas": {
+        "media": 5,
+        "min": 5,
+        "max": 5,
+        "dispersion": 0
+      },
+      "ms": {
+        "media": 9841.333333333334,
+        "min": 8319,
+        "max": 11589,
+        "dispersion": 0.33227204985774283
+      },
+      "mide": "distinguir dos conceptos parecidos",
+      "pasadas": [
+        {
+          "entrada": 16078,
+          "salida": 232,
+          "cache": 0,
+          "llamadas": 5,
+          "ms": 8319,
+          "correcta": true,
+          "delego": false
+        },
+        {
+          "entrada": 16206,
+          "salida": 243,
+          "cache": 0,
+          "llamadas": 5,
+          "ms": 9616,
+          "correcta": true,
+          "delego": false
+        },
+        {
+          "entrada": 16010,
+          "salida": 204,
+          "cache": 0,
+          "llamadas": 5,
+          "ms": 11589,
+          "correcta": true,
+          "delego": false
+        }
+      ]
+    }
+  ]
+}

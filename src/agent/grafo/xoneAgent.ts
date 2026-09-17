@@ -1,5 +1,5 @@
 import { createDeepAgent, createFilesystemMiddleware } from "deepagents";
-import { promptDeAgente, repartirSkills, type Agente } from "../../core/agentes.js";
+import { MAPA_DEL_PROYECTO, promptDeAgente, repartirSkills, type Agente } from "../../core/agentes.js";
 import type { MotorExterno, SubagenteExternoPort } from "../../core/ports.js";
 import { RunnableLambda } from "@langchain/core/runnables";
 import { AIMessage, type BaseMessage } from "@langchain/core/messages";
@@ -102,6 +102,9 @@ export function promptOrquestador(agentes: readonly Agente[]): string {
   const hay = (n: string): boolean => agentes.some((a) => a.nombre === n);
   return [
     "Eres el orquestador de un harness de desarrollo para la plataforma XOne.",
+    // El mapa lo ve él TAMBIÉN, y no solo los especialistas: desde que contesta lo que puede
+    // en vez de delegarlo todo, es quien más lo necesita.
+    MAPA_DEL_PROYECTO,
     // Decía «NO tienes herramientas», y era falso: tiene las seis de fichero. Ahora son de
     // SOLO LECTURA (`PERFIL_DEL_ORQUESTADOR`), así que la frase dice lo que de verdad puede.
     //

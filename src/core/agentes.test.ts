@@ -3,12 +3,14 @@ import {
   escribirAgente,
   fusionarAgentes,
   leerAgente,
+  MAPA_DEL_PROYECTO,
   motivoDeNombreInaceptable,
   nombreSugerido,
   promptDeAgente,
   REGLAS_XONE,
   type Agente,
 } from "./agentes.js";
+import { generarEsqueleto } from "./esqueleto.js";
 
 const FICHERO = [
   "---",
@@ -32,6 +34,37 @@ function agente(extra: Partial<Agente> = {}): Agente {
     ...extra,
   };
 }
+
+describe("el mapa del proyecto", () => {
+  it("dice dónde mirar, y lo que dice es CIERTO contra el esqueleto de verdad", () => {
+    // Un mapa inventado sería el bug mudo que este producto existe para evitar, así que se
+    // comprueba contra los ficheros que genera `crearProyecto`, no contra el recuerdo.
+    const esqueleto = new Map(
+      generarEsqueleto({ nombre: "X", titulo: "X", orientacion: "portrait", login: true }).map((f) => [f.ruta, f.contenido])
+    );
+    expect(MAPA_DEL_PROYECTO).toContain("<entry-point>");
+    expect(esqueleto.get("app.xml")).toContain("<entry-point>");
+    expect(MAPA_DEL_PROYECTO).toContain("<login-coll>");
+    expect(esqueleto.get("app.xml")).toContain("<login-coll>");
+    expect(MAPA_DEL_PROYECTO).toContain("`app.ini`");
+    expect(esqueleto.has("app.ini")).toBe(true);
+    expect(MAPA_DEL_PROYECTO).toContain("mappings.xne");
+    expect(esqueleto.get("mappings.xne")).toContain("<coll ");
+  });
+
+  it("va en el prompt de un especialista, detrás de las reglas", () => {
+    const prompt = promptDeAgente({
+      nombre: "x",
+      descripcion: "d",
+      motor: "modelo",
+      soloLectura: true,
+      instrucciones: "",
+      skills: [],
+      origen: "global",
+    });
+    expect(prompt.indexOf(REGLAS_XONE)).toBeLessThan(prompt.indexOf(MAPA_DEL_PROYECTO));
+  });
+});
 
 describe("leerAgente", () => {
   it("lee el frontmatter y deja el cuerpo como instrucciones", () => {
