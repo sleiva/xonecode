@@ -2926,8 +2926,26 @@ export function montarRutas(
     // documenta la medida).
     // Solo al recién llegado: los demás ya recibieron su saludo al conectar.
     sumidero({ clase: "bienvenida", ...(vestibulo.nombre === undefined ? {} : { nombre: vestibulo.nombre }) });
+    /**
+     * **Dos anuncios, y el primero va ANTES de preguntar a CloudStudio.**
+     *
+     * `pasos` se calcula del DISCO (`pasosPendientes`: de dónde vino el modelo y qué entornos
+     * hay registrados), así que en una máquina configurada ya se sabe «no falta nada» sin
+     * tocar la red. Con un solo anuncio detrás de `poblarProyectosSiProcede` —que abre la
+     * sesión MCP— el cliente no podía saberlo hasta que ese viaje terminara, y `App.tsx` lee
+     * un `alta` ausente como «todavía no consta»: enseñaba la pantalla del alta a alguien que
+     * no tiene nada que dar de alta. Medido en la máquina del usuario, con CloudStudio
+     * caliente: el `alta` llegaba a 1436 ms, y con el MCP lento o la red caída esa ventana
+     * crece hasta su tope. Es la misma forma que `MS_DE_TRABAJO_AL_ABRIR`: un dato que se
+     * sabe y no se dice porque va detrás de otro que tarda.
+     *
+     * El segundo anuncio lleva los proyectos, y sigue en un `finally` por lo de siempre: que
+     * `poblarProyectosSiProcede` acabe mal no puede dejar al cliente sin el anuncio. Es el
+     * mismo reparto que ya usaba el cambio de entorno (anunciar, luego preguntar).
+     */
     void conducirCuenta()
       .catch(contar)
+      .then(() => anunciarAlta().catch(contar))
       .then(() => poblarProyectosSiProcede())
       .finally(() => void anunciarAlta().catch(contar));
 

@@ -416,6 +416,46 @@ describe("App: la pantalla de arranque no enseña nada más", () => {
   });
 
   /**
+   * **«No consta» no es «falta»: sin `alta` y sin nada preguntado, se pinta el LIENZO y no
+   * el diálogo de configuración.**
+   *
+   * `enAlta` leía `estado.alta === undefined` como «hay que enseñar el alta», y ese ausente
+   * significa otra cosa: que el servidor todavía no lo ha dicho. La ventana no era teórica —
+   * el servidor anunciaba el alta DETRÁS de abrir la sesión MCP contra CloudStudio, medido en
+   * la máquina del usuario a 1436 ms con el MCP caliente, y sin tope si la red va mal—, así
+   * que un proyecto ya configurado enseñaba la progresión «Modelo / Entorno de CloudStudio»
+   * antes de entrar. El servidor ya adelanta ese anuncio (`arranque.ts`), y esto es la otra
+   * mitad: aunque tarde, lo que se ve mientras no se sabe es el lienzo.
+   *
+   * Lo que NO cambia, y está probado arriba y abajo: con un `selector` o un `secreto` en
+   * vuelo la tarjeta sí sale (el paso de cuenta viaja por ahí, no por `alta`), y el aviso de
+   * conexión sigue fuera de la tarjeta para que un servidor caído no se quede mudo.
+   */
+  it("sin `alta` y sin nada preguntado no sale el diálogo de configuración, y con un paso pendiente sí", () => {
+    const { store } = montarSinAbrir();
+    // `PasosDelAlta` es la progresión del alta y solo la pinta `TarjetaDeAlta`, así que su
+    // `aria-label` es la presencia de la tarjeta — no un texto que pueda cambiar de copy.
+    expect(screen.queryByLabelText("Pasos del alta")).toBeNull();
+    // Y no se ha colado la maqueta completa por el otro lado: esto sigue siendo el arranque.
+    expect(screen.queryByPlaceholderText(/pregunta sobre xone/i)).toBeNull();
+    expect(screen.queryByText("Ajustes")).toBeNull();
+
+    // En cuanto el servidor dice que SÍ falta un paso, la tarjeta sale.
+    act(() =>
+      store.aplicar({
+        clase: "alta",
+        pasos: ["entorno"],
+        proveedores: [],
+        entornos: [],
+        proyectos: [],
+        ramas: [],
+        proyectoAbierto: false,
+      })
+    );
+    expect(screen.getByLabelText("Pasos del alta")).toBeTruthy();
+  });
+
+  /**
    * Antes de este aviso, un token inválido o el servidor caído mientras `estado.alta`
    * seguía `undefined` (nunca llegó ni un `selector`) pintaban el splash sólido y NADA
    * más: un fallo mudo, justo lo que este repo persigue en todas partes (`AGENTS.md`,

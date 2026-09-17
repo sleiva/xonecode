@@ -564,6 +564,33 @@ export function App({
   const enAlta = estado.alta === undefined || estado.alta.pasos.length > 0;
 
   /**
+   * ¿Hay algo esperando respuesta AQUÍ, en el arranque?
+   *
+   * El paso de cuenta no viaja por `alta` sino por `selector`/`secreto`, y una `pregunta`
+   * puede caer también antes de entrar. Se mira solo con `alta` ausente a propósito: los
+   * tres llegan TAMBIÉN a mitad de conversación, y entonces los pinta la maqueta completa.
+   */
+  const algoPreguntado =
+    estado.alta === undefined &&
+    (estado.selector !== undefined || estado.secreto !== undefined || estado.pregunta !== undefined);
+
+  /**
+   * **No consta ≠ falta.** `alta === undefined` significa que el servidor todavía no lo ha
+   * dicho, y leerlo como «hay que dar algo de alta» enseñaba el diálogo de configuración a
+   * quien ya lo tiene todo configurado. La ventana no era teórica: el anuncio del alta iba
+   * DETRÁS de abrir la sesión MCP contra CloudStudio —medido en la máquina del usuario a
+   * 1436 ms con el MCP caliente, y sin tope si la red va mal—. El servidor ya adelanta ese
+   * anuncio (`web/servidor/arranque.ts`), y esto es la otra mitad: aunque tarde, mientras no
+   * se sabe se pinta el LIENZO y nada más.
+   *
+   * `enAlta` no cambia —la maqueta completa no puede montarse antes de saberlo—; lo que se
+   * calla es la TARJETA. Y se calla solo cuando no hay nada dentro que contestar, que es lo
+   * que evita esconder una pregunta: `AvisoDeConexion` va fuera de ella, así que un servidor
+   * caído sigue diciéndolo.
+   */
+  const sinSaberTodavia = estado.alta === undefined && !algoPreguntado;
+
+  /**
    * ¿Está el paso de cuenta en marcha AHORA MISMO?
    *
    * Dos señales, y las dos hacen falta. La primera es que `estado.alta` todavía no haya
@@ -605,6 +632,12 @@ export function App({
           preferencia y no se retira: quitar ese campo de `alta` es tocar un contrato que
           no es parte de este arreglo.
         */}
+        {/*
+          La tarjeta solo cuando se sabe que hay algo que dar de alta, o hay algo que
+          contestar. Mientras no consta, el lienzo y el aviso de conexión — ver
+          `sinSaberTodavia`.
+        */}
+        {sinSaberTodavia ? null : (
         <TarjetaDeAlta
           nombre={estado.nombre ?? estado.alta?.nombre}
           pasos={pasosDeAlta}
@@ -675,6 +708,7 @@ export function App({
             />
           ) : null}
         </TarjetaDeAlta>
+        )}
       </PantallaDeArranque>
     );
   }

@@ -193,6 +193,12 @@ describe("montarRutas — el cable, por fin conectado", () => {
       // anunció, y su compositor se quedaría encendido mientras lo que escriba se encola.
       "turno",
       "bienvenida",
+      // DOS altas, y en ese orden a propósito: el primero dice lo que ya se sabe del disco
+      // («no falta ningún paso»), y el segundo llega cuando CloudStudio ha contestado, con
+      // los proyectos dentro. Fundirlos en uno dejaba al cliente sin saber si hacía falta
+      // dar algo de alta durante todo el viaje al MCP, y entonces enseñaba la pantalla del
+      // alta a quien no tenía nada que dar de alta.
+      "alta",
       "alta",
     ]);
   });
@@ -251,6 +257,51 @@ describe("montarRutas — el cable, por fin conectado", () => {
     // Las ramas sí siguen vacías: pedirlas exige saber de qué PROYECTO, y eso solo lo
     // dice quien elige uno en la barra (`paso: "proyecto"`), no la población automática.
     expect(alta.ramas).toEqual([]);
+  });
+
+  /**
+   * **El alta se anuncia ANTES de preguntar a CloudStudio, igual que al cambiar de entorno.**
+   *
+   * `pasos` se calcula del DISCO (`pasosPendientes`: de dónde vino el modelo y qué entornos
+   * hay registrados), así que en una máquina configurada ya se sabe «no falta nada» antes de
+   * tocar la red. Colgado detrás de `poblarProyectosSiProcede` —que abre la sesión MCP— el
+   * cliente se quedaba sin saberlo mientras durara ese viaje: medido en la máquina del
+   * usuario, con CloudStudio caliente y respondiendo, el `alta` llegaba a los 1436 ms y hasta
+   * entonces la pantalla enseñaba el DIÁLOGO DE CONFIGURACIÓN de un proyecto ya configurado,
+   * porque `App.tsx` leía `alta === undefined` como «falta el alta» en vez de «no consta».
+   * Con el MCP lento, el token caducado o la red caída, esa ventana crece hasta su tope.
+   *
+   * Por eso la aserción es sobre el PRIMER anuncio y con la conexión colgando: si el arreglo
+   * se deshace, esto se queda sin ningún `alta` y muere. Los proyectos llegan en el SEGUNDO
+   * anuncio, que es lo que prueba el test de arriba.
+   */
+  it("el alta se anuncia sin esperar al MCP: con la conexión colgando, `pasos` ya llega", async () => {
+    const servidor = servidorDeMentira();
+    let contestar: ((v: { proyectos: { id: string; nombre: string }[] }) => void) | undefined;
+    montarRutas(
+      servidor,
+      vestibuloDePrueba({
+        // La sesión de CloudStudio que no contesta: sin resolver, la población queda en vuelo.
+        proyectosDeEntorno: () =>
+          new Promise((r) => {
+            contestar = r;
+          }),
+      })
+    );
+    const cliente = clienteDeMentira();
+    const eventos = servidor.rutas.get(`GET ${RUTA_EVENTOS}`);
+    await eventos!(cliente.peticion, cliente.respuesta);
+    await asentar();
+    const primera = ultimaAlta(cliente) as Extract<MensajeAlCliente, { clase: "alta" }>;
+    expect(primera).toBeDefined();
+    expect(primera.pasos).toEqual([]);
+    // Y cuando el MCP contesta, los proyectos llegan en otro anuncio: lo que se adelanta es
+    // el «no falta nada», no el dato que todavía no se sabe.
+    expect(primera.proyectos).toEqual([]);
+    contestar?.({ proyectos: [{ id: "p1", nombre: "Tienda" }] });
+    await asentar();
+    const segunda = ultimaAlta(cliente) as Extract<MensajeAlCliente, { clase: "alta" }>;
+    expect(segunda.proyectos).toEqual([{ id: "p1", nombre: "Tienda" }]);
   });
 
   it("sin ningún entorno registrado, la población automática no tiene de dónde sacar proyectos: `proyectos` se queda vacío sin lanzar", async () => {
