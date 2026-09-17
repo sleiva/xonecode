@@ -188,8 +188,10 @@ export function Receta({
           </div>
         </div>
       )}
-      {/* Lo que viene DESPUÉS se dice siempre, completa o no: arrancar un emulador todavía
-          no está cableado aquí, y el comando es lo único honesto que se puede dar. */}
+      {/* Lo que viene DESPUÉS se dice siempre, completa o no. Se pinta PLANO: los backticks
+          y las comillas del texto salen literales a propósito —es la convención de estas
+          recetas—, así que quien lo escriba no puede poner marcado esperando que se
+          interprete (con `**negrita**` salieron los asteriscos en pantalla, medido). */}
       <p className={estilos.despues}>{receta.despues}</p>
     </section>
   );

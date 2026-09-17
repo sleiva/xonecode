@@ -373,8 +373,8 @@ export function recetaDeEmuladorAndroid(plataforma: string, estado: EstadoDeAndr
     // cableado, así que se da el comando en vez de prometer un botón.
     despues:
       "Con el AVD creado aparece abajo, en «Simuladores y emuladores», con su botón de " +
-      "**Arrancar**: se lanza desde aquí y la fila se pone en verde cuando el aparato " +
-      "responde. A mano sería `emulator -avd pixel8`, que es lo mismo que hace ese botón.",
+      "«Arrancar»: se lanza desde aquí y la fila se pone en verde cuando el aparato responde. " +
+      "A mano sería `emulator -avd pixel8`, que es lo mismo que hace ese botón.",
   };
 }
 
