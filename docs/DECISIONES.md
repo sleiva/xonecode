@@ -4418,6 +4418,18 @@ Consecuencia para lo siguiente: **`cache_control` con Anthropic deja de ser una 
 El prefijo son ~3.500 tokens estables y su mínimo cacheable ronda los 1.024, así que lo que se
 cachearía es justo la cabecera que hoy se paga entera en cada llamada.
 
+**Y con Gemini se comprobó, ya desde dentro del harness**: cuatro llamadas de un turno real con
+el prefijo idéntico —una sola huella— y `cache_read` **cero en las cuatro**, con 2.133 a 2.852
+tokens de entrada. Confirma por otra vía lo que ya estaba medido con prefijos sintéticos (a 11k,
+cero aciertos; a 20k, el 81 %): **a nuestros tamaños su caché implícita no entra**, y no por
+culpa de nuestro prompt. Lo que esto añade es que ahora la comprobación es de una línea y sobre
+el prompt de verdad, no sobre un montaje.
+
+Y un contrapeso que conviene tener escrito: **quitar esquemas ACHICA el prefijo**, o sea que aleja
+del suelo de Gemini mientras abarata a todos los demás. En la práctica no hubo que elegir —3.500
+frente a 20.000 no iba a entrar de ninguna manera—, pero las dos palancas tiran en direcciones
+contrarias y el día que alguien persiga esa caché tiene que saberlo.
+
 ## Trampas verificadas
 
 - **El orquestador va de SOLO LECTURA, y hasta el 9-09-2026 no lo era** (`PERFIL_DEL_ORQUESTADOR`,
