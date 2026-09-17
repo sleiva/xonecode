@@ -21,8 +21,8 @@ la prosa —una duración va entre paréntesis y con el nombre de su constante (
 ficheros `.xne`, JavaScript ES5 y un CSS propio. No existe el DOM, ni `async/await` en el
 runtime, ni React. La fuente de una colección es su `.xne`; los `.xml` los genera XOne Studio
 y **no se tocan**. XOne ignora en silencio lo desconocido, así que un atributo o una función
-inventada no da error — da un bug mudo. Esa regla gobierna los prompts (`agent/xoneAgent.ts`)
-y el backend (`agent/proyecto.ts`), y es la razón de ser de la aprobación y del verificador.
+inventada no da error — da un bug mudo. Esa regla gobierna los prompts (`agent/grafo/xoneAgent.ts`)
+y el backend (`agent/grafo/proyecto.ts`), y es la razón de ser de la aprobación y del verificador.
 
 ## Comandos
 
@@ -65,7 +65,7 @@ Seis capas, y la frontera importa más que el contenido:
 | capa | qué es |
 |---|---|
 | `src/core/` | TypeScript **puro**: eventos de dominio, motor de turno, puertos + dobles, resolución de modelos, config |
-| `src/agent/` | toda la suciedad del grafo: deepagents, langgraph, backend de ficheros, perfiles, verificador, git |
+| `src/agent/` | toda la suciedad del grafo: deepagents, langgraph, backend de ficheros, perfiles, verificador, git. Repartida en ocho carpetas por la misma división que las secciones de más abajo: `grafo/`, `turno/`, `subagentes/`, `tareas/`, `sesiones/`, `cloudstudio/`, `dispositivos/`, `config/` |
 | `src/cli/` | despachador (`main.ts`), consola interactiva (`consola.ts`), un disparo (`run.ts`), comandos de diagnóstico |
 | `src/web/` | el SERVIDOR de la consola web: http en loopback, SSE, vestíbulo, sesiones, piel web |
 | `apps/web/` | el CLIENTE: React + Vite, un `package.json` propio (workspace) que se compila a `apps/web/dist` |
@@ -80,7 +80,7 @@ Seis capas, y la frontera importa más que el contenido:
 - **react-dom, vite y `apps/web/` no se importan desde `src/`** (`src/web/frontera.test.ts`), y
   los tipos del cable se **redeclaran** en `apps/web/src/tipos.ts`. `tipos.test.ts` compara los
   literales `tipo:` y `clase:` contra el host: divergir da rojo, no un bug mudo.
-- `agent/` no importa de `cli/` — convención sin test, solo un comentario en `agent/turnoReal.ts`.
+- `agent/` no importa de `cli/` — convención sin test, solo un comentario en `agent/turno/turnoReal.ts`.
   En el otro sentido sí se puede.
 
 ### Puertos, eventos y honestidad
@@ -91,7 +91,7 @@ Seis capas, y la frontera importa más que el contenido:
   `ES_DOBLE`, no un booleano: un campo se puede olvidar y entonces el aviso calla.
 - **Ningún evento lleva argumentos de tool, ni truncados** (`core/events.ts`): `write_file`
   llevaría el contenido del fichero y una tool MCP el bearer. `tool.detalle` no es excepción: es
-  una lista blanca por NOMBRE de tool (`agent/resumenDeTool.ts`) que extrae un solo campo de
+  una lista blanca por NOMBRE de tool (`agent/turno/resumenDeTool.ts`) que extrae un solo campo de
   ruta o patrón. El **único** sitio donde el contenido se enseña entero es el diff de la
   aprobación (`cli/aprobar.ts`, `core/diff.ts`), que es el paso donde se DECIDE sobre él.
 - **Ninguna ruta de la máquina viaja por el cable** (`sinRutas`, `web/servidor/arranque.ts`): puede
@@ -100,14 +100,14 @@ Seis capas, y la frontera importa más que el contenido:
 - **Los avisos de honestidad son código, no prompt**, con alcance de **turno**
   (`core/bitacora.ts`): a un modelo se le puede pedir que avise y a veces no avisa, y un aviso
   que salta cuando no ha pasado nada enseña a ignorarlo.
-- `agent/puente.ts` traduce los chunks de langgraph a eventos, `core/turno.ts` decide qué se
+- `agent/turno/puente.ts` traduce los chunks de langgraph a eventos, `core/turno.ts` decide qué se
   cuenta, y las pieles (`cli/stdio.ts`, `cli/tui/`, `web/servidor/pielWeb.ts`) pintan. Los
   métodos nuevos de `Piel` van **opcionales** (`fase?`, `razonamiento?`, `notificacion?`,
   `linea(texto, detalle?)`): así stdio y la TUI no cambian y la tubería sigue byte-idéntica.
 
 ### El agente, y lo único que puede escribir
 
-`agent/xoneAgent.ts`: un orquestador que delega en los especialistas de `core/agentes.ts`.
+`agent/grafo/xoneAgent.ts`: un orquestador que delega en los especialistas de `core/agentes.ts`.
 Cinco cosas no son negociables:
 
 - **El orquestador va de SOLO LECTURA por PERMISOS, no por falta de tools**
@@ -126,7 +126,7 @@ Cinco cosas no son negociables:
 Y las guardas del proyecto:
 
 - **Las vistas aplanadas** (`X.xml` con un `X.xne` al lado) se retiran del backend con un Proxy
-  (`agent/proyecto.ts`): la regla es propiedad del proyecto, no de un prompt.
+  (`agent/grafo/proyecto.ts`): la regla es propiedad del proyecto, no de un prompt.
 - **Un rechazo de guarda se DEVUELVE como `{error}`, nunca se lanza.** deepagents devuelve el
   error al modelo, que puede reintentar; una excepción se lleva el turno por delante y el agente
   no reintenta. Vale para `sinVistasAplanadas`, `sinArtefactosEnElProyecto` y
@@ -138,7 +138,7 @@ Y las guardas del proyecto:
 - **Un artefacto no puede acabar dentro del proyecto, y eso es código**: `artefactoFueraDeSitio`
   (`core/artefactos.ts`) deniega `artifacts`/`artifact` como primer segmento y `/artifact.html`
   en `write` y `edit` — solo ahí, para poder leer y borrar los mal puestos de antes. El predicado
-  `when` de `seDetieneEn` (`agent/perfiles.ts`) usa **la misma función** para no sacar un modal
+  `when` de `seDetieneEn` (`agent/grafo/perfiles.ts`) usa **la misma función** para no sacar un modal
   cuyo único final posible es un rechazo; `perfiles.test.ts` exige que no preguntar implique que
   la guarda rechaza.
 - **Lo que deepagents desaloja del contexto tampoco es del proyecto**: `/large_tool_results/` y
@@ -151,18 +151,18 @@ Y las guardas del proyecto:
 - **`/adjuntos/` es de solo lectura y su fila en `permisosDe` es INCONDICIONAL**: sin ella, un
   `write_file` con la carpeta sin montar escribe un fichero DEL PROYECTO con el nombre de algo
   que la interfaz presenta como «lo que te adjuntaron».
-- **La tool propia es la búsqueda regex** (`agent/busquedaRegex.ts`), acotada (`LIMITES_REGEX`).
+- **La tool propia es la búsqueda regex** (`agent/grafo/busquedaRegex.ts`), acotada (`LIMITES_REGEX`).
   Re-aplica `puedeLeerRuta` **a mano**: una tool de LangChain añadida por xonecode **no pasa por
   el middleware de permisos**.
 - `.xonecode/memoria.md` se ve por UNA ruta virtual, `/MEMORIA_PROYECTO.md` (Proxy en
-  `agent/memoriaDeProyecto.ts`), así que la carpeta sigue denegada entera y escribir la memoria
+  `agent/grafo/memoriaDeProyecto.ts`), así que la carpeta sigue denegada entera y escribir la memoria
   pasa por la aprobación de siempre. El resumen de contexto usa umbrales **fijados a mano** (32k
   para disparar, 8k de reciente): deepagents asume 170k y con Ollama comprime demasiado tarde.
 
 ### Los subagentes
 
 Un subagente es un `.md` con frontmatter en `.xonecode/agentes/<nombre>.md`
-(`core/agentes.ts`, `agent/agentesEnDisco.ts`). Los cinco de serie —`docs`, `planner`, `dev`,
+(`core/agentes.ts`, `agent/subagentes/agentesEnDisco.ts`). Los cinco de serie —`docs`, `planner`, `dev`,
 `mockup`, `xone-device-tester`— se siembran al arrancar. Reglas duras:
 
 - **`REGLAS_XONE` se antepone SIEMPRE desde código**, igual que el aviso de las skills que faltan
@@ -198,7 +198,7 @@ Un subagente es un `.md` con frontmatter en `.xonecode/agentes/<nombre>.md`
   mensaje de denegación le ofrecía unas tools que no podía alcanzar), y **listar la RAÍZ se
   permite**: `rutaVirtualDeEscritura` la descarta porque no es un fichero que escribir, y eso es
   cierto para escribir y falso para mirar.
-- **Motores externos**: `claude-code` (`agent/subagenteExterno.ts`) **escribe, y cada escritura
+- **Motores externos**: `claude-code` (`agent/subagentes/subagenteExterno.ts`) **escribe, y cada escritura
   pasa por una autorización** — `canUseTool` es asíncrono y corre en nuestro proceso, así que se
   espera ahí, **sin `interrupt()` y sin reejecutar el nodo**. `decisionDeTool`, en este orden:
   **TRES listas** de tools (lectura / escritura / denegadas, y lo desconocido denegado), el papel
@@ -207,7 +207,7 @@ Un subagente es un `.md` con frontmatter en `.xonecode/agentes/<nombre>.md`
   **solo `Write` y `Edit`**: las únicas cuyos argumentos encajan en `cambioDe()`, o sea de las que
   se puede componer el diff que hay que mirar. `Bash`, `WebFetch` y `WebSearch` se deniegan: los
   dos últimos no escriben, pero sacan el proyecto de la máquina.
-- **Las guardas de ruta hay que REAPLICARLAS** (`agent/escrituraExterna.ts`): el `file_path` del
+- **Las guardas de ruta hay que REAPLICARLAS** (`agent/subagentes/escrituraExterna.ts`): el `file_path` del
   hijo es ABSOLUTO y va al disco directo, así que `permisosDe`, el `virtualMode`, las vistas
   aplanadas y las guardas de artefactos y descargas no lo alcanzan. Las MISMAS funciones sobre la
   ruta virtual, y **dos veces** —texto y `realpath`— como en `arbolDeProyecto.ts`. Del destino se
@@ -237,7 +237,7 @@ Un subagente es un `.md` con frontmatter en `.xonecode/agentes/<nombre>.md`
 - Un `.md` con `soloLectura: false` se acepta ya en los TRES motores, y las guardas se levantaron
   **con** su cableado, no antes. Se comprueba `disponible()` antes de montarlo.
 - **En Codex la palanca de la escritura es el `approvalPolicy`, no el `sandbox`**
-  (`agent/subagenteCodex.ts`, `agent/escrituraDeCodex.ts`). El sandbox se queda en **`read-only`
+  (`agent/subagentes/subagenteCodex.ts`, `agent/subagentes/escrituraDeCodex.ts`). El sandbox se queda en **`read-only`
   SIEMPRE** —también con la escritura concedida— y lo que abre `permitirEscritura` es
   `approvalPolicy: never → on-request`: la denegación la sigue poniendo la caja del SO y cada
   escritura llega como una petición que contestamos. Es el mismo papel que el `ask` del hook
@@ -268,8 +268,8 @@ Un subagente es un `.md` con frontmatter en `.xonecode/agentes/<nombre>.md`
 - El resto del protocolo: `codex app-server --stdio` con JSON por línea; la respuesta final es el
   `item/completed` cuyo item es un `agentMessage` de fase `final_answer`. El hijo es el Codex DEL
   USUARIO, con sus MCP y sus hooks: xonecode no los filtra.
-- **OpenCode es el TERCER motor, y habla por ACP** (`agent/subagenteOpencode.ts`,
-  `agent/escrituraDeOpencode.ts`). De sus tres superficies —`run --format json`, `serve` y
+- **OpenCode es el TERCER motor, y habla por ACP** (`agent/subagentes/subagenteOpencode.ts`,
+  `agent/subagentes/escrituraDeOpencode.ts`). De sus tres superficies —`run --format json`, `serve` y
   `acp`— se usa ACP: JSON-RPC 2.0 por línea sobre stdio, el mismo molde que Codex, y la única
   con portón de permiso por stdio.
 - **Su petición trae TODO en un solo mensaje**: `session/request_permission` lleva
@@ -365,12 +365,12 @@ Un subagente es un `.md` con frontmatter en `.xonecode/agentes/<nombre>.md`
   (en la web `FuentesDeEleccion.proyecto` no se rellena nunca); hace falta interactivo; solo el
   booleano `true`; se pregunta en cada RONDA y no al abrir; y se DICE dos veces (aviso por turno
   con los nombres, y `alta.sinAprobacion`). En un proyecto conectado el comando RECHAZA.
-- El origen del interrupt se dice UNA vez: `aPendiente` (`agent/interrupts.ts`) quita el prefijo
+- El origen del interrupt se dice UNA vez: `aPendiente` (`agent/turno/interrupts.ts`) quita el prefijo
   `[perfil]` de la descripción porque el dato ya viaja en `origen`.
 
 ### El verificador, en el turno
 
-`agent/turnoReal.ts#conVerificacion`. Cinco reglas:
+`agent/turno/turnoReal.ts#conVerificacion`. Cinco reglas:
 
 - **Cosido al FINAL del flujo, no después del turno** (`correrTurno` cierra en su `finally`).
 - **Solo la ronda FINAL**, la que termina sin escrituras pendientes.
@@ -389,13 +389,13 @@ generador al agotar el flujo, y las condiciones con que predice otra ronda son *
 `break` del bucle — si divergen, un turno se queda sin `fin` o cierra dos veces. `reparacion` se
 emite al EMPEZAR la pasada.
 
-`agent/instantanea.ts`: la foto del ANTES es un árbol de git en un `GIT_INDEX_FILE` privado —sin
+`agent/turno/instantanea.ts`: la foto del ANTES es un árbol de git en un `GIT_INDEX_FILE` privado —sin
 commits, sin tocar el índice del usuario— y se toma **por turno**, no por sesión.
 
 ### Las tareas en background
 
-`core/tareas.ts`, `agent/tareasEnDisco.ts`, `web/servidor/corredorDeTareas.ts`,
-`consolaDeTarea.ts`, `core/entrega.ts`, `agent/juezDeTarea.ts`. Un encargo por proyecto que corre
+`core/tareas.ts`, `agent/tareas/tareasEnDisco.ts`, `web/servidor/corredorDeTareas.ts`,
+`consolaDeTarea.ts`, `core/entrega.ts`, `agent/tareas/juezDeTarea.ts`. Un encargo por proyecto que corre
 solo y escribe sin pedir aprobación. Cuatro estados; `requiere-atencion` significa **esperando
 feedback del desarrollador** y no es terminal.
 
@@ -458,7 +458,7 @@ feedback del desarrollador** y no es terminal.
   llevaría el e2e de tubería byte-idéntica. El TTY entra por parámetro para probar los dos lados.
   `decidirTui` igual: `--no-tui` gana, `--tui` fuerza (sin TTY es error de USO, 64), por omisión
   TUI solo con stdin Y stdout TTY.
-- **La consola web DICE con qué código corre** (`core/version.ts` + `agent/versionEnDisco.ts`,
+- **La consola web DICE con qué código corre** (`core/version.ts` + `agent/config/versionEnDisco.ts`,
   opción `version`), antes que la URL: `xonecode 0.5.0 · 85219d4 + cambios sin commitear`.
   Existe por una asimetría que hay que tener presente: **el cliente se lee del DISCO en cada
   petición** (`servidor.ts`, `readFileSync`), así que reconstruirlo se ve recargando la página,
@@ -599,7 +599,7 @@ feedback del desarrollador** y no es terminal.
   cookie puesta. Más `nosniff` y `no-store`. La barrera es `esRutaDeArtefacto` aplicada al texto
   de la query **y** al `realpath`. La sesión la resuelve el servidor con `idDeHilo`, no con
   `sesion`. Consecuencia: `localStorage`, `sessionStorage` e `indexedDB` **lanzan** dentro del
-  iframe, así que `SKILLS_VISUALES` (`agent/agentesEnDisco.ts`) lo dice desde el prompt y no solo
+  iframe, así que `SKILLS_VISUALES` (`agent/subagentes/agentesEnDisco.ts`) lo dice desde el prompt y no solo
   desde una skill que hay que cargar.
 - **Ficheros y Revisión**: el lector filtra con las MISMAS reglas que ve el agente
   (`puedeLeerRuta`, `esVistaAplanada`) y **la barrera se aplica DOS veces** — sobre el texto que
@@ -624,7 +624,7 @@ feedback del desarrollador** y no es terminal.
   `return` temprano no escondería solo la cifra — ni la pediría. Es la razón de que esos `return`
   sean hoy una variable `cuerpo`. Y manda la INTENCIÓN, no la sintaxis (mensaje `sync`): **`estado`
   se MIDE en el servidor** contra la ref de la bajada —la MISMA cuenta que da `/sync estado`,
-  `agent/gitSync.ts#cambiosPendientes`— y **sin abrir sesión MCP**, porque el número ya está en
+  `agent/sesiones/gitSync.ts#cambiosPendientes`— y **sin abrir sesión MCP**, porque el número ya está en
   local; **`subir` y `bajar` se ENCOLAN** como `/sync <accion>`, así que salen con el MISMO plan,
   la MISMA guarda de árbol sucio y la MISMA aprobación que el terminal — un segundo camino de
   subida es donde el hueco de política podría reabrirse—. Una acción que no se entiende NO cae en
@@ -678,7 +678,7 @@ feedback del desarrollador** y no es terminal.
 
 ### Sesiones, hilos y git
 
-- **El hilo SOBREVIVE al proceso** (`agent/checkpointer.ts`, `SqliteSaver` en
+- **El hilo SOBREVIVE al proceso** (`agent/sesiones/checkpointer.ts`, `SqliteSaver` en
   `.xonecode/checkpoint.sqlite`): uno por PROYECTO particionado por `thread_id`, y **el
   `thread_id` ES el id de la sesión** —sin esa igualdad no hay nada que reanudar—, decidido al
   ABRIR. Se crea con el modo puesto **antes** de abrirlo (SQLite lo crea con 0644 y un checkpoint
@@ -693,7 +693,7 @@ feedback del desarrollador** y no es terminal.
   saca del índice privado de `instantanea.ts` y `sesionGit.ts` (`sacarXonecodeDelIndice`): en un
   proyecto OFFLINE nadie escribió el `info/exclude` y las refs `refs/xonecode/sesion/*`
   mantendrían esos objetos vivos para siempre. `/nuevo` en la web abre un hilo huérfano y lo DICE.
-- **Cada turno COMMITEA lo que dejó** (`agent/gitSync.ts#commitDeTurno`): con el índice DE VERDAD
+- **Cada turno COMMITEA lo que dejó** (`agent/sesiones/gitSync.ts#commitDeTurno`): con el índice DE VERDAD
   (hay test de que el árbol queda LIMPIO), sin cambios no se commitea (`git commit` con índice
   vacío sale con error), identidad NUESTRA por `-c`, se ESPERA, va en el `finally`
   **envuelto entero**, y solo `dentroDelWorkspace` (puro, con test) — en la carpeta que abrió una
@@ -702,7 +702,7 @@ feedback del desarrollador** y no es terminal.
 - **La basura del SO va a `info/exclude`, NUNCA a `.gitignore`** (`asegurarExclusiones`, que
   `prepararRepo` y `commitDeTurno` comparten): `.gitignore` es un fichero del PROYECTO y subiría
   él mismo, y sin esto un `.DS_Store` acaba en la app del cliente **como binario**.
-- **La atribución sale de los COMMITS, no de la foto** (`agent/sesionGit.ts`): un TRAILER con el
+- **La atribución sale de los COMMITS, no de la foto** (`agent/sesiones/sesionGit.ts`): un TRAILER con el
   id de sesión (`CLAVE_DE_SELLO`, que `commitDeTurno` escribe y `sesionGit.ts` grepea — el formato
   vive en el módulo que lo lee). El `--grep` no decide: se **VERIFICA** el trailer entero, o `s1`
   se quedaría los commits de `s10`. La LISTA sale de los commits uno a uno; las CUENTAS y el
@@ -724,7 +724,7 @@ feedback del desarrollador** y no es terminal.
 
 ### CloudStudio y la sincronización
 
-`agent/cloudstudioMcp.ts`, `descarga.ts`, `gitSync.ts`, `subida.ts`, `core/planDeSubida.ts`.
+`agent/cloudstudio/cloudstudioMcp.ts`, `descarga.ts`, `gitSync.ts`, `subida.ts`, `core/planDeSubida.ts`.
 
 - **Las tools remotas NO se inyectan en el agente.** Solo `cli/` (y el vestíbulo) llaman a
   `conectarCloudStudio`, `descarga.ts` y `subida.ts`; nunca una tool que el agente pueda invocar.
@@ -736,7 +736,7 @@ feedback del desarrollador** y no es terminal.
   `{id, nombre}`).
 - **La sesión caída llega de DOS formas** y hay que mirar las dos: un error de tool (`isError`) y
   una respuesta CORRECTA cuyo texto empieza por «Error: No project is open…». `conSesion`
-  (`agent/cloudstudioClient.ts`) mira el RESULTADO además de la excepción, reabre y reintenta una
+  (`agent/cloudstudio/cloudstudioClient.ts`) mira el RESULTADO además de la excepción, reabre y reintenta una
   vez. Ningún `JSON.parse` a pelo: `comoJson` dice QUÉ tool contestó.
   **`ProviderCloudStudio.invalidateCredentials` tiene que existir**: es el gancho del que depende
   la recuperación del SDK; sin él un token caducado era un fallo duro.
@@ -785,7 +785,7 @@ feedback del desarrollador** y no es terminal.
   Por omisión, Ollama local. Precedencia: `--modelo-<papel>` > `--modelo` > `XONECODE_MODELO` >
   proyecto > global > omisión, y cada valor recuerda su `origen`.
 - **`config.json` RECHAZA claves de API**; las credenciales van solo en `~/.xonecode/auth.json`,
-  modo 0600. El ESCRITOR es `agent/authEnDisco.ts` y su contrato es que **una escritura nunca
+  modo 0600. El ESCRITOR es `agent/config/authEnDisco.ts` y su contrato es que **una escritura nunca
   destruye lo que había**: la base de la fusión es el objeto CRUDO (no el de `validarAuth`, que
   descarta entradas raras en silencio) y ante un JSON roto **para sin escribir**.
 - **La variable de entorno de cada proveedor vive en UN sitio**
@@ -806,7 +806,7 @@ feedback del desarrollador** y no es terminal.
   tira `cloudstudioMcp.ts#urlDeMcpAceptable`): HTTPS sin credenciales, más `http://` en una lista
   CERRADA de hosts loopback. El cliente lleva su copia declarada porque la frontera prohíbe
   compartir módulo.
-- **El catálogo VIVO es la validación de la conexión** (`agent/catalogoModelos.ts`).
+- **El catálogo VIVO es la validación de la conexión** (`agent/config/catalogoModelos.ts`).
   `ErrorCatalogoModelos` nunca lleva la clave ni el cuerpo remoto —pero sí el código HTTP, o un
   410 y un 500 se leen igual—. Un modelo de Ollama retirado se salta; que fallen TODOS se relanza.
   Ollama local y Ollama Cloud son dos hosts distintos y no se mezclan.
@@ -816,7 +816,7 @@ feedback del desarrollador** y no es terminal.
   quedan fuera se CUENTAN. `SIN_CREDENCIAL` tiene TRES estados (verde / hueco / nada);
   `hayCredencial` no sirve para esto, contesta otra pregunta.
 - **Los tokens de una SESIÓN se cuentan y se enseñan, en DOS cuentas que no se suman**
-  (`core/ports.ts#ConsumoDeSesionPorCuenta`, `agent/consumoExterno.ts`, mensaje `consumo`,
+  (`core/ports.ts#ConsumoDeSesionPorCuenta`, `agent/subagentes/consumoExterno.ts`, mensaje `consumo`,
   `componentes/ContadorDeTokens.tsx`). El del agente EXTERNO lo dan `result.modelUsage` (Claude
   Code) y `thread/tokenUsage/updated` (Codex). Reglas:
   - **Los dos son ACUMULADOS: se lee el último, no se suman.** Entre ejecuciones sí se suma:
@@ -918,7 +918,7 @@ feedback del desarrollador** y no es terminal.
 - **Los topes de contexto solo si se saben** (`core/contextos.ts`, por familias; **ollama no tiene
   tope a propósito**). El porcentaje solo se calcula con tope: uno sobre un número inventado es
   una mentira con forma de cifra. La barra y `/config` usan la misma `topeResuelto`.
-- **La creación de proyecto al arrancar** (`core/esqueleto.ts`, `agent/crearProyecto.ts`): omisión
+- **La creación de proyecto al arrancar** (`core/esqueleto.ts`, `agent/config/crearProyecto.ts`): omisión
   **No**, datos puros de la documentación XOne —nada inventado—, y **nunca pisa un fichero
   existente**: lo salta y lo declara.
 - **El alta son cuatro pasos y cada uno solo aparece si falta lo que decide**, preguntándole al
@@ -931,7 +931,7 @@ feedback del desarrollador** y no es terminal.
 
 ### Dispositivos
 
-`core/dispositivos.ts`, `agent/dispositivosEnMaquina.ts`, `agent/instalacionEnMaquina.ts`.
+`core/dispositivos.ts`, `agent/dispositivos/dispositivosEnMaquina.ts`, `agent/dispositivos/instalacionEnMaquina.ts`.
 
 - **`xcode-select -p` ANTES de cualquier `xcrun`**: sin herramientas de desarrollo, `xcrun`
   levanta el diálogo de instalación encima de lo que haya.
@@ -1002,7 +1002,7 @@ las tareas, cómo leer un resultado y por qué la línea base se comprueba.
 | 64 | error de uso (bandera o modelo mal escritos) |
 | 70 | fallo del **entorno**, no del proyecto |
 
-Un fallo del entorno no se reporta como un proyecto roto: `agent/verificador.ts` lanza
+Un fallo del entorno no se reporta como un proyecto roto: `agent/turno/verificador.ts` lanza
 `ErrorDelSimulador` en vez de devolver un informe en rojo.
 
 **El 2 NO promete «nada se aplicó».** Prometía eso cuando las únicas escrituras eran las del HITL
@@ -1026,6 +1026,13 @@ recordar antes de tocar el código:
   todo en verde**, y en las nueve el remedio fue el mismo.
   Regla práctica: **si una regla de producción se compone dentro de algo que los tests simulan,
   esa regla no está probada — está escrita.**
+- **La raíz del paquete se BUSCA hacia arriba, nunca se cuenta con `..`**
+  (`agent/raizDelPaquete.ts`). `RAIZ_SKILLS` y la raíz de `versionEnDisco` se resolvían con
+  `resolve(dirname(import.meta.url), "..", "..")`, que ataba esos ficheros a su profundidad:
+  mover uno a una subcarpeta dejaba el catálogo de skills VACÍO sin un error que leer, y en
+  `dist/` igual, que es donde `package.json` declara `skills` en la raíz. No encontrarla LANZA:
+  una raíz adivinada haría falsas todas las rutas derivadas. Lo que vale para dos carpetas de
+  `agent/` se queda en su raíz, y por eso este módulo no está en ninguna de las ocho.
 - **La caché implícita de Gemini no entra a los tamaños de contexto de este harness** —los umbrales
   están en `DECISIONES.md`—, y `@langchain/google-genai` 2.3.0 suma `cache_read` dos veces en
   streaming: `vendor/tokenTracking.ts` acota la caché a la entrada.

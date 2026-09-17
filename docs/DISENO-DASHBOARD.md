@@ -33,7 +33,7 @@ que aporta el diseño no es la disposición sino tres cosas concretas:
 
 Más de la mitad del mockup es un **puente con dispositivos** que este producto no tiene
 cableado. De ese puente, lo ÚNICO que hoy se pinta es lo que se MIDE: el panel «Tu equipo»
-del escritorio (`Equipo.tsx`, servido por `agent/dispositivosEnMaquina.ts`) dice el sistema
+del escritorio (`Equipo.tsx`, servido por `agent/dispositivos/dispositivosEnMaquina.ts`) dice el sistema
 operativo, si hay adb/emulator y Xcode, y a qué simuladores y dispositivos se llega — una
 foto con hora, con botón para volver a mirar y sin sondeo, porque `adb devices` arranca el
 demonio de adb y `xcrun` tarda segundos. Lo demás sigue sin poder pintarse sin mentir:
