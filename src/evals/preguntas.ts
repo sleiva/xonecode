@@ -51,6 +51,26 @@ export const PREGUNTAS: readonly Pregunta[] = [
     correcta: (r) => tiene(r, "default.css") && (tiene(r, "app.xml") || tiene(r, "mappings.xne")),
   },
   {
+    nombre: "capacidad",
+    mide: "criterio sobre la plataforma, no lectura del proyecto",
+    texto: "¿Puedo usar XOne para hacer un CRM móvil? Di si es viable y con qué mecanismos de la plataforma se modelarían los clientes y sus visitas.",
+    /**
+     * **La clase CARA, y por eso está aquí**: una pregunta de capacidad no se contesta mirando
+     * el proyecto, así que no tiene criterio de parada natural — medida real, 426k de entrada y
+     * 24 llamadas frente a los 9-12k de una de estructura. Es la que decide si el orquestador
+     * delega lo que es de criterio o se pone a investigar la plataforma él.
+     *
+     * El juez es DELIBERADAMENTE flojo: pide el mecanismo real (las colecciones) y descarta la
+     * negación plana, y nada más. Un juez fino sobre una respuesta abierta mediría la redacción
+     * del modelo en vez de si acertó, que es el error que ya costó una tarde en `estilo`. Lo que
+     * se viene a medir aquí es el COSTE; el juez solo tiene que cazar la respuesta degenerada.
+     *
+     * Nada de exigir que NO diga «módulo CRM»: la respuesta buena medida decía literalmente «no
+     * hay un módulo CRM», así que esa comprobación habría suspendido justo a la correcta.
+     */
+    correcta: (r) => (tiene(r, "colecc") || tiene(r, "<coll")) && !/\bno (se puede|es posible|puedes)\b/i.test(r),
+  },
+  {
     nombre: "login",
     mide: "distinguir dos conceptos parecidos",
     texto: "¿La app pide login al arrancar? Di qué colección lo hace y en qué fichero está.",

@@ -40,6 +40,19 @@ describe("las preguntas del banco", () => {
     expect(juez("estilo")("`default.css`, declarada en app.xml.")).toBe(true);
   });
 
+  it("la de capacidad acepta la respuesta real y caza la degenerada", () => {
+    // El texto de arriba es un recorte de la respuesta REAL medida el 17-09-2026, con su «no
+    // hay un módulo CRM» incluido: un juez que castigara esa frase suspendería a la buena.
+    expect(
+      juez("capacidad")(
+        "Sí, es viable: modelas contactos y visitas como colecciones `<coll>` en sus `.xne`. No hay un módulo CRM: lo modelas tú."
+      )
+    ).toBe(true);
+    expect(juez("capacidad")("No se puede: XOne no sirve para eso.")).toBe(false);
+    // Y sin nombrar el mecanismo no contesta la segunda mitad de la pregunta.
+    expect(juez("capacidad")("Sí, claro, XOne vale para cualquier app de gestión.")).toBe(false);
+  });
+
   it("no suspenden por la REDACCIÓN: se juzga el hecho, no el estilo", () => {
     expect(juez("entrypoint")("entradaapp")).toBe(true);
   });
