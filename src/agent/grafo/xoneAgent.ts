@@ -12,7 +12,7 @@ import { crearBusquedaRegex } from "./busquedaRegex.js";
 import { inventarioDelProyecto } from "../subagentes/escrituraExterna.js";
 import type { DiagnosticoDeTools } from "../turno/diagnosticoDeTools.js";
 import { middlewareTextoDeTool } from "../turno/textoDeTool.js";
-import { resumenConEncargo, topeDeLlamadas } from "../turno/resumenDeContexto.js";
+import { resumenConEncargo, topeDeLlamadas, topeDeTools } from "../turno/resumenDeContexto.js";
 import { inspectorDePrompt } from "../turno/inspectorDePrompt.js";
 import { excluirTools, toolsQueNoUsa } from "./excluirTools.js";
 import {
@@ -356,6 +356,9 @@ export async function construirAgente(opciones: OpcionesDelAgente): Promise<unkn
       // puede quedarse a medias, y el que hace un encargo acotado sí debe. Ver
       // `resumenDeContexto.ts#topeDeLlamadas`.
       topeDeLlamadas(),
+      // Y el de TOOLS, que es el que acota lo que se ACUMULA: 43 resultados en el contexto
+      // hicieron que la última llamada costara ocho veces la primera.
+      topeDeTools(),
       // Los DOS, y en su orden, que es lo que `resumenConEncargo` garantiza: el resumen
       // se lleva el encargo por delante al cruzar el umbral, y el segundo lo devuelve.
       ...resumenConEncargo(backend),

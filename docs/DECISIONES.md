@@ -4430,6 +4430,43 @@ del suelo de Gemini mientras abarata a todos los demás. En la práctica no hubo
 frente a 20.000 no iba a entrar de ninguna manera—, pero las dos palancas tiran en direcciones
 contrarias y el día que alguien persiga esa caché tiene que saberlo.
 
+**Le decíamos al especialista que cargara TODAS sus skills antes de contestar, y costaba el 67 %
+de una conversación** (17-09-2026). El síntoma que lo destapó fue una pantalla del usuario: el
+consultor leyendo `SKILL.md`, `indice-completo.md` y las mismas referencias una y otra vez. No
+era que el modelo se despistara: **estaba obedeciendo**. `promptDeAgente` terminaba con «Tus
+skills: … **Cárgalas antes de responder**».
+
+Y era, además, una contradicción con la librería. `SkillsMiddleware` de deepagents ya añade al
+mensaje de sistema una sección «## Skills System» con cada skill del agente, su ruta y su propia
+regla: «you know they exist, but you only read the full instructions **when needed**». El
+subconjunto por agente también es suyo — se le pasa el ARRAY de rutas de skill en el campo
+`skills` del `SubAgent` (`rutasDeSkills`), no la carpeta padre, que las daría todas. O sea que lo
+nuestro duplicaba lo que ya estaba y encima lo invertía. Se retira; lo que se queda desde código
+es el aviso de las que FALTAN, que eso la librería no lo sabe porque para ella no existen.
+
+Medido con las tres preguntas del usuario en UNA conversación («Hola» → «cuántas colecciones
+tiene mi proyecto» → «crees que con Xone podríamos hacer un CRM»):
+
+| | antes | después |
+| --- | --- | --- |
+| «Hola» | 2.489 | 2.489 |
+| «cuántas colecciones» | 23.599 | 12.849 |
+| «CRM» | 406.163 | 126.425 |
+| **la conversación** | **432.251** | **141.763 (−67 %)** |
+
+Con dos cosas más en el mismo cambio:
+
+- **Un tope de TOOLS por especialista** (20), que es distinto del de llamadas: aquel acota los
+  viajes y este **lo que se acumula**. En el turno que lo motivó, el consultor llegó a 43
+  resultados de tool en su contexto, y como cada llamada reenvía todo lo anterior, la primera
+  costó 5.264 tokens y la última 39.888.
+- **Sale con `continue`, no con `end`, y eso lo enseñó el primer turno con el tope puesto**:
+  «Cannot end execution with other tool calls pending. Found calls to: read_file, ls, grep». La
+  doc de langchain lo dice igual —`end` «raises NotImplementedError if there are multiple tool
+  calls»— y nosotros le PEDIMOS al especialista que agrupe las tools independientes, así que
+  llegar al tope con varias en vuelo es el caso normal. Dos reglas nuestras que vivían sin
+  hablarse; el test las ata juntas.
+
 ## Trampas verificadas
 
 - **El orquestador va de SOLO LECTURA, y hasta el 9-09-2026 no lo era** (`PERFIL_DEL_ORQUESTADOR`,

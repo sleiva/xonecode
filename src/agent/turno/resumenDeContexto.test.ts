@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { AIMessage, HumanMessage, ToolMessage } from "@langchain/core/messages";
 import { FilesystemBackend } from "deepagents";
-import { conservarElEncargo, resumenConEncargo, resumenDeContexto, topeDeLlamadas, TOPE_DE_LLAMADAS_DEL_ESPECIALISTA, UMBRAL_RESUMEN_TOKENS } from "./resumenDeContexto.js";
+import { conservarElEncargo, resumenConEncargo, resumenDeContexto, SALIDA_DEL_TOPE_DE_TOOLS, topeDeLlamadas, TOPE_DE_LLAMADAS_DEL_ESPECIALISTA, TOPE_DE_TOOLS_DEL_ESPECIALISTA, UMBRAL_RESUMEN_TOKENS } from "./resumenDeContexto.js";
 
 /**
  * Qué le pasa al ENCARGO cuando el especialista se pasa de contexto.
@@ -165,5 +165,30 @@ describe("el tope de llamadas del especialista", () => {
     // descarrilada. El tope va por encima de lo que funciona y por debajo de lo que no.
     expect(TOPE_DE_LLAMADAS_DEL_ESPECIALISTA).toBeGreaterThan(10);
     expect(TOPE_DE_LLAMADAS_DEL_ESPECIALISTA).toBeLessThan(32);
+  });
+});
+
+describe("el tope de TOOLS", () => {
+  it("sale con `continue`, porque `end` no admite varias tools a la vez", async () => {
+    /**
+     * Las dos reglas vivían en el repo sin hablarse: le pedimos al especialista que agrupe las
+     * lecturas independientes en un mismo mensaje, y le poníamos un tope que al saltar con
+     * varias en vuelo lanza «Cannot end execution with other tool calls pending». Medido en el
+     * primer turno con el tope puesto. Este test las ata: si alguien vuelve a poner `end`, o
+     * quita la petición de agrupar, esto se pone rojo.
+     */
+    expect(SALIDA_DEL_TOPE_DE_TOOLS).toBe("continue");
+    const { promptDeAgente } = await import("../../core/agentes.js");
+    const prompt = promptDeAgente(
+      { nombre: "x", descripcion: "d", motor: "modelo", soloLectura: true, instrucciones: "", skills: [], origen: "global" },
+      { suyas: [], faltan: [] }
+    );
+    expect(prompt).toContain("en el MISMO mensaje");
+  });
+
+  it("veinte es generoso contra su propia regla de tres referencias", () => {
+    expect(TOPE_DE_TOOLS_DEL_ESPECIALISTA).toBeGreaterThan(10);
+    // Y por debajo de los 43 que acumuló el turno que lo motivó.
+    expect(TOPE_DE_TOOLS_DEL_ESPECIALISTA).toBeLessThan(43);
   });
 });

@@ -161,8 +161,20 @@ describe("el prompt de un especialista sembrado", () => {
     });
   });
 
-  it("nombra las skills que SÍ tiene", () => {
-    expect(promptDeAgente(deSerie("developer-xone"), repartirSkills(deSerie("developer-xone"), disponibles(conSkills)))).toContain("xone-development");
+  it("NO nombra las que sí tiene: de eso se encarga la librería, y mejor", () => {
+    /**
+     * `SkillsMiddleware` de deepagents ya añade al mensaje de sistema una sección con cada skill
+     * que el agente tiene —su descripción, su ruta— y con su propia regla de progressive
+     * disclosure: se leen CUANDO hacen falta. El subconjunto por agente también es suyo: se le
+     * pasa en el campo `skills` del `SubAgent` (`rutasDeSkills`).
+     *
+     * La nuestra decía «Cárgalas antes de responder», o sea que duplicaba lo que ya estaba y
+     * encima lo contradecía. Costaba dinero medido: el consultor cargaba sus TRES skills para
+     * contestar cuántas colecciones tiene el proyecto, y su turno se fue a 406k.
+     */
+    const p = promptDeAgente(deSerie("developer-xone"), repartirSkills(deSerie("developer-xone"), disponibles(conSkills)));
+    expect(p).not.toContain("Tus skills:");
+    expect(p).not.toContain("Cárgalas");
   });
 
   it("y AVISA de las que le faltan en vez de callarlo", () => {
@@ -171,6 +183,7 @@ describe("el prompt de un especialista sembrado", () => {
     const sin = new SkillsEnMemoria({});
     const p = promptDeAgente(deSerie("developer-xone"), repartirSkills(deSerie("developer-xone"), disponibles(sin)));
     expect(p).toMatch(/AVISO/);
+    // La que FALTA sí se nombra: eso la librería no lo sabe, porque para ella no existe.
     expect(p).toContain("xone-development");
   });
 

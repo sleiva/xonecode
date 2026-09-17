@@ -35,6 +35,32 @@ function agente(extra: Partial<Agente> = {}): Agente {
   };
 }
 
+describe("las skills en el prompt", () => {
+  const conSkills = (suyas: string[], faltan: string[] = []) =>
+    promptDeAgente(
+      { nombre: "x", descripcion: "d", motor: "modelo", soloLectura: true, instrucciones: "", skills: suyas, origen: "global" },
+      { suyas, faltan }
+    );
+
+  it("las que TIENE no se nombran: ya lo hace deepagents, y decíamos lo contrario", () => {
+    /**
+     * `SkillsMiddleware` añade una sección «## Skills System» con cada skill, su ruta y su regla
+     * de progressive disclosure («you only read the full instructions when needed»). La nuestra
+     * decía «Cárgalas antes de responder», o sea que contradecía a la librería — y costaba
+     * dinero medido: el consultor cargaba sus TRES skills para contestar cuántas colecciones
+     * tiene el proyecto.
+     */
+    const prompt = conSkills(["archify", "xone-development"]);
+    expect(prompt).not.toContain("Cárgalas");
+    expect(prompt).not.toContain("Tus skills:");
+  });
+
+  it("pero las que FALTAN sí, porque eso la librería no lo sabe", () => {
+    // Sin este aviso el agente intenta cargar algo que no existe y no entiende por qué falla.
+    expect(conSkills(["archify"], ["inventada"])).toContain("te faltan estas skills");
+  });
+});
+
 describe("el mapa del proyecto", () => {
   it("dice dónde mirar, y lo que dice es CIERTO contra el esqueleto de verdad", () => {
     // Un mapa inventado sería el bug mudo que este producto existe para evitar, así que se
@@ -179,7 +205,9 @@ describe("promptDeAgente", () => {
       suyas: ["archify"],
       faltan: ["inventada"],
     });
-    expect(prompt).toContain("Tus skills: archify");
+    // Las que TIENE ya no se nombran: lo hace `SkillsMiddleware` de deepagents, y nuestra
+    // línea además le contradecía su progressive disclosure. Ver el describe de arriba.
+    expect(prompt).not.toContain("Tus skills:");
     expect(prompt).toMatch(/AVISO: te faltan.*inventada/);
   });
 });

@@ -6,7 +6,7 @@
  * Este umbral es independiente del proveedor: limita el coste sin borrar el trabajo reciente.
  */
 import { createSummarizationMiddleware, type FilesystemBackend } from "deepagents";
-import { createMiddleware, modelCallLimitMiddleware } from "langchain";
+import { createMiddleware, modelCallLimitMiddleware, toolCallLimitMiddleware } from "langchain";
 import { HumanMessage } from "@langchain/core/messages";
 import { RUTA_HISTORIAL_RESUMIDO } from "../grafo/memoriaDeProyecto.js";
 
@@ -143,4 +143,41 @@ export const TOPE_DE_LLAMADAS_DEL_ESPECIALISTA = 15;
  */
 export function topeDeLlamadas(limite: number = TOPE_DE_LLAMADAS_DEL_ESPECIALISTA) {
   return modelCallLimitMiddleware({ runLimit: limite, exitBehavior: "end" });
+}
+
+/**
+ * Cuántas TOOLS puede gastar un especialista en un encargo.
+ *
+ * El tope de llamadas al modelo acota los VIAJES; este acota **lo que se acumula**, que es lo
+ * que multiplica. Medido el 17-09-2026 en una conversación de tres preguntas: en la tercera, el
+ * consultor llegó a 43 resultados de tool metidos en su contexto, y como cada llamada al modelo
+ * reenvía todo lo anterior, la primera costó 5.264 tokens y la última 39.888 — 406k en total. No
+ * era un bucle: era la acumulación al cuadrado.
+ *
+ * Veinte es generoso contra su propia regla, que ya le pide «máximo tres referencias por
+ * pregunta y un `grep` por hipótesis»: si con veinte no le llega, lo que falla es la delegación
+ * o la regla, no el tope.
+ */
+export const TOPE_DE_TOOLS_DEL_ESPECIALISTA = 20;
+
+/**
+ * **`continue`, y NO `end`: son incompatibles con pedir varias tools a la vez.**
+ *
+ * Medido el 17-09-2026 en el primer turno con el tope puesto: «Cannot end execution with other
+ * tool calls pending. Found calls to: read_file, ls, grep». La documentación de langchain lo
+ * dice igual —`end` «raises NotImplementedError if there are multiple tool calls»— y nosotros le
+ * PEDIMOS al especialista que agrupe las lecturas independientes en un mismo mensaje, así que
+ * llegar al tope con varias en vuelo es el caso normal, no el raro.
+ *
+ * `continue` bloquea las que sobran con un mensaje de error y deja que el modelo termine: se
+ * queda sin más tools y contesta con lo que tiene, que es lo mismo que buscaba `end` pero sin
+ * romperse. `error` tumbaría la delegación entera, que es como empieza el bucle de reintentos.
+ *
+ * Dos reglas nuestras que vivían sin hablarse —«agrupa las tools» y «corta al llegar al tope»—
+ * y cuyo choque solo se ve corriendo. Por eso el test las ata juntas.
+ */
+export const SALIDA_DEL_TOPE_DE_TOOLS = "continue" as const;
+
+export function topeDeTools(limite: number = TOPE_DE_TOOLS_DEL_ESPECIALISTA) {
+  return toolCallLimitMiddleware({ runLimit: limite, exitBehavior: SALIDA_DEL_TOPE_DE_TOOLS });
 }

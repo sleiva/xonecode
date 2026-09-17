@@ -124,9 +124,20 @@ export function promptDeAgente(agente: Agente, skills?: EstadoDeSkills): string 
     // Las skills que tiene, y las que NO. El aviso es la misma disciplina de siempre: un
     // doble nunca se disfraza, y una skill declarada en el `.md` que no está en el catálogo
     // haría que el modelo intentara cargarla y fallara sin saber por qué. Se dice.
-    ...(skills === undefined || skills.suyas.length === 0
-      ? []
-      : [`Tus skills: ${skills.suyas.join(", ")}. Cárgalas antes de responder.`]),
+    /**
+     * **Las que TIENE no se nombran aquí, y es deliberado.**
+     *
+     * `SkillsMiddleware` de deepagents ya añade al mensaje de sistema una sección entera —«##
+     * Skills System»— con cada skill, su descripción, su ruta y su propia regla de *progressive
+     * disclosure*: «you know they exist, but you only read the full instructions **when
+     * needed**». Repetirlo aquí era duplicarlo, y como nuestra línea decía «cárgalas antes de
+     * responder», era además CONTRADECIRLO — con el resultado medido de que el consultor cargaba
+     * sus tres skills para contestar «¿cuántas colecciones tiene mi proyecto?».
+     *
+     * Lo que sí se dice desde código es lo que la librería no puede saber: las que el `.md`
+     * declara y NO están en el catálogo. Eso no es duplicado, es el aviso de honestidad de
+     * siempre — sin él, el agente intenta cargar algo que no existe y no entiende por qué falla.
+     */
     ...(skills === undefined || skills.faltan.length === 0
       ? []
       : [`AVISO: te faltan estas skills y no las tienes: ${skills.faltan.join(", ")}.`]),
