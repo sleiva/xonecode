@@ -1,5 +1,5 @@
 import { useEffect } from "react";
-import { etiquetaDeEstado } from "../inventarioDeDispositivos.js";
+import { etiquetaDeEstado, seLlegaAlDispositivo } from "../inventarioDeDispositivos.js";
 import { selloDeFecha } from "../selloDeFecha.js";
 import type { EstadoDelCliente } from "../store.js";
 import { formatearMs } from "../tiempo.js";
@@ -37,6 +37,7 @@ export function Ejecutar({
   veredicto,
   lanzamiento,
   dispositivos,
+  alActualizarDispositivos,
   elegido,
   conectado,
   alRevisar,
@@ -63,6 +64,9 @@ export function Ejecutar({
    * no se ha mirado qué hay enchufado, que no es lo mismo que no haber nada.
    */
   dispositivos?: readonly Dispositivo[];
+  /** «Vuelve a medir.» Se llama al entrar: la foto que hay puede ser de hace rato. Ausente =
+   *  esta ejecución no puede, y entonces se trabaja con la que haya. */
+  alActualizarDispositivos?: () => void;
   /** El dispositivo de la sesión, que es el que el servidor va a usar si nadie elige otro. */
   elegido?: DispositivoElegido;
   /** ¿Hay cable? Sin él no se pide ni se lanza: la petición se perdería sin decirlo. */
@@ -93,6 +97,21 @@ export function Ejecutar({
     alRevisar();
   }, [conectado, alRevisar, elegido?.id]);
 
+  /**
+   * **Y la foto de los dispositivos se rehace al entrar aquí**, por lo mismo que en Ajustes:
+   * la que hay es de cuando se conectó el cliente, y esta pestaña decide con ella qué está «a
+   * mano». Medido en la pantalla del usuario: mató el emulador y siguió saliendo como
+   * arrancado, así que esta lista habría ofrecido lanzar la app en un aparato que no está.
+   *
+   * Una sola vez al montar —`conectado` es la única dependencia— y no un sondeo: cada medida
+   * lanza `adb` y `xcrun` en la máquina de quien mira.
+   */
+  useEffect(() => {
+    if (conectado === false) return;
+    alActualizarDispositivos?.();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [conectado]);
+
   const enCurso = lanzamiento?.estado === "corriendo";
   const puedeLanzar = conectado === true && veredicto?.listo === true && alLanzar !== undefined && !enCurso;
 
@@ -106,7 +125,7 @@ export function Ejecutar({
    * Ajustes con una lista donde nueve de cada diez filas no se pueden pulsar. Lo que falta se
    * CUENTA y se manda a Ajustes, que es donde se arregla.
    */
-  const aMano = (dispositivos ?? []).filter((d) => d.estado === "conectado" || d.estado === "arrancado");
+  const aMano = (dispositivos ?? []).filter(seLlegaAlDispositivo);
   const sinMirar = dispositivos === undefined;
 
   // El nombre del destino: el del veredicto manda —es el que el servidor acaba de resolver

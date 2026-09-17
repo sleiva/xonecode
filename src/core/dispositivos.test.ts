@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import {
   alcanzables,
   nombreDeAvdDeConsola,
+  motivoDeVerificacion,
   esAlcanzable,
   type Dispositivo,
   nombreDelSistema,
@@ -540,5 +541,30 @@ describe("nombreDeAvdDeConsola", () => {
     for (const crudo of ["", "OK\n", "KO: unknown command\n", "error: device offline\n", "sdk gphone64 arm64\n", "../fuera\n"]) {
       expect(nombreDeAvdDeConsola(crudo)).toBeUndefined();
     }
+  });
+});
+
+describe("motivoDeVerificacion", () => {
+  const pixel8 = { id: "emulator-5554", nombre: "pixel8" };
+
+  /**
+   * Lo que se vio en la pantalla del usuario: mató el emulador, pulsó Verificar y la fila
+   * —que se llama `pixel8`— le contestó «adb: device 'emulator-5554' not found». Dos nombres
+   * del mismo aparato, y uno de ellos un puerto que cambia entre arranques.
+   */
+  it("dice que ya no está, en vez de traducir a adb palabra por palabra", () => {
+    const r = motivoDeVerificacion("adb: device 'emulator-5554' not found", pixel8);
+    expect(r).toBe("ya no está: se apagó o se desenchufó desde la última medida");
+    expect(r).not.toContain("emulator-5554");
+  });
+
+  it("y con cualquier otro fallo, el serial se cambia por el nombre que se enseña", () => {
+    expect(motivoDeVerificacion("error raro en emulator-5554: qué sé yo", pixel8)).toBe(
+      "error raro en pixel8: qué sé yo"
+    );
+  });
+
+  it("lo que no menciona el serial se queda igual", () => {
+    expect(motivoDeVerificacion("no respondió en 8 s", pixel8)).toBe("no respondió en 8 s");
   });
 });

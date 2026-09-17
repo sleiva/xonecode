@@ -511,6 +511,29 @@ export function Ajustes({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [seccion, registrando, entornoEnPestana, suyosEnPestana, errorEnPestana]);
 
+  /**
+   * **Al ENTRAR en Dispositivos se vuelve a medir**, aunque ya haya foto.
+   *
+   * La foto es de cuando se conectó el primer cliente, y entre eso y abrir esta sección puede
+   * haber pasado cualquier cosa: medido en la pantalla del usuario, mató el emulador y la fila
+   * siguió diciendo «arrancado» en verde durante minutos, porque nadie había vuelto a mirar.
+   *
+   * Esto NO es sondear, que es lo que la sección se prohíbe a propósito (un panel que se
+   * refresca solo cada pocos segundos lanza procesos en la máquina de quien mira sin que nadie
+   * los pida). Es UNA medida por navegación explícita — el mismo trato que ya tienen la lista
+   * de proyectos de una pestaña, el árbol de Ficheros y la lista de Revisión.
+   *
+   * Y a diferencia de esas, se pide TAMBIÉN cuando ya hay foto: aquí el dato viejo es
+   * precisamente el problema. Las dependencias son solo `seccion`, así que la foto que llega
+   * no vuelve a disparar el efecto; el manejador queda fuera porque `App` pasa una lambda del
+   * JSX y su identidad cambia en cada render.
+   */
+  useEffect(() => {
+    if (seccion !== "dispositivos") return;
+    alActualizarDispositivos?.();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [seccion]);
+
   const [avisoDeUrl, setAvisoDeUrl] = useState<string | undefined>(undefined);
 
   const registrar = (evento: FormEvent): void => {

@@ -40,6 +40,7 @@ import {
   parsearRuntimesDeIos,
   parsearAdbDevices,
   nombreDeAvdDeConsola,
+  motivoDeVerificacion,
   parsearAvds,
   parsearDevicectl,
   parsearSimctl,
@@ -592,7 +593,11 @@ export async function verificarDispositivo(
       // que se preguntaba. Afirmar un modelo vacío sería inventarlo.
       return { ok: true, detalle: modelo === "" ? "responde a la shell" : `responde: ${recortar(modelo)}` };
     } catch (error) {
-      return { ok: false, detalle: describirFallo(error, TOPES_MS.adb) };
+      // Sin el serial dentro: lo que contesta adb lo lleva, y esta fila se llama `pixel8`.
+      return {
+        ok: false,
+        detalle: motivoDeVerificacion(describirFallo(error, TOPES_MS.adb), dispositivo),
+      };
     }
   }
 

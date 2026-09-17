@@ -564,6 +564,30 @@ export function parsearAvds(texto: string): string[] {
 }
 
 /**
+ * El motivo de una verificación fallida, dicho sin vocabulario de máquina.
+ *
+ * Lo que devuelve `adb` viene con el SERIAL dentro —«adb: device 'emulator-5554' not found»— y
+ * eso acaba en una fila que se llama `pixel8`: el serial es un puerto que cambia entre
+ * arranques, es lo que esta interfaz esconde a propósito en todas partes, y encima deja al
+ * usuario leyendo dos nombres del mismo aparato. Se sustituye por el nombre que se le enseña.
+ *
+ * Y el caso de «no está» se DICE en vez de traducirse palabra por palabra: «not found» de adb
+ * significa que el aparato ya no aparece en su lista, o sea que se apagó o se desenchufó desde
+ * la última medida. Eso es lo accionable —la lista está vieja, vuelve a mirar— y es lo que
+ * explica por qué la fila decía «arrancado» mientras la verificación dice que no.
+ */
+export function motivoDeVerificacion(
+  crudo: string,
+  dispositivo: Pick<Dispositivo, "id" | "nombre">
+): string {
+  const sinSerial = crudo.split(dispositivo.id).join(dispositivo.nombre);
+  if (/\bnot found\b|\bdevice offline\b|\bno devices?\b/i.test(crudo)) {
+    return `ya no está: se apagó o se desenchufó desde la última medida`;
+  }
+  return sinSerial;
+}
+
+/**
  * `adb -s <serial> emu avd name`: el nombre del AVD que hay detrás de un emulador en marcha.
  *
  * Forma MEDIDA con `pixel8` arrancado — son DOS líneas, el nombre y el acuse de la consola:

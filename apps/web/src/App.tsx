@@ -235,6 +235,13 @@ export function App({
    * del `enviar({clase:"tarea", …})` diverjan otra vez.
    */
   const alReintentarTarea = useCallback((id: string) => void enviar({ clase: "tarea", accion: "reintentar", id }), [enviar]);
+  /**
+   * «Vuelve a medir qué hay.» En `useCallback` y no una lambda del JSX porque `Ejecutar` la
+   * llama desde un efecto: con una identidad nueva por render, ese efecto pediría una medida
+   * por tecla, y cada medida lanza `adb` y `xcrun` en la máquina de quien mira. Es la misma
+   * razón por la que `alRevisar` ya está envuelta.
+   */
+  const actualizarDispositivos = useCallback(() => void enviar({ clase: "dispositivos" }), [enviar]);
   const alDescartarTarea = useCallback((id: string) => void enviar({ clase: "tarea", accion: "descartar", id }), [enviar]);
   const alTerminarTarea = useCallback((id: string) => void enviar({ clase: "tarea", accion: "terminar", id }), [enviar]);
   const alEnviarFeedbackTarea = useCallback(
@@ -1325,6 +1332,9 @@ export function App({
                   // «no hay ninguno enchufado» de «hay tres y ninguno arrancado» necesita la
                   // lista entera, y la pestaña decide qué hacer con ella.
                   dispositivos={estado.dispositivos?.dispositivos}
+                  // Y que vuelva a medir al entrar: la foto puede ser de hace rato, y esta
+                  // pestaña decide con ella en qué aparato se lanza la app.
+                  alActualizarDispositivos={actualizarDispositivos}
                   // El dispositivo de la sesión: la MISMA fuente que la pastilla del compositor,
                   // que es donde se elige y donde este botón va a caer.
                   elegido={estado.alta?.dispositivoActivo}

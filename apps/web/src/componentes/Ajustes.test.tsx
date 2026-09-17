@@ -629,6 +629,23 @@ describe("Ajustes: la sección de Dispositivos", () => {
     expect(within(panel).getByText("arrancado")).toBeTruthy();
   });
 
+  /**
+   * **Al ENTRAR en Dispositivos se vuelve a medir, aunque ya haya foto.**
+   *
+   * Medido en la pantalla del usuario: mató el emulador y la fila siguió diciendo «arrancado»
+   * en verde, porque la foto era de cuando se conectó el cliente y nadie había vuelto a
+   * mirar. No es sondear —la sección se prohíbe refrescarse sola, que lanzaría procesos que
+   * nadie pidió—: es una medida por navegación, como la lista de proyectos de una pestaña.
+   *
+   * Y se pide TENIENDO foto, que es la diferencia con las demás: aquí el dato viejo es el
+   * problema. El `abrir()` de estos tests navega a la sección, así que basta contar llamadas.
+   */
+  it("entrar en Dispositivos vuelve a medir, incluso con foto ya puesta", () => {
+    const alActualizarDispositivos = vi.fn();
+    abrir({ alActualizarDispositivos });
+    expect(alActualizarDispositivos).toHaveBeenCalledTimes(1);
+  });
+
   it("un AVD definido y sin arrancar TAMBIÉN es un simulador disponible", () => {
     // `emulator -list-avds` los da por nombre y no salen en `adb devices` hasta que
     // arrancan: sin esto, «los simuladores disponibles» dejaba fuera los de Android.
