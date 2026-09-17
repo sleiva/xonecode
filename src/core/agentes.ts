@@ -119,8 +119,30 @@ export function promptDeAgente(agente: Agente, skills?: EstadoDeSkills): string 
      * `doc/` sería inventar la intención de una escritura, que es justo lo que ninguna
      * guarda de este repo hace.
      */
+    /**
+     * **Cómo QUEREMOS que lea, que es distinto de qué hace la tool.**
+     *
+     * La descripción de `read_file` la pone deepagents y se actualiza con ella (ver
+     * `xoneAgent.ts#DESCRIPCIONES_FICHEROS`); esto es política nuestra, medida: una ida y
+     * vuelta al modelo cuesta del orden de cuatro mil tokens y unas líneas de más unos
+     * cientos, así que trocear un fichero en rodajas pequeñas sale trece veces más caro que
+     * leerlo de una. Y `limit` se PIDE porque omitirlo deja el valor del esquema, que es
+     * mucho menor.
+     *
+     * Solo para los de motor `modelo`: un hijo de Claude Code o de Codex lee con SUS tools,
+     * que no tienen estos parámetros, y decirle esto le describiría una tool que no tiene.
+     */
     ...(agente.motor === "modelo"
-      ? []
+      ? [
+          "LECTURAS: lee SOLO los ficheros que hagan falta para responder a lo que te han " +
+            "preguntado, y los que una búsqueda te haya señalado. No abras uno «por si acaso»: cada " +
+            "fichero que lees se queda en el contexto de TODAS las llamadas siguientes. Para el " +
+            "reconocimiento inicial usa `offset=0, limit=50`, y pide más solo si ese trozo no basta. " +
+            "Tras un `grep`, lee alrededor de la línea que te ha dado (`offset` = esa línea menos 5), " +
+            "nunca desde el principio. No releas la misma ruta y el mismo rango. Y cuando necesites " +
+            "varios ficheros o varias búsquedas independientes, pídelos en el MISMO mensaje: cuestan " +
+            "una sola llamada en vez de una por cada uno.",
+        ]
       : [
           "RUTAS: trabajas sobre la carpeta del proyecto directamente, así que una ruta que " +
             "empiece por «/» es la raíz del SISTEMA y está fuera del proyecto. Escribe las rutas " +

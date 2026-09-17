@@ -128,13 +128,23 @@ export function promptOrquestador(agentes: readonly Agente[]): string {
  * No crean herramientas ni rebajan permisos: hacen explícito el destino correcto
  * para que una skill no confunda su propia carpeta de instrucciones con la salida.
  */
+/**
+ * **`read_file` NO está aquí, y es deliberado.**
+ *
+ * Una descripción propia REEMPLAZA la de la librería, no se suma a ella, así que la nuestra
+ * —que solo hablaba de coste— borraba tres cosas que deepagents ya dice y que no son nuestras
+ * de decir: que la salida lleva una cabecera de formato **que no hay que reinyectar al
+ * editar** (eso es CORRECCIÓN, no ahorro), que conviene pedir varias lecturas en una misma
+ * respuesta, y que un resultado grande se descarga a `/large_tool_results/` y se pagina desde
+ * ahí. Medido al comparar dos parches suyos: entre `1.13.2` y `1.13.5` ese formato CAMBIÓ
+ * —de prefijos de número de línea a una cabecera `@@ … @@`— y con él la advertencia. Una copia
+ * nuestra habría quedado describiendo un formato que ya no existe, sin un error que leer.
+ *
+ * La regla: lo que describe la TOOL es de la librería y se actualiza con ella; lo que decimos
+ * nosotros es cómo QUEREMOS usarla, y eso vive en el prompt del especialista
+ * (`core/agentes.ts#promptDeAgente`), donde no compite con nada.
+ */
 export const DESCRIPCIONES_FICHEROS = {
-  read_file: [
-    "Lee únicamente el fragmento de un fichero necesario para responder.",
-    "Indica siempre `offset` y `limit`; para el reconocimiento inicial usa",
-    "`offset=0, limit=50`. No releas la misma ruta y el mismo rango: usa la",
-    "evidencia ya obtenida o una página distinta solo si hace falta.",
-  ].join(" "),
   write_file: [
     "Escribe un fichero del proyecto en una ruta absoluta.",
     "Para diagramas, esquemas, arquitecturas y flujos: carga primero la skill `archify`;",
@@ -156,9 +166,11 @@ export const DESCRIPCIONES_FICHEROS = {
     "Busca texto LITERAL (no regex) de forma progresiva para ahorrar contexto.",
     "Primero acota con `path` y `glob`; para localizar candidatos usa",
     "`output_mode=\"files_with_matches\"` o `output_mode=\"count\"`.",
-    "Usa `output_mode=\"content\"` solo con un patrón específico y lee después",
-    "el fragmento necesario con `read_file` (offset y limit). La búsqueda devuelve",
+    "Usa `output_mode=\"content\"` solo con un patrón específico: devuelve la ruta y el NÚMERO",
+    "DE LÍNEA de cada coincidencia, así que lee después con `read_file` ALREDEDOR de esa línea",
+    "(`offset` = línea menos 5), nunca desde el principio del fichero. La búsqueda devuelve",
     "como máximo 100 coincidencias salvo que justifiques subir `max_count`.",
+    "Varias búsquedas independientes van en el MISMO mensaje, igual que las lecturas.",
   ].join(" "),
 };
 

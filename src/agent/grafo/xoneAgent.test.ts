@@ -110,7 +110,12 @@ describe("el prompt de un especialista sembrado", () => {
   });
 
   it("describe en las tools de escritura el destino y la skill correctos", () => {
-    expect(DESCRIPCIONES_FICHEROS.read_file).toContain("offset=0, limit=50");
+    // `read_file` NO lleva descripción nuestra, a propósito: la suya REEMPLAZARÍA la de la
+    // librería, que trae el aviso de no reinyectar la cabecera al editar —corrección, no
+    // ahorro— y que cambió entre dos parches suyos. Cómo queremos que lea es política, y vive
+    // en el prompt (`promptDeAgente`). Si alguien la reintroduce aquí, esto se pone rojo.
+    expect("read_file" in DESCRIPCIONES_FICHEROS).toBe(false);
+    expect(DESCRIPCIONES_FICHEROS.grep).toContain("ALREDEDOR de esa línea");
     expect(DESCRIPCIONES_FICHEROS.write_file).toContain("`archify`");
     // La carpeta de la SESIÓN, no la del proyecto: esta descripción llega a todos los
     // agentes y era el último sitio que seguía mandando el HTML a la raíz.

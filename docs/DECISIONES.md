@@ -4187,6 +4187,45 @@ dice cuántos DISTINTOS. Lo medido con eso, sobre `proyecto_example`:
   `limit=50` está bien puesto, pero su efecto se verá en un `.xne` de mil líneas, no aquí.
 - Ninguna relectura en ninguna de las dos: todas las rutas distintas y ningún rango repetido.
 
+**El primer experimento de recorte salió MAL, y lo que enseñó vale más que el recorte**
+(17-09-2026). Se cambió la receta de lectura —de «`offset=0, limit=50` siempre» a «pide
+`limit=1000` y agrupa»— siguiendo lo que hacen los otros harnesses del laboratorio: opencode
+lee 2000 líneas por omisión y avisa contra las rodajas pequeñas («*Avoid tiny repeated slices
+(30 line chunks)*»), qwen-code lee el fichero ENTERO si se omite `limit`, y deepseek-harness
+tiene `READ_LIMIT = 2000`. Somos el único que pide 50. Medido con la misma pregunta:
+
+| | antes | después |
+| --- | --- | --- |
+| deepseek | 32.975 | **77.669 y 76.669** |
+| gemini | 39.518 | 26.711, 10.644 y 31.534 |
+
+- **Con deepseek es una regresión clara y repetible**: agrupó bien —ocho lecturas en un solo
+  viaje, que era el objetivo— pero pasó de leer 6 ficheros a leer 12, con `README.md`,
+  `Visitas.xne` y `Clientes.xne` entre ellos, y la ventana de 10k a 20k. La causa es la suma de
+  dos frases: la de la librería («*batch multiple `read_file` calls when several files **may**
+  be useful*») y la nuestra de agrupar, sin el «lee ÚNICAMENTE lo necesario» que el cambio se
+  había llevado por delante. **Especular es barato con 50 líneas y caro con 1000.**
+- **Con gemini no se puede afirmar nada**: tres ejecuciones del MISMO prompt dieron 10.644,
+  26.711 y 31.534 — un factor de tres. **La varianza entre ejecuciones idénticas es mayor que el
+  efecto que se busca**, así que una sola pasada no puede decidir un cambio de prompt. Cualquier
+  experimento futuro necesita varias pasadas por celda y comprobar además que la RESPUESTA sigue
+  siendo correcta: una de esas cifras bajas salió de que el orquestador contestó sin delegar, que
+  es otro comportamiento, no el mismo más barato.
+- Lo que se conserva del intento: no abrir ficheros «por si acaso», leer alrededor de la línea
+  que dio un `grep` en vez de desde el principio, y pedir en el mismo mensaje lo que sea
+  independiente. Lo que se revierte: el `limit=1000`.
+
+**Y el hallazgo que no era el que se buscaba: una descripción propia REEMPLAZA la de la
+librería.** `DESCRIPCIONES_FICHEROS.read_file` borraba tres cosas que deepagents ya dice —que la
+salida lleva una cabecera de formato que **no hay que reinyectar al editar** (corrección, no
+ahorro), que conviene agrupar lecturas, y que un resultado grande se descarga a
+`/large_tool_results/`—. Y no se puede copiar su texto: entre `1.13.2` y `1.13.5` ese formato
+CAMBIÓ, de prefijos de número de línea a una cabecera `@@ … @@`, así que una copia habría quedado
+describiendo un formato que ya no existe sin un error que leer. La regla que queda: **lo que
+describe la TOOL es de la librería y se actualiza con ella; cómo queremos usarla es política
+nuestra y vive en `promptDeAgente`.** Las descripciones no se exportan, así que componer las dos
+no es una opción.
+
 ## Trampas verificadas
 
 - **El orquestador va de SOLO LECTURA, y hasta el 9-09-2026 no lo era** (`PERFIL_DEL_ORQUESTADOR`,
