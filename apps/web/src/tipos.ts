@@ -850,6 +850,13 @@ export interface Dispositivo {
   plataforma: "android" | "ios";
   clase: "emulador" | "simulador" | "fisico";
   estado: "conectado" | "arrancado" | "apagado" | "sin-autorizar" | "offline" | "no-disponible";
+  /**
+   * De qué AVD es este emulador, MEDIDO en el host: es el único dato que ata un emulador en
+   * marcha a su definición, porque `adb devices` no lo dice. Sin él, el AVD arrancado se
+   * listaba además como apagado. **Ausente es «no se pudo identificar»**, no «no tiene»: quien
+   * empareja no puede leerlo como «ese AVD está apagado».
+   */
+  avd?: string;
   detalle?: string;
   /**
    * Lo que contestó al VERIFICAR la conexión. Ausente = nadie lo ha verificado en esta foto,

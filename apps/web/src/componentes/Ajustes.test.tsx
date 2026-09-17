@@ -637,6 +637,43 @@ describe("Ajustes: la sección de Dispositivos", () => {
     expect(within(panel).getByText("apagado")).toBeTruthy();
   });
 
+  /**
+   * **Un emulador de Android EN MARCHA sale en verde, y una sola vez.**
+   *
+   * Dos defectos en una fila, los dos medidos con `pixel8` arrancado en la máquina del
+   * usuario:
+   *
+   * - El punto lo decidía `estado === "arrancado"` en esta lista, y un emulador de Android
+   *   llega como `conectado` —los dos parsers del host le dan nombres distintos al mismo
+   *   hecho—, así que salía GRIS en la misma lista donde un simulador de iOS ponía el verde.
+   * - Y su AVD se listaba ADEMÁS como apagado, porque el emparejamiento iba por el nombre
+   *   visible: `sdk gphone64 arm64` contra `pixel8`, que no coinciden nunca.
+   */
+  it("un emulador de Android arrancado va en verde y no duplica su AVD", () => {
+    const panel = abrir({
+      dispositivos: {
+        ...INFORME,
+        dispositivos: [
+          ...INFORME.dispositivos,
+          {
+            id: "emulator-5554",
+            nombre: "sdk gphone64 arm64",
+            plataforma: "android" as const,
+            clase: "emulador" as const,
+            estado: "conectado" as const,
+            avd: "pixel8",
+          },
+        ],
+        avds: ["pixel8"],
+      },
+    });
+    abrirPestana(panel, "Android");
+    const fila = within(panel).getByText("sdk gphone64 arm64").closest("li") as HTMLElement;
+    expect(fila.querySelector("[data-herramienta]")?.getAttribute("data-herramienta")).toBe("ok");
+    // Y su AVD no aparece por segunda vez como apagado.
+    expect(within(panel).queryByText("pixel8")).toBeNull();
+  });
+
   it("los requisitos son los que la MEDIDA nombra: uno que no venga, se CUENTA", () => {
     // Las filas salen del informe y no de una tabla de la ventana, así que un informe
     // incompleto no puede hacer desaparecer una herramienta en silencio — que se leería

@@ -39,6 +39,7 @@ import {
   recetaDeSimuladorIos,
   parsearRuntimesDeIos,
   parsearAdbDevices,
+  nombreDeAvdDeConsola,
   parsearAvds,
   parsearDevicectl,
   parsearSimctl,
@@ -259,7 +260,33 @@ export async function detectarDispositivos(
   } else {
     try {
       const { stdout } = await ejecutar(adb, ["devices", "-l"], { timeout: TOPES_MS.adb });
-      dispositivos.push(...parsearAdbDevices(stdout));
+      const deAdb = parsearAdbDevices(stdout);
+      /**
+       * **De qué AVD es cada emulador en marcha**, que es lo único que `adb devices` no dice
+       * y sin lo cual el AVD arrancado se listaba además como apagado.
+       *
+       * Un proceso por emulador CONECTADO —hoy, en esta máquina, uno—, y solo por esos: un
+       * emulador `offline` o sin autorizar no va a contestar, así que preguntarle sería
+       * comerse un tope por fila. Es la misma disciplina que el resto de esta pantalla, donde
+       * medir cuesta procesos en el equipo de quien la mira.
+       *
+       * El fallo NO es un fallo de `adb`: la herramienta contestó y la lista es buena. Lo que
+       * queda sin saberse es de qué AVD es ese emulador, y eso se dice dejando el campo
+       * ausente — que es lo que `nombreDeAvdDeConsola` devuelve ante cualquier respuesta rara.
+       */
+      for (const d of deAdb) {
+        if (d.clase !== "emulador" || d.estado !== "conectado") continue;
+        try {
+          const { stdout: crudo } = await ejecutar(adb, ["-s", d.id, "emu", "avd", "name"], {
+            timeout: TOPES_MS.adb,
+          });
+          const avd = nombreDeAvdDeConsola(crudo);
+          if (avd !== undefined) d.avd = avd;
+        } catch {
+          // Sin `avd`: «no se pudo identificar». No se toca `herramientas` — adb funciona.
+        }
+      }
+      dispositivos.push(...deAdb);
       herramientas.push({ nombre: "adb", estado: "ok", ruta: adb });
     } catch (error) {
       herramientas.push({ nombre: "adb", estado: "fallo", ruta: adb, detalle: describirFallo(error, TOPES_MS.adb) });

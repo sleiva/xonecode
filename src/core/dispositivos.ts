@@ -92,6 +92,20 @@ export interface Dispositivo {
    * son situaciones propias y se enseñan como tales, no se pliegan en «no».
    */
   estado: "conectado" | "arrancado" | "apagado" | "sin-autorizar" | "offline" | "no-disponible";
+  /**
+   * De qué AVD es este emulador. Solo para `clase === "emulador"` de Android.
+   *
+   * **Es el único dato que ata un emulador en marcha a su definición**, y hay que MEDIRLO
+   * aparte: `adb devices -l` no lo dice por ningún lado —la imagen `google_apis` contesta
+   * `model:sdk_gphone64_arm64` mientras el AVD se llama `pixel8`—, así que emparejar por el
+   * nombre visible no puede acertar nunca. Sin este campo, el AVD arrancado se listaba
+   * ADEMÁS como apagado: dos filas para un aparato y una diciendo lo contrario de la verdad.
+   *
+   * Ausente es «no se pudo identificar», no «no tiene»: un emulador de terceros o una
+   * consola que no contesta. Quien empareja tiene que tratarlo como desconocido y no como
+   * «este AVD está apagado».
+   */
+  avd?: string;
   detalle?: string;
   /**
    * Lo que contestó el dispositivo cuando alguien pidió VERIFICAR la conexión.
@@ -546,6 +560,32 @@ export function parsearAvds(texto: string): string[] {
     .split(/\r?\n/)
     .map((l) => l.trim())
     .filter((l) => l !== "" && !/^(INFO|WARNING|ERROR)\b/.test(l));
+}
+
+/**
+ * `adb -s <serial> emu avd name`: el nombre del AVD que hay detrás de un emulador en marcha.
+ *
+ * Forma MEDIDA con `pixel8` arrancado — son DOS líneas, el nombre y el acuse de la consola:
+ *
+ *     pixel8
+ *     OK
+ *
+ * Se usa la consola del emulador y no `getprop ro.boot.qemu.avd_name` (que contesta lo mismo,
+ * medido) porque `getprop` lee una propiedad de la IMAGEN y podría no estar en un emulador de
+ * terceros, mientras que la consola es el emulador mismo contestando.
+ *
+ * Fail-closed: `undefined` ante cualquier cosa que no sea un nombre de AVD. El nombre es una
+ * carpeta de `~/.android/avd`, así que no lleva espacios ni barras; y el `OK` del acuse se
+ * descarta explícitamente porque llegar a tomarlo por nombre sería emparejar por una cadena
+ * que no existe, o sea el mismo fallo de antes con otra forma.
+ */
+export function nombreDeAvdDeConsola(texto: string): string | undefined {
+  for (const linea of texto.split(/\r?\n/)) {
+    const l = linea.trim();
+    if (l === "" || l === "OK" || /^(KO|error)\b/i.test(l)) continue;
+    return /^[A-Za-z0-9._-]+$/.test(l) ? l : undefined;
+  }
+  return undefined;
 }
 
 /**

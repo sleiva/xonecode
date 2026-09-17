@@ -97,9 +97,76 @@ describe("detectarDispositivos", () => {
       },
       { android: false }
     );
-    expect(llamadas.map((l) => l.binario)).toEqual(["/bin/adb", "/bin/emulator"]);
+    /**
+     * **Tres procesos, y el segundo `adb` es el que identifica el AVD.**
+     *
+     * `adb devices` no dice de qué AVD es un emulador —`model:` es de la imagen—, así que hay
+     * que preguntárselo a su consola. El coste se declara aquí porque la regla de esta
+     * pantalla es que medir cuesta procesos en el equipo de quien la mira: es UNA llamada por
+     * emulador CONECTADO, y aquí hay uno. El `R58M12` de la lista es físico y no se le
+     * pregunta; un emulador `offline` tampoco, que no contestaría.
+     */
+    expect(llamadas.map((l) => l.binario)).toEqual(["/bin/adb", "/bin/adb", "/bin/emulator"]);
+    expect(llamadas[1]?.args).toEqual(["-s", "emulator-5554", "emu", "avd", "name"]);
     expect(informe.dispositivos.map((d) => d.nombre)).toEqual(["sdk gphone64"]);
     expect(informe.avds).toEqual(["Pixel_8_API_34"]);
+  });
+
+  /**
+   * **De qué AVD es el emulador, medido y puesto en su fila.**
+   *
+   * Es el dato que no existía y sin el cual el AVD arrancado se listaba ADEMÁS como apagado:
+   * `adb devices -l` da `model:sdk_gphone64_arm64` y `emulator -list-avds` da `pixel8`, y no
+   * hay forma de atar uno con otro salvo preguntándole a la consola del emulador por su
+   * serial. La respuesta son DOS líneas —el nombre y el `OK` del acuse—, medido con `pixel8`
+   * arrancado en la máquina del usuario.
+   */
+  it("el AVD de un emulador se mide por su serial, y el `OK` de la consola no se cuela", async () => {
+    const { ejecutar } = ejecutorDe({
+      "/bin/adb devices": salida("List of devices attached\nemulator-5554 device model:sdk_gphone64\n"),
+      "/bin/adb -s": salida("pixel8\nOK\n"),
+      emulator: salida("pixel8\n"),
+    });
+    const informe = await detectarDispositivos(
+      {
+        plataforma: "linux",
+        entorno: { PATH: "/bin" },
+        home: "/home/yo",
+        existe: (r) => r === "/bin/adb" || r === "/bin/emulator",
+        ejecutar,
+      },
+      { android: false }
+    );
+    expect(informe.dispositivos.map((d) => ({ id: d.id, avd: d.avd }))).toEqual([
+      { id: "emulator-5554", avd: "pixel8" },
+    ]);
+    // `avds` sigue CRUDO: de él depende el paso «Crear el dispositivo virtual» de la receta
+    // (`core/dispositivos.ts`), que con la lista reducida se habría creído no hecho.
+    expect(informe.avds).toEqual(["pixel8"]);
+  });
+
+  /**
+   * Y si la consola no contesta, el campo se queda AUSENTE: «no se pudo identificar», que no
+   * es «no tiene». `adb` no pasa a fallo — la herramienta contestó y su lista es buena.
+   */
+  it("si la consola del emulador falla, no hay `avd` y adb sigue en ok", async () => {
+    const { ejecutar } = ejecutorDe({
+      "/bin/adb devices": salida("List of devices attached\nemulator-5554 device model:sdk_gphone64\n"),
+      "/bin/adb -s": new Error("device offline"),
+      emulator: salida("pixel8\n"),
+    });
+    const informe = await detectarDispositivos(
+      {
+        plataforma: "linux",
+        entorno: { PATH: "/bin" },
+        home: "/home/yo",
+        existe: (r) => r === "/bin/adb" || r === "/bin/emulator",
+        ejecutar,
+      },
+      { android: false }
+    );
+    expect(informe.dispositivos[0]?.avd).toBeUndefined();
+    expect(informe.herramientas.find((h) => h.nombre === "adb")?.estado).toBe("ok");
   });
 
   it("sin ajustes se mira todo: ausente no es «no»", async () => {

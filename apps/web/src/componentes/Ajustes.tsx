@@ -24,7 +24,7 @@ import type {
   ProveedorDeModelos,
 } from "../tipos.js";
 import { seMira } from "../tipos.js";
-import { ETIQUETA_DE_ESTADO, inventario } from "../inventarioDeDispositivos.js";
+import { ETIQUETA_DE_ESTADO, inventario, seLlegaAlDispositivo } from "../inventarioDeDispositivos.js";
 import { Agentes } from "./Agentes.js";
 import { Receta } from "./Receta.js";
 import { VerificarDispositivo } from "./VerificarDispositivo.js";
@@ -975,7 +975,7 @@ export function Ajustes({
                             <li key={d.id} className={estilos.fila}>
                               <span
                                 className={estilos.punto}
-                                data-herramienta={d.estado === "conectado" ? "ok" : "otro"}
+                                data-herramienta={seLlegaAlDispositivo(d) ? "ok" : "otro"}
                                 aria-label={ETIQUETA_DE_ESTADO[d.estado]}
                               />
                               <span className={estilos.nombre}>{d.nombre}</span>
@@ -1009,7 +1009,7 @@ export function Ajustes({
                             <li key={d.id} className={estilos.fila}>
                               <span
                                 className={estilos.punto}
-                                data-herramienta={d.estado === "arrancado" ? "ok" : "otro"}
+                                data-herramienta={seLlegaAlDispositivo(d) ? "ok" : "otro"}
                                 aria-label={ETIQUETA_DE_ESTADO[d.estado]}
                               />
                               <span className={estilos.nombre}>{d.nombre}</span>

@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
   alcanzables,
+  nombreDeAvdDeConsola,
   esAlcanzable,
   type Dispositivo,
   nombreDelSistema,
@@ -520,5 +521,24 @@ describe("motivoDeSimctl", () => {
   it("sin ninguna línea útil no se inventa una", () => {
     expect(motivoDeSimctl("")).toBeUndefined();
     expect(motivoDeSimctl("An error was encountered processing the command (code=1):")).toBeUndefined();
+  });
+});
+
+describe("nombreDeAvdDeConsola", () => {
+  /**
+   * La forma MEDIDA con `pixel8` arrancado: dos líneas, el nombre y el acuse de la consola
+   * del emulador. Tomar el `OK` por nombre sería emparejar por una cadena que no existe, o
+   * sea el mismo fallo que esto viene a cerrar, con otra forma.
+   */
+  it("coge el nombre y descarta el acuse", () => {
+    expect(nombreDeAvdDeConsola("pixel8\nOK\n")).toBe("pixel8");
+  });
+
+  it("fail-closed: lo que no es un nombre de AVD es `undefined`", () => {
+    // Un nombre de AVD es una carpeta de `~/.android/avd`: sin espacios ni barras. Y lo que
+    // llega cuando no hay emulador al otro lado tampoco es un nombre.
+    for (const crudo of ["", "OK\n", "KO: unknown command\n", "error: device offline\n", "sdk gphone64 arm64\n", "../fuera\n"]) {
+      expect(nombreDeAvdDeConsola(crudo)).toBeUndefined();
+    }
   });
 });

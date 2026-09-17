@@ -979,6 +979,11 @@ export function crearStoreDelCliente(): {
                   plataforma: d.plataforma,
                   clase: d.clase,
                   estado: d.estado,
+                  // De qué AVD es el emulador. Se nombra aquí porque esta lista es BLANCA: sin
+                  // esta línea el campo no llega al inventario aunque el host lo mande, y el
+                  // síntoma sería el de antes —el AVD arrancado saliendo también como
+                  // apagado— con todo en verde. Solo una cadena de verdad.
+                  ...(typeof d.avd === "string" ? { avd: d.avd } : {}),
                   ...(d.detalle === undefined ? {} : { detalle: d.detalle }),
                   // La verificación, campo a campo como todo lo de aquí — y esta lista
                   // blanca ya se ha pagado una vez: `mime` y `base64` se caían en el `case`

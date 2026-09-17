@@ -69,6 +69,19 @@ export function PastillaDeDispositivo({
           {titulo}
         </div>
         {lista.map((d) => (
+          /**
+           * **Un AVD que solo existe como definición NO se puede elegir, y se dice.**
+           *
+           * Esas filas las inventa `inventario()` a partir de `informe.avds`, y el servidor
+           * resuelve el elegido contra `informe.dispositivos`, donde no están: elegirlas no
+           * encontraba nada, no hacía nada y no lo decía. El arreglo es no ofrecer lo que no
+           * se puede dar — con el motivo en el `title`, porque un botón apagado sin decir por
+           * qué es el otro fallo mudo de la pareja.
+           *
+           * Se mira `soloDefinicion` y no el estado: un simulador de iOS APAGADO sí se puede
+           * elegir —viene del informe y el servidor lo resuelve—, así que apagar por «no está
+           * arrancado» quitaría treinta y cinco filas legítimas.
+           */
           <button
             key={d.id}
             type="button"
@@ -76,6 +89,10 @@ export function PastillaDeDispositivo({
             className={estilos.modelo}
             data-actual={d.id === elegido?.id ? "" : undefined}
             {...(d.id === elegido?.id ? { "aria-current": "true" as const } : {})}
+            disabled={d.soloDefinicion === true}
+            {...(d.soloDefinicion === true
+              ? { title: "apagado — arráncalo para poder elegirlo" }
+              : {})}
             onClick={() => elegir(d.id)}
           >
             {d.nombre} · {d.plataforma === "ios" ? "iOS" : "Android"} · {ETIQUETA_DE_ESTADO[d.estado]}

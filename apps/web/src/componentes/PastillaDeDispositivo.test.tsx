@@ -30,8 +30,20 @@ describe("PastillaDeDispositivo", () => {
     fireEvent.click(screen.getByRole("button", { name: /sin dispositivo/i }));
     expect(screen.getByText("Teléfonos y tablets")).toBeTruthy();
     expect(screen.getByText("Simuladores y emuladores")).toBeTruthy();
-    // El AVD definido y sin arrancar también es elegible.
-    expect(screen.getByRole("menuitem", { name: /Pixel_8_API_34/ })).toBeTruthy();
+    /**
+     * El AVD definido y sin arrancar SE LISTA —es lo que se puede arrancar— pero NO se puede
+     * elegir: esa fila la inventa el cliente y el servidor resuelve el elegido contra su
+     * propia medida, donde no está. Elegirla no encontraba nada, no hacía nada y no lo decía.
+     * Antes este test afirmaba lo contrario («también es elegible»), que es exactamente el
+     * defecto: un control sin dato detrás, probado como si fuera la intención.
+     */
+    const avd = screen.getByRole("menuitem", { name: /Pixel_8_API_34/ });
+    expect(avd).toBeTruthy();
+    expect((avd as HTMLButtonElement).disabled).toBe(true);
+    // Y dice POR QUÉ: un botón apagado sin motivo es el otro fallo mudo de la pareja.
+    expect(avd.getAttribute("title")).toMatch(/arráncalo/i);
+    fireEvent.click(avd);
+    expect(alElegir).not.toHaveBeenCalled();
     fireEvent.click(screen.getByRole("menuitem", { name: /Galaxy S21/ }));
     // El nombre y la plataforma NO viajan: el servidor los resuelve contra su medida.
     expect(alElegir).toHaveBeenCalledWith("R58");
