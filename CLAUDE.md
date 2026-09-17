@@ -1076,6 +1076,17 @@ una cifra comparable. Cuatro reglas:
   haya traza sale con **70** y con el comando que la enciende: un cero con el informe en
   blanco se leería como «no gastaste nada».
 
+## El banco (`npm run banco`, nunca en `npm test`)
+
+`src/evals/banco.ts` mide **cuánto cuesta enterarse**: preguntas de solo lectura sobre el
+esqueleto, repetidas N veces por modelo, con juez. El eval pregunta si sabe hacerlo; el banco,
+lo que cuesta y **cuánto varía**. Las reglas viven en `medidas.ts` (puro, con test, como los
+jueces): la media **nunca** sale sin su rango y su dispersión, una pasada que reventó se cuenta
+aparte en vez de promediarse como un cero, y se marcan las dos cosas que invalidan una
+comparación — una respuesta INCORRECTA (barata y mala no es mejor) y una pasada que **no
+delegó** cuando otras sí, que es otro camino y no el mismo más barato. `comparar()` se NIEGA a
+concluir con los rangos solapados. Su aprobación **rechaza**: esto son preguntas.
+
 ## Los evals (`npm run eval`, nunca en `npm test`)
 
 `src/evals/correr.ts` corre tareas XOne reales sobre el esqueleto «Hola Mundo» en un temporal,

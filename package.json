@@ -29,6 +29,7 @@
     "test:watch": "vitest",
     "typecheck": "tsc --noEmit && tsc -p apps/web/tsconfig.json --noEmit",
     "eval": "tsx src/evals/correr.ts",
+    "banco": "tsx src/evals/banco.ts",
     "xonecode": "tsx src/bin.ts"
   },
   "dependencies": {

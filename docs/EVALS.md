@@ -166,3 +166,31 @@ proyecto que el verificador rechazaba, y `esqueleto.test.ts` no lo veía porque 
 texto contra los docs, no el proyecto contra el simulador. La regla estaba en las propias
 skills. Es exactamente el agujero que los evals existen para tapar, y apareció en la
 comprobación de la línea base — por eso la línea base se comprueba.
+
+## El banco (`npm run banco`), que no es el eval
+
+```sh
+npm run banco                                   # las 3 preguntas × 3 pasadas, con tu modelo
+npm run banco -- --solo entrypoint --pasadas 5
+npm run banco -- --modelos ollama/deepseek-v4.1-flash:cloud,gemini/gemini-3.8-flash
+npm run banco -- --json base.json               # la línea base con la que comparar el próximo cambio
+```
+
+El eval pregunta **«¿sabe hacerlo?»** y el banco **«¿cuánto cuesta enterarse, y cuánto varía eso?»**.
+Son preguntas de solo lectura sobre el esqueleto, repetidas N veces, con juez.
+
+Existe por una lección cara: tres ejecuciones del MISMO prompt dieron 10.644, 26.711 y 31.534
+tokens de entrada. **La varianza entre ejecuciones idénticas era mayor que el efecto que se
+buscaba**, y estuvo a punto de venderse como un −73 % lo que era una tirada de dados. De ahí que
+la tabla imponga tres cosas (`medidas.ts`, con test):
+
+- **la media nunca sale sola**: va con el rango y con la dispersión;
+- **una pasada que reventó no se promedia**, se cuenta aparte — un cero abarataría el turno que
+  no ocurrió;
+- **se marca lo que invalidaría la comparación**: respuestas incorrectas (una respuesta barata y
+  mala no es una mejora) y pasadas que **no delegaron** cuando otras sí, porque eso es otro
+  camino y no el mismo más barato. `comparar()` se niega a concluir con los rangos solapados.
+
+La aprobación **RECHAZA** —estas son preguntas, y un turno que quiere escribir se ha ido de la
+pregunta—, y como el eval, el banco no acepta una raíz: mide sobre un proyecto que se tira.
+
