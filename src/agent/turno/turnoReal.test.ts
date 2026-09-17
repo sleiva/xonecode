@@ -315,6 +315,31 @@ describe("abrirSesionReal", () => {
     expect(mocks.construirAgente.mock.calls.length).toBe(1);
   });
 
+  it("nuevoHilo PONE A CERO el contador: el gasto es de la sesión, y el hilo ES la sesión", async () => {
+    /**
+     * Visto por el usuario en la caja del compositor: tras abrir una sesión nueva, el contador
+     * seguía enseñando los tokens de la anterior. `nuevoHilo` solo cambiaba el `thread_id`, y
+     * el tracker vive en el cierre de la sesión, así que el gasto viejo quedaba atribuido a una
+     * conversación que no lo había gastado.
+     */
+    const sesion = await abrir();
+    sesion.tracker.input = 1000;
+    sesion.tracker.output = 100;
+    sesion.tracker.cache = 50;
+    sesion.tracker.calls = 7;
+    sesion.tracker.contexto = 900;
+
+    let avisos = 0;
+    sesion.alCambiarConsumo(() => (avisos += 1));
+    sesion.nuevoHilo();
+
+    expect(sesion.consumo()).toEqual({ modelo: { entrada: 0, salida: 0, cache: 0 }, externo: { entrada: 0, salida: 0, cache: 0 }, contexto: 0 });
+    expect(sesion.tracker.calls).toBe(0);
+    // Y se AVISA, o la pantalla se queda con la cifra vieja hasta el turno siguiente: el
+    // contador solo se repinta cuando el consumo cambia.
+    expect(avisos).toBe(1);
+  });
+
   it("la foto se toma POR TURNO: el segundo turno no arrastra los cambios del primero", async () => {
     mocksInstantanea.tomarInstantanea
       .mockImplementationOnce(async () => instantaneaFalsa([{ ruta: "/uno.xne", clase: "nuevo" }]))

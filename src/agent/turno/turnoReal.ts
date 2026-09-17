@@ -976,9 +976,33 @@ export async function abrirSesionReal(opciones: {
       modelos = nuevos;
       agente = await construir();
     },
-    /** Para `/nuevo`: solo cambia el hilo. El agente no se reconstruye. */
+    /**
+     * Para `/nuevo`: cambia el hilo y **pone el contador a cero**. El agente no se reconstruye.
+     *
+     * Lo segundo no es un extra: **el `thread_id` ES la sesión** (`agent/sesiones/checkpointer.ts`),
+     * así que abrir un hilo nuevo es empezar una conversación nueva, y el gasto que se enseña
+     * es el de UNA sesión. Sin esto —medido en la caja del compositor por el usuario— la
+     * conversación recién abierta heredaba los tokens de la anterior: una cifra que nadie ha
+     * gastado ahí, y encima creciente, porque el tracker vive en el cierre de la sesión y esta
+     * no se recrea.
+     *
+     * El tracker se vacía EN SITIO en vez de sustituirse: quien lo tiene lo recibió al
+     * construirse (el middleware de conteo lo capturó en su cierre), así que cambiar la
+     * referencia dejaría al middleware sumando en un objeto que ya no lee nadie — el mismo
+     * fallo mudo de siempre, con el contador clavado para siempre.
+     *
+     * Y se AVISA, porque el contador solo se repinta cuando el consumo cambia: sin el aviso,
+     * la pantalla se quedaría con la cifra vieja hasta el primer turno del hilo nuevo.
+     */
     nuevoHilo(id?: string): void {
       hilo = id ?? `xonecode-${randomUUID()}`;
+      tracker.input = 0;
+      tracker.output = 0;
+      tracker.cache = 0;
+      tracker.calls = 0;
+      tracker.contexto = 0;
+      consumoExterno = SIN_CONSUMO;
+      avisarDeConsumo();
     },
     tracker,
     /**

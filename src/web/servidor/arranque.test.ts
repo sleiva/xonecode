@@ -1253,6 +1253,7 @@ describe("montarRutas — el cable, por fin conectado", () => {
       >;
       expect(m.via).toBe("sin-empezar");
       expect(m.ficheros).toEqual([]);
+
       await vestibulo.cerrar();
       rmSync(base, { recursive: true, force: true });
     });
@@ -1401,8 +1402,25 @@ describe("montarRutas — el cable, por fin conectado", () => {
       expect(segundo.recibidos.filter((m) => m.clase === "consumo").at(-1)).toMatchObject({
         modelo: { entrada: 2100, salida: 152, cache: 0 },
       });
+      /**
+       * **Abrir otra conversación limpia el contador, y lo limpia el SERVIDOR.**
+       *
+       * `consumo` solo viaja cuando el consumo cambia, y abrir una sesión no cambia el
+       * consumo: cambia de quién es la cuenta. Sin la reemisión, la caja seguía enseñando los
+       * tokens de la conversación anterior hasta la primera llamada del hilo nuevo — lo que el
+       * usuario vio en pantalla. Un cero el cliente no lo pinta, así que el contador
+       * desaparece, que es lo correcto para una sesión que no ha gastado nada.
+       */
+      consumo.modelo = { entrada: 0, salida: 0, cache: 0 };
+      await enviarMensaje(accion, { clase: "sesion", proyecto: "p1", sesion: "s1" });
+      for (let i = 0; i < 5; i++) await asentar();
+      expect(cliente.recibidos.filter((m) => m.clase === "consumo").at(-1)).toMatchObject({
+        modelo: { entrada: 0, salida: 0, cache: 0 },
+      });
+
       await vestibulo.cerrar();
       rmSync(base, { recursive: true, force: true });
+
     });
 
     it("cambiar de sesión no rechaza la aprobación de la que dejas atrás, y al volver se reemite", async () => {

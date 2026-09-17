@@ -4312,6 +4312,24 @@ ficheros en vez de delegarlo todo, lo que se colaba era cada fichero. Es el patr
 otra forma: una regla que solo se ejercita por un camino deja de estar probada cuando el camino
 cambia.
 
+**El contador de tokens no se limpiaba al abrir otra conversación** (17-09-2026, visto por el
+usuario en la caja del compositor). Son DOS mitades, y arreglar solo una deja el defecto vivo:
+
+- **`nuevoHilo` solo cambiaba el `thread_id`.** El tracker vive en el cierre de la sesión y esa
+  no se recrea, así que un `/nuevo` dejaba el gasto de la conversación anterior atribuido a la
+  nueva, y creciendo. El `thread_id` **es** la sesión (`agent/sesiones/checkpointer.ts`), o sea
+  que abrir un hilo es empezar una conversación: ahora se vacía el tracker EN SITIO —sustituir
+  la referencia dejaría al middleware de conteo sumando en un objeto que ya no lee nadie— y se
+  AVISA, porque el contador solo se repinta cuando el consumo cambia.
+- **Y en la web había que DECÍRSELO al cliente.** `consumo` viaja por `alCambiarConsumo`, y
+  abrir una sesión no cambia el consumo: cambia de quién es la cuenta. El primer intento llamó a
+  `emitirConsumo()` y **no arregló nada**, porque esa función calla cuando la cuenta no consta —
+  y al abrir no consta: el `SesionReal` no se registra hasta que el primer turno lo construye.
+  Justo en el instante que hay que limpiar, la vía normal no manda nada. Se emite el valor VIVO
+  si consta (volver al foco de una consola con un turno en vuelo: mandar cero ahí borraría un
+  contador vivo) y un cero si no. Ese cero **sí está medido**: una conversación recién abierta no
+  ha gastado nada. El cliente no pinta un cero, así que el contador desaparece.
+
 ## Trampas verificadas
 
 - **El orquestador va de SOLO LECTURA, y hasta el 9-09-2026 no lo era** (`PERFIL_DEL_ORQUESTADOR`,

@@ -136,6 +136,7 @@ import type { ProyectoRemoto } from "../../agent/cloudstudio/cloudstudioMcp.js";
 import { CatalogoModelos } from "../../agent/config/catalogoModelos.js";
 import { Modelos } from "../../agent/config/modelos.js";
 import { crearJuezDeTarea, invocarConModelos } from "../../agent/tareas/juezDeTarea.js";
+import { SIN_CONSUMO } from "../../agent/subagentes/consumoExterno.js";
 import type { AumentadorPort, JuezDeTareaPort } from "../../core/ports.js";
 import { AumentadorGuionizado } from "../../core/ports.js";
 import type { Entorno } from "../../core/settings.js";
@@ -2057,6 +2058,31 @@ export function montarRutas(
       // El cable se muda a la consola del proyecto, como en el alta: sin esto el usuario
       // mira un transcript vivo cuyas aprobaciones se rechazan solas al otro lado.
       adjuntar();
+      /**
+       * Y el contador se REEMITE, porque el gasto es de UNA conversación.
+       *
+       * `consumo` solo viaja cuando el consumo CAMBIA (`alCambiarConsumo`), y abrir otra
+       * sesión no cambia nada: cambia de quién es la cuenta. Sin esto —medido en la pantalla
+       * del usuario— la caja seguía enseñando los tokens de la conversación anterior hasta la
+       * primera llamada al modelo de la nueva, que puede tardar.
+       *
+       * **No se usa `emitirConsumo()`, y ese es el detalle que costó el primer intento**: esa
+       * función CALLA cuando no consta la cuenta, y al abrir no consta — el `SesionReal` no se
+       * registra hasta que el primer turno lo construye. O sea que justo en el instante que
+       * hay que limpiar, la vía normal no manda nada. Aquí el cero SÍ está medido: una
+       * conversación recién abierta no ha gastado nada, y su tracker nace a cero aunque la
+       * sesión sea vieja. El cliente no pinta un cero, así que el contador desaparece.
+       *
+       * Y si la cuenta SÍ consta —volver al foco de una consola que está corriendo un turno—
+       * se manda la de verdad: mandar cero ahí borraría un contador vivo a mitad de turno.
+       */
+      const alAbrir = vestibulo.consumoDeSesion();
+      emitir({
+        clase: "consumo",
+        modelo: alAbrir?.modelo ?? SIN_CONSUMO,
+        externo: alAbrir?.externo ?? SIN_CONSUMO,
+        ventana: ventanaDeAhora(alAbrir?.contexto ?? 0),
+      });
       // Y la cola se vuelve a mirar: este proyecto queda bloqueado para las tareas —gana la
       // persona— y el que estuviera abierto antes acaba de quedar libre.
       opciones.revisarTareas?.();
