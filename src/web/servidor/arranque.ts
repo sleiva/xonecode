@@ -191,6 +191,25 @@ import { filaDeTarea } from "./transporte.js";
  */
 export const MS_DE_TRABAJO_AL_ABRIR = 2000;
 
+/**
+ * Cuánto se espera al arranque antes de entrar igual.
+ *
+ * Lo que se prepara es la sesión MCP y la lista de proyectos del primer entorno registrado,
+ * y el usuario pidió no entrar al Escritorio hasta tenerlo: entrar antes significa un
+ * Escritorio vacío que se rellena delante. Pero esperar SIN plazo es lo que convierte una
+ * espera en un cuelgue — medido con un MCP que descarta paquetes, el lienzo se quedaba para
+ * siempre, y eso es peor que lo que veníamos a arreglar.
+ *
+ * Generoso a propósito: una sesión MCP fría lleva descubrimiento OAuth y handshake, y
+ * cortarla pronto haría entrar en vacío justo a quien tiene la red lenta, que es a quien más
+ * le duele. Y como el lienzo DICE lo que está haciendo (`preparando`), la espera se lee como
+ * trabajo y no como una pantalla muerta.
+ *
+ * Igual que `MS_DE_TRABAJO_AL_ABRIR`, lo que se acota es la ESPERA y no el trabajo: la
+ * promesa sigue viva y lo que llegue tarde sale en el siguiente anuncio.
+ */
+export const MS_DE_PREPARACION = 10_000;
+
 export const RUTA_EVENTOS = "/eventos";
 export const RUTA_ACCION = "/accion";
 /**
@@ -621,6 +640,14 @@ export function montarRutas(
    * en la Trayectoria —la otra pestaña—, y el wizard repintaba el mismo paso sin decir nada.
    */
   let aviso: string | undefined;
+  /**
+   * Qué está preparando el arranque, mientras lo prepara. `undefined` = listo.
+   *
+   * Vive aquí y no en el anuncio porque el `alta` se emite también en los dos flancos de
+   * cada turno, y esos anuncios no están preparando nada: quien lo pone y lo quita es el
+   * arranque de la conexión, y los demás leen lo que haya.
+   */
+  let preparando: string | undefined;
 
   const destinoActual = (): DestinoDelCable => vestibulo.proyectoAbierto() ?? vestibulo.consola;
 
@@ -812,6 +839,10 @@ export function montarRutas(
         : {}),
       ...(vestibulo.nombre === undefined ? {} : { nombre: vestibulo.nombre }),
       ...(aviso === undefined ? {} : { aviso }),
+      // Ausente = listo, y solo entonces el cliente sale del lienzo. Se lee de la variable
+      // en cada anuncio en vez de pasarse por parámetro: los anuncios de los flancos del
+      // turno no preparan nada y tienen que decir lo que hay, no lo que había.
+      ...(preparando === undefined ? {} : { preparando }),
     });
   };
 
@@ -1091,14 +1122,28 @@ export function montarRutas(
    * absoluto (arreglado en `agent/cloudstudio/cloudstudioMcp.ts#abrirCliente`), así que dos conexiones
    * seguidas no chocan por intentarlo cada una.
    */
-  const poblarProyectosSiProcede = async (): Promise<void> => {
-    if (vestibulo.proyectoAbierto() !== undefined) return;
-    if (entornoElegido !== undefined) return;
+  /**
+   * De qué entorno se poblarían los proyectos al arrancar, o nada si no hay nada que
+   * preparar.
+   *
+   * Es la MISMA decisión que toma `poblarProyectosSiProcede`, extraída para que el arranque
+   * pueda anunciar la fase ANTES de empezarla. En dos sitios divergirían, y el precio sería
+   * de los peores: el lienzo esperando por un trabajo que nadie va a pedir (`preparando`
+   * puesto y nada que lo quite), o entrar en vacío justo cuando sí había algo que traer.
+   */
+  const entornoAPoblar = (): { id: string; nombre: string } | undefined => {
+    if (vestibulo.proyectoAbierto() !== undefined) return undefined;
+    if (entornoElegido !== undefined) return undefined;
     const [primero] = vestibulo.entornosRegistrados();
-    if (primero === undefined) return;
+    return primero === undefined ? undefined : { id: primero.id, nombre: primero.nombre };
+  };
+
+  const poblarProyectosSiProcede = async (): Promise<void> => {
+    const destino = entornoAPoblar();
+    if (destino === undefined) return;
     try {
-      proyectos = await vestibulo.proyectosDe(primero.id);
-      entornoElegido = primero.id;
+      proyectos = await vestibulo.proyectosDe(destino.id);
+      entornoElegido = destino.id;
     } catch (error) {
       aviso = error instanceof Error ? error.message : String(error);
       contar(error);
@@ -2943,11 +2988,31 @@ export function montarRutas(
      * `poblarProyectosSiProcede` acabe mal no puede dejar al cliente sin el anuncio. Es el
      * mismo reparto que ya usaba el cambio de entorno (anunciar, luego preguntar).
      */
+    /**
+     * La fase se pone ANTES del primer anuncio y se quita en el `finally`, así que el primer
+     * `alta` sale con ella y el segundo sin ella. Es lo que hace que el Escritorio no entre
+     * hasta estar preparado —lo que el usuario pidió— sin volver a esconder el «no falta
+     * ningún paso», que es lo que el `alta` adelantado vino a arreglar: el cliente sabe
+     * desde el primer mensaje que no hay nada que dar de alta Y que todavía está trayendo
+     * los proyectos, que son dos cosas distintas.
+     *
+     * Con la cuenta pendiente y un entorno ya registrado las dos cosas pasan a la vez, y eso
+     * está bien: la tarjeta pinta el paso de cuenta mientras el MCP trabaja por detrás. Es el
+     * cliente quien decide qué se ve, porque la fase es un dato, no una orden de pintar.
+     */
+    const aPreparar = entornoAPoblar();
+    preparando = aPreparar === undefined ? undefined : `conectando con ${aPreparar.nombre}…`;
     void conducirCuenta()
       .catch(contar)
       .then(() => anunciarAlta().catch(contar))
-      .then(() => poblarProyectosSiProcede())
-      .finally(() => void anunciarAlta().catch(contar));
+      .then(() => conPlazo(poblarProyectosSiProcede(), MS_DE_PREPARACION))
+      .finally(() => {
+        // Se quita SIEMPRE, también cuando el plazo vence con el MCP todavía colgado: el
+        // lienzo no puede quedarse esperando a quien no contesta. Lo que llegue tarde entra
+        // en el siguiente anuncio, y lo que falló ya viaja en `aviso`.
+        preparando = undefined;
+        void anunciarAlta().catch(contar);
+      });
 
     peticion.on("close", () => {
       // Se va ESTE cliente, no «el cliente». La guarda de antes (`enviar !== sumidero`)

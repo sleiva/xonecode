@@ -14,11 +14,15 @@ import estilos from "./Marca.module.css";
  * una animación decorativa más. El informe de la tarea lo lista entre lo omitido.
  *
  * Sin `nombre` ni ningún otro dato: es la MISMA marca en cualquier estado del alta, así
- * que no lee el store — ninguna prop, como corresponde a algo que no varía.
+ * que no lee el store. La única prop es `grande`, y no es decoración: cuando el lienzo está
+ * SOLO —el arranque preparando, sin tarjeta que leer— la marca se queda el centro óptico y
+ * crece, que es lo que el usuario pidió al ver la maqueta del launch screen; con la tarjeta
+ * delante vuelve a ser la cabecera compacta. Quién de los dos casos es lo decide
+ * `PantallaDeArranque`, que es quien sabe si hay tarjeta.
  */
-export function Marca() {
+export function Marca({ grande }: { grande?: boolean }) {
   return (
-    <div className={estilos.marca}>
+    <div className={`${estilos.marca}${grande === true ? ` ${estilos.grande}` : ""}`}>
       <div className={estilos.fila}>
         <div className={estilos.placa}>
           <svg

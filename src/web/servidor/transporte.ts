@@ -538,6 +538,24 @@ export type MensajeAlCliente =
   | {
       clase: "alta";
       pasos: PasoDelVestibulo[];
+      /**
+       * **Qué está preparando el arranque AHORA. Ausente = ya está listo.**
+       *
+       * Existe porque `proyectos: []` no distingue «todavía no lo he preguntado» de «no hay
+       * ninguno», y de esa ambigüedad salía un Escritorio que entraba vacío y se rellenaba
+       * delante del usuario. Con este campo el cliente se queda en el lienzo hasta que el
+       * arranque termina, y mientras puede DECIR qué hace en vez de estar un segundo y medio
+       * en silencio.
+       *
+       * Es la FASE y no un booleano por lo mismo que `Fase` en el turno: un «espera» sin
+       * decir a qué se parece a estar colgado. Y va como texto ya redactado por el servidor,
+       * que es quien sabe el nombre del entorno al que está llamando.
+       *
+       * Lo que acota la espera es un PLAZO (`MS_DE_PREPARACION`), no la confianza en que el
+       * MCP conteste: si no contesta, se entra igual y el `aviso` dice por qué. Medido: con
+       * un MCP que descarta paquetes, sin plazo el lienzo se queda para siempre.
+       */
+      preparando?: string;
       proveedores: { id: string; nombre: string }[];
       entornos: OpcionDeEntorno[];
       /**

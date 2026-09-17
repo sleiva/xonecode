@@ -292,6 +292,8 @@ export interface EstadoDelCliente {
    */
   alta?: {
     pasos: PasoDelWizard[];
+    /** Qué prepara el arranque. AUSENTE = listo: es lo que decide si se sale del lienzo. */
+    preparando?: string;
     proveedores: { id: string; nombre: string }[];
     entornos: { id: string; nombre: string; url: string }[];
     /** Los REGISTRADOS (`settings.json`), no los ofrecidos: es lo que lista la ventana de
@@ -1408,6 +1410,7 @@ export function crearStoreDelCliente(): {
         case "alta": {
           const m = mensaje as {
             pasos?: unknown;
+            preparando?: unknown;
             proveedores?: unknown;
             entornos?: unknown;
             registrados?: unknown;
@@ -1523,6 +1526,10 @@ export function crearStoreDelCliente(): {
               proyectoAbierto: m.proyectoAbierto,
               // Ausente o de otro tipo = no hay aviso/nombre, nunca uno inventado.
               ...(typeof m.aviso === "string" ? { aviso: m.aviso } : {}),
+              // La fase del arranque. AUSENTE = listo, y es la diferencia entre quedarse en
+              // el lienzo y entrar al Escritorio: si un campo nuevo no se nombra en este
+              // `case` no llega nunca, y el síntoma sería entrar en vacío como antes.
+              ...(typeof m.preparando === "string" ? { preparando: m.preparando } : {}),
               ...(typeof m.nombre === "string" ? { nombre: m.nombre } : {}),
               ...(typeof m.entornoActivo === "string" ? { entornoActivo: m.entornoActivo } : {}),
               ...(typeof m.proyectoActivo === "string" ? { proyectoActivo: m.proyectoActivo } : {}),

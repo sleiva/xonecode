@@ -80,3 +80,41 @@
   max-width: 360px;
   color: var(--xonecode-splash-texto-suave);
 }
+
+/* La variante CENTRADA, para cuando el lienzo está solo: la marca se queda el centro óptico
+   y crece a tamaño de portada. Las proporciones salen de la maqueta del launch screen del
+   usuario; los colores NO —son los mismos tokens de arriba, que es la regla de esta casa con
+   cualquier maqueta: de ella se toma la forma, nunca la paleta.
+
+   El `padding` se va a cero porque aquí la marca ya no es una cabecera pegada al borde: la
+   separación la pone el `gap` de `.contenido`, que es quien la centra. */
+.grande {
+  padding: 0;
+  gap: 12px;
+}
+
+.grande .fila {
+  flex-direction: column;
+  gap: 16px;
+}
+
+.grande .placa {
+  width: 72px;
+  height: 72px;
+  border-radius: 20px;
+}
+
+.grande .simbolo {
+  width: 44px;
+  height: 44px;
+}
+
+.grande .textoDeMarca {
+  font-size: 44px;
+  letter-spacing: -0.02em;
+}
+
+.grande .eslogan {
+  font-size: 15px;
+  max-width: 420px;
+}

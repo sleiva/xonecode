@@ -422,6 +422,14 @@ export type MensajeAlCliente =
   | {
       clase: "alta";
       pasos: PasoDelWizard[];
+      /**
+       * Qué está preparando el arranque. AUSENTE = listo, y solo entonces se entra.
+       *
+       * `proyectos: []` no distingue «no preguntado todavía» de «ninguno», así que sin esto
+       * el Escritorio entraba vacío y se rellenaba delante. Es texto ya redactado por el
+       * servidor —él sabe a qué entorno está llamando— y el lienzo lo pinta tal cual.
+       */
+      preparando?: string;
       proveedores: { id: string; nombre: string }[];
       entornos: { id: string; nombre: string; url: string }[];
       /**

@@ -1,0 +1,47 @@
+/* Colores de MARCA y no `--dsw-alias-*`, por lo mismo que `Marca.module.css`: esto se pinta
+   sobre el lienzo del arranque, cuyo fondo no cambia con el tema, así que los alias —que sí
+   cambian— darían texto ilegible la mitad de las veces. Los tokens viven en
+   `apps/web/estilos/splash.css`; aquí solo se consumen. */
+.fase {
+  position: relative;
+  z-index: 1;
+  flex-shrink: 0;
+  margin: 0;
+  padding: 0 24px 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  font-size: 13px;
+  text-align: center;
+  color: var(--xonecode-splash-texto-suave);
+}
+
+/* El latido. Solo opacidad: el color sale del token, así que no hay ningún literal aquí
+   —`Barra.test.tsx` recorre estas hojas y lo exige— y la animación no inventa una paleta. */
+.punto {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  background: var(--xonecode-splash-cian);
+  animation: latido 1.4s ease-in-out infinite;
+}
+
+/* Quien pide menos movimiento se queda con el punto quieto, no sin punto: sigue diciendo
+   dónde está el estado, solo deja de parpadear. */
+@media (prefers-reduced-motion: reduce) {
+  .punto {
+    animation: none;
+  }
+}
+
+@keyframes latido {
+  0%,
+  100% {
+    opacity: 0.25;
+  }
+  50% {
+    opacity: 1;
+  }
+}

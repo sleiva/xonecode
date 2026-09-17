@@ -17,6 +17,7 @@ import { Selector } from "./componentes/Selector.js";
 import { Wizard } from "./componentes/Wizard.js";
 import { PantallaDeArranque } from "./componentes/PantallaDeArranque.js";
 import { TarjetaDeAlta } from "./componentes/TarjetaDeAlta.js";
+import { FaseDeArranque } from "./componentes/FaseDeArranque.js";
 import type { PasoDeAlta } from "./componentes/PasosDelAlta.js";
 import { Escritorio } from "./componentes/Escritorio.js";
 import { NuevaSesion } from "./componentes/NuevaSesion.js";
@@ -561,18 +562,36 @@ export function App({
   // resolviendo (viaja por `selector`/`secreto`, no por `alta`, así que `alta` sigue
   // `undefined`) o ya llegó con el paso de entorno pendiente. Las dos cuentan como
   // «todavía no hay nada que enseñar salvo el alta».
-  const enAlta = estado.alta === undefined || estado.alta.pasos.length > 0;
+  /**
+   * **Qué está preparando el arranque. Ausente = listo, y solo entonces se entra.**
+   *
+   * El usuario lo pidió así: no salir del lienzo hasta que la sesión MCP esté abierta y los
+   * proyectos listados, porque entrar antes deja un Escritorio vacío que se rellena delante.
+   * No se puede deducir de `proyectos: []` —eso no distingue «no preguntado» de «ninguno»—,
+   * así que el servidor lo DICE (`web/servidor/arranque.ts`), con la fase dentro para que el
+   * lienzo pueda contar qué hace en vez de estar en silencio. La espera la acota el servidor
+   * con su plazo: aquí no hay ningún reloj, y un `preparando` que no se quitara sería un
+   * lienzo para siempre.
+   */
+  const preparandoArranque = estado.alta?.preparando;
+
+  const enAlta =
+    estado.alta === undefined || estado.alta.pasos.length > 0 || preparandoArranque !== undefined;
 
   /**
    * ¿Hay algo esperando respuesta AQUÍ, en el arranque?
    *
    * El paso de cuenta no viaja por `alta` sino por `selector`/`secreto`, y una `pregunta`
-   * puede caer también antes de entrar. Se mira solo con `alta` ausente a propósito: los
-   * tres llegan TAMBIÉN a mitad de conversación, y entonces los pinta la maqueta completa.
+   * puede caer también antes de entrar. Dentro de `enAlta` los tres son del arranque: a
+   * mitad de conversación `enAlta` es falso y los pinta la maqueta completa, así que aquí no
+   * hace falta mirar si `alta` llegó — y mirarlo escondería el paso de cuenta de quien tiene
+   * un entorno ya registrado, donde la cuenta y la preparación pasan a la vez.
    */
   const algoPreguntado =
-    estado.alta === undefined &&
-    (estado.selector !== undefined || estado.secreto !== undefined || estado.pregunta !== undefined);
+    estado.selector !== undefined || estado.secreto !== undefined || estado.pregunta !== undefined;
+
+  /** Lo que el arranque tiene que resolver: pasos del alta pendientes. */
+  const faltanPasos = (estado.alta?.pasos.length ?? 0) > 0;
 
   /**
    * **No consta ≠ falta.** `alta === undefined` significa que el servidor todavía no lo ha
@@ -588,7 +607,7 @@ export function App({
    * que evita esconder una pregunta: `AvisoDeConexion` va fuera de ella, así que un servidor
    * caído sigue diciéndolo.
    */
-  const sinSaberTodavia = estado.alta === undefined && !algoPreguntado;
+  const soloElLienzo = !faltanPasos && !algoPreguntado;
 
   /**
    * ¿Está el paso de cuenta en marcha AHORA MISMO?
@@ -610,8 +629,10 @@ export function App({
   ];
 
   if (enAlta) {
+    // `centrada` cuando no hay tarjeta: la marca se queda el centro óptico y crece. Con
+    // tarjeta vuelve a ser la cabecera compacta, que es de quien es el centro entonces.
     return (
-      <PantallaDeArranque>
+      <PantallaDeArranque centrada={soloElLienzo}>
         {/*
           Antes de que llegue el primer `selector`/`secreto`/`alta` (la conexión SSE
           todavía no ha resuelto nada, o se cayó a mitad del alta) esto era la única
@@ -633,11 +654,18 @@ export function App({
           no es parte de este arreglo.
         */}
         {/*
-          La tarjeta solo cuando se sabe que hay algo que dar de alta, o hay algo que
-          contestar. Mientras no consta, el lienzo y el aviso de conexión — ver
-          `sinSaberTodavia`.
+          La FASE, cuando el arranque todavía está preparando algo. Va suelta en el lienzo y
+          no dentro de la tarjeta: no es un paso que nadie tenga que contestar, es lo que el
+          servidor está haciendo — y enseñarla dentro de una tarjeta la leería como un
+          formulario. Cuando además hay algo que contestar, se pinta con la tarjeta debajo:
+          el paso de cuenta y la sesión MCP pueden ir a la vez.
         */}
-        {sinSaberTodavia ? null : (
+        {preparandoArranque === undefined ? null : <FaseDeArranque texto={preparandoArranque} />}
+        {/*
+          La tarjeta solo cuando hay algo que dar de alta o algo que contestar. Mientras no,
+          el lienzo y el aviso de conexión — ver `soloElLienzo`.
+        */}
+        {soloElLienzo ? null : (
         <TarjetaDeAlta
           nombre={estado.nombre ?? estado.alta?.nombre}
           pasos={pasosDeAlta}

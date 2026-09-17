@@ -456,6 +456,123 @@ describe("App: la pantalla de arranque no enseña nada más", () => {
   });
 
   /**
+   * **Con `preparando` puesto no se entra: el Escritorio tiene que estar listo.**
+   *
+   * Lo pidió el usuario tras ver el arreglo anterior: el `alta` adelantado hacía entrar en
+   * 117 ms y el Escritorio se rellenaba delante (los proyectos llegan cuando CloudStudio
+   * contesta). Ahora el servidor DICE qué está preparando y el cliente se queda en el lienzo
+   * — y lo CUENTA, porque una espera de más de un segundo sin decir nada se lee como una
+   * pantalla colgada.
+   *
+   * Ausente = listo, y por eso el segundo `alta` (el que llega sin el campo) es el que abre
+   * la maqueta. La espera la acota el servidor con su plazo: si aquí hubiera un reloj serían
+   * dos, y el que venciera primero mandaría.
+   */
+  it("mientras el arranque prepara algo no se entra, se cuenta la fase, y sin el campo ya se entra", () => {
+    const { store } = montarSinAbrir();
+    const alta = {
+      clase: "alta" as const,
+      pasos: [],
+      proveedores: [],
+      entornos: [],
+      proyectos: [],
+      ramas: [],
+      proyectoAbierto: true,
+    };
+    act(() => store.aplicar({ ...alta, preparando: "conectando con XOne WebStudio…" }));
+    // La fase se cuenta, y como estado: quien navegue con lector de pantalla se entera.
+    expect(screen.getByRole("status").textContent).toContain("XOne WebStudio");
+    // Sin tarjeta —no hay nada que contestar— y sin maqueta: esto sigue siendo el lienzo.
+    expect(screen.queryByLabelText("Pasos del alta")).toBeNull();
+    expect(screen.queryByPlaceholderText(/pregunta sobre xone/i)).toBeNull();
+    expect(screen.queryByText("Ajustes")).toBeNull();
+
+    // El mismo alta SIN el campo es «listo», y entonces sí se entra.
+    act(() => store.aplicar(alta));
+    expect(screen.queryByRole("status")).toBeNull();
+    expect(screen.getByText("Ajustes")).toBeTruthy();
+  });
+
+  /**
+   * El caso mixto, que es el que se colaría: cuenta pendiente Y un entorno ya registrado, o
+   * sea preparando y preguntando a la vez. La tarjeta tiene que salir — si no, el paso de
+   * cuenta se quedaría escondido detrás de una espera que no depende de él.
+   */
+  it("preparando Y con algo que contestar: la tarjeta sale igual", () => {
+    const { store } = montarSinAbrir();
+    act(() =>
+      store.aplicar({
+        clase: "alta",
+        pasos: [],
+        preparando: "conectando con XOne WebStudio…",
+        proveedores: [],
+        entornos: [],
+        proyectos: [],
+        ramas: [],
+        proyectoAbierto: false,
+      })
+    );
+    act(() =>
+      store.aplicar({
+        clase: "selector",
+        selector: { titulo: "Proveedor de modelos", opciones: [{ id: "ollama", etiqueta: "ollama" }] },
+      })
+    );
+    expect(screen.getByRole("group", { name: /proveedor de modelos/i })).toBeTruthy();
+    expect(screen.getByRole("status").textContent).toContain("XOne WebStudio");
+  });
+
+  /**
+   * **La marca se centra solo cuando el lienzo está solo**, que es lo que el usuario pidió al
+   * ver la maqueta del launch screen: sin tarjeta no hay con quién competir por el centro
+   * óptico, y con tarjeta el centro es de la tarjeta.
+   *
+   * Se comprueba por ESTRUCTURA y no por CSS: en jsdom no hay layout que medir, y lo que
+   * decide el centrado es de qué grupo cuelga la marca — centrada entra DENTRO del contenedor
+   * que se centra, junto a la fase; con tarjeta se queda fuera, como fila de cabecera. Y se
+   * comprueba desde `App` porque lo que se rompe es el CABLEADO del prop: `PantallaDeArranque`
+   * podría aceptar `centrada` y nadie pasárselo nunca, con todo en verde.
+   */
+  it("la marca comparte grupo con la fase cuando el lienzo está solo, y no cuando hay tarjeta", () => {
+    const { store } = montarSinAbrir();
+    /** La raíz de `Marca`: el lema es un `<p>` suyo, así que su `div` más cercano es ella. */
+    const marca = () => screen.getByText(/Entorno de desarrollo con IA/).closest("div") as HTMLElement;
+
+    act(() =>
+      store.aplicar({
+        clase: "alta",
+        pasos: [],
+        preparando: "conectando con XOne WebStudio…",
+        proveedores: [],
+        entornos: [],
+        proyectos: [],
+        ramas: [],
+        proyectoAbierto: true,
+      })
+    );
+    // Centrada: la marca y la fase cuelgan del MISMO grupo, el que se centra.
+    expect(marca().parentElement).toBe(screen.getByRole("status").parentElement);
+
+    // Con un paso pendiente sale la tarjeta, y entonces la marca se va fuera de ese grupo.
+    act(() =>
+      store.aplicar({
+        clase: "alta",
+        pasos: ["entorno"],
+        proveedores: [],
+        entornos: [],
+        proyectos: [],
+        ramas: [],
+        proyectoAbierto: false,
+      })
+    );
+    // Y aquí se comparan los GRUPOS, no la contención: sin centrar, la marca cuelga de la
+    // envoltura, que contiene todo — incluida la tarjeta—, así que `contains` diría «sí»
+    // siempre y el test no distinguiría nada.
+    const tarjetaRaiz = screen.getByLabelText("Pasos del alta").parentElement as HTMLElement;
+    expect(marca().parentElement).not.toBe(tarjetaRaiz.parentElement);
+  });
+
+  /**
    * Antes de este aviso, un token inválido o el servidor caído mientras `estado.alta`
    * seguía `undefined` (nunca llegó ni un `selector`) pintaban el splash sólido y NADA
    * más: un fallo mudo, justo lo que este repo persigue en todas partes (`AGENTS.md`,

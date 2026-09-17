@@ -12,7 +12,8 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { Readable } from "node:stream";
 import type { IncomingMessage, ServerResponse } from "node:http";
-import { MS_DE_TRABAJO_AL_ABRIR,
+import { MS_DE_PREPARACION,
+  MS_DE_TRABAJO_AL_ABRIR,
   arrancarConsolaWeb,
   montarRutas,
   commitDeTurnoCableado,
@@ -275,6 +276,64 @@ describe("montarRutas — el cable, por fin conectado", () => {
    * se deshace, esto se queda sin ningún `alta` y muere. Los proyectos llegan en el SEGUNDO
    * anuncio, que es lo que prueba el test de arriba.
    */
+  /**
+   * **El Escritorio no entra hasta estar preparado, y la espera tiene plazo.**
+   *
+   * El usuario pidió lo primero: entrar con la sesión MCP abierta y los proyectos listados,
+   * porque antes el Escritorio entraba vacío y se rellenaba delante. `proyectos: []` no
+   * puede sostener eso —no distingue «no preguntado» de «ninguno»—, así que el primer `alta`
+   * lo DICE con `preparando`, y el segundo llega sin el campo.
+   *
+   * Lo segundo es la otra mitad y no es opcional: con un MCP que no contesta, un `preparando`
+   * que nadie quitara deja el lienzo para siempre — medido con un host que descarta paquetes.
+   * Por eso se quita en el `finally`, también cuando vence el plazo, y aquí se comprueba sin
+   * resolver nunca la conexión.
+   */
+  it("el arranque DICE lo que prepara, y al vencer el plazo entra igual sin el campo", async () => {
+    vi.useFakeTimers();
+    try {
+      const servidor = servidorDeMentira();
+      montarRutas(
+        servidor,
+        vestibuloDePrueba({
+          // El MCP que nunca contesta: el agujero negro, en forma de promesa.
+          proyectosDeEntorno: () => new Promise(() => undefined),
+        })
+      );
+      const cliente = clienteDeMentira();
+      const eventos = servidor.rutas.get(`GET ${RUTA_EVENTOS}`);
+      await eventos!(cliente.peticion, cliente.respuesta);
+      await vi.advanceTimersByTimeAsync(0);
+      const primera = ultimaAlta(cliente) as Extract<MensajeAlCliente, { clase: "alta" }>;
+      // Nombra el entorno al que está llamando: una espera que no dice a qué espera se lee
+      // como una pantalla colgada.
+      expect(primera.preparando).toContain("XOne WebStudio");
+      expect(primera.pasos).toEqual([]);
+
+      // Vencido el plazo, se entra igual: el campo desaparece aunque el MCP siga colgado.
+      await vi.advanceTimersByTimeAsync(MS_DE_PREPARACION + 10);
+      const segunda = ultimaAlta(cliente) as Extract<MensajeAlCliente, { clase: "alta" }>;
+      expect(segunda.preparando).toBeUndefined();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("sin ningún entorno registrado no hay nada que preparar: el alta sale sin `preparando`", async () => {
+    // El primer arranque de verdad: sin entornos, `poblarProyectosSiProcede` no tiene a quién
+    // preguntar, así que esperar sería esperar a nadie — y la tarjeta del alta tiene que salir
+    // ya, que es lo único que esa pantalla puede hacer.
+    const servidor = servidorDeMentira();
+    montarRutas(servidor, vestibuloDePrueba({ entornos: [] }));
+    const cliente = clienteDeMentira();
+    const eventos = servidor.rutas.get(`GET ${RUTA_EVENTOS}`);
+    await eventos!(cliente.peticion, cliente.respuesta);
+    await asentar();
+    const alta = ultimaAlta(cliente) as Extract<MensajeAlCliente, { clase: "alta" }>;
+    expect(alta.preparando).toBeUndefined();
+    expect(alta.pasos).toEqual(["entorno"]);
+  });
+
   it("el alta se anuncia sin esperar al MCP: con la conexión colgando, `pasos` ya llega", async () => {
     const servidor = servidorDeMentira();
     let contestar: ((v: { proyectos: { id: string; nombre: string }[] }) => void) | undefined;
