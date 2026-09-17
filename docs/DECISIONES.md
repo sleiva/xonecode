@@ -4395,6 +4395,29 @@ deepagents tiene `createToolExclusionMiddleware` para justo eso, y su propia doc
 el límite donde va: «exclusions calibrate the agent per model; **they are not a security
 boundary**». La frontera sigue siendo `permisosDe`; la exclusión es coste.
 
+**Y tres medidas que salieron de mirar, no de deducir** (17-09-2026, con el inspector puesto):
+
+1. **El prefijo es byte-idéntico entre llamadas.** El inspector lleva una HUELLA del prompt de
+   sistema más los esquemas en su orden, que es exactamente lo que decide si una caché de prompt
+   puede enganchar —toda caché es por prefijo—: cuatro llamadas de un turno real, **una sola
+   huella**. O sea que el problema de la caché nunca ha sido nuestro. La huella se toma del
+   CONTENIDO y no del resumen de la medida: la primera versión la hacía sobre `{nombre,
+   caracteres}` y una descripción que cambiara conservando el largo habría dado la misma huella.
+2. **Quitarle al orquestador las tools que no puede usar vale un cuarto del turno.** De 8 tools
+   a 5, de 12.350 caracteres de esquema a 8.607, y el turno de **15.466 a 11.738 tokens (−24 %)**
+   sin perder ni una capacidad: son las que `permisosDe` ya le deniega. La lista se DERIVA de
+   `toolsDe(perfil)` y no se escribe a mano, así que conceder una tool la saca de ahí sola.
+   `delete` se va para todos: ningún perfil nuestro la concede y su esquema viajaba igual.
+3. **El inspector dice, en la MISMA línea, lo que entró y lo que costó** (`uso`, de
+   `usage_metadata`). Separarlo obliga a cruzar dos ficheros a ojo para contestar de dónde sale
+   una cifra; junto, la primera medida habría enseñado de golpe que los esquemas eran el 80 % del
+   turno en vez de deducirlo restando. Ausente cuando el proveedor no lo manda, que es distinto
+   de cero.
+
+Consecuencia para lo siguiente: **`cache_control` con Anthropic deja de ser una mejora marginal**.
+El prefijo son ~3.500 tokens estables y su mínimo cacheable ronda los 1.024, así que lo que se
+cachearía es justo la cabecera que hoy se paga entera en cada llamada.
+
 ## Trampas verificadas
 
 - **El orquestador va de SOLO LECTURA, y hasta el 9-09-2026 no lo era** (`PERFIL_DEL_ORQUESTADOR`,

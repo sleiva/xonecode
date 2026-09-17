@@ -5,6 +5,7 @@ import { describe, expect, it } from "vitest";
 import { AIMessage, HumanMessage, SystemMessage, ToolMessage } from "@langchain/core/messages";
 import {
   inspeccionarLlamada,
+  usoDeRespuesta,
   inspectorDePrompt,
   rutaTrazaDePrompt,
   textoDeMensaje,
@@ -127,5 +128,80 @@ describe("el middleware", () => {
     // El middleware devuelve lo que devuelva el handler, tal cual: si este no es una promesa,
     // tampoco lo es la vuelta. Se comprueba el VALOR, que es lo que le llega al agente.
     expect(await mw.wrapModelCall(peticion, () => new AIMessage("ok"))).toBeDefined();
+  });
+});
+
+describe("la huella del prefijo", () => {
+  it("es la MISMA con el mismo sistema y las mismas tools, aunque cambien los mensajes", () => {
+    // Es lo que decide si una caché de prompt puede enganchar: toda caché es por prefijo.
+    const a = inspeccionarLlamada("x", peticion, false);
+    const b = inspeccionarLlamada("x", { ...peticion, messages: [...peticion.messages, new AIMessage("más")] }, false);
+    expect(b.prefijo.huella).toBe(a.prefijo.huella);
+  });
+
+  it("CAMBIA si cambia una DESCRIPCIÓN conservando el largo", () => {
+    // La primera versión hacía la huella sobre el resumen (), así que un
+    // cambio del mismo largo daba la misma huella: una huella que no cambia cuando cambia lo
+    // que representa no vale para nada.
+    const otra = inspeccionarLlamada("x", { ...peticion, tools: [{ ...peticion.tools[0], description: "Lee un FICHERO" }, peticion.tools[1]] }, false);
+    expect(otra.prefijo.huella).not.toBe(inspeccionarLlamada("x", peticion, false).prefijo.huella);
+  });
+
+  it("CAMBIA si cambia el orden de las tools, que para la caché es otro prefijo", () => {
+    const alReves = inspeccionarLlamada("x", { ...peticion, tools: [...peticion.tools].reverse() }, false);
+    expect(alReves.prefijo.huella).not.toBe(inspeccionarLlamada("x", peticion, false).prefijo.huella);
+  });
+
+  it("CAMBIA si cambia el prompt de sistema", () => {
+    const otro = inspeccionarLlamada("x", { ...peticion, systemMessage: new SystemMessage("otra cosa") }, false);
+    expect(otro.prefijo.huella).not.toBe(inspeccionarLlamada("x", peticion, false).prefijo.huella);
+  });
+});
+
+describe("el uso que declara la respuesta", () => {
+  it("lee `usage_metadata` y su caché", () => {
+    const uso = usoDeRespuesta({ usage_metadata: { input_tokens: 3500, output_tokens: 120, input_token_details: { cache_read: 3000 } } });
+    expect(uso).toEqual({ entrada: 3500, salida: 120, cache: 3000 });
+  });
+
+  it("sin `usage_metadata` queda AUSENTE, no a cero", () => {
+    // Un cero aquí sería una medición que nadie hizo, que es lo que este repo persigue en
+    // todas partes.
+    expect(usoDeRespuesta(new AIMessage("ok"))).toBeUndefined();
+    expect(usoDeRespuesta(null)).toBeUndefined();
+  });
+
+  it("y viaja en la MISMA línea que lo que entró", async () => {
+    const raiz = mkdtempSync(join(tmpdir(), "xc-insp-"));
+    try {
+      const mw = inspectorDePrompt(raiz, "orquestador", { [VARIABLE_TRAZA_PROMPT]: "1" }) as unknown as {
+        wrapModelCall: (p: unknown, h: (p: unknown) => unknown) => Promise<unknown>;
+      };
+      const respuesta = new AIMessage("ok");
+      (respuesta as unknown as { usage_metadata: unknown }).usage_metadata = { input_tokens: 3533, output_tokens: 40 };
+      await mw.wrapModelCall(peticion, () => respuesta);
+      const linea = JSON.parse(readFileSync(rutaTrazaDePrompt(raiz), "utf8").trim()) as Record<string, unknown>;
+      // Lo que entró y lo que costó, juntos: separarlos obliga a cruzar dos ficheros a ojo.
+      expect(linea).toMatchObject({ uso: { entrada: 3533, salida: 40, cache: 0 } });
+      expect(linea.caracteresTotales).toBeGreaterThan(0);
+    } finally {
+      rmSync(raiz, { recursive: true, force: true });
+    }
+  });
+
+  it("un fallo de la llamada se propaga INTACTO, no lo tapa el inspector", async () => {
+    const raiz = mkdtempSync(join(tmpdir(), "xc-insp-"));
+    try {
+      const mw = inspectorDePrompt(raiz, "x", { [VARIABLE_TRAZA_PROMPT]: "1" }) as unknown as {
+        wrapModelCall: (p: unknown, h: (p: unknown) => unknown) => Promise<unknown>;
+      };
+      await expect(
+        mw.wrapModelCall(peticion, () => {
+          throw new Error("el proveedor dijo que no");
+        })
+      ).rejects.toThrow("el proveedor dijo que no");
+    } finally {
+      rmSync(raiz, { recursive: true, force: true });
+    }
   });
 });

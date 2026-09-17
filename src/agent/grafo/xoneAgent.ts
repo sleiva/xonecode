@@ -14,6 +14,7 @@ import type { DiagnosticoDeTools } from "../turno/diagnosticoDeTools.js";
 import { middlewareTextoDeTool } from "../turno/textoDeTool.js";
 import { resumenConEncargo, topeDeLlamadas } from "../turno/resumenDeContexto.js";
 import { inspectorDePrompt } from "../turno/inspectorDePrompt.js";
+import { excluirTools, toolsQueNoUsa } from "./excluirTools.js";
 import {
   createTokenTrackingMiddleware,
   type AlContarTokens,
@@ -421,6 +422,11 @@ export async function construirAgente(opciones: OpcionesDelAgente): Promise<unkn
       // Los DOS, y en su orden, que es lo que `resumenConEncargo` garantiza: el resumen
       // se lleva el encargo por delante al cruzar el umbral, y el segundo lo devuelve.
       ...resumenConEncargo(backend),
+      // Los esquemas de las tools que NO puede usar son el 25 % de su cabecera, y la cabecera
+      // es el 87 % de cada llamada (`inspectorDePrompt`). `permissions` acota el permiso; el
+      // esquema viaja igual, así que esto lo quita del prompt Y sigue rechazando la llamada.
+      // La frontera sigue siendo `permisosDe`: ver `excluirTools.ts`.
+      excluirTools(toolsQueNoUsa(PERFIL_DEL_ORQUESTADOR)),
       middlewareTextoDeTool(),
       ...middlewareTracker("orquestador"),
       ...inspector(opciones.raiz, "orquestador"),

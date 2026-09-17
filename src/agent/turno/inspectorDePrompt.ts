@@ -28,6 +28,7 @@
  * sube a CloudStudio.
  */
 
+import { createHash } from "node:crypto";
 import { appendFileSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
 import { createMiddleware } from "langchain";
@@ -71,8 +72,30 @@ export interface LlamadaInspeccionada {
    * schema cost for that agent».
    */
   esquemas: { caracteres: number; porTool: EsquemaInspeccionado[] };
+  /**
+   * La HUELLA de lo que va delante: el prompt de sistema y los esquemas, en su orden.
+   *
+   * Es lo que decide si la caché de un proveedor puede enganchar, porque toda caché de prompt
+   * es por PREFIJO: si esto cambia entre dos llamadas, aunque sea por el orden de las tools o
+   * por una descripción generada, la reutilización se rompe desde el primer byte distinto. Y se
+   * contesta con un hash en vez de con el texto, así que la pregunta se puede responder sin
+   * sacar una línea del proyecto a disco.
+   */
+  prefijo: { caracteres: number; huella: string };
   /** La suma de TODO lo que va en la petición: sistema, mensajes y esquemas. */
   caracteresTotales: number;
+  /**
+   * Lo que el PROVEEDOR dice que costó esa misma llamada.
+   *
+   * Es la otra mitad, y va en la MISMA línea a propósito: el inspector cuenta caracteres y la
+   * factura viene en tokens, así que separarlos obliga a cruzar dos ficheros a ojo para
+   * contestar «¿de dónde salió esta cifra?». Juntos, una línea dice lo que entró y lo que
+   * costó. La primera medida con esto puesto habría enseñado de golpe que los esquemas eran el
+   * 80 % del turno, en vez de deducirlo restando.
+   *
+   * Ausente cuando el proveedor no lo manda: un cero aquí sería una medición que nadie hizo.
+   */
+  uso?: { entrada: number; salida: number; cache: number };
 }
 
 /**
@@ -83,9 +106,18 @@ export interface LlamadaInspeccionada {
  * comparar unas tools con otras y para ver cuánto pesa la cabecera, no para cuadrar con la
  * factura del proveedor.
  */
-export function esquemaDeTool(t: unknown): EsquemaInspeccionado {
+/**
+ * El esquema de una tool como TEXTO: nombre, descripción y parámetros.
+ *
+ * Es lo que se mide y lo que se huele, y tiene que ser el CONTENIDO y no un resumen: la primera
+ * versión hacía la huella sobre `{nombre, caracteres}`, o sea sobre la propia medida, y entonces
+ * una descripción que cambiara conservando el largo habría dado la misma huella. Una huella que
+ * no cambia cuando cambia lo que representa no vale para nada.
+ */
+export function textoDeEsquema(t: unknown): string {
   const tool = (t ?? {}) as { name?: unknown; description?: unknown; schema?: unknown };
   const nombre = typeof tool.name === "string" ? tool.name : "?";
+  const descripcion = typeof tool.description === "string" ? tool.description : "";
   let esquema = "";
   try {
     esquema = JSON.stringify(tool.schema) ?? "";
@@ -94,8 +126,13 @@ export function esquemaDeTool(t: unknown): EsquemaInspeccionado {
     // tumbar el turno por un diagnóstico.
     esquema = "";
   }
-  const descripcion = typeof tool.description === "string" ? tool.description : "";
-  return { nombre, caracteres: nombre.length + descripcion.length + esquema.length };
+  return `${nombre}\u0000${descripcion}\u0000${esquema}`;
+}
+
+export function esquemaDeTool(t: unknown): EsquemaInspeccionado {
+  const nombre = typeof (t as { name?: unknown } | null)?.name === "string" ? ((t as { name: string }).name) : "?";
+  // La MISMA función que la huella: dos formas de contar lo mismo son dos cifras que divergen.
+  return { nombre, caracteres: textoDeEsquema(t).length - 2 };
 }
 
 /** El tipo de un mensaje, venga como venga: langchain no lo expone igual en todos. */
@@ -107,6 +144,21 @@ export function tipoDeMensaje(msg: unknown): string {
   if (typeof m.tool_call_id === "string") return "tool";
   const clase = (m.constructor as { name?: string } | undefined)?.name;
   return typeof clase === "string" ? clase : "?";
+}
+
+/**
+ * El consumo que declara una respuesta del modelo, si lo declara.
+ *
+ * Se mira `usage_metadata` (el estándar de LangChain, que los tres adaptadores que usamos
+ * rellenan) y su `input_token_details.cache_read`. Lo que no venga se queda AUSENTE en vez de
+ * volverse cero: ya hay bastantes ceros inventados en este oficio.
+ */
+export function usoDeRespuesta(respuesta: unknown): { entrada: number; salida: number; cache: number } | undefined {
+  const u = (respuesta as { usage_metadata?: unknown } | null)?.usage_metadata as Record<string, unknown> | undefined;
+  if (u === undefined || u === null) return undefined;
+  const n = (v: unknown): number => (typeof v === "number" && Number.isFinite(v) ? v : 0);
+  const detalles = u.input_token_details as Record<string, unknown> | undefined;
+  return { entrada: n(u.input_tokens), salida: n(u.output_tokens), cache: n(detalles?.cache_read) };
 }
 
 /** El texto de un mensaje, con los bloques concatenados. Nunca `undefined`. */
@@ -152,9 +204,15 @@ export function inspeccionarLlamada(origen: string, peticion: unknown, conTexto:
   const porTool = tools.map(esquemaDeTool).sort((a, b) => b.caracteres - a.caracteres);
   const esquemas = porTool.reduce((a, t) => a + t.caracteres, 0);
 
+  // El orden cuenta: dos peticiones con las mismas tools en distinto orden son dos prefijos
+  // distintos para la caché, así que la huella se toma de `tools` tal y como viaja, no de la
+  // lista ordenada por tamaño que se guarda para leerla.
+  const prefijo = `${sistema}\u0000${tools.map(textoDeEsquema).join("\u0000")}`;
+
   return {
     origen,
     mensajes: inspeccionados,
+    prefijo: { caracteres: prefijo.length, huella: createHash("sha1").update(prefijo).digest("hex").slice(0, 12) },
     sistema: { caracteres: sistema.length, ...(conTexto ? { texto: sistema } : {}) },
     tools: tools.length,
     esquemas: { caracteres: esquemas, porTool },
@@ -185,16 +243,29 @@ export function inspectorDePrompt(
   return createMiddleware({
     name: "InspectorDePromptMiddleware",
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    wrapModelCall: (request: any, handler: any) => {
+    wrapModelCall: async (request: any, handler: any) => {
+      const foto = (() => {
+        try {
+          return inspeccionarLlamada(origen, request, conTexto);
+        } catch {
+          return undefined;
+        }
+      })();
+      // La llamada va PRIMERO y su fallo se propaga intacto: inspeccionar no puede cambiar lo
+      // que le pasa al turno, ni siquiera para apuntarlo.
+      const respuesta = await handler(request);
       try {
-        mkdirSync(join(raiz, ".xonecode"), { recursive: true });
-        const foto = inspeccionarLlamada(origen, request, conTexto);
-        appendFileSync(ruta, `${JSON.stringify({ v: 1, sesion, at: new Date().toISOString(), ...foto })}\n`, "utf8");
+        const uso = usoDeRespuesta(respuesta);
+        if (foto !== undefined) {
+          mkdirSync(join(raiz, ".xonecode"), { recursive: true });
+          const linea = { v: 1, sesion, at: new Date().toISOString(), ...foto, ...(uso === undefined ? {} : { uso }) };
+          appendFileSync(ruta, `${JSON.stringify(linea)}\n`, "utf8");
+        }
       } catch {
         // Inspeccionar no puede impedir que el agente conteste: es un modo de diagnóstico,
         // no parte del camino del turno. La misma regla que `diagnosticoDeTools`.
       }
-      return handler(request);
+      return respuesta;
     },
   });
 }
