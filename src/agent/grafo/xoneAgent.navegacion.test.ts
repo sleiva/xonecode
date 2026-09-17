@@ -64,6 +64,9 @@ describe("el cableado de xone_navegacion", () => {
         definicion: () => [],
         referencias: () => [],
         campos: () => [],
+        app: () => ({ entrada: [], login: [], estilos: [], conexiones: [] }),
+        detalle: () => undefined,
+        problemas: () => ({ rotas: [], huerfanas: [] }),
       }),
     });
 
@@ -89,6 +92,9 @@ describe("el cableado de xone_navegacion", () => {
         definicion: () => [],
         referencias: () => [],
         campos: () => [],
+        app: () => ({ entrada: [], login: [], estilos: [], conexiones: [] }),
+        detalle: () => undefined,
+        problemas: () => ({ rotas: [], huerfanas: [] }),
       }),
     });
 

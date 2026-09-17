@@ -1,6 +1,10 @@
 import { describe, it, expect } from "vitest";
 import { construirIndice, partirNombre, type ModeloDeNavegacion } from "./navegacion.js";
 
+/** Un `app` sin nada declarado. Vacío significa «no consta», no «no hay». */
+const APP_VACIA = { entrada: [], login: [], estilos: [], conexiones: [] };
+
+
 /** Dos colecciones que se referencian, que es el caso que el diseño pide como fixture. */
 const MODELO: ModeloDeNavegacion = {
   colecciones: [
@@ -11,12 +15,18 @@ const MODELO: ModeloDeNavegacion = {
         { nombre: "ID", tipo: "N" },
         { nombre: "NOMBRE", tipo: "T" },
       ],
+      eventos: [],
+      nodos: [],
+      conexiones: [],
       referencias: [],
     },
     {
       nombre: "Pedidos",
       fichero: "/Pedidos.xne",
       campos: [{ nombre: "CLIENTE", tipo: "N" }],
+      eventos: [],
+      nodos: [],
+      conexiones: [],
       referencias: [
         { desde: "Pedidos.CLIENTE", por: "mapcol", hacia: "Clientes" },
         { desde: "Pedidos.CLIENTE", por: "mapfld", hacia: "Clientes.NOMBRE" },
@@ -26,9 +36,14 @@ const MODELO: ModeloDeNavegacion = {
       nombre: "PedidosDetalle",
       fichero: "/PedidosDetalle.xne",
       campos: [],
+      eventos: [],
+      nodos: [],
+      conexiones: [],
       referencias: [{ desde: "PedidosDetalle", por: "inherits", hacia: "Pedidos" }],
     },
   ],
+  app: APP_VACIA,
+  referenciasDeScript: [],
 };
 
 describe("partirNombre", () => {
@@ -78,9 +93,11 @@ describe("definicion", () => {
     // Callarse una sería contestar a medias justo sobre el proyecto que tiene el problema.
     const dup: ModeloDeNavegacion = {
       colecciones: [
-        { nombre: "Clientes", fichero: "/a/Clientes.xne", campos: [], referencias: [] },
-        { nombre: "Clientes", fichero: "/b/Clientes.xne", campos: [], referencias: [] },
+        { nombre: "Clientes", fichero: "/a/Clientes.xne", campos: [], referencias: [], eventos: [], nodos: [], conexiones: [] },
+        { nombre: "Clientes", fichero: "/b/Clientes.xne", campos: [], referencias: [], eventos: [], nodos: [], conexiones: [] },
       ],
+      app: APP_VACIA,
+      referenciasDeScript: [],
     };
     expect(construirIndice(dup).definicion("Clientes").map((d) => d.fichero)).toEqual([
       "/a/Clientes.xne",
@@ -138,4 +155,84 @@ describe("campos", () => {
     // viaje en una corrección que aquí cuesta una línea.
     expect(construirIndice(MODELO).campos("Clientes.NOMBRE").map((d) => d.nombre)).toEqual(["ID", "NOMBRE"]);
   });
+});
+
+describe("app", () => {
+  it("devuelve lo que `app.xml` declara, tal cual", () => {
+    const m: ModeloDeNavegacion = {
+      colecciones: [],
+      app: { entrada: ["EntradaApp"], login: ["LoginColl"], estilos: ["default.css"], conexiones: [] },
+      referenciasDeScript: [],
+    };
+    expect(construirIndice(m).app()).toEqual({
+      entrada: ["EntradaApp"],
+      login: ["LoginColl"],
+      estilos: ["default.css"],
+      conexiones: [],
+    });
+  });
+});
+
+describe("detalle", () => {
+  const CON_TODO: ModeloDeNavegacion = {
+    colecciones: [
+      {
+        nombre: "Pedidos",
+        fichero: "/Pedidos.xne",
+        campos: [{ nombre: "ID", tipo: "N" }],
+        referencias: [{ desde: "Pedidos", por: "contents", hacia: "Lineas" }],
+        eventos: ["before-edit", "onchange(CLIENTE)"],
+        nodos: ["Recalcular"],
+        conexiones: ["erp"],
+      },
+    ],
+    app: APP_VACIA,
+    referenciasDeScript: [],
+  };
+
+  it("junta todo lo de una colección, incluido a qué apunta ELLA", () => {
+    const d = construirIndice(CON_TODO).detalle("Pedidos");
+    expect(d).toMatchObject({
+      nombre: "Pedidos",
+      fichero: "/Pedidos.xne",
+      eventos: ["before-edit", "onchange(CLIENTE)"],
+      nodos: ["Recalcular"],
+      conexiones: ["erp"],
+    });
+    expect(d!.apuntaA).toEqual([
+      { desde: "Pedidos", por: "contents", hacia: "Lineas", fichero: "/Pedidos.xne" },
+    ]);
+  });
+
+  it("de una que NO existe devuelve `undefined`, no un detalle vacío", () => {
+    // «No existe» y «existe y está vacía» son dos cosas, y contestar la segunda sobre la
+    // primera hace que el agente deje de buscar.
+    expect(construirIndice(CON_TODO).detalle("NoExiste")).toBeUndefined();
+  });
+});
+
+describe("problemas", () => {
+  it("una referencia a una colección que no existe sale como ROTA", () => {
+    const m: ModeloDeNavegacion = {
+      colecciones: [
+        {
+          nombre: "ConsolaReplica",
+          fichero: "/ConsolaReplica.xne",
+          campos: [],
+          referencias: [{ desde: "ConsolaReplica", por: "contents", hacia: "OperQueue" }],
+          eventos: [],
+          nodos: [],
+          conexiones: [],
+        },
+      ],
+      app: APP_VACIA,
+      referenciasDeScript: [],
+    };
+    expect(construirIndice(m).problemas().rotas).toEqual([
+      { desde: "ConsolaReplica", por: "contents", hacia: "OperQueue", fichero: "/ConsolaReplica.xne" },
+    ]);
+  });
+
+
+
 });

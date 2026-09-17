@@ -245,8 +245,20 @@ Y las guardas del proyecto:
   segundos de una llamada, y un índice viejo que afirma que un campo existe es peor que no tener
   índice. Las rutas se traducen a VIRTUALES y se filtran **en la fuente**
   (`agent/navegacion/modeloDeProyecto.ts`): lo que el agente no puede abrir no llega a estar en
-  el índice. **Límite declarado: no ve referencias calculadas en JavaScript**, y la descripción de
-  la tool lo dice — callarlo haría concluir que un uso no existe.
+  el índice.
+- **Siete operaciones, y las tres últimas salieron de medir sobre un proyecto real**: `app`
+  (por dónde arranca, login, estilos), `detalle` (campos, eventos, nodos y conexiones de una
+  colección) y `problemas` (referencias que apuntan a una colección que no existe). **Y las
+  referencias de SCRIPT**, que fue el hallazgo que cambió el alcance: una app XOne navega con
+  `onclick="javascript:appData.getCollection('X')…"` y no con `mapcol`, así que sin ellas
+  «¿quién usa Deportes?» contestaba «nadie» con dos botones apuntándole. Es un PATRÓN con
+  literal, no «el nombre aparece en el texto» — buscar el nombre suelto daría cualquier
+  comentario. **Límites declarados**: no ve un `getCollection(variable)` ni dice en qué LÍNEA
+  está, y la descripción de la tool lo dice — callarlo haría concluir que un uso no existe.
+- **Lo que NO hay, y se midió antes de descartarlo: «colecciones huérfanas».** Se implementó y
+  se tiró. Sobre un proyecto real daba 33 de 42, y con las referencias de script dentro bajaba a
+  22 — la mitad del proyecto. Una lista con esa proporción de falsos positivos no es un
+  hallazgo: o se ignora o se borra código vivo. Un aviso al pie no arregla una señal equivocada.
 - **Va a los cinco especialistas Y al orquestador, y eso lo decidió una MEDIDA que tumbó lo
   contrario** (`xoneAgent.navegacion.test.ts`, que lo mira en lo que recibe `createDeepAgent`). La
   primera versión se la negaba al orquestador, con el argumento de que delega; medido sobre un

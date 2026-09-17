@@ -35,13 +35,16 @@ export const LIMITES_NAVEGACION = {
   referencias: 60,
   campos: 150,
   definiciones: 20,
+  problemas: 40,
 } as const;
 
 const ESQUEMA = z.object({
   operacion: z
-    .enum(["inventario", "definicion", "referencias", "campos"])
+    .enum(["inventario", "definicion", "referencias", "campos", "detalle", "app", "problemas"])
     .describe(
-      "inventario: todas las colecciones. definicion: dónde se declara. referencias: quién la usa. campos: los campos de una colección"
+      "inventario: todas las colecciones. definicion: dónde se declara. referencias: quién la usa. " +
+        "campos: los campos de una colección. detalle: todo de una (campos, eventos, nodos, conexiones). " +
+        "app: por dónde arranca la aplicación, login y estilos. problemas: referencias rotas y colecciones que no usa nadie"
     ),
   nombre: z
     .string()
@@ -90,6 +93,34 @@ export function crearNavegacionXone(cargar: CargarIndice, ficheros: ReadonlySet<
         return `${todas.length} colecciones:\n${recortar(todas, LIMITES_NAVEGACION.inventario, pintarDeclaracion)}`;
       }
 
+      if (entrada.operacion === "app") {
+        const app = indice.app();
+        const filas: string[] = [];
+        // Vacío es «no consta», no «no hay», y por eso se dice con palabras en vez de
+        // devolver una fila en blanco que se leería como una afirmación.
+        filas.push(
+          app.entrada.length > 0
+            ? `arranca por: ${app.entrada.join(", ")}`
+            : "arranca por: no consta en app.xml"
+        );
+        if (app.login.length > 0) filas.push(`login: ${app.login.join(", ")}`);
+        if (app.estilos.length > 0) filas.push(`estilos: ${app.estilos.join(" ")}`);
+        if (app.conexiones.length > 0) filas.push(`conexiones: ${app.conexiones.join(" ")}`);
+        return filas.join("\n");
+      }
+
+      if (entrada.operacion === "problemas") {
+        const { rotas } = indice.problemas();
+        if (rotas.length === 0) {
+          return "Ninguna referencia apunta a una colección que no exista.";
+        }
+        return `${rotas.length} referencia(s) a una colección que no existe:\n${recortar(
+          rotas,
+          LIMITES_NAVEGACION.problemas,
+          pintarReferencia
+        )}`;
+      }
+
       const nombre = entrada.nombre?.trim();
       if (nombre === undefined || nombre === "") {
         return "Falta `nombre`: di la colección (`Clientes`) o el campo (`Clientes.NOMBRE`).";
@@ -113,6 +144,32 @@ export function crearNavegacionXone(cargar: CargarIndice, ficheros: ReadonlySet<
         return recortar(campos, LIMITES_NAVEGACION.campos, pintarDeclaracion);
       }
 
+      if (entrada.operacion === "detalle") {
+        const d = indice.detalle(nombre);
+        // `undefined` y no un detalle vacío: «no existe» y «existe y está vacía» son dos
+        // cosas, y contestar la segunda sobre la primera hace que el agente deje de buscar.
+        if (d === undefined) {
+          return `No hay ninguna colección «${nombre}». Prueba \`inventario\`.`;
+        }
+        const partes = [
+          `${d.nombre}  ${d.fichero}`,
+          d.campos.length === 0
+            ? "campos: (ninguno)"
+            : `campos: ${d.campos.map((c) => `${c.nombre}${c.tipo === undefined ? "" : ":" + c.tipo}`).join(" ")}`,
+        ];
+        // Lo que está VACÍO no se pinta: una fila «eventos: (ninguno)» por cada cosa que la
+        // colección no tiene convierte la respuesta en una plantilla y cuesta tokens en cada
+        // llamada. Lo único que se afirma vacío son los campos, porque una colección sin
+        // ellos es rara y merece decirse.
+        if (d.eventos.length > 0) partes.push(`eventos: ${d.eventos.join(" ")}`);
+        if (d.nodos.length > 0) partes.push(`nodos: ${d.nodos.join(" ")}`);
+        if (d.conexiones.length > 0) partes.push(`conexiones: ${d.conexiones.join(" ")}`);
+        if (d.apuntaA.length > 0) {
+          partes.push(`apunta a:\n${recortar(d.apuntaA, LIMITES_NAVEGACION.referencias, pintarReferencia)}`);
+        }
+        return partes.join("\n");
+      }
+
       const usos = indice.referencias(nombre);
       if (usos.length === 0) return `Nadie referencia «${nombre}» por mapcol, mapfld, linkedfield, contents ni inherits.`;
       return recortar(usos, LIMITES_NAVEGACION.referencias, pintarReferencia);
@@ -121,7 +178,8 @@ export function crearNavegacionXone(cargar: CargarIndice, ficheros: ReadonlySet<
       name: "xone_navegacion",
       description:
         "Estructura del proyecto XOne resuelta: qué colecciones hay, dónde se declara una colección o un campo, " +
-        "quién la referencia (mapcol, mapfld, linkedfield, contents, inherits) y qué campos tiene. " +
+        "quién la referencia (mapcol, mapfld, linkedfield, contents, inherits), qué campos, eventos y nodos tiene, " +
+        "por dónde arranca la aplicación y qué referencias están rotas. " +
         "Úsala ANTES de leer ficheros para saber CUÁL leer. No busca texto: para eso están grep y regex_search. " +
         "No ve referencias calculadas en JavaScript.",
       schema: ESQUEMA,

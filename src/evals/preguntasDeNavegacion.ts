@@ -25,7 +25,15 @@
  */
 
 /** Las operaciones que `xone_navegacion` tiene HOY. Debe cuadrar con su esquema. */
-export const OPERACIONES = ["inventario", "definicion", "referencias", "campos"] as const;
+export const OPERACIONES = [
+  "inventario",
+  "definicion",
+  "referencias",
+  "campos",
+  "detalle",
+  "app",
+  "problemas",
+] as const;
 export type Operacion = (typeof OPERACIONES)[number];
 
 /** Qué costaría cerrar un hueco. Ver la cabecera: no todos valen lo mismo. */
@@ -42,6 +50,9 @@ export interface PreguntaDeNavegacion {
   operacion?: Operacion;
   /** Solo en un hueco: qué costaría, y qué haría falta. */
   hueco?: { coste: CosteDelHueco; falta: string };
+  /** Solo en una cubierta que lo está a MEDIAS: qué parte no se contesta. Una cobertura con
+   *  asterisco y sin decir cuál es peor que un hueco declarado. */
+  limite?: string;
 }
 
 export const PREGUNTAS_DE_NAVEGACION: readonly PreguntaDeNavegacion[] = [
@@ -102,25 +113,19 @@ export const PREGUNTAS_DE_NAVEGACION: readonly PreguntaDeNavegacion[] = [
     nombre: "entrypoint",
     texto: "¿Por qué colección arranca la aplicación?",
     mide: "leer la configuración de `app.xml`",
-    hueco: {
-      coste: "barato",
-      falta: "mapear `XoneProjectModel.app`, que el linter ya carga; hoy el índice solo mira `colls`",
-    },
+    operacion: "app",
   },
   {
     nombre: "eventos",
     texto: "¿Qué eventos tiene la colección Clientes?",
     mide: "la superficie de comportamiento de una colección",
-    hueco: {
-      coste: "barato",
-      falta: "mapear `XoneColl.events` y `XoneColl.nodes`, que ya vienen en el modelo",
-    },
+    operacion: "detalle",
   },
   {
     nombre: "conexiones",
     texto: "¿Contra qué origen de datos va la colección Pedidos?",
     mide: "de dónde salen los datos",
-    hueco: { coste: "barato", falta: "mapear `XoneColl.connections` y las de `app`" },
+    operacion: "detalle",
   },
   {
     nombre: "rotas",
@@ -130,16 +135,21 @@ export const PREGUNTAS_DE_NAVEGACION: readonly PreguntaDeNavegacion[] = [
     // `contents src="OperQueue"` y esa colección no existe. El índice TIENE la referencia
     // —`referencias("OperQueue")` la devuelve— pero no hay forma de preguntarlo sin saber ya
     // el nombre que falta, que es justo lo que se quiere descubrir.
-    hueco: {
-      coste: "barato",
-      falta: "una operación que cruce las referencias con el inventario; el dato ya está en el índice",
-    },
+    operacion: "problemas",
   },
   {
     nombre: "huerfanas",
     texto: "¿Qué colecciones no usa nadie?",
     mide: "código muerto, la otra mitad de «quién usa»",
-    hueco: { coste: "barato", falta: "el complemento de `referencias` sobre el inventario" },
+    // **Se implementó y se tiró, midiendo.** Sobre un proyecto real de 42 colecciones daba 33
+    // huérfanas; metiendo las referencias de script bajaba a 22 — la mitad del proyecto. Una
+    // lista con 50 % de falsos positivos no es un hallazgo: o se ignora o se borra código
+    // vivo. En XOne se llega a una colección por caminos que este índice no modela, y un
+    // aviso al pie no arregla una señal equivocada.
+    hueco: {
+      coste: "caro",
+      falta: "una forma de ACOTAR el falso positivo; medido, la mitad del proyecto sale como huérfana y eso no se arregla con un aviso",
+    },
   },
 
   // ─── Huecos CAROS: hace falta trabajo nuevo ───────────────────────────────────────────
@@ -149,10 +159,12 @@ export const PREGUNTAS_DE_NAVEGACION: readonly PreguntaDeNavegacion[] = [
     mide: "referencias que no están en un atributo XML sino en JavaScript",
     // El linter SÍ las detecta (su aviso «Script referencia a colección X no encontrada»),
     // pero por regex sobre los scripts unidos: sirve para avisar y no para afirmar dónde.
-    hueco: {
-      coste: "caro",
-      falta: "reconocer referencias en ES5 conservando fichero y posición; por regex no es base fiable",
-    },
+    // Cubierta desde que `referenciasDeScript` reconoce `appData.getCollection("X")`, que es
+    // como navega de verdad una app XOne: medido sobre un proyecto real, «¿quién usa
+    // Deportes?» pasó de «nadie» a sus dos botones de menú.
+    operacion: "referencias",
+    limite:
+      "reconoce el patrón `getCollection(\"X\")` con literal; no ve un nombre en variable ni dice en qué línea está",
   },
   {
     nombre: "en-que-linea",

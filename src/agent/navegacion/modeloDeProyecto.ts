@@ -31,6 +31,14 @@ import { esVistaAplanada } from "../grafo/proyecto.js";
  *  mucho más; nombrar solo esto es lo que deja ver de un vistazo de qué dependemos. */
 export interface ModeloDelLinter {
   colls?: readonly CollDelLinter[];
+  /** Ruta RELATIVA del `.js` -> su contenido. Lo carga el linter. */
+  jsFiles?: ReadonlyMap<string, string>;
+  app?: {
+    entryPoints?: readonly string[];
+    loginColls?: readonly string[];
+    styles?: readonly { url?: string }[];
+    connections?: readonly { name?: string }[];
+  };
 }
 
 interface CollDelLinter {
@@ -41,8 +49,18 @@ interface CollDelLinter {
     name?: string;
     type?: string;
     attributes?: Record<string, string>;
+    inlineEvents?: readonly { name?: string; script?: string }[];
   }[];
   contents?: readonly { src?: string }[];
+  events?: readonly EventoDelLinter[];
+  nodes?: readonly EventoDelLinter[];
+  connections?: readonly { name?: string }[];
+}
+
+interface EventoDelLinter {
+  name?: string;
+  triggerProp?: string;
+  actions?: readonly { script?: string; value?: string }[];
 }
 
 /**
@@ -93,10 +111,35 @@ export function modeloDeNavegacion(
       fichero,
       campos,
       referencias: referenciasDe(coll, nombre),
+      // Un `onchange` lleva el campo que lo dispara: sin él no se sabe a qué reacciona, y eso
+      // es justo lo que hace falta antes de tocarlo.
+      eventos: (coll.events ?? [])
+        .filter((e): e is { name: string; triggerProp?: string } => typeof e.name === "string" && e.name !== "")
+        .map((e) => (e.triggerProp === undefined || e.triggerProp === "" ? e.name : `${e.name}(${e.triggerProp})`)),
+      nodos: nombresDe(coll.nodes),
+      conexiones: nombresDe(coll.connections),
     });
   }
 
-  return { colecciones };
+  return {
+    colecciones,
+    referenciasDeScript: referenciasDeScript(delLinter, raiz, ficheros),
+    app: {
+      entrada: [...(delLinter.app?.entryPoints ?? [])],
+      login: [...(delLinter.app?.loginColls ?? [])],
+      // La URL de un estilo es del PROYECTO (`default.css`), no una ruta de la máquina: la
+      // declara el propio `app.xml` y por eso viaja tal cual.
+      estilos: (delLinter.app?.styles ?? [])
+        .map((e) => e.url)
+        .filter((u): u is string => typeof u === "string" && u !== ""),
+      conexiones: nombresDe(delLinter.app?.connections),
+    },
+  };
+}
+
+/** Los `name` que existen de verdad, de una lista que puede traerlos a medias. */
+function nombresDe(lista: readonly { name?: string }[] | undefined): string[] {
+  return (lista ?? []).map((x) => x.name).filter((n): n is string => typeof n === "string" && n !== "");
 }
 
 /**
@@ -137,6 +180,78 @@ function referenciasDe(coll: CollDelLinter, nombre: string): Omit<Referencia, "f
         salida.push({ desde, por: clave, hacia: `${mapcol}.${campo}` });
       }
     }
+  }
+
+  return salida;
+}
+
+
+/**
+ * Cómo una app XOne llega de verdad a una colección: `appData.getCollection("X")`.
+ *
+ * **Medido sobre un proyecto real**, y fue una sorpresa que cambió el alcance de la tool: los
+ * botones del menú no usan `mapcol`, usan
+ * `onclick="javascript:var obj=appData.getCollection('Deportes').createObject();ui.openEditView(obj)"`.
+ * Sin esto, «¿quién usa Deportes?» contestaba «nadie» con dos botones apuntándole — y dos de las
+ * tres referencias ROTAS del proyecto solo se ven por aquí.
+ *
+ * **Es un PATRÓN concreto y no «el nombre aparece en el texto»**, y en esa diferencia está todo:
+ * buscar el nombre suelto en los scripts daría cualquier comentario o variable homónima. Esto
+ * reconoce una llamada con su literal, que es la forma en que se nombra una colección desde ES5.
+ *
+ * **Límite declarado y deliberado**: es una expresión regular, no un análisis de ES5. No ve un
+ * `getCollection(nombreVariable)` ni un nombre compuesto en ejecución, y no sabe en qué LÍNEA
+ * está —para eso harían falta rangos—. Sirve para «quién usa esto», que es la pregunta, y no
+ * para saltar al sitio exacto, que no se promete.
+ */
+const LLAMADA_A_COLECCION = /getCollection\s*\(\s*['"]([^'"]+)['"]\s*\)/gi;
+
+function referenciasDeScript(
+  delLinter: ModeloDelLinter,
+  raiz: string,
+  ficheros: ReadonlySet<string>
+): Referencia[] {
+  const salida: Referencia[] = [];
+  const anotar = (desde: string, hacia: string, fichero: string): void => {
+    if (!puedeLeerRuta(fichero) || esVistaAplanada(fichero, ficheros)) return;
+    // Sin repetir: un mismo botón puede nombrar la colección dos veces en la misma línea.
+    if (salida.some((r) => r.desde === desde && r.hacia === hacia && r.fichero === fichero)) return;
+    salida.push({ desde, por: "script", hacia, fichero });
+  };
+
+  for (const coll of delLinter.colls ?? []) {
+    const nombre = coll.name;
+    const fichero = coll.location?.file;
+    if (nombre === undefined || fichero === undefined) continue;
+    const virtual = rutaVirtualDelProyecto(raiz, fichero);
+    if (virtual === undefined) continue;
+
+    // El `onclick` de un `<prop>`, que es de donde salen los menús.
+    for (const prop of coll.props ?? []) {
+      if (typeof prop.name !== "string" || prop.name === "") continue;
+      for (const evento of prop.inlineEvents ?? []) {
+        for (const x of String(evento.script ?? "").matchAll(LLAMADA_A_COLECCION)) {
+          anotar(`${nombre}.${prop.name}`, x[1]!, virtual);
+        }
+      }
+    }
+    // Y las acciones de eventos y nodos.
+    for (const evento of [...(coll.events ?? []), ...(coll.nodes ?? [])]) {
+      for (const accion of evento.actions ?? []) {
+        for (const texto of [accion.script, accion.value]) {
+          for (const x of String(texto ?? "").matchAll(LLAMADA_A_COLECCION)) {
+            anotar(`${nombre}:${evento.name ?? "(evento)"}`, x[1]!, virtual);
+          }
+        }
+      }
+    }
+  }
+
+  // Los `.js` sueltos. Sus claves son rutas RELATIVAS al proyecto, así que la virtual es
+  // directa — pero pasan por las mismas guardas, que es la regla de esta capa.
+  for (const [ruta, texto] of delLinter.jsFiles ?? new Map<string, string>()) {
+    const virtual = "/" + String(ruta).split(/[\\/]/).filter(Boolean).join("/");
+    for (const x of String(texto).matchAll(LLAMADA_A_COLECCION)) anotar(virtual, x[1]!, virtual);
   }
 
   return salida;

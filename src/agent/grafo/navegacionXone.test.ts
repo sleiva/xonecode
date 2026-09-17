@@ -3,21 +3,33 @@ import { crearNavegacionXone, LIMITES_NAVEGACION } from "./navegacionXone.js";
 import { construirIndice, type ModeloDeNavegacion } from "../../core/navegacion.js";
 import type { CargarIndice } from "../navegacion/indiceEnDisco.js";
 
+/** Un `app` sin nada declarado. Vacío significa «no consta», no «no hay». */
+const APP_VACIA = { entrada: [], login: [], estilos: [], conexiones: [] };
+
+
 const MODELO: ModeloDeNavegacion = {
   colecciones: [
     {
       nombre: "Clientes",
       fichero: "/Clientes.xne",
       campos: [{ nombre: "NOMBRE", tipo: "T" }],
+      eventos: [],
+      nodos: [],
+      conexiones: [],
       referencias: [],
     },
     {
       nombre: "Pedidos",
       fichero: "/Pedidos.xne",
       campos: [],
+      eventos: [],
+      nodos: [],
+      conexiones: [],
       referencias: [{ desde: "Pedidos.CLIENTE", por: "mapcol", hacia: "Clientes" }],
     },
   ],
+  app: APP_VACIA,
+  referenciasDeScript: [],
 };
 
 const cargarDe = (modelo: ModeloDeNavegacion): CargarIndice => async () => construirIndice(modelo);
@@ -25,7 +37,10 @@ const SIN_FICHEROS = new Set<string>();
 
 /** La tool devuelve texto; invocarla es lo que hace el agente. */
 const llamar = async (
-  entrada: { operacion: "inventario" | "definicion" | "referencias" | "campos"; nombre?: string },
+  entrada: {
+    operacion: "inventario" | "definicion" | "referencias" | "campos" | "detalle" | "app" | "problemas";
+    nombre?: string;
+  },
   modelo = MODELO
 ): Promise<string> => String(await crearNavegacionXone(cargarDe(modelo), SIN_FICHEROS).invoke(entrada));
 
@@ -80,8 +95,13 @@ describe("xone_navegacion", () => {
         nombre: `C${i}`,
         fichero: `/C${i}.xne`,
         campos: [],
+        eventos: [],
+        nodos: [],
+        conexiones: [],
         referencias: [],
       })),
+      app: APP_VACIA,
+      referenciasDeScript: [],
     };
     const r = await llamar({ operacion: "inventario" }, muchas);
     expect(r).toContain(`${LIMITES_NAVEGACION.inventario + 5} colecciones`);
@@ -89,7 +109,7 @@ describe("xone_navegacion", () => {
   });
 
   it("un proyecto sin colecciones lo AFIRMA, no devuelve una lista vacía muda", async () => {
-    expect(await llamar({ operacion: "inventario" }, { colecciones: [] })).toContain("no declara ninguna");
+    expect(await llamar({ operacion: "inventario" }, { colecciones: [], app: APP_VACIA, referenciasDeScript: [] })).toContain("no declara ninguna");
   });
 
   it("si el índice no se puede construir, se DEVUELVE el motivo y se ofrece la salida", async () => {
@@ -126,5 +146,107 @@ describe("la costura con el índice de disco", () => {
     const r = String(await crearNavegacionXone(comoElDisco, SIN_FICHEROS).invoke({ operacion: "inventario" }));
     expect(r).toContain("No se pudo leer la estructura");
     expect(r).not.toContain("/var/folders");
+  });
+});
+
+describe("las operaciones nuevas", () => {
+  const RICO: ModeloDeNavegacion = {
+    colecciones: [
+      {
+        nombre: "Pedidos",
+        fichero: "/Pedidos.xne",
+        campos: [{ nombre: "ID", tipo: "N" }],
+        referencias: [{ desde: "Pedidos", por: "contents", hacia: "NoExiste" }],
+        eventos: ["before-edit", "onchange(CLIENTE)"],
+        nodos: ["Recalcular"],
+        conexiones: [],
+      },
+      {
+        nombre: "Sola",
+        fichero: "/Sola.xne",
+        campos: [],
+        referencias: [],
+        eventos: [],
+        nodos: [],
+        conexiones: [],
+      },
+    ],
+    app: { entrada: ["Pedidos"], login: ["LoginColl"], estilos: ["default.css"], conexiones: [] },
+    referenciasDeScript: [],
+  };
+
+  it("`app` contesta por dónde arranca, que es la primera pregunta de un proyecto ajeno", async () => {
+    const r = await llamar({ operacion: "app" }, RICO);
+    expect(r).toContain("arranca por: Pedidos");
+    expect(r).toContain("login: LoginColl");
+    expect(r).toContain("default.css");
+  });
+
+  it("y sin entrypoint declarado lo DICE, en vez de dejar la fila en blanco", async () => {
+    const r = await llamar({ operacion: "app" }, { colecciones: [], app: APP_VACIA, referenciasDeScript: [] });
+    expect(r).toContain("no consta");
+  });
+
+  it("`detalle` junta campos, eventos y nodos de una colección", async () => {
+    const r = await llamar({ operacion: "detalle", nombre: "Pedidos" }, RICO);
+    expect(r).toContain("campos: ID:N");
+    expect(r).toContain("eventos: before-edit onchange(CLIENTE)");
+    expect(r).toContain("nodos: Recalcular");
+  });
+
+  it("y lo que está VACÍO no se pinta: una plantilla de «(ninguno)» cuesta en cada llamada", async () => {
+    const r = await llamar({ operacion: "detalle", nombre: "Sola" }, RICO);
+    expect(r).toContain("campos: (ninguno)");
+    expect(r).not.toContain("eventos:");
+    expect(r).not.toContain("nodos:");
+  });
+
+  it("`problemas` encuentra una referencia rota SIN saber el nombre que falta", async () => {
+    // Era el hueco: el índice ya guardaba la referencia a `OperQueue`, pero solo se podía
+    // encontrar preguntando por un nombre que es justo lo que se quiere descubrir.
+    const r = await llamar({ operacion: "problemas" }, RICO);
+    expect(r).toContain("NoExiste");
+    expect(r).toContain("Pedidos --contents--> NoExiste");
+  });
+
+  it("las referencias de SCRIPT cuentan como referencias, y dicen que vienen de un script", async () => {
+    // Es como navega una app XOne de verdad: los botones del menú abren colecciones con
+    // `appData.getCollection('X')`, no con `mapcol`.
+    const conScript: ModeloDeNavegacion = {
+      ...RICO,
+      referenciasDeScript: [
+        { desde: "EntradaApp.MAP_BT_DEPORTES", por: "script", hacia: "Deportes", fichero: "/EntradaApp.xne" },
+      ],
+    };
+    expect(await llamar({ operacion: "referencias", nombre: "Deportes" }, conScript)).toContain(
+      "EntradaApp.MAP_BT_DEPORTES --script--> Deportes"
+    );
+  });
+
+  it("y una rota que SOLO se ve desde un script también sale en `problemas`", async () => {
+    const conScript: ModeloDeNavegacion = {
+      ...RICO,
+      referenciasDeScript: [
+        { desde: "LoginColl:onload", por: "script", hacia: "Login", fichero: "/LoginColl.xne" },
+      ],
+    };
+    const r = await llamar({ operacion: "problemas" }, conScript);
+    expect(r).toContain("Login");
+    expect(r).toContain("LoginColl:onload --script--> Login");
+  });
+
+  it("un proyecto sano lo AFIRMA, en vez de devolver dos listas vacías", async () => {
+    const sano: ModeloDeNavegacion = {
+      colecciones: [
+        { nombre: "A", fichero: "/A.xne", campos: [], referencias: [], eventos: [], nodos: [], conexiones: [] },
+      ],
+      app: { entrada: ["A"], login: [], estilos: [], conexiones: [] },
+      referenciasDeScript: [],
+    };
+    expect(await llamar({ operacion: "problemas" }, sano)).toContain("Ninguna referencia");
+  });
+
+  it("`detalle` de lo que no existe manda al inventario", async () => {
+    expect(await llamar({ operacion: "detalle", nombre: "Fantasma" }, RICO)).toContain("inventario");
   });
 });

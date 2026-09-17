@@ -59,6 +59,17 @@ export interface Referencia {
  */
 export interface ModeloDeNavegacion {
   colecciones: readonly ColeccionDeNavegacion[];
+  app: AppDeNavegacion;
+  /**
+   * Las referencias que salen de un SCRIPT y no de un atributo XML.
+   *
+   * Van aparte porque no son de una colección: una puede vivir en un `.js` suelto. Y existen
+   * porque **así es como navega una app XOne de verdad** — medido sobre un proyecto real: los
+   * botones del menú abren colecciones con
+   * `onclick="javascript:appData.getCollection('Deportes')…"`, no con `mapcol`. Sin ellas, «¿quién
+   * usa Deportes?» contestaba «nadie» teniendo dos botones delante.
+   */
+  referenciasDeScript: readonly Referencia[];
 }
 
 export interface ColeccionDeNavegacion {
@@ -68,7 +79,65 @@ export interface ColeccionDeNavegacion {
   campos: readonly { nombre: string; tipo?: string }[];
   /** Lo que esta colección apunta hacia fuera, ya resuelto por el adaptador. */
   referencias: readonly Omit<Referencia, "fichero">[];
+  /**
+   * Los eventos declarados, por nombre. Un `onchange` lleva el campo que lo dispara entre
+   * paréntesis, porque sin él no se sabe a qué reacciona — y eso es justo lo que hace falta
+   * antes de tocarlo.
+   */
+  eventos: readonly string[];
+  /** Los nodos personalizados, por nombre. */
+  nodos: readonly string[];
+  /** Las conexiones propias de la colección, por nombre. */
+  conexiones: readonly string[];
 }
+
+/** Lo que `app.xml` declara del conjunto. Contesta «¿por dónde arranca esto?». */
+export interface AppDeNavegacion {
+  /** Las colecciones de entrada. Vacío = no consta, que no es «no hay». */
+  entrada: readonly string[];
+  /** Las colecciones de login, si el proyecto tiene. */
+  login: readonly string[];
+  /** Las hojas de estilo declaradas, por URL. */
+  estilos: readonly string[];
+  /** Las conexiones declaradas a nivel de aplicación. */
+  conexiones: readonly string[];
+}
+
+/** Todo lo que se sabe de UNA colección, para la pregunta «háblame de Clientes». */
+export interface DetalleDeColeccion {
+  nombre: string;
+  fichero: string;
+  campos: readonly Declaracion[];
+  eventos: readonly string[];
+  nodos: readonly string[];
+  conexiones: readonly string[];
+  /** Lo que ELLA apunta hacia fuera. Lo que apunta hacia ella es `referencias`. */
+  apuntaA: readonly Referencia[];
+}
+
+/**
+ * Lo que no cuadra en el proyecto, cruzando referencias con inventario.
+ *
+ * **Esto NO convierte el índice en un validador**, y la diferencia importa: el linter valida
+ * —tiene reglas, severidades y un informe— y esto solo cruza dos listas que ya tiene. Lo que
+ * contesta es la pregunta de orientación «¿hay algo roto por aquí?», que hoy no se puede hacer
+ * sin saber ya el nombre que falta.
+ */
+export interface ProblemasDelProyecto {
+  /** Referencias a una colección que no existe. */
+  rotas: readonly Referencia[];
+}
+
+/**
+ * **Por qué NO hay «colecciones huérfanas», y está medido.**
+ *
+ * Se implementó y se tiró. Sobre un proyecto real de 42 colecciones daba 33 huérfanas; con las
+ * referencias de script dentro bajaba a 22 — la mitad del proyecto. Una lista donde el 50 % son
+ * falsos positivos no es un hallazgo, es ruido con autoridad: quien la lea o la ignora o borra
+ * código vivo. El motivo es que en XOne se llega a una colección por caminos que este índice no
+ * modela (menús, `ExecuteNode`, nombres compuestos en tiempo de ejecución), y un aviso al pie no
+ * arregla una señal equivocada. Vuelve el día que se pueda acotar el falso positivo, no antes.
+ */
 
 /** Lo que el índice sabe contestar. Cuatro preguntas, que son las que se han medido. */
 export interface IndiceDeNavegacion {
@@ -80,6 +149,12 @@ export interface IndiceDeNavegacion {
   referencias(nombre: string): readonly Referencia[];
   /** Los campos de una colección, con su tipo. Vacío si la colección no existe. */
   campos(coleccion: string): readonly Declaracion[];
+  /** Lo que declara `app.xml`: por dónde arranca, login, estilos y conexiones. */
+  app(): AppDeNavegacion;
+  /** Todo lo de UNA colección. `undefined` si no existe — que no es lo mismo que vacía. */
+  detalle(coleccion: string): DetalleDeColeccion | undefined;
+  /** Lo que no cuadra: referencias a lo que no existe, y colecciones que nadie usa. */
+  problemas(): ProblemasDelProyecto;
 }
 
 /** Parte `Coll.CAMPO` en sus dos mitades. Sin punto, es una colección a secas. */
@@ -137,19 +212,21 @@ export function construirIndice(modelo: ModeloDeNavegacion): IndiceDeNavegacion 
 
     referencias(nombre) {
       const { coleccion, campo } = partirNombre(nombre);
+      const encaja = (hacia: string): boolean => {
+        const destino = partirNombre(hacia);
+        if (!igual(destino.coleccion, coleccion)) return false;
+        // Preguntando por la coll entera valen todas las que apunten a ella, lleven campo o
+        // no: quien pregunta «¿quién usa Clientes?» quiere también los `mapfld`.
+        if (campo === undefined || campo === "") return true;
+        return destino.campo !== undefined && igual(destino.campo, campo);
+      };
+
       const salida: Referencia[] = [];
       for (const c of modelo.colecciones) {
-        for (const r of c.referencias) {
-          const destino = partirNombre(r.hacia);
-          if (!igual(destino.coleccion, coleccion)) continue;
-          // Preguntando por la coll entera valen todas las que apunten a ella, lleven campo
-          // o no: quien pregunta «¿quién usa Clientes?» quiere también los `mapfld`.
-          if (campo !== undefined && campo !== "") {
-            if (destino.campo === undefined || !igual(destino.campo, campo)) continue;
-          }
-          salida.push({ ...r, fichero: c.fichero });
-        }
+        for (const r of c.referencias) if (encaja(r.hacia)) salida.push({ ...r, fichero: c.fichero });
       }
+      // Y las de script, que ya traen su fichero porque pueden venir de un `.js` suelto.
+      for (const r of modelo.referenciasDeScript) if (encaja(r.hacia)) salida.push(r);
       return salida;
     },
 
@@ -158,6 +235,41 @@ export function construirIndice(modelo: ModeloDeNavegacion): IndiceDeNavegacion 
       return modelo.colecciones
         .filter((c) => igual(c.nombre, soloColl))
         .flatMap((c) => c.campos.map((f) => declaracionDeCampo(c, f)));
+    },
+
+    app: () => modelo.app,
+
+    detalle(coleccion) {
+      const { coleccion: soloColl } = partirNombre(coleccion);
+      const c = modelo.colecciones.find((x) => igual(x.nombre, soloColl));
+      // `undefined` y no un detalle vacío: «no existe» y «existe y está vacía» son dos cosas,
+      // y contestar lo segundo sobre lo primero hace que el agente deje de buscar.
+      if (c === undefined) return undefined;
+      return {
+        nombre: c.nombre,
+        fichero: c.fichero,
+        campos: c.campos.map((f) => declaracionDeCampo(c, f)),
+        eventos: c.eventos,
+        nodos: c.nodos,
+        conexiones: c.conexiones,
+        apuntaA: c.referencias.map((r) => ({ ...r, fichero: c.fichero })),
+      };
+    },
+
+    problemas() {
+      const existe = (nombre: string): boolean =>
+        modelo.colecciones.some((c) => igual(c.nombre, nombre));
+
+      const rotas: Referencia[] = [];
+      const todas: Referencia[] = [
+        ...modelo.colecciones.flatMap((c) => c.referencias.map((r) => ({ ...r, fichero: c.fichero }))),
+        // Las de script cuentan: dos de las tres referencias rotas de un proyecto real solo se
+        // ven desde ahí (`appData.getCollection('Login')`, que no existe).
+        ...modelo.referenciasDeScript,
+      ];
+      for (const r of todas) if (!existe(partirNombre(r.hacia).coleccion)) rotas.push(r);
+
+      return { rotas };
     },
   };
 }

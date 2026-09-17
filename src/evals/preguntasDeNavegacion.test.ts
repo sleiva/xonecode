@@ -13,6 +13,9 @@ const VACIO: CargarIndice = async () => ({
   definicion: () => [],
   referencias: () => [],
   campos: () => [],
+  app: () => ({ entrada: [], login: [], estilos: [], conexiones: [] }),
+  detalle: () => undefined,
+  problemas: () => ({ rotas: [], huerfanas: [] }),
 });
 
 describe("el catálogo de preguntas de navegación", () => {
@@ -57,6 +60,17 @@ describe("el catálogo de preguntas de navegación", () => {
   it("una pregunta cubierta NO lleva hueco, y al revés: son excluyentes", () => {
     for (const p of PREGUNTAS_DE_NAVEGACION) {
       expect(p.operacion === undefined, `«${p.nombre}»`).toBe(p.hueco !== undefined);
+    }
+  });
+
+  it("un `limite` solo lo lleva una CUBIERTA: es cobertura a medias, no un hueco", () => {
+    // Una cobertura con asterisco y sin decir cuál es peor que un hueco declarado: se lee
+    // como completa.
+    for (const p of PREGUNTAS_DE_NAVEGACION) {
+      if (p.limite !== undefined) {
+        expect(p.operacion, `«${p.nombre}» tiene límite pero no operación`).toBeDefined();
+        expect(p.limite.length).toBeGreaterThan(20);
+      }
     }
   });
 

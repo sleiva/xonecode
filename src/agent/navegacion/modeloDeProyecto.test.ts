@@ -44,6 +44,9 @@ describe("modeloDeNavegacion", () => {
         fichero: "/Clientes.xne",
         campos: [{ nombre: "NOMBRE", tipo: "T" }],
         referencias: [],
+        eventos: [],
+        nodos: [],
+        conexiones: [],
       },
     ]);
   });
@@ -161,5 +164,97 @@ describe("las referencias que se extraen", () => {
       { desde: "Detalle", por: "inherits", hacia: "Pedidos" },
       { desde: "Detalle", por: "contents", hacia: "Lineas" },
     ]);
+  });
+});
+
+describe("las referencias de SCRIPT", () => {
+  it("reconoce `appData.getCollection('X')` en el onclick de un prop", () => {
+    // Es como navega de verdad una app XOne: los botones del menú no usan `mapcol`.
+    const m = modeloDeNavegacion(
+      {
+        colls: [
+          coll({
+            name: "EntradaApp",
+            location: { file: "/proy/EntradaApp.xne" },
+            props: [
+              {
+                name: "MAP_BT_DEPORTES",
+                inlineEvents: [
+                  { name: "onclick", script: "javascript:var o=appData.getCollection('Deportes').createObject();ui.openEditView(o);" },
+                ],
+              },
+            ],
+          }),
+        ],
+      },
+      RAIZ,
+      TODAS
+    );
+    expect(m.referenciasDeScript).toEqual([
+      { desde: "EntradaApp.MAP_BT_DEPORTES", por: "script", hacia: "Deportes", fichero: "/EntradaApp.xne" },
+    ]);
+  });
+
+  it("acepta comillas dobles y espacios, que es como está escrito de verdad", () => {
+    const m = modeloDeNavegacion(
+      {
+        colls: [
+          coll({
+            props: [{ name: "B", inlineEvents: [{ name: "onclick", script: 'appData.getCollection( "SitiosVerano" )' }] }],
+          }),
+        ],
+      },
+      RAIZ,
+      TODAS
+    );
+    expect(m.referenciasDeScript.map((r) => r.hacia)).toEqual(["SitiosVerano"]);
+  });
+
+  it("no repite cuando el mismo sitio la nombra dos veces", () => {
+    const m = modeloDeNavegacion(
+      {
+        colls: [
+          coll({
+            props: [
+              { name: "B", inlineEvents: [{ name: "onclick", script: "getCollection('X');getCollection('X')" }] },
+            ],
+          }),
+        ],
+      },
+      RAIZ,
+      TODAS
+    );
+    expect(m.referenciasDeScript).toHaveLength(1);
+  });
+
+  it("también en las acciones de un evento o un nodo", () => {
+    const m = modeloDeNavegacion(
+      { colls: [coll({ nodes: [{ name: "abrir", actions: [{ script: "appData.getCollection('Citas')" }] }] })] },
+      RAIZ,
+      TODAS
+    );
+    expect(m.referenciasDeScript[0]).toMatchObject({ desde: "Clientes:abrir", hacia: "Citas" });
+  });
+
+  it("y en un `.js` suelto, con su ruta virtual", () => {
+    const m = modeloDeNavegacion(
+      { colls: [], jsFiles: new Map([["funciones.js", "appData.getCollection('OperQueue')"]]) },
+      RAIZ,
+      TODAS
+    );
+    expect(m.referenciasDeScript).toEqual([
+      { desde: "/funciones.js", por: "script", hacia: "OperQueue", fichero: "/funciones.js" },
+    ]);
+  });
+
+  it("un `getCollection(variable)` NO se inventa: solo cuenta el literal", () => {
+    // El límite declarado: es una regex, no un análisis de ES5. Inventar aquí sería peor que
+    // no ver: una referencia falsa manda a leer donde no hay nada.
+    const m = modeloDeNavegacion(
+      { colls: [coll({ props: [{ name: "B", inlineEvents: [{ name: "onclick", script: "getCollection(nombre)" }] }] })] },
+      RAIZ,
+      TODAS
+    );
+    expect(m.referenciasDeScript).toEqual([]);
   });
 });
