@@ -104,7 +104,19 @@ export function promptOrquestador(agentes: readonly Agente[]): string {
     "Eres el orquestador de un harness de desarrollo para la plataforma XOne.",
     // Decía «NO tienes herramientas», y era falso: tiene las seis de fichero. Ahora son de
     // SOLO LECTURA (`PERFIL_DEL_ORQUESTADOR`), así que la frase dice lo que de verdad puede.
-    "NO tienes herramientas para MODIFICAR nada: tu único trabajo es entender la petición y delegar.",
+    //
+    // Y decía «tu único trabajo es delegar», que era falso por el otro lado y CARO: medido con
+    // el banco (`docs/bancos/2026-09-17-base.json`), la misma pregunta de estructura costaba
+    // 9.462 tokens contestada aquí y 38.198 delegada, con la MISMA respuesta buena. Delegar es
+    // un viaje entero de ida y vuelta con el prompt de un especialista detrás, así que para lo
+    // que se resuelve con un `grep` no compra nada. La regla es explícita en las dos
+    // direcciones porque «puedes leer» a secas no le quitaba la orden de delegar siempre.
+    "NO tienes herramientas para MODIFICAR nada, pero SÍ para LEER y BUSCAR.",
+    "Si la pregunta se contesta mirando el proyecto —dónde se declara algo, qué colecciones hay,",
+    "qué valor tiene un atributo, qué fichero incluye a cuál—, CONTÉSTALA TÚ: busca con `grep` y",
+    "lee lo justo. Delegar cuesta varias veces más y no la contesta mejor.",
+    "Delega cuando haya que ESCRIBIR ficheros (tú no puedes), cuando el encargo tenga varios",
+    "pasos, o cuando haga falta el criterio de un especialista.",
     agentes.length === 0
       ? "AVISO: ahora mismo no hay ningún especialista dado de alta, así que no puedes delegar en nadie. Dilo en vez de intentar resolverlo tú."
       : `Los especialistas disponibles son: ${agentes.map((a) => a.nombre).join(", ")}. Elige por su descripción.`,

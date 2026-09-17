@@ -1,5 +1,6 @@
 /**
- * El banco: `npm run banco [-- --pasadas 3] [--modelos a/b,c/d] [--solo entrypoint] [--json f]`.
+ * El banco: `npm run banco [-- --pasadas 3] [--modelos a/b,c/d] [--solo entrypoint] [--json f]`
+ * `[--contra base.json]`.
  *
  * Corre las mismas preguntas VARIAS veces contra uno o varios modelos y dice lo que cuestan,
  * con su dispersión y con el veredicto de un juez. Existe por una lección cara del 17-09-2026
@@ -38,10 +39,13 @@ import { hidratarFuentesDeDisco } from "../cli/fuentesDeDisco.js";
 import { rutaTrazaDeTools, VARIABLE_TRAZA_TOOLS } from "../agent/turno/diagnosticoDeTools.js";
 import { resumirTraza } from "../agent/turno/informeDeTraza.js";
 import { PREGUNTAS, type Pregunta } from "./preguntas.js";
-import { pintarCelda, resumirCelda, type Pasada } from "./medidas.js";
+import { comparar, pintarCelda, resumirCelda, type Pasada, type ResumenDeCelda } from "./medidas.js";
 import type { Piel } from "../core/turno.js";
 import type { Decision } from "../vendor/hitl.js";
 import type { PendienteDeAprobacion } from "../core/events.js";
+
+/** Cuánto se guarda de una respuesta SUSPENDIDA, para poder mirarla sin archivar el turno. */
+const TOPE_DE_RESPUESTA = 700;
 
 /** Tope por pasada. Una pasada colgada no puede colgar el banco entero. */
 const TOPE_MS = 5 * 60 * 1000;
@@ -120,6 +124,8 @@ async function unaPasada(pregunta: Pregunta, modelos: Modelos, skills: SkillsEnD
       // solo avisa cuando unas pasadas delegan y otras no.
     }
 
+    const respuesta = texto();
+    const correcta = pregunta.correcta(respuesta);
     return {
       ...base,
       ms: Date.now() - t0,
@@ -127,8 +133,10 @@ async function unaPasada(pregunta: Pregunta, modelos: Modelos, skills: SkillsEnD
       entrada: sesion.tracker.input,
       salida: sesion.tracker.output,
       cache: sesion.tracker.cache,
-      correcta: pregunta.correcta(texto()),
+      correcta,
       delego,
+      // Solo la suspendida, y recortada: para poder decidir si falló el agente o el juez.
+      ...(correcta ? {} : { respuesta: respuesta.trim().slice(0, TOPE_DE_RESPUESTA) }),
     };
   } catch (e) {
     return { ...base, ms: Date.now() - t0, error: e instanceof Error ? e.message : String(e) };
@@ -142,6 +150,7 @@ async function unaPasada(pregunta: Pregunta, modelos: Modelos, skills: SkillsEnD
 async function main(): Promise<number> {
   const solo = argumento("--solo");
   const json = argumento("--json");
+  const contra = argumento("--contra");
   const pasadas = Number(argumento("--pasadas") ?? 3);
   if (!Number.isInteger(pasadas) || pasadas < 1) {
     console.error("`--pasadas` tiene que ser un entero positivo");
@@ -182,6 +191,24 @@ async function main(): Promise<number> {
       resumenes.push({ ...resumen, mide: pregunta.mide, pasadas: medidas });
       process.stderr.write(`${" ".repeat(72)}\r`);
       for (const linea of pintarCelda(resumen)) console.log(linea);
+    }
+  }
+
+  // **La comparación es el punto de todo esto**, y la hace `comparar()`, que se NIEGA a
+  // concluir con los rangos solapados. Se empareja por modelo y pregunta: una celda que no
+  // esté en la base se DICE, en vez de compararla contra nada.
+  if (contra !== undefined) {
+    console.log(`\ncontra ${contra}:`);
+    const base = JSON.parse(readFileSync(contra, "utf8")) as { celdas: ResumenDeCelda[] };
+    for (const ahora of resumenes) {
+      const antes = base.celdas.find((c) => c.modelo === ahora.modelo && c.pregunta === ahora.pregunta);
+      if (antes === undefined) {
+        console.log(`  ${ahora.pregunta} · ${ahora.modelo}: no estaba en la base`);
+        continue;
+      }
+      const v = comparar(antes, ahora);
+      const cambio = v.diferencia === undefined ? "?" : `${v.diferencia > 0 ? "+" : ""}${Math.round(100 * v.diferencia)}%`;
+      console.log(`  ${ahora.pregunta} · ${ahora.modelo}: ${cambio} — ${v.concluyente ? "CONCLUYENTE" : "no concluyente"}, ${v.motivo}`);
     }
   }
 

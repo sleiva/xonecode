@@ -31,6 +31,15 @@ export interface Pasada {
   delego: boolean;
   /** Presente solo si la pasada no llegó a terminar. */
   error?: string;
+  /**
+   * La respuesta, y **solo cuando el juez la suspende**.
+   *
+   * Es la lección de `--conservar` del corredor de evals: un ✗ que no se puede inspeccionar es
+   * un ✗ del que no se aprende, y la primera vez que pasó no había forma de saber si fallaba el
+   * agente o el juez —fallaba el juez—. En un ✓ no hay nada que mirar, así que no se guarda:
+   * el fichero del banco es para comparar cifras, no un archivo de transcripciones.
+   */
+  respuesta?: string;
 }
 
 export interface Reparto {

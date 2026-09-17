@@ -28,7 +28,16 @@ describe("las preguntas del banco", () => {
     expect(juez("entrypoint")("El entrypoint es MenuPrincipal.")).toBe(false);
     // Nombrar el fichero correcto sin decir de dónde sale no contesta la pregunta.
     expect(juez("estilo")("Usa una hoja llamada default.css.")).toBe(false);
+    expect(juez("estilo")("La declara mappings.xne, pero no sé cuál.")).toBe(false);
     expect(juez("login")("No hay login en esta aplicación.")).toBe(false);
+  });
+
+  it("el estilo vale desde CUALQUIERA de los dos ficheros que lo declaran", () => {
+    // El esqueleto lo declara en `app.xml` y en `mappings.xne`: exigir uno suspendía a quien
+    // encontraba el otro con un `grep`, que es el camino más barato y una respuesta cierta.
+    expect(esqueleto.get("mappings.xne")).toContain("default.css");
+    expect(juez("estilo")("`default.css`, declarada en mappings.xne:4.")).toBe(true);
+    expect(juez("estilo")("`default.css`, declarada en app.xml.")).toBe(true);
   });
 
   it("no suspenden por la REDACCIÓN: se juzga el hecho, no el estilo", () => {

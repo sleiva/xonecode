@@ -39,12 +39,21 @@ describe("promptOrquestador", () => {
     expect(promptOrquestador([deSerie("analyst-xone")])).not.toMatch(/delega en `designer-xone`/);
   });
 
-  it("dice que NO tiene herramientas y que solo delega", () => {
+  it("dice que no MODIFICA, y que sí lee y busca", () => {
     // «NO tienes herramientas» era falso: tiene las seis de fichero, y hasta que se le
     // pusieron permisos podía escribir con ellas. Ahora son de solo lectura y la frase lo
     // dice — ver `xoneAgent.orquestador.test.ts`.
     expect(PROMPT_ORQUESTADOR).toMatch(/NO tienes herramientas para MODIFICAR nada/);
-    expect(PROMPT_ORQUESTADOR).toMatch(/delegar/);
+    expect(PROMPT_ORQUESTADOR).toMatch(/LEER y BUSCAR/);
+  });
+
+  it("le dice CUÁNDO contestar él y cuándo delegar, en las dos direcciones", () => {
+    // Decía «tu único trabajo es entender la petición y delegar», y eso costaba dinero
+    // medido: la misma pregunta de estructura, 9.462 tokens contestada por él y 38.198
+    // delegada, con la misma respuesta buena (`docs/bancos/2026-09-17-base.json`). Las DOS
+    // direcciones, porque «puedes leer» a secas no le quitaba la orden de delegar siempre.
+    expect(PROMPT_ORQUESTADOR).toMatch(/CONTÉSTALA TÚ/);
+    expect(PROMPT_ORQUESTADOR).toMatch(/Delega cuando haya que ESCRIBIR/);
   });
 
   it("pide paralelismo explícito para las tareas independientes", () => {

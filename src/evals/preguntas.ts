@@ -39,7 +39,16 @@ export const PREGUNTAS: readonly Pregunta[] = [
     nombre: "estilo",
     mide: "seguir una referencia entre ficheros",
     texto: "¿Qué hoja de estilos usa la aplicación y desde qué fichero se declara? Contesta en una línea.",
-    correcta: (r) => tiene(r, "default.css") && tiene(r, "app.xml"),
+    /**
+     * **Vale cualquiera de los dos ficheros, y esto lo arregló el banco a sí mismo.**
+     *
+     * El esqueleto declara `<style url="default.css" />` en `app.xml` Y en `mappings.xne`, así
+     * que exigir `app.xml` suspendía a quien lo encontraba con un `grep` en el otro — una
+     * respuesta igual de cierta y por el camino más barato. Medido: la pasada suspendida había
+     * contestado `mappings.xne:4`. El ✗ era del juez, como las dos primeras veces del corredor
+     * de evals, y por eso las respuestas suspendidas se guardan.
+     */
+    correcta: (r) => tiene(r, "default.css") && (tiene(r, "app.xml") || tiene(r, "mappings.xne")),
   },
   {
     nombre: "login",

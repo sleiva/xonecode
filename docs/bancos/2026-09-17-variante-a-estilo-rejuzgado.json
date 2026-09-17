@@ -1,0 +1,129 @@
+{
+  "cuando": "2026-09-17T15:18:01.132Z",
+  "celdas": [
+    {
+      "modelo": "ollama/deepseek-v4.1-flash:cloud  (bandera)",
+      "pregunta": "estilo",
+      "validas": 3,
+      "errores": 0,
+      "correctas": 3,
+      "delegadas": 0,
+      "entrada": {
+        "media": 11461.333333333334,
+        "min": 9945,
+        "max": 14380,
+        "dispersion": 0.38695323406235455
+      },
+      "salida": {
+        "media": 416,
+        "min": 266,
+        "max": 526,
+        "dispersion": 0.625
+      },
+      "llamadas": {
+        "media": 3.3333333333333335,
+        "min": 3,
+        "max": 4,
+        "dispersion": 0.3
+      },
+      "ms": {
+        "media": 2339,
+        "min": 1813,
+        "max": 2893,
+        "dispersion": 0.46173578452330055
+      },
+      "mide": "seguir una referencia entre ficheros",
+      "pasadas": [
+        {
+          "entrada": 14380,
+          "salida": 526,
+          "cache": 0,
+          "llamadas": 4,
+          "ms": 2893,
+          "correcta": true,
+          "delego": false
+        },
+        {
+          "entrada": 10059,
+          "salida": 456,
+          "cache": 0,
+          "llamadas": 3,
+          "ms": 2311,
+          "correcta": true,
+          "delego": false
+        },
+        {
+          "entrada": 9945,
+          "salida": 266,
+          "cache": 0,
+          "llamadas": 3,
+          "ms": 1813,
+          "correcta": true,
+          "delego": false
+        }
+      ]
+    },
+    {
+      "modelo": "gemini/gemini-3.8-flash  (bandera)",
+      "pregunta": "estilo",
+      "validas": 3,
+      "errores": 0,
+      "correctas": 3,
+      "delegadas": 0,
+      "entrada": {
+        "media": 10845.666666666666,
+        "min": 5469,
+        "max": 15301,
+        "dispersion": 0.9065371730645112
+      },
+      "salida": {
+        "media": 108.33333333333333,
+        "min": 86,
+        "max": 132,
+        "dispersion": 0.4246153846153846
+      },
+      "llamadas": {
+        "media": 3.3333333333333335,
+        "min": 2,
+        "max": 4,
+        "dispersion": 0.6
+      },
+      "ms": {
+        "media": 7465.666666666667,
+        "min": 3277,
+        "max": 13430,
+        "dispersion": 1.359958923070054
+      },
+      "mide": "seguir una referencia entre ficheros",
+      "pasadas": [
+        {
+          "entrada": 15301,
+          "salida": 132,
+          "cache": 0,
+          "llamadas": 4,
+          "ms": 13430,
+          "correcta": true,
+          "delego": false
+        },
+        {
+          "entrada": 11767,
+          "salida": 107,
+          "cache": 0,
+          "llamadas": 4,
+          "ms": 5690,
+          "correcta": true,
+          "delego": false
+        },
+        {
+          "entrada": 5469,
+          "salida": 86,
+          "cache": 0,
+          "llamadas": 2,
+          "ms": 3277,
+          "correcta": true,
+          "delego": false
+        }
+      ]
+    }
+  ]
+}

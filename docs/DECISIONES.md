@@ -4226,6 +4226,43 @@ describe la TOOL es de la librería y se actualiza con ella; cómo queremos usar
 nuestra y vive en `promptDeAgente`.** Las descripciones no se exportan, así que componer las dos
 no es una opción.
 
+**El orquestador deja de delegar lo que puede contestar, y es el recorte más grande medido
+hasta hoy** (17-09-2026). Su prompt decía «tu único trabajo es entender la petición y delegar»,
+y eso costaba dinero: la línea base del banco (`docs/bancos/2026-09-17-base.json`) enseñó que la
+MISMA pregunta de estructura costaba **9.462 tokens contestada por él y 38.198 delegada, con la
+misma respuesta buena**. Delegar es un viaje de ida y vuelta con el prompt de un especialista
+detrás; para lo que se resuelve con un `grep`, no compra nada.
+
+Peor: la dispersión brutal de la base (±114 %, ±150 %) **no era ruido, era esa moneda al aire**.
+Unas pasadas delegaban y otras no, y el banco las marcaba como «otro camino» precisamente para
+que no se promediaran como si fueran el mismo.
+
+La regla se escribe en las DOS direcciones —«contéstala tú» y «delega cuando haya que escribir,
+cuando el encargo tenga varios pasos o haga falta criterio»— porque decirle solo que puede leer
+no le quitaba la orden de delegar siempre. Medido contra la base, con tres pasadas por celda:
+
+| pregunta · modelo | base | con la regla | cambio | veredicto |
+| --- | --- | --- | --- | --- |
+| entrypoint · deepseek | 25.114 | 11.212 | −55 % | rangos solapados |
+| estilo · deepseek | 20.213 | 11.461 | −43 % | rangos solapados |
+| login · deepseek | 57.961 | 35.084 | −39 % | **concluyente** |
+| entrypoint · gemini | 18.979 | 10.037 | −47 % | **concluyente** |
+| estilo · gemini | 26.684 | 10.846 | −59 % | **concluyente** |
+| login · gemini | 47.149 | 29.393 | −38 % | rangos solapados |
+
+Seis de seis en la misma dirección, tres concluyentes por `comparar()` y **ninguna respuesta
+incorrecta**. Las llamadas al modelo bajan de 4-9 a 3-6 y el turno de 6-33 s a 2-11 s. Las tres
+celdas no concluyentes lo son porque **la base** tenía rangos enormes — el propio defecto que
+esto arregla.
+
+**Y el banco se corrigió a sí mismo por el camino.** Dos celdas salieron con «respuesta
+INCORRECTA», que por diseño invalida la comparación. La respuesta suspendida —que ahora se
+guarda, la lección de `--conservar` del corredor de evals— decía `mappings.xne:4:
+<style url="default.css" />`: el esqueleto declara la hoja de estilos en `app.xml` **y** en
+`mappings.xne`, y el juez exigía el primero. **El ✗ era del juez**, como las dos primeras veces
+del eval, y suspendía justo al que la encontraba por el camino más barato. Sin guardar la
+respuesta, el experimento habría concluido que el cambio empeora las respuestas.
+
 ## Trampas verificadas
 
 - **El orquestador va de SOLO LECTURA, y hasta el 9-09-2026 no lo era** (`PERFIL_DEL_ORQUESTADOR`,
