@@ -490,7 +490,8 @@ function FilaDeSkill({
             <button
               type="button"
               className={clsx(estilos.icono, estilos.iconoDestructivo)}
-              aria-label={`Borrar ${skill.nombre}`}
+              aria-label={`Eliminar ${skill.nombre}`}
+              title="Eliminar"
               onClick={alArmarBorrado}
             >
               <IconTrashOutline16 />
@@ -584,7 +585,7 @@ function FilaDeSkill({
         <div className={estilos.confirmar}>
           <span>Se borra la carpeta entera, anexos incluidos. No hay papelera.</span>
           <Button className={clsx(estilos.accion, estilos.destructiva)} onClick={alBorrar}>
-            Borrar
+            Eliminar
           </Button>
         </div>
       ) : null}

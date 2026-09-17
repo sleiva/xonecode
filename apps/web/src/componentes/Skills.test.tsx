@@ -210,11 +210,11 @@ describe("Skills", () => {
     const m = manejadores();
     render(<Skills {...m} skills={[MIA]} />);
     irA("Tuyas");
-    fireEvent.click(screen.getByRole("button", { name: /^Borrar mi-skill/ }));
+    fireEvent.click(screen.getByRole("button", { name: /^Eliminar mi-skill/ }));
     expect(screen.getByText(/carpeta entera/)).not.toBeNull();
     expect(m.alBorrar).not.toHaveBeenCalled();
 
-    fireEvent.click(screen.getByRole("button", { name: "Borrar" }));
+    fireEvent.click(screen.getByRole("button", { name: "Eliminar" }));
     expect(m.alBorrar).toHaveBeenCalledWith(expect.objectContaining({ nombre: "mi-skill" }), "global");
   });
 
@@ -222,8 +222,8 @@ describe("Skills", () => {
     const m = manejadores();
     render(<Skills {...m} hayProyecto skills={[{ ...MIA, origen: "proyecto" }]} />);
     irA("Tuyas");
-    fireEvent.click(screen.getByRole("button", { name: /^Borrar mi-skill/ }));
-    fireEvent.click(screen.getByRole("button", { name: "Borrar" }));
+    fireEvent.click(screen.getByRole("button", { name: /^Eliminar mi-skill/ }));
+    fireEvent.click(screen.getByRole("button", { name: "Eliminar" }));
     expect(m.alBorrar).toHaveBeenCalledWith(expect.anything(), "proyecto");
   });
 

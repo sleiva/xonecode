@@ -1,6 +1,6 @@
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
-import { Equipo } from "./Equipo.js";
+import { Equipo, TITULO_DE_REFRESCAR_EQUIPO } from "./Equipo.js";
 import type { InformeDeDispositivos } from "../tipos.js";
 
 afterEach(cleanup);
@@ -31,7 +31,7 @@ describe("Equipo", () => {
   it("sin informe dice que está consultando, y el botón no se ofrece encendido", () => {
     render(<Equipo conectado alActualizar={() => {}} />);
     expect(screen.getByText(/consultando qué dispositivos/i)).toBeTruthy();
-    expect((screen.getByRole("button", { name: "Volver a mirar" }) as HTMLButtonElement).disabled).toBe(true);
+    expect((screen.getByRole("button", { name: "Refrescar" }) as HTMLButtonElement).disabled).toBe(true);
   });
 
   it("la máquina medida aquí: macOS, sin SDK de Android, 35 simuladores y ninguno arrancado", () => {
@@ -97,21 +97,33 @@ describe("Equipo", () => {
     expect(screen.getByText("Ningún simulador iOS disponible.")).toBeTruthy();
   });
 
-  it("«Volver a mirar» pide la medida, pasa a «Mirando…» y vuelve cuando llega una foto NUEVA", () => {
+  it("«Refrescar» pide la medida, pasa a «Refrescando…» y vuelve cuando llega una foto NUEVA", () => {
     let pedidas = 0;
     const { rerender } = render(<Equipo informe={base} conectado alActualizar={() => pedidas++} />);
-    fireEvent.click(screen.getByRole("button", { name: "Volver a mirar" }));
+    fireEvent.click(screen.getByRole("button", { name: "Refrescar" }));
     expect(pedidas).toBe(1);
-    expect((screen.getByRole("button", { name: "Mirando…" }) as HTMLButtonElement).disabled).toBe(true);
+    expect((screen.getByRole("button", { name: "Refrescando…" }) as HTMLButtonElement).disabled).toBe(true);
     // La misma foto otra vez no lo apaga: no ha llegado nada nuevo.
     rerender(<Equipo informe={base} conectado alActualizar={() => pedidas++} />);
-    expect(screen.getByRole("button", { name: "Mirando…" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Refrescando…" })).toBeTruthy();
     rerender(<Equipo informe={{ ...base, medido: "2026-09-06T10:00:05.000Z" }} conectado alActualizar={() => pedidas++} />);
-    expect(screen.getByRole("button", { name: "Volver a mirar" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Refrescar" })).toBeTruthy();
   });
 
   it("sin cable el botón se apaga: no hay a quién pedirle que mire", () => {
     render(<Equipo informe={base} conectado={false} alActualizar={() => {}} />);
-    expect((screen.getByRole("button", { name: "Volver a mirar" }) as HTMLButtonElement).disabled).toBe(true);
+    expect((screen.getByRole("button", { name: "Refrescar" }) as HTMLButtonElement).disabled).toBe(true);
+  });
+});
+
+describe("el title de «Refrescar»", () => {
+  it("dice QUÉ se refresca, porque el nombre del botón ya no lo hace", () => {
+    // Se llamaba «Volver a mirar» y ese nombre lo decía solo. «Refrescar» es genérico, y en
+    // esta consola hay tres botones así midiendo cosas distintas: el alcance se va al `title`,
+    // el mismo reparto que `AVISO_DE_ACTUALIZAR` en CloudStudio.
+    render(<Equipo informe={base} conectado alActualizar={() => {}} />);
+    expect(screen.getByRole("button", { name: "Refrescar" }).getAttribute("title")).toBe(
+      TITULO_DE_REFRESCAR_EQUIPO
+    );
   });
 });

@@ -23,6 +23,21 @@ import estilos from "./Equipo.module.css";
  *   pidiera. Y ese demonio se dice aquí: es un efecto de medir, también de la primera
  *   medida al conectar, no solo del botón.
  */
+/**
+ * Lo que el botón de refrescar hace, en su `title`.
+ *
+ * Se llamaba «Volver a mirar», y ese nombre DECÍA qué se rehace. «Refrescar» es más corto y
+ * más reconocible, pero es genérico: en una ventana donde también se refresca la revisión y
+ * la cuenta de CloudStudio, el nombre solo ya no contesta «¿refrescar QUÉ?». El `title` es
+ * donde eso cabe sin robarle ancho a la fila — el mismo reparto que `AVISO_DE_ACTUALIZAR` en
+ * `CloudStudio.tsx`: el nombre dice la acción, el `title` dice el alcance.
+ *
+ * Y vive en UN sitio porque son DOS botones —éste y el de la sección Dispositivos de
+ * Ajustes— que disparan la MISMA medida. Dos copias es donde divergirían.
+ */
+export const TITULO_DE_REFRESCAR_EQUIPO =
+  "Vuelve a mirar qué dispositivos y simuladores hay en este equipo";
+
 export function Equipo({
   informe,
   conectado,
@@ -60,13 +75,14 @@ export function Equipo({
           <button
             type="button"
             className={estilos.actualizar}
+            title={TITULO_DE_REFRESCAR_EQUIPO}
             disabled={!conectado || mirando || informe === undefined}
             onClick={() => {
               setMirando(true);
               alActualizar();
             }}
           >
-            {mirando ? "Mirando…" : "Volver a mirar"}
+            {mirando ? "Refrescando…" : "Refrescar"}
           </button>
         )}
       </div>

@@ -407,7 +407,7 @@
   gap: 8px;
 }
 
-/* Un enlace de texto dentro de una nota: «Volver a mirar», al lado de la hora de la foto.
+/* Un enlace de texto dentro de una nota: «Refrescar», al lado de la hora de la foto.
    No es un `Button` porque no es una acción de la fila, es la continuación de la frase que
    dice cuándo se midió — y un botón con caja ahí partiría el párrafo en dos. Con subrayado
    siempre, que es lo que lo distingue del texto que tiene alrededor: aquí no hay ninguna

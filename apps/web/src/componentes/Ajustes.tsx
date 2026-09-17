@@ -31,6 +31,7 @@ import { ArrancarEmulador } from "./ArrancarEmulador.js";
 import { useMedirAlVolver } from "../medirAlVolver.js";
 import { Agentes } from "./Agentes.js";
 import { Skills } from "./Skills.js";
+import { TITULO_DE_REFRESCAR_EQUIPO } from "./Equipo.js";
 import { Receta } from "./Receta.js";
 import { VerificarDispositivo } from "./VerificarDispositivo.js";
 import { Pregunta } from "./Pregunta.js";
@@ -1152,8 +1153,16 @@ export function Ajustes({
                   ? "Todavía no ha llegado ninguna medida de este equipo."
                   : `Medido a las ${horaDe(dispositivos.medido)}. Lo que no se busca no se mide: adb arranca un demonio que se queda vivo, y xcrun tarda segundos.`}{" "}
                 {alActualizarDispositivos === undefined ? null : (
-                  <button type="button" className={estilos.enlace} disabled={!conectado} onClick={alActualizarDispositivos}>
-                    Volver a mirar
+                  <button
+                    type="button"
+                    className={estilos.enlace}
+                    // La MISMA frase que el botón del escritorio, importada y no copiada: es
+                    // la misma medida, y dos copias es donde divergirían.
+                    title={TITULO_DE_REFRESCAR_EQUIPO}
+                    disabled={!conectado}
+                    onClick={alActualizarDispositivos}
+                  >
+                    Refrescar
                   </button>
                 )}
               </p>

@@ -180,8 +180,16 @@ export function Revision({
                 </span>
               ) : null}
             </span>
-            <button type="button" className={estilos.recargar} onClick={alRecargar}>
-              Volver a mirar
+            {/* El `title` dice QUÉ se refresca: el nombre del botón ya no lo hace —se llamaba
+                «Volver a mirar»— y en esta pantalla hay dos, éste y el de la banda de arriba,
+                que miden cosas distintas contra referencias distintas. */}
+            <button
+              type="button"
+              className={estilos.recargar}
+              title="Vuelve a mirar qué ficheros ha tocado esta sesión"
+              onClick={alRecargar}
+            >
+              Refrescar
             </button>
           </div>
 

@@ -1056,7 +1056,7 @@ feedback del desarrollador** y no es terminal.
 - **Cinco estados por herramienta, no un booleano**: ok, no encontrada, falló (UNA línea de
   motivo), **no aplica** (iOS fuera de macOS) y **desactivada**. La RUTA se queda en el host.
 - **Es una FOTO con hora, no un estado en vivo, y no hay sondeo**: se mide al conectar el primer
-  cliente (una detección en vuelo compartida) y al pulsar «Volver a mirar». Cada proceso lleva
+  cliente (una detección en vuelo compartida) y al pulsar «Refrescar». Cada proceso lleva
   tope (`TOPES_MS`) y un cuelgue se dice «no respondió».
 - **Apagar un destino deja de LANZAR procesos**, no esconde filas; una herramienta que sirve a dos
   destinos solo se salta con los dos apagados. Configurar y volver a medir son el MISMO mensaje,

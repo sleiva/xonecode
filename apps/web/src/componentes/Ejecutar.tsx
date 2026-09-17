@@ -323,7 +323,7 @@ function Recorrido({
         {enCurso && alCancelar !== undefined ? (
           // Cancelar SOLO mientras corre y SOLO si hay a quién pedírselo: sobre un recorrido
           // cerrado no hay nada que parar, y sin manejador el botón no llevaría a ninguna
-          // parte. Estilo secundario, el mismo de «Volver a mirar»: parar esto es una acción
+          // parte. Estilo secundario, el mismo de «Refrescar»: parar esto es una acción
           // corriente de la pestaña, no la parada de emergencia del compositor.
           <button type="button" className={estilos.cancelar} onClick={alCancelar}>
             Cancelar

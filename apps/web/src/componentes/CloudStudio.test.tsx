@@ -204,7 +204,7 @@ describe("CloudStudio: los botones", () => {
       <CloudStudio sync={{ proyecto: "Tienda", rama: "main", pendientes: 1 }} alPedir={NADA} alRecargar={recargar} />
     );
     recargar.mockClear();
-    fireEvent.click(screen.getByRole("button", { name: "Volver a mirar" }));
+    fireEvent.click(screen.getByRole("button", { name: "Refrescar" }));
     expect(recargar).toHaveBeenCalledTimes(1);
   });
 });

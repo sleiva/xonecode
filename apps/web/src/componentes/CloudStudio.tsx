@@ -262,8 +262,16 @@ export function CloudStudio({
       <div className={estilos.cabecera}>
         <span className={estilos.proyecto}>{sync.proyecto}</span>
         <span className={estilos.rama}>rama {sync.rama}</span>
-        <button type="button" className={estilos.recargar} onClick={alRecargar}>
-          Volver a mirar
+        {/* Y aquí el `title` importa el doble: este botón y el de Revisión están en la misma
+            pantalla y miden contra REFERENCIAS distintas —la rama de la bajada y el sello de
+            la sesión—, así que dos «Refrescar» a secas se leerían como el mismo. */}
+        <button
+          type="button"
+          className={estilos.recargar}
+          title="Vuelve a medir cuánto queda por subir a CloudStudio"
+          onClick={alRecargar}
+        >
+          Refrescar
         </button>
       </div>
 

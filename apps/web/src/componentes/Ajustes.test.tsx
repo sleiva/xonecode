@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { Ajustes } from "./Ajustes.js";
+import { TITULO_DE_REFRESCAR_EQUIPO } from "./Equipo.js";
 
 const MANEJADORES = {
   apariencia: "sistema" as const,
@@ -807,7 +808,7 @@ describe("Ajustes: la sección de Dispositivos", () => {
     );
     fireEvent.click(screen.getByRole("button", { name: "Dispositivos" }));
     for (const c of screen.getAllByRole("checkbox")) expect(c).toHaveProperty("disabled", true);
-    expect(screen.getByRole("button", { name: /volver a mirar/i })).toHaveProperty("disabled", true);
+    expect(screen.getByRole("button", { name: /refrescar/i })).toHaveProperty("disabled", true);
   });
 });
 
@@ -964,5 +965,17 @@ describe("Ajustes: el modelo por defecto", () => {
     // Ausente ≠ «ninguno». Es la misma regla de las cuatro capas: lo que falta se ROTULA.
     abrir();
     expect(screen.getByRole("button", { name: /elige modelo/i })).toBeTruthy();
+  });
+});
+
+describe("los dos botones de refrescar el equipo son el mismo", () => {
+  it("comparten el `title`, importado y no copiado: es la misma medida", () => {
+    // Dos copias de la frase es donde divergirían, y el síntoma sería que el mismo botón
+    // explica dos cosas distintas según por dónde se entre.
+    render(<Ajustes {...MANEJADORES} conectado alActualizarDispositivos={() => {}} />);
+    fireEvent.click(screen.getByRole("button", { name: "Dispositivos" }));
+    expect(screen.getByRole("button", { name: /refrescar/i }).getAttribute("title")).toBe(
+      TITULO_DE_REFRESCAR_EQUIPO
+    );
   });
 });

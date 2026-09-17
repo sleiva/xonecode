@@ -2643,7 +2643,7 @@ lanza ni un proceso. Reglas:
   y el panel lo dice.
 - **Es una FOTO con hora, no un estado en vivo, y no hay sondeo**: se mide al conectar el
   primer cliente —UNA detección en vuelo compartida, dos pestañas no lanzan dos adb— y solo
-  se vuelve a medir cuando alguien pulsa «Volver a mirar». Refrescar solo cada pocos
+  se vuelve a medir cuando alguien pulsa «Refrescar». Remedir solo cada pocos
   segundos lanzaría procesos en el equipo del usuario sin que nadie lo pidiera. Va a TODOS
   los clientes: la máquina es la misma para todos. Y el store NO la tira al caerse el
   cable, al revés que `modelos`: no es un estado que el servidor pueda haber cambiado.
@@ -3395,7 +3395,7 @@ de la lista vacía, donde esa cifra es lo único que hay que mirar. Hay un test 
 un `/sync` encolado, y arriba —en CloudStudio— puede cambiar algo desde fuera, pero el
 servidor **no sabe cuándo termina una línea encolada**, así que tras `subir`/`bajar` no se
 reemite ninguna lectura. La banda la vuelve a pedir al ENTRAR —su montaje, que ahora ocurre al
-abrir Revisión— y con «Volver a mirar», y `App` la pide en el flanco de fin de turno si
+abrir Revisión— y con «Refrescar», y `App` la pide en el flanco de fin de turno si
 Revisión está delante, porque el turno acaba de escribir y ese sí es un momento que el
 servidor conoce. Es la forma de Ficheros y Revisión —se pide cuando NO hay dato y con
 `conectado`, no al montar— con una vuelta de tuerca: aquí el dato caduca solo.

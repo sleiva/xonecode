@@ -2545,7 +2545,7 @@ export function montarRutas(
 
   /**
    * La sincronización con CloudStudio del proyecto abierto, pedida desde un control
-   * (la banda de arriba de Revisión, y «Volver a mirar»).
+   * (la banda de arriba de Revisión, y «Refrescar»).
    *
    * **`estado` se mide aquí; `subir` y `bajar` se ENCOLAN**, y la asimetría es deliberada.
    * Medir es leer una ref de git que ya está en local (`lecturaDeSync`), así que encolarla
@@ -2562,7 +2562,7 @@ export function montarRutas(
    * Y lo que NO se hace es volver a emitir la lectura después de encolar: el servidor no
    * sabe cuándo termina una línea de la cola, y un «3 ficheros por subir» recién emitido
    * tras pulsar Subir sería una cifra que nadie ha vuelto a medir. La pestaña se refresca
-   * al volver a ella y al pulsar «Volver a mirar», que es cuando de verdad se mira.
+   * al volver a ella y al pulsar «Refrescar», que es cuando de verdad se mira.
    */
   const atenderSync = (accion: "estado" | "subir" | "bajar"): void => {
     const abierto = vestibulo.proyectoAbierto();
