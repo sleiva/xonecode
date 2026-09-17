@@ -3621,6 +3621,19 @@ export function montarRutas(
         respuesta.end();
         return;
       }
+      /**
+       * **Y el acuse del último arranque se OLVIDA.**
+       *
+       * Sin esto se queda pegado para siempre: el usuario vio `pixel8 · apagado` con un
+       * «✓ pixel8 arrancado» al lado, o sea las dos cosas a la vez. El acuse pertenece a la
+       * foto que se tomó justo después de arrancar, no a todas las de después — y ahora que
+       * la sección remide al entrar y al volver, «todas las de después» son muchas.
+       *
+       * Ausente vuelve a significar «no se ha pedido ningún arranque en esta medida», que es
+       * lo que el campo declara. El `finally` de `atenderArranqueDeEmulador` lo pone y se
+       * salta este camino, así que su propia medida sí lo lleva.
+       */
+      ultimoArranque = undefined;
       informeDeDispositivos = undefined;
       void atenderDispositivos().catch(contar);
       respuesta.writeHead(204);

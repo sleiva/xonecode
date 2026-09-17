@@ -84,7 +84,12 @@ describe("detectarDispositivos", () => {
     // adb no distingue: trae los físicos y los emuladores en la misma lista, y un emulador
     // arrancado no aparece en ningún otro sitio. Así que se llama igual y se filtra después.
     const { ejecutar, llamadas } = ejecutorDe({
-      adb: salida("List of devices attached\nemulator-5554 device model:sdk_gphone64\nR58M12 device model:Galaxy_S21\n"),
+      // Las claves van EXACTAS (`<binario> <primer arg>`) y no como `adb` a secas: el doble se
+      // queda con el primer nombre que casa, y `adb` casa por sufijo con TODAS las llamadas —
+      // así `emu avd name` recibía la lista de aparatos, no parseaba, y se disparaba la fuente
+      // de respaldo: tres llamadas donde la máquina de verdad hace dos.
+      "/bin/adb devices": salida("List of devices attached\nemulator-5554 device model:sdk_gphone64\nR58M12 device model:Galaxy_S21\n"),
+      "/bin/adb -s": salida("Pixel_8_API_34\nOK\n"),
       emulator: salida("Pixel_8_API_34\n"),
     });
     const informe = await detectarDispositivos(
@@ -108,7 +113,11 @@ describe("detectarDispositivos", () => {
      */
     expect(llamadas.map((l) => l.binario)).toEqual(["/bin/adb", "/bin/adb", "/bin/emulator"]);
     expect(llamadas[1]?.args).toEqual(["-s", "emulator-5554", "emu", "avd", "name"]);
-    expect(informe.dispositivos.map((d) => d.nombre)).toEqual(["sdk gphone64"]);
+    // Y se llama como su AVD, no como su imagen: `model:` decía `sdk gphone64`, y el mismo
+    // aparato salía con ese nombre arrancado y con el del AVD apagado — un aparato, dos
+    // nombres, que es lo que el usuario pidió quitar.
+    expect(informe.dispositivos.map((d) => d.nombre)).toEqual(["Pixel_8_API_34"]);
+    // `avds` sigue CRUDO: de él depende el paso de la receta que crea el AVD.
     expect(informe.avds).toEqual(["Pixel_8_API_34"]);
   });
 
@@ -149,6 +158,48 @@ describe("detectarDispositivos", () => {
    * Y si la consola no contesta, el campo se queda AUSENTE: «no se pudo identificar», que no
    * es «no tiene». `adb` no pasa a fallo — la herramienta contestó y su lista es buena.
    */
+  /**
+   * **La consola es UN canal, así que hay una segunda fuente.** Mientras el bucle de
+   * «Arrancar» sondea `emu avd name` esperando a que el aparato aparezca, una medida que
+   * pregunte a la vez se lleva un error — y sin `avd` el AVD volvía a salir DUPLICADO
+   * («sdk gphone64 arm64 · arrancado» y «pixel8 · apagado» a la vez). Medido en la pantalla
+   * del usuario justo después de pulsar el botón.
+   *
+   * `ro.boot.qemu.avd_name` contesta lo mismo (medido segundo a segundo en un arranque en
+   * frío: los dos dicen `pixel8` en cuanto adb da el aparato por `device`) y falla por cosas
+   * distintas, que es lo que lo hace un respaldo y no una copia.
+   */
+  it("con la consola ocupada, el AVD se saca de la propiedad de la imagen", async () => {
+    let cual = 0;
+    const { ejecutar } = ejecutorDe({
+      "/bin/adb devices": salida("List of devices attached\nemulator-5554 device model:sdk_gphone64\n"),
+      emulator: salida("pixel8\n"),
+    });
+    // El doble no distingue las dos preguntas por `-s`, así que se envuelve: la primera
+    // (la consola) falla como cuando está ocupada, y la segunda (getprop) contesta.
+    const conConsolaOcupada: typeof ejecutar = async (binario, args, opciones) => {
+      if (args[0] === "-s") {
+        cual += 1;
+        if (cual === 1) throw new Error("error: could not connect to TCP port 5554");
+        return { stdout: "pixel8\n", stderr: "" };
+      }
+      return ejecutar(binario, args, opciones);
+    };
+    const informe = await detectarDispositivos(
+      {
+        plataforma: "linux",
+        entorno: { PATH: "/bin" },
+        home: "/home/yo",
+        existe: (r) => r === "/bin/adb" || r === "/bin/emulator",
+        ejecutar: conConsolaOcupada,
+      },
+      { android: false }
+    );
+    expect(cual).toBe(2);
+    expect(informe.dispositivos[0]?.avd).toBe("pixel8");
+    expect(informe.dispositivos[0]?.nombre).toBe("pixel8");
+  });
+
   it("si la consola del emulador falla, no hay `avd` y adb sigue en ok", async () => {
     const { ejecutar } = ejecutorDe({
       "/bin/adb devices": salida("List of devices attached\nemulator-5554 device model:sdk_gphone64\n"),

@@ -181,6 +181,33 @@ export function jdkDeLaMaquina(
   return undefined;
 }
 
+/**
+ * De qué AVD es un emulador, preguntando por sus DOS caminos.
+ *
+ * La consola primero —es el emulador mismo contestando, y no depende de la imagen— y
+ * `getprop ro.boot.qemu.avd_name` de respaldo. Nunca lanza: `undefined` es «no se pudo
+ * identificar», y quien empareja lo trata como desconocido y no como «ese AVD está apagado».
+ */
+async function nombreDeAvdDe(
+  serial: string,
+  adb: string,
+  ejecutar: NonNullable<DependenciasDeDeteccion["ejecutar"]>
+): Promise<string | undefined> {
+  for (const args of [
+    ["-s", serial, "emu", "avd", "name"],
+    ["-s", serial, "shell", "getprop", "ro.boot.qemu.avd_name"],
+  ]) {
+    try {
+      const { stdout } = await ejecutar(adb, args, { timeout: TOPES_MS.adb });
+      const avd = nombreDeAvdDeConsola(stdout);
+      if (avd !== undefined) return avd;
+    } catch {
+      // Ese camino no contesta: se prueba el otro.
+    }
+  }
+  return undefined;
+}
+
 export async function detectarDispositivos(
   deps: DependenciasDeDeteccion = {},
   /** Qué destinos se miran. Ausente = todos (`core/settings.ts#seMira`). */
@@ -278,10 +305,20 @@ export async function detectarDispositivos(
       for (const d of deAdb) {
         if (d.clase !== "emulador" || d.estado !== "conectado") continue;
         try {
-          const { stdout: crudo } = await ejecutar(adb, ["-s", d.id, "emu", "avd", "name"], {
-            timeout: TOPES_MS.adb,
-          });
-          const avd = nombreDeAvdDeConsola(crudo);
+          /**
+           * **Dos fuentes, y la segunda no es lujo.** La consola del emulador (`emu avd
+           * name`) es el dato autoritativo, pero es UN canal: mientras el bucle de «Arrancar»
+           * la sondea esperando a que el aparato aparezca, una medida que pregunte a la vez se
+           * lleva un error — y sin `avd` la fila no se puede atribuir, así que el AVD volvía a
+           * salir DUPLICADO («sdk gphone64 arm64 · arrancado» y «pixel8 · apagado» a la vez).
+           * Medido en la pantalla del usuario justo después de pulsar el botón.
+           *
+           * `ro.boot.qemu.avd_name` contesta lo mismo (medido segundo a segundo en un arranque
+           * en frío: los dos dicen `pixel8` en cuanto adb da el aparato por `device`) y es otro
+           * camino — el de la propiedad de la imagen—, así que los dos fallan por cosas
+           * distintas. Se pregunta primero a la consola porque no depende de la imagen.
+           */
+          const avd = await nombreDeAvdDe(d.id, adb, ejecutar);
           if (avd !== undefined) {
             d.avd = avd;
             /**

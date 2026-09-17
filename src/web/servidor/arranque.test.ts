@@ -3626,6 +3626,45 @@ describe("qué hay en la máquina: el mensaje «dispositivos»", () => {
   });
 
   /**
+   * **El acuse del arranque se OLVIDA en la siguiente medida pedida.**
+   *
+   * Sin esto se queda pegado: el usuario vio `pixel8 · apagado` con un «✓ pixel8 arrancado» al
+   * lado, o sea las dos cosas a la vez en la misma fila. El acuse pertenece a la foto que se
+   * tomó justo después de arrancar, y ahora que la sección remide al entrar y al volver a la
+   * ventana, las medidas de después son muchas.
+   */
+  it("una medida pedida después de arrancar llega SIN el acuse", async () => {
+    const servidor = servidorDeMentira();
+    montarRutas(servidor, vestibuloDePrueba(), {
+      detectarDispositivos: async () => ({ ...informe, avds: ["pixel8"] }),
+      arrancarEmulador: async (avd) => ({ ok: true, detalle: `${avd} arrancado` }),
+    });
+    const eventos = servidor.rutas.get(`GET ${RUTA_EVENTOS}`)!;
+    const cliente = clienteDeMentira();
+    await eventos(cliente.peticion, cliente.respuesta);
+    await asentar();
+    const accion = servidor.rutas.get(`POST ${RUTA_ACCION}`)!;
+
+    await enviarMensaje(accion, { clase: "arrancarEmulador", avd: "pixel8" });
+    await asentar();
+    const conAcuse = cliente.recibidos.filter((m) => m.clase === "dispositivos").at(-1) as Extract<
+      MensajeAlCliente,
+      { clase: "dispositivos" }
+    >;
+    expect(conAcuse.arranque?.ok).toBe(true);
+
+    // La medida siguiente —la que dispara entrar en la sección o volver a la ventana— ya no
+    // lo lleva: ausente vuelve a significar «no se ha pedido ningún arranque en esta medida».
+    await enviarMensaje(accion, { clase: "dispositivos" });
+    await asentar();
+    const despues = cliente.recibidos.filter((m) => m.clase === "dispositivos").at(-1) as Extract<
+      MensajeAlCliente,
+      { clase: "dispositivos" }
+    >;
+    expect(despues.arranque).toBeUndefined();
+  });
+
+  /**
    * Sin el puerto no hay arranque, y se DICE: el botón no se pinta porque `App` no pasa el
    * manejador, pero el servidor no puede quedarse mudo si el mensaje llega igual.
    */
