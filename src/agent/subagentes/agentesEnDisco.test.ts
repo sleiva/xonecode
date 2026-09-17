@@ -12,6 +12,7 @@ import {
   esDeSerie,
   leerCarpetaDeAgentes,
   marcarSemilla,
+  renombrarAgente,
   restaurarAgente,
   rutaDeAgentes,
   rutaGlobalDeAgentes,
@@ -418,6 +419,81 @@ describe("restaurarAgente", () => {
 
     expect(restaurarAgente(raiz, "mockup")).toBe(true);
     expect(existsSync(join(rutaDeAgentes(raiz), "mockup.md"))).toBe(true);
+  });
+});
+
+/**
+ * Renombrar, que es `renameSync` y LUEGO escribir — nunca escribir y luego borrar.
+ *
+ * El orden importa y es la única razón de que esto sea una función y no dos llamadas: un
+ * fallo entre los dos pasos deja UN fichero (el renombrado, con el contenido viejo), nunca
+ * dos con el mismo prompt ni cero. Al revés, una excepción entre el `write` y el `rm` deja
+ * los DOS —que es exactamente lo que el campo deshabilitado del formulario evitaba— y el
+ * usuario ve dos subagentes con la misma descripción y no sabe cuál toca el orquestador.
+ */
+describe("renombrarAgente", () => {
+  const propio = (nombre: string, descripcion = "el mío"): Agente => ({
+    nombre,
+    descripcion,
+    motor: "modelo",
+    soloLectura: true,
+    skills: [],
+    instrucciones: "cuerpo",
+    origen: "global",
+  });
+
+  it("mueve el `.md` y escribe el contenido nuevo en el mismo paso", () => {
+    // Las dos cosas a la vez porque el formulario permite cambiar el nombre Y la descripción
+    // en la misma pulsación: guardar solo una de las dos dejaría la pantalla mintiendo.
+    const raiz = base();
+    guardarAgente(raiz, propio("advisor"));
+
+    expect(renombrarAgente(raiz, "advisor", propio("segunda-opinion", "revisada"))).toBe("hecho");
+    expect(existsSync(join(rutaDeAgentes(raiz), "advisor.md"))).toBe(false);
+    const { agentes, problemas } = leerCarpetaDeAgentes(rutaDeAgentes(raiz), "global");
+    expect(problemas).toEqual([]);
+    expect(agentes.map((a) => [a.nombre, a.descripcion])).toEqual([["segunda-opinion", "revisada"]]);
+  });
+
+  it("NO pisa el destino si ya existe, y deja el origen donde estaba", () => {
+    // Es la guarda que de verdad importa: sin ella, renombrar `advisor` a `docs` se llevaba
+    // por delante el `docs.md` de serie —o el otro subagente del usuario— sin decir nada.
+    // «El destino ya existe» cubre los dos casos, y es el motivo honesto: no hace falta un
+    // caso especial para los de serie.
+    const raiz = base();
+    sembrarAgentes(raiz);
+    guardarAgente(raiz, propio("advisor"));
+    const docsAntes = readFileSync(join(rutaDeAgentes(raiz), "docs.md"), "utf8");
+
+    expect(renombrarAgente(raiz, "advisor", propio("docs"))).toBe("destino-ocupado");
+    expect(readFileSync(join(rutaDeAgentes(raiz), "docs.md"), "utf8")).toBe(docsAntes);
+    expect(existsSync(join(rutaDeAgentes(raiz), "advisor.md"))).toBe(true);
+  });
+
+  it("sin origen no se inventa nada: no se escribe el destino", () => {
+    // Escribirlo convertiría un renombrado de algo que ya no está en un alta silenciosa, con
+    // el contenido de una pantalla que se abrió sobre un fichero que alguien borró a mano.
+    const raiz = base();
+    expect(renombrarAgente(raiz, "fantasma", propio("nuevo"))).toBe("sin-origen");
+    expect(existsSync(join(rutaDeAgentes(raiz), "nuevo.md"))).toBe(false);
+  });
+
+  it("un nombre nuevo inválido LANZA, y no toca el origen", () => {
+    // `segmentoSeguro`, la misma de `guardarAgente`: el nombre llega del cliente por HTTP y
+    // un `../../.env` compondría una ruta fuera de la carpeta. Se comprueba ANTES de mover.
+    const raiz = base();
+    guardarAgente(raiz, propio("advisor"));
+    expect(() => renombrarAgente(raiz, "advisor", propio("../fuera"))).toThrow();
+    expect(existsSync(join(rutaDeAgentes(raiz), "advisor.md"))).toBe(true);
+  });
+
+  it("el renombrado de un de serie no se impide AQUÍ: eso lo decide quien llama", () => {
+    // Esta función mueve un fichero. Que un de serie no se pueda renombrar es una regla del
+    // producto y vive en el servidor, junto a la de que no se borra — dos sitios donde
+    // decidir lo mismo es cómo uno de los dos se queda sin la regla.
+    const raiz = base();
+    sembrarAgentes(raiz);
+    expect(renombrarAgente(raiz, "docs", propio("mis-docs"))).toBe("hecho");
   });
 });
 

@@ -3411,6 +3411,98 @@ describe("los subagentes, por el cable", () => {
     await asentar();
     expect(dichos.join("\n")).toMatch(/no es uno de los de serie/);
   });
+
+  /**
+   * El renombrado, que por el cable es un `guardar` con `renombrandoDe`.
+   *
+   * `tipos.test.ts` no lo cubre —solo compara los literales `clase:`—, así que esta es la
+   * única red del campo nuevo: si se cae del mensaje, renombrar se vuelve un alta y deja los
+   * DOS ficheros, que es justo lo que el campo deshabilitado del formulario evitaba.
+   */
+  it("un `guardar` con `renombrandoDe` MUEVE el `.md`: no deja los dos", async () => {
+    const dir = carpeta();
+    if (dir === undefined) return;
+    const { accion, dichos } = await conectar();
+    writeFileSync(join(dir, "advisor.md"), "---\ndescripcion: el mío\n---\ncuerpo", "utf8");
+
+    await enviarMensaje(accion, {
+      clase: "agente",
+      accion: "guardar",
+      ambito: "global",
+      agente: { ...deSerie(), nombre: "segunda-opinion", descripcion: "revisada" },
+      renombrandoDe: "advisor",
+    });
+    await asentar();
+
+    expect(existsSync(join(dir, "advisor.md"))).toBe(false);
+    expect(readFileSync(join(dir, "segunda-opinion.md"), "utf8")).toContain("revisada");
+    expect(dichos.join("\n")).toMatch(/renombrado a/);
+  });
+
+  it("con el MISMO nombre no es un renombrado: se guarda y no falla contra sí mismo", async () => {
+    // Tratarlo de renombrado lo haría fallar por «destino ocupado» contra su propio fichero.
+    const dir = carpeta();
+    if (dir === undefined) return;
+    const { accion, dichos } = await conectar();
+    writeFileSync(join(dir, "advisor.md"), "---\ndescripcion: el mío\n---\ncuerpo", "utf8");
+
+    await enviarMensaje(accion, {
+      clase: "agente",
+      accion: "guardar",
+      ambito: "global",
+      agente: { ...deSerie(), nombre: "advisor", descripcion: "afinada" },
+      renombrandoDe: "advisor",
+    });
+    await asentar();
+
+    expect(readFileSync(join(dir, "advisor.md"), "utf8")).toContain("afinada");
+    expect(dichos.join("\n")).toMatch(/guardado en global/);
+  });
+
+  it("renombrar uno de serie se RECHAZA: su nombre lo ata a la semilla", async () => {
+    // Moverlo lo volvería un subagente del usuario y la siembra repondría el de serie al
+    // arrancar — dos especialistas donde había uno, y en silencio.
+    const dir = carpeta();
+    if (dir === undefined) return;
+    const { accion, dichos } = await conectar();
+
+    await enviarMensaje(accion, {
+      clase: "agente",
+      accion: "guardar",
+      ambito: "global",
+      agente: { ...deSerie(), nombre: "mis-docs" },
+      renombrandoDe: "docs",
+    });
+    await asentar();
+
+    expect(existsSync(join(dir, "docs.md"))).toBe(true);
+    expect(existsSync(join(dir, "mis-docs.md"))).toBe(false);
+    expect(dichos.join("\n")).toMatch(/no se cambia/);
+  });
+
+  it("un destino OCUPADO no se pisa, y se dice cuál es el arreglo", async () => {
+    // Sin esta guarda, renombrar `advisor` a `docs` se llevaba por delante el `docs.md`
+    // sembrado sin decir nada. Y los tres desenlaces se dicen distintos: «ya existe» y «ya no
+    // estaba» se arreglan de formas distintas.
+    const dir = carpeta();
+    if (dir === undefined) return;
+    const { accion, dichos } = await conectar();
+    writeFileSync(join(dir, "advisor.md"), "---\ndescripcion: el mío\n---\ncuerpo", "utf8");
+    const docsAntes = readFileSync(join(dir, "docs.md"), "utf8");
+
+    await enviarMensaje(accion, {
+      clase: "agente",
+      accion: "guardar",
+      ambito: "global",
+      agente: { ...deSerie(), nombre: "docs", descripcion: "el mío" },
+      renombrandoDe: "advisor",
+    });
+    await asentar();
+
+    expect(readFileSync(join(dir, "docs.md"), "utf8")).toBe(docsAntes);
+    expect(existsSync(join(dir, "advisor.md"))).toBe(true);
+    expect(dichos.join("\n")).toMatch(/ya hay un subagente/);
+  });
 });
 
 describe("arrancarConsolaWeb — las comprobaciones, en orden", () => {

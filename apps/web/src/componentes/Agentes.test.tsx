@@ -250,13 +250,98 @@ describe("Agentes", () => {
     expect(alBorrar).toHaveBeenCalledWith("revisor", "global");
   });
 
-  it("al editar, el nombre no se cambia: el nombre ES el fichero", () => {
-    // Renombrarlo desde aquí crearía uno nuevo y dejaría el viejo puesto, que es la peor de
-    // las dos cosas que el usuario podría querer.
-    render(<Agentes {...manejadores} agentes={[REVISOR]} />);
+  it("el nombre de uno TUYO se cambia; el de un de serie no, y se dice por qué", () => {
+    // Estuvo deshabilitado siempre, con el argumento de que renombrarlo crearía uno nuevo y
+    // dejaría el viejo puesto: cierto de la implementación de entonces, no del renombrado —
+    // el servidor MUEVE el `.md`. Lo que no cambia es el de un de serie: su nombre es lo que
+    // lo ata a la marca de la siembra, que guarda el hash POR NOMBRE.
+    render(<Agentes {...manejadores} agentes={[DOCS, REVISOR]} />);
+    fireEvent.click(screen.getByRole("button", { name: "Editar docs" }));
+    expect(screen.getByDisplayValue("docs")).toHaveProperty("disabled", true);
+    // Y el motivo va en el rótulo: un campo apagado sin explicación se lee como un fallo.
+    expect(screen.getByText(/no se cambia: lo trae xonecode/)).not.toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Cancelar" }));
+
     irA("Tuyos");
     fireEvent.click(screen.getByRole("button", { name: "Editar revisor" }));
-    expect(screen.getByDisplayValue("revisor")).toHaveProperty("disabled", true);
+    expect(screen.getByDisplayValue("revisor")).toHaveProperty("disabled", false);
+    expect(screen.queryByText(/lo trae xonecode/)).toBeNull();
+  });
+
+  it("renombrar manda el nombre de ANTES; guardar sin tocarlo NO lo manda", () => {
+    // Es lo único que distingue un renombrado de un guardado, y el servidor no tiene otra
+    // forma de saberlo: la lista que tiene delante ya no lleva el nombre viejo.
+    const alGuardar = vi.fn();
+    render(<Agentes {...manejadores} alGuardar={alGuardar} agentes={[REVISOR]} />);
+    irA("Tuyos");
+
+    fireEvent.click(screen.getByRole("button", { name: "Editar revisor" }));
+    fireEvent.click(screen.getByRole("button", { name: "Guardar" }));
+    expect(alGuardar).toHaveBeenCalledWith(expect.objectContaining({ nombre: "revisor" }), "global", undefined);
+
+    fireEvent.click(screen.getByRole("button", { name: "Editar revisor" }));
+    fireEvent.change(screen.getByDisplayValue("revisor"), { target: { value: "segunda-opinion" } });
+    fireEvent.click(screen.getByRole("button", { name: "Guardar" }));
+    expect(alGuardar).toHaveBeenLastCalledWith(
+      expect.objectContaining({ nombre: "segunda-opinion" }),
+      "global",
+      "revisor"
+    );
+  });
+
+  /**
+   * Un nombre ocupado se EXPLICA en el cliente, porque la negativa del servidor no llega.
+   *
+   * `informar` escribe en el terminal y en la consola del proyecto abierto, y esta ventana se
+   * abre desde el vestíbulo: sin esto, renombrar a un nombre ocupado cerraba el formulario y
+   * no pasaba nada. La barrera sigue estando en el servidor (`renombrarAgente` no pisa un
+   * destino que exista); esto es lo que convierte un rechazo mudo en una frase.
+   */
+  it("un nombre YA OCUPADO apaga «Guardar» y dice por qué", () => {
+    render(<Agentes {...manejadores} agentes={[DOCS, REVISOR]} />);
+    irA("Tuyos");
+    fireEvent.click(screen.getByRole("button", { name: "Editar revisor" }));
+    fireEvent.change(screen.getByLabelText(/^Nombre/), { target: { value: "docs" } });
+
+    expect(screen.getByText(/Ya hay un subagente que se llama/)).not.toBeNull();
+    expect(screen.getByRole("button", { name: "Guardar" })).toHaveProperty("disabled", true);
+  });
+
+  it("su PROPIO nombre no cuenta como ocupado: editar sin renombrar tiene que poder guardar", () => {
+    render(<Agentes {...manejadores} agentes={[DOCS, REVISOR]} />);
+    irA("Tuyos");
+    fireEvent.click(screen.getByRole("button", { name: "Editar revisor" }));
+    expect(screen.getByRole("button", { name: "Guardar" })).toHaveProperty("disabled", false);
+    expect(screen.queryByText(/Ya hay un subagente/)).toBeNull();
+  });
+
+  it("y al CREAR también, que ese agujero ya estaba: un `docs` nuevo pisaba el sembrado", () => {
+    // `guardarAgente` escribe sin mirar, así que dar de alta uno llamado igual que un de
+    // serie se llevaba su `.md` por delante en silencio.
+    render(<Agentes {...manejadores} agentes={[DOCS]} />);
+    irA("Tuyos");
+    fireEvent.click(screen.getByRole("button", { name: "Nuevo subagente" }));
+    fireEvent.change(screen.getByLabelText(/^Nombre/), { target: { value: "docs" } });
+    fireEvent.change(screen.getByLabelText(/^Cuándo usarlo/), { target: { value: "el mío" } });
+
+    expect(screen.getByRole("button", { name: "Guardar" })).toHaveProperty("disabled", true);
+  });
+
+  it("al CREAR no se manda nombre de antes: no hay nada de lo que renombrar", () => {
+    // El estado del formulario se reusa entre editar y crear, así que sin limpiarlo un alta
+    // después de editar mandaría un renombrado del agente anterior — y el servidor movería
+    // un fichero que nadie pidió mover.
+    const alGuardar = vi.fn();
+    render(<Agentes {...manejadores} alGuardar={alGuardar} agentes={[REVISOR]} />);
+    irA("Tuyos");
+    fireEvent.click(screen.getByRole("button", { name: "Editar revisor" }));
+    fireEvent.click(screen.getByRole("button", { name: "Cancelar" }));
+
+    fireEvent.click(screen.getByRole("button", { name: "Nuevo subagente" }));
+    fireEvent.change(screen.getByLabelText(/^Nombre/), { target: { value: "otro" } });
+    fireEvent.change(screen.getByLabelText(/^Cuándo usarlo/), { target: { value: "para otra cosa" } });
+    fireEvent.click(screen.getByRole("button", { name: "Guardar" }));
+    expect(alGuardar).toHaveBeenCalledWith(expect.objectContaining({ nombre: "otro" }), "global", undefined);
   });
 
   it("guardar manda el ámbito del que ya estaba, no el que hubiera por defecto", () => {
@@ -270,7 +355,12 @@ describe("Agentes", () => {
     irA("Tuyos");
     fireEvent.click(screen.getByRole("button", { name: "Editar revisor" }));
     fireEvent.click(screen.getByRole("button", { name: "Guardar" }));
-    expect(alGuardar).toHaveBeenCalledWith(expect.objectContaining({ nombre: "revisor" }), "proyecto");
+    // El tercer argumento es el nombre de ANTES, y aquí va AUSENTE: no se ha renombrado.
+    expect(alGuardar).toHaveBeenCalledWith(
+      expect.objectContaining({ nombre: "revisor" }),
+      "proyecto",
+      undefined
+    );
   });
 });
 

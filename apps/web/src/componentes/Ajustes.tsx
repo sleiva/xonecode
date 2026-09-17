@@ -294,7 +294,7 @@ export function Ajustes({
   agentes?: { lista: readonly AgenteDelCable[]; problemas: readonly string[] };
   /** Si hay proyecto abierto, para poder ofrecer el ámbito «de este proyecto». */
   hayProyecto: boolean;
-  alGuardarAgente: (agente: AgenteDelCable, ambito: "global" | "proyecto") => void;
+  alGuardarAgente: (agente: AgenteDelCable, ambito: "global" | "proyecto", renombrandoDe?: string) => void;
   alBorrarAgente: (nombre: string, ambito: "global" | "proyecto") => void;
   /** Devuelve un subagente de serie a como lo entrega xonecode. Sin ámbito: solo el global. */
   alRestaurarAgente: (nombre: string) => void;

@@ -203,6 +203,18 @@ Un subagente es un `.md` con frontmatter en `.xonecode/agentes/<nombre>.md`
   `problemas`, que pintaba en rojo y con `role="alert"` un agente que está perfectamente: lo dice
   su tarjeta, con la consecuencia (las mejoras que publiquemos ya no le llegan) y con el botón que
   lo arregla al lado. `problemas` vuelve a significar solo «este fichero no carga».
+- **Y RENOMBRAR es solo para los tuyos** (`renombrarAgente`, `renombrandoDe` en el mensaje
+  `guardar`): el nombre de un de serie es lo que lo ata a la marca, que guarda el hash POR
+  NOMBRE, así que moverlo lo vuelve un subagente del usuario y la siembra repone el de serie —
+  dos especialistas donde había uno. Tres cosas que no son de forma: **`renameSync` y LUEGO
+  escribir**, nunca escribir y luego borrar, porque un fallo entre los dos pasos deja UN fichero
+  y no dos con el mismo prompt; **un destino que existe es un NO** —sea de serie o del usuario,
+  que es el motivo honesto y cubre los dos—; y **la negativa se EXPLICA en el cliente** porque
+  `informar` no llega al navegador desde el vestíbulo (escribe en el terminal y en la consola del
+  proyecto abierto, y ahí no hay ninguno), así que la barrera sigue en el servidor y lo que el
+  cliente aporta es la frase. Eso cierra también el agujero del ALTA: `guardarAgente` escribe sin
+  mirar, así que crear uno llamado `docs` pisaba el sembrado en silencio — hoy se avisa, pero el
+  servidor no lo corta, porque un `guardar` no dice si es un alta o una edición.
 - **El prompt del orquestador se GENERA** de la lista (`xoneAgent.ts#promptOrquestador`).
 - Un `.md` roto se salta y su motivo viaja por el cable hasta la ventana de Ajustes.
 - **La línea de una delegación dice a QUIÉN** (`task` → `subagent_type`, en la lista blanca de

@@ -17,7 +17,7 @@
  */
 
 import { createHash } from "node:crypto";
-import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import {
@@ -191,6 +191,43 @@ export function restaurarAgente(base: string, nombre: string): boolean {
   mkdirSync(carpeta, { recursive: true });
   writeFileSync(join(carpeta, `${agente.nombre}.md`), escribirAgente(agente), "utf8");
   return true;
+}
+
+/** Los tres desenlaces de un renombrado. Tres situaciones distintas, tres valores. */
+export type Renombrado = "hecho" | "sin-origen" | "destino-ocupado";
+
+/**
+ * Renombra un subagente, escribiendo a la vez lo que se haya cambiado de él.
+ *
+ * **`renameSync` y LUEGO escribir**, nunca escribir y luego borrar: un fallo entre los dos
+ * pasos deja UN fichero —el renombrado, con el contenido de antes—, nunca dos con el mismo
+ * prompt ni cero. Al revés, una excepción entre el `write` y el `rm` deja los DOS, que es
+ * justo lo que el campo deshabilitado del formulario evitaba: dos subagentes con la misma
+ * descripción y ninguna forma de saber a cuál delega el orquestador.
+ *
+ * Las dos cosas en el mismo paso porque el formulario permite cambiar el nombre Y el resto en
+ * la misma pulsación; guardar solo una dejaría la pantalla mintiendo.
+ *
+ * **El destino ocupado es un NO**, sea de serie o del usuario: sin esta guarda, renombrar
+ * `advisor` a `docs` se llevaba por delante el `docs.md` sembrado —o el otro subagente— sin
+ * decir nada. Un caso especial para los de serie diría un motivo menos cierto.
+ *
+ * Que un de serie NO se pueda renombrar no se decide aquí: esto mueve un fichero, y la regla
+ * del producto vive donde ya vive la de que no se borra (`arranque.ts#atenderAgente`). Dos
+ * sitios donde decidir lo mismo es cómo uno de los dos se queda sin la regla.
+ */
+export function renombrarAgente(base: string, viejo: string, agente: Agente): Renombrado {
+  // Antes de mover nada: el nombre viene del cliente por HTTP, y `segmentoSeguro` LANZA en
+  // vez de limpiarlo — limpiarlo guardaría el agente con un nombre que nadie pidió.
+  const seguro = segmentoSeguro(agente.nombre, "nombre de agente");
+  const carpeta = rutaDeAgentes(base);
+  const origen = join(carpeta, `${segmentoSeguro(viejo, "nombre de agente")}.md`);
+  const destino = join(carpeta, `${seguro}.md`);
+  if (!existsSync(origen)) return "sin-origen";
+  if (existsSync(destino)) return "destino-ocupado";
+  renameSync(origen, destino);
+  writeFileSync(destino, escribirAgente({ ...agente, nombre: seguro }), "utf8");
+  return "hecho";
 }
 
 /** Borra uno. Devuelve si existía: la interfaz no puede decir «borrado» de algo que no estaba. */

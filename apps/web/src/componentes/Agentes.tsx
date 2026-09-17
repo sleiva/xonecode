@@ -180,7 +180,12 @@ export function Agentes({
   problemas?: readonly string[];
   /** Si hay proyecto abierto: decide si se puede ofrecer el ámbito «de este proyecto». */
   hayProyecto: boolean;
-  alGuardar: (agente: AgenteDelCable, ambito: "global" | "proyecto") => void;
+  /**
+   * Guardar. `renombrandoDe` va puesto cuando el nombre ha cambiado —solo puede pasar en uno
+   * tuyo— y ausente cuando no: renombrar ES guardar, porque el formulario cambia el nombre y
+   * el resto en la misma pulsación.
+   */
+  alGuardar: (agente: AgenteDelCable, ambito: "global" | "proyecto", renombrandoDe?: string) => void;
   alBorrar: (nombre: string, ambito: "global" | "proyecto") => void;
   /**
    * Devuelve un de serie a como lo entrega xonecode. Sin ámbito: la siembra solo escribe en
@@ -214,6 +219,14 @@ export function Agentes({
    */
   const [abierta, setAbierta] = useState<{ nombre: string; que: "borrar" | "restaurar" } | undefined>(undefined);
   const [pestana, setPestana] = useState<Grupo>("serie");
+  /**
+   * Con qué nombre se abrió el formulario, para saber si se ha renombrado.
+   *
+   * No se puede deducir de `editando`, que es la copia que el usuario está tecleando, ni de
+   * la lista, que ya no tiene el nombre nuevo. Ausente al crear: ahí no hay nada de lo que
+   * renombrar.
+   */
+  const [nombreOriginal, setNombreOriginal] = useState<string | undefined>(undefined);
 
   /**
    * Los proveedores COMPROBADOS, la misma regla que la pastilla del compositor: con clave
@@ -262,9 +275,32 @@ export function Agentes({
     propios: (agentes ?? []).filter((a) => a.semilla === undefined),
   };
 
+  /**
+   * ¿El nombre que se está tecleando ya lo tiene otro?
+   *
+   * Existe porque la negativa del servidor NO llega al navegador: `informar` escribe en el
+   * terminal y en la consola del proyecto abierto, y la ventana de ajustes se abre desde el
+   * vestíbulo, donde no hay ninguno. Sin esto, renombrar a un nombre ocupado cerraba el
+   * formulario y no pasaba nada — el botón muerto de siempre, y encima sobre un destino que
+   * el usuario creería pisado.
+   *
+   * Es una EXPLICACIÓN, no la barrera: la barrera sigue siendo `renombrarAgente`, que no pisa
+   * un destino que exista. Y por eso se mide contra la lista EN VIGOR, que es lo que el
+   * cliente tiene: una colisión en la otra carpeta no se ve desde aquí y la corta el servidor.
+   *
+   * Cubre también el alta, donde el agujero ya estaba: crear uno llamado `docs` en el global
+   * escribía encima del `docs.md` sembrado sin decir nada.
+   */
+  const ocupado =
+    editando !== undefined &&
+    editando.nombre.trim() !== "" &&
+    editando.nombre !== nombreOriginal &&
+    (agentes ?? []).some((a) => a.nombre === editando.nombre.trim());
+
   /** Abrir el formulario en blanco. Uno solo: lo llaman los dos sitios donde sale el botón. */
   const nuevo = (): void => {
     setAbierta(undefined);
+    setNombreOriginal(undefined);
     setEditando(enBlanco());
     setCreando(true);
     setAmbito(hayProyecto ? "proyecto" : "global");
@@ -277,7 +313,12 @@ export function Agentes({
 
   const guardar = (): void => {
     if (editando === undefined) return;
-    alGuardar(editando, ambito);
+    // Ausente cuando no ha cambiado, y no `nombreOriginal` a secas: el servidor ya lo
+    // compara, pero mandar un renombrado que no lo es haría que un guardado normal dependiera
+    // de esa comparación en vez de decir lo que es.
+    const renombrandoDe =
+      nombreOriginal !== undefined && nombreOriginal !== editando.nombre ? nombreOriginal : undefined;
+    alGuardar(editando, ambito, renombrandoDe);
     cerrar();
   };
 
@@ -382,6 +423,7 @@ export function Agentes({
                     alEditar={() => {
                       setAbierta(undefined);
                       setAmbito(a.origen === "proyecto" ? "proyecto" : "global");
+                      setNombreOriginal(a.nombre);
                       setEditando({ ...a });
                       setCreando(false);
                     }}
@@ -400,13 +442,27 @@ export function Agentes({
 
       {editando === undefined ? null : (
         <div className={estilos.formulario}>
+          {/*
+            El nombre SE CAMBIA, y solo en uno tuyo.
+            Estaba deshabilitado siempre, con el argumento de que renombrarlo crearía uno
+            nuevo y dejaría el viejo puesto — cierto de la implementación de entonces, no del
+            renombrado: ahora el servidor MUEVE el `.md` (`renombrarAgente`, `renameSync` y
+            luego escribir), así que nunca quedan dos.
+            Un de serie sigue sin poder: su nombre es lo que lo ata a la marca de la siembra,
+            que guarda el hash POR NOMBRE, así que moverlo lo volvería un subagente tuyo y el
+            de serie se sembraría otra vez al arrancar — dos especialistas donde había uno. Y
+            eso se DICE en el rótulo: un campo apagado sin motivo se lee como un fallo.
+          */}
           <label className={estilos.campo}>
-            <span className={estilos.rotulo}>Nombre</span>
-            {/* Al editar no se cambia: el nombre ES el fichero, así que renombrarlo desde
-                aquí crearía uno nuevo y dejaría el viejo puesto. Se renombra el `.md`. */}
+            <span className={estilos.rotulo}>
+              Nombre
+              {editando.semilla === undefined ? null : (
+                <span className={estilos.pista}> — no se cambia: lo trae xonecode</span>
+              )}
+            </span>
             <Input
               value={editando.nombre}
-              disabled={!creando}
+              disabled={!creando && editando.semilla !== undefined}
               onChange={(e) => setEditando({ ...editando, nombre: e.target.value })}
             />
           </label>
@@ -577,6 +633,15 @@ export function Agentes({
             <p className={estilos.pista}>Se guarda como global: no hay ningún proyecto abierto.</p>
           )}
 
+          {/* Y se dice ARRIBA de los botones, no en un `title`: es el motivo de que «Guardar»
+              esté apagado, y un botón apagado sin motivo a la vista se lee como un fallo. */}
+          {ocupado ? (
+            <p className={estilos.aviso}>
+              Ya hay un subagente que se llama «{editando.nombre.trim()}». Elige otro nombre, o
+              borra ese primero.
+            </p>
+          ) : null}
+
           <div className={estilos.botones}>
             <Button variant="outline" className={estilos.accion} onClick={cerrar}>
               Cancelar
@@ -593,7 +658,7 @@ export function Agentes({
               className={estilos.principal}
               // Sin nombre ni descripción el servidor lo rechazaría: es más honesto no
               // dejar pulsar que aceptar y contestar que no.
-              disabled={editando.nombre.trim() === "" || editando.descripcion.trim() === ""}
+              disabled={ocupado || editando.nombre.trim() === "" || editando.descripcion.trim() === ""}
               onClick={guardar}
             >
               Guardar

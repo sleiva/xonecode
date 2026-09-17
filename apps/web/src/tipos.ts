@@ -765,6 +765,8 @@ export type MensajeDelCliente =
       accion: "guardar" | "borrar" | "restaurar";
       ambito: "global" | "proyecto";
       agente: AgenteDelCable;
+      /** El nombre de ANTES, solo en un renombrado. Ausente = no cambia. Ver el host. */
+      renombrandoDe?: string;
     }
   /** Parar el turno en vuelo, dejando la sesión viva. */
   | { clase: "cancelar" }

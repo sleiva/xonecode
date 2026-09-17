@@ -1016,8 +1016,16 @@ export function App({
       // Si hay proyecto abierto: decide si la ventana puede ofrecer guardar el subagente
       // «en este proyecto». Sin uno, ese ámbito no existe y no se pregunta.
       hayProyecto={proyectoAbierto}
-      alGuardarAgente={(agente, ambito) =>
-        void enviar({ clase: "agente", accion: "guardar", ambito, agente })
+      alGuardarAgente={(agente, ambito, renombrandoDe) =>
+        void enviar({
+          clase: "agente",
+          accion: "guardar",
+          ambito,
+          agente,
+          // Ausente cuando el nombre no ha cambiado: eso es lo que distingue un guardado de
+          // un renombrado, y el servidor no tiene otra forma de saberlo.
+          ...(renombrandoDe === undefined ? {} : { renombrandoDe }),
+        })
       }
       alRestaurarAgente={(nombre) =>
         void enviar({

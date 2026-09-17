@@ -1172,6 +1172,16 @@ export type MensajeDelCliente =
       accion: "guardar" | "borrar" | "restaurar";
       ambito: "global" | "proyecto";
       agente: AgenteDelCable;
+      /**
+       * El nombre de ANTES, solo en un renombrado. Ausente = el nombre no cambia, que es lo
+       * que manda un alta y una edición normal.
+       *
+       * Va en el `guardar` y no en una cuarta acción porque renombrar ES guardar: el
+       * formulario permite cambiar el nombre y la descripción en la misma pulsación, y dos
+       * mensajes serían dos escrituras que pueden quedarse a medias. Lo decide el servidor
+       * comparándolo con `agente.nombre`: si son iguales, no hay renombrado.
+       */
+      renombrandoDe?: string;
     }
   /** Parar el turno en vuelo. Aborta el `stream` del grafo (`SesionReal.cancelar`) y deja
    *  la sesión viva: es parar ESTO, no cerrar la conversación. */

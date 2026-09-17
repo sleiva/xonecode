@@ -42,6 +42,7 @@ import {
   cargarAgentes,
   esDeSerie,
   guardarAgente,
+  renombrarAgente,
   restaurarAgente,
 } from "../../agent/subagentes/agentesEnDisco.js";
 import { detectarDispositivos, frameworkEnDispositivo } from "../../agent/dispositivos/dispositivosEnMaquina.js";
@@ -945,6 +946,31 @@ export function montarRutas(
       );
       return;
     }
+    /**
+     * Un renombrado de verdad: `renombrandoDe` puesto y DISTINTO del nombre nuevo. Con el
+     * mismo nombre es un guardado normal, y tratarlo de renombrado lo haría fallar por
+     * «destino ocupado» contra sí mismo.
+     */
+    const renombrandoDe =
+      mensaje.accion === "guardar" &&
+      mensaje.renombrandoDe !== undefined &&
+      mensaje.renombrandoDe !== mensaje.agente.nombre
+        ? mensaje.renombrandoDe
+        : undefined;
+    /**
+     * Y un de serie tampoco se RENOMBRA, por lo mismo que no se borra: su nombre es lo que lo
+     * ata a la marca de la siembra (`.semilla.json` guarda el hash POR NOMBRE), así que
+     * moverlo lo convierte en un subagente del usuario y hace que el de serie vuelva a
+     * sembrarse al arrancar — dos especialistas donde había uno. La regla vive aquí y no en
+     * `renombrarAgente`, que mueve un fichero: dos sitios donde decidir lo mismo es cómo uno
+     * de los dos se queda sin la regla.
+     */
+    if (renombrandoDe !== undefined && mensaje.ambito === "global" && esDeSerie(renombrandoDe)) {
+      informar(
+        `«${renombrandoDe}» lo trae xonecode y su nombre no se cambia: es lo que lo ata a la versión de serie`
+      );
+      return;
+    }
     if (mensaje.ambito === "proyecto" && abierto === undefined) {
       informar("no hay ningún proyecto abierto: ese subagente solo se puede guardar como global");
       return;
@@ -972,8 +998,22 @@ export function montarRutas(
           informar(`no se guarda «${candidato.nombre}»: ${comprobado.error}`);
           return;
         }
-        guardarAgente(base, candidato);
-        informar(`subagente «${candidato.nombre}» guardado en ${mensaje.ambito}`);
+        if (renombrandoDe === undefined) {
+          guardarAgente(base, candidato);
+          informar(`subagente «${candidato.nombre}» guardado en ${mensaje.ambito}`);
+        } else {
+          // Los tres desenlaces se dicen distintos: el destino ocupado y el origen que ya no
+          // está son dos situaciones que el usuario arregla de formas distintas, y un «no se
+          // pudo» para las dos le haría probar la equivocada.
+          const como = renombrarAgente(base, renombrandoDe, candidato);
+          informar(
+            como === "hecho"
+              ? `subagente «${renombrandoDe}» renombrado a «${candidato.nombre}»`
+              : como === "sin-origen"
+                ? `«${renombrandoDe}» ya no existía en ${mensaje.ambito}: no se ha renombrado`
+                : `ya hay un subagente «${candidato.nombre}» en ${mensaje.ambito}: elige otro nombre, o bórralo primero`
+          );
+        }
       }
     } catch (error) {
       informar(error instanceof Error ? error.message : String(error));
