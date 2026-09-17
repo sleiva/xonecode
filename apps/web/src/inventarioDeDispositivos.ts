@@ -6,8 +6,14 @@
  */
 import type { Dispositivo, InformeDeDispositivos } from "./tipos.js";
 
-/** Las mismas palabras que el panel «Tu equipo»: dos vocabularios para un estado divergen. */
-export const ETIQUETA_DE_ESTADO: Record<Dispositivo["estado"], string> = {
+/**
+ * Las palabras de cada estado. **Una sola tabla para toda la interfaz**: `Equipo.tsx` tenía su
+ * propia copia idéntica, justo lo que el comentario de antes decía que había que evitar.
+ *
+ * No se consume directamente: lo que se pinta sale de `etiquetaDeEstado`, que además sabe si
+ * lo que tiene delante es un emulador.
+ */
+const PALABRAS: Record<Dispositivo["estado"], string> = {
   conectado: "conectado",
   arrancado: "arrancado",
   apagado: "apagado",
@@ -15,6 +21,23 @@ export const ETIQUETA_DE_ESTADO: Record<Dispositivo["estado"], string> = {
   offline: "offline",
   "no-disponible": "no disponible",
 };
+
+/**
+ * Cómo se DICE el estado de un dispositivo.
+ *
+ * `adb devices` contesta `device` para un emulador y de ahí salía «conectado», mientras que un
+ * simulador de iOS salía «arrancado»: la misma palabra partida en dos para el mismo hecho, y
+ * encima la que menos encaja — un emulador no se conecta, se arranca; conectar es lo que se
+ * hace con un cable. Con `clase` delante la fila puede decir la palabra que le toca.
+ *
+ * Se decide aquí y no en el host a propósito: el ESTADO es un dato medido y los dos nombres son
+ * ciertos (`core/dispositivos.ts` lo documenta), mientras que cuál de los dos se lee es cosa de
+ * la piel. Cambiarlo en el parser reescribiría una medida para arreglar una palabra.
+ */
+export function etiquetaDeEstado(d: Pick<Dispositivo, "estado" | "clase">): string {
+  if (d.estado === "conectado" && d.clase !== "fisico") return PALABRAS.arrancado;
+  return PALABRAS[d.estado];
+}
 
 /**
  * **Se LLEGA al dispositivo**, que es el único hecho que importa para pintarlo en verde.

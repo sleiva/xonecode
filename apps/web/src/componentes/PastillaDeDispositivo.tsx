@@ -1,7 +1,7 @@
 import { useCallback, useRef, useState } from "react";
 import { useCerrarAlPulsarFuera } from "../cerrarAlPulsarFuera.js";
 import type { DispositivoElegido, InformeDeDispositivos } from "../tipos.js";
-import { ETIQUETA_DE_ESTADO, inventario } from "../inventarioDeDispositivos.js";
+import { etiquetaDeEstado, inventario } from "../inventarioDeDispositivos.js";
 import estilos from "./PastillaDeModelo.module.css";
 
 /**
@@ -95,7 +95,7 @@ export function PastillaDeDispositivo({
               : {})}
             onClick={() => elegir(d.id)}
           >
-            {d.nombre} · {d.plataforma === "ios" ? "iOS" : "Android"} · {ETIQUETA_DE_ESTADO[d.estado]}
+            {d.nombre} · {d.plataforma === "ios" ? "iOS" : "Android"} · {etiquetaDeEstado(d)}
           </button>
         ))}
       </div>

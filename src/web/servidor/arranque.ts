@@ -66,6 +66,7 @@ import type { Dispositivo, InformeDeDispositivos } from "../../core/dispositivos
 import { PLATAFORMAS_DE_DISPOSITIVO, type AjustesDeDispositivos } from "../../core/settings.js";
 import type { NombreDeHerramienta } from "../../core/dispositivos.js";
 import { instalarHerramientaDeDispositivos, verificarDispositivo } from "../../agent/dispositivos/dispositivosEnMaquina.js";
+import { arrancarEmulador } from "../../agent/dispositivos/arranqueDeEmulador.js";
 import { correrPasoDeReceta } from "../../agent/dispositivos/instalacionEnMaquina.js";
 import { modelosDeMotor } from "../../agent/config/modelosDeMotor.js";
 import {
@@ -395,6 +396,12 @@ export interface OpcionesDeMontaje {
    * = esta ejecución no verifica nada y el botón no se pinta.
    */
   verificarDispositivo?: (dispositivo: Dispositivo) => Promise<{ ok: boolean; detalle: string }>;
+  /**
+   * Arranca un AVD y espera a que el aparato aparezca
+   * (`agent/dispositivos/arranqueDeEmulador.ts`). **Ausente = esta ejecución no puede**, y
+   * entonces se dice en vez de pintar un botón muerto. Promete no lanzar.
+   */
+  arrancarEmulador?: (avd: string) => Promise<{ ok: boolean; detalle: string }>;
   /**
    * Qué se midió del framework de XOne en un dispositivo (`agent/dispositivos/dispositivosEnMaquina.ts`).
    * Lanza adb, así que entra por opción.
@@ -1482,6 +1489,13 @@ export function montarRutas(
   /** Los ajustes de destino, o `{}` —que es «se miran todos»— si esta ejecución no los lee. */
   const ajustesDeDispositivos = (): AjustesDeDispositivos => opciones.ajustesDeDispositivos?.() ?? {};
   let deteccionEnVuelo: Promise<void> | undefined;
+  /**
+   * Cómo acabó el último «Arrancar». Viaja con la foto porque el resultado de arrancar ES la
+   * foto: `emulator` devuelve el control enseguida y lo que importa es si el aparato apareció.
+   * Se limpia al pedir una medida sin arranque de por medio, para no repetir un acuse viejo.
+   */
+  let ultimoArranque: { avd: string; ok: boolean; detalle: string } | undefined;
+
   const atenderDispositivos = (): Promise<void> => {
     if (opciones.detectarDispositivos === undefined) return Promise.resolve();
     if (deteccionEnVuelo !== undefined) return deteccionEnVuelo;
@@ -1489,7 +1503,12 @@ export function montarRutas(
     deteccionEnVuelo = (async () => {
       try {
         informeDeDispositivos = sinRutas(await detectar());
-        emitir({ clase: "dispositivos", informe: informeDeDispositivos, ajustes: ajustesDeDispositivos() });
+        emitir({
+          clase: "dispositivos",
+          informe: informeDeDispositivos,
+          ajustes: ajustesDeDispositivos(),
+          ...(ultimoArranque === undefined ? {} : { arranque: ultimoArranque }),
+        });
       } catch (error) {
         // El detector reparte los fallos por herramienta y no lanza por ninguno; que
         // reviente entero es un bug suyo. Aquí solo se cuenta en el terminal: el escritorio
@@ -1501,6 +1520,54 @@ export function montarRutas(
       }
     })();
     return deteccionEnVuelo;
+  };
+
+  /**
+   * **Arrancar un AVD, y contarlo con la foto de después.**
+   *
+   * Tres guardas, en este orden:
+   *
+   * 1. **Que esta ejecución pueda.** Sin el puerto no hay arranque y se DICE: un botón que
+   *    llega a un servidor que no sabe arrancar nada es el control muerto de siempre.
+   * 2. **Que ese AVD esté en NUESTRA última medida.** El nombre llega por el cable y acaba
+   *    siendo un argumento de proceso; la lista de AVDs es lo único que lo autoriza. Sin
+   *    medida todavía no se arranca nada — no hay con qué comprobarlo.
+   * 3. **Uno a la vez.** Dos arranques del mismo AVD a la vez son dos emuladores peleándose
+   *    por el mismo puerto, y de otro AVD sería trabajo pesado en paralelo en la máquina de
+   *    quien mira. Se reenvía el estado, que es lo que hace la receta.
+   *
+   * Al acabar se vuelve a medir SIEMPRE, salga bien o mal: la foto es la que dice si arrancó.
+   */
+  let arranqueEnVuelo: string | undefined;
+  const atenderArranqueDeEmulador = async (avd: string): Promise<void> => {
+    const arrancar = opciones.arrancarEmulador;
+    if (arrancar === undefined) {
+      informar("esta ejecución no puede arrancar emuladores");
+      return;
+    }
+    if (arranqueEnVuelo !== undefined) {
+      informar(`ya estoy arrancando ${arranqueEnVuelo}`);
+      return;
+    }
+    if (informeDeDispositivos === undefined || !informeDeDispositivos.avds.includes(avd)) {
+      ultimoArranque = { avd, ok: false, detalle: `no consta ningún AVD llamado «${avd}» en la última medida` };
+      await atenderDispositivos().catch(contar);
+      return;
+    }
+    arranqueEnVuelo = avd;
+    try {
+      const r = await arrancar(avd);
+      ultimoArranque = { avd, ...r };
+    } catch (error) {
+      // El puerto promete no lanzar; si lanzara, el botón no puede quedarse mudo.
+      ultimoArranque = { avd, ok: false, detalle: error instanceof Error ? error.message : String(error) };
+      contar(error);
+    } finally {
+      arranqueEnVuelo = undefined;
+      // La medida nueva, pase lo que pase: es la que dice la verdad.
+      informeDeDispositivos = undefined;
+      await atenderDispositivos().catch(contar);
+    }
   };
 
   /**
@@ -3319,6 +3386,19 @@ export function montarRutas(
       respuesta.end();
       return;
     }
+    if (
+      typeof mensaje === "object" &&
+      mensaje !== null &&
+      mensaje.clase === "arrancarEmulador" &&
+      typeof mensaje.avd === "string"
+    ) {
+      // Se contesta ya: arrancar tarda lo que tarda un emulador y la respuesta del POST no es
+      // el sitio donde se cuenta — eso viaja por el SSE con la foto nueva.
+      void atenderArranqueDeEmulador(mensaje.avd).catch(contar);
+      respuesta.writeHead(204);
+      respuesta.end();
+      return;
+    }
     /**
      * ANTES del `recibir` de la consola, y también antes que las demás clases de tarea: por
      * aquí no entra nada hacia ningún turno. Ver `atenderMirar`.
@@ -4375,6 +4455,11 @@ export async function arrancarConsolaWeb(opciones: OpcionesDeArranque): Promise<
     guardarAjustesDeDispositivos: (ajustes) => void guardarDispositivos(undefined, ajustes),
     instalarHerramienta: instalarHerramientaDeDispositivos,
     verificarDispositivo,
+    // Con la función REAL, y no declarada y sin pasar: es la trampa que este repo ha pagado
+    // nueve veces, y la que el comentario de justo abajo describe para las cuatro del
+    // lanzamiento. `montarRutas` lo trata como ausente si falta, así que olvidarlo aquí
+    // dejaría el botón diciendo «esta ejecución no puede arrancar emuladores» con todo verde.
+    arrancarEmulador: (avd) => arrancarEmulador(avd),
     /**
      * Las cuatro de «¿se puede lanzar y lánzalo?», compuestas con las funciones REALES.
      *

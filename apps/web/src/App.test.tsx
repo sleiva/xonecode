@@ -185,6 +185,42 @@ describe("App: el secreto y el selector, que también colgaban", () => {
     await waitFor(() => expect(screen.queryByLabelText(/clave de anthropic/i)).toBeNull());
   });
 
+  /**
+   * **El cableado del botón de arrancar un emulador.**
+   *
+   * `alArrancarEmulador` es OPCIONAL en el tipo de `Ajustes`, así que si `App` no lo pasara
+   * todo compilaría y el botón no se pintaría nunca — la ventana diría que esta ejecución no
+   * puede arrancar emuladores, sin que nada se ponga rojo. Es la misma trampa que ya se pagó
+   * con `alPedirProyectosDeEntorno` justo debajo, y la décima vez de la lista.
+   *
+   * La fila del AVD apagado la inventa el inventario a partir de `informe.avds`, así que el
+   * fixture solo necesita eso: un AVD definido y ningún aparato.
+   */
+  it("el botón de arrancar un emulador manda su AVD por el cable", () => {
+    const { store, enviar } = montar();
+    act(() =>
+      store.aplicar({
+        clase: "dispositivos",
+        informe: {
+          sistema: "mac",
+          medido: "2026-09-17T11:00:00.000Z",
+          herramientas: [
+            { nombre: "adb", plataforma: "android", estado: "ok" },
+            { nombre: "emulator", plataforma: "android", estado: "ok" },
+          ],
+          dispositivos: [],
+          avds: ["pixel8"],
+          recetas: [],
+        },
+        ajustes: {},
+      })
+    );
+    fireEvent.click(screen.getAllByRole("button", { name: "Ajustes" })[0]!);
+    fireEvent.click(screen.getByRole("button", { name: "Dispositivos" }));
+    fireEvent.click(screen.getByRole("button", { name: "Arrancar" }));
+    expect(enviar).toHaveBeenCalledWith({ clase: "arrancarEmulador", avd: "pixel8" });
+  });
+
   it("abrir la pestaña de otro entorno pide SUS proyectos por el cable", async () => {
     /*
       El CABLEADO, que es lo que ningún test de componente ve: `Ajustes.tsx` ya está probado

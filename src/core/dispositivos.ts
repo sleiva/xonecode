@@ -372,8 +372,9 @@ export function recetaDeEmuladorAndroid(plataforma: string, estado: EstadoDeAndr
     // Arrancar un emulador es un proceso de vida larga y otra capacidad; hoy no está
     // cableado, así que se da el comando en vez de prometer un botón.
     despues:
-      "Para arrancarlo: `emulator -avd pixel8`. Con él abierto, `adb devices` lista " +
-      "`emulator-5554` y aparecerá aquí. Arrancarlo desde esta ventana todavía no está cableado.",
+      "Con el AVD creado aparece abajo, en «Simuladores y emuladores», con su botón de " +
+      "**Arrancar**: se lanza desde aquí y la fila se pone en verde cuando el aparato " +
+      "responde. A mano sería `emulator -avd pixel8`, que es lo mismo que hace ese botón.",
   };
 }
 
@@ -583,7 +584,10 @@ export function nombreDeAvdDeConsola(texto: string): string | undefined {
   for (const linea of texto.split(/\r?\n/)) {
     const l = linea.trim();
     if (l === "" || l === "OK" || /^(KO|error)\b/i.test(l)) continue;
-    return /^[A-Za-z0-9._-]+$/.test(l) ? l : undefined;
+    // Misma clase que acepta el arranque (`agent/dispositivos/arranqueDeEmulador.ts`), guion
+    // inicial incluido: ahí un nombre que empiece por `-` lo tomaría `emulator` por bandera, y
+    // dos reglas distintas para el mismo nombre es como se acaba colando por el lado flojo.
+    return /^[A-Za-z0-9._][A-Za-z0-9._-]*$/.test(l) ? l : undefined;
   }
   return undefined;
 }

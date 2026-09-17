@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { etiquetaDeEstado } from "../inventarioDeDispositivos.js";
 import type { Dispositivo, Herramienta, InformeDeDispositivos } from "../tipos.js";
 import { VerificarDispositivo } from "./VerificarDispositivo.js";
 import estilos from "./Equipo.module.css";
@@ -109,15 +110,6 @@ const NOMBRE_DEL_SISTEMA: Record<InformeDeDispositivos["sistema"], string> = {
   otro: "sistema desconocido",
 };
 
-const ETIQUETA_DE_ESTADO: Record<Dispositivo["estado"], string> = {
-  conectado: "conectado",
-  arrancado: "arrancado",
-  apagado: "apagado",
-  "sin-autorizar": "sin autorizar",
-  offline: "offline",
-  "no-disponible": "no disponible",
-};
-
 const ETIQUETA_DE_CLASE: Record<Dispositivo["clase"], string> = {
   emulador: "emulador",
   simulador: "simulador",
@@ -156,7 +148,7 @@ function Bloque({
               <span className={estilos.punto} aria-hidden="true" />
               <span className={estilos.nombre}>{d.nombre}</span>
               <span className={estilos.etiqueta}>
-                {ETIQUETA_DE_CLASE[d.clase]} · {ETIQUETA_DE_ESTADO[d.estado]}
+                {ETIQUETA_DE_CLASE[d.clase]} · {etiquetaDeEstado(d)}
               </span>
               {d.detalle === undefined ? null : <span className={estilos.detalle}>{d.detalle}</span>}
               <VerificarDispositivo

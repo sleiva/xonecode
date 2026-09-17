@@ -65,6 +65,12 @@ export interface EstadoDelCliente {
    *
    * **Se tira al caerse el cable** (`marcarDesconectado`), como `modelos`.
    */
+  /**
+   * Cómo acabó el último «Arrancar» de un emulador. AUSENTE = no se ha pedido ninguno en esta
+   * conexión, que no es «salió bien». Se tira con cada foto pedida a mano, porque un acuse
+   * viejo junto a una medida nueva es una contradicción en pantalla.
+   */
+  arranqueDeEmulador?: { avd: string; ok: boolean; detalle: string };
   proyectosPorEntorno?: Record<
     string,
     { proyectos?: { id: string; nombre: string; compartido?: boolean }[]; error?: string }
@@ -882,6 +888,21 @@ export function crearStoreDelCliente(): {
         }
         case "dispositivos": {
           const m = mensaje as { informe?: unknown; ajustes?: unknown };
+          /**
+           * Cómo acabó el último «Arrancar». Se nombra aquí porque esta lista es BLANCA: sin
+           * esta línea el botón se quedaría sin poder decir si arrancó o no, con todo verde.
+           * Campo a campo y solo con las tres formas correctas: media respuesta no es una
+           * respuesta.
+           */
+          const arr = (m as { arranque?: unknown }).arranque;
+          const arranque =
+            typeof arr === "object" &&
+            arr !== null &&
+            typeof (arr as { avd?: unknown }).avd === "string" &&
+            typeof (arr as { ok?: unknown }).ok === "boolean" &&
+            typeof (arr as { detalle?: unknown }).detalle === "string"
+              ? (arr as { avd: string; ok: boolean; detalle: string })
+              : undefined;
           const informe = m.informe as Partial<InformeDeDispositivos> | undefined;
           if (informe === undefined || informe === null || typeof informe !== "object") return;
           if (!Array.isArray(informe.herramientas) || !Array.isArray(informe.dispositivos) || !Array.isArray(informe.avds)) return;
@@ -1009,6 +1030,11 @@ export function crearStoreDelCliente(): {
             // repo. Lo que no venga como booleano se queda ausente, que significa «se
             // mira» — el lado que no esconde nada.
             ajustesDeDispositivos: ajustesDelCable(m.ajustes),
+            // **Se asigna SIEMPRE, también `undefined`.** Una medida pedida a mano («Volver a
+            // mirar») llega sin `arranque`, y dejar el anterior puesto repetiría un acuse
+            // viejo junto a una foto nueva: el usuario leería «arrancado» de un emulador que
+            // acaba de matar.
+            arranqueDeEmulador: arranque,
           });
           return;
         }

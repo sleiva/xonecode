@@ -24,7 +24,8 @@ import type {
   ProveedorDeModelos,
 } from "../tipos.js";
 import { seMira } from "../tipos.js";
-import { ETIQUETA_DE_ESTADO, inventario, seLlegaAlDispositivo } from "../inventarioDeDispositivos.js";
+import { etiquetaDeEstado, inventario, seLlegaAlDispositivo, type FilaDeInventario } from "../inventarioDeDispositivos.js";
+import { ArrancarEmulador } from "./ArrancarEmulador.js";
 import { Agentes } from "./Agentes.js";
 import { Receta } from "./Receta.js";
 import { VerificarDispositivo } from "./VerificarDispositivo.js";
@@ -220,6 +221,8 @@ export function Ajustes({
   alActualizarDispositivos,
   alInstalarHerramienta,
   alVerificarDispositivo,
+  alArrancarEmulador,
+  arranqueDeEmulador,
   modelosDeMotor,
   alPedirModelosDeMotor,
   alPedirCatalogo,
@@ -322,6 +325,10 @@ export function Ajustes({
    * servidor lo resuelve contra su medida y decide qué lanzar. Ausente = no se pinta botón.
    */
   alVerificarDispositivo?: (id: string) => void;
+  /** «Arranca este AVD.» Ausente = esta ejecución no puede, y el botón no se pinta. */
+  alArrancarEmulador?: (avd: string) => void;
+  /** Cómo acabó el último arranque. Ausente = no se ha pedido ninguno. */
+  arranqueDeEmulador?: { avd: string; ok: boolean; detalle: string };
   /** Lo que ofrece cada motor externo, por motor, para el desplegable de un subagente. */
   modelosDeMotor?: Record<string, { modelos: { id: string; nombre: string }[]; error?: string }>;
   /** Pide los de un motor. Bajo demanda: el de Codex arranca un proceso. */
@@ -960,7 +967,9 @@ export function Ajustes({
               ) : (
                 (() => {
                   const { fisicos, virtuales } = inventario(dispositivos);
-                  const deAqui = (ds: readonly Dispositivo[]): Dispositivo[] =>
+                  // `FilaDeInventario` y no `Dispositivo`: la fila de un AVD que solo existe
+                  // como definición lleva su marca, y estrecharla aquí la perdía.
+                  const deAqui = (ds: readonly FilaDeInventario[]): FilaDeInventario[] =>
                     ds.filter((d) => d.plataforma === plataformaAbierta);
                   const telefonos = deAqui(fisicos);
                   const simuladores = deAqui(virtuales);
@@ -976,13 +985,13 @@ export function Ajustes({
                               <span
                                 className={estilos.punto}
                                 data-herramienta={seLlegaAlDispositivo(d) ? "ok" : "otro"}
-                                aria-label={ETIQUETA_DE_ESTADO[d.estado]}
+                                aria-label={etiquetaDeEstado(d)}
                               />
                               <span className={estilos.nombre}>{d.nombre}</span>
                               {/* Sin decir la plataforma: la pestaña abierta ya la dice, y
                                   repetirla en cada fila era lo que hacía larga la lista. */}
                               <span className={estilos.detalle}>
-                                {ETIQUETA_DE_ESTADO[d.estado]}
+                                {etiquetaDeEstado(d)}
                                 {d.detalle === undefined ? "" : ` · ${d.detalle}`}
                               </span>
                               <VerificarDispositivo
@@ -1010,10 +1019,27 @@ export function Ajustes({
                               <span
                                 className={estilos.punto}
                                 data-herramienta={seLlegaAlDispositivo(d) ? "ok" : "otro"}
-                                aria-label={ETIQUETA_DE_ESTADO[d.estado]}
+                                aria-label={etiquetaDeEstado(d)}
                               />
                               <span className={estilos.nombre}>{d.nombre}</span>
-                              <span className={estilos.detalle}>{ETIQUETA_DE_ESTADO[d.estado]}</span>
+                              <span className={estilos.detalle}>{etiquetaDeEstado(d)}</span>
+                              {/*
+                                **Arrancar, solo donde hay algo que arrancar.** Un AVD que
+                                existe y no está en marcha (`soloDefinicion`) es el único caso:
+                                un simulador de iOS apagado no lo arranca xonecode, y uno ya
+                                arrancado no se arranca dos veces. Sin el manejador no se pinta
+                                —esta ejecución no puede—, que es la regla de esta ventana.
+                              */}
+                              {d.soloDefinicion === true && alArrancarEmulador !== undefined ? (
+                                <ArrancarEmulador
+                                  avd={d.nombre}
+                                  conectado={conectado}
+                                  alArrancar={alArrancarEmulador}
+                                  {...(arranqueDeEmulador?.avd === d.nombre
+                                    ? { resultado: arranqueDeEmulador }
+                                    : {})}
+                                />
+                              ) : null}
                               <VerificarDispositivo
                                 dispositivo={d}
                                 conectado={conectado}
@@ -1088,10 +1114,18 @@ export function Ajustes({
                   {sinMedir.length === 1 ? "está" : "están"}.
                 </p>
               )}
+              {/*
+                Esta nota dice lo que la ventana HACE y lo que NO, y por eso hay que tocarla
+                cada vez que una de las dos listas cambia: «arrancar un emulador» estuvo aquí
+                como pendiente hasta que se cableó el botón de la fila, y una nota que niega
+                un botón que está ahí al lado es peor que no tenerla. Instalar la app y
+                conectar por red siguen sin estar, así que siguen dichos.
+              */}
               <p className={estilos.nota}>
-                xonecode los DESCUBRE, instala lo que falta y verifica la conexión con uno. Elegir con cuál
-                trabaja el agente es una decisión de la sesión, no de esta ventana; conectar por red, arrancar
-                un emulador o instalar la app tampoco está cableado todavía.
+                xonecode los DESCUBRE, instala lo que falta, arranca un emulador de Android y verifica la
+                conexión con uno. Elegir con cuál trabaja el agente es una decisión de la sesión, no de esta
+                ventana; conectar por red, arrancar un simulador de iOS o instalar la app no están cableados
+                todavía.
               </p>
             </>
           ) : null}

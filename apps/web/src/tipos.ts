@@ -334,7 +334,15 @@ export type MensajeAlCliente =
    * estado, y los dispositivos y simuladores a los que se llega. Es una foto con hora
    * (`medido`), no un estado en vivo. Redeclarado de `core/dispositivos.ts`.
    */
-  | { clase: "dispositivos"; informe: InformeDeDispositivos; ajustes: AjustesDeDispositivos }
+  | {
+      clase: "dispositivos";
+      informe: InformeDeDispositivos;
+      ajustes: AjustesDeDispositivos;
+      /** Cómo acabó el último «Arrancar» de un emulador. Viaja CON la foto porque la foto ES
+       *  el resultado: `emulator` vuelve enseguida y lo que cuenta es si el aparato apareció.
+       *  **Ausente = no se ha pedido ninguno**, que no es «salió bien». */
+      arranque?: { avd: string; ok: boolean; detalle: string };
+    }
   /**
    * Los ficheros que la sesión ha tocado, y el parche de uno. Los tres `via` son tres cosas
    * distintas: «git» es «comparado»; «sin-empezar», que la sesión no ha volcado ningún acto
@@ -708,6 +716,10 @@ export type MensajeDelCliente =
   | { clase: "dispositivos"; ajustes?: AjustesDeDispositivos; instalar?: NombreDeHerramienta }
   /** Con qué dispositivo trabaja la sesión. Viaja el ID; sin él, se quita la elección. */
   | { clase: "dispositivo"; id?: string }
+  /** «Arranca este AVD.» El nombre y nada más: el servidor comprueba que esté en SU última
+   *  medida antes de ejecutar. La respuesta es el `dispositivos` de siempre, con el resultado
+   *  dentro — arrancar acaba en una medida, no en un acuse. */
+  | { clase: "arrancarEmulador"; avd: string }
   /**
    * «Habla con este dispositivo y dime si contesta.» Viaja el ID y nada más; el servidor lo
    * resuelve contra su última medida y decide qué comando lanzar. NO vuelve a medir: la

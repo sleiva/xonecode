@@ -1,5 +1,5 @@
 import { useEffect } from "react";
-import { ETIQUETA_DE_ESTADO } from "../inventarioDeDispositivos.js";
+import { etiquetaDeEstado } from "../inventarioDeDispositivos.js";
 import { selloDeFecha } from "../selloDeFecha.js";
 import type { EstadoDelCliente } from "../store.js";
 import { formatearMs } from "../tiempo.js";
@@ -236,7 +236,7 @@ export function Ejecutar({
               // Sin cable la elección se perdería, así que no se ofrece: la fila se enseña
               // —es la foto de lo que hay— pero no se finge que se puede pulsar.
               const elegible = alElegirDispositivo !== undefined && conectado !== false;
-              const etiqueta = `${d.nombre} · ${d.plataforma === "ios" ? "iOS" : "Android"} · ${ETIQUETA_DE_ESTADO[d.estado]}`;
+              const etiqueta = `${d.nombre} · ${d.plataforma === "ios" ? "iOS" : "Android"} · ${etiquetaDeEstado(d)}`;
               return (
                 <li key={d.id} className={estilos.fila}>
                   {elegible ? (

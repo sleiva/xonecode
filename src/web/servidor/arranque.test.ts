@@ -3578,6 +3578,73 @@ describe("qué hay en la máquina: el mensaje «dispositivos»", () => {
     expect(medidas).toBe(1);
   });
 
+  /**
+   * **El nombre del AVD llega por el CABLE y acaba siendo un argumento de proceso.** Lo único
+   * que lo autoriza es que esté en NUESTRA última medida: sin esa guarda, cualquiera que
+   * alcance el loopback elige qué se ejecuta. Se contesta con la foto y con el motivo — un
+   * botón que no hace nada y no lo dice es lo que esto viene a evitar.
+   */
+  it("arrancar un AVD que no está en la última medida no ejecuta nada, y lo dice", async () => {
+    const conAvd = { ...informe, avds: ["pixel8"] };
+    let arranques: string[] = [];
+    const servidor = servidorDeMentira();
+    montarRutas(servidor, vestibuloDePrueba(), {
+      detectarDispositivos: async () => conAvd,
+      arrancarEmulador: async (avd) => {
+        arranques.push(avd);
+        return { ok: true, detalle: `${avd} arrancado` };
+      },
+    });
+    const eventos = servidor.rutas.get(`GET ${RUTA_EVENTOS}`)!;
+    const cliente = clienteDeMentira();
+    await eventos(cliente.peticion, cliente.respuesta);
+    await asentar();
+    const accion = servidor.rutas.get(`POST ${RUTA_ACCION}`)!;
+
+    await enviarMensaje(accion, { clase: "arrancarEmulador", avd: "inventado" });
+    await asentar();
+    expect(arranques).toEqual([]);
+    const fallo = cliente.recibidos.filter((m) => m.clase === "dispositivos").at(-1) as Extract<
+      MensajeAlCliente,
+      { clase: "dispositivos" }
+    >;
+    expect(fallo.arranque).toEqual({
+      avd: "inventado",
+      ok: false,
+      detalle: "no consta ningún AVD llamado «inventado» en la última medida",
+    });
+
+    // Y el que SÍ está se ejecuta, con su resultado junto a la foto nueva.
+    await enviarMensaje(accion, { clase: "arrancarEmulador", avd: "pixel8" });
+    await asentar();
+    expect(arranques).toEqual(["pixel8"]);
+    const bien = cliente.recibidos.filter((m) => m.clase === "dispositivos").at(-1) as Extract<
+      MensajeAlCliente,
+      { clase: "dispositivos" }
+    >;
+    expect(bien.arranque).toEqual({ avd: "pixel8", ok: true, detalle: "pixel8 arrancado" });
+  });
+
+  /**
+   * Sin el puerto no hay arranque, y se DICE: el botón no se pinta porque `App` no pasa el
+   * manejador, pero el servidor no puede quedarse mudo si el mensaje llega igual.
+   */
+  it("sin `arrancarEmulador` no se promete nada", async () => {
+    const servidor = servidorDeMentira();
+    montarRutas(servidor, vestibuloDePrueba(), { detectarDispositivos: async () => ({ ...informe, avds: ["pixel8"] }) });
+    const eventos = servidor.rutas.get(`GET ${RUTA_EVENTOS}`)!;
+    const cliente = clienteDeMentira();
+    await eventos(cliente.peticion, cliente.respuesta);
+    await asentar();
+    await enviarMensaje(servidor.rutas.get(`POST ${RUTA_ACCION}`)!, { clase: "arrancarEmulador", avd: "pixel8" });
+    await asentar();
+    const ultima = cliente.recibidos.filter((m) => m.clase === "dispositivos").at(-1) as Extract<
+      MensajeAlCliente,
+      { clase: "dispositivos" }
+    >;
+    expect(ultima.arranque).toBeUndefined();
+  });
+
   it("dos pestañas que conectan A LA VEZ comparten la detección en vuelo", async () => {
     let medidas = 0;
     let soltar: (() => void) | undefined;

@@ -281,7 +281,28 @@ export async function detectarDispositivos(
             timeout: TOPES_MS.adb,
           });
           const avd = nombreDeAvdDeConsola(crudo);
-          if (avd !== undefined) d.avd = avd;
+          if (avd !== undefined) {
+            d.avd = avd;
+            /**
+             * **Y se llama como el AVD, no como su imagen.**
+             *
+             * El nombre venía de `model:`, que es de la IMAGEN: el mismo emulador salía como
+             * `pixel8` cuando estaba apagado —ahí el nombre es el del AVD— y como
+             * `sdk gphone64 arm64` cuando estaba arrancado. Un aparato con dos nombres según
+             * su estado, que es lo que el usuario pidió quitar: el que reconoce es el que
+             * creó él.
+             *
+             * Se hace en el HOST y no al pintar porque el nombre lo consumen tres pantallas
+             * —Ajustes, «Tu equipo» y la pastilla— más la FOTO que guarda la sesión, y esa
+             * foto sobrevive al emulador: guardar ahí `sdk gphone64 arm64` dejaría a la
+             * pastilla enseñando un nombre que ya no aparece en ninguna lista.
+             *
+             * El modelo de la imagen no se pierde en ningún sitio donde haga falta: quien
+             * quiera saber qué imagen corre lo pregunta al aparato (es lo que hace VERIFICAR
+             * con `ro.product.model`).
+             */
+            d.nombre = avd;
+          }
         } catch {
           // Sin `avd`: «no se pudo identificar». No se toca `herramientas` — adb funciona.
         }

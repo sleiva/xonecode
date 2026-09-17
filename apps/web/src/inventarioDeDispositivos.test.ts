@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { inventario, seLlegaAlDispositivo } from "./inventarioDeDispositivos.js";
+import { etiquetaDeEstado, inventario, seLlegaAlDispositivo } from "./inventarioDeDispositivos.js";
 import type { Dispositivo, InformeDeDispositivos } from "./tipos.js";
 
 /** Una foto mínima: lo que el inventario mira y nada más. */
@@ -80,5 +80,26 @@ describe("se llega al dispositivo", () => {
     for (const estado of ["apagado", "sin-autorizar", "offline", "no-disponible"] as const) {
       expect(seLlegaAlDispositivo({ ...emuladorEnMarcha, estado })).toBe(false);
     }
+  });
+});
+
+/**
+ * **Un emulador se ARRANCA, no se conecta.**
+ *
+ * `adb devices` contesta `device` y de ahí salía «conectado» para un emulador, mientras que un
+ * simulador de iOS —el mismo hecho— salía «arrancado». Conectar es lo que se hace con un
+ * cable, así que la palabra que menos encajaba era justo la que se estaba usando.
+ */
+describe("etiquetaDeEstado", () => {
+  it("dice «arrancado» de un emulador o simulador al que se llega, y «conectado» de un físico", () => {
+    expect(etiquetaDeEstado({ estado: "conectado", clase: "emulador" })).toBe("arrancado");
+    expect(etiquetaDeEstado({ estado: "conectado", clase: "simulador" })).toBe("arrancado");
+    expect(etiquetaDeEstado({ estado: "conectado", clase: "fisico" })).toBe("conectado");
+  });
+
+  it("y no toca los demás estados, que no son ese hecho", () => {
+    expect(etiquetaDeEstado({ estado: "apagado", clase: "emulador" })).toBe("apagado");
+    expect(etiquetaDeEstado({ estado: "sin-autorizar", clase: "fisico" })).toBe("sin autorizar");
+    expect(etiquetaDeEstado({ estado: "offline", clase: "emulador" })).toBe("offline");
   });
 });

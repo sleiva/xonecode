@@ -375,6 +375,17 @@ export type MensajeAlCliente =
       clase: "dispositivos";
       informe: InformeDeDispositivosDelCable;
       /**
+       * Cómo acabó el último «Arrancar» de un emulador, si hubo uno.
+       *
+       * Viaja CON la foto nueva a propósito: el resultado de arrancar no es el código de
+       * salida de `emulator` —que vuelve enseguida— sino que el aparato APAREZCA, y eso es lo
+       * que dice la foto. Así las dos cosas llegan juntas y no se pueden leer desfasadas.
+       *
+       * **Ausente = no se ha pedido ninguno**, que no es «salió bien». Y un `ok: false` trae
+       * su línea: un botón que no hace nada y no lo dice es lo que esto viene a evitar.
+       */
+      arranque?: { avd: string; ok: boolean; detalle: string };
+      /**
        * Qué destinos se miran (`core/settings.ts#AjustesDeDispositivos`). Viaja CON la
        * foto porque las dos cosas se leen juntas: una herramienta «desactivada» solo se
        * entiende sabiendo qué interruptor la apagó. **Ausente = nadie ha elegido**, y
@@ -1093,6 +1104,14 @@ export type MensajeDelCliente =
    * es una fuente sobre la máquina. Sin `id`, se quita la elección.
    */
   | { clase: "dispositivo"; id?: string }
+  /**
+   * «Arranca este AVD.» El nombre y nada más: el servidor comprueba que esté en SU última
+   * medida antes de ejecutar nada, así que por aquí no entra un nombre a ciegas.
+   *
+   * La respuesta es el `dispositivos` de siempre, con la foto nueva y el `arranque` dentro:
+   * arrancar acaba en una medida, no en un acuse.
+   */
+  | { clase: "arrancarEmulador"; avd: string }
   /**
    * VERIFICAR la conexión con un dispositivo: hablarle y esperar respuesta.
    *

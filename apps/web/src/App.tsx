@@ -1045,6 +1045,12 @@ export function App({
       // Verificar es su propio mensaje y NO vuelve a medir: la verificación vive dentro de
       // la foto, así que una medida nueva se llevaría la que se acaba de hacer.
       alVerificarDispositivo={(id) => void enviar({ clase: "conexion", id })}
+      // Arrancar un AVD. La respuesta NO es el POST: viaja por el cable con la foto nueva,
+      // porque lo que dice si arrancó es la medida y no el código de salida de `emulator`.
+      alArrancarEmulador={(avd) => void enviar({ clase: "arrancarEmulador", avd })}
+      {...(estado.arranqueDeEmulador === undefined
+        ? {}
+        : { arranqueDeEmulador: estado.arranqueDeEmulador })}
       // El tope de concurrencia de la cola de tareas: mismo mensaje que manda el kanban al
       // pedirlo la primera vez, con el número que puso quien lo cambia.
       {...(estado.tareas === undefined ? {} : { tareas: { concurrencia: estado.tareas.concurrencia } })}
