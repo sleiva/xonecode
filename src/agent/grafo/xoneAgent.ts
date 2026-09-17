@@ -13,6 +13,7 @@ import { inventarioDelProyecto } from "../subagentes/escrituraExterna.js";
 import type { DiagnosticoDeTools } from "../turno/diagnosticoDeTools.js";
 import { middlewareTextoDeTool } from "../turno/textoDeTool.js";
 import { resumenConEncargo, topeDeLlamadas } from "../turno/resumenDeContexto.js";
+import { inspectorDePrompt } from "../turno/inspectorDePrompt.js";
 import {
   createTokenTrackingMiddleware,
   type AlContarTokens,
@@ -228,6 +229,12 @@ export const OPCIONES_BUSQUEDA_FICHEROS = {
  *    ocupar el nombre lo sustituye en el catálogo (`agent/generalPurpose.test.ts`).
  * 4. **El HITL va en las tools de fichero**, que en la v1 son las que escriben.
  */
+/** El inspector, o nada: `inspectorDePrompt` devuelve `undefined` si no se ha pedido. */
+function inspector(raiz: string, origen: string): ReturnType<typeof inspectorDePrompt>[] {
+  const mw = inspectorDePrompt(raiz, origen);
+  return mw === undefined ? [] : [mw];
+}
+
 export async function construirAgente(opciones: OpcionesDelAgente): Promise<unknown> {
   // Las cuatro capas y su orden están en `backendDeAgente`, que vive en `proyecto.ts` para
   // poder PROBARSE: aquí no había forma, porque `construirAgente` se simula en todos los
@@ -353,6 +360,10 @@ export async function construirAgente(opciones: OpcionesDelAgente): Promise<unkn
       ...resumenConEncargo(backend),
       middlewareTextoDeTool(),
       ...middlewareTracker(perfil.nombre),
+      // El ÚLTIMO, y por eso ve la petición ya pasada por todos los de arriba: el resumen, la
+      // devolución del encargo y la conversión de los `ToolMessage`. Puesto delante enseñaría
+      // lo que otros van a cambiar después, que es la mentira de un inspector.
+      ...inspector(opciones.raiz, perfil.nombre),
     ],
     // El modelo que fije el agente en su fichero, y si no lo fija, el del papel que le
     // toca por lo que hace: `rapido` para el que solo lee, `trabajo` para el que escribe.
@@ -412,6 +423,7 @@ export async function construirAgente(opciones: OpcionesDelAgente): Promise<unkn
       ...resumenConEncargo(backend),
       middlewareTextoDeTool(),
       ...middlewareTracker("orquestador"),
+      ...inspector(opciones.raiz, "orquestador"),
     ],
     subagents: [
       ...subagentes,

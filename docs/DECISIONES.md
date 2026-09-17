@@ -4362,6 +4362,39 @@ identidad, porque la lista efectiva se reconstruye y el mismo texto puede venir 
 Los dos middleware viajan juntos en `resumenConEncargo`, en ese orden: el primero de la lista
 envuelve al siguiente, así que puesto delante no vería nada que devolver.
 
+**El inspector, y lo que enseñó a la primera: el 87 % de una llamada son los ESQUEMAS de las
+tools** (17-09-2026). Todo lo medido hasta ese día era lo que SALE —tokens del proveedor, tools
+llamadas, ficheros leídos— y de ahí se DEDUCÍA lo que entra. `inspectorDePrompt` mira: es un
+`wrapModelCall` puesto el ÚLTIMO de la lista, así que ve la petición después de todos los demás
+middleware —el resumen, la devolución del encargo, la conversión de los `ToolMessage`— y no lo
+que alguien creía haber puesto.
+
+Va por variable de entorno y en dos niveles. `XONECODE_TRACE_PROMPT=1` apunta la FORMA y ni una
+letra de contenido; `=todo` añade el texto, que es lo que hace falta para entender POR QUÉ un
+agente contesta lo que contesta y por eso se pide aparte y a sabiendas. La disciplina de
+`diagnosticoDeTools.ts` es no guardar contenido nunca; aquí el contenido ES la pregunta, así que
+no se puede prohibir — se hace explícito.
+
+Su primera versión ya destapó un agujero en la propia medida: decía 8.151 caracteres (~2k
+tokens) en una llamada de un turno que pagaba 3.900 tokens por llamada. Faltaban los esquemas,
+que se contaban como un número (`tools: 8`) en vez de como tamaño. Con ellos dentro, un turno
+real de la pregunta más barata que tenemos:
+
+```
+  sistema 1.745  +  ESQUEMAS 12.350  +  mensajes 40  =  14.135  (~3.533 tokens)
+  read_file 2.831 · task 2.517 · grep 2.275 · edit_file 1.483
+  write_file 1.429 · delete 831 · glob 495 · ls 489
+```
+
+La pregunta ocupaba 40 caracteres. Los esquemas se reenvían en las cuatro llamadas del turno:
+**~12.400 de los 15.466 tokens, el 80 %**. Y de ahí sale lo siguiente, que no es una intuición:
+**el orquestador es de solo lectura por permisos y carga igualmente los esquemas de
+`write_file`, `edit_file` y `delete`** —3.743 caracteres, ~940 tokens POR LLAMADA— por tres
+tools que tiene prohibido usar. `permissions` acota el permiso; el esquema viaja igual.
+deepagents tiene `createToolExclusionMiddleware` para justo eso, y su propia documentación pone
+el límite donde va: «exclusions calibrate the agent per model; **they are not a security
+boundary**». La frontera sigue siendo `permisosDe`; la exclusión es coste.
+
 ## Trampas verificadas
 
 - **El orquestador va de SOLO LECTURA, y hasta el 9-09-2026 no lo era** (`PERFIL_DEL_ORQUESTADOR`,
