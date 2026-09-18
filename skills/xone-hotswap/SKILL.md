@@ -34,36 +34,47 @@ responde. Habla dos protocolos por el mismo puerto: **WebSocket** para los coman
   comando exista. Cuál es cuál, comando a comando: la columna **Canal (iOS)** de la
   [matriz](references/comandos.md#matriz-de-disponibilidad).
 
-## Los scripts que trae esta skill, y cómo se llaman
+## Los scripts que trae esta skill: se llaman por su nombre
 
-Esta carpeta trae tres programas listos. **Son la forma de usar el canal desde una shell**, y
-existen por una razón concreta: los comandos viajan por **WebSocket** y `curl` no habla
-WebSocket, así que sin ellos no hay manera de mandar un `getAllElements` desde la línea de
-órdenes. Se llaman por la variable de entorno de esta skill, nunca con una ruta escrita a mano:
+Esta carpeta trae tres programas, y **están en el PATH**: se llaman como cualquier otro comando,
+sin ruta. Existen por una razón concreta — los comandos del canal viajan por **WebSocket** y
+`curl` no habla WebSocket, así que sin ellos no hay forma de mandar un `getAllElements` desde una
+shell.
 
 ```bash
-# Un comando cualquiera del catálogo (varios, en orden, si le pasas varios):
-node "$XONECODE_SKILL_XONE_HOTSWAP/scripts/hotswap.mjs" '{"command":"getAllElements","format":"xone"}'
+# «lanza la app», «despliégala»: la cadena ENTERA (túnel, ZIP, subida, reinicio, lanzamiento)
+# y termina diciendo si la app está VIVA, con su árbol de controles.
+xone-desplegar-android
+xone-desplegar-android --app MiApp --serie emulator-5554
 
-# Android: poner ESTE proyecto en el aparato y dejar la app arrancada, la cadena entera.
-node "$XONECODE_SKILL_XONE_HOTSWAP/scripts/android-desplegar.mjs"
+# Cualquier comando del catálogo de más abajo (varios en orden, si le pasas varios):
+xone-hotswap '{"command":"getAllElements","format":"xone"}'
+xone-hotswap '{"command":"getScreenshot"}'
+xone-hotswap '{"command":"click","name":"MAP_BT_ACEPTAR"}'
 
 # iOS: levantar el host y dejar el canal listo (desplegar en iOS NO está medido).
-node "$XONECODE_SKILL_XONE_HOTSWAP/scripts/ios-arrancar.mjs"
+xone-arrancar-ios
 ```
 
-Tres cosas de `hotswap.mjs` que conviene saber antes de leer su salida:
+Tres cosas de `xone-hotswap` que conviene saber antes de leer su salida:
 
-- **Una captura no se imprime**: se guarda en `$XONECODE_ARTEFACTOS` y lo que sale es su
-  nombre y su tamaño. Un `getScreenshot` son ~57.000 caracteres de base64, y volcarlos en la
-  salida de un comando es meterlos en el contexto sin que nadie pueda mirarlos. Para
-  ENSEÑARLA, di su nombre: la interfaz la enseña desde ahí.
+- **Una captura no se imprime**: se guarda en `$XONECODE_ARTEFACTOS` y lo que sale es su nombre y
+  su tamaño. Un `getScreenshot` son ~57.000 caracteres de base64, y volcarlos en la salida de un
+  comando es meterlos en el contexto sin que nadie pueda mirarlos. Para ENSEÑARLA, di su nombre:
+  la interfaz la enseña desde ahí. **No intentes abrirla ni leerla**: es binaria.
 - **La respuesta viene en `status`** —no en un campo `image`— y una captura de Android es
   **JPEG**, no PNG.
-- Si la llamada muere con «no se pudo hablar con el aparato», casi siempre falta el túnel
+- Si muere con «no se pudo hablar con el aparato», casi siempre falta el túnel
   (`adb forward tcp:8443 tcp:8443`) o la app host no está viva.
 
-**Un comando que no termina cuelga tu turno.** Arrancar un emulador no vuelve nunca: mándalo al
+Y `xone-desplegar-android` **no necesita un `zip` del sistema**: construye el ZIP él mismo con
+`zlib`, así que tampoco depende de que haya uno en Windows.
+
+**No uses las herramientas nativas para lo que contesta el canal**: `uiautomator dump` da la
+jerarquía de vistas de ANDROID y `adb exec-out screencap` una foto cruda; ninguna de las dos
+conoce los controles XOne, que es por lo que suelen preguntarte.
+
+**Un comando que no termina cuelga el turno.** Arrancar un emulador no vuelve nunca: mándalo al
 fondo y espera a una CONDICIÓN, no a un número de segundos.
 
 ```bash
@@ -72,7 +83,7 @@ adb wait-for-device
 adb shell 'while [ "$(getprop sys.boot_completed)" != "1" ]; do sleep 2; done'
 ```
 
-Y ojo con el PATH: tus comandos corren con `/bin/sh`, sin el `~/.zshrc` de nadie. En un Mac con
+Ojo con el PATH: tus comandos corren con `/bin/sh`, sin el `~/.zshrc` de nadie. En un Mac con
 Homebrew, `emulator` suele estar en `$(brew --prefix)/share/android-commandlinetools/emulator/`
 aunque `adb` sí esté en el PATH.
 

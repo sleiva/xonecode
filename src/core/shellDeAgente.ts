@@ -27,7 +27,19 @@
  * en silencio es peor que una regla declarada. Quien concede ejecución concede leer el
  * entorno y el disco; lo que esto evita es que el harness REGALE lo que él mismo escribió.
  *
- * **Y lo que se AÑADE son rutas, una variable por cosa.** Una shell ve el disco de verdad,
+ * **Y los scripts de una skill se ponen en el PATH, que es lo que quita el problema en vez de
+ * explicarlo.** Medido corriéndolo: el agente tenía DOS espacios de rutas —las virtuales de
+ * `read_file` y las reales de sus comandos— y se pasó decenas de llamadas mezclándolos, leyendo
+ * con `read_file` rutas absolutas que no existen para esa tool y no van a existir nunca. Con los
+ * `scripts/` de cada skill montada en el PATH, un script se llama por su NOMBRE
+ * (`xone-hotswap …`) y no hay ninguna ruta que acertar, ni que meter en el prompt, ni que viaje
+ * en el evento. Un aparato nuevo mañana trae su skill con sus scripts y quedan disponibles solos.
+ *
+ * **Se AÑADEN al final, no al principio.** Prepender dejaría que una skill —que puede venir en
+ * un `.zip` de cualquier sitio— sombreara un binario del sistema llamando a un script suyo `ls`
+ * o `git`. Al final, lo que ya existe gana.
+ *
+ * **Y lo que se AÑADE además son rutas, una variable por cosa.** Una shell ve el disco de verdad,
  * no nuestras rutas virtuales: `/skills/xone-hotswap/` no existe para ella. Pero meter la
  * ruta absoluta en el prompt tendría dos precios —el comando que el modelo componga sería el
  * `detalle` del evento, y ahí no puede viajar una ruta de la máquina (`sinRutas`), y la
@@ -71,6 +83,12 @@ export function entornoDeShell(opciones: {
   skills?: readonly SkillEnDisco[];
   /** La carpeta de artefactos de la sesión, si la sesión tiene una. */
   artefactos?: string;
+  /**
+   * Las carpetas de scripts que hay que poner al alcance, ya comprobadas por quien toca el
+   * disco: esto es puro y no mira si existen. Una que no exista no rompe nada, pero ensucia
+   * el PATH con una promesa vacía.
+   */
+  binarios?: readonly string[];
 }): Record<string, string> {
   const credenciales = new Set<string>(Object.values(VARIABLES_POR_PROVEEDOR));
   const limpio: Record<string, string> = {};
@@ -86,6 +104,13 @@ export function entornoDeShell(opciones: {
 
   for (const skill of opciones.skills ?? []) {
     limpio[variableDeSkill(skill.nombre)] = skill.dir;
+  }
+  const binarios = opciones.binarios ?? [];
+  if (binarios.length > 0) {
+    // Sin PATH heredado no se parte de vacío: `sh` se inventaría el suyo y perderíamos el del
+    // proceso, que es donde están el `adb` y el `node` del usuario.
+    const actual = limpio["PATH"];
+    limpio["PATH"] = actual === undefined || actual === "" ? binarios.join(":") : [actual, ...binarios].join(":");
   }
   if (opciones.artefactos !== undefined) limpio[VARIABLE_DE_ARTEFACTOS] = opciones.artefactos;
 

@@ -28,6 +28,18 @@ import { execFileSync } from "node:child_process";
 
 const HOST = "es.xone.studioapp.swift";
 
+if (process.argv.includes("--help") || process.argv.includes("-h")) {
+  console.error(`xone-arrancar-ios — levanta el host de iOS y deja el canal listo.
+
+  xone-arrancar-ios                     usa el único simulador arrancado
+  xone-arrancar-ios --udid <UDID>       con varios arrancados
+  xone-arrancar-ios --app MiApp         además lanza esa app
+
+NO despliega el proyecto: en iOS no hay /file_upload y eso no está medido. Después, los comandos
+van por: HOTSWAP_URL=wss://localhost:8443/hotswap xone-hotswap '{"command":"getAllElements"}'`);
+  process.exit(0);
+}
+
 const args = process.argv.slice(2);
 const opcion = (nombre) => {
   const i = args.indexOf(`--${nombre}`);

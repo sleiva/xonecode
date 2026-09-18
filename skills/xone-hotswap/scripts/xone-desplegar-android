@@ -1,0 +1,332 @@
+#!/usr/bin/env node
+/**
+ * Poner ESTE proyecto en un Android y dejar la app arrancada. La plantilla completa.
+ *
+ * POR QUÉ EXISTE. «Lanza la app» no es un comando del protocolo hotswap: es una cadena de
+ * cinco pasos, y cuatro de ellos no viajan por el canal (el túnel, el ZIP, la subida HTTP y
+ * el reinicio). El canal solo hace el quinto. Esta plantilla es esa cadena, en el orden en el
+ * que se midió que funciona.
+ *
+ * USO (desde la raíz del proyecto, que es el `cwd` de tus comandos):
+ *   xone-desplegar-android
+ *   xone-desplegar-android --app MiApp --serie emulator-5554
+ *
+ * EL ORDEN, Y POR QUÉ ES ESE:
+ *  1. **El túnel primero.** Sin `adb forward`, `127.0.0.1:8443` no lleva a ninguna parte: el
+ *     servidor escucha en el localhost del APARATO. No se quita al terminar — hay que
+ *     reaplicarlo tras cada reconexión, así que quitarlo dejaría el siguiente intento hablando
+ *     con nadie.
+ *  2. **El ZIP**, sin `.xonecode` ni `.git`. No es higiene: el `checkpoint.sqlite` de un
+ *     proyecto real pesaba 122 MB él solo, contra 6,7 MB el proyecto entero.
+ *  3. **La subida.** Subir NO aplica: el proceso tiene cargado en memoria lo de antes.
+ *  4. **El reinicio**, que es lo único que aplica lo subido. Y es `SetupActivity`, **nunca**
+ *     `.mainEntry`: medido, `.mainEntry` no levanta el servidor hotswap.
+ *  5. **El lanzamiento**, y LUEGO la comprobación: `{"result":true}` de `launchApplication`
+ *     significa «aceptado», no «arrancó». Lo que dice si está viva es el árbol de controles,
+ *     que tarda unos segundos en contestar algo.
+ *
+ * LA TRAMPA QUE CUESTA UNA SESIÓN: **sin `bd/gestion.db` la app no arranca** y el verificador
+ * estático dice VERDE igual. El `app.xml` declara `<connection connstring="bd/gestion.db"/>` y
+ * esa base se genera FUERA (XOne Studio o `xone-db-tools create-db`). Si la app muere con
+ * «Error opening database», mira eso antes que nada.
+ *
+ * LO QUE NECESITA: `adb` en el PATH, y nada más. El ZIP se construye aquí dentro con `zlib`
+ * —ni binario externo ni dependencias—, así que esto no depende de que haya un `zip` en el
+ * sistema, que en Windows no lo hay.
+ */
+process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0";
+// Y se calla SU aviso, no todos: node grita en cada arranque que la verificación está
+// desactivada, y ese grito acaba en la salida del comando —o sea en el contexto del agente—
+// invitándole a «arreglar» algo que es deliberado y está acotado a este proceso hijo.
+process.removeAllListeners("warning");
+process.on("warning", (aviso) => {
+  if (!String(aviso.message).includes("NODE_TLS_REJECT_UNAUTHORIZED")) console.warn(aviso);
+});
+
+import { execFileSync } from "node:child_process";
+import { existsSync, readFileSync, readdirSync } from "node:fs";
+import { basename, join, relative, sep } from "node:path";
+import { deflateRawSync } from "node:zlib";
+
+const PAQUETE = "com.xone.android.framework";
+const ACTIVIDAD = `${PAQUETE}/com.xone.android.hotswap.activities.SetupActivity`;
+const PUERTO = 8443;
+
+/**
+ * Un ZIP en memoria, sin `zip` del sistema y sin dependencias.
+ *
+ * Se escribió a mano por dos razones, y ninguna es el gusto por reinventar: **en Windows no
+ * hay `zip`**, así que llamar al binario dejaba esta plantilla sirviendo en dos sistemas de
+ * tres; y una skill instalada en la casa del usuario no tiene `node_modules` donde resolver
+ * una librería. Con `zlib`, que viene con node, no hace falta ninguna de las dos cosas.
+ *
+ * Es el formato mínimo y suficiente: entradas DEFLATE con cabecera local, directorio central y
+ * su cola. Sin ZIP64 —un proyecto XOne no llega a 4 GB ni a 65.535 ficheros— y sin atributos de
+ * Unix, que el framework no mira.
+ */
+const TABLA_CRC = (() => {
+  const tabla = new Uint32Array(256);
+  for (let i = 0; i < 256; i++) {
+    let c = i;
+    for (let k = 0; k < 8; k++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1;
+    tabla[i] = c >>> 0;
+  }
+  return tabla;
+})();
+
+function crc32(buf) {
+  let c = 0xffffffff;
+  for (let i = 0; i < buf.length; i++) c = TABLA_CRC[(c ^ buf[i]) & 0xff] ^ (c >>> 8);
+  return (c ^ 0xffffffff) >>> 0;
+}
+
+/** Los ficheros del proyecto, en rutas relativas con `/`, saltándose lo que no sube. */
+function ficherosDe(raiz, fuera, dentro = raiz, salida = []) {
+  for (const entrada of readdirSync(dentro, { withFileTypes: true })) {
+    const completa = join(dentro, entrada.name);
+    const rel = relative(raiz, completa).split(sep).join("/");
+    if (fuera.some((f) => rel === f || rel.startsWith(`${f}/`))) continue;
+    // No se sigue un enlace: un symlink a una carpeta de fuera metería el disco entero.
+    if (entrada.isSymbolicLink()) continue;
+    if (entrada.isDirectory()) ficherosDe(raiz, fuera, completa, salida);
+    else if (entrada.isFile()) salida.push(rel);
+  }
+  return salida;
+}
+
+function crearZip(raiz, fuera) {
+  const locales = [];
+  const central = [];
+  let desplazamiento = 0;
+
+  for (const rel of ficherosDe(raiz, fuera)) {
+    const datos = readFileSync(join(raiz, rel));
+    const comprimido = deflateRawSync(datos);
+    const nombre = Buffer.from(rel, "utf8");
+    const suma = crc32(datos);
+
+    const local = Buffer.alloc(30);
+    local.writeUInt32LE(0x04034b50, 0);
+    local.writeUInt16LE(20, 4); // versión mínima
+    local.writeUInt16LE(0x0800, 6); // nombres en UTF-8
+    local.writeUInt16LE(8, 8); // deflate
+    local.writeUInt32LE(suma, 14);
+    local.writeUInt32LE(comprimido.length, 18);
+    local.writeUInt32LE(datos.length, 22);
+    local.writeUInt16LE(nombre.length, 26);
+    locales.push(local, nombre, comprimido);
+
+    const entrada = Buffer.alloc(46);
+    entrada.writeUInt32LE(0x02014b50, 0);
+    entrada.writeUInt16LE(20, 4);
+    entrada.writeUInt16LE(20, 6);
+    entrada.writeUInt16LE(0x0800, 8);
+    entrada.writeUInt16LE(8, 10);
+    entrada.writeUInt32LE(suma, 16);
+    entrada.writeUInt32LE(comprimido.length, 20);
+    entrada.writeUInt32LE(datos.length, 24);
+    entrada.writeUInt16LE(nombre.length, 28);
+    entrada.writeUInt32LE(desplazamiento, 42);
+    central.push(entrada, nombre);
+
+    desplazamiento += local.length + nombre.length + comprimido.length;
+  }
+
+  const cuerpoCentral = Buffer.concat(central);
+  const cola = Buffer.alloc(22);
+  const cuantos = central.length / 2;
+  cola.writeUInt32LE(0x06054b50, 0);
+  cola.writeUInt16LE(cuantos, 8);
+  cola.writeUInt16LE(cuantos, 10);
+  cola.writeUInt32LE(cuerpoCentral.length, 12);
+  cola.writeUInt32LE(desplazamiento, 16);
+  return Buffer.concat([...locales, cuerpoCentral, cola]);
+}
+
+const args = process.argv.slice(2);
+const opcion = (nombre) => {
+  const i = args.indexOf(`--${nombre}`);
+  return i >= 0 ? args[i + 1] : undefined;
+};
+
+if (args.includes("--help") || args.includes("-h")) {
+  // **Tiene que existir**, y esto no es cortesía: sin `--help` esta orden DESPLEGABA, así que
+  // un agente que la usa para orientarse lanzaba el proceso entero creyendo que preguntaba —
+  // medido, lo repitió 75 veces en un turno. Una opción que no se entiende no puede ejecutar.
+  console.error(`xone-desplegar-android — pone ESTE proyecto en un Android y deja la app arrancada.
+
+  xone-desplegar-android                       nombre de app tomado de app.xml
+  xone-desplegar-android --app MiApp           nombre explícito
+  xone-desplegar-android --serie emulator-5554 con varios aparatos conectados
+
+Hace la cadena entera: túnel adb, ZIP del proyecto (sin .xonecode ni .git), subida, reinicio del
+framework y lanzamiento, y COMPRUEBA que la app esté viva pidiendo su árbol de controles.
+Necesita \`adb\` en el PATH; el ZIP lo construye él mismo.
+
+Si la app no arranca, lo primero que hay que mirar es si existe bd/gestion.db: la genera XOne
+Studio o \`xone-db-tools\`, no esto, y sin ella la app muere aunque el verificador esté en verde.`);
+  process.exit(0);
+}
+
+const serie = opcion("serie");
+const adb = (...partes) =>
+  execFileSync("adb", [...(serie ? ["-s", serie] : []), ...partes], { encoding: "utf8" });
+
+/**
+ * Igual, pero sin dejar hablar al hijo por stderr.
+ *
+ * `execFileSync` hereda stderr por omisión, así que un `pm grant` de un permiso que no es de
+ * ejecución escupe una traza de Java entera. Con 63 permisos declarados eso son decenas de
+ * pantallas de ruido que acaban en el contexto del agente y le hacen creer que algo se rompió.
+ */
+const adbCallado = (...partes) =>
+  execFileSync("adb", [...(serie ? ["-s", serie] : []), ...partes], { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] });
+
+/**
+ * Cómo se llama la app, en tres saltos y con el último declarado.
+ *
+ * **El `<app>` de un proyecto XOne real NO lleva `name`** — medido sobre cuatro proyectos del
+ * usuario: lleva `prefix`, `version`, `debug`… y nada más. Leerlo de ahí fue el primer intento y
+ * falla en todos menos en los de juguete. Donde sí está, cuando está, es en `app.ini`
+ * (`name=AppDemo`); y varios proyectos reales ni siquiera tienen `app.ini`.
+ *
+ * Por eso el último salto es **la carpeta**, que es lo que una persona usaría y lo que casa con
+ * cómo guarda el framework lo que sube (`app_<nombre en minúsculas>`). Se DICE cuál se usó, para
+ * que quien mire la salida pueda corregir con `--app` en vez de descubrirlo por el resultado.
+ */
+function nombreDeLaApp() {
+  const dicho = opcion("app");
+  if (dicho !== undefined) return dicho;
+
+  if (existsSync("app.ini")) {
+    const m = /^\s*name\s*=\s*(.+?)\s*$/im.exec(readFileSync("app.ini", "latin1"));
+    if (m !== null && m[1] !== "") {
+      console.log(`    nombre de app.ini: ${m[1]}`);
+      return m[1];
+    }
+  }
+
+  const deLaCarpeta = basename(process.cwd());
+  console.log(`    nombre de la carpeta: ${deLaCarpeta} (usa --app si no es ése)`);
+  return deLaCarpeta;
+}
+
+/**
+ * Concede los permisos de ejecución que el host pide, antes de reiniciarlo.
+ *
+ * **Sin esto la app no arranca y el síntoma engaña.** Medido: tras el reinicio, Android pone
+ * encima su `GrantPermissionsActivity` y la app se queda detrás esperando a que alguien toque
+ * «Permitir». El canal deja de contestar y el mensaje honesto —«no llegó a contestar el árbol»—
+ * manda a mirar la base de datos, que estaba perfectamente. O sea: un diálogo del SISTEMA
+ * disfrazado de app rota.
+ *
+ * Es lo mismo que hace `adb install -g`, y sobre un aparato de PRUEBAS es lo razonable: lo que
+ * se está automatizando es pulsar «Permitir» quince veces. Se conceden solo los que el paquete
+ * DECLARA —se leen del aparato, no de una lista nuestra que caducaría con la siguiente versión
+ * del framework— y los que no son de ejecución fallan uno a uno sin parar nada.
+ */
+function concederPermisos() {
+  let declaradas;
+  try {
+    const volcado = adb("shell", "dumpsys", "package", PAQUETE);
+    const trozo = /requested permissions:([\s\S]*?)(?:install permissions:|runtime permissions:|$)/.exec(volcado);
+    declaradas = (trozo?.[1] ?? "").split("\n").map((l) => l.trim().split(":")[0]).filter((l) => l.startsWith("android.permission."));
+  } catch {
+    console.log("    no se pudo leer qué permisos pide; sigo");
+    return;
+  }
+  let dados = 0;
+  for (const permiso of declaradas) {
+    try {
+      adbCallado("shell", "pm", "grant", PAQUETE, permiso);
+      dados += 1;
+    } catch {
+      // Los que no son de ejecución (`INTERNET`, `FOREGROUND_SERVICE`…) no se conceden así y
+      // fallan uno a uno. No es un error: es que no había nada que conceder.
+    }
+  }
+  console.log(`    ${dados} permiso(s) concedido(s) de ${declaradas.length} declarado(s)`);
+}
+
+const app = nombreDeLaApp();
+
+{
+  console.log(`1/5 túnel: ${PUERTO}`);
+  adb("forward", `tcp:${PUERTO}`, `tcp:${PUERTO}`);
+
+  console.log("2/5 empaquetando el proyecto (sin .xonecode ni .git)");
+  const cuerpo = crearZip(process.cwd(), [".xonecode", ".git"]);
+  console.log(`    ${(cuerpo.length / 1024).toFixed(0)} KB`);
+
+  console.log(`3/5 subiendo a ${app}`);
+  const url = `https://127.0.0.1:${PUERTO}/file_upload?file=debug_app_update.zip&appName=${encodeURIComponent(app)}`;
+  const respuesta = await fetch(url, {
+    method: "POST",
+    body: cuerpo,
+    headers: { "Content-Type": "application/octet-stream", "Content-Length": String(cuerpo.length) },
+  });
+  if (!respuesta.ok) {
+    console.error(`la subida falló con ${respuesta.status}`);
+    process.exit(1);
+  }
+
+  console.log("4/5 permisos y reinicio del framework");
+  concederPermisos();
+  adb("shell", "am", "force-stop", PAQUETE);
+  adb("shell", "am", "start", "-n", ACTIVIDAD);
+
+  console.log("5/5 esperando al canal, lanzando y comprobando que está VIVA");
+  const cliente = join(import.meta.dirname, "xone-hotswap");
+  const mandar = (comando) =>
+    execFileSync("node", [cliente, JSON.stringify(comando)], { encoding: "utf8" }).trim();
+  const esperar = (segundos) => execFileSync("sleep", [String(segundos)]);
+
+  /**
+   * **El canal no está en pie justo después del reinicio**, y esto se descubrió corriéndolo:
+   * el `am start` vuelve en cuanto Android acepta el intent, no cuando el servidor escucha,
+   * así que el primer intento moría con «Received network error or non-101 status code».
+   * Se espera a que CONTESTE, que es la condición de verdad, en vez de dormir un rato fijo.
+   */
+  let listo = false;
+  for (let intento = 1; intento <= 15 && !listo; intento++) {
+    try {
+      mandar({ command: "launchApplication", appName: app });
+      listo = true;
+    } catch {
+      esperar(1);
+    }
+  }
+  if (!listo) {
+    console.error(`el servidor hotswap no levantó tras el reinicio. Comprueba que ${PAQUETE} está instalado`);
+    console.error("y que el puerto es el 8443 (si estaba ocupado, el framework coge el siguiente libre).");
+    process.exit(1);
+  }
+
+  // El árbol es la comprobación: `result:true` solo dice que el encargo se aceptó. Se
+  // reintenta porque la app tarda unos segundos en tener pantalla, y se espera a una
+  // CONDICIÓN y no a un número fijo de segundos.
+  for (let intento = 1; intento <= 10; intento++) {
+    const salida = mandar({ command: "getAllElements", format: "xone" });
+    if (!salida.includes("App is not running")) {
+      console.log(salida);
+      process.exit(0);
+    }
+    esperar(2);
+  }
+  console.error("la app no llegó a contestar el árbol de controles: NO está viva.");
+  // Antes de mandar a mirar la base de datos, se mira QUÉ hay en pantalla: un diálogo del
+  // sistema encima es el falso culpable más caro de este bucle.
+  try {
+    const foco = adb("shell", "dumpsys", "window").split("\n").find((l) => l.includes("mCurrentFocus")) ?? "";
+    if (foco.trim() !== "") console.error(`En pantalla ahora: ${foco.trim()}`);
+    if (foco.includes("permissioncontroller")) {
+      console.error("Hay un diálogo de PERMISOS de Android encima: la app está detrás, esperando.");
+      console.error("Vuelve a intentarlo; si insiste, contéstalo en el aparato.");
+      process.exit(1);
+    }
+  } catch {
+    // Si no se puede preguntar, se sigue con el consejo de siempre.
+  }
+  console.error("Lo primero que hay que mirar es si existe bd/gestion.db (la genera XOne Studio, no esto).");
+  process.exit(1);
+}

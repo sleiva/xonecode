@@ -1,4 +1,4 @@
-import { readdirSync, statSync } from "node:fs";
+import { existsSync, readdirSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { CompositeBackend, FilesystemBackend, LocalShellBackend } from "deepagents";
 import { RUTA_MEMORIA_INTERNA, RUTA_MEMORIA_VIRTUAL } from "./memoriaDeProyecto.js";
@@ -84,9 +84,14 @@ export function backendDelProyectoConShell(
  * sesión en curso, que es el límite ya anotado en CLAUDE.md y no uno nuevo.
  */
 export function entornoDeLaShellDelProyecto(raiz: string, artefactos?: string): Record<string, string> {
+  const skills = skillsMontables(raiz).map((m) => ({ nombre: m.nombre, dir: m.dir }));
   return entornoDeShell({
     entorno: process.env,
-    skills: skillsMontables(raiz).map((m) => ({ nombre: m.nombre, dir: m.dir })),
+    skills,
+    // La carpeta `scripts/` de cada skill que la tenga, al PATH. La comprobación de que existe
+    // va aquí porque `entornoDeShell` es puro: prometer en el PATH una carpeta que no está es
+    // el botón muerto de siempre, solo que en una variable de entorno.
+    binarios: skills.map((s) => join(s.dir, "scripts")).filter((d) => existsSync(d)),
     ...(artefactos === undefined ? {} : { artefactos }),
   });
 }

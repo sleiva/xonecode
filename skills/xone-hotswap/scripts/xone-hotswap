@@ -59,15 +59,31 @@ const ARTEFACTOS = process.env.XONECODE_ARTEFACTOS;
 /** A partir de aquí se da por binario y no se imprime. */
 const LARGO_DE_BINARIO = 2_000;
 
+const pedidos = process.argv.slice(2);
+if (pedidos.length === 0 || pedidos.includes("--help") || pedidos.includes("-h")) {
+  // El prompt del agente promete que `--help` contesta. Una promesa así, sin cumplir, cuesta
+  // un viaje y deja al modelo adivinando argumentos.
+  console.error(`xone-hotswap — manda comandos al servidor hotswap de la app (WebSocket).
+
+  xone-hotswap '{"command":"getAllElements","format":"xone"}'
+  xone-hotswap '{"command":"getScreenshot"}'           la captura va a $XONECODE_ARTEFACTOS
+  xone-hotswap '{"command":"click","name":"MAP_BT"}'   varios comandos, en orden, si pasas varios
+
+Antes, en Android, hace falta el túnel: adb forward tcp:8443 tcp:8443
+Variables: HOTSWAP_URL (${URL_POR_OMISION}), XONECODE_ARTEFACTOS, HOTSWAP_TOPE_MS.
+El catálogo entero de comandos está en el SKILL.md de xone-hotswap.`);
+  process.exit(pedidos.length === 0 ? 1 : 0);
+}
+
 const comandos = [];
-for (const arg of process.argv.slice(2)) {
+for (const arg of pedidos) {
   try {
     comandos.push(JSON.parse(arg));
   } catch {
     salir(`no es JSON válido: ${arg.slice(0, 80)}`);
   }
 }
-if (comandos.length === 0) salir("no me has dado ningún comando");
+
 
 function salir(motivo) {
   console.error(`hotswap: ${motivo}`);

@@ -80,6 +80,33 @@ describe("entornoDeShell", () => {
   });
 });
 
+describe("los scripts de una skill, en el PATH", () => {
+  it("se añaden al PATH heredado, sin perderlo", () => {
+    const { PATH } = entornoDeShell({
+      entorno: { PATH: "/usr/bin:/bin" },
+      binarios: ["/skills/xone-hotswap/scripts"],
+    });
+
+    expect(PATH).toBe("/usr/bin:/bin:/skills/xone-hotswap/scripts");
+  });
+
+  it("al FINAL, para que una skill no pueda sombrear un binario del sistema", () => {
+    // Una skill puede venir en un `.zip` de cualquier sitio: con el PATH prepuesto, un script
+    // suyo llamado `git` o `ls` ganaría al de verdad.
+    const { PATH } = entornoDeShell({ entorno: { PATH: "/usr/bin" }, binarios: ["/de/una/skill"] });
+
+    expect(PATH!.indexOf("/usr/bin")).toBeLessThan(PATH!.indexOf("/de/una/skill"));
+  });
+
+  it("sin PATH heredado no se inventa uno: solo van los de las skills", () => {
+    expect(entornoDeShell({ entorno: {}, binarios: ["/a", "/b"] })["PATH"]).toBe("/a:/b");
+  });
+
+  it("y sin scripts no se toca el PATH", () => {
+    expect(entornoDeShell({ entorno: { PATH: "/usr/bin" } })["PATH"]).toBe("/usr/bin");
+  });
+});
+
 describe("variableDeSkill", () => {
   it("deriva el nombre igual que la clave de un proveedor personalizado", () => {
     expect(variableDeSkill("xone-hotswap")).toBe("XONECODE_SKILL_XONE_HOTSWAP");
