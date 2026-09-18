@@ -11,6 +11,10 @@ import { permisosDe, hitlDe, montajeDeFicheros, puedeEjecutar, type QuienDecideP
 import { crearBusquedaRegex } from "./busquedaRegex.js";
 import { crearNavegacionXone } from "./navegacionXone.js";
 import { indiceEnDisco, type CargarIndice } from "../navegacion/indiceEnDisco.js";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+import { crearCriticaVisual } from "./criticaVisual.js";
+import { invocarVisualConModelos } from "../dispositivos/juezVisual.js";
 import { inventarioDelProyecto } from "../subagentes/escrituraExterna.js";
 import type { DiagnosticoDeTools } from "../turno/diagnosticoDeTools.js";
 import { middlewareTextoDeTool } from "../turno/textoDeTool.js";
@@ -150,7 +154,7 @@ export function promptOrquestador(agentes: readonly Agente[]): string {
      * hay que cambiarlo aquí o la regla se queda escrita y muerta.
      */
     hay("developer-xone") && hay("device-controller")
-      ? "Si el encargo incluye PROBARLO en un móvil o emulador, son DOS pasos y en este orden: `developer-xone` escribe, y luego `device-controller` lo despliega y lo comprueba. Dile SIEMPRE a qué pantalla o colección tiene que llegar, no solo «pruébalo». Lo que encuentre vuelve a `developer-xone` para corregir; no des por buena una pantalla que nadie ha mirado."
+      ? "Si el encargo incluye PROBARLO en un móvil o emulador, son DOS pasos y en este orden: `developer-xone` escribe, y luego `device-controller` lo despliega y lo comprueba. Dile SIEMPRE a qué pantalla o colección tiene que llegar, no solo «pruébalo». Si tienes `xone_critica_visual`, pásale la captura que deje: ve fallos de pintado que ninguna comprobación estática detecta, y si te pide otra pantalla, encárgasela al conductor y vuelve. Lo que salga de todo eso vuelve a `developer-xone` para corregir; no des por buena una pantalla que nadie ha mirado."
       : "",
     "Los especialistas no comparten el transcript: al encadenarlos, incluye en la descripción",
     "de la siguiente `task` un bloque `HANDOFF DE ANÁLISIS` compacto con los hechos verificados,",
@@ -482,7 +486,30 @@ export async function construirAgente(opciones: OpcionesDelAgente): Promise<unkn
      * `excluirTools` existe por eso—, pero es una operación enumerada y un nombre frente a
      * las once llamadas que sustituye.
      */
-    tools: [crearNavegacionXone(cargarIndice, opciones.ficheros)],
+    /**
+     * **Y la crítica visual va SOLO aquí, y solo si hay carpeta de artefactos.**
+     *
+     * Aquí porque es quien reparte: el crítico pide pantallas por nombre y el único que puede
+     * ir a por ellas es el conductor, así que el que tiene que oír la petición es el que
+     * delega. Dársela al conductor sería que el que trabaja se puntúe solo — lo que
+     * `juezDeTarea` prohíbe por escrito y lo que su propio prompt le prohíbe afirmar.
+     *
+     * Y solo con carpeta porque sin ella no hay ninguna captura que mirar: una tool cuyo
+     * único final posible es «no encuentro nada» es el botón muerto de siempre, y encima
+     * cobrando su esquema en cada llamada.
+     */
+    tools: [
+      crearNavegacionXone(cargarIndice, opciones.ficheros),
+      ...(opciones.artefactos === undefined
+        ? []
+        : [
+            crearCriticaVisual({
+              leerArtefacto: async (nombre) =>
+                readFileSync(join(opciones.artefactos!.carpeta, nombre)),
+              invocar: invocarVisualConModelos(opciones.modelos),
+            }),
+          ]),
+    ],
     interruptOn: hitlDe(PERFIL_DEL_ORQUESTADOR),
     checkpointer: opciones.checkpointer ?? new MemorySaver(),
     // El contenido de los `ToolMessage` va como TEXTO al modelo. Sin esto, un turno real

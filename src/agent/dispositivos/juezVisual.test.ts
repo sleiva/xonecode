@@ -4,6 +4,7 @@ import {
   juzgarPantalla,
   PROMPT_VISUAL,
   TOPE_DE_OBSERVACIONES,
+  TOPE_DE_PETICIONES,
   type InvocarVisual,
 } from "./juezVisual.js";
 
@@ -90,6 +91,68 @@ describe("juzgarPantalla", () => {
     };
 
     await expect(juzgarPantalla(PANTALLA, { pantalla: "X" }, invocar)).rejects.toThrow(ErrorDelJuezVisual);
+  });
+
+  /**
+   * **Lo que le faltaba para ser útil: poder PEDIR.** Juzga la captura que le den, así que si
+   * el conductor fotografió el login, dictamina sobre el login. Pedir por NOMBRE es lo que le
+   * deja cerrar el bucle sin tocar el aparato — que es de lo que se trata: la shell la lleva
+   * uno solo.
+   */
+  it("puede pedir otras pantallas, por nombre", async () => {
+    const v = await juzgarPantalla(
+      PANTALLA,
+      { pantalla: "Calculadora" },
+      contesta('{"veredicto":"rojo","hallazgos":["el texto sale cortado"],"necesito":["Productos","Clientes"]}'),
+    );
+
+    expect(v.necesito).toEqual(["Productos", "Clientes"]);
+  });
+
+  /**
+   * **Un VERDE que pide más no es un verde.** Es la misma dirección que «un verificador que no
+   * corrió no es verde» de `condicionesDeEntrega`: lo que deja pasar algo no puede decirse
+   * sobre lo que no se ha visto.
+   */
+  it("un verde que aún pide pantallas es INDETERMINADO", async () => {
+    const v = await juzgarPantalla(
+      PANTALLA,
+      { pantalla: "X" },
+      contesta('{"veredicto":"verde","hallazgos":[],"necesito":["Calculadora"]}'),
+    );
+
+    expect(v.veredicto).toBe("indeterminado");
+    // Pero lo que pide NO se tira: es lo que hay que ir a buscar.
+    expect(v.necesito).toEqual(["Calculadora"]);
+  });
+
+  /**
+   * Su salida no es estable —6 vueltas sobre la MISMA captura dieron 4, 2, 4, 5, 3 y 5
+   * observaciones—, así que sin tope pediría pantallas indefinidamente.
+   */
+  it("acota cuántas pantallas puede pedir, y descarta la prosa", async () => {
+    const v = await juzgarPantalla(
+      PANTALLA,
+      { pantalla: "X" },
+      contesta(
+        JSON.stringify({
+          veredicto: "rojo",
+          hallazgos: ["algo"],
+          necesito: ["A", "B", "C", "D", "E", "F", " ", "mándame otra foto de la pantalla anterior por favor"],
+        }),
+      ),
+    );
+
+    expect(v.necesito.length).toBeLessThanOrEqual(TOPE_DE_PETICIONES);
+    expect(v.necesito).not.toContain(" ");
+    // Un nombre de colección, no una frase: lo que no lo parece se descarta.
+    expect(v.necesito.some((n) => n.includes(" "))).toBe(false);
+  });
+
+  it("sin `necesito` la lista está vacía, no ausente", async () => {
+    const v = await juzgarPantalla(PANTALLA, { pantalla: "X" }, contesta('{"veredicto":"verde","hallazgos":[]}'));
+
+    expect(v.necesito).toEqual([]);
   });
 
   it("la imagen y la pantalla llegan al modelo", async () => {

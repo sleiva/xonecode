@@ -45,6 +45,9 @@ describe("promptOrquestador", () => {
     expect(PROMPT_ORQUESTADOR).toMatch(/PROBARLO en un móvil o emulador/);
     // Lo que distingue esta regla de un «pruébalo»: el conductor necesita saber A DÓNDE ir.
     expect(PROMPT_ORQUESTADOR).toMatch(/a qué pantalla o colección tiene que llegar/);
+    // Y qué hacer con la captura: el crítico visual ve lo que nada estático ve, y puede PEDIR.
+    expect(PROMPT_ORQUESTADOR).toContain("xone_critica_visual");
+    expect(PROMPT_ORQUESTADOR).toMatch(/te pide otra pantalla/);
   });
 
   it("y esa regla tampoco se escribe si falta uno de los dos", () => {
