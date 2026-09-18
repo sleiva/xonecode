@@ -824,6 +824,12 @@ export async function abrirSesionReal(opciones: {
        *
        * Y que no se pueda preguntar NO es un rojo: se dice como aviso y el turno sigue, igual
        * que con el binario del simulador.
+       *
+       * **Límite declarado**: esto cuelga del mismo bloque que el verificador, así que solo
+       * corre en un turno que ESCRIBIÓ ficheros del proyecto. Un turno de pura inspección
+       * —«ve a esa pantalla y dime qué ves»— no pasa por aquí, y no debe: la pregunta que
+       * contesta este enganche es «¿quedó bien lo que acabas de escribir?». Para mirar sin
+       * escribir está la tool `xone_critica_visual`, que el orquestador invoca cuando quiere.
        */
       if (
         tocaCriticarPantalla({

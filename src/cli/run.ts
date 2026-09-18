@@ -7,6 +7,7 @@ import { inspeccionar, type Entorno } from "../agent/config/entorno.js";
 import { tomarInstantanea, type Instantanea, type Cambio } from "../agent/turno/instantanea.js";
 import { SkillsEnDisco } from "../agent/grafo/skills.js";
 import { Modelos } from "../agent/config/modelos.js";
+import { juzgarPantalla, invocarVisualConModelos } from "../agent/dispositivos/juezVisual.js";
 import { proveedoresPersonalizados } from "../agent/config/configEnDisco.js";
 import { abrirSesionReal } from "../agent/turno/turnoReal.js";
 import { SimuladorVerifier } from "../agent/turno/verificador.js";
@@ -158,6 +159,14 @@ async function correrReal(opciones: OpcionesRun, escribir: Escribir): Promise<nu
     // El simulador de verdad. Su ausencia en la máquina no se descubre aquí sino al
     // verificar, y entonces se dice en el turno — sin tumbar nada.
     verifier: new SimuladorVerifier(),
+    /**
+     * Y el crítico VISUAL, que mira las capturas que el turno haya dejado. Se monta junto al
+     * verificador porque contesta la otra mitad de «¿quedó bien?»: el simulador dice si está
+     * bien escrito y esto si se VE bien — medido sobre una pantalla real, `validate` en verde,
+     * `smoke` en verde, el log limpio y las etiquetas cortadas por la mitad.
+     */
+    criticaVisual: (captura, pantalla) =>
+      juzgarPantalla(captura, { pantalla }, invocarVisualConModelos(modelos)),
     pedirAprobacion: async (lista, ficheros, diffs) => {
       // **Se pregunta SIEMPRE, con TTY o sin él.** Cortar aquí sin preguntar dejaría
       // muerto el conjunto de respuestas sin-TTY de `interpretAnswer`, que existe

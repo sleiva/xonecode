@@ -66,6 +66,7 @@ import { inspeccionar } from "../agent/config/entorno.js";
 import { versionEnMarcha } from "../agent/config/versionEnDisco.js";
 import { SkillsEnDisco } from "../agent/grafo/skills.js";
 import { Modelos } from "../agent/config/modelos.js";
+import { juzgarPantalla, invocarVisualConModelos } from "../agent/dispositivos/juezVisual.js";
 import { CatalogoModelos } from "../agent/config/catalogoModelos.js";
 import { abrirSesionReal, ficherosDelProyecto, type SesionReal } from "../agent/turno/turnoReal.js";
 import { SimuladorVerifier } from "../agent/turno/verificador.js";
@@ -529,6 +530,14 @@ export function crearEjecutorReal(
         // El simulador de verdad. Su ausencia en la máquina no se descubre aquí sino al
         // verificar, y entonces se dice en el turno — sin tumbar nada.
         verifier: new SimuladorVerifier(),
+        /**
+         * Y el crítico VISUAL, que mira las capturas que el turno haya dejado. Se monta junto al
+         * verificador porque contesta la otra mitad de «¿quedó bien?»: el simulador dice si está
+         * bien escrito y esto si se VE bien — medido sobre una pantalla real, `validate` en verde,
+         * `smoke` en verde, el log limpio y las etiquetas cortadas por la mitad.
+         */
+        criticaVisual: (captura, pantalla) =>
+          juzgarPantalla(captura, { pantalla }, invocarVisualConModelos(new Modelos(estado.fuentes, proveedoresPersonalizados))),
         // Las aprobaciones entran por el `preguntar` de la propia consola: el turno para
         // y pregunta DENTRO de la sesión, sin salir de ella ni montar otro lector de stdin.
         // Si la consola aporta su propio puerto (`aprobacionesTui`, el modal de la TUI),
