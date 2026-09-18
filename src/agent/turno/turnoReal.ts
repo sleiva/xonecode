@@ -15,6 +15,78 @@ import { esRutaDeArtefacto, type Artefacto } from "../../core/artefactos.js";
  * veces) corta antes de llegar aquí cuando el modelo repite el mismo cambio.
  */
 export const TOPE_REPARACIONES = 2;
+
+/**
+ * ¿Toca criticar la pantalla en esta pasada?
+ *
+ * PURA y exportada a propósito: la condición vivía dentro de `conVerificacion`, que es un
+ * cierre que TODOS los tests de este fichero doblan, y ahí una regla de producción se queda
+ * escrita y no probada — el patrón de fallo que este repo ha pagado nueve veces.
+ *
+ * Cuatro condiciones, y cada una dice algo distinto: sin crítico esta ejecución no puede
+ * preguntar (y eso NO es «la pantalla está bien»); sin capturas no hay nada que mirar; una vez
+ * por turno porque sus observaciones no son una huella y no hay forma de saber si una segunda
+ * vuelta avanza; y nunca por encima del tope de reparaciones, que es de todo el turno.
+ */
+export function tocaCriticarPantalla(estado: {
+  hayCritico: boolean;
+  capturas: number;
+  yaDisparo: boolean;
+  intento: number;
+}): boolean {
+  return (
+    estado.hayCritico &&
+    estado.capturas > 0 &&
+    !estado.yaDisparo &&
+    estado.intento < TOPE_REPARACIONES
+  );
+}
+
+/**
+ * El texto que se le devuelve al agente para que repare, de las DOS fuentes.
+ *
+ * Fuera del cierre por lo mismo que `tocaCriticarPantalla`. Y no se le dice CÓMO arreglarlo
+ * —eso lo sabe él o no lo sabe—, solo lo que se ha medido y lo único que importa aquí: que no
+ * invente nada para que el error desaparezca, que es justo lo que XOne no le reprocha.
+ */
+export function textoDeReparacion(
+  hallazgos: readonly HallazgoDelTurno[],
+  observaciones: readonly string[]
+): string {
+  const lineas: string[] = [];
+  if (hallazgos.length > 0) {
+    const errores = hallazgos.filter((h) => h.severidad === "error").length;
+    lineas.push(
+      `El simulador de XOne ha revisado lo que acabas de escribir y ha encontrado ${errores} error(es):`,
+      ...hallazgos.map(
+        (h) =>
+          `- ${h.severidad === "error" ? "ERROR" : "aviso"} ${h.code}${h.fichero === undefined ? "" : ` en ${h.fichero}${h.linea === undefined ? "" : `:${h.linea}`}`}: ${h.mensaje}`
+      )
+    );
+  }
+  if (observaciones.length > 0) {
+    if (lineas.length > 0) lineas.push("");
+    /**
+     * **El aviso sobre la redacción está MEDIDO y no es cortesía.** Seis vueltas del crítico
+     * describieron un texto CORTADO como «girado 180°». A dónde apunta sí lo acertó las seis.
+     * Sin esta línea, el desarrollador busca una rotación que no existe y gasta la única
+     * vuelta que hay.
+     */
+    lineas.push(
+      "Y mirando una captura de la pantalla en el aparato se ve esto (la REDACCIÓN no es de",
+      "fiar: describe mal la causa. Fíate de QUÉ control señala, no de su explicación, y",
+      "míralo tú en el código):",
+      ...observaciones.map((o) => `- ${o}`)
+    );
+  }
+  lineas.push(
+    "",
+    "Corrige lo que puedas. No inventes atributos, funciones ni propiedades para que",
+    "desaparezcan: XOne ignora lo desconocido en silencio y el simulador lo detecta.",
+    "Si algo no sabes cómo corregirlo, dilo en vez de intentar otra cosa."
+  );
+  return lineas.join("\n");
+}
 import { aPendiente, ficheroDe, cambioDe, buildResume } from "./interrupts.js";
 import { cargarAgentes } from "../subagentes/agentesEnDisco.js";
 import { crearSubagenteExterno } from "../subagentes/subagenteExterno.js";
@@ -281,6 +353,16 @@ export async function abrirSesionReal(opciones: {
    */
   artefactos?: string;
   /**
+   * El crítico visual, si esta ejecución tiene con qué preguntar.
+   *
+   * Entra por parámetro como `verifier`, así que `npm test` no le pregunta a ningún modelo, y
+   * su ausencia significa «esta ejecución no tiene crítico» y no «la pantalla está bien».
+   */
+  criticaVisual?: (
+    captura: { base64: string; mime: string },
+    pantalla: string
+  ) => Promise<{ veredicto: string; observaciones: string[] }>;
+  /**
    * La carpeta de los ADJUNTOS de la tarea — lo que el agente ve como `/adjuntos/`, de solo
    * lectura (`core/adjuntos.ts`).
    *
@@ -390,6 +472,17 @@ export async function abrirSesionReal(opciones: {
    * diga una vez y no en cada pasada de una reparación.
    */
   const artefactosDeLaPasada: Artefacto[] = [];
+  /**
+   * Las CAPTURAS que este turno dejó, sin vaciarse.
+   *
+   * `artefactosDeLaPasada` se drena al anunciarlas, así que al llegar al final del turno está
+   * vacío. Esto es lo que mira el crítico visual: **no navega ni conduce nada**, mira lo que el
+   * turno ya fotografió. Ésa es la única forma de que la crítica sea un paso del harness y no
+   * un recado que el orquestador puede olvidar — llegar a una pantalla necesita un agente
+   * (medido: el control de la Calculadora vive en un cajón cerrado), pero MIRAR lo ya
+   * capturado no.
+   */
+  const capturasDelTurno: Artefacto[] = [];
   const carpetaDeArtefactos = opciones.artefactos ?? join(raiz, ".xonecode", "artefactos");
 
   const construir = async (): Promise<unknown> =>
@@ -440,7 +533,10 @@ export async function abrirSesionReal(opciones: {
       diagnostico,
       artefactos: {
         carpeta: carpetaDeArtefactos,
-        alEscribir: (a) => artefactosDeLaPasada.push(a),
+        alEscribir: (a) => {
+          artefactosDeLaPasada.push(a);
+          if (a.mime !== undefined && a.mime.startsWith("image/")) capturasDelTurno.push(a);
+        },
       },
       // Ausente es «no hay», no una carpeta vacía: ver `OpcionesDeSesion.adjuntos`.
       ...(opciones.adjuntos === undefined ? {} : { adjuntos: opciones.adjuntos }),
@@ -593,6 +689,18 @@ export async function abrirSesionReal(opciones: {
     let ultimosHallazgos: HallazgoDelTurno[] = [];
     /** La huella del veredicto anterior, para detectar que reparar no avanza. */
     let huellaPrevia: string | undefined;
+    /**
+     * Lo que el crítico visual vio, y si ya disparó.
+     *
+     * **Una vez por turno, y es deliberado.** Sus observaciones NO son una huella —medido:
+     * seis vueltas sobre la MISMA captura dieron 4, 2, 4, 5, 3 y 5—, así que la guarda de «no
+     * progreso» no puede decidir si una segunda vuelta avanza. Sin forma de medirlo, el tope
+     * es uno: se le devuelve al agente lo que se ve mal, y lo que pase después lo mira una
+     * persona. Y por eso tampoco entran en `huellaPrevia`: la ensuciarían con texto que cambia
+     * solo, y entonces el bucle creería que siempre avanza.
+     */
+    let visualYaDisparo = false;
+    let observacionesVisuales: string[] = [];
 
     /**
      * El lazo de verificación, cosido al FINAL del flujo de eventos y no después del turno.
@@ -701,6 +809,69 @@ export async function abrirSesionReal(opciones: {
         hallazgos,
         ...(preexistentes > 0 ? { preexistentes } : {}),
       };
+      /**
+       * **El crítico visual, enganchado AQUÍ y no en el prompt del orquestador.**
+       *
+       * Ésta es la diferencia entre que la crítica ocurra y que ocurra cuando el modelo se
+       * acuerde. Es el mismo punto y el mismo mecanismo que el resto del lazo —y el mismo que
+       * el `RubricMiddleware` de deepagents: enganchar donde el agente iba a terminar y
+       * devolver el feedback como mensaje de USUARIO en el mismo hilo—.
+       *
+       * **No conduce nada**: mira las capturas que este turno ya dejó. Navegar hasta una
+       * pantalla necesita un agente (medido: el control que lleva a la Calculadora vive en un
+       * cajón cerrado y hay que abrirlo mirando el árbol), pero MIRAR lo ya fotografiado no.
+       * Sin capturas no opina, que es honesto: no hay nada que ver.
+       *
+       * Y que no se pueda preguntar NO es un rojo: se dice como aviso y el turno sigue, igual
+       * que con el binario del simulador.
+       */
+      if (
+        tocaCriticarPantalla({
+          hayCritico: opciones.criticaVisual !== undefined,
+          capturas: capturasDelTurno.length,
+          yaDisparo: visualYaDisparo,
+          intento,
+        })
+      ) {
+        visualYaDisparo = true;
+        // La ÚLTIMA: es el estado más reciente de la pantalla, y las anteriores pueden ser de
+        // antes del cambio que este turno acaba de hacer.
+        const captura = capturasDelTurno[capturasDelTurno.length - 1]!;
+        try {
+          const bytes = readFileSync(join(carpetaDeArtefactos, captura.nombre));
+          const visual = await opciones.criticaVisual!(
+            { base64: bytes.toString("base64"), mime: captura.mime ?? "image/png" },
+            captura.nombre
+          );
+          if (visual.veredicto === "rojo" && visual.observaciones.length > 0) {
+            observacionesVisuales = visual.observaciones;
+            yield {
+              tipo: "aviso",
+              texto: `⚠ la captura de esta sesión enseña ${visual.observaciones.length} defecto(s) de pantalla`,
+              severidad: "aviso",
+            };
+            /**
+             * Si el simulador está en VERDE, nadie más va a disparar una ronda: la dispara
+             * esto. Si ya está en rojo, las observaciones se suman a la petición que va a
+             * salir igualmente, y no se gasta una vuelta extra.
+             */
+            if (errores === 0) {
+              ultimosHallazgos = [];
+              intento += 1;
+              reparar = true;
+              cerrarRonda = false;
+              return;
+            }
+          }
+        } catch (error) {
+          yield {
+            tipo: "aviso",
+            texto: `⚠ no se pudo criticar la pantalla: ${error instanceof Error ? error.name : "error"}`,
+            severidad: "aviso",
+          };
+        }
+      }
+
       if (errores === 0) return;
 
       // Rojo. Tres salidas, y solo una de ellas es «inténtalo otra vez».
@@ -754,17 +925,7 @@ export async function abrirSesionReal(opciones: {
      * es justo lo que XOne no le va a reprochar y el simulador sí.
      */
     const peticionDeReparacion = (): string =>
-      [
-        `El simulador de XOne ha revisado lo que acabas de escribir y ha encontrado ${ultimosHallazgos.filter((h) => h.severidad === "error").length} error(es):`,
-        ...ultimosHallazgos.map(
-          (h) =>
-            `- ${h.severidad === "error" ? "ERROR" : "aviso"} ${h.code}${h.fichero === undefined ? "" : ` en ${h.fichero}${h.linea === undefined ? "" : `:${h.linea}`}`}: ${h.mensaje}`
-        ),
-        "",
-        "Corrige los errores. No inventes atributos, funciones ni propiedades para que",
-        "desaparezcan: XOne ignora lo desconocido en silencio y el simulador lo detecta.",
-        "Si algún error no sabes cómo corregirlo, dilo en vez de intentar otra cosa.",
-      ].join("\n");
+      textoDeReparacion(ultimosHallazgos, observacionesVisuales);
 
     // Dos bucles anidados y a propósito: el de dentro son las RONDAS de aprobación de una
     // petición (una pausa termina la ronda, se reanuda con las decisiones); el de fuera son
