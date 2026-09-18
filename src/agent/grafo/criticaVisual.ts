@@ -100,6 +100,32 @@ export function crearCriticaVisual(deps: DependenciasDeCritica) {
         );
         for (const o of veredicto.observaciones) lineas.push(`- ${o}`);
       }
+      /**
+       * **Un rojo tiene que ENTERAR a alguien, y el sitio fuerte es aquí.**
+       *
+       * La regla de «lo que salga vuelve a `developer-xone`» vive en el prompt del
+       * orquestador, o sea a miles de tokens del momento en que llega el veredicto. Eso es
+       * una sugerencia. Este repo ya tiene escrito que «los avisos de honestidad son código,
+       * no prompt», y el patrón para que un modelo haga lo siguiente es el de
+       * `xone_navegacion` cuando no sabe contestar: se devuelve el PASO SIGUIENTE escrito, no
+       * un consejo — a un modelo al que se le dice qué hacer sin decirle cómo se le inventa
+       * los argumentos.
+       *
+       * **Límite declarado, y es el que queda abierto**: esto no es un tope. No puede serlo
+       * desde aquí, porque la tool se construye por SESIÓN y no por turno, así que no tiene
+       * dónde contar las vueltas. Lo que acota hoy es que cada arreglo pasa por una
+       * aprobación humana. Un tope de verdad exige que el bucle lo lleve el harness
+       * (`conVerificacion`), y eso pide conducir el aparato desde código — medido: no se
+       * puede, porque llegar a una pantalla necesita abrir cajones y mirar el árbol.
+       */
+      if (veredicto.veredicto === "rojo") {
+        lineas.push(
+          "Esto es un defecto del proyecto SIN ARREGLAR: no lo cuentes y ya está. Encárgaselo a",
+          "`developer-xone` pasándole estas observaciones tal cual, y cuando lo haya corregido",
+          "manda otra vez al conductor a esta misma pantalla y vuelve a llamarme con la captura",
+          "nueva. No des la pantalla por buena hasta que yo la vea en verde."
+        );
+      }
       if (veredicto.necesito.length > 0) {
         lineas.push(
           `Necesita ver ${veredicto.necesito.length === 1 ? "otra pantalla" : "otras pantallas"} para dictaminar: ${veredicto.necesito.join(", ")}.`,

@@ -37,6 +37,32 @@ describe("xone_critica_visual", () => {
     expect(limpio).not.toMatch(/no es fiable/);
   });
 
+  /**
+   * **Un rojo tiene que enterar a alguien.** La regla de «vuelve al developer» vive en el
+   * prompt del orquestador, a miles de tokens del veredicto; el sitio fuerte es el resultado
+   * de la tool, como hace `xone_navegacion` cuando no sabe contestar: el paso siguiente
+   * ESCRITO, no un consejo.
+   */
+  it("un ROJO trae el paso siguiente escrito, no un «arréglalo»", async () => {
+    const salida = await tool('{"veredicto":"rojo","hallazgos":["el texto sale cortado"]}').invoke({
+      captura: "/artefactos/c.jpg",
+      pantalla: "Calculadora",
+    });
+
+    expect(salida).toContain("developer-xone");
+    expect(salida).toMatch(/vuelve a llamarme con la captura/);
+    expect(salida).toMatch(/SIN ARREGLAR/);
+  });
+
+  it("y un VERDE no manda a nadie a arreglar nada", async () => {
+    const salida = await tool('{"veredicto":"verde","hallazgos":[]}').invoke({
+      captura: "/artefactos/c.jpg",
+      pantalla: "X",
+    });
+
+    expect(salida).not.toContain("developer-xone");
+  });
+
   it("dice qué pantallas pide y qué hacer con eso", async () => {
     const salida = await tool(
       '{"veredicto":"rojo","hallazgos":["algo"],"necesito":["Productos"]}'
