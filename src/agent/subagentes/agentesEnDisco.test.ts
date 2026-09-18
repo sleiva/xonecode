@@ -366,6 +366,27 @@ describe("sembrarAgentes", () => {
   });
 
   /**
+   * MEDIDO: en un turno real el conductor gastó su presupuesto haciendo `grep` de
+   * `MAP_BT_ACEPTAR`, `function hacerLogin` y `Usuarios` para deducir las credenciales del
+   * código — y se quedó en la pantalla de login con 285k tokens gastados. La respuesta estaba
+   * a UNA orden: `runSql` contra la tabla de usuarios del aparato devolvió `LOGIN "admin"` y
+   * `PWD` vacío, y con eso se entra.
+   *
+   * **Y el final de la regla no es cosmético**: un subagente no tiene canal para preguntar a
+   * nadie a mitad de turno, así que «pedírselo al usuario» solo puede ser pararse y decir qué
+   * falta. Lo que no puede es seguir probando contraseñas.
+   */
+  it("le dice cómo entrar cuando la app pide login, y qué hacer si no puede", () => {
+    const conductor = AGENTES_DE_SERIE.find((a) => a.nombre === "device-controller")!;
+
+    expect(conductor.instrucciones).toContain("runSql");
+    expect(conductor.instrucciones).toMatch(/_usuarios/);
+    expect(conductor.instrucciones).toMatch(/autologon/);
+    // Pararse y decirlo, en vez de seguir adivinando.
+    expect(conductor.instrucciones).toMatch(/PÁRATE/);
+  });
+
+  /**
    * Lo que lo separa de «prueba a ver»: MEDIDO contra el aparato, el control que da la tool
    * (`MAP_BT_CALCULADORA_DR`) NO se puede pulsar de primeras — vive en un cajón cerrado y el
    * aparato contesta «not found or not enabled». Si el prompt no dice qué hacer entonces, el
