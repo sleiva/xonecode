@@ -4622,14 +4622,23 @@ que es exactamente lo que la plantilla dice que mires primero.
 
 ### Correrlo de verdad, que es otra cosa que cablearlo
 
-Dos turnos reales sobre un proyecto de verdad (`MinitsMT`) con `gemini-3.8-flash`, que es lo que
-ese usuario tiene en sus tres papeles. **El cableado funcionó las dos veces y el agente no hizo
-la tarea bien ninguna.** La primera: 245 comandos, 290k tokens de entrada, la skill releída 45
-veces, 30 `ls` sobre una ruta REAL que `read_file` no puede abrir nunca y 25 `grep adb` DENTRO
-del proyecto; capturó la app que ya estaba viva sin desplegar nada y dijo «se ha lanzado la
-aplicación». La segunda, con el prompt ya corregido: **640 comandos y 821k tokens**, o sea peor.
-Sí usó la variable de la skill y el cliente del canal, y la captura salió anunciada como
-artefacto — pero tampoco desplegó.
+Cuatro turnos reales sobre un proyecto de verdad (`MinitsMT`) con `gemini-3.8-flash`, que es lo
+que ese usuario tiene en sus tres papeles. **El cableado funcionó desde el primero y el agente
+tardó tres en hacer la tarea bien.** Las cifras honestas son las LLAMADAS AL MODELO y los
+tokens, no los «comandos» —ver más abajo por qué—: 72 llamadas y 821k de entrada en el peor
+momento, 17 y 184k cuando salió bien. En medio, el agente capturó la app que ya estaba viva sin
+desplegar nada y dijo «se ha lanzado la aplicación»; leyó la skill una y otra vez; probó rutas
+absolutas con `read_file`, que no existen para esa tool; y buscó `adb` con `grep` dentro del
+proyecto.
+
+**Y una advertencia sobre el instrumento, que es la lección más cara de todas**: la traza de
+tools CUENTA DE MÁS. Con `subgraphs: true` y `streamMode: ["updates","messages"]`, cada paso
+reemite los mensajes acumulados del subgrafo, así que `aEventos` vuelve a emitir los eventos de
+tool anteriores: 286 eventos `execute` para **10 comandos distintos**, con el primero repetido 43
+veces. No es un adorno del diagnóstico —lo mismo se ve en la PANTALLA, en forma de tramos
+repetidos— y durante media sesión hizo leer «245 → 640 comandos» donde no los había. Las cifras
+de llamadas y de tokens vienen del tracker y no de ahí, así que ésas sí valen. Arreglarlo es otra
+tarea, y está declarado aquí para que nadie vuelva a decidir con esa columna.
 
 De ahí salen tres cosas que conviene no confundir. Una: el prompt se puede corregir con lo que
 enseña la traza, y se hizo. Otra: **el modelo importa más que el prompt aquí**, y
