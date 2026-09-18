@@ -732,6 +732,18 @@ describe("la ejecución es de UNO, y se comprueba", () => {
     ]);
   });
 
+  it("el que ejecuta NO es de solo lectura, y ese campo además le elige el modelo", () => {
+    // `soloLectura` se refiere a los FICHEROS, pero decide el papel: `rapido` para quien solo
+    // lee, `trabajo` para quien escribe. Un agente con shell marcado «solo lectura» miente dos
+    // veces: dice que no puede tocar nada —puede tocar el disco entero— y se lleva el modelo
+    // barato para un trabajo que es leer un log y entender una excepción.
+    const conductor = AGENTES_DE_SERIE.find((a) => a.nombre === "device-controller")!;
+    expect(conductor.soloLectura).toBe(false);
+    for (const otro of AGENTES_DE_SERIE.filter((a) => a.ejecucion !== true)) {
+      expect(otro.ejecucion).toBeUndefined();
+    }
+  });
+
   it("y su `.md` la lleva escrita, que es de donde sale al recargarlo", () => {
     const conductor = AGENTES_DE_SERIE.find((a) => a.nombre === "device-controller")!;
     expect(escribirAgente(conductor)).toContain("ejecucion: true");

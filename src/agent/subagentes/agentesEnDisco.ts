@@ -800,9 +800,27 @@ export const AGENTES_DE_SERIE: readonly Agente[] = [
       "instalada: despliega el proyecto en el aparato, lanza la app, captura la pantalla, " +
       "lee el árbol de controles, pulsa y rellena, y consulta el log y la base de datos del " +
       "dispositivo. Ejecuta comandos en esta máquina para conseguirlo. Delega en él " +
-      "«lánzalo», «sácame una captura», «pruébalo en el móvil». No modifica el proyecto.",
+      "«lánzalo», «sácame una captura», «pruébalo en el móvil». No edita ficheros del " +
+      "proyecto: para eso está developer-xone.",
     motor: "modelo",
-    soloLectura: true,
+    /**
+     * **NO es de solo lectura, y decirlo importa por dos cosas distintas.**
+     *
+     * La primera es honestidad: tiene una shell, así que puede escribir el disco entero. Una
+     * pastilla verde de «solo lectura» sobre el único agente que alcanza la máquina es
+     * exactamente el tipo de etiqueta que enseña a no mirarlas.
+     *
+     * La segunda es que ese campo DECIDE EL MODELO: `rapido` para quien solo lee, `trabajo`
+     * para quien escribe. Conducir un aparato —leer un log, entender una excepción de Rhino,
+     * decidir el siguiente comando— no es trabajo de modelo barato, y medido con uno rápido se
+     * quedaba en bucles: probaba lo mismo dos veces, mezclaba rutas virtuales con reales y
+     * tardaba tres turnos en hacer lo que hace en uno. `soloLectura` se refería a los FICHEROS
+     * y aquí se estaba leyendo como «tarea sencilla», que es otra cosa.
+     *
+     * Lo que NO cambia: sigue sin `write_file` ni `edit_file` (`TOOLS_CON_EJECUCION`), para que
+     * el camino normal de tocar el proyecto siga siendo el que pasa por la aprobación y el diff.
+     */
+    soloLectura: false,
     /**
      * **El único de serie con ejecución**, y lo que concede no es «correr un comando»: una
      * shell no pasa por `permisosDe` ni por el `virtualMode`, así que alcanza el disco

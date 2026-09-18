@@ -317,7 +317,11 @@ no viaja porque ahí la ejecución no se concede—. Reglas duras:
   quien la tiene NO recibe `permissions` (`perfiles.ts#montajeDeFicheros`, puro y probado; el
   cableado se mira desde fuera en `xoneAgent.ejecucion.test.ts`, preguntándole a la LIBRERÍA si
   ese backend ejecuta). Se le quitan `write_file` y `edit_file` para que el camino normal de
-  tocar el proyecto siga siendo el de la aprobación, no porque eso lo impida. **Solo con
+  tocar el proyecto siga siendo el de la aprobación, no porque eso lo impida. **Y quien ejecuta
+  NO es `soloLectura`**: ese campo se refiere a los ficheros pero además ELIGE EL MODELO
+  (`rapido` para quien solo lee, `trabajo` para quien escribe), así que marcarlo miente dos
+  veces — sobre lo que puede tocar, y dándole el modelo barato a un trabajo que es leer un log
+  y entender una excepción. **Solo con
   `motor: "modelo"`**: en los tres externos la shell está cerrada a propósito, así que ahí el
   campo se declara «no aplica» y la ventana lo dice, en vez de prometer lo que no llega. Se
   compensa VIÉNDOLO: el comando entero sale como `detalle` del evento (lista blanca de
