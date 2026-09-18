@@ -1,0 +1,133 @@
+--------- beginning of main
+09-18 15:19:32.754 15327 15327 I droid.framework: Late-enabling -Xcheck:jni
+09-18 15:19:32.891 15327 15327 I droid.framework: Using CollectorTypeCMC GC.
+09-18 15:19:32.935 15327 15327 D nativeloader: Load libframework-connectivity-tiramisu-jni.so using APEX ns com_android_tethering for caller /apex/com.android.tethering/javalib/framework-connectivity-t.jar: ok
+09-18 15:19:33.977 15327 15327 D ApplicationLoaders: Returning zygote-cached class loader: /system/framework/org.apache.http.legacy.jar
+09-18 15:19:33.984 15327 15327 W ziparchive: Unable to open '/data/app/~~Fu1GPN0JNgPCM2Ssuc4cgA==/com.xone.android.framework-a7H98Rv5BzpMPom2JFrt7Q==/base.dm': No such file or directory
+09-18 15:19:33.984 15327 15327 W ziparchive: Unable to open '/data/app/~~Fu1GPN0JNgPCM2Ssuc4cgA==/com.xone.android.framework-a7H98Rv5BzpMPom2JFrt7Q==/base.dm': No such file or directory
+09-18 15:19:35.804 15327 15327 D nativeloader: Configuring clns-7 for other apk /data/app/~~Fu1GPN0JNgPCM2Ssuc4cgA==/com.xone.android.framework-a7H98Rv5BzpMPom2JFrt7Q==/base.apk. target_sdk_version=37, uses_libraries=, library_path=/data/app/~~Fu1GPN0JNgPCM2Ssuc4cgA==/com.xone.android.framework-a7H98Rv5BzpMPom2JFrt7Q==/lib/arm64:/data/app/~~Fu1GPN0JNgPCM2Ssuc4cgA==/com.xone.android.framework-a7H98Rv5BzpMPom2JFrt7Q==/base.apk!/lib/arm64-v8a, permitted_path=/data:/mnt/expand:/data/user/0/com.xone.android.framework
+09-18 15:19:35.854 15327 15327 V GraphicsEnvironment: Currently set values for:
+09-18 15:19:35.855 15327 15327 V GraphicsEnvironment:   angle_gl_driver_selection_pkgs=[]
+09-18 15:19:35.855 15327 15327 V GraphicsEnvironment:   angle_gl_driver_selection_values=[]
+09-18 15:19:35.855 15327 15327 V GraphicsEnvironment: Global.Settings values are invalid: number of packages: 0, number of values: 0
+09-18 15:19:35.856 15327 15327 V GraphicsEnvironment: Neither updatable production driver nor prerelease driver is supported.
+09-18 15:19:36.028 15327 15327 W FirebaseApp: Default FirebaseApp failed to initialize because no default options were found. This usually means that com.google.gms:google-services was not applied to your gradle project.
+09-18 15:19:36.028 15327 15327 I FirebaseInitProvider: FirebaseApp initialization unsuccessful
+09-18 15:19:36.242 15327 15327 V XOneAndroidFramework: xoneApp.onCreate() event fired
+09-18 15:19:36.262 15327 15327 W droid.framework: Accessing hidden field Ljava/lang/Throwable;->detailMessage:Ljava/lang/String; (unsupported, reflection, allowed)
+09-18 15:19:36.364 15327 15327 W DynamiteModule: Local module descriptor class for com.google.android.gms.providerinstaller.dynamite not found.
+09-18 15:19:36.395 15327 15327 I DynamiteModule: Considering local module com.google.android.gms.providerinstaller.dynamite:0 and remote module com.google.android.gms.providerinstaller.dynamite:0
+09-18 15:19:36.397 15327 15327 W ProviderInstaller: Failed to load providerinstaller module: No acceptable module com.google.android.gms.providerinstaller.dynamite found. Local version is 0 and remote version is 0.
+09-18 15:19:36.415 15327 15327 D ApplicationLoaders: Returning zygote-cached class loader: /system/framework/org.apache.http.legacy.jar
+09-18 15:19:36.421 15327 15327 D nativeloader: Configuring clns-8 for other apk /system/framework/com.android.media.remotedisplay.jar. target_sdk_version=34, uses_libraries=ALL, library_path=/product/priv-app/PrebuiltGmsCore/lib/arm64:/product/priv-app/PrebuiltGmsCore/PrebuiltGmsCore.apk!/lib/arm64-v8a, permitted_path=/data:/mnt/expand:/data/user/0/com.google.android.gms
+09-18 15:19:36.427 15327 15327 D nativeloader: Configuring clns-9 for other apk /system/framework/com.android.location.provider.jar. target_sdk_version=34, uses_libraries=ALL, library_path=/product/priv-app/PrebuiltGmsCore/lib/arm64:/product/priv-app/PrebuiltGmsCore/PrebuiltGmsCore.apk!/lib/arm64-v8a, permitted_path=/data:/mnt/expand:/data/user/0/com.google.android.gms
+09-18 15:19:36.427 15327 15327 D ApplicationLoaders: Returning zygote-cached class loader: /system_ext/framework/androidx.window.extensions.jar
+09-18 15:19:36.428 15327 15327 D ApplicationLoaders: Returning zygote-cached class loader: /system_ext/framework/androidx.window.sidecar.jar
+09-18 15:19:36.440 15327 15327 D nativeloader: InitLlndkLibrariesProduct: libEGL.so:libGLESv1_CM.so:libGLESv2.so:libGLESv3.so:libRS.so:libandroid_net.so:libapexsupport.so:libbinder_ndk.so:libc.so:libcgrouprc.so:libclang_rt.asan-aarch64-android.so:libclang_rt.hwasan-aarch64-android.so:libcom.android.tethering.connectivity_native.so:libdl.so:libft2.so:liblog.so:libm.so:libmediandk.so:libnativewindow.so:libneuralnetworks.so:libselinux.so:libsync.so:libvendorsupport.so:libvndksupport.so:libvulkan.so
+09-18 15:19:36.441 15327 15327 D nativeloader: Configuring product-clns-10 for unbundled product apk /product/priv-app/PrebuiltGmsCore/PrebuiltGmsCore.apk. target_sdk_version=34, uses_libraries=, library_path=/product/priv-app/PrebuiltGmsCore/lib/arm64:/product/priv-app/PrebuiltGmsCore/PrebuiltGmsCore.apk!/lib/arm64-v8a:/product/lib64:/system/product/lib64, permitted_path=/data:/mnt/expand:/data/user/0/com.google.android.gms:/product/lib64:/system/product/lib64
+09-18 15:19:36.445 15327 15327 D nativeloader: InitVndkspLibrariesProduct: VNDK is deprecated with product
+09-18 15:19:36.629 15327 15327 D nativeloader: Load /product/priv-app/PrebuiltGmsCore/PrebuiltGmsCore.apk!/lib/arm64-v8a/libconscrypt_gmscore_jni.so using ns product-clns-10 from class loader (caller=/product/priv-app/PrebuiltGmsCore/PrebuiltGmsCore.apk!classes3.dex): ok
+09-18 15:19:36.635 15327 15327 V NativeCrypto: Registering com/google/android/gms/org/conscrypt/NativeCrypto's 305 native methods...
+09-18 15:19:36.667 15327 15327 W droid.framework: Accessing hidden method Ljava/security/spec/ECParameterSpec;->getCurveName()Ljava/lang/String; (unsupported, reflection, allowed)
+09-18 15:19:36.718 15327 15327 I ProviderInstaller: Installed default security provider GmsCore_OpenSSL
+09-18 15:19:36.719 15327 15327 V XOneAndroidFramework: XOneLiveServices is not embedded on XOneAndroidFramework. Skipping initialization.
+09-18 15:19:36.915 15327 15327 V XOneAndroidFramework: Found external/shared/removable directory: /storage/emulated/0/Android/data/com.xone.android.framework/files
+09-18 15:19:36.929 15327 15327 I WebViewFactory: Loading com.google.android.webview version 124.0.6367.219 (code 636771932)
+--------- beginning of system
+09-18 15:19:36.937 15327 15327 V ResourcesManager: The following library key has been added: ResourcesKey{ mHash=370dd8eb mResDir=null mSplitDirs=[] mOverlayDirs=[/product/overlay/EmulationPixel8/EmulationPixel8Overlay.apk,/product/overlay/NavigationBarModeGestural/NavigationBarModeGesturalOverlay.apk] mLibDirs=[/data/app/~~IikkPigl-gn-iI5czq5Bjg==/com.google.android.webview-7x9FD0W0WL27tioh5DZtsw==/WebViewGoogle.apk,/data/app/~~mwXMMFIhxhwS88Yjn76atw==/com.google.android.trichromelibrary_636771932-mUsotetS2U1cpybx1oPMlA==/TrichromeLibrary.apk,/system_ext/framework/androidx.window.extensions.jar] mDisplayId=0 mOverrideConfig=v35 mCompatInfo={420dpi always-compat} mLoaders=[]}
+09-18 15:19:36.941 15327 15327 W ziparchive: Unable to open '/data/app/~~mwXMMFIhxhwS88Yjn76atw==/com.google.android.trichromelibrary_636771932-mUsotetS2U1cpybx1oPMlA==/TrichromeLibrary.dm': No such file or directory
+09-18 15:19:36.941 15327 15327 W ziparchive: Unable to open '/data/app/~~mwXMMFIhxhwS88Yjn76atw==/com.google.android.trichromelibrary_636771932-mUsotetS2U1cpybx1oPMlA==/TrichromeLibrary.dm': No such file or directory
+09-18 15:19:36.942 15327 15327 W droid.framework: Entry not found
+09-18 15:19:36.944 15327 15327 D nativeloader: Configuring clns-11 for other apk /data/app/~~mwXMMFIhxhwS88Yjn76atw==/com.google.android.trichromelibrary_636771932-mUsotetS2U1cpybx1oPMlA==/TrichromeLibrary.apk. target_sdk_version=34, uses_libraries=ALL, library_path=/data/app/~~IikkPigl-gn-iI5czq5Bjg==/com.google.android.webview-7x9FD0W0WL27tioh5DZtsw==/lib/arm64:/data/app/~~IikkPigl-gn-iI5czq5Bjg==/com.google.android.webview-7x9FD0W0WL27tioh5DZtsw==/WebViewGoogle.apk!/lib/arm64-v8a:/data/app/~~mwXMMFIhxhwS88Yjn76atw==/com.google.android.trichromelibrary_636771932-mUsotetS2U1cpybx1oPMlA==/TrichromeLibrary.apk!/lib/arm64-v8a, permitted_path=/data:/mnt/expand
+09-18 15:19:36.944 15327 15327 D ApplicationLoaders: Returning zygote-cached class loader: /system_ext/framework/androidx.window.extensions.jar
+09-18 15:19:36.953 15327 15327 D nativeloader: Configuring clns-12 for other apk /data/app/~~IikkPigl-gn-iI5czq5Bjg==/com.google.android.webview-7x9FD0W0WL27tioh5DZtsw==/WebViewGoogle.apk. target_sdk_version=34, uses_libraries=, library_path=/data/app/~~IikkPigl-gn-iI5czq5Bjg==/com.google.android.webview-7x9FD0W0WL27tioh5DZtsw==/lib/arm64:/data/app/~~IikkPigl-gn-iI5czq5Bjg==/com.google.android.webview-7x9FD0W0WL27tioh5DZtsw==/WebViewGoogle.apk!/lib/arm64-v8a:/data/app/~~mwXMMFIhxhwS88Yjn76atw==/com.google.android.trichromelibrary_636771932-mUsotetS2U1cpybx1oPMlA==/TrichromeLibrary.apk!/lib/arm64-v8a, permitted_path=/data:/mnt/expand
+09-18 15:19:37.016 15327 15327 I cr_WVCFactoryProvider: Loaded version=124.0.6367.219 minSdkVersion=29 isBundle=false multiprocess=true packageId=2
+09-18 15:19:37.037 15327 15327 D nativeloader: Load /data/app/~~mwXMMFIhxhwS88Yjn76atw==/com.google.android.trichromelibrary_636771932-mUsotetS2U1cpybx1oPMlA==/TrichromeLibrary.apk!/lib/arm64-v8a/libmonochrome_64.so using ns clns-12 from class loader (caller=/data/app/~~IikkPigl-gn-iI5czq5Bjg==/com.google.android.webview-7x9FD0W0WL27tioh5DZtsw==/WebViewGoogle.apk): ok
+09-18 15:19:37.069 15327 15327 D nativeloader: Load /system/lib64/libwebviewchromium_plat_support.so using ns clns-12 from class loader (caller=/data/app/~~IikkPigl-gn-iI5czq5Bjg==/com.google.android.webview-7x9FD0W0WL27tioh5DZtsw==/WebViewGoogle.apk): ok
+09-18 15:19:37.095 15327 15349 E chromium: [0918/151937.094068:ERROR:variations_seed_loader.cc(37)] Seed missing signature.
+09-18 15:19:37.097 15327 15349 I cr_VariationsUtils: Failed reading seed file "/data/user/0/com.xone.android.framework/app_webview/variations_seed_new"
+09-18 15:19:37.101 15327 15349 I chromium: [0918/151937.101172:INFO:variations_seed_loader.cc(66)] Failed to open file for reading.: No such file or directory (2)
+09-18 15:19:37.101 15327 15349 I cr_VariationsUtils: Failed reading seed file "/data/user/0/com.xone.android.framework/app_webview/variations_seed"
+09-18 15:19:37.126 15327 15327 I cr_LibraryLoader: Successfully loaded native library
+09-18 15:19:37.127 15327 15327 I cr_CachingUmaRecorder: Flushed 6 samples from 6 histograms, 0 samples were dropped.
+09-18 15:19:37.168 15327 15327 D TrafficStats: tagSocket(104) with statsTag=0x3e8, statsUid=-1
+09-18 15:19:37.209 15327 15327 D TrafficStats: tagSocket(106) with statsTag=0x3e8, statsUid=-1
+09-18 15:19:37.337 15327 15327 V XOneAndroidFramework: Device boot completed
+09-18 15:19:37.348 15327 15327 I Choreographer: Skipped 72 frames!  The application may be doing too much work on its main thread.
+09-18 15:19:37.874 15327 15327 D AppCompatDelegate: Checking for metadata for AppLocalesMetadataHolderService : Service not found
+09-18 15:19:38.113 15327 15327 W droid.framework: Accessing hidden method Landroid/view/ViewGroup;->makeOptionalFitsSystemWindows()V (unsupported, reflection, allowed)
+09-18 15:19:38.736 15327 15332 I droid.framework: Compiler allocated 4206KB to compile void android.widget.TextView.<init>(android.content.Context, android.util.AttributeSet, int, int)
+09-18 15:19:39.312 15327 15327 V XOneHotswap: SetupActivity.checkMarketUpdate(): APK is not the Play Store Developer flavour. Skipping update check
+09-18 15:19:39.446 15327 15327 W HWUI    : Unknown dataspace 0
+09-18 15:19:39.533 15327 15327 D XOneReplicator:  *** RPL: ReplicatorBroadcastReceiver.onReceive() invoked because the device initial boot has been completed. Starting replicator
+09-18 15:19:39.549 15327 15327 W ActivityThread: ClassLoader.loadClass: The class loader returned by Thread.getContextClassLoader() may fail for processes that host multiple applications. You should explicitly specify a context class loader. For example: Thread.setContextClassLoader(getClass().getClassLoader());
+09-18 15:19:39.554 15327 15353 D TrafficStats: tagSocket(131) with statsTag=0x3e8, statsUid=-1
+09-18 15:19:39.558 15327 15353 W droid.framework: Accessing hidden field Ljava/net/Socket;->impl:Ljava/net/SocketImpl; (unsupported, reflection, allowed)
+09-18 15:19:39.674 15327 15353 W droid.framework: Accessing hidden method Ljava/net/InetAddress;->holder()Ljava/net/InetAddress$InetAddressHolder; (unsupported, reflection, allowed)
+09-18 15:19:39.677 15327 15353 W droid.framework: Accessing hidden method Ljava/net/InetAddress$InetAddressHolder;->getOriginalHostName()Ljava/lang/String; (max-target-o, reflection, denied)
+09-18 15:19:39.928 15327 15366 V XOneHotswap: Thread was interrupted, most likely the connection was closed. Stopping periodic hotswap ping check.
+09-18 15:19:39.962 15327 15356 I EGL_emulation: Opening libGLESv1_CM_emulation.so
+09-18 15:19:39.963 15327 15356 I EGL_emulation: Opening libGLESv2_emulation.so
+09-18 15:19:40.018 15327 15356 W HWUI    : Failed to choose config with EGL_SWAP_BEHAVIOR_PRESERVED, retrying without...
+09-18 15:19:40.018 15327 15356 W HWUI    : Failed to initialize 101010-2 format, error = EGL_SUCCESS
+09-18 15:19:40.123 15327 15356 I Gralloc4: mapper 4.x is not supported
+09-18 15:19:40.351 15327 15355 I HWUI    : Davey! duration=1136ms; Flags=1, FrameTimelineVsyncId=125914, IntendedVsync=29912744088269, Vsync=29913177421585, InputEventId=0, HandleInputStart=29913181133596, AnimationStart=29913181135055, PerformTraversalsStart=29913181341638, DrawStart=29913741222513, FrameDeadline=29912760754935, FrameInterval=29913180836638, FrameStartTime=16666666, SyncQueued=29913763687096, SyncStart=29913764373805, IssueDrawCommandsStart=29913765808638, SwapBuffers=29913866736263, FrameCompleted=29913880910222, DequeueBufferDuration=4916, QueueBufferDuration=1142750, GpuCompleted=29913880799305, SwapBuffersCompleted=29913880910222, DisplayPresentTime=8387223562011225716, CommandSubmissionCompleted=29913866736263, 
+09-18 15:19:40.371 15327 15327 I Choreographer: Skipped 43 frames!  The application may be doing too much work on its main thread.
+09-18 15:19:40.413 15327 15371 V XOneReplicator: *** Starting replica cycle.
+09-18 15:19:40.512 15327 15371 V XOneReplicator: *** Started by: ReplicatorBroadcastReceiver
+09-18 15:19:40.516 15327 15355 I HWUI    : Davey! duration=844ms; Flags=0, FrameTimelineVsyncId=125944, IntendedVsync=29913210754917, Vsync=29913927421555, InputEventId=0, HandleInputStart=29913937820680, AnimationStart=29913937822680, PerformTraversalsStart=29913991868097, DrawStart=29914001497263, FrameDeadline=29913910754889, FrameInterval=29913931190888, FrameStartTime=16666666, SyncQueued=29914005465805, SyncStart=29914017615388, IssueDrawCommandsStart=29914019805138, SwapBuffers=29914053380388, FrameCompleted=29914067052930, DequeueBufferDuration=2834, QueueBufferDuration=166834, GpuCompleted=29914067052930, SwapBuffersCompleted=29914059192055, DisplayPresentTime=7022288762003092069, CommandSubmissionCompleted=29914053380388, 
+09-18 15:19:40.607 15327 15371 V XOneReplicator: *** Replicator is unlocked. Proceeding to the next step.
+09-18 15:19:40.739 15327 15371 V AppDescriptor: No previously saved application descriptor found
+09-18 15:19:40.837 15327 15371 D nativeloader: Load /data/app/~~Fu1GPN0JNgPCM2Ssuc4cgA==/com.xone.android.framework-a7H98Rv5BzpMPom2JFrt7Q==/lib/arm64/libsqlcipher.so using ns clns-7 from class loader (caller=/data/app/~~Fu1GPN0JNgPCM2Ssuc4cgA==/com.xone.android.framework-a7H98Rv5BzpMPom2JFrt7Q==/base.apk!classes2.dex): ok
+09-18 15:19:40.926 15327 15327 V XOneAndroidFramework: mainEntry onCreate event fired. No reason specified.
+09-18 15:19:41.050 15327 15371 I SQLiteConnection: Database keying operation returned:0
+09-18 15:19:41.075 15327 15327 V XOneAndroidFramework: A new AppData is being instantiated.
+09-18 15:19:41.081 15327 15371 D XOneReplicator: *** RPL: Replica disabled for application app_holamundo
+09-18 15:19:41.084 15327 15371 V AppDescriptor: No previously saved application descriptor found
+09-18 15:19:41.116 15327 15371 D XOneReplicator: *** RPL: Replica disabled for application app_appdemo
+09-18 15:19:41.118 15327 15371 V AppDescriptor: No previously saved application descriptor found
+09-18 15:19:41.132 15327 15327 W WindowOnBackDispatcher: OnBackInvokedCallback is not enabled for the application.
+09-18 15:19:41.132 15327 15327 W WindowOnBackDispatcher: Set 'android:enableOnBackInvokedCallback="true"' in the application manifest.
+09-18 15:19:41.138 15327 15371 D XOneReplicator: *** RPL: Replica disabled for application app_pruebaxonecode
+09-18 15:19:41.146 15327 15371 V AppDescriptor: No previously saved application descriptor found
+09-18 15:19:41.155 15327 15327 I Choreographer: Skipped 43 frames!  The application may be doing too much work on its main thread.
+09-18 15:19:41.206 15327 15332 I droid.framework: Compiler allocated 5250KB to compile void android.view.ViewRootImpl.performTraversals()
+09-18 15:19:41.226 15327 15371 D XOneReplicator: *** RPL: Replica disabled for application app_minitsmt
+09-18 15:19:41.234 15327 15371 V AppDescriptor: No previously saved application descriptor found
+09-18 15:19:41.259 15327 15371 D XOneReplicator: *** RPL: Replica disabled for application app_myallxone
+09-18 15:19:41.264 15327 15371 V XOneReplicator:  *** RPL: Could not load any applications yet.
+09-18 15:19:41.629 15327 15355 I HWUI    : Davey! duration=1055ms; Flags=1, FrameTimelineVsyncId=126067, IntendedVsync=29913994088219, Vsync=29914710754857, InputEventId=0, HandleInputStart=29914716138805, AnimationStart=29914716139847, PerformTraversalsStart=29914896751555, DrawStart=29914990161014, FrameDeadline=29914010754885, FrameInterval=29914715872764, FrameStartTime=16666666, SyncQueued=29914990992055, SyncStart=29914993403389, IssueDrawCommandsStart=29914993469555, SwapBuffers=29914993679639, FrameCompleted=29915052109264, DequeueBufferDuration=14839625, QueueBufferDuration=243958, GpuCompleted=29915052109264, SwapBuffersCompleted=29915016625972, DisplayPresentTime=0, CommandSubmissionCompleted=29914993679639, 
+09-18 15:19:41.685 15327 15356 D EGL_emulation: app_time_stats: avg=682.57ms min=178.31ms max=1186.83ms count=2
+09-18 15:19:41.752 15327 15337 I HWUI    : Davey! duration=1179ms; Flags=1, FrameTimelineVsyncId=126067, IntendedVsync=29913994088219, Vsync=29914710754857, InputEventId=0, HandleInputStart=29914716138805, AnimationStart=29914716139847, PerformTraversalsStart=29914896751555, DrawStart=29915038606764, FrameDeadline=29914094088215, FrameInterval=29914715872764, FrameStartTime=16666666, SyncQueued=29915074535680, SyncStart=29915189471722, IssueDrawCommandsStart=29915189794014, SwapBuffers=29915194595680, FrameCompleted=29915288944014, DequeueBufferDuration=6708, QueueBufferDuration=495333, GpuCompleted=29915288944014, SwapBuffersCompleted=29915246618556, DisplayPresentTime=7597416872071474803, CommandSubmissionCompleted=29915194595680, 
+09-18 15:19:41.904 15327 15327 I Choreographer: Skipped 42 frames!  The application may be doing too much work on its main thread.
+09-18 15:19:42.018 15327 15341 I HWUI    : Davey! duration=796ms; Flags=0, FrameTimelineVsyncId=126265, IntendedVsync=29914760754855, Vsync=29915460754827, InputEventId=0, HandleInputStart=29915464883806, AnimationStart=29915464884764, PerformTraversalsStart=29915465493681, DrawStart=29915482272847, FrameDeadline=29915310754833, FrameInterval=29915464735222, FrameStartTime=16666666, SyncQueued=29915489595097, SyncStart=29915489611514, IssueDrawCommandsStart=29915489791389, SwapBuffers=29915495326347, FrameCompleted=29915557538431, DequeueBufferDuration=4625, QueueBufferDuration=45005292, GpuCompleted=29915555953056, SwapBuffersCompleted=29915557538431, DisplayPresentTime=72343097710805900, CommandSubmissionCompleted=29915495326347, 
+09-18 15:19:42.278 15327 15327 V XOneAndroidFramework: LoadAppActivity onCreate event fired.
+09-18 15:19:42.650 15327 15379 D ProfileInstaller: Installing profile for com.xone.android.framework
+09-18 15:19:42.936 15327 15380 D ss      : sssss
+09-18 15:19:42.970 15327 15333 W droid.framework: Cleared Reference was only reachable from finalizer (only reported once)
+09-18 15:19:43.009 15327 15380 I SQLiteConnection: Database keying operation returned:0
+09-18 15:19:43.010 15327 15380 E SQLiteLog: (1) no such column: SESSIONID in "SELECT SESSIONID FROM master_replica_queue WHERE SESSIONID IS NULL"
+09-18 15:19:43.020 15327 15333 I droid.framework: Background concurrent mark compact GC freed 11MB AllocSpace bytes, 38(784KB) LOS objects, 49% free, 8618KB/16MB, paused 977us,2.156ms total 117.408ms
+09-18 15:19:43.052 15327 15335 W droid.framework: ApkAssets: Deleting an ApkAssets object '<empty> and /data/app/~~IikkPigl-gn-iI5czq5Bjg==/com.google.android.webview-7x9FD0W0WL27tioh5DZtsw==/WebViewGoogle.apk' with 2 weak references
+09-18 15:19:43.951 15327 15327 V XOneAndroidFramework: LoadAppActivity.quitActivity() invoked, result code: -1
+09-18 15:19:43.963 15327 15327 V XOneAndroidFramework: mainEntry onActivityResult event fired. No reason specified.
+09-18 15:19:43.998 15327 15353 D TrafficStats: tagSocket(5) with statsTag=0x3e8, statsUid=-1
+09-18 15:19:44.113 15327 15353 W droid.framework: Accessing hidden method Ljava/net/InetAddress$InetAddressHolder;->getOriginalHostName()Ljava/lang/String; (max-target-o, reflection, denied)
+09-18 15:19:44.211 15327 15381 V XOneHotswap: Thread was interrupted, most likely the connection was closed. Stopping periodic hotswap ping check.
+09-18 15:19:44.271 15327 15327 D VRI[LoadAppActivity]: visibilityChanged oldVisibility=true newVisibility=false
+09-18 15:19:44.292 15327 15327 V XOneAndroidFramework: LoadAppActivity onDestroy event fired.
+09-18 15:19:44.293 15327 15327 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@4ed0af9
+09-18 15:19:44.416 15327 15327 V XOneAndroidFramework: EditViewHyperPortrait onCreate event fired. No data object set yet.
+09-18 15:19:44.445 15327 15327 W WindowOnBackDispatcher: OnBackInvokedCallback is not enabled for the application.
+09-18 15:19:44.445 15327 15327 W WindowOnBackDispatcher: Set 'android:enableOnBackInvokedCallback="true"' in the application manifest.
+09-18 15:19:44.448 15327 15327 V XOneAndroidFramework: EditViewHyperPortrait onStart event fired. No data object set yet.
+09-18 15:19:44.459 15327 15327 V XOneAndroidFramework: EditViewHyperPortrait onResume event fired. No data object set yet.
+09-18 15:19:44.698 15327 15383 V XOneJavaScript: Executing script: @LoginColl|//create/action[@name='runscript']/script
+09-18 15:19:44.710 15327 15383 V XOneJavaScript: End executing script: @LoginColl|//create/action[@name='runscript']/script
+09-18 15:19:45.206 15327 15327 D AutofillManager: Fill dialog is enabled:false, hints=[password, passwordAuto, creditCardNumber, creditCardSecurityCode, creditCardExpirationDate]
+09-18 15:19:45.511 15327 15327 W WindowOnBackDispatcher: sendCancelIfRunning: isInProgress=false callback=android.view.ViewRootImpl$$ExternalSyntheticLambda11@9b21bcc
+09-18 15:19:45.533 15327 15327 I Choreographer: Skipped 35 frames!  The application may be doing too much work on its main thread.
+09-18 15:19:45.551 15327 15327 D AutofillManager: notifyViewReadyInner:1073741824
+09-18 15:19:45.553 15327 15327 D AutofillManager: notifyViewReadyInner:1073741825
+09-18 15:19:45.694 15327 15356 D EGL_emulation: app_time_stats: avg=584.00ms min=89.15ms max=1078.85ms count=2
+09-18 15:19:45.709 15327 15342 I HWUI    : Davey! duration=766ms; Flags=0, FrameTimelineVsyncId=127411, IntendedVsync=29918494088039, Vsync=29919077421349, InputEventId=0, HandleInputStart=29919095037932, AnimationStart=29919095039932, PerformTraversalsStart=29919095111849, DrawStart=29919122395932, FrameDeadline=29918510754705, FrameInterval=29919093691141, FrameStartTime=16666666, SyncQueued=29919127094016, SyncStart=29919127904391, IssueDrawCommandsStart=29919140716266, SwapBuffers=29919243972182, FrameCompleted=29919261255682, DequeueBufferDuration=4209, QueueBufferDuration=161792, GpuCompleted=29919261255682, SwapBuffersCompleted=29919255130391, DisplayPresentTime=0, CommandSubmissionCompleted=29919243972182, 
