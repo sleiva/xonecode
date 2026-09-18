@@ -529,6 +529,43 @@
   opacity: 0.45;
 }
 
+/* La carpeta del workspace: etiqueta, campo elástico y su botón, en una fila. El campo se
+   lleva el hueco porque lo que se lee ahí es una RUTA, que es lo único de esta pantalla que
+   puede no caber. Envuelve en pantallas estrechas en vez de recortar la ruta: una ruta a
+   medias no se puede comprobar de un vistazo, que es justo para lo que se enseña. */
+.filaDeWorkspace {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin: 8px 0;
+  color: var(--dsw-alias-label-primary);
+  font-size: 13px;
+}
+
+.filaDeWorkspace input {
+  flex: 1 1 260px;
+  min-width: 0;
+  padding: 4px 8px;
+  border: 0.5px solid var(--dsw-alias-border-l2);
+  border-radius: 6px;
+  background: var(--dsw-alias-bg-layer-1);
+  color: var(--dsw-alias-label-primary);
+  font-family: var(--ds-font-family-code);
+  font-size: 12px;
+}
+
+/* El no de la regla se dice con el borde además de con la frase de debajo: el color solo no
+   vale —no todo el mundo lo distingue— y la frase sola obliga a buscar a qué campo se
+   refiere. `aria-invalid` es lo que lo dice de verdad, y de ahí cuelga el estilo. */
+.filaDeWorkspace input[aria-invalid="true"] {
+  border-color: var(--dsw-alias-state-error-primary);
+}
+
+.filaDeWorkspace input:disabled {
+  opacity: 0.45;
+}
+
 .pistaEnLinea {
   color: var(--dsw-alias-label-tertiary);
   font-size: 12px;

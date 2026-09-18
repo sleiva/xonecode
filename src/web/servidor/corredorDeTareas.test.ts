@@ -1770,7 +1770,7 @@ describe("el volcado de la sesión de una tarea", () => {
       descargar: async () => {},
       guardarConfigDeProyecto: () => ({ ruta: "/x/config.json" }),
       guardarModeloGlobal: (_papel, id) => ({ ruta: "/casa/.xonecode/config.json", id }),
-      baseDeWorkspace: base,
+      baseDeWorkspace: () => base,
       entornos: [{ id: "webstudio", nombre: "XOne WebStudio", url: "https://mcp.xonewebstudio.com/mcp" }],
       /**
        * La marca de la sesión, con `fotoDeApertura` de verdad y git de verdad: es lo que hace

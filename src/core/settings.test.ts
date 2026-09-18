@@ -1,6 +1,9 @@
 import { describe, it, expect } from "vitest";
 import {
   validarSettings,
+  abreviarConCasa,
+  expandirConCasa,
+  motivoDeWorkspaceInaceptable,
   rutaDeWorkspace,
   dentroDelWorkspace,
   seMira,
@@ -75,8 +78,24 @@ describe("validarSettings", () => {
 
 describe("rutaDeWorkspace", () => {
   it("la base es configurable; la disposición de dentro la fija xonecode", () => {
-    expect(rutaDeWorkspace("/home/u/.xonecode", "webstudio", "MinitMT"))
-      .toBe("/home/u/.xonecode/webstudio/workspace/MinitMT");
+    expect(rutaDeWorkspace("/home/u/.xonecode/workspace", "webstudio", "MinitMT"))
+      .toBe("/home/u/.xonecode/workspace/webstudio/MinitMT");
+  });
+
+  it("la BASE es el workspace: no se le cuelga un «workspace» que nadie pidió", () => {
+    // El literal vivía en MEDIO (`<base>/<entorno>/workspace/<proyecto>`), y con la base
+    // por omisión en `~/.xonecode` eso dejaba `webstudio/` y `manager/` de hermanos de
+    // `agentes/`, `skills/` y `auth.json`. Movido a la base, quien elige una carpeta suya
+    // obtiene lo que eligió y no un nivel de más.
+    expect(rutaDeWorkspace("/home/u/xone-proyectos", "webstudio", "MinitMT"))
+      .toBe("/home/u/xone-proyectos/webstudio/MinitMT");
+  });
+
+  it("el segmento del ENTORNO se queda, y no es decoración", () => {
+    // El mismo nombre de proyecto existe en dos entornos a la vez, y los on-premise
+    // comparten el id «otro» solo si se registran mal (ver `Wizard.tsx`). Sin este
+    // segmento, dos copias distintas serían la misma carpeta.
+    expect(rutaDeWorkspace("/w", "webstudio", "AppDemo")).not.toBe(rutaDeWorkspace("/w", "manager", "AppDemo"));
   });
 
   it("un nombre con separador o .. no puede salirse de la base", () => {
@@ -180,22 +199,65 @@ describe("dentroDelWorkspace: dónde puede xonecode commitear solo", () => {
     // La carpeta del workspace la creó xonecode y es suya: ahí un commit por turno es
     // razonable. En la que abrió el usuario —offline, o `./bin/xonecode` dentro de su
     // repo— sería ensuciarle el historial cada vez que habla con el agente.
-    expect(dentroDelWorkspace("/casa/.xonecode/webstudio/workspace/AppDemo", "/casa/.xonecode")).toBe(true);
-    expect(dentroDelWorkspace("/proyectos/mi-app", "/casa/.xonecode")).toBe(false);
+    expect(dentroDelWorkspace("/casa/.xonecode/workspace/webstudio/AppDemo", "/casa/.xonecode/workspace")).toBe(true);
+    expect(dentroDelWorkspace("/proyectos/mi-app", "/casa/.xonecode/workspace")).toBe(false);
   });
 
   it("un vecino con el mismo prefijo NO cuela", () => {
     // La trampa de comparar cadenas: `/casa/.xonecodeX` empieza por `/casa/.xonecode`.
-    expect(dentroDelWorkspace("/casa/.xonecodeX/webstudio/workspace/A", "/casa/.xonecode")).toBe(false);
+    expect(dentroDelWorkspace("/casa/.xonecodeX/workspace/webstudio/A", "/casa/.xonecode/workspace")).toBe(false);
   });
 
   it("la base a secas no es una copia: ahí no hay ningún proyecto", () => {
-    expect(dentroDelWorkspace("/casa/.xonecode", "/casa/.xonecode")).toBe(false);
+    expect(dentroDelWorkspace("/casa/.xonecode/workspace", "/casa/.xonecode/workspace")).toBe(false);
   });
 
   it("las rutas se normalizan antes de comparar", () => {
     // Una raíz con `..` o con barra final compara mal como texto plano.
-    expect(dentroDelWorkspace("/casa/.xonecode/webstudio/workspace/A/", "/casa/.xonecode")).toBe(true);
-    expect(dentroDelWorkspace("/casa/.xonecode/webstudio/../../fuera", "/casa/.xonecode")).toBe(false);
+    expect(dentroDelWorkspace("/casa/.xonecode/workspace/webstudio/A/", "/casa/.xonecode/workspace")).toBe(true);
+    expect(dentroDelWorkspace("/casa/.xonecode/workspace/../../fuera", "/casa/.xonecode/workspace")).toBe(false);
+  });
+});
+
+describe("el workspace tal como viaja por el cable", () => {
+  it("lo que cuelga de la casa se abrevia con «~»: el caso normal no lleva el nombre de la cuenta", () => {
+    expect(abreviarConCasa("/Users/ana/.xonecode/workspace", "/Users/ana")).toBe("~/.xonecode/workspace");
+    expect(abreviarConCasa("/Users/ana", "/Users/ana")).toBe("~");
+  });
+
+  it("lo de fuera viaja entero, porque no hay forma de nombrarlo si no", () => {
+    // Y es una decisión de quien lo eligió, tomada con el campo delante.
+    expect(abreviarConCasa("/Volumes/Externo/xone", "/Users/ana")).toBe("/Volumes/Externo/xone");
+  });
+
+  it("un vecino con el mismo prefijo de TEXTO no es la casa", () => {
+    expect(abreviarConCasa("/Users/anabel/proyectos", "/Users/ana")).toBe("/Users/anabel/proyectos");
+  });
+
+  it("y la vuelta deshace exactamente eso", () => {
+    expect(expandirConCasa("~/.xonecode/workspace", "/Users/ana")).toBe("/Users/ana/.xonecode/workspace");
+    expect(expandirConCasa("~", "/Users/ana")).toBe("/Users/ana");
+    expect(expandirConCasa("/Volumes/Externo/xone", "/Users/ana")).toBe("/Volumes/Externo/xone");
+  });
+
+  it("un «~otra» es la casa de OTRA persona y aquí no se resuelve", () => {
+    // Se deja tal cual, y entonces no es absoluta: la rechaza el validador.
+    expect(expandirConCasa("~otra/cosa", "/Users/ana")).toBe("~otra/cosa");
+    expect(motivoDeWorkspaceInaceptable("~otra/cosa")).toBeDefined();
+  });
+});
+
+describe("motivoDeWorkspaceInaceptable", () => {
+  it("una carpeta absoluta vale", () => {
+    expect(motivoDeWorkspaceInaceptable("/Users/ana/xone")).toBeUndefined();
+  });
+
+  it("en blanco, no: no es una elección", () => {
+    expect(motivoDeWorkspaceInaceptable("   ")).toBeDefined();
+  });
+
+  it("relativa, tampoco: dependería del directorio desde el que se arrancó la consola", () => {
+    expect(motivoDeWorkspaceInaceptable("proyectos")).toBeDefined();
+    expect(motivoDeWorkspaceInaceptable("./proyectos")).toBeDefined();
   });
 });

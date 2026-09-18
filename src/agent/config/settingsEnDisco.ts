@@ -211,6 +211,44 @@ export function guardarConcurrenciaDeTareas(casa: string | undefined, concurrenc
   return { ruta };
 }
 
+/**
+ * Reescribe las claves de `sinAprobacion` cuando una copia local se ha mudado de sitio.
+ *
+ * Son rutas ABSOLUTAS de raíz de proyecto, así que una mudanza las deja apuntando a una
+ * carpeta que ya no está: la autorización de escribir sin preguntar dejaría de aplicarse en
+ * silencio. Es la dirección segura —se vuelve a preguntar— pero es un ajuste que el dueño de
+ * la máquina dio por puesto, y perderlo sin decir nada es el fallo mudo de siempre.
+ *
+ * Misma disciplina que el resto del fichero: la base es el objeto CRUDO, un JSON roto PARA
+ * sin escribir, y cero cambios no escribe nada. Devuelve cuántas claves se tradujeron.
+ */
+export function remapearSinAprobacion(
+  casa: string | undefined,
+  traducir: (raiz: string) => string | undefined
+): number {
+  const ruta = rutaSettings(casa ?? homedir());
+  if (!existsSync(ruta)) return 0;
+  const crudo = leerCrudoOAbortar(ruta);
+  const previo = crudo.sinAprobacion;
+  if (!esObjeto(previo)) return 0;
+
+  let cambiadas = 0;
+  const salida: Record<string, unknown> = {};
+  for (const [clave, valor] of Object.entries(previo)) {
+    const nueva = traducir(clave);
+    if (nueva === undefined) {
+      salida[clave] = valor;
+      continue;
+    }
+    cambiadas += 1;
+    salida[nueva] = valor;
+  }
+
+  if (cambiadas === 0) return 0;
+  escribirAtomico(ruta, JSON.stringify({ ...crudo, sinAprobacion: salida }, null, 2) + "\n");
+  return cambiadas;
+}
+
 /** Guarda solo la base del workspace, sin tocar la lista de entornos. */
 export function guardarWorkspace(casa: string | undefined, base: string): { ruta: string } {
   const ruta = rutaSettings(casa ?? homedir());

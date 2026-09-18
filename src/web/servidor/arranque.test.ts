@@ -17,6 +17,8 @@ import { MS_DE_PREPARACION,
   arrancarConsolaWeb,
   montarRutas,
   commitDeTurnoCableado,
+  mudarWorkspaceLegadoCableado,
+  ajusteDeWorkspaceCableado,
   construirCorredorDeTareasCableado,
   FALTA_EL_BUILD,
   RUTA_ACCION,
@@ -146,7 +148,7 @@ function vestibuloDePrueba(extra: Partial<Parameters<typeof crearVestibulo>[0]> 
     descargar: async () => {},
     adoptarLegado: () => {},
     entornos,
-    baseDeWorkspace: "/w",
+    baseDeWorkspace: () => "/w",
     proyectosDeEntorno: async () => ({ proyectos: [{ id: "p1", nombre: "Tienda" }] }),
     ramasDeProyecto: async () => ["master", "pruebas"],
     sesiones: {
@@ -1189,7 +1191,8 @@ describe("montarRutas — el cable, por fin conectado", () => {
      */
     it("sin proyecto abierto se contesta «sin-marca», no una lista vacía a secas", async () => {
       const servidor = servidorDeMentira();
-      const vestibulo = vestibuloDePrueba({ baseDeWorkspace: mkdtempSync(join(tmpdir(), "xonecode-vacio-")) });
+      const vaciovestibulo = mkdtempSync(join(tmpdir(), "xonecode-vacio-"));
+      const vestibulo = vestibuloDePrueba({ baseDeWorkspace: () => vaciovestibulo });
       montarRutas(servidor, vestibulo, {
         cambiosDeSesion: async () => ({ via: "git", ficheros: [{ ruta: "no.xne", clase: "nuevo" }] }),
       });
@@ -1211,7 +1214,8 @@ describe("montarRutas — el cable, por fin conectado", () => {
 
     it("sin puerto que sepa mirar el repo tampoco se afirma: «sin-marca» igual", async () => {
       const servidor = servidorDeMentira();
-      const vestibulo = vestibuloDePrueba({ baseDeWorkspace: mkdtempSync(join(tmpdir(), "xonecode-vacio-")) });
+      const vaciovestibulo = mkdtempSync(join(tmpdir(), "xonecode-vacio-"));
+      const vestibulo = vestibuloDePrueba({ baseDeWorkspace: () => vaciovestibulo });
       // Sin `cambiosDeSesion`: es lo que pasa con un montaje que no trae ese puerto.
       montarRutas(servidor, vestibulo);
       const cliente = clienteDeMentira();
@@ -1238,7 +1242,7 @@ describe("montarRutas — el cable, por fin conectado", () => {
     it("recién abierto el proyecto, sin id de sesión todavía, se dice «sin-empezar» y no «sin-marca»", async () => {
       const base = mkdtempSync(join(tmpdir(), "xonecode-proy-"));
       const servidor = servidorDeMentira();
-      const vestibulo = vestibuloDePrueba({ baseDeWorkspace: base });
+      const vestibulo = vestibuloDePrueba({ baseDeWorkspace: () => base });
       const raizDeVerdad = vestibulo.raizDeProyecto("webstudio", "Tienda");
       mkdirSync(join(raizDeVerdad, ".xonecode"), { recursive: true });
       writeFileSync(join(raizDeVerdad, ".xonecode", "config.json"), JSON.stringify({ modo: "offline" }));
@@ -1297,7 +1301,7 @@ describe("montarRutas — el cable, por fin conectado", () => {
       const base = mkdtempSync(join(tmpdir(), "xonecode-plazo-"));
       const servidor = servidorDeMentira();
       const vestibulo = vestibuloDePrueba({
-        baseDeWorkspace: base,
+        baseDeWorkspace: () => base,
         proyectosDeEntorno: async () => ({ proyectos: [{ id: "p1", nombre: "Tienda" }] }),
         sesiones: {
           crear: () => "s1",
@@ -1337,7 +1341,7 @@ describe("montarRutas — el cable, por fin conectado", () => {
       let avisar: (() => void) | undefined;
       const consumo = { modelo: { entrada: 0, salida: 0, cache: 0 }, externo: { entrada: 0, salida: 0, cache: 0 }, contexto: 0 };
       const vestibulo = vestibuloDePrueba({
-        baseDeWorkspace: base,
+        baseDeWorkspace: () => base,
         proyectosDeEntorno: async () => ({ proyectos: [{ id: "p1", nombre: "Tienda" }] }),
         sesiones: {
           crear: () => "s1",
@@ -1437,7 +1441,7 @@ describe("montarRutas — el cable, por fin conectado", () => {
       const servidor = servidorDeMentira();
       let decididas: Map<string, { type: string }> | undefined;
       const vestibulo = vestibuloDePrueba({
-        baseDeWorkspace: base,
+        baseDeWorkspace: () => base,
         proyectosDeEntorno: async () => ({
           proyectos: [
             { id: "p1", nombre: "Tienda" },
@@ -1524,7 +1528,7 @@ describe("montarRutas — el cable, por fin conectado", () => {
       const servidor = servidorDeMentira();
       let soltarElTurno: (() => void) | undefined;
       const vestibulo = vestibuloDePrueba({
-        baseDeWorkspace: base,
+        baseDeWorkspace: () => base,
         sesiones: {
           crear: () => "s1",
           listar: () => [
@@ -1594,7 +1598,7 @@ describe("montarRutas — el cable, por fin conectado", () => {
     it("con proyecto y sesión, la lista sale del puerto y el parche se pide POR RUTA", async () => {
       const base = mkdtempSync(join(tmpdir(), "xonecode-proy-"));
       const servidor = servidorDeMentira();
-      const vestibulo = vestibuloDePrueba({ baseDeWorkspace: base });
+      const vestibulo = vestibuloDePrueba({ baseDeWorkspace: () => base });
       const raizDeVerdad = vestibulo.raizDeProyecto("webstudio", "Tienda");
       mkdirSync(join(raizDeVerdad, ".xonecode"), { recursive: true });
       writeFileSync(join(raizDeVerdad, ".xonecode", "config.json"), JSON.stringify({ modo: "offline" }));
@@ -1652,7 +1656,7 @@ describe("montarRutas — el cable, por fin conectado", () => {
     it("sin puerto de parche se contesta igual, con el texto vacío", async () => {
       const base = mkdtempSync(join(tmpdir(), "xonecode-proy-"));
       const servidor = servidorDeMentira();
-      const vestibulo = vestibuloDePrueba({ baseDeWorkspace: base });
+      const vestibulo = vestibuloDePrueba({ baseDeWorkspace: () => base });
       const raizDeVerdad = vestibulo.raizDeProyecto("webstudio", "Tienda");
       mkdirSync(join(raizDeVerdad, ".xonecode"), { recursive: true });
       writeFileSync(join(raizDeVerdad, ".xonecode", "config.json"), JSON.stringify({ modo: "offline" }));
@@ -1682,7 +1686,7 @@ describe("montarRutas — el cable, por fin conectado", () => {
     const abrirProyecto = async () => {
       const base = mkdtempSync(join(tmpdir(), "xonecode-arbol-"));
       const servidor = servidorDeMentira();
-      const vestibulo = vestibuloDePrueba({ baseDeWorkspace: base });
+      const vestibulo = vestibuloDePrueba({ baseDeWorkspace: () => base });
       const raizDeVerdad = vestibulo.raizDeProyecto("webstudio", "Tienda");
       mkdirSync(join(raizDeVerdad, ".xonecode"), { recursive: true });
       writeFileSync(join(raizDeVerdad, ".xonecode", "config.json"), JSON.stringify({ modo: "offline" }));
@@ -1825,7 +1829,7 @@ describe("montarRutas — el cable, por fin conectado", () => {
       const encoladas: string[] = [];
       const servidor = servidorDeMentira();
       const vestibulo = vestibuloDePrueba({
-        baseDeWorkspace: base,
+        baseDeWorkspace: () => base,
         crearConsola: (o: OpcionesDeConsolaWeb): ConsolaWeb => {
           const real = crearConsolaWeb(o);
           return {
@@ -1962,7 +1966,7 @@ describe("montarRutas — el cable, por fin conectado", () => {
     it("un proyecto offline llega SIN proyecto ni rama, no con un cero", async () => {
       const base = mkdtempSync(join(tmpdir(), "xonecode-sync-off-"));
       const servidor = servidorDeMentira();
-      const vestibulo = vestibuloDePrueba({ baseDeWorkspace: base });
+      const vestibulo = vestibuloDePrueba({ baseDeWorkspace: () => base });
       const raiz = vestibulo.raizDeProyecto("webstudio", "Tienda");
       mkdirSync(join(raiz, ".xonecode"), { recursive: true });
       writeFileSync(join(raiz, ".xonecode", "config.json"), JSON.stringify({ modo: "offline" }));
@@ -2006,8 +2010,8 @@ describe("montarRutas — el cable, por fin conectado", () => {
       mkdirSync(join(raiz, ".xonecode"));
       writeFileSync(join(raiz, ".xonecode", "config.json"), JSON.stringify({ modo: "offline" }));
       const servidor = servidorDeMentira();
-      const vestibulo = vestibuloDePrueba({ baseDeWorkspace: dirname(raiz) });
-      // `raizDeProyecto` compone `<base>/<entorno>/workspace/<nombre>`, así que el nombre
+      const vestibulo = vestibuloDePrueba({ baseDeWorkspace: () => dirname(raiz) });
+      // `raizDeProyecto` compone `<workspace>/<entorno>/<nombre>`, así que el nombre
       // del proyecto se elige para que caiga en la carpeta que acabamos de preparar.
       const raizDeVerdad = vestibulo.raizDeProyecto("webstudio", "Tienda");
       mkdirSync(join(raizDeVerdad, ".xonecode"), { recursive: true });
@@ -2045,7 +2049,7 @@ describe("montarRutas — el cable, por fin conectado", () => {
     it("abrir una sesión anuncia los DOS flancos, y el de bajada va después del alta", async () => {
       const raiz = mkdtempSync(join(tmpdir(), "xonecode-abriendo-"));
       const servidor = servidorDeMentira();
-      const vestibulo = vestibuloDePrueba({ baseDeWorkspace: raiz });
+      const vestibulo = vestibuloDePrueba({ baseDeWorkspace: () => raiz });
       const raizDeVerdad = vestibulo.raizDeProyecto("webstudio", "Tienda");
       mkdirSync(join(raizDeVerdad, ".xonecode"), { recursive: true });
       writeFileSync(join(raizDeVerdad, ".xonecode", "config.json"), JSON.stringify({ modo: "offline" }));
@@ -2078,7 +2082,8 @@ describe("montarRutas — el cable, por fin conectado", () => {
     it("un fallo al abrir también APAGA el indicador: va en el `finally`", async () => {
       const servidor = servidorDeMentira();
       // Sin entorno elegido no se puede abrir nada, que es el camino de salida temprana.
-      const vestibulo = vestibuloDePrueba({ baseDeWorkspace: mkdtempSync(join(tmpdir(), "xonecode-vacio-")) });
+      const vaciovestibulo = mkdtempSync(join(tmpdir(), "xonecode-vacio-"));
+      const vestibulo = vestibuloDePrueba({ baseDeWorkspace: () => vaciovestibulo });
       montarRutas(servidor, vestibulo);
       const cliente = clienteDeMentira();
       await servidor.rutas.get(`GET ${RUTA_EVENTOS}`)!(cliente.peticion, cliente.respuesta);
@@ -2098,7 +2103,10 @@ describe("montarRutas — el cable, por fin conectado", () => {
       const pedidos: string[] = [];
       const servidor = servidorDeMentira();
       const vestibulo = vestibuloDePrueba({
-        baseDeWorkspace: mkdtempSync(join(tmpdir(), "xonecode-vacio-")),
+        baseDeWorkspace: (() => {
+          const v = mkdtempSync(join(tmpdir(), "xonecode-vacio-"));
+          return () => v;
+        })(),
         ramasDeProyecto: async (_entorno, proyecto) => {
           pedidos.push(proyecto);
           return ["master"];
@@ -2121,7 +2129,8 @@ describe("montarRutas — el cable, por fin conectado", () => {
 
     it("sin copia local se cae al camino del alta: contesta las ramas y no abre nada", async () => {
       const servidor = servidorDeMentira();
-      const vestibulo = vestibuloDePrueba({ baseDeWorkspace: mkdtempSync(join(tmpdir(), "xonecode-vacio-")) });
+      const vaciovestibulo = mkdtempSync(join(tmpdir(), "xonecode-vacio-"));
+      const vestibulo = vestibuloDePrueba({ baseDeWorkspace: () => vaciovestibulo });
       montarRutas(servidor, vestibulo);
       const cliente = clienteDeMentira();
       await servidor.rutas.get(`GET ${RUTA_EVENTOS}`)!(cliente.peticion, cliente.respuesta);
@@ -2360,7 +2369,7 @@ describe("montarRutas — el cable, por fin conectado", () => {
     it("con proyecto abierto se dice CUÁL, deducido de su raíz y no de un id guardado aparte", async () => {
       const base = mkdtempSync(join(tmpdir(), "xonecode-base-"));
       const servidor = servidorDeMentira();
-      const vestibulo = vestibuloDePrueba({ baseDeWorkspace: base });
+      const vestibulo = vestibuloDePrueba({ baseDeWorkspace: () => base });
       montarRutas(servidor, vestibulo);
       const cliente = clienteDeMentira();
       await servidor.rutas.get(`GET ${RUTA_EVENTOS}`)!(cliente.peticion, cliente.respuesta);
@@ -2387,7 +2396,7 @@ describe("montarRutas — el cable, por fin conectado", () => {
       const base = mkdtempSync(join(tmpdir(), "xonecode-base-"));
       const servidor = servidorDeMentira();
       const vestibulo = vestibuloDePrueba({
-        baseDeWorkspace: base,
+        baseDeWorkspace: () => base,
         sinCommitear: async () => ({ via: "git", ficheros: ["app.xml", "js/Clientes.js"] }),
       });
       montarRutas(servidor, vestibulo);
@@ -2414,7 +2423,7 @@ describe("montarRutas — el cable, por fin conectado", () => {
       const base = mkdtempSync(join(tmpdir(), "xonecode-base-"));
       const servidor = servidorDeMentira();
       const vestibulo = vestibuloDePrueba({
-        baseDeWorkspace: base,
+        baseDeWorkspace: () => base,
         sinCommitear: async () => ({ via: "git", ficheros: [] }),
       });
       montarRutas(servidor, vestibulo);
@@ -2438,7 +2447,7 @@ describe("montarRutas — el cable, por fin conectado", () => {
       const base = mkdtempSync(join(tmpdir(), "xonecode-base-"));
       const servidor = servidorDeMentira();
       const vestibulo = vestibuloDePrueba({
-        baseDeWorkspace: base,
+        baseDeWorkspace: () => base,
         sinCommitear: async () => ({ via: "sin-git" }),
       });
       montarRutas(servidor, vestibulo);
@@ -2464,7 +2473,7 @@ describe("montarRutas — el cable, por fin conectado", () => {
       const servidor = servidorDeMentira();
       const muchos = Array.from({ length: 30 }, (_, i) => `f${String(i).padStart(2, "0")}.xne`);
       const vestibulo = vestibuloDePrueba({
-        baseDeWorkspace: base,
+        baseDeWorkspace: () => base,
         sinCommitear: async () => ({ via: "git", ficheros: muchos }),
       });
       montarRutas(servidor, vestibulo);
@@ -2734,7 +2743,7 @@ describe("montarRutas — el cable, por fin conectado", () => {
       // lista, este mismo alta no llevaría la cifra y haría falta un reanuncio — una segunda
       // pasada por el cable solo para enseñar un número que ya se tenía.
       const base = mkdtempSync(join(tmpdir(), "xonecode-ws-"));
-      const raiz = join(base, "webstudio", "workspace", "Tienda");
+      const raiz = join(base, "webstudio", "Tienda");
       crearSesion(raiz, "s-vieja");
       // Una sesión anterior a esto: su `.jsonl` tiene el `fin` con su consumo y su entrada
       // del índice no lo trae.
@@ -2748,7 +2757,7 @@ describe("montarRutas — el cable, por fin conectado", () => {
       );
       const servidor = servidorDeMentira();
       const vestibulo = vestibuloDePrueba({
-        baseDeWorkspace: base,
+        baseDeWorkspace: () => base,
         sesiones: {
           crear: () => "s1",
           listar: (r: string) => listarSesiones(r),
@@ -2779,7 +2788,7 @@ describe("montarRutas — el cable, por fin conectado", () => {
       // sola vez no es una cifra: es que salga en la barra un poco antes, porque en cuanto
       // esa sesión se use la pondrá `anotarActo`, entera.
       const base = mkdtempSync(join(tmpdir(), "xonecode-ws-"));
-      const raiz = join(base, "webstudio", "workspace", "Tienda");
+      const raiz = join(base, "webstudio", "Tienda");
       crearSesion(raiz, "s-vieja");
       const jsonl = join(raiz, ".xonecode", "sesiones", "s-vieja.jsonl");
       writeFileSync(
@@ -2792,7 +2801,7 @@ describe("montarRutas — el cable, por fin conectado", () => {
       );
       const servidor = servidorDeMentira();
       const vestibulo = vestibuloDePrueba({
-        baseDeWorkspace: base,
+        baseDeWorkspace: () => base,
         sesiones: {
           crear: () => "s1",
           listar: (r: string) => listarSesiones(r),
@@ -4150,7 +4159,7 @@ describe("los artefactos de la sesión", () => {
   const abrirProyecto = async (opciones: Parameters<typeof montarRutas>[2] = {}) => {
     const base = mkdtempSync(join(tmpdir(), "xonecode-artefacto-"));
     const servidor = servidorDeMentira();
-    const vestibulo = vestibuloDePrueba({ baseDeWorkspace: base });
+    const vestibulo = vestibuloDePrueba({ baseDeWorkspace: () => base });
     const raizDeVerdad = vestibulo.raizDeProyecto("webstudio", "Tienda");
     mkdirSync(join(raizDeVerdad, ".xonecode"), { recursive: true });
     writeFileSync(join(raizDeVerdad, ".xonecode", "config.json"), JSON.stringify({ modo: "offline" }));
@@ -5204,6 +5213,44 @@ describe("las tareas en background, por el cable", () => {
     expect(revisado).toBe(1);
   });
 
+  it("el workspace viaja en la ráfaga, y elegirlo LLEGA a guardarWorkspace", async () => {
+    // Lo que se fija es el CABLE, no la escritura: `ajusteDeWorkspaceCableado` ya prueba
+    // qué se acepta y qué se guarda. Aquí lo que puede caerse es que el mensaje no llegue
+    // a nadie, que es el patrón de fallo que este ajuste ya traía de serie.
+    const elegidas: string[] = [];
+    let enDisco = "~/.xonecode/workspace";
+    const servidor = servidorDeMentira();
+    montarRutas(servidor, vestibuloDePrueba(), {
+      workspace: () => enDisco,
+      guardarWorkspace: (r) => {
+        elegidas.push(r);
+        enDisco = r;
+      },
+    });
+    const cliente = clienteDeMentira();
+    await servidor.rutas.get(`GET ${RUTA_EVENTOS}`)!(cliente.peticion, cliente.respuesta);
+    await asentar();
+    expect(cliente.recibidos.filter((m) => m.clase === "workspace")).toEqual([
+      { clase: "workspace", ruta: "~/.xonecode/workspace" },
+    ]);
+
+    const accion = servidor.rutas.get(`POST ${RUTA_ACCION}`)!;
+    expect(await enviarMensaje(accion, { clase: "workspace", ruta: "~/xone-proyectos" })).toBe(204);
+    await asentar();
+    expect(elegidas).toEqual(["~/xone-proyectos"]);
+    // Y se REEMITE: el campo acaba enseñando lo que hay, no lo que se tecleó.
+    expect(cliente.recibidos.at(-1)).toEqual({ clase: "workspace", ruta: "~/xone-proyectos" });
+  });
+
+  it("sin puerto de workspace no se manda ninguno: un control sin dato detrás no se pinta", async () => {
+    const servidor = servidorDeMentira();
+    montarRutas(servidor, vestibuloDePrueba(), {});
+    const cliente = clienteDeMentira();
+    await servidor.rutas.get(`GET ${RUTA_EVENTOS}`)!(cliente.peticion, cliente.respuesta);
+    await asentar();
+    expect(cliente.recibidos.some((m) => m.clase === "workspace")).toBe(false);
+  });
+
   it("sin puerto de augmentar no manda ningún «augmentado»", async () => {
     const servidor = servidorDeMentira();
     montarRutas(servidor, vestibuloDePrueba(), {
@@ -5499,7 +5546,7 @@ describe("augmentar: lo que se le da y cómo se dice que falló", () => {
     expect(vistas).toEqual([
       {
         texto: "Arregla",
-        proyecto: { id: "p1", raiz: "/w/webstudio/workspace/Tienda", nombre: "Tienda" },
+        proyecto: { id: "p1", raiz: "/w/webstudio/Tienda", nombre: "Tienda" },
         adjuntos: [{ nombre: "notas.md", mime: "text/markdown" }],
       },
     ]);
@@ -6738,24 +6785,127 @@ describe("abrir la sesión de una tarea en curso, por el cable", () => {
  * sostiene la atribución entera de la pestaña Revisión: sin `sesion` el commit sale sin
  * sello y la pestaña se cae al respaldo «desde-apertura» para siempre, sin un solo síntoma.
  */
+describe("el ajuste del workspace, cableado", () => {
+  it("lo que se ENSEÑA sale del disco y viaja abreviado con «~»", () => {
+    const { workspace } = ajusteDeWorkspaceCableado({
+      casa: "/Users/ana",
+      leer: () => "/Users/ana/xone-proyectos",
+    });
+    expect(workspace()).toBe("~/xone-proyectos");
+  });
+
+  it("sin nada guardado se enseña la omisión, no un hueco", () => {
+    // Un campo en blanco se leería como «no hay ninguno puesto», y sí lo hay.
+    const { workspace } = ajusteDeWorkspaceCableado({ casa: "/Users/ana", leer: () => undefined });
+    expect(workspace()).toMatch(/workspace$/);
+  });
+
+  it("se RELEE en cada emisión: lo que se acaba de guardar es lo que se vuelve a enseñar", () => {
+    let enDisco: string | undefined;
+    const { workspace, guardarWorkspace } = ajusteDeWorkspaceCableado({
+      casa: "/Users/ana",
+      leer: () => enDisco,
+      guardar: (r) => void (enDisco = r),
+    });
+    guardarWorkspace("~/xone-proyectos");
+    expect(workspace()).toBe("~/xone-proyectos");
+  });
+
+  it("lo que se GUARDA es la ruta absoluta, nunca el «~»", () => {
+    // Un `settings.json` con un `~` dentro sería una ruta que solo significa algo para
+    // quien la escribió: la casa cambia de máquina a máquina y de usuario a usuario.
+    const guardadas: string[] = [];
+    const { guardarWorkspace } = ajusteDeWorkspaceCableado({
+      casa: "/Users/ana",
+      guardar: (r) => void guardadas.push(r),
+    });
+    guardarWorkspace("~/xone-proyectos");
+    expect(guardadas).toEqual(["/Users/ana/xone-proyectos"]);
+  });
+
+  it("y la regla se aplica en el SERVIDOR: una ruta que no vale NO llega al disco", () => {
+    // La pantalla lleva su copia declarada para poder explicar el no, pero una pantalla
+    // solo esconde un botón.
+    const guardadas: string[] = [];
+    const { guardarWorkspace } = ajusteDeWorkspaceCableado({
+      casa: "/Users/ana",
+      guardar: (r) => void guardadas.push(r),
+    });
+    guardarWorkspace("proyectos");
+    guardarWorkspace("   ");
+    guardarWorkspace("~otra/cosa");
+    expect(guardadas).toEqual([]);
+  });
+});
+
+describe("la mudanza del reparto viejo, cableada", () => {
+  /** Lo que se mira es lo que LLEGA a la mudanza, no que la mudanza funcione: eso ya lo
+   *  fija `mudanzaEnDisco.test.ts`. Aquí se puede caer la cuenta de las dos bases. */
+  it("con el workspace sin configurar, la base VIEJA es `~/.xonecode` y la de ahora le cuelga", () => {
+    const vistas: Record<string, unknown>[] = [];
+    mudarWorkspaceLegadoCableado({
+      settings: { entornos: [{ id: "webstudio", nombre: "W", url: "https://x/mcp" }] },
+      escribir: () => {},
+      mudar: (o) => {
+        vistas.push({ ...o });
+        return { mudadas: 0, chocadas: 0 };
+      },
+    });
+    expect(vistas).toHaveLength(1);
+    const vista = vistas[0] as { legado: string; workspace: string; entornos: readonly string[] };
+    // La de ahora CUELGA de la vieja: es la mudanza entera en una frase. Si las dos
+    // salieran iguales no se encontraría nada y no se diría nada.
+    expect(vista.workspace).toBe(join(vista.legado, "workspace"));
+    expect(vista.entornos).toEqual(["webstudio"]);
+  });
+
+  it("con el workspace configurado, las DOS bases son ese mismo valor", () => {
+    // El reparto viejo metía su `workspace/` en medio fuera cual fuera la base, así que
+    // quien la había elegido también tiene el nivel de más — y ahí las dos bases coinciden.
+    const vistas: Record<string, unknown>[] = [];
+    mudarWorkspaceLegadoCableado({
+      settings: { entornos: [], workspace: "/u/xone-proyectos" },
+      escribir: () => {},
+      mudar: (o) => {
+        vistas.push({ ...o });
+        return { mudadas: 0, chocadas: 0 };
+      },
+    });
+    expect(vistas[0]).toMatchObject({ legado: "/u/xone-proyectos", workspace: "/u/xone-proyectos" });
+  });
+
+  it("lo que se cuenta va al TERMINAL, que es el `escribir` que se le pasa", () => {
+    const dichos: string[] = [];
+    mudarWorkspaceLegadoCableado({
+      settings: { entornos: [] },
+      escribir: (t) => void dichos.push(t),
+      mudar: (o) => {
+        o.escribir("una copia mudada\n");
+        return { mudadas: 1, chocadas: 0 };
+      },
+    });
+    expect(dichos).toEqual(["una copia mudada\n"]);
+  });
+});
+
 describe("el commit del turno, cableado", () => {
   it("reenvía la raíz, el mensaje Y LA SESIÓN: el sello sale de ese tercer argumento", async () => {
     const vistos: unknown[][] = [];
     const commitear = commitDeTurnoCableado({
-      base: "/w",
+      base: () => "/w",
       commitear: async (...args) => {
         vistos.push(args);
         return { via: "commit" };
       },
     });
-    expect(await commitear("/w/entorno/workspace/AppDemo", "xonecode: Hola", "s-1")).toBeUndefined();
-    expect(vistos).toEqual([["/w/entorno/workspace/AppDemo", "xonecode: Hola", "s-1"]]);
+    expect(await commitear("/w/entorno/AppDemo", "xonecode: Hola", "s-1")).toBeUndefined();
+    expect(vistos).toEqual([["/w/entorno/AppDemo", "xonecode: Hola", "s-1"]]);
   });
 
   it("fuera del workspace no commitea NADA: ahí el historial es de una persona", async () => {
     let llamado = false;
     const commitear = commitDeTurnoCableado({
-      base: "/w",
+      base: () => "/w",
       commitear: async () => {
         llamado = true;
         return { via: "commit" };
@@ -6768,9 +6918,9 @@ describe("el commit del turno, cableado", () => {
   it("solo el FALLO se dice; no haber nada que commitear no es un aviso", async () => {
     const conVia = async (via: string, motivo?: string): Promise<string | undefined> =>
       commitDeTurnoCableado({
-        base: "/w",
+        base: () => "/w",
         commitear: async () => ({ via, ...(motivo === undefined ? {} : { motivo }) }),
-      })("/w/e/workspace/A", "m", "s");
+      })("/w/e/A", "m", "s");
     expect(await conVia("sin-cambios")).toBeUndefined();
     expect(await conVia("sin-git")).toBeUndefined();
     expect(await conVia("commit")).toBeUndefined();
@@ -6826,7 +6976,7 @@ describe("el recorrido por el cable — el veredicto, la intención y las fases"
   } = {}) => {
     const base = mkdtempSync(join(tmpdir(), "xonecode-lanzar-"));
     const servidor = servidorDeMentira();
-    const vestibulo = vestibuloDePrueba({ baseDeWorkspace: base });
+    const vestibulo = vestibuloDePrueba({ baseDeWorkspace: () => base });
     const raiz = vestibulo.raizDeProyecto("webstudio", "Tienda");
     mkdirSync(join(raiz, ".xonecode"), { recursive: true });
     writeFileSync(join(raiz, ".xonecode", "config.json"), JSON.stringify({ modo: "offline" }));

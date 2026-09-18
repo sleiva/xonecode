@@ -123,10 +123,19 @@ import {
 import {
   cargarSettings,
   guardarConcurrenciaDeTareas,
+  guardarWorkspace as guardarWorkspaceEnDisco,
   guardarDispositivos,
   guardarEntorno as guardarEntornoEnDisco,
 } from "../../agent/config/settingsEnDisco.js";
-import { dentroDelWorkspace, seAplicaSinAprobacion } from "../../core/settings.js";
+import {
+  abreviarConCasa,
+  dentroDelWorkspace,
+  expandirConCasa,
+  motivoDeWorkspaceInaceptable,
+  seAplicaSinAprobacion,
+  type Settings,
+} from "../../core/settings.js";
+import { mudarWorkspaceLegado, type ResultadoDeMudanza } from "../../agent/config/mudanzaEnDisco.js";
 import { cloudstudioDelProyecto } from "../../agent/config/configEnDisco.js";
 import { abrirEnSistema } from "../../agent/cloudstudio/cloudstudioMcp.js";
 import { nombreDePersona } from "../../agent/config/persona.js";
@@ -172,6 +181,7 @@ import { nombreDeAdjuntoAceptable } from "../../core/adjuntos.js";
 import { rutaMemoriaDeProyecto } from "../../agent/grafo/memoriaDeProyecto.js";
 import { crearAumentador, invocarParaAumentar } from "../../agent/tareas/aumentador.js";
 import {
+  baseDeWorkspaceLegada,
   baseDeWorkspacePorOmision,
   conexionDeVestibulo,
   crearVestibulo,
@@ -529,6 +539,16 @@ export interface OpcionesDeMontaje {
   concurrenciaDeTareas?: () => number;
   /** Cambia el tope de concurrencia del corredor. Ausente = Ajustes no puede tocarlo. */
   guardarConcurrencia?: (concurrencia: number) => void;
+  /**
+   * El workspace VIGENTE, ya en la forma del cable. Ausente = esta ejecución no lo dice, y
+   * entonces Ajustes no pinta el campo: un control sin dato detrás no se pinta.
+   */
+  workspace?: () => string;
+  /**
+   * Elige el workspace. Ausente = Ajustes lo enseña pero no deja cambiarlo — el mismo trato
+   * que `guardarConcurrencia`.
+   */
+  guardarWorkspace?: (ruta: string) => void;
   /**
    * Augmenta una petición en un encargo revisado (`agent/tareas/aumentador.ts`, Task 9). Ausente =
    * el botón «Preparar el encargo» no está disponible.
@@ -1290,6 +1310,9 @@ export function montarRutas(
     // La cola de tareas, si esta ejecución las tiene: la misma regla que `agentes`, sin
     // esto la pestaña de tareas se quedaría vacía hasta el primer cambio de la cola.
     const tareas = mensajeDeTareas();
+    // El workspace, por lo mismo que los subagentes y las skills: Ajustes se puede abrir en
+    // cuanto conecta, y un campo en blanco se lee como «no hay ninguno puesto».
+    const workspace = mensajeDeWorkspace();
     /**
      * Lo consumido por la sesión que se va a pintar. Va en la ráfaga por lo mismo que los
      * modelos: una pestaña que conecta a mitad de sesión no vio los cambios anteriores, y
@@ -1306,6 +1329,7 @@ export function montarRutas(
       cliente(agentes);
       cliente(skills);
       if (tareas !== undefined) cliente(tareas);
+      if (workspace !== undefined) cliente(workspace);
       if (consumoDeLaSesion !== undefined) {
         cliente({
           clase: "consumo",
@@ -1443,6 +1467,15 @@ export function montarRutas(
   /** Los cuatro nombres conocidos y nada más: lo que llega por el cable no elige binario. */
   const esNombreDeHerramienta = (v: string): v is NombreDeHerramienta =>
     v === "adb" || v === "emulator" || v === "xcrun" || v === "devicectl";
+
+  const mensajeDeWorkspace = (): MensajeAlCliente | undefined => {
+    const ruta = opciones.workspace?.();
+    return ruta === undefined ? undefined : { clase: "workspace", ruta };
+  };
+  const emitirWorkspace = (): void => {
+    const m = mensajeDeWorkspace();
+    if (m !== undefined) emitir(m);
+  };
 
   const mensajeDeTareas = (): MensajeAlCliente | undefined => {
     if (opciones.colaDeTareas === undefined) return undefined;
@@ -3818,6 +3851,22 @@ export function montarRutas(
       respuesta.end();
       return;
     }
+    if (typeof mensaje === "object" && mensaje !== null && mensaje.clase === "workspace" && typeof mensaje.ruta === "string") {
+      /**
+       * La regla se aplica AQUÍ además de en la pantalla. El cliente lleva su copia
+       * declarada para poder explicar el no —`informar` no llega al navegador desde el
+       * vestíbulo—, pero la barrera vive en el servidor: una pantalla solo esconde un botón.
+       *
+       * Y se reemite SIEMPRE, se haya escrito o no: con el valor nuevo cuando valió y con el
+       * de antes cuando no, así el campo acaba enseñando lo que hay en disco y no lo que se
+       * tecleó. Un rechazo mudo dejaría la pantalla afirmando un ajuste que no está puesto.
+       */
+      opciones.guardarWorkspace?.(mensaje.ruta);
+      emitirWorkspace();
+      respuesta.writeHead(204);
+      respuesta.end();
+      return;
+    }
     if (typeof mensaje === "object" && mensaje !== null && mensaje.clase === "modelosDeMotor" && typeof mensaje.motor === "string") {
       void atenderModelosDeMotor(mensaje.motor).catch(contar);
       respuesta.writeHead(204);
@@ -4365,14 +4414,81 @@ export function augmentacionCableada(opciones: {
  *   normal, y uno por turno enseñaría a ignorarlos.
  */
 export function commitDeTurnoCableado(opciones: {
-  base: string;
+  /** Una FUNCIÓN y no un valor: `settings.workspace` cambia con la consola en marcha, y una
+   *  base capturada al arrancar pararía los commits por turno EN SILENCIO en cuanto alguien
+   *  lo tocara — `dentroDelWorkspace` compararía contra la carpeta de antes. */
+  base: () => string;
   commitear?: (raiz: string, mensaje: string, sesion?: string) => Promise<{ via: string; motivo?: string }>;
 }): (raiz: string, mensaje: string, sesion: string) => Promise<string | undefined> {
   const commitear = opciones.commitear ?? commitDeTurno;
   return async (raiz, mensaje, sesion) => {
-    if (!dentroDelWorkspace(raiz, opciones.base)) return undefined;
+    if (!dentroDelWorkspace(raiz, opciones.base())) return undefined;
     const hecho = await commitear(raiz, mensaje, sesion);
     return hecho.via === "fallo" ? `no se pudo commitear el turno: ${hecho.motivo}` : undefined;
+  };
+}
+
+/**
+ * La mudanza de una vez de las copias que siguen en el reparto viejo, cableada — y extraída
+ * por el motivo de siempre: compuesta dentro del cierre de `arrancarConsolaWeb`, que todos
+ * sus tests doblan, la regla estaría escrita y no probada.
+ *
+ * Lo que aquí se puede caer sin que TypeScript diga nada son las DOS bases, que no son la
+ * misma cuenta: la VIEJA es `settings.workspace` si estaba puesto —el reparto viejo metía su
+ * `workspace/` en medio fuera cual fuera la base— o `~/.xonecode` a secas; la de AHORA es ese
+ * mismo `settings.workspace` o `~/.xonecode/workspace`. Confundirlas en cualquiera de los dos
+ * sentidos da el mismo resultado: una mudanza que no encuentra nada y no dice nada.
+ *
+ * Y se ESCRIBE en el terminal, nunca por el cable: lo que se cuenta son rutas de la máquina
+ * y nombres de proyecto (`sinRutas`). Corre antes de que exista el vestíbulo, así que ni
+ * siquiera hay cable donde emitirlo.
+ */
+export function mudarWorkspaceLegadoCableado(opciones: {
+  settings: Pick<Settings, "entornos" | "workspace">;
+  escribir: (texto: string) => void;
+  mudar?: typeof mudarWorkspaceLegado;
+}): ResultadoDeMudanza {
+  const mudar = opciones.mudar ?? mudarWorkspaceLegado;
+  return mudar({
+    legado: opciones.settings.workspace ?? baseDeWorkspaceLegada(),
+    workspace: opciones.settings.workspace ?? baseDeWorkspacePorOmision(),
+    entornos: opciones.settings.entornos.map((e) => e.id),
+    escribir: opciones.escribir,
+  });
+}
+
+/**
+ * Las dos mitades del ajuste del workspace, cableadas — y extraídas por el motivo de
+ * siempre: dentro del cierre de `arrancarConsolaWeb`, que todos sus tests doblan, ni una ni
+ * otra estaría probada. Y aquí `guardarWorkspace` LLEVABA la marca: existía en
+ * `agent/config/settingsEnDisco.ts` con un test propio y CERO llamadores de producción, o
+ * sea el ajuste escrito que no hacía nada porque nadie lo había enchufado.
+ *
+ * Tres cosas que se deciden aquí y no en la pantalla:
+ * - **Qué se LEE**: el disco, en cada emisión, no un valor capturado al arrancar. Es la misma
+ *   regla que `baseDeWorkspace`, y aquí además cierra el lazo: lo que se acaba de guardar es
+ *   lo que se vuelve a emitir.
+ * - **Qué se ACEPTA**: `motivoDeWorkspaceInaceptable` sobre la ruta ya expandida, en el
+ *   servidor. El cliente lleva su copia declarada para explicar el no, pero una pantalla
+ *   solo esconde un botón.
+ * - **Qué se GUARDA**: la ruta ABSOLUTA, nunca el `~/…`. La casa cambia de una máquina a
+ *   otra y de un usuario a otro, y un `settings.json` con un `~` dentro sería una ruta que
+ *   solo significa algo para quien la escribió.
+ */
+export function ajusteDeWorkspaceCableado(opciones: {
+  casa: string;
+  leer?: () => string | undefined;
+  guardar?: (ruta: string) => void;
+}): { workspace: () => string; guardarWorkspace: (ruta: string) => void } {
+  const leer = opciones.leer ?? (() => cargarSettings().settings.workspace);
+  const guardar = opciones.guardar ?? ((ruta: string) => void guardarWorkspaceEnDisco(undefined, ruta));
+  return {
+    workspace: () => abreviarConCasa(leer() ?? baseDeWorkspacePorOmision(), opciones.casa),
+    guardarWorkspace: (ruta) => {
+      const absoluta = expandirConCasa(ruta, opciones.casa);
+      if (motivoDeWorkspaceInaceptable(absoluta) !== undefined) return;
+      guardar(absoluta);
+    },
   };
 }
 
@@ -4667,6 +4783,18 @@ export async function arrancarConsolaWeb(opciones: OpcionesDeArranque): Promise<
     escribir("este directorio es un proyecto offline: ábrelo con «xonecode --cli»\n");
   }
 
+  /**
+   * La mudanza del reparto viejo, ANTES de que exista el vestíbulo y de que arranque el
+   * corredor de tareas. El orden no es estético: el vestíbulo compone raíces con el reparto
+   * de AHORA y una tarea pendiente lleva su raíz grabada, así que cualquiera de los dos
+   * corriendo antes abriría una carpeta que esta función está a punto de mover.
+   *
+   * Y va aquí y no en el vestíbulo porque no es del vestíbulo: es de la MÁQUINA, pasa una
+   * sola vez, y cuando no quede nadie con el reparto viejo en disco se retira de un tirón
+   * junto con `core/mudanzaDeWorkspace.ts`.
+   */
+  mudarWorkspaceLegadoCableado({ settings: cargarSettings().settings, escribir });
+
   const arrancar = opciones.crearServidor ?? arrancarServidor;
   const servidor = await arrancar({
     puerto: opciones.puerto,
@@ -4781,6 +4909,10 @@ export async function arrancarConsolaWeb(opciones: OpcionesDeArranque): Promise<
     // la raíz que la tarea necesita para poder correr. Ver el comentario de
     // `OpcionesDeMontaje.colaDeTareas`.
     ...opcionesDeTareas,
+    // Dónde se bajan las copias: leerlo y elegirlo. La composición está EXTRAÍDA y probada
+    // (`ajusteDeWorkspaceCableado`) por el patrón de fallo de siempre — y aquí el escritor
+    // ya venía con la marca puesta: existía con su test y sin un solo llamador.
+    ...ajusteDeWorkspaceCableado({ casa: homedir() }),
     // Los dos puertos del selector de modelos, con las piezas reales: quién tiene
     // credencial (`auth.json` o el entorno, leído desde el cwd) y el catálogo VIVO.
     hayCredencial: (proveedor) => hayCredencial(proveedor, opciones.cwd),
@@ -5044,14 +5176,25 @@ function vestibuloReal(
     // El commit del turno, con el sello de la sesión. La composición está EXTRAÍDA y probada
     // (`commitDeTurnoCableado`): el argumento que se cae en una lambda escrita a mano es
     // justo el que sostiene la atribución de Revisión.
-    commitearTurno: commitDeTurnoCableado({ base: settings.workspace ?? baseDeWorkspacePorOmision() }),
+    commitearTurno: commitDeTurnoCableado({
+      base: () => cargarSettings().settings.workspace ?? baseDeWorkspacePorOmision(),
+    }),
     olvidarMarcaDeSesion: olvidarSesion,
     // La memoria del agente por hilo. `historica` deja de ser «se reabrió» para ser «no hay
     // checkpoint que cargar», y borrar una sesión se lleva también su checkpoint.
     hayMemoriaDeHilo: async (raiz, hilo) => hayCheckpoint(crearCheckpointerDeProyecto(raiz), hilo),
     olvidarMemoriaDeHilo: async (raiz, hilo) => olvidarHilo(crearCheckpointerDeProyecto(raiz), hilo),
     entornos: settings.entornos,
-    ...(settings.workspace === undefined ? {} : { baseDeWorkspace: settings.workspace }),
+    /**
+     * Dónde se bajan las copias, RELEÍDO en cada uso y no resuelto aquí.
+     *
+     * `settings.workspace` se cambia desde Ajustes con la consola en marcha, así que un
+     * valor capturado al arrancar dejaría el resto del proceso bajando al sitio de antes
+     * mientras la pantalla enseña el nuevo — el ajuste escrito que no hace nada. Es lo
+     * mismo que ya hacen `sinAprobacion` y el tope de concurrencia, y por lo mismo: releer
+     * un JSON pequeño no cuesta nada al lado de equivocarse de carpeta.
+     */
+    baseDeWorkspace: () => cargarSettings().settings.workspace ?? baseDeWorkspacePorOmision(),
     // La URL de la web para que la página del callback devuelva AQUÍ y no diga «vuelve a
     // la terminal», que en un navegador es falso.
     ...conexionDeVestibulo(servidor.url),

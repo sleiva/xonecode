@@ -1114,6 +1114,11 @@ export function App({
       // pedirlo la primera vez, con el número que puso quien lo cambia.
       {...(estado.tareas === undefined ? {} : { tareas: { concurrencia: estado.tareas.concurrencia } })}
       alCambiarConcurrencia={(concurrencia) => void enviar({ clase: "tareas", concurrencia })}
+      // Dónde se bajan las copias. Ausente = el servidor no lo dice, y entonces el campo
+      // no se pinta: un control sin dato detrás no se pinta, y aquí un campo en blanco se
+      // leería como «no hay ninguna carpeta puesta».
+      {...(estado.workspace === undefined ? {} : { workspace: estado.workspace })}
+      alCambiarWorkspace={(ruta) => void enviar({ clase: "workspace", ruta })}
       // Los modelos de un motor externo, para el desplegable de un subagente.
       {...(estado.modelosDeMotor === undefined ? {} : { modelosDeMotor: estado.modelosDeMotor })}
       alPedirModelosDeMotor={(motor) => void enviar({ clase: "modelosDeMotor", motor })}

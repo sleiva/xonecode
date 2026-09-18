@@ -360,6 +360,15 @@ export type MensajeAlCliente =
    */
   | { clase: "tareas"; lista: TareaDelCable[]; concurrencia: number; corriendoAqui: boolean }
   /**
+   * Dónde se bajan las copias locales, ya abreviado con `~` cuando cuelga de la casa.
+   *
+   * **Es la excepción NOMBRADA a «ninguna ruta de la máquina viaja por el cable»**, y la
+   * única: el campo de Ajustes tiene que enseñar la carpeta que hay puesta, y una ruta que
+   * no se enseña no se puede elegir. El `~` es lo que evita que el caso normal lleve dentro
+   * el nombre de la cuenta del sistema.
+   */
+  | { clase: "workspace"; ruta: string }
+  /**
    * Cómo fue la última augmentación pedida (`{clase:"tarea", accion:"augmentar"}`): el
    * encargo que propone el modelo, o por qué no se pudo. Nunca los dos a la vez.
    */
@@ -864,6 +873,9 @@ export type MensajeDelCliente =
   | { clase: "tarea"; accion: "reintentar" | "descartar" | "terminar"; id: string }
   /** Cambia el tope de concurrencia de la cola de tareas. */
   | { clase: "tareas"; concurrencia: number }
+  /** Elige dónde se bajan las copias locales. **No mueve nada de lo ya bajado**: cambia
+   *  dónde caerá lo siguiente, y la pantalla lo dice. */
+  | { clase: "workspace"; ruta: string }
   /**
    * Empezar (`ver: true`) o dejar de mirar en vivo lo que hace una tarea.
    *

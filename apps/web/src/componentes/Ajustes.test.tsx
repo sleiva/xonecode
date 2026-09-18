@@ -37,6 +37,81 @@ const PROVEEDORES = [
 describe("Ajustes", () => {
   afterEach(cleanup);
 
+  describe("dónde se bajan los proyectos", () => {
+    const campo = (): HTMLInputElement =>
+      screen.getByLabelText("Carpeta donde se bajan los proyectos") as HTMLInputElement;
+
+    it("sin dato del servidor NO se pinta: una caja vacía se leería como «no hay ninguna»", () => {
+      render(<Ajustes {...MANEJADORES} proveedores={PROVEEDORES} conectado />);
+      expect(screen.queryByLabelText("Carpeta donde se bajan los proyectos")).toBeNull();
+    });
+
+    it("enseña la que hay y la manda al guardar", () => {
+      const elegidas: string[] = [];
+      render(
+        <Ajustes
+          {...MANEJADORES}
+          proveedores={PROVEEDORES}
+          conectado
+          workspace="~/.xonecode/workspace"
+          alCambiarWorkspace={(r) => void elegidas.push(r)}
+        />
+      );
+      expect(campo().value).toBe("~/.xonecode/workspace");
+      fireEvent.change(campo(), { target: { value: "~/xone-proyectos" } });
+      fireEvent.click(screen.getByRole("button", { name: "Guardar" }));
+      expect(elegidas).toEqual(["~/xone-proyectos"]);
+    });
+
+    it("sin tocar nada el botón está apagado: guardar lo mismo no es una acción", () => {
+      render(
+        <Ajustes
+          {...MANEJADORES}
+          proveedores={PROVEEDORES}
+          conectado
+          workspace="~/.xonecode/workspace"
+          alCambiarWorkspace={() => {}}
+        />
+      );
+      expect((screen.getByRole("button", { name: "Guardar" }) as HTMLButtonElement).disabled).toBe(true);
+    });
+
+    it("una ruta que no vale ni se manda ni se calla", () => {
+      // La copia declarada de la regla del host. El servidor la vuelve a aplicar, pero sin
+      // esto el no sería mudo: `informar` no llega al navegador desde el vestíbulo.
+      const elegidas: string[] = [];
+      render(
+        <Ajustes
+          {...MANEJADORES}
+          proveedores={PROVEEDORES}
+          conectado
+          workspace="~/.xonecode/workspace"
+          alCambiarWorkspace={(r) => void elegidas.push(r)}
+        />
+      );
+      fireEvent.change(campo(), { target: { value: "proyectos" } });
+      expect((screen.getByRole("button", { name: "Guardar" }) as HTMLButtonElement).disabled).toBe(true);
+      expect(campo().getAttribute("aria-invalid")).toBe("true");
+      expect(screen.getByRole("alert").textContent).toMatch(/absoluta/);
+      expect(elegidas).toEqual([]);
+    });
+
+    it("DICE que cambiarla no mueve lo que ya está bajado", () => {
+      // Callarlo deja a alguien buscando sus proyectos en una carpeta vacía.
+      render(
+        <Ajustes {...MANEJADORES} proveedores={PROVEEDORES} conectado workspace="~/.xonecode/workspace" />
+      );
+      expect(screen.getByText(/NO mueve lo que ya está bajado/)).toBeTruthy();
+    });
+
+    it("sin manejador el campo se enseña apagado: la carpeta existe, cambiarla desde aquí no", () => {
+      render(
+        <Ajustes {...MANEJADORES} proveedores={PROVEEDORES} conectado workspace="~/.xonecode/workspace" />
+      );
+      expect(campo().disabled).toBe(true);
+    });
+  });
+
   it("mientras se registra un entorno, la sección enseña SOLO el formulario", () => {
     // Medido en pantalla: con la lista de proyectos debajo, el campo de la URL quedaba
     // detrás de dieciocho casillas de 54 px — fuera de la vista justo después de pulsar el

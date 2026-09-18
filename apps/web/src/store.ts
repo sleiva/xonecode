@@ -121,6 +121,14 @@ export interface EstadoDelCliente {
     ejecutaOtroProceso?: boolean;
   };
   /**
+   * Dónde se bajan las copias locales, tal como lo dice el servidor (`~/…` o absoluta).
+   *
+   * **Ausente = esta ejecución no lo dice**, y entonces Ajustes no pinta el campo: un
+   * control sin dato detrás no se pinta, y una caja de texto vacía se leería como «no hay
+   * ninguna carpeta puesta».
+   */
+  workspace?: string;
+  /**
    * El ENCARGO que el aumentador propuso para la tarea que se está creando, o el motivo por
    * el que no pudo.
    *
@@ -1152,6 +1160,13 @@ export function crearStoreDelCliente(): {
           const m = mensaje as { encargo?: unknown; error?: unknown };
           if (typeof m.encargo === "string") mutar({ encargoPropuesto: { encargo: m.encargo } });
           else if (typeof m.error === "string") mutar({ encargoPropuesto: { error: m.error } });
+          return;
+        }
+        case "workspace": {
+          // Lista blanca como todo lo de aquí: una `ruta` que no sea cadena no se cree.
+          const m = mensaje as Record<string, unknown>;
+          if (typeof m["ruta"] !== "string") return;
+          mutar({ workspace: m["ruta"] });
           return;
         }
         case "tareas": {

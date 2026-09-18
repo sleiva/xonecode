@@ -114,9 +114,31 @@ export const ENTORNOS_OFICIALES: readonly OpcionDeEntorno[] = [
  */
 export const ENTORNO_OTRO: OpcionDeEntorno = { id: "otro", nombre: "Otro (on-premise)", url: "" };
 
-/** La base del workspace por omisión: `~/.xonecode`. La disposición de dentro la fija
- *  `rutaDeWorkspace` y no es configurable. */
+/**
+ * El workspace por omisión: `~/.xonecode/workspace`. La disposición de DENTRO
+ * (`<workspace>/<entorno>/<proyecto>`) la fija `rutaDeWorkspace` y no es configurable.
+ *
+ * **La carpeta propia es el punto.** Esto era `~/.xonecode` a secas, y entonces cada id de
+ * entorno se plantaba de hermano de `agentes/`, `skills/`, `tareas/`, `auth.json` y
+ * `settings.json`: la casa del harness y el trabajo del usuario en el mismo cajón. Con la
+ * carpeta puesta, lo de xonecode queda arriba y lo bajado queda junto, y
+ * `dentroDelWorkspace` —que es lo que decide si se commitea solo al cerrar cada turno—
+ * deja de dar por suya cualquier carpeta que cuelgue de `~/.xonecode`.
+ */
 export function baseDeWorkspacePorOmision(): string {
+  return join(homedir(), ".xonecode", "workspace");
+}
+
+/**
+ * Dónde caían las copias con el reparto VIEJO, cuando nadie había configurado nada:
+ * `~/.xonecode` a secas, con los ids de los entornos colgando directamente de ahí.
+ *
+ * Existe solo para que la mudanza de una vez sepa dónde mirar
+ * (`agent/config/mudanzaEnDisco.ts`), y se va con ella el día que no quede nadie con el
+ * reparto viejo en disco. Está aquí y no en `mudanzaDeWorkspace.ts` porque depende de
+ * `homedir()`, que es lo que ese módulo no puede tocar para seguir siendo puro.
+ */
+export function baseDeWorkspaceLegada(): string {
   return join(homedir(), ".xonecode");
 }
 
@@ -281,7 +303,16 @@ export interface OpcionesDelVestibulo {
   olvidarMarcaDeSesion?: (raiz: string, id: string) => Promise<void>;
   /** Los entornos YA registrados, tal cual los lee `agent/config/settingsEnDisco.ts#cargarSettings`. */
   entornos?: readonly Entorno[];
-  baseDeWorkspace?: string;
+  /**
+   * Dónde se bajan las copias locales — una FUNCIÓN, no un valor, y eso es la regla.
+   *
+   * `settings.workspace` se puede cambiar desde Ajustes con la consola en marcha, así que
+   * una base capturada al construir dejaría el resto del proceso bajando al sitio de antes
+   * mientras la pantalla enseña el nuevo: el ajuste escrito que no hace nada. Es la misma
+   * razón por la que `sinAprobacion` y el tope de concurrencia releen el disco en cada uso
+   * en vez de resolverse al arrancar.
+   */
+  baseDeWorkspace?: () => string;
   /**
    * Proveedores que ya tienen credencial. Por omisión `false` para todos, que es la
    * dirección segura: preguntar de más molesta, no preguntar deja al usuario sin clave.
@@ -778,7 +809,7 @@ export function crearVestibulo(opciones: OpcionesDelVestibulo): Vestibulo {
   const sesiones = opciones.sesiones ?? SESIONES_EN_DISCO;
   const crearConsola = opciones.crearConsola ?? crearConsolaWeb;
   const correr = opciones.correr ?? correrConsola;
-  const base = opciones.baseDeWorkspace ?? baseDeWorkspacePorOmision();
+  const base = opciones.baseDeWorkspace ?? baseDeWorkspacePorOmision;
   const adoptarLegado =
     opciones.adoptarLegado ??
     // `rutaAuthPorDefecto` y no un `join` propio: el mismo literal en dos ficheros es lo
@@ -1760,7 +1791,7 @@ export function crearVestibulo(opciones: OpcionesDelVestibulo): Vestibulo {
     },
 
     raizDeProyecto(entorno, proyecto) {
-      return rutaDeWorkspace(base, entornoPorId(entorno).id, proyecto);
+      return rutaDeWorkspace(base(), entornoPorId(entorno).id, proyecto);
     },
 
     sesionesDe(raiz) {
@@ -1841,7 +1872,7 @@ export function crearVestibulo(opciones: OpcionesDelVestibulo): Vestibulo {
         typeof proyecto === "string"
           ? { id: proyecto, nombre: proyecto }
           : { id: proyecto.id, nombre: proyecto.nombre };
-      const raiz = rutaDeWorkspace(base, registrado.id, identidad.nombre);
+      const raiz = rutaDeWorkspace(base(), registrado.id, identidad.nombre);
       const datos: DatosDeProyecto = {
         entorno: registrado.id,
         url: registrado.url,

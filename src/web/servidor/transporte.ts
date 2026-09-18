@@ -359,6 +359,20 @@ export type MensajeAlCliente =
       ejecutaOtroProceso?: boolean;
     }
   /**
+   * Dónde se bajan las copias locales, en la forma en que viaja: `~/…` cuando cuelga de la
+   * casa, absoluta cuando no (`core/settings.ts#abreviarConCasa`).
+   *
+   * **Es la excepción NOMBRADA a `sinRutas`**, y la única del cable. No se puede esquivar:
+   * el campo de Ajustes tiene que enseñar la carpeta que hay puesta, y una ruta que no se
+   * enseña no se puede elegir. Lo que sí se evita es que el caso normal lleve el nombre de
+   * la cuenta del sistema — de ahí el `~`. Quien elija un disco de fuera manda su ruta
+   * entera, y eso es una decisión suya con el campo delante.
+   *
+   * Va en la ráfaga de bienvenida por lo mismo que los modelos y las skills: Ajustes se
+   * puede abrir en cuanto conecta, y un campo vacío se lee como «no hay nada puesto».
+   */
+  | { clase: "workspace"; ruta: string }
+  /**
    * Cómo fue la última augmentación pedida (`{clase:"tarea", accion:"augmentar"}`): el
    * encargo que propone el modelo, o por qué no se pudo. Nunca los dos a la vez.
    */
@@ -1289,6 +1303,16 @@ export type MensajeDelCliente =
   | { clase: "tarea"; accion: "reintentar" | "descartar" | "terminar"; id: string }
   /** Cambia el tope de concurrencia de la cola de tareas. */
   | { clase: "tareas"; concurrencia: number }
+  /**
+   * Elige dónde se bajan las copias locales. Acepta `~/…` y absolutas; la regla de qué vale
+   * es `core/settings.ts#motivoDeWorkspaceInaceptable`, y se aplica en el SERVIDOR además de
+   * en la pantalla — el cliente lleva su copia DECLARADA, como la de la URL de un entorno y
+   * la del slug de un subagente, porque la frontera prohíbe compartir módulo.
+   *
+   * **No mueve nada de lo que ya está bajado**: cambia dónde caerá lo SIGUIENTE. La pantalla
+   * lo dice con todas las letras.
+   */
+  | { clase: "workspace"; ruta: string }
   /**
    * Empezar (`ver: true`) o dejar de mirar en vivo lo que hace una tarea.
    *

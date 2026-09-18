@@ -36,6 +36,25 @@ import { Receta } from "./Receta.js";
 import { VerificarDispositivo } from "./VerificarDispositivo.js";
 import { Pregunta } from "./Pregunta.js";
 import { urlDeEntornoAceptable, AVISO_DE_URL } from "./Wizard.js";
+
+/**
+ * La copia DECLARADA de `core/settings.ts#motivoDeWorkspaceInaceptable`, igual que
+ * `urlDeEntornoAceptable` lo es de la regla de la URL de un entorno: la frontera prohíbe
+ * que el cliente importe del host, y sin una copia aquí el rechazo del servidor sería mudo
+ * —`informar` no llega al navegador desde el vestíbulo—. De balde evita un viaje; la que
+ * MANDA es la del servidor, que la vuelve a aplicar.
+ *
+ * Las frases son las mismas a propósito: leer un motivo distinto según dónde se teclee la
+ * carpeta haría dudar de cuál es la regla.
+ */
+export function motivoDeWorkspaceInaceptable(ruta: string): string | undefined {
+  const limpio = ruta.trim();
+  if (limpio === "") return "escribe una carpeta: en blanco no es una elección";
+  if (!limpio.startsWith("/") && !limpio.startsWith("~/") && limpio !== "~") {
+    return "tiene que ser una ruta absoluta, que empiece por «/» o por «~/»";
+  }
+  return undefined;
+}
 import { PROYECTOS_POR_OMISION } from "./Barra.js";
 import { IconoDeEntorno } from "./IconoDeEntorno.js";
 import { IconoDeProveedor } from "./IconoDeProveedor.js";
@@ -273,6 +292,8 @@ export function Ajustes({
   alResponderSecreto,
   tareas,
   alCambiarConcurrencia,
+  workspace,
+  alCambiarWorkspace,
   alCerrar,
 }: {
   /** Los del mensaje «modelos». Vacío = todavía no ha llegado, y se dice. */
@@ -425,6 +446,15 @@ export function Ajustes({
   tareas?: { concurrencia: number };
   /** Cambia el tope. Ausente = esta ejecución no puede, y el selector se apaga. */
   alCambiarConcurrencia?: (concurrencia: number) => void;
+  /**
+   * Dónde se bajan las copias locales, como lo dice el servidor (`~/…` o absoluta).
+   * **Ausente = esta ejecución no lo dice**, y entonces el campo no se pinta: una caja de
+   * texto vacía se leería como «no hay ninguna carpeta puesta», y sí la hay.
+   */
+  workspace?: string;
+  /** Elige la carpeta. Ausente = esta ejecución no puede, y el campo se enseña de solo
+   *  lectura — que es la verdad: la carpeta existe, cambiarla desde aquí no. */
+  alCambiarWorkspace?: (ruta: string) => void;
   alCerrar: () => void;
 }) {
   /**
@@ -437,6 +467,19 @@ export function Ajustes({
    * lo particular contradecía el propio orden que la lista declara.
    */
   const [seccion, setSeccion] = useState<SeccionDeAjustes>("general");
+
+  /**
+   * Lo que hay TECLEADO en el campo del workspace, que no es lo que hay guardado.
+   *
+   * Ausente = «no lo he tocado», y entonces se pinta lo que dice el servidor. No se
+   * sincroniza con un efecto: hacerlo pisaría lo que la persona está escribiendo cada vez
+   * que llegue una reemisión, y el servidor reemite en cuanto alguien guarda. Se suelta al
+   * guardar, que es cuando el valor del servidor vuelve a ser la verdad.
+   */
+  const [workspaceTecleado, setWorkspaceTecleado] = useState<string | undefined>(undefined);
+  const workspaceEnElCampo = workspaceTecleado ?? workspace ?? "";
+  const motivoDelWorkspace = motivoDeWorkspaceInaceptable(workspaceEnElCampo);
+  const workspaceCambiado = workspaceTecleado !== undefined && workspaceTecleado.trim() !== (workspace ?? "");
   /** Qué fila está pidiendo clave: es donde se pinta la pregunta del servidor. */
   const [editando, setEditando] = useState<string | undefined>(undefined);
   /** Registrar un entorno es un MODO: mientras dura, la lista no está (ver más abajo). */
@@ -1211,6 +1254,76 @@ export function Ajustes({
                 máquina suelto, y el próximo que aparezca —lo que valga para todo el equipo y no
                 para un proyecto— tiene su sitio sin volver a decidir dónde ponerlo.
               */}
+              {/*
+                DÓNDE se bajan las copias. Va en General y arriba de Tareas porque es lo
+                más estructural que hay aquí: decide en qué carpeta de este Mac vive el
+                trabajo. El campo solo se pinta si el servidor dice cuál es — ausente ≠
+                vacío, y una caja en blanco se leería como «no hay ninguna puesta».
+              */}
+              {workspace === undefined ? null : (
+                <>
+                  <h3 className={estilos.subencabezado}>Dónde se bajan los proyectos</h3>
+                  <p className={estilos.nota}>
+                    Cada proyecto que bajas de CloudStudio se copia a{" "}
+                    <code>esta carpeta/&lt;entorno&gt;/&lt;proyecto&gt;</code>. El nivel del entorno no es
+                    decoración: el mismo proyecto puede existir en dos servidores.
+                  </p>
+                  <label className={estilos.filaDeWorkspace}>
+                    Carpeta
+                    <input
+                      type="text"
+                      value={workspaceEnElCampo}
+                      spellCheck={false}
+                      autoCapitalize="off"
+                      autoCorrect="off"
+                      aria-label="Carpeta donde se bajan los proyectos"
+                      aria-invalid={motivoDelWorkspace === undefined ? undefined : true}
+                      disabled={!conectado || alCambiarWorkspace === undefined}
+                      onChange={(e) => setWorkspaceTecleado(e.target.value)}
+                    />
+                    <button
+                      type="button"
+                      className={estilos.accion}
+                      disabled={
+                        !conectado ||
+                        alCambiarWorkspace === undefined ||
+                        !workspaceCambiado ||
+                        motivoDelWorkspace !== undefined
+                      }
+                      onClick={() => {
+                        // Se suelta lo tecleado: a partir de aquí manda lo que conteste el
+                        // servidor, que reemite el valor que acabó en disco — el que valió
+                        // o el de antes.
+                        alCambiarWorkspace?.(workspaceEnElCampo.trim());
+                        setWorkspaceTecleado(undefined);
+                      }}
+                    >
+                      Guardar
+                    </button>
+                  </label>
+                  {/*
+                    La regla es la copia DECLARADA de la del host
+                    (`core/settings.ts#motivoDeWorkspaceInaceptable`), como la de la URL de
+                    un entorno: la frontera prohíbe compartir módulo. De balde evita un
+                    viaje, y el servidor la vuelve a aplicar, que es quien manda.
+                  */}
+                  {motivoDelWorkspace === undefined ? null : (
+                    <p className={estilos.nota} role="alert">
+                      {motivoDelWorkspace}
+                    </p>
+                  )}
+                  {/*
+                    Y lo que NO hace, dicho antes de que lo descubra nadie: cambiarla no
+                    mueve lo que ya está bajado. Callarlo dejaría a alguien buscando sus
+                    proyectos en una carpeta vacía.
+                  */}
+                  <p className={estilos.nota}>
+                    Cambiarla NO mueve lo que ya está bajado: las copias que tengas se quedan donde están y
+                    siguen abriéndose desde ahí. Lo que cambia es dónde caerá lo siguiente que bajes.
+                  </p>
+                </>
+              )}
+
               <h3 className={estilos.subencabezado}>Tareas</h3>
               <p className={estilos.nota}>
                 Las tareas son los encargos que corren solos, sin nadie delante: la pestaña «Tareas» del

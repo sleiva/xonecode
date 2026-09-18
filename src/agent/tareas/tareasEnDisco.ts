@@ -21,6 +21,53 @@ import { mimeDeAdjunto, nombreDeAdjuntoAceptable } from "../../core/adjuntos.js"
 export const TOPE_DE_ADJUNTO = 20_000_000;
 export const TOPE_DE_ADJUNTOS_POR_TAREA = 50_000_000;
 
+/**
+ * Reescribe las raíces ABSOLUTAS del índice cuando una copia local se ha mudado de sitio.
+ *
+ * Vive aquí y no en quien muda porque el dueño del formato de `indice.json` es este fichero:
+ * un segundo sitio que sepa escribirlo divergiría del primero en cuanto uno de los dos se
+ * corrigiera. Quien llama solo aporta la TRADUCCIÓN (ausente = «esta raíz no la mudé yo»).
+ *
+ * **Se trabaja sobre el JSON crudo**, no sobre `Tarea`: la misma disciplina de
+ * `settingsEnDisco.ts`: pasar por un tipo descartaría en silencio del fichero del usuario
+ * cualquier campo que este proceso no conozca. Y si no hay índice, o no se puede leer, no se
+ * escribe nada: una cola que no está no es una cola rota.
+ *
+ * Devuelve cuántas entradas cambiaron. Cero no escribe el fichero: reescribirlo sin que haya
+ * cambiado nada movería su mtime sin motivo.
+ */
+export function remapearRaicesDeTareas(
+  base: string | undefined,
+  traducir: (raiz: string) => string | undefined
+): number {
+  const indice = join(base ?? join(homedir(), ".xonecode"), "tareas", "indice.json");
+  if (!existsSync(indice)) return 0;
+  let bruto: unknown;
+  try {
+    bruto = JSON.parse(readFileSync(indice, "utf8"));
+  } catch {
+    return 0;
+  }
+  if (!Array.isArray(bruto)) return 0;
+
+  let cambiadas = 0;
+  const salida = bruto.map((entrada) => {
+    if (typeof entrada !== "object" || entrada === null) return entrada;
+    const proyecto = (entrada as { proyecto?: unknown }).proyecto;
+    if (typeof proyecto !== "object" || proyecto === null) return entrada;
+    const raiz = (proyecto as { raiz?: unknown }).raiz;
+    if (typeof raiz !== "string") return entrada;
+    const nueva = traducir(raiz);
+    if (nueva === undefined) return entrada;
+    cambiadas += 1;
+    return { ...entrada, proyecto: { ...proyecto, raiz: nueva } };
+  });
+
+  if (cambiadas === 0) return 0;
+  writeFileSync(indice, `${JSON.stringify(salida, null, 1)}\n`, { encoding: "utf8", mode: 0o600 });
+  return cambiadas;
+}
+
 /** Un nombre de adjunto: un segmento llano y nada más. La lista BLANCA de forma vive en
  *  `core/adjuntos.ts` —la comparten esto, la ruta de subida y el listado—, y de ella depende
  *  que esto no escriba fuera. */

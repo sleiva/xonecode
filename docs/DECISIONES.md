@@ -5101,3 +5101,121 @@ aquí no se puede decir QUÉ comando dejó el fichero, solo que fue uno.
 (Antes había una segunda trampa: `docs/COMO-PROBARLO.md` decía que la consola no hablaba con el
 agente real. El doc ya está corregido — `cli/main.ts` monta `crearEjecutorReal` por omisión y
 `--guion` es el modo de pega. Ante una discrepancia entre doc y código, el código manda.)
+
+## El workspace: dónde viven las copias locales (18-09-2026)
+
+### El síntoma, y por qué no era estético
+
+En una máquina con los dos entornos oficiales registrados, `~/.xonecode` tenía esto:
+
+```
+~/.xonecode/
+  agentes/  skills/  tareas/  opencode/
+  auth.json  settings.json  cloudstudio-oauth.json
+  webstudio/workspace/{AppDemo, AppDeve, PlaemerWebTestAsync}
+  manager/workspace/{ABCTempo_Revolution, ACAProd, ActivoMobileDev, MyAllXOne}
+```
+
+`rutaDeWorkspace` componía `<base>/<entorno>/workspace/<proyecto>` y la base por omisión era
+`~/.xonecode` a secas, así que **el id de cada entorno quedaba de hermano de la casa del
+harness**: las credenciales, los subagentes y la cola de tareas en el mismo cajón que el
+trabajo del usuario. Y había un segundo precio que solo se ve al configurar la base: quien
+pusiera `settings.workspace = /Users/x/xone-proyectos` no obtenía esa carpeta, obtenía
+`/Users/x/xone-proyectos/<entorno>/workspace/<proyecto>` — un nivel que no había pedido y
+que no podía quitar, porque el literal estaba dentro de la función.
+
+### La decisión: el literal se muda del medio a la base
+
+`<workspace>/<entorno>/<proyecto>`, con la omisión en `~/.xonecode/workspace`. Con eso lo
+que se configura ES el workspace, y la omisión deja la casa del harness arriba y lo bajado
+junto y abajo.
+
+**El segmento del ENTORNO se queda, y se planteó quitarlo.** `AppDemo` existe a la vez en
+los dos entornos de esa máquina, así que un reparto plano (`<workspace>/<proyecto>`) los
+haría la misma carpeta — dos proyectos distintos, de dos servidores distintos, compartiendo
+historia de git y checkpoint. `Wizard.tsx` ya documentaba la mitad de esto por otro camino:
+los on-premise necesitan id propio justo para no compartir carpeta de workspace.
+
+### Lo que NO era estético: los commits por turno se paraban solos
+
+`dentroDelWorkspace(raiz, base)` es lo que decide si el harness puede commitear al cerrar
+cada turno — en la carpeta que creó él sí, en la que abrió una persona no, porque ahí sería
+ensuciarle el historial. Con el reparto nuevo y la base nueva,
+`~/.xonecode/webstudio/workspace/AppDemo` **deja de estar dentro**, y entonces esas siete
+copias se quedaban sin commit por turno sin un solo síntoma: la pestaña Revisión se cae al
+respaldo «desde-apertura» y nadie tiene por qué notarlo. Eso convirtió la mudanza de «sería
+limpio» en «no hay alternativa»: dejarlas y avisar tampoco valía, porque el aviso saldría en
+cada arranque para siempre.
+
+### La mudanza, y las cuatro decisiones que tiene dentro
+
+Corre en `arrancarConsolaWeb`, **antes del vestíbulo y antes del corredor de tareas**: el
+primero compone raíces con el reparto de ahora y el segundo abre la raíz que la tarea lleva
+grabada, así que cualquiera de los dos por delante abriría una carpeta a punto de moverse.
+
+1. **Proyecto a proyecto, no la carpeta del entorno entera.** Mover
+   `<entorno>/workspace` de una pieza parece más barato y no vale en el caso de quien ya
+   tenía `settings.workspace` puesto: ahí el destino (`<workspace>/<entorno>`) es el PADRE
+   del origen, y sería mover una carpeta encima de sí misma. Proyecto a proyecto sirve para
+   los dos casos con un solo camino. El degenerado —un proyecto llamado `workspace`— se
+   reconoce por «una cuelga de la otra» y se salta; contarlo como choque diría que hay dos
+   copias donde no hay ninguna.
+2. **Un destino que ya existe no se pisa, y se DICE.** Ahí dentro hay historia de git,
+   sesiones y un checkpoint. Y callarlo dejaría dos copias del mismo proyecto sin que nadie
+   supiera cuál mira la consola.
+3. **Solo lo que se movió de verdad reescribe una ruta guardada.** Hay dos almacenes con
+   raíces absolutas escritas: `proyecto.raiz` del índice de tareas y las claves de
+   `settings.sinAprobacion`. Sin reescribirlas, una tarea pendiente abre una carpeta que ya
+   no está, y una autorización de escribir sin preguntar deja de aplicarse en silencio — la
+   dirección segura, sí, pero es un ajuste que el dueño de la máquina dio por puesto. Cada
+   reescritura vive en el fichero DUEÑO de su formato (`tareasEnDisco.ts`,
+   `settingsEnDisco.ts`), no en quien muda: un segundo sitio que sepa escribir el índice
+   divergiría del primero en cuanto uno se corrigiera.
+4. **El husco vacío se retira con `rmdir`, que por construcción nunca vacía nada.** Un
+   `notas.txt` del usuario ahí dentro deja la carpeta en pie, que es la respuesta correcta.
+   Lo único que se borra antes es la basura del SO, y de la lista CERRADA que `gitSync.ts` ya
+   mantiene: medido sobre el caso real, Finder había dejado un `.DS_Store` en las dos
+   carpetas, y sin esto el husco vacío se quedaba en `~/.xonecode` para siempre — justo lo
+   que la mudanza venía a quitar.
+
+El ensayo sobre la máquina real, antes de mover nada: 7 copias a mudar, 0 choques.
+
+### Poder elegir la carpeta: el escritor ya existía y no lo llamaba nadie
+
+`agent/config/settingsEnDisco.ts#guardarWorkspace` estaba escrito, documentado y con su
+test — y con **cero llamadores de producción**. Es el patrón de fallo de este repo en su
+forma más pura: la regla estaba escrita, no montada, y nada podía decirlo porque su test
+pasaba. Por eso la composición se extrae (`ajusteDeWorkspaceCableado`) y lo que se prueba en
+`montarRutas` es que el MENSAJE llega a la función, no que la función funcione.
+
+### La base se relee en cada uso
+
+`baseDeWorkspace` pasa de ser un `string` a ser una función, y con ella el `base` de
+`commitDeTurnoCableado`. El motivo es el mismo que ya tenían `sinAprobacion` y el tope de
+concurrencia: se cambian desde Ajustes con la consola en marcha, y un valor resuelto al
+arrancar deja el resto del proceso trabajando con el de antes. Aquí el síntoma sería doble y
+los dos mudos: lo siguiente se bajaría al sitio viejo mientras la pantalla enseña el nuevo, y
+`dentroDelWorkspace` compararía contra la carpeta de antes y pararía los commits por turno.
+
+### Cambiar la carpeta no mueve nada, y eso se dice
+
+Se decidió a propósito y la pantalla lo escribe. Las razones: un `renameSync` entre volúmenes
+es EXDEV —y el caso interesante de elegir carpeta es justo un disco externo—, y mover
+gigabytes de trabajo ajeno como efecto secundario de guardar un ajuste no es algo que se pueda
+hacer sin preguntar. Lo que cambia es dónde cae lo SIGUIENTE. Lo que queda abierto es ofrecer
+la mudanza con el plan delante, por la misma puerta que ya usa la subida.
+
+### La ruta en el cable: la excepción nombrada a `sinRutas`
+
+«Ninguna ruta de la máquina viaja por el cable» tiene aquí su única excepción, y no se puede
+esquivar: el campo de Ajustes tiene que enseñar la carpeta que hay puesta, porque una ruta que
+no se enseña no se puede elegir. Lo que sí se puede es que el caso normal no lleve dentro el
+nombre de la cuenta del sistema, y de ahí `abreviarConCasa`: `~/.xonecode/workspace` dice lo
+mismo sin decir quién eres. Quien elija un disco de fuera manda su ruta entera, porque no hay
+forma de nombrarla si no, y esa es una decisión suya tomada con el campo delante.
+
+Se GUARDA absoluta. Un `~` dentro de `settings.json` sería una ruta que solo significa algo
+para quien la escribió, y ese fichero se lee desde procesos que no tienen por qué compartir
+casa. Y la regla de qué vale se aplica en el SERVIDOR además de en la pantalla: el cliente
+lleva su copia DECLARADA —como la de la URL de un entorno— para poder explicar el no, porque
+`informar` no llega al navegador desde el vestíbulo; pero una pantalla solo esconde un botón.

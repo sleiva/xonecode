@@ -54,7 +54,7 @@ function dobles() {
       return { ruta: "/casa/.xonecode/config.json", id };
     },
     entornos,
-    baseDeWorkspace: "/w",
+    baseDeWorkspace: () => "/w",
     escrituras,
   };
 }
@@ -1044,10 +1044,10 @@ describe("vestíbulo", () => {
     const dichos: string[] = [];
     const v = crearVestibulo({ ...d, origenDeTrabajo: "global", informar: (t) => dichos.push(t) });
     const { raiz } = await v.completarProyecto({ entorno: "webstudio", proyecto: "MinitMT", rama: "master" });
-    expect(raiz).toBe("/w/webstudio/workspace/MinitMT");
+    expect(raiz).toBe("/w/webstudio/MinitMT");
     // El alta se escribe ANTES de bajar: el consejo «/sync bajar» de un fallo posterior
     // solo es cierto si el proyecto y la rama ya están en disco.
-    expect(d.escrituras).toEqual(["config:/w/webstudio/workspace/MinitMT", "descarga"]);
+    expect(d.escrituras).toEqual(["config:/w/webstudio/MinitMT", "descarga"]);
   });
 
   it("un fallo de descarga NO crea .xonecode a medias y dice cómo reintentar", async () => {
@@ -1148,7 +1148,7 @@ describe("abrirParaTarea — la segunda puerta", () => {
       ...dobles(),
       origenDeTrabajo: "global",
       sesiones: s.puerto,
-      baseDeWorkspace: base,
+      baseDeWorkspace: () => base,
     });
     const raizA = proyectoEnDisco(base, "A");
     const raizB = proyectoEnDisco(base, "B");
@@ -1180,7 +1180,7 @@ describe("abrirParaTarea — la segunda puerta", () => {
       ...dobles(),
       origenDeTrabajo: "global",
       sesiones: s.puerto,
-      baseDeWorkspace: base,
+      baseDeWorkspace: () => base,
       crearEjecutor: () => async (_peticion, _estado, consola) => {
         consola.escribir("hecho\n");
       },
@@ -1214,7 +1214,7 @@ describe("abrirParaTarea — la segunda puerta", () => {
       ...dobles(),
       origenDeTrabajo: "global",
       sesiones: s.puerto,
-      baseDeWorkspace: base,
+      baseDeWorkspace: () => base,
     });
     const raices = ["A", "B"].map((n) => proyectoEnDisco(base, n));
     const consolas = await Promise.all(raices.map((r) => v.abrirParaTarea(r)));
@@ -1241,7 +1241,7 @@ describe("abrirParaTarea — la segunda puerta", () => {
       ...dobles(),
       origenDeTrabajo: "global",
       sesiones: s.puerto,
-      baseDeWorkspace: base,
+      baseDeWorkspace: () => base,
       correr: async (_consola, estado, ejecutar) => {
         recibidos.set(estado.raiz, ejecutar);
         return 0;
@@ -1279,7 +1279,7 @@ describe("abrirParaTarea — la segunda puerta", () => {
       ...dobles(),
       origenDeTrabajo: "global",
       sesiones: s.puerto,
-      baseDeWorkspace: base,
+      baseDeWorkspace: () => base,
       crearEjecutor: (_alAbrir, opciones) => {
         extras.push(opciones);
         return async () => {};
@@ -1305,7 +1305,7 @@ describe("abrirParaTarea — la segunda puerta", () => {
       ...dobles(),
       origenDeTrabajo: "global",
       sesiones: s.puerto,
-      baseDeWorkspace: base,
+      baseDeWorkspace: () => base,
       crearEjecutor: (_alAbrir, opciones) => {
         extras.push(opciones);
         return async () => {};
@@ -1330,7 +1330,7 @@ describe("abrirParaTarea — la segunda puerta", () => {
       ...dobles(),
       origenDeTrabajo: "global",
       sesiones: s.puerto,
-      baseDeWorkspace: base,
+      baseDeWorkspace: () => base,
       crearEjecutor: () => async () => {},
       commitearTurno: async (raiz, mensaje) => {
         commits.push({ raiz, mensaje });
@@ -1368,7 +1368,7 @@ describe("abrirParaTarea — la segunda puerta", () => {
       ...dobles(),
       origenDeTrabajo: "global",
       sesiones: s.puerto,
-      baseDeWorkspace: base,
+      baseDeWorkspace: () => base,
       informar: (texto) => dichos.push(texto),
       crearEjecutor: () => async () => {},
       commitearTurno: async () => "no se pudo commitear el turno: git no está",
@@ -1390,7 +1390,7 @@ describe("abrirParaTarea — la segunda puerta", () => {
       ...dobles(),
       origenDeTrabajo: "global",
       sesiones: s.puerto,
-      baseDeWorkspace: base,
+      baseDeWorkspace: () => base,
       crearEjecutor: () => async () => {},
       commitearTurno: async () => {
         throw new Error("git reventó");
@@ -1416,7 +1416,7 @@ describe("abrirParaTarea — la segunda puerta", () => {
       ...dobles(),
       origenDeTrabajo: "global",
       sesiones: s.puerto,
-      baseDeWorkspace: base,
+      baseDeWorkspace: () => base,
       // Sin `correr` inyectado corre el `correrConsola` de verdad, que es lo que hace que
       // la prosa se convierta en un turno y el turno vuelque. Con un `correr` que devuelve
       // en el acto, el lazo se acaba antes de que haya nada que anotar.
@@ -1455,7 +1455,7 @@ describe("abrirParaTarea — la segunda puerta", () => {
       ...dobles(),
       origenDeTrabajo: "global",
       sesiones: s.puerto,
-      baseDeWorkspace: base,
+      baseDeWorkspace: () => base,
       crearEjecutor: () => async () => {},
       sinCommitear: async (raiz) => {
         medidas.push(raiz);
@@ -1485,7 +1485,7 @@ describe("abrirParaTarea — la segunda puerta", () => {
       ...dobles(),
       origenDeTrabajo: "global",
       sesiones: s.puerto,
-      baseDeWorkspace: base,
+      baseDeWorkspace: () => base,
       crearEjecutor: () => async () => {},
       sinCommitear: async () => {
         throw new Error("git no está");
@@ -1507,7 +1507,7 @@ describe("abrirParaTarea — la segunda puerta", () => {
       ...dobles(),
       origenDeTrabajo: "global",
       sesiones: s.puerto,
-      baseDeWorkspace: base,
+      baseDeWorkspace: () => base,
       crearEjecutor: () => async () => {},
       correr: async () => 0,
     });
@@ -1534,7 +1534,7 @@ describe("abrirParaTarea — la segunda puerta", () => {
       ...dobles(),
       origenDeTrabajo: "global",
       sesiones: s.puerto,
-      baseDeWorkspace: base,
+      baseDeWorkspace: () => base,
       crearEjecutor: () => {
         llamadas.push("crearEjecutor");
         return async () => {};
@@ -1593,7 +1593,7 @@ describe("abrirParaTarea — la segunda puerta", () => {
       ...dobles(),
       origenDeTrabajo: "global",
       sesiones: s.puerto,
-      baseDeWorkspace: base,
+      baseDeWorkspace: () => base,
       // El turno emite un acto, que es lo que hace que `volcar()` nombre la foto.
       crearEjecutor: () => async (_peticion, _estado, consola) => void consola.escribir("hecho\n"),
       marcarSesion: async () => (_id) =>
@@ -1627,7 +1627,7 @@ describe("abrirParaTarea — la segunda puerta", () => {
       ...dobles(),
       origenDeTrabajo: "global",
       sesiones: s.puerto,
-      baseDeWorkspace: base,
+      baseDeWorkspace: () => base,
       crearEjecutor: () => {
         construidas++;
         return async () => {};
@@ -1672,7 +1672,7 @@ describe("abrirParaTarea — la segunda puerta", () => {
       ...dobles(),
       origenDeTrabajo: "global",
       sesiones: s.puerto,
-      baseDeWorkspace: base,
+      baseDeWorkspace: () => base,
     });
     const deTarea = await v.abrirParaTarea(proyectoEnDisco(base, "A"));
     expect(deTarea.cerrada).toBe(false);
@@ -1701,7 +1701,7 @@ describe("abrirParaTarea — la segunda puerta", () => {
       ...dobles(),
       origenDeTrabajo: "global",
       sesiones: s.puerto,
-      baseDeWorkspace: base,
+      baseDeWorkspace: () => base,
       crearEjecutor: () => async () => {
         corridos++;
       },
@@ -1749,7 +1749,7 @@ describe("abrirParaTarea — la segunda puerta", () => {
       ...dobles(),
       origenDeTrabajo: "global",
       sesiones: s.puerto,
-      baseDeWorkspace: base,
+      baseDeWorkspace: () => base,
       olvidarMarcaDeSesion: async (_raiz, id) => {
         olvidadas.push(id);
       },
@@ -1828,7 +1828,7 @@ describe("abrirParaTarea — la segunda puerta", () => {
       ...dobles(),
       origenDeTrabajo: "global",
       sesiones: s.puerto,
-      baseDeWorkspace: base,
+      baseDeWorkspace: () => base,
       crearEjecutor: () => async (_peticion, _estado, consola) => {
         consola.escribir("hecho\n");
       },
@@ -1902,7 +1902,7 @@ describe("abrirParaTarea — la segunda puerta", () => {
       ...dobles(),
       origenDeTrabajo: "global",
       sesiones: s.puerto,
-      baseDeWorkspace: base,
+      baseDeWorkspace: () => base,
       // Un ejecutor que NO es doble: si lo fuera, `volcar` saldría antes por `esDoble` y
       // este test no mediría lo que dice medir.
       crearEjecutor: () => async (_peticion, _estado, consola) => {

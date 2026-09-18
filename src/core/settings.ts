@@ -92,7 +92,8 @@ export const TOPE_DE_CONCURRENCIA_DE_TAREAS = 8;
 
 export interface Settings {
   entornos: Entorno[];
-  /** La BASE del workspace. La disposición de dentro la fija `rutaDeWorkspace`. */
+  /** La carpeta donde se bajan las copias locales. La disposición de DENTRO la fija
+   *  `rutaDeWorkspace` y no es configurable. Ausente = `~/.xonecode/workspace`. */
   workspace?: string;
   /** Qué destinos se miran al medir la máquina. Ausente = todos. */
   dispositivos?: AjustesDeDispositivos;
@@ -306,16 +307,27 @@ export function segmentoSeguro(valor: string, que: string): string {
 }
 
 /**
- * Dónde queda la copia local de un proyecto.
+ * Dónde queda la copia local de un proyecto: `<workspace>/<entorno>/<proyecto>`.
  *
- * La BASE es configurable (`settings.workspace`); la disposición de dentro NO, porque es
- * lo que hace predecible encontrar una copia sin consultar un índice.
+ * El WORKSPACE es configurable (`settings.workspace`); la disposición de dentro NO, porque
+ * es lo que hace predecible encontrar una copia sin consultar un índice.
+ *
+ * **El literal `workspace` vivía aquí, en MEDIO** (`<base>/<entorno>/workspace/<proyecto>`),
+ * y se ha mudado a la omisión de la base (`~/.xonecode/workspace`). Dos motivos medidos:
+ * con la base en `~/.xonecode`, los ids de los entornos quedaban de HERMANOS de `agentes/`,
+ * `skills/`, `tareas/` y `auth.json` —la casa del harness mezclada con el trabajo—; y quien
+ * eligiera una carpeta suya se encontraba un nivel `workspace/` que no había pedido. Con el
+ * literal en la base, lo que se configura ES el workspace.
+ *
+ * **El segmento del ENTORNO se queda, y no es decoración**: el mismo nombre de proyecto
+ * existe a la vez en dos entornos, y sin ese nivel serían la misma carpeta (ver
+ * `Wizard.tsx`, que ya explica por qué un on-premise necesita id propio).
  */
 /**
  * ¿Esa raíz es una copia que creó xonecode, o una carpeta del usuario?
  *
  * De esto depende si el harness puede COMMITEAR solo al cerrar cada turno. En
- * `<base>/<entorno>/workspace/<proyecto>` la carpeta la creó él y es suya; en la que abrió
+ * `<workspace>/<entorno>/<proyecto>` la carpeta la creó él y es suya; en la que abrió
  * una persona —un proyecto offline, o `./bin/xonecode` dentro de su propio repo— un commit
  * por turno sería ensuciarle el historial cada vez que habla con el agente.
  *
@@ -331,11 +343,56 @@ export function dentroDelWorkspace(raiz: string, base: string): boolean {
   return dentro.length > fuera.length && fuera.every((seg, i) => dentro[i] === seg);
 }
 
+/**
+ * El workspace tal como viaja por el CABLE: `~/loquesea` cuando cuelga de la casa, y
+ * absoluto cuando no.
+ *
+ * **Es la excepción NOMBRADA a «ninguna ruta de la máquina viaja por el cable»** (`sinRutas`),
+ * y no se puede esquivar: el campo de Ajustes tiene que enseñar la carpeta que hay puesta y
+ * recibir la que se elige, así que o viaja la ruta o no hay ajuste. Lo que sí se puede es
+ * que el caso NORMAL —el de omisión y el de casi todo el mundo— no lleve el nombre de la
+ * cuenta del sistema: `~/.xonecode/workspace` dice lo mismo sin decir quién eres. Quien
+ * elige un disco externo sí manda su ruta entera, porque no hay forma de nombrarla si no, y
+ * eso es una decisión suya tomada con el campo delante.
+ *
+ * `casa` entra por parámetro y no se lee aquí: este módulo es puro.
+ */
+export function abreviarConCasa(ruta: string, casa: string): string {
+  const dentro = posix.normalize(ruta).replace(/\/+$/, "");
+  const fuera = posix.normalize(casa).replace(/\/+$/, "");
+  if (dentro === fuera) return "~";
+  return dentro.startsWith(`${fuera}/`) ? `~${dentro.slice(fuera.length)}` : dentro;
+}
+
+/** La vuelta de `abreviarConCasa`. Solo `~` y `~/…`: un `~otro` es la casa de OTRA persona
+ *  en la sintaxis del shell, y aquí no se resuelve — se deja tal cual y se rechaza después
+ *  por no ser absoluta. */
+export function expandirConCasa(ruta: string, casa: string): string {
+  const limpio = ruta.trim();
+  if (limpio === "~") return casa;
+  return limpio.startsWith("~/") ? posix.join(casa, limpio.slice(2)) : limpio;
+}
+
+/**
+ * ¿Vale eso como workspace? Ausente = sí.
+ *
+ * Se comprueba sobre la ruta ya EXPANDIDA. Tres noes, y ninguno es de estilo: vacío no es
+ * una elección, una ruta relativa dependería del directorio desde el que se arrancó la
+ * consola —que no es el proyecto ni nada estable— y la raíz del disco convertiría cada id de
+ * entorno en una carpeta de primer nivel del sistema.
+ */
+export function motivoDeWorkspaceInaceptable(ruta: string): string | undefined {
+  const limpio = ruta.trim();
+  if (limpio === "") return "escribe una carpeta: en blanco no es una elección";
+  if (!posix.isAbsolute(limpio)) {
+    return "tiene que ser una ruta absoluta, que empiece por «/» o por «~/»";
+  }
+  if (posix.normalize(limpio).replace(/\/+$/, "") === "") {
+    return "la raíz del disco no: ahí cada entorno sería una carpeta de primer nivel del sistema";
+  }
+  return undefined;
+}
+
 export function rutaDeWorkspace(base: string, entorno: string, proyecto: string): string {
-  return posix.join(
-    base,
-    segmentoSeguro(entorno, "id de entorno"),
-    "workspace",
-    segmentoSeguro(proyecto, "nombre de proyecto")
-  );
+  return posix.join(base, segmentoSeguro(entorno, "id de entorno"), segmentoSeguro(proyecto, "nombre de proyecto"));
 }

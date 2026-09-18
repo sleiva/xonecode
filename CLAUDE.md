@@ -910,6 +910,45 @@ feedback del desarrollador** y no es terminal.
   acabó—, y los dos errores de USO de `/sync`, que no son una operación y son el mismo tipo de
   mensaje que el de cualquier otro comando mal escrito.
 
+### El workspace: dónde viven las copias locales
+
+`core/settings.ts` (`rutaDeWorkspace`, `dentroDelWorkspace`), `web/servidor/vestibulo.ts`
+(`baseDeWorkspacePorOmision`), `core/mudanzaDeWorkspace.ts`, `agent/config/mudanzaEnDisco.ts`.
+
+- **`<workspace>/<entorno>/<proyecto>`, y el workspace es lo ÚNICO configurable**
+  (`settings.workspace`, omisión `~/.xonecode/workspace`). El literal `workspace` vivía en
+  MEDIO del reparto, y con la base en `~/.xonecode` a secas eso dejaba cada id de entorno de
+  HERMANO de `agentes/`, `skills/`, `tareas/` y `auth.json`. Movido a la base, lo que se
+  configura ES el workspace y quien elige una carpeta suya no se encuentra un nivel que no
+  pidió. **El segmento del ENTORNO se queda**: el mismo nombre de proyecto existe a la vez en
+  dos servidores, y sin ese nivel serían la misma carpeta.
+- **La base se LEE en cada uso, nunca se captura al arrancar** (`baseDeWorkspace` es una
+  función, y también el `base` de `commitDeTurnoCableado`): se cambia desde Ajustes con la
+  consola en marcha, así que un valor capturado dejaría el proceso bajando al sitio de antes
+  mientras la pantalla enseña el nuevo — y, peor, `dentroDelWorkspace` compararía contra la
+  carpeta de antes y los commits por turno se pararían EN SILENCIO. Es la misma regla que
+  `sinAprobacion` y el tope de concurrencia.
+- **El reparto viejo se MUDA de una vez al arrancar la web**
+  (`arranque.ts#mudarWorkspaceLegadoCableado`, antes del vestíbulo y del corredor de tareas:
+  los dos abrirían carpetas que están a punto de moverse). Proyecto a proyecto y no la carpeta
+  entera, porque con el workspace ya configurado el destino es el PADRE del origen. **Un
+  destino que existe NUNCA se pisa** y se cuenta aparte; **solo lo que se movió de verdad
+  reescribe una ruta guardada**, que son dos: `proyecto.raiz` del índice de tareas y las
+  claves de `sinAprobacion` — sin eso, una tarea pendiente abriría una carpeta que ya no está
+  y una autorización se perdería sin decirlo. El husco vacío se retira con `rmdir`, que nunca
+  vacía nada, y antes se borra solo la BASURA DEL SO de la lista CERRADA que ya mantiene
+  `gitSync.ts`.
+- **Cambiar el workspace NO mueve lo que ya está bajado**, y la pantalla lo dice: las copias
+  llevan su historia de git, sus sesiones y su checkpoint, y un `renameSync` a otro volumen es
+  EXDEV. Lo que cambia es dónde cae lo siguiente.
+- **La ruta del workspace es la excepción NOMBRADA a `sinRutas`, y la única del cable**: el
+  campo de Ajustes tiene que enseñar la carpeta que hay puesta, y una ruta que no se enseña no
+  se puede elegir. Viaja ABREVIADA con `~` cuando cuelga de la casa (`abreviarConCasa`), así
+  que el caso normal no lleva el nombre de la cuenta del sistema; se GUARDA absoluta, porque un
+  `~` en `settings.json` solo significa algo para quien lo escribió. La regla de qué vale
+  (`motivoDeWorkspaceInaceptable`) se aplica en el SERVIDOR, y el cliente lleva su copia
+  DECLARADA —como la URL de un entorno— para que el no no sea mudo.
+
 ### Sesiones, hilos y git
 
 - **El hilo SOBREVIVE al proceso** (`agent/sesiones/checkpointer.ts`, `SqliteSaver` en
