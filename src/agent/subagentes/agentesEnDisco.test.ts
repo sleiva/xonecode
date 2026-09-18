@@ -313,10 +313,26 @@ describe("sembrarAgentes", () => {
     expect(agentes.map((a) => a.nombre)).not.toContain("designer-xone");
   });
 
-  it("los cuatro conservan los textos que tenían en código: es una mudanza, no un rediseño", () => {
+  /**
+   * Este test guardaba la MUDANZA de los textos de código a los `.md` comprobando frases
+   * literales. Esa mudanza acabó hace mucho, y las descripciones SE REDISEÑARON a propósito:
+   * dejaron de decir lo que cada agente ES y pasaron a decir cómo se USA —cuándo llamarlo, qué
+   * darle y qué devuelve—, que es la convención de los ejemplos de deepagents
+   * (`research-agent`: «Only give this researcher ONE topic at a time…»). Una descripción es
+   * lo que el orquestador lee para repartir, así que una frase de identidad le dice menos que
+   * una instrucción de uso.
+   *
+   * Lo que se comprueba ahora es la SUSTANCIA, no la redacción: que quien escribe avisa de que
+   * se aprueba, y que los papeles siguen siendo los que son.
+   */
+  it("las descripciones dicen cómo se USA cada uno, y las capacidades no han cambiado", () => {
     const dev = AGENTES_DE_SERIE.find((a) => a.nombre === "developer-xone")!;
-    expect(dev.descripcion).toContain("aprobación humana");
+    expect(dev.descripcion).toMatch(/aprobaci[oó]n/i);
     expect(dev.soloLectura).toBe(false);
+    // Y todas dicen qué DEVUELVEN, que es la mitad que hace falta para encadenarlas.
+    for (const a of AGENTES_DE_SERIE) {
+      expect(a.descripcion, a.nombre).toMatch(/[Dd]evuelve/);
+    }
     const docs = AGENTES_DE_SERIE.find((a) => a.nombre === "consultant-xone")!;
     expect(docs.soloLectura).toBe(true);
     // Las particularidades que vivían en un `nombre === "planner"` dentro de `promptDe`

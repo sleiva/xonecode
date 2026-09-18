@@ -331,6 +331,54 @@ export interface Lectura {
  * Y un de serie NO se borra: ver `restaurarAgente`. Borrarlo no devolvía el de serie —la
  * marca recuerda que se entregó y no se resiembra—, así que era perderlo para siempre.
  */
+/**
+ * La ficha con la que el ORQUESTADOR conoce a un especialista: su descripción más lo que
+ * SABE HACER y lo que DEVUELVE.
+ *
+ * **Por qué hace falta, medido en la librería.** deepagents arma la lista de especialistas con
+ * `- ${name}: ${description}` y nada más
+ * (`getTaskToolDescription`/`subagentDescriptions.push`), bajo un encabezado que promete
+ * «Available agent types **and the tools they have access to**» — una promesa que su cuerpo no
+ * cumple. O sea que lo único que el orquestador sabe de su equipo es una frase en prosa: no
+ * sabe quién escribe, quién alcanza la máquina ni qué devuelve cada uno. Y con eso no se puede
+ * ENGRANAR nada: componer un pipeline exige conocer las capacidades y qué entra y sale de cada
+ * pieza.
+ *
+ * **Se DERIVA de lo que el `.md` ya declara**, nunca se escribe a mano. Así un subagente del
+ * usuario trae su ficha solo y no hay una segunda lista que se quede vieja — que es el fallo
+ * que este repo ya tiene anotado para la regla de los diagramas, la única escrita a pelo.
+ *
+ * Y la frase del usuario va DELANTE y entera: es lo que él quiso decir, y esto solo la
+ * completa con lo que el código sabe y él no tiene por qué repetir.
+ */
+export function fichaDeAgente(agente: Agente): string {
+  const capacidades: string[] = [];
+  if (agente.soloLectura) {
+    capacidades.push("solo LEE el proyecto");
+  } else {
+    capacidades.push("ESCRIBE ficheros del proyecto, y cada escritura pasa por aprobación");
+  }
+  // Lo que más cambia una decisión de reparto: quién alcanza la máquina.
+  if (agente.ejecucion === true) capacidades.push("ejecuta comandos en esta máquina");
+  if (agente.motor !== "modelo") capacidades.push(`corre en ${agente.motor}`);
+
+  /**
+   * Qué DEVUELVE, que es la mitad que falta para encadenar. Derivado de lo mismo: quien solo
+   * lee devuelve hechos; quien escribe devuelve cambios; quien ejecuta devuelve lo que MIDIÓ,
+   * que no es lo mismo que lo que cree.
+   */
+  const devuelve =
+    agente.ejecucion === true
+      ? "devuelve lo que midió en la máquina"
+      : agente.soloLectura
+        ? "devuelve hechos y análisis, sin tocar nada"
+        : "devuelve los ficheros que cambió";
+
+  const frase = agente.descripcion.trim();
+  const conPunto = /[.!?]$/.test(frase) ? frase : `${frase}.`;
+  return `${conPunto} [${capacidades.join("; ")}; ${devuelve}]`;
+}
+
 export interface AgenteCargado extends Agente {
   semilla?: "intacta" | "modificada";
 }

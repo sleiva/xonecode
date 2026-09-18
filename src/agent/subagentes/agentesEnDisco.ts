@@ -771,9 +771,11 @@ export const AGENTES_DE_SERIE: readonly Agente[] = [
   {
     nombre: "consultant-xone",
     descripcion:
-      "Responde preguntas técnicas de la plataforma XOne (XML/.xne, JavaScript, CSS, " +
-      "eventos, patrones). Puede leer el proyecto para no contradecir el código real. " +
-      "No modifica nada.",
+      "Para preguntas técnicas de la plataforma XOne: XML/.xne, JavaScript, CSS, eventos y " +
+      "patrones. Úsalo cuando la duda sea «¿cómo se hace esto en XOne?» o «¿este atributo " +
+      "existe?», no para averiguar qué hay en el proyecto. Dale la pregunta concreta y el " +
+      "contexto que ya hayas visto. Devuelve la respuesta anclada en la documentación de la " +
+      "plataforma, y dice cuándo no lo sabe en vez de deducirlo.",
     motor: "modelo",
     soloLectura: true,
     /**
@@ -792,8 +794,11 @@ export const AGENTES_DE_SERIE: readonly Agente[] = [
   {
     nombre: "analyst-xone",
     descripcion:
-      "Inspecciona el proyecto real para anclar planes y diagnósticos: estructura, " +
-      "colecciones y búsqueda de código. No modifica nada.",
+      "Para enterarte de cómo es ESTE proyecto antes de tocarlo: qué colecciones hay, dónde " +
+      "se declara algo, quién usa qué. Úsalo como PRIMER paso de un encargo que vaya a " +
+      "cambiar código, y no para preguntas de la plataforma. Dale qué hay que averiguar y " +
+      "para qué, que es lo que acota cuánto busca. Devuelve hechos con su fichero y su " +
+      "línea, listos para pasárselos al siguiente en un bloque HANDOFF DE ANÁLISIS.",
     motor: "modelo",
     soloLectura: true,
     skills: ["xone-spec-builder", "xone-plan-builder", "archify", "artifacts-builder"],
@@ -803,8 +808,10 @@ export const AGENTES_DE_SERIE: readonly Agente[] = [
   {
     nombre: "developer-xone",
     descripcion:
-      "Desarrolla: crea y modifica colecciones, escribe scripts y edita ficheros. " +
-      "Las modificaciones requieren aprobación humana.",
+      "Para CAMBIAR el proyecto: crear o modificar colecciones, escribir scripts, editar " +
+      "ficheros. Dale los hechos ya averiguados —no le hagas redescubrirlos— y QUÉ tiene que " +
+      "conseguir, no cómo. Devuelve los ficheros que cambió; cada escritura para el turno y " +
+      "pide aprobación, así que un encargo enorme son muchas paradas: pártelo.",
     motor: "modelo",
     soloLectura: false,
     // `artifacts-builder` se queda: escribe documentos e informes. `archify` no, que los
@@ -816,12 +823,14 @@ export const AGENTES_DE_SERIE: readonly Agente[] = [
   {
     nombre: "device-controller",
     descripcion:
-      "CONDUCE un dispositivo o emulador LOCAL —Android o iOS— con la app host XOne " +
-      "instalada: despliega el proyecto en el aparato, lanza la app, captura la pantalla, " +
-      "lee el árbol de controles, pulsa y rellena, y consulta el log y la base de datos del " +
-      "dispositivo. Ejecuta comandos en esta máquina para conseguirlo. Delega en él " +
-      "«lánzalo», «sácame una captura», «pruébalo en el móvil». No edita ficheros del " +
-      "proyecto: para eso está developer-xone.",
+      "Para PROBAR de verdad en un móvil o emulador local: despliega el proyecto, lanza la " +
+      "app, navega, captura la pantalla, lee el árbol de controles, pulsa y rellena, y " +
+      "consulta el log y la base de datos del aparato. Dile SIEMPRE a qué pantalla o " +
+      "colección tiene que llegar y qué comprobar ahí — «pruébalo» a secas le hace " +
+      "improvisar y sale caro. Si no hay aparato levanta el emulador él mismo. Devuelve lo " +
+      "que MIDIÓ: la salida literal, la captura y las excepciones del log; si no pudo " +
+      "comprobar algo lo dice en vez de deducirlo. No edita ficheros del proyecto: eso es de " +
+      "developer-xone.",
     motor: "modelo",
     /**
      * **NO es de solo lectura, y decirlo importa por dos cosas distintas.**
@@ -856,8 +865,10 @@ export const AGENTES_DE_SERIE: readonly Agente[] = [
   {
     nombre: "designer-xone",
     descripcion:
-      "Trabajo visual: layouts, CSS y recursos. Las modificaciones requieren " +
-      "aprobación humana.",
+      "Para el aspecto: layouts, CSS, recursos y diagramas. Úsalo cuando el problema sea cómo " +
+      "se VE algo, no cómo funciona. Si tiene que reflejar el código real, dale antes el " +
+      "análisis hecho. Devuelve los ficheros que cambió, con aprobación como cualquier otra " +
+      "escritura.",
     motor: "modelo",
     soloLectura: false,
     skills: ["xone-development", "archify", "artifacts-builder"],

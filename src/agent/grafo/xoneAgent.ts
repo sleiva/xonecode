@@ -1,5 +1,5 @@
 import { createDeepAgent, createFilesystemMiddleware } from "deepagents";
-import { MAPA_DEL_PROYECTO, promptDeAgente, repartirSkills, type Agente } from "../../core/agentes.js";
+import { MAPA_DEL_PROYECTO, fichaDeAgente, promptDeAgente, repartirSkills, type Agente } from "../../core/agentes.js";
 import type { MotorExterno, SubagenteExternoPort } from "../../core/ports.js";
 import { RunnableLambda } from "@langchain/core/runnables";
 import { AIMessage, type BaseMessage } from "@langchain/core/messages";
@@ -135,7 +135,21 @@ export function promptOrquestador(agentes: readonly Agente[]): string {
     "pasos, o cuando haga falta el criterio de un especialista.",
     agentes.length === 0
       ? "AVISO: ahora mismo no hay ningún especialista dado de alta, así que no puedes delegar en nadie. Dilo en vez de intentar resolverlo tú."
-      : `Los especialistas disponibles son: ${agentes.map((a) => a.nombre).join(", ")}. Elige por su descripción.`,
+      : `Los especialistas disponibles son: ${agentes.map((a) => a.nombre).join(", ")}. La ficha de cada uno —qué sabe hacer y qué devuelve— va en la descripción de \`task\`; léela antes de elegir.`,
+    /**
+     * **Que puede ENCADENARLOS, y que la cadena la compone él.**
+     *
+     * Hasta aquí solo había reglas de secuencia escritas a mano —los diagramas y la del
+     * aparato—, o sea que cualquier encargo que no encajara en esas dos se resolvía con una
+     * sola delegación. Esto no añade una tercera regla: le dice la FORMA (entender → hacer →
+     * comprobar) y le deja montar la cadena con las fichas que ya tiene, que es lo que hace
+     * que un especialista nuevo del usuario entre solo en el reparto.
+     */
+    "Un encargo grande no es UNA delegación: móntalo como una cadena, y la cadena la eliges tú",
+    "leyendo las fichas — primero quien ENTIENDE (los que solo leen), luego quien HACE (los que",
+    "escriben) y al final quien COMPRUEBA (los que alcanzan la máquina o el aparato). Salta las",
+    "etapas que no hagan falta y no inventes las que no tengas: si nadie puede comprobar algo,",
+    "dilo en vez de darlo por bueno.",
     hay("analyst-xone") && hay("designer-xone")
       ? "Para diagramas o esquemas de la app, delega en `designer-xone`; si deben reflejar el código real, encarga PRIMERO el análisis a `analyst-xone` y usa su resultado antes de dibujar."
       : "",
@@ -339,7 +353,7 @@ export async function construirAgente(opciones: OpcionesDelAgente): Promise<unkn
     if (!(await opciones.subagenteExterno.disponible(motor))) continue;
     externos.push({
       name: agente.nombre,
-      description: agente.descripcion,
+      description: fichaDeAgente(agente),
       runnable: RunnableLambda.from(async (entrada: { messages?: BaseMessage[] }) => {
         // La tarea es el último mensaje que le pasa el orquestador. El hijo no comparte
         // transcript —es un proceso aparte, con su propia sesión—, así que lo que no venga
@@ -389,7 +403,7 @@ export async function construirAgente(opciones: OpcionesDelAgente): Promise<unkn
     });
     return {
     name: perfil.nombre,
-    description: perfil.descripcion,
+    description: fichaDeAgente(perfil),
     systemPrompt: promptDeAgente(perfil, repartirSkills(perfil, catalogoDeSkills)),
     // Los subagentes no heredan las skills del orquestador. Se entregan como fuentes
     // directas para mantener cada perfil limitado a su catálogo declarado.
