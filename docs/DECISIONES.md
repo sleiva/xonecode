@@ -4613,6 +4613,40 @@ un rato fijo. Probado de punta a punta con un proyecto de usar y tirar: túnel, 
 reinicio, espera, lanzamiento y comprobación — la app no arrancó porque no tenía `bd/gestion.db`,
 que es exactamente lo que la plantilla dice que mires primero.
 
+### Correrlo de verdad, que es otra cosa que cablearlo
+
+Dos turnos reales sobre un proyecto de verdad (`MinitsMT`) con `gemini-3.8-flash`, que es lo que
+ese usuario tiene en sus tres papeles. **El cableado funcionó las dos veces y el agente no hizo
+la tarea bien ninguna.** La primera: 245 comandos, 290k tokens de entrada, la skill releída 45
+veces, 30 `ls` sobre una ruta REAL que `read_file` no puede abrir nunca y 25 `grep adb` DENTRO
+del proyecto; capturó la app que ya estaba viva sin desplegar nada y dijo «se ha lanzado la
+aplicación». La segunda, con el prompt ya corregido: **640 comandos y 821k tokens**, o sea peor.
+Sí usó la variable de la skill y el cliente del canal, y la captura salió anunciada como
+artefacto — pero tampoco desplegó.
+
+De ahí salen tres cosas que conviene no confundir. Una: el prompt se puede corregir con lo que
+enseña la traza, y se hizo. Otra: **el modelo importa más que el prompt aquí**, y
+`device-controller` hereda el papel `rapido` por ser `soloLectura` — que es cierto de sus tools
+de FICHERO y engañoso para lo que hace. Y la tercera: nada de esto es un fallo del cableado, así
+que no hay código que arreglar a ciegas.
+
+### Dos pruebas que la segunda ronda convirtió en necesidad medida
+
+**El `printenv` no era hipotético: fue su segundo comando.** La lista de lo que corrió empieza
+`adb devices -l`, `adb forward …`, y a los pocos pasos `env`, `node -e 'console.log(process.env)'`
+y `env | grep -i xone`. Orientarse mirando el entorno es lo primero que hace cualquiera con una
+shell nueva, modelo incluido. Sin `core/shellDeAgente.ts` las claves de Gemini y de NVIDIA de ese
+usuario estarían hoy en el transcript y en el `.jsonl` de esa sesión. Deja de ser una precaución
+razonable y pasa a ser la razón por la que esto no se monta con `inheritEnv: true`.
+
+**Y el precio declarado de la ejecución tiene ya su caso real**: el agente sacó la foto con
+`adb exec-out screencap > /tmp/screenshot.png` y la copió a la RAÍZ del proyecto, sin aprobación,
+sin diff y sin pasar por `artefactoFueraDeSitio` — que es exactamente lo que una shell permite y
+lo que se dijo al concederla. Apareció en «cambios en el proyecto» al cerrar el turno, que es la
+única red que queda. La palanca que lo reduciría sin fingir una barrera es **dónde se para de
+pie**: con el `cwd` en la carpeta de artefactos y el proyecto en una variable, un `> fichero`
+ingenuo cae donde se anuncia en vez de en la app del usuario. No está hecho.
+
 ### El renombrado
 
 `tester-xone` → `device-controller`, con su entrada en `RENOMBRADOS` y las dos viejas
