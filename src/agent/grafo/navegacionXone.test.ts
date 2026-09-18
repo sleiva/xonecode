@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { crearNavegacionXone, LIMITES_NAVEGACION } from "./navegacionXone.js";
+import { crearBusquedaRegex, NOMBRE_BUSQUEDA_REGEX } from "./busquedaRegex.js";
 import { construirIndice, type ModeloDeNavegacion } from "../../core/navegacion.js";
 import type { CargarIndice } from "../navegacion/indiceEnDisco.js";
 
@@ -104,7 +105,7 @@ describe("xone_navegacion", () => {
 
   it("nadie que la referencie se dice nombrando los atributos que se miraron", async () => {
     const r = await llamar({ operacion: "referencias", nombre: "Pedidos" });
-    expect(r).toContain("Nadie referencia");
+    expect(r).toContain("Ninguna referencia declarada");
     expect(r).toContain("mapcol");
   });
 
@@ -145,7 +146,7 @@ describe("xone_navegacion", () => {
     };
     const r = String(await crearNavegacionXone(rota, SIN_FICHEROS).invoke({ operacion: "inventario" }));
     expect(r).toContain("No se pudo leer la estructura");
-    expect(r).toContain("read_file");
+    expect(r).toContain(NOMBRE_BUSQUEDA_REGEX);
     // Y el mensaje de Node NO viaja: lleva la ruta absoluta de la máquina.
     expect(r).not.toContain("/Users/alguien");
   });
@@ -274,5 +275,69 @@ describe("una mención se marca como lo que es", () => {
     };
     const r = await llamar({ operacion: "referencias", nombre: "Pedidos" }, soloFuertes);
     expect(r).not.toContain("probable");
+  });
+});
+
+describe("cuando no sabe contestar, manda a `regex_search` con la llamada HECHA", () => {
+  /**
+   * **El test que impide que la sugerencia se pudra**: los argumentos que `xone_navegacion`
+   * propone se validan contra el ESQUEMA REAL de `regex_search`. Una sugerencia con un
+   * argumento que la otra tool no acepta es peor que ninguna — el modelo gasta un viaje y se
+   * lleva un error de esquema, justo cuando ya venía de un camino sin salida.
+   */
+  function sugerenciaValida(texto: string): boolean {
+    const linea = texto.split("\n").find((l) => l.startsWith(NOMBRE_BUSQUEDA_REGEX));
+    if (linea === undefined) return false;
+    const args: unknown = JSON.parse(linea.slice(NOMBRE_BUSQUEDA_REGEX.length).trim());
+    const backend = { glob: async () => ({ files: [] }), readRaw: async () => ({ error: "x" }) };
+    const esquema = crearBusquedaRegex(backend as never).schema as { safeParse(v: unknown): { success: boolean } };
+    return esquema.safeParse(args).success;
+  }
+
+  it("la llamada que propone la ACEPTA `regex_search` de verdad", async () => {
+    const r = await llamar({ operacion: "referencias", nombre: "Clientes" }, { colecciones: [], app: APP_VACIA, referenciasDeScript: [] });
+    expect(sugerenciaValida(r)).toBe(true);
+  });
+
+  it("y el patrón busca el término como palabra, escapado", async () => {
+    const r = await llamar({ operacion: "definicion", nombre: "Clientes" }, { colecciones: [], app: APP_VACIA, referenciasDeScript: [] });
+    expect(r).toContain('"pattern":"\\\\bClientes\\\\b"');
+  });
+
+  it("un nombre con caracteres de regex no rompe la sugerencia", async () => {
+    // Una sugerencia que no se puede ejecutar es peor que ninguna.
+    const r = await llamar({ operacion: "definicion", nombre: "Coll(rara)" }, { colecciones: [], app: APP_VACIA, referenciasDeScript: [] });
+    expect(sugerenciaValida(r)).toBe(true);
+  });
+
+  it("«nadie la referencia» NO se afirma a secas: se dice la duda y el siguiente paso", async () => {
+    // Es el caso peligroso: el índice tiene un límite declarado —no ve nombres calculados en
+    // JavaScript— así que un vacío puede ser «no se usa» o «se usa por donde no miro». Sobre
+    // la primera lectura se borra código vivo.
+    const r = await llamar({ operacion: "referencias", nombre: "Clientes" }, { colecciones: [], app: APP_VACIA, referenciasDeScript: [] });
+    expect(r).toContain("NO concluyas que no se usa");
+    expect(r).toContain("JavaScript");
+    expect(sugerenciaValida(r)).toBe(true);
+  });
+
+  it("también cuando el índice NO CARGA, que es el otro callejón", async () => {
+    const rota: CargarIndice = async () => {
+      throw new Error("No se encontró app.xml en /Users/alguien/proy");
+    };
+    const r = String(await crearNavegacionXone(rota, SIN_FICHEROS).invoke({ operacion: "inventario" }));
+    expect(sugerenciaValida(r)).toBe(true);
+    // Y sigue sin filtrar la ruta de la máquina.
+    expect(r).not.toContain("/Users/alguien");
+  });
+
+  it("y en `detalle` y `campos` de algo que no está", async () => {
+    const vacio = { colecciones: [], app: APP_VACIA, referenciasDeScript: [] };
+    expect(sugerenciaValida(await llamar({ operacion: "detalle", nombre: "X" }, vacio))).toBe(true);
+    expect(sugerenciaValida(await llamar({ operacion: "campos", nombre: "X" }, vacio))).toBe(true);
+  });
+
+  it("cuando SÍ encuentra algo NO manda a ningún sitio: solo estorbaría", async () => {
+    const r = await llamar({ operacion: "inventario" }, RICO);
+    expect(r).not.toContain(NOMBRE_BUSQUEDA_REGEX);
   });
 });

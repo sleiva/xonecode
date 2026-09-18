@@ -2,6 +2,7 @@ import { tool } from "@langchain/core/tools";
 import { z } from "zod";
 import type { Declaracion, IndiceDeNavegacion, Referencia } from "../../core/navegacion.js";
 import type { CargarIndice } from "../navegacion/indiceEnDisco.js";
+import { llamadaDeBusqueda } from "./busquedaRegex.js";
 
 /**
  * `xone_navegacion`: preguntar por la ESTRUCTURA del proyecto sin leer ficheros.
@@ -84,12 +85,20 @@ export function crearNavegacionXone(cargar: CargarIndice, ficheros: ReadonlySet<
         // El motivo de un error de Node lleva la ruta absoluta y esto va al modelo: se dice
         // QUÉ pasó, no dónde. Y se DEVUELVE en vez de lanzarse, para que el agente pueda
         // seguir con `read_file` en vez de llevarse el turno por delante.
-        return `No se pudo leer la estructura del proyecto (${error instanceof Error ? error.name : "error"}). Usa read_file o grep.`;
+        return (
+          `No se pudo leer la estructura del proyecto (${error instanceof Error ? error.name : "error"}). ` +
+          `Sigue por texto:\n${llamadaDeBusqueda("coll name=")}`
+        );
       }
 
       if (entrada.operacion === "inventario") {
         const todas = indice.inventario();
-        if (todas.length === 0) return "El proyecto no declara ninguna colección.";
+        if (todas.length === 0) {
+          return (
+            "El proyecto no declara ninguna colección. Si esperabas alguna, puede que el `.xne` no la " +
+            `declare como espera el parser:\n${llamadaDeBusqueda("coll name=")}`
+          );
+        }
         return `${todas.length} colecciones:\n${recortar(todas, LIMITES_NAVEGACION.inventario, pintarDeclaracion)}`;
       }
 
@@ -131,7 +140,10 @@ export function crearNavegacionXone(cargar: CargarIndice, ficheros: ReadonlySet<
         // Vacío no es un fallo: es que no está. Y se dice CÓMO seguir, que es lo que evita
         // que el modelo pruebe seis rutas inventadas — la misma postura que `porQueNo`.
         if (donde.length === 0) {
-          return `No hay ninguna declaración de «${nombre}». Prueba \`inventario\` para ver las colecciones que sí existen.`;
+          return (
+            `No hay ninguna declaración de «${nombre}». Prueba \`inventario\` para ver las que sí existen, ` +
+            `o búscalo como texto:\n${llamadaDeBusqueda(nombre)}`
+          );
         }
         return recortar(donde, LIMITES_NAVEGACION.definiciones, pintarDeclaracion);
       }
@@ -139,7 +151,10 @@ export function crearNavegacionXone(cargar: CargarIndice, ficheros: ReadonlySet<
       if (entrada.operacion === "campos") {
         const campos = indice.campos(nombre);
         if (campos.length === 0) {
-          return `«${nombre}» no declara campos, o no existe. Prueba \`definicion\` para saber cuál de las dos.`;
+          return (
+            `«${nombre}» no declara campos, o no existe. Prueba \`definicion\` para saber cuál de las dos, ` +
+            `o búscalo como texto:\n${llamadaDeBusqueda(nombre)}`
+          );
         }
         return recortar(campos, LIMITES_NAVEGACION.campos, pintarDeclaracion);
       }
@@ -149,7 +164,10 @@ export function crearNavegacionXone(cargar: CargarIndice, ficheros: ReadonlySet<
         // `undefined` y no un detalle vacío: «no existe» y «existe y está vacía» son dos
         // cosas, y contestar la segunda sobre la primera hace que el agente deje de buscar.
         if (d === undefined) {
-          return `No hay ninguna colección «${nombre}». Prueba \`inventario\`.`;
+          return (
+            `No hay ninguna colección «${nombre}». Prueba \`inventario\`, o búscala como texto:\n` +
+            llamadaDeBusqueda(nombre)
+          );
         }
         const partes = [
           `${d.nombre}  ${d.fichero}`,
@@ -172,7 +190,22 @@ export function crearNavegacionXone(cargar: CargarIndice, ficheros: ReadonlySet<
 
       const usos = indice.referencias(nombre);
       if (usos.length === 0) {
-        return `Nadie referencia «${nombre}» por mapcol, mapfld, linkedfield, contents, inherits ni desde un script.`;
+        /**
+         * **El caso que más importa, y por eso la salida es una llamada y no un consejo.**
+         *
+         * «Nadie la referencia» es una afirmación fuerte y este índice no puede sostenerla:
+         * tiene un límite declarado —no ve un nombre calculado en JavaScript, ni un
+         * `getCollection(variable)`— así que un vacío aquí puede ser «no se usa» o «se usa por
+         * un camino que no modelo». Devolver el vacío a secas invita a concluir lo primero, y
+         * sobre esa conclusión se borra código vivo. Se dice la duda Y se da el siguiente paso
+         * hecho: un modelo al que se le dice qué hacer sin decirle cómo se inventa los
+         * argumentos, y eso cuesta un viaje y un error de esquema.
+         */
+        return (
+          `Ninguna referencia declarada a «${nombre}» (mapcol, mapfld, linkedfield, contents, inherits ni ` +
+          `getCollection con literal). Puede usarse por un camino que esto no ve —un nombre calculado en ` +
+          `JavaScript—, así que NO concluyas que no se usa sin comprobarlo:\n${llamadaDeBusqueda(nombre)}`
+        );
       }
       /**
        * **Se DICE cuál es floja.** `mencion` es un literal que coincide con el nombre de una

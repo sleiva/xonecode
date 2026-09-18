@@ -268,6 +268,17 @@ Y las guardas del proyecto:
   se mira (es donde vive el `ExecuteNode`, y en un proyecto real era la única aparición literal
   de una colección), y **una colección que se nombra a SÍ MISMA no cuenta** — medido, era la
   mayoría de las menciones y sale en todas las que tienen script.
+- **Cuando NO sabe contestar, devuelve la llamada a `regex_search` HECHA** — no un consejo.
+  Pasa en los cinco callejones: el índice que no carga, y `definicion`, `campos`, `detalle` y
+  `referencias` que no encuentran nada. El caso que lo justifica es el último: «nadie la
+  referencia» es una afirmación fuerte y este índice **no puede sostenerla** —no ve un nombre
+  calculado en JavaScript—, así que el vacío se acompaña de «NO concluyas que no se usa» y del
+  siguiente paso ya escrito. Se devuelve la llamada entera y no «busca con regex_search» por lo
+  mismo que `porQueNo` dice la ruta buena: un modelo al que se le dice qué hacer sin decirle
+  cómo se inventa los argumentos, y eso cuesta un viaje y un error de esquema. **El nombre de
+  la otra tool sale de una constante** (`NOMBRE_BUSQUEDA_REGEX`) y **la llamada se valida
+  contra su ESQUEMA REAL en el test** — una sugerencia que la otra tool rechaza es peor que
+  ninguna. Y **cuando sí encuentra, no manda a ningún sitio**: ahí solo estorbaría.
 - **Lo que NO hay, y se midió antes de descartarlo: «colecciones huérfanas».** Se implementó y
   se tiró. Sobre un proyecto real daba 33 de 42, y con las referencias de script dentro bajaba a
   22 — la mitad del proyecto. Una lista con esa proporción de falsos positivos no es un

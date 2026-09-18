@@ -3,6 +3,51 @@ import type { FilesystemBackend } from "deepagents";
 import { z } from "zod";
 import { puedeLeerRuta } from "./perfiles.js";
 
+/**
+ * El nombre de esta tool, en UN sitio.
+ *
+ * Existe porque `xone_navegacion` manda aquí cuando no sabe contestar, y una sugerencia que
+ * nombre una tool que ya no se llama así manda al modelo a llamar a algo que no existe —
+ * gasta un viaje y devuelve un error. Es la lección del token `HANDOFF DE ANÁLISIS`: lo que se
+ * nombra desde otro sitio no se escribe dos veces.
+ */
+export const NOMBRE_BUSQUEDA_REGEX = "regex_search";
+
+/** Los ficheros donde vive lo que se puede nombrar una colección: el XML y los scripts. */
+const GLOB_DE_FUENTES = "**/*.{xne,xml,js}";
+
+/** Escapa lo que en una regex significaría otra cosa. Un nombre XOne no suele traerlo, pero
+ *  una sugerencia que no se puede ejecutar es peor que ninguna. */
+const comoLiteral = (texto: string): string => texto.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+/**
+ * La llamada EXACTA a `regex_search` que busca un término como texto, lista para copiar.
+ *
+ * Se devuelve la llamada entera y no un consejo en prosa («busca con regex_search») por lo
+ * mismo que `porQueNo` dice la ruta buena en vez de solo negarse: un modelo al que se le dice
+ * qué hacer sin decirle cómo se inventa los argumentos, y aquí inventarlos cuesta un viaje y
+ * un error de esquema. Se comprueba contra el esquema REAL de la tool en su test.
+ */
+export function llamadaDeBusqueda(termino: string, glob: string = GLOB_DE_FUENTES): string {
+  return `${NOMBRE_BUSQUEDA_REGEX} ${JSON.stringify({ pattern: patronDe(termino), glob })}`;
+}
+
+/**
+ * El patrón para buscar un término como texto.
+ *
+ * **`\b` solo cuando los extremos son carácter de palabra**, y esto NO es cosmético: `\b` es
+ * una frontera entre palabra y no-palabra, así que `\bcoll name=\b` no casa nunca — el `=`
+ * final ya no es palabra y la frontera cae donde no hay nada que delimitar. Un nombre de
+ * colección sí la quiere (`\bClientes\b` no encuentra `ClientesViejos`); un fragmento con
+ * signos, no. Salió de un test que ejecutó la sugerencia.
+ */
+function patronDe(termino: string): string {
+  const literal = comoLiteral(termino);
+  const abre = /^\w/.test(termino) ? "\\b" : "";
+  const cierra = /\w$/.test(termino) ? "\\b" : "";
+  return `${abre}${literal}${cierra}`;
+}
+
 /** Límites defensivos: la regex es una ayuda de localización, no un lector masivo. */
 export const LIMITES_REGEX = {
   archivos: 50,
@@ -89,7 +134,7 @@ export function crearBusquedaRegex(backend: BackendDeBusqueda) {
       return `${lineas.join("\n")}${avisos.length ? `\n\nNota: ${avisos.join("; ")}.` : ""}`;
     },
     {
-      name: "regex_search",
+      name: NOMBRE_BUSQUEDA_REGEX,
       description:
         "Busca una expresión regular JavaScript por LÍNEA en ficheros del proyecto. " +
         "Úsala solo cuando grep literal no baste; acota path y glob, localiza líneas y después usa read_file paginado. " +
