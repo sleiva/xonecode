@@ -22,11 +22,13 @@ xone-review             →  valida con xone-simulator
 
 ## Estructura de archivos
 
-Todo vive en **`/artefactos/`**, NUNCA en la raíz del proyecto: un plan no es parte de la app del
-cliente, y lo que se escribe en la raíz entra en el commit del turno y sube a CloudStudio.
+Todo vive en **la carpeta del plan**, `/planes/<nombre>/`, NUNCA en la raíz del proyecto: un plan
+no es parte de la app del cliente, y lo que se escribe en la raíz entra en el commit del turno y
+sube a CloudStudio. Escribe tu `TASKS.md` **en la misma carpeta de la que leíste el `PLAN.md`**,
+no en otra: quien desarrolle va a buscarlo ahí.
 
 ```
-/artefactos/
+/planes/favoritos/
 ├── PLAN.md                 ← entrada (producido por xone-spec-builder)
 ├── TASKS.md                ← salida (esta skill)
 ├── CONTEXT.md              ← glosario (ya existe del spec-builder)
@@ -34,6 +36,16 @@ cliente, y lo que se escribe en la raíz entra en el commit del turno y sube a C
 ```
 
 Si no existe `PLAN.md`, **detente y pide al usuario que ejecute `xone-spec-builder` primero**. No se puede descomponer lo que no está especificado.
+
+## El `TASKS.md` se ACTUALIZA, no se archiva
+
+`**Estado:**` es `pendiente`, `en curso` o `hecha`, y lo mantiene **quien ejecuta la tarea**, en
+este mismo fichero y en esta misma carpeta. Las casillas de los criterios se marcan `- [x]`
+cuando ese criterio está comprobado, no cuando se escribió el código que debería cumplirlo.
+
+Ésa es la razón de que el plan viva en `/planes/` y no entre los artefactos: no es un documento
+que se entrega una vez, es el estado compartido entre quien planifica y quien desarrolla, a lo
+largo de varios turnos y varias sesiones.
 
 ## Precondiciones
 
@@ -135,6 +147,7 @@ Ver [TASKS-FORMAT.md](references/TASKS-FORMAT.md) para la plantilla completa. Re
 ## Tareas
 
 ### 01 — {Título}
+**Estado:** pendiente
 **Qué entrega:** {comportamiento end-to-end, perspectiva del usuario — no lista de capas}
 **Bloqueada por:** Ninguna — puede empezar ya
 **Notas:** {si hay algo que el spec dejó pendiente que afecta a esta tarea}
@@ -143,6 +156,7 @@ Ver [TASKS-FORMAT.md](references/TASKS-FORMAT.md) para la plantilla completa. Re
 - [ ] Criterio de aceptación 2
 
 ### 02 — {Título}
+**Estado:** pendiente
 **Qué entrega:** …
 **Bloqueada por:** 01
 …

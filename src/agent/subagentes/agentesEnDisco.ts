@@ -631,6 +631,28 @@ export function sembrarAgentes(base: string = homedir()): Siembra {
  * regla del dominio: un agente que el usuario escriba puede querer no leerla, y `docs`
  * —que contesta de la plataforma y no del proyecto— tampoco la lee.
  */
+/**
+ * Trabajar CON un plan, cuando lo hay.
+ *
+ * El plan no es un documento que alguien entrega y se archiva: es el estado compartido entre
+ * quien planifica y quien desarrolla, y por eso vive en `/planes/<nombre>/` —fuera del proyecto,
+ * fuera de git y fuera de CloudStudio— y sobrevive a la sesión. Sin esta instrucción el plan se
+ * escribía y nadie volvía a mirarlo: medido, los ocho proyectos del usuario tenían CERO.
+ *
+ * **Se marca lo COMPROBADO, no lo escrito**, que es la misma regla que gobierna todo lo demás
+ * aquí: un comando que devuelve 0 no dice que la app arrancara, y un fichero guardado no dice
+ * que el criterio se cumpla.
+ */
+const TRABAJAR_CON_PLAN = [
+  "SI TU ENCARGO NOMBRA UN PLAN (`/planes/<nombre>/`):",
+  "- Lee su `TASKS.md` ANTES de tocar nada y trabaja la tarea que te toque, no el plan entero.",
+  "  Su `PLAN.md` y su `CONTEXT.md` están al lado si te falta contexto; no los redescubras.",
+  "- Y ACTUALÍZALO en el mismo sitio cuando termines: `**Estado:**` a `hecha`, y las casillas",
+  "  de los criterios a `- [x]` solo si los has COMPROBADO — no por haber escrito el código que",
+  "  debería cumplirlos. Lo que no puedas comprobar se queda sin marcar y lo dices.",
+  "- Si el plan se contradice con lo que ves en el código, no lo sigas a ciegas: dilo y para.",
+].join("\n");
+
 const MEMORIA_LEER = [
   "Para una tarea sobre este proyecto, lee una sola vez `/MEMORIA_PROYECTO.md` antes de inspeccionarlo.",
   "No la uses para preguntas generales de plataforma.",
@@ -798,7 +820,9 @@ export const AGENTES_DE_SERIE: readonly Agente[] = [
       "se declara algo, quién usa qué. Úsalo como PRIMER paso de un encargo que vaya a " +
       "cambiar código, y no para preguntas de la plataforma. Dale qué hay que averiguar y " +
       "para qué, que es lo que acota cuánto busca. Devuelve hechos con su fichero y su " +
-      "línea, listos para pasárselos al siguiente en un bloque HANDOFF DE ANÁLISIS.",
+      "línea, listos para pasárselos al siguiente en un bloque HANDOFF DE ANÁLISIS. Para un " +
+      "desarrollo grande puede además dejar un PLAN escrito en `/planes/<nombre>/` —spec, " +
+      "tareas y glosario— y entonces te dice el nombre: pásaselo a quien desarrolle.",
     motor: "modelo",
     soloLectura: true,
     skills: ["xone-spec-builder", "xone-plan-builder", "archify", "artifacts-builder"],
@@ -810,14 +834,16 @@ export const AGENTES_DE_SERIE: readonly Agente[] = [
     descripcion:
       "Para CAMBIAR el proyecto: crear o modificar colecciones, escribir scripts, editar " +
       "ficheros. Dale los hechos ya averiguados —no le hagas redescubrirlos— y QUÉ tiene que " +
-      "conseguir, no cómo. Devuelve los ficheros que cambió; cada escritura para el turno y " +
-      "pide aprobación, así que un encargo enorme son muchas paradas: pártelo.",
+      "conseguir, no cómo. Si hay un plan en `/planes/<nombre>/`, dale el nombre y la tarea " +
+      "concreta: lo lee y marca ahí lo que deja hecho. Devuelve los ficheros que cambió; cada " +
+      "escritura para el turno y pide aprobación, así que un encargo enorme son muchas " +
+      "paradas: pártelo.",
     motor: "modelo",
     soloLectura: false,
     // `artifacts-builder` se queda: escribe documentos e informes. `archify` no, que los
     // diagramas son de `designer-xone` y su descripción son ~700 caracteres por llamada.
     skills: ["xone-development", "xone-debugging", "artifacts-builder"],
-    instrucciones: `${MEMORIA_LEER}\n\n${MEMORIA_ESCRIBIR}`,
+    instrucciones: `${TRABAJAR_CON_PLAN}\n\n${MEMORIA_LEER}\n\n${MEMORIA_ESCRIBIR}`,
     origen: "semilla",
   },
   {
@@ -872,7 +898,7 @@ export const AGENTES_DE_SERIE: readonly Agente[] = [
     motor: "modelo",
     soloLectura: false,
     skills: ["xone-development", "archify", "artifacts-builder"],
-    instrucciones: `${HANDOFF_MOCKUP}\n\n${MEMORIA_LEER_CON_HANDOFF}\n\n${MEMORIA_ESCRIBIR}`,
+    instrucciones: `${TRABAJAR_CON_PLAN}\n\n${HANDOFF_MOCKUP}\n\n${MEMORIA_LEER_CON_HANDOFF}\n\n${MEMORIA_ESCRIBIR}`,
     origen: "semilla",
   },
 ];

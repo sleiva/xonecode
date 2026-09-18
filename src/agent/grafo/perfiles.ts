@@ -9,6 +9,7 @@
  * concederle leer `/.env`.
  */
 import { RUTA_ARTEFACTOS } from "../../core/artefactos.js";
+import { RUTA_PLANES } from "../../core/planes.js";
 import { artefactoFueraDeSitio } from "../../core/artefactos.js";
 /** Las tools de fichero que monta deepagents sobre el backend. */
 export const TOOLS_LECTURA = ["ls", "read_file", "glob", "grep"] as const;
@@ -93,6 +94,10 @@ export function permisosDe(perfil: QuienDecidePermisos) {
   return [
     ...base,
     { operations: ["write"] as const, paths: [`${RUTA_ARTEFACTOS}**`], mode: "allow" as const },
+    // Y los PLANES, por lo mismo: quien analiza escribe el plan y quien desarrolla marca ahí
+    // lo hecho, así que los dos tienen que poder escribir — y ninguno de los dos está tocando
+    // el proyecto. `.xonecode/planes/` no entra en git ni sube a CloudStudio.
+    { operations: ["write"] as const, paths: [`${RUTA_PLANES}**`], mode: "allow" as const },
     { operations: ["write"] as const, paths: ["/**"], mode: "deny" as const },
   ];
 }

@@ -24,14 +24,18 @@ El spec builder es el primer paso de cualquier trabajo XOne. Lo que sigue:
 
 ## Estructura de archivos
 
-La entrevista escribe en **`/artefactos/`**, NUNCA en la raíz del proyecto. Un plan no es parte de
-la app: la raíz es el proyecto XOne del cliente, lo que se escribe ahí pasa por aprobación, entra
-en el commit de cada turno y **sube a CloudStudio**. `/artefactos/` es la carpeta de esta sesión —
-no entra en git, no se sincroniza, y lo que dejes ahí se anuncia solo. Crea los archivos **lazy**,
-solo cuando hay algo que escribir:
+La entrevista escribe en **`/planes/<nombre>/`**, NUNCA en la raíz del proyecto. Un plan no es
+parte de la app: la raíz es el proyecto XOne del cliente, y lo que se escribe ahí pasa por
+aprobación, entra en el commit de cada turno y **sube a CloudStudio**. `/planes/` no: no entra en
+git, no se sincroniza, y **sobrevive a la sesión** — se planifica un día y se implementa otro.
+
+**Elige tú el `<nombre>`**, y es una carpeta por plan porque puede haber varios a la vez:
+minúsculas, dígitos y guiones sencillos (`favoritos`, `sync-offline`), corto y por lo que el
+desarrollo ES. Mira antes `/planes/` por si ya existe uno del mismo tema: si lo hay, AMPLÍALO en
+vez de abrir otro. Crea los archivos **lazy**, solo cuando hay algo que escribir:
 
 ```
-/artefactos/
+/planes/favoritos/
 ├── PLAN.md                 ← el plan del desarrollo (entregable)
 ├── CONTEXT.md              ← glosario del dominio (términos canónicos, evitar)
 └── adr/
@@ -39,7 +43,7 @@ solo cuando hay algo que escribir:
     └── 0002-login-con-oauth2-o-contra-db.md
 ```
 
-Si no existe `PLAN.md`, créalo cuando la entrevista empiece a cristalizar decisiones. Si no existe `CONTEXT.md`, créalo cuando se resuelva el primer término de dominio. Si no existe `/artefactos/adr/`, créalo cuando se tome la primera decisión digna de ADR.
+Si no existe `PLAN.md`, créalo cuando la entrevista empiece a cristalizar decisiones. Si no existe `CONTEXT.md`, créalo cuando se resuelva el primer término de dominio. Si no existe `adr/` dentro de la carpeta del plan, créalo cuando se tome la primera decisión digna de ADR.
 
 > **`PLAN.md` es el entregable.** `CONTEXT.md` y los ADRs lo acompañan y alimentan, pero lo que el usuario se lleva es el plan.
 

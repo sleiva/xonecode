@@ -11,6 +11,7 @@ import {
   type Artefacto,
 } from "../../core/artefactos.js";
 import { RUTA_ADJUNTOS } from "../../core/adjuntos.js";
+import { CARPETA_DE_PLANES, RUTA_PLANES } from "../../core/planes.js";
 import { entornoDeShell, variablesDeAndroid } from "../../core/shellDeAgente.js";
 import { localizadorDeAndroid } from "../dispositivos/dispositivosEnMaquina.js";
 import {
@@ -194,6 +195,31 @@ export function backendConAdjuntos<T extends object>(backend: T, carpeta: string
     // La barra final es obligatoria: `CompositeBackend` la retira antes de delegar, y sin
     // ella reconstruye `//fichero`, fuera de la raíz montada. La misma trampa de `/skills/`.
     [RUTA_ADJUNTOS]: new FilesystemBackend({ rootDir: carpeta, virtualMode: true }),
+  }) as T;
+}
+
+/**
+ * Cuelga `/planes/` de `.xonecode/planes/`, en el repo LOCAL.
+ *
+ * El porqué de ese sitio está en `core/planes.ts`. Lo que aporta esto es el montaje, y tiene
+ * las mismas dos trampas que `/artefactos/` y `/skills/`:
+ *
+ *  - **La barra final es obligatoria**: `CompositeBackend` la retira antes de delegar, y sin
+ *    ella reconstruye `//favoritos/PLAN.md`, que `FilesystemBackend` interpreta fuera de su
+ *    raíz.
+ *  - **La carpeta NO se crea al montar**: la crea `FilesystemBackend.write` la primera vez que
+ *    se escribe. Un proyecto en el que nadie ha planificado no tiene por qué tener la carpeta.
+ *
+ * Y una diferencia con los artefactos que es el motivo de que exista: esto **no se anuncia**.
+ * Un artefacto se enseña una vez; un plan se escribe, se lee y se ACTUALIZA por varios
+ * especialistas a lo largo de varios turnos, así que un evento por escritura sería ruido.
+ */
+export function backendConPlanes<T extends object>(backend: T, raiz: string): T {
+  return new CompositeBackend(backend as never, {
+    [RUTA_PLANES]: new FilesystemBackend({
+      rootDir: join(raiz, CARPETA_DE_PLANES),
+      virtualMode: true,
+    }),
   }) as T;
 }
 
@@ -401,12 +427,18 @@ export function backendDeAgente(opciones: {
       : backendConDescargas(conArtefactos, opciones.artefactos.carpeta);
   const conAdjuntos =
     opciones.adjuntos === undefined ? conDescargas : backendConAdjuntos(conDescargas, opciones.adjuntos);
+  /**
+   * Los PLANES van SIEMPRE, sin depender de la sesión: cuelgan del repo local
+   * (`.xonecode/planes/`) y no de la carpeta de una sesión, porque un plan se escribe un día y
+   * se implementa otro. Es la diferencia con los artefactos, que mueren con su sesión.
+   */
+  const conPlanes = backendConPlanes(conAdjuntos, opciones.raiz);
   // Lo que deje un COMANDO en la carpeta de artefactos también se anuncia. Sin esto, la
   // captura que escribe un script existe en el disco y no existe para nadie: el evento
   // `artefacto` lo emite el Proxy de `write`/`edit`, y una shell no pasa por ahí.
   return opciones.ejecucion === undefined || opciones.artefactos === undefined
-    ? conAdjuntos
-    : anunciarArtefactosDeLaShell(conAdjuntos, opciones.artefactos.carpeta, opciones.artefactos.alEscribir);
+    ? conPlanes
+    : anunciarArtefactosDeLaShell(conPlanes, opciones.artefactos.carpeta, opciones.artefactos.alEscribir);
 }
 
 /**
