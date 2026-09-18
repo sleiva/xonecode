@@ -135,6 +135,23 @@ export function promptOrquestador(agentes: readonly Agente[]): string {
     hay("analyst-xone") && hay("designer-xone")
       ? "Para diagramas o esquemas de la app, delega en `designer-xone`; si deben reflejar el código real, encarga PRIMERO el análisis a `analyst-xone` y usa su resultado antes de dibujar."
       : "",
+    /**
+     * **Escribir y PROBARLO EN UN APARATO son dos encargos, y el segundo necesita un
+     * destino.** Sin esta regla, «crea una pantalla y pruébala» se leía como una sola `task`
+     * al desarrollador — que no tiene `execute`, así que «probar» se quedaba en que dijera
+     * que lo había hecho, que es justo lo que su prompt le prohíbe afirmar.
+     *
+     * Y lo que se le pide al conductor no es «prueba»: es a DÓNDE tiene que llegar. Medido
+     * sobre un proyecto real, la ruta existe y el harness la sabe
+     * (`xone_navegacion referencias Calculadora` → `EntradaApp.MAP_BT_CALCULADORA_DR`), pero
+     * el conductor no la busca si nadie le dice qué pantalla importa.
+     *
+     * Nombra a dos especialistas a pelo, igual que la regla de los diagramas: al renombrarlos
+     * hay que cambiarlo aquí o la regla se queda escrita y muerta.
+     */
+    hay("developer-xone") && hay("device-controller")
+      ? "Si el encargo incluye PROBARLO en un móvil o emulador, son DOS pasos y en este orden: `developer-xone` escribe, y luego `device-controller` lo despliega y lo comprueba. Dile SIEMPRE a qué pantalla o colección tiene que llegar, no solo «pruébalo». Lo que encuentre vuelve a `developer-xone` para corregir; no des por buena una pantalla que nadie ha mirado."
+      : "",
     "Los especialistas no comparten el transcript: al encadenarlos, incluye en la descripción",
     "de la siguiente `task` un bloque `HANDOFF DE ANÁLISIS` compacto con los hechos verificados,",
     "rutas/evidencias y lagunas. No pidas al siguiente especialista redescubrir esos hechos.",
@@ -384,8 +401,9 @@ export async function construirAgente(opciones: OpcionesDelAgente): Promise<unkn
      *
      * A los CINCO especialistas y no a unos pocos: los cinco trabajan sobre un proyecto XOne
      * y la pregunta que esto abarata —«qué hay aquí»— se la hacen todos. El esquema es de una
-     * operación enumerada y un nombre, que es poco en cada llamada; el orquestador NO la
-     * recibe, porque no tiene tools propias y delega.
+     * operación enumerada y un nombre, que es poco en cada llamada. El orquestador la lleva
+     * TAMBIÉN, y eso lo decidió una medida que tumbó lo contrario: ver su propio `tools` más
+     * abajo.
      */
     tools: [crearBusquedaRegex(ficheros.backend), crearNavegacionXone(cargarIndice, opciones.ficheros)],
     //

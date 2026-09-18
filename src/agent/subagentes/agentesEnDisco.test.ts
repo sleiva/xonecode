@@ -20,6 +20,7 @@ import {
 } from "./agentesEnDisco.js";
 import { escribirAgente, fusionarAgentes, type Agente } from "../../core/agentes.js";
 import { RAIZ_SKILLS, SkillsEnDisco } from "../grafo/skills.js";
+import { crearNavegacionXone } from "../grafo/navegacionXone.js";
 
 const base = () => mkdtempSync(join(tmpdir(), "xonecode-agentes-"));
 
@@ -332,6 +333,51 @@ describe("sembrarAgentes", () => {
    * comprueba contra el catálogo REAL del paquete, y en las DOS direcciones: un script nuevo
    * que no se nombre tampoco existe para quien tiene que usarlo.
    */
+  /**
+   * El prompt del conductor le dice cómo ORIENTARSE: que `xone_navegacion` con
+   * `operacion: "referencias"` le da el control que lleva a una colección. Medido sobre
+   * AppDemo, esa llamada devuelve `EntradaApp.MAP_BT_CALCULADORA_DR --script--> Calculadora`,
+   * que es justo lo que hay que pulsar.
+   *
+   * **Y la operación se comprueba contra el ESQUEMA REAL de la tool**, por lo mismo que los
+   * scripts se comprueban contra el catálogo: un nombre de operación que no existe hace que
+   * la tool rechace la llamada, y entonces el modelo se pone a adivinar argumentos — un viaje
+   * y un error de esquema, justo cuando venía a orientarse.
+   */
+  it("la operación de navegación que el prompt NOMBRA existe en el esquema de la tool", () => {
+    const conductor = AGENTES_DE_SERIE.find((a) => a.nombre === "device-controller")!;
+    expect(conductor.instrucciones).toContain("xone_navegacion");
+
+    const nombradas = [...conductor.instrucciones.matchAll(/operacion:\s*\\?"([a-z]+)\\?"/g)].map((m) => m[1]!);
+    expect(nombradas.length).toBeGreaterThan(0);
+
+    const esquema = crearNavegacionXone(
+      () => {
+        throw new Error("el esquema no necesita índice");
+      },
+      new Set()
+    ).schema as { safeParse(v: unknown): { success: boolean } };
+    for (const operacion of nombradas) {
+      expect(
+        esquema.safeParse({ operacion, nombre: "Calculadora" }).success,
+        `el prompt nombra la operación «${operacion}» y la tool no la acepta`
+      ).toBe(true);
+    }
+  });
+
+  /**
+   * Lo que lo separa de «prueba a ver»: MEDIDO contra el aparato, el control que da la tool
+   * (`MAP_BT_CALCULADORA_DR`) NO se puede pulsar de primeras — vive en un cajón cerrado y el
+   * aparato contesta «not found or not enabled». Si el prompt no dice qué hacer entonces, el
+   * modelo repite el mismo clic.
+   */
+  it("y le dice qué hacer cuando ese control no está en pantalla", () => {
+    const conductor = AGENTES_DE_SERIE.find((a) => a.nombre === "device-controller")!;
+
+    expect(conductor.instrucciones).toMatch(/no aparece en el árbol/);
+    expect(conductor.instrucciones).toMatch(/en vez de repetir el mismo clic/);
+  });
+
   it("todos los scripts que el prompt NOMBRA existen y son ejecutables, y al revés", () => {
     const conductor = AGENTES_DE_SERIE.find((a) => a.nombre === "device-controller")!;
     const nombrados = new Set(

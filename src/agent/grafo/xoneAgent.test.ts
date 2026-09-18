@@ -36,6 +36,23 @@ describe("promptOrquestador", () => {
     expect(promptOrquestador([])).toMatch(/no hay ningún especialista/);
   });
 
+  /**
+   * «Crea una pantalla y pruébala» son DOS encargos. Sin esta regla se leía como uno solo al
+   * desarrollador —que no tiene `execute`—, así que «probar» se quedaba en que lo dijera.
+   */
+  it("escribir y PROBAR EN UN APARATO se encadena, y con destino", () => {
+    expect(PROMPT_ORQUESTADOR).toContain("device-controller");
+    expect(PROMPT_ORQUESTADOR).toMatch(/PROBARLO en un móvil o emulador/);
+    // Lo que distingue esta regla de un «pruébalo»: el conductor necesita saber A DÓNDE ir.
+    expect(PROMPT_ORQUESTADOR).toMatch(/a qué pantalla o colección tiene que llegar/);
+  });
+
+  it("y esa regla tampoco se escribe si falta uno de los dos", () => {
+    const soloUno = promptOrquestador([deSerie("developer-xone")]);
+
+    expect(soloUno).not.toMatch(/PROBARLO en un móvil o emulador/);
+  });
+
   it("la regla del encadenado solo se escribe si existen los DOS de los que habla", () => {
     // Una instrucción sobre un especialista que no está no la puede seguir nadie: es el
     // mismo botón muerto que la interfaz lleva semanas quitando, pero en un prompt.
