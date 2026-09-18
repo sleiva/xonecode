@@ -123,6 +123,25 @@ export const REGLAS_XONE = [
   "- La fuente de una colección es su `.xne`. Los `.xml` los genera Studio y no se tocan.",
   "- No inventes atributos XML, funciones ni propiedades CSS: XOne ignora lo desconocido",
   "  en silencio, así que un invento no da error — da un bug mudo.",
+  /**
+   * **El motor de JavaScript en Android es Rhino**, y eso no es una curiosidad: un error de
+   * sintaxis en UN fichero incluido **para la app entera al arrancar** (`LoadAppActivity`,
+   * «Error loading initial config»), no rompe solo la función donde está. Así que un descuido
+   * que en un navegador sería un aviso, aquí es una app que no abre.
+   *
+   * Las tres que se midieron el 18-09-2026 sobre un proyecto real, y son las que hay: una
+   * llamada sin `;` (Rhino no aplica ASI donde un navegador sí), una coma sobrante en un
+   * objeto, y **una `var` declarada dos veces en la misma función** — esta última la introdujo
+   * el propio agente «arreglando» la primera, y por eso está escrita: arreglar sin conocer el
+   * motor es cambiar un error por otro.
+   *
+   * **Lo que NO dice, a propósito**: que no se pueda usar `let`. El proyecto donde se midió
+   * tiene `let` en varias funciones y arranca, así que prohibirlo sería inventar una regla —
+   * exactamente lo que la regla de más arriba prohíbe hacer con los atributos.
+   */
+  "- El motor JS en Android es Rhino (ES5): un error de sintaxis en un fichero incluido para",
+  "  la app ENTERA al arrancar. Termina cada sentencia con `;` (no se aplica ASI), sin comas",
+  "  sobrantes, y no declares dos veces la misma `var` en una función.",
 ].join("\n");
 
 /**

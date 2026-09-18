@@ -9,6 +9,7 @@
  *
  * USO (desde la raíz del proyecto, que es el `cwd` de tus comandos):
  *   xone-desplegar-android
+ *   xone-desplegar-android --captura
  *   xone-desplegar-android --app MiApp --serie emulator-5554
  *
  * EL ORDEN, Y POR QUÉ ES ESE:
@@ -248,6 +249,32 @@ function concederPermisos() {
   console.log(`    ${dados} permiso(s) concedido(s) de ${declaradas.length} declarado(s)`);
 }
 
+/**
+ * La excepción de XOne de ESTE arranque, en las cuatro líneas que importan, o nada.
+ *
+ * Se lee del log y no de la pantalla porque el diálogo enseña el mensaje recortado y sin el
+ * fichero ni la línea; el log trae `Source`, `Cause`, `Line number` y `In include file`, que es
+ * lo que deja ir directo al sitio. Se piden pocas líneas: lo que se busca está al principio del
+ * arranque, y un volcado grande aquí sería ruido en la salida de un comando.
+ */
+function excepcionDeXOne() {
+  let log;
+  try {
+    log = adbCallado("logcat", "-d", "-t", "600");
+  } catch {
+    return undefined;
+  }
+  const filas = log.split("\n");
+  const donde = filas.findIndex((l) => l.includes("XOneJavascriptException"));
+  if (donde < 0) return undefined;
+  // Desde la excepción, lo que viene detrás es su descripción: fuente, causa, línea y fichero.
+  const utiles = filas
+    .slice(donde, donde + 12)
+    .map((l) => l.replace(/^.*?\bSystem\.err:\s?/, "").trim())
+    .filter((l) => l !== "" && !l.startsWith("at "));
+  return utiles.slice(0, 6).join("\n");
+}
+
 const app = nombreDeLaApp();
 
 {
@@ -272,6 +299,14 @@ const app = nombreDeLaApp();
 
   console.log("4/5 permisos y reinicio del framework");
   concederPermisos();
+  // El buffer se vacía ANTES de reiniciar para que lo que se lea después sea de ESTE arranque
+  // y no la excepción del intento anterior — que es la forma más fácil de «arreglar» algo y
+  // creerse que sigue roto, o al revés.
+  try {
+    adbCallado("logcat", "-c");
+  } catch {
+    // Si no se puede vaciar, se sigue: el diagnóstico será menos preciso, no falso.
+  }
   adb("shell", "am", "force-stop", PAQUETE);
   adb("shell", "am", "start", "-n", ACTIVIDAD);
 
@@ -309,11 +344,55 @@ const app = nombreDeLaApp();
     const salida = mandar({ command: "getAllElements", format: "xone" });
     if (!salida.includes("App is not running")) {
       console.log(salida);
+      /**
+       * **La captura en la MISMA orden, porque lo que se paga es la ida y vuelta.** Medido: un
+       * «lanza la app y sácame una captura» costaba 17 llamadas al modelo, y cada una reenvía
+       * el historial entero — mientras que lo que devuelve cada comando es pequeño (1,6 KB el
+       * árbol, 108 bytes la captura). O sea que el gasto no es lo que se dice, es cuántas veces
+       * hay que volver a preguntar. Tres órdenes encadenadas por el modelo son tres viajes;
+       * ésta es una.
+       */
+      if (args.includes("--captura")) {
+        try {
+          console.log(mandar({ command: "getScreenshot" }));
+        } catch {
+          console.error("la app arrancó pero la captura falló; el árbol de arriba sí es bueno.");
+        }
+      }
+      // **Estar VIVA no es estar BIEN.** Una app que revienta al cargar la configuración se
+      // queda con su diálogo de error delante, y el canal contesta igual: el árbol llega, la
+      // captura sale, y todo parece haber ido bien. Quien lo cuenta es el log, y no pedirlo
+      // aquí obliga a que alguien se acuerde de hacerlo — que es justo lo que no pasa.
+      const roto = excepcionDeXOne();
+      if (roto !== undefined) {
+        console.error("");
+        console.error("La app ARRANCÓ pero XOne lanzó una excepción al cargar:");
+        console.error(roto);
+        console.error("");
+        console.error("El runtime de XOne es ES5 (Rhino): nada de `let`, `const`, `=>` ni comas");
+        console.error("sobrantes, y una `var` no se puede declarar dos veces en la misma función.");
+        process.exit(1);
+      }
       process.exit(0);
     }
     esperar(2);
   }
   console.error("la app no llegó a contestar el árbol de controles: NO está viva.");
+  // **Lo primero, la excepción**, y antes que cualquier consejo: si XOne reventó al cargar, eso
+  // es la respuesta entera y todo lo demás sobra. Aquí hace MÁS falta que en la rama de «está
+  // viva»: una app que no llega a arrancar no tiene pantalla que mirar ni árbol que pedir, así
+  // que sin esto lo único que queda es adivinar.
+  const roto = excepcionDeXOne();
+  if (roto !== undefined) {
+    console.error("");
+    console.error("XOne lanzó una excepción al cargar:");
+    console.error(roto);
+    console.error("");
+    console.error("El motor JS de XOne en Android es Rhino: un error de sintaxis en un fichero");
+    console.error("incluido para la app ENTERA. Mira el `;` al final de cada sentencia, las comas");
+    console.error("sobrantes y las `var` declaradas dos veces en la misma función.");
+    process.exit(1);
+  }
   // Antes de mandar a mirar la base de datos, se mira QUÉ hay en pantalla: un diálogo del
   // sistema encima es el falso culpable más caro de este bucle.
   try {

@@ -50,6 +50,7 @@ xone-reiniciar-android --app MiApp
 # «lanza la app», «despliégala»: la cadena ENTERA (túnel, ZIP, subida, reinicio, lanzamiento)
 # y termina diciendo si la app está VIVA, con su árbol de controles.
 xone-desplegar-android
+xone-desplegar-android --captura                  # …y deja la captura, en la MISMA orden
 xone-desplegar-android --app MiApp --serie emulator-5554
 
 # Cualquier comando del catálogo de más abajo (varios en orden, si le pasas varios):
@@ -69,6 +70,12 @@ xone-arrancar-ios
 `LayoutException … Cannot find font file Inter-Regular`, con la colección y el control. Medido
 sobre un proyecto real: la app arrancaba, el árbol de controles contestaba, y lo que faltaba era
 una fuente. Ni la captura ni `getAllElements` lo cuentan.
+
+**Encadenar órdenes cuesta más que la orden.** Lo que devuelve cada una es pequeño —1,6 KB el
+árbol de controles, 108 bytes la captura—, pero cada ida y vuelta reenvía la conversación
+entera. Por eso «lanza la app y sácame una captura» es `xone-desplegar-android --captura`, un
+viaje, y no tres órdenes encadenadas. Y `xone-hotswap` acepta varios comandos de golpe, que es
+la misma idea.
 
 Tres cosas de `xone-hotswap` que conviene saber antes de leer su salida:
 
