@@ -247,3 +247,59 @@ describe("aEventos", () => {
     expect(pausas[0].pendientes).toHaveLength(2);
   });
 });
+
+describe("la historia acumulada de un subgrafo no se cuenta dos veces", () => {
+  /** Un chunk de `updates` tal como llega: con TODOS los mensajes del subgrafo, no solo el nuevo. */
+  const actualizacion = (llamadas: Array<{ id: string; name: string; args: unknown }>) => ({
+    agente: { messages: [{ tool_calls: llamadas }] },
+  });
+
+  it("una tool solo sale UNA vez aunque su `tool_call` vuelva a llegar", async () => {
+    // Medido contra un turno real: 286 eventos `execute` para 10 comandos distintos, con el
+    // primero repetido 43 veces. Se veía en la pantalla, en la traza y en el contador de pasos.
+    const uno = { id: "call_1", name: "execute", args: { command: "adb devices" } };
+    const dos = { id: "call_2", name: "execute", args: { command: "xone-hotswap" } };
+    const stream = (async function* () {
+      yield [[], "updates", actualizacion([uno])];
+      yield [[], "updates", actualizacion([uno, dos])];
+      yield [[], "updates", actualizacion([uno, dos])];
+    })();
+
+    const eventos = [];
+    for await (const e of aEventos(stream)) if (e.tipo === "tool") eventos.push(e);
+
+    expect(eventos).toHaveLength(2);
+  });
+
+  it("dos llamadas IGUALES con ids distintos son dos: no se colapsa por contenido", async () => {
+    // Repetir un comando es trabajo de verdad —y a veces el síntoma de un bucle—: esconderlo
+    // por parecerse al anterior sería maquillar justo lo que hay que ver.
+    const stream = (async function* () {
+      yield [
+        [],
+        "updates",
+        actualizacion([
+          { id: "call_1", name: "execute", args: { command: "adb devices" } },
+          { id: "call_2", name: "execute", args: { command: "adb devices" } },
+        ]),
+      ];
+    })();
+
+    const eventos = [];
+    for await (const e of aEventos(stream)) if (e.tipo === "tool") eventos.push(e);
+
+    expect(eventos).toHaveLength(2);
+  });
+
+  it("sin `id` se emite: la dirección segura es contar de más, no callar una llamada", async () => {
+    const stream = (async function* () {
+      yield [[], "updates", { agente: { messages: [{ tool_calls: [{ name: "read_file", args: {} }] }] } }];
+      yield [[], "updates", { agente: { messages: [{ tool_calls: [{ name: "read_file", args: {} }] }] } }];
+    })();
+
+    const eventos = [];
+    for await (const e of aEventos(stream)) if (e.tipo === "tool") eventos.push(e);
+
+    expect(eventos).toHaveLength(2);
+  });
+});

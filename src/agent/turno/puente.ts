@@ -56,10 +56,22 @@ export function razonamientoDe(msg: unknown): string {
     .join("");
 }
 
-/** Los nombres de tool de un chunk de `updates`, con su detalle de la lista blanca. */
-export function toolsDe(dato: unknown): Array<{ nombre: string; detalle?: string; parametros?: ParametrosSeguros }> {
+/**
+ * Los nombres de tool de un chunk de `updates`, con su detalle de la lista blanca y su ID.
+ *
+ * **El `id` viaja porque el mismo chunk trae la historia ENTERA.** Un `updates` de un subgrafo
+ * no llega con los mensajes nuevos: llega con los acumulados, así que sin distinguir cuáles ya
+ * se contaron, cada paso reemite todas las tools anteriores. Medido sobre un turno real: 286
+ * eventos `execute` para **10 comandos distintos**, con el primero repetido 43 veces — y eso
+ * se ve en la PANTALLA, en tramos repetidos, además de inflar la traza y el contador de pasos.
+ *
+ * El `id` de un `tool_call` es identidad, no parecido: dos llamadas idénticas a la misma tool
+ * con los mismos argumentos son dos llamadas, y colapsarlas por su contenido escondería trabajo
+ * de verdad. Por eso se deduplica por ahí y no por el par nombre+argumentos.
+ */
+export function toolsDe(dato: unknown): Array<{ nombre: string; detalle?: string; parametros?: ParametrosSeguros; id?: string }> {
   if (!dato || typeof dato !== "object") return [];
-  const salida: Array<{ nombre: string; detalle?: string }> = [];
+  const salida: Array<{ nombre: string; detalle?: string; id?: string }> = [];
   for (const nodo of Object.values(dato as Record<string, unknown>)) {
     const msgs = (nodo as Record<string, unknown> | null)?.messages;
     if (!Array.isArray(msgs)) continue;
@@ -72,7 +84,13 @@ export function toolsDe(dato: unknown): Array<{ nombre: string; detalle?: string
             const args = (l as Record<string, unknown>).args;
             const detalle = detalleDe(n, args);
             const parametros = parametrosDe(n, args);
-            salida.push({ nombre: n, ...(detalle === undefined ? {} : { detalle }), ...(parametros === undefined ? {} : { parametros }) });
+            const id = (l as Record<string, unknown>)?.id;
+            salida.push({
+              nombre: n,
+              ...(detalle === undefined ? {} : { detalle }),
+              ...(parametros === undefined ? {} : { parametros }),
+              ...(typeof id === "string" && id !== "" ? { id } : {}),
+            });
           }
         }
       }
@@ -131,13 +149,22 @@ export async function* aEventos(
   alLlamarTool?: AlLlamarTool
 ): AsyncIterable<DomainEvent> {
   const mensajes = new Mensajes();
+  /** Los `tool_call` ya contados, por id: el stream reenvía los mensajes acumulados. */
+  const vistas = new Set<string>();
   try {
     for await (const bruto of stream) {
       const chunk = normalizar(bruto);
       if (!chunk) continue;
 
       if (chunk.modo === "updates") {
-        for (const { nombre, detalle, parametros } of toolsDe(chunk.dato)) {
+        for (const { nombre, detalle, parametros, id } of toolsDe(chunk.dato)) {
+          // Ya contada: este mismo chunk trae la historia acumulada del subgrafo (ver
+          // `toolsDe`). Sin `id` no se puede afirmar que sea repetida, así que se emite —
+          // la dirección segura es contar de más, no callar una llamada que ocurrió.
+          if (id !== undefined) {
+            if (vistas.has(id)) continue;
+            vistas.add(id);
+          }
           try {
             alLlamarTool?.({ nombre, ...(detalle === undefined ? {} : { detalle }), ...(parametros === undefined ? {} : { parametros }) });
           } catch {
