@@ -18,7 +18,10 @@
  *   asume del servidor.
  * - La rama activa del servidor se restaura al terminar (incluso si falló al posicionar
  *   la rama, antes de tocar un solo fichero): `switch` le mueve el suelo a quien tenga
- *   Studio abierto en el navegador.
+ *   Studio abierto en el navegador. Salvo que no se haya podido LEER cuál era —medido:
+ *   `studio_get_context` revienta en el servidor para algunos proyectos—, y entonces no
+ *   se restaura y se dice: es una cortesía, no una condición de corrección, y tumbar la
+ *   subida entera por ella sería pagar el precio más caro por el detalle más barato.
  */
 import { appendFileSync, mkdirSync, readFileSync, statSync, existsSync, readdirSync } from "node:fs";
 import { dirname, join } from "node:path";
@@ -28,6 +31,7 @@ import { planDeSubida } from "../../core/planDeSubida.js";
 import { NOMBRE_CARPETA } from "../config/configEnDisco.js";
 import { cambiosPendientes, marcarSubido } from "../sesiones/gitSync.js";
 import { rutaSyncJson } from "./descarga.js";
+import { ramaActiva } from "./ramaActiva.js";
 
 export interface OpcionesDeSubida {
   puerto: CloudStudioPort;
@@ -191,7 +195,10 @@ export async function subir(opciones: OpcionesDeSubida): Promise<InformeDeSubida
   }
 
   await puerto.abrir(proyecto.nombre);
-  const antes = await puerto.contexto();
+  // `undefined` = no se pudo leer (`ramaActiva.ts`). Aquí el posicionamiento ya era
+  // incondicional, así que lo único que depende de esta lectura es la restauración del
+  // `finally`; su fallo no tiene por qué impedir subir, y quedarse mudo sí sería mentir.
+  const antes = await ramaActiva(puerto, ramaOrigen, informar);
   try {
     try {
       // Posicionarse en la rama del PROYECTO. Aquí hubo un `crearRama` perezoso para la
@@ -220,8 +227,9 @@ export async function subir(opciones: OpcionesDeSubida): Promise<InformeDeSubida
       // antes. Este `finally` corre TAMBIÉN si `cambiarRama` revienta antes
       // de llegar al plan — es precisamente el camino para el que existe: un fallo
       // posicionando la rama no puede dejar el suelo movido bajo quien tenga Studio
-      // abierto en el navegador.
-      await puerto.cambiarRama(antes.rama);
+      // abierto en el navegador. Y sin `antes` no hay a dónde volver: adivinar una rama
+      // movería ese suelo con más seguridad de la que hay.
+      if (antes !== undefined) await puerto.cambiarRama(antes);
     }
   } catch (error) {
     // No se pudo ni intentar el plan (crear/cambiar de rama falló): se registra el

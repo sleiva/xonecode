@@ -81,6 +81,23 @@ function conRamaInstrumentada(base: CloudStudioEnMemoria) {
   return { puerto, ramasAlEscribir };
 }
 
+/**
+ * Registra los `cambiarRama` en ORDEN. Hace falta cuando lo que se prueba es que
+ * `contexto()` revienta: `conRamaInstrumentada` observa preguntándole a `contexto()`, que
+ * en ese escenario es justo lo que no se puede llamar.
+ */
+function conCambiosDeRama(base: CloudStudioEnMemoria): { puerto: CloudStudioPort; cambios: string[] } {
+  const prototipo = Object.getPrototypeOf(base) as CloudStudioPort;
+  const puerto = Object.assign(Object.create(prototipo), base) as CloudStudioPort;
+  const cambios: string[] = [];
+  const original = prototipo.cambiarRama.bind(puerto);
+  puerto.cambiarRama = async (nombre: string) => {
+    cambios.push(nombre);
+    return original(nombre);
+  };
+  return { puerto, cambios };
+}
+
 describe("subir", () => {
   it("se muda a la rama del proyecto, escribe ahí, y devuelve la que estaba", async () => {
     // El puerto arranca en OTRA rama a propósito: si ya estuviera en `master`, «se mudó y
@@ -101,6 +118,35 @@ describe("subir", () => {
     // AC1: get_context → cambiarRama(proyecto) → operar → cambiarRama(la que estaba).
     expect(ramasAlEscribir).toEqual(["master"]);
     expect((await puerto.contexto()).rama).toBe("otra");
+  });
+
+  /**
+   * Medido contra CloudStudio: `studio_get_context` revienta para algunos proyectos —con
+   * el proyecto ABIERTO y con el resto de tools contestando bien—. Esa lectura solo sirve
+   * para devolver la rama que estaba activa; su fallo no puede impedir subir.
+   */
+  it("si no se puede leer la rama activa, sube igual: se posiciona, no restaura, y lo dice", async () => {
+    const raiz = await proyectoConCambios();
+    const base = new CloudStudioEnMemoria({
+      rama: "otra",
+      contextoFalla: "An error occurred invoking 'studio_get_context'.",
+      textos: { "app.xml": "<app/>" },
+    });
+    await base.abrir("AppForTest");
+    const { puerto, cambios } = conCambiosDeRama(base);
+    const avisos: string[] = [];
+
+    const informe = await subir({
+      puerto, raiz, ramaOrigen: "master", proyecto: { id: "96fe", nombre: "AppForTest" },
+      politicaDeAprobacion: autorizaSiempre, informar: (t) => avisos.push(t),
+    });
+
+    expect(informe.ok).toEqual(["app.xml"]);
+    // Se posicionó en la rama del proyecto, y NO hay restauración: no se puede volver a
+    // una rama que no se pudo leer, e inventársela sería peor que quedarse donde estamos.
+    expect(cambios).toEqual(["master"]);
+    expect(avisos.join("")).toMatch(/no se pudo leer la rama activa/);
+    expect(avisos.join("")).toMatch(/master/);
   });
 
   it("con todo bien, la ref se mueve y no queda nada pendiente", async () => {

@@ -65,6 +65,26 @@ function conRamaDuranteLaDescarga(base: CloudStudioEnMemoria): {
   return { puerto, ramaAlDescargar: () => ramaAlDescargar };
 }
 
+/**
+ * Registra los `cambiarRama` en ORDEN. Es el único observador que sirve cuando lo que se
+ * prueba es que `contexto()` falla: `conRamaDuranteLaDescarga` mira la rama preguntándole
+ * a `contexto()`, que en ese escenario revienta.
+ */
+function conCambiosDeRama(base: CloudStudioEnMemoria): {
+  puerto: CloudStudioEnMemoria;
+  cambios: string[];
+} {
+  const prototipo = Object.getPrototypeOf(base) as CloudStudioEnMemoria;
+  const puerto: CloudStudioEnMemoria = Object.assign(Object.create(prototipo), base);
+  const cambios: string[] = [];
+  const original = prototipo.cambiarRama.bind(puerto);
+  puerto.cambiarRama = async (nombre: string) => {
+    cambios.push(nombre);
+    return original(nombre);
+  };
+  return { puerto, cambios };
+}
+
 describe("descargarProyecto", () => {
   it("vía ZIP: extrae y declara la copia completa", async () => {
     const raiz = raizNueva();
@@ -294,5 +314,38 @@ describe("descargarProyecto", () => {
     expect(estado.rama).toBe("master");
     // Y no le movió el suelo a quien tenga Studio abierto en el navegador.
     expect((await puerto.contexto()).rama).toBe("feature-abierta-en-el-navegador");
+  });
+
+  /**
+   * Medido contra CloudStudio: `studio_get_context` revienta para algunos proyectos
+   * —con el proyecto ABIERTO y con `studio_get_file`, `studio_get_project_structure` y
+   * `studio_manage_branches` contestando bien sobre ese mismo proyecto—. Esa lectura
+   * sirve para UNA cosa (devolver la rama que estaba activa), así que su fallo no puede
+   * llevarse por delante la descarga entera: se fija la ORIGEN igual —que es lo que
+   * garantiza que se baja lo que se cree— y lo que se pierde, la restauración, se DICE.
+   */
+  it("si no se puede leer la rama activa, baja igual: fija la ORIGEN, no restaura, y lo dice", async () => {
+    const raiz = raizNueva();
+    const base = new CloudStudioEnMemoria({
+      rama: "feature-abierta-en-el-navegador",
+      contextoFalla: "An error occurred invoking 'studio_get_context'.",
+      zipBase64: zip({ "app.xml": "<app/>" }),
+      textos: { "app.xml": "<app/>" },
+    });
+    const { puerto, cambios } = conCambiosDeRama(base);
+    const avisos: string[] = [];
+
+    const estado = await descargarProyecto({
+      puerto, raiz, proyecto, ramaOrigen: "master", informar: (t) => avisos.push(t),
+    });
+
+    expect(estado.via).toBe("zip");
+    expect(readFileSync(join(raiz, "app.xml"), "utf8")).toBe("<app/>");
+    // Se posicionó en la ORIGEN, y NO hay segunda llamada: no se puede restaurar lo que
+    // no se pudo leer, e inventarse una rama a la que volver sería peor que no volver.
+    expect(cambios).toEqual(["master"]);
+    expect(avisos.join("")).toMatch(/no se pudo leer la rama activa/);
+    // El aviso dice la CONSECUENCIA, no solo que algo falló: dónde se queda Studio.
+    expect(avisos.join("")).toMatch(/master/);
   });
 });

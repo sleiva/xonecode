@@ -199,6 +199,16 @@ export function clienteCloudStudio(invocar: Invocar, nombreDeProyecto: string): 
     },
     async cambiarRama(nombre) {
       await conSesion("studio_manage_branches", { operation: "switch", branchName: nombre });
+      // El `switch` CIERRA el proyecto. No es una suposición: el propio servidor lo declara
+      // en su respuesta (`action: "closeandopenproject"`), y medido, todo lo que venga
+      // después contesta «Empty response from server» hasta que se reabre. Ese texto NO
+      // encaja en `SESION_PERDIDA`, así que la reapertura automática no se dispara: sin
+      // esta línea, `/sync bajar` moría justo después de posicionar la rama.
+      //
+      // Se reabre aquí, y NO se amplía `SESION_PERDIDA` con ese otro texto: un mensaje
+      // vacío puede venir de cualquier fallo del servidor, y tratarlo como sesión caída
+      // pondría una reapertura —y un reintento— delante de problemas que no arregla.
+      await invocar("studio_open_project", { project: proyecto });
     },
   };
 }

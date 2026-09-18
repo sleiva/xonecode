@@ -12,6 +12,7 @@ import type { CloudStudioPort } from "../../core/ports.js";
 import type { EstadoDeSync } from "../../core/cloudstudio.js";
 import { EXTENSIONES_DE_TEXTO, extensionDe } from "../../core/planDeSubida.js";
 import { NOMBRE_CARPETA } from "../config/configEnDisco.js";
+import { ramaActiva } from "./ramaActiva.js";
 import { destinoSeguro, extraerZipBase64 } from "./zip.js";
 import { enumerarRemoto } from "./manifiesto.js";
 
@@ -103,8 +104,15 @@ export async function descargarProyecto(opciones: OpcionesDeDescarga): Promise<E
   // posicionamiento explícito se bajaba lo que estuviera activo en la sesión (no
   // necesariamente `ramaOrigen`), y una subida posterior atribuía ese contenido a
   // `ramaOrigen` sin comprobarlo: rama B bajada, firmada y subida como si fuera la A.
-  const antes = await puerto.contexto();
-  if (antes.rama !== ramaOrigen) await puerto.cambiarRama(ramaOrigen);
+  // Con una diferencia: leer la rama que estaba es una CORTESÍA (devolver el suelo), y su
+  // fallo —medido, `studio_get_context` revienta en el servidor para algunos proyectos—
+  // no puede tumbar la descarga. La corrección la sostiene el `cambiarRama` explícito.
+  // `undefined` = no se pudo leer (ver `ramaActiva.ts`: `studio_get_context` falla en el
+  // servidor para algunos proyectos). Entonces el `!==` de abajo es cierto siempre, que es
+  // justo lo que hace falta: posicionarse SIN CONDICIÓN en la origen. Lo único que se
+  // pierde es la restauración, y eso ya lo ha dicho `ramaActiva`.
+  const antes = await ramaActiva(puerto, ramaOrigen, informar);
+  if (antes !== ramaOrigen) await puerto.cambiarRama(ramaOrigen);
   try {
     const { manifiesto, noEnumerados, raizTruncada } = await enumerarRemoto(puerto);
     if (noEnumerados.length > 0) {
@@ -167,6 +175,8 @@ export async function descargarProyecto(opciones: OpcionesDeDescarga): Promise<E
     writeFileSync(ruta, JSON.stringify(estado, null, 2) + "\n");
     return estado;
   } finally {
-    if (antes.rama !== ramaOrigen) await puerto.cambiarRama(antes.rama);
+    // Sin `antes` no hay a dónde volver: adivinar una rama sería moverle el suelo a quien
+    // tenga Studio abierto con más seguridad de la que hay.
+    if (antes !== undefined && antes !== ramaOrigen) await puerto.cambiarRama(antes);
   }
 }

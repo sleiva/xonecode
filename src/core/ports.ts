@@ -649,6 +649,15 @@ export interface OpcionesCloudStudioEnMemoria {
   binarios?: Record<string, number>;
   /** Motivo con el que `descargarZip` rechaza; ausente = el ZIP funciona. */
   zipFalla?: string;
+  /**
+   * Motivo con el que `contexto` rechaza; ausente = se puede leer la rama activa.
+   *
+   * No es un capricho de test: medido contra CloudStudio, `studio_get_context` revienta
+   * para algunos proyectos —con el proyecto abierto y con el resto de tools contestando
+   * bien sobre ese mismo proyecto—, y sin poder reproducirlo aquí la tolerancia de
+   * `agent/cloudstudio/ramaActiva.ts` no tendría dónde probarse.
+   */
+  contextoFalla?: string;
   /** Tope de entradas por llamada, para reproducir el truncado del servidor real. */
   topeEstructura?: number;
   /** ZIP ya fabricado (por el test, fuera de la frontera) para que `descargarZip` lo devuelva. */
@@ -683,6 +692,9 @@ export class CloudStudioEnMemoria implements CloudStudioPort {
 
   async contexto(): Promise<ContextoRemoto> {
     this.exigirAbierto();
+    // Después de `exigirAbierto`: el fallo medido ocurre con el proyecto ABIERTO, y
+    // ponerlo antes convertiría este doble en otro camino para «no hay proyecto».
+    if (this.opciones.contextoFalla !== undefined) throw new Error(this.opciones.contextoFalla);
     return { proyecto: this.abierto!, rama: this.ramaActual };
   }
 

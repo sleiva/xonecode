@@ -74,6 +74,28 @@ describe("clienteCloudStudio", () => {
     ]);
   });
 
+  /**
+   * MEDIDO contra el servidor real: `studio_manage_branches switch` CIERRA el proyecto. Lo
+   * dice en su propia respuesta (`action: "closeandopenproject"`), y a partir de ahí toda
+   * llamada contesta «Empty response from server» — que NO es «no project is open», así
+   * que la reapertura de `conSesion` no se dispara y la descarga entera muere justo
+   * después de posicionar la rama. Se reabre aquí porque es el contrato que el servidor
+   * declara en la respuesta, no por una heurística sobre el texto de un error: tratar
+   * «Empty response from server» como sesión caída taparía cualquier otro fallo del
+   * servidor detrás de una reapertura que no arregla nada.
+   */
+  it("cambiar de rama REABRE el proyecto: el `switch` lo cierra en el servidor", async () => {
+    const falso = clienteFalso([
+      { action: "closeandopenproject", newBranch: "jose" },
+      { status: "project_open" },
+    ]);
+    await clienteCloudStudio(falso.invocar, "Bequikly").cambiarRama("jose");
+    expect(falso.llamadas).toEqual([
+      { nombre: "studio_manage_branches", argumentos: { operation: "switch", branchName: "jose" } },
+      { nombre: "studio_open_project", argumentos: { project: "Bequikly" } },
+    ]);
+  });
+
   it("si tras reabrir el TEXTO sigue diciendo lo mismo, se lanza nombrando la tool", async () => {
     const perdida = { content: [{ type: "text", text: "Error: No project is open." }] };
     const falso = clienteFalso([perdida, { status: "project_open" }, perdida]);
