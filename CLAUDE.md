@@ -442,10 +442,10 @@ no viaja porque ahí la ejecución no se concede—. Reglas duras:
   su lista blanca, y duplicarlos aquí los sacaría con los argumentos crudos dentro. **Límite
   declarado**: hoy solo lo alimenta `claude-code`.
 - **El pulso DICE en qué paso está y cuánto lleva en él** (`Chat.tsx`, `cronometro.ts` con
-  `clave`), en la línea que se ve con el pulso PLEGADO. El total no contesta esa pregunta:
-  «Trabajando… · 650 s» no distingue avanzar de colgarse, y lo que lo distingue es si el paso
-  actual lleva dos segundos o seis minutos. Se mide desde que la LÍNEA apareció, que es lo
-  único que el cliente sabe.
+  `clave`), en la línea que se ve con el pulso PLEGADO. El total no contesta esa pregunta: un
+  «Trabajando…» con su cuenta atrás no distingue avanzar de colgarse, y lo que lo distingue es
+  si el paso actual acaba de empezar o lleva ahí desde el principio. Se mide desde que la
+  LÍNEA apareció, que es lo único que el cliente sabe.
 - **Y lo que hace un agente EXTERNO se ve MIENTRAS lo hace** (`core/entrelazar.ts`): sale un
   evento `tool` NORMAL, con nombre canónico (`Read` → `read_file`) y ruta VIRTUAL, así que el
   colapsador lo agrupa con los demás y ninguna piel sabe que hay dos orígenes. Es un generador
