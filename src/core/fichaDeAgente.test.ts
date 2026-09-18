@@ -43,6 +43,28 @@ describe("fichaDeAgente", () => {
     expect(ficha).toMatch(/ejecuta comandos/);
   });
 
+  /**
+   * **REPRODUCIDO**: la primera versión derivaba «ESCRIBE ficheros, y cada escritura pasa por
+   * aprobación» de `soloLectura: false`, y para quien EJECUTA eso es falso dos veces —y la
+   * segunda en la dirección peligrosa, porque promete una barrera que no existe—:
+   *
+   *  - `montajeDeFicheros` le da `TOOLS_CON_EJECUCION`, que **no lleva `write_file` ni
+   *    `edit_file`**: con las tools de fichero no puede escribir nada.
+   *  - Y **no recibe `permissions`** (deepagents lanza si se combinan con un backend
+   *    ejecutable), así que lo que su SHELL toque no pasa por ninguna aprobación.
+   *
+   * La propia descripción del conductor acababa en «No edita ficheros del proyecto», o sea que
+   * la ficha se contradecía con la frase que iba tres palabras antes.
+   */
+  it("quien ejecuta NO «escribe con aprobación»: no tiene las tools y su shell no pasa por ella", () => {
+    const ficha = fichaDeAgente(agente({ soloLectura: false, ejecucion: true }));
+
+    expect(ficha).not.toMatch(/ESCRIBE ficheros del proyecto/);
+    expect(ficha).not.toMatch(/cada escritura pasa por aprobación/);
+    // Y lo que sí es cierto se DICE, porque es lo que hay que saber para repartir.
+    expect(ficha).toMatch(/sin pasar por la aprobación|sin aprobación/i);
+  });
+
   it("y quien no ejecuta no lo insinúa", () => {
     expect(fichaDeAgente(agente())).not.toMatch(/ejecuta comandos/);
   });

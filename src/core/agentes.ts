@@ -353,13 +353,24 @@ export interface Lectura {
  */
 export function fichaDeAgente(agente: Agente): string {
   const capacidades: string[] = [];
-  if (agente.soloLectura) {
+  /**
+   * **Quien EJECUTA es su propio caso, y confundirlo con «escribe» miente dos veces.**
+   * `montajeDeFicheros` le da `TOOLS_CON_EJECUCION`, que no lleva `write_file` ni `edit_file`
+   * —así que con las tools de fichero no escribe nada—, y **no recibe `permissions`** (la
+   * librería lanza al combinarlos con un backend ejecutable), así que lo que su shell toque no
+   * pasa por ninguna aprobación. Derivarlo de `soloLectura: false` decía lo contrario en las
+   * dos mitades, y la segunda en la dirección peligrosa: prometía una barrera que no existe.
+   */
+  if (agente.ejecucion === true) {
+    capacidades.push(
+      "ejecuta comandos en esta máquina, así que alcanza el disco sin pasar por la aprobación",
+      "no edita ficheros con las tools de fichero: no las tiene"
+    );
+  } else if (agente.soloLectura) {
     capacidades.push("solo LEE el proyecto");
   } else {
     capacidades.push("ESCRIBE ficheros del proyecto, y cada escritura pasa por aprobación");
   }
-  // Lo que más cambia una decisión de reparto: quién alcanza la máquina.
-  if (agente.ejecucion === true) capacidades.push("ejecuta comandos en esta máquina");
   if (agente.motor !== "modelo") capacidades.push(`corre en ${agente.motor}`);
 
   /**
