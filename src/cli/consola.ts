@@ -16,6 +16,7 @@ import { cmdDescribe } from "./describe.js";
 import { cmdDoctor } from "./doctor.js";
 import { cmdVerify } from "./verify.js";
 import { AgenteGuionizado } from "../agent/turno/guionizado.js";
+import { exportarAPdf } from "../agent/exportarPdf.js";
 import { correrTurno, type Piel } from "../core/turno.js";
 import {
   PAPELES, POR_OMISION, ModeloMalEscrito, parsear, PROVEEDORES, VARIABLES_POR_PROVEEDOR, esProveedorPersonalizado, variableDeProveedor,
@@ -979,6 +980,30 @@ export const COMANDOS: Record<string, { descripcion: string; manejador: Manejado
       for (const [nombre, c] of Object.entries(COMANDOS)) {
         consola.escribir(`  /${nombre.padEnd(16)}  ${c.descripcion}\n`);
       }
+      return { seguir: true };
+    },
+  },
+  pdf: {
+    descripcion: "exporta un .md o .html del proyecto a PDF, al lado del original",
+    /**
+     * **Lo hace el HARNESS y no el agente.** Producir un PDF es lo que las skills `pdf`/`docx`
+     * hacen ejecutando scripts, y a un motor externo no se le concede shell — abrirla dejaría
+     * a ese hijo reescribir el proyecto sin diff ni aprobación. Aquí el comando es FIJO y lo
+     * escribe el código, así que no hay prompt que pueda torcerlo. El porqué entero está en
+     * `core/exportacion.ts`.
+     *
+     * **Y la autorización es teclear el comando**, como crear una tarea: no pasa por la
+     * aprobación de escritura porque no lo pide el modelo, lo pide quien está delante, y el
+     * destino lo DERIVA el código del origen (`rutaDePdf`) — no se puede elegir dónde escribe.
+     */
+    manejador: async (args, estado, consola) => {
+      const ruta = args.join(" ").trim();
+      if (ruta === "") {
+        consola.escribir("uso: /pdf <ruta del fichero dentro del proyecto>\n");
+        return { seguir: true };
+      }
+      const hecho = await exportarAPdf({ raiz: estado.raiz, ruta });
+      consola.escribir("error" in hecho ? `${hecho.error}\n` : `PDF en ${hecho.ruta}\n`);
       return { seguir: true };
     },
   },

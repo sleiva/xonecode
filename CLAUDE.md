@@ -992,6 +992,35 @@ feedback del desarrollador** y no es terminal.
   túnel el botón no sirve — por eso el campo de texto es el camino principal y esto un atajo, y
   en un sistema sin selector el botón no se pinta.
 
+### Exportar a PDF
+
+`core/exportacion.ts` (puro), `agent/exportarPdf.ts`, comando `/pdf <ruta>`.
+
+- **Lo hace el HARNESS, no el agente, y eso es la decisión.** Producir un PDF es lo que las
+  skills `pdf`/`docx` hacen EJECUTANDO scripts, y a un motor externo no se le concede shell:
+  abrirla dejaría a ese hijo reescribir el proyecto sin diff ni aprobación. Y medido sobre una
+  máquina real, conceder la shell tampoco habría dado el PDF — esas skills asumen el sandbox
+  donde sus dependencias vienen puestas, y ahí no estaba ninguna. El comando lo escribe el
+  CÓDIGO, así que no hay prompt que pueda torcerlo.
+- **Se imprime con un NAVEGADOR**, buscado en una lista CERRADA de rutas conocidas (todos
+  Chromium por dentro: es el que trae `--print-to-pdf`). Su ruta se queda en el host. No
+  haberlo se DICE con el remedio, porque no hay forma de adivinar que lo que falta es eso.
+- **Que el navegador salga con 0 no significa que haya PDF**, y por eso se comprueba el
+  fichero — la misma regla que la instalación de dispositivos. Ese guarda se ganó el sitio
+  solo: un flag que parecía inofensivo dejaba de escribir el fichero en silencio.
+- **Lo que impide que imprimir EJECUTE algo es una CSP en el documento, no un flag.** Medido
+  contra el navegador instalado: ni `--disable-javascript` ni `--blink-settings=scriptEnabled=false`
+  desactivan un `<script>`, y el segundo además rompe la impresión. La política corta también
+  la RED, que es por donde un documento del proyecto podría avisar de que se está imprimiendo.
+  A un `.html` ajeno se le INYECTA, y eso solo puede TENSAR: con varias políticas el navegador
+  exige que todas permitan cada carga.
+- **El destino lo DERIVA el código del origen** (`rutaDePdf`), nunca se recibe: con un destino
+  por parámetro esto sería una forma de escribir cualquier fichero sin pasar por la aprobación.
+  Las guardas de ruta son las MISMAS de la pestaña Ficheros, no una copia. Y el HTML intermedio
+  se escribe FUERA del proyecto, o entraría en git, en el commit del turno y en la subida.
+- **La autorización es teclear el comando**, como crear una tarea: no lo pide el modelo, lo
+  pide quien está delante.
+
 ### Sesiones, hilos y git
 
 - **El hilo SOBREVIVE al proceso** (`agent/sesiones/checkpointer.ts`, `SqliteSaver` en

@@ -5372,3 +5372,79 @@ una a una debajo. Copiarlas sería duplicar megas por máquina y volver a resolv
 carpeta a carpeta en cada `npm install`; leyéndolas del paquete, una mejora nuestra llega sola.
 De ahí que en Skills no haya `.semilla.json` ni «restaurar», a diferencia de los subagentes: no
 hay nada que restaurar porque nada nuestro se copió nunca.
+
+## Exportar a PDF sin abrirle la shell a nadie (18-09-2026)
+
+### La petición, y por qué no se resolvía sola
+
+«Que se pueda generar PDF y DOCX con Claude Code, porque no me lo permite aunque Claude Code
+tenga las skills globales». Las skills estaban, y llegaban: desde que `Skill` entró en la lista
+de lectura, el hijo las carga. El problema es lo que esas skills SON. Leídas por dentro:
+
+- **`docx`**: «Write a `docx` (npm) script», `unzip` → editar `word/document.xml` → `zip`,
+  `pandoc -t markdown`.
+- **`pdf`**: su `SKILL.md` es todo bloques de Python y trae ocho `.py` en `scripts/`.
+
+Su método entero es «ejecuta esto», y `Bash` está denegada para los motores externos porque una
+shell basta por sí sola para reescribir el proyecto saltándose la política, el diff y las
+guardas de ruta.
+
+Y hay una segunda causa que la primera tapaba. Medido sobre la máquina real, en los CINCO
+Python instalados: `pypdf`, `reportlab`, `python-docx` y `python-pptx` no estaban en ninguno;
+tampoco `pandoc`, ni LibreOffice, ni el `docx` de npm. Esas skills asumen el sandbox de Claude,
+donde sus dependencias vienen puestas. **Conceder la shell no habría dado el PDF**: el hijo
+habría escrito el script y se habría estrellado en el `import`.
+
+### La decisión: lo convierte el harness, con un comando fijo
+
+Lo que sí hay en cualquier máquina que use la consola web es un navegador, y un navegador
+imprime. Así que la conversión la hace el harness —comando escrito por el CÓDIGO, sin prompt
+que pueda torcerlo— y la shell del hijo sigue cerrada. Se descartaron las otras dos:
+
+- **Abrir `Bash` al hijo con `ejecucion: true` declarado**: simétrico con el motor interno,
+  pero mueve una barrera para algo que además no funcionaría sin instalar media docena de cosas.
+- **Hacerlo por el motor interno** (`motor: modelo` + `ejecucion: true`): no mueve ninguna
+  barrera, pero arrastra el mismo problema de dependencias.
+
+### Tres cosas que se midieron y cambiaron el diseño
+
+**1. Los flags de Chrome NO desactivan JavaScript.** La primera versión pasaba
+`--blink-settings=scriptEnabled=false`, con el argumento de que un `.md` del proyecto puede
+traer un `<script>`. Probado con un documento que se reescribe a sí mismo desde un script: con
+ese flag, con `--disable-javascript` y sin nada, el script se ejecutó **en los tres casos**. Lo
+que sí lo corta es una `<meta http-equiv="Content-Security-Policy">` en el documento, que
+además —con `default-src 'none'`— corta la RED: un `<img src="https://…">` dentro de un
+documento del proyecto podría avisar fuera de que se está imprimiendo.
+
+**2. Y ese flag rompía la impresión, en silencio.** Con él puesto, Chrome sale con código 0 y
+**no escribe el PDF**. Lo cazó la comprobación de que «terminó bien» y «hay fichero» son dos
+cosas —la misma regla que ya usaba la instalación de dispositivos—, que estaba escrita por
+disciplina y se ganó el sitio en su primer uso real.
+
+**3. Un test que depende de si la máquina tiene Chrome no fija nada.** La búsqueda del
+navegador se inyecta por parámetro: sin eso, el caso «no hay navegador» pasaba en CI y fallaba
+en la máquina del que lo escribió, que es no probar nada.
+
+### Lo que no se puede elegir desde fuera
+
+El destino lo DERIVA el código del origen (`doc/X.md` → `doc/X.pdf`). Con un destino por
+parámetro, exportar sería una forma de escribir cualquier fichero del proyecto sin pasar por
+ninguna aprobación. Las guardas de ruta son las MISMAS que las de la pestaña Ficheros y no una
+copia. Y el HTML intermedio se escribe fuera del proyecto: dentro entraría en git, en el commit
+de cada turno y en la siguiente subida a CloudStudio.
+
+La autorización es teclear `/pdf`, como crear una tarea: no lo pide el modelo, lo pide quien
+está delante.
+
+### La dependencia que sí se añadió
+
+`marked`, para Markdown → HTML. Es de cero dependencias propias y se carga PEREZOSAMENTE:
+exportar es raro y no tiene por qué pesar en el arranque de cada turno. La alternativa era que
+el CLIENTE mandara el HTML ya renderizado —lo pinta con el mismo componente que se ve en
+pantalla— pero eso ata exportar a tener el fichero abierto en el navegador.
+
+### Lo que queda fuera
+
+**DOCX.** Un `.docx` no se imprime, se construye, y para eso hace falta una librería de verdad
+—`pandoc` o `python-docx`—, no un navegador. Se declara pendiente en vez de fingirlo: el PDF es
+lo que la petición pedía primero, y es lo que se puede dar sin instalar nada.
