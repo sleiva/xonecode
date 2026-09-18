@@ -5270,3 +5270,105 @@ Y de rebote salió un fallo de disposición que solo se ve en el navegador: con 
 los dos botones en la misma fila le comían el ancho al campo y la ruta salía cortada. Los
 botones caben en cualquier ancho y la ruta no, así que la fila es del campo y los botones van
 debajo.
+
+## Las skills sí llegan a los motores externos (18-09-2026)
+
+### El síntoma, y por qué no era «falta copiar unas carpetas»
+
+La pregunta que lo destapó fue del usuario: *«si tenemos que meter ahí nuestras skills, no sé
+por qué usas Claude Code»*. Y tenía razón, porque lo que se le había propuesto —copiar sus
+skills a `~/.xonecode/skills/`— **no habría servido de nada**: `/skills/` es una ruta virtual
+de nuestro `CompositeBackend`, y un hijo de Claude Code corre en otro proceso y lee el disco.
+La copia solo habría dado de comer a los cinco especialistas internos. Dos copias para dos
+públicos: el segundo sitio donde decidir lo mismo.
+
+Debajo había un fallo de verdad. Sus skills **sí** llegaban al hijo de Claude Code —no
+pasamos la opción `skills` del SDK, y su documentación dice que omitirla «**no es** skills
+off»: sigue valiendo el descubrimiento del CLI, o sea su `~/.claude/skills/`—, pero la tool
+`Skill` no estaba en ninguna de las tres listas de `escrituraExterna.ts`, así que caía en
+«desconocida» y el hook `PreToolUse` contestaba `deny`. Lo peor de los dos mundos: el modelo
+ve las skills listadas en su contexto y se le dice que no cada vez que va a abrir una. Y
+tampoco había puerta de atrás, porque esos ficheros viven fuera del proyecto y
+`veredictoDeLectura` corta un `Read` ahí.
+
+### Paso 1: `Skill` a la lista de lectura
+
+Entra como LECTURA y no como una cuarta clase, porque eso es lo que hace: mete instrucciones
+en el contexto. No ejecuta nada por su cuenta, y lo que una skill MANDE hacer vuelve a pasar
+por el mismo hook. La confianza que asume es la que el fichero ya declaraba con
+`settingSources: ["user"]`: el hijo es el Claude Code del usuario, con sus MCP y sus hooks —que
+ejecutan código—, así que negarle unas instrucciones suyas no defendía nada.
+
+### Paso 2: OpenCode, por `skills.paths`
+
+Su configuración tiene `skills: { paths: [...] }` («Additional paths to skill folders»), y esa
+configuración ya la reescribimos entera en cada arranque en `~/.xonecode/opencode`. O sea: una
+clave en un fichero que ya era nuestro.
+
+**Comprobado contra el binario instalado**, sin gastar un token de modelo: `opencode serve` con
+esa configuración y un `GET /skill` a su endpoint. Aparecen las nuestras junto a las suyas. Dos
+cosas que salieron de esa medida y no del manual:
+
+- **Ya descubría solo sus `~/.claude/skills/` y `~/.agents/skills/`**, así que lo que esta
+  clave añade son las NUESTRAS, no las suyas.
+- **En un choque de nombre gana la suya**: `xone-project-generator` está en su carpeta
+  sincronizada y en nuestro paquete, y el listado lo resolvió a la suya. Nuestra precedencia
+  (`cargarSkills`) no gobierna eso; lo gobierna opencode.
+
+Y `permission.skill` se declara explícito en `"allow"`: esa configuración es nuestra superficie
+cerrada, y un permiso que depende del valor por defecto de otra versión es el ajuste que cambia
+sin que nadie se entere.
+
+### Paso 3: Claude Code — y aquí la primera idea era FALSA
+
+La hipótesis era `additionalDirectories`, porque la documentación del SDK dice que añadir un
+directorio recarga «CLAUDE.md, **skills**, and plugins». Se montó una carpeta con la disposición
+`<dir>/.claude/skills/` y se le preguntó a un hijo de verdad qué skills tenía: listó las del
+usuario y las de sus plugins, y **ninguna de las dos del montaje**.
+
+La palanca que sí funciona es `plugins: [{ type: "local", path }]` con un `plugin.json` cuyo
+campo `skills` apunta a una subcarpeta. Con eso, las mismas dos aparecieron como
+`xonecode:xone-review` y `xonecode:xone-debugging`. La comprobación final, ya con el código
+cableado, listó las nueve del paquete **más una plantada en el proyecto** — o sea que las tres
+raíces se funden con su precedencia.
+
+Cuatro decisiones dentro:
+
+- **Enlaces y no copias.** Las de serie pesan megas (una sola son 77 ficheros) y esto se monta
+  en cada arranque de un subagente externo.
+- **La carpeta de skills se RECREA entera** en cada montaje. Dentro solo hay enlaces nuestros,
+  así que borrarla es seguro; sin recrearla, una skill que el usuario quitó seguiría anunciada
+  por un enlace roto.
+- **Un fallo al montar devuelve AUSENTE y no tumba el turno**: el hijo arranca sin plugin, que
+  es como estaba antes.
+- **Nada se escribe dentro del proyecto**, que era la propuesta inicial (crear `.claude`,
+  `.opencode` y `.codex` en la carpeta del proyecto). No se puede: el proyecto es la app del
+  cliente, se sincroniza con CloudStudio —`.xonecode/` tiene filtro propio para no subir, pero
+  `.claude/` no es `.xonecode/`— y entra en el `add -A` del commit de cada turno. Y para
+  opencode, su `.opencode/plugin/*.ts` ejecuta código arbitrario: es exactamente la puerta que
+  `OPENCODE_DISABLE_PROJECT_CONFIG=1` cierra a propósito.
+
+### Lo que queda fuera, dicho entero
+
+- **Codex.** Sus skills llegan por su sistema de PLUGINS (en la configuración del usuario se ve
+  un `[plugins."anthropic-skills@claude-cowork"]`) y sus agentes por `~/.codex/agents/*.toml`.
+  No hay carpeta de skills que apuntar, así que ahí sigue el límite.
+- **Una skill de varios ficheros se queda en su `SKILL.md`.** Lo que carga el motor por su
+  cuenta son las instrucciones; si la skill manda leer otro fichero de su carpeta, ese `Read`
+  cae fuera del proyecto y lo deniega `veredictoDeLectura` (y en opencode, `external_directory`).
+  **No se ensancha esa guarda para arreglarlo**: abrir la lectura a una carpeta de fuera por
+  comodidad es justo el agujero que esa función existe para cerrar. Se dice en vez de pagarse a
+  escondidas.
+- **Y lo que una skill mande EJECUTAR se sigue denegando**: `Bash` no entra por esta puerta.
+- **El nombre le llega prefijado** (`xonecode:<nombre>`) mientras que el `.md` de un subagente y
+  `promptDeAgente` lo nombran a secas. No se reescribe el prompt para igualarlo: el prefijo lo
+  pone el motor, y adivinarlo aquí sería atarse a su formato.
+
+### Y por qué nuestras skills no están en `~/.xonecode/skills/`
+
+Porque no se copian ahí nunca, y eso ya estaba decidido: viven dentro del paquete instalado
+(`RAIZ_SKILLS`) y el backend cuelga esa raíz ENTERA en `/skills/`, con las del usuario colgando
+una a una debajo. Copiarlas sería duplicar megas por máquina y volver a resolver la siembra
+carpeta a carpeta en cada `npm install`; leyéndolas del paquete, una mejora nuestra llega sola.
+De ahí que en Skills no haya `.semilla.json` ni «restaurar», a diferencia de los subagentes: no
+hay nada que restaurar porque nada nuestro se copió nunca.

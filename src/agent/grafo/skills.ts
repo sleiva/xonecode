@@ -200,6 +200,39 @@ export function skillsMontables(raiz?: string): Montaje[] {
 }
 
 /**
+ * Las CARPETAS que contienen skills, para un motor EXTERNO que descubre por directorio.
+ *
+ * **Por qué existe, y por qué no vale `skillsMontables`.** Aquélla devuelve una entrada por
+ * SKILL, que es lo que necesita nuestro `CompositeBackend` para colgar cada una de
+ * `/skills/<nombre>/`. Un motor externo no ve esa ruta virtual —corre en otro proceso y lee
+ * el disco— y descubre por CARPETA CONTENEDORA: opencode con `skills.paths` de su
+ * configuración, Claude Code con `additionalDirectories`. Son dos preguntas distintas y
+ * confundirlas da una lista de rutas que el motor descarta en silencio.
+ *
+ * **Solo las que EXISTEN.** Una ruta que no está es una entrada de configuración que el motor
+ * tiene que descartar por su cuenta, y cómo la descarte no lo decidimos nosotros — puede ser
+ * un aviso, puede ser un fallo de arranque. La carpeta global está vacía en una máquina que
+ * nunca guardó una skill propia, así que este caso es el normal y no el raro.
+ *
+ * **Y no se pasa por el proyecto abierto sin más**: la del proyecto cuelga de su `.xonecode/`,
+ * que es carpeta DENEGADA para los motores externos por todas las demás vías. Entra aquí
+ * porque el motor la carga ÉL al arrancar, no por una tool, que es la misma distinción que
+ * hace que `/skills/` sea de solo lectura para el agente interno.
+ *
+ * El orden es el de la precedencia de `cargarSkills` —serie, global, proyecto— para que un
+ * motor que resuelva un nombre repetido quedándose con el último coincida con lo que ve el
+ * agente interno.
+ */
+export function carpetasDeSkillsParaElMotor(opciones: { casa?: string; raiz?: string } = {}): string[] {
+  const casa = opciones.casa ?? join(homedir(), NOMBRE_CARPETA);
+  return [
+    RAIZ_SKILLS,
+    join(casa, CARPETA),
+    ...(opciones.raiz === undefined ? [] : [rutaDeSkills(opciones.raiz)]),
+  ].filter((ruta) => existsSync(ruta));
+}
+
+/**
  * TODAS las skills con su carpeta REAL, las de serie incluidas, con la precedencia de siempre.
  *
  * No es lo mismo que `skillsMontables`, y confundirlas costó un turno entero: aquélla contesta

@@ -53,6 +53,7 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import type { PeticionExterna, PoliticaDeEscrituraExterna } from "../../core/ports.js";
+import { carpetasDeSkillsParaElMotor } from "../grafo/skills.js";
 import { consumoDeOpencode } from "./consumoExterno.js";
 import { decisionDeEscrituraDeOpencode } from "./escrituraDeOpencode.js";
 
@@ -91,6 +92,12 @@ const TOPE_MS = 10 * 60 * 1000;
 export function configuracionDeOpencode(opciones: {
   vistasAplanadas?: readonly string[];
   modelo?: string;
+  /**
+   * Las CARPETAS que contienen skills —la del paquete y la global del usuario—, no una
+   * skill suelta. Vacío o ausente = no se emite la clave: una lista vacía en el fichero
+   * diría «ninguna», que es lo mismo pero deja escrito un ajuste que nadie puso.
+   */
+  skills?: readonly string[];
 }): string {
   const negadas: Record<string, string> = {
     "**/.env": "deny",
@@ -114,7 +121,27 @@ export function configuracionDeOpencode(opciones: {
         external_directory: "deny",
         task: "deny",
         question: "deny",
+        // Explícito y no por omisión: esta configuración es nuestra superficie CERRADA, y
+        // un permiso que depende del valor por defecto de otra versión de opencode es el
+        // ajuste que cambia sin que nadie se entere. Cargar una skill mete instrucciones en
+        // el contexto; lo que la skill MANDE hacer sigue pasando por las reglas de arriba.
+        skill: "allow",
       },
+      /**
+       * **Dónde busca skills, y por qué NO en el proyecto.**
+       *
+       * Estas rutas son nuestras —la del paquete instalado y la global del usuario— y van en
+       * la configuración que ya reescribimos en cada arranque, así que no hace falta crear
+       * ningún `.opencode/` dentro del proyecto. Eso importa: el proyecto es la app del
+       * cliente, se sincroniza con CloudStudio y entra en el commit de cada turno; y además
+       * su `.opencode/` es justo la puerta que `OPENCODE_DISABLE_PROJECT_CONFIG` cierra a
+       * propósito, porque un `plugin/*.ts` suyo ejecuta código arbitrario.
+       *
+       * **Límite declarado**: `external_directory` sigue en `deny`, así que una skill que
+       * mande LEER un fichero de su propia carpeta choca con esa regla. Las instrucciones del
+       * `SKILL.md` sí llegan, que es lo que carga opencode por su cuenta al arrancar.
+       */
+      ...((opciones.skills ?? []).length === 0 ? {} : { skills: { paths: [...(opciones.skills ?? [])] } }),
     },
     null,
     2
@@ -178,6 +205,13 @@ export async function correrOpencode(
     configuracionDeOpencode({
       vistasAplanadas: opciones.vistasAplanadas?.() ?? [],
       ...(peticion.modelo === undefined ? {} : { modelo: peticion.modelo }),
+      // Las carpetas que EXISTEN, no las tres a ciegas: una ruta que no está es una entrada
+      // de configuración que opencode tiene que descartar por su cuenta, y cómo la descarte
+      // no lo decidimos nosotros.
+      skills: carpetasDeSkillsParaElMotor({
+        ...(opciones.casa === undefined ? {} : { casa: opciones.casa }),
+        raiz: peticion.cwd,
+      }),
     }),
     { mode: 0o600 }
   );

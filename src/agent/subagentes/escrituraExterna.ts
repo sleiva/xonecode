@@ -68,6 +68,29 @@ export const TOOLS_EXTERNAS_DE_LECTURA: ReadonlySet<string> = new Set([
    * lista blanca sigue siendo la barrera, y ahora además es cierta.
    */
   "ToolSearch",
+  /**
+   * **`Skill` está aquí porque sin ella el hijo VE las skills y no puede abrir ninguna.**
+   *
+   * No le pasamos la opción `skills` del SDK, y su propia documentación dice que omitirla
+   * «**no es** skills off»: sigue valiendo el descubrimiento normal del CLI. O sea que las
+   * del usuario —`~/.claude/skills/`— y las nuestras, cuando se las montamos, llegan a su
+   * contexto LISTADAS. Y al ir a cargar una, esta tool caía en «desconocida» y el hook
+   * contestaba `deny`. Lo peor de los dos mundos: el modelo sabe que están y se le dice que
+   * no cada vez. Tampoco había puerta de atrás, porque los ficheros viven fuera del proyecto
+   * y `veredictoDeLectura` corta un `Read` ahí.
+   *
+   * Y entra en la lista de LECTURA, no como una cuarta clase, porque eso es lo que hace:
+   * mete instrucciones en el contexto. No ejecuta nada por su cuenta — lo que una skill
+   * MANDE hacer vuelve a pasar por este mismo hook, así que un `Bash` sugerido por un
+   * SKILL.md se deniega igual que cualquier otro. **Límite declarado**: por eso una skill
+   * que dependa de correr comandos se queda a medias aquí; mejor que no cargar nada, y no lo
+   * mismo que Claude Code suelto.
+   *
+   * La confianza que esto asume es la que el fichero YA declara con `settingSources:
+   * ["user"]`: el hijo es el Claude Code DEL USUARIO, con sus MCP y sus hooks —que ejecutan
+   * código—, así que negarle unas instrucciones suyas no defendía nada.
+   */
+  "Skill",
 ]);
 
 /**

@@ -224,12 +224,28 @@ Y las guardas del proyecto:
   no, y una entrada mala se lleva el zip ENTERO. El nombre se DEDUCE —la carpeta envolvente, o
   el fichero que subió la persona— y pasa por la regla del slug; el motivo de un rechazo nunca
   repite el nombre de una entrada del zip, que lo eligió quien lo empaquetó.
-- **Límite declarado: las skills no llegan a un motor EXTERNO.** `/skills/` es una ruta
-  virtual de nuestro backend, y un hijo de Claude Code, Codex u OpenCode lee el disco de
-  verdad, confinado a la carpeta del proyecto (`veredictoDeLectura`). Su `.md` puede
-  declararlas —y entonces `promptDeAgente` se las NOMBRA, que es lo que hay— pero no tiene por
-  dónde abrirlas. Vale igual para las de serie que para las del usuario: no es una regresión
-  de estas, es la misma frontera de siempre hecha más visible.
+- **A un motor EXTERNO las skills llegan por SU palanca, nunca por `/skills/`.** Esa ruta es
+  virtual de nuestro backend y un hijo de Claude Code, Codex u OpenCode lee el disco de
+  verdad, confinado a la carpeta del proyecto (`veredictoDeLectura`). Cada motor tiene lo
+  suyo, y **cuál es se MIDIÓ, no se dedujo del manual**: Claude Code por `plugins`
+  (`agent/subagentes/pluginDeSkills.ts`, un plugin local con enlaces a las tres raíces —
+  `additionalDirectories` NO vale, probado contra un hijo de verdad), y OpenCode por
+  `skills.paths` de la configuración que ya reescribimos en cada arranque. **Ninguna de las
+  dos escribe dentro del PROYECTO**, que es la otra forma de que lo encuentren: el proyecto es
+  la app del cliente, se sincroniza con CloudStudio y entra en el commit de cada turno; y para
+  opencode su `.opencode/` es justo la puerta que `OPENCODE_DISABLE_PROJECT_CONFIG` cierra.
+  **Codex se queda fuera**: sus skills vienen de su sistema de plugins y no hay carpeta que
+  apuntar.
+- **Y la tool `Skill` está en la lista de LECTURA de los motores externos.** No pasamos la
+  opción `skills` del SDK, y su documentación dice que omitirla «no es skills off»: las del
+  usuario ya llegaban LISTADAS al hijo y al cargar una caía en «desconocida» → `deny`. Lo peor
+  de los dos mundos. Entra como lectura porque eso hace: mete instrucciones en el contexto, y
+  lo que la skill MANDE hacer vuelve a pasar por el mismo hook. **Dos límites declarados**: un
+  `Bash` que pida una skill se sigue denegando, y un `Read` a otro fichero de su carpeta
+  también —cae fuera del proyecto—, así que una skill de varios ficheros se queda en su
+  `SKILL.md`. No se ensancha `veredictoDeLectura` para arreglarlo. **Y el nombre le llega
+  PREFIJADO** (`xonecode:<nombre>`), que es como Claude Code nombra lo de un plugin, mientras
+  que `promptDeAgente` lo nombra a secas.
 - **Las skills de un subagente se MARCAN de una lista, no se teclean**
   (`componentes/Agentes.tsx#SkillsDelAgente`). Un nombre mal escrito no daba error:
   `repartirSkills` lo mete en `faltan` y el subagente trabaja sin lo que creías haberle dado, con

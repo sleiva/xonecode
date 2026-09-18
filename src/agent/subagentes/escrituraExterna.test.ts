@@ -45,6 +45,22 @@ describe("las TRES listas de tools", () => {
     expect(claseDeToolExterna("ToolSearch")).toBe("lectura");
   });
 
+  it("`Skill` es de lectura: sin ella el hijo VE las skills y no puede abrir ninguna", () => {
+    // No le pasamos la opción `skills` del SDK, y su documentación dice que omitirla «no es
+    // skills off»: sigue valiendo el descubrimiento del CLI. Así que las del usuario le
+    // llegan LISTADAS, y al cargar una caía en «desconocida» → `deny`. Tampoco había puerta
+    // de atrás: sus ficheros viven fuera del proyecto y `veredictoDeLectura` corta el `Read`.
+    // Mete instrucciones en contexto y no ejecuta nada: lo que una skill MANDE hacer vuelve
+    // a pasar por este mismo hook.
+    expect(claseDeToolExterna("Skill")).toBe("lectura");
+  });
+
+  it("y lo que una skill mande EJECUTAR se sigue denegando", () => {
+    // Es el límite declarado de conceder `Skill`: una skill que dependa de correr comandos se
+    // queda a medias. Mejor que no cargar nada, y no lo mismo que Claude Code suelto.
+    expect(claseDeToolExterna("Bash")).toBe("denegada");
+  });
+
   it("escribir son DOS tools y ninguna más: las que se pueden enseñar en un diff", () => {
     expect([...TOOLS_EXTERNAS_DE_ESCRITURA].sort()).toEqual(["Edit", "Write"]);
   });

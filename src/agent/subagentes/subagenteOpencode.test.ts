@@ -138,6 +138,27 @@ describe("la configuración con la que corre el hijo", () => {
     expect(JSON.parse(configuracionDeOpencode({})).model).toBeUndefined();
     expect(JSON.parse(configuracionDeOpencode({ modelo: "opencode/x" })).model).toBe("opencode/x");
   });
+
+  it("las carpetas de skills van en `skills.paths`, que es la palanca de opencode", () => {
+    // COMPROBADO contra el opencode instalado: con estas rutas en la configuración, su
+    // endpoint `/skill` lista las nuestras junto a las suyas. Por eso no hace falta crear
+    // ningún `.opencode/` dentro del proyecto — que además es la puerta que
+    // `OPENCODE_DISABLE_PROJECT_CONFIG` cierra a propósito, y el proyecto es la app del
+    // cliente: se sincroniza con CloudStudio y entra en el commit de cada turno.
+    const c = JSON.parse(configuracionDeOpencode({ skills: ["/paquete/skills", "/casa/.xonecode/skills"] }));
+    expect(c.skills).toEqual({ paths: ["/paquete/skills", "/casa/.xonecode/skills"] });
+  });
+
+  it("sin carpetas NO se emite la clave: una lista vacía deja escrito un ajuste que nadie puso", () => {
+    expect(JSON.parse(configuracionDeOpencode({})).skills).toBeUndefined();
+    expect(JSON.parse(configuracionDeOpencode({ skills: [] })).skills).toBeUndefined();
+  });
+
+  it("y el permiso de `skill` se declara EXPLÍCITO, no se hereda de una omisión ajena", () => {
+    // Esta configuración es nuestra superficie cerrada: un permiso que depende del valor por
+    // defecto de otra versión de opencode es el ajuste que cambia sin que nadie se entere.
+    expect(JSON.parse(configuracionDeOpencode({})).permission.skill).toBe("allow");
+  });
 });
 
 describe("cómo se lanza el hijo", () => {

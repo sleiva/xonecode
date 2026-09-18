@@ -35,6 +35,7 @@ import type {
 import { codexDisponible, correrCodex } from "./subagenteCodex.js";
 import { correrOpencode, opencodeDisponible } from "./subagenteOpencode.js";
 import { consumoDeClaude } from "./consumoExterno.js";
+import { montarPluginDeSkills } from "./pluginDeSkills.js";
 import {
   claseDeToolExterna,
   decisionDePreToolUse,
@@ -327,6 +328,11 @@ export function crearSubagenteExterno(opciones: {
       }
       const { query } = await import("@anthropic-ai/claude-agent-sdk");
 
+      // Se monta ANTES de arrancar y en cada ejecución: una skill guardada mientras la
+      // consola vive tiene que alcanzar al siguiente subagente, que es justo lo que el
+      // montaje del agente interno no consigue (ver `backendConSkills`).
+      const pluginDeSkills = montarPluginDeSkills({ raiz: peticion.cwd });
+
       const respuesta = query({
         prompt: peticion.tarea,
         options: {
@@ -432,6 +438,22 @@ export function crearSubagenteExterno(opciones: {
            * SDK nombra es un hook `PreToolUse`, que no se ensombrece; no está puesto todavía.
            */
           settingSources: ["user"],
+          /**
+           * **Nuestras skills, como PLUGIN LOCAL — que es la única palanca que funciona.**
+           *
+           * Medido contra un hijo de verdad: con `additionalDirectories` apuntando a una
+           * carpeta con la disposición `.claude/skills/`, el hijo no las ve. Con
+           * `plugins: [{type:"local", …}]` sí, y salen como `xonecode:<nombre>`. El porqué
+           * entero y los dos límites que esto NO cierra están en `pluginDeSkills.ts`.
+           *
+           * Y va aquí y no escribiendo un `.claude/` dentro del proyecto —que es la otra
+           * forma— porque el proyecto es la app del cliente: se sincroniza con CloudStudio y
+           * entra en el commit de cada turno.
+           *
+           * Ausente = no se pudo montar, o no hay ninguna skill. Se arranca igual: un fallo
+           * al escribir en la casa del usuario no puede llevarse por delante el turno.
+           */
+          ...(pluginDeSkills === undefined ? {} : { plugins: [{ type: "local" as const, path: pluginDeSkills }] }),
           // El modelo del PRODUCTO, si el `.md` lo pide. Ausente = el que Claude Code use
           // por su cuenta, que es lo que hacía siempre. Los alias (`opus`, `sonnet`…) son
           // los que su propio SDK documenta, y se prefieren a un id pinchado: sobreviven a
