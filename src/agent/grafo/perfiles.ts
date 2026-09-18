@@ -8,8 +8,8 @@
  * monta su aprobación humana. Un `.md` puede cambiar el prompt de un agente; no puede
  * concederle leer `/.env`.
  */
-import { RUTA_ARTEFACTOS } from "../../core/artefactos.js";
-import { RUTA_PLANES } from "../../core/planes.js";
+import { esRutaDeArtefacto, RUTA_ARTEFACTOS } from "../../core/artefactos.js";
+import { esRutaDePlan, RUTA_PLANES } from "../../core/planes.js";
 import { artefactoFueraDeSitio } from "../../core/artefactos.js";
 /** Las tools de fichero que monta deepagents sobre el backend. */
 export const TOOLS_LECTURA = ["ls", "read_file", "glob", "grep"] as const;
@@ -251,13 +251,31 @@ export function hitlDe(perfil: QuienDecidePermisos): Record<string, ConfigDeInte
  *
  * Lo que pasa después es lo que se busca: la tool corre, el backend devuelve su `{error}` con
  * la ruta buena, y el modelo reintenta en `/artefactos/`.
+ *
+ * **Y un SEGUNDO motivo, que es de coherencia y no de relajación**: tampoco se pregunta por lo
+ * que NO ES EL PROYECTO —`/artefactos/` y `/planes/`—. No es una excepción nueva: un perfil de
+ * SOLO LECTURA ya escribe esas dos rutas sin aprobación ninguna, porque `hitlDe` le devuelve
+ * `{}` y sus `permissions` lo confinan exactamente ahí. O sea que la misma ruta no se aprobaba
+ * para el analista y sí para el desarrollador, y eso no es una barrera: es una incoherencia que
+ * se paga cara — medido, el desarrollador fue a marcar como hecha una tarea de un plan, salió
+ * un modal, se rechazó, y el plan se quedó viejo en silencio. En una tarea de fondo no hay
+ * nadie que pulse, así que el plan NUNCA se marcaría.
+ *
+ * Ninguna de las dos rutas es la app del cliente: no entran en el commit del turno, no van a
+ * git y no suben a CloudStudio. Lo que sigue intacto es lo único que importa: **por un fichero
+ * del PROYECTO siempre se pregunta**, y el test lo comprueba ruta a ruta.
  */
 export function seDetieneEn(peticion: unknown): boolean {
   const args = (peticion as { toolCall?: { args?: Record<string, unknown> } } | null)?.toolCall?.args;
   const ruta = args?.["file_path"];
   if (typeof ruta !== "string") return true;
+  // (1) Lo que el backend va a rechazar de todas formas: un modal cuyo único final posible es
+  //     un rechazo enseña a aprobar sin mirar.
+  if (artefactoFueraDeSitio(ruta) !== undefined) return false;
+  // (2) Lo que NO es el proyecto. Ver la cabecera: esto quita una incoherencia, no una barrera.
+  if (esRutaDeArtefacto(ruta) || esRutaDePlan(ruta)) return false;
   // Ante la duda, se PREGUNTA: es la dirección conservadora de siempre.
-  return artefactoFueraDeSitio(ruta) === undefined;
+  return true;
 }
 
 /**

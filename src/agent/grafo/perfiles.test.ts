@@ -1,6 +1,8 @@
 import { describe, it, expect } from "vitest";
 import { permisosDe, toolsDe, hitlDe, seDetieneEn, TOOLS_ESCRITURA, puedeEjecutar, montajeDeFicheros } from "./perfiles.js";
 import { sinArtefactosEnElProyecto } from "./proyecto.js";
+import { esRutaDeArtefacto } from "../../core/artefactos.js";
+import { esRutaDePlan } from "../../core/planes.js";
 import { AIMessage } from "@langchain/core/messages";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
@@ -176,6 +178,43 @@ describe("seDetieneEn — a qué escrituras se para el turno a preguntar", () =>
     expect(seDetieneEn(peticion("/artifact/x.html"))).toBe(false);
   });
 
+  /**
+   * **Ni por lo que NO ES EL PROYECTO, y eso quita una incoherencia, no una barrera.**
+   *
+   * Un perfil de SOLO LECTURA ya escribe esas dos rutas sin aprobación ninguna —`hitlDe` le
+   * devuelve `{}` y sus `permissions` lo confinan exactamente ahí—, así que la misma ruta no
+   * se aprobaba para el analista y sí para el desarrollador. Medido lo que costaba: el
+   * desarrollador fue a marcar hecha una tarea del plan, salió un modal, se rechazó, y el plan
+   * se quedó viejo en silencio. En una tarea de fondo no hay quien pulse.
+   */
+  it("ni por lo que no es el proyecto: artefactos y planes", () => {
+    expect(seDetieneEn(peticion("/artefactos/informe.html"))).toBe(false);
+    expect(seDetieneEn(peticion("/planes/acerca-de/TASKS.md"))).toBe(false);
+    expect(seDetieneEn(peticion("/planes/acerca-de/adr/0001-x.md"))).toBe(false);
+  });
+
+  /** Y lo que solo se PARECE a esas rutas sigue preguntando: son listas blancas de forma. */
+  it("pero un parecido no cuela", () => {
+    expect(seDetieneEn(peticion("/planes.md"))).toBe(true);
+    expect(seDetieneEn(peticion("/planes/PLAN.md"))).toBe(true);
+    expect(seDetieneEn(peticion("/planes/Acerca-De/TASKS.md"))).toBe(true);
+    expect(seDetieneEn(peticion("/artefactosviejos/x.html"))).toBe(true);
+  });
+
+  /**
+   * **La mitad que no se toca, y es la que importa**: por un fichero del PROYECTO siempre se
+   * pregunta. Esto se comprueba contra los `.xne`, `.js` y `.css` de verdad del esqueleto, no
+   * contra una lista inventada: si alguien ensancha la excepción de arriba, aquí se cae.
+   */
+  it("por un fichero del proyecto SIEMPRE se pregunta", () => {
+    for (const ruta of [
+      "/app.xml", "/Calculadora.xne", "/calculadora.js", "/Calculadora.css",
+      "/doc/README.md", "/bd/gestion.db", "/MEMORIA_PROYECTO.md", "/.env",
+    ]) {
+      expect(seDetieneEn(peticion(ruta)), ruta).toBe(true);
+    }
+  });
+
   it("sigue preguntando por CUALQUIER fichero del proyecto", () => {
     expect(seDetieneEn(peticion("/app.xml"))).toBe(true);
     expect(seDetieneEn(peticion("/src/Clientes.xne"))).toBe(true);
@@ -205,7 +244,7 @@ describe("seDetieneEn — a qué escrituras se para el turno a preguntar", () =>
    * misma cadena, así que no pueden discrepar — y esto lo comprueba en vez de confiarlo:
    * para cada ruta, si no se pregunta, la guarda del backend TIENE que rechazarla.
    */
-  it("no preguntar implica que el backend lo rechaza — nunca al revés", async () => {
+  it("no preguntar implica que el backend lo rechaza O que no es del proyecto", async () => {
     const escrituras: string[] = [];
     const guardado = sinArtefactosEnElProyecto({
       async write(ruta: string) { escrituras.push(ruta); return { ok: true }; },
@@ -219,7 +258,11 @@ describe("seDetieneEn — a qué escrituras se para el turno a preguntar", () =>
       const sePregunta = seDetieneEn(peticion(ruta));
       const resultado = (await guardado.write(ruta)) as { error?: string };
       if (!sePregunta) {
-        expect(resultado.error, `«${ruta}» no se pregunta y el backend NO la rechaza`).toBeDefined();
+        const fuera = esRutaDeArtefacto(ruta) || esRutaDePlan(ruta);
+        expect(
+          resultado.error !== undefined || fuera,
+          `«${ruta}» no se pregunta, el backend NO la rechaza y ES del proyecto`
+        ).toBe(true);
       }
     }
     // Y de propina: lo que sí se escribió es exactamente lo que el backend dejó pasar.
