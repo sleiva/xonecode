@@ -674,6 +674,54 @@ describe("la shell de un subagente con EJECUCIÓN", () => {
     }
   });
 
+  /**
+   * REPRODUCIDO antes de arreglarlo: `$XONECODE_ARTEFACTOS` la crea `FilesystemBackend.write`
+   * la primera vez que se escribe un artefacto por una TOOL, y una shell no pasa por ahí. En
+   * una sesión que aún no había dibujado nada, el `writeFileSync` del script de captura
+   * reventaba con ENOENT —«no such file or directory»— y el modelo se replegaba a dejar el
+   * `.png` en la raíz del proyecto, que es lo que la regla existe para impedir.
+   *
+   * Se crea al CORRER, no al montar: los otros cuatro especialistas no tienen shell, así que
+   * siguen sin carpeta vacía.
+   */
+  it("correr un comando CREA la carpeta de artefactos: un script no puede crearla por su cuenta", async () => {
+    const raiz = raizDePrueba();
+    const carpeta = join(mkdtempSync(join(tmpdir(), "xc-sesion-")), "artefactos");
+    const backend = backendDeAgente({
+      raiz,
+      ficheros: new Set(["/app.xml"]),
+      ejecucion: { entorno: {} },
+      artefactos: { carpeta, alEscribir: () => {} },
+    }) as unknown as { execute(c: string): Promise<{ output: string }> };
+
+    expect(existsSync(carpeta)).toBe(false);
+
+    // Un comando que no escribe nada: lo que crea la carpeta es CORRER, no lo que se corra.
+    await backend.execute("true");
+
+    expect(existsSync(carpeta)).toBe(true);
+  });
+
+  it("y lo que el comando deja ahí se ANUNCIA, que es para lo que existe la carpeta", async () => {
+    const raiz = raizDePrueba();
+    const carpeta = join(mkdtempSync(join(tmpdir(), "xc-sesion-")), "artefactos");
+    const apuntados: Artefacto[] = [];
+    const backend = backendDeAgente({
+      raiz,
+      ficheros: new Set(["/app.xml"]),
+      ejecucion: { entorno: { DESTINO: carpeta } },
+      artefactos: { carpeta, alEscribir: (a) => apuntados.push(a) },
+    }) as unknown as { execute(c: string): Promise<{ output: string }> };
+
+    // Sin el `mkdir` de arriba este comando fallaría, que es exactamente lo que le pasaba al
+    // script de la captura. No lo crea él: escribe donde la variable dice, como haría un
+    // script de una skill del usuario.
+    await backend.execute('printf x > "$DESTINO/captura.png"');
+
+    expect(apuntados.map((a) => a.nombre)).toEqual(["captura.png"]);
+    expect(apuntados[0]!.ruta).toBe("/artefactos/captura.png");
+  });
+
   it("el `cwd` de la shell es la raíz del proyecto", async () => {
     const raiz = raizDePrueba();
     const be = backendDelProyectoConShell(raiz, {}) as unknown as {

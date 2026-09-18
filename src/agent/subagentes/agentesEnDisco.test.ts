@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { existsSync, mkdtempSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, it, expect } from "vitest";
@@ -19,7 +19,7 @@ import {
   sembrarAgentes,
 } from "./agentesEnDisco.js";
 import { escribirAgente, fusionarAgentes, type Agente } from "../../core/agentes.js";
-import { SkillsEnDisco } from "../grafo/skills.js";
+import { RAIZ_SKILLS, SkillsEnDisco } from "../grafo/skills.js";
 
 const base = () => mkdtempSync(join(tmpdir(), "xonecode-agentes-"));
 
@@ -322,6 +322,35 @@ describe("sembrarAgentes", () => {
     // ahora están en el cuerpo de su fichero, que es donde se pueden leer y ajustar.
     const planner = AGENTES_DE_SERIE.find((a) => a.nombre === "analyst-xone")!;
     expect(planner.instrucciones).toContain("HANDOFF DE ANÁLISIS");
+  });
+
+  /**
+   * El prompt de `device-controller` NOMBRA sus scripts y promete que están en el PATH. Un
+   * nombre que no existe es el botón muerto de siempre, solo que en un prompt: el modelo lo
+   * llama, `sh` contesta «command not found», y lo que hace entonces —medido— es apañárselas
+   * por su cuenta, que es como apareció un `.png` en la raíz del proyecto del usuario. Se
+   * comprueba contra el catálogo REAL del paquete, y en las DOS direcciones: un script nuevo
+   * que no se nombre tampoco existe para quien tiene que usarlo.
+   */
+  it("todos los scripts que el prompt NOMBRA existen y son ejecutables, y al revés", () => {
+    const conductor = AGENTES_DE_SERIE.find((a) => a.nombre === "device-controller")!;
+    const nombrados = new Set(
+      [...conductor.instrucciones.matchAll(/`(xone-[a-z0-9-]+)`/g)].map((m) => m[1]!)
+    );
+    const carpeta = join(RAIZ_SKILLS, "xone-hotswap", "scripts");
+    const enDisco = new Set(readdirSync(carpeta));
+
+    expect(nombrados.size).toBeGreaterThan(0);
+    for (const nombre of nombrados) {
+      expect(enDisco.has(nombre), `el prompt nombra «${nombre}» y no está en scripts/`).toBe(true);
+      // Sin el bit de ejecución el PATH no lo encuentra, y el síntoma es idéntico al de que
+      // no exista: se comprueba aparte porque `npm pack` y git lo conservan, pero un fichero
+      // creado a mano no lo trae.
+      expect(statSync(join(carpeta, nombre)).mode & 0o111).toBeGreaterThan(0);
+    }
+    for (const nombre of enDisco) {
+      expect(nombrados.has(nombre), `«${nombre}» existe y el prompt no lo nombra`).toBe(true);
+    }
   });
 });
 

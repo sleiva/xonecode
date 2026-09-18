@@ -1,4 +1,4 @@
-import { existsSync, readdirSync, statSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { CompositeBackend, FilesystemBackend, LocalShellBackend } from "deepagents";
 import { RUTA_MEMORIA_INTERNA, RUTA_MEMORIA_VIRTUAL } from "./memoriaDeProyecto.js";
@@ -402,8 +402,18 @@ export function backendDeAgente(opciones: {
  *
  * **Se compara una FOTO de antes con una de después** (nombre → tamaño + mtime) en vez de
  * fiarse de lo que el comando diga que hizo. Un comando puede escribir tres ficheros, o
- * ninguno, o pisar el de antes; lo único que lo sabe es la carpeta. Y si la carpeta no
- * existe —no se crea al montar, a propósito— la foto es vacía y no falla.
+ * ninguno, o pisar el de antes; lo único que lo sabe es la carpeta.
+ *
+ * **Y la carpeta se CREA aquí, antes de correr el comando.** Es la excepción a «no se crea
+ * al montar», y la pagó una captura: `$XONECODE_ARTEFACTOS` la crea `FilesystemBackend.write`
+ * la primera vez que el agente escribe un artefacto por una TOOL, y una shell no pasa por
+ * ahí — así que en una sesión que no había dibujado nada, el `writeFileSync` del script de
+ * captura reventaba con ENOENT (reproducido) y el modelo se replegaba a dejar el `.png` en
+ * la raíz del proyecto, que es justo lo que la regla existe para impedir. El sitio es este y
+ * no el script: quien SABE que va a correr una shell y DÓNDE está la carpeta es el harness,
+ * y arreglarlo en el script lo dejaría arreglado en uno de cinco —y en ninguna skill del
+ * usuario—, que es el patrón de fallo de siempre. Se crea solo cuando hay ejecución, así que
+ * una sesión de los otros cuatro especialistas sigue sin carpeta vacía.
  */
 export function anunciarArtefactosDeLaShell<T extends object>(
   backend: T,
@@ -436,6 +446,15 @@ export function anunciarArtefactosDeLaShell<T extends object>(
       if (prop !== "execute") return (valor as (...a: unknown[]) => unknown).bind(destino);
 
       return async (...args: unknown[]) => {
+        try {
+          // Antes de la foto: si el comando es el que escribe la captura, la carpeta tiene
+          // que existir YA. Un fallo al crearla no puede tumbar el comando —se podía correr
+          // sin carpeta antes de esto—, así que se traga y la foto sigue tolerando su
+          // ausencia.
+          mkdirSync(carpeta, { recursive: true });
+        } catch {
+          // Sin carpeta no hay artefactos que anunciar, y el comando no es asunto suyo.
+        }
         const antes = foto();
         try {
           return await (valor as (...a: unknown[]) => unknown).apply(destino, args);

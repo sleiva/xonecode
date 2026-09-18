@@ -36,7 +36,7 @@ responde. Habla dos protocolos por el mismo puerto: **WebSocket** para los coman
 
 ## Los scripts que trae esta skill: se llaman por su nombre
 
-Esta carpeta trae cinco programas, y **están en el PATH**: se llaman como cualquier otro comando,
+Esta carpeta trae seis programas, y **están en el PATH**: se llaman como cualquier otro comando,
 sin ruta. Existen por una razón concreta — los comandos del canal viajan por **WebSocket** y
 `curl` no habla WebSocket, así que sin ellos no hay forma de mandar un `getAllElements` desde una
 shell.
@@ -61,6 +61,11 @@ xone-hotswap '{"command":"click","name":"MAP_BT_ACEPTAR"}'
 # Por qué algo no se pinta o la app se muere: las excepciones del aparato.
 xone-log-android
 xone-log-android --limpiar        # aísla lo que pase a partir de ahora
+
+# RESPALDO de la captura, para cuando el canal no contesta: `adb exec-out screencap` pero
+# guardándola donde toca. Nunca redirijas ese `adb` tú: el `cwd` es la raíz del proyecto.
+xone-captura-android
+xone-captura-android --nombre login.png
 
 # iOS: levantar el host y dejar el canal listo (desplegar en iOS NO está medido).
 xone-arrancar-ios
@@ -94,6 +99,13 @@ Y `xone-desplegar-android` **no necesita un `zip` del sistema**: construye el ZI
 **No uses las herramientas nativas para lo que contesta el canal**: `uiautomator dump` da la
 jerarquía de vistas de ANDROID y `adb exec-out screencap` una foto cruda; ninguna de las dos
 conoce los controles XOne, que es por lo que suelen preguntarte.
+
+**Pero si el canal no contesta y aun así hace falta una captura, es `xone-captura-android`, no
+un `adb` compuesto a mano.** Medido: redirigir `adb exec-out screencap -p > captura.png` deja el
+fichero en el `cwd`, que es LA RAÍZ DEL PROYECTO del usuario — de ahí se va a la aprobación, a
+git y a CloudStudio. El script hace lo mismo y lo deja en `$XONECODE_ARTEFACTOS`, e imprime solo
+el nombre. Lo que enseña es lo que pinta el SISTEMA, no lo que la app host dice de sí misma: por
+eso sigue siendo el respaldo y no la vía buena.
 
 **Un comando que no termina cuelga el turno.** Arrancar un emulador no vuelve nunca: mándalo al
 fondo y espera a una CONDICIÓN, no a un número de segundos.

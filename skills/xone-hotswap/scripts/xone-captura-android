@@ -1,0 +1,93 @@
+#!/usr/bin/env node
+/**
+ * Una captura de la pantalla del aparato, POR LA VÍA NATIVA, a la carpeta de artefactos.
+ *
+ * POR QUÉ EXISTE, si el canal ya sabe capturar. `xone-hotswap '{"command":"getScreenshot"}'`
+ * es la vía buena —la pide la app host, así que sale lo que la app pinta— pero necesita el
+ * túnel y la app viva. Cuando eso no está, lo único que queda es `adb exec-out screencap`, y
+ * medido: el modelo la compone él y redirige la salida a un fichero, que en el `cwd` de la
+ * shell es LA RAÍZ DEL PROYECTO. Así apareció un `screenshot_login.png` de 773 KB entre los
+ * `.xne` del cliente, camino de la aprobación, de git y de CloudStudio.
+ *
+ * Un script no es una barrera —una shell alcanza el disco entero y eso no se arregla con
+ * prompts—, pero le quita el motivo: pedir la captura por su nombre cuesta menos que
+ * componer el `adb` y elegir dónde dejarla, y ya cae donde tiene que caer.
+ *
+ * LO QUE NO HACE: no imprime la imagen. Un PNG de pantalla completa son cientos de miles de
+ * caracteres en base64, y meterlos en el contexto es pagarlos sin que nadie pueda mirarlos.
+ * Sale el NOMBRE, que es con lo que la interfaz la enseña.
+ *
+ * USO:
+ *   xone-captura-android                       captura a $XONECODE_ARTEFACTOS
+ *   xone-captura-android --nombre login.png    con nombre propio
+ *   xone-captura-android --serie emulator-5554 con varios aparatos conectados
+ */
+import { execFileSync } from "node:child_process";
+import { writeFileSync } from "node:fs";
+import { join, basename } from "node:path";
+
+const args = process.argv.slice(2);
+if (args.includes("--help") || args.includes("-h")) {
+  console.error(`xone-captura-android — captura la pantalla del aparato con \`adb\` y la deja en artefactos.
+
+  xone-captura-android                        captura a $XONECODE_ARTEFACTOS
+  xone-captura-android --nombre login.png     con nombre propio
+  xone-captura-android --serie <id>           con varios aparatos conectados
+
+Es la vía de RESPALDO: si el túnel y la app host están vivos, la buena es
+\`xone-hotswap '{"command":"getScreenshot"}'\`, que captura lo que la app pinta.
+Nunca redirijas \`adb exec-out screencap\` a un fichero: el \`cwd\` es la raíz del
+proyecto del usuario y ahí no se escribe.`);
+  process.exit(0);
+}
+
+const ARTEFACTOS = process.env.XONECODE_ARTEFACTOS;
+if (ARTEFACTOS === undefined) {
+  // Sin sitio donde dejarla no se inventa uno: escribir en el `cwd` es exactamente el fallo
+  // que este script existe para no cometer.
+  console.error("no hay XONECODE_ARTEFACTOS: esta sesión no tiene carpeta de artefactos y la captura no se puede guardar.");
+  process.exit(1);
+}
+
+const opcion = (nombre) => {
+  const i = args.indexOf(`--${nombre}`);
+  return i >= 0 ? args[i + 1] : undefined;
+};
+const serie = opcion("serie");
+
+// `basename` y no la cadena tal cual: el nombre lo elige el modelo, y un `../` aquí escribiría
+// fuera de la carpeta de la sesión. Misma regla que `esRutaDeArtefacto` en el host.
+const pedido = opcion("nombre");
+const nombre = pedido === undefined ? `captura-${Date.now()}.png` : basename(pedido);
+if (nombre === "" || nombre === "." || nombre === "..") {
+  console.error("ese nombre no vale para un fichero.");
+  process.exit(1);
+}
+
+let bytes;
+try {
+  // `exec-out` y no `shell`: `shell` traduce los finales de línea y corrompe el PNG.
+  bytes = execFileSync("adb", [...(serie ? ["-s", serie] : []), "exec-out", "screencap", "-p"], {
+    maxBuffer: 256 * 1024 * 1024,
+  });
+} catch (error) {
+  console.error(`no se pudo capturar con adb: ${error.message}`);
+  process.exit(1);
+}
+
+// Una captura vacía no es una captura: `screencap` puede salir con 0 y no devolver nada si el
+// aparato está bloqueado. Decirlo es mejor que dejar un fichero de 0 bytes con buena pinta.
+if (bytes.length === 0) {
+  console.error("adb devolvió una captura VACÍA: ¿está el aparato despierto y desbloqueado?");
+  process.exit(1);
+}
+
+const destino = join(ARTEFACTOS, nombre);
+try {
+  writeFileSync(destino, bytes);
+} catch (error) {
+  console.error(`no se pudo guardar la captura: ${error.message}`);
+  process.exit(1);
+}
+
+console.log(`captura guardada como ${nombre} (${bytes.length} bytes). Es de la vía nativa: enseña lo que el SISTEMA pinta, no lo que la app host dice.`);
