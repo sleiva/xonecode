@@ -56,8 +56,14 @@ import { join } from "node:path";
 const URL_POR_OMISION = "wss://127.0.0.1:8443/hotswap";
 const TOPE_MS = Number(process.env.HOTSWAP_TOPE_MS ?? 40_000);
 const ARTEFACTOS = process.env.XONECODE_ARTEFACTOS;
-/** A partir de aquí se da por binario y no se imprime. */
-const LARGO_DE_BINARIO = 2_000;
+/**
+ * A partir de aquí una respuesta de TEXTO se guarda en vez de imprimirse.
+ *
+ * No decide si algo es binario —eso lo dice `extensionDe` mirando los bytes—, solo si cabe en
+ * la salida de un comando. El árbol de controles de una pantalla llena son varios miles de
+ * caracteres y volcarlos enteros en el contexto del agente cuesta más que la pregunta.
+ */
+const LARGO_PARA_GUARDAR = 2_000;
 
 const pedidos = process.argv.slice(2);
 if (pedidos.length === 0 || pedidos.includes("--help") || pedidos.includes("-h")) {
@@ -90,12 +96,24 @@ function salir(motivo) {
   process.exit(1);
 }
 
-/** Extensión por los primeros bytes en base64, sin adivinar por el nombre del comando. */
-function extensionDe(base64) {
+/**
+ * Qué es esto, por sus primeros bytes en base64 — nunca por el nombre del comando.
+ *
+ * **`undefined` significa «no es una imagen», y eso NO es «es binario desconocido».** Era el
+ * bug: cualquier campo de más de 2.000 caracteres se daba por base64 y se pasaba por
+ * `Buffer.from(valor, "base64")`. El árbol de `getAllElements` es JSON de TEXTO, así que en
+ * cuanto una pantalla tiene bastantes controles pasaba de ese largo, se «decodificaba»
+ * —descartando `{`, `"`, `:` y los espacios, que no son del alfabeto base64— y lo que quedaba
+ * en el disco eran unos 3/4 de bytes de basura, con nombre `captura-….bin`. Comprobado contra
+ * el aparato: el fichero real empezaba por `9da9 9e30 03ff` y un árbol JSON pasado por ese
+ * mismo `Buffer.from` empieza exactamente igual. O sea que el agente perdía la pantalla justo
+ * cuando la pantalla tenía algo que contar, y encima creía haber guardado una captura.
+ */
+function imagenDe(base64) {
   if (base64.startsWith("/9j/")) return "jpg";
   if (base64.startsWith("iVBORw0KGgo")) return "png";
   if (base64.startsWith("UklGR")) return "webp";
-  return "bin";
+  return undefined;
 }
 
 /**
@@ -108,13 +126,25 @@ function extensionDe(base64) {
 function sinBinarios(respuesta) {
   const copia = { ...respuesta };
   for (const [clave, valor] of Object.entries(copia)) {
-    if (typeof valor !== "string" || valor.length < LARGO_DE_BINARIO) continue;
+    if (typeof valor !== "string" || valor.length < LARGO_PARA_GUARDAR) continue;
+    const imagen = imagenDe(valor);
     if (ARTEFACTOS === undefined) {
-      copia[clave] = `<${valor.length} car. de binario; sin XONECODE_ARTEFACTOS no hay dónde guardarlo>`;
+      copia[clave] =
+        imagen === undefined
+          ? `<${valor.length} caracteres; sin XONECODE_ARTEFACTOS no hay dónde guardarlos>`
+          : `<imagen ${imagen} de ${valor.length} car.; sin XONECODE_ARTEFACTOS no hay dónde guardarla>`;
       continue;
     }
-    const nombre = `captura-${Date.now()}.${extensionDe(valor)}`;
-    const bytes = Buffer.from(valor, "base64");
+    /**
+     * Una imagen se DECODIFICA y se llama captura; lo demás es TEXTO y se guarda tal cual,
+     * con su extensión y con un nombre que dice lo que es. Llamar `captura-` a un árbol de
+     * controles no era solo feo: mandaba a quien lo leyera a buscar una foto.
+     */
+    const nombre =
+      imagen === undefined
+        ? `respuesta-${clave}-${Date.now()}.${valor.trimStart().startsWith("[") || valor.trimStart().startsWith("{") ? "json" : "txt"}`
+        : `captura-${Date.now()}.${imagen}`;
+    const bytes = imagen === undefined ? Buffer.from(valor, "utf8") : Buffer.from(valor, "base64");
     writeFileSync(join(ARTEFACTOS, nombre), bytes);
     copia[clave] = `<guardado como ${nombre}, ${bytes.length} bytes>`;
   }
