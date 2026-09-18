@@ -159,6 +159,17 @@ Y las guardas del proyecto:
   eso se ANUNCIA con el evento `artefacto` (nombre, tamaño, ruta virtual — nunca contenido).
   `esRutaDeArtefacto` es una lista BLANCA de forma, no un `startsWith`. La carpeta no se crea al
   montar. Tope propio de rondas, para que una tanda de diagramas no gaste `cortadoPorTope`.
+- **La carpeta de artefactos SE CREA antes de correr un comando**
+  (`proyecto.ts#anunciarArtefactosDeLaShell`), que es la única excepción a «no se crea al
+  montar»: la crea `FilesystemBackend.write` la primera vez que se escribe por una TOOL, y una
+  shell no pasa por ahí — así que el script de la captura reventaba con ENOENT y el modelo se
+  replegaba a dejar el `.png` en la raíz del proyecto. Va en el harness y no en el script:
+  cinco scripts y uno escribe, y una skill del usuario tendría que saberse el mismo truco. Solo
+  con `ejecucion`, así que los otros cuatro especialistas siguen sin carpeta vacía. Lo que el
+  código NO puede cerrar es que una shell escriba donde quiera; lo que se le quita es el
+  motivo, con un script que hace lo nativo y lo deja donde toca. **Y los scripts que el prompt
+  NOMBRA se comprueban contra el catálogo real, en las dos direcciones y con el bit de
+  ejecución**: un nombre muerto en un prompt manda al modelo a apañárselas solo.
 - **Un artefacto no puede acabar dentro del proyecto, y eso es código**: `artefactoFueraDeSitio`
   (`core/artefactos.ts`) deniega `artifacts`/`artifact` como primer segmento y `/artifact.html`
   en `write` y `edit` — solo ahí, para poder leer y borrar los mal puestos de antes. El predicado
@@ -981,6 +992,21 @@ feedback del desarrollador** y no es terminal.
   escribir en la rama que el cliente tuviera abierta en Studio; el precio era que lo subido vivía
   en un sitio que nadie mira mientras la del proyecto se quedaba quieta. Con ella se fue
   `crearRama` del puerto: sin rama que crear, no quedaba llamador.
+- **La rama activa solo se sabe por `studio_get_context`, y esa tool se CAE en el servidor
+  para algunos proyectos** —con el proyecto abierto y con las demás contestando bien sobre
+  ese mismo proyecto—. Leerla es una CORTESÍA (devolverle el suelo a quien tenga Studio
+  abierto en el navegador), no una condición de corrección: de qué rama se baja y a cuál se
+  sube lo sostiene el `cambiarRama(ramaOrigen)` explícito. Por eso `ramaActiva.ts` devuelve
+  `undefined` en vez de lanzar —uno solo, compartido por descarga y subida— y lo DICE con la
+  rama en la que Studio se queda. `CloudStudioPort.contexto()` sigue LANZANDO: tolerar es de
+  quien llama, no del puerto. La sesión perdida NO se cuela por ahí: `conSesion` reabre,
+  reintenta y relanza en el `cambiarRama` siguiente.
+- **El `switch` de rama CIERRA el proyecto en el servidor**, y lo dice él mismo en la
+  respuesta (`action: "closeandopenproject"`): a partir de ahí toda llamada contesta «Empty
+  response from server». Por eso `cloudstudioClient.ts#cambiarRama` REABRE después del
+  `switch` — por ese contrato declarado, no por reconocer un texto—. `SESION_PERDIDA` no se
+  amplía con ese mensaje: es el genérico de una respuesta vacía, y tratarlo como sesión caída
+  pondría una reapertura delante de fallos que no arregla.
 - **La ref se mueve solo si la subida terminó entera.** El reintento reenvía el plan ENTERO, lo que
   asume idempotencia del servidor sin comprobarla.
 - **`.xonecode` no sube nunca**, con filtro propio además del exclude de git. La rama activa del

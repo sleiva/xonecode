@@ -4672,6 +4672,157 @@ nombre se sale de la convención `<rol>-xone` por decisión del usuario, y el ar
 sufijo estaba para distinguir nuestros nombres de los agentes del hijo en un motor externo, y a un
 motor externo este agente no viaja — ahí la ejecución no se concede.
 
+## `studio_get_context` se cae en el servidor, y se llevaba el `/sync` entero (18-09-2026)
+
+El síntoma era un alta que llegaba hasta el final y luego decía «no se pudo descargar el
+proyecto: studio_get_context: An error occurred invoking 'studio_get_context'.». Se midió
+contra el MCP de CloudStudio a mano, sin xonecode de por medio, y el reparto es este:
+
+| proyecto | `studio_get_context` | `studio_get_file` | `studio_get_project_structure` | `studio_manage_branches list` |
+|---|---|---|---|---|
+| Bequikly | **error** | ok | ok | ok |
+| Conecta2 | **error** | — | — | ok |
+| AppDemo | ok (`no_active_view`) | — | ok | — |
+| XOneAI | ok (`no_active_view`) | — | — | ok |
+
+El proyecto estaba ABIERTO en las cuatro (`studio_open_project` contestó
+`status: project_open`), así que no es la sesión, ni el token, ni la red. Tampoco es que el
+proyecto sea compartido: XOneAI también lo es y contesta. El texto del fallo es el genérico
+del servidor —no lleva causa—, así que la causa se queda en su lado: esto **no se arregla
+aquí**, lo que se arregla aquí es depender de ello.
+
+Y se dependía de más de lo que hacía falta. `puerto.contexto()` es la ÚNICA forma de saber
+qué rama tiene Studio activa —`studio_manage_branches` las enumera y no marca cuál está
+puesta; se comprobó que `operation: "current"` no existe—, y esa lectura sirve para UNA
+cosa: devolverle el suelo a quien tenga Studio abierto en el navegador al acabar. Lo que
+garantiza que se baja (y se sube) de la rama que dice `config.rama` no es esa lectura, es el
+`cambiarRama(ramaOrigen)` explícito, que no depende de ella. O sea: una cortesía estaba
+tumbando la operación entera, y en la subida era todavía más claro —ahí el posicionamiento
+YA era incondicional, así que `contexto()` no decidía nada más que el `finally`—.
+
+`agent/cloudstudio/ramaActiva.ts` es el único sitio donde eso se tolera, y devuelve
+`string | undefined`. Cuatro decisiones dentro:
+
+- **El puerto sigue LANZANDO.** Tolerar es de quien llama, no del puerto: cambiar
+  `CloudStudioPort.contexto()` para devolver un opcional arrastraría a `CloudStudioEnMemoria`
+  y a todos los dobles, y dejaría a `core/` decidiendo una política de la capa de arriba.
+- **Un ayudante y no dos copias.** El patrón de fallo de este repo es la regla compuesta en
+  un cierre; dos bucles de tolerancia serían dos sitios donde dejar de tolerar.
+- **El `undefined` hace el trabajo solo en la descarga.** Ahí la guarda era
+  `antes.rama !== ramaOrigen`, y `undefined !== ramaOrigen` es cierto siempre: el
+  posicionamiento pasa a ser incondicional sin una rama nueva. El `finally` sí pregunta por
+  la ausencia, porque no hay a dónde volver.
+- **Se DICE, con la consecuencia.** El aviso nombra la rama en la que Studio se va a quedar,
+  no solo que algo falló: el usuario tiene que poder ir a arreglarlo en Studio. No entra en
+  `sync.log`, y eso es a propósito: ese fichero es «una línea por OPERACIÓN de sync» y su
+  campo `error` significa el fallo ESTRUCTURAL que impidió intentar el plan — aquí el plan se
+  intenta y se cumple.
+
+El doble lo reproduce con `contextoFalla` (el mismo molde que `zipFalla`), **después** de
+`exigirAbierto()`: el fallo medido ocurre con el proyecto abierto, y ponerlo antes lo
+convertiría en otro camino para «no hay proyecto», que es un caso distinto y que
+`cloudstudioClient.ts#conSesion` ya atiende reabriendo. Por eso la sesión perdida sigue
+tumbando la operación: `conSesion` reabre, reintenta y relanza, y el relanzamiento llega por
+el `cambiarRama` siguiente, no por aquí. Los dos tests nuevos mueren con el mutante (que
+`ramaActiva` relance en vez de devolver `undefined`).
+
+### Y detrás había un segundo muro: el `switch` de rama CIERRA el proyecto
+
+Con la tolerancia puesta, `/sync bajar` sobre Bequikly pasa a hacer siempre
+`studio_manage_branches switch branchName: "jose"`. Se probó esa llamada contra el servidor
+antes de dar el arreglo por bueno, y contesta bien — pero contesta esto:
+
+```json
+{ "action": "closeandopenproject", "pid": "…", "sid": "…", "newBranch": "jose" }
+```
+
+Y a partir de ahí **todo** falla: `studio_get_file` y `studio_get_project_structure` sobre el
+mismo proyecto devuelven «Empty response from server» hasta que se vuelve a llamar a
+`studio_open_project`. Reproducido dos veces, una por rama. O sea que el `switch` no cambia de
+rama dentro de la sesión: cierra el proyecto y deja que el IDE lo reabra.
+
+Eso ya estaba roto antes de este cambio —la descarga cambiaba de rama cuando la activa no era
+la origen, y la subida lo hace siempre—, pero la tolerancia lo vuelve el camino normal, así
+que había que cerrarlo. `cloudstudioClient.ts#cambiarRama` reabre el proyecto después del
+`switch`. Dos cosas que no son de forma:
+
+- **Se reabre por el CONTRATO que el servidor declara** (`action: "closeandopenproject"` en su
+  propia respuesta), no por reconocer un texto de error.
+- **`SESION_PERDIDA` NO se amplía con «Empty response from server»**, que era la otra forma de
+  arreglarlo. Ese mensaje es el genérico de una respuesta vacía y puede venir de cualquier
+  fallo del servidor; meterlo ahí pondría una reapertura y un reintento delante de problemas
+  que no arregla, y convertiría en mudos los que hoy se ven. La reapertura va donde se sabe
+  que hace falta.
+
+Los dos fallos son del mismo servidor y ninguno lo arregla xonecode: el primero se rodea, el
+segundo se compensa.
+
+## Una captura acabó en la raíz del proyecto, y la causa era un ENOENT (18-09-2026)
+
+El síntoma: «sácame pantallazos de la coll de login» dejó `screenshot_login.png` (773 KB, PNG)
+entre los `.xne` del cliente en `MyAllXOne`, y el propio agente lo contó así —«en la raíz del
+proyecto»—. De ahí ese fichero se va a la aprobación, al `add -A` de `commitDeTurno` y al plan
+de `/sync subir`.
+
+El prompt de `device-controller` ya decía que lo que se quiera ENSEÑAR va a
+`$XONECODE_ARTEFACTOS`, y la skill ya decía que no se usen las herramientas nativas para lo que
+contesta el canal. Las dos reglas estaban escritas. Lo que faltaba era que la buena FUNCIONARA.
+
+**El ENOENT, reproducido.** `$XONECODE_ARTEFACTOS` apunta a
+`.xonecode/sesiones/<id>/artefactos/`, y esa carpeta **no se crea al montar** —decisión
+anterior, para no dejar un `artefactos/` vacío en cada sesión—: la crea
+`FilesystemBackend.write` la primera vez que el agente escribe un artefacto por una TOOL. Una
+shell no pasa por ahí. Así que en una sesión que aún no había dibujado nada, el
+`writeFileSync(join(ARTEFACTOS, nombre))` de `xone-hotswap` revienta:
+
+```
+Error: ENOENT: no such file or directory, open '…/artefactos/captura-1789719897539.png'
+    at sinBinarios (…/xone-hotswap:…)
+```
+
+Y no está dentro de ningún `try`: va en el manejador del WebSocket, así que se lleva el proceso
+entero. Lo comprobado no es la inferencia: se extrajo `sinBinarios` tal cual y se corrió con la
+carpeta ausente y con la carpeta creada — revienta y funciona, respectivamente. La sesión que
+dejó el `.png` en el proyecto (`3af1b883…`) **no tiene carpeta de sesión en el disco**; la
+anterior (`93667b3a…`) sí, y sus tres capturas están dentro.
+
+**Dónde va el `mkdir`, que es la decisión.** En `anunciarArtefactosDeLaShell`, justo antes de la
+foto del `execute`, y no en el script:
+
+- Cinco scripts, uno escribe. El siguiente que escriba se olvida — el patrón de fallo de este
+  repo, y ya van diez.
+- Un script de una skill DEL USUARIO tendría que saberse el mismo truco, y no hay dónde
+  contárselo.
+- Quien SABE que va a correr una shell y DÓNDE está la carpeta es el harness. El script solo
+  sabe leer una variable.
+
+Es más estrecho que crearla al montar: solo un agente con `ejecucion` la tiene, así que los
+otros cuatro especialistas siguen sin carpeta vacía y la decisión anterior aguanta. El `mkdir`
+va en un `try` vacío: antes de esto un comando corría sin carpeta, y un fallo al crearla no
+puede volverse un fallo del comando.
+
+**Y el escape hatch, que el código no puede cerrar.** Una shell alcanza el disco entero: no hay
+guarda que impida un `adb exec-out screencap -p > captura.png` con el `cwd` en la raíz del
+proyecto. Lo que sí se puede es quitarle el MOTIVO, y por eso hay un sexto script,
+`xone-captura-android`: hace ese mismo `adb` y lo deja en `$XONECODE_ARTEFACTOS`, imprimiendo
+solo el nombre. Pedirlo cuesta menos que componer el `adb` y elegir dónde dejarlo. El nombre
+pasa por `basename` —lo elige el modelo, y un `../` escribiría fuera de la sesión, la misma
+regla que `esRutaDeArtefacto` en el host— y una captura de cero bytes se DICE en vez de dejar un
+fichero con buena pinta. Sigue siendo el respaldo y la ficha lo dice: enseña lo que pinta el
+SISTEMA, no lo que la app host dice de sí misma.
+
+**Lo que se cerró de paso**: el prompt NOMBRA sus scripts, y no había nada que comprobara que
+existen. Un nombre mal escrito da «command not found» y entonces el modelo se apaña por su
+cuenta, que es exactamente cómo apareció el `.png`. Hay test, contra el catálogo REAL del
+paquete y **en las dos direcciones** —un script que nadie nombra tampoco existe para quien tiene
+que usarlo—, y comprueba además el bit de ejecución, porque sin él el síntoma es idéntico al de
+que el fichero no esté.
+
+**Lo que NO se arregló, y es un tercer problema**: el `detalle` de un `execute` —el comando
+entero, que es lo que sustituye a preguntar antes de cada uno— **no se persiste en el `.jsonl`**.
+En vivo se ve; al reabrir la sesión, las líneas son `$ corre ×6` y el `detalle` no está. Por eso
+aquí no se puede decir QUÉ comando dejó el fichero, solo que fue uno.
+
 ## Trampas verificadas
 
 - **El orquestador va de SOLO LECTURA, y hasta el 9-09-2026 no lo era** (`PERFIL_DEL_ORQUESTADOR`,
