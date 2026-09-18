@@ -330,7 +330,7 @@ const unaFrase = (texto: string, tope: number): string =>
  * se busca el primer `{` y el último `}`. Lo que no parsee no es un error: es un veredicto
  * `indeterminado`, que no es verde.
  */
-function objetoDe(texto: string): Record<string, unknown> | undefined {
+export function objetoDe(texto: string): Record<string, unknown> | undefined {
   const desde = texto.indexOf("{");
   const hasta = texto.lastIndexOf("}");
   if (desde === -1 || hasta <= desde) return undefined;
