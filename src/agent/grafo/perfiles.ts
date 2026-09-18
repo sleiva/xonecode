@@ -8,6 +8,7 @@
  * monta su aprobación humana. Un `.md` puede cambiar el prompt de un agente; no puede
  * concederle leer `/.env`.
  */
+import { RUTA_ARTEFACTOS } from "../../core/artefactos.js";
 import { artefactoFueraDeSitio } from "../../core/artefactos.js";
 /** Las tools de fichero que monta deepagents sobre el backend. */
 export const TOOLS_LECTURA = ["ls", "read_file", "glob", "grep"] as const;
@@ -69,14 +70,31 @@ export const DENEGADO_SIEMPRE = [
 export function permisosDe(perfil: QuienDecidePermisos) {
   const base = [...DENEGADO_SIEMPRE];
   if (!perfil.soloLectura) return base;
-  // OJO: este `/**` también deniega `/artefactos/**`, así que un agente de SOLO LECTURA no
-  // puede dejar una captura CON UNA TOOL DE FICHERO. `device-controller` la deja igual, pero
-  // por otro camino —un comando, que no pasa por aquí— y por eso el anuncio del artefacto
-  // tuvo que ir aparte (`proyecto.ts#anunciarArtefactosDeLaShell`). Si algún día hace falta
-  // un productor de solo lectura SIN shell, la excepción va aquí, y antes hay que medir el
-  // orden de reglas de deepagents (¿gana la primera que casa, o gana la denegación?), porque
-  // de eso depende que un `allow` sobre `/artefactos/**` haga algo o sea decorativo.
-  return [...base, { operations: ["write"] as const, paths: ["/**"], mode: "deny" as const }];
+  /**
+   * **Un agente de SOLO LECTURA sí puede dejar ARTEFACTOS, y la medida que lo permite está
+   * hecha.** Este `/**` también denegaba `/artefactos/**`, así que un productor sin shell no
+   * podía dejar nada escrito —un análisis, un plan, un informe— aunque no tocara el proyecto.
+   * `device-controller` los deja por otro camino, un comando, que no pasa por aquí, y por eso
+   * su anuncio vive aparte (`proyecto.ts#anunciarArtefactosDeLaShell`).
+   *
+   * La duda que quedaba anotada era si un `allow` haría algo o sería decorativo. **Medido
+   * contra la librería**: `decidePathAccess` es *first-match-wins* con default permisivo, y su
+   * propio docstring lo dice. O sea que la excepción funciona **si va delante** del `deny`
+   * general — y por eso el orden de estas tres líneas no es estilo, es la regla.
+   *
+   * Va DETRÁS de `DENEGADO_SIEMPRE` a propósito: con first-match-wins, eso es lo que mantiene
+   * ganando a `/.env`, `/.git` y `/.xonecode`. Delante de ellas, un patrón más ancho escrito
+   * mañana los abriría.
+   *
+   * Y lo que concede está acotado por construcción: `/artefactos/` no es del proyecto, no
+   * entra en git, no sube a CloudStudio, no pasa por aprobación —por eso se ANUNCIA con su
+   * evento— y `artefactoFueraDeSitio` ya impide que nada de ahí acabe dentro de la app.
+   */
+  return [
+    ...base,
+    { operations: ["write"] as const, paths: [`${RUTA_ARTEFACTOS}**`], mode: "allow" as const },
+    { operations: ["write"] as const, paths: ["/**"], mode: "deny" as const },
+  ];
 }
 
 /**

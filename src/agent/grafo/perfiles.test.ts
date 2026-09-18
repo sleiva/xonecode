@@ -316,3 +316,46 @@ describe("puedeEjecutar / montajeDeFicheros", () => {
     expect(m.permissions).toEqual(permisosDe(base));
   });
 });
+
+describe("un productor de SOLO LECTURA puede dejar artefactos", () => {
+  /**
+   * **La medida que el comentario de `permisosDe` pedía desde hace tiempo, hecha contra la
+   * librería**: `decidePathAccess` es *first-match-wins* con default permisivo
+   * (`deepagents/dist`, y su propio docstring lo dice). O sea que un `allow` DELANTE del
+   * `deny /**` no es decorativo: gana.
+   *
+   * Y eso desbloquea el caso que el comentario nombraba: un agente que solo LEE el proyecto
+   * pero tiene que dejar algo escrito —un análisis, un plan, un informe—. `/artefactos/` es el
+   * sitio: no es del proyecto, no entra en git, no sube a CloudStudio, no pasa por aprobación
+   * y se ANUNCIA con su evento.
+   */
+  const reglas = (soloLectura: boolean) => permisosDe({ nombre: "x", soloLectura });
+
+  it("el allow de /artefactos/ va DELANTE del deny general, o no sirve de nada", () => {
+    const r = permisosDe({ nombre: "x", soloLectura: true });
+    const allow = r.findIndex((x) => x.mode === "allow" && x.paths.some((p) => p.includes("artefactos")));
+    const denyTodo = r.findIndex((x) => x.mode === "deny" && x.paths.includes("/**"));
+
+    expect(allow).toBeGreaterThanOrEqual(0);
+    expect(denyTodo).toBeGreaterThanOrEqual(0);
+    expect(allow).toBeLessThan(denyTodo);
+  });
+
+  /**
+   * Y DETRÁS de las denegaciones duras, que con first-match-wins es lo que las mantiene
+   * ganando. Un `allow` delante de ellas abriría `/.env` el día que alguien escriba un patrón
+   * más ancho.
+   */
+  it("pero DETRÁS de /.env, /.git y /.xonecode, que siguen ganando", () => {
+    const r = permisosDe({ nombre: "x", soloLectura: true });
+    const allow = r.findIndex((x) => x.mode === "allow" && x.paths.some((p) => p.includes("artefactos")));
+    const duras = r.findIndex((x) => x.paths.some((p) => p === "/.env"));
+
+    expect(duras).toBeGreaterThanOrEqual(0);
+    expect(duras).toBeLessThan(allow);
+  });
+
+  it("y quien NO es de solo lectura no necesita la excepción: ya puede", () => {
+    expect(reglas(false).some((x) => x.mode === "allow")).toBe(false);
+  });
+});

@@ -22,13 +22,15 @@ xone-review             →  valida con xone-simulator
 
 ## Estructura de archivos
 
+Todo vive en **`/artefactos/`**, NUNCA en la raíz del proyecto: un plan no es parte de la app del
+cliente, y lo que se escribe en la raíz entra en el commit del turno y sube a CloudStudio.
+
 ```
-<raíz del proyecto>/
+/artefactos/
 ├── PLAN.md                 ← entrada (producido por xone-spec-builder)
-├── TASKS.md                 ← salida (esta skill)
+├── TASKS.md                ← salida (esta skill)
 ├── CONTEXT.md              ← glosario (ya existe del spec-builder)
-├── docs/
-│   └── adr/
+└── adr/
 ```
 
 Si no existe `PLAN.md`, **detente y pide al usuario que ejecute `xone-spec-builder` primero**. No se puede descomponer lo que no está especificado.

@@ -24,21 +24,42 @@ El spec builder es el primer paso de cualquier trabajo XOne. Lo que sigue:
 
 ## Estructura de archivos
 
-La entrevista escribe en el **directorio de trabajo** del usuario — la raíz del proyecto XOne (existente o por crear). Crea los archivos **lazy**, solo cuando hay algo que escribir:
+La entrevista escribe en **`/artefactos/`**, NUNCA en la raíz del proyecto. Un plan no es parte de
+la app: la raíz es el proyecto XOne del cliente, lo que se escribe ahí pasa por aprobación, entra
+en el commit de cada turno y **sube a CloudStudio**. `/artefactos/` es la carpeta de esta sesión —
+no entra en git, no se sincroniza, y lo que dejes ahí se anuncia solo. Crea los archivos **lazy**,
+solo cuando hay algo que escribir:
 
 ```
-<raíz del proyecto>/
+/artefactos/
 ├── PLAN.md                 ← el plan del desarrollo (entregable)
 ├── CONTEXT.md              ← glosario del dominio (términos canónicos, evitar)
-├── docs/
-│   └── adr/
-│       ├── 0001-sqlite-local-vs-replica.md
-│       └── 0002-login-con-oauth2-o-contra-db.md
+└── adr/
+    ├── 0001-sqlite-local-vs-replica.md
+    └── 0002-login-con-oauth2-o-contra-db.md
 ```
 
-Si no existe `PLAN.md`, créalo cuando la entrevista empiece a cristalizar decisiones. Si no existe `CONTEXT.md`, créalo cuando se resuelva el primer término de dominio. Si no existe `docs/adr/`, créalo cuando se tome la primera decisión digna de ADR.
+Si no existe `PLAN.md`, créalo cuando la entrevista empiece a cristalizar decisiones. Si no existe `CONTEXT.md`, créalo cuando se resuelva el primer término de dominio. Si no existe `/artefactos/adr/`, créalo cuando se tome la primera decisión digna de ADR.
 
 > **`PLAN.md` es el entregable.** `CONTEXT.md` y los ADRs lo acompañan y alimentan, pero lo que el usuario se lleva es el plan.
+
+## Si no hay nadie a quien entrevistar
+
+Puede que corras **dentro de un subagente**, y entonces no tienes interlocutor: una delegación es
+de un solo disparo y no hay forma de devolverle una pregunta a nadie a mitad de trabajo. Se nota
+en que nadie contesta a la primera ronda.
+
+Cuando eso pase, **no te inventes las respuestas**, que es justo lo que esta skill se prohíbe.
+Haz esto:
+
+1. Escribe el `PLAN.md` con lo que SÍ puedes resolver leyendo el proyecto.
+2. Pon las decisiones que no puedes tomar en **§Pendientes**, cada una con las opciones y con
+   qué cambia según la respuesta. Una pregunta sin consecuencia no merece bloquear nada.
+3. **Dilo en tu respuesta final**, nombrando las pendientes que bloquean. Quien lea eso sí puede
+   preguntárselo a la persona y volver a encargártelo con las respuestas dentro.
+
+Un plan con tres huecos declarados vale; uno con tres huecos rellenados a ojo es peor que no
+tenerlo, porque nadie sabe cuáles eran.
 
 ## Antes de entrevistar: triage de complejidad
 
