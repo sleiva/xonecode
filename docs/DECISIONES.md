@@ -4562,9 +4562,16 @@ tabla** (`VARIABLES_POR_PROVEEDOR`, el único sitio donde vive el nombre de cada
 prefijo `XONECODE_CLAVE_` de los personalizados, que por definición no puede estar en ninguna
 tabla. No se quita todo lo que empiece por `XONECODE_`, que se llevaría `XONECODE_TRACE_TOOLS`.
 
-**Límite declarado**: quita las NUESTRAS. Un `GITHUB_TOKEN` del entorno de quien arranca sigue
-ahí, y no se filtra — «lo que parece una clave» es una heurística, y una heurística que falla en
-silencio es peor que un límite escrito. Quien concede ejecución concede leer el entorno y el
+**Límite declarado, y hay que decirlo entero porque la mitad engaña**: quitar las claves del
+ENTORNO cierra la puerta por la que se escapan solas —un `printenv` al orientarse—, pero no
+cierra el disco. `~/.xonecode/auth.json` sigue ahí y un `cat` lo lee: modo 0600, sí, y el mismo
+usuario. Igual que el `GITHUB_TOKEN` de quien arranca el proceso, que tampoco se filtra —«lo que
+parece una clave» es una heurística, y una heurística que falla en silencio es peor que un
+límite escrito—. Y hay una vuelta de tuerca que conviene tener delante: **el proyecto abierto
+desde la consola web vive DENTRO de la casa de xonecode** (`~/.xonecode/webstudio/workspace/…`),
+así que el `cwd` de esa shell está a un `cd ..` de los demás proyectos del usuario y de nuestra
+propia carpeta. Nada de esto es una regresión de la ejecución: es lo que significa conceder una
+shell, y es la razón por la que la lleva un subagente y se declara en su fichero. Quien concede ejecución concede leer el entorno y el
 disco; lo que esto evita es que el harness REGALE lo que él mismo escribió.
 
 ### Por qué las rutas van en variables de entorno

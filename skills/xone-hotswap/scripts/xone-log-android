@@ -1,0 +1,102 @@
+#!/usr/bin/env node
+/**
+ * El log del aparato, acotado a lo que sirve para diagnosticar: excepciones y errores del host.
+ *
+ * POR QUÉ NO ES `adb logcat` A SECAS. Un volcado crudo de este emulador son megabytes de
+ * `WindowManager` y `Transition requested`, con líneas sueltas de 2 KB: metido en el contexto de
+ * un agente cuesta más que todo el turno y entierra justo lo que se busca. Aquí se filtra por el
+ * **PID del host** —así sale TODO lo suyo, incluidas las excepciones de JavaScript del runtime
+ * XOne— y, aparte, los `FATAL`/`AndroidRuntime` de cualquiera, que son los que cuentan cuando la
+ * app se acaba de morir y ya no tiene PID.
+ *
+ * **Nunca sigue el log.** `adb logcat` sin `-d` no termina jamás, y un comando que no termina
+ * cuelga el turno entero. Si quieres aislar lo que pasa a partir de ahora: `--limpiar`, haces lo
+ * que sea, y vuelves a pedirlo.
+ *
+ * USO:
+ *   xone-log-android                      errores y excepciones recientes
+ *   xone-log-android --lineas 400         más cola
+ *   xone-log-android --todo               todo lo del host, no solo errores
+ *   xone-log-android --limpiar            vacía el buffer y sale (para aislar lo siguiente)
+ *   xone-log-android --serie emulator-5554
+ */
+import { execFileSync } from "node:child_process";
+
+const PAQUETE = "com.xone.android.framework";
+
+const args = process.argv.slice(2);
+if (args.includes("--help") || args.includes("-h")) {
+  console.error(`xone-log-android — el log del aparato, acotado al host de XOne.
+
+  xone-log-android                 errores y excepciones recientes (por omisión, 200 líneas)
+  xone-log-android --lineas 400    más cola
+  xone-log-android --todo          todo lo del host, no solo errores
+  xone-log-android --limpiar       vacía el buffer y sale, para aislar lo que pase después
+  xone-log-android --serie <id>    con varios aparatos conectados
+
+Filtra por el PID del host, así que trae también las excepciones de JavaScript del runtime.
+Nunca sigue el log: un comando que no termina cuelga el turno.`);
+  process.exit(0);
+}
+
+const opcion = (nombre) => {
+  const i = args.indexOf(`--${nombre}`);
+  return i >= 0 ? args[i + 1] : undefined;
+};
+const serie = opcion("serie");
+const adb = (...partes) =>
+  execFileSync("adb", [...(serie ? ["-s", serie] : []), ...partes], {
+    encoding: "utf8",
+    maxBuffer: 64 * 1024 * 1024,
+  });
+
+if (args.includes("--limpiar")) {
+  adb("logcat", "-c");
+  console.log("buffer del log vaciado. Haz lo que quieras aislar y vuelve a pedir el log.");
+  process.exit(0);
+}
+
+const lineas = Number(opcion("lineas") ?? 200);
+const todo = args.includes("--todo");
+
+/** El PID del host, si está vivo. Sin él no se puede acotar por proceso: se dice y se sigue. */
+let pid;
+try {
+  pid = adb("shell", "pidof", PAQUETE).trim().split(/\s+/)[0];
+} catch {
+  pid = undefined;
+}
+
+const salida = [];
+
+if (pid !== undefined && pid !== "") {
+  const suyo = adb("logcat", "-d", "--pid", pid, "-t", String(lineas));
+  salida.push(`--- ${PAQUETE} (pid ${pid}) ---`);
+  salida.push(todo ? suyo : soloInteresante(suyo));
+} else {
+  salida.push(`--- ${PAQUETE} no está vivo ahora mismo: solo queda lo que dejó escrito ---`);
+}
+
+/**
+ * Las caídas duras van aparte y SIN el PID, a propósito: cuando una app se muere, el proceso
+ * que escribió la excepción ya no existe, así que filtrar por PID se lleva por delante justo la
+ * traza que explica la muerte.
+ */
+const caidas = adb("logcat", "-d", "-t", String(lineas * 4), "AndroidRuntime:E", "DEBUG:F", "*:F", "*:S").trim();
+if (caidas !== "") {
+  salida.push("", "--- caídas duras (cualquier proceso) ---", caidas);
+}
+
+/** Lo que merece la pena leer de un volcado del host: errores, avisos y trazas de excepción. */
+function soloInteresante(texto) {
+  const filas = texto.split("\n").filter((l) => {
+    if (/^\s*$/.test(l)) return false;
+    // El nivel va tras el PID/TID: `09-18 08:21:17.053 815 880 E Tag: mensaje`.
+    if (/\s[EWF]\s/.test(l)) return true;
+    // Y el cuerpo de una traza de Java, que no lleva nivel en cada línea.
+    return /\bat [\w$.]+\(|Caused by:|Exception|Error:/.test(l);
+  });
+  return filas.length === 0 ? "(sin errores ni avisos en esas líneas)" : filas.join("\n");
+}
+
+console.log(salida.join("\n"));

@@ -1,0 +1,104 @@
+#!/usr/bin/env node
+/**
+ * Dejar el host de Android en un estado conocido: matarlo y volver a levantarlo.
+ *
+ * POR QUÉ EXISTE. El host guarda la última app ejecutada y la reabre al arrancar, así que si
+ * esa app se quedó en un diálogo de error —o simplemente colgada— el canal **no contesta** y
+ * cualquier comando que mandes muere con «no se pudo hablar con el aparato». Desde fuera eso
+ * se lee como «no hay dispositivo», que es el diagnóstico equivocado: el aparato está, el
+ * framework está, y lo que hay es una app atascada delante.
+ *
+ * Es la primera orden que conviene correr al empezar con un aparato, y la que hay que probar
+ * antes de concluir que algo no funciona.
+ *
+ * USO:
+ *   xone-reiniciar-android                        deja el host en su pantalla de inicio
+ *   xone-reiniciar-android --app MiApp            y además lanza esa app
+ *   xone-reiniciar-android --serie emulator-5554  con varios aparatos conectados
+ *
+ * **No despliega nada**: no sube ficheros ni toca el proyecto. Para eso está
+ * `xone-desplegar-android`, que ya hace este reinicio como uno de sus pasos.
+ */
+import { execFileSync } from "node:child_process";
+import { join } from "node:path";
+
+const PAQUETE = "com.xone.android.framework";
+const ACTIVIDAD = `${PAQUETE}/com.xone.android.hotswap.activities.SetupActivity`;
+const PUERTO = 8443;
+
+const args = process.argv.slice(2);
+if (args.includes("--help") || args.includes("-h")) {
+  console.error(`xone-reiniciar-android — mata el host de XOne y lo vuelve a levantar.
+
+  xone-reiniciar-android                        lo deja en su pantalla de inicio
+  xone-reiniciar-android --app MiApp            y además lanza esa app
+  xone-reiniciar-android --serie emulator-5554  con varios aparatos conectados
+
+Úsalo cuando el canal no conteste: el host reabre la última app ejecutada, y si ésa se quedó
+en un error, nada responde aunque el aparato esté perfectamente. No despliega ni sube nada.`);
+  process.exit(0);
+}
+
+const opcion = (nombre) => {
+  const i = args.indexOf(`--${nombre}`);
+  return i >= 0 ? args[i + 1] : undefined;
+};
+const serie = opcion("serie");
+const adb = (...partes) =>
+  execFileSync("adb", [...(serie ? ["-s", serie] : []), ...partes], { encoding: "utf8" });
+
+const cliente = join(import.meta.dirname, "xone-hotswap");
+const mandar = (comando) =>
+  execFileSync("node", [cliente, JSON.stringify(comando)], { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] }).trim();
+
+console.log(`1/3 túnel y parada de ${PAQUETE}`);
+// El túnel PRIMERO y sin quitarlo después: hay que reaplicarlo tras cada reconexión del cable,
+// así que quitarlo dejaría al siguiente hablando con nadie.
+adb("forward", `tcp:${PUERTO}`, `tcp:${PUERTO}`);
+adb("shell", "am", "force-stop", PAQUETE);
+
+console.log("2/3 levantando el host");
+adb("shell", "am", "start", "-n", ACTIVIDAD);
+
+console.log("3/3 esperando a que el canal CONTESTE");
+/**
+ * Se espera a una respuesta, no a un reloj: el `am start` vuelve cuando Android acepta el
+ * intent, no cuando el servidor escucha. Medido — sin esto, el primer comando de después muere
+ * con «Received network error or non-101 status code».
+ *
+ * Y la pregunta es `getAllElements`: contesta tanto si hay app viva como si no (`App is not
+ * running`), así que sirve de latido sin exigir que haya nada cargado.
+ */
+let vivo = false;
+for (let intento = 1; intento <= 20 && !vivo; intento++) {
+  try {
+    mandar({ command: "getAllElements", format: "xone" });
+    vivo = true;
+  } catch {
+    execFileSync("sleep", ["1"]);
+  }
+}
+if (!vivo) {
+  console.error(`el canal no levantó. Comprueba que ${PAQUETE} está instalado (adb shell pm list packages | grep xone)`);
+  console.error(`y que el puerto es el ${PUERTO}: si estaba ocupado, el framework coge el siguiente libre y lo dice en su pantalla.`);
+  process.exit(1);
+}
+
+const app = opcion("app");
+if (app === undefined) {
+  console.log("host reiniciado y canal listo. Ninguna app cargada.");
+} else {
+  console.log(`lanzando ${app}`);
+  console.log(mandar({ command: "launchApplication", appName: app }));
+  for (let intento = 1; intento <= 10; intento++) {
+    const salida = mandar({ command: "getAllElements", format: "xone" });
+    if (!salida.includes("App is not running")) {
+      console.log(salida);
+      process.exit(0);
+    }
+    execFileSync("sleep", ["2"]);
+  }
+  console.error(`«${app}» no llegó a contestar el árbol de controles: NO está viva.`);
+  console.error("Si nunca se ha subido a este aparato, primero xone-desplegar-android.");
+  process.exit(1);
+}

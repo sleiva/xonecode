@@ -36,12 +36,17 @@ responde. Habla dos protocolos por el mismo puerto: **WebSocket** para los coman
 
 ## Los scripts que trae esta skill: se llaman por su nombre
 
-Esta carpeta trae tres programas, y **están en el PATH**: se llaman como cualquier otro comando,
+Esta carpeta trae cinco programas, y **están en el PATH**: se llaman como cualquier otro comando,
 sin ruta. Existen por una razón concreta — los comandos del canal viajan por **WebSocket** y
 `curl` no habla WebSocket, así que sin ellos no hay forma de mandar un `getAllElements` desde una
 shell.
 
 ```bash
+# LO PRIMERO al empezar con un aparato, y lo primero que hay que probar si el canal no contesta:
+# el host reabre la última app ejecutada, y si ésa se quedó en un error, nada responde.
+xone-reiniciar-android
+xone-reiniciar-android --app MiApp
+
 # «lanza la app», «despliégala»: la cadena ENTERA (túnel, ZIP, subida, reinicio, lanzamiento)
 # y termina diciendo si la app está VIVA, con su árbol de controles.
 xone-desplegar-android
@@ -52,9 +57,18 @@ xone-hotswap '{"command":"getAllElements","format":"xone"}'
 xone-hotswap '{"command":"getScreenshot"}'
 xone-hotswap '{"command":"click","name":"MAP_BT_ACEPTAR"}'
 
+# Por qué algo no se pinta o la app se muere: las excepciones del aparato.
+xone-log-android
+xone-log-android --limpiar        # aísla lo que pase a partir de ahora
+
 # iOS: levantar el host y dejar el canal listo (desplegar en iOS NO está medido).
 xone-arrancar-ios
 ```
+
+**El log es donde está el porqué.** Una pantalla en blanco no dice nada; el log dice
+`LayoutException … Cannot find font file Inter-Regular`, con la colección y el control. Medido
+sobre un proyecto real: la app arrancaba, el árbol de controles contestaba, y lo que faltaba era
+una fuente. Ni la captura ni `getAllElements` lo cuentan.
 
 Tres cosas de `xone-hotswap` que conviene saber antes de leer su salida:
 

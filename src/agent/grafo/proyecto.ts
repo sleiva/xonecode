@@ -2,7 +2,7 @@ import { existsSync, readdirSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { CompositeBackend, FilesystemBackend, LocalShellBackend } from "deepagents";
 import { RUTA_MEMORIA_INTERNA, RUTA_MEMORIA_VIRTUAL } from "./memoriaDeProyecto.js";
-import { RAIZ_SKILLS, skillsMontables, type Montaje } from "./skills.js";
+import { RAIZ_SKILLS, skillsConRuta, skillsMontables, type Montaje } from "./skills.js";
 import {
   artefactoFueraDeSitio,
   mimeDeArtefacto,
@@ -84,7 +84,10 @@ export function backendDelProyectoConShell(
  * sesión en curso, que es el límite ya anotado en CLAUDE.md y no uno nuevo.
  */
 export function entornoDeLaShellDelProyecto(raiz: string, artefactos?: string): Record<string, string> {
-  const skills = skillsMontables(raiz).map((m) => ({ nombre: m.nombre, dir: m.dir }));
+  // `skillsConRuta` y no `skillsMontables`: aquélla deja fuera las de SERIE —su raíz se cuelga
+  // entera en el backend— y una shell necesita la ruta real de todas. Sin esto, los scripts de
+  // las skills de serie no llegan al PATH y el agente se queda buscándolos por el disco.
+  const skills = skillsConRuta(raiz).map((m) => ({ nombre: m.nombre, dir: m.dir }));
   return entornoDeShell({
     entorno: process.env,
     skills,

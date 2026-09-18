@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { esVistaAplanada, porQueNo, sinArtefactosEnElProyecto, sinVistasAplanadas, backendConArtefactos, backendConSkills, backendDeAgente, backendDelProyecto, backendDelProyectoConShell, exponerMemoriaDeProyecto } from "./proyecto.js";
+import { esVistaAplanada, porQueNo, sinArtefactosEnElProyecto, sinVistasAplanadas, backendConArtefactos, backendConSkills, backendDeAgente, backendDelProyecto, backendDelProyectoConShell, entornoDeLaShellDelProyecto, exponerMemoriaDeProyecto } from "./proyecto.js";
 import { mkdirSync, mkdtempSync, existsSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -654,6 +654,24 @@ describe("la shell de un subagente con EJECUCIÓN", () => {
     // `permissions` con un backend ejecutable lanza `ConfigurationError` en deepagents, así
     // que esto es lo que deja intactos a los otros cuatro especialistas.
     expect(isSandboxBackend(backend)).toBe(false);
+  });
+
+  it("los scripts de las skills DE SERIE llegan al PATH, que es lo que costó un turno", () => {
+    // `skillsMontables` deja fuera las de serie —su raíz se cuelga entera en el backend— y con
+    // ella el PATH iba vacío: el agente probó el nombre del script, falló, y acabó haciendo
+    // `find /` por el disco entero. Se comprueba contra el catálogo REAL del paquete.
+    const entorno = entornoDeLaShellDelProyecto(raizDePrueba());
+
+    expect(entorno["XONECODE_SKILL_XONE_HOTSWAP"]).toMatch(/xone-hotswap$/);
+    expect(entorno["PATH"]!.split(":").some((d) => d.endsWith("xone-hotswap/scripts"))).toBe(true);
+  });
+
+  it("y no se lleva por delante el PATH del proceso, donde está el `adb` del usuario", () => {
+    const entorno = entornoDeLaShellDelProyecto(raizDePrueba());
+
+    for (const dir of (process.env["PATH"] ?? "").split(":").filter(Boolean)) {
+      expect(entorno["PATH"]!.split(":")).toContain(dir);
+    }
   });
 
   it("el `cwd` de la shell es la raíz del proyecto", async () => {

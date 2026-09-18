@@ -200,6 +200,31 @@ export function skillsMontables(raiz?: string): Montaje[] {
 }
 
 /**
+ * TODAS las skills con su carpeta REAL, las de serie incluidas, con la precedencia de siempre.
+ *
+ * No es lo mismo que `skillsMontables`, y confundirlas costó un turno entero: aquélla contesta
+ * «qué carpetas hay que colgar de `/skills/` UNA A UNA», y las de serie no están ahí porque su
+ * raíz se cuelga ENTERA en `backendConSkills`. Para el backend da igual; para quien necesita la
+ * ruta de verdad de una skill —una shell, que no ve rutas virtuales— significaba que las nueve
+ * de serie no existían. Medido: el agente recibió un PATH sin sus scripts, probó el nombre a
+ * secas, falló, y acabó haciendo `find /` por el disco entero.
+ *
+ * El orden es el de la precedencia (`cargarSkills`): serie, luego global, luego proyecto, y el
+ * último gana. Una skill del proyecto que se llame igual que una de serie tapa a la de serie
+ * también aquí, que es lo que el agente ve por `/skills/`.
+ */
+export function skillsConRuta(raiz?: string): Montaje[] {
+  const de = (carpeta: string, origen: OrigenDeSkill): Map<string, string> =>
+    new Map(leerCarpetaDeSkills(carpeta, origen).skills.map((s) => [s.nombre, join(carpeta, s.nombre)]));
+  const todas = new Map<string, string>([
+    ...de(RAIZ_SKILLS, "serie"),
+    ...de(rutaGlobalDeSkills(), "global"),
+    ...(raiz === undefined ? [] : de(rutaDeSkills(raiz), "proyecto")),
+  ]);
+  return [...todas].map(([nombre, dir]) => ({ nombre, dir }));
+}
+
+/**
  * Escribe una skill del usuario. Devuelve el motivo si NO se escribió, nunca lanza.
  *
  * Tres negativas, y ninguna es de forma:
