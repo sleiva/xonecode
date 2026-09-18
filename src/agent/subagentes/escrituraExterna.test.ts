@@ -462,6 +462,30 @@ describe("lo que el hijo hace, contado como un evento del harness", () => {
     });
   });
 
+  it("`Skill` y `ToolSearch` dicen SOBRE QUÉ, o la línea no cuenta nada", () => {
+    // Medido en la pantalla con un turno de nueve minutos delante: la traza decía «⊙ Skill»
+    // a secas, así que de un paso que puede llevarse minutos no se sabía ni cuál era la
+    // skill. Mismo argumento que ya puso `subagent_type` en la línea de `task`.
+    expect(eventoDeToolExterna("Skill", { skill: "xonecode:archify" }, "/proyecto")).toEqual({
+      nombre: "Skill",
+      detalle: "xonecode:archify",
+    });
+    expect(eventoDeToolExterna("ToolSearch", { query: "select:Glob,Grep" }, "/proyecto")).toEqual({
+      nombre: "ToolSearch",
+      detalle: "select:Glob,Grep",
+    });
+  });
+
+  it("y los ARGUMENTOS de una skill NO salen: ahí puede ir contenido del proyecto", () => {
+    // El mismo trato que la `description` de `task`. Sin el campo esperado, la línea se queda
+    // con el nombre de la tool y nada más — que es lo que pasaba antes con todas.
+    expect(eventoDeToolExterna("Skill", { skill: "x", args: "el contenido de app.xml" }, "/proyecto")).toEqual({
+      nombre: "Skill",
+      detalle: "x",
+    });
+    expect(eventoDeToolExterna("Skill", { args: "solo argumentos" }, "/proyecto")).toEqual({ nombre: "Skill" });
+  });
+
   it("y tolera una raíz NO canónica, que fue lo que la dejó muda al medirla", () => {
     // Medido en vivo: con el proyecto en `/tmp/x` el hijo pide `/private/tmp/x/...` —
     // canonicaliza él—, los textos no casaban y el pulso decía «→ lee ×65» sin UN SOLO
@@ -511,6 +535,19 @@ describe("las opciones del subagente externo, extraídas del cierre y probadas",
     expect(eventos.vaciar()).toEqual([
       { tipo: "tool", nombre: "read_file", detalle: "/app/x.js" },
       { tipo: "tool", nombre: "grep" },
+    ]);
+  });
+
+  it("y lo que el hijo CUENTA también, que es la señal de vida entre dos tools", () => {
+    // Medido con un turno de más de nueve minutos delante: entre una tool y la siguiente
+    // pueden pasar minutos y no cruzaba NADA, así que no había forma de distinguir un agente
+    // que trabaja de uno colgado. Va como `razonamiento` porque es trabajo, no la respuesta:
+    // la piel lo pinta dentro del pulso y se pliega con él al acabar el turno.
+    const eventos = new ColaDeEventos();
+    const o = opcionesDeSubagenteExterno({ ficherosDelProyecto: ficheros, eventos });
+    o.alRazonar("Voy a leer las colecciones para entender el modelo");
+    expect(eventos.vaciar()).toEqual([
+      { tipo: "razonamiento", texto: "Voy a leer las colecciones para entender el modelo" },
     ]);
   });
 

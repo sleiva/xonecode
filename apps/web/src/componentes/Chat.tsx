@@ -1,5 +1,6 @@
 import type { Acto, ConsumoDeTurno } from "../tipos.js";
 import { usarPegadoAbajo } from "../pegadoAbajo.js";
+import { useCronometro } from "../cronometro.js";
 import { protegerDolares } from "../protegerDolares.js";
 import { ETIQUETAS_DE_CODIGO } from "../etiquetasDeCodigo.js";
 import { BotonDeCopiar } from "./BotonDeCopiar.js";
@@ -134,6 +135,34 @@ export function Chat({
 }) {
   // Cuál es el último acto de asistente: es el único que puede estar llegando todavía.
   const ultimoAsistente = actos.map((a) => a.tipo).lastIndexOf("asistente");
+
+  /**
+   * En QUÉ paso está ahora mismo: la última línea de trabajo que llegó.
+   *
+   * Las líneas se emiten cuando una tool va a EMPEZAR (`core/entrelazar.ts`: «solo cuenta lo
+   * que va a ocurrir»), así que la última es literalmente lo que se está haciendo. Ausente =
+   * todavía no ha hecho nada, y entonces no se afirma ningún paso.
+   */
+  const pasoActual = (() => {
+    for (let i = actos.length - 1; i >= 0; i -= 1) {
+      const a = actos[i]!;
+      if (a.tipo === "usuario") return undefined;
+      if (a.tipo === "herramientas" && a.lineas.length > 0) return a.lineas[a.lineas.length - 1];
+    }
+    return undefined;
+  })();
+  /**
+   * Y cuánto lleva EN ÉL, que es otra pregunta que el total no contesta.
+   *
+   * Medido con un turno de más de nueve minutos delante: «Trabajando… · 650 s» no distingue
+   * un agente que avanza de uno colgado. Lo que lo distingue es si el paso actual lleva dos
+   * segundos o lleva seis minutos, y eso importa sobre todo con un motor EXTERNO, cuyo
+   * trabajo son minutos en otro proceso.
+   *
+   * Se mide desde que la línea APARECIÓ, no desde que la tool arrancó de verdad: es lo único
+   * que el cliente sabe, y decirlo de otra forma sería afirmar una medida que nadie tomó.
+   */
+  const segundosDelPaso = useCronometro(turnoEnVuelo === true && pasoActual !== undefined, pasoActual);
 
   /**
    * La lista a pintar: los actos de conversación tal cual, y los de pulso agrupados en
@@ -345,10 +374,21 @@ export function Chat({
                           </>
                         )}
                       </>
-                    ) : segundosEnVuelo === undefined ? (
-                      "Trabajando…"
                     ) : (
-                      `Trabajando… · ${segundosEnVuelo} s`
+                      <>
+                        {segundosEnVuelo === undefined ? "Trabajando…" : `Trabajando… · ${segundosEnVuelo} s`}
+                        {/*
+                          Y en qué paso está. Va aquí, en la línea que se ve con el pulso
+                          PLEGADO, porque desplegarlo para saber qué está haciendo es
+                          exactamente lo que sobra cuando un turno se alarga.
+                        */}
+                        {pasoActual === undefined ? null : (
+                          <span className={estilos.pasoActual}>
+                            {` · ${pasoActual}`}
+                            {segundosDelPaso === undefined ? "" : ` · ${segundosDelPaso} s`}
+                          </span>
+                        )}
+                      </>
                     )}
                   </summary>
                   <div className={estilos.detalleDePulso}>

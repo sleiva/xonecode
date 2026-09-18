@@ -782,6 +782,22 @@ export function eventoDeToolExterna(
   real: (ruta: string) => string = realpathSync
 ): { nombre: string; detalle?: string } {
   const canonico = NOMBRE_CANONICO[nombre] ?? nombre;
+  /**
+   * **`Skill` y `ToolSearch` dicen SOBRE QUÉ, o la línea no cuenta nada.**
+   *
+   * Medido en la pantalla del usuario con un turno de nueve minutos delante: la traza decía
+   * «⊙ Skill» y «⊙ ToolSearch» a secas, así que de un paso que puede llevarse minutos no se
+   * sabía ni cuál era la skill. Es el mismo argumento que ya puso `subagent_type` en la línea
+   * de `task`: un nombre no es contenido, y sin él no hay nada que mirar.
+   *
+   * Sale el NOMBRE de la skill y la CONSULTA de la búsqueda, nunca los `args` con que se
+   * invoca una skill — ahí sí puede ir contenido del proyecto, que es justo lo que la lista
+   * blanca de `resumenDeTool.ts` existe para dejar fuera.
+   */
+  if (canonico === "Skill" || canonico === "ToolSearch") {
+    const campo = canonico === "Skill" ? entrada["skill"] : entrada["query"];
+    return typeof campo === "string" && campo !== "" ? { nombre: canonico, detalle: campo } : { nombre: canonico };
+  }
   // Un patrón para las de búsqueda, una ruta para las de fichero. Igual que `detalleDe`.
   if (canonico === "glob" || canonico === "grep") {
     const patron = entrada["pattern"];
@@ -837,6 +853,7 @@ export function opcionesDeSubagenteExterno(opciones: {
   aprobarEscritura?: PoliticaDeEscrituraExterna;
   ficherosDelProyecto: () => ReadonlySet<string>;
   alUsarTool: (tool: { nombre: string; detalle?: string }) => void;
+  alRazonar: (texto: string) => void;
   alConsumir?: (consumo: ConsumoExterno) => void;
 } {
   const politica = politicaExternaDeSesion(opciones.pedirAprobacion);
@@ -847,6 +864,20 @@ export function opcionesDeSubagenteExterno(opciones: {
     // bitácora lo cuenta y ninguna piel se entera de que hay dos orígenes.
     alUsarTool: ({ nombre, detalle }) =>
       opciones.eventos.empujar({ tipo: "tool", nombre, ...(detalle === undefined ? {} : { detalle }) }),
+    /**
+     * **Lo que el hijo VA CONTANDO, como `razonamiento`.**
+     *
+     * Existe por un silencio medido en la pantalla del usuario, con un turno de más de nueve
+     * minutos delante: entre una tool y la siguiente pueden pasar minutos, y el bucle de
+     * mensajes del SDK **descartaba todo lo que no fuera el `result`** — o sea que la
+     * narración del hijo, que es continua, no cruzaba. Sin ella no hay forma de saber si
+     * trabaja o se colgó: sus palabras SON la señal de vida.
+     *
+     * Va como `razonamiento` y no como un acto de asistente por lo mismo que el del grafo:
+     * es trabajo, no la respuesta. La piel lo pinta dentro del pulso, con el resto del
+     * andamio, y se pliega con él cuando el turno acaba.
+     */
+    alRazonar: (texto: string) => opciones.eventos.empujar({ tipo: "razonamiento", texto }),
     ...(opciones.alConsumir === undefined ? {} : { alConsumir: opciones.alConsumir }),
   };
 }

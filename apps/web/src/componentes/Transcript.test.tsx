@@ -36,7 +36,9 @@ describe("Transcript", () => {
       />
     );
     expect(screen.getByText("hola")).toBeTruthy();
-    expect(screen.getByText(/read_file/)).toBeTruthy();
+    // En la LISTA del pulso. La misma línea sale además en el `summary` —es el paso actual,
+    // que se ve con el pulso plegado—, así que `getByText` a secas encuentra dos.
+    expect(document.querySelector("ul li")?.textContent).toMatch(/read_file/);
     expect(screen.getByText(/planificando/)).toBeTruthy();
     // Turno EN CURSO (no ha llegado `fin`): el pulso se ve abierto, que es lo único que hay
     // que mirar mientras el agente trabaja.

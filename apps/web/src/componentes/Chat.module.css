@@ -346,3 +346,14 @@
 .artefactoAbrir:hover {
   text-decoration: underline;
 }
+
+/* El paso ACTUAL, en la misma línea del pulso plegado. Se recorta con puntos suspensivos en
+   vez de envolver: esa línea es un `summary` y crecerle alto mueve todo el transcript en
+   cada tool, que con veinte lecturas seguidas es la pantalla saltando. La ruta entera está a
+   un clic, desplegando. */
+.pasoActual {
+  color: var(--dsw-alias-label-tertiary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

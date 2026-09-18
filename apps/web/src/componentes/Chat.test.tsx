@@ -133,6 +133,43 @@ describe("Chat: lo que la revisión de interfaz vio en vivo", () => {
     render(<Chat actos={actos} turnoEnVuelo segundosEnVuelo={42} />);
     expect(screen.getByText(/Trabajando… · 42 s/)).toBeTruthy();
   });
+
+  it("y DICE en qué paso está, que es lo que el total no contesta", () => {
+    // Medido con un turno de más de nueve minutos delante: «Trabajando… · 650 s» no
+    // distingue un agente que avanza de uno colgado. Las líneas se emiten cuando una tool va
+    // a EMPEZAR, así que la última es literalmente lo que está haciendo.
+    render(
+      <Chat
+        actos={[
+          { tipo: "usuario", texto: "documenta el proyecto" },
+          { tipo: "herramientas", lineas: ["→ lee ×20 — /app.xml", "⊙ Skill xonecode:archify"] },
+        ]}
+        turnoEnVuelo
+        segundosEnVuelo={650}
+      />
+    );
+    // En el SUMMARY, que es lo que se ve con el pulso PLEGADO: desplegarlo para saber qué
+    // está haciendo es justo lo que sobra cuando un turno se alarga.
+    const resumen = document.querySelector("summary")!;
+    expect(resumen.textContent).toMatch(/Skill xonecode:archify/);
+    expect(resumen.textContent).toMatch(/650 s/);
+  });
+
+  it("y el paso se olvida al llegar el mensaje siguiente: no es de este turno", () => {
+    // Sin esto, un turno nuevo abriría enseñando el último paso del anterior.
+    render(
+      <Chat
+        actos={[
+          { tipo: "herramientas", lineas: ["⊙ Skill de antes"] },
+          { tipo: "usuario", texto: "otra cosa" },
+        ]}
+        turnoEnVuelo
+        segundosEnVuelo={3}
+      />
+    );
+    const resumen = [...document.querySelectorAll("summary")].at(-1)!;
+    expect(resumen.textContent).not.toMatch(/Skill de antes/);
+  });
 });
 
 describe("Chat: la sesión nueva no es un vacío", () => {

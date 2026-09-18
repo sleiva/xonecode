@@ -265,6 +265,17 @@ export function crearSubagenteExterno(opciones: {
    */
   alUsarTool?: (tool: { nombre: string; detalle?: string }) => void;
   /**
+   * Lo que el hijo va CONTANDO mientras trabaja, para que se vea que trabaja.
+   *
+   * Hermano de `alUsarTool` y por el mismo motivo medido, que aquél solo resolvió a medias:
+   * entre una tool y la siguiente pueden pasar minutos, y en ese hueco no cruzaba NADA. La
+   * narración del hijo es continua y es la única señal de vida que hay.
+   */
+  alRazonar?: (texto: string) => void;
+  // **Límite declarado**: hoy solo lo alimenta `claude-code`. Codex y OpenCode hablan por
+  // sus protocolos y su narración va por otros mensajes; cablearla ahí es otra medida, y
+  // prometerlo aquí con un reenvío que no llega a ningún sitio sería peor que no tenerlo.
+  /**
    * Lo que el hijo consumió, al terminar. Los dos motores lo reportan y hasta ahora se
    * tiraba entero (`agent/subagentes/consumoExterno.ts` explica de dónde sale cada uno).
    *
@@ -323,6 +334,9 @@ export function crearSubagenteExterno(opciones: {
           ...(opciones.aprobarEscritura === undefined ? {} : { aprobar: opciones.aprobarEscritura }),
           ficheros: () => opciones.ficherosDelProyecto?.() ?? new Set<string>(),
           vistasAplanadas: () => vistasAplanadasDe(opciones.ficherosDelProyecto?.() ?? new Set<string>()),
+          // `alRazonar` NO se reenvía aquí: `correrOpencode` no lo acepta, y un spread
+          // condicional se lo habría tragado sin que `tsc` dijera nada — el no-op mudo de
+          // siempre. Está declarado abajo como límite, no escondido en una lambda.
           ...(opciones.alUsarTool === undefined ? {} : { alUsarTool: opciones.alUsarTool }),
         });
       }
@@ -497,6 +511,30 @@ export function crearSubagenteExterno(opciones: {
       // no en el último `assistant`: un turno puede terminar por error y entonces el último
       // mensaje del modelo no es la respuesta.
       for await (const mensaje of respuesta) {
+        /**
+         * **Lo que el hijo cuenta por el camino SÍ cruza, aunque su respuesta salga del
+         * `result`.** Este bucle descartaba todo lo que no fuera el `result`, así que entre
+         * dos tools —minutos, con un motor externo— la pantalla no recibía nada. Medido con
+         * un turno de más de nueve minutos delante: el usuario no tenía forma de distinguir
+         * un agente que trabaja de uno colgado.
+         *
+         * Solo bloques de TEXTO, y nunca los de `tool_use`: esos ya viajan por
+         * `alUsarTool`, con su lista blanca de qué argumento puede salir. Duplicarlos aquí
+         * los sacaría con los argumentos crudos dentro, que es la regla que `core/events.ts`
+         * no admite.
+         */
+        if (mensaje.type === "assistant" && opciones.alRazonar !== undefined) {
+          const bloques = (mensaje as { message?: { content?: unknown } }).message?.content;
+          if (Array.isArray(bloques)) {
+            for (const bloque of bloques) {
+              const b = bloque as { type?: unknown; text?: unknown };
+              if (b.type === "text" && typeof b.text === "string" && b.text.trim() !== "") {
+                opciones.alRazonar(b.text);
+              }
+            }
+          }
+          continue;
+        }
         if (mensaje.type !== "result") continue;
         if (mensaje.subtype !== "success") {
           opciones.alConsumir?.({ motor: "claude-code", ...consumoDeClaude(mensaje) });

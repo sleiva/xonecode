@@ -434,6 +434,18 @@ no viaja porque ahí la ejecución no se concede—. Reglas duras:
   `resumenDeTool.ts` + icono y verbo en `core/notify.ts`), y **nunca la `description`**, que es el
   encargo entero. La rama genérica de `frase()` no tira el `detalle`: no filtra nada nuevo,
   porque un `detalle` solo existe si la lista blanca lo eligió a mano.
+- **Y lo que un agente externo CUENTA entre dos tools también cruza**, como `razonamiento`
+  (`escrituraExterna.ts#opcionesDeSubagenteExterno`, `alRazonar`). El bucle de mensajes del SDK
+  descartaba todo lo que no fuera el `result`, así que en los minutos entre una tool y la
+  siguiente no llegaba NADA y no había forma de distinguir un agente que trabaja de uno
+  colgado. Solo bloques de TEXTO, nunca los de `tool_use`: esos ya viajan por `alUsarTool` con
+  su lista blanca, y duplicarlos aquí los sacaría con los argumentos crudos dentro. **Límite
+  declarado**: hoy solo lo alimenta `claude-code`.
+- **El pulso DICE en qué paso está y cuánto lleva en él** (`Chat.tsx`, `cronometro.ts` con
+  `clave`), en la línea que se ve con el pulso PLEGADO. El total no contesta esa pregunta:
+  «Trabajando… · 650 s» no distingue avanzar de colgarse, y lo que lo distingue es si el paso
+  actual lleva dos segundos o seis minutos. Se mide desde que la LÍNEA apareció, que es lo
+  único que el cliente sabe.
 - **Y lo que hace un agente EXTERNO se ve MIENTRAS lo hace** (`core/entrelazar.ts`): sale un
   evento `tool` NORMAL, con nombre canónico (`Read` → `read_file`) y ruta VIRTUAL, así que el
   colapsador lo agrupa con los demás y ninguna piel sabe que hay dos orígenes. Es un generador

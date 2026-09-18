@@ -56,6 +56,13 @@ const CAMPOS_SEGUROS: Record<string, readonly string[]> = {
    * silencio, que es peor que un límite escrito.
    */
   execute: ["command"],
+  /**
+   * De un motor externo: QUÉ skill se carga y QUÉ se busca. Nunca los `args` con que se
+   * invoca una skill, que pueden llevar contenido del proyecto dentro — el mismo trato que
+   * la `description` de `task`.
+   */
+  Skill: ["skill"],
+  ToolSearch: ["query"],
 };
 
 function objetoDeArgs(args: unknown): Record<string, unknown> | undefined {
