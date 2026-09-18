@@ -1,7 +1,6 @@
 import { describe, it, expect } from "vitest";
 import {
   validarSettings,
-  abreviarConCasa,
   expandirConCasa,
   motivoDeWorkspaceInaceptable,
   rutaDeWorkspace,
@@ -219,24 +218,13 @@ describe("dentroDelWorkspace: dónde puede xonecode commitear solo", () => {
   });
 });
 
-describe("el workspace tal como viaja por el cable", () => {
-  it("lo que cuelga de la casa se abrevia con «~»: el caso normal no lleva el nombre de la cuenta", () => {
-    expect(abreviarConCasa("/Users/ana/.xonecode/workspace", "/Users/ana")).toBe("~/.xonecode/workspace");
-    expect(abreviarConCasa("/Users/ana", "/Users/ana")).toBe("~");
-  });
-
-  it("lo de fuera viaja entero, porque no hay forma de nombrarlo si no", () => {
-    // Y es una decisión de quien lo eligió, tomada con el campo delante.
-    expect(abreviarConCasa("/Volumes/Externo/xone", "/Users/ana")).toBe("/Volumes/Externo/xone");
-  });
-
-  it("un vecino con el mismo prefijo de TEXTO no es la casa", () => {
-    expect(abreviarConCasa("/Users/anabel/proyectos", "/Users/ana")).toBe("/Users/anabel/proyectos");
-  });
-
-  it("y la vuelta deshace exactamente eso", () => {
+describe("expandirConCasa: el «~» es una comodidad de ENTRADA", () => {
+  it("resuelve lo que se teclea con «~»", () => {
     expect(expandirConCasa("~/.xonecode/workspace", "/Users/ana")).toBe("/Users/ana/.xonecode/workspace");
     expect(expandirConCasa("~", "/Users/ana")).toBe("/Users/ana");
+  });
+
+  it("una ruta entera se queda igual", () => {
     expect(expandirConCasa("/Volumes/Externo/xone", "/Users/ana")).toBe("/Volumes/Externo/xone");
   });
 

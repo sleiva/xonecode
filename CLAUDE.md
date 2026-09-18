@@ -943,11 +943,26 @@ feedback del desarrollador** y no es terminal.
   EXDEV. Lo que cambia es dónde cae lo siguiente.
 - **La ruta del workspace es la excepción NOMBRADA a `sinRutas`, y la única del cable**: el
   campo de Ajustes tiene que enseñar la carpeta que hay puesta, y una ruta que no se enseña no
-  se puede elegir. Viaja ABREVIADA con `~` cuando cuelga de la casa (`abreviarConCasa`), así
-  que el caso normal no lleva el nombre de la cuenta del sistema; se GUARDA absoluta, porque un
-  `~` en `settings.json` solo significa algo para quien lo escribió. La regla de qué vale
-  (`motivoDeWorkspaceInaceptable`) se aplica en el SERVIDOR, y el cliente lleva su copia
-  DECLARADA —como la URL de un entorno— para que el no no sea mudo.
+  se puede comprobar ni elegir. Viaja **ENTERA**: se probó abreviada con `~` para que el caso
+  normal no llevara el nombre de la cuenta del sistema, y no se sostiene —la cabecera de esa
+  misma consola ya saluda por ese nombre—, mientras que el precio era dejar en pantalla una
+  ruta que no se lee de un vistazo. El `~` se sigue aceptando al TECLEAR (`expandirConCasa`),
+  que es comodidad de entrada. La regla de qué vale (`motivoDeWorkspaceInaceptable`) se aplica
+  en el SERVIDOR, y el cliente lleva su copia DECLARADA —como la URL de un entorno— para que el
+  no no sea mudo.
+- **El selector de carpeta lo abre el SISTEMA, no el navegador** (`core/selectorDeCarpeta.ts`,
+  `agent/config/selectorEnMaquina.ts`). Una página no puede devolver una ruta absoluta y no es
+  un descuido: `showDirectoryPicker()` da solo el NOMBRE y un `<input webkitdirectory>` da
+  rutas RELATIVAS. Un explorador propio servido por nosotros sí podría, y el precio sería que
+  el ÁRBOL DE CARPETAS de la máquina empezara a viajar por el cable — una excepción mucho más
+  ancha que la de una ruta, para el mismo resultado. Así que lo abre `osascript`/`zenity` donde
+  corre la consola y solo cruza la carpeta elegida. **Elegir y guardar son dos actos y dos
+  mensajes**: lo que devuelve el diálogo entra en el CAMPO, y guardar sigue siendo pulsar el
+  botón. Se contesta 204 en el acto y la carpeta llega por el SSE, porque el diálogo tarda lo
+  que tarde una persona; **cancelar se ACUSA igual** o el «Abriendo…» se queda encendido para
+  siempre. **Límite declarado**: el diálogo sale en la máquina de la consola, así que por un
+  túnel el botón no sirve — por eso el campo de texto es el camino principal y esto un atajo, y
+  en un sistema sin selector el botón no se pinta.
 
 ### Sesiones, hilos y git
 

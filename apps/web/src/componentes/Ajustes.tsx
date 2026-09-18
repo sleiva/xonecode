@@ -53,6 +53,12 @@ export function motivoDeWorkspaceInaceptable(ruta: string): string | undefined {
   if (!limpio.startsWith("/") && !limpio.startsWith("~/") && limpio !== "~") {
     return "tiene que ser una ruta absoluta, que empiece por «/» o por «~/»";
   }
+  // La raíz del disco, que el host también rechaza. Sin esta línea un «/» pasaba aquí, lo
+  // rechazaba el servidor y el campo volvía al valor de antes SIN decir por qué — el no
+  // mudo que esta copia existe para evitar.
+  if (limpio.replace(/\/+$/, "") === "") {
+    return "la raíz del disco no: ahí cada entorno sería una carpeta de primer nivel del sistema";
+  }
   return undefined;
 }
 import { PROYECTOS_POR_OMISION } from "./Barra.js";
@@ -294,6 +300,8 @@ export function Ajustes({
   alCambiarConcurrencia,
   workspace,
   alCambiarWorkspace,
+  alElegirCarpeta,
+  carpetaElegida,
   alCerrar,
 }: {
   /** Los del mensaje «modelos». Vacío = todavía no ha llegado, y se dice. */
@@ -455,6 +463,15 @@ export function Ajustes({
   /** Elige la carpeta. Ausente = esta ejecución no puede, y el campo se enseña de solo
    *  lectura — que es la verdad: la carpeta existe, cambiarla desde aquí no. */
   alCambiarWorkspace?: (ruta: string) => void;
+  /**
+   * Abre el selector de carpeta del sistema. **Ausente = esta máquina no tiene ninguno** —o
+   * la consola se mira por un túnel, que es el límite declarado— y entonces el botón no se
+   * pinta: queda el campo de texto, que siempre vale.
+   */
+  alElegirCarpeta?: () => void;
+  /** El acuse del diálogo: `ruta` ausente = canceló. El `n` sube en cada acuse, porque
+   *  elegir dos veces la misma carpeta no cambia la cadena y el campo no se enteraría. */
+  carpetaElegida?: { n: number; ruta?: string };
   alCerrar: () => void;
 }) {
   /**
@@ -480,6 +497,22 @@ export function Ajustes({
   const workspaceEnElCampo = workspaceTecleado ?? workspace ?? "";
   const motivoDelWorkspace = motivoDeWorkspaceInaceptable(workspaceEnElCampo);
   const workspaceCambiado = workspaceTecleado !== undefined && workspaceTecleado.trim() !== (workspace ?? "");
+
+  /**
+   * Lo que el diálogo del sistema devuelve entra en el campo como si se hubiera tecleado: se
+   * LEE, y guardarlo sigue siendo pulsar el botón. Elegir y guardar son dos actos.
+   *
+   * Se sigue el CONTADOR del acuse y no la ruta: elegir dos veces la misma carpeta no cambia
+   * la cadena, y entonces ni se recogería el acuse ni se apagaría el «abriendo…».
+   */
+  const [acusePintado, setAcusePintado] = useState(0);
+  const [abriendoSelector, setAbriendoSelector] = useState(false);
+  if (carpetaElegida !== undefined && carpetaElegida.n !== acusePintado) {
+    setAcusePintado(carpetaElegida.n);
+    setAbriendoSelector(false);
+    // Cancelar no toca el campo, que es lo que significa: no elegí ninguna.
+    if (carpetaElegida.ruta !== undefined) setWorkspaceTecleado(carpetaElegida.ruta);
+  }
   /** Qué fila está pidiendo clave: es donde se pinta la pregunta del servidor. */
   const [editando, setEditando] = useState<string | undefined>(undefined);
   /** Registrar un entorno es un MODO: mientras dura, la lista no está (ver más abajo). */
@@ -1264,12 +1297,12 @@ export function Ajustes({
                 <>
                   <h3 className={estilos.subencabezado}>Dónde se bajan los proyectos</h3>
                   <p className={estilos.nota}>
-                    Cada proyecto que bajas de CloudStudio se copia a{" "}
-                    <code>esta carpeta/&lt;entorno&gt;/&lt;proyecto&gt;</code>. El nivel del entorno no es
-                    decoración: el mismo proyecto puede existir en dos servidores.
+                    Cada proyecto que bajas de CloudStudio se copia dentro, en{" "}
+                    <code>&lt;entorno&gt;/&lt;proyecto&gt;</code>. El nivel del entorno no es decoración: el
+                    mismo proyecto puede existir en dos servidores a la vez.
                   </p>
                   <label className={estilos.filaDeWorkspace}>
-                    Carpeta
+                    <span className={estilos.etiquetaDeWorkspace}>Carpeta</span>
                     <input
                       type="text"
                       value={workspaceEnElCampo}
@@ -1277,10 +1310,29 @@ export function Ajustes({
                       autoCapitalize="off"
                       autoCorrect="off"
                       aria-label="Carpeta donde se bajan los proyectos"
+                      // La ruta entera al pasar por encima: el campo se hace todo lo ancho
+                      // que da la ventana, y aun así una ruta puede no caber.
+                      title={workspaceEnElCampo}
                       aria-invalid={motivoDelWorkspace === undefined ? undefined : true}
                       disabled={!conectado || alCambiarWorkspace === undefined}
                       onChange={(e) => setWorkspaceTecleado(e.target.value)}
                     />
+                  </label>
+                  <div className={estilos.accionesDeWorkspace}>
+                    {alElegirCarpeta === undefined ? null : (
+                      <button
+                        type="button"
+                        className={estilos.accion}
+                        title="Abre el explorador de este Mac, donde corre la consola"
+                        disabled={!conectado || abriendoSelector}
+                        onClick={() => {
+                          setAbriendoSelector(true);
+                          alElegirCarpeta();
+                        }}
+                      >
+                        {abriendoSelector ? "Abriendo…" : "Examinar…"}
+                      </button>
+                    )}
                     <button
                       type="button"
                       className={estilos.accion}
@@ -1300,7 +1352,7 @@ export function Ajustes({
                     >
                       Guardar
                     </button>
-                  </label>
+                  </div>
                   {/*
                     La regla es la copia DECLARADA de la del host
                     (`core/settings.ts#motivoDeWorkspaceInaceptable`), como la de la URL de

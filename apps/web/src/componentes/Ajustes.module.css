@@ -529,22 +529,37 @@
   opacity: 0.45;
 }
 
-/* La carpeta del workspace: etiqueta, campo elástico y su botón, en una fila. El campo se
-   lleva el hueco porque lo que se lee ahí es una RUTA, que es lo único de esta pantalla que
-   puede no caber. Envuelve en pantallas estrechas en vez de recortar la ruta: una ruta a
-   medias no se puede comprobar de un vistazo, que es justo para lo que se enseña. */
+/* La carpeta del workspace: el campo ocupa la FILA ENTERA y los botones van debajo.
+   Estuvieron los tres en línea y se midió en el navegador: con la ruta completa en el campo
+   —`/Users/<cuenta>/.xonecode/workspace`, que es la omisión, no un caso raro— los dos
+   botones le comían el ancho y la ruta salía cortada. Y una ruta a medias no se puede
+   comprobar de un vistazo, que es justo para lo que ese campo existe. Los botones caben en
+   cualquier ancho; la ruta no, así que la fila es suya. */
 .filaDeWorkspace {
   display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 10px;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 4px;
   margin: 8px 0;
   color: var(--dsw-alias-label-primary);
   font-size: 13px;
 }
 
+.etiquetaDeWorkspace {
+  color: var(--dsw-alias-label-secondary);
+}
+
+/* Los botones a la DERECHA y debajo del campo: es donde termina de leerse la ruta, así que
+   es donde cae la vista al acabar de comprobarla. */
+.accionesDeWorkspace {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin: 0 0 8px;
+}
+
 .filaDeWorkspace input {
-  flex: 1 1 260px;
+  width: 100%;
   min-width: 0;
   padding: 4px 8px;
   border: 0.5px solid var(--dsw-alias-border-l2);

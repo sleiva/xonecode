@@ -5219,3 +5219,54 @@ para quien la escribió, y ese fichero se lee desde procesos que no tienen por q
 casa. Y la regla de qué vale se aplica en el SERVIDOR además de en la pantalla: el cliente
 lleva su copia DECLARADA —como la de la URL de un entorno— para poder explicar el no, porque
 `informar` no llega al navegador desde el vestíbulo; pero una pantalla solo esconde un botón.
+
+### El selector de carpeta, y por qué no lo pone el navegador
+
+Lo primero que uno intenta es `showDirectoryPicker()`, y no vale: entrega un handle del que
+solo se puede leer el NOMBRE de la carpeta. Lo segundo es `<input webkitdirectory>`, y
+tampoco: entrega rutas RELATIVAS a lo elegido. Las dos cosas son deliberadas de la
+plataforma —una web no tiene por qué saber cómo está montado tu disco— y las dos son justo lo
+que aquí no sirve, porque `settings.workspace` necesita la ruta entera.
+
+La tercera opción es un explorador propio: el servidor lista carpetas y el cliente navega.
+Funciona, y el precio es que el **árbol de carpetas de la máquina** empieza a viajar por el
+cable. La ruta del workspace es una excepción declarada a `sinRutas`; el mapa del disco
+entero sería una excepción mucho más ancha para el mismo resultado, así que se descartó.
+
+Lo que se hizo es abrir el selector NATIVO donde corre la consola (`osascript` en macOS,
+`zenity` en Linux): solo cruza el cable la carpeta que la persona elige, que es la misma que
+iba a teclear. Cuatro decisiones dentro:
+
+- **Elegir y guardar son dos actos y dos mensajes.** Lo que devuelve el diálogo entra en el
+  CAMPO; guardar sigue siendo pulsar el botón. Guardar desde el propio diálogo dejaría el
+  ajuste escrito antes de que nadie hubiera leído la ruta entera, y en un campo cuyo único
+  trabajo es que la ruta se pueda leer eso sería quitarle el trabajo.
+- **Se contesta 204 en el acto y la carpeta llega por el SSE.** El diálogo tarda lo que tarde
+  una persona, y dejar una petición HTTP abierta minutos enteros es lo que este servidor no
+  hace en ningún otro sitio.
+- **Cancelar se ACUSA igual**, con `ruta` ausente. Sin ese acuse el «Abriendo…» del botón se
+  quedaba encendido para siempre después de un simple «no, gracias». Y el acuse lleva un
+  CONTADOR, no solo la ruta: elegir dos veces la misma carpeta no cambia la cadena, y
+  entonces el campo no se enteraría de la segunda.
+- **La carpeta de partida va como ARGUMENTO, nunca interpolada en el AppleScript.**
+  Interpolada, una comilla en el nombre de una carpeta cierra la cadena y lo que venga detrás
+  se ejecuta.
+
+**Límite declarado**: el diálogo sale en la máquina donde corre la consola, así que mirándola
+por un túnel el botón no sirve. Por eso el campo de texto sigue siendo el camino principal y
+esto es un atajo; y en un sistema sin selector conocido la opción no se monta y el botón no
+llega a existir, que es mejor que un botón que no hace nada.
+
+### Y por qué la ruta dejó de viajar abreviada
+
+La primera versión mandaba `~/.xonecode/workspace` por el cable, para que el caso normal no
+llevara el nombre de la cuenta del sistema. Se cayó al mirarla en el navegador: **la cabecera
+de esa misma consola ya saluda por el nombre del usuario**, así que el `~` no tapaba nada que
+no estuviera ya — y a cambio dejaba en pantalla una ruta que no se puede comprobar de un
+vistazo, que es exactamente para lo que ese campo existe. Ahora viaja entera; el `~` se sigue
+aceptando al TECLEAR, que es comodidad de entrada y otra cosa.
+
+Y de rebote salió un fallo de disposición que solo se ve en el navegador: con la ruta completa,
+los dos botones en la misma fila le comían el ancho al campo y la ruta salía cortada. Los
+botones caben en cualquier ancho y la ruta no, así que la fila es del campo y los botones van
+debajo.

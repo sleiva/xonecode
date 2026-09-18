@@ -367,7 +367,17 @@ export type MensajeAlCliente =
    * no se enseña no se puede elegir. El `~` es lo que evita que el caso normal lleve dentro
    * el nombre de la cuenta del sistema.
    */
-  | { clase: "workspace"; ruta: string }
+  | { clase: "workspace"; ruta: string; puedeElegir?: boolean }
+  /**
+   * La carpeta que la persona eligió en el diálogo del sistema, para PONERLA EN EL CAMPO —
+   * no para guardarla. `ruta` AUSENTE = no eligió ninguna (canceló, o no se pudo abrir el
+   * diálogo), y entonces el campo se queda como estaba.
+   *
+   * **Elegir y guardar son dos actos, y por eso son dos mensajes.** Guardar desde el propio
+   * diálogo dejaría el ajuste escrito antes de que nadie hubiera leído la ruta entera, y en
+   * un campo cuyo único trabajo es que la ruta se pueda leer eso sería quitarle el trabajo.
+   */
+  | { clase: "carpetaElegida"; ruta?: string }
   /**
    * Cómo fue la última augmentación pedida (`{clase:"tarea", accion:"augmentar"}`): el
    * encargo que propone el modelo, o por qué no se pudo. Nunca los dos a la vez.
@@ -876,6 +886,9 @@ export type MensajeDelCliente =
   /** Elige dónde se bajan las copias locales. **No mueve nada de lo ya bajado**: cambia
    *  dónde caerá lo siguiente, y la pantalla lo dice. */
   | { clase: "workspace"; ruta: string }
+  /** Abre el selector de carpeta NATIVO **de la máquina donde corre la consola** — ver
+   *  `core/selectorDeCarpeta.ts` para por qué no lo puede poner el navegador. */
+  | { clase: "elegirCarpeta" }
   /**
    * Empezar (`ver: true`) o dejar de mirar en vivo lo que hace una tarea.
    *

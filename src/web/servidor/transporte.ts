@@ -359,19 +359,30 @@ export type MensajeAlCliente =
       ejecutaOtroProceso?: boolean;
     }
   /**
-   * Dónde se bajan las copias locales, en la forma en que viaja: `~/…` cuando cuelga de la
-   * casa, absoluta cuando no (`core/settings.ts#abreviarConCasa`).
+   * Dónde se bajan las copias locales: la ruta ENTERA.
    *
    * **Es la excepción NOMBRADA a `sinRutas`**, y la única del cable. No se puede esquivar:
    * el campo de Ajustes tiene que enseñar la carpeta que hay puesta, y una ruta que no se
-   * enseña no se puede elegir. Lo que sí se evita es que el caso normal lleve el nombre de
-   * la cuenta del sistema — de ahí el `~`. Quien elija un disco de fuera manda su ruta
-   * entera, y eso es una decisión suya con el campo delante.
+   * enseña no se puede comprobar ni elegir. Se probó a mandarla abreviada con `~` para que el
+   * caso normal no llevara el nombre de la cuenta del sistema, y no se sostiene: la cabecera
+   * de esta misma consola ya saluda por el nombre del usuario (`clase: "bienvenida"`), así que
+   * el `~` no tapaba nada que no estuviera ya y a cambio dejaba en pantalla una ruta que no se
+   * puede leer de un vistazo.
    *
    * Va en la ráfaga de bienvenida por lo mismo que los modelos y las skills: Ajustes se
    * puede abrir en cuanto conecta, y un campo vacío se lee como «no hay nada puesto».
    */
-  | { clase: "workspace"; ruta: string }
+  | { clase: "workspace"; ruta: string; puedeElegir?: boolean }
+  /**
+   * La carpeta que la persona eligió en el diálogo del sistema, para PONERLA EN EL CAMPO —
+   * no para guardarla. `ruta` AUSENTE = no eligió ninguna (canceló, o no se pudo abrir el
+   * diálogo), y entonces el campo se queda como estaba.
+   *
+   * **Elegir y guardar son dos actos, y por eso son dos mensajes.** Guardar desde el propio
+   * diálogo dejaría el ajuste escrito antes de que nadie hubiera leído la ruta entera, y en
+   * un campo cuyo único trabajo es que la ruta se pueda leer eso sería quitarle el trabajo.
+   */
+  | { clase: "carpetaElegida"; ruta?: string }
   /**
    * Cómo fue la última augmentación pedida (`{clase:"tarea", accion:"augmentar"}`): el
    * encargo que propone el modelo, o por qué no se pudo. Nunca los dos a la vez.
@@ -1313,6 +1324,9 @@ export type MensajeDelCliente =
    * lo dice con todas las letras.
    */
   | { clase: "workspace"; ruta: string }
+  /** Abre el selector de carpeta NATIVO **de la máquina donde corre la consola** — ver
+   *  `core/selectorDeCarpeta.ts` para por qué no lo puede poner el navegador. */
+  | { clase: "elegirCarpeta" }
   /**
    * Empezar (`ver: true`) o dejar de mirar en vivo lo que hace una tarea.
    *

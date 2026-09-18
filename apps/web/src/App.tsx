@@ -1119,6 +1119,9 @@ export function App({
       // leería como «no hay ninguna carpeta puesta».
       {...(estado.workspace === undefined ? {} : { workspace: estado.workspace })}
       alCambiarWorkspace={(ruta) => void enviar({ clase: "workspace", ruta })}
+      // El selector de carpeta, solo si el servidor dice que esta máquina tiene uno.
+      {...(estado.puedeElegirCarpeta === true ? { alElegirCarpeta: () => void enviar({ clase: "elegirCarpeta" }) } : {})}
+      {...(estado.carpetaElegida === undefined ? {} : { carpetaElegida: estado.carpetaElegida })}
       // Los modelos de un motor externo, para el desplegable de un subagente.
       {...(estado.modelosDeMotor === undefined ? {} : { modelosDeMotor: estado.modelosDeMotor })}
       alPedirModelosDeMotor={(motor) => void enviar({ clase: "modelosDeMotor", motor })}

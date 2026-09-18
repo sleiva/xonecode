@@ -128,7 +128,6 @@ import {
   guardarEntorno as guardarEntornoEnDisco,
 } from "../../agent/config/settingsEnDisco.js";
 import {
-  abreviarConCasa,
   dentroDelWorkspace,
   expandirConCasa,
   motivoDeWorkspaceInaceptable,
@@ -136,6 +135,7 @@ import {
   type Settings,
 } from "../../core/settings.js";
 import { mudarWorkspaceLegado, type ResultadoDeMudanza } from "../../agent/config/mudanzaEnDisco.js";
+import { elegirCarpetaEnMaquina, haySelectorDeCarpeta } from "../../agent/config/selectorEnMaquina.js";
 import { cloudstudioDelProyecto } from "../../agent/config/configEnDisco.js";
 import { abrirEnSistema } from "../../agent/cloudstudio/cloudstudioMcp.js";
 import { nombreDePersona } from "../../agent/config/persona.js";
@@ -549,6 +549,13 @@ export interface OpcionesDeMontaje {
    * que `guardarConcurrencia`.
    */
   guardarWorkspace?: (ruta: string) => void;
+  /**
+   * Abre el selector de carpeta NATIVO de esta máquina y devuelve la elegida, o AUSENTE si
+   * no se eligió ninguna. Ausente la OPCIÓN = este sistema no tiene selector (o esta
+   * ejecución no lo monta), y entonces el botón no se ofrece: un botón que no hace nada es
+   * peor que no tenerlo, y el campo de texto ya resuelve el caso.
+   */
+  elegirCarpeta?: (desde?: string) => Promise<string | undefined>;
   /**
    * Augmenta una petición en un encargo revisado (`agent/tareas/aumentador.ts`, Task 9). Ausente =
    * el botón «Preparar el encargo» no está disponible.
@@ -1470,7 +1477,12 @@ export function montarRutas(
 
   const mensajeDeWorkspace = (): MensajeAlCliente | undefined => {
     const ruta = opciones.workspace?.();
-    return ruta === undefined ? undefined : { clase: "workspace", ruta };
+    if (ruta === undefined) return undefined;
+    // `puedeElegir` va solo cuando es cierto: ausente ya significa que no, y un `false`
+    // escrito solo daría dos formas de decir lo mismo.
+    return opciones.elegirCarpeta === undefined
+      ? { clase: "workspace", ruta }
+      : { clase: "workspace", ruta, puedeElegir: true };
   };
   const emitirWorkspace = (): void => {
     const m = mensajeDeWorkspace();
@@ -3867,6 +3879,24 @@ export function montarRutas(
       respuesta.end();
       return;
     }
+    if (typeof mensaje === "object" && mensaje !== null && mensaje.clase === "elegirCarpeta") {
+      /**
+       * El diálogo lo abre el SISTEMA donde corre la consola, así que esto tarda lo que
+       * tarde una persona. Se contesta 204 en el acto y la carpeta llega después por el SSE:
+       * dejar la petición abierta minutos enteros es lo que este servidor no hace en ningún
+       * otro sitio.
+       *
+       * Se emite SIEMPRE, también sin carpeta: el cliente encendió su «abriendo…» al pedirlo
+       * y sin respuesta se quedaría encendido para siempre después de un simple «cancelar».
+       */
+      void (async () => {
+        const elegida = await opciones.elegirCarpeta?.(opciones.workspace?.());
+        emitir(elegida === undefined ? { clase: "carpetaElegida" } : { clase: "carpetaElegida", ruta: elegida });
+      })().catch(contar);
+      respuesta.writeHead(204);
+      respuesta.end();
+      return;
+    }
     if (typeof mensaje === "object" && mensaje !== null && mensaje.clase === "modelosDeMotor" && typeof mensaje.motor === "string") {
       void atenderModelosDeMotor(mensaje.motor).catch(contar);
       respuesta.writeHead(204);
@@ -4471,9 +4501,13 @@ export function mudarWorkspaceLegadoCableado(opciones: {
  * - **Qué se ACEPTA**: `motivoDeWorkspaceInaceptable` sobre la ruta ya expandida, en el
  *   servidor. El cliente lleva su copia declarada para explicar el no, pero una pantalla
  *   solo esconde un botón.
- * - **Qué se GUARDA**: la ruta ABSOLUTA, nunca el `~/…`. La casa cambia de una máquina a
- *   otra y de un usuario a otro, y un `settings.json` con un `~` dentro sería una ruta que
- *   solo significa algo para quien la escribió.
+ * - **Qué se GUARDA y qué se ENSEÑA**: la ruta ENTERA, nunca un `~/…`. En el fichero porque
+ *   la casa cambia de una máquina a otra y un `~` dentro solo significa algo para quien lo
+ *   escribió; en la pantalla porque una ruta abreviada no se puede comprobar de un vistazo,
+ *   que es para lo que ese campo existe. Se probó a mandarla abreviada —para que el caso
+ *   normal no llevara el nombre de la cuenta— y no se sostiene: la cabecera de esa misma
+ *   consola ya saluda por el nombre del usuario. El `~` sigue ACEPTÁNDOSE al teclear, que es
+ *   comodidad de entrada y otra cosa.
  */
 export function ajusteDeWorkspaceCableado(opciones: {
   casa: string;
@@ -4483,7 +4517,7 @@ export function ajusteDeWorkspaceCableado(opciones: {
   const leer = opciones.leer ?? (() => cargarSettings().settings.workspace);
   const guardar = opciones.guardar ?? ((ruta: string) => void guardarWorkspaceEnDisco(undefined, ruta));
   return {
-    workspace: () => abreviarConCasa(leer() ?? baseDeWorkspacePorOmision(), opciones.casa),
+    workspace: () => leer() ?? baseDeWorkspacePorOmision(),
     guardarWorkspace: (ruta) => {
       const absoluta = expandirConCasa(ruta, opciones.casa);
       if (motivoDeWorkspaceInaceptable(absoluta) !== undefined) return;
@@ -4913,6 +4947,11 @@ export async function arrancarConsolaWeb(opciones: OpcionesDeArranque): Promise<
     // (`ajusteDeWorkspaceCableado`) por el patrón de fallo de siempre — y aquí el escritor
     // ya venía con la marca puesta: existía con su test y sin un solo llamador.
     ...ajusteDeWorkspaceCableado({ casa: homedir() }),
+    // El selector nativo, solo si este sistema tiene uno. En el que no, la opción no se
+    // monta y el botón no llega a existir.
+    ...(haySelectorDeCarpeta()
+      ? { elegirCarpeta: (desde?: string) => elegirCarpetaEnMaquina(desde === undefined ? {} : { desde }) }
+      : {}),
     // Los dos puertos del selector de modelos, con las piezas reales: quién tiene
     // credencial (`auth.json` o el entorno, leído desde el cwd) y el catálogo VIVO.
     hayCredencial: (proveedor) => hayCredencial(proveedor, opciones.cwd),

@@ -344,29 +344,17 @@ export function dentroDelWorkspace(raiz: string, base: string): boolean {
 }
 
 /**
- * El workspace tal como viaja por el CABLE: `~/loquesea` cuando cuelga de la casa, y
- * absoluto cuando no.
+ * Un `~/…` tecleado, resuelto contra la casa. Solo `~` y `~/…`: un `~otro` es la casa de
+ * OTRA persona en la sintaxis del shell, y aquí no se resuelve — se deja tal cual y se
+ * rechaza después por no ser absoluta.
  *
- * **Es la excepción NOMBRADA a «ninguna ruta de la máquina viaja por el cable»** (`sinRutas`),
- * y no se puede esquivar: el campo de Ajustes tiene que enseñar la carpeta que hay puesta y
- * recibir la que se elige, así que o viaja la ruta o no hay ajuste. Lo que sí se puede es
- * que el caso NORMAL —el de omisión y el de casi todo el mundo— no lleve el nombre de la
- * cuenta del sistema: `~/.xonecode/workspace` dice lo mismo sin decir quién eres. Quien
- * elige un disco externo sí manda su ruta entera, porque no hay forma de nombrarla si no, y
- * eso es una decisión suya tomada con el campo delante.
- *
- * `casa` entra por parámetro y no se lee aquí: este módulo es puro.
+ * Es una comodidad de ENTRADA y nada más. **Lo que se enseña y lo que se guarda es la ruta
+ * ENTERA**: se probó a mandarla abreviada por el cable, para que el caso normal no llevara
+ * el nombre de la cuenta del sistema, y no se sostiene — la cabecera de esa misma consola ya
+ * saluda por el nombre del usuario, así que el `~` no tapaba nada que no estuviera ya, y a
+ * cambio dejaba en pantalla una ruta que no se puede comprobar de un vistazo, que es justo
+ * para lo que ese campo existe. `casa` entra por parámetro: este módulo es puro.
  */
-export function abreviarConCasa(ruta: string, casa: string): string {
-  const dentro = posix.normalize(ruta).replace(/\/+$/, "");
-  const fuera = posix.normalize(casa).replace(/\/+$/, "");
-  if (dentro === fuera) return "~";
-  return dentro.startsWith(`${fuera}/`) ? `~${dentro.slice(fuera.length)}` : dentro;
-}
-
-/** La vuelta de `abreviarConCasa`. Solo `~` y `~/…`: un `~otro` es la casa de OTRA persona
- *  en la sintaxis del shell, y aquí no se resuelve — se deja tal cual y se rechaza después
- *  por no ser absoluta. */
 export function expandirConCasa(ruta: string, casa: string): string {
   const limpio = ruta.trim();
   if (limpio === "~") return casa;

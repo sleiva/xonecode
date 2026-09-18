@@ -128,6 +128,18 @@ export interface EstadoDelCliente {
    * ninguna carpeta puesta».
    */
   workspace?: string;
+  /** ¿Se puede abrir un selector de carpeta en la máquina donde corre la consola? Ausente =
+   *  no, y entonces el botón no se pinta: solo queda el campo de texto. */
+  puedeElegirCarpeta?: boolean;
+  /**
+   * La carpeta que acaba de elegir el diálogo del sistema, para que el campo la recoja.
+   *
+   * Es un ACUSE con contador y no una cadena, porque la misma carpeta elegida dos veces
+   * seguidas no cambiaría el valor y el campo no se enteraría de la segunda. `ruta` ausente
+   * = canceló, y entonces el campo se queda como estaba — pero el acuse llega igual, que es
+   * lo que apaga el «abriendo…».
+   */
+  carpetaElegida?: { n: number; ruta?: string };
   /**
    * El ENCARGO que el aumentador propuso para la tarea que se está creando, o el motivo por
    * el que no pudo.
@@ -1166,7 +1178,16 @@ export function crearStoreDelCliente(): {
           // Lista blanca como todo lo de aquí: una `ruta` que no sea cadena no se cree.
           const m = mensaje as Record<string, unknown>;
           if (typeof m["ruta"] !== "string") return;
-          mutar({ workspace: m["ruta"] });
+          mutar({ workspace: m["ruta"], puedeElegirCarpeta: m["puedeElegir"] === true });
+          return;
+        }
+        case "carpetaElegida": {
+          const m = mensaje as Record<string, unknown>;
+          const ruta = typeof m["ruta"] === "string" ? m["ruta"] : undefined;
+          // El contador sube SIEMPRE, también sin carpeta: es el acuse que apaga el
+          // «abriendo…» del botón después de un simple «cancelar».
+          const n = (estado.carpetaElegida?.n ?? 0) + 1;
+          mutar({ carpetaElegida: ruta === undefined ? { n } : { n, ruta } });
           return;
         }
         case "tareas": {

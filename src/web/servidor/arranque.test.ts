@@ -5218,7 +5218,7 @@ describe("las tareas en background, por el cable", () => {
     // qué se acepta y qué se guarda. Aquí lo que puede caerse es que el mensaje no llegue
     // a nadie, que es el patrón de fallo que este ajuste ya traía de serie.
     const elegidas: string[] = [];
-    let enDisco = "~/.xonecode/workspace";
+    let enDisco = "/Users/ana/.xonecode/workspace";
     const servidor = servidorDeMentira();
     montarRutas(servidor, vestibuloDePrueba(), {
       workspace: () => enDisco,
@@ -5231,7 +5231,7 @@ describe("las tareas en background, por el cable", () => {
     await servidor.rutas.get(`GET ${RUTA_EVENTOS}`)!(cliente.peticion, cliente.respuesta);
     await asentar();
     expect(cliente.recibidos.filter((m) => m.clase === "workspace")).toEqual([
-      { clase: "workspace", ruta: "~/.xonecode/workspace" },
+      { clase: "workspace", ruta: "/Users/ana/.xonecode/workspace" },
     ]);
 
     const accion = servidor.rutas.get(`POST ${RUTA_ACCION}`)!;
@@ -5240,6 +5240,76 @@ describe("las tareas en background, por el cable", () => {
     expect(elegidas).toEqual(["~/xone-proyectos"]);
     // Y se REEMITE: el campo acaba enseñando lo que hay, no lo que se tecleó.
     expect(cliente.recibidos.at(-1)).toEqual({ clase: "workspace", ruta: "~/xone-proyectos" });
+  });
+
+  it("el selector de carpeta se OFRECE solo si esta ejecución lo monta", async () => {
+    const servidor = servidorDeMentira();
+    montarRutas(servidor, vestibuloDePrueba(), { workspace: () => "/w" });
+    const cliente = clienteDeMentira();
+    await servidor.rutas.get(`GET ${RUTA_EVENTOS}`)!(cliente.peticion, cliente.respuesta);
+    await asentar();
+    // Ausente ya significa que no: un `false` escrito daría dos formas de decir lo mismo.
+    expect(cliente.recibidos.find((m) => m.clase === "workspace")).toEqual({ clase: "workspace", ruta: "/w" });
+  });
+
+  it("elegir carpeta contesta en el ACTO y la carpeta llega por el SSE", async () => {
+    // El diálogo lo abre una persona: dejar la petición abierta minutos enteros es lo que
+    // este servidor no hace en ningún otro sitio.
+    let soltar: (r: string | undefined) => void = () => {};
+    const servidor = servidorDeMentira();
+    montarRutas(servidor, vestibuloDePrueba(), {
+      workspace: () => "/w",
+      elegirCarpeta: () => new Promise((r) => (soltar = r)),
+    });
+    const cliente = clienteDeMentira();
+    await servidor.rutas.get(`GET ${RUTA_EVENTOS}`)!(cliente.peticion, cliente.respuesta);
+    await asentar();
+    expect(cliente.recibidos.find((m) => m.clase === "workspace")).toEqual({
+      clase: "workspace",
+      ruta: "/w",
+      puedeElegir: true,
+    });
+
+    const accion = servidor.rutas.get(`POST ${RUTA_ACCION}`)!;
+    expect(await enviarMensaje(accion, { clase: "elegirCarpeta" })).toBe(204);
+    soltar("/Volumes/Externo/xone");
+    await asentar();
+    expect(cliente.recibidos.at(-1)).toEqual({ clase: "carpetaElegida", ruta: "/Volumes/Externo/xone" });
+  });
+
+  it("cancelar el diálogo se ACUSA igual, o el «abriendo…» se queda encendido", async () => {
+    let soltar: (r: string | undefined) => void = () => {};
+    const servidor = servidorDeMentira();
+    montarRutas(servidor, vestibuloDePrueba(), {
+      workspace: () => "/w",
+      elegirCarpeta: () => new Promise((r) => (soltar = r)),
+    });
+    const cliente = clienteDeMentira();
+    await servidor.rutas.get(`GET ${RUTA_EVENTOS}`)!(cliente.peticion, cliente.respuesta);
+    await asentar();
+    const accion = servidor.rutas.get(`POST ${RUTA_ACCION}`)!;
+    await enviarMensaje(accion, { clase: "elegirCarpeta" });
+    soltar(undefined);
+    await asentar();
+    expect(cliente.recibidos.at(-1)).toEqual({ clase: "carpetaElegida" });
+  });
+
+  it("y el diálogo se abre DONDE está la carpeta de ahora, no en un sitio cualquiera", async () => {
+    const desdes: (string | undefined)[] = [];
+    const servidor = servidorDeMentira();
+    montarRutas(servidor, vestibuloDePrueba(), {
+      workspace: () => "/Users/ana/.xonecode/workspace",
+      elegirCarpeta: async (desde) => {
+        desdes.push(desde);
+        return undefined;
+      },
+    });
+    const cliente = clienteDeMentira();
+    await servidor.rutas.get(`GET ${RUTA_EVENTOS}`)!(cliente.peticion, cliente.respuesta);
+    await asentar();
+    await enviarMensaje(servidor.rutas.get(`POST ${RUTA_ACCION}`)!, { clase: "elegirCarpeta" });
+    await asentar();
+    expect(desdes).toEqual(["/Users/ana/.xonecode/workspace"]);
   });
 
   it("sin puerto de workspace no se manda ninguno: un control sin dato detrás no se pinta", async () => {
@@ -6786,12 +6856,16 @@ describe("abrir la sesión de una tarea en curso, por el cable", () => {
  * sello y la pestaña se cae al respaldo «desde-apertura» para siempre, sin un solo síntoma.
  */
 describe("el ajuste del workspace, cableado", () => {
-  it("lo que se ENSEÑA sale del disco y viaja abreviado con «~»", () => {
+  it("lo que se ENSEÑA es la ruta ENTERA, no un «~»", () => {
+    // Se probó abreviada, para que el caso normal no llevara el nombre de la cuenta del
+    // sistema, y no se sostiene: la cabecera de esta misma consola ya saluda por ese nombre.
+    // Y a cambio dejaba en pantalla una ruta que no se puede comprobar de un vistazo, que es
+    // justo para lo que ese campo existe.
     const { workspace } = ajusteDeWorkspaceCableado({
       casa: "/Users/ana",
       leer: () => "/Users/ana/xone-proyectos",
     });
-    expect(workspace()).toBe("~/xone-proyectos");
+    expect(workspace()).toBe("/Users/ana/xone-proyectos");
   });
 
   it("sin nada guardado se enseña la omisión, no un hueco", () => {
@@ -6807,8 +6881,9 @@ describe("el ajuste del workspace, cableado", () => {
       leer: () => enDisco,
       guardar: (r) => void (enDisco = r),
     });
+    // Y el «~» se sigue aceptando al TECLEAR, que es comodidad de entrada y otra cosa.
     guardarWorkspace("~/xone-proyectos");
-    expect(workspace()).toBe("~/xone-proyectos");
+    expect(workspace()).toBe("/Users/ana/xone-proyectos");
   });
 
   it("lo que se GUARDA es la ruta absoluta, nunca el «~»", () => {

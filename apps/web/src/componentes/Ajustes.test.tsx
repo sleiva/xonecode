@@ -53,11 +53,11 @@ describe("Ajustes", () => {
           {...MANEJADORES}
           proveedores={PROVEEDORES}
           conectado
-          workspace="~/.xonecode/workspace"
+          workspace="/Users/ana/.xonecode/workspace"
           alCambiarWorkspace={(r) => void elegidas.push(r)}
         />
       );
-      expect(campo().value).toBe("~/.xonecode/workspace");
+      expect(campo().value).toBe("/Users/ana/.xonecode/workspace");
       fireEvent.change(campo(), { target: { value: "~/xone-proyectos" } });
       fireEvent.click(screen.getByRole("button", { name: "Guardar" }));
       expect(elegidas).toEqual(["~/xone-proyectos"]);
@@ -69,7 +69,7 @@ describe("Ajustes", () => {
           {...MANEJADORES}
           proveedores={PROVEEDORES}
           conectado
-          workspace="~/.xonecode/workspace"
+          workspace="/Users/ana/.xonecode/workspace"
           alCambiarWorkspace={() => {}}
         />
       );
@@ -85,7 +85,7 @@ describe("Ajustes", () => {
           {...MANEJADORES}
           proveedores={PROVEEDORES}
           conectado
-          workspace="~/.xonecode/workspace"
+          workspace="/Users/ana/.xonecode/workspace"
           alCambiarWorkspace={(r) => void elegidas.push(r)}
         />
       );
@@ -96,17 +96,90 @@ describe("Ajustes", () => {
       expect(elegidas).toEqual([]);
     });
 
+    it("la raíz del disco tampoco, y con el MISMO motivo que da el host", () => {
+      // Divergir aquí no da error: el servidor rechaza y el campo vuelve al valor de antes
+      // sin decir por qué, que es exactamente el no mudo que esta copia evita.
+      const elegidas: string[] = [];
+      render(
+        <Ajustes
+          {...MANEJADORES}
+          proveedores={PROVEEDORES}
+          conectado
+          workspace="/Users/ana/.xonecode/workspace"
+          alCambiarWorkspace={(r) => void elegidas.push(r)}
+        />
+      );
+      fireEvent.change(campo(), { target: { value: "/" } });
+      expect(screen.getByRole("alert").textContent).toMatch(/raíz del disco/);
+      expect(elegidas).toEqual([]);
+    });
+
+    it("sin selector en la máquina el botón NO se pinta: queda el campo, que siempre vale", () => {
+      render(
+        <Ajustes {...MANEJADORES} proveedores={PROVEEDORES} conectado workspace="/Users/ana/.xonecode/workspace" />
+      );
+      expect(screen.queryByRole("button", { name: /Examinar/ })).toBeNull();
+    });
+
+    it("lo que elige el diálogo entra en el CAMPO, no en el disco", () => {
+      // Elegir y guardar son dos actos: guardar desde el diálogo dejaría el ajuste escrito
+      // antes de que nadie hubiera leído la ruta entera.
+      const guardadas: string[] = [];
+      const { rerender } = render(
+        <Ajustes
+          {...MANEJADORES}
+          proveedores={PROVEEDORES}
+          conectado
+          workspace="/Users/ana/.xonecode/workspace"
+          alCambiarWorkspace={(r) => void guardadas.push(r)}
+          alElegirCarpeta={() => {}}
+        />
+      );
+      fireEvent.click(screen.getByRole("button", { name: "Examinar…" }));
+      rerender(
+        <Ajustes
+          {...MANEJADORES}
+          proveedores={PROVEEDORES}
+          conectado
+          workspace="/Users/ana/.xonecode/workspace"
+          alCambiarWorkspace={(r) => void guardadas.push(r)}
+          alElegirCarpeta={() => {}}
+          carpetaElegida={{ n: 1, ruta: "/Volumes/Externo/xone" }}
+        />
+      );
+      expect(campo().value).toBe("/Volumes/Externo/xone");
+      expect(guardadas).toEqual([]);
+    });
+
+    it("cancelar deja el campo como estaba y APAGA el «abriendo…»", () => {
+      // Sin el acuse del cancelado el botón se quedaba en «Abriendo…» para siempre.
+      const props = {
+        ...MANEJADORES,
+        proveedores: PROVEEDORES,
+        conectado: true,
+        workspace: "/Users/ana/.xonecode/workspace",
+        alCambiarWorkspace: () => {},
+        alElegirCarpeta: () => {},
+      };
+      const { rerender } = render(<Ajustes {...props} />);
+      fireEvent.click(screen.getByRole("button", { name: "Examinar…" }));
+      expect(screen.getByRole("button", { name: "Abriendo…" })).toBeTruthy();
+      rerender(<Ajustes {...props} carpetaElegida={{ n: 1 }} />);
+      expect(screen.getByRole("button", { name: "Examinar…" })).toBeTruthy();
+      expect(campo().value).toBe("/Users/ana/.xonecode/workspace");
+    });
+
     it("DICE que cambiarla no mueve lo que ya está bajado", () => {
       // Callarlo deja a alguien buscando sus proyectos en una carpeta vacía.
       render(
-        <Ajustes {...MANEJADORES} proveedores={PROVEEDORES} conectado workspace="~/.xonecode/workspace" />
+        <Ajustes {...MANEJADORES} proveedores={PROVEEDORES} conectado workspace="/Users/ana/.xonecode/workspace" />
       );
       expect(screen.getByText(/NO mueve lo que ya está bajado/)).toBeTruthy();
     });
 
     it("sin manejador el campo se enseña apagado: la carpeta existe, cambiarla desde aquí no", () => {
       render(
-        <Ajustes {...MANEJADORES} proveedores={PROVEEDORES} conectado workspace="~/.xonecode/workspace" />
+        <Ajustes {...MANEJADORES} proveedores={PROVEEDORES} conectado workspace="/Users/ana/.xonecode/workspace" />
       );
       expect(campo().disabled).toBe(true);
     });
