@@ -255,6 +255,19 @@ Y las guardas del proyecto:
   literal, no «el nombre aparece en el texto» — buscar el nombre suelto daría cualquier
   comentario. **Límites declarados**: no ve un `getCollection(variable)` ni dice en qué LÍNEA
   está, y la descripción de la tool lo dice — callarlo haría concluir que un uso no existe.
+- **Y hay una SEGUNDA señal, más floja, que va MARCADA aparte** (`por: "mencion"` frente a
+  `por: "script"`). Existe porque la cadena real puede tener tres saltos:
+  `method="ExecuteNode(abrirColl('X'))"` → un nodo con `<param>` → `irColl(coll)` →
+  `getCollection(collname)` + `pushValue(obj)`, y el nombre solo aparece como literal en el
+  PRIMERO. Perseguir la cadena sería atarse a cómo llama UN proyecto a sus ayudantes
+  (`irColl`, `abrirColl`, `openMenu`), que no son de XOne; así que lo que se reconoce es un
+  literal que COINCIDE con una colección del inventario — el inventario es la criba, sin él
+  sería «cualquier cadena». **Se marcan distinto porque la confianza es distinta**, y la
+  respuesta lo dice con palabras: fundirlas haría que una coincidencia se leyera con la
+  autoridad de una llamada resuelta. Dos cosas que no son de forma: el atributo **`method`**
+  se mira (es donde vive el `ExecuteNode`, y en un proyecto real era la única aparición literal
+  de una colección), y **una colección que se nombra a SÍ MISMA no cuenta** — medido, era la
+  mayoría de las menciones y sale en todas las que tienen script.
 - **Lo que NO hay, y se midió antes de descartarlo: «colecciones huérfanas».** Se implementó y
   se tiró. Sobre un proyecto real daba 33 de 42, y con las referencias de script dentro bajaba a
   22 — la mitad del proyecto. Una lista con esa proporción de falsos positivos no es un

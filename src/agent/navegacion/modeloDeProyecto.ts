@@ -123,7 +123,14 @@ export function modeloDeNavegacion(
 
   return {
     colecciones,
-    referenciasDeScript: referenciasDeScript(delLinter, raiz, ficheros),
+    // El inventario entra como criba de la señal débil: sin él, «un literal que coincide con
+    // una colección» sería «cualquier literal». Por eso va DESPUÉS de componer las colecciones.
+    referenciasDeScript: referenciasDeScript(
+      delLinter,
+      raiz,
+      ficheros,
+      new Set(colecciones.map((c) => c.nombre.toLowerCase()))
+    ),
     app: {
       entrada: [...(delLinter.app?.entryPoints ?? [])],
       login: [...(delLinter.app?.loginColls ?? [])],
@@ -187,71 +194,131 @@ function referenciasDe(coll: CollDelLinter, nombre: string): Omit<Referencia, "f
 
 
 /**
- * Cómo una app XOne llega de verdad a una colección: `appData.getCollection("X")`.
+ * Cómo una app XOne llega de verdad a una colección, que no es con `mapcol`.
  *
- * **Medido sobre un proyecto real**, y fue una sorpresa que cambió el alcance de la tool: los
- * botones del menú no usan `mapcol`, usan
- * `onclick="javascript:var obj=appData.getCollection('Deportes').createObject();ui.openEditView(obj)"`.
- * Sin esto, «¿quién usa Deportes?» contestaba «nadie» con dos botones apuntándole — y dos de las
- * tres referencias ROTAS del proyecto solo se ven por aquí.
+ * **Medido sobre un proyecto real**, y fue lo que cambió el alcance de la tool. Hay DOS
+ * señales, y van separadas a propósito porque no valen lo mismo:
  *
- * **Es un PATRÓN concreto y no «el nombre aparece en el texto»**, y en esa diferencia está todo:
- * buscar el nombre suelto en los scripts daría cualquier comentario o variable homónima. Esto
- * reconoce una llamada con su literal, que es la forma en que se nombra una colección desde ES5.
+ * 1. **`appData.getCollection("X")` — señal FUERTE** (`por: "script"`). Es una llamada con su
+ *    literal: la forma en que se nombra una colección desde ES5. Los botones del menú abren
+ *    así (`onclick="javascript:var o=appData.getCollection('Deportes')…"`), y sin esto «¿quién
+ *    usa Deportes?» contestaba «nadie» con dos botones apuntándole.
+ * 2. **Un literal que COINCIDE con el nombre de una colección — señal DÉBIL**
+ *    (`por: "mencion"`). Existe porque la cadena real puede tener tres saltos:
+ *    `method="ExecuteNode(abrirColl('ConsolaReplica'))"` → un nodo con `<param name="coll">` →
+ *    `irColl(coll)` → `getCollection(collname)` + `pushValue(obj)`. El nombre solo aparece
+ *    como literal en el PRIMER salto, y perseguir la cadena sería atarse a cómo se llaman los
+ *    ayudantes de UN proyecto (`irColl`, `abrirColl`, `openMenu`), que no son de XOne.
  *
- * **Límite declarado y deliberado**: es una expresión regular, no un análisis de ES5. No ve un
- * `getCollection(nombreVariable)` ni un nombre compuesto en ejecución, y no sabe en qué LÍNEA
- * está —para eso harían falta rangos—. Sirve para «quién usa esto», que es la pregunta, y no
- * para saltar al sitio exacto, que no se promete.
+ * **Y se marcan distinto porque la confianza es distinta.** Una llamada resuelta y una cadena
+ * que coincide con un nombre no son lo mismo, y fundirlas haría que la segunda se leyera con
+ * la autoridad de la primera. Medido sobre el proyecto real: la débil añade cinco referencias
+ * y todas resultaron ciertas, pero eso no la convierte en la fuerte.
+ *
+ * **Límites declarados**: ninguna de las dos ve un nombre compuesto en ejecución ni dice en qué
+ * LÍNEA está —para eso harían falta rangos—, y la débil no puede distinguir un nombre de
+ * colección de una cadena que se le parece.
  */
 const LLAMADA_A_COLECCION = /getCollection\s*\(\s*['"]([^'"]+)['"]\s*\)/gi;
 
-function referenciasDeScript(
-  delLinter: ModeloDelLinter,
-  raiz: string,
-  ficheros: ReadonlySet<string>
-): Referencia[] {
-  const salida: Referencia[] = [];
-  const anotar = (desde: string, hacia: string, fichero: string): void => {
-    if (!puedeLeerRuta(fichero) || esVistaAplanada(fichero, ficheros)) return;
-    // Sin repetir: un mismo botón puede nombrar la colección dos veces en la misma línea.
-    if (salida.some((r) => r.desde === desde && r.hacia === hacia && r.fichero === fichero)) return;
-    salida.push({ desde, por: "script", hacia, fichero });
-  };
+/** Cualquier literal de cadena con forma de identificador. La criba es el inventario. */
+const LITERAL_DE_CADENA = /['"]([A-Za-z_][A-Za-z0-9_]{2,40})['"]/g;
+
+/** Un trozo de script del proyecto, con de dónde salió. */
+interface TrozoDeScript {
+  /** Quién lo contiene: `Coll.PROP`, `Coll:evento` o la ruta virtual de un `.js`. */
+  desde: string;
+  /** Ruta VIRTUAL del fichero donde vive. */
+  fichero: string;
+  /** La colección dueña, si la hay. Sirve para no contar que se menciona a sí misma. */
+  duena?: string;
+  texto: string;
+}
+
+/** Todos los sitios del proyecto donde hay script, con su origen ya traducido. */
+function trozosDeScript(delLinter: ModeloDelLinter, raiz: string): TrozoDeScript[] {
+  const trozos: TrozoDeScript[] = [];
 
   for (const coll of delLinter.colls ?? []) {
     const nombre = coll.name;
-    const fichero = coll.location?.file;
-    if (nombre === undefined || fichero === undefined) continue;
-    const virtual = rutaVirtualDelProyecto(raiz, fichero);
-    if (virtual === undefined) continue;
+    const absoluta = coll.location?.file;
+    if (nombre === undefined || absoluta === undefined) continue;
+    const fichero = rutaVirtualDelProyecto(raiz, absoluta);
+    if (fichero === undefined) continue;
 
-    // El `onclick` de un `<prop>`, que es de donde salen los menús.
     for (const prop of coll.props ?? []) {
       if (typeof prop.name !== "string" || prop.name === "") continue;
+      const desde = `${nombre}.${prop.name}`;
       for (const evento of prop.inlineEvents ?? []) {
-        for (const x of String(evento.script ?? "").matchAll(LLAMADA_A_COLECCION)) {
-          anotar(`${nombre}.${prop.name}`, x[1]!, virtual);
-        }
+        trozos.push({ desde, fichero, duena: nombre, texto: String(evento.script ?? "") });
+      }
+      // **El atributo `method` cuenta**, y no es un detalle: es donde vive
+      // `ExecuteNode(abrirColl('ConsolaReplica'))`, o sea la única aparición literal de esa
+      // colección en todo el proyecto. Sin mirarlo, el botón de información no referencia nada.
+      const metodo = prop.attributes?.["method"];
+      if (metodo !== undefined && metodo !== "") {
+        trozos.push({ desde, fichero, duena: nombre, texto: metodo });
       }
     }
-    // Y las acciones de eventos y nodos.
+
     for (const evento of [...(coll.events ?? []), ...(coll.nodes ?? [])]) {
+      const desde = `${nombre}:${evento.name ?? "(evento)"}`;
       for (const accion of evento.actions ?? []) {
         for (const texto of [accion.script, accion.value]) {
-          for (const x of String(texto ?? "").matchAll(LLAMADA_A_COLECCION)) {
-            anotar(`${nombre}:${evento.name ?? "(evento)"}`, x[1]!, virtual);
-          }
+          if (texto !== undefined && texto !== "") trozos.push({ desde, fichero, duena: nombre, texto });
         }
       }
     }
   }
 
   // Los `.js` sueltos. Sus claves son rutas RELATIVAS al proyecto, así que la virtual es
-  // directa — pero pasan por las mismas guardas, que es la regla de esta capa.
+  // directa. No tienen colección dueña: un `.js` puede nombrar a cualquiera.
   for (const [ruta, texto] of delLinter.jsFiles ?? new Map<string, string>()) {
     const virtual = "/" + String(ruta).split(/[\\/]/).filter(Boolean).join("/");
-    for (const x of String(texto).matchAll(LLAMADA_A_COLECCION)) anotar(virtual, x[1]!, virtual);
+    trozos.push({ desde: virtual, fichero: virtual, texto: String(texto) });
+  }
+
+  return trozos;
+}
+
+function referenciasDeScript(
+  delLinter: ModeloDelLinter,
+  raiz: string,
+  ficheros: ReadonlySet<string>,
+  conocidas: ReadonlySet<string>
+): Referencia[] {
+  const salida: Referencia[] = [];
+  const anotar = (desde: string, por: string, hacia: string, fichero: string): void => {
+    if (!puedeLeerRuta(fichero) || esVistaAplanada(fichero, ficheros)) return;
+    // Sin repetir: un mismo botón puede nombrar la colección dos veces en la misma línea.
+    if (salida.some((r) => r.desde === desde && r.hacia === hacia && r.fichero === fichero)) return;
+    salida.push({ desde, por, hacia, fichero });
+  };
+
+  for (const trozo of trozosDeScript(delLinter, raiz)) {
+    const fuertes = new Set<string>();
+    for (const x of trozo.texto.matchAll(LLAMADA_A_COLECCION)) {
+      fuertes.add(x[1]!.toLowerCase());
+      anotar(trozo.desde, "script", x[1]!, trozo.fichero);
+    }
+
+    for (const x of trozo.texto.matchAll(LITERAL_DE_CADENA)) {
+      const literal = x[1]!;
+      const clave = literal.toLowerCase();
+      // Solo si es el nombre de una colección que EXISTE: el inventario es la criba, y sin
+      // ella esto sería «cualquier cadena del proyecto».
+      if (!conocidas.has(clave)) continue;
+      // Ya la cogió la señal fuerte en este mismo trozo: no se degrada a mención.
+      if (fuertes.has(clave)) continue;
+      /**
+       * **Una colección que se nombra a sí misma no cuenta.** Medido: de las menciones que
+       * aparecían en el proyecto real, la mayoría eran los scripts de `ConsolaReplica`
+       * diciendo «ConsolaReplica» — en un SQL, en un mensaje, en un refresco. Como respuesta a
+       * «¿quién usa X?» eso es ruido, y ruido que sale en TODAS las colecciones con scripts.
+       */
+      if (trozo.duena !== undefined && trozo.duena.toLowerCase() === clave) continue;
+      anotar(trozo.desde, "mencion", literal, trozo.fichero);
+    }
   }
 
   return salida;

@@ -6,6 +6,31 @@ import type { CargarIndice } from "../navegacion/indiceEnDisco.js";
 /** Un `app` sin nada declarado. Vacío significa «no consta», no «no hay». */
 const APP_VACIA = { entrada: [], login: [], estilos: [], conexiones: [] };
 
+const RICO: ModeloDeNavegacion = {
+  colecciones: [
+    {
+      nombre: "Pedidos",
+      fichero: "/Pedidos.xne",
+      campos: [{ nombre: "ID", tipo: "N" }],
+      referencias: [{ desde: "Pedidos", por: "contents", hacia: "NoExiste" }],
+      eventos: ["before-edit", "onchange(CLIENTE)"],
+      nodos: ["Recalcular"],
+      conexiones: [],
+    },
+    {
+      nombre: "Sola",
+      fichero: "/Sola.xne",
+      campos: [],
+      referencias: [],
+      eventos: [],
+      nodos: [],
+      conexiones: [],
+    },
+  ],
+  app: { entrada: ["Pedidos"], login: ["LoginColl"], estilos: ["default.css"], conexiones: [] },
+  referenciasDeScript: [],
+};
+
 
 const MODELO: ModeloDeNavegacion = {
   colecciones: [
@@ -150,30 +175,6 @@ describe("la costura con el índice de disco", () => {
 });
 
 describe("las operaciones nuevas", () => {
-  const RICO: ModeloDeNavegacion = {
-    colecciones: [
-      {
-        nombre: "Pedidos",
-        fichero: "/Pedidos.xne",
-        campos: [{ nombre: "ID", tipo: "N" }],
-        referencias: [{ desde: "Pedidos", por: "contents", hacia: "NoExiste" }],
-        eventos: ["before-edit", "onchange(CLIENTE)"],
-        nodos: ["Recalcular"],
-        conexiones: [],
-      },
-      {
-        nombre: "Sola",
-        fichero: "/Sola.xne",
-        campos: [],
-        referencias: [],
-        eventos: [],
-        nodos: [],
-        conexiones: [],
-      },
-    ],
-    app: { entrada: ["Pedidos"], login: ["LoginColl"], estilos: ["default.css"], conexiones: [] },
-    referenciasDeScript: [],
-  };
 
   it("`app` contesta por dónde arranca, que es la primera pregunta de un proyecto ajeno", async () => {
     const r = await llamar({ operacion: "app" }, RICO);
@@ -248,5 +249,30 @@ describe("las operaciones nuevas", () => {
 
   it("`detalle` de lo que no existe manda al inventario", async () => {
     expect(await llamar({ operacion: "detalle", nombre: "Fantasma" }, RICO)).toContain("inventario");
+  });
+});
+
+describe("una mención se marca como lo que es", () => {
+  it("se DICE que es probable y no segura, para que no se lea como una llamada resuelta", async () => {
+    const conMencion: ModeloDeNavegacion = {
+      ...RICO,
+      referenciasDeScript: [
+        { desde: "EntradaApp.MAP_BT_INFO", por: "mencion", hacia: "Pedidos", fichero: "/EntradaApp.xne" },
+      ],
+    };
+    const r = await llamar({ operacion: "referencias", nombre: "Pedidos" }, conMencion);
+    expect(r).toContain("--mencion--> Pedidos");
+    expect(r).toContain("probable, no seguro");
+  });
+
+  it("y sin menciones NO se pinta la coletilla: solo estorba", async () => {
+    const soloFuertes: ModeloDeNavegacion = {
+      ...RICO,
+      referenciasDeScript: [
+        { desde: "EntradaApp.B", por: "script", hacia: "Pedidos", fichero: "/EntradaApp.xne" },
+      ],
+    };
+    const r = await llamar({ operacion: "referencias", nombre: "Pedidos" }, soloFuertes);
+    expect(r).not.toContain("probable");
   });
 });

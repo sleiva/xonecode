@@ -258,3 +258,71 @@ describe("las referencias de SCRIPT", () => {
     expect(m.referenciasDeScript).toEqual([]);
   });
 });
+
+describe("la señal DÉBIL: un literal que coincide con una colección", () => {
+  /** El inventario es la criba: sin él esto sería «cualquier cadena del proyecto». */
+  const CON_TAREAS = (extra: Partial<NonNullable<ModeloDelLinter["colls"]>[number]> = {}) => ({
+    colls: [coll({ name: "Tareas", location: { file: "/proy/Tareas.xne" } }), coll(extra)],
+  });
+
+  it("el atributo `method` se mira, que es donde vive `ExecuteNode(abrirColl('X'))`", () => {
+    // Medido en un proyecto real: es la ÚNICA aparición literal de `ConsolaReplica` en todo el
+    // proyecto. Sin mirar `method`, el botón de información no referencia nada.
+    const m = modeloDeNavegacion(
+      CON_TAREAS({
+        name: "EntradaApp",
+        location: { file: "/proy/EntradaApp.xne" },
+        props: [{ name: "MAP_BT_INFO", attributes: { method: "ExecuteNode(abrirColl('Tareas'))" } }],
+      }),
+      RAIZ,
+      TODAS
+    );
+    expect(m.referenciasDeScript).toEqual([
+      { desde: "EntradaApp.MAP_BT_INFO", por: "mencion", hacia: "Tareas", fichero: "/EntradaApp.xne" },
+    ]);
+  });
+
+  it("va marcada `mencion` y no `script`: la confianza no es la misma", () => {
+    // Una llamada resuelta y una cadena que coincide con un nombre no son lo mismo. Fundirlas
+    // haría que la segunda se leyera con la autoridad de la primera.
+    const m = modeloDeNavegacion(
+      CON_TAREAS({ props: [{ name: "B", inlineEvents: [{ name: "onclick", script: "irColl('Tareas')" }] }] }),
+      RAIZ,
+      TODAS
+    );
+    expect(m.referenciasDeScript.map((r) => r.por)).toEqual(["mencion"]);
+  });
+
+  it("un literal que NO es una colección conocida se ignora", () => {
+    const m = modeloDeNavegacion(
+      CON_TAREAS({ props: [{ name: "B", inlineEvents: [{ name: "onclick", script: "mostrar('Hola mundo')" }] }] }),
+      RAIZ,
+      TODAS
+    );
+    expect(m.referenciasDeScript).toEqual([]);
+  });
+
+  it("una colección que se nombra a SÍ MISMA no cuenta: es ruido en todas las que tienen script", () => {
+    // Medido: la mayoría de las menciones de un proyecto real eran los scripts de una coll
+    // diciendo su propio nombre —en un SQL, en un mensaje—. Como respuesta a «¿quién usa X?»
+    // eso no dice nada, y sale en todas.
+    const m = modeloDeNavegacion(
+      { colls: [coll({ name: "Tareas", location: { file: "/proy/Tareas.xne" },
+        props: [{ name: "B", inlineEvents: [{ name: "onclick", script: "log('Tareas')" }] }] })] },
+      RAIZ,
+      TODAS
+    );
+    expect(m.referenciasDeScript).toEqual([]);
+  });
+
+  it("la señal FUERTE gana: no se apunta dos veces la misma en el mismo trozo", () => {
+    const m = modeloDeNavegacion(
+      CON_TAREAS({
+        props: [{ name: "B", inlineEvents: [{ name: "onclick", script: "appData.getCollection('Tareas')" }] }],
+      }),
+      RAIZ,
+      TODAS
+    );
+    expect(m.referenciasDeScript.map((r) => r.por)).toEqual(["script"]);
+  });
+});

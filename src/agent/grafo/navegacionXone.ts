@@ -171,14 +171,27 @@ export function crearNavegacionXone(cargar: CargarIndice, ficheros: ReadonlySet<
       }
 
       const usos = indice.referencias(nombre);
-      if (usos.length === 0) return `Nadie referencia «${nombre}» por mapcol, mapfld, linkedfield, contents ni inherits.`;
-      return recortar(usos, LIMITES_NAVEGACION.referencias, pintarReferencia);
+      if (usos.length === 0) {
+        return `Nadie referencia «${nombre}» por mapcol, mapfld, linkedfield, contents, inherits ni desde un script.`;
+      }
+      /**
+       * **Se DICE cuál es floja.** `mencion` es un literal que coincide con el nombre de una
+       * colección, no una llamada resuelta: la cadena real puede tener tres saltos
+       * (`ExecuteNode(abrirColl('X'))` → nodo → `irColl(coll)` → `getCollection`). Sin esta
+       * línea, el modelo leería las dos con la misma autoridad y afirmaría un uso que solo es
+       * probable.
+       */
+      const hayMenciones = usos.some((r) => r.por === "mencion");
+      const lista = recortar(usos, LIMITES_NAVEGACION.referencias, pintarReferencia);
+      return hayMenciones
+        ? `${lista}\n(«mencion» = el nombre aparece como literal en un script; es probable, no seguro)`
+        : lista;
     },
     {
       name: "xone_navegacion",
       description:
         "Estructura del proyecto XOne resuelta: qué colecciones hay, dónde se declara una colección o un campo, " +
-        "quién la referencia (mapcol, mapfld, linkedfield, contents, inherits), qué campos, eventos y nodos tiene, " +
+        "quién la referencia (mapcol, mapfld, linkedfield, contents, inherits y desde scripts), qué campos, eventos y nodos tiene, " +
         "por dónde arranca la aplicación y qué referencias están rotas. " +
         "Úsala ANTES de leer ficheros para saber CUÁL leer. No busca texto: para eso están grep y regex_search. " +
         "No ve referencias calculadas en JavaScript.",
