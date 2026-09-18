@@ -1,7 +1,15 @@
 # Navegación semántica XOne y referencias de archivos en xonecode
 
 **Diseño para desarrollo · 17 de septiembre de 2026**  
-**Base examinada:** `deepseek-harness`, `xonecode` y `xone-linter` locales. **Destino de producto:** chat web; la CLI/TUI se retirará. Es una propuesta; no se ha implementado ni probado en xonecode.
+**Base examinada:** `deepseek-harness`, `xonecode` y `xone-linter` locales. **Destino de producto:** chat web; la CLI/TUI se retirará. Este documento nació como propuesta; el estado implementado se recoge en la sección siguiente.
+
+## Estado actual comprobado en xonecode · 18 de septiembre de 2026
+
+La primera fase ya existe como **`xone_navegacion`**: una tool de LangChain que consulta por nombre un índice XOne determinista. Ofrece siete operaciones (`inventario`, `definicion`, `referencias`, `campos`, `detalle`, `app`, `problemas`). El índice puro vive en [core/navegacion.ts](/Users/projects/xonecode/src/core/navegacion.ts), la traducción del modelo de `xone-linter` y el filtro de rutas en [modeloDeProyecto.ts](/Users/projects/xonecode/src/agent/navegacion/modeloDeProyecto.ts), la carga sin caché en [indiceEnDisco.ts](/Users/projects/xonecode/src/agent/navegacion/indiceEnDisco.ts) y la tool en [navegacionXone.ts](/Users/projects/xonecode/src/agent/grafo/navegacionXone.ts). Está cableada tanto al orquestador como a los especialistas en [xoneAgent.ts](/Users/projects/xonecode/src/agent/grafo/xoneAgent.ts).
+
+El código distingue referencias directas desde atributos XML y llamadas literales a `getCollection` de las **menciones probables** en scripts; ante resultados ausentes propone una llamada concreta a `regex_search`. Las rutas que entrega son virtuales y se filtran antes de entrar al índice. Según la medición documentada junto a la tool, inventariar un proyecto real de 41 `.xne` pasó de unos 18 000 tokens leyendo archivos a 141 tokens usando el índice; aquí se recoge esa medición del proyecto, no una repetición independiente.
+
+Esta fase **no implementa todavía un servidor del Language Server Protocol**: las consultas son por nombre y devuelven archivo, sin rangos ni posición de cursor, `didOpen`/`didChange` o `textDocument/definition`. El adaptador LSP descrito más abajo sigue siendo una opción para editores y para `dsh-lsp-stdio`. El completado `@archivo` del chat web también es una capacidad separada de `xone_navegacion`.
 
 ![Flujo propuesto de referencias y navegación XOne](./03-navegacion-xone-y-referencias.png)
 
