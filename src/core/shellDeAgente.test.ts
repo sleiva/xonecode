@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { VARIABLES_POR_PROVEEDOR } from "./modelos.js";
-import { entornoDeShell, variableDeSkill } from "./shellDeAgente.js";
+import { entornoDeShell, variableDeSkill, variablesDeAndroid } from "./shellDeAgente.js";
 
 describe("entornoDeShell", () => {
   it("quita las claves de API de los proveedores de serie", () => {
@@ -110,5 +110,68 @@ describe("los scripts de una skill, en el PATH", () => {
 describe("variableDeSkill", () => {
   it("deriva el nombre igual que la clave de un proveedor personalizado", () => {
     expect(variableDeSkill("xone-hotswap")).toBe("XONECODE_SKILL_XONE_HOTSWAP");
+  });
+});
+
+describe("variablesDeAndroid", () => {
+  it("nombra el emulador y el adb que el localizador encontró", () => {
+    const variables = variablesDeAndroid((nombre) =>
+      nombre === "emulator" ? "/sdk/emulator/emulator" : "/sdk/platform-tools/adb",
+    );
+
+    expect(variables).toEqual({
+      XONECODE_EMULATOR: "/sdk/emulator/emulator",
+      XONECODE_ADB: "/sdk/platform-tools/adb",
+    });
+  });
+
+  /**
+   * La MISMA regla que el resto del módulo: una variable sin valor se descarta en vez de
+   * pasarse vacía. Un `XONECODE_EMULATOR=""` no es «no consta», es una ruta rota que el
+   * script tomaría por buena y ejecutaría.
+   */
+  it("lo que el localizador NO encuentra no sale como cadena vacía: no sale", () => {
+    expect(variablesDeAndroid(() => undefined)).toEqual({});
+    expect(variablesDeAndroid((n) => (n === "adb" ? "/usr/bin/adb" : undefined))).toEqual({
+      XONECODE_ADB: "/usr/bin/adb",
+    });
+  });
+
+  it("busca cada binario en la subcarpeta del SDK que le toca", () => {
+    const pedidos: Array<[string, string]> = [];
+    variablesDeAndroid((nombre, subcarpeta) => {
+      pedidos.push([nombre, subcarpeta]);
+      return undefined;
+    });
+
+    expect(pedidos).toEqual([
+      ["emulator", "emulator"],
+      ["adb", "platform-tools"],
+    ]);
+  });
+});
+
+describe("entornoDeShell con Android", () => {
+  /**
+   * El motivo de todo esto: en esta máquina `adb` está en el PATH y `emulator` NO —vive en
+   * `.../share/android-commandlinetools/emulator/`— y `ANDROID_HOME` está vacía. Sin la
+   * variable, el script tendría que adivinar dónde está el SDK, que es una segunda regla
+   * compitiendo con `localizadorDeAndroid`.
+   */
+  it("pone en el entorno lo que el localizador encontró", () => {
+    const entorno = entornoDeShell({
+      entorno: { PATH: "/usr/bin" },
+      android: { XONECODE_EMULATOR: "/sdk/emulator/emulator" },
+    });
+
+    expect(entorno["XONECODE_EMULATOR"]).toBe("/sdk/emulator/emulator");
+    expect(entorno["PATH"]).toBe("/usr/bin");
+  });
+
+  it("sin Android no aparece ninguna de las dos variables", () => {
+    const entorno = entornoDeShell({ entorno: { PATH: "/usr/bin" } });
+
+    expect(entorno).not.toHaveProperty("XONECODE_EMULATOR");
+    expect(entorno).not.toHaveProperty("XONECODE_ADB");
   });
 });

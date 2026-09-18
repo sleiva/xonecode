@@ -36,12 +36,18 @@ responde. Habla dos protocolos por el mismo puerto: **WebSocket** para los coman
 
 ## Los scripts que trae esta skill: se llaman por su nombre
 
-Esta carpeta trae seis programas, y **están en el PATH**: se llaman como cualquier otro comando,
+Esta carpeta trae siete programas, y **están en el PATH**: se llaman como cualquier otro comando,
 sin ruta. Existen por una razón concreta — los comandos del canal viajan por **WebSocket** y
 `curl` no habla WebSocket, así que sin ellos no hay forma de mandar un `getAllElements` desde una
 shell.
 
 ```bash
+# ANTES QUE NADA si `adb devices` no lista ninguno: levanta el emulador y ESPERA a que esté
+# listo de verdad. Ya arrancado, lo dice y no lanza nada, así que se puede llamar sin miedo.
+xone-arrancar-android
+xone-arrancar-android --avd pixel8                # con varios AVDs
+xone-arrancar-android --lista                     # cuáles hay, sin arrancar ninguno
+
 # LO PRIMERO al empezar con un aparato, y lo primero que hay que probar si el canal no contesta:
 # el host reabre la última app ejecutada, y si ésa se quedó en un error, nada responde.
 xone-reiniciar-android
@@ -107,18 +113,22 @@ git y a CloudStudio. El script hace lo mismo y lo deja en `$XONECODE_ARTEFACTOS`
 el nombre. Lo que enseña es lo que pinta el SISTEMA, no lo que la app host dice de sí misma: por
 eso sigue siendo el respaldo y no la vía buena.
 
-**Un comando que no termina cuelga el turno.** Arrancar un emulador no vuelve nunca: mándalo al
-fondo y espera a una CONDICIÓN, no a un número de segundos.
+**Sin aparato no hay nada que probar, y arrancarlo es `xone-arrancar-android`.** Espera a que
+el sistema diga `sys.boot_completed=1` —no solo a que salga en `adb devices`—, porque sobre un
+Android a medio arrancar el despliegue falla de formas que no se leen. Y si ya está arrancado
+lo dice y no lanza nada, así que se puede llamar a la defensiva antes de desplegar.
 
 ```bash
-emulator -avd <nombre> >/dev/null 2>&1 &
-adb wait-for-device
-adb shell 'while [ "$(getprop sys.boot_completed)" != "1" ]; do sleep 2; done'
+adb devices                    # ¿hay algo?
+xone-arrancar-android          # si no; --avd <nombre> con varios AVDs
+xone-desplegar-android
 ```
 
-Ojo con el PATH: tus comandos corren con `/bin/sh`, sin el `~/.zshrc` de nadie. En un Mac con
-Homebrew, `emulator` suele estar en `$(brew --prefix)/share/android-commandlinetools/emulator/`
-aunque `adb` sí esté en el PATH.
+**No lo compongas a mano.** Un comando que no termina cuelga el turno, y además el binario no
+suele estar donde crees: tus comandos corren con `/bin/sh`, sin el `~/.zshrc` de nadie, y en un
+Mac con Homebrew `emulator` vive en `share/android-commandlinetools/emulator/` aunque `adb` sí
+esté en el PATH. El script recibe la ruta buena del harness (`$XONECODE_EMULATOR`), que la
+resuelve con el mismo localizador que la pestaña Ejecutar.
 
 ## Cómo llegar, según la plataforma
 

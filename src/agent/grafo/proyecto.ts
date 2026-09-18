@@ -11,7 +11,8 @@ import {
   type Artefacto,
 } from "../../core/artefactos.js";
 import { RUTA_ADJUNTOS } from "../../core/adjuntos.js";
-import { entornoDeShell } from "../../core/shellDeAgente.js";
+import { entornoDeShell, variablesDeAndroid } from "../../core/shellDeAgente.js";
+import { localizadorDeAndroid } from "../dispositivos/dispositivosEnMaquina.js";
 import {
   RUTAS_DE_DESCARGA,
   carpetaDeDescargas,
@@ -83,7 +84,22 @@ export function backendDelProyectoConShell(
  * backend y que `cargarAgentes`: una skill instalada con la consola abierta no alcanza a la
  * sesión en curso, que es el límite ya anotado en CLAUDE.md y no uno nuevo.
  */
-export function entornoDeLaShellDelProyecto(raiz: string, artefactos?: string): Record<string, string> {
+export function entornoDeLaShellDelProyecto(
+  raiz: string,
+  artefactos?: string,
+  /**
+   * El buscador de binarios del SDK de Android. Entra por parámetro **solo** para que un test
+   * pueda ver que está montado: esta función toca `process.env` y `existsSync`, así que sin
+   * inyectarlo la composición viviría donde ningún test la alcanza — el patrón de fallo que
+   * este repo lleva contadas nueve veces. En producción no lo pasa nadie.
+   */
+  enSdk: (nombre: string, subcarpeta: string) => string | undefined = localizadorDeAndroid({
+    plataforma: process.platform,
+    entorno: process.env,
+    home: process.env["HOME"] ?? "",
+    existe: (ruta) => existsSync(ruta),
+  }).enSdk,
+): Record<string, string> {
   // `skillsConRuta` y no `skillsMontables`: aquélla deja fuera las de SERIE —su raíz se cuelga
   // entera en el backend— y una shell necesita la ruta real de todas. Sin esto, los scripts de
   // las skills de serie no llegan al PATH y el agente se queda buscándolos por el disco.
@@ -95,6 +111,9 @@ export function entornoDeLaShellDelProyecto(raiz: string, artefactos?: string): 
     // va aquí porque `entornoDeShell` es puro: prometer en el PATH una carpeta que no está es
     // el botón muerto de siempre, solo que en una variable de entorno.
     binarios: skills.map((s) => join(s.dir, "scripts")).filter((d) => existsSync(d)),
+    // Sin esto, `xone-arrancar-android` tendría que adivinar dónde está el SDK: en un Mac con
+    // Homebrew `emulator` no está en el PATH y `ANDROID_HOME` suele estar vacía.
+    android: variablesDeAndroid(enSdk),
     ...(artefactos === undefined ? {} : { artefactos }),
   });
 }

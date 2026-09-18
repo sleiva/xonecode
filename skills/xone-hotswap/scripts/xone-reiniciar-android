@@ -51,6 +51,34 @@ const cliente = join(import.meta.dirname, "xone-hotswap");
 const mandar = (comando) =>
   execFileSync("node", [cliente, JSON.stringify(comando)], { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] }).trim();
 
+/**
+ * Sin aparato NO se empieza, y se dice el siguiente paso HECHO.
+ *
+ * Antes el primer `adb forward` moría con «no devices/emulators found», que es cierto y no
+ * dice qué hacer: medido, el modelo se ponía a componer el arranque a mano —y `emulator` no
+ * está en el PATH—. Es la regla de `porQueNo`: cuando sabemos la salida, se escribe, no se
+ * aconseja.
+ */
+function exigirAparato() {
+  let lista = "";
+  try {
+    lista = execFileSync("adb", ["devices"], { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] });
+  } catch (error) {
+    console.error(`no pude hablar con adb: ${error.message.split("\n")[0]}`);
+    process.exit(1);
+  }
+  const hay = lista
+    .split(/\r?\n/)
+    .slice(1)
+    .some((l) => /\sdevice$/.test(l.trim()));
+  if (!hay) {
+    console.error("no hay ningún aparato conectado. Arranca el emulador primero:");
+    console.error("  xone-arrancar-android");
+    process.exit(1);
+  }
+}
+
+exigirAparato();
 console.log(`1/3 túnel y parada de ${PAQUETE}`);
 // El túnel PRIMERO y sin quitarlo después: hay que reaplicarlo tras cada reconexión del cable,
 // así que quitarlo dejaría al siguiente hablando con nadie.

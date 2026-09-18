@@ -666,6 +666,29 @@ describe("la shell de un subagente con EJECUCIÓN", () => {
     expect(entorno["PATH"]!.split(":").some((d) => d.endsWith("xone-hotswap/scripts"))).toBe(true);
   });
 
+  /**
+   * El síntoma que lo pidió: el emulador estaba cerrado y el agente no lo levantó. Medido en
+   * la máquina de desarrollo, `adb` está en el PATH y `emulator` NO, con `ANDROID_HOME`
+   * vacía — o sea que el caso normal de un Mac con Homebrew es el que deja al script sin el
+   * binario. El localizador entra por parámetro justo para poder mirar esto: la función toca
+   * `process.env` y `existsSync`, así que con la composición dentro nadie vería si se cayó.
+   */
+  it("las rutas del SDK de Android llegan al entorno de la shell", () => {
+    const entorno = entornoDeLaShellDelProyecto(raizDePrueba(), undefined, (nombre) =>
+      nombre === "emulator" ? "/sdk/emulator/emulator" : "/sdk/platform-tools/adb",
+    );
+
+    expect(entorno["XONECODE_EMULATOR"]).toBe("/sdk/emulator/emulator");
+    expect(entorno["XONECODE_ADB"]).toBe("/sdk/platform-tools/adb");
+  });
+
+  it("y sin SDK no se promete una ruta vacía, que el script ejecutaría", () => {
+    const entorno = entornoDeLaShellDelProyecto(raizDePrueba(), undefined, () => undefined);
+
+    expect(entorno).not.toHaveProperty("XONECODE_EMULATOR");
+    expect(entorno).not.toHaveProperty("XONECODE_ADB");
+  });
+
   it("y no se lleva por delante el PATH del proceso, donde está el `adb` del usuario", () => {
     const entorno = entornoDeLaShellDelProyecto(raizDePrueba());
 

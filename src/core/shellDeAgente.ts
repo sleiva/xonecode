@@ -72,6 +72,50 @@ export function variableDeSkill(nombre: string): string {
   return `XONECODE_SKILL_${nombre.toUpperCase().replace(/-/g, "_")}`;
 }
 
+/**
+ * Las dos rutas de Android que la shell necesita y no puede deducir.
+ *
+ * **Medido en la máquina de desarrollo**: `adb` está en el PATH (`/opt/homebrew/bin/adb`) y
+ * `emulator` **no** —vive en `.../share/android-commandlinetools/emulator/`— con
+ * `ANDROID_HOME` y `ANDROID_SDK_ROOT` vacías. O sea que el caso normal de un Mac con
+ * Homebrew es justo el que deja al agente sin el binario que arranca un emulador.
+ *
+ * Quien sabe dónde está el SDK es `localizadorDeAndroid` (`agent/dispositivos/`), que ya
+ * mira las dos variables de entorno y las raíces por omisión de cada plataforma. Pasarlo por
+ * aquí es lo que evita que el script tenga que adivinarlo: **una segunda regla sobre dónde
+ * vive el SDK es una segunda regla que puede divergir**, y ésta es la clase de cosa que falla
+ * en silencio —el script no encuentra el binario, el modelo se apaña por su cuenta—.
+ *
+ * Va por VARIABLE y no por el prompt por lo mismo que las skills: el comando que el modelo
+ * componga sale como `detalle` del evento, y ahí no puede viajar una ruta de la máquina
+ * (`sinRutas`).
+ */
+export const VARIABLE_DE_EMULATOR = "XONECODE_EMULATOR";
+export const VARIABLE_DE_ADB = "XONECODE_ADB";
+
+/**
+ * De un localizador de binarios del SDK a las variables que ve la shell.
+ *
+ * PURA y con el localizador por parámetro: así se prueba sin disco, y sobre todo así la
+ * composición de producción no vive dentro de `entornoDeLaShellDelProyecto` —que toca
+ * `process.env` y `existsSync`, y por tanto ningún test suyo podría ver si el localizador
+ * llegó a estar cableado—. Es el patrón de fallo que este repo lleva contadas nueve veces.
+ *
+ * Lo que no se encuentra **no sale**, ni siquiera como cadena vacía: la misma regla que el
+ * resto del módulo. Un `XONECODE_EMULATOR=""` no es «no consta», es una ruta rota que el
+ * script tomaría por buena.
+ */
+export function variablesDeAndroid(
+  enSdk: (nombre: string, subcarpeta: string) => string | undefined,
+): Record<string, string> {
+  const variables: Record<string, string> = {};
+  const emulator = enSdk("emulator", "emulator");
+  if (emulator !== undefined) variables[VARIABLE_DE_EMULATOR] = emulator;
+  const adb = enSdk("adb", "platform-tools");
+  if (adb !== undefined) variables[VARIABLE_DE_ADB] = adb;
+  return variables;
+}
+
 /** Una skill montada: su nombre de catálogo y dónde está DE VERDAD en el disco. */
 export interface SkillEnDisco {
   nombre: string;
@@ -89,6 +133,11 @@ export function entornoDeShell(opciones: {
    * el PATH con una promesa vacía.
    */
   binarios?: readonly string[];
+  /**
+   * Las rutas de Android ya resueltas (`variablesDeAndroid`). Entran hechas y no como un
+   * localizador para que esto siga sin tocar disco.
+   */
+  android?: Readonly<Record<string, string>>;
 }): Record<string, string> {
   const credenciales = new Set<string>(Object.values(VARIABLES_POR_PROVEEDOR));
   const limpio: Record<string, string> = {};
@@ -113,6 +162,9 @@ export function entornoDeShell(opciones: {
     limpio["PATH"] = actual === undefined || actual === "" ? binarios.join(":") : [actual, ...binarios].join(":");
   }
   if (opciones.artefactos !== undefined) limpio[VARIABLE_DE_ARTEFACTOS] = opciones.artefactos;
+  // Después de la copia del entorno heredado, así que lo que resuelve el localizador gana
+  // sobre un valor que viniera de fuera: el localizador SÍ ha comprobado que el fichero está.
+  Object.assign(limpio, opciones.android ?? {});
 
   return limpio;
 }

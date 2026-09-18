@@ -1,0 +1,202 @@
+#!/usr/bin/env node
+/**
+ * Levantar un emulador de Android y dejarlo listo para desplegar.
+ *
+ * EXISTE PORQUE FALTABA, y el síntoma fue literal: con el emulador cerrado, el agente no lo
+ * levantaba. Lo que había era prosa en la skill —«mándalo al fondo y espera a una
+ * condición»— y cuatro sitios donde equivocarse: encontrar un binario que NO está en el PATH
+ * (en un Mac con Homebrew `emulator` vive en `share/android-commandlinetools/emulator/`
+ * mientras `adb` sí está, y `ANDROID_HOME` suele estar vacía), elegir el AVD, mandarlo al
+ * fondo sin colgar el turno, y saber cuándo está listo de verdad.
+ *
+ * LAS RUTAS NO SE ADIVINAN, LLEGAN: `$XONECODE_EMULATOR` y `$XONECODE_ADB` las pone el
+ * harness con el MISMO localizador que usa la pestaña Ejecutar
+ * (`core/shellDeAgente.ts#variablesDeAndroid` ← `localizadorDeAndroid`). Dos reglas sobre
+ * dónde vive el SDK son dos reglas que divergen. Si no están, se cae al PATH, que es lo
+ * único honesto que se puede hacer sin ellas.
+ *
+ * DOS COSAS QUE LO SEPARAN DEL BOTÓN DE LA WEB (`agent/dispositivos/arranqueDeEmulador.ts`),
+ * y son deliberadas:
+ *
+ *  - **Espera a `sys.boot_completed`, no solo a que el aparato APAREZCA.** Al botón le basta
+ *    con que `adb devices` lo liste con su nombre de AVD: quien mira la pantalla ya ve el
+ *    resto. Aquí el comando siguiente es `xone-desplegar-android`, y sobre un Android a
+ *    medio arrancar falla de formas que no se leen —un `pm grant` que no responde, un
+ *    `am start` que se traga—. La condición de «listo» es la del sistema, no la nuestra.
+ *  - **Es IDEMPOTENTE.** El modelo lo va a llamar a la defensiva antes de desplegar. Si ya
+ *    hay un emulador vivo con ese AVD se dice y se sale con 0, sin lanzar nada: un segundo
+ *    `emulator -avd pixel8` falla con ruido y manda al modelo a diagnosticar un problema que
+ *    no existe.
+ *
+ * USO:
+ *   xone-arrancar-android                  el único AVD que haya
+ *   xone-arrancar-android --avd pixel8     con varios
+ *   xone-arrancar-android --lista          qué AVDs hay, sin arrancar nada
+ */
+import { execFileSync, spawn } from "node:child_process";
+
+/** Lo que tarda un arranque en frío de un AVD con `google_apis`, con margen. Por debajo del
+ *  tope de reloj de UN comando del harness (600 s), que es quien mataría al script entero. */
+const TOPE_MS = 180_000;
+const ESPERA_S = 2;
+
+const args = process.argv.slice(2);
+const opcion = (nombre) => {
+  const i = args.indexOf(`--${nombre}`);
+  return i >= 0 ? args[i + 1] : undefined;
+};
+
+if (args.includes("--help") || args.includes("-h")) {
+  console.error(`xone-arrancar-android — levanta un emulador y espera a que esté ARRANCADO.
+
+  xone-arrancar-android                  el único AVD que haya
+  xone-arrancar-android --avd pixel8     con varios
+  xone-arrancar-android --lista          qué AVDs hay, sin arrancar nada
+
+Si ya hay un emulador vivo con ese AVD, lo dice y no lanza nada. Espera a que el sistema
+diga \`sys.boot_completed=1\`, no solo a que el aparato aparezca en \`adb devices\`: sobre un
+Android a medio arrancar, \`xone-desplegar-android\` falla de formas que no se leen.
+Después: xone-desplegar-android`);
+  process.exit(0);
+}
+
+// El harness los pone; el PATH es el respaldo. Un valor vacío no es «no consta», así que no
+// se acepta como ruta: se cae al nombre pelado igual que si no estuviera.
+const EMULATOR = process.env.XONECODE_EMULATOR || "emulator";
+const ADB = process.env.XONECODE_ADB || "adb";
+
+const adb = (...partes) =>
+  execFileSync(ADB, partes, { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] });
+
+/** Los emuladores conectados, con el AVD que dice ser cada uno. */
+function emuladoresVivos() {
+  let salida;
+  try {
+    salida = adb("devices");
+  } catch {
+    // `adb` puede estar levantando su demonio. No es un fallo del arranque, es un sondeo más.
+    return [];
+  }
+  const vivos = [];
+  for (const linea of salida.split(/\r?\n/)) {
+    const l = linea.trim();
+    if (l === "" || /^List of devices/i.test(l) || l.startsWith("*")) continue;
+    const [serie, estado] = l.split(/\s+/);
+    if (!serie || !serie.startsWith("emulator-") || estado !== "device") continue;
+    let avd;
+    try {
+      avd = adb("-s", serie, "emu", "avd", "name")
+        .split(/\r?\n/)
+        .map((x) => x.trim())
+        .find((x) => x !== "" && x !== "OK");
+    } catch {
+      // Ese emulador todavía no contesta a la consola. Se sigue con los demás.
+    }
+    vivos.push({ serie, avd });
+  }
+  return vivos;
+}
+
+/** «Listo» lo dice el SISTEMA, no nosotros. */
+function arrancadoDelTodo(serie) {
+  try {
+    return adb("-s", serie, "shell", "getprop", "sys.boot_completed").trim() === "1";
+  } catch {
+    return false;
+  }
+}
+
+function avdsDisponibles() {
+  try {
+    return execFileSync(EMULATOR, ["-list-avds"], { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] })
+      .split(/\r?\n/)
+      .map((l) => l.trim())
+      .filter((l) => l !== "");
+  } catch (error) {
+    console.error(`no pude listar los AVDs con «${EMULATOR}»: ${error.message.split("\n")[0]}`);
+    console.error("Si el SDK está instalado pero no lo encuentro, es que falta ANDROID_HOME o la carpeta emulator/.");
+    process.exit(1);
+  }
+}
+
+if (args.includes("--lista")) {
+  const avds = avdsDisponibles();
+  if (avds.length === 0) console.error("no hay ningún AVD creado. Créalo con `avdmanager` o desde Android Studio.");
+  else console.log(avds.join("\n"));
+  process.exit(0);
+}
+
+/** El AVD: el que se diga, o el único que haya. Mismo contrato que `xone-arrancar-ios`. */
+function elegirAvd() {
+  const dicho = opcion("avd");
+  if (dicho !== undefined) return dicho;
+  const avds = avdsDisponibles();
+  if (avds.length === 0) {
+    console.error("no hay ningún AVD creado. Créalo con `avdmanager` o desde Android Studio.");
+    process.exit(1);
+  }
+  if (avds.length > 1) {
+    console.error(`hay ${avds.length} AVDs; dime cuál con --avd:`);
+    for (const a of avds) console.error(`  ${a}`);
+    process.exit(1);
+  }
+  return avds[0];
+}
+
+const avd = elegirAvd();
+
+// El nombre se convierte en un ARGUMENTO de proceso, así que se cierra por FORMA. Ojo al guion
+// INICIAL: `emulator` tomaría `-foo` por una bandera suya. Es la misma clase que acepta el
+// harness (`core/dispositivos.ts#nombreDeAvdDeConsola`), a propósito.
+if (!/^[A-Za-z0-9._][A-Za-z0-9._-]*$/.test(avd)) {
+  console.error(`«${avd}» no es un nombre de AVD`);
+  process.exit(1);
+}
+
+// IDEMPOTENTE: si ya está, no se lanza nada.
+const yaEstaba = emuladoresVivos().find((e) => e.avd === avd);
+if (yaEstaba !== undefined) {
+  if (arrancadoDelTodo(yaEstaba.serie)) {
+    console.log(`${avd} ya está arrancado (${yaEstaba.serie}). No he lanzado nada.`);
+    console.log("Siguiente: xone-desplegar-android");
+    process.exit(0);
+  }
+  console.log(`${avd} (${yaEstaba.serie}) está arrancando; espero a que termine.`);
+}
+
+if (yaEstaba === undefined) {
+  console.log(`1/2 lanzando ${avd}`);
+  /**
+   * DESPEGADO Y SIN TUBERÍAS. Un emulador no termina nunca: si el script se queda con sus
+   * pipes, no sale, y entonces el que muere por el tope de reloj es el SCRIPT —diez minutos
+   * de turno tirados—. `unref` es lo que deja que este proceso acabe con el nieto vivo.
+   */
+  const hijo = spawn(EMULATOR, ["-avd", avd], { detached: true, stdio: "ignore" });
+  let fallo;
+  hijo.on("error", (e) => {
+    fallo = e.message;
+  });
+  hijo.unref();
+  execFileSync("sleep", [String(ESPERA_S)]);
+  if (fallo !== undefined) {
+    console.error(`no pude lanzar el emulador: ${fallo}`);
+    process.exit(1);
+  }
+}
+
+console.log(`2/2 esperando a que ${avd} termine de arrancar`);
+const t0 = Date.now();
+while (Date.now() - t0 < TOPE_MS) {
+  const mio = emuladoresVivos().find((e) => e.avd === avd);
+  if (mio !== undefined && arrancadoDelTodo(mio.serie)) {
+    console.log(`${avd} arrancado y listo (${mio.serie}), ${Math.round((Date.now() - t0) / 1000)} s`);
+    console.log("Siguiente: xone-desplegar-android");
+    process.exit(0);
+  }
+  execFileSync("sleep", [String(ESPERA_S)]);
+}
+
+// El proceso sigue vivo: se dice lo que se SABE, que es que todavía no está listo.
+console.error(`${avd} no ha terminado de arrancar en ${TOPE_MS / 1000} s; sigue en marcha.`);
+console.error("Vuelve a llamarme dentro de un rato: si ya está, lo digo y no lanzo nada.");
+process.exit(1);
