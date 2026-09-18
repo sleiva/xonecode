@@ -81,7 +81,8 @@
    prosa. */
 .motor,
 .origen,
-.lectura {
+.lectura,
+.ejecucion {
   flex: none;
   padding: 1px 6px;
   border-radius: 999px;
@@ -107,6 +108,15 @@
 .lectura {
   background: var(--dsw-alias-state-success-tertiary);
   color: var(--dsw-alias-state-success-primary);
+}
+
+/* Y ÁMBAR para el que ejecuta comandos: no es un error —lo declaró quien escribió el `.md`—
+   pero es lo único de esta lista que alcanza la máquina entera, así que no puede leerse igual
+   que «solo lectura». El par de aviso ya viene ajustado por tema; inventar aquí un color sería
+   el literal que `Barra.test.tsx` persigue por todos los `.module.css`. */
+.ejecucion {
+  background: var(--dsw-alias-state-warning-tertiary);
+  color: var(--dsw-alias-state-warning-primary);
 }
 
 .descripcion {

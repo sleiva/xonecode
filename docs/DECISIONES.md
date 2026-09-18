@@ -4500,6 +4500,128 @@ usuario**: los cinco `.md` seguían con nuestro hash, así que la siembra los re
 (`consultant-xone.md` pasó de 2.556 a 1.251 caracteres) y sus dos agentes propios no se tocan.
 Es exactamente para lo que existe `.semilla.json`.
 
+## `device-controller`: el agente que conduce el aparato (18-09-2026)
+
+El punto de partida era un botón muerto declarado. `tester-xone` existía, llevaba la skill
+`xone-hotswap` —1.100 líneas con el protocolo de las dos plataformas— y su propio prompt decía
+«NO tienes conexión con el dispositivo … las tools que lo harían son el paso siguiente». O sea
+que a «lanza la app y sácame una captura» el orquestador delegaba bien, y el especialista
+devolvía el PROCEDIMIENTO en vez de hacerlo.
+
+**Lo primero que se midió fue si la skill bastaba.** No basta, y no por cómo esté escrita: un
+`.md` no ejecuta un `adb`. Lo ejecuta quien lo lee, si tiene con qué, y hoy no lo tiene nadie —
+los cinco de `motor: "modelo"` tienen seis tools de fichero sobre un backend virtual;
+`claude-code` tiene `Bash` en `TOOLS_EXTERNAS_DENEGADAS`; a OpenCode se le RETIRA la tool; y el
+sandbox de Codex es `read-only` siempre. Así que la elección real era entre escribir tools o
+conceder ejecución, y la decidió el usuario: **ejecución**, con el argumento de que esto es un
+harness y mañana hay otro aparato al que se le dan instrucciones con una skill.
+
+**El hallazgo que simplificó el diseño lo puso él: `execute` ya existe en deepagents.** Es una
+tool más del `FilesystemMiddleware` (`ls`, `read_file`, `write_file`, `edit_file`, `delete`,
+`glob`, `grep`, `execute`) y aparece **solo si el backend resuelto sabe ejecutar**. O sea que no
+había que escribir ninguna tool: había que montar `LocalShellBackend` en UN subagente. Con eso
+las tres tools que se habían diseñado antes (`xone_hotswap`, `xone_desplegar`,
+`xone_dispositivos`) sobran, y con ellas sobra el acoplamiento a XOne: lo que sabe hacer con un
+aparato lo dice la skill.
+
+### Lo que se midió contra la librería antes de escribir el cableado
+
+Tres cosas, y dos habrían costado una sesión cada una:
+
+- **`execute` sobrevive la cadena entera.** `CompositeBackend.execute` «siempre delega en el
+  backend por defecto», y el `id` se propaga por los composites anidados. Con la shell como
+  base, la cadena real —memoria → vistas aplanadas → artefactos → descargas → `/skills/` →
+  `/artefactos/`— da `isSandboxBackend` verdadero; sin ella, falso. El discriminante es
+  `id !== ""`, y por eso el backend normal (que no tiene `id`) sigue sin `execute`.
+- **Nuestro Proxy revienta con un backend con shell.** Los cinco Proxies de `proyecto.ts` leían
+  con `Reflect.get(objetivo, prop, receptor)`, y `LocalShellBackend.id` es un getter sobre un
+  campo PRIVADO (`#sandboxId`): leído con el proxy como receptor lanza `TypeError`. Lo lee el
+  **constructor** de `CompositeBackend`, así que el fallo sería al montar el agente, no al correr
+  un comando. Se arregla leyendo contra el objetivo.
+- **`permissions` y ejecución no se combinan, y lo prohíbe la librería**: lanza
+  `ConfigurationError` salvo que `execute` esté apagado o que todas las rutas estén acotadas a un
+  prefijo montado. Las nuestras deniegan `/.env`, `/.git` y `/.xonecode`, que viven en la raíz. La
+  librería no se niega por capricho: «los comandos alcanzan cualquier ruta independientemente de
+  las reglas de ruta». Esa negativa es el argumento entero de por qué esto se declara en el `.md`
+  y lo lleva uno solo.
+
+Y una cuarta, del lado del sistema: **`execute` corre con `shell: true`, o sea `/bin/sh`**, y sin
+PATH explícito `sh` se inventa uno (`/usr/gnu/bin:/usr/local/bin:/bin:/usr/bin:.`) que **no
+incluye `/opt/homebrew/bin`**. Por eso el entorno se construye QUITANDO del `process.env` en vez
+de montándolo desde cero: con un entorno limpio no se encuentra el `adb` del usuario y el fallo se
+lee como «no hay dispositivo». El tope de la librería es de RELOJ (no de silencio, al revés que
+`TOPE_SIN_SALIDA_MS`) y al vencer mata al HIJO, no al grupo.
+
+### Las claves de API, que es el agujero que abre `inheritEnv`
+
+`guardarCredencial` escribe la clave también en `process.env`, a propósito. Un `inheritEnv: true`
+se la pasa a la shell del modelo, y `printenv` —lo primero que hace cualquiera para orientarse—
+la deja en el resultado de la tool, o sea en el contexto y en el `.jsonl`. No es una fuga
+hipotética: es la salida normal de un comando normal. `core/shellDeAgente.ts` las quita **por la
+tabla** (`VARIABLES_POR_PROVEEDOR`, el único sitio donde vive el nombre de cada variable) más el
+prefijo `XONECODE_CLAVE_` de los personalizados, que por definición no puede estar en ninguna
+tabla. No se quita todo lo que empiece por `XONECODE_`, que se llevaría `XONECODE_TRACE_TOOLS`.
+
+**Límite declarado**: quita las NUESTRAS. Un `GITHUB_TOKEN` del entorno de quien arranca sigue
+ahí, y no se filtra — «lo que parece una clave» es una heurística, y una heurística que falla en
+silencio es peor que un límite escrito. Quien concede ejecución concede leer el entorno y el
+disco; lo que esto evita es que el harness REGALE lo que él mismo escribió.
+
+### Por qué las rutas van en variables de entorno
+
+Una shell ve el disco de verdad: `/skills/xone-hotswap/` es una ruta virtual de nuestro backend y
+para un comando no existe. Poner la ruta absoluta en el prompt tenía dos precios: el comando que
+el modelo componga es el `detalle` del evento `tool`, y ahí no puede viajar una ruta de la máquina
+(`sinRutas`); y la raíz no es una sino TRES, con la del proyecto ganando. Con una variable por
+skill montada (`XONECODE_SKILL_<SLUG>`, la misma derivación que `XONECODE_CLAVE_<SLUG>` y otro
+prefijo para que una skill no pueda fabricarse el nombre de una credencial) el prompt dice
+`$XONECODE_SKILL_XONE_HOTSWAP/scripts/…` y no hay ruta en ningún lado. Igual con
+`XONECODE_ARTEFACTOS`: sin ella, un script escribe en el `cwd` —la raíz del proyecto—, que es
+justo lo que `artefactoFueraDeSitio` prohíbe a las tools de fichero y que una shell no pasa.
+
+### Lo que se compensa VIENDO, ya que no se pregunta
+
+No se pide aprobación por comando: «lanza la app» son cuatro, y preguntar cuatro veces mata el
+bucle que esto existe para tener. A cambio, el comando ENTERO sale como `detalle` del evento
+`tool` —es la única entrada de la lista blanca de `resumenDeTool.ts` que no es una ruta ni un
+patrón— con icono y verbo propios, y la capacidad se ve en la tarjeta del agente con una pastilla
+ámbar. El precio declarado: si el modelo escribe una ruta absoluta en su comando, esa ruta viaja
+por el cable. No se tapa con un limpiador que adivine qué trozo de una línea de shell es una ruta,
+porque fallaría en silencio.
+
+### Los scripts van DENTRO de la skill, y eso es lo que hace esto extensible
+
+`curl` no habla WebSocket, y en el framework 5.0.2.2dev el `POST /command` por HTTP da 404 (eso
+es del flavor `playStoreDeveloper`). O sea que con `bash` y la skill sola, el primer turno se le
+iría en escribir un cliente de WebSocket. Así que el cliente vive en la skill
+(`skills/xone-hotswap/scripts/hotswap.mjs`), junto a las dos plantillas de plataforma
+(`android-desplegar.mjs`, `ios-arrancar.mjs`). Una skill es una CARPETA —por eso se instalan como
+`.zip`— y ahora esa carpeta puede traer programas, no solo texto. **Un aparato nuevo mañana es
+una skill nueva con su script: cero código nuestro.**
+
+Dos cosas del cliente salieron de correrlo contra el emulador, no de leer la documentación: la
+respuesta del `getScreenshot` viene en `status` y es **JPEG**, no PNG ni un campo `image`; y una
+captura son ~57.000 caracteres de base64, así que se guarda a fichero y lo que se imprime es su
+nombre y su tamaño — volcarla en la salida del comando la mete en el contexto para siempre sin
+que nadie pueda mirarla.
+
+Y una tercera, que apareció al probar la plantilla de despliegue entera: **el canal no está en
+pie justo después del reinicio**. El `am start` vuelve cuando Android acepta el intent, no cuando
+el servidor escucha, así que el primer `launchApplication` moría con «Received network error or
+non-101 status code». Se espera a que CONTESTE, que es la condición de verdad, en vez de dormir
+un rato fijo. Probado de punta a punta con un proyecto de usar y tirar: túnel, ZIP, subida,
+reinicio, espera, lanzamiento y comprobación — la app no arrancó porque no tenía `bd/gestion.db`,
+que es exactamente lo que la plantilla dice que mires primero.
+
+### El renombrado
+
+`tester-xone` → `device-controller`, con su entrada en `RENOMBRADOS` y las dos viejas
+(`xone-device-tester`, `probador`) **actualizadas al nombre de hoy**, porque esa tabla se lee de
+un salto y una entrada que apunte al nombre de enmedio manda a buscar un agente que no existe. El
+nombre se sale de la convención `<rol>-xone` por decisión del usuario, y el argumento aguanta: el
+sufijo estaba para distinguir nuestros nombres de los agentes del hijo en un motor externo, y a un
+motor externo este agente no viaja — ahí la ejecución no se concede.
+
 ## Trampas verificadas
 
 - **El orquestador va de SOLO LECTURA, y hasta el 9-09-2026 no lo era** (`PERFIL_DEL_ORQUESTADOR`,

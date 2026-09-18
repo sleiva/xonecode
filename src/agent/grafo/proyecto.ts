@@ -1,6 +1,6 @@
-import { statSync } from "node:fs";
+import { readdirSync, statSync } from "node:fs";
 import { join } from "node:path";
-import { CompositeBackend, FilesystemBackend } from "deepagents";
+import { CompositeBackend, FilesystemBackend, LocalShellBackend } from "deepagents";
 import { RUTA_MEMORIA_INTERNA, RUTA_MEMORIA_VIRTUAL } from "./memoriaDeProyecto.js";
 import { RAIZ_SKILLS, skillsMontables, type Montaje } from "./skills.js";
 import {
@@ -11,6 +11,7 @@ import {
   type Artefacto,
 } from "../../core/artefactos.js";
 import { RUTA_ADJUNTOS } from "../../core/adjuntos.js";
+import { entornoDeShell } from "../../core/shellDeAgente.js";
 import {
   RUTAS_DE_DESCARGA,
   carpetaDeDescargas,
@@ -25,12 +26,81 @@ import {
  * default (`false`) el backend LEYÓ una ruta absoluta de fuera de la raíz. La propia
  * librería lo dice de su default — «absolute paths and `..` can bypass rootDir».
  *
- * Y nada de `LocalShellBackend`: la librería avisa de que `virtualMode` **no restringe los
- * comandos de shell**. El simulador lo invoca el código de xonecode, no el modelo.
+ * Y sin shell: el `execute` de deepagents solo aparece si el backend sabe ejecutar, así que
+ * éste es el que deja a un especialista SIN esa tool. El que sí la tiene es
+ * `backendDelProyectoConShell`, y quién se lleva cuál lo decide `ejecucion` en el `.md`.
  */
 export function backendDelProyecto(raiz: string): FilesystemBackend {
   return new FilesystemBackend({ rootDir: raiz, virtualMode: true });
 }
+
+/**
+ * El mismo backend, pero que además EJECUTA — el de un subagente con `ejecucion: true`.
+ *
+ * Es la pieza que enciende la tool `execute` de deepagents: el middleware la registra solo
+ * cuando «el backend resuelto sabe ejecutar», y lo que decide eso es `isSandboxBackend`, que
+ * mira que haya un `execute` y un `id` NO vacío (medido en la librería: `id !== ""`).
+ *
+ * **Lo que `virtualMode` NO hace aquí, y hay que tenerlo delante.** Confina las tools de
+ * FICHERO, no los comandos: un `cat ../../otro` del shell sale de la raíz igual. Lo mismo
+ * vale para `permisosDe`, y la propia librería se niega a fingir lo contrario — usar
+ * `permissions` con un backend ejecutable **lanza `ConfigurationError`** («permissions are
+ * not enforced on execute because shell commands can access any path regardless of
+ * path-based rules»). O sea que conceder ejecución es conceder la máquina, y por eso se
+ * declara en el `.md`, se ve en cada evento y lo lleva un solo subagente.
+ *
+ * **El entorno se pasa ENTERO y a mano, nunca `inheritEnv`.** Con `inheritEnv: true` la
+ * shell hereda `process.env`, donde `guardarCredencial` escribe las claves de API a
+ * propósito; un `printenv` las dejaría en el contexto. Lo que se pasa lo decide
+ * `core/shellDeAgente.ts#entornoDeShell`, que es puro y tiene test.
+ *
+ * **Dos límites de la librería, declarados**: el tope es de RELOJ (`timeout`, en segundos) y
+ * no de silencio, al revés que `TOPE_SIN_SALIDA_MS` de `agent/dispositivos/`; y al vencer
+ * mata al HIJO (`SIGTERM`), no al grupo, así que un nieto sobrevive. Por eso lo que no
+ * termina —un emulador— va al fondo desde la propia orden, y eso lo dice la skill.
+ */
+export function backendDelProyectoConShell(
+  raiz: string,
+  entorno: Record<string, string>,
+): FilesystemBackend {
+  return new LocalShellBackend({
+    rootDir: raiz,
+    virtualMode: true,
+    env: entorno,
+    timeout: TOPE_DE_COMANDO_S,
+  });
+}
+
+/**
+ * El entorno con el que corre la shell de ESTE proyecto.
+ *
+ * Una sola llamada para que el montaje no sea una composición dentro de `construirAgente`:
+ * ahí lo doblan todos los tests y la regla —qué claves se quitan, qué rutas se añaden—
+ * quedaría escrita y sin probar. La decisión es pura y vive en `core/shellDeAgente.ts`; lo
+ * que aporta esto es de dónde salen los tres ingredientes.
+ *
+ * Las skills se leen del disco en cada construcción, igual que `skillsMontables` en el
+ * backend y que `cargarAgentes`: una skill instalada con la consola abierta no alcanza a la
+ * sesión en curso, que es el límite ya anotado en CLAUDE.md y no uno nuevo.
+ */
+export function entornoDeLaShellDelProyecto(raiz: string, artefactos?: string): Record<string, string> {
+  return entornoDeShell({
+    entorno: process.env,
+    skills: skillsMontables(raiz).map((m) => ({ nombre: m.nombre, dir: m.dir })),
+    ...(artefactos === undefined ? {} : { artefactos }),
+  });
+}
+
+/**
+ * El tope de reloj de UN comando, en segundos.
+ *
+ * El de la librería son 120 s. Se sube porque aquí los comandos normales son de dispositivo
+ * —un `adb install`, esperar a que un emulador termine de arrancar— y 120 s los corta a
+ * mitad; y no se sube más porque un comando que no vuelve deja el turno colgado hasta aquí.
+ * Lo que de verdad no termina nunca (arrancar un emulador) no se acota con un tope: se manda
+ * al fondo, que es lo que la skill explica.
+ */
+export const TOPE_DE_COMANDO_S = 600;
 
 /**
  * Añade las skills como una ruta virtual de solo lectura del agente.
@@ -126,8 +196,8 @@ export function backendConArtefactos<T extends object>(
   const destino = new FilesystemBackend({ rootDir: carpeta, virtualMode: true });
 
   const anotado = new Proxy(destino, {
-    get(objetivo, prop, receptor) {
-      const valor = Reflect.get(objetivo, prop, receptor);
+    get(objetivo, prop) {
+      const valor = Reflect.get(objetivo, prop, objetivo);
       if (typeof valor !== "function") return valor;
       if (prop !== "write" && prop !== "edit") {
         return (valor as (...a: unknown[]) => unknown).bind(objetivo);
@@ -216,8 +286,8 @@ export function sinDescargasEnElProyecto<T extends object>(backend: T): T {
   };
 
   return new Proxy(backend, {
-    get(destino, prop, receptor) {
-      const valor = Reflect.get(destino, prop, receptor);
+    get(destino, prop) {
+      const valor = Reflect.get(destino, prop, destino);
       if (typeof valor !== "function") return valor;
       if (prop !== "write" && prop !== "edit") {
         return (valor as (...a: unknown[]) => unknown).bind(destino);
@@ -259,6 +329,13 @@ export function backendDeAgente(opciones: {
   ficheros: ReadonlySet<string>;
   artefactos?: { carpeta: string; alEscribir: (artefacto: Artefacto) => void };
   /**
+   * Presente solo para un subagente con `ejecucion: true` en su `.md`. Cambia la BASE de la
+   * cadena por una que ejecuta, y con eso deepagents le registra la tool `execute`. Ausente
+   * —que es todo el mundo menos uno— la cadena no es ejecutable y `permisosDe` sigue
+   * aplicándose, que es justo lo que la librería prohíbe combinar.
+   */
+  ejecucion?: { entorno: Record<string, string> };
+  /**
    * La carpeta de los adjuntos de una TAREA, si la hay. Ausente —toda sesión de persona, y
    * toda tarea sin adjuntos— y `/adjuntos/` no se monta; entonces esa ruta no es nada, y la
    * denegación incondicional de `permisosDe` evita que se convierta en un fichero del
@@ -266,9 +343,13 @@ export function backendDeAgente(opciones: {
    */
   adjuntos?: string;
 }): FilesystemBackend {
+  const base =
+    opciones.ejecucion === undefined
+      ? backendDelProyecto(opciones.raiz)
+      : backendDelProyectoConShell(opciones.raiz, opciones.ejecucion.entorno);
   const delProyecto = sinDescargasEnElProyecto(
     sinArtefactosEnElProyecto(
-      sinVistasAplanadas(exponerMemoriaDeProyecto(backendDelProyecto(opciones.raiz)), opciones.ficheros)
+      sinVistasAplanadas(exponerMemoriaDeProyecto(base), opciones.ficheros)
     )
   );
   /**
@@ -291,7 +372,83 @@ export function backendDeAgente(opciones: {
     opciones.artefactos === undefined
       ? conArtefactos
       : backendConDescargas(conArtefactos, opciones.artefactos.carpeta);
-  return opciones.adjuntos === undefined ? conDescargas : backendConAdjuntos(conDescargas, opciones.adjuntos);
+  const conAdjuntos =
+    opciones.adjuntos === undefined ? conDescargas : backendConAdjuntos(conDescargas, opciones.adjuntos);
+  // Lo que deje un COMANDO en la carpeta de artefactos también se anuncia. Sin esto, la
+  // captura que escribe un script existe en el disco y no existe para nadie: el evento
+  // `artefacto` lo emite el Proxy de `write`/`edit`, y una shell no pasa por ahí.
+  return opciones.ejecucion === undefined || opciones.artefactos === undefined
+    ? conAdjuntos
+    : anunciarArtefactosDeLaShell(conAdjuntos, opciones.artefactos.carpeta, opciones.artefactos.alEscribir);
+}
+
+/**
+ * Anuncia lo que un COMANDO deja en la carpeta de artefactos.
+ *
+ * El evento `artefacto` —«hay un diagrama de 42 KB y se llama así», nunca el contenido— lo
+ * emite hoy el Proxy de `backendConArtefactos`, que envuelve `write` y `edit`. Una shell no
+ * llama a ninguna de las dos: escribe en el disco de verdad. Así que sin esto, una captura
+ * dejada por un script no sale en la pestaña Artefactos ni en el hilo, y el subagente tendría
+ * que decir «he dejado una captura» sin que nada lo respalde — que es la clase de afirmación
+ * que este harness no quiere.
+ *
+ * **Se compara una FOTO de antes con una de después** (nombre → tamaño + mtime) en vez de
+ * fiarse de lo que el comando diga que hizo. Un comando puede escribir tres ficheros, o
+ * ninguno, o pisar el de antes; lo único que lo sabe es la carpeta. Y si la carpeta no
+ * existe —no se crea al montar, a propósito— la foto es vacía y no falla.
+ */
+export function anunciarArtefactosDeLaShell<T extends object>(
+  backend: T,
+  carpeta: string,
+  alEscribir: (artefacto: Artefacto) => void,
+): T {
+  const foto = (): Map<string, string> => {
+    const m = new Map<string, string>();
+    let nombres: string[];
+    try {
+      nombres = readdirSync(carpeta);
+    } catch {
+      return m;
+    }
+    for (const nombre of nombres) {
+      try {
+        const e = statSync(join(carpeta, nombre));
+        if (e.isFile()) m.set(nombre, `${e.size}:${e.mtimeMs}`);
+      } catch {
+        // Un fichero que desaparece entre el listado y la medida no es un artefacto nuevo.
+      }
+    }
+    return m;
+  };
+
+  return new Proxy(backend, {
+    get(destino, prop) {
+      const valor = Reflect.get(destino, prop, destino);
+      if (typeof valor !== "function") return valor;
+      if (prop !== "execute") return (valor as (...a: unknown[]) => unknown).bind(destino);
+
+      return async (...args: unknown[]) => {
+        const antes = foto();
+        try {
+          return await (valor as (...a: unknown[]) => unknown).apply(destino, args);
+        } finally {
+          // En el `finally`: un comando que acaba en error puede haber dejado el fichero, y
+          // un fallo al listar la carpeta no puede llevarse por delante el resultado.
+          try {
+            for (const [nombre, marca] of foto()) {
+              if (antes.get(nombre) === marca) continue;
+              const ruta = RUTA_ARTEFACTOS + nombre;
+              const mime = mimeDeArtefacto(nombre);
+              const bytes = Number(marca.split(":")[0] ?? 0);
+              alEscribir({ ruta, nombre, bytes, ...(mime === undefined ? {} : { mime }) });
+            }
+          } catch {
+            // Un artefacto que no se pudo anunciar no invalida el comando.
+          }
+        }
+      };
+    },
+  }) as T;
 }
 
 /**
@@ -304,8 +461,8 @@ export function exponerMemoriaDeProyecto<T extends object>(backend: T): T {
   const rutaReal = (ruta: unknown): unknown => ruta === RUTA_MEMORIA_VIRTUAL ? RUTA_MEMORIA_INTERNA : ruta;
 
   return new Proxy(backend, {
-    get(destino, prop, receptor) {
-      const valor = Reflect.get(destino, prop, receptor);
+    get(destino, prop) {
+      const valor = Reflect.get(destino, prop, destino);
       if (typeof valor !== "function") return valor;
 
       if (prop === "read" || prop === "readRaw" || prop === "write" || prop === "edit") {
@@ -362,8 +519,8 @@ export function sinArtefactosEnElProyecto<T extends object>(backend: T): T {
   };
 
   return new Proxy(backend, {
-    get(destino, prop, receptor) {
-      const valor = Reflect.get(destino, prop, receptor);
+    get(destino, prop) {
+      const valor = Reflect.get(destino, prop, destino);
       if (typeof valor !== "function") return valor;
       if (prop !== "write" && prop !== "edit") {
         return (valor as (...a: unknown[]) => unknown).bind(destino);
@@ -421,8 +578,8 @@ export function sinVistasAplanadas<T extends object>(backend: T, todas: Readonly
     typeof ruta === "string" && esVistaAplanada(ruta, todas) ? porQueNo(ruta) : undefined;
 
   return new Proxy(backend, {
-    get(destino, prop, receptor) {
-      const valor = Reflect.get(destino, prop, receptor);
+    get(destino, prop) {
+      const valor = Reflect.get(destino, prop, destino);
       if (typeof valor !== "function") return valor;
 
       // Las que reciben una ruta y la tocan: se rechazan con explicación.

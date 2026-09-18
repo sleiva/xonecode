@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { permisosDe, toolsDe, hitlDe, seDetieneEn, TOOLS_ESCRITURA } from "./perfiles.js";
+import { permisosDe, toolsDe, hitlDe, seDetieneEn, TOOLS_ESCRITURA, puedeEjecutar, montajeDeFicheros } from "./perfiles.js";
 import { sinArtefactosEnElProyecto } from "./proyecto.js";
 import { AIMessage } from "@langchain/core/messages";
 import { readFileSync } from "node:fs";
@@ -21,7 +21,7 @@ describe("permisosDe", () => {
    * llevan».
    *
    * Se afirmaba lo segundo mientras los cuatro especialistas eran de desarrollo y dibujaban
-   * diagramas. `xone-device-tester` no dibuja ninguno: darle dos skills que no va a usar sería prompt
+   * diagramas. `device-controller` no dibuja ninguno: darle dos skills que no va a usar sería prompt
    * en TODAS sus llamadas, que es justo el coste que este repo mide antes de añadir una
    * línea. Lo que sí se rompe solo es tener una de las dos: el bloque `SKILLS_VISUALES` que
    * va en el cuerpo habla de las dos y manda usar `archify` antes que la otra, así que un
@@ -71,7 +71,7 @@ describe("permisosDe", () => {
     expect(de("consultant-xone")).not.toContain("archify");
     expect(de("consultant-xone")).not.toContain("artifacts-builder");
     // Y el probador no dibuja nada, que es de donde salió toda esta regla.
-    expect(de("tester-xone")).not.toContain("archify");
+    expect(de("device-controller")).not.toContain("archify");
   });
 
   it("TODO perfil deniega .env y .git — incluido el que se añada mañana", () => {
@@ -275,5 +275,44 @@ describe("la costura con el HITL: el modal sale para el proyecto y NO para /arti
   it("una escritura a `/artifacts/` no la pide: ese modal solo podía acabar en rechazo", async () => {
     expect(await pidioAprobacion("/artifacts/modal.html")).toBe(false);
     expect(await pidioAprobacion("/artifact.html")).toBe(false);
+  });
+});
+
+describe("puedeEjecutar / montajeDeFicheros", () => {
+  const base = { nombre: "x", soloLectura: true };
+
+  it("sin declararlo, no ejecuta", () => {
+    expect(puedeEjecutar(base)).toBe(false);
+  });
+
+  it("declarado y con motor propio, ejecuta", () => {
+    expect(puedeEjecutar({ ...base, ejecucion: true })).toBe(true);
+    expect(puedeEjecutar({ ...base, ejecucion: true, motor: "modelo" })).toBe(true);
+  });
+
+  it("con un motor EXTERNO no ejecuta, aunque el `.md` lo pida", () => {
+    for (const motor of ["claude-code", "codex", "opencode"]) {
+      expect(puedeEjecutar({ ...base, ejecucion: true, motor })).toBe(false);
+    }
+  });
+
+  it("quien NO ejecuta se lleva el backend normal y sus permisos", () => {
+    const m = montajeDeFicheros(base, { normal: "normal", conShell: "shell" });
+    expect(m.backend).toBe("normal");
+    expect(m.permissions).toEqual(permisosDe(base));
+    expect(m.tools).toBeUndefined();
+  });
+
+  it("quien ejecuta se lleva la shell y NINGÚN `permissions` — la librería lo prohíbe", () => {
+    const m = montajeDeFicheros({ ...base, ejecucion: true }, { normal: "normal", conShell: "shell" });
+    expect(m.backend).toBe("shell");
+    expect(m.permissions).toBeUndefined();
+    expect(m.tools).toEqual(["read_file", "ls", "glob", "grep", "execute"]);
+  });
+
+  it("sin backend con shell se cae al normal CON permisos, nunca a una shell que no hay", () => {
+    const m = montajeDeFicheros({ ...base, ejecucion: true }, { normal: "normal" });
+    expect(m.backend).toBe("normal");
+    expect(m.permissions).toEqual(permisosDe(base));
   });
 });

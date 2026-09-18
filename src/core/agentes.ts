@@ -53,6 +53,27 @@ export interface Agente {
   modelo?: string;
   /** Sin escribir nada. Decide `permisosDe` y si se le monta el HITL. */
   soloLectura: boolean;
+  /**
+   * Si puede EJECUTAR comandos en la máquina (la tool `execute` de deepagents).
+   *
+   * **Ausente es que no**, y es lo único que puede significar: es una capacidad, y una
+   * capacidad que se concede por omisión es la que nadie decidió conceder. Cierto solo con
+   * exactamente «true», como `soloLectura` — la trampa del `"false"` de CloudStudio, que
+   * aquí concedería la máquina entera.
+   *
+   * **Lo que concede no es «correr un comando», es la máquina.** Una shell no pasa por
+   * `permisosDe` ni por el `virtualMode`: lee `/.env`, escribe el proyecto sin aprobación y
+   * sale de la raíz. La propia deepagents se niega a fingir lo contrario y LANZA si le pasas
+   * `permissions` junto a un backend ejecutable. Por eso se declara aquí, en el fichero, en
+   * vez de deducirse de nada: lo que no se declara, no se concede.
+   *
+   * **Solo tiene efecto con `motor: "modelo"`.** En los tres motores externos la shell está
+   * cerrada a propósito —`Bash` denegada en Claude Code, la tool retirada en OpenCode, el
+   * sandbox `read-only` en Codex— y eso no lo abre un campo del `.md`: ahí el hijo corre en
+   * otro proceso con sus propias reglas. Declararlo con otro motor no rompe nada, pero no
+   * hace nada, y la ventana de Ajustes lo dice.
+   */
+  ejecucion?: boolean;
   /** Las skills del catálogo que se le cargan, por nombre. */
   skills: string[];
   /** El cuerpo del `.md`: sus instrucciones. Puede estar vacío. */
@@ -409,6 +430,10 @@ export function leerAgente(
       // puede acabar concediendo escritura por ser una cadena verdadera en JavaScript —
       // es la misma trampa que `compartido` con el `"false"` de CloudStudio.
       soloLectura,
+      // Misma regla y misma trampa que `soloLectura`, y por eso se lee igual. Solo se emite
+      // cuando es cierto: un `ejecucion: false` en todos los `.md` sería ruido que además
+      // invita a cambiarlo a mano sin saber lo que abre.
+      ...((campos["ejecucion"] ?? "").trim() === "true" ? { ejecucion: true } : {}),
       skills: leerLista(campos["skills"]),
       instrucciones,
       origen,
@@ -437,6 +462,7 @@ export function escribirAgente(agente: Agente): string {
     `motor: ${agente.motor}`,
     ...(agente.modelo === undefined ? [] : [`modelo: ${agente.modelo}`]),
     `soloLectura: ${agente.soloLectura}`,
+    ...(agente.ejecucion === true ? ["ejecucion: true"] : []),
     `skills: [${agente.skills.join(", ")}]`,
   ];
   return `---\n${campos.join("\n")}\n---\n${agente.instrucciones}`;

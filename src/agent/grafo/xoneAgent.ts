@@ -5,9 +5,9 @@ import { RunnableLambda } from "@langchain/core/runnables";
 import { AIMessage, type BaseMessage } from "@langchain/core/messages";
 import { MemorySaver } from "@langchain/langgraph";
 import type { BaseCheckpointSaver } from "@langchain/langgraph-checkpoint";
-import { backendDeAgente } from "./proyecto.js";
+import { backendDeAgente, entornoDeLaShellDelProyecto } from "./proyecto.js";
 import type { Artefacto } from "../../core/artefactos.js";
-import { permisosDe, hitlDe, type QuienDecidePermisos } from "./perfiles.js";
+import { permisosDe, hitlDe, montajeDeFicheros, puedeEjecutar, type QuienDecidePermisos } from "./perfiles.js";
 import { crearBusquedaRegex } from "./busquedaRegex.js";
 import { crearNavegacionXone } from "./navegacionXone.js";
 import { indiceEnDisco, type CargarIndice } from "../navegacion/indiceEnDisco.js";
@@ -260,12 +260,30 @@ export async function construirAgente(opciones: OpcionesDelAgente): Promise<unkn
    */
   const cargarIndice: CargarIndice = opciones.navegacion ?? indiceEnDisco(opciones.raiz);
 
-  const backend = backendDeAgente({
+  const comunes = {
     raiz: opciones.raiz,
     ficheros: opciones.ficheros,
     ...(opciones.artefactos === undefined ? {} : { artefactos: opciones.artefactos }),
     ...(opciones.adjuntos === undefined ? {} : { adjuntos: opciones.adjuntos }),
-  });
+  };
+  const backend = backendDeAgente(comunes);
+
+  /**
+   * El backend CON shell, y solo si alguien lo va a usar.
+   *
+   * Se construye aparte porque es otra cadena entera: la base ejecuta, y eso cambia lo que
+   * la librería registra (`execute`) y lo que se le puede pasar (`permissions` lanza junto a
+   * un backend ejecutable). Que sea `undefined` cuando nadie declara `ejecucion` no es una
+   * optimización: es lo que hace que el caso normal sea, byte a byte, el de antes.
+   */
+  const conShell = opciones.agentes.some((a) => puedeEjecutar(a))
+    ? backendDeAgente({
+        ...comunes,
+        ejecucion: {
+          entorno: entornoDeLaShellDelProyecto(opciones.raiz, opciones.artefactos?.carpeta),
+        },
+      })
+    : undefined;
 
   // Si no hay tracker, no se añade el middleware: es opcional a propósito arriba.
   const middlewareTracker = (origen: string) =>
@@ -342,7 +360,13 @@ export async function construirAgente(opciones: OpcionesDelAgente): Promise<unkn
 
   const subagentes = opciones.agentes
     .filter((a) => a.motor === "modelo")
-    .map((perfil) => ({
+    .map((perfil) => {
+    // Una vez por perfil: con qué backend ve los ficheros, con qué permisos y con qué tools.
+    const ficheros = montajeDeFicheros(perfil, {
+      normal: backend,
+      ...(conShell === undefined ? {} : { conShell }),
+    });
+    return {
     name: perfil.nombre,
     description: perfil.descripcion,
     systemPrompt: promptDeAgente(perfil, repartirSkills(perfil, catalogoDeSkills)),
@@ -363,14 +387,19 @@ export async function construirAgente(opciones: OpcionesDelAgente): Promise<unkn
      * operación enumerada y un nombre, que es poco en cada llamada; el orquestador NO la
      * recibe, porque no tiene tools propias y delega.
      */
-    tools: [crearBusquedaRegex(backend), crearNavegacionXone(cargarIndice, opciones.ficheros)],
+    tools: [crearBusquedaRegex(ficheros.backend), crearNavegacionXone(cargarIndice, opciones.ficheros)],
     //
     // Las tools de fichero las monta el `FilesystemMiddleware` a partir del backend, y
     // quien las acota por NOMBRE es su propia opción `tools` (con la restricción de que
     // `read_file` tiene que estar siempre). Aquí el solo-lectura se impone con
     // `permissions`, que la librería aplica sobre `ls`, `read_file`, `write_file`,
     // `edit_file`, `glob` y `grep` — o sea, sobre todas las que importan.
-    permissions: permisosDe(perfil),
+    /**
+     * **Ausente para quien EJECUTA**, y por la misma razón que en el middleware: deepagents
+     * lanza `ConfigurationError` al combinar `permissions` con un backend ejecutable. Dejarlo
+     * aquí «por si acaso» no añadiría una barrera, tumbaría la construcción del agente.
+     */
+    ...(ficheros.permissions === undefined ? {} : { permissions: ficheros.permissions }),
     interruptOn: hitlDe(perfil),
     // En CADA especialista, no solo en el orquestador: son ellos los que llaman a las
     // tools de fichero, así que es su siguiente llamada al modelo la que reventaba.
@@ -378,8 +407,9 @@ export async function construirAgente(opciones: OpcionesDelAgente): Promise<unkn
     // aplica tanto al especialista como al orquestador.
     middleware: [
       createFilesystemMiddleware({
-        backend,
-        permissions: permisosDe(perfil),
+        // Quién se lleva la shell, con qué permisos y con qué tools lo decide una función
+        // pura y probada (`perfiles.ts#montajeDeFicheros`), no un `if` aquí dentro.
+        ...ficheros,
         customToolDescriptions: DESCRIPCIONES_FICHEROS,
         ...OPCIONES_BUSQUEDA_FICHEROS,
       }),
@@ -392,7 +422,9 @@ export async function construirAgente(opciones: OpcionesDelAgente): Promise<unkn
       topeDeTools(),
       // Los DOS, y en su orden, que es lo que `resumenConEncargo` garantiza: el resumen
       // se lleva el encargo por delante al cruzar el umbral, y el segundo lo devuelve.
-      ...resumenConEncargo(backend),
+      // Sobre el backend del PERFIL: quien tiene shell descarga en SU cadena, que es la que
+      // tiene montadas `/large_tool_results/` y `/conversation_history/` con su misma raíz.
+      ...resumenConEncargo(ficheros.backend),
       middlewareTextoDeTool(),
       ...middlewareTracker(perfil.nombre),
       // El ÚLTIMO, y por eso ve la petición ya pasada por todos los de arriba: el resumen, la
@@ -409,7 +441,8 @@ export async function construirAgente(opciones: OpcionesDelAgente): Promise<unkn
       perfil.modelo === undefined
         ? opciones.modelos.paraPapel(perfil.soloLectura ? "rapido" : "trabajo")
         : opciones.modelos.paraModelo(perfil.modelo),
-  }));
+    };
+  });
 
   return createDeepAgent({
     model: opciones.modelos.paraPapel("rapido"),

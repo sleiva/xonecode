@@ -1,0 +1,73 @@
+#!/usr/bin/env node
+/**
+ * Levantar el host de iOS y dejar el canal listo. La plantilla equivalente a la de Android.
+ *
+ * LO QUE CAMBIA RESPECTO A ANDROID, y no es un detalle:
+ *  - **No hay túnel.** El simulador comparte la pila de red del Mac, así que el servidor se
+ *    alcanza en `localhost` directamente. En un iPhone físico se llega por la IP de la LAN que
+ *    enseña la propia app.
+ *  - **No hay `/file_upload`, ni `push_files`, ni `runScript`, ni `runSql`, ni logs.** El host
+ *    de iOS no los tiene. O sea que **esto no despliega el proyecto**: arranca el host y abre
+ *    el canal. Desplegar en iOS no está medido, y fingir un paso que no se ha probado es peor
+ *    que no tenerlo.
+ *  - El host es **`es.xone.studioapp.swift`**, y solo existe en el runtime en modo desarrollo.
+ *
+ * USO:
+ *   node "$XONECODE_SKILL_XONE_HOTSWAP/scripts/ios-arrancar.mjs"
+ *   node "$XONECODE_SKILL_XONE_HOTSWAP/scripts/ios-arrancar.mjs" --udid <UDID> --app MiApp
+ *
+ * Después, los comandos van por el mismo cliente que en Android:
+ *   HOTSWAP_URL=wss://localhost:8443/hotswap node "$XONECODE_SKILL_XONE_HOTSWAP/scripts/hotswap.mjs" '{"command":"getAllElements","format":"xone"}'
+ *
+ * DOS AVISOS SOBRE EL HOST DE iOS que te van a costar una sesión si no los sabes: `MyAllXOne`
+ * crashea al arrancar (GoogleMaps) —para probar filas, el fixture usable es `FontIconsApp`—, y
+ * el host se cae al abrir una lista de menú porque le faltan los `xone_img_*.png`. Si el puerto
+ * deja de responder justo después de abrir un menú, es eso y es un defecto AJENO al hotswap.
+ */
+import { execFileSync } from "node:child_process";
+
+const HOST = "es.xone.studioapp.swift";
+
+const args = process.argv.slice(2);
+const opcion = (nombre) => {
+  const i = args.indexOf(`--${nombre}`);
+  return i >= 0 ? args[i + 1] : undefined;
+};
+
+/** El simulador arrancado, o el que se diga. Sin ninguno, se dice: no se arranca uno a ciegas. */
+function udid() {
+  const dicho = opcion("udid");
+  if (dicho !== undefined) return dicho;
+  const salida = execFileSync("xcrun", ["simctl", "list", "devices", "booted", "-j"], { encoding: "utf8" });
+  const porRuntime = JSON.parse(salida).devices ?? {};
+  const arrancados = Object.values(porRuntime).flat();
+  if (arrancados.length === 0) {
+    console.error("no hay ningún simulador arrancado. Arranca uno (`xcrun simctl boot <UDID>`) o pásame --udid.");
+    process.exit(1);
+  }
+  if (arrancados.length > 1) {
+    console.error(`hay ${arrancados.length} simuladores arrancados; dime cuál con --udid:`);
+    for (const d of arrancados) console.error(`  ${d.udid}  ${d.name}`);
+    process.exit(1);
+  }
+  return arrancados[0].udid;
+}
+
+const destino = udid();
+console.log(`1/2 arrancando el host en ${destino}`);
+// Arrancar el host es lo que levanta el servidor: sin la app viva, el puerto no responde.
+console.log(execFileSync("xcrun", ["simctl", "launch", destino, HOST], { encoding: "utf8" }).trim());
+
+const app = opcion("app");
+if (app === undefined) {
+  console.log("2/2 host arrancado. El canal es wss://localhost:8443/hotswap");
+} else {
+  console.log(`2/2 lanzando ${app}`);
+  const cliente = new URL("hotswap.mjs", import.meta.url).pathname;
+  console.log(
+    execFileSync("node", [cliente, JSON.stringify({ command: "launchApplication", appName: app })], {
+      encoding: "utf8",
+      env: { ...process.env, HOTSWAP_URL: "wss://localhost:8443/hotswap" },
+    }).trim(),
+  );
+}

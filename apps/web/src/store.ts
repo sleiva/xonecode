@@ -1087,6 +1087,10 @@ export function crearStoreDelCliente(): {
                 motor: a.motor,
                 ...(a.modelo === undefined ? {} : { modelo: a.modelo }),
                 soloLectura: a.soloLectura,
+                // Por la lista blanca como todo lo demás: un campo que no se nombra aquí no
+                // llega al estado. El síntoma de olvidarlo sería una tarjeta sin la pastilla
+                // que avisa de que ese agente ejecuta comandos — todo en verde.
+                ...(a.ejecucion === true ? { ejecucion: true } : {}),
                 skills: [...a.skills],
                 instrucciones: a.instrucciones,
                 ...(a.origen === undefined ? {} : { origen: a.origen }),

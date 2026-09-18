@@ -1347,6 +1347,15 @@ export interface AgenteDelCable {
   motor: string;
   modelo?: string;
   soloLectura: boolean;
+  /**
+   * Si puede EJECUTAR comandos en la máquina. **Ausente es que no**: es una capacidad, y una
+   * capacidad que se concede por omisión es la que nadie decidió conceder.
+   *
+   * Solo tiene efecto con `motor: "modelo"`; en los tres externos la shell está cerrada a
+   * propósito y esto no la abre, así que la ventana lo dice en vez de pintar una casilla
+   * marcada que no hace nada.
+   */
+  ejecucion?: boolean;
   skills: string[];
   instrucciones: string;
   origen?: string;

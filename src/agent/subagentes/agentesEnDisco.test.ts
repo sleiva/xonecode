@@ -36,10 +36,10 @@ describe("sembrarAgentes", () => {
     // especialistas desaparecerían al siguiente arranque y el orquestador se quedaría sin
     // nadie a quien delegar — sin que nada diera error.
     const raiz = base();
-    expect(sembrarAgentes(raiz).escritos.sort()).toEqual(["analyst-xone", "consultant-xone", "designer-xone", "developer-xone", "tester-xone"]);
+    expect(sembrarAgentes(raiz).escritos.sort()).toEqual(["analyst-xone", "consultant-xone", "designer-xone", "developer-xone", "device-controller"]);
     const { agentes, problemas } = leerCarpetaDeAgentes(rutaDeAgentes(raiz), "global");
     expect(problemas).toEqual([]);
-    expect(agentes.map((a) => a.nombre).sort()).toEqual(["analyst-xone", "consultant-xone", "designer-xone", "developer-xone", "tester-xone"]);
+    expect(agentes.map((a) => a.nombre).sort()).toEqual(["analyst-xone", "consultant-xone", "designer-xone", "developer-xone", "device-controller"]);
   });
 
   it("NO pisa uno que ya existe: el usuario ha podido afinar su prompt", () => {
@@ -127,10 +127,10 @@ describe("sembrarAgentes", () => {
     const carpeta = rutaDeAgentes(raiz);
     const rutaViejo = join(carpeta, "probador.md");
     writeFileSync(rutaViejo, enDisco, "utf8");
-    rmSync(join(carpeta, "tester-xone.md"));
+    rmSync(join(carpeta, "device-controller.md"));
     const rutaMarca = join(carpeta, FICHERO_DE_SEMILLA);
     const marca = JSON.parse(readFileSync(rutaMarca, "utf8")) as Record<string, string>;
-    delete marca["tester-xone"];
+    delete marca["device-controller"];
     marca["probador"] = createHash("sha256").update(sembrado, "utf8").digest("hex").slice(0, 16);
     writeFileSync(rutaMarca, JSON.stringify(marca), "utf8");
     return rutaViejo;
@@ -147,12 +147,12 @@ describe("sembrarAgentes", () => {
     const rutaViejo = conElNombreViejo(raiz, "---\ndescripcion: el de antes\n---\nLO DE ANTES");
 
     const siembra = sembrarAgentes(raiz);
-    expect(siembra.escritos).toEqual(["tester-xone"]);
+    expect(siembra.escritos).toEqual(["device-controller"]);
     expect(siembra.retirados).toEqual([
-      { nombre: "probador", ahoraSeLlama: "tester-xone", borrado: true },
+      { nombre: "probador", ahoraSeLlama: "device-controller", borrado: true },
     ]);
     expect(existsSync(rutaViejo)).toBe(false);
-    expect(existsSync(join(rutaDeAgentes(raiz), "tester-xone.md"))).toBe(true);
+    expect(existsSync(join(rutaDeAgentes(raiz), "device-controller.md"))).toBe(true);
     // Y no se vuelve a decir: la clave se fue con el fichero.
     expect(sembrarAgentes(raiz).retirados).toEqual([]);
   });
@@ -167,7 +167,7 @@ describe("sembrarAgentes", () => {
 
     const siembra = sembrarAgentes(raiz);
     expect(siembra.retirados).toEqual([
-      { nombre: "probador", ahoraSeLlama: "tester-xone", borrado: false },
+      { nombre: "probador", ahoraSeLlama: "device-controller", borrado: false },
     ]);
     expect(readFileSync(rutaViejo, "utf8")).toContain("MIS INSTRUCCIONES");
     // Sigue diciéndose: aquí queda algo que decidir, que es borrarlo o quedarse con los dos.
@@ -229,7 +229,7 @@ describe("sembrarAgentes", () => {
       ["docs", "consultant-xone"],
       ["planner", "analyst-xone"],
       ["dev", "developer-xone"],
-      ["xone-device-tester", "tester-xone"],
+      ["xone-device-tester", "device-controller"],
     ];
     for (const [viejo, nuevo] of viejos) {
       const contenido = escribirAgente({ ...AGENTES_DE_SERIE.find((a) => a.nombre === nuevo)!, nombre: viejo });
@@ -252,7 +252,7 @@ describe("sembrarAgentes", () => {
       "consultant-xone",
       "designer-xone",
       "developer-xone",
-      "tester-xone",
+      "device-controller",
     ]);
     for (const [viejo] of viejos) expect(existsSync(join(carpeta, `${viejo}.md`))).toBe(false);
     expect(siembra.retirados.filter((r) => r.borrado).map((r) => r.nombre).sort()).toEqual([
@@ -286,7 +286,7 @@ describe("sembrarAgentes", () => {
 
     expect(sembrarAgentes(raiz).retirados).toContainEqual({
       nombre: "probador",
-      ahoraSeLlama: "tester-xone",
+      ahoraSeLlama: "device-controller",
       borrado: false,
     });
   });
@@ -344,7 +344,7 @@ describe("cargarAgentes", () => {
           "consultant-xone",
           "designer-xone",
           "developer-xone",
-          "tester-xone",
+          "device-controller",
         ]);
       }
     } finally {
@@ -718,6 +718,28 @@ describe("las skills que piden los agentes de serie", () => {
       for (const skill of agente.skills) {
         expect(catalogo.has(skill), `${agente.nombre} pide «${skill}», que no está en el catálogo`).toBe(true);
       }
+    }
+  });
+});
+
+describe("la ejecución es de UNO, y se comprueba", () => {
+  it("solo `device-controller` la trae de serie", () => {
+    // Es la guarda contra el «ya que estamos»: conceder ejecución a un especialista más es
+    // darle el disco entero, porque una shell no pasa por `permisosDe` ni por `virtualMode`.
+    // Que se note aquí y no en producción.
+    expect(AGENTES_DE_SERIE.filter((a) => a.ejecucion === true).map((a) => a.nombre)).toEqual([
+      "device-controller",
+    ]);
+  });
+
+  it("y su `.md` la lleva escrita, que es de donde sale al recargarlo", () => {
+    const conductor = AGENTES_DE_SERIE.find((a) => a.nombre === "device-controller")!;
+    expect(escribirAgente(conductor)).toContain("ejecucion: true");
+  });
+
+  it("los demás no la mencionan siquiera", () => {
+    for (const a of AGENTES_DE_SERIE.filter((x) => x.nombre !== "device-controller")) {
+      expect(escribirAgente(a)).not.toContain("ejecucion");
     }
   });
 });

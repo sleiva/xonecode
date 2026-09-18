@@ -41,6 +41,21 @@ const CAMPOS_SEGUROS: Record<string, readonly string[]> = {
    * minutos en otro proceso, sin una sola tool que cruce.
    */
   task: ["subagent_type"],
+  /**
+   * **El comando ENTERO**, y es la única entrada de esta tabla que no es una ruta ni un
+   * patrón. Está aquí a propósito: a un agente con `ejecucion: true` no se le pregunta antes
+   * de cada comando —preguntar cuatro veces por «lanza la app» mata el bucle—, así que lo
+   * que sustituye a esa pregunta es VERLO. Un `⚙ execute` sin detalle sería la peor de las
+   * dos: ni se pregunta ni se enseña.
+   *
+   * **Límite declarado, y no se tapa con un filtro**: si el modelo escribe una ruta absoluta
+   * en su comando, esa ruta sale en el evento y por tanto por el cable, que es lo que
+   * `sinRutas` evita en los demás sitios. Por eso el entorno le da una variable por skill y
+   * el `cwd` es la raíz del proyecto: para que no le haga falta escribir ninguna. Un
+   * limpiador que adivinara qué trozo de una línea de shell es una ruta fallaría en
+   * silencio, que es peor que un límite escrito.
+   */
+  execute: ["command"],
 };
 
 function objetoDeArgs(args: unknown): Record<string, unknown> | undefined {

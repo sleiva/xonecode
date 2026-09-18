@@ -341,3 +341,36 @@ describe("nombreSugerido", () => {
     }
   });
 });
+
+describe("ejecucion: la capacidad de correr comandos", () => {
+  it("ausente es que NO: lo que no se declara, no se concede", () => {
+    const { agente } = leerAgente("mio", "---\ndescripcion: x\n---\n", "global") as { agente: Agente };
+    expect(agente.ejecucion).toBeUndefined();
+  });
+
+  it("solo con exactamente «true» — la trampa del \"false\" de CloudStudio", () => {
+    const de = (v: string) =>
+      (leerAgente("mio", `---\ndescripcion: x\nejecucion: ${v}\n---\n`, "global") as { agente: Agente }).agente
+        .ejecucion;
+    expect(de("true")).toBe(true);
+    expect(de("false")).toBeUndefined();
+    expect(de("quizá")).toBeUndefined();
+    expect(de("True")).toBeUndefined();
+  });
+
+  it("va y vuelve por el `.md` sin perderse, y no ensucia a quien no la tiene", () => {
+    const base: Agente = {
+      nombre: "mio",
+      descripcion: "x",
+      motor: "modelo",
+      soloLectura: true,
+      skills: [],
+      instrucciones: "",
+      origen: "global",
+    };
+    expect(escribirAgente(base)).not.toContain("ejecucion");
+    const texto = escribirAgente({ ...base, ejecucion: true });
+    expect(texto).toContain("ejecucion: true");
+    expect((leerAgente("mio", texto, "global") as { agente: Agente }).agente.ejecucion).toBe(true);
+  });
+});

@@ -2,7 +2,7 @@
  * Los ARTEFACTOS de una sesión: lo que el agente produce y **no es del proyecto**.
  *
  * Un diagrama de `archify`, un panel de `artifacts-builder`, la captura que el
- * `xone-device-tester`
+ * `device-controller`
  * traerá del móvil el día que hable con él. Son salidas de la conversación, no código de la
  * app: nacen de una pregunta, se miran una vez y no tienen por qué sobrevivir al proyecto.
  *

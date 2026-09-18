@@ -69,13 +69,68 @@ export const DENEGADO_SIEMPRE = [
 export function permisosDe(perfil: QuienDecidePermisos) {
   const base = [...DENEGADO_SIEMPRE];
   if (!perfil.soloLectura) return base;
-  // OJO para cuando el `xone-device-tester` sepa hablar con el móvil: este `/**` también deniega
-  // `/artefactos/**`, así que un agente de SOLO LECTURA no puede dejar una captura. Hoy no
-  // hay ningún productor de solo lectura, así que no se abre un hueco por si acaso — pero
-  // el día que lo haya, la excepción va aquí y antes hay que medir el orden de reglas de
-  // deepagents (¿gana la primera que casa, o gana la denegación?), porque de eso depende que
-  // un `allow` sobre `/artefactos/**` haga algo o sea decorativo.
+  // OJO: este `/**` también deniega `/artefactos/**`, así que un agente de SOLO LECTURA no
+  // puede dejar una captura CON UNA TOOL DE FICHERO. `device-controller` la deja igual, pero
+  // por otro camino —un comando, que no pasa por aquí— y por eso el anuncio del artefacto
+  // tuvo que ir aparte (`proyecto.ts#anunciarArtefactosDeLaShell`). Si algún día hace falta
+  // un productor de solo lectura SIN shell, la excepción va aquí, y antes hay que medir el
+  // orden de reglas de deepagents (¿gana la primera que casa, o gana la denegación?), porque
+  // de eso depende que un `allow` sobre `/artefactos/**` haga algo o sea decorativo.
   return [...base, { operations: ["write"] as const, paths: ["/**"], mode: "deny" as const }];
+}
+
+/**
+ * Las tools de fichero de un agente con EJECUCIÓN.
+ *
+ * `read_file` tiene que estar siempre (lo exige el middleware). Lo que NO está son
+ * `write_file` y `edit_file`: no porque no pueda escribir —con una shell puede, y fingir lo
+ * contrario sería peor que no decir nada— sino para que el camino normal de tocar el
+ * proyecto siga siendo el que pasa por la aprobación y por el diff. Quien escribe el proyecto
+ * es `developer-xone`; éste conduce un aparato.
+ */
+export const TOOLS_CON_EJECUCION = ["read_file", "ls", "glob", "grep", "execute"] as const;
+
+/** Lo que este módulo mira para decidir si un agente ejecuta. */
+export interface QuienDecideEjecucion extends QuienDecidePermisos {
+  ejecucion?: boolean;
+  motor?: string;
+}
+
+/**
+ * Si a este agente le toca la shell.
+ *
+ * Dos condiciones, y la segunda no es una formalidad: en los tres motores EXTERNOS la shell
+ * está cerrada a propósito (`Bash` denegada, la tool retirada, el sandbox `read-only`) y el
+ * hijo corre en otro proceso donde este campo no manda nada. Honrarlo ahí sería prometer una
+ * capacidad que no llega; ignorarlo en silencio, esconder que no llega. Se decide aquí, en un
+ * sitio, y la ventana de Ajustes lo cuenta.
+ */
+export function puedeEjecutar(perfil: QuienDecideEjecucion): boolean {
+  return perfil.ejecucion === true && (perfil.motor ?? "modelo") === "modelo";
+}
+
+/**
+ * Con qué backend y con qué reglas se le montan las tools de fichero a un especialista.
+ *
+ * Existe como función PURA y exportada por el patrón de fallo de este repo: compuesto dentro
+ * de `construirAgente` —que todos sus tests doblan— «este agente lleva shell y aquél no»
+ * quedaría escrito y sin probar, y el síntoma sería el peor de todos: todo en verde y un
+ * especialista corriente con una shell, o el de dispositivos sin ella y sin error que leer.
+ *
+ * **Y `permissions` NO se pasa con un backend ejecutable.** No es una elección: deepagents
+ * LANZA (`ConfigurationError`) si se combinan, porque «los comandos alcanzan cualquier ruta
+ * independientemente de las reglas de ruta». O sea que la biblioteca se niega a sostener una
+ * barrera que no sería verdad — y esa negativa es la razón por la que esto se concede a UN
+ * agente y se declara en su fichero.
+ */
+export function montajeDeFicheros<B>(
+  perfil: QuienDecideEjecucion,
+  backends: { normal: B; conShell?: B },
+): { backend: B; permissions?: ReturnType<typeof permisosDe>; tools?: typeof TOOLS_CON_EJECUCION } {
+  if (!puedeEjecutar(perfil) || backends.conShell === undefined) {
+    return { backend: backends.normal, permissions: permisosDe(perfil) };
+  }
+  return { backend: backends.conShell, tools: TOOLS_CON_EJECUCION };
 }
 
 /**

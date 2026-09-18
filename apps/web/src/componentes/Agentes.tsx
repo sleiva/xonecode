@@ -643,9 +643,42 @@ export function Agentes({
             </span>
           </label>
 
+          {/*
+            La casilla solo aparece con motor propio, y no es cosmética: en los tres motores
+            externos la shell está cerrada a propósito (`Bash` denegada, la tool retirada, el
+            sandbox `read-only`), así que una casilla marcada ahí prometería lo que no llega.
+            Quien tenga un `.md` con `ejecucion: true` y un motor externo ve el aviso de abajo.
+          */}
+          {editando.motor === "modelo" ? (
+            <label className={estilos.casilla}>
+              <input
+                type="checkbox"
+                checked={editando.ejecucion === true}
+                onChange={(e) =>
+                  setEditando(
+                    e.target.checked
+                      ? { ...editando, ejecucion: true }
+                      : // Ausente y no `false`: es la misma ausencia que viaja por el cable.
+                        (({ ejecucion: _, ...resto }) => resto)(editando),
+                  )
+                }
+              />
+              <span>
+                Ejecuta comandos{" "}
+                <span className={estilos.pista}>
+                  — alcanza tu máquina entera: no lo acotan ni los permisos de fichero ni la
+                  aprobación de escrituras
+                </span>
+              </span>
+            </label>
+          ) : null}
+
           {editando.motor === "modelo" ? null : (
             <p className={estilos.aviso}>
               {AVISO_EXTERNO} {AVISO_DE_LECTURA[editando.motor] ?? ""}
+              {editando.ejecucion === true
+                ? " Y «ejecuta comandos» no se aplica con este motor: el hijo corre en otro proceso, con la shell cerrada."
+                : ""}
             </p>
           )}
 
@@ -764,6 +797,14 @@ function FilaDeAgente({
             demás proyectos — o por qué sí. */}
         {a.origen === undefined ? null : <span className={estilos.origen}>{a.origen}</span>}
         {a.soloLectura ? <span className={estilos.lectura}>solo lectura</span> : null}
+        {/* Lo que ejecuta comandos se DICE en la lista, no solo al abrirlo: es lo único de
+            aquí que no lo acota `permisosDe`, y verlo es lo que sustituye a que se pregunte
+            antes de cada comando. Con un motor externo no se pinta, porque ahí no se aplica. */}
+        {a.ejecucion === true && a.motor === "modelo" ? (
+          <span className={estilos.ejecucion} title="Puede ejecutar comandos en esta máquina">
+            ejecuta
+          </span>
+        ) : null}
         <span className={estilos.relleno} />
         {/*
           Iconos y no dos botones de texto: con cinco subagentes eran diez rótulos

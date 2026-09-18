@@ -1,9 +1,9 @@
 import { describe, it, expect } from "vitest";
-import { esVistaAplanada, porQueNo, sinArtefactosEnElProyecto, sinVistasAplanadas, backendConArtefactos, backendConSkills, backendDeAgente, backendDelProyecto, exponerMemoriaDeProyecto } from "./proyecto.js";
+import { esVistaAplanada, porQueNo, sinArtefactosEnElProyecto, sinVistasAplanadas, backendConArtefactos, backendConSkills, backendDeAgente, backendDelProyecto, backendDelProyectoConShell, exponerMemoriaDeProyecto } from "./proyecto.js";
 import { mkdirSync, mkdtempSync, existsSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { createFilesystemMiddleware, createSkillsMiddleware } from "deepagents";
+import { createFilesystemMiddleware, createSkillsMiddleware, isSandboxBackend } from "deepagents";
 import { permisosDe } from "./perfiles.js";
 import type { Artefacto } from "../../core/artefactos.js";
 import { RUTA_MEMORIA_VIRTUAL } from "./memoriaDeProyecto.js";
@@ -573,5 +573,98 @@ describe("`/adjuntos/`: se lee, no se escribe, y con las piezas de verdad", () =
     // el `write` la crea, así que crearla al montar dejaría un `adjuntos/` vacío en cada
     // tarea que no adjunta nada — que son casi todas.
     expect(existsSync(join(raiz, "adjuntos"))).toBe(false);
+  });
+});
+
+describe("la shell de un subagente con EJECUCIÓN", () => {
+  function raizDePrueba() {
+    const raiz = mkdtempSync(join(tmpdir(), "xonecode-shell-"));
+    writeFileSync(join(raiz, "app.xml"), "<app/>");
+    writeFileSync(join(raiz, "Clientes.xne"), "<coll/>");
+    writeFileSync(join(raiz, "Clientes.xml"), "<coll/>");
+    return raiz;
+  }
+
+  it("confina igual: `virtualMode` sigue en true con la shell puesta", () => {
+    const be = backendDelProyectoConShell("/tmp", {}) as unknown as { virtualMode: boolean };
+    expect(be.virtualMode).toBe(true);
+  });
+
+  it("la librería REAL lo reconoce como ejecutable, y al backend normal no", () => {
+    // El discriminante es `id !== ""` (medido en deepagents 1.13.2). Se pregunta con la
+    // función de la librería y no con una copia nuestra: el día que cambie, esto se entera.
+    expect(isSandboxBackend(backendDelProyectoConShell("/tmp", {}))).toBe(true);
+    expect(isSandboxBackend(backendDelProyecto("/tmp"))).toBe(false);
+  });
+
+  it("recibe el entorno que se le pasa y NADA más: no hereda el del proceso", async () => {
+    const raiz = raizDePrueba();
+    process.env["XONECODE_MARCA_DE_PRUEBA"] = "no-deberia-llegar";
+    try {
+      const be = backendDelProyectoConShell(raiz, { SOLO_ESTA: "1" }) as unknown as {
+        execute(c: string): Promise<{ output: string }>;
+      };
+
+      const { output } = await be.execute("echo [$SOLO_ESTA][$XONECODE_MARCA_DE_PRUEBA]");
+
+      expect(output.trim()).toBe("[1][]");
+    } finally {
+      delete process.env["XONECODE_MARCA_DE_PRUEBA"];
+    }
+  });
+
+  it("sin PATH, `sh` se inventa uno — y ahí NO está `adb`", async () => {
+    // Medido: con `env: {}` el shell cae en su PATH de fábrica
+    // (`/usr/gnu/bin:/usr/local/bin:/bin:/usr/bin:.`), que no incluye `/opt/homebrew/bin`.
+    // O sea que pasar el PATH del proceso no es una comodidad: sin él, un `adb` del usuario
+    // no se encuentra y el fallo se lee como «no hay dispositivo». Por eso `entornoDeShell`
+    // parte del entorno del proceso y quita, en vez de construir uno desde cero.
+    const be = backendDelProyectoConShell(raizDePrueba(), {}) as unknown as {
+      execute(c: string): Promise<{ output: string }>;
+    };
+
+    const { output } = await be.execute("echo $PATH");
+
+    expect(output).not.toContain("/opt/homebrew/bin");
+  });
+
+  it("`execute` SOBREVIVE a los Proxies y a los CompositeBackend de la cadena entera", async () => {
+    // El montaje real: memoria → vistas aplanadas → artefactos → descargas → /skills/ →
+    // /artefactos/. Si `execute` se pierde por el camino, el subagente se queda sin la tool
+    // y no hay error que leer: la librería la filtra en silencio cuando el backend resuelto
+    // no sabe ejecutar. Por eso se comprueba sobre el compuesto y no sobre la shell suelta.
+    const raiz = raizDePrueba();
+    const backend = backendDeAgente({
+      raiz,
+      ficheros: new Set(["/app.xml", "/Clientes.xne", "/Clientes.xml"]),
+      ejecucion: { entorno: { HOLA: "mundo" } },
+    });
+
+    expect(isSandboxBackend(backend)).toBe(true);
+    const { output } = await (backend as unknown as {
+      execute(c: string): Promise<{ output: string }>;
+    }).execute("echo $HOLA");
+    expect(output.trim()).toBe("mundo");
+  });
+
+  it("y sin ejecución la cadena NO es ejecutable, que es lo que conserva `permisosDe`", () => {
+    const raiz = raizDePrueba();
+    const backend = backendDeAgente({ raiz, ficheros: new Set(["/app.xml"]) });
+
+    // `permissions` con un backend ejecutable lanza `ConfigurationError` en deepagents, así
+    // que esto es lo que deja intactos a los otros cuatro especialistas.
+    expect(isSandboxBackend(backend)).toBe(false);
+  });
+
+  it("el `cwd` de la shell es la raíz del proyecto", async () => {
+    const raiz = raizDePrueba();
+    const be = backendDelProyectoConShell(raiz, {}) as unknown as {
+      execute(c: string): Promise<{ output: string }>;
+    };
+
+    const { output } = await be.execute("pwd");
+
+    // En macOS `/var` es un enlace a `/private/var`, así que se compara el final.
+    expect(output.trim().endsWith(raiz.replace(/^\/private/, ""))).toBe(true);
   });
 });

@@ -134,7 +134,11 @@ Cinco cosas no son negociables:
   (`PERFIL_DEL_ORQUESTADOR`). Quitarle el middleware podría reinstalar el de deepagents —sin
   permisos— y reabrir el agujero; `xoneAgent.orquestador.test.ts` exige lo contrario.
 - **`FilesystemBackend` con `virtualMode: true`.** Con el default leyó una ruta absoluta
-  de fuera de la raíz. Nada de backends con shell.
+  de fuera de la raíz. **Backend con shell, exactamente UNO**, y el que lo lleva lo declara en
+  su `.md` (`ejecucion`, ver los subagentes): `virtualMode` confina las tools de FICHERO, no
+  los comandos, así que ahí no hay barrera que poner — la propia deepagents LANZA si le pasas
+  `permissions` junto a un backend ejecutable, y esa negativa es el motivo de que esto se
+  declare en vez de deducirse.
 - **Los permisos se construyen con `permisosDe(perfil)`, NUNCA a mano**: `SubAgent.permissions`
   reemplaza los del padre en vez de fusionarlos, así que un perfil que los escriba a mano pierde
   la denegación de `/.env`, `/.git` y `/.xonecode`.
@@ -299,10 +303,42 @@ Y las guardas del proyecto:
 
 Un subagente es un `.md` con frontmatter en `.xonecode/agentes/<nombre>.md`
 (`core/agentes.ts`, `agent/subagentes/agentesEnDisco.ts`). Los cinco de serie —`consultant-xone`,
-`analyst-xone`, `developer-xone`, `designer-xone`, `tester-xone`— se siembran al arrancar. El
-sufijo no es decoración: estos nombres viajan como `subagent_type` a los motores externos, donde
-el hijo tiene sus propios agentes, y es lo que los distingue. Reglas duras:
+`analyst-xone`, `developer-xone`, `designer-xone`, `device-controller`— se siembran al arrancar. El
+sufijo `-xone` no es decoración: estos nombres viajan como `subagent_type` a los motores
+externos, donde el hijo tiene sus propios agentes, y es lo que los distingue. `device-controller`
+se sale de esa convención a propósito —lo que conduce no es propio de XOne, y a un motor externo
+no viaja porque ahí la ejecución no se concede—. Reglas duras:
 
+- **La EJECUCIÓN de comandos se DECLARA en el `.md` y la lleva uno solo** (`ejecucion`, cierto
+  solo con exactamente `"true"` — la trampa del `"false"` de CloudStudio, que aquí concedería la
+  máquina). Lo que concede no es «correr un comando»: una shell no pasa por `permisosDe` ni por
+  el `virtualMode`, así que lee `/.env`, escribe el proyecto sin aprobación y sale de la raíz —
+  por eso deepagents **lanza** al combinar `permissions` con un backend ejecutable, y por eso
+  quien la tiene NO recibe `permissions` (`perfiles.ts#montajeDeFicheros`, puro y probado; el
+  cableado se mira desde fuera en `xoneAgent.ejecucion.test.ts`, preguntándole a la LIBRERÍA si
+  ese backend ejecuta). Se le quitan `write_file` y `edit_file` para que el camino normal de
+  tocar el proyecto siga siendo el de la aprobación, no porque eso lo impida. **Solo con
+  `motor: "modelo"`**: en los tres externos la shell está cerrada a propósito, así que ahí el
+  campo se declara «no aplica» y la ventana lo dice, en vez de prometer lo que no llega. Se
+  compensa VIÉNDOLO: el comando entero sale como `detalle` del evento (lista blanca de
+  `resumenDeTool.ts`) porque no se pregunta antes de cada uno, y el precio declarado es que una
+  ruta absoluta que el modelo escriba en su comando viaja por el cable — para eso el entorno le
+  da una variable por skill y el `cwd` es la raíz.
+- **La shell NO hereda las claves de API** (`core/shellDeAgente.ts`, puro): `guardarCredencial`
+  escribe también en `process.env`, así que un `printenv` las dejaría en el contexto y en el
+  `.jsonl`. Se quitan por la TABLA (`VARIABLES_POR_PROVEEDOR`) más el prefijo de los
+  personalizados, no por una lista a mano. Y se AÑADE una variable por skill montada
+  (`XONECODE_SKILL_<SLUG>`) y otra para los artefactos: una shell ve el disco de verdad y
+  `/skills/` es virtual, pero una ruta absoluta en el prompt acabaría en el cable. **Límite
+  declarado**: quita las NUESTRAS; un `GITHUB_TOKEN` del usuario sigue ahí, y filtrar «lo que
+  parece una clave» sería una heurística que falla en silencio.
+- **Lo que un COMANDO deja en la carpeta de artefactos también se anuncia**
+  (`proyecto.ts#anunciarArtefactosDeLaShell`): el evento `artefacto` lo emite el Proxy de
+  `write`/`edit`, y una shell no pasa por ahí — sin esto, una captura existe en el disco y no
+  existe para nadie. Se compara una FOTO de la carpeta antes y después, no lo que el comando diga.
+- **Un Proxy sobre un backend lee contra el OBJETIVO, no contra el proxy.** `LocalShellBackend.id`
+  es un getter sobre un campo PRIVADO, y `Reflect.get(o, p, receptor)` lanza al leerlo — lo lee el
+  constructor de `CompositeBackend`, así que el fallo es al MONTAR y no al usar.
 - **`REGLAS_XONE` se antepone SIEMPRE desde código**, igual que el aviso de las skills que faltan
   y la línea de que las escrituras se aprueban: poder quitarlas editando un `.md` convertiría el
   invariante en una preferencia.

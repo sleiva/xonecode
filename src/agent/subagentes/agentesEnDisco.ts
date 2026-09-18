@@ -400,7 +400,7 @@ const RENOMBRADOS: Readonly<Record<string, string>> = {
   planner: "analyst-xone",
   dev: "developer-xone",
   mockup: "designer-xone",
-  "xone-device-tester": "tester-xone",
+  "xone-device-tester": "device-controller",
   /**
    * Y el de antes se ACTUALIZA, no se deja: apuntaba a `xone-device-tester`, que ya no es de
    * serie, así que a quien conserve un `probador.md` afinado se le habría seguido diciendo
@@ -410,7 +410,18 @@ const RENOMBRADOS: Readonly<Record<string, string>> = {
    * Dos claves pueden apuntar al mismo nombre nuevo sin chocar: cada entrada se resuelve por
    * separado contra el hash de SU fichero.
    */
-  probador: "tester-xone",
+  probador: "device-controller",
+  /**
+   * Y `tester-xone` se convirtió en `device-controller` cuando dejó de escribir pruebas para
+   * CONDUCIR el aparato: con `ejecucion: true` ya no es el que dice cómo se probaría, es el
+   * que lo hace. El nombre viejo describía lo que podía hacer cuando no tenía manos.
+   *
+   * **Se sale de la convención `<rol>-xone` a propósito**, y es decisión del usuario: lo que
+   * conduce no es propio de XOne —mañana es otro aparato con otra skill—, y el sufijo estaba
+   * para distinguir nuestros nombres de los agentes del hijo en un motor externo. Este no
+   * viaja a ninguno: con motor externo la ejecución no se concede (`puedeEjecutar`).
+   */
+  "tester-xone": "device-controller",
 };
 
 /**
@@ -679,46 +690,46 @@ const HANDOFF_MOCKUP = [
 ].join("\n");
 
 /**
- * El probador de dispositivos. Su conocimiento del protocolo NO va aquí: va en la skill
+ * El que CONDUCE el aparato. Su conocimiento del protocolo NO va aquí: va en la skill
  * `xone-hotswap`, que son 1.100 líneas de referencia sobre las dos plataformas y se cargan
- * solo cuando hacen falta. Aquí queda lo que tiene que saber SIEMPRE, que es qué puede y qué
- * no.
+ * solo cuando hacen falta. Y las reglas de método —por nombre y no por coordenadas, esperar
+ * a un control y no a un temporizador, un `result:false` es el resultado— tampoco: están en
+ * esa misma skill, y aquí se pagarían en cada llamada, dibuje o no.
  *
- * **Y lo que hoy no puede es hablar con el dispositivo.** Este agente no tiene shell ni
- * cliente del servidor hotswap: las tools que lo harían son el paso siguiente. Decirlo aquí
- * —y decirlo en la `descripcion`, que es lo que el orquestador lee para delegar— es lo que
- * evita el peor botón muerto de todos: uno dentro del grafo, que pulsa el modelo y del que
- * se cree el resultado. Mientras tanto sirve para lo que sí puede: escribir el procedimiento
- * exacto y leer lo que vuelva.
+ * **Lo que queda es lo que la skill no puede saber: cómo es ESTA casa.** Dónde están sus
+ * ficheros cuando se mira el disco de verdad, dónde se deja lo que una persona va a ver, y
+ * qué hacer con un comando que no termina. Nada de eso es de XOne ni de Android: es del
+ * harness, y por eso vive en código y no en una skill que mañana se sustituye por otra.
  *
- * Los ejemplos del cuerpo son de Android (`adb`, `logcat`, `runSql`) porque es lo que hay
- * medido; no acotan el agente, que es de las dos plataformas. La que dice cuál tiene qué,
- * comando a comando, es la skill.
+ * Este bloque vale para CUALQUIER agente con `ejecucion: true`, no solo para éste. Está
+ * escrito así a propósito: el día que haya un segundo, lo hereda sin copiarse.
  */
-const PROCEDIMIENTO_DE_PRUEBA = [
-  "LO QUE PUEDES Y LO QUE NO, HOY:",
-  "- NO tienes conexión con el dispositivo: no puedes lanzar adb, ni abrir el WebSocket del",
-  "  servidor hotswap, ni subir un fichero, ni capturar una pantalla. No lo intentes ni digas",
-  "  que lo has hecho.",
-  "- Sí puedes leer el proyecto, y con eso escribir el PROCEDIMIENTO exacto: los comandos en",
-  "  orden, con el nombre real de cada colección y de cada control, y qué tiene que valer cada",
-  "  comprobación para dar la prueba por pasada.",
-  "- Y puedes LEER lo que te devuelvan: un volcado de `getAllElements`, un logcat, la salida de",
-  "  un `runSql`. Ahí sí diagnosticas.",
+const EJECUCION_EN_LA_MAQUINA = [
+  "EJECUTAS COMANDOS EN ESTA MÁQUINA (`execute`), y eso te obliga a tres cosas:",
+  "- El comando corre con `/bin/sh` desde la raíz del proyecto. No se lee ningún `~/.zshrc`,",
+  "  así que no des por puesta ninguna variable del entorno de una persona.",
+  "- Tus skills están en el disco de verdad, no en `/skills/`: esa ruta es virtual y un",
+  "  comando no la ve. Cada una tiene su variable: la skill `xone-hotswap` está en",
+  "  `$XONECODE_SKILL_XONE_HOTSWAP`. Usa la variable, nunca una ruta escrita a mano.",
+  "- Lo que quieras ENSEÑAR a una persona —una captura— déjalo en `$XONECODE_ARTEFACTOS`,",
+  "  que es donde la interfaz lo enseña. Si esa variable no está, no hay dónde: dilo.",
   "",
-  "CÓMO ESCRIBES UNA PRUEBA:",
-  "- Un paso es una acción y su comprobación. Una acción sin comprobación no prueba nada.",
-  "- Por NOMBRE de control, nunca por coordenadas.",
-  "- Espera a un control (`waitForElement`), nunca a un número de segundos.",
-  "- Di qué evidencia esperas de cada comprobación (`getText` devuelve X, `isVisible` true) en",
-  "  vez de «comprobar que se ve bien».",
-  "- Si el proyecto no tiene el control que la prueba necesitaría, DILO: no inventes un nombre.",
+  "UN COMANDO QUE NO TERMINA CUELGA EL TURNO:",
+  "- Arrancar un emulador o un simulador no vuelve nunca. Mándalo al fondo (`… &`) y espera a",
+  "  una CONDICIÓN acotada, no a un número de segundos.",
+  "- El tope de un comando es de reloj, y al vencer se mata solo al hijo: un nieto sobrevive.",
+  "",
+  "LO QUE CUENTAS:",
+  "- La salida literal de lo que corriste, no tu interpretación de ella. Un comando que",
+  "  devuelve 0 no dice que la app arrancara.",
+  "- Si no pudiste comprobar algo, dilo en vez de deducirlo.",
 ].join("\n");
 
 /**
  * Los cinco. Nacieron como una mudanza de los textos que había en código; desde entonces
- * `docs` lleva además la consulta acotada, y `xone-device-tester` llegó con la documentación
- * del protocolo hotswap —con el nombre viejo, `probador`, ver `RENOMBRADOS`—. Cada regla que
+ * `docs` lleva además la consulta acotada, y el que conduce aparatos llegó con la documentación
+ * del protocolo hotswap y pasó por dos nombres más antes de `device-controller` (ver
+ * `RENOMBRADOS`). Cada regla que
  * se añade aquí se mide antes con los evals, porque un prompt más largo es coste en TODAS las
  * llamadas.
  */
@@ -769,16 +780,25 @@ export const AGENTES_DE_SERIE: readonly Agente[] = [
     origen: "semilla",
   },
   {
-    nombre: "tester-xone",
+    nombre: "device-controller",
     descripcion:
-      "Pruebas en un dispositivo o emulador LOCAL —Android o iOS— sobre la app host XOne " +
-      "instalada. Hoy NO se conecta al dispositivo: escribe el procedimiento de prueba con " +
-      "los comandos y las comprobaciones exactas, y diagnostica los volcados de controles, " +
-      "los log y las consultas que se le peguen. No modifica el proyecto.",
+      "CONDUCE un dispositivo o emulador LOCAL —Android o iOS— con la app host XOne " +
+      "instalada: despliega el proyecto en el aparato, lanza la app, captura la pantalla, " +
+      "lee el árbol de controles, pulsa y rellena, y consulta el log y la base de datos del " +
+      "dispositivo. Ejecuta comandos en esta máquina para conseguirlo. Delega en él " +
+      "«lánzalo», «sácame una captura», «pruébalo en el móvil». No modifica el proyecto.",
     motor: "modelo",
     soloLectura: true,
+    /**
+     * **El único de serie con ejecución**, y lo que concede no es «correr un comando»: una
+     * shell no pasa por `permisosDe` ni por el `virtualMode`, así que alcanza el disco
+     * entero. Se le da porque es lo único que contesta «lanza la app»: el canal del aparato
+     * es un WebSocket —`curl` no lo habla— y el despliegue es `adb` más una subida HTTP.
+     * Ninguna de las dos cosas se compone leyendo, y un prompt no las suple.
+     */
+    ejecucion: true,
     skills: ["xone-hotswap", "xone-debugging"],
-    instrucciones: PROCEDIMIENTO_DE_PRUEBA,
+    instrucciones: EJECUCION_EN_LA_MAQUINA,
     origen: "semilla",
   },
   {

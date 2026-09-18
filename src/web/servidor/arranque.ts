@@ -916,6 +916,9 @@ export function montarRutas(
         motor: a.motor,
         ...(a.modelo === undefined ? {} : { modelo: a.modelo }),
         soloLectura: a.soloLectura,
+        // Ausente = no la tiene. No se emite `false` para que el cliente no tenga que
+        // distinguir entre «no» y «no consta»: aquí son lo mismo y la ausencia lo dice.
+        ...(a.ejecucion === true ? { ejecucion: true } : {}),
         skills: a.skills,
         instrucciones: a.instrucciones,
         origen: a.origen,

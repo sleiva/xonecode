@@ -660,3 +660,64 @@ describe("las skills de un subagente", () => {
     expect(screen.getByText(/No hay ninguna skill/)).not.toBeNull();
   });
 });
+
+describe("la capacidad de EJECUTAR comandos", () => {
+  const CONDUCTOR: AgenteDelCable = {
+    nombre: "device-controller",
+    descripcion: "Conduce un aparato.",
+    motor: "modelo",
+    soloLectura: true,
+    ejecucion: true,
+    skills: ["xone-hotswap"],
+    instrucciones: "",
+    origen: "global",
+    semilla: "intacta",
+  };
+
+  it("se ve en la LISTA, no solo al abrirlo", () => {
+    // Es lo único de esta ventana que no acota `permisosDe`, y verlo es lo que sustituye a
+    // que se pregunte antes de cada comando.
+    render(<Agentes {...manejadores} agentes={[CONDUCTOR]} />);
+
+    expect(screen.getByText("ejecuta")).toBeTruthy();
+  });
+
+  it("y el que no la tiene no la enseña", () => {
+    render(<Agentes {...manejadores} agentes={[{ ...CONDUCTOR, ejecucion: undefined }]} />);
+
+    expect(screen.queryByText("ejecuta")).toBeNull();
+  });
+
+  it("con un motor EXTERNO no se pinta, porque ahí no se aplica", () => {
+    // La shell está cerrada en los tres motores externos: pintarla sería decir que ese
+    // agente ejecuta cuando no puede.
+    render(<Agentes {...manejadores} agentes={[{ ...CONDUCTOR, motor: "claude-code" }]} />);
+
+    expect(screen.queryByText("ejecuta")).toBeNull();
+  });
+
+  it("la casilla dice lo que concede, y guarda la AUSENCIA cuando se desmarca", () => {
+    const alGuardar = vi.fn();
+    render(<Agentes {...manejadores} alGuardar={alGuardar} agentes={[{ ...CONDUCTOR, semilla: undefined }]} />);
+    irA("Tuyos");
+    fireEvent.click(screen.getByRole("button", { name: /Editar/ }));
+
+    const casilla = screen.getByRole("checkbox", { name: /Ejecuta comandos/ });
+    expect((casilla as HTMLInputElement).checked).toBe(true);
+    fireEvent.click(casilla);
+    fireEvent.click(screen.getByRole("button", { name: "Guardar" }));
+
+    // Ausente, no `false`: es la misma ausencia que viaja por el cable y la que lee el `.md`.
+    expect(alGuardar).toHaveBeenCalled();
+    expect(alGuardar.mock.calls[0]![0]).not.toHaveProperty("ejecucion");
+  });
+
+  it("con un motor externo la casilla no está, y el aviso DICE que no se aplica", () => {
+    render(<Agentes {...manejadores} agentes={[{ ...CONDUCTOR, motor: "codex", semilla: undefined }]} />);
+    irA("Tuyos");
+    fireEvent.click(screen.getByRole("button", { name: /Editar/ }));
+
+    expect(screen.queryByRole("checkbox", { name: /Ejecuta comandos/ })).toBeNull();
+    expect(screen.getByText(/no se aplica con este motor/)).toBeTruthy();
+  });
+});
