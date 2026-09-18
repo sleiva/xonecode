@@ -148,6 +148,32 @@ export function configuracionDeOpencode(opciones: {
   )}\n`;
 }
 
+/**
+ * El mensaje de error del motor, con el SIGUIENTE PASO detrás cuando se sabe cuál es.
+ *
+ * Medido en la pantalla del usuario: un subagente configurado con un modelo del **tier
+ * gratuito** de opencode fallaba dos veces seguidas con «OpenCode's free tier can only be
+ * used from within OpenCode», que es exacto y no dice qué hacer — y lo que hay que hacer no
+ * se adivina, porque el problema no está en el prompt ni en el proyecto sino en un campo del
+ * `.md` del subagente. Es la misma disciplina que `porQueNo` en la tool de navegación: a
+ * quien se le dice qué está mal sin decirle cómo se arregla, se lo inventa.
+ *
+ * **Se reconoce el texto del proveedor y no se traduce ni se sustituye**: el mensaje
+ * original se conserva entero, y lo nuestro se AÑADE. Si opencode cambia esa frase, lo que
+ * se pierde es el consejo, no el error — que es la dirección segura.
+ *
+ * Y el remedio **no nombra un modelo concreto**: cuál vale depende de qué credenciales tenga
+ * quien lo corre, y proponer uno que él no tiene sería mandarlo a otro callejón.
+ */
+export function conRemedio(mensaje: string): string {
+  if (!/free tier can only be used from within OpenCode/i.test(mensaje)) return mensaje;
+  return (
+    `${mensaje} — ese modelo es del tier GRATUITO de opencode y no funciona fuera de su propia ` +
+    "consola, así que desde aquí no hay forma de usarlo. Elige otro modelo para este subagente " +
+    "en Ajustes → Subagentes: uno de un proveedor con credencial tuya."
+  );
+}
+
 /** ¿Está el binario? Se pregunta lanzándolo, que es la única respuesta que no miente. */
 export async function opencodeDisponible(): Promise<boolean> {
   return new Promise((resolver) => {
@@ -418,7 +444,7 @@ export async function correrOpencode(
       }
       if (m.id === 3) {
         if (m.error !== undefined) {
-          acabar(new Error(`opencode: ${m.error.message ?? "error sin mensaje"}`));
+          acabar(new Error(`opencode: ${conRemedio(m.error.message ?? "error sin mensaje")}`));
           return;
         }
         const consumo = consumoDeOpencode((m.result as { usage?: unknown } | undefined)?.usage);

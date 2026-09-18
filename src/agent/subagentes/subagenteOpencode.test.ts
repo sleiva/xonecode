@@ -11,7 +11,12 @@ import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { mkdtempSync, writeFileSync, chmodSync, readFileSync, existsSync, rmSync, realpathSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { correrOpencode, configuracionDeOpencode, carpetaDeConfigDeOpencode } from "./subagenteOpencode.js";
+import {
+  correrOpencode,
+  configuracionDeOpencode,
+  carpetaDeConfigDeOpencode,
+  conRemedio,
+} from "./subagenteOpencode.js";
 import { crearSubagenteExterno, vistasAplanadasDe } from "./subagenteExterno.js";
 import type { EscrituraExternaPedida, PeticionExterna } from "../../core/ports.js";
 
@@ -365,5 +370,26 @@ describe("y que el puerto le pase de verdad lo que le da la sesión", () => {
     }).correr({ ...peticionDe(true), cwd: raiz });
     const escrita = JSON.parse(readFileSync(join(carpetaDeConfigDeOpencode(), "opencode.json"), "utf8"));
     expect(escrita.permission.read["**/Cosa.xml"]).toBe("deny");
+  });
+});
+
+describe("el error del motor, con el siguiente paso detrás", () => {
+  it("el tier gratuito de opencode dice QUÉ hacer, no solo qué falla", () => {
+    // Medido en pantalla: falló dos veces seguidas con el mensaje del proveedor, que es
+    // exacto y no dice qué hacer — y no se adivina, porque lo que hay que cambiar es un
+    // campo del `.md` del subagente, no el prompt ni el proyecto.
+    const dicho = conRemedio("Error from provider (Console): OpenCode's free tier can only be used from within OpenCode");
+    expect(dicho).toContain("OpenCode's free tier can only be used from within OpenCode");
+    expect(dicho).toMatch(/Ajustes → Subagentes/);
+  });
+
+  it("y no nombra un modelo concreto: cuál vale depende de las credenciales de cada uno", () => {
+    // Proponer uno que quien lo corre no tiene sería mandarlo a otro callejón.
+    expect(conRemedio("… free tier can only be used from within OpenCode")).not.toMatch(/nvidia\/|opencode-go\//);
+  });
+
+  it("cualquier otro error se pasa TAL CUAL: sin consejo inventado", () => {
+    // Si opencode cambia esa frase, lo que se pierde es el consejo y no el error.
+    expect(conRemedio("no such model")).toBe("no such model");
   });
 });
