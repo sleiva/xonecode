@@ -867,3 +867,42 @@ describe("la ejecución es de UNO, y se comprueba", () => {
     }
   });
 });
+
+/**
+ * Lo que se inyecta en deepagents por cada subagente es `- <nombre>: <descripción>`, y eso
+ * viaja en CADA llamada del orquestador. Así que estas cinco frases son a la vez lo único con
+ * lo que reparte y un coste fijo: valen las dos comprobaciones.
+ */
+describe("las descripciones que ve el orquestador", () => {
+  it("todas dicen cuándo usarlo, qué darle y qué devuelve", () => {
+    for (const a of AGENTES_DE_SERIE) {
+      expect(a.descripcion, `${a.nombre}: para qué`).toMatch(/^Para /);
+      expect(a.descripcion, `${a.nombre}: qué darle`).toMatch(/[Dd]ale |[Dd]ile /);
+      expect(a.descripcion, `${a.nombre}: qué devuelve`).toMatch(/[Dd]evuelve/);
+    }
+  });
+
+  /**
+   * **Y las que se pisan dicen dónde está la frontera.** Medido: el arreglo de un padding —CSS
+   * puro— se lo llevó `developer-xone` y no `designer-xone`, porque la frontera era un adverbio
+   * («cómo se VE» contra «cómo funciona»). Ahora cada una NOMBRA a la otra y dice por qué.
+   */
+  it("los que compiten se nombran y se deslindan", () => {
+    const de = (n: string) => AGENTES_DE_SERIE.find((a) => a.nombre === n)!.descripcion;
+
+    expect(de("designer-xone")).toContain("developer-xone");
+    expect(de("device-controller")).toContain("developer-xone");
+    expect(de("consultant-xone")).toMatch(/no para averiguar qué hay en el proyecto/);
+    expect(de("analyst-xone")).toMatch(/no para preguntas de la plataforma/);
+  });
+
+  /**
+   * El coste es real y conviene que salte si alguien lo dobla sin querer: son ~800 tokens que
+   * viajan en cada llamada del que más llamadas hace. No es un límite de diseño, es un aviso.
+   */
+  it("y no se van de precio sin que nadie se entere", () => {
+    const total = AGENTES_DE_SERIE.reduce((n, a) => n + `- ${a.nombre}: ${a.descripcion}`.length, 0);
+
+    expect(total).toBeLessThan(4500);
+  });
+});

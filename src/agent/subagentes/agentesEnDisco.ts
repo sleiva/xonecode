@@ -849,13 +849,12 @@ export const AGENTES_DE_SERIE: readonly Agente[] = [
   {
     nombre: "device-controller",
     descripcion:
-      "Para PROBAR de verdad en un móvil o emulador local: despliega el proyecto, lanza la " +
-      "app, navega, captura la pantalla, lee el árbol de controles, pulsa y rellena, y " +
-      "consulta el log y la base de datos del aparato. Dile SIEMPRE a qué pantalla o " +
-      "colección tiene que llegar y qué comprobar ahí — «pruébalo» a secas le hace " +
-      "improvisar y sale caro. Si no hay aparato levanta el emulador él mismo. Devuelve lo " +
-      "que MIDIÓ: la salida literal, la captura y las excepciones del log; si no pudo " +
-      "comprobar algo lo dice en vez de deducirlo. No edita ficheros del proyecto: eso es de " +
+      "Para PROBAR en un móvil o emulador de verdad: despliega, navega hasta una pantalla y " +
+      "mira qué pasa. Es el único que ve lo que ninguna comprobación estática puede ver. " +
+      "Dile SIEMPRE a qué pantalla o colección llegar y qué comprobar ahí: «pruébalo» a " +
+      "secas le hace improvisar y sale caro. Levanta el emulador si no hay ninguno. Devuelve " +
+      "lo que MIDIÓ —salida literal, captura y excepciones del log—, y dice lo que no pudo " +
+      "comprobar en vez de deducirlo. No lo uses para cambiar el proyecto: eso es de " +
       "developer-xone.",
     motor: "modelo",
     /**
@@ -891,10 +890,13 @@ export const AGENTES_DE_SERIE: readonly Agente[] = [
   {
     nombre: "designer-xone",
     descripcion:
-      "Para el aspecto: layouts, CSS, recursos y diagramas. Úsalo cuando el problema sea cómo " +
-      "se VE algo, no cómo funciona. Si tiene que reflejar el código real, dale antes el " +
-      "análisis hecho. Devuelve los ficheros que cambió, con aprobación como cualquier otra " +
-      "escritura.",
+      "Para cambiar cómo se VE algo: el layout de una pantalla, el CSS, los recursos, y los " +
+      "diagramas de la app. La frontera con developer-xone no es el fichero sino la PREGUNTA: " +
+      "si lo que falla es la colocación, el tamaño, el color o la legibilidad es suyo aunque " +
+      "se arregle en un `.xne`; si es qué hace un botón al pulsarlo, es de developer-xone " +
+      "aunque se toque el CSS. Dale la pantalla, qué se ve mal y qué tendría que verse — y si " +
+      "el arreglo depende del código real, el análisis ya hecho. Devuelve los ficheros que " +
+      "cambió, con aprobación como cualquier otra escritura.",
     motor: "modelo",
     soloLectura: false,
     skills: ["xone-development", "archify", "artifacts-builder"],

@@ -534,7 +534,15 @@ export function Agentes({
             <span className={estilos.rotulo}>
               Cuándo usarlo <span className={estilos.pista}>— lo lee el orquestador para elegirlo</span>
             </span>
-            <Input
+            {/*
+              Un `textarea` y no un `Input`: esta descripción es lo ÚNICO que el orquestador lee
+              para repartir, así que no es un rótulo — dice cuándo usarlo, qué darle y qué
+              devuelve. Las de serie van de 386 a 741 caracteres, y en una caja de una línea se
+              editan a ciegas: se ve el 12 % y no se sabe ni dónde acaba una frase.
+            */}
+            <textarea
+              className={estilos.descripcion}
+              rows={4}
               value={editando.descripcion}
               onChange={(e) => setEditando({ ...editando, descripcion: e.target.value })}
             />

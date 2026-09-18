@@ -298,6 +298,19 @@
   resize: vertical;
 }
 
+/**
+ * La descripción se edita en un `textarea`, no en un campo de una línea: es lo único que el
+ * orquestador lee para repartir, y las de serie van de 386 a 741 caracteres.
+ *
+ * Hereda todo de `.instrucciones` menos la tipografía: aquello es el prompt del agente y se
+ * lee como código; esto es PROSA en castellano, y en monoespaciada cuesta más leerla.
+ */
+.descripcion {
+  composes: instrucciones;
+  font-family: inherit;
+  font-size: 13px;
+}
+
 .botones {
   display: flex;
   justify-content: flex-end;
