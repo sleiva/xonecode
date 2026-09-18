@@ -25,7 +25,9 @@ xone-review             →  valida con xone-simulator
 Todo vive en **la carpeta del plan**, `/planes/<nombre>/`, NUNCA en la raíz del proyecto: un plan
 no es parte de la app del cliente, y lo que se escribe en la raíz entra en el commit del turno y
 sube a CloudStudio. Escribe tu `TASKS.md` **en la misma carpeta de la que leíste el `PLAN.md`**,
-no en otra: quien desarrolle va a buscarlo ahí.
+no en otra: quien desarrolle va a buscarlo ahí. Y el nombre es **EXACTO** — nada de
+`tareas.md` ni variantes: dos ficheros con las mismas tareas son dos fuentes de verdad, y la
+que nadie marca se queda vieja.
 
 ```
 /planes/favoritos/

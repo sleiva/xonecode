@@ -32,7 +32,12 @@ git, no se sincroniza, y **sobrevive a la sesión** — se planifica un día y s
 **Elige tú el `<nombre>`**, y es una carpeta por plan porque puede haber varios a la vez:
 minúsculas, dígitos y guiones sencillos (`favoritos`, `sync-offline`), corto y por lo que el
 desarrollo ES. Mira antes `/planes/` por si ya existe uno del mismo tema: si lo hay, AMPLÍALO en
-vez de abrir otro. Crea los archivos **lazy**, solo cuando hay algo que escribir:
+vez de abrir otro. Crea los archivos **lazy**, solo cuando hay algo que escribir.
+
+**Los nombres son EXACTOS**: `PLAN.md`, `CONTEXT.md` y la carpeta `adr/`. No crees
+traducciones ni variantes (`spec.md`, `glosario.md`, `plan.md`): quien lea el plan después
+busca esos nombres, y dos ficheros con lo mismo dentro son dos fuentes de verdad — la que
+nadie actualiza se queda vieja sin que nadie lo note.
 
 ```
 /planes/favoritos/
