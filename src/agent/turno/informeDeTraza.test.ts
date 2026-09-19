@@ -217,3 +217,40 @@ describe("un corte por tope se CUENTA y se VE", () => {
     expect(sesion.origenes.find((o) => o.origen === "consultant-xone")?.cortes).toBe(1);
   });
 });
+
+
+describe("el reparto de tools entre orquestador y especialistas", () => {
+  const linea = (o: Record<string, unknown>) => JSON.stringify({ v: 1, sesion: "s1", ...o });
+
+  it("cuenta las del ORQUESTADOR y lo dice", () => {
+    const [sesion] = resumirTraza([
+      linea({ tipo: "sesion" }),
+      linea({ tipo: "tool", nombre: "grep", origen: "orquestador" }),
+      linea({ tipo: "tool", nombre: "grep", origen: "orquestador" }),
+      linea({ tipo: "tool", nombre: "read_file", origen: "especialista" }),
+    ]);
+    expect(sesion.toolsDelOrquestador).toBe(2);
+    expect(pintarSesion(sesion).join("\n")).toContain("orquestador 2 de 3");
+  });
+
+  it("una traza SIN origen no dice cero: se calla", () => {
+    // Un cero medido y un cero por ausencia no se distinguirían. Una traza de antes de que el
+    // origen se registrara afirmaría que el orquestador no gastó ninguna tool, que es falso.
+    const [sesion] = resumirTraza([
+      linea({ tipo: "sesion" }),
+      linea({ tipo: "tool", nombre: "grep" }),
+    ]);
+    expect(sesion.toolsDelOrquestador).toBe(0);
+    const pintado = pintarSesion(sesion).join("\n");
+    expect(pintado).toContain("tools");
+    expect(pintado).not.toContain("orquestador 0");
+  });
+
+  it("un origen desconocido no se imputa al orquestador", () => {
+    const [sesion] = resumirTraza([
+      linea({ tipo: "sesion" }),
+      linea({ tipo: "tool", nombre: "grep", origen: "vete a saber" }),
+    ]);
+    expect(sesion.toolsDelOrquestador).toBe(0);
+  });
+});

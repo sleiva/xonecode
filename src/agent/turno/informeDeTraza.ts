@@ -72,6 +72,17 @@ export interface SesionDeTraza {
   contexto: number;
   origenes: GastoDeOrigen[];
   tools: UsoDeTool[];
+  /**
+   * Cuántas tools gastó el ORQUESTADOR. El resto son de los especialistas.
+   *
+   * Dos cubos y no cinco porque el dato solo da para dos: el namespace del stream dice si un
+   * chunk es del padre o de un especialista, pero no de CUÁL —sus segmentos son ids opacos—.
+   * Repartir entre los cinco pedía una heurística que ya se vio fallar (daba 21 tools a uno
+   * cuyo tope son 20), y un número que parece un dato y es una inferencia es peor que no
+   * tenerlo. El cubo que hacía falta para decidir el presupuesto del orquestador es uno de
+   * estos dos.
+   */
+  toolsDelOrquestador: number;
   /** Líneas que no se pudieron leer. Se dicen: una traza a medias no se disimula. */
   ilegibles: number;
 }
@@ -135,7 +146,7 @@ export function resumirTraza(lineas: Iterable<string>): SesionDeTraza[] {
     const ya = sesiones.get(id);
     if (ya !== undefined) return ya;
     const nueva: EnConstruccion = {
-      sesion: { id, llamadas: 0, input: 0, output: 0, cache: 0, contexto: 0, origenes: [], tools: [], ilegibles: 0 },
+      sesion: { id, llamadas: 0, input: 0, output: 0, cache: 0, contexto: 0, origenes: [], tools: [], toolsDelOrquestador: 0, ilegibles: 0 },
       porOrigen: new Map(),
       porTool: new Map(),
     };
@@ -196,6 +207,9 @@ export function resumirTraza(lineas: Iterable<string>): SesionDeTraza[] {
 
     if (evento.tipo === "tool") {
       const nombre = texto(evento.nombre) ?? "(sin nombre)";
+      // Ausente NO se cuenta como del orquestador: una traza vieja, de antes de que esto se
+      // registrara, diría que el orquestador gastó cero — que es «no consta», no «ninguna».
+      if (texto(evento.origen) === "orquestador") actual.sesion.toolsDelOrquestador += 1;
       const entrada = actual.porTool.get(nombre) ?? {
         uso: { nombre, veces: 0, blancos: [], distintos: 0 },
         blancos: new Map<string, BlancoDeTool>(),
@@ -266,7 +280,15 @@ export function pintarSesion(sesion: SesionDeTraza): string[] {
   }
 
   if (sesion.tools.length > 0) {
-    lineas.push("  tools");
+    // El reparto solo se dice si CONSTA. Una traza de antes de que el origen se registrara
+    // daría cero, y un cero medido y un cero por ausencia no se distinguirían.
+    const total = sesion.tools.reduce((s, x) => s + x.veces, 0);
+    const orq = sesion.toolsDelOrquestador;
+    lineas.push(
+      orq === 0
+        ? "  tools"
+        : `  tools (orquestador ${orq} de ${total}, el resto de los especialistas)`
+    );
     for (const t of sesion.tools) {
       // «Seis lecturas» y «seis ficheros» no son lo mismo, así que se dicen los dos: lo
       // primero es el trabajo y lo segundo el alcance, y solo juntos se ve una relectura.

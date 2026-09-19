@@ -128,7 +128,46 @@ export function esDelPadre(ns: readonly string[]): boolean {
   return ns.length <= 1;
 }
 
-export type AlLlamarTool = (tool: { nombre: string; detalle?: string; parametros?: ParametrosSeguros }) => void;
+/**
+ * El `origen` es EXACTO, no una inferencia, y por eso solo distingue dos.
+ *
+ * Sale de `esDelPadre`, que está medido: un especialista SIEMPRE lleva un segmento `tools:`
+ * delante en su namespace, porque se le invoca con la tool `task`. Lo que el namespace NO dice
+ * es CUÁL especialista — sus segmentos son `tools:<uuid>` y `model_request:<uuid>`, ids opacos.
+ *
+ * **Y se queda así a propósito.** Antes de esto, la única forma de repartir tools por origen era
+ * una heurística sobre el fichero de traza (imputarlas al siguiente registro de modelo), que se
+ * veía que fallaba: daba 21 tools a un especialista cuyo tope son 20. Un número que parece un
+ * dato y es una inferencia es peor que no tenerlo. Esto son dos cubos ciertos en vez de cinco
+ * dudosos, y el que hacía falta —cuánto gasta el orquestador— es uno de los dos.
+ */
+export type OrigenDeTool = "orquestador" | "especialista";
+
+/**
+ * De quién es esta tool, por el namespace del chunk.
+ *
+ * **No usa `esDelPadre`, y equivocarme con eso costó una medida falsa.** Aquel predicado es la
+ * LONGITUD del namespace y está medido para `messages`, donde el padre llega como
+ * `["model_request:<uuid>"]` — longitud 1. En `updates`, que es el modo por el que llegan los
+ * `tool_calls`, el padre llega con `[]` y un especialista con `["tools:<id>"]`, también
+ * longitud 1. Aplicar allí la regla de la longitud imputaba al orquestador TODAS las tools:
+ * el informe decía «orquestador 70 de 70» en un turno donde un especialista hizo 16 llamadas
+ * y se comió su tope.
+ *
+ * La regla buena es la que el propio comentario de `esDelPadre` ya declaraba: **un
+ * especialista SIEMPRE lleva un segmento `tools:` delante**, porque se le invoca con la tool
+ * `task`. Eso vale en los dos modos y no depende de cuántos segmentos haya.
+ */
+export function origenDeTool(ns: readonly string[]): OrigenDeTool {
+  return ns[0]?.startsWith("tools:") === true ? "especialista" : "orquestador";
+}
+
+export type AlLlamarTool = (tool: {
+  nombre: string;
+  detalle?: string;
+  parametros?: ParametrosSeguros;
+  origen: OrigenDeTool;
+}) => void;
 
 /**
  * Convierte el stream del grafo en `DomainEvent`.
@@ -166,7 +205,12 @@ export async function* aEventos(
             vistas.add(id);
           }
           try {
-            alLlamarTool?.({ nombre, ...(detalle === undefined ? {} : { detalle }), ...(parametros === undefined ? {} : { parametros }) });
+            alLlamarTool?.({
+              nombre,
+              ...(detalle === undefined ? {} : { detalle }),
+              ...(parametros === undefined ? {} : { parametros }),
+              origen: origenDeTool(chunk.ns),
+            });
           } catch {
             // La observabilidad no puede tumbar ni silenciar el stream.
           }

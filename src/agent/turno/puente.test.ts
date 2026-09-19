@@ -172,8 +172,40 @@ describe("aEventos", () => {
     }
     const e: DomainEvent[] = [];
     for await (const evento of aEventos(flujo(), undefined, (tool) => vistas.push(tool))) e.push(evento);
-    expect(vistas).toEqual([{ nombre: "grep", detalle: "MTLogin", parametros: { pattern: "MTLogin" } }]);
+    // El `origen` va en lo OBSERVADO y NO en el evento: la consola pinta una línea de tool
+    // igual venga de donde venga —el colapsador las agrupa a todas—, y meterlo ahí sería un
+    // dato de diagnóstico colándose en la piel.
+    expect(vistas).toEqual([
+      { nombre: "grep", detalle: "MTLogin", parametros: { pattern: "MTLogin" }, origen: "especialista" },
+    ]);
     expect(e).toEqual([{ tipo: "tool", nombre: "grep", detalle: "MTLogin" }]);
+  });
+
+  it("una tool del ORQUESTADOR se marca como tal: en `updates` llega con namespace VACÍO", async () => {
+    // El error que esto fija: `esDelPadre` es la longitud del namespace y vale para `messages`,
+    // donde el padre llega como `["model_request:…"]`. En `updates` el padre llega con `[]` y un
+    // especialista con `["tools:…"]` — las dos de longitud 1 y 0. Usar la longitud aquí imputaba
+    // al orquestador TODAS las tools: el informe decía «orquestador 70 de 70».
+    const vistas: Array<{ origen?: string }> = [];
+    const dato = { agent: { messages: [{ tool_calls: [{ name: "grep", args: { pattern: "x" } }] }] } };
+    async function* flujo(): AsyncIterable<unknown> {
+      yield [[], "updates", dato];
+    }
+    for await (const _ of aEventos(flujo(), undefined, (tool) => vistas.push(tool))) void _;
+    expect(vistas[0]?.origen).toBe("orquestador");
+  });
+
+  it("una tool de un ESPECIALISTA se marca como tal, y es exacto", async () => {
+    // Un especialista SIEMPRE lleva un segmento `tools:` delante porque se le invoca con
+    // `task`, así que la frontera es la LONGITUD del namespace (`esDelPadre`, medido). No es
+    // una heurística: es la misma regla con la que se decide qué tokens se emiten.
+    const vistas: Array<{ origen?: string }> = [];
+    const dato = { agent: { messages: [{ tool_calls: [{ name: "grep", args: { pattern: "x" } }] }] } };
+    async function* flujo(): AsyncIterable<unknown> {
+      yield [["tools:abc", "model_request:def"], "updates", dato];
+    }
+    for await (const _ of aEventos(flujo(), undefined, (tool) => vistas.push(tool))) void _;
+    expect(vistas[0]?.origen).toBe("especialista");
   });
 
   it("acepta las dos formas de chunk, con y sin namespace", async () => {

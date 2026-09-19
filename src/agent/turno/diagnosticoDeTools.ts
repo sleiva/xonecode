@@ -2,6 +2,7 @@ import { appendFileSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
 import type { TokenTracker } from "../../vendor/tokenTracking.js";
 import type { ParametrosSeguros } from "./resumenDeTool.js";
+import type { OrigenDeTool } from "./puente.js";
 
 /** Activa una traza local y opt-in; nunca se habilita para una sesión normal. */
 export const VARIABLE_TRAZA_TOOLS = "XONECODE_TRACE_TOOLS";
@@ -29,7 +30,12 @@ export interface DiagnosticoDeTools {
    * echa de menos cuando ya te ha engañado.
    */
   corte?(origen: string, limite: number): void;
-  herramienta(nombre: string, detalle: string | undefined, parametros: ParametrosSeguros | undefined, tracker: TokenTracker): void;
+  /**
+   * `origen` distingue el orquestador de un especialista, y es EXACTO (sale del namespace del
+   * stream, ver `puente.ts#esDelPadre`). No dice CUÁL especialista: sus segmentos son ids
+   * opacos. Dos cubos ciertos en vez de cinco dudosos.
+   */
+  herramienta(nombre: string, detalle: string | undefined, parametros: ParametrosSeguros | undefined, tracker: TokenTracker, origen?: OrigenDeTool): void;
 }
 
 /** Ruta pública solo para comunicar al usuario dónde quedó su diagnóstico. */
@@ -71,10 +77,11 @@ export function crearDiagnosticoDeTools(
     corte(origen, limite) {
       escribir({ tipo: "corte", origen, limite });
     },
-    herramienta(nombre, detalle, parametros, tracker) {
+    herramienta(nombre, detalle, parametros, tracker, origen) {
       escribir({
         tipo: "tool",
         nombre,
+        ...(origen === undefined ? {} : { origen }),
         ...(detalle === undefined ? {} : { detalle }),
         ...(parametros === undefined ? {} : { parametros }),
         inputAcumulado: tracker.input,
