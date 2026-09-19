@@ -855,7 +855,9 @@ export const AGENTES_DE_SERIE: readonly Agente[] = [
       "secas le hace improvisar y sale caro. Levanta el emulador si no hay ninguno. Devuelve " +
       "lo que MIDIÓ —salida literal, captura y excepciones del log—, y dice lo que no pudo " +
       "comprobar en vez de deducirlo. No lo uses para cambiar el proyecto: eso es de " +
-      "developer-xone.",
+      "developer-xone. Y NO lo uses para algo que se ve LEYENDO —un texto cortado, un " +
+      "atributo, un error de sintaxis—: arrancar un aparato para eso se come un cuarto del " +
+      "turno y no contesta nada que no conteste abrir el fichero.",
     motor: "modelo",
     /**
      * **NO es de solo lectura, y decirlo importa por dos cosas distintas.**
@@ -891,11 +893,12 @@ export const AGENTES_DE_SERIE: readonly Agente[] = [
     nombre: "designer-xone",
     descripcion:
       "Para cambiar cómo se VE algo: el layout de una pantalla, el CSS, los recursos, y los " +
-      "diagramas de la app. La frontera con developer-xone no es el fichero sino la PREGUNTA: " +
-      "si lo que falla es la colocación, el tamaño, el color o la legibilidad es suyo aunque " +
-      "se arregle en un `.xne`; si es qué hace un botón al pulsarlo, es de developer-xone " +
-      "aunque se toque el CSS. Dale la pantalla, qué se ve mal y qué tendría que verse — y si " +
-      "el arreglo depende del código real, el análisis ya hecho. Devuelve los ficheros que " +
+      "diagramas de la app. Suyo es TODO síntoma visual, y da igual que suene a avería: algo " +
+      "CORTADO, que SE SALE, que NO SE LEE, que NO CABE, apretado, pegado al borde, " +
+      "desalineado, del color o del tamaño equivocado — también cuando se arregle en un " +
+      "`.xne` y no en el CSS. De developer-xone es qué HACE un botón al pulsarlo, aunque se " +
+      "toque el CSS. Dale la pantalla, qué se ve mal y qué tendría que verse — y si el " +
+      "arreglo depende del código real, el análisis ya hecho. Devuelve los ficheros que " +
       "cambió, con aprobación como cualquier otra escritura.",
     motor: "modelo",
     soloLectura: false,
