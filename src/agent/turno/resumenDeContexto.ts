@@ -242,6 +242,33 @@ export const TOPE_DE_TOOLS_DEL_ESPECIALISTA = 20;
 export const SALIDA_DEL_TOPE_DE_TOOLS = "continue" as const;
 
 
+/**
+ * Cuántas TOOLS puede gastar el ORQUESTADOR, y **es un guarda, no una economía**.
+ *
+ * ## Por qué NO lleva tope de LLAMADAS, y esto sí
+ *
+ * El argumento contra caparle las llamadas sigue en pie y es bueno: **el que contesta al
+ * usuario no puede quedarse a medias**. Pero ese argumento es sobre no cortarle la VOZ, y el
+ * tope de tools con `exitBehavior: "continue"` no corta nada — se queda sin más tools y
+ * contesta con lo que tenga. Le quita la pala, no la palabra.
+ *
+ * ## Por qué el número es ALTO, y qué NO es
+ *
+ * **No está puesto para ahorrar.** Medido el 19-09-2026 sobre turnos reales, el orquestador
+ * gasta 41 tools en un encargo visual normal —18 lecturas, 15 `grep`, 5 de navegación y 3
+ * delegaciones— y sus llamadas al modelo van de 14 a 49 según el turno. Esas lecturas SON el
+ * trabajo: recortarlas no abarata el turno, empeora la respuesta. Lo que abarata es quitarle la
+ * NECESIDAD de leer, que es lo que hacen `conHechosDelProyecto` y la operación `estilos` — y se
+ * está moviendo: la navegación pasó de 1-2 usos por turno a 5.
+ *
+ * Así que esto se sitúa POR ENCIMA de lo observado a propósito: no muerde en ningún turno
+ * medido y solo para uno desbocado. Es el mismo papel que `topeDeRondas` y el tope propio de
+ * los artefactos — «aquí no hay humano que frene el bucle»—, y por eso vive aquí y no en una
+ * medida de coste. Si algún día muerde en un turno normal, lo que hay que mirar es por qué ese
+ * turno necesitó 60 tools, no subir el número.
+ */
+export const TOPE_DE_TOOLS_DEL_ORQUESTADOR = 60;
+
 export function topeDeTools(limite: number = TOPE_DE_TOOLS_DEL_ESPECIALISTA) {
   return toolCallLimitMiddleware({ runLimit: limite, exitBehavior: SALIDA_DEL_TOPE_DE_TOOLS });
 }

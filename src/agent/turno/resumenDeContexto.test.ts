@@ -5,7 +5,7 @@ import { describe, expect, it } from "vitest";
 import { AIMessage, HumanMessage, ToolMessage } from "@langchain/core/messages";
 import { FilesystemBackend } from "deepagents";
 import { createAgent, FakeToolCallingModel } from "langchain";
-import { conservarElEncargo, resumenConEncargo, resumenDeContexto, SALIDA_DEL_TOPE_DE_TOOLS, topeDeLlamadas, TOPE_DE_LLAMADAS_DEL_ESPECIALISTA, TOPE_DE_TOOLS_DEL_ESPECIALISTA, UMBRAL_RESUMEN_TOKENS } from "./resumenDeContexto.js";
+import { conservarElEncargo, resumenConEncargo, resumenDeContexto, SALIDA_DEL_TOPE_DE_TOOLS, topeDeLlamadas, TOPE_DE_LLAMADAS_DEL_ESPECIALISTA, topeDeTools, TOPE_DE_TOOLS_DEL_ESPECIALISTA, TOPE_DE_TOOLS_DEL_ORQUESTADOR, UMBRAL_RESUMEN_TOKENS } from "./resumenDeContexto.js";
 
 
 /**
@@ -267,5 +267,35 @@ describe("topeDeLlamadas, contra la librería real", () => {
     const texto = ultimo(await correr([topeDeLlamadas(0)], "el titulo sale cortado"));
     expect(texto).toContain("el titulo sale cortado");
     expect(texto).toContain("PARCIAL");
+  });
+});
+
+
+describe("el tope de tools del ORQUESTADOR", () => {
+  it("está POR ENCIMA de lo medido: es un guarda, no una economía", () => {
+    // Medido sobre turnos reales: 41 tools en un encargo visual normal (18 lecturas, 15 grep,
+    // 5 de navegación, 3 delegaciones), y de 14 a 49 llamadas al modelo según el turno. Si este
+    // número bajara hasta morder en un turno normal dejaría de ser un guarda y empezaría a
+    // recortar el trabajo — que es justo lo que no queremos, porque esas lecturas SON el trabajo.
+    expect(TOPE_DE_TOOLS_DEL_ORQUESTADOR).toBeGreaterThan(41);
+  });
+
+  it("es MAYOR que el del especialista, y eso no es arbitrario", () => {
+    // Un especialista hace un encargo acotado; el orquestador lleva el turno entero y delega.
+    // Darles el mismo presupuesto sería tratar dos trabajos distintos como si fueran el mismo.
+    expect(TOPE_DE_TOOLS_DEL_ORQUESTADOR).toBeGreaterThan(TOPE_DE_TOOLS_DEL_ESPECIALISTA);
+  });
+
+  it("no le corta la respuesta: sale por `continue`, no por `end`", async () => {
+    // El argumento contra caparle las LLAMADAS sigue en pie —«el que contesta al usuario no
+    // puede quedarse a medias»— y este tope lo respeta: le quita la pala, no la palabra.
+    expect(SALIDA_DEL_TOPE_DE_TOOLS).toBe("continue");
+    const agente = createAgent({
+      model: new FakeToolCallingModel({ responses: [] } as never),
+      tools: [],
+      middleware: [topeDeTools(TOPE_DE_TOOLS_DEL_ORQUESTADOR)],
+    } as never) as { invoke: (x: unknown) => Promise<{ messages: unknown[] }> };
+    const r = await agente.invoke({ messages: [new HumanMessage("hola")] });
+    expect(r.messages.length).toBeGreaterThan(0);
   });
 });

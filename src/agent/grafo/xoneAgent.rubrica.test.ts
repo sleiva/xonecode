@@ -71,3 +71,13 @@ describe("el cableado del bucle de rúbrica", () => {
     if (tracker >= 0) expect(rubrica).toBeLessThan(tracker);
   });
 });
+
+describe("el guarda de tools del orquestador", () => {
+  it("está montado, y en el orquestador", async () => {
+    // Condicional no es, pero sigue siendo una composición dentro de `construirAgente`, que
+    // todos los tests que lo tocan doblan: sin mirar lo que recibe `createDeepAgent`, podría
+    // dejar de estar y nada se pondría rojo.
+    const nombres = await construir(false);
+    expect(nombres.some((n) => n.toLowerCase().includes("toolcalllimit"))).toBe(true);
+  });
+});
