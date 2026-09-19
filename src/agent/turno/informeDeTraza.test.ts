@@ -170,3 +170,50 @@ describe("informe de traza", () => {
     expect(texto).not.toContain("ventana");
   });
 });
+
+
+describe("un corte por tope se CUENTA y se VE", () => {
+  // El dato que faltaba: «15 llamadas» se lee exactamente igual viniendo de un agente que
+  // terminó que de uno al que cortaron. Esa confusión costó una sesión entera de diagnóstico.
+  const linea = (o: Record<string, unknown>) => JSON.stringify({ v: 1, sesion: "s1", ...o });
+
+  it("suma los cortes al origen y los pinta en SU línea", () => {
+    const [sesion] = resumirTraza([
+      linea({ tipo: "sesion" }),
+      linea({ tipo: "modelo", origen: "designer-xone", input: 100, output: 10, cache: 0, llamadas: 1, contexto: 50 }),
+      linea({ tipo: "corte", origen: "designer-xone", limite: 15 }),
+    ]);
+    expect(sesion.origenes[0].cortes).toBe(1);
+    expect(pintarSesion(sesion).join("\n")).toContain("CORTADO por tope");
+  });
+
+  it("un origen que NO se cortó no dice nada", () => {
+    const [sesion] = resumirTraza([
+      linea({ tipo: "sesion" }),
+      linea({ tipo: "modelo", origen: "developer-xone", input: 100, output: 10, cache: 0, llamadas: 1, contexto: 50 }),
+    ]);
+    expect(sesion.origenes[0].cortes).toBe(0);
+    expect(pintarSesion(sesion).join("\n")).not.toContain("CORTADO");
+  });
+
+  it("dos cortes del mismo origen se cuentan, que es lo que pasa con dos delegaciones", () => {
+    const [sesion] = resumirTraza([
+      linea({ tipo: "sesion" }),
+      linea({ tipo: "modelo", origen: "designer-xone", input: 1, output: 1, cache: 0, llamadas: 1, contexto: 1 }),
+      linea({ tipo: "corte", origen: "designer-xone", limite: 15 }),
+      linea({ tipo: "corte", origen: "designer-xone", limite: 15 }),
+    ]);
+    expect(sesion.origenes[0].cortes).toBe(2);
+    expect(pintarSesion(sesion).join("\n")).toContain("×2");
+  });
+
+  it("un corte que llega ANTES que su primera línea de modelo no se pierde", () => {
+    // El fichero es append-only y el orden lo pone el tiempo, no nosotros. Si la entrada solo
+    // se creara en la rama `modelo`, un corte madrugador desaparecería sin dejar rastro.
+    const [sesion] = resumirTraza([
+      linea({ tipo: "sesion" }),
+      linea({ tipo: "corte", origen: "consultant-xone", limite: 15 }),
+    ]);
+    expect(sesion.origenes.find((o) => o.origen === "consultant-xone")?.cortes).toBe(1);
+  });
+});

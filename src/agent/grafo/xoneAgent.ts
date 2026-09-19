@@ -18,7 +18,7 @@ import { invocarVisualConModelos } from "../dispositivos/juezVisual.js";
 import { inventarioDelProyecto } from "../subagentes/escrituraExterna.js";
 import type { DiagnosticoDeTools } from "../turno/diagnosticoDeTools.js";
 import { middlewareTextoDeTool } from "../turno/textoDeTool.js";
-import { resumenConEncargo, topeDeLlamadas, topeDeTools } from "../turno/resumenDeContexto.js";
+import { resumenConEncargo, topeDeLlamadas, TOPE_DE_LLAMADAS_DEL_ESPECIALISTA, topeDeTools } from "../turno/resumenDeContexto.js";
 import { middlewareDeRubrica, type Calificador } from "../turno/rubrica.js";
 import { inspectorDePrompt } from "../turno/inspectorDePrompt.js";
 import { excluirTools, toolsQueNoUsa } from "./excluirTools.js";
@@ -462,7 +462,11 @@ export async function construirAgente(opciones: OpcionesDelAgente): Promise<unkn
       // El tope es del ESPECIALISTA y no del orquestador: el que contesta al usuario no
       // puede quedarse a medias, y el que hace un encargo acotado sí debe. Ver
       // `resumenDeContexto.ts#topeDeLlamadas`.
-      topeDeLlamadas(),
+      // El corte se ANOTA con el nombre de ESTE perfil: sin origen, saber que hubo un corte no
+      // dice a quién le pasó, que es justo lo que hace falta para calibrar el presupuesto.
+      topeDeLlamadas(undefined, () =>
+        opciones.diagnostico?.corte?.(perfil.nombre, TOPE_DE_LLAMADAS_DEL_ESPECIALISTA)
+      ),
       // Y el de TOOLS, que es el que acota lo que se ACUMULA: 43 resultados en el contexto
       // hicieron que la última llamada costara ocho veces la primera.
       topeDeTools(),

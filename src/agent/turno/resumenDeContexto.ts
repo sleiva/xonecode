@@ -167,6 +167,7 @@ const ESTADO_DEL_TOPE = z.object({ llamadasDelEspecialista: z.number().default(0
  */
 export function topeDeLlamadas(
   limite: number = TOPE_DE_LLAMADAS_DEL_ESPECIALISTA,
+  alCortar?: () => void,
 ): ReturnType<typeof createMiddleware> {
   return createMiddleware({
     name: "TopeDeLlamadasMiddleware",
@@ -176,6 +177,9 @@ export function topeDeLlamadas(
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       hook: (state: any) => {
         if ((state?.llamadasDelEspecialista ?? 0) < limite) return undefined;
+        // Que el corte se VEA. Sin esto el único sitio donde consta es el mensaje que recibe
+        // quien delegó, y la traza sigue diciendo «15 llamadas» como si hubiera terminado.
+        alCortar?.();
         const parcial = ultimoTextoSustancial(state?.messages);
         return {
           jumpTo: "end",

@@ -245,6 +245,21 @@ describe("topeDeLlamadas, contra la librería real", () => {
     expect(ultimo(await correr([topeDeLlamadas(50)]))).not.toContain("[harness]");
   });
 
+  it("AVISA de que cortó, que es lo que la traza no sabía", async () => {
+    // Sin esto el único sitio donde consta el corte es el mensaje que recibe quien delegó, y
+    // la traza sigue diciendo «15 llamadas» como si el agente hubiera terminado. Leer eso mal
+    // costó una sesión entera de diagnóstico equivocado.
+    const avisos: number[] = [];
+    await correr([topeDeLlamadas(0, () => avisos.push(1))]);
+    expect(avisos).toHaveLength(1);
+  });
+
+  it("no avisa cuando NO cortó", async () => {
+    const avisos: number[] = [];
+    await correr([topeDeLlamadas(50, () => avisos.push(1))]);
+    expect(avisos).toHaveLength(0);
+  });
+
   it("devuelve el trabajo PARCIAL que el corte iba a tirar", async () => {
     // El defecto entero: quince llamadas de trabajo perdidas porque la respuesta era la
     // frase del corte. Aquí lo único que hay en la conversación es la petición, y aun así

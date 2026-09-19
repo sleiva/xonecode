@@ -33,4 +33,15 @@ describe("diagnóstico de tools", () => {
     });
     expect(JSON.stringify(lineas)).not.toContain("contenido");
   });
+
+  it("anota un corte con su ORIGEN y su límite", () => {
+    // Sin el origen, saber que hubo un corte no dice a quién le pasó — y eso es justo lo que
+    // hace falta para calibrar el presupuesto por papel.
+    const raiz = mkdtempSync(join(tmpdir(), "xc-traza-"));
+    const log = crearDiagnosticoDeTools(raiz, { [VARIABLE_TRAZA_TOOLS]: "1" });
+    log!.corte!("designer-xone", 15);
+    const lineas = readFileSync(rutaTrazaDeTools(raiz), "utf8").trim().split("\n").map((l) => JSON.parse(l)) as Array<Record<string, unknown>>;
+    expect(lineas.map((l) => l.tipo)).toEqual(["sesion", "corte"]);
+    expect(lineas[1]).toMatchObject({ origen: "designer-xone", limite: 15 });
+  });
 });

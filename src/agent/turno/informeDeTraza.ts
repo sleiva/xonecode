@@ -27,6 +27,15 @@ export interface GastoDeOrigen {
   cache: number;
   /** La MAYOR ventana alcanzada, no la última: tras un resumen el contexto baja. */
   contexto: number;
+  /**
+   * Cuántas veces a ESTE origen se le agotó el presupuesto de llamadas.
+   *
+   * Cero y ausente son lo mismo aquí a propósito: un origen que nunca se cortó no tiene nada
+   * que decir. Lo que NO puede pasar es que un corte no aparezca — «15 llamadas» se lee
+   * exactamente igual viniendo de un agente que terminó que de uno al que cortaron, y esa
+   * confusión costó una sesión entera de diagnóstico equivocado.
+   */
+  cortes: number;
 }
 
 /**
@@ -165,12 +174,22 @@ export function resumirTraza(lineas: Iterable<string>): SesionDeTraza[] {
       actual.sesion.cache += cache;
       actual.sesion.contexto = Math.max(actual.sesion.contexto, contexto);
 
-      const gasto = actual.porOrigen.get(origen) ?? { origen, llamadas: 0, input: 0, output: 0, cache: 0, contexto: 0 };
+      const gasto = actual.porOrigen.get(origen) ?? { origen, llamadas: 0, input: 0, output: 0, cache: 0, contexto: 0, cortes: 0 };
       gasto.llamadas += 1;
       gasto.input += input;
       gasto.output += output;
       gasto.cache += cache;
       gasto.contexto = Math.max(gasto.contexto, contexto);
+      actual.porOrigen.set(origen, gasto);
+      continue;
+    }
+
+    if (evento.tipo === "corte") {
+      // Un corte puede llegar ANTES que cualquier línea de modelo de ese origen, así que la
+      // entrada se crea aquí si falta: si no, el corte se perdería por llegar el primero.
+      const origen = texto(evento.origen) ?? "(sin origen)";
+      const gasto = actual.porOrigen.get(origen) ?? { origen, llamadas: 0, input: 0, output: 0, cache: 0, contexto: 0, cortes: 0 };
+      gasto.cortes += 1;
       actual.porOrigen.set(origen, gasto);
       continue;
     }
@@ -237,7 +256,11 @@ export function pintarSesion(sesion: SesionDeTraza): string[] {
       const parte = sesion.input + sesion.output === 0 ? 0 : Math.round((100 * costeEfectivo(o)) / costeEfectivo(sesion));
       lineas.push(
         `    ${o.origen.padEnd(18)} ${String(o.llamadas).padStart(3)} llam · entrada ${cifra(o.input)} · salida ${cifra(o.output)} · ` +
-          `caché ${porcentajeDeCache(o)}% · efectivo ≈${cifra(costeEfectivo(o))} (${parte}%)`
+          `caché ${porcentajeDeCache(o)}% · efectivo ≈${cifra(costeEfectivo(o))} (${parte}%)` +
+          // Al FINAL de su línea y no en una aparte: lo que hay que poder leer de un vistazo es
+          // «estas llamadas no son las de un agente que terminó». Separado en otra línea se lee
+          // como una nota al pie de algo que ya se dio por bueno.
+          (o.cortes > 0 ? `  ⚠ CORTADO por tope${o.cortes > 1 ? ` ×${o.cortes}` : ""}` : "")
       );
     }
   }

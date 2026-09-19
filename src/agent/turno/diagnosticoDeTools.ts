@@ -17,6 +17,18 @@ export interface UsoDeModelo {
 
 export interface DiagnosticoDeTools {
   modelo(origen: string, uso: UsoDeModelo): void;
+  /**
+   * Un especialista al que se le agotó el presupuesto de llamadas.
+   *
+   * **OPCIONAL**, como los métodos nuevos de `Piel`: así ningún doble de los tests se rompe por
+   * existir esto, y quien no lo implemente sigue funcionando igual.
+   *
+   * Existe porque un corte era INDISTINGUIBLE de un agente que termina: la traza decía «15
+   * llamadas» en los dos casos. Eso costó una sesión entera de diagnóstico equivocado —se leyó
+   * como un fallo de enrutado lo que era el tope cortando— y es el tipo de dato que solo se
+   * echa de menos cuando ya te ha engañado.
+   */
+  corte?(origen: string, limite: number): void;
   herramienta(nombre: string, detalle: string | undefined, parametros: ParametrosSeguros | undefined, tracker: TokenTracker): void;
 }
 
@@ -55,6 +67,9 @@ export function crearDiagnosticoDeTools(
   return {
     modelo(origen, uso) {
       escribir({ tipo: "modelo", origen, ...uso });
+    },
+    corte(origen, limite) {
+      escribir({ tipo: "corte", origen, limite });
     },
     herramienta(nombre, detalle, parametros, tracker) {
       escribir({
