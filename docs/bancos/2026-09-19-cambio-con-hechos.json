@@ -1,0 +1,94 @@
+{
+  "cuando": "2026-09-19T10:40:06.359Z",
+  "celdas": [
+    {
+      "modelo": "gemini/gemini-3.8-flash  (global)",
+      "pregunta": "cambio",
+      "validas": 6,
+      "errores": 0,
+      "correctas": 6,
+      "delegadas": 0,
+      "entrada": {
+        "media": 23775.166666666668,
+        "min": 13420,
+        "max": 31513,
+        "dispersion": 0.7610041289580864
+      },
+      "salida": {
+        "media": 466.3333333333333,
+        "min": 399,
+        "max": 505,
+        "dispersion": 0.22730521801286635
+      },
+      "llamadas": {
+        "media": 5.166666666666667,
+        "min": 3,
+        "max": 7,
+        "dispersion": 0.7741935483870968
+      },
+      "ms": {
+        "media": 9156,
+        "min": 6346,
+        "max": 18547,
+        "dispersion": 1.3325688073394495
+      },
+      "mide": "preparar un CAMBIO: dos ficheros y el ayudante que YA existe",
+      "pasadas": [
+        {
+          "entrada": 18557,
+          "salida": 468,
+          "cache": 0,
+          "llamadas": 4,
+          "ms": 6346,
+          "correcta": true,
+          "delego": false
+        },
+        {
+          "entrada": 18336,
+          "salida": 444,
+          "cache": 0,
+          "llamadas": 4,
+          "ms": 7947,
+          "correcta": true,
+          "delego": false
+        },
+        {
+          "entrada": 31513,
+          "salida": 496,
+          "cache": 0,
+          "llamadas": 7,
+          "ms": 7490,
+          "correcta": true,
+          "delego": false
+        },
+        {
+          "entrada": 13420,
+          "salida": 399,
+          "cache": 0,
+          "llamadas": 3,
+          "ms": 6806,
+          "correcta": true,
+          "delego": false
+        },
+        {
+          "entrada": 29529,
+          "salida": 486,
+          "cache": 0,
+          "llamadas": 6,
+          "ms": 18547,
+          "correcta": true,
+          "delego": false
+        },
+        {
+          "entrada": 31296,
+          "salida": 505,
+          "cache": 0,
+          "llamadas": 7,
+          "ms": 7800,
+          "correcta": true,
+          "delego": false
+        }
+      ]
+    }
+  ]
+}

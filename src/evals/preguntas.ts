@@ -71,6 +71,38 @@ export const PREGUNTAS: readonly Pregunta[] = [
     correcta: (r) => (tiene(r, "colecc") || tiene(r, "<coll")) && !/\bno (se puede|es posible|puedes)\b/i.test(r),
   },
   {
+    nombre: "cambio",
+    mide: "preparar un CAMBIO: dos ficheros y el ayudante que YA existe",
+    texto:
+      "El botón «Saludar» de MenuPrincipal solo muestra un toast. Quiero que antes pida "
+      + "confirmación al usuario. Dime en qué fichero está ese botón y, si el proyecto ya tiene "
+      + "una función para pedir confirmación, cuál es y en qué fichero está. No cambies nada.",
+    /**
+     * **La familia que faltaba: un encargo de CAMBIO.** Las otras cuatro preguntan por un dato
+     * suelto; ésta pide lo que hay que saber ANTES de tocar nada, que es donde se midió el
+     * problema el 19-09-2026 — seis turnos reales en los que cada especialista repetía las
+     * mismas búsquedas (`grep` ×42 en uno solo) y el orquestador se llevaba el 38-50 % del
+     * gasto averiguando.
+     *
+     * **Va redactada en SOLO LECTURA a propósito, y es un límite declarado.** Una orden de
+     * verdad chocaría con el invariante del banco: aquí la aprobación RECHAZA, así que el turno
+     * acabaría con escrituras sin resolver, el texto final tras un rechazo no es fiable
+     * —a veces es «no se aplicó nada»— y el bucle de rondas mete un ruido de otra clase encima
+     * del que se viene a medir. Así que esto mide **lo que cuesta PREPARAR un cambio**, no la
+     * cadena entera hasta quien escribe. Lo segundo sigue sin instrumento.
+     *
+     * **Por qué ESTE cambio y no otro**: la respuesta vive en DOS ficheros —el botón en
+     * `MenuPrincipal.xne`, el ayudante en `functions.js`— y el proyecto ya tiene `confirmar()`.
+     * La respuesta degenerada es la cara: proponer un `ui.msgBox` a pelo sin haber mirado si ya
+     * existía algo, que es exactamente lo que hace quien no se entera. Exigir `confirmar` la
+     * caza sin tener que juzgar la redacción.
+     *
+     * El juez es flojo a propósito, por la lección de `estilo` y de `capacidad`: pide los tres
+     * hechos y nada más. Un juez fino sobre una respuesta abierta mide el estilo del modelo.
+     */
+    correcta: (r) => tiene(r, "confirmar") && tiene(r, "functions.js") && tiene(r, "MenuPrincipal"),
+  },
+  {
     nombre: "login",
     mide: "distinguir dos conceptos parecidos",
     texto: "¿La app pide login al arrancar? Di qué colección lo hace y en qué fichero está.",
