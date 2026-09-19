@@ -6,8 +6,10 @@
  * Este umbral es independiente del proveedor: limita el coste sin borrar el trabajo reciente.
  */
 import { createSummarizationMiddleware, type FilesystemBackend } from "deepagents";
-import { createMiddleware, modelCallLimitMiddleware, toolCallLimitMiddleware } from "langchain";
-import { HumanMessage } from "@langchain/core/messages";
+import { createMiddleware, toolCallLimitMiddleware } from "langchain";
+import { z } from "zod";
+import { AIMessage, HumanMessage } from "@langchain/core/messages";
+import { mensajeDeTopeAgotado } from "../../core/topeAgotado.js";
 import { RUTA_HISTORIAL_RESUMIDO } from "../grafo/memoriaDeProyecto.js";
 
 export const UMBRAL_RESUMEN_TOKENS = 32_000;
@@ -141,8 +143,65 @@ export const TOPE_DE_LLAMADAS_DEL_ESPECIALISTA = 15;
  * `EXCLUDED_STATE_KEYS` a propósito, «each agent counts its own calls, so they never cross the
  * boundary». O sea que el tope de un especialista no toca el del padre.
  */
-export function topeDeLlamadas(limite: number = TOPE_DE_LLAMADAS_DEL_ESPECIALISTA) {
-  return modelCallLimitMiddleware({ runLimit: limite, exitBehavior: "end" });
+const ESTADO_DEL_TOPE = z.object({ llamadasDelEspecialista: z.number().default(0) });
+
+/**
+ * El tope, NUESTRO y no el de la librería.
+ *
+ * `modelCallLimitMiddleware` cuenta bien y corta bien, pero lo que deja como respuesta es un
+ * `AIMessage` con su frase en inglés —«Model call limits exceeded: …»—, y el `task` de
+ * deepagents devuelve SOLO el último mensaje (`extractLastMessage`). O sea que quien delegó
+ * recibe esa frase y **las quince llamadas de trabajo se pierden**: medido el 19-09-2026,
+ * 100-160k de entrada por especialista devolviendo menos de 900 tokens. Esa es la razón de que
+ * el orquestador encadene al siguiente — no enruta mal, es que no recibe nada con lo que seguir.
+ *
+ * No se pudo arreglar por fuera: su `jumpTo: "end"` **cortocircuita todos los middlewares
+ * posteriores**, incluidos `afterAgent` y su propio reset del contador (medido contra la
+ * librería real con `FakeToolCallingModel` y `runLimit: 0`, ver el test). No hay dónde
+ * engancharse. Así que el contador, la decisión y el mensaje son de aquí: uno de cada, y el
+ * mensaje se compone en `core/` donde se puede probar sin librería.
+ *
+ * `exitBehavior` sigue siendo «terminar» y no «lanzar», por el argumento de siempre: con un
+ * error la delegación entera se cae y el orquestador se queda sin nada, que es como empieza el
+ * bucle de reintentos que costó 1,5M de tokens.
+ */
+export function topeDeLlamadas(
+  limite: number = TOPE_DE_LLAMADAS_DEL_ESPECIALISTA,
+): ReturnType<typeof createMiddleware> {
+  return createMiddleware({
+    name: "TopeDeLlamadasMiddleware",
+    stateSchema: ESTADO_DEL_TOPE,
+    beforeModel: {
+      canJumpTo: ["end"],
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      hook: (state: any) => {
+        if ((state?.llamadasDelEspecialista ?? 0) < limite) return undefined;
+        const parcial = ultimoTextoSustancial(state?.messages);
+        return {
+          jumpTo: "end",
+          messages: [
+            new AIMessage(
+              mensajeDeTopeAgotado({ limite, ...(parcial === undefined ? {} : { parcial }) }),
+            ),
+          ],
+        };
+      },
+    },
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    afterModel: (state: any) => ({
+      llamadasDelEspecialista: (state?.llamadasDelEspecialista ?? 0) + 1,
+    }),
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  } as any) as ReturnType<typeof createMiddleware>;
+}
+
+/** Lo último que el especialista dijo con contenido: el trabajo que el corte iba a tirar. */
+function ultimoTextoSustancial(mensajes: unknown): string | undefined {
+  if (!Array.isArray(mensajes)) return undefined;
+  return [...mensajes]
+    .reverse()
+    .map((m) => textoPlano(m))
+    .find((texto) => texto.trim() !== "");
 }
 
 /**
@@ -177,6 +236,7 @@ export const TOPE_DE_TOOLS_DEL_ESPECIALISTA = 20;
  * y cuyo choque solo se ve corriendo. Por eso el test las ata juntas.
  */
 export const SALIDA_DEL_TOPE_DE_TOOLS = "continue" as const;
+
 
 export function topeDeTools(limite: number = TOPE_DE_TOOLS_DEL_ESPECIALISTA) {
   return toolCallLimitMiddleware({ runLimit: limite, exitBehavior: SALIDA_DEL_TOPE_DE_TOOLS });

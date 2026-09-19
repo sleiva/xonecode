@@ -4,7 +4,9 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { AIMessage, HumanMessage, ToolMessage } from "@langchain/core/messages";
 import { FilesystemBackend } from "deepagents";
+import { createAgent, FakeToolCallingModel } from "langchain";
 import { conservarElEncargo, resumenConEncargo, resumenDeContexto, SALIDA_DEL_TOPE_DE_TOOLS, topeDeLlamadas, TOPE_DE_LLAMADAS_DEL_ESPECIALISTA, TOPE_DE_TOOLS_DEL_ESPECIALISTA, UMBRAL_RESUMEN_TOKENS } from "./resumenDeContexto.js";
+
 
 /**
  * Qué le pasa al ENCARGO cuando el especialista se pasa de contexto.
@@ -153,11 +155,20 @@ describe("el par", () => {
 });
 
 describe("el tope de llamadas del especialista", () => {
-  it("acaba el encargo en vez de TUMBARLO", () => {
+  it("acaba el encargo en vez de TUMBARLO", async () => {
     // Con `error` la delegación entera se cae y el orquestador se queda sin nada, que es como
-    // empieza el bucle de reintentos que costó 1,5M. Con `end` devuelve lo que tenga.
-    const mw = topeDeLlamadas() as unknown as { name: string };
-    expect(mw.name).toContain("ModelCallLimit");
+    // empieza el bucle de reintentos que costó 1,5M. Tiene que terminar devolviendo algo.
+    //
+    // Se comprueba la CONDUCTA y no el nombre del middleware: antes esto miraba que fuera el
+    // de la librería, y esa comprobación pasaba en verde el día que lo que la librería DEJA
+    // como respuesta era el defecto. Lo que hay que atar es que no lance y que conteste.
+    const agente = createAgent({
+      model: new FakeToolCallingModel({ responses: [] } as never),
+      tools: [],
+      middleware: [topeDeLlamadas(0)],
+    } as never) as { invoke: (x: unknown) => Promise<{ messages: unknown[] }> };
+    const r = await agente.invoke({ messages: [new HumanMessage("hola")] });
+    expect(r.messages.length).toBeGreaterThan(0);
   });
 
   it("el tope sale de una MEDIDA, no de una intuición", () => {
@@ -190,5 +201,56 @@ describe("el tope de TOOLS", () => {
     expect(TOPE_DE_TOOLS_DEL_ESPECIALISTA).toBeGreaterThan(10);
     // Y por debajo de los 43 que acumuló el turno que lo motivó.
     expect(TOPE_DE_TOOLS_DEL_ESPECIALISTA).toBeLessThan(43);
+  });
+});
+
+
+/**
+ * Lo que un especialista DEVUELVE cuando se le agota el presupuesto.
+ *
+ * Contra la librería DE VERDAD y sin red: `FakeToolCallingModel` y un tope de cero o uno. Es
+ * lo único que ata que el corte siga ocurriendo donde creemos y dejando lo que creemos.
+ */
+describe("topeDeLlamadas, contra la librería real", () => {
+  const correr = async (middleware: unknown[], mensaje = "hola") => {
+    const agente = createAgent({
+      model: new FakeToolCallingModel({ responses: [] } as never),
+      tools: [],
+      middleware,
+    } as never) as { invoke: (x: unknown) => Promise<{ messages: Array<{ content?: unknown; text?: string }> }> };
+    return agente.invoke({ messages: [new HumanMessage(mensaje)] });
+  };
+  const ultimo = (r: { messages: Array<{ content?: unknown; text?: string }> }): string => {
+    const m = r.messages[r.messages.length - 1];
+    return typeof m?.content === "string" ? m.content : (m?.text ?? "");
+  };
+
+  it("al agotarse deja NUESTRO mensaje, no la jerga de la librería", async () => {
+    // `extractLastMessage` de deepagents devuelve SOLO el último mensaje, así que esto es
+    // literalmente lo que recibe quien delegó. Antes era «Model call limits exceeded: …».
+    const r = await correr([topeDeLlamadas(0)]);
+    const texto = ultimo(r);
+    expect(texto).not.toContain("Model call limits exceeded");
+    expect(texto).toContain("[harness]");
+    expect(texto).toContain("HANDOFF DE ANÁLISIS");
+  });
+
+  it("dice el tope que se agotó de verdad, no una cifra fija", async () => {
+    expect(ultimo(await correr([topeDeLlamadas(0)]))).toContain("0 llamadas");
+  });
+
+  it("no corta un turno que cabe en su presupuesto", async () => {
+    // Con margen no hay nada que decir, y apilar un aviso donde no lo hay sería inventarse
+    // que un especialista se quedó a medias.
+    expect(ultimo(await correr([topeDeLlamadas(50)]))).not.toContain("[harness]");
+  });
+
+  it("devuelve el trabajo PARCIAL que el corte iba a tirar", async () => {
+    // El defecto entero: quince llamadas de trabajo perdidas porque la respuesta era la
+    // frase del corte. Aquí lo único que hay en la conversación es la petición, y aun así
+    // tiene que volver: si no vuelve lo poco, tampoco volvería lo mucho.
+    const texto = ultimo(await correr([topeDeLlamadas(0)], "el titulo sale cortado"));
+    expect(texto).toContain("el titulo sale cortado");
+    expect(texto).toContain("PARCIAL");
   });
 });
