@@ -5448,3 +5448,75 @@ pantalla— pero eso ata exportar a tener el fichero abierto en el navegador.
 **DOCX.** Un `.docx` no se imprime, se construye, y para eso hace falta una librería de verdad
 —`pandoc` o `python-docx`—, no un navegador. Se declara pendiente en vez de fingirlo: el PDF es
 lo que la petición pedía primero, y es lo que se puede dar sin instalar nada.
+
+## El motor de JavaScript de Android, medido ejecutando (19-09-2026)
+
+`REGLAS_XONE` (`core/agentes.ts`) decía «el motor JS en Android es Rhino (ES5)». Era lo que se
+sabía, y era impreciso **en las dos direcciones**. Ahora está medido, y no deducido de la
+versión: **ejecutando en el aparato**.
+
+### Cómo se midió
+
+El emulador tenía la app instalada (`com.xone.android.framework`, `versionName 5.0.2.2dev`).
+Dos fuentes, y la segunda es la que manda:
+
+1. **El APK.** `adb pull` del `base.apk` (41 MB, 22 dex, 329 clases `org/mozilla/javascript/`).
+   **Ojo: está shrinkado con R8, así que una AUSENCIA no prueba nada** — `NativeDate` está y
+   `NativeMap` no. Las clases del PARSER sí valen, porque el parser las alcanza siempre:
+   `SlotMapContainer`, `EmbeddedSlotMap` y `HashSlotMap` presentes (el refactor de slots es de
+   **1.7.12**); `ast/TemplateLiteral`, `ast/ClassNode`, `LambdaConstructor` (**1.7.14**) y
+   `NativeConsole` (**1.7.15**) ausentes. Consistente con **Rhino 1.7.12–1.7.13**.
+2. **Ejecutando JavaScript en el motor**, por el canal hotswap. El comando es **`runScript`** y
+   sus dos parámetros —los dos obligatorios, y el error los va nombrando uno a uno— son
+   **`scriptText`, el código en BASE64** (en claro llega como basura: «illegal character») y
+   **`scriptLanguage`**. El cuerpo se evalúa como función (`In node:
+   AnonymousHotswapFunction`), así que `return` vale. Y el error **distingue** un fallo de
+   parseo (`Cause: syntax error`, `illegal character`, `missing …`) de uno de ejecución
+   (`ReferenceError`, `TypeError`), que es lo que permite clasificar. **`Packages` no está
+   definido**: LiveConnect está cerrado, así que no se puede pedir
+   `Context.getImplementationVersion()` y la matriz es la evidencia primaria, no la etiqueta.
+
+### La matriz
+
+**Acepta**: arrow functions (con y sin paréntesis, cuerpo de bloque), `let`, `const`,
+destructuring de array y de objeto, `for...of`, método abreviado en literal (`{ m(){} }`),
+getter/setter en literal, `Symbol`.
+
+**Rechaza, y siempre al PARSEAR** —o sea que el script entero queda mudo: ni error, ni traza—:
+template literals, `class`, spread, rest, parámetros por defecto, `function*`, `async`/`await`,
+`**`, coma final en parámetros, propiedad abreviada (`{ a }`), clave computada (`{ [k]: v }`),
+`?.`, `??` y `1n`. **También los valores por defecto y el rest dentro de un destructuring**
+(`var {a=1} = o`, `var [a,...r] = arr`), medidos aparte.
+
+**Existen pero valen `undefined`** —fallo mudo en EJECUCIÓN, no de sintaxis—: `Map`, `Set`,
+`WeakMap` y `Array.prototype.includes`. Sí están `Object.assign/keys`,
+`Array.isArray/find/forEach`, `String.includes/startsWith/trim`, `Number.isNaN` y `JSON`.
+**`Promise` sí está** — y `NativePromise` NO está en el dex, así que lo pone XOne, no Rhino.
+
+### Qué cambia en el prompt, y por qué la lista va ENTERA
+
+Va la matriz completa aunque alargue unas líneas que el propio comentario de `REGLAS_XONE`
+quiere cortas. **Una lista incompleta es peor que ninguna**: el modelo se fía de ella, y lo
+omitido no falla ruidosamente sino en silencio y **para la app entera al arrancar** —un error
+de sintaxis en un fichero incluido revienta `LoadAppActivity`, no la función donde está—.
+
+Y la mitad de «SÍ acepta» no es relleno: sin ella, un modelo al que se le dice «ES5» evita
+`let` y las arrow functions, que funcionan, y **«arregla» código bueno**. Ese fallo ya ocurrió
+una vez (la `var` declarada dos veces que el agente introdujo arreglando otra cosa), y por eso
+la prudencia del 18-09 de no prohibir `let` estaba bien puesta: la medida del 19 la confirma.
+
+**Tiene test** (`agentes.test.ts`), y es de los que hacen falta: este es el único sitio de
+xonecode donde vive la medida, y «acortar» la lista no pondría nada rojo — el prompt seguiría
+siendo un prompt válido.
+
+### Lo que se hizo en `xone-linter` con esta misma medida
+
+La regla de sintaxis del linter usaba `new Function`, que falla por DOS motivos: es V8 al nivel
+del Node que corra (el más permisivo de los tres motores), y **falla también dentro de ES5** —en
+modo laxo, asignar a un destino no simple es un `ReferenceError` de ejecución, no un error
+temprano, así que `if (len(x)=0)` lo pasa y Rhino lo rechaza al compilar—. Se cambió por `acorn`
+a `ecmaVersion: 2015` más la deny-list de arriba, con dos códigos (`JS_SYNTAX` y
+`JS_UNSUPPORTED_SYNTAX`). Y `JsSyntaxRule` miraba solo `coll.events`: medido sobre un proyecto
+real, 119 scripts en eventos contra **162 en nodos**, y los cuatro errores de sintaxis que tiene
+el proyecto están **los cuatro en nodos**. Empujado a `sleiva/xone-linter` hasta `d5f42b4`; no
+alcanza a xonecode hasta que se publique, porque el verificador usa el binario GLOBAL del PATH.

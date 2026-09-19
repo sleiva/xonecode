@@ -129,19 +129,37 @@ export const REGLAS_XONE = [
    * «Error loading initial config»), no rompe solo la función donde está. Así que un descuido
    * que en un navegador sería un aviso, aquí es una app que no abre.
    *
-   * Las tres que se midieron el 18-09-2026 sobre un proyecto real, y son las que hay: una
-   * llamada sin `;` (Rhino no aplica ASI donde un navegador sí), una coma sobrante en un
-   * objeto, y **una `var` declarada dos veces en la misma función** — esta última la introdujo
-   * el propio agente «arreglando» la primera, y por eso está escrita: arreglar sin conocer el
-   * motor es cambiar un error por otro.
+   * Tres se midieron el 18-09-2026 sobre un proyecto real: una llamada sin `;` (Rhino no
+   * aplica ASI donde un navegador sí), una coma sobrante en un objeto, y **una `var` declarada
+   * dos veces en la misma función** — esta última la introdujo el propio agente «arreglando» la
+   * primera, y por eso está escrita: arreglar sin conocer el motor es cambiar un error por otro.
    *
-   * **Lo que NO dice, a propósito**: que no se pueda usar `let`. El proyecto donde se midió
-   * tiene `let` en varias funciones y arranca, así que prohibirlo sería inventar una regla —
-   * exactamente lo que la regla de más arriba prohíbe hacer con los atributos.
+   * **El resto es la matriz del 19-09-2026, y está medida EJECUTANDO en el aparato** —emulador
+   * con `com.xone.android.framework` 5.0.2.2dev, por el canal hotswap (`runScript`)—, no
+   * deducida de la versión. Decía «(ES5)» a secas, y eso era impreciso en las DOS direcciones:
+   * de menos, porque acepta media docena de cosas de ES2015; y de más, porque lo que no acepta
+   * lo rechaza **al PARSEAR**, o sea que el script entero queda mudo — ni error, ni traza.
+   *
+   * **Va la lista ENTERA y no solo las frecuentes**, aunque alargue unas líneas que el propio
+   * comentario de arriba quiere cortas. El motivo es que una lista incompleta es peor que
+   * ninguna: el modelo se fía de ella, y lo omitido no falla ruidosamente sino en silencio y
+   * para toda la app. Y la mitad de «SÍ puedes» no es relleno — sin ella, un modelo al que se
+   * le dice «ES5» evita `let` y las arrow functions, que funcionan, y peor: «arregla» código
+   * bueno, que es exactamente el fallo que ya introdujo una vez.
+   *
+   * **Lo que sigue sin decir, a propósito**: que no se pueda usar `let`. Estaba escrito así
+   * desde el 18-09 por prudencia —el proyecto donde se midió lo usa y arranca— y la medida del
+   * 19 lo confirma: `let`, `const`, arrow functions, destructuring y `for...of` los acepta.
    */
-  "- El motor JS en Android es Rhino (ES5): un error de sintaxis en un fichero incluido para",
+  "- El motor JS en Android es Rhino 1.7.13: un error de sintaxis en un fichero incluido para",
   "  la app ENTERA al arrancar. Termina cada sentencia con `;` (no se aplica ASI), sin comas",
   "  sobrantes, y no declares dos veces la misma `var` en una función.",
+  "- SÍ acepta: let, const, arrow functions, destructuring, for...of, { m(){} }.",
+  "- NO acepta, y el script queda MUDO (falla al parsear, sin dar error): template literals",
+  "  `${}`, class, spread y rest (...), parámetros por defecto (a=1), function*, async/await,",
+  "  **, ?., ??, propiedad abreviada ({ a }) y clave computada ({ [k]: v }).",
+  "- Existen pero valen undefined: Map, Set, WeakMap, Array.prototype.includes. Sí están",
+  "  Object.assign/keys, Array.isArray/find/forEach, String.includes/startsWith/trim, JSON.",
 ].join("\n");
 
 /**

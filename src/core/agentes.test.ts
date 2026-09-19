@@ -179,6 +179,29 @@ describe("promptDeAgente", () => {
     expect(prompt.indexOf(REGLAS_XONE)).toBe(0);
   });
 
+  it("las reglas nombran lo que el motor de Android RECHAZA, y también lo que acepta", () => {
+    // La matriz de Rhino está MEDIDA ejecutando en el aparato, y este es el único sitio de
+    // xonecode donde vive. Sin este test, «acortar» la lista —que es lo que pide el comentario
+    // de arriba sobre no hacer un preámbulo largo— se lleva por delante la medida sin que nada
+    // se ponga rojo: el prompt seguiría siendo un prompt válido. Y lo que se pierde no falla
+    // ruidosamente, falla MUDO y para la app entera al arrancar.
+    //
+    // Se comprueban las dos mitades a propósito. La de «NO» evita el bug; la de «SÍ» evita el
+    // otro fallo, que ya ocurrió una vez: un modelo al que solo se le dice «ES5» se pone a
+    // «arreglar» `let` y arrow functions, que funcionan.
+    for (const rechazado of ["${}", "class", "spread", "a=1", "function*", "async/await", "?.", "??"]) {
+      expect(REGLAS_XONE).toContain(rechazado);
+    }
+    for (const aceptado of ["let", "const", "arrow functions", "destructuring", "for...of"]) {
+      expect(REGLAS_XONE).toContain(aceptado);
+    }
+    // Estos no son de sintaxis: existen y valen `undefined`, así que el fallo llega en
+    // ejecución y no al parsear. Se nombran por separado en la regla y aquí también.
+    for (const ausente of ["Map", "Set", "Array.prototype.includes"]) {
+      expect(REGLAS_XONE).toContain(ausente);
+    }
+  });
+
   it("las instrucciones del usuario van DESPUÉS de la descripción, que es donde más pesan", () => {
     const prompt = promptDeAgente(agente({ descripcion: "DESC", instrucciones: "MI REGLA" }));
     expect(prompt.indexOf("MI REGLA")).toBeGreaterThan(prompt.indexOf("DESC"));
