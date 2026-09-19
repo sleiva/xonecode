@@ -81,6 +81,36 @@ describe("las preguntas del banco", () => {
     expect(juez("cambio")("Usa `confirmar()` antes del toast de MenuPrincipal.")).toBe(false);
   });
 
+  it("la de estilo-efectivo pide hechos que el esqueleto de verdad tiene", () => {
+    // Los dos valores viven en sitios distintos a propósito: uno gana una cascada y el otro
+    // solo existe en la clase. Si alguno no estuviera, la celda mediría lo contrario de lo que
+    // cree y suspendería a todo el mundo para siempre.
+    expect(esqueleto.get("default.css")).toContain("btnPrimario");
+    expect(esqueleto.get("default.css")).toContain("#2196F3");
+    expect(esqueleto.get("MenuPrincipal.xne")).toContain('class="btnPrimario"');
+    // Y el señuelo de la cascada: el `prop` global pone 10, la clase pone 14.
+    expect(esqueleto.get("default.css")).toMatch(/prop \{[^}]*fontsize:\s*10/s);
+  });
+
+  it("la de estilo-efectivo caza al que se queda con el `fontsize` global", () => {
+    // Es el error exacto de quien lee la hoja sin saber qué prevalece, y es barato de cometer:
+    // `prop { fontsize: 10 }` aparece antes en el fichero.
+    expect(
+      juez("estilo-efectivo")("Se pinta a fontsize 10 y en azul #2196F3, según default.css y btnPrimario.")
+    ).toBe(false);
+    expect(
+      juez("estilo-efectivo")(
+        "fontsize 14 y bgcolor #2196F3: los pone la clase `btnPrimario` de default.css, que gana al `prop` global."
+      )
+    ).toBe(true);
+  });
+
+  it("la de estilo-efectivo no se conforma con el valor sin decir de dónde sale", () => {
+    // La segunda mitad de la pregunta es «de dónde salen»: sin la clase y el fichero, el
+    // acierto pudo ser una casualidad o una lectura del atributo inline.
+    expect(juez("estilo-efectivo")("Se ve a 14 y de fondo #2196F3.")).toBe(false);
+  });
+
   it("no suspenden por la REDACCIÓN: se juzga el hecho, no el estilo", () => {
     expect(juez("entrypoint")("entradaapp")).toBe(true);
   });

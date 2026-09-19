@@ -103,6 +103,32 @@ export const PREGUNTAS: readonly Pregunta[] = [
     correcta: (r) => tiene(r, "confirmar") && tiene(r, "functions.js") && tiene(r, "MenuPrincipal"),
   },
   {
+    nombre: "estilo-efectivo",
+    mide: "resolver la CASCADA de estilos: qué le toca de verdad a un control",
+    texto:
+      "El botón «Saludar» de MenuPrincipal: ¿con qué tamaño de fuente y qué color de fondo acaba "
+      + "pintándose, y de dónde salen esos dos valores? No cambies nada.",
+    /**
+     * **La familia VISUAL, que es donde se va el trabajo y no había pregunta.** Medido el
+     * 19-09-2026 sobre diez pasadas del mismo encargo: `xone_navegacion` es la PRIMERA tool en
+     * ocho de ellas —o sea que el modelo sí empieza por donde se le dice— y luego deja de
+     * servirle, porque indexa el modelo `.xne` y el arreglo visual vive en los ESTILOS. Lo que
+     * queda son 20-46 lecturas y 30-42 `grep`, y ~22 de cada 30 greps son la misma clase con
+     * variantes (`xnTituloHeaderC`, `.xnTituloHeader`, `xnHeader`…).
+     *
+     * **Por qué ESTOS dos valores y no otros**: los dos obligan a resolver la cascada, no a
+     * leer un atributo. El `fontsize` está en DOS sitios —`prop { fontsize: 10 }` global y
+     * `.btnPrimario { fontsize: 14 }`— y gana la clase; contestar 10 es el error exacto que
+     * comete quien lee la hoja de arriba abajo sin saber qué prevalece. El color solo está en
+     * la clase, así que obliga a llegar hasta ella desde el `class=` del prop.
+     *
+     * Solo lectura, como las demás y por lo mismo: aquí la aprobación RECHAZA, y un turno que
+     * quiera escribir mide otra cosa.
+     */
+    correcta: (r) =>
+      tiene(r, "14") && tiene(r, "2196F3") && tiene(r, "btnPrimario") && tiene(r, "default.css"),
+  },
+  {
     nombre: "login",
     mide: "distinguir dos conceptos parecidos",
     texto: "¿La app pide login al arrancar? Di qué colección lo hace y en qué fichero está.",
