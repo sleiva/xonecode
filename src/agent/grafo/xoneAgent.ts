@@ -19,6 +19,7 @@ import { inventarioDelProyecto } from "../subagentes/escrituraExterna.js";
 import type { DiagnosticoDeTools } from "../turno/diagnosticoDeTools.js";
 import { middlewareTextoDeTool } from "../turno/textoDeTool.js";
 import { resumenConEncargo, topeDeLlamadas, topeDeTools } from "../turno/resumenDeContexto.js";
+import { middlewareDeRubrica, type Calificador } from "../turno/rubrica.js";
 import { inspectorDePrompt } from "../turno/inspectorDePrompt.js";
 import { excluirTools, toolsQueNoUsa } from "./excluirTools.js";
 import {
@@ -62,6 +63,15 @@ export interface OpcionesDelAgente {
    * `xone-linter`. Entra por aquí para que un test pueda doblarlo sin proyecto en disco.
    */
   navegacion?: CargarIndice;
+  /**
+   * Quién juzga si lo hecho cumple la rúbrica del encargo, si es que hay rúbrica.
+   *
+   * Ausente = no se monta el bucle, y ese es el caso normal. El middleware además no hace nada
+   * sin rúbrica en el estado, así que hay dos puertas y las dos son datos: quien no lo use no
+   * paga ni una llamada. Entra por parámetro porque llama a un modelo, y el invariante de
+   * `npm test` es que nada de eso haga falta para probar el harness.
+   */
+  calificador?: Calificador;
   /** `BaseCheckpointSaver` y no `MemorySaver`: desde que hay uno persistente
    *  (`agent/sesiones/checkpointer.ts`) el tipo tiene que ser el de la interfaz, no el del doble. */
   checkpointer?: BaseCheckpointSaver;
@@ -571,6 +581,19 @@ export async function construirAgente(opciones: OpcionesDelAgente): Promise<unkn
       // La frontera sigue siendo `permisosDe`: ver `excluirTools.ts`.
       excluirTools(toolsQueNoUsa(PERFIL_DEL_ORQUESTADOR)),
       middlewareTextoDeTool(),
+      /**
+       * El bucle de rúbrica, y va en el ORQUESTADOR y no en los especialistas.
+       *
+       * Es quien cierra el encargo de la persona; un especialista contesta a quien le delegó,
+       * que es otra pregunta. Y el gancho es `afterAgent`, que en un especialista ni siquiera
+       * corre cuando lo corta su tope (medido: el `jumpTo: "end"` cortocircuita lo posterior),
+       * así que allí el bucle sería mudo justo en el caso que más importa.
+       *
+       * Sin `calificador` no se monta, y montado sin rúbrica no hace nada.
+       */
+      ...(opciones.calificador === undefined
+        ? []
+        : [middlewareDeRubrica({ calificar: opciones.calificador })]),
       ...middlewareTracker("orquestador"),
       ...inspector(opciones.raiz, "orquestador"),
     ],
