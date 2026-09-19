@@ -1,0 +1,539 @@
+{
+  "cuando": "2026-09-19T18:26:59.465Z",
+  "celdas": [
+    {
+      "modelo": "gemini/gemini-3.8-flash  (global)",
+      "pregunta": "entrypoint",
+      "validas": 6,
+      "errores": 0,
+      "correctas": 6,
+      "delegadas": 0,
+      "entrada": {
+        "media": 3755,
+        "min": 3755,
+        "max": 3755,
+        "dispersion": 0
+      },
+      "salida": {
+        "media": 15,
+        "min": 12,
+        "max": 16,
+        "dispersion": 0.26666666666666666
+      },
+      "llamadas": {
+        "media": 1,
+        "min": 1,
+        "max": 1,
+        "dispersion": 0
+      },
+      "ms": {
+        "media": 1356.8333333333333,
+        "min": 1104,
+        "max": 1556,
+        "dispersion": 0.3331286082790812
+      },
+      "mide": "leer una declaración de app.xml",
+      "pasadas": [
+        {
+          "entrada": 3755,
+          "salida": 12,
+          "cache": 0,
+          "llamadas": 1,
+          "ms": 1556,
+          "correcta": true,
+          "delego": false
+        },
+        {
+          "entrada": 3755,
+          "salida": 16,
+          "cache": 0,
+          "llamadas": 1,
+          "ms": 1441,
+          "correcta": true,
+          "delego": false
+        },
+        {
+          "entrada": 3755,
+          "salida": 16,
+          "cache": 0,
+          "llamadas": 1,
+          "ms": 1465,
+          "correcta": true,
+          "delego": false
+        },
+        {
+          "entrada": 3755,
+          "salida": 15,
+          "cache": 0,
+          "llamadas": 1,
+          "ms": 1204,
+          "correcta": true,
+          "delego": false
+        },
+        {
+          "entrada": 3755,
+          "salida": 15,
+          "cache": 0,
+          "llamadas": 1,
+          "ms": 1104,
+          "correcta": true,
+          "delego": false
+        },
+        {
+          "entrada": 3755,
+          "salida": 16,
+          "cache": 0,
+          "llamadas": 1,
+          "ms": 1371,
+          "correcta": true,
+          "delego": false
+        }
+      ]
+    },
+    {
+      "modelo": "gemini/gemini-3.8-flash  (global)",
+      "pregunta": "estilo",
+      "validas": 6,
+      "errores": 0,
+      "correctas": 6,
+      "delegadas": 0,
+      "entrada": {
+        "media": 21106.166666666668,
+        "min": 11680,
+        "max": 25015,
+        "dispersion": 0.6318058703222597
+      },
+      "salida": {
+        "media": 145.5,
+        "min": 96,
+        "max": 177,
+        "dispersion": 0.5567010309278351
+      },
+      "llamadas": {
+        "media": 5.166666666666667,
+        "min": 3,
+        "max": 6,
+        "dispersion": 0.5806451612903225
+      },
+      "ms": {
+        "media": 5002.5,
+        "min": 3181,
+        "max": 6568,
+        "dispersion": 0.6770614692653674
+      },
+      "mide": "seguir una referencia entre ficheros",
+      "pasadas": [
+        {
+          "entrada": 24518,
+          "salida": 162,
+          "cache": 0,
+          "llamadas": 6,
+          "ms": 5321,
+          "correcta": true,
+          "delego": false
+        },
+        {
+          "entrada": 11680,
+          "salida": 96,
+          "cache": 0,
+          "llamadas": 3,
+          "ms": 3181,
+          "correcta": true,
+          "delego": false
+        },
+        {
+          "entrada": 25015,
+          "salida": 162,
+          "cache": 0,
+          "llamadas": 6,
+          "ms": 5705,
+          "correcta": true,
+          "delego": false
+        },
+        {
+          "entrada": 24940,
+          "salida": 177,
+          "cache": 0,
+          "llamadas": 6,
+          "ms": 6568,
+          "correcta": true,
+          "delego": false
+        },
+        {
+          "entrada": 20321,
+          "salida": 129,
+          "cache": 0,
+          "llamadas": 5,
+          "ms": 4651,
+          "correcta": true,
+          "delego": false
+        },
+        {
+          "entrada": 20163,
+          "salida": 147,
+          "cache": 0,
+          "llamadas": 5,
+          "ms": 4589,
+          "correcta": true,
+          "delego": false
+        }
+      ]
+    },
+    {
+      "modelo": "gemini/gemini-3.8-flash  (global)",
+      "pregunta": "capacidad",
+      "validas": 6,
+      "errores": 0,
+      "correctas": 6,
+      "delegadas": 6,
+      "entrada": {
+        "media": 218524,
+        "min": 137616,
+        "max": 270459,
+        "dispersion": 0.6079103439439146
+      },
+      "salida": {
+        "media": 4256.833333333333,
+        "min": 2067,
+        "max": 6442,
+        "dispersion": 1.0277592889863358
+      },
+      "llamadas": {
+        "media": 15.166666666666666,
+        "min": 12,
+        "max": 17,
+        "dispersion": 0.32967032967032966
+      },
+      "ms": {
+        "media": 33559.166666666664,
+        "min": 27375,
+        "max": 41535,
+        "dispersion": 0.42194134737155775
+      },
+      "mide": "criterio sobre la plataforma, no lectura del proyecto",
+      "pasadas": [
+        {
+          "entrada": 270459,
+          "salida": 2067,
+          "cache": 158457,
+          "llamadas": 17,
+          "ms": 27375,
+          "correcta": true,
+          "delego": true
+        },
+        {
+          "entrada": 148989,
+          "salida": 6046,
+          "cache": 36540,
+          "llamadas": 12,
+          "ms": 37987,
+          "correcta": true,
+          "delego": true
+        },
+        {
+          "entrada": 246219,
+          "salida": 2698,
+          "cache": 117679,
+          "llamadas": 17,
+          "ms": 27539,
+          "correcta": true,
+          "delego": true
+        },
+        {
+          "entrada": 244068,
+          "salida": 6442,
+          "cache": 113883,
+          "llamadas": 15,
+          "ms": 41535,
+          "correcta": true,
+          "delego": true
+        },
+        {
+          "entrada": 263793,
+          "salida": 2648,
+          "cache": 150305,
+          "llamadas": 17,
+          "ms": 31332,
+          "correcta": true,
+          "delego": true
+        },
+        {
+          "entrada": 137616,
+          "salida": 5640,
+          "cache": 0,
+          "llamadas": 13,
+          "ms": 35587,
+          "correcta": true,
+          "delego": true
+        }
+      ]
+    },
+    {
+      "modelo": "gemini/gemini-3.8-flash  (global)",
+      "pregunta": "cambio",
+      "validas": 6,
+      "errores": 0,
+      "correctas": 6,
+      "delegadas": 0,
+      "entrada": {
+        "media": 23355.666666666668,
+        "min": 17586,
+        "max": 31880,
+        "dispersion": 0.6120142149656757
+      },
+      "salida": {
+        "media": 488.5,
+        "min": 447,
+        "max": 549,
+        "dispersion": 0.20880245649948823
+      },
+      "llamadas": {
+        "media": 5.166666666666667,
+        "min": 4,
+        "max": 7,
+        "dispersion": 0.5806451612903225
+      },
+      "ms": {
+        "media": 7368.666666666667,
+        "min": 5208,
+        "max": 10341,
+        "dispersion": 0.6965982086311409
+      },
+      "mide": "preparar un CAMBIO: dos ficheros y el ayudante que YA existe",
+      "pasadas": [
+        {
+          "entrada": 17879,
+          "salida": 447,
+          "cache": 0,
+          "llamadas": 4,
+          "ms": 6675,
+          "correcta": true,
+          "delego": false
+        },
+        {
+          "entrada": 18022,
+          "salida": 450,
+          "cache": 0,
+          "llamadas": 4,
+          "ms": 5208,
+          "correcta": true,
+          "delego": false
+        },
+        {
+          "entrada": 31172,
+          "salida": 495,
+          "cache": 0,
+          "llamadas": 7,
+          "ms": 10341,
+          "correcta": true,
+          "delego": false
+        },
+        {
+          "entrada": 31880,
+          "salida": 549,
+          "cache": 0,
+          "llamadas": 7,
+          "ms": 9420,
+          "correcta": true,
+          "delego": false
+        },
+        {
+          "entrada": 23595,
+          "salida": 498,
+          "cache": 0,
+          "llamadas": 5,
+          "ms": 6588,
+          "correcta": true,
+          "delego": false
+        },
+        {
+          "entrada": 17586,
+          "salida": 492,
+          "cache": 0,
+          "llamadas": 4,
+          "ms": 5980,
+          "correcta": true,
+          "delego": false
+        }
+      ]
+    },
+    {
+      "modelo": "gemini/gemini-3.8-flash  (global)",
+      "pregunta": "estilo-efectivo",
+      "validas": 6,
+      "errores": 0,
+      "correctas": 6,
+      "delegadas": 0,
+      "entrada": {
+        "media": 35677.333333333336,
+        "min": 27596,
+        "max": 46262,
+        "dispersion": 0.5231893265565438
+      },
+      "salida": {
+        "media": 547.8333333333334,
+        "min": 484,
+        "max": 609,
+        "dispersion": 0.228171585031944
+      },
+      "llamadas": {
+        "media": 7.333333333333333,
+        "min": 6,
+        "max": 9,
+        "dispersion": 0.4090909090909091
+      },
+      "ms": {
+        "media": 13091.5,
+        "min": 10524,
+        "max": 16354,
+        "dispersion": 0.44532712065080393
+      },
+      "mide": "resolver la CASCADA de estilos: qué le toca de verdad a un control",
+      "pasadas": [
+        {
+          "entrada": 38649,
+          "salida": 606,
+          "cache": 4010,
+          "llamadas": 8,
+          "ms": 15545,
+          "correcta": true,
+          "delego": false
+        },
+        {
+          "entrada": 27596,
+          "salida": 572,
+          "cache": 0,
+          "llamadas": 6,
+          "ms": 13368,
+          "correcta": true,
+          "delego": false
+        },
+        {
+          "entrada": 28005,
+          "salida": 499,
+          "cache": 0,
+          "llamadas": 6,
+          "ms": 11001,
+          "correcta": true,
+          "delego": false
+        },
+        {
+          "entrada": 28126,
+          "salida": 484,
+          "cache": 0,
+          "llamadas": 6,
+          "ms": 10524,
+          "correcta": true,
+          "delego": false
+        },
+        {
+          "entrada": 46262,
+          "salida": 517,
+          "cache": 0,
+          "llamadas": 9,
+          "ms": 11757,
+          "correcta": true,
+          "delego": false
+        },
+        {
+          "entrada": 45426,
+          "salida": 609,
+          "cache": 0,
+          "llamadas": 9,
+          "ms": 16354,
+          "correcta": true,
+          "delego": false
+        }
+      ]
+    },
+    {
+      "modelo": "gemini/gemini-3.8-flash  (global)",
+      "pregunta": "login",
+      "validas": 6,
+      "errores": 0,
+      "correctas": 6,
+      "delegadas": 0,
+      "entrada": {
+        "media": 32419.333333333332,
+        "min": 17621,
+        "max": 74261,
+        "dispersion": 1.7471056365543196
+      },
+      "salida": {
+        "media": 289.1666666666667,
+        "min": 172,
+        "max": 557,
+        "dispersion": 1.3314121037463975
+      },
+      "llamadas": {
+        "media": 6.666666666666667,
+        "min": 4,
+        "max": 13,
+        "dispersion": 1.3499999999999999
+      },
+      "ms": {
+        "media": 10607.666666666666,
+        "min": 4577,
+        "max": 15139,
+        "dispersion": 0.9956949376237313
+      },
+      "mide": "distinguir dos conceptos parecidos",
+      "pasadas": [
+        {
+          "entrada": 17621,
+          "salida": 235,
+          "cache": 0,
+          "llamadas": 4,
+          "ms": 7954,
+          "correcta": true,
+          "delego": false
+        },
+        {
+          "entrada": 36338,
+          "salida": 307,
+          "cache": 0,
+          "llamadas": 8,
+          "ms": 7909,
+          "correcta": true,
+          "delego": false
+        },
+        {
+          "entrada": 17714,
+          "salida": 172,
+          "cache": 0,
+          "llamadas": 4,
+          "ms": 4577,
+          "correcta": true,
+          "delego": false
+        },
+        {
+          "entrada": 27177,
+          "salida": 247,
+          "cache": 0,
+          "llamadas": 6,
+          "ms": 13560,
+          "correcta": true,
+          "delego": false
+        },
+        {
+          "entrada": 74261,
+          "salida": 557,
+          "cache": 0,
+          "llamadas": 13,
+          "ms": 15139,
+          "correcta": true,
+          "delego": false
+        },
+        {
+          "entrada": 21405,
+          "salida": 217,
+          "cache": 0,
+          "llamadas": 5,
+          "ms": 14507,
+          "correcta": true,
+          "delego": false
+        }
+      ]
+    }
+  ]
+}
