@@ -1,8 +1,10 @@
 import { tool } from "@langchain/core/tools";
 import { z } from "zod";
-import type { Declaracion, IndiceDeNavegacion, Referencia } from "../../core/navegacion.js";
+import { partirNombre, type Declaracion, type IndiceDeNavegacion, type Referencia } from "../../core/navegacion.js";
 import type { CargarIndice } from "../navegacion/indiceEnDisco.js";
 import { llamadaDeBusqueda } from "./busquedaRegex.js";
+import { pintarEstiloDeProp } from "../../core/estilos.js";
+import type { CargarEstilos } from "../navegacion/estilosEnDisco.js";
 
 /**
  * `xone_navegacion`: preguntar por la ESTRUCTURA del proyecto sin leer ficheros.
@@ -41,18 +43,23 @@ export const LIMITES_NAVEGACION = {
 
 const ESQUEMA = z.object({
   operacion: z
-    .enum(["inventario", "definicion", "referencias", "campos", "detalle", "app", "problemas"])
+    .enum(["inventario", "definicion", "referencias", "campos", "detalle", "app", "problemas", "estilos"])
     .describe(
       "inventario: todas las colecciones. definicion: dónde se declara. referencias: quién la usa. " +
         "campos: los campos de una colección. detalle: todo de una (campos, eventos, nodos, conexiones). " +
-        "app: por dónde arranca la aplicación, login y estilos. problemas: referencias rotas y colecciones que no usa nadie"
+        "app: por dónde arranca la aplicación, login y estilos. problemas: referencias rotas y colecciones que no usa nadie. " +
+        "estilos: qué estilo acaba aplicándosele a un control y de qué clase y fichero sale — resuelve la cascada, " +
+        "que es lo que no se puede averiguar leyendo una hoja de arriba abajo"
     ),
   nombre: z
     .string()
     .min(1)
     .max(200)
     .optional()
-    .describe("`Coleccion` o `Coleccion.CAMPO`. No hace falta en `inventario`"),
+    .describe(
+      "`Coleccion` o `Coleccion.CAMPO`. No hace falta en `inventario`. En `estilos` tiene que ser " +
+        "`Coleccion.CONTROL`"
+    ),
 });
 
 type Entrada = z.infer<typeof ESQUEMA>;
@@ -75,7 +82,11 @@ const pintarReferencia = (r: Referencia): string => `${r.desde} --${r.por}--> ${
  * pueda decir sobre QUÉ proyecto pregunta: si pudiera, esto sería una tool que lee cualquier
  * carpeta de la máquina.
  */
-export function crearNavegacionXone(cargar: CargarIndice, ficheros: ReadonlySet<string>) {
+export function crearNavegacionXone(
+  cargar: CargarIndice,
+  ficheros: ReadonlySet<string>,
+  cargarEstilos?: CargarEstilos
+) {
   return tool(
     async (entrada: Entrada) => {
       let indice: IndiceDeNavegacion;
@@ -157,6 +168,39 @@ export function crearNavegacionXone(cargar: CargarIndice, ficheros: ReadonlySet<
           );
         }
         return recortar(campos, LIMITES_NAVEGACION.campos, pintarDeclaracion);
+      }
+
+      if (entrada.operacion === "estilos") {
+        /**
+         * **La capa que no tenía índice.** Medido sobre diez pasadas del mismo encargo visual:
+         * el turno se iba en 30-42 `grep` de los cuales ~22 de cada 30 eran la MISMA clase con
+         * variantes (`xnTituloHeaderC`, `.xnTituloHeader`, `xnHeader`…), más cinco ficheros CSS
+         * y varios `.xne` ajenos buscando ejemplos. Nada de eso lo contestaba este índice,
+         * porque indexa el modelo `.xne` y el arreglo visual vive en los estilos.
+         *
+         * La cascada la resuelve `xone-linter` (`Stylesheet.lookup`, fiel a
+         * `FindStylesheetByClassName`), no nosotros: ver `agent/navegacion/estilosEnDisco.ts`.
+         */
+        if (cargarEstilos === undefined) {
+          return "Esta operación no está disponible en este montaje: no se cableó el resolvedor de estilos.";
+        }
+        const { coleccion, campo } = partirNombre(nombre);
+        if (campo === undefined || campo === "") {
+          return (
+            "`estilos` necesita el control, no solo la colección: escríbelo como " +
+            "`Coleccion.CONTROL`. Con `detalle Coleccion` sale la lista de sus campos."
+          );
+        }
+        const estilo = await cargarEstilos(coleccion, campo);
+        if (estilo === undefined) {
+          // Ni la coll ni el prop: se dice cómo averiguar CUÁL de las dos falta, en vez de
+          // dejar al agente probando nombres. Misma postura que `detalle`.
+          return (
+            `No encuentro el control «${nombre}». Prueba \`detalle ${coleccion}\` para ver sus ` +
+            `campos, o búscalo como texto:\n${llamadaDeBusqueda(campo)}`
+          );
+        }
+        return pintarEstiloDeProp(estilo);
       }
 
       if (entrada.operacion === "detalle") {

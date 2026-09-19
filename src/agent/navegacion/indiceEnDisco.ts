@@ -7,6 +7,7 @@
 import { XoneProject } from "xone-linter/dist/project/XoneProject.js";
 import { construirIndice, type IndiceDeNavegacion } from "../../core/navegacion.js";
 import { modeloDeNavegacion, type ModeloDelLinter } from "./modeloDeProyecto.js";
+import { estilosEnDisco, type CargarEstilos } from "./estilosEnDisco.js";
 
 /**
  * El índice de navegación de un proyecto de verdad, leyendo el disco con `xone-linter`.
@@ -43,4 +44,19 @@ export function indiceEnDisco(raiz: string): CargarIndice {
     const proyecto = await XoneProject.load(raiz);
     return construirIndice(modeloDeNavegacion(proyecto.model as ModeloDelLinter, raiz, ficheros));
   };
+}
+
+/**
+ * El resolvedor de ESTILOS de una raíz, sobre el mismo `XoneProject`.
+ *
+ * Vive aquí y no en `estilosEnDisco.ts` para que el import profundo de `XoneProject` —con su
+ * motivo medido escrito arriba— esté en UN solo sitio. `estilosEnDisco` recibe el modelo ya
+ * cargado y no sabe de dónde sale, que es lo que lo deja probable sin proyecto en disco.
+ *
+ * **No cachea**, por lo mismo que el índice: el agente escribe CSS dentro del turno, y una hoja
+ * vieja que afirma que una clase pone 14 cuando acaba de ponerse 18 es una respuesta con
+ * autoridad y equivocada.
+ */
+export function estilosDeDisco(raiz: string): CargarEstilos {
+  return estilosEnDisco(async () => (await XoneProject.load(raiz)).model as never);
 }

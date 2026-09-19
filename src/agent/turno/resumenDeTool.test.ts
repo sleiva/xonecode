@@ -79,3 +79,19 @@ describe("`task`: sale QUIÉN, nunca el encargo", () => {
     expect(JSON.stringify(p)).not.toContain("fieldsize");
   });
 });
+
+describe("xone_navegacion", () => {
+  it("deja la OPERACIÓN, que es lo que hacía falta para poder medir", () => {
+    // Siete operaciones bajo un solo nombre es no poder contestar cuál de las siete se usa. Se
+    // descubrió al añadir `estilos`: no hubo forma de comprobar si el modelo llegaba a usarla.
+    expect(parametrosDe("xone_navegacion", { operacion: "estilos", nombre: "AcercaDe.MAP_APP_NAME" }))
+      .toEqual({ operacion: "estilos" });
+  });
+
+  it("y NUNCA el `nombre`, que es una colección del proyecto", () => {
+    // Es contenido, y por aquí no pasa contenido: la misma regla que deja fuera la
+    // `description` de `task`.
+    const p = parametrosDe("xone_navegacion", { operacion: "detalle", nombre: "Clientes" });
+    expect(JSON.stringify(p)).not.toContain("Clientes");
+  });
+});

@@ -1,0 +1,94 @@
+{
+  "cuando": "2026-09-19T16:53:30.543Z",
+  "celdas": [
+    {
+      "modelo": "gemini/gemini-3.8-flash  (global)",
+      "pregunta": "estilo-efectivo",
+      "validas": 6,
+      "errores": 0,
+      "correctas": 6,
+      "delegadas": 0,
+      "entrada": {
+        "media": 31769.5,
+        "min": 22814,
+        "max": 45317,
+        "dispersion": 0.7083208737940477
+      },
+      "salida": {
+        "media": 552.1666666666666,
+        "min": 442,
+        "max": 667,
+        "dispersion": 0.4074856625415032
+      },
+      "llamadas": {
+        "media": 6.666666666666667,
+        "min": 5,
+        "max": 9,
+        "dispersion": 0.6
+      },
+      "ms": {
+        "media": 11251.166666666666,
+        "min": 8998,
+        "max": 13459,
+        "dispersion": 0.39649221562208364
+      },
+      "mide": "resolver la CASCADA de estilos: qué le toca de verdad a un control",
+      "pasadas": [
+        {
+          "entrada": 23022,
+          "salida": 516,
+          "cache": 0,
+          "llamadas": 5,
+          "ms": 11032,
+          "correcta": true,
+          "delego": false
+        },
+        {
+          "entrada": 32326,
+          "salida": 589,
+          "cache": 0,
+          "llamadas": 7,
+          "ms": 8998,
+          "correcta": true,
+          "delego": false
+        },
+        {
+          "entrada": 45317,
+          "salida": 667,
+          "cache": 0,
+          "llamadas": 9,
+          "ms": 13459,
+          "correcta": true,
+          "delego": false
+        },
+        {
+          "entrada": 22814,
+          "salida": 442,
+          "cache": 0,
+          "llamadas": 5,
+          "ms": 13041,
+          "correcta": true,
+          "delego": false
+        },
+        {
+          "entrada": 39218,
+          "salida": 605,
+          "cache": 0,
+          "llamadas": 8,
+          "ms": 10975,
+          "correcta": true,
+          "delego": false
+        },
+        {
+          "entrada": 27920,
+          "salida": 494,
+          "cache": 0,
+          "llamadas": 6,
+          "ms": 10002,
+          "correcta": true,
+          "delego": false
+        }
+      ]
+    }
+  ]
+}

@@ -10,7 +10,8 @@ import type { Artefacto } from "../../core/artefactos.js";
 import { permisosDe, hitlDe, montajeDeFicheros, puedeEjecutar, type QuienDecidePermisos } from "./perfiles.js";
 import { crearBusquedaRegex } from "./busquedaRegex.js";
 import { crearNavegacionXone } from "./navegacionXone.js";
-import { indiceEnDisco, type CargarIndice } from "../navegacion/indiceEnDisco.js";
+import { estilosDeDisco, indiceEnDisco, type CargarIndice } from "../navegacion/indiceEnDisco.js";
+import type { CargarEstilos } from "../navegacion/estilosEnDisco.js";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { crearCriticaVisual } from "./criticaVisual.js";
@@ -63,6 +64,8 @@ export interface OpcionesDelAgente {
    * `xone-linter`. Entra por aquí para que un test pueda doblarlo sin proyecto en disco.
    */
   navegacion?: CargarIndice;
+  /** El resolvedor de estilos. Ausente, el de disco sobre `raiz`. Doblable como el índice. */
+  estilos?: CargarEstilos;
   /**
    * Quién juzga si lo hecho cumple la rúbrica del encargo, si es que hay rúbrica.
    *
@@ -304,6 +307,14 @@ export async function construirAgente(opciones: OpcionesDelAgente): Promise<unkn
    * pregunta, esto sería una tool que lee cualquier sitio de la máquina.
    */
   const cargarIndice: CargarIndice = opciones.navegacion ?? indiceEnDisco(opciones.raiz);
+  /**
+   * El resolvedor de ESTILOS, que va con la misma tool y por el mismo camino.
+   *
+   * Entra por parámetro como el índice, y ausente deja la operación `estilos` diciendo que no
+   * está montada — en vez de fallar dentro. Un test que doble la navegación no tiene por qué
+   * saber de esto.
+   */
+  const cargarEstilos = opciones.estilos ?? estilosDeDisco(opciones.raiz);
 
   const comunes = {
     raiz: opciones.raiz,
@@ -433,7 +444,7 @@ export async function construirAgente(opciones: OpcionesDelAgente): Promise<unkn
      * TAMBIÉN, y eso lo decidió una medida que tumbó lo contrario: ver su propio `tools` más
      * abajo.
      */
-    tools: [crearBusquedaRegex(ficheros.backend), crearNavegacionXone(cargarIndice, opciones.ficheros)],
+    tools: [crearBusquedaRegex(ficheros.backend), crearNavegacionXone(cargarIndice, opciones.ficheros, cargarEstilos)],
     //
     // Las tools de fichero las monta el `FilesystemMiddleware` a partir del backend, y
     // quien las acota por NOMBRE es su propia opción `tools` (con la restricción de que
@@ -527,7 +538,7 @@ export async function construirAgente(opciones: OpcionesDelAgente): Promise<unkn
      * cobrando su esquema en cada llamada.
      */
     tools: [
-      crearNavegacionXone(cargarIndice, opciones.ficheros),
+      crearNavegacionXone(cargarIndice, opciones.ficheros, cargarEstilos),
       ...(opciones.artefactos === undefined
         ? []
         : [

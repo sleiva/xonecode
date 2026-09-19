@@ -42,6 +42,17 @@ const CAMPOS_SEGUROS: Record<string, readonly string[]> = {
    */
   task: ["subagent_type"],
   /**
+   * De `xone_navegacion` sale la OPERACIÓN y **no el `nombre`**, que es una colección del
+   * proyecto — o sea contenido, y aquí no entra contenido.
+   *
+   * Hace falta por un fallo de instrumento medido el 19-09-2026: al añadir la operación
+   * `estilos` no se pudo comprobar si el modelo llegaba a usarla, porque la traza registraba
+   * «xone_navegacion» a secas. Siete operaciones bajo un solo nombre es no poder contestar
+   * cuál de las siete se usa, que es justo lo que se quería saber. La operación es un enum
+   * cerrado de siete valores: no hay nada del proyecto dentro.
+   */
+  xone_navegacion: ["operacion"],
+  /**
    * **El comando ENTERO**, y es la única entrada de esta tabla que no es una ruta ni un
    * patrón. Está aquí a propósito: a un agente con `ejecucion: true` no se le pregunta antes
    * de cada comando —preguntar cuatro veces por «lanza la app» mata el bucle—, así que lo

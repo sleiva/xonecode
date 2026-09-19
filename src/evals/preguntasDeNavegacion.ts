@@ -33,6 +33,7 @@ export const OPERACIONES = [
   "detalle",
   "app",
   "problemas",
+  "estilos",
 ] as const;
 export type Operacion = (typeof OPERACIONES)[number];
 
@@ -136,6 +137,22 @@ export const PREGUNTAS_DE_NAVEGACION: readonly PreguntaDeNavegacion[] = [
     // —`referencias("OperQueue")` la devuelve— pero no hay forma de preguntarlo sin saber ya
     // el nombre que falta, que es justo lo que se quiere descubrir.
     operacion: "problemas",
+  },
+  {
+    nombre: "estilo-efectivo",
+    texto: "¿De qué tamaño y color se ve este botón, y de dónde sale?",
+    mide: "la CASCADA de estilos: qué le toca de verdad a un control",
+    operacion: "estilos",
+    /**
+     * **Era el hueco más caro y no estaba en esta lista.** Medido el 19-09-2026 sobre diez
+     * pasadas del mismo encargo visual: `xone_navegacion` es la PRIMERA tool en ocho de ellas
+     * y luego deja de servir, porque indexa el modelo `.xne` y el arreglo visual vive en los
+     * estilos. Lo que quedaba eran 30-42 `grep` —~22 de cada 30, la misma clase con variantes—
+     * más cinco ficheros CSS y varios `.xne` ajenos buscando ejemplos.
+     */
+    limite:
+      "Contesta por el control (`Coleccion.CONTROL`), no por la clase: «quién usa .btnPrimario» " +
+      "sigue siendo `grep`. Y la cascada la resuelve `xone-linter`, así que hereda sus límites.",
   },
   {
     nombre: "huerfanas",
