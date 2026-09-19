@@ -1,0 +1,253 @@
+{
+  "cuando": "2026-09-19T10:17:26.637Z",
+  "celdas": [
+    {
+      "modelo": "gemini/gemini-3.8-flash  (global)",
+      "pregunta": "entrypoint",
+      "validas": 3,
+      "errores": 0,
+      "correctas": 3,
+      "delegadas": 0,
+      "entrada": {
+        "media": 3697,
+        "min": 3697,
+        "max": 3697,
+        "dispersion": 0
+      },
+      "salida": {
+        "media": 14.333333333333334,
+        "min": 12,
+        "max": 16,
+        "dispersion": 0.27906976744186046
+      },
+      "llamadas": {
+        "media": 1,
+        "min": 1,
+        "max": 1,
+        "dispersion": 0
+      },
+      "ms": {
+        "media": 1907.6666666666667,
+        "min": 1372,
+        "max": 2409,
+        "dispersion": 0.5435960160754849
+      },
+      "mide": "leer una declaración de app.xml",
+      "pasadas": [
+        {
+          "entrada": 3697,
+          "salida": 12,
+          "cache": 0,
+          "llamadas": 1,
+          "ms": 1942,
+          "correcta": true,
+          "delego": false
+        },
+        {
+          "entrada": 3697,
+          "salida": 15,
+          "cache": 0,
+          "llamadas": 1,
+          "ms": 2409,
+          "correcta": true,
+          "delego": false
+        },
+        {
+          "entrada": 3697,
+          "salida": 16,
+          "cache": 0,
+          "llamadas": 1,
+          "ms": 1372,
+          "correcta": true,
+          "delego": false
+        }
+      ]
+    },
+    {
+      "modelo": "gemini/gemini-3.8-flash  (global)",
+      "pregunta": "estilo",
+      "validas": 3,
+      "errores": 0,
+      "correctas": 3,
+      "delegadas": 0,
+      "entrada": {
+        "media": 15960.666666666666,
+        "min": 11532,
+        "max": 24336,
+        "dispersion": 0.8022221294014452
+      },
+      "salida": {
+        "media": 110,
+        "min": 82,
+        "max": 164,
+        "dispersion": 0.7454545454545455
+      },
+      "llamadas": {
+        "media": 4,
+        "min": 3,
+        "max": 6,
+        "dispersion": 0.75
+      },
+      "ms": {
+        "media": 6041.333333333333,
+        "min": 4019,
+        "max": 7269,
+        "dispersion": 0.5379607150739352
+      },
+      "mide": "seguir una referencia entre ficheros",
+      "pasadas": [
+        {
+          "entrada": 12014,
+          "salida": 82,
+          "cache": 0,
+          "llamadas": 3,
+          "ms": 4019,
+          "correcta": true,
+          "delego": false
+        },
+        {
+          "entrada": 11532,
+          "salida": 84,
+          "cache": 0,
+          "llamadas": 3,
+          "ms": 7269,
+          "correcta": true,
+          "delego": false
+        },
+        {
+          "entrada": 24336,
+          "salida": 164,
+          "cache": 0,
+          "llamadas": 6,
+          "ms": 6836,
+          "correcta": true,
+          "delego": false
+        }
+      ]
+    },
+    {
+      "modelo": "gemini/gemini-3.8-flash  (global)",
+      "pregunta": "capacidad",
+      "validas": 3,
+      "errores": 0,
+      "correctas": 3,
+      "delegadas": 3,
+      "entrada": {
+        "media": 200314,
+        "min": 117079,
+        "max": 253634,
+        "dispersion": 0.6817047235839732
+      },
+      "salida": {
+        "media": 3833.6666666666665,
+        "min": 2230,
+        "max": 5220,
+        "dispersion": 0.7799321798104513
+      },
+      "llamadas": {
+        "media": 14.333333333333334,
+        "min": 10,
+        "max": 17,
+        "dispersion": 0.4883720930232558
+      },
+      "ms": {
+        "media": 35949.333333333336,
+        "min": 30339,
+        "max": 45082,
+        "dispersion": 0.4101049625398709
+      },
+      "mide": "criterio sobre la plataforma, no lectura del proyecto",
+      "pasadas": [
+        {
+          "entrada": 230229,
+          "salida": 2230,
+          "cache": 105464,
+          "llamadas": 17,
+          "ms": 30339,
+          "correcta": true,
+          "delego": true
+        },
+        {
+          "entrada": 253634,
+          "salida": 5220,
+          "cache": 130072,
+          "llamadas": 16,
+          "ms": 45082,
+          "correcta": true,
+          "delego": true
+        },
+        {
+          "entrada": 117079,
+          "salida": 4051,
+          "cache": 28446,
+          "llamadas": 10,
+          "ms": 32427,
+          "correcta": true,
+          "delego": true
+        }
+      ]
+    },
+    {
+      "modelo": "gemini/gemini-3.8-flash  (global)",
+      "pregunta": "login",
+      "validas": 3,
+      "errores": 0,
+      "correctas": 3,
+      "delegadas": 0,
+      "entrada": {
+        "media": 18152.666666666668,
+        "min": 16271,
+        "max": 21100,
+        "dispersion": 0.26602152117227956
+      },
+      "salida": {
+        "media": 210,
+        "min": 181,
+        "max": 247,
+        "dispersion": 0.3142857142857143
+      },
+      "llamadas": {
+        "media": 4.333333333333333,
+        "min": 4,
+        "max": 5,
+        "dispersion": 0.23076923076923078
+      },
+      "ms": {
+        "media": 6242.666666666667,
+        "min": 4848,
+        "max": 7437,
+        "dispersion": 0.41472661255873555
+      },
+      "mide": "distinguir dos conceptos parecidos",
+      "pasadas": [
+        {
+          "entrada": 17087,
+          "salida": 202,
+          "cache": 0,
+          "llamadas": 4,
+          "ms": 7437,
+          "correcta": true,
+          "delego": false
+        },
+        {
+          "entrada": 16271,
+          "salida": 181,
+          "cache": 0,
+          "llamadas": 4,
+          "ms": 6443,
+          "correcta": true,
+          "delego": false
+        },
+        {
+          "entrada": 21100,
+          "salida": 247,
+          "cache": 0,
+          "llamadas": 5,
+          "ms": 4848,
+          "correcta": true,
+          "delego": false
+        }
+      ]
+    }
+  ]
+}

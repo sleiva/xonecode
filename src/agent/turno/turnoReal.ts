@@ -113,6 +113,9 @@ import { asegurarMemoriaDeProyecto } from "../grafo/memoriaDeProyecto.js";
 import { aEventos } from "./puente.js";
 import { createTokenTracker, type TokenTracker } from "../../vendor/tokenTracking.js";
 import { crearDiagnosticoDeTools } from "./diagnosticoDeTools.js";
+import { indiceEnDisco, type CargarIndice } from "../navegacion/indiceEnDisco.js";
+import { hechosDelProyectoDe } from "../navegacion/hechosEnDisco.js";
+import { conHechosDelProyecto } from "../../core/hechosDelProyecto.js";
 
 /**
  * Una sesión de turno real: varios turnos sobre el MISMO agente y el MISMO hilo.
@@ -404,6 +407,15 @@ export async function abrirSesionReal(opciones: {
    * `fin` o cerraría dos veces.
    */
   topeDeRondas?: number;
+  /**
+   * El cargador del índice de navegación. Ausente, se hace el de disco sobre `raiz`.
+   *
+   * Entra por parámetro por lo mismo que el verificador: toca disco y entra en la librería del
+   * linter, así que un test que no lo pueda doblar tendría que traerse un proyecto de verdad.
+   * Lo usan DOS —la tool del agente y la foto de hechos del turno— y es el mismo objeto a
+   * propósito: dos cargadores serían dos fuentes para la misma pregunta.
+   */
+  navegacion?: CargarIndice;
 }): Promise<SesionReal> {
   const { raiz, entorno } = opciones;
 
@@ -484,11 +496,24 @@ export async function abrirSesionReal(opciones: {
    */
   const capturasDelTurno: Artefacto[] = [];
   const carpetaDeArtefactos = opciones.artefactos ?? join(raiz, ".xonecode", "artefactos");
+  /**
+   * El índice de navegación de esta sesión, y **es UNO solo**.
+   *
+   * Lo usan dos: la tool `xone_navegacion` que se le da al agente, y la foto de hechos que se
+   * pega al turno. Con dos cargadores serían dos fuentes para la misma pregunta, que es como
+   * el harness acaba diciendo una cosa en el prompt y otra en la tool sobre el mismo proyecto.
+   * Por eso se crea aquí y se le PASA a `construirAgente` en vez de dejar que se haga el suyo.
+   *
+   * No cachea nada: `indiceEnDisco` reconstruye en cada llamada a propósito, que es lo que
+   * deja que la foto del turno 3 no sea la del turno 1.
+   */
+  const cargarIndice = opciones.navegacion ?? indiceEnDisco(raiz);
 
   const construir = async (): Promise<unknown> =>
     construirAgente({
       raiz,
       ficheros: ficherosDelProyecto(raiz),
+      navegacion: cargarIndice,
       // Se releen en CADA construcción del agente y no una vez al abrir la sesión: el
       // usuario puede tocar un `.md` —o guardarlo desde Ajustes— con la consola abierta, y
       // una lista congelada al arrancar le haría creer que su cambio no se aplicó.
@@ -635,7 +660,26 @@ export async function abrirSesionReal(opciones: {
     const t0 = Date.now();
     const instantanea: Instantanea = await tomarInstantanea(raiz, entorno.git);
 
-    let payload: unknown = { messages: [new HumanMessage(peticion)] };
+    /**
+     * Los hechos baratos del proyecto, DELANTE, en vez de esperar a que alguien los busque.
+     *
+     * Medido el 19-09-2026 sobre un proyecto real: cada especialista repetía las mismas
+     * búsquedas (`grep` ×42 en un turno, `xnTituloHeaderC` ×7) y el orquestador se llevaba el
+     * 38-50 % del gasto averiguando. El prompt ya pide lo contrario y no basta.
+     *
+     * Va en la PETICIÓN y no en el prompt de sistema por una razón medida: el prompt se compone
+     * al construir el agente —dos veces por sesión— y esta foto envejecería dentro de la sesión
+     * que la usa, que es exactamente por lo que `xone_navegacion` no cachea. Aquí se rehace en
+     * cada turno, que cuesta decenas de milisegundos.
+     *
+     * Y solo en la petición ORIGINAL: el mensaje de una reparación ya lleva los hallazgos del
+     * verificador, y repetir ahí el inventario sería pagarlo dos veces por el mismo turno.
+     */
+    const payloadInicial = conHechosDelProyecto(
+      peticion,
+      await hechosDelProyectoDe(cargarIndice, ficherosDelProyecto(raiz)),
+    );
+    let payload: unknown = { messages: [new HumanMessage(payloadInicial)] };
     let bitacora = null as Awaited<ReturnType<typeof correrTurno>> | null;
     let ronda = 0;
 

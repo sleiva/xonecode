@@ -23,6 +23,8 @@ import type { LineaDeDiff } from "../../core/diff.js";
 import { MAX_APPROVAL_ROUNDS, type Decision } from "../../vendor/hitl.js";
 import type { Entorno } from "../config/entorno.js";
 import type { Cambio } from "./instantanea.js";
+import type { CargarIndice } from "../navegacion/indiceEnDisco.js";
+import type { IndiceDeNavegacion } from "../../core/navegacion.js";
 
 /**
  * El agente falso, con el MÍNIMO que `turnoReal.ts` consume:
@@ -169,6 +171,7 @@ async function abrir(
     sinAprobacion?: () => boolean;
     insiste?: boolean;
     topeDeRondas?: number;
+    navegacion?: CargarIndice;
   } = {}
 ) {
   mocks.construirAgente.mockImplementation(() =>
@@ -192,7 +195,24 @@ async function abrir(
     ...(opts.sinAprobacion === undefined ? {} : { sinAprobacion: opts.sinAprobacion }),
     ...(opts.verifier === undefined ? {} : { verifier: opts.verifier }),
     ...(opts.topeDeRondas === undefined ? {} : { topeDeRondas: opts.topeDeRondas }),
+    ...(opts.navegacion === undefined ? {} : { navegacion: opts.navegacion }),
   });
+}
+
+/** Un índice de pega con dos colecciones, para la foto de hechos del turno. */
+function indiceFalso(): IndiceDeNavegacion {
+  return {
+    inventario: () => [
+      { nombre: "EntradaApp", clase: "coleccion", fichero: "/EntradaApp.xne" },
+      { nombre: "Calculadora", clase: "coleccion", fichero: "/Calculadora.xne" },
+    ],
+    app: () => ({ entrada: ["EntradaApp"], login: [], estilos: ["default.css"], conexiones: [] }),
+  } as unknown as IndiceDeNavegacion;
+}
+
+/** El payload con el que se llamó al `stream` del agente de la llamada i-ésima. */
+function payloadDe(i: number): { messages: Array<{ content: unknown }> } {
+  return agenteDeLLamada(i).stream.mock.calls[0][0] as { messages: Array<{ content: unknown }> };
 }
 
 /** Las líneas que la piel falsa recibió, en orden. */
@@ -1193,5 +1213,45 @@ describe("la carpeta de adjuntos llega al agente", () => {
       entorno: entornoFalso,
     });
     expect(mocks.construirAgente.mock.calls.at(-1)?.[0]).not.toHaveProperty("adjuntos");
+  });
+});
+
+describe("los hechos del proyecto van DELANTE del turno", () => {
+  // Es el décimo caso del patrón de fallo de este repo: la composición vive dentro de
+  // `turno()`, que es un cierre que todos los tests de aquí doblan. Sin estos tres, la foto
+  // podía dejar de montarse con todo en verde — que es lo que pasó nueve veces antes.
+
+  it("la petición llega con el inventario detrás, y la petición va PRIMERO", async () => {
+    const sesion = await abrir({ navegacion: async () => indiceFalso() });
+    await sesion.turno("arregla el visor", pielFalsa());
+    const texto = String(payloadDe(0).messages[0].content);
+    expect(texto.startsWith("arregla el visor")).toBe(true);
+    expect(texto).toContain("Calculadora");
+    expect(texto).toContain("Entrada: EntradaApp");
+    await sesion.cerrar();
+  });
+
+  it("un índice que revienta NO tumba el turno: va la petición sola", async () => {
+    // Adelantar hechos abarata enterarse, no es una capacidad. Una carpeta que no es un
+    // proyecto XOne tiene que dejar el turno como estaba antes de que esto existiera.
+    const sesion = await abrir({
+      navegacion: async () => {
+        throw new Error("no es un proyecto XOne");
+      },
+    });
+    await sesion.turno("arregla el visor", pielFalsa());
+    expect(String(payloadDe(0).messages[0].content)).toBe("arregla el visor");
+    await sesion.cerrar();
+  });
+
+  it("el agente recibe EL MISMO cargador que usa la foto, no otro", async () => {
+    // Dos cargadores serían dos fuentes para la misma pregunta, y el día que divergieran el
+    // prompt diría una cosa y `xone_navegacion` otra sobre el mismo proyecto.
+    const cargador: CargarIndice = async () => indiceFalso();
+    const sesion = await abrir({ navegacion: cargador });
+    await sesion.turno("hola", pielFalsa());
+    const opcionesDelAgente = mocks.construirAgente.mock.calls[0][0] as { navegacion?: CargarIndice };
+    expect(opcionesDelAgente.navegacion).toBe(cargador);
+    await sesion.cerrar();
   });
 });
