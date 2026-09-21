@@ -7,7 +7,7 @@ import { MemorySaver } from "@langchain/langgraph";
 import type { BaseCheckpointSaver } from "@langchain/langgraph-checkpoint";
 import { backendDeAgente, entornoDeLaShellDelProyecto } from "./proyecto.js";
 import type { Artefacto } from "../../core/artefactos.js";
-import { permisosDe, hitlDe, montajeDeFicheros, puedeEjecutar, type QuienDecidePermisos } from "./perfiles.js";
+import { permisosDe, hitlDe, montajeDeFicheros, presupuestoDeLlamadas, puedeEjecutar, type QuienDecidePermisos } from "./perfiles.js";
 import { crearBusquedaRegex } from "./busquedaRegex.js";
 import { crearNavegacionXone } from "./navegacionXone.js";
 import { crearCopiarArtefacto } from "./copiarArtefacto.js";
@@ -20,7 +20,7 @@ import { invocarVisualConModelos } from "../dispositivos/juezVisual.js";
 import { inventarioDelProyecto } from "../subagentes/escrituraExterna.js";
 import type { DiagnosticoDeTools } from "../turno/diagnosticoDeTools.js";
 import { middlewareTextoDeTool } from "../turno/textoDeTool.js";
-import { resumenConEncargo, topeDeLlamadas, TOPE_DE_LLAMADAS_DEL_ESPECIALISTA, topeDeTools, TOPE_DE_TOOLS_DEL_ORQUESTADOR } from "../turno/resumenDeContexto.js";
+import { resumenConEncargo, topeDeLlamadas, topeDeTools, TOPE_DE_TOOLS_DEL_ORQUESTADOR } from "../turno/resumenDeContexto.js";
 import { middlewareDeRubrica, type Calificador } from "../turno/rubrica.js";
 import { inspectorDePrompt } from "../turno/inspectorDePrompt.js";
 import { excluirTools, toolsQueNoUsa } from "./excluirTools.js";
@@ -439,6 +439,7 @@ export async function construirAgente(opciones: OpcionesDelAgente): Promise<unkn
       normal: backend,
       ...(conShell === undefined ? {} : { conShell }),
     });
+    const presupuesto = presupuestoDeLlamadas(perfil);
     return {
     name: perfil.nombre,
     description: fichaDeAgente(perfil),
@@ -513,9 +514,11 @@ export async function construirAgente(opciones: OpcionesDelAgente): Promise<unkn
       // `resumenDeContexto.ts#topeDeLlamadas`.
       // El corte se ANOTA con el nombre de ESTE perfil: sin origen, saber que hubo un corte no
       // dice a quién le pasó, que es justo lo que hace falta para calibrar el presupuesto.
-      topeDeLlamadas(undefined, () =>
-        opciones.diagnostico?.corte?.(perfil.nombre, TOPE_DE_LLAMADAS_DEL_ESPECIALISTA)
-      ),
+      // Y el presupuesto lo decide el PERFIL (`perfiles.ts#presupuestoDeLlamadas`): quien
+      // conduce un aparato avanza en un bucle de acto→observa y no se acota como una
+      // consulta. Con el 15 para todos, el conductor se re-delegaba siete veces en el mismo
+      // turno — el mismo gasto, partido en siete arranques sin memoria entre ellos.
+      topeDeLlamadas(presupuesto, () => opciones.diagnostico?.corte?.(perfil.nombre, presupuesto)),
       // Y el de TOOLS, que es el que acota lo que se ACUMULA: 43 resultados en el contexto
       // hicieron que la última llamada costara ocho veces la primera.
       topeDeTools(),

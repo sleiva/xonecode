@@ -10,7 +10,7 @@
  */
 
 import { describe, it, expect } from "vitest";
-import { parametrosDe, detalleDe } from "./resumenDeTool.js";
+import { CAMPOS_SEGUROS, parametrosDe, detalleDe } from "./resumenDeTool.js";
 
 describe("detalleDe", () => {
   it("las tools de fichero declaran su campo seguro, y solo ese sale", () => {
@@ -93,5 +93,50 @@ describe("xone_navegacion", () => {
     // `description` de `task`.
     const p = parametrosDe("xone_navegacion", { operacion: "detalle", nombre: "Clientes" });
     expect(JSON.stringify(p)).not.toContain("Clientes");
+  });
+});
+
+/**
+ * El `detalle` que se PINTA, que no es lo mismo que lo que se guarda en la traza.
+ *
+ * Toda esta batería miraba `parametrosDe` —lo que va al `.jsonl` de la traza— y ninguna
+ * miraba `detalleDe`, que es lo que sale en la línea de la pantalla. Por ahí se coló el
+ * fallo: tres filas de la tabla (`execute`, `xone_navegacion`, `Skill`) estaban puestas,
+ * con su porqué escrito encima, y `detalleDe` no las leía porque elegía el campo con una
+ * cadena de `if` aparte. No fallaba: callaba.
+ */
+describe("el detalle de la línea", () => {
+  it("el comando de `execute` sale ENTERO: es lo que sustituye a preguntar antes de cada uno", () => {
+    // Medido en las sesiones reales: «$ corre ×14» sin un solo comando a la vista.
+    expect(detalleDe("execute", { command: "adb shell am start -n com.xone/.Main" }))
+      .toBe("adb shell am start -n com.xone/.Main");
+  });
+
+  it("la operación de `xone_navegacion`, que es el instrumento para saber cuál de las siete se usa", () => {
+    expect(detalleDe("xone_navegacion", { operacion: "estilos", nombre: "Clientes" })).toBe("estilos");
+  });
+
+  it("y la skill que carga un motor externo", () => {
+    expect(detalleDe("Skill", { skill: "xone-hotswap" })).toBe("xone-hotswap");
+  });
+
+  it("de `write_file` sale la RUTA y jamás el contenido", () => {
+    expect(detalleDe("write_file", { file_path: "/a.xne", content: "SECRETO" })).toBe("/a.xne");
+  });
+
+  it("lo que no está en la tabla no tiene detalle", () => {
+    expect(detalleDe("studio_edit_file", { path: "/x" })).toBeUndefined();
+  });
+
+  /**
+   * La prueba que cierra la CLASE de fallo, y no el caso: mientras el campo se elija en un
+   * sitio distinto de la tabla, una fila nueva puede nacer muda igual que nacieron estas
+   * tres. Con esto, añadir una fila sin que su primer campo se pinte da rojo.
+   */
+  it("NINGUNA fila de la tabla puede quedarse muda", () => {
+    for (const [tool, campos] of Object.entries(CAMPOS_SEGUROS)) {
+      const primero = campos[0]!;
+      expect(detalleDe(tool, { [primero]: "valor" }), tool).toBe("valor");
+    }
   });
 });

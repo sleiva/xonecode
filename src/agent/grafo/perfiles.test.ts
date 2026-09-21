@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
-import { permisosDe, toolsDe, hitlDe, seDetieneEn, TOOLS_ESCRITURA, puedeEjecutar, montajeDeFicheros, puedeEscribirRuta } from "./perfiles.js";
+import { permisosDe, toolsDe, hitlDe, seDetieneEn, TOOLS_ESCRITURA, puedeEjecutar, montajeDeFicheros, presupuestoDeLlamadas, puedeEscribirRuta } from "./perfiles.js";
+import { TOPE_DE_LLAMADAS_DEL_CONDUCTOR, TOPE_DE_LLAMADAS_DEL_ESPECIALISTA } from "../turno/resumenDeContexto.js";
 import { sinArtefactosEnElProyecto } from "./proyecto.js";
 import { esRutaDeArtefacto } from "../../core/artefactos.js";
 import { esRutaDePlan } from "../../core/planes.js";
@@ -446,5 +447,44 @@ describe("escribeEn acota sin depender de soloLectura", () => {
     const writer = AGENTES_DE_SERIE.find((a) => a.nombre === "document-writer");
     expect(writer?.soloLectura).toBe(false);
     expect(writer?.escribeEn).toEqual(["/doc/"]);
+  });
+});
+
+/**
+ * El presupuesto de llamadas, que es lo que separa conducir de consultar.
+ *
+ * Nace de un turno real: con el mismo tope para todos, el conductor se delegó SIETE veces
+ * en el mismo turno —cada una agotándolo— para hacer UNA navegación. El tope no evitó el
+ * gasto, lo partió en siete arranques sin memoria entre ellos.
+ */
+describe("el presupuesto de llamadas de un perfil", () => {
+  it("quien ejecuta tiene el largo: un bucle de acto→observa no se acota como una consulta", () => {
+    expect(presupuestoDeLlamadas({ nombre: "device-controller", soloLectura: false, ejecucion: true }))
+      .toBe(TOPE_DE_LLAMADAS_DEL_CONDUCTOR);
+  });
+
+  it("y el resto sigue con el corto, que es donde se midió", () => {
+    expect(presupuestoDeLlamadas({ nombre: "developer-xone", soloLectura: false })).toBe(
+      TOPE_DE_LLAMADAS_DEL_ESPECIALISTA
+    );
+    expect(presupuestoDeLlamadas({ nombre: "consultant-xone", soloLectura: true })).toBe(
+      TOPE_DE_LLAMADAS_DEL_ESPECIALISTA
+    );
+  });
+
+  /**
+   * La condición es la MISMA que la de la shell, y eso no es estética: un `.md` con
+   * `ejecucion: true` y motor externo no recibe shell, así que tampoco hace el trabajo que
+   * justifica el presupuesto largo. Se decide con `puedeEjecutar` y no con un segundo
+   * predicado, que es donde los dos divergirían.
+   */
+  it("un motor EXTERNO con `ejecucion` no lo recibe: ahí la shell está cerrada", () => {
+    expect(
+      presupuestoDeLlamadas({ nombre: "x", soloLectura: false, ejecucion: true, motor: "claude-code" })
+    ).toBe(TOPE_DE_LLAMADAS_DEL_ESPECIALISTA);
+  });
+
+  it("el largo es MAYOR que el corto, o esto no arregla nada", () => {
+    expect(TOPE_DE_LLAMADAS_DEL_CONDUCTOR).toBeGreaterThan(TOPE_DE_LLAMADAS_DEL_ESPECIALISTA);
   });
 });

@@ -4,6 +4,10 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { isSandboxBackend } from "deepagents";
 import type { Agente } from "../../core/agentes.js";
+import {
+  TOPE_DE_LLAMADAS_DEL_CONDUCTOR,
+  TOPE_DE_LLAMADAS_DEL_ESPECIALISTA,
+} from "../turno/resumenDeContexto.js";
 
 /**
  * A QUIÉN se le cablea la SHELL, mirado desde fuera.
@@ -116,5 +120,49 @@ describe("el cableado de la ejecución", () => {
     await construirCon([agente({ nombre: "externo", motor: "claude-code", ejecucion: true })]);
 
     expect(conShell()).toHaveLength(0);
+  });
+});
+
+/**
+ * Y el PRESUPUESTO de llamadas, mirado en el middleware que de verdad se montó.
+ *
+ * `perfiles.test.ts` prueba la función pura, y eso no dice que llegue al agente: es
+ * exactamente el patrón de fallo de este repo —la regla compuesta dentro de
+ * `construirAgente`, que todos los tests doblan—, y el síntoma sería el de partida, con el
+ * conductor cortado a las 15 y todo en verde.
+ *
+ * No hace falta gastar sesenta llamadas para comprobarlo: el middleware decide en
+ * `beforeModel` mirando el contador, así que se le pregunta con el contador puesto en el
+ * tope corto. Quien conduce tiene que seguir; quien escribe, cortar.
+ */
+describe("el presupuesto de llamadas, cableado", () => {
+  const hookDelTope = (nombre: string) => {
+    const subagentes = (capturado.opciones?.["subagents"] ?? []) as {
+      name: string;
+      middleware?: { name?: string; beforeModel?: { hook?: (e: unknown) => unknown } }[];
+    }[];
+    const m = subagentes
+      .find((s) => s.name === nombre)
+      ?.middleware?.find((x) => x?.name === "TopeDeLlamadasMiddleware");
+    return m?.beforeModel?.hook;
+  };
+
+  it("el conductor SIGUE donde el resto se corta", async () => {
+    await construirCon([
+      agente({ nombre: "device-controller", ejecucion: true }),
+      agente({ nombre: "developer-xone", soloLectura: false }),
+    ]);
+    const estado = { llamadasDelEspecialista: TOPE_DE_LLAMADAS_DEL_ESPECIALISTA, messages: [] };
+
+    // `undefined` es «no cortes»; un objeto con `jumpTo` es el corte.
+    expect(hookDelTope("device-controller")!(estado)).toBeUndefined();
+    expect(hookDelTope("developer-xone")!(estado)).toMatchObject({ jumpTo: "end" });
+  });
+
+  it("y el conductor también acaba cortándose: sigue habiendo freno, más arriba", async () => {
+    await construirCon([agente({ nombre: "device-controller", ejecucion: true })]);
+
+    const alTope = { llamadasDelEspecialista: TOPE_DE_LLAMADAS_DEL_CONDUCTOR, messages: [] };
+    expect(hookDelTope("device-controller")!(alTope)).toMatchObject({ jumpTo: "end" });
   });
 });

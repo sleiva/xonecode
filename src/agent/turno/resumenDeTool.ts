@@ -21,7 +21,7 @@ export type ParametrosSeguros = Record<string, string | number | boolean>;
  * Los parámetros de paginación y acotación son justo los que necesitamos para
  * detectar una lectura masiva o una búsqueda mal afinada.
  */
-const CAMPOS_SEGUROS: Record<string, readonly string[]> = {
+export const CAMPOS_SEGUROS: Record<string, readonly string[]> = {
   read_file: ["file_path", "offset", "limit"],
   write_file: ["file_path"],
   edit_file: ["file_path"],
@@ -114,15 +114,20 @@ export function parametrosDe(nombre: string, args: unknown): ParametrosSeguros |
  */
 export function detalleDe(nombre: string, args: unknown): string | undefined {
   const parametros = parametrosDe(nombre, args);
-  const campo = nombre === "read_file" || nombre === "write_file" || nombre === "edit_file"
-    ? "file_path"
-    : nombre === "ls"
-      ? "path"
-      : nombre === "glob" || nombre === "grep" || nombre === "regex_search"
-        ? "pattern"
-        : nombre === "task"
-          ? "subagent_type"
-          : undefined;
+  // El campo es el PRIMERO de la fila de la tabla, no una cadena de `if` paralela.
+  //
+  // Era esa cadena, y se le habían quedado fuera TRES entradas que sí están en la tabla y
+  // con su porqué escrito encima: `execute`, `xone_navegacion` y `Skill`. El resultado no
+  // era un error, era silencio — medido en las sesiones reales del usuario, `$ corre ×14`
+  // sin un solo comando a la vista, justo lo que el comentario de `execute` declara como
+  // la compensación de no preguntar antes de cada uno; y la operación de `xone_navegacion`,
+  // que se añadió a la tabla EXPRESAMENTE para poder medir cuál de las siete se usa,
+  // tampoco se registraba.
+  //
+  // Por eso se deriva de la tabla: dos sitios donde decidir lo mismo es la forma en la que
+  // esto se rompió. La fila se escribe con el campo que se ENSEÑA delante; los demás son
+  // para la traza.
+  const campo = CAMPOS_SEGUROS[nombre]?.[0];
   if (campo === undefined || parametros === undefined) return undefined;
   const valor = parametros[campo];
   // Una cadena vacía no describe nada, y un tipo raro (`file_path: 42`) tampoco:

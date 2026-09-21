@@ -133,6 +133,27 @@ export function resumenConEncargo(backend: FilesystemBackend): ReturnType<typeof
 export const TOPE_DE_LLAMADAS_DEL_ESPECIALISTA = 15;
 
 /**
+ * El de quien CONDUCE UN APARATO, que es otro trabajo y por eso otro número.
+ *
+ * El 15 de arriba se midió sobre especialistas que LEEN y contestan: ahí treinta llamadas
+ * significan que la delegación estaba mal escrita. Conducir no es eso — es un bucle de
+ * acto→observa donde cada paso (conectar, listar controles, pulsar, esperar, capturar,
+ * leer el log) es una llamada al modelo POR CONSTRUCCIÓN, y no hay encargo, por bien
+ * escrito que esté, que lo acorte.
+ *
+ * **Medido en un turno real** (MyAllXOne, «crear una opción nueva en el drawer»): el
+ * conductor se delegó SIETE veces en el mismo turno, cada una agotando su tope, ~94
+ * comandos en total. El tope no evitó el gasto: lo partió en siete arranques, y como los
+ * especialistas no comparten transcript, cada uno volvió a conectar y a orientarse desde
+ * cero. Un tope que se rodea re-delegando no acota nada, solo añade amnesia.
+ *
+ * Sigue habiendo tope, y por lo mismo de siempre: un bucle sin freno se come el turno. Lo
+ * que cambia es dónde está el freno — por encima de UNA navegación completa y no por
+ * debajo.
+ */
+export const TOPE_DE_LLAMADAS_DEL_CONDUCTOR = 60;
+
+/**
  * El tope, con `exitBehavior: "end"` y no `"error"`.
  *
  * Con `"error"` la delegación entera se cae y el orquestador se queda sin nada, que es como

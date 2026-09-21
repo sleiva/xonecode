@@ -9,6 +9,10 @@
  * concederle leer `/.env`.
  */
 import { esRutaDeArtefacto, RUTA_ARTEFACTOS } from "../../core/artefactos.js";
+import {
+  TOPE_DE_LLAMADAS_DEL_CONDUCTOR,
+  TOPE_DE_LLAMADAS_DEL_ESPECIALISTA,
+} from "../turno/resumenDeContexto.js";
 import { esRutaDePlan, RUTA_PLANES } from "../../core/planes.js";
 import { artefactoFueraDeSitio } from "../../core/artefactos.js";
 /** Las tools de fichero que monta deepagents sobre el backend. */
@@ -185,6 +189,23 @@ export interface QuienDecideEjecucion extends QuienDecidePermisos {
  */
 export function puedeEjecutar(perfil: QuienDecideEjecucion): boolean {
   return perfil.ejecucion === true && (perfil.motor ?? "modelo") === "modelo";
+}
+
+/**
+ * Cuántas llamadas al modelo puede gastar ESTE perfil en un encargo.
+ *
+ * Se decide por `ejecucion` y **no por el nombre del agente**: `device-controller` es quien
+ * lo tiene hoy, pero una regla que nombrara a un agente se queda escrita y muerta el día que
+ * lo renombren — ya pasó con `planner`. Lo que justifica el presupuesto largo es el trabajo,
+ * no quién lo hace: el que conduce un aparato avanza en un bucle de acto→observa, y el que
+ * lee y contesta no.
+ *
+ * Pura y exportada por el patrón de fallo de siempre: compuesta dentro de `construirAgente`
+ * —que todos sus tests doblan— «el conductor lleva otro presupuesto» quedaría escrito y sin
+ * probar, y el síntoma sería el de ahora, con todo en verde.
+ */
+export function presupuestoDeLlamadas(perfil: QuienDecideEjecucion): number {
+  return puedeEjecutar(perfil) ? TOPE_DE_LLAMADAS_DEL_CONDUCTOR : TOPE_DE_LLAMADAS_DEL_ESPECIALISTA;
 }
 
 /**
