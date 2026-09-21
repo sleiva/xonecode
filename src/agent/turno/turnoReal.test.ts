@@ -809,6 +809,58 @@ describe("el lazo de reparación", () => {
    * corría. Lo puro está en `core/fallos.ts`; aquí se ata que el turno lo USE y que no se
    * trague la excepción.
    */
+  /**
+   * Los artefactos salen DONDE se escribieron, no en un montón al final.
+   *
+   * Nace de un turno real de `device-controller`: dieciocho tarjetas seguidas DESPUÉS de la
+   * respuesta, enterrando el resumen y separadas del trabajo que las produjo.
+   *
+   * **Lo que se mide es el orden contra los TOKENS del agente**, no contra el `fin`: con el
+   * vaciado del final el artefacto también sale antes del `fin`, así que esa comprobación
+   * pasaba con y sin el arreglo — se probó, y el mutante sobrevivía. Lo que solo es cierto
+   * intercalando es que el artefacto salga ANTES de que el agente acabe de hablar.
+   */
+  it("un artefacto sale ENTRE los eventos del agente, no detrás de todos", async () => {
+    const orden: string[] = [];
+    mocks.construirAgente.mockImplementation(
+      (opciones: { artefactos: { alEscribir: (a: unknown) => void } }) => ({
+        getState: vi.fn(async () => ({ tasks: [] })),
+        stream: vi.fn(async () => {
+          async function* flujo() {
+            yield [[], "messages", [{ text: "uno", id: "m1" }, {}]];
+            // La captura se escribe A MITAD de la pasada, como en un turno real.
+            opciones.artefactos.alEscribir({
+              nombre: "captura.jpg",
+              bytes: 10,
+              ruta: "/artefactos/captura.jpg",
+              mime: "image/jpeg",
+            });
+            yield [[], "messages", [{ text: "dos", id: "m1" }, {}]];
+          }
+          return flujo();
+        }),
+      })
+    );
+    const sesion = await abrirSesionReal({
+      raiz: "/tmp/turno-real-test",
+      modelos: new ModeloGuionizado(),
+      skills: new SkillsEnMemoria(),
+      entorno: entornoFalso,
+    });
+    const piel: Piel = {
+      ...pielFalsa(),
+      token: (t: string) => { orden.push(`token:${t}`); },
+      artefacto: () => { orden.push("artefacto"); },
+    };
+    await sesion.turno("haz una captura", piel);
+
+    const iArtefacto = orden.indexOf("artefacto");
+    const iUltimoToken = orden.map((x) => x.startsWith("token:")).lastIndexOf(true);
+    expect(iArtefacto).toBeGreaterThanOrEqual(0);
+    // Intercalado: sale antes de que el agente acabe de hablar. Vaciado al final: después.
+    expect(iArtefacto).toBeLessThan(iUltimoToken);
+  });
+
   describe("cuando el turno revienta", () => {
     const queRevienta = async () => {
       mocks.construirAgente.mockImplementation(() => ({

@@ -99,7 +99,22 @@ export function invocarConModelos(modelos: ModelosPort): InvocarModelo {
       throw new ErrorDelJuezDeTarea(`el modelo del papel «${papel}» no se puede invocar aquí`);
     }
     try {
-      const respuesta = await (modelo as { invoke: (p: unknown) => Promise<unknown> }).invoke(prompt);
+      /**
+       * **`callbacks: []` CORTA la cadena, y sin eso el veredicto se ve en el chat.**
+       *
+       * LangChain propaga los callbacks del run padre a toda invocación anidada. Este juez
+       * se llama DENTRO de una tool del turno, así que sus tokens salían por el mismo
+       * puente que la respuesta del agente y se pintaban como texto del asistente: en un
+       * turno real aparecieron seis bloques de `{"veredicto":"rojo","hallazgos":[…]}` en
+       * mitad de la conversación. Comprobado en el `.jsonl` de la sesión — llegaban como
+       * actos `asistente`, justo detrás del grupo con `xone_critica_visual`.
+       *
+       * No es cosmético: el juez es maquinaria, y su salida cruda en el hilo es la misma
+       * clase de fuga que un argumento de tool en un evento. Lo que la persona tiene que
+       * leer es lo que el harness decide contar con ese veredicto, no el JSON.
+       */
+      const respuesta = await (modelo as { invoke: (p: unknown, o?: unknown) => Promise<unknown> })
+        .invoke(prompt, { callbacks: [] });
       // El MISMO extractor que el puente del stream, no una copia: dos reglas para sacar el
       // texto de un mensaje son dos reglas que divergen — y una de ellas metería el
       // razonamiento del modelo dentro del JSON que hay que parsear.

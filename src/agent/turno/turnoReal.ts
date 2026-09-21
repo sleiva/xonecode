@@ -842,15 +842,34 @@ export async function abrirSesionReal(opciones: {
       // mismo. No cuesta nada — solo se mira el `tipo`.
       let respuestaDeLaPasada = "";
       for await (const evento of eventos) {
+        /**
+         * **Los artefactos salen DONDE se escribieron, no en un montón al final.**
+         *
+         * Se acumulaban y se vaciaban de golpe al agotarse la pasada, y con un turno de
+         * `device-controller` eso son dieciocho tarjetas seguidas DESPUÉS de la respuesta:
+         * entierran el resumen, que es lo único que la persona quería leer, y las separan
+         * del trabajo que las produjo — una captura suelta no dice nada, una captura justo
+         * detrás del comando que la sacó sí.
+         *
+         * Se drena aquí y no con `entrelazar` porque este bucle ya recorre la pasada: la
+         * cola de `core/entrelazar.ts` existe para intercalar lo que viene de OTRO proceso,
+         * y aquí el productor es el mismo turno. Añadir una cola sería una segunda forma de
+         * hacer lo mismo.
+         *
+         * El vaciado final se queda igual: recoge lo que se escriba DESPUÉS del último
+         * evento, que si no se perdería.
+         */
+        for (const artefacto of artefactosDeLaPasada.splice(0)) yield { tipo: "artefacto", artefacto };
         if (evento.tipo === "token") respuestaDeLaPasada += evento.texto;
         if (evento.tipo === "tool") pasosDelTurno.push(evento.nombre);
         yield evento;
       }
 
-      // Lo primero al agotarse la pasada: lo que el agente dejó escrito sin preguntar. Va
-      // ANTES de la decisión de cierre y antes del veredicto porque es trabajo TERMINADO de
-      // esta pasada — anunciarlo después del `fin` lo pintaría fuera del turno, que es el
-      // mismo motivo por el que el verificador está cosido aquí dentro.
+      // Lo que se haya escrito DESPUÉS del último evento: el bucle de arriba ya fue
+      // sacando los demás según se escribían. Va antes de la decisión de cierre y antes
+      // del veredicto porque es trabajo TERMINADO de esta pasada — anunciarlo después del
+      // `fin` lo pintaría fuera del turno, que es el mismo motivo por el que el
+      // verificador está cosido aquí dentro.
       for (const artefacto of artefactosDeLaPasada.splice(0)) yield { tipo: "artefacto", artefacto };
 
       /**

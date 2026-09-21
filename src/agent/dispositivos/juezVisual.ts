@@ -217,14 +217,28 @@ export function invocarVisualConModelos(modelos: {
     const { HumanMessage } = await import("@langchain/core/messages");
     const { textoDe } = await import("../turno/puente.js");
     try {
-      const respuesta = await (modelo as { invoke: (p: unknown) => Promise<unknown> }).invoke([
+      /**
+       * **`callbacks: []` CORTA la cadena, y sin eso el veredicto se ve en el chat.**
+       *
+       * LangChain propaga los callbacks del run padre a toda invocación anidada. Este juez
+       * se llama DENTRO de una tool del turno, así que sus tokens salían por el mismo
+       * puente que la respuesta del agente y se pintaban como texto del asistente: en un
+       * turno real aparecieron seis bloques de `{"veredicto":"rojo","hallazgos":[…]}` en
+       * mitad de la conversación. Comprobado en el `.jsonl` de la sesión — llegaban como
+       * actos `asistente`, justo detrás del grupo con `xone_critica_visual`.
+       *
+       * No es cosmético: el juez es maquinaria, y su salida cruda en el hilo es la misma
+       * clase de fuga que un argumento de tool en un evento. Lo que la persona tiene que
+       * leer es lo que el harness decide contar con ese veredicto, no el JSON.
+       */
+      const respuesta = await (modelo as { invoke: (p: unknown, o?: unknown) => Promise<unknown> }).invoke([
         new HumanMessage({
           content: [
             { type: "text", text: prompt },
             { type: "image_url", image_url: { url: `data:${imagen.mime};base64,${imagen.base64}` } },
           ],
         }),
-      ]);
+      ], { callbacks: [] });
       // El MISMO extractor que el puente del stream y que el juez de tareas: dos reglas para
       // sacar el texto de un mensaje son dos reglas que divergen.
       return textoDe(respuesta);
