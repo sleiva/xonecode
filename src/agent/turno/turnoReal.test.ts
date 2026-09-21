@@ -801,6 +801,40 @@ describe("el lazo de reparación", () => {
    * que le dé los hechos que mide el código. Eso es el patrón de fallo de siempre, y aquí
    * se ata: se le pasa un juez de pega y se mira lo que recibe y lo que sale.
    */
+  /**
+   * El registro de FALLOS, y su cableado.
+   *
+   * Nace de una sesión entera diagnosticando errores a partir de lo que se podía pegar del
+   * chat: el mensaje truncado, sin la cadena de causas y sin saber siquiera con qué modelo
+   * corría. Lo puro está en `core/fallos.ts`; aquí se ata que el turno lo USE y que no se
+   * trague la excepción.
+   */
+  describe("cuando el turno revienta", () => {
+    const queRevienta = async () => {
+      mocks.construirAgente.mockImplementation(() => ({
+        stream: vi.fn(async () => { throw new Error("400 del proveedor"); }),
+      }));
+      return abrirSesionReal({
+        raiz: "/tmp/turno-real-test",
+        modelos: new ModeloGuionizado(),
+        skills: new SkillsEnMemoria(),
+        entorno: entornoFalso,
+      });
+    };
+
+    it("lo cuenta con la cadena y el modelo, y NO se traga la excepción", async () => {
+      const sesion = await queRevienta();
+      const piel = pielFalsa();
+      await expect(sesion.turno("arregla el arranque", piel)).rejects.toThrow("400 del proveedor");
+      const texto = lineasDe(piel).join("\n");
+      expect(texto).toContain("el turno falló");
+      expect(texto).toContain("400 del proveedor");
+      // El encargo y el modelo en vigor: los dos datos que había que preguntar a mano.
+      expect(texto).toContain("arregla el arranque");
+      expect(texto).toMatch(/modelos:/);
+    });
+  });
+
   describe("el juez del turno", () => {
     it("recibe el ENCARGO y los hechos medidos, no la opinión del agente", async () => {
       const juez = vi.fn(async () => ({ cumplimiento: "cumplido" as const, motivo: "hecho" }));

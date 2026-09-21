@@ -160,6 +160,7 @@ import { indiceEnDisco, type CargarIndice } from "../navegacion/indiceEnDisco.js
 import { hechosDelProyectoDe } from "../navegacion/hechosEnDisco.js";
 import { conHechosDelProyecto } from "../../core/hechosDelProyecto.js";
 import { accionDelJuez, type HechosDelTurno, type VeredictoDelTurno } from "../../core/juezDelTurno.js";
+import { crearRegistroDeFallos } from "./registroDeFallos.js";
 
 /**
  * Una sesión de turno real: varios turnos sobre el MISMO agente y el MISMO hilo.
@@ -700,6 +701,15 @@ export async function abrirSesionReal(opciones: {
    * La foto es POR TURNO, no por sesión: con una sola, el diff del turno 3 incluiría lo que
    * escribió el turno 1.
    */
+  /**
+   * Los NOMBRES de lo que el turno ha ido haciendo, para el registro de fallos.
+   *
+   * Solo nombres, nunca argumentos — la misma regla que `core/events.ts`. Un `400` a secas
+   * no dice nada; «tras delegar en dos subagentes» sí, y eso es lo que hubo que reconstruir
+   * a mano de las trazas pegadas.
+   */
+  const pasosDelTurno: string[] = [];
+
   const turno = async (
     peticion: string,
     piel: Piel
@@ -833,6 +843,7 @@ export async function abrirSesionReal(opciones: {
       let respuestaDeLaPasada = "";
       for await (const evento of eventos) {
         if (evento.tipo === "token") respuestaDeLaPasada += evento.texto;
+        if (evento.tipo === "tool") pasosDelTurno.push(evento.nombre);
         yield evento;
       }
 
@@ -1330,8 +1341,42 @@ export async function abrirSesionReal(opciones: {
     };
   };
 
+  const fallos = crearRegistroDeFallos(raiz);
+
   return {
-    turno,
+    /**
+     * El turno, con el registro de fallos alrededor.
+     *
+     * **Se envuelve aquí y no dentro** porque `turno` tiene muchas salidas y lo que
+     * interesa es la ÚNICA que importa para esto: que la excepción escape. Envolverlo por
+     * dentro sería repartir la anotación por cada `throw`, que es cómo una contabilidad
+     * deriva — el mismo argumento que ya hace que las pendientes se midan una vez al final.
+     *
+     * **Y se RELANZA siempre.** Esto anota y cuenta; no captura. Quien llama decide qué
+     * hacer con el fallo, y tragárselo aquí convertiría un turno roto en uno que parece
+     * que fue bien — exactamente lo contrario de lo que este registro existe para arreglar.
+     *
+     * Lo que se pinta es el texto PEGABLE, no un «ha fallado algo»: lo que hace útil un
+     * error es la cadena de causas y el modelo en vigor, y hasta ahora había que ir a
+     * buscarlos a mano.
+     */
+    turno: async (peticion, piel, ...resto) => {
+      pasosDelTurno.length = 0;
+      try {
+        return await turno(peticion, piel, ...resto);
+      } catch (error) {
+        const anotado = fallos.anotar({
+          error,
+          peticion,
+          modelos: modelos.descripcion(),
+          pasos: pasosDelTurno,
+        });
+        if (anotado !== undefined) {
+          piel.linea(`\n⚠ el turno falló. Queda apuntado en ${anotado.ruta}\n${anotado.legible}\n`);
+        }
+        throw error;
+      }
+    },
     cancelar: () => cancelarEnCurso?.(),
     cerrar: () => {
       cerrada = true;
