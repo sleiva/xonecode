@@ -392,12 +392,47 @@ export function adoptarLegadoSiProcede(ruta: string, entorno: Pick<Entorno, "id"
  * excepción no capturada que se lleva el proceso por delante. Aquí abrir el navegador es
  * siempre lo ACCESORIO: la URL ya está impresa, y el servidor tiene que seguir en pie.
  */
+/**
+ * Con qué comando se abre una URL en cada sistema. PURA, y separada por eso mismo: el caso
+ * que se rompió no se podía probar desde un Mac sin sacarlo de aquí.
+ *
+ * **En Windows NO se usa `cmd /c start`, y ese era el fallo.** MEDIDO: en Windows el login
+ * de OAuth fallaba SIEMPRE con `invalid_request · The mandatory 'client_id' parameter is
+ * missing` (OpenIddict ID2029), y el navegador abría
+ * `…/connect/authorize?response_type=code` — cortado justo en el primer `&`.
+ *
+ * La causa es la combinación de dos reglas, ninguna de las dos nuestra: Node solo
+ * entrecomilla un argumento si lleva espacios, tabuladores o comillas, y la URL de
+ * autorización no lleva ninguno; y `cmd.exe` trata `&` como SEPARADOR DE COMANDOS. Así que
+ * la línea llegaba partida y `start` solo recibía hasta el primer `&` — se perdían
+ * `client_id`, `redirect_uri`, `code_challenge`, `scope` y `resource`, y el resto se
+ * intentaba ejecutar como comandos sueltos. En silencio, porque el `spawn` va con
+ * `stdio: "ignore"` y el `on("error")` se lo traga. El SDK pone `response_type` primero y
+ * `client_id` justo después (`client/auth.js`), que es por qué lo que sobrevivía era
+ * exactamente ese primer parámetro.
+ *
+ * `rundll32 url.dll,FileProtocolHandler` recibe la URL como **un solo argumento** y no pasa
+ * por ningún intérprete de comandos, así que la clase entera de fallo desaparece: ni `&`,
+ * ni `%VAR%`, ni comillas. La alternativa era seguir con `cmd` entrecomillando a mano y
+ * `windowsVerbatimArguments`, que arregla el `&` pero deja la URL a merced del resto de la
+ * sintaxis de `cmd` — se prefirió quitar el intérprete a aprender a escaparlo.
+ *
+ * macOS y Linux nunca lo tuvieron: `open` y `xdg-open` reciben la URL como argumento único
+ * y no hay shell de por medio.
+ */
+export function comandoParaAbrir(
+  plataforma: NodeJS.Platform,
+  url: URL,
+): { comando: string; args: string[] } {
+  if (plataforma === "darwin") return { comando: "open", args: [url.toString()] };
+  if (plataforma === "win32") {
+    return { comando: "rundll32", args: ["url.dll,FileProtocolHandler", url.toString()] };
+  }
+  return { comando: "xdg-open", args: [url.toString()] };
+}
+
 export function abrirEnSistema(url: URL): void {
-  const [comando, args] = process.platform === "darwin"
-    ? ["open", [url.toString()]]
-    : process.platform === "win32"
-      ? ["cmd", ["/c", "start", "", url.toString()]]
-      : ["xdg-open", [url.toString()]];
+  const { comando, args } = comandoParaAbrir(process.platform, url);
   const proceso = spawn(comando, args, { detached: true, stdio: "ignore" });
   proceso.on("error", () => {});
   proceso.unref();
@@ -483,6 +518,14 @@ function urlDeCallback(): string {
 }
 
 /**
+ * El callback PENDIENTE, si lo hay: uno por proceso, porque el puerto es uno.
+ *
+ * Existe para que un login nuevo pueda QUEDARSE con el puerto en vez de morir. Ver
+ * `escucharCallback`.
+ */
+let callbackPendiente: { cerrar: () => void } | undefined;
+
+/**
  * Arranca el servidor HTTP local que recibe el `code` de la redirección, con su
  * temporizador de espera. Se llama solo cuando `auth()` YA dijo `REDIRECT` —antes se
  * llamaba SIEMPRE, incluso con un token guardado y válido que no iba a redirigir nunca—:
@@ -490,8 +533,33 @@ function urlDeCallback(): string {
  * cada llamada a `abrirCliente`, y dos llamadas seguidas o solapadas (dos conexiones del
  * vestíbulo listando proyectos del mismo entorno, por ejemplo) chocaban por el mismo
  * puerto sin que hiciera falta ningún login de verdad.
+ *
+ * **Un login nuevo SE QUEDA con el puerto, y ése es el arreglo.** El puerto es FIJO —el IDS
+ * registra el `redirect_uri`, así que no se puede esquivar eligiendo otro— y el plazo de
+ * espera es de cinco minutos. O sea que un login que no se completa (se cierra la pestaña,
+ * se cancela, falla) dejaba el 7634 cogido POR NOSOTROS todo ese rato, y cada reintento
+ * moría con `EADDRINUSE 127.0.0.1:7634` mientras el código caducaba al otro lado. MEDIDO en
+ * la consola web: el mismo proceso tenía a la vez su puerto y el 7634, y lo soltaba justo al
+ * cumplirse el plazo — de ahí que «se curara solo al rato», que es lo que lo disfrazaba de
+ * carrera entre procesos.
+ *
+ * Quien llega después gana porque es quien tiene a alguien delante: el pendiente es, por
+ * definición, el que nadie está mirando. Su promesa se RECHAZA con el motivo en vez de
+ * dejarse colgada, o el flujo viejo se quedaría esperando un código que ya no va a llegar.
+ *
+ * Lo que esto NO puede arreglar es que el puerto lo tenga OTRO proceso, y entonces se dice
+ * con esas palabras: un `EADDRINUSE` crudo manda a buscar un choque de puertos cuando lo
+ * que hay es otra consola autenticando.
  */
-function escucharCallback(timeoutMs: number, redirigirA?: string): Promise<{ codigo: Promise<string>; cerrar: () => void }> {
+export function escucharCallback(
+  timeoutMs: number,
+  redirigirA?: string,
+  /** Solo para las pruebas: el real es fijo y lo impone el `redirect_uri` del IDS. */
+  puerto: number = PUERTO_CALLBACK,
+): Promise<{ codigo: Promise<string>; cerrar: () => void }> {
+  // El pendiente, si lo hay, se cierra ANTES de intentar escuchar: es la única forma de que
+  // el puerto esté libre cuando lleguemos al `listen`.
+  callbackPendiente?.cerrar();
   return new Promise((resolver, rechazar) => {
     let resolverCodigo!: (codigo: string) => void;
     let rechazarCodigo!: (error: Error) => void;
@@ -516,13 +584,29 @@ function escucharCallback(timeoutMs: number, redirigirA?: string): Promise<{ cod
     }, timeoutMs);
     const limpiar = () => {
       clearTimeout(temporizador);
+      if (callbackPendiente === registro) callbackPendiente = undefined;
       servidor.close();
     };
+    const registro = { cerrar: () => {
+      limpiar();
+      // Rechazar y no dejar colgado: el flujo viejo espera un código que ya no va a llegar,
+      // y sin esto se quedaría ahí hasta agotar su plazo aunque su puerto ya no sea suyo.
+      rechazarCodigo(new Error("se abandonó este login de CloudStudio porque empezó otro"));
+    } };
     servidor.once("error", (error) => {
       limpiar();
-      rechazar(new Error(`no se pudo abrir el callback local de OAuth: ${error.message}`));
+      const codigoDeError = (error as NodeJS.ErrnoException).code;
+      rechazar(new Error(
+        codigoDeError === "EADDRINUSE"
+          // El puerto es fijo y compartido por todo lo que hable con este IDS, así que el
+          // choque tiene una causa concreta y un remedio concreto. Decir «EADDRINUSE» manda
+          // a buscar un conflicto de configuración que no existe.
+          ? `el puerto ${puerto} del callback de OAuth lo tiene otro proceso: cierra la otra consola de xonecode (o lo que esté autenticando contra CloudStudio) y vuelve a intentarlo`
+          : `no se pudo abrir el callback local de OAuth: ${error.message}`,
+      ));
     });
-    servidor.listen(PUERTO_CALLBACK, "127.0.0.1", () => {
+    servidor.listen(puerto, "127.0.0.1", () => {
+      callbackPendiente = registro;
       resolver({ codigo, cerrar: limpiar });
     });
   });

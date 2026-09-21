@@ -15,6 +15,8 @@ import {
   respuestaDeCallback,
   servidorDeImplementacion,
   URL_CLOUDSTUDIO_POR_OMISION,
+  escucharCallback,
+  comandoParaAbrir,
 } from "./cloudstudioMcp.js";
 
 describe("proyectosDeResultado", () => {
@@ -522,5 +524,103 @@ describe("ProviderCloudStudio · invalidar credenciales", () => {
     provider(ruta).invalidateCredentials("client");
     expect(leerEstado(ruta).porEntorno.webstudio?.clientInformation).toBeUndefined();
     expect(leerEstado(ruta).porEntorno.webstudio?.tokens?.access_token).toBe("a");
+  });
+});
+
+/**
+ * El puerto del callback de OAuth, que es FIJO porque el IDS registra el `redirect_uri`.
+ *
+ * Lo que se defiende aquí salió de un fallo real y repetido en la consola web: un login
+ * que no se completa deja el puerto cogido POR NOSOTROS durante los cinco minutos del
+ * plazo, y cada reintento moría con `EADDRINUSE` mientras el código caducaba al otro lado.
+ *
+ * Se usa un puerto de pruebas y no el real: dos suites en paralelo pelearían por el 7634, y
+ * el arreglo no depende de cuál sea el número.
+ */
+describe("el callback de OAuth y su puerto único", () => {
+  const PUERTO_DE_PRUEBA = 7699;
+
+  it("un login nuevo SE QUEDA con el puerto en vez de morir", async () => {
+    const primero = await escucharCallback(60_000, undefined, PUERTO_DE_PRUEBA);
+    // El viejo no se queda colgado: se le dice que lo abandonaron.
+    const motivo = primero.codigo.then(() => "resolvió", (e: Error) => e.message);
+
+    const segundo = await escucharCallback(60_000, undefined, PUERTO_DE_PRUEBA);
+    expect(await motivo).toMatch(/empezó otro/i);
+    segundo.cerrar();
+  });
+
+  it("y el puerto queda libre al cerrar, para el siguiente", async () => {
+    const uno = await escucharCallback(60_000, undefined, PUERTO_DE_PRUEBA);
+    uno.cerrar();
+    // Si `cerrar()` no soltara el puerto, esto lanzaría en vez de resolver.
+    const dos = await escucharCallback(60_000, undefined, PUERTO_DE_PRUEBA);
+    dos.cerrar();
+  });
+
+  it("si lo tiene OTRO proceso, el motivo lo DICE en vez de soltar un EADDRINUSE", async () => {
+    // Un servidor ajeno: no pasa por `callbackPendiente`, así que no se puede desalojar.
+    const { createServer } = await import("node:http");
+    const ajeno = createServer();
+    await new Promise<void>((listo) => ajeno.listen(PUERTO_DE_PRUEBA, "127.0.0.1", listo));
+    try {
+      await expect(escucharCallback(60_000, undefined, PUERTO_DE_PRUEBA)).rejects.toThrow(
+        /lo tiene otro proceso/i,
+      );
+    } finally {
+      await new Promise((listo) => ajeno.close(listo));
+    }
+  });
+});
+
+/**
+ * Cómo se abre el navegador, y el caso de Windows en particular.
+ *
+ * Existe por un fallo que dejaba el login de OAuth ROTO EN WINDOWS y en silencio: el
+ * navegador abría la URL cortada en el primer `&` y el IDS contestaba
+ * «The mandatory 'client_id' parameter is missing». Se prueba la función PURA porque el
+ * caso no se puede reproducir desde un Mac de otra forma — que es exactamente por lo que
+ * estuvo tanto tiempo sin cubrir.
+ */
+describe("con qué comando se abre el navegador", () => {
+  // Una URL con la forma real: varios `&`, que es lo que rompía cmd.exe.
+  const AUTORIZACION = new URL(
+    "https://ids.example.com/connect/authorize?response_type=code&client_id=dcr-1&redirect_uri=http%3A%2F%2F127.0.0.1%3A7634%2Foauth%2Fcallback&code_challenge=abc&scope=openid+mcp.read",
+  );
+
+  /** La invariante que de verdad importa: lo que se manda es la URL ENTERA, sin tocar. */
+  it("la URL llega COMPLETA en un solo argumento, en los tres sistemas", () => {
+    for (const plataforma of ["darwin", "win32", "linux"] as const) {
+      const { args } = comandoParaAbrir(plataforma, AUTORIZACION);
+      expect(args, plataforma).toContain(AUTORIZACION.toString());
+      // Y ningún argumento la lleva PARTIDA: el fallo de Windows era justo eso.
+      const entera = args.find((a) => a.includes("authorize"));
+      expect(entera, plataforma).toBe(AUTORIZACION.toString());
+      expect(entera, plataforma).toContain("client_id=dcr-1");
+    }
+  });
+
+  /**
+   * El mutante que este test tiene que matar: volver a `cmd /c start`. No basta con mirar
+   * que la URL esté entera en `args` —ahí lo estaría igual—: lo que rompe es que la parsee
+   * un intérprete de comandos, así que lo que se prohíbe es el intérprete.
+   */
+  it("en Windows NO se pasa por cmd: `&` es un separador de comandos allí", () => {
+    const { comando, args } = comandoParaAbrir("win32", AUTORIZACION);
+    expect(comando).not.toMatch(/^cmd(\.exe)?$/i);
+    expect(args).not.toContain("/c");
+    expect(comando).toBe("rundll32");
+    expect(args[0]).toBe("url.dll,FileProtocolHandler");
+  });
+
+  it("macOS y Linux siguen como estaban: la URL como único argumento", () => {
+    expect(comandoParaAbrir("darwin", AUTORIZACION)).toEqual({
+      comando: "open",
+      args: [AUTORIZACION.toString()],
+    });
+    expect(comandoParaAbrir("linux", AUTORIZACION)).toEqual({
+      comando: "xdg-open",
+      args: [AUTORIZACION.toString()],
+    });
   });
 });
