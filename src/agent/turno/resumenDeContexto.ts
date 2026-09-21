@@ -123,14 +123,42 @@ export function resumenConEncargo(backend: FilesystemBackend): ReturnType<typeof
  *
  * Medido el 17-09-2026 con el banco: una pregunta de estructura se resuelve en 3-7 llamadas en
  * TODO el turno, y la de capacidad —la clase cara— la terminó bien un modelo en 10. El que se
- * descarriló llevaba 32 y subiendo cuando el reloj lo mató, y 57 en el turno que lo destapó. El
- * tope deja intacto lo que funciona y corta lo otro.
+ * descarriló llevaba 32 y subiendo cuando el reloj lo mató, y 57 en el turno que lo destapó.
  *
  * **No es un ahorro, es una frontera.** Un especialista hace una tarea específica con un
- * encargo bien descrito; si necesita treinta llamadas, lo que falla es la delegación, y seguir
+ * encargo bien descrito; si necesita cuarenta llamadas, lo que falla es la delegación, y seguir
  * dándole cuerda solo hace más cara la misma respuesta mala.
+ *
+ * ## Por qué ya no es 15: aquella medida era de PREGUNTAS, y no todos contestan preguntas
+ *
+ * Las cifras de arriba salieron del banco, que pregunta. Y a un especialista que además
+ * ESCRIBE no le valen: medido el 21-09-2026 sobre MyAllXOne con un encargo de desarrollo de
+ * varios pasos, `analyst-xone` se delegó dos veces, **agotó las 15 las dos veces y no escribió
+ * ni un fichero**. No se descarriló ni entendió mal el encargo —en sus llamadas 2 y 3 abrió
+ * `xone-spec-builder` y `xone-plan-builder`, o sea que sabía que tenía que dejar un plan—:
+ * se le fue el presupuesto ORIENTÁNDOSE, y la fase de escribir, que es el entregable, no
+ * llegó a empezar. `developer-xone` se quedó cortado en el mismo turno.
+ *
+ * Un tope calibrado sobre «leer y contestar» aplicado a «leer y ENTREGAR» corta el trabajo
+ * justo antes de que produzca algo, y encima en silencio: el síntoma es un plan que no
+ * existe, no un error. El número cubre una pasada entera de reconocimiento (~15, medido) más
+ * las lecturas de sus skills y los tres ficheros que deja, y se queda POR DEBAJO del
+ * conductor: es un freno por encima de una entrega y no por debajo.
+ *
+ * ## Y SUBIRLO NO BASTA — se probó el mismo día y hay que decirlo aquí
+ *
+ * Con 15 el analista gastaba 15 y no escribía; con 30 gastó **30 y tampoco escribió**, dos
+ * pasadas otra vez, y el turno costó un 30 % más (~950k → ~1,24M efectivos) para el mismo
+ * resultado: cero `write_file`, cero `/planes/`. **Expande el reconocimiento hasta llenar lo
+ * que le des** — con 30 llamadas se fue a `LoginColl`, `ContentTareas`, `ClientesCoord` y
+ * `basico.css` para un conversor de divisas.
+ *
+ * O sea que el presupuesto **no era la restricción que ataba**, y este número no es el
+ * arreglo de nada: lo que ata es que escribir está planteado como el ÚLTIMO paso, y eso se
+ * arregla donde vive esa instrucción (`agentesEnDisco.ts#PLAN_DE_DESARROLLO`), no aquí. Esto
+ * se queda porque una entrega no cabía en 15 y sigue sin caber; no porque cure el síntoma.
  */
-export const TOPE_DE_LLAMADAS_DEL_ESPECIALISTA = 15;
+export const TOPE_DE_LLAMADAS_DEL_ESPECIALISTA = 30;
 
 /**
  * El de quien CONDUCE UN APARATO, que es otro trabajo y por eso otro número.
@@ -253,11 +281,21 @@ function ultimoTextoSustancial(mensajes: unknown): string | undefined {
  * reenvía todo lo anterior, la primera costó 5.264 tokens y la última 39.888 — 406k en total. No
  * era un bucle: era la acumulación al cuadrado.
  *
- * Veinte es generoso contra su propia regla, que ya le pide «máximo tres referencias por
- * pregunta y un `grep` por hipótesis»: si con veinte no le llega, lo que falla es la delegación
- * o la regla, no el tope.
+ * ## Por qué ya no es 20, y qué NO cambia
+ *
+ * Aquel veinte era generoso contra la regla del CONSULTOR, que ya le pide «máximo tres
+ * referencias por pregunta y un `grep` por hipótesis». Pero el consultor contesta, y hay
+ * especialistas que ENTREGAN: medido el 21-09-2026, `analyst-xone` gastó su pasada entera
+ * inventariando (`glob *.xne`, `mappings.xne` paginado, `regex_search create table`, greps de
+ * `SqlManager`) y se quedó sin tools antes de escribir el plan — ver
+ * `TOPE_DE_LLAMADAS_DEL_ESPECIALISTA`, donde está la medida entera.
+ *
+ * Lo que NO cambia es el motivo por el que este tope existe, que es la acumulación y no el
+ * bucle: cada llamada reenvía todo lo anterior, así que esto sigue siendo cuadrático y sigue
+ * habiendo techo. El número nuevo cubre un reconocimiento completo más la escritura del
+ * entregable y se queda por debajo del orquestador; el 43 de aquel incidente sigue fuera.
  */
-export const TOPE_DE_TOOLS_DEL_ESPECIALISTA = 20;
+export const TOPE_DE_TOOLS_DEL_ESPECIALISTA = 35;
 
 /**
  * **`continue`, y NO `end`: son incompatibles con pedir varias tools a la vez.**

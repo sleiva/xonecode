@@ -177,6 +177,35 @@ describe("el tope de llamadas del especialista", () => {
     expect(TOPE_DE_LLAMADAS_DEL_ESPECIALISTA).toBeGreaterThan(10);
     expect(TOPE_DE_LLAMADAS_DEL_ESPECIALISTA).toBeLessThan(32);
   });
+
+  /**
+   * **El que ENTREGA tiene que llegar a entregar, y por eso este test existe.**
+   *
+   * Medido el 21-09-2026 sobre MyAllXOne: con el tope en 15, `analyst-xone` se delegó dos
+   * veces, agotó las quince las dos y **no escribió ni un fichero** — no por no entender el
+   * encargo (abrió `xone-spec-builder` y `xone-plan-builder` en sus llamadas 2 y 3), sino
+   * porque una pasada de reconocimiento sobre un proyecto real cuesta ya esas quince.
+   *
+   * Un tope calibrado con PREGUNTAS aplicado a quien deja un entregable corta el trabajo
+   * justo antes de producirlo, y en SILENCIO: el síntoma es un plan que no existe, no un
+   * error que leer. Por eso la frontera se ata por abajo además de por arriba — tiene que
+   * caber el reconocimiento medido MÁS los ficheros que el entregable son.
+   *
+   * **Lo que este test NO afirma, porque se midió y es falso**: que con el tope más alto
+   * aparezca el plan. Se probó con 30/35 la misma tarde y el analista gastó las treinta en
+   * reconocimiento y siguió sin escribir nada. Esto ata un mínimo necesario, no suficiente;
+   * lo que falta está en `PLAN_DE_DESARROLLO`, donde escribir es el último paso.
+   */
+  it("cabe un reconocimiento entero MÁS escribir el entregable", () => {
+    // Lo que se contó en esa pasada, y por eso son tres sumandos y no un número redondo:
+    const RECONOCIMIENTO_MEDIDO = 15; // lo que gastó orientándose, y no había terminado
+    const SKILLS_QUE_ABRE = 2; // xone-spec-builder y xone-plan-builder, sus llamadas 2 y 3
+    const FICHEROS_DEL_PLAN = 3; // PLAN.md, CONTEXT.md, TASKS.md
+    const UNA_ENTREGA = RECONOCIMIENTO_MEDIDO + SKILLS_QUE_ABRE + FICHEROS_DEL_PLAN;
+    // Estrictamente MAYOR: con el tope justo en la cuenta, la última escritura es la que cae.
+    expect(TOPE_DE_LLAMADAS_DEL_ESPECIALISTA).toBeGreaterThan(UNA_ENTREGA);
+    expect(TOPE_DE_TOOLS_DEL_ESPECIALISTA).toBeGreaterThan(UNA_ENTREGA);
+  });
 });
 
 describe("el tope de TOOLS", () => {
