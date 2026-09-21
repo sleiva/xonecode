@@ -666,6 +666,35 @@ const MEMORIA_ESCRIBIR = [
   "o pendientes útiles. Nunca copies transcripciones, salidas de tools, secretos ni ficheros completos.",
 ].join(" ");
 
+/**
+ * Lo que hace distinto al que documenta: su entregable es el TEXTO, no el arreglo.
+ *
+ * Nace de un turno real. Se pidió «documenta el proyecto con capturas» y a mitad de faena
+ * el agente encontró una pantalla que se veía mal y se puso a corregirla — nadie había
+ * pedido tocar nada. No fue capricho: no había especialista que documentara, y la única
+ * ficha del catálogo que reconocía «esto se ve mal» era la de un arreglador.
+ *
+ * Por eso esto se dice aquí Y se impone en `permisosDe`: es `soloLectura` con `escribeEn`
+ * acotado a `/doc/`, así que aunque el prompt fallara no podría tocar el código. El texto
+ * está para que no lo INTENTE y pierda el turno en escrituras denegadas, no para sostener
+ * la regla — eso es cosa del código, como siempre en esta casa.
+ */
+const DOCUMENTAR = [
+  "Tu entregable es el DOCUMENTO, nunca un cambio en el proyecto.",
+  "- Lo que encuentres mal —una pantalla cortada, un texto que no se lee, un flujo que no",
+  "  cierra— se DESCRIBE en el documento, con dónde está y qué se ve. No lo arregles: no",
+  "  puedes, y aunque pudieras no es lo que te han pedido. Quien decide si eso se toca es",
+  "  la persona, y lo decide leyéndote.",
+  "- Escribes en `/doc/` y en ningún otro sitio del proyecto. Un intento fuera de ahí te lo",
+  "  van a denegar, así que no gastes el turno probando.",
+  "- Las CAPTURAS no las tomas tú: las deja `device-controller` en `/artefactos/`. Mira qué",
+  "  hay con `ls /artefactos/`, y las que de verdad entren en el documento las traes con",
+  "  `copiar_artefacto` a `/doc/img/`. Solo las que uses: una carpeta llena de capturas que",
+  "  nadie referencia es basura que sube a CloudStudio con el proyecto.",
+  "- Referéncialas con ruta RELATIVA desde el documento (`img/login.png`), que es lo que",
+  "  funciona al leerlo en el repo y en Studio.",
+].join("\n");
+
 const RECONOCIMIENTO_PLANNER = [
   "RECONOCIMIENTO RÁPIDO DEL PROYECTO:",
   "- Para preguntas generales como «qué hace esta app», busca evidencia suficiente, no un inventario completo.",
@@ -893,17 +922,46 @@ export const AGENTES_DE_SERIE: readonly Agente[] = [
     nombre: "designer-xone",
     descripcion:
       "Para cambiar cómo se VE algo: el layout de una pantalla, el CSS, los recursos, y los " +
-      "diagramas de la app. Suyo es TODO síntoma visual, y da igual que suene a avería: algo " +
+      "diagramas de la app. Cuando el encargo sea CAMBIAR algo, suyo es todo síntoma visual " +
+      "y da igual que suene a avería: algo " +
       "CORTADO, que SE SALE, que NO SE LEE, que NO CABE, apretado, pegado al borde, " +
       "desalineado, del color o del tamaño equivocado — también cuando se arregle en un " +
       "`.xne` y no en el CSS. De developer-xone es qué HACE un botón al pulsarlo, aunque se " +
       "toque el CSS. Dale la pantalla, qué se ve mal y qué tendría que verse — y si el " +
       "arreglo depende del código real, el análisis ya hecho. Devuelve los ficheros que " +
-      "cambió, con aprobación como cualquier otra escritura.",
+      "cambió, con aprobación como cualquier otra escritura. **Si el encargo es DOCUMENTAR " +
+      "y no cambiar, una pantalla que se ve mal no es suya: es document-writer quien la " +
+      "describe.**",
     motor: "modelo",
     soloLectura: false,
     skills: ["xone-development", "archify", "artifacts-builder"],
     instrucciones: `${TRABAJAR_CON_PLAN}\n\n${HANDOFF_MOCKUP}\n\n${MEMORIA_LEER_CON_HANDOFF}\n\n${MEMORIA_ESCRIBIR}`,
+    origen: "semilla",
+  },
+  {
+    nombre: "document-writer",
+    descripcion:
+      "Para DOCUMENTAR el proyecto sin tocarlo: manual de usuario, manual técnico, " +
+      "arquitectura, seguridad, notas de una versión. Escribe en `/doc/` y NO puede cambiar " +
+      "el proyecto, así que lo que encuentre mal lo DESCRIBE en vez de arreglarlo — que es " +
+      "justo lo que quieres cuando el encargo es documentar. Si el documento lleva capturas, " +
+      "pídeselas ANTES a device-controller: él las deja en `/artefactos/` y este las trae a " +
+      "`/doc/img/`. Dale para quién es el documento y qué tiene que cubrir; el lector cambia " +
+      "el texto entero, y no es lo mismo un manual de usuario que uno técnico. Devuelve la " +
+      "ruta de lo que escribió en `/doc/` y, aparte, la lista de lo que encontró mal — para " +
+      "que decidas tú si algo de eso se arregla.",
+    // **Se sale de la convención `<rol>-xone` a propósito, como `device-controller`.** Ese
+    // sufijo está para distinguir a los nuestros cuando el nombre viaja como `subagent_type`
+    // a un motor externo, donde el hijo tiene sus propios agentes. Éste es de motor
+    // `modelo`: escribir documentación no es propio de XOne y su nombre no viaja.
+    motor: "modelo",
+    // De solo lectura sobre el CÓDIGO, con una carpeta abierta para su entregable. Las dos
+    // mitades importan: sin la primera vuelve el problema que esto viene a arreglar, y sin
+    // la segunda no puede entregar nada y habría que quitarle la primera.
+    soloLectura: true,
+    escribeEn: ["/doc/"],
+    skills: ["artifacts-builder", "archify"],
+    instrucciones: `${DOCUMENTAR}\n\n${MEMORIA_LEER}`,
     origen: "semilla",
   },
 ];

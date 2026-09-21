@@ -37,10 +37,10 @@ describe("sembrarAgentes", () => {
     // especialistas desaparecerían al siguiente arranque y el orquestador se quedaría sin
     // nadie a quien delegar — sin que nada diera error.
     const raiz = base();
-    expect(sembrarAgentes(raiz).escritos.sort()).toEqual(["analyst-xone", "consultant-xone", "designer-xone", "developer-xone", "device-controller"]);
+    expect(sembrarAgentes(raiz).escritos.sort()).toEqual(["analyst-xone", "consultant-xone", "designer-xone", "developer-xone", "device-controller", "document-writer"]);
     const { agentes, problemas } = leerCarpetaDeAgentes(rutaDeAgentes(raiz), "global");
     expect(problemas).toEqual([]);
-    expect(agentes.map((a) => a.nombre).sort()).toEqual(["analyst-xone", "consultant-xone", "designer-xone", "developer-xone", "device-controller"]);
+    expect(agentes.map((a) => a.nombre).sort()).toEqual(["analyst-xone", "consultant-xone", "designer-xone", "developer-xone", "device-controller", "document-writer"]);
   });
 
   it("NO pisa uno que ya existe: el usuario ha podido afinar su prompt", () => {
@@ -56,7 +56,7 @@ describe("sembrarAgentes", () => {
 
   it("sembrar dos veces con la misma versión de serie no escribe nada la segunda", () => {
     const raiz = base();
-    expect(sembrarAgentes(raiz).escritos).toHaveLength(5);
+    expect(sembrarAgentes(raiz).escritos).toHaveLength(6);
     const segunda = sembrarAgentes(raiz);
     expect(segunda.escritos).toEqual([]);
     expect(segunda.desactualizados).toEqual([]);
@@ -254,6 +254,7 @@ describe("sembrarAgentes", () => {
       "designer-xone",
       "developer-xone",
       "device-controller",
+      "document-writer",
     ]);
     for (const [viejo] of viejos) expect(existsSync(join(carpeta, `${viejo}.md`))).toBe(false);
     expect(siembra.retirados.filter((r) => r.borrado).map((r) => r.nombre).sort()).toEqual([
@@ -457,6 +458,7 @@ describe("cargarAgentes", () => {
           "designer-xone",
           "developer-xone",
           "device-controller",
+          "document-writer",
         ]);
       }
     } finally {
@@ -796,7 +798,7 @@ describe("guardarAgente", () => {
     // se adoptaría, anotando los cinco como entregados sin escribir ninguno. Por eso se
     // comprueban las dos cosas: que no queda carpeta, y que sembrar escribe los cinco.
     expect(existsSync(rutaDeAgentes(raiz))).toBe(false);
-    expect(sembrarAgentes(raiz).escritos).toHaveLength(5);
+    expect(sembrarAgentes(raiz).escritos).toHaveLength(6);
   });
 
   it("una carpeta VACÍA sin marca se siembra, no se adopta", () => {
@@ -805,7 +807,7 @@ describe("guardarAgente", () => {
     // para siempre.
     const raiz = base();
     mkdirSync(rutaDeAgentes(raiz), { recursive: true });
-    expect(sembrarAgentes(raiz).escritos).toHaveLength(5);
+    expect(sembrarAgentes(raiz).escritos).toHaveLength(6);
     expect(existsSync(join(rutaDeAgentes(raiz), "developer-xone.md"))).toBe(true);
   });
 

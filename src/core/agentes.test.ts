@@ -406,7 +406,7 @@ describe("ejecucion: la capacidad de correr comandos", () => {
  */
 describe("escribeEn en el frontmatter", () => {
   const conFrontmatter = (linea: string) =>
-    leerAgente("writer-xone", `---\ndescripcion: documenta\nmotor: modelo\nsoloLectura: true\n${linea}\nskills: []\n---\ncuerpo`, "global");
+    leerAgente("document-writer", `---\ndescripcion: documenta\nmotor: modelo\nsoloLectura: true\n${linea}\nskills: []\n---\ncuerpo`, "global");
 
   it("se lee como lista y se normaliza a ruta absoluta", () => {
     const leido = conFrontmatter("escribeEn: [doc, /doc2/]");
@@ -426,7 +426,7 @@ describe("escribeEn en el frontmatter", () => {
   it("se conserva al volver a escribir el fichero", () => {
     const leido = conFrontmatter("escribeEn: [/doc/]");
     if ("error" in leido) throw new Error(leido.error);
-    const vuelta = leerAgente("writer-xone", escribirAgente(leido.agente), "global");
+    const vuelta = leerAgente("document-writer", escribirAgente(leido.agente), "global");
     if ("error" in vuelta) throw new Error(vuelta.error);
     expect(vuelta.agente.escribeEn).toEqual(["/doc/"]);
   });

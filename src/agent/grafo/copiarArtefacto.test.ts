@@ -22,7 +22,7 @@ function escenario(perfil: Partial<QuienDecidePermisos> = {}) {
   const tool = crearCopiarArtefacto({
     raiz,
     carpetaDeArtefactos,
-    perfil: { nombre: "writer-xone", soloLectura: true, escribeEn: ["/doc/"], ...perfil },
+    perfil: { nombre: "document-writer", soloLectura: true, escribeEn: ["/doc/"], ...perfil },
   });
   const copiar = (artefacto: string, destino: string): Promise<string> =>
     (tool as unknown as { invoke: (x: unknown) => Promise<string> }).invoke({ artefacto, destino });
