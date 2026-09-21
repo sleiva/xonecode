@@ -214,3 +214,72 @@ describe("MAX_APPROVAL_ROUNDS", () => {
     expect(MAX_APPROVAL_ROUNDS).toBe(5);
   });
 });
+
+/**
+ * Varias escrituras en la MISMA tanda, que es lo que hace un modelo que paraleliza.
+ *
+ * Nace de un fallo real con DeepSeek: `designer-xone` pidió tres escrituras a la vez y el
+ * turno moría con «Number of human decisions (1) does not match number of hanging tool
+ * calls (3)». La causa era leer `actionRequests[0]` y olvidar el resto — con una segunda
+ * consecuencia peor que el crash: al usuario se le preguntaba por UNA de las tres.
+ */
+describe("una interrupción con VARIAS acciones", () => {
+  const estadoCon = (acciones: Array<{ name: string; args: Record<string, unknown> }>) => ({
+    tasks: [{
+      interrupts: [{
+        id: "int-1",
+        value: {
+          actionRequests: acciones.map((a) => ({ ...a, description: `Ejecutar ${a.name}` })),
+          reviewConfigs: acciones.map(() => ({ allowedDecisions: ["approve", "reject"] })),
+        },
+      }],
+    }],
+  });
+
+  it("se pregunta por TODAS, no solo por la primera", () => {
+    const pendientes = collectPending(estadoCon([
+      { name: "write_file", args: { file_path: "/a.xne" } },
+      { name: "write_file", args: { file_path: "/b.xne" } },
+      { name: "edit_file", args: { file_path: "/c.xne" } },
+    ]));
+    expect(pendientes).toHaveLength(3);
+    expect(pendientes.map((p) => p.args["file_path"])).toEqual(["/a.xne", "/b.xne", "/c.xne"]);
+    // Ids DISTINTOS: son la clave con la que se emparejan las decisiones.
+    expect(new Set(pendientes.map((p) => p.id)).size).toBe(3);
+  });
+
+  it("y al reanudar vuelven las TRES decisiones, en su orden", () => {
+    const pendientes = collectPending(estadoCon([
+      { name: "write_file", args: { file_path: "/a.xne" } },
+      { name: "write_file", args: { file_path: "/b.xne" } },
+      { name: "edit_file", args: { file_path: "/c.xne" } },
+    ]));
+    const resume = buildResume(new Map([
+      [pendientes[0]!.id, { type: "approve" as const }],
+      [pendientes[1]!.id, { type: "reject" as const }],
+      [pendientes[2]!.id, { type: "approve" as const }],
+    ]));
+    // UNA entrada por interrupción, con las tres decisiones dentro: es lo que la librería
+    // cuenta cuando dice «hanging tool calls».
+    expect(Object.keys(resume)).toEqual(["int-1"]);
+    expect(resume["int-1"]!.decisions.map((d) => d.type)).toEqual(["approve", "reject", "approve"]);
+  });
+
+  it("una decisión que falta se RECHAZA, y la lista conserva su tamaño", () => {
+    const pendientes = collectPending(estadoCon([
+      { name: "write_file", args: { file_path: "/a.xne" } },
+      { name: "write_file", args: { file_path: "/b.xne" } },
+      { name: "write_file", args: { file_path: "/c.xne" } },
+    ]));
+    // Solo se contesta la del medio: las otras dos no las decidió nadie.
+    const resume = buildResume(new Map([[pendientes[1]!.id, { type: "approve" as const }]]));
+    expect(resume["int-1"]!.decisions.map((d) => d.type)).toEqual(["reject", "approve", "reject"]);
+  });
+
+  it("con UNA sola acción el id no cambia: el caso normal sigue igual", () => {
+    const pendientes = collectPending(estadoCon([{ name: "write_file", args: { file_path: "/a.xne" } }]));
+    expect(pendientes[0]!.id).toBe("int-1");
+    const resume = buildResume(new Map([["int-1", { type: "approve" as const }]]));
+    expect(resume).toEqual({ "int-1": { decisions: [{ type: "approve" }] } });
+  });
+});

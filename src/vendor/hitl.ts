@@ -63,29 +63,100 @@ export function collectPending(state: unknown): PendingInterrupt[] {
           reviewConfigs?: Array<{ allowedDecisions?: string[] }>;
         };
       };
-      const action = value?.actionRequests?.[0];
-      if (!id || !action?.name) continue;
+      const acciones = value?.actionRequests ?? [];
+      if (!id || acciones.length === 0) continue;
 
-      pending.push({
-        id,
-        tool: action.name,
-        args: action.args ?? {},
-        description: action.description ?? `Ejecutar ${action.name}`,
-        allowedDecisions: value?.reviewConfigs?.[0]?.allowedDecisions ?? ["approve", "reject"],
+      /**
+       * **UNA entrada por acción, no por interrupción, y ahí estaba el fallo.**
+       *
+       * `actionRequests` es una LISTA: cuando el modelo pide varias escrituras en la misma
+       * tanda —lo hace DeepSeek, y cualquiera que paralelice—, la interrupción llega con
+       * todas dentro. Leer solo `[0]` tenía dos consecuencias, y la silenciosa era la peor:
+       * al usuario se le preguntaba por la PRIMERA y las demás no se veían; y al reanudar
+       * se mandaba UNA decisión para N llamadas colgadas, que la librería rechaza con
+       * «Number of human decisions (1) does not match number of hanging tool calls (3)».
+       *
+       * El `id` se compone porque es la CLAVE con la que todo lo de arriba empareja
+       * decisiones —mapas en `turnoReal.ts`, la tarjeta de aprobación, el cable— y cambiar
+       * su naturaleza obligaría a tocar las cuatro capas. Compuesto sigue siendo una cadena
+       * opaca para todos ellos, y `buildResume` es el único que lo abre. Lleva también el
+       * TOTAL porque al reanudar hay que entregar exactamente N decisiones y en ORDEN: sin
+       * el total, una decisión que faltara al final encogería la lista sin que se note.
+       */
+      acciones.forEach((action, indice) => {
+        if (!action?.name) return;
+        pending.push({
+          id: componerId(id, indice, acciones.length),
+          tool: action.name,
+          args: action.args ?? {},
+          description: action.description ?? `Ejecutar ${action.name}`,
+          // Cada acción tiene su propia configuración de revisión; se cae a la primera
+          // porque la librería la omite cuando todas comparten la misma.
+          allowedDecisions:
+            value?.reviewConfigs?.[indice]?.allowedDecisions
+            ?? value?.reviewConfigs?.[0]?.allowedDecisions
+            ?? ["approve", "reject"],
+        });
       });
     }
   }
   return pending;
 }
 
-/** El mapa `{ id → { decisions: [...] } }` que espera `new Command({ resume })`. */
+/**
+ * El separador del id compuesto. Un carácter que no aparece en un id de interrupción de
+ * langgraph (son hexadecimales con guiones), así que partir por el PRIMERO es seguro.
+ */
+const SEPARADOR_DE_ACCION = "#";
+
+function componerId(id: string, indice: number, total: number): string {
+  // Con una sola acción el id se queda como estaba: es el caso normal y así no cambia nada
+  // de lo que ya circula —transcripts guardados, tarjetas en vuelo— por un caso que no era.
+  return total === 1 ? id : `${id}${SEPARADOR_DE_ACCION}${indice}/${total}`;
+}
+
+/** `«abc#1/3»` → la interrupción, su índice y cuántas hay. Un id simple es `{indice:0,total:1}`. */
+function descomponerId(compuesto: string): { id: string; indice: number; total: number } {
+  const corte = compuesto.indexOf(SEPARADOR_DE_ACCION);
+  if (corte < 0) return { id: compuesto, indice: 0, total: 1 };
+  const [indice, total] = compuesto.slice(corte + 1).split("/").map(Number);
+  if (!Number.isInteger(indice) || !Number.isInteger(total) || total < 1) {
+    return { id: compuesto, indice: 0, total: 1 };
+  }
+  return { id: compuesto.slice(0, corte), indice: indice!, total: total! };
+}
+
+/**
+ * El mapa `{ id → { decisions: [...] } }` que espera `new Command({ resume })`.
+ *
+ * **Una interrupción con N acciones necesita N decisiones, en ORDEN.** Por eso esto vuelve
+ * a agrupar lo que `collectPending` desplegó: la lista se dimensiona con el total que viaja
+ * en el id, y cada decisión se coloca en su índice.
+ *
+ * **El hueco que quede se RECHAZA**, que es la dirección de siempre: una decisión que falta
+ * es una que nadie tomó, y aprobar por omisión una escritura sobre el proyecto del cliente
+ * es justo lo que la aprobación existe para impedir. Aquí no debería pasar nunca —quien
+ * llama resuelve todas las pendientes, a mano o automáticas—, pero si pasa, el turno sigue
+ * y lo que no se decidió no se aplica, en vez de reventar con un descuadre de números.
+ */
 export function buildResume(
   decisions: Map<string, Decision>
 ): Record<string, { decisions: Decision[] }> {
-  const resume: Record<string, { decisions: Decision[] }> = {};
-  for (const [id, decision] of decisions) {
-    resume[id] = { decisions: [decision] };
+  const porInterrupcion = new Map<string, Decision[]>();
+  for (const [compuesto, decision] of decisions) {
+    const { id, indice, total } = descomponerId(compuesto);
+    let lista = porInterrupcion.get(id);
+    if (lista === undefined) {
+      lista = Array.from({ length: total }, () => ({ type: "reject" as const, message: REJECT_MESSAGE }));
+      porInterrupcion.set(id, lista);
+    }
+    // Una lista más corta de lo que dice este id significa dos totales distintos para la
+    // misma interrupción: se estira, porque quedarse corto es el descuadre que esto arregla.
+    while (lista.length < total) lista.push({ type: "reject", message: REJECT_MESSAGE });
+    lista[indice] = decision;
   }
+  const resume: Record<string, { decisions: Decision[] }> = {};
+  for (const [id, lista] of porInterrupcion) resume[id] = { decisions: lista };
   return resume;
 }
 
