@@ -54,6 +54,28 @@ describe("xone_critica_visual", () => {
     expect(salida).toMatch(/SIN ARREGLAR/);
   });
 
+  /**
+   * **Y ese paso va CONDICIONADO al encargo, que es la cuarta puerta de la deriva.**
+   *
+   * Medido en un turno real: la tarea era DOCUMENTAR, el conductor sacó una captura, esto
+   * la vio en rojo y el turno se fue a arreglar la pantalla. La tool no puede saber el
+   * encargo —se construye por sesión— así que escribe las dos ramas y elige quien lo sabe.
+   */
+  it("y ese paso dice que arreglar solo va SI el encargo lo incluye", async () => {
+    const salida = await tool('{"veredicto":"rojo","hallazgos":["el texto sale cortado"]}').invoke({
+      captura: "/artefactos/c.jpg",
+      pantalla: "Calculadora",
+    });
+
+    // La rama de arreglar va condicionada…
+    expect(salida).toMatch(/Si el encargo incluye ARREGLAR/);
+    // …y la otra rama existe y dice que NO se toque el proyecto.
+    expect(salida).toMatch(/documentar/);
+    expect(salida).toMatch(/NO toques el proyecto/);
+    // Lo único incondicional: no callárselo.
+    expect(salida).toMatch(/callártelo/);
+  });
+
   it("y un VERDE no manda a nadie a arreglar nada", async () => {
     const salida = await tool('{"veredicto":"verde","hallazgos":[]}').invoke({
       captura: "/artefactos/c.jpg",

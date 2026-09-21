@@ -111,6 +111,19 @@ export function crearCriticaVisual(deps: DependenciasDeCritica) {
        * un consejo — a un modelo al que se le dice qué hacer sin decirle cómo se le inventa
        * los argumentos.
        *
+       * **Pero quién arregla y CUÁNDO no lo decide esta tool, y eso se aprendió caro.** La
+       * versión anterior mandaba a `developer-xone` sin condición, y era la CUARTA puerta
+       * de la deriva: en una tarea de DOCUMENTAR, el conductor sacó una captura, el crítico
+       * la vio en rojo y el turno se fue a arreglar la pantalla — nadie había pedido que se
+       * tocara el código. Un paso siguiente escrito es fuerte justamente por eso, así que
+       * escrito de más manda igual de fuerte.
+       *
+       * Lo que la tool NO puede saber es el encargo: se construye por SESIÓN y el encargo
+       * es del TURNO. Y deducirlo del texto sería una heurística que falla en silencio, que
+       * es lo que este repo no hace. Así que se escriben las DOS ramas y la elige quien sí
+       * lo sabe — con la única parte que no depende del encargo dicha aparte: callárselo no
+       * vale nunca.
+       *
        * **Límite declarado, y es el que queda abierto**: esto no es un tope. No puede serlo
        * desde aquí, porque la tool se construye por SESIÓN y no por turno, así que no tiene
        * dónde contar las vueltas. Lo que acota hoy es que cada arreglo pasa por una
@@ -120,10 +133,15 @@ export function crearCriticaVisual(deps: DependenciasDeCritica) {
        */
       if (veredicto.veredicto === "rojo") {
         lineas.push(
-          "Esto es un defecto del proyecto SIN ARREGLAR: no lo cuentes y ya está. Encárgaselo a",
-          "`developer-xone` pasándole estas observaciones tal cual, y cuando lo haya corregido",
-          "manda otra vez al conductor a esta misma pantalla y vuelve a llamarme con la captura",
-          "nueva. No des la pantalla por buena hasta que yo la vea en verde."
+          "Esto es un defecto del proyecto SIN ARREGLAR, y qué hacer con él depende de TU",
+          "encargo — que lo sabes tú y no yo:",
+          "- Si el encargo incluye ARREGLAR o dejar la app bien: encárgaselo a `developer-xone`",
+          "  pasándole estas observaciones tal cual, y cuando lo haya corregido manda otra vez",
+          "  al conductor a esta misma pantalla y vuelve a llamarme con la captura nueva. No",
+          "  des la pantalla por buena hasta que yo la vea en verde.",
+          "- Si el encargo es OTRO —documentar, medir, inventariar—: NO toques el proyecto por",
+          "  esto. Anótalo donde estés contando lo que ves y sigue con lo tuyo.",
+          "Lo que NO vale en ninguno de los dos casos es callártelo."
         );
       }
       if (veredicto.necesito.length > 0) {
