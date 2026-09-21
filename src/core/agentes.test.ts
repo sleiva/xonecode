@@ -397,3 +397,37 @@ describe("ejecucion: la capacidad de correr comandos", () => {
     expect((leerAgente("mio", texto, "global") as { agente: Agente }).agente.ejecucion).toBe(true);
   });
 });
+
+/**
+ * `escribeEn`: dónde puede escribir un agente de solo lectura.
+ *
+ * Nace del que documenta — su entregable es un manual en `doc/`—, y lo que defiende es que
+ * darle esa carpeta NO sea lo mismo que quitarle el `soloLectura`.
+ */
+describe("escribeEn en el frontmatter", () => {
+  const conFrontmatter = (linea: string) =>
+    leerAgente("writer-xone", `---\ndescripcion: documenta\nmotor: modelo\nsoloLectura: true\n${linea}\nskills: []\n---\ncuerpo`, "global");
+
+  it("se lee como lista y se normaliza a ruta absoluta", () => {
+    const leido = conFrontmatter("escribeEn: [doc, /doc2/]");
+    expect("error" in leido).toBe(false);
+    if ("error" in leido) return;
+    // `doc`, `/doc` y `/doc/` dicen lo mismo: quien escribe el `.md` no tiene por qué saber
+    // cuál esperamos.
+    expect(leido.agente.escribeEn).toEqual(["/doc", "/doc2/"]);
+  });
+
+  it("ausente es AUSENTE, no una lista vacía", () => {
+    const leido = leerAgente("x", "---\ndescripcion: d\nmotor: modelo\nsoloLectura: true\nskills: []\n---\n", "global");
+    if ("error" in leido) throw new Error(leido.error);
+    expect(leido.agente.escribeEn).toBeUndefined();
+  });
+
+  it("se conserva al volver a escribir el fichero", () => {
+    const leido = conFrontmatter("escribeEn: [/doc/]");
+    if ("error" in leido) throw new Error(leido.error);
+    const vuelta = leerAgente("writer-xone", escribirAgente(leido.agente), "global");
+    if ("error" in vuelta) throw new Error(vuelta.error);
+    expect(vuelta.agente.escribeEn).toEqual(["/doc/"]);
+  });
+});

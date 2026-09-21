@@ -27,6 +27,32 @@ export const TOOLS_ESCRITURA = ["write_file", "edit_file"] as const;
 export interface QuienDecidePermisos {
   nombre: string;
   soloLectura: boolean;
+  /**
+   * Las carpetas del PROYECTO donde este agente sí puede escribir, aunque sea de solo
+   * lectura. Ausente o vacía = ninguna, que es como se ha comportado siempre.
+   *
+   * Nace del documentador: su trabajo es dejar un manual en `doc/`, y sin esto la única
+   * forma de dárselo era quitarle el `soloLectura` — o sea, dejarle tocar el código
+   * entero para que pudiera escribir un `.md`. Esto parte esas dos cosas: puede escribir
+   * DONDE se le diga y en ningún otro sitio.
+   *
+   * Son rutas VIRTUALES del backend (`/doc/`), no de la máquina, y se comparan por
+   * prefijo de SEGMENTO: `/doc` no abre `/documentos`.
+   */
+  escribeEn?: readonly string[];
+}
+
+/**
+ * ¿Cae `ruta` dentro de `carpeta`? Por SEGMENTO y no por texto.
+ *
+ * `"/documentos/x".startsWith("/doc")` es cierto y sería un agujero: conceder `/doc`
+ * abriría cualquier carpeta que empiece igual. Se normaliza la carpeta con su barra final
+ * y se admite además la ruta exacta, para que `escribeEn: ["/doc"]` y `["/doc/"]` digan
+ * lo mismo — quien escribe un `.md` no tiene por qué saber cuál de las dos esperamos.
+ */
+export function dentroDeCarpeta(ruta: string, carpeta: string): boolean {
+  const base = carpeta.endsWith("/") ? carpeta : `${carpeta}/`;
+  return ruta === carpeta.replace(/\/$/, "") || ruta.startsWith(base);
 }
 
 /** Lo que estructuralmente da igual quién seas: nunca se lee ni se escribe. */
@@ -93,6 +119,19 @@ export function permisosDe(perfil: QuienDecidePermisos) {
    */
   return [
     ...base,
+    /**
+     * Las carpetas que el agente declara en su `escribeEn`, y van DELANTE del `deny`
+     * general por lo mismo que las otras dos: *first-match-wins*. Detrás no harían nada.
+     *
+     * Siguen DETRÁS de `DENEGADO_SIEMPRE`, así que un `escribeEn: ["/.git"]` escrito en un
+     * `.md` no abre nada: lo que un fichero puede cambiar es el prompt de un agente, no
+     * concederle `/.env`.
+     */
+    ...(perfil.escribeEn ?? []).map((carpeta) => ({
+      operations: ["write"] as const,
+      paths: [`${carpeta.endsWith("/") ? carpeta : `${carpeta}/`}**`],
+      mode: "allow" as const,
+    })),
     { operations: ["write"] as const, paths: [`${RUTA_ARTEFACTOS}**`], mode: "allow" as const },
     // Y los PLANES, por lo mismo: quien analiza escribe el plan y quien desarrolla marca ahí
     // lo hecho, así que los dos tienen que poder escribir — y ninguno de los dos está tocando
@@ -179,6 +218,28 @@ export function puedeLeerRuta(ruta: string): boolean {
     ruta === "/.xonecode" ||
     ruta.startsWith("/.xonecode/")
   );
+}
+
+/**
+ * ¿Puede ESTE agente escribir en ESTA ruta? El espejo de `permisosDe`, como predicado.
+ *
+ * Existe porque **una tool propia no pasa por el middleware de permisos** —ya está dicho de
+ * `regex_search` y de `xone_navegacion`, que reaplican `puedeLeerRuta` a mano—, y una tool
+ * que escriba tiene el mismo deber con más consecuencias: sin esto, `copiar_artefacto`
+ * sería la puerta trasera por la que un agente de solo lectura mete ficheros en el
+ * proyecto, que es exactamente lo que `permisosDe` existe para impedir.
+ *
+ * Se mantiene en el MISMO fichero y al lado de `permisosDe` a propósito: son dos formas de
+ * la misma regla, y separarlas es cómo una se queda vieja. Si algún día divergen, lo que
+ * hay que hacer es derivar una de la otra, no añadir una tercera.
+ */
+export function puedeEscribirRuta(perfil: QuienDecidePermisos, ruta: string): boolean {
+  // Lo denegado a todo el mundo manda sobre cualquier concesión, igual que en `permisosDe`.
+  if (!puedeLeerRuta(ruta)) return false;
+  if (ruta === "/skills" || ruta.startsWith("/skills/")) return false;
+  if (!perfil.soloLectura) return true;
+  if (esRutaDeArtefacto(ruta) || esRutaDePlan(ruta)) return true;
+  return (perfil.escribeEn ?? []).some((carpeta) => dentroDeCarpeta(ruta, carpeta));
 }
 
 /**

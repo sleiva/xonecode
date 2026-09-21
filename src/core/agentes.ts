@@ -75,6 +75,23 @@ export interface Agente {
   /** Sin escribir nada. Decide `permisosDe` y si se le monta el HITL. */
   soloLectura: boolean;
   /**
+   * Las carpetas del PROYECTO donde este agente SÍ puede escribir, aun siendo de solo
+   * lectura. Rutas virtuales (`/doc/`), separadas por comas.
+   *
+   * Nace del que documenta: su entregable es un manual en `doc/`, y sin esto la única forma
+   * de dárselo era quitarle el `soloLectura` — o sea, abrirle el código entero para que
+   * pudiera escribir un `.md`. Esto separa las dos cosas: puede escribir DONDE se le diga y
+   * en ningún otro sitio.
+   *
+   * **No afloja lo denegado a todo el mundo**: `permisosDe` pone estas filas DETRÁS de
+   * `DENEGADO_SIEMPRE`, y con *first-match-wins* eso mantiene ganando a `/.env`, `/.git` y
+   * `/.xonecode`. Un `.md` puede cambiar el prompt de un agente; no puede concederle leer
+   * la clave del cliente.
+   *
+   * Solo tiene efecto con `soloLectura: true`: quien ya escribe, escribe en todas partes.
+   */
+  escribeEn?: string[];
+  /**
    * Si puede EJECUTAR comandos en la máquina (la tool `execute` de deepagents).
    *
    * **Ausente es que no**, y es lo único que puede significar: es una capacidad, y una
@@ -557,6 +574,12 @@ export function leerAgente(
       ...(esEsfuerzo((campos["esfuerzo"] ?? "").trim())
         ? { esfuerzo: (campos["esfuerzo"] ?? "").trim() as Esfuerzo }
         : {}),
+      // Misma forma que `skills`: una lista separada por comas. Cada entrada se normaliza
+      // a ruta virtual absoluta para que `doc`, `/doc` y `/doc/` digan lo mismo — quien
+      // escribe un `.md` no tiene por qué saber cuál esperamos.
+      ...(leerLista(campos["escribeEn"]).length === 0
+        ? {}
+        : { escribeEn: leerLista(campos["escribeEn"]).map((c) => (c.startsWith("/") ? c : `/${c}`)) }),
       skills: leerLista(campos["skills"]),
       instrucciones,
       origen,
@@ -587,6 +610,9 @@ export function escribirAgente(agente: Agente): string {
     ...(agente.esfuerzo === undefined ? [] : [`esfuerzo: ${agente.esfuerzo}`]),
     `soloLectura: ${agente.soloLectura}`,
     ...(agente.ejecucion === true ? ["ejecucion: true"] : []),
+    ...(agente.escribeEn === undefined || agente.escribeEn.length === 0
+      ? []
+      : [`escribeEn: [${agente.escribeEn.join(", ")}]`]),
     `skills: [${agente.skills.join(", ")}]`,
   ];
   return `---\n${campos.join("\n")}\n---\n${agente.instrucciones}`;

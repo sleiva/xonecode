@@ -10,6 +10,7 @@ import type { Artefacto } from "../../core/artefactos.js";
 import { permisosDe, hitlDe, montajeDeFicheros, puedeEjecutar, type QuienDecidePermisos } from "./perfiles.js";
 import { crearBusquedaRegex } from "./busquedaRegex.js";
 import { crearNavegacionXone } from "./navegacionXone.js";
+import { crearCopiarArtefacto } from "./copiarArtefacto.js";
 import { estilosDeDisco, indiceEnDisco, type CargarIndice } from "../navegacion/indiceEnDisco.js";
 import type { CargarEstilos } from "../navegacion/estilosEnDisco.js";
 import { readFileSync } from "node:fs";
@@ -444,7 +445,28 @@ export async function construirAgente(opciones: OpcionesDelAgente): Promise<unkn
      * TAMBIÉN, y eso lo decidió una medida que tumbó lo contrario: ver su propio `tools` más
      * abajo.
      */
-    tools: [crearBusquedaRegex(ficheros.backend), crearNavegacionXone(cargarIndice, opciones.ficheros, cargarEstilos)],
+    tools: [
+      crearBusquedaRegex(ficheros.backend),
+      crearNavegacionXone(cargarIndice, opciones.ficheros, cargarEstilos),
+      /**
+       * Traer un artefacto al proyecto, y **solo a quien tenga dónde dejarlo**.
+       *
+       * Se monta condicionada porque una tool que siempre contesta «no puedes escribir en
+       * ningún sitio» es un botón muerto en el prompt de cuatro de los cinco especialistas:
+       * gasta esquema en cada llamada y le ofrece al modelo un camino que no existe. Quien
+       * declara `escribeEn` en su `.md` —hoy el que documenta— es el único que puede usarla.
+       *
+       * Y la carpeta de artefactos tiene que estar montada: sin ella no hay origen del que
+       * copiar. Las dos condiciones son de DATO, no de configuración.
+       */
+      ...(opciones.artefactos !== undefined && (perfil.escribeEn ?? []).length > 0
+        ? [crearCopiarArtefacto({
+            raiz: opciones.raiz,
+            carpetaDeArtefactos: opciones.artefactos.carpeta,
+            perfil,
+          })]
+        : []),
+    ],
     //
     // Las tools de fichero las monta el `FilesystemMiddleware` a partir del backend, y
     // quien las acota por NOMBRE es su propia opción `tools` (con la restricción de que
