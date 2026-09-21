@@ -944,17 +944,36 @@ export async function abrirSesionReal(opciones: {
               severidad: "aviso",
             };
             /**
-             * Si el simulador está en VERDE, nadie más va a disparar una ronda: la dispara
-             * esto. Si ya está en rojo, las observaciones se suman a la petición que va a
-             * salir igualmente, y no se gasta una vuelta extra.
+             * **Con el simulador en VERDE, el crítico REPORTA y no dispara reparación.**
+             *
+             * Antes sí la disparaba, y ésa era la tercera puerta de la misma deriva. MEDIDO
+             * dos veces en turnos reales: se pidió «arregla el error al ejecutar la app», se
+             * arregló, el conductor MIDIÓ que arranca y llega a Menu —o sea, objetivo
+             * cumplido y comprobado— y aun así el crítico veía cuatro textos recortados en
+             * otra pantalla, rotos desde antes, y el harness abría otra ronda «de
+             * reparación». El turno se iba a rediseñar el menú.
+             *
+             * Verde del simulador + objetivo cumplido no es un turno a medias: es un turno
+             * terminado con algo que decir. Las observaciones ya salen como `aviso` y van en
+             * la respuesta; quien decide si eso se toca es la persona, que es la misma regla
+             * de `preexistentes` — no se repara lo que no rompiste.
+             *
+             * En ROJO no cambia nada: las observaciones se suman a la petición que iba a
+             * salir igualmente, con el objetivo delante (`textoDeReparacion`), y no se gasta
+             * una vuelta extra.
+             *
+             * **El precio, declarado**: un turno que SÍ rompió el layout y dejó el simulador
+             * en verde ya no se autocorrige. Lo que queda es el aviso y lo que el propio
+             * agente haga dentro de su ronda —tiene la tool—, y eso se ve. Se prefiere eso a
+             * una ronda que arregla lo que nadie pidió, que es lo que pasaba.
+             *
+             * **Y un hueco de TEST, dicho y no escondido**: esta rama no tiene prueba de
+             * turno. El arnés de `turnoReal.test.ts` no sabe producir una captura —el
+             * crítico solo entra con un artefacto de imagen en `capturasDelTurno` y además
+             * LEE el fichero del disco—, así que atarlo pide cablear eso primero. Lo que sí
+             * está probado es `tocaCriticarPantalla` (cuándo entra el crítico) y el objetivo
+             * dentro de `textoDeReparacion` (qué recibe el agente cuando sí hay ronda).
              */
-            if (errores === 0) {
-              ultimosHallazgos = [];
-              intento += 1;
-              reparar = true;
-              cerrarRonda = false;
-              return;
-            }
           }
         } catch (error) {
           yield {

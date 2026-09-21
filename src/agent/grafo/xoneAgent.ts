@@ -180,9 +180,25 @@ export function promptOrquestador(agentes: readonly Agente[]): string {
      *
      * Nombra a dos especialistas a pelo, igual que la regla de los diagramas: al renombrarlos
      * hay que cambiarlo aquí o la regla se queda escrita y muerta.
+     *
+     * **Y lo que saque el crítico se corrige SOLO si sirve al encargo.** Esta frase decía
+     * «lo que salga de todo eso vuelve a `developer-xone` para corregir», sin condición, y
+     * eso es una orden: MEDIDO en un turno real, se pidió «arregla el error al ejecutar la
+     * app», se arregló —faltaba un `;`—, y el crítico vio cuatro textos recortados en otra
+     * pantalla, rotos desde antes. El turno se fue a rediseñar el menú porque aquí se lo
+     * mandamos.
+     *
+     * Es el hermano del objetivo que ya viaja en `textoDeReparacion`, y hacía falta
+     * arreglar los DOS: aquél cubre el bucle de reparación del harness, y éste el camino en
+     * el que el orquestador invoca la tool por su cuenta. Arreglar uno solo dejaba el otro
+     * abierto — y así fue: con el primero puesto, el turno volvió a irse por el segundo.
+     *
+     * El objetivo es lo que separa trabajo de ruido: el mismo «BASICOS PLUS se corta» es
+     * ruido si el encargo era arrancar la app y es EL trabajo si el encargo era arreglar
+     * los fallos visuales. Por eso se decide contra el encargo y no contra el fichero.
      */
     hay("developer-xone") && hay("device-controller")
-      ? "Si el encargo incluye PROBARLO en un móvil o emulador, son DOS pasos y en este orden: `developer-xone` escribe, y luego `device-controller` lo despliega y lo comprueba. Dile SIEMPRE a qué pantalla o colección tiene que llegar, no solo «pruébalo». Si tienes `xone_critica_visual`, pásale la captura que deje: ve fallos de pintado que ninguna comprobación estática detecta, y si te pide otra pantalla, encárgasela al conductor y vuelve. Lo que salga de todo eso vuelve a `developer-xone` para corregir; no des por buena una pantalla que nadie ha mirado."
+      ? "Si el encargo incluye PROBARLO en un móvil o emulador, son DOS pasos y en este orden: `developer-xone` escribe, y luego `device-controller` lo despliega y lo comprueba. Dile SIEMPRE a qué pantalla o colección tiene que llegar, no solo «pruébalo». Si tienes `xone_critica_visual`, pásale la captura que deje: ve fallos de pintado que ninguna comprobación estática detecta, y si te pide otra pantalla, encárgasela al conductor y vuelve. De lo que saque, MANDA A CORREGIR solo lo que sirva al encargo que te hicieron: un defecto que ya estaba ahí y que tu cambio no ha causado NO se arregla, se CUENTA en tu respuesta para que lo decida quien te encargó el trabajo. Y no des por buena una pantalla que nadie ha mirado."
       : "",
     "Los especialistas no comparten el transcript: al encadenarlos, incluye en la descripción",
     "de la siguiente `task` un bloque `HANDOFF DE ANÁLISIS` compacto con los hechos verificados,",
