@@ -216,3 +216,31 @@ describe("la carpeta de adjuntos llega desde la fábrica del ejecutor", () => {
     expect(dobles.abrirSesionReal.mock.calls.at(-1)?.[0]).not.toHaveProperty("adjuntos");
   });
 });
+
+/**
+ * El CABLEADO del juez del turno, que es donde se queda escrito y no montado.
+ *
+ * `core/juezDelTurno.ts` tiene sus pruebas y `turnoReal.ts` las suyas del cableado interno,
+ * y con las dos en verde el juez podía seguir sin llegar NUNCA a una sesión real: lo que
+ * enchufa el puerto vive aquí, en un cierre que el resto de los tests dobla. Es el patrón
+ * que este repo ha pagado nueve veces.
+ */
+describe("el juez del turno llega a la sesión", () => {
+  it("se le pasa a `abrirSesionReal`, y es una función", async () => {
+    dobles.abrirSesionReal.mockImplementation(async () => ({
+      turno: async () => ({
+        bitacora: { todo: [] },
+        cambios: [],
+        cortadoPorTope: false,
+        verificador: "verde" as const,
+        pendientes: 0,
+      }),
+    }));
+    const ejecutor = crearEjecutorReal(() => {});
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    await ejecutor("haz algo", ESTADO, consolaDeMentira() as any);
+
+    const opciones = dobles.abrirSesionReal.mock.calls[0]![0] as { juezDelTurno?: unknown };
+    expect(typeof opciones.juezDelTurno).toBe("function");
+  });
+});

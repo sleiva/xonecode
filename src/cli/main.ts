@@ -77,6 +77,7 @@ import { crearProyecto } from "../agent/config/crearProyecto.js";
 import { type DatosDelProyecto } from "../core/esqueleto.js";
 import { createTokenTracker, type TokenTracker } from "../vendor/tokenTracking.js";
 import { compacto, formatearTokens, formatearTope } from "./tokens.js";
+import { crearJuezDelTurno } from "../agent/turno/juezDelTurnoConModelo.js";
 
 /**
  * Los `Modelos` de una sesión, con su esfuerzo y —si hace falta— con las capacidades ya
@@ -529,6 +530,18 @@ export function crearEjecutorReal(
       sesion = await abrirSesionReal({
         raiz: estado.raiz,
         modelos: await modelosDeSesion(estado),
+        /**
+         * El juez del turno: ¿esto cumple lo que se pidió? Va con el papel `afilado`, que
+         * es el reservado a juzgar, y aquí se enchufa para el terminal Y para la web —las
+         * dos pasan por `crearEjecutorReal`—.
+         *
+         * Se le da un `Modelos` PROPIO y no el de la sesión: el de la sesión lleva el
+         * esfuerzo que el usuario eligió, y el esfuerzo de un turno no es el esfuerzo con
+         * el que se juzga ese turno. Juzgar es una pregunta corta y cerrada; recortarle el
+         * razonamiento porque alguien puso `low` para ahorrar en el trabajo sería aplicar
+         * una decisión donde no se tomó.
+         */
+        juezDelTurno: crearJuezDelTurno(new Modelos(estado.fuentes, proveedoresPersonalizados)),
         // La raíz va PUESTA, y es lo que hace que las skills DEL PROYECTO
         // (`<raiz>/.xonecode/skills/`) entren en el catálogo. Sin ella el agente recibiría
         // solo las de serie y las globales, y un subagente que declarase una del proyecto
