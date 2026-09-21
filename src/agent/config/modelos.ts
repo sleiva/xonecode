@@ -136,9 +136,28 @@ function construirCompatibleOpenAi(
   if (apiKey === undefined || apiKey.trim() === "") {
     throw new Error(`falta la credencial para ${proveedor} (${variable}); usa /provider ${proveedor}`);
   }
+  /**
+   * **A DeepSeek se le APAGA el pensamiento, y es obligatorio para que funcione aquí.**
+   *
+   * Su documentación: con el parámetro `tools` presente, el `reasoning_content` de TODOS
+   * los turnos anteriores hay que devolvérselo, y si no, 400. Un agente manda siempre
+   * `tools`. Y `@langchain/openai` no lo devuelve nunca —lo guarda al entrar y lo tira al
+   * salir, por los dos conversores—, así que pensar + agente es un 400 garantizado en
+   * cuanto la conversación avanza. Visto en un turno real, reventando dentro de un
+   * subagente.
+   *
+   * No es una preferencia de coste: es lo único que hace a DeepSeek usable con este
+   * harness. Si algún día el cliente devuelve el eco, esto se quita y vuelve su fila en
+   * `core/esfuerzo.ts`.
+   */
+  const apagarPensamiento = proveedor === "deepseek" ? { thinking: { type: "disabled" } } : {};
+  const kwargs = {
+    ...apagarPensamiento,
+    ...(esfuerzo === undefined ? {} : { reasoning_effort: esfuerzo }),
+  };
   return new ChatOpenAI({
     model: modelo, apiKey, configuration: { baseURL: baseUrl },
-    ...(esfuerzo === undefined ? {} : { modelKwargs: { reasoning_effort: esfuerzo } }),
+    ...(Object.keys(kwargs).length === 0 ? {} : { modelKwargs: kwargs }),
   });
 }
 

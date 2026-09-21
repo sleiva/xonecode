@@ -68,19 +68,23 @@ describe("los niveles de esfuerzo de un modelo", () => {
     });
   });
 
-  describe("deepseek — la lista NO son los tres de siempre", () => {
-    /**
-     * Su documentación mapea `medium`→high y `xhigh`→high, así que ofrecer low/medium/high
-     * daría dos opciones que hacen lo mismo. Los distintos son estos tres.
-     */
-    it("solo hay tres niveles distintos: low, high y max", () => {
-      expect(nivelesDeEsfuerzo("deepseek", "deepseek-flash")).toEqual(["low", "high", "max"]);
-      expect(nivelesDeEsfuerzo("deepseek", "deepseek-v4-pro")).toEqual(["low", "high", "max"]);
+  /**
+   * DeepSeek tuvo fila —`low`/`high`/`max`, sus tres niveles distintos— y se retiró con la
+   * causa delante: su documentación exige devolver el `reasoning_content` de todos los
+   * turnos cuando la petición lleva `tools`, y `@langchain/openai` no lo devuelve nunca.
+   * Un agente manda siempre `tools`, así que pensar ahí es un 400 garantizado; por eso el
+   * pensamiento se le apaga al construir el cliente, y sin pensamiento un nivel no
+   * significa nada.
+   */
+  describe("deepseek — sin fila, porque aquí no puede pensar", () => {
+    it("no admite ningún nivel: ofrecerlo sería un control que no hace nada", () => {
+      expect(nivelesDeEsfuerzo("deepseek", "deepseek-flash")).toBeUndefined();
+      expect(nivelesDeEsfuerzo("deepseek", "deepseek-v4-pro")).toBeUndefined();
     });
 
-    it("«medium» no es aplicable ahí, y no se sustituye por el parecido", () => {
-      expect(esfuerzoAplicable("medium", "deepseek", "deepseek-flash")).toBeUndefined();
-      expect(esfuerzoAplicable("high", "deepseek", "deepseek-flash")).toBe("high");
+    it("y ningún nivel elegido le llega, venga de donde venga", () => {
+      expect(esfuerzoAplicable("high", "deepseek", "deepseek-flash")).toBeUndefined();
+      expect(esfuerzoAplicable("low", "deepseek", "deepseek-v4-pro")).toBeUndefined();
     });
   });
 
@@ -142,7 +146,6 @@ describe("los niveles de esfuerzo de un modelo", () => {
       const filas: Array<readonly string[]> = [
         nivelesDeEsfuerzo("anthropic", "claude-opus-5")!,
         nivelesDeEsfuerzo("gemini", "gemini-3.8-flash")!,
-        nivelesDeEsfuerzo("deepseek", "deepseek-flash")!,
         nivelesDeEsfuerzo("nvidia", "openai/gpt-oss-20b")!,
         NIVELES_DE_OLLAMA,
       ];

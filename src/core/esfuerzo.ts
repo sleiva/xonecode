@@ -12,12 +12,11 @@
  * tres, contra el mismo host y con la misma clave. Una tabla por proveedor habría sido
  * falsa el primer día.
  *
- * **Y los niveles son una LISTA por modelo, no tres fijos.** La razón es DeepSeek: publica
- * —y su API acepta— siete valores, pero los COLAPSA (`minimal`→low, `medium`→high,
- * `xhigh`→high, `ultra`→max), así que ahí solo hay tres niveles de verdad. Ofrecer
- * low/medium/high en un desplegable contra ese modelo sería dar dos opciones que hacen
- * exactamente lo mismo sin decirlo, que es la misma clase de mentira que un contador a
- * cero que nadie ha medido.
+ * **Y los niveles son una LISTA por modelo, no tres fijos.** Anthropic tiene cinco desde
+ * Opus 4.7 y cuatro en la 4.6; Gemini tres; `nvidia/nemotron-3` cinco y `openai/gpt-oss`
+ * tres. Pintar siempre los mismos tres daría, según el modelo, o un control recortado o
+ * dos opciones que hacen lo mismo sin decirlo — la misma clase de mentira que un contador
+ * a cero que nadie ha medido.
  *
  * **Lo desconocido devuelve `undefined`**: ni se ofrece control ni se manda parámetro. Es
  * el mismo lado conservador de `pideThinkingAdaptativo`, y aquí es literal — un nivel
@@ -66,11 +65,6 @@ const CINCO: readonly Esfuerzo[] = ["low", "medium", "high", "xhigh", "max"];
  *   Y el catálogo vivo NO sirve para decidir esto: `GET /v1beta/models/<id>` devuelve
  *   `"thinking": true` también para `gemini-2.5-flash`, que es justo el que falla; ese campo
  *   dice «sabe pensar», no «acepta niveles».
- * - **deepseek**: MEDIDO que el enum se valida (un valor inventado da 422) y LEÍDO de su
- *   documentación que lo colapsa. Por eso la fila tiene TRES valores que no son los tres de
- *   siempre: `low`, `high` y `max` son los únicos distintos. Lo que NO se pudo medir es que
- *   los niveles cambien el resultado — con un problema fácil y dos pasadas la señal quedó
- *   por debajo de la varianza —, y eso es «no medido», que no es lo mismo que «no hace nada».
  * - **nvidia**: MEDIDO con el truco del valor inválido, que devuelve el enum en el propio
  *   error. Son dos filas y no una porque los dos modelos probados no coinciden.
  *
@@ -100,7 +94,32 @@ const TABLA: Partial<Record<Proveedor, Array<[prefijo: string, niveles: readonly
     ["gemini-flash-lite-latest", TRES],
     ["gemini-pro-latest", TRES],
   ],
-  deepseek: [["deepseek", ["low", "high", "max"]]],
+  /**
+   * **DeepSeek NO tiene fila, y no es porque no sepa: es porque no puede aquí.**
+   *
+   * La tenía (`low`/`high`/`max`, que son sus tres niveles distintos tras el colapso de
+   * `medium` sobre `high`), y se retira con la causa medida delante. Su documentación es
+   * explícita: «for requests carrying the `tools` parameter, the `reasoning_content` must
+   * be fully passed back to the API in all subsequent requests — even for turns where the
+   * model did not perform a tool call. If your code does not correctly pass back
+   * `reasoning_content`, the API will return a 400 error».
+   *
+   * Y `@langchain/openai` 1.5.5 **no lo devuelve nunca**: lo captura al entrar
+   * (`additional_kwargs.reasoning_content`) y lo tira al salir, por los DOS conversores
+   * —`convertMessagesToCompletionsMessageParams` y el de `output_version: "v1"`—, que
+   * montan `role`, `content`, `name`, `function_call`, `tool_calls`, `tool_call_id` y
+   * `audio`, y nada más. Comprobado leyendo la dependencia.
+   *
+   * Un agente manda SIEMPRE `tools`, así que pensar + agente = 400 en cuanto la
+   * conversación avanza. Visto en un turno real: `MiddlewareError: 400 The
+   * reasoning_content in the thinking mode must be passed back to the API`, y el
+   * `MiddlewareError` lo puso `wrapToolCall` — o sea que reventó DENTRO de un subagente.
+   *
+   * Por eso el pensamiento se apaga al construir el cliente
+   * (`agent/config/modelos.ts`), y sin pensamiento un nivel de esfuerzo no significa nada:
+   * ofrecerlo sería un control que no hace nada. El día que langchain devuelva el eco,
+   * esta fila vuelve — con su medida.
+   */
   nvidia: [
     ["openai/gpt-oss", TRES],
     ["nvidia/nemotron-3", CINCO],

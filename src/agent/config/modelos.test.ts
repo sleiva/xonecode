@@ -106,8 +106,27 @@ describe("el esfuerzo, contra el invocationParams de cada cliente", () => {
   });
 
   it("los compatibles con OpenAI lo mandan como reasoning_effort", () => {
-    expect(params("deepseek/deepseek-flash", "high")["reasoning_effort"]).toBe("high");
     expect(params("nvidia/openai/gpt-oss-20b", "low")["reasoning_effort"]).toBe("low");
+    // El id lleva el proveedor DOS veces y no es un error: `parsear` corta por la primera
+    // barra, así que el proveedor es `nvidia` y el modelo `nvidia/nemotron-…` — los ids de
+    // NIM incluyen al fabricante, igual que `openai/gpt-oss-20b`.
+    expect(params("nvidia/nvidia/nemotron-3-super-120b-a12b", "max")["reasoning_effort"]).toBe("max");
+  });
+
+  /**
+   * DeepSeek es el caso aparte: se le APAGA el pensamiento siempre, con nivel o sin él.
+   *
+   * Su API exige devolver el `reasoning_content` de todos los turnos cuando la petición
+   * lleva `tools` —y un agente la lleva siempre—, y `@langchain/openai` no lo devuelve
+   * nunca. Pensar ahí es un 400 en cuanto la conversación avanza, visto en un turno real
+   * reventando dentro de un subagente.
+   */
+  it("a deepseek se le apaga el pensamiento, y sin nivel ninguno", () => {
+    expect(params("deepseek/deepseek-flash")["thinking"]).toEqual({ type: "disabled" });
+    // Aunque alguien pida esfuerzo: no tiene fila, así que no viaja.
+    const conNivel = params("deepseek/deepseek-flash", "high");
+    expect(conNivel["thinking"]).toEqual({ type: "disabled" });
+    expect(conNivel["reasoning_effort"]).toBeUndefined();
   });
 
   it("ollama lo manda como «think» con el nivel dentro, no como booleano", () => {
