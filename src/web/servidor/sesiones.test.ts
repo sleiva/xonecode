@@ -11,6 +11,7 @@ import { tituloDesde,
   borrarSesion,
   renombrarSesion,
   elegirDispositivo,
+  elegirEsfuerzo,
   IndiceDeSesionesRoto,
   marcarTareaDeSesion,
   sembrarConsumosPendientes,
@@ -536,5 +537,45 @@ describe("el dispositivo preferido de una sesión", () => {
     elegirDispositivo(raiz, id, GALAXY);
     anotarActo(raiz, id, { tipo: "usuario", texto: "hola" });
     expect(listarSesiones(raiz)[0]!.dispositivo).toEqual(GALAXY);
+  });
+});
+
+/**
+ * El ESFUERZO de una sesión, que es la hermana del dispositivo: una elección DE la sesión,
+ * guardada en el índice y no en el `.jsonl`.
+ *
+ * Lo que defiende es que sobreviva a cerrar. Sin esto la elección moría con la pestaña, y
+ * una palanca de coste que hay que volver a poner en cada sesión no es una palanca.
+ */
+describe("el esfuerzo de una sesión", () => {
+  it("se guarda con la sesión y vuelve al reabrirla", () => {
+    const raiz = mkdtempSync(join(tmpdir(), "xonecode-esf-"));
+    const id = crearSesion(raiz);
+    expect(elegirEsfuerzo(raiz, id, "high")).toBe(true);
+    expect(listarSesiones(raiz)[0]!.esfuerzo).toBe("high");
+    expect(reabrirSesion(raiz, id).esfuerzo).toBe("high");
+  });
+
+  it("se puede quitar, y entonces vuelve AUSENTE y no vacío", () => {
+    const raiz = mkdtempSync(join(tmpdir(), "xonecode-esf-"));
+    const id = crearSesion(raiz);
+    elegirEsfuerzo(raiz, id, "low");
+    expect(elegirEsfuerzo(raiz, id, undefined)).toBe(true);
+    // Ausente, no `""` ni `null`: es lo que la pastilla lee como «Sin fijar».
+    expect("esfuerzo" in listarSesiones(raiz)[0]!).toBe(false);
+    expect(reabrirSesion(raiz, id).esfuerzo).toBeUndefined();
+  });
+
+  it("una sesión que aún no está en el índice contesta que NO hay dónde anotarlo", () => {
+    // El mismo `false` que `elegirDispositivo`, y por el mismo motivo: crear aquí la
+    // entrada pintaría en la barra una sesión vacía que nadie ha empezado.
+    const raiz = mkdtempSync(join(tmpdir(), "xonecode-esf-"));
+    expect(elegirEsfuerzo(raiz, "sesion-que-no-existe", "max")).toBe(false);
+  });
+
+  it("y una sesión anterior a esto reabre sin esfuerzo, no con uno inventado", () => {
+    const raiz = mkdtempSync(join(tmpdir(), "xonecode-esf-"));
+    const id = crearSesion(raiz);
+    expect(reabrirSesion(raiz, id).esfuerzo).toBeUndefined();
   });
 });

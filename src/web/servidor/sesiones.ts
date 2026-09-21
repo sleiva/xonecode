@@ -61,6 +61,7 @@ import { acumularTotales, consumoDeLosActos } from "../../core/actos.js";
 import { carpetaDeArtefactosDeSesion } from "../../core/artefactos.js";
 import { segmentoSeguro } from "../../core/settings.js";
 import { tituloDesde } from "../../core/textos.js";
+import type { Esfuerzo } from "../../core/esfuerzo.js";
 
 /** Cuántos caracteres de la primera prosa del usuario se guardan como título. */
 const LARGO_TITULO = 80;
@@ -102,6 +103,19 @@ export interface EntradaIndice {
   /** Con cuál trabaja el agente. Ausente = ninguno elegido. */
   dispositivo?: DispositivoElegido;
   /**
+   * Cuánto razona el modelo en esta sesión. Ausente = ninguno fijado.
+   *
+   * Vive AQUÍ y no en el `.jsonl` por lo mismo que el dispositivo: es un dato DE la sesión,
+   * no uno de sus actos, y sin esto la elección se perdía al cerrar la pestaña — que es
+   * justo lo que hace inútil una palanca de coste, porque hay que volver a ponerla cada vez.
+   *
+   * **No hay defecto global**, y esa ausencia es la decisión: el esfuerzo se elige por
+   * SESIÓN y por SUBAGENTE (en su `.md`), que son los dos sitios donde alguien sabe lo que
+   * está pidiendo. Un tercer valor «para todas las nuevas» habría sido un ajuste que decide
+   * en nombre de conversaciones que todavía no existen.
+   */
+  esfuerzo?: Esfuerzo;
+  /**
    * El id de la TAREA de fondo que abrió esta sesión, si la abrió una.
    *
    * Ausente es **«no consta»** y no «es una conversación»: no la lleva ninguna sesión
@@ -139,6 +153,8 @@ export interface SesionReabierta {
   historica: boolean;
   /** El dispositivo que tenía elegido. Ausente = ninguno, o la sesión es anterior a esto. */
   dispositivo?: DispositivoElegido;
+  /** El esfuerzo que tenía fijado. Ausente = ninguno, o la sesión es anterior a esto. */
+  esfuerzo?: Esfuerzo;
 }
 
 function carpetaSesiones(raiz: string): string {
@@ -489,6 +505,25 @@ export function elegirDispositivo(raiz: string, id: string, dispositivo: Disposi
   return true;
 }
 
+/**
+ * Fija —o quita, con `undefined`— el esfuerzo de una sesión.
+ *
+ * Gemela de `elegirDispositivo` hasta en el `false`: una sesión cuyo id todavía no está en
+ * el índice (nace al volcar el primer acto) no se puede anotar, y crear ahí una entrada a
+ * medias la pintaría en la barra como una sesión vacía. Quien llama la tiene en memoria de
+ * todos modos —vive en `EstadoDeSesion`—, así que perder la anotación no pierde la
+ * elección: solo no sobrevive a cerrar, que es lo mismo que pasaba antes de esto.
+ */
+export function elegirEsfuerzo(raiz: string, id: string, esfuerzo: Esfuerzo | undefined): boolean {
+  const entradas = leerIndiceOAbortar(raiz);
+  const entrada = entradas.find((e) => e.id === id);
+  if (entrada === undefined) return false;
+  if (esfuerzo === undefined) delete entrada.esfuerzo;
+  else entrada.esfuerzo = esfuerzo;
+  escribirIndice(raiz, entradas);
+  return true;
+}
+
 /** El índice completo, tal cual lo enseña la lista de sesiones del proyecto. */
 export function listarSesiones(raiz: string): EntradaIndice[] {
   return leerIndice(raiz);
@@ -514,6 +549,13 @@ export function reabrirSesion(raiz: string, id: string): SesionReabierta {
   }
   // El dispositivo preferido sale del ÍNDICE y no del `.jsonl`: es un dato de la sesión, no
   // uno de sus actos, y reabrir tiene que devolverlo o la elección se perdería al releer.
-  const dispositivo = leerIndice(raiz).find((e) => e.id === id)?.dispositivo;
-  return { id, actos, historica: true, ...(dispositivo === undefined ? {} : { dispositivo }) };
+  // Una sola lectura del índice para los dos: son el mismo dato de la misma entrada.
+  const entrada = leerIndice(raiz).find((e) => e.id === id);
+  return {
+    id,
+    actos,
+    historica: true,
+    ...(entrada?.dispositivo === undefined ? {} : { dispositivo: entrada.dispositivo }),
+    ...(entrada?.esfuerzo === undefined ? {} : { esfuerzo: entrada.esfuerzo }),
+  };
 }

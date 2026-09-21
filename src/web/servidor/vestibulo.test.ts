@@ -21,6 +21,7 @@ import type { DispositivoElegido } from "./sesiones.js";
 import type { Entorno } from "../../core/settings.js";
 import { validar } from "../../core/config.js";
 import type { Consola, EjecutorDeTurno } from "../../cli/consola.js";
+import type { Esfuerzo } from "../../core/esfuerzo.js";
 
 function dobles() {
   const escrituras: string[] = [];
@@ -64,6 +65,7 @@ function sesionesEnMemoria() {
   const jsonl = new Map<string, Acto[]>();
   /** El dispositivo preferido, por clave `raiz|id` — como lo guarda el índice de verdad. */
   const dispositivos = new Map<string, DispositivoElegido | undefined>();
+  const esfuerzos = new Map<string, Esfuerzo | undefined>();
   /** Con qué tarea se dio de alta cada sesión, como lo guarda el índice de verdad. */
   const tareas = new Map<string, string | undefined>();
   /** El acumulado de cada sesión, como lo guarda el índice de verdad. */
@@ -71,6 +73,7 @@ function sesionesEnMemoria() {
   return {
     jsonl,
     dispositivos,
+    esfuerzos,
     tareas,
     consumos,
     puerto: {
@@ -99,11 +102,13 @@ function sesionesEnMemoria() {
       },
       reabrir: (raiz: string, id: string) => {
         const dispositivo = dispositivos.get(`${raiz}|${id}`);
+        const esfuerzo = esfuerzos.get(`${raiz}|${id}`);
         return {
           id,
           actos: [...(jsonl.get(`${raiz}|${id}`) ?? [])],
           historica: true,
           ...(dispositivo === undefined ? {} : { dispositivo }),
+          ...(esfuerzo === undefined ? {} : { esfuerzo }),
         };
       },
       borrar: (raiz: string, id: string) => jsonl.delete(`${raiz}|${id}`),
@@ -112,6 +117,11 @@ function sesionesEnMemoria() {
         // Como el índice real: sin entrada no hay nada que anotar, y se dice con `false`.
         if (!jsonl.has(`${raiz}|${id}`)) return false;
         dispositivos.set(`${raiz}|${id}`, dispositivo);
+        return true;
+      },
+      elegirEsfuerzo: (raiz: string, id: string, esfuerzo: Esfuerzo | undefined) => {
+        if (!jsonl.has(`${raiz}|${id}`)) return false;
+        esfuerzos.set(`${raiz}|${id}`, esfuerzo);
         return true;
       },
     },
@@ -433,6 +443,57 @@ describe("vestíbulo", () => {
       abierta.elegirDispositivo(GALAXY);
       expect(abierta.dispositivo).toEqual(GALAXY);
       expect(s.dispositivos.get(`/w/a|${id}`)).toEqual(GALAXY);
+      await v.cerrar();
+    });
+
+    /**
+     * El ESFUERZO de la sesión, que es la hermana del dispositivo y se rompe igual.
+     *
+     * Lo que vigila es el patrón de fallo de esta arquitectura: el valor viaja del índice
+     * al `EstadoDeSesion` dentro del cierre que construye la consola, y ése es un sitio que
+     * todos los tests doblan. Sin esto, «restaurar el esfuerzo al reabrir» podía quedarse
+     * escrito y no montado, con el suite entero en verde — y el síntoma sería mudo: una
+     * pastilla en «Sin fijar» sobre una sesión donde alguien eligió `high`.
+     */
+    it("el esfuerzo guardado vuelve al ESTADO DE SESIÓN al reabrirla", async () => {
+      const s = sesionesEnMemoria();
+      const v = crearVestibulo({ ...dobles(), origenDeTrabajo: "global", sesiones: s.puerto });
+      const id = s.puerto.crear("/w/a");
+      s.puerto.elegirEsfuerzo("/w/a", id, "high");
+
+      const abierta = await v.abrirProyecto({ raiz: "/w/a", sesion: id });
+      // En el ESTADO, que es de donde lo lee `Modelos` al construir y de donde sale el
+      // `esfuerzo.actual` del cable. Que esté en el índice no basta: ése es el otro test.
+      expect(abierta.estadoDeSesion.esfuerzo).toBe("high");
+      await v.cerrar();
+    });
+
+    /**
+     * La otra mitad, y la que más fácil se queda sin montar: que ELEGIRLO lo anote.
+     *
+     * Va por `alEstado`, que es la costura que ve el estado de antes y el de ahora — el
+     * comando `/esfuerzo` solo devuelve un estado nuevo, no toca disco. Esa costura vive
+     * dentro del cierre que construye la consola, así que sin este test la elección podía
+     * aplicarse en caliente y no sobrevivir a cerrar, que es justo el fallo que esto vino a
+     * arreglar.
+     */
+    it("elegirlo con /esfuerzo lo ANOTA en el índice", async () => {
+      const s = sesionesEnMemoria();
+      const v = crearVestibulo({ ...dobles(), origenDeTrabajo: "global", sesiones: s.puerto });
+      const id = s.puerto.crear("/w/a");
+      const abierta = await v.abrirProyecto({ raiz: "/w/a", sesion: id });
+      abierta.consola.encolar("/esfuerzo high");
+      await new Promise((r) => setTimeout(r, 0));
+      expect(s.esfuerzos.get(`/w/a|${id}`)).toBe("high");
+      await v.cerrar();
+    });
+
+    it("una sesión sin esfuerzo guardado abre SIN esfuerzo, no con uno inventado", async () => {
+      const s = sesionesEnMemoria();
+      const v = crearVestibulo({ ...dobles(), origenDeTrabajo: "global", sesiones: s.puerto });
+      const id = s.puerto.crear("/w/a");
+      const abierta = await v.abrirProyecto({ raiz: "/w/a", sesion: id });
+      expect(abierta.estadoDeSesion.esfuerzo).toBeUndefined();
       await v.cerrar();
     });
 

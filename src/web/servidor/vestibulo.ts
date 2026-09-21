@@ -69,12 +69,14 @@ import {
   borrarSesion,
   crearSesion,
   elegirDispositivo,
+  elegirEsfuerzo,
   listarSesiones,
   reabrirSesion,
   renombrarSesion,
   type DispositivoElegido,
 } from "./sesiones.js";
 import type { MensajeAlCliente, MensajeDelCliente, Sumidero } from "./transporte.js";
+import type { Esfuerzo } from "../../core/esfuerzo.js";
 
 /**
  * Un paso del alta — o, para «proyecto», una ACCIÓN que ya no es un paso del alta:
@@ -168,7 +170,10 @@ export interface PuertoDeSesiones {
    *  solo lo trae la puerta de las tareas: ausente es «no consta». */
   crear(raiz: string, id?: string, tarea?: string): string;
   anotar(raiz: string, id: string, acto: Acto): void;
-  reabrir(raiz: string, id: string): { id: string; actos: Acto[]; historica: boolean; dispositivo?: DispositivoElegido };
+  reabrir(
+    raiz: string,
+    id: string,
+  ): { id: string; actos: Acto[]; historica: boolean; dispositivo?: DispositivoElegido; esfuerzo?: Esfuerzo };
   /** Borra una sesión. Devuelve si había algo que borrar; un id desconocido no es un error
    *  (dos pestañas, un doble clic). Opcional: un puerto de prueba puede no saber borrar. */
   borrar?(raiz: string, id: string): boolean;
@@ -177,6 +182,8 @@ export interface PuertoDeSesiones {
   /** Fija el dispositivo preferido. Devuelve si había entrada que tocar: la de una sesión
    *  cuyo id todavía no existe (nace al volcar) no está, y quien llama lo guarda en memoria. */
   elegirDispositivo?(raiz: string, id: string, dispositivo: DispositivoElegido | undefined): boolean;
+  /** Anota el esfuerzo de una sesión. Gemelo del anterior: otra elección DE la sesión. */
+  elegirEsfuerzo?(raiz: string, id: string, esfuerzo: Esfuerzo | undefined): boolean;
 }
 
 const SESIONES_EN_DISCO: PuertoDeSesiones = {
@@ -187,6 +194,7 @@ const SESIONES_EN_DISCO: PuertoDeSesiones = {
   borrar: borrarSesion,
   renombrar: renombrarSesion,
   elegirDispositivo,
+  elegirEsfuerzo,
 };
 
 /**
@@ -1253,6 +1261,11 @@ export function crearVestibulo(opciones: OpcionesDelVestibulo): Vestibulo {
       // ahora, que es la primera vez que hay una entrada a la que apuntarlo. Sin esto,
       // elegir dispositivo y hablar después perdía la elección al reabrir.
       if (dispositivo !== undefined) sesiones.elegirDispositivo?.(raiz, idSesion, dispositivo);
+      // Lo mismo para el esfuerzo: si se eligió antes de que la sesión existiera en el
+      // índice, ésta es la primera oportunidad de anotarlo.
+      if (estadoDeSesion.esfuerzo !== undefined) {
+        sesiones.elegirEsfuerzo?.(raiz, idSesion, estadoDeSesion.esfuerzo);
+      }
     };
 
     /**
@@ -1354,10 +1367,32 @@ export function crearVestibulo(opciones: OpcionesDelVestibulo): Vestibulo {
       // Se LEE aquí, una vez por consola y no una por proceso: es lo que hace que una
       // sesión nueva vea el `config.json` de ahora. Ver `OpcionesDelVestibulo.fuentes`.
       fuentes: opciones.fuentes?.() ?? {},
+      /**
+       * El esfuerzo que la sesión tenía fijado, restaurado al reabrirla.
+       *
+       * Sale del ÍNDICE y no del `.jsonl`, igual que el dispositivo: es un dato de la
+       * sesión, no uno de sus actos. Sin esto la elección moría al cerrar la pestaña, que
+       * es lo que vuelve inútil una palanca de coste — hay que volver a ponerla cada vez.
+       */
+      ...(reabierta?.esfuerzo === undefined ? {} : { esfuerzo: reabierta.esfuerzo }),
     };
     // `/modelo` y `/modelos` cambian el modelo EN CALIENTE y no tocan disco, así que esta
     // es la única forma de enterarse. Ver `Consola.alEstado`.
     consolaWeb.consola.alEstado = (nuevo) => {
+      /**
+       * El esfuerzo se ANOTA en el índice cuando cambia, y solo cuando cambia.
+       *
+       * Aquí y no en un manejador propio porque `/esfuerzo` es un comando como `/modelo`:
+       * lo único que hace es devolver un estado nuevo, y ésta es la costura que ve los dos
+       * —el de antes y el de ahora—. Comparar evita reescribir el índice en cada `/modelo`.
+       *
+       * Con la sesión aún fuera del índice se queda en memoria, igual que el dispositivo:
+       * `volcar()` la crea al primer acto y la anota entonces. Escribir aquí una entrada
+       * nueva la enseñaría en la barra como una sesión vacía que nadie ha empezado.
+       */
+      if (nuevo.esfuerzo !== estadoDeSesion.esfuerzo && anotada) {
+        sesiones.elegirEsfuerzo?.(raiz, idSesion, nuevo.esfuerzo);
+      }
       estadoDeSesion = nuevo;
       // Al cable solo por la puerta de las personas: la escucha reemite el estado de
       // modelos a los navegadores conectados, y el modelo de una tarea no es el que está

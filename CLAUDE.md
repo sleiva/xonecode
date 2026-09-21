@@ -1291,7 +1291,12 @@ feedback del desarrollador** y no es terminal.
   de OpenAI, porque su `reasoningEffort` filtra por nombre de modelo y descarta el campo en
   silencio), así que la traducción se prueba con COSTURA contra `invocationParams()`. En
   Anthropic va ACOPLADO al `thinking`, de ahí `aceptaThinkingAdaptativo` al lado de
-  `pideThinkingAdaptativo`: una dice si hace falta pedirlo, la otra si se puede.
+  `pideThinkingAdaptativo`: una dice si hace falta pedirlo, la otra si se puede. **Se elige en
+  DOS sitios y los dos PERSISTEN**: el `.md` de un subagente (que gana sobre el de la
+  sesión) y la sesión, cuyo nivel vive en el ÍNDICE y no en el `.jsonl` —es un dato DE la
+  sesión, no uno de sus actos, igual que el dispositivo— y vuelve al reabrirla. **No hay
+  defecto global, y esa ausencia es la decisión**: un tercer valor «para todas las nuevas»
+  decidiría en nombre de conversaciones que todavía no existen.
 - **Los topes de contexto solo si se saben** (`core/contextos.ts`, por familias; **ollama no tiene
   tope a propósito**). El porcentaje solo se calcula con tope: uno sobre un número inventado es
   una mentira con forma de cifra. La barra y `/config` usan la misma `topeResuelto`.
