@@ -778,6 +778,34 @@ describe("el lazo de reparación", () => {
     expect(piel.fin).toHaveBeenCalledTimes(1);
   });
 
+  /**
+   * **El OBJETIVO del turno viaja en la petición de reparación, y esto mira lo que de verdad
+   * recibe el agente.**
+   *
+   * El test de `textoDeReparacion` (puro) NO basta, y se comprobó: quitando el objetivo del
+   * SITIO DE LLAMADA los 248 tests seguían en verde. Es el patrón de fallo de esta
+   * arquitectura —la composición vive en un cierre que los tests doblan—, así que la única
+   * red posible es leer el `stream` de la segunda vuelta.
+   *
+   * Lo que defiende, medido en un turno real: la reparación entra como `HumanMessage`, o sea
+   * que pasa a ser «el último humano» — y `conservarElEncargo` protege justo ése. Sin el
+   * objetivo dentro, el encargo del usuario deja de estar protegido y lo sustituye la lista
+   * de hallazgos. El turno se iba a arreglar cosas que nadie pidió.
+   */
+  it("la petición de reparación lleva el ENCARGO original, y no solo los hallazgos", async () => {
+    const verificador = verificadorConGuion([{ verde: false, hallazgos: [ERROR_A] }]);
+    const sesion = await abrir({ cambios: [XNE], verifier: verificador });
+    await sesion.turno("arregla el error al arrancar la app", pielFalsa());
+
+    const stream = agenteDeLLamada(0).stream as unknown as { mock: { calls: unknown[][] } };
+    expect(stream.mock.calls.length).toBeGreaterThan(1);
+    const segunda = stream.mock.calls[1]![0] as { messages?: { content?: unknown }[] };
+    const texto = String(segunda.messages?.[0]?.content ?? "");
+    expect(texto).toContain("arregla el error al arrancar la app");
+    // Y el reparto: lo que no sirve al objetivo se CUENTA, no se toca.
+    expect(texto).toMatch(/NO lo toques/);
+  });
+
   it("si cada intento cambia el error pero nunca queda verde, se para en el tope y se dice", async () => {
     // Errores DISTINTOS cada vez es avance, así que no-progreso no salta; lo que corta es el
     // tope. Y se dice con la cifra para que quien lo lea sepa que se dejó como está.

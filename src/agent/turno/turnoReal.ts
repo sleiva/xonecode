@@ -49,11 +49,45 @@ export function tocaCriticarPantalla(estado: {
  * —eso lo sabe él o no lo sabe—, solo lo que se ha medido y lo único que importa aquí: que no
  * invente nada para que el error desaparezca, que es justo lo que XOne no le reprocha.
  */
+/**
+ * Lo que se le pide al agente cuando el verificador o el crítico ven algo.
+ *
+ * **Lleva el OBJETIVO delante, y ése es el arreglo.** Esta petición entra como
+ * `HumanMessage` en el mismo hilo (ver abajo), así que a partir de ese momento pasa a ser
+ * «el último humano» — y `conservarElEncargo` protege justo ése. O sea que sin el objetivo
+ * dentro, el encargo del usuario deja de estar protegido y lo sustituye la lista de
+ * hallazgos: el agente no se despista, le hemos cambiado el encargo por debajo y encima se
+ * lo recordamos en cada llamada.
+ *
+ * MEDIDO en un turno real: se pidió «tengo un error al ejecutar la app, arréglalo», se
+ * arregló (faltaba un `;` en `funciones.js`), y entonces el crítico visual vio tres textos
+ * recortados en otra pantalla —rotos desde antes, y sin relación con el arreglo—. El turno
+ * se fue a rediseñar el menú.
+ *
+ * **Y el objetivo es lo que decide si un hallazgo es trabajo o es ruido.** El mismo
+ * «BASICOS PLUS se corta» es ruido si el objetivo era arrancar la app, y es EL trabajo si
+ * el objetivo era arreglar los fallos visuales. Eso no lo dice el fichero que se tocó —el
+ * heurístico que se descartó— ni lo puede decidir el harness: lo decide el objetivo, y por
+ * eso viaja con la petición en vez de quedarse fuera.
+ */
 export function textoDeReparacion(
   hallazgos: readonly HallazgoDelTurno[],
-  observaciones: readonly string[]
+  observaciones: readonly string[],
+  /** El encargo ORIGINAL de este turno. Ausente = no se pudo saber, y entonces no se afirma. */
+  objetivo?: string
 ): string {
   const lineas: string[] = [];
+  if (objetivo !== undefined && objetivo.trim() !== "") {
+    lineas.push(
+      "TU OBJETIVO EN ESTE TURNO SIGUE SIENDO ÉSTE, y no ha cambiado:",
+      "",
+      objetivo.trim(),
+      "",
+      "Lo que viene debajo es lo que han visto las comprobaciones AL PASAR. No es un encargo",
+      "nuevo.",
+      "",
+    );
+  }
   if (hallazgos.length > 0) {
     const errores = hallazgos.filter((h) => h.severidad === "error").length;
     lineas.push(
@@ -81,7 +115,16 @@ export function textoDeReparacion(
   }
   lineas.push(
     "",
-    "Corrige lo que puedas. No inventes atributos, funciones ni propiedades para que",
+    // El reparto: lo que sirve al objetivo se arregla, y lo demás se CUENTA. Sin esta
+    // frase, una lista de hallazgos se lee como la tarea entera — que es lo que pasó.
+    ...(objetivo === undefined || objetivo.trim() === ""
+      ? ["Corrige lo que puedas."]
+      : [
+          "Arregla lo que haga falta PARA CUMPLIR TU OBJETIVO. Lo que no tenga que ver con él",
+          "—algo que ya estaba roto antes y que tu cambio no ha causado— NO lo toques: dilo en",
+          "tu respuesta para que lo decida quien te lo encargó. Nadie te ha pedido eso.",
+        ]),
+    "No inventes atributos, funciones ni propiedades para que",
     "desaparezcan: XOne ignora lo desconocido en silencio y el simulador lo detecta.",
     "Si algo no sabes cómo corregirlo, dilo en vez de intentar otra cosa."
   );
@@ -974,8 +1017,12 @@ export async function abrirSesionReal(opciones: {
      * lo único que importa aquí: que no se invente nada para que el error desaparezca, que
      * es justo lo que XOne no le va a reprochar y el simulador sí.
      */
+    // El objetivo es la petición TAL CUAL la escribió quien encargó el turno, no el
+    // `payloadInicial`: ése lleva además los hechos del proyecto precargados, que son
+    // contexto y no encargo — repetirlos en cada reparación sería pagarlos otra vez y
+    // enterrar la frase que de verdad hay que recordar.
     const peticionDeReparacion = (): string =>
-      textoDeReparacion(ultimosHallazgos, observacionesVisuales);
+      textoDeReparacion(ultimosHallazgos, observacionesVisuales, peticion);
 
     // Dos bucles anidados y a propósito: el de dentro son las RONDAS de aprobación de una
     // petición (una pausa termina la ronda, se reanuda con las decisiones); el de fuera son

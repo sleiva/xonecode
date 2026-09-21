@@ -93,3 +93,41 @@ describe("textoDeReparacion", () => {
     }
   });
 });
+
+/**
+ * El OBJETIVO dentro de la petición de reparación.
+ *
+ * Nace de un turno real: se pidió «tengo un error al ejecutar la app, arréglalo», se
+ * arregló (un `;` que faltaba en `funciones.js`) y entonces el crítico visual vio tres
+ * textos recortados en otra pantalla —rotos desde antes—. El turno se fue a rediseñar el
+ * menú.
+ *
+ * La causa no era el modelo: esta petición entra como `HumanMessage`, y `conservarElEncargo`
+ * protege «el último humano». Sin el objetivo dentro, el encargo del usuario deja de estar
+ * protegido y lo sustituye la lista de hallazgos.
+ */
+describe("el objetivo del turno viaja con la reparación", () => {
+  const OBJETIVO = "tengo un error al ejecutar la app, puedes arreglarlo";
+
+  it("va DELANTE de los hallazgos, y dice que no es un encargo nuevo", () => {
+    const texto = textoDeReparacion([HALLAZGO], ["un texto se corta"], OBJETIVO);
+    expect(texto).toContain(OBJETIVO);
+    // Delante: lo primero que lee el modelo es para qué está, no la lista.
+    expect(texto.indexOf(OBJETIVO)).toBeLessThan(texto.indexOf("un texto se corta"));
+    expect(texto).toMatch(/no es un encargo\s*\n?\s*nuevo/i);
+  });
+
+  /** El reparto que arregla la deriva: lo que sirve al objetivo se arregla, lo demás se CUENTA. */
+  it("manda NO tocar lo que no tenga que ver con el objetivo", () => {
+    const texto = textoDeReparacion([], ["un texto se corta"], OBJETIVO);
+    expect(texto).toMatch(/NO lo toques/);
+    expect(texto).toMatch(/dilo en/i);
+  });
+
+  it("sin objetivo no se inventa uno, y el texto sigue siendo válido", () => {
+    // Ausente = no se pudo saber. Mejor «corrige lo que puedas» que afirmar un objetivo.
+    const texto = textoDeReparacion([HALLAZGO], []);
+    expect(texto).not.toMatch(/TU OBJETIVO/);
+    expect(texto).toContain("Corrige lo que puedas.");
+  });
+});
