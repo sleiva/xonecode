@@ -1,5 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { esRutaDePlan, motivoDePlanInaceptable, rutaDelPlan, RUTA_PLANES } from "./planes.js";
+import {
+  CARPETA_DE_PLANES,
+  esRutaDePlan,
+  motivoDePlanInaceptable,
+  rutaDelPlan,
+  rutaPublicaDelPlan,
+  RUTA_PLANES,
+} from "./planes.js";
 
 describe("esRutaDePlan", () => {
   it("acepta lo que es un plan: carpeta con nombre válido y un fichero dentro", () => {
@@ -84,5 +91,27 @@ describe("el plan enlaza al analista con el desarrollador", () => {
       // Lo COMPROBADO, no lo escrito: la misma regla que gobierna el resto del harness.
       expect(a.instrucciones, nombre).toMatch(/COMPROBADO/);
     }
+  });
+});
+
+describe("publicar un plan", () => {
+  it("la carpeta publicada sale del NOMBRE y es del proyecto", () => {
+    expect(rutaPublicaDelPlan("login-biometrico")).toBe("doc/planes/login-biometrico");
+  });
+
+  /**
+   * La misma criba que del otro lado: de aquí sale una ruta del disco, así que un nombre que
+   * no es un slug no compone una ruta «casi buena» — no compone ninguna.
+   */
+  it("un nombre que no vale NO compone ruta", () => {
+    for (const malo of ["../fuera", "con/barra", "", ".", "..", "con espacio", "MAYUS"]) {
+      expect(rutaPublicaDelPlan(malo), malo).toBeUndefined();
+    }
+  });
+
+  it("y publicar NO es donde se trabaja: son dos carpetas distintas", () => {
+    // Si coincidieran, planificar publicaría solo, que es justo lo que se decidió no hacer.
+    expect(rutaPublicaDelPlan("x")).not.toContain(CARPETA_DE_PLANES);
+    expect(rutaPublicaDelPlan("x")!.startsWith("doc/")).toBe(true);
   });
 });

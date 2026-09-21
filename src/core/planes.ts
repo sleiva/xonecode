@@ -70,3 +70,34 @@ export function esRutaDePlan(ruta: string | undefined): boolean {
 export function rutaDelPlan(nombre: string): string {
   return `${RUTA_PLANES}${nombre}/`;
 }
+
+/**
+ * Dónde cae un plan cuando se PUBLICA, y por qué publicar es un acto aparte.
+ *
+ * `.xonecode/planes/` es estado de trabajo: no entra en git, no sube a CloudStudio y no lo
+ * ve nadie más que la copia que lo escribió. Eso es lo que hace barato trabajarlo —el que
+ * desarrolla marca una tarea como hecha sin sacar un modal, y eso está medido: cuando salía,
+ * se rechazaba y el plan se quedaba viejo en silencio; en una tarea de fondo no lo pulsa
+ * nadie—. El precio es que el plan no viaja: si se borra la copia local, se fue con ella.
+ *
+ * Así que compartirlo es un PASO EXPLÍCITO y no un efecto. Se copia a `doc/planes/<nombre>`,
+ * que sí es del proyecto: entra en el commit del turno y sube a Studio con lo demás. La
+ * decisión de publicar se ve, en vez de ocurrir sola la primera vez que alguien planifica.
+ *
+ * **Y lo hace el HARNESS, no el agente** — el mismo reparto que `/pdf`: la autorización es
+ * teclear el comando, el destino lo DERIVA el código del nombre, y no hay prompt que pueda
+ * torcerlo hacia otra carpeta.
+ */
+export const CARPETA_PUBLICA_DE_PLANES = "doc/planes";
+
+/**
+ * La carpeta publicada de un plan, relativa a la raíz del proyecto.
+ *
+ * Devuelve `undefined` si el nombre no vale, en vez de componer una ruta con él: de aquí sale
+ * una ruta del disco, y es la misma criba que `esRutaDePlan` aplica del otro lado.
+ */
+export function rutaPublicaDelPlan(nombre: string): string | undefined {
+  return motivoDePlanInaceptable(nombre) === undefined
+    ? `${CARPETA_PUBLICA_DE_PLANES}/${nombre}`
+    : undefined;
+}

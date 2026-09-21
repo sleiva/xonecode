@@ -17,6 +17,7 @@ import { cmdDoctor } from "./doctor.js";
 import { cmdVerify } from "./verify.js";
 import { AgenteGuionizado } from "../agent/turno/guionizado.js";
 import { exportarAPdf } from "../agent/exportarPdf.js";
+import { planesDelProyecto, publicarPlan } from "../agent/publicarPlan.js";
 import { correrTurno, type Piel } from "../core/turno.js";
 import {
   PAPELES, POR_OMISION, ModeloMalEscrito, parsear, PROVEEDORES, VARIABLES_POR_PROVEEDOR, esProveedorPersonalizado, variableDeProveedor,
@@ -1054,6 +1055,54 @@ export const COMANDOS: Record<string, { descripcion: string; manejador: Manejado
       }
       const hecho = await exportarAPdf({ raiz: estado.raiz, ruta });
       consola.escribir("error" in hecho ? `${hecho.error}\n` : `PDF en ${hecho.ruta}\n`);
+      return { seguir: true };
+    },
+  },
+  plan: {
+    descripcion: "los planes del proyecto; `/plan publicar <nombre>` lo copia a doc/planes/",
+    /**
+     * **Publicar es un ACTO, y por eso es un comando y no un efecto.**
+     *
+     * Un plan vive en `.xonecode/planes/`, que no entra en git ni sube a CloudStudio: eso es
+     * lo que hace barato trabajarlo —marcar una tarea como hecha no saca un modal, y cuando
+     * lo sacaba se rechazaba y el plan se quedaba viejo en silencio—. El precio es que el
+     * plan no viaja. Compartirlo se decide, no ocurre solo la primera vez que alguien
+     * planifica.
+     *
+     * Mismo reparto que `/pdf`: la autorización es teclear el comando, el destino lo DERIVA
+     * el código del nombre (`rutaPublicaDelPlan`) y no hay prompt que pueda torcerlo. Una vez
+     * publicado es un fichero del proyecto como cualquier otro: entra en el commit del turno
+     * y sube con `/sync subir`.
+     *
+     * Y sin argumentos LISTA, que es la única forma que hay de ver si existe un plan: no se
+     * pinta en ninguna pantalla.
+     */
+    manejador: async (args, estado, consola) => {
+      const [accion, ...resto] = args;
+      if (accion === undefined) {
+        const planes = planesDelProyecto(estado.raiz);
+        consola.escribir(
+          planes.length === 0
+            ? "no hay ningún plan todavía. Los escribe `analyst-xone` cuando le pides preparar un desarrollo.\n"
+            : `${planes.map((p) => `  ${p}`).join("\n")}\npublica uno con /plan publicar <nombre>\n`
+        );
+        return { seguir: true };
+      }
+      if (accion !== "publicar") {
+        consola.escribir("uso: /plan  ·  /plan publicar <nombre>\n");
+        return { seguir: true };
+      }
+      const nombre = resto.join(" ").trim();
+      if (nombre === "") {
+        consola.escribir("uso: /plan publicar <nombre>\n");
+        return { seguir: true };
+      }
+      const hecho = publicarPlan({ raiz: estado.raiz, nombre });
+      consola.escribir(
+        "error" in hecho
+          ? `${hecho.error}\n`
+          : `plan «${nombre}» en ${hecho.ruta} (${hecho.ficheros.length} ${hecho.ficheros.length === 1 ? "fichero" : "ficheros"}) — ya es del proyecto, así que sube con /sync subir\n`
+      );
       return { seguir: true };
     },
   },
