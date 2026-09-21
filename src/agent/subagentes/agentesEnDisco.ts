@@ -709,11 +709,41 @@ const DOCUMENTAR = [
  * canal con la persona. Por eso lo que decidiría a ciegas se queda escrito como PENDIENTE:
  * inventarlo es la única salida peor que no planificar, porque el plan se lee luego como si
  * lo hubiera decidido alguien. Quien delegó sí puede preguntar, y su prompt se lo manda.
+ *
+ * ## Escribir PRIMERO, y por qué eso no es una preferencia de estilo
+ *
+ * Pedirlo no bastó. Medido el 21-09-2026 sobre MyAllXOne con este bloque ya puesto: cuatro
+ * delegaciones al analista y **cero `write_file` en las cuatro**, con `.xonecode/planes/`
+ * sin llegar a existir. Entendía el encargo —abría `xone-spec-builder` y `xone-plan-builder`
+ * en sus primeras llamadas y hasta nombraba el plan en su respuesta—, pero gastaba el
+ * presupuesto entero orientándose y el entregable nunca empezaba.
+ *
+ * Dos cosas lo causaban y las dos son de ORDEN, no de tamaño. La primera, que este bloque
+ * iba DETRÁS de `RECONOCIMIENTO_PLANNER`, que termina en «deja de llamar tools y responde»:
+ * dos órdenes de parada opuestas, y gana la que se lee antes. La segunda, que todo —este
+ * texto incluido— planteaba escribir como el ÚLTIMO paso, y la propia skill remata con
+ * «crea los archivos **lazy**, solo cuando hay algo que escribir».
+ *
+ * Así que la regla se invierte: la PRIMERA escritura abre el plan con lo que ya se sabe y el
+ * resto lo amplía. Un plan a medias en disco se continúa; uno completo en el contexto de un
+ * subagente al que le cortan la última llamada no existe para nadie — y el corte es lo
+ * normal, no lo raro. **Subir el presupuesto NO es la alternativa: se probó el mismo día y
+ * con el doble solo hubo el doble de reconocimiento** (ver `TOPE_DE_LLAMADAS_DEL_ESPECIALISTA`).
  */
 const PLAN_DE_DESARROLLO = [
-  "CUANDO EL ENCARGO ES PREPARAR UN CAMBIO Y NO CONTESTAR UNA PREGUNTA:",
-  "- El reconocimiento de arriba es el PRIMER paso y no el único: termina dejando el spec y el",
-  "  plan ESCRITOS, no solo contados en tu respuesta.",
+  "CUANDO EL ENCARGO ES PREPARAR O ENCARAR UN CAMBIO (aunque te lo pidan como «averigua X para",
+  "hacer Y»: eso es preparar un cambio, no una pregunta suelta). ESTO MANDA SOBRE LA REGLA DE",
+  "RECONOCIMIENTO DE ABAJO:",
+  "- **Tu PRIMERA escritura es `/planes/<nombre>/PLAN.md`, y va ANTES de terminar de",
+  "  investigar.** En cuanto sepas de qué va el encargo —no cuando lo sepas todo— crea la",
+  "  carpeta y deja ahí el encargo, lo que ya sabes y lo que te falta. Luego lo AMPLÍAS según",
+  "  averigües. No esperes a tenerlo claro para empezar a escribirlo.",
+  "- Va al revés de lo razonable y por eso se dice: investigar hasta tenerlo todo y escribir al",
+  "  final NO funciona aquí. Tienes un presupuesto de llamadas y se agota; medido, se agota",
+  "  ANTES de que llegues a escribir, y entonces se pierde el trabajo entero. Un plan a medias",
+  "  EN DISCO vale y se continúa; uno completo en tu cabeza al que le cortan la última llamada",
+  "  no vale nada, porque para quien delegó es un plan que no existe.",
+  "- El reconocimiento es un paso del plan, no un paso previo al plan.",
   "- `xone-spec-builder` deja `PLAN.md` y `CONTEXT.md`; `xone-plan-builder` lo descompone en",
   "  `TASKS.md`. Los tres en `/planes/<nombre>/`, una carpeta por plan y el nombre en",
   "  minúsculas con guiones. Es la ÚNICA ruta donde puedes escribir: no es el proyecto, no",
@@ -733,6 +763,8 @@ const RECONOCIMIENTO_PLANNER = [
   "- En cada primera lectura usa exactamente `offset=0` y `limit=50`; usa otra página solo si una evidencia concreta lo exige.",
   "- No repitas una lectura de la misma ruta y rango, ni hagas búsquedas genéricas como `function ` sin una hipótesis.",
   "- Cuando puedas identificar el propósito y los módulos principales con evidencia, deja de llamar tools y responde.",
+  "  Esto vale para una PREGUNTA. Si el encargo es preparar o encarar un cambio, manda el bloque del plan:",
+  "  ahí parar no es responder, es dejarlo ESCRITO, y eso empieza pronto en vez de acabar tarde.",
   "- Solo amplía la exploración si el usuario pide detalle exhaustivo o si las evidencias son insuficientes o contradictorias; explica brevemente qué faltaba.",
   "- Si el resultado alimenta un diagrama o artefacto, termina con un `HANDOFF DE ANÁLISIS` compacto:",
   "  propósito; nodos; aristas `origen → destino`; evidencia `ruta:líneas`; y lagunas. No incluyas transcript ni lecturas crudas.",
@@ -888,7 +920,21 @@ export const AGENTES_DE_SERIE: readonly Agente[] = [
     motor: "modelo",
     soloLectura: true,
     skills: ["xone-spec-builder", "xone-plan-builder", "archify", "artifacts-builder"],
-    instrucciones: `${RECONOCIMIENTO_PLANNER}\n\n${PLAN_DE_DESARROLLO}\n\n${MEMORIA_LEER}`,
+    /**
+     * **El plan va DELANTE del reconocimiento, y el orden es la mitad del arreglo.**
+     *
+     * Estaba al revés y se midió lo que pasaba (21-09-2026, MyAllXOne): `RECONOCIMIENTO_PLANNER`
+     * termina en «deja de llamar tools y responde» y el bloque del plan caía cinco líneas
+     * DESPUÉS, así que eran dos órdenes de parada opuestas y ganaba la primera. Cuatro
+     * delegaciones al analista, con dos presupuestos distintos, y CERO `write_file` en las
+     * cuatro — no por no entender el encargo (abría las dos skills del plan en sus primeras
+     * llamadas), sino porque todo le decía que escribir era el último paso.
+     *
+     * Subir el tope no lo arregló: con el doble de presupuesto hizo el doble de
+     * reconocimiento y siguió sin escribir (ver `TOPE_DE_LLAMADAS_DEL_ESPECIALISTA`). Lo que
+     * se invierte aquí es el ORDEN, no el tamaño.
+     */
+    instrucciones: `${PLAN_DE_DESARROLLO}\n\n${RECONOCIMIENTO_PLANNER}\n\n${MEMORIA_LEER}`,
     origen: "semilla",
   },
   {

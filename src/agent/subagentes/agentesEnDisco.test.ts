@@ -901,6 +901,34 @@ describe("las descripciones que ve el orquestador", () => {
   });
 
   /**
+   * **El plan por delante del reconocimiento, atado por POSICIÓN y no por presencia.**
+   *
+   * Las dos reglas ya estaban las dos en el prompt y aun así no salía ningún plan: medido el
+   * 21-09-2026, cuatro delegaciones al analista y cero escrituras, porque
+   * `RECONOCIMIENTO_PLANNER` acaba en «deja de llamar tools y responde» y el bloque del plan
+   * caía DESPUÉS. Dos órdenes de parada opuestas, y gana la que se lee antes.
+   *
+   * Por eso esto compara ÍNDICES: un test de `toContain` seguiría verde con el orden
+   * invertido, que es exactamente el estado que no producía planes. Y por eso la frase de la
+   * primera escritura se ata aparte — sin ella, el orden solo adelanta la misma instrucción
+   * de «escribe al final».
+   */
+  it("al analista se le manda escribir el plan ANTES de terminar de investigar", () => {
+    const analista = AGENTES_DE_SERIE.find((a) => a.nombre === "analyst-xone")!;
+    const prompt = analista.instrucciones;
+
+    const plan = prompt.indexOf("PREPARAR O ENCARAR UN CAMBIO");
+    const pararYResponder = prompt.indexOf("deja de llamar tools y responde");
+    expect(plan).toBeGreaterThanOrEqual(0);
+    expect(pararYResponder).toBeGreaterThanOrEqual(0);
+    expect(plan).toBeLessThan(pararYResponder);
+
+    // La primera escritura es el plan, y va ANTES de acabar de investigar.
+    expect(prompt).toMatch(/PRIMERA escritura es `\/planes\/<nombre>\/PLAN\.md`/);
+    expect(prompt).toMatch(/ANTES de terminar de\s+investigar/);
+  });
+
+  /**
    * El coste es real y conviene que salte si alguien lo dobla sin querer: son ~800 tokens que
    * viajan en cada llamada del que más llamadas hace. No es un límite de diseño, es un aviso.
    */
