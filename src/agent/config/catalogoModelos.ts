@@ -357,3 +357,49 @@ export class CatalogoModelos implements CatalogoModelosPort {
     return salida;
   }
 }
+
+/**
+ * Qué sabe hacer un modelo de Ollama, PREGUNTÁNDOSELO al servidor.
+ *
+ * Existe porque Ollama es el único proveedor cuyos modelos los elige el usuario y no hay
+ * prefijo que los describa: en esta máquina conviven `granite4.2:3b`, `qwen3.8:27b-mlx` y
+ * `ministral-3:3b`, y de los tres solo los dos primeros piensan. Una tabla habría sido
+ * adivinar; `POST /api/show` lo contesta, y devuelve `capabilities` con `"thinking"` dentro
+ * cuando el modelo piensa.
+ *
+ * **Importa acertar porque el fallo es duro, no blando**: medido, pedirle pensar a
+ * `ministral-3:3b` contesta `"ministral-3:3b" does not support thinking` y se lleva el
+ * turno. Por eso lo que no se pueda comprobar devuelve `undefined` —«no consta»— y
+ * `nivelesDeEsfuerzo` no afirma nada: sin capacidades no se manda el parámetro.
+ *
+ * No cachea, por la misma razón que `xone_navegacion` no cachea su índice: quien la llama
+ * ya guarda la respuesta el tiempo que le sirve, y un «este modelo piensa» viejo sobre un
+ * modelo que se ha sustituido es peor que no tener el dato.
+ */
+export async function capacidadesDeOllama(
+  modelo: string,
+  baseUrl: string = baseUrlDeOllama(),
+  fetchImpl: typeof fetch = fetch,
+): Promise<{ piensa: boolean } | undefined> {
+  try {
+    const respuesta = await fetchImpl(unirUrl(baseUrl, "/api/show"), {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ model: modelo }),
+      signal: AbortSignal.timeout(5_000),
+    });
+    if (!respuesta.ok) return undefined;
+    const cuerpo: unknown = await respuesta.json();
+    if (!esRegistro(cuerpo)) return undefined;
+    const capacidades = cuerpo["capabilities"];
+    // Una lista que no es lista es «no consta», no «no piensa»: afirmar lo segundo sobre
+    // una respuesta que no se entiende sería inventar una medida.
+    if (!Array.isArray(capacidades)) return undefined;
+    return { piensa: capacidades.includes("thinking") };
+  } catch {
+    // El servidor apagado, un plazo agotado o un JSON roto son todos «no consta». No se
+    // relanza: esto alimenta un control de la interfaz, y que no se pueda pintar una
+    // pastilla no puede tumbar nada.
+    return undefined;
+  }
+}

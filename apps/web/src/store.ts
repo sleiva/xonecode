@@ -39,8 +39,10 @@ import type {
   SesionDelCable,
   FaseDelLanzamiento,
   EstadoDelLanzamiento,
+  Esfuerzo,
+  EsfuerzoDelCable,
 } from "./tipos.js";
-import { PLATAFORMAS_DE_DISPOSITIVO, FASES_DEL_LANZAMIENTO, ESTADOS_DEL_LANZAMIENTO } from "./tipos.js";
+import { PLATAFORMAS_DE_DISPOSITIVO, FASES_DEL_LANZAMIENTO, ESTADOS_DEL_LANZAMIENTO, ESFUERZOS } from "./tipos.js";
 
 export interface EstadoDelCliente {
   actos: Acto[];
@@ -57,7 +59,13 @@ export interface EstadoDelCliente {
    * ni se recuerda entre conexiones: al caerse el SSE se tira (`marcarDesconectado`) y la
    * reconexión lo vuelve a traer entero.
    */
-  modelos?: { actual?: string; porDefecto?: string; proveedores: ProveedorDeModelos[] };
+  modelos?: {
+    actual?: string;
+    porDefecto?: string;
+    proveedores: ProveedorDeModelos[];
+    /** Lo que admite el modelo EN VIGOR. Ausente = no se pinta la pastilla de esfuerzo. */
+    esfuerzo?: EsfuerzoDelCable;
+  };
   /**
    * Los proyectos de cada entorno registrado que alguien ha consultado, por su id: las
    * casillas de su pestaña en Ajustes. Solo están los PEDIDOS —el activo no hace falta,
@@ -899,8 +907,31 @@ export function crearStoreDelCliente(): {
           return;
         }
         case "modelos": {
-          const m = mensaje as { actual?: unknown; porDefecto?: unknown; proveedores?: unknown };
+          const m = mensaje as { actual?: unknown; porDefecto?: unknown; proveedores?: unknown; esfuerzo?: unknown };
           if (!Array.isArray(m.proveedores)) return;
+          /**
+           * El esfuerzo, con la MISMA disciplina de lista blanca campo a campo.
+           *
+           * Se criban los niveles uno a uno contra el vocabulario en vez de copiar la
+           * lista: lo que llega alimenta un desplegable cuyos valores vuelven por el cable
+           * y acaban en un parámetro de la API, así que una cadena rara aquí sería un 400
+           * dentro de dos saltos. Y una lista que se queda VACÍA tras la criba se descarta
+           * entera: `PastillaDeEsfuerzo` no se pinta sin niveles, y propagar `[]` sería
+           * pedirle que decida eso a ella.
+           */
+          const e = m.esfuerzo as { niveles?: unknown; actual?: unknown; nota?: unknown } | undefined;
+          const niveles = Array.isArray(e?.niveles)
+            ? e.niveles.filter((n): n is Esfuerzo => typeof n === "string" && (ESFUERZOS as readonly string[]).includes(n))
+            : [];
+          const esfuerzo = niveles.length === 0
+            ? undefined
+            : {
+                niveles,
+                ...(typeof e?.actual === "string" && niveles.includes(e.actual as Esfuerzo)
+                  ? { actual: e.actual as Esfuerzo }
+                  : {}),
+                ...(typeof e?.nota === "string" ? { nota: e.nota } : {}),
+              };
           const proveedores = m.proveedores.filter(esProveedorDeModelos).map((p) => ({
             id: p.id,
             // Campo a campo, que es una lista BLANCA: lo que no se nombra aquí no llega al
@@ -926,6 +957,10 @@ export function crearStoreDelCliente(): {
               // no es un modelo. Ausente se propaga como ausente.
               ...(typeof m.porDefecto === "string" ? { porDefecto: m.porDefecto } : {}),
               proveedores,
+              // Ausente se propaga como ausente: «este modelo no admite esfuerzo» y «aún
+              // no se sabe» se pintan igual —sin pastilla—, y un `{niveles: []}` aquí
+              // haría que el componente tuviera que distinguir lo que el store ya decidió.
+              ...(esfuerzo === undefined ? {} : { esfuerzo }),
             },
           });
           return;

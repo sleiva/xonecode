@@ -4095,8 +4095,81 @@ nada más. Cinco cosas:
   budget_tokens:N}`), así que un `thinking` adaptativo a ciegas para «anthropic» los
   rompería con un 400. Lo desconocido devuelve `false`, que es el lado conservador: se omite
   y el modelo hace lo suyo, en vez de mandarle algo que puede rechazar.
-- **`effort` NO se manda, a propósito**: omitirlo ya es `high`, que es el valor que se
-  querría. Añadirlo sería superficie de configuración sin ganancia medida.
+- **`effort` SÍ se manda, y esto revierte lo que aquí decía.** La versión anterior de esta
+  entrada decía que omitirlo ya es `high` —cierto— y que añadirlo sería «superficie de
+  configuración sin ganancia medida». Lo primero sigue siendo verdad; lo segundo dejó de
+  serlo en cuanto la pregunta cambió: no es configuración por configurar, es la palanca de
+  COSTE en manos de quien está delante, en un harness donde una sola pregunta de estructura
+  se midió en cientos de miles de tokens. Lo que no cambia es la dirección del fallo: el
+  nivel se omite siempre que no conste que el modelo lo admite.
+- **La unidad NO es el proveedor, es el MODELO, y eso está medido.** Contra
+  `integrate.api.nvidia.com` con la misma clave, `nvidia/nemotron-3-super-120b-a12b` acepta
+  `none, minimal, low, medium, high, xhigh, max` y `openai/gpt-oss-20b` acepta solo
+  `'low', 'medium' or 'high'`. Los dos enums salieron del propio mensaje de error al mandar
+  un valor inventado, que es el descubridor más barato que hay para esto. Una tabla por
+  proveedor habría sido falsa el primer día.
+- **Y los niveles son una LISTA por modelo, no tres fijos, por DeepSeek.** Su API acepta los
+  siete y los COLAPSA: su documentación publica el mapeo `minimal→low`, `medium→high`,
+  `xhigh→high`, `ultra→max`, así que allí solo hay tres niveles de verdad —`low`, `high` y
+  `max`—. Ofrecer low/medium/high contra ese modelo sería dar dos opciones que hacen lo
+  mismo sin decirlo. Medido además que el enum se valida (un valor inventado da 422); lo que
+  NO se pudo medir es que los niveles cambien el resultado — con un problema fácil y dos
+  pasadas la señal quedó por debajo de la varianza entre tiradas, y eso es «no medido», no
+  «no hace nada».
+- **Gemini: la frontera es la generación 3, y el catálogo vivo NO sirve para decidirlo.**
+  Medido contra la API real: `gemini-2.5-flash` y `gemma-4-31b-it` contestan
+  **«Thinking level is not supported for this model»**, y las 3.x lo aceptan con efecto
+  monótono (`LOW` sin pensamiento, `MEDIUM` 685 tokens de pensamiento, `HIGH` 847) y con un
+  **400** para un nivel inventado. Los tres alias `*-latest` van ENUMERADOS en la tabla
+  porque apuntan a 3.x y el prefijo `gemini-3` no los casaría — comprobados uno a uno. Y el
+  resultado NEGATIVO que importa: `GET /v1beta/models/<id>` devuelve `"thinking": true`
+  también para `gemini-2.5-flash`, que es justo el que falla; ese campo dice «sabe pensar»,
+  no «acepta niveles», así que hace falta tabla.
+- **Ollama SÍ tiene niveles, y el booleano era del cliente.** El servidor valida el campo y
+  lo dice en su error: `invalid think value: "banana" (must be "high", "medium", "low",
+  "max", true, or false)`. Que `@langchain/ollama` tipe `think` como `boolean` es una
+  limitación suya — pasa el valor tal cual al request, comprobado de punta a punta con el
+  cliente real: con `think: "low"` el razonamiento de `granite4.2:3b` baja de 1589 a 55
+  caracteres y el `content` sigue limpio (el razonamiento va a
+  `additional_kwargs.reasoning_content`, no al contenido, así que `puente.ts` no cambia).
+- **El soporte de Ollama se PREGUNTA, no se tabula**: sus modelos los elige el usuario y no
+  hay prefijo que los describa, pero `POST /api/show` devuelve `capabilities` con
+  `"thinking"` dentro. Medido: `granite4.2:3b`, `glm-5.3-flash:cloud` y `qwen3.8:27b-mlx` la
+  tienen, `ministral-3:3b` no — y pedirle pensar a ése contesta
+  `"ministral-3:3b" does not support thinking` y se lleva el turno. Por eso las capacidades
+  entran por PARÁMETRO a `nivelesDeEsfuerzo` (son dos cadencias: preguntar es asíncrono,
+  construir un modelo es síncrono) y su ausencia significa «no consta» → no se manda nada.
+- **Aceptar un nivel y HONRARLO son dos cosas, y en Ollama se separan.** Medido con semilla
+  fija en `granite4.2:3b`: `low` da 112 caracteres de razonamiento y `medium`, `high`, `max`
+  y `true` dan 1537 idénticos. Y en `glm-5.3-flash:cloud` —el modelo POR OMISIÓN de este
+  repo— cinco tiradas dan `low` 0/0/0/0/0, `high` 54/0/0/0/0 y `medium` entre 572 y 1647:
+  o sea que **`high` se comporta como apagado y solo `medium` piensa**. No es monótono y no
+  se puede arreglar desde aquí: lo pone el template de cada modelo. La decisión fue
+  ofrecerlos igual (la alternativa era no ofrecer niveles en Ollama) y **DECIRLO en la
+  pastilla**, que es donde alguien va a elegir.
+- **`reasoningEffort` de `@langchain/openai` no sirve para los compatibles, y falla EN
+  SILENCIO.** Medido en 1.5.5: `_getReasoningParams` abre con
+  `if (!isReasoningModel(this.model)) return;`, y ese predicado solo reconoce `/^o\d/` y
+  `gpt-5*`. Un `deepseek-flash` o un `openai/gpt-oss-20b` no casan, el campo se descarta
+  antes de componer la petición y el payload sale sin él — ni error ni aviso, el mismo
+  patrón que el `max_tokens` de 4096 y descubierto igual, preguntándole a
+  `invocationParams()`. La puerta que sí llega es `modelKwargs`, y se usa en los CINCO
+  caminos de `ChatOpenAI` (no solo en los compatibles) para que no haya un segundo sitio
+  donde esto pueda dejar de llegar.
+- **El esfuerzo y el `thinking` están ACOPLADOS en Anthropic.** Medido contra
+  `validateInvocationParamCompatibility` del propio cliente, que corre en local:
+  `claude-opus-5` con `outputConfig.effort: "max"` y sin `thinking` explícito es una
+  petición que **ni sale de esta máquina** — «thinking.type="disabled" is not supported for
+  claude-opus-5 with outputConfig.effort="max"». De ahí `aceptaThinkingAdaptativo`, hermana
+  de `pideThinkingAdaptativo`: aquélla dice si HACE FALTA pedirlo (si omitirlo significa «no
+  pienses»), ésta si se PUEDE pedir. Se separan justo en la generación 5, que ya corre
+  adaptativo por omisión pero admite que se le pida. Opus 4.5 no está en la lista aunque el
+  validador local lo deje pasar: ese validador solo mira la forma, y el adaptativo llegó en
+  4.6.
+- **Lo que queda SIN MEDIR y por eso sin fila**: `openai`, `groq` y `xai`, que no tenían
+  credencial con la que probarlos. Se quedan sin control y sin parámetro, que es la
+  dirección segura; el probe del valor inválido los resuelve en una llamada cada uno el día
+  que haya clave.
 - **Y la prueba es de COSTURA, contra `invocationParams()` del cliente real.** Las dos
   tablas de `core/` no valen de nada si no llegan al payload, y eso no lo ve ningún test de
   la tabla. Se construye el `ChatAnthropic` de verdad y se le preguntan sus parámetros —sin

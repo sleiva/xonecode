@@ -1,6 +1,9 @@
 import { useEffect, useRef, useState, type KeyboardEvent } from "react";
-import type { DispositivoElegido, InformeDeDispositivos, ProveedorDeModelos } from "../tipos.js";
+import type {
+  DispositivoElegido, Esfuerzo, EsfuerzoDelCable, InformeDeDispositivos, ProveedorDeModelos,
+} from "../tipos.js";
 import { PastillaDeModelo } from "./PastillaDeModelo.js";
+import { PastillaDeEsfuerzo } from "./PastillaDeEsfuerzo.js";
 import { PastillaDeDispositivo } from "./PastillaDeDispositivo.js";
 import { ContadorDeTokens, type ConsumoPintable } from "./ContadorDeTokens.js";
 import estilos from "./Compositor.module.css";
@@ -28,6 +31,7 @@ export function Compositor({
   modelos,
   alPedirCatalogo,
   alElegirModelo,
+  alElegirEsfuerzo,
   alAbrirAjustes,
   dispositivo,
   dispositivos,
@@ -63,10 +67,28 @@ export function Compositor({
   alParar?: () => void;
   /** El estado de modelos del cable. Ausente = todavía no llegó: no se pinta pastilla, en
    *  vez de una que diga «Elige modelo» sin saber siquiera si hay algo que elegir. */
-  modelos?: { actual?: string; proveedores: readonly ProveedorDeModelos[] };
+  modelos?: {
+    actual?: string;
+    proveedores: readonly ProveedorDeModelos[];
+    /**
+     * Lo que admite de esfuerzo el modelo EN VIGOR. Viaja DENTRO de `modelos` y no como
+     * prop suelta por el mismo motivo por el que viaja dentro del mensaje: la lista
+     * depende del modelo, y separarlos dejaría que llegara una sin la otra — la pastilla
+     * ofreciendo los niveles del modelo anterior, que es un control que miente.
+     */
+    esfuerzo?: EsfuerzoDelCable;
+  };
   alPedirCatalogo?: (proveedor: string) => void;
   /** Elegir modelo: el id `proveedor/modelo`. Lo manda como acción, no como comando. */
   alElegirModelo?: (id: string) => void;
+  /**
+   * Elegir el esfuerzo, o `undefined` para dejar de mandarlo.
+   *
+   * Opcional como `alElegirDispositivo`: sin manejador no se ofrece el control, que es lo
+   * que mantiene honesto al compositor en los sitios donde no hay servidor detrás (los
+   * tests, y cualquier montaje que no cablee el cable).
+   */
+  alElegirEsfuerzo?: (nivel: Esfuerzo | undefined) => void;
   /** Abrir Ajustes, para los proveedores que la pastilla no lista por no estar comprobados. */
   alAbrirAjustes?: () => void;
   /** El dispositivo de la sesión, tal como lo cuenta el servidor. Ausente = ninguno. */
@@ -179,6 +201,22 @@ export function Compositor({
               {...(alAbrirAjustes === undefined ? {} : { alAbrirAjustes })}
             />
           ) : null}
+          {/*
+            El esfuerzo, PEGADO al modelo: no es una elección independiente, es un ajuste DE
+            ese modelo — qué niveles hay depende de cuál esté puesto, y la mitad de los
+            modelos de este harness no admiten ninguno. Por eso se pinta solo cuando el
+            servidor manda niveles, y por eso no lleva rótulo: en una fila estrecha, «low»
+            junto al nombre del modelo se lee como lo que es.
+          */}
+          {alElegirEsfuerzo === undefined ? null : (
+            <PastillaDeEsfuerzo
+              {...(modelos?.esfuerzo === undefined ? {} : { niveles: modelos.esfuerzo.niveles })}
+              {...(modelos?.esfuerzo?.actual === undefined ? {} : { actual: modelos.esfuerzo.actual })}
+              {...(modelos?.esfuerzo?.nota === undefined ? {} : { nota: modelos.esfuerzo.nota })}
+              conectado={conectado}
+              alElegir={alElegirEsfuerzo}
+            />
+          )}
           {/*
             El dispositivo, AL LADO del modelo: son la misma clase de elección —de la sesión,
             la decide el servidor y el cliente la pinta— y se miran juntas. Estuvo arriba en

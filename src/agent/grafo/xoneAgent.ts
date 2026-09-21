@@ -498,10 +498,13 @@ export async function construirAgente(opciones: OpcionesDelAgente): Promise<unkn
     // Fijarlo es la excepción y no la norma — un agente con modelo escrito se queda ahí
     // aunque el usuario cambie el suyo con `/modelo`, que es justo lo que quiere quien
     // escribe «este revisor corre con Claude» y no lo que quiere nadie más.
+    // Y el ESFUERZO del perfil, que gana sobre el de la sesión: quien escribe «este
+    // consultor piensa poco» lo dice de ESE especialista, no de la conversación. Ausente
+    // deja pasar el de la sesión, que es lo que `Modelos` resuelve por dentro.
     model:
       perfil.modelo === undefined
-        ? opciones.modelos.paraPapel(perfil.soloLectura ? "rapido" : "trabajo")
-        : opciones.modelos.paraModelo(perfil.modelo),
+        ? opciones.modelos.paraPapel(perfil.soloLectura ? "rapido" : "trabajo", perfil.esfuerzo)
+        : opciones.modelos.paraModelo(perfil.modelo, perfil.esfuerzo),
     };
   });
 

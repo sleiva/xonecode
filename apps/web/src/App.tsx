@@ -1487,6 +1487,11 @@ export function App({
               // no al conectar.
               alPedirCatalogo={(proveedor) => void enviar({ clase: "catalogo", proveedor })}
               alElegirModelo={(id) => void enviar({ clase: "modelo", id })}
+              // El esfuerzo es de la SESIÓN y solo de la sesión: a diferencia del modelo, no
+              // se guarda ningún defecto. `nivel` ausente significa quitarlo.
+              alElegirEsfuerzo={(nivel) =>
+                void enviar(nivel === undefined ? { clase: "esfuerzo" } : { clase: "esfuerzo", nivel })
+              }
               // Los proveedores que la pastilla no lista —sin comprobar— se configuran aquí.
               alAbrirAjustes={() => setAjustesAbiertos(true)}
               // El dispositivo de la sesión: viaja el ID y el servidor resuelve la foto

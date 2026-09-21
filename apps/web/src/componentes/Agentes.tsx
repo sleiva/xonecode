@@ -7,7 +7,7 @@ import {
   IconTrashOutline16,
 } from "@deepseek-ai/dsh-client-ui-primitives";
 import type {
-  ProveedorDeModelos, AgenteDelCable, SkillDelCable } from "../tipos.js";
+  ProveedorDeModelos, AgenteDelCable, SkillDelCable, Esfuerzo } from "../tipos.js";
 import { abreviar } from "../cifras.js";
 import estilos from "./Agentes.module.css";
 
@@ -306,6 +306,28 @@ export function Agentes({
    * subagentes se mira mucho más de lo que se edita uno.
    */
   const faltanCatalogos = comprobados.filter((p) => p.modelos === undefined && p.error === undefined);
+
+  /**
+   * Los niveles de esfuerzo que admite el modelo elegido AHORA MISMO en este formulario.
+   *
+   * Sale del catálogo y no de una tabla del cliente: el servidor anota `esfuerzos` en cada
+   * modelo, así que esto es una búsqueda y no una regla duplicada. Vacío en los tres casos
+   * que significan lo mismo para quien mira —sin modelo elegido, con uno que no lo admite,
+   * o con el catálogo aún sin llegar—, y entonces el control no se pinta: un desplegable
+   * de esfuerzo sobre «El que le toque» prometería fijar algo de un modelo que todavía no
+   * se sabe cuál es.
+   */
+  const nivelesDelModelo: readonly Esfuerzo[] = (() => {
+    const id = editando?.modelo;
+    if (id === undefined || editando?.motor !== "modelo") return [];
+    // El id es `proveedor/modelo` y se parte por la PRIMERA barra, como en `core/modelos.ts`:
+    // un id de Ollama puede llevar más (`library/qwen3:8b`).
+    const corte = id.indexOf("/");
+    if (corte <= 0) return [];
+    const proveedor = id.slice(0, corte);
+    const modelo = id.slice(corte + 1);
+    return (proveedores ?? []).find((p) => p.id === proveedor)?.modelos?.find((m) => m.id === modelo)?.esfuerzos ?? [];
+  })();
   const idsSinCatalogo = faltanCatalogos.map((p) => p.id).join(",");
   useEffect(() => {
     if (motorEditado !== "modelo" || idsSinCatalogo === "") return;
@@ -639,6 +661,48 @@ export function Agentes({
               </p>
             ) : null}
           </label>
+          {/*
+            El esfuerzo, PEGADO al modelo y solo con motor propio.
+            
+            Pegado a él porque es un ajuste DE ese modelo y no una elección independiente: los
+            niveles que se ofrecen salen del modelo elegido justo arriba, y la mitad de los
+            que este harness sirve no admiten ninguno — con `claude-haiku-4-5` o con
+            `gemini-2.5-flash`, pedirlo no da una respuesta peor: da un 400.
+
+            Solo con `motor: "modelo"` por lo mismo que la casilla de ejecutar comandos: en
+            los tres externos el modelo lo construye el hijo en su proceso, con su propia
+            configuración, y un campo nuestro no llega hasta allí. Quien tenga un `.md` con
+            `esfuerzo` y un motor externo ve el aviso de abajo, no un control que miente.
+          */}
+          {editando.motor === "modelo" && nivelesDelModelo.length > 0 ? (
+            <label className={estilos.campo}>
+              <span className={estilos.rotulo}>
+                Esfuerzo{" "}
+                <span className={estilos.pista}>— cuánto razona antes de contestar</span>
+              </span>
+              <select
+                className={estilos.selector}
+                value={editando.esfuerzo ?? ""}
+                onChange={(e) =>
+                  setEditando({
+                    ...editando,
+                    // Ausente y no cadena vacía: es la misma ausencia que viaja por el cable
+                    // y la que `escribirAgente` traduce a «no escribas la línea».
+                    ...(e.target.value === ""
+                      ? { esfuerzo: undefined }
+                      : { esfuerzo: e.target.value as Esfuerzo }),
+                  })
+                }
+              >
+                <option value="">Sin fijar — decide el modelo</option>
+                {nivelesDelModelo.map((n) => (
+                  <option key={n} value={n}>
+                    {n}
+                  </option>
+                ))}
+              </select>
+            </label>
+          ) : null}
 
           <label className={estilos.casilla}>
             <input
@@ -681,11 +745,16 @@ export function Agentes({
             </label>
           ) : null}
 
+
+
           {editando.motor === "modelo" ? null : (
             <p className={estilos.aviso}>
               {AVISO_EXTERNO} {AVISO_DE_LECTURA[editando.motor] ?? ""}
               {editando.ejecucion === true
                 ? " Y «ejecuta comandos» no se aplica con este motor: el hijo corre en otro proceso, con la shell cerrada."
+                : ""}
+              {editando.esfuerzo !== undefined
+                ? " El «esfuerzo» tampoco se aplica: el modelo lo construye el hijo, con su propia configuración."
                 : ""}
             </p>
           )}

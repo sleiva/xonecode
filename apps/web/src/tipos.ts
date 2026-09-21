@@ -47,6 +47,14 @@ export interface AgenteDelCable {
    * marcada que no hace nada.
    */
   ejecucion?: boolean;
+  /**
+   * Cuánto razona su modelo antes de contestar. Ausente = no se manda el parámetro.
+   *
+   * Solo tiene efecto con `motor: "modelo"`: en los tres externos el modelo lo construye el
+   * hijo en su proceso y un campo nuestro no llega hasta allí. Qué niveles admite depende
+   * del modelo elegido (`core/esfuerzo.ts`), y por eso la ventana lo pinta pegado a él.
+   */
+  esfuerzo?: Esfuerzo;
   skills: string[];
   instrucciones: string;
   origen?: string;
@@ -302,7 +310,24 @@ export type MensajeAlCliente =
    * inventada—, mientras que `porDefecto` es el que usarán las sesiones nuevas y se manda
    * también sin sesión, que es justo donde se configura.
    */
-  | { clase: "modelos"; actual?: string; porDefecto?: string; proveedores: ProveedorDeModelos[] }
+  | {
+      clase: "modelos";
+      actual?: string;
+      porDefecto?: string;
+      proveedores: ProveedorDeModelos[];
+      /**
+       * Qué esfuerzo de razonamiento admite el modelo EN VIGOR, y cuál está puesto.
+       *
+       * Viaja con los modelos y no en un mensaje propio porque cambia en los mismos
+       * instantes: la lista depende del modelo, así que un `/modelo` que no la trajera
+       * dejaría la pastilla ofreciendo los niveles del modelo de antes. Es el mismo motivo
+       * por el que la ventana de contexto viaja con el consumo.
+       *
+       * Ausente = no se pudo afirmar nada (no hay sesión, o el modelo no lo admite), y
+       * entonces la pastilla no se pinta.
+       */
+      esfuerzo?: EsfuerzoDelCable;
+    }
   /** Los proyectos de UN entorno registrado, pedidos por su pestaña en Ajustes. `proyectos`
    *  ausente con `error` puesto es «no se pudo preguntar», que no es una lista vacía. */
   | {
@@ -714,6 +739,35 @@ export const TRANSICIONES: Readonly<Record<TareaDelCable["estado"], readonly Tar
   terminada: [],
 };
 
+/**
+ * Copia DECLARADA de `core/esfuerzo.ts#Esfuerzo`, como la de la URL de un entorno y la del
+ * slug de un subagente: la frontera prohíbe que el cliente importe de `src/`, y sin una
+ * copia aquí el desplegable tendría que tipar sus valores como `string`.
+ *
+ * `none` no está, igual que allí: en DeepSeek significa «no pienses», o sea que es un
+ * interruptor y no un nivel, y mezclarlos haría que un control con forma de intensidad
+ * apagara una capacidad.
+ */
+export type Esfuerzo = "low" | "medium" | "high" | "xhigh" | "max";
+
+/** El vocabulario como VALOR, que es lo que el store necesita para cribar lo que llega. */
+export const ESFUERZOS: readonly Esfuerzo[] = ["low", "medium", "high", "xhigh", "max"] as const;
+
+/**
+ * Lo que el servidor sabe decir del esfuerzo para el modelo en vigor.
+ *
+ * `niveles` son los que ESE modelo admite —no tres fijos: Anthropic tiene cinco desde Opus
+ * 4.7, Gemini tres y DeepSeek `low`/`high`/`max`, porque colapsa `medium` sobre `high`—, y
+ * `nota` es lo que hay que advertir de él y la lista no cuenta. Hoy la usa Ollama: su
+ * servidor valida cuatro niveles, pero que los acepte no significa que el modelo los honre.
+ */
+export interface EsfuerzoDelCable {
+  niveles: Esfuerzo[];
+  /** El de la sesión. Ausente = no se manda el parámetro. */
+  actual?: Esfuerzo;
+  nota?: string;
+}
+
 export interface ProveedorDeModelos {
   id: string;
   /** Cómo se escribe. Lo pone el servidor: capitalizar el id aquí daría «Xai». */
@@ -726,7 +780,15 @@ export interface ProveedorDeModelos {
   /** La credencial está en `auth.json` y por tanto se puede borrar desde aquí. Una que solo
    *  viene del entorno no lo lleva: desexportar la shell de nadie no está a nuestro alcance. */
   enFichero?: boolean;
-  modelos?: { id: string; nombre?: string }[];
+  /**
+   * Los modelos que sirve, con los niveles de ESFUERZO que admite cada uno.
+   *
+   * `esfuerzos` lo calcula el SERVIDOR con la tabla de `core/esfuerzo.ts`: la frontera
+   * prohíbe que el cliente importe de `src/`, y una copia declarada de una tabla que crece
+   * cada vez que se mide un modelo nuevo es un sitio donde quedarse viejo en silencio.
+   * Ausente = ese modelo no admite ninguno, y entonces no se pinta el control.
+   */
+  modelos?: { id: string; nombre?: string; esfuerzos?: Esfuerzo[] }[];
   error?: string;
 }
 
@@ -738,6 +800,18 @@ export type MensajeDelCliente =
    * sintaxis de otra piel. Cómo se aplica es cosa del servidor.
    */
   | { clase: "modelo"; id: string }
+  /**
+   * Cuánto razona el modelo de esta sesión. `nivel` ausente = quitarlo.
+   *
+   * La INTENCIÓN y no la sintaxis, como el modelo: el servidor la aplica encolando el
+   * manejador de `/esfuerzo` que ya comparten el terminal y la TUI. Mandar la prosa
+   * apuntaría en el transcript un acto de usuario que nadie tecleó.
+   *
+   * El nivel NO se comprueba aquí contra el modelo en vigor: se guarda en la sesión y
+   * `construirModelo` lo omite mientras no aplique. Así, cambiar de modelo a uno que sí lo
+   * admite lo recupera solo, en vez de obligar a volver a elegirlo.
+   */
+  | { clase: "esfuerzo"; nivel?: Esfuerzo }
   /** Abrir una sesión de un proyecto: la nombrada, o una NUEVA si no se nombra ninguna. */
   | { clase: "sesion"; proyecto: string; sesion?: string }
   /** Borrar una sesión guardada, o ponerle nombre, desde el menú de su fila en la barra.

@@ -647,6 +647,119 @@ describe("montarRutas — el cable, por fin conectado", () => {
       expect(modelos.actual).toBe("anthropic/claude-x");
     });
 
+    /**
+     * El ESFUERZO del modelo en vigor: los niveles que se le pueden pedir y el que hay puesto.
+     *
+     * Se prueba aquí y no solo en `core/esfuerzo.test.ts` porque son dos preguntas: allí, que
+     * la tabla diga la verdad; aquí, que ese dato CRUCE el cable. Es el patrón de fallo de
+     * esta arquitectura —una composición de producción dentro de un cierre que los tests
+     * doblan—, y sin esto la pastilla podía quedarse sin pintar con todo en verde.
+     */
+    it("con un modelo que lo admite, viajan sus niveles de esfuerzo", async () => {
+      const servidor = servidorDeMentira();
+      const vestibulo = vestibuloDePrueba({
+        fuentes: () => ({ bandera: "anthropic/claude-opus-5" }),
+        correr: async () => 0,
+      });
+      montarRutas(servidor, vestibulo);
+      const cliente = clienteDeMentira();
+      await servidor.rutas.get(`GET ${RUTA_EVENTOS}`)!(cliente.peticion, cliente.respuesta);
+      await vestibulo.abrirProyecto({ raiz: "/w/a" });
+      await asentar();
+      const antes = cliente.recibidos.length;
+      await servidor.rutas.get(`GET ${RUTA_EVENTOS}`)!(cliente.peticion, cliente.respuesta);
+      await asentar();
+
+      const modelos = cliente.recibidos
+        .slice(antes)
+        .find((m) => m.clase === "modelos") as Extract<MensajeAlCliente, { clase: "modelos" }>;
+      expect(modelos.esfuerzo?.niveles).toEqual(["low", "medium", "high", "xhigh", "max"]);
+      // Nada elegido todavía: ausente, no un nivel inventado.
+      expect(modelos.esfuerzo?.actual).toBeUndefined();
+      // Y sin nota: la advertencia es de Ollama, donde el efecto no es monótono.
+      expect(modelos.esfuerzo?.nota).toBeUndefined();
+    });
+
+    it("con un modelo que NO lo admite, el bloque entero va ausente", async () => {
+      // Haiku 4.5 da error si se le manda `effort`. Ausente es lo que hace que la pastilla
+      // no se pinte — un `{niveles: []}` obligaría al cliente a decidir eso.
+      const servidor = servidorDeMentira();
+      const vestibulo = vestibuloDePrueba({
+        fuentes: () => ({ bandera: "anthropic/claude-haiku-4-5" }),
+        correr: async () => 0,
+      });
+      montarRutas(servidor, vestibulo);
+      const cliente = clienteDeMentira();
+      await servidor.rutas.get(`GET ${RUTA_EVENTOS}`)!(cliente.peticion, cliente.respuesta);
+      await vestibulo.abrirProyecto({ raiz: "/w/a" });
+      await asentar();
+      const antes = cliente.recibidos.length;
+      await servidor.rutas.get(`GET ${RUTA_EVENTOS}`)!(cliente.peticion, cliente.respuesta);
+      await asentar();
+
+      const modelos = cliente.recibidos
+        .slice(antes)
+        .find((m) => m.clase === "modelos") as Extract<MensajeAlCliente, { clase: "modelos" }>;
+      expect(modelos.esfuerzo).toBeUndefined();
+    });
+
+    /**
+     * Ollama es el único que se PREGUNTA, y por eso su camino tiene test propio: sin el
+     * puerto `capacidadesDeModelo` cableado, sus modelos no ofrecen esfuerzo — y eso es lo
+     * correcto, porque pedírselo a uno que no piensa tumba el turno.
+     */
+    it("un modelo de Ollama no ofrece nada mientras no se le haya preguntado", async () => {
+      const servidor = servidorDeMentira();
+      const vestibulo = vestibuloDePrueba({
+        fuentes: () => ({ bandera: "ollama/granite4.2:3b" }),
+        correr: async () => 0,
+      });
+      montarRutas(servidor, vestibulo);
+      const cliente = clienteDeMentira();
+      await servidor.rutas.get(`GET ${RUTA_EVENTOS}`)!(cliente.peticion, cliente.respuesta);
+      await vestibulo.abrirProyecto({ raiz: "/w/a" });
+      await asentar();
+      // Reconectar para que la ráfaga se recomponga con el proyecto ya abierto, como en
+      // los tests de al lado.
+      await servidor.rutas.get(`GET ${RUTA_EVENTOS}`)!(cliente.peticion, cliente.respuesta);
+      await asentar();
+
+      const modelos = cliente.recibidos.filter((m) => m.clase === "modelos").at(-1) as Extract<
+        MensajeAlCliente,
+        { clase: "modelos" }
+      >;
+      expect(modelos.esfuerzo).toBeUndefined();
+    });
+
+    it("y cuando el servidor contesta que piensa, llegan sus niveles CON la advertencia", async () => {
+      const servidor = servidorDeMentira();
+      const vestibulo = vestibuloDePrueba({
+        fuentes: () => ({ bandera: "ollama/granite4.2:3b" }),
+        correr: async () => 0,
+      });
+      montarRutas(servidor, vestibulo, {
+        capacidadesDeModelo: async () => ({ piensa: true }),
+      });
+      const cliente = clienteDeMentira();
+      await servidor.rutas.get(`GET ${RUTA_EVENTOS}`)!(cliente.peticion, cliente.respuesta);
+      await vestibulo.abrirProyecto({ raiz: "/w/a" });
+      await asentar();
+      // La ráfaga con el proyecto ya abierto es la que dispara la consulta; la respuesta
+      // llega en una SEGUNDA emisión, y por eso hacen falta los dos `asentar`.
+      await servidor.rutas.get(`GET ${RUTA_EVENTOS}`)!(cliente.peticion, cliente.respuesta);
+      await asentar();
+      await asentar();
+
+      const modelos = cliente.recibidos.filter((m) => m.clase === "modelos").at(-1) as Extract<
+        MensajeAlCliente,
+        { clase: "modelos" }
+      >;
+      expect(modelos.esfuerzo?.niveles).toEqual(["low", "medium", "high", "max"]);
+      // La advertencia NO es decorativa: en Ollama el efecto lo pone el template de cada
+      // modelo y está medido que no es monótono. Sin ella, la pastilla afirmaría una escala.
+      expect(modelos.esfuerzo?.nota).toMatch(/lo decide el modelo/i);
+    });
+
     it("una sesión NUEVA resuelve con el modelo de AHORA, no con el del arranque", async () => {
       /**
        * El fallo que esto vigila, medido en la pantalla del usuario: las fuentes se

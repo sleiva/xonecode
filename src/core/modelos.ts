@@ -428,3 +428,36 @@ export function pideThinkingAdaptativo(proveedor: Proveedor, modelo: string): bo
   if (proveedor !== "anthropic") return false;
   return FAMILIAS_CON_ADAPTATIVO_A_MANO.some((prefijo) => modelo.startsWith(prefijo));
 }
+
+/**
+ * ¿Este modelo ACEPTA que se le pida `thinking: {type:"adaptive"}`?
+ *
+ * Es la hermana de `pideThinkingAdaptativo` y contesta otra pregunta. Aquélla dice si hace
+ * falta pedirlo —o sea, si omitirlo significa «no pienses»—; ésta dice si se PUEDE pedir
+ * sin que sea un 400. Son distintas justo en la generación 5, que ya corre adaptativo por
+ * omisión: no hace falta pedírselo, pero admite que se le pida.
+ *
+ * Existe por un acoplamiento MEDIDO contra el validador del propio cliente
+ * (`@langchain/anthropic` 1.5.2, `validateInvocationParamCompatibility`): con un `effort`
+ * puesto, `claude-opus-5` RECHAZA la combinación si el `thinking` no va explícito —
+ * «thinking.type="disabled" is not supported for claude-opus-5 with
+ * outputConfig.effort="max"»—. O sea que pedir esfuerzo sin pedir razonamiento es una
+ * petición que ni sale de esta máquina. Y la recomendación de la casa va en la misma
+ * dirección: el esfuerzo se combina con el razonamiento adaptativo.
+ *
+ * **Opus 4.5 NO está**, aunque el validador local lo deje pasar: ese validador solo mira la
+ * forma, y el adaptativo llegó en 4.6 — mandárselo sería un 400 en el servidor, que es el
+ * único sitio donde ya no hay red que lo pare.
+ */
+const FAMILIAS_QUE_ACEPTAN_ADAPTATIVO: readonly string[] = [
+  ...FAMILIAS_CON_ADAPTATIVO_A_MANO,
+  "claude-opus-5",
+  "claude-sonnet-5",
+  "claude-fable",
+  "claude-mythos",
+];
+
+export function aceptaThinkingAdaptativo(proveedor: Proveedor, modelo: string): boolean {
+  if (proveedor !== "anthropic") return false;
+  return FAMILIAS_QUE_ACEPTAN_ADAPTATIVO.some((prefijo) => modelo.startsWith(prefijo));
+}

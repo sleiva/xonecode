@@ -10,6 +10,7 @@
  */
 
 import type { Proveedor } from "./modelos.js";
+import type { Esfuerzo } from "./esfuerzo.js";
 import type { ConsumoDeTurno } from "./actos.js";
 import type { EstadoDeVerificador, VeredictoDeTarea } from "./entrega.js";
 import type { HallazgoDelTurno } from "./events.js";
@@ -294,7 +295,20 @@ export type Papel = "rapido" | "trabajo" | "afilado";
  * los turnos arranca en `rapido`, y se sube solo con una medición delante.
  */
 export interface ModelosPort {
-  paraPapel(papel: Papel): unknown;
+  /**
+   * El `esfuerzo` es OPCIONAL en los dos métodos, y esa opcionalidad es la que mantiene
+   * el cambio en una línea: `ModeloGuionizado` y cualquier doble con menos parámetros
+   * siguen encajando en esta interfaz, igual que pasa con `fase?` y `razonamiento?` en
+   * `Piel`. Ausente = no se manda el parámetro, que es lo que hacía este harness entero
+   * hasta ahora.
+   *
+   * Quien decide si un nivel es aplicable NO es quien llama: es
+   * `core/esfuerzo.ts#esfuerzoAplicable`, contra el modelo que de verdad resuelve el
+   * papel. Pasar aquí un `xhigh` para un modelo que no lo admite tiene que acabar en un
+   * parámetro omitido y no en un 400, y el único sitio que conoce las dos mitades —el
+   * nivel elegido y el modelo resuelto— está dentro.
+   */
+  paraPapel(papel: Papel, esfuerzo?: Esfuerzo): unknown;
   /**
    * Un modelo CONCRETO, «proveedor/modelo», para el subagente que fija el suyo
    * (`core/agentes.ts`). Los papeles no sirven para esto: son tres funciones del turno
@@ -302,7 +316,7 @@ export interface ModelosPort {
    * un papel, está pidiendo ese modelo. Lanza si el texto no es un `proveedor/modelo`
    * válido, que es lo que hace que un error de escritura en un `.md` se vea.
    */
-  paraModelo(id: string): unknown;
+  paraModelo(id: string, esfuerzo?: Esfuerzo): unknown;
   /** Qué modelo concreto resuelve cada papel, para que `describe` lo pueda enseñar. */
   descripcion(): Record<Papel, string>;
 }

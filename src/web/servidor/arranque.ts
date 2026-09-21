@@ -154,7 +154,9 @@ import {
   type LecturaCruda,
 } from "../../agent/grafo/artefactosEnDisco.js";
 import type { ProyectoRemoto } from "../../agent/cloudstudio/cloudstudioMcp.js";
-import { CatalogoModelos } from "../../agent/config/catalogoModelos.js";
+import {
+  CatalogoModelos, baseUrlDeOllama, baseUrlDeOllamaCloud, capacidadesDeOllama,
+} from "../../agent/config/catalogoModelos.js";
 import { Modelos } from "../../agent/config/modelos.js";
 import { crearJuezDeTarea, invocarConModelos } from "../../agent/tareas/juezDeTarea.js";
 import { SIN_CONSUMO } from "../../agent/subagentes/consumoExterno.js";
@@ -210,6 +212,7 @@ import type {
 // documentado cinco veces: una composición de producción dentro de algo que los tests
 // doblan.
 import { filaDeTarea } from "./transporte.js";
+import { esEsfuerzo, nivelesDeEsfuerzo, type Esfuerzo } from "../../core/esfuerzo.js";
 
 /** Las dos rutas del cable. El cliente las tiene escritas en `apps/web/src/conexion.ts`. */
 /**
@@ -373,6 +376,16 @@ export interface OpcionesDeMontaje {
    * menú lo dice en vez de quedarse cargando para siempre.
    */
   catalogoDeModelos?: (proveedor: Proveedor) => Promise<{ id: string; nombre?: string }[]>;
+  /**
+   * Lo que el servidor de un proveedor dice de UN modelo suyo. Hoy solo Ollama, que es el
+   * único cuyos modelos elige el usuario y no hay tabla que los describa.
+   *
+   * Entra por opción y no se importa aquí por la regla de siempre: toca la red, y sin ella
+   * `npm test` tendría que tener un Ollama levantado. Ausente = no se pregunta, y entonces
+   * un modelo de Ollama no ofrece esfuerzo — que es la dirección segura, porque pedírselo a
+   * uno que no piensa tumba el turno.
+   */
+  capacidadesDeModelo?: (proveedor: Proveedor, modelo: string) => Promise<{ piensa: boolean } | undefined>;
   /** Qué ha tocado la sesión, y el parche de un fichero (`agent/sesiones/sesionGit.ts`). Ausentes =
    *  esta ejecución no lo puede saber, y la pestaña lo dice. */
   cambiosDeSesion?: (
@@ -913,7 +926,19 @@ export function montarRutas(
    * uno es una llamada de red: abrir el menú dos veces no la repite. Un fallo también se
    * recuerda —como fallo— hasta que alguien lo vuelva a pedir a propósito.
    */
-  const catalogos = new Map<string, { modelos?: { id: string; nombre?: string }[]; error?: string }>();
+  const catalogos = new Map<string, { modelos?: { id: string; nombre?: string; esfuerzos?: Esfuerzo[] }[]; error?: string }>();
+  /**
+   * Lo que el servidor de Ollama ha dicho de cada modelo, por `proveedor/modelo`.
+   *
+   * Es una memoria y no una caché con plazo: se llena la primera vez que ese modelo está en
+   * vigor y se vuelve a emitir el estado cuando llega. Ollama es el único que necesita esto
+   * —los demás salen de la tabla, que es síncrona—, y lo necesita porque sus modelos los
+   * elige el usuario: no hay prefijo que diga si `ministral-3:3b` piensa, pero `/api/show`
+   * sí lo contesta.
+   */
+  const capacidadesVivas = new Map<string, { piensa: boolean }>();
+  /** Las que ya se están preguntando, para no lanzar una consulta por cliente conectado. */
+  const capacidadesEnVuelo = new Set<string>();
 
   /**
    * El estado de modelos: qué está en vigor y qué se puede elegir.
@@ -922,7 +947,13 @@ export function montarRutas(
    * proyecto abierto no hay sesión y por tanto no hay modelo que afirmar: el campo se va
    * y el cliente pinta «Elige modelo» en vez de una fila muerta.
    */
-  const emitirModelos = (): void => emitir(mensajeDeModelos());
+  const emitirModelos = (): void => {
+    emitir(mensajeDeModelos());
+    // Después de emitir, no antes: lo que ya se sabe se pinta ya, y lo que falta llega en
+    // una segunda emisión. Al revés, cada cambio de modelo dejaría la pastilla esperando
+    // una consulta de red para pintar lo que no depende de ella.
+    asegurarCapacidades();
+  };
 
   /**
    * Los subagentes en vigor, compuestos pero sin mandar.
@@ -946,6 +977,8 @@ export function montarRutas(
         // Ausente = no la tiene. No se emite `false` para que el cliente no tenga que
         // distinguir entre «no» y «no consta»: aquí son lo mismo y la ausencia lo dice.
         ...(a.ejecucion === true ? { ejecucion: true } : {}),
+        // Igual que arriba: ausente es «no hay ninguno fijado», que es un dato y no un hueco.
+        ...(a.esfuerzo === undefined ? {} : { esfuerzo: a.esfuerzo }),
         skills: a.skills,
         instrucciones: a.instrucciones,
         origen: a.origen,
@@ -1243,10 +1276,48 @@ export function montarRutas(
     // pueda leer el config global. Sin el segundo, Ajustes enseñaría «sin elegir» sobre una
     // máquina con un defecto escrito, justo en la pantalla donde se configura.
     const porDefecto = opciones.modeloPorDefecto?.();
+    /**
+     * El esfuerzo del modelo EN VIGOR, que es lo único de lo que se puede afirmar algo.
+     *
+     * Sin sesión no hay modelo en vigor y no viaja: la pastilla no se pinta, igual que
+     * `actual` no se inventa. Los niveles salen de la tabla pura; para Ollama hacen falta
+     * las capacidades vivas, y mientras no hayan llegado tampoco se afirma nada — se
+     * piden aparte y el estado se vuelve a emitir cuando contesten.
+     */
+    const niveles =
+      trabajo === undefined
+        ? undefined
+        : nivelesDeEsfuerzo(
+            trabajo.proveedor, trabajo.modelo,
+            capacidadesVivas.get(`${trabajo.proveedor}/${trabajo.modelo}`),
+          );
+    const elegido = abierto?.estadoDeSesion.esfuerzo;
     return {
       clase: "modelos",
       ...(trabajo === undefined ? {} : { actual: `${trabajo.proveedor}/${trabajo.modelo}` }),
       ...(porDefecto === undefined ? {} : { porDefecto }),
+      ...(niveles === undefined
+        ? {}
+        : {
+            esfuerzo: {
+              niveles: [...niveles],
+              // El nivel guardado solo viaja si ESTE modelo lo admite. Si no, la pastilla
+              // diría «xhigh» sobre un modelo que va a ignorarlo — el valor sigue en la
+              // sesión y vuelve solo al cambiar a un modelo que lo acepte.
+              ...(elegido !== undefined && niveles.includes(elegido) ? { actual: elegido } : {}),
+              // La nota de Ollama, MEDIDA: su servidor valida los cuatro niveles, pero el
+              // efecto lo pone el template de cada modelo y no es monótono —en
+              // `glm-5.3-flash:cloud`, `high` mide menos razonamiento que `medium`—.
+              // Callarlo haría que la pastilla afirmara una escala que ahí no existe.
+              ...(trabajo?.proveedor === "ollama" || trabajo?.proveedor === "ollama-cloud"
+                ? {
+                    nota:
+                      "En Ollama el efecto de cada nivel lo decide el modelo, no el servidor:"
+                      + " medido, en algunos «high» razona MENOS que «medium».",
+                  }
+                : {}),
+            },
+          }),
       proveedores: [...PROVEEDORES, ...idsPersonalizados()].map((p) => ({
         id: p,
         nombre: nombreDeProveedor(p, personalizados()),
@@ -1306,6 +1377,20 @@ export function montarRutas(
     for (const cliente of destinatarios) actos = destino.conectar(cliente);
 
     const modelos = mensajeDeModelos();
+    /**
+     * Y se pregunta por lo que falte, que en esta rama hay que pedir A MANO.
+     *
+     * La ráfaga COMPONE el mensaje en vez de emitirlo —va solo al recién llegado—, así que
+     * no pasa por `emitirModelos` y sin esta línea el camino más normal de todos —abrir el
+     * navegador sobre un proyecto ya abierto— no preguntaba nunca: la pastilla de esfuerzo
+     * no aparecía con Ollama hasta que algo más provocara una emisión. Lo encontró el test
+     * del cable, que es exactamente el patrón de fallo de esta arquitectura.
+     *
+     * No se mete DENTRO de `mensajeDeModelos` porque eso es un compositor: un efecto de red
+     * escondido en la función que arma un mensaje es la clase de cosa que luego dispara
+     * desde sitios que nadie esperaba.
+     */
+    asegurarCapacidades();
     // Los subagentes van en la ráfaga por lo mismo que los modelos: la ventana de ajustes
     // se puede abrir en cuanto conecta, y sin esto enseñaría una lista vacía hasta que algo
     // los cambiara — que es indistinguible de «no tienes ninguno».
@@ -1928,7 +2013,28 @@ export function montarRutas(
     }
     try {
       const modelos = await opciones.catalogoDeModelos(id);
-      catalogos.set(id, { modelos: modelos.map((m) => ({ id: m.id, ...(m.nombre === undefined ? {} : { nombre: m.nombre }) })) });
+      /**
+       * Cada modelo viaja con los niveles de esfuerzo que ADMITE, y se calculan aquí.
+       *
+       * Aquí y no en el cliente porque la tabla vive en `core/esfuerzo.ts` y la frontera
+       * prohíbe que `apps/web/` importe de `src/`. La alternativa era una copia DECLARADA
+       * al otro lado —como la del slug o la del workspace—, y no compensa: aquéllas son una
+       * regla de tres líneas, y ésta es una tabla por familia que además cambia cada vez que
+       * alguien MIDE un modelo nuevo. Dos tablas es un sitio donde una queda vieja sin que
+       * nada lo diga.
+       *
+       * Ausente = ese modelo no admite ninguno, y entonces el control no se pinta.
+       */
+      catalogos.set(id, {
+        modelos: modelos.map((m) => {
+          const niveles = nivelesDeEsfuerzo(id, m.id);
+          return {
+            id: m.id,
+            ...(m.nombre === undefined ? {} : { nombre: m.nombre }),
+            ...(niveles === undefined ? {} : { esfuerzos: [...niveles] }),
+          };
+        }),
+      });
     } catch (error) {
       // `ErrorCatalogoModelos` es publicable por contrato: nunca lleva la clave ni el
       // cuerpo remoto (`agent/config/catalogoModelos.ts`).
@@ -2358,6 +2464,70 @@ export function montarRutas(
    * Si no hay escritor, se DICE que no se ha guardado en vez de callarlo: un ajuste que
    * parece puesto y no lo está es peor que uno que falta.
    */
+  /**
+   * El esfuerzo de la sesión abierta. `nivel` ausente = quitarlo.
+   *
+   * Se encola `/esfuerzo`, que es el MISMO manejador que usa el terminal: la función se
+   * comparte y la sintaxis no se exporta, igual que con `/modelo`. Y **no se guarda ningún
+   * defecto**: a diferencia del modelo, esto es de la sesión y solo de la sesión — un
+   * defecto persistido es otra decisión y no se toma por inercia.
+   *
+   * Sin proyecto abierto no hay sesión a la que aplicárselo, y se DICE en vez de callarlo:
+   * la pastilla solo se pinta con sesión, así que llegar aquí sin ella es un cliente
+   * desincronizado y merece una frase, no un silencio.
+   */
+  const atenderEsfuerzo = (nivel?: string): void => {
+    const abierto = vestibulo.proyectoAbierto();
+    if (abierto === undefined) {
+      informar("no hay ninguna sesión abierta a la que fijarle el esfuerzo");
+      return;
+    }
+    if (nivel === undefined) {
+      abierto.consola.encolar("/esfuerzo ninguno");
+      return;
+    }
+    // Se criba contra el vocabulario ANTES de encolar: lo que llega del cable acaba siendo
+    // un parámetro de una API, y el manejador ya lo rechazaría, pero su rechazo se
+    // imprimiría como una línea de consola en vez de un aviso. Aquí se dice mejor.
+    if (!esEsfuerzo(nivel)) {
+      informar(`«${nivel}» no es un nivel de esfuerzo`);
+      return;
+    }
+    abierto.consola.encolar(`/esfuerzo ${nivel}`);
+  };
+
+  /**
+   * Pregunta a Ollama si el modelo en vigor piensa, y vuelve a emitir cuando conteste.
+   *
+   * Una vez por modelo y por proceso: la respuesta se guarda en `capacidadesVivas`, y sin
+   * el conjunto `capacidadesEnVuelo` cada cliente que se conecta lanzaría la suya. Mismo
+   * molde que `catalogos`.
+   *
+   * Solo Ollama, porque solo Ollama lo necesita: los demás salen de la tabla, que es pura
+   * y síncrona. Y su fallo se TRAGA — lo que no se pudo preguntar deja la pastilla sin
+   * pintar, que es la dirección segura y ya es lo que pasaba antes de que esto existiera.
+   */
+  const asegurarCapacidades = (): void => {
+    if (opciones.capacidadesDeModelo === undefined) return;
+    const abierto = vestibulo.proyectoAbierto();
+    if (abierto === undefined) return;
+    const trabajo = resolver(abierto.estadoDeSesion.fuentes).trabajo;
+    if (trabajo.proveedor !== "ollama" && trabajo.proveedor !== "ollama-cloud") return;
+    const clave = `${trabajo.proveedor}/${trabajo.modelo}`;
+    if (capacidadesVivas.has(clave) || capacidadesEnVuelo.has(clave)) return;
+    capacidadesEnVuelo.add(clave);
+    void opciones
+      .capacidadesDeModelo(trabajo.proveedor, trabajo.modelo)
+      .then((vivas) => {
+        if (vivas !== undefined) {
+          capacidadesVivas.set(clave, vivas);
+          emitirModelos();
+        }
+      })
+      .catch(() => {})
+      .finally(() => capacidadesEnVuelo.delete(clave));
+  };
+
   const atenderModelo = (id: string): void => {
     try {
       parsear(id);
@@ -3934,6 +4104,12 @@ export function montarRutas(
       respuesta.end();
       return;
     }
+    if (typeof mensaje === "object" && mensaje !== null && mensaje.clase === "esfuerzo") {
+      atenderEsfuerzo(mensaje.nivel);
+      respuesta.writeHead(204);
+      respuesta.end();
+      return;
+    }
     if (typeof mensaje === "object" && mensaje !== null && mensaje.clase === "agente") {
       atenderAgente(mensaje);
       respuesta.writeHead(204);
@@ -5037,6 +5213,18 @@ export async function arrancarConsolaWeb(opciones: OpcionesDeArranque): Promise<
       const modelos = await new CatalogoModelos(undefined, undefined, proveedoresPersonalizados).listar(proveedor);
       return modelos.map((m) => ({ id: m.id, ...(m.nombre === undefined ? {} : { nombre: m.nombre }) }));
     },
+    /**
+     * Solo Ollama tiene a quién preguntarle esto, y por eso los demás devuelven «no consta»
+     * aquí en vez de que lo decida `asegurarCapacidades`: quien sabe qué proveedores saben
+     * contestar es este cableado, no el servidor.
+     */
+    capacidadesDeModelo: async (proveedor, modelo) =>
+      proveedor === "ollama" || proveedor === "ollama-cloud"
+        ? capacidadesDeOllama(
+            modelo,
+            proveedor === "ollama" ? baseUrlDeOllama() : baseUrlDeOllamaCloud(),
+          )
+        : undefined,
     // Se releen de disco en cada consulta, igual que los ajustes de dispositivos: esta
     // misma ventana los da de alta, y una lista capturada al montar las rutas se quedaría
     // vieja hasta reiniciar el proceso.

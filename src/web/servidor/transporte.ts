@@ -32,6 +32,7 @@ import type { OpcionDeEntorno, PasoDelVestibulo } from "./vestibulo.js";
 // se queda corta el día que un dispositivo sepa algo más. Solo TIPO: `sesiones.ts` no importa
 // este módulo, así que no hay ciclo ni siquiera en el grafo de tipos.
 import type { DispositivoElegido } from "./sesiones.js";
+import type { Esfuerzo } from "../../core/esfuerzo.js";
 
 /**
  * El informe de `core/dispositivos.ts` SIN la ruta de cada herramienta: es una ruta del
@@ -199,7 +200,24 @@ export type MensajeAlCliente =
    * de ESE proveedor y no tumba a los demás — se lista inservible y el resto sigue
    * elegible.
    */
-  | { clase: "modelos"; actual?: string; porDefecto?: string; proveedores: ProveedorDeModelos[] }
+  | {
+      clase: "modelos";
+      actual?: string;
+      porDefecto?: string;
+      proveedores: ProveedorDeModelos[];
+      /**
+       * Qué esfuerzo admite el modelo EN VIGOR y cuál está puesto en la sesión.
+       *
+       * Viaja con los modelos y no en un mensaje propio porque cambia en los mismos
+       * instantes: los niveles dependen del modelo, así que un `/modelo` que no lo trajera
+       * dejaría la pastilla ofreciendo los del modelo de antes. Mismo motivo por el que la
+       * ventana de contexto viaja dentro de `consumo`.
+       *
+       * Ausente = no hay nada que afirmar (sin sesión, o el modelo no lo admite), y
+       * entonces la pastilla no se pinta.
+       */
+      esfuerzo?: { niveles: Esfuerzo[]; actual?: Esfuerzo; nota?: string };
+    }
   /**
    * Los proyectos de UN entorno registrado, en respuesta a la acción «proyectos» de un
    * mensaje de entorno. Lleva el `entorno` dentro porque el cliente los guarda por
@@ -1021,7 +1039,15 @@ export interface ProveedorDeModelos {
    *  ver al lado de su clave para saber a dónde va. Los de serie la tienen en el repo. */
   baseUrl?: string;
   /** Ausente = todavía no se ha consultado su catálogo. Vacío = lo dijo y no ofrece nada. */
-  modelos?: { id: string; nombre?: string }[];
+  /**
+   * Los modelos que sirve, con los niveles de ESFUERZO que admite cada uno.
+   *
+   * `esfuerzos` lo calcula el SERVIDOR con la tabla de `core/esfuerzo.ts`: la frontera
+   * prohíbe que el cliente importe de `src/`, y una copia declarada de una tabla que crece
+   * cada vez que se mide un modelo nuevo es un sitio donde quedarse viejo en silencio.
+   * Ausente = ese modelo no admite ninguno, y entonces no se pinta el control.
+   */
+  modelos?: { id: string; nombre?: string; esfuerzos?: Esfuerzo[] }[];
   /** El catálogo de ESTE proveedor falló. Nunca lleva la clave ni el cuerpo remoto. */
   error?: string;
 }
@@ -1040,6 +1066,18 @@ export type MensajeDelCliente =
    * ya comparten el terminal y la TUI — la función se comparte, la sintaxis no se exporta.
    */
   | { clase: "modelo"; id: string }
+  /**
+   * Cuánto razona el modelo de esta sesión. `nivel` ausente = quitarlo.
+   *
+   * La INTENCIÓN y no la sintaxis, como el modelo: el servidor la aplica encolando el
+   * manejador de `/esfuerzo` que ya comparten el terminal y la TUI. Mandar la prosa
+   * apuntaría en el transcript un acto de usuario que nadie tecleó.
+   *
+   * El nivel NO se comprueba aquí contra el modelo en vigor: se guarda en la sesión y
+   * `construirModelo` lo omite mientras no aplique. Así, cambiar de modelo a uno que sí lo
+   * admite lo recupera solo, en vez de obligar a volver a elegirlo.
+   */
+  | { clase: "esfuerzo"; nivel?: Esfuerzo }
   /**
    * Abrir una sesión de un proyecto: la que se nombra, o una NUEVA si no se nombra ninguna.
    *
@@ -1394,6 +1432,14 @@ export interface AgenteDelCable {
    * marcada que no hace nada.
    */
   ejecucion?: boolean;
+  /**
+   * Cuánto razona su modelo antes de contestar. Ausente = no se manda el parámetro.
+   *
+   * Solo tiene efecto con `motor: "modelo"`: en los tres externos el modelo lo construye el
+   * hijo en su proceso y un campo nuestro no llega hasta allí. Qué niveles admite depende
+   * del modelo elegido (`core/esfuerzo.ts`), y por eso la ventana lo pinta pegado a él.
+   */
+  esfuerzo?: Esfuerzo;
   skills: string[];
   instrucciones: string;
   origen?: string;

@@ -1274,7 +1274,24 @@ feedback del desarrollador** y no es terminal.
   da error, corta la escritura a media respuesta. Y **omitir `thinking` no significa lo mismo en todos**:
   Opus 5 y Sonnet 5 ya corren adaptativo, la generación 4.6-4.8 corre **sin pensar**, y
   Haiku 4.5 y lo anterior a 4.6 lo RECHAZAN (usan `budget_tokens`), así que pedirlo a ciegas
-  sería un 400. `effort` no se manda: omitirlo ya es `high`.
+  sería un 400.
+- **El ESFUERZO de razonamiento es una tabla POR MODELO** (`core/esfuerzo.ts`), no por
+  proveedor: dentro de un mismo proveedor el enum cambia de un modelo a otro, y hay uno que
+  acepta los siete y los COLAPSA sobre tres. Por eso `nivelesDeEsfuerzo` devuelve una LISTA
+  y la pastilla ofrece lo que devuelva — un desplegable con dos opciones que hacen lo mismo
+  es la misma mentira que una cifra que nadie midió. Lo que no se reconoce devuelve
+  `undefined`: sin control y **sin parámetro**, que es el lado conservador de
+  `pideThinkingAdaptativo` y aquí es literal — pedírselo a quien no lo admite no da una
+  respuesta peor, da un error duro. **Ollama se PREGUNTA en vez de tabularse** (`/api/show`
+  dice si un modelo piensa), y por eso las capacidades entran por PARÁMETRO: preguntar es
+  asíncrono y construir un modelo es síncrono, las dos cadencias de siempre. **Y aceptar un
+  nivel no es honrarlo**: en Ollama el efecto lo pone el template de cada modelo y no es
+  monótono, así que la pastilla lo DICE. Cada cliente lo escribe a su manera
+  (`outputConfig.effort`, `thinkingConfig.thinkingLevel`, `think`, y `modelKwargs` para los
+  de OpenAI, porque su `reasoningEffort` filtra por nombre de modelo y descarta el campo en
+  silencio), así que la traducción se prueba con COSTURA contra `invocationParams()`. En
+  Anthropic va ACOPLADO al `thinking`, de ahí `aceptaThinkingAdaptativo` al lado de
+  `pideThinkingAdaptativo`: una dice si hace falta pedirlo, la otra si se puede.
 - **Los topes de contexto solo si se saben** (`core/contextos.ts`, por familias; **ollama no tiene
   tope a propósito**). El porcentaje solo se calcula con tope: uno sobre un número inventado es
   una mentira con forma de cifra. La barra y `/config` usan la misma `topeResuelto`.

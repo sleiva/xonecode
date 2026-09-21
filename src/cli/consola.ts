@@ -42,6 +42,7 @@ import { URL_CLOUDSTUDIO_POR_OMISION } from "../agent/cloudstudio/cloudstudioMcp
 import { cargar, cloudstudioDelProyecto, NOMBRE_CARPETA } from "../agent/config/configEnDisco.js";
 import { rutaMemoriaDeProyecto } from "../agent/grafo/memoriaDeProyecto.js";
 import type { CatalogoModelosPort, ModeloDisponible } from "../core/ports.js";
+import { ESFUERZOS, esEsfuerzo, type Esfuerzo } from "../core/esfuerzo.js";
 
 /**
  * Una línea del lazo, con su procedencia DICHA cuando hace falta decirla.
@@ -459,6 +460,21 @@ export interface EstadoDeSesion {
   fuentes: FuentesDeEleccion;
   /** Overrides vivos de `/modelos`, separados de las banderas con las que arrancó la CLI. */
   seleccionesDeCatalogo?: Partial<Record<Papel, string>>;
+  /**
+   * Cuánto razona el modelo en esta sesión. Ausente = no se manda el parámetro.
+   *
+   * Va FUERA de `fuentes` a propósito: `FuentesDeEleccion` contesta «qué modelo le toca a
+   * cada papel» y tiene su propia precedencia de seis escalones, mientras que esto es un
+   * ajuste DEL modelo resuelto — no compite con nada ni viene de un fichero. Meterlo ahí
+   * habría obligado a `resolver()` a devolverlo por papel, que es una pregunta que nadie
+   * hace: el esfuerzo es de la sesión, no del papel.
+   *
+   * No se valida aquí contra el modelo: eso lo hace `esfuerzoAplicable` al CONSTRUIR, que
+   * es el único sitio que conoce las dos mitades. Un nivel guardado que el modelo de ahora
+   * no admite se omite en vez de tumbar el turno — y vuelve a valer si se cambia a un
+   * modelo que sí lo acepte, que es justo lo que se quiere al ir probando.
+   */
+  esfuerzo?: Esfuerzo;
 }
 
 /** Lo que hace un comando de barra: escribe y puede cambiar el estado de la sesión. */
@@ -857,6 +873,40 @@ export function crearCompleter(
  * El estado solo cambia con un modelo VÁLIDO: un fallo de tecleo no puede dejar la sesión
  * apuntando a algo que revienta al construir el cliente.
  */
+/**
+ * `/esfuerzo <nivel>` — cuánto razona el modelo, en caliente y para esta sesión.
+ *
+ * `ninguno` lo quita, y es una palabra y no un argumento vacío: teclear `/esfuerzo` a secas
+ * es casi siempre olvidarse del nivel, y tratar ese olvido como «quítalo» apagaría en
+ * silencio algo que alguien había puesto. Sin argumento se enseña el uso, como en `/modelo`.
+ *
+ * **No se comprueba contra el modelo de ahora, y es deliberado.** El nivel es de la SESIÓN y
+ * el modelo se cambia debajo con `/modelo`; rechazar aquí un `xhigh` porque el modelo
+ * puesto en este segundo no lo admite obligaría a volver a teclearlo tras cada cambio. Lo
+ * que hace `construirModelo` es omitirlo mientras no aplique — y recuperarlo solo, sin que
+ * nadie lo vuelva a escribir, en cuanto el modelo lo admita.
+ */
+const manejadorDeEsfuerzo: ManejadorDeBarra = async (args, estado, consola) => {
+  const valor = (args[0] ?? "").trim().toLowerCase();
+  if (valor === "") {
+    consola.escribir(`uso: /esfuerzo <${ESFUERZOS.join("|")}|ninguno>\n`);
+    return { seguir: true };
+  }
+  if (valor === "ninguno") {
+    consola.escribir("esfuerzo: sin fijar — lo decide el modelo\n");
+    const { esfuerzo: _quitado, ...resto } = estado;
+    return { seguir: true, estado: resto };
+  }
+  if (!esEsfuerzo(valor)) {
+    consola.escribir(`«${valor}» no es un nivel. Los que hay: ${ESFUERZOS.join(", ")} (o «ninguno»).\n`);
+    return { seguir: true };
+  }
+  // Se DICE que puede no aplicar, en vez de callarlo: el nivel se guarda igual, pero quien
+  // lo teclea tiene que saber que su modelo de ahora manda sobre esto.
+  consola.escribir(`esfuerzo: ${valor} — se aplica a los modelos que lo admitan\n`);
+  return { seguir: true, estado: { ...estado, esfuerzo: valor } };
+};
+
 function manejadorDeModelo(papel: Papel | undefined): ManejadorDeBarra {
   const nombre = papel === undefined ? "/modelo" : `/modelo-${papel}`;
   return async (args, estado, consola) => {
@@ -1040,6 +1090,10 @@ export const COMANDOS: Record<string, { descripcion: string; manejador: Manejado
   modelo: {
     descripcion: "cambia los TRES papeles en caliente: /modelo <proveedor>/<modelo>",
     manejador: manejadorDeModelo(undefined),
+  },
+  esfuerzo: {
+    descripcion: "cuánto razona el modelo: /esfuerzo <low|medium|high|xhigh|max|ninguno>",
+    manejador: manejadorDeEsfuerzo,
   },
   "modelo-rapido": {
     descripcion: "cambia el papel `rapido` en caliente: /modelo-rapido <proveedor>/<modelo>",

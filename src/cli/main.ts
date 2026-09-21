@@ -67,13 +67,55 @@ import { versionEnMarcha } from "../agent/config/versionEnDisco.js";
 import { SkillsEnDisco } from "../agent/grafo/skills.js";
 import { Modelos } from "../agent/config/modelos.js";
 import { juzgarPantalla, invocarVisualConModelos } from "../agent/dispositivos/juezVisual.js";
-import { CatalogoModelos } from "../agent/config/catalogoModelos.js";
+import {
+  CatalogoModelos, baseUrlDeOllama, baseUrlDeOllamaCloud, capacidadesDeOllama,
+} from "../agent/config/catalogoModelos.js";
+import type { Esfuerzo } from "../core/esfuerzo.js";
 import { abrirSesionReal, ficherosDelProyecto, type SesionReal } from "../agent/turno/turnoReal.js";
 import { SimuladorVerifier } from "../agent/turno/verificador.js";
 import { crearProyecto } from "../agent/config/crearProyecto.js";
 import { type DatosDelProyecto } from "../core/esqueleto.js";
 import { createTokenTracker, type TokenTracker } from "../vendor/tokenTracking.js";
 import { compacto, formatearTokens, formatearTope } from "./tokens.js";
+
+/**
+ * Los `Modelos` de una sesión, con su esfuerzo y —si hace falta— con las capacidades ya
+ * PREGUNTADAS.
+ *
+ * Es una función `async` y ése es el motivo de que exista: `construirModelo` es síncrono
+ * —devuelve el cliente, no una promesa, y lo llama el grafo en mitad de un turno—, pero
+ * saber si un modelo de Ollama piensa exige una llamada a su `/api/show`. Los dos sitios
+ * que construyen `Modelos` para una sesión (al abrirla y al reconstruirla tras `/modelo`)
+ * ya son asíncronos, así que la consulta cabe aquí y lo de dentro se queda síncrono.
+ *
+ * **Solo se pregunta cuando hay esfuerzo puesto Y el proveedor es Ollama.** Sin esfuerzo la
+ * respuesta no cambiaría nada, y con cualquier otro proveedor la tabla de `core/` ya
+ * contesta sin red — cobrar una llamada por turno para no usarla sería el peaje de siempre.
+ *
+ * Lo que no se pueda preguntar deja las capacidades en «no consta», y entonces el nivel se
+ * OMITE: pedirle pensar a un modelo de Ollama que no piensa no da una respuesta peor, tumba
+ * el turno con `"<modelo>" does not support thinking`.
+ */
+async function modelosDeSesion(
+  estado: { fuentes: FuentesDeEleccion; esfuerzo?: Esfuerzo },
+): Promise<Modelos> {
+  const trabajo = resolver(estado.fuentes).trabajo;
+  const esDeOllama = trabajo.proveedor === "ollama" || trabajo.proveedor === "ollama-cloud";
+  const vivas =
+    estado.esfuerzo !== undefined && esDeOllama
+      ? await capacidadesDeOllama(
+          trabajo.modelo,
+          trabajo.proveedor === "ollama" ? baseUrlDeOllama() : baseUrlDeOllamaCloud(),
+        )
+      : undefined;
+  return new Modelos(
+    estado.fuentes,
+    proveedoresPersonalizados,
+    vivas === undefined ? undefined : () => vivas,
+    estado.esfuerzo,
+  );
+}
+
 
 /**
  * Estilo, y solo con TTY detrás.
@@ -451,6 +493,16 @@ export function crearEjecutorReal(
 ): EjecutorDeTurno {
   let sesion: SesionReal | undefined;
   let fuentesVistas: FuentesDeEleccion | undefined;
+  /**
+   * El esfuerzo con el que se construyó el agente que está montado.
+   *
+   * Va aparte de `fuentesVistas` porque el esfuerzo vive fuera de `fuentes` —no es una
+   * fuente de elección de modelo, es un ajuste del modelo resuelto—, y sin esta segunda
+   * marca `/esfuerzo` habría sido un comando cosmético: cambiaba el estado y el agente
+   * seguía corriendo con el cliente de antes hasta que alguien tocara `/modelo`. El mismo
+   * fallo mudo que esta comparación existe para evitar.
+   */
+  let esfuerzoVisto: Esfuerzo | undefined;
   let hiloVisto: string | undefined;
 
   return async (peticion, estado, consolaReal) => {
@@ -476,7 +528,7 @@ export function crearEjecutorReal(
       }
       sesion = await abrirSesionReal({
         raiz: estado.raiz,
-        modelos: new Modelos(estado.fuentes, proveedoresPersonalizados),
+        modelos: await modelosDeSesion(estado),
         // La raíz va PUESTA, y es lo que hace que las skills DEL PROYECTO
         // (`<raiz>/.xonecode/skills/`) entren en el catálogo. Sin ella el agente recibiría
         // solo las de serie y las globales, y un subagente que declarase una del proyecto
@@ -558,14 +610,19 @@ export function crearEjecutorReal(
       alAbrirSesion(sesion);
       // Recién construida: no hay cambio que detectar en esta primera vuelta.
       fuentesVistas = estado.fuentes;
+      esfuerzoVisto = estado.esfuerzo;
       hiloVisto = estado.hilo;
     } else {
       // `/modelo` solo actualizó `estado.fuentes`; aquí es donde deja de ser un cambio
       // cosmético: el agente se reconstruye con el modelo nuevo y el hilo SE CONSERVA.
-      if (JSON.stringify(estado.fuentes) !== JSON.stringify(fuentesVistas)) {
-        await sesion.cambiarModelos(new Modelos(estado.fuentes, proveedoresPersonalizados));
+      if (
+        JSON.stringify(estado.fuentes) !== JSON.stringify(fuentesVistas)
+        || estado.esfuerzo !== esfuerzoVisto
+      ) {
+        await sesion.cambiarModelos(await modelosDeSesion(estado));
         consolaReal.escribir("  (agente reconstruido con el modelo nuevo — el hilo se conserva)\n");
         fuentesVistas = estado.fuentes;
+        esfuerzoVisto = estado.esfuerzo;
       }
       // `/nuevo` generó su propio UUID, que no coincide con el hilo interno de la sesión:
       // lo que importa es que CAMBIÓ, y se abre uno nuevo. El aviso ya lo imprimió el

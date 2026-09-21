@@ -55,3 +55,97 @@ describe("el cliente de Anthropic, contra su propio invocationParams", () => {
     expect(parametrosDe("claude-sonnet-5").thinking).toBeUndefined();
   });
 });
+
+/**
+ * La misma costura, para el ESFUERZO, y en los cuatro clientes.
+ *
+ * Aquí vale doble que en el caso del `max_tokens`: la tabla de `core/esfuerzo.ts` dice qué
+ * niveles admite cada modelo, pero cada cliente tiene su propio nombre para el campo
+ * —`outputConfig.effort`, `reasoningEffort`, `thinkingConfig.thinkingLevel`, `think`— y una
+ * traducción mal escrita no da error de tipos: da un parámetro que el servidor ignora, o
+ * un 400. Ningún test de la tabla puede verlo.
+ *
+ * Sin red: construir un cliente y preguntarle sus parámetros no llama a nadie.
+ */
+describe("el esfuerzo, contra el invocationParams de cada cliente", () => {
+  const guardadas = { ...process.env };
+  beforeEach(() => {
+    process.env.ANTHROPIC_API_KEY = "sk-ant-de-pega";
+    process.env.GOOGLE_API_KEY = "google-de-pega";
+    process.env.DEEPSEEK_API_KEY = "deepseek-de-pega";
+    process.env.NVIDIA_API_KEY = "nvidia-de-pega";
+  });
+  afterEach(() => {
+    for (const v of ["ANTHROPIC_API_KEY", "GOOGLE_API_KEY", "DEEPSEEK_API_KEY", "NVIDIA_API_KEY"]) {
+      if (guardadas[v] === undefined) delete process.env[v];
+      else process.env[v] = guardadas[v];
+    }
+  });
+
+  const params = (id: string, esfuerzo?: "low" | "medium" | "high" | "xhigh" | "max", piensa?: boolean) => {
+    const modelos = new Modelos(
+      { bandera: id },
+      undefined,
+      piensa === undefined ? undefined : () => ({ piensa }),
+    );
+    const cliente = modelos.paraPapel("trabajo", esfuerzo) as {
+      invocationParams: () => Record<string, unknown>;
+    };
+    return cliente.invocationParams();
+  };
+
+  it("anthropic lo manda dentro de outputConfig, que es donde lo quiere su API", () => {
+    expect(params("anthropic/claude-opus-5", "low")["output_config"]).toEqual({ effort: "low" });
+    expect(params("anthropic/claude-opus-5", "max")["output_config"]).toEqual({ effort: "max" });
+  });
+
+  it("gemini lo traduce a thinkingLevel EN VERSALES", () => {
+    const p = params("gemini/gemini-3.8-flash", "medium");
+    expect(p["thinkingConfig"] ?? p["generationConfig"]).toBeTruthy();
+    expect(JSON.stringify(p)).toContain("MEDIUM");
+  });
+
+  it("los compatibles con OpenAI lo mandan como reasoning_effort", () => {
+    expect(params("deepseek/deepseek-flash", "high")["reasoning_effort"]).toBe("high");
+    expect(params("nvidia/openai/gpt-oss-20b", "low")["reasoning_effort"]).toBe("low");
+  });
+
+  it("ollama lo manda como «think» con el nivel dentro, no como booleano", () => {
+    // Medido contra el servidor: valida "high"|"medium"|"low"|"max"|true|false, y el tipo
+    // `boolean` del cliente es una limitación suya — pasa el valor tal cual al request.
+    expect(params("ollama/granite4.2:3b", "low", true)["think"]).toBe("low");
+  });
+
+  /** Las cuatro caras del fail-closed, que es lo que de verdad hay que defender. */
+  describe("y lo que NO se manda", () => {
+    it("sin esfuerzo elegido, ningún cliente lleva el campo", () => {
+      expect(params("anthropic/claude-opus-5")["output_config"]).toBeUndefined();
+      expect(params("deepseek/deepseek-flash")["reasoning_effort"]).toBeUndefined();
+      expect(params("ollama/granite4.2:3b", undefined, true)["think"]).toBeUndefined();
+      expect(JSON.stringify(params("gemini/gemini-3.8-flash"))).not.toContain("thinkingLevel");
+    });
+
+    it("un nivel que el modelo no admite se OMITE, en vez de viajar y dar un 400", () => {
+      // Haiku 4.5 no acepta `effort`.
+      expect(params("anthropic/claude-haiku-4-5", "low")["output_config"]).toBeUndefined();
+      // Gemini 2.5 contesta «Thinking level is not supported for this model».
+      expect(JSON.stringify(params("gemini/gemini-2.5-flash", "low"))).not.toContain("LOW");
+      // DeepSeek colapsa `medium` sobre `high`, así que `medium` no es uno de los suyos.
+      expect(params("deepseek/deepseek-flash", "medium")["reasoning_effort"]).toBeUndefined();
+      // Ollama no valida `xhigh`.
+      expect(params("ollama/granite4.2:3b", "xhigh", true)["think"]).toBeUndefined();
+    });
+
+    it("a ollama SIN capacidades medidas no se le manda nada, que es la dirección segura", () => {
+      // Pedirle pensar a un modelo que no piensa no da peor respuesta: tumba el turno con
+      // `"ministral-3:3b" does not support thinking`.
+      expect(params("ollama/granite4.2:3b", "low")["think"]).toBeUndefined();
+      expect(params("ollama/ministral-3:3b", "low", false)["think"]).toBeUndefined();
+    });
+
+    it("un proveedor sin fila medida tampoco lo lleva, aunque el cliente sepa mandarlo", () => {
+      process.env.OPENAI_API_KEY = "openai-de-pega";
+      expect(params("openai/gpt-5", "high")["reasoning_effort"]).toBeUndefined();
+    });
+  });
+});

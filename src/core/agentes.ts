@@ -16,6 +16,8 @@
  * el que los avisos de honestidad son código y no prompt (`core/bitacora.ts`).
  */
 
+import { esEsfuerzo, type Esfuerzo } from "./esfuerzo.js";
+
 /** De qué está hecho un subagente. Los tres van al MISMO sitio: la lista de deepagents. */
 export type Motor = "modelo" | "claude-code" | "codex" | "opencode";
 
@@ -51,6 +53,25 @@ export interface Agente {
    * modelo corre cada especialista.
    */
   modelo?: string;
+  /**
+   * Cuánto tiene que PENSAR su modelo antes de contestar.
+   *
+   * Es un ajuste DEL modelo y por eso va pegado a él: qué niveles hay depende de cuál esté
+   * puesto, y la mitad de los que este harness ofrece no admiten ninguno (`core/esfuerzo.ts`
+   * tiene la tabla y lo medido). Ausente = no se manda el parámetro, que es lo que hacía
+   * este harness entero hasta ahora.
+   *
+   * **Solo tiene efecto con `motor: "modelo"`**, igual que `ejecucion` y por una razón del
+   * mismo tipo: en los tres motores externos el modelo lo construye el hijo en SU proceso,
+   * con su propia configuración, y un campo nuestro no llega hasta allí. Los tres tienen su
+   * propia palanca de esfuerzo y ésta no es. Declararlo con otro motor no rompe nada, pero
+   * no hace nada, y la ventana de Ajustes lo dice.
+   *
+   * Se valida al APLICARLO y no al leerlo: un nivel que el modelo no admite se omite
+   * (`esfuerzoAplicable`), porque rechazar el `.md` haría desaparecer un subagente que
+   * funciona por un campo que solo afinaba su coste.
+   */
+  esfuerzo?: Esfuerzo;
   /** Sin escribir nada. Decide `permisosDe` y si se le monta el HITL. */
   soloLectura: boolean;
   /**
@@ -530,6 +551,12 @@ export function leerAgente(
       // cuando es cierto: un `ejecucion: false` en todos los `.md` sería ruido que además
       // invita a cambiarlo a mano sin saber lo que abre.
       ...((campos["ejecucion"] ?? "").trim() === "true" ? { ejecucion: true } : {}),
+      // Contra el vocabulario y no contra `string`: lo que se escriba aquí acaba siendo un
+      // parámetro de una API, así que un `esfuerzo: mucho` se DESCARTA en silencio —el
+      // subagente corre sin él— en vez de viajar y dar un 400 a mitad de turno.
+      ...(esEsfuerzo((campos["esfuerzo"] ?? "").trim())
+        ? { esfuerzo: (campos["esfuerzo"] ?? "").trim() as Esfuerzo }
+        : {}),
       skills: leerLista(campos["skills"]),
       instrucciones,
       origen,
@@ -557,6 +584,7 @@ export function escribirAgente(agente: Agente): string {
     `descripcion: ${agente.descripcion}`,
     `motor: ${agente.motor}`,
     ...(agente.modelo === undefined ? [] : [`modelo: ${agente.modelo}`]),
+    ...(agente.esfuerzo === undefined ? [] : [`esfuerzo: ${agente.esfuerzo}`]),
     `soloLectura: ${agente.soloLectura}`,
     ...(agente.ejecucion === true ? ["ejecucion: true"] : []),
     `skills: [${agente.skills.join(", ")}]`,
