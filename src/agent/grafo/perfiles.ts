@@ -96,7 +96,23 @@ export const DENEGADO_SIEMPRE = [
  */
 export function permisosDe(perfil: QuienDecidePermisos) {
   const base = [...DENEGADO_SIEMPRE];
-  if (!perfil.soloLectura) return base;
+  /**
+   * **`escribeEn` ACOTA aunque el agente no sea de solo lectura, y eso desacopla dos cosas
+   * que `soloLectura` tenía pegadas.**
+   *
+   * Ese campo decide los permisos Y el MODELO: `xoneAgent.ts` da `rapido` a quien solo lee
+   * y `trabajo` a quien escribe. Es la trampa que este repo ya tiene escrita para
+   * `ejecucion` —«se refiere a los ficheros pero además elige el modelo, así que marcarlo
+   * miente dos veces»—, y con el documentador muerde igual: su trabajo ES escribir, y
+   * marcarlo `soloLectura` para confinarlo le daba el modelo barato justo a quien más
+   * necesita el bueno.
+   *
+   * Con esto se pueden pedir las dos cosas por separado: `soloLectura: false` para que
+   * corra con el modelo de trabajo, y `escribeEn: [/doc/]` para que siga sin poder tocar
+   * el código. Quien no declare `escribeEn` se comporta exactamente como antes.
+   */
+  const acotado = (perfil.escribeEn ?? []).length > 0;
+  if (!perfil.soloLectura && !acotado) return base;
   /**
    * **Un agente de SOLO LECTURA sí puede dejar ARTEFACTOS, y la medida que lo permite está
    * hecha.** Este `/**` también denegaba `/artefactos/**`, así que un productor sin shell no
@@ -237,7 +253,9 @@ export function puedeEscribirRuta(perfil: QuienDecidePermisos, ruta: string): bo
   // Lo denegado a todo el mundo manda sobre cualquier concesión, igual que en `permisosDe`.
   if (!puedeLeerRuta(ruta)) return false;
   if (ruta === "/skills" || ruta.startsWith("/skills/")) return false;
-  if (!perfil.soloLectura) return true;
+  const acotado = (perfil.escribeEn ?? []).length > 0;
+  // Sin acotar y sin ser de solo lectura, escribe donde quiera: es el caso de siempre.
+  if (!perfil.soloLectura && !acotado) return true;
   if (esRutaDeArtefacto(ruta) || esRutaDePlan(ruta)) return true;
   return (perfil.escribeEn ?? []).some((carpeta) => dentroDeCarpeta(ruta, carpeta));
 }

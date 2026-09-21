@@ -955,10 +955,16 @@ export const AGENTES_DE_SERIE: readonly Agente[] = [
     // a un motor externo, donde el hijo tiene sus propios agentes. Éste es de motor
     // `modelo`: escribir documentación no es propio de XOne y su nombre no viaja.
     motor: "modelo",
-    // De solo lectura sobre el CÓDIGO, con una carpeta abierta para su entregable. Las dos
-    // mitades importan: sin la primera vuelve el problema que esto viene a arreglar, y sin
-    // la segunda no puede entregar nada y habría que quitarle la primera.
-    soloLectura: true,
+    /**
+     * **NO es `soloLectura`, y lo que lo confina es `escribeEn`.**
+     *
+     * Ese campo decide los permisos Y el modelo (`rapido` para quien solo lee, `trabajo`
+     * para quien escribe), y el trabajo de éste ES escribir: marcarlo le daba el modelo
+     * barato justo a quien más necesita el bueno. Desde que `escribeEn` acota por sí solo
+     * (`perfiles.ts#permisosDe`), se pueden pedir las dos cosas por separado — corre con el
+     * modelo de trabajo y sigue sin poder tocar el código.
+     */
+    soloLectura: false,
     escribeEn: ["/doc/"],
     skills: ["artifacts-builder", "archify"],
     instrucciones: `${DOCUMENTAR}\n\n${MEMORIA_LEER}`,

@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { permisosDe, toolsDe, hitlDe, seDetieneEn, TOOLS_ESCRITURA, puedeEjecutar, montajeDeFicheros } from "./perfiles.js";
+import { permisosDe, toolsDe, hitlDe, seDetieneEn, TOOLS_ESCRITURA, puedeEjecutar, montajeDeFicheros, puedeEscribirRuta } from "./perfiles.js";
 import { sinArtefactosEnElProyecto } from "./proyecto.js";
 import { esRutaDeArtefacto } from "../../core/artefactos.js";
 import { esRutaDePlan } from "../../core/planes.js";
@@ -400,5 +400,51 @@ describe("un productor de SOLO LECTURA puede dejar artefactos", () => {
 
   it("y quien NO es de solo lectura no necesita la excepción: ya puede", () => {
     expect(reglas(false).some((x) => x.mode === "allow")).toBe(false);
+  });
+});
+
+/**
+ * `escribeEn` ACOTA aunque el agente no sea de solo lectura.
+ *
+ * Nace del documentador: `soloLectura` decide los permisos Y el modelo (`rapido` para
+ * quien solo lee), así que marcarlo para confinarlo le daba el modelo barato justo a quien
+ * más necesita el bueno — la misma trampa que el repo ya tiene escrita para `ejecucion`.
+ * Esto separa las dos peticiones: buen modelo y, aun así, confinado.
+ */
+describe("escribeEn acota sin depender de soloLectura", () => {
+  const escritor = { nombre: "document-writer", soloLectura: false, escribeEn: ["/doc/"] };
+
+  it("puede escribir en su carpeta", () => {
+    expect(puedeEscribirRuta(escritor, "/doc/manual.md")).toBe(true);
+    expect(puedeEscribirRuta(escritor, "/doc/img/login.png")).toBe(true);
+  });
+
+  it("y NO en el resto del proyecto, aunque no sea de solo lectura", () => {
+    expect(puedeEscribirRuta(escritor, "/Menu.xne")).toBe(false);
+    expect(puedeEscribirRuta(escritor, "/funciones.js")).toBe(false);
+  });
+
+  /** Por SEGMENTO: conceder `/doc` no puede abrir `/documentos`. */
+  it("no abre una carpeta que solo empieza igual", () => {
+    expect(puedeEscribirRuta(escritor, "/documentos/x.md")).toBe(false);
+  });
+
+  it("lo denegado a todo el mundo sigue denegado", () => {
+    expect(puedeEscribirRuta({ ...escritor, escribeEn: ["/"] }, "/.env")).toBe(false);
+    expect(puedeEscribirRuta({ ...escritor, escribeEn: ["/"] }, "/.git/config")).toBe(false);
+  });
+
+  it("quien no declara nada y no es de solo lectura escribe donde quiera: no cambia nada", () => {
+    const dev = { nombre: "developer-xone", soloLectura: false };
+    expect(puedeEscribirRuta(dev, "/Menu.xne")).toBe(true);
+  });
+
+  /** Y la otra mitad, la que de verdad se arregló: el MODELO que le toca. */
+  it("y al no ser soloLectura le toca el papel de trabajo, no el rápido", () => {
+    // La regla vive en `xoneAgent.ts` (`perfil.soloLectura ? "rapido" : "trabajo"`), y lo
+    // que se fija aquí es el dato del que depende: el documentador NO es soloLectura.
+    const writer = AGENTES_DE_SERIE.find((a) => a.nombre === "document-writer");
+    expect(writer?.soloLectura).toBe(false);
+    expect(writer?.escribeEn).toEqual(["/doc/"]);
   });
 });
