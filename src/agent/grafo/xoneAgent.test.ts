@@ -56,6 +56,42 @@ describe("promptOrquestador", () => {
     expect(soloUno).not.toMatch(/PROBARLO en un móvil o emulador/);
   });
 
+  /**
+   * La tercera regla con NOMBRE, y la que faltaba.
+   *
+   * Medido en las sesiones reales: de 68 delegaciones, `analyst-xone` salió UNA vez, y
+   * ningún proyecto tiene un plan escrito. Con solo la forma abstracta («primero quien
+   * entiende…»), un encargo de desarrollo empezaba directamente en el que escribe.
+   */
+  it("un cambio del proyecto empieza por el ANÁLISIS, y eso va con nombre y apellidos", () => {
+    expect(PROMPT_ORQUESTADOR).toMatch(/va a CAMBIAR el proyecto/);
+    expect(PROMPT_ORQUESTADOR).toContain("analyst-xone");
+    // El handoff es lo que evita que el siguiente redescubra lo mismo.
+    expect(PROMPT_ORQUESTADOR).toMatch(/HANDOFF DE ANÁLISIS/);
+  });
+
+  it("y para un desarrollo de varios pasos pide el PLAN, y pasa su NOMBRE", () => {
+    // Sin el nombre el plan no existe para el que desarrolla: `TRABAJAR_CON_PLAN` empieza
+    // con «SI tu encargo nombra un plan».
+    expect(PROMPT_ORQUESTADOR).toContain("/planes/<nombre>/");
+    expect(PROMPT_ORQUESTADOR).toMatch(/ese nombre es lo que le pasas/);
+  });
+
+  /**
+   * La parte que no es de forma: el spec builder es una ENTREVISTA y un subagente no tiene
+   * a quién entrevistar. El único con una persona delante es este turno.
+   */
+  it("y una decisión pendiente se PREGUNTA, porque el analista no puede", () => {
+    expect(PROMPT_ORQUESTADOR).toMatch(/decisiones PENDIENTES/);
+    expect(PROMPT_ORQUESTADOR).toMatch(/no tiene a quién preguntar y tú sí/);
+  });
+
+  it("esa regla tampoco se escribe si falta uno de los dos", () => {
+    const soloAnalista = promptOrquestador([deSerie("analyst-xone")]);
+
+    expect(soloAnalista).not.toMatch(/va a CAMBIAR el proyecto/);
+  });
+
   it("la regla del encadenado solo se escribe si existen los DOS de los que habla", () => {
     // Una instrucción sobre un especialista que no está no la puede seguir nadie: es el
     // mismo botón muerto que la interfaz lleva semanas quitando, pero en un prompt.

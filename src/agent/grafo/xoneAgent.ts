@@ -168,6 +168,30 @@ export function promptOrquestador(agentes: readonly Agente[]): string {
       ? "Para diagramas o esquemas de la app, delega en `designer-xone`; si deben reflejar el código real, encarga PRIMERO el análisis a `analyst-xone` y usa su resultado antes de dibujar."
       : "",
     /**
+     * **La cadena de un DESARROLLO, que era la que faltaba por nombre.**
+     *
+     * Había dos reglas nombradas —los diagramas y el aparato— y para «cambia el proyecto»
+     * solo la forma abstracta de arriba. Medido en las sesiones reales del usuario: de 68
+     * delegaciones, `analyst-xone` salió UNA vez, y NINGÚN proyecto tiene un solo plan en
+     * `.xonecode/planes/`. El turno de «crear una opción nueva en el drawer» empezó
+     * directamente en `developer-xone` y acabó en diez delegaciones dando tumbos entre
+     * escribir y probar.
+     *
+     * No es que el reparto esté mal escrito: es que aquí compiten dos reglas medidas que
+     * empujan al revés —«contéstala tú, delegar cuesta más» y los hechos del proyecto ya
+     * precargados en la petición, que le dan la sensación de estar orientado— y la cadena
+     * abstracta pierde contra las dos concretas. Lo que funciona en este prompt son las
+     * reglas con NOMBRE, así que ésta también lo tiene.
+     *
+     * **Y lo de preguntar no es cortesía.** El spec builder es una entrevista, y un
+     * subagente no tiene a quién entrevistar: el único con una persona delante es este
+     * turno. Sin esta frase, la salida del analista ante una decisión abierta es
+     * inventarla.
+     */
+    hay("analyst-xone") && hay("developer-xone")
+      ? "Si el encargo va a CAMBIAR el proyecto y no es un retoque de una línea, son DOS pasos y en este orden: `analyst-xone` averigua primero —dile QUÉ hay que averiguar y PARA QUÉ— y su `HANDOFF DE ANÁLISIS` va DENTRO del encargo a `developer-xone`, que así no redescubre nada. Si el desarrollo son varios pasos o no cabe en un turno, pídele además el PLAN: lo deja en `/planes/<nombre>/` y te dice el nombre, y ese nombre es lo que le pasas al que desarrolla. Y si el plan vuelve con decisiones PENDIENTES, pregúntaselas al usuario antes de mandar a escribir: el analista no tiene a quién preguntar y tú sí."
+      : "",
+    /**
      * **Escribir y PROBARLO EN UN APARATO son dos encargos, y el segundo necesita un
      * destino.** Sin esta regla, «crea una pantalla y pruébala» se leía como una sola `task`
      * al desarrollador — que no tiene `execute`, así que «probar» se quedaba en que dijera

@@ -695,6 +695,37 @@ const DOCUMENTAR = [
   "  funciona al leerlo en el repo y en Studio.",
 ].join("\n");
 
+/**
+ * **Cuándo el reconocimiento deja de serlo y toca escribir el plan.**
+ *
+ * `RECONOCIMIENTO_PLANNER` termina en «deja de llamar tools y responde», que es lo correcto
+ * para una pregunta y lo contrario de lo que hace falta para preparar un desarrollo. Medido
+ * en las sesiones reales del usuario: NINGÚN proyecto tiene un plan en `.xonecode/planes/`,
+ * nunca. No era falta de permiso ni de herramienta —`permisosDe` le concede `/planes/**` y
+ * las dos skills están montadas—: es que nadie se lo pedía y su propia instrucción le decía
+ * que parara antes.
+ *
+ * **Las dos skills ENTREVISTAN, y aquí no hay a quién entrevistar.** Un subagente no tiene
+ * canal con la persona. Por eso lo que decidiría a ciegas se queda escrito como PENDIENTE:
+ * inventarlo es la única salida peor que no planificar, porque el plan se lee luego como si
+ * lo hubiera decidido alguien. Quien delegó sí puede preguntar, y su prompt se lo manda.
+ */
+const PLAN_DE_DESARROLLO = [
+  "CUANDO EL ENCARGO ES PREPARAR UN CAMBIO Y NO CONTESTAR UNA PREGUNTA:",
+  "- El reconocimiento de arriba es el PRIMER paso y no el único: termina dejando el spec y el",
+  "  plan ESCRITOS, no solo contados en tu respuesta.",
+  "- `xone-spec-builder` deja `PLAN.md` y `CONTEXT.md`; `xone-plan-builder` lo descompone en",
+  "  `TASKS.md`. Los tres en `/planes/<nombre>/`, una carpeta por plan y el nombre en",
+  "  minúsculas con guiones. Es la ÚNICA ruta donde puedes escribir: no es el proyecto, no",
+  "  entra en git y no pasa por aprobación.",
+  "- Esas skills entrevistan y tú NO tienes a quién preguntar. Lo que decidirías a ciegas se",
+  "  queda escrito como decisión PENDIENTE, con las opciones y qué cambia entre ellas. No la",
+  "  inventes: un plan con una decisión inventada se lee después como si la hubiera tomado",
+  "  alguien.",
+  "- Y termina diciendo el NOMBRE del plan y las decisiones pendientes que dejaste. Sin el",
+  "  nombre, el plan no existe para el que desarrolla.",
+].join("\n");
+
 const RECONOCIMIENTO_PLANNER = [
   "RECONOCIMIENTO RÁPIDO DEL PROYECTO:",
   "- Para preguntas generales como «qué hace esta app», busca evidencia suficiente, no un inventario completo.",
@@ -850,12 +881,14 @@ export const AGENTES_DE_SERIE: readonly Agente[] = [
       "cambiar código, y no para preguntas de la plataforma. Dale qué hay que averiguar y " +
       "para qué, que es lo que acota cuánto busca. Devuelve hechos con su fichero y su " +
       "línea, listos para pasárselos al siguiente en un bloque HANDOFF DE ANÁLISIS. Para un " +
-      "desarrollo grande puede además dejar un PLAN escrito en `/planes/<nombre>/` —spec, " +
-      "tareas y glosario— y entonces te dice el nombre: pásaselo a quien desarrolle.",
+      "desarrollo de varios pasos PÍDELE ADEMÁS EL PLAN: deja el spec, las tareas y el " +
+      "glosario en `/planes/<nombre>/` y te dice el nombre, que es lo que hay que pasarle a " +
+      "quien desarrolle. No puede preguntarte nada, así que lo que no pueda decidir te lo " +
+      "devuelve como decisión PENDIENTE.",
     motor: "modelo",
     soloLectura: true,
     skills: ["xone-spec-builder", "xone-plan-builder", "archify", "artifacts-builder"],
-    instrucciones: `${RECONOCIMIENTO_PLANNER}\n\n${MEMORIA_LEER}`,
+    instrucciones: `${RECONOCIMIENTO_PLANNER}\n\n${PLAN_DE_DESARROLLO}\n\n${MEMORIA_LEER}`,
     origen: "semilla",
   },
   {

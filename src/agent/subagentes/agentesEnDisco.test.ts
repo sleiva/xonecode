@@ -18,6 +18,8 @@ import {
   rutaGlobalDeAgentes,
   sembrarAgentes,
 } from "./agentesEnDisco.js";
+import { puedeEscribirRuta } from "../grafo/perfiles.js";
+import { FICHEROS_DE_UN_PLAN } from "../../core/planes.js";
 import { escribirAgente, fusionarAgentes, type Agente } from "../../core/agentes.js";
 import { RAIZ_SKILLS, SkillsEnDisco } from "../grafo/skills.js";
 import { crearNavegacionXone } from "../grafo/navegacionXone.js";
@@ -906,5 +908,48 @@ describe("las descripciones que ve el orquestador", () => {
     const total = AGENTES_DE_SERIE.reduce((n, a) => n + `- ${a.nombre}: ${a.descripcion}`.length, 0);
 
     expect(total).toBeLessThan(4500);
+  });
+});
+
+/**
+ * El plan que el analista PROMETE, cruzado con lo que el código le deja hacer.
+ *
+ * Es la prueba de la CLASE de fallo que esto arregla, y no del caso: durante semanas su
+ * ficha decía «puede dejar un PLAN en `/planes/<nombre>/`» y ningún proyecto tuvo jamás uno.
+ * Una promesa en un prompt solo es verdad si la ruta se puede escribir, las skills existen y
+ * el agente las tiene declaradas — tres sitios distintos que nadie comparaba.
+ */
+describe("el plan del analista, prometido y posible", () => {
+  const analista = AGENTES_DE_SERIE.find((a) => a.nombre === "analyst-xone")!;
+
+  it("escribe donde dice que escribe, y NO en el proyecto", () => {
+    expect(analista.instrucciones).toContain("/planes/<nombre>/");
+    expect(puedeEscribirRuta(analista, "/planes/login-biometrico/PLAN.md")).toBe(true);
+    expect(puedeEscribirRuta(analista, "/planes/login-biometrico/TASKS.md")).toBe(true);
+    // Sigue siendo de solo lectura para la app del cliente, que es lo que no se toca.
+    expect(puedeEscribirRuta(analista, "/Menu.xne")).toBe(false);
+    expect(analista.soloLectura).toBe(true);
+  });
+
+  it("las skills que su prompt NOMBRA las tiene declaradas y existen en el catálogo real", () => {
+    // Un nombre muerto en un prompt manda al modelo a apañárselas solo: la misma regla que
+    // ya se aplica a los scripts que nombra el conductor.
+    for (const skill of ["xone-spec-builder", "xone-plan-builder"]) {
+      expect(analista.instrucciones, skill).toContain(skill);
+      expect(analista.skills, skill).toContain(skill);
+      expect(existsSync(join(RAIZ_SKILLS, skill, "SKILL.md")), skill).toBe(true);
+    }
+  });
+
+  it("y los tres ficheros del plan son los que el que desarrolla va a buscar", () => {
+    // `TRABAJAR_CON_PLAN` lee `TASKS.md` y se apoya en `PLAN.md` y `CONTEXT.md`. Si el
+    // analista escribiera otros nombres, el plan existiría y nadie lo leería.
+    for (const f of FICHEROS_DE_UN_PLAN) expect(analista.instrucciones, f).toContain(f);
+  });
+
+  it("una decisión que no puede tomar se deja PENDIENTE, no se inventa", () => {
+    // Las dos skills entrevistan y un subagente no tiene a quién entrevistar.
+    expect(analista.instrucciones).toMatch(/PENDIENTE/);
+    expect(analista.instrucciones).toMatch(/No la\s+inventes|no la inventes/);
   });
 });
