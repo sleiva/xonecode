@@ -56,7 +56,7 @@ export function comandoDelSelector(plataforma: string, desde?: string): ComandoD
       "  on error",
       "    set inicio to path to home folder",
       "  end try",
-      '  set elegida to choose folder with prompt "Dónde se bajan los proyectos de xonecode" default location inicio',
+      '  set elegida to choose folder with prompt "Dónde se bajan los proyectos de XOneCode" default location inicio',
       "  return POSIX path of elegida",
       "end run",
     ].join("\n");
@@ -68,7 +68,7 @@ export function comandoDelSelector(plataforma: string, desde?: string): ComandoD
       argumentos: [
         "--file-selection",
         "--directory",
-        "--title=Dónde se bajan los proyectos de xonecode",
+        "--title=Dónde se bajan los proyectos de XOneCode",
         ...(desde === undefined ? [] : [`--filename=${desde.replace(/\/*$/, "/")}`]),
       ],
     };

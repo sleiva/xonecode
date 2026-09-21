@@ -412,7 +412,7 @@ describe("motivoDeBloqueo: una frase por causa, y cada una dice dónde se arregl
     // creer que el fichero lo pone xonecode.
     const frase = motivoDeBloqueo({ causa: "falta-el-fichero-de-la-conexion", connstring: "bd/gestion.db" });
     expect(frase).toContain("bd/gestion.db");
-    expect(frase).toContain("xonecode no la crea");
+    expect(frase).toContain("XOneCode no la crea");
     expect(frase).toContain("XOne Studio");
     expect(frase).toContain("Error opening database");
   });
@@ -421,7 +421,7 @@ describe("motivoDeBloqueo: una frase por causa, y cada una dice dónde se arregl
     const frase = motivoDeBloqueo({ causa: "falta-la-base" });
     expect(frase).toContain("bd/gestion.db");
     expect(frase).toContain("POR DEFECTO");
-    expect(frase).toContain("xonecode no la crea");
+    expect(frase).toContain("XOneCode no la crea");
     expect(frase).toContain("Error opening database");
     // Y la única frase del catálogo que admite que puede estar equivocada: el fichero se mira
     // en el proyecto y una app ya lanzada en ese aparato tiene allí su copia. Callarlo dejaría

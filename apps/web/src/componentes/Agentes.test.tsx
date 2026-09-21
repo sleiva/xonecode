@@ -30,7 +30,7 @@ const DOCS: AgenteDelCable = {
 };
 
 /** Cambia de pestaña. Los tuyos no están a la vista al abrir: la primera es la de xonecode. */
-const irA = (titulo: "De xonecode" | "Tuyos"): void => {
+const irA = (titulo: "De XOneCode" | "Tuyos"): void => {
   fireEvent.click(screen.getByRole("tab", { name: new RegExp(`^${titulo}`) }));
 };
 
@@ -259,13 +259,13 @@ describe("Agentes", () => {
     fireEvent.click(screen.getByRole("button", { name: "Editar consultant-xone" }));
     expect(screen.getByDisplayValue("consultant-xone")).toHaveProperty("disabled", true);
     // Y el motivo va en el rótulo: un campo apagado sin explicación se lee como un fallo.
-    expect(screen.getByText(/no se cambia: lo trae xonecode/)).not.toBeNull();
+    expect(screen.getByText(/no se cambia: lo trae XOneCode/)).not.toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "Cancelar" }));
 
     irA("Tuyos");
     fireEvent.click(screen.getByRole("button", { name: "Editar revisor" }));
     expect(screen.getByDisplayValue("revisor")).toHaveProperty("disabled", false);
-    expect(screen.queryByText(/lo trae xonecode/)).toBeNull();
+    expect(screen.queryByText(/lo trae XOneCode/)).toBeNull();
   });
 
   it("renombrar manda el nombre de ANTES; guardar sin tocarlo NO lo manda", () => {
@@ -440,7 +440,7 @@ describe("Agentes: los que trae xonecode y los tuyos", () => {
     render(<Agentes {...manejadores} agentes={[DOCS, REVISOR]} />);
     // La cuenta va en la pestaña para no tener que abrirla, así que el nombre accesible la
     // lleva detrás: se busca por el principio.
-    expect(screen.getByRole("tab", { name: /^De xonecode/ }).textContent).toContain("1");
+    expect(screen.getByRole("tab", { name: /^De XOneCode/ }).textContent).toContain("1");
     expect(screen.getByRole("tab", { name: /^Tuyos/ }).textContent).toContain("1");
     // Y solo se pinta la lista de la pestaña abierta, que es la primera.
     expect(screen.getByText("consultant-xone")).not.toBeNull();
@@ -552,7 +552,7 @@ describe("Agentes: los que trae xonecode y los tuyos", () => {
     expect(screen.getByRole("button", { name: "Restaurar" })).not.toBeNull();
 
     irA("Tuyos");
-    irA("De xonecode");
+    irA("De XOneCode");
     expect(screen.queryByRole("button", { name: "Restaurar" })).toBeNull();
     // Y sigue ofreciéndose, claro: lo que se cerró es la confirmación, no la acción.
     expect(screen.getByRole("button", { name: "Restaurar el de serie" })).not.toBeNull();

@@ -176,22 +176,26 @@ export function herramientaDeProyectos(tools: readonly DefinicionDeTool[]): Defi
 /**
  * Un proyecto del listado remoto, con lo ÚNICO que se conserva de él.
  *
- * La respuesta de `studio_list_projects` trae bastante más —permisos (`rights`), fechas
- * (`last`), el correo del propietario (`suser`), una tabla de `studiopermissions`— y nada de
- * eso sale de aquí: esta función es el punto de estrangulamiento, y hay un test que compara
- * las claves EXACTAS de lo que devuelve para que un «ya que estamos, llevemos también la
- * fecha» no cuele el correo de un compañero de camino.
+ * La respuesta de `studio_list_projects` trae bastante más —permisos (`rights`), el correo
+ * del propietario (`suser`), una tabla de `studiopermissions`— y nada de eso sale de aquí:
+ * esta función es el punto de estrangulamiento, y hay un test que compara las claves
+ * EXACTAS de lo que devuelve para que un «ya que estamos, llevemos también el correo» no
+ * cuele el de un compañero de camino.
  *
- * `compartido` es la excepción que se añadió a los dos de siempre, y es un booleano y no el
- * correo: para distinguir lo propio de lo compartido basta con eso, y quién lo compartió es
- * un dato personal que esta consola no necesita para pintar una etiqueta. **Es opcional a
- * propósito**: ausente significa «el servidor no lo dijo», que no es lo mismo que «es tuyo».
+ * `compartido` y `ultimoAcceso` son las DOS excepciones que se añadieron a la mínima de
+ * siempre (`id`, `nombre`), y las dos por el mismo motivo: son datos del PROYECTO, no de una
+ * PERSONA. `compartido` es un booleano y no el correo de quien compartió; `ultimoAcceso` es
+ * la fecha (`last`) y no trae más contexto que ella. Las dos son opcionales a propósito:
+ * ausente significa «CloudStudio no lo dijo», que no es lo mismo que «no» / «nunca abierto».
  */
 export interface ProyectoRemoto {
   id: string;
   nombre: string;
   /** Compartido CONTIGO por otra persona. Ausente = el servidor no lo dijo. */
   compartido?: boolean;
+  /** Fecha ISO del último acceso (`last`). Ausente = no consta — el fixture medido contra
+   *  el servidor real trae un proyecto sin este campo. */
+  ultimoAcceso?: string;
 }
 
 export function proyectosDeResultado(valor: unknown): ProyectoRemoto[] {
@@ -245,7 +249,12 @@ export function proyectosDeResultado(valor: unknown): ProyectoRemoto[] {
     // respuesta, `rights` es un objeto serializado como cadena—, así que ni «"true"» ni
     // deducirlo de que `suser` no esté vacío: la ausencia se propaga como ausencia y la
     // interfaz no pinta nada, que es la respuesta honesta para un endpoint que no lo dice.
-    return [{ id, nombre, ...(typeof dato.shared === "boolean" ? { compartido: dato.shared } : {}) }];
+    return [{
+      id,
+      nombre,
+      ...(typeof dato.shared === "boolean" ? { compartido: dato.shared } : {}),
+      ...(typeof dato.last === "string" ? { ultimoAcceso: dato.last } : {}),
+    }];
   });
 }
 
@@ -492,7 +501,7 @@ export function respuestaDeCallback(
     return {
       estado: 400,
       cabeceras: { "content-type": "text/html; charset=utf-8" },
-      cuerpo: "<h1>No se pudo completar el acceso a CloudStudio</h1><p>Vuelve a xonecode para ver el detalle.</p>",
+      cuerpo: "<h1>No se pudo completar el acceso a CloudStudio</h1><p>Vuelve a XOneCode para ver el detalle.</p>",
     };
   }
   if (redirigirA !== undefined) {
@@ -501,7 +510,7 @@ export function respuestaDeCallback(
   return {
     estado: 200,
     cabeceras: { "content-type": "text/html; charset=utf-8" },
-    cuerpo: "<h1>CloudStudio conectado</h1><p>Ya puedes volver a xonecode.</p>",
+    cuerpo: "<h1>CloudStudio conectado</h1><p>Ya puedes volver a XOneCode.</p>",
   };
 }
 
@@ -601,7 +610,7 @@ export function escucharCallback(
           // El puerto es fijo y compartido por todo lo que hable con este IDS, así que el
           // choque tiene una causa concreta y un remedio concreto. Decir «EADDRINUSE» manda
           // a buscar un conflicto de configuración que no existe.
-          ? `el puerto ${puerto} del callback de OAuth lo tiene otro proceso: cierra la otra consola de xonecode (o lo que esté autenticando contra CloudStudio) y vuelve a intentarlo`
+          ? `el puerto ${puerto} del callback de OAuth lo tiene otro proceso: cierra la otra consola de XOneCode (o lo que esté autenticando contra CloudStudio) y vuelve a intentarlo`
           : `no se pudo abrir el callback local de OAuth: ${error.message}`,
       ));
     });

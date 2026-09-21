@@ -389,6 +389,8 @@ export interface EstadoDelCliente {
     /** El modo del proyecto abierto, para la pastilla de la cabecera. Ausente = el
      *  servidor no lo sabe, y entonces no se pinta pastilla (`Cabecera.tsx`). */
     modo?: "offline" | "cloud";
+    /** La línea de versión ya formateada, para el pie de la barra. Ausente = no consta. */
+    version?: string;
   };
 }
 
@@ -883,7 +885,7 @@ export function crearStoreDelCliente(): {
           const suyos = Array.isArray(m.proyectos)
             ? m.proyectos
                 .filter(
-                  (p): p is { id: string; nombre: string; compartido?: boolean } =>
+                  (p): p is { id: string; nombre: string; compartido?: boolean; ultimoAcceso?: unknown } =>
                     typeof p === "object" &&
                     p !== null &&
                     typeof (p as { id?: unknown }).id === "string" &&
@@ -893,6 +895,7 @@ export function crearStoreDelCliente(): {
                   id: p.id,
                   nombre: p.nombre,
                   ...(typeof p.compartido === "boolean" ? { compartido: p.compartido } : {}),
+                  ...(typeof p.ultimoAcceso === "string" ? { ultimoAcceso: p.ultimoAcceso } : {}),
                 }))
             : undefined;
           mutar({
@@ -1611,6 +1614,7 @@ export function crearStoreDelCliente(): {
             nombre?: unknown;
             proyectoAbierto?: unknown;
             modo?: unknown;
+            version?: unknown;
           };
           if (!Array.isArray(m.pasos) || !m.pasos.every((p) => typeof p === "string" && PASOS.has(p))) return;
           if (!sonIdentidades(m.proveedores) || !sonIdentidades(m.proyectos)) return;
@@ -1657,6 +1661,9 @@ export function crearStoreDelCliente(): {
               // proyecto como compartido, porque una cadena no vacía es verdadera.
               ...(typeof (p as { compartido?: unknown }).compartido === "boolean"
                 ? { compartido: (p as unknown as { compartido: boolean }).compartido }
+                : {}),
+              ...(typeof (p as { ultimoAcceso?: unknown }).ultimoAcceso === "string"
+                ? { ultimoAcceso: (p as unknown as { ultimoAcceso: string }).ultimoAcceso }
                 : {}),
             };
           });
@@ -1740,6 +1747,7 @@ export function crearStoreDelCliente(): {
               // pastilla, que es lo mismo que hace cuando el campo no viene. Aceptar la
               // cadena a ciegas dejaría un modo desconocido escrito en pantalla.
               ...(m.modo === "offline" || m.modo === "cloud" ? { modo: m.modo } : {}),
+              ...(typeof m.version === "string" ? { version: m.version } : {}),
             },
           });
           return;

@@ -31,7 +31,7 @@ const RECETA: RecetaDelCable = {
   aparte: {
     titulo: "Declarar las variables en tu shell",
     comandos: ['export ANDROID_HOME="$(brew --prefix)/share/x"'],
-    nota: "Para que los comandos funcionen en tu terminal. xonecode NO lo necesita.",
+    nota: "Para que los comandos funcionen en tu terminal. XOneCode NO lo necesita.",
   },
   completa: false,
   despues: "Para arrancarlo: `emulator -avd pixel8`.",
@@ -70,7 +70,7 @@ describe("Receta", () => {
     render(<Receta receta={RECETA} />);
     expect(screen.getByText("Declarar las variables en tu shell")).toBeTruthy();
     expect(screen.getByText(/export ANDROID_HOME/)).toBeTruthy();
-    expect(screen.getByText(/xonecode NO lo necesita/)).toBeTruthy();
+    expect(screen.getByText(/XOneCode NO lo necesita/)).toBeTruthy();
     // Y no es un paso: la lista sigue teniendo dos.
     expect(screen.getAllByRole("listitem")).toHaveLength(2);
   });

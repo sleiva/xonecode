@@ -159,7 +159,7 @@ describe("main — la consola no se come los subcomandos", () => {
       // Algo reconocible de `describe` (monta deps offline y las describe) y, sobre todo,
       // NADA de la consola: ni su cabecera ni su lista de comandos.
       expect(texto.length).toBeGreaterThan(0);
-      expect(texto).not.toContain("xonecode · ");
+      expect(texto).not.toContain("XOneCode · ");
       expect(texto).not.toContain("colls)");
     } finally {
       espia.mockRestore();
@@ -174,7 +174,7 @@ describe("main — la consola no se come los subcomandos", () => {
 
       expect(codigo).toBe(0);
       expect(texto).toContain("xonecode run");
-      expect(texto).not.toContain("xonecode · ");
+      expect(texto).not.toContain("XOneCode · ");
     } finally {
       espia.mockRestore();
     }
@@ -209,7 +209,7 @@ describe("entrarEnConsola", () => {
     // Devuelve: no se cuelga con el input cerrado.
     expect(codigo).toBe(0);
     const texto = salida();
-    expect(texto).toContain(`xonecode · ${basename(raiz)}`);
+    expect(texto).toContain(`XOneCode · ${basename(raiz)}`);
     expect(texto).toContain("3 colls");
     const porOmision = `${POR_OMISION.trabajo.proveedor}/${POR_OMISION.trabajo.modelo}`;
     expect(texto).toContain(porOmision);
@@ -259,7 +259,7 @@ describe("entrarEnConsola", () => {
     expect(codigo).toBe(0);
     const texto = salida();
     // La cabecera aparece al menos DOS veces: una al arrancar y otra tras el comando.
-    const cabeceras = texto.split("xonecode · ").length - 1;
+    const cabeceras = texto.split("XOneCode · ").length - 1;
     expect(cabeceras).toBeGreaterThanOrEqual(2);
     // Y en esa segunda cabecera ya figura el modelo nuevo (el acuse de consola.ts
     // también lo contiene, así que comprobamos que llega tras el primer arranque).
@@ -282,7 +282,7 @@ describe("entrarEnConsola", () => {
     const texto = salida();
     const trasArranque = texto.slice(texto.indexOf("\n") + 1);
     expect(trasArranque).toContain("ollama/qwen3");
-    expect(texto.split("xonecode · ").length - 1).toBeGreaterThanOrEqual(2);
+    expect(texto.split("XOneCode · ").length - 1).toBeGreaterThanOrEqual(2);
   });
 
   it("hidrata el modelo global antes de construir la cabecera", async () => {
@@ -609,7 +609,7 @@ describe("entrarEnConsola — proyecto XOne ausente", () => {
     const texto = salida();
     expect(texto).toContain("no es un proyecto XOne");
     // La consola sigue viva: cabecera normal, no el fallo del primer turno de prosa.
-    expect(texto).toContain("xonecode · ");
+    expect(texto).toContain("XOneCode · ");
     expect(existsSync(join(raiz, "app.xml"))).toBe(false);
   });
 
@@ -673,7 +673,7 @@ describe("entrarEnConsola — proyecto XOne ausente", () => {
     expect(codigo).toBe(0);
     const texto = salida();
     expect(texto).toContain("no es un proyecto XOne");
-    expect(texto).toContain("xonecode · ");
+    expect(texto).toContain("XOneCode · ");
     expect(existsSync(join(raiz, "app.xml"))).toBe(false);
   });
 });

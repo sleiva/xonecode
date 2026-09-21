@@ -35,12 +35,12 @@ export interface VersionEnMarcha {
  * corre; y si no se pudo mirar, se dice eso y no «limpio».
  */
 export function lineaDeVersion(v: VersionEnMarcha): string {
-  if (v.commit === undefined) return `xonecode ${v.version}`;
+  if (v.commit === undefined) return `XOneCode ${v.version}`;
   const estado =
     v.sucio === true
       ? " + cambios sin commitear"
       : v.sucio === undefined
         ? " (no se pudo mirar si hay cambios sin commitear)"
         : "";
-  return `xonecode ${v.version} · ${v.commit}${estado}`;
+  return `XOneCode ${v.version} · ${v.commit}${estado}`;
 }

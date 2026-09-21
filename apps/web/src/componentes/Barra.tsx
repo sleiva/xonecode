@@ -6,6 +6,8 @@ import {
   IconTriangleRightFill14,
   IconNewChatOutline16,
   IconSettingsOutline16,
+  IconCheckOutline16,
+  IconDownloadOutline16,
 } from "@deepseek-ai/dsh-client-ui-primitives";
 import barra from "../../estilos/SidebarRoot.module.css";
 import navegador from "../../estilos/WorkspaceBrowser.module.css";
@@ -123,6 +125,15 @@ export interface Proyecto {
    */
   compartido?: boolean;
   /**
+   * La copia local ya existe: no hace falta bajar nada para abrirlo. Se pinta con un icono
+   * (junto al badge de `compartido`) en vez de con la pastilla de texto que usa el
+   * Escritorio: aquí la fila es de una sola línea y no hay sitio para dos palabras más.
+   * A diferencia de `compartido`, ausente aquí SÍ significa «no está» — el servidor mide
+   * la copia en disco para todo proyecto de este mensaje, nunca «no lo sé» —, así que se
+   * pinta siempre, con un icono para cada uno de los dos estados.
+   */
+  local?: boolean;
+  /**
    * Alguna sesión de este proyecto tiene un turno EN MARCHA. No se deduce de `sesiones`: una
    * sesión nueva no tiene fila en el índice hasta que vuelca su primer acto, así que el caso
    * más común —abrir, pedir algo, irse a otro proyecto— no habría marcado nada.
@@ -181,7 +192,7 @@ export interface Proyecto {
  */
 export const PROYECTOS_POR_OMISION = 4;
 
-export function Barra({ entornos, entornoActivo, proyectos, visibles, proyectoActivo, sesionActiva, abriendo, alElegirEntorno, alAbrirSesion, alAbrirProyecto, alNuevaSesion, alAccionDeSesion, alAbrirAjustes, conectado }: {
+export function Barra({ entornos, entornoActivo, proyectos, visibles, proyectoActivo, sesionActiva, abriendo, alElegirEntorno, alAbrirSesion, alAbrirProyecto, alNuevaSesion, alAccionDeSesion, alAbrirAjustes, alAbrirAjustesEnEntornos, conectado, version }: {
   entornos: { id: string; nombre: string }[];
   entornoActivo: string;
   proyectos: Proyecto[];
@@ -244,12 +255,25 @@ export function Barra({ entornos, entornoActivo, proyectos, visibles, proyectoAc
    */
   alAbrirAjustes: () => void;
   /**
+   * El enlace «Ajustes» del aviso de proyectos sin enseñar abre la ventana YA en la pestaña
+   * Entornos, en vez de en «general»: quien lo pulsa viene buscando justo esa lista.
+   * Opcional y con fallback a `alAbrirAjustes` — un caller que no lo cablee sigue abriendo
+   * la ventana, solo que en la sección de siempre; nunca un enlace que no hace nada.
+   */
+  alAbrirAjustesEnEntornos?: () => void;
+  /**
    * Si el cable está vivo. Sin él, todo lo que manda algo al servidor se apaga: cambiar de
    * entorno, abrir un proyecto o una sesión, el «+» y el «…». Medido sin servidor: la barra
    * seguía entera y pulsable con un «sin conexión» pequeño arriba. «Ajustes» se queda: la
    * apariencia es de este navegador y funciona sin cable.
    */
   conectado?: boolean;
+  /**
+   * La línea de versión ya formateada por el servidor (`core/version.ts#lineaDeVersion`),
+   * para el pie de la barra. Ausente = no se pudo calcular al arrancar, y entonces no se
+   * pinta nada — nunca una versión inventada.
+   */
+  version?: string;
 }) {
   const apagado = conectado === false;
 
@@ -489,6 +513,30 @@ export function Barra({ entornos, entornoActivo, proyectos, visibles, proyectoAc
                               {p.compartido ? "compartido" : "propio"}
                             </span>
                           )}
+                          {/*
+                            Descargado en local o no. A diferencia de `compartido`, aquí
+                            AUSENTE sí significa «no está» —el servidor mide la copia en
+                            disco para todo proyecto de este mensaje, nunca «no lo sé»—, así
+                            que se pinta SIEMPRE, con un icono por cada uno de los dos
+                            estados en vez de la pastilla de texto que usa el Escritorio:
+                            esta fila es de una sola línea y no hay sitio para dos palabras
+                            más.
+
+                            `aria-hidden`, con la info solo en `title`: es supletoria al
+                            nombre del botón («abre este proyecto»), y sin ocultarla un
+                            lector de pantalla leería «tienda no descargado» como si «no
+                            descargado» fuera parte del NOMBRE del proyecto — se comprobó
+                            con `Barra.comportamiento.test.tsx`, que busca los botones por
+                            el nombre a secas.
+                          */}
+                          <span
+                            className={estilos.estadoLocal}
+                            data-local={p.local === true ? "" : undefined}
+                            title={p.local === true ? "Descargado en este equipo" : "No descargado: se bajará al abrirlo"}
+                            aria-hidden="true"
+                          >
+                            {p.local === true ? <IconCheckOutline16 size={14} /> : <IconDownloadOutline16 size={14} />}
+                          </span>
                         </button>
                         <span className={clsx(filas.rowActions, estilos.accionesDeFila)}>
                           <button
@@ -622,13 +670,29 @@ export function Barra({ entornos, entornoActivo, proyectos, visibles, proyectoAc
                   Lo que NO se está viendo se dice, y se dice dónde se arregla. Callarlo
                   dejaría creer que el entorno solo tiene cuatro proyectos — el listado
                   remoto trae los que trae, y esto es un tope de presentación, no la verdad
-                  sobre el servidor.
+                  sobre el servidor. En tarjeta y no en línea suelta, para que se lea como
+                  un aviso y no como una fila más de la lista; «Ajustes» es el botón que
+                  arregla lo que la tarjeta describe, así que lleva DIRECTO a esa pestaña
+                  (`alAbrirAjustesEnEntornos`) y no a la sección general.
                 */}
                 {ocultos > 0 ? (
-                  <p className={clsx(navegador.empty, estilos.sinSesiones)}>
-                    {ocultos === 1 ? "1 proyecto más sin enseñar" : `${ocultos} proyectos más sin enseñar`} · elígelos en
-                    Ajustes
-                  </p>
+                  <div className={estilos.avisoOcultos}>
+                    <p className={estilos.textoDeAviso}>
+                      {ocultos === 1 ? "1 proyecto más sin enseñar" : `${ocultos} proyectos más sin enseñar`} · elígelos en{" "}
+                      {/* Nombre accesible DISTINTO del botón de más abajo (`ajustes.trigger`,
+                          que también se llama «Ajustes»): dos controles con el mismo nombre
+                          en la misma pantalla son indistinguibles para quien navega por
+                          nombre. El texto visible se queda igual — es la frase de siempre. */}
+                      <button
+                        type="button"
+                        className={estilos.enlaceDeAviso}
+                        onClick={alAbrirAjustesEnEntornos ?? alAbrirAjustes}
+                        aria-label="Ajustes, pestaña Entornos"
+                      >
+                        Ajustes
+                      </button>
+                    </p>
+                  </div>
                 ) : null}
               </div>
               <div className={navegador.fade} aria-hidden="true" />
@@ -642,6 +706,10 @@ export function Barra({ entornos, entornoActivo, proyectos, visibles, proyectoAc
           cuya salida entra en el transcript como cualquier otra. Mismo asiento, misma
           geometría, misma tecla de color; lo que cambia es a dónde lleva. */}
       <div className={barra.footArea}>
+        {/* El separador y la versión son propios (`Barra.module.css`) y no de la hoja
+            copiada `SidebarRoot.module.css` («Copiado SIN CAMBIOS»): van como hermanos de
+            `.settingsArea` dentro de `.footArea`, que ya es `flex-direction: column`. */}
+        <div className={estilos.separadorDePie} aria-hidden="true" />
         <div className={barra.settingsArea}>
           <div className={ajustes.triggerRow}>
             <button type="button" className={ajustes.trigger} onClick={alAbrirAjustes}>
@@ -650,6 +718,7 @@ export function Barra({ entornos, entornoActivo, proyectos, visibles, proyectoAc
             </button>
           </div>
         </div>
+        {version === undefined ? null : <p className={estilos.version}>{version}</p>}
       </div>
     </nav>
   );

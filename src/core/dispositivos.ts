@@ -293,7 +293,7 @@ export function recetaDeEmuladorAndroid(plataforma: string, estado: EstadoDeAndr
       nota:
         "Son unos cientos de MB. Ni la fórmula ni el cask piden la contraseña de " +
         "administrador —instalan dentro del prefijo de Homebrew, que es tuyo—, así que " +
-        "puedes pegarlo en un terminal o dejar que lo haga xonecode.",
+        "puedes pegarlo en un terminal o dejar que lo haga XOneCode.",
       // `sdkmanager` es lo que instala el cask: si está, el paso está hecho.
       hecho: estado.sdkmanager,
       // **Este es el paso del que colgaban los otros dos.** Sin él, en una máquina nueva la
@@ -316,7 +316,7 @@ export function recetaDeEmuladorAndroid(plataforma: string, estado: EstadoDeAndr
       comandos: [
         'sdkmanager --install "platform-tools" "emulator" "platforms;android-35" "system-images;android-35;google_apis;arm64-v8a"',
       ],
-      nota: "Son 2-3 GB. Puedes pegarlo en un terminal o dejar que lo haga xonecode.",
+      nota: "Son 2-3 GB. Puedes pegarlo en un terminal o dejar que lo haga XOneCode.",
       hecho: estado.emulator,
       // Se puede lanzar en cuanto están las herramientas del paso 1: no pide contraseña.
       ejecutable: puedeLanzar,
@@ -364,7 +364,7 @@ export function recetaDeEmuladorAndroid(plataforma: string, estado: EstadoDeAndr
       ],
       nota:
         "Va en `~/.zshrc`, y luego abre un terminal nuevo o haz `source ~/.zshrc`. " +
-        "xonecode NO lo necesita —ya mira la carpeta de Homebrew para encontrar el SDK—: " +
+        "XOneCode NO lo necesita —ya mira la carpeta de Homebrew para encontrar el SDK—: " +
         "esto es para que `emulator` y `adb` te funcionen en tu terminal, y sin ello el " +
         "comando de abajo hay que escribirlo con la ruta entera. No es un paso: no se mide, " +
         "no se lanza desde aquí y la receta no espera a que lo hagas.",

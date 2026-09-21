@@ -23,7 +23,7 @@ import { Escritorio } from "./componentes/Escritorio.js";
 import { NuevaSesion } from "./componentes/NuevaSesion.js";
 import { NuevaTarea } from "./componentes/NuevaTarea.js";
 import { AccionDeSesion, type AccionPendiente } from "./componentes/AccionDeSesion.js";
-import { Ajustes } from "./componentes/Ajustes.js";
+import { Ajustes, type SeccionDeAjustes } from "./componentes/Ajustes.js";
 import { Revision } from "./componentes/Revision.js";
 import { Ficheros } from "./componentes/Ficheros.js";
 import { CloudStudio } from "./componentes/CloudStudio.js";
@@ -113,6 +113,18 @@ export function App({
    * perezoso), no en cada render.
    */
   const [ajustesAbiertos, setAjustesAbiertos] = useState(false);
+  /**
+   * En qué sección abrir Ajustes la PRÓXIMA vez — no la que está abierta ahora, que vive
+   * dentro de `Ajustes` mismo. `undefined` es la omisión de siempre («general»). Sin
+   * resetear esto en cada apertura genérica, la última sección pedida por un enlace
+   * concreto (el aviso de proyectos sin enseñar) se quedaría pegada a las aperturas
+   * siguientes desde el botón de la barra.
+   */
+  const [seccionDeAjustes, setSeccionDeAjustes] = useState<SeccionDeAjustes | undefined>(undefined);
+  const abrirAjustes = (seccion?: SeccionDeAjustes): void => {
+    setSeccionDeAjustes(seccion);
+    setAjustesAbiertos(true);
+  };
   /**
    * La barra lateral, plegada. Es de esta ventana —como la apariencia— y se recuerda en el
    * navegador: quien la pliega para ganar sitio no quiere volver a plegarla en cada
@@ -1008,6 +1020,7 @@ export function App({
 
   const ventanaDeAjustes = ajustesAbiertos ? (
     <Ajustes
+      {...(seccionDeAjustes === undefined ? {} : { seccionInicial: seccionDeAjustes })}
       {...(estado.modelos === undefined ? {} : { proveedores: estado.modelos.proveedores })}
       entornos={estado.alta?.registrados ?? []}
       // El listado del entorno ACTIVO, que es del único del que el cable trae proyectos.
@@ -1223,7 +1236,7 @@ export function App({
       conectado={estado.conectado}
       barraContraida={barraContraida}
       alAlternarBarra={alternarBarra}
-      alAbrirAjustes={() => setAjustesAbiertos(true)}
+      alAbrirAjustes={() => abrirAjustes()}
       // La marca lleva al escritorio, y solo desde la sesión: en el escritorio ya estás.
       alIrAlEscritorio={() => setEnEscritorio(true)}
     />
@@ -1233,7 +1246,7 @@ export function App({
       conectado={estado.conectado}
       barraContraida={barraContraida}
       alAlternarBarra={alternarBarra}
-      alAbrirAjustes={() => setAjustesAbiertos(true)}
+      alAbrirAjustes={() => abrirAjustes()}
     />
   );
 
@@ -1493,7 +1506,7 @@ export function App({
                 void enviar(nivel === undefined ? { clase: "esfuerzo" } : { clase: "esfuerzo", nivel })
               }
               // Los proveedores que la pastilla no lista —sin comprobar— se configuran aquí.
-              alAbrirAjustes={() => setAjustesAbiertos(true)}
+              alAbrirAjustes={() => abrirAjustes()}
               // El dispositivo de la sesión: viaja el ID y el servidor resuelve la foto
               // contra su última medida — el navegador no es fuente sobre la máquina.
               {...(estado.alta?.dispositivoActivo === undefined ? {} : { dispositivo: estado.alta.dispositivoActivo })}
@@ -1558,7 +1571,7 @@ export function App({
             {...(estado.modelos?.actual === undefined ? {} : { modelo: estado.modelos.actual })}
             alNuevaSesion={(proyecto) => abrirVentanaDeSesion(proyecto)}
             alNuevaTarea={(proyecto) => abrirVentanaDeTarea(proyecto)}
-              alAbrirAjustes={() => setAjustesAbiertos(true)}
+              alAbrirAjustes={() => abrirAjustes()}
               {...(estado.dispositivos === undefined ? {} : { dispositivos: estado.dispositivos })}
               alActualizarDispositivos={actualizarDispositivos}
               alVerificarDispositivo={(id) => void enviar({ clase: "conexion", id })}
@@ -1644,10 +1657,15 @@ export function App({
           // configuración al transcript: era lo único que había, pero leer un volcado no es
           // configurar. El volcado sigue estando, dentro de la ventana, para quien quiera
           // verlo entero.
-          alAbrirAjustes={() => setAjustesAbiertos(true)}
+          alAbrirAjustes={() => abrirAjustes()}
+          // El «Ajustes» del aviso de proyectos sin enseñar va DIRECTO a esa pestaña.
+          alAbrirAjustesEnEntornos={() => abrirAjustes("entornos")}
           // Qué se está abriendo, para que la fila donde se pulsó lo diga. Lo manda el
           // servidor: es el único que sabe cuándo acaba (`clase: "abriendo"`).
           {...(abriendo === undefined ? {} : { abriendo })}
+          // La versión ya formateada por el servidor, para el pie de la barra. Ausente = no
+          // se pudo calcular al arrancar, y entonces la barra no pinta nada.
+          {...(estado.alta?.version === undefined ? {} : { version: estado.alta.version })}
         />
       }
     />

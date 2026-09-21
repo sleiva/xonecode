@@ -160,7 +160,7 @@ export function Compositor({
           // quedaría en la cola hasta que termine.
           placeholder={
             !conectado
-              ? "sin conexión con xonecode"
+              ? "sin conexión con XOneCode"
               : turnoEnVuelo
                 ? "el agente está trabajando…"
                 : // Corto a propósito: con la ventana estrecha el largo partía en DOS líneas

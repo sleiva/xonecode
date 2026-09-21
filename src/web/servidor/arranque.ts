@@ -313,6 +313,14 @@ export interface OpcionesDeMontaje {
    */
   topeDeContexto?: (raiz: string, modelo: string) => number | undefined;
   /**
+   * Con qué código corre este proceso. Ver la opción del mismo nombre en
+   * `OpcionesDeArranque`: se llama UNA vez al montar las rutas —no cambia mientras el
+   * proceso vive— y su número (sin commit ni si el árbol está sucio: eso es lo que ya dice
+   * la línea de terminal) viaja en el `alta`, para el pie de la barra. Ausente = no se dice
+   * nada.
+   */
+  version?: () => VersionEnMarcha;
+  /**
    * ¿Está confirmada la credencial de ese proveedor? Por omisión NADIE la tiene, que es la
    * dirección honesta: decir «puesta» sin haberlo comprobado es pintar un punto verde que
    * no significa nada. Los que no necesitan credencial (`SIN_CREDENCIAL`) no pasan por
@@ -617,6 +625,9 @@ export function montarRutas(
 ): { emitirTareas: () => void } {
   const informar = opciones.informar ?? (() => {});
   const hayCredencialDe = opciones.hayCredencial ?? (() => false);
+  // Se llama UNA vez, aquí: no cambia mientras el proceso vive, y es el mismo dato que ya se
+  // imprime por terminal al arrancar (`arrancarConsolaWeb`).
+  const version = opciones.version?.();
 
   /** Los personalizados dados de alta AHORA: se relee en cada mensaje, porque esta misma
    *  ventana los da de alta y de baja sin reiniciar nada. */
@@ -878,6 +889,10 @@ export function montarRutas(
       ramas,
       proyectoAbierto,
       ...(modo === undefined ? {} : { modo }),
+      // Solo «XOneCode X.X.X», para el pie de la barra: ahí no hay sitio para el commit ni
+      // para si el árbol está sucio —eso es lo que ya dice `lineaDeVersion` por terminal—,
+      // así que no se reutiliza esa función y se compone la línea corta aquí.
+      ...(version === undefined ? {} : { version: `XOneCode ${version.version}` }),
       ...(entornoElegido === undefined ? {} : { entornoActivo: entornoElegido }),
       ...(activo === undefined ? {} : { proyectoActivo: activo }),
       ...(abierto?.sesion === undefined ? {} : { sesionActiva: abierto.sesion }),
@@ -1026,7 +1041,7 @@ export function montarRutas(
      */
     if (mensaje.accion === "borrar" && mensaje.ambito === "global" && esDeSerie(mensaje.agente.nombre)) {
       informar(
-        `«${mensaje.agente.nombre}» lo trae xonecode y no se borra: edítalo, o restaura el de serie si quieres el original`
+        `«${mensaje.agente.nombre}» lo trae XOneCode y no se borra: edítalo, o restaura el de serie si quieres el original`
       );
       return;
     }
@@ -1051,7 +1066,7 @@ export function montarRutas(
      */
     if (renombrandoDe !== undefined && mensaje.ambito === "global" && esDeSerie(renombrandoDe)) {
       informar(
-        `«${renombrandoDe}» lo trae xonecode y su nombre no se cambia: es lo que lo ata a la versión de serie`
+        `«${renombrandoDe}» lo trae XOneCode y su nombre no se cambia: es lo que lo ata a la versión de serie`
       );
       return;
     }
@@ -1211,7 +1226,7 @@ export function montarRutas(
         borrarSkill(base, nombre)
           ? `skill «${nombre}» borrada`
           : esDeSerieLaSkill(nombre)
-            ? `la skill «${nombre}» la trae xonecode y no se borra: cópiala si quieres partir de ella`
+            ? `la skill «${nombre}» la trae XOneCode y no se borra: cópiala si quieres partir de ella`
             : `«${nombre}» no existía en ${mensaje.ambito}`
       );
       emitirSkills();
@@ -2210,12 +2225,21 @@ export function montarRutas(
   /**
    * Los proyectos de UN entorno, SIN hacerlo activo.
    *
-   * El hermano de `atenderEntornoActivo`, y lo que los separa es todo lo que este NO hace:
-   * no toca `entornoElegido`, ni `proyectos`, ni `ramas`, ni `proyectoElegido`, ni pone
-   * `aviso`. Es una pregunta para las casillas de una pestaña de Ajustes, y mudar el entorno
-   * activo desde ahí le cambiaría la barra —y los proyectos de los que se habla— a quien
-   * esté trabajando en otro servidor. Por eso la aserción que sostiene el diseño en
-   * `arranque.test.ts` es que `alta.entornoActivo` no cambia.
+   * El hermano de `atenderEntornoActivo`, y lo que los separa es casi todo lo que este NO
+   * hace: no toca `entornoElegido`, ni `ramas`, ni `proyectoElegido`, ni pone `aviso`. Es una
+   * pregunta para las casillas de una pestaña de Ajustes, y mudar el entorno activo desde ahí
+   * le cambiaría la barra —y los proyectos de los que se habla— a quien esté trabajando en
+   * otro servidor. Por eso la aserción que sostiene el diseño en `arranque.test.ts` es que
+   * `alta.entornoActivo` no cambia.
+   *
+   * **La excepción es `proyectos`, y solo cuando el entorno preguntado ES el activo**: esa
+   * variable es la fuente de `alta.proyectos`, lo único que pinta la barra
+   * (`Barra.tsx#alaVista`), así que sin refrescarla aquí un proyecto recién aparecido en
+   * CloudStudio se podía MARCAR visible desde Ajustes y no verse nunca — `alta.proyectos`
+   * seguía siendo la foto de cuando el entorno se activó, y el `filter` de la barra descarta
+   * en silencio un id de `visibles` que no tiene proyecto con el que cruzar. No hace falta
+   * para uno NO activo: ese hueco se cierra solo en cuanto se activa, que es cuando
+   * `atenderEntornoActivo` pide la lista de verdad.
    *
    * No se cachea, a propósito: cada apertura de pestaña pregunta. Con caché, la pestaña
    * podría contradecir a la barra en cuanto alguien cree un proyecto en Studio, y aquí hay
@@ -2228,6 +2252,7 @@ export function montarRutas(
   const atenderProyectosDeEntorno = async (entorno: string): Promise<void> => {
     try {
       const suyos = await vestibulo.proyectosDe(entorno);
+      if (entorno === entornoElegido) proyectos = suyos;
       emitir({
         clase: "proyectosDeEntorno",
         entorno,
@@ -2235,8 +2260,10 @@ export function montarRutas(
           id: p.id,
           nombre: p.nombre,
           ...(p.compartido === undefined ? {} : { compartido: p.compartido }),
+          ...(p.ultimoAcceso === undefined ? {} : { ultimoAcceso: p.ultimoAcceso }),
         })),
       });
+      if (entorno === entornoElegido) await anunciarAlta().catch(contar);
     } catch (error) {
       contar(error);
       emitir({
@@ -4475,7 +4502,7 @@ function fotoDeDispositivo(dispositivo: Dispositivo): DispositivoElegido {
 const SIN_NOMBRE_DE_APP =
   "No se puede lanzar sin saber cómo se llama la app: el nombre sale del `name=` de app.ini, y ese fichero no está o no lo dice. Ábrelo en XOne Studio y vuelve a guardarlo.";
 const SIN_CAMINO_DE_LANZAMIENTO =
-  "Esta ejecución de xonecode no puede lanzar apps —no tiene montado el lanzamiento—, así que el veredicto se puede mirar pero no ejecutar.";
+  "Esta ejecución de XOneCode no puede lanzar apps —no tiene montado el lanzamiento—, así que el veredicto se puede mirar pero no ejecutar.";
 
 /**
  * Lo que la pestaña CloudStudio enseña: de qué rama es este proyecto y cuántos ficheros
@@ -5112,6 +5139,9 @@ export async function arrancarConsolaWeb(opciones: OpcionesDeArranque): Promise<
     // El tope de ventana, tal cual llega: es la misma función que la barra del terminal, y
     // dos resoluciones serían dos porcentajes distintos para el mismo modelo.
     ...(opciones.topeDeContexto === undefined ? {} : { topeDeContexto: opciones.topeDeContexto }),
+    // La misma función que ya usa la línea de terminal (`lineaDeVersion(version)` más abajo):
+    // un proceso, una versión, un solo sitio que la calcula.
+    ...(opciones.version === undefined ? {} : { version: opciones.version }),
     ...(corredor === undefined ? {} : { revisarTareas: () => corredor.revisar() }),
     // El PUERTO de disco y el corredor, no operaciones sueltas: `montarRutas` resuelve
     // `crearTarea`/`accionDeTarea` con SU propio estado (`proyectos`, `entornoElegido`,

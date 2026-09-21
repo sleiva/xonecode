@@ -125,7 +125,7 @@ async function correrReal(opciones: OpcionesRun, escribir: Escribir): Promise<nu
   const entorno = await inspeccionar(raiz);
   if (!entorno.esProyectoXone) {
     escribir(`${entorno.raiz}  (no hay app.xml aquí)\n`);
-    escribir("✗ falta algo imprescindible: xonecode no puede trabajar aquí.\n");
+    escribir("✗ falta algo imprescindible: XOneCode no puede trabajar aquí.\n");
     return 1;
   }
 

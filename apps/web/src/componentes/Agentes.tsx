@@ -45,7 +45,7 @@ import estilos from "./Agentes.module.css";
  * explica por qué no aparece.
  */
 const MOTORES: readonly { id: string; etiqueta: string; detalle: string }[] = [
-  { id: "modelo", etiqueta: "Un modelo", detalle: "corre dentro de xonecode, con las tools del proyecto" },
+  { id: "modelo", etiqueta: "Un modelo", detalle: "corre dentro de XOneCode, con las tools del proyecto" },
   {
     id: "claude-code",
     etiqueta: "Claude Code",
@@ -71,7 +71,7 @@ const MOTORES: readonly { id: string; etiqueta: string; detalle: string }[] = [
  * —y forzar la casilla— convierte un error en una explicación.
  */
 const AVISO_EXTERNO =
-  "Un agente externo corre fuera de xonecode, con su propia cuenta y su propia " +
+  "Un agente externo corre fuera de XOneCode, con su propia cuenta y su propia " +
   "configuración. Si le dejas escribir, cada escritura te llega con su diff para que la " +
   "apruebes, y las guardas del proyecto siguen puestas: no ESCRIBE en .env, .git, .xonecode, " +
   "una vista aplanada ni fuera de la carpeta. Borrar y renombrar no se le conceden.";
@@ -183,8 +183,8 @@ type Grupo = "serie" | "propios";
 const GRUPOS: readonly { clave: Grupo; titulo: string; vacio: string }[] = [
   {
     clave: "serie",
-    titulo: "De xonecode",
-    vacio: "No tienes en disco ninguno de los que trae xonecode.",
+    titulo: "De XOneCode",
+    vacio: "No tienes en disco ninguno de los que trae XOneCode.",
   },
   {
     clave: "propios",
@@ -542,7 +542,7 @@ export function Agentes({
             <span className={estilos.rotulo}>
               Nombre
               {editando.semilla === undefined ? null : (
-                <span className={estilos.pista}> — no se cambia: lo trae xonecode</span>
+                <span className={estilos.pista}> — no se cambia: lo trae XOneCode</span>
               )}
             </span>
             <Input
@@ -958,7 +958,7 @@ function FilaDeAgente({
       ) : null}
       {confirmando === "restaurar" ? (
         <p className={estilos.confirmar}>
-          Se pisa tu versión de «{a.nombre}» con la de xonecode. Lo que hayas escrito no vuelve.{" "}
+          Se pisa tu versión de «{a.nombre}» con la de XOneCode. Lo que hayas escrito no vuelve.{" "}
           <Button
             variant="outline"
             className={estilos.destructiva}

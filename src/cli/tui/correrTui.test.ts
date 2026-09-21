@@ -265,7 +265,7 @@ describe("la consola TUI", () => {
     });
     try {
       montaje.enviar("/themes");
-      await esperarSelector(montaje, "Tema de xonecode");
+      await esperarSelector(montaje, "Tema de XOneCode");
       expect(montaje.vista.ver().selector?.opciones.map((opcion) => opcion.id)).toEqual([
         "xone", "clear", "midnight", "graphite", "ember",
       ]);

@@ -213,7 +213,7 @@ export interface Consola {
  * visible que xonecode está listo sin gastar tokens ni sesgar la primera petición.
  */
 export const MENSAJE_BIENVENIDA =
-  "¡Bienvenido a xonecode! Puedo analizar, explicar y modificar tu proyecto XOne. Escribe `/` para ver los comandos o cuéntame qué necesitas.\n";
+  "¡Bienvenido a XOneCode! Puedo analizar, explicar y modificar tu proyecto XOne. Escribe `/` para ver los comandos o cuéntame qué necesitas.\n";
 
 /**
  * Hay estado que retomar solo cuando existe la memoria del PROYECTO. Una carpeta
@@ -744,7 +744,7 @@ async function elegirTema(_args: string[], _estado: EstadoDeSesion, consola: Con
   let id: string | undefined;
   if (consola.seleccionar !== undefined) {
     id = await consola.seleccionar({
-      titulo: "Tema de xonecode",
+      titulo: "Tema de XOneCode",
       opciones: TEMAS.map((tema) => ({ id: tema.id, etiqueta: tema.etiqueta, detalle: tema.detalle })),
     });
   } else {

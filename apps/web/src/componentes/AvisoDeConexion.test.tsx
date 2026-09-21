@@ -12,6 +12,6 @@ describe("AvisoDeConexion", () => {
 
   it("sin conectar: el banner se pinta, con el mismo aviso que el compositor deshabilitado", () => {
     const { container } = render(<AvisoDeConexion conectado={false} />);
-    expect(container.textContent).toMatch(/sin conexión con xonecode/);
+    expect(container.textContent).toMatch(/sin conexión con XOneCode/);
   });
 });

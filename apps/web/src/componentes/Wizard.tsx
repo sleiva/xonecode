@@ -189,7 +189,7 @@ export function Wizard({
           onChange={(e) => setClave(e.target.value)}
         />
         <p className={estilos.nota}>
-          La clave no se guarda en el navegador: viaja a xonecode y se escribe en el fichero de
+          La clave no se guarda en el navegador: viaja a XOneCode y se escribe en el fichero de
           credenciales, con permisos 0600.
         </p>
         {avisoDelServidor}
@@ -197,7 +197,7 @@ export function Wizard({
           <p className={estilos.estado} role="status">
             {rutaDeCredencial !== undefined
               ? `Credencial guardada en ${rutaDeCredencial}. Queda escrita aunque canceles lo que viene después.`
-              : "Credencial enviada a xonecode; el servidor dirá dónde queda escrita."}
+              : "Credencial enviada a XOneCode; el servidor dirá dónde queda escrita."}
           </p>
         ) : null}
         <div className={estilos.acciones}>

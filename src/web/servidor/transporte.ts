@@ -733,6 +733,9 @@ export type MensajeAlCliente =
          * compartió es un dato de una persona que esta pantalla no necesita.
          */
         compartido?: boolean;
+        /** Fecha ISO del último acceso (`last` de `studio_list_projects`). Ausente = no
+         *  consta — no todos los proyectos lo traen. */
+        ultimoAcceso?: string;
         sesiones?: SesionDelCable[];
         /** La copia local YA existe: se puede abrir sin bajar nada ni preguntar rama. */
         local?: boolean;
@@ -826,6 +829,8 @@ export interface ProyectoDeEntorno {
   nombre: string;
   /** Compartido contigo por otra persona. Ausente no es «es tuyo»: es que no se dijo. */
   compartido?: boolean;
+  /** Fecha ISO del último acceso (`last` de `studio_list_projects`). Ausente = no consta. */
+  ultimoAcceso?: string;
 }
 
 /** Un fichero de la sesión. `mas`/`menos` faltan en un binario: git no cuenta líneas ahí, y

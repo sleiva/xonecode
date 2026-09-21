@@ -333,7 +333,7 @@ export type MensajeAlCliente =
   | {
       clase: "proyectosDeEntorno";
       entorno: string;
-      proyectos?: { id: string; nombre: string; compartido?: boolean }[];
+      proyectos?: { id: string; nombre: string; compartido?: boolean; ultimoAcceso?: string }[];
       error?: string;
     }
   /**
@@ -572,6 +572,8 @@ export type MensajeAlCliente =
          *  lo mismo que «es tuyo»: entonces no se pinta etiqueta. Booleano y no el correo
          *  del propietario, que el host descarta a propósito. */
         compartido?: boolean;
+        /** Fecha ISO del último acceso. Ausente = no consta. */
+        ultimoAcceso?: string;
         sesiones?: SesionDelCable[];
         /** La copia local ya existe: abrirlo no baja nada ni pregunta rama. */
         local?: boolean;
@@ -600,6 +602,9 @@ export type MensajeAlCliente =
        * rama, que son datos del despliegue y no tienen por qué acabar en el transcript.
        */
       modo?: "offline" | "cloud";
+      /** La línea de versión ya formateada (`core/version.ts#lineaDeVersion`), para el pie de
+       *  la barra. Ausente = no se pudo calcular al arrancar (sin opción `version`). */
+      version?: string;
     }
   | {
       clase: "aprobacion";
