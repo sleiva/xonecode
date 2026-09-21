@@ -172,6 +172,7 @@ async function abrir(
     insiste?: boolean;
     topeDeRondas?: number;
     navegacion?: CargarIndice;
+    juezDelTurno?: Parameters<typeof abrirSesionReal>[0]["juezDelTurno"];
   } = {}
 ) {
   mocks.construirAgente.mockImplementation(() =>
@@ -196,6 +197,7 @@ async function abrir(
     ...(opts.verifier === undefined ? {} : { verifier: opts.verifier }),
     ...(opts.topeDeRondas === undefined ? {} : { topeDeRondas: opts.topeDeRondas }),
     ...(opts.navegacion === undefined ? {} : { navegacion: opts.navegacion }),
+    ...(opts.juezDelTurno === undefined ? {} : { juezDelTurno: opts.juezDelTurno }),
   });
 }
 
@@ -792,6 +794,65 @@ describe("el lazo de reparación", () => {
    * objetivo dentro, el encargo del usuario deja de estar protegido y lo sustituye la lista
    * de hallazgos. El turno se iba a arreglar cosas que nadie pidió.
    */
+  /**
+   * El JUEZ del turno, mirado desde el cableado y no desde su función pura.
+   *
+   * `core/juezDelTurno.ts` tiene sus 18 pruebas, y ninguna dice que el turno lo LLAME ni
+   * que le dé los hechos que mide el código. Eso es el patrón de fallo de siempre, y aquí
+   * se ata: se le pasa un juez de pega y se mira lo que recibe y lo que sale.
+   */
+  describe("el juez del turno", () => {
+    it("recibe el ENCARGO y los hechos medidos, no la opinión del agente", async () => {
+      const juez = vi.fn(async () => ({ cumplimiento: "cumplido" as const, motivo: "hecho" }));
+      const sesion = await abrir({ cambios: [XNE], juezDelTurno: juez });
+      await sesion.turno("arregla el arranque", pielFalsa());
+      expect(juez).toHaveBeenCalledTimes(1);
+      const caso = (juez.mock.calls as unknown as [{ objetivo: string; hechos: Record<string, unknown> }][])[0]![0];
+      expect(caso.objetivo).toBe("arregla el arranque");
+      // Sin verificador en este montaje: ausente es «no corrió», y el prompt lo dice.
+      expect(caso.hechos).not.toHaveProperty("verificador", "rojo");
+    });
+
+    it("«cumplido» no dice NADA: un juez que felicita en cada turno es ruido", async () => {
+      const sesion = await abrir({
+        cambios: [XNE],
+        juezDelTurno: async () => ({ cumplimiento: "cumplido" as const, motivo: "hecho" }),
+      });
+      const piel = pielFalsa();
+      await sesion.turno("arregla el arranque", piel);
+      expect(lineasDe(piel).some((l) => l.includes("cumpla lo que pediste"))).toBe(false);
+    });
+
+    it("«no cumplido» sale como AVISO con su motivo", async () => {
+      const sesion = await abrir({
+        cambios: [XNE],
+        juezDelTurno: async () => ({ cumplimiento: "no-cumplido" as const, motivo: "el login sigue fallando" }),
+      });
+      const piel = pielFalsa();
+      await sesion.turno("arregla el login", piel);
+      expect(lineasDe(piel).some((l) => l.includes("el login sigue fallando"))).toBe(true);
+    });
+
+    /** Un juez que se cae es una opinión que falta, no un turno perdido. */
+    it("si el juez revienta, el turno sigue y se dice", async () => {
+      const sesion = await abrir({
+        cambios: [XNE],
+        juezDelTurno: async () => { throw new Error("sin clave"); },
+      });
+      const piel = pielFalsa();
+      await sesion.turno("arregla el login", piel);
+      expect(lineasDe(piel).some((l) => l.includes("no se pudo consultar al juez"))).toBe(true);
+      expect(piel.fin).toHaveBeenCalledTimes(1);
+    });
+
+    it("y sin juez no se pregunta nada: `npm test` sigue sin modelo", async () => {
+      const sesion = await abrir({ cambios: [XNE] });
+      const piel = pielFalsa();
+      await sesion.turno("arregla el login", piel);
+      expect(lineasDe(piel).some((l) => l.includes("juez"))).toBe(false);
+    });
+  });
+
   it("la petición de reparación lleva el ENCARGO original, y no solo los hallazgos", async () => {
     const verificador = verificadorConGuion([{ verde: false, hallazgos: [ERROR_A] }]);
     const sesion = await abrir({ cambios: [XNE], verifier: verificador });

@@ -159,6 +159,7 @@ import { crearDiagnosticoDeTools } from "./diagnosticoDeTools.js";
 import { indiceEnDisco, type CargarIndice } from "../navegacion/indiceEnDisco.js";
 import { hechosDelProyectoDe } from "../navegacion/hechosEnDisco.js";
 import { conHechosDelProyecto } from "../../core/hechosDelProyecto.js";
+import { accionDelJuez, type HechosDelTurno, type VeredictoDelTurno } from "../../core/juezDelTurno.js";
 
 /**
  * Una sesión de turno real: varios turnos sobre el MISMO agente y el MISMO hilo.
@@ -408,6 +409,18 @@ export async function abrirSesionReal(opciones: {
     captura: { base64: string; mime: string },
     pantalla: string
   ) => Promise<{ veredicto: string; observaciones: string[] }>;
+  /**
+   * El JUEZ del turno: ¿esto cumple lo que se pidió? Ausente = no se pregunta.
+   *
+   * Entra por puerto como el verificador y el crítico, y por lo mismo: llama a un modelo,
+   * así que `npm test` sigue sin necesitar clave. Lo puro —el prompt, el parser y qué hacer
+   * con cada veredicto— vive en `core/juezDelTurno.ts` y sí tiene test.
+   */
+  juezDelTurno?: (caso: {
+    objetivo: string;
+    respuesta: string;
+    hechos: HechosDelTurno;
+  }) => Promise<VeredictoDelTurno>;
   /**
    * La carpeta de los ADJUNTOS de la tarea — lo que el agente ve como `/adjuntos/`, de solo
    * lectura (`core/adjuntos.ts`).
@@ -814,7 +827,14 @@ export async function abrirSesionReal(opciones: {
       if (intento > 0) yield { tipo: "reparacion", intento, tope: TOPE_REPARACIONES };
       reparar = false;
 
-      yield* eventos;
+      // Se acumula el texto AL PASAR en vez de `yield*`: es lo que el juez del turno tiene
+      // que cruzar con los hechos, y pedírselo al estado después sería leer dos veces lo
+      // mismo. No cuesta nada — solo se mira el `tipo`.
+      let respuestaDeLaPasada = "";
+      for await (const evento of eventos) {
+        if (evento.tipo === "token") respuestaDeLaPasada += evento.texto;
+        yield evento;
+      }
 
       // Lo primero al agotarse la pasada: lo que el agente dejó escrito sin preguntar. Va
       // ANTES de la decisión de cierre y antes del veredicto porque es trabajo TERMINADO de
@@ -822,209 +842,278 @@ export async function abrirSesionReal(opciones: {
       // mismo motivo por el que el verificador está cosido aquí dentro.
       for (const artefacto of artefactosDeLaPasada.splice(0)) yield { tipo: "artefacto", artefacto };
 
-      if ((await leerPendientes()).lista.length > 0) {
-        // Quedan escrituras por aprobar. Si el bucle va a seguir —hay quien apruebe y no se
-        // ha agotado el tope de rondas— esta pasada NO es el final del turno y no cierra.
-        // Son las mismas dos condiciones del `break` del bucle, y tienen que serlo: si
-        // divergen, un turno se queda sin `fin` o cierra dos veces.
-        cerrarRonda = !(ronda < topeDeRondas && opciones.pedirAprobacion !== undefined);
-        return;
-      }
-      cerrarRonda = true;
-
-      const cambios = (await instantanea.cambios()).filter(
-        (c) => c.clase !== "borrado" && !c.ruta.startsWith(".xonecode/") && c.ruta !== ".xonecode"
-      );
-      rondaEscribio = cambios.length > 0;
-      if (!rondaEscribio) {
-        // No hay nada que verificar, y eso NO es un verde. Se DICE, porque este motivo
-        // acaba en la tarjeta de una tarea aparcada y «no se sabe» tiene que distinguirse
-        // de «el simulador no está» y de «el turno se cortó antes de llegar».
-        motivoSinVerificar = "el turno no escribió ningún fichero del proyecto";
-        return;
-      }
-
-      if (opciones.verifier === undefined) {
-        motivoSinVerificar = "esta ejecución no tiene verificador";
-        return;
-      }
-
-      yield { tipo: "fase", fase: "verificando" };
-      let informe;
-      try {
-        informe = await opciones.verifier.verificar(raiz);
-      } catch (e) {
-        // Que no esté el binario NO es un fallo del proyecto, y se dice como tal. El aviso
-        // determinista del final saldrá igualmente: «no ha corrido» sigue siendo verdad.
-        motivoSinVerificar = e instanceof Error ? e.message : String(e);
-        yield { tipo: "aviso", texto: `⚠ no se pudo verificar: ${motivoSinVerificar}`, severidad: "aviso" };
-        return;
-      }
-
-      // Los hallazgos se reparten entre los ficheros que ESTE turno tocó y los demás. El
-      // simulador mira el proyecto entero —es su API—, y un error que ya estaba en un
-      // fichero que el agente no abrió no es del agente. Un hallazgo sin fichero no se
-      // puede atribuir: se enseña con los del turno, que es el lado conservador.
-      const tocados = new Set(cambios.map((c) => resolverRuta(raiz, c.ruta)));
-      const delTurno = informe.hallazgos.filter(
-        (h) => h.fichero === undefined || tocados.has(resolverRuta(h.fichero))
-      );
-      const preexistentes = informe.hallazgos.length - delTurno.length;
-      const errores = delTurno.filter((h) => h.severidad === "error").length;
-
-      const hallazgos: HallazgoDelTurno[] = delTurno.map((h) => ({
-        code: h.code,
-        severidad: h.severidad,
-        mensaje: h.mensaje,
-        ...(h.fichero === undefined ? {} : { fichero: relative(raiz, h.fichero) }),
-        ...(h.linea === undefined ? {} : { linea: h.linea }),
-      }));
-
-      // Lo mismo que va al evento, apuntado para el retorno: NO se recalcula ni se
-      // re-parsea de la bitácora, que es cómo dos copias de una cuenta acaban discrepando.
-      veredicto = errores === 0 ? "verde" : "rojo";
-      hallazgosDelTurno = hallazgos;
-      // El reparto entero, no solo su mitad. Aquí sí se apunta el cero: el evento lo omite
-      // porque una línea de consola que dice «y 0 más» no dice nada, pero quien recibe
-      // `hallazgos` necesita saber que la lista está filtrada — y con cero también.
-      preexistentesDelTurno = preexistentes;
-      yield {
-        tipo: "verificacion",
-        verde: errores === 0,
-        errores,
-        avisos: delTurno.length - errores,
-        hallazgos,
-        ...(preexistentes > 0 ? { preexistentes } : {}),
-      };
       /**
-       * **El crítico visual, enganchado AQUÍ y no en el prompt del orquestador.**
+       * El verificador y el crítico, en su propio generador.
        *
-       * Ésta es la diferencia entre que la crítica ocurra y que ocurra cuando el modelo se
-       * acuerde. Es el mismo punto y el mismo mecanismo que el resto del lazo —y el mismo que
-       * el `RubricMiddleware` de deepagents: enganchar donde el agente iba a terminar y
-       * devolver el feedback como mensaje de USUARIO en el mismo hilo—.
+       * Se extrae por una razón de FLUJO y no de estética: este cuerpo tiene CUATRO
+       * `return` que significan «no hay nada que reparar» —escrituras pendientes, una
+       * ronda que no escribió, sin verificador, un verificador que revienta—, y todos
+       * ellos son el final feliz del turno. Con el juez escrito detrás de ellos no se
+       * llamaba nunca en esos casos, que son justo los que más falta hace mirar: un turno
+       * que no escribió nada es el candidato número uno a no haber cumplido el encargo.
        *
-       * **No conduce nada**: mira las capturas que este turno ya dejó. Navegar hasta una
-       * pantalla necesita un agente (medido: el control que lleva a la Calculadora vive en un
-       * cajón cerrado y hay que abrirlo mirando el árbol), pero MIRAR lo ya fotografiado no.
-       * Sin capturas no opina, que es honesto: no hay nada que ver.
-       *
-       * Y que no se pueda preguntar NO es un rojo: se dice como aviso y el turno sigue, igual
-       * que con el binario del simulador.
-       *
-       * **Límite declarado**: esto cuelga del mismo bloque que el verificador, así que solo
-       * corre en un turno que ESCRIBIÓ ficheros del proyecto. Un turno de pura inspección
-       * —«ve a esa pantalla y dime qué ves»— no pasa por aquí, y no debe: la pregunta que
-       * contesta este enganche es «¿quedó bien lo que acabas de escribir?». Para mirar sin
-       * escribir está la tool `xone_critica_visual`, que el orquestador invoca cuando quiere.
+       * Metido aquí, esos `return` terminan solo ESTE generador y el juez de abajo corre
+       * igual. Comprobado con el test del cableado, que sin esto no llamaba al juez.
        */
-      if (
-        tocaCriticarPantalla({
-          hayCritico: opciones.criticaVisual !== undefined,
-          capturas: capturasDelTurno.length,
-          yaDisparo: visualYaDisparo,
-          intento,
-        })
-      ) {
-        visualYaDisparo = true;
-        // La ÚLTIMA: es el estado más reciente de la pantalla, y las anteriores pueden ser de
-        // antes del cambio que este turno acaba de hacer.
-        const captura = capturasDelTurno[capturasDelTurno.length - 1]!;
+      async function* verificarYCriticar(): AsyncIterable<DomainEvent> {
+        if ((await leerPendientes()).lista.length > 0) {
+          // Quedan escrituras por aprobar. Si el bucle va a seguir —hay quien apruebe y no se
+          // ha agotado el tope de rondas— esta pasada NO es el final del turno y no cierra.
+          // Son las mismas dos condiciones del `break` del bucle, y tienen que serlo: si
+          // divergen, un turno se queda sin `fin` o cierra dos veces.
+          cerrarRonda = !(ronda < topeDeRondas && opciones.pedirAprobacion !== undefined);
+          return;
+        }
+        cerrarRonda = true;
+
+        const cambios = (await instantanea.cambios()).filter(
+          (c) => c.clase !== "borrado" && !c.ruta.startsWith(".xonecode/") && c.ruta !== ".xonecode"
+        );
+        rondaEscribio = cambios.length > 0;
+        if (!rondaEscribio) {
+          // No hay nada que verificar, y eso NO es un verde. Se DICE, porque este motivo
+          // acaba en la tarjeta de una tarea aparcada y «no se sabe» tiene que distinguirse
+          // de «el simulador no está» y de «el turno se cortó antes de llegar».
+          motivoSinVerificar = "el turno no escribió ningún fichero del proyecto";
+          return;
+        }
+
+        if (opciones.verifier === undefined) {
+          motivoSinVerificar = "esta ejecución no tiene verificador";
+          return;
+        }
+
+        yield { tipo: "fase", fase: "verificando" };
+        let informe;
         try {
-          const bytes = readFileSync(join(carpetaDeArtefactos, captura.nombre));
-          const visual = await opciones.criticaVisual!(
-            { base64: bytes.toString("base64"), mime: captura.mime ?? "image/png" },
-            captura.nombre
-          );
-          if (visual.veredicto === "rojo" && visual.observaciones.length > 0) {
-            observacionesVisuales = visual.observaciones;
+          informe = await opciones.verifier.verificar(raiz);
+        } catch (e) {
+          // Que no esté el binario NO es un fallo del proyecto, y se dice como tal. El aviso
+          // determinista del final saldrá igualmente: «no ha corrido» sigue siendo verdad.
+          motivoSinVerificar = e instanceof Error ? e.message : String(e);
+          yield { tipo: "aviso", texto: `⚠ no se pudo verificar: ${motivoSinVerificar}`, severidad: "aviso" };
+          return;
+        }
+
+        // Los hallazgos se reparten entre los ficheros que ESTE turno tocó y los demás. El
+        // simulador mira el proyecto entero —es su API—, y un error que ya estaba en un
+        // fichero que el agente no abrió no es del agente. Un hallazgo sin fichero no se
+        // puede atribuir: se enseña con los del turno, que es el lado conservador.
+        const tocados = new Set(cambios.map((c) => resolverRuta(raiz, c.ruta)));
+        const delTurno = informe.hallazgos.filter(
+          (h) => h.fichero === undefined || tocados.has(resolverRuta(h.fichero))
+        );
+        const preexistentes = informe.hallazgos.length - delTurno.length;
+        const errores = delTurno.filter((h) => h.severidad === "error").length;
+
+        const hallazgos: HallazgoDelTurno[] = delTurno.map((h) => ({
+          code: h.code,
+          severidad: h.severidad,
+          mensaje: h.mensaje,
+          ...(h.fichero === undefined ? {} : { fichero: relative(raiz, h.fichero) }),
+          ...(h.linea === undefined ? {} : { linea: h.linea }),
+        }));
+
+        // Lo mismo que va al evento, apuntado para el retorno: NO se recalcula ni se
+        // re-parsea de la bitácora, que es cómo dos copias de una cuenta acaban discrepando.
+        veredicto = errores === 0 ? "verde" : "rojo";
+        hallazgosDelTurno = hallazgos;
+        // El reparto entero, no solo su mitad. Aquí sí se apunta el cero: el evento lo omite
+        // porque una línea de consola que dice «y 0 más» no dice nada, pero quien recibe
+        // `hallazgos` necesita saber que la lista está filtrada — y con cero también.
+        preexistentesDelTurno = preexistentes;
+        yield {
+          tipo: "verificacion",
+          verde: errores === 0,
+          errores,
+          avisos: delTurno.length - errores,
+          hallazgos,
+          ...(preexistentes > 0 ? { preexistentes } : {}),
+        };
+        /**
+         * **El crítico visual, enganchado AQUÍ y no en el prompt del orquestador.**
+         *
+         * Ésta es la diferencia entre que la crítica ocurra y que ocurra cuando el modelo se
+         * acuerde. Es el mismo punto y el mismo mecanismo que el resto del lazo —y el mismo que
+         * el `RubricMiddleware` de deepagents: enganchar donde el agente iba a terminar y
+         * devolver el feedback como mensaje de USUARIO en el mismo hilo—.
+         *
+         * **No conduce nada**: mira las capturas que este turno ya dejó. Navegar hasta una
+         * pantalla necesita un agente (medido: el control que lleva a la Calculadora vive en un
+         * cajón cerrado y hay que abrirlo mirando el árbol), pero MIRAR lo ya fotografiado no.
+         * Sin capturas no opina, que es honesto: no hay nada que ver.
+         *
+         * Y que no se pueda preguntar NO es un rojo: se dice como aviso y el turno sigue, igual
+         * que con el binario del simulador.
+         *
+         * **Límite declarado**: esto cuelga del mismo bloque que el verificador, así que solo
+         * corre en un turno que ESCRIBIÓ ficheros del proyecto. Un turno de pura inspección
+         * —«ve a esa pantalla y dime qué ves»— no pasa por aquí, y no debe: la pregunta que
+         * contesta este enganche es «¿quedó bien lo que acabas de escribir?». Para mirar sin
+         * escribir está la tool `xone_critica_visual`, que el orquestador invoca cuando quiere.
+         */
+        if (
+          tocaCriticarPantalla({
+            hayCritico: opciones.criticaVisual !== undefined,
+            capturas: capturasDelTurno.length,
+            yaDisparo: visualYaDisparo,
+            intento,
+          })
+        ) {
+          visualYaDisparo = true;
+          // La ÚLTIMA: es el estado más reciente de la pantalla, y las anteriores pueden ser de
+          // antes del cambio que este turno acaba de hacer.
+          const captura = capturasDelTurno[capturasDelTurno.length - 1]!;
+          try {
+            const bytes = readFileSync(join(carpetaDeArtefactos, captura.nombre));
+            const visual = await opciones.criticaVisual!(
+              { base64: bytes.toString("base64"), mime: captura.mime ?? "image/png" },
+              captura.nombre
+            );
+            if (visual.veredicto === "rojo" && visual.observaciones.length > 0) {
+              observacionesVisuales = visual.observaciones;
+              yield {
+                tipo: "aviso",
+                texto: `⚠ la captura de esta sesión enseña ${visual.observaciones.length} defecto(s) de pantalla`,
+                severidad: "aviso",
+              };
+              /**
+               * **Con el simulador en VERDE, el crítico REPORTA y no dispara reparación.**
+               *
+               * Antes sí la disparaba, y ésa era la tercera puerta de la misma deriva. MEDIDO
+               * dos veces en turnos reales: se pidió «arregla el error al ejecutar la app», se
+               * arregló, el conductor MIDIÓ que arranca y llega a Menu —o sea, objetivo
+               * cumplido y comprobado— y aun así el crítico veía cuatro textos recortados en
+               * otra pantalla, rotos desde antes, y el harness abría otra ronda «de
+               * reparación». El turno se iba a rediseñar el menú.
+               *
+               * Verde del simulador + objetivo cumplido no es un turno a medias: es un turno
+               * terminado con algo que decir. Las observaciones ya salen como `aviso` y van en
+               * la respuesta; quien decide si eso se toca es la persona, que es la misma regla
+               * de `preexistentes` — no se repara lo que no rompiste.
+               *
+               * En ROJO no cambia nada: las observaciones se suman a la petición que iba a
+               * salir igualmente, con el objetivo delante (`textoDeReparacion`), y no se gasta
+               * una vuelta extra.
+               *
+               * **El precio, declarado**: un turno que SÍ rompió el layout y dejó el simulador
+               * en verde ya no se autocorrige. Lo que queda es el aviso y lo que el propio
+               * agente haga dentro de su ronda —tiene la tool—, y eso se ve. Se prefiere eso a
+               * una ronda que arregla lo que nadie pidió, que es lo que pasaba.
+               *
+               * **Y un hueco de TEST, dicho y no escondido**: esta rama no tiene prueba de
+               * turno. El arnés de `turnoReal.test.ts` no sabe producir una captura —el
+               * crítico solo entra con un artefacto de imagen en `capturasDelTurno` y además
+               * LEE el fichero del disco—, así que atarlo pide cablear eso primero. Lo que sí
+               * está probado es `tocaCriticarPantalla` (cuándo entra el crítico) y el objetivo
+               * dentro de `textoDeReparacion` (qué recibe el agente cuando sí hay ronda).
+               */
+            }
+          } catch (error) {
             yield {
               tipo: "aviso",
-              texto: `⚠ la captura de esta sesión enseña ${visual.observaciones.length} defecto(s) de pantalla`,
+              texto: `⚠ no se pudo criticar la pantalla: ${error instanceof Error ? error.name : "error"}`,
               severidad: "aviso",
             };
-            /**
-             * **Con el simulador en VERDE, el crítico REPORTA y no dispara reparación.**
-             *
-             * Antes sí la disparaba, y ésa era la tercera puerta de la misma deriva. MEDIDO
-             * dos veces en turnos reales: se pidió «arregla el error al ejecutar la app», se
-             * arregló, el conductor MIDIÓ que arranca y llega a Menu —o sea, objetivo
-             * cumplido y comprobado— y aun así el crítico veía cuatro textos recortados en
-             * otra pantalla, rotos desde antes, y el harness abría otra ronda «de
-             * reparación». El turno se iba a rediseñar el menú.
-             *
-             * Verde del simulador + objetivo cumplido no es un turno a medias: es un turno
-             * terminado con algo que decir. Las observaciones ya salen como `aviso` y van en
-             * la respuesta; quien decide si eso se toca es la persona, que es la misma regla
-             * de `preexistentes` — no se repara lo que no rompiste.
-             *
-             * En ROJO no cambia nada: las observaciones se suman a la petición que iba a
-             * salir igualmente, con el objetivo delante (`textoDeReparacion`), y no se gasta
-             * una vuelta extra.
-             *
-             * **El precio, declarado**: un turno que SÍ rompió el layout y dejó el simulador
-             * en verde ya no se autocorrige. Lo que queda es el aviso y lo que el propio
-             * agente haga dentro de su ronda —tiene la tool—, y eso se ve. Se prefiere eso a
-             * una ronda que arregla lo que nadie pidió, que es lo que pasaba.
-             *
-             * **Y un hueco de TEST, dicho y no escondido**: esta rama no tiene prueba de
-             * turno. El arnés de `turnoReal.test.ts` no sabe producir una captura —el
-             * crítico solo entra con un artefacto de imagen en `capturasDelTurno` y además
-             * LEE el fichero del disco—, así que atarlo pide cablear eso primero. Lo que sí
-             * está probado es `tocaCriticarPantalla` (cuándo entra el crítico) y el objetivo
-             * dentro de `textoDeReparacion` (qué recibe el agente cuando sí hay ronda).
-             */
+          }
+        }
+
+        if (errores === 0) return;
+
+        // Rojo. Tres salidas, y solo una de ellas es «inténtalo otra vez».
+        //
+        // La huella son los ERRORES, no todos los hallazgos: un aviso que va y viene no dice
+        // nada de si el error se está arreglando. Y se compara con la del veredicto anterior
+        // y no con «¿bajó el número?»: dos errores distintos en vez de dos iguales también es
+        // avance, y un modelo que arregla uno y rompe otro no debe quedarse bloqueado como si
+        // no hubiera hecho nada.
+        const huella = hallazgos
+          .filter((h) => h.severidad === "error")
+          .map((h) => `${h.code}|${h.fichero ?? ""}|${h.linea ?? ""}`)
+          .sort()
+          .join("\n");
+
+        if (huella === huellaPrevia) {
+          // Corregir no cambió nada: el mismo error, en el mismo sitio. Seguir sería gastar
+          // el tope —y aprobaciones humanas— en repetir el mismo cambio.
+          yield {
+            tipo: "bloqueado",
+            motivo: "no-progreso",
+            explicacion: `el intento ${intento} dejó los mismos ${errores} error(es) en los mismos sitios`,
+          };
+          return;
+        }
+        if (intento >= TOPE_REPARACIONES) {
+          yield {
+            tipo: "bloqueado",
+            motivo: "tope-reparaciones",
+            explicacion: `tras ${intento} intento(s) siguen ${errores} error(es); se deja como está para que lo mires`,
+          };
+          return;
+        }
+
+        // Se intenta otra vez. Esta pasada NO cierra el turno: el `fin` y los avisos van al
+        // final del intento que viene, o del que corte.
+        huellaPrevia = huella;
+        ultimosHallazgos = hallazgos;
+        intento += 1;
+        reparar = true;
+        cerrarRonda = false;
+      }
+
+      yield* verificarYCriticar();
+
+      /**
+       * **El turno se acaba aquí. ¿Pero hizo lo que se le pidió?**
+       *
+       * Ningún `if` contesta eso, y es la pregunta de quien lo encargó. MEDIDO en turnos
+       * reales, tres veces en la misma sesión: «el especialista se ha vuelto a cortar antes
+       * de darme el informe», «las dos tareas que lancé no llegaron a ejecutarse», «la
+       * devolución del verificador ha llegado cortada». En los tres el turno cerró y el
+       * resumen sonaba a trabajo terminado.
+       *
+       * Va DESPUÉS del verificador y FUERA de él a propósito: sus cuatro `return` son
+       * finales felices del turno —incluido «no escribió nada», que es el candidato número
+       * uno a no haber cumplido—, y el juez tiene que llegar a todos.
+       *
+       * **Y no se juzga un turno que va a seguir**: con `reparar` puesto viene otra pasada,
+       * así que preguntar aquí sería juzgar un trabajo a medias y avisar de algo que está a
+       * punto de arreglarse solo.
+       *
+       * El reparto es el de las tareas (`core/entrega.ts`): los HECHOS los mide el código y
+       * se le dan hechos, y lo único que se le pregunta es el juicio. Lo que no se entiende
+       * es `dudoso`, nunca `cumplido`: decir que se cumplió sin serlo cierra el turno en
+       * falso, y de eso se entera quien use la app.
+       *
+       * **Un juez que falla no tumba el turno**: es una opinión sobre trabajo ya hecho. Y
+       * sin puerto no se pregunta nada, así que `npm test` sigue sin modelo.
+       */
+      if (opciones.juezDelTurno !== undefined && !reparar) {
+        try {
+          const veredictoDelJuez = await opciones.juezDelTurno({
+            objetivo: peticion,
+            respuesta: respuestaDeLaPasada,
+            hechos: {
+              // Ausente es «no corrió», que no es lo mismo que «salió mal»: el prompt lo dice.
+              ...(veredicto === "verde" || veredicto === "rojo" ? { verificador: veredicto } : {}),
+              ...(cortadoPorTope ? { escriturasSinResolver: true } : {}),
+            },
+          });
+          // `hayHumano: false` en esta versión: preguntar exige el `preguntar` de la consola,
+          // que hasta aquí no llega. Así la duda se DICE en vez de callarse, que es la
+          // degradación que `accionDelJuez` ya contempla para las tareas de fondo.
+          const accion = accionDelJuez(veredictoDelJuez, { hayHumano: false });
+          if (accion.tipo !== "nada") {
+            yield { tipo: "aviso", texto: `⚠ ${accion.texto}`, severidad: "aviso" };
           }
         } catch (error) {
           yield {
             tipo: "aviso",
-            texto: `⚠ no se pudo criticar la pantalla: ${error instanceof Error ? error.name : "error"}`,
+            texto: `⚠ no se pudo consultar al juez del turno: ${error instanceof Error ? error.name : "error"}`,
             severidad: "aviso",
           };
         }
       }
-
-      if (errores === 0) return;
-
-      // Rojo. Tres salidas, y solo una de ellas es «inténtalo otra vez».
-      //
-      // La huella son los ERRORES, no todos los hallazgos: un aviso que va y viene no dice
-      // nada de si el error se está arreglando. Y se compara con la del veredicto anterior
-      // y no con «¿bajó el número?»: dos errores distintos en vez de dos iguales también es
-      // avance, y un modelo que arregla uno y rompe otro no debe quedarse bloqueado como si
-      // no hubiera hecho nada.
-      const huella = hallazgos
-        .filter((h) => h.severidad === "error")
-        .map((h) => `${h.code}|${h.fichero ?? ""}|${h.linea ?? ""}`)
-        .sort()
-        .join("\n");
-
-      if (huella === huellaPrevia) {
-        // Corregir no cambió nada: el mismo error, en el mismo sitio. Seguir sería gastar
-        // el tope —y aprobaciones humanas— en repetir el mismo cambio.
-        yield {
-          tipo: "bloqueado",
-          motivo: "no-progreso",
-          explicacion: `el intento ${intento} dejó los mismos ${errores} error(es) en los mismos sitios`,
-        };
-        return;
-      }
-      if (intento >= TOPE_REPARACIONES) {
-        yield {
-          tipo: "bloqueado",
-          motivo: "tope-reparaciones",
-          explicacion: `tras ${intento} intento(s) siguen ${errores} error(es); se deja como está para que lo mires`,
-        };
-        return;
-      }
-
-      // Se intenta otra vez. Esta pasada NO cierra el turno: el `fin` y los avisos van al
-      // final del intento que viene, o del que corte.
-      huellaPrevia = huella;
-      ultimosHallazgos = hallazgos;
-      intento += 1;
-      reparar = true;
-      cerrarRonda = false;
     }
 
     /**
