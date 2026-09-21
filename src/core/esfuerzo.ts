@@ -95,31 +95,24 @@ const TABLA: Partial<Record<Proveedor, Array<[prefijo: string, niveles: readonly
     ["gemini-pro-latest", TRES],
   ],
   /**
-   * **DeepSeek NO tiene fila, y no es porque no sepa: es porque no puede aquí.**
+   * **DeepSeek: sus tres niveles DISTINTOS, que no son los tres de siempre.**
    *
-   * La tenía (`low`/`high`/`max`, que son sus tres niveles distintos tras el colapso de
-   * `medium` sobre `high`), y se retira con la causa medida delante. Su documentación es
-   * explícita: «for requests carrying the `tools` parameter, the `reasoning_content` must
-   * be fully passed back to the API in all subsequent requests — even for turns where the
-   * model did not perform a tool call. If your code does not correctly pass back
-   * `reasoning_content`, the API will return a 400 error».
+   * Su API acepta siete valores y los COLAPSA —`minimal`→low, `medium`→high, `xhigh`→high,
+   * `ultra`→max—, así que solo hay tres de verdad. Ofrecer low/medium/high ahí sería dar
+   * dos opciones que hacen exactamente lo mismo sin decirlo.
    *
-   * Y `@langchain/openai` 1.5.5 **no lo devuelve nunca**: lo captura al entrar
-   * (`additional_kwargs.reasoning_content`) y lo tira al salir, por los DOS conversores
-   * —`convertMessagesToCompletionsMessageParams` y el de `output_version: "v1"`—, que
-   * montan `role`, `content`, `name`, `function_call`, `tool_calls`, `tool_call_id` y
-   * `audio`, y nada más. Comprobado leyendo la dependencia.
+   * La fila estuvo RETIRADA un rato, y merece quedar contado: con `tools` presente su API
+   * exige que se le devuelva el `reasoning_content` de todos los turnos, y
+   * `@langchain/openai` no lo devuelve nunca. La salida rápida fue apagarle el
+   * pensamiento, y con él la fila — pero eso es perder la capacidad para esquivar un
+   * defecto del cliente. Vuelve porque el eco se repone en el `fetch`
+   * (`agent/config/ecoDeRazonamiento.ts`), que es la costura que sí alcanza al cuerpo.
    *
-   * Un agente manda SIEMPRE `tools`, así que pensar + agente = 400 en cuanto la
-   * conversación avanza. Visto en un turno real: `MiddlewareError: 400 The
-   * reasoning_content in the thinking mode must be passed back to the API`, y el
-   * `MiddlewareError` lo puso `wrapToolCall` — o sea que reventó DENTRO de un subagente.
-   *
-   * Por eso el pensamiento se apaga al construir el cliente
-   * (`agent/config/modelos.ts`), y sin pensamiento un nivel de esfuerzo no significa nada:
-   * ofrecerlo sería un control que no hace nada. El día que langchain devuelva el eco,
-   * esta fila vuelve — con su medida.
+   * Lo que NO se pudo medir es que los niveles cambien el resultado: con un problema fácil
+   * y dos pasadas la señal quedó por debajo de la varianza. Eso es «no medido», que no es
+   * lo mismo que «no hace nada».
    */
+  deepseek: [["deepseek", ["low", "high", "max"]]],
   nvidia: [
     ["openai/gpt-oss", TRES],
     ["nvidia/nemotron-3", CINCO],

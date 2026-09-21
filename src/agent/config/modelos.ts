@@ -10,6 +10,7 @@ import {
 import { topeDeSalida } from "../../core/contextos.js";
 import { esfuerzoAplicable, type CapacidadesVivas, type Esfuerzo } from "../../core/esfuerzo.js";
 import { baseUrlDeOllama, baseUrlDeOllamaCloud } from "./catalogoModelos.js";
+import { crearMemoriaDeEco, fetchConEcoDeRazonamiento } from "./ecoDeRazonamiento.js";
 import { ChatGoogleGenerativeAICompatible } from "./gemini.js";
 
 /**
@@ -137,26 +138,38 @@ function construirCompatibleOpenAi(
     throw new Error(`falta la credencial para ${proveedor} (${variable}); usa /provider ${proveedor}`);
   }
   /**
-   * **A DeepSeek se le APAGA el pensamiento, y es obligatorio para que funcione aquí.**
+   * **A DeepSeek se le RESTAURA el eco del razonamiento, y por eso puede pensar aquí.**
    *
    * Su documentación: con el parámetro `tools` presente, el `reasoning_content` de TODOS
    * los turnos anteriores hay que devolvérselo, y si no, 400. Un agente manda siempre
    * `tools`. Y `@langchain/openai` no lo devuelve nunca —lo guarda al entrar y lo tira al
-   * salir, por los dos conversores—, así que pensar + agente es un 400 garantizado en
-   * cuanto la conversación avanza. Visto en un turno real, reventando dentro de un
-   * subagente.
+   * salir, por los dos conversores—, así que el eco hay que reponerlo.
    *
-   * No es una preferencia de coste: es lo único que hace a DeepSeek usable con este
-   * harness. Si algún día el cliente devuelve el eco, esto se quita y vuelve su fila en
-   * `core/esfuerzo.ts`.
+   * Se repone en el `fetch`, que es la única costura declarada que alcanza al cuerpo de la
+   * petición: la conversión de mensajes es interna al cliente y no la toca ni un método
+   * sobrescribible ni un middleware. Ver `ecoDeRazonamiento.ts`, que explica el emparejado
+   * por id de tool call y el `tee()` que no bufferiza el flujo.
+   *
+   * **La memoria es por CLIENTE**, o sea una por modelo construido, y eso es lo que se
+   * quiere: los ids de tool call viven dentro de una conversación, y compartir una memoria
+   * global entre sesiones solo serviría para que creciera.
+   *
+   * **Honesto sobre lo probado**: el mecanismo está medido de punta a punta contra la API
+   * real —captura el razonamiento del flujo SSE y lo vuelve a pegar—, pero el 400 original
+   * NO se pudo reproducir en el experimento (cuatro vueltas con tools, pensamiento y
+   * streaming pasaron sin él). O sea que esto hace lo que su documentación pide, y que eso
+   * CURE aquel fallo concreto está por confirmar. Si vuelve, el registro de fallos
+   * (`registroDeFallos.ts`) ya lo captura entero.
    */
-  const apagarPensamiento = proveedor === "deepseek" ? { thinking: { type: "disabled" } } : {};
-  const kwargs = {
-    ...apagarPensamiento,
-    ...(esfuerzo === undefined ? {} : { reasoning_effort: esfuerzo }),
-  };
+  const kwargs = esfuerzo === undefined ? {} : { reasoning_effort: esfuerzo };
   return new ChatOpenAI({
-    model: modelo, apiKey, configuration: { baseURL: baseUrl },
+    model: modelo, apiKey,
+    configuration: {
+      baseURL: baseUrl,
+      ...(proveedor === "deepseek"
+        ? { fetch: fetchConEcoDeRazonamiento(crearMemoriaDeEco()) }
+        : {}),
+    },
     ...(Object.keys(kwargs).length === 0 ? {} : { modelKwargs: kwargs }),
   });
 }

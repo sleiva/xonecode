@@ -114,25 +114,13 @@ describe("el esfuerzo, contra el invocationParams de cada cliente", () => {
   });
 
   /**
-   * DeepSeek es el caso aparte: se le APAGA el pensamiento siempre, con nivel o sin él.
-   *
-   * Su API exige devolver el `reasoning_content` de todos los turnos cuando la petición
-   * lleva `tools` —y un agente la lleva siempre—, y `@langchain/openai` no lo devuelve
-   * nunca. Pensar ahí es un 400 en cuanto la conversación avanza, visto en un turno real
-   * reventando dentro de un subagente.
+   * DeepSeek vuelve a poder pensar: el eco del `reasoning_content` se repone en el `fetch`
+   * (`ecoDeRazonamiento.ts`), así que su nivel viaja como el de cualquier compatible.
    */
-  it("a deepseek se le apaga el pensamiento, y sin nivel ninguno", () => {
-    expect(params("deepseek/deepseek-flash")["thinking"]).toEqual({ type: "disabled" });
-    // Aunque alguien pida esfuerzo: no tiene fila, así que no viaja.
-    const conNivel = params("deepseek/deepseek-flash", "high");
-    expect(conNivel["thinking"]).toEqual({ type: "disabled" });
-    expect(conNivel["reasoning_effort"]).toBeUndefined();
-  });
-
-  it("ollama lo manda como «think» con el nivel dentro, no como booleano", () => {
-    // Medido contra el servidor: valida "high"|"medium"|"low"|"max"|true|false, y el tipo
-    // `boolean` del cliente es una limitación suya — pasa el valor tal cual al request.
-    expect(params("ollama/granite4.2:3b", "low", true)["think"]).toBe("low");
+  it("deepseek manda su nivel y ya no se le apaga el pensamiento", () => {
+    const p = params("deepseek/deepseek-flash", "high");
+    expect(p["reasoning_effort"]).toBe("high");
+    expect(p["thinking"]).toBeUndefined();
   });
 
   /** Las cuatro caras del fail-closed, que es lo que de verdad hay que defender. */
