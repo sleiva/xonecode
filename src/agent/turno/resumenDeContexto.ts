@@ -139,9 +139,24 @@ export const TOPE_DE_LLAMADAS_DEL_ESPECIALISTA = 15;
  * empieza el bucle de reintentos que ya costó 1,5M de tokens. Con `"end"` el especialista
  * devuelve lo que tenga y quien decide es el orquestador, que para eso lee la respuesta.
  *
- * Es de la librería (`langchain`), y deepagents lo contempla: sus claves de conteo están en
- * `EXCLUDED_STATE_KEYS` a propósito, «each agent counts its own calls, so they never cross the
- * boundary». O sea que el tope de un especialista no toca el del padre.
+ * Es de la librería (`langchain`), y deepagents lo contempla: **desde 1.14.0** sus cuatro
+ * claves de conteo (`CALL_COUNT_STATE_KEYS`) están en `EXCLUDED_STATE_KEYS`, «each agent
+ * counts its own calls, so they never cross the boundary». O sea que el tope de un
+ * especialista no toca el del padre.
+ *
+ * **Ojo: eso no era verdad antes, y este comentario lo afirmaba igual.** En 1.13.2 la lista
+ * no incluía los contadores, y como el `task` devuelve un `Command` que vuelca en el PADRE
+ * todo el estado del subagente menos esa lista, dos `task` en el mismo paso escribían dos
+ * veces el mismo canal — y `LastValue` solo admite un valor por paso. El síntoma era
+ * `InvalidUpdateError: Invalid update for channel "threadToolCallCount" with values
+ * [{"__all__":20},{"__all__":20}]`, con los DOS VALORES IGUALES, que es la firma de dos
+ * subagentes y no de un contador avanzando. Visto con DeepSeek, que paraleliza las
+ * delegaciones. Subir la dependencia es el arreglo.
+ *
+ * **Y `llamadasDelEspecialista` NO está cubierta**: es NUESTRA y la librería no la conoce,
+ * así que sigue cruzando la frontera y puede chocar igual. No se ha visto todavía porque
+ * hace falta que dos especialistas terminen en el mismo paso CON el mismo contador, pero el
+ * agujero es el mismo. Está declarado y sin arreglar.
  */
 const ESTADO_DEL_TOPE = z.object({ llamadasDelEspecialista: z.number().default(0) });
 

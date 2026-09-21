@@ -220,13 +220,30 @@ describe("backendConSkills", () => {
     writeFileSync(join(dir, "SKILL.md"), "---\nname: mia\ndescription: la mía\n---\n\nCUERPO PROPIO\n");
 
     const backend = backendConSkills(backendDelProyecto(process.cwd()), [{ nombre: "mia", dir }]);
-    // El middleware REAL de deepagents, con las mismas `sources` que le pasa `xoneAgent.ts`
-    // (`rutasDeSkills`). Se le arranca su `beforeAgent`, que es donde lista y lee: eso ata el
-    // montaje al camino que el agente usa, y no al `read` que aquí nadie llama a pelo.
+    /**
+     * El middleware REAL de deepagents, con las mismas `sources` que le pasa `xoneAgent.ts`
+     * (`rutasDeSkills`). Se le arranca su gancho, que es donde lista y lee: eso ata el
+     * montaje al camino que el agente usa, y no al `read` que aquí nadie llama a pelo.
+     *
+     * **El gancho se BUSCA en vez de nombrarse**, y no es pereza: en deepagents 1.13 era
+     * `beforeAgent` y en 1.14 pasó a ser `beforeModel`. Este test lo cazó al subir la
+     * dependencia —que es para lo que está—, pero atarlo al nombre lo convierte en un test
+     * que se rompe cada vez que la librería mueve el gancho sin que el montaje cambie. Lo
+     * que aquí importa es que el middleware DESCUBRA la skill por su ruta virtual; de qué
+     * fase lo haga es cosa suya. Si algún día no hay ninguno, el `throw` lo dice.
+     */
     const middleware = createSkillsMiddleware({ backend: backend as never, sources: ["/skills/mia/"] });
-    const estado = await (middleware as unknown as {
-      beforeAgent(s: unknown): Promise<{ skillsMetadata?: { name: string }[] } | undefined>;
-    }).beforeAgent({});
+    const conGanchos = middleware as unknown as Record<string, unknown>;
+    const nombreDelGancho = ["beforeModel", "beforeAgent"].find(
+      (g) => typeof conGanchos[g] === "function",
+    );
+    if (nombreDelGancho === undefined) {
+      throw new Error(
+        `SkillsMiddleware ya no expone ni «beforeModel» ni «beforeAgent»: tiene ${Object.keys(conGanchos).join(", ")}`,
+      );
+    }
+    const estado = await (conGanchos[nombreDelGancho] as
+      (s: unknown) => Promise<{ skillsMetadata?: { name: string }[] } | undefined>)({});
     expect((estado?.skillsMetadata ?? []).map((s) => s.name)).toEqual(["mia"]);
   });
 
