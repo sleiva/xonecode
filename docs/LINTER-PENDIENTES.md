@@ -19,12 +19,18 @@ no existe:
 Y el uso real es EXACTAMENTE el anti-patrón, ya con las dos mitades del arreglo puestas:
 `<prop name="EMPRESA" type="C" mapcol="Empresas" mapfld="ID" …/>`. Solo sobra el tipo.
 
-**Lo que hay que mirar no es AppDemo, es la skill que lo enseña.**
-`xone-project-generator/references/fases-10-12-readmes-y-validacion.md:75` tiene una tabla de
-tipo de prop → columna SQL que da por buenos **`C`, `F`, `M`, `P`, `R` y `S`** (y `N1`, cuando
-la serie va de `N2` a `N6`). Son seis tipos que la otra skill declara inexistentes. Una skill
-que GENERA proyectos enseñando un anti-patrón documentado es peor que un proyecto con el
-anti-patrón dentro: lo reproduce en cada app nueva.
+**Y la otra skill lo da por bueno.**
+`xone-project-generator/references/fases-10-12-readmes-y-validacion.md:75` tiene una tabla
+titulada «Mapeo de Tipos XOne a SQLite» —para el generador de la base de datos— y bajo la
+columna **«Tipo XOne»** lista `C`, `F`, `M`, `P`, `R` y `S`, más `N1` cuando la serie va de
+`N2` a `N6`. Son seis tipos que `xone-development` declara inexistentes.
+
+**Con precisión, porque la diferencia importa**: esa tabla NO manda escribir `type="C"` —dice
+qué columna SQLite crear si lo encuentra— y el skill no usa ninguno de esos tipos en ningún
+ejemplo suyo (comprobado: cero apariciones de `type="C|F|M|P|R|S|N1"` en todo el skill). El
+daño es indirecto: es una lista rotulada «Tipo XOne» que contiene seis que no lo son, y quien
+la lea para saber qué tipos hay se llevará la respuesta equivocada. Además la tabla se
+contradice sola — `L` sale en dos filas, en `TEXT` y en `NO SE CREA`.
 
 El linter acierta al marcarlo (`INVALID_PROP_TYPE`). Lo que hay que decidir es cuál de las dos
 tablas manda y corregir la otra.
