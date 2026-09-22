@@ -193,6 +193,25 @@ export function promptOrquestador(agentes: readonly Agente[]): string {
       ? "Si el encargo va a CAMBIAR el proyecto y no es un retoque de una línea, son DOS pasos y en este orden: `analyst-xone` averigua primero —dile QUÉ hay que averiguar y PARA QUÉ— y su `HANDOFF DE ANÁLISIS` va DENTRO del encargo a `developer-xone`, que así no redescubre nada. Si el desarrollo son varios pasos o no cabe en un turno, pídele además el PLAN: lo deja en `/planes/<nombre>/` y te dice el nombre, y ese nombre es lo que le pasas al que desarrolla. Y si el plan vuelve con decisiones PENDIENTES, pregúntaselas al usuario antes de mandar a escribir: el analista no tiene a quién preguntar y tú sí."
       : "",
     /**
+     * **Lo que se puede MEDIR no se pregunta**, y esto salió de una sesión en vivo.
+     *
+     * El encargo era «arregla el error que me pasa al arrancar la app». El orquestador miró
+     * los ficheros, no lo encontró, y **paró a preguntarle a la persona cuándo pasaba** — con
+     * un emulador delante, la app desplegada y un conductor capaz de lanzarla y leer el log,
+     * que es donde XOne escribe la excepción con su fichero, su línea y su columna. La
+     * persona contestó «al entrar», que es exactamente lo que el aparato habría dicho solo.
+     *
+     * El modo autónomo NO cubre esto: gobierna las ESCRITURAS —si se aplican sin aprobación—
+     * y una pregunta no es una escritura. Así que un turno «autónomo» se queda parado
+     * igualmente, y quien lo dejó corriendo se lo encuentra esperando.
+     *
+     * La frontera es qué clase de cosa es lo que falta: un HECHO del proyecto o del aparato se
+     * va a buscar; una DECISIÓN o una preferencia, que solo vive en la cabeza de quien
+     * encarga, se pregunta. Por eso esta regla no contradice la del plan con decisiones
+     * pendientes de arriba: aquélla habla de lo segundo.
+     */
+    "Lo que puedas AVERIGUAR, no lo preguntes. Si lo que te falta se puede medir —qué error da al arrancar, en qué pantalla pasa, qué valor tiene un campo— vas y lo mides: `device-controller` lanza la app y trae el log, que es donde XOne escribe la excepción con su fichero y su línea. Preguntar a la persona es para lo que SOLO ella sabe: qué quiere, una decisión de negocio, una credencial. Y ojo, que el modo autónomo no te salva de esto: gobierna si una escritura se aplica sola, no si paras a preguntar — un turno que nadie está mirando se queda ahí.",
+    /**
      * **Escribir y PROBARLO EN UN APARATO son dos encargos, y el segundo necesita un
      * destino.** Sin esta regla, «crea una pantalla y pruébala» se leía como una sola `task`
      * al desarrollador — que no tiene `execute`, así que «probar» se quedaba en que dijera

@@ -280,7 +280,24 @@ function concederPermisos() {
 function excepcionDeXOne() {
   let log;
   try {
-    log = adbCallado("logcat", "-d", "-t", "600");
+    /**
+     * **Acotado al PROCESO, no a las últimas N líneas del aparato.** Era `-t 600` a secas, y
+     * eso no es «lo último de la app»: son 600 líneas de TODO —Chromium, el sistema, lo que
+     * haya—, que en este emulador son un par de minutos. La excepción de XOne se salía de esa
+     * ventana enseguida, el despliegue no la veía y no contaba nada.
+     *
+     * Y lo que pasa después es el motivo de arreglarlo: sin el texto, a quien diagnostica solo
+     * le queda **fotografiar el diálogo de error** —visto en una sesión real—, que cuesta 3.375
+     * tokens y dice exactamente lo mismo que estas seis líneas.
+     *
+     * Con `--pid`, 600 líneas son 600 líneas DE LA APP. Es como ya leía `xone-log-android`;
+     * que dos sitios miraran el mismo log de forma distinta era la razón de que uno lo
+     * encontrara y el otro no.
+     */
+    const pid = adbCallado("shell", "pidof", PAQUETE).trim().split(/\s+/)[0];
+    log = pid
+      ? adbCallado("logcat", "-d", "--pid", pid, "-t", "600")
+      : adbCallado("logcat", "-d", "-t", "600");
   } catch {
     return undefined;
   }
